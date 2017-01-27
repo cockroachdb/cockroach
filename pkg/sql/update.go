@@ -228,7 +228,7 @@ func (p *planner) Update(
 	// types are inferred. For the simpler case ("SET a = $1"), populate them
 	// using checkColumnType. This step also verifies that the expression
 	// types match the column types.
-	sel := rows.(*selectTopNode).source.(*renderNode)
+	sel := rows.(*renderNode)
 	for i, target := range sel.render[exprTargetIdx:] {
 		// DefaultVal doesn't implement TypeCheck
 		if _, ok := target.(parser.DefaultVal); ok {

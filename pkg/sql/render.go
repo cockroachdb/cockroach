@@ -198,13 +198,19 @@ func (p *planner) Select(
 		if err != nil {
 			return nil, err
 		}
+		if sort != nil {
+			sort.plan = plan
+			plan = sort
+		}
 		limit, err := p.Limit(limit)
 		if err != nil {
 			return nil, err
 		}
-		result := &selectTopNode{source: plan, sort: sort, limit: limit}
-		limit.setTop(result)
-		return result, nil
+		if limit != nil {
+			limit.plan = plan
+			plan = limit
+		}
+		return plan, nil
 	}
 }
 
@@ -272,17 +278,27 @@ func (p *planner) SelectClause(
 	}
 	distinctPlan := p.Distinct(parsed)
 
-	result := &selectTopNode{
-		source:   s,
-		group:    group,
-		window:   window,
-		sort:     sort,
-		distinct: distinctPlan,
-		limit:    limitPlan,
+	result := planNode(s)
+	if group != nil {
+		group.plan = result
+		result = group
 	}
-	limitPlan.setTop(result)
-	distinctPlan.setTop(result)
-
+	if window != nil {
+		window.plan = result
+		result = window
+	}
+	if sort != nil {
+		sort.plan = result
+		result = sort
+	}
+	if distinctPlan != nil {
+		distinctPlan.plan = result
+		result = distinctPlan
+	}
+	if limitPlan != nil {
+		limitPlan.plan = result
+		result = limitPlan
+	}
 	return result, nil
 }
 

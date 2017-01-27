@@ -170,17 +170,83 @@ func doExpandPlan(params expandParameters, plan planNode) (planNode, error) {
 			n.ordering.unique = true
 		}
 
-	case *limitNode, *sortNode, *windowNode, *groupNode, *distinctNode:
-		panic(fmt.Sprintf("expand for %T must be handled by selectTopNode", plan))
+	case *limitNode:
+		// Estimate the limit parameters. We can't full eval them just yet,
+		// because evaluation requires running potential sub-queries, which
+		// cannot occur during expand.
+		n.estimateLimit()
+		params.numRowsHint = getLimit(n.count, n.offset)
+		n.plan, err = doExpandPlan(params, n.plan)
+
+	case *groupNode:
+		params.desiredOrdering = n.desiredOrdering
+		// Under a group node, there may be arbitrarily more rows
+		// than those required by the context.
+		params.numRowsHint = math.MaxInt64
+		n.plan, err = doExpandPlan(params, n.plan)
+
+	case *windowNode:
+		// Under a window node, there may be arbitrarily more rows
+		// than those required by the context.
+		params.numRowsHint = math.MaxInt64
+		n.plan, err = doExpandPlan(params, n.plan)
+
+	case *sortNode:
+		params.desiredOrdering = n.ordering
+		n.plan, err = doExpandPlan(params, n.plan)
+		if err != nil {
+			return plan, err
+		}
+
+		// Check to see if the requested ordering is compatible with the existing
+		// ordering.
+		existingOrdering := n.plan.Ordering()
+		match := computeOrderingMatch(n.ordering, existingOrdering, false)
+		if match < len(n.ordering) {
+			n.needSort = true
+		} else if len(n.columns) < len(n.plan.Columns()) {
+			// No sorting required, but we have to strip off the extra render
+			// expressions we added. So keep the sort node.
+		} else {
+			// Sort node fully disappears.
+			plan = n.plan
+		}
+
+	case *distinctNode:
+		// TODO(radu/knz) perhaps we can propagate the DISTINCT
+		// clause as desired ordering/exact match for the source node.
+		n.plan, err = doExpandPlan(params, n.plan)
+		if err != nil {
+			return plan, err
+		}
+
+		ordering := n.plan.Ordering()
+		if !ordering.isEmpty() {
+			n.columnsInOrder = make([]bool, len(n.plan.Columns()))
+			for colIdx := range ordering.exactMatchCols {
+				if colIdx >= len(n.columnsInOrder) {
+					// If the exact-match column is not part of the output, we can safely ignore it.
+					continue
+				}
+				n.columnsInOrder[colIdx] = true
+			}
+			for _, c := range ordering.ordering {
+				if c.ColIdx >= len(n.columnsInOrder) {
+					// Cannot use sort order. This happens when the
+					// columns used for sorting are not part of the output.
+					// e.g. SELECT a FROM t ORDER BY c.
+					n.columnsInOrder = nil
+					break
+				}
+				n.columnsInOrder[c.ColIdx] = true
+			}
+		}
 
 	case *scanNode:
 		plan, err = expandScanNode(params, n)
 
 	case *renderNode:
 		plan, err = expandRenderNode(params, n)
-
-	case *selectTopNode:
-		plan, err = expandSelectTopNode(params, n)
 
 	case *delayedNode:
 		v, err := n.constructor(params.p)
@@ -209,102 +275,6 @@ func doExpandPlan(params expandParameters, plan planNode) (planNode, error) {
 		panic(fmt.Sprintf("unhandled node type: %T", plan))
 	}
 	return plan, err
-}
-
-func expandSelectTopNode(params expandParameters, n *selectTopNode) (planNode, error) {
-	if n.plan != nil {
-		// Plan is already expanded. Just elide.
-		return n.plan, nil
-	}
-
-	if n.limit != nil {
-		// Estimate the limit parameters. We can't full eval them just yet,
-		// because evaluation requires running potential sub-queries, which
-		// cannot occur during expand.
-		n.limit.estimateLimit()
-		params.numRowsHint = getLimit(n.limit.count, n.limit.offset)
-	}
-
-	expandSourceParams := params
-	if n.group != nil {
-		expandSourceParams.desiredOrdering = n.group.desiredOrdering
-		// Under a group node, there may be arbitrarily more rows
-		// than those required by the context.
-		expandSourceParams.numRowsHint = math.MaxInt64
-	} else if n.sort != nil {
-		expandSourceParams.desiredOrdering = n.sort.ordering
-	}
-
-	var err error
-	n.source, err = doExpandPlan(expandSourceParams, n.source)
-	if err != nil {
-		return n, err
-	}
-	n.plan = n.source
-
-	if n.group != nil {
-		n.group.plan = n.plan
-		n.plan = n.group
-	}
-
-	if n.window != nil {
-		n.window.plan = n.plan
-		n.plan = n.window
-	}
-
-	if n.sort != nil {
-		// Check to see if the requested ordering is compatible with the existing
-		// ordering.
-		existingOrdering := n.plan.Ordering()
-		match := computeOrderingMatch(n.sort.ordering, existingOrdering, false)
-		if match < len(n.sort.ordering) {
-			n.sort.needSort = true
-			n.sort.plan = n.plan
-			n.plan = n.sort
-		} else if len(n.sort.columns) < len(n.plan.Columns()) {
-			// No sorting required, but we have to strip off the extra render
-			// expressions we added.
-			n.sort.plan = n.plan
-			n.plan = n.sort
-		} else {
-			// Sort node fully disappears.
-			n.sort = nil
-		}
-	}
-
-	if n.distinct != nil {
-		ordering := n.plan.Ordering()
-		if !ordering.isEmpty() {
-			n.distinct.columnsInOrder = make([]bool, len(n.plan.Columns()))
-			for colIdx := range ordering.exactMatchCols {
-				if colIdx >= len(n.distinct.columnsInOrder) {
-					// If the exact-match column is not part of the output, we can safely ignore it.
-					continue
-				}
-				n.distinct.columnsInOrder[colIdx] = true
-			}
-			for _, c := range ordering.ordering {
-				if c.ColIdx >= len(n.distinct.columnsInOrder) {
-					// Cannot use sort order. This happens when the
-					// columns used for sorting are not part of the output.
-					// e.g. SELECT a FROM t ORDER BY c.
-					n.distinct.columnsInOrder = nil
-					break
-				}
-				n.distinct.columnsInOrder[c.ColIdx] = true
-			}
-		}
-		n.distinct.plan = n.plan
-		n.plan = n.distinct
-	}
-
-	if n.limit != nil {
-		n.limit.plan = n.plan
-		n.plan = n.limit
-	}
-
-	// Everything's expanded, so elide the remaining selectTopNode.
-	return n.plan, nil
 }
 
 func expandScanNode(params expandParameters, s *scanNode) (planNode, error) {

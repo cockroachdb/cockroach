@@ -221,20 +221,6 @@ func (p *planner) propagateFilters(
 		}
 		return plan, parser.DBoolTrue, nil
 
-	case *selectTopNode:
-		if n.limit == nil && n.window == nil && n.group == nil {
-			// We only know how to propagate the filter if there is no
-			// intervening GROUP BY or LIMIT clause nor window functions.
-			// (For GROUP BY, see below for details.)
-			newPlan, remainingFilter, err = p.propagateFilters(n.source, nil, extraFilter)
-			if err != nil {
-				return plan, extraFilter, err
-			}
-			n.source = newPlan
-		} else if n.source, err = p.triggerFilterPropagation(n.source); err != nil {
-			return plan, extraFilter, err
-		}
-
 	case *unionNode:
 		// Filtering is distributive over set operations.
 		// Source filtering reduces the amount of work, so force propagation.

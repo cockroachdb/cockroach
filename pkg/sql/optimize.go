@@ -73,12 +73,7 @@ func (i *subqueryInitializer) subqueryNode(sq *subquery) error {
 				numRows = 2
 			}
 
-			top := &selectTopNode{
-				source: sq.plan,
-				limit:  &limitNode{p: i.p, countExpr: parser.NewDInt(numRows)},
-			}
-			top.limit.top = top
-			sq.plan = top
+			sq.plan = &limitNode{p: i.p, plan: sq.plan, countExpr: parser.NewDInt(numRows)}
 		}
 
 		needed := make([]bool, len(sq.plan.Columns()))

@@ -136,17 +136,6 @@ func setNeededColumns(plan planNode, needed []bool) {
 		setNeededColumns(n.source.plan, sourceNeeded)
 		markOmitted(n.columns, needed)
 
-	case *selectTopNode:
-		if n.plan == nil {
-			// Not yet expanded: we don't know what the relationship is
-			// between the sub-nodes, so the best we can do is to trigger
-			// the optimization in the source node as if all columns were
-			// needed.
-			setNeededColumns(n.source, allColumns(n.source))
-		} else {
-			setNeededColumns(n.plan, needed)
-		}
-
 	case *sortNode:
 		sourceNeeded := make([]bool, len(n.plan.Columns()))
 		copy(sourceNeeded[:len(needed)], needed)

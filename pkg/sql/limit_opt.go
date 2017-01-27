@@ -153,16 +153,6 @@ func applyLimit(plan planNode, numRows int64, soft bool) {
 			setUnlimited(n.plan)
 		}
 
-	case *selectTopNode:
-		// A selectTopNode can only be encountered here if using
-		// EXPLAIN(NOEXPAND). At this point, the selectTopNode is not
-		// fully connected so we must be naive about limits.
-		if n.limit != nil || n.group != nil || n.distinct != nil || n.sort != nil {
-			numRows = math.MaxInt64
-			soft = true
-		}
-		applyLimit(n.source, numRows, soft)
-
 	case *valuesNode:
 	case *alterTableNode:
 	case *copyNode:

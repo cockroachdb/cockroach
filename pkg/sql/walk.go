@@ -74,9 +74,6 @@ func (v *planVisitor) visit(plan planNode) {
 	if v.err != nil {
 		return
 	}
-	if plan == nil {
-		return
-	}
 
 	name := nodeName(plan)
 	recurse := v.observer.enterNode(name, plan)
@@ -186,28 +183,6 @@ func (v *planVisitor) visit(plan planNode) {
 		v.subqueries(name, subplans)
 		v.visit(n.left.plan)
 		v.visit(n.right.plan)
-
-	case *selectTopNode:
-		if n.plan != nil {
-			v.visit(n.plan)
-		} else {
-			if n.limit != nil {
-				v.visit(n.limit)
-			}
-			if n.distinct != nil {
-				v.visit(n.distinct)
-			}
-			if n.sort != nil {
-				v.visit(n.sort)
-			}
-			if n.window != nil {
-				v.visit(n.window)
-			}
-			if n.group != nil {
-				v.visit(n.group)
-			}
-			v.visit(n.source)
-		}
 
 	case *limitNode:
 		subplans := v.expr(name, "count", -1, n.countExpr, nil)
@@ -357,7 +332,9 @@ func (v *planVisitor) visit(plan planNode) {
 
 	case *delayedNode:
 		v.observer.attr(name, "source", n.name)
-		v.visit(n.plan)
+		if n.plan != nil {
+			v.visit(n.plan)
+		}
 
 	case *explainDebugNode:
 		v.visit(n.plan)
@@ -500,7 +477,6 @@ var planNodeNames = map[reflect.Type]string{
 	reflect.TypeOf(&ordinalityNode{}):     "ordinality",
 	reflect.TypeOf(&scanNode{}):           "scan",
 	reflect.TypeOf(&renderNode{}):         "render",
-	reflect.TypeOf(&selectTopNode{}):      "select",
 	reflect.TypeOf(&sortNode{}):           "sort",
 	reflect.TypeOf(&splitNode{}):          "split",
 	reflect.TypeOf(&unionNode{}):          "union",
