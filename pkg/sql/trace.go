@@ -62,26 +62,24 @@ var traceOrdering = sqlbase.ColumnOrdering{
 }
 
 func (p *planner) makeTraceNode(plan planNode, txn *client.Txn) planNode {
-	return &selectTopNode{
-		source: &explainTraceNode{
+	return &sortNode{
+		plan: &explainTraceNode{
 			plan: plan,
 			txn:  txn,
 		},
-		sort: &sortNode{
-			// Generally, sortNode uses its ctx field to log sorting
-			// details.  However the user of EXPLAIN(TRACE) only wants
-			// details about the traced statement, not about the sortNode
-			// that does work on behalf of the EXPLAIN statement itself.  So
-			// we connect this sortNode to a different context, so its log
-			// messages do not go to the planner's context which will be
-			// responsible to collect the trace.
+		// Generally, sortNode uses its ctx field to log sorting
+		// details.  However the user of EXPLAIN(TRACE) only wants
+		// details about the traced statement, not about the sortNode
+		// that does work on behalf of the EXPLAIN statement itself.  So
+		// we connect this sortNode to a different context, so its log
+		// messages do not go to the planner's context which will be
+		// responsible to collect the trace.
 
-			p:        p,
-			ordering: traceOrdering,
-			// These are the columns that the sortNode (and thus the selectTopNode)
-			// presents as the output.
-			columns: traceColumns,
-		},
+		p:        p,
+		ordering: traceOrdering,
+		// These are the columns that the sortNode (and thus the selectTopNode)
+		// presents as the output.
+		columns: traceColumns,
 	}
 }
 

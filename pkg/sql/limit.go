@@ -27,7 +27,6 @@ import (
 // returned or only return them past a given number (offset).
 type limitNode struct {
 	p          *planner
-	top        *selectTopNode
 	plan       planNode
 	countExpr  parser.TypedExpr
 	offsetExpr parser.TypedExpr
@@ -149,30 +148,9 @@ func (n *limitNode) evalLimit() error {
 	return nil
 }
 
-// setTop connects the limitNode back to the selectTopNode that caused
-// its existence.
-func (n *limitNode) setTop(top *selectTopNode) {
-	if n != nil {
-		n.top = top
-	}
-}
-
-func (n *limitNode) Columns() ResultColumns {
-	if n.plan != nil {
-		return n.plan.Columns()
-	}
-	// Pre-prepare: not connected yet. Ask the top select node.
-	return n.top.Columns()
-}
-
-func (n *limitNode) Values() parser.DTuple { return n.plan.Values() }
-func (n *limitNode) Ordering() orderingInfo {
-	if n.plan != nil {
-		return n.plan.Ordering()
-	}
-	// Pre-prepare: not connected yet. Ask the top select node.
-	return n.top.Ordering()
-}
+func (n *limitNode) Columns() ResultColumns { return n.plan.Columns() }
+func (n *limitNode) Values() parser.DTuple  { return n.plan.Values() }
+func (n *limitNode) Ordering() orderingInfo { return n.plan.Ordering() }
 
 func (n *limitNode) MarkDebug(mode explainMode) {
 	if mode != explainDebug {
