@@ -471,6 +471,7 @@ func (r *Replica) AdminTransferLease(ctx context.Context, target roachpb.StoreID
 		}
 		// Stop using the current lease.
 		r.mu.minLeaseProposedTS = status.timestamp
+		log.Infof(ctx, "****** RESETTING MIN LEASE: %s", status.timestamp)
 		transfer := r.mu.pendingLeaseRequest.InitOrJoinRequest(
 			ctx, r, nextLeaseHolder, status, desc.StartKey.AsRawKey(), true, /* transfer */
 		)

@@ -199,6 +199,13 @@ func (s *Store) ReservationCount() int {
 	return len(s.snapshotApplySem)
 }
 
+// ReplicaIDLocked returns the replica ID.
+func (r *Replica) ReplicaID() roachpb.ReplicaID {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.mu.replicaID
+}
+
 func (r *Replica) RaftLock() {
 	r.raftMu.Lock()
 }

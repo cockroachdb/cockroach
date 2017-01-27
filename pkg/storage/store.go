@@ -702,6 +702,9 @@ type StoreTestingKnobs struct {
 	// TODO(kaneda): This hook is not encouraged to use. Get rid of it once
 	// we make TestServer take a ManualClock.
 	ClockBeforeSend func(*hlc.Clock, roachpb.BatchRequest)
+	// OnCampaign is called if the replica campaigns for Raft leadership
+	// when initializing the Raft group.
+	OnCampaign func(*Replica)
 	// MaxOffset, if set, overrides the server clock's MaxOffset at server
 	// creation time.
 	// See also DisableMaxOffsetCheck.
@@ -1829,6 +1832,7 @@ func splitPostApply(
 	r.mu.tsCache.MergeInto(rightRng.mu.tsCache, true /* clear */)
 	// Copy the minLeaseProposedTS from the LHS.
 	rightRng.mu.minLeaseProposedTS = r.mu.minLeaseProposedTS
+	log.Infof(ctx, "****** SETTING MIN LEASE AFTER SPLIT: %s", r.mu.minLeaseProposedTS)
 	rightRng.mu.Unlock()
 	r.mu.Unlock()
 	log.Event(ctx, "copied timestamp cache")
