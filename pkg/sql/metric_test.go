@@ -206,4 +206,8 @@ func TestAbortCountErrorDuringTransaction(t *testing.T) {
 	if err := checkCounterEQ(s, sql.MetaSelect, 1); err != nil {
 		t.Error(err)
 	}
+
+	if err := txn.Rollback(); err != nil {
+		t.Fatal(err)
+	}
 }

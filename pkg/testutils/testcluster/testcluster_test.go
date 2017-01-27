@@ -57,6 +57,8 @@ func TestManualReplication(t *testing.T) {
 
 	if r := s1.Query(`SELECT * FROM test WHERE k = 5`); !r.Next() {
 		t.Fatal("no rows")
+	} else {
+		r.Close()
 	}
 
 	s2.ExecRowsAffected(3, `DELETE FROM test`)
