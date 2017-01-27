@@ -50,6 +50,18 @@ send "1;\r"
 eexpect "1 row"
 eexpect root@
 
+# Check that \set without argument prints the current options
+send "\\set\r\n"
+eexpect "4 rows"
+eexpect "display_format\ttsv"
+eexpect root@
+
+# Check that \set can change the display format
+send "\\set display_format csv\r\n\\set\r\n"
+eexpect "4 rows"
+eexpect "display_format,csv"
+eexpect root@
+
 # Check that a built-in command in the middle of a token (eg a string)
 # is processed locally.
 send "select 'hello\r"
