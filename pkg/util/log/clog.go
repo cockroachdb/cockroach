@@ -724,14 +724,17 @@ func (l *loggingT) outputLogEntry(s Severity, file string, line int, msg string)
 		}
 	}
 
-	if s >= l.stderrThreshold.get() {
+	stderr := l.toStderr || s >= l.stderrThreshold.get()
+	if stderr {
 		l.outputToStderr(entry, stacks)
 	}
 	if logDir.isSet() {
 		if l.file[s] == nil {
 			if err := l.createFiles(s); err != nil {
-				// Make sure the message appears somewhere.
-				l.outputToStderr(entry, stacks)
+				if !stderr {
+					// Make sure the message appears somewhere.
+					l.outputToStderr(entry, stacks)
+				}
 				l.mu.Unlock()
 				l.exit(err)
 				return
