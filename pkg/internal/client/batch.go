@@ -261,6 +261,10 @@ func (b *Batch) fillResults() error {
 			if result.Err == nil && reply != nil && reply.Header().ResumeSpan != nil {
 				result.ResumeSpan = *reply.Header().ResumeSpan
 			}
+			// Fill up the RangeInfos, in case we got any.
+			if result.Err == nil && reply != nil {
+				result.RangeInfos = reply.Header().RangeInfos
+			}
 		}
 		offset += result.calls
 	}

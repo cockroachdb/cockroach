@@ -548,3 +548,9 @@ func (rf *RowFetcher) finalizeRow() {
 func (rf *RowFetcher) Key() roachpb.Key {
 	return rf.kv.Key
 }
+
+// GetRangeInfo returns information about the ranges where the rows came from.
+// The RangeInfo's are deduped and not ordered.
+func (rf *RowFetcher) GetRangeInfo() []roachpb.RangeInfo {
+	return rf.kvFetcher.getRangesInfo()
+}
