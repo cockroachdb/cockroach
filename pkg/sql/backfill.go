@@ -462,8 +462,9 @@ func (sc *SchemaChanger) truncateAndBackfillColumnsChunk(
 			_, valNeededForCol[i] = ru.fetchColIDtoRowIndex[tableDesc.Columns[i].ID]
 		}
 		if err := rf.Init(
-			tableDesc, colIDtoRowIndex, &tableDesc.PrimaryIndex, false, false,
-			tableDesc.Columns, valNeededForCol,
+			tableDesc, colIDtoRowIndex, &tableDesc.PrimaryIndex,
+			false /* reverse */, false, /* isSecondaryIndex */
+			tableDesc.Columns, valNeededForCol, false, /* returnRangeInfo */
 		); err != nil {
 			return err
 		}

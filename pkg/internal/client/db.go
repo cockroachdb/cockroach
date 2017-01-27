@@ -139,6 +139,12 @@ type Result struct {
 	// a new shorter span of keys. An empty span is returned when the
 	// operation has successfully completed running through the span.
 	ResumeSpan roachpb.Span
+
+	// RangeInfos contains information about the replicas that produced this
+	// result.
+	// This is only populated if Err == nil and if ReturnRangeInfo has been set on
+	// the request.
+	RangeInfos []roachpb.RangeInfo
 }
 
 func (r Result) String() string {
