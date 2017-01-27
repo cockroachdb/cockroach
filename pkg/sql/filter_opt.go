@@ -195,7 +195,10 @@ func (p *planner) propagateFilters(
 		return plan, parser.DBoolTrue, nil
 
 	case *renderNode:
-		return p.addRenderFilter(n, extraFilter)
+		return p.addRenderFilter(n, &n.source.plan, n.source.info, n.render, extraFilter)
+
+	case *groupNode:
+		return p.addRenderFilter(n, &n.plan, info, n.render, extraFilter)
 
 	case *joinNode:
 		return p.addJoinFilter(n, extraFilter)
@@ -237,23 +240,6 @@ func (p *planner) propagateFilters(
 		n.left = newLeft
 		n.right = newRight
 		return plan, parser.DBoolTrue, nil
-
-	case *groupNode:
-		// Filters can't propagate across aggregates:
-		//   SELECT * FROM (SELECT MAX(x) AS m FROM foo GROUP BY y) WHERE m > 123
-		// can only be filtered after the aggregation has occurred.
-		// They can however propagate across non-aggregated GROUP BY columns:
-		//   SELECT * FROM (SELECT MAX(x) AS m, y FROM foo GROUP BY y) WHERE y > 123
-		// can be transformed to:
-		//   SELECT MAX(x) AS m, y FROM (SELECT * FROM foo WHERE y > 123) GROUP BY y
-		// However we don't do that yet.
-		// For now, simply trigger optimization for the child node.
-		//
-		// TODO(knz) implement the aforementioned optimization.
-		//
-		if n.plan, err = p.triggerFilterPropagation(n.plan); err != nil {
-			return plan, extraFilter, err
-		}
 
 	case *limitNode:
 		if n.plan, err = p.triggerFilterPropagation(n.plan); err != nil {
@@ -381,12 +367,16 @@ func (p *planner) propagateOrWrapFilters(
 	return f, nil
 }
 
-// addRenderFilter attempts to add the extraFilter to the renderNode.
-// The filter is only propagated to the sub-plan if it is expressed
-// using renders that are either simple datums or simple column
-// references to the source.
+// addRenderFilter attempts to add the extraFilter to the renderNode
+// or groupNode. The filter is only propagated to the sub-plan if it
+// is expressed using renders that are either simple datums or simple
+// column references to the source.
 func (p *planner) addRenderFilter(
-	s *renderNode, extraFilter parser.TypedExpr,
+	node planNode,
+	sourcePlan *planNode,
+	info *dataSourceInfo,
+	renders []parser.TypedExpr,
+	extraFilter parser.TypedExpr,
 ) (planNode, parser.TypedExpr, error) {
 	// outerFilter is the filter expressed using values rendered by this renderNode.
 	var outerFilter parser.TypedExpr = parser.DBoolTrue
@@ -441,7 +431,12 @@ func (p *planner) addRenderFilter(
 		//
 		convFunc := func(v parser.VariableExpr) (bool, parser.Expr) {
 			if iv, ok := v.(*parser.IndexedVar); ok {
-				renderExpr := s.render[iv.Idx]
+				renderExpr := renders[iv.Idx]
+				if a, ok := renderExpr.(*aggregateFuncHolder); ok && a.identAggregate {
+					// `SELECT k FROM ... GROUP BY k` wraps `k` into an aggregateFuncHolder
+					// marked with "identAggregate". Unwrap it.
+					renderExpr = a.arg
+				}
 				if d, ok := renderExpr.(parser.Datum); ok {
 					// A standalone Datum is not complex, so it can be propagated further.
 					return true, d
@@ -459,16 +454,15 @@ func (p *planner) addRenderFilter(
 	}
 
 	// Propagate the inner filter.
-	newPlan, err := s.planner.propagateOrWrapFilters(
-		s.source.plan, s.source.info, innerFilter)
+	newPlan, err := p.propagateOrWrapFilters(*sourcePlan, info, innerFilter)
 	if err != nil {
-		return s, extraFilter, err
+		return node, extraFilter, err
 	}
 
 	// Attach what remains as the new source.
-	s.source.plan = newPlan
+	*sourcePlan = newPlan
 
-	return s, outerFilter, nil
+	return node, outerFilter, nil
 }
 
 // addJoinFilter propagates the given filter to a joinNode.

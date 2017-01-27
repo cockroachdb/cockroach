@@ -534,7 +534,7 @@ func (v *extractAggregatesVisitor) VisitPre(expr parser.Expr) (recurse bool, new
 			if t.Filter != nil {
 				filterExpr = t.Filter.(parser.TypedExpr)
 			}
-			f := v.n.newAggregateFuncHolder(t, argExpr.(parser.TypedExpr), filterExpr, agg)
+			f := v.n.newAggregateFuncHolder(t, argExpr.(parser.TypedExpr), filterExpr, false, agg)
 			if t.Type == parser.DistinctFuncType {
 				f.seen = make(map[string]struct{})
 			}
@@ -545,7 +545,7 @@ func (v *extractAggregatesVisitor) VisitPre(expr parser.Expr) (recurse bool, new
 		if v.groupedCopy != nil {
 			panic("query checker did not detect column not appearing in GROUP BY clauses or aggregation function")
 		}
-		f := v.n.newAggregateFuncHolder(t, t, nil /* filter */, parser.NewIdentAggregate)
+		f := v.n.newAggregateFuncHolder(t, t, nil /* filter */, true, parser.NewIdentAggregate)
 		v.n.funcs = append(v.n.funcs, f)
 		return false, f
 	}
@@ -557,7 +557,7 @@ func (v *extractAggregatesVisitor) VisitPre(expr parser.Expr) (recurse bool, new
 		if !v.subAggVisitor.Aggregated {
 			// If there's no aggregation function calls in t, then t must by one of
 			// the GROUP BY clauses.
-			f := v.n.newAggregateFuncHolder(t, t, nil /* filter */, parser.NewIdentAggregate)
+			f := v.n.newAggregateFuncHolder(t, t, nil /* filter */, true, parser.NewIdentAggregate)
 			v.n.funcs = append(v.n.funcs, f)
 			return false, f
 		}
@@ -659,27 +659,29 @@ type aggregateFuncHolder struct {
 	// expr must either contain an aggregation function (SUM, COUNT, etc.) or an
 	// expression that also appears as one of the GROUP BY expressions (v+w in
 	// SELECT v+w FROM kvw GROUP BY v+w).
-	expr          parser.TypedExpr
-	arg           parser.TypedExpr
-	filter        parser.TypedExpr
-	create        func() parser.AggregateFunc
-	group         *groupNode
-	buckets       map[string]parser.AggregateFunc
-	bucketsMemAcc WrappableMemoryAccount
-	seen          map[string]struct{}
+	expr           parser.TypedExpr
+	arg            parser.TypedExpr
+	filter         parser.TypedExpr
+	identAggregate bool
+	create         func() parser.AggregateFunc
+	group          *groupNode
+	buckets        map[string]parser.AggregateFunc
+	bucketsMemAcc  WrappableMemoryAccount
+	seen           map[string]struct{}
 }
 
 func (n *groupNode) newAggregateFuncHolder(
-	expr, arg, filter parser.TypedExpr, create func() parser.AggregateFunc,
+	expr, arg, filter parser.TypedExpr, identAggregate bool, create func() parser.AggregateFunc,
 ) *aggregateFuncHolder {
 	res := &aggregateFuncHolder{
-		expr:          expr,
-		arg:           arg,
-		filter:        filter,
-		create:        create,
-		group:         n,
-		buckets:       make(map[string]parser.AggregateFunc),
-		bucketsMemAcc: n.planner.session.TxnState.OpenAccount(),
+		expr:           expr,
+		arg:            arg,
+		filter:         filter,
+		identAggregate: identAggregate,
+		create:         create,
+		group:          n,
+		buckets:        make(map[string]parser.AggregateFunc),
+		bucketsMemAcc:  n.planner.session.TxnState.OpenAccount(),
 	}
 	return res
 }
