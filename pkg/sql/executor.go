@@ -1285,6 +1285,10 @@ func (e *Executor) execClassic(planMaker *planner, plan planNode, result *Result
 		if err != nil {
 			return err
 		}
+	case parser.DDL:
+		if n, ok := plan.(*createTableNode); ok && n.n.As() {
+			result.RowsAffected += n.count
+		}
 	}
 	return nil
 }
