@@ -10,7 +10,8 @@ CREATE TABLE p1_0 (
   s2 STRING,
   d DECIMAL,
   PRIMARY KEY (i, s1),
-  FAMILY (i, s1, s2)
+  FAMILY (i, s1, s2),
+  FAMILY (d)
 ) INTERLEAVE IN PARENT p2 (i)
 
 statement ok

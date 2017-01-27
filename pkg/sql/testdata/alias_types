@@ -1,7 +1,9 @@
 statement ok
 CREATE TABLE aliases (
     a OID,
-    b NAME
+    b NAME,
+    FAMILY "primary" (a, rowid),
+    FAMILY fam_1_b (b)
 )
 
 query TT colnames
