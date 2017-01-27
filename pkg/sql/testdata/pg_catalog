@@ -54,8 +54,11 @@ pg_database
 pg_depend
 pg_description
 pg_enum
+pg_foreign_server
+pg_foreign_table
 pg_index
 pg_indexes
+pg_inherits
 pg_namespace
 pg_proc
 pg_range
