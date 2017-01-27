@@ -965,6 +965,9 @@ func TestRollbackToSavepointStatement(t *testing.T) {
 	) {
 		t.Fatalf("unexpected error: %v", err)
 	}
+	if err := tx.Rollback(); err != nil {
+		t.Fatal(err)
+	}
 }
 
 // TestNonRetriableError checks that a non-retriable error (e.g. duplicate key)
@@ -1256,5 +1259,8 @@ INSERT INTO t.test (k, v) VALUES ('test_key', 'test_val');
 	}
 	if !testutils.IsError(err, "pq: retryable error from another txn: forced by crdb_internal.force_retry()") {
 		t.Fatalf("unexpected error: %v", err)
+	}
+	if err := tx.Rollback(); err != nil {
+		t.Fatal(err)
 	}
 }
