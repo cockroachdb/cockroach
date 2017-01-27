@@ -147,7 +147,11 @@ CREATE TABLE test.users (
   email     VARCHAR(100) NULL,
   INDEX foo (name),
   CHECK (LENGTH(nickname) < LENGTH(name)),
-  UNIQUE INDEX bar (id, name)
+  UNIQUE INDEX bar (id, name),
+  FAMILY "primary" (id, name),
+  FAMILY fam_1_title (title),
+  FAMILY fam_2_nickname (nickname),
+  FAMILY fam_3_username_email (username, email)
 )
 
 query TTBTT colnames
@@ -228,7 +232,11 @@ CREATE TABLE test.named_constraints (
   INDEX foo (name),
   CONSTRAINT uq2 UNIQUE (username),
   CONSTRAINT ck2 CHECK (LENGTH(nickname) < LENGTH(name)),
-  UNIQUE INDEX bar (id, name)
+  UNIQUE INDEX bar (id, name),
+  FAMILY "primary" (id, name),
+  FAMILY fam_1_title (title),
+  FAMILY fam_2_nickname (nickname),
+  FAMILY fam_3_username_email (username, email)
 )
 
 query TT
