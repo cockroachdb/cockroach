@@ -81,8 +81,17 @@ type AggregateFunc interface {
 // Exported for use in documentation.
 var Aggregates = map[string][]Builtin{
 	"array_agg": {
-		makeIdentityArrayAggBuiltin(newArrayAggregate,
-			"Aggregates the selected values into an array."),
+		makeAggBuiltinWithReturnType(
+			TypeAny,
+			func(args []TypedExpr) Type {
+				if len(args) == 0 {
+					return unknownReturnType
+				}
+				return tArray{args[0].ResolvedType()}
+			},
+			newArrayAggregate,
+			"Aggregates the selected values into an array.",
+		),
 	},
 
 	"avg": {
@@ -164,25 +173,25 @@ var Aggregates = map[string][]Builtin{
 }
 
 func makeAggBuiltin(in, ret Type, f func([]Type) AggregateFunc, info string) Builtin {
+	return makeAggBuiltinWithReturnType(in, fixedReturnType(ret), f, info)
+}
+
+func makeAggBuiltinWithReturnType(
+	in Type, retType returnTyper, f func([]Type) AggregateFunc, info string,
+) Builtin {
 	return Builtin{
 		// See the comment about aggregate functions in the definitions
 		// of the Builtins array above.
 		impure:        true,
 		class:         AggregateClass,
 		Types:         ArgTypes{{"arg", in}},
-		ReturnType:    fixedReturnType{ret},
+		ReturnType:    retType,
 		AggregateFunc: f,
 		WindowFunc: func(params []Type) WindowFunc {
 			return newAggregateWindow(f(params))
 		},
 		Info: info,
 	}
-}
-
-func makeIdentityArrayAggBuiltin(f func([]Type) AggregateFunc, info string) Builtin {
-	b := makeAggBuiltin(TypeAny, nil, f, info)
-	b.ReturnType = identityArrayReturnType{0}
-	return b
 }
 
 var _ AggregateFunc = &arrayAggregate{}

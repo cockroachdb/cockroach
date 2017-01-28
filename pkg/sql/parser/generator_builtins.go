@@ -113,15 +113,14 @@ var generators = map[string][]Builtin{
 		),
 	},
 	"unnest": {
-		makeGeneratorBuiltin(
-			ArgTypes{{"input", TypeIntArray}},
-			TTuple{TypeInt},
-			makeArrayGenerator,
-			"Returns the input array as a set of rows",
-		),
-		makeGeneratorBuiltin(
-			ArgTypes{{"input", TypeStringArray}},
-			TTuple{TypeString},
+		makeGeneratorBuiltinWithReturnType(
+			ArgTypes{{"input", TypeAnyArray}},
+			func(args []TypedExpr) Type {
+				if len(args) == 0 {
+					return unknownReturnType
+				}
+				return TTable{Cols: TTuple{args[0].ResolvedType().(tArray).Typ}}
+			},
 			makeArrayGenerator,
 			"Returns the input array as a set of rows",
 		),
@@ -129,11 +128,17 @@ var generators = map[string][]Builtin{
 }
 
 func makeGeneratorBuiltin(in ArgTypes, ret TTuple, g generatorFactory, info string) Builtin {
+	return makeGeneratorBuiltinWithReturnType(in, fixedReturnType(TTable{Cols: ret}), g, info)
+}
+
+func makeGeneratorBuiltinWithReturnType(
+	in ArgTypes, retType returnTyper, g generatorFactory, info string,
+) Builtin {
 	return Builtin{
 		impure:     true,
 		class:      GeneratorClass,
 		Types:      in,
-		ReturnType: fixedReturnType{TTable{Cols: ret}},
+		ReturnType: retType,
 		fn: func(ctx *EvalContext, args DTuple) (Datum, error) {
 			gen, err := g(ctx, args)
 			if err != nil {
