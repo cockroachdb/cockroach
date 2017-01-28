@@ -2,7 +2,8 @@ query ITTT colnames
 EXPLAIN (PLAN) SELECT 1
 ----
 Level  Type    Field Description
-0      nullrow
+0      render
+1      nullrow
 
 query ITTTTT colnames
 EXPLAIN (PLAN, METADATA) SELECT 1
@@ -123,10 +124,11 @@ EXPLAIN SHOW DATABASES
 ----
 0  sort
 0                 order   +Database
-1  virtual table
-1                 source  information_schema.schemata
-2  values
-2                 size    4 columns, 5 rows
+1  render
+2  virtual table
+2                 source  information_schema.schemata
+3  values
+3                 size    4 columns, 5 rows
 
 query ITTT
 EXPLAIN SHOW TABLES
@@ -223,5 +225,6 @@ EXPLAIN SHOW CONSTRAINTS FROM foo
 query ITTT
 EXPLAIN SHOW USERS
 ----
-0  scan
-0        table  users@primary
+0  render
+1  scan
+1        table  users@primary

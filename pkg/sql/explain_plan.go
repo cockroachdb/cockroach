@@ -48,10 +48,6 @@ type explainer struct {
 	// expressions and result columns.
 	showTypes bool
 
-	// showSelectTop indicates whether intermediate selectTopNodes
-	// are rendered.
-	showSelectTop bool
-
 	// level is the current depth in the tree of planNodes.
 	level int
 
@@ -140,11 +136,10 @@ func (p *planner) populateExplain(e *explainer, v *valuesNode, plan planNode) er
 func planToString(plan planNode) string {
 	var buf bytes.Buffer
 	e := explainer{
-		showMetadata:  true,
-		showTypes:     true,
-		showExprs:     true,
-		showSelectTop: true,
-		fmtFlags:      parser.FmtExpr(parser.FmtSimple, true, true, true),
+		showMetadata: true,
+		showTypes:    true,
+		showExprs:    true,
+		fmtFlags:     parser.FmtExpr(parser.FmtSimple, true, true, true),
 		makeRow: func(level int, name, field, description string, plan planNode) {
 			if field != "" {
 				field = "." + field
@@ -181,13 +176,6 @@ func (e *explainer) expr(nodeName, fieldName string, n int, expr parser.Expr) {
 
 // enterNode implements the planObserver interface.
 func (e *explainer) enterNode(name string, plan planNode) bool {
-	if !e.showSelectTop && name == "select" {
-		return true
-	}
-	if !e.showExprs && !e.showMetadata && (name == "render" || name == "filter") {
-		return true
-	}
-
 	desc := ""
 	if e.doIndent {
 		desc = fmt.Sprintf("%*s-> %s", e.level*3, " ", name)
@@ -208,12 +196,6 @@ func (e *explainer) attr(nodeName, fieldName, attr string) {
 
 // leaveNode implements the planObserver interface.
 func (e *explainer) leaveNode(name string) {
-	if !e.showSelectTop && name == "select" {
-		return
-	}
-	if !e.showExprs && !e.showMetadata && (name == "render" || name == "filter") {
-		return
-	}
 	e.level--
 }
 
