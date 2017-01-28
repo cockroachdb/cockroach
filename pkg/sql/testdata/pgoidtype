@@ -33,8 +33,8 @@ SELECT 'blah( )'::REGPROC
 query error function 'blah\(, \)' does not exist
 SELECT 'blah(, )'::REGPROC
 
-query error more than one function named 'max'
-SELECT 'max'::REGPROC
+query error more than one function named 'sqrt'
+SELECT 'sqrt'::REGPROC
 
 query O
 SELECT 'public'::REGNAMESPACE

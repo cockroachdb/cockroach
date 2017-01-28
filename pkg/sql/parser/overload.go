@@ -19,13 +19,15 @@ package parser
 import (
 	"bytes"
 	"fmt"
+
+	"github.com/pkg/errors"
 )
 
 // overloadImpl is an implementation of an overloaded function. It provides
 // access to the parameter type list  and the return type of the implementation.
 type overloadImpl interface {
 	params() typeList
-	returnType() Type
+	returnType() returnType
 	// allows manually resolving preference between multiple compatible overloads
 	preferred() bool
 }
@@ -50,7 +52,7 @@ type typeList interface {
 }
 
 var _ typeList = ArgTypes{}
-var _ typeList = AnyType{}
+var _ typeList = HomogeneousType{}
 var _ typeList = VariadicType{}
 
 // ArgTypes is very similar to ArgTypes except it allows keeping a string
@@ -121,36 +123,38 @@ func (a ArgTypes) String() string {
 	return s.String()
 }
 
-// AnyType is a typeList implementation that accepts any arguments.
-type AnyType struct{}
+// HomogeneousType is a typeList implementation that accepts any arguments, as
+// long as all are the same type or NULL. The homogeneous constraint is enforced
+// in typeCheckOverloadedExprs.
+type HomogeneousType struct{}
 
-func (AnyType) match(types []Type) bool {
+func (HomogeneousType) match(types []Type) bool {
 	return true
 }
 
-func (AnyType) matchAt(typ Type, i int) bool {
+func (HomogeneousType) matchAt(typ Type, i int) bool {
 	return true
 }
 
-func (AnyType) matchLen(l int) bool {
+func (HomogeneousType) matchLen(l int) bool {
 	return true
 }
 
-func (AnyType) getAt(i int) Type {
-	panic("getAt called on AnyType")
+func (HomogeneousType) getAt(i int) Type {
+	return TypeAny
 }
 
 // Length implements the typeList interface.
-func (a AnyType) Length() int {
+func (HomogeneousType) Length() int {
 	return 1
 }
 
 // Types implements the typeList interface.
-func (a AnyType) Types() []Type {
+func (HomogeneousType) Types() []Type {
 	return []Type{TypeAny}
 }
 
-func (AnyType) String() string {
+func (HomogeneousType) String() string {
 	return "anyelement..."
 }
 
@@ -196,6 +200,64 @@ func (v VariadicType) String() string {
 	return fmt.Sprintf("%s...", v.Typ)
 }
 
+// returnType defines the method in which a functions' return type is determined.
+// The vast majority of functions have a hard-coded return type, denoted as "fixed".
+// However, some functions' return types are not static, but are instead based on
+// the types of arguments provided to them.
+type returnType interface {
+	returnType()
+}
+
+func (fixedReturnType) returnType()         {}
+func (identityReturnType) returnType()      {}
+func (identityArrayReturnType) returnType() {}
+
+// fixedReturnType functions simply return a fixed type, independent
+// of argument types.
+type fixedReturnType struct {
+	typ Type
+}
+
+// identityReturnType functions return the same type as their idx'th argument.
+// This is useful in conjunction with TypeAny args and HomogeneousType typeLists.
+type identityReturnType struct {
+	idx int
+}
+
+// identityArrayReturnType functions return a type that is the array of their
+// idx'th argument type. This is useful in conjunction with TypeAny args and
+// HomogeneousType typeLists.
+type identityArrayReturnType struct {
+	idx int
+}
+
+// overloadReturnTypeGivenArgs determines the return type for a given overloadImpl
+// given the arguments provided to it.
+func overloadReturnTypeGivenArgs(o overloadImpl, args []TypedExpr) Type {
+	switch s := o.returnType().(type) {
+	case fixedReturnType:
+		return s.typ
+	case identityReturnType:
+		if len(args) == 0 {
+			return TypeNull
+		}
+		return args[s.idx].ResolvedType()
+	case identityArrayReturnType:
+		return tArray{args[s.idx].ResolvedType()}
+	default:
+		panic(errors.Errorf("unexpected returnTypeStyle %v for overload %v", s, o))
+	}
+}
+
+func returnTypeToFixedType(s returnType) Type {
+	switch t := s.(type) {
+	case fixedReturnType:
+		return t.typ
+	default:
+		return TypeAny
+	}
+}
+
 // typeCheckOverloadedExprs determines the correct overload to use for the given set of
 // expression parameters, along with an optional desired return type. It returns the expression
 // parameters after being type checked, along with the chosen overloadImpl. If an overloaded
@@ -203,13 +265,13 @@ func (v VariadicType) String() string {
 func typeCheckOverloadedExprs(
 	ctx *SemaContext, desired Type, overloads []overloadImpl, exprs ...Expr,
 ) ([]TypedExpr, overloadImpl, error) {
-	// Special-case the AnyType overload. We determine its return type by checking that
+	// Special-case the HomogeneousType overload. We determine its return type by checking that
 	// all parameters have the same type.
 	for _, overload := range overloads {
-		// Only one overload can be provided if it has parameters with AnyType.
-		if _, ok := overload.params().(AnyType); ok {
+		// Only one overload can be provided if it has parameters with HomogeneousType.
+		if _, ok := overload.params().(HomogeneousType); ok {
 			if len(overloads) > 1 {
-				return nil, nil, fmt.Errorf("only one overload can have parameters with AnyType")
+				panic("only one overload can have HomogeneousType parameters")
 			}
 			typedExprs, _, err := typeCheckSameTypedExprs(ctx, desired, exprs...)
 			if err != nil {
@@ -370,7 +432,12 @@ func typeCheckOverloadedExprs(
 	// The first heuristic is to prefer candidates that return the desired type.
 	if desired != TypeAny {
 		filterOverloads(func(o overloadImpl) bool {
-			return o.returnType().Equivalent(desired)
+			// For now, we only filter on the return type for overloads with
+			// fixed return types. This could be improved.
+			if t, ok := o.returnType().(fixedReturnType); ok {
+				return t.typ.Equivalent(desired)
+			}
+			return true
 		})
 		if ok, fn, err := checkReturn(); ok {
 			return typedExprs, fn, err

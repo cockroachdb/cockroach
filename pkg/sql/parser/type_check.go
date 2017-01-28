@@ -135,7 +135,7 @@ func (expr *BinaryExpr) TypeCheck(ctx *SemaContext, desired Type) (TypedExpr, er
 	}
 	expr.Left, expr.Right = leftTyped, rightTyped
 	expr.fn = fn.(BinOp)
-	expr.typ = fn.returnType()
+	expr.typ = overloadReturnTypeGivenArgs(fn, typedSubExprs)
 	return expr, nil
 }
 
@@ -450,15 +450,7 @@ func (expr *FuncExpr) TypeCheck(ctx *SemaContext, desired Type) (TypedExpr, erro
 		expr.Exprs[i] = subExpr
 	}
 	expr.fn = builtin
-	returnType := fn.returnType()
-	if _, ok := expr.fn.params().(AnyType); ok {
-		if len(typedSubExprs) > 0 {
-			returnType = typedSubExprs[0].ResolvedType()
-		} else {
-			returnType = TypeNull
-		}
-	}
-	expr.typ = returnType
+	expr.typ = overloadReturnTypeGivenArgs(builtin, typedSubExprs)
 	return expr, nil
 }
 
@@ -627,7 +619,7 @@ func (expr *UnaryExpr) TypeCheck(ctx *SemaContext, desired Type) (TypedExpr, err
 	}
 	expr.Expr = exprTyped
 	expr.fn = fn.(UnaryOp)
-	expr.typ = fn.returnType()
+	expr.typ = overloadReturnTypeGivenArgs(fn, typedSubExprs)
 	return expr, nil
 }
 

@@ -815,7 +815,7 @@ func newBinExprIfValidOverload(op BinaryOperator, left TypedExpr, right TypedExp
 			Right:    right,
 			fn:       fn,
 		}
-		expr.typ = fn.returnType()
+		expr.typ = returnTypeToFixedType(fn.returnType())
 		return expr
 	}
 	return nil
