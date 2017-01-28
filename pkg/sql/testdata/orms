@@ -28,3 +28,43 @@ SELECT t.typname enum_name, array_agg(e.enumlabel ORDER BY enumsortorder) enum_v
     WHERE n.nspname = 'public'
     GROUP BY 1;
 ----
+
+
+## 12207
+statement ok
+CREATE TABLE customers (
+    name STRING PRIMARY KEY, 
+    id INT, 
+    INDEX (id)
+)
+
+statement ok 
+INSERT INTO customers VALUES ('jordan', 12), ('cuong', 13)
+
+query TBBTTTT colnames
+SELECT i.relname AS name,
+       ix.indisprimary AS PRIMARY,
+       ix.indisunique AS UNIQUE,
+       ix.indkey AS indkey,
+       ARRAY_AGG(a.attnum) AS column_indexes,
+       ARRAY_AGG(a.attname) AS column_names,
+       pg_get_indexdef(ix.indexrelid) AS definition
+FROM pg_class t,
+     pg_class i,
+     pg_index ix,
+     pg_attribute a
+WHERE t.oid = ix.indrelid
+AND   i.oid = ix.indexrelid
+AND   a.attrelid = t.oid
+AND   t.relkind = 'r'
+AND   t.relname = 'customers' -- this query is run once for each table
+GROUP BY i.relname,
+         ix.indexrelid,
+         ix.indisprimary,
+         ix.indisunique,
+         ix.indkey
+ORDER BY i.relname
+----
+name              PRIMARY  UNIQUE  indkey  column_indexes  column_names  definition
+customers_id_idx  false    false   {2}     {1,2}           {name,id}     CREATE INDEX customers_id_idx ON test.customers (id ASC)
+primary           true     true    {1}     {1,2}           {name,id}     CREATE UNIQUE INDEX "primary" ON test.customers (name ASC)
