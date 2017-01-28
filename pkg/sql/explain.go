@@ -48,11 +48,10 @@ func (p *planner) Explain(n *parser.Explain, autoCommit bool) (planNode, error) 
 	expanded := true
 	normalizeExprs := true
 	explainer := explainer{
-		showMetadata:  false,
-		showSelectTop: false,
-		showExprs:     false,
-		showTypes:     false,
-		doIndent:      false,
+		showMetadata: false,
+		showExprs:    false,
+		showTypes:    false,
+		doIndent:     false,
 	}
 
 	for _, opt := range n.Options {
@@ -68,14 +67,12 @@ func (p *planner) Explain(n *parser.Explain, autoCommit bool) (planNode, error) 
 			explainer.showExprs = true
 			explainer.showTypes = true
 			// TYPES implies METADATA.
-			explainer.showSelectTop = true
 			explainer.showMetadata = true
 		} else if strings.EqualFold(opt, "INDENT") {
 			explainer.doIndent = true
 		} else if strings.EqualFold(opt, "SYMVARS") {
 			explainer.symbolicVars = true
 		} else if strings.EqualFold(opt, "METADATA") {
-			explainer.showSelectTop = true
 			explainer.showMetadata = true
 		} else if strings.EqualFold(opt, "QUALIFY") {
 			explainer.qualifyNames = true
@@ -85,7 +82,6 @@ func (p *planner) Explain(n *parser.Explain, autoCommit bool) (planNode, error) 
 			// VERBOSE implies QUALIFY.
 			explainer.qualifyNames = true
 			// VERBOSE implies METADATA.
-			explainer.showSelectTop = true
 			explainer.showMetadata = true
 		} else if strings.EqualFold(opt, "EXPRS") {
 			explainer.showExprs = true

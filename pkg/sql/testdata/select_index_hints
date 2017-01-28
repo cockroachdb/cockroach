@@ -98,21 +98,23 @@ SELECT * FROM abcd@bcd WHERE a >= 20 AND a <= 30
 query ITTT
 EXPLAIN SELECT b FROM abcd@b WHERE a >= 20 AND a <= 30
 ----
-0  scan
-0        table  abcd@b
-0        spans  ALL
+0  render
+1  scan
+1        table  abcd@b
+1        spans  ALL
 
 # Force index b (non-covering due to WHERE clause)
 
 query ITTT
 EXPLAIN SELECT b FROM abcd@b WHERE c >= 20 AND c <= 30
 ----
-0  index-join
-1  scan
-1              table  abcd@b
-1              spans  ALL
-1  scan
-1              table  abcd@primary
+0  render
+1  index-join
+2  scan
+2              table  abcd@b
+2              spans  ALL
+2  scan
+2              table  abcd@primary
 
 # No hint, should be using index cd
 
@@ -125,9 +127,10 @@ SELECT c, d FROM abcd WHERE c >= 20 AND c < 40
 query ITTT
 EXPLAIN SELECT c, d FROM abcd WHERE c >= 20 AND c < 40
 ----
-0  scan
-0        table  abcd@cd
-0        spans  /20-/40
+0  render
+1  scan
+1        table  abcd@cd
+1        spans  /20-/40
 
 # Force no index
 
@@ -140,9 +143,10 @@ SELECT c, d FROM abcd@primary WHERE c >= 20 AND c < 40
 query ITTT
 EXPLAIN SELECT c, d FROM abcd@primary WHERE c >= 20 AND c < 40
 ----
-0  scan
-0        table  abcd@primary
-0        spans  ALL
+0  render
+1  scan
+1        table  abcd@primary
+1        spans  ALL
 
 # Force index b
 
@@ -155,12 +159,13 @@ SELECT c, d FROM abcd@b WHERE c >= 20 AND c < 40
 query ITTT
 EXPLAIN SELECT c, d FROM abcd@b WHERE c >= 20 AND c < 40
 ----
-0  index-join
-1  scan
-1              table  abcd@b
-1              spans  ALL
-1  scan
-1              table  abcd@primary
+0  render
+1  index-join
+2  scan
+2              table  abcd@b
+2              spans  ALL
+2  scan
+2              table  abcd@primary
 
 query error index \"badidx\" not found
 SELECT * FROM abcd@badidx
@@ -181,36 +186,40 @@ EXPLAIN SELECT * FROM abcd@{FORCE_INDEX=b} WHERE a >= 20 AND a <= 30
 query ITTT
 EXPLAIN SELECT b, c, d FROM abcd WHERE c = 10
 ----
-0  index-join
-1  scan
-1              table  abcd@cd
-1              spans  /10-/11
-1  scan
-1              table  abcd@primary
+0  render                           
+1  index-join                       
+2  scan                             
+2              table  abcd@cd       
+2              spans  /10-/11       
+2  scan                             
+2              table  abcd@primary  
 
 query ITTT
 EXPLAIN SELECT b, c, d FROM abcd@{NO_INDEX_JOIN} WHERE c = 10
 ----
-0  scan
-0        table  abcd@bcd
-0        hint   no index join
-0        spans  ALL
+0  render
+1  scan
+1        table  abcd@bcd
+1        hint   no index join
+1        spans  ALL
 
 query ITTT
 EXPLAIN SELECT b, c, d FROM abcd@{FORCE_INDEX=bcd,NO_INDEX_JOIN} WHERE c = 10
 ----
-0  scan
-0        table  abcd@bcd
-0        hint   no index join
-0        spans  ALL
+0  render
+1  scan
+1        table  abcd@bcd
+1        hint   no index join
+1        spans  ALL
 
 query ITTT
 EXPLAIN SELECT b, c, d FROM abcd@{FORCE_INDEX=primary,NO_INDEX_JOIN} WHERE c = 10
 ----
-0  scan
-0        table  abcd@primary
-0        hint   no index join
-0        spans  ALL
+0  render
+1  scan
+1        table  abcd@primary
+1        hint   no index join
+1        spans  ALL
 
 query error index \"cd\" is not covering and NO_INDEX_JOIN was specified
 EXPLAIN SELECT b, c, d FROM abcd@{FORCE_INDEX=cd,NO_INDEX_JOIN} WHERE c = 10

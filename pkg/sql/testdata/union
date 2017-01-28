@@ -138,19 +138,23 @@ query ITTT rowsort
 EXPLAIN SELECT v FROM uniontest UNION SELECT k FROM uniontest
 ----
 0  union
-1  scan
-1         table  uniontest@primary
-1  scan
-1         table  uniontest@primary
+1  render
+2  scan
+2          table  uniontest@primary
+1  render
+2  scan
+2          table  uniontest@primary
 
 query ITTT rowsort
 EXPLAIN SELECT v FROM uniontest UNION ALL SELECT k FROM uniontest
 ----
 0  append
-1  scan
-1         table  uniontest@primary
-1  scan
-1         table  uniontest@primary
+1  render
+2  scan
+2          table  uniontest@primary
+1  render
+2  scan
+2          table  uniontest@primary
 
 
 query error each UNION query must have the same number of columns: 2 vs 1
