@@ -43,7 +43,10 @@ func GetAggregateInfo(
 		for _, t := range b.Types.Types() {
 			if inputDatumType.Equivalent(t) {
 				// Found!
-				return b.AggregateFunc, sqlbase.DatumTypeToColumnType(b.FixedReturnType()), nil
+				constructAgg := func() parser.AggregateFunc {
+					return b.AggregateFunc([]parser.Type{inputDatumType})
+				}
+				return constructAgg, sqlbase.DatumTypeToColumnType(b.FixedReturnType()), nil
 			}
 		}
 	}

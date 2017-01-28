@@ -29,8 +29,8 @@ import (
 // printing all values to strings once the accumulation has finished. If the string
 // slices are not equal, it means that the result Datums were modified during later
 // accumulation, which violates the "deep copy of any internal state" condition.
-func testAggregateResultDeepCopy(t *testing.T, aggFunc func() AggregateFunc, vals []Datum) {
-	aggImpl := aggFunc()
+func testAggregateResultDeepCopy(t *testing.T, aggFunc func([]Type) AggregateFunc, vals []Datum) {
+	aggImpl := aggFunc([]Type{vals[0].ResolvedType()})
 	runningDatums := make([]Datum, len(vals))
 	runningStrings := make([]string, len(vals))
 	for i := range vals {
@@ -223,10 +223,11 @@ func makeIntervalTestDatum(count int) []Datum {
 	return vals
 }
 
-func runBenchmarkAggregate(b *testing.B, aggFunc func() AggregateFunc, vals []Datum) {
+func runBenchmarkAggregate(b *testing.B, aggFunc func([]Type) AggregateFunc, vals []Datum) {
+	params := []Type{vals[0].ResolvedType()}
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		aggImpl := aggFunc()
+		aggImpl := aggFunc(params)
 		for i := range vals {
 			aggImpl.Add(vals[i])
 		}
