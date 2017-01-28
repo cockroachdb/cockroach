@@ -165,7 +165,7 @@ func makeWindowBuiltin(in ArgTypes, ret Type, f func([]Type) WindowFunc) Builtin
 		impure:     true,
 		class:      WindowClass,
 		Types:      in,
-		ReturnType: fixedReturnType{ret},
+		ReturnType: fixedReturnType(ret),
 		WindowFunc: f,
 	}
 }

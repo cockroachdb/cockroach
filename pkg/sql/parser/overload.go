@@ -19,15 +19,13 @@ package parser
 import (
 	"bytes"
 	"fmt"
-
-	"github.com/pkg/errors"
 )
 
 // overloadImpl is an implementation of an overloaded function. It provides
 // access to the parameter type list  and the return type of the implementation.
 type overloadImpl interface {
 	params() typeList
-	returnType() returnType
+	returnType() returnTyper
 	// allows manually resolving preference between multiple compatible overloads
 	preferred() bool
 }
@@ -200,62 +198,40 @@ func (v VariadicType) String() string {
 	return fmt.Sprintf("%s...", v.Typ)
 }
 
-// returnType defines the method in which a functions' return type is determined.
-// The vast majority of functions have a hard-coded return type, denoted as "fixed".
-// However, some functions' return types are not static, but are instead based on
-// the types of arguments provided to them.
-type returnType interface {
-	returnType()
+// unknownReturnType is returned from returnTypers when the arguments provided are
+// not sufficient to determine a return type. This is necessary for cases like overload
+// resolution, where the argument types are not resolved yet so the type-level function
+// will be called without argument types. If a returnTyper returns unknownReturnType,
+// then the candidate function set cannot be refined. This means that only returnTypers
+// that never return unknownReturnType, like those created with fixedReturnType, can
+// help reduce overload ambiguity.
+var unknownReturnType Type
+
+// returnTyper defines the type-level function in which a builtin function's return type
+// is determined. returnTypers should make sure to return unknownReturnType when necessary.
+type returnTyper func(args []TypedExpr) Type
+
+// fixedReturnType functions simply return a fixed type, independent of argument types.
+func fixedReturnType(typ Type) returnTyper {
+	return func(args []TypedExpr) Type { return typ }
 }
 
-func (fixedReturnType) returnType()         {}
-func (identityReturnType) returnType()      {}
-func (identityArrayReturnType) returnType() {}
-
-// fixedReturnType functions simply return a fixed type, independent
-// of argument types.
-type fixedReturnType struct {
-	typ Type
-}
-
-// identityReturnType functions return the same type as their idx'th argument.
-// This is useful in conjunction with TypeAny args and HomogeneousType typeLists.
-type identityReturnType struct {
-	idx int
-}
-
-// identityArrayReturnType functions return a type that is the array of their
-// idx'th argument type. This is useful in conjunction with TypeAny args and
-// HomogeneousType typeLists.
-type identityArrayReturnType struct {
-	idx int
-}
-
-// overloadReturnTypeGivenArgs determines the return type for a given overloadImpl
-// given the arguments provided to it.
-func overloadReturnTypeGivenArgs(o overloadImpl, args []TypedExpr) Type {
-	switch s := o.returnType().(type) {
-	case fixedReturnType:
-		return s.typ
-	case identityReturnType:
+// identityReturnType creates a returnType that is a projection of the idx'th
+// argument type.
+func identityReturnType(idx int) returnTyper {
+	return func(args []TypedExpr) Type {
 		if len(args) == 0 {
-			return TypeNull
+			return unknownReturnType
 		}
-		return args[s.idx].ResolvedType()
-	case identityArrayReturnType:
-		return tArray{args[s.idx].ResolvedType()}
-	default:
-		panic(errors.Errorf("unexpected returnTypeStyle %v for overload %v", s, o))
+		return args[idx].ResolvedType()
 	}
 }
 
-func returnTypeToFixedType(s returnType) Type {
-	switch t := s.(type) {
-	case fixedReturnType:
-		return t.typ
-	default:
-		return TypeAny
+func returnTypeToFixedType(s returnTyper) Type {
+	if t := s(nil); t != unknownReturnType {
+		return t
 	}
+	return TypeAny
 }
 
 // typeCheckOverloadedExprs determines the correct overload to use for the given set of
@@ -433,9 +409,11 @@ func typeCheckOverloadedExprs(
 	if desired != TypeAny {
 		filterOverloads(func(o overloadImpl) bool {
 			// For now, we only filter on the return type for overloads with
-			// fixed return types. This could be improved.
-			if t, ok := o.returnType().(fixedReturnType); ok {
-				return t.typ.Equivalent(desired)
+			// fixed return types. This could be improved, but is not currently
+			// critical because we have no cases of functions with multiple
+			// overloads that do not all expose fixedReturnTypes.
+			if t := o.returnType()(nil); t != unknownReturnType {
+				return t.Equivalent(desired)
 			}
 			return true
 		})
