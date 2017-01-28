@@ -133,7 +133,7 @@ func makeGeneratorBuiltin(in ArgTypes, ret TTuple, g generatorFactory, info stri
 		impure:     true,
 		class:      GeneratorClass,
 		Types:      in,
-		ReturnType: TTable{Cols: ret},
+		ReturnType: fixedReturnType{TTable{Cols: ret}},
 		fn: func(ctx *EvalContext, args DTuple) (Datum, error) {
 			gen, err := g(ctx, args)
 			if err != nil {

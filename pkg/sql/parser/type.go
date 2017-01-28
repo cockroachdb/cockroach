@@ -114,6 +114,20 @@ var (
 	// TypeName is a type-alias for TypeString with a different OID. Can be
 	// compared with ==.
 	TypeName = wrapTypeWithOid(TypeString, oid.T_name)
+
+	// TypesAnyNonArray contains all non-array types.
+	TypesAnyNonArray = []Type{
+		TypeBool,
+		TypeInt,
+		TypeFloat,
+		TypeDecimal,
+		TypeString,
+		TypeBytes,
+		TypeDate,
+		TypeTimestamp,
+		TypeTimestampTZ,
+		TypeInterval,
+	}
 )
 
 // OidToType maps Postgres object IDs to CockroachDB types.

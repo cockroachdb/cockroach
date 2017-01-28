@@ -1071,9 +1071,9 @@ CREATE TABLE pg_catalog.pg_proc (
 
 				var retType parser.Datum
 				isRetSet := false
-				if builtin.ReturnType != nil {
+				if fixedRetType := builtin.FixedReturnType(); fixedRetType != nil {
 					var retOid oid.Oid
-					if t, ok := builtin.ReturnType.(parser.TTable); ok {
+					if t, ok := fixedRetType.(parser.TTable); ok {
 						isRetSet = true
 						// Functions returning tables with zero, or more than one
 						// columns are marked to return "anyelement"
@@ -1086,7 +1086,7 @@ CREATE TABLE pg_catalog.pg_proc (
 							retOid = t.Cols[0].Oid()
 						}
 					} else {
-						retOid = builtin.ReturnType.Oid()
+						retOid = fixedRetType.Oid()
 					}
 					retType = parser.NewDOid(parser.DInt(retOid))
 				}
@@ -1107,12 +1107,11 @@ CREATE TABLE pg_catalog.pg_proc (
 					argType := argTypes.Types()[0]
 					oid := argType.Oid()
 					variadicType = parser.NewDOid(parser.DInt(oid))
-				case parser.AnyType:
+				case parser.HomogeneousType:
 					argmodes = proArgModeVariadic
 					argType := parser.TypeAny
 					oid := argType.Oid()
 					variadicType = parser.NewDOid(parser.DInt(oid))
-
 				default:
 					argmodes = parser.DNull
 					variadicType = oidZero

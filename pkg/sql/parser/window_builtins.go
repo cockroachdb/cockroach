@@ -124,51 +124,40 @@ var windows = map[string][]Builtin{
 		makeWindowBuiltin(ArgTypes{{"n", TypeInt}}, TypeInt, newNtileWindow),
 	},
 	"lag": mergeBuiltinSlices(
-		collectWindowBuiltins(func(t Type) Builtin {
+		collectBuiltins(func(t Type) Builtin {
 			return makeWindowBuiltin(ArgTypes{{"val", t}}, t, makeLeadLagWindowConstructor(false, false, false))
-		}, anyElementTypes...),
-		collectWindowBuiltins(func(t Type) Builtin {
+		}, TypesAnyNonArray...),
+		collectBuiltins(func(t Type) Builtin {
 			return makeWindowBuiltin(ArgTypes{{"val", t}, {"n", TypeInt}}, t, makeLeadLagWindowConstructor(false, true, false))
-		}, anyElementTypes...),
-		collectWindowBuiltins(func(t Type) Builtin {
+		}, TypesAnyNonArray...),
+		// TODO(nvanbenschoten) We still have no good way to represent two parameters that
+		// can be any types but must be the same (eg. lag(T, Int, T)).
+		collectBuiltins(func(t Type) Builtin {
 			return makeWindowBuiltin(ArgTypes{{"val", t}, {"n", TypeInt}, {"default", t}},
 				t, makeLeadLagWindowConstructor(false, true, true))
-		}, anyElementTypes...),
+		}, TypesAnyNonArray...),
 	),
 	"lead": mergeBuiltinSlices(
-		collectWindowBuiltins(func(t Type) Builtin {
+		collectBuiltins(func(t Type) Builtin {
 			return makeWindowBuiltin(ArgTypes{{"val", t}}, t, makeLeadLagWindowConstructor(true, false, false))
-		}, anyElementTypes...),
-		collectWindowBuiltins(func(t Type) Builtin {
+		}, TypesAnyNonArray...),
+		collectBuiltins(func(t Type) Builtin {
 			return makeWindowBuiltin(ArgTypes{{"val", t}, {"n", TypeInt}}, t, makeLeadLagWindowConstructor(true, true, false))
-		}, anyElementTypes...),
-		collectWindowBuiltins(func(t Type) Builtin {
+		}, TypesAnyNonArray...),
+		collectBuiltins(func(t Type) Builtin {
 			return makeWindowBuiltin(ArgTypes{{"val", t}, {"n", TypeInt}, {"default", t}},
 				t, makeLeadLagWindowConstructor(true, true, true))
-		}, anyElementTypes...),
+		}, TypesAnyNonArray...),
 	),
-	"first_value": collectWindowBuiltins(func(t Type) Builtin {
+	"first_value": collectBuiltins(func(t Type) Builtin {
 		return makeWindowBuiltin(ArgTypes{{"val", t}}, t, newFirstValueWindow)
-	}, anyElementTypes...),
-	"last_value": collectWindowBuiltins(func(t Type) Builtin {
+	}, TypesAnyNonArray...),
+	"last_value": collectBuiltins(func(t Type) Builtin {
 		return makeWindowBuiltin(ArgTypes{{"val", t}}, t, newLastValueWindow)
-	}, anyElementTypes...),
-	"nth_value": collectWindowBuiltins(func(t Type) Builtin {
+	}, TypesAnyNonArray...),
+	"nth_value": collectBuiltins(func(t Type) Builtin {
 		return makeWindowBuiltin(ArgTypes{{"val", t}, {"n", TypeInt}}, t, newNthValueWindow)
-	}, anyElementTypes...),
-}
-
-var anyElementTypes = []Type{
-	TypeBool,
-	TypeInt,
-	TypeFloat,
-	TypeDecimal,
-	TypeString,
-	TypeBytes,
-	TypeDate,
-	TypeTimestamp,
-	TypeInterval,
-	TypeTuple,
+	}, TypesAnyNonArray...),
 }
 
 func makeWindowBuiltin(in ArgTypes, ret Type, f func() WindowFunc) Builtin {
@@ -176,12 +165,12 @@ func makeWindowBuiltin(in ArgTypes, ret Type, f func() WindowFunc) Builtin {
 		impure:     true,
 		class:      WindowClass,
 		Types:      in,
-		ReturnType: ret,
+		ReturnType: fixedReturnType{ret},
 		WindowFunc: f,
 	}
 }
 
-func collectWindowBuiltins(f func(Type) Builtin, types ...Type) []Builtin {
+func collectBuiltins(f func(Type) Builtin, types ...Type) []Builtin {
 	r := make([]Builtin, len(types))
 	for i := range types {
 		r[i] = f(types[i])

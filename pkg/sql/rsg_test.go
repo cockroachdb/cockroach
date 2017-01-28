@@ -128,7 +128,7 @@ func TestRandomSyntaxFunctions(t *testing.T) {
 			for _, arg := range ft {
 				args = append(args, r.GenerateRandomArg(arg.Typ))
 			}
-		case parser.AnyType:
+		case parser.HomogeneousType:
 			for i := r.Intn(5); i > 0; i-- {
 				var typ parser.Type
 				switch r.Intn(4) {

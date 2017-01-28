@@ -33,8 +33,8 @@ SELECT 'blah( )'::REGPROC
 query error unknown function: "blah\(, \)"\(\)
 SELECT 'blah(, )'::REGPROC
 
-query error more than one function named 'max'
-SELECT 'max'::REGPROC
+query error more than one function named 'sqrt'
+SELECT 'sqrt'::REGPROC
 
 query OOOO
 SELECT 'array_in'::REGPROC, 'array_in(a,b,c)'::REGPROC, 'pg_catalog.array_in'::REGPROC, 'pg_catalog.array_in( a ,b, c )'::REGPROC
