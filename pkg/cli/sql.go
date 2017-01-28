@@ -362,11 +362,16 @@ func (c *cliState) doRefreshPrompts(nextState cliStateEnum) cliStateEnum {
 		return nextState
 	}
 
+	return c.refreshTransactionStatus(nextState)
+}
+
+// refreshTransactionStatus retrieves and sets the current transaction status.
+func (c *cliState) refreshTransactionStatus(nextState cliStateEnum) cliStateEnum {
 	// Query the server for the current transaction status.
 	query := makeQuery(`SHOW TRANSACTION STATUS`)
 	rows, err := query(c.conn)
 	if err != nil {
-		fmt.Fprintf(osStderr, "error retrieving the database name: %v", err)
+		fmt.Fprintf(osStderr, "error retrieving the transaction status: %v", err)
 		return c.refreshDatabaseName(" ?", nextState)
 	}
 
@@ -379,10 +384,9 @@ func (c *cliState) doRefreshPrompts(nextState cliStateEnum) cliStateEnum {
 	err = rows.Next(val)
 	if err != nil {
 		fmt.Fprintf(osStderr, "invalid transaction status")
-		//return c.refreshPrompts(" ?", nextState)
 		return c.refreshDatabaseName(" ?", nextState)
 	}
-	txnString := formatVal(val[0], false, false)
+	txnString := formatVal(val[0], false /* showPrintableUnicode */, false /* shownewLinesAndTabs */)
 
 	// Change the prompt based on the response from the server.
 	promptSuffix := " ?"
@@ -422,7 +426,6 @@ func (c *cliState) refreshDatabaseName(txnStatus string, nextState cliStateEnum)
 
 	err = rows.Next(dbVals[:])
 	if err != nil {
-		fmt.Fprintf(osStderr, "error retrieving the database name: %v", err)
 		return c.refreshPrompts(txnStatus, nextState)
 	}
 
