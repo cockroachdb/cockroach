@@ -17,9 +17,11 @@
 package log
 
 import (
+	"fmt"
 	"io"
 	"io/ioutil"
 	"os"
+	"runtime"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/util/caller"
@@ -79,10 +81,10 @@ func (l TestLogScope) Close(t tShim) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if t.Failed() && !emptyDir {
+		if (t.Failed() || calledDuringPanic()) && !emptyDir {
 			// If the test failed, we keep the log files for further investigation,
 			// but only if there were any.
-			t.Errorf("test log files left over in: %s", l)
+			fmt.Fprintf(os.Stderr, "test log files left over in: %s\n", l)
 		} else {
 			// Clean up.
 			if err := os.RemoveAll(string(l)); err != nil {
@@ -94,6 +96,24 @@ func (l TestLogScope) Close(t tShim) {
 	if err := dirTestOverride(""); err != nil {
 		t.Fatal(err)
 	}
+}
+
+// calledDuringPanic returns true if panic() is one of its callers.
+func calledDuringPanic() bool {
+	pc := make([]uintptr, 40)
+	nCallers := runtime.Callers(2, pc[:])
+	frames := runtime.CallersFrames(pc)
+
+	for i := 0; i < nCallers; i++ {
+		f, more := frames.Next()
+		if f.Function == "runtime.gopanic" {
+			return true
+		}
+		if !more {
+			break
+		}
+	}
+	return false
 }
 
 // dirTestOverride sets the default value for the logging output directory
