@@ -1473,6 +1473,7 @@ func checkResultType(typ parser.Type) error {
 	case parser.TypeTimestampTZ:
 	case parser.TypeInterval:
 	case parser.TypeStringArray:
+	case parser.TypeNameArray:
 	case parser.TypeIntArray:
 	default:
 		// Compare all types that cannot rely on == equality.

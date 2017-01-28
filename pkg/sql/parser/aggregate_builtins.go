@@ -81,10 +81,7 @@ type AggregateFunc interface {
 // Exported for use in documentation.
 var Aggregates = map[string][]Builtin{
 	"array_agg": {
-		makeAggBuiltin(TypeInt, TypeIntArray, newIntArrayAggregate,
-			"Aggregates the selected values into an array."),
-		makeAggBuiltin(
-			TypeString, TypeStringArray, newStringArrayAggregate,
+		makeIdentityArrayAggBuiltin(newArrayAggregate,
 			"Aggregates the selected values into an array."),
 	},
 
@@ -166,7 +163,7 @@ var Aggregates = map[string][]Builtin{
 	},
 }
 
-func makeAggBuiltin(in, ret Type, f func() AggregateFunc, info string) Builtin {
+func makeAggBuiltin(in, ret Type, f func([]Type) AggregateFunc, info string) Builtin {
 	return Builtin{
 		// See the comment about aggregate functions in the definitions
 		// of the Builtins array above.
@@ -175,14 +172,14 @@ func makeAggBuiltin(in, ret Type, f func() AggregateFunc, info string) Builtin {
 		Types:         ArgTypes{{"arg", in}},
 		ReturnType:    fixedReturnType{ret},
 		AggregateFunc: f,
-		WindowFunc: func() WindowFunc {
-			return newAggregateWindow(f())
+		WindowFunc: func(params []Type) WindowFunc {
+			return newAggregateWindow(f(params))
 		},
 		Info: info,
 	}
 }
 
-func makeIdentityArrayAggBuiltin(f func() AggregateFunc, info string) Builtin {
+func makeIdentityArrayAggBuiltin(f func([]Type) AggregateFunc, info string) Builtin {
 	b := makeAggBuiltin(TypeAny, nil, f, info)
 	b.ReturnType = identityArrayReturnType{0}
 	return b
@@ -240,12 +237,10 @@ type arrayAggregate struct {
 	arr *DArray
 }
 
-func newIntArrayAggregate() AggregateFunc {
-	return &arrayAggregate{arr: NewDArray(TypeInt)}
-}
-
-func newStringArrayAggregate() AggregateFunc {
-	return &arrayAggregate{arr: NewDArray(TypeString)}
+func newArrayAggregate(params []Type) AggregateFunc {
+	return &arrayAggregate{
+		arr: NewDArray(params[0]),
+	}
 }
 
 // Add accumulates the passed datum into the array.
@@ -268,14 +263,14 @@ type avgAggregate struct {
 	count int
 }
 
-func newIntAvgAggregate() AggregateFunc {
-	return &avgAggregate{agg: newIntSumAggregate()}
+func newIntAvgAggregate(params []Type) AggregateFunc {
+	return &avgAggregate{agg: newIntSumAggregate(params)}
 }
-func newFloatAvgAggregate() AggregateFunc {
-	return &avgAggregate{agg: newFloatSumAggregate()}
+func newFloatAvgAggregate(params []Type) AggregateFunc {
+	return &avgAggregate{agg: newFloatSumAggregate(params)}
 }
-func newDecimalAvgAggregate() AggregateFunc {
-	return &avgAggregate{agg: newDecimalSumAggregate()}
+func newDecimalAvgAggregate(params []Type) AggregateFunc {
+	return &avgAggregate{agg: newDecimalSumAggregate(params)}
 }
 
 // Add accumulates the passed datum into the average.
@@ -311,10 +306,10 @@ type concatAggregate struct {
 	result     bytes.Buffer
 }
 
-func newBytesConcatAggregate() AggregateFunc {
+func newBytesConcatAggregate(_ []Type) AggregateFunc {
 	return &concatAggregate{forBytes: true}
 }
-func newStringConcatAggregate() AggregateFunc {
+func newStringConcatAggregate(_ []Type) AggregateFunc {
 	return &concatAggregate{}
 }
 
@@ -349,7 +344,7 @@ type boolAndAggregate struct {
 	result     bool
 }
 
-func newBoolAndAggregate() AggregateFunc {
+func newBoolAndAggregate(_ []Type) AggregateFunc {
 	return &boolAndAggregate{}
 }
 
@@ -376,7 +371,7 @@ type boolOrAggregate struct {
 	result     bool
 }
 
-func newBoolOrAggregate() AggregateFunc {
+func newBoolOrAggregate(_ []Type) AggregateFunc {
 	return &boolOrAggregate{}
 }
 
@@ -399,7 +394,7 @@ type countAggregate struct {
 	count int
 }
 
-func newCountAggregate() AggregateFunc {
+func newCountAggregate(_ []Type) AggregateFunc {
 	return &countAggregate{}
 }
 
@@ -420,7 +415,7 @@ type MaxAggregate struct {
 	max Datum
 }
 
-func newMaxAggregate() AggregateFunc {
+func newMaxAggregate(_ []Type) AggregateFunc {
 	return &MaxAggregate{}
 }
 
@@ -452,7 +447,7 @@ type MinAggregate struct {
 	min Datum
 }
 
-func newMinAggregate() AggregateFunc {
+func newMinAggregate(_ []Type) AggregateFunc {
 	return &MinAggregate{}
 }
 
@@ -484,7 +479,7 @@ type smallIntSumAggregate struct {
 	seenNonNull bool
 }
 
-func newSmallIntSumAggregate() AggregateFunc {
+func newSmallIntSumAggregate(_ []Type) AggregateFunc {
 	return &smallIntSumAggregate{}
 }
 
@@ -517,7 +512,7 @@ type intSumAggregate struct {
 	seenNonNull bool
 }
 
-func newIntSumAggregate() AggregateFunc {
+func newIntSumAggregate(_ []Type) AggregateFunc {
 	return &intSumAggregate{}
 }
 
@@ -571,7 +566,7 @@ type decimalSumAggregate struct {
 	sawNonNull bool
 }
 
-func newDecimalSumAggregate() AggregateFunc {
+func newDecimalSumAggregate(_ []Type) AggregateFunc {
 	return &decimalSumAggregate{}
 }
 
@@ -600,7 +595,7 @@ type floatSumAggregate struct {
 	sawNonNull bool
 }
 
-func newFloatSumAggregate() AggregateFunc {
+func newFloatSumAggregate(_ []Type) AggregateFunc {
 	return &floatSumAggregate{}
 }
 
@@ -627,7 +622,7 @@ type intervalSumAggregate struct {
 	sawNonNull bool
 }
 
-func newIntervalSumAggregate() AggregateFunc {
+func newIntervalSumAggregate(_ []Type) AggregateFunc {
 	return &intervalSumAggregate{}
 }
 
@@ -655,7 +650,7 @@ type intVarianceAggregate struct {
 	tmpDec DDecimal
 }
 
-func newIntVarianceAggregate() AggregateFunc {
+func newIntVarianceAggregate(_ []Type) AggregateFunc {
 	return &intVarianceAggregate{}
 }
 
@@ -678,7 +673,7 @@ type floatVarianceAggregate struct {
 	sqrDiff float64
 }
 
-func newFloatVarianceAggregate() AggregateFunc {
+func newFloatVarianceAggregate(_ []Type) AggregateFunc {
 	return &floatVarianceAggregate{}
 }
 
@@ -715,7 +710,7 @@ type decimalVarianceAggregate struct {
 	tmp   inf.Dec
 }
 
-func newDecimalVarianceAggregate() AggregateFunc {
+func newDecimalVarianceAggregate(_ []Type) AggregateFunc {
 	return &decimalVarianceAggregate{}
 }
 
@@ -756,14 +751,14 @@ type stdDevAggregate struct {
 	agg AggregateFunc
 }
 
-func newIntStdDevAggregate() AggregateFunc {
-	return &stdDevAggregate{agg: newIntVarianceAggregate()}
+func newIntStdDevAggregate(params []Type) AggregateFunc {
+	return &stdDevAggregate{agg: newIntVarianceAggregate(params)}
 }
-func newFloatStdDevAggregate() AggregateFunc {
-	return &stdDevAggregate{agg: newFloatVarianceAggregate()}
+func newFloatStdDevAggregate(params []Type) AggregateFunc {
+	return &stdDevAggregate{agg: newFloatVarianceAggregate(params)}
 }
-func newDecimalStdDevAggregate() AggregateFunc {
-	return &stdDevAggregate{agg: newDecimalVarianceAggregate()}
+func newDecimalStdDevAggregate(params []Type) AggregateFunc {
+	return &stdDevAggregate{agg: newDecimalVarianceAggregate(params)}
 }
 
 // Add implements the AggregateFunc interface.

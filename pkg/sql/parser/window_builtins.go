@@ -160,7 +160,7 @@ var windows = map[string][]Builtin{
 	}, TypesAnyNonArray...),
 }
 
-func makeWindowBuiltin(in ArgTypes, ret Type, f func() WindowFunc) Builtin {
+func makeWindowBuiltin(in ArgTypes, ret Type, f func([]Type) WindowFunc) Builtin {
 	return Builtin{
 		impure:     true,
 		class:      WindowClass,
@@ -229,7 +229,7 @@ func (w *aggregateWindowFunc) Compute(wf WindowFrame) (Datum, error) {
 // counting from 1.
 type rowNumberWindow struct{}
 
-func newRowNumberWindow() WindowFunc {
+func newRowNumberWindow(_ []Type) WindowFunc {
 	return &rowNumberWindow{}
 }
 
@@ -242,7 +242,7 @@ type rankWindow struct {
 	peerRes *DInt
 }
 
-func newRankWindow() WindowFunc {
+func newRankWindow(_ []Type) WindowFunc {
 	return &rankWindow{}
 }
 
@@ -259,7 +259,7 @@ type denseRankWindow struct {
 	peerRes   *DInt
 }
 
-func newDenseRankWindow() WindowFunc {
+func newDenseRankWindow(_ []Type) WindowFunc {
 	return &denseRankWindow{}
 }
 
@@ -277,7 +277,7 @@ type percentRankWindow struct {
 	peerRes *DFloat
 }
 
-func newPercentRankWindow() WindowFunc {
+func newPercentRankWindow(_ []Type) WindowFunc {
 	return &percentRankWindow{}
 }
 
@@ -302,7 +302,7 @@ type cumulativeDistWindow struct {
 	peerRes *DFloat
 }
 
-func newCumulativeDistWindow() WindowFunc {
+func newCumulativeDistWindow(_ []Type) WindowFunc {
 	return &cumulativeDistWindow{}
 }
 
@@ -323,7 +323,7 @@ type ntileWindow struct {
 	remainder      int   // (total rows) % (bucket num)
 }
 
-func newNtileWindow() WindowFunc {
+func newNtileWindow(_ []Type) WindowFunc {
 	return &ntileWindow{}
 }
 
@@ -387,8 +387,10 @@ func newLeadLagWindow(forward, withOffset, withDefault bool) WindowFunc {
 	}
 }
 
-func makeLeadLagWindowConstructor(forward, withOffset, withDefault bool) func() WindowFunc {
-	return func() WindowFunc {
+func makeLeadLagWindowConstructor(
+	forward, withOffset, withDefault bool,
+) func(_ []Type) WindowFunc {
+	return func(_ []Type) WindowFunc {
 		return newLeadLagWindow(forward, withOffset, withDefault)
 	}
 }
@@ -421,7 +423,7 @@ func (w *leadLagWindow) Compute(wf WindowFrame) (Datum, error) {
 // firstValueWindow returns value evaluated at the row that is the first row of the window frame.
 type firstValueWindow struct{}
 
-func newFirstValueWindow() WindowFunc {
+func newFirstValueWindow(_ []Type) WindowFunc {
 	return &firstValueWindow{}
 }
 
@@ -432,7 +434,7 @@ func (firstValueWindow) Compute(wf WindowFrame) (Datum, error) {
 // lastValueWindow returns value evaluated at the row that is the last row of the window frame.
 type lastValueWindow struct{}
 
-func newLastValueWindow() WindowFunc {
+func newLastValueWindow(_ []Type) WindowFunc {
 	return &lastValueWindow{}
 }
 
@@ -444,7 +446,7 @@ func (lastValueWindow) Compute(wf WindowFrame) (Datum, error) {
 // (counting from 1). Returns null if no such row.
 type nthValueWindow struct{}
 
-func newNthValueWindow() WindowFunc {
+func newNthValueWindow(_ []Type) WindowFunc {
 	return &nthValueWindow{}
 }
 

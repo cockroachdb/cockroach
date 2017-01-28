@@ -127,8 +127,8 @@ type Builtin struct {
 	// might be more appropriate.
 	Info string
 
-	AggregateFunc func() AggregateFunc
-	WindowFunc    func() WindowFunc
+	AggregateFunc func([]Type) AggregateFunc
+	WindowFunc    func([]Type) WindowFunc
 	fn            func(*EvalContext, DTuple) (Datum, error)
 }
 
