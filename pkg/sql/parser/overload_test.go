@@ -34,8 +34,8 @@ func (to *testOverload) params() typeList {
 	return to.paramTypes
 }
 
-func (to *testOverload) returnType() Type {
-	return to.retType
+func (to *testOverload) returnType() returnType {
+	return fixedReturnType{to.retType}
 }
 
 func (to testOverload) preferred() bool {
