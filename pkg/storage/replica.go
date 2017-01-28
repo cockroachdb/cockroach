@@ -1359,8 +1359,6 @@ func (r *Replica) maybeInitializeRaftGroup(ctx context.Context) {
 func (r *Replica) Send(
 	ctx context.Context, ba roachpb.BatchRequest,
 ) (*roachpb.BatchResponse, *roachpb.Error) {
-	r.assert5725(ba)
-
 	var br *roachpb.BatchResponse
 
 	if err := r.checkBatchRequest(ba); err != nil {
@@ -1892,7 +1890,6 @@ func (r *Replica) addReadOnlyCmd(
 	br, result, pErr = r.executeBatch(ctx, storagebase.CmdIDKey(""), r.store.Engine(), nil, ba)
 
 	if pErr == nil && ba.Txn != nil {
-		r.assert5725(ba)
 		// Checking whether the transaction has been aborted on reads
 		// makes sure that we don't experience anomalous conditions as
 		// described in #2231.
@@ -1908,16 +1905,6 @@ func (r *Replica) addReadOnlyCmd(
 		log.Event(ctx, "read completed")
 	}
 	return br, pErr
-}
-
-// TODO(tschottdorf): temporary assertion for #5725, which saw batches with
-// a nonempty but incomplete Txn (i.e. &Transaction{})
-func (r *Replica) assert5725(ba roachpb.BatchRequest) {
-	if ba.Txn != nil && ba.Txn.ID == nil {
-		ctx := r.AnnotateCtx(context.TODO())
-		log.Fatalf(ctx, "nontrivial transaction with empty ID: %s\n%s",
-			ba.Txn, pretty.Sprint(ba))
-	}
 }
 
 // addWriteCmd is the entry point for client requests which may mutate the
@@ -3801,7 +3788,6 @@ func (r *Replica) applyRaftCommandInBatch(
 	// requests which write intents (for example HeartbeatTxn does not get
 	// hindered by this).
 	if ba.Txn != nil && ba.IsTransactionWrite() {
-		r.assert5725(ba)
 		// TODO(tschottdorf): confusing and potentially incorrect use of
 		// r.store.Engine() here (likely OK with proposer-evaluated KV,
 		// though still confusing).
