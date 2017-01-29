@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -355,6 +356,12 @@ func (e *Executor) Start(
 		log.Fatal(ctx, err)
 	}
 	startupSession.Finish(e)
+}
+
+// SetDistSQLSpanResolver changes the SpanResolver used for DistSQL. It is the
+// caller's responsibility to make sure no queries are being run with DistSQL at // the same time.
+func (e *Executor) SetDistSQLSpanResolver(spanResolver distsqlplan.SpanResolver) {
+	e.distSQLPlanner.setSpanResolver(spanResolver)
 }
 
 // AnnotateCtx is a convenience wrapper; see AmbientContext.

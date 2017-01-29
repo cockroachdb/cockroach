@@ -83,6 +83,14 @@ type TestServerInterface interface {
 	// DistSQLServer returns the *distsqlrun.ServerImpl as an interface{}.
 	DistSQLServer() interface{}
 
+	// SetDistSQLSpanResolver changes the SpanResolver used for DistSQL inside the
+	// server's executor. The argument must be a distsqlplan.SpanResolver
+	// instance.
+	//
+	// It is the caller's responsibility to make sure no queries are being run
+	// with DistSQL at the same time.
+	SetDistSQLSpanResolver(spanResolver interface{})
+
 	// AdminURL returns the URL for the admin UI.
 	AdminURL() string
 	// GetHTTPClient returns an http client connected to the server. It uses the

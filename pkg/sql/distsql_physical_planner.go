@@ -88,6 +88,12 @@ func newDistSQLPlanner(
 	}
 }
 
+// setSpanResolver switches to a different SpanResolver. It is the caller's
+// responsibility to make sure the distSQLPlanner is not in use.
+func (dsp *distSQLPlanner) setSpanResolver(spanResolver distsqlplan.SpanResolver) {
+	dsp.spanResolver = spanResolver
+}
+
 // distSQLExprCheckVisitor is a parser.Visitor that checks if expressions
 // contain things not supported by distSQL (like subqueries).
 type distSQLExprCheckVisitor struct {
