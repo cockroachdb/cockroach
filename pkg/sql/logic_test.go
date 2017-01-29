@@ -338,8 +338,13 @@ type logicQuery struct {
 // sqllogictest source.
 type logicTest struct {
 	t *testing.T
-	// the database server instantiated for this input file.
-	srv serverutils.TestServerInterface
+	// the number of nodes in the cluster.
+	numNodes int
+	// the cluster instantiated for this input file.
+	cluster serverutils.TestClusterInterface
+	// the index of the node (within the cluster) against which we run the test
+	// statements.
+	nodeIdx int
 	// map of built clients. Needs to be persisted so that we can
 	// re-use them and close them all on exit.
 	clients map[string]*gosql.DB
@@ -385,9 +390,9 @@ func (t *logicTest) close() {
 		t.cleanupRootUser()
 		t.cleanupRootUser = nil
 	}
-	if t.srv != nil {
-		t.srv.Stopper().Stop()
-		t.srv = nil
+	if t.cluster != nil {
+		t.cluster.Stopper().Stop()
+		t.cluster = nil
 	}
 	if t.clients != nil {
 		for _, c := range t.clients {
@@ -446,7 +451,8 @@ func (t *logicTest) setUser(user string) func() {
 		return func() {}
 	}
 
-	pgURL, cleanupFunc := sqlutils.PGUrl(t.t, t.srv.ServingAddr(), "TestLogic", url.User(user))
+	addr := t.cluster.Server(t.nodeIdx).ServingAddr()
+	pgURL, cleanupFunc := sqlutils.PGUrl(t.t, addr, "TestLogic", url.User(user))
 	db, err := gosql.Open("postgres", pgURL.String())
 	if err != nil {
 		t.Fatal(err)
@@ -471,15 +477,18 @@ func (t *logicTest) setup() {
 	// it installs detects a transaction that doesn't have
 	// modifiedSystemConfigSpan set even though it should, for
 	// "testdata/rename_table". Figure out what's up with that.
-	params := base.TestServerArgs{
-		Knobs: base.TestingKnobs{
-			SQLExecutor: &sql.ExecutorTestingKnobs{
-				WaitForGossipUpdate:   true,
-				CheckStmtStringChange: true,
+	params := base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				SQLExecutor: &sql.ExecutorTestingKnobs{
+					WaitForGossipUpdate:   true,
+					CheckStmtStringChange: true,
+				},
 			},
 		},
+		ReplicationMode: base.ReplicationManual,
 	}
-	t.srv, _, _ = serverutils.StartServer(t.t, params)
+	t.cluster = serverutils.StartTestCluster(t.t, t.numNodes, params)
 
 	// db may change over the lifetime of this function, with intermediate
 	// values cached in t.clients and finally closed in t.close().
@@ -521,7 +530,7 @@ func (t *logicTest) processTestFile(path string) error {
 
 	t.lastProgress = timeutil.Now()
 
-	execKnobs := t.srv.(*server.TestServer).Cfg.TestingKnobs.SQLExecutor.(*sql.ExecutorTestingKnobs)
+	execKnobs := t.cluster.Server(t.nodeIdx).(*server.TestServer).Cfg.TestingKnobs.SQLExecutor.(*sql.ExecutorTestingKnobs)
 
 	repeat := 1
 	s := newLineScanner(file)
@@ -1150,6 +1159,7 @@ func TestLogic(t *testing.T) {
 	lastProgress := timeutil.Now()
 	l := logicTest{
 		t:               t,
+		numNodes:        1,
 		verbose:         testing.Verbose() || log.V(1),
 		perErrorSummary: make(map[string][]string),
 	}
