@@ -47,6 +47,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/distsqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -344,7 +345,8 @@ type logicTest struct {
 	cluster serverutils.TestClusterInterface
 	// the index of the node (within the cluster) against which we run the test
 	// statements.
-	nodeIdx int
+	nodeIdx         int
+	useFakeResolver bool
 	// map of built clients. Needs to be persisted so that we can
 	// re-use them and close them all on exit.
 	clients map[string]*gosql.DB
@@ -486,9 +488,15 @@ func (t *logicTest) setup() {
 				},
 			},
 		},
+		// For distributed SQL tests, we use the fake span resolver; it doesn't
+		// matter where the data really is.
 		ReplicationMode: base.ReplicationManual,
 	}
 	t.cluster = serverutils.StartTestCluster(t.t, t.numNodes, params)
+	if t.useFakeResolver {
+		fakeResolver := distsqlutils.FakeResolverForTestCluster(t.cluster)
+		t.cluster.Server(t.nodeIdx).SetDistSQLSpanResolver(fakeResolver)
+	}
 
 	// db may change over the lifetime of this function, with intermediate
 	// values cached in t.clients and finally closed in t.close().
@@ -1093,13 +1101,22 @@ func (t *logicTest) success(file string) {
 	}
 }
 
-func TestLogic(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	if testutils.Stress() {
-		t.Skip()
+func makeLogicTest(t *testing.T, numNodes int, useFakeSpanResolver bool) *logicTest {
+	return &logicTest{
+		t:               t,
+		numNodes:        numNodes,
+		useFakeResolver: true,
+		verbose:         testing.Verbose() || log.V(1),
+		perErrorSummary: make(map[string][]string),
 	}
+}
 
+// run runs the logic tests indicated by the bigtest and logictestdata flags.
+// A new cluster is set up for each separate file in the test.
+// This function must be called from within the testing.T associated with the
+// logicTest.
+func (l *logicTest) run() {
+	t := l.t
 	var globs []string
 	if *bigtest {
 		const logicTestPath = "../../sqllogictest"
@@ -1157,12 +1174,6 @@ func TestLogic(t *testing.T) {
 	totalFail := 0
 	totalUnsupported := 0
 	lastProgress := timeutil.Now()
-	l := logicTest{
-		t:               t,
-		numNodes:        1,
-		verbose:         testing.Verbose() || log.V(1),
-		perErrorSummary: make(map[string][]string),
-	}
 	if *printErrorSummary {
 		defer l.printErrorSummary()
 	}
@@ -1205,6 +1216,17 @@ func TestLogic(t *testing.T) {
 	l.outf("--- total: %d tests, %d failures%s", total, totalFail, unsupportedMsg)
 }
 
+func TestLogic(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	if testutils.Stress() {
+		t.Skip()
+	}
+
+	l := makeLogicTest(t, 1 /* numNodes */, false /* useFakeSpanResolver */)
+	l.run()
+}
+
 // TestLogicDistSQL is a variant of TestLogic that uses DistSQL for all
 // supported queries.
 func TestLogicDistSQL(t *testing.T) {
@@ -1214,9 +1236,15 @@ func TestLogicDistSQL(t *testing.T) {
 		t.Skip("short flag")
 	}
 
+	if testutils.Stress() {
+		t.Skip()
+	}
+
 	defer sql.SetDefaultDistSQLMode("ON")()
 
-	TestLogic(t)
+	// TODO(radu): make this run on 3 nodes (#13377)
+	l := makeLogicTest(t, 1 /* numNodes */, true /* useFakeSpanResolver */)
+	l.run()
 }
 
 type errorSummaryEntry struct {
