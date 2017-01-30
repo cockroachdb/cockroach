@@ -100,16 +100,16 @@ func initGeneratorBuiltins() {
 var generators = map[string][]Builtin{
 	"pg_catalog.generate_series": {
 		makeGeneratorBuiltin(
-			ArgTypes{{"a", TypeInt}, {"b", TypeInt}},
+			ArgTypes{{"start", TypeInt}, {"end", TypeInt}},
 			TTuple{TypeInt},
 			makeSeriesGenerator,
-			"Not usable; supported only for ORM compatibility.",
+			"Produces a virtual table containing the integer values from <start> to <end>, inclusive",
 		),
 		makeGeneratorBuiltin(
-			ArgTypes{{"a", TypeInt}, {"b", TypeInt}, {"c", TypeInt}},
+			ArgTypes{{"start", TypeInt}, {"end", TypeInt}, {"step", TypeInt}},
 			TTuple{TypeInt},
 			makeSeriesGenerator,
-			"Not usable; supported only for ORM compatibility.",
+			"Produces a virtual table containing the integer values from <start> to <end>, by increment of <step>.",
 		),
 	},
 	"unnest": {
