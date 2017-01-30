@@ -3112,7 +3112,6 @@ func (s *Store) processRaftRequest(
 		if req.Message.Type == raftpb.MsgApp {
 			r.setEstimatedCommitIndexLocked(req.Message.Commit)
 		}
-		log.Infof(ctx, "message: %+v", req.Message)
 		return false, /* !unquiesceAndWakeLeader */
 			raftGroup.Step(req.Message)
 	}); err != nil {

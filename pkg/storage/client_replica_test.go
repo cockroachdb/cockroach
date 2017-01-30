@@ -1234,38 +1234,20 @@ func TestCampaignOnLazyRaftGroupInitialization(t *testing.T) {
 		testState.Unlock()
 		<-blocking
 	}
-	mtc := &multiTestContext{storeConfig: &sc}
-	defer mtc.Stop()
-	mtc.Start(t, 3)
-
-	// Split so we can rely on RHS range being quiescent after a restart.
-	// We use UserTableDataMin to avoid having the range activated to
-	// gossip system table data.
-	splitArgs := adminSplitArgs(roachpb.KeyMin, splitKey)
-	if _, err := client.SendWrapped(context.Background(), rg1(mtc.stores[0]), splitArgs); err != nil {
-		t.Fatal(err)
-	}
-
-	// Up-replicate to three replicas.
-	repl := mtc.stores[0].LookupReplica(roachpb.RKey(splitKey), nil)
-	if repl == nil {
-		t.Fatal("replica should not be nil for RHS range")
-	}
-	mtc.replicateRange(repl.RangeID, 1, 2)
 
 	testCases := []struct {
 		desc         string
-		prepFn       func(*testing.T)
+		prepFn       func(*multiTestContext, *testing.T)
 		expCampaigns map[roachpb.ReplicaID]bool
 	}{
 		{
 			desc:         "within idle replica campaign timeout",
-			prepFn:       func(t *testing.T) {},
+			prepFn:       func(mtc *multiTestContext, t *testing.T) {},
 			expCampaigns: map[roachpb.ReplicaID]bool{},
 		},
 		{
 			desc: "past idle replica campaign timeout",
-			prepFn: func(t *testing.T) {
+			prepFn: func(mtc *multiTestContext, t *testing.T) {
 				for _, s := range mtc.stores {
 					if err := s.GossipStore(context.TODO()); err != nil {
 						t.Fatal(err)
@@ -1280,7 +1262,7 @@ func TestCampaignOnLazyRaftGroupInitialization(t *testing.T) {
 		},
 		{
 			desc: "lease expired all replicas should campaign",
-			prepFn: func(t *testing.T) {
+			prepFn: func(mtc *multiTestContext, t *testing.T) {
 				for _, s := range mtc.stores {
 					if err := s.GossipStore(context.TODO()); err != nil {
 						t.Fatal(err)
@@ -1298,22 +1280,50 @@ func TestCampaignOnLazyRaftGroupInitialization(t *testing.T) {
 
 	for i, test := range testCases {
 		t.Run(test.desc, func(t *testing.T) {
-			fmt.Println("\n\n********** Starting test case", i)
-			// Restart the cluster for lazy initialization of the raft group.
-			mtc.restart()
+			mtc := &multiTestContext{storeConfig: &sc}
+			defer mtc.Stop()
+			mtc.Start(t, 3)
+
+			// Split so we can rely on RHS range being quiescent after a restart.
+			// We use UserTableDataMin to avoid having the range activated to
+			// gossip system table data.
+			splitArgs := adminSplitArgs(roachpb.KeyMin, splitKey)
+			if _, err := client.SendWrapped(context.Background(), rg1(mtc.stores[0]), splitArgs); err != nil {
+				t.Fatal(err)
+			}
+
+			// Up-replicate to three replicas.
+			repl := mtc.stores[0].LookupReplica(roachpb.RKey(splitKey), nil)
+			if repl == nil {
+				t.Fatal("replica should not be nil for RHS range")
+			}
+			mtc.replicateRange(repl.RangeID, 1, 2)
+
+			incArgs := incrementArgs(splitKey, 1)
+			if _, pErr := client.SendWrappedWith(
+				context.Background(), mtc.stores[0], roachpb.Header{RangeID: repl.RangeID}, incArgs,
+			); pErr != nil {
+				t.Fatal(pErr)
+			}
+			mtc.waitForValues(splitKey, []int64{1, 1, 1})
+
 			// Clear the campaign map.
 			testState.Lock()
 			testState.blockingCh = make(chan struct{})
 			testState.campaigns = map[roachpb.ReplicaID]bool{}
 			testState.Unlock()
+
+			// Restart the cluster for lazy initialization of the raft group.
+			fmt.Println("\n\n********** Starting test case", i)
+			mtc.restart()
+
 			// Run whatever preparation is necessary for this test case.
-			test.prepFn(t)
+			test.prepFn(mtc, t)
 
 			// Send an increment to all three replicas in parallel.
 			errCh := make(chan error, len(mtc.stores))
 			for _, s := range mtc.stores {
 				go func(s *storage.Store) {
-					incArgs := incrementArgs(splitKey, 1)
 					_, pErr := client.SendWrappedWith(
 						context.Background(), s, roachpb.Header{RangeID: repl.RangeID}, incArgs,
 					)
@@ -1346,19 +1356,13 @@ func TestCampaignOnLazyRaftGroupInitialization(t *testing.T) {
 				t.Errorf("expected 2 errors; got %d", errCount)
 			}
 
-			mtc.waitForValues(splitKey, []int64{int64(i + 1), int64(i + 1), int64(i + 1)})
+			mtc.waitForValues(splitKey, []int64{2, 2, 2})
 
 			testState.Lock()
 			if !reflect.DeepEqual(test.expCampaigns, testState.campaigns) {
 				t.Errorf("expected %+v; got %+v", test.expCampaigns, testState.campaigns)
 			}
 			testState.Unlock()
-
-			// HACK: sleep to process raft leader wakeup proposals. It is
-			// otherwise too difficult to guarantee that the next test cycle
-			// will not have a stray raft request init the raft group after
-			// restart.
-			time.Sleep(100 * time.Millisecond)
 		})
 	}
 }
