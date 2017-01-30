@@ -17,6 +17,8 @@
 package rocksdb
 
 import (
+	"unsafe"
+
 	// Link against the protobuf, rocksdb, and snappy libraries. This is
 	// explicit because these Go libraries do not export any Go symbols.
 	_ "github.com/cockroachdb/c-protobuf"
@@ -28,6 +30,8 @@ import (
 // #cgo darwin LDFLAGS: -Wl,-undefined -Wl,dynamic_lookup
 // #cgo !darwin LDFLAGS: -Wl,-unresolved-symbols=ignore-all
 // #cgo linux LDFLAGS: -lrt
+//
+// #include "db.h"
 import "C"
 
 // Logger is a logging function to be set by the importing package. Its
@@ -36,7 +40,23 @@ var Logger = func(string, ...interface{}) {}
 
 //export rocksDBLog
 func rocksDBLog(s *C.char, n C.int) {
-	// Note that rocksdb logging is only enabled if log.V(1) is true
+	// Note that rocksdb logging is only enabled if log.V(3) is true
 	// when RocksDB.Open() is called.
 	Logger("%s", C.GoStringN(s, n))
+}
+
+// DBKeyPrinter may be set to a function to perform pretty-printing
+// of rocksdb keys. It is normally set by an init function in the
+// storage/engine package. The arguments are a DBKey decomposed into its
+// primitive fields, because the compiler doesn't like passing C types
+// across package boundaries.
+var DBKeyPrinter func([]byte, int64, int32) string
+
+//export prettyPrintKey
+func prettyPrintKey(cKey C.DBKey) *C.char {
+	if DBKeyPrinter == nil {
+		return C.CString("pretty printer not initialized")
+	}
+	return C.CString(DBKeyPrinter(C.GoBytes(unsafe.Pointer(cKey.key.data), cKey.key.len),
+		int64(cKey.wall_time), int32(cKey.logical)))
 }
