@@ -337,6 +337,9 @@ func (s *renderNode) initTargets(targets parser.SelectExprs, desiredTypes []pars
 		// function's column in the join.
 		if e := extractSetReturningFunction(exprs); e != nil {
 			cols, exprs, hasStar, err = s.transformToCrossJoin(e, desiredType)
+			if err != nil {
+				return err
+			}
 		}
 
 		s.isStar = s.isStar || hasStar

@@ -669,9 +669,6 @@ func TestStyle(t *testing.T) {
 				//
 				// TODO(bdarnell): remove when/if #8360 is fixed.
 				"github.com/cockroachdb/cockroach/pkg/storage/intent_resolver.go:SA4009",
-				// Loop intentionally exits unconditionally; it's cleaner than
-				// explicitly checking length and extracting the first element.
-				"github.com/cockroachdb/cockroach/pkg/sql/errors.go:SA4004",
 				// A value assigned to a variable is never read; this might be worth
 				// investigating, but it's cumbersome because the reported file
 				// differs from the source.

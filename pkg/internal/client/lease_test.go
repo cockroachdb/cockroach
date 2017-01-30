@@ -76,15 +76,14 @@ func TestReacquireLease(t *testing.T) {
 	clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
 	lm := client.NewLeaseManager(db, clock, client.LeaseManagerOptions{ClientID: clientID1})
 
-	l, err := lm.AcquireLease(ctx, leaseKey)
-	if err != nil {
+	if _, err := lm.AcquireLease(ctx, leaseKey); err != nil {
 		t.Fatal(err)
 	}
 
 	// We allow re-acquiring the same lease as long as the client ID is
 	// the same to allow a client to reacquire its own leases rather than
 	// having to wait them out if it crashes and restarts.
-	l, err = lm.AcquireLease(ctx, leaseKey)
+	l, err := lm.AcquireLease(ctx, leaseKey)
 	if err != nil {
 		t.Fatal(err)
 	}
