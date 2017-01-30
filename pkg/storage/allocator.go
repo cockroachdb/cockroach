@@ -120,28 +120,15 @@ func makeAllocatorRand(source rand.Source) allocatorRand {
 	}
 }
 
-// AllocatorOptions are configurable options which effect the way that the
-// replicate queue will handle rebalancing opportunities.
-type AllocatorOptions struct {
-	// AllowRebalance allows this store to attempt to rebalance its own
-	// replicas to other stores.
-	AllowRebalance bool
-
-	// UseRuleSolver enables this store to use the updated rules based
-	// constraint solver instead of the original rebalancer.
-	UseRuleSolver bool
-}
-
 // Allocator tries to spread replicas as evenly as possible across the stores
 // in the cluster.
 type Allocator struct {
 	storePool *StorePool
 	randGen   allocatorRand
-	options   AllocatorOptions
 }
 
 // MakeAllocator creates a new allocator using the specified StorePool.
-func MakeAllocator(storePool *StorePool, options AllocatorOptions) Allocator {
+func MakeAllocator(storePool *StorePool) Allocator {
 	var randSource rand.Source
 	// There are number of test cases that make a test store but don't add
 	// gossip or a store pool. So we can't rely on the existence of the
@@ -153,7 +140,6 @@ func MakeAllocator(storePool *StorePool, options AllocatorOptions) Allocator {
 	}
 	return Allocator{
 		storePool: storePool,
-		options:   options,
 		randGen:   makeAllocatorRand(randSource),
 	}
 }
@@ -212,58 +198,29 @@ func (a *Allocator) AllocateTarget(
 	rangeID roachpb.RangeID,
 	relaxConstraints bool,
 ) (*roachpb.StoreDescriptor, error) {
-	sl, aliveStoreCount, throttledStoreCount := a.storePool.getStoreList(rangeID)
-	if a.options.UseRuleSolver {
-		candidates := allocateCandidates(
-			sl,
-			constraints,
-			existing,
-			a.storePool.getNodeLocalities(existing),
-			a.storePool.deterministic,
-		)
-		if log.V(3) {
-			log.Infof(context.TODO(), "allocate candidates: %s", candidates)
-		}
-		if target := candidates.selectGood(a.randGen); target != nil {
-			return target, nil
-		}
+	sl, _, throttledStoreCount := a.storePool.getStoreList(rangeID)
 
-		// When there are throttled stores that do match, we shouldn't send
-		// the replica to purgatory.
-		if throttledStoreCount > 0 {
-			return nil, errors.Errorf("%d matching stores are currently throttled", throttledStoreCount)
-		}
-		return nil, &allocatorError{
-			required: constraints.Constraints,
-		}
+	candidates := allocateCandidates(
+		sl,
+		constraints,
+		existing,
+		a.storePool.getNodeLocalities(existing),
+		a.storePool.deterministic,
+	)
+	if log.V(3) {
+		log.Infof(context.TODO(), "allocate candidates: %s", candidates)
+	}
+	if target := candidates.selectGood(a.randGen); target != nil {
+		return target, nil
 	}
 
-	existingNodes := make(nodeIDSet, len(existing))
-	for _, repl := range existing {
-		existingNodes[repl.NodeID] = struct{}{}
+	// When there are throttled stores that do match, we shouldn't send
+	// the replica to purgatory.
+	if throttledStoreCount > 0 {
+		return nil, errors.Errorf("%d matching stores are currently throttled", throttledStoreCount)
 	}
-
-	// Because more redundancy is better than less, if relaxConstraints, the
-	// matching here is lenient, and tries to find a target by relaxing an
-	// attribute constraint, from last attribute to first.
-	for attrs := constraints.Constraints; ; attrs = attrs[:len(attrs)-1] {
-		filteredSL := sl.filter(config.Constraints{Constraints: attrs})
-		if target := a.selectGood(filteredSL, existingNodes); target != nil {
-			return target, nil
-		}
-
-		// When there are throttled stores that do match, we shouldn't send
-		// the replica to purgatory or even consider relaxing the constraints.
-		if throttledStoreCount > 0 {
-			return nil, errors.Errorf("%d matching stores are currently throttled", throttledStoreCount)
-		}
-		if len(attrs) == 0 || !relaxConstraints {
-			return nil, &allocatorError{
-				required:         constraints.Constraints,
-				relaxConstraints: relaxConstraints,
-				aliveStoreCount:  aliveStoreCount,
-			}
-		}
+	return nil, &allocatorError{
+		required: constraints.Constraints,
 	}
 }
 
@@ -292,24 +249,17 @@ func (a Allocator) RemoveTarget(
 		}
 	}
 	sl := makeStoreList(descriptors)
-	var bad *roachpb.StoreDescriptor
 
-	if a.options.UseRuleSolver {
-		candidates := removeCandidates(
-			sl,
-			constraints,
-			a.storePool.getNodeLocalities(existing),
-			a.storePool.deterministic,
-		)
-		if log.V(3) {
-			log.Infof(context.TODO(), "remove candidates: %s", candidates)
-		}
-		bad = candidates.selectBad(a.randGen)
-	} else {
-		bad = a.selectBad(sl)
+	candidates := removeCandidates(
+		sl,
+		constraints,
+		a.storePool.getNodeLocalities(existing),
+		a.storePool.deterministic,
+	)
+	if log.V(3) {
+		log.Infof(context.TODO(), "remove candidates: %s", candidates)
 	}
-
-	if bad != nil {
+	if bad := candidates.selectBad(a.randGen); bad != nil {
 		for _, exist := range existing {
 			if exist.StoreID == bad.StoreID {
 				return exist, nil
@@ -346,59 +296,12 @@ func (a Allocator) RebalanceTarget(
 	leaseStoreID roachpb.StoreID,
 	rangeID roachpb.RangeID,
 ) (*roachpb.StoreDescriptor, error) {
-	if !a.options.AllowRebalance {
-		return nil, nil
-	}
 	sl, _, _ := a.storePool.getStoreList(rangeID)
 
-	if a.options.UseRuleSolver {
-		// TODO(bram): ShouldRebalance should be part of rebalanceCandidates
-		// and decision made afterward, not it's own function. It is
-		// performing the same operations as rebalanceCandidates and any
-		// missing functionality can be added.
-		var shouldRebalance bool
-		for _, repl := range existing {
-			if leaseStoreID == repl.StoreID {
-				continue
-			}
-			storeDesc, ok := a.storePool.getStoreDescriptor(repl.StoreID)
-			if ok && a.shouldRebalance(storeDesc, sl) {
-				shouldRebalance = true
-				break
-			}
-		}
-		if !shouldRebalance {
-			return nil, nil
-		}
-
-		existingCandidates, candidates := rebalanceCandidates(
-			sl,
-			constraints,
-			existing,
-			a.storePool.getNodeLocalities(existing),
-			a.storePool.deterministic,
-		)
-
-		if len(existingCandidates) == 0 {
-			return nil, errors.Errorf(
-				"all existing replicas' stores are not present in the store pool: %v\n%s", existing, sl)
-		}
-
-		if log.V(3) {
-			log.Infof(context.TODO(), "existing replicas: %s", existingCandidates)
-			log.Infof(context.TODO(), "candidates: %s", candidates)
-		}
-
-		// Find all candidates that are better than the worst existing replica.
-		targets := candidates.betterThan(existingCandidates[len(existingCandidates)-1])
-		return targets.selectGood(a.randGen), nil
-	}
-
-	sl = sl.filter(constraints)
-	if log.V(3) {
-		log.Infof(context.TODO(), "rebalance-target (lease-holder=%d):\n%s", leaseStoreID, sl)
-	}
-
+	// TODO(bram): ShouldRebalance should be part of rebalanceCandidates
+	// and decision made afterward, not it's own function. It is
+	// performing the same operations as rebalanceCandidates and any
+	// missing functionality can be added.
 	var shouldRebalance bool
 	for _, repl := range existing {
 		if leaseStoreID == repl.StoreID {
@@ -414,11 +317,27 @@ func (a Allocator) RebalanceTarget(
 		return nil, nil
 	}
 
-	existingNodes := make(nodeIDSet, len(existing))
-	for _, repl := range existing {
-		existingNodes[repl.NodeID] = struct{}{}
+	existingCandidates, candidates := rebalanceCandidates(
+		sl,
+		constraints,
+		existing,
+		a.storePool.getNodeLocalities(existing),
+		a.storePool.deterministic,
+	)
+
+	if len(existingCandidates) == 0 {
+		return nil, errors.Errorf(
+			"all existing replicas' stores are not present in the store pool: %v\n%s", existing, sl)
 	}
-	return a.improve(sl, existingNodes), nil
+
+	if log.V(3) {
+		log.Infof(context.TODO(), "existing replicas: %s", existingCandidates)
+		log.Infof(context.TODO(), "candidates: %s", candidates)
+	}
+
+	// Find all candidates that are better than the worst existing replica.
+	targets := candidates.betterThan(existingCandidates[len(existingCandidates)-1])
+	return targets.selectGood(a.randGen), nil
 }
 
 // TransferLeaseTarget returns a suitable replica to transfer the range lease
@@ -430,10 +349,6 @@ func (a *Allocator) TransferLeaseTarget(
 	rangeID roachpb.RangeID,
 	checkTransferLeaseSource bool,
 ) roachpb.ReplicaDescriptor {
-	if !a.options.AllowRebalance {
-		return roachpb.ReplicaDescriptor{}
-	}
-
 	sl, _, _ := a.storePool.getStoreList(rangeID)
 	sl = sl.filter(constraints)
 
@@ -498,10 +413,6 @@ func (a *Allocator) ShouldTransferLease(
 	leaseStoreID roachpb.StoreID,
 	rangeID roachpb.RangeID,
 ) bool {
-	if !a.options.AllowRebalance {
-		return false
-	}
-
 	source, ok := a.storePool.getStoreDescriptor(leaseStoreID)
 	if !ok {
 		return false
@@ -553,32 +464,6 @@ func (a Allocator) shouldTransferLease(
 		}
 	}
 	return false
-}
-
-// selectGood attempts to select a store from the supplied store list that it
-// considers to be 'Good' relative to the other stores in the list. Any nodes
-// in the supplied 'exclude' list will be disqualified from selection. Returns
-// the selected store or nil if no such store can be found.
-func (a Allocator) selectGood(sl StoreList, excluded nodeIDSet) *roachpb.StoreDescriptor {
-	rcb := rangeCountBalancer{a.randGen}
-	return rcb.selectGood(sl, excluded)
-}
-
-// selectBad attempts to select a store from the supplied store list that it
-// considers to be 'Bad' relative to the other stores in the list. Returns the
-// selected store or nil if no such store can be found.
-func (a Allocator) selectBad(sl StoreList) *roachpb.StoreDescriptor {
-	rcb := rangeCountBalancer{a.randGen}
-	return rcb.selectBad(sl)
-}
-
-// improve attempts to select an improvement over the given store from the
-// stores in the given store list. Any nodes in the supplied 'exclude' list
-// will be disqualified from selection. Returns the selected store, or nil if
-// no such store can be found.
-func (a Allocator) improve(sl StoreList, excluded nodeIDSet) *roachpb.StoreDescriptor {
-	rcb := rangeCountBalancer{a.randGen}
-	return rcb.improve(sl, excluded)
 }
 
 // rebalanceThreshold is the minimum ratio of a store's range/lease surplus to
