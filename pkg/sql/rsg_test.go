@@ -192,6 +192,8 @@ func testRandomSyntax(
 
 	params, _ := createTestServerParams()
 	params.UseDatabase = "ident"
+	// Use a low memory limit to quickly halt runaway functions.
+	params.SQLMemoryPoolSize = 3 * 1024 * 1024 // 3MB
 	s, db, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop()
 
