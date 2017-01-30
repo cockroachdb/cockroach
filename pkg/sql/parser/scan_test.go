@@ -350,7 +350,7 @@ world'`, `hello
 world`},
 		{`x'666f6f'`, `foo`},
 		{`X'626172'`, `bar`},
-		{`X'FF'`, `invalid UTF-8 byte sequence`},
+		{`X'FF'`, "\xff"},
 	}
 	for _, d := range testData {
 		s := MakeScanner(d.sql, Traditional)
