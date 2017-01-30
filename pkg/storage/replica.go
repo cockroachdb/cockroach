@@ -1482,8 +1482,8 @@ func (r *Replica) checkBatchRequest(ba roachpb.BatchRequest) error {
 // command processing.
 type endCmds struct {
 	repl      *Replica
-	cmdGlobal *cmd
-	cmdLocal  *cmd
+	cmdGlobal [numSpanAccess]*cmd
+	cmdLocal  [numSpanAccess]*cmd
 	ba        roachpb.BatchRequest
 }
 
@@ -1510,8 +1510,10 @@ func (ec *endCmds) doneLocked(
 	}
 
 	ec.repl.cmdQMu.Lock()
-	ec.repl.cmdQMu.global.remove(ec.cmdGlobal)
-	ec.repl.cmdQMu.local.remove(ec.cmdLocal)
+	for i := range ec.cmdGlobal {
+		ec.repl.cmdQMu.global.remove(ec.cmdGlobal[i])
+		ec.repl.cmdQMu.local.remove(ec.cmdLocal[i])
+	}
 	ec.repl.cmdQMu.Unlock()
 }
 
@@ -1578,29 +1580,31 @@ func makeCacheRequest(ba *roachpb.BatchRequest, br *roachpb.BatchResponse) cache
 // commands are done and can be removed from the queue, and whose returned
 // error is to be used in place of the supplied error.
 func (r *Replica) beginCmds(ctx context.Context, ba *roachpb.BatchRequest) (*endCmds, error) {
-	var cmdGlobal *cmd
-	var cmdLocal *cmd
+	var cmdGlobal [numSpanAccess]*cmd
+	var cmdLocal [numSpanAccess]*cmd
 	// Don't use the command queue for inconsistent reads.
 	if ba.ReadConsistency != roachpb.INCONSISTENT {
+		var spans SpanSet
+		// TODO(bdarnell): need to make this less global when the local
+		// command queue is used more heavily. For example, a split will have
+		// a large read-only span but also a write (see #10084).
+		access := SpanReadWrite
+		if ba.IsReadOnly() {
+			access = SpanReadOnly
+		}
 		// Currently local spans are the exception, so preallocate for the
 		// common case in which all are global.
 		//
-		// TODO(tschottdorf): revisit as the local portion gets its appropriate
+		// TODO(bdarnell): revisit as the local portion gets its appropriate
 		// use.
-		spansGlobal := make([]roachpb.Span, 0, len(ba.Requests))
-		var spansLocal []roachpb.Span
+		spans.reserve(access, spanGlobal, len(ba.Requests))
 
 		for _, union := range ba.Requests {
 			inner := union.GetInner()
 			if _, ok := inner.(*roachpb.NoopRequest); ok {
 				continue
 			}
-			header := inner.Header()
-			if keys.IsLocal(header.Key) {
-				spansLocal = append(spansLocal, header)
-			} else {
-				spansGlobal = append(spansGlobal, header)
-			}
+			spans.Add(access, inner.Header())
 		}
 
 		// When running with experimental proposer-evaluated KV, insert a
@@ -1609,16 +1613,11 @@ func (r *Replica) beginCmds(ctx context.Context, ba *roachpb.BatchRequest) (*end
 		// but is required for passing tests until correctness work in
 		// #6290 is addressed.
 		if propEvalKV {
-			spansGlobal = append(spansGlobal, roachpb.Span{
+			spans.Add(access, roachpb.Span{
 				Key:    keys.LocalMax,
 				EndKey: keys.MaxKey,
 			})
 		}
-
-		// TODO(tschottdorf): need to make this less global when the local
-		// command queue is used more heavily. For example, a split will have
-		// a large read-only span but also a write (see #10084).
-		readOnly := ba.IsReadOnly()
 
 		// Check for context cancellation before inserting into the
 		// command queue (and check again afterward). Once we're in the
@@ -1637,10 +1636,16 @@ func (r *Replica) beginCmds(ctx context.Context, ba *roachpb.BatchRequest) (*end
 		}
 
 		r.cmdQMu.Lock()
-		chans := r.cmdQMu.global.getWait(readOnly, spansGlobal...)
-		chans = append(chans, r.cmdQMu.local.getWait(readOnly, spansLocal...)...)
-		cmdGlobal = r.cmdQMu.global.add(readOnly, spansGlobal...)
-		cmdLocal = r.cmdQMu.local.add(readOnly, spansLocal...)
+		var chans []<-chan struct{}
+		for i := SpanAccess(0); i < numSpanAccess; i++ {
+			spansGlobal := spans.getSpans(i, spanGlobal)
+			spansLocal := spans.getSpans(i, spanLocal)
+			readOnly := i == SpanReadOnly
+			chans = append(chans, r.cmdQMu.global.getWait(readOnly, spansGlobal)...)
+			chans = append(chans, r.cmdQMu.local.getWait(readOnly, spansLocal)...)
+			cmdGlobal[i] = r.cmdQMu.global.add(readOnly, spansGlobal)
+			cmdLocal[i] = r.cmdQMu.local.add(readOnly, spansLocal)
+		}
 		r.cmdQMu.Unlock()
 
 		beforeWait := timeutil.Now()
@@ -1690,8 +1695,10 @@ func (r *Replica) beginCmds(ctx context.Context, ba *roachpb.BatchRequest) (*end
 						}
 					}
 					r.cmdQMu.Lock()
-					r.cmdQMu.global.remove(cmdGlobal)
-					r.cmdQMu.local.remove(cmdLocal)
+					for i := range cmdGlobal {
+						r.cmdQMu.global.remove(cmdGlobal[i])
+						r.cmdQMu.local.remove(cmdLocal[i])
+					}
 					r.cmdQMu.Unlock()
 				}()
 				return nil, err

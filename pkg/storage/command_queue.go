@@ -156,7 +156,7 @@ func (cq *CommandQueue) String() string {
 
 // prepareSpans ensures the spans all have an end key. Note that this function
 // mutates its arguments.
-func prepareSpans(spans ...roachpb.Span) {
+func prepareSpans(spans []roachpb.Span) {
 	for i, span := range spans {
 		// This gives us a memory-efficient end key if end is empty.
 		if len(span.EndKey) == 0 {
@@ -195,8 +195,8 @@ func (cq *CommandQueue) expand(c *cmd, isInserted bool) bool {
 // that all gating commands have completed or failed, and then call add() to
 // add the keys to the command queue. readOnly is true if the requester is a
 // read-only command; false for read-write.
-func (cq *CommandQueue) getWait(readOnly bool, spans ...roachpb.Span) (chans []<-chan struct{}) {
-	prepareSpans(spans...)
+func (cq *CommandQueue) getWait(readOnly bool, spans []roachpb.Span) (chans []<-chan struct{}) {
+	prepareSpans(spans)
 
 	for i := 0; i < len(spans); i++ {
 		span := spans[i]
@@ -445,11 +445,11 @@ func (o *overlapHeap) PopOverlap() *cmd {
 //
 // add should be invoked after waiting on already-executing, overlapping
 // commands via the WaitGroup initialized through getWait().
-func (cq *CommandQueue) add(readOnly bool, spans ...roachpb.Span) *cmd {
+func (cq *CommandQueue) add(readOnly bool, spans []roachpb.Span) *cmd {
 	if len(spans) == 0 {
 		return nil
 	}
-	prepareSpans(spans...)
+	prepareSpans(spans)
 
 	// Compute the min and max key that covers all of the spans.
 	minKey, maxKey := spans[0].Key, spans[0].EndKey
