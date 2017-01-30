@@ -296,27 +296,8 @@ func (a Allocator) RebalanceTarget(
 	leaseStoreID roachpb.StoreID,
 	rangeID roachpb.RangeID,
 ) (*roachpb.StoreDescriptor, error) {
+
 	sl, _, _ := a.storePool.getStoreList(rangeID)
-
-	// TODO(bram): ShouldRebalance should be part of rebalanceCandidates
-	// and decision made afterward, not it's own function. It is
-	// performing the same operations as rebalanceCandidates and any
-	// missing functionality can be added.
-	var shouldRebalance bool
-	for _, repl := range existing {
-		if leaseStoreID == repl.StoreID {
-			continue
-		}
-		storeDesc, ok := a.storePool.getStoreDescriptor(repl.StoreID)
-		if ok && a.shouldRebalance(storeDesc, sl) {
-			shouldRebalance = true
-			break
-		}
-	}
-	if !shouldRebalance {
-		return nil, nil
-	}
-
 	existingCandidates, candidates := rebalanceCandidates(
 		sl,
 		constraints,
@@ -470,51 +451,6 @@ func (a Allocator) shouldTransferLease(
 // the mean range/lease count that permits rebalances/lease-transfers away from
 // that store.
 var rebalanceThreshold = envutil.EnvOrDefaultFloat("COCKROACH_REBALANCE_THRESHOLD", 0.05)
-
-// shouldRebalance returns whether the specified store is a candidate for
-// having a replica removed from it given the candidate store list.
-func (a Allocator) shouldRebalance(store roachpb.StoreDescriptor, sl StoreList) bool {
-	// TODO(peter,bram,cuong): The FractionUsed check seems suspicious. When a
-	// node becomes fuller than maxFractionUsedThreshold we will always select it
-	// for rebalancing. This is currently utilized by tests.
-	maxCapacityUsed := store.Capacity.FractionUsed() >= maxFractionUsedThreshold
-
-	// Rebalance if we're above the rebalance target, which is
-	// mean*(1+rebalanceThreshold).
-	target := int32(math.Ceil(sl.candidateCount.mean * (1 + rebalanceThreshold)))
-	rangeCountAboveTarget := store.Capacity.RangeCount > target
-
-	// Rebalance if the candidate store has a range count above the mean, and
-	// there exists another store that is underfull: its range count is smaller
-	// than mean*(1-rebalanceThreshold).
-	var rebalanceToUnderfullStore bool
-	if float64(store.Capacity.RangeCount) > sl.candidateCount.mean {
-		underfullThreshold := int32(math.Floor(sl.candidateCount.mean * (1 - rebalanceThreshold)))
-		for _, desc := range sl.stores {
-			if desc.Capacity.RangeCount < underfullThreshold {
-				rebalanceToUnderfullStore = true
-				break
-			}
-		}
-	}
-
-	// Require that moving a replica from the given store makes its range count
-	// converge on the mean range count. This only affects clusters with a
-	// small number of ranges.
-	rebalanceConvergesOnMean := rebalanceFromConvergesOnMean(sl, store)
-
-	shouldRebalance :=
-		(maxCapacityUsed || rangeCountAboveTarget || rebalanceToUnderfullStore) && rebalanceConvergesOnMean
-	if log.V(2) {
-		log.Infof(context.TODO(),
-			"%d: should-rebalance=%t: fraction-used=%.2f range-count=%d "+
-				"(mean=%.1f, target=%d, fraction-used=%t, above-target=%t, underfull=%t, converges=%t)",
-			store.StoreID, shouldRebalance, store.Capacity.FractionUsed(), store.Capacity.RangeCount,
-			sl.candidateCount.mean, target, maxCapacityUsed, rangeCountAboveTarget,
-			rebalanceToUnderfullStore, rebalanceConvergesOnMean)
-	}
-	return shouldRebalance
-}
 
 // computeQuorum computes the quorum value for the given number of nodes.
 func computeQuorum(nodes int) int {
