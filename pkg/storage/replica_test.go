@@ -2306,7 +2306,7 @@ func TestReplicaCommandQueueCancellation(t *testing.T) {
 	// Wait until both commands are in the command queue.
 	testutils.SucceedsSoon(t, func() error {
 		tc.repl.cmdQMu.Lock()
-		chans := tc.repl.cmdQMu.global.getWait(false, roachpb.Span{Key: key1}, roachpb.Span{Key: key2})
+		chans := tc.repl.cmdQMu.global.getWait(false, []roachpb.Span{{Key: key1}, {Key: key2}})
 		tc.repl.cmdQMu.Unlock()
 		if a, e := len(chans), 2; a < e {
 			return errors.Errorf("%d of %d commands in the command queue", a, e)
