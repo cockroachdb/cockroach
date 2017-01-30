@@ -345,17 +345,16 @@ func rebalanceCandidates(
 				rangeCount:      int(s.Capacity.RangeCount),
 			})
 		} else {
-			if !constraintsOk || !maxCapacityOK || !rebalanceToConvergesOnMean(sl, s) {
+			if !constraintsOk || !maxCapacityOK {
 				continue
 			}
-			// The 1.0 here represents that adding this candidate does indeed
-			// converge the range counts to the mean, which matches its
-			// counterpart of !rebalanceFromConvergesOnMean from the existing
-			// candidates. This ensures that when comparing the best candidate
-			// against the worst existing candidate, any existing candidate
-			// that does rebalanceFromConvergesOnMean will always have a lower
-			// score.
-			constraintScore := 1.0 + diversityScore(s, existingNodeLocalities) + float64(preferredMatched)
+			constraintScore := diversityScore(s, existingNodeLocalities) + float64(preferredMatched)
+			if rebalanceToConvergesOnMean(sl, s) {
+				// This is the counterpart of !rebalanceFromConvergesOnMean from
+				// the existing candidates. Candidates whose addition would
+				// converge towards the range count mean are promoted.
+				constraintScore += 1.0
+			}
 			candidates = append(candidates, candidate{
 				store:           s,
 				valid:           true,
