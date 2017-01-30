@@ -4,7 +4,7 @@ set -euo pipefail
 
 export CLOUDSDK_CORE_PROJECT=${CLOUDSDK_CORE_PROJECT-${GOOGLE_PROJECT-cockroach-$(id -un)}}
 export CLOUDSDK_COMPUTE_ZONE=${GCEWORKER_ZONE-${CLOUDSDK_COMPUTE_ZONE-us-east1-b}}
-NAME="${GCEWORKER_NAME-gceworker$(echo "${GOVERSION}" | tr -d '.')}"
+NAME=${GCEWORKER_NAME-gceworker}
 
 case ${1-} in
     create)

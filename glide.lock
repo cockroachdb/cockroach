@@ -32,13 +32,13 @@ imports:
   subpackages:
   - cmd/misspell
 - name: github.com/cockroachdb/c-jemalloc
-  version: 2582439cfbace368ad093c71209ad72efef8aa4d
+  version: 3beab1e776e214b995521cbcbd115c0ac30c6e50
 - name: github.com/cockroachdb/c-protobuf
   version: 070b64667a22925d971878b61e4f0c1df31e8599
   subpackages:
   - cmd/protoc
 - name: github.com/cockroachdb/c-rocksdb
-  version: 09d6d520b61160d194c06768ed85415cd8abee57
+  version: ed59f056308a08367dc0556cb9c6a22d313cc818
 - name: github.com/cockroachdb/c-snappy
   version: c0cd3c9ce92f195001595e1fbbe66f045daad34f
 - name: github.com/cockroachdb/cmux
