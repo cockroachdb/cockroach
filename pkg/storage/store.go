@@ -121,8 +121,6 @@ var storeSchedulerConcurrency = envutil.EnvOrDefaultInt(
 var enablePreVote = envutil.EnvOrDefaultBool(
 	"COCKROACH_ENABLE_PREVOTE", false)
 
-var enableRuleSolver = envutil.EnvOrDefaultBool("COCKROACH_ENABLE_RULE_SOLVER", true)
-
 // RaftElectionTimeout returns the raft election timeout, as computed
 // from the specified tick interval and number of election timeout
 // ticks. If raftElectionTimeoutTicks is 0, uses the value of
@@ -636,10 +634,6 @@ type StoreConfig struct {
 	// replication consistency check failure.
 	ConsistencyCheckPanicOnFailure bool
 
-	// AllocatorOptions configures how the store will attempt to rebalance its
-	// replicas to other stores.
-	AllocatorOptions AllocatorOptions
-
 	// If LogRangeEvents is true, major changes to ranges will be logged into
 	// the range event log.
 	LogRangeEvents bool
@@ -823,8 +817,6 @@ func (sc *StoreConfig) SetDefaults() {
 		sc.RangeLeaseRenewalDuration = rangeLeaseRenewalDuration
 	}
 
-	sc.AllocatorOptions.UseRuleSolver = enableRuleSolver
-
 	if sc.GossipWhenCapacityDeltaExceedsFraction == 0 {
 		sc.GossipWhenCapacityDeltaExceedsFraction = defaultGossipWhenCapacityDeltaExceedsFraction
 	}
@@ -842,7 +834,7 @@ func NewStore(cfg StoreConfig, eng engine.Engine, nodeDesc *roachpb.NodeDescript
 		cfg:       cfg,
 		db:        cfg.DB, // TODO(tschottdorf) remove redundancy.
 		engine:    eng,
-		allocator: MakeAllocator(cfg.StorePool, cfg.AllocatorOptions),
+		allocator: MakeAllocator(cfg.StorePool),
 		nodeDesc:  nodeDesc,
 		metrics:   newStoreMetrics(cfg.MetricsSampleInterval),
 	}
@@ -893,9 +885,7 @@ func NewStore(cfg StoreConfig, eng engine.Engine, nodeDesc *roachpb.NodeDescript
 		)
 		s.gcQueue = newGCQueue(s, s.cfg.Gossip)
 		s.splitQueue = newSplitQueue(s, s.db, s.cfg.Gossip)
-		s.replicateQueue = newReplicateQueue(
-			s, s.cfg.Gossip, s.allocator, s.cfg.Clock, s.cfg.AllocatorOptions,
-		)
+		s.replicateQueue = newReplicateQueue(s, s.cfg.Gossip, s.allocator, s.cfg.Clock)
 		s.replicaGCQueue = newReplicaGCQueue(s, s.db, s.cfg.Gossip)
 		s.raftLogQueue = newRaftLogQueue(s, s.db, s.cfg.Gossip)
 		s.raftSnapshotQueue = newRaftSnapshotQueue(s, s.cfg.Gossip, s.cfg.Clock)
