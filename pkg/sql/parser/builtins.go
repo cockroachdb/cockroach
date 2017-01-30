@@ -1603,7 +1603,7 @@ var Builtins = map[string][]Builtin{
 				return NewDString(typ.SQLName()), nil
 			},
 			category: categoryCompatibility,
-			Info: "format_type returns the SQL name of a data type that is " +
+			Info: "Returns the SQL name of a data type that is " +
 				"identified by its type OID and possibly a type modifier. " +
 				"Currently, the type modifier is ignored.",
 		},
@@ -1616,8 +1616,7 @@ var Builtins = map[string][]Builtin{
 				return DNull, nil
 			},
 			category: categoryCompatibility,
-			Info: "col_description returns the comment for a table column. " +
-				"Currently, CockroachDB does not support adding comments to columns.",
+			Info: "Not usable; supported only for ORM compatibility.",
 		},
 	},
 	"pg_catalog.obj_description": {
@@ -1628,8 +1627,7 @@ var Builtins = map[string][]Builtin{
 				return DNull, nil
 			},
 			category: categoryCompatibility,
-			Info: "obj_description returns the comment for a database object. " +
-				"Currently, CockroachDB does not support database object comments.",
+			Info: "Not usable; supported only for ORM compatibility.",
 		},
 	},
 	"pg_catalog.shobj_description": {
@@ -1640,9 +1638,7 @@ var Builtins = map[string][]Builtin{
 				return DNull, nil
 			},
 			category: categoryCompatibility,
-			Info: "shobj_description returns the comment for a shared database " +
-				"object. Currently, CockroachDB does not support database object " +
-				"comments.",
+			Info: "Not usable; supported only for ORM compatibility.",
 		},
 	},
 	"pg_catalog.array_in": {
@@ -1653,7 +1649,7 @@ var Builtins = map[string][]Builtin{
 				return nil, errors.New("unimplemented")
 			},
 			category: categoryCompatibility,
-			Info:     "array_in is unimplemented and exists for compatibility purposes",
+			Info:     "Not usable; supported only for ORM compatibility.",
 		},
 	},
 }
