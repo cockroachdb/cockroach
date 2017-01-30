@@ -132,14 +132,6 @@ func (s *SorterSpec) summary() (string, []string) {
 	return "Sorter", details
 }
 
-func (e *EvaluatorSpec) summary() (string, []string) {
-	var details []string
-	for _, expr := range e.Exprs {
-		details = append(details, expr.Expr)
-	}
-	return "Evaluator", details
-}
-
 func (is *InputSyncSpec) summary() (string, []string) {
 	switch is.Type {
 	case InputSyncSpec_UNORDERED:
@@ -173,6 +165,15 @@ func (post *PostProcessSpec) summary() []string {
 	}
 	if len(post.OutputColumns) > 0 {
 		res = append(res, fmt.Sprintf("Out: %s", colListStr(post.OutputColumns)))
+	}
+	if len(post.RenderExprs) > 0 {
+		var buf bytes.Buffer
+		buf.WriteString("Render:")
+		for _, expr := range post.RenderExprs {
+			buf.WriteByte(' ')
+			buf.WriteString(expr.Expr)
+		}
+		res = append(res, buf.String())
 	}
 	return res
 }

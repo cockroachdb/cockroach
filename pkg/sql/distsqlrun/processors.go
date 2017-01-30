@@ -43,8 +43,12 @@ type procOutputHelper struct {
 	output          RowReceiver
 	rowAlloc        sqlbase.EncDatumRowAlloc
 	filter          *exprHelper
-	filterErr       error
 	outputCols      []uint32
+
+	internalErr error
+
+	renderExprs []exprHelper
+	renderTypes []sqlbase.ColumnType
 }
 
 // init sets up a procOutputHelper. The types describe the internal schema of
@@ -56,6 +60,9 @@ func (h *procOutputHelper) init(
 	evalCtx *parser.EvalContext,
 	output RowReceiver,
 ) error {
+	if len(post.OutputColumns) > 0 && len(post.RenderExprs) > 0 {
+		return errors.Errorf("post-processing has both projection and rendering: %s", post)
+	}
 	h.output = output
 	h.numInternalCols = len(types)
 	if post.Filter.Expr != "" {
@@ -71,7 +78,17 @@ func (h *procOutputHelper) init(
 			}
 		}
 		h.outputCols = post.OutputColumns
+	} else if len(post.RenderExprs) > 0 {
+		h.renderExprs = make([]exprHelper, len(post.RenderExprs))
+		h.renderTypes = make([]sqlbase.ColumnType, len(post.RenderExprs))
+		for i, expr := range post.RenderExprs {
+			if err := h.renderExprs[i].init(expr, types, evalCtx); err != nil {
+				return err
+			}
+			h.renderTypes[i] = sqlbase.DatumTypeToColumnType(h.renderExprs[i].expr.ResolvedType())
+		}
 	}
+
 	return nil
 }
 
@@ -79,8 +96,8 @@ func (h *procOutputHelper) init(
 // actually used by the post-processing stage.
 func (h *procOutputHelper) neededColumns() []bool {
 	needed := make([]bool, h.numInternalCols)
-	if h.outputCols == nil {
-		// No projection; all columns are needed.
+	if h.outputCols == nil && h.renderExprs == nil {
+		// No projection or rendering; all columns are needed.
 		for i := range needed {
 			needed[i] = true
 		}
@@ -96,6 +113,18 @@ func (h *procOutputHelper) neededColumns() []bool {
 			}
 		}
 	}
+	if h.renderExprs != nil {
+		for i := range needed {
+			if !needed[i] {
+				for j := range h.renderExprs {
+					if h.renderExprs[j].vars.IndexedVarUsed(i) {
+						needed[i] = true
+						break
+					}
+				}
+			}
+		}
+	}
 	return needed
 }
 
@@ -103,9 +132,10 @@ func (h *procOutputHelper) neededColumns() []bool {
 // reused. Returns false if the caller should stop emitting more rows.
 func (h *procOutputHelper) emitRow(ctx context.Context, row sqlbase.EncDatumRow) bool {
 	if h.filter != nil {
+		// Filtering.
 		passes, err := h.filter.evalFilter(row)
 		if err != nil {
-			h.filterErr = err
+			h.internalErr = err
 			return false
 		}
 		if !passes {
@@ -116,14 +146,27 @@ func (h *procOutputHelper) emitRow(ctx context.Context, row sqlbase.EncDatumRow)
 		}
 	}
 	var outRow sqlbase.EncDatumRow
-	if h.outputCols == nil {
-		outRow = h.rowAlloc.AllocRow(len(row))
-		copy(outRow, row)
-	} else {
+	if h.renderExprs != nil {
+		// Rendering.
+		outRow = h.rowAlloc.AllocRow(len(h.renderExprs))
+		for i := range h.renderExprs {
+			datum, err := h.renderExprs[i].eval(row)
+			if err != nil {
+				h.internalErr = err
+				return false
+			}
+			outRow[i] = sqlbase.DatumToEncDatum(h.renderTypes[i], datum)
+		}
+	} else if h.outputCols != nil {
+		// Projection.
 		outRow = h.rowAlloc.AllocRow(len(h.outputCols))
 		for i, col := range h.outputCols {
 			outRow[i] = row[col]
 		}
+	} else {
+		// No rendering or projection.
+		outRow = h.rowAlloc.AllocRow(len(row))
+		copy(outRow, row)
 	}
 	if log.V(3) {
 		log.Infof(ctx, "pushing row %s", outRow)
@@ -136,8 +179,8 @@ func (h *procOutputHelper) emitRow(ctx context.Context, row sqlbase.EncDatumRow)
 }
 
 func (h *procOutputHelper) close(err error) {
-	if h.filterErr != nil {
-		err = h.filterErr
+	if h.internalErr != nil {
+		err = h.internalErr
 	}
 	h.output.Close(err)
 }
@@ -183,4 +226,64 @@ func (n *noopProcessor) Run(wg *sync.WaitGroup) {
 			return
 		}
 	}
+}
+
+func newProcessor(
+	flowCtx *FlowCtx,
+	core *ProcessorCoreUnion,
+	post *PostProcessSpec,
+	inputs []RowSource,
+	outputs []RowReceiver,
+) (processor, error) {
+	if core.Noop != nil {
+		if err := checkNumInOut(inputs, outputs, 1, 1); err != nil {
+			return nil, err
+		}
+		return newNoopProcessor(flowCtx, inputs[0], post, outputs[0])
+	}
+	if core.TableReader != nil {
+		if err := checkNumInOut(inputs, outputs, 0, 1); err != nil {
+			return nil, err
+		}
+		return newTableReader(flowCtx, core.TableReader, post, outputs[0])
+	}
+	if core.JoinReader != nil {
+		if err := checkNumInOut(inputs, outputs, 1, 1); err != nil {
+			return nil, err
+		}
+		return newJoinReader(flowCtx, core.JoinReader, inputs[0], post, outputs[0])
+	}
+	if core.Sorter != nil {
+		if err := checkNumInOut(inputs, outputs, 1, 1); err != nil {
+			return nil, err
+		}
+		return newSorter(flowCtx, core.Sorter, inputs[0], post, outputs[0])
+	}
+	if core.Distinct != nil {
+		if err := checkNumInOut(inputs, outputs, 1, 1); err != nil {
+			return nil, err
+		}
+		return newDistinct(flowCtx, core.Distinct, inputs[0], post, outputs[0])
+	}
+	if core.Aggregator != nil {
+		if err := checkNumInOut(inputs, outputs, 1, 1); err != nil {
+			return nil, err
+		}
+		return newAggregator(flowCtx, core.Aggregator, inputs[0], post, outputs[0])
+	}
+	if core.MergeJoiner != nil {
+		if err := checkNumInOut(inputs, outputs, 2, 1); err != nil {
+			return nil, err
+		}
+		return newMergeJoiner(
+			flowCtx, core.MergeJoiner, inputs[0], inputs[1], post, outputs[0],
+		)
+	}
+	if core.HashJoiner != nil {
+		if err := checkNumInOut(inputs, outputs, 2, 1); err != nil {
+			return nil, err
+		}
+		return newHashJoiner(flowCtx, core.HashJoiner, inputs[0], inputs[1], post, outputs[0])
+	}
+	return nil, errors.Errorf("unsupported processor core %s", core)
 }
