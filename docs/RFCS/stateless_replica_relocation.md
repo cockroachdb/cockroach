@@ -77,8 +77,7 @@ The second piece, the core mechanic, will be performed by the existing
 "replicate queue" which will be renamed the "*replication queue*". This queue is
 already used to add replicas to ranges which are under-replicated; it can be
 enhanced to remove replicas from over-replicated ranges, thus satisfying the
-basic requirements of the core mechanic. Detailed design for these changes are
-in a [separate RFC (#2153)](https://github.com/cockroachdb/cockroach/pull/2153).
+basic requirements of the core mechanic.
 
 The third piece simply informs the design of systems performing relocations; for
 example, the upcoming repair and rebalance systems (still being planned).  After

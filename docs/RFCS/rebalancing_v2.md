@@ -154,8 +154,7 @@ priority:
 
 - Replicas are moved to where there is demand for them.
 
-  Experiment to see if this would be useful. However, with a proper load balancer, there should be
-  nothing to gain from doing this. There may however be performance gains on keeping replicas of
+  Experiment to see if this would be useful. There may be performance gains on keeping replicas of
   single tables together on the same set of stores.
 
 - Globally distributed data.
