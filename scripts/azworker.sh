@@ -11,7 +11,7 @@ LOCATION="${LOCATION-eastus}"
 MACHINE_SIZE="${MACHINE_SIZE-Standard_F16}"
 USER="${USER-$(id -un)}"
 CLUSTER="azworker-${USER}"
-NAME="${AZWORKER_NAME-${CLUSTER}-azworker}"
+NAME=${AZWORKER_NAME-${CLUSTER}-azworker}
 
 # Names for various resources just reuse cluster/vm name depending on scope.
 RG="${CLUSTER}"

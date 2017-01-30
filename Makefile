@@ -20,8 +20,10 @@
 GO ?= go
 # Allow setting of go build flags from the command line.
 GOFLAGS :=
-# Set to 1 to use static linking for all builds (including tests).
-STATIC :=
+# Possible values:
+# RELEASE: target Linux 2.6.32, dynamically link to GLIBC 2.12.2
+# STATIC:  target Linux 3.2.84, statically link musl 1.1.16
+TYPE :=
 
 COCKROACH := ./cockroach
 
@@ -58,11 +60,16 @@ $(error bash is required)
 endif
 export GIT_PAGER :=
 
-ifeq ($(STATIC),1)
-# Static linking with glibc is a bad time; see
-# https://github.com/golang/go/issues/13470. If a static build is requested,
-# assume musl is installed (it is in the cockroachdb/builder docker container)
-# and link against it instead.
+ifeq ($(TYPE),RELEASE)
+export CC  = /x-tools/x86_64-unknown-linux-gnu/bin/x86_64-unknown-linux-gnu-gcc
+export CXX = /x-tools/x86_64-unknown-linux-gnu/bin/x86_64-unknown-linux-gnu-g++
+override LDFLAGS += -extldflags "-static-libgcc -static-libstdc++"
+override GOFLAGS += -installsuffix glibc
+endif
+
+ifeq ($(TYPE),STATIC)
+export CC  = /x-tools/x86_64-unknown-linux-musl/bin/x86_64-unknown-linux-musl-gcc
+export CXX = /x-tools/x86_64-unknown-linux-musl/bin/x86_64-unknown-linux-musl-g++
 override LDFLAGS += -linkmode external -extldflags -static
 override GOFLAGS += -installsuffix musl
 endif

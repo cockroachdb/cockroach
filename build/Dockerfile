@@ -7,58 +7,129 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     curl
 
-RUN curl -fsSL https://deb.nodesource.com/gpgkey/nodesource.gpg.key | apt-key add - && \
-    echo 'deb https://deb.nodesource.com/node_6.x xenial main' | tee /etc/apt/sources.list.d/nodesource.list && \
-    curl -fsSL https://dl.yarnpkg.com/debian/pubkey.gpg | apt-key add - && \
-    echo 'deb https://dl.yarnpkg.com/debian/ stable main' | tee /etc/apt/sources.list.d/yarn.list
+RUN curl -fsSL -O https://github.com/Yelp/dumb-init/releases/download/v1.2.0/dumb-init_1.2.0_amd64.deb \
+ && dpkg -i dumb-init_1.2.0_amd64.deb && rm dumb-init_1.2.0_amd64.deb
 
-# cmake and python are used to build libcxx.
-# nodejs is used to build and test the UI.
-# bzip2 and fontconfig are used by phantomjs-prebuilt to test the UI.
-# iptables is used in the acceptance tests' partition nemesis.
-# yarn is the dependency manager for the UI, as an alternative to npm.
+ENTRYPOINT ["/usr/bin/dumb-init", "--"]
+
+RUN curl -fsSL https://deb.nodesource.com/gpgkey/nodesource.gpg.key | apt-key add - \
+ && echo 'deb https://deb.nodesource.com/node_6.x xenial main' | tee /etc/apt/sources.list.d/nodesource.list \
+ && curl -fsSL https://dl.yarnpkg.com/debian/pubkey.gpg | apt-key add - \
+ && echo 'deb https://dl.yarnpkg.com/debian/ stable main' | tee /etc/apt/sources.list.d/yarn.list
+
+# autoconf - crosstool-ng/bootstrap
+# automake - crosstool-ng/configure (1.22.0)
+# bison - crosstool-ng/configure
+# bzip2 - crosstool-ng/configure
+# clang - msan: -fsanitize
+# cmake - msan: libcxx
+# flex - crosstool-ng/configure
+# fontconfig - ui: phantomjs
+# g++ - crosstool-ng/build
+# gawk - crosstool-ng/configure
+# git - crosstool-ng/configure
+# golang - go: bootstrap
+# gperf - crosstool-ng/configure
+# help2man - crosstool-ng/configure
+# iptables - acceptance tests' partition nemesis
+# libncurses-dev - crosstool-ng/configure
+# libtool-bin - crosstool-ng/configure (1.22.0)
+# make - crosstool-ng boostrap / CRDB build system
+# nodejs - ui: all
+# patch - crosstool-ng/configure
+# python - msan: libxx
+# texinfo - crosstool-ng/configure
+# unzip - terraform
+# wget - crosstool-ng/configure
+# xz-utils - msan: libcxx
+# yarn - ui: all
 RUN apt-get update && apt-get install -y --no-install-recommends \
+    autoconf \
+    automake \
+    bison \
     bzip2 \
     clang \
     cmake \
+    flex \
     fontconfig \
+    g++ \
+    gawk \
     git \
+    golang \
+    gperf \
+    help2man \
     iptables \
+    libncurses-dev \
+    libtool-bin \
     make \
     nodejs \
+    patch \
     python \
+    texinfo \
     unzip \
+    wget \
+    xz-utils \
     yarn
 
-ENV CC clang
-ENV CXX clang++
+RUN curl -fsSL -O http://crosstool-ng.org/download/crosstool-ng/crosstool-ng-1.22.0.tar.bz2 \
+ && curl -fsSL -O http://crosstool-ng.org/download/crosstool-ng/crosstool-ng-1.22.0.tar.bz2.sig \
+ && gpg --list-keys \
+ && gpg --recv-keys 35B871D1 \
+ && gpg --verify crosstool-ng-1.22.0.tar.bz2.sig \
+ && tar -xj -f crosstool-ng-1.22.0.tar.bz2 \
+ && rm crosstool-ng-1.22.0.tar.bz2 \
+ && cd crosstool-ng \
+ && ./configure --prefix /usr/local/ct-ng-1.22.0 \
+ && make -j$(nproc) \
+ && make install \
+ && cd .. \
+ && rm -rf crosstool-ng \
+ && git clone --depth 1 https://github.com/crosstool-ng/crosstool-ng \
+ && cd crosstool-ng \
+ && ./bootstrap \
+ && ./configure --prefix /usr/local/ct-ng-HEAD \
+ && make -j$(nproc) \
+ && make install \
+ && cd .. \
+ && rm -rf crosstool-ng
+
+# crosstool-ng 1.22.0 insists on never being run as root.
+RUN groupadd -r roachbuild && useradd -m -r -g roachbuild roachbuild
+RUN mkdir /x-tools && chown roachbuild:roachbuild /x-tools
+USER roachbuild
+WORKDIR /tmp
+
+COPY x86-linux-musl.config x86-linux-gnu.config ./
+RUN mkdir build && cd build \
+ && rm -rf * && cp ../x86-linux-gnu.config  .config && CC=gcc CXX=g++ /usr/local/ct-ng-1.22.0/bin/ct-ng build \
+ && rm -rf * && cp ../x86-linux-musl.config .config && CC=gcc CXX=g++ /usr/local/ct-ng-HEAD/bin/ct-ng build \
+ && cd .. \
+ && rm -rf build
+
+USER root
+
+RUN apt-get autoremove -y g++
 
 # Install an msan-enabled build of libc++, following instructions from
 # https://github.com/google/sanitizers/wiki/MemorySanitizerLibcxxHowTo
 
-# Build libcxx from head, because rocksdb 4.11 doesn't build with libcxx 3.9 on linux.
-# TODO(bdarnell): after we upgrade to rocksdb 5.0, replace these git commands with the
-# commented-out tarball installation below.
+RUN mkdir llvm                    && curl -sfSL http://releases.llvm.org/3.9.1/llvm-3.9.1.src.tar.xz      | tar --strip-components=1 -C llvm -xJ \
+ && mkdir llvm/projects/libcxx    && curl -sfSL http://releases.llvm.org/3.9.1/libcxx-3.9.1.src.tar.xz    | tar --strip-components=1 -C llvm/projects/libcxx -xJ \
+ && mkdir llvm/projects/libcxxabi && curl -sfSL http://releases.llvm.org/3.9.1/libcxxabi-3.9.1.src.tar.xz | tar --strip-components=1 -C llvm/projects/libcxxabi -xJ \
+ && mkdir libcxx_msan && (cd libcxx_msan && cmake ../llvm -DCMAKE_BUILD_TYPE=Release -DLLVM_USE_SANITIZER=Memory && make cxx -j$(nproc))
 
-RUN git                  clone --depth 1 --branch release_40 https://github.com/llvm-mirror/llvm.git \
- && git -C llvm/projects clone --depth 1 --branch release_40 https://github.com/llvm-mirror/libcxx.git \
- && git -C llvm/projects clone --depth 1 --branch release_40 https://github.com/llvm-mirror/libcxxabi.git \
- && mkdir libcxx_msan && (cd libcxx_msan && cmake ../llvm -DCMAKE_BUILD_TYPE=Release -DLLVM_USE_SANITIZER=Memory && make cxx -j16)
+# BEGIN https://github.com/docker-library/golang/blob/master/1.7/alpine/Dockerfile
 
-#mkdir ~/llvm && curl -sfSL http://releases.llvm.org/3.9.1/llvm-3.9.1.src.tar.xz | tar --strip-components=1 -C ~/llvm -xJ
-#mkdir ~/llvm/projects/libcxx && curl -sfSL http://releases.llvm.org/3.9.1/libcxx-3.9.1.src.tar.xz | tar --strip-components=1 -C ~/llvm/projects/libcxx -xJ
-#mkdir ~/llvm/projects/libcxxabi && curl -sfSL http://releases.llvm.org/3.9.1/libcxxabi-3.9.1.src.tar.xz | tar --strip-components=1 -C ~/llvm/projects/libcxxabi -xJ
-
-# BEGIN https://github.com/docker-library/golang/blob/master/1.7/Dockerfile
-
-ENV GOLANG_VERSION 1.7.4
-ENV GOLANG_DOWNLOAD_URL https://golang.org/dl/go$GOLANG_VERSION.linux-amd64.tar.gz
-ENV GOLANG_DOWNLOAD_SHA256 47fda42e46b4c3ec93fa5d4d4cc6a748aa3f9411a2a2b7e08e3a6d80d753ec8b
-
-RUN curl -fsSL "$GOLANG_DOWNLOAD_URL" -o golang.tar.gz \
- && echo "$GOLANG_DOWNLOAD_SHA256  golang.tar.gz" | sha256sum -c - \
+COPY parallelbuilds-go1.7.patch /
+RUN curl -fsSL https://golang.org/dl/go1.7.5.src.tar.gz -o golang.tar.gz \
+ && echo '4e834513a2079f8cbbd357502cccaac9507fd00a1efe672375798858ff291815  golang.tar.gz' | sha256sum -c - \
  && tar -C /usr/local -xzf golang.tar.gz \
- && rm golang.tar.gz
+ && rm golang.tar.gz \
+ && cd /usr/local/go/src \
+ && patch -p2 -i /parallelbuilds-go1.7.patch \
+ && GOROOT_BOOTSTRAP=$(go env GOROOT) ./make.bash \
+ && rm -rf /*.patch \
+ && apt-get autoremove -y golang
 
 ENV GOPATH /go
 ENV PATH $GOPATH/bin:/usr/local/go/bin:$PATH
@@ -66,7 +137,7 @@ ENV PATH $GOPATH/bin:/usr/local/go/bin:$PATH
 RUN mkdir -p "$GOPATH/src" "$GOPATH/bin" && chmod -R 777 "$GOPATH"
 WORKDIR $GOPATH
 
-# END https://github.com/docker-library/golang/blob/master/1.7/Dockerfile
+# END https://github.com/docker-library/golang/blob/master/1.7/alpine/Dockerfile
 
 RUN chmod -R a+w $(go env GOTOOLDIR)
 
@@ -78,5 +149,3 @@ RUN curl -fsSL https://releases.hashicorp.com/terraform/0.7.7/terraform_0.7.7_li
  && rm terraform.zip
 
 ENV PATH /opt/backtrace/bin:$PATH
-
-CMD ["/bin/bash"]
