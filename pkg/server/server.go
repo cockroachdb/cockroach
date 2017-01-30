@@ -316,10 +316,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		SQLExecutor: sql.InternalExecutor{
 			LeaseManager: s.leaseMgr,
 		},
-		LogRangeEvents: s.cfg.EventLogEnabled,
-		AllocatorOptions: storage.AllocatorOptions{
-			AllowRebalance: true,
-		},
+		LogRangeEvents:            s.cfg.EventLogEnabled,
 		RangeLeaseActiveDuration:  active,
 		RangeLeaseRenewalDuration: renewal,
 		TimeSeriesDataStore:       s.tsDB,

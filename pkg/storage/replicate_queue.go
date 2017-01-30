@@ -89,7 +89,7 @@ type replicateQueue struct {
 
 // newReplicateQueue returns a new instance of replicateQueue.
 func newReplicateQueue(
-	store *Store, g *gossip.Gossip, allocator Allocator, clock *hlc.Clock, options AllocatorOptions,
+	store *Store, g *gossip.Gossip, allocator Allocator, clock *hlc.Clock,
 ) *replicateQueue {
 	rq := &replicateQueue{
 		metrics:    makeReplicateQueueMetrics(),
