@@ -295,8 +295,6 @@ func (sp *StorePool) getStoreDetailLocked(storeID roachpb.StoreID) *storeDetail 
 // getStoreDescriptor returns the latest store descriptor for the given
 // storeID.
 func (sp *StorePool) getStoreDescriptor(storeID roachpb.StoreID) (roachpb.StoreDescriptor, bool) {
-	// If during testing you get a panic from this function, it typically means
-	// that no store pool was created but one was required.
 	sp.mu.RLock()
 	defer sp.mu.RUnlock()
 
