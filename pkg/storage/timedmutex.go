@@ -20,10 +20,13 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 
 	"golang.org/x/net/context"
 )
+
+var disableTimedMutex = envutil.EnvOrDefaultBool("COCKROACH_DISABLE_TIMED_MUTEX", false)
 
 // timedMutex is a mutex which dumps a stack trace via the supplied callback
 // whenever a lock is unlocked after having been held for longer than the
@@ -77,6 +80,9 @@ func thresholdLogger(
 // context and logging callback for the warning message; a nil logger falls
 // back to Fprintf to os.Stderr.
 func makeTimedMutex(cb timingFn) timedMutex {
+	if disableTimedMutex {
+		cb = nil
+	}
 	return timedMutex{
 		cb: cb,
 		mu: &syncutil.Mutex{},
