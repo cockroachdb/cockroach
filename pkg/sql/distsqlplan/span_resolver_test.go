@@ -193,6 +193,7 @@ func splitRangeAtVal(
 
 func TestSpanResolver(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	t.Skip("#13237")
 	s, db, cdb := serverutils.StartServer(t, base.TestServerArgs{
 		UseDatabase: "t",
 	})
