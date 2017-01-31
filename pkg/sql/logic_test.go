@@ -30,6 +30,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"regexp"
+	"runtime/debug"
 	"sort"
 	"strconv"
 	"strings"
@@ -1163,8 +1164,16 @@ func TestLogic(t *testing.T) {
 			l.t = t
 			defer l.close()
 			l.setup()
+
+			defer func() {
+				if r := recover(); r != nil {
+					// Translate panics during the test to test errors.
+					t.Fatalf("panic: %v\n%s", r, string(debug.Stack()))
+				}
+			}()
+
 			if err := l.processTestFile(path); err != nil {
-				t.Error(err)
+				t.Fatal(err)
 			}
 		})
 
