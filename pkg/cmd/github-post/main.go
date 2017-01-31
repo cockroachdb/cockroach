@@ -37,11 +37,15 @@ const githubAPITokenEnv = "GITHUB_API_TOKEN"
 const teamcityVCSNumberEnv = "BUILD_VCS_NUMBER"
 const teamcityBuildIDEnv = "TC_BUILD_ID"
 const teamcityServerURLEnv = "TC_SERVER_URL"
+const githubUser = "cockroachdb"
+const githubRepo = "cockroach"
 
 const pkgEnv = "PKG"
 const propEvalKVEnv = "COCKROACH_PROPOSER_EVALUATED_KV"
 const tagsEnv = "TAGS"
 const goFlagsEnv = "GOFLAGS"
+
+var issueLabels = []string{"Robot", "test-failure"}
 
 // Based on the following observed API response:
 //
@@ -58,7 +62,7 @@ func main() {
 		&oauth2.Token{AccessToken: token},
 	)))
 
-	if err := runGH(os.Stdin, client.Issues.Create); err != nil {
+	if err := runGH(os.Stdin, client.Issues.Create, client.Search.Issues, client.Issues.CreateComment); err != nil {
 		log.Fatal(err)
 	}
 }
@@ -79,6 +83,8 @@ func trimIssueRequestBody(message string, usedCharacters int) string {
 func runGH(
 	input io.Reader,
 	createIssue func(owner string, repo string, issue *github.IssueRequest) (*github.Issue, *github.Response, error),
+	searchIssues func(query string, opt *github.SearchOptions) (*github.IssuesSearchResult, *github.Response, error),
+	createComment func(owner string, repo string, number int, comment *github.IssueComment) (*github.IssueComment, *github.Response, error),
 ) error {
 	sha, ok := os.LookupEnv(teamcityVCSNumberEnv)
 	if !ok {
@@ -138,12 +144,9 @@ Stress build found a failed test: %s
 		body = fmt.Sprintf(body, trimIssueRequestBody(message, len(body)))
 
 		return &github.IssueRequest{
-			Title: &title,
-			Body:  &body,
-			Labels: &[]string{
-				"Robot",
-				"test-failure",
-			},
+			Title:  &title,
+			Body:   &body,
+			Labels: &issueLabels,
 		}
 	}
 
@@ -165,8 +168,34 @@ Stress build found a failed test: %s
 			switch test.Status {
 			case lib.Failed:
 				issueRequest := newIssueRequest(packageName, test.Name, test.Message)
-				if _, _, err := createIssue("cockroachdb", "cockroach", issueRequest); err != nil {
-					return errors.Wrapf(err, "failed to create GitHub issue %s", github.Stringify(issueRequest))
+				searchQuery := fmt.Sprintf(`"%s" user:%s repo:%s is:open`, issueRequest.Title, githubUser, githubRepo)
+				for _, label := range issueLabels {
+					searchQuery = searchQuery + fmt.Sprintf(` label:"%s"`, label)
+				}
+
+				var foundIssue *int
+
+				if result, _, err := searchIssues(searchQuery, &github.SearchOptions{
+					ListOptions: github.ListOptions{
+						PerPage: 1,
+					},
+				}); err == nil {
+					if *result.Total > 0 {
+						foundIssue = result.Issues[0].Number
+					}
+				} else {
+					log.Printf("failed to search GitHub; will make new issue: %s\n", err)
+				}
+
+				if foundIssue == nil {
+					if _, _, err := createIssue(githubUser, githubRepo, issueRequest); err != nil {
+						return errors.Wrapf(err, "failed to create GitHub issue %s", github.Stringify(issueRequest))
+					}
+				} else {
+					comment := &github.IssueComment{Body: issueRequest.Body}
+					if _, _, err := createComment(githubUser, githubRepo, *foundIssue, comment); err != nil {
+						return errors.Wrapf(err, "failed to update issue #%d with %s", *foundIssue, github.Stringify(comment))
+					}
 				}
 				posted = true
 			}
@@ -181,7 +210,7 @@ Stress build found a failed test: %s
 			packageName = unknown
 		}
 		issueRequest := newIssueRequest(packageName, unknown, inputBuf.String())
-		if _, _, err := createIssue("cockroachdb", "cockroach", issueRequest); err != nil {
+		if _, _, err := createIssue(githubUser, githubRepo, issueRequest); err != nil {
 			return errors.Wrapf(err, "failed to create GitHub issue %s", github.Stringify(issueRequest))
 		}
 	}
