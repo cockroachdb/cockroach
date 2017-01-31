@@ -936,41 +936,46 @@ func (dsp *distSQLPlanner) selectRenders(p *physicalPlan, n *renderNode) {
 // addSorters adds sorters corresponding to a sortNode and updates the plan to
 // reflect the sort node.
 func (dsp *distSQLPlanner) addSorters(p *physicalPlan, n *sortNode) {
-	sorterSpec := distsqlrun.SorterSpec{
-		OutputOrdering: dsp.convertOrdering(n.ordering, p.planToStreamColMap),
-		OrderingMatchLen: uint32(computeOrderingMatch(
-			n.ordering, n.plan.Ordering(), false, /* reverse */
-		)),
-	}
-	if len(sorterSpec.OutputOrdering.Columns) != len(n.ordering) {
-		panic(fmt.Sprintf(
-			"not all columns in sort ordering available: %v; %v",
-			n.ordering, sorterSpec.OutputOrdering.Columns,
-		))
+
+	matchLen := computeOrderingMatch(n.ordering, n.plan.Ordering(), false /* reverse */)
+
+	if matchLen < len(n.ordering) {
+		// Sorting is needed; we add a stage of sorting processors.
+		ordering := dsp.convertOrdering(n.ordering, p.planToStreamColMap)
+		if len(ordering.Columns) != len(n.ordering) {
+			panic(fmt.Sprintf(
+				"not all columns in sort ordering available: %v; %v", n.ordering, ordering.Columns,
+			))
+		}
+		dsp.addNoGroupingStage(
+			p,
+			distsqlrun.ProcessorCoreUnion{
+				Sorter: &distsqlrun.SorterSpec{
+					OutputOrdering:   ordering,
+					OrderingMatchLen: uint32(matchLen),
+				},
+			},
+			distsqlrun.PostProcessSpec{},
+			p.resultTypes,
+		)
+		p.ordering = ordering
 	}
 
-	var post distsqlrun.PostProcessSpec
 	if len(n.columns) != len(p.planToStreamColMap) {
 		// In cases like:
 		//   SELECT a FROM t ORDER BY b
 		// we have columns (b) that are only used for sorting. These columns are not
-		// in the output columns of the sortNode; we set a projection on the
-		// processors we just added.
+		// in the output columns of the sortNode; we set a projection such that the
+		// plan results map 1-to-1 to sortNode columns.
 		p.planToStreamColMap = p.planToStreamColMap[:len(n.columns)]
-		post.OutputColumns = make([]uint32, len(n.columns))
+		columns := make([]uint32, len(n.columns))
 		for i, col := range p.planToStreamColMap {
-			post.OutputColumns[i] = uint32(col)
+			columns[i] = uint32(col)
 			p.planToStreamColMap[i] = i
 		}
+		dsp.addProjection(p, columns)
+		p.ordering = dsp.convertOrdering(n.Ordering().ordering, p.planToStreamColMap)
 	}
-
-	dsp.addNoGroupingStage(
-		p,
-		distsqlrun.ProcessorCoreUnion{Sorter: &sorterSpec},
-		post,
-		getTypesForPlanResult(n, p.planToStreamColMap),
-	)
-	p.ordering = sorterSpec.OutputOrdering
 }
 
 // addSingleGroupStage adds a "single group" stage (one that cannot be
