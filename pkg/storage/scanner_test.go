@@ -56,8 +56,8 @@ func newTestRangeSet(count int, t *testing.T) *testRangeSet {
 		repl := &Replica{
 			RangeID: desc.RangeID,
 		}
-		repl.mu.TimedMutex = MakeTimedMutex(defaultMuLogger)
-		repl.cmdQMu.TimedMutex = MakeTimedMutex(defaultMuLogger)
+		repl.mu.timedMutex = makeTimedMutex(defaultMuLogger)
+		repl.cmdQMu.timedMutex = makeTimedMutex(defaultMuLogger)
 		repl.mu.state.Stats = enginepb.MVCCStats{
 			KeyBytes:  1,
 			ValBytes:  2,
