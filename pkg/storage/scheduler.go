@@ -130,7 +130,7 @@ type raftScheduler struct {
 	numWorkers int
 
 	mu struct {
-		TimedMutex
+		timedMutex
 		cond    *sync.Cond
 		queue   rangeIDQueue
 		state   map[roachpb.RangeID]raftScheduleState
@@ -147,7 +147,7 @@ func newRaftScheduler(
 		processor:  processor,
 		numWorkers: numWorkers,
 	}
-	muLogger := ThresholdLogger(
+	muLogger := thresholdLogger(
 		ambient.AnnotateCtx(context.Background()),
 		defaultReplicaMuWarnThreshold,
 		func(ctx context.Context, msg string, args ...interface{}) {
@@ -159,8 +159,8 @@ func newRaftScheduler(
 			}
 		},
 	)
-	s.mu.TimedMutex = MakeTimedMutex(muLogger)
-	s.mu.cond = sync.NewCond(&s.mu.TimedMutex)
+	s.mu.timedMutex = makeTimedMutex(muLogger)
+	s.mu.cond = sync.NewCond(&s.mu.timedMutex)
 	s.mu.state = make(map[roachpb.RangeID]raftScheduleState)
 	return s
 }
