@@ -103,13 +103,13 @@ var generators = map[string][]Builtin{
 			ArgTypes{{"start", TypeInt}, {"end", TypeInt}},
 			TTuple{TypeInt},
 			makeSeriesGenerator,
-			"Produces a virtual table containing the integer values from <start> to <end>, inclusive.",
+			"Produces a virtual table containing the integer values from `start` to `end`, inclusive.",
 		),
 		makeGeneratorBuiltin(
 			ArgTypes{{"start", TypeInt}, {"end", TypeInt}, {"step", TypeInt}},
 			TTuple{TypeInt},
 			makeSeriesGenerator,
-			"Produces a virtual table containing the integer values from <start> to <end>, inclusive, by increment of <step>.",
+			"Produces a virtual table containing the integer values from `start` to `end`, inclusive, by increment of `step`.",
 		),
 	},
 	"unnest": {
