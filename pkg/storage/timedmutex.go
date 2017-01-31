@@ -12,13 +12,16 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package syncutil
+package storage
 
 import (
 	"runtime"
 	"runtime/debug"
 	"sync/atomic"
 	"time"
+
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 
 	"golang.org/x/net/context"
 )
@@ -27,9 +30,9 @@ import (
 // whenever a lock is unlocked after having been held for longer than the
 // supplied duration, which must be strictly positive.
 type TimedMutex struct {
-	mu       *Mutex    // intentionally pointer to make zero value unusable
-	lockedAt time.Time // protected by mu
-	isLocked int32     // updated atomically
+	mu       *syncutil.Mutex // intentionally pointer to make zero value unusable
+	lockedAt time.Time       // protected by mu
+	isLocked int32           // updated atomically
 
 	// Non-mutable fields.
 	cb TimingFn
@@ -77,7 +80,7 @@ func ThresholdLogger(
 func MakeTimedMutex(cb TimingFn) TimedMutex {
 	return TimedMutex{
 		cb: cb,
-		mu: &Mutex{},
+		mu: &syncutil.Mutex{},
 	}
 }
 
@@ -85,7 +88,7 @@ func MakeTimedMutex(cb TimingFn) TimedMutex {
 func (tm *TimedMutex) Lock() {
 	tm.mu.Lock()
 	atomic.StoreInt32(&tm.isLocked, 1)
-	tm.lockedAt = time.Now()
+	tm.lockedAt = timeutil.Now()
 }
 
 // Unlock implements sync.Locker.
@@ -94,7 +97,7 @@ func (tm *TimedMutex) Unlock() {
 	atomic.StoreInt32(&tm.isLocked, 0)
 	tm.mu.Unlock()
 	if tm.cb != nil {
-		tm.cb(time.Since(lockedAt))
+		tm.cb(timeutil.Since(lockedAt))
 	}
 }
 

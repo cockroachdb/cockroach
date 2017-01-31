@@ -525,7 +525,7 @@ type Store struct {
 
 	mu struct {
 		// TODO(peter): evaluate runtime overhead of the timed mutex.
-		syncutil.TimedMutex // Protects all variables in the mu struct.
+		TimedMutex // Protects all variables in the mu struct.
 		// Map of replicas by Range ID. This includes `uninitReplicas`.
 		replicas map[roachpb.RangeID]*Replica
 		// A btree key containing objects of type *Replica or
@@ -855,7 +855,7 @@ func NewStore(cfg StoreConfig, eng engine.Engine, nodeDesc *roachpb.NodeDescript
 	s.drainLeases.Store(false)
 	s.scheduler = newRaftScheduler(s.cfg.AmbientCtx, s.metrics, s, storeSchedulerConcurrency)
 
-	storeMuLogger := syncutil.ThresholdLogger(
+	storeMuLogger := ThresholdLogger(
 		s.AnnotateCtx(context.Background()),
 		defaultStoreMutexWarnThreshold,
 		func(ctx context.Context, msg string, args ...interface{}) {
@@ -865,7 +865,7 @@ func NewStore(cfg StoreConfig, eng engine.Engine, nodeDesc *roachpb.NodeDescript
 			s.metrics.MuStoreNanos.RecordValue(t.Nanoseconds())
 		},
 	)
-	s.mu.TimedMutex = syncutil.MakeTimedMutex(storeMuLogger)
+	s.mu.TimedMutex = MakeTimedMutex(storeMuLogger)
 
 	s.coalescedMu.Lock()
 	s.coalescedMu.heartbeats = map[roachpb.StoreIdent][]RaftHeartbeat{}
