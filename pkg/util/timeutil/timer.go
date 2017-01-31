@@ -47,6 +47,7 @@ import "time"
 // there is no constructor function.
 type Timer struct {
 	*time.Timer
+	C    <-chan time.Time
 	Read bool
 }
 
@@ -59,6 +60,7 @@ type Timer struct {
 func (t *Timer) Reset(d time.Duration) {
 	if t.Timer == nil {
 		t.Timer = time.NewTimer(d)
+		t.C = t.Timer.C
 		return
 	}
 	if !t.Timer.Stop() && !t.Read {
