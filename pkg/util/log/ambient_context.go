@@ -99,7 +99,9 @@ func (ac *AmbientContext) SetEventLog(family, title string) {
 // FinishEventLog closes the event log. Concurrent and subsequent calls to
 // record events from contexts that use this event log embedded are allowed.
 func (ac *AmbientContext) FinishEventLog() {
-	ac.eventLog.finish()
+	if ac.eventLog != nil {
+		ac.eventLog.finish()
+	}
 }
 
 // AnnotateCtx annotates a given context with the information in AmbientContext:
