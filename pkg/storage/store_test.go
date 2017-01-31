@@ -55,7 +55,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
-var defaultMuLogger = ThresholdLogger(
+var defaultMuLogger = thresholdLogger(
 	context.Background(),
 	10*time.Second,
 	log.Warningf,
@@ -667,8 +667,8 @@ func TestProcessRangeDescriptorUpdate(t *testing.T) {
 		store:      store,
 		abortCache: NewAbortCache(desc.RangeID),
 	}
-	r.mu.TimedMutex = MakeTimedMutex(defaultMuLogger)
-	r.cmdQMu.TimedMutex = MakeTimedMutex(defaultMuLogger)
+	r.mu.timedMutex = makeTimedMutex(defaultMuLogger)
+	r.cmdQMu.timedMutex = makeTimedMutex(defaultMuLogger)
 	if err := r.init(desc, store.Clock(), 0); err != nil {
 		t.Fatal(err)
 	}

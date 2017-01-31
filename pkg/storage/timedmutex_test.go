@@ -39,12 +39,12 @@ func TestTimedMutex(t *testing.T) {
 	record := func(time.Duration) { numMeasurements++ }
 
 	{
-		cb := ThresholdLogger(
+		cb := thresholdLogger(
 			context.Background(), time.Nanosecond, printf, record,
 		)
 
 		// Should fire.
-		tm := MakeTimedMutex(cb)
+		tm := makeTimedMutex(cb)
 		tm.Lock()
 		time.Sleep(2 * time.Nanosecond)
 		tm.Unlock()
@@ -62,10 +62,10 @@ func TestTimedMutex(t *testing.T) {
 	msgs = nil
 
 	{
-		cb := ThresholdLogger(
+		cb := thresholdLogger(
 			context.Background(), time.Duration(math.MaxInt64), printf, record,
 		)
-		tm := MakeTimedMutex(cb)
+		tm := makeTimedMutex(cb)
 
 		const num = 10
 		for i := 0; i < num; i++ {
@@ -88,7 +88,7 @@ func TestTimedMutex(t *testing.T) {
 func TestAssertHeld(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	tm := MakeTimedMutex(nil)
+	tm := makeTimedMutex(nil)
 
 	// The normal, successful case.
 	tm.Lock()

@@ -396,8 +396,8 @@ func TestReplicaContains(t *testing.T) {
 
 	// This test really only needs a hollow shell of a Replica.
 	r := &Replica{}
-	r.mu.TimedMutex = MakeTimedMutex(defaultMuLogger)
-	r.cmdQMu.TimedMutex = MakeTimedMutex(defaultMuLogger)
+	r.mu.timedMutex = makeTimedMutex(defaultMuLogger)
+	r.cmdQMu.timedMutex = makeTimedMutex(defaultMuLogger)
 	r.mu.state.Desc = desc
 	r.rangeStr.store(0, desc)
 
