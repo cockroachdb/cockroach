@@ -229,8 +229,10 @@ func (rlq *raftLogQueue) process(ctx context.Context, r *Replica, _ config.Syste
 		raftLogSize := r.mu.raftLogSize
 		r.mu.Unlock()
 
-		log.VEventf(ctx, 1, "truncating raft log %d-%d: size=%d",
-			oldestIndex-truncatableIndexes, oldestIndex, raftLogSize)
+		if log.V(1) {
+			log.Infof(ctx, "truncating raft log %d-%d: size=%d",
+				oldestIndex-truncatableIndexes, oldestIndex, raftLogSize)
+		}
 		b := &client.Batch{}
 		b.AddRawRequest(&roachpb.TruncateLogRequest{
 			Span:    roachpb.Span{Key: r.Desc().StartKey.AsRawKey()},
