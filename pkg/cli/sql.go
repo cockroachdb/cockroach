@@ -28,6 +28,7 @@ import (
 	"os/exec"
 	"os/user"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"golang.org/x/net/context"
@@ -224,37 +225,76 @@ func (c *cliState) invalidSyntax(
 	return nextState
 }
 
-func (c *cliState) invalidOption(nextState cliStateEnum, opt string) cliStateEnum {
-	fmt.Fprintf(osStderr, "option not recognized: %s\n", opt)
-	return nextState
-}
-
 func (c *cliState) invalidOptionChange(nextState cliStateEnum, opt string) cliStateEnum {
 	fmt.Fprintf(osStderr, "cannot change option during multi-line editing: %s\n", opt)
 	return nextState
 }
 
+var options = map[string]struct {
+	numExpectedArgs           int
+	validDuringMultilineEntry bool
+	set                       func(c *cliState, args []string) error
+	unset                     func(c *cliState) error
+}{
+	`display_format`: {
+		1,
+		true,
+		func(_ *cliState, args []string) error {
+			return cliCtx.tableDisplayFormat.Set(args[0])
+		},
+		func(_ *cliState) error {
+			displayFormat := tableDisplayTSV
+			if isInteractive {
+				displayFormat = tableDisplayPretty
+			}
+			cliCtx.tableDisplayFormat = displayFormat
+			return nil
+		},
+	},
+	`errexit`: {
+		0,
+		true,
+		func(c *cliState, _ []string) error { c.errExit = true; return nil },
+		func(c *cliState) error { c.errExit = false; return nil },
+	},
+	`check_syntax`: {
+		0,
+		false,
+		func(c *cliState, _ []string) error { c.checkSyntax = true; return nil },
+		func(c *cliState) error { c.checkSyntax = false; return nil },
+	},
+	`normalize_history`: {
+		0,
+		false,
+		func(c *cliState, _ []string) error { c.normalizeHistory = true; return nil },
+		func(c *cliState) error { c.normalizeHistory = false; return nil },
+	},
+}
+
 // handleSet supports the \set client-side command.
 func (c *cliState) handleSet(args []string, nextState, errState cliStateEnum) cliStateEnum {
-	if len(args) != 1 {
+	if len(args) == 0 {
+		printQueryOutput(os.Stdout,
+			[]string{"Option", "Value"},
+			[][]string{
+				{"display_format", cliCtx.tableDisplayFormat.String()},
+				{"errexit", strconv.FormatBool(c.errExit)},
+				{"check_syntax", strconv.FormatBool(c.checkSyntax)},
+				{"normalize_history", strconv.FormatBool(c.normalizeHistory)},
+			},
+			"set", cliCtx.tableDisplayFormat)
+		return nextState
+	}
+	opt, ok := options[args[0]]
+	if !ok || len(args)-1 != opt.numExpectedArgs {
 		return c.invalidSyntax(errState, `\set %s. Try \? for help.`, strings.Join(args, " "))
 	}
-	opt := strings.ToLower(args[0])
-	switch opt {
-	case `errexit`:
-		c.errExit = true
-	case `check_syntax`:
-		if len(c.partialLines) > 0 {
-			return c.invalidOptionChange(errState, opt)
-		}
-		c.checkSyntax = true
-	case `normalize_history`:
-		if len(c.partialLines) > 0 {
-			return c.invalidOptionChange(errState, opt)
-		}
-		c.normalizeHistory = true
-	default:
-		return c.invalidOption(errState, opt)
+	if len(c.partialLines) > 0 && !opt.validDuringMultilineEntry {
+		return c.invalidOptionChange(errState, args[0])
+	}
+	if err := opt.set(c, args[1:]); err != nil {
+		fmt.Fprintf(osStderr, "%v", err)
+		return c.invalidOptionChange(errState, args[0])
 	}
 	return nextState
 }
@@ -264,22 +304,16 @@ func (c *cliState) handleUnset(args []string, nextState, errState cliStateEnum) 
 	if len(args) != 1 {
 		return c.invalidSyntax(errState, `\unset %s. Try \? for help.`, strings.Join(args, " "))
 	}
-	opt := strings.ToLower(args[0])
-	switch opt {
-	case `errexit`:
-		c.errExit = false
-	case `check_syntax`:
-		if len(c.partialLines) > 0 {
-			return c.invalidOptionChange(errState, opt)
-		}
-		c.checkSyntax = false
-	case `normalize_history`:
-		if len(c.partialLines) > 0 {
-			return c.invalidOptionChange(errState, opt)
-		}
-		c.normalizeHistory = false
-	default:
-		return c.invalidOption(errState, opt)
+	opt, ok := options[args[0]]
+	if !ok {
+		return c.invalidSyntax(errState, `\unset %s. Try \? for help.`, strings.Join(args, " "))
+	}
+	if len(c.partialLines) > 0 && !opt.validDuringMultilineEntry {
+		return c.invalidOptionChange(errState, args[0])
+	}
+	if err := opt.unset(c); err != nil {
+		fmt.Fprintf(osStderr, "%v", err)
+		return c.invalidOptionChange(errState, args[0])
 	}
 	return nextState
 }
@@ -819,7 +853,8 @@ func (c *cliState) doCheckStatement(startState, contState, execState cliStateEnu
 }
 
 func (c *cliState) doRunStatement(nextState cliStateEnum) cliStateEnum {
-	c.exitErr = runQueryAndFormatResults(c.conn, os.Stdout, makeQuery(c.concatLines), cliCtx.prettyFmt)
+	c.exitErr = runQueryAndFormatResults(c.conn, os.Stdout, makeQuery(c.concatLines),
+		cliCtx.tableDisplayFormat)
 	if c.exitErr != nil {
 		fmt.Fprintln(osStderr, c.exitErr)
 		if c.errExit {
@@ -918,9 +953,10 @@ func runInteractive(conn *sqlConn, config *readline.Config) (exitErr error) {
 
 // runOneStatement executes one statement and terminates
 // on error.
-func runStatements(conn *sqlConn, stmts []string, pretty bool) error {
+func runStatements(conn *sqlConn, stmts []string, displayFormat tableDisplayFormat) error {
 	for _, stmt := range stmts {
-		if err := runQueryAndFormatResults(conn, os.Stdout, makeQuery(stmt), pretty); err != nil {
+		if err := runQueryAndFormatResults(conn, os.Stdout, makeQuery(stmt),
+			displayFormat); err != nil {
 			return err
 		}
 	}
@@ -946,7 +982,7 @@ func runTerm(cmd *cobra.Command, args []string) error {
 
 	if len(sqlCtx.execStmts) > 0 {
 		// Single-line sql; run as simple as possible, without noise on stdout.
-		return runStatements(conn, sqlCtx.execStmts, cliCtx.prettyFmt)
+		return runStatements(conn, sqlCtx.execStmts, cliCtx.tableDisplayFormat)
 	}
 	// Use the same as the default global readline config.
 	conf := readline.Config{
