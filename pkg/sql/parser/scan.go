@@ -283,7 +283,7 @@ func (s *Scanner) scan(lval *sqlSymType) {
 		if t := s.peek(); t == singleQuote || t == s.stringQuote {
 			// [xX]'[a-f0-9]'
 			s.pos++
-			if s.scanStringOrHex(lval, t, false, true, true) {
+			if s.scanStringOrHex(lval, t, false, false, true) {
 				lval.id = BCONST
 			}
 			return
