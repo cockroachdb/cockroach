@@ -199,7 +199,9 @@ func (rgcq *replicaGCQueue) process(
 	if _, currentMember := replyDesc.GetReplicaDescriptor(repl.store.StoreID()); !currentMember {
 		// We are no longer a member of this range; clean up our local data.
 		rgcq.metrics.RemoveReplicaCount.Inc(1)
-		log.VEventf(ctx, 1, "destroying local data")
+		if log.V(1) {
+			log.Infof(ctx, "destroying local data")
+		}
 		if err := repl.store.RemoveReplica(ctx, repl, replyDesc, true); err != nil {
 			return err
 		}
@@ -209,7 +211,9 @@ func (rgcq *replicaGCQueue) process(
 		// subsuming range. Shut down raft processing for the former range
 		// and delete any remaining metadata, but do not delete the data.
 		rgcq.metrics.RemoveReplicaCount.Inc(1)
-		log.VEventf(ctx, 1, "removing merged range")
+		if log.V(1) {
+			log.Infof(ctx, "removing merged range")
+		}
 		if err := repl.store.RemoveReplica(ctx, repl, replyDesc, false); err != nil {
 			return err
 		}
@@ -224,7 +228,9 @@ func (rgcq *replicaGCQueue) process(
 		// but also on how good a job the queue does at inspecting every
 		// Replica (see #8111) when inactive ones can be starved by
 		// event-driven additions.
-		log.Event(ctx, "not gc'able")
+		if log.V(1) {
+			log.Infof(ctx, "not gc'able")
+		}
 		if err := repl.setLastReplicaGCTimestamp(ctx, repl.store.Clock().Now()); err != nil {
 			return err
 		}
