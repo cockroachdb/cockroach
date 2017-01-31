@@ -215,8 +215,13 @@ var lightstepToken = envutil.EnvOrDefaultString("COCKROACH_LIGHTSTEP_TOKEN", "")
 // net/trace. If this flag is enabled, we will only trace to Lightstep.
 var lightstepOnly = envutil.EnvOrDefaultBool("COCKROACH_LIGHTSTEP_ONLY", false)
 
+var disableTracing = envutil.EnvOrDefaultBool("COCKROACH_DISABLE_TRACING", false)
+
 // newTracer implements NewTracer and allows that function to be mocked out via Disable().
 var newTracer = func() opentracing.Tracer {
+	if disableTracing {
+		return opentracing.NoopTracer{}
+	}
 	if lightstepToken != "" {
 		lsTr := lightstep.NewTracer(lightstep.Options{
 			AccessToken:    lightstepToken,
