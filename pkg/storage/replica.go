@@ -273,13 +273,13 @@ type Replica struct {
 	// Locking notes: Replica.raftMu < Replica.mu
 	//
 	// TODO(peter): evaluate runtime overhead of the timed mutex.
-	raftMu syncutil.TimedMutex
+	raftMu TimedMutex
 
 	cmdQMu struct {
 		// Protects all fields in the cmdQMu struct.
 		//
 		// Locking notes: Replica.mu < Replica.cmdQMu
-		syncutil.TimedMutex
+		TimedMutex
 		// Enforces at most one command is running per key(s). The global
 		// component tracks user writes (i.e. all keys for which keys.Addr is
 		// the identity), the local component the rest (e.g. RangeDescriptor,
@@ -291,7 +291,7 @@ type Replica struct {
 		// Protects all fields in the mu struct.
 		//
 		// TODO(peter): evaluate runtime overhead of the timed mutex.
-		syncutil.TimedMutex
+		TimedMutex
 		// Has the replica been destroyed.
 		destroyed error
 		// Corrupted persistently (across process restarts) indicates whether the
@@ -560,7 +560,7 @@ func newReplica(rangeID roachpb.RangeID, store *Store) *Replica {
 	// Add replica pointer value.
 	r.AmbientContext.AddLogTagStr("@", fmt.Sprintf("%x", unsafe.Pointer(r)))
 
-	raftMuLogger := syncutil.ThresholdLogger(
+	raftMuLogger := ThresholdLogger(
 		r.AnnotateCtx(context.Background()),
 		defaultReplicaRaftMuWarnThreshold,
 		func(ctx context.Context, msg string, args ...interface{}) {
@@ -570,9 +570,9 @@ func newReplica(rangeID roachpb.RangeID, store *Store) *Replica {
 			r.store.metrics.MuRaftNanos.RecordValue(t.Nanoseconds())
 		},
 	)
-	r.raftMu = syncutil.MakeTimedMutex(raftMuLogger)
+	r.raftMu = MakeTimedMutex(raftMuLogger)
 
-	replicaMuLogger := syncutil.ThresholdLogger(
+	replicaMuLogger := ThresholdLogger(
 		r.AnnotateCtx(context.Background()),
 		defaultReplicaMuWarnThreshold,
 		func(ctx context.Context, msg string, args ...interface{}) {
@@ -582,9 +582,9 @@ func newReplica(rangeID roachpb.RangeID, store *Store) *Replica {
 			r.store.metrics.MuReplicaNanos.RecordValue(t.Nanoseconds())
 		},
 	)
-	r.mu.TimedMutex = syncutil.MakeTimedMutex(replicaMuLogger)
+	r.mu.TimedMutex = MakeTimedMutex(replicaMuLogger)
 
-	cmdQMuLogger := syncutil.ThresholdLogger(
+	cmdQMuLogger := ThresholdLogger(
 		r.AnnotateCtx(context.Background()),
 		defaultReplicaMuWarnThreshold,
 		func(ctx context.Context, msg string, args ...interface{}) {
@@ -594,7 +594,7 @@ func newReplica(rangeID roachpb.RangeID, store *Store) *Replica {
 			r.store.metrics.MuCommandQueueNanos.RecordValue(t.Nanoseconds())
 		},
 	)
-	r.cmdQMu.TimedMutex = syncutil.MakeTimedMutex(cmdQMuLogger)
+	r.cmdQMu.TimedMutex = MakeTimedMutex(cmdQMuLogger)
 	return r
 }
 
