@@ -723,9 +723,10 @@ func Example_sql() {
 	// system
 	// t
 	// sql -e explain select 3
-	// 1 row
+	// 2 rows
 	// Level	Type	Field	Description
-	// 0	nullrow
+	// 0	render
+	// 1	nullrow
 	// sql -e select 1; select 2
 	// 1 row
 	// 1
@@ -871,16 +872,18 @@ func Example_sql_format() {
 	// +-------+
 	// (1 row)
 	// sql --pretty -e explain(indent) select s from t.t union all select s from t.t
-	// +-------+--------+-------+-----------------+
-	// | Level |  Type  | Field |   Description   |
-	// +-------+--------+-------+-----------------+
-	// |     0 | append |       |  -> append      |
-	// |     1 | scan   |       |    -> scan      |
-	// |     1 |        | table |       t@primary |
-	// |     1 | scan   |       |    -> scan      |
-	// |     1 |        | table |       t@primary |
-	// +-------+--------+-------+-----------------+
-	// (5 rows)
+	// +-------+--------+-------+--------------------+
+	// | Level |  Type  | Field |    Description     |
+	// +-------+--------+-------+--------------------+
+	// |     0 | append |       |  -> append         |
+	// |     1 | render |       |    -> render       |
+	// |     2 | scan   |       |       -> scan      |
+	// |     2 |        | table |          t@primary |
+	// |     1 | render |       |    -> render       |
+	// |     2 | scan   |       |       -> scan      |
+	// |     2 |        | table |          t@primary |
+	// +-------+--------+-------+--------------------+
+	// (7 rows)
 }
 
 func Example_user() {

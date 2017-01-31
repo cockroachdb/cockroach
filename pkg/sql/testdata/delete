@@ -137,8 +137,9 @@ EXPLAIN DELETE FROM unindexed
 Level  Type    Field  Description
 0      delete
 0              from   unindexed
-1      scan
-1              table  unindexed@primary
+1      render
+2      scan
+2              table  unindexed@primary
 
 query II colnames
 SELECT k, v FROM unindexed
