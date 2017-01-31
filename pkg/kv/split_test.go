@@ -174,6 +174,7 @@ func TestRangeSplitsWithConcurrentTxns(t *testing.T) {
 // a range to 256K and writes data until there are five ranges.
 func TestRangeSplitsWithWritePressure(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	t.Skip("#12373")
 	// Override default zone config.
 	cfg := config.DefaultZoneConfig()
 	cfg.RangeMaxBytes = 1 << 18
