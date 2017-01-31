@@ -1529,6 +1529,8 @@ func (ec *endCmds) doneLocked(
 func (r *Replica) beginCmds(ctx context.Context, ba *roachpb.BatchRequest) (*endCmds, error) {
 	var cmdGlobal *cmd
 	var cmdLocal *cmd
+	readOnly := ba.IsReadOnly()
+
 	// Don't use the command queue for inconsistent reads.
 	if ba.ReadConsistency != roachpb.INCONSISTENT {
 		// Currently local spans are the exception, so preallocate for the
@@ -1563,11 +1565,6 @@ func (r *Replica) beginCmds(ctx context.Context, ba *roachpb.BatchRequest) (*end
 				EndKey: keys.MaxKey,
 			})
 		}
-
-		// TODO(tschottdorf): need to make this less global when the local
-		// command queue is used more heavily. For example, a split will have
-		// a large read-only span but also a write (see #10084).
-		readOnly := ba.IsReadOnly()
 
 		// Check for context cancellation before inserting into the
 		// command queue (and check again afterward). Once we're in the
@@ -1672,12 +1669,25 @@ func (r *Replica) beginCmds(ctx context.Context, ba *roachpb.BatchRequest) (*end
 		}
 	}
 
+	// Create the endCmds struct which holds the command queue
+	// blockers for this command and info necessary to update
+	// the timestamp cache.
 	ec := &endCmds{
 		repl:      r,
 		cmdGlobal: cmdGlobal,
 		cmdLocal:  cmdLocal,
 		ba:        *ba,
 	}
+
+	// For read-only commands, no need to have other commands wait; we
+	// instead pre-emptively unblock the command queue as well as update
+	// the timestamp cache, pre-supposing this read succeeds (even if
+	// it ultimately doesn't, this is cheap).
+	if readOnly {
+		ec.done(nil, nil, proposalNoRetry)
+		return nil, nil
+	}
+
 	return ec, nil
 }
 
@@ -1849,14 +1859,12 @@ func (r *Replica) addReadOnlyCmd(
 		}
 	}
 
-	var endCmds *endCmds
-
 	if !ba.IsNonKV() {
 		// Add the read to the command queue to gate subsequent
 		// overlapping commands until this command completes.
 		log.Event(ctx, "command queue")
 		var err error
-		endCmds, err = r.beginCmds(ctx, &ba)
+		_, err = r.beginCmds(ctx, &ba)
 		if err != nil {
 			return nil, roachpb.NewError(err)
 		}
@@ -1865,16 +1873,6 @@ func (r *Replica) addReadOnlyCmd(
 	log.Event(ctx, "waiting for read lock")
 	r.readOnlyCmdMu.RLock()
 	defer r.readOnlyCmdMu.RUnlock()
-
-	// Guarantee we remove the commands from the command queue. It is
-	// important that this is inside the readOnlyCmdMu lock so that the
-	// timestamp cache update is synchronized. This is wrapped to delay
-	// pErr evaluation to its value when returning.
-	defer func() {
-		if endCmds != nil {
-			endCmds.done(br, pErr, proposalNoRetry)
-		}
-	}()
 
 	r.mu.Lock()
 	err := r.mu.destroyed
