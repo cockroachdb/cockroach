@@ -579,11 +579,11 @@ CREATE UNIQUE INDEX vidx ON t.test (v);
 	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
 	tablePrefix := roachpb.Key(keys.MakeTablePrefix(uint32(tableDesc.ID)))
 	tableEnd := tablePrefix.PrefixEnd()
-	// number of keys == 3 * number of rows; 2 column families and 1 index entry
+	// number of keys == 2 * number of rows; 1 column family and 1 index entry
 	// for each row.
 	if kvs, err := kvDB.Scan(context.TODO(), tablePrefix, tableEnd, 0); err != nil {
 		t.Fatal(err)
-	} else if e := 3 * (maxValue + 1); len(kvs) != e {
+	} else if e := 2 * (maxValue + 1); len(kvs) != e {
 		t.Fatalf("expected %d key value pairs, but got %d", e, len(kvs))
 	}
 
@@ -597,7 +597,7 @@ CREATE UNIQUE INDEX vidx ON t.test (v);
 		kvDB,
 		"ALTER TABLE t.test ADD COLUMN x DECIMAL DEFAULT (DECIMAL '1.4')",
 		maxValue,
-		4,
+		2,
 		backfillNotification)
 
 	// Drop column.
@@ -608,7 +608,7 @@ CREATE UNIQUE INDEX vidx ON t.test (v);
 		kvDB,
 		"ALTER TABLE t.test DROP pi",
 		maxValue,
-		3,
+		2,
 		backfillNotification)
 
 	// Add index.
@@ -619,7 +619,7 @@ CREATE UNIQUE INDEX vidx ON t.test (v);
 		kvDB,
 		"CREATE UNIQUE INDEX foo ON t.test (v)",
 		maxValue,
-		4,
+		3,
 		backfillNotification)
 
 	// Drop index.
@@ -630,7 +630,7 @@ CREATE UNIQUE INDEX vidx ON t.test (v);
 		kvDB,
 		"DROP INDEX t.test@vidx",
 		maxValue,
-		3,
+		2,
 		backfillNotification)
 
 	// Verify that the index foo over v is consistent, and that column x has
@@ -793,7 +793,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 		// number of keys representing a table row.
 		expectedNumKeysPerRow int
 	}{
-		{"ALTER TABLE t.test ADD COLUMN x DECIMAL DEFAULT (DECIMAL '1.4')", 2},
+		{"ALTER TABLE t.test ADD COLUMN x DECIMAL DEFAULT (DECIMAL '1.4')", 1},
 		{"ALTER TABLE t.test DROP x", 1},
 		{"CREATE UNIQUE INDEX foo ON t.test (v)", 2},
 		{"DROP INDEX t.test@foo", 1},
@@ -1032,7 +1032,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 
 	attempts = 0
 	seenSpan = roachpb.Span{}
-	addColumnSchemaChange(t, sqlDB, kvDB, maxValue, 3)
+	addColumnSchemaChange(t, sqlDB, kvDB, maxValue, 2)
 
 	attempts = 0
 	seenSpan = roachpb.Span{}
@@ -1123,7 +1123,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 
 	attempts = 0
 	seenSpan = roachpb.Span{}
-	addColumnSchemaChange(t, sqlDB, kvDB, maxValue, 3)
+	addColumnSchemaChange(t, sqlDB, kvDB, maxValue, 2)
 	if reevaluated := atomic.SwapUint32(&numReevaluated, 0); reevaluated != 1 {
 		t.Fatalf("exected %d reevaluations, but seen %d", 1, reevaluated)
 	}

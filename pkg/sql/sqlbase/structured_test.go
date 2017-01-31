@@ -932,7 +932,7 @@ func TestFitColumnToFamily(t *testing.T) {
 		idx              int // not applicable if colFits is false
 	}{
 		// Bounded size column.
-		{colFits: false, idx: -1, newCol: ColumnType{Kind: ColumnType_BOOL},
+		{colFits: true, idx: 0, newCol: ColumnType{Kind: ColumnType_BOOL},
 			existingFamilies: nil,
 		},
 		{colFits: true, idx: 0, newCol: ColumnType{Kind: ColumnType_BOOL},
@@ -941,10 +941,10 @@ func TestFitColumnToFamily(t *testing.T) {
 		{colFits: true, idx: 0, newCol: ColumnType{Kind: ColumnType_BOOL},
 			existingFamilies: [][]ColumnType{partiallyFullFamily},
 		},
-		{colFits: false, idx: -1, newCol: ColumnType{Kind: ColumnType_BOOL},
+		{colFits: true, idx: 0, newCol: ColumnType{Kind: ColumnType_BOOL},
 			existingFamilies: [][]ColumnType{fullFamily},
 		},
-		{colFits: true, idx: 1, newCol: ColumnType{Kind: ColumnType_BOOL},
+		{colFits: true, idx: 0, newCol: ColumnType{Kind: ColumnType_BOOL},
 			existingFamilies: [][]ColumnType{fullFamily, emptyFamily},
 		},
 
@@ -952,16 +952,8 @@ func TestFitColumnToFamily(t *testing.T) {
 		{colFits: true, idx: 0, newCol: ColumnType{Kind: ColumnType_DECIMAL},
 			existingFamilies: [][]ColumnType{emptyFamily},
 		},
-		{colFits: false, idx: -1, newCol: ColumnType{Kind: ColumnType_DECIMAL},
+		{colFits: true, idx: 0, newCol: ColumnType{Kind: ColumnType_DECIMAL},
 			existingFamilies: [][]ColumnType{partiallyFullFamily},
-		},
-
-		// Check FamilyHeuristicMaxBytes boundary.
-		{colFits: true, idx: 0, newCol: ColumnType{Kind: ColumnType_INT},
-			existingFamilies: [][]ColumnType{maxIntsInOneFamily[1:]},
-		},
-		{colFits: false, idx: -1, newCol: ColumnType{Kind: ColumnType_INT},
-			existingFamilies: [][]ColumnType{maxIntsInOneFamily},
 		},
 	}
 	for i, test := range tests {

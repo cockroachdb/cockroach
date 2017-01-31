@@ -115,10 +115,9 @@ abcd  CREATE TABLE abcd (
       i INT NULL,
       j INT NULL,
       CONSTRAINT "primary" PRIMARY KEY (a),
-      FAMILY f1 (a, b, e),
+      FAMILY f1 (a, b, e, f),
       FAMILY fam_1_c_d (c, d),
-      FAMILY fam_2_f (f),
-      FAMILY fam_3_g (g),
+      FAMILY fam_2_g (g),
       FAMILY f_h (h, i),
       FAMILY f_j (j)
       )
@@ -135,9 +134,8 @@ abcd  CREATE TABLE abcd (
       f DECIMAL NULL,
       g INT NULL,
       CONSTRAINT "primary" PRIMARY KEY (a),
-      FAMILY f1 (a, b),
-      FAMILY fam_2_f (f),
-      FAMILY fam_3_g (g)
+      FAMILY f1 (a, b, f),
+      FAMILY fam_2_g (g)
       )
 
 statement ok
@@ -151,8 +149,7 @@ f1  CREATE TABLE f1 (
       b STRING NULL,
       c STRING NULL,
       CONSTRAINT "primary" PRIMARY KEY (a),
-      FAMILY "primary" (a, b),
-      FAMILY fam_1_c (c)
+      FAMILY "primary" (a, b, c)
     )
 
 statement ok
