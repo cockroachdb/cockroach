@@ -1045,7 +1045,9 @@ func (r *Replica) redirectOnOrAcquireLease(ctx context.Context) (LeaseStatus, *r
 
 		// Wait for the range lease to finish, or the context to expire.
 		pErr = func() *roachpb.Error {
-			slowTimer := time.After(base.SlowRequestThreshold)
+			var slowTimer timeutil.Timer
+			defer slowTimer.Stop()
+			slowTimer.Reset(base.SlowRequestThreshold)
 			for {
 				select {
 				case pErr = <-llChan:
@@ -1085,8 +1087,7 @@ func (r *Replica) redirectOnOrAcquireLease(ctx context.Context) (LeaseStatus, *r
 					}
 					log.Eventf(ctx, "lease acquisition succeeded: %+v", status.lease)
 					return nil
-				case <-slowTimer:
-					slowTimer = nil
+				case <-slowTimer.C:
 					log.Warningf(ctx, "have been waiting %s attempting to acquire lease",
 						base.SlowRequestThreshold)
 					r.store.metrics.SlowLeaseRequests.Inc(1)
@@ -1614,12 +1615,13 @@ func (r *Replica) beginCmds(ctx context.Context, ba *roachpb.BatchRequest) (*end
 					// However, the command queue assumes that commands don't drop
 					// out before their prerequisites, so we still have to wait it
 					// out.
-					slowTimer := time.After(base.SlowRequestThreshold)
+					var slowTimer timeutil.Timer
+					defer slowTimer.Stop()
+					slowTimer.Reset(base.SlowRequestThreshold)
 					for _, ch := range chans {
 						select {
 						case <-ch:
-						case <-slowTimer:
-							slowTimer = nil
+						case <-slowTimer.C:
 							r.cmdQMu.Lock()
 							g := r.cmdQMu.global.String()
 							l := r.cmdQMu.local.String()
@@ -2099,7 +2101,9 @@ func (r *Replica) tryAddWriteCmd(
 	// If the command was accepted by raft, wait for the range to apply it.
 	ctxDone := ctx.Done()
 	shouldQuiesce := r.store.stopper.ShouldQuiesce()
-	slowTimer := time.After(base.SlowRequestThreshold)
+	var slowTimer timeutil.Timer
+	defer slowTimer.Stop()
+	slowTimer.Reset(base.SlowRequestThreshold)
 	for {
 		select {
 		case propResult := <-ch:
@@ -2117,8 +2121,7 @@ func (r *Replica) tryAddWriteCmd(
 				r.store.intentResolver.processIntentsAsync(r, propResult.Intents)
 			}
 			return propResult.Reply, propResult.Err, propResult.ProposalRetry
-		case <-slowTimer:
-			slowTimer = nil
+		case <-slowTimer.C:
 			log.Warningf(ctx, "have been waiting %s for proposing command %s",
 				base.SlowRequestThreshold, ba)
 			r.store.metrics.SlowRaftRequests.Inc(1)
