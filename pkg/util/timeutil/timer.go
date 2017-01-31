@@ -46,7 +46,10 @@ import "time"
 // not begin counting down until Reset is called for the first time, as
 // there is no constructor function.
 type Timer struct {
-	*time.Timer
+	timer *time.Timer
+	// C is a local "copy" of timer.C that can be used in a select case before
+	// the timer has been initialized (via Reset).
+	C    <-chan time.Time
 	Read bool
 }
 
@@ -57,14 +60,15 @@ type Timer struct {
 // they successfully read from the Timer's channel. Reset operates on
 // and returns a value so that Timer can be stack allocated.
 func (t *Timer) Reset(d time.Duration) {
-	if t.Timer == nil {
-		t.Timer = time.NewTimer(d)
+	if t.timer == nil {
+		t.timer = time.NewTimer(d)
+		t.C = t.timer.C
 		return
 	}
-	if !t.Timer.Stop() && !t.Read {
+	if !t.timer.Stop() && !t.Read {
 		<-t.C
 	}
-	t.Timer.Reset(d)
+	t.timer.Reset(d)
 	t.Read = false
 }
 
@@ -73,8 +77,8 @@ func (t *Timer) Reset(d time.Duration) {
 // or had never been initialized with a call to Timer.Reset. Stop does not
 // close the channel, to prevent a read from succeeding incorrectly.
 func (t *Timer) Stop() bool {
-	if t.Timer == nil {
+	if t.timer == nil {
 		return false
 	}
-	return t.Timer.Stop()
+	return t.timer.Stop()
 }
