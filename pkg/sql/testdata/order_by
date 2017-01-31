@@ -43,9 +43,10 @@ EXPLAIN SELECT a, b FROM t ORDER BY b
 ----
 0  sort
 0        order  +b
-1  scan
-1        table  t@primary
-1        spans  ALL
+1  render
+2  scan
+2        table  t@primary
+2        spans  ALL
 
 query II
 SELECT a, b FROM t ORDER BY b DESC
@@ -59,9 +60,10 @@ EXPLAIN SELECT a, b FROM t ORDER BY b DESC
 ----
 0  sort
 0        order  -b
-1  scan
-1        table  t@primary
-1        spans  ALL
+1  render
+2  scan
+2        table  t@primary
+2        spans  ALL
 
 query I
 SELECT a FROM t ORDER BY 1 DESC
@@ -77,9 +79,10 @@ EXPLAIN SELECT a, b FROM t ORDER BY b LIMIT 2
 1  sort
 1         order     +b
 1         strategy  top 2
-2  scan
-2         table     t@primary
-2         spans     ALL
+2  render
+3  scan
+3         table     t@primary
+3         spans     ALL
 
 query II
 SELECT a, b FROM t ORDER BY b DESC LIMIT 2
@@ -95,9 +98,10 @@ EXPLAIN SELECT DISTINCT a FROM t ORDER BY b LIMIT 2
 2  sort
 2            order     +b
 2            strategy  iterative
-3  scan
-3            table     t@primary
-3            spans     ALL
+3  render
+4  scan
+4            table     t@primary
+4            spans     ALL
 
 query I
 SELECT DISTINCT a FROM t ORDER BY b DESC LIMIT 2
@@ -149,27 +153,30 @@ EXPLAIN SELECT b FROM t ORDER BY a DESC
 ----
 0  nosort
 0           order  -a
-1  revscan
-1           table  t@primary
-1           spans  ALL
+1  render
+2  revscan
+2           table  t@primary
+2           spans  ALL
 
 query ITTT
 EXPLAIN SELECT b FROM t ORDER BY a DESC, b ASC
 ----
 0  nosort
 0           order  -a,+b
-1  revscan
-1           table  t@primary
-1           spans  ALL
+1  render
+2  revscan
+2           table  t@primary
+2           spans  ALL
 
 query ITTT
 EXPLAIN SELECT b FROM t ORDER BY a DESC, b DESC
 ----
 0  nosort
 0           order  -a,-b
-1  revscan
-1           table  t@primary
-1           spans  ALL
+1  render
+2  revscan
+2           table  t@primary
+2           spans  ALL
 
 statement ok
 INSERT INTO t VALUES (4, 7), (5, 7)
@@ -344,18 +351,20 @@ EXPLAIN (DEBUG) SELECT a, b FROM abc ORDER BY b, a
 query ITTT
 EXPLAIN SELECT a, b FROM abc ORDER BY b, a
 ----
-0  scan
-0        table  abc@ba
-0        spans  ALL
+0  render
+1  scan
+1        table  abc@ba
+1        spans  ALL
 
 # The non-unique index ba includes column c (required to make the keys unique)
 # so the results will already be sorted.
 query ITTT
 EXPLAIN SELECT a, b, c FROM abc ORDER BY b, a, c
 ----
-0  scan
-0        table  abc@ba
-0        spans  ALL
+0  render
+1  scan
+1        table  abc@ba
+1        spans  ALL
 
 # We use the WHERE condition to force the use of index ba.
 query ITTT
@@ -387,9 +396,10 @@ EXPLAIN SELECT a, b FROM abc ORDER BY b, c
 ----
 0  nosort
 0          order  +b,+c
-1  scan
-1          table  abc@bc
-1          spans  ALL
+1  render
+2  scan
+2          table  abc@bc
+2          spans  ALL
 
 query ITTTTT
 EXPLAIN(VERBOSE) SELECT a, b FROM abc ORDER BY b, c
@@ -409,18 +419,20 @@ EXPLAIN SELECT a, b FROM abc ORDER BY b, c, a
 ----
 0  nosort
 0          order  +b,+c,+a
-1  scan
-1          table  abc@bc
-1          spans  ALL
+1  render
+2  scan
+2          table  abc@bc
+2          spans  ALL
 
 query ITTT
 EXPLAIN SELECT a, b FROM abc ORDER BY b, c, a DESC
 ----
 0  nosort
 0          order  +b,+c,-a
-1  scan
-1          table  abc@bc
-1          spans  ALL
+1  render
+2  scan
+2          table  abc@bc
+2          spans  ALL
 
 query ITTT
 EXPLAIN (DEBUG) SELECT b, c FROM abc ORDER BY b, c
@@ -445,9 +457,10 @@ EXPLAIN (DEBUG) SELECT a FROM abc ORDER BY a DESC
 query ITTT
 EXPLAIN SELECT a FROM abc ORDER BY a DESC
 ----
-0  revscan
-0           table  abc@primary
-0           spans  ALL
+0  render
+1  revscan
+1           table  abc@primary
+1           spans  ALL
 
 query I
 SELECT a FROM abc ORDER BY a DESC
@@ -468,16 +481,18 @@ SELECT a FROM abc ORDER BY a DESC OFFSET 1
 query ITTT
 EXPLAIN SELECT c FROM abc WHERE b = 2 ORDER BY c
 ----
-0  scan
-0        table  abc@bc
-0        spans  /2-/3
+0  render
+1  scan
+1        table  abc@bc
+1        spans  /2-/3
 
 query ITTT
 EXPLAIN SELECT c FROM abc WHERE b = 2 ORDER BY c DESC
 ----
-0  revscan
-0           table  abc@bc
-0           spans  /2-/3
+0  render
+1  revscan
+1           table  abc@bc
+1           spans  /2-/3
 
 statement ok
 CREATE TABLE bar (id INT PRIMARY KEY, baz STRING, UNIQUE INDEX i_bar (baz));
@@ -507,30 +522,34 @@ INSERT INTO abcd VALUES (1, 4, 2, 3), (2, 3, 4, 1), (3, 2, 1, 2), (4, 4, 1, 1)
 query ITTT
 EXPLAIN SELECT a, b, c FROM abcd@abc WHERE (a, b) = (1, 4) ORDER BY c
 ----
-0  scan
-0        table  abcd@abc
-0        spans  /1/4-/1/5
+0  render
+1  scan
+1        table  abcd@abc
+1        spans  /1/4-/1/5
 
 query ITTT
 EXPLAIN SELECT a, b, c FROM abcd@abc WHERE (a, b) = (1, 4) ORDER BY c, b, a
 ----
-0  scan
-0        table  abcd@abc
-0        spans  /1/4-/1/5
+0  render
+1  scan
+1        table  abcd@abc
+1        spans  /1/4-/1/5
 
 query ITTT
 EXPLAIN SELECT a, b, c FROM abcd@abc WHERE (a, b) = (1, 4) ORDER BY b, a, c
 ----
-0  scan
-0        table  abcd@abc
-0        spans  /1/4-/1/5
+0  render
+1  scan
+1        table  abcd@abc
+1        spans  /1/4-/1/5
 
 query ITTT
 EXPLAIN SELECT a, b, c FROM abcd@abc WHERE (a, b) = (1, 4) ORDER BY b, c, a
 ----
-0  scan
-0        table  abcd@abc
-0        spans  /1/4-/1/5
+0  render
+1  scan
+1        table  abcd@abc
+1        spans  /1/4-/1/5
 
 statement ok
 CREATE TABLE nan (id INT PRIMARY KEY, x REAL);

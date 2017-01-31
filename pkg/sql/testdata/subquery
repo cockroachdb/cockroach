@@ -46,7 +46,8 @@ EXPLAIN ALTER TABLE abc SPLIT AT ((SELECT 42))
 0  split
 0           subqueries  1
 1  limit
-2  nullrow
+2  render
+3  nullrow
 
 statement ok
 ALTER TABLE abc SPLIT AT ((SELECT 1))
@@ -73,11 +74,13 @@ SELECT (SELECT a FROM abc)
 query ITTT
 EXPLAIN SELECT EXISTS (SELECT a FROM abc)
 ----
--1           subqueries  1
-0   limit
-1   scan
-1            table       abc@primary
-0   nullrow
+0  render
+0           subqueries  1
+1  limit
+2  render
+3  scan
+3           table       abc@primary
+1  nullrow
 
 query I
 SELECT (SELECT a FROM abc WHERE false)
@@ -282,10 +285,12 @@ EXPLAIN SELECT * FROM (SELECT * FROM (VALUES (1, 8, 8), (3, 1, 1), (2, 4, 4)) AS
 ----
 0  sort
 0          order  +foo1
-1  sort
-1          order  +moo2
-2  values
-2          size   3 columns, 3 rows
+1  render
+2  sort
+2          order  +moo2
+3  render
+4  values
+4          size   3 columns, 3 rows
 
 query II colnames
 SELECT a, b FROM (VALUES (1, 2, 3), (3, 4, 7), (5, 6, 10)) AS foo (a, b, c) WHERE a + b = c
@@ -364,17 +369,20 @@ SELECT col0 FROM tab4 WHERE (col0 <= 0 AND col4 <= 5.38) OR (col4 IN (SELECT col
 query ITTT
 EXPLAIN SELECT col0 FROM tab4 WHERE (col0 <= 0 AND col4 <= 5.38) OR (col4 IN (SELECT col1 FROM tab4 WHERE col1 > 8.27)) AND (col3 <= 5 AND (col3 BETWEEN 7 AND 9))
 ----
-0  index-join
-1  scan
-1              table       tab4@idx_tab4_0
-1              spans       /#-/5.38/1
-1              subqueries  1
+0  render
+1  index-join
+2  scan
+2              table       tab4@idx_tab4_0
+2              spans       /#-/5.38/1
+2              subqueries  1
+3  render
+4  scan
+4              table       tab4@primary
+4              spans       ALL
 2  scan
 2              table       tab4@primary
-2              spans       ALL
-1  scan
-1              table       tab4@primary
-1              subqueries  1
-2  scan
-2              table       tab4@primary
-2              spans       ALL
+2              subqueries  1
+3  render
+4  scan
+4              table       tab4@primary
+4              spans       ALL
