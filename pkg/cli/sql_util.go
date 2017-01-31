@@ -30,11 +30,8 @@ import (
 
 	"golang.org/x/net/context"
 
-	"github.com/olekukonko/tablewriter"
-
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/pq"
 )
@@ -242,28 +239,32 @@ func makeQuery(query string, parameters ...driver.Value) queryFunc {
 
 // runQuery takes a 'query' with optional 'parameters'.
 // It runs the sql query and returns a list of columns names and a list of rows.
-func runQuery(conn *sqlConn, fn queryFunc, pretty bool) ([]string, [][]string, string, error) {
+func runQuery(
+	conn *sqlConn, fn queryFunc, showMoreChars bool,
+) ([]string, [][]string, string, error) {
 	rows, err := fn(conn)
 	if err != nil {
 		return nil, nil, "", err
 	}
 
 	defer func() { _ = rows.Close() }()
-	return sqlRowsToStrings(rows, pretty)
+	return sqlRowsToStrings(rows, showMoreChars)
 }
 
 // runQueryAndFormatResults takes a 'query' with optional 'parameters'.
 // It runs the sql query and writes output to 'w'.
-func runQueryAndFormatResults(conn *sqlConn, w io.Writer, fn queryFunc, pretty bool) error {
+func runQueryAndFormatResults(
+	conn *sqlConn, w io.Writer, fn queryFunc, displayFormat tableDisplayFormat,
+) error {
 	for {
-		cols, allRows, result, err := runQuery(conn, fn, pretty)
+		cols, allRows, result, err := runQuery(conn, fn, true)
 		if err != nil {
 			if err == pq.ErrNoMoreResults {
 				return nil
 			}
 			return err
 		}
-		printQueryOutput(w, cols, allRows, result, pretty)
+		printQueryOutput(w, cols, allRows, result, displayFormat)
 		fn = nextResult
 	}
 }
@@ -274,12 +275,12 @@ func runQueryAndFormatResults(conn *sqlConn, w io.Writer, fn queryFunc, pretty b
 // It returns the header row followed by all data rows.
 // If both the header row and list of rows are empty, it means no row
 // information was returned (eg: statement was not a query).
-// If pretty is true, then more characters are not escaped.
-func sqlRowsToStrings(rows *sqlRows, pretty bool) ([]string, [][]string, string, error) {
+// If showMoreChars is true, then more characters are not escaped.
+func sqlRowsToStrings(rows *sqlRows, showMoreChars bool) ([]string, [][]string, string, error) {
 	srcCols := rows.Columns()
 	cols := make([]string, len(srcCols))
 	for i, c := range srcCols {
-		cols[i] = formatVal(c, pretty, false)
+		cols[i] = formatVal(c, showMoreChars, false)
 	}
 
 	var allRows [][]string
@@ -298,7 +299,7 @@ func sqlRowsToStrings(rows *sqlRows, pretty bool) ([]string, [][]string, string,
 		}
 		rowStrings := make([]string, len(cols))
 		for i, v := range vals {
-			rowStrings[i] = formatVal(v, pretty, pretty)
+			rowStrings[i] = formatVal(v, showMoreChars, showMoreChars)
 		}
 		allRows = append(allRows, rowStrings)
 	}
@@ -330,48 +331,6 @@ func expandTabsAndNewLines(s string) string {
 	fmt.Fprint(w, strings.Replace(s, "\n", "␤\n", -1))
 	_ = w.Flush()
 	return buf.String()
-}
-
-// printQueryOutput takes a list of column names and a list of row contents
-// writes a pretty table to 'w', or "OK" if empty.
-func printQueryOutput(w io.Writer, cols []string, allRows [][]string, tag string, pretty bool) {
-	if len(cols) == 0 {
-		// This operation did not return rows, just show the tag.
-		fmt.Fprintln(w, tag)
-		return
-	}
-
-	if pretty {
-		// Initialize tablewriter and set column names as the header row.
-		table := tablewriter.NewWriter(w)
-		table.SetAutoFormatHeaders(false)
-		table.SetAutoWrapText(false)
-		table.SetHeader(cols)
-		for _, row := range allRows {
-			for i, r := range row {
-				row[i] = expandTabsAndNewLines(r)
-			}
-			table.Append(row)
-		}
-		table.Render()
-		nRows := len(allRows)
-		fmt.Fprintf(w, "(%d row%s)\n", nRows, util.Pluralize(int64(nRows)))
-	} else {
-		if len(cols) == 0 {
-			// No result selected, inform the user.
-			fmt.Fprintln(w, tag)
-		} else {
-			// Some results selected, inform the user about how much data to expect.
-			fmt.Fprintf(w, "%d row%s\n", len(allRows),
-				util.Pluralize(int64(len(allRows))))
-
-			// Then print the results themselves.
-			fmt.Fprintln(w, strings.Join(cols, "\t"))
-			for _, row := range allRows {
-				fmt.Fprintln(w, strings.TrimRight(strings.Join(row, "\t"), "\t "))
-			}
-		}
-	}
 }
 
 func isNotPrintableASCII(r rune) bool { return r < 0x20 || r > 0x7e || r == '"' || r == '\\' }

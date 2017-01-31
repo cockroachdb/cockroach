@@ -692,7 +692,6 @@ func Example_sql() {
 	c.RunWithArgs([]string{"sql", "-e", "begin", "-e", "select 3", "-e", "commit"})
 	c.RunWithArgs([]string{"sql", "-e", "select * from t.f"})
 	c.RunWithArgs([]string{"sql", "--execute=show databases"})
-	c.RunWithArgs([]string{"sql", "-e", "explain select 3"})
 	c.RunWithArgs([]string{"sql", "-e", "select 1; select 2"})
 
 	// Output:
@@ -722,11 +721,6 @@ func Example_sql() {
 	// pg_catalog
 	// system
 	// t
-	// sql -e explain select 3
-	// 2 rows
-	// Level	Type	Field	Description
-	// 0	render
-	// 1	nullrow
 	// sql -e select 1; select 2
 	// 1 row
 	// 1
@@ -737,6 +731,117 @@ func Example_sql() {
 }
 
 func Example_sql_format() {
+	c := newCLITest(cliTestParams{})
+	defer c.cleanup()
+
+	c.RunWithArgs([]string{"sql", "-e", "create database t; create table t.times (bare timestamp, withtz timestamptz)"})
+	c.RunWithArgs([]string{"sql", "-e", "insert into t.times values ('2016-01-25 10:10:10', '2016-01-25 10:10:10-05:00')"})
+	c.RunWithArgs([]string{"sql", "-e", "select * from t.times"})
+
+	// Output:
+	// sql -e create database t; create table t.times (bare timestamp, withtz timestamptz)
+	// CREATE TABLE
+	// sql -e insert into t.times values ('2016-01-25 10:10:10', '2016-01-25 10:10:10-05:00')
+	// INSERT 1
+	// sql -e select * from t.times
+	// 1 row
+	// bare	withtz
+	// 2016-01-25 10:10:10+00:00	2016-01-25 15:10:10+00:00
+}
+
+func Example_sql_column_labels() {
+	c := newCLITest(cliTestParams{})
+	defer c.cleanup()
+
+	c.RunWithArgs([]string{"sql", "-e", "create database t; create table t.u (\"\"\"foo\" int, \"\\foo\" int, \"foo\nbar\" int, \"κόσμε\" int, \"a|b\" int, \"܈85\" int)"})
+	c.RunWithArgs([]string{"sql", "-e", "insert into t.u values (0, 0, 0, 0, 0, 0)"})
+	c.RunWithArgs([]string{"sql", "-e", "show columns from t.u"})
+	c.RunWithArgs([]string{"sql", "-e", "select * from t.u"})
+	c.RunWithArgs([]string{"sql", "--format=pretty", "-e", "show columns from t.u"})
+	c.RunWithArgs([]string{"sql", "--format=pretty", "-e", "select * from t.u"})
+	c.RunWithArgs([]string{"sql", "--format=tsv", "-e", "select * from t.u"})
+	c.RunWithArgs([]string{"sql", "--format=csv", "-e", "select * from t.u"})
+	c.RunWithArgs([]string{"sql", "--format=sql", "-e", "select * from t.u"})
+	c.RunWithArgs([]string{"sql", "--format=html", "-e", "select * from t.u"})
+	c.RunWithArgs([]string{"sql", "--format=records", "-e", "select * from t.u"})
+
+	// Output:
+	// sql -e create database t; create table t.u ("""foo" int, "\foo" int, "foo
+	// bar" int, "κόσμε" int, "a|b" int, "܈85" int)
+	// CREATE TABLE
+	// sql -e insert into t.u values (0, 0, 0, 0, 0, 0)
+	// INSERT 1
+	// sql -e show columns from t.u
+	// 6 rows
+	// Field	Type	Null	Default	Indices
+	// """foo"	INT	true	NULL	{}
+	// \foo	INT	true	NULL	{}
+	// "foo
+	// bar"	INT	true	NULL	{}
+	// κόσμε	INT	true	NULL	{}
+	// a|b	INT	true	NULL	{}
+	// ܈85	INT	true	NULL	{}
+	// sql -e select * from t.u
+	// 1 row
+	// """foo"	\foo	"""foo\nbar"""	κόσμε	a|b	܈85
+	// 0	0	0	0	0	0
+	// sql --format=pretty -e show columns from t.u
+	// +----------+------+------+---------+---------+
+	// |  Field   | Type | Null | Default | Indices |
+	// +----------+------+------+---------+---------+
+	// | "foo     | INT  | true | NULL    | {}      |
+	// | \foo     | INT  | true | NULL    | {}      |
+	// | foo␤     | INT  | true | NULL    | {}      |
+	// | bar      |      |      |         |         |
+	// | κόσμε    | INT  | true | NULL    | {}      |
+	// | a|b      | INT  | true | NULL    | {}      |
+	// | ܈85      | INT  | true | NULL    | {}      |
+	// +----------+------+------+---------+---------+
+	// (6 rows)
+	// sql --format=pretty -e select * from t.u
+	// +------+------+------------+-------+-----+-----+
+	// | "foo | \foo | "foo\nbar" | κόσμε | a|b | ܈85 |
+	// +------+------+------------+-------+-----+-----+
+	// |    0 |    0 |          0 |     0 |   0 |   0 |
+	// +------+------+------------+-------+-----+-----+
+	// (1 row)
+	// sql --format=tsv -e select * from t.u
+	// 1 row
+	// """foo"	\foo	"""foo\nbar"""	κόσμε	a|b	܈85
+	// 0	0	0	0	0	0
+	// sql --format=csv -e select * from t.u
+	// 1 row
+	// """foo",\foo,"""foo\nbar""",κόσμε,a|b,܈85
+	// 0,0,0,0,0,0
+	// sql --format=sql -e select * from t.u
+	// CREATE TABLE results (
+	//   """foo" STRING,
+	//   "\foo" STRING,
+	//   """foo\nbar""" STRING,
+	//   κόσμε STRING,
+	//   "a|b" STRING,
+	//   ܈85 STRING
+	// );
+	//
+	// INSERT INTO results VALUES ('0', '0', '0', '0', '0', '0');
+	// sql --format=html -e select * from t.u
+	// <table>
+	// <thead><tr><th>&#34;foo</th><th>\foo</th><th>&#34;foo\nbar&#34;</th><th>κόσμε</th><th>a|b</th><th>܈85</th></tr></head>
+	// <tbody>
+	// <tr><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td></tr>
+	// </tbody>
+	// </table>
+	// sql --format=records -e select * from t.u
+	// -[ RECORD 1 ]
+	// "foo       | 0
+	// \foo       | 0
+	// "foo\nbar" | 0
+	// κόσμε      | 0
+	// a|b        | 0
+	// ܈85        | 0
+}
+
+func Example_sql_table() {
 	c := newCLITest(cliTestParams{})
 	defer c.cleanup()
 
@@ -752,18 +857,14 @@ func Example_sql_format() {
 	c.RunWithArgs([]string{"sql", "-e", "insert into t.t values (e'\\xc3\\x28', 'non-UTF8 string')"})
 	c.RunWithArgs([]string{"sql", "-e", "insert into t.t values (e'a\\tb\\tc\\n12\\t123123213\\t12313', 'tabs')"})
 	c.RunWithArgs([]string{"sql", "-e", "select * from t.t"})
-	c.RunWithArgs([]string{"sql", "-e", "create table t.u (\"\"\"foo\" int, \"\\foo\" int, \"foo\nbar\" int, \"κόσμε\" int, \"܈85\" int)"})
-	c.RunWithArgs([]string{"sql", "-e", "insert into t.u values (0, 0, 0, 0, 0)"})
-	c.RunWithArgs([]string{"sql", "-e", "show columns from t.u"})
-	c.RunWithArgs([]string{"sql", "-e", "select * from t.u"})
-	c.RunWithArgs([]string{"sql", "-e", "create table t.times (bare timestamp, withtz timestamptz)"})
-	c.RunWithArgs([]string{"sql", "-e", "insert into t.times values ('2016-01-25 10:10:10', '2016-01-25 10:10:10-05:00')"})
-	c.RunWithArgs([]string{"sql", "-e", "select * from t.times"})
-	c.RunWithArgs([]string{"sql", "--pretty", "-e", "select * from t.t"})
-	c.RunWithArgs([]string{"sql", "--pretty", "-e", "show columns from t.u"})
-	c.RunWithArgs([]string{"sql", "--pretty", "-e", "select * from t.u"})
-	c.RunWithArgs([]string{"sql", "--pretty", "-e", "select '  hai' as x"})
-	c.RunWithArgs([]string{"sql", "--pretty", "-e", "explain(indent) select s from t.t union all select s from t.t"})
+	c.RunWithArgs([]string{"sql", "--format=pretty", "-e", "select * from t.t"})
+	c.RunWithArgs([]string{"sql", "--format=tsv", "-e", "select * from t.t"})
+	c.RunWithArgs([]string{"sql", "--format=csv", "-e", "select * from t.t"})
+	c.RunWithArgs([]string{"sql", "--format=sql", "-e", "select * from t.t"})
+	c.RunWithArgs([]string{"sql", "--format=html", "-e", "select * from t.t"})
+	c.RunWithArgs([]string{"sql", "--format=records", "-e", "select * from t.t"})
+	c.RunWithArgs([]string{"sql", "--format=pretty", "-e", "select '  hai' as x"})
+	c.RunWithArgs([]string{"sql", "--format=pretty", "-e", "explain(indent) select s from t.t union all select s from t.t"})
 
 	// Output:
 	// sql -e create database t; create table t.t (s string, d string);
@@ -795,40 +896,17 @@ func Example_sql_format() {
 	// 9 rows
 	// s	d
 	// foo	printable ASCII
-	// "\"foo"	printable ASCII with quotes
-	// "\\foo"	printable ASCII with backslash
-	// "foo\nbar"	non-printable ASCII
-	// "\u03ba\u1f79\u03c3\u03bc\u03b5"	printable UTF8
-	// "\u00f1"	printable UTF8 using escapes
-	// "\x01"	non-printable UTF8 string
-	// "\u070885"	UTF8 string with RTL char
-	// "a\tb\tc\n12\t123123213\t12313"	tabs
-	// sql -e create table t.u ("""foo" int, "\foo" int, "foo
-	// bar" int, "κόσμε" int, "܈85" int)
-	// CREATE TABLE
-	// sql -e insert into t.u values (0, 0, 0, 0, 0)
-	// INSERT 1
-	// sql -e show columns from t.u
-	// 5 rows
-	// Field	Type	Null	Default	Indices
-	// "\"foo"	INT	true	NULL	{}
-	// "\\foo"	INT	true	NULL	{}
-	// "foo\nbar"	INT	true	NULL	{}
-	// "\u03ba\u1f79\u03c3\u03bc\u03b5"	INT	true	NULL	{}
-	// "\u070885"	INT	true	NULL	{}
-	// sql -e select * from t.u
-	// 1 row
-	// "\"foo"	"\\foo"	"foo\nbar"	"\u03ba\u1f79\u03c3\u03bc\u03b5"	"\u070885"
-	// 0	0	0	0	0
-	// sql -e create table t.times (bare timestamp, withtz timestamptz)
-	// CREATE TABLE
-	// sql -e insert into t.times values ('2016-01-25 10:10:10', '2016-01-25 10:10:10-05:00')
-	// INSERT 1
-	// sql -e select * from t.times
-	// 1 row
-	// bare	withtz
-	// 2016-01-25 10:10:10+00:00	2016-01-25 15:10:10+00:00
-	// sql --pretty -e select * from t.t
+	// """foo"	printable ASCII with quotes
+	// \foo	printable ASCII with backslash
+	// "foo
+	// bar"	non-printable ASCII
+	// κόσμε	printable UTF8
+	// ñ	printable UTF8 using escapes
+	// """\x01"""	non-printable UTF8 string
+	// ܈85	UTF8 string with RTL char
+	// "a	b	c
+	// 12	123123213	12313"	tabs
+	// sql --format=pretty -e select * from t.t
 	// +--------------------------------+--------------------------------+
 	// |               s                |               d                |
 	// +--------------------------------+--------------------------------+
@@ -845,33 +923,102 @@ func Example_sql_format() {
 	// | 12  123123213 12313            |                                |
 	// +--------------------------------+--------------------------------+
 	// (9 rows)
-	// sql --pretty -e show columns from t.u
-	// +----------+------+------+---------+---------+
-	// |  Field   | Type | Null | Default | Indices |
-	// +----------+------+------+---------+---------+
-	// | "foo     | INT  | true | NULL    | {}      |
-	// | \foo     | INT  | true | NULL    | {}      |
-	// | foo␤     | INT  | true | NULL    | {}      |
-	// | bar      |      |      |         |         |
-	// | κόσμε    | INT  | true | NULL    | {}      |
-	// | ܈85      | INT  | true | NULL    | {}      |
-	// +----------+------+------+---------+---------+
-	// (5 rows)
-	// sql --pretty -e select * from t.u
-	// +------+------+------------+-------+-----+
-	// | "foo | \foo | "foo\nbar" | κόσμε | ܈85 |
-	// +------+------+------------+-------+-----+
-	// |    0 |    0 |          0 |     0 |   0 |
-	// +------+------+------------+-------+-----+
-	// (1 row)
-	// sql --pretty -e select '  hai' as x
+	// sql --format=tsv -e select * from t.t
+	// 9 rows
+	// s	d
+	// foo	printable ASCII
+	// """foo"	printable ASCII with quotes
+	// \foo	printable ASCII with backslash
+	// "foo
+	// bar"	non-printable ASCII
+	// κόσμε	printable UTF8
+	// ñ	printable UTF8 using escapes
+	// """\x01"""	non-printable UTF8 string
+	// ܈85	UTF8 string with RTL char
+	// "a	b	c
+	// 12	123123213	12313"	tabs
+	// sql --format=csv -e select * from t.t
+	// 9 rows
+	// s,d
+	// foo,printable ASCII
+	// """foo",printable ASCII with quotes
+	// \foo,printable ASCII with backslash
+	// "foo
+	// bar",non-printable ASCII
+	// κόσμε,printable UTF8
+	// ñ,printable UTF8 using escapes
+	// """\x01""",non-printable UTF8 string
+	// ܈85,UTF8 string with RTL char
+	// "a	b	c
+	// 12	123123213	12313",tabs
+	// sql --format=sql -e select * from t.t
+	// CREATE TABLE results (
+	//   s STRING,
+	//   d STRING
+	// );
+	//
+	// INSERT INTO results VALUES ('foo', 'printable ASCII');
+	// INSERT INTO results VALUES ('"foo', 'printable ASCII with quotes');
+	// INSERT INTO results VALUES (e'\\foo', 'printable ASCII with backslash');
+	// INSERT INTO results VALUES (e'foo\nbar', 'non-printable ASCII');
+	// INSERT INTO results VALUES (e'\u03BA\U00001F79\u03C3\u03BC\u03B5', 'printable UTF8');
+	// INSERT INTO results VALUES (e'\u00F1', 'printable UTF8 using escapes');
+	// INSERT INTO results VALUES (e'"\\x01"', 'non-printable UTF8 string');
+	// INSERT INTO results VALUES (e'\u070885', 'UTF8 string with RTL char');
+	// INSERT INTO results VALUES (e'a\tb\tc\n12\t123123213\t12313', 'tabs');
+	// sql --format=html -e select * from t.t
+	// <table>
+	// <thead><tr><th>s</th><th>d</th></tr></head>
+	// <tbody>
+	// <tr><td>foo</td><td>printable ASCII</td></tr>
+	// <tr><td>&#34;foo</td><td>printable ASCII with quotes</td></tr>
+	// <tr><td>\foo</td><td>printable ASCII with backslash</td></tr>
+	// <tr><td>foo<br/>bar</td><td>non-printable ASCII</td></tr>
+	// <tr><td>κόσμε</td><td>printable UTF8</td></tr>
+	// <tr><td>ñ</td><td>printable UTF8 using escapes</td></tr>
+	// <tr><td>&#34;\x01&#34;</td><td>non-printable UTF8 string</td></tr>
+	// <tr><td>܈85</td><td>UTF8 string with RTL char</td></tr>
+	// <tr><td>a	b	c<br/>12	123123213	12313</td><td>tabs</td></tr>
+	// </tbody>
+	// </table>
+	// sql --format=records -e select * from t.t
+	// -[ RECORD 1 ]
+	// s | foo
+	// d | printable ASCII
+	// -[ RECORD 2 ]
+	// s | "foo
+	// d | printable ASCII with quotes
+	// -[ RECORD 3 ]
+	// s | \foo
+	// d | printable ASCII with backslash
+	// -[ RECORD 4 ]
+	// s | foo
+	//   | bar
+	// d | non-printable ASCII
+	// -[ RECORD 5 ]
+	// s | κόσμε
+	// d | printable UTF8
+	// -[ RECORD 6 ]
+	// s | ñ
+	// d | printable UTF8 using escapes
+	// -[ RECORD 7 ]
+	// s | "\x01"
+	// d | non-printable UTF8 string
+	// -[ RECORD 8 ]
+	// s | ܈85
+	// d | UTF8 string with RTL char
+	// -[ RECORD 9 ]
+	// s | a	b	c
+	//   | 12	123123213	12313
+	// d | tabs
+	// sql --format=pretty -e select '  hai' as x
 	// +-------+
 	// |   x   |
 	// +-------+
 	// |   hai |
 	// +-------+
 	// (1 row)
-	// sql --pretty -e explain(indent) select s from t.t union all select s from t.t
+	// sql --format=pretty -e explain(indent) select s from t.t union all select s from t.t
 	// +-------+--------+-------+--------------------+
 	// | Level |  Type  | Field |    Description     |
 	// +-------+--------+-------+--------------------+
@@ -891,31 +1038,31 @@ func Example_user() {
 	defer c.cleanup()
 
 	c.Run("user ls")
-	c.Run("user ls --pretty")
-	c.Run("user ls --pretty=false")
+	c.Run("user ls --format=pretty")
+	c.Run("user ls --format=tsv")
 	c.Run("user set foo")
 	// Don't use get, since the output of hashedPassword is random.
 	// c.Run("user get foo")
-	c.Run("user ls --pretty")
+	c.Run("user ls --format=pretty")
 	c.Run("user rm foo")
-	c.Run("user ls --pretty")
+	c.Run("user ls --format=pretty")
 
 	// Output:
 	// user ls
 	// 0 rows
 	// username
-	// user ls --pretty
+	// user ls --format=pretty
 	// +----------+
 	// | username |
 	// +----------+
 	// +----------+
 	// (0 rows)
-	// user ls --pretty=false
+	// user ls --format=tsv
 	// 0 rows
 	// username
 	// user set foo
 	// INSERT 1
-	// user ls --pretty
+	// user ls --format=pretty
 	// +----------+
 	// | username |
 	// +----------+
@@ -924,7 +1071,7 @@ func Example_user() {
 	// (1 row)
 	// user rm foo
 	// DELETE 1
-	// user ls --pretty
+	// user ls --format=pretty
 	// +----------+
 	// | username |
 	// +----------+
@@ -1020,7 +1167,7 @@ func Example_node() {
 	}
 
 	c.Run("node ls")
-	c.Run("node ls --pretty")
+	c.Run("node ls --format=pretty")
 	c.Run("node status 10000")
 
 	// Output:
@@ -1028,7 +1175,7 @@ func Example_node() {
 	// 1 row
 	// id
 	// 1
-	// node ls --pretty
+	// node ls --format=pretty
 	// +----+
 	// | id |
 	// +----+
@@ -1079,13 +1226,13 @@ func TestNodeStatus(t *testing.T) {
 		t.Fatalf("couldn't write stats summaries: %s", err)
 	}
 
-	out, err := c.RunWithCapture("node status 1 --pretty")
+	out, err := c.RunWithCapture("node status 1 --format=pretty")
 	if err != nil {
 		t.Fatal(err)
 	}
 	checkNodeStatus(t, c, out, start)
 
-	out, err = c.RunWithCapture("node status --pretty")
+	out, err = c.RunWithCapture("node status --format=pretty")
 	if err != nil {
 		t.Fatal(err)
 	}
