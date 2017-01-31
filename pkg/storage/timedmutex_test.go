@@ -12,7 +12,7 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package syncutil_test // because of log import
+package storage
 
 import (
 	"fmt"
@@ -20,9 +20,6 @@ import (
 	"regexp"
 	"testing"
 	"time"
-
-	_ "github.com/cockroachdb/cockroach/pkg/util/log" // for flags
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 
 	"golang.org/x/net/context"
 )
@@ -38,12 +35,12 @@ func TestTimedMutex(t *testing.T) {
 	record := func(time.Duration) { numMeasurements++ }
 
 	{
-		cb := syncutil.ThresholdLogger(
+		cb := ThresholdLogger(
 			context.Background(), time.Nanosecond, printf, record,
 		)
 
 		// Should fire.
-		tm := syncutil.MakeTimedMutex(cb)
+		tm := MakeTimedMutex(cb)
 		tm.Lock()
 		time.Sleep(2 * time.Nanosecond)
 		tm.Unlock()
@@ -61,10 +58,10 @@ func TestTimedMutex(t *testing.T) {
 	msgs = nil
 
 	{
-		cb := syncutil.ThresholdLogger(
+		cb := ThresholdLogger(
 			context.Background(), time.Duration(math.MaxInt64), printf, record,
 		)
-		tm := syncutil.MakeTimedMutex(cb)
+		tm := MakeTimedMutex(cb)
 
 		const num = 10
 		for i := 0; i < num; i++ {
@@ -85,7 +82,7 @@ func TestTimedMutex(t *testing.T) {
 }
 
 func TestAssertHeld(t *testing.T) {
-	tm := syncutil.MakeTimedMutex(nil)
+	tm := MakeTimedMutex(nil)
 
 	// The normal, successful case.
 	tm.Lock()
