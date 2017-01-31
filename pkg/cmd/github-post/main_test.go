@@ -40,6 +40,7 @@ func TestRunGH(t *testing.T) {
 		serverURL     = "https://teamcity.example.com"
 		buildID       = 8008135
 		issueID       = 1337
+		issueNumber   = 30
 	)
 
 	for key, value := range map[string]string{
@@ -93,38 +94,45 @@ func TestRunGH(t *testing.T) {
 			body:        "F161007 00:27:33.243126 449 storage/store.go:2446  [s3] [n3,s3,r1:/M{in-ax}]: could not remove placeholder after preemptive snapshot",
 		},
 	} {
-		t.Run(fileName, func(t *testing.T) {
-			file, err := os.Open(filepath.Join("testdata", fileName))
-			if err != nil {
-				t.Fatal(err)
+		for _, foundIssue := range []bool{true, false} {
+			testName := fileName
+			if foundIssue {
+				testName = testName + "-existing-issue"
 			}
+			t.Run(testName, func(t *testing.T) {
+				file, err := os.Open(filepath.Join("testdata", fileName))
+				if err != nil {
+					t.Fatal(err)
+				}
 
-			issueBodyRe, err := regexp.Compile(
-				fmt.Sprintf(`(?s)\ASHA: https://github.com/cockroachdb/cockroach/commits/%s
+				reString := fmt.Sprintf(`(?s)\ASHA: https://github.com/cockroachdb/cockroach/commits/%s
 
 Parameters:
 %s
 
-Stress build found a failed test: %s
+Stress build found a failed test: %s`,
+					regexp.QuoteMeta(sha),
+					regexp.QuoteMeta(parameters),
+					regexp.QuoteMeta(fmt.Sprintf("%s/viewLog.html?buildId=%d&tab=buildLog", serverURL, buildID)))
+
+				issueBodyRe, err := regexp.Compile(
+					fmt.Sprintf(reString+`
 
 .*
 %s
-`,
-					regexp.QuoteMeta(sha),
-					regexp.QuoteMeta(parameters),
-					regexp.QuoteMeta(fmt.Sprintf("%s/viewLog.html?buildId=%d&tab=buildLog", serverURL, buildID)),
-					regexp.QuoteMeta(expectations.body),
-				),
-			)
-			if err != nil {
-				t.Fatal(err)
-			}
+`, regexp.QuoteMeta(expectations.body)))
+				if err != nil {
+					t.Fatal(err)
+				}
+				commentBodyRe, err := regexp.Compile(reString)
+				if err != nil {
+					t.Fatal(err)
+				}
 
-			count := 0
-			if err := runGH(
-				file,
-				func(owner string, repo string, issue *github.IssueRequest) (*github.Issue, *github.Response, error) {
-					count++
+				issueCount := 0
+				commentCount := 0
+				postIssue := func(owner string, repo string, issue *github.IssueRequest) (*github.Issue, *github.Response, error) {
+					issueCount++
 					if owner != expOwner {
 						t.Fatalf("got %s, expected %s", owner, expOwner)
 					}
@@ -141,13 +149,53 @@ Stress build found a failed test: %s
 						t.Fatalf("issue length %d exceeds (undocumented) maximum %d", length, githubIssueBodyMaximumLength)
 					}
 					return &github.Issue{ID: github.Int(issueID)}, nil, nil
-				},
-			); err != nil {
-				t.Fatal(err)
-			}
-			if expected := 1; count != expected {
-				t.Fatalf("%d issues were posted, expected %d", count, expected)
-			}
-		})
+				}
+				searchIssues := func(query string, opt *github.SearchOptions) (*github.IssuesSearchResult, *github.Response, error) {
+					total := 0
+					if foundIssue {
+						total = 1
+					}
+					return &github.IssuesSearchResult{
+						Total: &total,
+						Issues: []github.Issue{
+							{Number: github.Int(issueNumber)},
+						},
+					}, nil, nil
+				}
+				postComment := func(owner string, repo string, number int, comment *github.IssueComment) (*github.IssueComment, *github.Response, error) {
+					if owner != expOwner {
+						t.Fatalf("got %s, expected %s", owner, expOwner)
+					}
+					if repo != expRepo {
+						t.Fatalf("got %s, expected %s", repo, expRepo)
+					}
+					if !commentBodyRe.MatchString(*comment.Body) {
+						t.Fatalf("got:\n%s\nexpected:\n%s", *comment.Body, issueBodyRe)
+					}
+					if length := len(*comment.Body); length > githubIssueBodyMaximumLength {
+						t.Fatalf("comment length %d exceeds (undocumented) maximum %d", length, githubIssueBodyMaximumLength)
+					}
+					commentCount++
+
+					return nil, nil, nil
+				}
+
+				if err := runGH(file, postIssue, searchIssues, postComment); err != nil {
+					t.Fatal(err)
+				}
+				expectedIssues := 1
+				expectedComments := 0
+				if foundIssue {
+					expectedIssues = 0
+					expectedComments = 1
+				}
+				if issueCount != expectedIssues {
+					t.Fatalf("%d issues were posted, expected %d", issueCount, expectedIssues)
+				}
+				if commentCount != expectedComments {
+					t.Fatalf("%d comments were posted, expected %d", commentCount, expectedComments)
+				}
+			})
+		}
 	}
 }
