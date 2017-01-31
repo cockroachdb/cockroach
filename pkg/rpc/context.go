@@ -80,9 +80,10 @@ func NewServer(ctx *Context) *grpc.Server {
 
 type connMeta struct {
 	sync.Once
-	conn    *grpc.ClientConn
-	err     error
-	healthy bool
+	dialCancel context.CancelFunc
+	conn       *grpc.ClientConn
+	err        error
+	healthy    bool
 }
 
 // Context contains the fields required by the rpc framework.
@@ -124,8 +125,7 @@ func NewContext(
 			clock: hlcClock,
 		},
 	}
-	var cancel context.CancelFunc
-	ctx.masterCtx, cancel = context.WithCancel(ambient.AnnotateCtx(context.Background()))
+	ctx.masterCtx = ambient.AnnotateCtx(context.Background())
 	ctx.Stopper = stopper
 	ctx.RemoteClocks = newRemoteClockMonitor(ctx.localClock, 10*defaultHeartbeatInterval)
 	ctx.HeartbeatInterval = defaultHeartbeatInterval
@@ -134,24 +134,30 @@ func NewContext(
 
 	stopper.RunWorker(func() {
 		<-stopper.ShouldQuiesce()
-
-		cancel()
-		ctx.conns.Lock()
-		for key, meta := range ctx.conns.cache {
-			meta.Do(func() {
-				// Make sure initialization is not in progress when we're removing the
-				// conn. We need to set the error in case we win the race against the
-				// real initialization code.
-				if meta.err == nil {
-					meta.err = &roachpb.NodeUnavailableError{}
-				}
-			})
-			ctx.removeConnLocked(key, meta)
-		}
-		ctx.conns.Unlock()
+		ctx.Reset()
 	})
 
 	return ctx
+}
+
+// Reset cancels any pending dialings, closes all connections, and
+// clears the context's connection cache.
+func (ctx *Context) Reset() {
+	ctx.conns.Lock()
+	for key, meta := range ctx.conns.cache {
+		meta.dialCancel()
+		meta.Do(func() {
+			// Make sure initialization is not in progress when we're removing the
+			// conn. We need to set the error in case we win the race against the
+			// real initialization code.
+			if meta.err == nil {
+				meta.err = &roachpb.NodeUnavailableError{}
+			}
+		})
+		ctx.removeConnLocked(key, meta)
+	}
+	ctx.conns.cache = make(map[string]*connMeta)
+	ctx.conns.Unlock()
 }
 
 // GetLocalInternalServerForAddr returns the context's internal batch server
@@ -192,8 +198,11 @@ func (ctx *Context) removeConnLocked(key string, meta *connMeta) {
 func (ctx *Context) GRPCDial(target string, opts ...grpc.DialOption) (*grpc.ClientConn, error) {
 	ctx.conns.Lock()
 	meta, ok := ctx.conns.cache[target]
+	var dialCtx context.Context
 	if !ok {
 		meta = &connMeta{}
+		dialCtx, meta.dialCancel = context.WithCancel(ctx.masterCtx)
+		defer meta.dialCancel()
 		ctx.conns.cache[target] = meta
 	}
 	ctx.conns.Unlock()
@@ -219,7 +228,7 @@ func (ctx *Context) GRPCDial(target string, opts ...grpc.DialOption) (*grpc.Clie
 		if log.V(1) {
 			log.Infof(ctx.masterCtx, "dialing %s", target)
 		}
-		meta.conn, meta.err = grpc.DialContext(ctx.masterCtx, target, dialOpts...)
+		meta.conn, meta.err = grpc.DialContext(dialCtx, target, dialOpts...)
 		if meta.err == nil {
 			if err := ctx.Stopper.RunTask(func() {
 				ctx.Stopper.RunWorker(func() {
