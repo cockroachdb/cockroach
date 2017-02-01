@@ -906,12 +906,12 @@ func (r *Replica) isLeaseValidLocked(lease *roachpb.Lease, ts hlc.Timestamp) boo
 // Note that this error can be generated on the Raft processing goroutine, so
 // its output should be completely determined by its parameters.
 func newNotLeaseHolderError(
-	l *roachpb.Lease, originStoreID roachpb.StoreID, rangeDesc *roachpb.RangeDescriptor,
+	l *roachpb.Lease, proposerStoreID roachpb.StoreID, rangeDesc *roachpb.RangeDescriptor,
 ) *roachpb.NotLeaseHolderError {
 	err := &roachpb.NotLeaseHolderError{
 		RangeID: rangeDesc.RangeID,
 	}
-	err.Replica, _ = rangeDesc.GetReplicaDescriptor(originStoreID)
+	err.Replica, _ = rangeDesc.GetReplicaDescriptor(proposerStoreID)
 	if l != nil {
 		// Normally, we return the lease-holding Replica here. However, in the
 		// case in which a leader removes itself, we want the followers to
@@ -2261,7 +2261,7 @@ func (r *Replica) evaluateProposal(
 // insertProposalLocked assigns a MaxLeaseIndex to a proposal and adds
 // it to the pending map.
 func (r *Replica) insertProposalLocked(
-	proposal *ProposalData, originReplica roachpb.ReplicaDescriptor, originLease *roachpb.Lease,
+	proposal *ProposalData, proposerReplica roachpb.ReplicaDescriptor, proposerLease *roachpb.Lease,
 ) {
 	// Assign a lease index. Note that we do this as late as possible
 	// to make sure (to the extent that we can) that we don't assign
@@ -2274,8 +2274,8 @@ func (r *Replica) insertProposalLocked(
 		r.mu.lastAssignedLeaseIndex++
 	}
 	proposal.command.MaxLeaseIndex = r.mu.lastAssignedLeaseIndex
-	proposal.command.OriginReplica = originReplica
-	proposal.command.OriginLease = originLease
+	proposal.command.ProposerReplica = proposerReplica
+	proposal.command.ProposerLease = proposerLease
 	if log.V(4) {
 		log.Infof(proposal.ctx, "submitting proposal %x: maxLeaseIndex=%d",
 			proposal.idKey, proposal.command.MaxLeaseIndex)
@@ -3087,7 +3087,7 @@ func (r *Replica) refreshProposalsLocked(refreshAtDelta int, reason refreshRaftR
 			// (generally achieved through the wonders of MVCC) or, if they aren't,
 			// the 2nd application will somehow fail to apply (e.g. a command
 			// resulting from a RequestLease is not idempotent, but the 2nd
-			// application will be rejected by the OriginLease verification).
+			// application will be rejected by the ProposerLease verification).
 			//
 			// Note that we can't use the commit index here (which is typically a
 			// little ahead), because a pending command is removed only as it
@@ -3368,7 +3368,7 @@ func (r *Replica) processRaftCommand(
 	// Verify checks that the lease has not been modified since proposal
 	// due to Raft delays / reorderings.
 	// To understand why this lease verification is necessary, see comments on the
-	// origin_lease field in the proto.
+	// proposer_lease field in the proto.
 	//
 	// TODO(spencer): remove the special-casing for the pre-epoch range
 	// leases.
@@ -3378,18 +3378,18 @@ func (r *Replica) processRaftCommand(
 			return nil
 		}
 		// Handle the case of pre-epoch-based-leases command.
-		if raftCmd.OriginLease == nil {
+		if raftCmd.ProposerLease == nil {
 			// Skip verification for lease commands for legacy case.
 			if raftCmd.BatchRequest.IsSingleSkipLeaseCheckRequest() {
 				return nil
 			}
-			l, origin := r.mu.state.Lease, raftCmd.OriginReplica
-			if l.OwnedBy(origin.StoreID) && ts.Less(l.DeprecatedStartStasis) {
+			l, proposer := r.mu.state.Lease, raftCmd.ProposerReplica
+			if l.OwnedBy(proposer.StoreID) && ts.Less(l.DeprecatedStartStasis) {
 				return nil
 			}
 			return errors.Errorf("lease %s not held", l)
 		}
-		return raftCmd.OriginLease.Equivalent(*r.mu.state.Lease)
+		return raftCmd.ProposerLease.Equivalent(*r.mu.state.Lease)
 	}
 
 	// TODO(tschottdorf): consider the Trace situation here.
@@ -3413,15 +3413,15 @@ func (r *Replica) processRaftCommand(
 		log.VEventf(
 			ctx, 1,
 			"command %s proposed from replica %+v: %s",
-			raftCmd.BatchRequest, raftCmd.OriginReplica, err,
+			raftCmd.BatchRequest, raftCmd.ProposerReplica, err,
 		)
 		if !isLeaseRequest {
 			// We return a NotLeaseHolderError so that the DistSender retries.
 			nlhe := newNotLeaseHolderError(
-				r.mu.state.Lease, raftCmd.OriginReplica.StoreID, r.mu.state.Desc)
+				r.mu.state.Lease, raftCmd.ProposerReplica.StoreID, r.mu.state.Desc)
 			nlhe.CustomMsg = fmt.Sprintf(
 				"stale proposal: command was proposed under lease %s but is being applied "+
-					"under lease: %s", raftCmd.OriginLease, r.mu.state.Lease)
+					"under lease: %s", raftCmd.ProposerLease, r.mu.state.Lease)
 			forcedErr = roachpb.NewError(nlhe)
 		} else {
 			// For lease requests we return a special error that

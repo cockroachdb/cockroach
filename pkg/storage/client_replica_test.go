@@ -655,8 +655,8 @@ func TestRangeTransferLease(t *testing.T) {
 	// We can sometimes receive an error from our renewal attempt
 	// because the lease transfer ends up causing the renewal to
 	// re-propose and second attempt fails because it's already been
-	// renewed. This used to work before we compared the origin lease
-	// with actual lease because the renewed lease still encompassed the
+	// renewed. This used to work before we compared the proposer's lease
+	// with the actual lease because the renewed lease still encompassed the
 	// previous request.
 	if err := <-renewalErrCh; err != nil {
 		if _, ok := err.(*roachpb.NotLeaseHolderError); !ok {
