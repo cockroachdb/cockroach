@@ -1396,17 +1396,17 @@ SELECT format_type(oid, -1) FROM pg_type WHERE typname='string' LIMIT 1
 text
 
 query T
-SELECT format_type(oid, -1) FROM pg_type WHERE typname='int' LIMIT 1
+SELECT format_type(oid, -1) FROM pg_type WHERE typname='int8' LIMIT 1
 ----
 bigint
 
 query T
-SELECT format_type(oid, -1) FROM pg_type WHERE typname='float' LIMIT 1
+SELECT format_type(oid, -1) FROM pg_type WHERE typname='float8' LIMIT 1
 ----
 double precision
 
 query T
-SELECT format_type(oid, -1) FROM pg_type WHERE typname='int[]' LIMIT 1
+SELECT format_type(oid, -1) FROM pg_type WHERE typname='int8[]' LIMIT 1
 ----
 bigint[]
 
