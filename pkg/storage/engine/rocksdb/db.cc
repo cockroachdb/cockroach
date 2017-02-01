@@ -1640,12 +1640,6 @@ rocksdb::Options DBMakeOptions(DBOptions db_opts) {
   options.target_file_size_base = options.max_bytes_for_level_base / 4;
   options.target_file_size_multiplier = 2;
 
-  // Temporarily enable additional checks (reading each sstable and
-  // verifying its checksum immediately after it is written) to detect
-  // https://github.com/cockroachdb/cockroach/issues/12875
-  // TODO(bdarnell): Remove this when #12875 is fixed
-  options.paranoid_file_checks = true;
-
   return options;
 }
 
