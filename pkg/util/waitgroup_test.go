@@ -14,49 +14,47 @@
 //
 // Author: Daniel Harrison (dan@cockroachlabs.com)
 
-package util
+package util_test
 
 import (
 	"errors"
-	"strings"
 	"testing"
+
+	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
 func TestWaitGroupNoError(t *testing.T) {
-	var wg WaitGroupWithError
-	wg.Wait()
-	if err := wg.FirstError(); err != nil {
+	var wg util.WaitGroupWithError
+	if err := wg.Wait(); err != nil {
 		t.Fatal(err)
 	}
 }
 
 func TestWaitGroupNilError(t *testing.T) {
-	var wg WaitGroupWithError
+	var wg util.WaitGroupWithError
 	wg.Add(1)
 	wg.Done(nil)
-	wg.Wait()
-	if err := wg.FirstError(); err != nil {
+	if err := wg.Wait(); err != nil {
 		t.Fatal(err)
 	}
 }
 
 func TestWaitGroupOneError(t *testing.T) {
-	var wg WaitGroupWithError
+	var wg util.WaitGroupWithError
 	wg.Add(1)
 	wg.Done(errors.New("one"))
-	wg.Wait()
-	if err := wg.FirstError(); err == nil || !strings.Contains(err.Error(), "one") {
+	if err := wg.Wait(); !testutils.IsError(err, "one") {
 		t.Fatalf("expected 'one' error got: %+v", err)
 	}
 }
 
 func TestWaitGroupTwoErrors(t *testing.T) {
-	var wg WaitGroupWithError
+	var wg util.WaitGroupWithError
 	wg.Add(2)
 	wg.Done(errors.New("one"))
 	wg.Done(errors.New("two"))
-	wg.Wait()
-	if err := wg.FirstError(); err == nil || !strings.Contains(err.Error(), "one") {
+	if err := wg.Wait(); !testutils.IsError(err, "one") {
 		t.Fatalf("expected 'one' error got: %+v", err)
 	}
 }
