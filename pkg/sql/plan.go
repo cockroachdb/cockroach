@@ -17,6 +17,8 @@
 package sql
 
 import (
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -220,6 +222,24 @@ func (p *planner) startPlan(plan planNode) error {
 	return nil
 }
 
+func maybePlanHook(
+	ctx context.Context, stmt parser.Statement, cfg *ExecutorConfig,
+) (planNode, error) {
+	// TODO(dan): This iteration makes the plan dispatch no longer constant
+	// time. We could fix that with a map of `reflect.Type` but including
+	// reflection in such a primary codepath is unfortunate. Instead, the
+	// upcoming IR work will provide unique numeric type tags, which will
+	// elegantly solve this.
+	for _, planHook := range planHooks {
+		if fn, header, err := planHook(ctx, stmt, cfg); err != nil {
+			return nil, err
+		} else if fn != nil {
+			return &hookFnNode{f: fn, header: header}, nil
+		}
+	}
+	return nil, nil
+}
+
 // newPlan constructs a planNode from a statement. This is used
 // recursively by the various node constructors.
 func (p *planner) newPlan(
@@ -236,17 +256,8 @@ func (p *planner) newPlan(
 		p.txn.SetSystemConfigTrigger()
 	}
 
-	// TODO(dan): This iteration makes the plan dispatch no longer constant
-	// time. We could fix that with a map of `reflect.Type` but including
-	// reflection in such a primary codepath is unfortunate. Instead, the
-	// upcoming IR work will provide unique numeric type tags, which will
-	// elegantly solve this.
-	for _, planHook := range planHooks {
-		if fn, header, err := planHook(p.ctx(), stmt, p.execCfg); err != nil {
-			return nil, err
-		} else if fn != nil {
-			return &hookFnNode{f: fn, header: header}, nil
-		}
+	if plan, err := maybePlanHook(p.ctx(), stmt, p.execCfg); plan != nil || err != nil {
+		return plan, err
 	}
 
 	switch n := stmt.(type) {
@@ -346,6 +357,10 @@ func (p *planner) newPlan(
 }
 
 func (p *planner) prepare(stmt parser.Statement) (planNode, error) {
+	if plan, err := maybePlanHook(p.ctx(), stmt, p.execCfg); plan != nil || err != nil {
+		return plan, err
+	}
+
 	switch n := stmt.(type) {
 	case *parser.Delete:
 		return p.Delete(n, nil, false)
