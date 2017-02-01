@@ -705,7 +705,11 @@ func TestBaseQueueProcessTimeout(t *testing.T) {
 		},
 	}
 	bq := makeTestBaseQueue("test", ptQueue, tc.store, tc.gossip,
-		queueConfig{maxSize: 1, processTimeout: 1 * time.Millisecond})
+		queueConfig{
+			maxSize:              1,
+			processTimeout:       time.Millisecond,
+			acceptsUnsplitRanges: true,
+		})
 	bq.Start(tc.Clock(), stopper)
 	bq.MaybeAdd(r, hlc.ZeroTimestamp)
 
@@ -755,7 +759,11 @@ func TestBaseQueueTimeMetric(t *testing.T) {
 		},
 	}
 	bq := makeTestBaseQueue("test", ptQueue, tc.store, tc.gossip,
-		queueConfig{maxSize: 1, processTimeout: 1 * time.Millisecond})
+		queueConfig{
+			maxSize:              1,
+			processTimeout:       time.Millisecond,
+			acceptsUnsplitRanges: true,
+		})
 	bq.Start(tc.Clock(), stopper)
 	bq.MaybeAdd(r, hlc.ZeroTimestamp)
 

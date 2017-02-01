@@ -111,6 +111,10 @@ func (ltc *LocalTestCluster) Start(t testing.TB, baseCtx *base.Config, initSende
 	ltc.DB = client.NewDBWithContext(ltc.Sender, *ltc.DBContext)
 	transport := storage.NewDummyRaftTransport()
 	cfg := storage.TestStoreConfig(ltc.Clock)
+	// Disable the replica scanner and split queue, which confuse tests using
+	// LocalTestCluster.
+	cfg.TestingKnobs.DisableScanner = true
+	cfg.TestingKnobs.DisableSplitQueue = true
 	if ltc.RangeRetryOptions != nil {
 		cfg.RangeRetryOptions = *ltc.RangeRetryOptions
 	}
