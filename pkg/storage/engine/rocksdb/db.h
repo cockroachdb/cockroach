@@ -193,6 +193,9 @@ DBStatus DBIterError(DBIterator* iter);
 // Go code.
 DBStatus DBMergeOne(DBSlice existing, DBSlice update, DBString* new_value);
 
+// NB: The function (cStatsToGoStats) that converts these to the go
+// representation is unfortunately duplicated in engine and engineccl. If this
+// struct is changed, both places need to be updated.
 typedef struct {
   DBStatus status;
   int64_t live_bytes;
