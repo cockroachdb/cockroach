@@ -494,6 +494,11 @@ func (ds *DistSender) sendSingleRange(
 func (ds *DistSender) initAndVerifyBatch(
 	ctx context.Context, ba *roachpb.BatchRequest,
 ) *roachpb.Error {
+	// Attach the local node ID to each request.
+	if ba.Header.GatewayNodeID == 0 && ds.gossip != nil {
+		ba.Header.GatewayNodeID = ds.gossip.NodeID.Get()
+	}
+
 	// In the event that timestamp isn't set and read consistency isn't
 	// required, set the timestamp using the local clock.
 	if ba.ReadConsistency == roachpb.INCONSISTENT && ba.Timestamp.Equal(hlc.ZeroTimestamp) {
