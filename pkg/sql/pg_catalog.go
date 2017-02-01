@@ -1412,9 +1412,13 @@ CREATE TABLE pg_catalog.pg_type (
 			if cat == typCategoryArray {
 				typInput = arrayInProcOid
 			}
+			typname := typ.String()
+			if n, ok := oidToName[oid]; ok {
+				typname = n
+			}
 			if err := addRow(
 				parser.NewDOid(parser.DInt(oid)), // oid
-				parser.NewDName(typ.String()),    // typname
+				parser.NewDName(typname),         // typname
 				pgNamespacePGCatalog.Oid,         // typnamespace
 				parser.DNull,                     // typowner
 				typLen(typ),                      // typlen
@@ -1453,6 +1457,21 @@ CREATE TABLE pg_catalog.pg_type (
 		}
 		return nil
 	},
+}
+
+// oidToName maps Postgres object IDs to type names for those OIDs that map to
+// Cockroach types that have more than one associated OID, like Int. The name
+// for these OIDs will override the type name of the corresponding type when
+// looking up the display name for an OID.
+var oidToName = map[oid.Oid]string{
+	oid.T_float4: "float4",
+	oid.T_float8: "float8",
+	oid.T_int2:   "int2",
+	oid.T_int4:   "int4",
+	oid.T_int8:   "int8",
+	oid.T__int2:  "int2[]",
+	oid.T__int4:  "int4[]",
+	oid.T__int8:  "int8[]",
 }
 
 // typOid is the only OID generation approach that does not use oidHasher, because
