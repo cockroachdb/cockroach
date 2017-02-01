@@ -1,22 +1,31 @@
 // Copyright 2016 The Cockroach Authors.
 //
-// Licensed under the Cockroach Community Licence (the "License");
+// Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//     https://github.com/cockroachdb/cockroach/blob/master/LICENSE
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+// implied. See the License for the specific language governing
+// permissions and limitations under the License.
+//
+// Author: Dan Harrison (daniel.harrison@gmail.com)
 
-package utilccl
+package util_test
 
 import (
 	"errors"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
 func TestWaitGroupNoError(t *testing.T) {
-	var wg WaitGroupWithError
+	var wg util.WaitGroupWithError
 	wg.Wait()
 	if err := wg.FirstError(); err != nil {
 		t.Fatal(err)
@@ -24,7 +33,7 @@ func TestWaitGroupNoError(t *testing.T) {
 }
 
 func TestWaitGroupNilError(t *testing.T) {
-	var wg WaitGroupWithError
+	var wg util.WaitGroupWithError
 	wg.Add(1)
 	wg.Done(nil)
 	wg.Wait()
@@ -34,7 +43,7 @@ func TestWaitGroupNilError(t *testing.T) {
 }
 
 func TestWaitGroupOneError(t *testing.T) {
-	var wg WaitGroupWithError
+	var wg util.WaitGroupWithError
 	wg.Add(1)
 	wg.Done(errors.New("one"))
 	wg.Wait()
@@ -44,7 +53,7 @@ func TestWaitGroupOneError(t *testing.T) {
 }
 
 func TestWaitGroupTwoErrors(t *testing.T) {
-	var wg WaitGroupWithError
+	var wg util.WaitGroupWithError
 	wg.Add(2)
 	wg.Done(errors.New("one"))
 	wg.Done(errors.New("two"))
