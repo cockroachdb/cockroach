@@ -71,10 +71,13 @@ func adminSplitArgs(key, splitKey roachpb.Key) *roachpb.AdminSplitRequest {
 // at illegal keys.
 func TestStoreRangeSplitAtIllegalKeys(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	t.Skip("#13212")
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
-	store, _ := createTestStore(t, stopper)
+
+	manual := hlc.NewManualClock(123)
+	cfg := storage.TestStoreConfig(hlc.NewClock(manual.UnixNano, time.Nanosecond))
+	cfg.TestingKnobs.DisableSplitQueue = true
+	store := createTestStoreWithConfig(t, stopper, cfg)
 
 	for _, key := range []roachpb.Key{
 		keys.Meta1Prefix,
