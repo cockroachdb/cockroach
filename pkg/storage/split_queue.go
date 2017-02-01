@@ -69,7 +69,7 @@ func (sq *splitQueue) shouldQueue(
 	ctx context.Context, now hlc.Timestamp, repl *Replica, sysCfg config.SystemConfig,
 ) (shouldQ bool, priority float64) {
 	desc := repl.Desc()
-	if len(sysCfg.ComputeSplitKeys(desc.StartKey, desc.EndKey)) > 0 {
+	if sysCfg.NeedsSplit(desc.StartKey, desc.EndKey) {
 		// Set priority to 1 in the event the range is split by zone configs.
 		priority = 1
 		shouldQ = true
@@ -94,19 +94,17 @@ func (sq *splitQueue) shouldQueue(
 func (sq *splitQueue) process(ctx context.Context, r *Replica, sysCfg config.SystemConfig) error {
 	// First handle case of splitting due to zone config maps.
 	desc := r.Desc()
-	splitKeys := sysCfg.ComputeSplitKeys(desc.StartKey, desc.EndKey)
-	if len(splitKeys) > 0 {
-		log.Infof(ctx, "splitting at keys %v", splitKeys)
-		for _, splitKey := range splitKeys {
-			if _, pErr := r.adminSplitWithDescriptor(
-				ctx,
-				roachpb.AdminSplitRequest{
-					SplitKey: splitKey.AsRawKey(),
-				},
-				desc,
-			); pErr != nil {
-				return errors.Wrapf(pErr.GoError(), "unable to split %s at key %q", r, splitKey)
-			}
+	splitKey := sysCfg.ComputeSplitKey(desc.StartKey, desc.EndKey)
+	if len(splitKey) > 0 {
+		log.Infof(ctx, "splitting at key %v", splitKey)
+		if _, pErr := r.adminSplitWithDescriptor(
+			ctx,
+			roachpb.AdminSplitRequest{
+				SplitKey: splitKey.AsRawKey(),
+			},
+			desc,
+		); pErr != nil {
+			return errors.Wrapf(pErr.GoError(), "unable to split %s at key %q", r, splitKey)
 		}
 		return nil
 	}
