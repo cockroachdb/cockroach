@@ -225,77 +225,67 @@ func TestComputeSplits(t *testing.T) {
 		descriptor(start), descriptor(start+1), descriptor(start+5))
 	sort.Sort(roachpb.KeyValueByKey(allSql))
 
-	allUserSplits := []uint32{start, start + 1, start + 2, start + 3, start + 4, start + 5}
-	var allReservedSplits []uint32
-	for i := 0; i < schema.SystemDescriptorCount()-schema.SystemConfigDescriptorCount(); i++ {
-		allReservedSplits = append(allReservedSplits, reservedStart+uint32(i))
-	}
-	allSplits := append(allReservedSplits, allUserSplits...)
-
 	testCases := []struct {
 		values     []roachpb.KeyValue
 		start, end roachpb.RKey
-		// Use ints in the testcase definitions, more readable.
-		splits []uint32
+		split      int32 // -1 to indicate no split is expected
 	}{
 		// No data.
-		{nil, roachpb.RKeyMin, roachpb.RKeyMax, nil},
-		{nil, keys.MakeTablePrefix(start), roachpb.RKeyMax, nil},
-		{nil, keys.MakeTablePrefix(start), keys.MakeTablePrefix(start + 10), nil},
-		{nil, roachpb.RKeyMin, keys.MakeTablePrefix(start + 10), nil},
+		{nil, roachpb.RKeyMin, roachpb.RKeyMax, 0},
+		{nil, keys.MakeTablePrefix(start), roachpb.RKeyMax, -1},
+		{nil, keys.MakeTablePrefix(start), keys.MakeTablePrefix(start + 10), -1},
+		{nil, roachpb.RKeyMin, keys.MakeTablePrefix(start + 10), 0},
 
 		// Reserved descriptors.
-		{baseSql, roachpb.RKeyMin, roachpb.RKeyMax, allReservedSplits},
-		{baseSql, keys.MakeTablePrefix(start), roachpb.RKeyMax, nil},
-		{baseSql, keys.MakeTablePrefix(start), keys.MakeTablePrefix(start + 10), nil},
-		{baseSql, roachpb.RKeyMin, keys.MakeTablePrefix(start + 10), allReservedSplits},
-		{baseSql, keys.MakeTablePrefix(reservedStart), roachpb.RKeyMax, allReservedSplits[1:]},
-		{baseSql, keys.MakeTablePrefix(reservedStart), keys.MakeTablePrefix(start + 10), allReservedSplits[1:]},
-		{baseSql, roachpb.RKeyMin, keys.MakeTablePrefix(reservedStart + 2), allReservedSplits[:2]},
-		{baseSql, roachpb.RKeyMin, keys.MakeTablePrefix(reservedStart + 10), allReservedSplits},
-		{baseSql, keys.MakeTablePrefix(reservedStart), keys.MakeTablePrefix(reservedStart + 2), allReservedSplits[1:2]},
+		{baseSql, roachpb.RKeyMin, roachpb.RKeyMax, 0},
+		{baseSql, keys.MakeTablePrefix(start), roachpb.RKeyMax, -1},
+		{baseSql, keys.MakeTablePrefix(start), keys.MakeTablePrefix(start + 10), -1},
+		{baseSql, roachpb.RKeyMin, keys.MakeTablePrefix(start + 10), 0},
+		{baseSql, keys.MakeTablePrefix(reservedStart), roachpb.RKeyMax, reservedStart + 1},
+		{baseSql, keys.MakeTablePrefix(reservedStart), keys.MakeTablePrefix(start + 10), reservedStart + 1},
+		{baseSql, roachpb.RKeyMin, keys.MakeTablePrefix(reservedStart + 2), 0},
+		{baseSql, roachpb.RKeyMin, keys.MakeTablePrefix(reservedStart + 10), 0},
+		{baseSql, keys.MakeTablePrefix(reservedStart), keys.MakeTablePrefix(reservedStart + 2), reservedStart + 1},
 		{baseSql, testutils.MakeKey(keys.MakeTablePrefix(reservedStart), roachpb.RKey("foo")),
-			testutils.MakeKey(keys.MakeTablePrefix(start+10), roachpb.RKey("foo")), allReservedSplits[1:]},
+			testutils.MakeKey(keys.MakeTablePrefix(start+10), roachpb.RKey("foo")), reservedStart + 1},
 
 		// Reserved + User descriptors.
-		{allSql, keys.MakeTablePrefix(start - 1), roachpb.RKeyMax, allUserSplits},
-		{allSql, keys.MakeTablePrefix(start), roachpb.RKeyMax, allUserSplits[1:]},
-		{allSql, keys.MakeTablePrefix(start), keys.MakeTablePrefix(start + 10), allUserSplits[1:]},
-		{allSql, keys.MakeTablePrefix(start - 1), keys.MakeTablePrefix(start + 10), allUserSplits},
-		{allSql, keys.MakeTablePrefix(start + 4), keys.MakeTablePrefix(start + 10), allUserSplits[5:]},
-		{allSql, keys.MakeTablePrefix(start + 5), keys.MakeTablePrefix(start + 10), nil},
-		{allSql, keys.MakeTablePrefix(start + 6), keys.MakeTablePrefix(start + 10), nil},
+		{allSql, keys.MakeTablePrefix(start - 1), roachpb.RKeyMax, start},
+		{allSql, keys.MakeTablePrefix(start), roachpb.RKeyMax, start + 1},
+		{allSql, keys.MakeTablePrefix(start), keys.MakeTablePrefix(start + 10), start + 1},
+		{allSql, keys.MakeTablePrefix(start - 1), keys.MakeTablePrefix(start + 10), start},
+		{allSql, keys.MakeTablePrefix(start + 4), keys.MakeTablePrefix(start + 10), start + 5},
+		{allSql, keys.MakeTablePrefix(start + 5), keys.MakeTablePrefix(start + 10), -1},
+		{allSql, keys.MakeTablePrefix(start + 6), keys.MakeTablePrefix(start + 10), -1},
 		{allSql, testutils.MakeKey(keys.MakeTablePrefix(start), roachpb.RKey("foo")),
-			keys.MakeTablePrefix(start + 10), allUserSplits[1:]},
+			keys.MakeTablePrefix(start + 10), start + 1},
 		{allSql, testutils.MakeKey(keys.MakeTablePrefix(start), roachpb.RKey("foo")),
-			keys.MakeTablePrefix(start + 5), allUserSplits[1:5]},
+			keys.MakeTablePrefix(start + 5), start + 1},
 		{allSql, testutils.MakeKey(keys.MakeTablePrefix(start), roachpb.RKey("foo")),
-			testutils.MakeKey(keys.MakeTablePrefix(start+5), roachpb.RKey("bar")), allUserSplits[1:5]},
+			testutils.MakeKey(keys.MakeTablePrefix(start+5), roachpb.RKey("bar")), start + 1},
 		{allSql, testutils.MakeKey(keys.MakeTablePrefix(start), roachpb.RKey("foo")),
-			testutils.MakeKey(keys.MakeTablePrefix(start), roachpb.RKey("morefoo")), nil},
-		{allSql, roachpb.RKeyMin, roachpb.RKeyMax, allSplits},
-		{allSql, keys.MakeTablePrefix(reservedStart + 1), roachpb.RKeyMax, allSplits[2:]},
-		{allSql, keys.MakeTablePrefix(reservedStart), keys.MakeTablePrefix(start + 10), allSplits[1:]},
-		{allSql, roachpb.RKeyMin, keys.MakeTablePrefix(start + 2), allSplits[:6]},
+			testutils.MakeKey(keys.MakeTablePrefix(start), roachpb.RKey("morefoo")), -1},
+		{allSql, roachpb.RKeyMin, roachpb.RKeyMax, 0},
+		{allSql, keys.MakeTablePrefix(reservedStart + 1), roachpb.RKeyMax, reservedStart + 2},
+		{allSql, keys.MakeTablePrefix(reservedStart), keys.MakeTablePrefix(start + 10), reservedStart + 1},
+		{allSql, roachpb.RKeyMin, keys.MakeTablePrefix(start + 2), 0},
 		{allSql, testutils.MakeKey(keys.MakeTablePrefix(reservedStart), roachpb.RKey("foo")),
-			testutils.MakeKey(keys.MakeTablePrefix(start+5), roachpb.RKey("foo")), allSplits[1:9]},
+			testutils.MakeKey(keys.MakeTablePrefix(start+5), roachpb.RKey("foo")), reservedStart + 1},
 	}
 
 	cfg := config.SystemConfig{}
 	for tcNum, tc := range testCases {
 		cfg.Values = tc.values
-		splits := cfg.ComputeSplitKeys(tc.start, tc.end)
-		if len(splits) == 0 && len(tc.splits) == 0 {
+		splitKey := cfg.ComputeSplitKey(tc.start, tc.end)
+		if splitKey == nil && tc.split == -1 {
 			continue
 		}
-
-		// Convert ints to actual keys.
-		expected := []roachpb.RKey{}
-		for _, s := range tc.splits {
-			expected = append(expected, keys.MakeRowSentinelKey(keys.MakeTablePrefix(s)))
+		var expected roachpb.RKey
+		if tc.split != -1 {
+			expected = keys.MakeRowSentinelKey(keys.MakeTablePrefix(uint32(tc.split)))
 		}
-		if !reflect.DeepEqual(splits, expected) {
-			t.Errorf("#%d: bad splits:\ngot: %v\nexpected: %v", tcNum, splits, expected)
+		if !splitKey.Equal(expected) {
+			t.Errorf("#%d: bad split:\ngot: %v\nexpected: %v", tcNum, splitKey, expected)
 		}
 	}
 }
