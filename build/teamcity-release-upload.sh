@@ -1,17 +1,19 @@
 #!/usr/bin/env bash
 set -euxo pipefail
 
-sed "s/<EMAIL>/$DOCKER_EMAIL/;s/<AUTH>/$DOCKER_AUTH/" < build/.dockercfg.in > ~/.dockercfg
+build_dir="$(dirname $0)"
+
+sed "s/<EMAIL>/$DOCKER_EMAIL/;s/<AUTH>/$DOCKER_AUTH/" < "${build_dir}"/.dockercfg.in > ~/.dockercfg
 
 case "$TC_BUILD_BRANCH" in
   master)
     VERSION=$(git describe || git rev-parse --short HEAD)
-    push=build/push-aws.sh
+    push="${build_dir}"/push-aws.sh
     ;;
 
   beta-*)
     VERSION="$TC_BUILD_BRANCH"
-    push=build/push-tagged-aws.sh
+    push="${build_dir}"/push-tagged-aws.sh
     ;;
 
   *)
@@ -21,9 +23,9 @@ esac
 
 export VERSION
 echo "Deploying $VERSION..."
-build/builder.sh build/build-static-binaries.sh static-tests.tar.gz
-build/push-docker-deploy.sh
-mv build/deploy/cockroach cockroach
+"${build_dir}"/builder.sh "${build_dir}"/build-static-binaries.sh static-tests.tar.gz
+"${build_dir}"/push-docker-deploy.sh
+mv "${build_dir}"/deploy/cockroach cockroach
 aws configure set region us-east-1
-build/build-osx.sh
+"${build_dir}"/build-osx.sh
 eval $push

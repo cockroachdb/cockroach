@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
 set -exuo pipefail
 
-exec ./build/builder.sh build/checkdeps.sh
+build_dir="$(dirname $0)"
+
+exec "${build_dir}"/builder.sh "${build_dir}"/checkdeps.sh

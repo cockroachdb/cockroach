@@ -5,7 +5,9 @@
 
 set -euo pipefail
 
-source "$(dirname "${0}")"/build-common.sh
+build_dir="$(dirname $0)"
+
+source "${build_dir}"/build-common.sh
 
 # This is mildly tricky: This script runs itself recursively. The
 # first time it is run it does not take the if-branch below and
@@ -19,7 +21,7 @@ if [ "${1-}" = "docker" ]; then
     check_static cockroach
     strip -S cockroach
 
-    mv cockroach build/deploy/cockroach
+    mv cockroach ${build_dir}/deploy/cockroach
 
     exit 0
 fi
@@ -28,7 +30,7 @@ fi
 relative_path_to_self="$(basename "$(cd "$(dirname "${0}")"; pwd)")/$(basename "${0}")"
 
 # Build the CockroachDB binary.
-"$(dirname "${0}")"/builder.sh "${relative_path_to_self}" docker
+"${build_dir}"/builder.sh "${relative_path_to_self}" docker
 
 # Build the image.
-docker build --tag=cockroachdb/cockroach "$(dirname "${0}")"/deploy
+docker build --tag=cockroachdb/cockroach "${build_dir}"/deploy
