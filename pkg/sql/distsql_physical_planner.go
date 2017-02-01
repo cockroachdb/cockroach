@@ -812,83 +812,106 @@ func (dsp *distSQLPlanner) addNoGroupingStage(
 	p.resultTypes = outputTypes
 }
 
+// addProjection applies a projection to a plan. The new plan outputs the
+// columns of the old plan as listed in the slice.
+//
+// Note: the columns slice is relinquished to this function, which can modify it
+// or use it directly in specs.
+//
+// The caller must update p.ordering, p.planToStreamColMap.
+func (dsp *distSQLPlanner) addProjection(p *physicalPlan, columns []uint32) {
+	post := p.getLastStagePost()
+
+	newResultTypes := make([]sqlbase.ColumnType, len(columns))
+	for i, c := range columns {
+		newResultTypes[i] = p.resultTypes[c]
+	}
+
+	if post.RenderExprs != nil {
+		// Apply the projection to the existing rendering; in other words, keep
+		// only the renders needed by the new output columns, and reorder them
+		// accordingly.
+		oldRenders := post.RenderExprs
+		post.RenderExprs = make([]distsqlrun.Expression, len(columns))
+		for i, c := range columns {
+			post.RenderExprs[i] = oldRenders[c]
+		}
+	} else {
+		// There is no existing rendering; we can use OutputColumns to set the
+		// projection.
+		if post.OutputColumns != nil {
+			// We already had a projection: compose it with the new one.
+			for i, c := range columns {
+				columns[i] = post.OutputColumns[c]
+			}
+		}
+		post.OutputColumns = columns
+	}
+
+	p.setLastStagePost(post, newResultTypes)
+}
+
 // addRendering adds a rendering (expression evaluation) to the output of a
 // plan. The rendering is achieved either through an adjustment on the last
 // stage post-process spec, or via a new stage.
 // The caller must update p.ordering, p.planToStreamColMap.
 func (dsp *distSQLPlanner) addRendering(
-	planCtx *planningCtx,
-	p *physicalPlan,
-	exprs []parser.TypedExpr,
-	indexVarMap []int,
-	outTypes []sqlbase.ColumnType,
+	p *physicalPlan, exprs []parser.TypedExpr, indexVarMap []int, outTypes []sqlbase.ColumnType,
 ) {
-	// First check if we need an Evaluator, or we are just shuffling values.
+	// First check if we need an Evaluator, or we are just shuffling values. We
+	// also check if the rendering is a no-op ("identity").
 	needRendering := false
+	identity := (len(exprs) == len(p.resultTypes))
 
-	for _, e := range exprs {
-		if _, ok := e.(*parser.IndexedVar); !ok {
+	for exprIdx, e := range exprs {
+		if varIdx, ok := e.(*parser.IndexedVar); ok {
+			identity = identity && (exprIdx == varIdx.Idx)
+		} else {
 			needRendering = true
 			break
 		}
 	}
 
-	post := p.getLastStagePost()
 	if !needRendering {
-		// We don't need to do any rendering; we just need to adjust the projection
-		// to output only the columns in the rendering.
-
-		oldOutCols := post.OutputColumns
-		newOutCols := make([]uint32, len(exprs))
+		if identity {
+			// Nothing to do.
+			return
+		}
+		// We don't need to do any rendering: the expressions effectively describe
+		// just a projection.
+		cols := make([]uint32, len(exprs))
 		for i, e := range exprs {
 			idx := e.(*parser.IndexedVar).Idx
 			streamCol := indexVarMap[idx]
 			if streamCol == -1 {
 				panic(fmt.Sprintf("render %d refers to column %d not in source", i, idx))
 			}
-			if oldOutCols != nil {
-				newOutCols[i] = oldOutCols[streamCol]
-			} else {
-				newOutCols[i] = uint32(streamCol)
-			}
+			cols[i] = uint32(streamCol)
 		}
-
-		if post.RenderExprs != nil {
-			oldRenders := post.RenderExprs
-			// Apply the new projection to the existing rendering; in other words,
-			// keep only the renders needed by the new output columns, and reorder
-			// them accordingly.
-			post.RenderExprs = make([]distsqlrun.Expression, len(newOutCols))
-			for i, c := range newOutCols {
-				post.RenderExprs[i] = oldRenders[c]
-			}
-		} else {
-			// We didn't have a rendering before and we also don't need one for the
-			// new expressions. Simply overwrite the projection with the columns
-			// needed indicated by the new expressions.
-			post.OutputColumns = newOutCols
-		}
-	} else {
-		if len(post.RenderExprs) > 0 {
-			post = distsqlrun.PostProcessSpec{}
-			// The last stage contains render expressions. The new renders refer to
-			// the output of these, so we need to add another "no-op" stage to which
-			// to attach the new rendering.
-			dsp.addNoGroupingStage(
-				p,
-				distsqlrun.ProcessorCoreUnion{Noop: &distsqlrun.NoopCoreSpec{}},
-				post,
-				p.resultTypes,
-			)
-		}
-
-		compositeMap := reverseProjection(post.OutputColumns, indexVarMap)
-		post.RenderExprs = make([]distsqlrun.Expression, len(exprs))
-		for i, e := range exprs {
-			post.RenderExprs[i] = distSQLExpression(e, compositeMap)
-		}
-		post.OutputColumns = nil
+		dsp.addProjection(p, cols)
+		return
 	}
+
+	post := p.getLastStagePost()
+	if len(post.RenderExprs) > 0 {
+		post = distsqlrun.PostProcessSpec{}
+		// The last stage contains render expressions. The new renders refer to
+		// the output of these, so we need to add another "no-op" stage to which
+		// to attach the new rendering.
+		dsp.addNoGroupingStage(
+			p,
+			distsqlrun.ProcessorCoreUnion{Noop: &distsqlrun.NoopCoreSpec{}},
+			post,
+			p.resultTypes,
+		)
+	}
+
+	compositeMap := reverseProjection(post.OutputColumns, indexVarMap)
+	post.RenderExprs = make([]distsqlrun.Expression, len(exprs))
+	for i, e := range exprs {
+		post.RenderExprs[i] = distSQLExpression(e, compositeMap)
+	}
+	post.OutputColumns = nil
 	p.setLastStagePost(post, outTypes)
 }
 
@@ -896,8 +919,8 @@ func (dsp *distSQLPlanner) addRendering(
 // the select data source (a n.source) and updates it to produce results
 // corresponding to the render node itself. An evaluator stage is added if the
 // render node has any expressions which are not just simple column references.
-func (dsp *distSQLPlanner) selectRenders(planCtx *planningCtx, p *physicalPlan, n *renderNode) {
-	dsp.addRendering(planCtx, p, n.render, p.planToStreamColMap, getTypesForPlanResult(n, nil))
+func (dsp *distSQLPlanner) selectRenders(p *physicalPlan, n *renderNode) {
+	dsp.addRendering(p, n.render, p.planToStreamColMap, getTypesForPlanResult(n, nil))
 
 	// Update p.planToStreamColMap; we will have a simple 1-to-1 mapping of
 	// planNode columns to stream columns because the evaluator has been
@@ -912,42 +935,47 @@ func (dsp *distSQLPlanner) selectRenders(planCtx *planningCtx, p *physicalPlan, 
 
 // addSorters adds sorters corresponding to a sortNode and updates the plan to
 // reflect the sort node.
-func (dsp *distSQLPlanner) addSorters(planCtx *planningCtx, p *physicalPlan, n *sortNode) {
-	sorterSpec := distsqlrun.SorterSpec{
-		OutputOrdering: dsp.convertOrdering(n.ordering, p.planToStreamColMap),
-		OrderingMatchLen: uint32(computeOrderingMatch(
-			n.ordering, n.plan.Ordering(), false, /* reverse */
-		)),
-	}
-	if len(sorterSpec.OutputOrdering.Columns) != len(n.ordering) {
-		panic(fmt.Sprintf(
-			"not all columns in sort ordering available: %v; %v",
-			n.ordering, sorterSpec.OutputOrdering.Columns,
-		))
+func (dsp *distSQLPlanner) addSorters(p *physicalPlan, n *sortNode) {
+
+	matchLen := computeOrderingMatch(n.ordering, n.plan.Ordering(), false /* reverse */)
+
+	if matchLen < len(n.ordering) {
+		// Sorting is needed; we add a stage of sorting processors.
+		ordering := dsp.convertOrdering(n.ordering, p.planToStreamColMap)
+		if len(ordering.Columns) != len(n.ordering) {
+			panic(fmt.Sprintf(
+				"not all columns in sort ordering available: %v; %v", n.ordering, ordering.Columns,
+			))
+		}
+		dsp.addNoGroupingStage(
+			p,
+			distsqlrun.ProcessorCoreUnion{
+				Sorter: &distsqlrun.SorterSpec{
+					OutputOrdering:   ordering,
+					OrderingMatchLen: uint32(matchLen),
+				},
+			},
+			distsqlrun.PostProcessSpec{},
+			p.resultTypes,
+		)
+		p.ordering = ordering
 	}
 
-	var post distsqlrun.PostProcessSpec
 	if len(n.columns) != len(p.planToStreamColMap) {
 		// In cases like:
 		//   SELECT a FROM t ORDER BY b
 		// we have columns (b) that are only used for sorting. These columns are not
-		// in the output columns of the sortNode; we set a projection on the
-		// processors we just added.
+		// in the output columns of the sortNode; we set a projection such that the
+		// plan results map 1-to-1 to sortNode columns.
 		p.planToStreamColMap = p.planToStreamColMap[:len(n.columns)]
-		post.OutputColumns = make([]uint32, len(n.columns))
+		columns := make([]uint32, len(n.columns))
 		for i, col := range p.planToStreamColMap {
-			post.OutputColumns[i] = uint32(col)
+			columns[i] = uint32(col)
 			p.planToStreamColMap[i] = i
 		}
+		dsp.addProjection(p, columns)
+		p.ordering = dsp.convertOrdering(n.Ordering().ordering, p.planToStreamColMap)
 	}
-
-	dsp.addNoGroupingStage(
-		p,
-		distsqlrun.ProcessorCoreUnion{Sorter: &sorterSpec},
-		post,
-		getTypesForPlanResult(n, p.planToStreamColMap),
-	)
-	p.ordering = sorterSpec.OutputOrdering
 }
 
 // addSingleGroupStage adds a "single group" stage (one that cannot be
@@ -1158,7 +1186,7 @@ func (dsp *distSQLPlanner) addAggregators(
 	)
 
 	evalExprs := dsp.extractPostAggrExprs(n.render)
-	dsp.addRendering(planCtx, p, evalExprs, p.planToStreamColMap, getTypesForPlanResult(n, nil))
+	dsp.addRendering(p, evalExprs, p.planToStreamColMap, getTypesForPlanResult(n, nil))
 
 	// Update p.planToStreamColMap; we will have a simple 1-to-1 mapping of
 	// planNode columns to stream columns because the aggregator (and possibly
@@ -1487,7 +1515,7 @@ func (dsp *distSQLPlanner) createPlanForNode(
 		if err != nil {
 			return physicalPlan{}, err
 		}
-		dsp.selectRenders(planCtx, &plan, n)
+		dsp.selectRenders(&plan, n)
 		return plan, nil
 
 	case *groupNode:
@@ -1508,7 +1536,7 @@ func (dsp *distSQLPlanner) createPlanForNode(
 			return physicalPlan{}, err
 		}
 
-		dsp.addSorters(planCtx, &plan, n)
+		dsp.addSorters(&plan, n)
 
 		return plan, nil
 
