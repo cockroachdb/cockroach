@@ -1010,8 +1010,13 @@ func TestRefreshPendingCommands(t *testing.T) {
 // under-replicated ranges and replicate them.
 func TestStoreRangeUpReplicate(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	t.Skip("#12902")
-	mtc := &multiTestContext{}
+	sc := storage.TestStoreConfig(nil)
+	// Prevent the split queue from creating additional ranges while we're
+	// waiting for replication.
+	sc.TestingKnobs.DisableSplitQueue = true
+	mtc := &multiTestContext{
+		storeConfig: &sc,
+	}
 	defer mtc.Stop()
 	mtc.Start(t, 3)
 
