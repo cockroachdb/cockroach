@@ -1505,7 +1505,7 @@ func (ec *endCmds) doneLocked(
 			txnID:     ec.ba.GetTxnID(),
 		}
 
-		for _, union := range ec.ba.Requests {
+		for i, union := range ec.ba.Requests {
 			args := union.GetInner()
 			if updatesTimestampCache(args) {
 				header := args.Header()
@@ -1519,6 +1519,18 @@ func (ec *endCmds) doneLocked(
 					// create a transaction record with WriteTooOld set.
 					key := keys.TransactionKey(header.Key, *cr.txnID)
 					cr.txn = roachpb.Span{Key: key}
+				case *roachpb.ScanRequest:
+					resp := br.Responses[i].GetInner().(*roachpb.ScanResponse)
+					if ec.ba.Header.MaxSpanRequestKeys != 0 &&
+						ec.ba.Header.MaxSpanRequestKeys == int64(len(resp.Rows)) {
+						// If the scan requested a limited number of results and we hit the
+						// limit, truncate the span of keys to add to the timestamp cache
+						// to those that were returned.
+						header.EndKey = resp.Rows[len(resp.Rows)-1].Key.Next()
+					}
+					cr.reads = append(cr.reads, header)
+				// case *roachpb.ReverseScanRequest:
+				// TODO(peter): Handle in a similar fashion to ScanRequest.
 				default:
 					cr.reads = append(cr.reads, header)
 				}
