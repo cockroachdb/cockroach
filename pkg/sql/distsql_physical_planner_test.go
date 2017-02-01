@@ -35,48 +35,7 @@ import (
 func TestDistSQLPlanner(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	args := base.TestClusterArgs{ReplicationMode: base.ReplicationManual}
-	tc := serverutils.StartTestCluster(t, 1, args)
-	defer tc.Stopper().Stop()
-
-	sqlutils.CreateTable(
-		t, tc.ServerConn(0), "t",
-		"num INT PRIMARY KEY, str STRING, mod INT, INDEX(mod)",
-		10, sqlutils.ToRowFn(sqlutils.RowIdxFn, sqlutils.RowEnglishFn, sqlutils.RowModuloFn(3)),
-	)
-
-	r := sqlutils.MakeSQLRunner(t, tc.ServerConn(0))
-	r.DB.SetMaxOpenConns(1)
-	r.Exec("SET DIST_SQL = ALWAYS")
-	r.CheckQueryResults(
-		"SELECT 5, 2 + num, * FROM test.t ORDER BY str",
-		[][]string{
-			strings.Fields("5 10  8 eight    2"),
-			strings.Fields("5  7  5 five     2"),
-			strings.Fields("5  6  4 four     1"),
-			strings.Fields("5 11  9 nine     0"),
-			strings.Fields("5  3  1 one      1"),
-			strings.Fields("5 12 10 one-zero 1"),
-			strings.Fields("5  9  7 seven    1"),
-			strings.Fields("5  8  6 six      0"),
-			strings.Fields("5  5  3 three    0"),
-			strings.Fields("5  4  2 two      2"),
-		},
-	)
-	r.CheckQueryResults(
-		"SELECT str FROM test.t WHERE mod=0",
-		[][]string{
-			{"three"},
-			{"six"},
-			{"nine"},
-		},
-	)
-}
-
-func TestDistSQLJoinAndAgg(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	// This test sets up a distributed join between two tables:
+	// This test sets up various queries using these tables:
 	//  - a NumToSquare table of size N that maps integers from 1 to n to their
 	//    squares
 	//  - a NumToStr table of size N^2 that maps integers to their string
@@ -151,62 +110,100 @@ func TestDistSQLJoinAndAgg(t *testing.T) {
 	r := sqlutils.MakeSQLRunner(t, tc.ServerConn(0))
 	r.DB.SetMaxOpenConns(1)
 	r.Exec("SET DIST_SQL = ALWAYS")
-	res := r.QueryStr("SELECT x, str FROM NumToSquare JOIN NumToStr ON y = xsquared")
-	// Verify that res contains one entry for each integer, with the string
-	// representation of its square, e.g.:
-	//  [1, one]
-	//  [2, two]
-	//  [3, nine]
-	//  [4, one-six]
-	// (but not necessarily in order).
-	if len(res) != n {
-		t.Fatalf("expected %d rows, got %d", n, len(res))
-	}
-	resMap := make(map[int]string)
-	for _, row := range res {
-		if len(row) != 2 {
-			t.Fatalf("invalid row %v", row)
+
+	t.Run("Basic", func(t *testing.T) {
+		r = r.Subtest(t)
+		r.CheckQueryResults(
+			"SELECT 5, 2 + y, * FROM NumToStr WHERE y <= 10 ORDER BY str",
+			[][]string{
+				strings.Fields("5 10  8 eight"),
+				strings.Fields("5  7  5 five"),
+				strings.Fields("5  6  4 four"),
+				strings.Fields("5 11  9 nine"),
+				strings.Fields("5  3  1 one"),
+				strings.Fields("5 12 10 one-zero"),
+				strings.Fields("5  9  7 seven"),
+				strings.Fields("5  8  6 six"),
+				strings.Fields("5  5  3 three"),
+				strings.Fields("5  4  2 two"),
+			},
+		)
+		r.CheckQueryResults(
+			"SELECT str FROM NumToStr WHERE y < 10 AND str LIKE '%e%' ORDER BY y",
+			[][]string{
+				{"one"},
+				{"three"},
+				{"five"},
+				{"seven"},
+				{"eight"},
+				{"nine"},
+			},
+		)
+	})
+
+	t.Run("Join", func(t *testing.T) {
+		r = r.Subtest(t)
+		res := r.QueryStr("SELECT x, str FROM NumToSquare JOIN NumToStr ON y = xsquared")
+		// Verify that res contains one entry for each integer, with the string
+		// representation of its square, e.g.:
+		//  [1, one]
+		//  [2, two]
+		//  [3, nine]
+		//  [4, one-six]
+		// (but not necessarily in order).
+		if len(res) != n {
+			t.Fatalf("expected %d rows, got %d", n, len(res))
 		}
-		n, err := strconv.Atoi(row[0])
-		if err != nil {
-			t.Fatalf("error parsing row %v: %s", row, err)
+		resMap := make(map[int]string)
+		for _, row := range res {
+			if len(row) != 2 {
+				t.Fatalf("invalid row %v", row)
+			}
+			n, err := strconv.Atoi(row[0])
+			if err != nil {
+				t.Fatalf("error parsing row %v: %s", row, err)
+			}
+			resMap[n] = row[1]
 		}
-		resMap[n] = row[1]
-	}
-	for i := 1; i <= n; i++ {
-		if resMap[i] != sqlutils.IntToEnglish(i*i) {
-			t.Errorf("invalid string for %d: %s", i, resMap[i])
-		}
-	}
-
-	checkRes := func(exp int) bool {
-		return len(res) == 1 && len(res[0]) == 1 && res[0][0] == strconv.Itoa(exp)
-	}
-
-	// Sum the numbers in the NumToStr table.
-	res = r.QueryStr("SELECT SUM(y) FROM NumToStr")
-	if exp := n * n * (n*n + 1) / 2; !checkRes(exp) {
-		t.Errorf("expected [[%d]], got %s", exp, res)
-	}
-
-	// Count the rows in the NumToStr table.
-	res = r.QueryStr("SELECT COUNT(*) FROM NumToStr")
-	if !checkRes(n * n) {
-		t.Errorf("expected [[%d]], got %s", n*n, res)
-	}
-
-	// Count how many numbers contain the digit 5.
-	res = r.QueryStr("SELECT COUNT(*) FROM NumToStr WHERE str LIKE '%five%'")
-	exp := 0
-	for i := 1; i <= n*n; i++ {
-		for x := i; x > 0; x /= 10 {
-			if x%10 == 5 {
-				exp++
-				break
+		for i := 1; i <= n; i++ {
+			if resMap[i] != sqlutils.IntToEnglish(i*i) {
+				t.Errorf("invalid string for %d: %s", i, resMap[i])
 			}
 		}
-	}
-	if !checkRes(exp) {
-		t.Errorf("expected [[%d]], got %s", exp, res)
-	}
+	})
+
+	t.Run("Agg", func(t *testing.T) {
+		r = r.Subtest(t)
+		var res [][]string
+		checkRes := func(exp int) bool {
+			return len(res) == 1 && len(res[0]) == 1 && res[0][0] == strconv.Itoa(exp)
+		}
+
+		// Sum the numbers in the NumToStr table.
+		res = r.QueryStr("SELECT SUM(y) FROM NumToStr")
+		if exp := n * n * (n*n + 1) / 2; !checkRes(exp) {
+			t.Errorf("expected [[%d]], got %s", exp, res)
+		}
+
+		// Count the rows in the NumToStr table.
+		res = r.QueryStr("SELECT COUNT(*) FROM NumToStr")
+		if !checkRes(n * n) {
+			t.Errorf("expected [[%d]], got %s", n*n, res)
+		}
+
+		// Count how many numbers contain the digit 5.
+		res = r.QueryStr("SELECT COUNT(*) FROM NumToStr WHERE str LIKE '%five%'")
+		exp := 0
+		for i := 1; i <= n*n; i++ {
+			for x := i; x > 0; x /= 10 {
+				if x%10 == 5 {
+					exp++
+					break
+				}
+			}
+		}
+		if !checkRes(exp) {
+			t.Errorf("expected [[%d]], got %s", exp, res)
+		}
+	})
 }
