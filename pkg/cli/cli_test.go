@@ -459,9 +459,9 @@ func Example_ranges() {
 	// 	0: node-id=1 store-id=1
 	// "c"-/Table/0 [7]
 	// 	0: node-id=1 store-id=1
-	// /Table/0-/Table/11 [3]
+	// /Table/0-/Table/11 [2]
 	// 	0: node-id=1 store-id=1
-	// /Table/11-/Table/12 [2]
+	// /Table/11-/Table/12 [3]
 	// 	0: node-id=1 store-id=1
 	// /Table/12-/Table/13 [4]
 	//	0: node-id=1 store-id=1
