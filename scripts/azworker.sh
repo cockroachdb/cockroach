@@ -7,20 +7,20 @@
 
 set -euo pipefail
 
-LOCATION="${LOCATION-eastus}"
-MACHINE_SIZE="${MACHINE_SIZE-Standard_F16}"
-USER="${USER-$(id -un)}"
-CLUSTER="azworker-${USER}"
-NAME=${AZWORKER_NAME-${CLUSTER}-azworker}
+LOCATION=${LOCATION-eastus}
+MACHINE_SIZE=${MACHINE_SIZE-Standard_F16}
+USER=${USER-$(id -un)}
+CLUSTER=azworker-${USER}
+NAME=${AZWORKER_NAME-${CLUSTER}}
 
 # Names for various resources just reuse cluster/vm name depending on scope.
-RG="${CLUSTER}"
-NET="${CLUSTER}"
-SUBNET="${CLUSTER}"
-NIC="${NAME}"
-IP="${NAME}"
-DOMAIN="cockroach-${NAME}"
-FQDN="${DOMAIN}.${LOCATION}.cloudapp.azure.com"
+RG=${CLUSTER}
+NET=${CLUSTER}
+SUBNET=${CLUSTER}
+NIC=${NAME}
+IP=${NAME}
+DOMAIN=cockroach-${NAME}
+FQDN=${DOMAIN}.${LOCATION}.cloudapp.azure.com
 
 case ${1-} in
     create)

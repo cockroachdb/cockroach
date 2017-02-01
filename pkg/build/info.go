@@ -47,6 +47,7 @@ var (
 	platform    = fmt.Sprintf("%s %s", runtime.GOOS, runtime.GOARCH)
 	// Distribution is changed by the CCL init-time hook in non-APL builds.
 	Distribution = "OSS"
+	typ          string // Type of this build; <empty>, "release", or "musl"
 )
 
 // Short returns a pretty printed build and version summary.
@@ -73,5 +74,6 @@ func GetInfo() Info {
 		CgoCompiler:  cgoCompiler,
 		Platform:     platform,
 		Distribution: Distribution,
+		Typ:          typ,
 	}
 }

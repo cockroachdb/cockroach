@@ -5,8 +5,8 @@
 # or
 #   with-msan $(SHELL)
 #
-# MemorySanitizer is only available on linux; this script assumes the machine has
-# been set up with bootstrap-debian.sh.
+# MemorySanitizer is only available on Linux; this script assumes it is
+# running in the cockroachdb/builder docker image.
 
 export GOFLAGS=-msan
 export CGO_CPPFLAGS='-fsanitize=memory -fsanitize-memory-track-origins -fno-omit-frame-pointer -I/libcxx_msan/include -I/libcxx_msan/include/c++/v1'
