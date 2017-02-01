@@ -1333,7 +1333,7 @@ func TestCampaignOnLazyRaftGroupInitialization(t *testing.T) {
 
 			// We expect not lease holder errors on 2 out of the three replicas.
 			var errCount int
-			for i := 0; i < len(mtc.stores); i++ {
+			for range mtc.stores {
 				if err := <-errCh; err != nil {
 					errCount++
 					if _, ok := err.(*roachpb.NotLeaseHolderError); !ok {
