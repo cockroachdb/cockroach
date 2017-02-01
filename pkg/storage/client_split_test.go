@@ -963,7 +963,7 @@ func runSetupSplitSnapshotRace(
 	// safe (or allowed) for a leaseholder to remove itself from a cluster
 	// without first giving up its lease.
 	mtc.replicateRange(leftRangeID, 1, 2, 3)
-	mtc.transferLease(leftRangeID, 0, 1)
+	mtc.transferLease(context.TODO(), leftRangeID, 0, 1)
 	mtc.unreplicateRange(leftRangeID, 0)
 
 	mtc.waitForValues(leftKey, []int64{0, 1, 1, 1, 0, 0})
@@ -971,7 +971,7 @@ func runSetupSplitSnapshotRace(
 
 	// Stop node 3 so it doesn't hear about the split.
 	mtc.stopStore(3)
-	mtc.expireLeases(context.TODO())
+	mtc.advanceClock(context.TODO())
 
 	// Split the data range.
 	splitArgs = adminSplitArgs(keys.SystemMax, roachpb.Key("m"))
@@ -993,7 +993,7 @@ func runSetupSplitSnapshotRace(
 	// Relocate the right range onto nodes 3-5.
 	mtc.replicateRange(rightRangeID, 4, 5)
 	mtc.unreplicateRange(rightRangeID, 2)
-	mtc.transferLease(rightRangeID, 1, 4)
+	mtc.transferLease(context.TODO(), rightRangeID, 1, 4)
 	mtc.unreplicateRange(rightRangeID, 1)
 
 	// Perform another increment after all the replication changes. This
