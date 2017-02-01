@@ -31,7 +31,6 @@ import (
 	"reflect"
 	"sort"
 	"sync"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -190,14 +189,13 @@ type multiTestContext struct {
 	// The per-store clocks slice normally contains aliases of
 	// multiTestContext.clock, but it may be populated before Start() to
 	// use distinct clocks per store.
-	clocks         []*hlc.Clock
-	engines        []engine.Engine
-	grpcServers    []*grpc.Server
-	distSenders    []*kv.DistSender
-	dbs            []*client.DB
-	gossips        []*gossip.Gossip
-	nodeLivenesses []*storage.NodeLiveness
-	storePools     []*storage.StorePool
+	clocks      []*hlc.Clock
+	engines     []engine.Engine
+	grpcServers []*grpc.Server
+	distSenders []*kv.DistSender
+	dbs         []*client.DB
+	gossips     []*gossip.Gossip
+	storePools  []*storage.StorePool
 	// We use multiple stoppers so we can restart different parts of the
 	// test individually. transportStopper is for 'transport', and the
 	// 'stoppers' slice corresponds to the 'stores'.
@@ -207,16 +205,12 @@ type multiTestContext struct {
 
 	// The fields below may mutate at runtime so the pointers they contain are
 	// protected by 'mu'.
-	mu       *syncutil.RWMutex
-	senders  []*storage.Stores
-	stores   []*storage.Store
-	stoppers []*stop.Stopper
-	idents   []roachpb.StoreIdent
-
-	// expireLeasesActive restricts expiration of leases so only one is
-	// active at a time. This int32 value is set to 1 atomically to
-	// indicate that an expiration is active.
-	expireLeasesActive int32
+	mu             *syncutil.RWMutex
+	senders        []*storage.Stores
+	stores         []*storage.Store
+	stoppers       []*stop.Stopper
+	idents         []roachpb.StoreIdent
+	nodeLivenesses []*storage.NodeLiveness
 }
 
 func (m *multiTestContext) getNodeIDAddress(nodeID roachpb.NodeID) (net.Addr, error) {
@@ -483,14 +477,14 @@ func (t *multiTestContextKVTransport) SendNext(ctx context.Context, done chan<- 
 				t.mtc.mu.RUnlock()
 				if leaseHolderStore == nil {
 					// The lease holder is known but down, so expire its lease.
-					t.mtc.expireLeases(ctx)
+					t.mtc.advanceClock(ctx)
 				}
 			} else {
 				// stores has the range, is *not* the lease holder, but the
 				// lease holder is not known; this can happen if the lease
 				// holder is removed from the group. Move the manual clock
 				// forward in an attempt to expire the lease.
-				t.mtc.expireLeases(ctx)
+				t.mtc.advanceClock(ctx)
 			}
 		}
 		t.setPending(rep.ReplicaID, false)
@@ -1099,7 +1093,32 @@ func (m *multiTestContext) waitForValues(key roachpb.Key, expected []int64) {
 // transferLease transfers the lease for the given range from the source
 // replica to the target replica. Assumes that the caller knows who the
 // current leaseholder is.
-func (m *multiTestContext) transferLease(rangeID roachpb.RangeID, source int, dest int) {
+func (m *multiTestContext) transferLease(
+	ctx context.Context, rangeID roachpb.RangeID, source int, dest int,
+) {
+	live := m.stores[dest] != nil && !m.stores[dest].IsDrainingLeases()
+	if !live {
+		m.t.Fatalf("can't transfer lease to down or draining node at index %d", dest)
+	}
+
+	// Heartbeat the liveness record of the destination node to make sure that the
+	// lease we're about to transfer can be used afterwards. Otherwise, the
+	// liveness record might be expired and the node is considered down, making
+	// this transfer irrelevant. In particular, this can happen if the clock was
+	// advanced recently, so all the liveness records (including the destination)
+	// are expired. In that case, the simple fact that the transfer succeeded
+	// doesn't mean that the destination now has a usable lease.
+	m.mu.RLock()
+	nl := m.nodeLivenesses[dest]
+	m.mu.RUnlock()
+	l, err := nl.Self()
+	if err != nil {
+		m.t.Fatal(err)
+	}
+	if err := nl.Heartbeat(ctx, l); err != nil {
+		m.t.Fatal(err)
+	}
+
 	sourceRepl, err := m.stores[source].GetReplica(rangeID)
 	if err != nil {
 		m.t.Fatal(err)
@@ -1109,54 +1128,21 @@ func (m *multiTestContext) transferLease(rangeID roachpb.RangeID, source int, de
 	}
 }
 
-// expireLeases increments the context's manual clock far enough into
-// the future that current range leases are expired.  To also expire
-// epoch-based range leases, each node's epoch is incremented and live
-// nodes are heartbeat so they are able to reacquire leases.
+// advanceClock advances the mtc's manual clock such that all
+// expiration-based leases become expired. The liveness records of all the nodes
+// will also become expired on the new clock value (and this will cause all the
+// epoch-based leases to be considered expired until the liveness record is
+// heartbeated).
 //
-// Useful for tests which modify replica sets.
-func (m *multiTestContext) expireLeases(ctx context.Context) {
-	// Allow only one expiration in progress at a time.
-	if !atomic.CompareAndSwapInt32(&m.expireLeasesActive, 0, 1) {
-		return
-	}
-
-	m.expireLeasesWithoutIncrementingEpochs()
-
-	// Increment epochs.
-	m.mu.RLock()
-	nls := append([]*storage.NodeLiveness(nil), m.nodeLivenesses...)
-	m.mu.RUnlock()
-
-	for idx, nl := range nls {
-		l, err := nl.Self()
-		if err != nil {
-			continue
-		}
-		if err = nl.IncrementEpoch(ctx, l); err != nil {
-			log.Error(ctx, err)
-			continue
-		}
-		m.mu.RLock()
-		live := m.stores[idx] != nil && !m.stores[idx].IsDrainingLeases()
-		m.mu.RUnlock()
-		if live {
-			l, err := nl.Self()
-			if err != nil {
-				log.Error(ctx, err)
-				continue
-			}
-			if err := nl.Heartbeat(ctx, l); err != nil {
-				log.Error(ctx, err)
-				continue
-			}
+// This method asserts that all the stores share the manual clock. Otherwise,
+// the desired effect would be ambiguous.
+func (m *multiTestContext) advanceClock(ctx context.Context) {
+	for i, clock := range m.clocks {
+		if clock != m.clock {
+			log.Fatalf(ctx, "clock at index %d is different from the shared clock", i)
 		}
 	}
 
-	atomic.StoreInt32(&m.expireLeasesActive, 0)
-}
-
-func (m *multiTestContext) expireLeasesWithoutIncrementingEpochs() {
 	m.mu.RLock()
 	for _, store := range m.stores {
 		if store != nil {
@@ -1165,6 +1151,7 @@ func (m *multiTestContext) expireLeasesWithoutIncrementingEpochs() {
 		}
 	}
 	m.mu.RUnlock()
+	log.Infof(ctx, "test clock advanced to: %s", m.clock.Now())
 }
 
 // getRaftLeader returns the replica that is the current raft leader for the
