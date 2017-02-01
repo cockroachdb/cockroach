@@ -901,6 +901,9 @@ message Header {
   // If set, return_range_info causes RangeInfo details to be returned with
   // each ResponseHeader.
   optional bool return_range_info = 10 [(gogoproto.nullable) = false];
+  // gateway_node_id is the ID of the gateway node where the request originated.
+  optional int32 gateway_node_id = 11 [(gogoproto.nullable) = false,
+      (gogoproto.customname) = "GatewayNodeID", (gogoproto.casttype) = "NodeID"];
 }
 
 
