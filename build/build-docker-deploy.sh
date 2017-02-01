@@ -14,7 +14,7 @@ source "$(dirname "${0}")"/build-common.sh
 # commands in the if-branch to be executed within the docker
 # container.
 if [ "${1-}" = "docker" ]; then
-    time make TYPE=RELEASE build
+    time make TYPE=release build
 
     check_static cockroach
     strip -S cockroach

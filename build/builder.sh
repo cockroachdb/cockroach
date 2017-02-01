@@ -76,7 +76,7 @@ echo "${username}:x:${uid_gid}::${container_home}:/bin/bash" > "${passwd_file}"
 # created as the invoking user. Docker would otherwise create them when
 # mounting, but that would deny write access to the invoking user since docker
 # runs as root.
-mkdir -p "${HOME}"/.{jspm,yarn-cache} "${gopath0}"/pkg/docker_amd64{,_glibc,_musl,_race} "${gopath0}/bin/docker_amd64"
+mkdir -p "${HOME}"/.{jspm,yarn-cache} "${gopath0}"/pkg/docker_amd64{,_release,_musl,_race} "${gopath0}/bin/docker_amd64"
 
 # Since we're mounting both /root and its subdirectories in our container,
 # Docker will create the subdirectories on the host side under the directory
@@ -111,12 +111,12 @@ vols="${vols} --volume=${passwd_file}:/etc/passwd"
 vols="${vols} --volume=${host_home}:${container_home}"
 vols="${vols} --volume=${gopath0}/src:/go/src"
 vols="${vols} --volume=${gopath0}/pkg/docker_amd64:/go/pkg/linux_amd64"
-vols="${vols} --volume=${gopath0}/pkg/docker_amd64_glibc:/go/pkg/linux_amd64_glibc"
-vols="${vols} --volume=${gopath0}/pkg/docker_amd64_gmusl:/go/pkg/linux_amd64_musl"
+vols="${vols} --volume=${gopath0}/pkg/docker_amd64_release:/go/pkg/linux_amd64_release"
+vols="${vols} --volume=${gopath0}/pkg/docker_amd64_musl:/go/pkg/linux_amd64_musl"
 vols="${vols} --volume=${gopath0}/pkg/docker_amd64_race:/go/pkg/linux_amd64_race"
 vols="${vols} --volume=${gopath0}/pkg/docker_amd64:/usr/local/go/pkg/linux_amd64"
-vols="${vols} --volume=${gopath0}/pkg/docker_amd64_glibc:/usr/local/go/pkg/linux_amd64_glibc"
-vols="${vols} --volume=${gopath0}/pkg/docker_amd64_gmusl:/usr/local/go/pkg/linux_amd64_musl"
+vols="${vols} --volume=${gopath0}/pkg/docker_amd64_release:/usr/local/go/pkg/linux_amd64_release"
+vols="${vols} --volume=${gopath0}/pkg/docker_amd64_musl:/usr/local/go/pkg/linux_amd64_musl"
 vols="${vols} --volume=${gopath0}/pkg/docker_amd64_race:/usr/local/go/pkg/linux_amd64_race"
 vols="${vols} --volume=${gopath0}/bin/docker_amd64:/go/bin"
 vols="${vols} --volume=${HOME}/.jspm:${container_home}/.jspm"
