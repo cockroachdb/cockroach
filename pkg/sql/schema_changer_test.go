@@ -518,16 +518,32 @@ func bulkInsertIntoTable(sqlDB *gosql.DB, maxValue int) error {
 func TestRaceWithBackfill(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	var backfillNotification chan bool
+	var partialBackfillDone atomic.Value
+	partialBackfillDone.Store(false)
+	var partialBackfill bool
 	params, _ := createTestServerParams()
 	// Disable asynchronous schema change execution to allow synchronous path
 	// to trigger start of backfill notification.
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &csql.SchemaChangerTestingKnobs{
 			RunBeforeBackfillChunk: func(sp roachpb.Span) error {
-				if backfillNotification != nil {
-					// Close channel to notify that the backfill has started.
-					close(backfillNotification)
-					backfillNotification = nil
+				notifyBackfill := func() {
+					if backfillNotification != nil {
+						// Close channel to notify that the backfill has started.
+						close(backfillNotification)
+						backfillNotification = nil
+					}
+				}
+				if partialBackfill {
+					if partialBackfillDone.Load().(bool) {
+						notifyBackfill()
+						// Returning DeadlineExceeded will result in the
+						// schema change being retried.
+						return context.DeadlineExceeded
+					}
+					partialBackfillDone.Store(true)
+				} else {
+					notifyBackfill()
 				}
 				return nil
 			},
@@ -648,24 +664,20 @@ CREATE UNIQUE INDEX vidx ON t.test (v);
 
 	notification := make(chan bool)
 	backfillNotification = notification
+	partialBackfill = true
 	// Run the schema change in a separate goroutine.
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {
-		// Start schema change that eventually runs a backfill.
+		// Start schema change that eventually runs a partial backfill.
 		if _, err := sqlDB.Exec("CREATE UNIQUE INDEX bar ON t.test (v)"); err != nil {
 			t.Error(err)
 		}
 		wg.Done()
 	}()
 
-	// Wait until the schema change backfill starts.
+	// Wait until the schema change backfill is partially complete.
 	<-notification
-
-	// Wait for a short bit to ensure that the backfill has likely progressed
-	// and written some data, but not long enough that the backfill has
-	// completed.
-	time.Sleep(10 * time.Millisecond)
 
 	if _, err := sqlDB.Exec("DROP TABLE t.test"); err != nil {
 		t.Fatal(err)
