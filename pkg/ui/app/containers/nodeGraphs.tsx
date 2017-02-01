@@ -104,6 +104,75 @@ class NodeGraphs extends React.Component<NodeGraphsProps, {}> {
 
     return <div className="section l-columns graph-lines">
       <div className="chart-group l-columns__left">
+        <GraphGroup groupId="node.overview" hide={dashboard !== "overview"}>
+          <LineGraph title="SQL Queries" sources={nodeSources} tooltip={`The average number of SELECT, INSERT, UPDATE, and DELETE statements per second across ${specifier}.`}>
+            <Axis>
+              <Metric name="cr.node.sql.select.count" title="Total Reads" nonNegativeRate />
+              <Metric name="cr.node.sql.distsql.select.count" title="DistSQL Reads" nonNegativeRate />
+              <Metric name="cr.node.sql.update.count" title="Updates" nonNegativeRate />
+              <Metric name="cr.node.sql.insert.count" title="Inserts" nonNegativeRate />
+              <Metric name="cr.node.sql.delete.count" title="Deletes" nonNegativeRate />
+            </Axis>
+          </LineGraph>
+          <LineGraph title="Exec Latency: 99th percentile"
+          tooltip={`The 99th percentile of latency between query requests and responses
+                    over a 1 minute period.
+                    Values are displayed individually for each node on each node.`}>
+            <Axis units={ AxisUnits.Duration }>
+              {
+                _.map(nodeIds, (node) =>
+                  <Metric key={node}
+                          name="cr.node.exec.latency-p99"
+                          title={this.nodeAddress(node)}
+                          sources={[node]}
+                          downsampleMax />,
+                )
+              }
+            </Axis>
+          </LineGraph>
+          <LineGraph title="Exec Latency: 90th percentile"
+                    tooltip={`The 90th percentile of latency between query requests and responses
+                              over a 1 minute period.
+                              Values are displayed individually for each node on each node.`}>
+            <Axis units={ AxisUnits.Duration }>
+              {
+                _.map(nodeIds, (node) =>
+                  <Metric key={node}
+                          name="cr.node.exec.latency-p90"
+                          title={this.nodeAddress(node)}
+                          sources={[node]}
+                          downsampleMax />,
+                )
+              }
+            </Axis>
+          </LineGraph>
+          <LineGraph title="Replicas per Store"
+                    tooltip={`The number of replicas on each store.`}>
+            <Axis>
+              {
+                _.map(nodeIds, (nid) =>
+                  <Metric key={nid}
+                          name="cr.store.replicas"
+                          title={this.nodeAddress(nid)}
+                          sources={this.storeIDsForNode(nid)}/>,
+                )
+              }
+            </Axis>
+          </LineGraph>
+          <LineGraph title="Capacity" sources={storeSources} tooltip={`Summary of total and available capacity ${specifier}.`}>
+            <Axis>
+              <Metric name="cr.store.capacity" title="Capacity" />
+              {
+                // TODO(mrtracy): We really want to display a used capacity
+                // stat, but that is not directly recorded. We either need to
+                // start directly recording it, or add the ability to create
+                // derived series.
+              }
+              <Metric name="cr.store.capacity.available" title="Available" />
+            </Axis>
+          </LineGraph>
+        </GraphGroup>
+
         <GraphGroup groupId="node.runtime" hide={dashboard !== "runtime"}>
           <LineGraph title="Node Count" tooltip="The number of nodes active on the cluster.">
             <Axis>
