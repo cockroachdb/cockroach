@@ -9,7 +9,7 @@ import { Dispatch } from "redux";
 import { assert } from "chai";
 import moment = require("moment");
 
-import { APIRequestFn } from "../util/api.ts";
+import { APIRequestFn } from "../util/api";
 
 import { Action, PayloadAction, WithRequest } from "../interfaces/action";
 

@@ -4,6 +4,8 @@ import Banner from "./banner";
 
 import { AdminUIState } from "../../redux/state";
 import { refreshHealth, HealthState } from "../../redux/apiReducers";
+import { warningIcon } from "../../components/icons";
+import { trustIcon } from "../../util/trust";
 
 class DisconnectedBannerProps {
   health: HealthState;
@@ -31,7 +33,7 @@ class DisconnectedBanner extends React.Component<DisconnectedBannerProps, Discon
   render() {
     let visible: boolean = this.props.health && !!this.props.health.lastError && !this.state.dismissed;
     return <Banner className="disconnected" visible={visible} onclose={() => this.setState({dismissed: true}) }>
-        <span className="icon-warning" />
+      <span className="warning" dangerouslySetInnerHTML={trustIcon(warningIcon)} />
         Connection to Cockroach node lost.
     </Banner>;
   }

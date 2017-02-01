@@ -13,6 +13,7 @@ import { AdminUIState } from "../redux/state";
 import { refreshNodes } from "../redux/apiReducers";
 import GraphGroup from "../components/graphGroup";
 import { SummaryBar, SummaryLabel, SummaryStat, SummaryMetricStat } from "../components/summaryBar";
+import AlertBox from "./alertBox";
 import { Axis, AxisUnits } from "../components/graphs";
 import { LineGraph } from "../components/linegraph";
 import { Metric } from "../components/metric";
@@ -584,6 +585,7 @@ class NodeGraphs extends React.Component<NodeGraphsProps, {}> {
         </GraphGroup>
       </div>
       <div className="l-columns__right">
+        <AlertBox />
         <SummaryBar>
           <SummaryLabel>Summary</SummaryLabel>
           <SummaryStat title={<span>Total Nodes <Link to="/cluster/nodes">View nodes list</Link></span>}

@@ -30,6 +30,6 @@ export function findChildrenOfType(children: React.ReactNode, type: any) {
  * Predicate function to determine if a react child is a ReactElement (as
  * opposed to a string or number).
  */
-function isReactElement(child: any): child is React.ReactElement<any> {
+export function isReactElement(child: any): child is React.ReactElement<any> {
   return (child && child.type);
 }

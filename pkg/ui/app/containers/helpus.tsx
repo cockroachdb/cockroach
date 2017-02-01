@@ -6,7 +6,6 @@ import classNames from "classnames";
 import { AdminUIState } from "../redux/state";
 import * as uiData from "../redux/uiData";
 import { setUISetting } from "../redux/ui";
-import { HELPUS_BANNER_DISMISSED_KEY } from "./banner/helpusBanner";
 
 export interface HelpUsProps {
   optInAttributes: uiData.OptInAttributes;
@@ -15,7 +14,6 @@ export interface HelpUsProps {
   loading: boolean;
   saveError: Error;
   loadError: Error;
-  helpusDismissed: boolean;
   loadUIData: typeof uiData.loadUIData;
   saveUIData: typeof uiData.saveUIData;
   setUISetting: typeof setUISetting;
@@ -40,9 +38,6 @@ export class HelpUs extends React.Component<HelpUsProps, HelpUsState> {
   componentWillMount() {
     this.setState({ initialized: false } as any);
     this.props.loadUIData(uiData.KEY_HELPUS);
-    if (!this.props.helpusDismissed) {
-      this.props.setUISetting(HELPUS_BANNER_DISMISSED_KEY, true);
-    }
   }
 
   componentWillReceiveProps(props: HelpUsProps) {
@@ -161,7 +156,6 @@ let saving = (state: AdminUIState): boolean => uiData.isSaving(state, uiData.KEY
 let loading = (state: AdminUIState): boolean => uiData.isLoading(state, uiData.KEY_HELPUS);
 let saveError = (state: AdminUIState): Error => uiData.getSaveError(state, uiData.KEY_HELPUS);
 let loadError = (state: AdminUIState): Error => uiData.getLoadError(state, uiData.KEY_HELPUS);
-let helpusDismissed = (state: AdminUIState): boolean => uiData.getData(state, HELPUS_BANNER_DISMISSED_KEY);
 
 // Connect the HelpUs class with our redux store.
 let helpusConnected = connect(
@@ -173,7 +167,6 @@ let helpusConnected = connect(
       loading: loading(state),
       saveError: saveError(state),
       loadError: loadError(state),
-      helpusDismissed: helpusDismissed(state),
     };
   },
   {
