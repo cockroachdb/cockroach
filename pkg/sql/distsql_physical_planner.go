@@ -64,7 +64,7 @@ type distSQLPlanner struct {
 	nodeDesc     roachpb.NodeDescriptor
 	rpcContext   *rpc.Context
 	distSQLSrv   *distsqlrun.ServerImpl
-	spanResolver *distsqlplan.SpanResolver
+	spanResolver distsqlplan.SpanResolver
 }
 
 const resolverPolicy = distsqlplan.BinPackingLeaseHolderChoice
@@ -237,7 +237,7 @@ func (dsp *distSQLPlanner) CheckSupport(tree planNode) (shouldRunDist bool, notS
 // a single query.
 type planningCtx struct {
 	ctx      context.Context
-	spanIter *distsqlplan.SpanResolverIterator
+	spanIter distsqlplan.SpanResolverIterator
 	// nodeAddresses contains addresses for all NodeIDs that are referenced by any
 	// physicalPlan we generate with this context.
 	nodeAddresses map[roachpb.NodeID]string
