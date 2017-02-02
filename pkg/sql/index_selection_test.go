@@ -648,8 +648,8 @@ func TestApplyConstraints(t *testing.T) {
 		{`a = 1 AND b = 1`, `a,b`, `<nil>`},
 		{`a = 1 AND b = 1`, `a`, `b = 1`},
 		{`a = 1 AND b = 1`, `b`, `a = 1`},
-		{`a = 1 AND b > 1`, `a,b`, `b > 1`},
-		{`a > 1 AND b = 1`, `a,b`, `(a > 1) AND (b = 1)`},
+		{`a = 1 AND b > 1`, `a,b`, `<nil>`},
+		{`a > 1 AND b = 1`, `a,b`, `b = 1`},
 		{`a IN (1)`, `a`, `<nil>`},
 		{`a IN (1) OR a IN (2)`, `a`, `<nil>`},
 		{`a = 1 OR a = 2`, `a`, `<nil>`},
@@ -658,17 +658,30 @@ func TestApplyConstraints(t *testing.T) {
 		{`a != 1`, `a`, `a != 1`},
 		{`a IS NOT NULL`, `a`, `<nil>`},
 		{`a = 1 AND b IS NOT NULL`, `a,b`, `<nil>`},
-		{`a >= 1 AND b = 2`, `a,b`, `(a >= 1) AND (b = 2)`},
-		{`a >= 1 AND a <= 3 AND b = 2`, `a,b`, `(a >= 1) AND ((a <= 3) AND (b = 2))`},
+		{`a >= 1 AND b = 2`, `a,b`, `b = 2`},
+		{`a >= 1 AND a <= 3 AND b = 2`, `a,b`, `b = 2`},
 		{`(a, b) = (1, 2) AND c IS NOT NULL`, `a,b,c`, `<nil>`},
 		{`a IN (1, 2) AND b = 3`, `a,b`, `b = 3`},
-		{`a <= 5 AND b >= 6 AND (a, b) IN ((1, 2))`, `a,b`, `(a <= 5) AND (b >= 6)`},
+		{`a <= 5 AND b >= 6 AND (a, b) IN ((1, 2))`, `a,b`, `false`},
 		{`a IN (1) AND a = 1`, `a`, `<nil>`},
-		{`(a, b) = (1, 2)`, `a`, `(a, b) IN ((1, 2))`},
-		// Filters that are not trimmed as of Dec 2015, although they could be.
-		// Issue #3473.
-		// {`a > 1`, `a`, `<nil>`},
-		// {`a < 1`, `a`, `<nil>`},
+		{`(a, b) = (1, 2)`, `a`, `b = 2`},
+		{`a > 1`, `a`, `<nil>`},
+		{`a < 1`, `a`, `<nil>`},
+		// The constraint (l, m) < (123, 456) must be treated as implying
+		// l <= 123. This means that l < 123 definitely cannot be
+		// simplified.
+		// Note 1: we use DECIMAL columns so that constraint extraction
+		// cannot change the < constraint on the left <= by applying
+		// Next(). Any column type without a Next() would do.
+		// Note 2: we use a COALESCE expression to make the
+		// sub-expression "l < 123" invisible to constraint analysis; any
+		// function that returns an opaque boolean based on a boolean
+		// argument would do.
+		{`(l, m) < (123, 456) AND COALESCE(l < 123, true)`, `l,m`,
+			`((l, m) < (123, 456)) AND COALESCE(l < 123, true)`},
+		// Same for the other direction.
+		{`(l, m) > (123, 456) AND COALESCE(l > 123, true)`, `l,m`,
+			`((l, m) > (123, 456)) AND COALESCE(l > 123, true)`},
 	}
 	for _, d := range testData {
 		t.Run(d.expr+"~"+d.expected, func(t *testing.T) {
@@ -677,7 +690,7 @@ func TestApplyConstraints(t *testing.T) {
 			constraints, expr := makeConstraints(t, d.expr, desc, index, sel)
 			expr2 := applyIndexConstraints(expr, constraints)
 			if s := fmt.Sprint(expr2); d.expected != s {
-				t.Errorf("%s: expected %s, but found %s", d.expr, d.expected, s)
+				t.Errorf("%s: expected %s, but found %s (constraints %s)", d.expr, d.expected, s, constraints)
 			}
 		})
 	}

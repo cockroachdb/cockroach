@@ -291,7 +291,7 @@ func expandScanNode(params expandParameters, s *scanNode) (planNode, error) {
 		preferOrderMatchingIndex = true
 	}
 
-	plan, err := selectIndex(s, analyzeOrdering, preferOrderMatchingIndex)
+	plan, err := params.p.selectIndex(s, analyzeOrdering, preferOrderMatchingIndex)
 	if err != nil {
 		return s, err
 	}
