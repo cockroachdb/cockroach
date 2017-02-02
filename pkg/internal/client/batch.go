@@ -256,6 +256,7 @@ func (b *Batch) fillResults() error {
 			case *roachpb.RequestLeaseRequest:
 			case *roachpb.CheckConsistencyRequest:
 			case *roachpb.ChangeFrozenRequest:
+			case *roachpb.WriteBatchRequest:
 			}
 			// Fill up the resume span.
 			if result.Err == nil && reply != nil && reply.Header().ResumeSpan != nil {
@@ -596,6 +597,28 @@ func (b *Batch) adminTransferLease(key interface{}, target roachpb.StoreID) {
 			Key: k,
 		},
 		Target: target,
+	}
+	b.appendReqs(req)
+	b.initResult(1, 0, notRaw, nil)
+}
+
+// writeBatch is only exported on DB.
+func (b *Batch) writeBatch(s, e interface{}, data []byte) {
+	begin, err := marshalKey(s)
+	if err != nil {
+		b.initResult(0, 0, notRaw, err)
+		return
+	}
+	end, err := marshalKey(e)
+	if err != nil {
+		b.initResult(0, 0, notRaw, err)
+		return
+	}
+	span := roachpb.Span{Key: begin, EndKey: end}
+	req := &roachpb.WriteBatchRequest{
+		Span:     span,
+		DataSpan: span,
+		Data:     data,
 	}
 	b.appendReqs(req)
 	b.initResult(1, 0, notRaw, nil)

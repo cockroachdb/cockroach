@@ -6,13 +6,12 @@
 //
 //     https://github.com/cockroachdb/cockroach/blob/master/pkg/ccl/LICENSE
 
-package sqlccl
+package storageccl
 
 import (
 	"os"
 	"testing"
 
-	_ "github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
 	"github.com/cockroachdb/cockroach/pkg/server"

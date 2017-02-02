@@ -100,6 +100,12 @@ var propEvalKV = func() bool {
 	return enabled
 }()
 
+// ProposerEvaluatedKVEnabled returns whether experimental support for
+// proposer-evaluated KV is enabled.
+func ProposerEvaluatedKVEnabled() bool {
+	return propEvalKV
+}
+
 // raftInitialLog{Index,Term} are the starting points for the raft log. We
 // bootstrap the raft membership by synthesizing a snapshot as if there were
 // some discarded prefix to the log, so we must begin the log at an arbitrary

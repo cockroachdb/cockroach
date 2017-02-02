@@ -280,7 +280,3 @@ func (r *Replica) RaftTransferLeader(ctx context.Context, target roachpb.Replica
 func GetGCQueueTxnCleanupThreshold() time.Duration {
 	return txnCleanupThreshold
 }
-
-func ProposerEvaluatedKVEnabled() bool {
-	return propEvalKV
-}
