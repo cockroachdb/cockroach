@@ -348,7 +348,9 @@ func (gcq *gcQueue) process(ctx context.Context, repl *Replica, sysCfg config.Sy
 		return err
 	}
 
-	log.VEventf(ctx, 1, "completed with stats %+v", info)
+	if log.V(1) {
+		log.Infof(ctx, "completed with stats %+v", info)
+	}
 
 	info.updateMetrics(gcq.store.metrics)
 
