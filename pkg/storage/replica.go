@@ -3775,7 +3775,7 @@ func (r *Replica) applyRaftCommand(
 				oldRaftAppliedIndex, rResult.State.RaftAppliedIndex)))
 	}
 
-	batch := r.store.Engine().NewBatch()
+	batch := r.store.Engine().NewWriteOnlyBatch()
 	defer batch.Close()
 	if writeBatch != nil {
 		if err := batch.ApplyBatchRepr(writeBatch.Data); err != nil {
