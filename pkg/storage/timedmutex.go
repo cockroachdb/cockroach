@@ -94,7 +94,9 @@ func makeTimedMutex(cb timingFn) timedMutex {
 func (tm *timedMutex) Lock() {
 	tm.mu.Lock()
 	atomic.StoreInt32(&tm.isLocked, 1)
-	tm.lockedAt = timeutil.Now()
+	if tm.cb != nil {
+		tm.lockedAt = timeutil.Now()
+	}
 }
 
 // Unlock implements sync.Locker.
