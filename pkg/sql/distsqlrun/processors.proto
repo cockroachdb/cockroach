@@ -85,6 +85,12 @@ message PostProcessSpec {
   //
   // Cannot be set at the same time with output columns.
   repeated Expression render_exprs = 3 [(gogoproto.nullable) = false];
+
+  // If nonzero, the first <offset> rows will be suppressed.
+  optional uint64 offset = 4 [(gogoproto.nullable) = false];
+
+  // If nonzero, the processor will stop after emitting this many rows.
+  optional uint64 limit = 5 [(gogoproto.nullable) = false];
 }
 
 message ProcessorCoreUnion {
