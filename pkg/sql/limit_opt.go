@@ -86,8 +86,8 @@ func applyLimit(plan planNode, numRows int64, soft bool) {
 			// potentially needs all rows.
 			numRows = math.MaxInt64
 			soft = true
-			applyLimit(n.plan, numRows, soft)
 		}
+		applyLimit(n.plan, numRows, soft)
 
 	case *groupNode:
 		if len(n.desiredOrdering) > 0 {
