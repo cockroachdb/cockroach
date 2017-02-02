@@ -223,6 +223,7 @@ func (n *noopProcessor) Run(wg *sync.WaitGroup) {
 		}
 		if !n.out.emitRow(ctx, row) {
 			n.input.ConsumerDone()
+			n.out.close(nil)
 			return
 		}
 	}
