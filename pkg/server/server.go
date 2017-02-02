@@ -775,7 +775,7 @@ func (s *Server) doDrain(modes []serverpb.DrainMode, setTo bool) ([]serverpb.Dra
 				return nil, err
 			}
 		case serverpb.DrainMode_LEASES:
-			s.nodeLiveness.PauseHeartbeat(setTo)
+			s.nodeLiveness.SetDraining(setTo)
 			if err := s.node.SetDraining(setTo); err != nil {
 				return nil, err
 			}

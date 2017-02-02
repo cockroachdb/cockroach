@@ -67,7 +67,7 @@ func MakeStorePoolNodeLivenessFunc(nodeLiveness *NodeLiveness) NodeLivenessFunc 
 			return false
 		}
 		deadAsOf := liveness.Expiration.GoTime().Add(threshold)
-		return now.Before(deadAsOf)
+		return now.Before(deadAsOf) && !liveness.Draining
 	}
 }
 

@@ -101,6 +101,7 @@ type NodeLiveness struct {
 	pauseHeartbeat    atomic.Value // contains a bool
 	incrementSem      chan struct{}
 	heartbeatSem      chan struct{}
+	drainSem          chan struct{}
 	metrics           LivenessMetrics
 
 	mu struct {
@@ -130,6 +131,7 @@ func NewNodeLiveness(
 		heartbeatInterval: livenessThreshold - renewalDuration,
 		incrementSem:      make(chan struct{}, 1),
 		heartbeatSem:      make(chan struct{}, 1),
+		drainSem:          make(chan struct{}, 1),
 	}
 	nl.metrics = LivenessMetrics{
 		LiveNodes:          metric.NewFunctionalGauge(metaLiveNodes, nl.numLiveNodes),
@@ -144,6 +146,56 @@ func NewNodeLiveness(
 	nl.gossip.RegisterCallback(livenessRegex, nl.livenessGossipUpdate)
 
 	return nl
+}
+
+// SetDraining calls PauseHeartbeat with the given boolean and then attempts to
+// update the liveness record.
+func (nl *NodeLiveness) SetDraining(drain bool) {
+	// Allow only one attempt to set the draining field at a time. The semaphore
+	// is used before pausing/resuming the heartbeat to protect against cases
+	// in which heartbeats are resumed after SetDraining(true) has paused them
+	// by a previous call to SetDraining(false).
+	nl.drainSem <- struct{}{}
+	defer func() {
+		<-nl.drainSem
+	}()
+	if drain {
+		nl.PauseHeartbeat(drain)
+	} else {
+		defer nl.PauseHeartbeat(drain)
+	}
+
+	ctx := nl.ambientCtx.AnnotateCtx(context.Background())
+	for r := retry.StartWithCtx(ctx, base.DefaultRetryOptions()); r.Next(); {
+		liveness, err := nl.Self()
+		if err != nil && err != ErrNoLivenessRecord {
+			log.Errorf(ctx, "unexpected error getting liveness: %s", err)
+		}
+		var newLiveness Liveness
+		if liveness == nil {
+			newLiveness = Liveness{
+				NodeID:   nl.gossip.NodeID.Get(),
+				Epoch:    1,
+				Draining: drain,
+			}
+		} else {
+			newLiveness = *liveness
+			newLiveness.Draining = drain
+		}
+		update := func(l Liveness) {
+			nl.mu.Lock()
+			nl.mu.self = l
+			nl.mu.Unlock()
+		}
+		if err := nl.updateLiveness(ctx, &newLiveness, liveness, func(actual Liveness) error {
+			update(actual)
+			return errors.New("failed to update liveness record")
+		}); err != nil {
+			continue
+		}
+		update(newLiveness)
+		break
+	}
 }
 
 // GetLivenessThreshold returns the maximum duration between heartbeats
@@ -472,12 +524,12 @@ func (nl *NodeLiveness) livenessGossipUpdate(key string, content roachpb.Value) 
 	}
 
 	// If there's an existing liveness record, only update the received
-	// timestamp if this is our first receipt of this node's liveness
-	// or if the expiration or epoch was advanced.
+	// timestamp if this is our first receipt of this node's liveness, the
+	// expiration or epoch was advanced, or the draining state changed.
 	var callbacks []IsLiveCallback
 	nl.mu.Lock()
 	exLiveness, ok := nl.mu.nodes[liveness.NodeID]
-	if !ok || exLiveness.Expiration.Less(liveness.Expiration) || exLiveness.Epoch < liveness.Epoch {
+	if !ok || exLiveness.Expiration.Less(liveness.Expiration) || exLiveness.Epoch < liveness.Epoch || exLiveness.Draining != liveness.Draining {
 		nl.mu.nodes[liveness.NodeID] = liveness
 
 		// If isLive status is now true, but previously false, invoke any registered callbacks.

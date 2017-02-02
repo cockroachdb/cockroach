@@ -456,3 +456,29 @@ func TestNodeLivenessConcurrentIncrementEpochs(t *testing.T) {
 		}
 	}
 }
+
+// TestNodeLivenessSetDraining verifies that when draining, a node's liveness
+// record is updated and the node will not be a target for any transfers once
+// other nodes are aware of its draining state.
+func TestNodeLivenessSetDraining(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	mtc := &multiTestContext{}
+	defer mtc.Stop()
+	mtc.Start(t, 3)
+	mtc.initGossipNetwork()
+
+	verifyLiveness(t, mtc)
+	mtc.nodeLivenesses[0].SetDraining(true)
+
+	// The following is executed in a retry loop because we must wait until the
+	// new liveness record has been gossiped to the rest of the cluster.
+	expectedLive := 2
+	testutils.SucceedsSoon(t, func() error {
+		for i, sp := range mtc.storePools {
+			if _, alive, _ := sp.GetStoreList(roachpb.RangeID(0)); alive != expectedLive {
+				return errors.Errorf("expected %d live stores but got %d from node %d", expectedLive, alive, i)
+			}
+		}
+		return nil
+	})
+}
