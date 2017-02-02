@@ -139,9 +139,9 @@ func TestNodeLivenessInitialIncrement(t *testing.T) {
 	})
 }
 
-// TestNodeLivenessCallback verifies that the liveness callback for a
+// TestNodeIsLiveCallback verifies that the liveness callback for a
 // node is invoked when it changes from state false to true.
-func TestNodeLivenessCallback(t *testing.T) {
+func TestNodeIsLiveCallback(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	mtc := &multiTestContext{}
 	defer mtc.Stop()
@@ -184,6 +184,55 @@ func TestNodeLivenessCallback(t *testing.T) {
 		}
 		return nil
 	})
+}
+
+// TestNodeHeartbeatCallback verifies that HeartbeatCallback is invoked whenever
+// this node updates its own liveness status.
+func TestNodeHeartbeatCallback(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	mtc := &multiTestContext{}
+	defer mtc.Stop()
+	mtc.Start(t, 3)
+
+	// Verify liveness of all nodes for all nodes.
+	verifyLiveness(t, mtc)
+	pauseNodeLivenessHeartbeats(mtc, true)
+
+	// Verify that last update time has been set for all nodes.
+	verifyUptimes := func() error {
+		expected := mtc.clock.Now()
+		for i, s := range mtc.stores {
+			uptm, err := storage.ReadStoreLastUp(context.Background(), s.Engine())
+			if err != nil {
+				return errors.Errorf("error reading last up time from store %d: %s", i, err)
+			}
+			if a, e := uptm.WallTime, expected.WallTime; a != e {
+				return errors.Errorf("store %d last uptime = %d; wanted %d\n", i, a, e)
+			}
+		}
+		return nil
+	}
+
+	if err := verifyUptimes(); err != nil {
+		t.Fatal(err)
+	}
+
+	// Advance clock past the liveness threshold and force a manual heartbeat on
+	// all node liveness objects, which should update the last up time for each
+	// store.
+	mtc.manualClock.Increment(mtc.nodeLivenesses[0].GetLivenessThreshold().Nanoseconds() + 1)
+	for _, nl := range mtc.nodeLivenesses {
+		l, err := nl.Self()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := nl.Heartbeat(context.Background(), l); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := verifyUptimes(); err != nil {
+		t.Fatal(err)
+	}
 }
 
 // TestNodeLivenessEpochIncrement verifies that incrementing the epoch
