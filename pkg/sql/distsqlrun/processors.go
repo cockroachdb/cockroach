@@ -269,6 +269,12 @@ func newProcessor(
 		}
 		return newNoopProcessor(flowCtx, inputs[0], post, outputs[0])
 	}
+	if core.Values != nil {
+		if err := checkNumInOut(inputs, outputs, 0, 1); err != nil {
+			return nil, err
+		}
+		return newValuesProcessor(flowCtx, core.Values, post, outputs[0])
+	}
 	if core.TableReader != nil {
 		if err := checkNumInOut(inputs, outputs, 0, 1); err != nil {
 			return nil, err
