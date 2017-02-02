@@ -79,11 +79,11 @@ to create your cockroachdb cluster.
 
 You can either set up your cluster following the
 [instructions provided in the Kubernetes docs](http://kubernetes.io/docs/getting-started-guides/gce/)
-or by creating a special
-[Container Engine alpha cluster](https://cloud.google.com/container-engine/docs/alpha-clusters):
+or by using the hosted
+[Container Engine](https://cloud.google.com/container-engine/docs) service:
 
 ```shell
-gcloud alpha container clusters create NAME --enable-kubernetes-alpha
+gcloud container clusters create NAME
 ```
 
 Then once you have a Kubernetes cluster running, either run the
