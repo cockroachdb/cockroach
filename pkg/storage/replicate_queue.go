@@ -263,7 +263,9 @@ func (rq *replicateQueue) processOneChange(
 
 	switch action, _ := rq.allocator.ComputeAction(zone, desc); action {
 	case AllocatorAdd:
-		log.Event(ctx, "adding a new replica")
+		if log.V(1) {
+			log.Infof(ctx, "adding a new replica")
+		}
 		newStore, err := rq.allocator.AllocateTarget(
 			zone.Constraints,
 			desc.Replicas,
@@ -279,12 +281,16 @@ func (rq *replicateQueue) processOneChange(
 		}
 
 		rq.metrics.AddReplicaCount.Inc(1)
-		log.VEventf(ctx, 1, "adding replica to %+v due to under-replication", newReplica)
+		if log.V(1) {
+			log.Infof(ctx, "adding replica to %+v due to under-replication", newReplica)
+		}
 		if err := rq.addReplica(ctx, repl, newReplica, desc); err != nil {
 			return false, err
 		}
 	case AllocatorRemove:
-		log.Event(ctx, "removing a replica")
+		if log.V(1) {
+			log.Infof(ctx, "removing a replica")
+		}
 		// If the lease holder (our local store) is an overfull store (in terms of
 		// leases) allow transferring the lease away.
 		leaseHolderStoreID := repl.store.StoreID()
@@ -320,13 +326,17 @@ func (rq *replicateQueue) processOneChange(
 			}
 		} else {
 			rq.metrics.RemoveReplicaCount.Inc(1)
-			log.VEventf(ctx, 1, "removing replica %+v due to over-replication", removeReplica)
+			if log.V(1) {
+				log.Infof(ctx, "removing replica %+v due to over-replication", removeReplica)
+			}
 			if err := rq.removeReplica(ctx, repl, removeReplica, desc); err != nil {
 				return false, err
 			}
 		}
 	case AllocatorRemoveDead:
-		log.Event(ctx, "removing a dead replica")
+		if log.V(1) {
+			log.Infof(ctx, "removing a dead replica")
+		}
 		if len(deadReplicas) == 0 {
 			if log.V(1) {
 				log.Warningf(ctx, "range of replica %s was identified as having dead replicas, but no dead replicas were found", repl)
@@ -335,14 +345,18 @@ func (rq *replicateQueue) processOneChange(
 		}
 		deadReplica := deadReplicas[0]
 		rq.metrics.RemoveDeadReplicaCount.Inc(1)
-		log.VEventf(ctx, 1, "removing dead replica %+v from store", deadReplica)
+		if log.V(1) {
+			log.Infof(ctx, "removing dead replica %+v from store", deadReplica)
+		}
 		if err := rq.removeReplica(ctx, repl, deadReplica, desc); err != nil {
 			return false, err
 		}
 	case AllocatorNoop:
 		// The Noop case will result if this replica was queued in order to
 		// rebalance. Attempt to find a rebalancing target.
-		log.Event(ctx, "considering a rebalance")
+		if log.V(1) {
+			log.Infof(ctx, "considering a rebalance")
+		}
 
 		if rq.canTransferLease() {
 			// We require the lease in order to process replicas, so
@@ -368,7 +382,9 @@ func (rq *replicateQueue) processOneChange(
 			return false, nil
 		}
 		if rebalanceStore == nil {
-			log.VEventf(ctx, 1, "no suitable rebalance target")
+			if log.V(1) {
+				log.Infof(ctx, "no suitable rebalance target")
+			}
 			// No action was necessary and no rebalance target was found. Return
 			// without re-queuing this replica.
 			return false, nil
@@ -378,7 +394,9 @@ func (rq *replicateQueue) processOneChange(
 			StoreID: rebalanceStore.StoreID,
 		}
 		rq.metrics.RebalanceReplicaCount.Inc(1)
-		log.VEventf(ctx, 1, "rebalancing to %+v", rebalanceReplica)
+		if log.V(1) {
+			log.Infof(ctx, "rebalancing to %+v", rebalanceReplica)
+		}
 		if err := rq.addReplica(ctx, repl, rebalanceReplica, desc); err != nil {
 			return false, err
 		}
@@ -403,7 +421,9 @@ func (rq *replicateQueue) transferLease(
 		checkTransferLeaseSource,
 	); target != (roachpb.ReplicaDescriptor{}) {
 		rq.metrics.TransferLeaseCount.Inc(1)
-		log.VEventf(ctx, 1, "transferring lease to s%d", target.StoreID)
+		if log.V(1) {
+			log.Infof(ctx, "transferring lease to s%d", target.StoreID)
+		}
 		if err := repl.AdminTransferLease(ctx, target.StoreID); err != nil {
 			return false, errors.Wrapf(err, "%s: unable to transfer lease to s%d", repl, target.StoreID)
 		}
