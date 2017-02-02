@@ -541,6 +541,7 @@ func bulkInsertIntoTable(sqlDB *gosql.DB, maxValue int) error {
 // that run simultaneously.
 func TestRaceWithBackfill(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	t.Skip("#13014")
 	var backfillNotification chan bool
 	params, _ := createTestServerParams()
 	// Disable asynchronous schema change execution to allow synchronous path
