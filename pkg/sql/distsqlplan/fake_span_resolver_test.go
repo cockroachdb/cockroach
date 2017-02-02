@@ -53,9 +53,12 @@ func TestFakeSpanResolver(t *testing.T) {
 	)
 
 	resolver := distsqlutils.FakeResolverForTestCluster(tc)
-	it := resolver.NewSpanResolverIterator()
 
 	db := tc.Server(0).KVClient().(*client.DB)
+
+	txn := client.NewTxn(context.TODO(), *db)
+	it := resolver.NewSpanResolverIterator(txn)
+
 	desc := sqlbase.GetTableDescriptor(db, "test", "t")
 
 	prefix := roachpb.Key(sqlbase.MakeIndexKeyPrefix(desc, desc.PrimaryIndex.ID))
