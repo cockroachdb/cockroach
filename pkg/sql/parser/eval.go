@@ -1908,7 +1908,7 @@ func (expr *CaseExpr) Eval(ctx *EvalContext) (Datum, error) {
 // regprocedureRegexp matches a Postgres function type signature, capturing the
 // name of the function into group 1.
 // e.g. function(a, b, c) or function( a )
-var regprocedureRegexp = regexp.MustCompile(`^\s*(\w+)\s*\((?:(?:\s*\w+\s*,)*\s*\w+)?\s*\)\s*$`)
+var regprocedureRegexp = regexp.MustCompile(`^\s*([\w\.]+)\s*\((?:(?:\s*\w+\s*,)*\s*\w+)?\s*\)\s*$`)
 
 // Eval implements the TypedExpr interface.
 func (expr *CastExpr) Eval(ctx *EvalContext) (Datum, error) {
@@ -2221,7 +2221,17 @@ func (expr *CastExpr) Eval(ctx *EvalContext) (Datum, error) {
 				// We additionally do not yet implement disambiguation based on type
 				// parameters: we return the match iff there is exactly one.
 				s = regprocedureRegexp.ReplaceAllString(s, "$1")
-				return queryOid(s, "pg_proc", "proname", "function")
+				// Resolve function name.
+				substrs := strings.Split(s, ".")
+				name := UnresolvedName{}
+				for _, substr := range substrs {
+					name = append(name, Name(substr))
+				}
+				funcDef, err := name.ResolveFunction(ctx.SearchPath)
+				if err != nil {
+					return nil, err
+				}
+				return queryOid(funcDef.Name, "pg_proc", "proname", "function")
 			case oidPseudoTypeRegNamespace:
 				return queryOid(s, "pg_namespace", "nspname", "namespace")
 			case oidPseudoTypeRegType:
