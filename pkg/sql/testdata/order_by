@@ -158,6 +158,19 @@ EXPLAIN SELECT b FROM t ORDER BY a DESC
 2           table  t@primary
 2           spans  ALL
 
+# Check that LIMIT propagates past nosort nodes.
+query ITTT
+EXPLAIN SELECT b FROM t ORDER BY a LIMIT 1
+----
+0  limit
+1  nosort
+1          order  +a
+2  render
+3  scan
+3          table  t@primary
+3          spans  ALL
+3          limit  1
+
 query ITTT
 EXPLAIN SELECT b FROM t ORDER BY a DESC, b ASC
 ----
