@@ -693,7 +693,7 @@ func (sc *SchemaChanger) backfillIndexesChunk(
 
 		// We manually invoke selectIndex() because for now expandPlan()
 		// can only do so itself when looking at a renderNode.
-		rows, err := selectIndex(scan, nil, false)
+		rows, err := planner.selectIndex(scan, nil, false)
 		if err != nil {
 			return err
 		}
