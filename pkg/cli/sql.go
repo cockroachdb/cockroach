@@ -399,23 +399,32 @@ func (c *cliState) doRefreshPrompts(nextState cliStateEnum) cliStateEnum {
 		return nextState
 	}
 
+	return c.refreshTransactionStatus(nextState)
+}
+
+// refreshTransactionStatus retrieves and sets the current transaction status.
+func (c *cliState) refreshTransactionStatus(nextState cliStateEnum) cliStateEnum {
 	// Query the server for the current transaction status.
 	query := makeQuery(`SHOW TRANSACTION STATUS`)
 	rows, err := query(c.conn)
 	if err != nil {
-		return c.refreshPrompts(" ?", nextState)
+		fmt.Fprintf(osStderr, "error retrieving the transaction status: %v", err)
+		return c.refreshDatabaseName(" ?", nextState)
 	}
+	defer func() { _ = rows.Close() }()
+
 	if len(rows.Columns()) == 0 {
 		fmt.Fprintf(osStderr, "invalid transaction status\n")
-		return c.refreshPrompts(" ?", nextState)
+		return c.refreshDatabaseName(" ?", nextState)
 	}
+
 	val := make([]driver.Value, len(rows.Columns()))
 	err = rows.Next(val)
 	if err != nil {
 		fmt.Fprintf(osStderr, "invalid transaction status: %v\n", err)
-		return c.refreshPrompts(" ?", nextState)
+		return c.refreshDatabaseName(" ?", nextState)
 	}
-	txnString := formatVal(val[0], false, false)
+	txnString := formatVal(val[0], false /* showPrintableUnicode */, false /* shownewLinesAndTabs */)
 
 	// Change the prompt based on the response from the server.
 	promptSuffix := " ?"
@@ -431,13 +440,47 @@ func (c *cliState) doRefreshPrompts(nextState cliStateEnum) cliStateEnum {
 	case sql.Open.String():
 		promptSuffix = "  OPEN"
 	}
-	return c.refreshPrompts(promptSuffix, nextState)
+
+	return c.refreshDatabaseName(promptSuffix, nextState)
+}
+
+// refreshDatabaseName retrieves the current database name from the server.
+// The database name is only queried if there is no transaction ongoing,
+// or the transaction is fully open.
+func (c *cliState) refreshDatabaseName(txnStatus string, nextState cliStateEnum) cliStateEnum {
+	if !(txnStatus == "" /*NoTxn*/ || txnStatus == "  OPEN") {
+		return c.refreshPrompts(txnStatus, nextState)
+	}
+
+	var dbVals [1]driver.Value
+
+	query := makeQuery(`SHOW DATABASE`)
+	rows, err := query(c.conn)
+	if err != nil {
+		fmt.Fprintf(osStderr, "error retrieving the database name: %v", err)
+		return c.refreshPrompts(txnStatus, nextState)
+	}
+	defer func() { _ = rows.Close() }()
+
+	if len(rows.Columns()) == 0 {
+		fmt.Fprintf(osStderr, "cannot get the database name")
+		return c.refreshPrompts(txnStatus, nextState)
+	}
+
+	err = rows.Next(dbVals[:])
+	if err != nil {
+		return c.refreshPrompts(txnStatus, nextState)
+	}
+
+	dbName := formatVal(dbVals[0].(string), false /* showPrintableUnicode */, false /* shownewLinesAndTabs */)
+	return c.refreshPrompts("/"+dbName+txnStatus, nextState)
 }
 
 func (c *cliState) refreshPrompts(promptSuffix string, nextState cliStateEnum) cliStateEnum {
 	c.fullPrompt = c.promptPrefix + promptSuffix
 	c.continuePrompt = strings.Repeat(" ", len(c.fullPrompt)-1) + "-> "
 	c.fullPrompt += "> "
+
 	return nextState
 }
 
