@@ -1300,10 +1300,10 @@ func (e *Executor) execClassic(planMaker *planner, plan planNode, result *Result
 
 // shouldUseDistSQL determines whether we should use DistSQL for a plan, based
 // on the session settings.
-func (e *Executor) shouldUseDistSQL(session *Session, plan planNode) (bool, error) {
+func (e *Executor) shouldUseDistSQL(planMaker *planner, plan planNode) (bool, error) {
 	distSQLMode := defaultDistSQLMode
-	if session.DistSQLMode != distSQLOff {
-		distSQLMode = session.DistSQLMode
+	if planMaker.session.DistSQLMode != distSQLOff {
+		distSQLMode = planMaker.session.DistSQLMode
 	}
 
 	if distSQLMode == distSQLOff {
@@ -1314,19 +1314,29 @@ func (e *Executor) shouldUseDistSQL(session *Session, plan planNode) (bool, erro
 		return false, nil
 	}
 
-	distribute, err := e.distSQLPlanner.CheckSupport(plan)
+	var err error
+
+	// Temporary workaround for #13376: if the transaction modified something,
+	// TxnCoordSender will freak out if it sees scans in this txn from other
+	// nodes. We detect this by checking if the transaction's "anchor" key is set.
+	if planMaker.txn.Proto.TxnMeta.Key != nil {
+		err = errors.New("writing txn")
+	} else {
+		distribute, err = e.distSQLPlanner.CheckSupport(plan)
+	}
+
 	if err != nil {
 		// If the distSQLMode is ALWAYS, any unsupported statement is an error.
 		if distSQLMode == distSQLAlways {
 			return false, err
 		}
 		// Don't use distSQL for this request.
-		log.VEventf(session.Ctx(), 1, "query not supported for distSQL: %s", err)
+		log.VEventf(planMaker.session.Ctx(), 1, "query not supported for distSQL: %s", err)
 		return false, nil
 	}
 
 	if distSQLMode == distSQLAuto && !distribute {
-		log.VEventf(session.Ctx(), 1, "not distributing query")
+		log.VEventf(planMaker.session.Ctx(), 1, "not distributing query")
 		return false, nil
 	}
 
@@ -1360,7 +1370,7 @@ func (e *Executor) execStmt(
 		result.Rows = NewRowContainer(planMaker.session.makeBoundAccount(), result.Columns, 0)
 	}
 
-	useDistSQL, err := e.shouldUseDistSQL(planMaker.session, plan)
+	useDistSQL, err := e.shouldUseDistSQL(planMaker, plan)
 	if err != nil {
 		return result, err
 	}
