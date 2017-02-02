@@ -1807,7 +1807,7 @@ func (dsp *distSQLPlanner) PlanAndRun(
 
 	planCtx := planningCtx{
 		ctx:           ctx,
-		spanIter:      dsp.spanResolver.NewSpanResolverIterator(),
+		spanIter:      dsp.spanResolver.NewSpanResolverIterator(txn),
 		nodeAddresses: make(map[roachpb.NodeID]string),
 	}
 	thisNodeID := dsp.nodeDesc.NodeID
