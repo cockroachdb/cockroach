@@ -28,6 +28,10 @@ import (
 
 func TestTimedMutex(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer func(orig bool) {
+		enableTimedMutex = orig
+	}(enableTimedMutex)
+	enableTimedMutex = true
 
 	var msgs []string
 
