@@ -80,6 +80,12 @@ var (
 	// localStoreGossipSuffix stores gossip bootstrap metadata for this
 	// store, updated any time new gossip hosts are encountered.
 	localStoreGossipSuffix = []byte("goss")
+	// localStoreLastUpSuffix stores the last timestamp that a store's node
+	// acknowledged that it was still running. This value will be regularly
+	// refreshed on all stores for a running node; the intention of this value
+	// is to allow a restarting node to discover approximately how long it has
+	// been down without needing to retrieve liveness records from the cluster.
+	localStoreLastUpSuffix = []byte("uptm")
 
 	// LocalRangeIDPrefix is the prefix identifying per-range data
 	// indexed by Range ID. The Range ID is appended to this prefix,
