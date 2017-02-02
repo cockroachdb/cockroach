@@ -3842,20 +3842,6 @@ func (r *Replica) applyRaftCommand(
 func (r *Replica) applyRaftCommandInBatch(
 	ctx context.Context, idKey storagebase.CmdIDKey, ba roachpb.BatchRequest,
 ) EvalResult {
-	// Check whether this txn has been aborted. Only applies to transactional
-	// requests which write intents (for example HeartbeatTxn does not get
-	// hindered by this).
-	if ba.Txn != nil && ba.IsTransactionWrite() {
-		// TODO(tschottdorf): confusing and potentially incorrect use of
-		// r.store.Engine() here (likely OK with proposer-evaluated KV,
-		// though still confusing).
-		if pErr := r.checkIfTxnAborted(ctx, r.store.Engine(), *ba.Txn); pErr != nil {
-			var result EvalResult
-			result.Local.Err = pErr
-			return result
-		}
-	}
-
 	// Keep track of original txn Writing state to sanitize txn
 	// reported with any error except TransactionRetryError.
 	wasWriting := ba.Txn != nil && ba.Txn.Writing
@@ -3874,6 +3860,9 @@ func (r *Replica) applyRaftCommandInBatch(
 		result.Replicated.Delta = ms
 		result.Local.Reply = br
 		result.Local.Err = pErr
+		if btch == nil {
+			return result
+		}
 	}
 
 	if result.Local.Err != nil && ba.IsWrite() {
@@ -3968,11 +3957,23 @@ type intentsWithArg struct {
 func (r *Replica) executeWriteBatch(
 	ctx context.Context, idKey storagebase.CmdIDKey, ba roachpb.BatchRequest,
 ) (engine.Batch, enginepb.MVCCStats, *roachpb.BatchResponse, EvalResult, *roachpb.Error) {
-	batch := r.store.Engine().NewBatch()
 	ms := enginepb.MVCCStats{}
 	// If not transactional or there are indications that the batch's txn
 	// will require restart or retry, execute as normal.
 	if r.store.TestingKnobs().DisableOnePhaseCommits || !isOnePhaseCommit(ba) {
+		// Check whether this txn has been aborted. Only applies to transactional
+		// requests which write intents (for example HeartbeatTxn does not get
+		// hindered by this).
+		if ba.Txn != nil && ba.IsTransactionWrite() {
+			// TODO(tschottdorf): confusing and potentially incorrect use of
+			// r.store.Engine() here (likely OK with proposer-evaluated KV,
+			// though still confusing).
+			if pErr := r.checkIfTxnAborted(ctx, r.store.Engine(), *ba.Txn); pErr != nil {
+				return nil, ms, nil, EvalResult{}, pErr
+			}
+		}
+
+		batch := r.store.Engine().NewBatch()
 		br, result, pErr := r.executeBatch(ctx, idKey, batch, &ms, ba)
 		return batch, ms, br, result, pErr
 	}
@@ -3983,6 +3984,7 @@ func (r *Replica) executeWriteBatch(
 	strippedBa.Requests = ba.Requests[1 : len(ba.Requests)-1] // strip begin/end txn reqs
 
 	// If all writes occurred at the intended timestamp, we've succeeded on the fast path.
+	batch := r.store.Engine().NewBatch()
 	br, result, pErr := r.executeBatch(ctx, idKey, batch, &ms, strippedBa)
 	if pErr == nil && ba.Timestamp == br.Timestamp {
 		clonedTxn := ba.Txn.Clone()
@@ -4015,11 +4017,25 @@ func (r *Replica) executeWriteBatch(
 		return batch, ms, br, result, nil
 	}
 
+	log.VEventf(ctx, 2, "1PC execution failed, reverting to regular execution for batch")
+
 	batch.Close()
-	batch = r.store.Engine().NewBatch()
-	log.VEventf(ctx, 2, "1PC execution failed, reverting to regular execution for "+
-		"batch: %s", batch)
 	ms = enginepb.MVCCStats{}
+
+	// Check whether this txn has been aborted. Only applies to transactional
+	// requests which write intents (for example HeartbeatTxn does not get
+	// hindered by this). Note that we don't do this check for 1PC transactions
+	// that never write a transaction record.
+	if ba.Txn != nil && ba.IsTransactionWrite() {
+		// TODO(tschottdorf): confusing and potentially incorrect use of
+		// r.store.Engine() here (likely OK with proposer-evaluated KV,
+		// though still confusing).
+		if pErr := r.checkIfTxnAborted(ctx, r.store.Engine(), *ba.Txn); pErr != nil {
+			return nil, ms, nil, EvalResult{}, pErr
+		}
+	}
+
+	batch = r.store.Engine().NewBatch()
 	br, result, pErr = r.executeBatch(ctx, idKey, batch, &ms, ba)
 	return batch, ms, br, result, pErr
 }
