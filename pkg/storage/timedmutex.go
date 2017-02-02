@@ -12,7 +12,7 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package syncutil
+package storage
 
 import (
 	"runtime"
@@ -20,35 +20,41 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+
 	"golang.org/x/net/context"
 )
 
-// TimedMutex is a mutex which dumps a stack trace via the supplied callback
+var disableTimedMutex = envutil.EnvOrDefaultBool("COCKROACH_DISABLE_TIMED_MUTEX", false)
+
+// timedMutex is a mutex which dumps a stack trace via the supplied callback
 // whenever a lock is unlocked after having been held for longer than the
 // supplied duration, which must be strictly positive.
-type TimedMutex struct {
-	mu       *Mutex    // intentionally pointer to make zero value unusable
-	lockedAt time.Time // protected by mu
-	isLocked int32     // updated atomically
+type timedMutex struct {
+	mu       *syncutil.Mutex // intentionally pointer to make zero value unusable
+	lockedAt time.Time       // protected by mu
+	isLocked int32           // updated atomically
 
 	// Non-mutable fields.
-	cb TimingFn
+	cb timingFn
 }
 
-// TimingFn is a callback passed to MakeTimedMutex. It is invoked with the
+// timingFn is a callback passed to MakeTimedMutex. It is invoked with the
 // measured duration of the critical section of the associated mutex after
 // each Unlock operation.
-type TimingFn func(heldFor time.Duration)
+type timingFn func(heldFor time.Duration)
 
-// ThresholdLogger returns a timing function which calls 'record' for each
+// thresholdLogger returns a timing function which calls 'record' for each
 // measured duration and, for measurements exceeding 'warnDuration', invokes
 // 'printf' with the passed context and a detailed stack trace.
-func ThresholdLogger(
+func thresholdLogger(
 	ctx context.Context,
 	warnDuration time.Duration,
 	printf func(context.Context, string, ...interface{}),
-	record TimingFn,
-) TimingFn {
+	record timingFn,
+) timingFn {
 	return func(heldFor time.Duration) {
 		record(heldFor)
 		if heldFor > warnDuration {
@@ -70,31 +76,34 @@ func ThresholdLogger(
 	}
 }
 
-// MakeTimedMutex creates a TimedMutex which warns when an Unlock happens more
-// than warnDuration after the corresponding lock. It will use the supplied
-// context and logging callback for the warning message; a nil logger falls
-// back to Fprintf to os.Stderr.
-func MakeTimedMutex(cb TimingFn) TimedMutex {
-	return TimedMutex{
+// makeTimedMutex creates a TimedMutex which warns when an Unlock happens more
+// than warnDuration after the corresponding lock. If non-nil, it will invoke
+// the supplied timingFn callback after each unlock with the elapsed time that
+// the mutex was held for.
+func makeTimedMutex(cb timingFn) timedMutex {
+	if disableTimedMutex {
+		cb = nil
+	}
+	return timedMutex{
 		cb: cb,
-		mu: &Mutex{},
+		mu: &syncutil.Mutex{},
 	}
 }
 
 // Lock implements sync.Locker.
-func (tm *TimedMutex) Lock() {
+func (tm *timedMutex) Lock() {
 	tm.mu.Lock()
 	atomic.StoreInt32(&tm.isLocked, 1)
-	tm.lockedAt = time.Now()
+	tm.lockedAt = timeutil.Now()
 }
 
 // Unlock implements sync.Locker.
-func (tm *TimedMutex) Unlock() {
+func (tm *timedMutex) Unlock() {
 	lockedAt := tm.lockedAt
 	atomic.StoreInt32(&tm.isLocked, 0)
 	tm.mu.Unlock()
 	if tm.cb != nil {
-		tm.cb(time.Since(lockedAt))
+		tm.cb(timeutil.Since(lockedAt))
 	}
 }
 
@@ -110,7 +119,7 @@ func (tm *TimedMutex) Unlock() {
 //
 // TODO(bdarnell): Add an equivalent method to syncutil.Mutex
 // (possibly a no-op depending on a build tag)
-func (tm *TimedMutex) AssertHeld() {
+func (tm *timedMutex) AssertHeld() {
 	isLocked := atomic.LoadInt32(&tm.isLocked)
 	if isLocked == 0 {
 		panic("mutex is not locked")
