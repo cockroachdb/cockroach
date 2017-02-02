@@ -4534,12 +4534,12 @@ func verifyRangeStats(eng engine.Reader, rangeID roachpb.RangeID, expMS enginepb
 	return nil
 }
 
-// TestReplicaStatsComputation verifies that commands executed against a
+// TestRangeStatsComputation verifies that commands executed against a
 // range update the range stat counters. The stat values are
 // empirically derived; we're really just testing that they increment
 // in the right ways, not the exact amounts. If the encodings change,
 // will need to update this test.
-func TestReplicaStatsComputation(t *testing.T) {
+func TestRangeStatsComputation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	tc := testContext{
 		bootstrapMode: bootstrapRangeOnly,
