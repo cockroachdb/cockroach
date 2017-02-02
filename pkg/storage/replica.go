@@ -1941,10 +1941,15 @@ func (r *Replica) addReadOnlyCmd(
 	var result EvalResult
 	br, result, pErr = r.executeBatch(ctx, storagebase.CmdIDKey(""), r.store.Engine(), nil, ba)
 
-	if pErr == nil && ba.Txn != nil {
-		// Checking whether the transaction has been aborted on reads
-		// makes sure that we don't experience anomalous conditions as
-		// described in #2231.
+	if pErr == nil && ba.Txn != nil && ba.Txn.Writing {
+		// Checking whether the transaction has been aborted on reads makes sure
+		// that we don't experience anomalous conditions as described in #2231. We
+		// only perform this check for transactional reads in which the transaction
+		// has written a transaction record (Txn.Writing is true). The anomalous
+		// condition being avoided is for an aborted transaction to continue
+		// successfully performing reads. Note that this check doesn't completely
+		// avoid that behavior because we only detect the aborted transaction if
+		// this read is to a range that previously had a write.
 		pErr = r.checkIfTxnAborted(ctx, r.store.Engine(), *ba.Txn)
 	}
 	if intents := result.Local.detachIntents(); len(intents) > 0 {
