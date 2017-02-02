@@ -7260,3 +7260,92 @@ func TestCancelPendingCommands(t *testing.T) {
 		t.Errorf("expected AmbiguousResultError, got %v", pErr)
 	}
 }
+
+func TestMakeTimestampCacheRequest(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	a := roachpb.Key("a")
+	b := roachpb.Key("b")
+	c := roachpb.Key("c")
+	ac := roachpb.Span{Key: a, EndKey: c}
+	testCases := []struct {
+		maxKeys  int64
+		req      roachpb.Request
+		resp     roachpb.Response
+		expected cacheRequest
+	}{
+		{
+			0,
+			&roachpb.ScanRequest{Span: ac},
+			&roachpb.ScanResponse{},
+			cacheRequest{reads: []roachpb.Span{ac}},
+		},
+		{
+			0,
+			&roachpb.ScanRequest{Span: ac},
+			&roachpb.ScanResponse{Rows: []roachpb.KeyValue{{Key: a}}},
+			cacheRequest{reads: []roachpb.Span{ac}},
+		},
+		{
+			2,
+			&roachpb.ScanRequest{Span: ac},
+			&roachpb.ScanResponse{},
+			cacheRequest{reads: []roachpb.Span{ac}},
+		},
+		{
+			2,
+			&roachpb.ScanRequest{Span: ac},
+			&roachpb.ScanResponse{Rows: []roachpb.KeyValue{{Key: a}}},
+			cacheRequest{reads: []roachpb.Span{ac}},
+		},
+		{
+			2,
+			&roachpb.ScanRequest{Span: ac},
+			&roachpb.ScanResponse{Rows: []roachpb.KeyValue{{Key: a}, {Key: b}}},
+			cacheRequest{reads: []roachpb.Span{{Key: a, EndKey: b.Next()}}},
+		},
+		{
+			0,
+			&roachpb.ReverseScanRequest{Span: ac},
+			&roachpb.ReverseScanResponse{},
+			cacheRequest{reads: []roachpb.Span{ac}},
+		},
+		{
+			0,
+			&roachpb.ReverseScanRequest{Span: ac},
+			&roachpb.ReverseScanResponse{Rows: []roachpb.KeyValue{{Key: a}}},
+			cacheRequest{reads: []roachpb.Span{ac}},
+		},
+		{
+			2,
+			&roachpb.ReverseScanRequest{Span: ac},
+			&roachpb.ReverseScanResponse{},
+			cacheRequest{reads: []roachpb.Span{ac}},
+		},
+		{
+			2,
+			&roachpb.ReverseScanRequest{Span: ac},
+			&roachpb.ReverseScanResponse{Rows: []roachpb.KeyValue{{Key: a}}},
+			cacheRequest{reads: []roachpb.Span{ac}},
+		},
+		{
+			2,
+			&roachpb.ReverseScanRequest{Span: ac},
+			&roachpb.ReverseScanResponse{Rows: []roachpb.KeyValue{{Key: c}, {Key: b}}},
+			cacheRequest{reads: []roachpb.Span{{Key: b, EndKey: c}}},
+		},
+	}
+	for _, c := range testCases {
+		t.Run("", func(t *testing.T) {
+			var ba roachpb.BatchRequest
+			var br roachpb.BatchResponse
+			ba.Header.MaxSpanRequestKeys = c.maxKeys
+			ba.Add(c.req)
+			br.Add(c.resp)
+			cr := makeCacheRequest(&ba, &br)
+			if !reflect.DeepEqual(c.expected, cr) {
+				t.Fatalf("%s", pretty.Diff(c.expected, cr))
+			}
+		})
+	}
+}

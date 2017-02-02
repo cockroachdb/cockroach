@@ -1500,38 +1500,68 @@ func (ec *endCmds) doneLocked(
 	// marked as affecting the cache are processed. Inconsistent reads
 	// are excluded.
 	if pErr == nil && retry == proposalNoRetry && ec.ba.ReadConsistency != roachpb.INCONSISTENT {
-		cr := cacheRequest{
-			timestamp: ec.ba.Timestamp,
-			txnID:     ec.ba.GetTxnID(),
-		}
-
-		for _, union := range ec.ba.Requests {
-			args := union.GetInner()
-			if updatesTimestampCache(args) {
-				header := args.Header()
-				switch args.(type) {
-				case *roachpb.DeleteRangeRequest:
-					// DeleteRange adds to the write timestamp cache to prevent
-					// subsequent writes from rewriting history.
-					cr.writes = append(cr.writes, header)
-				case *roachpb.EndTransactionRequest:
-					// EndTransaction adds to the write timestamp cache to ensure replays
-					// create a transaction record with WriteTooOld set.
-					key := keys.TransactionKey(header.Key, *cr.txnID)
-					cr.txn = roachpb.Span{Key: key}
-				default:
-					cr.reads = append(cr.reads, header)
-				}
-			}
-		}
-
-		ec.repl.mu.tsCache.AddRequest(cr)
+		ec.repl.mu.tsCache.AddRequest(makeCacheRequest(&ec.ba, br))
 	}
 
 	ec.repl.cmdQMu.Lock()
 	ec.repl.cmdQMu.global.remove(ec.cmdGlobal)
 	ec.repl.cmdQMu.local.remove(ec.cmdLocal)
 	ec.repl.cmdQMu.Unlock()
+}
+
+func makeCacheRequest(ba *roachpb.BatchRequest, br *roachpb.BatchResponse) cacheRequest {
+	cr := cacheRequest{
+		timestamp: ba.Timestamp,
+		txnID:     ba.GetTxnID(),
+	}
+
+	for i, union := range ba.Requests {
+		args := union.GetInner()
+		if updatesTimestampCache(args) {
+			header := args.Header()
+			switch args.(type) {
+			case *roachpb.DeleteRangeRequest:
+				// DeleteRange adds to the write timestamp cache to prevent
+				// subsequent writes from rewriting history.
+				cr.writes = append(cr.writes, header)
+			case *roachpb.EndTransactionRequest:
+				// EndTransaction adds to the write timestamp cache to ensure replays
+				// create a transaction record with WriteTooOld set.
+				key := keys.TransactionKey(header.Key, *cr.txnID)
+				cr.txn = roachpb.Span{Key: key}
+			case *roachpb.ScanRequest:
+				resp := br.Responses[i].GetInner().(*roachpb.ScanResponse)
+				if ba.Header.MaxSpanRequestKeys != 0 &&
+					ba.Header.MaxSpanRequestKeys == int64(len(resp.Rows)) {
+					// If the scan requested a limited number of results and we hit the
+					// limit, truncate the span of keys to add to the timestamp cache
+					// to those that were returned.
+					//
+					// NB: We need to include any key read by the operation, even if
+					// not returned, in the span added to the timestamp cache in order
+					// to prevent phantom read anomalies. That means we can only
+					// perform this truncate if the scan requested a limited number of
+					// results and we hit that limit.
+					header.EndKey = resp.Rows[len(resp.Rows)-1].Key.Next()
+				}
+				cr.reads = append(cr.reads, header)
+			case *roachpb.ReverseScanRequest:
+				resp := br.Responses[i].GetInner().(*roachpb.ReverseScanResponse)
+				if ba.Header.MaxSpanRequestKeys != 0 &&
+					ba.Header.MaxSpanRequestKeys == int64(len(resp.Rows)) {
+					// See comment in the ScanRequest case. For revert scans, results
+					// are returned in reverse order and we truncate the start key of
+					// the span.
+					header.Key = resp.Rows[len(resp.Rows)-1].Key
+				}
+				cr.reads = append(cr.reads, header)
+			default:
+				cr.reads = append(cr.reads, header)
+			}
+		}
+	}
+
+	return cr
 }
 
 // beginCmds waits for any overlapping, already-executing commands via
