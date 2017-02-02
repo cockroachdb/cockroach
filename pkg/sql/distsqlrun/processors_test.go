@@ -155,6 +155,77 @@ func TestPostProcess(t *testing.T) {
 				/* 2 3 4 */ "[-1 14 true true true true]",
 			}, " ") + "]",
 		},
+
+		// Offset.
+		{
+			post:          PostProcessSpec{Offset: 3},
+			expNeededCols: []int{0, 1, 2},
+			expected:      "[[0 2 3] [0 2 4] [0 3 4] [1 2 3] [1 2 4] [1 3 4] [2 3 4]]",
+		},
+
+		// Limit.
+		{
+			post:          PostProcessSpec{Limit: 3},
+			expNeededCols: []int{0, 1, 2},
+			expected:      "[[0 1 2] [0 1 3] [0 1 4]]",
+		},
+		{
+			post:          PostProcessSpec{Limit: 9},
+			expNeededCols: []int{0, 1, 2},
+			expected:      "[[0 1 2] [0 1 3] [0 1 4] [0 2 3] [0 2 4] [0 3 4] [1 2 3] [1 2 4] [1 3 4]]",
+		},
+		{
+			post:          PostProcessSpec{Limit: 10},
+			expNeededCols: []int{0, 1, 2},
+			expected:      "[[0 1 2] [0 1 3] [0 1 4] [0 2 3] [0 2 4] [0 3 4] [1 2 3] [1 2 4] [1 3 4] [2 3 4]]",
+		},
+		{
+			post:          PostProcessSpec{Limit: 11},
+			expNeededCols: []int{0, 1, 2},
+			expected:      "[[0 1 2] [0 1 3] [0 1 4] [0 2 3] [0 2 4] [0 3 4] [1 2 3] [1 2 4] [1 3 4] [2 3 4]]",
+		},
+
+		// Offset + limit.
+		{
+			post:          PostProcessSpec{Offset: 3, Limit: 2},
+			expNeededCols: []int{0, 1, 2},
+			expected:      "[[0 2 3] [0 2 4]]",
+		},
+		{
+			post:          PostProcessSpec{Offset: 3, Limit: 6},
+			expNeededCols: []int{0, 1, 2},
+			expected:      "[[0 2 3] [0 2 4] [0 3 4] [1 2 3] [1 2 4] [1 3 4]]",
+		},
+		{
+			post:          PostProcessSpec{Offset: 3, Limit: 7},
+			expNeededCols: []int{0, 1, 2},
+			expected:      "[[0 2 3] [0 2 4] [0 3 4] [1 2 3] [1 2 4] [1 3 4] [2 3 4]]",
+		},
+		{
+			post:          PostProcessSpec{Offset: 3, Limit: 8},
+			expNeededCols: []int{0, 1, 2},
+			expected:      "[[0 2 3] [0 2 4] [0 3 4] [1 2 3] [1 2 4] [1 3 4] [2 3 4]]",
+		},
+
+		// Filter + offset.
+		{
+			post: PostProcessSpec{
+				Filter: Expression{Expr: "@1 = 1"},
+				Offset: 1,
+			},
+			expNeededCols: []int{0, 1, 2},
+			expected:      "[[1 2 4] [1 3 4]]",
+		},
+
+		// Filter + limit.
+		{
+			post: PostProcessSpec{
+				Filter: Expression{Expr: "@1 = 1"},
+				Limit:  2,
+			},
+			expNeededCols: []int{0, 1, 2},
+			expected:      "[[1 2 3] [1 2 4]]",
+		},
 	}
 
 	for tcIdx, tc := range testCases {
@@ -184,7 +255,7 @@ func TestPostProcess(t *testing.T) {
 			// Run the rows through the helper.
 			for i := range input {
 				if !out.emitRow(context.TODO(), input[i]) {
-					t.Error("emitRow returned false")
+					break
 				}
 			}
 			if outBuf.Err != nil {
