@@ -54,8 +54,13 @@ const makeTargetEnv = "TARGET"
 //
 // It is a Test (say) if there is a character after Test that is not a lower-case letter.
 // We don't want TesticularCancer.
-var newGoTestRE = regexp.MustCompile(`^\+\s*func (Test[^a-z]\w*)\(.*\*testing\.TB?\) {$`)
-var newGoBenchmarkRE = regexp.MustCompile(`^\+\s*func (Benchmark[^a-z]\w*)\(.*\*testing\.T?B\) {$`)
+const goTestStr = `func (Test[^a-z]\w*)\(.*\*testing\.TB?\) {$`
+const goBenchmarkStr = `func (Benchmark[^a-z]\w*)\(.*\*testing\.T?B\) {$`
+
+var currentGoTestRE = regexp.MustCompile(`.*` + goTestStr)
+var currentGoBenchmarkRE = regexp.MustCompile(`.*` + goBenchmarkStr)
+var newGoTestRE = regexp.MustCompile(`^\+\s*` + goTestStr)
+var newGoBenchmarkRE = regexp.MustCompile(`^\+\s*` + goBenchmarkStr)
 
 type pkg struct {
 	tests, benchmarks []string
@@ -70,6 +75,8 @@ func pkgsFromDiff(r io.Reader) (map[string]pkg, error) {
 	pkgs := make(map[string]pkg)
 
 	var curPkgName string
+	var curTestName string
+	var curBenchmarkName string
 	var inPrefix bool
 	for reader := bufio.NewReader(r); ; {
 		line, isPrefix, err := reader.ReadLine()
@@ -100,6 +107,23 @@ func pkgsFromDiff(r io.Reader) (map[string]pkg, error) {
 			curPkg := pkgs[curPkgName]
 			curPkg.benchmarks = append(curPkg.benchmarks, string(newGoBenchmarkRE.ReplaceAll(line, []byte(replacement))))
 			pkgs[curPkgName] = curPkg
+		case currentGoTestRE.Match(line):
+			curTestName = string(currentGoTestRE.ReplaceAll(line, []byte(replacement)))
+			curBenchmarkName = ""
+		case currentGoBenchmarkRE.Match(line):
+			curBenchmarkName = string(currentGoBenchmarkRE.ReplaceAll(line, []byte(replacement)))
+			curTestName = ""
+		case bytes.HasPrefix(line, []byte{'-'}) && bytes.Contains(line, []byte(".Skip")):
+			switch {
+			case len(curTestName) > 0:
+				curPkg := pkgs[curPkgName]
+				curPkg.tests = append(curPkg.tests, curTestName)
+				pkgs[curPkgName] = curPkg
+			case len(curBenchmarkName) > 0:
+				curPkg := pkgs[curPkgName]
+				curPkg.benchmarks = append(curPkg.benchmarks, curBenchmarkName)
+				pkgs[curPkgName] = curPkg
+			}
 		}
 	}
 }
