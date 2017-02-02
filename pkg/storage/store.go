@@ -2433,10 +2433,7 @@ func (s *Store) Send(
 	}
 
 	// Add the command to the range for execution; exit retry loop on success.
-	s.mu.Lock()
-	retryOpts := s.cfg.RangeRetryOptions
-	s.mu.Unlock()
-	for r := retry.StartWithCtx(ctx, retryOpts); next(&r); {
+	for r := retry.StartWithCtx(ctx, s.cfg.RangeRetryOptions); next(&r); {
 		// Get range and add command to the range for execution.
 		repl, err := s.GetReplica(ba.RangeID)
 		if err != nil {
