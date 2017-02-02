@@ -112,11 +112,16 @@ RUN apt-get autoremove -y g++
 
 # Install an msan-enabled build of libc++, following instructions from
 # https://github.com/google/sanitizers/wiki/MemorySanitizerLibcxxHowTo
-
+#
+# Note that this is done before CC and CXX are set below because our cross
+# compilers are too old to build libc++.
 RUN mkdir llvm                    && curl -sfSL http://releases.llvm.org/3.9.1/llvm-3.9.1.src.tar.xz      | tar --strip-components=1 -C llvm -xJ \
  && mkdir llvm/projects/libcxx    && curl -sfSL http://releases.llvm.org/3.9.1/libcxx-3.9.1.src.tar.xz    | tar --strip-components=1 -C llvm/projects/libcxx -xJ \
  && mkdir llvm/projects/libcxxabi && curl -sfSL http://releases.llvm.org/3.9.1/libcxxabi-3.9.1.src.tar.xz | tar --strip-components=1 -C llvm/projects/libcxxabi -xJ \
  && mkdir libcxx_msan && (cd libcxx_msan && cmake ../llvm -DCMAKE_BUILD_TYPE=Release -DLLVM_USE_SANITIZER=Memory && make cxx -j$(nproc))
+
+ENV CC  /x-tools/x86_64-unknown-linux-gnu/bin/x86_64-unknown-linux-gnu-gcc
+ENV CXX /x-tools/x86_64-unknown-linux-gnu/bin/x86_64-unknown-linux-gnu-g++
 
 # BEGIN https://github.com/docker-library/golang/blob/master/1.7/alpine/Dockerfile
 

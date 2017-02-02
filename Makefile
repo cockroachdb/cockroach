@@ -72,10 +72,7 @@ endif
 export GIT_PAGER :=
 
 ifeq ($(TYPE),release)
-export CC  = /x-tools/x86_64-unknown-linux-gnu/bin/x86_64-unknown-linux-gnu-gcc
-export CXX = /x-tools/x86_64-unknown-linux-gnu/bin/x86_64-unknown-linux-gnu-g++
 override LDFLAGS += -linkmode external -extldflags "-static-libgcc -static-libstdc++" -X github.com/cockroachdb/cockroach/pkg/build.typ=release
-override GOFLAGS += -installsuffix release
 endif
 
 ifeq ($(TYPE),musl)
