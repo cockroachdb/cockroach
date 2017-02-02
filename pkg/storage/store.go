@@ -1517,6 +1517,40 @@ func (s *Store) Bootstrap(ident roachpb.StoreIdent) error {
 	return nil
 }
 
+// WriteLastUpTimestamp records the supplied timestamp into the "last up" key
+// on this store. This value should be refreshed whenever this store's node
+// updates its own liveness record; it is used by a restarting store to
+// determine the approximate time that it stopped.
+func (s *Store) WriteLastUpTimestamp(ctx context.Context, time hlc.Timestamp) error {
+	ctx = s.AnnotateCtx(ctx)
+	return engine.MVCCPutProto(
+		ctx,
+		s.engine,
+		nil,
+		keys.StoreLastUpKey(),
+		hlc.ZeroTimestamp,
+		nil,
+		&time,
+	)
+}
+
+// ReadLastUpTimestamp returns the "last up" timestamp recorded in this store.
+// This value can be used to approximate the last time the engine was was being
+// served as a store by a running node. If the store does not contain a "last
+// up" timestamp (for example, on a newly bootstrapped store), the zero
+// timestamp is returned instead.
+func (s *Store) ReadLastUpTimestamp(ctx context.Context) (hlc.Timestamp, error) {
+	var timestamp hlc.Timestamp
+	ok, err := engine.MVCCGetProto(
+		ctx, s.Engine(), keys.StoreLastUpKey(), hlc.ZeroTimestamp, true, nil, &timestamp)
+	if err != nil {
+		return hlc.Timestamp{}, err
+	} else if !ok {
+		return hlc.ZeroTimestamp, nil
+	}
+	return timestamp, nil
+}
+
 func checkEngineEmpty(ctx context.Context, eng engine.Engine) error {
 	kvs, err := engine.Scan(
 		eng,
