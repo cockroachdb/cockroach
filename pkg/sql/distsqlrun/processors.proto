@@ -146,12 +146,13 @@ message TableReaderSpec {
   optional bool reverse = 3 [(gogoproto.nullable) = false];
   repeated TableReaderSpan spans = 4 [(gogoproto.nullable) = false];
 
-  // If nonzero, the table reader only needs to return this many rows.
-  optional int64 hard_limit = 8 [(gogoproto.nullable) = false];
-  // The soft limit is a hint for how many rows the consumer of the table reader
-  // output might need. If both the hard limit and the soft limit are set, the
-  // soft limit must be lower than the hard limit.
-  optional int64 soft_limit = 7 [(gogoproto.nullable) = false];
+  // A hint for how many rows the consumer of the table reader output might
+  // need. This is used to size the initial KV batches to try to avoid reading
+  // many more rows than needed by the processor receiving the output.
+  //
+  // Not used if there is a limit set in the PostProcessSpec of this processor
+  // (that value will be used for sizing batches instead).
+  optional int64 limit_hint = 5 [(gogoproto.nullable) = false];
 }
 
 // JoinReaderSpec is the specification for a "join reader". A join reader

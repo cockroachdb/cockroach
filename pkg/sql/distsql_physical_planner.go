@@ -514,10 +514,10 @@ func reverseProjection(outputColumns []uint32, indexVarMap []int) []int {
 // necessary.
 func (dsp *distSQLPlanner) addFilter(p *physicalPlan, expr parser.TypedExpr, indexVarMap []int) {
 	post := p.getLastStagePost()
-	if len(post.RenderExprs) > 0 {
-		// The last stage contains render expressions. The filter refers to the
-		// output of these, so we need to add another "no-op" stage to which to
-		// attach the filter.
+	if len(post.RenderExprs) > 0 || post.Offset != 0 || post.Limit != 0 {
+		// The last stage contains render expressions or a limit. The filter refers
+		// to the output as described by the existing spec, so we need to add
+		// another "no-op" stage to which to attach the filter.
 		post = distsqlrun.PostProcessSpec{}
 		dsp.addNoGroupingStage(
 			p,
@@ -624,9 +624,11 @@ func (dsp *distSQLPlanner) partitionSpans(
 	return splits, nil
 }
 
-// initTableReaderSpec initializes a TableReaderSpec that corresponds to a
-// scanNode, except for the Spans and OutputColumns.
-func initTableReaderSpec(n *scanNode) (distsqlrun.TableReaderSpec, error) {
+// initTableReaderSpec initializes a TableReaderSpec/PostProcessSpec that
+// corresponds to a scanNode, except for the Spans and OutputColumns.
+func initTableReaderSpec(
+	n *scanNode,
+) (distsqlrun.TableReaderSpec, distsqlrun.PostProcessSpec, error) {
 	s := distsqlrun.TableReaderSpec{
 		Table:   n.desc,
 		Reverse: n.reverse,
@@ -641,15 +643,20 @@ func initTableReaderSpec(n *scanNode) (distsqlrun.TableReaderSpec, error) {
 		}
 		if s.IndexIdx == 0 {
 			err := errors.Errorf("invalid scanNode index %v (table %s)", n.index, n.desc.Name)
-			return distsqlrun.TableReaderSpec{}, err
+			return distsqlrun.TableReaderSpec{}, distsqlrun.PostProcessSpec{}, err
 		}
 	}
-	if n.limitSoft {
-		s.SoftLimit = n.limitHint
-	} else {
-		s.HardLimit = n.limitHint
+
+	post := distsqlrun.PostProcessSpec{
+		Filter: distSQLExpression(n.filter, nil),
 	}
-	return s, nil
+
+	if n.hardLimit != 0 {
+		post.Limit = uint64(n.hardLimit)
+	} else if n.softLimit != 0 {
+		s.LimitHint = n.softLimit
+	}
+	return s, post, nil
 }
 
 // getOutputColumnsFromScanNode returns the indices of the columns that are
@@ -707,13 +714,9 @@ func (dsp *distSQLPlanner) convertOrdering(
 func (dsp *distSQLPlanner) createTableReaders(
 	planCtx *planningCtx, n *scanNode, overrideResultColumns []uint32,
 ) (physicalPlan, error) {
-	spec, err := initTableReaderSpec(n)
+	spec, post, err := initTableReaderSpec(n)
 	if err != nil {
 		return physicalPlan{}, err
-	}
-
-	post := distsqlrun.PostProcessSpec{
-		Filter: distSQLExpression(n.filter, nil),
 	}
 
 	if overrideResultColumns != nil {
