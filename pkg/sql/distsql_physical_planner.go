@@ -20,6 +20,7 @@ package sql
 import (
 	"bytes"
 	"fmt"
+	"math"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/gossip"
@@ -134,15 +135,41 @@ func (dsp *distSQLPlanner) checkExpr(expr parser.Expr) error {
 	return v.err
 }
 
+type distRecommendation int
+
+const (
+	// shouldNotDistribute indicates that a plan could suffer if run
+	// under DistSQL
+	shouldNotDistribute distRecommendation = iota
+
+	// canDistribute indicates that a plan will probably not benefit but will
+	// probably not suffer if run under DistSQL.
+	canDistribute
+
+	// shouldDistribute indicates that a plan will likely benefit if run under
+	// DistSQL.
+	shouldDistribute
+)
+
+func (a distRecommendation) compose(b distRecommendation) distRecommendation {
+	if a == shouldNotDistribute || b == shouldNotDistribute {
+		return shouldNotDistribute
+	}
+	if a == shouldDistribute || b == shouldDistribute {
+		return shouldDistribute
+	}
+	return canDistribute
+}
+
 // CheckSupport looks at a planNode tree and decides:
 //  - whether DistSQL is equipped to handle the query (if not, an error is
 //    returned).
 //  - whether it is recommended that the query be run with DistSQL.
-func (dsp *distSQLPlanner) CheckSupport(tree planNode) (shouldRunDist bool, notSuppErr error) {
+func (dsp *distSQLPlanner) CheckSupport(tree planNode) (distRecommendation, error) {
 	switch n := tree.(type) {
 	case *filterNode:
 		if err := dsp.checkExpr(n.filter); err != nil {
-			return false, err
+			return 0, err
 		}
 		return dsp.CheckSupport(n.source.plan)
 
@@ -151,85 +178,105 @@ func (dsp *distSQLPlanner) CheckSupport(tree planNode) (shouldRunDist bool, notS
 			if typ := n.columns[i].Typ; typ.FamilyEqual(parser.TypeTuple) ||
 				typ.FamilyEqual(parser.TypeStringArray) ||
 				typ.FamilyEqual(parser.TypeIntArray) {
-				return false, errors.Errorf("unsupported render type %s", typ)
+				return 0, errors.Errorf("unsupported render type %s", typ)
 			}
 			if err := dsp.checkExpr(e); err != nil {
-				return false, err
+				return 0, err
 			}
 		}
 		return dsp.CheckSupport(n.source.plan)
 
 	case *sortNode:
-		shouldDistribute, err := dsp.CheckSupport(n.plan)
+		rec, err := dsp.CheckSupport(n.plan)
 		if err != nil {
-			return false, err
+			return 0, err
 		}
 		// If we have to sort, distribute the query.
-		return shouldDistribute || n.needSort, nil
+		if n.needSort {
+			rec = rec.compose(shouldDistribute)
+		}
+		return rec, nil
 
 	case *joinNode:
 		if n.joinType != joinTypeInner {
-			return false, errors.Errorf("only inner join supported")
+			return 0, errors.Errorf("only inner join supported")
 		}
 		if err := dsp.checkExpr(n.pred.onCond); err != nil {
-			return false, err
+			return 0, err
 		}
-		shouldRunDistLeft, err := dsp.CheckSupport(n.left.plan)
+		recLeft, err := dsp.CheckSupport(n.left.plan)
 		if err != nil {
-			return false, err
+			return 0, err
 		}
-		shouldRunDistRight, err := dsp.CheckSupport(n.right.plan)
+		recRight, err := dsp.CheckSupport(n.right.plan)
 		if err != nil {
-			return false, err
+			return 0, err
 		}
 		// If either the left or the right side can benefit from distribution, we
 		// should distribute.
-		shouldDistribute := shouldRunDistLeft || shouldRunDistRight
+		rec := recLeft.compose(recRight)
 		// If we can do a hash join, we should distribute.
-		shouldDistribute = shouldDistribute || len(n.pred.leftEqualityIndices) > 0
-		return shouldDistribute, nil
+		if len(n.pred.leftEqualityIndices) > 0 {
+			rec = rec.compose(shouldDistribute)
+		}
+		return rec, nil
 
 	case *scanNode:
+		rec := canDistribute
+		if n.limitHint != 0 {
+			// We don't yet recommend distributing plans where limits propagate
+			// to scan nodes.
+			rec = shouldNotDistribute
+		}
 		// We recommend running scans distributed if we have a filtering
 		// expression or if we have a full table scan.
 		if n.filter != nil {
 			if err := dsp.checkExpr(n.filter); err != nil {
-				return false, err
+				return 0, err
 			}
-			return true, nil
+			rec = rec.compose(shouldDistribute)
 		}
 		if len(n.spans) == 0 {
 			// No spans means we are doing a full table scan.
-			return true, nil
+			rec = rec.compose(shouldDistribute)
 		}
-		return false, nil
+		return rec, nil
 
 	case *indexJoinNode:
 		// n.table doesn't have meaningful spans, but we need to check support (e.g.
 		// for any filtering expression).
 		if _, err := dsp.CheckSupport(n.table); err != nil {
-			return false, err
+			return 0, err
 		}
 		return dsp.CheckSupport(n.index)
 
 	case *groupNode:
 		if n.having != nil {
-			return false, errors.Errorf("group with having not supported yet")
+			return 0, errors.Errorf("group with having not supported yet")
 		}
 		for _, fholder := range n.funcs {
 			if fholder.filter != nil {
-				return false, errors.Errorf("aggregation with FILTER not supported yet")
+				return 0, errors.Errorf("aggregation with FILTER not supported yet")
 			}
 			if f, ok := fholder.expr.(*parser.FuncExpr); ok {
 				if strings.ToUpper(f.Func.FunctionReference.String()) == "ARRAY_AGG" {
-					return false, errors.Errorf("ARRAY_AGG aggregation not supported yet")
+					return 0, errors.Errorf("ARRAY_AGG aggregation not supported yet")
 				}
 			}
 		}
 		return dsp.CheckSupport(n.plan)
 
+	case *limitNode:
+		if err := dsp.checkExpr(n.countExpr); err != nil {
+			return 0, err
+		}
+		if err := dsp.checkExpr(n.offsetExpr); err != nil {
+			return 0, err
+		}
+		return dsp.CheckSupport(n.plan)
+
 	default:
-		return false, errors.Errorf("unsupported node %T", tree)
+		return 0, errors.Errorf("unsupported node %T", tree)
 	}
 }
 
@@ -535,6 +582,99 @@ func (dsp *distSQLPlanner) addFilter(p *physicalPlan, expr parser.TypedExpr, ind
 	for _, pIdx := range p.resultRouters {
 		p.processors[pIdx].spec.Post.Filter = filter
 	}
+}
+
+// emptyPlan creates a plan with a single processor that generates no rows; the
+// output stream has the given types.
+func (dsp *distSQLPlanner) emptyPlan(types []sqlbase.ColumnType) physicalPlan {
+	s := distsqlrun.ValuesCoreSpec{
+		Columns: make([]distsqlrun.DatumInfo, len(types)),
+	}
+	for i, t := range types {
+		s.Columns[i].Encoding = sqlbase.DatumEncoding_VALUE
+		s.Columns[i].Type = t
+	}
+
+	return physicalPlan{
+		processors: []processor{{
+			node: dsp.nodeDesc.NodeID,
+			spec: distsqlrun.ProcessorSpec{
+				Core:   distsqlrun.ProcessorCoreUnion{Values: &s},
+				Output: make([]distsqlrun.OutputRouterSpec, 1),
+			},
+		}},
+		resultRouters: []processorIdx{0},
+		resultTypes:   types,
+	}
+}
+
+// addLimit adds a limit and/or offset to the results of the current plan. The
+// new plan will have a single processor producing results.
+//
+// For no limit, count should be MaxInt64.
+func (dsp *distSQLPlanner) addLimit(p *physicalPlan, count int64, offset int64) error {
+	if count < 0 {
+		return errors.Errorf("negative limit")
+	}
+	if offset < 0 {
+		return errors.Errorf("negative offset")
+	}
+	if count == 0 {
+		*p = dsp.emptyPlan(p.resultTypes)
+		return nil
+	}
+
+	if len(p.resultRouters) == 1 {
+		// We only have one processor producing results. Just update its PostProcessSpec.
+		post := p.getLastStagePost()
+		if offset != 0 {
+			if post.Limit > 0 && post.Limit <= uint64(offset) {
+				// The previous limit is not enough to reach the offset; we know there
+				// will be no results. For example:
+				//   SELECT * FROM (SELECT * FROM .. LIMIT 5) OFFSET 10
+				*p = dsp.emptyPlan(p.resultTypes)
+				return nil
+			}
+			post.Limit -= uint64(offset)
+			post.Offset += uint64(offset)
+		}
+		if count != math.MaxInt64 && (post.Limit == 0 || post.Limit > uint64(count)) {
+			post.Limit = uint64(count)
+		}
+		p.setLastStagePost(post, p.resultTypes)
+		return nil
+	}
+
+	// We have multiple processors producing results. We will add a single
+	// processor stage that limits. As an optimization, we can also set a
+	// "local" limit on each processor producing results.
+	if count != math.MaxInt64 {
+		post := p.getLastStagePost()
+		// If we have OFFSET 10 LIMIT 5, we may need as much as 15 rows from some
+		// processor.
+		localLimit := uint64(count + offset)
+		if post.Limit == 0 || post.Limit > localLimit {
+			post.Limit = localLimit
+			p.setLastStagePost(post, p.resultTypes)
+		}
+	}
+
+	post := distsqlrun.PostProcessSpec{
+		Offset: uint64(offset),
+	}
+	if count != math.MaxInt64 {
+		post.Limit = uint64(count)
+	}
+	dsp.addSingleGroupStage(
+		p,
+		dsp.nodeDesc.NodeID,
+		distsqlrun.ProcessorCoreUnion{
+			Noop: &distsqlrun.NoopCoreSpec{},
+		},
+		post,
+		p.resultTypes,
+	)
+	return nil
 }
 
 // spanPartition is the intersection between a set of spans for a certain
@@ -1559,6 +1699,19 @@ func (dsp *distSQLPlanner) createPlanForNode(
 
 		dsp.addFilter(&plan, n.filter, plan.planToStreamColMap)
 
+		return plan, nil
+
+	case *limitNode:
+		plan, err := dsp.createPlanForNode(planCtx, n.plan)
+		if err != nil {
+			return physicalPlan{}, err
+		}
+		if err := n.evalLimit(); err != nil {
+			return physicalPlan{}, err
+		}
+		if err := dsp.addLimit(&plan, n.count, n.offset); err != nil {
+			return physicalPlan{}, err
+		}
 		return plan, nil
 
 	default:

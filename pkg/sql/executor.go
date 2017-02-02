@@ -1305,7 +1305,7 @@ func (e *Executor) shouldUseDistSQL(session *Session, plan planNode) (bool, erro
 		return false, nil
 	}
 
-	shouldDistribute, err := e.distSQLPlanner.CheckSupport(plan)
+	rec, err := e.distSQLPlanner.CheckSupport(plan)
 	if err != nil {
 		// If the distSQLMode is ALWAYS, any unsupported statement is an error.
 		if distSQLMode == distSQLAlways {
@@ -1316,7 +1316,7 @@ func (e *Executor) shouldUseDistSQL(session *Session, plan planNode) (bool, erro
 		return false, nil
 	}
 
-	if distSQLMode == distSQLAuto && !shouldDistribute {
+	if distSQLMode == distSQLAuto && rec != shouldDistribute {
 		log.VEventf(session.Ctx(), 1, "not distributing query")
 		return false, nil
 	}
