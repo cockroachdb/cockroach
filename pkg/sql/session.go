@@ -50,6 +50,11 @@ import (
 var traceSQLDuration = envutil.EnvOrDefaultDuration("COCKROACH_TRACE_SQL", 0)
 var traceSQL = traceSQLDuration > 0
 
+// COCKROACH_DISABLE_SQL_EVENT_LOG can be used to disable the event log that is
+// normally kept for every SQL connection. The event log has a non-trivial
+// performance impact.
+var disableSQLEventLog = envutil.EnvOrDefaultBool("COCKROACH_DISABLE_SQL_EVENT_LOG", false)
+
 // COCKROACH_TRACE_7881 can be used to trace all SQL transactions, in the hope
 // that we'll catch #7881 and dump the current trace for debugging.
 var traceSQLFor7881 = envutil.EnvOrDefaultBool("COCKROACH_TRACE_7881", false)
@@ -142,7 +147,7 @@ func NewSession(
 	s.PreparedStatements = makePreparedStatements(s)
 	s.PreparedPortals = makePreparedPortals(s)
 
-	if opentracing.SpanFromContext(ctx) == nil {
+	if !disableSQLEventLog && opentracing.SpanFromContext(ctx) == nil {
 		remoteStr := "<admin>"
 		if remote != nil {
 			remoteStr = remote.String()
