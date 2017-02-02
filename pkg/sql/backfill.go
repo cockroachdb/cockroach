@@ -697,7 +697,9 @@ func (sc *SchemaChanger) backfillIndexesChunk(
 			return err
 		}
 
-		if err := planner.startPlanWithLimit(rows, chunkSize); err != nil {
+		rows = &limitNode{p: planner, plan: rows, countExpr: parser.NewDInt(parser.DInt(chunkSize))}
+
+		if err := planner.startPlan(rows); err != nil {
 			return err
 		}
 
