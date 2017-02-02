@@ -79,10 +79,13 @@ type scanNode struct {
 	scanInitialized bool
 	fetcher         sqlbase.RowFetcher
 
-	limitHint          int64
+	// limitHint is a hint for how many rows are needed (after applying any filter).
+	limitHint int64
+	// limitSoft is true if limitHint is a "soft" limit.
 	limitSoft          bool
 	disableBatchLimits bool
-	scanVisibility     scanVisibility
+
+	scanVisibility scanVisibility
 	// This struct must be allocated on the heap and its location stay
 	// stable after construction because it implements
 	// IndexedVarContainer and the IndexedVar objects in sub-expressions
@@ -147,7 +150,7 @@ func (n *scanNode) initScan() error {
 	}
 
 	limitHint := n.limitHint
-	if limitHint != 0 && n.limitSoft {
+	if limitHint != 0 && (n.limitSoft || n.filter != nil) {
 		// Read a multiple of the limit if the limit is "soft".
 		limitHint *= 2
 	}

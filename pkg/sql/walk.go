@@ -127,7 +127,7 @@ func (v *planVisitor) visit(plan planNode) {
 			}
 			v.observer.attr(name, "spans", spans)
 		}
-		if n.limitHint > 0 && !n.limitSoft {
+		if n.limitHint > 0 && !n.limitSoft && n.filter == nil {
 			v.observer.attr(name, "limit", fmt.Sprintf("%d", n.limitHint))
 		}
 		subplans := v.expr(name, "filter", -1, n.filter, nil)

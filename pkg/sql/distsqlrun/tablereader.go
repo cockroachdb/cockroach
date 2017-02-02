@@ -36,8 +36,8 @@ type tableReader struct {
 	flowCtx *FlowCtx
 	ctx     context.Context
 
-	spans                roachpb.Spans
-	hardLimit, softLimit int64
+	spans     roachpb.Spans
+	limitHint int64
 
 	fetcher sqlbase.RowFetcher
 
@@ -51,14 +51,31 @@ func newTableReader(
 	flowCtx *FlowCtx, spec *TableReaderSpec, post *PostProcessSpec, output RowReceiver,
 ) (*tableReader, error) {
 	tr := &tableReader{
-		flowCtx:   flowCtx,
-		hardLimit: spec.HardLimit,
-		softLimit: spec.SoftLimit,
+		flowCtx: flowCtx,
 	}
 
-	if tr.hardLimit != 0 && tr.hardLimit < tr.softLimit {
-		return nil, errors.Errorf("soft limit %d larger than hard limit %d", tr.softLimit,
-			tr.hardLimit)
+	// We ignore any limits that are higher than this value to avoid any
+	// overflows.
+	const overflowProtection = 1000000000
+	if post.Limit != 0 && post.Limit <= overflowProtection {
+		// In this case the procOutputHelper will tell us to stop once we emit
+		// enough rows.
+		tr.limitHint = int64(post.Limit)
+	} else if spec.LimitHint != 0 && spec.LimitHint <= overflowProtection {
+		// Even if the receiver needs only a certain number of rows, we will be able
+		// to push more rows into a RowChannel before we block; so increase the
+		// estimate by the size of the RowChannel buffer.
+		//
+		// TODO(radu): if there are multiple processors and RowChannels between us
+		// and whatever processor only needs a certain number of rows, we could emit
+		// enough rows to fill all those channels. Experiment with this and perhaps
+		// find a better mechanism for limits.
+		tr.limitHint = spec.LimitHint + rowChannelBufSize
+	}
+
+	if post.Filter.Expr != "" {
+		// We have a filter so we will likely need to read more rows.
+		tr.limitHint *= 2
 	}
 
 	types := make([]sqlbase.ColumnType, len(spec.Table.Columns))
@@ -119,24 +136,6 @@ func initRowFetcher(
 	return index, isSecondaryIndex, nil
 }
 
-// getLimitHint calculates the row limit hint for the row fetcher.
-func (tr *tableReader) getLimitHint() int64 {
-	softLimit := tr.softLimit
-	if tr.hardLimit != 0 {
-		if tr.out.filter == nil {
-			return tr.hardLimit
-		}
-		// If we have a filter, we don't know how many rows will pass the filter
-		// so the hard limit is actually a "soft" limit at the row fetcher.
-		if softLimit == 0 {
-			softLimit = tr.hardLimit
-		}
-	}
-	// If the limit is soft, we request a multiple of the limit.
-	// If the limit is 0 (no limit), we must return 0.
-	return softLimit * 2
-}
-
 // Run is part of the processor interface.
 func (tr *tableReader) Run(wg *sync.WaitGroup) {
 	if wg != nil {
@@ -154,7 +153,7 @@ func (tr *tableReader) Run(wg *sync.WaitGroup) {
 	}
 
 	if err := tr.fetcher.StartScan(
-		txn, tr.spans, true /* limit batches */, tr.getLimitHint(),
+		txn, tr.spans, true /* limit batches */, tr.limitHint,
 	); err != nil {
 		log.Errorf(ctx, "scan error: %s", err)
 		tr.out.close(err)
