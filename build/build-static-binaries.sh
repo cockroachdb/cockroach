@@ -17,7 +17,7 @@ check_static "cockroach${SUFFIX-}"
 check_static "cli/cli.test${SUFFIX-}"
 
 # Try running the cockroach binary.
-MALLOC_CONF=prof:true ./cockroach${SUFFIX-} version
+./cockroach${SUFFIX-} version
 
 strip -S "cockroach${SUFFIX-}"
 find . -type f -name '*.test*' -exec strip -S {} ';'
