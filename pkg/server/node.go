@@ -128,6 +128,7 @@ type Node struct {
 	metrics     nodeMetrics
 	recorder    *status.MetricsRecorder
 	startedAt   int64
+	lastUp      int64
 	initialBoot bool // True if this is the first time this node has started.
 	txnMetrics  kv.TxnMetrics
 
@@ -479,6 +480,21 @@ func (n *Node) initStores(
 	}
 	log.Event(ctx, "validated stores")
 
+	// Compute last up time from stores; this is done by checking the last
+	// up timestamp for every
+	latestTimestamp := hlc.ZeroTimestamp
+	n.stores.VisitStores(func(s *storage.Store) error {
+		timestamp, err := storage.ReadStoreLastUp(ctx, s.Engine())
+		if err != nil {
+			return err
+		}
+		if latestTimestamp.Less(timestamp) {
+			latestTimestamp = timestamp
+		}
+		return nil
+	})
+	n.lastUp = latestTimestamp.WallTime
+
 	// Set the stores map as the gossip persistent storage, so that
 	// gossip can bootstrap using the most recently persisted set of
 	// node addresses.
@@ -749,8 +765,21 @@ func (n *Node) recordJoinEvent() {
 	}
 
 	logEventType := sql.EventLogNodeRestart
+	var eventInfo interface{}
 	if n.initialBoot {
 		logEventType = sql.EventLogNodeJoin
+		eventInfo = struct {
+			Descriptor roachpb.NodeDescriptor
+			ClusterID  uuid.UUID
+			StartedAt  int64
+		}{n.Descriptor, n.ClusterID, n.startedAt}
+	} else {
+		eventInfo = struct {
+			Descriptor roachpb.NodeDescriptor
+			ClusterID  uuid.UUID
+			StartedAt  int64
+			LastUp     int64
+		}{n.Descriptor, n.ClusterID, n.startedAt, n.lastUp}
 	}
 
 	n.stopper.RunWorker(func() {
@@ -764,11 +793,7 @@ func (n *Node) recordJoinEvent() {
 					logEventType,
 					int32(n.Descriptor.NodeID),
 					int32(n.Descriptor.NodeID),
-					struct {
-						Descriptor roachpb.NodeDescriptor
-						ClusterID  uuid.UUID
-						StartedAt  int64
-					}{n.Descriptor, n.ClusterID, n.startedAt},
+					eventInfo,
 				)
 			}); err != nil {
 				log.Warningf(ctx, "%s: unable to log %s event: %s", n, logEventType, err)
