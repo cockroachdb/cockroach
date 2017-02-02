@@ -17,8 +17,6 @@
 package sql
 
 import (
-	"math"
-
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -211,10 +209,6 @@ func (p *planner) makePlan(stmt parser.Statement, autoCommit bool) (planNode, er
 
 // startPlan starts the plan and all its sub-query nodes.
 func (p *planner) startPlan(plan planNode) error {
-	return p.startPlanWithLimit(plan, math.MaxInt64)
-}
-
-func (p *planner) startPlanWithLimit(plan planNode, numRowsNeeded int64) error {
 	if err := p.startSubqueryPlans(plan); err != nil {
 		return err
 	}
@@ -222,7 +216,7 @@ func (p *planner) startPlanWithLimit(plan planNode, numRowsNeeded int64) error {
 		return err
 	}
 	// Trigger limit propagation through the plan and sub-queries.
-	applyLimit(plan, numRowsNeeded, false /* !soft */)
+	setUnlimited(plan)
 	return nil
 }
 
