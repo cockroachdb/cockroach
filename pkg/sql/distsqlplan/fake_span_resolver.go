@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 const avgRangesPerNode = 5
@@ -34,16 +35,14 @@ const avgRangesPerNode = 5
 // expected avgRangesPerNode ranges for each node.
 type fakeSpanResolver struct {
 	nodes []*roachpb.NodeDescriptor
-	db    *client.DB
 }
 
 var _ SpanResolver = &fakeSpanResolver{}
 
 // NewFakeSpanResolver creates a fake span resolver.
-func NewFakeSpanResolver(nodes []*roachpb.NodeDescriptor, db *client.DB) SpanResolver {
+func NewFakeSpanResolver(nodes []*roachpb.NodeDescriptor) SpanResolver {
 	return &fakeSpanResolver{
 		nodes: nodes,
-		db:    db,
 	}
 }
 
@@ -55,6 +54,7 @@ type fakeSplit struct {
 
 type fakeSpanResolverIterator struct {
 	fsr *fakeSpanResolver
+	txn *client.Txn
 	err error
 	// splits are ordered by the key; the first one is the beginning of the
 	// current range and the last one is the end of the queried span.
@@ -62,10 +62,8 @@ type fakeSpanResolverIterator struct {
 }
 
 // NewSpanResolverIterator is part of the SpanResolver interface.
-func (fsr *fakeSpanResolver) NewSpanResolverIterator() SpanResolverIterator {
-	return &fakeSpanResolverIterator{
-		fsr: fsr,
-	}
+func (fsr *fakeSpanResolver) NewSpanResolverIterator(txn *client.Txn) SpanResolverIterator {
+	return &fakeSpanResolverIterator{fsr: fsr, txn: txn}
 }
 
 // Seek is part of the SpanResolverIterator interface. Each Seek call generates
@@ -78,8 +76,9 @@ func (fit *fakeSpanResolverIterator) Seek(
 	}
 
 	// Scan the range and keep a list of all potential split keys.
-	kvs, err := fit.fsr.db.Scan(ctx, span.Key, span.EndKey, 0)
+	kvs, err := fit.txn.Scan(span.Key, span.EndKey, 0)
 	if err != nil {
+		log.Errorf(ctx, "Error in fake span resolver scan: %s", err)
 		fit.err = err
 		return
 	}
