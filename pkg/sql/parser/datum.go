@@ -1636,27 +1636,6 @@ func (d *DTuple) Size() uintptr {
 	return sz
 }
 
-// SortedDifference finds the elements of d which are not in other,
-// assuming that d and other are already sorted.
-func (d *DTuple) SortedDifference(other *DTuple) *DTuple {
-	var r DTuple
-	a := *d
-	b := *other
-	for len(a) > 0 && len(b) > 0 {
-		switch a[0].Compare(b[0]) {
-		case -1:
-			r = append(r, a[0])
-			a = a[1:]
-		case 0:
-			a = a[1:]
-			b = b[1:]
-		case 1:
-			b = b[1:]
-		}
-	}
-	return &r
-}
-
 type dNull struct{}
 
 // ResolvedType implements the TypedExpr interface.

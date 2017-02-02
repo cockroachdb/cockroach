@@ -19,7 +19,6 @@ package sql
 import (
 	"bytes"
 	"fmt"
-	"reflect"
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -79,7 +78,7 @@ type analyzeOrderingFn func(indexOrdering orderingInfo) (matchingCols, totalCols
 //
 // If preferOrderMatching is true, we prefer an index that matches the desired
 // ordering completely, even if it is not a covering index.
-func selectIndex(
+func (p *planner) selectIndex(
 	s *scanNode, analyzeOrdering analyzeOrderingFn, preferOrderMatching bool,
 ) (planNode, error) {
 	if s.desc.IsEmpty() || (s.filter == nil && analyzeOrdering == nil && s.specifiedIndex == nil) {
@@ -204,7 +203,23 @@ func selectIndex(
 		// There are no spans to scan.
 		return &emptyNode{}, nil
 	}
+
 	s.filter = applyIndexConstraints(s.filter, c.constraints)
+	if s.filter != nil {
+		// Constraint propagation may have produced new constant sub-expressions.
+		// Propagate them.
+		var err error
+		s.filter, err = p.evalCtx.NormalizeExpr(s.filter)
+		if err != nil {
+			return nil, err
+		}
+		if s.filter == parser.DBoolTrue {
+			s.filter = nil
+		} else if s.filter == parser.DBoolFalse {
+			return &emptyNode{}, nil
+		}
+	}
+
 	s.reverse = c.reverse
 
 	var plan planNode
@@ -487,7 +502,7 @@ func (v *indexInfo) makeOrConstraints(orExprs []parser.TypedExprs) error {
 // TODO(pmattis): It would be more obvious to perform this transform in
 // simplifyComparisonExpr, but doing so there eliminates some of the other
 // simplifications. For example, "a < 1 OR a > 1" currently simplifies to "a !=
-// 1", but if we performed this transform in simpilfyComparisonExpr it would
+// 1", but if we performed this transform in simplifyComparisonExpr it would
 // simplify to "a < 1 OR a >= 2" which is also the same as "a != 1", but not so
 // obvious based on comparisons of the constants.
 func (v *indexInfo) makeIndexConstraints(andExprs parser.TypedExprs) (indexConstraints, error) {
@@ -1373,13 +1388,23 @@ func applyIndexConstraints(
 	v := &applyConstraintsVisitor{}
 	expr := typedExpr.(parser.Expr)
 	for _, c := range constraints[0] {
-		v.constraint = c
+		// Apply the start constraint.
+		v.constraints = expandConstraint(v.constraints, c.start, c.tupleMap)
 		expr, _ = parser.WalkExpr(v, expr)
+
+		if c.start != c.end {
+			// If there is a range (x >= 3 AND x <= 10), apply the
+			// end-of-range constraint as well.
+			v.constraints = expandConstraint(v.constraints, c.end, c.tupleMap)
+			expr, _ = parser.WalkExpr(v, expr)
+		}
+
 		// We can only continue to apply the constraints if the constraints we have
 		// applied so far are equality constraints. There are two cases to
-		// consider: the first is that both the start and end constraints are
-		// equality.
+		// consider, both of which satisfy c.start == c.end.
 		if c.start == c.end {
+			// The first is that both the start and end constraints are
+			// equality.
 			if c.start.Operator == parser.EQ {
 				continue
 			}
@@ -1397,103 +1422,353 @@ func applyIndexConstraints(
 	return expr.(parser.TypedExpr)
 }
 
+// expandConstraint transforms a potentially complex constraint
+// expression into one or more simple constraint suitable for the
+// VisitPre() code below.
+// The following are transformed:
+// - (a,b,c) = (x,y,z)    -> [a=x, b=y, c=z]     (same for !=)
+// - (a,b,c) < (x,y,z)    -> [a<x]               (same for <= > >=)
+// - (a,b,c) IN ((x,y,z)) -> [a=x, b=y, c=z] but only for the part
+//                           of the tuple (a,b,c) that was matched by the index.
+// - (a,b,c) IS TRUE, (a,b,c) IS NULL, etc -> constraint ignored
+func expandConstraint(
+	a []*parser.ComparisonExpr, c *parser.ComparisonExpr, tupleMap []int,
+) []*parser.ComparisonExpr {
+	if c == nil {
+		return a
+	}
+	if vars, ok := c.Left.(*parser.Tuple); ok {
+		if c.Operator == parser.Is || c.Operator == parser.IsNot {
+			// The syntax <tuple> IS <val> or <tuple> IS NOT <val> is
+			// always false.
+			return a
+		}
+		vals := *c.Right.(*parser.DTuple)
+
+		switch c.Operator {
+		case parser.NE:
+			fallthrough
+		case parser.EQ:
+			// (a,b,c) != (x,y,z)  ->  [a!=x, b!=y, c!=z]
+			// (a,b,c) = (x,y,z)   ->  [a=x, b=y, c=z]
+			for i, v := range vars.Exprs {
+				a = append(a, &parser.ComparisonExpr{Operator: c.Operator, Left: v, Right: vals[i]})
+			}
+
+		case parser.LT:
+			fallthrough
+		case parser.GT:
+			fallthrough
+		case parser.LE:
+			fallthrough
+		case parser.GE:
+			// (a,b,c) < (x,y,z)  -> [a<x]
+			a = append(a, &parser.ComparisonExpr{Operator: c.Operator, Left: vars.Exprs[0], Right: vals[0]})
+
+		case parser.In:
+			// (a,b,c) IN ((x,y,z)) -> [a=x, b=y, c=z]
+			// But beware of which part of the tuple has been matched by the index.
+			if len(vals) == 1 {
+				if oneTuplep, ok := vals[0].(*parser.DTuple); ok {
+					oneTuple := *oneTuplep
+					for i := range tupleMap {
+						a = append(a,
+							&parser.ComparisonExpr{Operator: parser.EQ, Left: vars.Exprs[i], Right: oneTuple[i]})
+					}
+				}
+			}
+		}
+	} else {
+		a = append(a, c)
+	}
+	return a
+}
+
 type applyConstraintsVisitor struct {
-	constraint indexConstraint
+	constraints []*parser.ComparisonExpr
 }
 
 func (v *applyConstraintsVisitor) VisitPre(expr parser.Expr) (recurse bool, newExpr parser.Expr) {
-	switch t := expr.(type) {
-	case *parser.AndExpr, *parser.NotExpr:
-		return true, expr
+	if t, ok := expr.(*parser.ComparisonExpr); ok {
 
-	case *parser.ComparisonExpr:
-		c := v.constraint.start
-		if c == nil {
-			return true, expr
-		}
-		if !varEqual(t.TypedLeft(), c.TypedLeft()) {
-			return true, expr
-		}
-		if !isDatum(t.TypedRight()) || !isDatum(c.TypedRight()) {
-			return true, expr
-		}
-		if tuple, ok := c.Left.(*parser.Tuple); ok {
-			// Do not apply a constraint on a tuple which does not use the entire
-			// tuple.
-			//
-			// TODO(peter): The current code is conservative. We could trim the
-			// tuple instead.
-			if len(tuple.Exprs) != len(v.constraint.tupleMap) {
-				return true, expr
+		// If looking at an expression of the form (a,b,c) IN ((x,y,z)), decompose it.
+		if tLeft, ok2 := t.Left.(*parser.Tuple); ok2 {
+			if tRight, ok3 := t.Right.(*parser.DTuple); ok3 && len(*tRight) == 1 {
+				if vRight, ok4 := (*tRight)[0].(*parser.DTuple); ok4 {
+					andExprs := make([]parser.TypedExpr, len(*vRight))
+					for i, v := range tLeft.Exprs {
+						tv := v.(parser.TypedExpr)
+						andExprs[i] = parser.NewTypedComparisonExpr(parser.EQ, tv, (*vRight)[i])
+					}
+					return true, joinAndExprs(andExprs)
+				}
 			}
 		}
 
-		datum := t.Right.(parser.Datum)
-		cdatum := c.Right.(parser.Datum)
+		for _, c := range v.constraints {
+			expr = applyConstraint(c, t)
+			t, ok = expr.(*parser.ComparisonExpr)
+			if !ok {
+				break
+			}
+		}
+	}
+	return true, expr
+}
 
+// applyConstraint tries to evaluate the expression t on the right
+// assuming that the expression c on the left (the constraint) is
+// true.
+func applyConstraint(c *parser.ComparisonExpr, t *parser.ComparisonExpr) parser.Expr {
+	// Check that both expressions have the same variable on the left.
+	// It is always true for the constraint, and
+	// simplifyExpr() has ensured this is true in most sub-expressions of t.
+	varLeft := c.Left.(*parser.IndexedVar)
+	if varRight, ok := t.Left.(*parser.IndexedVar); !ok || varLeft.Idx != varRight.Idx {
+		return t
+	}
+
+	// applyConstraint() is only defined over comparisons that
+	// have a Datum on the right side.
+	datum, ok := t.Right.(parser.Datum)
+	if !ok {
+		return t
+	}
+	cdatum := c.Right.(parser.Datum)
+
+	switch c.Operator {
+	case parser.IsNot:
+		if cdatum == parser.DNull {
+			switch t.Operator {
+			case parser.Is:
+				return parser.MakeDBool(datum != parser.DNull)
+			case parser.IsNot:
+				return parser.MakeDBool(datum == parser.DNull)
+			}
+		} else {
+			return applyConstraintFlat(t, parser.NE, cdatum, datum)
+		}
+	case parser.Is:
+		if cdatum == parser.DNull {
+			switch t.Operator {
+			case parser.Is:
+				return parser.MakeDBool(datum == parser.DNull)
+			case parser.IsNot:
+				return parser.MakeDBool(datum != parser.DNull)
+			default:
+				// A NULL var compared to anything is always false.
+				return parser.DBoolFalse
+			}
+		} else {
+			return applyConstraintFlat(t, parser.EQ, cdatum, datum)
+		}
+	default:
+		return applyConstraintFlat(t, c.Operator, cdatum, datum)
+	}
+	return t
+}
+
+// applyConstraintFlat is the common branch of applyConstraint().
+func applyConstraintFlat(
+	t *parser.ComparisonExpr, cOp parser.ComparisonOperator, cdatum, datum parser.Datum,
+) parser.Expr {
+	switch cOp {
+	case parser.EQ:
+		// Constraint: "a = <val>"
+		cmp := cdatum.Compare(datum)
 		switch t.Operator {
 		case parser.EQ:
-			if v.constraint.start != v.constraint.end {
-				return true, expr
+			return parser.MakeDBool(cmp == 0)
+		case parser.NE:
+			return parser.MakeDBool(cmp != 0)
+		case parser.LE:
+			return parser.MakeDBool(cmp <= 0)
+		case parser.GE:
+			return parser.MakeDBool(cmp >= 0)
+		case parser.LT:
+			return parser.MakeDBool(cmp < 0)
+		case parser.GT:
+			return parser.MakeDBool(cmp > 0)
+		case parser.Is:
+			if datum == parser.DNull {
+				return parser.DBoolFalse
 			}
-
-			switch c.Operator {
-			case parser.EQ:
-				// Expr: "a = <val>", constraint: "a = <val>".
-				if reflect.TypeOf(datum) != reflect.TypeOf(cdatum) {
-					return true, expr
-				}
-				cmp := datum.Compare(cdatum)
-				if cmp == 0 {
-					return false, parser.DBoolTrue
-				}
-			case parser.In:
-				// Expr: "a = <val>", constraint: "a IN (<vals>)".
-				ctuple := *cdatum.(*parser.DTuple)
-				if reflect.TypeOf(datum) != reflect.TypeOf(ctuple[0]) {
-					return true, expr
-				}
-				i := sort.Search(len(ctuple), func(i int) bool {
-					return ctuple[i].(parser.Datum).Compare(datum) >= 0
-				})
-				if i < len(ctuple) && ctuple[i].Compare(datum) == 0 {
-					return false, parser.DBoolTrue
-				}
+			return parser.MakeDBool(cmp == 0)
+		case parser.IsNot:
+			if datum == parser.DNull {
+				return parser.DBoolTrue
 			}
-
+			return parser.MakeDBool(cmp != 0)
 		case parser.In:
-			if v.constraint.start != v.constraint.end {
-				return true, expr
+			if tuple, ok := datum.(*parser.DTuple); ok {
+				for _, d := range *tuple {
+					if cdatum.Compare(d) == 0 {
+						return parser.DBoolTrue
+					}
+				}
 			}
+		case parser.NotIn:
+			if tuple, ok := datum.(*parser.DTuple); ok {
+				for _, d := range *tuple {
+					if cdatum.Compare(d) == 0 {
+						return parser.DBoolFalse
+					}
+				}
+			}
+			return parser.DBoolTrue
+		}
 
-			switch c.Operator {
-			case parser.In:
-				// Expr: "a IN (<vals>)", constraint: "a IN (<vals>)".
-				if reflect.TypeOf(datum) != reflect.TypeOf(cdatum) {
-					return true, expr
+	case parser.LE:
+		// Constraint: "a <= <val>"
+		cmp := cdatum.Compare(datum)
+		switch t.Operator {
+		case parser.EQ:
+			// Expr: a = <val2>
+			// -> false if <val> > <val2>
+			// unknown otherwise
+			if cmp > 0 {
+				return parser.DBoolFalse
+			}
+		case parser.LE:
+			// Expr: a <= <val2>
+			// -> true if <val> <= <val2>
+			// unknown otherwise
+			if cmp <= 0 {
+				return parser.DBoolTrue
+			}
+		case parser.LT:
+			// Expr: a < <val2>
+			// -> true if <val> < <val2>
+			// unknown otherwise
+			if cmp < 0 {
+				return parser.DBoolTrue
+			}
+		case parser.GE:
+			// Expr: a >= <val2>
+			// -> false if <val> < <val2>
+			// unknown otherwise
+			if cmp < 0 {
+				return parser.DBoolFalse
+			}
+		case parser.GT:
+			// Expr: a > <val2>
+			// -> false if <val> <= <val2>
+			// unknown otherwise
+			if cmp <= 0 {
+				return parser.DBoolFalse
+			}
+		}
+
+	case parser.GE:
+		// Constraint: "a >= <val>"
+		cmp := cdatum.Compare(datum)
+		switch t.Operator {
+		case parser.EQ:
+			// Expr: a = <val2>
+			// -> false if <val> < <val2>
+			// unknown otherwise
+			if cmp < 0 {
+				return parser.DBoolFalse
+			}
+		case parser.GE:
+			// Expr: a >= <val2>
+			// -> true if <val> >= <val2>
+			// unknown otherwise
+			if cmp >= 0 {
+				return parser.DBoolTrue
+			}
+		case parser.GT:
+			// Expr: a > <val2>
+			// -> true if <val> > <val2>
+			// unknown otherwise
+			if cmp > 0 {
+				return parser.DBoolTrue
+			}
+		case parser.LE:
+			// Expr: a <= <val2>
+			// -> false if <val> > <val2>
+			// unknown otherwise
+			if cmp > 0 {
+				return parser.DBoolFalse
+			}
+		case parser.LT:
+			// Expr: a < <val2>
+			// -> false if <val> >= <val2>
+			// unknown otherwise
+			if cmp >= 0 {
+				return parser.DBoolFalse
+			}
+		}
+
+	case parser.In:
+		// Constraint: "a IN (x, y, z, ...)"
+		ctuple := cdatum.(*parser.DTuple)
+		switch t.Operator {
+		case parser.Is:
+			if datum == parser.DNull {
+				// If the constraint says the value is not-null, then IS NULL is false.
+				return parser.DBoolFalse
+			}
+			// Expr asks IS TRUE / IS FALSE: check whether the boolean is in the IN set.
+			// If it is not, we're sure it never matches. Otherwise we don't know.
+			found := false
+			for _, cd := range *ctuple {
+				if cd.Compare(datum) == 0 {
+					found = true
+					break
 				}
-				diff := datum.(*parser.DTuple).SortedDifference(cdatum.(*parser.DTuple))
-				if len(*diff) == 0 {
-					return false, parser.DBoolTrue
-				}
-				t.Right = diff
+			}
+			if !found {
+				return parser.DBoolFalse
 			}
 
 		case parser.IsNot:
-			switch c.Operator {
-			case parser.IsNot:
-				if datum == parser.DNull && cdatum == parser.DNull {
-					// Expr: "a IS NOT NULL", constraint: "a IS NOT NULL"
-					return false, parser.DBoolTrue
+			if datum == parser.DNull {
+				// If the constraint says the value is not-null, then IS NOT NULL is true.
+				return parser.DBoolTrue
+			}
+
+		case parser.In:
+			// Expr: "a IN (t, u, v, ...)"
+			// true if (x, y, z, ...) is a subset of (t, u, v, ...)
+			// unknown otherwise
+			if ttuple, ok := datum.(*parser.DTuple); ok {
+				for _, cd := range *ctuple {
+					found := false
+					for _, td := range *ttuple {
+						if cd.Compare(td) == 0 {
+							found = true
+							break
+						}
+					}
+					if !found {
+						return t
+					}
 				}
+				return parser.DBoolTrue
+			}
+		case parser.NotIn:
+			// Expr: "a NOT IN (t, u, v, ...)"
+			// True if none of the values in (x, y, z...) are in (t, u, v, ...)
+			// unknown otherwise
+			if ttuple, ok := datum.(*parser.DTuple); ok {
+				for _, cd := range *ctuple {
+					found := false
+					for _, td := range *ttuple {
+						if cd.Compare(td) == 0 {
+							found = true
+							break
+						}
+					}
+					if found {
+						return t
+					}
+				}
+				return parser.DBoolTrue
 			}
 		}
-
-	default:
-		return false, expr
 	}
-
-	return true, expr
+	return t
 }
 
 func (v *applyConstraintsVisitor) VisitPost(expr parser.Expr) parser.Expr {
@@ -1507,6 +1782,5 @@ func (v *applyConstraintsVisitor) VisitPost(expr parser.Expr) parser.Expr {
 			return t.Left
 		}
 	}
-
 	return expr
 }
