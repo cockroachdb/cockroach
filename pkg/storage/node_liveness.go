@@ -84,6 +84,11 @@ type LivenessMetrics struct {
 // Callbacks can be registered via NodeLiveness.RegisterCallback().
 type IsLiveCallback func(nodeID roachpb.NodeID)
 
+// AliveCallback is invoked whenever this node updates its own liveness status,
+// indicating that it is alive. The timestamp is the approximate time at which
+// the node liveness record was updated, not the expiration timestamp.
+type AliveCallback func(context.Context, hlc.Timestamp) error
+
 // NodeLiveness encapsulates information on node liveness and provides
 // an API for querying, updating, and invalidating node
 // liveness. Nodes periodically "heartbeat" the range holding the node
@@ -102,6 +107,7 @@ type NodeLiveness struct {
 	incrementSem      chan struct{}
 	heartbeatSem      chan struct{}
 	metrics           LivenessMetrics
+	aliveCallback     AliveCallback
 
 	mu struct {
 		syncutil.Mutex
@@ -164,11 +170,15 @@ func (nl *NodeLiveness) IsLive(nodeID roachpb.NodeID) (bool, error) {
 }
 
 // StartHeartbeat starts a periodic heartbeat to refresh this node's
-// last heartbeat in the node liveness table.
-func (nl *NodeLiveness) StartHeartbeat(ctx context.Context, stopper *stop.Stopper) {
+// last heartbeat in the node liveness table. The optionally provided
+// AliveCallback will be invoked whenever this node updates its own liveness.
+func (nl *NodeLiveness) StartHeartbeat(
+	ctx context.Context, stopper *stop.Stopper, alive AliveCallback,
+) {
 	log.VEventf(ctx, 1, "starting liveness heartbeat")
 	retryOpts := base.DefaultRetryOptions()
 	retryOpts.Closer = stopper.ShouldQuiesce()
+	nl.aliveCallback = alive
 
 	stopper.RunWorker(func() {
 		ambient := nl.ambientCtx
@@ -458,6 +468,10 @@ func (nl *NodeLiveness) updateLiveness(
 			return handleCondFailed(actualLiveness)
 		}
 		return err
+	}
+	aliveAt := nl.clock.Now()
+	if nl.aliveCallback != nil {
+		return nl.aliveCallback(ctx, aliveAt)
 	}
 	return nil
 }

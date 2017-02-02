@@ -675,7 +675,14 @@ func (s *Server) Start(ctx context.Context) error {
 
 	log.Event(ctx, "accepting connections")
 
-	s.nodeLiveness.StartHeartbeat(ctx, s.stopper)
+	// Begin the node liveness heartbeat. Add a callback which records the local
+	// store "last up" timestamp for every store whenever the liveness record
+	// is updated.
+	s.nodeLiveness.StartHeartbeat(ctx, s.stopper, func(ctx context.Context, time hlc.Timestamp) error {
+		return s.node.stores.VisitStores(func(s *storage.Store) error {
+			return s.WriteLastUpTimestamp(ctx, time)
+		})
+	})
 
 	// Before serving SQL requests, we have to make sure the database is
 	// in an acceptable form for this version of the software.

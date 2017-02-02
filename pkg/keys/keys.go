@@ -52,6 +52,11 @@ func StoreGossipKey() roachpb.Key {
 	return MakeStoreKey(localStoreGossipSuffix, nil)
 }
 
+// StoreLastUpKey returns the key for the store's "last up" timestamp.
+func StoreLastUpKey() roachpb.Key {
+	return MakeStoreKey(localStoreLastUpSuffix, nil)
+}
+
 // NodeLivenessKey returns the key for the node liveness record.
 func NodeLivenessKey(nodeID roachpb.NodeID) roachpb.Key {
 	key := make(roachpb.Key, 0, len(NodeLivenessPrefix)+9)
