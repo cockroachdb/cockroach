@@ -526,7 +526,9 @@ func (e *Executor) execRequest(session *Session, sql string, copymsg copyMsg) St
 	var stmts parser.StatementList
 	var err error
 
-	log.VEventf(session.Ctx(), 2, "execRequest: %s", sql)
+	if log.V(2) {
+		log.Infof(session.Ctx(), "execRequest: %s", sql)
+	}
 
 	if session.planner.copyFrom != nil {
 		stmts, err = session.planner.ProcessCopyData(sql, copymsg)
