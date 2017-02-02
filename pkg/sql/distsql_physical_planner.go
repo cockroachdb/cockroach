@@ -967,14 +967,20 @@ func (dsp *distSQLPlanner) addSorters(p *physicalPlan, n *sortNode) {
 		// we have columns (b) that are only used for sorting. These columns are not
 		// in the output columns of the sortNode; we set a projection such that the
 		// plan results map 1-to-1 to sortNode columns.
+		//
+		// We can only do this when there is a single result stream. With multiple
+		// result streams, we need the columns to later merge the streams correctly
+		// with an ordered synchronizer.
 		p.planToStreamColMap = p.planToStreamColMap[:len(n.columns)]
-		columns := make([]uint32, len(n.columns))
-		for i, col := range p.planToStreamColMap {
-			columns[i] = uint32(col)
-			p.planToStreamColMap[i] = i
+		if len(p.resultRouters) == 1 {
+			columns := make([]uint32, len(n.columns))
+			for i, col := range p.planToStreamColMap {
+				columns[i] = uint32(col)
+				p.planToStreamColMap[i] = i
+			}
+			dsp.addProjection(p, columns)
+			p.ordering = dsp.convertOrdering(n.Ordering().ordering, p.planToStreamColMap)
 		}
-		dsp.addProjection(p, columns)
-		p.ordering = dsp.convertOrdering(n.Ordering().ordering, p.planToStreamColMap)
 	}
 }
 
