@@ -237,6 +237,10 @@ SELECT * FROM xyzw LIMIT (RANDOM() * 0.0)::int OFFSET (RANDOM() * 0.0)::int
 query error multiple LIMIT clauses not allowed
 ((SELECT a FROM t LIMIT 1)) LIMIT 1
 
+query IIII
+SELECT * FROM (SELECT * FROM xyzw LIMIT 5) OFFSET 5
+----
+
 query II
 SELECT z, y FROM xyzw@foo
 ----
