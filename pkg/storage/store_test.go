@@ -52,11 +52,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
-var defaultMuLogger = syncutil.ThresholdLogger(
+var defaultMuLogger = thresholdLogger(
 	context.Background(),
 	10*time.Second,
 	log.Warningf,
@@ -668,8 +667,8 @@ func TestProcessRangeDescriptorUpdate(t *testing.T) {
 		store:      store,
 		abortCache: NewAbortCache(desc.RangeID),
 	}
-	r.mu.TimedMutex = syncutil.MakeTimedMutex(defaultMuLogger)
-	r.cmdQMu.TimedMutex = syncutil.MakeTimedMutex(defaultMuLogger)
+	r.mu.timedMutex = makeTimedMutex(defaultMuLogger)
+	r.cmdQMu.timedMutex = makeTimedMutex(defaultMuLogger)
 	if err := r.init(desc, store.Clock(), 0); err != nil {
 		t.Fatal(err)
 	}
