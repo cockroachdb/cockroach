@@ -251,6 +251,13 @@ func (sp *StorePool) GetStoreList(rangeID roachpb.RangeID) (StoreList, int, int)
 	return sp.getStoreList(rangeID)
 }
 
+// Stores returns a copy of sl.stores.
+func (sl *StoreList) Stores() []roachpb.StoreDescriptor {
+	stores := make([]roachpb.StoreDescriptor, len(sl.stores))
+	copy(stores, sl.stores)
+	return stores
+}
+
 // IsQuiescent returns whether the replica is quiescent or not.
 func (r *Replica) IsQuiescent() bool {
 	r.mu.Lock()
@@ -270,4 +277,10 @@ func (r *Replica) RaftTransferLeader(ctx context.Context, target roachpb.Replica
 
 func GetGCQueueTxnCleanupThreshold() time.Duration {
 	return txnCleanupThreshold
+}
+
+func (nl *NodeLiveness) SetDrainingInternal(
+	ctx context.Context, liveness *Liveness, drain bool,
+) error {
+	return nl.setDrainingInternal(ctx, liveness, drain)
 }
