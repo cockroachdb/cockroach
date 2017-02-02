@@ -251,6 +251,13 @@ func (sp *StorePool) GetStoreList(rangeID roachpb.RangeID) (StoreList, int, int)
 	return sp.getStoreList(rangeID)
 }
 
+// GetStores returns a copy of sl.stores.
+func (sl *StoreList) GetStores() []roachpb.StoreDescriptor {
+	stores := make([]roachpb.StoreDescriptor, len(sl.stores))
+	copy(stores, sl.stores)
+	return stores
+}
+
 // IsQuiescent returns whether the replica is quiescent or not.
 func (r *Replica) IsQuiescent() bool {
 	r.mu.Lock()

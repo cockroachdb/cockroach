@@ -456,3 +456,93 @@ func TestNodeLivenessConcurrentIncrementEpochs(t *testing.T) {
 		}
 	}
 }
+
+// TestNodeLivenessSetDraining verifies that when draining, a node's liveness
+// record is updated and the node will not be a target for any transfers once
+// other nodes are aware of its draining state.
+func TestNodeLivenessSetDraining(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	mtc := &multiTestContext{}
+	defer mtc.Stop()
+	mtc.Start(t, 3)
+	mtc.initGossipNetwork()
+
+	verifyLiveness(t, mtc)
+	drainingNodeIdx := 0
+	drainingNodeID := mtc.gossips[drainingNodeIdx].NodeID.Get()
+
+	nodeIDAppearsInStoreList := func(id roachpb.NodeID, sl storage.StoreList) bool {
+		for _, store := range sl.GetStores() {
+			if store.Node.NodeID == id {
+				return true
+			}
+		}
+		return false
+	}
+
+	mtc.nodeLivenesses[drainingNodeIdx].SetDraining(context.Background(), true)
+
+	// Draining node becomes unavailable for transfers.
+	{
+		const expectedLive = 2
+		// Executed in a retry loop to wait until the new liveness record has
+		// been gossiped to the rest of the cluster.
+		testutils.SucceedsSoon(t, func() error {
+			for i, sp := range mtc.storePools {
+				curNodeID := mtc.gossips[i].NodeID.Get()
+				sl, alive, _ := sp.GetStoreList(0)
+				if alive != expectedLive {
+					return errors.Errorf(
+						"expected %d live stores but got %d from node %d",
+						expectedLive,
+						alive,
+						curNodeID,
+					)
+				}
+				if nodeIDAppearsInStoreList(drainingNodeID, sl) {
+					return errors.Errorf(
+						"expected node %d not to appear in node %d's store list",
+						drainingNodeID,
+						curNodeID,
+					)
+				}
+			}
+			return nil
+		})
+	}
+
+	// Stop and restart the store to verify that a restarted server clears the
+	// draining field on the liveness record.
+	mtc.stopStore(drainingNodeIdx)
+	mtc.restartStore(drainingNodeIdx)
+
+	// Restarted node becomes once again available for transfers.
+	{
+		const expectedLive = 3
+		// Executed in a retry loop to wait until the new liveness record has
+		// been gossiped to the rest of the cluster.
+		testutils.SucceedsSoon(t, func() error {
+			for i, sp := range mtc.storePools {
+				curNodeID := mtc.gossips[i].NodeID.Get()
+				sl, alive, _ := sp.GetStoreList(0)
+				if alive != expectedLive {
+					return errors.Errorf(
+						"expected %d live stores but got %d from node %d",
+						expectedLive,
+						alive,
+						curNodeID,
+					)
+				}
+				if !nodeIDAppearsInStoreList(drainingNodeID, sl) {
+					return errors.Errorf(
+						"expected node %d to appear in node %d's store list: %+v",
+						drainingNodeID,
+						curNodeID,
+						sl.GetStores(),
+					)
+				}
+			}
+			return nil
+		})
+	}
+}
