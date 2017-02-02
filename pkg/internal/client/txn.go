@@ -352,8 +352,10 @@ func (txn *Txn) CleanupOnError(err error) {
 	if err == nil {
 		panic("no error")
 	}
-	if replyErr := txn.Rollback(); replyErr != nil {
-		log.Errorf(txn.Context, "failure aborting transaction: %s; abort caused by: %s", replyErr, err)
+	if txn.Proto.Status == roachpb.PENDING {
+		if replyErr := txn.Rollback(); replyErr != nil {
+			log.Errorf(txn.Context, "failure aborting transaction: %s; abort caused by: %s", replyErr, err)
+		}
 	}
 }
 
