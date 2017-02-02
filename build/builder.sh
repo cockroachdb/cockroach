@@ -42,6 +42,7 @@ if [ "${1-}" = "version" ]; then
 fi
 
 gopath0="${GOPATH%%:*}"
+gocache=${GOCACHEPATH-$gopath0}
 
 if [ -t 0 ]; then
   tty="--tty"
@@ -76,7 +77,7 @@ echo "${username}:x:${uid_gid}::${container_home}:/bin/bash" > "${passwd_file}"
 # created as the invoking user. Docker would otherwise create them when
 # mounting, but that would deny write access to the invoking user since docker
 # runs as root.
-mkdir -p "${HOME}"/.{jspm,yarn-cache} "${gopath0}"/pkg/docker_amd64{,_race} "${gopath0}/bin/docker_amd64"
+mkdir -p "${HOME}"/.{jspm,yarn-cache} "${gocache}"/pkg/docker_amd64{,_race} "${gocache}/bin/docker_amd64"
 
 # Since we're mounting both /root and its subdirectories in our container,
 # Docker will create the subdirectories on the host side under the directory
@@ -110,11 +111,11 @@ vols=""
 vols="${vols} --volume=${passwd_file}:/etc/passwd"
 vols="${vols} --volume=${host_home}:${container_home}"
 vols="${vols} --volume=${gopath0}/src:/go/src"
-vols="${vols} --volume=${gopath0}/pkg/docker_amd64:/go/pkg/linux_amd64"
-vols="${vols} --volume=${gopath0}/pkg/docker_amd64_race:/go/pkg/linux_amd64_race"
-vols="${vols} --volume=${gopath0}/pkg/docker_amd64:/usr/local/go/pkg/linux_amd64"
-vols="${vols} --volume=${gopath0}/pkg/docker_amd64_race:/usr/local/go/pkg/linux_amd64_race"
-vols="${vols} --volume=${gopath0}/bin/docker_amd64:/go/bin"
+vols="${vols} --volume=${gocache}/pkg/docker_amd64:/go/pkg/linux_amd64"
+vols="${vols} --volume=${gocache}/pkg/docker_amd64_race:/go/pkg/linux_amd64_race"
+vols="${vols} --volume=${gocache}/pkg/docker_amd64:/usr/local/go/pkg/linux_amd64"
+vols="${vols} --volume=${gocache}/pkg/docker_amd64_race:/usr/local/go/pkg/linux_amd64_race"
+vols="${vols} --volume=${gocache}/bin/docker_amd64:/go/bin"
 vols="${vols} --volume=${HOME}/.jspm:${container_home}/.jspm"
 vols="${vols} --volume=${HOME}/.yarn-cache:${container_home}/.yarn-cache"
 vols="${vols} --volume=${cockroach_toplevel}:/go/src/github.com/cockroachdb/cockroach"
@@ -133,6 +134,7 @@ if test -e "${alternates_file}"; then
   vols="${vols} --volume=${alternates_path}:${alternates_path}"
 fi
 
+# shellcheck disable=SC2086
 docker run -i ${tty-} --rm \
   -u "${uid_gid}" \
   ${vols} \
