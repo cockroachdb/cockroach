@@ -1,0 +1,26 @@
+
+# Unqualified pg_type resolves from pg_catalog.
+query T
+SELECT typname FROM pg_type WHERE typname = 'date'
+----
+date
+
+# Override table and check name resolves properly.
+statement ok
+CREATE TABLE pg_type(x INT);
+
+query I
+SELECT x FROM pg_type
+----
+
+# Leave database, check name resolves to default.
+query T
+SET DATABASE=''; SELECT typname FROM pg_type WHERE typname = 'date'
+----
+date
+
+# Go to different database, check name still resolves to default.
+query T
+CREATE DATABASE foo; SET DATABASE='foo'; SELECT typname FROM pg_type WHERE typname = 'date'
+----
+date

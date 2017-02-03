@@ -410,11 +410,7 @@ func (p *planner) QualifyWithDatabase(t *parser.NormalizableTableName) (*parser.
 		return nil, err
 	}
 	if tn.DatabaseName == "" {
-		database, err := p.databaseFromSearchPath(tn)
-		if err != nil {
-			return nil, err
-		}
-		if err := tn.QualifyWithDatabase(database); err != nil {
+		if err := p.searchAndQualifyDatabase(tn); err != nil {
 			return nil, err
 		}
 	}
