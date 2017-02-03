@@ -456,7 +456,7 @@ func TestStorePoolThrottle(t *testing.T) {
 	}
 }
 
-func TestGetNodeLocalities(t *testing.T) {
+func TestGetLocalities(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper, g, _, sp, _ := createTestStorePool(
 		TestTimeUntilStoreDead, false /* deterministic */, false /* defaultNodeLiveness */)
@@ -503,14 +503,18 @@ func TestGetNodeLocalities(t *testing.T) {
 		existingReplicas = append(existingReplicas, roachpb.ReplicaDescriptor{NodeID: store.Node.NodeID})
 	}
 
-	localities := sp.getNodeLocalities(existingReplicas)
+	localities := sp.getLocalities(existingReplicas)
 	for _, store := range stores {
-		locality, ok := localities[store.Node.NodeID]
+		nodeID := store.Node.NodeID
+		locality, ok := localities[nodeID]
 		if !ok {
-			t.Fatalf("could not find locality for node %d", store.Node.NodeID)
+			t.Fatalf("could not find locality for node %d", nodeID)
 		}
-		if e, a := int(store.Node.NodeID), len(locality.Tiers); e != a {
-			t.Fatalf("for node %d, expected %d tiers, only got %d", store.Node.NodeID, e, a)
+		if e, a := int(nodeID), len(locality.Tiers); e != a {
+			t.Fatalf("for node %d, expected %d tiers, only got %d", nodeID, e, a)
+		}
+		if e, a := int(nodeID), len(sp.getNodeLocality(nodeID).Tiers); e != a {
+			t.Fatalf("for getNodeLocality(%d), expected %d tiers, only got %d", nodeID, e, a)
 		}
 	}
 }
