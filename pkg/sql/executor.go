@@ -538,6 +538,9 @@ func (e *Executor) execRequest(session *Session, sql string, copymsg copyMsg) St
 		stmts, err = planMaker.parser.Parse(sql, parser.Syntax(session.Syntax))
 	}
 	if err != nil {
+		if log.V(2) {
+			log.Infof(session.Ctx(), "execRequest: error: %v", err)
+		}
 		// A parse error occurred: we can't determine if there were multiple
 		// statements or only one, so just pretend there was one.
 		if txnState.txn != nil {
@@ -660,6 +663,10 @@ func (e *Executor) execRequest(session *Session, sql string, copymsg copyMsg) St
 			// got converted to a non-retryable error when the txn closure was done.
 			lastRes := &results[len(results)-1]
 			lastRes.Err = convertToErrWithPGCode(err)
+		}
+
+		if err != nil && log.V(2) {
+			log.Infof(session.Ctx(), "execRequest: error: %v", err)
 		}
 
 		// Update the Err field of the last result if the error was coming from
