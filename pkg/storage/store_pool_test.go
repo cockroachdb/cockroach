@@ -456,7 +456,7 @@ func TestStorePoolThrottle(t *testing.T) {
 	}
 }
 
-func TestGetNodeLocalities(t *testing.T) {
+func TestGetLocalities(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper, g, _, sp, _ := createTestStorePool(
 		TestTimeUntilStoreDead, false /* deterministic */, false /* defaultNodeLiveness */)
@@ -465,16 +465,22 @@ func TestGetNodeLocalities(t *testing.T) {
 
 	// Creates a node with a locality with the number of tiers passed in. The
 	// NodeID is the same as the tier count.
-	createDescWithLocality := func(tierCount int) roachpb.NodeDescriptor {
-		nodeDescriptor := roachpb.NodeDescriptor{NodeID: roachpb.NodeID(tierCount)}
+	createLocality := func(tierCount int) roachpb.Locality {
+		var locality roachpb.Locality
 		for i := 1; i <= tierCount; i++ {
 			value := fmt.Sprintf("%d", i)
-			nodeDescriptor.Locality.Tiers = append(nodeDescriptor.Locality.Tiers, roachpb.Tier{
+			locality.Tiers = append(locality.Tiers, roachpb.Tier{
 				Key:   value,
 				Value: value,
 			})
 		}
-		return nodeDescriptor
+		return locality
+	}
+	createDescWithLocality := func(tierCount int) roachpb.NodeDescriptor {
+		return roachpb.NodeDescriptor{
+			NodeID:   roachpb.NodeID(tierCount),
+			Locality: createLocality(tierCount),
+		}
 	}
 
 	stores := []*roachpb.StoreDescriptor{
@@ -503,14 +509,18 @@ func TestGetNodeLocalities(t *testing.T) {
 		existingReplicas = append(existingReplicas, roachpb.ReplicaDescriptor{NodeID: store.Node.NodeID})
 	}
 
-	localities := sp.getNodeLocalities(existingReplicas)
+	localities := sp.getLocalities(existingReplicas)
 	for _, store := range stores {
-		locality, ok := localities[store.Node.NodeID]
+		nodeID := store.Node.NodeID
+		locality, ok := localities[nodeID]
 		if !ok {
-			t.Fatalf("could not find locality for node %d", store.Node.NodeID)
+			t.Fatalf("could not find locality for node %d", nodeID)
 		}
-		if e, a := int(store.Node.NodeID), len(locality.Tiers); e != a {
-			t.Fatalf("for node %d, expected %d tiers, only got %d", store.Node.NodeID, e, a)
+		if e, a := int(nodeID), len(locality.Tiers); e != a {
+			t.Fatalf("for node %d, expected %d tiers, only got %d", nodeID, e, a)
+		}
+		if e, a := createLocality(int(nodeID)).String(), sp.getNodeLocalityString(nodeID); e != a {
+			t.Fatalf("for getNodeLocalityString(%d), expected %q, got %q", nodeID, e, a)
 		}
 	}
 }

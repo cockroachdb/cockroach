@@ -150,6 +150,16 @@ func (sd *storeDetail) status(
 	return storeStatusAvailable
 }
 
+// localityWithString maintains a string representation of each locality along
+// with its protocol buffer implementation. This is for the sake of optimizing
+// memory usage by allocating a single copy of each that can be returned to
+// callers of getNodeLocalityString rather than each caller (which is currently
+// each replica in the local store) making its own copy.
+type localityWithString struct {
+	locality roachpb.Locality
+	str      string
+}
+
 // StorePool maintains a list of all known stores in the cluster and
 // information on their health.
 type StorePool struct {
@@ -171,7 +181,7 @@ type StorePool struct {
 	}
 	localitiesMu struct {
 		syncutil.RWMutex
-		nodeLocalities map[roachpb.NodeID]roachpb.Locality
+		nodeLocalities map[roachpb.NodeID]localityWithString
 	}
 }
 
@@ -197,7 +207,7 @@ func NewStorePool(
 		deterministic: deterministic,
 	}
 	sp.detailsMu.storeDetails = make(map[roachpb.StoreID]*storeDetail)
-	sp.localitiesMu.nodeLocalities = make(map[roachpb.NodeID]roachpb.Locality)
+	sp.localitiesMu.nodeLocalities = make(map[roachpb.NodeID]localityWithString)
 
 	storeRegex := gossip.MakePrefixPattern(gossip.KeyStorePrefix)
 	g.RegisterCallback(storeRegex, sp.storeGossipUpdate)
@@ -253,7 +263,8 @@ func (sp *StorePool) storeGossipUpdate(_ string, content roachpb.Value) {
 	sp.detailsMu.Unlock()
 
 	sp.localitiesMu.Lock()
-	sp.localitiesMu.nodeLocalities[storeDesc.Node.NodeID] = storeDesc.Node.Locality
+	sp.localitiesMu.nodeLocalities[storeDesc.Node.NodeID] =
+		localityWithString{storeDesc.Node.Locality, storeDesc.Node.Locality.String()}
 	sp.localitiesMu.Unlock()
 }
 
@@ -506,10 +517,10 @@ func (sp *StorePool) throttle(reason throttleReason, storeID roachpb.StoreID) {
 	}
 }
 
-// getNodeLocalities returns the localities for the provided replicas.
+// getLocalities returns the localities for the provided replicas.
 // TODO(bram): consider storing a full list of all node to node diversity
 // scores for faster lookups.
-func (sp *StorePool) getNodeLocalities(
+func (sp *StorePool) getLocalities(
 	replicas []roachpb.ReplicaDescriptor,
 ) map[roachpb.NodeID]roachpb.Locality {
 	sp.localitiesMu.RLock()
@@ -517,10 +528,22 @@ func (sp *StorePool) getNodeLocalities(
 	localities := make(map[roachpb.NodeID]roachpb.Locality)
 	for _, replica := range replicas {
 		if locality, ok := sp.localitiesMu.nodeLocalities[replica.NodeID]; ok {
-			localities[replica.NodeID] = locality
+			localities[replica.NodeID] = locality.locality
 		} else {
 			localities[replica.NodeID] = roachpb.Locality{}
 		}
 	}
 	return localities
+}
+
+// getNodeLocalityString returns the locality information for the given node
+// in its string format.
+func (sp *StorePool) getNodeLocalityString(nodeID roachpb.NodeID) string {
+	sp.localitiesMu.RLock()
+	defer sp.localitiesMu.RUnlock()
+	locality, ok := sp.localitiesMu.nodeLocalities[nodeID]
+	if !ok {
+		return ""
+	}
+	return locality.str
 }
