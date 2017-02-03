@@ -744,7 +744,11 @@ func (r *distinctBatch) NewIterator(prefix bool) Iterator {
 		iter = &r.prefixIter
 	}
 	if iter.rocksDBIterator.iter == nil {
-		iter.rocksDBIterator.init(r.batch, prefix, r)
+		if r.writeOnly {
+			iter.rocksDBIterator.init(r.parent.rdb, prefix, r)
+		} else {
+			iter.rocksDBIterator.init(r.batch, prefix, r)
+		}
 	}
 	if iter.inuse {
 		panic("iterator already in use")
@@ -754,12 +758,18 @@ func (r *distinctBatch) NewIterator(prefix bool) Iterator {
 }
 
 func (r *distinctBatch) Get(key MVCCKey) ([]byte, error) {
+	if r.writeOnly {
+		return dbGet(r.parent.rdb, key)
+	}
 	return dbGet(r.batch, key)
 }
 
 func (r *distinctBatch) GetProto(
 	key MVCCKey, msg proto.Message,
 ) (ok bool, keyBytes, valBytes int64, err error) {
+	if r.writeOnly {
+		return dbGetProto(r.parent.rdb, key, msg)
+	}
 	return dbGetProto(r.batch, key, msg)
 }
 
@@ -1171,6 +1181,9 @@ func (r *rocksDBIterator) getIter() *C.DBIterator {
 
 func (r *rocksDBIterator) init(rdb *C.DBEngine, prefix bool, engine Reader) {
 	r.iter = C.DBNewIter(rdb, C.bool(prefix))
+	if r.iter == nil {
+		panic("unable to create iterator")
+	}
 	r.engine = engine
 }
 
