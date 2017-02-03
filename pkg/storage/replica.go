@@ -1747,27 +1747,17 @@ func (r *Replica) beginCmds(ctx context.Context, ba *roachpb.BatchRequest) (*end
 // timestamp cache. When the write returns, the updated timestamp
 // will inform the batch response timestamp or batch response txn
 // timestamp.
-func (r *Replica) applyTimestampCache(ba *roachpb.BatchRequest) (bumped bool, _ *roachpb.Error) {
+func (r *Replica) applyTimestampCache(ba *roachpb.BatchRequest) (bool, *roachpb.Error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	var origTS hlc.Timestamp
 	if ba.Txn != nil {
 		r.mu.tsCache.ExpandRequests(ba.Txn.Timestamp)
-		origTS = ba.Txn.Timestamp
 	} else {
 		r.mu.tsCache.ExpandRequests(ba.Timestamp)
-		origTS = ba.Timestamp
 	}
-	defer func() {
-		// Let the caller know whether we did anything.
-		if ba.Txn != nil {
-			bumped = origTS != ba.Txn.Timestamp
-		} else {
-			bumped = origTS != ba.Timestamp
-		}
-	}()
 
+	var bumped bool
 	for _, union := range ba.Requests {
 		args := union.GetInner()
 		if consultsTimestampCache(args) {
@@ -1788,7 +1778,7 @@ func (r *Replica) applyTimestampCache(ba *roachpb.BatchRequest) (bumped bool, _ 
 					// a replay. We move the timestamp forward and return retry.
 					// If it's really a replay, it won't retry.
 					txn := ba.Txn.Clone()
-					txn.Timestamp.Forward(wTS.Next())
+					bumped = txn.Timestamp.Forward(wTS.Next()) || bumped
 					return bumped, roachpb.NewErrorWithTxn(roachpb.NewTransactionRetryError(), &txn)
 				}
 				continue
@@ -1801,12 +1791,12 @@ func (r *Replica) applyTimestampCache(ba *roachpb.BatchRequest) (bumped bool, _ 
 					nextTS := rTS.Next()
 					if ba.Txn.Timestamp.Less(nextTS) {
 						txn := ba.Txn.Clone()
-						txn.Timestamp.Forward(rTS.Next())
+						bumped = txn.Timestamp.Forward(nextTS) || bumped
 						ba.Txn = &txn
 					}
 				}
 			} else {
-				ba.Timestamp.Forward(rTS.Next())
+				bumped = ba.Timestamp.Forward(rTS.Next()) || bumped
 			}
 
 			// On more recent writes, forward the timestamp and set the
@@ -1818,13 +1808,13 @@ func (r *Replica) applyTimestampCache(ba *roachpb.BatchRequest) (bumped bool, _ 
 				if wTxnID == nil || *ba.Txn.ID != *wTxnID {
 					if !wTS.Less(ba.Txn.Timestamp) {
 						txn := ba.Txn.Clone()
-						txn.Timestamp.Forward(wTS.Next())
+						bumped = txn.Timestamp.Forward(wTS.Next()) || bumped
 						txn.WriteTooOld = true
 						ba.Txn = &txn
 					}
 				}
 			} else {
-				ba.Timestamp.Forward(wTS.Next())
+				bumped = ba.Timestamp.Forward(wTS.Next()) || bumped
 			}
 		}
 	}
