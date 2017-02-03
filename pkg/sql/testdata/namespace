@@ -7,11 +7,12 @@ date
 
 # Override table and check name resolves properly.
 statement ok
-CREATE TABLE pg_type(x INT);
+CREATE TABLE pg_type(x INT); INSERT INTO pg_type VALUES(42)
 
 query I
 SELECT x FROM pg_type
 ----
+42
 
 # Leave database, check name resolves to default.
 query T
@@ -24,3 +25,17 @@ query T
 CREATE DATABASE foo; SET DATABASE='foo'; SELECT typname FROM pg_type WHERE typname = 'date'
 ----
 date
+
+# Now set the search path to the testdb, check that pg_catalog is
+# inserted implicitly at the beginning.
+query T
+SET SEARCH_PATH = test; SELECT typname FROM pg_type WHERE typname = 'date'
+----
+date
+
+# Now set the search path to the testdb, placing pg_catalog explicitly
+# at the end.
+query I
+SET SEARCH_PATH = test,pg_catalog; SELECT x FROM pg_type
+----
+42
