@@ -187,10 +187,10 @@ func NewHistogram(metadata Metadata, duration time.Duration, maxVal int64, sigFi
 // with one digit of precision (i.e. errors of <10ms at 100ms, <6s at 60s).
 //
 // The windowed portion of the Histogram retains values for approximately
-// sampleDuration.
-func NewLatency(metadata Metadata, sampleDuration time.Duration) *Histogram {
+// histogramWindow.
+func NewLatency(metadata Metadata, histogramWindow time.Duration) *Histogram {
 	return NewHistogram(
-		metadata, sampleDuration, MaxLatency.Nanoseconds(), 1,
+		metadata, histogramWindow, MaxLatency.Nanoseconds(), 1,
 	)
 }
 

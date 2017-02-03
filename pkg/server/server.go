@@ -200,7 +200,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	s.distSender = kv.NewDistSender(distSenderCfg, s.gossip)
 	s.registry.AddMetricStruct(s.distSender.Metrics())
 
-	txnMetrics := kv.MakeTxnMetrics(s.cfg.MetricsSampleInterval)
+	txnMetrics := kv.MakeTxnMetrics(s.cfg.HistogramWindowInterval())
 	s.registry.AddMetricStruct(txnMetrics)
 	s.txnCoordSender = kv.NewTxnCoordSender(
 		s.cfg.AmbientCtx,
@@ -236,7 +236,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	roachpb.RegisterExternalServer(s.grpc, s.kvDB)
 
 	// Set up internal memory metrics for use by internal SQL executors.
-	s.internalMemMetrics = sql.MakeMemMetrics("internal")
+	s.internalMemMetrics = sql.MakeMemMetrics("internal", cfg.HistogramWindowInterval())
 	s.registry.AddMetricStruct(s.internalMemMetrics)
 
 	// Set up Lease Manager
@@ -259,21 +259,21 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	distsqlrun.RegisterDistSQLServer(s.grpc, s.distSQLServer)
 
 	// Set up admin memory metrics for use by admin SQL executors.
-	s.adminMemMetrics = sql.MakeMemMetrics("admin")
+	s.adminMemMetrics = sql.MakeMemMetrics("admin", cfg.HistogramWindowInterval())
 	s.registry.AddMetricStruct(s.adminMemMetrics)
 
 	// Set up Executor
 	execCfg := sql.ExecutorConfig{
-		AmbientCtx:            s.cfg.AmbientCtx,
-		NodeID:                &s.nodeIDContainer,
-		DB:                    s.db,
-		Gossip:                s.gossip,
-		DistSender:            s.distSender,
-		RPCContext:            s.rpcContext,
-		LeaseManager:          s.leaseMgr,
-		Clock:                 s.clock,
-		DistSQLSrv:            s.distSQLServer,
-		MetricsSampleInterval: s.cfg.MetricsSampleInterval,
+		AmbientCtx:              s.cfg.AmbientCtx,
+		NodeID:                  &s.nodeIDContainer,
+		DB:                      s.db,
+		Gossip:                  s.gossip,
+		DistSender:              s.distSender,
+		RPCContext:              s.rpcContext,
+		LeaseManager:            s.leaseMgr,
+		Clock:                   s.clock,
+		DistSQLSrv:              s.distSQLServer,
+		HistogramWindowInterval: s.cfg.HistogramWindowInterval(),
 	}
 	if s.cfg.TestingKnobs.SQLExecutor != nil {
 		execCfg.TestingKnobs = s.cfg.TestingKnobs.SQLExecutor.(*sql.ExecutorTestingKnobs)
@@ -290,7 +290,12 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	s.registry.AddMetricStruct(s.sqlExecutor)
 
 	s.pgServer = pgwire.MakeServer(
-		s.cfg.AmbientCtx, s.cfg.Config, s.sqlExecutor, &s.internalMemMetrics, s.cfg.SQLMemoryPoolSize,
+		s.cfg.AmbientCtx,
+		s.cfg.Config,
+		s.sqlExecutor,
+		&s.internalMemMetrics,
+		s.cfg.SQLMemoryPoolSize,
+		s.cfg.HistogramWindowInterval(),
 	)
 	s.registry.AddMetricStruct(s.pgServer.Metrics())
 
@@ -312,6 +317,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		ConsistencyCheckInterval:       s.cfg.ConsistencyCheckInterval,
 		ConsistencyCheckPanicOnFailure: s.cfg.ConsistencyCheckPanicOnFailure,
 		MetricsSampleInterval:          s.cfg.MetricsSampleInterval,
+		HistogramWindowInterval:        s.cfg.HistogramWindowInterval(),
 		StorePool:                      s.storePool,
 		SQLExecutor: sql.InternalExecutor{
 			LeaseManager: s.leaseMgr,
