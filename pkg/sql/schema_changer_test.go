@@ -200,13 +200,6 @@ INSERT INTO t.test VALUES ('a', 'b'), ('c', 'd');
 	if newVersion != expectedVersion {
 		t.Fatalf("bad version; e = %d, v = %d", expectedVersion, newVersion)
 	}
-	isDone, err := changer.IsDone()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !isDone {
-		t.Fatalf("table expected to not have an outstanding schema change: %v", tableDesc)
-	}
 
 	// Check that MaybeIncrementVersion increments the version
 	// correctly.
@@ -219,13 +212,7 @@ INSERT INTO t.test VALUES ('a', 'b'), ('c', 'd');
 	); err != nil {
 		t.Fatal(err)
 	}
-	isDone, err = changer.IsDone()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if isDone {
-		t.Fatalf("table expected to have an outstanding schema change: %v", desc.GetTable())
-	}
+
 	desc, err = changer.MaybeIncrementVersion()
 	if err != nil {
 		t.Fatal(err)
@@ -239,13 +226,6 @@ INSERT INTO t.test VALUES ('a', 'b'), ('c', 'd');
 	newVersion = savedTableDesc.Version
 	if newVersion != expectedVersion {
 		t.Fatalf("bad version in saved desc; e = %d, v = %d", expectedVersion, newVersion)
-	}
-	isDone, err = changer.IsDone()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !isDone {
-		t.Fatalf("table expected to not have an outstanding schema change: %v", tableDesc)
 	}
 
 	// Check that RunStateMachineBeforeBackfill doesn't do anything
@@ -310,14 +290,10 @@ INSERT INTO t.test VALUES ('a', 'b'), ('c', 'd');
 		}
 	}
 	// RunStateMachineBeforeBackfill() doesn't complete the schema change.
-	isDone, err = changer.IsDone()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if isDone {
+	tableDesc = sqlbase.GetTableDescriptor(kvDB, "t", "test")
+	if len(tableDesc.Mutations) == 0 {
 		t.Fatalf("table expected to have an outstanding schema change: %v", tableDesc)
 	}
-
 }
 
 func TestAsyncSchemaChanger(t *testing.T) {
@@ -541,18 +517,33 @@ func bulkInsertIntoTable(sqlDB *gosql.DB, maxValue int) error {
 // that run simultaneously.
 func TestRaceWithBackfill(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	t.Skip("#13014")
 	var backfillNotification chan bool
+	var partialBackfillDone atomic.Value
+	partialBackfillDone.Store(false)
+	var partialBackfill bool
 	params, _ := createTestServerParams()
 	// Disable asynchronous schema change execution to allow synchronous path
 	// to trigger start of backfill notification.
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &csql.SchemaChangerTestingKnobs{
 			RunBeforeBackfillChunk: func(sp roachpb.Span) error {
-				if backfillNotification != nil {
-					// Close channel to notify that the backfill has started.
-					close(backfillNotification)
-					backfillNotification = nil
+				notifyBackfill := func() {
+					if backfillNotification != nil {
+						// Close channel to notify that the backfill has started.
+						close(backfillNotification)
+						backfillNotification = nil
+					}
+				}
+				if partialBackfill {
+					if partialBackfillDone.Load().(bool) {
+						notifyBackfill()
+						// Returning DeadlineExceeded will result in the
+						// schema change being retried.
+						return context.DeadlineExceeded
+					}
+					partialBackfillDone.Store(true)
+				} else {
+					notifyBackfill()
 				}
 				return nil
 			},
@@ -673,24 +664,20 @@ CREATE UNIQUE INDEX vidx ON t.test (v);
 
 	notification := make(chan bool)
 	backfillNotification = notification
+	partialBackfill = true
 	// Run the schema change in a separate goroutine.
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {
-		// Start schema change that eventually runs a backfill.
+		// Start schema change that eventually runs a partial backfill.
 		if _, err := sqlDB.Exec("CREATE UNIQUE INDEX bar ON t.test (v)"); err != nil {
 			t.Error(err)
 		}
 		wg.Done()
 	}()
 
-	// Wait until the schema change backfill starts.
+	// Wait until the schema change backfill is partially complete.
 	<-notification
-
-	// Wait for a short bit to ensure that the backfill has likely progressed
-	// and written some data, but not long enough that the backfill has
-	// completed.
-	time.Sleep(10 * time.Millisecond)
 
 	if _, err := sqlDB.Exec("DROP TABLE t.test"); err != nil {
 		t.Fatal(err)

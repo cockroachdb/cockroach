@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/mon"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
@@ -481,29 +482,27 @@ func (scc *schemaChangerCollection) execSchemaChanges(
 		sc.db = *e.cfg.DB
 		sc.testingKnobs = e.cfg.SchemaChangerTestingKnobs
 		for r := retry.Start(base.DefaultRetryOptions()); r.Next(); {
-			if done, err := sc.IsDone(); err != nil {
-				log.Warning(ctx, err)
-				break
-			} else if done {
-				break
-			}
 			if err := sc.exec(); err != nil {
-				if isSchemaChangeRetryError(err) {
-					// Try again
+				if err != errExistingSchemaChangeLease {
+					log.Warningf(ctx, "Error executing schema change: %s", err)
+				}
+				if err == sqlbase.ErrDescriptorNotFound {
+				} else if sqlbase.IsIntegrityConstraintError(err) {
+					// All constraint violations can be reported; we report it as the result
+					// corresponding to the statement that enqueued this changer.
+					// There's some sketchiness here: we assume there's a single result
+					// per statement and we clobber the result/error of the corresponding
+					// statement.
+					// There's also another subtlety: we can only report results for
+					// statements in the current batch; we can't modify the results of older
+					// statements.
+					if scEntry.epoch == scc.curGroupNum {
+						results[scEntry.idx] = Result{Err: err}
+					}
+				} else {
+					// retryable error.
 					continue
 				}
-				// All other errors can be reported; we report it as the result
-				// corresponding to the statement that enqueued this changer.
-				// There's some sketchiness here: we assume there's a single result
-				// per statement and we clobber the result/error of the corresponding
-				// statement.
-				// There's also another subtlety: we can only report results for
-				// statements in the current batch; we can't modify the results of older
-				// statements.
-				if scEntry.epoch == scc.curGroupNum {
-					results[scEntry.idx] = Result{Err: err}
-				}
-				log.Warningf(ctx, "error executing schema change: %s", err)
 			}
 			break
 		}
