@@ -86,9 +86,19 @@ func (n UnresolvedName) ResolveFunction(searchPath SearchPath) (*FunctionDefinit
 	// Name.Normalize(), functions are special in that they are
 	// guaranteed to not contain special Unicode characters. So we can
 	// use ToLower directly.
+	// TODO(knz) this will need to be revisited once we allow
+	// function names to exist in custom namespaces, whose names
+	// may contain special characters.
 	prefix := strings.ToLower(fn.prefix())
 	smallName := strings.ToLower(fn.function())
 	fullName := smallName
+
+	if prefix == "pg_catalog" {
+		// If the user specified e.g. `pg_catalog.max()` we want to find
+		// it in the global namespace.
+		prefix = ""
+	}
+
 	if prefix != "" {
 		fullName = prefix + "." + smallName
 	}
