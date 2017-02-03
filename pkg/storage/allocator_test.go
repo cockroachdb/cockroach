@@ -189,11 +189,11 @@ func mockStorePool(
 	aliveStoreIDs, deadStoreIDs []roachpb.StoreID,
 	deadReplicas []roachpb.ReplicaIdent,
 ) {
-	storePool.mu.Lock()
-	defer storePool.mu.Unlock()
+	storePool.detailsMu.Lock()
+	defer storePool.detailsMu.Unlock()
 
 	liveNodeSet := map[roachpb.NodeID]struct{}{}
-	storePool.mu.storeDetails = map[roachpb.StoreID]*storeDetail{}
+	storePool.detailsMu.storeDetails = map[roachpb.StoreID]*storeDetail{}
 	for _, storeID := range aliveStoreIDs {
 		liveNodeSet[roachpb.NodeID(storeID)] = struct{}{}
 		detail := storePool.getStoreDetailLocked(storeID)
@@ -209,7 +209,7 @@ func mockStorePool(
 			Node:    roachpb.NodeDescriptor{NodeID: roachpb.NodeID(storeID)},
 		}
 	}
-	for storeID, detail := range storePool.mu.storeDetails {
+	for storeID, detail := range storePool.detailsMu.storeDetails {
 		for _, replica := range deadReplicas {
 			if storeID != replica.Replica.StoreID {
 				continue
@@ -257,13 +257,13 @@ func TestAllocatorCorruptReplica(t *testing.T) {
 	const store1ID = roachpb.StoreID(1)
 
 	// Set store 1 to have a dead replica in the store pool.
-	sp.mu.Lock()
-	sp.mu.storeDetails[store1ID].deadReplicas[firstRange] =
+	sp.detailsMu.Lock()
+	sp.detailsMu.storeDetails[store1ID].deadReplicas[firstRange] =
 		[]roachpb.ReplicaDescriptor{{
 			NodeID:  roachpb.NodeID(1),
 			StoreID: store1ID,
 		}}
-	sp.mu.Unlock()
+	sp.detailsMu.Unlock()
 
 	result, err := a.AllocateTarget(
 		simpleZoneConfig.Constraints,
@@ -1543,13 +1543,13 @@ func TestAllocatorThrottled(t *testing.T) {
 
 	// Finally, set that store to be throttled and ensure we don't send the
 	// replica to purgatory.
-	a.storePool.mu.Lock()
-	storeDetail, ok := a.storePool.mu.storeDetails[singleStore[0].StoreID]
+	a.storePool.detailsMu.Lock()
+	storeDetail, ok := a.storePool.detailsMu.storeDetails[singleStore[0].StoreID]
 	if !ok {
 		t.Fatalf("store:%d was not found in the store pool", singleStore[0].StoreID)
 	}
 	storeDetail.throttledUntil = timeutil.Now().Add(24 * time.Hour)
-	a.storePool.mu.Unlock()
+	a.storePool.detailsMu.Unlock()
 	_, err = a.AllocateTarget(
 		simpleZoneConfig.Constraints,
 		[]roachpb.ReplicaDescriptor{},
