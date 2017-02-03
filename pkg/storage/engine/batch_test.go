@@ -847,6 +847,50 @@ func TestBatchDistinct(t *testing.T) {
 	}
 }
 
+func TestWriteOnlyBatchDistinct(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+	e := NewInMem(roachpb.Attributes{}, 1<<20)
+	stopper.AddCloser(e)
+
+	if err := e.Put(mvccKey("b"), []byte("b")); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := PutProto(e, mvccKey("c"), &roachpb.Value{}); err != nil {
+		t.Fatal(err)
+	}
+
+	b := e.NewWriteOnlyBatch()
+	defer b.Close()
+
+	distinct := b.Distinct()
+	defer distinct.Close()
+
+	// Verify that reads on the distinct batch go to the underlying engine, not
+	// to the write-only batch.
+	iter := distinct.NewIterator(false)
+	iter.Seek(mvccKey("a"))
+	if !iter.Valid() {
+		t.Fatalf("expected iterator to be valid")
+	}
+	if string(iter.Key().Key) != "b" {
+		t.Fatalf("expected b, but got %s", iter.Key())
+	}
+
+	if v, err := distinct.Get(mvccKey("b")); err != nil {
+		t.Fatal(err)
+	} else if string(v) != "b" {
+		t.Fatalf("expected b, but got %s", v)
+	}
+
+	val := &roachpb.Value{}
+	if _, _, _, err := distinct.GetProto(mvccKey("c"), val); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestBatchDistinctPanics(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
