@@ -984,7 +984,7 @@ func (tc *TxnCoordSender) resendWithTxn(
 	tmpDB := client.NewDBWithContext(tc, dbCtx)
 	var br *roachpb.BatchResponse
 	err := tmpDB.Txn(ctx, func(txn *client.Txn) error {
-		txn.SetDebugName("auto-wrap", 0)
+		txn.SetDebugName("auto-wrap")
 		b := txn.NewBatch()
 		b.Header = ba.Header
 		for _, arg := range ba.Requests {

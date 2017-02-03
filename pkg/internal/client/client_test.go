@@ -680,7 +680,7 @@ func concurrentIncrements(db *client.DB, t *testing.T) {
 			wgStart.Wait()
 
 			if err := db.Txn(context.TODO(), func(txn *client.Txn) error {
-				txn.SetDebugName(fmt.Sprintf("test-%d", i), 0)
+				txn.SetDebugName(fmt.Sprintf("test-%d", i))
 
 				// Retrieve the other key.
 				gr, err := txn.Get(readKey)
