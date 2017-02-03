@@ -116,19 +116,19 @@ func TestStorePoolGossipUpdate(t *testing.T) {
 	defer stopper.Stop()
 	sg := gossiputil.NewStoreGossiper(g)
 
-	sp.mu.RLock()
-	if _, ok := sp.mu.storeDetails[2]; ok {
+	sp.detailsMu.RLock()
+	if _, ok := sp.detailsMu.storeDetails[2]; ok {
 		t.Fatalf("store 2 is already in the pool's store list")
 	}
-	sp.mu.RUnlock()
+	sp.detailsMu.RUnlock()
 
 	sg.GossipStores(uniqueStore, t)
 
-	sp.mu.RLock()
-	if _, ok := sp.mu.storeDetails[2]; !ok {
+	sp.detailsMu.RLock()
+	if _, ok := sp.detailsMu.storeDetails[2]; !ok {
 		t.Fatalf("store 2 isn't in the pool's store list")
 	}
-	sp.mu.RUnlock()
+	sp.detailsMu.RUnlock()
 }
 
 // verifyStoreList ensures that the returned list of stores is correct.
@@ -233,23 +233,23 @@ func TestStorePoolGetStoreList(t *testing.T) {
 	}
 
 	// Add some corrupt replicas that should not affect getStoreList().
-	sp.mu.Lock()
-	sp.mu.storeDetails[matchingStore.StoreID].deadReplicas[roachpb.RangeID(10)] =
+	sp.detailsMu.Lock()
+	sp.detailsMu.storeDetails[matchingStore.StoreID].deadReplicas[roachpb.RangeID(10)] =
 		[]roachpb.ReplicaDescriptor{{
 			StoreID: matchingStore.StoreID,
 			NodeID:  matchingStore.Node.NodeID,
 		}}
-	sp.mu.storeDetails[matchingStore.StoreID].deadReplicas[roachpb.RangeID(11)] =
+	sp.detailsMu.storeDetails[matchingStore.StoreID].deadReplicas[roachpb.RangeID(11)] =
 		[]roachpb.ReplicaDescriptor{{
 			StoreID: matchingStore.StoreID,
 			NodeID:  matchingStore.Node.NodeID,
 		}}
-	sp.mu.storeDetails[corruptReplicaStore.StoreID].deadReplicas[roachpb.RangeID(10)] =
+	sp.detailsMu.storeDetails[corruptReplicaStore.StoreID].deadReplicas[roachpb.RangeID(10)] =
 		[]roachpb.ReplicaDescriptor{{
 			StoreID: corruptReplicaStore.StoreID,
 			NodeID:  corruptReplicaStore.Node.NodeID,
 		}}
-	sp.mu.Unlock()
+	sp.detailsMu.Unlock()
 
 	if err := verifyStoreList(
 		sp,
@@ -270,16 +270,16 @@ func TestStorePoolGetStoreList(t *testing.T) {
 
 	// Set deadStore as dead.
 	mnl.setLive(deadStore.Node.NodeID, false)
-	sp.mu.Lock()
+	sp.detailsMu.Lock()
 	// Set declinedStore as throttled.
-	sp.mu.storeDetails[declinedStore.StoreID].throttledUntil = sp.clock.Now().GoTime().Add(time.Hour)
+	sp.detailsMu.storeDetails[declinedStore.StoreID].throttledUntil = sp.clock.Now().GoTime().Add(time.Hour)
 	// Add a corrupt replica to corruptReplicaStore.
-	sp.mu.storeDetails[corruptReplicaStore.StoreID].deadReplicas[roachpb.RangeID(1)] =
+	sp.detailsMu.storeDetails[corruptReplicaStore.StoreID].deadReplicas[roachpb.RangeID(1)] =
 		[]roachpb.ReplicaDescriptor{{
 			StoreID: corruptReplicaStore.StoreID,
 			NodeID:  corruptReplicaStore.Node.NodeID,
 		}}
-	sp.mu.Unlock()
+	sp.detailsMu.Unlock()
 
 	if err := verifyStoreList(
 		sp,
@@ -304,8 +304,8 @@ func TestStorePoolGetStoreDetails(t *testing.T) {
 	sg := gossiputil.NewStoreGossiper(g)
 	sg.GossipStores(uniqueStore, t)
 
-	sp.mu.Lock()
-	defer sp.mu.Unlock()
+	sp.detailsMu.Lock()
+	defer sp.detailsMu.Unlock()
 	if detail := sp.getStoreDetailLocked(roachpb.StoreID(1)); detail.desc != nil {
 		t.Errorf("unexpected fetched store ID 1: %+v", detail.desc)
 	}
@@ -433,9 +433,9 @@ func TestStorePoolThrottle(t *testing.T) {
 		expected := sp.clock.Now().GoTime().Add(sp.declinedReservationsTimeout)
 		sp.throttle(throttleDeclined, 1)
 
-		sp.mu.Lock()
+		sp.detailsMu.Lock()
 		detail := sp.getStoreDetailLocked(1)
-		sp.mu.Unlock()
+		sp.detailsMu.Unlock()
 		if !detail.throttledUntil.Equal(expected) {
 			t.Errorf("expected store to have been throttled to %v, found %v",
 				expected, detail.throttledUntil)
@@ -446,9 +446,9 @@ func TestStorePoolThrottle(t *testing.T) {
 		expected := sp.clock.Now().GoTime().Add(sp.failedReservationsTimeout)
 		sp.throttle(throttleFailed, 1)
 
-		sp.mu.Lock()
+		sp.detailsMu.Lock()
 		detail := sp.getStoreDetailLocked(1)
-		sp.mu.Unlock()
+		sp.detailsMu.Unlock()
 		if !detail.throttledUntil.Equal(expected) {
 			t.Errorf("expected store to have been throttled to %v, found %v",
 				expected, detail.throttledUntil)
