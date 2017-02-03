@@ -27,7 +27,7 @@ import (
 	"golang.org/x/net/context"
 )
 
-var disableTimedMutex = envutil.EnvOrDefaultBool("COCKROACH_DISABLE_TIMED_MUTEX", false)
+var enableTimedMutex = envutil.EnvOrDefaultBool("COCKROACH_ENABLE_TIMED_MUTEX", false)
 
 // timedMutex is a mutex which dumps a stack trace via the supplied callback
 // whenever a lock is unlocked after having been held for longer than the
@@ -81,7 +81,7 @@ func thresholdLogger(
 // the supplied timingFn callback after each unlock with the elapsed time that
 // the mutex was held for.
 func makeTimedMutex(cb timingFn) timedMutex {
-	if disableTimedMutex {
+	if !enableTimedMutex {
 		cb = nil
 	}
 	return timedMutex{
@@ -94,7 +94,9 @@ func makeTimedMutex(cb timingFn) timedMutex {
 func (tm *timedMutex) Lock() {
 	tm.mu.Lock()
 	atomic.StoreInt32(&tm.isLocked, 1)
-	tm.lockedAt = timeutil.Now()
+	if tm.cb != nil {
+		tm.lockedAt = timeutil.Now()
+	}
 }
 
 // Unlock implements sync.Locker.
