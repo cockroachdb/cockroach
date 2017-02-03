@@ -513,30 +513,43 @@ func (p *planner) expandTableGlob(pattern parser.TablePattern) (parser.TableName
 	return tableNames, nil
 }
 
-// databaseFromSearchPath returns the first database in the session's SearchPath
-// that contains the specified table. If the table can't be found, we return the
-// session database.
-func (p *planner) databaseFromSearchPath(tn *parser.TableName) (string, error) {
+// searchAndQualifyDatabase augments the table name with the database
+// where it was found. It searches first in the session current
+// database, if that's defined, otherwise the search path.  The
+// provided TableName is modified in-place in case of success, and
+// left unchanged otherwise.
+func (p *planner) searchAndQualifyDatabase(tn *parser.TableName) error {
 	t := *tn
+
+	if p.session.Database != "" {
+		t.DatabaseName = parser.Name(p.session.Database)
+		desc, err := p.getTableOrViewDesc(&t)
+		if err != nil && !sqlbase.IsUndefinedTableError(err) {
+			return err
+		}
+		if desc != nil {
+			// Database was found, use this name.
+			*tn = t
+			return nil
+		}
+	}
+
+	// Not found using the current session's database, so try
+	// the search path instead.
 	for _, database := range p.session.SearchPath {
 		t.DatabaseName = parser.Name(database)
 		desc, err := p.getTableOrViewDesc(&t)
-		if err != nil {
-			if sqlbase.IsUndefinedDatabaseError(err) {
-				// Keep iterating through search path if a database in the search path
-				// doesn't exist.
-				continue
-			}
-			return "", err
+		if err != nil && !sqlbase.IsUndefinedTableError(err) {
+			return err
 		}
 		if desc != nil {
 			// The table or view exists in this database, so return it.
-			return t.Database(), nil
+			*tn = t
+			return nil
 		}
 	}
-	// If we couldn't find the table or view in the search path, default to the
-	// database set by the user.
-	return p.session.Database, nil
+
+	return sqlbase.NewUndefinedTableError(string(t.TableName))
 }
 
 // getQualifiedTableName returns the database-qualified name of the table
