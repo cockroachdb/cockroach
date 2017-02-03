@@ -842,23 +842,24 @@ func (s *SchemaChangeManager) Start(stopper *stop.Stopper) {
 					if timeutil.Since(sc.execAfter) > 0 {
 						err := sc.exec()
 						if err != nil {
-							if err == errExistingSchemaChangeLease {
-							} else if err == sqlbase.ErrDescriptorNotFound {
+							if err == sqlbase.ErrDescriptorNotFound {
 								// Someone deleted this table. Don't try to run the schema
 								// changer again. Note that there's no gossip update for the
 								// deletion which would remove this schemaChanger.
 								delete(s.schemaChangers, tableID)
-							} else {
+								break
+							} else if err != errExistingSchemaChangeLease {
 								// We don't need to act on integrity
 								// constraints violations because exec()
 								// purges mutations that violate integrity
 								// constraints.
-								log.Warningf(context.TODO(), "Error executing schema change: %s", err)
+								log.Warningf(context.TODO(), "error executing schema change: %s", err)
 							}
 						}
 						// Advance the execAfter time so that this schema
 						// changer doesn't get called again for a while.
 						sc.execAfter = timeutil.Now().Add(delay)
+						s.schemaChangers[tableID] = sc
 					}
 					// Only attempt to run one schema changer.
 					break
