@@ -204,7 +204,7 @@ func (a *Allocator) AllocateTarget(
 		sl,
 		constraints,
 		existing,
-		a.storePool.getNodeLocalities(existing),
+		a.storePool.getLocalities(existing),
 		a.storePool.deterministic,
 	)
 	if log.V(3) {
@@ -253,7 +253,7 @@ func (a Allocator) RemoveTarget(
 	candidates := removeCandidates(
 		sl,
 		constraints,
-		a.storePool.getNodeLocalities(existing),
+		a.storePool.getLocalities(existing),
 		a.storePool.deterministic,
 	)
 	if log.V(3) {
@@ -321,7 +321,7 @@ func (a Allocator) RebalanceTarget(
 		sl,
 		constraints,
 		existing,
-		a.storePool.getNodeLocalities(existing),
+		a.storePool.getLocalities(existing),
 		a.storePool.deterministic,
 	)
 
