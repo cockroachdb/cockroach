@@ -1362,7 +1362,7 @@ var (
 
 	typDelim = parser.NewDString(",")
 
-	arrayInProcName = "pg_catalog.array_in"
+	arrayInProcName = "array_in"
 	arrayInProcOid  = makeOidHasher().BuiltinOid(arrayInProcName, &parser.Builtins[arrayInProcName][0])
 )
 
