@@ -502,10 +502,10 @@ func (sp *StorePool) throttle(reason throttleReason, storeID roachpb.StoreID) {
 	}
 }
 
-// getNodeLocalities returns the localities for the provided replicas.
+// getLocalities returns the localities for the provided replicas.
 // TODO(bram): consider storing a full list of all node to node diversity
 // scores for faster lookups.
-func (sp *StorePool) getNodeLocalities(
+func (sp *StorePool) getLocalities(
 	replicas []roachpb.ReplicaDescriptor,
 ) map[roachpb.NodeID]roachpb.Locality {
 	sp.localitiesMu.RLock()
@@ -519,4 +519,15 @@ func (sp *StorePool) getNodeLocalities(
 		}
 	}
 	return localities
+}
+
+// getNodeLocality returns the locality information for the given node.
+func (sp *StorePool) getNodeLocality(nodeID roachpb.NodeID) roachpb.Locality {
+	sp.localitiesMu.RLock()
+	defer sp.localitiesMu.RUnlock()
+	locality, ok := sp.localitiesMu.nodeLocalities[nodeID]
+	if !ok {
+		return roachpb.Locality{}
+	}
+	return locality
 }
