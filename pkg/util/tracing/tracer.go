@@ -24,7 +24,6 @@ import (
 	"golang.org/x/net/context"
 	"golang.org/x/net/trace"
 
-	"github.com/cockroachdb/cockroach/pkg/util/caller"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/lightstep/lightstep-tracer-go"
 	basictracer "github.com/opentracing/basictracer-go"
@@ -249,10 +248,11 @@ func NewTracer() opentracing.Tracer {
 // not, it creates one using the provided Tracer and wraps it in the returned
 // Span. The returned closure must be called after the request has been fully
 // processed.
-func EnsureContext(ctx context.Context, tracer opentracing.Tracer) (context.Context, func()) {
-	_, _, funcName := caller.Lookup(1)
+func EnsureContext(
+	ctx context.Context, tracer opentracing.Tracer, name string,
+) (context.Context, func()) {
 	if opentracing.SpanFromContext(ctx) == nil {
-		sp := tracer.StartSpan(funcName)
+		sp := tracer.StartSpan(name)
 		return opentracing.ContextWithSpan(ctx, sp), sp.Finish
 	}
 	return ctx, func() {}

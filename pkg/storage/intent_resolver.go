@@ -418,7 +418,7 @@ func (ir *intentResolver) resolveIntents(
 		return nil
 	}
 	// We're doing async stuff below; those need new traces.
-	ctx, cleanup := tracing.EnsureContext(ctx, ir.store.Tracer())
+	ctx, cleanup := tracing.EnsureContext(ctx, ir.store.Tracer(), "resolve intents")
 	defer cleanup()
 	log.Eventf(ctx, "resolving intents [wait=%t]", wait)
 

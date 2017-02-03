@@ -596,7 +596,7 @@ func (ds *DistSender) Send(
 	}
 
 	ctx = ds.AnnotateCtx(ctx)
-	ctx, cleanup := tracing.EnsureContext(ctx, ds.AmbientContext.Tracer)
+	ctx, cleanup := tracing.EnsureContext(ctx, ds.AmbientContext.Tracer, "dist sender")
 	defer cleanup()
 
 	var rplChunks []*roachpb.BatchResponse
