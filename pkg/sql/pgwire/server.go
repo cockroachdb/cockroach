@@ -103,13 +103,15 @@ type ServerMetrics struct {
 	internalMemMetrics *sql.MemoryMetrics
 }
 
-func makeServerMetrics(internalMemMetrics *sql.MemoryMetrics) ServerMetrics {
+func makeServerMetrics(
+	internalMemMetrics *sql.MemoryMetrics, histogramWindow time.Duration,
+) ServerMetrics {
 	return ServerMetrics{
 		Conns:              metric.NewCounter(MetaConns),
 		BytesInCount:       metric.NewCounter(MetaBytesIn),
 		BytesOutCount:      metric.NewCounter(MetaBytesOut),
-		ConnMemMetrics:     sql.MakeMemMetrics("conns"),
-		SQLMemMetrics:      sql.MakeMemMetrics("client"),
+		ConnMemMetrics:     sql.MakeMemMetrics("conns", histogramWindow),
+		SQLMemMetrics:      sql.MakeMemMetrics("client", histogramWindow),
 		internalMemMetrics: internalMemMetrics,
 	}
 }
@@ -131,12 +133,13 @@ func MakeServer(
 	executor *sql.Executor,
 	internalMemMetrics *sql.MemoryMetrics,
 	maxSQLMem int64,
+	histogramWindow time.Duration,
 ) *Server {
 	server := &Server{
 		AmbientCtx: ambientCtx,
 		cfg:        cfg,
 		executor:   executor,
-		metrics:    makeServerMetrics(internalMemMetrics),
+		metrics:    makeServerMetrics(internalMemMetrics, histogramWindow),
 	}
 	server.sqlMemoryPool = mon.MakeMonitor("sql",
 		server.metrics.SQLMemMetrics.CurBytesCount,

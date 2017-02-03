@@ -36,12 +36,12 @@ import (
 )
 
 func makeTestV3Conn(c net.Conn) v3Conn {
-	metrics := makeServerMetrics(nil)
+	metrics := makeServerMetrics(nil, metric.TestSampleInterval)
 	mon := mon.MakeUnlimitedMonitor(context.Background(), "test", nil, nil, 1000)
 	exec := sql.NewExecutor(
 		sql.ExecutorConfig{
-			AmbientCtx:            log.AmbientContext{Tracer: tracing.NewTracer()},
-			MetricsSampleInterval: metric.TestSampleInterval,
+			AmbientCtx:              log.AmbientContext{Tracer: tracing.NewTracer()},
+			HistogramWindowInterval: metric.TestSampleInterval,
 		},
 		nil, /* stopper */
 	)

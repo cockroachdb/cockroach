@@ -87,9 +87,9 @@ type nodeMetrics struct {
 	Err     *metric.Counter
 }
 
-func makeNodeMetrics(reg *metric.Registry, sampleInterval time.Duration) nodeMetrics {
+func makeNodeMetrics(reg *metric.Registry, histogramWindow time.Duration) nodeMetrics {
 	nm := nodeMetrics{
-		Latency: metric.NewLatency(metaExecLatency, sampleInterval),
+		Latency: metric.NewLatency(metaExecLatency, histogramWindow),
 		Success: metric.NewCounter(metaExecSuccess),
 		Err:     metric.NewCounter(metaExecError),
 	}
@@ -201,6 +201,7 @@ func bootstrapCluster(
 	cfg.TestingKnobs = storage.StoreTestingKnobs{}
 	cfg.ScanInterval = 10 * time.Minute
 	cfg.MetricsSampleInterval = time.Duration(math.MaxInt64)
+	cfg.HistogramWindowInterval = time.Duration(math.MaxInt64)
 	cfg.ConsistencyCheckInterval = 10 * time.Minute
 	cfg.AmbientCtx.Tracer = tracing.NewTracer()
 	// Create a KV DB with a local sender.
@@ -272,7 +273,7 @@ func NewNode(
 		storeCfg:    cfg,
 		stopper:     stopper,
 		recorder:    recorder,
-		metrics:     makeNodeMetrics(reg, cfg.MetricsSampleInterval),
+		metrics:     makeNodeMetrics(reg, cfg.HistogramWindowInterval),
 		stores:      storage.NewStores(cfg.AmbientCtx, cfg.Clock),
 		txnMetrics:  txnMetrics,
 		eventLogger: eventLogger,
