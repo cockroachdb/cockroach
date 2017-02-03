@@ -1407,34 +1407,30 @@ var Builtins = map[string][]Builtin{
 		},
 	},
 
-	// For now, schemas are the same as databases. So, current_schemas returns the
-	// current database (if one has been set by the user) and, if the passed in
-	// parameter is true, the session's database search path.
+	// For now, schemas are the same as databases. So, current_schemas
+	// returns the current database (if one has been set by the user)
+	// and the session's database search path.
 	"current_schemas": {
 		Builtin{
-			Types:        ArgTypes{{"include_implicit", TypeBool}},
+			Types:        ArgTypes{{"unused", TypeBool}},
 			ReturnType:   TypeStringArray,
 			category:     categorySystemInfo,
 			ctxDependent: true,
 			fn: func(ctx *EvalContext, args DTuple) (Datum, error) {
 				schemas := NewDArray(TypeString)
-				showImplicitSchemas := args[0].(*DBool)
-				if showImplicitSchemas == DBoolTrue {
-					for _, p := range ctx.SearchPath {
-						if err := schemas.Append(NewDString(p)); err != nil {
-							return nil, err
-						}
-					}
-				}
 				if len(ctx.Database) != 0 {
 					if err := schemas.Append(NewDString(ctx.Database)); err != nil {
 						return nil, err
 					}
 				}
+				for _, p := range ctx.SearchPath {
+					if err := schemas.Append(NewDString(p)); err != nil {
+						return nil, err
+					}
+				}
 				return schemas, nil
 			},
-			Info: "Returns the current database; optionally include implicit schemas (e.g. " +
-				"`pg_catalog`).",
+			Info: "Returns the current search path for unqualified names.",
 		},
 	},
 
