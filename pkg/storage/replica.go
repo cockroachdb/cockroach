@@ -2679,7 +2679,10 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 		}
 	}
 
-	batch := r.store.Engine().NewBatch()
+	// Use a more efficient write-only batch because we don't need to do any
+	// reads from the batch. Any reads are performed via the "distinct" batch
+	// which passes the reads through to the underlying DB.
+	batch := r.store.Engine().NewWriteOnlyBatch()
 	defer batch.Close()
 
 	// We know that all of the writes from here forward will be to distinct keys.
@@ -3775,7 +3778,7 @@ func (r *Replica) applyRaftCommand(
 				oldRaftAppliedIndex, rResult.State.RaftAppliedIndex)))
 	}
 
-	batch := r.store.Engine().NewBatch()
+	batch := r.store.Engine().NewWriteOnlyBatch()
 	defer batch.Close()
 	if writeBatch != nil {
 		if err := batch.ApplyBatchRepr(writeBatch.Data); err != nil {
@@ -3787,7 +3790,6 @@ func (r *Replica) applyRaftCommand(
 	// The only remaining use of the batch is for range-local keys which we know
 	// have not been previously written within this batch. Currently the only
 	// remaining writes are the raft applied index and the updated MVCC stats.
-	//
 	writer := batch.Distinct()
 
 	// Advance the last applied index. We use a blind write in order to avoid
