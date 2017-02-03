@@ -28,8 +28,7 @@ func TestResolveFunction(t *testing.T) {
 		err     string
 	}{
 		{`count`, `count`, ``},
-		{`pg_catalog.pg_typeof`, `pg_catalog.pg_typeof`, ``},
-		{`pg_typeof`, `pg_catalog.pg_typeof`, ``},
+		{`pg_catalog.pg_typeof`, `pg_typeof`, ``},
 
 		{`foo`, ``, `unknown function: foo`},
 		{`""`, ``, `invalid function name: ""`},

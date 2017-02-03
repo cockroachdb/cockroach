@@ -718,10 +718,10 @@ oid   typname      typinput    typoutput  typreceive  typsend  typmodin  typmodo
 26    oid          0           0          0           0        0         0          0
 700   float4       0           0          0           0        0         0          0
 701   float8       0           0          0           0        0         0          0
-1005  int2[]       2892088402  0          0           0        0         0          0
-1007  int4[]       2892088402  0          0           0        0         0          0
-1009  string[]     2892088402  0          0           0        0         0          0
-1016  int8[]       2892088402  0          0           0        0         0          0
+1005  int2[]       4288767817  0          0           0        0         0          0
+1007  int4[]       4288767817  0          0           0        0         0          0
+1009  string[]     4288767817  0          0           0        0         0          0
+1016  int8[]       4288767817  0          0           0        0         0          0
 1043  string       0           0          0           0        0         0          0
 1082  date         0           0          0           0        0         0          0
 1114  timestamp    0           0          0           0        0         0          0

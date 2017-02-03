@@ -39,12 +39,12 @@ SELECT 'max'::REGPROC
 query OOOO
 SELECT 'array_in'::REGPROC, 'array_in(a,b,c)'::REGPROC, 'pg_catalog.array_in'::REGPROC, 'pg_catalog.array_in( a ,b, c )'::REGPROC
 ----
-2892088402  2892088402  2892088402  2892088402
+4288767817  4288767817  4288767817  4288767817
 
 query OOOO
 SELECT 'array_in'::REGPROCEDURE, 'array_in(a,b,c)'::REGPROCEDURE, 'pg_catalog.array_in'::REGPROCEDURE, 'pg_catalog.array_in( a ,b, c )'::REGPROCEDURE
 ----
-2892088402  2892088402  2892088402  2892088402
+4288767817  4288767817  4288767817  4288767817
 
 query O
 SELECT 'public'::REGNAMESPACE
