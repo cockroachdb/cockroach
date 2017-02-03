@@ -58,7 +58,7 @@ var _ metric.Struct = MemoryMetrics{}
 const log10int64times1000 = 19 * 1000
 
 // MakeMemMetrics instantiates the metric objects for an SQL endpoint.
-func MakeMemMetrics(endpoint string) MemoryMetrics {
+func MakeMemMetrics(endpoint string, histogramWindow time.Duration) MemoryMetrics {
 	prefix := "sql.mon." + endpoint
 	MetaMemMaxBytes := metric.Metadata{Name: prefix + ".max"}
 	MetaMemCurBytes := metric.Metadata{Name: prefix + ".cur"}
@@ -67,11 +67,11 @@ func MakeMemMetrics(endpoint string) MemoryMetrics {
 	MetaMemMaxSessionBytes := metric.Metadata{Name: prefix + ".session.max"}
 	MetaMemSessionCurBytes := metric.Metadata{Name: prefix + ".session.cur"}
 	return MemoryMetrics{
-		MaxBytesHist:         metric.NewHistogram(MetaMemMaxBytes, time.Minute, log10int64times1000, 3),
+		MaxBytesHist:         metric.NewHistogram(MetaMemMaxBytes, histogramWindow, log10int64times1000, 3),
 		CurBytesCount:        metric.NewCounter(MetaMemCurBytes),
-		TxnMaxBytesHist:      metric.NewHistogram(MetaMemMaxTxnBytes, time.Minute, log10int64times1000, 3),
+		TxnMaxBytesHist:      metric.NewHistogram(MetaMemMaxTxnBytes, histogramWindow, log10int64times1000, 3),
 		TxnCurBytesCount:     metric.NewCounter(MetaMemTxnCurBytes),
-		SessionMaxBytesHist:  metric.NewHistogram(MetaMemMaxSessionBytes, time.Minute, log10int64times1000, 3),
+		SessionMaxBytesHist:  metric.NewHistogram(MetaMemMaxSessionBytes, histogramWindow, log10int64times1000, 3),
 		SessionCurBytesCount: metric.NewCounter(MetaMemSessionCurBytes),
 	}
 }

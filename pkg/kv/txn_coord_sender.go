@@ -125,15 +125,15 @@ var (
 )
 
 // MakeTxnMetrics returns a TxnMetrics struct that contains metrics whose
-// windowed portions retain data for approximately sampleInterval.
-func MakeTxnMetrics(sampleInterval time.Duration) TxnMetrics {
+// windowed portions retain data for approximately histogramWindow.
+func MakeTxnMetrics(histogramWindow time.Duration) TxnMetrics {
 	return TxnMetrics{
 		Aborts:     metric.NewCounterWithRates(metaAbortsRates),
 		Commits:    metric.NewCounterWithRates(metaCommitsRates),
 		Commits1PC: metric.NewCounterWithRates(metaCommits1PCRates),
 		Abandons:   metric.NewCounterWithRates(metaAbandonsRates),
-		Durations:  metric.NewLatency(metaDurationsHistograms, sampleInterval),
-		Restarts:   metric.NewHistogram(metaRestartsHistogram, sampleInterval, 100, 3),
+		Durations:  metric.NewLatency(metaDurationsHistograms, histogramWindow),
+		Restarts:   metric.NewHistogram(metaRestartsHistogram, histogramWindow, 100, 3),
 	}
 }
 
