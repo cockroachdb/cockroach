@@ -53,10 +53,8 @@ func thresholdLogger(
 	ctx context.Context,
 	warnDuration time.Duration,
 	printf func(context.Context, string, ...interface{}),
-	record timingFn,
 ) timingFn {
 	return func(heldFor time.Duration) {
-		record(heldFor)
 		if heldFor > warnDuration {
 			// NB: this doesn't use `util/caller.Lookup` because that would result
 			// in an import cycle.
