@@ -22,7 +22,10 @@ import (
 )
 
 func init() {
-	storage.SetWriteBatchCmd(storage.Command{Eval: evalWriteBatch})
+	storage.SetWriteBatchCmd(storage.Command{
+		DeclareKeys: storage.DefaultDeclareKeys,
+		Eval:        evalWriteBatch,
+	})
 }
 
 // evalWriteBatch applies the operations encoded in a BatchRepr.

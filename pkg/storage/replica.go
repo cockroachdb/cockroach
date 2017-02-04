@@ -1606,11 +1606,7 @@ func (r *Replica) beginCmds(ctx context.Context, ba *roachpb.BatchRequest) (*end
 			if _, ok := inner.(*roachpb.NoopRequest); ok {
 				continue
 			}
-			if roachpb.IsReadOnly(inner) {
-				spans.Add(SpanReadOnly, inner.Header())
-			} else {
-				spans.Add(SpanReadWrite, inner.Header())
-			}
+			commands[inner.Method()].DeclareKeys(ba.Header, inner, &spans)
 		}
 
 		// When running with experimental proposer-evaluated KV, insert a
