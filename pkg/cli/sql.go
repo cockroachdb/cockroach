@@ -293,8 +293,8 @@ func (c *cliState) handleSet(args []string, nextState, errState cliStateEnum) cl
 		return c.invalidOptionChange(errState, args[0])
 	}
 	if err := opt.set(c, args[1:]); err != nil {
-		fmt.Fprintf(osStderr, "%v", err)
-		return c.invalidOptionChange(errState, args[0])
+		fmt.Fprintf(osStderr, "\\set %s: %v\n", strings.Join(args, " "), err)
+		return errState
 	}
 	return nextState
 }
@@ -312,8 +312,8 @@ func (c *cliState) handleUnset(args []string, nextState, errState cliStateEnum) 
 		return c.invalidOptionChange(errState, args[0])
 	}
 	if err := opt.unset(c); err != nil {
-		fmt.Fprintf(osStderr, "%v", err)
-		return c.invalidOptionChange(errState, args[0])
+		fmt.Fprintf(osStderr, "\\unset %s: %v\n", args[0], err)
+		return errState
 	}
 	return nextState
 }

@@ -51,13 +51,20 @@ eexpect "1 row"
 eexpect root@
 
 # Check that \set without argument prints the current options
-send "\\set\r\n"
+send "\\set\r"
 eexpect "4 rows"
 eexpect "display_format\ttsv"
 eexpect root@
 
+# Check that \set display_format properly errors out
+send "\\set display_format blabla\r"
+eexpect "invalid table display format"
+# check we don't see a stray "cannot change option during multi-line editing" tacked at the end
+eexpect "html)\r\n"
+eexpect root@
+
 # Check that \set can change the display format
-send "\\set display_format csv\r\n\\set\r\n"
+send "\\set display_format csv\r\\set\r"
 eexpect "4 rows"
 eexpect "display_format,csv"
 eexpect root@
@@ -83,11 +90,11 @@ eexpect ":/# "
 
 # Now check that non-interactive built-in commands are only accepted
 # at the start of a statement.
-send "(echo '\\set check_syntax'; echo 'select '; echo '\\help'; echo '1;') | $argv sql\n"
+send "(echo '\\set check_syntax'; echo 'select '; echo '\\help'; echo '1;') | $argv sql\r"
 eexpect "statement ignored"
 eexpect ":/# "
 
-send "(echo '\\unset check_syntax'; echo 'select '; echo '\\help'; echo '1;') | $argv sql\n"
+send "(echo '\\unset check_syntax'; echo 'select '; echo '\\help'; echo '1;') | $argv sql\r"
 eexpect "pq: syntax error"
 eexpect ":/# "
 
