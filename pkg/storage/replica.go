@@ -1586,25 +1586,31 @@ func (r *Replica) beginCmds(ctx context.Context, ba *roachpb.BatchRequest) (*end
 	if ba.ReadConsistency != roachpb.INCONSISTENT {
 		var spans SpanSet
 		// TODO(bdarnell): need to make this less global when the local
-		// command queue is used more heavily. For example, a split will have
-		// a large read-only span but also a write (see #10084).
-		access := SpanReadWrite
-		if ba.IsReadOnly() {
-			access = SpanReadOnly
-		}
+		// command queue is used more heavily. For example, a split will
+		// have a large read-only span but also a write (see #10084).
 		// Currently local spans are the exception, so preallocate for the
-		// common case in which all are global.
+		// common case in which all are global. We rarely mix read and
+		// write commands, so preallocate for writes if there are any
+		// writes present in the batch.
 		//
 		// TODO(bdarnell): revisit as the local portion gets its appropriate
 		// use.
-		spans.reserve(access, spanGlobal, len(ba.Requests))
+		if ba.IsReadOnly() {
+			spans.reserve(SpanReadOnly, spanGlobal, len(ba.Requests))
+		} else {
+			spans.reserve(SpanReadWrite, spanGlobal, len(ba.Requests))
+		}
 
 		for _, union := range ba.Requests {
 			inner := union.GetInner()
 			if _, ok := inner.(*roachpb.NoopRequest); ok {
 				continue
 			}
-			spans.Add(access, inner.Header())
+			if roachpb.IsReadOnly(inner) {
+				spans.Add(SpanReadOnly, inner.Header())
+			} else {
+				spans.Add(SpanReadWrite, inner.Header())
+			}
 		}
 
 		// When running with experimental proposer-evaluated KV, insert a
@@ -1613,6 +1619,10 @@ func (r *Replica) beginCmds(ctx context.Context, ba *roachpb.BatchRequest) (*end
 		// but is required for passing tests until correctness work in
 		// #6290 is addressed.
 		if propEvalKV {
+			access := SpanReadWrite
+			if ba.IsReadOnly() {
+				access = SpanReadOnly
+			}
 			spans.Add(access, roachpb.Span{
 				Key:    keys.LocalMax,
 				EndKey: keys.MaxKey,
@@ -1637,14 +1647,17 @@ func (r *Replica) beginCmds(ctx context.Context, ba *roachpb.BatchRequest) (*end
 
 		r.cmdQMu.Lock()
 		var chans []<-chan struct{}
+		// Collect all the channels to wait on before adding this batch to the
+		// command queue.
 		for i := SpanAccess(0); i < numSpanAccess; i++ {
-			spansGlobal := spans.getSpans(i, spanGlobal)
-			spansLocal := spans.getSpans(i, spanLocal)
 			readOnly := i == SpanReadOnly
-			chans = append(chans, r.cmdQMu.global.getWait(readOnly, spansGlobal)...)
-			chans = append(chans, r.cmdQMu.local.getWait(readOnly, spansLocal)...)
-			cmdGlobal[i] = r.cmdQMu.global.add(readOnly, spansGlobal)
-			cmdLocal[i] = r.cmdQMu.local.add(readOnly, spansLocal)
+			chans = append(chans, r.cmdQMu.global.getWait(readOnly, spans.getSpans(i, spanGlobal))...)
+			chans = append(chans, r.cmdQMu.local.getWait(readOnly, spans.getSpans(i, spanLocal))...)
+		}
+		for i := SpanAccess(0); i < numSpanAccess; i++ {
+			readOnly := i == SpanReadOnly
+			cmdGlobal[i] = r.cmdQMu.global.add(readOnly, spans.getSpans(i, spanGlobal))
+			cmdLocal[i] = r.cmdQMu.local.add(readOnly, spans.getSpans(i, spanLocal))
 		}
 		r.cmdQMu.Unlock()
 
