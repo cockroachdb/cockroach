@@ -100,7 +100,8 @@ func (f *tableDisplayFormat) Set(s string) error {
 	case "html":
 		*f = tableDisplayHTML
 	default:
-		return fmt.Errorf("invalid value for --format: %s", s)
+		return fmt.Errorf("invalid table display format: %s "+
+			"(possible values: tsv, csv, pretty, records, sql, html)", s)
 	}
 	return nil
 }
