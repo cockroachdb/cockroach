@@ -406,13 +406,13 @@ func (c *cliState) doRefreshPrompts(nextState cliStateEnum) cliStateEnum {
 		return c.refreshPrompts(" ?", nextState)
 	}
 	if len(rows.Columns()) == 0 {
-		fmt.Fprintf(osStderr, "invalid transaction status")
+		fmt.Fprintf(osStderr, "invalid transaction status\n")
 		return c.refreshPrompts(" ?", nextState)
 	}
 	val := make([]driver.Value, len(rows.Columns()))
 	err = rows.Next(val)
 	if err != nil {
-		fmt.Fprintf(osStderr, "invalid transaction status")
+		fmt.Fprintf(osStderr, "invalid transaction status: %v\n", err)
 		return c.refreshPrompts(" ?", nextState)
 	}
 	txnString := formatVal(val[0], false, false)
