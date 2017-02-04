@@ -470,7 +470,7 @@ func (db *DB) Txn(ctx context.Context, retryable func(txn *Txn) error) error {
 	// TODO(dan): This context should, at longest, live for the lifetime of this
 	// method. Add a defered cancel.
 	txn := NewTxn(ctx, *db)
-	txn.SetDebugName("", 1)
+	txn.SetDebugName("unnamed")
 	err := txn.Exec(TxnExecOptions{AutoRetry: true, AutoCommit: true},
 		func(txn *Txn, _ *TxnExecOptions) error {
 			return retryable(txn)

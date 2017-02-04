@@ -598,9 +598,9 @@ func (e *Executor) execRequest(session *Session, sql string, copymsg copyMsg) St
 			txnState.autoRetry = true
 			txnState.sqlTimestamp = e.cfg.Clock.PhysicalTime()
 			if execOpt.AutoCommit {
-				txnState.txn.SetDebugName(sqlImplicitTxnName, 0)
+				txnState.txn.SetDebugName(sqlImplicitTxnName)
 			} else {
-				txnState.txn.SetDebugName(sqlTxnName, 0)
+				txnState.txn.SetDebugName(sqlTxnName)
 			}
 		} else {
 			txnState.autoRetry = false

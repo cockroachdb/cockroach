@@ -18,7 +18,6 @@ package client
 
 import (
 	"fmt"
-	"strconv"
 
 	"github.com/gogo/protobuf/proto"
 	basictracer "github.com/opentracing/basictracer-go"
@@ -28,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
-	"github.com/cockroachdb/cockroach/pkg/util/caller"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -82,15 +80,9 @@ func (txn *Txn) IsFinalized() bool {
 }
 
 // SetDebugName sets the debug name associated with the transaction which will
-// appear in log files and the web UI. Each transaction starts out with an
-// automatically assigned debug name composed of the file and line number where
-// the transaction was created.
-func (txn *Txn) SetDebugName(name string, depth int) {
-	file, line, fun := caller.Lookup(depth + 1)
-	if name == "" {
-		name = fun
-	}
-	txn.Proto.Name = file + ":" + strconv.Itoa(line) + " " + name
+// appear in log files and the web UI.
+func (txn *Txn) SetDebugName(name string) {
+	txn.Proto.Name = name
 }
 
 // DebugName returns the debug name associated with the transaction.

@@ -852,7 +852,7 @@ func (hv *historyVerifier) runTxn(
 			cmds[cmdIdx].done(nil)
 		}
 
-		txn.SetDebugName(txnName, 0)
+		txn.SetDebugName(txnName)
 		if isolation == enginepb.SNAPSHOT {
 			if err := txn.SetIsolation(enginepb.SNAPSHOT); err != nil {
 				return err
