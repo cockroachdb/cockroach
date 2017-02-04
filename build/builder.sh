@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-set -xeuo pipefail
+set -euo pipefail
 
 image="cockroachdb/builder"
 
@@ -137,7 +137,7 @@ if test -e "${alternates_file}"; then
 fi
 
 # shellcheck disable=SC2086
-docker run -i ${tty-} --rm \
+docker run --privileged -i ${tty-} --rm \
   -u "${uid_gid}" \
   ${vols} \
   --workdir="/go/src/github.com/cockroachdb/cockroach" \
