@@ -3834,20 +3834,6 @@ func (r *Replica) applyRaftCommand(
 func (r *Replica) applyRaftCommandInBatch(
 	ctx context.Context, idKey storagebase.CmdIDKey, ba roachpb.BatchRequest,
 ) EvalResult {
-	// Check whether this txn has been aborted. Only applies to transactional
-	// requests which write intents (for example HeartbeatTxn does not get
-	// hindered by this).
-	if ba.Txn != nil && ba.IsTransactionWrite() {
-		// TODO(tschottdorf): confusing and potentially incorrect use of
-		// r.store.Engine() here (likely OK with proposer-evaluated KV,
-		// though still confusing).
-		if pErr := r.checkIfTxnAborted(ctx, r.store.Engine(), *ba.Txn); pErr != nil {
-			var result EvalResult
-			result.Local.Err = pErr
-			return result
-		}
-	}
-
 	// Keep track of original txn Writing state to sanitize txn
 	// reported with any error except TransactionRetryError.
 	wasWriting := ba.Txn != nil && ba.Txn.Writing
@@ -3855,17 +3841,20 @@ func (r *Replica) applyRaftCommandInBatch(
 	// Execute the commands. If this returns without an error, the batch should
 	// be committed.
 	var result EvalResult
-	var btch engine.Batch
+	var batch engine.Batch
 	{
 		// TODO(tschottdorf): absorb all returned values in `pd` below this point
 		// in the call stack as well.
 		var pErr *roachpb.Error
 		var ms enginepb.MVCCStats
 		var br *roachpb.BatchResponse
-		btch, ms, br, result, pErr = r.executeWriteBatch(ctx, idKey, ba)
+		batch, ms, br, result, pErr = r.executeWriteBatch(ctx, idKey, ba)
 		result.Replicated.Delta = ms
 		result.Local.Reply = br
 		result.Local.Err = pErr
+		if batch == nil {
+			return result
+		}
 	}
 
 	if result.Local.Err != nil && ba.IsWrite() {
@@ -3876,8 +3865,8 @@ func (r *Replica) applyRaftCommandInBatch(
 			// Reset the batch to clear out partial execution. Don't set
 			// a WriteBatch to signal to the caller that we fail-fast this
 			// proposal.
-			btch.Close()
-			btch = nil
+			batch.Close()
+			batch = nil
 			// Restore the original txn's Writing bool if pd.Err specifies
 			// a transaction.
 			if txn := result.Local.Err.GetTxn(); txn != nil && txn.Equal(ba.Txn) {
@@ -3903,13 +3892,13 @@ func (r *Replica) applyRaftCommandInBatch(
 	}
 
 	result.WriteBatch = &storagebase.WriteBatch{
-		Data: btch.Repr(),
+		Data: batch.Repr(),
 	}
 	// TODO(tschottdorf): could keep this open and commit as the proposal
 	// applies, saving work on the proposer. Take care to discard batches
 	// properly whenever the command leaves `r.mu.proposals` without coming
 	// back.
-	btch.Close()
+	batch.Close()
 	return result
 }
 
@@ -3960,59 +3949,70 @@ type intentsWithArg struct {
 func (r *Replica) executeWriteBatch(
 	ctx context.Context, idKey storagebase.CmdIDKey, ba roachpb.BatchRequest,
 ) (engine.Batch, enginepb.MVCCStats, *roachpb.BatchResponse, EvalResult, *roachpb.Error) {
-	batch := r.store.Engine().NewBatch()
 	ms := enginepb.MVCCStats{}
-	// If not transactional or there are indications that the batch's txn
-	// will require restart or retry, execute as normal.
-	if r.store.TestingKnobs().DisableOnePhaseCommits || !isOnePhaseCommit(ba) {
-		br, result, pErr := r.executeBatch(ctx, idKey, batch, &ms, ba)
-		return batch, ms, br, result, pErr
-	}
+	// If not transactional or there are indications that the batch's txn will
+	// require restart or retry, execute as normal.
+	if !r.store.TestingKnobs().DisableOnePhaseCommits && isOnePhaseCommit(ba) {
+		// Try executing with transaction stripped.
+		strippedBa := ba
+		strippedBa.Txn = nil
+		strippedBa.Requests = ba.Requests[1 : len(ba.Requests)-1] // strip begin/end txn reqs
 
-	// Try executing with transaction stripped.
-	strippedBa := ba
-	strippedBa.Txn = nil
-	strippedBa.Requests = ba.Requests[1 : len(ba.Requests)-1] // strip begin/end txn reqs
+		// If all writes occurred at the intended timestamp, we've succeeded on the fast path.
+		batch := r.store.Engine().NewBatch()
+		br, result, pErr := r.executeBatch(ctx, idKey, batch, &ms, strippedBa)
+		if pErr == nil && ba.Timestamp == br.Timestamp {
+			clonedTxn := ba.Txn.Clone()
+			clonedTxn.Writing = true
+			clonedTxn.Status = roachpb.COMMITTED
 
-	// If all writes occurred at the intended timestamp, we've succeeded on the fast path.
-	br, result, pErr := r.executeBatch(ctx, idKey, batch, &ms, strippedBa)
-	if pErr == nil && ba.Timestamp == br.Timestamp {
-		clonedTxn := ba.Txn.Clone()
-		clonedTxn.Writing = true
-		clonedTxn.Status = roachpb.COMMITTED
-
-		// If the end transaction is not committed, clear the batch and mark the status aborted.
-		arg, _ := ba.GetArg(roachpb.EndTransaction)
-		etArg := arg.(*roachpb.EndTransactionRequest)
-		if !etArg.Commit {
-			clonedTxn.Status = roachpb.ABORTED
-			batch.Close()
-			batch = r.store.Engine().NewBatch()
-			ms = enginepb.MVCCStats{}
-		} else {
-			// Run commit trigger manually.
-			innerResult, err := r.runCommitTrigger(ctx, batch, &ms, *etArg, &clonedTxn)
-			if err != nil {
-				return batch, ms, br, result, roachpb.NewErrorf("failed to run commit trigger: %s", err)
+			// If the end transaction is not committed, clear the batch and mark the status aborted.
+			arg, _ := ba.GetArg(roachpb.EndTransaction)
+			etArg := arg.(*roachpb.EndTransactionRequest)
+			if !etArg.Commit {
+				clonedTxn.Status = roachpb.ABORTED
+				batch.Close()
+				batch = r.store.Engine().NewBatch()
+				ms = enginepb.MVCCStats{}
+			} else {
+				// Run commit trigger manually.
+				innerResult, err := r.runCommitTrigger(ctx, batch, &ms, *etArg, &clonedTxn)
+				if err != nil {
+					return batch, ms, br, result, roachpb.NewErrorf("failed to run commit trigger: %s", err)
+				}
+				if err := result.MergeAndDestroy(innerResult); err != nil {
+					return batch, ms, br, result, roachpb.NewError(err)
+				}
 			}
-			if err := result.MergeAndDestroy(innerResult); err != nil {
-				return batch, ms, br, result, roachpb.NewError(err)
-			}
+
+			br.Txn = &clonedTxn
+			// Add placeholder responses for begin & end transaction requests.
+			br.Responses = append([]roachpb.ResponseUnion{{BeginTransaction: &roachpb.BeginTransactionResponse{}}}, br.Responses...)
+			br.Responses = append(br.Responses, roachpb.ResponseUnion{EndTransaction: &roachpb.EndTransactionResponse{OnePhaseCommit: true}})
+			return batch, ms, br, result, nil
 		}
 
-		br.Txn = &clonedTxn
-		// Add placeholder responses for begin & end transaction requests.
-		br.Responses = append([]roachpb.ResponseUnion{{BeginTransaction: &roachpb.BeginTransactionResponse{}}}, br.Responses...)
-		br.Responses = append(br.Responses, roachpb.ResponseUnion{EndTransaction: &roachpb.EndTransactionResponse{OnePhaseCommit: true}})
-		return batch, ms, br, result, nil
+		log.VEventf(ctx, 2, "1PC execution failed, reverting to regular execution for batch")
+
+		batch.Close()
+		ms = enginepb.MVCCStats{}
 	}
 
-	batch.Close()
-	batch = r.store.Engine().NewBatch()
-	log.VEventf(ctx, 2, "1PC execution failed, reverting to regular execution for "+
-		"batch: %s", batch)
-	ms = enginepb.MVCCStats{}
-	br, result, pErr = r.executeBatch(ctx, idKey, batch, &ms, ba)
+	// Check whether this txn has been aborted. Only applies to transactional
+	// requests which write intents (for example HeartbeatTxn does not get
+	// hindered by this). Note that we don't do this check for 1PC transactions
+	// that never write a transaction record.
+	if ba.Txn != nil && ba.IsTransactionWrite() {
+		// TODO(tschottdorf): confusing and potentially incorrect use of
+		// r.store.Engine() here (likely OK with proposer-evaluated KV,
+		// though still confusing).
+		if pErr := r.checkIfTxnAborted(ctx, r.store.Engine(), *ba.Txn); pErr != nil {
+			return nil, ms, nil, EvalResult{}, pErr
+		}
+	}
+
+	batch := r.store.Engine().NewBatch()
+	br, result, pErr := r.executeBatch(ctx, idKey, batch, &ms, ba)
 	return batch, ms, br, result, pErr
 }
 
