@@ -972,6 +972,37 @@ func mvccPutUsingIter(
 	return err
 }
 
+// maybeGetValue returns either value (if valueFn is nil) or else
+// the result of calling valueFn on the data read at readTS.
+func maybeGetValue(
+	ctx context.Context,
+	iter Iterator,
+	metaKey MVCCKey,
+	value []byte,
+	exists bool,
+	readTS hlc.Timestamp,
+	txn *roachpb.Transaction,
+	buf *putBuffer,
+	valueFn func(*roachpb.Value) ([]byte, error),
+) ([]byte, error) {
+	// If a valueFn is specified, read existing value using the iter.
+	if valueFn == nil {
+		return value, nil
+	}
+	var exVal *roachpb.Value
+	if exists {
+		getBuf := newGetBuffer()
+		defer getBuf.release()
+		getBuf.meta = buf.meta // initialize get metadata from what we've already read
+		var err error
+		if exVal, _, _, err = mvccGetInternal(
+			ctx, iter, metaKey, readTS, true /* consistent */, safeValue, txn, getBuf); err != nil {
+			return nil, err
+		}
+	}
+	return valueFn(exVal)
+}
+
 // mvccPutInternal adds a new timestamped value to the specified key.
 // If value is nil, creates a deletion tombstone value. valueFn is
 // an optional alternative to supplying value directly. It is passed
@@ -1001,26 +1032,6 @@ func mvccPutInternal(
 		return err
 	}
 
-	// maybeGetValue returns either value (if valueFn is nil) or else
-	// the result of calling valueFn on the data read at readTS.
-	maybeGetValue := func(exists bool, readTS hlc.Timestamp) ([]byte, error) {
-		// If a valueFn is specified, read existing value using the iter.
-		if valueFn == nil {
-			return value, nil
-		}
-		var exVal *roachpb.Value
-		if exists {
-			getBuf := newGetBuffer()
-			defer getBuf.release()
-			getBuf.meta = buf.meta // initialize get metadata from what we've already read
-			if exVal, _, _, err = mvccGetInternal(
-				ctx, iter, metaKey, readTS, true /* consistent */, safeValue, txn, getBuf); err != nil {
-				return nil, err
-			}
-		}
-		return valueFn(exVal)
-	}
-
 	// Verify we're not mixing inline and non-inline values.
 	putIsInline := timestamp.Equal(hlc.ZeroTimestamp)
 	if ok && putIsInline != buf.meta.IsInline() {
@@ -1033,7 +1044,8 @@ func mvccPutInternal(
 			return errors.Errorf("%q: inline writes not allowed within transactions", metaKey)
 		}
 		var metaKeySize, metaValSize int64
-		if value, err = maybeGetValue(ok, timestamp); err != nil {
+		if value, err = maybeGetValue(
+			ctx, iter, metaKey, value, ok, timestamp, txn, buf, valueFn); err != nil {
 			return err
 		}
 		if value == nil {
@@ -1072,7 +1084,8 @@ func mvccPutInternal(
 			// Make sure we process valueFn before clearing any earlier
 			// version.  For example, a conditional put within same
 			// transaction should read previous write.
-			if value, err = maybeGetValue(ok, timestamp); err != nil {
+			if value, err = maybeGetValue(
+				ctx, iter, metaKey, value, ok, timestamp, txn, buf, valueFn); err != nil {
 				return err
 			}
 			// We are replacing our own older write intent. If we are
@@ -1098,27 +1111,31 @@ func mvccPutInternal(
 			// If we're in a transaction, always get the value at the orig
 			// timestamp.
 			if txn != nil {
-				if value, err = maybeGetValue(ok, timestamp); err != nil {
+				if value, err = maybeGetValue(
+					ctx, iter, metaKey, value, ok, timestamp, txn, buf, valueFn); err != nil {
 					return err
 				}
 			} else {
 				// Outside of a transaction, read the latest value and advance
 				// the write timestamp to the latest value's timestamp + 1. The
 				// new timestamp is returned to the caller in maybeTooOldErr.
-				if value, err = maybeGetValue(ok, actualTimestamp); err != nil {
+				if value, err = maybeGetValue(
+					ctx, iter, metaKey, value, ok, actualTimestamp, txn, buf, valueFn); err != nil {
 					return err
 				}
 			}
 			timestamp = actualTimestamp
 		} else {
-			if value, err = maybeGetValue(ok, timestamp); err != nil {
+			if value, err = maybeGetValue(
+				ctx, iter, metaKey, value, ok, timestamp, txn, buf, valueFn); err != nil {
 				return err
 			}
 		}
 	} else {
 		// There is no existing value for this key. Even if the new value is
 		// nil write a deletion tombstone for the key.
-		if value, err = maybeGetValue(ok, timestamp); err != nil {
+		if value, err = maybeGetValue(
+			ctx, iter, metaKey, value, ok, timestamp, txn, buf, valueFn); err != nil {
 			return err
 		}
 	}
