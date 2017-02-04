@@ -36,6 +36,7 @@ RUN curl -fsSL https://deb.nodesource.com/gpgkey/nodesource.gpg.key | apt-key ad
 # libtool-bin - crosstool-ng/configure (1.22.0)
 # make - crosstool-ng boostrap / CRDB build system
 # nodejs - ui: all
+# openssh-client - terraform / jepsen
 # patch - crosstool-ng/configure
 # python - msan: libxx
 # texinfo - crosstool-ng/configure
@@ -63,6 +64,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libtool-bin \
     make \
     nodejs \
+    openssh-client \
     patch \
     python \
     texinfo \
