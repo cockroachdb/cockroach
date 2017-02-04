@@ -87,12 +87,14 @@ func (t Timestamp) Prev() Timestamp {
 	panic("cannot take the previous value to a zero timestamp")
 }
 
-// Forward updates the timestamp from the one given, if that moves it
-// forwards in time.
-func (t *Timestamp) Forward(s Timestamp) {
+// Forward updates the timestamp from the one given, if that moves it forwards
+// in time. Returns true if the timestamp was adjusted and false otherwise.
+func (t *Timestamp) Forward(s Timestamp) bool {
 	if t.Less(s) {
 		*t = s
+		return true
 	}
+	return false
 }
 
 // Backward updates the timestamp from the one given, if that moves it
