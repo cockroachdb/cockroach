@@ -302,7 +302,7 @@ func (tc *TxnCoordSender) Send(
 
 		// Associate the txnID with the trace. We need to do this after the
 		// maybeBeginTxn call. We set both a baggage item and a tag because only
-		// tags show up in the LIghtstep UI.
+		// tags show up in the Lightstep UI.
 		txnIDStr := txnID.String()
 		sp.SetTag("txnID", txnIDStr)
 		sp.SetBaggageItem("txnID", txnIDStr)
