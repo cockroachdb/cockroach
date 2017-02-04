@@ -1606,10 +1606,10 @@ func (r *Replica) beginCmds(ctx context.Context, ba *roachpb.BatchRequest) (*end
 			if _, ok := inner.(*roachpb.NoopRequest); ok {
 				continue
 			}
-			if roachpb.IsReadOnly(inner) {
-				spans.Add(SpanReadOnly, inner.Header())
+			if cmd, ok := commands[inner.Method()]; ok {
+				cmd.DeclareKeys(ba.Header, inner, &spans)
 			} else {
-				spans.Add(SpanReadWrite, inner.Header())
+				return nil, errors.Errorf("unrecognized command %s", inner.Method())
 			}
 		}
 

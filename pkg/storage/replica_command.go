@@ -73,6 +73,9 @@ type CommandArgs struct {
 
 // A Command is the implementation of a single request within a BatchRequest.
 type Command struct {
+	// DeclareKeys adds all keys this command touches to the given spanSet.
+	DeclareKeys func(roachpb.Header, roachpb.Request, *SpanSet)
+
 	// Eval evaluates a command on the given engine. It should populate
 	// the supplied response (always a non-nil pointer to the correct
 	// type) and return special side effects (if any) in the EvalResult.
@@ -81,36 +84,47 @@ type Command struct {
 	Eval func(context.Context, engine.ReadWriter, CommandArgs, roachpb.Response) (EvalResult, error)
 }
 
+// DefaultDeclareKeys is the default implementation of Command.DeclareKeys
+func DefaultDeclareKeys(header roachpb.Header, req roachpb.Request, spans *SpanSet) {
+	if roachpb.IsReadOnly(req) {
+		spans.Add(SpanReadOnly, req.Header())
+	} else {
+		spans.Add(SpanReadWrite, req.Header())
+	}
+}
+
 var commands = map[roachpb.Method]Command{
-	roachpb.Get:                {Eval: evalGet},
-	roachpb.Put:                {Eval: evalPut},
-	roachpb.ConditionalPut:     {Eval: evalConditionalPut},
-	roachpb.InitPut:            {Eval: evalInitPut},
-	roachpb.Increment:          {Eval: evalIncrement},
-	roachpb.Delete:             {Eval: evalDelete},
-	roachpb.DeleteRange:        {Eval: evalDeleteRange},
-	roachpb.Scan:               {Eval: evalScan},
-	roachpb.ReverseScan:        {Eval: evalReverseScan},
-	roachpb.BeginTransaction:   {Eval: evalBeginTransaction},
-	roachpb.EndTransaction:     {Eval: evalEndTransaction},
-	roachpb.RangeLookup:        {Eval: evalRangeLookup},
-	roachpb.HeartbeatTxn:       {Eval: evalHeartbeatTxn},
-	roachpb.GC:                 {Eval: evalGC},
-	roachpb.PushTxn:            {Eval: evalPushTxn},
-	roachpb.ResolveIntent:      {Eval: evalResolveIntent},
-	roachpb.ResolveIntentRange: {Eval: evalResolveIntentRange},
-	roachpb.Merge:              {Eval: evalMerge},
-	roachpb.TruncateLog:        {Eval: evalTruncateLog},
-	roachpb.RequestLease:       {Eval: evalRequestLease},
-	roachpb.TransferLease:      {Eval: evalTransferLease},
-	roachpb.LeaseInfo:          {Eval: evalLeaseInfo},
-	roachpb.ComputeChecksum:    {Eval: evalComputeChecksum},
-	roachpb.ChangeFrozen:       {Eval: evalChangeFrozen},
+	roachpb.Get:                {DeclareKeys: DefaultDeclareKeys, Eval: evalGet},
+	roachpb.Put:                {DeclareKeys: DefaultDeclareKeys, Eval: evalPut},
+	roachpb.ConditionalPut:     {DeclareKeys: DefaultDeclareKeys, Eval: evalConditionalPut},
+	roachpb.InitPut:            {DeclareKeys: DefaultDeclareKeys, Eval: evalInitPut},
+	roachpb.Increment:          {DeclareKeys: DefaultDeclareKeys, Eval: evalIncrement},
+	roachpb.Delete:             {DeclareKeys: DefaultDeclareKeys, Eval: evalDelete},
+	roachpb.DeleteRange:        {DeclareKeys: DefaultDeclareKeys, Eval: evalDeleteRange},
+	roachpb.Scan:               {DeclareKeys: DefaultDeclareKeys, Eval: evalScan},
+	roachpb.ReverseScan:        {DeclareKeys: DefaultDeclareKeys, Eval: evalReverseScan},
+	roachpb.BeginTransaction:   {DeclareKeys: DefaultDeclareKeys, Eval: evalBeginTransaction},
+	roachpb.EndTransaction:     {DeclareKeys: DefaultDeclareKeys, Eval: evalEndTransaction},
+	roachpb.RangeLookup:        {DeclareKeys: DefaultDeclareKeys, Eval: evalRangeLookup},
+	roachpb.HeartbeatTxn:       {DeclareKeys: DefaultDeclareKeys, Eval: evalHeartbeatTxn},
+	roachpb.GC:                 {DeclareKeys: DefaultDeclareKeys, Eval: evalGC},
+	roachpb.PushTxn:            {DeclareKeys: DefaultDeclareKeys, Eval: evalPushTxn},
+	roachpb.ResolveIntent:      {DeclareKeys: DefaultDeclareKeys, Eval: evalResolveIntent},
+	roachpb.ResolveIntentRange: {DeclareKeys: DefaultDeclareKeys, Eval: evalResolveIntentRange},
+	roachpb.Merge:              {DeclareKeys: DefaultDeclareKeys, Eval: evalMerge},
+	roachpb.TruncateLog:        {DeclareKeys: DefaultDeclareKeys, Eval: evalTruncateLog},
+	roachpb.RequestLease:       {DeclareKeys: DefaultDeclareKeys, Eval: evalRequestLease},
+	roachpb.TransferLease:      {DeclareKeys: DefaultDeclareKeys, Eval: evalTransferLease},
+	roachpb.LeaseInfo:          {DeclareKeys: DefaultDeclareKeys, Eval: evalLeaseInfo},
+	roachpb.ComputeChecksum:    {DeclareKeys: DefaultDeclareKeys, Eval: evalComputeChecksum},
+	roachpb.ChangeFrozen:       {DeclareKeys: DefaultDeclareKeys, Eval: evalChangeFrozen},
 	roachpb.WriteBatch:         writeBatchCmd,
 
-	roachpb.DeprecatedVerifyChecksum: {Eval: func(context.Context, engine.ReadWriter, CommandArgs, roachpb.Response) (EvalResult, error) {
-		return EvalResult{}, nil
-	}},
+	roachpb.DeprecatedVerifyChecksum: {
+		DeclareKeys: DefaultDeclareKeys,
+		Eval: func(context.Context, engine.ReadWriter, CommandArgs, roachpb.Response) (EvalResult, error) {
+			return EvalResult{}, nil
+		}},
 }
 
 // executeCmd switches over the method and multiplexes to execute the appropriate storage API
@@ -2117,11 +2131,13 @@ func evalChangeFrozen(
 }
 
 func makeUnimplementedCommand(method roachpb.Method) Command {
-	return Command{Eval: func(
-		_ context.Context, _ engine.ReadWriter, _ CommandArgs, _ roachpb.Response,
-	) (EvalResult, error) {
-		return EvalResult{}, errors.Errorf("unimplemented command: %s", method.String())
-	}}
+	return Command{
+		DeclareKeys: DefaultDeclareKeys,
+		Eval: func(
+			_ context.Context, _ engine.ReadWriter, _ CommandArgs, _ roachpb.Response,
+		) (EvalResult, error) {
+			return EvalResult{}, errors.Errorf("unimplemented command: %s", method.String())
+		}}
 }
 
 var writeBatchCmd = makeUnimplementedCommand(roachpb.WriteBatch)
