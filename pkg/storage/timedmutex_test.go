@@ -39,13 +39,9 @@ func TestTimedMutex(t *testing.T) {
 		formatted := fmt.Sprintf(innerMsg, args...)
 		msgs = append(msgs, formatted)
 	}
-	var numMeasurements int
-	record := func(time.Duration) { numMeasurements++ }
 
 	{
-		cb := thresholdLogger(
-			context.Background(), time.Nanosecond, printf, record,
-		)
+		cb := thresholdLogger(context.Background(), time.Nanosecond, printf)
 
 		// Should fire.
 		tm := makeTimedMutex(cb)
@@ -57,18 +53,12 @@ func TestTimedMutex(t *testing.T) {
 		if len(msgs) != 1 || !re.MatchString(msgs[0]) {
 			t.Fatalf("mutex did not warn as expected: %+v", msgs)
 		}
-		if numMeasurements != 1 {
-			t.Fatalf("expected one measurement, not %d", numMeasurements)
-		}
 	}
 
-	numMeasurements = 0
 	msgs = nil
 
 	{
-		cb := thresholdLogger(
-			context.Background(), time.Duration(math.MaxInt64), printf, record,
-		)
+		cb := thresholdLogger(context.Background(), time.Duration(math.MaxInt64), printf)
 		tm := makeTimedMutex(cb)
 
 		const num = 10
@@ -82,10 +72,6 @@ func TestTimedMutex(t *testing.T) {
 		if len(msgs) != 0 {
 			t.Fatalf("mutex warned erroneously: %+v", msgs)
 		}
-		if numMeasurements != num {
-			t.Fatalf("expected %d measurements not %d", num, numMeasurements)
-		}
-
 	}
 }
 

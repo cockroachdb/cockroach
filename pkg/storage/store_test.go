@@ -59,7 +59,6 @@ var defaultMuLogger = thresholdLogger(
 	context.Background(),
 	10*time.Second,
 	log.Warningf,
-	func(time.Duration) {},
 )
 
 var testIdent = roachpb.StoreIdent{
