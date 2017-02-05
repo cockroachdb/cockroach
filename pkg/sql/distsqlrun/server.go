@@ -36,9 +36,10 @@ import (
 type ServerConfig struct {
 	log.AmbientContext
 
-	DB         *client.DB
-	RPCContext *rpc.Context
-	Stopper    *stop.Stopper
+	DB           *client.DB
+	RPCContext   *rpc.Context
+	Stopper      *stop.Stopper
+	TestingKnobs TestingKnobs
 }
 
 // ServerImpl implements the server for the distributed SQL APIs.
@@ -101,6 +102,7 @@ func (ds *ServerImpl) setupFlow(
 		rpcCtx:         ds.RPCContext,
 		txnProto:       &req.Txn,
 		clientDB:       ds.DB,
+		testingKnobs:   ds.TestingKnobs,
 	}
 
 	f := newFlow(flowCtx, ds.flowRegistry, syncFlowConsumer)
@@ -200,3 +202,10 @@ func (ds *ServerImpl) FlowStream(stream DistSQL_FlowStreamServer) error {
 	}
 	return err
 }
+
+// TestingKnobs are the testing knobs.
+type TestingKnobs struct {
+}
+
+// ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
+func (*TestingKnobs) ModuleTestingKnobs() {}
