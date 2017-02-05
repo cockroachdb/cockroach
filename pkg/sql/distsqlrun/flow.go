@@ -45,12 +45,13 @@ type FlowID struct {
 
 // FlowCtx encompasses the contexts needed for various flow components.
 type FlowCtx struct {
-	Context  context.Context
-	id       FlowID
-	evalCtx  *parser.EvalContext
-	rpcCtx   *rpc.Context
-	txnProto *roachpb.Transaction
-	clientDB *client.DB
+	Context      context.Context
+	id           FlowID
+	evalCtx      *parser.EvalContext
+	rpcCtx       *rpc.Context
+	txnProto     *roachpb.Transaction
+	clientDB     *client.DB
+	testingKnobs TestingKnobs
 }
 
 func (flowCtx *FlowCtx) setupTxn(ctx context.Context) *client.Txn {
