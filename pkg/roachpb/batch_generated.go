@@ -5,6 +5,7 @@ package roachpb
 import (
 	"bytes"
 	"fmt"
+	"strconv"
 )
 
 type reqCounts [31]int32
@@ -124,13 +125,18 @@ func (ba *BatchRequest) Summary() string {
 		return "empty batch"
 	}
 	counts := ba.getReqCounts()
-	var buf bytes.Buffer
+	var buf struct {
+		bytes.Buffer
+		tmp [10]byte
+	}
 	for i, v := range counts {
 		if v != 0 {
 			if buf.Len() > 0 {
 				buf.WriteString(", ")
 			}
-			fmt.Fprintf(&buf, "%d %s", v, requestNames[i])
+			buf.Write(strconv.AppendInt(buf.tmp[:0], int64(v), 10))
+			buf.WriteString(" ")
+			buf.WriteString(requestNames[i])
 		}
 	}
 	return buf.String()
