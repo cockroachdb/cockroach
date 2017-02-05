@@ -1481,10 +1481,11 @@ func (r *Replica) checkBatchRequest(ba roachpb.BatchRequest) error {
 // endCmds holds necessary information to end a batch after Raft
 // command processing.
 type endCmds struct {
-	repl      *Replica
-	cmdGlobal [numSpanAccess]*cmd
-	cmdLocal  [numSpanAccess]*cmd
-	ba        roachpb.BatchRequest
+	repl *Replica
+	cmds [numSpanAccess]struct {
+		global, local *cmd
+	}
+	ba roachpb.BatchRequest
 }
 
 // done removes pending commands from the command queue and updates
@@ -1510,9 +1511,9 @@ func (ec *endCmds) doneLocked(
 	}
 
 	ec.repl.cmdQMu.Lock()
-	for i := range ec.cmdGlobal {
-		ec.repl.cmdQMu.global.remove(ec.cmdGlobal[i])
-		ec.repl.cmdQMu.local.remove(ec.cmdLocal[i])
+	for i := range ec.cmds {
+		ec.repl.cmdQMu.global.remove(ec.cmds[i].global)
+		ec.repl.cmdQMu.local.remove(ec.cmds[i].local)
 	}
 	ec.repl.cmdQMu.Unlock()
 }
@@ -1580,8 +1581,9 @@ func makeCacheRequest(ba *roachpb.BatchRequest, br *roachpb.BatchResponse) cache
 // commands are done and can be removed from the queue, and whose returned
 // error is to be used in place of the supplied error.
 func (r *Replica) beginCmds(ctx context.Context, ba *roachpb.BatchRequest) (*endCmds, error) {
-	var cmdGlobal [numSpanAccess]*cmd
-	var cmdLocal [numSpanAccess]*cmd
+	var cmds [numSpanAccess]struct {
+		global, local *cmd
+	}
 	// Don't use the command queue for inconsistent reads.
 	if ba.ReadConsistency != roachpb.INCONSISTENT {
 		var spans SpanSet
@@ -1656,8 +1658,8 @@ func (r *Replica) beginCmds(ctx context.Context, ba *roachpb.BatchRequest) (*end
 		}
 		for i := SpanAccess(0); i < numSpanAccess; i++ {
 			readOnly := i == SpanReadOnly
-			cmdGlobal[i] = r.cmdQMu.global.add(readOnly, spans.getSpans(i, spanGlobal))
-			cmdLocal[i] = r.cmdQMu.local.add(readOnly, spans.getSpans(i, spanLocal))
+			cmds[i].global = r.cmdQMu.global.add(readOnly, spans.getSpans(i, spanGlobal))
+			cmds[i].local = r.cmdQMu.local.add(readOnly, spans.getSpans(i, spanLocal))
 		}
 		r.cmdQMu.Unlock()
 
@@ -1695,9 +1697,9 @@ func (r *Replica) beginCmds(ctx context.Context, ba *roachpb.BatchRequest) (*end
 							l := r.cmdQMu.local.String()
 							r.cmdQMu.Unlock()
 							log.Warningf(r.AnnotateCtx(context.Background()),
-								"have been waiting %s for dependencies: cmd-global:\n%s\nglobal:\n%s"+
-									"cmd-local:\n%s\nlocal:%s\n",
-								base.SlowRequestThreshold, cmdGlobal, g, cmdLocal, l)
+								"have been waiting %s for dependencies: cmds:\n%+v\nglobal:\n%s\n"+
+									"local:%s\n",
+								base.SlowRequestThreshold, cmds, g, l)
 							r.store.metrics.SlowCommandQueueRequests.Inc(1)
 							defer r.store.metrics.SlowCommandQueueRequests.Dec(1)
 						case <-r.store.stopper.ShouldQuiesce():
@@ -1708,9 +1710,9 @@ func (r *Replica) beginCmds(ctx context.Context, ba *roachpb.BatchRequest) (*end
 						}
 					}
 					r.cmdQMu.Lock()
-					for i := range cmdGlobal {
-						r.cmdQMu.global.remove(cmdGlobal[i])
-						r.cmdQMu.local.remove(cmdLocal[i])
+					for i := range cmds {
+						r.cmdQMu.global.remove(cmds[i].global)
+						r.cmdQMu.local.remove(cmds[i].local)
 					}
 					r.cmdQMu.Unlock()
 				}()
@@ -1745,10 +1747,9 @@ func (r *Replica) beginCmds(ctx context.Context, ba *roachpb.BatchRequest) (*end
 	}
 
 	ec := &endCmds{
-		repl:      r,
-		cmdGlobal: cmdGlobal,
-		cmdLocal:  cmdLocal,
-		ba:        *ba,
+		repl: r,
+		cmds: cmds,
+		ba:   *ba,
 	}
 	return ec, nil
 }
