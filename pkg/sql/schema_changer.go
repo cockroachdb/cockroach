@@ -515,7 +515,7 @@ func (sc *SchemaChanger) reverseMutations(causingError error) error {
 				// mutation ID we're looking for.
 				break
 			}
-			desc.Mutations[i].ResumeSpan = roachpb.Span{}
+			desc.Mutations[i].ResumeSpan = nil
 			log.Warningf(context.TODO(), "reverse schema change mutation: %+v", mutation)
 			switch mutation.Direction {
 			case sqlbase.DescriptorMutation_ADD:
