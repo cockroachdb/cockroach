@@ -248,9 +248,8 @@ func (sc *SchemaChanger) getTableSpan(mutationIdx int) (roachpb.Span, error) {
 		return roachpb.Span{},
 			errors.Errorf("mutation index pointing to the wrong schema change, %d vs expected %d", mutationID, sc.mutationID)
 	}
-	resumeSpan := tableDesc.Mutations[mutationIdx].ResumeSpan
-	if resumeSpan.Key != nil {
-		return resumeSpan, nil
+	if len(tableDesc.Mutations[mutationIdx].ResumeSpans) > 0 {
+		return tableDesc.Mutations[mutationIdx].ResumeSpans[0], nil
 	}
 	prefix := roachpb.Key(sqlbase.MakeIndexKeyPrefix(tableDesc, tableDesc.PrimaryIndex.ID))
 	return roachpb.Span{
@@ -280,7 +279,11 @@ func (sc *SchemaChanger) maybeWriteResumeSpan(
 	if tableDesc.Version != version {
 		return errVersionMismatch
 	}
-	tableDesc.Mutations[mutationIdx].ResumeSpan = resume
+	if len(tableDesc.Mutations[mutationIdx].ResumeSpans) > 0 {
+		tableDesc.Mutations[mutationIdx].ResumeSpans[0] = resume
+	} else {
+		tableDesc.Mutations[mutationIdx].ResumeSpans = append(tableDesc.Mutations[mutationIdx].ResumeSpans, resume)
+	}
 	txn.SetSystemConfigTrigger()
 	if err := txn.Put(sqlbase.MakeDescMetadataKey(tableDesc.GetID()),
 		sqlbase.WrapDescriptor(tableDesc)); err != nil {
@@ -664,7 +667,7 @@ func (sc *SchemaChanger) backfillIndexesChunk(
 		// transaction writes. This is also called by
 		// SchemaChanger.maybeWriteResumeSpan, but it is too late at that point. Do
 		// we even need to be setting the system-config trigger here. We're
-		// changing the TableDescriptor.Mutations.ResumeSpan, but it isn't clear to
+		// changing the TableDescriptor.Mutations.ResumeSpans, but it isn't clear to
 		// me that we need to gossip the updated TableDescriptor.
 		txn.SetSystemConfigTrigger()
 
