@@ -255,6 +255,9 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		RPCContext:     s.rpcContext,
 		Stopper:        s.stopper,
 	}
+	if s.cfg.TestingKnobs.DistSQL != nil {
+		distSQLCfg.TestingKnobs = *s.cfg.TestingKnobs.DistSQL.(*distsqlrun.TestingKnobs)
+	}
 	s.distSQLServer = distsqlrun.NewServer(distSQLCfg)
 	distsqlrun.RegisterDistSQLServer(s.grpc, s.distSQLServer)
 
