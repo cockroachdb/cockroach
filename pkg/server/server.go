@@ -627,7 +627,16 @@ func (s *Server) Start(ctx context.Context) error {
 	if s.cfg.TestingKnobs.SQLSchemaChanger != nil {
 		testingKnobs = s.cfg.TestingKnobs.SQLSchemaChanger.(*sql.SchemaChangerTestingKnobs)
 	}
-	sql.NewSchemaChangeManager(testingKnobs, *s.db, s.gossip, s.leaseMgr).Start(s.stopper)
+	sql.NewSchemaChangeManager(
+		testingKnobs,
+		*s.db,
+		s.node.Descriptor,
+		s.rpcContext,
+		s.distSQLServer,
+		s.distSender,
+		s.gossip,
+		s.leaseMgr,
+	).Start(s.stopper)
 
 	s.sqlExecutor.Start(ctx, &s.adminMemMetrics, s.node.Descriptor)
 	s.distSQLServer.Start()
