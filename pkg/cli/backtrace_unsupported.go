@@ -20,6 +20,6 @@ package cli
 
 import "github.com/cockroachdb/cockroach/pkg/util/stop"
 
-func initBacktrace(logDir string) *stop.Stopper {
-	return stop.NewStopper()
+func initBacktrace(logDir string, options ...stop.Option) *stop.Stopper {
+	return stop.NewStopper(options...)
 }
