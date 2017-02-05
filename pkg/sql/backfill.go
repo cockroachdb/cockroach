@@ -248,9 +248,8 @@ func (sc *SchemaChanger) getTableSpan(mutationIdx int) (roachpb.Span, error) {
 		return roachpb.Span{},
 			errors.Errorf("mutation index pointing to the wrong schema change, %d vs expected %d", mutationID, sc.mutationID)
 	}
-	resumeSpan := tableDesc.Mutations[mutationIdx].ResumeSpan
-	if resumeSpan.Key != nil {
-		return resumeSpan, nil
+	if len(tableDesc.Mutations[mutationIdx].ResumeSpan) > 0 {
+		return tableDesc.Mutations[mutationIdx].ResumeSpan[0], nil
 	}
 	prefix := roachpb.Key(sqlbase.MakeIndexKeyPrefix(tableDesc, tableDesc.PrimaryIndex.ID))
 	return roachpb.Span{
@@ -280,7 +279,11 @@ func (sc *SchemaChanger) maybeWriteResumeSpan(
 	if tableDesc.Version != version {
 		return errVersionMismatch
 	}
-	tableDesc.Mutations[mutationIdx].ResumeSpan = resume
+	if len(tableDesc.Mutations[mutationIdx].ResumeSpan) > 0 {
+		tableDesc.Mutations[mutationIdx].ResumeSpan[0] = resume
+	} else {
+		tableDesc.Mutations[mutationIdx].ResumeSpan = append(tableDesc.Mutations[mutationIdx].ResumeSpan, resume)
+	}
 	txn.SetSystemConfigTrigger()
 	if err := txn.Put(sqlbase.MakeDescMetadataKey(tableDesc.GetID()),
 		sqlbase.WrapDescriptor(tableDesc)); err != nil {
