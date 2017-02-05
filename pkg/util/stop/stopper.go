@@ -117,12 +117,13 @@ func (k taskKey) String() string {
 // be added to the stopper via AddCloser(), to be closed after the
 // stopper has stopped.
 type Stopper struct {
-	quiescer chan struct{}     // Closed when quiescing
-	stopper  chan struct{}     // Closed when stopping
-	stopped  chan struct{}     // Closed when stopped completely
-	onPanic  func(interface{}) // called with recover() on panic on any goroutine
-	stop     sync.WaitGroup    // Incremented for outstanding workers
-	mu       struct {
+	quiescer   chan struct{}     // Closed when quiescing
+	stopper    chan struct{}     // Closed when stopping
+	stopped    chan struct{}     // Closed when stopped completely
+	onPanic    func(interface{}) // called with recover() on panic on any goroutine
+	trackTasks bool              // Should task call sites be tracked
+	stop       sync.WaitGroup    // Incremented for outstanding workers
+	mu         struct {
 		syncutil.Mutex
 		quiesce   *sync.Cond // Conditional variable to wait for outstanding tasks
 		quiescing bool       // true when Stop() has been called
@@ -153,12 +154,24 @@ func OnPanic(handler func(interface{})) Option {
 	return optionPanicHandler(handler)
 }
 
+type optionTrackTasks bool
+
+func (ott optionTrackTasks) apply(stopper *Stopper) {
+	stopper.trackTasks = bool(ott)
+}
+
+// TrackTasks is an option which allows tracking of tasks to be disabled.
+func TrackTasks(enabled bool) Option {
+	return optionTrackTasks(enabled)
+}
+
 // NewStopper returns an instance of Stopper.
 func NewStopper(options ...Option) *Stopper {
 	s := &Stopper{
-		quiescer: make(chan struct{}),
-		stopper:  make(chan struct{}),
-		stopped:  make(chan struct{}),
+		quiescer:   make(chan struct{}),
+		stopper:    make(chan struct{}),
+		stopped:    make(chan struct{}),
+		trackTasks: true,
 	}
 
 	s.mu.tasks = map[taskKey]int{}
@@ -213,8 +226,10 @@ func (s *Stopper) AddCloser(c Closer) {
 // Returns an error to indicate that the system is currently quiescing and
 // function f was not called.
 func (s *Stopper) RunTask(f func()) error {
-	file, line, _ := caller.Lookup(1)
-	key := taskKey{file, line}
+	key := taskKey{"???", 1}
+	if s.trackTasks {
+		key.file, key.line, _ = caller.Lookup(1)
+	}
 	if !s.runPrelude(key) {
 		return errUnavailable
 	}
@@ -234,8 +249,10 @@ func (s *Stopper) RunTask(f func()) error {
 // If the system is currently quiescing and function f was not called, returns
 // an error indicating this condition. Otherwise, returns whatever f returns.
 func (s *Stopper) RunTaskWithErr(f func() error) error {
-	file, line, _ := caller.Lookup(1)
-	key := taskKey{file, line}
+	key := taskKey{"???", 1}
+	if s.trackTasks {
+		key.file, key.line, _ = caller.Lookup(1)
+	}
 	if !s.runPrelude(key) {
 		return errUnavailable
 	}
@@ -248,13 +265,15 @@ func (s *Stopper) RunTaskWithErr(f func() error) error {
 // RunAsyncTask runs function f in a goroutine. It returns an error when the
 // Stopper is quiescing, in which case the function is not executed.
 func (s *Stopper) RunAsyncTask(ctx context.Context, f func(context.Context)) error {
-	file, line, _ := caller.Lookup(1)
-	key := taskKey{file, line}
+	key := taskKey{"???", 1}
+	if s.trackTasks {
+		key.file, key.line, _ = caller.Lookup(1)
+	}
 	if !s.runPrelude(key) {
 		return errUnavailable
 	}
 
-	ctx, span := tracing.ForkCtxSpan(ctx, fmt.Sprintf("%s:%d", file, line))
+	ctx, span := tracing.ForkCtxSpan(ctx, key.String())
 
 	// Call f.
 	go func() {
@@ -277,8 +296,10 @@ func (s *Stopper) RunAsyncTask(ctx context.Context, f func(context.Context)) err
 func (s *Stopper) RunLimitedAsyncTask(
 	ctx context.Context, sem chan struct{}, wait bool, f func(context.Context),
 ) error {
-	file, line, _ := caller.Lookup(1)
-	key := taskKey{file, line}
+	key := taskKey{"???", 1}
+	if s.trackTasks {
+		key.file, key.line, _ = caller.Lookup(1)
+	}
 
 	// Wait for permission to run from the semaphore.
 	select {
@@ -291,7 +312,7 @@ func (s *Stopper) RunLimitedAsyncTask(
 		if !wait {
 			return ErrThrottled
 		}
-		log.Infof(context.TODO(), "stopper throttling task from %s:%d due to semaphore", file, line)
+		log.Infof(context.TODO(), "stopper throttling task from %s due to semaphore", key)
 		// Retry the select without the default.
 		select {
 		case sem <- struct{}{}:
@@ -316,7 +337,7 @@ func (s *Stopper) RunLimitedAsyncTask(
 		return errUnavailable
 	}
 
-	ctx, span := tracing.ForkCtxSpan(ctx, fmt.Sprintf("%s:%d", file, line))
+	ctx, span := tracing.ForkCtxSpan(ctx, key.String())
 
 	go func() {
 		defer s.Recover()
