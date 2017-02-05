@@ -483,6 +483,7 @@ func (scc *schemaChangerCollection) execSchemaChanges(
 		sc := &scEntry.sc
 		sc.db = *e.cfg.DB
 		sc.testingKnobs = e.cfg.SchemaChangerTestingKnobs
+		sc.distSQLPlanner = e.distSQLPlanner
 		for r := retry.Start(base.DefaultRetryOptions()); r.Next(); {
 			if err := sc.exec(); err != nil {
 				if err != errExistingSchemaChangeLease {
