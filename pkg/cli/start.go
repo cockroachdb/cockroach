@@ -331,7 +331,10 @@ func runStart(cmd *cobra.Command, args []string) error {
 	// Default user for servers.
 	serverCfg.User = security.NodeUser
 
-	stopper := initBacktrace(logDir)
+	// Disable Stopper task tracking as performing that call site tracking is
+	// moderately expensive (certainly outweighing the infrequent benefit it
+	// provides).
+	stopper := initBacktrace(logDir, stop.TrackTasks(false))
 	log.Event(startCtx, "initialized profiles")
 
 	// Run the rest of the startup process in the background to avoid preventing
@@ -465,9 +468,6 @@ func runStart(cmd *cobra.Command, args []string) error {
 		for {
 			select {
 			case <-ticker.C:
-				if log.V(1) {
-					log.Infof(shutdownCtx, "running tasks:\n%s", stopper.RunningTasks())
-				}
 				log.Infof(shutdownCtx, "%d running tasks", stopper.NumTasks())
 			case <-stopper.ShouldStop():
 				return
