@@ -47,11 +47,12 @@ type FlowID struct {
 type FlowCtx struct {
 	log.AmbientContext
 
-	id       FlowID
-	evalCtx  *parser.EvalContext
-	rpcCtx   *rpc.Context
-	txnProto *roachpb.Transaction
-	clientDB *client.DB
+	id           FlowID
+	evalCtx      *parser.EvalContext
+	rpcCtx       *rpc.Context
+	txnProto     *roachpb.Transaction
+	clientDB     *client.DB
+	testingKnobs TestingKnobs
 }
 
 func (flowCtx *FlowCtx) setupTxn(ctx context.Context) *client.Txn {
