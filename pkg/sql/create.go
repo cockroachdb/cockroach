@@ -1486,7 +1486,7 @@ func (p *planner) populateViewBackrefs(
 	plan planNode, tbl *sqlbase.TableDescriptor, backrefs map[sqlbase.ID]*sqlbase.TableDescriptor,
 ) {
 	b := &backrefCollector{p: p, tbl: tbl, backrefs: backrefs}
-	_ = walkPlan(plan, b)
+	_ = walkPlan(plan, planObserver{enterNode: b.enterNode})
 }
 
 type backrefCollector struct {
@@ -1494,8 +1494,6 @@ type backrefCollector struct {
 	tbl      *sqlbase.TableDescriptor
 	backrefs map[sqlbase.ID]*sqlbase.TableDescriptor
 }
-
-var _ planObserver = &backrefCollector{}
 
 // enterNode implements the planObserver interface.
 func (b *backrefCollector) enterNode(_ string, plan planNode) bool {
@@ -1548,10 +1546,6 @@ func (b *backrefCollector) enterNode(_ string, plan planNode) bool {
 	}
 	return true
 }
-func (b *backrefCollector) attr(_, _, _ string)                    {}
-func (b *backrefCollector) expr(_, _ string, _ int, _ parser.Expr) {}
-func (b *backrefCollector) leaveNode(_ string)                     {}
-func (b *backrefCollector) subqueryNode(_ *subquery) error         { return nil }
 
 func populateViewBackrefFromViewDesc(
 	dependency *sqlbase.TableDescriptor,
@@ -1571,7 +1565,7 @@ func populateViewBackrefFromViewDesc(
 // plan contains a star expansion.
 func (p *planner) planContainsStar(plan planNode) bool {
 	s := &starDetector{}
-	_ = walkPlan(plan, s)
+	_ = walkPlan(plan, planObserver{enterNode: s.enterNode})
 	return s.foundStar
 }
 
@@ -1579,8 +1573,6 @@ func (p *planner) planContainsStar(plan planNode) bool {
 type starDetector struct {
 	foundStar bool
 }
-
-var _ planObserver = &starDetector{}
 
 // enterNode implements the planObserver interface.
 func (s *starDetector) enterNode(_ string, plan planNode) bool {
@@ -1595,7 +1587,3 @@ func (s *starDetector) enterNode(_ string, plan planNode) bool {
 	}
 	return true
 }
-func (s *starDetector) attr(_, _, _ string)                    {}
-func (s *starDetector) expr(_, _ string, _ int, _ parser.Expr) {}
-func (s *starDetector) leaveNode(_ string)                     {}
-func (s *starDetector) subqueryNode(_ *subquery) error         { return nil }
