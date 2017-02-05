@@ -45,8 +45,12 @@ func (p *planner) optimizePlan(plan planNode, needed []bool) (planNode, error) {
 	setNeededColumns(newPlan, needed)
 
 	// Now do the same work for all sub-queries.
-	i := subqueryInitializer{p: p}
-	if err := walkPlan(newPlan, &i); err != nil {
+	i := &subqueryInitializer{p: p}
+	observer := planObserver{
+		subqueryNode: i.subqueryNode,
+		enterNode:    i.enterNode,
+	}
+	if err := walkPlan(newPlan, observer); err != nil {
 		return plan, err
 	}
 	return newPlan, nil
@@ -58,8 +62,6 @@ func (p *planner) optimizePlan(plan planNode, needed []bool) (planNode, error) {
 type subqueryInitializer struct {
 	p *planner
 }
-
-var _ planObserver = &subqueryInitializer{}
 
 // subqueryNode implements the planObserver interface.
 func (i *subqueryInitializer) subqueryNode(sq *subquery) error {
@@ -94,7 +96,4 @@ func (i *subqueryInitializer) subqueryNode(sq *subquery) error {
 	return nil
 }
 
-func (i *subqueryInitializer) enterNode(_ string, _ planNode) bool    { return true }
-func (i *subqueryInitializer) expr(_, _ string, _ int, _ parser.Expr) {}
-func (i *subqueryInitializer) leaveNode(_ string)                     {}
-func (i *subqueryInitializer) attr(_, _, _ string)                    {}
+func (i *subqueryInitializer) enterNode(_ string, _ planNode) bool { return true }
