@@ -101,8 +101,8 @@ func TestBatchIterReadOwnWrite(t *testing.T) {
 		t.Fatalf(`Seek on batch-backed iter after batched closed should panic.
 			iter.engine: %T, iter.engine.Closed: %v, batch.Closed %v`,
 			after.(*rocksDBIterator).engine,
-			after.(*rocksDBIterator).engine.closed(),
-			b.closed(),
+			after.(*rocksDBIterator).engine.Closed(),
+			b.Closed(),
 		)
 	}()
 }
