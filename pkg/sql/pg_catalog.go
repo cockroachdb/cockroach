@@ -61,6 +61,7 @@ var pgCatalog = virtualSchema{
 		pgCatalogDependTable,
 		pgCatalogDescriptionTable,
 		pgCatalogEnumTable,
+		pgCatalogExtensionTable,
 		pgCatalogForeignServerTable,
 		pgCatalogForeignTableTable,
 		pgCatalogIndexTable,
@@ -742,6 +743,25 @@ CREATE TABLE pg_catalog.pg_enum (
 `,
 	populate: func(p *planner, addRow func(...parser.Datum) error) error {
 		// Enum types are not currently supported.
+		return nil
+	},
+}
+
+// See: https://www.postgresql.org/docs/9.6/static/catalog-pg-extension.html.
+var pgCatalogExtensionTable = virtualSchemaTable{
+	schema: `
+CREATE TABLE pg_catalog.pg_extension (
+  extname NAME,
+  extowner OID,
+  extnamespace OID,
+  extrelocatable BOOL,
+  extversion STRING,
+  extconfig STRING,
+  extcondition STRING
+);
+`,
+	populate: func(p *planner, addRow func(...parser.Datum) error) error {
+		// Extensions are not supported.
 		return nil
 	},
 }
