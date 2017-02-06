@@ -55,15 +55,17 @@ type UnaryOp struct {
 	Typ        Type
 	ReturnType Type
 	fn         func(*EvalContext, Datum) (Datum, error)
-	types      typeList
+
+	types   typeList
+	retType returnTyper
 }
 
 func (op UnaryOp) params() typeList {
 	return op.types
 }
 
-func (op UnaryOp) returnType() Type {
-	return op.ReturnType
+func (op UnaryOp) returnType() returnTyper {
+	return op.retType
 }
 
 func (UnaryOp) preferred() bool {
@@ -74,6 +76,7 @@ func init() {
 	for op, overload := range UnaryOps {
 		for i, impl := range overload {
 			impl.types = ArgTypes{{"arg", impl.Typ}}
+			impl.retType = fixedReturnType(impl.ReturnType)
 			UnaryOps[op][i] = impl
 		}
 	}
@@ -163,7 +166,9 @@ type BinOp struct {
 	RightType  Type
 	ReturnType Type
 	fn         func(*EvalContext, Datum, Datum) (Datum, error)
-	types      typeList
+
+	types   typeList
+	retType returnTyper
 }
 
 func (op BinOp) params() typeList {
@@ -174,8 +179,8 @@ func (op BinOp) matchParams(l, r Type) bool {
 	return op.params().matchAt(l, 0) && op.params().matchAt(r, 1)
 }
 
-func (op BinOp) returnType() Type {
-	return op.ReturnType
+func (op BinOp) returnType() returnTyper {
+	return op.retType
 }
 
 func (BinOp) preferred() bool {
@@ -186,6 +191,7 @@ func init() {
 	for op, overload := range BinOps {
 		for i, impl := range overload {
 			impl.types = ArgTypes{{"left", impl.LeftType}, {"right", impl.RightType}}
+			impl.retType = fixedReturnType(impl.ReturnType)
 			BinOps[op][i] = impl
 		}
 	}
@@ -876,7 +882,8 @@ type CmpOp struct {
 	LeftType  Type
 	RightType Type
 	fn        func(*EvalContext, Datum, Datum) (DBool, error)
-	types     typeList
+
+	types typeList
 }
 
 func (op CmpOp) params() typeList {
@@ -887,8 +894,10 @@ func (op CmpOp) matchParams(l, r Type) bool {
 	return op.params().matchAt(l, 0) && op.params().matchAt(r, 1)
 }
 
-func (op CmpOp) returnType() Type {
-	return TypeBool
+var cmpOpReturnType = fixedReturnType(TypeBool)
+
+func (op CmpOp) returnType() returnTyper {
+	return cmpOpReturnType
 }
 
 func (CmpOp) preferred() bool {
