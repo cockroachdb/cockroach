@@ -1050,6 +1050,18 @@ func (s Span) Overlaps(o Span) bool {
 	return bytes.Compare(s.EndKey, o.Key) > 0 && bytes.Compare(s.Key, o.EndKey) < 0
 }
 
+// Contains returns whether the receiver contains the given span.
+func (s Span) Contains(o Span) bool {
+	if len(s.EndKey) == 0 && len(o.EndKey) == 0 {
+		return s.Key.Equal(o.Key)
+	} else if len(s.EndKey) == 0 {
+		return false
+	} else if len(o.EndKey) == 0 {
+		return bytes.Compare(o.Key, s.Key) >= 0 && bytes.Compare(o.Key, s.EndKey) < 0
+	}
+	return bytes.Compare(s.Key, o.Key) <= 0 && bytes.Compare(s.EndKey, o.EndKey) >= 0
+}
+
 // Spans is a slice of spans.
 type Spans []Span
 

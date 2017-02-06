@@ -430,7 +430,7 @@ func sendLeaseRequest(r *Replica, l *roachpb.Lease) error {
 	ba.Timestamp = r.store.Clock().Now()
 	ba.Add(&roachpb.RequestLeaseRequest{Lease: *l})
 	exLease, _ := r.getLease()
-	ch, _, err := r.propose(context.TODO(), exLease, ba, nil)
+	ch, _, err := r.propose(context.TODO(), exLease, ba, nil, nil)
 	if err == nil {
 		// Next if the command was committed, wait for the range to apply it.
 		// TODO(bdarnell): refactor this to a more conventional error-handling pattern.
@@ -1118,7 +1118,7 @@ func TestReplicaLeaseRejectUnknownRaftNodeID(t *testing.T) {
 	ba := roachpb.BatchRequest{}
 	ba.Timestamp = tc.repl.store.Clock().Now()
 	ba.Add(&roachpb.RequestLeaseRequest{Lease: *lease})
-	ch, _, err := tc.repl.propose(context.Background(), exLease, ba, nil)
+	ch, _, err := tc.repl.propose(context.Background(), exLease, ba, nil, nil)
 	if err == nil {
 		// Next if the command was committed, wait for the range to apply it.
 		// TODO(bdarnell): refactor to a more conventional error-handling pattern.
@@ -2890,7 +2890,14 @@ func TestEndTransactionWithMalformedSplitTrigger(t *testing.T) {
 	// split of the default range; start key must be "" in this case.
 	args.InternalCommitTrigger = &roachpb.InternalCommitTrigger{
 		SplitTrigger: &roachpb.SplitTrigger{
-			LeftDesc: roachpb.RangeDescriptor{StartKey: roachpb.RKey("bar")},
+			LeftDesc: roachpb.RangeDescriptor{
+				StartKey: roachpb.RKey("bar"),
+				EndKey:   roachpb.RKey("foo"),
+			},
+			RightDesc: roachpb.RangeDescriptor{
+				StartKey: roachpb.RKey("foo"),
+				EndKey:   roachpb.RKeyMax,
+			},
 		},
 	}
 
@@ -3279,7 +3286,7 @@ func TestRaftRetryProtectionInTxn(t *testing.T) {
 		// also avoid updating the timestamp cache.
 		ba.Timestamp = txn.OrigTimestamp
 		lease, _ := tc.repl.getLease()
-		ch, _, err := tc.repl.propose(context.Background(), lease, ba, nil)
+		ch, _, err := tc.repl.propose(context.Background(), lease, ba, nil, nil)
 		if err != nil {
 			t.Fatalf("%d: unexpected error: %s", i, err)
 		}
@@ -6156,7 +6163,7 @@ func TestReplicaIDChangePending(t *testing.T) {
 			Key: roachpb.Key("a"),
 		},
 	})
-	_, _, err := repl.propose(context.Background(), lease, ba, nil)
+	_, _, err := repl.propose(context.Background(), lease, ba, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -6330,7 +6337,7 @@ func TestReplicaCancelRaftCommandProgress(t *testing.T) {
 			ba.Add(&roachpb.PutRequest{Span: roachpb.Span{
 				Key: roachpb.Key(fmt.Sprintf("k%d", i))}})
 			lease, _ := repl.getLease()
-			cmd, pErr := repl.requestToProposal(context.Background(), makeIDKey(), ba, nil)
+			cmd, pErr := repl.requestToProposal(context.Background(), makeIDKey(), ba, nil, nil)
 			if pErr != nil {
 				t.Fatal(pErr)
 			}
@@ -6406,7 +6413,7 @@ func TestReplicaBurstPendingCommandsAndRepropose(t *testing.T) {
 			ba.Timestamp = tc.Clock().Now()
 			ba.Add(&roachpb.PutRequest{Span: roachpb.Span{
 				Key: roachpb.Key(fmt.Sprintf("k%d", i))}})
-			cmd, pErr := tc.repl.requestToProposal(ctx, makeIDKey(), ba, nil)
+			cmd, pErr := tc.repl.requestToProposal(ctx, makeIDKey(), ba, nil, nil)
 			if pErr != nil {
 				t.Fatal(pErr)
 			}
@@ -6525,7 +6532,7 @@ func TestReplicaRefreshPendingCommandsTicks(t *testing.T) {
 		ba.Timestamp = tc.Clock().Now()
 		ba.Add(&roachpb.PutRequest{Span: roachpb.Span{Key: roachpb.Key(id)}})
 		lease, _ := r.getLease()
-		cmd, pErr := r.requestToProposal(context.Background(), storagebase.CmdIDKey(id), ba, nil)
+		cmd, pErr := r.requestToProposal(context.Background(), storagebase.CmdIDKey(id), ba, nil, nil)
 		if pErr != nil {
 			t.Fatal(pErr)
 		}
@@ -6932,7 +6939,7 @@ func TestReplicaEvaluationNotTxnMutation(t *testing.T) {
 	ba.Add(&txnPut)
 	ba.Add(&txnPut)
 
-	batch, _, _, _, pErr := tc.repl.executeWriteBatch(ctx, makeIDKey(), ba)
+	batch, _, _, _, pErr := tc.repl.executeWriteBatch(ctx, makeIDKey(), ba, nil)
 	defer batch.Close()
 	if pErr != nil {
 		t.Fatal(pErr)
