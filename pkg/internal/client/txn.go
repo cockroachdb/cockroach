@@ -20,7 +20,6 @@ import (
 	"fmt"
 
 	"github.com/gogo/protobuf/proto"
-	basictracer "github.com/opentracing/basictracer-go"
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
@@ -40,12 +39,6 @@ type Txn struct {
 	Proto        roachpb.Transaction
 	UserPriority roachpb.UserPriority
 	Context      context.Context // must not be nil
-	// CollectedSpans receives spans from remote hosts for "snowball" traces
-	// initiated on this host.
-	// It's also used by "EXPLAIN TRACE".
-	// Note that in SQL land there's also TxnState.CollectedSpans which
-	// should be used when we want to accumulate everything for a SQL txn.
-	CollectedSpans []basictracer.RawSpan
 	// systemConfigTrigger is set to true when modifying keys from the SystemConfig
 	// span. This sets the SystemConfigTrigger on EndTransactionRequest.
 	systemConfigTrigger bool
@@ -600,15 +593,12 @@ func (txn *Txn) sendInternal(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *
 		panic(roachpb.ErrorUnexpectedlySet(txn.db.sender, br))
 	}
 
-	if br != nil {
-		for _, encSp := range br.CollectedSpans {
-			var newSp basictracer.RawSpan
-			if err := tracing.DecodeRawSpan(encSp, &newSp); err != nil {
-				return nil, roachpb.NewError(err)
-			}
-			txn.CollectedSpans = append(txn.CollectedSpans, newSp)
+	if br != nil && len(br.CollectedSpans) != 0 {
+		if err := tracing.IngestRemoteSpans(txn.Context, br.CollectedSpans); err != nil {
+			return nil, roachpb.NewErrorf("error ingesting remote spans: %s", err)
 		}
 	}
+
 	// Only successful requests can carry an updated Txn in their response
 	// header. Any error (e.g. a restart) can have a Txn attached to them as
 	// well; those update our local state in the same way for the next attempt.
