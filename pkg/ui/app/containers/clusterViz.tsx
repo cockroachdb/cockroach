@@ -3,7 +3,7 @@ import {runVisualization, viewWidth, viewHeight} from "../js/sim/index";
 
 /**
  * Renders the layout of the ClusterViz page. "ClusterViz" is an experimental
- * visual map of the cluster, expressed as a directive 
+ * visual map of the cluster which is being rapidly prototyped.
  */
 export default class ClusterViz extends React.Component<{}, {}> {
     modelElem: Element;

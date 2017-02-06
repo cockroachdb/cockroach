@@ -3,84 +3,11 @@ var RoachNode = require("./node.js");
 var Range = require("./range.js");
 var Replica = require("./replica.js");
 var App = require("./app.js");
+var layoutModel = require("./visualization.js").layoutModel;
+let packRanges = require("./visualization.js").packRanges;
+let sendRequest = require("./visualization.js").sendRequest;
 
 // This file defines a simple model for describing a CockroachDB cluster.
-function randomOffset(x, y, radius) {
-  x = x + Math.floor(Math.random() * radius)
-  y = y + Math.floor(Math.random() * radius)
-  return [x, y]
-}
-
-function addNodeToModel(model, dc) {
-  // Offset new node randomly.
-  var x = dc.cx,
-      y = dc.cy
-  if (dc.roachNodes.length > 0) {
-    var last = dc.roachNodes[dc.roachNodes.length-1]
-    offset = randomOffset(last.x, last.y, model.nodeRadius)
-    x = offset[0]
-    y = offset[1]
-  }
-
-  // Create the new node, identified by node ID.
-  var nodeID = dc.roachNodes.length
-  rn = new RoachNode(dc.id + "node" + nodeID, x, y, model, dc)
-
-  return rn
-}
-
-function addAppToModel(model, dc) {
-  var nodes = dc.roachNodes
-  var avail = []
-  for (var j = 0; j < nodes.length; j++) {
-    if (nodes[j].app == null) {
-      avail.push(nodes[j])
-    }
-  }
-  if (avail.length == 0) {
-    alert("There are no nodes without apps; add more nodes")
-    return
-  }
-  var rn = avail[Math.floor(Math.random() * avail.length)]
-  var offset = randomOffset(rn.x, rn.y, model.nodeRadius)
-  var x = offset[0]
-  var y = offset[1]
-
-  // Create the new application, identified by app ID.
-  var l = {source: null, target: rn, clazz: "applink", distance: model.appDistance(), latency: model.dcLatency}
-  var app = new App(dc.id + "app" + dc.apps.length, x, y, l, rn, model, dc)
-  return app
-}
-
-function restart(modelIdx) {
-  var model = models[modelIdx]
-  model.restart()
-}
-
-function addNode(modelIdx, dcIdx) {
-  var model = models[modelIdx]
-  var dc = model.datacenters[dcIdx]
-  addNodeToModel(model, dc)
-}
-
-function addApp(modelIdx, dcIdx) {
-  var model = models[modelIdx]
-  if (model.datacenters.length == 0) {
-    alert("Add a datacenter first!")
-    return
-  }
-  var dc = model.datacenters[dcIdx]
-  if (dc.roachNodes.length == 0) {
-    alert("Add a node to this datacenter first!")
-    return
-  }
-  addAppToModel(model, dc)
-}
-
-var layoutModel = require("./visualization").layoutModel;
-let packRanges = require("./visualization").packRanges;
-let sendRequest = require("./visualization").sendRequest;
-let setAppClass = require("./visualization").setAppClass;
 
 var modelCount = 0
 var models = []
@@ -91,8 +18,9 @@ function Model(id, width, height, initFn) {
   this.width = width
   this.height = height
   this.initFn = initFn
+  this.dcRadius = 30
   this.nodeRadius = 35
-  this.appRadius = 10
+  this.appRadius = 0
   this.nodeDistance = 150
   this.interNodeDistance = 25
   this.nodeCapacity = 3.0
@@ -119,11 +47,12 @@ function Model(id, width, height, initFn) {
   this.stopped = true
   this.played = false
 
+  this.projectionName = "none"
+  this.projection = function(p) { return p }
   this.skin = new Circles()
-  this.force = null
-  this.forceNodes = []
-  this.forceLinks = []
-  this.links = []
+  this.enablePlayAndReload = true
+  this.enableAddNodeAndApp = false
+  this.dcLinks = []
   models.push(this)
 
   if (initFn != null) {
@@ -187,9 +116,7 @@ Model.prototype.restart = function() {
   // Clean up each datacenter.
   for (var j = 0; j < this.datacenters.length; j++) {
     var dc = this.datacenters[j]
-    if (dc.blackHole != null) {
-      dc.blackHole.links = {}
-    }
+    dc.links = {}
     dc.apps = []
     dc.roachNodes = []
   }
@@ -197,14 +124,8 @@ Model.prototype.restart = function() {
   this.datacenters = []
 
   this.clearRequests()
-  while (this.forceNodes.length > 0) {
-    this.forceNodes.pop()
-  }
-  while (this.forceLinks.length > 0) {
-    this.forceLinks.pop()
-  }
-  while (this.links.length > 0) {
-    this.links.pop()
+  while (this.dcLinks.length > 0) {
+    this.dcLinks.pop()
   }
 
   // Re-initialize from scratch.
@@ -276,10 +197,60 @@ Model.prototype.setNodeUnreachable = function(node, endFn) {
   setNodeUnreachable(this, node, endFn)
 }
 
+function addNodeToModel(model, dc) {
+  // Create the new node, identified by node ID.
+  var nodeID = dc.roachNodes.length
+  rn = new RoachNode(dc.id + "node" + nodeID, 0, 0, model, dc)
 
+  return rn
+}
+
+function addAppToModel(model, dc) {
+  var nodes = dc.roachNodes
+  var avail = []
+  for (var j = 0; j < nodes.length; j++) {
+    if (nodes[j].app == null) {
+      avail.push(nodes[j])
+    }
+  }
+  if (avail.length == 0) {
+    alert("There are no nodes without apps; add more nodes")
+    return
+  }
+  var rn = avail[Math.floor(Math.random() * avail.length)]
+
+  // Create the new application, identified by app ID.
+  var l = {source: null, target: rn, clazz: "applink", distance: model.appDistance(), latency: model.dcLatency}
+  var app = new App(dc.id + "app" + dc.apps.length, 0, 0, l, rn, model, dc)
+  return app
+}
+
+function restart(modelIdx) {
+  var model = models[modelIdx]
+  model.restart()
+}
+
+function addNode(modelIdx, dcIdx) {
+  var model = models[modelIdx]
+  var dc = model.datacenters[dcIdx]
+  addNodeToModel(model, dc)
+}
+
+function addApp(modelIdx, dcIdx) {
+  var model = models[modelIdx]
+  if (model.datacenters.length == 0) {
+    alert("Add a datacenter first!")
+    return
+  }
+  var dc = model.datacenters[dcIdx]
+  if (dc.roachNodes.length == 0) {
+    alert("Add a node to this datacenter first!")
+    return
+  }
+  addAppToModel(model, dc)
+}
 
 module.exports.Model = Model;
-module.exports.randomOffset = randomOffset; 
 module.exports.addNodeToModel = addNodeToModel;
 module.exports.addAppToModel = addAppToModel;
 module.exports.restart = restart;

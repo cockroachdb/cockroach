@@ -283,7 +283,7 @@ Replica.prototype.split = function(newReplica) {
   // range was not fully up-replicated at the time of the split, so
   // no replica was created to house the right hand side of this replica's
   // split. That's OK as that RHS will be up-replicated from the new range
-  // automatically. We just want to set this replica's size appropraitely
+  // automatically. We just want to set this replica's size appropriately
   // and return.
   if (newReplica == null) {
     return

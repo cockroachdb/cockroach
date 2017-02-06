@@ -1,6 +1,13 @@
-var timeScale = require("./visualization.js").timeScale;
-
 function Circles() {
+}
+
+Circles.prototype.init = function(mode) {}
+
+Circles.prototype.dc = function(model, sel) {
+  return sel.append("path")
+    .attr("d", function(d) { return drawBox(d.radius * 2, d.radius * 2.25, 0.1) })
+    .attr("class", function(d) { return d.clazz })
+    .attr("visibility", "hidden")
 }
 
 Circles.prototype.node = function(model, sel) {
@@ -8,7 +15,6 @@ Circles.prototype.node = function(model, sel) {
     .attr("r", function(d) { return d.radius })
   //.on("click", function(d) { d.clicked() })
     .attr("class", function(d) { return d.clazz })
-    .call(model.force.drag)
 }
 
 Circles.prototype.packRanges = function(model, n, sel) {
@@ -33,4 +39,7 @@ Circles.prototype.packRanges = function(model, n, sel) {
     .style("stroke-width", function(d) { return d.flushed ? 0 : 1 })
 }
 
-module.exports = Circles
+Circles.prototype.sendRequest = function(model, payload, link, reverse, endFn) {
+  animateRequest(model, payload, link, reverse, endFn)
+}
+
