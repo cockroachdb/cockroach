@@ -3259,12 +3259,15 @@ func sendSnapshot(
 		LogEntries: logEntries,
 		Final:      true,
 	}
+	// Notify the sent callback before the final snapshot request is sent so that
+	// the snapshots generated metric gets incremented before the snapshot is
+	// applied.
+	sent()
 	if err := stream.Send(req); err != nil {
 		return err
 	}
 	log.Infof(ctx, "streamed snapshot: kv pairs: %d, log entries: %d, %0.0fms",
 		n, len(logEntries), timeutil.Since(start).Seconds()*1000)
-	sent()
 
 	resp, err = stream.Recv()
 	if err != nil {
