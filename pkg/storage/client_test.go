@@ -590,6 +590,7 @@ func (m *multiTestContext) makeStoreConfig(i int) storage.StoreConfig {
 		cfg.Clock = m.clocks[i]
 	} else {
 		cfg = storage.TestStoreConfig(m.clocks[i])
+		m.storeConfig = &cfg
 	}
 	cfg.Transport = m.transport
 	cfg.Gossip = m.gossips[i]
@@ -705,7 +706,6 @@ func (m *multiTestContext) addStore(idx int) {
 
 	nodeID := roachpb.NodeID(idx + 1)
 	cfg := m.makeStoreConfig(idx)
-	cfg.SetDefaults()
 	m.populateDB(idx, stopper)
 	m.nodeLivenesses[idx] = storage.NewNodeLiveness(
 		ambient, m.clocks[idx], m.dbs[idx], m.gossips[idx],
@@ -849,7 +849,6 @@ func (m *multiTestContext) restartStore(i int) {
 	stopper := stop.NewStopper()
 	m.stoppers[i] = stopper
 	cfg := m.makeStoreConfig(i)
-	cfg.SetDefaults()
 	m.populateDB(i, stopper)
 	m.nodeLivenesses[i] = storage.NewNodeLiveness(
 		log.AmbientContext{Tracer: tracing.NewTracer()}, m.clocks[i], m.dbs[i], m.gossips[i],
@@ -1142,15 +1141,7 @@ func (m *multiTestContext) advanceClock(ctx context.Context) {
 			log.Fatalf(ctx, "clock at index %d is different from the shared clock", i)
 		}
 	}
-
-	m.mu.RLock()
-	for _, store := range m.stores {
-		if store != nil {
-			m.manualClock.Increment(store.LeaseExpiration(m.clock))
-			break
-		}
-	}
-	m.mu.RUnlock()
+	m.manualClock.Increment(m.storeConfig.LeaseExpiration())
 	log.Infof(ctx, "test clock advanced to: %s", m.clock.Now())
 }
 
