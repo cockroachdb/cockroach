@@ -105,6 +105,7 @@ message ProcessorCoreUnion {
   optional MergeJoinerSpec mergeJoiner = 8;
   optional HashJoinerSpec hashJoiner = 9;
   optional ValuesCoreSpec values = 10;
+  optional BackfillerSpec backfiller = 11;
 }
 
 // NoopCoreSpec indicates a "no-op" processor core. This is used when we just
@@ -320,6 +321,26 @@ message AggregatorSpec {
   repeated uint32 group_cols = 2 [packed = true];
 
   repeated Aggregation aggregations = 3 [(gogoproto.nullable) = false];
+}
+
+// BackfillerSpec is the specification for a "schema change backfiller".
+// A backfiller performs KV operations to retrieve rows for a table and
+// backfills the new indexes/columns contained in the table descriptor.
+message BackfillerSpec {
+  enum Type {
+    Invalid = 0;
+    Column = 1;
+    Index = 2;
+  }
+  optional Type type = 1 [(gogoproto.nullable) = false];
+  optional sqlbase.TableDescriptor table = 2 [(gogoproto.nullable) = false];
+
+  // Sections of the table to be backfilled.
+  repeated TableReaderSpan spans = 3 [(gogoproto.nullable) = false];
+
+  // Run the backfill for approximately this duration.
+  // The backfill will always at least one backfill chunk.
+  optional int64 duration = 4 [(gogoproto.nullable) = false, (gogoproto.casttype) = "time.Duration"];
 }
 
 // FlowSpec describes a "flow" which is a subgraph of a distributed SQL
