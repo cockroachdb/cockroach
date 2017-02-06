@@ -1905,6 +1905,10 @@ func (expr *CaseExpr) Eval(ctx *EvalContext) (Datum, error) {
 	return DNull, nil
 }
 
+// unwrapQuotesRegexp matches a quoted string with whitespace surrounding it,
+// extracting the inner string into group 1.
+var unwrapQuotesRegexp = regexp.MustCompile(`^"(.*)"$`)
+
 // regprocedureRegexp matches a Postgres function type signature, capturing the
 // name of the function into group 1.
 // e.g. function(a, b, c) or function( a )
@@ -2211,6 +2215,10 @@ func (expr *CastExpr) Eval(ctx *EvalContext) (Datum, error) {
 				return results[0], nil
 			}
 			s := string(*v)
+			// Trim whitespace and unwrap outer quotes if necessary.
+			// This is required to mimic postgres.
+			s = strings.Trim(s, " ")
+			s = unwrapQuotesRegexp.ReplaceAllString(s, "$1")
 
 			switch typ {
 			case oidPseudoTypeRegClass:
