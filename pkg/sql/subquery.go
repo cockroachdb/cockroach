@@ -190,8 +190,6 @@ type subqueryPlanVisitor struct {
 	p *planner
 }
 
-var _ planObserver = &subqueryPlanVisitor{}
-
 func (v *subqueryPlanVisitor) subqueryNode(sq *subquery) error {
 	if !sq.expanded {
 		panic("subquery was not expanded properly")
@@ -218,16 +216,15 @@ func (v *subqueryPlanVisitor) enterNode(_ string, n planNode) bool {
 	return true
 }
 
-func (v *subqueryPlanVisitor) attr(_, _, _ string)                    {}
-func (v *subqueryPlanVisitor) expr(_, _ string, _ int, _ parser.Expr) {}
-func (v *subqueryPlanVisitor) leaveNode(_ string)                     {}
-
 func (p *planner) startSubqueryPlans(plan planNode) error {
 	// We also run and pre-evaluate the subqueries during start,
 	// so as to avoid re-running the sub-query for every row
 	// in the results of the surrounding planNode.
 	p.subqueryPlanVisitor = subqueryPlanVisitor{p: p}
-	return walkPlan(plan, &p.subqueryPlanVisitor)
+	return walkPlan(plan, planObserver{
+		subqueryNode: p.subqueryPlanVisitor.subqueryNode,
+		enterNode:    p.subqueryPlanVisitor.enterNode,
+	})
 }
 
 // subqueryVisitor replaces parser.Subquery syntax nodes by a
