@@ -73,7 +73,7 @@ App.prototype.write = function() {
   if (this.model.ranges[idx].leader != null) {
     var size = Math.random() * this.model.reqSize
     req = new Request(new DataPayload(size), this.model.ranges[idx].leader, this, this.model)
-    req.route(this, null)
+    req.route(this.roachNode, null)
   }
 }
 

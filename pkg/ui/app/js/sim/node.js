@@ -47,6 +47,14 @@ RoachNode.prototype.down = function() {
   return this.state != "healthy"
 }
 
+RoachNode.prototype.pctUsage = function(countLog) {
+  var pctUsage = (this.usage(countLog) * 100.0) / this.model.nodeCapacity
+  if (pctUsage > 100) {
+    pctUsage = 100
+  }
+  return pctUsage
+}
+
 RoachNode.prototype.usage = function(countLog) {
   var usage = 0
   for (var i = 0; i < this.replicas.length; i++) {
