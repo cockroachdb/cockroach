@@ -1216,6 +1216,7 @@ func TestFreeze(t *testing.T) {
 
 func TestNodeStatus(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	t.Skip("#13394")
 
 	start := timeutil.Now()
 	c := newCLITest(cliTestParams{})
