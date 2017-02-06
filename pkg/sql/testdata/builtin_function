@@ -1391,7 +1391,7 @@ timestamp with time zone
 record
 
 query T
-SELECT format_type(oid, -1) FROM pg_type WHERE typname='string' LIMIT 1
+SELECT format_type(oid, -1) FROM pg_type WHERE typname='text' LIMIT 1
 ----
 text
 
@@ -1411,7 +1411,7 @@ SELECT format_type(oid, -1) FROM pg_type WHERE typname='int8[]' LIMIT 1
 bigint[]
 
 query T
-SELECT format_type(oid, -1) FROM pg_type WHERE typname='string[]' LIMIT 1
+SELECT format_type(oid, -1) FROM pg_type WHERE typname='text[]' LIMIT 1
 ----
 text[]
 
