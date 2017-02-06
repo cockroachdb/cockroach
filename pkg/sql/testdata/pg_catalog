@@ -54,6 +54,7 @@ pg_database
 pg_depend
 pg_description
 pg_enum
+pg_extension
 pg_foreign_server
 pg_foreign_table
 pg_index
@@ -893,6 +894,12 @@ query OORT colnames
 SELECT * FROM pg_catalog.pg_enum
 ----
 oid  enumtypid  enumsortorder  enumlabel
+
+## pg_catalog.pg_extension
+query TOOBTTT colnames
+SELECT * FROM pg_catalog.pg_extension
+----
+extname  extowner  extnamespace  extrelocatable  extversion  extconfig  extcondition
 
 ## pg_catalog.pg_settings
 
