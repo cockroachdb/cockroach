@@ -25,11 +25,11 @@ import (
 )
 
 func getWait(cq *CommandQueue, from, to roachpb.Key, readOnly bool) []<-chan struct{} {
-	return cq.getWait(readOnly, roachpb.Span{Key: from, EndKey: to})
+	return cq.getWait(readOnly, []roachpb.Span{{Key: from, EndKey: to}})
 }
 
 func add(cq *CommandQueue, from, to roachpb.Key, readOnly bool) *cmd {
-	return cq.add(readOnly, roachpb.Span{Key: from, EndKey: to})
+	return cq.add(readOnly, []roachpb.Span{{Key: from, EndKey: to}})
 }
 
 func getWaitAndAdd(cq *CommandQueue, from, to roachpb.Key, readOnly bool) ([]<-chan struct{}, *cmd) {
@@ -245,7 +245,7 @@ func TestCommandQueueSelfOverlap(t *testing.T) {
 	cq := NewCommandQueue(true)
 	a := roachpb.Key("a")
 	k := add(cq, a, roachpb.Key("b"), false)
-	chans := cq.getWait(false, []roachpb.Span{{Key: a}, {Key: a}, {Key: a}}...)
+	chans := cq.getWait(false, []roachpb.Span{{Key: a}, {Key: a}, {Key: a}})
 	cq.remove(k)
 	waitCmdDone(chans)
 }
@@ -260,18 +260,18 @@ func TestCommandQueueCoveringOptimization(t *testing.T) {
 
 	{
 		// Test adding a covering entry and then not expanding it.
-		wk := cq.add(false, a, b)
+		wk := cq.add(false, []roachpb.Span{a, b})
 		if n := cq.tree.Len(); n != 1 {
 			t.Fatalf("expected a single covering span, but got %d", n)
 		}
-		waitCmdDone(cq.getWait(false, c))
+		waitCmdDone(cq.getWait(false, []roachpb.Span{c}))
 		cq.remove(wk)
 	}
 
 	{
 		// Test adding a covering entry and expanding it.
-		wk := cq.add(false, a, b)
-		chans := cq.getWait(false, a)
+		wk := cq.add(false, []roachpb.Span{a, b})
+		chans := cq.getWait(false, []roachpb.Span{a})
 		cq.remove(wk)
 		waitCmdDone(chans)
 	}
@@ -286,7 +286,7 @@ func TestCommandQueueWithoutCoveringOptimization(t *testing.T) {
 	c := roachpb.Span{Key: roachpb.Key("c")}
 
 	{
-		cmd := cq.add(false, a, b)
+		cmd := cq.add(false, []roachpb.Span{a, b})
 		if !cmd.expanded {
 			t.Errorf("expected non-expanded command, not %+v", cmd)
 		}
@@ -300,7 +300,7 @@ func TestCommandQueueWithoutCoveringOptimization(t *testing.T) {
 	}
 
 	{
-		cmd := cq.add(false, c)
+		cmd := cq.add(false, []roachpb.Span{c})
 		if cmd.expanded {
 			t.Errorf("expected unexpanded command, not %+v", cmd)
 		}
@@ -340,17 +340,17 @@ func TestCommandQueueIssue6495(t *testing.T) {
 		mkSpan("\xbb\x89\x8a\x8a\x89", "\xbb\x89\x8a\x8a\x89\x00"),
 	}
 
-	cq.getWait(false, spans1998...)
-	cmd1998 := cq.add(false, spans1998...)
+	cq.getWait(false, spans1998)
+	cmd1998 := cq.add(false, spans1998)
 
-	cq.getWait(true, spans1999...)
-	cmd1999 := cq.add(true, spans1999...)
+	cq.getWait(true, spans1999)
+	cmd1999 := cq.add(true, spans1999)
 
-	cq.getWait(true, spans2002...)
-	cq.add(true, spans2002...)
+	cq.getWait(true, spans2002)
+	cq.add(true, spans2002)
 
-	cq.getWait(false, spans2003...)
-	cq.add(false, spans2003...)
+	cq.getWait(false, spans2003)
+	cq.add(false, spans2003)
 
 	cq.remove(cmd1998)
 	cq.remove(cmd1999)

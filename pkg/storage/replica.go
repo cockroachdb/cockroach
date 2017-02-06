@@ -1481,10 +1481,11 @@ func (r *Replica) checkBatchRequest(ba roachpb.BatchRequest) error {
 // endCmds holds necessary information to end a batch after Raft
 // command processing.
 type endCmds struct {
-	repl      *Replica
-	cmdGlobal *cmd
-	cmdLocal  *cmd
-	ba        roachpb.BatchRequest
+	repl *Replica
+	cmds [numSpanAccess]struct {
+		global, local *cmd
+	}
+	ba roachpb.BatchRequest
 }
 
 // done removes pending commands from the command queue and updates
@@ -1510,8 +1511,10 @@ func (ec *endCmds) doneLocked(
 	}
 
 	ec.repl.cmdQMu.Lock()
-	ec.repl.cmdQMu.global.remove(ec.cmdGlobal)
-	ec.repl.cmdQMu.local.remove(ec.cmdLocal)
+	for i := range ec.cmds {
+		ec.repl.cmdQMu.global.remove(ec.cmds[i].global)
+		ec.repl.cmdQMu.local.remove(ec.cmds[i].local)
+	}
 	ec.repl.cmdQMu.Unlock()
 }
 
@@ -1578,28 +1581,37 @@ func makeCacheRequest(ba *roachpb.BatchRequest, br *roachpb.BatchResponse) cache
 // commands are done and can be removed from the queue, and whose returned
 // error is to be used in place of the supplied error.
 func (r *Replica) beginCmds(ctx context.Context, ba *roachpb.BatchRequest) (*endCmds, error) {
-	var cmdGlobal *cmd
-	var cmdLocal *cmd
+	var cmds [numSpanAccess]struct {
+		global, local *cmd
+	}
 	// Don't use the command queue for inconsistent reads.
 	if ba.ReadConsistency != roachpb.INCONSISTENT {
+		var spans SpanSet
+		// TODO(bdarnell): need to make this less global when the local
+		// command queue is used more heavily. For example, a split will
+		// have a large read-only span but also a write (see #10084).
 		// Currently local spans are the exception, so preallocate for the
-		// common case in which all are global.
+		// common case in which all are global. We rarely mix read and
+		// write commands, so preallocate for writes if there are any
+		// writes present in the batch.
 		//
-		// TODO(tschottdorf): revisit as the local portion gets its appropriate
+		// TODO(bdarnell): revisit as the local portion gets its appropriate
 		// use.
-		spansGlobal := make([]roachpb.Span, 0, len(ba.Requests))
-		var spansLocal []roachpb.Span
+		if ba.IsReadOnly() {
+			spans.reserve(SpanReadOnly, spanGlobal, len(ba.Requests))
+		} else {
+			spans.reserve(SpanReadWrite, spanGlobal, len(ba.Requests))
+		}
 
 		for _, union := range ba.Requests {
 			inner := union.GetInner()
 			if _, ok := inner.(*roachpb.NoopRequest); ok {
 				continue
 			}
-			header := inner.Header()
-			if keys.IsLocal(header.Key) {
-				spansLocal = append(spansLocal, header)
+			if cmd, ok := commands[inner.Method()]; ok {
+				cmd.DeclareKeys(ba.Header, inner, &spans)
 			} else {
-				spansGlobal = append(spansGlobal, header)
+				return nil, errors.Errorf("unrecognized command %s", inner.Method())
 			}
 		}
 
@@ -1609,16 +1621,15 @@ func (r *Replica) beginCmds(ctx context.Context, ba *roachpb.BatchRequest) (*end
 		// but is required for passing tests until correctness work in
 		// #6290 is addressed.
 		if propEvalKV {
-			spansGlobal = append(spansGlobal, roachpb.Span{
+			access := SpanReadWrite
+			if ba.IsReadOnly() {
+				access = SpanReadOnly
+			}
+			spans.Add(access, roachpb.Span{
 				Key:    keys.LocalMax,
 				EndKey: keys.MaxKey,
 			})
 		}
-
-		// TODO(tschottdorf): need to make this less global when the local
-		// command queue is used more heavily. For example, a split will have
-		// a large read-only span but also a write (see #10084).
-		readOnly := ba.IsReadOnly()
 
 		// Check for context cancellation before inserting into the
 		// command queue (and check again afterward). Once we're in the
@@ -1637,10 +1648,19 @@ func (r *Replica) beginCmds(ctx context.Context, ba *roachpb.BatchRequest) (*end
 		}
 
 		r.cmdQMu.Lock()
-		chans := r.cmdQMu.global.getWait(readOnly, spansGlobal...)
-		chans = append(chans, r.cmdQMu.local.getWait(readOnly, spansLocal...)...)
-		cmdGlobal = r.cmdQMu.global.add(readOnly, spansGlobal...)
-		cmdLocal = r.cmdQMu.local.add(readOnly, spansLocal...)
+		var chans []<-chan struct{}
+		// Collect all the channels to wait on before adding this batch to the
+		// command queue.
+		for i := SpanAccess(0); i < numSpanAccess; i++ {
+			readOnly := i == SpanReadOnly
+			chans = append(chans, r.cmdQMu.global.getWait(readOnly, spans.getSpans(i, spanGlobal))...)
+			chans = append(chans, r.cmdQMu.local.getWait(readOnly, spans.getSpans(i, spanLocal))...)
+		}
+		for i := SpanAccess(0); i < numSpanAccess; i++ {
+			readOnly := i == SpanReadOnly
+			cmds[i].global = r.cmdQMu.global.add(readOnly, spans.getSpans(i, spanGlobal))
+			cmds[i].local = r.cmdQMu.local.add(readOnly, spans.getSpans(i, spanLocal))
+		}
 		r.cmdQMu.Unlock()
 
 		beforeWait := timeutil.Now()
@@ -1677,9 +1697,9 @@ func (r *Replica) beginCmds(ctx context.Context, ba *roachpb.BatchRequest) (*end
 							l := r.cmdQMu.local.String()
 							r.cmdQMu.Unlock()
 							log.Warningf(r.AnnotateCtx(context.Background()),
-								"have been waiting %s for dependencies: cmd-global:\n%s\nglobal:\n%s"+
-									"cmd-local:\n%s\nlocal:%s\n",
-								base.SlowRequestThreshold, cmdGlobal, g, cmdLocal, l)
+								"have been waiting %s for dependencies: cmds:\n%+v\nglobal:\n%s\n"+
+									"local:%s\n",
+								base.SlowRequestThreshold, cmds, g, l)
 							r.store.metrics.SlowCommandQueueRequests.Inc(1)
 							defer r.store.metrics.SlowCommandQueueRequests.Dec(1)
 						case <-r.store.stopper.ShouldQuiesce():
@@ -1690,8 +1710,10 @@ func (r *Replica) beginCmds(ctx context.Context, ba *roachpb.BatchRequest) (*end
 						}
 					}
 					r.cmdQMu.Lock()
-					r.cmdQMu.global.remove(cmdGlobal)
-					r.cmdQMu.local.remove(cmdLocal)
+					for i := range cmds {
+						r.cmdQMu.global.remove(cmds[i].global)
+						r.cmdQMu.local.remove(cmds[i].local)
+					}
 					r.cmdQMu.Unlock()
 				}()
 				return nil, err
@@ -1725,10 +1747,9 @@ func (r *Replica) beginCmds(ctx context.Context, ba *roachpb.BatchRequest) (*end
 	}
 
 	ec := &endCmds{
-		repl:      r,
-		cmdGlobal: cmdGlobal,
-		cmdLocal:  cmdLocal,
-		ba:        *ba,
+		repl: r,
+		cmds: cmds,
+		ba:   *ba,
 	}
 	return ec, nil
 }

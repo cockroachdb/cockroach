@@ -1993,14 +1993,26 @@ func TestReplicaCommandQueue(t *testing.T) {
 
 	tooLong := 5 * time.Second
 
+	uniqueKeyCounter := int32(0)
+
 	for _, test := range testCases {
-		for _, addNoop := range []bool{false, true} {
+		for _, addReq := range []string{"", "noop", "read", "write"} {
+			if addReq == "write" && propEvalKV {
+				// adding a write changes behavior in propEvalKV until the command
+				// queue changes are all done.
+				continue
+			}
 			for _, localKey := range []bool{false, true} {
 				readWriteLabels := map[bool]string{true: "read", false: "write"}
 				testName := fmt.Sprintf("%s-%s", readWriteLabels[test.cmd1Read],
 					readWriteLabels[test.cmd2Read])
-				if addNoop {
+				switch addReq {
+				case "noop":
 					testName += "-noop"
+				case "read":
+					testName += "-addRead"
+				case "write":
+					testName += "-addWrite"
 				}
 				if localKey {
 					testName += "-local"
@@ -2022,7 +2034,7 @@ func TestReplicaCommandQueue(t *testing.T) {
 						tsc := TestStoreConfig(nil)
 						tsc.TestingKnobs.TestingCommandFilter =
 							func(filterArgs storagebase.FilterArgs) *roachpb.Error {
-								if filterArgs.Hdr.UserPriority == blockingPriority {
+								if filterArgs.Hdr.UserPriority == blockingPriority && filterArgs.Index == 0 {
 									blockingStart <- struct{}{}
 									<-blockingDone
 								}
@@ -2039,8 +2051,27 @@ func TestReplicaCommandQueue(t *testing.T) {
 							ba.Header = header
 							ba.Add(args)
 
-							if addNoop {
-								ba.Add(&roachpb.NoopRequest{})
+							if header.UserPriority == blockingPriority {
+								switch addReq {
+								case "noop":
+									// Add a noop request to make sure that its empty key
+									// doesn't cause additional blocking.
+									ba.Add(&roachpb.NoopRequest{})
+
+								case "read", "write":
+									// Additional reads and writes to unique keys do not
+									// cause additional blocking; the read/write nature of
+									// the keys in the command queue is determined on a
+									// per-request basis.
+									key := roachpb.Key(fmt.Sprintf("unique-key-%s-%d", testName, atomic.AddInt32(&uniqueKeyCounter, 1)))
+									if addReq == "read" {
+										req := getArgs(key)
+										ba.Add(&req)
+									} else {
+										req := putArgs(key, []byte{})
+										ba.Add(&req)
+									}
+								}
 							}
 
 							_, pErr := tc.Sender().Send(context.Background(), ba)
@@ -2306,7 +2337,7 @@ func TestReplicaCommandQueueCancellation(t *testing.T) {
 	// Wait until both commands are in the command queue.
 	testutils.SucceedsSoon(t, func() error {
 		tc.repl.cmdQMu.Lock()
-		chans := tc.repl.cmdQMu.global.getWait(false, roachpb.Span{Key: key1}, roachpb.Span{Key: key2})
+		chans := tc.repl.cmdQMu.global.getWait(false, []roachpb.Span{{Key: key1}, {Key: key2}})
 		tc.repl.cmdQMu.Unlock()
 		if a, e := len(chans), 2; a < e {
 			return errors.Errorf("%d of %d commands in the command queue", a, e)
@@ -2325,6 +2356,42 @@ func TestReplicaCommandQueueCancellation(t *testing.T) {
 	blockingDone <- struct{}{}
 	if pErr := <-cmd1Done; pErr != nil {
 		t.Fatal(pErr)
+	}
+}
+
+// TestReplicaCommandQueueSelfOverlap verifies that self-overlapping
+// batches are allowed, and in particular do not deadlock by
+// introducing command-queue dependencies between the parts of the
+// batch.
+func TestReplicaCommandQueueSelfOverlap(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	tc := testContext{}
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+	tc.Start(t, stopper)
+
+	for _, cmd1Read := range []bool{false, true} {
+		for _, cmd2Read := range []bool{false, true} {
+			name := fmt.Sprintf("%v,%v", cmd1Read, cmd2Read)
+			t.Run(name, func(t *testing.T) {
+				ba := roachpb.BatchRequest{}
+				ba.Add(readOrWriteArgs(roachpb.Key(name), cmd1Read))
+				ba.Add(readOrWriteArgs(roachpb.Key(name), cmd2Read))
+
+				// Set a deadline for nicer error behavior on deadlock.
+				ctx, cancel := context.WithTimeout(context.TODO(), 5*time.Second)
+				defer cancel()
+				_, pErr := tc.Sender().Send(ctx, ba)
+				if pErr != nil {
+					if _, ok := pErr.GetDetail().(*roachpb.WriteTooOldError); ok && !cmd1Read && !cmd2Read {
+						// WriteTooOldError is expected in the write/write case because we don't
+						// allow self-overlapping non-transactional batches.
+					} else {
+						t.Fatal(pErr)
+					}
+				}
+			})
+		}
 	}
 }
 
