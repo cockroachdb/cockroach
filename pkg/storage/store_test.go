@@ -484,7 +484,7 @@ func TestStoreRemoveReplicaDestroy(t *testing.T) {
 	}
 
 	if _, _, err := repl1.propose(
-		context.Background(), lease, roachpb.BatchRequest{}, nil,
+		context.Background(), lease, roachpb.BatchRequest{}, nil, nil,
 	); err != expErr {
 		t.Fatalf("expected error %s, but got %v", expErr, err)
 	}
