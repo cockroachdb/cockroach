@@ -8,6 +8,11 @@ SELECT 'pg_constraint'::REGCLASS
 ----
 402060402
 
+query O
+SELECT '"pg_constraint"'::REGCLASS
+----
+402060402
+
 query OO
 SELECT 'upper'::REGPROC, 'upper'::REGPROCEDURE
 ----
