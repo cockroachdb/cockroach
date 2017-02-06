@@ -80,10 +80,7 @@ func TestClusterFlow(t *testing.T) {
 	// that doesn't matter for the purposes of this test.
 
 	// Start a span (useful to look at spans using Lighstep).
-	sp, err := tracing.JoinOrNew(tracing.NewTracer(), nil, "cluster test")
-	if err != nil {
-		t.Fatal(err)
-	}
+	sp := tracing.NewTracer().StartSpan("cluster test")
 	ctx := opentracing.ContextWithSpan(context.Background(), sp)
 	defer sp.Finish()
 

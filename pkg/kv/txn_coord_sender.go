@@ -406,6 +406,10 @@ func (tc *TxnCoordSender) Send(
 		// passed to the RPC layer.
 		ba.TraceContext = protoutil.Clone(ba.TraceContext).(*tracing.SpanContextCarrier)
 	}
+	// TODO(andrei): we shouldn't be injecting the span here; we should be
+	// injecting it at a much lower level, when we're actually sending the RPC
+	// (i.e. in gRPCTransport). Injecting it here causes the server-side spans to
+	// not be children of the client's leaf spans.
 	if err := tracer.Inject(sp.Context(), basictracer.Delegator, ba.TraceContext); err != nil {
 		return nil, roachpb.NewError(err)
 	}

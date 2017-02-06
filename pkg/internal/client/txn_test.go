@@ -21,7 +21,6 @@ import (
 	"testing"
 	"time"
 
-	basictracer "github.com/opentracing/basictracer-go"
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
@@ -51,31 +50,29 @@ func TestTxnSnowballTrace(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	db := NewDB(newTestSender(nil, nil))
-	var collectedSpans []basictracer.RawSpan
-	sp, err := tracing.JoinOrNewSnowball("coordinator", nil, func(sp basictracer.RawSpan) {
-		collectedSpans = append(collectedSpans, sp)
-	})
+	ctx, trace, err := tracing.StartSnowballTrace(context.Background(), "test-txn")
 	if err != nil {
 		t.Fatal(err)
 	}
-	ctx := opentracing.ContextWithSpan(context.TODO(), sp)
+
 	if err := db.Txn(ctx, func(txn *Txn) error {
-		log.Event(ctx, "collecting spans")
-		collectedSpans = append(collectedSpans, txn.CollectedSpans...)
+		log.Event(ctx, "inside txn")
 		return nil
 	}); err != nil {
 		t.Fatal(err)
 	}
 	log.Event(ctx, "txn complete")
-	// Cannot use ctx once Finish() is called.
+	sp := opentracing.SpanFromContext(ctx)
 	sp.Finish()
+	trace.Done()
+	collectedSpans := trace.GetSpans()
 	dump := tracing.FormatRawSpans(collectedSpans)
 	// dump:
-	//    0.105ms      0.000ms    event:collecting spans
+	//    0.105ms      0.000ms    event:inside txn
 	//    0.275ms      0.171ms    event:client.Txn did AutoCommit. err: <nil>
 	//txn: "internal/client/txn_test.go:67 TestTxnSnowballTrace" id=<nil> key=/Min rw=false pri=0.00000000 iso=SERIALIZABLE stat=COMMITTED epo=0 ts=0.000000000,0 orig=0.000000000,0 max=0.000000000,0 wto=false rop=false
 	//    0.278ms      0.173ms    event:txn complete
-	found, err := regexp.MatchString(".*event:collecting spans\n.*event:client.Txn did AutoCommit. err: <nil>\n.*\n.*event:txn complete.*", dump)
+	found, err := regexp.MatchString(".*event:inside txn\n.*event:client.Txn did AutoCommit. err: <nil>\n.*\n.*event:txn complete.*", dump)
 	if err != nil {
 		t.Fatal(err)
 	}
