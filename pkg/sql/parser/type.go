@@ -114,6 +114,23 @@ var (
 	// TypeName is a type-alias for TypeString with a different OID. Can be
 	// compared with ==.
 	TypeName = wrapTypeWithOid(TypeString, oid.T_name)
+	// TypeNameArray is the type family of a DArray containing the Name alias type.
+	// Can be compared with ==.
+	TypeNameArray Type = tArray{TypeName}
+
+	// TypesAnyNonArray contains all non-array types.
+	TypesAnyNonArray = []Type{
+		TypeBool,
+		TypeInt,
+		TypeFloat,
+		TypeDecimal,
+		TypeString,
+		TypeBytes,
+		TypeDate,
+		TypeTimestamp,
+		TypeTimestampTZ,
+		TypeInterval,
+	}
 )
 
 // OidToType maps Postgres object IDs to CockroachDB types.
@@ -439,16 +456,19 @@ func (tArray) Size() (uintptr, bool) {
 	return unsafe.Sizeof(DString("")), variableSize
 }
 
+// oidToArrayOid maps scalar type Oids to their corresponding array type Oid.
+var oidToArrayOid = map[oid.Oid]oid.Oid{
+	oid.T_int8: oid.T__int8,
+	oid.T_text: oid.T__text,
+	oid.T_name: oid.T__name,
+}
+
 // Oid implements the Type interface.
 func (a tArray) Oid() oid.Oid {
-	switch a.Typ {
-	case TypeInt:
-		return oid.T__int8
-	case TypeString:
-		return oid.T__text
-	default:
-		return oid.T_anyarray
+	if o, ok := oidToArrayOid[a.Typ.Oid()]; ok {
+		return o
 	}
+	return oid.T_anyarray
 }
 
 // SQLName implements the Type interface.
