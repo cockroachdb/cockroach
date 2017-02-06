@@ -2722,7 +2722,7 @@ func TestRemovedReplicaError(t *testing.T) {
 	mtc.transferLease(context.TODO(), raftID, 0, 1)
 	mtc.unreplicateRange(raftID, 0)
 
-	mtc.manualClock.Increment(mtc.stores[1].LeaseExpiration(mtc.clock))
+	mtc.manualClock.Increment(mtc.storeConfig.LeaseExpiration())
 
 	// Expect to get a RangeNotFoundError. We have to allow for ambiguous result
 	// errors to avoid the occasional test flake.
