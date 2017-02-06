@@ -938,7 +938,9 @@ func (sb *syncBuffer) rotateFile(now time.Time) error {
 		fmt.Sprintf("[config] running on machine: %s\n", host),
 		fmt.Sprintf("[config] binary: %s\n", build.GetInfo().Short()),
 		fmt.Sprintf("[config] arguments: %s\n", os.Args),
-		fmt.Sprintf("line format: [IWEF]yymmdd hh:mm:ss.uuuuuu goid file:line msg\n"),
+		// Including a non-ascii character in the first 1024 bytes of the log helps
+		// viewers that attempt to guess the character encoding.
+		fmt.Sprintf("line format: [IWEF]yymmdd hh:mm:ss.uuuuuu goid file:line msg utf8=\u2713\n"),
 	} {
 		buf := formatLogEntry(Entry{
 			Severity:  sb.sev,
