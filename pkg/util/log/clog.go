@@ -969,21 +969,6 @@ func (sb *syncBuffer) rotateFile(now time.Time) error {
 // on disk I/O. The flushDaemon will block instead.
 const bufferSize = 256 * 1024
 
-func (l *loggingT) removeFilesLocked() error {
-	for s := Severity_FATAL; s >= Severity_INFO; s-- {
-		if sb, ok := l.file[s].(*syncBuffer); ok {
-			if err := sb.file.Close(); err != nil {
-				return err
-			}
-			if err := os.Remove(sb.file.Name()); err != nil {
-				return err
-			}
-		}
-		l.file[s] = nil
-	}
-	return nil
-}
-
 func (l *loggingT) closeFilesLocked() error {
 	for s := Severity_FATAL; s >= Severity_INFO; s-- {
 		if l.file[s] != nil {

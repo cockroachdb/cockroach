@@ -50,28 +50,6 @@ func FatalOnPanic() {
 	}
 }
 
-// EnableLogFileOutput turns on logging using the specified directory.
-// For unittesting only.
-func EnableLogFileOutput(dir string, stderrSeverity Severity) error {
-	logging.mu.Lock()
-	defer logging.mu.Unlock()
-	logging.toStderr = false
-	logging.stderrThreshold = stderrSeverity
-	return logDir.Set(dir)
-}
-
-// DisableLogFileOutput turns off logging. For unittesting only.
-func DisableLogFileOutput() {
-	logging.mu.Lock()
-	defer logging.mu.Unlock()
-	if err := logging.removeFilesLocked(); err != nil {
-		logging.exit(err)
-	}
-	logDir.clear()
-	logging.toStderr = true
-	logging.stderrThreshold = Severity_NONE
-}
-
 // SetExitFunc allows setting a function that will be called to exit the
 // process when a Fatal message is generated.
 func SetExitFunc(f func(int)) {

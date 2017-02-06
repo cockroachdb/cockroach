@@ -62,10 +62,20 @@ func Scope(t tShim, testName string) TestLogScope {
 	if err := dirTestOverride(tempDir); err != nil {
 		t.Fatal(err)
 	}
-	if err := EnableLogFileOutput(tempDir, Severity_ERROR); err != nil {
+	if err := enableLogFileOutput(tempDir, Severity_ERROR); err != nil {
 		t.Fatal(err)
 	}
 	return TestLogScope(tempDir)
+}
+
+// enableLogFileOutput turns on logging using the specified directory.
+// For unittesting only.
+func enableLogFileOutput(dir string, stderrSeverity Severity) error {
+	logging.mu.Lock()
+	defer logging.mu.Unlock()
+	logging.toStderr = false
+	logging.stderrThreshold = stderrSeverity
+	return logDir.Set(dir)
 }
 
 // Close cleans up a TestLogScope. The directory and its contents are
