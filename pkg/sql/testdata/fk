@@ -510,3 +510,22 @@ DROP TABLE otherdb.othertable
 
 statement ok
 DROP TABLE otherdb.othertable, crossdb
+
+statement ok
+CREATE TABLE modules (id BIGSERIAL NOT NULL PRIMARY KEY);
+
+statement ok
+CREATE TABLE domains (id BIGSERIAL NOT NULL PRIMARY KEY);
+
+# We'll use the unique index for the domain fk (since it is a prefix), but we
+# we correctly only mark the prefix as used and thus still allow module_id to be
+# used in another FK.
+statement ok
+CREATE TABLE domain_modules (
+  id         BIGSERIAL    NOT NULL PRIMARY KEY,
+  domain_id  BIGINT       NOT NULL,
+  module_id  BIGINT       NOT NULL,
+  CONSTRAINT domain_modules_domain_id_fk FOREIGN KEY (domain_id) REFERENCES domains (id),
+  CONSTRAINT domain_modules_module_id_fk FOREIGN KEY (module_id) REFERENCES modules (id),
+  CONSTRAINT domain_modules_uq UNIQUE (domain_id, module_id)
+);
