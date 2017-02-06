@@ -1401,7 +1401,7 @@ var Builtins = map[string][]Builtin{
 				if len(ctx.Database) == 0 {
 					return DNull, nil
 				}
-				return NewDString(ctx.Database), nil
+				return NewDString(schemaForDb(ctx.Database)), nil
 			},
 			Info: "Returns the current database.",
 		},
@@ -1421,13 +1421,13 @@ var Builtins = map[string][]Builtin{
 				showImplicitSchemas := args[0].(*DBool)
 				if showImplicitSchemas == DBoolTrue {
 					for _, p := range ctx.SearchPath {
-						if err := schemas.Append(NewDString(p)); err != nil {
+						if err := schemas.Append(NewDString(schemaForDb(p))); err != nil {
 							return nil, err
 						}
 					}
 				}
 				if len(ctx.Database) != 0 {
-					if err := schemas.Append(NewDString(ctx.Database)); err != nil {
+					if err := schemas.Append(NewDString(schemaForDb(ctx.Database))); err != nil {
 						return nil, err
 					}
 				}
@@ -1652,6 +1652,24 @@ var Builtins = map[string][]Builtin{
 			Info:     "Not usable; exposed only for ORM compatibility.",
 		},
 	},
+}
+
+const (
+	// InformationSchemaName is the name of the information_schema table.
+	InformationSchemaName = "information_schema"
+	// PgCatalogName is the name of the pg_catalog table.
+	PgCatalogName = "pg_catalog"
+	// SystemName is the name of the system table.
+	SystemName = "system"
+)
+
+// schemaForDb maps a DatabaseDescriptor to its corresponding pgNamespace.
+// See the comment above pgNamespace for more details.
+func schemaForDb(db string) string {
+	if db == InformationSchemaName || db == PgCatalogName || db == SystemName {
+		return db
+	}
+	return "public"
 }
 
 var substringImpls = []Builtin{

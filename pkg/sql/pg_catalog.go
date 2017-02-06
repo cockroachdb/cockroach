@@ -1794,9 +1794,9 @@ type pgNamespace struct {
 
 var (
 	pgNamespacePublic            = &pgNamespace{name: "public"}
-	pgNamespaceSystem            = &pgNamespace{name: "system"}
-	pgNamespacePGCatalog         = &pgNamespace{name: "pg_catalog"}
-	pgNamespaceInformationSchema = &pgNamespace{name: "information_schema"}
+	pgNamespaceSystem            = &pgNamespace{name: sqlbase.SystemDB.Name}
+	pgNamespacePGCatalog         = &pgNamespace{name: parser.PgCatalogName}
+	pgNamespaceInformationSchema = &pgNamespace{name: parser.InformationSchemaName}
 
 	pgNamespaces = []*pgNamespace{
 		pgNamespacePublic,
@@ -1820,9 +1820,9 @@ func pgNamespaceForDB(db *sqlbase.DatabaseDescriptor) *pgNamespace {
 	switch db.Name {
 	case sqlbase.SystemDB.Name:
 		return pgNamespaceSystem
-	case pgCatalogName:
+	case parser.PgCatalogName:
 		return pgNamespacePGCatalog
-	case informationSchemaName:
+	case parser.InformationSchemaName:
 		return pgNamespaceInformationSchema
 	default:
 		return pgNamespacePublic
