@@ -841,7 +841,12 @@ func resolveFK(
 		}
 	}
 
-	ref := sqlbase.ForeignKeyReference{Table: target.ID, Index: targetIdx.ID, Name: constraintName}
+	ref := sqlbase.ForeignKeyReference{
+		Table:           target.ID,
+		Index:           targetIdx.ID,
+		Name:            constraintName,
+		SharedPrefixLen: int32(len(srcCols)),
+	}
 	if mode == sqlbase.ConstraintValidity_Unvalidated {
 		ref.Validity = sqlbase.ConstraintValidity_Unvalidated
 	}
@@ -1314,7 +1319,11 @@ func MakeTableDesc(
 	colsInFKs := make(map[sqlbase.ColumnID]struct{})
 	for _, idx := range desc.Indexes {
 		if idx.ForeignKey.IsSet() {
-			for i := range idx.ColumnIDs {
+			numCols := len(idx.ColumnIDs)
+			if idx.ForeignKey.SharedPrefixLen > 0 {
+				numCols = int(idx.ForeignKey.SharedPrefixLen)
+			}
+			for i := 0; i < numCols; i++ {
 				if _, ok := colsInFKs[idx.ColumnIDs[i]]; ok {
 					return desc, fmt.Errorf(
 						"column %q cannot be used by multiple foreign key constraints", idx.ColumnNames[i])
