@@ -1218,11 +1218,11 @@ func evalGC(
 	pd.Replicated.State.GCThreshold = newThreshold
 	pd.Replicated.State.TxnSpanGCThreshold = newTxnSpanGCThreshold
 
-	if err := setGCThreshold(ctx, batch, cArgs.Stats, r.Desc().RangeID, &newThreshold); err != nil {
+	if err := r.state.setGCThreshold(ctx, batch, cArgs.Stats, &newThreshold); err != nil {
 		return EvalResult{}, err
 	}
 
-	if err := setTxnSpanGCThreshold(ctx, batch, cArgs.Stats, r.Desc().RangeID, &newTxnSpanGCThreshold); err != nil {
+	if err := r.state.setTxnSpanGCThreshold(ctx, batch, cArgs.Stats, &newTxnSpanGCThreshold); err != nil {
 		return EvalResult{}, err
 	}
 
@@ -1592,7 +1592,7 @@ func evalTruncateLog(
 	pd.Replicated.State.TruncatedState = tState
 	pd.Replicated.RaftLogDelta = &diff.SysBytes
 
-	return pd, setTruncatedState(ctx, batch, cArgs.Stats, r.RangeID, tState)
+	return pd, r.state.setTruncatedState(ctx, batch, cArgs.Stats, tState)
 }
 
 func newFailedLeaseTrigger(isTransfer bool) EvalResult {
@@ -1746,7 +1746,7 @@ func (r *Replica) applyNewLeaseLocked(
 	}
 
 	// Store the lease to disk & in-memory.
-	if err := setLease(ctx, batch, ms, r.RangeID, &lease); err != nil {
+	if err := r.state.setLease(ctx, batch, ms, &lease); err != nil {
 		return newFailedLeaseTrigger(isTransfer), err
 	}
 
@@ -2061,7 +2061,7 @@ func evalChangeFrozen(
 
 	desc := r.Desc()
 
-	frozen, err := loadFrozenStatus(ctx, batch, desc.RangeID)
+	frozen, err := r.state.loadFrozenStatus(ctx, batch)
 	if err != nil || (frozen == storagebase.ReplicaState_FROZEN) == args.Frozen {
 		// Something went wrong or we're already in the right frozen state. In
 		// the latter case, we avoid writing the "same thing" because "we"
@@ -2116,7 +2116,7 @@ func evalChangeFrozen(
 	if args.Frozen {
 		frozenStatus = storagebase.ReplicaState_FROZEN
 	}
-	if err := setFrozenStatus(ctx, batch, cArgs.Stats, r.Desc().RangeID, frozenStatus); err != nil {
+	if err := r.state.setFrozenStatus(ctx, batch, cArgs.Stats, frozenStatus); err != nil {
 		*reply = roachpb.ChangeFrozenResponse{}
 		return EvalResult{}, err
 	}
@@ -2772,7 +2772,7 @@ func (r *Replica) splitTrigger(
 		//
 		// TODO(tschottdorf): why would this use r.store.Engine() and not the
 		// batch?
-		leftLease, err := loadLease(ctx, r.store.Engine(), r.RangeID)
+		leftLease, err := r.state.loadLease(ctx, r.store.Engine())
 		if err != nil {
 			return enginepb.MVCCStats{}, EvalResult{}, errors.Wrap(err, "unable to load lease")
 		}
@@ -3001,7 +3001,7 @@ func (r *Replica) mergeTrigger(
 	mergedMS.Add(msRange)
 
 	// Set stats for updated range.
-	if err := setMVCCStats(ctx, batch, r.RangeID, mergedMS); err != nil {
+	if err := r.state.setMVCCStats(ctx, batch, &mergedMS); err != nil {
 		return EvalResult{}, errors.Errorf("unable to write MVCC stats: %s", err)
 	}
 

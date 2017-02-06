@@ -65,19 +65,20 @@ func TestSynthesizeHardState(t *testing.T) {
 				TruncatedState:   &roachpb.RaftTruncatedState{Term: test.TruncTerm},
 				RaftAppliedIndex: test.RaftAppliedIndex,
 			}
+			rsk := makeReplicaStateKeys(testState.Desc.RangeID)
 
 			if test.OldHS != nil {
-				if err := setHardState(context.Background(), batch, testState.Desc.RangeID, *test.OldHS); err != nil {
+				if err := rsk.setHardState(context.Background(), batch, *test.OldHS); err != nil {
 					t.Fatal(err)
 				}
 			}
 
-			oldHS, err := loadHardState(context.Background(), batch, testState.Desc.RangeID)
+			oldHS, err := rsk.loadHardState(context.Background(), batch)
 			if err != nil {
 				t.Fatal(err)
 			}
 
-			err = synthesizeHardState(context.Background(), batch, testState, oldHS)
+			err = rsk.synthesizeHardState(context.Background(), batch, testState, oldHS)
 			if !testutils.IsError(err, test.Err) {
 				t.Fatalf("%d: expected %q got %v", i, test.Err, err)
 			} else if err != nil {
@@ -85,7 +86,7 @@ func TestSynthesizeHardState(t *testing.T) {
 				return
 			}
 
-			hs, err := loadHardState(context.Background(), batch, testState.Desc.RangeID)
+			hs, err := rsk.loadHardState(context.Background(), batch)
 			if err != nil {
 				t.Fatal(err)
 			}

@@ -5039,7 +5039,7 @@ func TestReplicaCorruption(t *testing.T) {
 	}
 
 	// Verify destroyed error was persisted.
-	pErr, err = loadReplicaDestroyedError(context.Background(), r.store.Engine(), r.RangeID)
+	pErr, err = r.state.loadReplicaDestroyedError(context.Background(), r.store.Engine())
 	if err != nil {
 		t.Fatal(err)
 	}

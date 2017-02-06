@@ -42,17 +42,18 @@ func TestMigrate7310And6991(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	ts, err := loadTruncatedState(context.Background(), eng, desc.RangeID)
+	rsk := makeReplicaStateKeys(desc.RangeID)
+	ts, err := rsk.loadTruncatedState(context.Background(), eng)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	hs, err := loadHardState(context.Background(), eng, desc.RangeID)
+	hs, err := rsk.loadHardState(context.Background(), eng)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	rApplied, lApplied, err := loadAppliedIndex(context.Background(), eng, desc.RangeID)
+	rApplied, lApplied, err := rsk.loadAppliedIndex(context.Background(), eng)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -42,7 +42,8 @@ import (
 func migrate7310And6991(
 	ctx context.Context, batch engine.ReadWriter, desc roachpb.RangeDescriptor,
 ) error {
-	state, err := loadState(ctx, batch, &desc)
+	rsk := makeReplicaStateKeys(desc.RangeID)
+	state, err := rsk.load(ctx, batch, &desc)
 	if err != nil {
 		return errors.Wrap(err, "could not migrate TruncatedState: %s")
 	}
@@ -50,13 +51,13 @@ func migrate7310And6991(
 		state.TruncatedState.Term = raftInitialLogTerm
 		state.TruncatedState.Index = raftInitialLogIndex
 		state.RaftAppliedIndex = raftInitialLogIndex
-		if _, err := saveState(ctx, batch, state); err != nil {
+		if _, err := rsk.save(ctx, batch, state); err != nil {
 			return errors.Wrapf(err, "could not migrate TruncatedState to %+v", &state.TruncatedState)
 		}
 		log.Warningf(ctx, "migration: synthesized TruncatedState for %+v", desc)
 	}
 
-	hs, err := loadHardState(ctx, batch, desc.RangeID)
+	hs, err := rsk.loadHardState(ctx, batch)
 	if err != nil {
 		return errors.Wrap(err, "unable to load HardState")
 	}
@@ -65,7 +66,7 @@ func migrate7310And6991(
 	// index (which would error out and fatal us).
 	if hs.Commit == 0 {
 		log.Warningf(ctx, "migration: synthesized HardState for %+v", desc)
-		if err := synthesizeHardState(ctx, batch, state, hs); err != nil {
+		if err := rsk.synthesizeHardState(ctx, batch, state, hs); err != nil {
 			return errors.Wrap(err, "could not migrate HardState")
 		}
 	}

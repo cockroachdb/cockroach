@@ -55,7 +55,7 @@ var _ raft.Storage = (*Replica)(nil)
 // InitialState requires that the replica lock be held.
 func (r *Replica) InitialState() (raftpb.HardState, raftpb.ConfState, error) {
 	ctx := r.AnnotateCtx(context.TODO())
-	hs, err := loadHardState(ctx, r.store.Engine(), r.RangeID)
+	hs, err := r.state.loadHardState(ctx, r.store.Engine())
 	// For uninitialized ranges, membership is unknown at this point.
 	if raft.IsEmptyHardState(hs) || err != nil {
 		return raftpb.HardState{}, raftpb.ConfState{}, err
@@ -76,10 +76,10 @@ func (r *Replica) Entries(lo, hi, maxBytes uint64) ([]raftpb.Entry, error) {
 	snap := r.store.NewSnapshot()
 	defer snap.Close()
 	ctx := r.AnnotateCtx(context.TODO())
-	return entries(ctx, snap, r.RangeID, r.store.raftEntryCache, lo, hi, maxBytes)
+	return r.entries(ctx, snap, r.RangeID, r.store.raftEntryCache, lo, hi, maxBytes)
 }
 
-func entries(
+func (r *Replica) entries(
 	ctx context.Context,
 	e engine.Reader,
 	rangeID roachpb.RangeID,
@@ -148,7 +148,7 @@ func entries(
 		}
 
 		// Was the missing index after the last index?
-		lastIndex, err := loadLastIndex(ctx, e, rangeID)
+		lastIndex, err := r.state.loadLastIndex(ctx, e)
 		if err != nil {
 			return nil, err
 		}
@@ -161,7 +161,7 @@ func entries(
 	}
 
 	// No results, was it due to unavailability or truncation?
-	ts, err := loadTruncatedState(ctx, e, rangeID)
+	ts, err := r.state.loadTruncatedState(ctx, e)
 	if err != nil {
 		return nil, err
 	}
@@ -200,15 +200,15 @@ func (r *Replica) Term(i uint64) (uint64, error) {
 	snap := r.store.NewSnapshot()
 	defer snap.Close()
 	ctx := r.AnnotateCtx(context.TODO())
-	return term(ctx, snap, r.RangeID, r.store.raftEntryCache, i)
+	return r.term(ctx, snap, r.RangeID, r.store.raftEntryCache, i)
 }
 
-func term(
+func (r *Replica) term(
 	ctx context.Context, eng engine.Reader, rangeID roachpb.RangeID, eCache *raftEntryCache, i uint64,
 ) (uint64, error) {
-	ents, err := entries(ctx, eng, rangeID, eCache, i, i+1, 0)
+	ents, err := r.entries(ctx, eng, rangeID, eCache, i, i+1, 0)
 	if err == raft.ErrCompacted {
-		ts, err := loadTruncatedState(ctx, eng, rangeID)
+		ts, err := r.state.loadTruncatedState(ctx, eng)
 		if err != nil {
 			return 0, err
 		}
@@ -239,7 +239,7 @@ func (r *Replica) raftTruncatedStateLocked(ctx context.Context) (roachpb.RaftTru
 	if r.mu.state.TruncatedState != nil {
 		return *r.mu.state.TruncatedState, nil
 	}
-	ts, err := loadTruncatedState(ctx, r.store.Engine(), r.RangeID)
+	ts, err := r.state.loadTruncatedState(ctx, r.store.Engine())
 	if err != nil {
 		return ts, err
 	}
@@ -313,7 +313,7 @@ func (r *Replica) GetSnapshot(ctx context.Context, snapType string) (*OutgoingSn
 	// Delegate to a static function to make sure that we do not depend
 	// on any indirect calls to r.store.Engine() (or other in-memory
 	// state of the Replica). Everything must come from the snapshot.
-	snapData, err := snapshot(ctx, snapType, snap, rangeID, r.store.raftEntryCache, startKey)
+	snapData, err := r.snapshot(ctx, snapType, snap, rangeID, r.store.raftEntryCache, startKey)
 	if err != nil {
 		log.Errorf(ctx, "error generating snapshot: %s", err)
 		return nil, err
@@ -355,7 +355,7 @@ type IncomingSnapshot struct {
 }
 
 // snapshot creates an OutgoingSnapshot containing a rocksdb snapshot for the given range.
-func snapshot(
+func (r *Replica) snapshot(
 	ctx context.Context,
 	snapType string,
 	snap engine.Reader,
@@ -382,7 +382,7 @@ func snapshot(
 
 	// Read the range metadata from the snapshot instead of the members
 	// of the Range struct because they might be changed concurrently.
-	appliedIndex, _, err := loadAppliedIndex(ctx, snap, rangeID)
+	appliedIndex, _, err := r.state.loadAppliedIndex(ctx, snap)
 	if err != nil {
 		return OutgoingSnapshot{}, err
 	}
@@ -393,12 +393,13 @@ func snapshot(
 		cs.Nodes = append(cs.Nodes, uint64(rep.ReplicaID))
 	}
 
-	term, err := term(ctx, snap, rangeID, eCache, appliedIndex)
+	term, err := r.term(ctx, snap, rangeID, eCache, appliedIndex)
 	if err != nil {
 		return OutgoingSnapshot{}, errors.Errorf("failed to fetch term of %d: %s", appliedIndex, err)
 	}
 
-	state, err := loadState(ctx, snap, &desc)
+	rsk := makeReplicaStateKeys(rangeID)
+	state, err := rsk.load(ctx, snap, &desc)
 	if err != nil {
 		return OutgoingSnapshot{}, err
 	}
@@ -444,7 +445,7 @@ func (r *Replica) append(
 	var value roachpb.Value
 	for i := range entries {
 		ent := &entries[i]
-		key := keys.RaftLogKey(r.RangeID, ent.Index)
+		key := r.state.RaftLogKey(ent.Index)
 		if err := value.SetProto(ent); err != nil {
 			return 0, 0, err
 		}
@@ -463,14 +464,14 @@ func (r *Replica) append(
 	// Delete any previously appended log entries which never committed.
 	lastIndex := entries[len(entries)-1].Index
 	for i := lastIndex + 1; i <= prevLastIndex; i++ {
-		err := engine.MVCCDelete(ctx, batch, &diff, keys.RaftLogKey(r.RangeID, i),
+		err := engine.MVCCDelete(ctx, batch, &diff, r.state.RaftLogKey(i),
 			hlc.ZeroTimestamp, nil /* txn */)
 		if err != nil {
 			return 0, 0, err
 		}
 	}
 
-	if err := setLastIndex(ctx, batch, r.RangeID, lastIndex); err != nil {
+	if err := r.state.setLastIndex(ctx, batch, lastIndex); err != nil {
 		return 0, 0, err
 	}
 
@@ -641,7 +642,7 @@ func (r *Replica) applySnapshot(
 	stats.entries = timeutil.Now()
 
 	if !raft.IsEmptyHardState(hs) {
-		if err := setHardState(ctx, distinctBatch, r.RangeID, hs); err != nil {
+		if err := r.state.setHardState(ctx, distinctBatch, hs); err != nil {
 			return errors.Wrapf(err, "unable to persist HardState %+v", &hs)
 		}
 	} else {
