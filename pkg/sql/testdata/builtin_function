@@ -1144,12 +1144,12 @@ SELECT foo.* IS NOT TRUE FROM (VALUES (1)) AS foo(x)
 query T
 SELECT CURRENT_SCHEMAS(true)
 ----
-{pg_catalog,test}
+{pg_catalog,public}
 
 query T
 SELECT CURRENT_SCHEMAS(false)
 ----
-{test}
+{public}
 
 query error pq: unknown signature: current_schemas()
 SELECT CURRENT_SCHEMAS()
@@ -1160,12 +1160,12 @@ SELECT CURRENT_SCHEMAS(NULL::bool)
 NULL
 
 query B
-SELECT 'test' = ANY (CURRENT_SCHEMAS(true))
+SELECT 'public' = ANY (CURRENT_SCHEMAS(true))
 ----
 true
 
 query B
-SELECT 'not test' = ANY (CURRENT_SCHEMAS(true))
+SELECT 'not public' = ANY (CURRENT_SCHEMAS(true))
 ----
 false
 
@@ -1183,7 +1183,7 @@ SET DATABASE = 'test'
 query T
 SELECT current_schema()
 ----
-test
+public
 
 statement ok
 SET DATABASE = ''
@@ -1391,7 +1391,7 @@ timestamp with time zone
 record
 
 query T
-SELECT format_type(oid, -1) FROM pg_type WHERE typname='string' LIMIT 1
+SELECT format_type(oid, -1) FROM pg_type WHERE typname='text' LIMIT 1
 ----
 text
 
@@ -1411,7 +1411,7 @@ SELECT format_type(oid, -1) FROM pg_type WHERE typname='int8[]' LIMIT 1
 bigint[]
 
 query T
-SELECT format_type(oid, -1) FROM pg_type WHERE typname='string[]' LIMIT 1
+SELECT format_type(oid, -1) FROM pg_type WHERE typname='text[]' LIMIT 1
 ----
 text[]
 

@@ -376,7 +376,7 @@ JOIN pg_catalog.pg_namespace n ON c.relnamespace = n.oid
 WHERE n.nspname = 'public'
 ----
 relname  attname  typname  attcollation  collname
-t3       c        string   1661428263    en-US
+t3       c        text     1661428263    en-US
 
 
 ## pg_catalog.pg_am
@@ -656,15 +656,15 @@ oid   typname      typnamespace  typowner  typlen  typbyval  typtype
 20    int8         1782195457    NULL      8       true      b
 21    int2         1782195457    NULL      8       true      b
 23    int4         1782195457    NULL      8       true      b
-25    string       1782195457    NULL      -1      false     b
+25    text         1782195457    NULL      -1      false     b
 26    oid          1782195457    NULL      8       true      b
 700   float4       1782195457    NULL      8       true      b
 701   float8       1782195457    NULL      8       true      b
 1005  int2[]       1782195457    NULL      -1      false     b
 1007  int4[]       1782195457    NULL      -1      false     b
-1009  string[]     1782195457    NULL      -1      false     b
+1009  text[]       1782195457    NULL      -1      false     b
 1016  int8[]       1782195457    NULL      -1      false     b
-1043  string       1782195457    NULL      -1      false     b
+1043  varchar      1782195457    NULL      -1      false     b
 1082  date         1782195457    NULL      8       true      b
 1114  timestamp    1782195457    NULL      24      true      b
 1184  timestamptz  1782195457    NULL      24      true      b
@@ -685,15 +685,15 @@ oid   typname      typcategory  typispreferred  typisdefined  typdelim  typrelid
 20    int8         N            false           true          ,         0         0        0
 21    int2         N            false           true          ,         0         0        0
 23    int4         N            false           true          ,         0         0        0
-25    string       S            false           true          ,         0         0        0
+25    text         S            false           true          ,         0         0        0
 26    oid          N            false           true          ,         0         0        0
 700   float4       N            false           true          ,         0         0        0
 701   float8       N            false           true          ,         0         0        0
 1005  int2[]       A            false           true          ,         0         0        0
 1007  int4[]       A            false           true          ,         0         0        0
-1009  string[]     A            false           true          ,         0         0        0
+1009  text[]       A            false           true          ,         0         0        0
 1016  int8[]       A            false           true          ,         0         0        0
-1043  string       S            false           true          ,         0         0        0
+1043  varchar      S            false           true          ,         0         0        0
 1082  date         D            false           true          ,         0         0        0
 1114  timestamp    D            false           true          ,         0         0        0
 1184  timestamptz  D            false           true          ,         0         0        0
@@ -714,15 +714,15 @@ oid   typname      typinput    typoutput  typreceive  typsend  typmodin  typmodo
 20    int8         0           0          0           0        0         0          0
 21    int2         0           0          0           0        0         0          0
 23    int4         0           0          0           0        0         0          0
-25    string       0           0          0           0        0         0          0
+25    text         0           0          0           0        0         0          0
 26    oid          0           0          0           0        0         0          0
 700   float4       0           0          0           0        0         0          0
 701   float8       0           0          0           0        0         0          0
 1005  int2[]       2892088402  0          0           0        0         0          0
 1007  int4[]       2892088402  0          0           0        0         0          0
-1009  string[]     2892088402  0          0           0        0         0          0
+1009  text[]       2892088402  0          0           0        0         0          0
 1016  int8[]       2892088402  0          0           0        0         0          0
-1043  string       0           0          0           0        0         0          0
+1043  varchar      0           0          0           0        0         0          0
 1082  date         0           0          0           0        0         0          0
 1114  timestamp    0           0          0           0        0         0          0
 1184  timestamptz  0           0          0           0        0         0          0
@@ -743,15 +743,15 @@ oid   typname      typalign  typstorage  typnotnull  typbasetype  typtypmod
 20    int8         NULL      NULL        false       0            -1
 21    int2         NULL      NULL        false       0            -1
 23    int4         NULL      NULL        false       0            -1
-25    string       NULL      NULL        false       0            -1
+25    text         NULL      NULL        false       0            -1
 26    oid          NULL      NULL        false       0            -1
 700   float4       NULL      NULL        false       0            -1
 701   float8       NULL      NULL        false       0            -1
 1005  int2[]       NULL      NULL        false       0            -1
 1007  int4[]       NULL      NULL        false       0            -1
-1009  string[]     NULL      NULL        false       0            -1
+1009  text[]       NULL      NULL        false       0            -1
 1016  int8[]       NULL      NULL        false       0            -1
-1043  string       NULL      NULL        false       0            -1
+1043  varchar      NULL      NULL        false       0            -1
 1082  date         NULL      NULL        false       0            -1
 1114  timestamp    NULL      NULL        false       0            -1
 1184  timestamptz  NULL      NULL        false       0            -1
@@ -772,15 +772,15 @@ oid   typname      typndims  typcollation  typdefaultbin  typdefault  typacl
 20    int8         0         0             NULL           NULL        NULL
 21    int2         0         0             NULL           NULL        NULL
 23    int4         0         0             NULL           NULL        NULL
-25    string       0         1661428263    NULL           NULL        NULL
+25    text         0         1661428263    NULL           NULL        NULL
 26    oid          0         0             NULL           NULL        NULL
 700   float4       0         0             NULL           NULL        NULL
 701   float8       0         0             NULL           NULL        NULL
 1005  int2[]       0         0             NULL           NULL        NULL
 1007  int4[]       0         0             NULL           NULL        NULL
-1009  string[]     0         1661428263    NULL           NULL        NULL
+1009  text[]       0         1661428263    NULL           NULL        NULL
 1016  int8[]       0         0             NULL           NULL        NULL
-1043  string       0         1661428263    NULL           NULL        NULL
+1043  varchar      0         1661428263    NULL           NULL        NULL
 1082  date         0         0             NULL           NULL        NULL
 1114  timestamp    0         0             NULL           NULL        NULL
 1184  timestamptz  0         0             NULL           NULL        NULL
