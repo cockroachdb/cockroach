@@ -865,9 +865,6 @@ func NewStore(cfg StoreConfig, eng engine.Engine, nodeDesc *roachpb.NodeDescript
 		func(ctx context.Context, msg string, args ...interface{}) {
 			log.Warningf(ctx, "storeMu: "+msg, args...)
 		},
-		func(t time.Duration) {
-			s.metrics.MuStoreNanos.RecordValue(t.Nanoseconds())
-		},
 	)
 	s.mu.timedMutex = makeTimedMutex(storeMuLogger)
 
