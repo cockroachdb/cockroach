@@ -304,17 +304,6 @@ var (
 	metaGCResolveSuccess = metric.Metadata{Name: "queue.gc.info.resolvesuccess",
 		Help: "Number of successful intent resolutions"}
 
-	metaMuReplicaNanos = metric.Metadata{Name: "mutex.replicananos",
-		Help: "Duration of Replica mutex critical sections"}
-	metaMuCommandQueueNanos = metric.Metadata{Name: "mutex.commandqueuenanos",
-		Help: "Duration of Command Queue mutex critical sections"}
-	metaMuRaftNanos = metric.Metadata{Name: "mutex.raftnanos",
-		Help: "Duration of Replica Raft mutex critical sections"}
-	metaMuStoreNanos = metric.Metadata{Name: "mutex.storenanos",
-		Help: "Duration of Store mutex critical sections"}
-	metaMuSchedulerNanos = metric.Metadata{Name: "mutex.schedulernanos",
-		Help: "Duration of Raft Scheduler mutex critical sections"}
-
 	// Slow request metrics.
 	metaSlowCommandQueueRequests = metric.Metadata{Name: "requests.slow.commandqueue",
 		Help: "Number of requests that have been stuck for a long time in the command queue"}
@@ -494,13 +483,6 @@ type StoreMetrics struct {
 	GCResolveTotal               *metric.Counter
 	GCResolveSuccess             *metric.Counter
 
-	// Mutex timing information.
-	MuStoreNanos        *metric.Histogram
-	MuSchedulerNanos    *metric.Histogram
-	MuRaftNanos         *metric.Histogram
-	MuReplicaNanos      *metric.Histogram
-	MuCommandQueueNanos *metric.Histogram
-
 	// Slow request counts.
 	SlowCommandQueueRequests *metric.Gauge
 	SlowLeaseRequests        *metric.Gauge
@@ -674,34 +656,6 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		GCPushTxn:                    metric.NewCounter(metaGCPushTxn),
 		GCResolveTotal:               metric.NewCounter(metaGCResolveTotal),
 		GCResolveSuccess:             metric.NewCounter(metaGCResolveSuccess),
-
-		// Mutex timing.
-		//
-		// TODO(tschottdorf): Histograms don't work very well as they were
-		// inherently built in a windowed (i.e. events-discarding) way, which
-		// is not at all the correct way. Discard at one-minute interval which
-		// gives sane (though mathematically nonsensical) results when exposed
-		// at the moment.
-		MuReplicaNanos: metric.NewHistogram(
-			metaMuReplicaNanos, histogramWindow,
-			time.Second.Nanoseconds(), 1,
-		),
-		MuCommandQueueNanos: metric.NewHistogram(
-			metaMuCommandQueueNanos, histogramWindow,
-			time.Second.Nanoseconds(), 1,
-		),
-		MuRaftNanos: metric.NewHistogram(
-			metaMuRaftNanos, histogramWindow,
-			time.Second.Nanoseconds(), 1,
-		),
-		MuStoreNanos: metric.NewHistogram(
-			metaMuStoreNanos, histogramWindow,
-			time.Second.Nanoseconds(), 1,
-		),
-		MuSchedulerNanos: metric.NewHistogram(
-			metaMuSchedulerNanos, histogramWindow,
-			time.Second.Nanoseconds(), 1,
-		),
 
 		// Wedge request counters.
 		SlowCommandQueueRequests: metric.NewGauge(metaSlowCommandQueueRequests),

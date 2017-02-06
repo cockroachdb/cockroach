@@ -572,9 +572,6 @@ func newReplica(rangeID roachpb.RangeID, store *Store) *Replica {
 		func(ctx context.Context, msg string, args ...interface{}) {
 			log.Warningf(ctx, "raftMu: "+msg, args...)
 		},
-		func(t time.Duration) {
-			r.store.metrics.MuRaftNanos.RecordValue(t.Nanoseconds())
-		},
 	)
 	r.raftMu = makeTimedMutex(raftMuLogger)
 
@@ -584,9 +581,6 @@ func newReplica(rangeID roachpb.RangeID, store *Store) *Replica {
 		func(ctx context.Context, msg string, args ...interface{}) {
 			log.Warningf(ctx, "replicaMu: "+msg, args...)
 		},
-		func(t time.Duration) {
-			r.store.metrics.MuReplicaNanos.RecordValue(t.Nanoseconds())
-		},
 	)
 	r.mu.timedMutex = makeTimedMutex(replicaMuLogger)
 
@@ -595,9 +589,6 @@ func newReplica(rangeID roachpb.RangeID, store *Store) *Replica {
 		defaultReplicaMuWarnThreshold,
 		func(ctx context.Context, msg string, args ...interface{}) {
 			log.Warningf(ctx, "cmdQMu: "+msg, args...)
-		},
-		func(t time.Duration) {
-			r.store.metrics.MuCommandQueueNanos.RecordValue(t.Nanoseconds())
 		},
 	)
 	r.cmdQMu.timedMutex = makeTimedMutex(cmdQMuLogger)

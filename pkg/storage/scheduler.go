@@ -18,7 +18,6 @@ import (
 	"container/list"
 	"fmt"
 	"sync"
-	"time"
 
 	"golang.org/x/net/context"
 
@@ -152,11 +151,6 @@ func newRaftScheduler(
 		defaultReplicaMuWarnThreshold,
 		func(ctx context.Context, msg string, args ...interface{}) {
 			log.Warningf(ctx, "raftScheduler.mu: "+msg, args...)
-		},
-		func(t time.Duration) {
-			if metrics != nil {
-				metrics.MuSchedulerNanos.RecordValue(t.Nanoseconds())
-			}
 		},
 	)
 	s.mu.timedMutex = makeTimedMutex(muLogger)
