@@ -80,13 +80,6 @@ func (l *logDirName) String() string {
 	return l.name
 }
 
-func (l *logDirName) clear() {
-	// For testing only.
-	l.Lock()
-	defer l.Unlock()
-	l.name = ""
-}
-
 func (l *logDirName) get() (string, error) {
 	l.Lock()
 	defer l.Unlock()
