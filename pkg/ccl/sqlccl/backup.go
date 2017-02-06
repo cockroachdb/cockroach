@@ -478,8 +478,7 @@ func presplitRanges(baseCtx context.Context, db client.DB, input []roachpb.Key) 
 
 	wg.Add(1)
 	splitFn(input)
-	wg.Wait()
-	return wg.FirstError()
+	return wg.Wait()
 }
 
 func restoreTableDesc(
