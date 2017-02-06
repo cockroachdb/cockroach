@@ -24,10 +24,10 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/pkg/errors"
 )
@@ -108,24 +108,6 @@ func (ids indexesByID) Less(i, j int) bool {
 }
 func (ids indexesByID) Swap(i, j int) {
 	ids[i], ids[j] = ids[j], ids[i]
-}
-
-func convertBackfillError(tableDesc *sqlbase.TableDescriptor, b *client.Batch) error {
-	// A backfill on a new schema element has failed and the batch contains
-	// information useful in printing a sensible error. However
-	// convertBatchError() will only work correctly if the schema elements
-	// are "live" in the tableDesc.
-	desc := protoutil.Clone(tableDesc).(*sqlbase.TableDescriptor)
-	mutationID := desc.Mutations[0].MutationID
-	for _, mutation := range desc.Mutations {
-		if mutation.MutationID != mutationID {
-			// Mutations are applied in a FIFO order. Only apply the first set
-			// of mutations if they have the mutation ID we're looking for.
-			break
-		}
-		desc.MakeMutationComplete(mutation)
-	}
-	return sqlbase.ConvertBatchError(desc, b)
 }
 
 func (sc *SchemaChanger) getChunkSize(chunkSize int64) int64 {
@@ -509,7 +491,7 @@ func (sc *SchemaChanger) truncateAndBackfillColumnsChunk(
 			}
 		}
 		if err := txn.Run(writeBatch); err != nil {
-			return convertBackfillError(tableDesc, writeBatch)
+			return distsqlrun.ConvertBackfillError(tableDesc, writeBatch)
 		}
 		if done = i < chunkSize; done {
 			return nil
@@ -741,7 +723,7 @@ func (sc *SchemaChanger) backfillIndexesChunk(
 		}
 		// Write the new index values.
 		if err := txn.Run(b); err != nil {
-			return convertBackfillError(tableDesc, b)
+			return distsqlrun.ConvertBackfillError(tableDesc, b)
 		}
 		// Have we processed all the table rows?
 		if done = numRows < chunkSize; done {

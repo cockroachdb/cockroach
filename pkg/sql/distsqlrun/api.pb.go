@@ -36,6 +36,7 @@
 		MergeJoinerSpec
 		HashJoinerSpec
 		AggregatorSpec
+		BackfillerSpec
 		FlowSpec
 */
 package distsqlrun
