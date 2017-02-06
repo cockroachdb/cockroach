@@ -663,6 +663,7 @@ func TestProcessRangeDescriptorUpdate(t *testing.T) {
 
 	r := &Replica{
 		RangeID:    desc.RangeID,
+		state:      makeReplicaStateKeys(desc.RangeID),
 		store:      store,
 		abortCache: NewAbortCache(desc.RangeID),
 	}
@@ -2058,7 +2059,7 @@ func TestStoreChangeFrozen(t *testing.T) {
 		repl.mu.Lock()
 		frozen := repl.mu.state.Frozen
 		repl.mu.Unlock()
-		pFrozen, err := loadFrozenStatus(context.Background(), store.Engine(), 1)
+		pFrozen, err := repl.state.loadFrozenStatus(context.Background(), store.Engine())
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -2181,7 +2182,7 @@ func TestStoreGCThreshold(t *testing.T) {
 		repl.mu.Lock()
 		gcThreshold := repl.mu.state.GCThreshold
 		repl.mu.Unlock()
-		pgcThreshold, err := loadGCThreshold(context.Background(), store.Engine(), 1)
+		pgcThreshold, err := repl.state.loadGCThreshold(context.Background(), store.Engine())
 		if err != nil {
 			t.Fatal(err)
 		}

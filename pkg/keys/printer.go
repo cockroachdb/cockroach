@@ -289,9 +289,9 @@ func localRangeIDKeyParse(input string) (remainder string, key roachpb.Key) {
 			break
 		}
 	}
-	maker := MakeRangeIDUnreplicatedKey
+	maker := makeRangeIDUnreplicatedKey
 	if replicated {
-		maker = MakeRangeIDReplicatedKey
+		maker = makeRangeIDReplicatedKey
 	}
 	if suffix != nil {
 		if input != "" {

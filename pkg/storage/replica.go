@@ -281,6 +281,10 @@ type Replica struct {
 	// TODO(peter): evaluate runtime overhead of the timed mutex.
 	raftMu timedMutex
 
+	// state provides facilities for loading and saving on-disk replica
+	// state. Requires Replica.raftMu is held.
+	state replicaStateKeys
+
 	cmdQMu struct {
 		// Protects all fields in the cmdQMu struct.
 		//
@@ -555,6 +559,7 @@ func newReplica(rangeID roachpb.RangeID, store *Store) *Replica {
 	r := &Replica{
 		AmbientContext: store.cfg.AmbientCtx,
 		RangeID:        rangeID,
+		state:          makeReplicaStateKeys(rangeID),
 		store:          store,
 		abortCache:     NewAbortCache(rangeID),
 	}
@@ -647,17 +652,17 @@ func (r *Replica) initLocked(
 
 	var err error
 
-	if r.mu.state, err = loadState(ctx, r.store.Engine(), desc); err != nil {
+	if r.mu.state, err = r.state.load(ctx, r.store.Engine(), desc); err != nil {
 		return err
 	}
 	r.rangeStr.store(0, r.mu.state.Desc)
 
-	r.mu.lastIndex, err = loadLastIndex(ctx, r.store.Engine(), r.RangeID)
+	r.mu.lastIndex, err = r.state.loadLastIndex(ctx, r.store.Engine())
 	if err != nil {
 		return err
 	}
 
-	pErr, err := loadReplicaDestroyedError(ctx, r.store.Engine(), r.RangeID)
+	pErr, err := r.state.loadReplicaDestroyedError(ctx, r.store.Engine())
 	if err != nil {
 		return err
 	}
@@ -1322,7 +1327,7 @@ func (r *Replica) assertState(reader engine.Reader) {
 // TODO(tschottdorf): Consider future removal (for example, when #7224 is resolved).
 func (r *Replica) assertStateLocked(reader engine.Reader) {
 	ctx := r.AnnotateCtx(context.TODO())
-	diskState, err := loadState(ctx, reader, r.mu.state.Desc)
+	diskState, err := r.state.load(ctx, reader, r.mu.state.Desc)
 	if err != nil {
 		log.Fatal(ctx, err)
 	}
@@ -2666,7 +2671,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 			return stats, err
 		}
 
-		if lastIndex, err = loadLastIndex(ctx, r.store.Engine(), r.RangeID); err != nil {
+		if lastIndex, err = r.state.loadLastIndex(ctx, r.store.Engine()); err != nil {
 			return stats, err
 		}
 		// We refresh pending commands after applying a snapshot because this
@@ -2698,7 +2703,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 		}
 	}
 	if !raft.IsEmptyHardState(rd.HardState) {
-		if err := setHardState(ctx, writer, r.RangeID, rd.HardState); err != nil {
+		if err := r.state.setHardState(ctx, writer, rd.HardState); err != nil {
 			return stats, err
 		}
 	}
@@ -3798,19 +3803,19 @@ func (r *Replica) applyRaftCommand(
 	// reading the previous applied index keys on every write operation. This
 	// requires a little additional work in order maintain the MVCC stats.
 	var appliedIndexNewMS enginepb.MVCCStats
-	if err := setAppliedIndexBlind(ctx, writer, &appliedIndexNewMS, r.RangeID,
+	if err := r.state.setAppliedIndexBlind(ctx, writer, &appliedIndexNewMS,
 		rResult.State.RaftAppliedIndex, rResult.State.LeaseAppliedIndex); err != nil {
 		return enginepb.MVCCStats{}, roachpb.NewError(NewReplicaCorruptionError(
 			errors.Wrap(err, "unable to set applied index")))
 	}
 	rResult.Delta.SysBytes += appliedIndexNewMS.SysBytes -
-		calcAppliedIndexSysBytes(r.RangeID, oldRaftAppliedIndex, oldLeaseAppliedIndex)
+		r.state.calcAppliedIndexSysBytes(oldRaftAppliedIndex, oldLeaseAppliedIndex)
 
 	// Special-cased MVCC stats handling to exploit commutativity of stats
 	// delta upgrades. Thanks to commutativity, the command queue does not
 	// have to serialize on the stats key.
 	ms.Add(rResult.Delta)
-	if err := setMVCCStats(ctx, writer, r.RangeID, ms); err != nil {
+	if err := r.state.setMVCCStats(ctx, writer, &ms); err != nil {
 		return enginepb.MVCCStats{}, roachpb.NewError(NewReplicaCorruptionError(
 			errors.Wrap(err, "unable to update MVCCStats")))
 	}
@@ -4502,7 +4507,7 @@ func (r *Replica) maybeSetCorrupt(ctx context.Context, pErr *roachpb.Error) *roa
 
 		// Try to persist the destroyed error message. If the underlying store is
 		// corrupted the error won't be processed and a panic will occur.
-		if err := setReplicaDestroyedError(ctx, r.store.Engine(), r.RangeID, pErr); err != nil {
+		if err := r.state.setReplicaDestroyedError(ctx, r.store.Engine(), pErr); err != nil {
 			cErr.Processed = false
 			return roachpb.NewError(cErr)
 		}

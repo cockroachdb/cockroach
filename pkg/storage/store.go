@@ -2993,7 +2993,7 @@ func (s *Store) processRaftRequest(
 			needTombstone := r.mu.state.Desc.NextReplicaID != 0
 			r.mu.Unlock()
 
-			appliedIndex, _, err := loadAppliedIndex(ctx, r.store.Engine(), r.RangeID)
+			appliedIndex, _, err := r.state.loadAppliedIndex(ctx, r.store.Engine())
 			if err != nil {
 				return roachpb.NewError(err)
 			}
