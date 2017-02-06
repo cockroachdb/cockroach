@@ -664,6 +664,41 @@ func TestSpanOverlaps(t *testing.T) {
 	}
 }
 
+// TestSpanContains verifies methods to check whether a key
+// or key range is contained within the span.
+func TestSpanContains(t *testing.T) {
+	s := Span{Key: []byte("a"), EndKey: []byte("b")}
+
+	testData := []struct {
+		start, end []byte
+		contains   bool
+	}{
+		// Single keys.
+		{[]byte("a"), nil, true},
+		{[]byte("aa"), nil, true},
+		{[]byte("`"), nil, false},
+		{[]byte("b"), nil, false},
+		{[]byte("c"), nil, false},
+		// Key ranges.
+		{[]byte("a"), []byte("b"), true},
+		{[]byte("a"), []byte("aa"), true},
+		{[]byte("aa"), []byte("b"), true},
+		{[]byte("0"), []byte("9"), false},
+		{[]byte("`"), []byte("a"), false},
+		{[]byte("b"), []byte("bb"), false},
+		{[]byte("0"), []byte("bb"), false},
+		{[]byte("aa"), []byte("bb"), false},
+		// TODO(bdarnell): check for invalid ranges in Span.Contains?
+		//{[]byte("b"), []byte("a"), false},
+	}
+	for i, test := range testData {
+		if s.Contains(Span{test.start, test.end}) != test.contains {
+			t.Errorf("%d: expected span %q-%q within range to be %v",
+				i, test.start, test.end, test.contains)
+		}
+	}
+}
+
 // TestRSpanContains verifies methods to check whether a key
 // or key range is contained within the span.
 func TestRSpanContains(t *testing.T) {
