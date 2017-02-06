@@ -626,7 +626,7 @@ func mvccGetMetadata(
 		return false, 0, 0, nil
 	}
 
-	unsafeKey := iter.unsafeKey()
+	unsafeKey := iter.UnsafeKey()
 	if !unsafeKey.Key.Equal(metaKey.Key) {
 		return false, 0, 0, nil
 	}
@@ -635,7 +635,7 @@ func mvccGetMetadata(
 		if err := iter.ValueProto(meta); err != nil {
 			return false, 0, 0, err
 		}
-		return true, int64(unsafeKey.EncodedSize()), int64(len(iter.unsafeValue())), nil
+		return true, int64(unsafeKey.EncodedSize()), int64(len(iter.UnsafeValue())), nil
 	}
 
 	meta.Reset()
@@ -643,8 +643,8 @@ func mvccGetMetadata(
 	// mvccVersionTimestampSize. The size of the metadata key is
 	// accounted for separately.
 	meta.KeyBytes = mvccVersionTimestampSize
-	meta.ValBytes = int64(len(iter.unsafeValue()))
-	meta.Deleted = len(iter.unsafeValue()) == 0
+	meta.ValBytes = int64(len(iter.UnsafeValue()))
+	meta.Deleted = len(iter.UnsafeValue()) == 0
 	meta.Timestamp = unsafeKey.Timestamp
 	return true, int64(unsafeKey.EncodedSize()) - meta.KeyBytes, 0, nil
 }
@@ -772,7 +772,7 @@ func mvccGetInternal(
 		return nil, ignoredIntents, safeValue, nil
 	}
 
-	unsafeKey := iter.unsafeKey()
+	unsafeKey := iter.UnsafeKey()
 	if !unsafeKey.Key.Equal(metaKey.Key) {
 		return nil, ignoredIntents, safeValue, nil
 	}
@@ -796,14 +796,14 @@ func mvccGetInternal(
 		// already been read above, so there's nothing left to do.
 	}
 
-	if len(iter.unsafeValue()) == 0 {
+	if len(iter.UnsafeValue()) == 0 {
 		// Value is deleted.
 		return nil, ignoredIntents, safeValue, nil
 	}
 
 	value := &buf.value
 	if allowedSafety == unsafeValue {
-		value.RawBytes = iter.unsafeValue()
+		value.RawBytes = iter.UnsafeValue()
 	} else {
 		value.RawBytes = iter.Value()
 	}
@@ -1428,7 +1428,7 @@ func MVCCDeleteRange(
 // MVCCKey is unsafe and will be invalidated by the next call to
 // Iterator.{Next,Prev,Seek,SeekReverse,Close}.
 func getScanMeta(iter Iterator, encEndKey MVCCKey, meta *enginepb.MVCCMetadata) (MVCCKey, error) {
-	metaKey := iter.unsafeKey()
+	metaKey := iter.UnsafeKey()
 	if !metaKey.Less(encEndKey) {
 		return NilKey, iter.Error()
 	}
@@ -1439,8 +1439,8 @@ func getScanMeta(iter Iterator, encEndKey MVCCKey, meta *enginepb.MVCCMetadata) 
 		// mvccVersionTimestampSize. The size of the metadata key is accounted for
 		// separately.
 		meta.KeyBytes = mvccVersionTimestampSize
-		meta.ValBytes = int64(len(iter.unsafeValue()))
-		meta.Deleted = len(iter.unsafeValue()) == 0
+		meta.ValBytes = int64(len(iter.UnsafeValue()))
+		meta.Deleted = len(iter.UnsafeValue()) == 0
 		return metaKey, nil
 	}
 	if err := iter.ValueProto(meta); err != nil {
@@ -1456,7 +1456,7 @@ func getScanMeta(iter Iterator, encEndKey MVCCKey, meta *enginepb.MVCCMetadata) 
 func getReverseScanMeta(
 	iter Iterator, encEndKey MVCCKey, meta *enginepb.MVCCMetadata,
 ) (MVCCKey, error) {
-	metaKey := iter.unsafeKey()
+	metaKey := iter.UnsafeKey()
 	// The metaKey < encEndKey is exceeding the boundary.
 	if metaKey.Less(encEndKey) {
 		return NilKey, iter.Error()
@@ -1476,15 +1476,15 @@ func getReverseScanMeta(
 		}
 
 		meta.Reset()
-		metaKey = iter.unsafeKey()
+		metaKey = iter.UnsafeKey()
 		meta.Timestamp = metaKey.Timestamp
 		if metaKey.IsValue() {
 			// For values, the size of keys is always account for as
 			// mvccVersionTimestampSize. The size of the metadata key is accounted
 			// for separately.
 			meta.KeyBytes = mvccVersionTimestampSize
-			meta.ValBytes = int64(len(iter.unsafeValue()))
-			meta.Deleted = len(iter.unsafeValue()) == 0
+			meta.ValBytes = int64(len(iter.UnsafeValue()))
+			meta.Deleted = len(iter.UnsafeValue()) == 0
 			return metaKey, nil
 		}
 	}
@@ -1699,7 +1699,7 @@ func MVCCIterate(
 				} else {
 					// This is subtle: mvccGetInternal might already have advanced us to the
 					// next key in which case we have to reset our position.
-					if !iter.unsafeKey().Key.Equal(metaKey.Key) {
+					if !iter.UnsafeKey().Key.Equal(metaKey.Key) {
 						iter.Seek(metaKey)
 						if iter.Valid() {
 							iter.Prev()
@@ -1720,7 +1720,7 @@ func MVCCIterate(
 					// the next key in which case we don't have to do anything. Only call
 					// NextKey() if the current key pointed to by the iterator is the same
 					// as the one at the top of the loop.
-					if iter.unsafeKey().Key.Equal(metaKey.Key) {
+					if iter.UnsafeKey().Key.Equal(metaKey.Key) {
 						iter.NextKey()
 					}
 				}
@@ -1937,7 +1937,7 @@ func mvccResolveWriteIntent(
 	iter.Seek(nextKey)
 
 	// If there is no other version, we should just clean up the key entirely.
-	if !iter.Valid() || !iter.unsafeKey().Key.Equal(intent.Key) {
+	if !iter.Valid() || !iter.UnsafeKey().Key.Equal(intent.Key) {
 		if err = engine.Clear(metaKey); err != nil {
 			return err
 		}
@@ -1948,12 +1948,12 @@ func mvccResolveWriteIntent(
 		return nil
 	}
 
-	unsafeIterKey := iter.unsafeKey()
+	unsafeIterKey := iter.UnsafeKey()
 	if !unsafeIterKey.IsValue() {
 		return errors.Errorf("expected an MVCC value key: %s", unsafeIterKey)
 	}
 	// Get the bytes for the next version so we have size for stat counts.
-	valueSize := int64(len(iter.unsafeValue()))
+	valueSize := int64(len(iter.UnsafeValue()))
 	// Update the keyMetadata with the next version.
 	buf.newMeta = enginepb.MVCCMetadata{
 		Deleted:  valueSize == 0,
@@ -2032,14 +2032,14 @@ func MVCCResolveWriteIntentRangeUsingIter(
 
 	for num < max {
 		iterAndBuf.iter.Seek(nextKey)
-		if !iterAndBuf.iter.Valid() || !iterAndBuf.iter.unsafeKey().Less(encEndKey) {
+		if !iterAndBuf.iter.Valid() || !iterAndBuf.iter.UnsafeKey().Less(encEndKey) {
 			// No more keys exists in the given range.
 			break
 		}
 
 		// Manually copy the underlying bytes of the unsafe key. This construction
 		// reuses keyBuf across iterations.
-		key := iterAndBuf.iter.unsafeKey()
+		key := iterAndBuf.iter.UnsafeKey()
 		keyBuf = append(keyBuf[:0], key.Key...)
 		key.Key = keyBuf
 
@@ -2087,7 +2087,7 @@ func MVCCGarbageCollect(
 			continue
 		}
 		inlinedValue := meta.IsInline()
-		implicitMeta := iter.unsafeKey().IsValue()
+		implicitMeta := iter.UnsafeKey().IsValue()
 		// First, check whether all values of the key are being deleted.
 		if !gcKey.Timestamp.Less(meta.Timestamp) {
 			// For version keys, don't allow GC'ing the meta key if it's
@@ -2110,7 +2110,7 @@ func MVCCGarbageCollect(
 				}
 			}
 			if !implicitMeta {
-				if err := engine.Clear(iter.unsafeKey()); err != nil {
+				if err := engine.Clear(iter.UnsafeKey()); err != nil {
 					return err
 				}
 			}
@@ -2123,7 +2123,7 @@ func MVCCGarbageCollect(
 
 		// Now, iterate through all values, GC'ing ones which have expired.
 		for ; iter.Valid(); iter.Next() {
-			unsafeIterKey := iter.unsafeKey()
+			unsafeIterKey := iter.UnsafeKey()
 			if !unsafeIterKey.Key.Equal(encKey.Key) {
 				break
 			}
@@ -2133,7 +2133,7 @@ func MVCCGarbageCollect(
 			if !gcKey.Timestamp.Less(unsafeIterKey.Timestamp) {
 				if ms != nil {
 					ms.Add(updateStatsOnGC(gcKey.Key, mvccVersionTimestampSize,
-						int64(len(iter.unsafeValue())), nil, unsafeIterKey.Timestamp.WallTime,
+						int64(len(iter.UnsafeValue())), nil, unsafeIterKey.Timestamp.WallTime,
 						timestamp.WallTime))
 				}
 				if err := engine.Clear(unsafeIterKey); err != nil {
