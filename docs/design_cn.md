@@ -763,8 +763,10 @@ t<sub>c</sub>, where t<sub>c</sub> \> t. The maximum timestamp `t+ε` remains
 the same. This implies that transaction restarts due to clock uncertainty
 can only happen on a time interval of length `ε`.
 
-
-
+对于多节点事务，使用协调事务节点的时间戳t。除此之外，最大时间戳t+ε 被补充用于提供
+已提交数据时间戳的上限（ε是最大时间偏移）。当事务执行时，任何时间戳大于t而小于t+ε的数据
+读操作都将引致事务被中止或者使用大于t的冲突时间戳t<sub>c</sub>进行重试。t+ε保持一成不变。这意味着，
+由于时钟的不确定性，事务只能以长度为ε的时间间隔进行重启。
 
 We apply another optimization to reduce the restarts caused
 by uncertainty. Upon restarting, the transaction not only takes
@@ -775,6 +777,11 @@ to increase the read timestamp. Additionally, the conflicting node is
 marked as “certain”. Then, for future reads to that node within the
 transaction, we set `MaxTimestamp = Read Timestamp`, preventing further
 uncertainty restarts.
+
+我们提供另一种优化来减少不确定性引起的事务重启。当重启时，事务不仅要考虑t<sub>c，
+也要考虑产生不确定读时间的那个节点的时间t<sub>node</sub>。t<sub>c</sub>和t<sub>node</sub>(可能是后者)
+中更大的时间戳将被用来增加读时间戳。此外，冲突的节点被标记为“certain”。此后，事务内对这个节点的读操作，
+我们将设置 `MaxTimestamp = Read Timestamp` ，以防止进一步不确定性引致的重启。
 
 Correctness follows from the fact that we know that at the time of the read,
 there exists no version of any key on that node with a higher timestamp than
@@ -787,6 +794,11 @@ restarts attributed to a node to at most one. The tradeoff is that we might
 pick a timestamp larger than the optimal one (> highest conflicting timestamp),
 resulting in the possibility of a few more conflicts.
 
+正确性来自以下事实：我们知道当读操作刚开始时，节点上没有任何key的版本有比t<sub>node</sub>更大的时间戳。
+当事务遇到一个有更高时间戳的key，它知道以绝对时间来计算，该值是在t<sub>node</sub>时间之后写的，也就是说在不确定读之后。
+因此事务会向前移动读取数据的一个较旧版本（位于该事务时间戳）。这将由时间不确定性引致的重启限定于一个节点，
+并且最多一个节点。但却以挑选了一个比最优时间（最高的冲突时间戳）更大的时间戳为代价，结果是可能造成更多几次的冲突。
+
 We expect retries will be rare, but this assumption may need to be
 revisited if retries become problematic. Note that this problem does not
 apply to historical reads. An alternate approach which does not require
@@ -797,7 +809,10 @@ potentially limiting. Cockroach could also potentially use a global
 clock (Google did this with [Percolator](https://www.usenix.org/legacy/event/osdi10/tech/full_papers/Peng.pdf)),
 which would be feasible for smaller, geographically-proximate clusters.
 
+我们期望重试会很罕见，但如果重试会成为问题，这种假设就需要被重新审视。注意，这个问题不适用于历史读操作。一个可替换的不需要重试的方法是，先对所有参与节点进行一次轮询，然后选择其中最大的系统时钟作为时间戳。然而，想预先知道哪些节点被访问是很困难的，并且有潜在的限制。Cockroach也潜在地使用了一个权威的全局时钟（Google的[Percolator](https://www.usenix.org/legacy/event/osdi10/tech/full_papers/Peng.pdf))做法类似，译注：是Time Oracle或是Chubby lockservice)，全局时钟对于更小型的、地理邻近的集群是可行的。（译注：google使用的是大型的、全球地域分布的集群，所以其使用的是原子钟，像Cockroach这种全局时钟是不行的）。
+
 # Strict Serializability (Linearizability)
+# 严格序列化（线性化）
 
 Roughly speaking, the gap between <i>strict serializability</i> (which we use
 interchangeably with <i>linearizability</i>) and CockroachDB's default
@@ -812,9 +827,17 @@ and the "later" transaction touches a part disjoint from that on which the
 first transaction ran, resulting in clocks with disjoint information to decide
 on the commit timestamps.
 
+粗略来讲，<i>严格序列化</i>（我们使用另一个术语<i>线性化</i>来替代）和CockroachDB的默
+认隔离级别<i>序列化</i>的区别是：线性化事务保留了因果性。也就是说，如果一个事务（比方说，为用户创建一个帖子）
+等待它的前序事务（先创建该用户）完成，赋予前者的逻辑时间戳要大于后者。
+实际上，在分布式数据库系统中这可能无法保持，典型原因是跨越分布式系统的时钟无法精确同步，
+导致后面的事务与前面的事务运行节点时间有部分脱节，导致使用脱节信息的时钟来确定提交的时间戳。
+
 In practice, in CockroachDB many transactional workloads are actually
 linearizable, though the precise conditions are too involved to outline them
 here.
+
+实践中，在CockroachDB中许多事务负载实际上是线性化的，尽管精确条件也被牵扯到这里的要点讨论中。
 
 Causality is typically not required for many transactions, and so it is
 advantageous to pay for it only when it *is* needed. CockroachDB implements
@@ -822,21 +845,31 @@ this via <i>causality tokens</i>: When committing a transaction, a causality
 token can be retrieved and passed to the next transaction, ensuring that these
 two transactions get assigned increasing logical timestamps.
 
+典型情况下，许多事务不需要因果性，因此只有需要时才会为此优势付出代价。
+CockroachDB通过<i>因果令牌</i>来实现：当提交一个事务时，检索因果令牌并传递给下一个事务，
+以确保这两个事务得到递增的逻辑时间戳。
+
 Additionally, as better synchronized clocks become a standard commodity offered
 by cloud providers, CockroachDB can provide global linearizability by doing
 much the same that [Google's
 Spanner](http://research.google.com/archive/spanner.html) does: wait out the
 maximum clock offset after committing, but before returning to the client.
 
-See the blog post below for much more in-depth information.
+此外，通过云提供者提供了一个更好的同步时钟，它成了标准设施，CockroachDB会提供全局线性能力，
+很像 [Google's Spanner](http://research.google.com/archive/spanner.html)的做法：在返回客户端前，提交后静静地等待最大时钟补偿。
 
+See the blog post below for much more in-depth information.
+更深入的信息请参见下面的微博：
 https://www.cockroachlabs.com/blog/living-without-atomic-clocks/
 
 # Logical Map Content
+# 逻辑Map内容
 
 Logically, the map contains a series of reserved system key/value
 pairs preceding the actual user data (which is managed by the SQL
 subsystem).
+
+逻辑上，该map在实际用户数据（由SQL子系统来管理）之前，包含了一系列预留系统K/V对
 
 - `\x02<key1>`: Range metadata for range ending `\x03<key1>`. This a "meta1" key.
 - ...
@@ -851,6 +884,7 @@ subsystem).
   subsystem, which employs its own key anatomy.
 
 # Stores and Storage
+# store和存储
 
 Nodes contain one or more stores. Each store should be placed on a unique disk.
 Internally, each store contains a single instance of RocksDB with a block cache
@@ -858,10 +892,17 @@ shared amongst all of the stores in a node. And these stores in turn have
 a collection of range replicas. More than one replica for a range will never
 be placed on the same store or even the same node.
 
+节点包含一个或多个store存储库。每个store都被放到一个单一磁盘。在内部，每个store包含一个RocksDB实例，
+该实例有一个该节点上所有存储库间共享的块缓存。这些store依次有一个range副本的集合。
+一个range的多个副本永远不会放在相同的store中，甚至相同的节点。
+
 Early on, when a cluster is first initialized, the few default starting ranges
 will only have a single replica, but as soon as other nodes are available they
 will replicate to them until they've reached their desired replication factor,
 the default being 3.
+
+刚开始，当集群第一次被初始化时，有几个默认的启动range只有一个副本，一但其他节点上线，
+他们将复制这些range直到达到期望的复制因子（默认是3）。
 
 Zone configs can be used to control a range's replication factor and add
 constraints as to where the range's replicas can be located. When there is a
@@ -869,7 +910,11 @@ change in a range's zone config, the range will up or down replicate to the
 appropriate number of replicas and move its replicas to the appropriate stores
 based on zone config's constraints.
 
+Zone配置被用于控制range的复制因子，并增加约束限制range副本位于哪个地方。当range的zone配置变化时，
+range将增加或减少副本的数量并基于zone配置的约束将它的副本移动到正确的store。
+
 # Self Repair
+# 自修复
 
 If a store has not been heard from (gossiped their descriptors) in some time,
 the default setting being 5 minutes, the cluster will consider this store to be
@@ -880,6 +925,11 @@ again met. If 50% or more of the replicas are unavailable at the same time,
 there is no quorum and the whole range will be considered unavailable until at
 least greater than 50% of the replicas are again available.
 
+如果一个store在一段时间内不能被监听到，默认是5分钟，集群将认为该store已经宕掉。
+此时，所有range在该store上的副本将被认定为失效并被移除。这些range将向上复制它们
+自己到其他有效store直到期望的复制因子。如果50%或者更多副本同时失效，此时达不到法定
+数量并且整个range被认定为失效，直到至少超过50%的副本再次有效。
+
 # Rebalancing
 
 As more data are added to the system, some stores may grow faster than others.
@@ -887,9 +937,17 @@ To combat this and to spread the overall load across the full cluster, replicas
 will be moved between stores maintaining the desired replication factor. The
 heuristics used to perform this rebalancing include:
 
+当更多的数据被加入到系统中，一些store将比另一些增长得更快一些。
+为了防止这种不平衡，并考虑将负载分散到整个集群，副本将在所期望复制因子的store间移动。
+此处使用启发式算法来完成该重新平衡，直观因素包括：
+
 - the number of replicas per store
 - the total size of the data used per store
 - free space available per store
+
+- 每个store副本的数量
+- 每个store已用数据总大小
+- 每个store有效空闲空间
 
 In the future, some other factors that might be considered include:
 
@@ -898,7 +956,15 @@ In the future, some other factors that might be considered include:
 - number of active ranges per store
 - number of range leases held per store
 
+将来需要考虑的一些其他因素，包括：
+
+- 每个store 的CPU/网络负载
+- range一起被查询的频度
+- 每个store活动range的数量
+- 每个store持有租期的range的数量
+
 # Range Metadata
+# Range 元数据
 
 The default approximate size of a range is 64M (2\^26 B). In order to
 support 1P (2\^50 B) of logical data, metadata is needed for roughly
@@ -908,6 +974,11 @@ locations and 220 bytes for the range key itself). 2\^24 ranges \* 2\^8
 B would require roughly 4G (2\^32 B) to store--too much to duplicate
 between machines. Our conclusion is that range metadata must be
 distributed for large installations.
+
+一个range默认大小接近64M (2^26 B)，要支持1PB(2^50 B)的逻辑数据，大概需要2^(50 - 26) = 2^24 
+个range的元数据。一个元数据的最大合理上限大约是256字节（其中3*12字节保存3个节点的位置，
+余下220字节保存range本身的key）。 2^24 range *（2^8 B）大概需要4G (2^32 B)字节存储，
+这太大而不能在机器间进行复制。我们的结论是，对于大型集群部署，range的元数据必须是分布式的。
 
 To keep key lookups relatively fast in the presence of distributed metadata,
 we store all the top-level metadata in a single range (the first range). These
@@ -920,6 +991,13 @@ second, and the second addresses user data. With two levels of indirection, we
 can address 2\^(18 + 18) = 2\^36 ranges; each range addresses 2\^26 B, and
 altogether we address 2\^(36+26) B = 2\^62 B = 4E of user data.
 
+对分布的元数据，为了保持key检索的相对高效，我们把所有顶层的元数据保存在单一range里（第一个range）。
+这些顶层元数据的key被称为 *meta1* key，并加上前缀以使得它们排序时在key空间的起始位置。
+前述给定一个元数据大小是256字节，一个64M的range可以保存 64M/256B=2^18 个range元数据，
+总共可以提供64M * （2^18） =16T的存储空间。为了提供上述1P的存储空间，我们需要两层寻址，
+第一层用来定位第二层的地址，第二层用来保存用户数据。采用两层寻址，我们可以寻址2^(18 + 18) = 2^36个range；
+每个range寻址2^26 B ，则总共可寻址2^(36+26) B = 2^62 B = 4E 的用户数据。
+
 For a given user-addressable `key1`, the associated *meta1* record is found
 at the successor key to `key1` in the *meta1* space. Since the *meta1* space
 is sparse, the successor key is defined as the next key which is present. The
@@ -927,10 +1005,18 @@ is sparse, the successor key is defined as the next key which is present. The
 found using the same process. The *meta2* record identifies the range
 containing `key1`, which is again found the same way (see examples below).
 
+对于一个给定的用户地址 `key1` ，其对应的 *meta1* 记录位于 *meta1* 空间中 `key1` 的后驱key中。
+因为 *meta1* 空间是稀疏的，后驱key被定义为下一个存在的key。*Meta1* 记录标识了包含 *meta2* 记录的range，
+查找方式相同。*Meta2* 记录标识了包含 `key1` 的range，查找过程与前面也采用了相同方法（参见下面的例子）
+
 Concretely, metadata keys are prefixed by `\x02` (meta1) and `\x03`
 (meta2); the prefixes `\x02` and `\x03` provide for the desired
 sorting behaviour. Thus, `key1`'s *meta1* record will reside at the
 successor key to `\x02<key1>`.
+
+具体的，key的元数据被增加了前缀： `\x02` (meta1) 、 `\x03` (meta2)；
+前缀 `\x02` 和 `\x03` 是为了得到期望的排序结果。这样，`key1` 的 *meta1* 
+记录就被保存在 `\x02<key1>` 的后驱key中。
 
 Note: we append the end key of each range to meta{1,2} records because
 the RocksDB iterator only supports a Seek() interface which acts as a
@@ -939,6 +1025,10 @@ key *after* the meta indexing record we’re looking for, which would
 result in having to back the iterator up, an option which is both less
 efficient and not available in all cases.
 
+注意：我们在每个range的最后追加一个key到meta{1,2}，这是因为RocksDB迭代器仅支持Seek()接口，
+其功能类似Ceil()。使用range开始的Key将会使Seek()函数找到的是我们寻找的元数据索引记录后面的key，
+这导致不得不使迭代回溯，这不方便并且在所有情况下都不可用。
+
 The following example shows the directory structure for a map with
 three ranges worth of data. Ellipses indicate additional key/value
 pairs to fill an entire range of data. For clarity, the examples use
@@ -946,6 +1036,10 @@ pairs to fill an entire range of data. For clarity, the examples use
 for the fact that splitting ranges requires updates to the range
 metadata with knowledge of the metadata layout, the range metadata
 itself requires no special treatment or bootstrapping.
+
+下面的例子展示了有三个range的map目录结构。省略号表示补充的填满数据整个range的key/value对。
+为了清晰，例子使用 `meta1` 和 `meta2` 来指代前缀 `\x02` 和 `\x03`。除了有切分range需求时需要更新range的元数据，
+需要知道元数据的分布信息，range元数据本身不需要特殊对待或者自举。
 
 **Range 0** (located on servers `dcrama1:8000`, `dcrama2:8000`,
   `dcrama3:8000`)
@@ -973,6 +1067,9 @@ Consider a simpler example of a map containing less than a single
 range of data. In this case, all range metadata and all data are
 located in the same range:
 
+对于一个map包含的内容小于单一数据range的简单例子，所有range元数据和数据都会位于相同的range里:
+
+
 **Range 0** (located on servers `dcrama1:8000`, `dcrama2:8000`,
 `dcrama3:8000`)*
 
@@ -984,6 +1081,9 @@ located in the same range:
 Finally, a map large enough to need both levels of indirection would
 look like (note that instead of showing range replicas, this
 example is simplified to just show range indexes):
+
+最终，如果一个map足够大则需要两层索引，看起来像这样
+( 注意：该例子为了简单明了只写了range序号，没有显示range副本):
 
 **Range 0**
 
@@ -1030,12 +1130,20 @@ dependent on the size of the keys. If efforts are made to keep key sizes
 small, the total number of addressable ranges would increase and vice
 versa.
 
+注意：选择range262144只是一个近似值。通过单一元数据range可寻址的range的实际数量依赖于key的大小。
+如果努力保持key的尺寸越小，则可寻址的range越多，反之亦然。
+
 From the examples above it’s clear that key location lookups require at
 most three reads to get the value for `<key>`:
 
 1. lower bound of `meta1<key>`
 2. lower bound of `meta2<key>`,
 3. `<key>`.
+
+从上面的例子可以清楚的看到，至多3次key寻址就可获取 <key> 对应的值：
+1. meta1中获取meta2地址；
+2. meta2中获取key地址；
+3. 由key得到值。
 
 For small maps, the entire lookup is satisfied in a single RPC to Range 0. Maps
 containing less than 16T of data would require two lookups. Clients cache both
@@ -1044,7 +1152,12 @@ clients will be high. Clients may end up with stale cache entries. If on a
 lookup, the range consulted does not match the client’s expectations, the
 client evicts the stale entries and possibly does a new lookup.
 
+对于小map，可以在Range 0上一次RPC调用内完成所有检索。包含16T以下的Map需要2次检索。
+客户端缓存range元数据的各层，我们期望客户端各自都具有很高的数据局部性。
+如果在一次检索中，协商好的range中没有匹配客户端的期望，客户端将移除这些过期条目并可能重新检索。
+
 # Raft - Consistency of Range Replicas
+# Raft – Range副本一致性
 
 Each range is configured to consist of three or more replicas, as specified by
 their ZoneConfig. The replicas in a range maintain their own instance of a
@@ -1055,6 +1168,13 @@ covering important details.
 promising performance characteristics for WAN-distributed replicas, but
 it does not guarantee a consistent ordering between replicas.
 
+每个range可配置成包含三个或者更多的副本，在它们的ZoneConfig中指定。
+一个range的副本们维护它们自己的分布式一致算法实例。
+我们采用Raft一致性算法 [*Raft consensus algorithm*](https://raftconsensus.github.io) 
+是因为其简单并且有一个包含重要细节的参考实现。
+[ePaxos](https://www.cs.cmu.edu/~dga/papers/epaxos-sosp2013.pdf)
+算法虽然承诺在WAN环境下分布式复制具有高性能，但它无法保障副本间操作顺序的一致性。
+
 Raft elects a relatively long-lived leader which must be involved to
 propose commands. It heartbeats followers periodically and keeps their logs
 replicated. In the absence of heartbeats, followers become candidates
@@ -1063,6 +1183,11 @@ elections. Cockroach weights random timeouts such that the replicas with
 shorter round trip times to peers are more likely to hold elections
 first (not implemented yet). Only the Raft leader may propose commands;
 followers will simply relay commands to the last known leader.
+
+Raft选择一个相对长寿命的leader，该leader负责发出命令。它周期性的向追随者发送心跳并保持它们的日志被复制。
+当无心跳时，追随者们随机选择超时时间进行等待，过了超时时间后成为候选者，并举行一次新的leader选举。
+Cockroach为随机超时定义权重以使得带有较短往返时间的副本更可能首先举行选举（还没实现）。
+仅Raft Leader可以发出命令；追随者们只简单回应命令给最后已知的leader。
 
 Our Raft implementation was developed together with CoreOS, but adds an extra
 layer of optimization to account for the fact that a single Node may have
@@ -1073,7 +1198,13 @@ batch processing of requests.
 Future optimizations may include two-phase elections and quiescent ranges
 (i.e. stopping traffic completely for inactive ranges).
 
+我们的Raft实现与CoreOS一起开发，但多加了一层优化，是考虑这样一个事实：
+单节点可以有千百万个一致的小组（一个或者每个range）。
+优化点主要是合并心跳（所以节点的数量确定了心跳的数量，而不是range的更大数量）和批量处理请求。
+将来优化可能包含两阶段选举和休眠range（即：完全停止非活动range间的通信）。
+
 # Range Leases
+# Range 租期
 
 As outlined in the Raft section, the replicas of a Range are organized as a
 Raft group and execute commands from their shared commit log. Going through
@@ -1081,6 +1212,10 @@ Raft is an expensive operation though, and there are tasks which should only be
 carried out by a single replica at a time (as opposed to all of them).
 In particular, it is desirable to serve authoritative reads from a single
 Replica (ideally from more than one, but that is far more difficult).
+
+如Raft选举协议中所概述，range的副本以Raft小组来组织并执行来自它们共享提交日志的命令。
+因为仔细检查Raft协议是一个昂贵的操作，所以每次仅用单一副本来执行一些任务（而不是所有副本）。
+特别是，期望提供权威性读取服务，实际却从单一副本读取（理想情况是从多个副本读取，但困难很大）。
 
 For these reasons, Cockroach introduces the concept of **Range Leases**:
 This is a lease held for a slice of (database, i.e. hybrid logical) time and is
@@ -1094,6 +1229,12 @@ request's header) fail with an error pointing at the replica's last known
 lease holder. These requests are retried transparently with the updated lease by the
 gateway node and never reach the client.
 
+出于这些原因，Cockroach引入了Range **租约** 的概念：这是一个持续一段时间的租约，
+该租约通过提交一个特殊日志条目来建立，该条目符合Raft协议并包含了租约将被激活的时间间隔，
+它与Node:RaftID联合体一起，该联合体唯一描述了正在请求的副本。读操作和写操作必须被寻址到持有租约的副本；
+如果不这么做，可以寻址到任一个副本，这将引起它试图同步地获得租约。
+非租约持有者（在请求头中指定的HLC时间戳）收到的请求将失败并返回一个错误来指出副本的最近已知的租约持有者。
+
 The replica holding the lease is in charge or involved in handling
 Range-specific maintenance tasks such as
 
@@ -1102,6 +1243,13 @@ Range-specific maintenance tasks such as
 
 and, very importantly, may satisfy reads locally, without incurring the
 overhead of going through Raft.
+
+
+正在持有租约的副本负责或者协助处理range约定的维护任务，如：
+
+* 传播哨兵和第一个range信息
+* 拆分、合并和重平衡
+和，非常重要的、满足本地读取、不发生仔细检查Raft协议的开销
 
 Since reads bypass Raft, a new lease holder will, among other things, ascertain
 that its timestamp cache does not report timestamps smaller than the previous
@@ -1112,6 +1260,11 @@ offset) before the actual expiration of the lease, so that all the next lease
 holder has to do is set the low water mark of the timestamp cache to its
 new lease's start time.
 
+因为读取绕过了Raft，一个新的租约持有者，除其他事情之外还要明确，
+它的时间戳缓存不能支持比前一租约持有者更小的时间戳（目的是为了兼容发生在前任租约持有者上的读取操作）。
+这通过在租约实际过期之前使其进入一个停滞期（过期时间-最大时间偏移）来完成，
+以使得所有下一个租约持有者必须做的是设置一个时间戳缓存低水位线作为它新租约的开始时间。
+
 As a lease enters its stasis period, no more reads or writes are served, which
 is undesirable. However, this would only happen in practice if a node became
 unavailable. In almost all practical situations, no unavailability results
@@ -1120,7 +1273,13 @@ the stasis period) or proactively transferred away from the lease holder, which
 can also avoid the stasis period by promising not to serve any further reads
 until the next lease goes into effect.
 
+当一个租约进入它的停滞期，将不再提供读操作或者写操作服务，这不是我们所期望的。
+然而，这实际上仅发生在一个节点失效时。在几乎所有实际场景中，没有失效的结果，
+因为租约通常是长寿命的（和/或急切地延期，这可以避免进入停滞期间）或者前瞻性地从租约持有者转移了，
+这也可以通过承诺直到下一次租约生效时不再提供任何读取操作避免进入停滞期间。
+
 ## Colocation with Raft leadership
+## 托管于Raft leadership
 
 The range lease is completely separate from Raft leadership, and so without
 further efforts, Raft leadership and the Range lease might not be held by the
@@ -1129,7 +1288,13 @@ lease holder has to forward each proposal to the leader, adding costly RPC
 round-trips), each lease renewal or transfer also attempts to colocate them.
 In practice, that means that the mismatch is rare and self-corrects quickly.
 
+Range租约完全从Raft leadership中分离出来，所以不需要更多的投入，
+Raft leadership和range租约可能不被相同的副本所持有。因为不同时拥有这两种角色
+（租约持有者必须将每个命令推送给leader，增加了昂贵的RPC往返开销），
+成本昂贵，所以每次重新续订或者转移也试图合并这两种角色。实际上，这意味着不匹配会很少出现并且会被快速自修正。
+
 ## Command Execution Flow
+## 命令执行流程
 
 This subsection describes how a lease holder replica processes a
 read/write command in more details. Each command specifies (1) a key
@@ -1139,6 +1304,11 @@ looks up a range by the specified Range ID and checks if the range is
 still responsible for the supplied keys. If any of the keys do not
 belong to the range, the node returns an error so that the client will
 retry and send a request to a correct range.
+
+本子章节更详细的描述一个持有租约的副本如何处理一个读取或者写命令。
+每个命令给定了该命令访问的一个key(或者key的一个range) (1)和这些key所属的range的ID（2）。
+当一个节点收到一个命令时，它据所给定的rangeID检索range并检查该range是否一直负责所提供的keys。
+如果有任一key不属于此range，那么该节点返回错误以使得客户端重试并将请求发送到正确的range。
 
 When all the keys belong to the range, the node attempts to
 process the command. If the command is an inconsistent read-only
@@ -1150,11 +1320,20 @@ conditions hold:
 - There are no other running commands whose keys overlap with
 the submitted command and cause read/write conflict.
 
+所有key属于此range，此节点偿试处理该命令。如果该命令是一个不要求一致性的只读命令，那么它将被立即处理。
+如果该命令是一个一致性读取或者更新操作，那么只有下面的条件全满足时才会被执行：
+
+- 该range副本拥有range租约
+- 没有其他正在运行命令的key与已递交命令的key有重叠并且引起读/写冲突
+
 When the first condition is not met, the replica attempts to acquire
 a lease or returns an error so that the client will redirect the
 command to the current lease holder. The second condition guarantees that
 consistent read/write commands for a given key are sequentially
 executed.
+
+当第一个条件不满足时，该副本偿试获取租约，或者返回错误以使得客户端可以重新发送命令到正确的租约持有者。
+第二个条件保障了对给定Key的一致性读/写命令是顺序执行的。
 
 When the above two conditions are met, the lease holder replica processes the
 command. Consistent reads are processed on the lease holder immediately.
@@ -1162,23 +1341,36 @@ Write commands are committed into the Raft log so that every replica
 will execute the same commands. All commands produce deterministic
 results so that the range replicas keep consistent states among them.
 
+当上面的两个条件都满足时，持有租约的副本处理该命令。在租约持有者上的一致性读会立即处理。
+写命令则被提交到Raft日志以使得每个副本都执行相同的命令。所有命令产生决策结果，
+目的是range副本们在它们之间保持一致性状态。
+
 When a write command completes, all the replica updates their response
 cache to ensure idempotency. When a read command completes, the lease holder
 replica updates its timestamp cache to keep track of the latest read
 for a given key.
+
+当一个写命令完成，所有副本更新它们的响应缓存来确保幂等性。当一个读命令完成，
+持有租约的副本更新它的时间戳缓存以追踪所给定key的最新读操作。
 
 There is a chance that a range lease gets expired while a command is
 executed. Before executing a command, each replica checks if a replica
 proposing the command has a still lease. When the lease has been
 expired, the command will be rejected by the replica.
 
+当命令被执行时range过期会偶有发生。在执行命令之前，每个副本都检查打算执行命令的副本是否一直有持有租约。
+当租约已经过期时，命令会被该副本拒绝。
 
 # Splitting / Merging Ranges
+# 拆分/合并 Range
 
 Nodes split or merge ranges based on whether they exceed maximum or
 minimum thresholds for capacity or load. Ranges exceeding maximums for
 either capacity or load are split; ranges below minimums for *both*
 capacity and load are merged.
+
+节点拆分或者合并range，是基于它们是否超过最大或者最小容量/负载的阀值的。
+超过容量或者负载任一最大值的range会被拆分；容量和负载 *都* 低于最小值的range会被合并。
 
 Ranges maintain the same accounting statistics as accounting key
 prefixes. These boil down to a time series of data points with minute
@@ -1191,12 +1383,22 @@ queue wait times. These metrics are gossipped, with each range / node
 passing along relevant metrics if they’re in the bottom or top of the
 range it’s aware of.
 
+Ranges维持与key前缀相同的记帐统计信息。这些归结为数据的以分钟为分隔的一个时间序列。
+从字节数到读/写队列大小的每件事情。记帐统计提取后的精华是确定拆分/合并的基础。
+确定是否拆分/合并使用的两个合情理的指标是range字节数大小和IOps（每秒IO数）。
+确定是否将一个副本从一个节点重平衡到另一个节点的好指标是读/写队列总的等待时间。
+这些指标被内部使用，每个range/节点沿用相对指标，来度量是否处于range底部或者顶部。
+
 A range finding itself exceeding either capacity or load threshold
 splits. To this end, the range lease holder computes an appropriate split key
 candidate and issues the split through Raft. In contrast to splitting,
 merging requires a range to be below the minimum threshold for both
 capacity *and* load. A range being merged chooses the smaller of the
 ranges immediately preceding and succeeding it.
+
+一个range发现它自己超过容量或者负载阀值时会进行拆分。
+为此，range租约持有者计算一个适当的拆分key候选并且通过Raft分发该拆分操作。
+与拆分相比，合并则需要一个range的容量和负载均低于最低阀值。正在合并的range先选择较小者，接着完成处理。
 
 Splitting, merging, rebalancing and recovering all follow the same basic
 algorithm for moving data between roach nodes. New target replicas are
@@ -1207,7 +1409,13 @@ from the timestamp of the snapshot to catch up fully. Once the new
 replicas are fully up to date, the range metadata is updated and old,
 source replica(s) deleted if applicable.
 
+拆分、合并、重平衡和恢复都遵循相同的基本算法来在节点间移动数据。
+新的目标副本被创建并添加到源range的集合中。然后每个新副本通过以下方式被更新：重放足够的日志，
+或者copy源副本数据的一个快照并从快照的时间戳开始重放日志直到完全同步。一旦新副本被完全同步，
+range元数据也被更新，老的源副本（如果有）被删除。
+
 **Coordinator** (lease holder replica)
+**协调者** （持有租约的副本）
 
 ```
 if splitting
@@ -1221,8 +1429,10 @@ else if rebalancing || recovering
 ```
 
 **New Replica**
+**新副本**
 
 *Bring replica up to date:*
+*更新副本*
 
 ```
 if all info can be read from replicated log
@@ -1242,9 +1452,15 @@ Nodes split ranges when the total data in a range exceeds a
 configurable maximum threshold. Similarly, ranges are merged when the
 total data falls below a configurable minimum threshold.
 
+当range内的总数据量超过配置的最大阀值时，节点就会拆分这些range。
+类似地，当总数据量低于配置的最小阀值时，节点就会合并这些range。
+
 **TBD: flesh this out**: Especially for merges (but also rebalancing) we have a
 range disappearing from the local node; that range needs to disappear
 gracefully, with a smooth handoff of operation to the new owner of its data.
+
+**待定：更具体化**： 特别是对于合并（重平衡也是如此），我们会有一个range从本地节点消失；
+这个range需要优雅地消失，平滑地切换到其数据的新owner。
 
 Ranges are rebalanced if a node determines its load or capacity is one
 of the worst in the cluster based on gossipped load stats. A node with
@@ -1252,7 +1468,11 @@ spare capacity is chosen in the same datacenter and a special-case split
 is done which simply duplicates the data 1:1 and resets the range
 configuration metadata.
 
+如果一个节点基于gossip的负载统计，确定它的负载和容量是集群中最差之一，那么range就会被重平衡。
+在相同的数据中心内，具有很少容量的节点被选择，并进行特殊场景拆分，简单复制数据1：1并重置range配置元数据。
+
 # Node Allocation (via Gossip)
+# 节点分配（通过Gossip）
 
 New nodes must be allocated when a range is split. Instead of requiring
 every node to know about the status of all or even a large number
@@ -1269,7 +1489,16 @@ capacity sufficiently in excess of the mean quickly becomes discovered
 by the entire cluster. To avoid piling onto outliers, nodes from the
 high capacity set are selected at random for allocation.
 
+当range拆分时，必须分派新节点。作为查询每个节点来获取所有节点或者大量对等节点的状态的替代方法，
+或者作为向一个专职管理者或主节点查询充足的全局信息的替代方法，我们使用gossip协议来高效地通信，
+仅交流集群中所有节点间感兴趣的信息。那什么是感兴趣的信息呢？举个例子，一个指定节点是否有许多空闲的能力。
+每个节点，当互相gossip通信时，都与自己比较gossip的每个主题的状态。
+如果它自己的状态不知为什么比主题中的最近有兴趣的项“更有兴趣”，那么在下一个与对等节点的gossip会话中就会包含它自己的状态。
+通过此方法，整个集群就可以超出平均速度迅速地发现具有充裕能力的节点。
+为了避免负载都堆积到具有极端值的节点上，我们从高能力节点集合中随机选择节点来分配负载。
+
 The gossip protocol itself contains two primary components:
+Gossip协议本身包含两个主要组件：
 
 - **Peer Selection**: each node maintains up to N peers with which it
   regularly communicates. It selects peers with an eye towards
@@ -1289,6 +1518,16 @@ The gossip protocol itself contains two primary components:
   **TBD**: how to avoid partitions? Need to work out a simulation of
   the protocol to tune the behavior and see empirically how well it
   works.
+
+- **对等选择**：每个节点维护N个与其定期通信的对等节点。它选择面向最大化扇出的对等节点。
+  一个自身与一系列其它未知节点通信的对等节点，选择了一个与包含显著重叠的集合通信的节点。
+  每次gossip被初始化时，每个节点的对等集合被交换。然后每个节点自由加入它看起来合适的其他节点的对等节点。
+  为了避免任何一个节点遭受过量的请求，一个节点可以拒绝应答一个gossip交换。每个节点倾向于应答来自没有显著重叠节点的请求，否则拒绝请求。
+
+  使用[Agarwal & Trachtenberg (2006)](https://drive.google.com/file/d/0B9GCVTp_FHJISmFRTThkOEZSM1U/edit?usp=sharing)
+  中描述的启发算法来高效选择对等节点。
+
+  **待定**：怎么避免分区？需要做协议仿真来优化行为，并从经验上观察怎样工作起来更好。
 
 - **Gossip Selection**: what to communicate. Gossip is divided into
   topics. Load characteristics (capacity per disk, cpu load, and
@@ -1311,22 +1550,39 @@ The gossip protocol itself contains two primary components:
   node has seen. Each round of gossip communicates only the delta
   containing new items.
 
+- **Gossip选择**：需要通信什么？Gossip内容按主题划分。负载特性（每个磁盘的容量、CPU负载、状态[如：draining耗尽，OK成功，failure失败]）
+  被用于驱动节点如何分派。Range统计信息（Range读/写负载、丢失副本、无效的range）和网络拓扑（机架间带宽/延迟、数据中心间带宽/延迟、子网故障期）
+  用于决定什么时间拆分range，什么时间恢复副本VS 等待网络连通、等待调试/等待管理员处理。在所有场景中，最小值集合和最大值集合都被传播；
+  每个节点都提供它自己的全局视图来附加这些值。每个最小值和最大值被汇报节点标记，并附加上其他上下文信息。
+  Gossip的每个主题都有其自己的协议缓存区来保存这些结构化数据。每个主题中gossip条目的数量由配置的边界限定。
+  
+  为了高效，节点分配给每个gossip新条目一个序列号并追踪每个对等节点看到的最大序列号。每轮gossip通信仅同步包含新条目的增量。
+
 # Node and Cluster Metrics
+# 节点和集群度量
 
 Every component of the system is responsible for exporting interesting
 metrics about itself. These could be histograms, throughput counters, or
 gauges.
 
+系统的每个组件负责输出自己的感兴趣的指标。这些可能是柱状图、吞吐量计数器，或者计量仪。
+
 These metrics are exported for external monitoring systems (such as Prometheus)
 via a HTTP endpoint, but CockroachDB also implements an internal timeseries
 database which is stored in the replicated key-value map.
+
+这些指标输出给外部HTTP终端的监控系统（如：Prometheus，一种监控系统和时间序列数据库），当然CockroachDB也实现了一个内部时间序列数据库，其被存储在复制的K-V map中。
 
 Time series are stored at Store granularity and allow the admin dashboard
 to efficiently gain visibility into a universe of information at the Cluster,
 Node or Store level. A [periodic background process](RFCS/time_series_culling.md)
 culls older timeseries data, downsampling and eventually discarding it.
 
+时间序列以store粒度被存储，这使得管理员仪表盘可以高效地获得集群、节点、store各层面的统一信息的可视化。
+一个[周期性后台进程](RFCS/time_series_culling.md)会挑选较老的时间序列数据、下采样并最终丢弃它。（译注：downsampling，一种采样算法）
+
 # Key-prefix Accounting and Zones
+# 
 
 Arbitrarily fine-grained accounting is specified via
 key prefixes. Key prefixes can overlap, as is necessary for capturing
