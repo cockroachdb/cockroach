@@ -1286,7 +1286,7 @@ func TestCampaignOnLazyRaftGroupInitialization(t *testing.T) {
 						t.Fatal(err)
 					}
 				}
-				mtc.manualClock.Increment(mtc.stores[0].LeaseExpiration(mtc.clock))
+				mtc.manualClock.Increment(mtc.storeConfig.LeaseExpiration())
 			},
 			expCampaigns: map[roachpb.ReplicaID]bool{
 				1: true,

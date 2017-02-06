@@ -162,7 +162,7 @@ func TestStoreConfig(clock *hlc.Clock) StoreConfig {
 	if clock == nil {
 		clock = hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	}
-	return StoreConfig{
+	sc := StoreConfig{
 		AmbientCtx:                     log.AmbientContext{Tracer: tracing.NewTracer()},
 		Clock:                          clock,
 		RaftTickInterval:               100 * time.Millisecond,
@@ -177,6 +177,8 @@ func TestStoreConfig(clock *hlc.Clock) StoreConfig {
 		EnableCoalescedHeartbeats:      true,
 		EnableEpochRangeLeases:         true,
 	}
+	sc.SetDefaults()
+	return sc
 }
 
 var (
@@ -828,6 +830,15 @@ func (sc *StoreConfig) SetDefaults() {
 	if sc.GossipWhenCapacityDeltaExceedsFraction == 0 {
 		sc.GossipWhenCapacityDeltaExceedsFraction = defaultGossipWhenCapacityDeltaExceedsFraction
 	}
+}
+
+// LeaseExpiration returns an int64 to increment a manual clock with to
+// make sure that all active range leases expire.
+func (sc *StoreConfig) LeaseExpiration() int64 {
+	// Due to lease extensions, the remaining interval can be longer than just
+	// the sum of the offset (=length of stasis period) and the active
+	// duration, but definitely not by 2x.
+	return 2 * int64(sc.RangeLeaseActiveDuration+sc.Clock.MaxOffset())
 }
 
 // NewStore returns a new instance of a store.
