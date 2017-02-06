@@ -1401,14 +1401,18 @@ var Builtins = map[string][]Builtin{
 				if len(ctx.Database) == 0 {
 					return DNull, nil
 				}
-				return NewDString(ctx.Database), nil
+				return NewDString(schemaForDb(ctx.Database)), nil
 			},
-			Info: "Returns the current database.",
+			Info: "Returns the schema of the current database. CockroachDB " +
+				"doesn't yet support custom schemas, so the schema of all " +
+				"non-system databases is reported as 'public'.",
 		},
 	},
 
-	// For now, schemas are the same as databases. So, current_schemas returns the
-	// current database (if one has been set by the user) and, if the passed in
+	// For now, we don't support custom schemas. So, for Postgres-compatibility,
+	// the schema of all user-defined databases is 'public', and the schema for
+	// all system databases is just their database name. This function returns
+	// the schema (if a database has been set by the user) and, if the passed in
 	// parameter is true, the session's database search path.
 	"current_schemas": {
 		Builtin{
@@ -1421,20 +1425,22 @@ var Builtins = map[string][]Builtin{
 				showImplicitSchemas := args[0].(*DBool)
 				if showImplicitSchemas == DBoolTrue {
 					for _, p := range ctx.SearchPath {
-						if err := schemas.Append(NewDString(p)); err != nil {
+						if err := schemas.Append(NewDString(schemaForDb(p))); err != nil {
 							return nil, err
 						}
 					}
 				}
 				if len(ctx.Database) != 0 {
-					if err := schemas.Append(NewDString(ctx.Database)); err != nil {
+					if err := schemas.Append(NewDString(schemaForDb(ctx.Database))); err != nil {
 						return nil, err
 					}
 				}
 				return schemas, nil
 			},
-			Info: "Returns the current database; optionally include implicit schemas (e.g. " +
-				"`pg_catalog`).",
+			Info: "Returns the schema of the current current database; optionally " +
+				"include implicit schemas (e.g. `pg_catalog`). CockroachDB " +
+				"doesn't yet support custom schemas, so the schema of all " +
+				"non-system databases is reported as 'public'.",
 		},
 	},
 
@@ -1652,6 +1658,24 @@ var Builtins = map[string][]Builtin{
 			Info:     "Not usable; exposed only for ORM compatibility.",
 		},
 	},
+}
+
+const (
+	// InformationSchemaName is the name of the information_schema table.
+	InformationSchemaName = "information_schema"
+	// PgCatalogName is the name of the pg_catalog table.
+	PgCatalogName = "pg_catalog"
+	// SystemName is the name of the system table.
+	SystemName = "system"
+)
+
+// schemaForDb maps a DatabaseDescriptor to its corresponding pgNamespace.
+// See the comment above pgNamespace for more details.
+func schemaForDb(db string) string {
+	if db == InformationSchemaName || db == PgCatalogName || db == SystemName {
+		return db
+	}
+	return "public"
 }
 
 var substringImpls = []Builtin{
