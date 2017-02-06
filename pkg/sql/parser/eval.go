@@ -2211,6 +2211,12 @@ func (expr *CastExpr) Eval(ctx *EvalContext) (Datum, error) {
 				return results[0], nil
 			}
 			s := string(*v)
+			// Trim whitespace and unwrap outer quotes if necessary.
+			// This is required to mimic postgres.
+			s = strings.TrimSpace(s)
+			if len(s) > 1 && s[0] == '"' && s[len(s)-1] == '"' {
+				s = s[1 : len(s)-1]
+			}
 
 			switch typ {
 			case oidPseudoTypeRegClass:
