@@ -59,8 +59,8 @@ type tableWriter interface {
 
 	// row performs a sql row modification (tableInserter performs an insert,
 	// etc). It batches up writes to the init'd txn and periodically sends them.
-	// The returned DTuple is suitable for use with returningHelper.
-	row(context.Context, parser.DTuple) (parser.DTuple, error)
+	// The returned Datums is suitable for use with returningHelper.
+	row(context.Context, parser.Datums) (parser.Datums, error)
 
 	// finalize flushes out any remaining writes. It is called after all calls to
 	// row.
@@ -90,7 +90,7 @@ func (ti *tableInserter) init(txn *client.Txn) error {
 	return nil
 }
 
-func (ti *tableInserter) row(ctx context.Context, values parser.DTuple) (parser.DTuple, error) {
+func (ti *tableInserter) row(ctx context.Context, values parser.Datums) (parser.Datums, error) {
 	return nil, ti.ri.InsertRow(ctx, ti.b, values, false)
 }
 
@@ -129,7 +129,7 @@ func (tu *tableUpdater) init(txn *client.Txn) error {
 	return nil
 }
 
-func (tu *tableUpdater) row(ctx context.Context, values parser.DTuple) (parser.DTuple, error) {
+func (tu *tableUpdater) row(ctx context.Context, values parser.Datums) (parser.Datums, error) {
 	oldValues := values[:len(tu.ru.fetchCols)]
 	updateValues := values[len(tu.ru.fetchCols):]
 	return tu.ru.updateRow(ctx, tu.b, oldValues, updateValues)
@@ -163,7 +163,7 @@ type tableUpsertEvaler interface {
 
 	// eval returns the values for the update case of an upsert, given the row
 	// that would have been inserted and the existing (conflicting) values.
-	eval(insertRow parser.DTuple, existingRow parser.DTuple) (parser.DTuple, error)
+	eval(insertRow parser.Datums, existingRow parser.Datums) (parser.Datums, error)
 
 	isIdentityEvaler() bool
 }
@@ -208,7 +208,7 @@ type tableUpserter struct {
 	fastPathKeys  map[string]struct{}
 
 	// Batched up in run/flush.
-	insertRows []parser.DTuple
+	insertRows []parser.Datums
 
 	// For allocation avoidance.
 	indexKeyPrefix []byte
@@ -270,7 +270,7 @@ func (tu *tableUpserter) init(txn *client.Txn) error {
 		tu.fetchCols, valNeededForCol)
 }
 
-func (tu *tableUpserter) row(ctx context.Context, row parser.DTuple) (parser.DTuple, error) {
+func (tu *tableUpserter) row(ctx context.Context, row parser.Datums) (parser.Datums, error) {
 	if tu.fastPathBatch != nil {
 		primaryKey, _, err := sqlbase.EncodeIndexKey(
 			tu.tableDesc, &tu.tableDesc.PrimaryIndex, tu.ri.InsertColIDtoRowIndex, row, tu.indexKeyPrefix)
@@ -397,7 +397,7 @@ func (tu *tableUpserter) upsertRowPKs(ctx context.Context) ([]roachpb.Key, error
 // fetchExisting returns any existing rows in the table that conflict with the
 // ones in tu.insertRows. The returned slice is the same length as tu.insertRows
 // and a nil entry indicates no conflict.
-func (tu *tableUpserter) fetchExisting(ctx context.Context) ([]parser.DTuple, error) {
+func (tu *tableUpserter) fetchExisting(ctx context.Context) ([]parser.Datums, error) {
 	primaryKeys, err := tu.upsertRowPKs(ctx)
 	if err != nil {
 		return nil, err
@@ -416,7 +416,7 @@ func (tu *tableUpserter) fetchExisting(ctx context.Context) ([]parser.DTuple, er
 	}
 	if len(pkSpans) == 0 {
 		// Every key was empty, so there's nothing to fetch.
-		return make([]parser.DTuple, len(primaryKeys)), nil
+		return make([]parser.Datums, len(primaryKeys)), nil
 	}
 
 	// We don't limit batches here because the spans are unordered.
@@ -424,7 +424,7 @@ func (tu *tableUpserter) fetchExisting(ctx context.Context) ([]parser.DTuple, er
 		return nil, err
 	}
 
-	rows := make([]parser.DTuple, len(primaryKeys))
+	rows := make([]parser.Datums, len(primaryKeys))
 	for {
 		row, err := tu.fetcher.NextRowDecoded()
 		if err != nil {
@@ -442,7 +442,7 @@ func (tu *tableUpserter) fetchExisting(ctx context.Context) ([]parser.DTuple, er
 
 		// The rows returned by rowFetcher are invalidated after the call to
 		// NextRow, so we have to copy them to save them.
-		rowCopy := make(parser.DTuple, len(row))
+		rowCopy := make(parser.Datums, len(row))
 		copy(rowCopy, row)
 		rows[rowIdxForPrimaryKey[string(rowPrimaryKey)]] = rowCopy
 	}
@@ -474,7 +474,7 @@ func (td *tableDeleter) init(txn *client.Txn) error {
 	return nil
 }
 
-func (td *tableDeleter) row(ctx context.Context, values parser.DTuple) (parser.DTuple, error) {
+func (td *tableDeleter) row(ctx context.Context, values parser.Datums) (parser.Datums, error) {
 	return nil, td.rd.deleteRow(ctx, td.b, values)
 }
 

@@ -38,7 +38,7 @@ type explainTraceNode struct {
 	// Internal state, not to be initialized.
 	earliest     time.Time
 	exhausted    bool
-	rows         []parser.DTuple
+	rows         []parser.Datums
 	lastTS       time.Time
 	lastPos      int
 	trace        *tracing.RecordedTrace
@@ -143,7 +143,7 @@ func (n *explainTraceNode) unhijackCtx() {
 func (n *explainTraceNode) Next() (bool, error) {
 	first := n.rows == nil
 	if first {
-		n.rows = []parser.DTuple{}
+		n.rows = []parser.Datums{}
 		if err := n.hijackTxnContext(); err != nil {
 			return false, err
 		}
@@ -206,7 +206,7 @@ func (n *explainTraceNode) Next() (bool, error) {
 						break
 					}
 				}
-				cols := append(parser.DTuple{
+				cols := append(parser.Datums{
 					parser.NewDString(commulativeDuration),
 					parser.NewDString(duration),
 					parser.NewDInt(parser.DInt(basePos + i)),
@@ -234,7 +234,7 @@ func (n *explainTraceNode) Next() (bool, error) {
 	return true, nil
 }
 
-func (n *explainTraceNode) Values() parser.DTuple {
+func (n *explainTraceNode) Values() parser.Datums {
 	return n.rows[0]
 }
 
