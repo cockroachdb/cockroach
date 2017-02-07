@@ -24,6 +24,7 @@
 #include "rocksdb/db.h"
 #include "rocksdb/env.h"
 #include "rocksdb/filter_policy.h"
+#include "rocksdb/ldb_tool.h"
 #include "rocksdb/merge_operator.h"
 #include "rocksdb/options.h"
 #include "rocksdb/slice_transform.h"
@@ -60,6 +61,7 @@ struct DBEngine {
   virtual DBStatus Put(DBKey key, DBSlice value) = 0;
   virtual DBStatus Merge(DBKey key, DBSlice value) = 0;
   virtual DBStatus Delete(DBKey key) = 0;
+  virtual DBStatus DeleteRange(DBKey start, DBKey end) = 0;
   virtual DBStatus CommitBatch() = 0;
   virtual DBStatus ApplyBatchRepr(DBSlice repr) = 0;
   virtual DBSlice BatchRepr() = 0;
@@ -100,6 +102,7 @@ struct DBImpl : public DBEngine {
   virtual DBStatus Put(DBKey key, DBSlice value);
   virtual DBStatus Merge(DBKey key, DBSlice value);
   virtual DBStatus Delete(DBKey key);
+  virtual DBStatus DeleteRange(DBKey start, DBKey end);
   virtual DBStatus CommitBatch();
   virtual DBStatus ApplyBatchRepr(DBSlice repr);
   virtual DBSlice BatchRepr();
@@ -120,6 +123,7 @@ struct DBBatch : public DBEngine {
   virtual DBStatus Put(DBKey key, DBSlice value);
   virtual DBStatus Merge(DBKey key, DBSlice value);
   virtual DBStatus Delete(DBKey key);
+  virtual DBStatus DeleteRange(DBKey start, DBKey end);
   virtual DBStatus CommitBatch();
   virtual DBStatus ApplyBatchRepr(DBSlice repr);
   virtual DBSlice BatchRepr();
@@ -139,6 +143,7 @@ struct DBWriteOnlyBatch : public DBEngine {
   virtual DBStatus Put(DBKey key, DBSlice value);
   virtual DBStatus Merge(DBKey key, DBSlice value);
   virtual DBStatus Delete(DBKey key);
+  virtual DBStatus DeleteRange(DBKey start, DBKey end);
   virtual DBStatus CommitBatch();
   virtual DBStatus ApplyBatchRepr(DBSlice repr);
   virtual DBSlice BatchRepr();
@@ -163,6 +168,7 @@ struct DBSnapshot : public DBEngine {
   virtual DBStatus Put(DBKey key, DBSlice value);
   virtual DBStatus Merge(DBKey key, DBSlice value);
   virtual DBStatus Delete(DBKey key);
+  virtual DBStatus DeleteRange(DBKey start, DBKey end);
   virtual DBStatus CommitBatch();
   virtual DBStatus ApplyBatchRepr(DBSlice repr);
   virtual DBSlice BatchRepr();
@@ -176,8 +182,6 @@ struct DBIterator {
 };
 
 }  // extern "C"
-
-namespace {
 
 // NOTE: these constants must be kept in sync with the values in
 // storage/engine/keys.go. Both kKeyLocalRangeIDPrefix and
@@ -365,15 +369,11 @@ DBStatus FmtStatus(const char *fmt, ...) {
   return ToDBString(str);
 }
 
+namespace {
+
 DBIterState DBIterGetState(DBIterator* iter) {
-  DBIterState state;
+  DBIterState state = {};
   state.valid = iter->rep->Valid();
-  state.key.key.data = NULL;
-  state.key.key.len = 0;
-  state.key.wall_time = 0;
-  state.key.logical = 0;
-  state.value.data = NULL;
-  state.value.len = 0;
 
   if (state.valid) {
     rocksdb::Slice key;
@@ -515,6 +515,8 @@ class DBBatchInserter : public rocksdb::WriteBatch::Handler {
   virtual void Merge(const rocksdb::Slice& key, const rocksdb::Slice& value) {
     batch_->Merge(key, value);
   }
+  // NB: we don't support DeleteRangeCF yet which causes us to pick up
+  // the default implementation that returns an error.
 
  private:
   rocksdb::WriteBatchBase* const batch_;
@@ -1409,13 +1411,23 @@ DBString DBEngine::GetUserProperties() {
     auto userprops = i->second->user_collected_properties;
 
     auto ts_min = userprops.find("crdb.ts.min");
-    if (ts_min != userprops.end()) {
-      DecodeHLCTimestamp(rocksdb::Slice(ts_min->second), sst->mutable_ts_min());
+    if (ts_min != userprops.end() && !ts_min->second.empty()) {
+      if (!DecodeHLCTimestamp(rocksdb::Slice(ts_min->second), sst->mutable_ts_min())) {
+        google::protobuf::SStringPrintf(all.mutable_error(),
+              "unable to decode crdb.ts.min value '%s' in table %s",
+              rocksdb::Slice(ts_min->second).ToString(true).c_str(), sst->path().c_str());
+        break;
+      }
     }
 
     auto ts_max = userprops.find("crdb.ts.max");
-    if (ts_max != userprops.end()) {
-      DecodeHLCTimestamp(rocksdb::Slice(ts_max->second), sst->mutable_ts_max());
+    if (ts_max != userprops.end() && !ts_max->second.empty()) {
+      if (!DecodeHLCTimestamp(rocksdb::Slice(ts_max->second), sst->mutable_ts_max())) {
+        google::protobuf::SStringPrintf(all.mutable_error(),
+              "unable to decode crdb.ts.max value '%s' in table %s",
+              rocksdb::Slice(ts_max->second).ToString(true).c_str(), sst->path().c_str());
+        break;
+      }
     }
   }
   return ToDBString(all.SerializeAsString());
@@ -1485,7 +1497,6 @@ class TimeBoundTblPropCollector : public rocksdb::TablePropertiesCollector {
  private:
   std::string ts_min_;
   std::string ts_max_;
-  uint32_t count_ = 0;
 };
 
 class TimeBoundTblPropCollectorFactory : public rocksdb::TablePropertiesCollectorFactory {
@@ -1628,12 +1639,6 @@ rocksdb::Options DBMakeOptions(DBOptions db_opts) {
   // of sstables.
   options.target_file_size_base = options.max_bytes_for_level_base / 4;
   options.target_file_size_multiplier = 2;
-
-  // Temporarily enable additional checks (reading each sstable and
-  // verifying its checksum immediately after it is written) to detect
-  // https://github.com/cockroachdb/cockroach/issues/12875
-  // TODO(bdarnell): Remove this when #12875 is fixed
-  options.paranoid_file_checks = true;
 
   return options;
 }
@@ -1787,13 +1792,38 @@ DBStatus DBSnapshot::Delete(DBKey key) {
   return FmtStatus("unsupported");
 }
 
+DBStatus DBImpl::DeleteRange(DBKey start, DBKey end) {
+  rocksdb::WriteOptions options;
+  return ToDBStatus(rep->DeleteRange(
+      options, rep->DefaultColumnFamily(), EncodeKey(start), EncodeKey(end)));
+}
+
+DBStatus DBBatch::DeleteRange(DBKey start, DBKey end) {
+  // TODO(peter): We don't support iteration on a batch containing a
+  // range tombstone, so prohibit such tombstones from behing added to
+  // a readable batch.
+  return FmtStatus("unsupported");
+}
+
+DBStatus DBWriteOnlyBatch::DeleteRange(DBKey start, DBKey end) {
+  ++updates;
+  batch.DeleteRange(EncodeKey(start), EncodeKey(end));
+  return kSuccess;
+}
+
+DBStatus DBSnapshot::DeleteRange(DBKey start, DBKey end) {
+  return FmtStatus("unsupported");
+}
+
 DBStatus DBDelete(DBEngine *db, DBKey key) {
   return db->Delete(key);
 }
 
-DBStatus DBDeleteRange(DBEngine* db, DBIterator *iter, DBKey start, DBKey end) {
-  // TODO(peter): Replace with the RocksDB DeleteRange support when
-  // that lands and is stable.
+DBStatus DBDeleteRange(DBEngine* db, DBKey start, DBKey end) {
+  return db->DeleteRange(start, end);
+}
+
+DBStatus DBDeleteIterRange(DBEngine* db, DBIterator *iter, DBKey start, DBKey end) {
   rocksdb::Iterator *const iter_rep = iter->rep.get();
   iter_rep->Seek(EncodeKey(start));
   const std::string end_key = EncodeKey(end);
@@ -2118,12 +2148,11 @@ inline int64_t age_factor(int64_t fromNS, int64_t toNS) {
 // in (*MVCCStats).AgeTo. Passing now_nanos in is semantically tricky if there
 // is a chance that we run into values ahead of now_nanos. Instead, now_nanos
 // should be taken as a hint but determined by the max timestamp encountered.
-MVCCStatsResult MVCCComputeStats(
-    DBIterator* iter, DBKey start, DBKey end, int64_t now_nanos) {
+MVCCStatsResult MVCCComputeStatsInternal(
+    ::rocksdb::Iterator *const iter_rep, DBKey start, DBKey end, int64_t now_nanos) {
   MVCCStatsResult stats;
   memset(&stats, 0, sizeof(stats));
 
-  rocksdb::Iterator *const iter_rep = iter->rep.get();
   iter_rep->Seek(EncodeKey(start));
   const std::string end_key = EncodeKey(end);
 
@@ -2230,6 +2259,11 @@ MVCCStatsResult MVCCComputeStats(
   return stats;
 }
 
+MVCCStatsResult MVCCComputeStats(
+    DBIterator* iter, DBKey start, DBKey end, int64_t now_nanos) {
+  return MVCCComputeStatsInternal(iter->rep.get(), start, end, now_nanos);
+}
+
 // DBGetStats queries the given DBEngine for various operational stats and
 // write them to the provided DBStatsResult instance.
 DBStatus DBGetStats(DBEngine* db, DBStatsResult* stats) {
@@ -2246,7 +2280,14 @@ DBString DBGetUserProperties(DBEngine* db) {
 
 DBStatus DBEngineAddFile(DBEngine* db, DBSlice path) {
   const std::vector<std::string> paths = { ToString(path) };
-  rocksdb::Status status = db->rep->AddFile(paths);
+  rocksdb::IngestExternalFileOptions ifo;
+  ifo.move_files = false;
+  ifo.snapshot_consistency = true;
+  ifo.allow_global_seqno = false;
+  ifo.allow_blocking_flush = false;
+
+  rocksdb::Status status = db->rep->IngestExternalFile(
+      db->rep->DefaultColumnFamily(), paths, ifo);
   if (!status.ok()) {
     return ToDBStatus(status);
   }
@@ -2265,8 +2306,24 @@ struct DBSstFileWriter {
 };
 
 DBSstFileWriter* DBSstFileWriterNew() {
+  // TODO(dan): Right now, backup is the only user of this code, so that's what
+  // the options are tuned for. If something else starts using it, we'll likely
+  // have to add some configurability.
+
+  rocksdb::BlockBasedTableOptions table_options;
+  // Larger block size (4kb default) means smaller file at the expense of more
+  // scanning during lookups.
+  table_options.block_size = 64 * 1024;
+  // The original LevelDB compatible format. We explicitly set the checksum too
+  // to guard against the silent version upconversion. See
+  // https://github.com/facebook/rocksdb/blob/972f96b3fbae1a4675043bdf4279c9072ad69645/include/rocksdb/table.h#L198
+  table_options.format_version = 0;
+  table_options.checksum = rocksdb::kCRC32c;
+
   rocksdb::Options* options = new rocksdb::Options();
   options->comparator = &kComparator;
+  options->table_factory.reset(rocksdb::NewBlockBasedTableFactory(table_options));
+
   return new DBSstFileWriter(options);
 }
 
@@ -2293,4 +2350,33 @@ DBStatus DBSstFileWriterClose(DBSstFileWriter* fw) {
     return ToDBStatus(status);
   }
   return kSuccess;
+}
+
+namespace {
+
+class CockroachKeyFormatter: public rocksdb::SliceFormatter {
+  std::string Format(const rocksdb::Slice& s) const {
+    char* p = prettyPrintKey(ToDBKey(s));
+    std::string ret(p);
+    free(static_cast<void*>(p));
+    return ret;
+  }
+};
+
+}  // unnamed namespace
+
+void DBRunLDB(int argc, char** argv) {
+  rocksdb::Options options = DBMakeOptions(DBOptions());
+  rocksdb::LDBOptions ldb_options;
+  ldb_options.key_formatter.reset(new CockroachKeyFormatter);
+  rocksdb::LDBTool tool;
+  tool.Run(argc, argv, options, ldb_options);
+}
+
+const rocksdb::Comparator* CockroachComparator() {
+  return &kComparator;
+}
+
+rocksdb::WriteBatch::Handler* GetDBBatchInserter(::rocksdb::WriteBatchBase* batch) {
+  return new DBBatchInserter(batch);
 }

@@ -58,6 +58,7 @@ func newHashJoiner(
 	spec *HashJoinerSpec,
 	leftSource RowSource,
 	rightSource RowSource,
+	post *PostProcessSpec,
 	output RowReceiver,
 ) (*hashJoiner, error) {
 	h := &hashJoiner{
@@ -66,13 +67,9 @@ func newHashJoiner(
 		buckets:     make(map[string]bucket),
 	}
 
-	err := h.joinerBase.init(
-		flowCtx,
-		leftSource, rightSource,
-		output, spec.OutputColumns,
-		spec.Type, spec.OnExpr,
-	)
-	if err != nil {
+	if err := h.joinerBase.init(
+		flowCtx, leftSource, rightSource, spec.Type, spec.OnExpr, post, output,
+	); err != nil {
 		return nil, err
 	}
 
@@ -93,8 +90,11 @@ func (h *hashJoiner) Run(wg *sync.WaitGroup) {
 		defer log.Infof(ctx, "exiting hash joiner run")
 	}
 
+	defer h.leftSource.ConsumerDone()
+	defer h.rightSource.ConsumerDone()
+
 	if err := h.buildPhase(ctx); err != nil {
-		h.output.Close(err)
+		h.out.close(err)
 		return
 	}
 	if h.joinType == rightOuter || h.joinType == fullOuter {
@@ -103,8 +103,9 @@ func (h *hashJoiner) Run(wg *sync.WaitGroup) {
 			h.buckets[k] = bucket
 		}
 	}
+	log.VEventf(ctx, 1, "build phase complete")
 	err := h.probePhase(ctx)
-	h.output.Close(err)
+	h.out.close(err)
 }
 
 // buildPhase constructs our internal hash map of rows seen, this is done
@@ -133,10 +134,7 @@ func (h *hashJoiner) buildPhase(ctx context.Context) error {
 				if err != nil {
 					return err
 				}
-				if log.V(3) && row != nil {
-					log.Infof(ctx, "pushing row %s", row)
-				}
-				if row != nil && !h.output.PushRow(row) {
+				if row != nil && !h.out.emitRow(ctx, row) {
 					return nil
 				}
 			}
@@ -157,17 +155,14 @@ func (h *hashJoiner) buildPhase(ctx context.Context) error {
 func (h *hashJoiner) probePhase(ctx context.Context) error {
 	var scratch []byte
 
-	renderAndPush := func(lrow sqlbase.EncDatumRow, rrow sqlbase.EncDatumRow,
+	renderAndEmit := func(lrow sqlbase.EncDatumRow, rrow sqlbase.EncDatumRow,
 	) (rowsLeft bool, failedOnCond bool, err error) {
 		row, failedOnCond, err := h.render(lrow, rrow)
 		if err != nil {
 			return false, failedOnCond, err
 		}
 		if row != nil {
-			if log.V(3) {
-				log.Infof(ctx, "pushing row %s", row)
-			}
-			return h.output.PushRow(row), failedOnCond, nil
+			return h.out.emitRow(ctx, row), failedOnCond, nil
 		}
 		return true, failedOnCond, nil
 	}
@@ -191,7 +186,7 @@ func (h *hashJoiner) probePhase(ctx context.Context) error {
 			// A row that has a NULL in an equality column will not match anything.
 			// Output it or throw it away.
 			if h.joinType == leftOuter || h.joinType == fullOuter {
-				if rowsLeft, _, err := renderAndPush(lrow, nil); err != nil {
+				if rowsLeft, _, err := renderAndEmit(lrow, nil); err != nil {
 					return err
 				} else if !rowsLeft {
 					return nil
@@ -202,14 +197,14 @@ func (h *hashJoiner) probePhase(ctx context.Context) error {
 
 		b, ok := h.buckets[string(encoded)]
 		if !ok {
-			if rowsLeft, _, err := renderAndPush(lrow, nil); err != nil {
+			if rowsLeft, _, err := renderAndEmit(lrow, nil); err != nil {
 				return err
 			} else if !rowsLeft {
 				return nil
 			}
 		} else {
 			for idx, rrow := range b.rows {
-				if rowsLeft, failedOnCond, err := renderAndPush(lrow, rrow); err != nil {
+				if rowsLeft, failedOnCond, err := renderAndEmit(lrow, rrow); err != nil {
 					return err
 				} else if !rowsLeft {
 					return nil
@@ -228,7 +223,7 @@ func (h *hashJoiner) probePhase(ctx context.Context) error {
 	for _, b := range h.buckets {
 		for idx, rrow := range b.rows {
 			if !b.seen[idx] {
-				if rowsLeft, _, err := renderAndPush(nil, rrow); err != nil {
+				if rowsLeft, _, err := renderAndEmit(nil, rrow); err != nil {
 					return err
 				} else if !rowsLeft {
 					return nil

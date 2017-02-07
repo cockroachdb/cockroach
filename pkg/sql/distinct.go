@@ -28,7 +28,6 @@ import (
 type distinctNode struct {
 	plan planNode
 	p    *planner
-	top  *selectTopNode
 	// All the columns that are part of the Sort. Set to nil if no-sort, or
 	// sort used an expression that was not part of the requested column set.
 	columnsInOrder []bool
@@ -61,31 +60,9 @@ func (n *distinctNode) Start() error {
 	return n.plan.Start()
 }
 
-// setTop connects the distinctNode back to the selectTopNode that
-// caused its existence.
-func (n *distinctNode) setTop(top *selectTopNode) {
-	if n != nil {
-		n.top = top
-	}
-}
-
-func (n *distinctNode) Columns() ResultColumns {
-	if n.plan != nil {
-		return n.plan.Columns()
-	}
-	// Pre-prepare: not connected yet. Ask the top select node.
-	return n.top.Columns()
-}
-
-func (n *distinctNode) Values() parser.DTuple { return n.plan.Values() }
-
-func (n *distinctNode) Ordering() orderingInfo {
-	if n.plan != nil {
-		return n.plan.Ordering()
-	}
-	// Pre-prepare: not connected yet. Ask the top select node.
-	return n.top.Ordering()
-}
+func (n *distinctNode) Columns() ResultColumns { return n.plan.Columns() }
+func (n *distinctNode) Values() parser.DTuple  { return n.plan.Values() }
+func (n *distinctNode) Ordering() orderingInfo { return n.plan.Ordering() }
 
 func (n *distinctNode) MarkDebug(mode explainMode) {
 	if mode != explainDebug {
@@ -196,11 +173,6 @@ func (n *distinctNode) encodeValues(values parser.DTuple) ([]byte, []byte, error
 		}
 	}
 	return prefix, suffix, err
-}
-
-func (n *distinctNode) SetLimitHint(numRows int64, soft bool) {
-	// Any limit becomes a "soft" limit underneath.
-	n.plan.SetLimitHint(numRows, true)
 }
 
 func (n *distinctNode) Close() {

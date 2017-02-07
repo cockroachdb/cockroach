@@ -30,6 +30,26 @@ import (
 // expansion of sub-queries. Returns an error if the initialization
 // fails.
 func (p *planner) expandPlan(plan planNode) (planNode, error) {
+	params := expandParameters{p: p}
+	return doExpandPlan(params.clear(), plan)
+}
+
+// expandParameters propagates the known row limit and desired ordering at
+// a given level to the levels under it (upstream).
+type expandParameters struct {
+	p               *planner
+	numRowsHint     int64
+	desiredOrdering sqlbase.ColumnOrdering
+}
+
+func (p expandParameters) clear() expandParameters {
+	p.numRowsHint = math.MaxInt64
+	p.desiredOrdering = nil
+	return p
+}
+
+// doExpandPlan is the algorithm that supports expandPlan().
+func doExpandPlan(params expandParameters, plan planNode) (planNode, error) {
 	if plan == nil {
 		return nil, nil
 	}
@@ -37,29 +57,29 @@ func (p *planner) expandPlan(plan planNode) (planNode, error) {
 	var err error
 	switch n := plan.(type) {
 	case *createTableNode:
-		n.sourcePlan, err = p.expandPlan(n.sourcePlan)
+		n.sourcePlan, err = doExpandPlan(params.clear(), n.sourcePlan)
 
 	case *updateNode:
-		n.run.rows, err = p.expandPlan(n.run.rows)
+		n.run.rows, err = doExpandPlan(params.clear(), n.run.rows)
 
 	case *insertNode:
-		n.run.rows, err = p.expandPlan(n.run.rows)
+		n.run.rows, err = doExpandPlan(params.clear(), n.run.rows)
 
 	case *deleteNode:
-		n.run.rows, err = p.expandPlan(n.run.rows)
+		n.run.rows, err = doExpandPlan(params.clear(), n.run.rows)
 
 	case *createViewNode:
-		n.sourcePlan, err = p.expandPlan(n.sourcePlan)
+		n.sourcePlan, err = doExpandPlan(params.clear(), n.sourcePlan)
 
 	case *explainDebugNode:
-		n.plan, err = p.expandPlan(n.plan)
+		n.plan, err = doExpandPlan(params.clear(), n.plan)
 		if err != nil {
 			return plan, err
 		}
 		n.plan.MarkDebug(explainDebug)
 
 	case *explainTraceNode:
-		n.plan, err = p.expandPlan(n.plan)
+		n.plan, err = doExpandPlan(params.clear(), n.plan)
 		if err != nil {
 			return plan, err
 		}
@@ -67,7 +87,7 @@ func (p *planner) expandPlan(plan planNode) (planNode, error) {
 
 	case *explainPlanNode:
 		if n.expanded {
-			n.plan, err = p.expandPlan(n.plan)
+			n.plan, err = doExpandPlan(params.clear(), n.plan)
 			if err != nil {
 				return plan, err
 			}
@@ -75,42 +95,57 @@ func (p *planner) expandPlan(plan planNode) (planNode, error) {
 			// during the plan's Start() phase. This may trigger additional
 			// optimizations (eg. in sortNode) which the user of EXPLAIN will be
 			// interested in.
-			n.plan.SetLimitHint(math.MaxInt64, true)
+			setUnlimited(n.plan)
 		}
 
 	case *indexJoinNode:
 		// We ignore the return value because we know the scanNode is preserved.
-		_, err = p.expandPlan(n.table)
+		_, err = doExpandPlan(params, n.index)
 		if err != nil {
 			return plan, err
 		}
-		_, err = p.expandPlan(n.index)
+
+		// The row limit and desired ordering, if any, only propagates on
+		// the index side.
+		_, err = doExpandPlan(params.clear(), n.table)
 
 	case *unionNode:
-		n.right, err = p.expandPlan(n.right)
+		n.right, err = doExpandPlan(params, n.right)
 		if err != nil {
 			return plan, err
 		}
-		n.left, err = p.expandPlan(n.left)
+		n.left, err = doExpandPlan(params, n.left)
 
 	case *filterNode:
-		n.source.plan, err = p.expandPlan(n.source.plan)
+		n.source.plan, err = doExpandPlan(params, n.source.plan)
 
 	case *joinNode:
-		n.left.plan, err = p.expandPlan(n.left.plan)
+		params = params.clear()
+		n.left.plan, err = doExpandPlan(params, n.left.plan)
 		if err != nil {
 			return plan, err
 		}
-		n.right.plan, err = p.expandPlan(n.right.plan)
+		n.right.plan, err = doExpandPlan(params, n.right.plan)
 
 	case *ordinalityNode:
-		n.source, err = p.expandPlan(n.source)
+		// If there's a desired ordering on the ordinality column, drop it.
+		if len(params.desiredOrdering) > 0 {
+			newDesired := make(sqlbase.ColumnOrdering, 0, len(params.desiredOrdering))
+			for _, ordInfo := range params.desiredOrdering {
+				if ordInfo.ColIdx == len(n.columns)-1 {
+					break
+				}
+				newDesired = append(newDesired, ordInfo)
+			}
+			params.desiredOrdering = newDesired
+		}
+		n.source, err = doExpandPlan(params, n.source)
 		if err != nil {
 			return plan, err
 		}
 
 		// We are going to "optimize" the ordering. We had an ordering
-		// initially from the source, but expandPlan() may have caused it to
+		// initially from the source, but expand() may have caused it to
 		// change. So here retrieve the ordering of the source again.
 		origOrdering := n.source.Ordering()
 
@@ -135,25 +170,91 @@ func (p *planner) expandPlan(plan planNode) (planNode, error) {
 			n.ordering.unique = true
 		}
 
-	case *limitNode, *sortNode, *windowNode, *groupNode, *distinctNode:
-		panic(fmt.Sprintf("expandPlan for %T must be handled by selectTopNode", plan))
+	case *limitNode:
+		// Estimate the limit parameters. We can't full eval them just yet,
+		// because evaluation requires running potential sub-queries, which
+		// cannot occur during expand.
+		n.estimateLimit()
+		params.numRowsHint = getLimit(n.count, n.offset)
+		n.plan, err = doExpandPlan(params, n.plan)
 
-	case *renderNode:
-		plan, err = p.expandSelectNode(n)
+	case *groupNode:
+		params.desiredOrdering = n.desiredOrdering
+		// Under a group node, there may be arbitrarily more rows
+		// than those required by the context.
+		params.numRowsHint = math.MaxInt64
+		n.plan, err = doExpandPlan(params, n.plan)
 
-	case *selectTopNode:
-		plan, err = p.expandSelectTopNode(n)
+	case *windowNode:
+		// Under a window node, there may be arbitrarily more rows
+		// than those required by the context.
+		params.numRowsHint = math.MaxInt64
+		n.plan, err = doExpandPlan(params, n.plan)
 
-	case *delayedNode:
-		v, err := n.constructor(p)
+	case *sortNode:
+		params.desiredOrdering = n.ordering
+		n.plan, err = doExpandPlan(params, n.plan)
 		if err != nil {
 			return plan, err
 		}
-		n.plan = v
-		n.plan, err = p.expandPlan(n.plan)
+
+		// Check to see if the requested ordering is compatible with the existing
+		// ordering.
+		existingOrdering := n.plan.Ordering()
+		match := computeOrderingMatch(n.ordering, existingOrdering, false)
+		if match < len(n.ordering) {
+			n.needSort = true
+		} else if len(n.columns) < len(n.plan.Columns()) {
+			// No sorting required, but we have to strip off the extra render
+			// expressions we added. So keep the sort node.
+		} else {
+			// Sort node fully disappears.
+			plan = n.plan
+		}
+
+	case *distinctNode:
+		// TODO(radu/knz) perhaps we can propagate the DISTINCT
+		// clause as desired ordering/exact match for the source node.
+		n.plan, err = doExpandPlan(params, n.plan)
+		if err != nil {
+			return plan, err
+		}
+
+		ordering := n.plan.Ordering()
+		if !ordering.isEmpty() {
+			n.columnsInOrder = make([]bool, len(n.plan.Columns()))
+			for colIdx := range ordering.exactMatchCols {
+				if colIdx >= len(n.columnsInOrder) {
+					// If the exact-match column is not part of the output, we can safely ignore it.
+					continue
+				}
+				n.columnsInOrder[colIdx] = true
+			}
+			for _, c := range ordering.ordering {
+				if c.ColIdx >= len(n.columnsInOrder) {
+					// Cannot use sort order. This happens when the
+					// columns used for sorting are not part of the output.
+					// e.g. SELECT a FROM t ORDER BY c.
+					n.columnsInOrder = nil
+					break
+				}
+				n.columnsInOrder[c.ColIdx] = true
+			}
+		}
+
+	case *scanNode:
+		plan, err = expandScanNode(params, n)
+
+	case *renderNode:
+		plan, err = expandRenderNode(params, n)
+
+	case *delayedNode:
+		n.plan, err = n.constructor(params.p)
+		if err == nil {
+			n.plan, err = doExpandPlan(params, n.plan)
+		}
 
 	case *valuesNode:
-	case *scanNode:
 	case *alterTableNode:
 	case *copyNode:
 	case *createDatabaseNode:
@@ -174,154 +275,42 @@ func (p *planner) expandPlan(plan planNode) (planNode, error) {
 	return plan, err
 }
 
-func (p *planner) expandSelectTopNode(n *selectTopNode) (planNode, error) {
-	if n.plan != nil {
-		// Plan is already expanded. Just elide.
-		return n.plan, nil
-	}
-
-	var err error
-	n.source, err = p.expandPlan(n.source)
-	if err != nil {
-		return n, err
-	}
-	n.plan = n.source
-
-	if n.group != nil {
-		if len(n.group.desiredOrdering) > 0 {
-			match := computeOrderingMatch(n.group.desiredOrdering, n.plan.Ordering(), false)
-			if match == len(n.group.desiredOrdering) {
-				// We have a single MIN/MAX function and the underlying plan's
-				// ordering matches the function. We only need to retrieve one row.
-				n.plan.SetLimitHint(1, false /* !soft */)
-				n.group.needOnlyOneRow = true
-			}
-		}
-		n.group.plan = n.plan
-		n.plan = n.group
-	}
-
-	if n.window != nil {
-		n.window.plan = n.plan
-		n.plan = n.window
-	}
-
-	if n.sort != nil {
-		// Check to see if the requested ordering is compatible with the existing
-		// ordering.
-		existingOrdering := n.plan.Ordering()
-		match := computeOrderingMatch(n.sort.ordering, existingOrdering, false)
-		if match < len(n.sort.ordering) {
-			n.sort.needSort = true
-			n.sort.plan = n.plan
-			n.plan = n.sort
-		} else if len(n.sort.columns) < len(n.plan.Columns()) {
-			// No sorting required, but we have to strip off the extra render
-			// expressions we added.
-			n.sort.plan = n.plan
-			n.plan = n.sort
-		} else {
-			// Sort node fully disappears.
-			n.sort = nil
+func expandScanNode(params expandParameters, s *scanNode) (planNode, error) {
+	var analyzeOrdering analyzeOrderingFn
+	if len(params.desiredOrdering) > 0 {
+		analyzeOrdering = func(indexOrdering orderingInfo) (matchingCols, totalCols int) {
+			match := computeOrderingMatch(params.desiredOrdering, indexOrdering, false)
+			return match, len(params.desiredOrdering)
 		}
 	}
 
-	if n.distinct != nil {
-		ordering := n.plan.Ordering()
-		if !ordering.isEmpty() {
-			n.distinct.columnsInOrder = make([]bool, len(n.plan.Columns()))
-			for colIdx := range ordering.exactMatchCols {
-				if colIdx >= len(n.distinct.columnsInOrder) {
-					// If the exact-match column is not part of the output, we can safely ignore it.
-					continue
-				}
-				n.distinct.columnsInOrder[colIdx] = true
-			}
-			for _, c := range ordering.ordering {
-				if c.ColIdx >= len(n.distinct.columnsInOrder) {
-					// Cannot use sort order. This happens when the
-					// columns used for sorting are not part of the output.
-					// e.g. SELECT a FROM t ORDER BY c.
-					n.distinct.columnsInOrder = nil
-					break
-				}
-				n.distinct.columnsInOrder[c.ColIdx] = true
-			}
-		}
-		n.distinct.plan = n.plan
-		n.plan = n.distinct
+	// If we have a reasonable limit, prefer an order matching index even if
+	// it is not covering.
+	var preferOrderMatchingIndex bool
+	if len(params.desiredOrdering) > 0 && params.numRowsHint <= 1000 {
+		preferOrderMatchingIndex = true
 	}
 
-	if n.limit != nil {
-		n.limit.plan = n.plan
-		n.plan = n.limit
-	}
-
-	// Everything's expanded, so elide the remaining selectTopNode.
-	return n.plan, nil
-}
-
-func (p *planner) expandSelectNode(s *renderNode) (planNode, error) {
-	// Get the ordering for index selection (if any).
-	var ordering sqlbase.ColumnOrdering
-	var grouping bool
-
-	if s.top.group != nil {
-		ordering = s.top.group.desiredOrdering
-		grouping = true
-	} else if s.top.sort != nil {
-		ordering = s.top.sort.ordering
-	}
-
-	// Estimate the limit parameters. We can't full eval them just yet,
-	// because evaluation requires running potential sub-queries, which
-	// cannot occur during expandPlan.
-	limitCount, limitOffset := s.top.limit.estimateLimit()
-
-	maybeScanNode := s.source.plan
-	if where, ok := maybeScanNode.(*filterNode); ok {
-		maybeScanNode = where.source.plan
-	}
-
-	if scan, ok := maybeScanNode.(*scanNode); ok {
-		var analyzeOrdering analyzeOrderingFn
-		if ordering != nil {
-			analyzeOrdering = func(indexOrdering orderingInfo) (matchingCols, totalCols int) {
-				selOrder := s.computeOrdering(indexOrdering)
-				return computeOrderingMatch(ordering, selOrder, false), len(ordering)
-			}
-		}
-
-		// If we have a reasonable limit, prefer an order matching index even if
-		// it is not covering - unless we are grouping, in which case the limit
-		// applies to the grouping results and not to the rows we scan.
-		var preferOrderMatchingIndex bool
-		if !grouping && len(ordering) > 0 && limitCount <= 1000-limitOffset {
-			preferOrderMatchingIndex = true
-		}
-
-		plan, err := selectIndex(scan, analyzeOrdering, preferOrderMatchingIndex)
-		if err != nil {
-			return s, err
-		}
-
-		// Update s.source.info with the new plan. This removes the
-		// filterNode, if any.
-		s.source.plan = plan
-	}
-
-	// Expand the source node. We need to do this before computing the
-	// ordering, since expansion may modify the ordering.
-	var err error
-	s.source.plan, err = p.expandPlan(s.source.plan)
+	plan, err := selectIndex(s, analyzeOrdering, preferOrderMatchingIndex)
 	if err != nil {
 		return s, err
+	}
+	return plan, nil
+}
+
+func expandRenderNode(params expandParameters, r *renderNode) (planNode, error) {
+	params.desiredOrdering = translateOrdering(params.desiredOrdering, r)
+
+	var err error
+	r.source.plan, err = doExpandPlan(params, r.source.plan)
+	if err != nil {
+		return r, err
 	}
 
 	// Elide the render node if it renders its source as-is.
 
-	sourceCols := s.source.plan.Columns()
-	if len(s.columns) == len(sourceCols) && s.source.info.viewDesc == nil {
+	sourceCols := r.source.plan.Columns()
+	if len(r.columns) == len(sourceCols) && r.source.info.viewDesc == nil {
 		// 1) we don't drop renderNodes which also interface to a view, because
 		// CREATE VIEW needs it.
 		// TODO(knz) make this optimization conditional on a flag, which can
@@ -334,12 +323,12 @@ func (p *planner) expandSelectNode(s *renderNode) (planNode, error) {
 		// TODO(knz) investigate this further and enable the optimization fully.
 
 		foundNonTrivialRender := false
-		for i, e := range s.render {
-			if s.columns[i].omitted {
+		for i, e := range r.render {
+			if r.columns[i].omitted {
 				continue
 			}
 			if iv, ok := e.(*parser.IndexedVar); ok && i < len(sourceCols) &&
-				(iv.Idx == i && sourceCols[i].Name == s.columns[i].Name) {
+				(iv.Idx == i && sourceCols[i].Name == r.columns[i].Name) {
 				continue
 			}
 			foundNonTrivialRender = true
@@ -347,11 +336,50 @@ func (p *planner) expandSelectNode(s *renderNode) (planNode, error) {
 		}
 		if !foundNonTrivialRender {
 			// Nothing special rendered, remove the render node entirely.
-			return s.source.plan, nil
+			return r.source.plan, nil
 		}
 	}
 
-	s.ordering = s.computeOrdering(s.source.plan.Ordering())
+	r.ordering = r.computeOrdering(r.source.plan.Ordering())
 
-	return s, nil
+	return r, nil
+}
+
+// translateOrdering modifies a desired ordering on the output of the
+// renderNode to a desired ordering on its its input.
+//
+// For example, it translates a desired ordering [@2 asc, @1 desc] for
+// a render node that renders [@4, @3, @2] into a desired ordering [@3
+// asc, @4 desc].
+func translateOrdering(desiredDown sqlbase.ColumnOrdering, r *renderNode) sqlbase.ColumnOrdering {
+	var desiredUp sqlbase.ColumnOrdering
+
+	for _, colOrder := range desiredDown {
+		rendered := r.render[colOrder.ColIdx]
+		if _, ok := rendered.(parser.Datum); ok {
+			// Simple constants do not participate in ordering. Just ignore.
+			continue
+		}
+		if v, ok := rendered.(*parser.IndexedVar); ok {
+			// This is a simple render, so we can propagate the desired ordering.
+			// However take care of avoiding duplicate ordering requests in
+			// case there is more than one render for the same source column.
+			duplicate := false
+			for _, desiredOrderCol := range desiredUp {
+				if desiredOrderCol.ColIdx == v.Idx {
+					duplicate = true
+					break
+				}
+			}
+			if !duplicate {
+				desiredUp = append(desiredUp,
+					sqlbase.ColumnOrderInfo{ColIdx: v.Idx, Direction: colOrder.Direction})
+			}
+			continue
+		}
+		// Anything else and we can't propagate the desired order.
+		break
+	}
+
+	return desiredUp
 }

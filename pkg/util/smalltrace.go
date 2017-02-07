@@ -32,12 +32,12 @@ func GetSmallTrace(skip int) string {
 
 	for i := range callers {
 		f, more := frames.Next()
+		callers[i] = fmt.Sprintf("%s:%d",
+			strings.TrimPrefix(f.Function, "github.com/cockroachdb/cockroach/pkg/"), f.Line)
+
 		if !more {
 			break
 		}
-
-		callers[i] = fmt.Sprintf("%s:%d",
-			strings.TrimPrefix(f.Function, "github.com/cockroachdb/cockroach/pkg/"), f.Line)
 	}
 
 	return strings.Join(callers, ",")

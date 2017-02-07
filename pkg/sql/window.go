@@ -734,8 +734,6 @@ func (n *windowNode) populateValues() error {
 	return nil
 }
 
-func (*windowNode) SetLimitHint(_ int64, _ bool) {}
-
 func (n *windowNode) Close() {
 	n.plan.Close()
 	if n.wrappedRenderVals != nil {

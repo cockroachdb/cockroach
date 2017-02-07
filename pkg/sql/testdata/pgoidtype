@@ -1,27 +1,57 @@
-query I
+query O
 SELECT 3::OID;
 ----
 3
 
-query I
+query O
 SELECT 'pg_constraint'::REGCLASS
 ----
 402060402
 
-query II
+query OO
 SELECT 'upper'::REGPROC, 'upper'::REGPROCEDURE
 ----
 1736923753  1736923753
 
-query error more than one function named 'max'
-SELECT 'max'::REGPROC
+query OO
+SELECT 'upper(int)'::REGPROC, 'upper(int)'::REGPROCEDURE
+----
+1736923753  1736923753
 
-query I
+query error unknown function: blah\(\)
+SELECT 'blah(ignored, ignored)'::REGPROC, 'blah(ignored, ignored)'::REGPROCEDURE
+
+query error unknown function: blah\(\)
+SELECT ' blah ( ignored , ignored ) '::REGPROC
+
+query error unknown function: blah\(\)
+SELECT 'blah ()'::REGPROC
+
+query error unknown function: blah\(\)
+SELECT 'blah( )'::REGPROC
+
+query error unknown function: "blah\(, \)"\(\)
+SELECT 'blah(, )'::REGPROC
+
+query error more than one function named 'sqrt'
+SELECT 'sqrt'::REGPROC
+
+query OOOO
+SELECT 'array_in'::REGPROC, 'array_in(a,b,c)'::REGPROC, 'pg_catalog.array_in'::REGPROC, 'pg_catalog.array_in( a ,b, c )'::REGPROC
+----
+2892088402  2892088402  2892088402  2892088402
+
+query OOOO
+SELECT 'array_in'::REGPROCEDURE, 'array_in(a,b,c)'::REGPROCEDURE, 'pg_catalog.array_in'::REGPROCEDURE, 'pg_catalog.array_in( a ,b, c )'::REGPROCEDURE
+----
+2892088402  2892088402  2892088402  2892088402
+
+query O
 SELECT 'public'::REGNAMESPACE
 ----
 268867073
 
-query I
+query O
 SELECT 'bool'::REGTYPE
 ----
 16
@@ -29,10 +59,10 @@ SELECT 'bool'::REGTYPE
 query error relation 'blah' does not exist
 SELECT 'blah'::REGCLASS
 
-query error function 'blah' does not exist
+query error unknown function: blah\(\)
 SELECT 'blah'::REGPROC
 
-query error function 'blah' does not exist
+query error unknown function: blah\(\)
 SELECT 'blah'::REGPROCEDURE
 
 query error namespace 'blah' does not exist
@@ -43,13 +73,13 @@ SELECT 'blah'::REGTYPE
 
 ## Test other cast syntaxes
 
-query I
+query O
 SELECT CAST ('pg_constraint' AS REGCLASS)
 ----
 402060402
 
 # This forces the b_expr form of the cast syntax.
-query I
+query O
 SELECT ('pg_constraint')::REGCLASS
 ----
 402060402

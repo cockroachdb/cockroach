@@ -1,5 +1,5 @@
 hash: 11665188dd657f4b479ce3c7698b6bb3e2636f0b25570883d67a85bc7520b8d1
-updated: 2017-01-09T11:24:29.408700952-05:00
+updated: 2017-01-27T16:45:08.62946917-05:00
 imports:
 - name: cloud.google.com/go
   version: c96c4486674a140772b9788370fa29898577bc0c
@@ -26,19 +26,19 @@ imports:
 - name: github.com/cenk/backoff
   version: b02f2bbce11d7ea6b97f282ef1771b0fe2f65ef3
 - name: github.com/chzyer/readline
-  version: c914be64f07d9998f52bf0d598ec26d457168c0f
+  version: eef24db1d59cac55d773312ab6efe1890187f2de
 - name: github.com/client9/misspell
   version: 9a1fc2456ac9e8c9b4cbe9d005b6e7adac0d357f
   subpackages:
   - cmd/misspell
 - name: github.com/cockroachdb/c-jemalloc
-  version: 5135b33df2bc67c42a91f6183072bba8a6c30d51
+  version: 7eb7980d8a9f68b771568a7eb15196a63a818595
 - name: github.com/cockroachdb/c-protobuf
   version: 070b64667a22925d971878b61e4f0c1df31e8599
   subpackages:
   - cmd/protoc
 - name: github.com/cockroachdb/c-rocksdb
-  version: 894d369c4ea259b65f75563feeb06bea322a8450
+  version: 608bf6179ca8b317e707394d263059a933808e2f
 - name: github.com/cockroachdb/c-snappy
   version: c0cd3c9ce92f195001595e1fbbe66f045daad34f
 - name: github.com/cockroachdb/cmux
@@ -51,6 +51,8 @@ imports:
   version: f4be2332630e8f33c3262c0d5f0d13d733c8bedf
 - name: github.com/cockroachdb/pq
   version: 44a6473ebbc26e3af09fe57bbdf761475c2c9f7c
+- name: github.com/cockroachdb/returncheck
+  version: f3a399c4b3744afe51001fb5f969bfcb78dc599a
 - name: github.com/cockroachdb/stress
   version: ce09c414594390d1d6432280c7cac55e62c6b0af
 - name: github.com/codahale/hdrhistogram
@@ -199,10 +201,6 @@ imports:
   - internal/errcheck
 - name: github.com/kisielk/gotool
   version: 0de1eaf82fa3f583ce21fde859f1e7e0c5e9b220
-- name: github.com/kkaneda/returncheck
-  version: bf081fa7155e3a27df1f056a49d50685edfa5b1b
-  subpackages:
-  - internal
 - name: github.com/kr/pretty
   version: cfb55aafdaf3ec08f0db22699ab822c50091b1c4
 - name: github.com/kr/text
@@ -245,7 +243,7 @@ imports:
 - name: github.com/montanaflynn/stats
   version: f8cd06f93c6c1b06028caafb88b540fc820f77c1
 - name: github.com/olekukonko/tablewriter
-  version: 44e365d423f4f06769182abfeeae2b91be9d529b
+  version: a0225b3f23b5ce0cbec6d7a66a968f8a59eca9c4
 - name: github.com/opencontainers/go-digest
   version: a6d0ee40d4207ea02364bd3b9e8e77b9159ba1eb
 - name: github.com/opentracing/basictracer-go
@@ -408,21 +406,18 @@ imports:
   version: 3887ee99ecf07df5b447e9b00d9c0b2adaa9f3e4
 - name: gopkg.in/yaml.v2
   version: a5b47d31c556af34a302ce5d659e6fea44d90de0
-- name: honnef.co/go/lint
-  version: 3cb61f0284a50a4f716a0ecd7274e7bc02b40428
+- name: honnef.co/go/tools
+  version: 287365bf3e058d443f33ec1dfe3de9e0ddf29169
   subpackages:
-  - lintutil
-- name: honnef.co/go/simple
-  version: 785f2adbeecfb675c110966bb69792863aa0aa49
-- name: honnef.co/go/ssa
-  version: 1cf7f34afde4f3f9cb9f7b15f8f2727ebcaa179a
-- name: honnef.co/go/staticcheck
-  version: 34cb9e1c04508c1fc4d12a65943aa17531909373
-  subpackages:
-  - pure
-  - vrp
-- name: honnef.co/go/unused
-  version: 33bc4cfe5599e665ab0117ca65e59f254aa6810d
+  - gcsizes
+  - lint
+  - lint/lintutil
+  - simple
+  - ssa
+  - staticcheck
+  - staticcheck/pure
+  - staticcheck/vrp
+  - unused
 testImports:
 - name: github.com/ghemawat/stream
   version: 78e682abcae4f96ac7ddbe39912967a5f7cbbaa6

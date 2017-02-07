@@ -111,14 +111,37 @@ func (ltc *LocalTestCluster) Start(t testing.TB, baseCtx *base.Config, initSende
 	ltc.DB = client.NewDBWithContext(ltc.Sender, *ltc.DBContext)
 	transport := storage.NewDummyRaftTransport()
 	cfg := storage.TestStoreConfig(ltc.Clock)
+	// Disable the replica scanner and split queue, which confuse tests using
+	// LocalTestCluster.
+	cfg.TestingKnobs.DisableScanner = true
+	cfg.TestingKnobs.DisableSplitQueue = true
 	if ltc.RangeRetryOptions != nil {
 		cfg.RangeRetryOptions = *ltc.RangeRetryOptions
 	}
 	cfg.AmbientCtx = ambient
 	cfg.DB = ltc.DB
 	cfg.Gossip = ltc.Gossip
+	active, renewal := storage.NodeLivenessDurations(
+		storage.RaftElectionTimeout(cfg.RaftTickInterval, cfg.RaftElectionTimeoutTicks))
+	cfg.NodeLiveness = storage.NewNodeLiveness(
+		cfg.AmbientCtx,
+		cfg.Clock,
+		cfg.DB,
+		cfg.Gossip,
+		active,
+		renewal,
+	)
+	cfg.StorePool = storage.NewStorePool(
+		cfg.AmbientCtx,
+		cfg.Gossip,
+		cfg.Clock,
+		storage.MakeStorePoolNodeLivenessFunc(cfg.NodeLiveness),
+		storage.TestTimeUntilStoreDead,
+		/* deterministic */ false,
+	)
 	cfg.Transport = transport
 	cfg.MetricsSampleInterval = metric.TestSampleInterval
+	cfg.HistogramWindowInterval = metric.TestSampleInterval
 	ltc.Store = storage.NewStore(cfg, ltc.Eng, nodeDesc)
 	if err := ltc.Store.Bootstrap(roachpb.StoreIdent{NodeID: nodeID, StoreID: 1}); err != nil {
 		t.Fatalf("unable to start local test cluster: %s", err)

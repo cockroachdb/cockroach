@@ -200,8 +200,10 @@ var (
 	}
 
 	// Raft log metrics.
-	metaRaftLogBehindCount = metric.Metadata{Name: "raftlog.behind",
-		Help: "Number of Raft log entries followers are behind"}
+	metaRaftLogFollowerBehindCount = metric.Metadata{Name: "raftlog.behind",
+		Help: "Number of Raft log entries followers on other stores are behind"}
+	metaRaftLogSelfBehindCount = metric.Metadata{Name: "raftlog.selfbehind",
+		Help: "Number of Raft log entries followers on this store are behind"}
 	metaRaftLogTruncated = metric.Metadata{Name: "raftlog.truncated",
 		Help: "Number of Raft log entries truncated"}
 
@@ -301,17 +303,6 @@ var (
 		Help: "Number of attempted intent resolutions"}
 	metaGCResolveSuccess = metric.Metadata{Name: "queue.gc.info.resolvesuccess",
 		Help: "Number of successful intent resolutions"}
-
-	metaMuReplicaNanos = metric.Metadata{Name: "mutex.replicananos",
-		Help: "Duration of Replica mutex critical sections"}
-	metaMuCommandQueueNanos = metric.Metadata{Name: "mutex.commandqueuenanos",
-		Help: "Duration of Command Queue mutex critical sections"}
-	metaMuRaftNanos = metric.Metadata{Name: "mutex.raftnanos",
-		Help: "Duration of Replica Raft mutex critical sections"}
-	metaMuStoreNanos = metric.Metadata{Name: "mutex.storenanos",
-		Help: "Duration of Store mutex critical sections"}
-	metaMuSchedulerNanos = metric.Metadata{Name: "mutex.schedulernanos",
-		Help: "Duration of Raft Scheduler mutex critical sections"}
 
 	// Slow request metrics.
 	metaSlowCommandQueueRequests = metric.Metadata{Name: "requests.slow.commandqueue",
@@ -429,8 +420,9 @@ type StoreMetrics struct {
 	RaftRcvdMsgDropped        *metric.Counter
 
 	// Raft log metrics.
-	RaftLogBehindCount *metric.Gauge
-	RaftLogTruncated   *metric.Counter
+	RaftLogFollowerBehindCount *metric.Gauge
+	RaftLogSelfBehindCount     *metric.Gauge
+	RaftLogTruncated           *metric.Counter
 
 	// A map for conveniently finding the appropriate metric. The individual
 	// metric references must exist as AddMetricStruct adds them by reflection
@@ -491,13 +483,6 @@ type StoreMetrics struct {
 	GCResolveTotal               *metric.Counter
 	GCResolveSuccess             *metric.Counter
 
-	// Mutex timing information.
-	MuStoreNanos        *metric.Histogram
-	MuSchedulerNanos    *metric.Histogram
-	MuRaftNanos         *metric.Histogram
-	MuReplicaNanos      *metric.Histogram
-	MuCommandQueueNanos *metric.Histogram
-
 	// Slow request counts.
 	SlowCommandQueueRequests *metric.Gauge
 	SlowLeaseRequests        *metric.Gauge
@@ -510,7 +495,7 @@ type StoreMetrics struct {
 	}
 }
 
-func newStoreMetrics(sampleInterval time.Duration) *StoreMetrics {
+func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 	storeRegistry := metric.NewRegistry()
 	sm := &StoreMetrics{
 		registry: storeRegistry,
@@ -618,8 +603,9 @@ func newStoreMetrics(sampleInterval time.Duration) *StoreMetrics {
 		RaftCoalescedHeartbeatsPending: metric.NewGauge(metaRaftCoalescedHeartbeatsPending),
 
 		// Raft log metrics.
-		RaftLogBehindCount: metric.NewGauge(metaRaftLogBehindCount),
-		RaftLogTruncated:   metric.NewCounter(metaRaftLogTruncated),
+		RaftLogFollowerBehindCount: metric.NewGauge(metaRaftLogFollowerBehindCount),
+		RaftLogSelfBehindCount:     metric.NewGauge(metaRaftLogSelfBehindCount),
+		RaftLogTruncated:           metric.NewCounter(metaRaftLogTruncated),
 
 		// Replica queue metrics.
 		GCQueueSuccesses:                          metric.NewCounter(metaGCQueueSuccesses),
@@ -670,34 +656,6 @@ func newStoreMetrics(sampleInterval time.Duration) *StoreMetrics {
 		GCPushTxn:                    metric.NewCounter(metaGCPushTxn),
 		GCResolveTotal:               metric.NewCounter(metaGCResolveTotal),
 		GCResolveSuccess:             metric.NewCounter(metaGCResolveSuccess),
-
-		// Mutex timing.
-		//
-		// TODO(tschottdorf): Histograms don't work very well as they were
-		// inherently built in a windowed (i.e. events-discarding) way, which
-		// is not at all the correct way. Discard at one-minute interval which
-		// gives sane (though mathematically nonsensical) results when exposed
-		// at the moment.
-		MuReplicaNanos: metric.NewHistogram(
-			metaMuReplicaNanos, sampleInterval,
-			time.Second.Nanoseconds(), 1,
-		),
-		MuCommandQueueNanos: metric.NewHistogram(
-			metaMuCommandQueueNanos, sampleInterval,
-			time.Second.Nanoseconds(), 1,
-		),
-		MuRaftNanos: metric.NewHistogram(
-			metaMuRaftNanos, sampleInterval,
-			time.Second.Nanoseconds(), 1,
-		),
-		MuStoreNanos: metric.NewHistogram(
-			metaMuStoreNanos, sampleInterval,
-			time.Second.Nanoseconds(), 1,
-		),
-		MuSchedulerNanos: metric.NewHistogram(
-			metaMuSchedulerNanos, time.Minute,
-			time.Second.Nanoseconds(), 1,
-		),
 
 		// Wedge request counters.
 		SlowCommandQueueRequests: metric.NewGauge(metaSlowCommandQueueRequests),

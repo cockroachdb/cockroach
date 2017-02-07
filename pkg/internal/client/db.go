@@ -397,6 +397,15 @@ func (db *DB) CheckConsistency(ctx context.Context, begin, end interface{}, with
 	return getOneErr(db.Run(ctx, b), b)
 }
 
+// WriteBatch applies the operations encoded in a BatchRepr, which is the
+// serialized form of a RocksDB Batch. The command cannot span Ranges and must
+// be run on an empty keyrange.
+func (db *DB) WriteBatch(ctx context.Context, begin, end interface{}, data []byte) error {
+	b := &Batch{}
+	b.writeBatch(begin, end, data)
+	return getOneErr(db.Run(ctx, b), b)
+}
+
 // sendAndFill is a helper which sends the given batch and fills its results,
 // returning the appropriate error which is either from the first failing call,
 // or an "internal" error.
@@ -461,7 +470,7 @@ func (db *DB) Txn(ctx context.Context, retryable func(txn *Txn) error) error {
 	// TODO(dan): This context should, at longest, live for the lifetime of this
 	// method. Add a defered cancel.
 	txn := NewTxn(ctx, *db)
-	txn.SetDebugName("", 1)
+	txn.SetDebugName("unnamed")
 	err := txn.Exec(TxnExecOptions{AutoRetry: true, AutoCommit: true},
 		func(txn *Txn, _ *TxnExecOptions) error {
 			return retryable(txn)

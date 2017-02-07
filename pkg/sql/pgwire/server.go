@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/mon"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -102,13 +103,15 @@ type ServerMetrics struct {
 	internalMemMetrics *sql.MemoryMetrics
 }
 
-func makeServerMetrics(internalMemMetrics *sql.MemoryMetrics) ServerMetrics {
+func makeServerMetrics(
+	internalMemMetrics *sql.MemoryMetrics, histogramWindow time.Duration,
+) ServerMetrics {
 	return ServerMetrics{
 		Conns:              metric.NewCounter(MetaConns),
 		BytesInCount:       metric.NewCounter(MetaBytesIn),
 		BytesOutCount:      metric.NewCounter(MetaBytesOut),
-		ConnMemMetrics:     sql.MakeMemMetrics("conns"),
-		SQLMemMetrics:      sql.MakeMemMetrics("client"),
+		ConnMemMetrics:     sql.MakeMemMetrics("conns", histogramWindow),
+		SQLMemMetrics:      sql.MakeMemMetrics("client", histogramWindow),
 		internalMemMetrics: internalMemMetrics,
 	}
 }
@@ -130,12 +133,13 @@ func MakeServer(
 	executor *sql.Executor,
 	internalMemMetrics *sql.MemoryMetrics,
 	maxSQLMem int64,
+	histogramWindow time.Duration,
 ) *Server {
 	server := &Server{
 		AmbientCtx: ambientCtx,
 		cfg:        cfg,
 		executor:   executor,
-		metrics:    makeServerMetrics(internalMemMetrics),
+		metrics:    makeServerMetrics(internalMemMetrics, histogramWindow),
 	}
 	server.sqlMemoryPool = mon.MakeMonitor("sql",
 		server.metrics.SQLMemMetrics.CurBytesCount,
@@ -281,9 +285,7 @@ func (s *Server) ServeConn(ctx context.Context, conn net.Conn) error {
 			return v3conn.sendInternalError(ErrSSLRequired)
 		}
 		if draining {
-			// TODO(tschottdorf): Likely not handled gracefully by clients.
-			// See #6295.
-			return v3conn.sendInternalError(ErrDraining)
+			return v3conn.sendError(newAdminShutdownErr(errors.New(ErrDraining)))
 		}
 
 		v3conn.sessionArgs.User = parser.Name(v3conn.sessionArgs.User).Normalize()
@@ -306,7 +308,13 @@ func (s *Server) ServeConn(ctx context.Context, conn net.Conn) error {
 				baseSQLMemoryBudget, err)
 		}
 
-		return v3conn.serve(ctx, acc)
+		err := v3conn.serve(ctx, s.IsDraining, acc)
+		// If the error that closed the connection is related to an
+		// administrative shutdown, relay that information to the client.
+		if code, ok := pgerror.PGCode(err); ok && code == pgerror.CodeAdminShutdownError {
+			return v3conn.sendError(err)
+		}
+		return err
 	}
 
 	return errors.Errorf("unknown protocol version %d", version)

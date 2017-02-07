@@ -3429,7 +3429,7 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                                 {
                                     "rule": "optional",
                                     "type": "string",
-                                    "name": "dependencies",
+                                    "name": "revision",
                                     "id": 4,
                                     "options": {
                                         "(gogoproto.nullable)": false
@@ -3461,6 +3461,21 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                                     "options": {
                                         "(gogoproto.nullable)": false
                                     }
+                                },
+                                {
+                                    "rule": "optional",
+                                    "type": "string",
+                                    "name": "type",
+                                    "id": 8,
+                                    "options": {
+                                        "(gogoproto.nullable)": false
+                                    }
+                                },
+                                {
+                                    "rule": "optional",
+                                    "type": "string",
+                                    "name": "dependencies",
+                                    "id": 10000
                                 }
                             ]
                         }

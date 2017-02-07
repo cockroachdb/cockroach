@@ -38,20 +38,20 @@ import (
 // clusters encounter panics. See #10872.
 const backtraceEnabled = false
 
-func initBacktrace(logDir string) *stop.Stopper {
+func initBacktrace(logDir string, options ...stop.Option) *stop.Stopper {
 	if !backtraceEnabled {
-		return stop.NewStopper()
+		return stop.NewStopper(options...)
 	}
 
 	const ptracePath = "/opt/backtrace/bin/ptrace"
 	if _, err := os.Stat(ptracePath); err != nil {
 		log.Infof(context.TODO(), "backtrace disabled: %s", err)
-		return stop.NewStopper()
+		return stop.NewStopper(options...)
 	}
 
 	if err := bcd.EnableTracing(); err != nil {
 		log.Infof(context.TODO(), "unable to enable backtrace: %s", err)
-		return stop.NewStopper()
+		return stop.NewStopper(options...)
 	}
 
 	bcd.UpdateConfig(bcd.GlobalConfig{
@@ -78,6 +78,7 @@ func initBacktrace(logDir string) *stop.Stopper {
 	tracer.AddKV(nil, "cgo-compiler", info.CgoCompiler)
 	tracer.AddKV(nil, "go-version", info.GoVersion)
 	tracer.AddKV(nil, "platform", info.Platform)
+	tracer.AddKV(nil, "type", info.Type)
 	tracer.AddKV(nil, "tag", info.Tag)
 	tracer.AddKV(nil, "time", info.Time)
 
@@ -97,14 +98,17 @@ func initBacktrace(logDir string) *stop.Stopper {
 		os.Exit(code)
 	})
 
-	stopper := stop.NewStopper(stop.OnPanic(func(val interface{}) {
-		err, ok := val.(error)
-		if !ok {
-			err = fmt.Errorf("%v", val)
-		}
-		_ = bcd.Trace(tracer, err, nil)
-		panic(val)
-	}))
+	options = append(options,
+		stop.OnPanic(func(val interface{}) {
+			err, ok := val.(error)
+			if !ok {
+				err = fmt.Errorf("%v", val)
+			}
+			_ = bcd.Trace(tracer, err, nil)
+			panic(val)
+		}))
+
+	stopper := stop.NewStopper(options...)
 
 	// Internally, backtrace uses an external program (/opt/backtrace/bin/ptrace)
 	// to generate traces. We direct the stdout for this program to a file for

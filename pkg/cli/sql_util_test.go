@@ -44,7 +44,8 @@ func TestRunQuery(t *testing.T) {
 	var b bytes.Buffer
 
 	// Non-query statement.
-	if err := runQueryAndFormatResults(conn, &b, makeQuery(`SET DATABASE=system`), true); err != nil {
+	if err := runQueryAndFormatResults(conn, &b, makeQuery(`SET DATABASE=system`),
+		tableDisplayPretty); err != nil {
 		t.Fatal(err)
 	}
 
@@ -62,33 +63,33 @@ SET
 		t.Fatal(err)
 	}
 
-	expectedCols := []string{"Field", "Type", "Null", "Default"}
+	expectedCols := []string{"Field", "Type", "Null", "Default", "Indices"}
 	if !reflect.DeepEqual(expectedCols, cols) {
 		t.Fatalf("expected:\n%v\ngot:\n%v", expectedCols, cols)
 	}
 
 	expectedRows := [][]string{
-		{`parentID`, `INT`, `false`, `NULL`},
-		{`name`, `STRING`, `false`, `NULL`},
-		{`id`, `INT`, `true`, `NULL`},
+		{`parentID`, `INT`, `false`, `NULL`, `{primary}`},
+		{`name`, `STRING`, `false`, `NULL`, `{primary}`},
+		{`id`, `INT`, `true`, `NULL`, `{}`},
 	}
 	if !reflect.DeepEqual(expectedRows, rows) {
 		t.Fatalf("expected:\n%v\ngot:\n%v", expectedRows, rows)
 	}
 
 	if err := runQueryAndFormatResults(conn, &b,
-		makeQuery(`SHOW COLUMNS FROM system.namespace`), true); err != nil {
+		makeQuery(`SHOW COLUMNS FROM system.namespace`), tableDisplayPretty); err != nil {
 		t.Fatal(err)
 	}
 
 	expected = `
-+----------+--------+-------+---------+
-|  Field   |  Type  | Null  | Default |
-+----------+--------+-------+---------+
-| parentID | INT    | false | NULL    |
-| name     | STRING | false | NULL    |
-| id       | INT    | true  | NULL    |
-+----------+--------+-------+---------+
++----------+--------+-------+---------+-----------+
+|  Field   |  Type  | Null  | Default |  Indices  |
++----------+--------+-------+---------+-----------+
+| parentID | INT    | false | NULL    | {primary} |
+| name     | STRING | false | NULL    | {primary} |
+| id       | INT    | true  | NULL    | {}        |
++----------+--------+-------+---------+-----------+
 (3 rows)
 `
 
@@ -99,7 +100,8 @@ SET
 
 	// Test placeholders.
 	if err := runQueryAndFormatResults(conn, &b,
-		makeQuery(`SELECT * FROM system.namespace WHERE name=$1`, "descriptor"), true); err != nil {
+		makeQuery(`SELECT * FROM system.namespace WHERE name=$1`, "descriptor"),
+		tableDisplayPretty); err != nil {
 		t.Fatal(err)
 	}
 
@@ -118,7 +120,7 @@ SET
 
 	// Test multiple results.
 	if err := runQueryAndFormatResults(conn, &b,
-		makeQuery(`SELECT 1; SELECT 2, 3; SELECT 'hello'`), true); err != nil {
+		makeQuery(`SELECT 1; SELECT 2, 3; SELECT 'hello'`), tableDisplayPretty); err != nil {
 		t.Fatal(err)
 	}
 

@@ -396,8 +396,8 @@ func TestReplicaContains(t *testing.T) {
 
 	// This test really only needs a hollow shell of a Replica.
 	r := &Replica{}
-	r.mu.TimedMutex = syncutil.MakeTimedMutex(defaultMuLogger)
-	r.cmdQMu.TimedMutex = syncutil.MakeTimedMutex(defaultMuLogger)
+	r.mu.timedMutex = makeTimedMutex(defaultMuLogger)
+	r.cmdQMu.timedMutex = makeTimedMutex(defaultMuLogger)
 	r.mu.state.Desc = desc
 	r.rangeStr.store(0, desc)
 
@@ -1856,7 +1856,7 @@ func TestLeaseConcurrent(t *testing.T) {
 						// otherwise its context (and tracing span) may be used after the
 						// client cleaned up.
 						delete(tc.repl.mu.proposals, proposal.idKey)
-						proposal.finish(proposalResult{Err: roachpb.NewErrorf(origMsg)})
+						proposal.finishLocked(proposalResult{Err: roachpb.NewErrorf(origMsg)})
 						return
 					}
 					if err := defaultSubmitProposalLocked(tc.repl, proposal); err != nil {
@@ -1993,14 +1993,26 @@ func TestReplicaCommandQueue(t *testing.T) {
 
 	tooLong := 5 * time.Second
 
+	uniqueKeyCounter := int32(0)
+
 	for _, test := range testCases {
-		for _, addNoop := range []bool{false, true} {
+		for _, addReq := range []string{"", "noop", "read", "write"} {
+			if addReq == "write" && propEvalKV {
+				// adding a write changes behavior in propEvalKV until the command
+				// queue changes are all done.
+				continue
+			}
 			for _, localKey := range []bool{false, true} {
 				readWriteLabels := map[bool]string{true: "read", false: "write"}
 				testName := fmt.Sprintf("%s-%s", readWriteLabels[test.cmd1Read],
 					readWriteLabels[test.cmd2Read])
-				if addNoop {
+				switch addReq {
+				case "noop":
 					testName += "-noop"
+				case "read":
+					testName += "-addRead"
+				case "write":
+					testName += "-addWrite"
 				}
 				if localKey {
 					testName += "-local"
@@ -2022,7 +2034,7 @@ func TestReplicaCommandQueue(t *testing.T) {
 						tsc := TestStoreConfig(nil)
 						tsc.TestingKnobs.TestingCommandFilter =
 							func(filterArgs storagebase.FilterArgs) *roachpb.Error {
-								if filterArgs.Hdr.UserPriority == blockingPriority {
+								if filterArgs.Hdr.UserPriority == blockingPriority && filterArgs.Index == 0 {
 									blockingStart <- struct{}{}
 									<-blockingDone
 								}
@@ -2039,8 +2051,27 @@ func TestReplicaCommandQueue(t *testing.T) {
 							ba.Header = header
 							ba.Add(args)
 
-							if addNoop {
-								ba.Add(&roachpb.NoopRequest{})
+							if header.UserPriority == blockingPriority {
+								switch addReq {
+								case "noop":
+									// Add a noop request to make sure that its empty key
+									// doesn't cause additional blocking.
+									ba.Add(&roachpb.NoopRequest{})
+
+								case "read", "write":
+									// Additional reads and writes to unique keys do not
+									// cause additional blocking; the read/write nature of
+									// the keys in the command queue is determined on a
+									// per-request basis.
+									key := roachpb.Key(fmt.Sprintf("unique-key-%s-%d", testName, atomic.AddInt32(&uniqueKeyCounter, 1)))
+									if addReq == "read" {
+										req := getArgs(key)
+										ba.Add(&req)
+									} else {
+										req := putArgs(key, []byte{})
+										ba.Add(&req)
+									}
+								}
 							}
 
 							_, pErr := tc.Sender().Send(context.Background(), ba)
@@ -2306,7 +2337,7 @@ func TestReplicaCommandQueueCancellation(t *testing.T) {
 	// Wait until both commands are in the command queue.
 	testutils.SucceedsSoon(t, func() error {
 		tc.repl.cmdQMu.Lock()
-		chans := tc.repl.cmdQMu.global.getWait(false, roachpb.Span{Key: key1}, roachpb.Span{Key: key2})
+		chans := tc.repl.cmdQMu.global.getWait(false, []roachpb.Span{{Key: key1}, {Key: key2}})
 		tc.repl.cmdQMu.Unlock()
 		if a, e := len(chans), 2; a < e {
 			return errors.Errorf("%d of %d commands in the command queue", a, e)
@@ -2325,6 +2356,42 @@ func TestReplicaCommandQueueCancellation(t *testing.T) {
 	blockingDone <- struct{}{}
 	if pErr := <-cmd1Done; pErr != nil {
 		t.Fatal(pErr)
+	}
+}
+
+// TestReplicaCommandQueueSelfOverlap verifies that self-overlapping
+// batches are allowed, and in particular do not deadlock by
+// introducing command-queue dependencies between the parts of the
+// batch.
+func TestReplicaCommandQueueSelfOverlap(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	tc := testContext{}
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+	tc.Start(t, stopper)
+
+	for _, cmd1Read := range []bool{false, true} {
+		for _, cmd2Read := range []bool{false, true} {
+			name := fmt.Sprintf("%v,%v", cmd1Read, cmd2Read)
+			t.Run(name, func(t *testing.T) {
+				ba := roachpb.BatchRequest{}
+				ba.Add(readOrWriteArgs(roachpb.Key(name), cmd1Read))
+				ba.Add(readOrWriteArgs(roachpb.Key(name), cmd2Read))
+
+				// Set a deadline for nicer error behavior on deadlock.
+				ctx, cancel := context.WithTimeout(context.TODO(), 5*time.Second)
+				defer cancel()
+				_, pErr := tc.Sender().Send(ctx, ba)
+				if pErr != nil {
+					if _, ok := pErr.GetDetail().(*roachpb.WriteTooOldError); ok && !cmd1Read && !cmd2Read {
+						// WriteTooOldError is expected in the write/write case because we don't
+						// allow self-overlapping non-transactional batches.
+					} else {
+						t.Fatal(pErr)
+					}
+				}
+			})
+		}
 	}
 }
 
@@ -5466,7 +5533,7 @@ func TestReplicaLoadSystemConfigSpanIntent(t *testing.T) {
 	}
 
 	// Verify that the intent trips up loading the SystemConfig data.
-	if _, _, err := repl.loadSystemConfigSpan(); err != errSystemConfigIntent {
+	if _, err := repl.loadSystemConfig(context.Background()); err != errSystemConfigIntent {
 		t.Fatal(err)
 	}
 
@@ -5479,13 +5546,13 @@ func TestReplicaLoadSystemConfigSpanIntent(t *testing.T) {
 			return err
 		}
 
-		kvs, _, err := repl.loadSystemConfigSpan()
+		cfg, err := repl.loadSystemConfig(context.Background())
 		if err != nil {
 			return err
 		}
 
-		if len(kvs) != 1 || !bytes.Equal(kvs[0].Key, keys.SystemConfigSpan.Key) {
-			return errors.Errorf("expected only key %s in SystemConfigSpan map: %+v", keys.SystemConfigSpan.Key, kvs)
+		if len(cfg.Values) != 1 || !bytes.Equal(cfg.Values[0].Key, keys.SystemConfigSpan.Key) {
+			return errors.Errorf("expected only key %s in SystemConfigSpan map: %+v", keys.SystemConfigSpan.Key, cfg)
 		}
 		return nil
 	})
@@ -6643,6 +6710,10 @@ func checkValue(ctx context.Context, tc *testContext, key []byte, expectedVal []
 func TestAmbiguousResultErrorOnRetry(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	if testing.Short() {
+		t.Skip("short flag")
+	}
+
 	cfg := TestStoreConfig(nil)
 	tc := testContext{}
 	stopper := stop.NewStopper()
@@ -7064,7 +7135,7 @@ func TestReplicaMetrics(t *testing.T) {
 				rangeCounter:    false,
 				unavailable:     false,
 				underreplicated: false,
-				behindCount:     0,
+				selfBehindCount: 5,
 			}},
 		// Both replicas of a 2-replica range are live, but follower is behind.
 		{2, 1, desc(1, 2), status(1, progress(2, 1)), live(1, 2),
@@ -7155,6 +7226,7 @@ func TestReplicaMetrics(t *testing.T) {
 				rangeCounter:    true,
 				unavailable:     false,
 				underreplicated: false,
+				selfBehindCount: 15,
 			}},
 		// Range has no leader, local replica is the range counter.
 		{3, 3, desc(3, 2, 1), status(0, progress(2, 2, 2)), live(1, 2, 3),
@@ -7163,6 +7235,7 @@ func TestReplicaMetrics(t *testing.T) {
 				rangeCounter:    true,
 				unavailable:     false,
 				underreplicated: false,
+				selfBehindCount: 16,
 			}},
 		// Range has no leader, local replica is not the range counter.
 		{3, 2, desc(1, 2, 3), status(0, progress(2, 2, 2)), live(1, 2, 3),
@@ -7171,6 +7244,7 @@ func TestReplicaMetrics(t *testing.T) {
 				rangeCounter:    false,
 				unavailable:     false,
 				underreplicated: false,
+				selfBehindCount: 17,
 			}},
 		// Range has no leader, local replica is not the range counter.
 		{3, 3, desc(1, 2, 3), status(0, progress(2, 2, 2)), live(1, 2, 3),
@@ -7179,6 +7253,7 @@ func TestReplicaMetrics(t *testing.T) {
 				rangeCounter:    false,
 				unavailable:     false,
 				underreplicated: false,
+				selfBehindCount: 18,
 			}},
 	}
 	for i, c := range testCases {
@@ -7192,7 +7267,7 @@ func TestReplicaMetrics(t *testing.T) {
 			metrics := calcReplicaMetrics(
 				context.Background(), hlc.Timestamp{}, config.SystemConfig{},
 				c.liveness, &c.desc, c.raftStatus, LeaseStatus{},
-				c.storeID, c.expected.quiescent)
+				c.storeID, c.expected.quiescent, int64(i+1))
 			if c.expected != metrics {
 				t.Fatalf("unexpected metrics:\n%s", pretty.Diff(c.expected, metrics))
 			}
@@ -7250,5 +7325,94 @@ func TestCancelPendingCommands(t *testing.T) {
 	pErr := <-errChan
 	if _, ok := pErr.GetDetail().(*roachpb.AmbiguousResultError); !ok {
 		t.Errorf("expected AmbiguousResultError, got %v", pErr)
+	}
+}
+
+func TestMakeTimestampCacheRequest(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	a := roachpb.Key("a")
+	b := roachpb.Key("b")
+	c := roachpb.Key("c")
+	ac := roachpb.Span{Key: a, EndKey: c}
+	testCases := []struct {
+		maxKeys  int64
+		req      roachpb.Request
+		resp     roachpb.Response
+		expected cacheRequest
+	}{
+		{
+			0,
+			&roachpb.ScanRequest{Span: ac},
+			&roachpb.ScanResponse{},
+			cacheRequest{reads: []roachpb.Span{ac}},
+		},
+		{
+			0,
+			&roachpb.ScanRequest{Span: ac},
+			&roachpb.ScanResponse{Rows: []roachpb.KeyValue{{Key: a}}},
+			cacheRequest{reads: []roachpb.Span{ac}},
+		},
+		{
+			2,
+			&roachpb.ScanRequest{Span: ac},
+			&roachpb.ScanResponse{},
+			cacheRequest{reads: []roachpb.Span{ac}},
+		},
+		{
+			2,
+			&roachpb.ScanRequest{Span: ac},
+			&roachpb.ScanResponse{Rows: []roachpb.KeyValue{{Key: a}}},
+			cacheRequest{reads: []roachpb.Span{ac}},
+		},
+		{
+			2,
+			&roachpb.ScanRequest{Span: ac},
+			&roachpb.ScanResponse{Rows: []roachpb.KeyValue{{Key: a}, {Key: b}}},
+			cacheRequest{reads: []roachpb.Span{{Key: a, EndKey: b.Next()}}},
+		},
+		{
+			0,
+			&roachpb.ReverseScanRequest{Span: ac},
+			&roachpb.ReverseScanResponse{},
+			cacheRequest{reads: []roachpb.Span{ac}},
+		},
+		{
+			0,
+			&roachpb.ReverseScanRequest{Span: ac},
+			&roachpb.ReverseScanResponse{Rows: []roachpb.KeyValue{{Key: a}}},
+			cacheRequest{reads: []roachpb.Span{ac}},
+		},
+		{
+			2,
+			&roachpb.ReverseScanRequest{Span: ac},
+			&roachpb.ReverseScanResponse{},
+			cacheRequest{reads: []roachpb.Span{ac}},
+		},
+		{
+			2,
+			&roachpb.ReverseScanRequest{Span: ac},
+			&roachpb.ReverseScanResponse{Rows: []roachpb.KeyValue{{Key: a}}},
+			cacheRequest{reads: []roachpb.Span{ac}},
+		},
+		{
+			2,
+			&roachpb.ReverseScanRequest{Span: ac},
+			&roachpb.ReverseScanResponse{Rows: []roachpb.KeyValue{{Key: c}, {Key: b}}},
+			cacheRequest{reads: []roachpb.Span{{Key: b, EndKey: c}}},
+		},
+	}
+	for _, c := range testCases {
+		t.Run("", func(t *testing.T) {
+			var ba roachpb.BatchRequest
+			var br roachpb.BatchResponse
+			ba.Header.MaxSpanRequestKeys = c.maxKeys
+			ba.Add(c.req)
+			br.Add(c.resp)
+			cr := makeCacheRequest(&ba, &br)
+			if !reflect.DeepEqual(c.expected, cr) {
+				t.Fatalf("%s", pretty.Diff(c.expected, cr))
+			}
+		})
 	}
 }

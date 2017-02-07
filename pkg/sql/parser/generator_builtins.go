@@ -79,6 +79,7 @@ type ValueGenerator interface {
 }
 
 var _ ValueGenerator = &seriesValueGenerator{}
+var _ ValueGenerator = &arrayValueGenerator{}
 
 func initGeneratorBuiltins() {
 	// Add all windows to the Builtins map after a few sanity checks.
@@ -91,10 +92,6 @@ func initGeneratorBuiltins() {
 				panic(fmt.Sprintf("generator functions should be marked with the GeneratorClass "+
 					"function class, found %v", g))
 			}
-			if g.generator == nil {
-				panic(fmt.Sprintf("generator functions should have Generator objects, "+
-					"found %v", g))
-			}
 		}
 		Builtins[k] = v
 	}
@@ -103,27 +100,45 @@ func initGeneratorBuiltins() {
 var generators = map[string][]Builtin{
 	"pg_catalog.generate_series": {
 		makeGeneratorBuiltin(
-			ArgTypes{TypeInt, TypeInt},
+			ArgTypes{{"start", TypeInt}, {"end", TypeInt}},
 			TTuple{TypeInt},
 			makeSeriesGenerator,
-			"Not usable; supported only for ORM compatibility.",
+			"Produces a virtual table containing the integer values from `start` to `end`, inclusive.",
 		),
 		makeGeneratorBuiltin(
-			ArgTypes{TypeInt, TypeInt, TypeInt},
+			ArgTypes{{"start", TypeInt}, {"end", TypeInt}, {"step", TypeInt}},
 			TTuple{TypeInt},
 			makeSeriesGenerator,
-			"Not usable; supported only for ORM compatibility.",
+			"Produces a virtual table containing the integer values from `start` to `end`, inclusive, by increment of `step`.",
+		),
+	},
+	"unnest": {
+		makeGeneratorBuiltinWithReturnType(
+			ArgTypes{{"input", TypeAnyArray}},
+			func(args []TypedExpr) Type {
+				if len(args) == 0 {
+					return unknownReturnType
+				}
+				return TTable{Cols: TTuple{args[0].ResolvedType().(tArray).Typ}}
+			},
+			makeArrayGenerator,
+			"Returns the input array as a set of rows",
 		),
 	},
 }
 
 func makeGeneratorBuiltin(in ArgTypes, ret TTuple, g generatorFactory, info string) Builtin {
+	return makeGeneratorBuiltinWithReturnType(in, fixedReturnType(TTable{Cols: ret}), g, info)
+}
+
+func makeGeneratorBuiltinWithReturnType(
+	in ArgTypes, retType returnTyper, g generatorFactory, info string,
+) Builtin {
 	return Builtin{
 		impure:     true,
 		class:      GeneratorClass,
 		Types:      in,
-		ReturnType: TTable{Cols: ret},
-		generator:  g,
+		ReturnType: retType,
 		fn: func(ctx *EvalContext, args DTuple) (Datum, error) {
 			gen, err := g(ctx, args)
 			if err != nil {
@@ -145,11 +160,11 @@ type seriesValueGenerator struct {
 var errStepCannotBeZero = errors.New("step cannot be 0")
 
 func makeSeriesGenerator(_ *EvalContext, args DTuple) (ValueGenerator, error) {
-	start := int64(*args[0].(*DInt))
-	stop := int64(*args[1].(*DInt))
+	start := int64(MustBeDInt(args[0]))
+	stop := int64(MustBeDInt(args[1]))
 	step := int64(1)
 	if len(args) > 2 {
-		step = int64(*args[2].(*DInt))
+		step = int64(MustBeDInt(args[2]))
 	}
 	if step == 0 {
 		return nil, errStepCannotBeZero
@@ -182,4 +197,42 @@ func (s *seriesValueGenerator) Next() (bool, error) {
 // Values implements the ValueGenerator interface.
 func (s *seriesValueGenerator) Values() DTuple {
 	return DTuple{NewDInt(DInt(s.value))}
+}
+
+func makeArrayGenerator(_ *EvalContext, args DTuple) (ValueGenerator, error) {
+	arr := args[0].(*DArray)
+	return &arrayValueGenerator{array: arr}, nil
+}
+
+// arrayValueGenerator is a value generator that returns each element of an
+// array.
+type arrayValueGenerator struct {
+	array     *DArray
+	nextIndex int
+}
+
+// ColumnTypes implements the ValueGenerator interface.
+func (s *arrayValueGenerator) ColumnTypes() TTuple { return TTuple{s.array.ParamTyp} }
+
+// Start implements the ValueGenerator interface.
+func (s *arrayValueGenerator) Start() error {
+	s.nextIndex = -1
+	return nil
+}
+
+// Close implements the ValueGenerator interface.
+func (s *arrayValueGenerator) Close() {}
+
+// Next implements the ValueGenerator interface.
+func (s *arrayValueGenerator) Next() (bool, error) {
+	s.nextIndex++
+	if s.nextIndex >= s.array.Len() {
+		return false, nil
+	}
+	return true, nil
+}
+
+// Values implements the ValueGenerator interface.
+func (s *arrayValueGenerator) Values() DTuple {
+	return DTuple{s.array.Array[s.nextIndex]}
 }

@@ -80,37 +80,26 @@ func TestClusterFlow(t *testing.T) {
 	// that doesn't matter for the purposes of this test.
 
 	// Start a span (useful to look at spans using Lighstep).
-	sp, err := tracing.JoinOrNew(tracing.NewTracer(), nil, "cluster test")
-	if err != nil {
-		t.Fatal(err)
-	}
+	sp := tracing.NewTracer().StartSpan("cluster test")
 	ctx := opentracing.ContextWithSpan(context.Background(), sp)
 	defer sp.Finish()
 
 	tr1 := TableReaderSpec{
-		Table:         *desc,
-		IndexIdx:      1,
-		OutputColumns: []uint32{0, 1},
-		Spans:         []TableReaderSpan{makeIndexSpan(0, 8)},
+		Table:    *desc,
+		IndexIdx: 1,
+		Spans:    []TableReaderSpan{makeIndexSpan(0, 8)},
 	}
 
 	tr2 := TableReaderSpec{
-		Table:         *desc,
-		IndexIdx:      1,
-		OutputColumns: []uint32{0, 1},
-		Spans:         []TableReaderSpan{makeIndexSpan(8, 12)},
+		Table:    *desc,
+		IndexIdx: 1,
+		Spans:    []TableReaderSpan{makeIndexSpan(8, 12)},
 	}
 
 	tr3 := TableReaderSpec{
-		Table:         *desc,
-		IndexIdx:      1,
-		OutputColumns: []uint32{0, 1},
-		Spans:         []TableReaderSpan{makeIndexSpan(12, 100)},
-	}
-
-	jr := JoinReaderSpec{
-		Table:         *desc,
-		OutputColumns: []uint32{2},
+		Table:    *desc,
+		IndexIdx: 1,
+		Spans:    []TableReaderSpan{makeIndexSpan(12, 100)},
 	}
 
 	txn := client.NewTxn(ctx, *kvDB)
@@ -121,6 +110,9 @@ func TestClusterFlow(t *testing.T) {
 		FlowID: fid,
 		Processors: []ProcessorSpec{{
 			Core: ProcessorCoreUnion{TableReader: &tr1},
+			Post: PostProcessSpec{
+				OutputColumns: []uint32{0, 1},
+			},
 			Output: []OutputRouterSpec{{
 				Type: OutputRouterSpec_PASS_THROUGH,
 				Streams: []StreamEndpointSpec{
@@ -135,6 +127,9 @@ func TestClusterFlow(t *testing.T) {
 		FlowID: fid,
 		Processors: []ProcessorSpec{{
 			Core: ProcessorCoreUnion{TableReader: &tr2},
+			Post: PostProcessSpec{
+				OutputColumns: []uint32{0, 1},
+			},
 			Output: []OutputRouterSpec{{
 				Type: OutputRouterSpec_PASS_THROUGH,
 				Streams: []StreamEndpointSpec{
@@ -150,6 +145,9 @@ func TestClusterFlow(t *testing.T) {
 		Processors: []ProcessorSpec{
 			{
 				Core: ProcessorCoreUnion{TableReader: &tr3},
+				Post: PostProcessSpec{
+					OutputColumns: []uint32{0, 1},
+				},
 				Output: []OutputRouterSpec{{
 					Type: OutputRouterSpec_PASS_THROUGH,
 					Streams: []StreamEndpointSpec{
@@ -167,7 +165,10 @@ func TestClusterFlow(t *testing.T) {
 						{Type: StreamEndpointSpec_LOCAL, StreamID: 2},
 					},
 				}},
-				Core: ProcessorCoreUnion{JoinReader: &jr},
+				Core: ProcessorCoreUnion{JoinReader: &JoinReaderSpec{Table: *desc}},
+				Post: PostProcessSpec{
+					OutputColumns: []uint32{2},
+				},
 				Output: []OutputRouterSpec{{
 					Type:    OutputRouterSpec_PASS_THROUGH,
 					Streams: []StreamEndpointSpec{{Type: StreamEndpointSpec_SYNC_RESPONSE}},
@@ -248,7 +249,7 @@ func TestClusterFlow(t *testing.T) {
 	var results []string
 	for sum := 1; sum <= 50; sum++ {
 		for i := 1; i <= numRows; i++ {
-			if int(*sumDigitsFn(i).(*parser.DInt)) == sum {
+			if int(parser.MustBeDInt(sumDigitsFn(i))) == sum {
 				results = append(results, fmt.Sprintf("['%s']", sqlutils.IntToEnglish(i)))
 			}
 		}

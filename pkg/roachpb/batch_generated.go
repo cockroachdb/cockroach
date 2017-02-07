@@ -5,9 +5,10 @@ package roachpb
 import (
 	"bytes"
 	"fmt"
+	"strconv"
 )
 
-type reqCounts [30]int32
+type reqCounts [31]int32
 
 // getReqCounts returns the number of times each
 // request type appears in the batch.
@@ -75,6 +76,8 @@ func (ba *BatchRequest) getReqCounts() reqCounts {
 			counts[28]++
 		case r.LeaseInfo != nil:
 			counts[29]++
+		case r.WriteBatch != nil:
+			counts[30]++
 		default:
 			panic(fmt.Sprintf("unsupported request: %+v", r))
 		}
@@ -113,6 +116,7 @@ var requestNames = []string{
 	"ChangeFrozen",
 	"TransferLease",
 	"LeaseInfo",
+	"WriteBatch",
 }
 
 // Summary prints a short summary of the requests in a batch.
@@ -121,13 +125,18 @@ func (ba *BatchRequest) Summary() string {
 		return "empty batch"
 	}
 	counts := ba.getReqCounts()
-	var buf bytes.Buffer
+	var buf struct {
+		bytes.Buffer
+		tmp [10]byte
+	}
 	for i, v := range counts {
 		if v != 0 {
 			if buf.Len() > 0 {
 				buf.WriteString(", ")
 			}
-			fmt.Fprintf(&buf, "%d %s", v, requestNames[i])
+			buf.Write(strconv.AppendInt(buf.tmp[:0], int64(v), 10))
+			buf.WriteString(" ")
+			buf.WriteString(requestNames[i])
 		}
 	}
 	return buf.String()
@@ -172,6 +181,7 @@ func (ba *BatchRequest) CreateReply() *BatchResponse {
 	var buf27 []ChangeFrozenResponse
 	var buf28 []RequestLeaseResponse
 	var buf29 []LeaseInfoResponse
+	var buf30 []WriteBatchResponse
 
 	for i, r := range ba.Requests {
 		switch {
@@ -355,6 +365,12 @@ func (ba *BatchRequest) CreateReply() *BatchResponse {
 			}
 			br.Responses[i].LeaseInfo = &buf29[0]
 			buf29 = buf29[1:]
+		case r.WriteBatch != nil:
+			if buf30 == nil {
+				buf30 = make([]WriteBatchResponse, counts[30])
+			}
+			br.Responses[i].WriteBatch = &buf30[0]
+			buf30 = buf30[1:]
 		default:
 			panic(fmt.Sprintf("unsupported request: %+v", r))
 		}

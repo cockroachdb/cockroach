@@ -17,7 +17,6 @@
 package storage
 
 import (
-	"sync/atomic"
 	"time"
 
 	"golang.org/x/net/context"
@@ -97,9 +96,11 @@ type ProposalData struct {
 // invoked here in order to allow the original client to be cancelled
 // and possibly no longer listening to this done channel, and so can't
 // be counted on to invoke endCmds itself.
-func (proposal *ProposalData) finish(pr proposalResult) {
+// replica.mu needs to be held for the replica that's waiting for the
+// application of this proposal.
+func (proposal *ProposalData) finishLocked(pr proposalResult) {
 	if proposal.endCmds != nil {
-		proposal.endCmds.done(pr.Reply, pr.Err, pr.ProposalRetry)
+		proposal.endCmds.doneLocked(pr.Reply, pr.Err, pr.ProposalRetry)
 		proposal.endCmds = nil
 	}
 	proposal.doneCh <- pr
@@ -431,20 +432,19 @@ func (r *Replica) leasePostApply(
 		r.store.maybeGossipOnCapacityChange(ctx, leaseChangeEvent)
 	}
 
-	// Potentially re-gossip if the range contains system data (e.g.
-	// system config or node liveness) and the lease is changing hands
-	// or this is the first time that either system data has been
-	// gossiped.
+	// Potentially re-gossip if the range contains system data (e.g. system
+	// config or node liveness). We need to perform this gossip at startup as
+	// soon as possible. Trying to minimize how often we gossip is a fool's
+	// errand. The node liveness info will be gossiped frequently (every few
+	// seconds) in any case due to the liveness heartbeats. And the system config
+	// will be gossiped rarely because it falls on a range with an epoch-based
+	// range lease that is only reacquired extremely infrequently.
 	if iAmTheLeaseHolder {
-		if leaseChangingHands || atomic.CompareAndSwapInt32(&r.store.haveGossipedSystemConfig, 0, 1) {
-			if err := r.maybeGossipSystemConfig(ctx); err != nil {
-				log.Error(ctx, err)
-			}
+		if err := r.maybeGossipSystemConfig(ctx); err != nil {
+			log.Error(ctx, err)
 		}
-		if leaseChangingHands || atomic.CompareAndSwapInt32(&r.store.haveGossipedNodeLiveness, 0, 1) {
-			if err := r.maybeGossipNodeLiveness(ctx, keys.NodeLivenessSpan); err != nil {
-				log.Error(ctx, err)
-			}
+		if err := r.maybeGossipNodeLiveness(ctx, keys.NodeLivenessSpan); err != nil {
+			log.Error(ctx, err)
 		}
 	}
 }
@@ -665,7 +665,7 @@ func (r *Replica) handleReplicatedEvalResult(
 }
 
 func (r *Replica) handleLocalEvalResult(
-	ctx context.Context, originReplica roachpb.ReplicaDescriptor, lResult LocalEvalResult,
+	ctx context.Context, lResult LocalEvalResult,
 ) (shouldAssert bool) {
 	// Fields for which no action is taken in this method are zeroed so that
 	// they don't trigger an assertion at the end of the method (which checks
@@ -721,26 +721,22 @@ func (r *Replica) handleLocalEvalResult(
 		}
 		lResult.maybeGossipSystemConfig = false
 	}
-
-	if originReplica.StoreID == r.store.StoreID() {
-		if lResult.leaseMetricsResult != nil {
-			switch metric := *lResult.leaseMetricsResult; metric {
-			case leaseRequestSuccess, leaseRequestError:
-				r.store.metrics.leaseRequestComplete(metric == leaseRequestSuccess)
-			case leaseTransferSuccess, leaseTransferError:
-				r.store.metrics.leaseTransferComplete(metric == leaseTransferSuccess)
-			}
+	if lResult.maybeGossipNodeLiveness != nil {
+		if err := r.maybeGossipNodeLiveness(ctx, *lResult.maybeGossipNodeLiveness); err != nil {
+			log.Error(ctx, err)
 		}
-		if lResult.maybeGossipNodeLiveness != nil {
-			if err := r.maybeGossipNodeLiveness(ctx, *lResult.maybeGossipNodeLiveness); err != nil {
-				log.Error(ctx, err)
-			}
-		}
+		lResult.maybeGossipNodeLiveness = nil
 	}
-	// Satisfy the assertions for all of the items processed only on the
-	// proposer (the block just above).
-	lResult.leaseMetricsResult = nil
-	lResult.maybeGossipNodeLiveness = nil
+
+	if lResult.leaseMetricsResult != nil {
+		switch metric := *lResult.leaseMetricsResult; metric {
+		case leaseRequestSuccess, leaseRequestError:
+			r.store.metrics.leaseRequestComplete(metric == leaseRequestSuccess)
+		case leaseTransferSuccess, leaseTransferError:
+			r.store.metrics.leaseTransferComplete(metric == leaseTransferSuccess)
+		}
+		lResult.leaseMetricsResult = nil
+	}
 
 	if (lResult != LocalEvalResult{}) {
 		log.Fatalf(ctx, "unhandled field in LocalEvalResult: %s", pretty.Diff(lResult, LocalEvalResult{}))
@@ -750,10 +746,7 @@ func (r *Replica) handleLocalEvalResult(
 }
 
 func (r *Replica) handleEvalResult(
-	ctx context.Context,
-	originReplica roachpb.ReplicaDescriptor,
-	lResult *LocalEvalResult,
-	rResult *storagebase.ReplicatedEvalResult,
+	ctx context.Context, lResult *LocalEvalResult, rResult *storagebase.ReplicatedEvalResult,
 ) {
 	// Careful: `shouldAssert = f() || g()` will not run both if `f()` is true.
 	shouldAssert := false
@@ -761,7 +754,7 @@ func (r *Replica) handleEvalResult(
 		shouldAssert = r.handleReplicatedEvalResult(ctx, *rResult) || shouldAssert
 	}
 	if lResult != nil {
-		shouldAssert = r.handleLocalEvalResult(ctx, originReplica, *lResult) || shouldAssert
+		shouldAssert = r.handleLocalEvalResult(ctx, *lResult) || shouldAssert
 	}
 	if shouldAssert {
 		// Assert that the on-disk state doesn't diverge from the in-memory

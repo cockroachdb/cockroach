@@ -47,23 +47,23 @@ type valueGenerator struct {
 
 // makeGenerator creates a valueGenerator instance that wraps a call to a
 // generator function.
-func (p *planner) makeGenerator(t *parser.FuncExpr) (planNode, string, error) {
+func (p *planner) makeGenerator(t *parser.FuncExpr) (planNode, error) {
 	origName := t.Func.String()
 
 	if err := p.parser.AssertNoAggregationOrWindowing(t, "FROM", p.session.SearchPath); err != nil {
-		return nil, "", err
+		return nil, err
 	}
 
 	normalized, err := p.analyzeExpr(
 		t, multiSourceInfo{}, parser.IndexedVarHelper{}, parser.TypeAny, false, "FROM",
 	)
 	if err != nil {
-		return nil, "", err
+		return nil, err
 	}
 
 	tType, ok := normalized.ResolvedType().(parser.TTable)
 	if !ok {
-		return nil, "", errors.Errorf("FROM expression is not a generator: %s", t)
+		return nil, errors.Errorf("FROM expression is not a generator: %s", t)
 	}
 
 	var columns ResultColumns
@@ -83,7 +83,7 @@ func (p *planner) makeGenerator(t *parser.FuncExpr) (planNode, string, error) {
 		p:       p,
 		expr:    normalized,
 		columns: columns,
-	}, origName, nil
+	}, nil
 }
 
 func (n *valueGenerator) Start() error {
@@ -123,8 +123,7 @@ func (n *valueGenerator) DebugValues() debugValues {
 	}
 }
 
-func (n *valueGenerator) Ordering() orderingInfo       { return orderingInfo{} }
-func (n *valueGenerator) Values() parser.DTuple        { return n.gen.Values() }
-func (n *valueGenerator) MarkDebug(_ explainMode)      {}
-func (n *valueGenerator) Columns() ResultColumns       { return n.columns }
-func (n *valueGenerator) SetLimitHint(_ int64, _ bool) {}
+func (n *valueGenerator) Ordering() orderingInfo  { return orderingInfo{} }
+func (n *valueGenerator) Values() parser.DTuple   { return n.gen.Values() }
+func (n *valueGenerator) MarkDebug(_ explainMode) {}
+func (n *valueGenerator) Columns() ResultColumns  { return n.columns }

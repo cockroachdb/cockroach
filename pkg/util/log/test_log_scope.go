@@ -17,9 +17,11 @@
 package log
 
 import (
+	"fmt"
 	"io"
 	"io/ioutil"
 	"os"
+	"runtime"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/util/caller"
@@ -60,10 +62,20 @@ func Scope(t tShim, testName string) TestLogScope {
 	if err := dirTestOverride(tempDir); err != nil {
 		t.Fatal(err)
 	}
-	if err := EnableLogFileOutput(tempDir, Severity_ERROR); err != nil {
+	if err := enableLogFileOutput(tempDir, Severity_ERROR); err != nil {
 		t.Fatal(err)
 	}
 	return TestLogScope(tempDir)
+}
+
+// enableLogFileOutput turns on logging using the specified directory.
+// For unittesting only.
+func enableLogFileOutput(dir string, stderrSeverity Severity) error {
+	logging.mu.Lock()
+	defer logging.mu.Unlock()
+	logging.toStderr = false
+	logging.stderrThreshold = stderrSeverity
+	return logDir.Set(dir)
 }
 
 // Close cleans up a TestLogScope. The directory and its contents are
@@ -79,10 +91,10 @@ func (l TestLogScope) Close(t tShim) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if t.Failed() && !emptyDir {
+		if (t.Failed() || calledDuringPanic()) && !emptyDir {
 			// If the test failed, we keep the log files for further investigation,
 			// but only if there were any.
-			t.Errorf("test log files left over in: %s", l)
+			fmt.Fprintf(os.Stderr, "test log files left over in: %s\n", l)
 		} else {
 			// Clean up.
 			if err := os.RemoveAll(string(l)); err != nil {
@@ -94,6 +106,24 @@ func (l TestLogScope) Close(t tShim) {
 	if err := dirTestOverride(""); err != nil {
 		t.Fatal(err)
 	}
+}
+
+// calledDuringPanic returns true if panic() is one of its callers.
+func calledDuringPanic() bool {
+	pc := make([]uintptr, 40)
+	nCallers := runtime.Callers(2, pc[:])
+	frames := runtime.CallersFrames(pc)
+
+	for i := 0; i < nCallers; i++ {
+		f, more := frames.Next()
+		if f.Function == "runtime.gopanic" {
+			return true
+		}
+		if !more {
+			break
+		}
+	}
+	return false
 }
 
 // dirTestOverride sets the default value for the logging output directory

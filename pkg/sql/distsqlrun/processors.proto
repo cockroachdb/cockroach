@@ -30,9 +30,92 @@ import "cockroach/pkg/sql/sqlbase/encoded_datum.proto";
 import "cockroach/pkg/sql/distsqlrun/data.proto";
 import "gogoproto/gogo.proto";
 
-// NoopCoreSpec indicates a "no-op" processor core. This is used when only a
-// synchronizer is required, e.g. at the final endpoint.
+
+// Each processor has the following components:
+//  - one or more input synchronizers; each one merges rows between one or more
+//    input streams;
+//
+//  - a processor "core" which encapsulates the inner logic of each processor;
+//
+//  - a post-processing stage which allows "inline" post-processing on results
+//    (like projection or filtering);
+//
+//  - one or more output synchronizers; each one directs rows to one or more
+//  output streams.
+//
+//
+// == Internal columns ==
+//
+// The core outputs rows of a certain schema to the post-processing stage. We
+// call this the "internal schema" (or "internal columns") and it differs for
+// each type of core. Column indices in a PostProcessSpec refers to these
+// internal columns. Some columns may be unused by the post-processing stage;
+// processor implementations are internally optimized to not produce values for
+// such unneded columns.
+message ProcessorSpec {
+  // In most cases, there is one input.
+  repeated InputSyncSpec input = 1 [(gogoproto.nullable) = false];
+
+  optional ProcessorCoreUnion core = 2 [(gogoproto.nullable) = false];
+
+  optional PostProcessSpec post = 4 [(gogoproto.nullable) = false];
+
+  // In most cases, there is one output.
+  repeated OutputRouterSpec output = 3 [(gogoproto.nullable) = false];
+}
+
+// PostProcessSpec describes the processing required to obtain the output
+// (filtering, projection). It operates on the internal schema of the processor
+// (see ProcessorSpec).
+message PostProcessSpec {
+  // A filtering expression which references the internal columns of the
+  // processor via ordinal references (@1, @2, etc).
+  optional Expression filter = 1 [(gogoproto.nullable) = false];
+
+  // The output columns describe a projection on the internal set of columns;
+  // only the columns in this list will be emitted. This can be omitted if the
+  // set of output columns is a trivial identity (in which case all the internal
+  // columns will be emitted).
+  //
+  // Cannot be set at the same time with render expressions.
+  repeated uint32 output_columns = 2 [packed = true];
+
+  // If set, the output is the result of rendering these expressions. The
+  // expressions reference the internal columns of the processor.
+  //
+  // Cannot be set at the same time with output columns.
+  repeated Expression render_exprs = 3 [(gogoproto.nullable) = false];
+}
+
+message ProcessorCoreUnion {
+  option (gogoproto.onlyone) = true;
+
+  optional NoopCoreSpec noop = 1;
+  optional TableReaderSpec tableReader = 2;
+  optional JoinReaderSpec joinReader = 3;
+  optional SorterSpec sorter = 4;
+  optional AggregatorSpec aggregator = 5;
+  optional DistinctSpec distinct = 7;
+  optional MergeJoinerSpec mergeJoiner = 8;
+  optional HashJoinerSpec hashJoiner = 9;
+  optional ValuesCoreSpec values = 10;
+}
+
+// NoopCoreSpec indicates a "no-op" processor core. This is used when we just
+// need post-processing or when only a synchronizer is required (e.g. at the
+// final endpoint).
 message NoopCoreSpec {
+}
+
+// ValuesCoreSpec is the core of a processor that has no inputs and generates
+// "pre-canned" rows. This is not intended to be used for very large datasets.
+message ValuesCoreSpec {
+  // There is one DatumInfo for each element in a row.
+  repeated DatumInfo columns = 1 [(gogoproto.nullable) = false];
+
+  // Each raw block encodes one or more data rows; each datum is encoded
+  // according to the corresponding DatumInfo.
+  repeated bytes raw_bytes = 2;
 }
 
 message TableReaderSpan {
@@ -45,6 +128,10 @@ message TableReaderSpan {
 // TableReaderSpec is the specification for a "table reader". A table reader
 // performs KV operations to retrieve rows for a table and outputs the desired
 // columns of the rows that pass a filter expression.
+//
+// The "internal columns" of a TableReader (see ProcessorSpec) are all the
+// columns of the table. Internally, only the values for the columns needed by
+// the post-processing stage are be populated.
 message TableReaderSpec {
   optional sqlbase.TableDescriptor table = 1 [(gogoproto.nullable) = false];
   // If 0, we use the primary index. If non-zero, we use the index_idx-th index,
@@ -52,15 +139,6 @@ message TableReaderSpec {
   optional uint32 index_idx = 2 [(gogoproto.nullable) = false];
   optional bool reverse = 3 [(gogoproto.nullable) = false];
   repeated TableReaderSpan spans = 4 [(gogoproto.nullable) = false];
-
-  // The filter expression references the columns in the table (table.columns)
-  // via ordinal references (@1, @2, etc). If a secondary index is used, the
-  // columns that are not available as part of the index cannot be referenced.
-  optional Expression filter = 5 [(gogoproto.nullable) = false];
-
-  // The table reader will only produce values for these columns, referenced by
-  // their indices in table.columns.
-  repeated uint32 output_columns = 6 [packed = true];
 
   // If nonzero, the table reader only needs to return this many rows.
   optional int64 hard_limit = 8 [(gogoproto.nullable) = false];
@@ -73,6 +151,10 @@ message TableReaderSpec {
 // JoinReaderSpec is the specification for a "join reader". A join reader
 // performs KV operations to retrieve specific rows that correspond to the
 // values in the input stream (join by lookup).
+//
+// The "internal columns" of a JoinReader (see ProcessorSpec) are all the
+// columns of the table. Internally, only the values for the columns needed by
+// the post-processing stage are be populated.
 message JoinReaderSpec {
   optional sqlbase.TableDescriptor table = 1 [(gogoproto.nullable) = false];
 
@@ -80,15 +162,6 @@ message JoinReaderSpec {
   // for each primary key.
   // TODO(radu): figure out the correct semantics when joining with an index.
   optional uint32 index_idx = 2 [(gogoproto.nullable) = false];
-
-  // The filter expression references the columns in the table (table.columns)
-  // via ordinal references (@1, @2, etc). If a secondary index is used, the
-  // columns that are not available as part of the index cannot be referenced.
-  optional Expression filter = 3 [(gogoproto.nullable) = false];
-
-  // The table reader will only produce values for these columns, referenced by
-  // their indices in table.columns.
-  repeated uint32 output_columns = 4 [packed = true];
 
   // TODO(radu): add field to describe the input columns and allow plumbing
   // through values that aren't used for the lookup.
@@ -98,6 +171,9 @@ message JoinReaderSpec {
 // aggregator sorts elements in the input stream providing a certain output
 // order guarantee regardless of the input ordering. The output ordering is
 // according to a configurable set of columns.
+//
+// The "internal columns" of a Sorter (see ProcessorSpec) are the same as the
+// input columns.
 message SorterSpec {
   optional Ordering output_ordering = 1 [(gogoproto.nullable) = false];
 
@@ -109,21 +185,6 @@ message SorterSpec {
   // Limits can be optionally specified to allow for further optimizations
   // taking advantage of the fact that only the top 'k' results are needed.
   optional int64 limit = 3 [(gogoproto.nullable) = false];
-}
-
-// EvaluatorSpec is the specification for an "evaluator", a fully
-// programmable no-grouping aggregator. It runs a 'program' on each individual
-// row and is restricted to operating on one row of data at a time.
-// The 'program' is a set of expressions evaluated in order, the output
-// schema therefore consists of the results of evaluating each of these
-// expressions on the input row.
-//
-// TODO(irfansharif): Add support for an optional output filter expression.
-// The filter expression would reference the columns in the row via @1, @2,
-// etc., possibly optimizing if filtering on expressions common to the
-// 'program'.
-message EvaluatorSpec {
-  repeated Expression exprs = 1 [(gogoproto.nullable) = false];
 }
 
 message DistinctSpec {
@@ -150,7 +211,11 @@ enum JoinType {
 // same ordering on columns C1, C2 and C5, C4 respectively. For example: C1+,C2-
 // and C5+,C4-.
 //
-// It is guaranteed that the results preserve this ordering.
+// The "internal columns" of a MergeJoiner (see ProcessorSpec) are the
+// concatenation of left input columns and right input columns. If the left
+// input has N columns and the right input has M columns, the first N columns
+// contain values from the left side and the following M columns contain values
+// from the right side.
 message MergeJoinerSpec {
   // The streams must be ordered according to the columns that have equality
   // constraints. The first column of the left ordering is constrained to be
@@ -170,10 +235,6 @@ message MergeJoinerSpec {
 
   optional JoinType type = 6 [(gogoproto.nullable) = false];
 
-  // Columns for the output stream. Assuming that the left stream has N columns
-  // and the right stream has M columns, column indices 0 to (N-1) refer to left
-  // stream columns and indices N to (N+M-1) refer to right stream columns.
-  repeated uint32 output_columns = 7 [packed = true];
 }
 
 // HashJoinerSpec is the specification for a hash join processor. The processor
@@ -185,6 +246,12 @@ message MergeJoinerSpec {
 // guaranteed that results that involve the left stream preserve the ordering;
 // i.e. all results that stem from left row (i) precede results that stem from
 // left row (i+1).
+//
+// The "internal columns" of a HashJoiner (see ProcessorSpec) are the
+// concatenation of left input columns and right input columns. If the left
+// input has N columns and the right input has M columns, the first N columns
+// contain values from the left side and the following M columns contain values
+// from the right side.
 message HashJoinerSpec {
   // The join constraints certain columns from the left stream to equal
   // corresponding columns on the right stream. These must have the same length.
@@ -199,11 +266,6 @@ message HashJoinerSpec {
   optional Expression on_expr = 5 [(gogoproto.nullable) = false];
 
   optional JoinType type = 6 [(gogoproto.nullable) = false];
-
-  // Columns for the output stream. Assuming that the left stream has N columns
-  // and the right stream has M columns, column indices 0 to (N-1) refer to left
-  // stream columns and indices N to (N+M-1) refer to right stream columns.
-  repeated uint32 output_columns = 7 [packed = true];
 }
 
 // AggregatorSpec is the specification for an "aggregator" (processor core
@@ -212,8 +274,7 @@ message HashJoinerSpec {
 // for each group. The group is configured using the group key. The aggregator
 // can be configured with one or more aggregation functions.
 //
-// The aggregator's output schema consists of the group key, plus a
-// configurable subset of the generated aggregated values.
+// The "internal columns" of an Aggregator map 1-1 to the aggregations.
 message AggregatorSpec {
   // These mirror the aggregate functions supported by sql/parser. See
   // sql/parser/aggregate_builtins.go.
@@ -249,35 +310,9 @@ message AggregatorSpec {
 
   // The group key is a subset of the columns in the input stream schema on the
   // basis of which we define our groups.
-  repeated uint32 group_cols = 2;
+  repeated uint32 group_cols = 2 [packed = true];
 
   repeated Aggregation aggregations = 3 [(gogoproto.nullable) = false];
-}
-
-message ProcessorCoreUnion {
-  option (gogoproto.onlyone) = true;
-
-  optional NoopCoreSpec noop = 1;
-  optional TableReaderSpec tableReader = 2;
-  optional JoinReaderSpec joinReader = 3;
-  optional SorterSpec sorter = 4;
-  optional AggregatorSpec aggregator = 5;
-  optional EvaluatorSpec evaluator = 6;
-  optional DistinctSpec distinct = 7;
-  optional MergeJoinerSpec mergeJoiner = 8;
-  optional HashJoinerSpec hashJoiner = 9;
-  // TODO(radu): other "processor core" types will go here.
-  // TODO(irfansharif): add join, set operations, etc. from #7587
-}
-
-message ProcessorSpec {
-  // In most cases, there is one input.
-  repeated InputSyncSpec input = 1 [(gogoproto.nullable) = false];
-
-  optional ProcessorCoreUnion core = 2 [(gogoproto.nullable) = false];
-
-  // In most cases, there is one output.
-  repeated OutputRouterSpec output = 3 [(gogoproto.nullable) = false];
 }
 
 // FlowSpec describes a "flow" which is a subgraph of a distributed SQL

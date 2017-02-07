@@ -75,6 +75,13 @@ const (
 
 func init() {
 	rocksdb.Logger = func(format string, args ...interface{}) { log.Infof(context.TODO(), format, args...) }
+	rocksdb.DBKeyPrinter = func(k []byte, wall_time int64, logical int32) string {
+		mvccKey := MVCCKey{
+			Key:       k,
+			Timestamp: hlc.Timestamp{WallTime: wall_time, Logical: logical},
+		}
+		return mvccKey.String()
+	}
 }
 
 // SSTableInfo contains metadata about a single RocksDB sstable. This mirrors
@@ -457,8 +464,14 @@ func (r *RocksDB) Clear(key MVCCKey) error {
 
 // ClearRange removes a set of entries, from start (inclusive) to end
 // (exclusive).
-func (r *RocksDB) ClearRange(iter Iterator, start, end MVCCKey) error {
-	return dbClearRange(r.rdb, iter, start, end)
+func (r *RocksDB) ClearRange(start, end MVCCKey) error {
+	return dbClearRange(r.rdb, start, end)
+}
+
+// ClearIterRange removes a set of entries, from start (inclusive) to end
+// (exclusive).
+func (r *RocksDB) ClearIterRange(iter Iterator, start, end MVCCKey) error {
+	return dbClearIterRange(r.rdb, iter, start, end)
 }
 
 // Iterate iterates from start to end keys, invoking f on each
@@ -731,7 +744,11 @@ func (r *distinctBatch) NewIterator(prefix bool) Iterator {
 		iter = &r.prefixIter
 	}
 	if iter.rocksDBIterator.iter == nil {
-		iter.rocksDBIterator.init(r.batch, prefix, r)
+		if r.writeOnly {
+			iter.rocksDBIterator.init(r.parent.rdb, prefix, r)
+		} else {
+			iter.rocksDBIterator.init(r.batch, prefix, r)
+		}
 	}
 	if iter.inuse {
 		panic("iterator already in use")
@@ -741,12 +758,18 @@ func (r *distinctBatch) NewIterator(prefix bool) Iterator {
 }
 
 func (r *distinctBatch) Get(key MVCCKey) ([]byte, error) {
+	if r.writeOnly {
+		return dbGet(r.parent.rdb, key)
+	}
 	return dbGet(r.batch, key)
 }
 
 func (r *distinctBatch) GetProto(
 	key MVCCKey, msg proto.Message,
 ) (ok bool, keyBytes, valBytes int64, err error) {
+	if r.writeOnly {
+		return dbGetProto(r.parent.rdb, key, msg)
+	}
 	return dbGetProto(r.batch, key, msg)
 }
 
@@ -769,10 +792,19 @@ func (r *distinctBatch) Clear(key MVCCKey) error {
 	return nil
 }
 
-func (r *distinctBatch) ClearRange(iter Iterator, start, end MVCCKey) error {
+func (r *distinctBatch) ClearRange(start, end MVCCKey) error {
+	if !r.writeOnly {
+		panic("readable batch")
+	}
 	r.flushMutations()
 	r.flushes++ // make sure that Repr() doesn't take a shortcut
-	return dbClearRange(r.batch, iter, start, end)
+	return dbClearRange(r.batch, start, end)
+}
+
+func (r *distinctBatch) ClearIterRange(iter Iterator, start, end MVCCKey) error {
+	r.flushMutations()
+	r.flushes++ // make sure that Repr() doesn't take a shortcut
+	return dbClearIterRange(r.batch, iter, start, end)
 }
 
 func (r *distinctBatch) close() {
@@ -986,13 +1018,25 @@ func (r *rocksDBBatch) Clear(key MVCCKey) error {
 	return nil
 }
 
-func (r *rocksDBBatch) ClearRange(iter Iterator, start, end MVCCKey) error {
+func (r *rocksDBBatch) ClearRange(start, end MVCCKey) error {
+	if !r.writeOnly {
+		panic("readable batch")
+	}
 	if r.distinctOpen {
 		panic("distinct batch open")
 	}
 	r.flushMutations()
 	r.flushes++ // make sure that Repr() doesn't take a shortcut
-	return dbClearRange(r.batch, iter, start, end)
+	return dbClearRange(r.batch, start, end)
+}
+
+func (r *rocksDBBatch) ClearIterRange(iter Iterator, start, end MVCCKey) error {
+	if r.distinctOpen {
+		panic("distinct batch open")
+	}
+	r.flushMutations()
+	r.flushes++ // make sure that Repr() doesn't take a shortcut
+	return dbClearIterRange(r.batch, iter, start, end)
 }
 
 // NewIterator returns an iterator over the batch and underlying engine. Note
@@ -1137,6 +1181,9 @@ func (r *rocksDBIterator) getIter() *C.DBIterator {
 
 func (r *rocksDBIterator) init(rdb *C.DBEngine, prefix bool, engine Reader) {
 	r.iter = C.DBNewIter(rdb, C.bool(prefix))
+	if r.iter == nil {
+		panic("unable to create iterator")
+	}
 	r.engine = engine
 }
 
@@ -1265,23 +1312,27 @@ func (r *rocksDBIterator) ComputeStats(
 	start, end MVCCKey, nowNanos int64,
 ) (enginepb.MVCCStats, error) {
 	result := C.MVCCComputeStats(r.iter, goToCKey(start), goToCKey(end), C.int64_t(nowNanos))
+	return cStatsToGoStats(result, nowNanos)
+}
+
+func cStatsToGoStats(stats C.MVCCStatsResult, nowNanos int64) (enginepb.MVCCStats, error) {
 	ms := enginepb.MVCCStats{}
-	if err := statusToError(result.status); err != nil {
+	if err := statusToError(stats.status); err != nil {
 		return ms, err
 	}
 	ms.ContainsEstimates = false
-	ms.LiveBytes = int64(result.live_bytes)
-	ms.KeyBytes = int64(result.key_bytes)
-	ms.ValBytes = int64(result.val_bytes)
-	ms.IntentBytes = int64(result.intent_bytes)
-	ms.LiveCount = int64(result.live_count)
-	ms.KeyCount = int64(result.key_count)
-	ms.ValCount = int64(result.val_count)
-	ms.IntentCount = int64(result.intent_count)
-	ms.IntentAge = int64(result.intent_age)
-	ms.GCBytesAge = int64(result.gc_bytes_age)
-	ms.SysBytes = int64(result.sys_bytes)
-	ms.SysCount = int64(result.sys_count)
+	ms.LiveBytes = int64(stats.live_bytes)
+	ms.KeyBytes = int64(stats.key_bytes)
+	ms.ValBytes = int64(stats.val_bytes)
+	ms.IntentBytes = int64(stats.intent_bytes)
+	ms.LiveCount = int64(stats.live_count)
+	ms.KeyCount = int64(stats.key_count)
+	ms.ValCount = int64(stats.val_count)
+	ms.IntentCount = int64(stats.intent_count)
+	ms.IntentAge = int64(stats.intent_age)
+	ms.GCBytesAge = int64(stats.gc_bytes_age)
+	ms.SysBytes = int64(stats.sys_bytes)
+	ms.SysCount = int64(stats.sys_count)
 	ms.LastUpdateNanos = nowNanos
 	return ms, nil
 }
@@ -1473,12 +1524,16 @@ func dbClear(rdb *C.DBEngine, key MVCCKey) error {
 	return statusToError(C.DBDelete(rdb, goToCKey(key)))
 }
 
-func dbClearRange(rdb *C.DBEngine, iter Iterator, start, end MVCCKey) error {
+func dbClearRange(rdb *C.DBEngine, start, end MVCCKey) error {
+	return statusToError(C.DBDeleteRange(rdb, goToCKey(start), goToCKey(end)))
+}
+
+func dbClearIterRange(rdb *C.DBEngine, iter Iterator, start, end MVCCKey) error {
 	getter, ok := iter.(dbIteratorGetter)
 	if !ok {
 		return errors.Errorf("%T is not a RocksDB iterator", iter)
 	}
-	return statusToError(C.DBDeleteRange(rdb, getter.getIter(), goToCKey(start), goToCKey(end)))
+	return statusToError(C.DBDeleteIterRange(rdb, getter.getIter(), goToCKey(start), goToCKey(end)))
 }
 
 func dbIterate(
@@ -1610,4 +1665,22 @@ func (fw *RocksDBSstFileWriter) Close() error {
 	err := statusToError(C.DBSstFileWriterClose(fw.fw))
 	fw.fw = nil
 	return err
+}
+
+// RunLDB runs RocksDB's ldb command-line tool. The passed
+// command-line arguments should not include argv[0].
+func RunLDB(args []string) {
+	// Prepend "ldb" as argv[0].
+	args = append([]string{"ldb"}, args...)
+	argv := make([]*C.char, len(args))
+	for i := range args {
+		argv[i] = C.CString(args[i])
+	}
+	defer func() {
+		for i := range argv {
+			C.free(unsafe.Pointer(argv[i]))
+		}
+	}()
+
+	C.DBRunLDB(C.int(len(argv)), &argv[0])
 }

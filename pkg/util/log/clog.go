@@ -26,6 +26,7 @@ import (
 	"fmt"
 	"io"
 	stdLog "log"
+	"math"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -577,8 +578,10 @@ func init() {
 
 	logging.setVState(0, nil, false)
 	logging.exitFunc = os.Exit
+	logging.gcNotify = make(chan struct{}, 1)
 
 	go logging.flushDaemon()
+	go logging.gcDaemon()
 }
 
 // Flush flushes all pending log I/O.
@@ -624,9 +627,10 @@ type loggingT struct {
 	traceLocation traceLocation
 	// These flags are modified only under lock, although verbosity may be fetched
 	// safely using atomic.LoadInt32.
-	vmodule   moduleSpec // The state of the --vmodule flag.
-	verbosity level      // V logging level, the value of the --verbosity flag/
-	exitFunc  func(int)  // func that will be called on fatal errors
+	vmodule   moduleSpec    // The state of the --vmodule flag.
+	verbosity level         // V logging level, the value of the --verbosity flag/
+	exitFunc  func(int)     // func that will be called on fatal errors
+	gcNotify  chan struct{} // notify GC daemon that a new log file was created
 }
 
 // buffer holds a byte Buffer for reuse. The zero value is ready for use.
@@ -934,7 +938,9 @@ func (sb *syncBuffer) rotateFile(now time.Time) error {
 		fmt.Sprintf("[config] running on machine: %s\n", host),
 		fmt.Sprintf("[config] binary: %s\n", build.GetInfo().Short()),
 		fmt.Sprintf("[config] arguments: %s\n", os.Args),
-		fmt.Sprintf("line format: [IWEF]yymmdd hh:mm:ss.uuuuuu goid file:line msg\n"),
+		// Including a non-ascii character in the first 1024 bytes of the log helps
+		// viewers that attempt to guess the character encoding.
+		fmt.Sprintf("line format: [IWEF]yymmdd hh:mm:ss.uuuuuu goid file:line msg utf8=\u2713\n"),
 	} {
 		buf := formatLogEntry(Entry{
 			Severity:  sb.sev,
@@ -952,6 +958,11 @@ func (sb *syncBuffer) rotateFile(now time.Time) error {
 		}
 		logging.putBuffer(buf)
 	}
+
+	select {
+	case logging.gcNotify <- struct{}{}:
+	default:
+	}
 	return nil
 }
 
@@ -959,21 +970,6 @@ func (sb *syncBuffer) rotateFile(now time.Time) error {
 // so that log records can accumulate without the logging thread blocking
 // on disk I/O. The flushDaemon will block instead.
 const bufferSize = 256 * 1024
-
-func (l *loggingT) removeFilesLocked() error {
-	for s := Severity_FATAL; s >= Severity_INFO; s-- {
-		if sb, ok := l.file[s].(*syncBuffer); ok {
-			if err := sb.file.Close(); err != nil {
-				return err
-			}
-			if err := os.Remove(sb.file.Name()); err != nil {
-				return err
-			}
-		}
-		l.file[s] = nil
-	}
-	return nil
-}
 
 func (l *loggingT) closeFilesLocked() error {
 	for s := Severity_FATAL; s >= Severity_INFO; s-- {
@@ -1034,6 +1030,49 @@ func (l *loggingT) flushAll() {
 		if file != nil {
 			_ = file.Flush() // ignore error
 			_ = file.Sync()  // ignore error
+		}
+	}
+}
+
+func (l *loggingT) gcDaemon() {
+	l.gcOldFiles()
+	for range l.gcNotify {
+		l.gcOldFiles()
+	}
+}
+
+func (l *loggingT) gcOldFiles() {
+	dir, err := logDir.get()
+	if err != nil {
+		// No log directory configured. Nothing to do.
+		return
+	}
+
+	allFiles, err := ListLogFiles()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "unable to GC log files: %s\n", err)
+		return
+	}
+
+	maxSizePerSeverity := atomic.LoadUint64(&MaxSizePerSeverity)
+	for s := Severity_INFO; s <= Severity_FATAL; s++ {
+		severityFiles := selectFiles(allFiles, s, math.MaxInt64)
+		if len(severityFiles) == 0 {
+			continue
+		}
+		// severityFiles is sorted with the newest log files first (which we want
+		// to keep). Note that we always keep the most recent log file per
+		// severity.
+		sum := severityFiles[0].SizeBytes
+		for _, f := range severityFiles[1:] {
+			sum += f.SizeBytes
+			if uint64(sum) < maxSizePerSeverity {
+				continue
+			}
+			path := filepath.Join(dir, f.Name)
+			if err := os.Remove(path); err != nil {
+				fmt.Fprintf(os.Stderr, "%s\n", err)
+			}
 		}
 	}
 }

@@ -30,6 +30,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"regexp"
+	"runtime/debug"
 	"sort"
 	"strconv"
 	"strings"
@@ -830,6 +831,10 @@ func (t *logicTest) verifyError(sql, pos, expectErr, expectErrCode string, err e
 	}
 	if !testutils.IsError(err, expectErr) {
 		t.Errorf("%s: expected %q, but found %v", pos, expectErr, err)
+		if strings.Contains(err.Error(), expectErr) {
+			t.t.Logf("The output string contained the input regexp. Perhaps you meant to write:\n"+
+				"query error %s", regexp.QuoteMeta(err.Error()))
+		}
 		return false
 	}
 	if expectErrCode != "" {
@@ -984,6 +989,10 @@ func (t *logicTest) execQuery(query logicQuery) error {
 				case 'B':
 					if valT != reflect.Bool {
 						return fmt.Errorf("%s: expected boolean value for column %d, but found %T: %#v", query.pos, i, val, val)
+					}
+				case 'O':
+					if valT != reflect.Slice {
+						return fmt.Errorf("%s: expected oid value for column %d, but found %T: %#v", query.pos, i, val, val)
 					}
 				default:
 					return fmt.Errorf("%s: unknown type in type string: %c in %s", query.pos, colT, query.colTypes)
@@ -1155,8 +1164,16 @@ func TestLogic(t *testing.T) {
 			l.t = t
 			defer l.close()
 			l.setup()
+
+			defer func() {
+				if r := recover(); r != nil {
+					// Translate panics during the test to test errors.
+					t.Fatalf("panic: %v\n%s", r, string(debug.Stack()))
+				}
+			}()
+
 			if err := l.processTestFile(path); err != nil {
-				t.Error(err)
+				t.Fatal(err)
 			}
 		})
 
@@ -1176,6 +1193,20 @@ func TestLogic(t *testing.T) {
 	}
 
 	l.outf("--- total: %d tests, %d failures%s", total, totalFail, unsupportedMsg)
+}
+
+// TestLogicDistSQL is a variant of TestLogic that uses DistSQL for all
+// supported queries.
+func TestLogicDistSQL(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	if testing.Short() {
+		t.Skip("short flag")
+	}
+
+	defer sql.SetDefaultDistSQLMode("ON")()
+
+	TestLogic(t)
 }
 
 type errorSummaryEntry struct {

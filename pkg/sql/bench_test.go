@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"math/rand"
 	"net"
+	"strconv"
 	"sync/atomic"
 	"testing"
 
@@ -30,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	_ "github.com/lib/pq"
 )
@@ -81,9 +83,9 @@ func benchmarkPostgres(b *testing.B, f func(b *testing.B, db *gosql.DB)) {
 	// ```
 	// $ cat /usr/local/var/postgres/postgresql.conf | grep ssl
 	// ssl = on                            # (change requires restart)
-	// ssl_cert_file = '$GOATH/src/github.com/cockroachdb/cockroach/resource/test_certs/node.server.crt'             # (change requires restart)
-	// ssl_key_file = '$GOATH/src/github.com/cockroachdb/cockroach/resource/test_certs/node.server.key'              # (change requires restart)
-	// ssl_ca_file = '$GOATH/src/github.com/cockroachdb/cockroach/resource/test_certs/ca.crt'                        # (change requires restart)
+	// ssl_cert_file = '$GOATH/src/github.com/cockroachdb/cockroach/pkg/security/securitytest/test_certs/node.server.crt' # (change requires restart)
+	// ssl_key_file = '$GOATH/src/github.com/cockroachdb/cockroach/pkg/security/securitytest/test_certs/node.server.key'  # (change requires restart)
+	// ssl_ca_file = '$GOATH/src/github.com/cockroachdb/cockroach/pkg/security/securitytest/test_certs/ca.crt'            # (change requires restart)
 	// ```
 	// Where `$GOATH/src/github.com/cockroachdb/cockroach`
 	// is replaced with your local Cockroach source directory.
@@ -1259,14 +1261,23 @@ func BenchmarkInsertDistinct100Multinode_Cockroach(b *testing.B) {
 }
 
 // runBenchmarkWideTable measures performance on a table with a large number of
-// columns (20).
-func runBenchmarkWideTable(b *testing.B, db *gosql.DB, count int) {
+// columns (20), half of which are fixed size, half of which are variable sized
+// and presumed small. 1 of the presumed small columns is actually large.
+//
+// This benchmark tracks the tradeoff in column family allocation at table
+// creation. Fewer column families mean fewer kv entries, which is faster. But
+// fewer column families mean updates are less targeted, which means large
+// columns in a family may be copied unnecessarily when it's updated. Perfect
+// knowledge of traffic patterns can result in much better heuristics, but we
+// don't have that information at table creation.
+func runBenchmarkWideTable(b *testing.B, db *gosql.DB, count int, bigColumnBytes int) {
 	if _, err := db.Exec(`DROP TABLE IF EXISTS bench.widetable`); err != nil {
 		b.Fatal(err)
 	}
 	const schema = `CREATE TABLE bench.widetable (
     f1 INT, f2 INT, f3 INT, f4 INT, f5 INT, f6 INT, f7 INT, f8 INT, f9 INT, f10 INT,
-    f11 INT, f12 INT, f13 INT, f14 INT, f15 INT, f16 INT, f17 INT, f18 INT, f19 INT, f20 INT,
+    f11 TEXT, f12 TEXT, f13 TEXT, f14 TEXT, f15 TEXT, f16 TEXT, f17 TEXT, f18 TEXT, f19 TEXT,
+	f20 TEXT,
     PRIMARY KEY (f1, f2, f3)
   )`
 	if _, err := db.Exec(schema); err != nil {
@@ -1290,14 +1301,29 @@ func runBenchmarkWideTable(b *testing.B, db *gosql.DB, count int) {
 		fmt.Fprintf(&buf, `INSERT INTO bench.widetable VALUES`)
 		for j := 0; j < count; j++ {
 			if j != 0 {
-				buf.WriteString(`,`)
+				if j%3 == 0 {
+					buf.WriteString(`;`)
+					if _, err := db.Exec(buf.String()); err != nil {
+						b.Fatal(err)
+					}
+					buf.Reset()
+					fmt.Fprintf(&buf, `INSERT INTO bench.widetable VALUES `)
+				} else {
+					buf.WriteString(`,`)
+				}
 			}
 			buf.WriteString(`(`)
 			for k := 0; k < 20; k++ {
 				if k != 0 {
 					buf.WriteString(`,`)
 				}
-				fmt.Fprintf(&buf, "%d", i*count+j)
+				if k < 10 {
+					fmt.Fprintf(&buf, "%d", i*count+j)
+				} else if k < 19 {
+					fmt.Fprintf(&buf, "'%d'", i*count+j)
+				} else {
+					fmt.Fprintf(&buf, "'%x'", randutil.RandBytes(s, bigColumnBytes))
+				}
 			}
 			buf.WriteString(`)`)
 		}
@@ -1336,34 +1362,24 @@ func runBenchmarkWideTable(b *testing.B, db *gosql.DB, count int) {
 	b.StopTimer()
 }
 
-func BenchmarkWideTable1_Cockroach(b *testing.B) {
-	benchmarkCockroach(b, func(b *testing.B, db *gosql.DB) { runBenchmarkWideTable(b, db, 1) })
+func BenchmarkWideTable_Cockroach(b *testing.B) {
+	const count = 10
+	for _, bigColumnBytes := range []int{10, 100, 1000, 10000, 100000, 1000000} {
+		b.Run(strconv.Itoa(bigColumnBytes), func(b *testing.B) {
+			benchmarkCockroach(b, func(b *testing.B, db *gosql.DB) {
+				runBenchmarkWideTable(b, db, count, bigColumnBytes)
+			})
+		})
+	}
 }
 
-func BenchmarkWideTable10_Cockroach(b *testing.B) {
-	benchmarkCockroach(b, func(b *testing.B, db *gosql.DB) { runBenchmarkWideTable(b, db, 10) })
-}
-
-func BenchmarkWideTable100_Cockroach(b *testing.B) {
-	benchmarkCockroach(b, func(b *testing.B, db *gosql.DB) { runBenchmarkWideTable(b, db, 100) })
-}
-
-func BenchmarkWideTable1000_Cockroach(b *testing.B) {
-	benchmarkCockroach(b, func(b *testing.B, db *gosql.DB) { runBenchmarkWideTable(b, db, 1000) })
-}
-
-func BenchmarkWideTable1Multinode_Cockroach(b *testing.B) {
-	benchmarkMultinodeCockroach(b, func(b *testing.B, db *gosql.DB) { runBenchmarkWideTable(b, db, 1) })
-}
-
-func BenchmarkWideTable10Multinode_Cockroach(b *testing.B) {
-	benchmarkMultinodeCockroach(b, func(b *testing.B, db *gosql.DB) { runBenchmarkWideTable(b, db, 10) })
-}
-
-func BenchmarkWideTable100Multinode_Cockroach(b *testing.B) {
-	benchmarkMultinodeCockroach(b, func(b *testing.B, db *gosql.DB) { runBenchmarkWideTable(b, db, 100) })
-}
-
-func BenchmarkWideTable1000Multinode_Cockroach(b *testing.B) {
-	benchmarkMultinodeCockroach(b, func(b *testing.B, db *gosql.DB) { runBenchmarkWideTable(b, db, 1000) })
+func BenchmarkWideTableMultinode_Cockroach(b *testing.B) {
+	const count = 10
+	for _, bigColumnBytes := range []int{10, 100, 1000, 10000, 100000, 1000000} {
+		b.Run(strconv.Itoa(bigColumnBytes), func(b *testing.B) {
+			benchmarkMultinodeCockroach(b, func(b *testing.B, db *gosql.DB) {
+				runBenchmarkWideTable(b, db, count, bigColumnBytes)
+			})
+		})
+	}
 }

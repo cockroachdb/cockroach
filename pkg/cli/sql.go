@@ -17,6 +17,7 @@
 package cli
 
 import (
+	"bufio"
 	"bytes"
 	"database/sql/driver"
 	"errors"
@@ -27,6 +28,7 @@ import (
 	"os/exec"
 	"os/user"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"golang.org/x/net/context"
@@ -60,7 +62,10 @@ Open a sql shell running against a cockroach database.
 // command-line processing.
 type cliState struct {
 	conn *sqlConn
-	ins  *readline.Instance
+	// ins is used to read lines if isInteractive is true.
+	ins *readline.Instance
+	// buf is used to read lines if isInteractive is false.
+	buf *bufio.Reader
 
 	// Options
 	//
@@ -220,37 +225,76 @@ func (c *cliState) invalidSyntax(
 	return nextState
 }
 
-func (c *cliState) invalidOption(nextState cliStateEnum, opt string) cliStateEnum {
-	fmt.Fprintf(osStderr, "option not recognized: %s\n", opt)
-	return nextState
-}
-
 func (c *cliState) invalidOptionChange(nextState cliStateEnum, opt string) cliStateEnum {
 	fmt.Fprintf(osStderr, "cannot change option during multi-line editing: %s\n", opt)
 	return nextState
 }
 
+var options = map[string]struct {
+	numExpectedArgs           int
+	validDuringMultilineEntry bool
+	set                       func(c *cliState, args []string) error
+	unset                     func(c *cliState) error
+}{
+	`display_format`: {
+		1,
+		true,
+		func(_ *cliState, args []string) error {
+			return cliCtx.tableDisplayFormat.Set(args[0])
+		},
+		func(_ *cliState) error {
+			displayFormat := tableDisplayTSV
+			if isInteractive {
+				displayFormat = tableDisplayPretty
+			}
+			cliCtx.tableDisplayFormat = displayFormat
+			return nil
+		},
+	},
+	`errexit`: {
+		0,
+		true,
+		func(c *cliState, _ []string) error { c.errExit = true; return nil },
+		func(c *cliState) error { c.errExit = false; return nil },
+	},
+	`check_syntax`: {
+		0,
+		false,
+		func(c *cliState, _ []string) error { c.checkSyntax = true; return nil },
+		func(c *cliState) error { c.checkSyntax = false; return nil },
+	},
+	`normalize_history`: {
+		0,
+		false,
+		func(c *cliState, _ []string) error { c.normalizeHistory = true; return nil },
+		func(c *cliState) error { c.normalizeHistory = false; return nil },
+	},
+}
+
 // handleSet supports the \set client-side command.
 func (c *cliState) handleSet(args []string, nextState, errState cliStateEnum) cliStateEnum {
-	if len(args) != 1 {
+	if len(args) == 0 {
+		printQueryOutput(os.Stdout,
+			[]string{"Option", "Value"},
+			[][]string{
+				{"display_format", cliCtx.tableDisplayFormat.String()},
+				{"errexit", strconv.FormatBool(c.errExit)},
+				{"check_syntax", strconv.FormatBool(c.checkSyntax)},
+				{"normalize_history", strconv.FormatBool(c.normalizeHistory)},
+			},
+			"set", cliCtx.tableDisplayFormat)
+		return nextState
+	}
+	opt, ok := options[args[0]]
+	if !ok || len(args)-1 != opt.numExpectedArgs {
 		return c.invalidSyntax(errState, `\set %s. Try \? for help.`, strings.Join(args, " "))
 	}
-	opt := strings.ToLower(args[0])
-	switch opt {
-	case `errexit`:
-		c.errExit = true
-	case `check_syntax`:
-		if len(c.partialLines) > 0 {
-			return c.invalidOptionChange(errState, opt)
-		}
-		c.checkSyntax = true
-	case `normalize_history`:
-		if len(c.partialLines) > 0 {
-			return c.invalidOptionChange(errState, opt)
-		}
-		c.normalizeHistory = true
-	default:
-		return c.invalidOption(errState, opt)
+	if len(c.partialLines) > 0 && !opt.validDuringMultilineEntry {
+		return c.invalidOptionChange(errState, args[0])
+	}
+	if err := opt.set(c, args[1:]); err != nil {
+		fmt.Fprintf(osStderr, "\\set %s: %v\n", strings.Join(args, " "), err)
+		return errState
 	}
 	return nextState
 }
@@ -260,22 +304,16 @@ func (c *cliState) handleUnset(args []string, nextState, errState cliStateEnum) 
 	if len(args) != 1 {
 		return c.invalidSyntax(errState, `\unset %s. Try \? for help.`, strings.Join(args, " "))
 	}
-	opt := strings.ToLower(args[0])
-	switch opt {
-	case `errexit`:
-		c.errExit = false
-	case `check_syntax`:
-		if len(c.partialLines) > 0 {
-			return c.invalidOptionChange(errState, opt)
-		}
-		c.checkSyntax = false
-	case `normalize_history`:
-		if len(c.partialLines) > 0 {
-			return c.invalidOptionChange(errState, opt)
-		}
-		c.normalizeHistory = false
-	default:
-		return c.invalidOption(errState, opt)
+	opt, ok := options[args[0]]
+	if !ok {
+		return c.invalidSyntax(errState, `\unset %s. Try \? for help.`, strings.Join(args, " "))
+	}
+	if len(c.partialLines) > 0 && !opt.validDuringMultilineEntry {
+		return c.invalidOptionChange(errState, args[0])
+	}
+	if err := opt.unset(c); err != nil {
+		fmt.Fprintf(osStderr, "\\unset %s: %v\n", args[0], err)
+		return errState
 	}
 	return nextState
 }
@@ -368,13 +406,13 @@ func (c *cliState) doRefreshPrompts(nextState cliStateEnum) cliStateEnum {
 		return c.refreshPrompts(" ?", nextState)
 	}
 	if len(rows.Columns()) == 0 {
-		fmt.Fprintf(osStderr, "invalid transaction status")
+		fmt.Fprintf(osStderr, "invalid transaction status\n")
 		return c.refreshPrompts(" ?", nextState)
 	}
 	val := make([]driver.Value, len(rows.Columns()))
 	err = rows.Next(val)
 	if err != nil {
-		fmt.Fprintf(osStderr, "invalid transaction status")
+		fmt.Fprintf(osStderr, "invalid transaction status: %v\n", err)
 		return c.refreshPrompts(" ?", nextState)
 	}
 	txnString := formatVal(val[0], false, false)
@@ -547,7 +585,27 @@ func (c *cliState) doContinueLine(nextState cliStateEnum) cliStateEnum {
 // input was successful it populates c.lastInputLine.  Otherwise
 // c.exitErr is set in some cases and an error/retry state is returned.
 func (c *cliState) doReadLine(nextState cliStateEnum) cliStateEnum {
-	l, err := c.ins.Readline()
+	var l string
+	var err error
+	if c.ins != nil {
+		l, err = c.ins.Readline()
+	} else {
+		l, err = c.buf.ReadString('\n')
+		// bufio.ReadString() differs from readline.Readline in the handling of
+		// EOF. Readline only returns EOF when there is nothing left to read and
+		// there is no partial line while bufio.ReadString() returns EOF when the
+		// end of input has been reached but will return the non-empty partial line
+		// as well. We workaround this by converting the bufio behavior to match
+		// the Readline behavior.
+		if err == io.EOF && len(l) != 0 {
+			err = nil
+		} else if err == nil {
+			// From the bufio.ReadString docs: ReadString returns err != nil if and
+			// only if the returned data does not end in delim. To match the behavior
+			// of readline.Readline, we strip off the trailing delimiter.
+			l = l[:len(l)-1]
+		}
+	}
 
 	switch err {
 	case nil:
@@ -795,7 +853,8 @@ func (c *cliState) doCheckStatement(startState, contState, execState cliStateEnu
 }
 
 func (c *cliState) doRunStatement(nextState cliStateEnum) cliStateEnum {
-	c.exitErr = runQueryAndFormatResults(c.conn, os.Stdout, makeQuery(c.concatLines), cliCtx.prettyFmt)
+	c.exitErr = runQueryAndFormatResults(c.conn, os.Stdout, makeQuery(c.concatLines),
+		cliCtx.tableDisplayFormat)
 	if c.exitErr != nil {
 		fmt.Fprintln(osStderr, c.exitErr)
 		if c.errExit {
@@ -829,13 +888,23 @@ func runInteractive(conn *sqlConn, config *readline.Config) (exitErr error) {
 		}
 		switch state {
 		case cliStart:
-			// The readline initialization is not placed in
-			// the doStart() method because of the defer.
-			c.ins, c.exitErr = readline.NewEx(config)
-			if c.exitErr != nil {
-				return c.exitErr
+			// chzyer/readline is exceptionally slow at reading long lines, so we
+			// only use it in interactive mode.
+			if isInteractive {
+				// The readline initialization is not placed in
+				// the doStart() method because of the defer.
+				c.ins, c.exitErr = readline.NewEx(config)
+				if c.exitErr != nil {
+					return c.exitErr
+				}
+				defer func() { _ = c.ins.Close() }()
+			} else {
+				stdin := config.Stdin
+				if stdin == nil {
+					stdin = os.Stdin
+				}
+				c.buf = bufio.NewReader(stdin)
 			}
-			defer func() { _ = c.ins.Close() }()
 
 			state = c.doStart(cliQuerySyntax)
 
@@ -884,9 +953,10 @@ func runInteractive(conn *sqlConn, config *readline.Config) (exitErr error) {
 
 // runOneStatement executes one statement and terminates
 // on error.
-func runStatements(conn *sqlConn, stmts []string, pretty bool) error {
+func runStatements(conn *sqlConn, stmts []string, displayFormat tableDisplayFormat) error {
 	for _, stmt := range stmts {
-		if err := runQueryAndFormatResults(conn, os.Stdout, makeQuery(stmt), pretty); err != nil {
+		if err := runQueryAndFormatResults(conn, os.Stdout, makeQuery(stmt),
+			displayFormat); err != nil {
 			return err
 		}
 	}
@@ -912,7 +982,7 @@ func runTerm(cmd *cobra.Command, args []string) error {
 
 	if len(sqlCtx.execStmts) > 0 {
 		// Single-line sql; run as simple as possible, without noise on stdout.
-		return runStatements(conn, sqlCtx.execStmts, cliCtx.prettyFmt)
+		return runStatements(conn, sqlCtx.execStmts, cliCtx.tableDisplayFormat)
 	}
 	// Use the same as the default global readline config.
 	conf := readline.Config{

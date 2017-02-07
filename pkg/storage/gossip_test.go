@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -143,6 +144,8 @@ func TestGossipHandlesReplacedNode(t *testing.T) {
 	// the replaced node's leases to time out, but has still shown itself to be
 	// long enough to avoid flakes.
 	serverArgs := base.TestServerArgs{
+		Addr:                     util.IsolatedTestAddr.String(),
+		Insecure:                 true, // because our certs are only valid for 127.0.0.1
 		RaftTickInterval:         50 * time.Millisecond,
 		RaftElectionTimeoutTicks: 10,
 		RetryOptions: retry.Options{

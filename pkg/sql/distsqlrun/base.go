@@ -17,13 +17,11 @@
 package distsqlrun
 
 import (
-	"sync"
 	"sync/atomic"
 
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	basictracer "github.com/opentracing/basictracer-go"
 	opentracing "github.com/opentracing/opentracing-go"
@@ -66,49 +64,12 @@ type RowSource interface {
 	// rows. Depending on the implementation, it may block.
 	// The caller must not modify the received row.
 	NextRow() (sqlbase.EncDatumRow, error)
-}
 
-// processor is a common interface implemented by all processors, used by the
-// higher-level flow orchestration code.
-type processor interface {
-	// Run is the main loop of the processor.
-	// If wg is non-nil, wg.Done is called before exiting.
-	Run(wg *sync.WaitGroup)
-}
-
-// noopProcessor is a processor that simply passes rows through from the
-// synchronizer to the router. It can be useful in the last stage of a
-// computation, where we may only need the synchronizer to join streams.
-type noopProcessor struct {
-	flowCtx *FlowCtx
-	input   RowSource
-	output  RowReceiver
-}
-
-var _ processor = &noopProcessor{}
-
-func newNoopProcessor(flowCtx *FlowCtx, input RowSource, output RowReceiver) *noopProcessor {
-	return &noopProcessor{flowCtx: flowCtx, input: input, output: output}
-}
-
-// Run is part of the processor interface.
-func (n *noopProcessor) Run(wg *sync.WaitGroup) {
-	if wg != nil {
-		defer wg.Done()
-	}
-	for {
-		row, err := n.input.NextRow()
-		if err != nil || row == nil {
-			n.output.Close(err)
-			return
-		}
-		if log.V(3) {
-			log.Infof(n.flowCtx.Context, "noop: pushing row %s", row)
-		}
-		if !n.output.PushRow(row) {
-			return
-		}
-	}
+	// ConsumerDone lets the source know that we will not need any more rows. May
+	// block. If the consumer of the source stops consuming rows before NextRow
+	// indicates that there are no more rows, this method must be called. It is ok
+	// to call the method even if all the rows were consumed.
+	ConsumerDone()
 }
 
 // StreamMsg is the message used in the channels that implement
@@ -187,10 +148,12 @@ func (rc *RowChannel) NextRow() (sqlbase.EncDatumRow, error) {
 	return d.Row, nil
 }
 
-// NoMoreRows causes future PushRow calls to return false. The caller should
-// still drain the channel to make sure the sender is not blocked.
-func (rc *RowChannel) NoMoreRows() {
+// ConsumerDone is part of the RowSource interface.
+func (rc *RowChannel) ConsumerDone() {
 	atomic.StoreUint32(&rc.noMoreRows, 1)
+	// Drain (at most) one message in case the sender is blocked trying to emit a
+	// row.
+	<-rc.dataChan
 }
 
 // MultiplexedRowChannel is a RowChannel wrapper which allows multiple row
@@ -242,6 +205,19 @@ func (mrc *MultiplexedRowChannel) NextRow() (sqlbase.EncDatumRow, error) {
 	return mrc.rowChan.NextRow()
 }
 
+// ConsumerDone is part of the RowSource interface.
+func (mrc *MultiplexedRowChannel) ConsumerDone() {
+	atomic.StoreUint32(&mrc.rowChan.noMoreRows, 1)
+	numSenders := atomic.LoadInt32(&mrc.numSenders)
+	// Drain (at most) numSenders messages in case senders are blocked trying to
+	// emit a row.
+	for i := int32(0); i < numSenders; i++ {
+		if _, ok := <-mrc.rowChan.dataChan; !ok {
+			break
+		}
+	}
+}
+
 // RowBuffer is an implementation of RowReceiver that buffers (accumulates)
 // results in memory, as well as an implementation of RowSource that returns
 // rows from a row buffer.
@@ -285,6 +261,9 @@ func NewRowBuffer(types []sqlbase.ColumnType, rows sqlbase.EncDatumRows) *RowBuf
 
 // PushRow is part of the RowReceiver interface.
 func (rb *RowBuffer) PushRow(row sqlbase.EncDatumRow) bool {
+	if rb.Closed {
+		panic("PushRow called after Close")
+	}
 	rowCopy := append(sqlbase.EncDatumRow(nil), row...)
 	rb.Rows = append(rb.Rows, rowCopy)
 	return true
@@ -317,6 +296,9 @@ func (rb *RowBuffer) NextRow() (sqlbase.EncDatumRow, error) {
 	rb.Rows = rb.Rows[1:]
 	return row, nil
 }
+
+// ConsumerDone is part of the RowSource interface.
+func (rb *RowBuffer) ConsumerDone() {}
 
 // SetFlowRequestTrace populates req.Trace with the context of the current Span
 // in the context (if any).

@@ -53,10 +53,10 @@ func testBuildInfoInner(
 
 	bi := details.BuildInfo
 	testData := map[string]string{
-		"go_version":   bi.GoVersion,
-		"tag":          bi.Tag,
-		"time":         bi.Time,
-		"dependencies": bi.Dependencies,
+		"go_version": bi.GoVersion,
+		"tag":        bi.Tag,
+		"time":       bi.Time,
+		"revision":   bi.Revision,
 	}
 	for key, val := range testData {
 		if val == "" {

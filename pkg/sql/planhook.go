@@ -24,7 +24,7 @@ import (
 
 // planHookFn is a function that can intercept a statement being planned and
 // provide an alternate implementation. It's primarily intended to allow
-// implemention of certain sql statements to live outside of the sql package.
+// implementation of certain sql statements to live outside of the sql package.
 //
 // To intercept a statement the function should return a non-nil function for
 // `fn` as well as the appropriate ResultColumns describing the results it will
@@ -56,10 +56,9 @@ type hookFnNode struct {
 
 var _ planNode = &hookFnNode{}
 
-func (*hookFnNode) Ordering() orderingInfo       { return orderingInfo{} }
-func (*hookFnNode) SetLimitHint(_ int64, _ bool) {}
-func (*hookFnNode) MarkDebug(_ explainMode)      {}
-func (*hookFnNode) Close()                       {}
+func (*hookFnNode) Ordering() orderingInfo  { return orderingInfo{} }
+func (*hookFnNode) MarkDebug(_ explainMode) {}
+func (*hookFnNode) Close()                  {}
 
 func (f *hookFnNode) Start() error {
 	var err error

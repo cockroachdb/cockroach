@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -349,7 +350,8 @@ type IncomingSnapshot struct {
 	// The Raft log entries for this snapshot.
 	LogEntries [][]byte
 	// The replica state at the time the snapshot was generated (never nil).
-	State *storagebase.ReplicaState
+	State    *storagebase.ReplicaState
+	snapType string
 }
 
 // snapshot creates an OutgoingSnapshot containing a rocksdb snapshot for the given range.
@@ -512,6 +514,29 @@ const (
 	snapTypePreemptive = "preemptive"
 )
 
+var fastClearRange = envutil.EnvOrDefaultBool("COCKROACH_ENABLE_FAST_CLEAR_RANGE", false)
+
+func clearRangeData(desc *roachpb.RangeDescriptor, eng engine.Engine, batch engine.Batch) error {
+	iter := eng.NewIterator(false)
+	defer iter.Close()
+
+	const metadataRanges = 2
+	for i, keyRange := range makeAllKeyRanges(desc) {
+		// The metadata ranges have a relatively small number of keys making usage
+		// of range tombstones (as created by ClearRange) a pessimization.
+		var err error
+		if i < metadataRanges || !fastClearRange {
+			err = batch.ClearIterRange(iter, keyRange.start, keyRange.end)
+		} else {
+			err = batch.ClearRange(keyRange.start, keyRange.end)
+		}
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // applySnapshot updates the replica based on the given snapshot and associated
 // HardState (which may be empty, as Raft may apply some snapshots which don't
 // require an update to the HardState). All snapshots must pass through Raft
@@ -527,14 +552,13 @@ func (r *Replica) applySnapshot(
 	}
 
 	r.mu.Lock()
-	replicaID := r.mu.replicaID
 	raftLogSize := r.mu.raftLogSize
 	r.mu.Unlock()
 
-	isPreemptive := replicaID == 0 // only used for accounting and log format
+	snapType := inSnap.snapType
 	defer func() {
 		if err == nil {
-			if !isPreemptive {
+			if snapType == snapTypeRaft {
 				r.store.metrics.RangeSnapshotsNormalApplied.Inc(1)
 			} else {
 				r.store.metrics.RangeSnapshotsPreemptiveApplied.Inc(1)
@@ -547,11 +571,6 @@ func (r *Replica) applySnapshot(
 		// already ahead of what the snapshot provides. But we count it for
 		// stats (see the defer above).
 		return nil
-	}
-
-	snapType := snapTypePreemptive
-	if !isPreemptive {
-		snapType = snapTypeRaft
 	}
 
 	var stats struct {
@@ -588,18 +607,12 @@ func (r *Replica) applySnapshot(
 	batch := r.store.Engine().NewWriteOnlyBatch()
 	defer batch.Close()
 
-	iter := r.store.Engine().NewIterator(false)
-	defer iter.Close()
-
 	// Delete everything in the range and recreate it from the snapshot.
 	// We need to delete any old Raft log entries here because any log entries
 	// that predate the snapshot will be orphaned and never truncated or GC'd.
-	for _, keyRange := range makeAllKeyRanges(s.Desc) {
-		if err := batch.ClearRange(iter, keyRange.start, keyRange.end); err != nil {
-			return err
-		}
+	if err := clearRangeData(s.Desc, r.store.Engine(), batch); err != nil {
+		return err
 	}
-
 	stats.clear = timeutil.Now()
 
 	// Write the snapshot into the range.

@@ -99,6 +99,7 @@ func TestCopyNullInfNaN(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	defer rows.Close()
 
 	for row, in := range input {
 		if !rows.Next() {
@@ -206,6 +207,7 @@ func TestCopyRandom(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	defer rows.Close()
 
 	for row, in := range inputs {
 		if !rows.Next() {

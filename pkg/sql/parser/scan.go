@@ -283,8 +283,8 @@ func (s *Scanner) scan(lval *sqlSymType) {
 		if t := s.peek(); t == singleQuote || t == s.stringQuote {
 			// [xX]'[a-f0-9]'
 			s.pos++
-			if s.scanStringOrHex(lval, t, false, true, true) {
-				lval.id = SCONST
+			if s.scanStringOrHex(lval, t, false, false, true) {
+				lval.id = BCONST
 			}
 			return
 		}
@@ -794,7 +794,7 @@ outer:
 			// Either the string has an odd number of characters or contains one or
 			// more invalid bytes.
 			lval.id = ERROR
-			lval.str = "invalid hexadecimal string literal"
+			lval.str = "invalid hexadecimal bytes literal"
 			return false
 		}
 		buf = decB

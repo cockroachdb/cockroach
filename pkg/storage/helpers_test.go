@@ -23,6 +23,7 @@ package storage
 
 import (
 	"fmt"
+	"sync/atomic"
 	"time"
 
 	"golang.org/x/net/context"
@@ -160,6 +161,14 @@ func (s *Store) SetReplicaScannerActive(active bool) {
 	s.setScannerActive(active)
 }
 
+func (s *Store) SetRebalancesDisabled(v bool) {
+	var i int32
+	if v {
+		i = 1
+	}
+	atomic.StoreInt32(&s.rebalancesDisabled, i)
+}
+
 // EnqueueRaftUpdateCheck enqueues the replica for a Raft update check, forcing
 // the replica's Raft group into existence.
 func (s *Store) EnqueueRaftUpdateCheck(rangeID roachpb.RangeID) {
@@ -188,6 +197,14 @@ func (s *Store) ManualReplicaGC(repl *Replica) error {
 
 func (s *Store) ReservationCount() int {
 	return len(s.snapshotApplySem)
+}
+
+func (r *Replica) ReplicaIDLocked() roachpb.ReplicaID {
+	return r.mu.replicaID
+}
+
+func (r *Replica) DescLocked() *roachpb.RangeDescriptor {
+	return r.mu.state.Desc
 }
 
 func (r *Replica) RaftLock() {
@@ -262,8 +279,4 @@ func (r *Replica) RaftTransferLeader(ctx context.Context, target roachpb.Replica
 
 func GetGCQueueTxnCleanupThreshold() time.Duration {
 	return txnCleanupThreshold
-}
-
-func ProposerEvaluatedKVEnabled() bool {
-	return propEvalKV
 }

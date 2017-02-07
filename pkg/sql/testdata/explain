@@ -2,7 +2,8 @@ query ITTT colnames
 EXPLAIN (PLAN) SELECT 1
 ----
 Level  Type    Field Description
-0      nullrow
+0      render
+1      nullrow
 
 query ITTTTT colnames
 EXPLAIN (PLAN, METADATA) SELECT 1
@@ -35,7 +36,7 @@ EXPLAIN (TRACE) SELECT 1
 ----
 Cumulative Time  Duration  Span Pos   Operation         Event        RowIdx  Key   Value  Disposition
 0.000ms                           1                                       0  NULL  NULL   t
-0.000ms                           0  coordinator  tracing completed       0  NULL         NULL
+0.000ms                           0  explain trace  tracing completed       0  NULL         NULL
 
 query ITTTTT colnames
 EXPLAIN (TYPES) SELECT 1
@@ -123,10 +124,11 @@ EXPLAIN SHOW DATABASES
 ----
 0  sort
 0                 order   +Database
-1  virtual table
-1                 source  information_schema.schemata
-2  values
-2                 size    4 columns, 5 rows
+1  render
+2  virtual table
+2                 source  information_schema.schemata
+3  values
+3                 size    4 columns, 5 rows
 
 query ITTT
 EXPLAIN SHOW TABLES
@@ -190,7 +192,7 @@ EXPLAIN SHOW COLUMNS FROM foo
 0  virtual table
 0                 source  SHOW COLUMNS FROM foo
 1  values
-1                 size    4 columns, 1 row
+1                 size    5 columns, 1 row
 
 query ITTT
 EXPLAIN SHOW GRANTS ON foo
@@ -223,5 +225,6 @@ EXPLAIN SHOW CONSTRAINTS FROM foo
 query ITTT
 EXPLAIN SHOW USERS
 ----
-0  scan
-0        table  users@primary
+0  render
+1  scan
+1        table  users@primary

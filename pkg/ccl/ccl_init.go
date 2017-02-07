@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//     https://github.com/cockroachdb/cockroach/blob/master/ccl/LICENSE
+//     https://github.com/cockroachdb/cockroach/blob/master/LICENSE
 
 package ccl
 
@@ -12,5 +12,11 @@ package ccl
 // import of this package enables building a binary with CCL features.
 
 import (
-	_ "github.com/cockroachdb/cockroach/pkg/ccl/buildccl" // ccl init hooks
+	// ccl init hooks
+	_ "github.com/cockroachdb/cockroach/pkg/ccl/buildccl"
+	_ "github.com/cockroachdb/cockroach/pkg/ccl/sqlccl"
+	_ "github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
+	_ "github.com/cockroachdb/cockroach/pkg/ccl/storageccl/engineccl"
+	_ "github.com/cockroachdb/cockroach/pkg/ccl/storageccl/engineccl/rocksdbccl"
+	_ "github.com/cockroachdb/cockroach/pkg/ccl/utilccl/intervalccl"
 )

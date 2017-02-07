@@ -52,15 +52,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
-var defaultMuLogger = syncutil.ThresholdLogger(
+var defaultMuLogger = thresholdLogger(
 	context.Background(),
 	10*time.Second,
 	log.Warningf,
-	func(time.Duration) {},
 )
 
 var testIdent = roachpb.StoreIdent{
@@ -154,6 +152,16 @@ func createTestStoreWithoutStart(t testing.TB, stopper *stop.Stopper, cfg *Store
 		TestTimeUntilStoreDeadOff,
 		/* deterministic */ false,
 	)
+	// Many tests using this test harness (as opposed to higher-level
+	// ones like multiTestContext or TestServer) want to micro-manage
+	// replicas and the background queues just get in the way. The
+	// scanner doesn't run frequently enough to expose races reliably,
+	// so just disable the scanner for all tests that use this function
+	// instead of figuring out exactly which tests need it.
+	cfg.TestingKnobs.DisableScanner = true
+	// The scanner affects background operations; we must also disable
+	// the split queue separately to cover event-driven splits.
+	cfg.TestingKnobs.DisableSplitQueue = true
 	eng := engine.NewInMem(roachpb.Attributes{}, 10<<20)
 	stopper.AddCloser(eng)
 	cfg.Transport = NewDummyRaftTransport()
@@ -173,16 +181,6 @@ func createTestStoreWithoutStart(t testing.TB, stopper *stop.Stopper, cfg *Store
 func createTestStore(t testing.TB, stopper *stop.Stopper) (*Store, *hlc.ManualClock) {
 	manual := hlc.NewManualClock(123)
 	cfg := TestStoreConfig(hlc.NewClock(manual.UnixNano, time.Nanosecond))
-	// Many tests using this test harness (as opposed to higher-level
-	// ones like multiTestContext or TestServer) want to micro-manage
-	// replicas and the background queues just get in the way. The
-	// scanner doesn't run frequently enough to expose races reliably,
-	// so just disable the scanner for all tests that use this function
-	// instead of figuring out exactly which tests need it.
-	cfg.TestingKnobs.DisableScanner = true
-	// The scanner affects background operations; we must also disable
-	// the split queue separately to cover event-driven splits.
-	cfg.TestingKnobs.DisableSplitQueue = true
 	store := createTestStoreWithConfig(t, stopper, &cfg)
 	return store, manual
 }
@@ -668,8 +666,8 @@ func TestProcessRangeDescriptorUpdate(t *testing.T) {
 		store:      store,
 		abortCache: NewAbortCache(desc.RangeID),
 	}
-	r.mu.TimedMutex = syncutil.MakeTimedMutex(defaultMuLogger)
-	r.cmdQMu.TimedMutex = syncutil.MakeTimedMutex(defaultMuLogger)
+	r.mu.timedMutex = makeTimedMutex(defaultMuLogger)
+	r.cmdQMu.timedMutex = makeTimedMutex(defaultMuLogger)
 	if err := r.init(desc, store.Clock(), 0); err != nil {
 		t.Fatal(err)
 	}

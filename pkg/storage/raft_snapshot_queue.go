@@ -92,7 +92,9 @@ func (rq *raftSnapshotQueue) process(
 		// raft.Status.Progress is only populated on the Raft group leader.
 		for id, p := range status.Progress {
 			if p.State == raft.ProgressStateSnapshot {
-				log.VEventf(ctx, 1, "sending raft snapshot")
+				if log.V(1) {
+					log.Infof(ctx, "sending raft snapshot")
+				}
 				if err := rq.processRaftSnapshot(ctx, repl, roachpb.ReplicaID(id)); err != nil {
 					return err
 				}

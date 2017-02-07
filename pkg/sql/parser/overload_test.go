@@ -34,8 +34,8 @@ func (to *testOverload) params() typeList {
 	return to.paramTypes
 }
 
-func (to *testOverload) returnType() Type {
-	return to.retType
+func (to *testOverload) returnType() returnTyper {
+	return fixedReturnType(to.retType)
 }
 
 func (to testOverload) preferred() bool {
@@ -45,14 +45,18 @@ func (to testOverload) preferred() bool {
 func (to *testOverload) String() string {
 	typeNames := make([]string, len(to.paramTypes))
 	for i, param := range to.paramTypes {
-		typeNames[i] = param.String()
+		typeNames[i] = param.Typ.String()
 	}
 	return fmt.Sprintf("func(%s) %s", strings.Join(typeNames, ","), to.retType)
 }
 
 func makeTestOverload(retType Type, params ...Type) overloadImpl {
+	t := make(ArgTypes, len(params))
+	for i := range params {
+		t[i].Typ = params[i]
+	}
 	return &testOverload{
-		paramTypes: ArgTypes(params),
+		paramTypes: t,
 		retType:    retType,
 	}
 }

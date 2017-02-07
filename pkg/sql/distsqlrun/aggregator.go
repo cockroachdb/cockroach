@@ -43,7 +43,10 @@ func GetAggregateInfo(
 		for _, t := range b.Types.Types() {
 			if inputDatumType.Equivalent(t) {
 				// Found!
-				return b.AggregateFunc, sqlbase.DatumTypeToColumnType(b.ReturnType), nil
+				constructAgg := func() parser.AggregateFunc {
+					return b.AggregateFunc([]parser.Type{inputDatumType})
+				}
+				return constructAgg, sqlbase.DatumTypeToColumnType(b.FixedReturnType()), nil
 			}
 		}
 	}
@@ -61,27 +64,30 @@ func GetAggregateInfo(
 // accompanying SELECT expressions.
 type aggregator struct {
 	input       RowSource
-	output      RowReceiver
 	ctx         context.Context
 	funcs       []*aggregateFuncHolder
 	outputTypes []sqlbase.ColumnType
 	datumAlloc  sqlbase.DatumAlloc
-	rowAlloc    sqlbase.EncDatumRowAlloc
 
 	groupCols columns
 	inputCols columns
 	buckets   map[string]struct{} // The set of bucket keys.
+
+	out procOutputHelper
 }
 
 var _ processor = &aggregator{}
 
 func newAggregator(
-	ctx *FlowCtx, spec *AggregatorSpec, input RowSource, output RowReceiver,
+	flowCtx *FlowCtx,
+	spec *AggregatorSpec,
+	input RowSource,
+	post *PostProcessSpec,
+	output RowReceiver,
 ) (*aggregator, error) {
 	ag := &aggregator{
 		input:       input,
-		output:      output,
-		ctx:         log.WithLogTag(ctx.Context, "Agg", nil),
+		ctx:         log.WithLogTag(flowCtx.Context, "Agg", nil),
 		buckets:     make(map[string]struct{}),
 		inputCols:   make(columns, len(spec.Aggregations)),
 		funcs:       make([]*aggregateFuncHolder, len(spec.Aggregations)),
@@ -113,6 +119,9 @@ func newAggregator(
 
 		ag.outputTypes[i] = retType
 	}
+	if err := ag.out.init(post, ag.outputTypes, flowCtx.evalCtx, output); err != nil {
+		return nil, err
+	}
 
 	return ag, nil
 }
@@ -132,7 +141,7 @@ func (ag *aggregator) Run(wg *sync.WaitGroup) {
 	}
 
 	if err := ag.accumulateRows(); err != nil {
-		ag.output.Close(err)
+		ag.out.close(err)
 		return
 	}
 
@@ -145,24 +154,19 @@ func (ag *aggregator) Run(wg *sync.WaitGroup) {
 	}
 
 	// Render the results.
-	tuple := make(parser.DTuple, len(ag.funcs))
-
+	row := make(sqlbase.EncDatumRow, len(ag.funcs))
 	for bucket := range ag.buckets {
-		row := ag.rowAlloc.AllocRow(len(tuple))
 		for i, f := range ag.funcs {
 			row[i] = sqlbase.DatumToEncDatum(ag.outputTypes[i], f.get(bucket))
 		}
 
-		// Push the row to the output RowReceiver; stop if they don't need more
-		// rows.
-		if !ag.output.PushRow(row) {
-			if log.V(2) {
-				log.Infof(ctx, "no more rows required")
-			}
+		if !ag.out.emitRow(ctx, row) {
 			break
 		}
 	}
-	ag.output.Close(nil)
+
+	ag.out.close(nil)
+	ag.input.ConsumerDone()
 }
 
 func (ag *aggregator) accumulateRows() error {

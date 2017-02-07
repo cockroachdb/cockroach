@@ -187,6 +187,33 @@ type Config struct {
 	enginesCreated bool
 }
 
+// HistogramWindowInterval is used to determine the approximate length of time
+// that individual samples are retained in in-memory histograms. Currently,
+// it is set to the arbitrary length of six times the Metrics sample interval.
+//
+// The length of the window must be longer than the sampling interval due to
+// issue #12998, which was causing histograms to return zero values when sampled
+// because all samples had been evicted.
+//
+// Note that this is only intended to be a temporary fix for the above issue,
+// as our current handling of metric histograms have numerous additional
+// problems. These are tracked in github issue #7896, which has been given
+// a relatively high priority in light of recent confusion around histogram
+// metrics. For more information on the issues underlying our histogram system
+// and the proposed fixes, please see issue #7896.
+func (cfg Config) HistogramWindowInterval() time.Duration {
+	hwi := cfg.MetricsSampleInterval * 6
+
+	// Rudimentary overflow detection; this can result if MetricsSampleInterval
+	// is set to an extremely large number, likely in the context of a test or
+	// an intentional attempt to disable metrics collection. Just return
+	// cfg.MetricsSampleInterval in this case.
+	if hwi < cfg.MetricsSampleInterval {
+		return cfg.MetricsSampleInterval
+	}
+	return hwi
+}
+
 // GetTotalMemory returns either the total system memory or if possible the
 // cgroups available memory.
 func GetTotalMemory() (int64, error) {

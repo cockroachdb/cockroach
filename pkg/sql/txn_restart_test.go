@@ -965,6 +965,9 @@ func TestRollbackToSavepointStatement(t *testing.T) {
 	) {
 		t.Fatalf("unexpected error: %v", err)
 	}
+	if err := tx.Rollback(); err != nil {
+		t.Fatal(err)
+	}
 }
 
 // TestNonRetriableError checks that a non-retriable error (e.g. duplicate key)
@@ -1112,7 +1115,7 @@ func TestNonRetryableErrorOnCommit(t *testing.T) {
 	cleanupFilter := cmdFilters.AppendFilter(
 		func(args storagebase.FilterArgs) *roachpb.Error {
 			if req, ok := args.Req.(*roachpb.EndTransactionRequest); ok {
-				if bytes.Contains(req.Key, []byte(keys.DescIDGenerator)) {
+				if bytes.Contains(req.Key, []byte(keys.SystemConfigSpan.Key)) {
 					hitError = true
 					return roachpb.NewErrorWithTxn(fmt.Errorf("testError"), args.Hdr.Txn)
 				}
@@ -1216,5 +1219,48 @@ SELECT * from t.test WHERE k = 'test_key';
 	}
 	if u := atomic.LoadInt32(&restartDone); u != 1 {
 		t.Errorf("expected exactly one restart, but got %d", u)
+	}
+}
+
+// Test that if as part of a transaction A we receive a retryable error intended
+// for a different transaction B, we don't retry transaction A.
+func TestRetryableErrorForWrongTxn(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	bogusTxnID := "deadb33f-baaa-aaaa-aaaa-aaaaaaaaaaad"
+
+	params, _ := createTestServerParams()
+	s, sqlDB, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop()
+	if _, err := sqlDB.Exec(`
+CREATE DATABASE t;
+CREATE TABLE t.test (k TEXT PRIMARY KEY, v TEXT);
+INSERT INTO t.test (k, v) VALUES ('test_key', 'test_val');
+`); err != nil {
+		t.Fatal(err)
+	}
+
+	tx, err := sqlDB.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	// We're going to use FORCE_RETRY() to generate an error for a different
+	// transaction than the one we initiate. We need call that function in a
+	// transaction that already has an id (so, it can't be the first query in the
+	// transaction), because the "wrong txn id" detection mechanism doesn't work
+	// when the txn doesn't have an id yet (see TODO in
+	// IsRetryableErrMeantForTxn).
+	_, err = tx.Exec(`SELECT * FROM t.test`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = tx.Exec(`SELECT CRDB_INTERNAL.FORCE_RETRY('500ms':::INTERVAL, $1)`, bogusTxnID)
+	if isRetryableErr(err) {
+		t.Fatalf("expected non-retryable error, got: %s", err)
+	}
+	if !testutils.IsError(err, "pq: retryable error from another txn: forced by crdb_internal.force_retry()") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if err := tx.Rollback(); err != nil {
+		t.Fatal(err)
 	}
 }

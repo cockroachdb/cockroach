@@ -214,61 +214,7 @@ func (f *Flow) makeProcessor(ps *ProcessorSpec, inputs []RowSource) (processor, 
 			return nil, err
 		}
 	}
-	if ps.Core.Noop != nil {
-		if err := checkNumInOut(inputs, outputs, 1, 1); err != nil {
-			return nil, err
-		}
-		return newNoopProcessor(&f.FlowCtx, inputs[0], outputs[0]), nil
-	}
-	if ps.Core.TableReader != nil {
-		if err := checkNumInOut(inputs, outputs, 0, 1); err != nil {
-			return nil, err
-		}
-		return newTableReader(&f.FlowCtx, ps.Core.TableReader, outputs[0])
-	}
-	if ps.Core.JoinReader != nil {
-		if err := checkNumInOut(inputs, outputs, 1, 1); err != nil {
-			return nil, err
-		}
-		return newJoinReader(&f.FlowCtx, ps.Core.JoinReader, inputs[0], outputs[0])
-	}
-	if ps.Core.Sorter != nil {
-		if err := checkNumInOut(inputs, outputs, 1, 1); err != nil {
-			return nil, err
-		}
-		return newSorter(&f.FlowCtx, ps.Core.Sorter, inputs[0], outputs[0]), nil
-	}
-	if ps.Core.Evaluator != nil {
-		if err := checkNumInOut(inputs, outputs, 1, 1); err != nil {
-			return nil, err
-		}
-		return newEvaluator(&f.FlowCtx, ps.Core.Evaluator, inputs[0], outputs[0])
-	}
-	if ps.Core.Distinct != nil {
-		if err := checkNumInOut(inputs, outputs, 1, 1); err != nil {
-			return nil, err
-		}
-		return newDistinct(&f.FlowCtx, ps.Core.Distinct, inputs[0], outputs[0])
-	}
-	if ps.Core.Aggregator != nil {
-		if err := checkNumInOut(inputs, outputs, 1, 1); err != nil {
-			return nil, err
-		}
-		return newAggregator(&f.FlowCtx, ps.Core.Aggregator, inputs[0], outputs[0])
-	}
-	if ps.Core.MergeJoiner != nil {
-		if err := checkNumInOut(inputs, outputs, 2, 1); err != nil {
-			return nil, err
-		}
-		return newMergeJoiner(&f.FlowCtx, ps.Core.MergeJoiner, inputs[0], inputs[1], outputs[0])
-	}
-	if ps.Core.HashJoiner != nil {
-		if err := checkNumInOut(inputs, outputs, 2, 1); err != nil {
-			return nil, err
-		}
-		return newHashJoiner(&f.FlowCtx, ps.Core.HashJoiner, inputs[0], inputs[1], outputs[0])
-	}
-	return nil, errors.Errorf("unsupported processor %s", ps)
+	return newProcessor(&f.FlowCtx, &ps.Core, &ps.Post, inputs, outputs)
 }
 
 func (f *Flow) setupFlow(spec *FlowSpec) error {

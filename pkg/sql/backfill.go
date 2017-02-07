@@ -409,6 +409,9 @@ func (sc *SchemaChanger) truncateAndBackfillColumnsChunk(
 			defer sc.testingKnobs.RunAfterBackfillChunk()
 		}
 
+		// TODO(vivek): See comment in backfillIndexesChunk.
+		txn.SetSystemConfigTrigger()
+
 		p := &planner{
 			txn:      txn,
 			leaseMgr: sc.leaseMgr,
@@ -557,6 +560,9 @@ func (sc *SchemaChanger) truncateIndexes(
 					defer sc.testingKnobs.RunAfterBackfillChunk()
 				}
 
+				// TODO(vivek): See comment in backfillIndexesChunk.
+				txn.SetSystemConfigTrigger()
+
 				p := &planner{
 					txn:      txn,
 					leaseMgr: sc.leaseMgr,
@@ -653,6 +659,14 @@ func (sc *SchemaChanger) backfillIndexesChunk(
 			defer sc.testingKnobs.RunAfterBackfillChunk()
 		}
 
+		// TODO(vivek): We need to set the system-config trigger before doing any
+		// transaction writes. This is also called by
+		// SchemaChanger.maybeWriteResumeSpan, but it is too late at that point. Do
+		// we even need to be setting the system-config trigger here. We're
+		// changing the TableDescriptor.Mutations.ResumeSpan, but it isn't clear to
+		// me that we need to gossip the updated TableDescriptor.
+		txn.SetSystemConfigTrigger()
+
 		// Get the next set of rows.
 		// TODO(tamird): Support partial indexes?
 		//
@@ -674,12 +688,16 @@ func (sc *SchemaChanger) backfillIndexesChunk(
 		scan := planner.Scan()
 		scan.desc = *tableDesc
 		scan.spans = []roachpb.Span{sp}
-		scan.SetLimitHint(chunkSize, false)
 		scan.initDescDefaults(publicAndNonPublicColumns)
+
+		// We manually invoke selectIndex() because for now expandPlan()
+		// can only do so itself when looking at a renderNode.
 		rows, err := selectIndex(scan, nil, false)
 		if err != nil {
 			return err
 		}
+
+		rows = &limitNode{p: planner, plan: rows, countExpr: parser.NewDInt(parser.DInt(chunkSize))}
 
 		if err := planner.startPlan(rows); err != nil {
 			return err

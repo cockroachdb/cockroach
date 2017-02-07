@@ -126,15 +126,15 @@ information_schema.tables  CREATE TABLE "information_schema.tables" (
                                VERSION INT NULL
                            )
 
-query TTBT colnames
+query TTBTT colnames
 SHOW COLUMNS FROM information_schema.tables
 ----
-Field            Type       Null   Default
-TABLE_CATALOG    STRING     false  ''
-TABLE_SCHEMA     STRING     false  ''
-TABLE_NAME       STRING     false  ''
-TABLE_TYPE       STRING     false  ''
-VERSION          INT        true   NULL
+Field            Type       Null   Default Indices
+TABLE_CATALOG    STRING     false  ''      {}
+TABLE_SCHEMA     STRING     false  ''	   {}
+TABLE_NAME       STRING     false  ''	   {}
+TABLE_TYPE       STRING     false  ''	   {}
+VERSION          INT        true   NULL    {}
 
 query TTBITTBB colnames
 SHOW INDEXES FROM information_schema.tables
@@ -219,13 +219,17 @@ pg_am
 pg_attrdef
 pg_attribute
 pg_class
+pg_collation
 pg_constraint
 pg_database
 pg_depend
 pg_description
 pg_enum
+pg_foreign_server
+pg_foreign_table
 pg_index
 pg_indexes
+pg_inherits
 pg_namespace
 pg_proc
 pg_range
@@ -266,13 +270,17 @@ pg_roles
 pg_range
 pg_proc
 pg_namespace
+pg_inherits
 pg_indexes
 pg_index
+pg_foreign_table
+pg_foreign_server
 pg_enum
 pg_description
 pg_depend
 pg_database
 pg_constraint
+pg_collation
 pg_class
 pg_attribute
 pg_attrdef
@@ -298,13 +306,17 @@ def            pg_catalog          pg_am              SYSTEM VIEW  1
 def            pg_catalog          pg_attrdef         SYSTEM VIEW  1
 def            pg_catalog          pg_attribute       SYSTEM VIEW  1
 def            pg_catalog          pg_class           SYSTEM VIEW  1
+def            pg_catalog          pg_collation       SYSTEM VIEW  1
 def            pg_catalog          pg_constraint      SYSTEM VIEW  1
 def            pg_catalog          pg_database        SYSTEM VIEW  1
 def            pg_catalog          pg_depend          SYSTEM VIEW  1
 def            pg_catalog          pg_description     SYSTEM VIEW  1
 def            pg_catalog          pg_enum            SYSTEM VIEW  1
+def            pg_catalog          pg_foreign_server  SYSTEM VIEW  1
+def            pg_catalog          pg_foreign_table   SYSTEM VIEW  1
 def            pg_catalog          pg_index           SYSTEM VIEW  1
 def            pg_catalog          pg_indexes         SYSTEM VIEW  1
+def            pg_catalog          pg_inherits        SYSTEM VIEW  1
 def            pg_catalog          pg_namespace       SYSTEM VIEW  1
 def            pg_catalog          pg_proc            SYSTEM VIEW  1
 def            pg_catalog          pg_range           SYSTEM VIEW  1
@@ -351,13 +363,17 @@ def            pg_catalog          pg_am              SYSTEM VIEW  1
 def            pg_catalog          pg_attrdef         SYSTEM VIEW  1
 def            pg_catalog          pg_attribute       SYSTEM VIEW  1
 def            pg_catalog          pg_class           SYSTEM VIEW  1
+def            pg_catalog          pg_collation       SYSTEM VIEW  1
 def            pg_catalog          pg_constraint      SYSTEM VIEW  1
 def            pg_catalog          pg_database        SYSTEM VIEW  1
 def            pg_catalog          pg_depend          SYSTEM VIEW  1
 def            pg_catalog          pg_description     SYSTEM VIEW  1
 def            pg_catalog          pg_enum            SYSTEM VIEW  1
+def            pg_catalog          pg_foreign_server  SYSTEM VIEW  1
+def            pg_catalog          pg_foreign_table   SYSTEM VIEW  1
 def            pg_catalog          pg_index           SYSTEM VIEW  1
 def            pg_catalog          pg_indexes         SYSTEM VIEW  1
+def            pg_catalog          pg_inherits        SYSTEM VIEW  1
 def            pg_catalog          pg_namespace       SYSTEM VIEW  1
 def            pg_catalog          pg_proc            SYSTEM VIEW  1
 def            pg_catalog          pg_range           SYSTEM VIEW  1
@@ -395,13 +411,17 @@ def            pg_catalog          pg_am              SYSTEM VIEW  1
 def            pg_catalog          pg_attrdef         SYSTEM VIEW  1
 def            pg_catalog          pg_attribute       SYSTEM VIEW  1
 def            pg_catalog          pg_class           SYSTEM VIEW  1
+def            pg_catalog          pg_collation       SYSTEM VIEW  1
 def            pg_catalog          pg_constraint      SYSTEM VIEW  1
 def            pg_catalog          pg_database        SYSTEM VIEW  1
 def            pg_catalog          pg_depend          SYSTEM VIEW  1
 def            pg_catalog          pg_description     SYSTEM VIEW  1
 def            pg_catalog          pg_enum            SYSTEM VIEW  1
+def            pg_catalog          pg_foreign_server  SYSTEM VIEW  1
+def            pg_catalog          pg_foreign_table   SYSTEM VIEW  1
 def            pg_catalog          pg_index           SYSTEM VIEW  1
 def            pg_catalog          pg_indexes         SYSTEM VIEW  1
+def            pg_catalog          pg_inherits        SYSTEM VIEW  1
 def            pg_catalog          pg_namespace       SYSTEM VIEW  1
 def            pg_catalog          pg_proc            SYSTEM VIEW  1
 def            pg_catalog          pg_range           SYSTEM VIEW  1

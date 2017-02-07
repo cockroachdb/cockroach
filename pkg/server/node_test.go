@@ -96,6 +96,25 @@ func createTestNode(
 	cfg.DB = client.NewDB(sender)
 	cfg.Transport = storage.NewDummyRaftTransport()
 	cfg.MetricsSampleInterval = metric.TestSampleInterval
+	cfg.HistogramWindowInterval = metric.TestSampleInterval
+	active, renewal := storage.NodeLivenessDurations(
+		storage.RaftElectionTimeout(cfg.RaftTickInterval, cfg.RaftElectionTimeoutTicks))
+	cfg.NodeLiveness = storage.NewNodeLiveness(
+		cfg.AmbientCtx,
+		cfg.Clock,
+		cfg.DB,
+		cfg.Gossip,
+		active,
+		renewal,
+	)
+	cfg.StorePool = storage.NewStorePool(
+		cfg.AmbientCtx,
+		cfg.Gossip,
+		cfg.Clock,
+		storage.MakeStorePoolNodeLivenessFunc(cfg.NodeLiveness),
+		storage.TestTimeUntilStoreDead,
+		/* deterministic */ false,
+	)
 	node := NewNode(cfg, status.NewMetricsRecorder(cfg.Clock), metric.NewRegistry(), stopper,
 		kv.MakeTxnMetrics(metric.TestSampleInterval), sql.MakeEventLogger(nil))
 	roachpb.RegisterInternalServer(grpcServer, node)
@@ -415,7 +434,7 @@ func compareNodeStatus(
 	// CompareMetricMaps accepts an actual and expected metric maps, along with
 	// two lists of string keys. For metrics with keys in the 'equal' map, the
 	// actual value must be equal to the expected value. For keys in the
-	// 'greater' map, the actul value must be greater than or equal to the
+	// 'greater' map, the actual value must be greater than or equal to the
 	// expected value.
 	compareMetricMaps := func(actual, expected map[string]float64, equal, greater []string) {
 		// Make sure the actual value map contains all values in expected map.

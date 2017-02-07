@@ -37,6 +37,14 @@ func MakeSQLRunner(tb testing.TB, db *gosql.DB) *SQLRunner {
 	return &SQLRunner{TB: tb, DB: db}
 }
 
+// Subtest returns a copy of SQLRunner which can be used with a subtest
+// (different testing.T or testing.B instance).
+func (sr *SQLRunner) Subtest(tb testing.TB) *SQLRunner {
+	copy := *sr
+	copy.TB = tb
+	return &copy
+}
+
 // Exec is a wrapper around gosql.Exec that kills the test on error.
 func (sr *SQLRunner) Exec(query string, args ...interface{}) gosql.Result {
 	r, err := sr.DB.Exec(query, args...)
@@ -77,7 +85,8 @@ type Row struct {
 // Scan is a wrapper around (*gosql.Row).Scan that kills the test on error.
 func (r *Row) Scan(dest ...interface{}) {
 	if err := r.row.Scan(dest...); err != nil {
-		r.Fatalf("error scanning '%v': %s", r.row, err)
+		file, line, _ := caller.Lookup(1)
+		r.Fatalf("%s:%d: error scanning '%v': %+v", file, line, r.row, err)
 	}
 }
 

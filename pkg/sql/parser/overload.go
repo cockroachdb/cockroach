@@ -25,7 +25,7 @@ import (
 // access to the parameter type list  and the return type of the implementation.
 type overloadImpl interface {
 	params() typeList
-	returnType() Type
+	returnType() returnTyper
 	// allows manually resolving preference between multiple compatible overloads
 	preferred() bool
 }
@@ -33,7 +33,7 @@ type overloadImpl interface {
 // typeList is a list of types representing a function parameter list.
 type typeList interface {
 	// match checks if all types in the typeList match the corresponding elements in types.
-	match(types ArgTypes) bool
+	match(types []Type) bool
 	// matchAt checks if the parameter type at index i of the typeList matches type typ.
 	matchAt(typ Type, i int) bool
 	// matchLen checks that the typeList can support l parameters.
@@ -50,15 +50,18 @@ type typeList interface {
 }
 
 var _ typeList = ArgTypes{}
-var _ typeList = NamedArgTypes{}
-var _ typeList = AnyType{}
+var _ typeList = HomogeneousType{}
 var _ typeList = VariadicType{}
 
-// ArgTypes is a typeList implementation that accepts a specific number of
-// argument types.
-type ArgTypes []Type
+// ArgTypes is very similar to ArgTypes except it allows keeping a string
+// name for each argument as well and using those when printing the
+// human-readable signature.
+type ArgTypes []struct {
+	Name string
+	Typ  Type
+}
 
-func (a ArgTypes) match(types ArgTypes) bool {
+func (a ArgTypes) match(types []Type) bool {
 	if len(types) != len(a) {
 		return false
 	}
@@ -79,7 +82,7 @@ func (a ArgTypes) matchAt(typ Type, i int) bool {
 	if typ.FamilyEqual(TypeTuple) {
 		typ = TypeTuple
 	}
-	return i < len(a) && a[i].Equivalent(typ)
+	return i < len(a) && a[i].Typ.Equivalent(typ)
 }
 
 func (a ArgTypes) matchLen(l int) bool {
@@ -87,7 +90,7 @@ func (a ArgTypes) matchLen(l int) bool {
 }
 
 func (a ArgTypes) getAt(i int) Type {
-	return a[i]
+	return a[i].Typ
 }
 
 // Length implements the typeList interface.
@@ -97,63 +100,6 @@ func (a ArgTypes) Length() int {
 
 // Types implements the typeList interface.
 func (a ArgTypes) Types() []Type {
-	return a
-}
-
-func (a ArgTypes) String() string {
-	var s bytes.Buffer
-	for i, typ := range a {
-		if i > 0 {
-			s.WriteString(", ")
-		}
-		s.WriteString(typ.String())
-	}
-	return s.String()
-}
-
-// NamedArgTypes is very similar to ArgTypes except it allows keeping a string
-// name for each argument as well and using those when printing the
-// human-readable signature.
-type NamedArgTypes []struct {
-	Name string
-	Typ  Type
-}
-
-func (a NamedArgTypes) match(types ArgTypes) bool {
-	if len(types) != len(a) {
-		return false
-	}
-	for i := range types {
-		if !a.matchAt(types[i], i) {
-			return false
-		}
-	}
-	return true
-}
-
-func (a NamedArgTypes) matchAt(typ Type, i int) bool {
-	// See ArgTypes.matchAt for explanation.
-	if typ.FamilyEqual(TypeTuple) {
-		typ = TypeTuple
-	}
-	return i < len(a) && a[i].Typ.Equivalent(typ)
-}
-
-func (a NamedArgTypes) matchLen(l int) bool {
-	return len(a) == l
-}
-
-func (a NamedArgTypes) getAt(i int) Type {
-	return a[i].Typ
-}
-
-// Length implements the typeList interface.
-func (a NamedArgTypes) Length() int {
-	return len(a)
-}
-
-// Types implements the typeList interface.
-func (a NamedArgTypes) Types() []Type {
 	n := len(a)
 	ret := make([]Type, n, n)
 	for i, s := range a {
@@ -162,7 +108,7 @@ func (a NamedArgTypes) Types() []Type {
 	return ret
 }
 
-func (a NamedArgTypes) String() string {
+func (a ArgTypes) String() string {
 	var s bytes.Buffer
 	for i, arg := range a {
 		if i > 0 {
@@ -175,36 +121,38 @@ func (a NamedArgTypes) String() string {
 	return s.String()
 }
 
-// AnyType is a typeList implementation that accepts any arguments.
-type AnyType struct{}
+// HomogeneousType is a typeList implementation that accepts any arguments, as
+// long as all are the same type or NULL. The homogeneous constraint is enforced
+// in typeCheckOverloadedExprs.
+type HomogeneousType struct{}
 
-func (AnyType) match(types ArgTypes) bool {
+func (HomogeneousType) match(types []Type) bool {
 	return true
 }
 
-func (AnyType) matchAt(typ Type, i int) bool {
+func (HomogeneousType) matchAt(typ Type, i int) bool {
 	return true
 }
 
-func (AnyType) matchLen(l int) bool {
+func (HomogeneousType) matchLen(l int) bool {
 	return true
 }
 
-func (AnyType) getAt(i int) Type {
-	panic("getAt called on AnyType")
+func (HomogeneousType) getAt(i int) Type {
+	return TypeAny
 }
 
 // Length implements the typeList interface.
-func (a AnyType) Length() int {
+func (HomogeneousType) Length() int {
 	return 1
 }
 
 // Types implements the typeList interface.
-func (a AnyType) Types() []Type {
+func (HomogeneousType) Types() []Type {
 	return []Type{TypeAny}
 }
 
-func (AnyType) String() string {
+func (HomogeneousType) String() string {
 	return "anyelement..."
 }
 
@@ -215,7 +163,7 @@ type VariadicType struct {
 	Typ Type
 }
 
-func (v VariadicType) match(types ArgTypes) bool {
+func (v VariadicType) match(types []Type) bool {
 	for i := range types {
 		if !v.matchAt(types[i], i) {
 			return false
@@ -250,6 +198,42 @@ func (v VariadicType) String() string {
 	return fmt.Sprintf("%s...", v.Typ)
 }
 
+// unknownReturnType is returned from returnTypers when the arguments provided are
+// not sufficient to determine a return type. This is necessary for cases like overload
+// resolution, where the argument types are not resolved yet so the type-level function
+// will be called without argument types. If a returnTyper returns unknownReturnType,
+// then the candidate function set cannot be refined. This means that only returnTypers
+// that never return unknownReturnType, like those created with fixedReturnType, can
+// help reduce overload ambiguity.
+var unknownReturnType Type
+
+// returnTyper defines the type-level function in which a builtin function's return type
+// is determined. returnTypers should make sure to return unknownReturnType when necessary.
+type returnTyper func(args []TypedExpr) Type
+
+// fixedReturnType functions simply return a fixed type, independent of argument types.
+func fixedReturnType(typ Type) returnTyper {
+	return func(args []TypedExpr) Type { return typ }
+}
+
+// identityReturnType creates a returnType that is a projection of the idx'th
+// argument type.
+func identityReturnType(idx int) returnTyper {
+	return func(args []TypedExpr) Type {
+		if len(args) == 0 {
+			return unknownReturnType
+		}
+		return args[idx].ResolvedType()
+	}
+}
+
+func returnTypeToFixedType(s returnTyper) Type {
+	if t := s(nil); t != unknownReturnType {
+		return t
+	}
+	return TypeAny
+}
+
 // typeCheckOverloadedExprs determines the correct overload to use for the given set of
 // expression parameters, along with an optional desired return type. It returns the expression
 // parameters after being type checked, along with the chosen overloadImpl. If an overloaded
@@ -257,13 +241,13 @@ func (v VariadicType) String() string {
 func typeCheckOverloadedExprs(
 	ctx *SemaContext, desired Type, overloads []overloadImpl, exprs ...Expr,
 ) ([]TypedExpr, overloadImpl, error) {
-	// Special-case the AnyType overload. We determine its return type by checking that
+	// Special-case the HomogeneousType overload. We determine its return type by checking that
 	// all parameters have the same type.
 	for _, overload := range overloads {
-		// Only one overload can be provided if it has parameters with AnyType.
-		if _, ok := overload.params().(AnyType); ok {
+		// Only one overload can be provided if it has parameters with HomogeneousType.
+		if _, ok := overload.params().(HomogeneousType); ok {
 			if len(overloads) > 1 {
-				return nil, nil, fmt.Errorf("only one overload can have parameters with AnyType")
+				panic("only one overload can have HomogeneousType parameters")
 			}
 			typedExprs, _, err := typeCheckSameTypedExprs(ctx, desired, exprs...)
 			if err != nil {
@@ -424,7 +408,14 @@ func typeCheckOverloadedExprs(
 	// The first heuristic is to prefer candidates that return the desired type.
 	if desired != TypeAny {
 		filterOverloads(func(o overloadImpl) bool {
-			return o.returnType().Equivalent(desired)
+			// For now, we only filter on the return type for overloads with
+			// fixed return types. This could be improved, but is not currently
+			// critical because we have no cases of functions with multiple
+			// overloads that do not all expose fixedReturnTypes.
+			if t := o.returnType()(nil); t != unknownReturnType {
+				return t.Equivalent(desired)
+			}
+			return true
 		})
 		if ok, fn, err := checkReturn(); ok {
 			return typedExprs, fn, err

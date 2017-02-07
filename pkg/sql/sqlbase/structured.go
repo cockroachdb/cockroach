@@ -1071,13 +1071,14 @@ func upperBoundColumnValueEncodedSize(col ColumnDescriptor) (int, bool) {
 	switch col.Type.Kind {
 	case ColumnType_BOOL:
 		typ = encoding.True
-	case ColumnType_INT, ColumnType_DATE, ColumnType_TIMESTAMP, ColumnType_TIMESTAMPTZ:
+	case ColumnType_INT, ColumnType_DATE, ColumnType_TIMESTAMP,
+		ColumnType_TIMESTAMPTZ, ColumnType_OID:
 		typ, size = encoding.Int, int(col.Type.Width)
 	case ColumnType_FLOAT:
 		typ = encoding.Float
 	case ColumnType_INTERVAL:
 		typ = encoding.Duration
-	case ColumnType_STRING, ColumnType_BYTES, ColumnType_COLLATEDSTRING:
+	case ColumnType_STRING, ColumnType_BYTES, ColumnType_COLLATEDSTRING, ColumnType_NAME:
 		// STRINGs are counted as runes, so this isn't totally correct, but this
 		// seems better than always assuming the maximum rune width.
 		typ, size = encoding.Bytes, int(col.Type.Width)
@@ -1095,62 +1096,34 @@ func upperBoundColumnValueEncodedSize(col ColumnDescriptor) (int, bool) {
 // should be put in a new family.
 //
 // Current heuristics:
-// - If the column is unbounded size (bytes, string, decimal) put it in a new
-//   family.
-// - If the column is bounded size (int, float, duration, date, timestamp, bool,
-//   or user bounded string/decimal), find the first family where the storage
-//   size of the existing columns plus the new column is not greater than
-//   FamilyHeuristicTargetBytes. The maximum size of the value encoding is used
-//   as the size of columns.
-// - Otherwise, the column doesn't fit in any existing family, spill it over
-//   into a new family.
-//
-// TODO(dan): Calling this function repeatedly to add columns is N^2. It
-// shouldn't be a problem because the number of columns is small, but if it
-// becomes an issue, make the bookkeeping of the columnSizesByID incremental.
+// - Put all columns in family 0.
 func fitColumnToFamily(desc TableDescriptor, col ColumnDescriptor) (int, bool) {
-	size, isBounded := upperBoundColumnValueEncodedSize(col)
-	if size > FamilyHeuristicTargetBytes {
-		return 0, false
-	}
-
-	primaryIndexColIDs := make(map[ColumnID]struct{}, len(desc.PrimaryIndex.ColumnIDs))
-	for _, colID := range desc.PrimaryIndex.ColumnIDs {
-		primaryIndexColIDs[colID] = struct{}{}
-	}
-
-	columnSizesByID := make(map[ColumnID]int, len(desc.Columns))
-	for _, c := range desc.Columns {
-		if _, ok := primaryIndexColIDs[c.ID]; ok {
-			// Primary key columns are stored in the key, so they don't count
-			// against the heuristic limit.
-			columnSizesByID[c.ID] = 0
-			continue
-		}
-		var bounded bool
-		if columnSizesByID[c.ID], bounded = upperBoundColumnValueEncodedSize(c); !bounded {
-			// Not bounded in size, so exceed the heuristic max to avoid assigning to
-			// a family that this column is in.
-			columnSizesByID[c.ID] = FamilyHeuristicTargetBytes + 1
-		}
-	}
-
-	// TODO(dan): This naively places columns in the first family they'll fit in,
-	// which is likely to lead to fragmentation. Consider something smarter like
-	// picking the most full family that will fit the column.
-	for i, family := range desc.Families {
-		var familySize int
-		for _, colID := range family.ColumnIDs {
-			familySize += columnSizesByID[colID]
-			if familySize > FamilyHeuristicTargetBytes {
-				break
-			}
-		}
-		if familySize == 0 || (isBounded && familySize+size <= FamilyHeuristicTargetBytes) {
-			return i, true
-		}
-	}
-	return 0, false
+	// Fewer column families means fewer kv entries, which is generally faster.
+	// On the other hand, an update to any column in a family requires that they
+	// all are read and rewritten, so large (or numerous) columns that are not
+	// updated at the same time as other columns in the family make things
+	// slower.
+	//
+	// The initial heuristic used for family assignment tried to pack
+	// fixed-width columns into families up to a certain size and would put any
+	// variable-width column into its own family. This was conservative to
+	// guarantee that we avoid the worst-case behavior of a very large immutable
+	// blob in the same family as frequently updated columns.
+	//
+	// However, our initial customers have revealed that this is backward.
+	// Repeatedly, they have recreated existing schemas without any tuning and
+	// found lackluster performance. Each of these has turned out better as a
+	// single family (sometimes 100% faster or more), the most aggressive tuning
+	// possible.
+	//
+	// Further, as the WideTable benchmark shows, even the worst-case isn't that
+	// bad (33% slower with an immutable 1MB blob, which is the upper limit of
+	// what we'd recommend for column size regardless of families). This
+	// situation also appears less frequent than we feared.
+	//
+	// The result is that we put all columns in one family and require the user
+	// to manually specify family assignments when this is incorrect.
+	return 0, true
 }
 
 // AddColumn adds a column to the table.
@@ -1651,6 +1624,8 @@ func DatumTypeToColumnType(ptyp parser.Type) ColumnType {
 		ctyp.Kind = ColumnType_BYTES
 	case parser.TypeString:
 		ctyp.Kind = ColumnType_STRING
+	case parser.TypeName:
+		ctyp.Kind = ColumnType_NAME
 	case parser.TypeDate:
 		ctyp.Kind = ColumnType_DATE
 	case parser.TypeTimestamp:
@@ -1659,6 +1634,10 @@ func DatumTypeToColumnType(ptyp parser.Type) ColumnType {
 		ctyp.Kind = ColumnType_TIMESTAMPTZ
 	case parser.TypeInterval:
 		ctyp.Kind = ColumnType_INTERVAL
+	case parser.TypeOid:
+		ctyp.Kind = ColumnType_OID
+	case parser.TypeIntArray:
+		ctyp.Kind = ColumnType_INT_ARRAY
 	default:
 		if t, ok := ptyp.(parser.TCollatedString); ok {
 			ctyp.Kind = ColumnType_COLLATEDSTRING
@@ -1699,6 +1678,10 @@ func (c *ColumnType) ToDatumType() parser.Type {
 			panic("locale is required for COLLATEDSTRING")
 		}
 		return parser.TCollatedString{Locale: *c.Locale}
+	case ColumnType_NAME:
+		return parser.TypeName
+	case ColumnType_OID:
+		return parser.TypeOid
 	case ColumnType_INT_ARRAY:
 		return parser.TypeIntArray
 	}

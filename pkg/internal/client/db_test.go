@@ -19,7 +19,6 @@ package client_test
 import (
 	"bytes"
 	"reflect"
-	"strings"
 	"testing"
 
 	"golang.org/x/net/context"
@@ -27,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/util/caller"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
@@ -333,10 +331,10 @@ func TestDebugName(t *testing.T) {
 	s, db := setup(t)
 	defer s.Stopper().Stop()
 
-	file, _, _ := caller.Lookup(0)
 	if err := db.Txn(context.TODO(), func(txn *client.Txn) error {
-		if !strings.HasPrefix(txn.DebugName(), file+":") {
-			t.Fatalf("expected \"%s\" to have the prefix \"%s:\"", txn.DebugName(), file)
+		const expected = "unnamed"
+		if txn.DebugName() != expected {
+			t.Fatalf("expected \"%s\", but found \"%s\"", expected, txn.DebugName())
 		}
 		return nil
 	}); err != nil {
@@ -376,6 +374,7 @@ func TestCommonMethods(t *testing.T) {
 		{dbType, "Txn"}:                     {},
 		{dbType, "GetSender"}:               {},
 		{dbType, "PutInline"}:               {},
+		{dbType, "WriteBatch"}:              {},
 		{txnType, "Commit"}:                 {},
 		{txnType, "CommitInBatch"}:          {},
 		{txnType, "CommitOrCleanup"}:        {},
@@ -394,6 +393,7 @@ func TestCommonMethods(t *testing.T) {
 		{txnType, "SetUserPriority"}:        {},
 		{txnType, "SetSystemConfigTrigger"}: {},
 		{txnType, "SystemConfigTrigger"}:    {},
+		{txnType, "SetTxnAnchorKey"}:        {},
 		{txnType, "UpdateDeadlineMaybe"}:    {},
 		{txnType, "AddCommitTrigger"}:       {},
 	}

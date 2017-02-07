@@ -20,8 +20,21 @@
 GO ?= go
 # Allow setting of go build flags from the command line.
 GOFLAGS :=
-# Set to 1 to use static linking for all builds (including tests).
-STATIC :=
+# Possible values:
+# <empty>: use the default toolchain
+# release: target Linux 2.6.32, dynamically link to GLIBC 2.12.2
+# musl:  target Linux 3.2.84, statically link musl 1.1.16
+#
+# Both release and musl only work in the cockroachdb/builder docker image,
+# as they depend on cross-compilation toolchains available there.
+#
+# The release variant targets RHEL/CentOS 6.
+#
+# The musl variant targets the latest musl version (at the time of writing).
+# The kernel version is the lowest available in combination with this version
+# of musl. See:
+# https://github.com/crosstool-ng/crosstool-ng/issues/540#issuecomment-276508500.
+TYPE :=
 
 COCKROACH := ./cockroach
 
@@ -58,21 +71,26 @@ $(error bash is required)
 endif
 export GIT_PAGER :=
 
-# Note: We pass `-v` to `go build` and `go test -i` so that warnings
-# from the linker aren't suppressed. The usage of `-v` also shows when
-# dependencies are rebuilt which is useful when switching between
-# normal and race test builds.
-
-ifeq ($(STATIC),1)
-# Static linking with glibc is a bad time; see
-# https://github.com/golang/go/issues/13470. If a static build is
-# requested, only link libgcc and libstdc++ statically.
-# TODO(peter): Allow this only when `go env CC` reports "gcc".
-LDFLAGS += -extldflags "-static-libgcc -static-libstdc++"
+ifeq ($(TYPE),)
+override LDFLAGS += -X github.com/cockroachdb/cockroach/pkg/build.typ=development
+else ifeq ($(TYPE),release)
+override LDFLAGS += -linkmode external -extldflags "-static-libgcc -static-libstdc++" -X github.com/cockroachdb/cockroach/pkg/build.typ=release
+else ifeq ($(TYPE),musl)
+# This tag disables jemalloc profiling. See https://github.com/jemalloc/jemalloc/issues/585.
+override TAGS += musl
+export CC  = /x-tools/x86_64-unknown-linux-musl/bin/x86_64-unknown-linux-musl-gcc
+export CXX = /x-tools/x86_64-unknown-linux-musl/bin/x86_64-unknown-linux-musl-g++
+override LDFLAGS += -linkmode external -extldflags -static -X github.com/cockroachdb/cockroach/pkg/build.typ=release-musl
+override GOFLAGS += -installsuffix musl
+else
+$(error unknown build type $(TYPE))
 endif
 
 .PHONY: all
 all: build test check
+
+.PHONY: short
+short: build testshort checkshort
 
 .PHONY: buildoss
 buildoss: BUILDTARGET = ./pkg/cmd/cockroach-oss
@@ -87,20 +105,19 @@ start: build
 start:
 	$(COCKROACH) start $(STARTFLAGS)
 
-
+# Note: We pass `-v` to `go build` and `go test -i` so that warnings
+# from the linker aren't suppressed. The usage of `-v` also shows when
+# dependencies are rebuilt which is useful when switching between
+# normal and race test builds.
 .PHONY: install
-install: LDFLAGS += $(shell GOPATH=${GOPATH} build/ldflags.sh)
+install: override LDFLAGS += $(shell GOPATH=${GOPATH} build/ldflags.sh)
 install:
 	@echo "GOPATH set to $$GOPATH"
 	@echo "$$GOPATH/bin added to PATH"
-	@echo $(GO) $(BUILDMODE) -v $(GOFLAGS) $(BUILDTARGET)
-	@$(GO) $(BUILDMODE) -v $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LDFLAGS)' $(BUILDTARGET)
+	$(GO) $(BUILDMODE) -v $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LDFLAGS)' $(BUILDTARGET)
 
 # Build, but do not run the tests.
 # PKG is expanded and all packages are built and moved to their directory.
-# If STATIC=1, tests are statically linked.
-# eg: to statically build the sql tests, run:
-#   make STATIC=1 testbuild PKG=./pkg/sql
 .PHONY: testbuild
 testbuild:
 	$(GO) list -tags '$(TAGS)' -f \
@@ -119,12 +136,16 @@ else
 	$(GO) test $(GOFLAGS) -tags '$(TAGS)' -run "$(TESTS)" -bench "$(BENCHES)" -timeout $(TESTTIMEOUT) $(PKG) $(TESTFLAGS)
 endif
 
-testrace: GOFLAGS += -race
+.PHONY: testshort
+testshort: override TESTFLAGS += -short
+testshort: test
+
+testrace: override GOFLAGS += -race
 testrace: TESTTIMEOUT := $(RACETIMEOUT)
 testrace: test
 
 .PHONY: testslow
-testslow: TESTFLAGS += -v
+testslow: override TESTFLAGS += -v
 testslow: gotestdashi
 ifeq ($(BENCHES),-)
 	$(GO) test $(GOFLAGS) -tags '$(TAGS)' -run "$(TESTS)" -timeout $(TESTTIMEOUT) $(PKG) $(TESTFLAGS) | grep -F ': Test' | sed -E 's/(--- PASS: |\(|\))//g' | awk '{ print $$2, $$1 }' | sort -rn | head -n 10
@@ -133,7 +154,7 @@ else
 endif
 
 .PHONY: testraceslow
-testraceslow: GOFLAGS += -race
+testraceslow: override GOFLAGS += -race
 testraceslow: TESTTIMEOUT := $(RACETIMEOUT)
 testraceslow: testslow
 
@@ -155,7 +176,7 @@ else
 endif
 
 .PHONY: stressrace
-stressrace: GOFLAGS += -race
+stressrace: override GOFLAGS += -race
 stressrace: TESTTIMEOUT := $(RACETIMEOUT)
 stressrace: stress
 
@@ -198,9 +219,14 @@ dupl:
 	| dupl -files $(DUPLFLAGS)
 
 .PHONY: check
-check: TAGS += check
+check: override TAGS += check
 check:
 	$(GO) test ./build -v -tags '$(TAGS)' -run 'TestStyle/$(TESTS)'
+
+.PHONY: checkshort
+checkshort: override TAGS += check
+checkshort:
+	$(GO) test ./build -v -tags '$(TAGS)' -short -run 'TestStyle/$(TESTS)'
 
 .PHONY: clean
 clean:
@@ -239,13 +265,11 @@ GLOCK := ../../../../bin/glock
 #        |  |~ GOPATH/src/github.com
 #        |~ GOPATH/src/github.com/cockroachdb
 
-$(GLOCK):
-	$(GO) install ./vendor/github.com/robfig/glock
-
 # Update the git hooks and run the bootstrap script whenever any
 # of them (or their dependencies) change.
-.bootstrap: $(GITHOOKS) $(GLOCK) GLOCKFILE glide.lock
+.bootstrap: $(GITHOOKS) GLOCKFILE glide.lock
 	git submodule update --init
+	$(GO) install ./vendor/github.com/robfig/glock
 	@unset GIT_WORK_TREE; $(GLOCK) sync -n < GLOCKFILE
 	touch $@
 

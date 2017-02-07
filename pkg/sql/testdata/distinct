@@ -34,8 +34,9 @@ query ITTT
 EXPLAIN SELECT DISTINCT y, z FROM xyz
 ----
 0  distinct
-1  scan
-1            table  xyz@primary
+1  render
+2  scan
+2            table  xyz@primary
 
 query II
 SELECT DISTINCT y, z FROM xyz ORDER BY z
@@ -51,9 +52,10 @@ EXPLAIN SELECT DISTINCT y, z FROM xyz ORDER BY z
 ----
 0  distinct
 0            key    y, z
-1  scan
-1            table  xyz@foo
-1            spans  ALL
+1  render
+2  scan
+2            table  xyz@foo
+2            spans  ALL
 
 query II
 SELECT DISTINCT y, z FROM xyz ORDER BY y, z
@@ -71,9 +73,10 @@ EXPLAIN SELECT DISTINCT y, z FROM xyz ORDER BY y
 0            key    y
 1  sort
 1            order  +y
-2  scan
-2            table  xyz@foo
-2            spans  ALL
+2  render
+3  scan
+3            table  xyz@foo
+3            spans  ALL
 
 query II
 SELECT DISTINCT y, z FROM xyz ORDER BY y, z
@@ -91,9 +94,10 @@ EXPLAIN SELECT DISTINCT y, z FROM xyz ORDER BY y, z
 0            key    y, z
 1  sort
 1            order  +y,+z
-2  scan
-2            table  xyz@foo
-2            spans  ALL
+2  render
+3  scan
+3            table  xyz@foo
+3            spans  ALL
 
 query I
 SELECT DISTINCT y + z FROM xyz ORDER by (y + z)
@@ -109,9 +113,9 @@ EXPLAIN SELECT DISTINCT y + z FROM xyz ORDER BY y + z
 0            key    y + z
 1  sort
 1            order  +"y + z"
-2  scan
-2            table  xyz@foo
-2            spans  ALL
+2  render
+3  scan
+3            table  xyz@primary
 
 query I
 SELECT DISTINCT y AS w FROM xyz ORDER by z
@@ -126,9 +130,10 @@ EXPLAIN SELECT DISTINCT y AS w FROM xyz ORDER BY z
 0  distinct
 1  nosort
 1            order  +z
-2  scan
-2            table  xyz@foo
-2            spans  ALL
+2  render
+3  scan
+3            table  xyz@foo
+3            spans  ALL
 
 query I
 SELECT DISTINCT y AS w FROM xyz ORDER by y
@@ -144,9 +149,10 @@ EXPLAIN SELECT DISTINCT y AS w FROM xyz ORDER BY y
 0            key    w
 1  sort
 1            order  +w
-2  scan
-2            table  xyz@foo
-2            spans  ALL
+2  render
+3  scan
+3            table  xyz@foo
+3            spans  ALL
 
 # Insert NULL values for z.
 statement ok

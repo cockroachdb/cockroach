@@ -41,6 +41,12 @@ import (
 // MaxSize is the maximum size of a log file in bytes.
 var MaxSize uint64 = 1024 * 1024 * 10
 
+// MaxSizePerSeverity is the maximum total size in bytes for log files per
+// severity. Note that this is only checked when log files are created, so the
+// total size of log files per severity might temporarily be up to MaxSize
+// larger.
+var MaxSizePerSeverity = MaxSize * 10
+
 // If non-empty, overrides the choice of directory in which to write logs. See
 // createLogDirs for the full list of possible destinations. Note that the
 // default is to log to stderr independent of this setting. See --logtostderr.
@@ -72,13 +78,6 @@ func (l *logDirName) String() string {
 	l.Lock()
 	defer l.Unlock()
 	return l.name
-}
-
-func (l *logDirName) clear() {
-	// For testing only.
-	l.Lock()
-	defer l.Unlock()
-	l.name = ""
 }
 
 func (l *logDirName) get() (string, error) {

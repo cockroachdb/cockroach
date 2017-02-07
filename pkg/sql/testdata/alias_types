@@ -1,0 +1,60 @@
+statement ok
+CREATE TABLE aliases (
+    a OID,
+    b NAME,
+    FAMILY "primary" (a, rowid),
+    FAMILY fam_1_b (b)
+)
+
+query TT colnames
+SHOW CREATE TABLE aliases
+----
+Table    CreateTable
+aliases  CREATE TABLE aliases (
+           a OID NULL,
+           b NAME NULL,
+           FAMILY "primary" (a, rowid),
+           FAMILY fam_1_b (b)
+         )
+
+statement ok
+INSERT INTO aliases VALUES (100, 'abc')
+
+statement ok
+INSERT INTO aliases VALUES (2::OID, 'def')
+
+statement ok
+INSERT INTO aliases VALUES ('bool'::REGTYPE, ('ghi':::STRING)::NAME)
+
+query OT
+SELECT a, b FROM aliases ORDER BY a
+----
+2    def
+16   ghi
+100  abc
+
+query TT
+SELECT pg_typeof(a), pg_typeof(b) FROM aliases LIMIT 1
+----
+oid  name
+
+query IT
+SELECT a+1, b || 'cat' FROM aliases ORDER BY a
+----
+3    defcat
+17   ghicat
+101  abccat
+
+query TT
+SELECT to_hex(a), reverse(b) FROM aliases ORDER BY a
+----
+2   fed
+10  ihg
+64  cba
+
+query RI
+SELECT sqrt(a::DECIMAL), length(b::BYTES) FROM aliases ORDER BY a
+----
+1.4142135623730950   3
+4.0000000000000000   3
+10.0000000000000000  3

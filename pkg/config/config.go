@@ -18,7 +18,6 @@ package config
 
 import (
 	"bytes"
-	"crypto/sha1"
 	"fmt"
 	"sort"
 	"strings"
@@ -189,16 +188,27 @@ func ObjectIDForKey(key roachpb.RKey) (uint32, bool) {
 	return uint32(id64), err == nil
 }
 
-// Hash returns a SHA1 hash of the SystemConfig contents.
-func (s SystemConfig) Hash() []byte {
-	sha := sha1.New()
-	for _, kv := range s.Values {
-		_, _ = sha.Write(kv.Key)
-		// There are all kinds of different types here, so we can't use the typed
-		// getters.
-		_, _ = sha.Write(kv.Value.RawBytes)
+// Equal checks for equality.
+//
+// It assumes that s.Values and other.Values are sorted in key order.
+func (s SystemConfig) Equal(other SystemConfig) bool {
+	if len(s.Values) != len(other.Values) {
+		return false
 	}
-	return sha.Sum(nil)
+	for i := range s.Values {
+		leftKV, rightKV := s.Values[i], other.Values[i]
+		if !leftKV.Key.Equal(rightKV.Key) {
+			return false
+		}
+		leftVal, rightVal := leftKV.Value, rightKV.Value
+		if !bytes.Equal(leftVal.RawBytes, rightVal.RawBytes) {
+			return false
+		}
+		if !leftVal.Timestamp.Equal(rightVal.Timestamp) {
+			return false
+		}
+	}
+	return true
 }
 
 // GetValue searches the kv list for 'key' and returns its
@@ -359,14 +369,24 @@ func (s SystemConfig) getZoneConfigForID(id uint32) (ZoneConfig, error) {
 	return DefaultZoneConfig(), nil
 }
 
-// ComputeSplitKeys takes a start and end key and returns an array of keys
-// at which to split the span [start, end).
-// The only required splits are at each user table prefix.
-func (s SystemConfig) ComputeSplitKeys(startKey, endKey roachpb.RKey) []roachpb.RKey {
-	tableStart := roachpb.RKey(keys.SystemConfigTableDataMax)
-	if !tableStart.Less(endKey) {
-		// This range is before the user tables span: no required splits.
+// ComputeSplitKey takes a start and end key and returns the first key at which
+// to split the span [start, end). Returns nil if no splits are required.
+//
+// Splits are required between user tables (i.e. /table/<id>) and at the start
+// of the system-config range (i.e. /table/0). The system-config range is
+// somewhat special in that it contains multiple SQL tables
+// (/table/0-/table/<max-system-config-desc>) which must be contained in a
+// single range.
+func (s SystemConfig) ComputeSplitKey(startKey, endKey roachpb.RKey) roachpb.RKey {
+	systemConfigStart := roachpb.RKey(keys.TableDataMin)
+	if !systemConfigStart.Less(endKey) {
+		// endKey <= systemConfigStart: no required splits.
 		return nil
+	}
+	if startKey.Less(systemConfigStart) {
+		// startKey < systemConfigStart: split the range at the start of the system
+		// config span.
+		return keys.SystemConfigSplitKey
 	}
 
 	startID, ok := ObjectIDForKey(startKey)
@@ -387,15 +407,13 @@ func (s SystemConfig) ComputeSplitKeys(startKey, endKey roachpb.RKey) []roachpb.
 	// that there are two disjoint sets of sequential keys: non-system reserved
 	// tables have sequential IDs, as do user tables, but the two ranges contain a
 	// gap.
-	var splitKeys []roachpb.RKey
-	var key roachpb.RKey
 
-	// appendSplitKeys generates all possible split keys between the given range
-	// of IDs and adds them to splitKeys.
-	appendSplitKeys := func(startID, endID uint32) {
+	// findSplitKey returns the first possible split key between the given range
+	// of IDs.
+	findSplitKey := func(startID, endID uint32) roachpb.RKey {
 		// endID could be smaller than startID if we don't have user tables.
 		for id := startID; id <= endID; id++ {
-			key = keys.MakeRowSentinelKey(keys.MakeTablePrefix(id))
+			key := roachpb.RKey(keys.MakeRowSentinelKey(keys.MakeTablePrefix(id)))
 			// Skip if this ID matches the startKey passed to ComputeSplitKeys.
 			if !startKey.Less(key) {
 				continue
@@ -404,8 +422,9 @@ func (s SystemConfig) ComputeSplitKeys(startKey, endKey roachpb.RKey) []roachpb.
 			if !key.Less(endKey) {
 				break
 			}
-			splitKeys = append(splitKeys, key)
+			return key
 		}
+		return nil
 	}
 
 	// If the startKey falls within the non-system reserved range, compute those
@@ -416,23 +435,23 @@ func (s SystemConfig) ComputeSplitKeys(startKey, endKey roachpb.RKey) []roachpb.
 			log.Errorf(context.TODO(), "unable to determine largest reserved object ID from system config: %s", err)
 			return nil
 		}
-		appendSplitKeys(startID, endID)
+		if splitKey := findSplitKey(startID, endID); splitKey != nil {
+			return splitKey
+		}
 		startID = keys.MaxReservedDescID + 1
 	}
 
-	// Append keys in the user space.
+	// Find the split key in the user space.
 	endID, err := s.GetLargestObjectID(0)
 	if err != nil {
 		log.Errorf(context.TODO(), "unable to determine largest object ID from system config: %s", err)
 		return nil
 	}
-	appendSplitKeys(startID, endID)
-
-	return splitKeys
+	return findSplitKey(startID, endID)
 }
 
 // NeedsSplit returns whether the range [startKey, endKey) needs a split due
 // to zone configs.
 func (s SystemConfig) NeedsSplit(startKey, endKey roachpb.RKey) bool {
-	return len(s.ComputeSplitKeys(startKey, endKey)) > 0
+	return len(s.ComputeSplitKey(startKey, endKey)) > 0
 }

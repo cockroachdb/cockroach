@@ -815,7 +815,7 @@ func newBinExprIfValidOverload(op BinaryOperator, left TypedExpr, right TypedExp
 			Right:    right,
 			fn:       fn,
 		}
-		expr.typ = fn.returnType()
+		expr.typ = returnTypeToFixedType(fn.returnType())
 		return expr
 	}
 	return nil
@@ -890,13 +890,33 @@ type FuncExpr struct {
 // GetAggregateConstructor exposes the AggregateFunc field for use by
 // the group node in package sql.
 func (node *FuncExpr) GetAggregateConstructor() func() AggregateFunc {
-	return node.fn.AggregateFunc
+	if node.fn.AggregateFunc == nil {
+		return nil
+	}
+	return func() AggregateFunc {
+		types := typesOfExprs(node.Exprs)
+		return node.fn.AggregateFunc(types)
+	}
 }
 
 // GetWindowConstructor returns a window function constructor if the
 // FuncExpr is a built-in window function.
 func (node *FuncExpr) GetWindowConstructor() func() WindowFunc {
-	return node.fn.WindowFunc
+	if node.fn.WindowFunc == nil {
+		return nil
+	}
+	return func() WindowFunc {
+		types := typesOfExprs(node.Exprs)
+		return node.fn.WindowFunc(types)
+	}
+}
+
+func typesOfExprs(exprs Exprs) []Type {
+	types := make([]Type, len(exprs))
+	for i, expr := range exprs {
+		types[i] = expr.(TypedExpr).ResolvedType()
+	}
+	return types
 }
 
 // IsWindowFunctionApplication returns if the function is being applied as a window function.
@@ -1007,37 +1027,6 @@ const (
 	castPrepend
 )
 
-// CastTargetType represents a type that is a valid cast target.
-type CastTargetType interface {
-	fmt.Stringer
-	NodeFormatter
-	castTargetType()
-}
-
-// PGOIDType represents a postgres oid pseudo-type.
-// See https://www.postgresql.org/docs/9.6/static/datatype-oid.html.
-type PGOIDType struct {
-	Name string
-}
-
-func (*PGOIDType) castTargetType() {}
-
-// Format implements the NodeFormatter interface.
-func (node *PGOIDType) Format(buf *bytes.Buffer, f FmtFlags) {
-	buf.WriteString(node.Name)
-}
-
-func (node *PGOIDType) String() string { return AsString(node) }
-
-// Pre-allocated immutable postgres oid pseudo-types.
-var (
-	oidPseudoTypeOid          = &PGOIDType{Name: "OID"}
-	oidPseudoTypeRegProc      = &PGOIDType{Name: "REGPROC"}
-	oidPseudoTypeRegClass     = &PGOIDType{Name: "REGCLASS"}
-	oidPseudoTypeRegType      = &PGOIDType{Name: "REGTYPE"}
-	oidPseudoTypeRegNamespace = &PGOIDType{Name: "REGNAMESPACE"}
-)
-
 // CastExpr represents a CAST(expr AS type) expression.
 type CastExpr struct {
 	Expr Expr
@@ -1075,7 +1064,7 @@ func (node *CastExpr) Format(buf *bytes.Buffer, f FmtFlags) {
 }
 
 func (node *CastExpr) castType() Type {
-	return columnTypeToDatumType(node.Type)
+	return CastTargetToDatumType(node.Type)
 }
 
 var (
@@ -1092,12 +1081,11 @@ var (
 	dateCastTypes      = []Type{TypeNull, TypeString, TypeCollatedString, TypeDate, TypeTimestamp, TypeTimestampTZ, TypeInt}
 	timestampCastTypes = []Type{TypeNull, TypeString, TypeCollatedString, TypeDate, TypeTimestamp, TypeTimestampTZ, TypeInt}
 	intervalCastTypes  = []Type{TypeNull, TypeString, TypeCollatedString, TypeInt, TypeInterval}
-	oidCastTypes       = []Type{TypeNull, TypeString, TypeCollatedString, TypeInt}
 )
 
 // validCastTypes returns a set of types that can be cast into the provided type.
 func validCastTypes(t Type) []Type {
-	switch t {
+	switch UnwrapType(t) {
 	case TypeBool:
 		return boolCastTypes
 	case TypeInt:
@@ -1116,8 +1104,6 @@ func validCastTypes(t Type) []Type {
 		return timestampCastTypes
 	case TypeInterval:
 		return intervalCastTypes
-	case TypePGOID:
-		return oidCastTypes
 	default:
 		// TODO(eisen): currently dead -- there is no syntax yet for casting
 		// directly to collated string.
@@ -1180,7 +1166,7 @@ func (node *AnnotateTypeExpr) TypedInnerExpr() TypedExpr {
 }
 
 func (node *AnnotateTypeExpr) annotationType() Type {
-	return columnTypeToDatumType(node.Type)
+	return CastTargetToDatumType(node.Type)
 }
 
 // CollateExpr represents an (expr COLLATE locale) expression.
@@ -1223,6 +1209,7 @@ func (node *DTimestampTZ) String() string     { return AsString(node) }
 func (node *DTuple) String() string           { return AsString(node) }
 func (node *DArray) String() string           { return AsString(node) }
 func (node *DTable) String() string           { return AsString(node) }
+func (node *DOidWrapper) String() string      { return AsString(node) }
 func (node *ExistsExpr) String() string       { return AsString(node) }
 func (node Exprs) String() string             { return AsString(node) }
 func (node *ArrayFlatten) String() string     { return AsString(node) }

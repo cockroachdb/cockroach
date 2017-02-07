@@ -429,7 +429,7 @@ func tryRaftLogEntry(kv engine.MVCCKeyValue) (string, error) {
 				return "", err
 			}
 			ent.Data = nil
-			return fmt.Sprintf("%s by %s\n%s\n%s\n", &ent, cmd.OriginLease, cmd.BatchRequest, &cmd), nil
+			return fmt.Sprintf("%s by %s\n%s\n%s\n", &ent, cmd.ProposerLease, cmd.BatchRequest, &cmd), nil
 		}
 		return fmt.Sprintf("%s: EMPTY\n", &ent), nil
 	} else if ent.Type == raftpb.EntryConfChange {
@@ -669,6 +669,23 @@ func runDebugCheckStoreCmd(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
+var debugRocksDBCmd = &cobra.Command{
+	Use:   "rocksdb",
+	Short: "run the RocksDB 'ldb' tool",
+	Long: `
+Runs the RocksDB 'ldb' tool, which provides various subcommands for examining
+raw store data. 'cockroach debug rocksdb' accepts the same arguments and flags
+as 'ldb'.
+
+https://github.com/facebook/rocksdb/wiki/Administration-and-Data-Access-Tool#ldb-tool
+`,
+	// LDB does its own flag parsing.
+	DisableFlagParsing: true,
+	Run: func(cmd *cobra.Command, args []string) {
+		engine.RunLDB(args)
+	},
+}
+
 var debugEnvCmd = &cobra.Command{
 	Use:   "env",
 	Short: "output environment settings",
@@ -761,6 +778,7 @@ var debugCmds = []*cobra.Command{
 	debugRaftLogCmd,
 	debugGCCmd,
 	debugCheckStoreCmd,
+	debugRocksDBCmd,
 	debugCompactCmd,
 	debugSSTablesCmd,
 	kvCmd,

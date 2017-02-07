@@ -89,7 +89,7 @@ const (
 // Builtin is a built-in function.
 type Builtin struct {
 	Types      typeList
-	ReturnType Type
+	ReturnType returnTyper
 
 	// When multiple overloads are eligible based on types even after all of of
 	// the heuristics to pick one have been used, if one of the overloads is a
@@ -127,9 +127,8 @@ type Builtin struct {
 	// might be more appropriate.
 	Info string
 
-	AggregateFunc func() AggregateFunc
-	WindowFunc    func() WindowFunc
-	generator     generatorFactory
+	AggregateFunc func([]Type) AggregateFunc
+	WindowFunc    func([]Type) WindowFunc
 	fn            func(*EvalContext, DTuple) (Datum, error)
 }
 
@@ -137,7 +136,7 @@ func (b Builtin) params() typeList {
 	return b.Types
 }
 
-func (b Builtin) returnType() Type {
+func (b Builtin) returnType() returnTyper {
 	return b.ReturnType
 }
 
@@ -168,16 +167,12 @@ func (b Builtin) Category() string {
 	switch typ := b.Types.(type) {
 	case ArgTypes:
 		if len(typ) == 1 {
-			return categorizeType(typ[0])
-		}
-	case NamedArgTypes:
-		if len(typ) == 1 {
 			return categorizeType(typ[0].Typ)
 		}
 	}
 	// Fall back to categorizing by return type.
-	if b.ReturnType != nil {
-		return categorizeType(b.ReturnType)
+	if retType := b.FixedReturnType(); retType != nil {
+		return categorizeType(retType)
 	}
 	return ""
 }
@@ -198,9 +193,18 @@ func (b Builtin) ContextDependent() bool {
 	return b.ctxDependent
 }
 
+// FixedReturnType returns a fixed type that the function returns, returning Any
+// if the return type is based on the function's arguments.
+func (b Builtin) FixedReturnType() Type {
+	if b.ReturnType == nil {
+		return nil
+	}
+	return returnTypeToFixedType(b.ReturnType)
+}
+
 // Signature returns a human-readable signature.
 func (b Builtin) Signature() string {
-	return fmt.Sprintf("(%s) -> %s", b.Types.String(), b.ReturnType)
+	return fmt.Sprintf("(%s) -> %s", b.Types.String(), b.FixedReturnType())
 }
 
 func init() {
@@ -266,14 +270,14 @@ var Builtins = map[string][]Builtin{
 	"concat": {
 		Builtin{
 			Types:      VariadicType{TypeString},
-			ReturnType: TypeString,
+			ReturnType: fixedReturnType(TypeString),
 			fn: func(_ *EvalContext, args DTuple) (Datum, error) {
 				var buffer bytes.Buffer
 				for _, d := range args {
 					if d == DNull {
 						continue
 					}
-					buffer.WriteString(string(*d.(*DString)))
+					buffer.WriteString(string(MustBeDString(d)))
 				}
 				return NewDString(buffer.String()), nil
 			},
@@ -284,7 +288,7 @@ var Builtins = map[string][]Builtin{
 	"concat_ws": {
 		Builtin{
 			Types:      VariadicType{TypeString},
-			ReturnType: TypeString,
+			ReturnType: fixedReturnType(TypeString),
 			fn: func(_ *EvalContext, args DTuple) (Datum, error) {
 				if len(args) == 0 {
 					return nil, errInsufficientArgs
@@ -292,7 +296,7 @@ var Builtins = map[string][]Builtin{
 				if args[0] == DNull {
 					return DNull, nil
 				}
-				sep := string(*args[0].(*DString))
+				sep := string(MustBeDString(args[0]))
 				var buf bytes.Buffer
 				prefix := ""
 				for _, d := range args[1:] {
@@ -303,7 +307,7 @@ var Builtins = map[string][]Builtin{
 					// would break when the 2nd argument is NULL.
 					buf.WriteString(prefix)
 					prefix = sep
-					buf.WriteString(string(*d.(*DString)))
+					buf.WriteString(string(MustBeDString(d)))
 				}
 				return NewDString(buf.String()), nil
 			},
@@ -315,10 +319,10 @@ var Builtins = map[string][]Builtin{
 
 	"to_uuid": {
 		Builtin{
-			Types:      NamedArgTypes{{"val", TypeString}},
-			ReturnType: TypeBytes,
+			Types:      ArgTypes{{"val", TypeString}},
+			ReturnType: fixedReturnType(TypeBytes),
 			fn: func(_ *EvalContext, args DTuple) (Datum, error) {
-				s := string(*args[0].(*DString))
+				s := string(MustBeDString(args[0]))
 				uv, err := uuid.FromString(s)
 				if err != nil {
 					return nil, err
@@ -332,8 +336,8 @@ var Builtins = map[string][]Builtin{
 
 	"from_uuid": {
 		Builtin{
-			Types:      NamedArgTypes{{"val", TypeBytes}},
-			ReturnType: TypeString,
+			Types:      ArgTypes{{"val", TypeBytes}},
+			ReturnType: fixedReturnType(TypeString),
 			fn: func(_ *EvalContext, args DTuple) (Datum, error) {
 				b := []byte(*args[0].(*DBytes))
 				uv, err := uuid.FromBytes(b)
@@ -349,8 +353,8 @@ var Builtins = map[string][]Builtin{
 
 	"from_ip": {
 		Builtin{
-			Types:      NamedArgTypes{{"val", TypeBytes}},
-			ReturnType: TypeString,
+			Types:      ArgTypes{{"val", TypeBytes}},
+			ReturnType: fixedReturnType(TypeString),
 			fn: func(_ *EvalContext, args DTuple) (Datum, error) {
 				ipstr := args[0].(*DBytes)
 				nboip := net.IP(*ipstr)
@@ -368,15 +372,15 @@ var Builtins = map[string][]Builtin{
 
 	"to_ip": {
 		Builtin{
-			Types:      NamedArgTypes{{"val", TypeString}},
-			ReturnType: TypeBytes,
+			Types:      ArgTypes{{"val", TypeString}},
+			ReturnType: fixedReturnType(TypeBytes),
 			fn: func(_ *EvalContext, args DTuple) (Datum, error) {
-				ipdstr := args[0].(*DString)
-				ip := net.ParseIP(string(*ipdstr))
+				ipdstr := MustBeDString(args[0])
+				ip := net.ParseIP(string(ipdstr))
 				// If ipdstr could not be parsed to a valid IP,
 				// ip will be nil.
 				if ip == nil {
-					return nil, fmt.Errorf("invalid IP format: %s", ipdstr)
+					return nil, fmt.Errorf("invalid IP format: %s", ipdstr.String())
 				}
 				return NewDBytes(DBytes(ip)), nil
 			},
@@ -387,16 +391,16 @@ var Builtins = map[string][]Builtin{
 
 	"split_part": {
 		Builtin{
-			Types: NamedArgTypes{
+			Types: ArgTypes{
 				{"input", TypeString},
 				{"delimiter", TypeString},
 				{"return_index_pos", TypeInt},
 			},
-			ReturnType: TypeString,
+			ReturnType: fixedReturnType(TypeString),
 			fn: func(_ *EvalContext, args DTuple) (Datum, error) {
-				text := string(*args[0].(*DString))
-				sep := string(*args[1].(*DString))
-				field := int(*args[2].(*DInt))
+				text := string(MustBeDString(args[0]))
+				sep := string(MustBeDString(args[1]))
+				field := int(MustBeDInt(args[2]))
 
 				if field <= 0 {
 					return nil, fmt.Errorf("field position %d must be greater than zero", field)
@@ -416,11 +420,11 @@ var Builtins = map[string][]Builtin{
 
 	"repeat": {
 		Builtin{
-			Types:      NamedArgTypes{{"input", TypeString}, {"repeat_counter", TypeInt}},
-			ReturnType: TypeString,
+			Types:      ArgTypes{{"input", TypeString}, {"repeat_counter", TypeInt}},
+			ReturnType: fixedReturnType(TypeString),
 			fn: func(_ *EvalContext, args DTuple) (_ Datum, err error) {
-				s := string(*args[0].(*DString))
-				count := int(*args[1].(*DInt))
+				s := string(MustBeDString(args[0]))
+				count := int(MustBeDInt(args[1]))
 				if count < 0 {
 					count = 0
 				}
@@ -460,10 +464,10 @@ var Builtins = map[string][]Builtin{
 
 	"to_hex": {
 		Builtin{
-			Types:      NamedArgTypes{{"val", TypeInt}},
-			ReturnType: TypeString,
+			Types:      ArgTypes{{"val", TypeInt}},
+			ReturnType: fixedReturnType(TypeString),
 			fn: func(_ *EvalContext, args DTuple) (Datum, error) {
-				return NewDString(fmt.Sprintf("%x", int64(*args[0].(*DInt)))), nil
+				return NewDString(fmt.Sprintf("%x", int64(MustBeDInt(args[0])))), nil
 			},
 			Info: "Converts `val` to its hexadecimal representation.",
 		},
@@ -482,16 +486,16 @@ var Builtins = map[string][]Builtin{
 
 	"overlay": {
 		Builtin{
-			Types: NamedArgTypes{
+			Types: ArgTypes{
 				{"input", TypeString},
 				{"overlay_val", TypeString},
 				{"start_pos", TypeInt},
 			},
-			ReturnType: TypeString,
+			ReturnType: fixedReturnType(TypeString),
 			fn: func(_ *EvalContext, args DTuple) (Datum, error) {
-				s := string(*args[0].(*DString))
-				to := string(*args[1].(*DString))
-				pos := int(*args[2].(*DInt))
+				s := string(MustBeDString(args[0]))
+				to := string(MustBeDString(args[1]))
+				pos := int(MustBeDInt(args[2]))
 				size := utf8.RuneCountInString(to)
 				return overlay(s, to, pos, size)
 			},
@@ -500,18 +504,18 @@ var Builtins = map[string][]Builtin{
 				"`dCATie`.",
 		},
 		Builtin{
-			Types: NamedArgTypes{
+			Types: ArgTypes{
 				{"input", TypeString},
 				{"overlay_val", TypeString},
 				{"start_pos", TypeInt},
 				{"end_pos", TypeInt},
 			},
-			ReturnType: TypeString,
+			ReturnType: fixedReturnType(TypeString),
 			fn: func(_ *EvalContext, args DTuple) (Datum, error) {
-				s := string(*args[0].(*DString))
-				to := string(*args[1].(*DString))
-				pos := int(*args[2].(*DInt))
-				size := int(*args[3].(*DInt))
+				s := string(MustBeDString(args[0]))
+				to := string(MustBeDString(args[1]))
+				pos := int(MustBeDInt(args[2]))
+				size := int(MustBeDInt(args[3]))
 				return overlay(s, to, pos, size)
 			},
 			Info: "Deletes the characters in `input` between `start_pos` and `end_pos` (count " +
@@ -604,11 +608,11 @@ var Builtins = map[string][]Builtin{
 
 	"regexp_extract": {
 		Builtin{
-			Types:      NamedArgTypes{{"input", TypeString}, {"regex", TypeString}},
-			ReturnType: TypeString,
+			Types:      ArgTypes{{"input", TypeString}, {"regex", TypeString}},
+			ReturnType: fixedReturnType(TypeString),
 			fn: func(ctx *EvalContext, args DTuple) (Datum, error) {
-				s := string(*args[0].(*DString))
-				pattern := string(*args[1].(*DString))
+				s := string(MustBeDString(args[0]))
+				pattern := string(MustBeDString(args[1]))
 				return regexpExtract(ctx, s, pattern, `\`)
 			},
 			Info: "Returns the first match for the Regular Expression `regex` in `input`.",
@@ -617,34 +621,34 @@ var Builtins = map[string][]Builtin{
 
 	"regexp_replace": {
 		Builtin{
-			Types: NamedArgTypes{
+			Types: ArgTypes{
 				{"input", TypeString},
 				{"regex", TypeString},
 				{"replace", TypeString},
 			},
-			ReturnType: TypeString,
+			ReturnType: fixedReturnType(TypeString),
 			fn: func(ctx *EvalContext, args DTuple) (Datum, error) {
-				s := string(*args[0].(*DString))
-				pattern := string(*args[1].(*DString))
-				to := string(*args[2].(*DString))
+				s := string(MustBeDString(args[0]))
+				pattern := string(MustBeDString(args[1]))
+				to := string(MustBeDString(args[2]))
 				return regexpReplace(ctx, s, pattern, to, "")
 			},
 			Info: "Replaces matches for the Regular Expression `regex` in `input` with the " +
 				"Regular Expression `replace`.",
 		},
 		Builtin{
-			Types: NamedArgTypes{
+			Types: ArgTypes{
 				{"input", TypeString},
 				{"regex", TypeString},
 				{"replace", TypeString},
 				{"flags", TypeString},
 			},
-			ReturnType: TypeString,
+			ReturnType: fixedReturnType(TypeString),
 			fn: func(ctx *EvalContext, args DTuple) (Datum, error) {
-				s := string(*args[0].(*DString))
-				pattern := string(*args[1].(*DString))
-				to := string(*args[2].(*DString))
-				sqlFlags := string(*args[3].(*DString))
+				s := string(MustBeDString(args[0]))
+				pattern := string(MustBeDString(args[1]))
+				to := string(MustBeDString(args[2]))
+				sqlFlags := string(MustBeDString(args[3]))
 				return regexpReplace(ctx, s, pattern, to, sqlFlags)
 			},
 			Info: "Replaces matches for the Regular Expression `regex` in `input` with the Regular " +
@@ -673,11 +677,11 @@ var Builtins = map[string][]Builtin{
 
 	"left": {
 		Builtin{
-			Types:      NamedArgTypes{{"input", TypeBytes}, {"return_set", TypeInt}},
-			ReturnType: TypeBytes,
+			Types:      ArgTypes{{"input", TypeBytes}, {"return_set", TypeInt}},
+			ReturnType: fixedReturnType(TypeBytes),
 			fn: func(_ *EvalContext, args DTuple) (Datum, error) {
 				bytes := []byte(*args[0].(*DBytes))
-				n := int(*args[1].(*DInt))
+				n := int(MustBeDInt(args[1]))
 
 				if n < -len(bytes) {
 					n = 0
@@ -691,11 +695,11 @@ var Builtins = map[string][]Builtin{
 			Info: "Returns the first `return_set` bytes from `input`.",
 		},
 		Builtin{
-			Types:      NamedArgTypes{{"input", TypeString}, {"return_set", TypeInt}},
-			ReturnType: TypeString,
+			Types:      ArgTypes{{"input", TypeString}, {"return_set", TypeInt}},
+			ReturnType: fixedReturnType(TypeString),
 			fn: func(_ *EvalContext, args DTuple) (Datum, error) {
-				runes := []rune(string(*args[0].(*DString)))
-				n := int(*args[1].(*DInt))
+				runes := []rune(string(MustBeDString(args[0])))
+				n := int(MustBeDInt(args[1]))
 
 				if n < -len(runes) {
 					n = 0
@@ -712,11 +716,11 @@ var Builtins = map[string][]Builtin{
 
 	"right": {
 		Builtin{
-			Types:      NamedArgTypes{{"input", TypeBytes}, {"return_set", TypeInt}},
-			ReturnType: TypeBytes,
+			Types:      ArgTypes{{"input", TypeBytes}, {"return_set", TypeInt}},
+			ReturnType: fixedReturnType(TypeBytes),
 			fn: func(_ *EvalContext, args DTuple) (Datum, error) {
 				bytes := []byte(*args[0].(*DBytes))
-				n := int(*args[1].(*DInt))
+				n := int(MustBeDInt(args[1]))
 
 				if n < -len(bytes) {
 					n = 0
@@ -730,11 +734,11 @@ var Builtins = map[string][]Builtin{
 			Info: "Returns the last `return_set` bytes from `input`.",
 		},
 		Builtin{
-			Types:      NamedArgTypes{{"input", TypeString}, {"return_set", TypeInt}},
-			ReturnType: TypeString,
+			Types:      ArgTypes{{"input", TypeString}, {"return_set", TypeInt}},
+			ReturnType: fixedReturnType(TypeString),
 			fn: func(_ *EvalContext, args DTuple) (Datum, error) {
-				runes := []rune(string(*args[0].(*DString)))
-				n := int(*args[1].(*DInt))
+				runes := []rune(string(MustBeDString(args[0])))
+				n := int(MustBeDInt(args[1]))
 
 				if n < -len(runes) {
 					n = 0
@@ -751,8 +755,8 @@ var Builtins = map[string][]Builtin{
 
 	"random": {
 		Builtin{
-			Types:                   NamedArgTypes{},
-			ReturnType:              TypeFloat,
+			Types:                   ArgTypes{},
+			ReturnType:              fixedReturnType(TypeFloat),
 			impure:                  true,
 			needsRepeatedEvaluation: true,
 			fn: func(_ *EvalContext, args DTuple) (Datum, error) {
@@ -764,8 +768,8 @@ var Builtins = map[string][]Builtin{
 
 	"unique_rowid": {
 		Builtin{
-			Types:      NamedArgTypes{},
-			ReturnType: TypeInt,
+			Types:      ArgTypes{},
+			ReturnType: fixedReturnType(TypeInt),
 			category:   categoryIDGeneration,
 			impure:     true,
 			fn: func(ctx *EvalContext, args DTuple) (Datum, error) {
@@ -783,8 +787,8 @@ var Builtins = map[string][]Builtin{
 
 	"greatest": {
 		Builtin{
-			Types:      AnyType{},
-			ReturnType: TypeAny,
+			Types:      HomogeneousType{},
+			ReturnType: identityReturnType(0),
 			category:   categoryComparison,
 			fn: func(ctx *EvalContext, args DTuple) (Datum, error) {
 				return pickFromTuple(ctx, true /* greatest */, args)
@@ -795,8 +799,8 @@ var Builtins = map[string][]Builtin{
 
 	"least": {
 		Builtin{
-			Types:      AnyType{},
-			ReturnType: TypeAny,
+			Types:      HomogeneousType{},
+			ReturnType: identityReturnType(0),
 			category:   categoryComparison,
 			fn: func(ctx *EvalContext, args DTuple) (Datum, error) {
 				return pickFromTuple(ctx, false /* !greatest */, args)
@@ -809,11 +813,11 @@ var Builtins = map[string][]Builtin{
 
 	"experimental_strftime": {
 		Builtin{
-			Types:      NamedArgTypes{{"input", TypeTimestamp}, {"extract_format", TypeString}},
-			ReturnType: TypeString,
+			Types:      ArgTypes{{"input", TypeTimestamp}, {"extract_format", TypeString}},
+			ReturnType: fixedReturnType(TypeString),
 			fn: func(_ *EvalContext, args DTuple) (Datum, error) {
 				fromTime := args[0].(*DTimestamp).Time
-				format := string(*args[1].(*DString))
+				format := string(MustBeDString(args[1]))
 				t, err := timeutil.Strftime(fromTime, format)
 				if err != nil {
 					return nil, err
@@ -824,11 +828,11 @@ var Builtins = map[string][]Builtin{
 				"using standard `strftime` notation (though not all formatting is supported).",
 		},
 		Builtin{
-			Types:      NamedArgTypes{{"input", TypeDate}, {"extract_format", TypeString}},
-			ReturnType: TypeString,
+			Types:      ArgTypes{{"input", TypeDate}, {"extract_format", TypeString}},
+			ReturnType: fixedReturnType(TypeString),
 			fn: func(_ *EvalContext, args DTuple) (Datum, error) {
 				fromTime := time.Unix(int64(*args[0].(*DDate))*secondsInDay, 0).UTC()
-				format := string(*args[1].(*DString))
+				format := string(MustBeDString(args[1]))
 				t, err := timeutil.Strftime(fromTime, format)
 				if err != nil {
 					return nil, err
@@ -839,11 +843,11 @@ var Builtins = map[string][]Builtin{
 				"using standard `strftime` notation (though not all formatting is supported).",
 		},
 		Builtin{
-			Types:      NamedArgTypes{{"input", TypeTimestampTZ}, {"extract_format", TypeString}},
-			ReturnType: TypeString,
+			Types:      ArgTypes{{"input", TypeTimestampTZ}, {"extract_format", TypeString}},
+			ReturnType: fixedReturnType(TypeString),
 			fn: func(_ *EvalContext, args DTuple) (Datum, error) {
 				fromTime := args[0].(*DTimestampTZ).Time
-				format := string(*args[1].(*DString))
+				format := string(MustBeDString(args[1]))
 				t, err := timeutil.Strftime(fromTime, format)
 				if err != nil {
 					return nil, err
@@ -857,11 +861,11 @@ var Builtins = map[string][]Builtin{
 
 	"experimental_strptime": {
 		Builtin{
-			Types:      NamedArgTypes{{"format", TypeString}, {"input", TypeString}},
-			ReturnType: TypeTimestampTZ,
+			Types:      ArgTypes{{"format", TypeString}, {"input", TypeString}},
+			ReturnType: fixedReturnType(TypeTimestampTZ),
 			fn: func(_ *EvalContext, args DTuple) (Datum, error) {
-				format := string(*args[0].(*DString))
-				toParse := string(*args[1].(*DString))
+				format := string(MustBeDString(args[0]))
+				toParse := string(MustBeDString(args[1]))
 				t, err := timeutil.Strptime(toParse, format)
 				if err != nil {
 					return nil, err
@@ -875,8 +879,8 @@ var Builtins = map[string][]Builtin{
 
 	"age": {
 		Builtin{
-			Types:        NamedArgTypes{{"val", TypeTimestampTZ}},
-			ReturnType:   TypeInterval,
+			Types:        ArgTypes{{"val", TypeTimestampTZ}},
+			ReturnType:   fixedReturnType(TypeInterval),
 			ctxDependent: true,
 			fn: func(ctx *EvalContext, args DTuple) (Datum, error) {
 				return timestampMinusBinOp.fn(ctx, ctx.GetTxnTimestamp(time.Microsecond), args[0])
@@ -884,8 +888,8 @@ var Builtins = map[string][]Builtin{
 			Info: "Calculates the interval between `val` and the current time.",
 		},
 		Builtin{
-			Types:      NamedArgTypes{{"begin", TypeTimestampTZ}, {"end", TypeTimestampTZ}},
-			ReturnType: TypeInterval,
+			Types:      ArgTypes{{"begin", TypeTimestampTZ}, {"end", TypeTimestampTZ}},
+			ReturnType: fixedReturnType(TypeInterval),
 			fn: func(ctx *EvalContext, args DTuple) (Datum, error) {
 				return timestampMinusBinOp.fn(ctx, args[0], args[1])
 			},
@@ -895,8 +899,8 @@ var Builtins = map[string][]Builtin{
 
 	"current_date": {
 		Builtin{
-			Types:        NamedArgTypes{},
-			ReturnType:   TypeDate,
+			Types:        ArgTypes{},
+			ReturnType:   fixedReturnType(TypeDate),
 			ctxDependent: true,
 			fn: func(ctx *EvalContext, args DTuple) (Datum, error) {
 				t := ctx.GetTxnTimestamp(time.Microsecond).Time
@@ -912,8 +916,8 @@ var Builtins = map[string][]Builtin{
 
 	"statement_timestamp": {
 		Builtin{
-			Types:             NamedArgTypes{},
-			ReturnType:        TypeTimestampTZ,
+			Types:             ArgTypes{},
+			ReturnType:        fixedReturnType(TypeTimestampTZ),
 			preferredOverload: true,
 			impure:            true,
 			ctxDependent:      true,
@@ -923,8 +927,8 @@ var Builtins = map[string][]Builtin{
 			Info: "Returns the current statement's timestamp.",
 		},
 		Builtin{
-			Types:        NamedArgTypes{},
-			ReturnType:   TypeTimestamp,
+			Types:        ArgTypes{},
+			ReturnType:   fixedReturnType(TypeTimestamp),
 			impure:       true,
 			ctxDependent: true,
 			fn: func(ctx *EvalContext, args DTuple) (Datum, error) {
@@ -936,8 +940,8 @@ var Builtins = map[string][]Builtin{
 
 	"cluster_logical_timestamp": {
 		Builtin{
-			Types:        NamedArgTypes{},
-			ReturnType:   TypeDecimal,
+			Types:        ArgTypes{},
+			ReturnType:   fixedReturnType(TypeDecimal),
 			category:     categorySystemInfo,
 			impure:       true,
 			ctxDependent: true,
@@ -950,8 +954,8 @@ var Builtins = map[string][]Builtin{
 
 	"clock_timestamp": {
 		Builtin{
-			Types:             NamedArgTypes{},
-			ReturnType:        TypeTimestampTZ,
+			Types:             ArgTypes{},
+			ReturnType:        fixedReturnType(TypeTimestampTZ),
 			preferredOverload: true,
 			impure:            true,
 			fn: func(_ *EvalContext, args DTuple) (Datum, error) {
@@ -960,8 +964,8 @@ var Builtins = map[string][]Builtin{
 			Info: "Returns the current wallclock time.",
 		},
 		Builtin{
-			Types:      NamedArgTypes{},
-			ReturnType: TypeTimestamp,
+			Types:      ArgTypes{},
+			ReturnType: fixedReturnType(TypeTimestamp),
 			impure:     true,
 			fn: func(_ *EvalContext, args DTuple) (Datum, error) {
 				return MakeDTimestamp(timeutil.Now(), time.Microsecond), nil
@@ -972,13 +976,13 @@ var Builtins = map[string][]Builtin{
 
 	"extract": {
 		Builtin{
-			Types:      NamedArgTypes{{"element", TypeString}, {"input", TypeTimestamp}},
-			ReturnType: TypeInt,
+			Types:      ArgTypes{{"element", TypeString}, {"input", TypeTimestamp}},
+			ReturnType: fixedReturnType(TypeInt),
 			category:   categoryDateAndTime,
 			fn: func(ctx *EvalContext, args DTuple) (Datum, error) {
 				// extract timeSpan fromTime.
 				fromTS := args[1].(*DTimestamp)
-				timeSpan := strings.ToLower(string(*args[0].(*DString)))
+				timeSpan := strings.ToLower(string(MustBeDString(args[0])))
 				return extractStringFromTimestamp(ctx, fromTS.Time, timeSpan)
 			},
 			Info: "Extracts `element` from `input`. Compatible `elements` are: <br/>&#8226; " +
@@ -987,11 +991,11 @@ var Builtins = map[string][]Builtin{
 				"second<br/>&#8226; millisecond<br/>&#8226; microsecond<br/>&#8226; epoch",
 		},
 		Builtin{
-			Types:      NamedArgTypes{{"element", TypeString}, {"input", TypeDate}},
-			ReturnType: TypeInt,
+			Types:      ArgTypes{{"element", TypeString}, {"input", TypeDate}},
+			ReturnType: fixedReturnType(TypeInt),
 			category:   categoryDateAndTime,
 			fn: func(ctx *EvalContext, args DTuple) (Datum, error) {
-				timeSpan := strings.ToLower(string(*args[0].(*DString)))
+				timeSpan := strings.ToLower(string(MustBeDString(args[0])))
 				date := args[1].(*DDate)
 				fromTSTZ := MakeDTimestampTZFromDate(ctx.GetLocation(), date)
 				return extractStringFromTimestamp(ctx, fromTSTZ.Time, timeSpan)
@@ -1005,13 +1009,13 @@ var Builtins = map[string][]Builtin{
 
 	"extract_duration": {
 		Builtin{
-			Types:      NamedArgTypes{{"element", TypeString}, {"input", TypeInterval}},
-			ReturnType: TypeInt,
+			Types:      ArgTypes{{"element", TypeString}, {"input", TypeInterval}},
+			ReturnType: fixedReturnType(TypeInt),
 			category:   categoryDateAndTime,
 			fn: func(_ *EvalContext, args DTuple) (Datum, error) {
 				// extract timeSpan fromTime.
 				fromInterval := *args[1].(*DInterval)
-				timeSpan := strings.ToLower(string(*args[0].(*DString)))
+				timeSpan := strings.ToLower(string(MustBeDString(args[0])))
 				switch timeSpan {
 				case "hour", "hours":
 					return NewDInt(DInt(fromInterval.Nanos / int64(time.Hour))), nil
@@ -1050,10 +1054,10 @@ var Builtins = map[string][]Builtin{
 			return dd, nil
 		}, "Calculates the absolute value of `val`."),
 		Builtin{
-			Types:      NamedArgTypes{{"val", TypeInt}},
-			ReturnType: TypeInt,
+			Types:      ArgTypes{{"val", TypeInt}},
+			ReturnType: fixedReturnType(TypeInt),
 			fn: func(_ *EvalContext, args DTuple) (Datum, error) {
-				x := *args[0].(*DInt)
+				x := MustBeDInt(args[0])
 				switch {
 				case x == math.MinInt64:
 					return nil, errAbsOfMinInt64
@@ -1135,14 +1139,14 @@ var Builtins = map[string][]Builtin{
 			return dd, nil
 		}, "Calculates the integer quotient of `x`/`y`."),
 		{
-			Types:      NamedArgTypes{{"x", TypeInt}, {"y", TypeInt}},
-			ReturnType: TypeInt,
+			Types:      ArgTypes{{"x", TypeInt}, {"y", TypeInt}},
+			ReturnType: fixedReturnType(TypeInt),
 			fn: func(_ *EvalContext, args DTuple) (Datum, error) {
-				y := *args[1].(*DInt)
+				y := MustBeDInt(args[1])
 				if y == 0 {
 					return nil, errDivByZero
 				}
-				x := *args[0].(*DInt)
+				x := MustBeDInt(args[0])
 				return NewDInt(x / y), nil
 			},
 			Info: "Calculates the integer quotient of `x`/`y`.",
@@ -1196,14 +1200,14 @@ var Builtins = map[string][]Builtin{
 			return dd, nil
 		}, "Calculates `x`%`y`."),
 		Builtin{
-			Types:      NamedArgTypes{{"x", TypeInt}, {"y", TypeInt}},
-			ReturnType: TypeInt,
+			Types:      ArgTypes{{"x", TypeInt}, {"y", TypeInt}},
+			ReturnType: fixedReturnType(TypeInt),
 			fn: func(_ *EvalContext, args DTuple) (Datum, error) {
-				y := *args[1].(*DInt)
+				y := MustBeDInt(args[1])
 				if y == 0 {
 					return nil, errZeroModulus
 				}
-				x := *args[0].(*DInt)
+				x := MustBeDInt(args[0])
 				return NewDInt(x % y), nil
 			},
 			Info: "Calculates `x`%`y`.",
@@ -1212,8 +1216,8 @@ var Builtins = map[string][]Builtin{
 
 	"pi": {
 		Builtin{
-			Types:      NamedArgTypes{},
-			ReturnType: TypeFloat,
+			Types:      ArgTypes{},
+			ReturnType: fixedReturnType(TypeFloat),
 			fn: func(_ *EvalContext, args DTuple) (Datum, error) {
 				return NewDFloat(math.Pi), nil
 			},
@@ -1238,19 +1242,19 @@ var Builtins = map[string][]Builtin{
 			return roundDecimal(x, 0)
 		}, "Rounds `val` to the nearest integer."),
 		Builtin{
-			Types:      NamedArgTypes{{"input", TypeFloat}, {"decimal_accuracy", TypeInt}},
-			ReturnType: TypeFloat,
+			Types:      ArgTypes{{"input", TypeFloat}, {"decimal_accuracy", TypeInt}},
+			ReturnType: fixedReturnType(TypeFloat),
 			fn: func(_ *EvalContext, args DTuple) (Datum, error) {
-				return round(float64(*args[0].(*DFloat)), int64(*args[1].(*DInt)))
+				return round(float64(*args[0].(*DFloat)), int64(MustBeDInt(args[1])))
 			},
 			Info: "Keeps `decimal_accuracy` number of figures to the right of the zero position " +
 				" in `input`.",
 		},
 		Builtin{
-			Types:      NamedArgTypes{{"input", TypeDecimal}, {"decimal_accuracy", TypeInt}},
-			ReturnType: TypeDecimal,
+			Types:      ArgTypes{{"input", TypeDecimal}, {"decimal_accuracy", TypeInt}},
+			ReturnType: fixedReturnType(TypeDecimal),
 			fn: func(_ *EvalContext, args DTuple) (Datum, error) {
-				scale := int64(*args[1].(*DInt))
+				scale := int64(MustBeDInt(args[1]))
 				return roundDecimal(&args[0].(*DDecimal).Dec, scale)
 			},
 			Info: "Keeps `decimal_accuracy` number of figures to the right of the zero position " +
@@ -1282,10 +1286,10 @@ var Builtins = map[string][]Builtin{
 		}, "Determines the sign of `val`: **1** for positive; **0** for 0 values; **-1** for "+
 			"negative."),
 		Builtin{
-			Types:      NamedArgTypes{{"val", TypeInt}},
-			ReturnType: TypeInt,
+			Types:      ArgTypes{{"val", TypeInt}},
+			ReturnType: fixedReturnType(TypeInt),
 			fn: func(_ *EvalContext, args DTuple) (Datum, error) {
-				x := *args[0].(*DInt)
+				x := MustBeDInt(args[0])
 				switch {
 				case x < 0:
 					return NewDInt(-1), nil
@@ -1337,12 +1341,12 @@ var Builtins = map[string][]Builtin{
 
 	"array_length": {
 		Builtin{
-			Types:      NamedArgTypes{{"input", TypeAnyArray}, {"array_dimension", TypeInt}},
-			ReturnType: TypeInt,
+			Types:      ArgTypes{{"input", TypeAnyArray}, {"array_dimension", TypeInt}},
+			ReturnType: fixedReturnType(TypeInt),
 			category:   categorySystemInfo,
 			fn: func(_ *EvalContext, args DTuple) (Datum, error) {
 				arr := args[0].(*DArray)
-				dimen := int64(*args[1].(*DInt))
+				dimen := int64(MustBeDInt(args[1]))
 				return arrayLength(arr, dimen), nil
 			},
 			Info: "Calculates the length of `input` on the provided `array_dimension`. However, " +
@@ -1353,12 +1357,12 @@ var Builtins = map[string][]Builtin{
 
 	"array_lower": {
 		Builtin{
-			Types:      NamedArgTypes{{"input", TypeAnyArray}, {"array_dimension", TypeInt}},
-			ReturnType: TypeInt,
+			Types:      ArgTypes{{"input", TypeAnyArray}, {"array_dimension", TypeInt}},
+			ReturnType: fixedReturnType(TypeInt),
 			category:   categorySystemInfo,
 			fn: func(_ *EvalContext, args DTuple) (Datum, error) {
 				arr := args[0].(*DArray)
-				dimen := int64(*args[1].(*DInt))
+				dimen := int64(MustBeDInt(args[1]))
 				return arrayLower(arr, dimen), nil
 			},
 			Info: "Calculates the minimum value of `input` on the provided `array_dimension`. " +
@@ -1369,12 +1373,12 @@ var Builtins = map[string][]Builtin{
 
 	"array_upper": {
 		Builtin{
-			Types:      NamedArgTypes{{"input", TypeAnyArray}, {"array_dimension", TypeInt}},
-			ReturnType: TypeInt,
+			Types:      ArgTypes{{"input", TypeAnyArray}, {"array_dimension", TypeInt}},
+			ReturnType: fixedReturnType(TypeInt),
 			category:   categorySystemInfo,
 			fn: func(_ *EvalContext, args DTuple) (Datum, error) {
 				arr := args[0].(*DArray)
-				dimen := int64(*args[1].(*DInt))
+				dimen := int64(MustBeDInt(args[1]))
 				return arrayLength(arr, dimen), nil
 			},
 			Info: "Calculates the maximum value of `input` on the provided `array_dimension`. " +
@@ -1387,8 +1391,8 @@ var Builtins = map[string][]Builtin{
 
 	"version": {
 		Builtin{
-			Types:      NamedArgTypes{},
-			ReturnType: TypeString,
+			Types:      ArgTypes{},
+			ReturnType: fixedReturnType(TypeString),
 			category:   categorySystemInfo,
 			fn: func(_ *EvalContext, args DTuple) (Datum, error) {
 				return NewDString(build.GetInfo().Short()), nil
@@ -1399,8 +1403,8 @@ var Builtins = map[string][]Builtin{
 
 	"current_schema": {
 		Builtin{
-			Types:      NamedArgTypes{},
-			ReturnType: TypeString,
+			Types:      ArgTypes{},
+			ReturnType: fixedReturnType(TypeString),
 			category:   categorySystemInfo,
 			fn: func(ctx *EvalContext, args DTuple) (Datum, error) {
 				if len(ctx.Database) == 0 {
@@ -1417,8 +1421,8 @@ var Builtins = map[string][]Builtin{
 	// parameter is true, the session's database search path.
 	"current_schemas": {
 		Builtin{
-			Types:        NamedArgTypes{{"include_implicit", TypeBool}},
-			ReturnType:   TypeStringArray,
+			Types:        ArgTypes{{"include_implicit", TypeBool}},
+			ReturnType:   fixedReturnType(TypeStringArray),
 			category:     categorySystemInfo,
 			ctxDependent: true,
 			fn: func(ctx *EvalContext, args DTuple) (Datum, error) {
@@ -1445,8 +1449,8 @@ var Builtins = map[string][]Builtin{
 
 	"crdb_internal.force_retry": {
 		Builtin{
-			Types:      NamedArgTypes{{"val", TypeInterval}},
-			ReturnType: TypeInt,
+			Types:      ArgTypes{{"val", TypeInterval}},
+			ReturnType: fixedReturnType(TypeInt),
 			impure:     true,
 			fn: func(ctx *EvalContext, args DTuple) (Datum, error) {
 				minDuration := args[0].(*DInterval).Duration
@@ -1454,7 +1458,30 @@ var Builtins = map[string][]Builtin{
 					Nanos: int64(ctx.stmtTimestamp.Sub(ctx.txnTimestamp)),
 				}
 				if elapsed.Compare(minDuration) < 0 {
-					return nil, roachpb.NewRetryableTxnError("forced by crdb_internal.force_retry()")
+					return nil, roachpb.NewRetryableTxnError("forced by crdb_internal.force_retry()", nil /* txnID */)
+				}
+				return NewDInt(0), nil
+			},
+			Info: "This function is used only by CockroachDB's developers for testing purposes.",
+		},
+		Builtin{
+			Types: ArgTypes{
+				{"val", TypeInterval},
+				{"txnID", TypeString}},
+			ReturnType: fixedReturnType(TypeInt),
+			impure:     true,
+			fn: func(ctx *EvalContext, args DTuple) (Datum, error) {
+				minDuration := args[0].(*DInterval).Duration
+				txnID := args[1].(*DString)
+				elapsed := duration.Duration{
+					Nanos: int64(ctx.stmtTimestamp.Sub(ctx.txnTimestamp)),
+				}
+				if elapsed.Compare(minDuration) < 0 {
+					uuid, err := uuid.FromString(string(*txnID))
+					if err != nil {
+						return nil, err
+					}
+					return nil, roachpb.NewRetryableTxnError("forced by crdb_internal.force_retry()", &uuid)
 				}
 				return NewDInt(0), nil
 			},
@@ -1464,6 +1491,17 @@ var Builtins = map[string][]Builtin{
 
 	// pg_catalog functions.
 	// See https://www.postgresql.org/docs/9.6/static/functions-info.html.
+	"pg_catalog.pg_backend_pid": {
+		Builtin{
+			Types:      ArgTypes{},
+			ReturnType: fixedReturnType(TypeInt),
+			fn: func(_ *EvalContext, _ DTuple) (Datum, error) {
+				return NewDInt(-1), nil
+			},
+			category: categoryCompatibility,
+			Info:     "Not usable; exposed only for ORM compatibility.",
+		},
+	},
 
 	// Postgres defines pg_get_expr as a function that "decompiles the internal form
 	// of an expression", which is provided in the pg_node_tree type. In Cockroach's
@@ -1473,29 +1511,29 @@ var Builtins = map[string][]Builtin{
 	// optional third argument.
 	"pg_catalog.pg_get_expr": {
 		Builtin{
-			Types: NamedArgTypes{
+			Types: ArgTypes{
 				{"pg_node_tree", TypeString},
 				{"relation_oid", TypeInt},
 			},
-			ReturnType: TypeString,
+			ReturnType: fixedReturnType(TypeString),
 			fn: func(_ *EvalContext, args DTuple) (Datum, error) {
 				return args[0], nil
 			},
 			category: categoryCompatibility,
-			Info:     "Not usable; supported only for ORM compatibility",
+			Info:     "Not usable; exposed only for ORM compatibility.",
 		},
 		Builtin{
-			Types: NamedArgTypes{
+			Types: ArgTypes{
 				{"pg_node_tree", TypeString},
 				{"relation_oid", TypeInt},
 				{"pretty_bool", TypeBool},
 			},
-			ReturnType: TypeString,
+			ReturnType: fixedReturnType(TypeString),
 			fn: func(_ *EvalContext, args DTuple) (Datum, error) {
 				return args[0], nil
 			},
 			category: categoryCompatibility,
-			Info:     "Not usable; supported only for ORM compatibility",
+			Info:     "Not usable; exposed only for ORM compatibility.",
 		},
 	},
 
@@ -1503,10 +1541,10 @@ var Builtins = map[string][]Builtin{
 	// statement.
 	"pg_catalog.pg_get_indexdef": {
 		Builtin{
-			Types: NamedArgTypes{
+			Types: ArgTypes{
 				{"index_oid", TypeInt},
 			},
-			ReturnType: TypeString,
+			ReturnType: fixedReturnType(TypeString),
 			fn: func(ctx *EvalContext, args DTuple) (Datum, error) {
 				oid := args[0]
 				r, err := ctx.Planner.QueryRow(
@@ -1520,7 +1558,7 @@ var Builtins = map[string][]Builtin{
 				return r[0], nil
 			},
 			category: categoryCompatibility,
-			Info:     "Not usable; supported only for ORM compatibility",
+			Info:     "Not usable; exposed only for ORM compatibility.",
 		},
 		// The other overload for this function, pg_get_indexdef(index_oid,
 		// column_no, pretty_bool), is unimplemented, because it isn't used by
@@ -1531,21 +1569,21 @@ var Builtins = map[string][]Builtin{
 		// TODO(knz): This is a proof-of-concept until TypeAny works
 		// properly.
 		Builtin{
-			Types:      NamedArgTypes{{"val", TypeAny}},
-			ReturnType: TypeString,
+			Types:      ArgTypes{{"val", TypeAny}},
+			ReturnType: fixedReturnType(TypeString),
 			fn: func(_ *EvalContext, args DTuple) (Datum, error) {
 				return NewDString(args[0].ResolvedType().String()), nil
 			},
 			category: categoryCompatibility,
-			Info:     "Not usable; supported only for ORM compatibility",
+			Info:     "Not usable; exposed only for ORM compatibility.",
 		},
 	},
 	"pg_catalog.pg_get_userbyid": {
 		Builtin{
-			Types: NamedArgTypes{
+			Types: ArgTypes{
 				{"role_oid", TypeInt},
 			},
-			ReturnType: TypeString,
+			ReturnType: fixedReturnType(TypeString),
 			fn: func(ctx *EvalContext, args DTuple) (Datum, error) {
 				oid := args[0]
 				t, err := ctx.Planner.QueryRow("SELECT rolname FROM pg_catalog.pg_roles WHERE oid=$1", oid)
@@ -1558,52 +1596,84 @@ var Builtins = map[string][]Builtin{
 				return t[0], nil
 			},
 			category: categoryCompatibility,
-			Info:     "Not usable; supported only for ORM compatibility",
+			Info:     "Not usable; exposed only for ORM compatibility.",
 		},
 	},
 	"pg_catalog.format_type": {
 		Builtin{
 			// TODO(jordan) typemod should be a Nullable TypeInt when supported.
-			Types:      NamedArgTypes{{"type_oid", TypeInt}, {"typemod", TypeInt}},
-			ReturnType: TypeString,
+			Types:      ArgTypes{{"type_oid", TypeInt}, {"typemod", TypeInt}},
+			ReturnType: fixedReturnType(TypeString),
 			fn: func(ctx *EvalContext, args DTuple) (Datum, error) {
-				typ, ok := OidToType[oid.Oid(int(*args[0].(*DInt)))]
+				typ, ok := OidToType[oid.Oid(int(MustBeDInt(args[0])))]
 				if !ok {
 					return NewDString(fmt.Sprintf("unknown (OID=%s)", args[0])), nil
 				}
 				return NewDString(typ.SQLName()), nil
 			},
 			category: categoryCompatibility,
-			Info: "format_type returns the SQL name of a data type that is " +
+			Info: "Returns the SQL name of a data type that is " +
 				"identified by its type OID and possibly a type modifier. " +
 				"Currently, the type modifier is ignored.",
 		},
 	},
 	"pg_catalog.col_description": {
 		Builtin{
-			Types:      NamedArgTypes{{"table_oid", TypeInt}, {"column_number", TypeInt}},
-			ReturnType: TypeString,
+			Types:      ArgTypes{{"table_oid", TypeInt}, {"column_number", TypeInt}},
+			ReturnType: fixedReturnType(TypeString),
 			fn: func(_ *EvalContext, _ DTuple) (Datum, error) {
 				return DNull, nil
 			},
 			category: categoryCompatibility,
-			Info: "col_description returns the comment for a table column. " +
-				"Currently, CockroachDB does not support adding comments to columns.",
+			Info:     "Not usable; exposed only for ORM compatibility.",
+		},
+	},
+	"pg_catalog.obj_description": {
+		Builtin{
+			Types:      ArgTypes{{"object_oid", TypeInt}},
+			ReturnType: fixedReturnType(TypeString),
+			fn: func(_ *EvalContext, _ DTuple) (Datum, error) {
+				return DNull, nil
+			},
+			category: categoryCompatibility,
+			Info:     "Not usable; exposed only for ORM compatibility.",
+		},
+	},
+	"pg_catalog.shobj_description": {
+		Builtin{
+			Types:      ArgTypes{{"object_oid", TypeInt}, {"catalog_name", TypeString}},
+			ReturnType: fixedReturnType(TypeString),
+			fn: func(_ *EvalContext, _ DTuple) (Datum, error) {
+				return DNull, nil
+			},
+			category: categoryCompatibility,
+			Info:     "Not usable; exposed only for ORM compatibility.",
+		},
+	},
+	"pg_catalog.array_in": {
+		Builtin{
+			Types:      ArgTypes{{"string", TypeString}, {"element_oid", TypeInt}, {"element_typmod", TypeInt}},
+			ReturnType: fixedReturnType(TypeString),
+			fn: func(_ *EvalContext, _ DTuple) (Datum, error) {
+				return nil, errors.New("unimplemented")
+			},
+			category: categoryCompatibility,
+			Info:     "Not usable; exposed only for ORM compatibility.",
 		},
 	},
 }
 
 var substringImpls = []Builtin{
 	{
-		Types: NamedArgTypes{
+		Types: ArgTypes{
 			{"input", TypeString},
 			{"substr_pos", TypeInt},
 		},
-		ReturnType: TypeString,
+		ReturnType: fixedReturnType(TypeString),
 		fn: func(_ *EvalContext, args DTuple) (Datum, error) {
-			runes := []rune(string(*args[0].(*DString)))
+			runes := []rune(string(MustBeDString(args[0])))
 			// SQL strings are 1-indexed.
-			start := int(*args[1].(*DInt)) - 1
+			start := int(MustBeDInt(args[1])) - 1
 
 			if start < 0 {
 				start = 0
@@ -1616,17 +1686,17 @@ var substringImpls = []Builtin{
 		Info: "Returns a substring of `input` starting at `substr_pos` (count starts at 1).",
 	},
 	{
-		Types: NamedArgTypes{
+		Types: ArgTypes{
 			{"input", TypeString},
 			{"start_pos", TypeInt},
 			{"end_pos", TypeInt},
 		},
-		ReturnType: TypeString,
+		ReturnType: fixedReturnType(TypeString),
 		fn: func(_ *EvalContext, args DTuple) (Datum, error) {
-			runes := []rune(string(*args[0].(*DString)))
+			runes := []rune(string(MustBeDString(args[0])))
 			// SQL strings are 1-indexed.
-			start := int(*args[1].(*DInt)) - 1
-			length := int(*args[2].(*DInt))
+			start := int(MustBeDInt(args[1])) - 1
+			length := int(MustBeDInt(args[2]))
 
 			if length < 0 {
 				return nil, fmt.Errorf("negative substring length %d not allowed", length)
@@ -1653,29 +1723,29 @@ var substringImpls = []Builtin{
 		Info: "Returns a substring of `input` between `start_pos` and `end_pos` (count starts at 1).",
 	},
 	{
-		Types: NamedArgTypes{
+		Types: ArgTypes{
 			{"input", TypeString},
 			{"regex", TypeString},
 		},
-		ReturnType: TypeString,
+		ReturnType: fixedReturnType(TypeString),
 		fn: func(ctx *EvalContext, args DTuple) (Datum, error) {
-			s := string(*args[0].(*DString))
-			pattern := string(*args[1].(*DString))
+			s := string(MustBeDString(args[0]))
+			pattern := string(MustBeDString(args[1]))
 			return regexpExtract(ctx, s, pattern, `\`)
 		},
 		Info: "Returns a substring of `input` that matches the regular expression `regex`.",
 	},
 	{
-		Types: NamedArgTypes{
+		Types: ArgTypes{
 			{"input", TypeString},
 			{"regex", TypeString},
 			{"escape_char", TypeString},
 		},
-		ReturnType: TypeString,
+		ReturnType: fixedReturnType(TypeString),
 		fn: func(ctx *EvalContext, args DTuple) (Datum, error) {
-			s := string(*args[0].(*DString))
-			pattern := string(*args[1].(*DString))
-			escape := string(*args[2].(*DString))
+			s := string(MustBeDString(args[0]))
+			pattern := string(MustBeDString(args[1]))
+			escape := string(MustBeDString(args[2]))
 			return regexpExtract(ctx, s, pattern, escape)
 		},
 		Info: "Returns a substring of `input` that matches the regular expression `regex` using " +
@@ -1684,8 +1754,8 @@ var substringImpls = []Builtin{
 }
 
 var uuidV4Impl = Builtin{
-	Types:      NamedArgTypes{},
-	ReturnType: TypeBytes,
+	Types:      ArgTypes{},
+	ReturnType: fixedReturnType(TypeBytes),
 	category:   categoryIDGeneration,
 	impure:     true,
 	fn: func(_ *EvalContext, args DTuple) (Datum, error) {
@@ -1707,8 +1777,8 @@ var ceilImpl = []Builtin{
 
 var txnTSImpl = []Builtin{
 	{
-		Types:             NamedArgTypes{},
-		ReturnType:        TypeTimestampTZ,
+		Types:             ArgTypes{},
+		ReturnType:        fixedReturnType(TypeTimestampTZ),
 		preferredOverload: true,
 		impure:            true,
 		ctxDependent:      true,
@@ -1718,8 +1788,8 @@ var txnTSImpl = []Builtin{
 		Info: "Returns the current transaction's timestamp.",
 	},
 	{
-		Types:        NamedArgTypes{},
-		ReturnType:   TypeTimestamp,
+		Types:        ArgTypes{},
+		ReturnType:   fixedReturnType(TypeTimestamp),
 		impure:       true,
 		ctxDependent: true,
 		fn: func(ctx *EvalContext, args DTuple) (Datum, error) {
@@ -1739,14 +1809,14 @@ var powImpls = []Builtin{
 		return dd, err
 	}, "Calculates `x`^`y`."),
 	{
-		Types: NamedArgTypes{
+		Types: ArgTypes{
 			{"x", TypeInt},
 			{"y", TypeInt},
 		},
-		ReturnType: TypeInt,
+		ReturnType: fixedReturnType(TypeInt),
 		fn: func(_ *EvalContext, args DTuple) (Datum, error) {
-			x := int64(*args[0].(*DInt))
-			y := int64(*args[1].(*DInt))
+			x := int64(MustBeDInt(args[0]))
+			y := int64(MustBeDInt(args[1]))
 			return NewDInt(DInt(intPow(x, y))), nil
 		},
 		Info: "Calculates `x`^`y`.",
@@ -1769,8 +1839,8 @@ func decimalLogFn(logFn func(*inf.Dec, *inf.Dec, inf.Scale) (*inf.Dec, error), i
 
 func floatBuiltin1(f func(float64) (Datum, error), info string) Builtin {
 	return Builtin{
-		Types:      NamedArgTypes{{"val", TypeFloat}},
-		ReturnType: TypeFloat,
+		Types:      ArgTypes{{"val", TypeFloat}},
+		ReturnType: fixedReturnType(TypeFloat),
 		fn: func(_ *EvalContext, args DTuple) (Datum, error) {
 			return f(float64(*args[0].(*DFloat)))
 		},
@@ -1780,8 +1850,8 @@ func floatBuiltin1(f func(float64) (Datum, error), info string) Builtin {
 
 func floatBuiltin2(a, b string, f func(float64, float64) (Datum, error), info string) Builtin {
 	return Builtin{
-		Types:      NamedArgTypes{{a, TypeFloat}, {b, TypeFloat}},
-		ReturnType: TypeFloat,
+		Types:      ArgTypes{{a, TypeFloat}, {b, TypeFloat}},
+		ReturnType: fixedReturnType(TypeFloat),
 		fn: func(_ *EvalContext, args DTuple) (Datum, error) {
 			return f(float64(*args[0].(*DFloat)),
 				float64(*args[1].(*DFloat)))
@@ -1792,8 +1862,8 @@ func floatBuiltin2(a, b string, f func(float64, float64) (Datum, error), info st
 
 func decimalBuiltin1(f func(*inf.Dec) (Datum, error), info string) Builtin {
 	return Builtin{
-		Types:      NamedArgTypes{{"val", TypeDecimal}},
-		ReturnType: TypeDecimal,
+		Types:      ArgTypes{{"val", TypeDecimal}},
+		ReturnType: fixedReturnType(TypeDecimal),
 		fn: func(_ *EvalContext, args DTuple) (Datum, error) {
 			dec := &args[0].(*DDecimal).Dec
 			return f(dec)
@@ -1804,8 +1874,8 @@ func decimalBuiltin1(f func(*inf.Dec) (Datum, error), info string) Builtin {
 
 func decimalBuiltin2(a, b string, f func(*inf.Dec, *inf.Dec) (Datum, error), info string) Builtin {
 	return Builtin{
-		Types:      NamedArgTypes{{a, TypeDecimal}, {b, TypeDecimal}},
-		ReturnType: TypeDecimal,
+		Types:      ArgTypes{{a, TypeDecimal}, {b, TypeDecimal}},
+		ReturnType: fixedReturnType(TypeDecimal),
 		fn: func(_ *EvalContext, args DTuple) (Datum, error) {
 			dec1 := &args[0].(*DDecimal).Dec
 			dec2 := &args[1].(*DDecimal).Dec
@@ -1817,10 +1887,10 @@ func decimalBuiltin2(a, b string, f func(*inf.Dec, *inf.Dec) (Datum, error), inf
 
 func stringBuiltin1(f func(string) (Datum, error), returnType Type, info string) Builtin {
 	return Builtin{
-		Types:      NamedArgTypes{{"val", TypeString}},
-		ReturnType: returnType,
+		Types:      ArgTypes{{"val", TypeString}},
+		ReturnType: fixedReturnType(returnType),
 		fn: func(_ *EvalContext, args DTuple) (Datum, error) {
-			return f(string(*args[0].(*DString)))
+			return f(string(MustBeDString(args[0])))
 		},
 		Info: info,
 	}
@@ -1830,11 +1900,11 @@ func stringBuiltin2(
 	a, b string, f func(string, string) (Datum, error), returnType Type, info string,
 ) Builtin {
 	return Builtin{
-		Types:      NamedArgTypes{{a, TypeString}, {b, TypeString}},
-		ReturnType: returnType,
+		Types:      ArgTypes{{a, TypeString}, {b, TypeString}},
+		ReturnType: fixedReturnType(returnType),
 		category:   categorizeType(TypeString),
 		fn: func(_ *EvalContext, args DTuple) (Datum, error) {
-			return f(string(*args[0].(*DString)), string(*args[1].(*DString)))
+			return f(string(MustBeDString(args[0])), string(MustBeDString(args[1])))
 		},
 		Info: info,
 	}
@@ -1844,10 +1914,10 @@ func stringBuiltin3(
 	a, b, c string, f func(string, string, string) (Datum, error), returnType Type, info string,
 ) Builtin {
 	return Builtin{
-		Types:      NamedArgTypes{{a, TypeString}, {b, TypeString}, {c, TypeString}},
-		ReturnType: returnType,
+		Types:      ArgTypes{{a, TypeString}, {b, TypeString}, {c, TypeString}},
+		ReturnType: fixedReturnType(returnType),
 		fn: func(_ *EvalContext, args DTuple) (Datum, error) {
-			return f(string(*args[0].(*DString)), string(*args[1].(*DString)), string(*args[2].(*DString)))
+			return f(string(MustBeDString(args[0])), string(MustBeDString(args[1])), string(MustBeDString(args[2])))
 		},
 		Info: info,
 	}
@@ -1855,8 +1925,8 @@ func stringBuiltin3(
 
 func bytesBuiltin1(f func(string) (Datum, error), returnType Type, info string) Builtin {
 	return Builtin{
-		Types:      NamedArgTypes{{"val", TypeBytes}},
-		ReturnType: returnType,
+		Types:      ArgTypes{{"val", TypeBytes}},
+		ReturnType: fixedReturnType(returnType),
 		fn: func(_ *EvalContext, args DTuple) (Datum, error) {
 			return f(string(*args[0].(*DBytes)))
 		},

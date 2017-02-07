@@ -1396,17 +1396,17 @@ SELECT format_type(oid, -1) FROM pg_type WHERE typname='string' LIMIT 1
 text
 
 query T
-SELECT format_type(oid, -1) FROM pg_type WHERE typname='int' LIMIT 1
+SELECT format_type(oid, -1) FROM pg_type WHERE typname='int8' LIMIT 1
 ----
 bigint
 
 query T
-SELECT format_type(oid, -1) FROM pg_type WHERE typname='float' LIMIT 1
+SELECT format_type(oid, -1) FROM pg_type WHERE typname='float8' LIMIT 1
 ----
 double precision
 
 query T
-SELECT format_type(oid, -1) FROM pg_type WHERE typname='int[]' LIMIT 1
+SELECT format_type(oid, -1) FROM pg_type WHERE typname='int8[]' LIMIT 1
 ----
 bigint[]
 
@@ -1444,3 +1444,6 @@ query T
 SELECT col_description('pg_class'::regclass::oid, 2)
 ----
 NULL
+
+query error pq: pg_catalog.array_in\(\): unimplemented
+SELECT array_in('foo', 3, -1)

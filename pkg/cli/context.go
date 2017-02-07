@@ -47,9 +47,63 @@ type cliContext struct {
 	// Embed the base context.
 	*base.Config
 
-	// prettyFmt indicates whether tables should be pretty-formatted in
-	// the output during non-interactive execution.
-	prettyFmt bool
+	// tableDisplayFormat indicates how to format result tables.
+	tableDisplayFormat tableDisplayFormat
+}
+
+type tableDisplayFormat int
+
+const (
+	tableDisplayTSV tableDisplayFormat = iota
+	tableDisplayCSV
+	tableDisplayPretty
+	tableDisplayRecords
+	tableDisplaySQL
+	tableDisplayHTML
+)
+
+// Type implements the pflag.Value interface.
+func (f *tableDisplayFormat) Type() string { return "string" }
+
+// String imlements the pflag.Value itnerface.
+func (f *tableDisplayFormat) String() string {
+	switch *f {
+	case tableDisplayTSV:
+		return "tsv"
+	case tableDisplayCSV:
+		return "csv"
+	case tableDisplayPretty:
+		return "pretty"
+	case tableDisplayRecords:
+		return "records"
+	case tableDisplaySQL:
+		return "sql"
+	case tableDisplayHTML:
+		return "html"
+	}
+	return ""
+}
+
+// Set implements the pflag.Value interface.
+func (f *tableDisplayFormat) Set(s string) error {
+	switch s {
+	case "tsv":
+		*f = tableDisplayTSV
+	case "csv":
+		*f = tableDisplayCSV
+	case "pretty":
+		*f = tableDisplayPretty
+	case "records":
+		*f = tableDisplayRecords
+	case "sql":
+		*f = tableDisplaySQL
+	case "html":
+		*f = tableDisplayHTML
+	default:
+		return fmt.Errorf("invalid table display format: %s "+
+			"(possible values: tsv, csv, pretty, records, sql, html)", s)
+	}
+	return nil
 }
 
 type sqlContext struct {

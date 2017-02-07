@@ -141,7 +141,8 @@ func TestStyle(t *testing.T) {
 		if err := stream.ForEach(stream.Sequence(
 			filter,
 			stream.GrepNot(`^cmd/`),
-			stream.GrepNot(`^(build/style_test\.go|((util/(log|envutil|sdnotify))|acceptance(/.*)?)/\w+\.go)\b`),
+			stream.GrepNot(`^(build/style_test\.go|ccl/sqlccl/backup_test\.go|ccl/storageccl/export_storage_test\.go|acceptance(/.*)?/\w+\.go)\b`),
+			stream.GrepNot(`^util/(log|envutil|sdnotify)/\w+\.go\b`),
 		), func(s string) {
 			t.Errorf(`%s <- forbidden; use "envutil" instead`, s)
 		}); err != nil {
@@ -567,7 +568,6 @@ func TestStyle(t *testing.T) {
 	})
 
 	t.Run("TestReturnCheck", func(t *testing.T) {
-		t.Skip("TODO(dt): need to update this upstream or pull it into repo")
 		t.Parallel()
 		cmd, stderr, filter, err := dirCmd(pkg.Dir, "returncheck", pkgScope)
 		if err != nil {
@@ -619,6 +619,9 @@ func TestStyle(t *testing.T) {
 	})
 
 	t.Run("TestUnconvert", func(t *testing.T) {
+		if testing.Short() {
+			t.Skip("short flag")
+		}
 		t.Parallel()
 		cmd, stderr, filter, err := dirCmd(pkg.Dir, "unconvert", pkgScope)
 		if err != nil {
@@ -646,6 +649,9 @@ func TestStyle(t *testing.T) {
 	})
 
 	t.Run("TestMetacheck", func(t *testing.T) {
+		if testing.Short() {
+			t.Skip("short flag")
+		}
 		t.Parallel()
 		cmd, stderr, filter, err := dirCmd(
 			pkg.Dir,
@@ -663,9 +669,6 @@ func TestStyle(t *testing.T) {
 				//
 				// TODO(bdarnell): remove when/if #8360 is fixed.
 				"github.com/cockroachdb/cockroach/pkg/storage/intent_resolver.go:SA4009",
-				// Loop intentionally exits unconditionally; it's cleaner than
-				// explicitly checking length and extracting the first element.
-				"github.com/cockroachdb/cockroach/pkg/sql/errors.go:SA4004",
 				// A value assigned to a variable is never read; this might be worth
 				// investigating, but it's cumbersome because the reported file
 				// differs from the source.

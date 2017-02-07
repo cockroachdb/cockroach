@@ -31,16 +31,18 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/lib/pq/oid"
 	"github.com/pkg/errors"
+	"golang.org/x/text/collate"
 )
 
 var (
-	oidZero   = parser.NewDInt(0)
-	zeroVal   = oidZero
+	oidZero   = parser.NewDOid(0)
+	zeroVal   = parser.NewDInt(0)
 	negOneVal = parser.NewDInt(-1)
 )
 
 const (
 	cockroachIndexEncoding = "prefix"
+	defaultCollationTag    = "en-US"
 )
 
 // pgCatalog contains a set of system tables mirroring PostgreSQL's pg_catalog schema.
@@ -53,13 +55,17 @@ var pgCatalog = virtualSchema{
 		pgCatalogAttrDefTable,
 		pgCatalogAttributeTable,
 		pgCatalogClassTable,
+		pgCatalogCollationTable,
 		pgCatalogConstraintTable,
 		pgCatalogDatabaseTable,
 		pgCatalogDependTable,
 		pgCatalogDescriptionTable,
 		pgCatalogEnumTable,
+		pgCatalogForeignServerTable,
+		pgCatalogForeignTableTable,
 		pgCatalogIndexTable,
 		pgCatalogIndexesTable,
+		pgCatalogInheritsTable,
 		pgCatalogNamespaceTable,
 		pgCatalogProcTable,
 		pgCatalogRangeTable,
@@ -75,9 +81,9 @@ var pgCatalog = virtualSchema{
 var pgCatalogAmTable = virtualSchemaTable{
 	schema: `
 CREATE TABLE pg_catalog.pg_am (
-	oid INT,
-	amname STRING,
-	amhandler INT,
+	oid OID,
+	amname NAME,
+	amhandler OID,
 	amtype CHAR
 );
 `,
@@ -86,7 +92,7 @@ CREATE TABLE pg_catalog.pg_am (
 		h.writeStr(cockroachIndexEncoding)
 		return addRow(
 			h.getOid(),
-			parser.NewDString(cockroachIndexEncoding),
+			parser.NewDName(cockroachIndexEncoding),
 			parser.DNull,
 			parser.NewDString("i"),
 		)
@@ -97,8 +103,8 @@ CREATE TABLE pg_catalog.pg_am (
 var pgCatalogAttrDefTable = virtualSchemaTable{
 	schema: `
 CREATE TABLE pg_catalog.pg_attrdef (
-	oid INT,
-	adrelid INT,
+	oid OID,
+	adrelid OID,
 	adnum INT,
 	adbin STRING,
 	adsrc STRING
@@ -133,9 +139,9 @@ CREATE TABLE pg_catalog.pg_attrdef (
 var pgCatalogAttributeTable = virtualSchemaTable{
 	schema: `
 CREATE TABLE pg_catalog.pg_attribute (
-	attrelid INT,
-	attname STRING,
-	atttypid INT,
+	attrelid OID,
+	attname NAME,
+	atttypid OID,
 	attstattarget INT,
 	attlen INT,
 	attnum INT,
@@ -150,6 +156,7 @@ CREATE TABLE pg_catalog.pg_attribute (
 	attisdropped BOOL,
 	attislocal BOOL,
 	attinhcount INT,
+	attcollation INT,
 	attacl STRING,
 	attoptions STRING,
 	attfdwoptions STRING
@@ -164,7 +171,7 @@ CREATE TABLE pg_catalog.pg_attribute (
 					colTyp := column.Type.ToDatumType()
 					return addRow(
 						attRelID,                            // attrelid
-						parser.NewDString(column.Name),      // attname
+						parser.NewDName(column.Name),        // attname
 						typOid(colTyp),                      // atttypid
 						zeroVal,                             // attstattarget
 						typLen(colTyp),                      // attlen
@@ -180,6 +187,7 @@ CREATE TABLE pg_catalog.pg_attribute (
 						parser.MakeDBool(false),                                   // attisdropped
 						parser.MakeDBool(true),                                    // attislocal
 						zeroVal,                                                   // attinhcount
+						typColl(colTyp, h),                                        // attcollation
 						parser.DNull,                                              // attacl
 						parser.DNull,                                              // attoptions
 						parser.DNull,                                              // attfdwoptions
@@ -222,18 +230,18 @@ var (
 var pgCatalogClassTable = virtualSchemaTable{
 	schema: `
 CREATE TABLE pg_catalog.pg_class (
-	oid INT,
-	relname STRING NOT NULL DEFAULT '',
-	relnamespace INT,
-	reltype INT,
-	relowner INT,
-	relam INT,
-	relfilenode INT,
-	reltablespace INT,
+	oid OID,
+	relname NAME NOT NULL,
+	relnamespace OID,
+	reltype OID,
+	relowner OID,
+	relam OID,
+	relfilenode OID,
+	reltablespace OID,
 	relpages INT,
 	reltuples FLOAT,
 	relallvisible INT,
-	reltoastrelid INT,
+	reltoastrelid OID,
 	relhasindex BOOL,
 	relisshared BOOL,
 	relistemp BOOL,
@@ -261,18 +269,18 @@ CREATE TABLE pg_catalog.pg_class (
 					relKind = relKindView
 				}
 				if err := addRow(
-					h.TableOid(db, table),         // oid
-					parser.NewDString(table.Name), // relname
-					pgNamespaceForDB(db).Oid,      // relnamespace
-					oidZero,                       // reltype (PG creates a composite type in pg_type for each table)
-					parser.DNull,                  // relowner
-					parser.DNull,                  // relam
-					oidZero,                       // relfilenode
-					oidZero,                       // reltablespace
-					parser.DNull,                  // relpages
-					parser.DNull,                  // reltuples
-					oidZero,                       // relallvisible
-					oidZero,                       // reltoastrelid
+					h.TableOid(db, table),       // oid
+					parser.NewDName(table.Name), // relname
+					pgNamespaceForDB(db).Oid,    // relnamespace
+					oidZero,                     // reltype (PG creates a composite type in pg_type for each table)
+					parser.DNull,                // relowner
+					parser.DNull,                // relam
+					oidZero,                     // relfilenode
+					oidZero,                     // reltablespace
+					parser.DNull,                // relpages
+					parser.DNull,                // reltuples
+					zeroVal,                     // relallvisible
+					oidZero,                     // reltoastrelid
 					parser.MakeDBool(parser.DBool(table.IsPhysicalTable())), // relhasindex
 					parser.MakeDBool(false),                                 // relisshared
 					parser.MakeDBool(false),                                 // relistemp
@@ -294,22 +302,22 @@ CREATE TABLE pg_catalog.pg_class (
 				// Indexes.
 				return forEachIndexInTable(table, func(index *sqlbase.IndexDescriptor) error {
 					return addRow(
-						h.IndexOid(db, table, index),  // oid
-						parser.NewDString(index.Name), // relname
-						pgNamespaceForDB(db).Oid,      // relnamespace
-						oidZero,                       // reltype
-						parser.DNull,                  // relowner
-						parser.DNull,                  // relam
-						oidZero,                       // relfilenode
-						oidZero,                       // reltablespace
-						parser.DNull,                  // relpages
-						parser.DNull,                  // reltuples
-						oidZero,                       // relallvisible
-						oidZero,                       // reltoastrelid
-						parser.MakeDBool(false),       // relhasindex
-						parser.MakeDBool(false),       // relisshared
-						parser.MakeDBool(false),       // relistemp
-						relKindIndex,                  // relkind
+						h.IndexOid(db, table, index), // oid
+						parser.NewDName(index.Name),  // relname
+						pgNamespaceForDB(db).Oid,     // relnamespace
+						oidZero,                      // reltype
+						parser.DNull,                 // relowner
+						parser.DNull,                 // relam
+						oidZero,                      // relfilenode
+						oidZero,                      // reltablespace
+						parser.DNull,                 // relpages
+						parser.DNull,                 // reltuples
+						zeroVal,                      // relallvisible
+						oidZero,                      // reltoastrelid
+						parser.MakeDBool(false),      // relhasindex
+						parser.MakeDBool(false),      // relisshared
+						parser.MakeDBool(false),      // relistemp
+						relKindIndex,                 // relkind
 						parser.NewDInt(parser.DInt(len(index.ColumnNames))), // relnatts
 						zeroVal,                 // relchecks
 						parser.MakeDBool(false), // relhasoids
@@ -324,6 +332,41 @@ CREATE TABLE pg_catalog.pg_class (
 				})
 			},
 		)
+	},
+}
+
+// See: https://www.postgresql.org/docs/9.6/static/catalog-pg-collation.html.
+var pgCatalogCollationTable = virtualSchemaTable{
+	schema: `
+CREATE TABLE pg_catalog.pg_collation (
+  oid OID,
+  collname STRING,
+  collnamespace OID,
+  collowner OID,
+  collencoding INT,
+  collcollate STRING,
+  collctype STRING
+);
+`,
+	populate: func(p *planner, addRow func(...parser.Datum) error) error {
+		h := makeOidHasher()
+		for _, tag := range collate.Supported() {
+			collName := tag.String()
+			if err := addRow(
+				h.CollationOid(collName),    // oid
+				parser.NewDString(collName), // collname
+				pgNamespacePGCatalog.Oid,    // collnamespace
+				parser.DNull,                // collowner
+				datEncodingUTFId,            // collencoding
+				// It's not clear how to translate a Go collation tag into the format
+				// required by LC_COLLATE and LC_CTYPE.
+				parser.DNull, // collcollate
+				parser.DNull, // collctype
+			); err != nil {
+				return err
+			}
+		}
+		return nil
 	},
 }
 
@@ -364,17 +407,17 @@ var (
 var pgCatalogConstraintTable = virtualSchemaTable{
 	schema: `
 CREATE TABLE pg_catalog.pg_constraint (
-	oid INT,
-	conname STRING,
-	connamespace INT,
+	oid OID,
+	conname NAME,
+	connamespace OID,
 	contype STRING,
 	condeferrable BOOL,
 	condeferred BOOL,
 	convalidated BOOL,
-	conrelid INT,
-	contypid INT,
-	conindid INT,
-	confrelid INT,
+	conrelid OID,
+	contypid OID,
+	conindid OID,
+	confrelid OID,
 	confupdtype STRING,
 	confdeltype STRING,
 	confmatchtype STRING,
@@ -407,8 +450,8 @@ CREATE TABLE pg_catalog.pg_constraint (
 				for name, c := range info {
 					oid := parser.DNull
 					contype := parser.DNull
-					conindid := zeroVal
-					confrelid := zeroVal
+					conindid := oidZero
+					confrelid := oidZero
 					confupdtype := parser.DNull
 					confdeltype := parser.DNull
 					confmatchtype := parser.DNull
@@ -473,14 +516,14 @@ CREATE TABLE pg_catalog.pg_constraint (
 
 					if err := addRow(
 						oid,                                            // oid
-						dStringOrNull(name),                            // conname
+						dNameOrNull(name),                              // conname
 						pgNamespaceForDB(db).Oid,                       // connamespace
 						contype,                                        // contype
 						parser.MakeDBool(false),                        // condeferrable
 						parser.MakeDBool(false),                        // condeferred
 						parser.MakeDBool(parser.DBool(!c.Unvalidated)), // convalidated
 						h.TableOid(db, table),                          // conrelid
-						zeroVal,                                        // contypid
+						oidZero,                                        // contypid
 						conindid,                                       // conindid
 						confrelid,                                      // confrelid
 						confupdtype,                                    // confupdtype
@@ -532,19 +575,19 @@ var (
 var pgCatalogDatabaseTable = virtualSchemaTable{
 	schema: `
 CREATE TABLE pg_catalog.pg_database (
-	oid INT,
-	datname STRING,
-	datdba INT,
+	oid OID,
+	datname Name,
+	datdba OID,
 	encoding INT,
 	datcollate STRING,
 	datctype STRING,
 	datistemplate BOOL,
 	datallowconn BOOL,
 	datconnlimit INT,
-	datlastsysoid INT,
+	datlastsysoid OID,
 	datfrozenxid INT,
 	datminmxid INT,
-	dattablespace INT,
+	dattablespace OID,
 	datacl STRING
 );
 `,
@@ -552,20 +595,20 @@ CREATE TABLE pg_catalog.pg_database (
 		h := makeOidHasher()
 		return forEachDatabaseDesc(p, func(db *sqlbase.DatabaseDescriptor) error {
 			return addRow(
-				h.DBOid(db),                // oid
-				parser.NewDString(db.Name), // datname
-				parser.DNull,               // datdba
-				datEncodingUTFId,           // encoding
-				datEncodingEnUTF8,          // datcollate
-				datEncodingEnUTF8,          // datctype
-				parser.MakeDBool(false),    // datistemplate
-				parser.MakeDBool(true),     // datallowconn
-				negOneVal,                  // datconnlimit
-				parser.DNull,               // datlastsysoid
-				parser.DNull,               // datfrozenxid
-				parser.DNull,               // datminmxid
-				parser.DNull,               // dattablespace
-				parser.DNull,               // datacl
+				h.DBOid(db),              // oid
+				parser.NewDName(db.Name), // datname
+				parser.DNull,             // datdba
+				datEncodingUTFId,         // encoding
+				datEncodingEnUTF8,        // datcollate
+				datEncodingEnUTF8,        // datctype
+				parser.MakeDBool(false),  // datistemplate
+				parser.MakeDBool(true),   // datallowconn
+				negOneVal,                // datconnlimit
+				parser.DNull,             // datlastsysoid
+				parser.DNull,             // datfrozenxid
+				parser.DNull,             // datminmxid
+				parser.DNull,             // dattablespace
+				parser.DNull,             // datacl
 			)
 		})
 	},
@@ -599,11 +642,11 @@ var (
 var pgCatalogDependTable = virtualSchemaTable{
 	schema: `
 CREATE TABLE pg_catalog.pg_depend (
-  classid INT,
-  objid INT,
+  classid OID,
+  objid OID,
   objsubid INT,
-  refclassid INT,
-  refobjid INT,
+  refclassid OID,
+  refobjid OID,
   refobjsubid INT,
   deptype CHAR
 );
@@ -675,8 +718,8 @@ CREATE TABLE pg_catalog.pg_depend (
 var pgCatalogDescriptionTable = virtualSchemaTable{
 	schema: `
 CREATE TABLE pg_catalog.pg_description (
-	objoid INT,
-	classoid INT,
+	objoid OID,
+	classoid OID,
 	objsubid INT,
 	description STRING
 );
@@ -691,8 +734,8 @@ CREATE TABLE pg_catalog.pg_description (
 var pgCatalogEnumTable = virtualSchemaTable{
 	schema: `
 CREATE TABLE pg_catalog.pg_enum (
-  oid INT,
-  enumtypid INT,
+  oid OID,
+  enumtypid OID,
   enumsortorder FLOAT,
   enumlabel STRING
 );
@@ -703,12 +746,47 @@ CREATE TABLE pg_catalog.pg_enum (
 	},
 }
 
+// See: https://www.postgresql.org/docs/9.6/static/catalog-pg-foreign-server.html.
+var pgCatalogForeignServerTable = virtualSchemaTable{
+	schema: `
+CREATE TABLE pg_catalog.pg_foreign_server (
+  oid OID,
+  srvname NAME,
+  srvowner OID,
+  srvfdw OID,
+  srvtype STRING,
+  srvversion STRING,
+  srvacl STRING,
+  srvoptions STRING
+);
+`,
+	populate: func(p *planner, addRow func(...parser.Datum) error) error {
+		// Foreign servers are not supported.
+		return nil
+	},
+}
+
+// See: https://www.postgresql.org/docs/9.6/static/catalog-pg-foreign-table.html.
+var pgCatalogForeignTableTable = virtualSchemaTable{
+	schema: `
+CREATE TABLE pg_catalog.pg_foreign_table (
+  ftrelid OID,
+  ftserver OID,
+  ftoptions STRING
+);
+`,
+	populate: func(p *planner, addRow func(...parser.Datum) error) error {
+		// Foreign tables are not supported.
+		return nil
+	},
+}
+
 // See: https://www.postgresql.org/docs/9.6/static/catalog-pg-index.html.
 var pgCatalogIndexTable = virtualSchemaTable{
 	schema: `
 CREATE TABLE pg_catalog.pg_index (
-    indexrelid INT,
-    indrelid INT,
+    indexrelid OID,
+    indrelid OID,
     indnatts INT,
     indisunique BOOL,
     indisprimary BOOL,
@@ -785,11 +863,11 @@ CREATE TABLE pg_catalog.pg_index (
 var pgCatalogIndexesTable = virtualSchemaTable{
 	schema: `
 CREATE TABLE pg_catalog.pg_indexes (
-	crdb_oid INT,
-	schemaname STRING,
-	tablename STRING,
-	indexname STRING,
-	tablespace STRING,
+	crdb_oid OID,
+	schemaname NAME,
+	tablename NAME,
+	indexname NAME,
+	tablespace NAME,
 	indexdef STRING
 );
 `,
@@ -803,12 +881,12 @@ CREATE TABLE pg_catalog.pg_indexes (
 						return err
 					}
 					return addRow(
-						h.IndexOid(db, table, index),  // oid
-						pgNamespaceForDB(db).NameStr,  // schemaname
-						parser.NewDString(table.Name), // tablename
-						parser.NewDString(index.Name), // indexname
-						parser.DNull,                  // tablespace
-						parser.NewDString(def),        // indexdef
+						h.IndexOid(db, table, index), // oid
+						pgNamespaceForDB(db).NameStr, // schemaname
+						parser.NewDName(table.Name),  // tablename
+						parser.NewDName(index.Name),  // indexname
+						parser.DNull,                 // tablespace
+						parser.NewDString(def),       // indexdef
 					)
 				})
 			},
@@ -877,13 +955,28 @@ func indexDefFromDescriptor(
 	return indexDef.String(), nil
 }
 
+// See: https://www.postgresql.org/docs/9.6/static/catalog-pg-inherits.html.
+var pgCatalogInheritsTable = virtualSchemaTable{
+	schema: `
+CREATE TABLE pg_catalog.pg_inherits (
+	inhrelid OID,
+	inhparent OID,
+	inhseqno INT
+);
+`,
+	populate: func(p *planner, addRow func(...parser.Datum) error) error {
+		// Table inheritance is not supported.
+		return nil
+	},
+}
+
 // See: https://www.postgresql.org/docs/9.6/static/catalog-pg-namespace.html.
 var pgCatalogNamespaceTable = virtualSchemaTable{
 	schema: `
 CREATE TABLE pg_catalog.pg_namespace (
-	oid INT,
-	nspname STRING NOT NULL DEFAULT '',
-	nspowner INT,
+	oid OID,
+	nspname NAME NOT NULL,
+	nspowner OID,
 	aclitem STRING
 );
 `,
@@ -920,14 +1013,14 @@ var (
 var pgCatalogProcTable = virtualSchemaTable{
 	schema: `
 CREATE TABLE pg_catalog.pg_proc (
-	oid INT,
-	proname STRING,
-	pronamespace INT,
-	proowner INT,
-	prolang INT,
+	oid OID,
+	proname NAME,
+	pronamespace OID,
+	proowner OID,
+	prolang OID,
 	procost FLOAT,
 	prorows FLOAT,
-	provariadic INT,
+	provariadic OID,
 	protransform STRING,
 	proisagg BOOL,
 	proiswindow BOOL,
@@ -939,7 +1032,7 @@ CREATE TABLE pg_catalog.pg_proc (
 	proparallel CHAR,
 	pronargs INT,
 	pronargdefaults INT,
-	prorettype INT,
+	prorettype OID,
 	proargtypes STRING,
 	proallargtypes STRING,
 	proargmodes STRING,
@@ -971,15 +1064,16 @@ CREATE TABLE pg_catalog.pg_proc (
 				continue
 			}
 			for _, builtin := range builtins {
-				dName := parser.NewDString(name)
+				dName := parser.NewDName(name)
+				dSrc := parser.NewDString(name)
 				isAggregate := builtin.Class() == parser.AggregateClass
 				isWindow := builtin.Class() == parser.WindowClass
 
 				var retType parser.Datum
 				isRetSet := false
-				if builtin.ReturnType != nil {
+				if fixedRetType := builtin.FixedReturnType(); fixedRetType != nil {
 					var retOid oid.Oid
-					if t, ok := builtin.ReturnType.(parser.TTable); ok {
+					if t, ok := fixedRetType.(parser.TTable); ok {
 						isRetSet = true
 						// Functions returning tables with zero, or more than one
 						// columns are marked to return "anyelement"
@@ -992,9 +1086,9 @@ CREATE TABLE pg_catalog.pg_proc (
 							retOid = t.Cols[0].Oid()
 						}
 					} else {
-						retOid = builtin.ReturnType.Oid()
+						retOid = fixedRetType.Oid()
 					}
-					retType = parser.NewDInt(parser.DInt(retOid))
+					retType = parser.NewDOid(parser.DInt(retOid))
 				}
 
 				argTypes := builtin.Types
@@ -1006,19 +1100,18 @@ CREATE TABLE pg_catalog.pg_proc (
 				dArgTypeString := strings.Join(dArgTypes, ", ")
 
 				var argmodes parser.Datum
-				var variadicType *parser.DInt
+				var variadicType parser.Datum
 				switch argTypes.(type) {
 				case parser.VariadicType:
 					argmodes = proArgModeVariadic
 					argType := argTypes.Types()[0]
 					oid := argType.Oid()
-					variadicType = parser.NewDInt(parser.DInt(oid))
-				case parser.AnyType:
+					variadicType = parser.NewDOid(parser.DInt(oid))
+				case parser.HomogeneousType:
 					argmodes = proArgModeVariadic
 					argType := parser.TypeAny
 					oid := argType.Oid()
-					variadicType = parser.NewDInt(parser.DInt(oid))
-
+					variadicType = parser.NewDOid(parser.DInt(oid))
 				default:
 					argmodes = parser.DNull
 					variadicType = oidZero
@@ -1050,7 +1143,7 @@ CREATE TABLE pg_catalog.pg_proc (
 					parser.DNull,                      // proargnames
 					parser.DNull,                      // proargdefaults
 					parser.DNull,                      // protrftypes
-					dName,                             // prosrc
+					dSrc,                              // prosrc
 					parser.DNull,                      // probin
 					parser.DNull,                      // proconfig
 					parser.DNull,                      // proacl
@@ -1064,14 +1157,14 @@ CREATE TABLE pg_catalog.pg_proc (
 	},
 }
 
-// See: https://www.postgresql.org/docs/9.6/static/view-pg-range.html.
+// See: https://www.postgresql.org/docs/9.6/static/catalog-pg-range.html.
 var pgCatalogRangeTable = virtualSchemaTable{
 	schema: `
 CREATE TABLE pg_catalog.pg_range (
-	rngtypid INT,
-	rngsubtype INT,
-	rngcollation INT,
-	rngsubopc INT,
+	rngtypid OID,
+	rngsubtype OID,
+	rngcollation OID,
+	rngsubopc OID,
 	rngcanonical INT,
 	rngsubdiff INT
 );
@@ -1088,8 +1181,8 @@ CREATE TABLE pg_catalog.pg_range (
 var pgCatalogRolesTable = virtualSchemaTable{
 	schema: `
 CREATE TABLE pg_catalog.pg_roles (
-	oid INT,
-	rolname STRING,
+	oid OID,
+	rolname NAME,
 	rolsuper BOOL,
 	rolinherit BOOL,
 	rolcreaterole BOOL,
@@ -1113,7 +1206,7 @@ CREATE TABLE pg_catalog.pg_roles (
 				isRoot := parser.DBool(username == security.RootUser)
 				return addRow(
 					h.UserOid(username),           // oid
-					parser.NewDString(username),   // rolname
+					parser.NewDName(username),     // rolname
 					parser.MakeDBool(isRoot),      // rolsuper
 					parser.MakeDBool(false),       // rolinherit
 					parser.MakeDBool(isRoot),      // rolcreaterole
@@ -1154,7 +1247,7 @@ CREATE TABLE pg_catalog.pg_settings (
     boot_val STRING,
     reset_val STRING,
     sourcefile STRING,
-    sourceline int,
+    sourceline INT,
     pending_restart BOOL  
 );    
 `,
@@ -1193,10 +1286,10 @@ CREATE TABLE pg_catalog.pg_settings (
 var pgCatalogTablesTable = virtualSchemaTable{
 	schema: `
 CREATE TABLE pg_catalog.pg_tables (
-	schemaname STRING,
-	tablename STRING,
-	tableowner STRING,
-	tablespace STRING,
+	schemaname NAME,
+	tablename NAME,
+	tableowner NAME,
+	tablespace NAME,
 	hasindexes BOOL,
 	hasrules BOOL,
 	hastriggers BOOL,
@@ -1210,10 +1303,10 @@ CREATE TABLE pg_catalog.pg_tables (
 					return nil
 				}
 				return addRow(
-					parser.NewDString(db.Name),    // schemaname
-					parser.NewDString(table.Name), // tablename
-					parser.DNull,                  // tableowner
-					parser.DNull,                  // tablespace
+					parser.NewDName(db.Name),    // schemaname
+					parser.NewDName(table.Name), // tablename
+					parser.DNull,                // tableowner
+					parser.DNull,                // tablespace
 					parser.MakeDBool(parser.DBool(table.IsPhysicalTable())), // hasindexes
 					parser.MakeDBool(false),                                 // hasrules
 					parser.MakeDBool(false),                                 // hastriggers
@@ -1268,16 +1361,19 @@ var (
 	_ = typCategoryUnknown
 
 	typDelim = parser.NewDString(",")
+
+	arrayInProcName = "pg_catalog.array_in"
+	arrayInProcOid  = makeOidHasher().BuiltinOid(arrayInProcName, &parser.Builtins[arrayInProcName][0])
 )
 
 // See: https://www.postgresql.org/docs/9.6/static/catalog-pg-type.html.
 var pgCatalogTypeTable = virtualSchemaTable{
 	schema: `
 CREATE TABLE pg_catalog.pg_type (
-	oid INT,
-	typname STRING NOT NULL DEFAULT '',
-	typnamespace INT,
-	typowner INT,
+	oid OID,
+	typname NAME NOT NULL,
+	typnamespace OID,
+	typowner OID,
 	typlen INT,
 	typbyval BOOL,
 	typtype CHAR,
@@ -1285,62 +1381,72 @@ CREATE TABLE pg_catalog.pg_type (
 	typispreferred BOOL,
 	typisdefined BOOL,
 	typdelim CHAR,
-	typrelid INT,
-	typelem INT,
-	typarray INT,
-	typinput INT,
-	typoutput INT,
-	typreceive INT,
-	typsend INT,
-	typmodin INT,
-	typmodout INT,
-	typanalyze INT,
+	typrelid OID,
+	typelem OID,
+	typarray OID,
+	typinput OID,
+	typoutput OID,
+	typreceive OID,
+	typsend OID,
+	typmodin OID,
+	typmodout OID,
+	typanalyze OID,
 	typalign CHAR,
 	typstorage CHAR,
 	typnotnull BOOL,
-	typbasetype INT,
+	typbasetype OID,
 	typtypmod INT,
 	typndims INT,
-	typcollation INT,
+	typcollation OID,
 	typdefaultbin STRING,
 	typdefault STRING,
 	typacl STRING
 );
 `,
 	populate: func(p *planner, addRow func(...parser.Datum) error) error {
+		h := makeOidHasher()
 		for oid, typ := range parser.OidToType {
+			cat := typCategory(typ)
+			typInput := oidZero
+			if cat == typCategoryArray {
+				typInput = arrayInProcOid
+			}
+			typname := typ.String()
+			if n, ok := aliasedOidToName[oid]; ok {
+				typname = n
+			}
 			if err := addRow(
-				parser.NewDInt(parser.DInt(oid)), // oid
-				parser.NewDString(typ.String()),  // typname
+				parser.NewDOid(parser.DInt(oid)), // oid
+				parser.NewDName(typname),         // typname
 				pgNamespacePGCatalog.Oid,         // typnamespace
 				parser.DNull,                     // typowner
 				typLen(typ),                      // typlen
 				typByVal(typ),                    // typbyval
 				typTypeBase,                      // typtype
-				typCategory(typ),                 // typcategory
-				parser.MakeDBool(false),          // typispreferred
-				parser.MakeDBool(true),           // typisdefined
-				typDelim,                         // typdelim
-				zeroVal,                          // typrelid
-				zeroVal,                          // typelem
-				zeroVal,                          // typarray
+				cat,                              // typcategory
+				parser.MakeDBool(false), // typispreferred
+				parser.MakeDBool(true),  // typisdefined
+				typDelim,                // typdelim
+				oidZero,                 // typrelid
+				oidZero,                 // typelem
+				oidZero,                 // typarray
 
 				// regproc references
-				zeroVal, // typinput
-				zeroVal, // typoutput
-				zeroVal, // typreceive
-				zeroVal, // typsend
-				zeroVal, // typmodin
-				zeroVal, // typmodout
-				zeroVal, // typanalyze
+				typInput, // typinput
+				oidZero,  // typoutput
+				oidZero,  // typreceive
+				oidZero,  // typsend
+				oidZero,  // typmodin
+				oidZero,  // typmodout
+				oidZero,  // typanalyze
 
 				parser.DNull,            // typalign
 				parser.DNull,            // typstorage
 				parser.MakeDBool(false), // typnotnull
-				zeroVal,                 // typbasetype
+				oidZero,                 // typbasetype
 				negOneVal,               // typtypmod
 				zeroVal,                 // typndims
-				zeroVal,                 // typcollation
+				typColl(typ, h),         // typcollation
 				parser.DNull,            // typdefaultbin
 				parser.DNull,            // typdefault
 				parser.DNull,            // typacl
@@ -1352,11 +1458,26 @@ CREATE TABLE pg_catalog.pg_type (
 	},
 }
 
+// aliasedOidToName maps Postgres object IDs to type names for those OIDs that map to
+// Cockroach types that have more than one associated OID, like Int. The name
+// for these OIDs will override the type name of the corresponding type when
+// looking up the display name for an OID.
+var aliasedOidToName = map[oid.Oid]string{
+	oid.T_float4: "float4",
+	oid.T_float8: "float8",
+	oid.T_int2:   "int2",
+	oid.T_int4:   "int4",
+	oid.T_int8:   "int8",
+	oid.T__int2:  "int2[]",
+	oid.T__int4:  "int4[]",
+	oid.T__int8:  "int8[]",
+}
+
 // typOid is the only OID generation approach that does not use oidHasher, because
 // object identifiers for types are not arbitrary, but instead need to be kept in
 // sync with Postgres.
-func typOid(typ parser.Type) *parser.DInt {
-	return parser.NewDInt(parser.DInt(typ.Oid()))
+func typOid(typ parser.Type) parser.Datum {
+	return parser.NewDOid(parser.DInt(typ.Oid()))
 }
 
 func typLen(typ parser.Type) *parser.DInt {
@@ -1369,6 +1490,20 @@ func typLen(typ parser.Type) *parser.DInt {
 func typByVal(typ parser.Type) parser.Datum {
 	_, variable := typ.Size()
 	return parser.MakeDBool(parser.DBool(!variable))
+}
+
+// typColl returns the collation OID for a given type.
+// The default collation is en-US, which is equivalent to but spelled
+// differently than the default database collation, en_US.utf8.
+func typColl(typ parser.Type, h oidHasher) parser.Datum {
+	if typ.FamilyEqual(parser.TypeAny) {
+		return oidZero
+	} else if typ.Equivalent(parser.TypeString) || typ.Equivalent(parser.TypeStringArray) {
+		return h.CollationOid(defaultCollationTag)
+	} else if typ.FamilyEqual(parser.TypeCollatedString) {
+		return h.CollationOid(typ.(parser.TCollatedString).Locale)
+	}
+	return oidZero
 }
 
 // This mapping should be kept sync with PG's categorization.
@@ -1391,15 +1526,15 @@ var datumToTypeCategory = map[reflect.Type]*parser.DString{
 }
 
 func typCategory(typ parser.Type) parser.Datum {
-	return datumToTypeCategory[reflect.TypeOf(typ)]
+	return datumToTypeCategory[reflect.TypeOf(parser.UnwrapType(typ))]
 }
 
 // See: https://www.postgresql.org/docs/9.6/static/view-pg-views.html.
 var pgCatalogViewsTable = virtualSchemaTable{
 	schema: `
 CREATE TABLE pg_catalog.pg_views (
-	schemaname STRING,
-	viewname STRING,
+	schemaname NAME,
+	viewname NAME,
 	viewowner STRING,
 	definition STRING
 );
@@ -1419,8 +1554,8 @@ CREATE TABLE pg_catalog.pg_views (
 				// TODO(a-robinson): Insert column aliases into view query once we
 				// have a semantic query representation to work with (#10083).
 				return addRow(
-					parser.NewDString(db.Name),        // schemaname
-					parser.NewDString(desc.Name),      // viewname
+					parser.NewDName(db.Name),          // schemaname
+					parser.NewDName(desc.Name),        // viewname
 					parser.DNull,                      // viewowner
 					parser.NewDString(desc.ViewQuery), // definition
 				)
@@ -1491,16 +1626,17 @@ const (
 	uniqueConstraintTypeTag
 	functionTypeTag
 	userTypeTag
+	collationTypeTag
 )
 
 func (h oidHasher) writeTypeTag(tag oidTypeTag) {
 	h.writeUInt8(uint8(tag))
 }
 
-func (h oidHasher) getOid() *parser.DInt {
+func (h oidHasher) getOid() parser.Datum {
 	i := h.h.Sum32()
 	h.h.Reset()
-	return parser.NewDInt(parser.DInt(i))
+	return parser.NewDOid(parser.DInt(i))
 }
 
 func (h oidHasher) writeDB(db *sqlbase.DatabaseDescriptor) {
@@ -1533,13 +1669,13 @@ func (h oidHasher) writeForeignKeyReference(fk *sqlbase.ForeignKeyReference) {
 	h.writeStr(fk.Name)
 }
 
-func (h oidHasher) NamespaceOid(namespace string) *parser.DInt {
+func (h oidHasher) NamespaceOid(namespace string) parser.Datum {
 	h.writeTypeTag(namespaceTypeTag)
 	h.writeStr(namespace)
 	return h.getOid()
 }
 
-func (h oidHasher) DBOid(db *sqlbase.DatabaseDescriptor) *parser.DInt {
+func (h oidHasher) DBOid(db *sqlbase.DatabaseDescriptor) parser.Datum {
 	h.writeTypeTag(databaseTypeTag)
 	h.writeDB(db)
 	return h.getOid()
@@ -1547,7 +1683,7 @@ func (h oidHasher) DBOid(db *sqlbase.DatabaseDescriptor) *parser.DInt {
 
 func (h oidHasher) TableOid(
 	db *sqlbase.DatabaseDescriptor, table *sqlbase.TableDescriptor,
-) *parser.DInt {
+) parser.Datum {
 	h.writeTypeTag(tableTypeTag)
 	h.writeDB(db)
 	h.writeTable(table)
@@ -1556,7 +1692,7 @@ func (h oidHasher) TableOid(
 
 func (h oidHasher) IndexOid(
 	db *sqlbase.DatabaseDescriptor, table *sqlbase.TableDescriptor, index *sqlbase.IndexDescriptor,
-) *parser.DInt {
+) parser.Datum {
 	h.writeTypeTag(indexTypeTag)
 	h.writeDB(db)
 	h.writeTable(table)
@@ -1566,7 +1702,7 @@ func (h oidHasher) IndexOid(
 
 func (h oidHasher) ColumnOid(
 	db *sqlbase.DatabaseDescriptor, table *sqlbase.TableDescriptor, column *sqlbase.ColumnDescriptor,
-) *parser.DInt {
+) parser.Datum {
 	h.writeTypeTag(columnTypeTag)
 	h.writeDB(db)
 	h.writeTable(table)
@@ -1578,7 +1714,7 @@ func (h oidHasher) CheckConstraintOid(
 	db *sqlbase.DatabaseDescriptor,
 	table *sqlbase.TableDescriptor,
 	check *sqlbase.TableDescriptor_CheckConstraint,
-) *parser.DInt {
+) parser.Datum {
 	h.writeTypeTag(checkConstraintTypeTag)
 	h.writeDB(db)
 	h.writeTable(table)
@@ -1588,7 +1724,7 @@ func (h oidHasher) CheckConstraintOid(
 
 func (h oidHasher) PrimaryKeyConstraintOid(
 	db *sqlbase.DatabaseDescriptor, table *sqlbase.TableDescriptor, pkey *sqlbase.IndexDescriptor,
-) *parser.DInt {
+) parser.Datum {
 	h.writeTypeTag(pKeyConstraintTypeTag)
 	h.writeDB(db)
 	h.writeTable(table)
@@ -1598,7 +1734,7 @@ func (h oidHasher) PrimaryKeyConstraintOid(
 
 func (h oidHasher) ForeignKeyConstraintOid(
 	db *sqlbase.DatabaseDescriptor, table *sqlbase.TableDescriptor, fk *sqlbase.ForeignKeyReference,
-) *parser.DInt {
+) parser.Datum {
 	h.writeTypeTag(fkConstraintTypeTag)
 	h.writeDB(db)
 	h.writeTable(table)
@@ -1608,7 +1744,7 @@ func (h oidHasher) ForeignKeyConstraintOid(
 
 func (h oidHasher) UniqueConstraintOid(
 	db *sqlbase.DatabaseDescriptor, table *sqlbase.TableDescriptor, index *sqlbase.IndexDescriptor,
-) *parser.DInt {
+) parser.Datum {
 	h.writeTypeTag(uniqueConstraintTypeTag)
 	h.writeDB(db)
 	h.writeTable(table)
@@ -1616,16 +1752,22 @@ func (h oidHasher) UniqueConstraintOid(
 	return h.getOid()
 }
 
-func (h oidHasher) BuiltinOid(name string, builtin *parser.Builtin) *parser.DInt {
+func (h oidHasher) BuiltinOid(name string, builtin *parser.Builtin) parser.Datum {
 	h.writeTypeTag(functionTypeTag)
 	h.writeStr(name)
 	h.writeStr(builtin.Types.String())
 	return h.getOid()
 }
 
-func (h oidHasher) UserOid(username string) *parser.DInt {
+func (h oidHasher) UserOid(username string) parser.Datum {
 	h.writeTypeTag(userTypeTag)
 	h.writeStr(username)
+	return h.getOid()
+}
+
+func (h oidHasher) CollationOid(collation string) parser.Datum {
+	h.writeTypeTag(collationTypeTag)
+	h.writeStr(collation)
 	return h.getOid()
 }
 
@@ -1642,8 +1784,8 @@ func (h oidHasher) UserOid(username string) *parser.DInt {
 type pgNamespace struct {
 	name string
 
-	NameStr *parser.DString
-	Oid     *parser.DInt
+	NameStr parser.Datum
+	Oid     parser.Datum
 }
 
 var (
@@ -1663,7 +1805,7 @@ var (
 func init() {
 	h := makeOidHasher()
 	for _, nsp := range pgNamespaces {
-		nsp.NameStr = parser.NewDString(nsp.name)
+		nsp.NameStr = parser.NewDName(nsp.name)
 		nsp.Oid = h.NamespaceOid(nsp.name)
 	}
 }

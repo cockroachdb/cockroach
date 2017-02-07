@@ -101,6 +101,13 @@ const (
 	// if a range lease holder experiences a failure causing a missed
 	// gossip update.
 	systemDataGossipInterval = 1 * time.Minute
+
+	// prohibitRebalancesBehindThreshold is the maximum number of log entries a
+	// store allows its replicas to be behind before it starts declining incoming
+	// rebalances. We prohibit rebalances in this situation to avoid adding
+	// additional work to a store that is either not keeping up or is undergoing
+	// recovery because it is on a recently restarted node.
+	prohibitRebalancesBehindThreshold = 1000
 )
 
 var changeTypeInternalToRaft = map[roachpb.ReplicaChangeType]raftpb.ConfChangeType{
@@ -113,8 +120,6 @@ var storeSchedulerConcurrency = envutil.EnvOrDefaultInt(
 
 var enablePreVote = envutil.EnvOrDefaultBool(
 	"COCKROACH_ENABLE_PREVOTE", false)
-
-var enableRuleSolver = envutil.EnvOrDefaultBool("COCKROACH_ENABLE_RULE_SOLVER", false)
 
 // RaftElectionTimeout returns the raft election timeout, as computed
 // from the specified tick interval and number of election timeout
@@ -167,7 +172,8 @@ func TestStoreConfig(clock *hlc.Clock) StoreConfig {
 		ScanInterval:                   10 * time.Minute,
 		ConsistencyCheckInterval:       10 * time.Minute,
 		ConsistencyCheckPanicOnFailure: true,
-		MetricsSampleInterval:          time.Hour,
+		MetricsSampleInterval:          metric.TestSampleInterval,
+		HistogramWindowInterval:        metric.TestSampleInterval,
 		EnableCoalescedHeartbeats:      true,
 		EnableEpochRangeLeases:         true,
 	}
@@ -420,6 +426,10 @@ type Store struct {
 	// Semaphore to limit concurrent snapshot application and replica data
 	// destruction.
 	snapshotApplySem chan struct{}
+	// Are rebalances to this store allowed or prohibited. Rebalances are
+	// prohibited while a store is catching up replicas (i.e. recovering) after
+	// being restarted.
+	rebalancesDisabled int32
 
 	// drainLeases holds a bool which indicates whether Replicas should be
 	// allowed to acquire or extend range leases; see DrainLeases().
@@ -428,12 +438,6 @@ type Store struct {
 	// the time of its creation was riddled with deadlock (but that situation
 	// has likely improved).
 	drainLeases atomic.Value
-
-	// These vars are atomically updated from 0 to 1 once per store
-	// lifetime to ensure we gossip system data in the event that the
-	// node ends up owning the relevant range lease on a restart.
-	haveGossipedSystemConfig int32
-	haveGossipedNodeLiveness int32
 
 	// Locking notes: To avoid deadlocks, the following lock order must be
 	// obeyed: Replica.raftMu < Replica.readOnlyCmdMu < Store.mu < Replica.mu
@@ -522,7 +526,7 @@ type Store struct {
 
 	mu struct {
 		// TODO(peter): evaluate runtime overhead of the timed mutex.
-		syncutil.TimedMutex // Protects all variables in the mu struct.
+		timedMutex // Protects all variables in the mu struct.
 		// Map of replicas by Range ID. This includes `uninitReplicas`.
 		replicas map[roachpb.RangeID]*Replica
 		// A btree key containing objects of type *Replica or
@@ -631,10 +635,6 @@ type StoreConfig struct {
 	// replication consistency check failure.
 	ConsistencyCheckPanicOnFailure bool
 
-	// AllocatorOptions configures how the store will attempt to rebalance its
-	// replicas to other stores.
-	AllocatorOptions AllocatorOptions
-
 	// If LogRangeEvents is true, major changes to ranges will be logged into
 	// the range event log.
 	LogRangeEvents bool
@@ -661,6 +661,9 @@ type StoreConfig struct {
 
 	// MetricsSampleInterval is (server.Context).MetricsSampleInterval
 	MetricsSampleInterval time.Duration
+
+	// HistogramWindowInterval is (server.Context).HistogramWindowInterval
+	HistogramWindowInterval time.Duration
 
 	// EnableCoalescedHeartbeats controls whether heartbeats are coalesced.
 	EnableCoalescedHeartbeats bool
@@ -697,6 +700,10 @@ type StoreTestingKnobs struct {
 	// TODO(kaneda): This hook is not encouraged to use. Get rid of it once
 	// we make TestServer take a ManualClock.
 	ClockBeforeSend func(*hlc.Clock, roachpb.BatchRequest)
+	// OnCampaign is called if the replica campaigns for Raft leadership
+	// when initializing the Raft group. Note that this method is invoked
+	// with both Replica.raftMu and Replica.mu locked.
+	OnCampaign func(*Replica)
 	// MaxOffset, if set, overrides the server clock's MaxOffset at server
 	// creation time.
 	// See also DisableMaxOffsetCheck.
@@ -818,8 +825,6 @@ func (sc *StoreConfig) SetDefaults() {
 		sc.RangeLeaseRenewalDuration = rangeLeaseRenewalDuration
 	}
 
-	sc.AllocatorOptions.UseRuleSolver = enableRuleSolver
-
 	if sc.GossipWhenCapacityDeltaExceedsFraction == 0 {
 		sc.GossipWhenCapacityDeltaExceedsFraction = defaultGossipWhenCapacityDeltaExceedsFraction
 	}
@@ -837,9 +842,9 @@ func NewStore(cfg StoreConfig, eng engine.Engine, nodeDesc *roachpb.NodeDescript
 		cfg:       cfg,
 		db:        cfg.DB, // TODO(tschottdorf) remove redundancy.
 		engine:    eng,
-		allocator: MakeAllocator(cfg.StorePool, cfg.AllocatorOptions),
+		allocator: MakeAllocator(cfg.StorePool),
 		nodeDesc:  nodeDesc,
-		metrics:   newStoreMetrics(cfg.MetricsSampleInterval),
+		metrics:   newStoreMetrics(cfg.HistogramWindowInterval),
 	}
 	// EnableCoalescedHeartbeats is enabled by TestStoreConfig, so in that case
 	// ignore the environment variable. Otherwise, use whatever the environment
@@ -854,17 +859,14 @@ func NewStore(cfg StoreConfig, eng engine.Engine, nodeDesc *roachpb.NodeDescript
 	s.drainLeases.Store(false)
 	s.scheduler = newRaftScheduler(s.cfg.AmbientCtx, s.metrics, s, storeSchedulerConcurrency)
 
-	storeMuLogger := syncutil.ThresholdLogger(
+	storeMuLogger := thresholdLogger(
 		s.AnnotateCtx(context.Background()),
 		defaultStoreMutexWarnThreshold,
 		func(ctx context.Context, msg string, args ...interface{}) {
 			log.Warningf(ctx, "storeMu: "+msg, args...)
 		},
-		func(t time.Duration) {
-			s.metrics.MuStoreNanos.RecordValue(t.Nanoseconds())
-		},
 	)
-	s.mu.TimedMutex = syncutil.MakeTimedMutex(storeMuLogger)
+	s.mu.timedMutex = makeTimedMutex(storeMuLogger)
 
 	s.coalescedMu.Lock()
 	s.coalescedMu.heartbeats = map[roachpb.StoreIdent][]RaftHeartbeat{}
@@ -888,9 +890,7 @@ func NewStore(cfg StoreConfig, eng engine.Engine, nodeDesc *roachpb.NodeDescript
 		)
 		s.gcQueue = newGCQueue(s, s.cfg.Gossip)
 		s.splitQueue = newSplitQueue(s, s.db, s.cfg.Gossip)
-		s.replicateQueue = newReplicateQueue(
-			s, s.cfg.Gossip, s.allocator, s.cfg.Clock, s.cfg.AllocatorOptions,
-		)
+		s.replicateQueue = newReplicateQueue(s, s.cfg.Gossip, s.allocator, s.cfg.Clock)
 		s.replicaGCQueue = newReplicaGCQueue(s, s.db, s.cfg.Gossip)
 		s.raftLogQueue = newRaftLogQueue(s, s.db, s.cfg.Gossip)
 		s.raftSnapshotQueue = newRaftSnapshotQueue(s, s.cfg.Gossip, s.cfg.Clock)
@@ -1266,31 +1266,50 @@ func (s *Store) WaitForInit() {
 	s.initComplete.Wait()
 }
 
+var errPeriodicGossipsDisabled = errors.New("periodic gossip is disabled")
+
 // startGossip runs an infinite loop in a goroutine which regularly checks
 // whether the store has a first range or config replica and asks those ranges
 // to gossip accordingly.
 func (s *Store) startGossip() {
+	wakeReplica := func(ctx context.Context, repl *Replica) error {
+		// Acquire the range lease, which in turn triggers system data gossip
+		// functions (e.g. maybeGossipSystemConfig or maybeGossipNodeLiveness).
+		_, pErr := repl.getLeaseForGossip(ctx)
+		return pErr.GoError()
+	}
+
+	if s.cfg.TestingKnobs.DisablePeriodicGossips {
+		wakeReplica = func(context.Context, *Replica) error {
+			return errPeriodicGossipsDisabled
+		}
+	}
+
 	gossipFns := []struct {
-		fn          func(context.Context) error
+		key         roachpb.Key
+		fn          func(context.Context, *Replica) error
 		description string
 		interval    time.Duration
 	}{
 		{
-			fn:          s.maybeGossipFirstRange,
+			key: roachpb.KeyMin,
+			fn: func(ctx context.Context, repl *Replica) error {
+				// The first range is gossiped by all replicas, not just the lease
+				// holder, so wakeReplica is not used here.
+				return repl.maybeGossipFirstRange(ctx).GoError()
+			},
 			description: "first range descriptor",
 			interval:    sentinelGossipInterval,
 		},
 		{
-			fn: func(ctx context.Context) error {
-				return s.maybeGossipSystemData(ctx, keys.SystemConfigSpan)
-			},
+			key:         keys.SystemConfigSpan.Key,
+			fn:          wakeReplica,
 			description: "system config",
 			interval:    systemDataGossipInterval,
 		},
 		{
-			fn: func(ctx context.Context) error {
-				return s.maybeGossipSystemData(ctx, keys.NodeLivenessSpan)
-			},
+			key:         keys.NodeLivenessSpan.Key,
+			fn:          wakeReplica,
 			description: "node liveness",
 			interval:    systemDataGossipInterval,
 		},
@@ -1303,74 +1322,38 @@ func (s *Store) startGossip() {
 		gossipFn := gossipFn // per-iteration copy
 		s.stopper.RunWorker(func() {
 			ctx := s.AnnotateCtx(context.Background())
-			// Run the first time without waiting for the Ticker and signal the WaitGroup.
-			if err := gossipFn.fn(ctx); err != nil {
-				log.Warningf(ctx, "error gossiping %s: %s", gossipFn.description, err)
-			}
-			s.initComplete.Done()
 			ticker := time.NewTicker(gossipFn.interval)
 			defer ticker.Stop()
-			for {
+			for first := true; ; {
+				// Retry in a backoff loop until gossipFn succeeds. The gossipFn might
+				// temporarily fail (e.g. because node liveness hasn't initialized yet
+				// making it impossible to get an epoch-based range lease), in which
+				// case we want to retry quickly.
+				retryOptions := base.DefaultRetryOptions()
+				retryOptions.Closer = s.stopper.ShouldStop()
+				for r := retry.Start(retryOptions); r.Next(); {
+					if repl := s.LookupReplica(roachpb.RKey(gossipFn.key), nil); repl != nil {
+						if err := gossipFn.fn(ctx, repl); err != nil {
+							log.Errorf(ctx, "error gossiping %s: %s", gossipFn.description, err)
+							if err != errPeriodicGossipsDisabled {
+								continue
+							}
+						}
+					}
+					break
+				}
+				if first {
+					first = false
+					s.initComplete.Done()
+				}
 				select {
 				case <-ticker.C:
-					if err := gossipFn.fn(ctx); err != nil {
-						log.Warningf(ctx, "error gossiping %s: %s", gossipFn.description, err)
-					}
 				case <-s.stopper.ShouldStop():
 					return
 				}
 			}
 		})
 	}
-}
-
-// maybeGossipFirstRange checks whether the store has a replica of the
-// first range and if so instructs it to gossip the cluster ID,
-// sentinel gossip and first range descriptor. This is done in a retry
-// loop in the event that the returned error indicates that the state
-// of the range lease is not known. This can happen on lease command
-// timeouts. The retry loop makes sure we try hard to keep asking for
-// the lease instead of waiting for the next sentinelGossipInterval
-// to transpire.
-func (s *Store) maybeGossipFirstRange(ctx context.Context) error {
-	retryOptions := base.DefaultRetryOptions()
-	retryOptions.Closer = s.stopper.ShouldStop()
-	for loop := retry.Start(retryOptions); loop.Next(); {
-		repl := s.LookupReplica(roachpb.RKeyMin, nil)
-		if repl != nil {
-			pErr := repl.maybeGossipFirstRange(ctx)
-			if nlErr, ok := pErr.GetDetail().(*roachpb.NotLeaseHolderError); !ok || nlErr.LeaseHolder != nil {
-				return pErr.GoError()
-			}
-		} else {
-			return nil
-		}
-	}
-	return nil
-}
-
-// maybeGossipSystemData looks for the range containing the specified
-// span and acquires the range lease, which in turn triggers a system
-// data gossip function (e.g. Replica.maybeGossipSystemConfig or
-// Replica.maybeGossipNodeLiveness).
-func (s *Store) maybeGossipSystemData(ctx context.Context, span roachpb.Span) error {
-	if s.cfg.TestingKnobs.DisablePeriodicGossips {
-		return nil
-	}
-
-	repl := s.LookupReplica(roachpb.RKey(span.Key), nil)
-	if repl == nil {
-		// This store has no range with this configuration.
-		return nil
-	}
-	// Wake up the replica. If it acquires a fresh lease, gossip the
-	// gossip. If an unexpected error occurs (i.e. nobody else seems to
-	// have an active lease but we still failed to obtain it), return
-	// that error.
-	if _, pErr := repl.getLeaseForGossip(ctx); pErr != nil {
-		return pErr.GoError()
-	}
-	return nil
 }
 
 // systemGossipUpdate is a callback for gossip updates to
@@ -2451,10 +2434,7 @@ func (s *Store) Send(
 	}
 
 	// Add the command to the range for execution; exit retry loop on success.
-	s.mu.Lock()
-	retryOpts := s.cfg.RangeRetryOptions
-	s.mu.Unlock()
-	for r := retry.StartWithCtx(ctx, retryOpts); next(&r); {
+	for r := retry.StartWithCtx(ctx, s.cfg.RangeRetryOptions); next(&r); {
 		// Get range and add command to the range for execution.
 		repl, err := s.GetReplica(ba.RangeID)
 		if err != nil {
@@ -2484,7 +2464,6 @@ func (s *Store) Send(
 				},
 			})
 		}
-		repl.assert5725(ba)
 		br, pErr = repl.Send(ctx, ba)
 		if pErr == nil {
 			return br, nil
@@ -2544,7 +2523,6 @@ func (s *Store) Send(
 			}
 			// Update the batch transaction, if applicable, in case it has
 			// been independently pushed and has more recent information.
-			repl.assert5725(ba)
 			if ba.Txn != nil {
 				updatedTxn, pErr := s.maybeUpdateTransaction(ba.Txn, now)
 				if pErr != nil {
@@ -2640,6 +2618,9 @@ func (s *Store) reserveSnapshot(
 	ctx context.Context, header *SnapshotRequest_Header,
 ) (func(), error) {
 	if header.CanDecline {
+		if atomic.LoadInt32(&s.rebalancesDisabled) == 1 {
+			return nil, nil
+		}
 		select {
 		case s.snapshotApplySem <- struct{}{}:
 		case <-ctx.Done():
@@ -2733,6 +2714,10 @@ func (s *Store) HandleSnapshot(header *SnapshotRequest_Header, stream SnapshotRe
 				Batches:    batches,
 				LogEntries: logEntries,
 				State:      &header.State,
+				snapType:   snapTypeRaft,
+			}
+			if header.RaftMessageRequest.ToReplica.ReplicaID == 0 {
+				inSnap.snapType = snapTypePreemptive
 			}
 
 			if err := s.processRaftRequest(ctx, &header.RaftMessageRequest, inSnap); err != nil {
@@ -3080,6 +3065,9 @@ func (s *Store) processRaftRequest(
 		// We're processing a message from another replica which means that the
 		// other replica is not quiesced, so we don't need to wake the leader.
 		r.unquiesceLocked()
+		if req.Message.Type == raftpb.MsgApp {
+			r.setEstimatedCommitIndexLocked(req.Message.Commit)
+		}
 		return false, /* !unquiesceAndWakeLeader */
 			raftGroup.Step(req.Message)
 	}); err != nil {
@@ -3268,12 +3256,15 @@ func sendSnapshot(
 		LogEntries: logEntries,
 		Final:      true,
 	}
+	// Notify the sent callback before the final snapshot request is sent so that
+	// the snapshots generated metric gets incremented before the snapshot is
+	// applied.
+	sent()
 	if err := stream.Send(req); err != nil {
 		return err
 	}
 	log.Infof(ctx, "streamed snapshot: kv pairs: %d, log entries: %d, %0.0fms",
 		n, len(logEntries), timeutil.Since(start).Seconds()*1000)
-	sent()
 
 	resp, err = stream.Recv()
 	if err != nil {
@@ -3763,6 +3754,7 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 		unavailableRangeCount     int64
 		underreplicatedRangeCount int64
 		behindCount               int64
+		selfBehindCount           int64
 	)
 
 	timestamp := s.cfg.Clock.Now()
@@ -3802,6 +3794,7 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 			}
 		}
 		behindCount += metrics.behindCount
+		selfBehindCount += metrics.selfBehindCount
 		return true // more
 	})
 
@@ -3815,8 +3808,14 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 	s.metrics.RangeCount.Update(rangeCount)
 	s.metrics.UnavailableRangeCount.Update(unavailableRangeCount)
 	s.metrics.UnderReplicatedRangeCount.Update(underreplicatedRangeCount)
-	s.metrics.RaftLogBehindCount.Update(behindCount)
+	s.metrics.RaftLogFollowerBehindCount.Update(behindCount)
+	s.metrics.RaftLogSelfBehindCount.Update(selfBehindCount)
 
+	if selfBehindCount > prohibitRebalancesBehindThreshold {
+		atomic.StoreInt32(&s.rebalancesDisabled, 1)
+	} else {
+		atomic.StoreInt32(&s.rebalancesDisabled, 0)
+	}
 	return nil
 }
 

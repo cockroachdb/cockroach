@@ -60,12 +60,12 @@ func TestJoinReader(t *testing.T) {
 	td := sqlbase.GetTableDescriptor(kvDB, "test", "t")
 
 	testCases := []struct {
-		spec     JoinReaderSpec
+		post     PostProcessSpec
 		input    [][]parser.Datum
 		expected string
 	}{
 		{
-			spec: JoinReaderSpec{
+			post: PostProcessSpec{
 				OutputColumns: []uint32{0, 1, 2},
 			},
 			input: [][]parser.Datum{
@@ -77,7 +77,7 @@ func TestJoinReader(t *testing.T) {
 			expected: "[[0 2 2] [0 5 5] [1 0 1] [1 5 6]]",
 		},
 		{
-			spec: JoinReaderSpec{
+			post: PostProcessSpec{
 				Filter:        Expression{Expr: "@3 <= 5"}, // sum <= 5
 				OutputColumns: []uint32{3},
 			},
@@ -95,9 +95,6 @@ func TestJoinReader(t *testing.T) {
 		},
 	}
 	for _, c := range testCases {
-		js := c.spec
-		js.Table = *td
-
 		flowCtx := FlowCtx{
 			Context:  context.Background(),
 			evalCtx:  &parser.EvalContext{},
@@ -115,7 +112,7 @@ func TestJoinReader(t *testing.T) {
 		}
 
 		out := &RowBuffer{}
-		jr, err := newJoinReader(&flowCtx, &js, in, out)
+		jr, err := newJoinReader(&flowCtx, &JoinReaderSpec{Table: *td}, in, &c.post, out)
 		if err != nil {
 			t.Fatal(err)
 		}

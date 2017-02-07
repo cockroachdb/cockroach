@@ -52,9 +52,17 @@ var _ error = &RetryableTxnError{}
 // NewRetryableTxnError creates a shim RetryableTxnError that
 // reports the given cause when converted to String(). This can be
 // used to fake/force a retry at the SQL layer.
-func NewRetryableTxnError(cause string) *RetryableTxnError {
+//
+// txnID is the id of the transaction that this error is supposed to cause a
+// retry for. Can be nil, in which case it will cause retries for transactions
+// that don't have an ID set.
+// TODO(andrei): this function should really take a transaction as an argument.
+// The caller (crdb_internal.force_retry) should be given access to the current
+// transaction through the EvalContext.
+func NewRetryableTxnError(cause string, txnID *uuid.UUID) *RetryableTxnError {
 	return &RetryableTxnError{
 		message: cause,
+		TxnID:   txnID,
 	}
 }
 
@@ -96,9 +104,10 @@ func NewError(err error) *Error {
 	if intErr, ok := err.(*internalError); ok {
 		*e = *(*Error)(intErr)
 	} else if _, ok := err.(*RetryableTxnError); ok {
-		// This shouldn't happen. The few unfortunate bastards that need to go from
-		// RetryableTxnError to pErr should do it explicitly through
-		// RetryableTxnErrorToPErr().
+		// This shouldn't happen; RetryableTxnError should never be converted back
+		// into a pErr because it might lead to the wrong transaction being retried.
+		// If this conversation were attempted, it'd be a sign of a pErr having been
+		// converted to an error which is now being converted back to a pErr.
 		panic("RetryableTxnError being converted back to pErr.")
 	} else {
 		e.setGoError(err)
@@ -174,8 +183,7 @@ func (e *Error) GoError() error {
 			Backoff:     backoff,
 		}
 	}
-	detail := e.GetDetail()
-	return detail
+	return e.GetDetail()
 }
 
 // setGoError sets Error using err.

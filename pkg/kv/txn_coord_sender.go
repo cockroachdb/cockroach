@@ -125,15 +125,15 @@ var (
 )
 
 // MakeTxnMetrics returns a TxnMetrics struct that contains metrics whose
-// windowed portions retain data for approximately sampleInterval.
-func MakeTxnMetrics(sampleInterval time.Duration) TxnMetrics {
+// windowed portions retain data for approximately histogramWindow.
+func MakeTxnMetrics(histogramWindow time.Duration) TxnMetrics {
 	return TxnMetrics{
 		Aborts:     metric.NewCounterWithRates(metaAbortsRates),
 		Commits:    metric.NewCounterWithRates(metaCommitsRates),
 		Commits1PC: metric.NewCounterWithRates(metaCommits1PCRates),
 		Abandons:   metric.NewCounterWithRates(metaAbandonsRates),
-		Durations:  metric.NewLatency(metaDurationsHistograms, sampleInterval),
-		Restarts:   metric.NewHistogram(metaRestartsHistogram, sampleInterval, 100, 3),
+		Durations:  metric.NewLatency(metaDurationsHistograms, histogramWindow),
+		Restarts:   metric.NewHistogram(metaRestartsHistogram, histogramWindow, 100, 3),
 	}
 }
 
@@ -302,7 +302,7 @@ func (tc *TxnCoordSender) Send(
 
 		// Associate the txnID with the trace. We need to do this after the
 		// maybeBeginTxn call. We set both a baggage item and a tag because only
-		// tags show up in the LIghtstep UI.
+		// tags show up in the Lightstep UI.
 		txnIDStr := txnID.String()
 		sp.SetTag("txnID", txnIDStr)
 		sp.SetBaggageItem("txnID", txnIDStr)
@@ -406,6 +406,10 @@ func (tc *TxnCoordSender) Send(
 		// passed to the RPC layer.
 		ba.TraceContext = protoutil.Clone(ba.TraceContext).(*tracing.SpanContextCarrier)
 	}
+	// TODO(andrei): we shouldn't be injecting the span here; we should be
+	// injecting it at a much lower level, when we're actually sending the RPC
+	// (i.e. in gRPCTransport). Injecting it here causes the server-side spans to
+	// not be children of the client's leaf spans.
 	if err := tracer.Inject(sp.Context(), basictracer.Delegator, ba.TraceContext); err != nil {
 		return nil, roachpb.NewError(err)
 	}
@@ -984,7 +988,7 @@ func (tc *TxnCoordSender) resendWithTxn(
 	tmpDB := client.NewDBWithContext(tc, dbCtx)
 	var br *roachpb.BatchResponse
 	err := tmpDB.Txn(ctx, func(txn *client.Txn) error {
-		txn.SetDebugName("auto-wrap", 0)
+		txn.SetDebugName("auto-wrap")
 		b := txn.NewBatch()
 		b.Header = ba.Header
 		for _, arg := range ba.Requests {

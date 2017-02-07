@@ -852,7 +852,7 @@ func (hv *historyVerifier) runTxn(
 			cmds[cmdIdx].done(nil)
 		}
 
-		txn.SetDebugName(txnName, 0)
+		txn.SetDebugName(txnName)
 		if isolation == enginepb.SNAPSHOT {
 			if err := txn.SetIsolation(enginepb.SNAPSHOT); err != nil {
 				return err
@@ -947,6 +947,11 @@ func checkConcurrency(
 //    R1(A) R2(B) I2(B) R2(A) I2(A) R1(B) C1 C2
 func TestTxnDBReadSkewAnomaly(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+
+	if testing.Short() {
+		t.Skip("short flag")
+	}
+
 	txn1 := "R(A) R(B) W(C,A+B) C"
 	txn2 := "R(A) R(B) I(A) I(B) C"
 	verify := &verifier{

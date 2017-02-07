@@ -27,6 +27,9 @@ func TestPkgsFromDiff(t *testing.T) {
 		"testdata/10305.diff": {
 			"pkg/roachpb": {tests: []string{"TestLeaseVerify"}},
 		},
+		"testdata/skip.diff": {
+			"pkg/ccl/storageccl": {tests: []string{"TestPutS3"}},
+		},
 	} {
 		t.Run(filename, func(t *testing.T) {
 			f, err := os.Open(filename)

@@ -94,7 +94,7 @@ func (r *editNodeRun) startEditNode(en *editNodeBase, tw tableWriter) error {
 
 	r.tw = tw
 
-	return en.p.startPlan(r.rows)
+	return r.rows.Start()
 }
 
 type updateNode struct {
@@ -228,7 +228,7 @@ func (p *planner) Update(
 	// types are inferred. For the simpler case ("SET a = $1"), populate them
 	// using checkColumnType. This step also verifies that the expression
 	// types match the column types.
-	sel := rows.(*selectTopNode).source.(*renderNode)
+	sel := rows.(*renderNode)
 	for i, target := range sel.render[exprTargetIdx:] {
 		// DefaultVal doesn't implement TypeCheck
 		if _, ok := target.(parser.DefaultVal); ok {
@@ -395,5 +395,3 @@ func (u *updateNode) DebugValues() debugValues {
 }
 
 func (u *updateNode) Ordering() orderingInfo { return orderingInfo{} }
-
-func (u *updateNode) SetLimitHint(numRows int64, soft bool) {}

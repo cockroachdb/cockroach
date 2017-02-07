@@ -20,8 +20,6 @@ package server
 import (
 	"bytes"
 	"fmt"
-	"io/ioutil"
-	"os"
 	"reflect"
 	"regexp"
 	"strconv"
@@ -192,19 +190,9 @@ func TestStatusLocalLogs(t *testing.T) {
 	if log.V(3) {
 		t.Skip("Test only works with low verbosity levels")
 	}
-	dir, err := ioutil.TempDir("", "local_log_test")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := log.EnableLogFileOutput(dir, log.Severity_INFO); err != nil {
-		t.Fatal(err)
-	}
-	defer func() {
-		log.DisableLogFileOutput()
-		if err := os.RemoveAll(dir); err != nil {
-			t.Fatal(err)
-		}
-	}()
+
+	s := log.Scope(t, "")
+	defer s.Close(t)
 
 	ts := startServer(t)
 	defer ts.Stopper().Stop()

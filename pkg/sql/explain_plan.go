@@ -48,10 +48,6 @@ type explainer struct {
 	// expressions and result columns.
 	showTypes bool
 
-	// showSelectTop indicates whether intermediate selectTopNodes
-	// are rendered.
-	showSelectTop bool
-
 	// level is the current depth in the tree of planNodes.
 	level int
 
@@ -132,7 +128,7 @@ func (p *planner) populateExplain(e *explainer, v *valuesNode, plan planNode) er
 	}
 
 	e.err = nil
-	_ = walkPlan(plan, e)
+	_ = walkPlan(plan, e.observer())
 	return e.err
 }
 
@@ -140,11 +136,10 @@ func (p *planner) populateExplain(e *explainer, v *valuesNode, plan planNode) er
 func planToString(plan planNode) string {
 	var buf bytes.Buffer
 	e := explainer{
-		showMetadata:  true,
-		showTypes:     true,
-		showExprs:     true,
-		showSelectTop: true,
-		fmtFlags:      parser.FmtExpr(parser.FmtSimple, true, true, true),
+		showMetadata: true,
+		showTypes:    true,
+		showExprs:    true,
+		fmtFlags:     parser.FmtExpr(parser.FmtSimple, true, true, true),
 		makeRow: func(level int, name, field, description string, plan planNode) {
 			if field != "" {
 				field = "." + field
@@ -159,8 +154,17 @@ func planToString(plan planNode) string {
 			}
 		},
 	}
-	_ = walkPlan(plan, &e)
+	_ = walkPlan(plan, e.observer())
 	return buf.String()
+}
+
+func (e *explainer) observer() planObserver {
+	return planObserver{
+		enterNode: e.enterNode,
+		expr:      e.expr,
+		attr:      e.attr,
+		leaveNode: e.leaveNode,
+	}
 }
 
 // expr implements the planObserver interface.
@@ -181,13 +185,6 @@ func (e *explainer) expr(nodeName, fieldName string, n int, expr parser.Expr) {
 
 // enterNode implements the planObserver interface.
 func (e *explainer) enterNode(name string, plan planNode) bool {
-	if !e.showSelectTop && name == "select" {
-		return true
-	}
-	if !e.showExprs && !e.showMetadata && (name == "render" || name == "filter") {
-		return true
-	}
-
 	desc := ""
 	if e.doIndent {
 		desc = fmt.Sprintf("%*s-> %s", e.level*3, " ", name)
@@ -208,17 +205,8 @@ func (e *explainer) attr(nodeName, fieldName, attr string) {
 
 // leaveNode implements the planObserver interface.
 func (e *explainer) leaveNode(name string) {
-	if !e.showSelectTop && name == "select" {
-		return
-	}
-	if !e.showExprs && !e.showMetadata && (name == "render" || name == "filter") {
-		return
-	}
 	e.level--
 }
-
-// subqueryNode implements the planObserver interface.
-func (e *explainer) subqueryNode(sq *subquery) error { return nil }
 
 // formatColumns converts a column signature for a data source /
 // planNode to a string. The column types are printed iff the 2nd
@@ -279,14 +267,16 @@ type explainPlanNode struct {
 	optimized bool
 }
 
-func (e *explainPlanNode) Next() (bool, error)          { return e.results.Next() }
-func (e *explainPlanNode) Columns() ResultColumns       { return e.results.Columns() }
-func (e *explainPlanNode) Ordering() orderingInfo       { return e.results.Ordering() }
-func (e *explainPlanNode) Values() parser.DTuple        { return e.results.Values() }
-func (e *explainPlanNode) DebugValues() debugValues     { return debugValues{} }
-func (e *explainPlanNode) SetLimitHint(n int64, s bool) { e.results.SetLimitHint(n, s) }
-func (e *explainPlanNode) MarkDebug(mode explainMode)   {}
+func (e *explainPlanNode) Next() (bool, error)        { return e.results.Next() }
+func (e *explainPlanNode) Columns() ResultColumns     { return e.results.Columns() }
+func (e *explainPlanNode) Ordering() orderingInfo     { return e.results.Ordering() }
+func (e *explainPlanNode) Values() parser.DTuple      { return e.results.Values() }
+func (e *explainPlanNode) DebugValues() debugValues   { return debugValues{} }
+func (e *explainPlanNode) MarkDebug(mode explainMode) {}
 func (e *explainPlanNode) Start() error {
+	// Note that we don't call start on e.plan. That's on purpose, Start() can
+	// have side effects. And it's supposed to not be needed for the way in which
+	// we're going to use e.plan.
 	return e.p.populateExplain(&e.explainer, e.results, e.plan)
 }
 

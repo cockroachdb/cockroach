@@ -49,15 +49,14 @@ type copyNode struct {
 	rowsMemAcc    WrappableMemoryAccount
 }
 
-func (n *copyNode) Columns() ResultColumns     { return n.resultColumns }
-func (*copyNode) Ordering() orderingInfo       { return orderingInfo{} }
-func (*copyNode) Values() parser.DTuple        { return nil }
-func (*copyNode) SetLimitHint(_ int64, _ bool) {}
-func (*copyNode) MarkDebug(_ explainMode)      {}
-func (*copyNode) Next() (bool, error)          { return false, nil }
+func (n *copyNode) Columns() ResultColumns { return n.resultColumns }
+func (*copyNode) Ordering() orderingInfo   { return orderingInfo{} }
+func (*copyNode) Values() parser.DTuple    { return nil }
+func (*copyNode) MarkDebug(_ explainMode)  {}
+func (*copyNode) Next() (bool, error)      { return false, nil }
 
 func (n *copyNode) Close() {
-	n.rowsMemAcc.Wtxn(n.p.session).Close()
+	n.rowsMemAcc.Wsession(n.p.session).Close()
 }
 
 func (*copyNode) DebugValues() debugValues {
@@ -187,7 +186,7 @@ func (n *copyNode) addRow(line []byte) error {
 		return fmt.Errorf("expected %d values, got %d", len(n.resultColumns), len(parts))
 	}
 	exprs := make(parser.Exprs, len(parts))
-	acc := n.rowsMemAcc.Wtxn(n.p.session)
+	acc := n.rowsMemAcc.Wsession(n.p.session)
 	for i, part := range parts {
 		s := string(part)
 		if s == nullString {
@@ -367,7 +366,7 @@ func (p *planner) CopyData(n CopyDataBlock, autoCommit bool) (planNode, error) {
 	vc := &parser.ValuesClause{Tuples: cf.rows}
 	// Reuse the same backing array once the Insert is complete.
 	cf.rows = cf.rows[:0]
-	cf.rowsMemAcc.Wtxn(p.session).Clear()
+	cf.rowsMemAcc.Wsession(p.session).Clear()
 
 	in := parser.Insert{
 		Table:   cf.table,

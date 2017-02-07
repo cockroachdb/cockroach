@@ -805,25 +805,41 @@ In particular, it is desirable to serve authoritative reads from a single
 Replica (ideally from more than one, but that is far more difficult).
 
 For these reasons, Cockroach introduces the concept of **Range Leases**:
-This is a lease held for a slice of (database, i.e. hybrid logical) time and is
-established by committing a special log entry through Raft containing the
-interval the lease is going to be active on, along with the Node:RaftID
-combination that uniquely describes the requesting replica. Reads and writes
-must generally be addressed to the replica holding the lease; if none does, any
-replica may be addressed, causing it to try to obtain the lease synchronously.
-Requests received by a non-lease holder (for the HLC timestamp specified in the
-request's header) fail with an error pointing at the replica's last known
-lease holder. These requests are retried transparently with the updated lease by the
-gateway node and never reach the client.
+This is a lease held for a slice of (database, i.e. hybrid logical) time.
+A replica establishes itself as owning the lease on a range by committing
+a special lease acquisition log entry through raft. The log entry contains
+the replica node's epoch from the node liveness table--a system
+table containing an epoch and an expiration time for each node. A node is
+responsible for continuously updating the expiration time for its entry
+in the liveness table. Once the lease has been committed through raft
+the replica becomes the lease holder as soon as it applies the lease
+acquisition command, guaranteeing that when it uses the lease it has
+already applied all prior writes on the replica and can see them locally.
 
-The replica holding the lease is in charge or involved in handling
-Range-specific maintenance tasks such as
+To prevent two nodes from acquiring the lease, the requestor includes a copy
+of the lease that it believes to be valid at the time it requests the lease.
+If that lease is still valid when the new lease is applied, it is granted,
+or another lease is granted in the interim and the requested lease is
+ignored. A lease can move from node A to node B only after node A's
+liveness record has expired and its epoch has been incremented.
 
-* gossiping the sentinel and/or first range information
-* splitting, merging and rebalancing
+Note: range leases for ranges within the node liveness table keyspace and
+all ranges that precede it, including meta1 and meta2, are not managed using
+the above mechanism to prevent circular dependencies.
 
-and, very importantly, may satisfy reads locally, without incurring the
-overhead of going through Raft.
+A replica holding a lease at a specific epoch can use the lease as long as
+the node epoch hasn't changed and the expiration time hasn't passed.
+The replica holding the lease may satisfy reads locally, without incurring the
+overhead of going through Raft, and is in charge or involved in handling
+Range-specific maintenance tasks such as splitting, merging and rebalancing
+
+All Reads and writes are generally addressed to the replica holding
+the lease; if none does, any replica may be addressed, causing it to try
+to obtain the lease synchronously. Requests received by a non-lease holder
+(for the HLC timestamp specified in the request's header) fail with an
+error pointing at the replica's last known lease holder. These requests
+are retried transparently with the updated lease by the gateway node and
+never reach the client.
 
 Since reads bypass Raft, a new lease holder will, among other things, ascertain
 that its timestamp cache does not report timestamps smaller than the previous

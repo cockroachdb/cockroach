@@ -17,6 +17,8 @@
 package sql
 
 import (
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -80,33 +82,9 @@ var _ planMaker = &planner{}
 // - planVisitor.visit()           (walk.go)
 // - planNodeNames                 (walk.go)
 // - planMaker.optimizeFilters()   (filter_opt.go)
+// - setLimitHint()                (limit_hint.go)
 //
 type planNode interface {
-	// SetLimitHint tells this node to optimize things under the assumption that
-	// we will only need the first `numRows` rows.
-	//
-	// The special value math.MaxInt64 indicates "no limit".
-	//
-	// If soft is true, this is a "soft" limit and is only a hint; the node must
-	// still be able to produce all results if requested.
-	//
-	// If soft is false, this is a "hard" limit and is a promise that Next will
-	// never be called more than numRows times.
-	//
-	// The action of calling this method triggers limit-based query plan
-	// optimizations, e.g. in expandSelectNode(). The primary user is
-	// limitNode.Start() after it has fully evaluated the limit and
-	// offset expressions. EXPLAIN also does this, see expandPlan() for
-	// explainPlanNode.
-	//
-	// TODO(radu) Arguably, this interface has room for improvement.  A
-	// limitNode may have a hard limit locally which is larger than the
-	// soft limit propagated up by nodes downstream. We may want to
-	// improve this API to pass both the soft and hard limit.
-	//
-	// Available during/after newPlan().
-	SetLimitHint(numRows int64, soft bool)
-
 	// Columns returns the column names and types. The length of the
 	// returned slice is guaranteed to be equal to the length of the
 	// tuple returned by Values().
@@ -165,6 +143,9 @@ type planNode interface {
 	DebugValues() debugValues
 
 	// Close terminates the planNode execution and releases its resources.
+	// This method should be called if the node has been used in any way (any
+	// methods on it have been called) after it was constructed. Note that this
+	// doesn't imply that Start() has been necessarily called.
 	Close()
 }
 
@@ -201,7 +182,6 @@ var _ planNode = &limitNode{}
 var _ planNode = &ordinalityNode{}
 var _ planNode = &scanNode{}
 var _ planNode = &renderNode{}
-var _ planNode = &selectTopNode{}
 var _ planNode = &sortNode{}
 var _ planNode = &splitNode{}
 var _ planNode = &unionNode{}
@@ -237,7 +217,30 @@ func (p *planner) startPlan(plan planNode) error {
 	if err := p.startSubqueryPlans(plan); err != nil {
 		return err
 	}
-	return plan.Start()
+	if err := plan.Start(); err != nil {
+		return err
+	}
+	// Trigger limit propagation through the plan and sub-queries.
+	setUnlimited(plan)
+	return nil
+}
+
+func maybePlanHook(
+	ctx context.Context, stmt parser.Statement, cfg *ExecutorConfig,
+) (planNode, error) {
+	// TODO(dan): This iteration makes the plan dispatch no longer constant
+	// time. We could fix that with a map of `reflect.Type` but including
+	// reflection in such a primary codepath is unfortunate. Instead, the
+	// upcoming IR work will provide unique numeric type tags, which will
+	// elegantly solve this.
+	for _, planHook := range planHooks {
+		if fn, header, err := planHook(ctx, stmt, cfg); err != nil {
+			return nil, err
+		} else if fn != nil {
+			return &hookFnNode{f: fn, header: header}, nil
+		}
+	}
+	return nil, nil
 }
 
 // newPlan constructs a planNode from a statement. This is used
@@ -256,17 +259,8 @@ func (p *planner) newPlan(
 		p.txn.SetSystemConfigTrigger()
 	}
 
-	// TODO(dan): This iteration makes the plan dispatch no longer constant
-	// time. We could fix that with a map of `reflect.Type` but including
-	// reflection in such a primary codepath is unfortunate. Instead, the
-	// upcoming IR work will provide unique numeric type tags, which will
-	// elegantly solve this.
-	for _, planHook := range planHooks {
-		if fn, header, err := planHook(p.ctx(), stmt, p.execCfg); err != nil {
-			return nil, err
-		} else if fn != nil {
-			return &hookFnNode{f: fn, header: header}, nil
-		}
+	if plan, err := maybePlanHook(p.ctx(), stmt, p.execCfg); plan != nil || err != nil {
+		return plan, err
 	}
 
 	switch n := stmt.(type) {
@@ -366,6 +360,10 @@ func (p *planner) newPlan(
 }
 
 func (p *planner) prepare(stmt parser.Statement) (planNode, error) {
+	if plan, err := maybePlanHook(p.ctx(), stmt, p.execCfg); plan != nil || err != nil {
+		return plan, err
+	}
+
 	switch n := stmt.(type) {
 	case *parser.Delete:
 		return p.Delete(n, nil, false)

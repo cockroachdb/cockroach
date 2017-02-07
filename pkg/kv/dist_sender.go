@@ -596,7 +596,7 @@ func (ds *DistSender) Send(
 	}
 
 	ctx = ds.AnnotateCtx(ctx)
-	ctx, cleanup := tracing.EnsureContext(ctx, ds.AmbientContext.Tracer)
+	ctx, cleanup := tracing.EnsureContext(ctx, ds.AmbientContext.Tracer, "dist sender")
 	defer cleanup()
 
 	var rplChunks []*roachpb.BatchResponse
@@ -1139,10 +1139,17 @@ func (ds *DistSender) sendToReplicas(
 	// with errors that reflect per-replica state and may succeed on
 	// other replicas.
 	var sendNextTimer timeutil.Timer
+	var slowTimer timeutil.Timer
 	defer sendNextTimer.Stop()
-	slowTimer := time.After(base.SlowRequestThreshold)
+	defer slowTimer.Stop()
+	slowTimer.Reset(base.SlowRequestThreshold)
 	for {
-		sendNextTimer.Reset(opts.SendNextTimeout)
+		if !transport.IsExhausted() {
+			// Only start the send-next timer if we haven't exhausted the transport
+			// (i.e. there is another replica to send to).
+			sendNextTimer.Reset(opts.SendNextTimeout)
+		}
+
 		select {
 		case <-sendNextTimer.C:
 			sendNextTimer.Read = true
@@ -1154,8 +1161,7 @@ func (ds *DistSender) sendToReplicas(
 				transport.SendNext(ctx, done)
 			}
 
-		case <-slowTimer:
-			slowTimer = nil
+		case <-slowTimer.C:
 			log.Warningf(ctx, "have been waiting %s sending RPC for batch: %s",
 				base.SlowRequestThreshold, args.Summary())
 			ds.metrics.SlowRequestsCount.Inc(1)

@@ -18,6 +18,7 @@
 #define ROACHLIB_DB_H
 
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
 
 #ifdef __cplusplus
@@ -112,7 +113,13 @@ DBStatus DBGet(DBEngine* db, DBKey key, DBString* value);
 DBStatus DBDelete(DBEngine* db, DBKey key);
 
 // Deletes a range of keys from start (inclusive) to end (exclusive).
-DBStatus DBDeleteRange(DBEngine* db, DBIterator *iter, DBKey start, DBKey end);
+DBStatus DBDeleteRange(DBEngine* db, DBKey start, DBKey end);
+
+// Deletes a range of keys from start (inclusive) to end
+// (exclusive). Unlike DBDeleteRange, this function finds the keys to
+// delete by iterating over the supplied iterator and creating
+// tombstones for the individual keys.
+DBStatus DBDeleteIterRange(DBEngine* db, DBIterator *iter, DBKey start, DBKey end);
 
 // Applies a batch of operations (puts, merges and deletes) to the
 // database atomically and closes the batch. It is only valid to call
@@ -186,6 +193,9 @@ DBStatus DBIterError(DBIterator* iter);
 // Go code.
 DBStatus DBMergeOne(DBSlice existing, DBSlice update, DBString* new_value);
 
+// NB: The function (cStatsToGoStats) that converts these to the go
+// representation is unfortunately duplicated in engine and engineccl. If this
+// struct is changed, both places need to be updated.
 typedef struct {
   DBStatus status;
   int64_t live_bytes;
@@ -261,6 +271,8 @@ DBStatus DBSstFileWriterAdd(DBSstFileWriter* fw, DBKey key, DBSlice val);
 // Closes the writer, flushing any remaining writes to disk and freeing
 // memory and other resources. At least one kv entry must have been added.
 DBStatus DBSstFileWriterClose(DBSstFileWriter* fw);
+
+void DBRunLDB(int argc, char** argv);
 
 #ifdef __cplusplus
 }  // extern "C"

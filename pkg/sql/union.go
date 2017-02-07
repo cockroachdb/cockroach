@@ -151,10 +151,6 @@ func (n *unionNode) Values() parser.DTuple {
 		return nil
 	}
 }
-func (n *unionNode) SetLimitHint(numRows int64, soft bool) {
-	n.right.SetLimitHint(numRows, true)
-	n.left.SetLimitHint(numRows, true)
-}
 
 func (n *unionNode) MarkDebug(mode explainMode) {
 	if mode != explainDebug {

@@ -6102,11 +6102,11 @@ getTime?() : string;
 
 
 
-dependencies?: string;
+revision?: string;
 		
 
-getDependencies?() : string;
-		setDependencies?(dependencies : string): void;
+getRevision?() : string;
+		setRevision?(revision : string): void;
 		
 
 
@@ -6134,6 +6134,24 @@ distribution?: string;
 
 getDistribution?() : string;
 		setDistribution?(distribution : string): void;
+		
+
+
+
+type?: string;
+		
+
+getType?() : string;
+		setType?(type : string): void;
+		
+
+
+
+dependencies?: string;
+		
+
+getDependencies?() : string;
+		setDependencies?(dependencies : string): void;
 		
 
 

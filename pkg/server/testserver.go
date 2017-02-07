@@ -130,6 +130,9 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 	if params.DisableEventLog {
 		cfg.EventLogEnabled = false
 	}
+	if params.SQLMemoryPoolSize != 0 {
+		cfg.SQLMemoryPoolSize = params.SQLMemoryPoolSize
+	}
 	cfg.JoinList = []string{params.JoinAddr}
 	if cfg.Insecure {
 		// Whenever we can (i.e. in insecure mode), use IsolatedTestAddr
@@ -301,7 +304,9 @@ func (ts *TestServer) Start(params base.TestServerArgs) error {
 // process.
 func ExpectedInitialRangeCount() int {
 	bootstrap := GetBootstrapSchema()
-	return bootstrap.SystemDescriptorCount() - bootstrap.SystemConfigDescriptorCount() + 1
+	return bootstrap.SystemDescriptorCount() -
+		bootstrap.SystemConfigDescriptorCount() +
+		2 /* first-range + system-config-range */
 }
 
 // WaitForInitialSplits waits for the server to complete its expected initial

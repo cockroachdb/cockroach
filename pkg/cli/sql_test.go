@@ -61,6 +61,7 @@ select '
 | ␤             |
 | \?␤           |
 | ;␤            |
+|               |
 +---------------+
 (1 row)
 `,
@@ -88,6 +89,7 @@ SET
 +------------+
 | '␤         |
 | ;␤         |
+|            |
 +------------+
 (1 row)
 `,
@@ -111,7 +113,7 @@ SET
 	}
 
 	// Some other tests (TestDumpRow) mess with this, so make sure it's set.
-	cliCtx.prettyFmt = true
+	cliCtx.tableDisplayFormat = tableDisplayPretty
 
 	for _, test := range tests {
 		conf.Stdin = strings.NewReader(test.in)

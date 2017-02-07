@@ -23,18 +23,19 @@
 		StreamData
 		StreamTrailer
 		StreamMessage
+		ProcessorSpec
+		PostProcessSpec
+		ProcessorCoreUnion
 		NoopCoreSpec
+		ValuesCoreSpec
 		TableReaderSpan
 		TableReaderSpec
 		JoinReaderSpec
 		SorterSpec
-		EvaluatorSpec
 		DistinctSpec
 		MergeJoinerSpec
 		HashJoinerSpec
 		AggregatorSpec
-		ProcessorCoreUnion
-		ProcessorSpec
 		FlowSpec
 */
 package distsqlrun

@@ -17,16 +17,15 @@
 package client
 
 import (
-	"strconv"
+	"fmt"
 
 	"github.com/gogo/protobuf/proto"
-	basictracer "github.com/opentracing/basictracer-go"
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
-	"github.com/cockroachdb/cockroach/pkg/util/caller"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -40,15 +39,12 @@ type Txn struct {
 	Proto        roachpb.Transaction
 	UserPriority roachpb.UserPriority
 	Context      context.Context // must not be nil
-	// CollectedSpans receives spans from remote hosts for "snowball" traces
-	// initiated on this host.
-	// It's also used by "EXPLAIN TRACE".
-	// Note that in SQL land there's also TxnState.CollectedSpans which
-	// should be used when we want to accumulate everything for a SQL txn.
-	CollectedSpans []basictracer.RawSpan
 	// systemConfigTrigger is set to true when modifying keys from the SystemConfig
 	// span. This sets the SystemConfigTrigger on EndTransactionRequest.
 	systemConfigTrigger bool
+	// txnAnchorKey is the key at which to anchor the transaction record. If
+	// unset, the first key written in the transaction will be used.
+	txnAnchorKey roachpb.Key
 	// commitTriggers are run upon successful commit.
 	commitTriggers []func()
 	// The txn has to be committed by this deadline. A nil value indicates no
@@ -77,20 +73,17 @@ func (txn *Txn) IsFinalized() bool {
 }
 
 // SetDebugName sets the debug name associated with the transaction which will
-// appear in log files and the web UI. Each transaction starts out with an
-// automatically assigned debug name composed of the file and line number where
-// the transaction was created.
-func (txn *Txn) SetDebugName(name string, depth int) {
-	file, line, fun := caller.Lookup(depth + 1)
-	if name == "" {
-		name = fun
-	}
-	txn.Proto.Name = file + ":" + strconv.Itoa(line) + " " + name
+// appear in log files and the web UI.
+func (txn *Txn) SetDebugName(name string) {
+	txn.Proto.Name = name
 }
 
 // DebugName returns the debug name associated with the transaction.
 func (txn *Txn) DebugName() string {
-	return txn.Proto.Name
+	if txn.Proto.ID == nil {
+		return txn.Proto.Name
+	}
+	return fmt.Sprintf("%s (id: %s)", txn.Proto.Name, txn.Proto.ID)
 }
 
 // SetIsolation sets the transaction's isolation type. Transactions default to
@@ -142,12 +135,27 @@ func (txn *Txn) InternalSetPriority(priority int32) {
 // This can be done by making sure a system key is the first key touched in the
 // transaction.
 func (txn *Txn) SetSystemConfigTrigger() {
-	txn.systemConfigTrigger = true
+	if !txn.systemConfigTrigger {
+		txn.systemConfigTrigger = true
+		// The system-config trigger must be run on the system-config range which
+		// means any transaction with the trigger set needs to be anchored to the
+		// system-config range.
+		txn.SetTxnAnchorKey(keys.SystemConfigSpan.Key)
+	}
 }
 
 // SystemConfigTrigger returns the systemConfigTrigger flag.
 func (txn *Txn) SystemConfigTrigger() bool {
 	return txn.systemConfigTrigger
+}
+
+// SetTxnAnchorKey sets the key at which to anchor the transaction record. The
+// transaction anchor key defaults to the first key written in a transaction.
+func (txn *Txn) SetTxnAnchorKey(key roachpb.Key) {
+	if txn.Proto.Writing {
+		panic("must set txn anchor key before any txn writes")
+	}
+	txn.txnAnchorKey = key
 }
 
 // NewBatch creates and returns a new empty batch object for use with the Txn.
@@ -396,8 +404,7 @@ func (txn *Txn) GetDeadline() *hlc.Timestamp {
 }
 
 // Rollback sends an EndTransactionRequest with Commit=false.
-// The txn's status is set to ABORTED in case of error. txn is
-// considered finalized and cannot be used to send any more commands.
+// txn is considered finalized and cannot be used to send any more commands.
 func (txn *Txn) Rollback() error {
 	log.VEventf(txn.Context, 2, "rolling back transaction")
 	err := txn.sendEndTxnReq(false /* commit */, nil)
@@ -486,20 +493,6 @@ func (txn *Txn) Exec(opt TxnExecOptions, fn func(txn *Txn, opt *TxnExecOptions) 
 		panic("asked to retry or commit a txn that is already aborted")
 	}
 
-	// Ensure that a RetryableTxnError escaping this function is not used by
-	// another (higher-level) Exec() invocation to restart its unrelated
-	// transaction. Technically, setting TxnID to nil here is best-effort and
-	// doesn't ensure that (the error will be wrongly used if the outer txn also
-	// has a nil TxnID).
-	// TODO(andrei): set TxnID to a bogus non-nil value once we get rid of the
-	// retErr.Transaction field.
-	defer func() {
-		if retErr, ok := err.(*roachpb.RetryableTxnError); ok {
-			retErr.TxnID = nil
-			retErr.Transaction = nil
-		}
-	}()
-
 	if opt.AutoRetry {
 		retryOptions = txn.db.ctx.TxnRetryOptions
 	}
@@ -538,23 +531,22 @@ func (txn *Txn) Exec(opt TxnExecOptions, fn func(txn *Txn, opt *TxnExecOptions) 
 			}
 		}
 
-		if !opt.AutoRetry {
-			break
-		}
-
-		if retErr, retryable := err.(*roachpb.RetryableTxnError); !retryable {
-			break
-		} else {
+		retErr, retryable := err.(*roachpb.RetryableTxnError)
+		if retryable && !IsRetryableErrMeantForTxn(retErr, txn) {
 			// Make sure the txn record that err carries is for this txn.
-			// If it's not, we terminate the "retryable" character of the error.
-			if txn.Proto.ID != nil && (retErr.TxnID == nil || *retErr.TxnID != *txn.Proto.ID) {
-				return errors.New(retErr.Error())
-			}
-
-			if !retErr.Backoff {
-				r.Reset()
-			}
+			// If it's not, we terminate the "retryable" character of the error. We
+			// might get a RetryableTxnError if the closure ran another transaction
+			// internally and let the error propagate upwards.
+			return errors.Wrap(retErr, "retryable error from another txn")
 		}
+		retErr, retryable = err.(*roachpb.RetryableTxnError)
+		if !opt.AutoRetry || !retryable {
+			break
+		}
+		if !retErr.Backoff {
+			r.Reset()
+		}
+
 		txn.commitTriggers = nil
 
 		log.VEventf(txn.Context, 2, "automatically retrying transaction: %s because of error: %s",
@@ -562,6 +554,18 @@ func (txn *Txn) Exec(opt TxnExecOptions, fn func(txn *Txn, opt *TxnExecOptions) 
 	}
 
 	return err
+}
+
+// IsRetryableErrMeantForTxn returns true if err is a retryable
+// error meant to restart txn.
+func IsRetryableErrMeantForTxn(err *roachpb.RetryableTxnError, txn *Txn) bool {
+	// Make sure the txn record that err carries is for this txn.
+	// TODO(andrei): this "wrong id" detection doesn't always work after a
+	// transaction's proto has been reset (when txn.Proto.ID == nil at the time of
+	// this check). Figure out a more robust mechanism. We should probably move
+	// the initialization of the txn ID here, in the client, from the
+	// TxnCoordSender.
+	return txn.Proto.ID == nil || roachpb.TxnIDEqual(err.TxnID, txn.Proto.ID)
 }
 
 // sendInternal sends the batch and updates the transaction on error. Depending
@@ -589,15 +593,12 @@ func (txn *Txn) sendInternal(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *
 		panic(roachpb.ErrorUnexpectedlySet(txn.db.sender, br))
 	}
 
-	if br != nil {
-		for _, encSp := range br.CollectedSpans {
-			var newSp basictracer.RawSpan
-			if err := tracing.DecodeRawSpan(encSp, &newSp); err != nil {
-				return nil, roachpb.NewError(err)
-			}
-			txn.CollectedSpans = append(txn.CollectedSpans, newSp)
+	if br != nil && len(br.CollectedSpans) != 0 {
+		if err := tracing.IngestRemoteSpans(txn.Context, br.CollectedSpans); err != nil {
+			return nil, roachpb.NewErrorf("error ingesting remote spans: %s", err)
 		}
 	}
+
 	// Only successful requests can carry an updated Txn in their response
 	// header. Any error (e.g. a restart) can have a Txn attached to them as
 	// well; those update our local state in the same way for the next attempt.
@@ -610,6 +611,27 @@ func (txn *Txn) sendInternal(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *
 
 	if log.V(1) {
 		log.Infof(txn.Context, "failed batch: %s", pErr)
+	}
+
+	if pErr.TransactionRestart != roachpb.TransactionRestart_NONE {
+		if !IsRetryableErrMeantForTxn(
+			pErr.GoError().(*roachpb.RetryableTxnError), txn) {
+			// If this happens, something is wrong; we've received an error that
+			// wasn't meant for this transaction. This is a sign that we either
+			// somehow ran another txn inside our txn and didn't properly terminate
+			// its error, or our transaction got a TransactionAbortedError (and the
+			// proto was reset), was retried, and then we still somehow managed to get
+			// an error meant for the previous incarnation of the transaction.
+			// Letting this wrong error slip here can cause us to retry the wrong
+			// transaction.
+			// TODO(andrei): this "wrong id" detection doesn't always work after a
+			// transaction's proto has been reset (when txn.Proto.ID == nil at the
+			// time of this check). Figure out a more robust mechanism. We should
+			// probably move the initialization of the txn ID here, in the client,
+			// from the TxnCoordSender.
+			panic(fmt.Sprintf("Got a retryable error meant for a different transaction. "+
+				"txn.Proto.ID: %v, pErr.ID: %v", txn.Proto.ID, pErr.GetTxn().ID))
+		}
 	}
 
 	if _, ok := pErr.GetDetail().(*roachpb.TransactionAbortedError); ok {
@@ -661,7 +683,7 @@ func (txn *Txn) send(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.
 	// the coordinator when the first intent has been created, and which
 	// lives for the life of the transaction.
 	firstWriteIndex := -1
-	var firstWriteKey roachpb.Key
+	txnAnchorKey := txn.txnAnchorKey
 
 	for i, ru := range ba.Requests {
 		args := ru.GetInner()
@@ -670,9 +692,13 @@ func (txn *Txn) send(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.
 				return nil, roachpb.NewErrorf("%s sent as non-terminal call", args.Method())
 			}
 		}
-		if roachpb.IsTransactionWrite(args) && firstWriteIndex == -1 {
-			firstWriteKey = args.Header().Key
-			firstWriteIndex = i
+		if roachpb.IsTransactionWrite(args) {
+			if firstWriteIndex == -1 {
+				firstWriteIndex = i
+			}
+			if len(txnAnchorKey) == 0 {
+				txnAnchorKey = args.Header().Key
+			}
 		}
 	}
 
@@ -689,7 +715,7 @@ func (txn *Txn) send(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.
 		// sure we set the key in the begin transaction request to the original.
 		bt := &roachpb.BeginTransactionRequest{
 			Span: roachpb.Span{
-				Key: firstWriteKey,
+				Key: txnAnchorKey,
 			},
 		}
 		if txn.Proto.Key != nil {

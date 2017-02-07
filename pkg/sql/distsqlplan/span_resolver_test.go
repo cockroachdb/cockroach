@@ -193,6 +193,7 @@ func splitRangeAtVal(
 
 func TestSpanResolver(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	t.Skip("#13237")
 	s, db, cdb := serverutils.StartServer(t, base.TestServerArgs{
 		UseDatabase: "t",
 	})
@@ -388,7 +389,7 @@ type rngInfo struct {
 }
 
 func resolveSpans(
-	ctx context.Context, it *distsqlplan.SpanResolverIterator, spans ...spanWithDir,
+	ctx context.Context, it distsqlplan.SpanResolverIterator, spans ...spanWithDir,
 ) ([][]rngInfo, error) {
 	res := make([][]rngInfo, 0)
 	for _, span := range spans {

@@ -125,14 +125,10 @@ func TestRandomSyntaxFunctions(t *testing.T) {
 		var args []string
 		switch ft := nb.builtin.Types.(type) {
 		case parser.ArgTypes:
-			for _, typ := range ft {
-				args = append(args, r.GenerateRandomArg(typ))
-			}
-		case parser.NamedArgTypes:
 			for _, arg := range ft {
 				args = append(args, r.GenerateRandomArg(arg.Typ))
 			}
-		case parser.AnyType:
+		case parser.HomogeneousType:
 			for i := r.Intn(5); i > 0; i-- {
 				var typ parser.Type
 				switch r.Intn(4) {
@@ -196,6 +192,8 @@ func testRandomSyntax(
 
 	params, _ := createTestServerParams()
 	params.UseDatabase = "ident"
+	// Use a low memory limit to quickly halt runaway functions.
+	params.SQLMemoryPoolSize = 3 * 1024 * 1024 // 3MB
 	s, db, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop()
 

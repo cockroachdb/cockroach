@@ -34,8 +34,17 @@ import (
 // protection against an aborted but active transaction not reading
 // values it wrote (due to its intents having been removed).
 //
-// The AbortCache stores responses in the underlying engine, using
-// keys derived from Range ID and txn ID.
+// The cache is range-specific. It is updated when an intent for an aborted txn
+// is cleared from a range, and is consulted before read commands are processed
+// on a range.
+//
+// The AbortCache stores responses in the underlying engine, using keys derived
+// from Range ID and txn ID.
+// Note that the epoch number is not used to query the cache: once aborted, even
+// higher epochs are prohibited from reading data. That's because, for better or
+// worse, the intent resolution process clears intents even from epochs higher
+// than the txn meta used for clearing (see engine.MVCCResolveWriteIntent), and
+// this clearing can race with the new epoch laying intents.
 //
 // A AbortCache is not thread safe. Access to it is serialized
 // through Raft.
@@ -80,7 +89,7 @@ func (sc *AbortCache) ClearData(e engine.Engine) error {
 	defer iter.Close()
 	b := e.NewWriteOnlyBatch()
 	defer b.Close()
-	err := b.ClearRange(iter, engine.MakeMVCCMetadataKey(sc.min()),
+	err := b.ClearIterRange(iter, engine.MakeMVCCMetadataKey(sc.min()),
 		engine.MakeMVCCMetadataKey(sc.max()))
 	if err != nil {
 		return err

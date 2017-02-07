@@ -96,10 +96,6 @@ var (
 	// TypePlaceholder is the type family of a placeholder. CANNOT be compared
 	// with ==.
 	TypePlaceholder Type = TPlaceholder{}
-	// TypePGOID is a pseudo-type representing a postgres-style OID type.  It's
-	// a special case cast target and can't be used as a normal type. See
-	// PGOIDType in expr.go.
-	TypePGOID Type = tInt{}
 	// TypeStringArray is the type family of a DArray containing strings. Can be
 	// compared with ==.
 	TypeStringArray Type = tArray{TypeString}
@@ -111,6 +107,30 @@ var (
 	TypeAnyArray Type = tArray{TypeAny}
 	// TypeAny can be any type. Can be compared with ==.
 	TypeAny Type = tAny{}
+
+	// TypeOid is a type-alias for TypeInt with a different OID. Can be
+	// compared with ==.
+	TypeOid = wrapTypeWithOid(TypeInt, oid.T_oid)
+	// TypeName is a type-alias for TypeString with a different OID. Can be
+	// compared with ==.
+	TypeName = wrapTypeWithOid(TypeString, oid.T_name)
+	// TypeNameArray is the type family of a DArray containing the Name alias type.
+	// Can be compared with ==.
+	TypeNameArray Type = tArray{TypeName}
+
+	// TypesAnyNonArray contains all non-array types.
+	TypesAnyNonArray = []Type{
+		TypeBool,
+		TypeInt,
+		TypeFloat,
+		TypeDecimal,
+		TypeString,
+		TypeBytes,
+		TypeDate,
+		TypeTimestamp,
+		TypeTimestampTZ,
+		TypeInterval,
+	}
 )
 
 // OidToType maps Postgres object IDs to CockroachDB types.
@@ -125,7 +145,9 @@ var OidToType = map[oid.Oid]Type{
 	oid.T_int4:        TypeInt,
 	oid.T_int8:        TypeInt,
 	oid.T_interval:    TypeInterval,
+	oid.T_name:        TypeName,
 	oid.T_numeric:     TypeDecimal,
+	oid.T_oid:         TypeOid,
 	oid.T_text:        TypeString,
 	oid.T__text:       TypeStringArray,
 	oid.T__int2:       TypeIntArray,
@@ -152,8 +174,8 @@ func (tNull) IsAmbiguous() bool           { return true }
 type tBool struct{}
 
 func (tBool) String() string              { return "bool" }
-func (tBool) Equivalent(other Type) bool  { return other == TypeBool || other == TypeAny }
-func (tBool) FamilyEqual(other Type) bool { return other == TypeBool }
+func (tBool) Equivalent(other Type) bool  { return UnwrapType(other) == TypeBool || other == TypeAny }
+func (tBool) FamilyEqual(other Type) bool { return UnwrapType(other) == TypeBool }
 func (tBool) Size() (uintptr, bool)       { return unsafe.Sizeof(DBool(false)), fixedSize }
 func (tBool) Oid() oid.Oid                { return oid.T_bool }
 func (tBool) SQLName() string             { return "boolean" }
@@ -162,8 +184,8 @@ func (tBool) IsAmbiguous() bool           { return false }
 type tInt struct{}
 
 func (tInt) String() string              { return "int" }
-func (tInt) Equivalent(other Type) bool  { return other == TypeInt || other == TypeAny }
-func (tInt) FamilyEqual(other Type) bool { return other == TypeInt }
+func (tInt) Equivalent(other Type) bool  { return UnwrapType(other) == TypeInt || other == TypeAny }
+func (tInt) FamilyEqual(other Type) bool { return UnwrapType(other) == TypeInt }
 func (tInt) Size() (uintptr, bool)       { return unsafe.Sizeof(DInt(0)), fixedSize }
 func (tInt) Oid() oid.Oid                { return oid.T_int8 }
 func (tInt) SQLName() string             { return "bigint" }
@@ -172,8 +194,8 @@ func (tInt) IsAmbiguous() bool           { return false }
 type tFloat struct{}
 
 func (tFloat) String() string              { return "float" }
-func (tFloat) Equivalent(other Type) bool  { return other == TypeFloat || other == TypeAny }
-func (tFloat) FamilyEqual(other Type) bool { return other == TypeFloat }
+func (tFloat) Equivalent(other Type) bool  { return UnwrapType(other) == TypeFloat || other == TypeAny }
+func (tFloat) FamilyEqual(other Type) bool { return UnwrapType(other) == TypeFloat }
 func (tFloat) Size() (uintptr, bool)       { return unsafe.Sizeof(DFloat(0.0)), fixedSize }
 func (tFloat) Oid() oid.Oid                { return oid.T_float8 }
 func (tFloat) SQLName() string             { return "double precision" }
@@ -181,9 +203,11 @@ func (tFloat) IsAmbiguous() bool           { return false }
 
 type tDecimal struct{}
 
-func (tDecimal) String() string              { return "decimal" }
-func (tDecimal) Equivalent(other Type) bool  { return other == TypeDecimal || other == TypeAny }
-func (tDecimal) FamilyEqual(other Type) bool { return other == TypeDecimal }
+func (tDecimal) String() string { return "decimal" }
+func (tDecimal) Equivalent(other Type) bool {
+	return UnwrapType(other) == TypeDecimal || other == TypeAny
+}
+func (tDecimal) FamilyEqual(other Type) bool { return UnwrapType(other) == TypeDecimal }
 func (tDecimal) Size() (uintptr, bool)       { return unsafe.Sizeof(DDecimal{}), variableSize }
 func (tDecimal) Oid() oid.Oid                { return oid.T_numeric }
 func (tDecimal) SQLName() string             { return "numeric" }
@@ -192,8 +216,8 @@ func (tDecimal) IsAmbiguous() bool           { return false }
 type tString struct{}
 
 func (tString) String() string              { return "string" }
-func (tString) Equivalent(other Type) bool  { return other == TypeString || other == TypeAny }
-func (tString) FamilyEqual(other Type) bool { return other == TypeString }
+func (tString) Equivalent(other Type) bool  { return UnwrapType(other) == TypeString || other == TypeAny }
+func (tString) FamilyEqual(other Type) bool { return UnwrapType(other) == TypeString }
 func (tString) Size() (uintptr, bool)       { return unsafe.Sizeof(DString("")), variableSize }
 func (tString) Oid() oid.Oid                { return oid.T_text }
 func (tString) SQLName() string             { return "text" }
@@ -214,7 +238,7 @@ func (t TCollatedString) Equivalent(other Type) bool {
 	if other == TypeAny {
 		return true
 	}
-	u, ok := other.(TCollatedString)
+	u, ok := UnwrapType(other).(TCollatedString)
 	if ok {
 		return t.Locale == "" || u.Locale == "" || t.Locale == u.Locale
 	}
@@ -223,7 +247,7 @@ func (t TCollatedString) Equivalent(other Type) bool {
 
 // FamilyEqual implements the Type interface.
 func (TCollatedString) FamilyEqual(other Type) bool {
-	_, ok := other.(TCollatedString)
+	_, ok := UnwrapType(other).(TCollatedString)
 	return ok
 }
 
@@ -246,8 +270,8 @@ func (t TCollatedString) IsAmbiguous() bool {
 type tBytes struct{}
 
 func (tBytes) String() string              { return "bytes" }
-func (tBytes) Equivalent(other Type) bool  { return other == TypeBytes || other == TypeAny }
-func (tBytes) FamilyEqual(other Type) bool { return other == TypeBytes }
+func (tBytes) Equivalent(other Type) bool  { return UnwrapType(other) == TypeBytes || other == TypeAny }
+func (tBytes) FamilyEqual(other Type) bool { return UnwrapType(other) == TypeBytes }
 func (tBytes) Size() (uintptr, bool)       { return unsafe.Sizeof(DBytes("")), variableSize }
 func (tBytes) Oid() oid.Oid                { return oid.T_bytea }
 func (tBytes) SQLName() string             { return "bytea" }
@@ -256,8 +280,8 @@ func (tBytes) IsAmbiguous() bool           { return false }
 type tDate struct{}
 
 func (tDate) String() string              { return "date" }
-func (tDate) Equivalent(other Type) bool  { return other == TypeDate || other == TypeAny }
-func (tDate) FamilyEqual(other Type) bool { return other == TypeDate }
+func (tDate) Equivalent(other Type) bool  { return UnwrapType(other) == TypeDate || other == TypeAny }
+func (tDate) FamilyEqual(other Type) bool { return UnwrapType(other) == TypeDate }
 func (tDate) Size() (uintptr, bool)       { return unsafe.Sizeof(DDate(0)), fixedSize }
 func (tDate) Oid() oid.Oid                { return oid.T_date }
 func (tDate) SQLName() string             { return "date" }
@@ -265,9 +289,11 @@ func (tDate) IsAmbiguous() bool           { return false }
 
 type tTimestamp struct{}
 
-func (tTimestamp) String() string              { return "timestamp" }
-func (tTimestamp) Equivalent(other Type) bool  { return other == TypeTimestamp || other == TypeAny }
-func (tTimestamp) FamilyEqual(other Type) bool { return other == TypeTimestamp }
+func (tTimestamp) String() string { return "timestamp" }
+func (tTimestamp) Equivalent(other Type) bool {
+	return UnwrapType(other) == TypeTimestamp || other == TypeAny
+}
+func (tTimestamp) FamilyEqual(other Type) bool { return UnwrapType(other) == TypeTimestamp }
 func (tTimestamp) Size() (uintptr, bool)       { return unsafe.Sizeof(DTimestamp{}), fixedSize }
 func (tTimestamp) Oid() oid.Oid                { return oid.T_timestamp }
 func (tTimestamp) SQLName() string             { return "timestamp without time zone" }
@@ -275,9 +301,11 @@ func (tTimestamp) IsAmbiguous() bool           { return false }
 
 type tTimestampTZ struct{}
 
-func (tTimestampTZ) String() string              { return "timestamptz" }
-func (tTimestampTZ) Equivalent(other Type) bool  { return other == TypeTimestampTZ || other == TypeAny }
-func (tTimestampTZ) FamilyEqual(other Type) bool { return other == TypeTimestampTZ }
+func (tTimestampTZ) String() string { return "timestamptz" }
+func (tTimestampTZ) Equivalent(other Type) bool {
+	return UnwrapType(other) == TypeTimestampTZ || other == TypeAny
+}
+func (tTimestampTZ) FamilyEqual(other Type) bool { return UnwrapType(other) == TypeTimestampTZ }
 func (tTimestampTZ) Size() (uintptr, bool)       { return unsafe.Sizeof(DTimestampTZ{}), fixedSize }
 func (tTimestampTZ) Oid() oid.Oid                { return oid.T_timestamptz }
 func (tTimestampTZ) SQLName() string             { return "timestamp with time zone" }
@@ -285,9 +313,11 @@ func (tTimestampTZ) IsAmbiguous() bool           { return false }
 
 type tInterval struct{}
 
-func (tInterval) String() string              { return "interval" }
-func (tInterval) Equivalent(other Type) bool  { return other == TypeInterval || other == TypeAny }
-func (tInterval) FamilyEqual(other Type) bool { return other == TypeInterval }
+func (tInterval) String() string { return "interval" }
+func (tInterval) Equivalent(other Type) bool {
+	return UnwrapType(other) == TypeInterval || other == TypeAny
+}
+func (tInterval) FamilyEqual(other Type) bool { return UnwrapType(other) == TypeInterval }
 func (tInterval) Size() (uintptr, bool)       { return unsafe.Sizeof(DInterval{}), fixedSize }
 func (tInterval) Oid() oid.Oid                { return oid.T_interval }
 func (tInterval) SQLName() string             { return "interval" }
@@ -318,7 +348,7 @@ func (t TTuple) Equivalent(other Type) bool {
 	if other == TypeAny {
 		return true
 	}
-	u, ok := other.(TTuple)
+	u, ok := UnwrapType(other).(TTuple)
 	if !ok || len(t) != len(u) {
 		return false
 	}
@@ -332,7 +362,7 @@ func (t TTuple) Equivalent(other Type) bool {
 
 // FamilyEqual implements the Type interface.
 func (TTuple) FamilyEqual(other Type) bool {
-	_, ok := other.(TTuple)
+	_, ok := UnwrapType(other).(TTuple)
 	return ok
 }
 
@@ -377,13 +407,13 @@ func (t TPlaceholder) Equivalent(other Type) bool {
 	if other == TypeAny {
 		return true
 	}
-	u, ok := other.(TPlaceholder)
+	u, ok := UnwrapType(other).(TPlaceholder)
 	return ok && t.Name == u.Name
 }
 
 // FamilyEqual implements the Type interface.
 func (TPlaceholder) FamilyEqual(other Type) bool {
-	_, ok := other.(TPlaceholder)
+	_, ok := UnwrapType(other).(TPlaceholder)
 	return ok
 }
 
@@ -409,7 +439,7 @@ func (a tArray) Equivalent(other Type) bool {
 	if other == TypeAny {
 		return true
 	}
-	if u, ok := other.(tArray); ok {
+	if u, ok := UnwrapType(other).(tArray); ok {
 		return a.Typ.Equivalent(u.Typ)
 	}
 	return false
@@ -417,7 +447,7 @@ func (a tArray) Equivalent(other Type) bool {
 
 // FamilyEqual implements the Type interface.
 func (tArray) FamilyEqual(other Type) bool {
-	_, ok := other.(tArray)
+	_, ok := UnwrapType(other).(tArray)
 	return ok
 }
 
@@ -426,16 +456,19 @@ func (tArray) Size() (uintptr, bool) {
 	return unsafe.Sizeof(DString("")), variableSize
 }
 
+// oidToArrayOid maps scalar type Oids to their corresponding array type Oid.
+var oidToArrayOid = map[oid.Oid]oid.Oid{
+	oid.T_int8: oid.T__int8,
+	oid.T_text: oid.T__text,
+	oid.T_name: oid.T__name,
+}
+
 // Oid implements the Type interface.
 func (a tArray) Oid() oid.Oid {
-	switch a.Typ {
-	case TypeInt:
-		return oid.T__int8
-	case TypeString:
-		return oid.T__text
-	default:
-		return oid.T_anyarray
+	if o, ok := oidToArrayOid[a.Typ.Oid()]; ok {
+		return o
 	}
+	return oid.T_anyarray
 }
 
 // SQLName implements the Type interface.
@@ -456,7 +489,7 @@ func (a TTable) String() string { return "setof " + a.Cols.String() }
 
 // Equivalent implements the Type interface.
 func (a TTable) Equivalent(other Type) bool {
-	if u, ok := other.(TTable); ok {
+	if u, ok := UnwrapType(other).(TTable); ok {
 		return a.Cols.Equivalent(u.Cols)
 	}
 	return false
@@ -464,7 +497,7 @@ func (a TTable) Equivalent(other Type) bool {
 
 // FamilyEqual implements the Type interface.
 func (TTable) FamilyEqual(other Type) bool {
-	_, ok := other.(TTable)
+	_, ok := UnwrapType(other).(TTable)
 	return ok
 }
 
@@ -494,3 +527,49 @@ func (tAny) Size() (uintptr, bool)       { return unsafe.Sizeof(DString("")), va
 func (tAny) Oid() oid.Oid                { return oid.T_anyelement }
 func (tAny) SQLName() string             { return "anyelement" }
 func (tAny) IsAmbiguous() bool           { return true }
+
+// tOidWrapper is a Type implementation which is a wrapper around a Type, allowing
+// custom Oid values to be attached to the Type. The Type is used by DOidWrapper
+// to permit type aliasing with custom Oids without needing to create new typing
+// rules or define new Datum types.
+type tOidWrapper struct {
+	Type
+	oid oid.Oid
+}
+
+var customOidNames = map[oid.Oid]string{
+	oid.T_oid:  "oid",
+	oid.T_name: "name",
+}
+
+func (t tOidWrapper) String() string {
+	// Allow custom type names for specific Oids, but default to wrapped String.
+	if s, ok := customOidNames[t.oid]; ok {
+		return s
+	}
+	return t.Type.String()
+}
+
+func (t tOidWrapper) Oid() oid.Oid { return t.oid }
+
+// wrapTypeWithOid wraps a Type with a custom Oid.
+func wrapTypeWithOid(t Type, oid oid.Oid) Type {
+	switch v := t.(type) {
+	case tNull, tAny, tOidWrapper:
+		panic(fmt.Errorf("cannot wrap %T with an Oid", v))
+	}
+	return tOidWrapper{
+		Type: t,
+		oid:  oid,
+	}
+}
+
+// UnwrapType returns the base Type type for a provided type, stripping
+// a *TOidWrapper if present. This is useful for cases like type switches,
+// where type aliases should be ignored.
+func UnwrapType(t Type) Type {
+	if w, ok := t.(tOidWrapper); ok {
+		return w.Type
+	}
+	return t
+}

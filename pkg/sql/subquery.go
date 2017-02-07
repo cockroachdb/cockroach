@@ -35,7 +35,6 @@ type subquery struct {
 	started  bool
 	plan     planNode
 	result   parser.Datum
-	err      error
 }
 
 type subqueryExecMode int
@@ -99,13 +98,10 @@ func (s *subquery) TypeCheck(_ *parser.SemaContext, desired parser.Type) (parser
 func (s *subquery) ResolvedType() parser.Type { return s.typ }
 
 func (s *subquery) Eval(_ *parser.EvalContext) (parser.Datum, error) {
-	if s.err != nil {
-		return nil, s.err
-	}
 	if s.result == nil {
 		panic("subquery was not pre-evaluated properly")
 	}
-	return s.result, s.err
+	return s.result, nil
 }
 
 func (s *subquery) doEval() (result parser.Datum, err error) {
@@ -117,7 +113,7 @@ func (s *subquery) doEval() (result parser.Datum, err error) {
 		// For EXISTS expressions, all we want to know is if there is at least one
 		// result.
 		next, err := s.plan.Next()
-		if s.err = err; err != nil {
+		if err != nil {
 			return result, err
 		}
 		if next {
@@ -149,7 +145,7 @@ func (s *subquery) doEval() (result parser.Datum, err error) {
 				rows = append(rows, &valuesCopy)
 			}
 		}
-		if s.err = err; err != nil {
+		if err != nil {
 			return result, err
 		}
 		if s.execMode == execModeAllRowsNormalized {
@@ -160,7 +156,7 @@ func (s *subquery) doEval() (result parser.Datum, err error) {
 	case execModeOneRow:
 		result = parser.DNull
 		hasRow, err := s.plan.Next()
-		if s.err = err; err != nil {
+		if err != nil {
 			return result, err
 		}
 		if hasRow {
@@ -174,12 +170,11 @@ func (s *subquery) doEval() (result parser.Datum, err error) {
 				result = &valuesCopy
 			}
 			another, err := s.plan.Next()
-			if s.err = err; err != nil {
+			if err != nil {
 				return result, err
 			}
 			if another {
-				s.err = fmt.Errorf("more than one row returned by a subquery used as an expression")
-				return result, s.err
+				return result, fmt.Errorf("more than one row returned by a subquery used as an expression")
 			}
 		}
 	}
@@ -194,8 +189,6 @@ func (s *subquery) doEval() (result parser.Datum, err error) {
 type subqueryPlanVisitor struct {
 	p *planner
 }
-
-var _ planObserver = &subqueryPlanVisitor{}
 
 func (v *subqueryPlanVisitor) subqueryNode(sq *subquery) error {
 	if !sq.expanded {
@@ -223,16 +216,15 @@ func (v *subqueryPlanVisitor) enterNode(_ string, n planNode) bool {
 	return true
 }
 
-func (v *subqueryPlanVisitor) attr(_, _, _ string)                    {}
-func (v *subqueryPlanVisitor) expr(_, _ string, _ int, _ parser.Expr) {}
-func (v *subqueryPlanVisitor) leaveNode(_ string)                     {}
-
 func (p *planner) startSubqueryPlans(plan planNode) error {
 	// We also run and pre-evaluate the subqueries during start,
 	// so as to avoid re-running the sub-query for every row
 	// in the results of the surrounding planNode.
 	p.subqueryPlanVisitor = subqueryPlanVisitor{p: p}
-	return walkPlan(plan, &p.subqueryPlanVisitor)
+	return walkPlan(plan, planObserver{
+		subqueryNode: p.subqueryPlanVisitor.subqueryNode,
+		enterNode:    p.subqueryPlanVisitor.enterNode,
+	})
 }
 
 // subqueryVisitor replaces parser.Subquery syntax nodes by a

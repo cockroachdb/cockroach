@@ -25,9 +25,7 @@ import (
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/peer"
 
-	basictracer "github.com/opentracing/basictracer-go"
 	opentracing "github.com/opentracing/opentracing-go"
-	otlog "github.com/opentracing/opentracing-go/log"
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
@@ -49,7 +47,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -87,9 +84,9 @@ type nodeMetrics struct {
 	Err     *metric.Counter
 }
 
-func makeNodeMetrics(reg *metric.Registry, sampleInterval time.Duration) nodeMetrics {
+func makeNodeMetrics(reg *metric.Registry, histogramWindow time.Duration) nodeMetrics {
 	nm := nodeMetrics{
-		Latency: metric.NewLatency(metaExecLatency, sampleInterval),
+		Latency: metric.NewLatency(metaExecLatency, histogramWindow),
 		Success: metric.NewCounter(metaExecSuccess),
 		Err:     metric.NewCounter(metaExecError),
 	}
@@ -137,11 +134,11 @@ type Node struct {
 // allocateNodeID increments the node id generator key to allocate
 // a new, unique node id.
 func allocateNodeID(ctx context.Context, db *client.DB) (roachpb.NodeID, error) {
-	r, err := db.Inc(ctx, keys.NodeIDGenerator, 1)
+	val, err := incVal(ctx, db, keys.NodeIDGenerator, 1)
 	if err != nil {
-		return 0, errors.Errorf("unable to allocate node ID: %s", err)
+		return 0, errors.Wrap(err, "unable to allocate node ID")
 	}
-	return roachpb.NodeID(r.ValueInt()), nil
+	return roachpb.NodeID(val), nil
 }
 
 // allocateStoreIDs increments the store id generator key for the
@@ -150,11 +147,29 @@ func allocateNodeID(ctx context.Context, db *client.DB) (roachpb.NodeID, error) 
 func allocateStoreIDs(
 	ctx context.Context, nodeID roachpb.NodeID, inc int64, db *client.DB,
 ) (roachpb.StoreID, error) {
-	r, err := db.Inc(ctx, keys.StoreIDGenerator, inc)
+	val, err := incVal(ctx, db, keys.StoreIDGenerator, inc)
 	if err != nil {
-		return 0, errors.Errorf("unable to allocate %d store IDs for node %d: %s", inc, nodeID, err)
+		return 0, errors.Wrapf(err, "unable to allocate %d store IDs for node %d", inc, nodeID)
 	}
-	return roachpb.StoreID(r.ValueInt() - inc + 1), nil
+	return roachpb.StoreID(val - inc + 1), nil
+}
+
+// incVal increments a key's value by a specified amount and returns the new
+// value.
+// It performs the increment as a retryable non-transactional increment. The key
+// might be incremented multiple times because of the retries.
+func incVal(ctx context.Context, db *client.DB, key roachpb.Key, inc int64) (int64, error) {
+	var err error
+	var res client.KeyValue
+	for r := retry.Start(base.DefaultRetryOptions()); r.Next(); {
+		res, err = db.Inc(ctx, key, inc)
+		switch err.(type) {
+		case *roachpb.RetryableTxnError, *roachpb.AmbiguousResultError:
+			continue
+		}
+		break
+	}
+	return res.ValueInt(), err
 }
 
 // GetBootstrapSchema returns the schema which will be used to bootstrap a new
@@ -183,6 +198,7 @@ func bootstrapCluster(
 	cfg.TestingKnobs = storage.StoreTestingKnobs{}
 	cfg.ScanInterval = 10 * time.Minute
 	cfg.MetricsSampleInterval = time.Duration(math.MaxInt64)
+	cfg.HistogramWindowInterval = time.Duration(math.MaxInt64)
 	cfg.ConsistencyCheckInterval = 10 * time.Minute
 	cfg.AmbientCtx.Tracer = tracing.NewTracer()
 	// Create a KV DB with a local sender.
@@ -254,7 +270,7 @@ func NewNode(
 		storeCfg:    cfg,
 		stopper:     stopper,
 		recorder:    recorder,
-		metrics:     makeNodeMetrics(reg, cfg.MetricsSampleInterval),
+		metrics:     makeNodeMetrics(reg, cfg.HistogramWindowInterval),
 		stores:      storage.NewStores(cfg.AmbientCtx, cfg.Clock),
 		txnMetrics:  txnMetrics,
 		eventLogger: eventLogger,
@@ -533,7 +549,7 @@ func (n *Node) bootstrapStores(
 	inc := int64(len(bootstraps))
 	firstID, err := allocateStoreIDs(ctx, n.Descriptor.NodeID, inc, n.storeCfg.DB)
 	if err != nil {
-		log.Fatal(ctx, err)
+		log.Fatalf(ctx, "error allocating store ids: %+v", err)
 	}
 	sIdent := roachpb.StoreIdent{
 		ClusterID: n.ClusterID,
@@ -782,57 +798,22 @@ func (n *Node) batchInternal(
 
 	var br *roachpb.BatchResponse
 
-	type snowballInfo struct {
-		syncutil.Mutex
-		collectedSpans [][]byte
-		done           bool
-	}
-	var snowball *snowballInfo
-
 	if err := n.stopper.RunTaskWithErr(func() error {
-		const opName = "node.Batch"
-		sp, err := tracing.JoinOrNew(n.storeCfg.AmbientCtx.Tracer, args.TraceContext, opName)
-		if err != nil {
-			return err
-		}
-		// If this is a snowball span, it gets special treatment: It skips the
-		// regular tracing machinery, and we instead send the collected spans
-		// back with the response. This is more expensive, but then again,
-		// those are individual requests traced by users, so they can be.
-		if sp.BaggageItem(tracing.Snowball) != "" {
-			sp.LogFields(otlog.String("event", "delegating to snowball tracing"))
-			sp.Finish()
-
-			snowball = new(snowballInfo)
-			recorder := func(rawSpan basictracer.RawSpan) {
-				snowball.Lock()
-				defer snowball.Unlock()
-				if snowball.done {
-					// This is a late span that we must discard because the request was
-					// already completed.
-					return
-				}
-				encSp, err := tracing.EncodeRawSpan(&rawSpan, nil)
-				if err != nil {
-					log.Warning(ctx, err)
-				}
-				snowball.collectedSpans = append(snowball.collectedSpans, encSp)
-			}
-
-			if sp, err = tracing.JoinOrNewSnowball(opName, args.TraceContext, recorder); err != nil {
-				return err
-			}
-		}
-		defer sp.Finish()
-		traceCtx := opentracing.ContextWithSpan(ctx, sp)
-		log.Event(traceCtx, args.Summary())
+		var finishSpan func(*roachpb.BatchResponse)
+		// Shadow ctx from the outer function. Written like this to pass the linter.
+		ctx := ctx
+		ctx, finishSpan = n.setupSpanForIncomingRPC(ctx, args.TraceContext)
+		defer func(br **roachpb.BatchResponse) {
+			finishSpan(*br)
+		}(&br)
+		log.Event(ctx, args.Summary())
 
 		tStart := timeutil.Now()
 		var pErr *roachpb.Error
-		br, pErr = n.stores.Send(traceCtx, *args)
+		br, pErr = n.stores.Send(ctx, *args)
 		if pErr != nil {
 			br = &roachpb.BatchResponse{}
-			log.ErrEventf(traceCtx, "%T", pErr.GetDetail())
+			log.ErrEventf(ctx, "%T", pErr.GetDetail())
 		}
 		if br.Error != nil {
 			panic(roachpb.ErrorUnexpectedlySet(n.stores, br))
@@ -843,14 +824,6 @@ func (n *Node) batchInternal(
 	}); err != nil {
 		return nil, err
 	}
-
-	if snowball != nil {
-		snowball.Lock()
-		br.CollectedSpans = snowball.collectedSpans
-		snowball.done = true
-		snowball.Unlock()
-	}
-
 	return br, nil
 }
 
@@ -879,6 +852,71 @@ func (n *Node) Batch(
 		br.Error = roachpb.NewError(err)
 	}
 	return br, nil
+}
+
+// setupSpanForIncomingRPC takes a context and returns a derived context with a
+// new span in it. Depending on the input context, that span might be a root
+// span or a child span. If it is a child span, it might be a child span of a
+// local or a remote span. Note that supporting both the "child of local span"
+// and "child of remote span" cases are important, as this RPC can be called
+// either through the network or directly if the caller is local.
+//
+// remoteTranceContext is the span context of this remote call. Can be
+// nil if this call is not remote.
+//
+// It returns the derived context and a cleanup function to be called when
+// servicing the RPC is done. The cleanup function will close the span and, in
+// case the span was the child of a remote span and "snowball tracing" was
+// enabled on that parent span, it serializes the local trace into the
+// BatchResponse. The cleanup function takes the BatchResponse in which the
+// response is to serialized. The BatchResponse can be nil in case no response
+// is to be returned to the rpc caller.
+func (n *Node) setupSpanForIncomingRPC(
+	ctx context.Context, remoteTraceContext *tracing.SpanContextCarrier,
+) (context.Context, func(*roachpb.BatchResponse)) {
+	const opName = "node.Batch"
+	tr := n.storeCfg.AmbientCtx.Tracer
+	var recordedTrace *tracing.RecordedTrace
+	if sp := opentracing.SpanFromContext(ctx); sp != nil {
+		// Child span of local parent.
+		ctx, _ = tracing.ChildSpan(ctx, opName)
+	} else {
+		if remoteTraceContext == nil {
+			// Root span.
+			ctx = opentracing.ContextWithSpan(ctx, tr.StartSpan(opName))
+		} else {
+			// Child span of remote parent.
+			var err error
+			ctx, recordedTrace, err = tracing.JoinRemoteTrace(ctx, tr, *remoteTraceContext, opName)
+			if err != nil {
+				// Fallback to root span.
+				log.Warningf(ctx, "failed to join remote trace: %s", err)
+				ctx = opentracing.ContextWithSpan(ctx, tr.StartSpan(opName))
+			}
+		}
+	}
+
+	finishSpan := func(br *roachpb.BatchResponse) {
+		opentracing.SpanFromContext(ctx).Finish()
+		if br == nil {
+			return
+		}
+		// If this is a "snowball trace", we'll need to encode all the recorded
+		// spans in the BatchResponse at the end of the request.
+		if recordedTrace != nil {
+			// Encode all the spans into the BatchResponse.
+			recordedTrace.Done()
+			for _, rawSpan := range recordedTrace.GetSpans() {
+				encSp, err := tracing.EncodeRawSpan(&rawSpan, nil)
+				if err == nil {
+					br.CollectedSpans = append(br.CollectedSpans, encSp)
+				} else {
+					log.Warning(ctx, err)
+				}
+			}
+		}
+	}
+	return ctx, finishSpan
 }
 
 var growStackGlobal = false

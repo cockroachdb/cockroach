@@ -200,13 +200,6 @@ INSERT INTO t.test VALUES ('a', 'b'), ('c', 'd');
 	if newVersion != expectedVersion {
 		t.Fatalf("bad version; e = %d, v = %d", expectedVersion, newVersion)
 	}
-	isDone, err := changer.IsDone()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !isDone {
-		t.Fatalf("table expected to not have an outstanding schema change: %v", tableDesc)
-	}
 
 	// Check that MaybeIncrementVersion increments the version
 	// correctly.
@@ -219,13 +212,7 @@ INSERT INTO t.test VALUES ('a', 'b'), ('c', 'd');
 	); err != nil {
 		t.Fatal(err)
 	}
-	isDone, err = changer.IsDone()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if isDone {
-		t.Fatalf("table expected to have an outstanding schema change: %v", desc.GetTable())
-	}
+
 	desc, err = changer.MaybeIncrementVersion()
 	if err != nil {
 		t.Fatal(err)
@@ -239,13 +226,6 @@ INSERT INTO t.test VALUES ('a', 'b'), ('c', 'd');
 	newVersion = savedTableDesc.Version
 	if newVersion != expectedVersion {
 		t.Fatalf("bad version in saved desc; e = %d, v = %d", expectedVersion, newVersion)
-	}
-	isDone, err = changer.IsDone()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !isDone {
-		t.Fatalf("table expected to not have an outstanding schema change: %v", tableDesc)
 	}
 
 	// Check that RunStateMachineBeforeBackfill doesn't do anything
@@ -310,14 +290,10 @@ INSERT INTO t.test VALUES ('a', 'b'), ('c', 'd');
 		}
 	}
 	// RunStateMachineBeforeBackfill() doesn't complete the schema change.
-	isDone, err = changer.IsDone()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if isDone {
+	tableDesc = sqlbase.GetTableDescriptor(kvDB, "t", "test")
+	if len(tableDesc.Mutations) == 0 {
 		t.Fatalf("table expected to have an outstanding schema change: %v", tableDesc)
 	}
-
 }
 
 func TestAsyncSchemaChanger(t *testing.T) {
@@ -542,16 +518,32 @@ func bulkInsertIntoTable(sqlDB *gosql.DB, maxValue int) error {
 func TestRaceWithBackfill(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	var backfillNotification chan bool
+	var partialBackfillDone atomic.Value
+	partialBackfillDone.Store(false)
+	var partialBackfill bool
 	params, _ := createTestServerParams()
 	// Disable asynchronous schema change execution to allow synchronous path
 	// to trigger start of backfill notification.
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &csql.SchemaChangerTestingKnobs{
 			RunBeforeBackfillChunk: func(sp roachpb.Span) error {
-				if backfillNotification != nil {
-					// Close channel to notify that the backfill has started.
-					close(backfillNotification)
-					backfillNotification = nil
+				notifyBackfill := func() {
+					if backfillNotification != nil {
+						// Close channel to notify that the backfill has started.
+						close(backfillNotification)
+						backfillNotification = nil
+					}
+				}
+				if partialBackfill {
+					if partialBackfillDone.Load().(bool) {
+						notifyBackfill()
+						// Returning DeadlineExceeded will result in the
+						// schema change being retried.
+						return context.DeadlineExceeded
+					}
+					partialBackfillDone.Store(true)
+				} else {
+					notifyBackfill()
 				}
 				return nil
 			},
@@ -579,11 +571,11 @@ CREATE UNIQUE INDEX vidx ON t.test (v);
 	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
 	tablePrefix := roachpb.Key(keys.MakeTablePrefix(uint32(tableDesc.ID)))
 	tableEnd := tablePrefix.PrefixEnd()
-	// number of keys == 3 * number of rows; 2 column families and 1 index entry
+	// number of keys == 2 * number of rows; 1 column family and 1 index entry
 	// for each row.
 	if kvs, err := kvDB.Scan(context.TODO(), tablePrefix, tableEnd, 0); err != nil {
 		t.Fatal(err)
-	} else if e := 3 * (maxValue + 1); len(kvs) != e {
+	} else if e := 2 * (maxValue + 1); len(kvs) != e {
 		t.Fatalf("expected %d key value pairs, but got %d", e, len(kvs))
 	}
 
@@ -597,7 +589,7 @@ CREATE UNIQUE INDEX vidx ON t.test (v);
 		kvDB,
 		"ALTER TABLE t.test ADD COLUMN x DECIMAL DEFAULT (DECIMAL '1.4')",
 		maxValue,
-		4,
+		2,
 		backfillNotification)
 
 	// Drop column.
@@ -608,7 +600,7 @@ CREATE UNIQUE INDEX vidx ON t.test (v);
 		kvDB,
 		"ALTER TABLE t.test DROP pi",
 		maxValue,
-		3,
+		2,
 		backfillNotification)
 
 	// Add index.
@@ -619,7 +611,7 @@ CREATE UNIQUE INDEX vidx ON t.test (v);
 		kvDB,
 		"CREATE UNIQUE INDEX foo ON t.test (v)",
 		maxValue,
-		4,
+		3,
 		backfillNotification)
 
 	// Drop index.
@@ -630,7 +622,7 @@ CREATE UNIQUE INDEX vidx ON t.test (v);
 		kvDB,
 		"DROP INDEX t.test@vidx",
 		maxValue,
-		3,
+		2,
 		backfillNotification)
 
 	// Verify that the index foo over v is consistent, and that column x has
@@ -672,24 +664,20 @@ CREATE UNIQUE INDEX vidx ON t.test (v);
 
 	notification := make(chan bool)
 	backfillNotification = notification
+	partialBackfill = true
 	// Run the schema change in a separate goroutine.
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {
-		// Start schema change that eventually runs a backfill.
+		// Start schema change that eventually runs a partial backfill.
 		if _, err := sqlDB.Exec("CREATE UNIQUE INDEX bar ON t.test (v)"); err != nil {
 			t.Error(err)
 		}
 		wg.Done()
 	}()
 
-	// Wait until the schema change backfill starts.
+	// Wait until the schema change backfill is partially complete.
 	<-notification
-
-	// Wait for a short bit to ensure that the backfill has likely progressed
-	// and written some data, but not long enough that the backfill has
-	// completed.
-	time.Sleep(10 * time.Millisecond)
 
 	if _, err := sqlDB.Exec("DROP TABLE t.test"); err != nil {
 		t.Fatal(err)
@@ -793,7 +781,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 		// number of keys representing a table row.
 		expectedNumKeysPerRow int
 	}{
-		{"ALTER TABLE t.test ADD COLUMN x DECIMAL DEFAULT (DECIMAL '1.4')", 2},
+		{"ALTER TABLE t.test ADD COLUMN x DECIMAL DEFAULT (DECIMAL '1.4')", 1},
 		{"ALTER TABLE t.test DROP x", 1},
 		{"CREATE UNIQUE INDEX foo ON t.test (v)", 2},
 		{"DROP INDEX t.test@foo", 1},
@@ -1032,7 +1020,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 
 	attempts = 0
 	seenSpan = roachpb.Span{}
-	addColumnSchemaChange(t, sqlDB, kvDB, maxValue, 3)
+	addColumnSchemaChange(t, sqlDB, kvDB, maxValue, 2)
 
 	attempts = 0
 	seenSpan = roachpb.Span{}
@@ -1123,7 +1111,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 
 	attempts = 0
 	seenSpan = roachpb.Span{}
-	addColumnSchemaChange(t, sqlDB, kvDB, maxValue, 3)
+	addColumnSchemaChange(t, sqlDB, kvDB, maxValue, 2)
 	if reevaluated := atomic.SwapUint32(&numReevaluated, 0); reevaluated != 1 {
 		t.Fatalf("exected %d reevaluations, but seen %d", 1, reevaluated)
 	}

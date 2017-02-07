@@ -34,18 +34,26 @@ import (
 const joinReaderBatchSize = 100
 
 type joinReader struct {
-	readerBase
+	flowCtx *FlowCtx
+	ctx     context.Context
 
-	ctx context.Context
+	desc  sqlbase.TableDescriptor
+	index *sqlbase.IndexDescriptor
 
-	input  RowSource
-	output RowReceiver
+	fetcher sqlbase.RowFetcher
+
+	input RowSource
+	out   procOutputHelper
 }
 
 var _ processor = &joinReader{}
 
 func newJoinReader(
-	flowCtx *FlowCtx, spec *JoinReaderSpec, input RowSource, output RowReceiver,
+	flowCtx *FlowCtx,
+	spec *JoinReaderSpec,
+	input RowSource,
+	post *PostProcessSpec,
+	output RowReceiver,
 ) (*joinReader, error) {
 	if spec.IndexIdx != 0 {
 		// TODO(radu): for now we only support joining with the primary index
@@ -53,12 +61,24 @@ func newJoinReader(
 	}
 
 	jr := &joinReader{
-		input:  input,
-		output: output,
+		flowCtx: flowCtx,
+		desc:    spec.Table,
+		input:   input,
 	}
 
-	err := jr.readerBase.init(flowCtx, &spec.Table, int(spec.IndexIdx), spec.Filter,
-		spec.OutputColumns, false)
+	types := make([]sqlbase.ColumnType, len(spec.Table.Columns))
+	for i := range types {
+		types[i] = spec.Table.Columns[i].Type
+	}
+
+	if err := jr.out.init(post, types, flowCtx.evalCtx, output); err != nil {
+		return nil, err
+	}
+
+	var err error
+	jr.index, _, err = initRowFetcher(
+		&jr.fetcher, &jr.desc, int(spec.IndexIdx), false /* reverse */, jr.out.neededColumns(),
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -77,16 +97,6 @@ func (jr *joinReader) generateKey(
 	}
 	row = row[:len(index.ColumnIDs)]
 
-	// Verify the types.
-	// TODO(radu): not strictly needed, perhaps enable only for tests.
-	for i, cid := range index.ColumnIDs {
-		colType := jr.desc.Columns[jr.colIdxMap[cid]].Type.Kind
-		if row[i].Type.Kind != colType {
-			return nil, errors.Errorf("joinReader input column %d has invalid type %s, expected %s",
-				i, row[i].Type.Kind, colType)
-		}
-	}
-
 	return sqlbase.MakeKeyFromEncDatums(row, &jr.desc, index, primaryKeyPrefix, alloc)
 }
 
@@ -103,10 +113,11 @@ func (jr *joinReader) mainLoop() error {
 
 	txn := jr.flowCtx.setupTxn(ctx)
 
-	log.VEventf(ctx, 1, "starting (filter: %s)", &jr.filter)
+	log.VEventf(ctx, 1, "starting")
 	if log.V(1) {
 		defer log.Infof(ctx, "exiting")
 	}
+	defer jr.input.ConsumerDone()
 
 	for {
 		// TODO(radu): figure out how to send smaller batches if the source has
@@ -144,21 +155,17 @@ func (jr *joinReader) mainLoop() error {
 		// the next batch. We could start the next batch early while we are
 		// outputting rows.
 		for {
-			outRow, err := jr.nextRow()
+			fetcherRow, err := jr.fetcher.NextRow()
 			if err != nil {
 				return err
 			}
-			if outRow == nil {
-				// Done.
+			if fetcherRow == nil {
+				// Done with this batch.
 				break
 			}
-			if log.V(3) {
-				log.Infof(ctx, "pushing row %s", outRow)
-			}
-			// Push the row to the output RowReceiver; stop if they don't need more
-			// rows.
-			if !jr.output.PushRow(outRow) {
-				log.VEventf(ctx, 1, "no more rows required")
+
+			// Emit the row; stop if no more rows are needed.
+			if !jr.out.emitRow(ctx, fetcherRow) {
 				return nil
 			}
 		}
@@ -177,5 +184,5 @@ func (jr *joinReader) Run(wg *sync.WaitGroup) {
 	}
 
 	err := jr.mainLoop()
-	jr.output.Close(err)
+	jr.out.close(err)
 }

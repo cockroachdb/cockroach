@@ -32,4 +32,6 @@ EXPLAIN VALUES (1), ((SELECT 2))
 0  values
 0           size        1 column, 2 rows
 0           subqueries  1
-1  nullrow
+1  limit
+2  render
+3  nullrow

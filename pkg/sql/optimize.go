@@ -19,7 +19,7 @@ package sql
 import "github.com/cockroachdb/cockroach/pkg/sql/parser"
 
 // optimizePlan transforms the query plan into its final form.  This
-// includes calling expandPlan().  The SQL "prepare" phase, as well as
+// includes calling expandPlan(). The SQL "prepare" phase, as well as
 // the EXPLAIN statement, should merely build the plan node(s) and
 // call optimizePlan(). This is called automatically by makePlan().
 func (p *planner) optimizePlan(plan planNode, needed []bool) (planNode, error) {
@@ -45,8 +45,12 @@ func (p *planner) optimizePlan(plan planNode, needed []bool) (planNode, error) {
 	setNeededColumns(newPlan, needed)
 
 	// Now do the same work for all sub-queries.
-	i := subqueryInitializer{p: p}
-	if err := walkPlan(newPlan, &i); err != nil {
+	i := &subqueryInitializer{p: p}
+	observer := planObserver{
+		subqueryNode: i.subqueryNode,
+		enterNode:    i.enterNode,
+	}
+	if err := walkPlan(newPlan, observer); err != nil {
 		return plan, err
 	}
 	return newPlan, nil
@@ -59,11 +63,21 @@ type subqueryInitializer struct {
 	p *planner
 }
 
-var _ planObserver = &subqueryInitializer{}
-
 // subqueryNode implements the planObserver interface.
 func (i *subqueryInitializer) subqueryNode(sq *subquery) error {
 	if sq.plan != nil && !sq.expanded {
+		if sq.execMode == execModeExists || sq.execMode == execModeOneRow {
+			numRows := parser.DInt(1)
+			if sq.execMode == execModeOneRow {
+				// When using a sub-query in a scalar context, we must
+				// appropriately reject sub-queries that return more than 1
+				// row.
+				numRows = 2
+			}
+
+			sq.plan = &limitNode{p: i.p, plan: sq.plan, countExpr: parser.NewDInt(numRows)}
+		}
+
 		needed := make([]bool, len(sq.plan.Columns()))
 		if sq.execMode != execModeExists {
 			// EXISTS does not need values; the rest does.
@@ -71,6 +85,7 @@ func (i *subqueryInitializer) subqueryNode(sq *subquery) error {
 				needed[i] = true
 			}
 		}
+
 		var err error
 		sq.plan, err = i.p.optimizePlan(sq.plan, needed)
 		if err != nil {
@@ -81,7 +96,4 @@ func (i *subqueryInitializer) subqueryNode(sq *subquery) error {
 	return nil
 }
 
-func (i *subqueryInitializer) enterNode(_ string, _ planNode) bool    { return true }
-func (i *subqueryInitializer) expr(_, _ string, _ int, _ parser.Expr) {}
-func (i *subqueryInitializer) leaveNode(_ string)                     {}
-func (i *subqueryInitializer) attr(_, _, _ string)                    {}
+func (i *subqueryInitializer) enterNode(_ string, _ planNode) bool { return true }
