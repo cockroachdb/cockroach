@@ -139,6 +139,25 @@ true
 query error pq: tuples \(\(1, 2\), 'equal'\), \(\(1, 'huh'\), 'equal'\) are not the same type: tuples \(1, 2\), \(1, 'huh'\) are not the same type: expected 2 to be of type string, found type int
 SELECT ((1, 2), 'equal') = ((1, 'huh'), 'equal')
 
+# Issue #3568
+
+statement ok
+CREATE TABLE kv (
+  k INT PRIMARY KEY,
+  v INT
+)
+
+statement ok
+INSERT INTO kv VALUES (1, 2)
+
+query II
+SELECT k, v FROM kv WHERE (k, v) = (1, 100)
+----
+
+query II
+SELECT k, v FROM kv WHERE (k, v) IN ((1, 100))
+----
+
 # Issue #12295
 
 query B
