@@ -78,7 +78,7 @@ func TestValues(t *testing.T) {
 					if out.Err != nil {
 						t.Fatal(out.Err)
 					}
-					if !out.Closed {
+					if !out.ProducerClosed {
 						t.Fatalf("output RowReceiver not closed")
 					}
 					if len(out.Rows) != numRows {
