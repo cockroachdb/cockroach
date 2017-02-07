@@ -714,8 +714,7 @@ func presplitRanges(baseCtx context.Context, db client.DB, input []roachpb.Key) 
 
 	wg.Add(1)
 	splitFn(input)
-	wg.Wait()
-	return wg.FirstError()
+	return wg.Wait()
 }
 
 func restoreTableDescs(
@@ -996,8 +995,7 @@ func Restore(
 			wg.Done(Import(ctx, db, i.Key, i.EndKey, i.files, kr))
 		}(importRequests[i])
 	}
-	wg.Wait()
-	if err := wg.FirstError(); err != nil {
+	if err := wg.Wait(); err != nil {
 		// This leaves the data that did get imported in case the user wants to
 		// retry.
 		// TODO(dan): Build tooling to allow a user to restart a failed restore.
