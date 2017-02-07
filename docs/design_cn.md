@@ -1582,30 +1582,43 @@ culls older timeseries data, downsampling and eventually discarding it.
 一个[周期性后台进程](RFCS/time_series_culling.md)会挑选较老的时间序列数据、下采样并最终丢弃它。（译注：downsampling，一种采样算法）
 
 # Key-prefix Accounting and Zones
-# 
+# Key前缀 记账和地域
 
 Arbitrarily fine-grained accounting is specified via
 key prefixes. Key prefixes can overlap, as is necessary for capturing
 hierarchical relationships. For illustrative purposes, let’s say keys
 specifying rows in a set of databases have the following format:
 
+通过key前缀可以指定记录任意精细的粒度。Key前缀可以重叠，这是捕捉层次关系所必需的。
+为了解释说明，举个例子，比如说：用key指定数据库集合中的行，格式如下：
+
 `<db>:<table>:<primary-key>[:<secondary-key>]`
 
 In this case, we might collect accounting with
 key prefixes:
 
+在该场景下，我们可以收集到以下key前缀的记录信息：
+
 `db1`, `db1:user`, `db1:order`,
 
 Accounting is kept for the entire map by default.
 
+默认情况下，保持对整个map进行记帐。
+
 ## Accounting
-to keep accounting for a range defined by a key prefix, an entry is created in
+## 记账
+
+To keep accounting for a range defined by a key prefix, an entry is created in
 the accounting system table. The format of accounting table keys is:
+
+为了保持对一个key前缀定义的range记帐，会在记帐系统表中增加一个条目。记帐表中key的格式是：
 
 `\0acct<key-prefix>`
 
 In practice, we assume each node is capable of caching the
 entire accounting table as it is likely to be relatively small.
+
+实践中，我们假设每个节点都有能力缓存整个记帐表，因为它可能相对较小。
 
 Accounting is kept for key prefix ranges with eventual consistency for
 efficiency. There are two types of values which comprise accounting:
@@ -1616,15 +1629,21 @@ types of accounting are captured as time series with minute
 granularity. The length of time accounting metrics are kept is
 configurable. Below are examples of each type of accounting value.
 
-**System State Counters/Performance**
+保持对最终一致性range的key前缀进行记帐的目的是为了更高效。记帐信息包含两种类型的值：
+总数counts和当前值occurrences，这里没有更好的术语来表达。总数描述了系统的状态，
+如：字节、行的总数等等。当前值包含了临时性能和负载的指标。
+这两种记帐类型以分钟粒度作为时间序列被采集。记帐时长是可配置的。下面是每种记帐类型值的例子：
 
-- Count of items (e.g. rows)
-- Total bytes
-- Total key bytes
-- Total value length
-- Queued message count
-- Queued message total bytes
-- Count of values \< 16B
+**System State Counters/Performance**
+**系统状态计数/性能**
+
+- Count of items (e.g. rows)条目数（例如：行）
+- Total bytes 字节总数
+- Total key bytes key字节总数
+- Total value length 值总长度
+- Queued message count 序列消息数
+- Queued message total bytes 序列消息总字节数
+- Count of values \< 16B 值总数
 - Count of values \< 64B
 - Count of values \< 256B
 - Count of values \< 1K
@@ -1634,13 +1653,14 @@ configurable. Below are examples of each type of accounting value.
 - Count of values \< 256K
 - Count of values \< 1M
 - Count of values \> 1M
-- Total bytes of accounting
+- Total bytes of accounting 记账的总字节数
 
 
 **Load Occurrences**
+**加载事件**
 
-- Get op count
-- Get total MB
+- Get op count Get操作数
+- Get total MB 
 - Put op count
 - Put total MB
 - Delete op count
@@ -1657,6 +1677,9 @@ possible metrics of interest, the data can become numerous. Accounting
 data are stored in the map near the key prefix described, in order to
 distribute load (for both aggregation and storage).
 
+因为记帐信息作为时间序列被保存并覆盖许多感兴趣的指标，所以数据量可能变得巨大。
+记帐数据存储在其key前缀附近的map中，目的是分散负载（对聚集体和存储）。
+
 Accounting keys for system state have the form:
 `<key-prefix>|acctd<metric-name>*`. Notice the leading ‘pipe’
 character. It’s meant to sort the root level account AFTER any other
@@ -1665,12 +1688,20 @@ are permanent counts, and not transient activity. Logic at the
 node takes care of snapshotting the value into an appropriately
 suffixed (e.g. with timestamp hour) multi-value time series entry.
 
+系统状态的记帐key形式为： `<key-prefix>|acctd<metric-name>*`。
+注意，前导“管道”符号，它的意义是为了把root层级的记帐排在其他系统表之后。
+当这些值是持久化总数并且不是临时活动时，它们必须高过相同的基础值。
+节点上的逻辑必须考虑选取多值时间序列条目中的一个合适后缀（例如：带有时间戳小时）值做为快照值。
+
 Keys for perf/load metrics:
+性能/负载指标的key :
 `<key-prefix>acctd<metric-name><hourly-timestamp>`.
 
 `<hourly-timestamp>`-suffixed accounting entries are multi-valued,
 containing a varint64 entry for each minute with activity during the
 specified hour.
+
+`<hourly-timestamp>`-suffixed记帐条目是多值的，包含：每分钟一个varint64条目，排满指定的小时期间。
 
 To efficiently keep accounting over large key ranges, the task of
 aggregation must be distributed. If activity occurs within the same
@@ -1683,20 +1714,37 @@ tree which is maintained to describe the range hierarchy. This limits
 the number of messages before an update is visible at the root to `2*log N`,
 where `N` is the number of ranges in the key prefix.
 
+为高效地保持对巨大数量的keyrange的记帐，聚集任务必须被分布执行。
+如果活动发生的range与记帐的key前缀range相同，更新则作为一致性写的一部分来执行。
+如果range不同，那么一个消息被发送到其父range来提升该记帐。
+如果据收到的消息，父range也不包含key前缀，它将依次传递消息到其父range或者平衡二叉树中的左孩子，
+该平衡二叉树被维护用来描述range的层次结构。这限制了一个更新前消息的数量，到根时的数量是2*logN，N是该key前缀内range的数量。
+
 ## Zones
+## 地域
+
 zones are stored in the map with keys prefixed by
 `\0zone` followed by the key prefix to which the zone
 configuration applies. Zone values specify a protobuf containing
 the datacenters from which replicas for ranges which fall under
 the zone must be chosen.
 
+地域信息存储在map中，map中的key前面追加\0zone+key前缀，key前缀由zone配置指定。
+Zone值指定了一个protobuf(google 的一种数据交换的格式)，包含了range的副本所在的数据中心，当本地域失效时，会选择这些zone来接替。
+
 Please see [pkg/config/config.proto](https://github.com/cockroachdb/cockroach/blob/master/pkg/config/config.proto) for up-to-date data structures used, the best entry point being `message ZoneConfig`.
+
+最新使用的数据结构请参阅[pkg/config/config.proto](https://github.com/cockroachdb/cockroach/blob/master/pkg/config/config.proto)  源码，
+最佳进入点是 `message ZoneConfig`
 
 If zones are modified in situ, each node verifies the
 existing zones for its ranges against the zone configuration. If
 it discovers differences, it reconfigures ranges in the same way
 that it rebalances away from busy nodes, via special-case 1:1
 split to a duplicate range comprising the new configuration.
+
+如果地域在原位置被修改，每个节点都会验证其上的ranges正使用的地域与zone配置是否匹配。
+如果发现不同，它将重新配置ranges，方式与它从忙碌节点进行重平衡一样，通过特殊情况1：1拆分成重复的包含新配置的range。
 
 # SQL
 
@@ -1706,31 +1754,49 @@ PostgreSQL client drivers. Connections using SSL and authenticated
 using client certificates are supported and even encouraged over
 unencrypted (insecure) and password-based connections.
 
+集群中的每个节点都可以接受SQL客户端连接。CockroachDB支持PostgreSQL有线协议，
+以重用本地PostgreSQL客户端驱动。支持使用SSL连接和使用客户端证书认证，甚至鼓励不加密（不安全）的基于口令的连接。
+
 Each connection is associated with a SQL session which holds the
 server-side state of the connection. Over the lifespan of a session
 the client can send SQL to open/close transactions, issue statements
 or queries or configure session parameters, much like with any other
 SQL database.
 
+每个连接与一个SQL会话关联，该会话保持连接的server一边的状态。
+在会话的整个生命周期，客户端可以发送SQL来打开/关闭事务、发送语句、查询，或者设置会话参数，像其他SQL数据库一样。
+
 ## Language support
+## 语言支持
 
 CockroachDB also attempts to emulate the flavor of SQL supported by
 PostgreSQL, although it also diverges in significant ways:
+
+CockroachDB也努力仿效PostgreSQL支持的SQL，尽管它在如下重要方式上有所不同：
 
 - CockroachDB exclusively implements MVCC-based consistency for
   transactions, and thus only supports SQL's isolation levels SNAPSHOT
   and SERIALIZABLE.  The other traditional SQL isolation levels are
   internally mapped to either SNAPSHOT or SERIALIZABLE.
 
+- 对于事务而言，CockroachDB仅实现了基于MVCC的一致性，这样事务就仅支持快照和序列化两种SQL隔离级别。
+  其他传统SQL隔离级别在CoackroachDB内部被映射成快照或者序列化隔离级别。
+
 - CockroachDB implements its own [SQL type system](RFCS/typing.md)
   which only supports a limited form of implicit coercions between
   types compared to PostgreSQL. The rationale is to keep the
-  implementation simple and efficient, capitalizing on the observation
+  implementation simple and efficient, capitalizing on the observation 
   that 1) most SQL code in clients is automatically generated with
   coherent typing already and 2) existing SQL code for other databases
   will need to be massaged for CockroachDB anyways.
 
+- CockroachDB实现了它自己的SQL类型系统，与PostgreSQL相比，仅支持类型间隐式强制转换的一种有限形式。
+  这样做的理论基础依据是保持实现简单且高效，这利用了观察所得：
+  1）客户端中大多数SQL代码已经自动产生并与所键入一致；
+  2）访问其他数据库的现存SQL代码移到Cockroach无论如何也要做修改。
+
 ## SQL architecture
+## SQL 结构
 
 Client connections over the network are handled in each node by a
 pgwire server process (goroutine). This handles the stream of incoming
@@ -1739,10 +1805,16 @@ The pgwire server also handles pgwire-level prepared statements,
 binding prepared statements to arguments and looking up prepared
 statements for execution.
 
+网络上的客户端连接由每个节点上的pgwireserver进程（goroutine）管理。
+它处理进来的命令流并发回包含查询/语句结果集的响应。Pgwire server也管理pgwire层预处理语句，绑定预处理语句到参数并且为执行查找预处理语句。
+
 Meanwhile the state of a SQL connection is maintained by a Session
 object and a monolithic `planner` object (one per connection) which
 coordinates execution between the session, the current SQL transaction
 state and the underlying KV store.
+
+期间，SQL连接的状态由一个会话对象和一个整体计划者对象（一个连接一个）来维护，
+计划者对象协调本会话、当前SQL事务状态和下层KV store来完成命令的执行。
 
 Upon receiving a query/statement (either directly or via an execute
 command for a previously prepared statement) the pgwire server forwards
@@ -1751,6 +1823,10 @@ code is then transformed into a SQL query plan.
 The query plan is implemented as a tree of objects which describe the
 high-level data operations needed to resolve the query, for example
 "join", "index join", "scan", "group", etc.
+
+依据收到的查询/语句（直接的命令或者由预处理语句生成的执行命令），pgwire server将SQL文本推到与本连接相关联的计划者。
+然后SQL代码被转成SQL查询计划。查询计划被实现为一个对象树，该对象树描述了查询解析后所需的高层数据操作，
+如：“join”、“index join”、“scan”、“group”，等等。
 
 The query plan objects currently also embed the run-time state needed
 for the execution of the query plan. Once the SQL query plan is ready,
@@ -1761,10 +1837,18 @@ children nodes and from that point forward each child node serves as a
 consume and transform incrementally and present to its own parent node
 also as a generator.
 
+查询计划对象目前也嵌入了查询计划执行时所需的运行时状态。一旦查询计划准备好，
+这些对象上的方法就会以“生成器”的方式用其他语言被执行：每个节点启动它的孩子节点，
+从那时起每个孩子节点作为一个结果行集流的“生成器”提供服务，
+其父节点会消费这个流并且进一步转换，同时呈现给它的父节点时，自己也是一个“生成器”。
+
 The top-level planner consumes the data produced by the top node of
 the query plan and returns it to the client via pgwire.
 
+顶层计划者消费查询计划顶层节点产生的数据并且通过pgwire协议返回给客户端。
+
 ## Data mapping between the SQL model and KV
+## SQL模型和KV之间数据映射 ##
 
 Every SQL table has a primary key in CockroachDB. (If a table is created
 without one, an implicit primary key is provided automatically.)
@@ -1772,15 +1856,23 @@ The table identifier, followed by the value of the primary key for
 each row, are encoded as the *prefix* of a key in the underlying KV
 store.
 
+在CockroachDB中的每个SQL表都有一个主键（如果一个表没有主键，会自动生成一个隐式主键）。
+表的标识+每行主键的值，被编码后作为底层KV store中的key的前缀。
+
 Each remaining column or *column family* in the table is then encoded
 as a value in the underlying KV store, and the column/family identifier
 is appended as *suffix* to the KV key.
 
+表中其余的列或者列族被编码为底层KVstore中的一个值，该列/族标识作为后缀追加到KV key中。
+
 For example:
+例如：
 
 - after table `customers` is created in a database `mydb` with a
 primary key column `name` and normal columns `address` and `URL`, the KV pairs
 to store the schema would be:
+
+- 在`mydb`库中创建带有一个主键和两个正常列（`地址`和`URL`）的`customer`表后，存储schema的KV键对见下表：
 
 | Key                          | Values |
 | ---------------------------- | ------ |
@@ -1795,7 +1887,11 @@ for the example and subject to change.)  Each database/table/column
 name is mapped to a spontaneously generated identifier, so as to
 simplify renames.
 
+（右侧的数字值是为举例子随意取的；左侧schemakey的结构为举例方便进行了简化并且可能随时变化。）
+每个database/table/column名称被映射到自然生成的标识，这是为了简化重命名。
+
 Then for a single row in this table:
+然后是该表中的单行：
 
 | Key               | Values                           |
 | ----------------- | -------------------------------- |
@@ -1806,20 +1902,33 @@ Each key has the table prefix `/51/42` followed by the primary key
 prefix `/Apple` followed by the column/family suffix (`/66`,
 `/69`). The KV value is directly encoded from the SQL value.
 
+每个key有表前缀/51/42，紧跟主键前缀/Apple，然后是列/族后缀（/66、/69）。
+KV值从SQL值直接编码。
+
 Efficient storage for the keys is guaranteed by the underlying RocksDB engine
 by means of prefix compression.
+
+Key的高效存储由底层RocksDB引擎通过前缀压缩方式来保障。
 
 Finally, for SQL indexes, the KV key is formed using the SQL value of the
 indexed columns, and the KV value is the KV key prefix of the rest of
 the indexed row.
 
+最终，对于SQL索引，使用索引列的SQL值形成KV的key，KV的value是该被索引行其余的KVkey前缀。
+（译注：因为一行有多个字段值，在底层存储为KV时，每个字段及其值都存储成一个KV对，所以此处会有很多的KV key前缀作为索引的）
+
 ## Distributed SQL
+## 分布式 SQL
 
 Dist-SQL is a new execution framework being developed as of Q3 2016 with the
 goal of distributing the processing of SQL queries.
 See the [Distributed SQL
 RFC](RFCS/distributed_sql.md)
 for a detailed design of the subsystem; this section will serve as a summary.
+
+分布式SQL作为2016 Q3 新的执行框架，其目标是分布式SQL查询处理。
+参见[分布式SQLRFC ]（RFC / distributed_sql。MD）
+对于子系统的详细设计，本节将进行总结。
 
 Distributing the processing is desirable for multiple reasons:
 - Remote-side filtering: when querying for a set of rows that match a filtering
@@ -1834,6 +1943,9 @@ Distributing the processing is desirable for multiple reasons:
 - Parallelize SQL computation: when significant computation is required, we
   want to distribute it to multiple node, so that it scales with the amount of
   data involved. This applies to `JOIN`s, aggregation, sorting.
+
+分布式进程值得拥有的多个原因：
+- 远程端过滤：
 
 The approach we took  was originally inspired by
 [Sawzall](https://cloud.google.com/dataflow/model/programming-model) - a
