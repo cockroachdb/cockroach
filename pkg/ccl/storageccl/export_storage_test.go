@@ -49,7 +49,7 @@ func testExportToTarget(t *testing.T, args roachpb.ExportStorage) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer w.Close()
+	defer w.Cleanup()
 
 	// Write something to the local file specified by our sink.
 	t.Logf("writing %q to %s", string(testingContent), w.LocalFile())
