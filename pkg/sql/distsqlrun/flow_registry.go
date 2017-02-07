@@ -153,7 +153,7 @@ func (fr *flowRegistry) RegisterFlow(
 				if !is.connected {
 					is.timedOut = true
 					numTimedOut++
-					is.receiver.Close(errors.Errorf("no inbound stream connection"))
+					is.receiver.ProducerDone(errors.Errorf("no inbound stream connection"))
 					fr.finishInboundStreamLocked(is)
 				}
 			}
@@ -271,7 +271,7 @@ func (fr *flowRegistry) finishInboundStreamLocked(is *inboundStreamInfo) {
 	}
 
 	if is.timedOut {
-		is.receiver.Close(errors.Errorf("inbound stream timed out"))
+		is.receiver.ProducerDone(errors.Errorf("inbound stream timed out"))
 	}
 
 	is.finished = true

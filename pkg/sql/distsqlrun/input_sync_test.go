@@ -150,7 +150,7 @@ func TestUnorderedSync(t *testing.T) {
 				row := sqlbase.EncDatumRow{a, b}
 				mrc.PushRow(row)
 			}
-			mrc.Close(nil)
+			mrc.ProducerDone(nil)
 		}(i)
 	}
 	var retRows sqlbase.EncDatumRows
@@ -195,7 +195,7 @@ func TestUnorderedSync(t *testing.T) {
 			if i == 3 {
 				err = fmt.Errorf("Test error")
 			}
-			mrc.Close(err)
+			mrc.ProducerDone(err)
 		}(i)
 	}
 	for {

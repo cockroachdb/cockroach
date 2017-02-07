@@ -95,14 +95,14 @@ func makeHashRouter(hashCols []uint32, streams []RowReceiver) (*hashRouter, erro
 	}, nil
 }
 
-// Close is part of the RowReceiver interface.
-func (rb *routerBase) Close(err error) {
+// ProducerDone is part of the interface.
+func (rb *routerBase) ProducerDone(err error) {
 	if rb.err != nil {
 		// Any error we ran into takes precedence.
 		err = rb.err
 	}
 	for _, s := range rb.streams {
-		s.Close(err)
+		s.ProducerDone(err)
 	}
 }
 

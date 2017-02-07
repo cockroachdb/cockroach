@@ -82,9 +82,9 @@ func TestHashRouter(t *testing.T) {
 				t.Fatalf("PushRow returned false")
 			}
 		}
-		hr.Close(nil)
+		hr.ProducerDone(nil)
 		for bIdx, b := range bufs {
-			if !b.Closed {
+			if !b.ProducerClosed {
 				t.Errorf("bucket not closed")
 			}
 			if b.Err != nil {
@@ -153,14 +153,14 @@ func TestMirrorRouter(t *testing.T) {
 				t.Fatalf("PushRow returned false")
 			}
 		}
-		mr.Close(nil)
+		mr.ProducerDone(nil)
 
 		// Verify each row is sent to each of the output streams.
 		for bIdx, b := range bufs {
 			if len(b.Rows) != len(bufs[0].Rows) {
 				t.Errorf("buckets %d and %d have different number of rows", 0, bIdx)
 			}
-			if !b.Closed {
+			if !b.ProducerClosed {
 				t.Errorf("bucket not closed")
 			}
 			if b.Err != nil {
