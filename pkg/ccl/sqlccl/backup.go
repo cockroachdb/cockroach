@@ -102,7 +102,7 @@ func allSQLDescriptors(txn *client.Txn) ([]sqlbase.Descriptor, error) {
 	endKey := startKey.PrefixEnd()
 	rows, err := txn.Scan(startKey, endKey, 0)
 	if err != nil {
-		return nil, errors.Wrap(err, "unable to scan SQL descriptors")
+		return nil, err
 	}
 
 	sqlDescs := make([]sqlbase.Descriptor, len(rows))
