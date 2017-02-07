@@ -1450,28 +1450,28 @@ func (d *DInterval) Size() uintptr {
 	return unsafe.Sizeof(*d)
 }
 
-// DTupleDatum is the tuple Datum.
-type DTupleDatum struct {
+// DTuple is the tuple Datum.
+type DTuple struct {
 	D Datums
 }
 
-// NewDTupleDatum creates a *DTupleDatum with the provided datums.
-func NewDTupleDatum(d ...Datum) *DTupleDatum {
-	return &DTupleDatum{D: d}
+// NewDTuple creates a *DTuple with the provided datums.
+func NewDTuple(d ...Datum) *DTuple {
+	return &DTuple{D: d}
 }
 
-// NewDTupleDatumWithLen creates a *DTupleDatum with the provided length.
-func NewDTupleDatumWithLen(l int) *DTupleDatum {
-	return &DTupleDatum{D: make(Datums, l)}
+// NewDTupleWithLen creates a *DTuple with the provided length.
+func NewDTupleWithLen(l int) *DTuple {
+	return &DTuple{D: make(Datums, l)}
 }
 
-// NewDTupleDatumWithCap creates a *DTupleDatum with the provided capacity.
-func NewDTupleDatumWithCap(c int) *DTupleDatum {
-	return &DTupleDatum{D: make(Datums, 0, c)}
+// NewDTupleWithCap creates a *DTuple with the provided capacity.
+func NewDTupleWithCap(c int) *DTuple {
+	return &DTuple{D: make(Datums, 0, c)}
 }
 
 // ResolvedType implements the TypedExpr interface.
-func (d *DTupleDatum) ResolvedType() Type {
+func (d *DTuple) ResolvedType() Type {
 	typ := make(TTuple, len(d.D))
 	for i, v := range d.D {
 		typ[i] = v.ResolvedType()
@@ -1480,12 +1480,12 @@ func (d *DTupleDatum) ResolvedType() Type {
 }
 
 // Compare implements the Datum interface.
-func (d *DTupleDatum) Compare(other Datum) int {
+func (d *DTuple) Compare(other Datum) int {
 	if other == DNull {
 		// NULL is less than any non-NULL value.
 		return 1
 	}
-	v, ok := other.(*DTupleDatum)
+	v, ok := other.(*DTuple)
 	if !ok {
 		panic(makeUnsupportedComparisonMessage(d, other))
 	}
@@ -1509,7 +1509,7 @@ func (d *DTupleDatum) Compare(other Datum) int {
 }
 
 // Prev implements the Datum interface.
-func (d *DTupleDatum) Prev() (Datum, bool) {
+func (d *DTuple) Prev() (Datum, bool) {
 	// Note: (a:decimal, b:int, c:int) has a prev value; that's (a, b,
 	// c-1). With an exception if c is MinInt64, in which case the prev
 	// value is (a, b-1, max()). However, (a:int, b:decimal) does not
@@ -1519,7 +1519,7 @@ func (d *DTupleDatum) Prev() (Datum, bool) {
 	// zero or more values that are a minimum and a maximum value of the
 	// same type exists, and the first element before that has a prev
 	// value.
-	res := NewDTupleDatumWithLen(len(d.D))
+	res := NewDTupleWithLen(len(d.D))
 	copy(res.D, d.D)
 	for i := len(res.D) - 1; i >= 0; i-- {
 		if !res.D[i].IsMin() {
@@ -1540,7 +1540,7 @@ func (d *DTupleDatum) Prev() (Datum, bool) {
 }
 
 // Next implements the Datum interface.
-func (d *DTupleDatum) Next() (Datum, bool) {
+func (d *DTuple) Next() (Datum, bool) {
 	// Note: (a:decimal, b:int, c:int) has a next value; that's (a, b,
 	// c+1). With an exception if c is MaxInt64, in which case the next
 	// value is (a, b+1, min()). However, (a:int, b:decimal) does not
@@ -1550,7 +1550,7 @@ func (d *DTupleDatum) Next() (Datum, bool) {
 	// zero or more values that are a maximum and a minimum value of the
 	// same type exists, and the first element before that has a next
 	// value.
-	res := NewDTupleDatumWithLen(len(d.D))
+	res := NewDTupleWithLen(len(d.D))
 	copy(res.D, d.D)
 	for i := len(res.D) - 1; i >= 0; i-- {
 		if !res.D[i].IsMax() {
@@ -1571,8 +1571,8 @@ func (d *DTupleDatum) Next() (Datum, bool) {
 }
 
 // max implements the Datum interface.
-func (d *DTupleDatum) max() (Datum, bool) {
-	res := NewDTupleDatumWithLen(len(d.D))
+func (d *DTuple) max() (Datum, bool) {
+	res := NewDTupleWithLen(len(d.D))
 	for i, v := range d.D {
 		m, ok := v.max()
 		if !ok {
@@ -1584,8 +1584,8 @@ func (d *DTupleDatum) max() (Datum, bool) {
 }
 
 // max implements the Datum interface.
-func (d *DTupleDatum) min() (Datum, bool) {
-	res := NewDTupleDatumWithLen(len(d.D))
+func (d *DTuple) min() (Datum, bool) {
+	res := NewDTupleWithLen(len(d.D))
 	for i, v := range d.D {
 		m, ok := v.min()
 		if !ok {
@@ -1597,7 +1597,7 @@ func (d *DTupleDatum) min() (Datum, bool) {
 }
 
 // IsMax implements the Datum interface.
-func (d *DTupleDatum) IsMax() bool {
+func (d *DTuple) IsMax() bool {
 	for _, v := range d.D {
 		if !v.IsMax() {
 			return false
@@ -1607,7 +1607,7 @@ func (d *DTupleDatum) IsMax() bool {
 }
 
 // IsMin implements the Datum interface.
-func (d *DTupleDatum) IsMin() bool {
+func (d *DTuple) IsMin() bool {
 	for _, v := range d.D {
 		if !v.IsMin() {
 			return false
@@ -1617,24 +1617,24 @@ func (d *DTupleDatum) IsMin() bool {
 }
 
 // AmbiguousFormat implements the Datum interface.
-func (*DTupleDatum) AmbiguousFormat() bool { return false }
+func (*DTuple) AmbiguousFormat() bool { return false }
 
 // Format implements the NodeFormatter interface.
-func (d *DTupleDatum) Format(buf *bytes.Buffer, f FmtFlags) {
+func (d *DTuple) Format(buf *bytes.Buffer, f FmtFlags) {
 	d.D.Format(buf, f)
 }
 
-func (d *DTupleDatum) Len() int           { return d.D.Len() }
-func (d *DTupleDatum) Less(i, j int) bool { return d.D.Less(i, j) }
-func (d *DTupleDatum) Swap(i, j int)      { d.D.Swap(i, j) }
+func (d *DTuple) Len() int           { return d.D.Len() }
+func (d *DTuple) Less(i, j int) bool { return d.D.Less(i, j) }
+func (d *DTuple) Swap(i, j int)      { d.D.Swap(i, j) }
 
 // Normalize sorts and uniques the datum tuple.
-func (d *DTupleDatum) Normalize() {
+func (d *DTuple) Normalize() {
 	sort.Sort(d)
 	d.makeUnique()
 }
 
-func (d *DTupleDatum) makeUnique() {
+func (d *DTuple) makeUnique() {
 	n := 0
 	for i := 0; i < len(d.D); i++ {
 		if d.D[i] == DNull {
@@ -1649,7 +1649,7 @@ func (d *DTupleDatum) makeUnique() {
 }
 
 // Size implements the Datum interface.
-func (d *DTupleDatum) Size() uintptr {
+func (d *DTuple) Size() uintptr {
 	sz := unsafe.Sizeof(*d)
 	for _, e := range d.D {
 		dsz := e.Size()
@@ -1660,8 +1660,8 @@ func (d *DTupleDatum) Size() uintptr {
 
 // SortedDifference finds the elements of d which are not in other,
 // assuming that d and other are already sorted.
-func (d *DTupleDatum) SortedDifference(other *DTupleDatum) *DTupleDatum {
-	var res DTupleDatum
+func (d *DTuple) SortedDifference(other *DTuple) *DTuple {
+	var res DTuple
 	a := d.D
 	b := other.D
 	for len(a) > 0 && len(b) > 0 {
