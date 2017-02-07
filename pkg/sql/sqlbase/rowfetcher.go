@@ -167,12 +167,9 @@ func (rf *RowFetcher) StartScan(
 	// a very restrictive filter and actually have to retrieve a lot of rows).
 	firstBatchLimit := limitHint
 	if firstBatchLimit != 0 {
-		// For a secondary index, we have one key per row.
-		if !rf.isSecondaryIndex {
-			// We have a sentinel key per row plus at most one key per non-PK column. Of course, we
-			// may have other keys due to a schema change, but this is only a hint.
-			firstBatchLimit *= int64(1 + len(rf.cols) - len(rf.index.ColumnIDs))
-		}
+		// The limitHint is a row limit, but each row could be made up of more
+		// than one key.
+		firstBatchLimit = limitHint * int64(rf.desc.KeysPerRow(rf.index.ID))
 		// We need an extra key to make sure we form the last row.
 		firstBatchLimit++
 	}
