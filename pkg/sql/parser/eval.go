@@ -22,7 +22,6 @@ import (
 	"math"
 	"math/big"
 	"regexp"
-	"sort"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -1586,10 +1585,23 @@ func makeEvalTupleIn(typ Type) CmpOp {
 				return DBool(false), nil
 			}
 
-			vtuple := values.(*DTuple).D
-			i := sort.Search(len(vtuple), func(i int) bool { return vtuple[i].Compare(arg) >= 0 })
-			found := i < len(vtuple) && vtuple[i].Compare(arg) == 0
-			return DBool(found), nil
+			// If the tuple was sorted during normalization, we can perform
+			// an efficient binary search to find if the arg is in the tuple.
+			vtuple := values.(*DTuple)
+			if vtuple.Sorted {
+				_, found := vtuple.SearchSorted(arg)
+				return DBool(found), nil
+			}
+
+			// If the tuple was not sorted, which happens in cases where it
+			// is not constant across rows, then we must fall back to iterating
+			// through the entire tuple.
+			for _, val := range vtuple.D {
+				if val.Compare(arg) == 0 {
+					return DBool(true), nil
+				}
+			}
+			return DBool(false), nil
 		},
 	}
 }

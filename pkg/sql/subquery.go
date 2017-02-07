@@ -21,6 +21,8 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 )
 
 // subquery represents a subquery expression in an expression tree
@@ -123,9 +125,7 @@ func (s *subquery) doEval() (result parser.Datum, err error) {
 			result = parser.MakeDBool(false)
 		}
 
-	case execModeAllRows:
-		fallthrough
-	case execModeAllRowsNormalized:
+	case execModeAllRows, execModeAllRowsNormalized:
 		var rows parser.DTuple
 		next, err := s.plan.Next()
 		for ; next; next, err = s.plan.Next() {
@@ -147,6 +147,13 @@ func (s *subquery) doEval() (result parser.Datum, err error) {
 		}
 		if err != nil {
 			return result, err
+		}
+
+		if ok, dir := s.subqueryTupleOrdering(); ok {
+			if dir == encoding.Descending {
+				rows.D.Reverse()
+			}
+			rows.SetSorted()
 		}
 		if s.execMode == execModeAllRowsNormalized {
 			rows.Normalize()
@@ -180,6 +187,41 @@ func (s *subquery) doEval() (result parser.Datum, err error) {
 	}
 
 	return result, nil
+}
+
+// subqueryTupleOrdering returns whether the rows of the subquery are ordered
+// such that the resulting subquery tuple can be considered fully sorted.
+// For this to happen, the columns in the subquery must be sorted in the same
+// direction and with the same order of precedence that the tuple will have. The
+// method will return a boolean specifying whether the result is in sorted order,
+// and if so, will specify which direction it is sorted in.
+//
+// TODO(knz): This will not work for subquery renders that are not row dependent
+// like
+//   SELECT 1 IN (SELECT 1 ORDER BY 1)
+// because even if they are included in an ORDER BY clause, they will not be part
+// of the plan.Ordering().
+func (s *subquery) subqueryTupleOrdering() (bool, encoding.Direction) {
+	// Columns must be sorted in the order that they appear in the render
+	// and which they will later appear in the resulting tuple.
+	desired := make(sqlbase.ColumnOrdering, len(s.plan.Columns()))
+	for i := range desired {
+		desired[i] = sqlbase.ColumnOrderInfo{
+			ColIdx:    i,
+			Direction: encoding.Ascending,
+		}
+	}
+
+	// Check Ascending direction.
+	order := s.plan.Ordering()
+	if match := computeOrderingMatch(desired, order, false); match == len(desired) {
+		return true, encoding.Ascending
+	}
+	// Check Descending direction.
+	if match := computeOrderingMatch(desired, order, true); match == len(desired) {
+		return true, encoding.Descending
+	}
+	return false, 0
 }
 
 // subqueryPlanVisitor is responsible for acting on the query plan
