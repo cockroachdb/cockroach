@@ -101,7 +101,7 @@ func (a ArgTypes) Length() int {
 // Types implements the typeList interface.
 func (a ArgTypes) Types() []Type {
 	n := len(a)
-	ret := make([]Type, n, n)
+	ret := make([]Type, n)
 	for i, s := range a {
 		ret[i] = s.Typ
 	}

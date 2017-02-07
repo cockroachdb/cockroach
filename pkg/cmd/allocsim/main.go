@@ -295,7 +295,7 @@ func main() {
 	var perNodeArgs map[int][]string
 	if *numLocalities > 0 {
 		perNodeArgs = make(map[int][]string)
-		a.localities = make([]roachpb.Locality, len(c.Nodes), len(c.Nodes))
+		a.localities = make([]roachpb.Locality, len(c.Nodes))
 		for i := range c.Nodes {
 			locality := roachpb.Locality{
 				Tiers: []roachpb.Tier{

@@ -41,6 +41,13 @@ and checked out as a sub-module at `./vendor`.
 This snapshot was built and is managed using `glide`.
 
 The [docs](https://github.com/Masterminds/glide) have detailed instructions, but in brief:
+* `go get -u github.com/Masterminds/glide`
+  * If installing from master becomes unstable, you can use the oldest version that correctly handles
+  submodules (`ab0972eb`), e.g.
+  ```
+  git -C $GOPATH/src/github.com/Masterminds/glide checkout ab0972eb && \
+  go install github.com/Masterminds/glide
+  ```
 * run `./scripts/glide.sh` in `cockroachdb/cockroach`.
 * add new dependencies with `./scripts/glide.sh get -s github.com/my/dependency`
 	- Note: if you are adding a non-import dependency (e.g. a binary tool to be used in development),
