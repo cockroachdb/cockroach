@@ -291,12 +291,11 @@ func TestPriorityRatchetOnAbortOrPush(t *testing.T) {
 	s, _ := createTestDB(t)
 	defer s.Stop()
 
-	const pusheePri = 1
-	const pusherPri = 10 // pusher will win
-
 	pushByReading := func(key roachpb.Key) {
 		if err := s.DB.Txn(context.TODO(), func(txn *client.Txn) error {
-			txn.InternalSetPriority(pusherPri)
+			if err := txn.SetUserPriority(roachpb.MaxUserPriority); err != nil {
+				t.Fatal(err)
+			}
 			_, err := txn.Get(key)
 			return err
 		}); err != nil {
@@ -305,7 +304,9 @@ func TestPriorityRatchetOnAbortOrPush(t *testing.T) {
 	}
 	abortByWriting := func(key roachpb.Key) {
 		if err := s.DB.Txn(context.TODO(), func(txn *client.Txn) error {
-			txn.InternalSetPriority(pusherPri)
+			if err := txn.SetUserPriority(roachpb.MaxUserPriority); err != nil {
+				t.Fatal(err)
+			}
 			return txn.Put(key, "foo")
 		}); err != nil {
 			t.Fatal(err)
@@ -320,10 +321,6 @@ func TestPriorityRatchetOnAbortOrPush(t *testing.T) {
 				defer func() { iteration++ }()
 				key := roachpb.Key(fmt.Sprintf("read=%t, iso=%s", read, iso))
 
-				// Only set our priority on first try.
-				if iteration == 0 {
-					txn.InternalSetPriority(pusheePri)
-				}
 				if err := txn.SetIsolation(iso); err != nil {
 					t.Fatal(err)
 				}
@@ -336,8 +333,9 @@ func TestPriorityRatchetOnAbortOrPush(t *testing.T) {
 
 				if iteration == 1 {
 					// Verify our priority has ratcheted to one less than the pusher's priority
-					if pri := txn.Proto.Priority; pri != pusherPri-1 {
-						t.Fatalf("%s: expected priority on retry to ratchet to %d; got %d", key, pusherPri-1, pri)
+					expPri := int32(roachpb.MaxTxnPriority - 1)
+					if pri := txn.Proto.Priority; pri != expPri {
+						t.Fatalf("%s: expected priority on retry to ratchet to %d; got %d", key, expPri, pri)
 					}
 					return nil
 				}
@@ -734,7 +732,9 @@ func TestTxnRestartedSerializableTimestampRegression(t *testing.T) {
 		errChan <- s.DB.Txn(context.TODO(), func(txn *client.Txn) error {
 			count++
 			// Use a low priority for the transaction so that it can be pushed.
-			txn.InternalSetPriority(1)
+			if err := txn.SetUserPriority(roachpb.MinUserPriority); err != nil {
+				t.Fatal(err)
+			}
 
 			// Put transactional value.
 			if err := txn.Put(keyA, "value1"); err != nil {

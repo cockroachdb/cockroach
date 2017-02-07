@@ -150,6 +150,16 @@ func (ba *BatchRequest) IsSingleSkipLeaseCheckRequest() bool {
 	return ba.IsSingleRequest() && ba.hasFlag(skipLeaseCheck)
 }
 
+// IsSinglePushTxnRequest returns true iff the batch contains a single
+// request, and that request is for a PushTxn.
+func (ba *BatchRequest) IsSinglePushTxnRequest() bool {
+	if ba.IsSingleRequest() {
+		_, ok := ba.Requests[0].GetInner().(*PushTxnRequest)
+		return ok
+	}
+	return false
+}
+
 // GetPrevLeaseForLeaseRequest returns the previous lease, at the time
 // of proposal, for a request lease or transfer lease request. If the
 // batch does not contain a single lease request, this method will panic.
