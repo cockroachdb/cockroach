@@ -171,8 +171,13 @@ func (gt *grpcTransport) SendNext(ctx context.Context, done chan<- BatchCall) {
 	// wait on all the RPCs that it sends and it should also have the ability to
 	// cancel them when it received the first result.
 	ctx, sp := tracing.ForkCtxSpan(ctx, "grpcTransport SendNext")
+	spanFinished := true
 	go func() {
-		defer tracing.FinishSpan(sp)
+		defer func() {
+			if !spanFinished {
+				tracing.FinishSpan(sp)
+			}
+		}()
 		gt.opts.metrics.SentCount.Inc(1)
 		reply, err := func() (*roachpb.BatchResponse, error) {
 			if enableLocalCalls {
@@ -206,6 +211,11 @@ func (gt *grpcTransport) SendNext(ctx context.Context, done chan<- BatchCall) {
 			return reply, err
 		}()
 		gt.setPending(client.args.Replica, false)
+		// Finish the span before writing on the channel so that the recorder (if
+		// there is one) gets it before the caller is unblocked. The defer might be
+		// run after the caller has finished recording.
+		tracing.FinishSpan(sp)
+		spanFinished = true
 		done <- BatchCall{Reply: reply, Err: err}
 	}()
 }
