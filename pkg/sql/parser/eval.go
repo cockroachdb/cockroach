@@ -1590,16 +1590,30 @@ func makeEvalTupleIn(typ Type) CmpOp {
 			vtuple := values.(*DTuple)
 			if vtuple.Sorted {
 				_, found := vtuple.SearchSorted(arg)
+				if !found && len(vtuple.D) > 0 && vtuple.D[0] == DNull {
+					// If the tuple contained any null elements and no matches are found,
+					// the result of IN will be null. The null element will at the front
+					// if the tuple is sorted because null is less than any non-null value.
+					return DBool(false), errCmpNull
+				}
 				return DBool(found), nil
 			}
 
 			// If the tuple was not sorted, which happens in cases where it
 			// is not constant across rows, then we must fall back to iterating
 			// through the entire tuple.
+			sawNull := false
 			for _, val := range vtuple.D {
-				if val.Compare(arg) == 0 {
+				if val == DNull {
+					sawNull = true
+				} else if val.Compare(arg) == 0 {
 					return DBool(true), nil
 				}
+			}
+			if sawNull {
+				// If the tuple contains any null elements and no matches are found, the
+				// result of IN will be null.
+				return DBool(false), errCmpNull
 			}
 			return DBool(false), nil
 		},

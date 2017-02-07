@@ -407,6 +407,13 @@ func (expr *ComparisonExpr) normalize(v *normalizeVisitor) TypedExpr {
 		if ok {
 			tupleCopy := *tuple
 			tupleCopy.Normalize()
+
+			// If the tuple only contains NULL values, Normalize will have reduced
+			// it to a single NULL value.
+			if len(tupleCopy.D) == 1 && tupleCopy.D[0] == DNull {
+				return DNull
+			}
+
 			exprCopy := *expr
 			expr = &exprCopy
 			expr.Right = &tupleCopy
