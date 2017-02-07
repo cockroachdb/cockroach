@@ -192,7 +192,8 @@ groups.
 
 ## Comparison with Other Databases
 
-![SQL - NoSQL - NewSQL Capabilities](docs/media/sql-nosql-newsql.png?raw=true)
+To see how key features of CockroachDB stack up against other databases, 
+visit the [CockroachDB in Comparison](https://www.cockroachlabs.com/docs/cockroachdb-in-comparison.html) page hosted on our docs site. 
 
 ## See Also
 
