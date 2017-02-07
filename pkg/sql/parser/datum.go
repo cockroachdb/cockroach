@@ -1454,7 +1454,8 @@ func (d *DInterval) Size() uintptr {
 type DTuple struct {
 	D Datums
 
-	Sorted bool
+	Sorted      bool
+	NullRemoved bool // set when normalization removed null datums
 }
 
 // NewDTuple creates a *DTuple with the provided datums. When creating a new
@@ -1670,6 +1671,7 @@ func (d *DTuple) makeUnique() {
 	n := 0
 	for i := 0; i < len(d.D); i++ {
 		if d.D[i] == DNull {
+			d.NullRemoved = true
 			continue
 		}
 		if n == 0 || d.D[n-1].Compare(d.D[i]) < 0 {
