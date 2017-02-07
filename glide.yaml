@@ -1,12 +1,46 @@
 package: github.com/cockroachdb/cockroach
 import:
+# Pins due to known upstream issues that prevent updates.
+# These must stay until the issue is resolved, and should include a comment
+# linking to or summarizing the upstream issue.
+#
 # https://github.com/docker/docker/issues/29362
 - package: github.com/docker/docker
   version: 7248742ae7127347a52ab9d215451c213b7b59da
-# etcd pins this via glide, so we must pin harder.
+# Pins to prevent unintended version changes to libs we care about when adding/
+# removing/changing other deps. These are grouped separately to make it easier
+# to comment them out in bulk when running an across-the-board dep update.
+- package: github.com/cockroachdb/c-jemalloc
+  version: 7eb7980d8a9f68b771568a7eb15196a63a818595
+- package: github.com/cockroachdb/c-protobuf
+  version: 070b64667a22925d971878b61e4f0c1df31e8599
+- package: github.com/cockroachdb/c-rocksdb
+  version: 608bf6179ca8b317e707394d263059a933808e2f
+- package: github.com/cockroachdb/cmux
+  version: 30d10be492927e2dcae0089c374c455d42414fcb
+- package: github.com/cockroachdb/cockroach-go
+  version: ba57380fe1f490388284806affe325d081e62be6
+- package: github.com/coreos/etcd
+  version: f99c76cb4791430a25aaea2e7e44e460a332f261
+- package: github.com/gogo/protobuf
+  version: f9114dace7bd920b32f943b3c73fafbcbab2bf31
+- package: github.com/golang/protobuf
+  version: 8ee79997227bf9b34611aee7946ae64735e6fd93
+- package: github.com/google/btree
+  version: 316fb6d3f031ae8f4d457c6c5186b9e3ded70435
+- package: github.com/grpc-ecosystem/grpc-gateway
+  version: 6193f51e51b0bfea774a33f535bc10e983832710
+- package: github.com/lib/pq
+  version: 8df6253d1317616f36b0c3740eb30c239a7372cb
+- package: github.com/olekukonko/tablewriter
+  version: a0225b3f23b5ce0cbec6d7a66a968f8a59eca9c4
+- package: github.com/spf13/cobra
+  version: 1dd5ff2e11b6dca62fdcb275eb804b94607d8b06
+- package: gopkg.in/yaml.v2
+  version: a5b47d31c556af34a302ce5d659e6fea44d90de0
+- package: golang.org/x/crypto
+  version: c3b1d0d6d8690eaebe3064711b026770cc37efa3
 - package: golang.org/x/net
   version: da2b4fa28524a3baf148c1b94df4440267063c88
-# used by a long-lived branch. TODO(dt): remove when merged.
-- package: cloud.google.com/go
-  subpackages:
-  - storage
+- package: google.golang.org/grpc
+  version: 85497e2c516cd289bce5551b840ee27c2a0d6878

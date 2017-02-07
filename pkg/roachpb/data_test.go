@@ -61,7 +61,7 @@ func TestKeyNext(t *testing.T) {
 	extraCap[0] = 'x'
 	extraCap[1] = 'o'
 
-	noExtraCap := make([]byte, 2, 2)
+	noExtraCap := make([]byte, 2)
 	noExtraCap[0] = 'x'
 	noExtraCap[1] = 'o'
 

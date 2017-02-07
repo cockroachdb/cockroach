@@ -39,7 +39,7 @@ func getRangeKeys(db *client.DB) ([]roachpb.Key, error) {
 	if err != nil {
 		return nil, err
 	}
-	ret := make([]roachpb.Key, len(rows), len(rows))
+	ret := make([]roachpb.Key, len(rows))
 	for i := 0; i < len(rows); i++ {
 		ret[i] = bytes.TrimPrefix(rows[i].Key, keys.Meta2Prefix)
 	}
