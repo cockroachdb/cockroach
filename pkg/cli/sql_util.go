@@ -28,19 +28,18 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/lib/pq"
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/pq"
 )
 
 type sqlConnI interface {
 	driver.Conn
 	driver.Execer
 	driver.Queryer
-	Next() (driver.Rows, error)
 }
 
 type sqlConn struct {
@@ -87,21 +86,6 @@ func (c *sqlConn) Query(query string, args []driver.Value) (*sqlRows, error) {
 	return &sqlRows{rows: rows.(sqlRowsI), conn: c}, nil
 }
 
-func (c *sqlConn) Next() (*sqlRows, error) {
-	if c.conn == nil {
-		return nil, driver.ErrBadConn
-	}
-	rows, err := c.conn.Next()
-	if err == driver.ErrBadConn {
-		c.reconnecting = true
-		c.Close()
-	}
-	if err != nil {
-		return nil, err
-	}
-	return &sqlRows{rows: rows.(sqlRowsI), conn: c}, nil
-}
-
 func (c *sqlConn) QueryRow(query string, args []driver.Value) ([]driver.Value, error) {
 	rows, err := makeQuery(query, args...)(c)
 	if err != nil {
@@ -127,6 +111,11 @@ type sqlRowsI interface {
 	driver.Rows
 	Result() driver.Result
 	Tag() string
+
+	// Go 1.8 multiple result set interfaces.
+	// TODO(mjibson): clean this up after 1.8 is released.
+	HasNextResultSet() bool
+	NextResultSet() error
 }
 
 type sqlRows struct {
@@ -172,6 +161,14 @@ func (r *sqlRows) Next(values []driver.Value) error {
 	return err
 }
 
+// NextResultSet prepares the next result set for reading.
+func (r *sqlRows) NextResultSet() (bool, error) {
+	if !r.rows.HasNextResultSet() {
+		return false, nil
+	}
+	return true, r.rows.NextResultSet()
+}
+
 func makeSQLConn(url string) *sqlConn {
 	return &sqlConn{
 		url: url,
@@ -214,10 +211,6 @@ func makeSQLClient(user *url.Userinfo) (*sqlConn, error) {
 
 type queryFunc func(conn *sqlConn) (*sqlRows, error)
 
-func nextResult(conn *sqlConn) (*sqlRows, error) {
-	return conn.Next()
-}
-
 func makeQuery(query string, parameters ...driver.Value) queryFunc {
 	return func(conn *sqlConn) (*sqlRows, error) {
 		// driver.Value is an alias for interface{}, but must adhere to a restricted
@@ -255,17 +248,29 @@ func runQuery(
 // It runs the sql query and writes output to 'w'.
 func runQueryAndFormatResults(
 	conn *sqlConn, w io.Writer, fn queryFunc, displayFormat tableDisplayFormat,
-) error {
+) (err error) {
+	rows, err := fn(conn)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		cerr := rows.Close()
+		if err == nil {
+			err = cerr
+		}
+	}()
 	for {
-		cols, allRows, result, err := runQuery(conn, fn, true)
+		cols, allRows, result, err := sqlRowsToStrings(rows, true)
 		if err != nil {
-			if err == pq.ErrNoMoreResults {
-				return nil
-			}
 			return err
 		}
 		printQueryOutput(w, cols, allRows, result, displayFormat)
-		fn = nextResult
+
+		if more, err := rows.NextResultSet(); err != nil {
+			return err
+		} else if !more {
+			return nil
+		}
 	}
 }
 
