@@ -39,7 +39,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
 // NOTE: these tests are in package kv_test to avoid a circular
@@ -1114,105 +1113,5 @@ func TestPropagateTxnOnError(t *testing.T) {
 
 	if epoch != 2 {
 		t.Errorf("unexpected epoch; the txn must be retried exactly once, but got %d", epoch)
-	}
-}
-
-func assertTransactionPushErrorWithTxnIDSet(t *testing.T, e error) *uuid.UUID {
-	if retErr, ok := e.(*roachpb.RetryableTxnError); ok {
-		if _, ok := retErr.Cause.(*roachpb.TransactionPushError); ok {
-			if retErr.TxnID == nil {
-				t.Fatalf("txn ID is not set unexpectedly: %s", retErr)
-			}
-			return retErr.TxnID
-		}
-		t.Fatalf("expected a TransactionPushError, but got %s (%T)", retErr.Cause, retErr.Cause)
-	} else {
-		t.Fatalf("expected a retryable error, but got %s (%T)", e, e)
-	}
-	panic("not reached")
-}
-
-// TestPropagateTxnOnPushError is similar to TestPropagateTxnOnError,
-// but verifies that txn data are propagated to the next iteration on
-// TransactionPushError.
-func TestPropagateTxnOnPushError(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop()
-	db := setupMultipleRanges(t, s, "b")
-
-	waitForWriteIntent := make(chan struct{})
-	waitForTxnRestart := make(chan struct{})
-	waitForTxnCommit := make(chan struct{})
-	lowPriority := int32(1)
-	highPriority := int32(10)
-	key := "a"
-	// Create a goroutine that creates a write intent and waits until
-	// another txn created in this test is restarted.
-	go func() {
-		if err := db.Txn(context.TODO(), func(txn *client.Txn) error {
-			// Set high priority so that the intent will not be pushed.
-			txn.InternalSetPriority(highPriority)
-			log.Infof(context.TODO(), "Creating a write intent with high priority")
-			if err := txn.Put(key, "val"); err != nil {
-				return err
-			}
-			close(waitForWriteIntent)
-			// Wait until another txn in this test is
-			// restarted by a push txn error.
-			log.Infof(context.TODO(), "Waiting for the txn restart")
-			<-waitForTxnRestart
-			return txn.CommitInBatch(txn.NewBatch())
-		}); err != nil {
-			t.Errorf("unexpected error on transactional Puts: %s", err)
-		}
-		close(waitForTxnCommit)
-	}()
-
-	// Wait until a write intent is created by the above goroutine.
-	log.Infof(context.TODO(), "Waiting for the write intent creation")
-	<-waitForWriteIntent
-
-	// The transaction below is restarted exactly once. The restart is
-	// caused by the write intent created on key "a" by the above goroutine.
-	// When the txn is retried, the error propagates the txn ID to the next
-	// iteration.
-	epoch := 0
-	var txnID *uuid.UUID
-	if err := db.Txn(context.TODO(), func(txn *client.Txn) error {
-		// Set low priority so that a write from this txn will not push others.
-		txn.InternalSetPriority(lowPriority)
-
-		epoch++
-
-		if epoch == 2 {
-			close(waitForTxnRestart)
-			// Wait until the txn created by the goroutine is committed.
-			log.Infof(context.TODO(), "Waiting for the txn commit")
-			<-waitForTxnCommit
-			if !roachpb.TxnIDEqual(txn.Proto.ID, txnID) {
-				t.Errorf("txn ID is not propagated; got %s", txn.Proto.ID)
-			}
-		}
-
-		// The commit returns an error, and it will pass
-		// the txn data to the next iteration.
-		err := txn.Put(key, "val")
-		if epoch == 1 {
-			txnID = assertTransactionPushErrorWithTxnIDSet(t, err)
-		}
-		return err
-	}); err != nil {
-		t.Errorf("unexpected error on transactional Puts: %s", err)
-	}
-
-	if e := 2; epoch != e {
-		t.Errorf("unexpected epoch; the txn must be attempted %d times, but got %d attempts", e, epoch)
-		if epoch == 1 {
-			// Wait for the completion of the goroutine to see if it successfully commits the txn.
-			close(waitForTxnRestart)
-			log.Infof(context.TODO(), "Waiting for the txn commit")
-			<-waitForTxnCommit
-		}
 	}
 }

@@ -109,6 +109,7 @@ var commands = map[roachpb.Method]Command{
 	roachpb.HeartbeatTxn:       {DeclareKeys: DefaultDeclareKeys, Eval: evalHeartbeatTxn},
 	roachpb.GC:                 {DeclareKeys: DefaultDeclareKeys, Eval: evalGC},
 	roachpb.PushTxn:            {DeclareKeys: DefaultDeclareKeys, Eval: evalPushTxn},
+	roachpb.QueryTxn:           {DeclareKeys: DefaultDeclareKeys, Eval: evalQueryTxn},
 	roachpb.ResolveIntent:      {DeclareKeys: DefaultDeclareKeys, Eval: evalResolveIntent},
 	roachpb.ResolveIntentRange: {DeclareKeys: DefaultDeclareKeys, Eval: evalResolveIntentRange},
 	roachpb.Merge:              {DeclareKeys: DefaultDeclareKeys, Eval: evalMerge},
@@ -639,7 +640,9 @@ func evalEndTransaction(
 	// will immediately succeed as a missing txn record on push sets the
 	// transaction to aborted. In both cases, the txn will be GC'd on
 	// the slow path.
-	if err := pd.MergeAndDestroy(intentsToEvalResult(externalIntents, args)); err != nil {
+	intentsResult := intentsToEvalResult(externalIntents, args)
+	intentsResult.Local.updatedTxn = reply.Txn
+	if err := pd.MergeAndDestroy(intentsResult); err != nil {
 		return EvalResult{}, err
 	}
 	return pd, nil
@@ -1277,14 +1280,16 @@ func evalPushTxn(
 	ctx context.Context, batch engine.ReadWriter, cArgs CommandArgs, resp roachpb.Response,
 ) (EvalResult, error) {
 	args := cArgs.Args.(*roachpb.PushTxnRequest)
-	h := cArgs.Header
 	reply := resp.(*roachpb.PushTxnResponse)
 
-	if h.Txn != nil {
+	if cArgs.Header.Txn != nil {
 		return EvalResult{}, errTransactionUnsupported
 	}
 	if args.Now.Equal(hlc.ZeroTimestamp) {
 		return EvalResult{}, errors.Errorf("the field Now must be provided")
+	}
+	if args.PushType == roachpb.PUSH_QUERY {
+		return EvalResult{}, errors.Errorf("PUSH_QUERY no longer supported")
 	}
 
 	if !bytes.Equal(args.Key, args.PusheeTxn.Key) {
@@ -1319,16 +1324,6 @@ func evalPushTxn(
 	// recreating a GC'ed transaction as PENDING, which is an error if it
 	// has open intents (which is likely if someone pushes it).
 	if !ok {
-		// If getting an update for a transaction record which doesn't yet
-		// exist, return empty Pushee, except when querying.
-		//
-		// Note that we *do* abort the transaction in PUSH_TOUCH mode. This
-		// leaves transactions which write intents before their txn entry
-		// vulnerable, but the alternative is having more intents never cleaned
-		// up eagerly.
-		if args.PushType == roachpb.PUSH_QUERY {
-			return EvalResult{}, nil
-		}
 		// The transaction doesn't exist on disk; we're allowed to abort it.
 		// TODO(tschottdorf): especially for SNAPSHOT transactions, there's
 		// something to win here by not aborting, but instead pushing the
@@ -1365,13 +1360,6 @@ func evalPushTxn(
 		return EvalResult{}, nil
 	}
 
-	// If getting an update for a transaction record, return now.
-	if args.PushType == roachpb.PUSH_QUERY {
-		return EvalResult{}, nil
-	}
-
-	priority := args.PusherTxn.Priority
-
 	var pusherWins bool
 	var reason string
 
@@ -1391,17 +1379,14 @@ func evalPushTxn(
 		// Can always push a SNAPSHOT txn's timestamp.
 		reason = "pushee is SNAPSHOT"
 		pusherWins = true
-	case reply.PusheeTxn.Priority != priority:
-		reason = "priority"
-		pusherWins = reply.PusheeTxn.Priority < priority
-	case args.PusherTxn.ID == nil:
-		reason = "equal priorities; pusher not transactional"
-		pusherWins = false
-	default:
-		reason = "equal priorities; greater ID wins"
-		pusherWins = bytes.Compare(reply.PusheeTxn.ID.GetBytes(),
-			args.PusherTxn.ID.GetBytes()) < 0
+	case canPushWithPriority(&args.PusherTxn, &reply.PusheeTxn, args.NewPriorities):
+		reason = "pusher has priority"
+		pusherWins = true
+	case args.Force:
+		reason = "forced txn abort"
+		pusherWins = true
 	}
+	log.Infof(ctx, "pusher wins: %t, reason: %s", pusherWins, reason)
 
 	if log.V(1) && reason != "" {
 		s := "pushed"
@@ -1422,7 +1407,7 @@ func evalPushTxn(
 	}
 
 	// Upgrade priority of pushed transaction to one less than pusher's.
-	reply.PusheeTxn.UpgradePriority(priority - 1)
+	reply.PusheeTxn.UpgradePriority(args.PusherTxn.Priority - 1)
 
 	// If aborting transaction, set new status and return success.
 	if args.PushType == roachpb.PUSH_ABORT {
@@ -1440,6 +1425,56 @@ func evalPushTxn(
 	if err := engine.MVCCPutProto(ctx, batch, cArgs.Stats, key, hlc.ZeroTimestamp, nil, &reply.PusheeTxn); err != nil {
 		return EvalResult{}, err
 	}
+	result := EvalResult{}
+	result.Local.updatedTxn = &reply.PusheeTxn
+	return result, nil
+}
+
+func canPushWithPriority(pusher, pushee *roachpb.Transaction, newPriorities bool) bool {
+	if newPriorities {
+		if (pusher.Priority > roachpb.MinTxnPriority && pushee.Priority == roachpb.MinTxnPriority) ||
+			(pusher.Priority == roachpb.MaxTxnPriority && pushee.Priority < pusher.Priority) {
+			return true
+		}
+	} else {
+		if pusher.Priority != pushee.Priority {
+			return pusher.Priority > pushee.Priority
+		} else if pusher.ID != nil {
+			return bytes.Compare(pushee.ID.GetBytes(), pusher.ID.GetBytes()) < 0
+		}
+	}
+	return false
+}
+
+// evalQueryTxn fetches the current state of a transaction.
+// This method is used to continually update the state of a txn
+// which is blocked waiting to resolve a conflicting intent. It
+// fetches the complete transaction record to determine whether
+// priority or status has changed and also fetches a list of
+// other txns which are waiting on this transaction in order
+// to find dependency cycles.
+func evalQueryTxn(
+	ctx context.Context, batch engine.ReadWriter, cArgs CommandArgs, resp roachpb.Response,
+) (EvalResult, error) {
+	args := cArgs.Args.(*roachpb.QueryTxnRequest)
+	reply := resp.(*roachpb.QueryTxnResponse)
+
+	if cArgs.Header.Txn != nil {
+		return EvalResult{}, errTransactionUnsupported
+	}
+	if !bytes.Equal(args.Key, args.Txn.Key) {
+		return EvalResult{}, errors.Errorf("request key %s does not match txn key %s", args.Key, args.Txn.Key)
+	}
+	key := keys.TransactionKey(args.Txn.Key, *args.Txn.ID)
+
+	// Fetch transaction record; if missing, return empty txn.
+	ok, err := engine.MVCCGetProto(ctx, batch, key, hlc.ZeroTimestamp,
+		true /* consistent */, nil /* txn */, &reply.QueriedTxn)
+	if err != nil || !ok {
+		return EvalResult{}, err
+	}
+	// Get the list of txns waiting on this txn.
+	reply.WaitingTxns = cArgs.Repl.pushTxnQueue.GetDependents(*args.Txn.ID)
 	return EvalResult{}, nil
 }
 

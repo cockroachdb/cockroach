@@ -282,10 +282,6 @@ type ExecutorTestingKnobs struct {
 	// that executed statements are not modified during execution.
 	CheckStmtStringChange bool
 
-	// FixTxnPriority causes transaction priority values to be hardcoded (for
-	// each priority level) to avoid the randomness in the normal generation.
-	FixTxnPriority bool
-
 	// StatementFilter can be used to trap execution of SQL statements and
 	// optionally change their results. The filter function is invoked after each
 	// statement has been executed.

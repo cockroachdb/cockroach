@@ -104,3 +104,30 @@ func TestRetryStop(t *testing.T) {
 		t.Errorf("expected %d attempts, got %d", expAttempts, attempts)
 	}
 }
+
+func TestRetryNextCh(t *testing.T) {
+	opts := Options{
+		InitialBackoff: time.Second,
+		MaxBackoff:     time.Second,
+		Multiplier:     2,
+		MaxRetries:     1,
+	}
+
+	var attempts int
+
+	// Create a retry loop which will never stop without stopper.
+	for r := Start(opts); attempts < 2; attempts++ {
+		if r.currentAttempt != attempts {
+			t.Errorf("expected attempt=%d; got %d", attempts, r.currentAttempt)
+		}
+		if attempts == 0 {
+			if r.NextCh() == nil {
+				t.Errorf("expected non-nil NextCh() on first attempt")
+			}
+		} else if attempts == 1 {
+			if r.NextCh() != nil {
+				t.Errorf("expected nil NextCh() on second attempt")
+			}
+		}
+	}
+}
