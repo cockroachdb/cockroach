@@ -1430,169 +1430,8 @@ func (d *DInterval) Size() uintptr {
 	return unsafe.Sizeof(*d)
 }
 
-// DTuple is the tuple Datum.
+// DTuple is a slice of Datum values.
 type DTuple []Datum
-
-// ResolvedType implements the TypedExpr interface.
-func (d *DTuple) ResolvedType() Type {
-	typ := make(TTuple, len(*d))
-	for i, v := range *d {
-		typ[i] = v.ResolvedType()
-	}
-	return typ
-}
-
-// Compare implements the Datum interface.
-func (d *DTuple) Compare(other Datum) int {
-	if other == DNull {
-		// NULL is less than any non-NULL value.
-		return 1
-	}
-	v, ok := other.(*DTuple)
-	if !ok {
-		panic(makeUnsupportedComparisonMessage(d, other))
-	}
-	n := len(*d)
-	if n > len(*v) {
-		n = len(*v)
-	}
-	for i := 0; i < n; i++ {
-		c := (*d)[i].Compare((*v)[i])
-		if c != 0 {
-			return c
-		}
-	}
-	if len(*d) < len(*v) {
-		return -1
-	}
-	if len(*d) > len(*v) {
-		return 1
-	}
-	return 0
-}
-
-// Prev implements the Datum interface.
-func (d *DTuple) Prev() (Datum, bool) {
-	// Note: (a:decimal, b:int, c:int) has a prev value; that's (a, b,
-	// c-1). With an exception if c is MinInt64, in which case the prev
-	// value is (a, b-1, max()). However, (a:int, b:decimal) does not
-	// have a prev value, because decimal doesn't have one.
-	//
-	// In general, a tuple has a prev value if and only if it ends with
-	// zero or more values that are a minimum and a maximum value of the
-	// same type exists, and the first element before that has a prev
-	// value.
-	n := make(DTuple, len(*d))
-	copy(n, *d)
-	for i := len(n) - 1; i >= 0; i-- {
-		if !n[i].IsMin() {
-			prevVal, ok := n[i].Prev()
-			if !ok {
-				return nil, false
-			}
-			n[i] = prevVal
-			break
-		}
-		maxVal, ok := n[i].max()
-		if !ok {
-			return nil, false
-		}
-		n[i] = maxVal
-	}
-	return &n, true
-}
-
-// Next implements the Datum interface.
-func (d *DTuple) Next() (Datum, bool) {
-	// Note: (a:decimal, b:int, c:int) has a next value; that's (a, b,
-	// c+1). With an exception if c is MaxInt64, in which case the next
-	// value is (a, b+1, min()). However, (a:int, b:decimal) does not
-	// have a next value, because decimal doesn't have one.
-	//
-	// In general, a tuple has a next value if and only if it ends with
-	// zero or more values that are a maximum and a minimum value of the
-	// same type exists, and the first element before that has a next
-	// value.
-	n := make(DTuple, len(*d))
-	copy(n, *d)
-	for i := len(n) - 1; i >= 0; i-- {
-		if !n[i].IsMax() {
-			nextVal, ok := n[i].Next()
-			if !ok {
-				return nil, false
-			}
-			n[i] = nextVal
-			break
-		}
-		minVal, ok := n[i].min()
-		if !ok {
-			return nil, false
-		}
-		n[i] = minVal
-	}
-	return &n, true
-}
-
-// max implements the Datum interface.
-func (d *DTuple) max() (Datum, bool) {
-	res := make(DTuple, len(*d))
-	for i, v := range *d {
-		m, ok := v.max()
-		if !ok {
-			return nil, false
-		}
-		res[i] = m
-	}
-	return &res, true
-}
-
-// max implements the Datum interface.
-func (d *DTuple) min() (Datum, bool) {
-	res := make(DTuple, len(*d))
-	for i, v := range *d {
-		m, ok := v.min()
-		if !ok {
-			return nil, false
-		}
-		res[i] = m
-	}
-	return &res, true
-}
-
-// IsMax implements the Datum interface.
-func (d *DTuple) IsMax() bool {
-	for _, v := range *d {
-		if !v.IsMax() {
-			return false
-		}
-	}
-	return true
-}
-
-// IsMin implements the Datum interface.
-func (d *DTuple) IsMin() bool {
-	for _, v := range *d {
-		if !v.IsMin() {
-			return false
-		}
-	}
-	return true
-}
-
-// AmbiguousFormat implements the Datum interface.
-func (*DTuple) AmbiguousFormat() bool { return false }
-
-// Format implements the NodeFormatter interface.
-func (d *DTuple) Format(buf *bytes.Buffer, f FmtFlags) {
-	buf.WriteByte('(')
-	for i, v := range *d {
-		if i > 0 {
-			buf.WriteString(", ")
-		}
-		FormatNode(buf, f, v)
-	}
-	buf.WriteByte(')')
-}
 
 func (d *DTuple) Len() int {
 	return len(*d)
@@ -1606,30 +1445,220 @@ func (d *DTuple) Swap(i, j int) {
 	(*d)[i], (*d)[j] = (*d)[j], (*d)[i]
 }
 
+// Format implements the NodeFormatter interface.
+func (d *DTuple) Format(buf *bytes.Buffer, f FmtFlags) {
+	buf.WriteByte('(')
+	for i, v := range *d {
+		if i > 0 {
+			buf.WriteString(", ")
+		}
+		FormatNode(buf, f, v)
+	}
+	buf.WriteByte(')')
+}
+
+// DTupleDatum is the tuple Datum.
+type DTupleDatum struct {
+	D DTuple
+}
+
+// NewDTupleDatum creates a *DTupleDatum with the provided datums.
+func NewDTupleDatum(d ...Datum) *DTupleDatum {
+	return &DTupleDatum{D: d}
+}
+
+// NewDTupleDatumWithLen creates a *DTupleDatum with the provided length.
+func NewDTupleDatumWithLen(l int) *DTupleDatum {
+	return &DTupleDatum{D: make([]Datum, l)}
+}
+
+// NewDTupleDatumWithCap creates a *DTupleDatum with the provided capacity.
+func NewDTupleDatumWithCap(c int) *DTupleDatum {
+	return &DTupleDatum{D: make([]Datum, 0, c)}
+}
+
+// ResolvedType implements the TypedExpr interface.
+func (d *DTupleDatum) ResolvedType() Type {
+	typ := make(TTuple, len(d.D))
+	for i, v := range d.D {
+		typ[i] = v.ResolvedType()
+	}
+	return typ
+}
+
+// Compare implements the Datum interface.
+func (d *DTupleDatum) Compare(other Datum) int {
+	if other == DNull {
+		// NULL is less than any non-NULL value.
+		return 1
+	}
+	v, ok := other.(*DTupleDatum)
+	if !ok {
+		panic(makeUnsupportedComparisonMessage(d, other))
+	}
+	n := len(d.D)
+	if n > len(v.D) {
+		n = len(v.D)
+	}
+	for i := 0; i < n; i++ {
+		c := d.D[i].Compare(v.D[i])
+		if c != 0 {
+			return c
+		}
+	}
+	if len(d.D) < len(v.D) {
+		return -1
+	}
+	if len(d.D) > len(v.D) {
+		return 1
+	}
+	return 0
+}
+
+// Prev implements the Datum interface.
+func (d *DTupleDatum) Prev() (Datum, bool) {
+	// Note: (a:decimal, b:int, c:int) has a prev value; that's (a, b,
+	// c-1). With an exception if c is MinInt64, in which case the prev
+	// value is (a, b-1, max()). However, (a:int, b:decimal) does not
+	// have a prev value, because decimal doesn't have one.
+	//
+	// In general, a tuple has a prev value if and only if it ends with
+	// zero or more values that are a minimum and a maximum value of the
+	// same type exists, and the first element before that has a prev
+	// value.
+	res := NewDTupleDatumWithLen(len(d.D))
+	copy(res.D, d.D)
+	for i := len(res.D) - 1; i >= 0; i-- {
+		if !res.D[i].IsMin() {
+			prevVal, ok := res.D[i].Prev()
+			if !ok {
+				return nil, false
+			}
+			res.D[i] = prevVal
+			break
+		}
+		maxVal, ok := res.D[i].max()
+		if !ok {
+			return nil, false
+		}
+		res.D[i] = maxVal
+	}
+	return res, true
+}
+
+// Next implements the Datum interface.
+func (d *DTupleDatum) Next() (Datum, bool) {
+	// Note: (a:decimal, b:int, c:int) has a next value; that's (a, b,
+	// c+1). With an exception if c is MaxInt64, in which case the next
+	// value is (a, b+1, min()). However, (a:int, b:decimal) does not
+	// have a next value, because decimal doesn't have one.
+	//
+	// In general, a tuple has a next value if and only if it ends with
+	// zero or more values that are a maximum and a minimum value of the
+	// same type exists, and the first element before that has a next
+	// value.
+	res := NewDTupleDatumWithLen(len(d.D))
+	copy(res.D, d.D)
+	for i := len(res.D) - 1; i >= 0; i-- {
+		if !res.D[i].IsMax() {
+			nextVal, ok := res.D[i].Next()
+			if !ok {
+				return nil, false
+			}
+			res.D[i] = nextVal
+			break
+		}
+		minVal, ok := res.D[i].min()
+		if !ok {
+			return nil, false
+		}
+		res.D[i] = minVal
+	}
+	return res, true
+}
+
+// max implements the Datum interface.
+func (d *DTupleDatum) max() (Datum, bool) {
+	res := NewDTupleDatumWithLen(len(d.D))
+	for i, v := range d.D {
+		m, ok := v.max()
+		if !ok {
+			return nil, false
+		}
+		res.D[i] = m
+	}
+	return res, true
+}
+
+// max implements the Datum interface.
+func (d *DTupleDatum) min() (Datum, bool) {
+	res := NewDTupleDatumWithLen(len(d.D))
+	for i, v := range d.D {
+		m, ok := v.min()
+		if !ok {
+			return nil, false
+		}
+		res.D[i] = m
+	}
+	return res, true
+}
+
+// IsMax implements the Datum interface.
+func (d *DTupleDatum) IsMax() bool {
+	for _, v := range d.D {
+		if !v.IsMax() {
+			return false
+		}
+	}
+	return true
+}
+
+// IsMin implements the Datum interface.
+func (d *DTupleDatum) IsMin() bool {
+	for _, v := range d.D {
+		if !v.IsMin() {
+			return false
+		}
+	}
+	return true
+}
+
+// AmbiguousFormat implements the Datum interface.
+func (*DTupleDatum) AmbiguousFormat() bool { return false }
+
+// Format implements the NodeFormatter interface.
+func (d *DTupleDatum) Format(buf *bytes.Buffer, f FmtFlags) {
+	d.D.Format(buf, f)
+}
+
+func (d *DTupleDatum) Len() int           { return d.D.Len() }
+func (d *DTupleDatum) Less(i, j int) bool { return d.D.Less(i, j) }
+func (d *DTupleDatum) Swap(i, j int)      { d.D.Swap(i, j) }
+
 // Normalize sorts and uniques the datum tuple.
-func (d *DTuple) Normalize() {
+func (d *DTupleDatum) Normalize() {
 	sort.Sort(d)
 	d.makeUnique()
 }
 
-func (d *DTuple) makeUnique() {
+func (d *DTupleDatum) makeUnique() {
 	n := 0
-	for i := 0; i < len(*d); i++ {
-		if (*d)[i] == DNull {
+	for i := 0; i < len(d.D); i++ {
+		if d.D[i] == DNull {
 			continue
 		}
-		if n == 0 || (*d)[n-1].Compare((*d)[i]) < 0 {
-			(*d)[n] = (*d)[i]
+		if n == 0 || d.D[n-1].Compare(d.D[i]) < 0 {
+			d.D[n] = d.D[i]
 			n++
 		}
 	}
-	*d = (*d)[:n]
+	d.D = d.D[:n]
 }
 
 // Size implements the Datum interface.
-func (d *DTuple) Size() uintptr {
+func (d *DTupleDatum) Size() uintptr {
 	sz := unsafe.Sizeof(*d)
-	for _, e := range *d {
+	for _, e := range d.D {
 		dsz := e.Size()
 		sz += dsz
 	}
@@ -1638,14 +1667,14 @@ func (d *DTuple) Size() uintptr {
 
 // SortedDifference finds the elements of d which are not in other,
 // assuming that d and other are already sorted.
-func (d *DTuple) SortedDifference(other *DTuple) *DTuple {
-	var r DTuple
-	a := *d
-	b := *other
+func (d *DTupleDatum) SortedDifference(other *DTupleDatum) *DTupleDatum {
+	var res DTupleDatum
+	a := d.D
+	b := other.D
 	for len(a) > 0 && len(b) > 0 {
 		switch a[0].Compare(b[0]) {
 		case -1:
-			r = append(r, a[0])
+			res.D = append(res.D, a[0])
 			a = a[1:]
 		case 0:
 			a = a[1:]
@@ -1654,7 +1683,7 @@ func (d *DTuple) SortedDifference(other *DTuple) *DTuple {
 			b = b[1:]
 		}
 	}
-	return &r
+	return &res
 }
 
 type dNull struct{}

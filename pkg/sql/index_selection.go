@@ -1020,7 +1020,7 @@ func applyInConstraint(
 	} else {
 		e = c.end
 	}
-	tuple := *e.Right.(*parser.DTuple)
+	tuple := e.Right.(*parser.DTupleDatum).D
 	existingSpans := spans
 	spans = make([]roachpb.Span, 0, len(existingSpans)*len(tuple))
 	for _, datum := range tuple {
@@ -1029,7 +1029,7 @@ func applyInConstraint(
 		var start, end []byte
 
 		switch t := datum.(type) {
-		case *parser.DTuple:
+		case *parser.DTupleDatum:
 			// The constraint is a tuple of tuples, meaning something like
 			// (...) IN ((1,2),(3,4)).
 			for j, tupleIdx := range c.tupleMap {
@@ -1039,11 +1039,11 @@ func applyInConstraint(
 					panic(err)
 				}
 
-				if start, err = sqlbase.EncodeTableKey(start, (*t)[tupleIdx], colDir); err != nil {
+				if start, err = sqlbase.EncodeTableKey(start, t.D[tupleIdx], colDir); err != nil {
 					panic(err)
 				}
 				end = encodeInclusiveEndValue(
-					end, (*t)[tupleIdx], colDir, isLastEndConstraint && (j == len(c.tupleMap)-1))
+					end, t.D[tupleIdx], colDir, isLastEndConstraint && (j == len(c.tupleMap)-1))
 			}
 		default:
 			// The constraint is a tuple of values, meaning something like
@@ -1245,7 +1245,7 @@ func (ic indexConstraints) exactPrefix() int {
 		case parser.EQ:
 			prefix++
 		case parser.In:
-			if tuple, ok := c.start.Right.(*parser.DTuple); !ok || len(*tuple) != 1 {
+			if tuple, ok := c.start.Right.(*parser.DTupleDatum); !ok || len(tuple.D) != 1 {
 				// TODO(radu): we may still have an exact prefix if the first
 				// value in each tuple is the same, e.g.
 				// `(a, b) IN ((1, 2), (1, 3))`
@@ -1279,12 +1279,12 @@ func (ic indexConstraints) exactPrefixDatums(num int) []parser.Datum {
 		case parser.EQ:
 			datums = append(datums, c.start.Right.(parser.Datum))
 		case parser.In:
-			right := (*c.start.Right.(*parser.DTuple))[0]
+			right := c.start.Right.(*parser.DTupleDatum).D[0]
 			if _, ok := c.start.Left.(*parser.Tuple); ok {
 				// We have something like `(a,b,c) IN (1,2,3)`
-				rtuple := *right.(*parser.DTuple)
+				rtuple := right.(*parser.DTupleDatum)
 				for _, tupleIdx := range c.tupleMap {
-					datums = append(datums, rtuple[tupleIdx])
+					datums = append(datums, rtuple.D[tupleIdx])
 					if len(datums) == num {
 						return datums
 					}
@@ -1385,7 +1385,7 @@ func applyIndexConstraints(
 			}
 			// The second case is that both the start and end constraint are an IN
 			// operator with only a single value.
-			if c.start.Operator == parser.In && len(*c.start.Right.(*parser.DTuple)) == 1 {
+			if c.start.Operator == parser.In && len(c.start.Right.(*parser.DTupleDatum).D) == 1 {
 				continue
 			}
 		}
@@ -1449,7 +1449,7 @@ func (v *applyConstraintsVisitor) VisitPre(expr parser.Expr) (recurse bool, newE
 				}
 			case parser.In:
 				// Expr: "a = <val>", constraint: "a IN (<vals>)".
-				ctuple := *cdatum.(*parser.DTuple)
+				ctuple := cdatum.(*parser.DTupleDatum).D
 				if reflect.TypeOf(datum) != reflect.TypeOf(ctuple[0]) {
 					return true, expr
 				}
@@ -1472,8 +1472,8 @@ func (v *applyConstraintsVisitor) VisitPre(expr parser.Expr) (recurse bool, newE
 				if reflect.TypeOf(datum) != reflect.TypeOf(cdatum) {
 					return true, expr
 				}
-				diff := datum.(*parser.DTuple).SortedDifference(cdatum.(*parser.DTuple))
-				if len(*diff) == 0 {
+				diff := datum.(*parser.DTupleDatum).SortedDifference(cdatum.(*parser.DTupleDatum))
+				if len(diff.D) == 0 {
 					return false, parser.DBoolTrue
 				}
 				t.Right = diff
