@@ -4,8 +4,9 @@ set -exuo pipefail
 # This is intended to run in a CI to ensure dependencies are properly vendored.
 
 echo "installing desired glide version"
-go get github.com/Masterminds/glide
-git -C $GOPATH/src/github.com/Masterminds/glide checkout v0.12.3
+go get -u github.com/Masterminds/glide
+# ab0972eb merged our fix for correctly vendoring submodule contents.
+git -C $GOPATH/src/github.com/Masterminds/glide checkout ab0972eb
 go install github.com/Masterminds/glide
 
 echo "checking that 'vendor' matches manifest"
