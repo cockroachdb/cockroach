@@ -327,6 +327,29 @@ func (desc *TableDescriptor) AllNonDropIndexes() []IndexDescriptor {
 	return indexes
 }
 
+// ForeachNonDropIndex runs a function on all indexes, including those being
+// added in the mutations.
+func (desc *TableDescriptor) ForeachNonDropIndex(f func(*IndexDescriptor) error) error {
+	if desc.IsPhysicalTable() {
+		if err := f(&desc.PrimaryIndex); err != nil {
+			return err
+		}
+	}
+	for i := range desc.Indexes {
+		if err := f(&desc.Indexes[i]); err != nil {
+			return err
+		}
+	}
+	for _, m := range desc.Mutations {
+		if idx := m.GetIndex(); idx != nil && m.Direction == DescriptorMutation_ADD {
+			if err := f(idx); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
 func generatedFamilyName(familyID FamilyID, columnNames []string) string {
 	var buf bytes.Buffer
 	fmt.Fprintf(&buf, "fam_%d", familyID)

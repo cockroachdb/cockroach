@@ -24,6 +24,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 const (
@@ -124,13 +125,17 @@ type ExportStorage interface {
 // file, not an io.Writer, and the required call to `Finish` gives
 // implementations the opportunity to move/copy/upload/etc as needed.
 type ExportFileWriter interface {
-	io.Closer
 	// LocalFile returns the path to a local path to which a caller should write.
 	LocalFile() string
-	// Finish indicates that no further writes to the local file are exepcted and
+	// Finish indicates that no further writes to the local file are expected and
 	// that the implementation should store the content (copy it, upload, etc) if
 	// that has not already been done in a streaming fashion (e.g. via a pipe).
 	Finish() error
+	// Cleanup removes any temporary files or resources that were made on behalf
+	// of this writer. If `Finish` has not been called, any writes to
+	// `LocalFile` will be lost. Implementations of `Cleanup` are required to be
+	// idempotent and should log any errors.
+	Cleanup()
 }
 
 type localFileStorage struct {
@@ -192,8 +197,10 @@ func (l localFileStorageWriter) Finish() error {
 	return os.Rename(l.LocalFile(), l.path)
 }
 
-func (l localFileStorageWriter) Close() error {
-	return nil
+func (l localFileStorageWriter) Cleanup() {
+	if err := os.RemoveAll(l.LocalFile()); err != nil {
+		log.Warningf(context.TODO(), "could not remove %q: %+v", l.LocalFile(), err)
+	}
 }
 
 type httpStorage struct {
@@ -292,8 +299,8 @@ func runHTTPRequest(c *http.Client, method, url string, body io.Reader) (io.Read
 	return resp.Body, nil
 }
 
-func (l httpStorageWriter) Close() error {
-	return nil
+func (l httpStorageWriter) Cleanup() {
+	return // No-op.
 }
 
 type s3Storage struct {
@@ -360,11 +367,13 @@ func (s *s3StorageWriter) Finish() error {
 	if _, err := io.Copy(s.w, f); err != nil {
 		return errors.Wrap(err, "failed to copy to s3")
 	}
-	return s.Close()
+	return s.w.Close()
 }
 
-func (s *s3StorageWriter) Close() error {
-	return s.w.Close()
+func (s *s3StorageWriter) Cleanup() {
+	if err := s.w.Close(); err != nil {
+		log.Warningf(context.TODO(), "couldn't cleanup s3StorageWriter: %+v", err)
+	}
 }
 
 func (s *s3Storage) ReadFile(_ context.Context, basename string) (io.ReadCloser, error) {
@@ -466,11 +475,13 @@ func (g *gcsStorageWriter) Finish() error {
 	if _, err := io.Copy(g.w, f); err != nil {
 		return errors.Wrap(err, "failed to write to google cloud")
 	}
-	return g.Close()
+	return g.w.Close()
 }
 
-func (g *gcsStorageWriter) Close() error {
-	return g.w.Close()
+func (g *gcsStorageWriter) Cleanup() {
+	if err := g.w.Close(); err != nil {
+		log.Warningf(context.TODO(), "couldn't cleanup gcsStorageWriter: %+v", err)
+	}
 }
 
 func (g *gcsStorage) ReadFile(ctx context.Context, basename string) (io.ReadCloser, error) {
