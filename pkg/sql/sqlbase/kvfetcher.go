@@ -98,6 +98,24 @@ type kvFetcher struct {
 	kvs          []client.KeyValue
 	kvIndex      int
 	totalFetched int64
+
+	// returnRangeInfo, is set, causes the kvFetcher to populate rangeInfos.
+	// See also rowFetcher.returnRangeInfo.
+	returnRangeInfo bool
+
+	// As the kvFetcher fetches batches of kvs, it accumulates information on the
+	// replicas where the batches came from. This info can be retrieved through
+	// getRangeInfo(), to be used for updating caches.
+	// rangeInfos are deduped, so they're not ordered in any particular way and
+	// they don't map to kvFetcher.spans in any particular way.
+	rangeInfos []roachpb.RangeInfo
+}
+
+func (f *kvFetcher) getRangesInfo() []roachpb.RangeInfo {
+	if !f.returnRangeInfo {
+		panic("GetRangeInfo() called on kvFetcher that wasn't configured with returnRangeInfo")
+	}
+	return f.rangeInfos
 }
 
 // getBatchSize returns the max size of the next batch.
@@ -150,7 +168,12 @@ func (f *kvFetcher) getBatchSize() int64 {
 //
 // Batch limits can only be used if the spans are ordered.
 func makeKVFetcher(
-	txn *client.Txn, spans roachpb.Spans, reverse bool, useBatchLimit bool, firstBatchLimit int64,
+	txn *client.Txn,
+	spans roachpb.Spans,
+	reverse bool,
+	useBatchLimit bool,
+	firstBatchLimit int64,
+	returnRangeInfo bool,
 ) (kvFetcher, error) {
 	if firstBatchLimit < 0 || (!useBatchLimit && firstBatchLimit != 0) {
 		return kvFetcher{}, errors.Errorf("invalid batch limit %d (useBatchLimit: %t)",
@@ -183,6 +206,7 @@ func makeKVFetcher(
 		reverse:         reverse,
 		useBatchLimit:   useBatchLimit,
 		firstBatchLimit: firstBatchLimit,
+		returnRangeInfo: returnRangeInfo,
 	}, nil
 }
 
@@ -193,6 +217,7 @@ func (f *kvFetcher) fetch() error {
 	b := &f.batch
 	*b = client.Batch{}
 	b.Header.MaxSpanRequestKeys = batchSize
+	b.Header.ReturnRangeInfo = f.returnRangeInfo
 
 	for _, span := range f.spans {
 		if f.reverse {
@@ -238,6 +263,11 @@ func (f *kvFetcher) fetch() error {
 		if result.ResumeSpan.Key != nil {
 			// Verify we don't receive results for any remaining spans.
 			sawResumeSpan = true
+		}
+		if f.returnRangeInfo {
+			for _, ri := range result.RangeInfos {
+				f.rangeInfos = roachpb.InsertRangeInfo(f.rangeInfos, ri)
+			}
 		}
 	}
 
