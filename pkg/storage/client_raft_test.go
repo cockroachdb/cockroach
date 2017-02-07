@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -829,7 +830,7 @@ func TestReplicateAfterRemoveAndSplit(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	mtc.expireLeases(context.TODO())
+	mtc.advanceClock(context.TODO())
 
 	// Restart store 2.
 	mtc.restartStore(2)
@@ -947,46 +948,47 @@ func TestRefreshPendingCommands(t *testing.T) {
 			mtc.stopStore(0)
 			mtc.restartStore(0)
 
+			////////////////////////////////////////////////////////////////////
+			// We want store 2 to take the lease later, so we'll drain the other
+			// stores and expire the lease.
+			////////////////////////////////////////////////////////////////////
+
 			// Disable node liveness heartbeats which can reacquire leases when we're
 			// trying to expire them. We pause liveness heartbeats here after node 0
 			// was restarted (which creates a new NodeLiveness).
 			pauseNodeLivenessHeartbeats(mtc, true)
 
-			// Expire existing leases (i.e. move the clock forward, but don't
-			// increment epochs). This allows node 2 to grab the lease later
-			// in the test.
-			testutils.SucceedsSoon(t, func() error {
-				mtc.expireLeasesWithoutIncrementingEpochs()
-				// Drain leases from nodes 0 and 1 to prevent them from grabbing any new
-				// leases.
-				for i := 0; i < 2; i++ {
+			// Start draining stores 0 and 1 to prevent them from grabbing any new
+			// leases.
+			mtc.advanceClock(context.Background())
+			var wg util.WaitGroupWithError
+			for i := 0; i < 2; i++ {
+				wg.Add(1)
+				go func(i int) {
 					if err := mtc.stores[i].DrainLeases(true); err != nil {
-						return errors.Wrapf(err, "store %d", i)
+						wg.Done(errors.Wrapf(err, "store %d", i))
+						return
 					}
-				}
-				return nil
-			})
+					wg.Done(nil)
+				}(i)
+			}
 
-			// TODO(peter,andrei): This shouldn't be necessary, but removes flakiness
-			// in TestRefreshPendingCommands/#01. The flakiness is caused by the
-			// first NodeLiveness.heartbeatInterval() operation never completing
-			// causing multiTestContext.restartStore(2) below to never return because
-			// the new store is not considered live. Why the heartbeat doesn't
-			// complete is unclear. It looks like the restarted node is able to get
-			// the range lease in order to perform the heartbeat operation, but the
-			// conditional-put for the heartbeat then seems to disappear inside of
-			// the replica.
-			//
-			// Note that node-liveness heartbeats are enabled when a node
-			// restarts. So the line to re-enable them below is present to re-enable
-			// node-liveness heartbeats on nodes 1 and 2. Doing so undoubtedly
-			// affects which node gets the range lease and thus masks the
-			// flakiness. But I suspect the flakiness is due to a real but very rare
-			// bug.
-			//
-			// To reproduce on a GCE worker:
-			//   make stress PKG=./storage/ TESTS='TestRefreshPendingCommands/#01' STRESSFLAGS='-maxfails 1 -stderr -p 64'
-			pauseNodeLivenessHeartbeats(mtc, false)
+			// Wait for the stores 0 and 1 to have entered draining mode, and then
+			// advance the clock. Advancing the clock will leave the liveness records
+			// of draining nodes in an expired state, so the DrainLeases() call above
+			// will be able to terminate.
+			draining := false
+			for !draining {
+				draining = true
+				for i := 0; i < 2; i++ {
+					draining = draining && mtc.stores[i].IsDrainingLeases()
+				}
+			}
+			mtc.advanceClock(context.Background())
+
+			if err := wg.Wait(); err != nil {
+				t.Fatal(err)
+			}
 
 			// Restart node 2 and wait for the snapshot to be applied. Note that
 			// waitForValues reads directly from the engine and thus isn't executing
@@ -1220,7 +1222,7 @@ func TestUnreplicateFirstRange(t *testing.T) {
 	// Replicate the range to store 1.
 	mtc.replicateRange(rangeID, 1)
 	// Move the lease away from store 0 before removing its replica.
-	mtc.transferLease(rangeID, 0, 1)
+	mtc.transferLease(context.TODO(), rangeID, 0, 1)
 	// Unreplicate the from from store 0.
 	mtc.unreplicateRange(rangeID, 0)
 	// Replicate the range to store 2. The first range is no longer available on
@@ -1570,7 +1572,7 @@ func testReplicaAddRemove(t *testing.T, addFirst bool) {
 	}))
 
 	// Wait out the range lease and the unleased duration to make the replica GC'able.
-	mtc.expireLeases(context.TODO())
+	mtc.advanceClock(context.TODO())
 	mtc.manualClock.Increment(int64(storage.ReplicaGCQueueInactivityThreshold + 1))
 	mtc.stores[1].SetReplicaGCQueueActive(true)
 	mtc.stores[1].ForceReplicaGCScanAndProcess()
@@ -1903,7 +1905,7 @@ func TestRaftAfterRemoveRange(t *testing.T) {
 
 	// Expire leases to ensure any remaining intent resolutions can complete.
 	// TODO(bdarnell): understand why some tests need this.
-	mtc.expireLeases(context.TODO())
+	mtc.advanceClock(context.TODO())
 }
 
 // TestRaftRemoveRace adds and removes a replica repeatedly in an attempt to
@@ -2275,7 +2277,7 @@ func TestReplicateRogueRemovedNode(t *testing.T) {
 	// moved under the lock, then the GC scan can be moved out of this loop.
 	mtc.stores[1].SetReplicaGCQueueActive(true)
 	testutils.SucceedsSoon(t, func() error {
-		mtc.expireLeases(context.TODO())
+		mtc.advanceClock(context.TODO())
 		mtc.manualClock.Increment(int64(
 			storage.ReplicaGCQueueInactivityThreshold) + 1)
 		mtc.stores[1].ForceReplicaGCScanAndProcess()
@@ -2359,7 +2361,7 @@ func TestReplicateRogueRemovedNode(t *testing.T) {
 	// will see that the range has been moved and delete the old
 	// replica.
 	mtc.stores[2].SetReplicaGCQueueActive(true)
-	mtc.expireLeases(context.TODO())
+	mtc.advanceClock(context.TODO())
 	mtc.manualClock.Increment(int64(
 		storage.ReplicaGCQueueInactivityThreshold) + 1)
 	mtc.stores[2].ForceReplicaGCScanAndProcess()
@@ -2406,7 +2408,7 @@ func TestReplicateRemovedNodeDisruptiveElection(t *testing.T) {
 	// Move the first range from the first node to the other three.
 	const rangeID = roachpb.RangeID(1)
 	mtc.replicateRange(rangeID, 1, 2, 3)
-	mtc.transferLease(rangeID, 0, 1)
+	mtc.transferLease(context.TODO(), rangeID, 0, 1)
 	mtc.unreplicateRange(rangeID, 0)
 
 	// Ensure that we have a stable lease and raft leader so we can tell if the
@@ -2717,10 +2719,10 @@ func TestRemovedReplicaError(t *testing.T) {
 
 	raftID := roachpb.RangeID(1)
 	mtc.replicateRange(raftID, 1)
-	mtc.transferLease(raftID, 0, 1)
+	mtc.transferLease(context.TODO(), raftID, 0, 1)
 	mtc.unreplicateRange(raftID, 0)
 
-	mtc.manualClock.Increment(mtc.stores[1].LeaseExpiration(mtc.clock))
+	mtc.manualClock.Increment(mtc.storeConfig.LeaseExpiration())
 
 	// Expect to get a RangeNotFoundError. We have to allow for ambiguous result
 	// errors to avoid the occasional test flake.
@@ -2750,7 +2752,7 @@ func TestRemoveRangeWithoutGC(t *testing.T) {
 	mtc.Start(t, 2)
 	const rangeID roachpb.RangeID = 1
 	mtc.replicateRange(rangeID, 1)
-	mtc.transferLease(rangeID, 0, 1)
+	mtc.transferLease(context.TODO(), rangeID, 0, 1)
 	mtc.unreplicateRange(rangeID, 0)
 
 	// Wait for store 0 to process the removal. The in-memory replica
@@ -2792,7 +2794,7 @@ func TestRemoveRangeWithoutGC(t *testing.T) {
 
 	// Re-enable the GC queue to allow the replica to be destroyed
 	// (after the simulated passage of time).
-	mtc.expireLeases(context.TODO())
+	mtc.advanceClock(context.TODO())
 	mtc.manualClock.Increment(int64(storage.ReplicaGCQueueInactivityThreshold + 1))
 	mtc.stores[0].SetReplicaGCQueueActive(true)
 	mtc.stores[0].ForceReplicaGCScanAndProcess()
@@ -2942,7 +2944,7 @@ func TestTransferRaftLeadership(t *testing.T) {
 	// and cause leadership to change hands in ways this test doesn't
 	// expect.
 	sc.RaftElectionTimeoutTicks = 100000
-	// This test can rapidly advance the clock via expireLeases(),
+	// This test can rapidly advance the clock via mtc.advanceClock(),
 	// which could lead the replication queue to consider a store dead
 	// and remove a replica in the middle of the test. Disable the
 	// replication queue; we'll control replication manually.
@@ -2999,7 +3001,7 @@ func TestTransferRaftLeadership(t *testing.T) {
 	// expire-request in a loop until we get our foot in the door.
 	origCount0 := store0.Metrics().RangeRaftLeaderTransfers.Count()
 	for {
-		mtc.expireLeases(context.TODO())
+		mtc.advanceClock(context.TODO())
 		if _, pErr := client.SendWrappedWith(
 			context.Background(), store1, roachpb.Header{RangeID: repl0.RangeID}, getArgs,
 		); pErr == nil {

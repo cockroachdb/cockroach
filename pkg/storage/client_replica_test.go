@@ -743,7 +743,7 @@ func TestLeaseMetricsOnSplitAndTransfer(t *testing.T) {
 	// Expire current leases and put a key to RHS of split to request
 	// an epoch-based lease.
 	testutils.SucceedsSoon(t, func() error {
-		mtc.expireLeases(context.TODO())
+		mtc.advanceClock(context.TODO())
 		if err := mtc.stores[0].DB().Put(context.TODO(), "a", "foo"); err != nil {
 			return err
 		}
@@ -1286,7 +1286,7 @@ func TestCampaignOnLazyRaftGroupInitialization(t *testing.T) {
 						t.Fatal(err)
 					}
 				}
-				mtc.manualClock.Increment(mtc.stores[0].LeaseExpiration(mtc.clock))
+				mtc.manualClock.Increment(mtc.storeConfig.LeaseExpiration())
 			},
 			expCampaigns: map[roachpb.ReplicaID]bool{
 				1: true,
