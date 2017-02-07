@@ -5,7 +5,8 @@ set -exuo pipefail
 
 echo "installing desired glide version"
 go get github.com/Masterminds/glide
-git -C $GOPATH/src/github.com/Masterminds/glide checkout v0.12.3
+# ab0972eb merged our fix for correctly vendoring submodule contents.
+git -C $GOPATH/src/github.com/Masterminds/glide checkout ab0972eb
 go install github.com/Masterminds/glide
 
 echo "checking that 'vendor' matches manifest"

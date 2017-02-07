@@ -42,7 +42,7 @@ type tsSample struct {
 }
 
 func gibberishString(n int) string {
-	b := make([]byte, n, n)
+	b := make([]byte, n)
 	for i := 0; i < n; i++ {
 		b[i] = byte(rand.Intn(math.MaxUint8 + 1))
 	}

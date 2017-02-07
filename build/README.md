@@ -41,6 +41,7 @@ and checked out as a sub-module at `./vendor`.
 This snapshot was built and is managed using `glide`.
 
 The [docs](https://github.com/Masterminds/glide) have detailed instructions, but in brief:
+* `go get -u github.com/Masterminds/glide`
 * run `./scripts/glide.sh` in `cockroachdb/cockroach`.
 * add new dependencies with `./scripts/glide.sh get -s github.com/my/dependency`
 	- Note: if you are adding a non-import dependency (e.g. a binary tool to be used in development),
