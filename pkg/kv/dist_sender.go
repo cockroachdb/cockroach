@@ -1138,8 +1138,8 @@ func (ds *DistSender) sendToReplicas(
 	// Wait for completions. This loop will retry operations that fail
 	// with errors that reflect per-replica state and may succeed on
 	// other replicas.
-	var sendNextTimer timeutil.Timer
-	var slowTimer timeutil.Timer
+	sendNextTimer := timeutil.NewTimer()
+	slowTimer := timeutil.NewTimer()
 	defer sendNextTimer.Stop()
 	defer slowTimer.Stop()
 	slowTimer.Reset(base.SlowRequestThreshold)

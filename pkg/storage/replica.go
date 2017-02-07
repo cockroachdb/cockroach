@@ -1045,7 +1045,7 @@ func (r *Replica) redirectOnOrAcquireLease(ctx context.Context) (LeaseStatus, *r
 
 		// Wait for the range lease to finish, or the context to expire.
 		pErr = func() *roachpb.Error {
-			var slowTimer timeutil.Timer
+			slowTimer := timeutil.NewTimer()
 			defer slowTimer.Stop()
 			slowTimer.Reset(base.SlowRequestThreshold)
 			for {
@@ -1676,7 +1676,7 @@ func (r *Replica) beginCmds(ctx context.Context, ba *roachpb.BatchRequest) (*end
 					// However, the command queue assumes that commands don't drop
 					// out before their prerequisites, so we still have to wait it
 					// out.
-					var slowTimer timeutil.Timer
+					slowTimer := timeutil.NewTimer()
 					defer slowTimer.Stop()
 					slowTimer.Reset(base.SlowRequestThreshold)
 					for _, ch := range chans {
@@ -2158,7 +2158,7 @@ func (r *Replica) tryAddWriteCmd(
 	// If the command was accepted by raft, wait for the range to apply it.
 	ctxDone := ctx.Done()
 	shouldQuiesce := r.store.stopper.ShouldQuiesce()
-	var slowTimer timeutil.Timer
+	slowTimer := timeutil.NewTimer()
 	defer slowTimer.Stop()
 	slowTimer.Reset(base.SlowRequestThreshold)
 	for {
