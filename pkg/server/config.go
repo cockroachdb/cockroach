@@ -268,10 +268,10 @@ func GetTotalMemory() (int64, error) {
 // setOpenFileLimit sets the soft limit for open file descriptors to the hard
 // limit if needed. Returns an error if the hard limit is too low. Returns the
 // value to set maxOpenFiles to for each store.
-// Minimum - 256 per store, 256 saved for networking
+// Minimum - 1700 per store, 256 saved for networking
 // Constrained - 256 saved for networking, rest divided evenly per store
-// Constrained (network only) - 5000 per store, rest saved for networking
-// Recommended - 5000 per store, 5000 for network
+// Constrained (network only) - 10000 per store, rest saved for networking
+// Recommended - 10000 per store, 5000 for network
 // Also, please note that current and max limits are commonly referred to as
 // the soft and hard limits respectively.
 func setOpenFileLimit(physicalStoreCount int) (int, error) {
