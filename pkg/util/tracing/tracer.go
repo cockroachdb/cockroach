@@ -46,7 +46,9 @@ type CallbackRecorder func(sp basictracer.RawSpan)
 
 // RecordSpan implements basictracer.SpanRecorder.
 func (cr CallbackRecorder) RecordSpan(sp basictracer.RawSpan) {
-	cr(sp)
+	if cr != nil {
+		cr(sp)
+	}
 }
 
 // NewTracerAndSpanFor7881 creates a new tracer and a root span. The tracer is
@@ -154,7 +156,7 @@ func basictracerOptions(recorder func(basictracer.RawSpan)) basictracer.Options 
 	opts.NewSpanEventListener = netTraceIntegrator
 	opts.DebugAssertUseAfterFinish = true // provoke crash on use-after-Finish
 	if recorder == nil {
-		opts.Recorder = CallbackRecorder(func(_ basictracer.RawSpan) {})
+		opts.Recorder = CallbackRecorder(nil)
 		// If we are not recording the spans, there is no need to keep them in
 		// memory. Events still get passed to netTraceIntegrator.
 		opts.DropAllLogs = true
@@ -379,10 +381,7 @@ func recorderFromCtx(ctx context.Context) *RecordedTrace {
 // trace.
 func NewRecordingTracer() (opentracing.Tracer, *RecordedTrace) {
 	rec := new(RecordedTrace)
-	recorder := func(rs basictracer.RawSpan) {
-		rec.addSpan(rs)
-	}
-	opts := basictracerOptions(recorder)
+	opts := basictracerOptions(rec.addSpan)
 	// Sample everything. This is required so that logs going to the spans don't
 	// get trimmed.
 	opts.ShouldSample = func(traceID uint64) bool { return true }
