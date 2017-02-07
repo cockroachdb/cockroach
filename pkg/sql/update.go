@@ -348,8 +348,8 @@ func (p *planner) namesForExprs(exprs parser.UpdateExprs) (parser.UnresolvedName
 				}
 			case *parser.Tuple:
 				n = len(t.Exprs)
-			case *parser.DTuple:
-				n = len(*t)
+			case *parser.DTupleDatum:
+				n = len(t.D)
 			}
 			if n < 0 {
 				return nil, errors.Errorf("unsupported tuple assignment: %T", expr.Expr)

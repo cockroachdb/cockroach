@@ -1207,6 +1207,7 @@ func (node *DCollatedString) String() string  { return AsString(node) }
 func (node *DTimestamp) String() string       { return AsString(node) }
 func (node *DTimestampTZ) String() string     { return AsString(node) }
 func (node *DTuple) String() string           { return AsString(node) }
+func (node *DTupleDatum) String() string      { return AsString(node) }
 func (node *DArray) String() string           { return AsString(node) }
 func (node *DTable) String() string           { return AsString(node) }
 func (node *DOidWrapper) String() string      { return AsString(node) }
