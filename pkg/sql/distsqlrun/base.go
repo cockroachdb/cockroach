@@ -45,13 +45,13 @@ type columns []uint32
 type RowReceiver interface {
 	// PushRow sends a row to this receiver. May block.
 	// Returns true if the row was sent, or false if the receiver does not need
-	// any more rows. In all cases, Close() still needs to be called.
+	// any more rows. In all cases, ProducerDone() still needs to be called.
 	// The sender must not modify the row after calling this function.
 	PushRow(row sqlbase.EncDatumRow) bool
-	// Close is called when we have no more rows; it causes the RowReceiver to
-	// process all rows and clean up. If err is not null, the error is sent to
-	// the receiver (and the function may block).
-	Close(err error)
+	// ProducerDone is called when the producer has pushed all the rows; it causes
+	// the RowReceiver to process all rows and clean up. If err is not null, the
+	// error is sent to the receiver (and the function may block).
+	ProducerDone(err error)
 }
 
 // RowSource is any component of a flow that produces rows that cam be consumed
@@ -122,8 +122,8 @@ func (rc *RowChannel) PushRow(row sqlbase.EncDatumRow) bool {
 	return true
 }
 
-// Close is part of the RowReceiver interface.
-func (rc *RowChannel) Close(err error) {
+// ProducerDone is part of the interface.
+func (rc *RowChannel) ProducerDone(err error) {
 	if err != nil {
 		rc.dataChan <- StreamMsg{Row: nil, Err: err}
 	}
@@ -161,7 +161,7 @@ func (rc *RowChannel) ConsumerDone() {
 type MultiplexedRowChannel struct {
 	rowChan RowChannel
 	// numSenders is an atomic counter that keeps track of how many senders have
-	// yet to call Close().
+	// yet to call ProducerDone().
 	numSenders int32
 	firstErr   chan error
 }
@@ -181,8 +181,8 @@ func (mrc *MultiplexedRowChannel) PushRow(row sqlbase.EncDatumRow) bool {
 	return mrc.rowChan.PushRow(row)
 }
 
-// Close is part of the RowReceiver interface.
-func (mrc *MultiplexedRowChannel) Close(err error) {
+// ProducerDone is part of the interface.
+func (mrc *MultiplexedRowChannel) ProducerDone(err error) {
 	if err != nil {
 		select {
 		case mrc.firstErr <- err:
@@ -192,14 +192,14 @@ func (mrc *MultiplexedRowChannel) Close(err error) {
 	}
 	newVal := atomic.AddInt32(&mrc.numSenders, -1)
 	if newVal < 0 {
-		panic("too many Close() calls")
+		panic("too many ProducerDone() calls")
 	}
 	if newVal == 0 {
 		var err error
 		if len(mrc.firstErr) > 0 {
 			err = <-mrc.firstErr
 		}
-		mrc.rowChan.Close(err)
+		mrc.rowChan.ProducerDone(err)
 	}
 }
 
@@ -235,12 +235,12 @@ type RowBuffer struct {
 	Rows sqlbase.EncDatumRows
 
 	// Err is used when the RowBuffer is used as a RowReceiver; it is the error
-	// passed via Close().
+	// passed via ProducerDone().
 	Err error
 
-	// Closed is used when the RowBuffer is used as a RowReceiver; it is set to
-	// true when the sender calls Close.
-	Closed bool
+	// ProducerClosed is used when the RowBuffer is used as a RowReceiver; it is
+	// set to true when the sender calls ProducerDone().
+	ProducerClosed bool
 
 	// Done is used when the RowBuffer is used as a RowSource; it is set to true
 	// when the receiver read all the rows.
@@ -269,18 +269,18 @@ func NewRowBuffer(types []sqlbase.ColumnType, rows sqlbase.EncDatumRows) *RowBuf
 
 // PushRow is part of the RowReceiver interface.
 func (rb *RowBuffer) PushRow(row sqlbase.EncDatumRow) bool {
-	if rb.Closed {
-		panic("PushRow called after Close")
+	if rb.ProducerClosed {
+		panic("PushRow called after ProducerDone")
 	}
 	rowCopy := append(sqlbase.EncDatumRow(nil), row...)
 	rb.Rows = append(rb.Rows, rowCopy)
 	return true
 }
 
-// Close is part of the RowReceiver interface.
-func (rb *RowBuffer) Close(err error) {
+// ProducerDone is part of the interface.
+func (rb *RowBuffer) ProducerDone(err error) {
 	rb.Err = err
-	rb.Closed = true
+	rb.ProducerClosed = true
 }
 
 // Types is part of the RowSource interface.

@@ -153,7 +153,7 @@ func (fr *flowRegistry) RegisterFlow(
 				if !is.connected {
 					is.timedOut = true
 					numTimedOut++
-					is.receiver.Close(errors.Errorf("no inbound stream connection"))
+					is.receiver.ProducerDone(errors.Errorf("no inbound stream connection"))
 					fr.finishInboundStreamLocked(is)
 				}
 			}
@@ -269,6 +269,7 @@ func (fr *flowRegistry) finishInboundStreamLocked(is *inboundStreamInfo) {
 	if is.finished {
 		panic("double finish")
 	}
+
 
 	is.finished = true
 	is.waitGroup.Done()

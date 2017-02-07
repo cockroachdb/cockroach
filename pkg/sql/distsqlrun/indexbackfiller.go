@@ -270,7 +270,7 @@ func (ib *indexBackfiller) Run(ctx context.Context, wg *sync.WaitGroup) {
 	}
 
 	err := ib.mainLoop(ctx)
-	ib.output.Close(err)
+	ib.output.ProducerDone(err)
 }
 
 // WriteResumeSpan writes a checkpoint for the backfill work on origSpan.

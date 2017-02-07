@@ -33,7 +33,7 @@ func ProcessInboundStream(
 ) error {
 	// Function which we call when we are done.
 	finish := func(err error) error {
-		dst.Close(err)
+		dst.ProducerDone(err)
 		if err != nil {
 			log.VEventf(ctx, 1, "inbound stream error: %s", err)
 			// TODO(radu): populate response and send error instead
@@ -57,7 +57,7 @@ func ProcessInboundStream(
 			if err != nil {
 				if err != io.EOF {
 					// Communication error.
-					dst.Close(err)
+					dst.ProducerDone(err)
 					return err
 				}
 				// End of the stream.
