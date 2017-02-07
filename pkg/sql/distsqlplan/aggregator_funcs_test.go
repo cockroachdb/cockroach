@@ -61,7 +61,7 @@ func runTestFlow(
 	if rowBuf.Err != nil {
 		t.Fatal(rowBuf.Err)
 	}
-	if !rowBuf.Closed {
+	if !rowBuf.ProducerClosed {
 		t.Errorf("output not closed")
 	}
 	return rowBuf.Rows

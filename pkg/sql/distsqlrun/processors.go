@@ -209,7 +209,7 @@ func (h *procOutputHelper) close(err error) {
 	if h.internalErr != nil {
 		err = h.internalErr
 	}
-	h.output.Close(err)
+	h.output.ProducerDone(err)
 }
 
 // noopProcessor is a processor that simply passes rows through from the

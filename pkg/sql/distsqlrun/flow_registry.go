@@ -167,7 +167,7 @@ func (fr *flowRegistry) RegisterFlow(
 					// We're giving up waiting for this inbound stream. Send an error to
 					// its consumer; the error will propagate and eventually drain all the
 					// processors.
-					is.receiver.Close(errors.Errorf("inbound stream timed out waiting for connection"))
+					is.receiver.ProducerDone(errors.Errorf("inbound stream timed out waiting for connection"))
 					fr.finishInboundStreamLocked(id, streamID)
 				}
 			}

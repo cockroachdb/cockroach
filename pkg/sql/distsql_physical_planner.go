@@ -1445,8 +1445,8 @@ func (r *distSQLReceiver) PushRow(row sqlbase.EncDatumRow) bool {
 	return true
 }
 
-// Close is part of the RowReceiver interface.
-func (r *distSQLReceiver) Close(err error) {
+// ProducerDone is part of the RowReceiver interface.
+func (r *distSQLReceiver) ProducerDone(err error) {
 	if r.closed {
 		panic("double close")
 	}
