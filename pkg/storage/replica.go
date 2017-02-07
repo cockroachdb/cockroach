@@ -253,8 +253,9 @@ type Replica struct {
 	// TODO(tschottdorf): Duplicates r.mu.state.desc.RangeID; revisit that.
 	RangeID roachpb.RangeID // Should only be set by the constructor.
 
-	store      *Store
-	abortCache *AbortCache // Avoids anomalous reads after abort
+	store        *Store
+	abortCache   *AbortCache   // Avoids anomalous reads after abort
+	pushTxnQueue *pushTxnQueue // Queues push txn attempts by txn ID
 
 	// creatingReplica is set when a replica is created as uninitialized
 	// via a raft message.
@@ -558,6 +559,7 @@ func newReplica(rangeID roachpb.RangeID, store *Store) *Replica {
 		stateLoader:    makeReplicaStateLoader(rangeID),
 		store:          store,
 		abortCache:     NewAbortCache(rangeID),
+		pushTxnQueue:   newPushTxnQueue(store),
 	}
 
 	// Init rangeStr with the range ID.
@@ -1953,6 +1955,7 @@ func (r *Replica) addReadOnlyCmd(
 		// this read is to a range that previously had a write.
 		pErr = r.checkIfTxnAborted(ctx, r.store.Engine(), *ba.Txn)
 	}
+
 	if intents := result.Local.detachIntents(); len(intents) > 0 {
 		log.Eventf(ctx, "submitting %d intents to asynchronous processing", len(intents))
 		r.store.intentResolver.processIntentsAsync(r, intents)
@@ -2061,6 +2064,21 @@ func (r *Replica) tryAddWriteCmd(
 	isNonKV := ba.IsNonKV()
 	var endCmds *endCmds
 	if !isNonKV {
+		// If this is a push txn request, check the push queue first, which
+		// may cause this request to wait and either return a successful push
+		// txn response or else allow this request to proceed.
+		if ba.IsSinglePushTxnRequest() {
+			pushReq := ba.Requests[0].GetInner().(*roachpb.PushTxnRequest)
+			pushResp, pErr := r.pushTxnQueue.MaybeWait(ctx, pushReq)
+			if pErr != nil {
+				return nil, pErr, proposalNoRetry
+			} else if pushResp != nil {
+				br = &roachpb.BatchResponse{}
+				br.Add(pushResp)
+				return br, nil, proposalNoRetry
+			}
+		}
+
 		// Add the write to the command queue to gate subsequent overlapping
 		// commands until this command completes. Note that this must be
 		// done before getting the max timestamp for the key(s), as
@@ -4028,6 +4046,7 @@ func (r *Replica) executeWriteBatch(
 
 	batch := r.store.Engine().NewBatch()
 	br, result, pErr := r.executeBatch(ctx, idKey, batch, &ms, ba)
+
 	return batch, ms, br, result, pErr
 }
 

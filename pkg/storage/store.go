@@ -588,6 +588,11 @@ type StoreConfig struct {
 	// encountered sending commands to ranges.
 	RangeRetryOptions retry.Options
 
+	// DontRetryPushTxnFailures will propagate a push txn failure immediately
+	// instead of utilizing the push txn queue to wait for the transaction to
+	// finish or be pushed by a higher priority contender.
+	DontRetryPushTxnFailures bool
+
 	// RaftTickInterval is the resolution of the Raft timer; other raft timeouts
 	// are defined in terms of multiples of this value.
 	RaftTickInterval time.Duration
@@ -945,13 +950,6 @@ func (s *Store) String() string {
 // AnnotateCtx is a convenience wrapper; see AmbientContext.
 func (s *Store) AnnotateCtx(ctx context.Context) context.Context {
 	return s.cfg.AmbientCtx.AnnotateCtx(ctx)
-}
-
-// AnnotateCtxWithSpan is a convenience wrapper; see AmbientContext.
-func (s *Store) AnnotateCtxWithSpan(
-	ctx context.Context, opName string,
-) (context.Context, opentracing.Span) {
-	return s.cfg.AmbientCtx.AnnotateCtxWithSpan(ctx, opName)
 }
 
 // DrainLeases (when called with 'true') prevents all of the Store's
@@ -2432,20 +2430,15 @@ func (s *Store) Send(
 	} else {
 		log.Eventf(ctx, "executing %d requests", len(ba.Requests))
 	}
-	// Backoff and retry loop for handling errors. Backoff times are measured
-	// in the Trace.
-	// Increase the sequence counter to avoid getting caught in replay
-	// protection on retry.
-	next := func(r *retry.Retry) bool {
-		if r.CurrentAttempt() > 0 {
-			ba.SetNewRequest()
-			log.Event(ctx, "backoff")
-		}
-		return r.Next()
-	}
 
 	// Add the command to the range for execution; exit retry loop on success.
-	for r := retry.StartWithCtx(ctx, s.cfg.RangeRetryOptions); next(&r); {
+	for {
+		// Exit loop if context has been canceled or timed out.
+		select {
+		case <-ctx.Done():
+		default:
+		}
+
 		// Get range and add command to the range for execution.
 		repl, err := s.GetReplica(ba.RangeID)
 		if err != nil {
@@ -2480,146 +2473,72 @@ func (s *Store) Send(
 			return br, nil
 		}
 
-		// Maybe resolve a potential write intent error. We do this here
-		// because this is the code path with the requesting client
-		// waiting. We don't want every replica to attempt to resolve the
-		// intent independently, so we can't do it there.
-		if _, ok := pErr.GetDetail().(*roachpb.WriteIntentError); ok && pErr.Index != nil {
-			var pushType roachpb.PushTxnType
-			if ba.IsWrite() {
-				pushType = roachpb.PUSH_ABORT
-			} else {
-				pushType = roachpb.PUSH_TIMESTAMP
-			}
-
-			index := pErr.Index
-			args := ba.Requests[index.Index].GetInner()
-			// Make a copy of the header for the upcoming push; we will update
-			// the timestamp.
-			h := ba.Header
-			// We must push at least to h.Timestamp, but in fact we want to
-			// go all the way up to a timestamp which was taken off the HLC
-			// after our operation started. This allows us to not have to
-			// restart for uncertainty as we come back and read.
-			h.Timestamp.Forward(now)
-			// We are going to hand the header (and thus the transaction proto)
-			// to the RPC framework, after which it must not be changed (since
-			// that could race). Since the subsequent execution of the original
-			// request might mutate the transaction, make a copy here.
-			//
-			// See #9130.
-			if h.Txn != nil {
-				clonedTxn := h.Txn.Clone()
-				h.Txn = &clonedTxn
-			}
-			pErr = s.intentResolver.processWriteIntentError(ctx, pErr, args, h, pushType)
-			// Preserve the error index.
-			pErr.Index = index
-		}
-
-		log.Eventf(ctx, "error: %T", pErr.GetDetail())
-		switch t := pErr.GetDetail().(type) {
-		case *roachpb.WriteIntentError:
-			// If write intent error is resolved, exit retry/backoff loop to
-			// immediately retry.
-			if t.Resolved {
-				r.Reset()
-				if log.V(1) {
-					log.Warning(ctx, pErr)
+		// Handle push txn failures and write intent conflicts locally and
+		// retry. Other errors are returned to caller.
+		switch pErr.GetDetail().(type) {
+		case *roachpb.TransactionPushError:
+			// On a transaction push error, retry immediately. This will
+			// enqueue the command in the pushTxnQueue, to await further
+			// updates to the unpushed txn's status.
+			if s.cfg.DontRetryPushTxnFailures {
+				// If we're not to retry on push txn failures (unittesting
+				// only), return an error after the first failure.
+				if ba.Txn != nil {
+					return nil, roachpb.NewErrorWithTxn(roachpb.NewTransactionRetryError(), ba.Txn)
 				}
-				continue
+				return nil, pErr
 			}
-			if log.V(1) {
-				log.Warning(ctx, pErr)
-			}
-			// Update the batch transaction, if applicable, in case it has
-			// been independently pushed and has more recent information.
-			if ba.Txn != nil {
-				updatedTxn, pErr := s.maybeUpdateTransaction(ba.Txn, now)
-				if pErr != nil {
+			pErr = nil // retry command
+
+		case *roachpb.WriteIntentError:
+			// Process and resolve write intent error. We do this here because
+			// this is the code path with the requesting client waiting.
+			if pErr.Index != nil {
+				var pushType roachpb.PushTxnType
+				if ba.IsWrite() {
+					pushType = roachpb.PUSH_ABORT
+				} else {
+					pushType = roachpb.PUSH_TIMESTAMP
+				}
+
+				index := pErr.Index
+				args := ba.Requests[index.Index].GetInner()
+				// Make a copy of the header for the upcoming push; we will update
+				// the timestamp.
+				h := ba.Header
+				// We must push at least to h.Timestamp, but in fact we want to
+				// go all the way up to a timestamp which was taken off the HLC
+				// after our operation started. This allows us to not have to
+				// restart for uncertainty as we come back and read.
+				h.Timestamp.Forward(now)
+				// We are going to hand the header (and thus the transaction proto)
+				// to the RPC framework, after which it must not be changed (since
+				// that could race). Since the subsequent execution of the original
+				// request might mutate the transaction, make a copy here.
+				//
+				// See #9130.
+				if h.Txn != nil {
+					clonedTxn := h.Txn.Clone()
+					h.Txn = &clonedTxn
+				}
+				if pErr = s.intentResolver.processWriteIntentError(ctx, pErr, args, h, pushType); pErr != nil {
+					// Preserve the error index.
+					pErr.Index = index
 					return nil, pErr
 				}
-				ba.Txn = updatedTxn
+				// We've resolved the write intent; retry command.
 			}
-			continue
-		}
-		return nil, pErr
-	}
 
-	// By default, retries are infinite and we'll only get here if the
-	// context was canceled or timed out. However, some unittests set a
-	// maximum retry count; return txn retry error for transactional
-	// cases and the original error otherwise.
-	if err := ctx.Err(); err != nil {
-		return nil, roachpb.NewError(err)
-	}
-	log.Event(ctx, "store retry limit exceeded") // good to check for if tests fail
-	if ba.Txn != nil {
-		pErr = roachpb.NewErrorWithTxn(roachpb.NewTransactionRetryError(), ba.Txn)
-	}
-	return nil, pErr
-}
-
-// maybeUpdateTransaction does a "query" push on the specified
-// transaction to glean possible changes, such as a higher timestamp
-// and/or priority. It turns out this is necessary while a request
-// is in a backoff/retry loop pushing write intents as two txns
-// can have circular dependencies where both are unable to push
-// because they have different information about their own txns.
-//
-// The supplied transaction is updated with the results of the
-// "query" push if possible.
-func (s *Store) maybeUpdateTransaction(
-	txn *roachpb.Transaction, now hlc.Timestamp,
-) (*roachpb.Transaction, *roachpb.Error) {
-	ctx, span := s.AnnotateCtxWithSpan(context.Background(), "maybe-update-txn")
-	defer span.Finish()
-	// Attempt to push the transaction which created the intent.
-	b := &client.Batch{}
-	b.AddRawRequest(&roachpb.PushTxnRequest{
-		Span: roachpb.Span{
-			Key: txn.Key,
-		},
-		Now:       now,
-		PusheeTxn: txn.TxnMeta,
-		PushType:  roachpb.PUSH_QUERY,
-	})
-	if err := s.db.Run(ctx, b); err != nil {
-		// TODO(tschottdorf):
-		// We shouldn't catch an error here (unless it's from the abort cache, in
-		// which case we would not get the crucial information that we've been
-		// aborted; instead we'll go around thinking we're still PENDING,
-		// potentially caught in an infinite loop).  Same issue: we must not used
-		// RunWithResponse on this level - we're trying to do internal kv stuff
-		// through the public interface. Likely not exercised in tests, so I'd be
-		// ok tackling this separately.
-		//
-		// Scenario:
-		// - we're aborted and don't know if we have a read-write conflict
-		// - the push above fails and we get a WriteIntentError
-		// - we try to update our transaction (right here, and if we don't we might
-		// be stuck in a race, that's why we do this - the txn proto we're using
-		// might be outdated)
-		// - query fails because our home range has the abort cache populated we catch
-		// a TransactionAbortedError, but with a pending transaction (since we lose
-		// the original txn, and you just use the txn we had...)
-		//
-		// so something is sketchy here, but it should all resolve nicely when we
-		// don't use s.db for these internal requests any more.
-		return nil, roachpb.NewError(err)
-	}
-	br := b.RawResponse()
-	// ID can be nil if no BeginTransaction has been sent yet.
-	if updatedTxn := &br.Responses[0].GetInner().(*roachpb.PushTxnResponse).PusheeTxn; updatedTxn.ID != nil {
-		switch updatedTxn.Status {
-		case roachpb.COMMITTED:
-			return nil, roachpb.NewErrorWithTxn(roachpb.NewTransactionStatusError("already committed"), updatedTxn)
-		case roachpb.ABORTED:
-			return nil, roachpb.NewErrorWithTxn(roachpb.NewTransactionAbortedError(), updatedTxn)
+			// Increase the sequence counter to avoid getting caught in replay
+			// protection on retry.
+			ba.SetNewRequest()
 		}
-		return updatedTxn, nil
+
+		if pErr != nil {
+			log.Eventf(ctx, "error: %T", pErr.GetDetail())
+			return nil, pErr
+		}
 	}
-	return txn, nil
 }
 
 // reserveSnapshot throttles incoming snapshots. The returned closure is used

@@ -67,12 +67,6 @@ func newIntentResolver(store *Store) *intentResolver {
 // transaction(s) responsible for the given WriteIntentError, and to
 // resolve those intents if possible. Returns a new error to be used
 // in place of the original.
-//
-// The returned error may be a copy of the original WriteIntentError,
-// with or without the Resolved flag set, which governs the client's
-// retry behavior (if the transaction is pushed, the Resolved flag is
-// set to tell the client to retry immediately; otherwise it is false
-// to cause the client to back off).
 func (ir *intentResolver) processWriteIntentError(
 	ctx context.Context,
 	wiPErr *roachpb.Error,
@@ -89,10 +83,10 @@ func (ir *intentResolver) processWriteIntentError(
 		log.Infof(ctx, "resolving write intent %s", wiErr)
 	}
 
-	method := args.Method()
-	readOnly := roachpb.IsReadOnly(args) // TODO(tschottdorf): pass as param
-
 	resolveIntents, pushErr := ir.maybePushTransactions(ctx, wiErr.Intents, h, pushType, false)
+	if pushErr != nil {
+		return pushErr
+	}
 
 	if resErr := ir.resolveIntents(ctx, resolveIntents,
 		false /* !wait */, pushType == roachpb.PUSH_ABORT /* poison */); resErr != nil {
@@ -103,39 +97,7 @@ func (ir *intentResolver) processWriteIntentError(
 		log.Warningf(ctx, "asynchronous resolveIntents failed: %s", resErr)
 	}
 
-	if pushErr != nil {
-		if log.V(1) {
-			log.Infof(ctx, "on %s: %s", method, pushErr)
-		}
-
-		switch pushErr.GetDetail().(type) {
-		case *roachpb.TransactionPushError:
-		case *roachpb.AmbiguousResultError:
-		default:
-			// If an unexpected error occurred, make sure it bubbles up to the
-			// client. Examples are timeouts and logic errors.
-			return pushErr
-		}
-
-		// For write/write conflicts within a transaction, propagate the
-		// push failure, not the original write intent error. The push
-		// failure will instruct the client to restart the transaction
-		// with a backoff.
-		if h.Txn != nil && h.Txn.ID != nil && !readOnly {
-			return pushErr
-		}
-
-		// For read/write conflicts, and non-transactional write/write
-		// conflicts, return the write intent error which engages
-		// backoff/retry (with !Resolved). We don't need to restart the
-		// txn, only resend the read with a backoff.
-		return wiPErr
-	}
-
-	// We pushed all transactions, so tell the client everything's
-	// resolved and it can retry immediately.
-	wiErr.Resolved = true
-	return wiPErr // references wiErr
+	return nil
 }
 
 // maybePushTransactions tries to push the conflicting transaction(s)

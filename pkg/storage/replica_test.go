@@ -3054,8 +3054,8 @@ func TestEndTransactionWithPushedTimestamp(t *testing.T) {
 	for i, test := range testCases {
 		pushee := newTransaction("pushee", key, 1, test.isolation, tc.Clock())
 		pusher := newTransaction("pusher", key, 1, enginepb.SERIALIZABLE, tc.Clock())
-		pushee.Priority = 1
-		pusher.Priority = 2 // pusher will win
+		pushee.Priority = roachpb.MinTxnPriority
+		pusher.Priority = roachpb.MaxTxnPriority
 		_, btH := beginTxnArgs(key, pushee)
 		put := putArgs(key, []byte("value"))
 		if _, pErr := maybeWrapWithBeginTransaction(context.Background(), tc.Sender(), btH, &put); pErr != nil {
@@ -3221,9 +3221,9 @@ func TestEndTransactionRollbackAbortedTransaction(t *testing.T) {
 		t.Fatal(pErr)
 	}
 
-	// Abort the transaction by pushing it with a higher priority.
+	// Abort the transaction by pushing it with maximum priority.
 	pusher := newTransaction("test", key, 1, enginepb.SERIALIZABLE, tc.Clock())
-	pusher.Priority = txn.Priority + 1 // will push successfully
+	pusher.Priority = roachpb.MaxTxnPriority
 	pushArgs := pushTxnArgs(pusher, btH.Txn, roachpb.PUSH_ABORT)
 	if _, pErr := tc.SendWrapped(&pushArgs); pErr != nil {
 		t.Fatal(pErr)
@@ -3825,7 +3825,7 @@ func TestReplicaResolveIntentNoWait(t *testing.T) {
 // aborted, the abort cache on the respective Range is poisoned and
 // the pushee is presented with a txn abort on its next contact with
 // the Range in the same epoch.
-func TestSequenceCachePoisonOnResolve(t *testing.T) {
+func TestAbortCachePoisonOnResolve(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	key := roachpb.Key("a")
 
@@ -3841,8 +3841,8 @@ func TestSequenceCachePoisonOnResolve(t *testing.T) {
 
 		pusher := newTransaction("test", key, 1, enginepb.SERIALIZABLE, tc.Clock())
 		pushee := newTransaction("test", key, 1, iso, tc.Clock())
-		pusher.Priority = 2
-		pushee.Priority = 1 // pusher will win
+		pusher.Priority = roachpb.MaxTxnPriority
+		pushee.Priority = roachpb.MinTxnPriority // pusher will win
 
 		inc := func(actor *roachpb.Transaction, k roachpb.Key) (*roachpb.IncrementResponse, *roachpb.Error) {
 			reply, pErr := maybeWrapWithBeginTransaction(context.Background(), tc.store, roachpb.Header{
@@ -4017,8 +4017,6 @@ func TestPushTxnAlreadyCommittedOrAborted(t *testing.T) {
 		key := roachpb.Key(fmt.Sprintf("key-%d", i))
 		pusher := newTransaction("test", key, 1, enginepb.SERIALIZABLE, tc.Clock())
 		pushee := newTransaction("test", key, 1, enginepb.SERIALIZABLE, tc.Clock())
-		pusher.Priority = 1
-		pushee.Priority = 2 // pusher will lose, meaning we shouldn't push unless pushee is already ended.
 
 		// Begin the pushee's transaction.
 		_, btH := beginTxnArgs(key, pushee)
@@ -4075,10 +4073,9 @@ func TestPushTxnUpgradeExistingTxn(t *testing.T) {
 		key := roachpb.Key(fmt.Sprintf("key-%d", i))
 		pusher := newTransaction("test", key, 1, enginepb.SERIALIZABLE, tc.Clock())
 		pushee := newTransaction("test", key, 1, enginepb.SERIALIZABLE, tc.Clock())
-		pushee.Priority = 1
 		pushee.Epoch = 12345
-		pusher.Priority = 2   // Pusher will win
-		pusher.Writing = true // expected when a txn is heartbeat
+		pusher.Priority = roachpb.MaxTxnPriority // Pusher will win
+		pusher.Writing = true                    // expected when a txn is heartbeat
 
 		// First, establish "start" of existing pushee's txn via BeginTransaction.
 		pushee.Timestamp = test.startTS
@@ -4099,6 +4096,7 @@ func TestPushTxnUpgradeExistingTxn(t *testing.T) {
 		}
 		reply := resp.(*roachpb.PushTxnResponse)
 		expTxn := pushee.Clone()
+		expTxn.Priority = roachpb.MaxTxnPriority - 1
 		expTxn.Epoch = pushee.Epoch // no change
 		expTxn.Timestamp = test.expTS
 		expTxn.Status = roachpb.ABORTED
@@ -4162,8 +4160,6 @@ func TestPushTxnHeartbeatTimeout(t *testing.T) {
 		key := roachpb.Key(fmt.Sprintf("key-%d", i))
 		pushee := newTransaction(fmt.Sprintf("test-%d", i), key, 1, enginepb.SERIALIZABLE, tc.Clock())
 		pusher := newTransaction("pusher", key, 1, enginepb.SERIALIZABLE, tc.Clock())
-		pushee.Priority = 2
-		pusher.Priority = 1 // Pusher won't win based on priority.
 
 		// First, establish "start" of existing pushee's txn via BeginTransaction.
 		if !test.heartbeat.Equal(hlc.ZeroTimestamp) {
@@ -4199,7 +4195,7 @@ func TestPushTxnHeartbeatTimeout(t *testing.T) {
 	}
 }
 
-// TestPushTxnNoTxn makes sure that no Txn is returned from PushTxn and that
+// TestResolveIntentPushTxnReplyTxn makes sure that no Txn is returned from PushTxn and that
 // it and ResolveIntent{,Range} can not be carried out in a transaction.
 func TestResolveIntentPushTxnReplyTxn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -4213,7 +4209,6 @@ func TestResolveIntentPushTxnReplyTxn(t *testing.T) {
 
 	txn := newTransaction("test", roachpb.Key("test"), 1, enginepb.SERIALIZABLE, tc.Clock())
 	txnPushee := txn.Clone()
-	txnPushee.Priority--
 	pa := pushTxnArgs(txn, &txnPushee, roachpb.PUSH_ABORT)
 	var ms enginepb.MVCCStats
 	var ra roachpb.ResolveIntentRequest
@@ -4269,30 +4264,22 @@ func TestPushTxnPriorities(t *testing.T) {
 		expSuccess                     bool
 	}{
 		// Pusher with higher priority succeeds.
-		{2, 1, ts1, ts1, roachpb.PUSH_TIMESTAMP, true},
-		{2, 1, ts1, ts1, roachpb.PUSH_ABORT, true},
+		{roachpb.MaxTxnPriority, roachpb.MinTxnPriority, ts1, ts1, roachpb.PUSH_TIMESTAMP, true},
+		{roachpb.MaxTxnPriority, roachpb.MinTxnPriority, ts1, ts1, roachpb.PUSH_ABORT, true},
 		// Pusher with lower priority fails.
-		{1, 2, ts1, ts1, roachpb.PUSH_ABORT, false},
-		{1, 2, ts1, ts1, roachpb.PUSH_TIMESTAMP, false},
+		{roachpb.MinTxnPriority, roachpb.MaxTxnPriority, ts1, ts1, roachpb.PUSH_ABORT, false},
+		{roachpb.MinTxnPriority, roachpb.MaxTxnPriority, ts1, ts1, roachpb.PUSH_TIMESTAMP, false},
 		// Pusher with lower priority fails, even with older txn timestamp.
-		{1, 2, ts1, ts2, roachpb.PUSH_ABORT, false},
+		{roachpb.MinTxnPriority, roachpb.MaxTxnPriority, ts1, ts2, roachpb.PUSH_ABORT, false},
 		// Pusher has lower priority, but older txn timestamp allows success if
 		// !abort since there's nothing to do.
-		{1, 2, ts1, ts2, roachpb.PUSH_TIMESTAMP, true},
-		// With same priorities, larger Txn ID wins. Timestamp does not matter
-		// (unless it implies that nothing needs to be pushed in the first
-		// place; see above).
-		// Note: in this test, the pusher has the larger ID.
-		{1, 1, ts1, ts1, roachpb.PUSH_ABORT, true},
-		{1, 1, ts1, ts1, roachpb.PUSH_TIMESTAMP, true},
-		{1, 1, ts2, ts1, roachpb.PUSH_ABORT, true},
-		{1, 1, ts2, ts1, roachpb.PUSH_TIMESTAMP, true},
+		{roachpb.MinTxnPriority, roachpb.MaxTxnPriority, ts1, ts2, roachpb.PUSH_TIMESTAMP, true},
 		// When touching, priority never wins.
-		{2, 1, ts1, ts1, roachpb.PUSH_TOUCH, false},
-		{1, 2, ts1, ts1, roachpb.PUSH_TOUCH, false},
+		{roachpb.MaxTxnPriority, roachpb.MinTxnPriority, ts1, ts1, roachpb.PUSH_TOUCH, false},
+		{roachpb.MinTxnPriority, roachpb.MaxTxnPriority, ts1, ts1, roachpb.PUSH_TOUCH, false},
 		// When updating, priority always succeeds.
-		{2, 1, ts1, ts1, roachpb.PUSH_QUERY, true},
-		{1, 2, ts1, ts1, roachpb.PUSH_QUERY, true},
+		{roachpb.MaxTxnPriority, roachpb.MinTxnPriority, ts1, ts1, roachpb.PUSH_QUERY, true},
+		{roachpb.MinTxnPriority, roachpb.MaxTxnPriority, ts1, ts1, roachpb.PUSH_QUERY, true},
 	}
 
 	for i, test := range testCases {
@@ -4343,8 +4330,8 @@ func TestPushTxnPushTimestamp(t *testing.T) {
 
 	pusher := newTransaction("test", roachpb.Key("a"), 1, enginepb.SERIALIZABLE, tc.Clock())
 	pushee := newTransaction("test", roachpb.Key("b"), 1, enginepb.SERIALIZABLE, tc.Clock())
-	pusher.Priority = 2
-	pushee.Priority = 1 // pusher will win
+	pusher.Priority = roachpb.MaxTxnPriority
+	pushee.Priority = roachpb.MinTxnPriority // pusher will win
 	now := tc.Clock().Now()
 	pusher.Timestamp = now.Add(50, 25)
 	pushee.Timestamp = now.Add(5, 1)
@@ -4388,8 +4375,6 @@ func TestPushTxnPushTimestampAlreadyPushed(t *testing.T) {
 
 	pusher := newTransaction("test", roachpb.Key("a"), 1, enginepb.SERIALIZABLE, tc.Clock())
 	pushee := newTransaction("test", roachpb.Key("b"), 1, enginepb.SERIALIZABLE, tc.Clock())
-	pusher.Priority = 1
-	pushee.Priority = 2 // pusher will lose
 	now := tc.Clock().Now()
 	pusher.Timestamp = now.Add(50, 0)
 	pushee.Timestamp = now.Add(50, 1)
@@ -4434,8 +4419,8 @@ func TestPushTxnSerializableRestart(t *testing.T) {
 	key := roachpb.Key("a")
 	pushee := newTransaction("test", key, 1, enginepb.SERIALIZABLE, tc.Clock())
 	pusher := newTransaction("test", key, 1, enginepb.SERIALIZABLE, tc.Clock())
-	pushee.Priority = 1
-	pusher.Priority = 2 // pusher will win
+	pushee.Priority = roachpb.MinTxnPriority
+	pusher.Priority = roachpb.MaxTxnPriority // pusher will win
 
 	// Read from the key to increment the timestamp cache.
 	gArgs := getArgs(key)
@@ -5460,7 +5445,7 @@ func TestReplicaLoadSystemConfigSpanIntent(t *testing.T) {
 	// config span.
 	key := keys.SystemConfigSpan.Key
 	_, btH := beginTxnArgs(key, newTransaction("test", key, 1, enginepb.SERIALIZABLE, repl.store.Clock()))
-	btH.Txn.Priority = 1 // low so it can be pushed
+	btH.Txn.Priority = roachpb.MinTxnPriority // low so it can be pushed
 	put := putArgs(key, []byte("foo"))
 	if _, pErr := maybeWrapWithBeginTransaction(context.Background(), tc.Sender(), btH, &put); pErr != nil {
 		t.Fatal(pErr)
@@ -5470,7 +5455,7 @@ func TestReplicaLoadSystemConfigSpanIntent(t *testing.T) {
 	// by loading the system config span doesn't waste any time in
 	// clearing the intent.
 	pusher := newTransaction("test", key, 1, enginepb.SERIALIZABLE, repl.store.Clock())
-	pusher.Priority = 2 // will push successfully
+	pusher.Priority = roachpb.MaxTxnPriority // will push successfully
 	pushArgs := pushTxnArgs(pusher, btH.Txn, roachpb.PUSH_ABORT)
 	if _, pErr := tc.SendWrapped(&pushArgs); pErr != nil {
 		t.Fatal(pErr)
@@ -6629,8 +6614,11 @@ func TestReplicaRefreshPendingCommandsTicks(t *testing.T) {
 func checkValue(ctx context.Context, tc *testContext, key []byte, expectedVal []byte) error {
 	gArgs := getArgs(key)
 	// Note: sending through the store, not directly through the replica, for
-	// intent resolution to kick in.
-	resp, pErr := client.SendWrapped(ctx, tc.store.testSender(), &gArgs)
+	// intent resolution to kick in. Use max user priority to ensure we push
+	// any residual intent.
+	resp, pErr := client.SendWrappedWith(ctx, tc.store.testSender(), roachpb.Header{
+		UserPriority: roachpb.MaxUserPriority,
+	}, &gArgs)
 	if pErr != nil {
 		return errors.Errorf("could not get data: %s", pErr)
 	}
@@ -6673,7 +6661,7 @@ func TestAmbiguousResultErrorOnRetry(t *testing.T) {
 	var ba1PCTxn roachpb.BatchRequest
 	{
 		key := roachpb.Key("1pc")
-		txn := newTransaction("1pc", key, 1, enginepb.SERIALIZABLE, tc.Clock())
+		txn := newTransaction("1pc", key, -1, enginepb.SERIALIZABLE, tc.Clock())
 		bt, _ := beginTxnArgs(key, txn)
 		put := putArgs(key, []byte("value"))
 		et, etH := endTxnArgs(txn, true)
@@ -6688,7 +6676,7 @@ func TestAmbiguousResultErrorOnRetry(t *testing.T) {
 		checkFn func(*roachpb.Error) error
 	}{
 		{
-			name: "non-tnx-put",
+			name: "non-txn-put",
 			ba:   baPut,
 			checkFn: func(pErr *roachpb.Error) error {
 				detail := pErr.GetDetail()
@@ -6710,7 +6698,7 @@ func TestAmbiguousResultErrorOnRetry(t *testing.T) {
 		{
 			// This test checks two things:
 			// - that we can do retries of 1pc batches
-			// - that they fail ambiguously if the original command had been applied
+			// - that they fail ambiguously if the original command was applied
 			name: "1PC-txn",
 			ba:   ba1PCTxn,
 			checkFn: func(pErr *roachpb.Error) error {
@@ -6736,7 +6724,7 @@ func TestAmbiguousResultErrorOnRetry(t *testing.T) {
 				if _, ok := detail.(*roachpb.TransactionRetryError); !ok {
 					return errors.Wrapf(detail,
 						"expected the AmbiguousResultError to be caused by a "+
-							"WriteTooOldError, got %T", detail)
+							"TransactionRetryError, got %T", detail)
 				}
 
 				// Test that the original proposal succeeded by checking the effects of

@@ -153,6 +153,10 @@ type LocalEvalResult struct {
 	maybeAddToSplitQueue bool
 	// Call maybeGossipNodeLiveness with the specified Span, if set.
 	maybeGossipNodeLiveness *roachpb.Span
+
+	// Set what a transaction record is updated, after a call to
+	// EndTransaction or PushTxn.
+	updatedTxn *roachpb.Transaction
 }
 
 func (lResult *LocalEvalResult) detachIntents() []intentsWithArg {
@@ -299,6 +303,13 @@ func (p *EvalResult) MergeAndDestroy(q EvalResult) error {
 	coalesceBool(&p.Local.maybeGossipSystemConfig, &q.Local.maybeGossipSystemConfig)
 	coalesceBool(&p.Local.maybeAddToSplitQueue, &q.Local.maybeAddToSplitQueue)
 
+	if p.Local.updatedTxn == nil {
+		p.Local.updatedTxn = q.Local.updatedTxn
+	} else if q.Local.updatedTxn != nil {
+		return errors.New("conflicting updatedTxn")
+	}
+	q.Local.updatedTxn = nil
+
 	if (q != EvalResult{}) {
 		log.Fatalf(context.TODO(), "unhandled EvalResult: %s", pretty.Diff(q, EvalResult{}))
 	}
@@ -412,6 +423,9 @@ func (r *Replica) leasePostApply(
 		r.mu.Lock()
 		r.mu.tsCache.Clear(r.store.Clock().Now())
 		r.mu.Unlock()
+		// Also clear the push transaction queue. Any waiters must be
+		// redirected to the new lease holder.
+		r.pushTxnQueue.Clear()
 	}
 
 	if !iAmTheLeaseHolder && r.IsLeaseValid(newLease, r.store.Clock().Now()) {
@@ -667,6 +681,13 @@ func (r *Replica) handleReplicatedEvalResult(
 func (r *Replica) handleLocalEvalResult(
 	ctx context.Context, lResult LocalEvalResult,
 ) (shouldAssert bool) {
+	// Enqueue failed push transactions on the pushTxnQueue.
+	if !r.store.cfg.DontRetryPushTxnFailures {
+		if tpErr, ok := lResult.Err.GetDetail().(*roachpb.TransactionPushError); ok {
+			r.pushTxnQueue.Enqueue(&tpErr.PusheeTxn)
+		}
+	}
+
 	// Fields for which no action is taken in this method are zeroed so that
 	// they don't trigger an assertion at the end of the method (which checks
 	// that all fields were handled).
@@ -736,6 +757,11 @@ func (r *Replica) handleLocalEvalResult(
 			r.store.metrics.leaseTransferComplete(metric == leaseTransferSuccess)
 		}
 		lResult.leaseMetricsResult = nil
+	}
+
+	if lResult.updatedTxn != nil {
+		r.pushTxnQueue.UpdateTxn(lResult.updatedTxn)
+		lResult.updatedTxn = nil
 	}
 
 	if (lResult != LocalEvalResult{}) {

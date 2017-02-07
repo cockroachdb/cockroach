@@ -133,13 +133,10 @@ message TransactionStatusError {
 // belonging to another transaction were encountered leading to a
 // read/write or write/write conflict. The keys at which the intent
 // was encountered are set, as are the txn records for the intents'
-// transactions. resolved is set if the intent was successfully
-// resolved, meaning the client may retry the operation
-// immediately. If resolved is false, the client should back off and
-// retry.
+// transactions.
 message WriteIntentError {
   repeated Intent intents = 1 [(gogoproto.nullable) = false];
-  optional bool resolved = 2 [(gogoproto.nullable) = false];
+  reserved 2;
 }
 
 // A WriteTooOldError indicates that a write encountered a versioned
@@ -262,10 +259,6 @@ enum TransactionRestart {
   //  a spurious RPC error.
   NONE = 0;
 
-  // BACKOFF is for errors that can retried by restarting the transaction
-  // after an exponential backoff.
-  BACKOFF = 1;
-
   // IMMEDIATE is for errors that can be retried by restarting the
   // transaction immediately.
   IMMEDIATE = 2;
@@ -287,7 +280,7 @@ message Error {
   optional string message = 1 [(gogoproto.nullable) = false];
 
   // If transaction_restart is not ABORT, the error condition may be handled by
-  // restarting the transaction (with or without a backoff).
+  // restarting the transaction.
   optional TransactionRestart transaction_restart = 3 [(gogoproto.nullable) = false];
 
   // An optional transaction related to this error. Not to be accessed directly.

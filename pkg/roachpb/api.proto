@@ -512,6 +512,9 @@ message PushTxnRequest {
   // this to PUSH_TOUCH to determine whether the pushee can be aborted
   // due to inactivity (based on the now field).
   optional PushTxnType push_type = 6 [(gogoproto.nullable) = false];
+  // Forces the push by overriding the normal checks in PushTxn to
+  // either abort or push the timestamp.
+  optional bool force = 7 [(gogoproto.nullable) = false];
 }
 
 // A PushTxnResponse is the return value from the PushTxn() method. It
@@ -526,6 +529,9 @@ message PushTxnResponse {
   // TODO(tschottdorf): Maybe this can be a TxnMeta instead; probably requires
   // factoring out the new Priority.
   optional Transaction pushee_txn = 2 [(gogoproto.nullable) = false];
+  // Set if request was of push_type PUSH_QUERY. waiting_txns specifies
+  // a list of transaction IDs which are waiting on the pushee_txn.
+  repeated bytes waiting_txns = 3 [(gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID"];
 }
 
 // A ResolveIntentRequest is arguments to the ResolveIntent()

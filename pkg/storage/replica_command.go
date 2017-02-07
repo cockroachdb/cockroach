@@ -639,7 +639,9 @@ func evalEndTransaction(
 	// will immediately succeed as a missing txn record on push sets the
 	// transaction to aborted. In both cases, the txn will be GC'd on
 	// the slow path.
-	if err := pd.MergeAndDestroy(intentsToEvalResult(externalIntents, args)); err != nil {
+	intentsResult := intentsToEvalResult(externalIntents, args)
+	intentsResult.Local.updatedTxn = reply.Txn
+	if err := pd.MergeAndDestroy(intentsResult); err != nil {
 		return EvalResult{}, err
 	}
 	return pd, nil
@@ -1278,6 +1280,7 @@ func evalPushTxn(
 ) (EvalResult, error) {
 	args := cArgs.Args.(*roachpb.PushTxnRequest)
 	h := cArgs.Header
+	r := cArgs.Repl
 	reply := resp.(*roachpb.PushTxnResponse)
 
 	if h.Txn != nil {
@@ -1367,6 +1370,8 @@ func evalPushTxn(
 
 	// If getting an update for a transaction record, return now.
 	if args.PushType == roachpb.PUSH_QUERY {
+		// Get the list of txns waiting on this txn.
+		reply.WaitingTxns = r.pushTxnQueue.GetDependents(*args.PusheeTxn.ID)
 		return EvalResult{}, nil
 	}
 
@@ -1391,16 +1396,17 @@ func evalPushTxn(
 		// Can always push a SNAPSHOT txn's timestamp.
 		reason = "pushee is SNAPSHOT"
 		pusherWins = true
-	case reply.PusheeTxn.Priority != priority:
-		reason = "priority"
-		pusherWins = reply.PusheeTxn.Priority < priority
-	case args.PusherTxn.ID == nil:
-		reason = "equal priorities; pusher not transactional"
-		pusherWins = false
-	default:
-		reason = "equal priorities; greater ID wins"
-		pusherWins = bytes.Compare(reply.PusheeTxn.ID.GetBytes(),
-			args.PusherTxn.ID.GetBytes()) < 0
+	case priority > roachpb.MinTxnPriority && reply.PusheeTxn.Priority == roachpb.MinTxnPriority:
+		// The pushee txn has a min priority, which means it can always be pushed.
+		reason = "pushee has min priority"
+		pusherWins = true
+	case priority == roachpb.MaxTxnPriority && reply.PusheeTxn.Priority < priority:
+		// A pusher with max priority can always push another txn without max priority.
+		reason = "pusher has max priority"
+		pusherWins = true
+	case args.Force:
+		reason = "forced txn abort"
+		pusherWins = true
 	}
 
 	if log.V(1) && reason != "" {
@@ -1440,7 +1446,9 @@ func evalPushTxn(
 	if err := engine.MVCCPutProto(ctx, batch, cArgs.Stats, key, hlc.ZeroTimestamp, nil, &reply.PusheeTxn); err != nil {
 		return EvalResult{}, err
 	}
-	return EvalResult{}, nil
+	result := EvalResult{}
+	result.Local.updatedTxn = &reply.PusheeTxn
+	return result, nil
 }
 
 // setAbortCache clears any abort cache entry if poison is false.
