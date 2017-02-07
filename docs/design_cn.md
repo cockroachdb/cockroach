@@ -1945,15 +1945,22 @@ Distributing the processing is desirable for multiple reasons:
   data involved. This applies to `JOIN`s, aggregation, sorting.
 
 分布式进程值得拥有的多个原因：
-- 远程端过滤：
+- 远程端过滤：当所查询的行集合与过滤表达式相匹配时，我们更希望过滤表达式在租约持有者或远程节点来处理,
+  而不是在一定的范围内查询出所有的key,在网关节点通过网络接受数据后进行过滤，进而节省网络带宽和相关处理。
+- 我们希望在持有数据的节点上执行像`UPDATE .. WHER` 和 `DELETE .. WHERE` 这样的脚本(相对于在网络上的网关接收结果，然后执行更新或删除，涉及额外的往返)。
+- SQL并行化计算：当需要大量的计算时，我将计算分发到多个节点，因此涉及大量数据规模。这适应于`JOIN`的 、聚合、排序。
 
-The approach we took  was originally inspired by
+The approach we took was originally inspired by
 [Sawzall](https://cloud.google.com/dataflow/model/programming-model) - a
 project by Rob Pike et al. at Google that proposes a "shell" (high-level
 language interpreter) to ease the exploitation of MapReduce. It provides a
 clear separation between "local" processes which process a limited amount of
 data and distributed computations, which are abstracted away behind a
 restricted set of conceptual constructs.
+
+我们采用的方法最初灵感来自[Sawzall](https://cloud.google.com/dataflow/model/programming-model) -
+Google的Rob Pike等人一个项目,提出一个“shell”（高级语言解释器）来简化Mapreduce开发。
+提供“本地”进程与分布式计算进行分离。本地进程执行有限的数据，分布式计算是对一组受限概念组成的抽象方式。
 
 To run SQL statements in a distributed fashion, we introduce a couple of concepts:
 - _logical plan_ - similar on the surface to the `planNode` tree described in
@@ -1964,7 +1971,16 @@ To run SQL statements in a distributed fashion, we introduce a couple of concept
   specialized depending on the cluster topology. The components of the physical
   plan are scheduled and run on the cluster.
 
+分布式的方式执行SQL脚本，我们介绍一组概念：
+
+- _逻辑计划_ - 表面上类似于在[SQL](#sql)章节中`planNode` 树描述,在数据计算阶段表达抽象（非分布式）数据流
+
+- _物理计划_ - 一个物理计划是逻辑计划节点到CockroachDB节点上概念的映射。逻辑计划节点被复制和专指依赖于集群拓扑。
+  物理计划的组件计划并运行在集群上
+
+
 ## Logical planning
+## 逻辑规划
 
 The logical plan is made up of _aggregators_. Each _aggregator_ consumes an
 _input stream_ of rows (or multiple streams for joins) and produces an _output
@@ -1981,10 +1997,17 @@ functions. An aggregator with no grouping is a special but important case in
 which we are not aggregating multiple pieces of data, but we may be filtering,
 transforming, or reordering individual pieces of data.
 
+逻辑计划是由 _聚合_ 组成。每个 _聚合_ 消费一个行(或为了连接多个流) _输入流_ 并产生一个行 _输出流_。
+不论是输入流还是输出流都要一套模式。这个流是一个逻辑概念，有可能不会映射到实际计算。当*逻辑计划* 转换为 *物理计划* 时聚合将被潜在的分布。
+为了表示什么样的分布式和并行化是被允许的，聚合定义了 _组_ 在数据通过它时表示哪些行需要在同一个节点上被处理
+（该机制制约了行匹配在列子集在一个节点中处理）。这个概念对需要查看输出行集合的聚集是有用的。
+例如： SQL聚集函数。一个没有组的聚集特殊而重要的用例，我们没有聚集多个数据分片，但是我们可能过滤，转换或重排序个别数据块。
+
 Special **table reader** aggregators with no inputs are used as data sources; a
 table reader can be configured to output only certain columns, as needed.
 A special **final** aggregator with no outputs is used for the results of the
 query/statement.
+
 
 To reflect the result ordering that a query has to produce, some aggregators
 (`final`, `limit`) are configured with an **ordering requirement** on the input
