@@ -1020,7 +1020,7 @@ func applyInConstraint(
 	} else {
 		e = c.end
 	}
-	tuple := e.Right.(*parser.DTupleDatum).D
+	tuple := e.Right.(*parser.DTuple).D
 	existingSpans := spans
 	spans = make([]roachpb.Span, 0, len(existingSpans)*len(tuple))
 	for _, datum := range tuple {
@@ -1029,7 +1029,7 @@ func applyInConstraint(
 		var start, end []byte
 
 		switch t := datum.(type) {
-		case *parser.DTupleDatum:
+		case *parser.DTuple:
 			// The constraint is a tuple of tuples, meaning something like
 			// (...) IN ((1,2),(3,4)).
 			for j, tupleIdx := range c.tupleMap {
@@ -1245,7 +1245,7 @@ func (ic indexConstraints) exactPrefix() int {
 		case parser.EQ:
 			prefix++
 		case parser.In:
-			if tuple, ok := c.start.Right.(*parser.DTupleDatum); !ok || len(tuple.D) != 1 {
+			if tuple, ok := c.start.Right.(*parser.DTuple); !ok || len(tuple.D) != 1 {
 				// TODO(radu): we may still have an exact prefix if the first
 				// value in each tuple is the same, e.g.
 				// `(a, b) IN ((1, 2), (1, 3))`
@@ -1279,10 +1279,10 @@ func (ic indexConstraints) exactPrefixDatums(num int) []parser.Datum {
 		case parser.EQ:
 			datums = append(datums, c.start.Right.(parser.Datum))
 		case parser.In:
-			right := c.start.Right.(*parser.DTupleDatum).D[0]
+			right := c.start.Right.(*parser.DTuple).D[0]
 			if _, ok := c.start.Left.(*parser.Tuple); ok {
 				// We have something like `(a,b,c) IN (1,2,3)`
-				rtuple := right.(*parser.DTupleDatum)
+				rtuple := right.(*parser.DTuple)
 				for _, tupleIdx := range c.tupleMap {
 					datums = append(datums, rtuple.D[tupleIdx])
 					if len(datums) == num {
@@ -1385,7 +1385,7 @@ func applyIndexConstraints(
 			}
 			// The second case is that both the start and end constraint are an IN
 			// operator with only a single value.
-			if c.start.Operator == parser.In && len(c.start.Right.(*parser.DTupleDatum).D) == 1 {
+			if c.start.Operator == parser.In && len(c.start.Right.(*parser.DTuple).D) == 1 {
 				continue
 			}
 		}
@@ -1449,7 +1449,7 @@ func (v *applyConstraintsVisitor) VisitPre(expr parser.Expr) (recurse bool, newE
 				}
 			case parser.In:
 				// Expr: "a = <val>", constraint: "a IN (<vals>)".
-				ctuple := cdatum.(*parser.DTupleDatum).D
+				ctuple := cdatum.(*parser.DTuple).D
 				if reflect.TypeOf(datum) != reflect.TypeOf(ctuple[0]) {
 					return true, expr
 				}
@@ -1472,7 +1472,7 @@ func (v *applyConstraintsVisitor) VisitPre(expr parser.Expr) (recurse bool, newE
 				if reflect.TypeOf(datum) != reflect.TypeOf(cdatum) {
 					return true, expr
 				}
-				diff := datum.(*parser.DTupleDatum).SortedDifference(cdatum.(*parser.DTupleDatum))
+				diff := datum.(*parser.DTuple).SortedDifference(cdatum.(*parser.DTuple))
 				if len(diff.D) == 0 {
 					return false, parser.DBoolTrue
 				}

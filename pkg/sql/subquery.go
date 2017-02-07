@@ -126,7 +126,7 @@ func (s *subquery) doEval() (result parser.Datum, err error) {
 	case execModeAllRows:
 		fallthrough
 	case execModeAllRowsNormalized:
-		var rows parser.DTupleDatum
+		var rows parser.DTuple
 		next, err := s.plan.Next()
 		for ; next; next, err = s.plan.Next() {
 			values := s.plan.Values()
@@ -140,7 +140,7 @@ func (s *subquery) doEval() (result parser.Datum, err error) {
 			default:
 				// The result from plan.Values() is only valid until the next call to
 				// plan.Next(), so make a copy.
-				valuesCopy := parser.NewDTupleDatumWithLen(len(values))
+				valuesCopy := parser.NewDTupleWithLen(len(values))
 				copy(valuesCopy.D, values)
 				rows.D = append(rows.D, valuesCopy)
 			}
@@ -165,7 +165,7 @@ func (s *subquery) doEval() (result parser.Datum, err error) {
 			case 1:
 				result = values[0]
 			default:
-				valuesCopy := parser.NewDTupleDatumWithLen(len(values))
+				valuesCopy := parser.NewDTupleWithLen(len(values))
 				copy(valuesCopy.D, values)
 				result = valuesCopy
 			}
@@ -359,7 +359,7 @@ func (v *subqueryVisitor) getSubqueryContext() (columns int, execMode subqueryEx
 			switch t := e.Left.(type) {
 			case *parser.Tuple:
 				columns = len(t.Exprs)
-			case *parser.DTupleDatum:
+			case *parser.DTuple:
 				columns = len(t.D)
 			}
 

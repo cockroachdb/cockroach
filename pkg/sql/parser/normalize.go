@@ -403,7 +403,7 @@ func (expr *ComparisonExpr) normalize(v *normalizeVisitor) TypedExpr {
 
 		// If the right tuple in an In or NotIn comparison expression is constant, it can
 		// be normalized.
-		tuple, ok := expr.Right.(*DTupleDatum)
+		tuple, ok := expr.Right.(*DTuple)
 		if ok {
 			tupleCopy := *tuple
 			tupleCopy.Normalize()
