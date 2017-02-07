@@ -299,18 +299,18 @@ func TestMergeJoiner(t *testing.T) {
 
 		m.Run(context.Background(), nil)
 
-		if out.Err != nil {
-			t.Fatal(out.Err)
-		}
 		if !out.ProducerClosed {
 			t.Fatalf("output RowReceiver not closed")
 		}
 
 		var retRows sqlbase.EncDatumRows
 		for {
-			row, err := out.NextRow()
+			row, meta := out.Next()
 			if err != nil {
 				t.Fatal(err)
+			}
+			if !meta.Empty() {
+				t.Fatalf("unexpected metadata: %v", meta)
 			}
 			if row == nil {
 				break

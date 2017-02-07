@@ -301,9 +301,9 @@ func TestAggregator(t *testing.T) {
 
 		var rets []string
 		for {
-			row, err := out.NextRow()
-			if err != nil {
-				t.Fatal(err)
+			row, meta := out.Next()
+			if !meta.Empty() {
+				t.Fatalf("unexpected metadata: %v", meta)
 			}
 			if row == nil {
 				break

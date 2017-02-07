@@ -1271,7 +1271,7 @@ func commitSQLTransaction(
 // runs it.
 func (e *Executor) execDistSQL(planMaker *planner, tree planNode, result *Result) error {
 	// Note: if we just want the row count, result.Rows is nil here.
-	recv := distSQLReceiver{rows: result.Rows}
+	recv := makeDistSQLReceiver(result.Rows)
 	err := e.distSQLPlanner.PlanAndRun(planMaker.session.Ctx(), planMaker.txn, tree, &recv)
 	if err != nil {
 		return err

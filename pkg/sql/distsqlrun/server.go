@@ -129,11 +129,19 @@ func (ds *ServerImpl) SetupSyncFlow(
 }
 
 // RunSyncFlow is part of the DistSQLServer interface.
-func (ds *ServerImpl) RunSyncFlow(req *SetupFlowRequest, stream DistSQL_RunSyncFlowServer) error {
+func (ds *ServerImpl) RunSyncFlow(stream DistSQL_RunSyncFlowServer) error {
 	// Set up the outgoing mailbox for the stream.
 	mbox := newOutboxSyncFlowStream(stream)
 	ctx := ds.AnnotateCtx(stream.Context())
 
+	firstMsg, err := stream.Recv()
+	if err != nil {
+		return err
+	}
+	if firstMsg.SetupFlowRequest == nil {
+		return errors.Errorf("first message in RunSyncFlow doesn't contain SetupFlowRequest")
+	}
+	req := firstMsg.SetupFlowRequest
 	ctx, f, err := ds.SetupSyncFlow(ctx, req, mbox)
 	if err != nil {
 		log.Error(ctx, err)

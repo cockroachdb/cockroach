@@ -91,13 +91,18 @@ func (h *hashJoiner) Run(ctx context.Context, wg *sync.WaitGroup) {
 		defer log.Infof(ctx, "exiting hash joiner run")
 	}
 
-	defer h.leftSource.ConsumerDone()
-	defer h.rightSource.ConsumerDone()
-
-	if err := h.buildPhase(ctx); err != nil {
-		h.out.close(err)
+	moreRows, err := h.buildPhase(ctx)
+	if err != nil {
+		// We got an error. We still want to drain. Any error encountered while
+		// draining will be swallowed, and the original error will be forwarded to
+		// the consumer.
+		DrainAndClose(ctx, h.out.output, err, h.leftSource, h.rightSource)
 		return
 	}
+	if !moreRows {
+		return
+	}
+
 	if h.joinType == rightOuter || h.joinType == fullOuter {
 		for k, bucket := range h.buckets {
 			bucket.seen = make([]bool, len(bucket.rows))
@@ -105,24 +110,49 @@ func (h *hashJoiner) Run(ctx context.Context, wg *sync.WaitGroup) {
 		}
 	}
 	log.VEventf(ctx, 1, "build phase complete")
-	err := h.probePhase(ctx)
-	h.out.close(err)
+	moreRows, err = h.probePhase(ctx)
+	if moreRows || err != nil {
+		// We got an error. We still want to drain. Any error encountered while
+		// draining will be swallowed, and the original error will be forwarded to
+		// the consumer. Note that rightSource has already been drained at this
+		// point.
+		DrainAndClose(ctx, h.out.output, err, h.leftSource)
+	}
 }
 
-// buildPhase constructs our internal hash map of rows seen, this is done
+// buildPhase constructs our internal hash map of rows seen. This is done
 // entirely from the right stream with the encoding/group key generated using the
-// left equality columns.
-func (h *hashJoiner) buildPhase(ctx context.Context) error {
+// left equality columns. If a row is found to have a NULL in an equality column
+// (and thus will not match anything), it might be routed directly to the
+// output. In such cases it is possible that the buildPhase will fully satisfy
+// the consumer.
+//
+// Returns true if more rows are needed to be passed to the output, false
+// otherwise. If it returns false, both the inputs and the output have been
+// properly drained and/or closed.
+// If true is returned, the right input has been drained.
+// If an error is returned, the inputs/output have not been drained or closed.
+func (h *hashJoiner) buildPhase(ctx context.Context) (bool, error) {
 	var scratch []byte
 	for {
-		rrow, err := h.rightSource.NextRow()
-		if err != nil || rrow == nil {
-			return err
+		rrow, meta := h.rightSource.Next()
+		if !meta.Empty() {
+			if meta.Err != nil {
+				return true, meta.Err
+			}
+			if !emitHelper(
+				ctx, &h.out, nil /* row */, ProducerMetadata{}, h.leftSource, h.rightSource) {
+				return false, nil
+			}
+			continue
+		}
+		if rrow == nil {
+			return true, nil
 		}
 
 		encoded, hasNull, err := h.encode(scratch, rrow, h.rightEqCols)
 		if err != nil {
-			return err
+			return false, err
 		}
 
 		scratch = encoded[:0]
@@ -133,10 +163,13 @@ func (h *hashJoiner) buildPhase(ctx context.Context) error {
 			if h.joinType == rightOuter || h.joinType == fullOuter {
 				row, _, err := h.render(nil, rrow)
 				if err != nil {
-					return err
+					return false, err
 				}
-				if row != nil && !h.out.emitRow(ctx, row) {
-					return nil
+				if row == nil {
+					continue
+				}
+				if !emitHelper(ctx, &h.out, row, ProducerMetadata{}, h.leftSource, h.rightSource) {
+					return false, nil
 				}
 			}
 			continue
@@ -153,33 +186,50 @@ func (h *hashJoiner) buildPhase(ctx context.Context) error {
 // merging of the two rows if matched. Behaviour for outer joins is as expected,
 // i.e. for RIGHT OUTER joins if no corresponding left row is seen an empty
 // DNull row is emitted instead.
-func (h *hashJoiner) probePhase(ctx context.Context) error {
+//
+// Returns false is both the inputs and the output have been properly drained
+// and/or closed. Returns true if the caller needs to do the draining.
+// If an error is returned, the inputs/output have not been drained or closed.
+// The return values are symmetric with buildPhase().
+func (h *hashJoiner) probePhase(ctx context.Context) (bool, error) {
 	var scratch []byte
 
+	// If moreRowsNeeded is returned false, then both the input and the output
+	// have been drained and closed.
+	// If an error is returned, the input/output have not been drained and closed.
 	renderAndEmit := func(lrow sqlbase.EncDatumRow, rrow sqlbase.EncDatumRow,
-	) (rowsLeft bool, failedOnCond bool, err error) {
+	) (moreRowsNeeded bool, failedOnCond bool, err error) {
 		row, failedOnCond, err := h.render(lrow, rrow)
 		if err != nil {
-			return false, failedOnCond, err
+			return false, false, err
 		}
 		if row != nil {
-			return h.out.emitRow(ctx, row), failedOnCond, nil
+			moreRowsNeeded := emitHelper(ctx, &h.out, row, ProducerMetadata{}, h.leftSource)
+			return moreRowsNeeded, failedOnCond, nil
 		}
 		return true, failedOnCond, nil
 	}
 
 	for {
-		lrow, err := h.leftSource.NextRow()
-		if err != nil {
-			return err
+		lrow, meta := h.leftSource.Next()
+		if !meta.Empty() {
+			if meta.Err != nil {
+				return true, meta.Err
+			}
+			if !emitHelper(
+				ctx, &h.out, nil /* row */, ProducerMetadata{}, h.leftSource, h.rightSource) {
+				return false, nil
+			}
+			continue
 		}
+
 		if lrow == nil {
 			break
 		}
 
 		encoded, hasNull, err := h.encode(scratch, lrow, h.leftEqCols)
 		if err != nil {
-			return err
+			return true, err
 		}
 		scratch = encoded[:0]
 
@@ -187,10 +237,9 @@ func (h *hashJoiner) probePhase(ctx context.Context) error {
 			// A row that has a NULL in an equality column will not match anything.
 			// Output it or throw it away.
 			if h.joinType == leftOuter || h.joinType == fullOuter {
-				if rowsLeft, _, err := renderAndEmit(lrow, nil); err != nil {
-					return err
-				} else if !rowsLeft {
-					return nil
+				moreRowsNeeded, _, err := renderAndEmit(lrow, nil)
+				if !moreRowsNeeded || err != nil {
+					return moreRowsNeeded, err
 				}
 			}
 			continue
@@ -198,17 +247,13 @@ func (h *hashJoiner) probePhase(ctx context.Context) error {
 
 		b, ok := h.buckets[string(encoded)]
 		if !ok {
-			if rowsLeft, _, err := renderAndEmit(lrow, nil); err != nil {
-				return err
-			} else if !rowsLeft {
-				return nil
+			if moreRowsNeeded, _, err := renderAndEmit(lrow, nil); !moreRowsNeeded || err != nil {
+				return moreRowsNeeded, err
 			}
 		} else {
 			for idx, rrow := range b.rows {
-				if rowsLeft, failedOnCond, err := renderAndEmit(lrow, rrow); err != nil {
-					return err
-				} else if !rowsLeft {
-					return nil
+				if moreRowsNeeded, failedOnCond, err := renderAndEmit(lrow, rrow); !moreRowsNeeded || err != nil {
+					return moreRowsNeeded, err
 				} else if !failedOnCond && (h.joinType == rightOuter || h.joinType == fullOuter) {
 					b.seen[idx] = true
 				}
@@ -217,23 +262,21 @@ func (h *hashJoiner) probePhase(ctx context.Context) error {
 	}
 
 	if h.joinType == innerJoin || h.joinType == leftOuter {
-		return nil
+		return true, nil
 	}
 
 	// Produce results for unmatched right rows (for RIGHT OUTER or FULL OUTER).
 	for _, b := range h.buckets {
 		for idx, rrow := range b.rows {
 			if !b.seen[idx] {
-				if rowsLeft, _, err := renderAndEmit(nil, rrow); err != nil {
-					return err
-				} else if !rowsLeft {
-					return nil
+				if moreRowsNeeded, _, err := renderAndEmit(nil, rrow); !moreRowsNeeded || err != nil {
+					return moreRowsNeeded, err
 				}
 			}
 		}
 	}
-
-	return nil
+	h.out.close()
+	return false, nil
 }
 
 // encode returns the encoding for the grouping columns, this is then used as

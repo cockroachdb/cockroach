@@ -482,51 +482,50 @@ func TestHashJoiner(t *testing.T) {
 	}
 
 	for _, c := range testCases {
-		hs := c.spec
-		leftInput := NewRowBuffer(nil, c.inputs[0])
-		rightInput := NewRowBuffer(nil, c.inputs[1])
-		out := &RowBuffer{}
-		flowCtx := FlowCtx{evalCtx: &parser.EvalContext{}}
+		t.Run("", func(t *testing.T) {
+			hs := c.spec
+			leftInput := NewRowBuffer(nil, c.inputs[0])
+			rightInput := NewRowBuffer(nil, c.inputs[1])
+			out := &RowBuffer{}
+			flowCtx := FlowCtx{evalCtx: &parser.EvalContext{}}
 
-		post := PostProcessSpec{OutputColumns: c.outCols}
-		h, err := newHashJoiner(&flowCtx, &hs, leftInput, rightInput, &post, out)
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		h.Run(context.Background(), nil)
-
-		if out.Err != nil {
-			t.Fatal(out.Err)
-		}
-		if !out.ProducerClosed {
-			t.Fatalf("output RowReceiver not closed")
-		}
-
-		var expected []string
-		for _, row := range c.expected {
-			expected = append(expected, row.String())
-		}
-		sort.Strings(expected)
-		expStr := strings.Join(expected, "")
-
-		var rets []string
-		for {
-			row, err := out.NextRow()
+			post := PostProcessSpec{OutputColumns: c.outCols}
+			h, err := newHashJoiner(&flowCtx, &hs, leftInput, rightInput, &post, out)
 			if err != nil {
 				t.Fatal(err)
 			}
-			if row == nil {
-				break
-			}
-			rets = append(rets, row.String())
-		}
-		sort.Strings(rets)
-		retStr := strings.Join(rets, "")
 
-		if expStr != retStr {
-			t.Errorf("invalid results; expected:\n   %s\ngot:\n   %s",
-				expStr, retStr)
-		}
+			h.Run(context.Background(), nil)
+
+			if !out.ProducerClosed {
+				t.Fatalf("output RowReceiver not closed")
+			}
+
+			var expected []string
+			for _, row := range c.expected {
+				expected = append(expected, row.String())
+			}
+			sort.Strings(expected)
+			expStr := strings.Join(expected, "")
+
+			var rets []string
+			for {
+				row, meta := out.Next()
+				if !meta.Empty() {
+					t.Fatalf("unexpected metadata: %v", meta)
+				}
+				if row == nil {
+					break
+				}
+				rets = append(rets, row.String())
+			}
+			sort.Strings(rets)
+			retStr := strings.Join(rets, "")
+
+			if expStr != retStr {
+				t.Errorf("invalid results; expected:\n   %s\ngot:\n   %s",
+					expStr, retStr)
+			}
+		})
 	}
 }
