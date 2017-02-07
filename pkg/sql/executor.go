@@ -1515,6 +1515,68 @@ func makeResultColumns(colDescs []sqlbase.ColumnDescriptor) ResultColumns {
 	return cols
 }
 
+// EvalAsOfTimestamp evaluates and returns the timestamp from an AS OF SYSTEM
+// TIME clause.
+func EvalAsOfTimestamp(
+	evalCtx *parser.EvalContext, asOf parser.AsOfClause, max hlc.Timestamp,
+) (hlc.Timestamp, error) {
+	var ts hlc.Timestamp
+	te, err := asOf.Expr.TypeCheck(nil, parser.TypeString)
+	if err != nil {
+		return hlc.ZeroTimestamp, err
+	}
+	d, err := te.Eval(evalCtx)
+	if err != nil {
+		return hlc.ZeroTimestamp, err
+	}
+	switch d := d.(type) {
+	case *parser.DString:
+		// Allow nanosecond precision because the timestamp is only used by the
+		// system and won't be returned to the user over pgwire.
+		dt, err := parser.ParseDTimestamp(string(*d), time.Nanosecond)
+		if err != nil {
+			return hlc.ZeroTimestamp, err
+		}
+		ts.WallTime = dt.Time.UnixNano()
+	case *parser.DInt:
+		ts.WallTime = int64(*d)
+	case *parser.DDecimal:
+		// Format the decimal into a string and split on `.` to extract the nanosecond
+		// walltime and logical tick parts.
+		s := d.String()
+		parts := strings.SplitN(s, ".", 2)
+		nanos, err := strconv.ParseInt(parts[0], 10, 64)
+		if err != nil {
+			return hlc.ZeroTimestamp, errors.Wrap(err, "parse AS OF SYSTEM TIME argument")
+		}
+		var logical int64
+		if len(parts) > 1 {
+			// logicalLength is the number of decimal digits expected in the
+			// logical part to the right of the decimal. See the implementation of
+			// cluster_logical_timestamp().
+			const logicalLength = 10
+			p := parts[1]
+			if lp := len(p); lp > logicalLength {
+				return hlc.ZeroTimestamp, errors.Errorf("bad AS OF SYSTEM TIME argument: logical part has too many digits")
+			} else if lp < logicalLength {
+				p += strings.Repeat("0", logicalLength-lp)
+			}
+			logical, err = strconv.ParseInt(p, 10, 32)
+			if err != nil {
+				return hlc.ZeroTimestamp, errors.Wrap(err, "parse AS OF SYSTEM TIME argument")
+			}
+		}
+		ts.WallTime = nanos
+		ts.Logical = int32(logical)
+	default:
+		return hlc.ZeroTimestamp, fmt.Errorf("unexpected AS OF SYSTEM TIME argument: %s (%T)", d.ResolvedType(), d)
+	}
+	if max.Less(ts) {
+		return hlc.ZeroTimestamp, fmt.Errorf("cannot specify timestamp in the future")
+	}
+	return ts, nil
+}
+
 // isAsOf analyzes a select statement to bypass the logic in newPlan(),
 // since that requires the transaction to be started already. If the returned
 // timestamp is not nil, it is the timestamp to which a transaction should
@@ -1534,61 +1596,9 @@ func isAsOf(planMaker *planner, stmt parser.Statement, max hlc.Timestamp) (*hlc.
 	if sc.From == nil || sc.From.AsOf.Expr == nil {
 		return nil, nil
 	}
-	te, err := sc.From.AsOf.Expr.TypeCheck(nil, parser.TypeString)
-	if err != nil {
-		return nil, err
-	}
-	d, err := te.Eval(&planMaker.evalCtx)
-	if err != nil {
-		return nil, err
-	}
-	var ts hlc.Timestamp
-	switch d := d.(type) {
-	case *parser.DString:
-		// Allow nanosecond precision because the timestamp is only used by the
-		// system and won't be returned to the user over pgwire.
-		dt, err := parser.ParseDTimestamp(string(*d), time.Nanosecond)
-		if err != nil {
-			return nil, err
-		}
-		ts.WallTime = dt.Time.UnixNano()
-	case *parser.DInt:
-		ts.WallTime = int64(*d)
-	case *parser.DDecimal:
-		// Format the decimal into a string and split on `.` to extract the nanosecond
-		// walltime and logical tick parts.
-		s := d.String()
-		parts := strings.SplitN(s, ".", 2)
-		nanos, err := strconv.ParseInt(parts[0], 10, 64)
-		if err != nil {
-			return nil, errors.Wrap(err, "parse AS OF SYSTEM TIME argument")
-		}
-		var logical int64
-		if len(parts) > 1 {
-			// logicalLength is the number of decimal digits expected in the
-			// logical part to the right of the decimal. See the implementation of
-			// cluster_logical_timestamp().
-			const logicalLength = 10
-			p := parts[1]
-			if lp := len(p); lp > logicalLength {
-				return nil, errors.Errorf("bad AS OF SYSTEM TIME argument: logical part has too many digits")
-			} else if lp < logicalLength {
-				p += strings.Repeat("0", logicalLength-lp)
-			}
-			logical, err = strconv.ParseInt(p, 10, 32)
-			if err != nil {
-				return nil, errors.Wrap(err, "parse AS OF SYSTEM TIME argument")
-			}
-		}
-		ts.WallTime = nanos
-		ts.Logical = int32(logical)
-	default:
-		return nil, fmt.Errorf("unexpected AS OF SYSTEM TIME argument: %s (%T)", d.ResolvedType(), d)
-	}
-	if max.Less(ts) {
-		return nil, fmt.Errorf("cannot specify timestamp in the future")
-	}
-	return &ts, nil
+
+	ts, err := EvalAsOfTimestamp(&planMaker.evalCtx, sc.From.AsOf, max)
+	return &ts, err
 }
 
 // SetTxnTimestamps sets the transaction's proto timestamps and deadline
