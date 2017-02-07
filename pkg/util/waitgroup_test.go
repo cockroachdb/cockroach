@@ -1,18 +1,25 @@
 // Copyright 2016 The Cockroach Authors.
 //
-// Licensed under the Cockroach Community Licence (the "License");
+// Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//     https://github.com/cockroachdb/cockroach/blob/master/LICENSE
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+// implied. See the License for the specific language governing
+// permissions and limitations under the License.
+//
+// Author: Daniel Harrison (dan@cockroachlabs.com)
 
-package utilccl
+package util
 
 import (
 	"errors"
+	"strings"
 	"testing"
-
-	"github.com/cockroachdb/cockroach/pkg/testutils"
 )
 
 func TestWaitGroupNoError(t *testing.T) {
@@ -38,7 +45,7 @@ func TestWaitGroupOneError(t *testing.T) {
 	wg.Add(1)
 	wg.Done(errors.New("one"))
 	wg.Wait()
-	if err := wg.FirstError(); !testutils.IsError(err, "one") {
+	if err := wg.FirstError(); err == nil || !strings.Contains(err.Error(), "one") {
 		t.Fatalf("expected 'one' error got: %+v", err)
 	}
 }
@@ -49,7 +56,7 @@ func TestWaitGroupTwoErrors(t *testing.T) {
 	wg.Done(errors.New("one"))
 	wg.Done(errors.New("two"))
 	wg.Wait()
-	if err := wg.FirstError(); !testutils.IsError(err, "one") {
+	if err := wg.FirstError(); err == nil || !strings.Contains(err.Error(), "one") {
 		t.Fatalf("expected 'one' error got: %+v", err)
 	}
 }
