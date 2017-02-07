@@ -348,7 +348,7 @@ func (p *planner) namesForExprs(exprs parser.UpdateExprs) (parser.UnresolvedName
 				}
 			case *parser.Tuple:
 				n = len(t.Exprs)
-			case *parser.DTupleDatum:
+			case *parser.DTuple:
 				n = len(t.D)
 			}
 			if n < 0 {

@@ -678,7 +678,7 @@ func simplifyOneAndInExpr(left, right *parser.ComparisonExpr) (parser.TypedExpr,
 		fallthrough
 
 	case parser.In:
-		ltuple := left.Right.(*parser.DTupleDatum).D
+		ltuple := left.Right.(*parser.DTuple).D
 		switch right.Operator {
 		case parser.Is:
 			if right.Right == parser.DNull {
@@ -710,7 +710,7 @@ func simplifyOneAndInExpr(left, right *parser.ComparisonExpr) (parser.TypedExpr,
 				return parser.NewTypedComparisonExpr(
 					parser.In,
 					left.TypedLeft(),
-					parser.NewDTupleDatum(ltuple...),
+					parser.NewDTuple(ltuple...),
 				), nil
 
 			case parser.GT:
@@ -724,7 +724,7 @@ func simplifyOneAndInExpr(left, right *parser.ComparisonExpr) (parser.TypedExpr,
 						return parser.NewTypedComparisonExpr(
 							parser.In,
 							left.TypedLeft(),
-							parser.NewDTupleDatum(ltuple...),
+							parser.NewDTuple(ltuple...),
 						), nil
 					}
 				}
@@ -737,7 +737,7 @@ func simplifyOneAndInExpr(left, right *parser.ComparisonExpr) (parser.TypedExpr,
 						return parser.NewTypedComparisonExpr(
 							parser.In,
 							left.TypedLeft(),
-							parser.NewDTupleDatum(ltuple...),
+							parser.NewDTuple(ltuple...),
 						), nil
 					}
 				}
@@ -752,7 +752,7 @@ func simplifyOneAndInExpr(left, right *parser.ComparisonExpr) (parser.TypedExpr,
 					return parser.NewTypedComparisonExpr(
 						parser.In,
 						left.TypedLeft(),
-						parser.NewDTupleDatum(ltuple...),
+						parser.NewDTuple(ltuple...),
 					), nil
 				}
 				return left, nil
@@ -769,7 +769,7 @@ func simplifyOneAndInExpr(left, right *parser.ComparisonExpr) (parser.TypedExpr,
 					return parser.NewTypedComparisonExpr(
 						parser.In,
 						left.TypedLeft(),
-						parser.NewDTupleDatum(ltuple...),
+						parser.NewDTuple(ltuple...),
 					), nil
 				}
 				return left, nil
@@ -777,7 +777,7 @@ func simplifyOneAndInExpr(left, right *parser.ComparisonExpr) (parser.TypedExpr,
 
 		case parser.In:
 			// Both of our tuples are sorted. Intersect the lists.
-			rtuple := right.Right.(*parser.DTupleDatum).D
+			rtuple := right.Right.(*parser.DTuple).D
 			intersection := intersectSorted(ltuple, rtuple)
 			if len(intersection) == 0 {
 				return parser.MakeDBool(false), nil
@@ -785,7 +785,7 @@ func simplifyOneAndInExpr(left, right *parser.ComparisonExpr) (parser.TypedExpr,
 			return parser.NewTypedComparisonExpr(
 				parser.In,
 				left.TypedLeft(),
-				parser.NewDTupleDatum(intersection...),
+				parser.NewDTuple(intersection...),
 			), nil
 		}
 	}
@@ -947,7 +947,7 @@ func simplifyOneOrExpr(left, right parser.TypedExpr) (parser.TypedExpr, parser.T
 			return parser.NewTypedComparisonExpr(
 				parser.In,
 				lcmpLeft,
-				parser.NewDTupleDatum(ldatum, rdatum),
+				parser.NewDTuple(ldatum, rdatum),
 			), nil, true
 		case parser.NE:
 			// a = x OR a != y
@@ -1268,7 +1268,7 @@ func simplifyOneOrInExpr(left, right *parser.ComparisonExpr) (parser.TypedExpr, 
 		fallthrough
 
 	case parser.In:
-		tuple := left.Right.(*parser.DTupleDatum).D
+		tuple := left.Right.(*parser.DTuple).D
 		switch right.Operator {
 		case parser.EQ:
 			datum := right.Right.(parser.Datum)
@@ -1277,7 +1277,7 @@ func simplifyOneOrInExpr(left, right *parser.ComparisonExpr) (parser.TypedExpr, 
 			return parser.NewTypedComparisonExpr(
 				parser.In,
 				left.TypedLeft(),
-				parser.NewDTupleDatum(mergeSorted(tuple, parser.Datums{datum})...),
+				parser.NewDTuple(mergeSorted(tuple, parser.Datums{datum})...),
 			), nil
 
 		case parser.NE, parser.GT, parser.GE, parser.LT, parser.LE:
@@ -1340,7 +1340,7 @@ func simplifyOneOrInExpr(left, right *parser.ComparisonExpr) (parser.TypedExpr, 
 			return parser.NewTypedComparisonExpr(
 				parser.In,
 				left.TypedLeft(),
-				parser.NewDTupleDatum(mergeSorted(tuple, right.Right.(*parser.DTupleDatum).D)...),
+				parser.NewDTuple(mergeSorted(tuple, right.Right.(*parser.DTuple).D)...),
 			), nil
 		}
 	}
@@ -1400,7 +1400,7 @@ func simplifyComparisonExpr(n *parser.ComparisonExpr) (parser.TypedExpr, bool) {
 				return parser.NewTypedComparisonExpr(
 					parser.In,
 					left,
-					parser.NewDTupleDatum(right.(parser.Datum)),
+					parser.NewDTuple(right.(parser.Datum)),
 				), true
 			}
 			return n, true
@@ -1424,7 +1424,7 @@ func simplifyComparisonExpr(n *parser.ComparisonExpr) (parser.TypedExpr, bool) {
 			}
 			return n, true
 		case parser.In, parser.NotIn:
-			tuple := right.(*parser.DTupleDatum).D
+			tuple := right.(*parser.DTuple).D
 			if len(tuple) == 0 {
 				return parser.MakeDBool(false), true
 			}

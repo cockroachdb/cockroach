@@ -169,7 +169,7 @@ func benchmarkWriteTuple(b *testing.B, format formatCode) {
 	i := parser.NewDInt(1234)
 	f := parser.NewDFloat(12.34)
 	s := parser.NewDString("testing")
-	t := parser.NewDTupleDatum(i, f, s)
+	t := parser.NewDTuple(i, f, s)
 	benchmarkWriteType(b, t, format)
 }
 

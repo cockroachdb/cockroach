@@ -1562,8 +1562,8 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 var errCmpNull = errors.New("NULL comparison")
 
 func cmpTuple(ldatum, rdatum Datum) (int, error) {
-	left := *ldatum.(*DTupleDatum)
-	right := *rdatum.(*DTupleDatum)
+	left := *ldatum.(*DTuple)
+	right := *rdatum.(*DTuple)
 	for i, l := range left.D {
 		r := right.D[i]
 		if l == DNull || r == DNull {
@@ -1586,7 +1586,7 @@ func makeEvalTupleIn(typ Type) CmpOp {
 				return DBool(false), nil
 			}
 
-			vtuple := values.(*DTupleDatum).D
+			vtuple := values.(*DTuple).D
 			i := sort.Search(len(vtuple), func(i int) bool { return vtuple[i].Compare(arg) >= 0 })
 			found := i < len(vtuple) && vtuple[i].Compare(arg) == 0
 			return DBool(found), nil
@@ -2375,7 +2375,7 @@ func (t *ExistsExpr) Eval(ctx *EvalContext) (Datum, error) {
 
 // Eval implements the TypedExpr interface.
 func (expr *FuncExpr) Eval(ctx *EvalContext) (Datum, error) {
-	args := NewDTupleDatumWithCap(len(expr.Exprs))
+	args := NewDTupleWithCap(len(expr.Exprs))
 	for _, e := range expr.Exprs {
 		arg, err := e.(TypedExpr).Eval(ctx)
 		if err != nil {
@@ -2557,7 +2557,7 @@ func (expr *ColumnItem) Eval(ctx *EvalContext) (Datum, error) {
 
 // Eval implements the TypedExpr interface.
 func (t *Tuple) Eval(ctx *EvalContext) (Datum, error) {
-	tuple := NewDTupleDatumWithCap(len(t.Exprs))
+	tuple := NewDTupleWithCap(len(t.Exprs))
 	for _, v := range t.Exprs {
 		d, err := v.(TypedExpr).Eval(ctx)
 		if err != nil {
@@ -2608,7 +2608,7 @@ func (t *ArrayFlatten) Eval(ctx *EvalContext) (Datum, error) {
 		return nil, err
 	}
 
-	tuple, ok := d.(*DTupleDatum)
+	tuple, ok := d.(*DTuple)
 	if !ok {
 		return nil, errors.Errorf("array subquery result (%v) is not DTuple", d)
 	}
@@ -2677,7 +2677,7 @@ func (t *DTimestampTZ) Eval(_ *EvalContext) (Datum, error) {
 }
 
 // Eval implements the TypedExpr interface.
-func (t *DTupleDatum) Eval(_ *EvalContext) (Datum, error) {
+func (t *DTuple) Eval(_ *EvalContext) (Datum, error) {
 	return t, nil
 }
 
