@@ -69,8 +69,10 @@ const (
 	// recommended number, than the default value is used.
 	RecommendedMaxOpenFiles = 10000
 	// MinimumMaxOpenFiles is The minimum value that rocksDB's max_open_files
-	// option can be set to.
-	MinimumMaxOpenFiles = 2000
+	// option can be set to. While this should be as high as possible, the
+	// minimum total for a single store node must be under 2000 for windows
+	// compatibility.
+	MinimumMaxOpenFiles = 1700
 )
 
 func init() {
