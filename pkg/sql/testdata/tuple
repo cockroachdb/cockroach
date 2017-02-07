@@ -139,6 +139,8 @@ true
 query error pq: tuples \(\(1, 2\), 'equal'\), \(\(1, 'huh'\), 'equal'\) are not the same type: tuples \(1, 2\), \(1, 'huh'\) are not the same type: expected 2 to be of type string, found type int
 SELECT ((1, 2), 'equal') = ((1, 'huh'), 'equal')
 
+# Issue #12295
+
 query B
 SELECT 'foo' IN (x, 'aaa') FROM (SELECT 'foo' AS x)
 ----
@@ -148,3 +150,15 @@ query B
 SELECT 'foo' IN (x, 'zzz') FROM (SELECT 'foo' AS x)
 ----
 true
+
+# Issue #12302
+
+query B
+SELECT 1 IN (2, NULL)
+----
+NULL
+
+query B
+SELECT 1 IN (2, x) FROM (SELECT NULL AS x)
+----
+NULL

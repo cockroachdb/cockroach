@@ -1670,9 +1670,6 @@ func (d *DTuple) sort() {
 func (d *DTuple) makeUnique() {
 	n := 0
 	for i := 0; i < len(d.D); i++ {
-		if d.D[i] == DNull {
-			continue
-		}
 		if n == 0 || d.D[n-1].Compare(d.D[i]) < 0 {
 			d.D[n] = d.D[i]
 			n++
