@@ -714,11 +714,6 @@ func TestAbortSchemaChangeBackfill(t *testing.T) {
 	// Disable asynchronous schema change execution to allow synchronous path
 	// to trigger start of backfill notification.
 	params.Knobs = base.TestingKnobs{
-		SQLExecutor: &csql.ExecutorTestingKnobs{
-			// Fix the priority to guarantee that a high priority transaction
-			// pushes a lower priority one.
-			FixTxnPriority: true,
-		},
 		SQLSchemaChanger: &csql.SchemaChangerTestingKnobs{
 			RunBeforeBackfillChunk: func(sp roachpb.Span) error {
 				switch atomic.LoadInt64(&backfillCount) {
