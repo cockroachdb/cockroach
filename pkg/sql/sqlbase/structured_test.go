@@ -18,6 +18,7 @@ package sqlbase
 
 import (
 	"encoding/json"
+	"fmt"
 	"reflect"
 	"testing"
 
@@ -28,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
@@ -1054,5 +1056,52 @@ func TestUnvalidateConstraints(t *testing.T) {
 	}
 	if c, ok := after["fk"]; !ok || !c.Unvalidated {
 		t.Fatalf("expected to find a unvalididated constraint fk before, found %v", c)
+	}
+}
+
+func TestKeysPerRow(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	// TODO(dan): This server is only used to turn a CREATE TABLE statement into
+	// a TableDescriptor. It should be possible to move MakeTableDesc into
+	// sqlbase. If/when that happens, use it here instead of this server.
+	s, conn, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop()
+	if _, err := conn.Exec(`CREATE DATABASE d`); err != nil {
+		t.Fatalf("%+v", err)
+	}
+
+	tests := []struct {
+		createTable string
+		indexID     IndexID
+		expected    int
+	}{
+		{"(a SERIAL PRIMARY KEY, b INT, INDEX (b))", 1, 1},                         // Primary index
+		{"(a SERIAL PRIMARY KEY, b INT, INDEX (b))", 2, 1},                         // 'b' index
+		{"(a SERIAL PRIMARY KEY, b INT, FAMILY (a), FAMILY (b), INDEX (b))", 1, 2}, // Primary index
+		{"(a SERIAL PRIMARY KEY, b INT, FAMILY (a), FAMILY (b), INDEX (b))", 2, 1}, // 'b' index
+	}
+
+	for i, test := range tests {
+		t.Run(fmt.Sprintf("%s - %d", test.createTable, test.indexID), func(t *testing.T) {
+			sqlDB := sqlutils.MakeSQLRunner(t, conn)
+			tableName := fmt.Sprintf("t%d", i)
+			sqlDB.Exec(fmt.Sprintf(`CREATE TABLE d.%s %s`, tableName, test.createTable))
+
+			var descBytes []byte
+			// Grab the most recently created descriptor.
+			row := sqlDB.QueryRow(
+				`SELECT descriptor FROM system.descriptor ORDER BY id DESC LIMIT 1`)
+			row.Scan(&descBytes)
+			var desc Descriptor
+			if err := desc.Unmarshal(descBytes); err != nil {
+				t.Fatalf("%+v", err)
+			}
+
+			keys := desc.GetTable().KeysPerRow(test.indexID)
+			if test.expected != keys {
+				t.Errorf("expected %d keys got %d", test.expected, keys)
+			}
+		})
 	}
 }

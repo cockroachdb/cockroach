@@ -294,6 +294,16 @@ func (desc *TableDescriptor) IsPhysicalTable() bool {
 	return desc.IsTable() && !desc.IsVirtualTable()
 }
 
+// KeysPerRow returns the maximum number of keys used to encode a row for the
+// given index. For secondary indexes, we always only use one, but for primary
+// indexes, we can encode up to one kv per column family.
+func (desc *TableDescriptor) KeysPerRow(indexID IndexID) int {
+	if desc.PrimaryIndex.ID == indexID {
+		return len(desc.Families)
+	}
+	return 1
+}
+
 // allNonDropColumns returns all the columns, including those being added
 // in the mutations.
 func (desc *TableDescriptor) allNonDropColumns() []ColumnDescriptor {
