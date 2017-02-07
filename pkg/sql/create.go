@@ -116,7 +116,7 @@ func (n *createDatabaseNode) Next() (bool, error)        { return false, nil }
 func (n *createDatabaseNode) Close()                     {}
 func (n *createDatabaseNode) Columns() ResultColumns     { return make(ResultColumns, 0) }
 func (n *createDatabaseNode) Ordering() orderingInfo     { return orderingInfo{} }
-func (n *createDatabaseNode) Values() parser.DTuple      { return parser.DTuple{} }
+func (n *createDatabaseNode) Values() parser.Datums      { return parser.Datums{} }
 func (n *createDatabaseNode) DebugValues() debugValues   { return debugValues{} }
 func (n *createDatabaseNode) MarkDebug(mode explainMode) {}
 
@@ -226,7 +226,7 @@ func (n *createIndexNode) Next() (bool, error)        { return false, nil }
 func (n *createIndexNode) Close()                     {}
 func (n *createIndexNode) Columns() ResultColumns     { return make(ResultColumns, 0) }
 func (n *createIndexNode) Ordering() orderingInfo     { return orderingInfo{} }
-func (n *createIndexNode) Values() parser.DTuple      { return parser.DTuple{} }
+func (n *createIndexNode) Values() parser.Datums      { return parser.Datums{} }
 func (n *createIndexNode) DebugValues() debugValues   { return debugValues{} }
 func (n *createIndexNode) MarkDebug(mode explainMode) {}
 
@@ -303,7 +303,7 @@ func (n *createUserNode) Next() (bool, error)        { return false, nil }
 func (n *createUserNode) Close()                     {}
 func (n *createUserNode) Columns() ResultColumns     { return make(ResultColumns, 0) }
 func (n *createUserNode) Ordering() orderingInfo     { return orderingInfo{} }
-func (n *createUserNode) Values() parser.DTuple      { return parser.DTuple{} }
+func (n *createUserNode) Values() parser.Datums      { return parser.Datums{} }
 func (n *createUserNode) DebugValues() debugValues   { return debugValues{} }
 func (n *createUserNode) MarkDebug(mode explainMode) {}
 
@@ -461,7 +461,7 @@ func (n *createViewNode) Close() {
 func (n *createViewNode) Next() (bool, error)        { return false, nil }
 func (n *createViewNode) Columns() ResultColumns     { return make(ResultColumns, 0) }
 func (n *createViewNode) Ordering() orderingInfo     { return orderingInfo{} }
-func (n *createViewNode) Values() parser.DTuple      { return parser.DTuple{} }
+func (n *createViewNode) Values() parser.Datums      { return parser.Datums{} }
 func (n *createViewNode) DebugValues() debugValues   { return debugValues{} }
 func (n *createViewNode) MarkDebug(mode explainMode) {}
 
@@ -684,7 +684,7 @@ func (n *createTableNode) Close() {
 func (n *createTableNode) Next() (bool, error)        { return false, nil }
 func (n *createTableNode) Columns() ResultColumns     { return make(ResultColumns, 0) }
 func (n *createTableNode) Ordering() orderingInfo     { return orderingInfo{} }
-func (n *createTableNode) Values() parser.DTuple      { return parser.DTuple{} }
+func (n *createTableNode) Values() parser.Datums      { return parser.Datums{} }
 func (n *createTableNode) DebugValues() debugValues   { return debugValues{} }
 func (n *createTableNode) MarkDebug(mode explainMode) {}
 

@@ -653,7 +653,7 @@ func MakeRekeyMVCCKeyValFunc(
 
 func backupPlanHook(
 	baseCtx context.Context, stmt parser.Statement, cfg *sql.ExecutorConfig,
-) (func() ([]parser.DTuple, error), sql.ResultColumns, error) {
+) (func() ([]parser.Datums, error), sql.ResultColumns, error) {
 	backup, ok := stmt.(*parser.Backup)
 	if !ok {
 		return nil, nil, nil
@@ -664,7 +664,7 @@ func backupPlanHook(
 		{Name: "endTs", Typ: parser.TypeString},
 		{Name: "dataSize", Typ: parser.TypeInt},
 	}
-	fn := func() ([]parser.DTuple, error) {
+	fn := func() ([]parser.Datums, error) {
 		// TODO(dan): Move this span into sql.
 		ctx, span := tracing.ChildSpan(baseCtx, stmt.StatementTag())
 		defer tracing.FinishSpan(span)
@@ -679,7 +679,7 @@ func backupPlanHook(
 		if err != nil {
 			return nil, err
 		}
-		ret := []parser.DTuple{{
+		ret := []parser.Datums{{
 			parser.NewDString(backup.To),
 			parser.NewDString(startTime.String()),
 			parser.NewDString(endTime.String()),
@@ -692,12 +692,12 @@ func backupPlanHook(
 
 func restorePlanHook(
 	baseCtx context.Context, stmt parser.Statement, cfg *sql.ExecutorConfig,
-) (func() ([]parser.DTuple, error), sql.ResultColumns, error) {
+) (func() ([]parser.Datums, error), sql.ResultColumns, error) {
 	restore, ok := stmt.(*parser.Restore)
 	if !ok {
 		return nil, nil, nil
 	}
-	fn := func() ([]parser.DTuple, error) {
+	fn := func() ([]parser.Datums, error) {
 		// TODO(dan): Move this span into sql.
 		ctx, span := tracing.ChildSpan(baseCtx, stmt.StatementTag())
 		defer tracing.FinishSpan(span)

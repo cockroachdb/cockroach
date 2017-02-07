@@ -79,7 +79,7 @@ type RowFetcher struct {
 	extraVals      EncDatumRow // the extra column values for unique indexes
 	indexKey       []byte      // the index key of the current row
 	row            EncDatumRow
-	decodedRow     parser.DTuple
+	decodedRow     parser.Datums
 	prettyValueBuf bytes.Buffer
 
 	// The current key/value, unless kvEnd is true.
@@ -489,10 +489,10 @@ func (rf *RowFetcher) NextRow() (EncDatumRow, error) {
 	}
 }
 
-// NextRowDecoded calls NextRow and decodes the EncDatumRow into a DTuple.
-// The DTuple should not be modified and is only valid until the next call.
-// When there are no more rows, the DTuple is nil.
-func (rf *RowFetcher) NextRowDecoded() (parser.DTuple, error) {
+// NextRowDecoded calls NextRow and decodes the EncDatumRow into a Datums.
+// The Datums should not be modified and is only valid until the next call.
+// When there are no more rows, the Datums is nil.
+func (rf *RowFetcher) NextRowDecoded() (parser.Datums, error) {
 	encRow, err := rf.NextRow()
 	if err != nil {
 		return nil, err
@@ -500,7 +500,7 @@ func (rf *RowFetcher) NextRowDecoded() (parser.DTuple, error) {
 	if encRow == nil {
 		return nil, nil
 	}
-	err = EncDatumRowToDTuple(rf.decodedRow, encRow, &rf.alloc)
+	err = EncDatumRowToDatums(rf.decodedRow, encRow, &rf.alloc)
 	if err != nil {
 		return nil, err
 	}

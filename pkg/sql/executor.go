@@ -1279,7 +1279,7 @@ func (e *Executor) execClassic(planMaker *planner, plan planNode, result *Result
 	case parser.Rows:
 		next, err := plan.Next()
 		for ; next; next, err = plan.Next() {
-			// The plan.Values DTuple needs to be copied on each iteration.
+			// The plan.Values Datums needs to be copied on each iteration.
 			values := plan.Values()
 
 			for _, val := range values {

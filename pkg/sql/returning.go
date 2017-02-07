@@ -34,7 +34,7 @@ type returningHelper struct {
 	exprs        []parser.TypedExpr
 	rowCount     int
 	source       *dataSourceInfo
-	curSourceRow parser.DTuple
+	curSourceRow parser.Datums
 
 	// This struct must be allocated on the heap and its location stay
 	// stable after construction because it implements
@@ -85,13 +85,13 @@ func (p *planner) newReturningHelper(
 
 // cookResultRow prepares a row according to the ReturningExprs, with input values
 // from rowVals.
-func (rh *returningHelper) cookResultRow(rowVals parser.DTuple) (parser.DTuple, error) {
+func (rh *returningHelper) cookResultRow(rowVals parser.Datums) (parser.Datums, error) {
 	if rh.exprs == nil {
 		rh.rowCount++
 		return rowVals, nil
 	}
 	rh.curSourceRow = rowVals
-	resRow := make(parser.DTuple, len(rh.exprs))
+	resRow := make(parser.Datums, len(rh.exprs))
 	for i, e := range rh.exprs {
 		d, err := e.Eval(&rh.p.evalCtx)
 		if err != nil {

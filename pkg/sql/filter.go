@@ -103,6 +103,6 @@ func (f *filterNode) DebugValues() debugValues {
 }
 
 func (f *filterNode) Close()                 { f.source.plan.Close() }
-func (f *filterNode) Values() parser.DTuple  { return f.source.plan.Values() }
+func (f *filterNode) Values() parser.Datums  { return f.source.plan.Values() }
 func (f *filterNode) Columns() ResultColumns { return f.source.plan.Columns() }
 func (f *filterNode) Ordering() orderingInfo { return f.source.plan.Ordering() }
