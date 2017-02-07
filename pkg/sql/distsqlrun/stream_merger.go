@@ -25,23 +25,23 @@ import (
 // streamCacher is a thin wrapper around an ordered RowSource buffering in the most
 // recently received rows.
 type streamCacher struct {
-	src      RowSource
+	src      NoMetadataRowSource
 	ordering sqlbase.ColumnOrdering
 	// rows contains the last set of rows received from the source.
 	rows       []sqlbase.EncDatumRow
 	datumAlloc sqlbase.DatumAlloc
 }
 
-// nextRow() is a wrapper around RowSource.NextRow(), it simultaneously saves the
-// retrieved row within the stream's most recently added rows buffer.
+// nextRow() is a wrapper around RowSource.NextRow() which simultaneously saves
+// the retrieved row within the stream's most recently added rows buffer.
 func (s *streamCacher) nextRow() (sqlbase.EncDatumRow, error) {
 	row, err := s.src.NextRow()
-	// We don't make the explicit check for row == nil and therefore add the nil
-	// row to the row buffer, this is because the nil row can be used in
-	// group comparisons (end of stream is effectively another group).
 	if err != nil {
 		return nil, err
 	}
+	// We don't make the explicit check for row == nil and therefore add the nil
+	// row to the row buffer. This is because the nil row can be used in
+	// group comparisons (end of stream is effectively another group).
 	s.rows = append(s.rows, row)
 	return row, nil
 }
@@ -210,11 +210,16 @@ func (sm *streamMerger) NextBatch() ([][2]sqlbase.EncDatumRow, error) {
 	return sm.outputBuffer, nil
 }
 
+// makeStreamMerger creates a streamMerger, joinging rows from leftSource with
+// rows from rightSource.
+//
+// All metadata from the sources is forwarded to metadataSink.
 func makeStreamMerger(
 	leftSource RowSource,
 	leftOrdering sqlbase.ColumnOrdering,
 	rightSource RowSource,
 	rightOrdering sqlbase.ColumnOrdering,
+	metadataSink RowReceiver,
 ) (streamMerger, error) {
 	if len(leftOrdering) != len(rightOrdering) {
 		return streamMerger{}, errors.Errorf(
@@ -228,11 +233,11 @@ func makeStreamMerger(
 
 	return streamMerger{
 		left: streamCacher{
-			src:      leftSource,
+			src:      MakeNoMetadataRowSource(leftSource, metadataSink),
 			ordering: leftOrdering,
 		},
 		right: streamCacher{
-			src:      rightSource,
+			src:      MakeNoMetadataRowSource(rightSource, metadataSink),
 			ordering: rightOrdering,
 		},
 	}, nil

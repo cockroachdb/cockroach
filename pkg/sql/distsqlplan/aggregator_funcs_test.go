@@ -58,13 +58,23 @@ func runTestFlow(
 	flow.Wait()
 	flow.Cleanup(ctx)
 
-	if rowBuf.Err != nil {
-		t.Fatal(rowBuf.Err)
-	}
 	if !rowBuf.ProducerClosed {
 		t.Errorf("output not closed")
 	}
-	return rowBuf.Rows
+
+	var res sqlbase.EncDatumRows
+	for {
+		row, meta := rowBuf.Next()
+		if !meta.Empty() {
+			t.Fatalf("unexpected metadata: %v", meta)
+		}
+		if row == nil {
+			break
+		}
+		res = append(res, row)
+	}
+
+	return res
 }
 
 // checkDistAggregationInfo tests that a flow with multiple local stages and a

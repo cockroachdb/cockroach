@@ -109,7 +109,7 @@ func TestOrderedSync(t *testing.T) {
 	for testIdx, c := range testCases {
 		var sources []RowSource
 		for _, srcRows := range c.sources {
-			rowBuf := NewRowBuffer(nil, srcRows)
+			rowBuf := NewRowBuffer(nil /* types */, srcRows, RowBufferArgs{})
 			sources = append(sources, rowBuf)
 		}
 		src, err := makeOrderedSync(c.ordering, sources)
@@ -118,9 +118,9 @@ func TestOrderedSync(t *testing.T) {
 		}
 		var retRows sqlbase.EncDatumRows
 		for {
-			row, err := src.NextRow()
-			if err != nil {
-				t.Fatal(err)
+			row, meta := src.Next()
+			if !meta.Empty() {
+				t.Fatalf("unexpected metadata: %v", meta)
 			}
 			if row == nil {
 				break
@@ -148,16 +148,18 @@ func TestUnorderedSync(t *testing.T) {
 				a := sqlbase.DatumToEncDatum(columnTypeInt, parser.NewDInt(parser.DInt(i)))
 				b := sqlbase.DatumToEncDatum(columnTypeInt, parser.NewDInt(parser.DInt(j)))
 				row := sqlbase.EncDatumRow{a, b}
-				mrc.PushRow(row)
+				if status := mrc.Push(row, ProducerMetadata{}); status != NeedMoreRows {
+					t.Fatalf("unexpected response: %d", status)
+				}
 			}
-			mrc.ProducerDone(nil)
+			mrc.ProducerDone()
 		}(i)
 	}
 	var retRows sqlbase.EncDatumRows
 	for {
-		row, err := mrc.NextRow()
-		if err != nil {
-			t.Fatal(err)
+		row, meta := mrc.Next()
+		if !meta.Empty() {
+			t.Fatalf("unexpected metadata: %v", meta)
 		}
 		if row == nil {
 			break
@@ -189,25 +191,32 @@ func TestUnorderedSync(t *testing.T) {
 				a := sqlbase.DatumToEncDatum(columnTypeInt, parser.NewDInt(parser.DInt(i)))
 				b := sqlbase.DatumToEncDatum(columnTypeInt, parser.NewDInt(parser.DInt(j)))
 				row := sqlbase.EncDatumRow{a, b}
-				mrc.PushRow(row)
+				if status := mrc.Push(row, ProducerMetadata{}); status != NeedMoreRows {
+					t.Fatalf("unexpected response: %d", status)
+				}
 			}
-			var err error
 			if i == 3 {
-				err = fmt.Errorf("Test error")
+				err := fmt.Errorf("Test error")
+				mrc.Push(nil /* row */, ProducerMetadata{Err: err})
 			}
-			mrc.ProducerDone(err)
+			mrc.ProducerDone()
 		}(i)
 	}
+	foundErr := false
 	for {
-		row, err := mrc.NextRow()
-		if err != nil {
-			if err.Error() != "Test error" {
-				t.Error(err)
+		row, meta := mrc.Next()
+		if meta.Err != nil {
+			if meta.Err.Error() != "Test error" {
+				t.Error(meta.Err)
+			} else {
+				foundErr = true
 			}
+		}
+		if row == nil && meta.Empty() {
 			break
 		}
-		if row == nil {
-			t.Error("Did not receive expected error")
-		}
+	}
+	if !foundErr {
+		t.Error("Did not receive expected error")
 	}
 }
