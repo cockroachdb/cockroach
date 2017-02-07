@@ -37,8 +37,8 @@ type upsertHelper struct {
 	sourceInfo         *dataSourceInfo
 	excludedSourceInfo *dataSourceInfo
 	allExprsIdentity   bool
-	curSourceRow       parser.DTuple
-	curExcludedRow     parser.DTuple
+	curSourceRow       parser.Datums
+	curExcludedRow     parser.Datums
 
 	// This struct must be allocated on the heap and its location stay
 	// stable after construction because it implements
@@ -160,8 +160,8 @@ func (uh *upsertHelper) walkExprs(walk func(desc string, index int, expr parser.
 // eval returns the values for the update case of an upsert, given the row
 // that would have been inserted and the existing (conflicting) values.
 func (uh *upsertHelper) eval(
-	insertRow parser.DTuple, existingRow parser.DTuple,
-) (parser.DTuple, error) {
+	insertRow parser.Datums, existingRow parser.Datums,
+) (parser.Datums, error) {
 	uh.curSourceRow = existingRow
 	uh.curExcludedRow = insertRow
 

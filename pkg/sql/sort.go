@@ -292,7 +292,7 @@ func (n *sortNode) Ordering() orderingInfo {
 	return orderingInfo{exactMatchCols: nil, ordering: ordering}
 }
 
-func (n *sortNode) Values() parser.DTuple {
+func (n *sortNode) Values() parser.Datums {
 	// If an ordering expression was used the number of columns in each row might
 	// differ from the number of columns requested, so trim the result.
 	return n.valueIter.Values()[:len(n.columns)]
@@ -396,7 +396,7 @@ func (n *sortNode) Close() {
 // should conform to the comments expressed in the planNode definition.
 type valueIterator interface {
 	Next() (bool, error)
-	Values() parser.DTuple
+	Values() parser.Datums
 	DebugValues() debugValues
 	Close()
 }
@@ -406,7 +406,7 @@ type sortingStrategy interface {
 	// Add adds a single value to the sortingStrategy. It guarantees that
 	// if it decided to store the provided value, that it will make a deep
 	// copy of it.
-	Add(parser.DTuple) error
+	Add(parser.Datums) error
 	// Finish terminates the sorting strategy, allowing for postprocessing
 	// after all values have been provided to the strategy. The method should
 	// not be called more than once, and should only be called after all Add
@@ -429,7 +429,7 @@ func newSortAllStrategy(vNode *valuesNode) sortingStrategy {
 	}
 }
 
-func (ss *sortAllStrategy) Add(values parser.DTuple) error {
+func (ss *sortAllStrategy) Add(values parser.Datums) error {
 	_, err := ss.vNode.rows.AddRow(values)
 	return err
 }
@@ -442,7 +442,7 @@ func (ss *sortAllStrategy) Next() (bool, error) {
 	return ss.vNode.Next()
 }
 
-func (ss *sortAllStrategy) Values() parser.DTuple {
+func (ss *sortAllStrategy) Values() parser.Datums {
 	return ss.vNode.Values()
 }
 
@@ -466,7 +466,7 @@ func (ss *sortAllStrategy) Close() {
 // need to be sorted, but that most likely not all values need to be sorted.
 type iterativeSortStrategy struct {
 	vNode      *valuesNode
-	lastVal    parser.DTuple
+	lastVal    parser.Datums
 	nextRowIdx int
 }
 
@@ -476,7 +476,7 @@ func newIterativeSortStrategy(vNode *valuesNode) sortingStrategy {
 	}
 }
 
-func (ss *iterativeSortStrategy) Add(values parser.DTuple) error {
+func (ss *iterativeSortStrategy) Add(values parser.Datums) error {
 	_, err := ss.vNode.rows.AddRow(values)
 	return err
 }
@@ -494,7 +494,7 @@ func (ss *iterativeSortStrategy) Next() (bool, error) {
 	return true, nil
 }
 
-func (ss *iterativeSortStrategy) Values() parser.DTuple {
+func (ss *iterativeSortStrategy) Values() parser.Datums {
 	return ss.lastVal
 }
 
@@ -541,7 +541,7 @@ func newSortTopKStrategy(vNode *valuesNode, topK int64) sortingStrategy {
 	return ss
 }
 
-func (ss *sortTopKStrategy) Add(values parser.DTuple) error {
+func (ss *sortTopKStrategy) Add(values parser.Datums) error {
 	switch {
 	case int64(ss.vNode.Len()) < ss.topK:
 		// The first k values all go into the max-heap.
@@ -574,7 +574,7 @@ func (ss *sortTopKStrategy) Next() (bool, error) {
 	return ss.vNode.Next()
 }
 
-func (ss *sortTopKStrategy) Values() parser.DTuple {
+func (ss *sortTopKStrategy) Values() parser.Datums {
 	return ss.vNode.Values()
 }
 

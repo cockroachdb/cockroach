@@ -108,6 +108,26 @@ type Datum interface {
 	Size() uintptr
 }
 
+// Datums is a slice of Datum values.
+type Datums []Datum
+
+// Datums implements sort.Interface.
+func (d *Datums) Len() int           { return len(*d) }
+func (d *Datums) Less(i, j int) bool { return (*d)[i].Compare((*d)[j]) < 0 }
+func (d *Datums) Swap(i, j int)      { (*d)[i], (*d)[j] = (*d)[j], (*d)[i] }
+
+// Format implements the NodeFormatter interface.
+func (d *Datums) Format(buf *bytes.Buffer, f FmtFlags) {
+	buf.WriteByte('(')
+	for i, v := range *d {
+		if i > 0 {
+			buf.WriteString(", ")
+		}
+		FormatNode(buf, f, v)
+	}
+	buf.WriteByte(')')
+}
+
 // DBool is the boolean Datum.
 type DBool bool
 
@@ -1430,36 +1450,9 @@ func (d *DInterval) Size() uintptr {
 	return unsafe.Sizeof(*d)
 }
 
-// DTuple is a slice of Datum values.
-type DTuple []Datum
-
-func (d *DTuple) Len() int {
-	return len(*d)
-}
-
-func (d *DTuple) Less(i, j int) bool {
-	return (*d)[i].Compare((*d)[j]) < 0
-}
-
-func (d *DTuple) Swap(i, j int) {
-	(*d)[i], (*d)[j] = (*d)[j], (*d)[i]
-}
-
-// Format implements the NodeFormatter interface.
-func (d *DTuple) Format(buf *bytes.Buffer, f FmtFlags) {
-	buf.WriteByte('(')
-	for i, v := range *d {
-		if i > 0 {
-			buf.WriteString(", ")
-		}
-		FormatNode(buf, f, v)
-	}
-	buf.WriteByte(')')
-}
-
 // DTupleDatum is the tuple Datum.
 type DTupleDatum struct {
-	D DTuple
+	D Datums
 }
 
 // NewDTupleDatum creates a *DTupleDatum with the provided datums.
@@ -1469,12 +1462,12 @@ func NewDTupleDatum(d ...Datum) *DTupleDatum {
 
 // NewDTupleDatumWithLen creates a *DTupleDatum with the provided length.
 func NewDTupleDatumWithLen(l int) *DTupleDatum {
-	return &DTupleDatum{D: make([]Datum, l)}
+	return &DTupleDatum{D: make(Datums, l)}
 }
 
 // NewDTupleDatumWithCap creates a *DTupleDatum with the provided capacity.
 func NewDTupleDatumWithCap(c int) *DTupleDatum {
-	return &DTupleDatum{D: make([]Datum, 0, c)}
+	return &DTupleDatum{D: make(Datums, 0, c)}
 }
 
 // ResolvedType implements the TypedExpr interface.
@@ -1748,7 +1741,7 @@ func (d dNull) Size() uintptr {
 // text during serialization.
 type DArray struct {
 	ParamTyp Type
-	Array    []Datum
+	Array    Datums
 }
 
 // NewDArray returns a DArray containing elements of the specified type.
@@ -1797,7 +1790,7 @@ func (d *DArray) Prev() (Datum, bool) {
 
 // Next implements the Datum interface.
 func (d *DArray) Next() (Datum, bool) {
-	a := DArray{ParamTyp: d.ParamTyp, Array: make([]Datum, d.Len()+1)}
+	a := DArray{ParamTyp: d.ParamTyp, Array: make(Datums, d.Len()+1)}
 	copy(a.Array, d.Array)
 	a.Array[len(a.Array)-1] = DNull
 	return &a, true

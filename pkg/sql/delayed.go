@@ -42,5 +42,5 @@ func (d *delayedNode) Ordering() orderingInfo   { return orderingInfo{} }
 func (d *delayedNode) MarkDebug(_ explainMode)  {}
 func (d *delayedNode) Start() error             { return d.plan.Start() }
 func (d *delayedNode) Next() (bool, error)      { return d.plan.Next() }
-func (d *delayedNode) Values() parser.DTuple    { return d.plan.Values() }
+func (d *delayedNode) Values() parser.Datums    { return d.plan.Values() }
 func (d *delayedNode) DebugValues() debugValues { return d.plan.DebugValues() }

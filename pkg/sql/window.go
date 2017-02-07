@@ -381,7 +381,7 @@ func (n *windowNode) Ordering() orderingInfo {
 	return orderingInfo{}
 }
 
-func (n *windowNode) Values() parser.DTuple {
+func (n *windowNode) Values() parser.Datums {
 	return n.values.Values()
 }
 
@@ -567,7 +567,7 @@ func (n *windowNode) computeWindows() error {
 					scratchDatum[i] = rowWindowDef[idx]
 				}
 
-				encoded, err := sqlbase.EncodeDTuple(scratchBytes, scratchDatum)
+				encoded, err := sqlbase.EncodeDatums(scratchBytes, scratchDatum)
 				if err != nil {
 					return err
 				}
@@ -680,7 +680,7 @@ func (n *windowNode) populateValues() error {
 		n.planner.session.TxnState.makeBoundAccount(), n.values.columns, rowCount,
 	)
 
-	row := make(parser.DTuple, len(n.windowRender))
+	row := make(parser.Datums, len(n.windowRender))
 	for i := 0; i < rowCount; i++ {
 		wrappedRow := n.wrappedRenderVals.At(i)
 

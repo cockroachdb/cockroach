@@ -170,7 +170,7 @@ type debugValues struct {
 	output debugValueType
 }
 
-func (vals *debugValues) AsRow() parser.DTuple {
+func (vals *debugValues) AsRow() parser.Datums {
 	keyVal := parser.DNull
 	if vals.key != "" {
 		keyVal = parser.NewDString(vals.key)
@@ -188,7 +188,7 @@ func (vals *debugValues) AsRow() parser.DTuple {
 		outputVal = parser.MakeDBool(true)
 	}
 
-	return parser.DTuple{
+	return parser.Datums{
 		parser.NewDInt(parser.DInt(vals.rowIdx)),
 		keyVal,
 		parser.NewDString(vals.value),
@@ -216,7 +216,7 @@ func (n *explainDebugNode) Start() error         { return n.plan.Start() }
 func (n *explainDebugNode) Next() (bool, error)  { return n.plan.Next() }
 func (n *explainDebugNode) Close()               { n.plan.Close() }
 
-func (n *explainDebugNode) Values() parser.DTuple {
+func (n *explainDebugNode) Values() parser.Datums {
 	vals := n.plan.DebugValues()
 
 	keyVal := parser.DNull
@@ -224,7 +224,7 @@ func (n *explainDebugNode) Values() parser.DTuple {
 		keyVal = parser.NewDString(vals.key)
 	}
 
-	return parser.DTuple{
+	return parser.Datums{
 		parser.NewDInt(parser.DInt(vals.rowIdx)),
 		keyVal,
 		parser.NewDString(vals.value),

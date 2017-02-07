@@ -78,11 +78,11 @@ type renderNode struct {
 
 	// The current source row, with one value per source column.
 	// populated by Next(), used by renderRow().
-	curSourceRow parser.DTuple
+	curSourceRow parser.Datums
 
 	// The rendered row, with one value for each render expression.
 	// populated by Next().
-	row parser.DTuple
+	row parser.Datums
 
 	// This struct must be allocated on the heap and its location stay
 	// stable after construction because it implements
@@ -100,7 +100,7 @@ func (s *renderNode) Ordering() orderingInfo {
 	return s.ordering
 }
 
-func (s *renderNode) Values() parser.DTuple {
+func (s *renderNode) Values() parser.Datums {
 	return s.row
 }
 

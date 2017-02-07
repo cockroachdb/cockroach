@@ -215,7 +215,7 @@ func (n *indexJoinNode) Ordering() orderingInfo {
 	return n.index.Ordering()
 }
 
-func (n *indexJoinNode) Values() parser.DTuple {
+func (n *indexJoinNode) Values() parser.Datums {
 	return n.table.Values()
 }
 

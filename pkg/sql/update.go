@@ -67,7 +67,7 @@ func (p *planner) makeEditNode(
 type editNodeRun struct {
 	rows      planNode
 	tw        tableWriter
-	resultRow parser.DTuple
+	resultRow parser.Datums
 
 	explain explainMode
 }
@@ -378,7 +378,7 @@ func (u *updateNode) Columns() ResultColumns {
 	return u.rh.columns
 }
 
-func (u *updateNode) Values() parser.DTuple {
+func (u *updateNode) Values() parser.Datums {
 	return u.run.resultRow
 }
 

@@ -1691,7 +1691,7 @@ func (e *MultipleResultsError) Error() string {
 type EvalPlanner interface {
 	// QueryRow executes a SQL query string where exactly 1 result row is
 	// expected and returns that row.
-	QueryRow(sql string, args ...interface{}) (DTuple, error)
+	QueryRow(sql string, args ...interface{}) (Datums, error)
 }
 
 // EvalContext defines the context in which to evaluate an expression, allowing

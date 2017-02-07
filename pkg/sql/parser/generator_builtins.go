@@ -51,7 +51,7 @@ import (
 
 // generatorFactory is the type of constructor functions for
 // ValueGenerator objects suitable for use with DTable.
-type generatorFactory func(ctx *EvalContext, args DTuple) (ValueGenerator, error)
+type generatorFactory func(ctx *EvalContext, args Datums) (ValueGenerator, error)
 
 // ValueGenerator is the interface provided by the object held by a
 // DTable; objects that implement this interface are able to produce
@@ -70,7 +70,7 @@ type ValueGenerator interface {
 	Next() (bool, error)
 
 	// Values retrieves the current row of data.
-	Values() DTuple
+	Values() Datums
 
 	// Close must be called after Start() before disposing of the
 	// ValueGenerator. It does not need to be called if Start() has not
@@ -139,7 +139,7 @@ func makeGeneratorBuiltinWithReturnType(
 		class:      GeneratorClass,
 		Types:      in,
 		ReturnType: retType,
-		fn: func(ctx *EvalContext, args DTuple) (Datum, error) {
+		fn: func(ctx *EvalContext, args Datums) (Datum, error) {
 			gen, err := g(ctx, args)
 			if err != nil {
 				return nil, err
@@ -159,7 +159,7 @@ type seriesValueGenerator struct {
 
 var errStepCannotBeZero = errors.New("step cannot be 0")
 
-func makeSeriesGenerator(_ *EvalContext, args DTuple) (ValueGenerator, error) {
+func makeSeriesGenerator(_ *EvalContext, args Datums) (ValueGenerator, error) {
 	start := int64(MustBeDInt(args[0]))
 	stop := int64(MustBeDInt(args[1]))
 	step := int64(1)
@@ -195,11 +195,11 @@ func (s *seriesValueGenerator) Next() (bool, error) {
 }
 
 // Values implements the ValueGenerator interface.
-func (s *seriesValueGenerator) Values() DTuple {
-	return DTuple{NewDInt(DInt(s.value))}
+func (s *seriesValueGenerator) Values() Datums {
+	return Datums{NewDInt(DInt(s.value))}
 }
 
-func makeArrayGenerator(_ *EvalContext, args DTuple) (ValueGenerator, error) {
+func makeArrayGenerator(_ *EvalContext, args Datums) (ValueGenerator, error) {
 	arr := args[0].(*DArray)
 	return &arrayValueGenerator{array: arr}, nil
 }
@@ -233,6 +233,6 @@ func (s *arrayValueGenerator) Next() (bool, error) {
 }
 
 // Values implements the ValueGenerator interface.
-func (s *arrayValueGenerator) Values() DTuple {
-	return DTuple{s.array.Array[s.nextIndex]}
+func (s *arrayValueGenerator) Values() Datums {
+	return Datums{s.array.Array[s.nextIndex]}
 }

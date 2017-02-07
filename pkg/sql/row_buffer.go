@@ -30,13 +30,13 @@ import (
 // interface.
 type RowBuffer struct {
 	*RowContainer
-	output parser.DTuple
+	output parser.Datums
 }
 
 // Values here is analogous to Values() as defined under planNode.
 //
 // Available after Next(), result only valid until the next call to Next()
-func (rb *RowBuffer) Values() parser.DTuple {
+func (rb *RowBuffer) Values() parser.Datums {
 	return rb.output
 }
 

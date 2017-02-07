@@ -264,22 +264,22 @@ func (r EncDatumRow) String() string {
 	return b.String()
 }
 
-// EncDatumRowToDTuple converts a given EncDatumRow to a DTuple.
-func EncDatumRowToDTuple(tuple parser.DTuple, row EncDatumRow, da *DatumAlloc) error {
-	if len(row) != len(tuple) {
+// EncDatumRowToDatums converts a given EncDatumRow to a Datums.
+func EncDatumRowToDatums(datums parser.Datums, row EncDatumRow, da *DatumAlloc) error {
+	if len(row) != len(datums) {
 		return errors.Errorf(
-			"Length mismatch (%d and %d) between tuple and row", len(tuple), len(row))
+			"Length mismatch (%d and %d) between datums and row", len(datums), len(row))
 	}
 	for i, encDatum := range row {
 		if encDatum.IsUnset() {
-			tuple[i] = parser.DNull
+			datums[i] = parser.DNull
 			continue
 		}
 		err := encDatum.EnsureDecoded(da)
 		if err != nil {
 			return err
 		}
-		tuple[i] = encDatum.Datum
+		datums[i] = encDatum.Datum
 	}
 	return nil
 }
