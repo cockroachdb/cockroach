@@ -55,8 +55,7 @@ type procOutputHelper struct {
 	// or MaxUint64 if there is no limit.
 	maxRowIdx uint64
 
-	rowIdx      uint64
-	internalErr error
+	rowIdx uint64
 }
 
 // init sets up a procOutputHelper. The types describe the internal schema of
@@ -143,30 +142,102 @@ func (h *procOutputHelper) neededColumns() []bool {
 	return needed
 }
 
-// emitRow sends a row through the post-processing stage. The same row can be
-// reused. Returns false if the caller should stop emitting more rows.
-func (h *procOutputHelper) emitRow(ctx context.Context, row sqlbase.EncDatumRow) bool {
-	if h.rowIdx >= h.maxRowIdx {
+// emitHelper is a utility wrapper on top of procOutputHelper.emitRow().
+// It takes a row to emit and, if anything happens other than the normal
+// situation where the emitting succeeds and the consumer still needs rows, both
+// the (potentially many) inputs and the output are properly closed after
+// potentially draining the inputs. It's allowed to not pass any inputs, in
+// which case nothing will be drained (this can happen when the caller has
+// already fully consumed the inputs).
+//
+// As opposed to emitRow(), this also supports metadata rows which bypass the
+// procOutputHelper and are routed directly to its output.
+//
+// If the consumer signals the producer to drain, the message is relayed and all
+// the draining metadata is consumed and forwarded.
+//
+// inputs can be nil.
+//
+// Returns true if more rows are needed, false otherwise. If false is returned,
+// both the inputs and the output have been properly closed.
+func emitHelper(
+	ctx context.Context,
+	output *procOutputHelper,
+	row sqlbase.EncDatumRow,
+	meta ProducerMetadata,
+	inputs ...RowSource,
+) bool {
+	var consumerStatus ConsumerStatus
+	if !meta.Empty() {
+		if row != nil {
+			log.Fatalf(ctx, "both row data and metadata in the same emitHelper call. "+
+				"row: %s. meta: %+v", row, meta)
+		}
+		// Bypass emitRow() and send directly to output.output.
+		consumerStatus = output.output.Push(nil /* row */, meta)
+	} else {
+		var err error
+		consumerStatus, err = output.emitRow(ctx, row)
+		if err != nil {
+			for _, input := range inputs {
+				input.ConsumerClosed()
+			}
+			output.output.Push(nil /* row */, ProducerMetadata{Err: err})
+			output.close()
+			return false
+		}
+	}
+	switch consumerStatus {
+	case NeedMoreRows:
+		return true
+	case DrainRequested:
+		log.VEventf(ctx, 1, "no more rows required. drain requested.")
+		DrainAndClose(ctx, output.output, nil /* cause */, inputs...)
 		return false
+	case ConsumerClosed:
+		log.VEventf(ctx, 1, "no more rows required. Consumer shut down.")
+		for _, input := range inputs {
+			input.ConsumerClosed()
+		}
+		output.close()
+		return false
+	default:
+		log.Fatalf(ctx, "unexpected consumerStatus: %d", consumerStatus)
+		return false
+	}
+}
+
+// emitRow sends a row through the post-processing stage. The same row can be
+// reused.
+//
+// It returns the consumer's status that was observed when pushing this row. If
+// an error is returned, it's coming from the procOutputHelper's filtering or
+// rendering processing; the output has not been closed.
+//
+// Note: check out emitHelper() for a useful wrapper.
+func (h *procOutputHelper) emitRow(
+	ctx context.Context, row sqlbase.EncDatumRow,
+) (ConsumerStatus, error) {
+	if h.rowIdx >= h.maxRowIdx {
+		return DrainRequested, nil
 	}
 	if h.filter != nil {
 		// Filtering.
 		passes, err := h.filter.evalFilter(row)
 		if err != nil {
-			h.internalErr = err
-			return false
+			return ConsumerClosed, err
 		}
 		if !passes {
 			if log.V(3) {
 				log.Infof(ctx, "filtered out row %s", row)
 			}
-			return true
+			return NeedMoreRows, nil
 		}
 	}
 	h.rowIdx++
 	if h.rowIdx <= h.offset {
 		// Suppress row.
-		return true
+		return NeedMoreRows, nil
 	}
 	var outRow sqlbase.EncDatumRow
 	if h.renderExprs != nil {
@@ -175,8 +246,7 @@ func (h *procOutputHelper) emitRow(ctx context.Context, row sqlbase.EncDatumRow)
 		for i := range h.renderExprs {
 			datum, err := h.renderExprs[i].eval(row)
 			if err != nil {
-				h.internalErr = err
-				return false
+				return ConsumerClosed, err
 			}
 			outRow[i] = sqlbase.DatumToEncDatum(h.renderTypes[i], datum)
 		}
@@ -194,22 +264,20 @@ func (h *procOutputHelper) emitRow(ctx context.Context, row sqlbase.EncDatumRow)
 	if log.V(3) {
 		log.Infof(ctx, "pushing row %s", outRow)
 	}
-	if !h.output.PushRow(outRow) {
-		log.VEventf(ctx, 1, "no more rows required")
-		return false
+	if r := h.output.Push(outRow, ProducerMetadata{}); r != NeedMoreRows {
+		log.VEventf(ctx, 1, "no more rows required. drain requested: %t",
+			r == DrainRequested)
+		return r, nil
 	}
 	if h.rowIdx == h.maxRowIdx {
-		log.VEventf(ctx, 1, "hit row limit")
-		return false
+		log.VEventf(ctx, 1, "hit row limit; asking producer to drain")
+		return DrainRequested, nil
 	}
-	return true
+	return NeedMoreRows, nil
 }
 
-func (h *procOutputHelper) close(err error) {
-	if h.internalErr != nil {
-		err = h.internalErr
-	}
-	h.output.ProducerDone(err)
+func (h *procOutputHelper) close() {
+	h.output.ProducerDone()
 }
 
 // noopProcessor is a processor that simply passes rows through from the
@@ -243,14 +311,12 @@ func (n *noopProcessor) Run(ctx context.Context, wg *sync.WaitGroup) {
 	defer tracing.FinishSpan(span)
 
 	for {
-		row, err := n.input.NextRow()
-		if err != nil || row == nil {
-			n.out.close(err)
+		row, meta := n.input.Next()
+		if row == nil && meta.Empty() {
+			n.out.close()
 			return
 		}
-		if !n.out.emitRow(ctx, row) {
-			n.input.ConsumerDone()
-			n.out.close(nil)
+		if !emitHelper(ctx, &n.out, row, meta, n.input) {
 			return
 		}
 	}

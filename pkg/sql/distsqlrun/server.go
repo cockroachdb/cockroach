@@ -116,7 +116,7 @@ func (ds *ServerImpl) setupFlow(
 	f := newFlow(flowCtx, ds.flowRegistry, syncFlowConsumer)
 	flowCtx.AddLogTagStr("f", f.id.Short())
 	if err := f.setupFlow(ctx, &req.Flow); err != nil {
-		log.Error(ctx, err)
+		log.Errorf(ctx, "error setting up flow: %s", err)
 		sp.Finish()
 		ctx = opentracing.ContextWithSpan(ctx, nil)
 		return ctx, nil, err
@@ -136,10 +136,18 @@ func (ds *ServerImpl) SetupSyncFlow(
 }
 
 // RunSyncFlow is part of the DistSQLServer interface.
-func (ds *ServerImpl) RunSyncFlow(req *SetupFlowRequest, stream DistSQL_RunSyncFlowServer) error {
+func (ds *ServerImpl) RunSyncFlow(stream DistSQL_RunSyncFlowServer) error {
 	// Set up the outgoing mailbox for the stream.
 	mbox := newOutboxSyncFlowStream(stream)
 
+	firstMsg, err := stream.Recv()
+	if err != nil {
+		return err
+	}
+	if firstMsg.SetupFlowRequest == nil {
+		return errors.Errorf("first message in RunSyncFlow doesn't contain SetupFlowRequest")
+	}
+	req := firstMsg.SetupFlowRequest
 	ctx, f, err := ds.SetupSyncFlow(stream.Context(), req, mbox)
 	if err != nil {
 		return err

@@ -169,7 +169,7 @@ func TestSorter(t *testing.T) {
 
 	for _, c := range testCases {
 		ss := c.spec
-		in := NewRowBuffer(nil, c.input)
+		in := NewRowBuffer(nil /* types */, c.input, RowBufferArgs{})
 		out := &RowBuffer{}
 		flowCtx := FlowCtx{}
 
@@ -178,24 +178,22 @@ func TestSorter(t *testing.T) {
 			t.Fatal(err)
 		}
 		s.Run(context.Background(), nil)
-		if out.Err != nil {
-			t.Fatal(out.Err)
-		}
 		if !out.ProducerClosed {
 			t.Fatalf("output RowReceiver not closed")
 		}
 
 		var retRows sqlbase.EncDatumRows
 		for {
-			row, err := out.NextRow()
-			if err != nil {
-				t.Fatal(err)
+			row, meta := out.Next()
+			if !meta.Empty() {
+				t.Fatalf("unexpected metadata: %v", meta)
 			}
 			if row == nil {
 				break
 			}
 			retRows = append(retRows, row)
 		}
+
 		expStr := c.expected.String()
 		retStr := retRows.String()
 		if expStr != retStr {

@@ -71,7 +71,7 @@ func newTableReader(
 		// rowChannelBufSize + 1 more rows:
 		//  - rowChannelBufSize rows guarantee that we will fill the row channel
 		//    even after limitHint rows are consumed
-		//  - the extra row gives us chance to call PushRow again after we unblock,
+		//  - the extra row gives us chance to call Push again after we unblock,
 		//    which will notice that ConsumerDone() was called.
 		//
 		// This flimsy mechanism is only useful in the (optimistic) case that the
@@ -165,19 +165,28 @@ func (tr *tableReader) Run(ctx context.Context, wg *sync.WaitGroup) {
 		txn, tr.spans, true /* limit batches */, tr.limitHint,
 	); err != nil {
 		log.Errorf(ctx, "scan error: %s", err)
-		tr.out.close(err)
+		tr.out.output.Push(nil /* row */, ProducerMetadata{Err: err})
+		tr.out.close()
 		return
 	}
 
 	for {
 		fetcherRow, err := tr.fetcher.NextRow()
 		if err != nil || fetcherRow == nil {
-			tr.out.close(err)
+			if err != nil {
+				tr.out.output.Push(nil /* row */, ProducerMetadata{Err: err})
+			}
+			tr.out.close()
 			return
 		}
 		// Emit the row; stop if no more rows are needed.
-		if !tr.out.emitRow(ctx, fetcherRow) {
-			tr.out.close(nil)
+		consumerStatus, err := tr.out.emitRow(ctx, fetcherRow)
+		if err != nil || consumerStatus != NeedMoreRows {
+			if err != nil {
+				tr.out.output.Push(nil /* row */, ProducerMetadata{Err: err})
+			}
+			// TODO(andrei): send trailing metadata.
+			tr.out.close()
 			return
 		}
 		/*
@@ -185,7 +194,7 @@ func (tr *tableReader) Run(ctx context.Context, wg *sync.WaitGroup) {
 			rowIdx++
 			if tr.hardLimit != 0 && rowIdx == tr.hardLimit {
 				// We sent tr.hardLimit rows.
-				tr.output.Close(nil)
+				tr.out.close(nil)
 				return
 			}
 		*/

@@ -84,7 +84,7 @@ func TestDistinct(t *testing.T) {
 	for _, c := range testCases {
 		ds := c.spec
 
-		in := NewRowBuffer(nil, c.input)
+		in := NewRowBuffer(nil /* types */, c.input, RowBufferArgs{})
 		out := &RowBuffer{}
 
 		flowCtx := FlowCtx{}
@@ -95,14 +95,22 @@ func TestDistinct(t *testing.T) {
 		}
 
 		d.Run(context.Background(), nil)
-		if out.Err != nil {
-			t.Fatal(out.Err)
-		}
 		if !out.ProducerClosed {
 			t.Fatalf("output RowReceiver not closed")
 		}
+		var res sqlbase.EncDatumRows
+		for {
+			row, meta := out.Next()
+			if !meta.Empty() {
+				t.Fatalf("unexpected metadata: %v", meta)
+			}
+			if row == nil {
+				break
+			}
+			res = append(res, row)
+		}
 
-		if result := out.Rows.String(); result != c.expected.String() {
+		if result := res.String(); result != c.expected.String() {
 			t.Errorf("invalid results: %s, expected %s'", result, c.expected.String())
 		}
 	}

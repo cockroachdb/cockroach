@@ -1407,6 +1407,7 @@ type distSQLReceiver struct {
 	numRows int64
 	err     error
 	row     parser.Datums
+	status  distsqlrun.ConsumerStatus
 	alloc   sqlbase.DatumAlloc
 	closed  bool
 }
@@ -1417,14 +1418,29 @@ func makeDistSQLReceiver(ctx context.Context, sink *RowContainer) distSQLReceive
 	return distSQLReceiver{ctx: ctx, rows: sink}
 }
 
-// PushRow is part of the RowReceiver interface.
-func (r *distSQLReceiver) PushRow(row sqlbase.EncDatumRow) bool {
-	if r.err != nil {
-		return false
+// Push is part of the RowReceiver interface.
+func (r *distSQLReceiver) Push(
+	row sqlbase.EncDatumRow, meta distsqlrun.ProducerMetadata,
+) distsqlrun.ConsumerStatus {
+	if !meta.Empty() {
+		if meta.Err != nil && r.err == nil {
+			r.err = meta.Err
+		}
+		// TODO(andrei): do something with the metadata - update the descriptor
+		// caches.
+		return r.status
 	}
+	if r.err != nil {
+		return distsqlrun.ConsumerClosed
+	}
+	if r.status != distsqlrun.NeedMoreRows {
+		return r.status
+	}
+
 	if r.rows == nil {
+		// We only need the row count.
 		r.numRows++
-		return true
+		return r.status
 	}
 	if r.row == nil {
 		r.row = make(parser.Datums, len(r.resultToStreamColMap))
@@ -1433,25 +1449,27 @@ func (r *distSQLReceiver) PushRow(row sqlbase.EncDatumRow) bool {
 		err := row[resIdx].EnsureDecoded(&r.alloc)
 		if err != nil {
 			r.err = err
-			return false
+			r.status = distsqlrun.ConsumerClosed
+			return r.status
 		}
 		r.row[i] = row[resIdx].Datum
 	}
 	// Note that AddRow accounts for the memory used by the Datums.
 	if _, err := r.rows.AddRow(r.ctx, r.row); err != nil {
 		r.err = err
-		return false
+		// TODO(andrei): We should drain here. Metadata from this query would be
+		// useful, particularly as it was likely a large query (since AddRow()
+		// above failed, presumably with an out-of-memory error).
+		r.status = distsqlrun.ConsumerClosed
+		return r.status
 	}
-	return true
+	return r.status
 }
 
 // ProducerDone is part of the RowReceiver interface.
-func (r *distSQLReceiver) ProducerDone(err error) {
+func (r *distSQLReceiver) ProducerDone() {
 	if r.closed {
 		panic("double close")
 	}
 	r.closed = true
-	if r.err == nil {
-		r.err = err
-	}
 }

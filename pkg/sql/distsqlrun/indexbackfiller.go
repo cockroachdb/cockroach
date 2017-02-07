@@ -269,8 +269,10 @@ func (ib *indexBackfiller) Run(ctx context.Context, wg *sync.WaitGroup) {
 		defer log.Infof(ctx, "exiting")
 	}
 
-	err := ib.mainLoop(ctx)
-	ib.output.ProducerDone(err)
+	if err := ib.mainLoop(ctx); err != nil {
+		ib.output.Push(nil /* row */, ProducerMetadata{Err: err})
+	}
+	ib.output.ProducerDone()
 }
 
 // WriteResumeSpan writes a checkpoint for the backfill work on origSpan.

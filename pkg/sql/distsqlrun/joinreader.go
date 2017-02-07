@@ -100,15 +100,15 @@ func (jr *joinReader) generateKey(
 
 // mainLoop runs the mainLoop and returns any error.
 // It does not close the output.
+//
+// If no error is returned, the input has been drained. Otherwise, it hasn't
+// necessarily been drained; the caller should attempt to drain. If an error is
+// returned, it's the caller's responsibility to pass it to the consumer.
 func (jr *joinReader) mainLoop(ctx context.Context) error {
 	primaryKeyPrefix := sqlbase.MakeIndexKeyPrefix(&jr.desc, jr.index.ID)
 
 	var alloc sqlbase.DatumAlloc
 	spans := make(roachpb.Spans, 0, joinReaderBatchSize)
-
-	ctx = log.WithLogTagInt(ctx, "JoinReader", int(jr.desc.ID))
-	ctx, span := tracing.ChildSpan(ctx, "join reader")
-	defer tracing.FinishSpan(span)
 
 	txn := jr.flowCtx.setupTxn(ctx)
 
@@ -116,16 +116,21 @@ func (jr *joinReader) mainLoop(ctx context.Context) error {
 	if log.V(1) {
 		defer log.Infof(ctx, "exiting")
 	}
-	defer jr.input.ConsumerDone()
 
 	for {
 		// TODO(radu): figure out how to send smaller batches if the source has
 		// a soft limit (perhaps send the batch out if we don't get a result
 		// within a certain amount of time).
 		for spans = spans[:0]; len(spans) < joinReaderBatchSize; {
-			row, err := jr.input.NextRow()
-			if err != nil {
-				return err
+			row, meta := jr.input.Next()
+			if !meta.Empty() {
+				if meta.Err != nil {
+					return meta.Err
+				}
+				if !emitHelper(ctx, &jr.out, nil /* row */, meta, jr.input) {
+					return nil
+				}
+				continue
 			}
 			if row == nil {
 				if len(spans) == 0 {
@@ -133,6 +138,7 @@ func (jr *joinReader) mainLoop(ctx context.Context) error {
 				}
 				break
 			}
+
 			key, err := jr.generateKey(row, &alloc, primaryKeyPrefix)
 			if err != nil {
 				return err
@@ -164,7 +170,7 @@ func (jr *joinReader) mainLoop(ctx context.Context) error {
 			}
 
 			// Emit the row; stop if no more rows are needed.
-			if !jr.out.emitRow(ctx, fetcherRow) {
+			if !emitHelper(ctx, &jr.out, fetcherRow, ProducerMetadata{}, jr.input) {
 				return nil
 			}
 		}
@@ -182,6 +188,14 @@ func (jr *joinReader) Run(ctx context.Context, wg *sync.WaitGroup) {
 		defer wg.Done()
 	}
 
+	ctx = log.WithLogTagInt(ctx, "JoinReader", int(jr.desc.ID))
+	ctx, span := tracing.ChildSpan(ctx, "join reader")
+	defer tracing.FinishSpan(span)
+
 	err := jr.mainLoop(ctx)
-	jr.out.close(err)
+	if err != nil {
+		DrainAndClose(ctx, jr.out.output, err /* cause */, jr.input)
+	} else {
+		jr.out.close()
+	}
 }
