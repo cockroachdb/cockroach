@@ -48,11 +48,25 @@ type orderedSynchronizer struct {
 	// rows are not in the heap.
 	heap        []srcIdx
 	initialized bool
+	// needsAdvance is set when the row at the root of the heap has already been
+	// consumed and thus producing a new row required the root to be advanced.
+	// This is usually set after a row is produced, but is not set when a metadata
+	// row has just been produced, as that means that the heap is in good state to
+	// serve the next row without advancing anything.
+	needsAdvance bool
 
 	// err can be set by the Less function (used by the heap implementation)
 	err error
 
 	alloc sqlbase.DatumAlloc
+
+	// metadata is accumulated from all the sources and is passed on as soon as
+	// possible.
+	metadata []*ProducerMetadata
+
+	// If draining is set, the orderedSynchronizer will ignore everything but
+	// metadata records.
+	draining bool
 }
 
 var _ RowSource = &orderedSynchronizer{}
@@ -98,9 +112,7 @@ func (s *orderedSynchronizer) Pop() interface{} {
 func (s *orderedSynchronizer) initHeap() error {
 	for i := range s.sources {
 		src := &s.sources[i]
-		var err error
-		src.row, err = src.src.NextRow()
-		if err != nil {
+		if err := s.consumeMetadata(src); err != nil {
 			return err
 		}
 		if src.row != nil {
@@ -113,6 +125,26 @@ func (s *orderedSynchronizer) initHeap() error {
 	return s.err
 }
 
+// consumeMetadata keeps reading from a source until the first data row.
+// Metadata records are accumulated in s.metadata. If a metadata record with an
+// error is encountered, further metadata is not consumed and the error is
+// returned.
+func (s *orderedSynchronizer) consumeMetadata(src *srcInfo) error {
+	for {
+		row, meta := src.src.NextRow()
+		if meta.Err != nil {
+			s.err = meta.Err
+			return meta.Err
+		}
+		if !meta.Empty() {
+			s.metadata = append(s.metadata, &meta)
+			continue
+		}
+		src.row = row
+		return nil
+	}
+}
+
 // advanceRoot retrieves the next row for the source at the root of the heap and
 // updates the heap accordingly.
 func (s *orderedSynchronizer) advanceRoot() error {
@@ -123,13 +155,12 @@ func (s *orderedSynchronizer) advanceRoot() error {
 	if src.row == nil {
 		panic("trying to advance closed source")
 	}
+
 	oldRow := src.row
-	var err error
-	src.row, err = src.src.NextRow()
-	if err != nil {
-		s.err = err
+	if err := s.consumeMetadata(src); err != nil {
 		return err
 	}
+
 	if src.row == nil {
 		heap.Remove(s, 0)
 	} else {
@@ -145,38 +176,83 @@ func (s *orderedSynchronizer) advanceRoot() error {
 	return s.err
 }
 
+// drainSources consumes all the rows from the sources. All the data is
+// discarded, except the metadata records which are accumulated in s.metadata.
+func (s *orderedSynchronizer) drainSources() error {
+	s.needsAdvance = true
+	for len(s.heap) > 0 {
+		if err := s.advanceRoot(); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // NextRow is part of the RowSource interface.
-func (s *orderedSynchronizer) NextRow() (sqlbase.EncDatumRow, error) {
+func (s *orderedSynchronizer) NextRow() (sqlbase.EncDatumRow, ProducerMetadata) {
 	if !s.initialized {
 		if err := s.initHeap(); err != nil {
-			return nil, err
+			return nil, ProducerMetadata{Err: err}
 		}
 		s.initialized = true
-	} else {
+	} else if s.needsAdvance {
 		// Last row returned was from the source at the root of the heap; get
 		// the next row for that source.
 		if err := s.advanceRoot(); err != nil {
-			return nil, err
+			return nil, ProducerMetadata{Err: err}
 		}
 	}
-	if len(s.heap) == 0 {
-		return nil, nil
+	if s.draining {
+		// ConsumerDone() has put us in draining mode. We're going to clear the heap
+		// and all subsequent NextRow() calls will return metadata records.
+		s.draining = false
+		if err := s.drainSources(); err != nil {
+			return nil, ProducerMetadata{Err: err}
+		}
+		if len(s.heap) != 0 {
+			panic("drainSources() didn't clear the heap")
+		}
 	}
-	return s.sources[s.heap[0]].row, nil
+	if len(s.metadata) != 0 {
+		// TODO(andrei): We return the metadata records one by one. The interface
+		// should support returning all of them at once.
+		var meta *ProducerMetadata
+		meta, s.metadata = s.metadata[0], s.metadata[1:]
+		s.needsAdvance = false
+		return nil, *meta
+	}
+	if len(s.heap) == 0 {
+		return nil, ProducerMetadata{}
+	}
+	s.needsAdvance = true
+	return s.sources[s.heap[0]].row, ProducerMetadata{}
 }
 
 // ConsumerDone is part of the RowSource interface.
 func (s *orderedSynchronizer) ConsumerDone() {
+	// We're entering draining mode. Only metadata will be forwarded from now on.
+	s.draining = true
+	s.consumerStatusChanged(RowSource.ConsumerDone)
+}
+
+// ConsumerClosed is part of the RowSource interface.
+func (s *orderedSynchronizer) ConsumerClosed() {
+	s.consumerStatusChanged(RowSource.ConsumerClosed)
+}
+
+// consumerStatusChanged calls a RowSource method on all the non-exhausted
+// sources.
+func (s *orderedSynchronizer) consumerStatusChanged(f func(RowSource)) {
 	if !s.initialized {
 		for i := range s.sources {
-			s.sources[i].src.ConsumerDone()
+			f(s.sources[i].src)
 		}
 	} else {
 		// The sources that are not in the heap have been consumed already. It would
 		// be ok to call ConsumerDone() on them too, but avoiding the call may be a
 		// bit faster (in most cases there should be no sources left).
 		for _, sIdx := range s.heap {
-			s.sources[sIdx].src.ConsumerDone()
+			f(s.sources[sIdx].src)
 		}
 	}
 }

@@ -74,10 +74,14 @@ func TestServer(t *testing.T) {
 	}
 
 	distSQLClient := NewDistSQLClient(conn)
-	stream, err := distSQLClient.RunSyncFlow(context.Background(), req)
+	stream, err := distSQLClient.RunSyncFlow(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
+	if err := stream.Send(&ConsumerSignal{SetupFlowRequest: req}); err != nil {
+		t.Fatal(err)
+	}
+
 	var decoder StreamDecoder
 	var rows sqlbase.EncDatumRows
 	for {

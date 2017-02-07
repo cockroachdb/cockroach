@@ -122,10 +122,13 @@ func TestOrderedSync(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if row == nil {
+			if row.Metadata != nil {
+				t.Fatalf("unexpected metadata: %v", row)
+			}
+			if row.Empty() {
 				break
 			}
-			retRows = append(retRows, row)
+			retRows = append(retRows, row.Row)
 		}
 		expStr := c.expected.String()
 		retStr := retRows.String()
@@ -148,7 +151,9 @@ func TestUnorderedSync(t *testing.T) {
 				a := sqlbase.DatumToEncDatum(columnTypeInt, parser.NewDInt(parser.DInt(i)))
 				b := sqlbase.DatumToEncDatum(columnTypeInt, parser.NewDInt(parser.DInt(j)))
 				row := sqlbase.EncDatumRow{a, b}
-				mrc.PushRow(row)
+				if status := mrc.PushRow(RowOrMetadata{Row: row}); status != NeedMoreRows {
+					t.Fatalf("unexpected response: %d", status)
+				}
 			}
 			mrc.ProducerDone(nil)
 		}(i)
@@ -159,10 +164,13 @@ func TestUnorderedSync(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if row == nil {
+		if row.Metadata != nil {
+			t.Fatalf("unexpected metadata: %v", row)
+		}
+		if row.Empty() {
 			break
 		}
-		retRows = append(retRows, row)
+		retRows = append(retRows, row.Row)
 	}
 	// Verify all elements.
 	for i := 1; i <= 5; i++ {
@@ -189,7 +197,9 @@ func TestUnorderedSync(t *testing.T) {
 				a := sqlbase.DatumToEncDatum(columnTypeInt, parser.NewDInt(parser.DInt(i)))
 				b := sqlbase.DatumToEncDatum(columnTypeInt, parser.NewDInt(parser.DInt(j)))
 				row := sqlbase.EncDatumRow{a, b}
-				mrc.PushRow(row)
+				if status := mrc.PushRow(RowOrMetadata{Row: row}); status != NeedMoreRows {
+					t.Fatalf("unexpected response: %d", status)
+				}
 			}
 			var err error
 			if i == 3 {
@@ -206,7 +216,7 @@ func TestUnorderedSync(t *testing.T) {
 			}
 			break
 		}
-		if row == nil {
+		if row.Empty() {
 			t.Error("Did not receive expected error")
 		}
 	}

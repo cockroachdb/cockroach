@@ -135,6 +135,11 @@ func makeMessage(ctx context.Context, format string, args []interface{}) string 
 	return buf.String()
 }
 
+// !!! export makeMessage in a different commit.
+func MakeTaggedMessage(ctx context.Context, format string, args []interface{}) string {
+	return makeMessage(ctx, format, args)
+}
+
 // addStructured creates a structured log entry to be written to the
 // specified facility of the logger.
 func addStructured(ctx context.Context, s Severity, depth int, format string, args []interface{}) {

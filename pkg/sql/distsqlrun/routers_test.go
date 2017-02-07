@@ -61,64 +61,88 @@ func TestHashRouter(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		bufs := make([]*RowBuffer, tc.numBuckets)
-		recvs := make([]RowReceiver, tc.numBuckets)
-		for i := 0; i < tc.numBuckets; i++ {
-			bufs[i] = &RowBuffer{}
-			recvs[i] = bufs[i]
-		}
-		hr, err := makeHashRouter(tc.hashColumns, recvs)
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		for i := 0; i < numRows; i++ {
-			row := make(sqlbase.EncDatumRow, numCols)
-			for j := 0; j < numCols; j++ {
-				row[j] = vals[j][rng.Intn(len(vals[j]))]
+		t.Run("", func(t *testing.T) {
+			bufs := make([]*RowBuffer, tc.numBuckets)
+			recvs := make([]RowReceiver, tc.numBuckets)
+			for i := 0; i < tc.numBuckets; i++ {
+				bufs[i] = &RowBuffer{}
+				recvs[i] = bufs[i]
 			}
-			ok := hr.PushRow(row)
-			if !ok {
-				t.Fatalf("PushRow returned false")
-			}
-		}
-		hr.ProducerDone(nil)
-		for bIdx, b := range bufs {
-			if !b.ProducerClosed {
-				t.Errorf("bucket not closed")
-			}
-			if b.Err != nil {
-				t.Error(b.Err)
+			hr, err := makeHashRouter(tc.hashColumns, recvs)
+			if err != nil {
+				t.Fatal(err)
 			}
 
-			for _, row := range b.Rows {
-				// Verify there are no rows that
-				//  - have the same values with this row on all the hashColumns, and
-				//  - ended up in a different bucket
-				for b2Idx, b2 := range bufs {
-					if b2Idx == bIdx {
-						continue
-					}
-					for _, row2 := range b2.Rows {
-						equal := true
-						for _, c := range tc.hashColumns {
-							cmp, err := row[c].Compare(alloc, &row2[c])
-							if err != nil {
-								t.Fatal(err)
-							}
-							if cmp != 0 {
-								equal = false
-								break
-							}
+			for i := 0; i < numRows; i++ {
+				row := make(sqlbase.EncDatumRow, numCols)
+				for j := 0; j < numCols; j++ {
+					row[j] = vals[j][rng.Intn(len(vals[j]))]
+				}
+				if status := hr.PushRow(RowOrMetadata{Row: row}); status != NeedMoreRows {
+					t.Fatalf("unexpected status: %d", status)
+				}
+			}
+			hr.ProducerDone(nil)
+
+			rows := make([]sqlbase.EncDatumRows, len(bufs))
+			for i, b := range bufs {
+				if !b.ProducerClosed {
+					t.Fatalf("bucket not closed: %d", i)
+				}
+				if b.Err != nil {
+					t.Fatal(b.Err)
+				}
+				rows[i] = getRowsFromBuffer(t, b)
+			}
+
+			for bIdx := range rows {
+				for _, row := range rows[bIdx] {
+					// Verify there are no rows that
+					//  - have the same values with this row on all the hashColumns, and
+					//  - ended up in a different bucket
+					for b2Idx, r2 := range rows {
+						if b2Idx == bIdx {
+							continue
 						}
-						if equal {
-							t.Errorf("rows %s and %s in different buckets", row, row2)
+						for _, row2 := range r2 {
+							equal := true
+							for _, c := range tc.hashColumns {
+								cmp, err := row[c].Compare(alloc, &row2[c])
+								if err != nil {
+									t.Fatal(err)
+								}
+								if cmp != 0 {
+									equal = false
+									break
+								}
+							}
+							if equal {
+								t.Errorf("rows %s and %s in different buckets", row, row2)
+							}
 						}
 					}
 				}
 			}
-		}
+		})
 	}
+}
+
+func getRowsFromBuffer(t *testing.T, buf *RowBuffer) sqlbase.EncDatumRows {
+	var res sqlbase.EncDatumRows
+	for {
+		row, err := buf.NextRow()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if row.Metadata != nil {
+			t.Fatalf("unexpected metadata: %v", row)
+		}
+		if row.Empty() {
+			break
+		}
+		res = append(res, row.Row)
+	}
+	return res
 }
 
 func TestMirrorRouter(t *testing.T) {
@@ -148,31 +172,35 @@ func TestMirrorRouter(t *testing.T) {
 			for j := 0; j < numCols; j++ {
 				row[j] = vals[j][rng.Intn(len(vals[j]))]
 			}
-			ok := mr.PushRow(row)
-			if !ok {
-				t.Fatalf("PushRow returned false")
+			if status := mr.PushRow(RowOrMetadata{Row: row}); status != NeedMoreRows {
+				t.Fatalf("unexpected status: %d", status)
 			}
 		}
 		mr.ProducerDone(nil)
 
-		// Verify each row is sent to each of the output streams.
-		for bIdx, b := range bufs {
-			if len(b.Rows) != len(bufs[0].Rows) {
-				t.Errorf("buckets %d and %d have different number of rows", 0, bIdx)
-			}
+		rows := make([]sqlbase.EncDatumRows, len(bufs))
+		for i, b := range bufs {
 			if !b.ProducerClosed {
-				t.Errorf("bucket not closed")
+				t.Fatalf("bucket not closed: %d", i)
 			}
 			if b.Err != nil {
-				t.Error(b.Err)
+				t.Fatal(b.Err)
 			}
+			rows[i] = getRowsFromBuffer(t, b)
+		}
+
+		// Verify each row is sent to each of the output streams.
+		for bIdx, r := range rows {
 			if bIdx == 0 {
 				continue
 			}
+			if len(rows[bIdx]) != len(rows[0]) {
+				t.Errorf("buckets %d and %d have different number of rows", 0, bIdx)
+			}
 
 			// Verify that the i-th row is the same across all buffers.
-			for i, row := range b.Rows {
-				row2 := bufs[0].Rows[i]
+			for i, row := range r {
+				row2 := rows[0][i]
 
 				equal := true
 				for j, c := range row {

@@ -165,19 +165,26 @@ func (tr *tableReader) Run(ctx context.Context, wg *sync.WaitGroup) {
 		txn, tr.spans, true /* limit batches */, tr.limitHint,
 	); err != nil {
 		log.Errorf(ctx, "scan error: %s", err)
-		tr.out.close(err)
+		tr.out.output.PushRow(nil /* row */, ProducerMetadata{Err: err})
+		tr.out.close()
 		return
 	}
 
 	for {
 		fetcherRow, err := tr.fetcher.NextRow()
 		if err != nil || fetcherRow == nil {
-			tr.out.close(err)
+			tr.out.output.PushRow(nil /* row */, ProducerMetadata{Err: err})
+			tr.out.close()
 			return
 		}
 		// Emit the row; stop if no more rows are needed.
-		if !tr.out.emitRow(ctx, fetcherRow) {
-			tr.out.close(nil)
+		consumerStatus, err := tr.out.emitRow(ctx, fetcherRow)
+		if err != nil || consumerStatus != NeedMoreRows {
+			if err != nil {
+				tr.out.output.PushRow(nil /* row */, ProducerMetadata{Err: err})
+			}
+			// TODO(andrei): send trailing metadata.
+			tr.out.close()
 			return
 		}
 		/*
@@ -185,7 +192,7 @@ func (tr *tableReader) Run(ctx context.Context, wg *sync.WaitGroup) {
 			rowIdx++
 			if tr.hardLimit != 0 && rowIdx == tr.hardLimit {
 				// We sent tr.hardLimit rows.
-				tr.output.Close(nil)
+				tr.out.close(nil)
 				return
 			}
 		*/

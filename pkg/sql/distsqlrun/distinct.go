@@ -69,31 +69,46 @@ func (d *distinct) Run(ctx context.Context, wg *sync.WaitGroup) {
 		defer log.Infof(ctx, "exiting distinct")
 	}
 
-	defer d.input.ConsumerDone()
+	cleanup := func() {
+		d.input.ConsumerClosed()
+		d.out.close()
+	}
 
 	var scratch []byte
 	for {
-		row, err := d.input.NextRow()
-		if err != nil || row == nil {
-			d.out.close(err)
+		row, meta := d.input.NextRow()
+		if !meta.Empty() {
+			if meta.Err != nil {
+				DrainAndForwardMetadataFinal(ctx, d.out.output, meta.Err, d.input)
+				return
+			}
+			if !emitHelper(ctx, &d.out, nil /* row */, meta, d.input) {
+				// No cleanup required; emitHelper() took care of it.
+				return
+			}
+			continue
+		}
+		if row == nil {
+			cleanup()
 			return
 		}
 
+		encoding := scratch
 		// If we are processing DISTINCT(x, y) and the input stream is ordered
 		// by x, we define x to be our group key. Our seen set at any given time
 		// is only the set of all rows with the same group key. The encoding of
 		// the row is the key we use in our 'seen' set.
-		encoding, err := d.encode(scratch, row)
+		var err error
+		encoding, err = d.encode(scratch, row)
 		if err != nil {
-			d.out.close(err)
+			cleanup()
 			return
 		}
-
 		// The 'seen' set is reset whenever we find consecutive rows differing on the
 		// group key thus avoiding the need to store encodings of all rows.
 		matched, err := d.matchLastGroupKey(row)
 		if err != nil {
-			d.out.close(err)
+			cleanup()
 			return
 		}
 
@@ -105,12 +120,12 @@ func (d *distinct) Run(ctx context.Context, wg *sync.WaitGroup) {
 		key := string(encoding)
 		if _, ok := d.seen[key]; !ok {
 			d.seen[key] = struct{}{}
-			if !d.out.emitRow(ctx, row) {
-				d.out.close(nil)
+			if !emitHelper(ctx, &d.out, row, ProducerMetadata{}, d.input) {
+				// No cleanup required; emitHelper() took care of it.
 				return
 			}
+			scratch = encoding[:0]
 		}
-		scratch = encoding[:0]
 	}
 }
 

@@ -101,8 +101,22 @@ func TestDistinct(t *testing.T) {
 		if !out.ProducerClosed {
 			t.Fatalf("output RowReceiver not closed")
 		}
+		var res sqlbase.EncDatumRows
+		for {
+			row, err := out.NextRow()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if row.Metadata != nil {
+				t.Fatalf("unexpected metadata: %v", row)
+			}
+			if row.Empty() {
+				break
+			}
+			res = append(res, row.Row)
+		}
 
-		if result := out.Rows.String(); result != c.expected.String() {
+		if result := res.String(); result != c.expected.String() {
 			t.Errorf("invalid results: %s, expected %s'", result, c.expected.String())
 		}
 	}

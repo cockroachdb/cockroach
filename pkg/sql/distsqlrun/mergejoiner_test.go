@@ -312,10 +312,13 @@ func TestMergeJoiner(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if row == nil {
+			if row.Metadata != nil {
+				t.Fatalf("unexpected metadata: %v", row)
+			}
+			if row.Empty() {
 				break
 			}
-			retRows = append(retRows, row)
+			retRows = append(retRows, row.Row)
 		}
 		expStr := c.expected.String()
 		retStr := retRows.String()

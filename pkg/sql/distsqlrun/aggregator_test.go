@@ -305,10 +305,13 @@ func TestAggregator(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if row == nil {
+			if row.Metadata != nil {
+				t.Fatalf("unexpected metadata: %v", row)
+			}
+			if row.Empty() {
 				break
 			}
-			rets = append(rets, row.String())
+			rets = append(rets, row.Row.String())
 		}
 		sort.Strings(rets)
 		retStr := strings.Join(rets, "")

@@ -13,16 +13,18 @@
 	It has these top-level messages:
 		SetupFlowRequest
 		SimpleResponse
+		ConsumerSignal
+		DrainRequest
 		Expression
 		Ordering
 		StreamEndpointSpec
 		InputSyncSpec
 		OutputRouterSpec
 		DatumInfo
-		StreamHeader
-		StreamData
-		StreamTrailer
-		StreamMessage
+		ProducerHeader
+		ProducerData
+		ProducerMessage
+		RemoteProducerMetadata
 		ProcessorSpec
 		PostProcessSpec
 		ProcessorCoreUnion
@@ -93,9 +95,42 @@ func (m *SimpleResponse) String() string            { return proto.CompactTextSt
 func (*SimpleResponse) ProtoMessage()               {}
 func (*SimpleResponse) Descriptor() ([]byte, []int) { return fileDescriptorApi, []int{1} }
 
+type ConsumerSignal struct {
+	// TODO(radu): we should be using our own error instead of roachpb.Error.
+	// One important error field for distsql is whether the error is
+	// "authoritative": if a query is distributed on multiple nodes and one node
+	// hits an error, the other nodes may hit errors as well as a consequence
+	// (e.g. streams can't connect to the failed flow). The node that started the
+	// flow needs to distinguish which errors are caused by non-availability of
+	// other nodes so they don't obscure the real error.
+	Error *cockroach_roachpb2.Error `protobuf:"bytes,1,opt,name=error" json:"error,omitempty"`
+	// The consumer is done (doesn't need to consume any more rows) and is asking
+	// the producer to push whatever trailing metadata it has and close its
+	// stream.
+	DrainRequest *DrainRequest `protobuf:"bytes,2,opt,name=drain_request,json=drainRequest" json:"drain_request,omitempty"`
+	// Used in the RunSyncFlow case; the first message on the client stream must
+	// contain this message.
+	SetupFlowRequest *SetupFlowRequest `protobuf:"bytes,3,opt,name=setup_flow_request,json=setupFlowRequest" json:"setup_flow_request,omitempty"`
+}
+
+func (m *ConsumerSignal) Reset()                    { *m = ConsumerSignal{} }
+func (m *ConsumerSignal) String() string            { return proto.CompactTextString(m) }
+func (*ConsumerSignal) ProtoMessage()               {}
+func (*ConsumerSignal) Descriptor() ([]byte, []int) { return fileDescriptorApi, []int{2} }
+
+type DrainRequest struct {
+}
+
+func (m *DrainRequest) Reset()                    { *m = DrainRequest{} }
+func (m *DrainRequest) String() string            { return proto.CompactTextString(m) }
+func (*DrainRequest) ProtoMessage()               {}
+func (*DrainRequest) Descriptor() ([]byte, []int) { return fileDescriptorApi, []int{3} }
+
 func init() {
 	proto.RegisterType((*SetupFlowRequest)(nil), "cockroach.sql.distsqlrun.SetupFlowRequest")
 	proto.RegisterType((*SimpleResponse)(nil), "cockroach.sql.distsqlrun.SimpleResponse")
+	proto.RegisterType((*ConsumerSignal)(nil), "cockroach.sql.distsqlrun.ConsumerSignal")
+	proto.RegisterType((*DrainRequest)(nil), "cockroach.sql.distsqlrun.DrainRequest")
 }
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -112,8 +147,8 @@ type DistSQLClient interface {
 	// RunSyncFlow instantiates a flow and streams back results of that flow.
 	// The request must contain one flow, and that flow must have a single mailbox
 	// of the special sync response type.
-	RunSyncFlow(ctx context.Context, in *SetupFlowRequest, opts ...grpc.CallOption) (DistSQL_RunSyncFlowClient, error)
-	// SetupFlow instantiates a flow (subgraps of a distributed SQL
+	RunSyncFlow(ctx context.Context, opts ...grpc.CallOption) (DistSQL_RunSyncFlowClient, error)
+	// SetupFlow instantiates a flow (subgraphs of a distributed SQL
 	// computation) on the receiving node.
 	SetupFlow(ctx context.Context, in *SetupFlowRequest, opts ...grpc.CallOption) (*SimpleResponse, error)
 	// FlowStream is used to push a stream of messages that is part of a flow. The
@@ -130,23 +165,18 @@ func NewDistSQLClient(cc *grpc.ClientConn) DistSQLClient {
 	return &distSQLClient{cc}
 }
 
-func (c *distSQLClient) RunSyncFlow(ctx context.Context, in *SetupFlowRequest, opts ...grpc.CallOption) (DistSQL_RunSyncFlowClient, error) {
+func (c *distSQLClient) RunSyncFlow(ctx context.Context, opts ...grpc.CallOption) (DistSQL_RunSyncFlowClient, error) {
 	stream, err := grpc.NewClientStream(ctx, &_DistSQL_serviceDesc.Streams[0], c.cc, "/cockroach.sql.distsqlrun.DistSQL/RunSyncFlow", opts...)
 	if err != nil {
 		return nil, err
 	}
 	x := &distSQLRunSyncFlowClient{stream}
-	if err := x.ClientStream.SendMsg(in); err != nil {
-		return nil, err
-	}
-	if err := x.ClientStream.CloseSend(); err != nil {
-		return nil, err
-	}
 	return x, nil
 }
 
 type DistSQL_RunSyncFlowClient interface {
-	Recv() (*StreamMessage, error)
+	Send(*ConsumerSignal) error
+	Recv() (*ProducerMessage, error)
 	grpc.ClientStream
 }
 
@@ -154,8 +184,12 @@ type distSQLRunSyncFlowClient struct {
 	grpc.ClientStream
 }
 
-func (x *distSQLRunSyncFlowClient) Recv() (*StreamMessage, error) {
-	m := new(StreamMessage)
+func (x *distSQLRunSyncFlowClient) Send(m *ConsumerSignal) error {
+	return x.ClientStream.SendMsg(m)
+}
+
+func (x *distSQLRunSyncFlowClient) Recv() (*ProducerMessage, error) {
+	m := new(ProducerMessage)
 	if err := x.ClientStream.RecvMsg(m); err != nil {
 		return nil, err
 	}
@@ -181,8 +215,8 @@ func (c *distSQLClient) FlowStream(ctx context.Context, opts ...grpc.CallOption)
 }
 
 type DistSQL_FlowStreamClient interface {
-	Send(*StreamMessage) error
-	CloseAndRecv() (*SimpleResponse, error)
+	Send(*ProducerMessage) error
+	Recv() (*ConsumerSignal, error)
 	grpc.ClientStream
 }
 
@@ -190,15 +224,12 @@ type distSQLFlowStreamClient struct {
 	grpc.ClientStream
 }
 
-func (x *distSQLFlowStreamClient) Send(m *StreamMessage) error {
+func (x *distSQLFlowStreamClient) Send(m *ProducerMessage) error {
 	return x.ClientStream.SendMsg(m)
 }
 
-func (x *distSQLFlowStreamClient) CloseAndRecv() (*SimpleResponse, error) {
-	if err := x.ClientStream.CloseSend(); err != nil {
-		return nil, err
-	}
-	m := new(SimpleResponse)
+func (x *distSQLFlowStreamClient) Recv() (*ConsumerSignal, error) {
+	m := new(ConsumerSignal)
 	if err := x.ClientStream.RecvMsg(m); err != nil {
 		return nil, err
 	}
@@ -211,8 +242,8 @@ type DistSQLServer interface {
 	// RunSyncFlow instantiates a flow and streams back results of that flow.
 	// The request must contain one flow, and that flow must have a single mailbox
 	// of the special sync response type.
-	RunSyncFlow(*SetupFlowRequest, DistSQL_RunSyncFlowServer) error
-	// SetupFlow instantiates a flow (subgraps of a distributed SQL
+	RunSyncFlow(DistSQL_RunSyncFlowServer) error
+	// SetupFlow instantiates a flow (subgraphs of a distributed SQL
 	// computation) on the receiving node.
 	SetupFlow(context.Context, *SetupFlowRequest) (*SimpleResponse, error)
 	// FlowStream is used to push a stream of messages that is part of a flow. The
@@ -226,15 +257,12 @@ func RegisterDistSQLServer(s *grpc.Server, srv DistSQLServer) {
 }
 
 func _DistSQL_RunSyncFlow_Handler(srv interface{}, stream grpc.ServerStream) error {
-	m := new(SetupFlowRequest)
-	if err := stream.RecvMsg(m); err != nil {
-		return err
-	}
-	return srv.(DistSQLServer).RunSyncFlow(m, &distSQLRunSyncFlowServer{stream})
+	return srv.(DistSQLServer).RunSyncFlow(&distSQLRunSyncFlowServer{stream})
 }
 
 type DistSQL_RunSyncFlowServer interface {
-	Send(*StreamMessage) error
+	Send(*ProducerMessage) error
+	Recv() (*ConsumerSignal, error)
 	grpc.ServerStream
 }
 
@@ -242,8 +270,16 @@ type distSQLRunSyncFlowServer struct {
 	grpc.ServerStream
 }
 
-func (x *distSQLRunSyncFlowServer) Send(m *StreamMessage) error {
+func (x *distSQLRunSyncFlowServer) Send(m *ProducerMessage) error {
 	return x.ServerStream.SendMsg(m)
+}
+
+func (x *distSQLRunSyncFlowServer) Recv() (*ConsumerSignal, error) {
+	m := new(ConsumerSignal)
+	if err := x.ServerStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
 }
 
 func _DistSQL_SetupFlow_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
@@ -269,8 +305,8 @@ func _DistSQL_FlowStream_Handler(srv interface{}, stream grpc.ServerStream) erro
 }
 
 type DistSQL_FlowStreamServer interface {
-	SendAndClose(*SimpleResponse) error
-	Recv() (*StreamMessage, error)
+	Send(*ConsumerSignal) error
+	Recv() (*ProducerMessage, error)
 	grpc.ServerStream
 }
 
@@ -278,12 +314,12 @@ type distSQLFlowStreamServer struct {
 	grpc.ServerStream
 }
 
-func (x *distSQLFlowStreamServer) SendAndClose(m *SimpleResponse) error {
+func (x *distSQLFlowStreamServer) Send(m *ConsumerSignal) error {
 	return x.ServerStream.SendMsg(m)
 }
 
-func (x *distSQLFlowStreamServer) Recv() (*StreamMessage, error) {
-	m := new(StreamMessage)
+func (x *distSQLFlowStreamServer) Recv() (*ProducerMessage, error) {
+	m := new(ProducerMessage)
 	if err := x.ServerStream.RecvMsg(m); err != nil {
 		return nil, err
 	}
@@ -304,10 +340,12 @@ var _DistSQL_serviceDesc = grpc.ServiceDesc{
 			StreamName:    "RunSyncFlow",
 			Handler:       _DistSQL_RunSyncFlow_Handler,
 			ServerStreams: true,
+			ClientStreams: true,
 		},
 		{
 			StreamName:    "FlowStream",
 			Handler:       _DistSQL_FlowStream_Handler,
+			ServerStreams: true,
 			ClientStreams: true,
 		},
 	},
@@ -386,6 +424,72 @@ func (m *SimpleResponse) MarshalTo(dAtA []byte) (int, error) {
 	return i, nil
 }
 
+func (m *ConsumerSignal) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *ConsumerSignal) MarshalTo(dAtA []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if m.Error != nil {
+		dAtA[i] = 0xa
+		i++
+		i = encodeVarintApi(dAtA, i, uint64(m.Error.Size()))
+		n5, err := m.Error.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n5
+	}
+	if m.DrainRequest != nil {
+		dAtA[i] = 0x12
+		i++
+		i = encodeVarintApi(dAtA, i, uint64(m.DrainRequest.Size()))
+		n6, err := m.DrainRequest.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n6
+	}
+	if m.SetupFlowRequest != nil {
+		dAtA[i] = 0x1a
+		i++
+		i = encodeVarintApi(dAtA, i, uint64(m.SetupFlowRequest.Size()))
+		n7, err := m.SetupFlowRequest.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n7
+	}
+	return i, nil
+}
+
+func (m *DrainRequest) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *DrainRequest) MarshalTo(dAtA []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	return i, nil
+}
+
 func encodeFixed64Api(dAtA []byte, offset int, v uint64) int {
 	dAtA[offset] = uint8(v)
 	dAtA[offset+1] = uint8(v >> 8)
@@ -437,6 +541,30 @@ func (m *SimpleResponse) Size() (n int) {
 	return n
 }
 
+func (m *ConsumerSignal) Size() (n int) {
+	var l int
+	_ = l
+	if m.Error != nil {
+		l = m.Error.Size()
+		n += 1 + l + sovApi(uint64(l))
+	}
+	if m.DrainRequest != nil {
+		l = m.DrainRequest.Size()
+		n += 1 + l + sovApi(uint64(l))
+	}
+	if m.SetupFlowRequest != nil {
+		l = m.SetupFlowRequest.Size()
+		n += 1 + l + sovApi(uint64(l))
+	}
+	return n
+}
+
+func (m *DrainRequest) Size() (n int) {
+	var l int
+	_ = l
+	return n
+}
+
 func sovApi(x uint64) (n int) {
 	for {
 		n++
@@ -449,6 +577,32 @@ func sovApi(x uint64) (n int) {
 }
 func sozApi(x uint64) (n int) {
 	return sovApi(uint64((x << 1) ^ uint64((int64(x) >> 63))))
+}
+func (this *ConsumerSignal) GetValue() interface{} {
+	if this.Error != nil {
+		return this.Error
+	}
+	if this.DrainRequest != nil {
+		return this.DrainRequest
+	}
+	if this.SetupFlowRequest != nil {
+		return this.SetupFlowRequest
+	}
+	return nil
+}
+
+func (this *ConsumerSignal) SetValue(value interface{}) bool {
+	switch vt := value.(type) {
+	case *cockroach_roachpb2.Error:
+		this.Error = vt
+	case *DrainRequest:
+		this.DrainRequest = vt
+	case *SetupFlowRequest:
+		this.SetupFlowRequest = vt
+	default:
+		return false
+	}
+	return true
 }
 func (m *SetupFlowRequest) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
@@ -676,6 +830,205 @@ func (m *SimpleResponse) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
+func (m *ConsumerSignal) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowApi
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: ConsumerSignal: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: ConsumerSignal: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Error", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowApi
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthApi
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.Error == nil {
+				m.Error = &cockroach_roachpb2.Error{}
+			}
+			if err := m.Error.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field DrainRequest", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowApi
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthApi
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.DrainRequest == nil {
+				m.DrainRequest = &DrainRequest{}
+			}
+			if err := m.DrainRequest.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 3:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field SetupFlowRequest", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowApi
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthApi
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.SetupFlowRequest == nil {
+				m.SetupFlowRequest = &SetupFlowRequest{}
+			}
+			if err := m.SetupFlowRequest.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipApi(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthApi
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *DrainRequest) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowApi
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: DrainRequest: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: DrainRequest: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		default:
+			iNdEx = preIndex
+			skippy, err := skipApi(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthApi
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
 func skipApi(dAtA []byte) (n int, err error) {
 	l := len(dAtA)
 	iNdEx := 0
@@ -784,32 +1137,38 @@ var (
 func init() { proto.RegisterFile("cockroach/pkg/sql/distsqlrun/api.proto", fileDescriptorApi) }
 
 var fileDescriptorApi = []byte{
-	// 430 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x09, 0x6e, 0x88, 0x02, 0xff, 0x94, 0x91, 0xc1, 0x8e, 0xd3, 0x30,
-	0x10, 0x86, 0xe3, 0xdd, 0x45, 0x08, 0x2f, 0x20, 0x64, 0x71, 0x88, 0x7a, 0x08, 0xab, 0x08, 0xb1,
-	0xd5, 0x4a, 0xd8, 0x68, 0x25, 0x38, 0x71, 0x40, 0x5b, 0xe0, 0x04, 0x42, 0x24, 0x9c, 0xb8, 0x54,
-	0xc6, 0x75, 0x83, 0xd5, 0xd4, 0x76, 0x6c, 0x47, 0x2d, 0x6f, 0xc1, 0xfb, 0xf0, 0x02, 0x3d, 0x72,
-	0x84, 0x0b, 0x82, 0xf0, 0x22, 0x28, 0x4e, 0x68, 0x5a, 0xd4, 0x46, 0xf4, 0x36, 0x4a, 0xbe, 0xf9,
-	0xe7, 0x9b, 0x31, 0x7c, 0xc0, 0x14, 0x9b, 0x19, 0x45, 0xd9, 0x47, 0xa2, 0x67, 0x19, 0xb1, 0x45,
-	0x4e, 0x26, 0xc2, 0x3a, 0x5b, 0xe4, 0xa6, 0x94, 0x84, 0x6a, 0x81, 0xb5, 0x51, 0x4e, 0xa1, 0x70,
-	0xcd, 0x61, 0x5b, 0xe4, 0xb8, 0x63, 0x06, 0x67, 0xdb, 0x09, 0xbe, 0xd2, 0x1f, 0xc8, 0x84, 0x3a,
-	0xda, 0xf4, 0x0e, 0xe2, 0xdd, 0x04, 0x37, 0x46, 0x19, 0xdb, 0x32, 0xe7, 0xbd, 0x1e, 0x1b, 0x61,
-	0x0f, 0x7b, 0x41, 0x6d, 0x14, 0xe3, 0xd6, 0x76, 0xb9, 0x8f, 0xb7, 0xf1, 0xd2, 0x89, 0x9c, 0x38,
-	0x43, 0x99, 0x90, 0x19, 0xb1, 0x9a, 0xca, 0x31, 0x53, 0xd2, 0xf1, 0xa5, 0x1b, 0x33, 0x6a, 0x8c,
-	0xe0, 0xa6, 0x6d, 0xbb, 0x9b, 0xa9, 0x4c, 0xf9, 0x92, 0xd4, 0x55, 0xf3, 0x35, 0xfe, 0x0e, 0xe0,
-	0x9d, 0x94, 0xbb, 0x52, 0xbf, 0xcc, 0xd5, 0x22, 0xe1, 0x45, 0xc9, 0xad, 0x43, 0x4f, 0xe0, 0xb1,
-	0x5b, 0xca, 0x10, 0x9c, 0x81, 0xe1, 0xe9, 0x65, 0x84, 0xbb, 0x3b, 0xb5, 0x7b, 0xe2, 0x77, 0x86,
-	0x4a, 0x4b, 0x99, 0x13, 0x4a, 0x5e, 0x9d, 0xac, 0x7e, 0xdc, 0x0b, 0x92, 0xba, 0x01, 0xbd, 0x81,
-	0xb7, 0x6a, 0x11, 0xfe, 0xd7, 0x20, 0x3c, 0xf2, 0x09, 0x17, 0x1b, 0x09, 0xb5, 0x2d, 0x6e, 0x6d,
-	0x71, 0xaa, 0xa9, 0x1c, 0x35, 0xe8, 0xa8, 0x71, 0x4d, 0x6e, 0xfa, 0x80, 0xf6, 0x23, 0x7a, 0x0a,
-	0x4f, 0xa6, 0xb9, 0x5a, 0x84, 0xc7, 0x3e, 0x27, 0xc6, 0xfb, 0x5e, 0x0c, 0xd7, 0xf6, 0xa9, 0xe6,
-	0xac, 0xb5, 0xf1, 0x5d, 0xf1, 0x33, 0x78, 0x3b, 0x15, 0x73, 0x9d, 0xf3, 0x84, 0x5b, 0xad, 0xa4,
-	0xe5, 0x08, 0xc3, 0x6b, 0xfe, 0x89, 0xda, 0xd5, 0xc2, 0x1d, 0xab, 0xbd, 0xa8, 0xff, 0x27, 0x0d,
-	0x76, 0xf9, 0xe5, 0x08, 0x5e, 0x7f, 0x2e, 0xac, 0x4b, 0xdf, 0xbe, 0x42, 0x53, 0x78, 0x9a, 0x94,
-	0x32, 0xfd, 0x24, 0x59, 0x3d, 0x0c, 0x5d, 0xec, 0x97, 0xf9, 0xf7, 0x9e, 0x83, 0xf3, 0x1e, 0xd6,
-	0x19, 0x4e, 0xe7, 0xaf, 0xb9, 0xb5, 0x34, 0xe3, 0x71, 0xf0, 0x08, 0x20, 0x06, 0x6f, 0xac, 0x03,
-	0x0e, 0x9a, 0x32, 0xec, 0x61, 0xb7, 0xce, 0x10, 0x07, 0x88, 0x41, 0xe8, 0x4f, 0xe6, 0xa7, 0xa3,
-	0xff, 0xf5, 0x3b, 0x64, 0xc4, 0x10, 0x5c, 0xdd, 0x5f, 0xfd, 0x8a, 0x82, 0x55, 0x15, 0x81, 0xaf,
-	0x55, 0x04, 0xbe, 0x55, 0x11, 0xf8, 0x59, 0x45, 0xe0, 0xf3, 0xef, 0x28, 0x78, 0x0f, 0xbb, 0xc6,
-	0x3f, 0x01, 0x00, 0x00, 0xff, 0xff, 0x90, 0xab, 0xa1, 0x07, 0xaf, 0x03, 0x00, 0x00,
+	// 519 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x09, 0x6e, 0x88, 0x02, 0xff, 0x94, 0x92, 0x4f, 0x6f, 0xd3, 0x30,
+	0x18, 0xc6, 0xe3, 0xb5, 0x08, 0xe1, 0x75, 0xd5, 0x64, 0x71, 0x88, 0x72, 0xc8, 0xa6, 0x08, 0x8d,
+	0x82, 0x84, 0x83, 0x26, 0xc1, 0x01, 0x71, 0x40, 0xeb, 0xe0, 0x02, 0x08, 0x48, 0x38, 0x20, 0x2e,
+	0x95, 0x71, 0x4c, 0x66, 0x2d, 0xb5, 0x5d, 0xdb, 0xd1, 0xc6, 0xb7, 0xe0, 0x23, 0xf0, 0x55, 0xb8,
+	0xf5, 0xc8, 0x11, 0x2e, 0x08, 0xca, 0x99, 0xef, 0x80, 0x9c, 0x84, 0xfe, 0xdb, 0x5a, 0xad, 0x37,
+	0xe7, 0xcd, 0xf3, 0x3e, 0xfe, 0x3d, 0xef, 0x6b, 0x78, 0x40, 0x25, 0x3d, 0xd5, 0x92, 0xd0, 0x93,
+	0x58, 0x9d, 0xe6, 0xb1, 0x19, 0x15, 0x71, 0xc6, 0x8d, 0x35, 0xa3, 0x42, 0x97, 0x22, 0x26, 0x8a,
+	0x63, 0xa5, 0xa5, 0x95, 0xc8, 0x9f, 0xea, 0xb0, 0x19, 0x15, 0x78, 0xa6, 0x09, 0xf6, 0x17, 0x1d,
+	0xaa, 0x93, 0xfa, 0x10, 0x67, 0xc4, 0x92, 0xba, 0x37, 0x88, 0x2e, 0x57, 0x30, 0xad, 0xa5, 0x36,
+	0x8d, 0xe6, 0xf6, 0x5a, 0x8e, 0x39, 0xb3, 0x7b, 0x6b, 0x85, 0x4a, 0x4b, 0xca, 0x8c, 0x99, 0xf9,
+	0x3e, 0x58, 0x94, 0x97, 0x96, 0x17, 0xb1, 0xd5, 0x84, 0x72, 0x91, 0xc7, 0x46, 0x11, 0x31, 0xa0,
+	0x52, 0x58, 0x76, 0x6e, 0x07, 0x94, 0x68, 0xcd, 0x99, 0x6e, 0xda, 0x6e, 0xe6, 0x32, 0x97, 0xd5,
+	0x31, 0x76, 0xa7, 0xba, 0x1a, 0xfd, 0x00, 0x70, 0x37, 0x65, 0xb6, 0x54, 0xcf, 0x0a, 0x79, 0x96,
+	0xb0, 0x51, 0xc9, 0x8c, 0x45, 0x0f, 0x61, 0xcb, 0x9e, 0x0b, 0x1f, 0xec, 0x83, 0xde, 0xf6, 0x61,
+	0x88, 0x67, 0x73, 0x6a, 0x72, 0xe2, 0xb7, 0x9a, 0x08, 0x43, 0xa8, 0xe5, 0x52, 0x1c, 0xb5, 0xc7,
+	0x3f, 0xf7, 0xbc, 0xc4, 0x35, 0xa0, 0x57, 0x70, 0xc7, 0x81, 0xb0, 0xff, 0x04, 0xfe, 0x56, 0xe5,
+	0x70, 0x77, 0xce, 0xc1, 0xd1, 0xe2, 0x86, 0x16, 0xa7, 0x8a, 0x88, 0x7e, 0x2d, 0xed, 0xd7, 0xac,
+	0x49, 0xa7, 0x32, 0x68, 0x8a, 0xe8, 0x31, 0x6c, 0x7f, 0x2c, 0xe4, 0x99, 0xdf, 0xaa, 0x7c, 0x22,
+	0xbc, 0x6a, 0x63, 0xd8, 0xd1, 0xa7, 0x8a, 0xd1, 0x86, 0xa6, 0xea, 0x8a, 0x9e, 0xc0, 0x6e, 0xca,
+	0x87, 0xaa, 0x60, 0x09, 0x33, 0x4a, 0x0a, 0xc3, 0x10, 0x86, 0xd7, 0xaa, 0x15, 0x35, 0xd1, 0xfc,
+	0x4b, 0xa2, 0x3d, 0x75, 0xff, 0x93, 0x5a, 0x16, 0xfd, 0x05, 0xb0, 0xdb, 0x97, 0xc2, 0x94, 0x43,
+	0xa6, 0x53, 0x9e, 0x0b, 0x52, 0x6c, 0x6a, 0x81, 0x9e, 0xc3, 0x9d, 0x4c, 0x13, 0x2e, 0x06, 0xba,
+	0x1e, 0x6e, 0x33, 0x93, 0x83, 0xd5, 0x59, 0x8e, 0x9d, 0xbc, 0x59, 0x45, 0xd2, 0xc9, 0xe6, 0xbe,
+	0xd0, 0x3b, 0x88, 0x8c, 0x5b, 0xd6, 0xc0, 0xe5, 0x9b, 0x3a, 0xb6, 0x2e, 0x4c, 0x79, 0xc9, 0x71,
+	0x79, 0xc1, 0xc9, 0xae, 0x59, 0xaa, 0x3c, 0x6a, 0x8f, 0xbf, 0xec, 0x81, 0xa8, 0x0b, 0x3b, 0xf3,
+	0xb7, 0x1f, 0x7e, 0xdd, 0x82, 0xd7, 0x8f, 0xb9, 0xb1, 0xe9, 0x9b, 0x17, 0xe8, 0x04, 0x6e, 0x27,
+	0xa5, 0x48, 0x3f, 0x09, 0xea, 0xfa, 0x50, 0x6f, 0xf5, 0x75, 0x8b, 0x13, 0x0b, 0xee, 0xac, 0x56,
+	0xbe, 0xd6, 0x32, 0x2b, 0x29, 0xd3, 0x2f, 0x99, 0x31, 0x24, 0x67, 0x91, 0xd7, 0x03, 0xf7, 0x01,
+	0xa2, 0xf0, 0xc6, 0x94, 0x18, 0x6d, 0x10, 0x2b, 0x58, 0xc3, 0xb4, 0xf8, 0x10, 0x22, 0x0f, 0xe5,
+	0x10, 0x56, 0x8f, 0xc6, 0x6a, 0x46, 0x86, 0xe8, 0xea, 0x8c, 0xc1, 0x95, 0x83, 0xd7, 0x69, 0x8e,
+	0x6e, 0x8d, 0x7f, 0x87, 0xde, 0x78, 0x12, 0x82, 0x6f, 0x93, 0x10, 0x7c, 0x9f, 0x84, 0xe0, 0xd7,
+	0x24, 0x04, 0x9f, 0xff, 0x84, 0xde, 0x7b, 0x38, 0x6b, 0xfd, 0x17, 0x00, 0x00, 0xff, 0xff, 0xb7,
+	0xee, 0x18, 0x7c, 0xb5, 0x04, 0x00, 0x00,
 }

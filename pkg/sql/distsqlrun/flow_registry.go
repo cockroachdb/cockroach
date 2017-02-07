@@ -153,7 +153,9 @@ func (fr *flowRegistry) RegisterFlow(
 				if !is.connected {
 					is.timedOut = true
 					numTimedOut++
-					is.receiver.ProducerDone(errors.Errorf("no inbound stream connection"))
+					is.receiver.PushRow(nil, /* row */
+						ProducerMetadata{Err: errors.Errorf("no inbound stream connection")})
+					is.receiver.ProducerDone()
 					fr.finishInboundStreamLocked(is)
 				}
 			}
@@ -271,7 +273,9 @@ func (fr *flowRegistry) finishInboundStreamLocked(is *inboundStreamInfo) {
 	}
 
 	if is.timedOut {
-		is.receiver.ProducerDone(errors.Errorf("inbound stream timed out"))
+		is.receiver.PushRow(nil, /* row */
+			ProducerMetadata{Err: errors.Errorf("inbound stream timed out")})
+		is.receiver.ProducerDone()
 	}
 
 	is.finished = true

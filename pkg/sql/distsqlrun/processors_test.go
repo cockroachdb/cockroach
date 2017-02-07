@@ -254,14 +254,34 @@ func TestPostProcess(t *testing.T) {
 			}
 			// Run the rows through the helper.
 			for i := range input {
-				if !out.emitRow(context.TODO(), input[i]) {
+				status, err := out.emitRow(context.TODO(), input[i])
+				if err != nil {
+					t.Fatal(err)
+				}
+				if status != NeedMoreRows {
+					out.close(nil)
 					break
 				}
 			}
 			if outBuf.Err != nil {
 				t.Fatal(outBuf.Err)
 			}
-			if str := outBuf.Rows.String(); str != tc.expected {
+			var res sqlbase.EncDatumRows
+			for {
+				row, err := outBuf.NextRow()
+				if err != nil {
+					t.Fatal(err)
+				}
+				if row.Metadata != nil {
+					t.Fatalf("unexpected metadata: %v", row)
+				}
+				if row.Empty() {
+					break
+				}
+				res = append(res, row.Row)
+			}
+
+			if str := res.String(); str != tc.expected {
 				t.Errorf("expected output:\n    %s\ngot:\n    %s\n", tc.expected, str)
 			}
 		})

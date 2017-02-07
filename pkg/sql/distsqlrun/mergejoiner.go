@@ -63,6 +63,7 @@ func newMergeJoiner(
 		convertToColumnOrdering(spec.LeftOrdering),
 		rightSource,
 		convertToColumnOrdering(spec.RightOrdering),
+		output, /*metadataSync*/
 	)
 	if err != nil {
 		return nil, err
@@ -80,30 +81,44 @@ func (m *mergeJoiner) Run(ctx context.Context, wg *sync.WaitGroup) {
 	ctx = log.WithLogTag(ctx, "MergeJoiner", nil)
 	ctx, span := tracing.ChildSpan(ctx, "merge joiner")
 	defer tracing.FinishSpan(span)
-
-	if log.V(2) {
-		log.Infof(ctx, "starting merge joiner run")
-		defer log.Infof(ctx, "exiting merge joiner run")
-	}
-	defer m.leftSource.ConsumerDone()
-	defer m.rightSource.ConsumerDone()
+	log.VEventf(ctx, 2, "starting merge joiner run")
 
 	for {
-		batch, err := m.streamMerger.NextBatch()
-		if err != nil || len(batch) == 0 {
-			m.out.close(err)
-			return
-		}
-		for _, rowPair := range batch {
-			row, _, err := m.render(rowPair[0], rowPair[1])
-			if err != nil {
-				m.out.close(err)
-				return
-			}
-			if row != nil && !m.out.emitRow(ctx, row) {
-				m.out.close(nil)
-				return
-			}
+		moreBatches, err := m.outputBatch(ctx)
+		if err != nil || !moreBatches {
+			DrainAndForwardMetadataFinal(
+				ctx, m.out.output, err, m.leftSource, m.rightSource)
+			break
 		}
 	}
+	log.VEventf(ctx, 2, "exiting merge joiner run")
+}
+
+// outputBatch outputs all the rows corresponding to a streamMerger batch (the
+// cross-product of two groups of matching rows).
+//
+// Returns true if more batches are available and needed. If false is returned,
+// the caller should drain the inputs (as the termination condition might have
+// been dictated by the consumer saying that no more rows are needed) and close
+// the output.
+func (m *mergeJoiner) outputBatch(ctx context.Context) (bool, error) {
+	batch, err := m.streamMerger.NextBatch()
+	if err != nil || len(batch) == 0 {
+		return len(batch) != 0, err
+	}
+	for _, rowPair := range batch {
+		row, _, err := m.render(rowPair[0], rowPair[1])
+		if err != nil {
+			return false, err
+		}
+		if row == nil {
+			continue
+		}
+
+		consumerStatus, err := m.out.emitRow(ctx, row)
+		if err != nil || consumerStatus != NeedMoreRows {
+			return false, err
+		}
+	}
+	return true, nil
 }

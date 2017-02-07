@@ -13,10 +13,12 @@
 // permissions and limitations under the License.
 //
 // Author: Radu Berinde (radu@cockroachlabs.com)
+// Author: Andrei Matei (andreimatei1@gmail.com)
 
 package distsqlrun
 
 import (
+	"io"
 	"sync"
 	"time"
 
@@ -44,7 +46,9 @@ type outbox struct {
 
 	flowCtx *FlowCtx
 	addr    string
-	stream  DistSQL_FlowStreamClient
+	// The rows received from the RowChannel will be forwarded on this stream once
+	// it is established.
+	stream DistSQL_FlowStreamClient
 
 	// syncFlowStream is set if we are outputting to a sync flow stream; in
 	// that case addr and stream will not be set.
@@ -77,26 +81,56 @@ func (m *outbox) setFlowCtx(flowCtx *FlowCtx) {
 	m.flowCtx = flowCtx
 }
 
-// addRow encodes a row into rowBuf. If enough rows were accumulated
-// calls flush().
-func (m *outbox) addRow(ctx context.Context, row sqlbase.EncDatumRow) error {
-	err := m.encoder.AddRow(row)
-	if err != nil {
-		return err
-	}
-	m.numRows++
-	if m.numRows >= outboxBufRows {
-		return m.flush(ctx, false, nil)
-	}
-	return nil
-}
-
-// flush sends the rows accumulated so far in a StreamMessage.
-func (m *outbox) flush(ctx context.Context, last bool, err error) error {
-	if !last && m.numRows == 0 {
+func (m *outbox) maybeCloseStream(ctx context.Context) error {
+	if m.stream == nil {
 		return nil
 	}
-	msg := m.encoder.FormMessage(last, err)
+	return m.stream.CloseSend()
+}
+
+// addRow encodes a row into rowBuf. If enough rows were accumulated, flush() is
+// called.
+//
+// If an error is returned, the outbox's stream is not usable any more and has
+// been set to nil. The error might be a communication error, in which case the
+// other side of the stream should get it too, or it might be an encoding error,
+// in which case we've forwarded it on the stream.
+func (m *outbox) addRow(ctx context.Context, row sqlbase.EncDatumRow, meta ProducerMetadata) error {
+	mustFlush := false
+	var encodingErr error
+	if !meta.Empty() {
+		m.encoder.AddMetadata(meta)
+		// If we hit an error, let's forward it ASAP. The consumer will probably
+		// close.
+		mustFlush = meta.Err != nil
+	} else {
+		encodingErr = m.encoder.AddRow(row)
+		if encodingErr != nil {
+			m.encoder.AddMetadata(ProducerMetadata{Err: encodingErr})
+			mustFlush = true
+		}
+	}
+	m.numRows++
+	var flushErr error
+	if m.numRows >= outboxBufRows || mustFlush {
+		flushErr = m.flush(ctx)
+	}
+	if encodingErr != nil {
+		m.stream = nil
+		return encodingErr
+	}
+	return flushErr
+}
+
+// flush sends the rows accumulated so far in a ProducerMessage. Any error
+// returned indicates that sending a message on the outbox's stream failed, and
+// thus the stream can't be used any more. The stream is also set to nil if
+// an error is returned.
+func (m *outbox) flush(ctx context.Context) error {
+	if m.numRows == 0 {
+		return nil
+	}
+	msg := m.encoder.FormMessage(ctx)
 
 	if log.V(3) {
 		log.Infof(ctx, "flushing outbox")
@@ -108,6 +142,9 @@ func (m *outbox) flush(ctx context.Context, last bool, err error) error {
 		sendErr = m.syncFlowStream.Send(msg)
 	}
 	if sendErr != nil {
+		// Make sure the stream is not used any more.
+		m.stream = nil
+		m.syncFlowStream = nil
 		if log.V(1) {
 			log.Errorf(ctx, "outbox flush error: %s", sendErr)
 		}
@@ -122,6 +159,19 @@ func (m *outbox) flush(ctx context.Context, last bool, err error) error {
 	return nil
 }
 
+// mainLoop reads from m.RowChannel and writes to the output stream through
+// addRow()/flush() until the producer doesn't have any more data to send or an
+// error happened.
+//
+// If the consumer asks the producer to drain, mainLoop() will relay this
+// information and, again, wait until the producer doesn't have any more data to
+// send (the producer is supposed to only send trailing metadata once it
+// receives this signal).
+//
+// If an error is returned, it's either a communication error from the outbox's
+// stream, or otherwise the error has already been forwarded on the stream. In
+// any case, the outbox's stream cannot be used any more; it has also been set
+// to nil.
 func (m *outbox) mainLoop(ctx context.Context) error {
 	if m.syncFlowStream == nil {
 		conn, err := m.flowCtx.rpcCtx.GRPCDial(m.addr)
@@ -144,48 +194,105 @@ func (m *outbox) mainLoop(ctx context.Context) error {
 		}
 	}
 
+	drainCh := m.waitForDrainSignalFromConsumer()
+
 	flushTicker := time.NewTicker(outboxFlushPeriod)
 	defer flushTicker.Stop()
 
+	draining := false
+	defer func() {
+		m.RowChannel.ConsumerClosed()
+	}()
+
 	for {
 		select {
-		case d, ok := <-m.RowChannel.C:
+		case msg, ok := <-m.RowChannel.C:
 			if !ok {
 				// No more data.
-				return m.flush(ctx, true, nil)
+				return m.flush(ctx)
 			}
-			err := d.Err
-			if err == nil {
-				err = m.addRow(ctx, d.Row)
-			}
-			if err != nil {
-				// Try to flush to send out the error, but ignore any
-				// send error.
-				_ = m.flush(ctx, true, err)
-				return err
+			if !draining || !msg.Meta.Empty() {
+				// If we're draining, we ignore all the rows and just send metadata.
+				err := m.addRow(ctx, msg.Row, msg.Meta)
+				if err != nil {
+					return err
+				}
 			}
 		case <-flushTicker.C:
-			err := m.flush(ctx, false, nil)
+			err := m.flush(ctx)
 			if err != nil {
 				return err
+			}
+		case drainSignal := <-drainCh:
+			drainCh = nil
+			m.err = errors.Wrap(drainSignal.err, "consumer signaled error")
+			if drainSignal.drainRequested {
+				// Enter draining mode.
+				draining = true
+				m.RowChannel.ConsumerDone()
+			} else {
+				// No draining required. We're done; no need to consume any more.
+				// m.RowChannel.ConsumerClosed() is called in a defer above.
+				return nil
 			}
 		}
 	}
 }
 
+// drainSignal is a signal received from the consumer telling the producer that
+// it doesn't need any more rows and optionally asking the producer to drain.
+type drainSignal struct {
+	// drainRequested, if set, means that the consumer is interested in the
+	// trailing metadata that the producer might have. If not set, the producer
+	// should close immediately (the consumer is probably gone by now).
+	drainRequested bool
+	// err, if set, is the error that the consumer returned when closing the
+	// FlowStream RPC.
+	err error
+}
+
+// waitForDrainSignalFromConsumer returns a channel that will be pinged once the
+// consumer has closed its send-side of the stream, or has sent a drain signal.
+func (m *outbox) waitForDrainSignalFromConsumer() <-chan drainSignal {
+	ch := make(chan drainSignal, 1)
+
+	go func() {
+		var signal *ConsumerSignal
+		var err error
+		if m.stream != nil {
+			signal, err = m.stream.Recv()
+		} else {
+			signal, err = m.syncFlowStream.Recv()
+		}
+		if err == io.EOF {
+			ch <- drainSignal{drainRequested: false, err: nil}
+			return
+		}
+		if err != nil {
+			ch <- drainSignal{drainRequested: false, err: err}
+			return
+		}
+		if signal.Error != nil {
+			ch <- drainSignal{
+				drainRequested: false,
+				err:            errors.Wrap(signal.Error.GoError(), "consumer signaled error"),
+			}
+			return
+		}
+		ch <- drainSignal{drainRequested: signal.DrainRequest != nil, err: nil}
+	}()
+	return ch
+}
+
 func (m *outbox) run(ctx context.Context) {
 	err := m.mainLoop(ctx)
-
-	m.RowChannel.ConsumerDone()
-
+	if err != nil && m.stream != nil {
+		log.Fatalf(ctx, "outbox got error but the stream hasn't been closed yet: %s", err)
+	}
 	if m.stream != nil {
-		resp, recvErr := m.stream.CloseAndRecv()
+		closeErr := m.stream.CloseSend()
 		if err == nil {
-			if recvErr != nil {
-				err = recvErr
-			} else if resp.Error != nil {
-				err = errors.Wrap(resp.Error.GoError(), "consumer signaled error")
-			}
+			err = closeErr
 		}
 	}
 	m.err = err

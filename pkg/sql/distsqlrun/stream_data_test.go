@@ -21,6 +21,8 @@ import (
 	"math/rand"
 	"testing"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -30,14 +32,17 @@ func testGetDecodedRows(
 	t *testing.T, sd *StreamDecoder, decodedRows sqlbase.EncDatumRows,
 ) sqlbase.EncDatumRows {
 	for {
-		decoded, err := sd.GetRow(nil)
+		row, err := sd.GetRow(nil)
 		if err != nil {
 			t.Fatal(err)
 		}
-		if decoded == nil {
+		if row.Empty() {
 			break
 		}
-		decodedRows = append(decodedRows, decoded)
+		if row.Metadata != nil {
+			t.Fatalf("unexpected metadata: %v", row)
+		}
+		decodedRows = append(decodedRows, row.Row)
 	}
 	return decodedRows
 }
@@ -53,14 +58,18 @@ func testRowStream(t *testing.T, rng *rand.Rand, rows sqlbase.EncDatumRows, trai
 			t.Fatal("StreamDecoder is done early")
 		}
 		if rowIdx < len(rows) {
-			if err := se.AddRow(rows[rowIdx]); err != nil {
+			if err := se.AddRow(RowOrMetadata{Row: rows[rowIdx]}); err != nil {
 				t.Fatal(err)
 			}
 		}
 		// "Send" a message every now and then and once at the end.
 		final := (rowIdx == len(rows))
 		if final || (rowIdx > 0 && rng.Intn(10) == 0) {
-			msg := se.FormMessage(final, trailerErr)
+			var msgErr error
+			if final {
+				msgErr = trailerErr
+			}
+			msg := se.FormMessage(context.TODO(), final, msgErr)
 			// Make a copy of the data buffer.
 			msg.Data.RawBytes = append([]byte(nil), msg.Data.RawBytes...)
 			err := sd.AddMessage(msg)
@@ -113,7 +122,7 @@ func TestEmptyStreamEncodeDecode(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	var se StreamEncoder
 	var sd StreamDecoder
-	msg := se.FormMessage(true /*final*/, nil /*error*/)
+	msg := se.FormMessage(context.TODO(), true /*final*/, nil /*error*/)
 	if err := sd.AddMessage(msg); err != nil {
 		t.Fatal(err)
 	}
@@ -122,7 +131,7 @@ func TestEmptyStreamEncodeDecode(t *testing.T) {
 	}
 	if row, err := sd.GetRow(nil); err != nil {
 		t.Fatal(err)
-	} else if row != nil {
+	} else if !row.Empty() {
 		t.Errorf("received bogus row %s", row)
 	}
 }

@@ -107,7 +107,9 @@ func TestJoinReader(t *testing.T) {
 			for i, d := range row {
 				encRow[i] = sqlbase.DatumToEncDatum(sqlbase.ColumnType{Kind: sqlbase.ColumnType_INT}, d)
 			}
-			in.Rows = append(in.Rows, encRow)
+			if status := in.PushRow(RowOrMetadata{Row: encRow}); status != NeedMoreRows {
+				t.Fatalf("unexpected response: %d", status)
+			}
 		}
 
 		out := &RowBuffer{}
@@ -122,12 +124,28 @@ func TestJoinReader(t *testing.T) {
 			t.Fatal(out.Err)
 		}
 		if !in.Done {
-			t.Fatal("joinReader stopped accepting rows")
+			t.Fatal("joinReader didn't consumer all the rows")
 		}
 		if !out.ProducerClosed {
 			t.Fatalf("output RowReceiver not closed")
 		}
-		if result := out.Rows.String(); result != c.expected {
+
+		var res sqlbase.EncDatumRows
+		for {
+			row, err := out.NextRow()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if row.Metadata != nil {
+				t.Fatalf("unexpected metadata: %v", row)
+			}
+			if row.Empty() {
+				break
+			}
+			res = append(res, row.Row)
+		}
+
+		if result := res.String(); result != c.expected {
 			t.Errorf("invalid results: %s, expected %s'", result, c.expected)
 		}
 	}

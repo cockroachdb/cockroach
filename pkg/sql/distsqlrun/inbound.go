@@ -22,6 +22,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/pkg/errors"
 )
 
 // ProcessInboundStream receives rows from a DistSQL_FlowStreamServer and sends
@@ -29,25 +30,30 @@ import (
 // already received (because the first message contains the flow and stream IDs,
 // it needs to be received before we can get here).
 func ProcessInboundStream(
-	ctx context.Context, stream DistSQL_FlowStreamServer, firstMsg *StreamMessage, dst RowReceiver,
-) error {
-	// Function which we call when we are done.
-	finish := func(err error) error {
-		dst.ProducerDone(err)
-		if err != nil {
-			log.VEventf(ctx, 1, "inbound stream error: %s", err)
-			// TODO(radu): populate response and send error instead
-			return err
-		}
-		if log.V(1) {
-			log.Infof(ctx, "inbound stream done")
-		}
-		return stream.SendAndClose(&SimpleResponse{})
-	}
+	ctx context.Context, stream DistSQL_FlowStreamServer, firstMsg *ProducerMessage, dst RowReceiver,
+) (finalErr error) {
 
+	// The return val, finalErr, if set, will also be propagated to the producer
+	// as the last record that the producer gets.
+
+	defer func() {
+		if finalErr != nil {
+			log.VEventf(ctx, 1, "inbound stream error: %s", finalErr)
+			dst.PushRow(nil, ProducerMetadata{Err: finalErr})
+			dst.ProducerDone()
+			return
+		}
+
+		log.VEventf(ctx, 1, "inbound stream done")
+		dst.ProducerDone()
+		// The consumer is now done. The producer, if it's still around, will
+		// receive an EOF error over its side of the stream.
+	}()
+
+	draining := false
 	var sd StreamDecoder
 	for {
-		var msg *StreamMessage
+		var msg *ProducerMessage
 		if firstMsg != nil {
 			msg = firstMsg
 			firstMsg = nil
@@ -57,37 +63,72 @@ func ProcessInboundStream(
 			if err != nil {
 				if err != io.EOF {
 					// Communication error.
-					dst.ProducerDone(err)
-					return err
+					finalErr = errors.Wrap(
+						err, log.MakeTaggedMessage(ctx, "communication error", nil /* args */))
 				}
 				// End of the stream.
-				return finish(nil)
+				return
 			}
 		}
 		err := sd.AddMessage(msg)
 		if err != nil {
-			return finish(err)
+			finalErr = errors.Wrap(err, log.MakeTaggedMessage(ctx, "decoding error", nil /* args */))
+			return
 		}
 		for {
-			row, err := sd.GetRow(nil)
+			row, meta, err := sd.GetRow(nil /* rowBuf */)
 			if err != nil {
-				return finish(err)
+				finalErr = err
+				return
 			}
-			if row == nil {
+			if row == nil && meta.Empty() {
 				// No more rows in the last message.
 				break
 			}
 			if log.V(3) {
 				log.Infof(ctx, "inbound stream pushing row %s", row)
 			}
-			if !dst.PushRow(row) {
-				// Rest of rows not needed.
-				return finish(nil)
+			if draining && meta.Empty() {
+				// Don't forward data rows when we're draining.
+				continue
+			}
+			switch dst.PushRow(row, meta) {
+			case NeedMoreRows:
+				continue
+			case DrainRequested:
+				// The rest of rows are not needed by the consumer. We'll send a drain
+				// signal to the producer and expect it to quickly send trailing
+				// metadata and close its side of the stream, at which point we also
+				// close the consuming side of the stream and call dst.ProducerDone().
+				if !draining {
+					draining = true
+					if err := sendDrainSignalToProducer(ctx, stream); err != nil {
+						// We remember to forward this error to the consumer, but we
+						// continue forwarding the rows we've already buffered.
+						// NOTE(andrei): I'm not sure what to do with this error. If we
+						// failed to send the drain signal to the producer, we're probably
+						// (guaranteed?) also going to fail the next stream.Recv() call with
+						// something other than io.EOF, in which case that error will override
+						// finalErr. Assuming io.EOF were to be returned by the following
+						// stream.Recv(), we also don't care about this error; the draining
+						// would be completed successfully regardless of the failure to send
+						// this signal. This suggests that maybe we want to swallow this
+						// error...
+						finalErr = err
+					}
+				}
+			case ConsumerClosed:
+				return
 			}
 		}
-		done, err := sd.IsDone()
-		if done {
-			return finish(err)
-		}
 	}
+}
+
+// sendDrainSignalToProducer is called when the consumer wants to signal the
+// producer that it doesn't need any more rows and the producer should drain. A
+// signal is sent on stream to the producer to ask it to send metadata.
+func sendDrainSignalToProducer(ctx context.Context, stream DistSQL_FlowStreamServer) error {
+	log.VEvent(ctx, 1, "sending drain signal to producer")
+	sig := ConsumerSignal{DrainRequest: &DrainRequest{}}
+	return stream.Send(&sig)
 }

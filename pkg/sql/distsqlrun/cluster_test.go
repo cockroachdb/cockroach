@@ -197,28 +197,26 @@ func TestClusterFlow(t *testing.T) {
 		clients = append(clients, NewDistSQLClient(conn))
 	}
 
-	if log.V(1) {
-		log.Infof(ctx, "Setting up flow on 0")
-	}
+	log.Infof(ctx, "Setting up flow on 0")
 	if resp, err := clients[0].SetupFlow(ctx, req1); err != nil {
 		t.Fatal(err)
 	} else if resp.Error != nil {
 		t.Fatal(resp.Error)
 	}
 
-	if log.V(1) {
-		log.Infof(ctx, "Setting up flow on 1")
-	}
+	log.Infof(ctx, "Setting up flow on 1")
 	if resp, err := clients[1].SetupFlow(ctx, req2); err != nil {
 		t.Fatal(err)
 	} else if resp.Error != nil {
 		t.Fatal(resp.Error)
 	}
 
-	if log.V(1) {
-		log.Infof(ctx, "Running flow on 2")
+	log.Infof(ctx, "Running flow on 2")
+	stream, err := clients[2].RunSyncFlow(ctx)
+	if err != nil {
+		t.Fatal(err)
 	}
-	stream, err := clients[2].RunSyncFlow(ctx, req3)
+	err = stream.Send(&ConsumerSignal{SetupFlowRequest: req3})
 	if err != nil {
 		t.Fatal(err)
 	}
