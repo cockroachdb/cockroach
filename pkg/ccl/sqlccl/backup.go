@@ -22,7 +22,6 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
-	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl/intervalccl"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -31,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/interval"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -678,7 +678,7 @@ func presplitRanges(baseCtx context.Context, db client.DB, input []roachpb.Key) 
 		return nil
 	}
 
-	var wg utilccl.WaitGroupWithError
+	var wg util.WaitGroupWithError
 	var splitFn func([]roachpb.Key)
 	splitFn = func(splitPoints []roachpb.Key) {
 		// Pick the index such that it's 0 if len(splitPoints) == 1.
@@ -989,7 +989,7 @@ func Restore(
 	// TODO(dan): Wait for the newly created ranges (and leaseholders) to
 	// rebalance.
 
-	var wg utilccl.WaitGroupWithError
+	var wg util.WaitGroupWithError
 	for i := range importRequests {
 		wg.Add(1)
 		go func(i importEntry) {
