@@ -20,7 +20,6 @@ import (
 	"fmt"
 	"reflect"
 	"regexp"
-	"sort"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -678,7 +677,9 @@ func simplifyOneAndInExpr(left, right *parser.ComparisonExpr) (parser.TypedExpr,
 		fallthrough
 
 	case parser.In:
-		ltuple := left.Right.(*parser.DTuple).D
+		ltuple := left.Right.(*parser.DTuple)
+		ltuple.AssertSorted()
+
 		switch right.Operator {
 		case parser.Is:
 			if right.Right == parser.DNull {
@@ -689,87 +690,85 @@ func simplifyOneAndInExpr(left, right *parser.ComparisonExpr) (parser.TypedExpr,
 			// Our tuple will be sorted (see simplifyComparisonExpr). Binary search
 			// for the right datum.
 			datum := right.Right.(parser.Datum)
-			i := sort.Search(len(ltuple), func(i int) bool {
-				return ltuple[i].(parser.Datum).Compare(datum) >= 0
-			})
+			i, found := ltuple.SearchSorted(datum)
 
 			switch right.Operator {
 			case parser.EQ:
-				if i < len(ltuple) && ltuple[i].Compare(datum) == 0 {
+				if found {
 					return right, nil
 				}
 				return parser.MakeDBool(false), nil
 
 			case parser.NE:
-				if i < len(ltuple) && ltuple[i].Compare(datum) == 0 {
-					if len(ltuple) < 2 {
+				if found {
+					if len(ltuple.D) < 2 {
 						return parser.MakeDBool(false), nil
 					}
-					ltuple = remove(ltuple, i)
+					ltuple.D = remove(ltuple.D, i)
 				}
 				return parser.NewTypedComparisonExpr(
 					parser.In,
 					left.TypedLeft(),
-					parser.NewDTuple(ltuple...),
+					parser.NewDTuple(ltuple.D...).SetSorted(),
 				), nil
 
 			case parser.GT:
-				if i < len(ltuple) {
-					if ltuple[i].Compare(datum) == 0 {
-						ltuple = ltuple[i+1:]
+				if i < len(ltuple.D) {
+					if found {
+						ltuple.D = ltuple.D[i+1:]
 					} else {
-						ltuple = ltuple[i:]
+						ltuple.D = ltuple.D[i:]
 					}
-					if len(ltuple) > 0 {
+					if len(ltuple.D) > 0 {
 						return parser.NewTypedComparisonExpr(
 							parser.In,
 							left.TypedLeft(),
-							parser.NewDTuple(ltuple...),
+							parser.NewDTuple(ltuple.D...).SetSorted(),
 						), nil
 					}
 				}
 				return parser.MakeDBool(false), nil
 
 			case parser.GE:
-				if i < len(ltuple) {
-					ltuple = ltuple[i:]
-					if len(ltuple) > 0 {
+				if i < len(ltuple.D) {
+					ltuple.D = ltuple.D[i:]
+					if len(ltuple.D) > 0 {
 						return parser.NewTypedComparisonExpr(
 							parser.In,
 							left.TypedLeft(),
-							parser.NewDTuple(ltuple...),
+							parser.NewDTuple(ltuple.D...).SetSorted(),
 						), nil
 					}
 				}
 				return parser.MakeDBool(false), nil
 
 			case parser.LT:
-				if i < len(ltuple) {
+				if i < len(ltuple.D) {
 					if i == 0 {
 						return parser.MakeDBool(false), nil
 					}
-					ltuple = ltuple[:i]
+					ltuple.D = ltuple.D[:i]
 					return parser.NewTypedComparisonExpr(
 						parser.In,
 						left.TypedLeft(),
-						parser.NewDTuple(ltuple...),
+						parser.NewDTuple(ltuple.D...).SetSorted(),
 					), nil
 				}
 				return left, nil
 
 			case parser.LE:
-				if i < len(ltuple) {
-					if ltuple[i].Compare(datum) == 0 {
+				if i < len(ltuple.D) {
+					if found {
 						i++
 					}
 					if i == 0 {
 						return parser.MakeDBool(false), nil
 					}
-					ltuple = ltuple[:i]
+					ltuple.D = ltuple.D[:i]
 					return parser.NewTypedComparisonExpr(
 						parser.In,
 						left.TypedLeft(),
-						parser.NewDTuple(ltuple...),
+						parser.NewDTuple(ltuple.D...).SetSorted(),
 					), nil
 				}
 				return left, nil
@@ -777,15 +776,15 @@ func simplifyOneAndInExpr(left, right *parser.ComparisonExpr) (parser.TypedExpr,
 
 		case parser.In:
 			// Both of our tuples are sorted. Intersect the lists.
-			rtuple := right.Right.(*parser.DTuple).D
-			intersection := intersectSorted(ltuple, rtuple)
+			rtuple := right.Right.(*parser.DTuple)
+			intersection := intersectSorted(ltuple.D, rtuple.D)
 			if len(intersection) == 0 {
 				return parser.MakeDBool(false), nil
 			}
 			return parser.NewTypedComparisonExpr(
 				parser.In,
 				left.TypedLeft(),
-				parser.NewDTuple(intersection...),
+				parser.NewDTuple(intersection...).SetSorted(),
 			), nil
 		}
 	}
@@ -947,7 +946,7 @@ func simplifyOneOrExpr(left, right parser.TypedExpr) (parser.TypedExpr, parser.T
 			return parser.NewTypedComparisonExpr(
 				parser.In,
 				lcmpLeft,
-				parser.NewDTuple(ldatum, rdatum),
+				parser.NewDTuple(ldatum, rdatum).SetSorted(),
 			), nil, true
 		case parser.NE:
 			// a = x OR a != y
@@ -1268,36 +1267,37 @@ func simplifyOneOrInExpr(left, right *parser.ComparisonExpr) (parser.TypedExpr, 
 		fallthrough
 
 	case parser.In:
-		tuple := left.Right.(*parser.DTuple).D
+		ltuple := left.Right.(*parser.DTuple)
+		ltuple.AssertSorted()
+
 		switch right.Operator {
 		case parser.EQ:
 			datum := right.Right.(parser.Datum)
 			// We keep the tuples for an IN expression in sorted order. So now we just
 			// merge the two sorted lists.
+			merged := mergeSorted(ltuple.D, parser.Datums{datum})
 			return parser.NewTypedComparisonExpr(
 				parser.In,
 				left.TypedLeft(),
-				parser.NewDTuple(mergeSorted(tuple, parser.Datums{datum})...),
+				parser.NewDTuple(merged...).SetSorted(),
 			), nil
 
 		case parser.NE, parser.GT, parser.GE, parser.LT, parser.LE:
 			datum := right.Right.(parser.Datum)
-			i := sort.Search(len(tuple), func(i int) bool {
-				return tuple[i].(parser.Datum).Compare(datum) >= 0
-			})
+			i, found := ltuple.SearchSorted(datum)
 
 			switch right.Operator {
 			case parser.NE:
-				if i < len(tuple) && tuple[i].Compare(datum) == 0 {
+				if found {
 					return makeIsNotNull(right.TypedLeft()), nil
 				}
 				return right, nil
 
 			case parser.GT:
 				if i == 0 {
-					// datum >= tuple[0]
-					if tuple[i].Compare(datum) == 0 {
-						// datum = tuple[0]
+					// datum >= ltuple.D[0]
+					if found {
+						// datum == ltuple.D[0]
 						return parser.NewTypedComparisonExpr(
 							parser.GE,
 							left.TypedLeft(),
@@ -1308,17 +1308,17 @@ func simplifyOneOrInExpr(left, right *parser.ComparisonExpr) (parser.TypedExpr, 
 				}
 			case parser.GE:
 				if i == 0 {
-					// datum >= tuple[0]
+					// datum >= ltuple.D[0]
 					return right, nil
 				}
 			case parser.LT:
-				if i == len(tuple) {
-					// datum > tuple[len(tuple)-1]
+				if i == len(ltuple.D) {
+					// datum > ltuple.D[len(ltuple.D)-1]
 					return right, nil
-				} else if i == len(tuple)-1 {
-					// datum >= tuple[len(tuple)-1]
-					if tuple[i].Compare(datum) == 0 {
-						// datum == tuple[len(tuple)-1]
+				} else if i == len(ltuple.D)-1 {
+					// datum >= ltuple.D[len(ltuple.D)-1]
+					if found {
+						// datum == ltuple.D[len(ltuple.D)-1]
 						return parser.NewTypedComparisonExpr(
 							parser.LE,
 							left.TypedLeft(),
@@ -1327,9 +1327,9 @@ func simplifyOneOrInExpr(left, right *parser.ComparisonExpr) (parser.TypedExpr, 
 					}
 				}
 			case parser.LE:
-				if i == len(tuple) ||
-					(i == len(tuple)-1 && tuple[i].Compare(datum) == 0) {
-					// datum >= tuple[len(tuple)-1]
+				if i == len(ltuple.D) ||
+					(i == len(ltuple.D)-1 && ltuple.D[i].Compare(datum) == 0) {
+					// datum >= ltuple.D[len(ltuple.D)-1]
 					return right, nil
 				}
 			}
@@ -1337,10 +1337,11 @@ func simplifyOneOrInExpr(left, right *parser.ComparisonExpr) (parser.TypedExpr, 
 		case parser.In:
 			// We keep the tuples for an IN expression in sorted order. So now we
 			// just merge the two sorted lists.
+			merged := mergeSorted(ltuple.D, right.Right.(*parser.DTuple).D)
 			return parser.NewTypedComparisonExpr(
 				parser.In,
 				left.TypedLeft(),
-				parser.NewDTuple(mergeSorted(tuple, right.Right.(*parser.DTuple).D)...),
+				parser.NewDTuple(merged...).SetSorted(),
 			), nil
 		}
 	}
@@ -1400,7 +1401,7 @@ func simplifyComparisonExpr(n *parser.ComparisonExpr) (parser.TypedExpr, bool) {
 				return parser.NewTypedComparisonExpr(
 					parser.In,
 					left,
-					parser.NewDTuple(right.(parser.Datum)),
+					parser.NewDTuple(right.(parser.Datum)).SetSorted(),
 				), true
 			}
 			return n, true

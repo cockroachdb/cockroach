@@ -1453,9 +1453,13 @@ func (d *DInterval) Size() uintptr {
 // DTuple is the tuple Datum.
 type DTuple struct {
 	D Datums
+
+	Sorted bool
 }
 
-// NewDTuple creates a *DTuple with the provided datums.
+// NewDTuple creates a *DTuple with the provided datums. When creating a new
+// DTuple with Datums that are known to be sorted in ascending order, chain
+// this call with DTuple.SetSorted.
 func NewDTuple(d ...Datum) *DTuple {
 	return &DTuple{D: d}
 }
@@ -1628,9 +1632,37 @@ func (d *DTuple) Len() int           { return d.D.Len() }
 func (d *DTuple) Less(i, j int) bool { return d.D.Less(i, j) }
 func (d *DTuple) Swap(i, j int)      { d.D.Swap(i, j) }
 
+// SetSorted sets the sorted flag on the DTuple. This should be used when a
+// DTuple is known to be sorted based on the datums added to it.
+func (d *DTuple) SetSorted() *DTuple {
+	d.Sorted = true
+	return d
+}
+
+// AssertSorted asserts that the DTuple is sorted.
+func (d *DTuple) AssertSorted() {
+	if !d.Sorted {
+		panic(fmt.Sprintf("expected sorted tuple, found %#v", d))
+	}
+}
+
+// SearchSorted searches the tuple for the target Datum, returning an int with
+// the same contract as sort.Search and a boolean flag signifying whether the datum
+// was found. It assumes that the DTuple is sorted and panics if it is not.
+func (d *DTuple) SearchSorted(target Datum) (int, bool) {
+	d.AssertSorted()
+	i := sort.Search(len(d.D), func(i int) bool {
+		return d.D[i].Compare(target) >= 0
+	})
+	found := i < len(d.D) && d.D[i].Compare(target) == 0
+	return i, found
+}
+
 // Normalize sorts and uniques the datum tuple.
 func (d *DTuple) Normalize() {
 	sort.Sort(d)
+	d.Sorted = true
+
 	d.makeUnique()
 }
 
@@ -1661,7 +1693,10 @@ func (d *DTuple) Size() uintptr {
 // SortedDifference finds the elements of d which are not in other,
 // assuming that d and other are already sorted.
 func (d *DTuple) SortedDifference(other *DTuple) *DTuple {
-	var res DTuple
+	d.AssertSorted()
+	other.AssertSorted()
+
+	res := NewDTuple().SetSorted()
 	a := d.D
 	b := other.D
 	for len(a) > 0 && len(b) > 0 {
@@ -1676,7 +1711,7 @@ func (d *DTuple) SortedDifference(other *DTuple) *DTuple {
 			b = b[1:]
 		}
 	}
-	return &res
+	return res
 }
 
 type dNull struct{}

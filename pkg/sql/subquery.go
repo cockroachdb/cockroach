@@ -108,6 +108,9 @@ func (s *subquery) doEval() (result parser.Datum, err error) {
 	// After evaluation, there is no plan remaining.
 	defer func() { s.plan.Close(); s.plan = nil }()
 
+	// TODO(nvanbenschoten/knz) If we know that a DTuple created here has been
+	// sorted in ascending order, we can set its Sorted flag using DTuple.SetSorted.
+	// This can allow us to avoid resorting in certain circumstances.
 	switch s.execMode {
 	case execModeExists:
 		// For EXISTS expressions, all we want to know is if there is at least one
