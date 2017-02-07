@@ -29,9 +29,6 @@ import (
 type RetryableTxnError struct {
 	message string
 	TxnID   *uuid.UUID
-	// TODO(spencer): Get rid of BACKOFF retries. Note that we don't propagate
-	// the backoff hint to the client anyway. See #5249
-	Backoff bool
 
 	// The error that this RetryableTxnError wraps. Useful for tests that want to
 	// assert that they got the expected error.
@@ -169,7 +166,6 @@ func (e *Error) GoError() error {
 		return nil
 	}
 	if e.TransactionRestart != TransactionRestart_NONE {
-		backoff := e.TransactionRestart == TransactionRestart_BACKOFF
 		var txnID *uuid.UUID
 		if e.GetTxn() != nil {
 			txnID = e.GetTxn().ID
@@ -180,7 +176,6 @@ func (e *Error) GoError() error {
 			Transaction: e.GetTxn(),
 			Cause:       e.GetDetail(),
 			CauseProto:  e.Detail,
-			Backoff:     backoff,
 		}
 	}
 	return e.GetDetail()
@@ -390,7 +385,7 @@ func (e *TransactionAbortedError) message(pErr *Error) string {
 }
 
 func (*TransactionAbortedError) canRestartTransaction() TransactionRestart {
-	return TransactionRestart_BACKOFF
+	return TransactionRestart_IMMEDIATE
 }
 
 var _ ErrorDetailInterface = &TransactionAbortedError{}
@@ -424,7 +419,7 @@ var _ ErrorDetailInterface = &TransactionPushError{}
 var _ transactionRestartError = &TransactionPushError{}
 
 func (*TransactionPushError) canRestartTransaction() TransactionRestart {
-	return TransactionRestart_BACKOFF
+	return TransactionRestart_IMMEDIATE
 }
 
 // NewTransactionRetryError initializes a new TransactionRetryError.
@@ -489,7 +484,7 @@ func (e *WriteIntentError) message(_ *Error) string {
 	for _, intent := range e.Intents {
 		keys = append(keys, intent.Key)
 	}
-	return fmt.Sprintf("conflicting intents on %v: resolved? %t", keys, e.Resolved)
+	return fmt.Sprintf("conflicting intents on %v", keys)
 }
 
 var _ ErrorDetailInterface = &WriteIntentError{}

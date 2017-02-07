@@ -50,19 +50,20 @@ import (
 // Note that the LocalTestCluster is different from server.TestCluster
 // in that although it uses a distributed sender, there is no RPC traffic.
 type LocalTestCluster struct {
-	Manual            *hlc.ManualClock
-	Clock             *hlc.Clock
-	Gossip            *gossip.Gossip
-	Eng               engine.Engine
-	Store             *storage.Store
-	DBContext         *client.DBContext
-	DB                *client.DB
-	RangeRetryOptions *retry.Options
-	Stores            *storage.Stores
-	Sender            client.Sender
-	Stopper           *stop.Stopper
-	Latency           time.Duration // sleep for each RPC sent
-	tester            testing.TB
+	Manual                   *hlc.ManualClock
+	Clock                    *hlc.Clock
+	Gossip                   *gossip.Gossip
+	Eng                      engine.Engine
+	Store                    *storage.Store
+	DBContext                *client.DBContext
+	DB                       *client.DB
+	RangeRetryOptions        *retry.Options
+	Stores                   *storage.Stores
+	Sender                   client.Sender
+	Stopper                  *stop.Stopper
+	Latency                  time.Duration // sleep for each RPC sent
+	tester                   testing.TB
+	DontRetryPushTxnFailures bool
 }
 
 // InitSenderFn is a callback used to initiate the txn coordinator (we don't
@@ -118,6 +119,7 @@ func (ltc *LocalTestCluster) Start(t testing.TB, baseCtx *base.Config, initSende
 	if ltc.RangeRetryOptions != nil {
 		cfg.RangeRetryOptions = *ltc.RangeRetryOptions
 	}
+	cfg.DontRetryPushTxnFailures = ltc.DontRetryPushTxnFailures
 	cfg.AmbientCtx = ambient
 	cfg.DB = ltc.DB
 	cfg.Gossip = ltc.Gossip

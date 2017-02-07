@@ -37,7 +37,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
-	"github.com/cockroachdb/cockroach/pkg/util/retry"
 )
 
 // startTestWriter creates a writer which initiates a sequence of
@@ -180,13 +179,7 @@ func TestRangeSplitsWithWritePressure(t *testing.T) {
 	cfg.RangeMaxBytes = 1 << 18
 	defer config.TestingSetDefaultZoneConfig(cfg)()
 
-	dbCtx := client.DefaultDBContext()
-	dbCtx.TxnRetryOptions = retry.Options{
-		InitialBackoff: 1 * time.Millisecond,
-		MaxBackoff:     10 * time.Millisecond,
-		Multiplier:     2,
-	}
-	s, _ := createTestDBWithContext(t, dbCtx)
+	s, _ := createTestDB(t)
 	// This is purely to silence log spam.
 	config.TestingSetupZoneConfigHook(s.Stopper)
 	defer s.Stop()

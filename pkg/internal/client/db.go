@@ -23,10 +23,8 @@ import (
 
 	"golang.org/x/net/context"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/gogo/protobuf/proto"
 )
@@ -167,17 +165,13 @@ type DBContext struct {
 	// userPriority is set to any value except 1 in call arguments, this
 	// value is ignored.
 	UserPriority roachpb.UserPriority
-
-	// TxnRetryOptions controls the retries of restarted transactions.
-	TxnRetryOptions retry.Options
 }
 
 // DefaultDBContext returns (a copy of) the default options for
 // NewDBWithContext.
 func DefaultDBContext() DBContext {
 	return DBContext{
-		UserPriority:    roachpb.NormalUserPriority,
-		TxnRetryOptions: base.DefaultRetryOptions(),
+		UserPriority: roachpb.NormalUserPriority,
 	}
 }
 

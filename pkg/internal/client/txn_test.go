@@ -565,9 +565,7 @@ func TestRunTransactionRetryOnErrors(t *testing.T) {
 
 	for i, test := range testCases {
 		count := 0
-		dbCtx := DefaultDBContext()
-		dbCtx.TxnRetryOptions.InitialBackoff = 1 * time.Millisecond
-		db := NewDBWithContext(newTestSender(
+		db := NewDB(newTestSender(
 			func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 
 				if _, ok := ba.GetArg(roachpb.Put); ok {
@@ -577,7 +575,7 @@ func TestRunTransactionRetryOnErrors(t *testing.T) {
 					}
 				}
 				return ba.CreateReply(), nil
-			}, nil), dbCtx)
+			}, nil))
 		err := db.Txn(context.TODO(), func(txn *Txn) error {
 			return txn.Put("a", "b")
 		})
@@ -800,7 +798,7 @@ func TestSetPriority(t *testing.T) {
 		}, nil))
 
 	// Verify the normal priority setting path.
-	expected = roachpb.HighUserPriority
+	expected = roachpb.NormalUserPriority
 	txn := NewTxn(context.Background(), *db)
 	if err := txn.SetUserPriority(expected); err != nil {
 		t.Fatal(err)

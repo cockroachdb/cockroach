@@ -204,36 +204,32 @@ func TestClientRetryNonTxn(t *testing.T) {
 	}
 	// Lay down a write intent using a txn and attempt to access the same
 	// key from our test client, with priorities set up so that the Push
-	// succeeds iff the test dictates that it do.
+	// succeeds iff the test dictates that it does.
 	for i, test := range testCases {
 		key := roachpb.Key(fmt.Sprintf("key-%d", i))
-		var txnPri int32 = 1
-		var clientPri roachpb.UserPriority = 1
-		if test.canPush {
-			clientPri = 2
-		} else {
-			txnPri = 2
-		}
-
-		db, sender := createTestNotifyClient(t, s, -clientPri)
+		db, sender := createTestNotifyClient(t, s, 1)
 
 		// doneCall signals when the non-txn read or write has completed.
 		doneCall := make(chan error)
 		count := 0 // keeps track of retries
 		err := db.Txn(context.TODO(), func(txn *client.Txn) error {
+			if test.canPush {
+				if err := txn.SetUserPriority(roachpb.MinUserPriority); err != nil {
+					t.Fatal(err)
+				}
+			}
 			if test.isolation == enginepb.SNAPSHOT {
 				if err := txn.SetIsolation(enginepb.SNAPSHOT); err != nil {
 					return err
 				}
 			}
-			txn.InternalSetPriority(txnPri)
 
 			count++
 			// Lay down the intent.
 			if err := txn.Put(key, "txn-value"); err != nil {
 				return err
 			}
-			// On the first true, send the non-txn put or get.
+			// On the first iteration, send the non-txn put or get.
 			if count == 1 {
 				// We use a "notifying" sender here, which allows us to know exactly when the
 				// call has been processed; otherwise, we'd be dependent on timing.
@@ -312,7 +308,6 @@ func TestClientRunTransaction(t *testing.T) {
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop()
 	dbCtx := client.DefaultDBContext()
-	dbCtx.TxnRetryOptions.InitialBackoff = 1 * time.Millisecond
 	db := createTestClientForUser(t, s, security.NodeUser, dbCtx)
 
 	for _, commit := range []bool{true, false} {
