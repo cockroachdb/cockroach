@@ -92,12 +92,6 @@ func (r *Retry) Reset() {
 	r.isReset = true
 }
 
-// CurrentAttempt it is zero initially and increases with each call to Next()
-// which does not immediately follow a Reset().
-func (r *Retry) CurrentAttempt() int {
-	return r.currentAttempt
-}
-
 func (r Retry) retryIn() time.Duration {
 	backoff := float64(r.opts.InitialBackoff) * math.Pow(r.opts.Multiplier, float64(r.currentAttempt))
 	if maxBackoff := float64(r.opts.MaxBackoff); backoff > maxBackoff {
@@ -120,7 +114,7 @@ func (r *Retry) Next() bool {
 		return true
 	}
 
-	if r.opts.MaxRetries > 0 && r.currentAttempt == r.opts.MaxRetries {
+	if r.opts.MaxRetries > 0 && r.currentAttempt >= r.opts.MaxRetries {
 		return false
 	}
 
@@ -134,4 +128,17 @@ func (r *Retry) Next() bool {
 	case <-r.ctxDoneChan:
 		return false
 	}
+}
+
+// NextCh returns a channel which will receive when the next retry
+// interval has expired.
+func (r *Retry) NextCh() <-chan time.Time {
+	if r.isReset {
+		r.isReset = false
+	}
+	r.currentAttempt++
+	if r.opts.MaxRetries > 0 && r.currentAttempt > r.opts.MaxRetries {
+		return nil
+	}
+	return time.After(r.retryIn())
 }
