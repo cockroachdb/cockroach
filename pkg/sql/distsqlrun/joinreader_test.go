@@ -124,7 +124,7 @@ func TestJoinReader(t *testing.T) {
 		if !in.Done {
 			t.Fatal("joinReader stopped accepting rows")
 		}
-		if !out.Closed {
+		if !out.ProducerClosed {
 			t.Fatalf("output RowReceiver not closed")
 		}
 		if result := out.Rows.String(); result != c.expected {
