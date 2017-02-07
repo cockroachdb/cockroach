@@ -960,15 +960,8 @@ func (r *Replica) redirectOnOrAcquireLease(ctx context.Context) (LeaseStatus, *r
 				if !status.lease.OwnedBy(r.store.StoreID()) {
 					_, stillMember := r.mu.state.Desc.GetReplicaDescriptor(status.lease.Replica.StoreID)
 					if !stillMember {
-						// If the leaseholder doesn't have a replica of the range, we should try
-						// to take the lease even if it hasn't actually expired, since the range
-						// won't be able to make progress while the lease is in such a state (and
-						// leases can stay in such a state for a very long time when using epoch-
-						// based range leases, as in #12591).
-						// TODO(a-robinson/#12680): Make occurrences of this more visible.
-						log.Errorf(ctx, "lease owned by replica %+v that no longer exists",
-							status.lease.Replica)
-						return r.requestLeaseLocked(ctx, status), nil
+						log.Fatalf(ctx, "lease %s owned by replica %+v that no longer exists",
+							status.lease, status.lease.Replica)
 					}
 					// Otherwise, if the lease is currently held by another replica, redirect
 					// to the holder.
