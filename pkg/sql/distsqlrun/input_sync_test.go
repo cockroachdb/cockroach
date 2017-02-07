@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/pkg/errors"
 )
 
 func TestOrderedSync(t *testing.T) {
@@ -109,7 +110,7 @@ func TestOrderedSync(t *testing.T) {
 	for testIdx, c := range testCases {
 		var sources []RowSource
 		for _, srcRows := range c.sources {
-			rowBuf := NewRowBuffer(nil, srcRows)
+			rowBuf := NewRowBuffer(nil /* types */, srcRows, RowBufferArgs{})
 			sources = append(sources, rowBuf)
 		}
 		src, err := makeOrderedSync(c.ordering, sources)
@@ -118,9 +119,9 @@ func TestOrderedSync(t *testing.T) {
 		}
 		var retRows sqlbase.EncDatumRows
 		for {
-			row, err := src.NextRow()
-			if err != nil {
-				t.Fatal(err)
+			row, meta := src.Next()
+			if !meta.Empty() {
+				t.Fatalf("unexpected metadata: %v", meta)
 			}
 			if row == nil {
 				break
@@ -142,22 +143,25 @@ func TestUnorderedSync(t *testing.T) {
 	columnTypeInt := sqlbase.ColumnType{Kind: sqlbase.ColumnType_INT}
 	mrc := &MultiplexedRowChannel{}
 	mrc.Init(5, []sqlbase.ColumnType{columnTypeInt})
+	producerErr := make(chan error, 100)
 	for i := 1; i <= 5; i++ {
 		go func(i int) {
 			for j := 1; j <= 100; j++ {
 				a := sqlbase.DatumToEncDatum(columnTypeInt, parser.NewDInt(parser.DInt(i)))
 				b := sqlbase.DatumToEncDatum(columnTypeInt, parser.NewDInt(parser.DInt(j)))
 				row := sqlbase.EncDatumRow{a, b}
-				mrc.PushRow(row)
+				if status := mrc.Push(row, ProducerMetadata{}); status != NeedMoreRows {
+					producerErr <- errors.Errorf("producer error: unexpected response: %d", status)
+				}
 			}
-			mrc.ProducerDone(nil)
+			mrc.ProducerDone()
 		}(i)
 	}
 	var retRows sqlbase.EncDatumRows
 	for {
-		row, err := mrc.NextRow()
-		if err != nil {
-			t.Fatal(err)
+		row, meta := mrc.Next()
+		if !meta.Empty() {
+			t.Fatalf("unexpected metadata: %v", meta)
 		}
 		if row == nil {
 			break
@@ -179,6 +183,11 @@ func TestUnorderedSync(t *testing.T) {
 			t.Errorf("Missing [%d %d]", i, j)
 		}
 	}
+	select {
+	case err := <-producerErr:
+		t.Fatal(err)
+	default:
+	}
 
 	// Test case when one source closes with an error.
 	mrc = &MultiplexedRowChannel{}
@@ -189,25 +198,37 @@ func TestUnorderedSync(t *testing.T) {
 				a := sqlbase.DatumToEncDatum(columnTypeInt, parser.NewDInt(parser.DInt(i)))
 				b := sqlbase.DatumToEncDatum(columnTypeInt, parser.NewDInt(parser.DInt(j)))
 				row := sqlbase.EncDatumRow{a, b}
-				mrc.PushRow(row)
+				if status := mrc.Push(row, ProducerMetadata{}); status != NeedMoreRows {
+					producerErr <- errors.Errorf("producer error: unexpected response: %d", status)
+				}
 			}
-			var err error
 			if i == 3 {
-				err = fmt.Errorf("Test error")
+				err := fmt.Errorf("Test error")
+				mrc.Push(nil /* row */, ProducerMetadata{Err: err})
 			}
-			mrc.ProducerDone(err)
+			mrc.ProducerDone()
 		}(i)
 	}
+	foundErr := false
 	for {
-		row, err := mrc.NextRow()
-		if err != nil {
-			if err.Error() != "Test error" {
-				t.Error(err)
+		row, meta := mrc.Next()
+		if meta.Err != nil {
+			if meta.Err.Error() != "Test error" {
+				t.Error(meta.Err)
+			} else {
+				foundErr = true
 			}
+		}
+		if row == nil && meta.Empty() {
 			break
 		}
-		if row == nil {
-			t.Error("Did not receive expected error")
-		}
+	}
+	select {
+	case err := <-producerErr:
+		t.Fatal(err)
+	default:
+	}
+	if !foundErr {
+		t.Error("Did not receive expected error")
 	}
 }

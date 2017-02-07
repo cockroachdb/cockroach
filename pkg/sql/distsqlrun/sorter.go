@@ -30,7 +30,11 @@ import (
 // that this is a no-grouping aggregator and therefore it does not produce a global ordering but
 // simply guarantees an intra-stream ordering on the physical output stream.
 type sorter struct {
-	input    RowSource
+	// input is a row source without metadata; the metadata is directed straight
+	// to out.output.
+	input NoMetadataRowSource
+	// rawInput is the true input, not wrapped in a NoMetadataRowSource.
+	rawInput RowSource
 	out      procOutputHelper
 	ordering sqlbase.ColumnOrdering
 	matchLen uint32
@@ -43,7 +47,8 @@ func newSorter(
 	flowCtx *FlowCtx, spec *SorterSpec, input RowSource, post *PostProcessSpec, output RowReceiver,
 ) (*sorter, error) {
 	s := &sorter{
-		input:    input,
+		input:    MakeNoMetadataRowSource(input, output),
+		rawInput: input,
 		ordering: convertToColumnOrdering(spec.OutputOrdering),
 		matchLen: spec.OrderingMatchLen,
 		limit:    spec.Limit,
@@ -69,54 +74,44 @@ func (s *sorter) Run(ctx context.Context, wg *sync.WaitGroup) {
 		defer log.Infof(ctx, "exiting sorter run")
 	}
 
+	// Construct the optimal sorterStrategy.
+	var ss sorterStrategy
 	switch {
 	case s.matchLen == 0 && s.limit == 0:
 		// No specified ordering match length and unspecified limit, no optimizations possible so we
 		// simply load all rows into memory and sort all values in-place. It has a worst-case time
 		// complexity of O(n*log(n)) and a worst-case space complexity of O(n).
-		ss := newSortAllStrategy(
+		ss = newSortAllStrategy(
 			&sorterValues{
 				ordering: s.ordering,
 			})
-		err := ss.Execute(ctx, s)
-		if err != nil {
-			log.Errorf(ctx, "error sorting rows in memory: %s", err)
-		}
-
-		s.out.close(err)
 	case s.matchLen == 0:
 		// No specified ordering match length but specified limit, we can optimize our sort procedure by
 		// maintaining a max-heap populated with only the smallest k rows seen. It has a worst-case time
 		// complexity of O(n*log(k)) and a worst-case space complexity of O(k).
-		ss := newSortTopKStrategy(
+		ss = newSortTopKStrategy(
 			&sorterValues{
 				ordering: s.ordering,
 			}, s.limit)
-		err := ss.Execute(ctx, s)
-		if err != nil {
-			log.Errorf(ctx, "error sorting rows: %s", err)
-		}
-
-		s.out.close(err)
 	case s.matchLen != 0:
 		// Ordering match length is specified, but no specified limit. We will be able to use
 		// existing ordering in order to avoid loading all the rows into memory. If we're scanning
 		// an index with a prefix matching an ordering prefix, we can only accumulate values for
 		// equal fields in this prefix, sort the accumulated chunk and then output.
-		ss := newSortChunksStrategy(
+		ss = newSortChunksStrategy(
 			&sorterValues{
 				ordering: s.ordering,
 			})
-		err := ss.Execute(ctx, s)
-		if err != nil {
-			log.Errorf(ctx, "error sorting rows: %s", err)
-		}
 
-		s.out.close(err)
 	default:
 		// TODO(irfansharif): Add optimization for case where both ordering match length and limit is
 		// specified.
 		panic("optimizationt no implemented yet")
 	}
-	s.input.ConsumerDone()
+
+	sortErr := ss.Execute(ctx, s)
+	if sortErr != nil {
+		log.Errorf(ctx, "error sorting rows: %s", sortErr)
+	}
+	DrainAndClose(ctx, s.out.output, sortErr, s.rawInput)
 }
