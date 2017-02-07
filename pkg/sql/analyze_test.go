@@ -60,7 +60,7 @@ func makeSelectNode(t *testing.T) *renderNode {
 	}
 	numColumns := len(sel.sourceInfo[0].sourceColumns)
 	sel.ivarHelper = parser.MakeIndexedVarHelper(sel, numColumns)
-	sel.curSourceRow = make(parser.DTuple, numColumns)
+	sel.curSourceRow = make(parser.Datums, numColumns)
 	return sel
 }
 

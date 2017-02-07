@@ -141,7 +141,7 @@ type unionNode struct {
 func (n *unionNode) Columns() ResultColumns { return n.left.Columns() }
 func (n *unionNode) Ordering() orderingInfo { return orderingInfo{} }
 
-func (n *unionNode) Values() parser.DTuple {
+func (n *unionNode) Values() parser.Datums {
 	switch {
 	case !n.rightDone:
 		return n.right.Values()
@@ -180,7 +180,7 @@ func (n *unionNode) readRight() (bool, error) {
 			return true, nil
 		}
 		n.scratch = n.scratch[:0]
-		if n.scratch, err = sqlbase.EncodeDTuple(n.scratch, n.right.Values()); err != nil {
+		if n.scratch, err = sqlbase.EncodeDatums(n.scratch, n.right.Values()); err != nil {
 			return false, err
 		}
 		// TODO(dan): Sending the entire encodeDTuple to be stored in the map would
@@ -219,7 +219,7 @@ func (n *unionNode) readLeft() (bool, error) {
 			return true, nil
 		}
 		n.scratch = n.scratch[:0]
-		if n.scratch, err = sqlbase.EncodeDTuple(n.scratch, n.left.Values()); err != nil {
+		if n.scratch, err = sqlbase.EncodeDatums(n.scratch, n.left.Values()); err != nil {
 			return false, err
 		}
 		if n.emit.emitLeft(n.scratch) {

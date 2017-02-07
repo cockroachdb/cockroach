@@ -47,7 +47,7 @@ type scanNode struct {
 	resultColumns ResultColumns
 	// Contains values for the current row. There is a 1-1 correspondence
 	// between resultColumns and values in row.
-	row parser.DTuple
+	row parser.Datums
 	// For each column in resultColumns, indicates if the value is
 	// needed (used as an optimization when the upper layer doesn't need
 	// all values).
@@ -103,7 +103,7 @@ func (n *scanNode) Ordering() orderingInfo {
 	return n.ordering
 }
 
-func (n *scanNode) Values() parser.DTuple {
+func (n *scanNode) Values() parser.Datums {
 	return n.row
 }
 
@@ -174,13 +174,13 @@ func (n *scanNode) debugNext() (bool, error) {
 		n.debugVals.output = debugValuePartial
 		return true, nil
 	}
-	tuple := make(parser.DTuple, len(encRow))
+	datums := make(parser.Datums, len(encRow))
 	var da sqlbase.DatumAlloc
 
-	if err := sqlbase.EncDatumRowToDTuple(tuple, encRow, &da); err != nil {
+	if err := sqlbase.EncDatumRowToDatums(datums, encRow, &da); err != nil {
 		return false, errors.Errorf("Could not decode row: %v", err)
 	}
-	n.row = tuple
+	n.row = datums
 	passesFilter, err := sqlbase.RunFilter(n.filter, &n.p.evalCtx)
 	if err != nil {
 		return false, err

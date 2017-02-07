@@ -29,7 +29,7 @@ type emptyNode struct {
 
 func (*emptyNode) Columns() ResultColumns  { return nil }
 func (*emptyNode) Ordering() orderingInfo  { return orderingInfo{} }
-func (*emptyNode) Values() parser.DTuple   { return nil }
+func (*emptyNode) Values() parser.Datums   { return nil }
 func (*emptyNode) Start() error            { return nil }
 func (*emptyNode) MarkDebug(_ explainMode) {}
 func (*emptyNode) Close()                  {}

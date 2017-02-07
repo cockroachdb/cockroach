@@ -1277,7 +1277,7 @@ func simplifyOneOrInExpr(left, right *parser.ComparisonExpr) (parser.TypedExpr, 
 			return parser.NewTypedComparisonExpr(
 				parser.In,
 				left.TypedLeft(),
-				parser.NewDTupleDatum(mergeSorted(tuple, parser.DTuple{datum})...),
+				parser.NewDTupleDatum(mergeSorted(tuple, parser.Datums{datum})...),
 			), nil
 
 		case parser.NE, parser.GT, parser.GE, parser.LT, parser.LE:
@@ -1478,8 +1478,8 @@ func makePrefixRange(prefix parser.DString, datum parser.TypedExpr, complete boo
 	)
 }
 
-func mergeSorted(a, b parser.DTuple) parser.DTuple {
-	r := make(parser.DTuple, 0, len(a)+len(b))
+func mergeSorted(a, b parser.Datums) parser.Datums {
+	r := make(parser.Datums, 0, len(a)+len(b))
 	for len(a) > 0 || len(b) > 0 {
 		if len(a) == 0 {
 			r = append(r, b...)
@@ -1505,12 +1505,12 @@ func mergeSorted(a, b parser.DTuple) parser.DTuple {
 	return r
 }
 
-func intersectSorted(a, b parser.DTuple) parser.DTuple {
+func intersectSorted(a, b parser.Datums) parser.Datums {
 	n := len(a)
 	if n > len(b) {
 		n = len(b)
 	}
-	r := make(parser.DTuple, 0, n)
+	r := make(parser.Datums, 0, n)
 	for len(a) > 0 && len(b) > 0 {
 		switch a[0].Compare(b[0]) {
 		case -1:
@@ -1526,8 +1526,8 @@ func intersectSorted(a, b parser.DTuple) parser.DTuple {
 	return r
 }
 
-func remove(a parser.DTuple, i int) parser.DTuple {
-	r := make(parser.DTuple, len(a)-1)
+func remove(a parser.Datums, i int) parser.Datums {
+	r := make(parser.Datums, len(a)-1)
 	copy(r, a[:i])
 	copy(r[i:], a[i+1:])
 	return r
