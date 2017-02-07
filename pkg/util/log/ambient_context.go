@@ -64,42 +64,56 @@ type AmbientContext struct {
 	eventLog *ctxEventLog
 
 	tags *logTag
+
+	// Cached annotated version of context.{TODO,Background}, to avoid annotating
+	// these contexts repeatedly.
+	backgroundCtx context.Context
 }
 
 func (ac *AmbientContext) addTag(field otlog.Field) {
 	ac.tags = &logTag{Field: field, parent: ac.tags}
+	ac.refreshCache()
 }
 
 // AddLogTag adds a tag; see WithLogTag.
 func (ac *AmbientContext) AddLogTag(name string, value interface{}) {
 	ac.addTag(otlog.Object(name, value))
+	ac.refreshCache()
 }
 
 // AddLogTagInt adds an integer tag; see WithLogTagInt.
 func (ac *AmbientContext) AddLogTagInt(name string, value int) {
 	ac.addTag(otlog.Int(name, value))
+	ac.refreshCache()
 }
 
 // AddLogTagInt64 adds an integer tag; see WithLogTagInt64.
 func (ac *AmbientContext) AddLogTagInt64(name string, value int64) {
 	ac.addTag(otlog.Int64(name, value))
+	ac.refreshCache()
 }
 
 // AddLogTagStr adds a string tag; see WithLogTagStr.
 func (ac *AmbientContext) AddLogTagStr(name string, value string) {
 	ac.addTag(otlog.String(name, value))
+	ac.refreshCache()
 }
 
 // SetEventLog sets up an event log. Annotated contexts log into this event log
 // (unless there's an open Span).
 func (ac *AmbientContext) SetEventLog(family, title string) {
 	ac.eventLog = &ctxEventLog{eventLog: trace.NewEventLog(family, title)}
+	ac.refreshCache()
 }
 
 // FinishEventLog closes the event log. Concurrent and subsequent calls to
 // record events from contexts that use this event log embedded are allowed.
 func (ac *AmbientContext) FinishEventLog() {
 	ac.eventLog.finish()
+}
+
+func (ac *AmbientContext) refreshCache() {
+	ac.backgroundCtx = ac.annotateCtxInternal(context.Background())
 }
 
 // AnnotateCtx annotates a given context with the information in AmbientContext:
@@ -113,8 +127,20 @@ func (ac *AmbientContext) FinishEventLog() {
 // that case it is strongly recommended to open a span if possible (using
 // AnnotateCtxWithSpan).
 func (ac *AmbientContext) AnnotateCtx(ctx context.Context) context.Context {
-	// TODO(radu): We could keep a cached context based off of
-	// context.Background() to avoid allocations in that case.
+	switch ctx {
+	case context.TODO(), context.Background():
+		// NB: context.TODO and context.Background are identical except for their
+		// names.
+		if ac.backgroundCtx != nil {
+			return ac.backgroundCtx
+		}
+		return ctx
+	default:
+		return ac.annotateCtxInternal(ctx)
+	}
+}
+
+func (ac *AmbientContext) annotateCtxInternal(ctx context.Context) context.Context {
 	if ac.eventLog != nil && opentracing.SpanFromContext(ctx) == nil && eventLogFromCtx(ctx) == nil {
 		ctx = embedCtxEventLog(ctx, ac.eventLog)
 	}
@@ -134,8 +160,17 @@ func (ac *AmbientContext) AnnotateCtx(ctx context.Context) context.Context {
 func (ac *AmbientContext) AnnotateCtxWithSpan(
 	ctx context.Context, opName string,
 ) (context.Context, opentracing.Span) {
-	if ac.tags != nil {
-		ctx = augmentTagChain(ctx, ac.tags)
+	switch ctx {
+	case context.TODO(), context.Background():
+		// NB: context.TODO and context.Background are identical except for their
+		// names.
+		if ac.backgroundCtx != nil {
+			ctx = ac.backgroundCtx
+		}
+	default:
+		if ac.tags != nil {
+			ctx = augmentTagChain(ctx, ac.tags)
+		}
 	}
 
 	var span opentracing.Span
