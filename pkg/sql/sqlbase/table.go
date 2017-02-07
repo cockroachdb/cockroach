@@ -368,8 +368,8 @@ func MakeKeyFromEncDatums(
 
 // EncodeDatum encodes a datum (order-preserving encoding, suitable for keys).
 func EncodeDatum(b []byte, d parser.Datum) ([]byte, error) {
-	if values, ok := d.(*parser.DTuple); ok {
-		return EncodeDTuple(b, *values)
+	if values, ok := d.(*parser.DTupleDatum); ok {
+		return EncodeDTuple(b, values.D)
 	}
 	return EncodeTableKey(b, d, encoding.Ascending)
 }
@@ -456,8 +456,8 @@ func EncodeTableKey(b []byte, val parser.Datum, dir encoding.Direction) ([]byte,
 			return encoding.EncodeDurationAscending(b, t.Duration)
 		}
 		return encoding.EncodeDurationDescending(b, t.Duration)
-	case *parser.DTuple:
-		for _, datum := range *t {
+	case *parser.DTupleDatum:
+		for _, datum := range t.D {
 			var err error
 			b, err = EncodeTableKey(b, datum, dir)
 			if err != nil {

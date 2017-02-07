@@ -1562,10 +1562,10 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 var errCmpNull = errors.New("NULL comparison")
 
 func cmpTuple(ldatum, rdatum Datum) (int, error) {
-	left := *ldatum.(*DTuple)
-	right := *rdatum.(*DTuple)
-	for i, l := range left {
-		r := right[i]
+	left := *ldatum.(*DTupleDatum)
+	right := *rdatum.(*DTupleDatum)
+	for i, l := range left.D {
+		r := right.D[i]
 		if l == DNull || r == DNull {
 			return 0, errCmpNull
 		}
@@ -1586,7 +1586,7 @@ func makeEvalTupleIn(typ Type) CmpOp {
 				return DBool(false), nil
 			}
 
-			vtuple := *values.(*DTuple)
+			vtuple := values.(*DTupleDatum).D
 			i := sort.Search(len(vtuple), func(i int) bool { return vtuple[i].Compare(arg) >= 0 })
 			found := i < len(vtuple) && vtuple[i].Compare(arg) == 0
 			return DBool(found), nil
@@ -2375,13 +2375,13 @@ func (t *ExistsExpr) Eval(ctx *EvalContext) (Datum, error) {
 
 // Eval implements the TypedExpr interface.
 func (expr *FuncExpr) Eval(ctx *EvalContext) (Datum, error) {
-	args := make(DTuple, 0, len(expr.Exprs))
+	args := NewDTupleDatumWithCap(len(expr.Exprs))
 	for _, e := range expr.Exprs {
 		arg, err := e.(TypedExpr).Eval(ctx)
 		if err != nil {
 			return nil, err
 		}
-		args = append(args, arg)
+		args.D = append(args.D, arg)
 	}
 
 	if !expr.fn.Types.match([]Type(args.ResolvedType().(TTuple))) {
@@ -2393,7 +2393,7 @@ func (expr *FuncExpr) Eval(ctx *EvalContext) (Datum, error) {
 		return DNull, nil
 	}
 
-	res, err := expr.fn.fn(ctx, args)
+	res, err := expr.fn.fn(ctx, args.D)
 	if err != nil {
 		// If we are facing a retry error, in particular those generated
 		// by crdb_internal.force_retry(), propagate it unchanged, so that
@@ -2557,15 +2557,15 @@ func (expr *ColumnItem) Eval(ctx *EvalContext) (Datum, error) {
 
 // Eval implements the TypedExpr interface.
 func (t *Tuple) Eval(ctx *EvalContext) (Datum, error) {
-	tuple := make(DTuple, 0, len(t.Exprs))
+	tuple := NewDTupleDatumWithCap(len(t.Exprs))
 	for _, v := range t.Exprs {
 		d, err := v.(TypedExpr).Eval(ctx)
 		if err != nil {
 			return nil, err
 		}
-		tuple = append(tuple, d)
+		tuple.D = append(tuple.D, d)
 	}
-	return &tuple, nil
+	return tuple, nil
 }
 
 // arrayOfType returns a fresh DArray of the input type.
@@ -2608,11 +2608,11 @@ func (t *ArrayFlatten) Eval(ctx *EvalContext) (Datum, error) {
 		return nil, err
 	}
 
-	tuple, ok := d.(*DTuple)
+	tuple, ok := d.(*DTupleDatum)
 	if !ok {
 		return nil, errors.Errorf("array subquery result (%v) is not DTuple", d)
 	}
-	array.Array = *tuple
+	array.Array = tuple.D
 	return array, nil
 }
 
@@ -2677,7 +2677,7 @@ func (t *DTimestampTZ) Eval(_ *EvalContext) (Datum, error) {
 }
 
 // Eval implements the TypedExpr interface.
-func (t *DTuple) Eval(_ *EvalContext) (Datum, error) {
+func (t *DTupleDatum) Eval(_ *EvalContext) (Datum, error) {
 	return t, nil
 }
 

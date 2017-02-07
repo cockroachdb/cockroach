@@ -162,9 +162,9 @@ func (b *writeBuffer) writeTextDatum(d parser.Datum, sessionLoc *time.Location) 
 	case *parser.DInterval:
 		b.writeLengthPrefixedString(v.ValueAsString())
 
-	case *parser.DTuple:
+	case *parser.DTupleDatum:
 		b.variablePutbuf.WriteString("(")
-		for i, d := range *v {
+		for i, d := range v.D {
 			if i > 0 {
 				b.variablePutbuf.WriteString(",")
 			}
