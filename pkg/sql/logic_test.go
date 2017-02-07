@@ -538,8 +538,6 @@ func (t *logicTest) processTestFile(path string) error {
 
 	t.lastProgress = timeutil.Now()
 
-	execKnobs := t.cluster.Server(t.nodeIdx).(*server.TestServer).Cfg.TestingKnobs.SQLExecutor.(*sql.ExecutorTestingKnobs)
-
 	repeat := 1
 	s := newLineScanner(file)
 	for s.Scan() {
@@ -803,20 +801,6 @@ func (t *logicTest) processTestFile(path string) error {
 				return errors.New("no trace active")
 			}
 			t.traceStop()
-
-		case "fix-txn-priorities":
-			// fix-txn-priorities causes future transactions to have hardcoded
-			// priority values (based on the priority level), (replacing the
-			// probabilistic generation).
-			// The change stays in effect for the duration of that particular
-			// test file.
-			if len(fields) != 1 {
-				return fmt.Errorf("fix-txn-priority takes no arguments, found: %v", fields[1:])
-			}
-			t.outf("Setting deterministic priorities.")
-
-			execKnobs.FixTxnPriority = true
-			defer func() { execKnobs.FixTxnPriority = false }()
 
 		case "kv-batch-size":
 			// kv-batch-size limits the kvfetcher batch size. It can be used to

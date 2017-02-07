@@ -550,14 +550,15 @@ func TestTxnCoordSenderCleanupOnAborted(t *testing.T) {
 	// Create a transaction with intent at "a".
 	key := roachpb.Key("a")
 	txn1 := client.NewTxn(context.Background(), *s.DB)
-	txn1.InternalSetPriority(1)
 	if err := txn1.Put(key, []byte("value")); err != nil {
 		t.Fatal(err)
 	}
 
 	// Push the transaction (by writing key "a" with higher priority) to abort it.
 	txn2 := client.NewTxn(context.Background(), *s.DB)
-	txn2.InternalSetPriority(2)
+	if err := txn2.SetUserPriority(roachpb.MaxUserPriority); err != nil {
+		t.Fatal(err)
+	}
 	if err := txn2.Put(key, []byte("value2")); err != nil {
 		t.Fatal(err)
 	}

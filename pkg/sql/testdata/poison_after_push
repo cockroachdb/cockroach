@@ -14,11 +14,6 @@ INSERT INTO t VALUES (1)
 statement ok
 GRANT ALL ON t TO testuser
 
-# The following command causes priority values to be hardcoded. Without this,
-# the probabilistic generation of priority values results in occasional priority
-# inversion.
-fix-txn-priorities
-
 statement ok
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE, PRIORITY LOW
 

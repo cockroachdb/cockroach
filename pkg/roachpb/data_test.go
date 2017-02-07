@@ -478,7 +478,7 @@ func checkVal(val, expected, errFraction float64) bool {
 // to be higher than a priority with user priority = 1.
 func TestMakePriority(t *testing.T) {
 	userPs := []UserPriority{
-		0.001,
+		0.0011,
 		0.01,
 		0.1,
 		0.5,
@@ -487,10 +487,18 @@ func TestMakePriority(t *testing.T) {
 		2.0,
 		10.0,
 		100.0,
-		1000.0,
+		999.0,
 	}
 
-	// Generate values for all priorities
+	// Verify min & max.
+	if a, e := MakePriority(MinUserPriority), int32(MinTxnPriority); a != e {
+		t.Errorf("expected min txn priority %d; got %d", e, a)
+	}
+	if a, e := MakePriority(MaxUserPriority), int32(MaxTxnPriority); a != e {
+		t.Errorf("expected max txn priority %d; got %d", e, a)
+	}
+
+	// Generate values for all priorities.
 	const trials = 100000
 	values := make([][trials]int32, len(userPs))
 	for i, userPri := range userPs {
@@ -558,7 +566,7 @@ func TestMakePriorityExplicit(t *testing.T) {
 }
 
 // TestMakePriorityLimits verifies that min & max priorities are
-// enforced and still yield randomized values.
+// enforced and yield txn priority limits.
 func TestMakePriorityLimits(t *testing.T) {
 	userPs := []UserPriority{
 		0.000000001,
@@ -568,14 +576,13 @@ func TestMakePriorityLimits(t *testing.T) {
 		100000,
 		math.MaxFloat64,
 	}
-	const trials = 100
 	for _, userPri := range userPs {
-		seen := map[int32]struct{}{} // set of priorities
-		for j := 0; j < trials; j++ {
-			seen[MakePriority(userPri)] = struct{}{}
+		expected := int32(MinTxnPriority)
+		if userPri > 1 {
+			expected = int32(MaxTxnPriority)
 		}
-		if len(seen) < 85 {
-			t.Errorf("%f: expected randomized values, got %d: %v", userPri, len(seen), seen)
+		if actual := MakePriority(userPri); actual != expected {
+			t.Errorf("%f: expected txn priority %d; got %d", userPri, expected, actual)
 		}
 	}
 }

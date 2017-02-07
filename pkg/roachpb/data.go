@@ -652,6 +652,13 @@ func (v Value) PrettyPrint() string {
 	return buf.String()
 }
 
+const (
+	// MinTxnPriority is the minimum allowed txn priority.
+	MinTxnPriority = 0
+	// MaxTxnPriority is the maximum allowed txn priority.
+	MaxTxnPriority = math.MaxInt32
+)
+
 // NewTransaction creates a new transaction. The transaction key is
 // composed using the specified baseKey (for locality with data
 // affected by the transaction) and a random ID to guarantee
@@ -738,6 +745,10 @@ func (t *Transaction) IsInitialized() bool {
 // userPriority = 0.1, the random priority will be 1/10th as likely to
 // be greater than if userPriority=1. Balance is achieved when
 // userPriority=1, in which case the priority chosen is unbiased.
+//
+// If userPriority is less than or equal to MinUserPriority, returns
+// MinUserPriority; if greater than or equal to MaxUserPriority,
+// returns MaxUserPriority.
 func MakePriority(userPriority UserPriority) int32 {
 	// A currently undocumented feature allows an explicit priority to
 	// be set by specifying priority < 1. The explicit priority is
@@ -750,10 +761,10 @@ func MakePriority(userPriority UserPriority) int32 {
 		return int32(-userPriority)
 	} else if userPriority == 0 {
 		userPriority = 1
-	} else if userPriority > MaxUserPriority {
-		userPriority = MaxUserPriority
-	} else if userPriority < MinUserPriority {
-		userPriority = MinUserPriority
+	} else if userPriority >= MaxUserPriority {
+		return MaxTxnPriority
+	} else if userPriority <= MinUserPriority {
+		return MinTxnPriority
 	}
 
 	// We generate random values which are biased according to priorities. If v1 is a value
@@ -804,8 +815,8 @@ func MakePriority(userPriority UserPriority) int32 {
 	// For userPriority=MaxUserPriority, the probability of overflow is 0.7%.
 	// For userPriority=(MaxUserPriority/2), the probability of overflow is 0.005%.
 	val = (val / (5 * MaxUserPriority)) * math.MaxInt32
-	if val >= math.MaxInt32 {
-		return math.MaxInt32
+	if val >= MaxTxnPriority {
+		return MaxTxnPriority
 	}
 	return int32(val)
 }
@@ -898,9 +909,11 @@ func (t *Transaction) Update(o *Transaction) {
 }
 
 // UpgradePriority sets transaction priority to the maximum of current
-// priority and the specified minPriority.
+// priority and the specified minPriority. The exception is if the
+// current priority is set to the minimum, in which case the minimum
+// is preserved.
 func (t *Transaction) UpgradePriority(minPriority int32) {
-	if minPriority > t.Priority {
+	if minPriority > t.Priority && t.Priority != MinTxnPriority {
 		t.Priority = minPriority
 	}
 }

@@ -92,12 +92,6 @@ func (r *Retry) Reset() {
 	r.isReset = true
 }
 
-// CurrentAttempt it is zero initially and increases with each call to Next()
-// which does not immediately follow a Reset().
-func (r *Retry) CurrentAttempt() int {
-	return r.currentAttempt
-}
-
 func (r Retry) retryIn() time.Duration {
 	backoff := float64(r.opts.InitialBackoff) * math.Pow(r.opts.Multiplier, float64(r.currentAttempt))
 	if maxBackoff := float64(r.opts.MaxBackoff); backoff > maxBackoff {
@@ -119,14 +113,13 @@ func (r *Retry) Next() bool {
 		r.isReset = false
 		return true
 	}
-
-	if r.opts.MaxRetries > 0 && r.currentAttempt == r.opts.MaxRetries {
+	if r.opts.MaxRetries > 0 && r.currentAttempt >= r.opts.MaxRetries {
 		return false
 	}
 
 	// Wait before retry.
 	select {
-	case <-time.After(r.retryIn()):
+	case <-r.NextCh():
 		r.currentAttempt++
 		return true
 	case <-r.opts.Closer:
@@ -134,4 +127,26 @@ func (r *Retry) Next() bool {
 	case <-r.ctxDoneChan:
 		return false
 	}
+}
+
+// ManualNext advances the current attempt counter and returns
+// whether the retry loop should terminate, in the event that the
+// current attempt exceeds the maximum number of retries.
+func (r *Retry) ManualNext() bool {
+	if r.isReset {
+		r.isReset = false
+		return true
+	}
+	r.currentAttempt++
+	return r.opts.MaxRetries == 0 || r.currentAttempt < r.opts.MaxRetries
+}
+
+// NextCh returns a channel which will receive when the next retry
+// interval has expired. This method should be used in conjunction
+// with ManualNext().
+func (r *Retry) NextCh() <-chan time.Time {
+	if r.opts.MaxRetries > 0 && r.currentAttempt >= r.opts.MaxRetries {
+		return nil
+	}
+	return time.After(r.retryIn())
 }
