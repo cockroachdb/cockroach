@@ -85,7 +85,7 @@ CockroachDB强一致性实现：
 
 - 对单一range的单一或者批量变化是通过该range的Raft实例作为中介来完成的。Raft保障了ACID语义；
 
-- 涉及多个range的逻辑上的变化则是利用分布式事务来保障ACID语义。CockroachDB使用高效的**无锁分布式提交**协议。
+- 涉及多个range的逻辑上的变化则是利用分布式事务来保障ACID语义。CockroachDB使用高效的 **无锁分布式提交** 协议。
 
 CockroachDB achieves survivability:
 - range replicas can be co-located within a single datacenter for low
@@ -121,9 +121,9 @@ implements [a limited form of linearizability](#linearizability),
 providing ordering for any observer or chain of observers.
 
 
-CockroachDB提供[快照隔离级别([snapshot isolation](http://en.wikipedia.org/wiki/Snapshot_isolation)简称SI)
-和序列化快照隔离级别（serializable snapshot isolation简称SSI）语义，容许 **外部一致性、无锁定读写**--
-从历史快照时间戳和从当前系统时间读写（系统时间指从时间设备如：钟表、电脑等计时设备等读到的时间值，它是我们对真实时间的度量值，但跟真实时间总是不可能完全一致）。SI隔离级别提供无锁定读写但会产生写偏序（译注：因为每个事务在更新过程中看不到其他事务的更新结果，所以可能造成各个事务提交之后的最终结果违反了一致性）。SSI隔离级别消除了写偏序，但在竞争频繁的系统中引起了性能的下降。SSI隔离级别是默认的隔离级别，用户必须有意识地决定是否用性能换取正确性。CockroachDB实现了严格一致性（线性一致性）的一种有限形式，为任一观察者或观察者链提供有序化。
+CockroachDB提供快照隔离级别([snapshot isolation](http://en.wikipedia.org/wiki/Snapshot_isolation)简称SI)
+和序列化快照隔离级别（serializable snapshot isolation简称SSI）语义，容许 **外部一致性、无锁定读写** --
+从历史快照时间戳和从当前系统时间读写（系统时间指从时间设备如：钟表、电脑等计时设备读到的时间值，它是我们对真实时间的度量值，但跟真实时间总是不可能完全一致）。SI隔离级别提供无锁定读写但会产生写偏序（译注：因为每个事务在更新过程中看不到其他事务的更新结果，所以可能造成各个事务提交之后的最终结果违反了一致性）。SSI隔离级别消除了写偏序，但在竞争频繁的系统中引起了性能的下降。SSI隔离级别是默认的隔离级别，用户必须有意识地决定是否用性能换取正确性。CockroachDB实现了严格一致性（线性一致性）的一种有限形式，为任一观察者或观察者链提供有序化。
 
 Similar to
 [Spanner](http://static.googleusercontent.com/media/research.google.com/en/us/archive/spanner-osdi2012.pdf)
@@ -372,6 +372,7 @@ timestamp to increase and the latter does not.
 SI与SSI两种隔离级别的核心不同点是前者允许事务的候选时间戳增长，而后者不允许。
 
 **Hybrid Logical Clock**
+
 **混合逻辑时钟**
 
 Each cockroach node maintains a hybrid logical clock (HLC) as discussed
@@ -391,6 +392,7 @@ HLC时间使用的时间戳有一个物理组件（看作总是接近本地物�
 
 For a more in depth description of HLC please read the paper. Our
 implementation is [here](https://github.com/cockroachdb/cockroach/blob/master/pkg/util/hlc/hlc.go).
+
 关于混合逻辑时钟(HLC)更深入的描述请阅读相关论文。我们的实现见[这里](https://github.com/cockroachdb/cockroach/blob/master/pkg/util/hlc/hlc.go).。
 
 Cockroach picks a Timestamp for a transaction using HLC time. Throughout this
@@ -408,8 +410,11 @@ HLC时钟由节点上的每个读/写事件来更新，并且HLC时间大于等�
 这用于保证在一个节点上的所有数据读写时间戳都小于下一次HLC时间。
 
 **Transaction execution flow**
+
 **事务执行流程**
+
 Transactions are executed in two phases:
+
 事务的执行分为两个阶段：
 
 1. Start the transaction by selecting a range which is likely to be
@@ -467,6 +472,7 @@ to ensure the correctness of the system.
 在没有冲突时，事务处理就结束了。不需要再做其他事情来确保系统的正确性了。
 
 **Conflict Resolution**
+
 **冲突解决**
 
 Things get more interesting when a reader or writer encounters an intent
@@ -478,6 +484,7 @@ abort or restart depending on the type of conflict.
 事情就变得更有趣了。这就是冲突，它通常会引致其中一事务被中止或者重新启动，这依赖于冲突的类型。
 
 ***Transaction restart:***
+
 ***事务重启：***
 
 This is the usual (and more efficient) type of behaviour and is used
@@ -515,6 +522,7 @@ a NOOP.
 所以在事务提交前显示清除通常什么都不做。
 
 ***Transaction abort:***
+
 ***事务终止：***
 
 This is the case in which a transaction, upon reading its transaction
@@ -531,9 +539,11 @@ transaction with **a new txn id**.
 之后也会努力清除自已。随后下一次尝试（若适用）将使用**新事务ID**作为一个新事务运行。
 
 ***Transaction interactions:***
+
 ***事务交叉***
 
 There are several scenarios in which transactions interact:
+
 事务互相影响有以下几种场景：
 
 - **Reader encounters write intent or value with newer timestamp far
@@ -630,6 +640,7 @@ There are several scenarios in which transactions interact:
   仅当事务是序列化时，新时间戳会强制事务重新启动。
 
 **Transaction management**
+
 **事务管理**
 
 Transactions are managed by the client proxy (or gateway in SQL Azure
@@ -669,6 +680,7 @@ transaction is
 对于竞争时重试和放弃事务时中止次数的探索请参见[这里](https://docs.google.com/document/d/1kBCu4sdGAnvLqpT-_2vaTbomNmX3_saayWEGYu1j7mQ/edit?usp=sharing).
 
 **Transaction Records**
+
 **事务记录**
 
 Please see [pkg/roachpb/data.proto](https://github.com/cockroachdb/cockroach/blob/master/pkg/roachpb/data.proto) for the up-to-date structures, the best entry point being `message Transaction`.
@@ -734,6 +746,7 @@ Please see [pkg/roachpb/data.proto](https://github.com/cockroachdb/cockroach/blo
 - 在竞争性系统中与两阶段锁相比，中止事务会降低系统吞吐量。因为中止和重试会增加读写的通信成本，从而增加时延，减少系统吞吐量。
 
 **Choosing a Timestamp**
+
 **选择一个时间戳**
 
 A key challenge of reading data in a distributed system with clock skew
@@ -778,7 +791,7 @@ marked as “certain”. Then, for future reads to that node within the
 transaction, we set `MaxTimestamp = Read Timestamp`, preventing further
 uncertainty restarts.
 
-我们提供另一种优化来减少不确定性引起的事务重启。当重启时，事务不仅要考虑t<sub>c，
+我们提供另一种优化来减少不确定性引起的事务重启。当重启时，事务不仅要考虑t<sub>c</sub>，
 也要考虑产生不确定读时间的那个节点的时间t<sub>node</sub>。t<sub>c</sub>和t<sub>node</sub>(可能是后者)
 中更大的时间戳将被用来增加读时间戳。此外，冲突的节点被标记为“certain”。此后，事务内对这个节点的读操作，
 我们将设置 `MaxTimestamp = Read Timestamp` ，以防止进一步不确定性引致的重启。
@@ -1415,6 +1428,7 @@ source replica(s) deleted if applicable.
 range元数据也被更新，老的源副本（如果有）被删除。
 
 **Coordinator** (lease holder replica)
+
 **协调者** （持有租约的副本）
 
 ```
@@ -1429,10 +1443,12 @@ else if rebalancing || recovering
 ```
 
 **New Replica**
+
 **新副本**
 
 *Bring replica up to date:*
-*更新副本*
+
+*更新副本:*
 
 ```
 if all info can be read from replicated log
@@ -2007,6 +2023,7 @@ Special **table reader** aggregators with no inputs are used as data sources; a
 table reader can be configured to output only certain columns, as needed.
 A special **final** aggregator with no outputs is used for the results of the
 query/statement.
+
 
 
 To reflect the result ordering that a query has to produce, some aggregators
