@@ -47,6 +47,7 @@ import (
 )
 
 const (
+	singleNode                  = 1
 	multiNode                   = 3
 	backupRestoreDefaultRanges  = 10
 	backupRestoreRowPayloadSize = 100
@@ -142,11 +143,19 @@ func backupRestoreTestSetup(
 
 	dir, dirCleanupFn := testutils.TempDir(t, 1)
 
+	// TODO(dan): Some tests don't need multiple nodes, but the test setup
+	// hangs with 1. Investigate.
+	if numAccounts == 0 && clusterSize < multiNode {
+		clusterSize = multiNode
+		t.Logf("setting cluster size to %d due to a bug", clusterSize)
+	}
+
 	tc = testcluster.StartTestCluster(t, clusterSize, base.TestClusterArgs{})
 	sqlDB = sqlutils.MakeSQLRunner(t, tc.Conns[0])
 	kvDB = tc.Server(0).KVClient().(*client.DB)
 
 	sqlDB.Exec(bankCreateDatabase)
+
 	if numAccounts > 0 {
 		sqlDB.Exec(bankCreateTable)
 		for _, insert := range bankDataInsertStmts(numAccounts) {
@@ -538,11 +547,8 @@ func TestPresplitRanges(t *testing.T) {
 
 func TestBackupLevelDB(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	const numAccounts = 1
 
-	// TODO(dan): This test doesn't need multiple nodes, but the test setup
-	// hangs with 1. Investigate.
-	_, dir, _, _, sqlDB, cleanupFn := backupRestoreTestSetup(t, multiNode, numAccounts)
+	_, dir, _, _, sqlDB, cleanupFn := backupRestoreTestSetup(t, singleNode, 0)
 	defer cleanupFn()
 
 	_ = sqlDB.Exec(fmt.Sprintf(`BACKUP DATABASE bench TO '%s'`, dir))
