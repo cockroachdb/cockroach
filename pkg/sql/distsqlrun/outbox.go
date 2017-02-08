@@ -24,6 +24,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/pkg/errors"
 )
 
 const outboxBufRows = 16
@@ -183,7 +184,7 @@ func (m *outbox) run() {
 			if recvErr != nil {
 				err = recvErr
 			} else if resp.Error != nil {
-				err = resp.Error.GoError()
+				err = errors.Wrap(resp.Error.GoError(), "consumer signaled error")
 			}
 		}
 	}
