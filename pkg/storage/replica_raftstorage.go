@@ -617,7 +617,7 @@ func (r *Replica) applySnapshot(
 
 	// Write the snapshot into the range.
 	for _, batchRepr := range inSnap.Batches {
-		if err := batch.ApplyBatchRepr(batchRepr); err != nil {
+		if err := batch.ApplyBatchRepr(batchRepr, false); err != nil {
 			return err
 		}
 	}
@@ -664,7 +664,8 @@ func (r *Replica) applySnapshot(
 			s.RaftAppliedIndex, snap.Metadata.Index)
 	}
 
-	if err := batch.Commit(); err != nil {
+	// We've written Raft log entries, so we need to sync the WAL.
+	if err := batch.Commit(syncRaftLog); err != nil {
 		return err
 	}
 	stats.commit = timeutil.Now()

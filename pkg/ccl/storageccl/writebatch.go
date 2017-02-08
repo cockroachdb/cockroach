@@ -72,7 +72,7 @@ func evalWriteBatch(
 		return storage.EvalResult{}, errors.New("WriteBatch can only be called on empty ranges")
 	}
 
-	if err := batch.ApplyBatchRepr(args.Data); err != nil {
+	if err := batch.ApplyBatchRepr(args.Data, false /* !sync */); err != nil {
 		return storage.EvalResult{}, err
 	}
 	return storage.EvalResult{}, nil

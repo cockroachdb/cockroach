@@ -124,7 +124,7 @@ func setupMVCCData(
 		// sstables.
 		if scaled := len(order) / 20; i > 0 && (i%scaled) == 0 {
 			log.Infof(context.Background(), "committing (%d/~%d)", i/scaled, 20)
-			if err := batch.Commit(); err != nil {
+			if err := batch.Commit(false /* !sync */); err != nil {
 				b.Fatal(err)
 			}
 			batch.Close()
@@ -143,7 +143,7 @@ func setupMVCCData(
 			b.Fatal(err)
 		}
 	}
-	if err := batch.Commit(); err != nil {
+	if err := batch.Commit(false /* !sync */); err != nil {
 		b.Fatal(err)
 	}
 	batch.Close()
@@ -352,7 +352,7 @@ func runMVCCBatchPut(emk engineMaker, valueSize, batchSize int, b *testing.B) {
 			}
 		}
 
-		if err := batch.Commit(); err != nil {
+		if err := batch.Commit(false /* !sync */); err != nil {
 			b.Fatal(err)
 		}
 
@@ -403,7 +403,7 @@ func runMVCCBatchTimeSeries(emk engineMaker, batchSize int, b *testing.B) {
 			}
 		}
 
-		if err := batch.Commit(); err != nil {
+		if err := batch.Commit(false /* !sync */); err != nil {
 			b.Fatal(err)
 		}
 		batch.Close()
@@ -561,7 +561,7 @@ func runBatchApplyBatchRepr(
 		} else {
 			batch = eng.NewBatch()
 		}
-		if err := batch.ApplyBatchRepr(repr); err != nil {
+		if err := batch.ApplyBatchRepr(repr, false /* !sync */); err != nil {
 			b.Fatal(err)
 		}
 		batch.Close()

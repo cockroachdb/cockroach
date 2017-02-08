@@ -125,8 +125,10 @@ type Reader interface {
 type Writer interface {
 	// ApplyBatchRepr atomically applies a set of batched updates. Created by
 	// calling Repr() on a batch. Using this method is equivalent to constructing
-	// and committing a batch whose Repr() equals repr.
-	ApplyBatchRepr(repr []byte) error
+	// and committing a batch whose Repr() equals repr. If sync is true, the
+	// batch is synchronously written to disk. It is an error to specify
+	// sync=true if the Writer is a Batch.
+	ApplyBatchRepr(repr []byte, sync bool) error
 	// Clear removes the item from the db with the given key.
 	// Note that clear actually removes entries from the storage
 	// engine, rather than inserting tombstones.
@@ -202,8 +204,9 @@ type Engine interface {
 type Batch interface {
 	ReadWriter
 	// Commit atomically applies any batched updates to the underlying
-	// engine. This is a noop unless the engine was created via NewBatch().
-	Commit() error
+	// engine. This is a noop unless the engine was created via NewBatch(). If
+	// sync is true, the batch is synchronously committed to disk.
+	Commit(sync bool) error
 	// Distinct returns a view of the existing batch which only sees writes that
 	// were performed before the Distinct batch was created. That is, the
 	// returned batch will not read its own writes, but it will read writes to

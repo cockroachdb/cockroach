@@ -91,6 +91,8 @@ var txnAutoGC = true
 
 var tickQuiesced = envutil.EnvOrDefaultBool("COCKROACH_TICK_QUIESCED", true)
 
+var syncRaftLog = envutil.EnvOrDefaultBool("COCKROACH_SYNC_RAFT_LOG", true)
+
 // Whether to enable experimental support for proposer-evaluated KV.
 var propEvalKV = envutil.EnvOrDefaultBool("COCKROACH_PROPOSER_EVALUATED_KV", false)
 
@@ -708,7 +710,7 @@ func (r *Replica) destroyDataRaftMuLocked(
 	if err := r.setTombstoneKey(ctx, batch, &consistentDesc); err != nil {
 		return err
 	}
-	if err := batch.Commit(); err != nil {
+	if err := batch.Commit(false); err != nil {
 		return err
 	}
 	commitTime := timeutil.Now()
@@ -2694,7 +2696,10 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 			return stats, err
 		}
 	}
-	if err := batch.Commit(); err != nil {
+	writer.Close()
+	// Synchronously commit the batch with the Raft log entries and Raft hard
+	// state as we're promising not to lose this data.
+	if err := batch.Commit(syncRaftLog); err != nil {
 		return stats, err
 	}
 
@@ -3774,8 +3779,9 @@ func (r *Replica) applyRaftCommand(
 
 	batch := r.store.Engine().NewWriteOnlyBatch()
 	defer batch.Close()
+
 	if writeBatch != nil {
-		if err := batch.ApplyBatchRepr(writeBatch.Data); err != nil {
+		if err := batch.ApplyBatchRepr(writeBatch.Data, false); err != nil {
 			return enginepb.MVCCStats{}, roachpb.NewError(NewReplicaCorruptionError(
 				errors.Wrap(err, "unable to apply WriteBatch")))
 		}
@@ -3813,7 +3819,7 @@ func (r *Replica) applyRaftCommand(
 	// the future.
 	writer.Close()
 
-	if err := batch.Commit(); err != nil {
+	if err := batch.Commit(false); err != nil {
 		return enginepb.MVCCStats{}, roachpb.NewError(NewReplicaCorruptionError(
 			errors.Wrap(err, "could not commit batch")))
 	}
