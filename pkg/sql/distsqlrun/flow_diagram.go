@@ -175,6 +175,19 @@ func (post *PostProcessSpec) summary() []string {
 		}
 		res = append(res, buf.String())
 	}
+	if post.Limit != 0 || post.Offset != 0 {
+		var buf bytes.Buffer
+		if post.Limit != 0 {
+			fmt.Fprintf(&buf, "Limit %d", post.Limit)
+		}
+		if post.Offset != 0 {
+			if buf.Len() != 0 {
+				buf.WriteByte(' ')
+			}
+			fmt.Fprintf(&buf, "Offset %d", post.Offset)
+		}
+		res = append(res, buf.String())
+	}
 	return res
 }
 
