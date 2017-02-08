@@ -117,6 +117,7 @@ var keywords = map[string]int{
 	"INNER":             INNER,
 	"INSERT":            INSERT,
 	"INT":               INT,
+	"INT2VECTOR":        INT2VECTOR,
 	"INT64":             INT64,
 	"INT8":              INT8,
 	"INTEGER":           INTEGER,

@@ -178,18 +178,31 @@ func (b *writeBuffer) writeTextDatum(d parser.Datum, sessionLoc *time.Location) 
 		b.writeLengthPrefixedVariablePutbuf()
 
 	case *parser.DArray:
-		b.variablePutbuf.WriteString("{")
-		for i, d := range v.Array {
-			if i > 0 {
-				b.variablePutbuf.WriteString(",")
+		switch d.ResolvedType().Oid() {
+		case oid.T_int2vector:
+			// int2vectors are serialized as a string of space-separated values.
+			for i, d := range v.Array {
+				if i > 0 {
+					b.variablePutbuf.WriteString(" ")
+				}
+				d.Format(&b.variablePutbuf, parser.FmtBareStrings)
 			}
-			d.Format(&b.variablePutbuf, parser.FmtBareStrings)
+			b.writeLengthPrefixedVariablePutbuf()
+		case oid.T__int8, oid.T__text, oid.T__name:
+			// Arrays are serialized as a string of comma-separated values, surrounded
+			// by braces.
+			b.variablePutbuf.WriteString("{")
+			for i, d := range v.Array {
+				if i > 0 {
+					b.variablePutbuf.WriteString(",")
+				}
+				d.Format(&b.variablePutbuf, parser.FmtBareStrings)
+			}
+			b.variablePutbuf.WriteString("}")
+			b.writeLengthPrefixedVariablePutbuf()
+		default:
+			b.setError(errors.Errorf("unsupported type %T", d))
 		}
-		b.variablePutbuf.WriteString("}")
-		b.writeLengthPrefixedVariablePutbuf()
-
-	default:
-		b.setError(errors.Errorf("unsupported type %T", d))
 	}
 }
 

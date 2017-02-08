@@ -200,7 +200,7 @@ func (s *seriesValueGenerator) Values() Datums {
 }
 
 func makeArrayGenerator(_ *EvalContext, args Datums) (ValueGenerator, error) {
-	arr := args[0].(*DArray)
+	arr := MustBeDArray(args[0])
 	return &arrayValueGenerator{array: arr}, nil
 }
 

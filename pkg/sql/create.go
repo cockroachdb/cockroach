@@ -1159,6 +1159,9 @@ func MakeTableDesc(
 				if _, ok := d.Type.(*parser.ArrayColType); ok {
 					return desc, util.UnimplementedWithIssueErrorf(2115, "ARRAY column types are unsupported")
 				}
+				if _, ok := d.Type.(*parser.VectorColType); ok {
+					return desc, util.UnimplementedWithIssueErrorf(2115, "VECTOR column types are unsupported")
+				}
 			}
 
 			col, idx, err := sqlbase.MakeColumnDefDescs(d, searchPath)

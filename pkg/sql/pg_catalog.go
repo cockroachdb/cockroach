@@ -798,7 +798,7 @@ CREATE TABLE pg_catalog.pg_index (
     indisready BOOL,
     indislive BOOL,
     indisreplident BOOL,
-    indkey INT[],
+    indkey INT2VECTOR,
     indcollation INT,
     indclass INT,
     indoption INT,
@@ -825,10 +825,11 @@ CREATE TABLE pg_catalog.pg_index (
 							}
 						}
 					}
-					indkey, err := colIDArrayToDatum(index.ColumnIDs)
+					indkeyArr, err := colIDArrayToDatum(index.ColumnIDs)
 					if err != nil {
 						return err
 					}
+					indkey := parser.NewDIntVectorFromDArray(indkeyArr.(*parser.DArray))
 					return addRow(
 						h.IndexOid(db, table, index), // indexrelid
 						tableOid,                     // indrelid
@@ -1248,8 +1249,8 @@ CREATE TABLE pg_catalog.pg_settings (
     reset_val STRING,
     sourcefile STRING,
     sourceline INT,
-    pending_restart BOOL  
-);    
+    pending_restart BOOL
+);
 `,
 	populate: func(p *planner, addRow func(...parser.Datum) error) error {
 		for _, vName := range varNames {
