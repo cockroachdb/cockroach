@@ -49,6 +49,7 @@ type rowHelper struct {
 	// Computed and cached.
 	primaryIndexKeyPrefix []byte
 	primaryIndexCols      map[sqlbase.ColumnID]struct{}
+	splitKeyCols          map[sqlbase.ColumnID]struct{}
 	sortedColumnFamilies  map[sqlbase.FamilyID][]sqlbase.ColumnID
 }
 
@@ -101,6 +102,19 @@ func (rh *rowHelper) columnInPK(colID sqlbase.ColumnID) bool {
 		}
 	}
 	_, ok := rh.primaryIndexCols[colID]
+	return ok
+}
+
+func (rh *rowHelper) isSplitKeyColumn(colID sqlbase.ColumnID) bool {
+	if rh.splitKeyCols == nil {
+		rh.splitKeyCols = make(map[sqlbase.ColumnID]struct{})
+		for _, col := range rh.tableDesc.Columns {
+			if col.Type.Kind == sqlbase.ColumnType_COLLATEDSTRING && rh.columnInPK(colID) {
+				rh.splitKeyCols[col.ID] = struct{}{}
+			}
+		}
+	}
+	_, ok := rh.splitKeyCols[colID]
 	return ok
 }
 
@@ -285,9 +299,14 @@ func (ri *RowInserter) InsertRow(
 				if family.ID != 0 {
 					return errors.Errorf("primary index column %d must be in family 0, was %d", colID, family.ID)
 				}
-				// Skip primary key columns as their values are encoded in the key of
-				// each family. Family 0 is guaranteed to exist and acts as a sentinel.
-				continue
+				if !ri.helper.isSplitKeyColumn(colID) {
+					// Skip primary key columns as their values are encoded in the key of
+					// each family. Family 0 is guaranteed to exist and acts as a
+					// sentinel.
+					continue
+				}
+				// Collated string key columns are encoded in both the key and the
+				// value.
 			}
 
 			idx, ok := ri.InsertColIDtoRowIndex[colID]
@@ -647,9 +666,14 @@ func (ru *rowUpdater) updateRow(
 				if family.ID != 0 {
 					return nil, errors.Errorf("primary index column %d must be in family 0, was %d", colID, family.ID)
 				}
-				// Skip primary key columns as their values are encoded in the key of
-				// each family. Family 0 is guaranteed to exist and acts as a sentinel.
-				continue
+				if !ru.helper.isSplitKeyColumn(colID) {
+					// Skip primary key columns as their values are encoded in the key of
+					// each family. Family 0 is guaranteed to exist and acts as a
+					// sentinel.
+					continue
+				}
+				// Collated string key columns are encoded in both the key and the
+				// value.
 			}
 
 			idx, ok := ru.fetchColIDtoRowIndex[colID]

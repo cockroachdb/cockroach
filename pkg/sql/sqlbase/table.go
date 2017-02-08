@@ -18,8 +18,6 @@ package sqlbase
 
 import (
 	"fmt"
-	"runtime/debug"
-	"strings"
 	"time"
 	"unicode/utf8"
 
@@ -470,16 +468,10 @@ func EncodeTableKey(b []byte, val parser.Datum, dir encoding.Direction) ([]byte,
 		}
 		return b, nil
 	case *parser.DCollatedString:
-		if !stackTraceContainsTesting() {
-			panic("collated strings cannot be used as keys yet (#2473)")
-		}
-		// TODO(eisen): assume for now that strings collating equal are identical.
-		// This assumption is violated when, e.g., the collation locale is case
-		// insensitive.
 		if dir == encoding.Ascending {
-			return encoding.EncodeStringAscending(b, t.Contents), nil
+			return encoding.EncodeBytesAscending(b, t.Key), nil
 		}
-		return encoding.EncodeStringDescending(b, t.Contents), nil
+		return encoding.EncodeBytesDescending(b, t.Key), nil
 	case *parser.DArray:
 		for _, datum := range t.Array {
 			var err error
@@ -1057,20 +1049,13 @@ func DecodeTableKey(
 		}
 		return a.NewDOid(parser.DInt(i)), rkey, err
 	default:
-		if typ, ok := valType.(parser.TCollatedString); ok {
-			if !stackTraceContainsTesting() {
-				panic("collated strings cannot be used as keys yet (#2473)")
-			}
-			// TODO(eisen): assume for now that strings collating equal are identical.
-			// This assumption is violated when, e.g., the collation locale is case
-			// insensitive.
+		if _, ok := valType.(parser.TCollatedString); ok {
 			var r string
-			if dir == encoding.Ascending {
-				rkey, r, err = encoding.DecodeUnsafeStringAscending(key, nil)
-			} else {
-				rkey, r, err = encoding.DecodeUnsafeStringDescending(key, nil)
+			_, r, err = encoding.DecodeUnsafeStringAscending(key, nil)
+			if err != nil {
+				return nil, nil, err
 			}
-			return parser.NewDCollatedString(r, typ.Locale, &a.env), rkey, err
+			return nil, nil, errors.Errorf("TODO(eisen): cannot decode collation key: %q", r)
 		}
 		return nil, nil, errors.Errorf("TODO(pmattis): decoded index key: %s", valType)
 	}
@@ -1189,6 +1174,7 @@ func EncodeSecondaryIndex(
 	// column ID suffix.
 	entry.Key = keys.MakeRowSentinelKey(entry.Key)
 
+	var entryValue []byte
 	if secondaryIndex.Unique {
 		// Note that a unique secondary index that contains a NULL column value
 		// will have extraKey appended to the key and stored in the value. We
@@ -1196,11 +1182,21 @@ func EncodeSecondaryIndex(
 		// unique. We could potentially get rid of the duplication here but at
 		// the expense of complicating scanNode when dealing with unique
 		// secondary indexes.
-		entry.Value.SetBytes(extraKey)
+		entryValue = extraKey
 	} else {
 		// The zero value for an index-key is a 0-length bytes value.
-		entry.Value.SetBytes([]byte{})
+		entryValue = []byte{}
 	}
+	// Collated strings have their contents encoded into the value.
+	for _, colID := range secondaryIndex.SplitKeyColumnIDs {
+		if val := values[colMap[colID]]; val == parser.DNull {
+			entryValue = encoding.EncodeNullAscending(entryValue)
+		} else {
+			entryValue = encoding.EncodeStringAscending(entryValue,
+				val.(*parser.DCollatedString).Contents)
+		}
+	}
+	entry.Value.SetBytes(entryValue)
 
 	return entry, nil
 }
@@ -1682,10 +1678,4 @@ func MakePrimaryIndexKey(desc *TableDescriptor, vals ...interface{}) (roachpb.Ke
 		return nil, err
 	}
 	return roachpb.Key(key), nil
-}
-
-// stackTraceContainsTesting tests whether the current stack trace appears to
-// contain test code.
-func stackTraceContainsTesting() bool {
-	return strings.Contains(string(debug.Stack()), "testing.")
 }

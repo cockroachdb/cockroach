@@ -121,6 +121,8 @@ var Aggregates = map[string][]Builtin{
 			"Concatenates all selected values."),
 		makeAggBuiltin(TypeBytes, TypeBytes, newBytesConcatAggregate,
 			"Concatenates all selected values."),
+		// TODO(eisen): support collated strings when the type system properly
+		// supports parametric types.
 	},
 
 	"count": {
