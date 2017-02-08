@@ -61,7 +61,7 @@ func (n *distinctNode) Start() error {
 }
 
 func (n *distinctNode) Columns() ResultColumns { return n.plan.Columns() }
-func (n *distinctNode) Values() parser.DTuple  { return n.plan.Values() }
+func (n *distinctNode) Values() parser.Datums  { return n.plan.Values() }
 func (n *distinctNode) Ordering() orderingInfo { return n.plan.Ordering() }
 
 func (n *distinctNode) MarkDebug(mode explainMode) {
@@ -152,8 +152,8 @@ func (n *distinctNode) Next() (bool, error) {
 }
 
 // TODO(irfansharif): This can be refactored away to use
-// sqlbase.EncodeDTuple([]byte, parser.DTuple)
-func (n *distinctNode) encodeValues(values parser.DTuple) ([]byte, []byte, error) {
+// sqlbase.EncodeDatums([]byte, parser.Datums)
+func (n *distinctNode) encodeValues(values parser.Datums) ([]byte, []byte, error) {
 	var prefix, suffix []byte
 	var err error
 	for i, val := range values {

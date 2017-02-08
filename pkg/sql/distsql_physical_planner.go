@@ -1763,7 +1763,7 @@ type distSQLReceiver struct {
 	// numRows counts the number of rows we received when rows is nil.
 	numRows int64
 	err     error
-	row     parser.DTuple
+	row     parser.Datums
 	alloc   sqlbase.DatumAlloc
 	closed  bool
 }
@@ -1780,7 +1780,7 @@ func (r *distSQLReceiver) PushRow(row sqlbase.EncDatumRow) bool {
 		return true
 	}
 	if r.row == nil {
-		r.row = make(parser.DTuple, len(r.resultToStreamColMap))
+		r.row = make(parser.Datums, len(r.resultToStreamColMap))
 	}
 	for i, resIdx := range r.resultToStreamColMap {
 		err := row[resIdx].EnsureDecoded(&r.alloc)

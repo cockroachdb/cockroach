@@ -67,7 +67,7 @@ func (p *planner) makeEditNode(
 type editNodeRun struct {
 	rows      planNode
 	tw        tableWriter
-	resultRow parser.DTuple
+	resultRow parser.Datums
 
 	explain explainMode
 }
@@ -349,7 +349,7 @@ func (p *planner) namesForExprs(exprs parser.UpdateExprs) (parser.UnresolvedName
 			case *parser.Tuple:
 				n = len(t.Exprs)
 			case *parser.DTuple:
-				n = len(*t)
+				n = len(t.D)
 			}
 			if n < 0 {
 				return nil, errors.Errorf("unsupported tuple assignment: %T", expr.Expr)
@@ -378,7 +378,7 @@ func (u *updateNode) Columns() ResultColumns {
 	return u.rh.columns
 }
 
-func (u *updateNode) Values() parser.DTuple {
+func (u *updateNode) Values() parser.Datums {
 	return u.run.resultRow
 }
 

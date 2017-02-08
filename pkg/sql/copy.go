@@ -51,7 +51,7 @@ type copyNode struct {
 
 func (n *copyNode) Columns() ResultColumns { return n.resultColumns }
 func (*copyNode) Ordering() orderingInfo   { return orderingInfo{} }
-func (*copyNode) Values() parser.DTuple    { return nil }
+func (*copyNode) Values() parser.Datums    { return nil }
 func (*copyNode) MarkDebug(_ explainMode)  {}
 func (*copyNode) Next() (bool, error)      { return false, nil }
 

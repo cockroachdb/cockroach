@@ -468,7 +468,7 @@ func (n *alterTableNode) Next() (bool, error)        { return false, nil }
 func (n *alterTableNode) Close()                     {}
 func (n *alterTableNode) Columns() ResultColumns     { return make(ResultColumns, 0) }
 func (n *alterTableNode) Ordering() orderingInfo     { return orderingInfo{} }
-func (n *alterTableNode) Values() parser.DTuple      { return parser.DTuple{} }
+func (n *alterTableNode) Values() parser.Datums      { return parser.Datums{} }
 func (n *alterTableNode) DebugValues() debugValues   { return debugValues{} }
 func (n *alterTableNode) MarkDebug(mode explainMode) {}
 
@@ -496,7 +496,7 @@ func applyColumnMutation(
 	return nil
 }
 
-func labeledRowValues(cols []sqlbase.ColumnDescriptor, values parser.DTuple) string {
+func labeledRowValues(cols []sqlbase.ColumnDescriptor, values parser.Datums) string {
 	var s bytes.Buffer
 	for i := range cols {
 		if i != 0 {

@@ -164,7 +164,7 @@ func (b *writeBuffer) writeTextDatum(d parser.Datum, sessionLoc *time.Location) 
 
 	case *parser.DTuple:
 		b.variablePutbuf.WriteString("(")
-		for i, d := range *v {
+		for i, d := range v.D {
 			if i > 0 {
 				b.variablePutbuf.WriteString(",")
 			}

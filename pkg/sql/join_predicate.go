@@ -58,7 +58,7 @@ type joinPredicate struct {
 	// and the expression itself.
 	iVarHelper parser.IndexedVarHelper
 	info       *dataSourceInfo
-	curRow     parser.DTuple
+	curRow     parser.Datums
 	onCond     parser.TypedExpr
 
 	// This struct must be allocated on the heap and its location stay
@@ -389,7 +389,7 @@ func (p *joinPredicate) IndexedVarFormat(buf *bytes.Buffer, f parser.FmtFlags, i
 // Returns true if there is no on condition or the on condition accepts the
 // row.
 func (p *joinPredicate) eval(
-	ctx *parser.EvalContext, result, leftRow, rightRow parser.DTuple,
+	ctx *parser.EvalContext, result, leftRow, rightRow parser.Datums,
 ) (bool, error) {
 	if p.onCond != nil {
 		p.curRow = result
@@ -428,7 +428,7 @@ func (p *joinPredicate) getNeededColumns(neededJoined []bool) ([]bool, []bool) {
 
 // prepareRow prepares the output row by combining values from the
 // input data sources.
-func (p *joinPredicate) prepareRow(result, leftRow, rightRow parser.DTuple) {
+func (p *joinPredicate) prepareRow(result, leftRow, rightRow parser.Datums) {
 	var offset int
 	for offset = 0; offset < p.numMergedEqualityColumns; offset++ {
 		// The result for merged columns must be computed as per COALESCE().
@@ -445,7 +445,7 @@ func (p *joinPredicate) prepareRow(result, leftRow, rightRow parser.DTuple) {
 
 // encode returns the encoding of a row from a given side (left or right),
 // according to the columns specified by the equality constraints.
-func (p *joinPredicate) encode(b []byte, row parser.DTuple, cols []int) ([]byte, bool, error) {
+func (p *joinPredicate) encode(b []byte, row parser.Datums, cols []int) ([]byte, bool, error) {
 	var err error
 	containsNull := false
 	for _, colIdx := range cols {

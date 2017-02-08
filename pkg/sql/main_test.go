@@ -202,7 +202,7 @@ func createTestServerParams() (base.TestServerArgs, *CommandFilters) {
 func init() {
 	testingPlanHook := func(
 		ctx context.Context, stmt parser.Statement, cfg *sql.ExecutorConfig,
-	) (func() ([]parser.DTuple, error), sql.ResultColumns, error) {
+	) (func() ([]parser.Datums, error), sql.ResultColumns, error) {
 		show, ok := stmt.(*parser.Show)
 		if !ok || show.Name != "planhook" {
 			return nil, nil, nil
@@ -210,8 +210,8 @@ func init() {
 		header := sql.ResultColumns{
 			{Name: "value", Typ: parser.TypeString},
 		}
-		return func() ([]parser.DTuple, error) {
-			return []parser.DTuple{
+		return func() ([]parser.Datums, error) {
+			return []parser.Datums{
 				{parser.NewDString(show.Name)},
 			}, nil
 		}, header, nil

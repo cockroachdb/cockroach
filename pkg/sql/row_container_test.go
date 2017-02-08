@@ -39,7 +39,7 @@ func TestRowContainer(t *testing.T) {
 				}
 				m := mon.MakeUnlimitedMonitor(context.Background(), "test", nil, nil, math.MaxInt64)
 				rc := NewRowContainer(m.MakeBoundAccount(context.Background()), resCol, 0)
-				row := make(parser.DTuple, numCols)
+				row := make(parser.Datums, numCols)
 				for i := 0; i < numRows; i++ {
 					for j := range row {
 						row[j] = parser.NewDInt(parser.DInt(i*numCols + j))

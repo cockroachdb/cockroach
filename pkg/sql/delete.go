@@ -217,7 +217,7 @@ func (d *deleteNode) Columns() ResultColumns {
 	return d.rh.columns
 }
 
-func (d *deleteNode) Values() parser.DTuple {
+func (d *deleteNode) Values() parser.Datums {
 	return d.run.resultRow
 }
 

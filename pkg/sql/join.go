@@ -39,7 +39,7 @@ const (
 // columns specified by the join constraints), 'seen' is used to determine if
 // there was a matching row in the opposite stream.
 type bucket struct {
-	rows []parser.DTuple
+	rows []parser.Datums
 	seen []bool
 }
 
@@ -47,7 +47,7 @@ func (b *bucket) Seen(i int) bool {
 	return b.seen[i]
 }
 
-func (b *bucket) Rows() []parser.DTuple {
+func (b *bucket) Rows() []parser.Datums {
 	return b.rows
 }
 
@@ -55,7 +55,7 @@ func (b *bucket) MarkSeen(i int) {
 	b.seen[i] = true
 }
 
-func (b *bucket) AddRow(row parser.DTuple) {
+func (b *bucket) AddRow(row parser.Datums) {
 	b.rows = append(b.rows, row)
 }
 
@@ -68,7 +68,7 @@ func (b *buckets) Buckets() map[string]*bucket {
 	return b.buckets
 }
 
-func (b *buckets) AddRow(acc WrappedMemoryAccount, encoding []byte, row parser.DTuple) error {
+func (b *buckets) AddRow(acc WrappedMemoryAccount, encoding []byte, row parser.Datums) error {
 	bk, ok := b.buckets[string(encoding)]
 	if !ok {
 		bk = &bucket{}
@@ -78,7 +78,7 @@ func (b *buckets) AddRow(acc WrappedMemoryAccount, encoding []byte, row parser.D
 	if err != nil {
 		return err
 	}
-	if err := acc.Grow(sizeOfDTuple); err != nil {
+	if err := acc.Grow(sizeOfDatums); err != nil {
 		return err
 	}
 	bk.AddRow(rowCopy)
@@ -132,7 +132,7 @@ type joinNode struct {
 	columns ResultColumns
 
 	// output contains the last generated row of results from this node.
-	output parser.DTuple
+	output parser.Datums
 
 	// buffer is our intermediate row store where we effectively 'stash' a batch
 	// of results at once, this is then used for subsequent calls to Next() and
@@ -144,11 +144,11 @@ type joinNode struct {
 
 	// emptyRight contain tuples of NULL values to use on the right for left and
 	// full outer joins when the on condition fails.
-	emptyRight parser.DTuple
+	emptyRight parser.Datums
 
 	// emptyLeft contains tuples of NULL values to use on the left for right and
 	// full outer joins when the on condition fails.
-	emptyLeft parser.DTuple
+	emptyLeft parser.Datums
 
 	// explain indicates whether this node is running on behalf of
 	// EXPLAIN(DEBUG).
@@ -302,18 +302,18 @@ func (n *joinNode) Start() error {
 	}
 
 	// Pre-allocate the space for output rows.
-	n.output = make(parser.DTuple, len(n.columns))
+	n.output = make(parser.Datums, len(n.columns))
 
 	// If needed, pre-allocate left and right rows of NULL tuples for when the
 	// join predicate fails to match.
 	if n.joinType == joinTypeLeftOuter || n.joinType == joinTypeFullOuter {
-		n.emptyRight = make(parser.DTuple, len(n.right.plan.Columns()))
+		n.emptyRight = make(parser.Datums, len(n.right.plan.Columns()))
 		for i := range n.emptyRight {
 			n.emptyRight[i] = parser.DNull
 		}
 	}
 	if n.joinType == joinTypeRightOuter || n.joinType == joinTypeFullOuter {
-		n.emptyLeft = make(parser.DTuple, len(n.left.plan.Columns()))
+		n.emptyLeft = make(parser.Datums, len(n.left.plan.Columns()))
 		for i := range n.emptyLeft {
 			n.emptyLeft[i] = parser.DNull
 		}
@@ -546,7 +546,7 @@ func (n *joinNode) Next() (res bool, err error) {
 }
 
 // Values implements the planNode interface.
-func (n *joinNode) Values() parser.DTuple {
+func (n *joinNode) Values() parser.Datums {
 	return n.buffer.Values()
 }
 

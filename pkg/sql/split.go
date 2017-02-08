@@ -132,10 +132,10 @@ func (n *splitNode) Next() (bool, error) {
 	return n.key != nil, nil
 }
 
-func (n *splitNode) Values() parser.DTuple {
+func (n *splitNode) Values() parser.Datums {
 	k := n.key
 	n.key = nil
-	return parser.DTuple{
+	return parser.Datums{
 		parser.NewDBytes(parser.DBytes(k)),
 		parser.NewDString(keys.PrettyPrint(k)),
 	}

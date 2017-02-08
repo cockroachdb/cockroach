@@ -45,7 +45,7 @@ func initWindowBuiltins() {
 // IndexedRow is a row with a corresponding index.
 type IndexedRow struct {
 	Idx int
-	Row DTuple
+	Row Datums
 }
 
 // WindowFrame is a view into a subset of data over which calculations are made.
@@ -82,11 +82,11 @@ func (wf WindowFrame) firstInPeerGroup() bool {
 	return wf.RowIdx == wf.FirstPeerIdx
 }
 
-func (wf WindowFrame) args() []Datum {
+func (wf WindowFrame) args() Datums {
 	return wf.argsWithRowOffset(0)
 }
 
-func (wf WindowFrame) argsWithRowOffset(offset int) []Datum {
+func (wf WindowFrame) argsWithRowOffset(offset int) Datums {
 	return wf.Rows[wf.RowIdx+offset].Row[wf.ArgIdxStart : wf.ArgIdxStart+wf.ArgCount]
 }
 

@@ -1232,7 +1232,7 @@ func makeResultScanner(cols []sql.ResultColumn) resultScanner {
 
 // IsNull returns whether the specified column of the given row contains
 // a SQL NULL value.
-func (rs resultScanner) IsNull(row parser.DTuple, col string) (bool, error) {
+func (rs resultScanner) IsNull(row parser.Datums, col string) (bool, error) {
 	idx, ok := rs.colNameToIdx[col]
 	if !ok {
 		return false, errors.Errorf("result is missing column %s", col)
@@ -1241,7 +1241,7 @@ func (rs resultScanner) IsNull(row parser.DTuple, col string) (bool, error) {
 }
 
 // ScanIndex scans the given column index of the given row into dst.
-func (rs resultScanner) ScanIndex(row parser.DTuple, index int, dst interface{}) error {
+func (rs resultScanner) ScanIndex(row parser.Datums, index int, dst interface{}) error {
 	src := row[index]
 
 	switch d := dst.(type) {
@@ -1304,7 +1304,7 @@ func (rs resultScanner) ScanIndex(row parser.DTuple, index int, dst interface{})
 }
 
 // Scan scans the column with the given name from the given row into dst.
-func (rs resultScanner) Scan(row parser.DTuple, colName string, dst interface{}) error {
+func (rs resultScanner) Scan(row parser.Datums, colName string, dst interface{}) error {
 	idx, ok := rs.colNameToIdx[colName]
 	if !ok {
 		return errors.Errorf("result is missing column %s", colName)

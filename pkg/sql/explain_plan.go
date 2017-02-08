@@ -108,7 +108,7 @@ func (p *planner) populateExplain(e *explainer, v *valuesNode, plan planNode) er
 			return
 		}
 
-		row := parser.DTuple{
+		row := parser.Datums{
 			parser.NewDInt(parser.DInt(level)),
 			parser.NewDString(name),
 			parser.NewDString(field),
@@ -270,7 +270,7 @@ type explainPlanNode struct {
 func (e *explainPlanNode) Next() (bool, error)        { return e.results.Next() }
 func (e *explainPlanNode) Columns() ResultColumns     { return e.results.Columns() }
 func (e *explainPlanNode) Ordering() orderingInfo     { return e.results.Ordering() }
-func (e *explainPlanNode) Values() parser.DTuple      { return e.results.Values() }
+func (e *explainPlanNode) Values() parser.Datums      { return e.results.Values() }
 func (e *explainPlanNode) DebugValues() debugValues   { return debugValues{} }
 func (e *explainPlanNode) MarkDebug(mode explainMode) {}
 func (e *explainPlanNode) Start() error {

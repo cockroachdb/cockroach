@@ -32,7 +32,7 @@ import (
 // execution.
 type planHookFn func(
 	context.Context, parser.Statement, *ExecutorConfig,
-) (fn func() ([]parser.DTuple, error), header ResultColumns, err error)
+) (fn func() ([]parser.Datums, error), header ResultColumns, err error)
 
 var planHooks []planHookFn
 
@@ -46,11 +46,11 @@ func AddPlanHook(f planHookFn) {
 // hookFnNode is a planNode implemented in terms of a function. It runs the
 // provided function during Start and serves the results it returned.
 type hookFnNode struct {
-	f func() ([]parser.DTuple, error)
+	f func() ([]parser.Datums, error)
 
 	header ResultColumns
 
-	res    []parser.DTuple
+	res    []parser.Datums
 	resIdx int
 }
 
@@ -76,7 +76,7 @@ func (f *hookFnNode) Next() (bool, error) {
 	f.resIdx++
 	return f.resIdx < len(f.res), nil
 }
-func (f *hookFnNode) Values() parser.DTuple { return f.res[f.resIdx] }
+func (f *hookFnNode) Values() parser.Datums { return f.res[f.resIdx] }
 
 func (*hookFnNode) DebugValues() debugValues {
 	return debugValues{
