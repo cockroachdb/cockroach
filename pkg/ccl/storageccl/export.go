@@ -41,7 +41,7 @@ func evalExport(
 	r := cArgs.Repl
 	reply := resp.(*roachpb.ExportResponse)
 
-	ctx, span := tracing.ChildSpan(ctx, fmt.Sprintf("ExportKeys %s-%s", args.Key, args.EndKey))
+	ctx, span := tracing.ChildSpan(ctx, fmt.Sprintf("Export %s-%s", args.Key, args.EndKey))
 	defer tracing.FinishSpan(span)
 
 	// If the startTime is zero, then we're doing a full backup and the gc
@@ -78,7 +78,7 @@ func evalExport(
 	defer func() {
 		if sst != nil {
 			if closeErr := sst.Close(); closeErr != nil {
-				log.Warningf(ctx, "could not close sst writer %s", path)
+				log.Warningf(ctx, "could not close sst writer %s: %+v", path, closeErr)
 			}
 		}
 	}()
@@ -94,7 +94,7 @@ func evalExport(
 		for ; iter.Valid(); iter.Next() {
 			key, value := iter.Key(), iter.Value()
 			if log.V(3) {
-				log.Infof(ctx, "ExportKeys %+v %+v", key, value)
+				log.Infof(ctx, "Export %+v %+v", key, value)
 			}
 			entries++
 			if err := sst.Add(engine.MVCCKeyValue{Key: key, Value: value}); err != nil {
@@ -114,6 +114,7 @@ func evalExport(
 	if entries == 0 {
 		// SSTables require at least one entry. It's silly to save an empty one,
 		// anyway.
+		sst = nil
 		reply.Files = []roachpb.ExportResponse_File{}
 		return storage.EvalResult{}, nil
 	}
