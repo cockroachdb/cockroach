@@ -226,7 +226,10 @@ func (tu *tableUpserter) init(txn *client.Txn) error {
 	tu.indexKeyPrefix = sqlbase.MakeIndexKeyPrefix(tu.tableDesc, tu.tableDesc.PrimaryIndex.ID)
 
 	allColsIdentityExpr := len(tu.ri.insertCols) == len(tu.tableDesc.Columns) &&
-		tu.evaler != nil && tu.evaler.isIdentityEvaler()
+		tu.evaler != nil && tu.evaler.isIdentityEvaler() &&
+		// Disable the upsert fast path when columns or indexes are being added
+		// or dropped.
+		len(tu.tableDesc.Mutations) == 0
 	if len(tu.tableDesc.Indexes) == 0 && allColsIdentityExpr {
 		tu.fastPathBatch = tu.txn.NewBatch()
 		tu.fastPathKeys = make(map[string]struct{})
