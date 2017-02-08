@@ -280,14 +280,26 @@ func TestPGWireDrainOngoingTxns(t *testing.T) {
 			t.Fatal(err)
 		}
 
+		// Overwrite the pgServer's cancel map to avoid race conditions in
+		// which the connection is canceled and closes itself before the
+		// pgServer stops waiting for connections to respond to cancellation.
+		realCancels := pgServer.OverwriteCancelMap()
+
 		// Set draining with no drainWait or cancelWait timeout. The expected
 		// behavior is that the ongoing session is immediately cancelled but
-		// pgServer won't wait for the connection to close properly and notify
-		// the caller that a session did not respond to cancellation.
+		// since we overwrote the context.CancelFunc, this cancellation will
+		// not have any effect. The pgServer will not bother to wait for the
+		// connection to close properly and should notify the caller that a
+		// session did not respond to cancellation.
 		if err := pgServer.SetDrainingImpl(
 			true, 0 /* drainWait */, 0, /* cancelWait */
 		); !testutils.IsError(err, "some sessions did not respond to cancellation") {
 			t.Fatalf("unexpected error: %v", err)
+		}
+
+		// Actually cancel the connection.
+		for _, cancel := range realCancels {
+			cancel()
 		}
 
 		// Make sure that the connection was disrupted. A retry loop is needed
