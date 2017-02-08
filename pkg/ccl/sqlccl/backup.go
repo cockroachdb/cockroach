@@ -10,12 +10,7 @@ package sqlccl
 
 import (
 	"bytes"
-	"fmt"
-	"hash/crc32"
-	"io"
 	"io/ioutil"
-	"math/rand"
-	"os"
 	"sort"
 	"strings"
 
@@ -34,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/interval"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/pkg/errors"
 )
@@ -202,22 +198,55 @@ func Backup(
 			tables = append(tables, tableDesc)
 		}
 	}
+	spans := spansForAllTableIndexes(tables)
 
-	desc := BackupDescriptor{StartTime: startTime, EndTime: endTime, Descriptors: sqlDescs}
-	desc.Spans = spansForAllTableIndexes(tables)
-	for _, span := range desc.Spans {
-		file, dataSize, err := export(ctx, db, startTime, endTime, span, exportStore)
-		if err != nil {
-			return BackupDescriptor{}, err
-		}
-		if file.Path == "" {
-			if log.V(1) {
-				log.Infof(ctx, "skipped backup of empty range %s", file.Span)
+	mu := struct {
+		syncutil.Mutex
+		files    []BackupDescriptor_File
+		dataSize int64
+	}{}
+
+	var wg util.WaitGroupWithError
+	header := roachpb.Header{Timestamp: endTime}
+	storageConf := exportStore.Conf()
+	for i := range spans {
+		wg.Add(1)
+		go func(span roachpb.Span) {
+			req := &roachpb.ExportRequest{
+				Span:      span,
+				Storage:   storageConf,
+				StartTime: startTime,
 			}
-			continue
-		}
-		desc.Files = append(desc.Files, file)
-		desc.DataSize += dataSize
+			res, pErr := client.SendWrappedWith(ctx, db.GetSender(), header, req)
+			if pErr != nil {
+				wg.Done(pErr.GoError())
+				return
+			}
+			mu.Lock()
+			defer mu.Unlock()
+			for _, file := range res.(*roachpb.ExportResponse).Files {
+				mu.files = append(mu.files, BackupDescriptor_File{
+					Span: file.Span,
+					Path: file.Path,
+					CRC:  file.CRC,
+				})
+				mu.dataSize += file.DataSize
+			}
+			wg.Done(nil)
+		}(spans[i])
+	}
+	if err := wg.Wait(); err != nil {
+		return BackupDescriptor{}, errors.Wrapf(err, "exporting %d ranges", len(spans))
+	}
+	files, dataSize := mu.files, mu.dataSize // No more concurrency, so this is safe.
+
+	desc := BackupDescriptor{
+		StartTime:   startTime,
+		EndTime:     endTime,
+		Descriptors: sqlDescs,
+		Spans:       spans,
+		Files:       files,
+		DataSize:    dataSize,
 	}
 	sort.Sort(backupFileDescriptors(desc.Files))
 
@@ -238,108 +267,6 @@ func Backup(
 	}
 
 	return desc, nil
-}
-
-// export dumps the requested kv entries into files of non-overlapping key
-// ranges in a format suitable for bulk import. Returns a descriptor of the
-// exported file and the number of exported bytes.
-func export(
-	ctx context.Context,
-	db client.DB,
-	startTime, endTime hlc.Timestamp,
-	span roachpb.Span,
-	exportStore storageccl.ExportStorage,
-) (BackupDescriptor_File, int64, error) {
-	// TODO(dan): Use the NodeID of where this came from instead of rand.Int63.
-	filename := fmt.Sprintf("%d.sst", rand.Int63())
-	writer, err := exportStore.PutFile(ctx, filename)
-	if err != nil {
-		return BackupDescriptor_File{}, 0, err
-	}
-	path := writer.LocalFile()
-	defer writer.Cleanup()
-
-	sstWriter := engine.MakeRocksDBSstFileWriter()
-	sst := &sstWriter
-	if err := sst.Open(path); err != nil {
-		return BackupDescriptor_File{}, 0, err
-	}
-	defer func() {
-		if sst != nil {
-			if closeErr := sst.Close(); closeErr != nil {
-				log.Warningf(ctx, "could not close sst writer %s", path)
-			}
-		}
-	}()
-
-	var kvs []client.KeyValue
-
-	txn := client.NewTxn(ctx, db)
-	opt := client.TxnExecOptions{
-		AutoRetry:  true,
-		AutoCommit: true,
-	}
-	err = txn.Exec(opt, func(txn *client.Txn, opt *client.TxnExecOptions) error {
-		var err error
-		sql.SetTxnTimestamps(txn, endTime)
-
-		// TODO(dan): Iterate with some batch size.
-		kvs, err = txn.Scan(span.Key, span.EndKey, 0)
-		return err
-	})
-	if err != nil {
-		return BackupDescriptor_File{}, 0, err
-	}
-	if len(kvs) == 0 {
-		// SSTables require at least one entry. It's silly to save an empty one,
-		// anyway.
-		return BackupDescriptor_File{}, 0, nil
-	}
-
-	var dataSize int64
-	for _, kv := range kvs {
-		mvccKV := engine.MVCCKeyValue{
-			Key:   engine.MVCCKey{Key: kv.Key, Timestamp: kv.Value.Timestamp},
-			Value: kv.Value.RawBytes,
-		}
-		if log.V(3) {
-			log.Infof(ctx, "export %+v %+v", mvccKV.Key, mvccKV.Value)
-		}
-		if err := sst.Add(mvccKV); err != nil {
-			return BackupDescriptor_File{}, 0, errors.Wrapf(err, "adding key %s", mvccKV.Key)
-		}
-		dataSize += int64(len(kv.Key) + len(kv.Value.RawBytes))
-	}
-
-	if err := sst.Close(); err != nil {
-		return BackupDescriptor_File{}, 0, err
-	}
-	sst = nil
-	// The data we've written to sst isn't leaked on errors below because the
-	// deferred writer.Cleanup above removes it.
-
-	crc := crc32.New(crc32.MakeTable(crc32.Castagnoli))
-	f, err := os.Open(path)
-	if err != nil {
-		return BackupDescriptor_File{}, 0, err
-	}
-	if _, err := io.Copy(crc, f); err != nil {
-		f.Close()
-		return BackupDescriptor_File{}, 0, err
-	}
-	f.Close()
-
-	if err := writer.Finish(); err != nil {
-		return BackupDescriptor_File{}, 0, err
-	}
-
-	res := BackupDescriptor_File{
-		Span: span,
-		Path: filename,
-		CRC:  crc.Sum32(),
-	}
-
-	return res, dataSize, nil
 }
 
 type importFile struct {
