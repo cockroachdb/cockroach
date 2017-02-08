@@ -26,6 +26,7 @@ interface ClusterOverviewState {
 }
 
 let dashboards = [
+  { value: "overview", label: "Overview" },
   { value: "runtime", label: "Runtime" },
   { value: "sql", label: "SQL" },
   { value: "storage", label: "Storage" },

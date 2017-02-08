@@ -103,7 +103,7 @@ ReactDOM.render(
       <Route path="/" component={Layout}>
         <IndexRedirect to="cluster" />
         <Route path="cluster" component={ Nodes }>
-          <IndexRedirect to="all/runtime" />
+          <IndexRedirect to="all/overview" />
           <Route path={`all/:${dashboardNameAttr}`} component={NodeGraphs} />
           <Route path={ `node/:${nodeIDAttr}/:${dashboardNameAttr}` } component={NodeGraphs} />
         </Route>
