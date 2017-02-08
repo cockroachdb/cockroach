@@ -37,7 +37,7 @@ eexpect ":/# "
 
 # Check that --alsologtostderr can override the threshold
 # regardless of what --logtostderr has set.
-send "echo marker; $argv start --alsologtostderr=ERROR $silence_prop_eval_kv\r"
+send "echo marker; $argv start --alsologtostderr=ERROR\r"
 eexpect "marker\r\nCockroachDB node starting"
 
 # Stop it.
@@ -45,7 +45,7 @@ interrupt
 interrupt
 eexpect ":/# "
 
-send "echo marker; $argv start --alsologtostderr=ERROR --logtostderr $silence_prop_eval_kv\r"
+send "echo marker; $argv start --alsologtostderr=ERROR --logtostderr\r"
 eexpect "marker\r\nCockroachDB node starting"
 
 # Stop it.
@@ -53,7 +53,7 @@ interrupt
 interrupt
 eexpect ":/# "
 
-send "echo marker; $argv start --alsologtostderr=ERROR --logtostderr=false $silence_prop_eval_kv\r"
+send "echo marker; $argv start --alsologtostderr=ERROR --logtostderr=false\r"
 eexpect "marker\r\nCockroachDB node starting"
 
 # Stop it.
@@ -67,7 +67,7 @@ send "$argv start >/dev/null 2>&1 & sleep 1\r"
 # Now test `quit` as non-start command, and test that `quit` does not
 # emit logging output between the point the command starts until it
 # prints the final ok message.
-send "echo marker; $argv quit $silence_prop_eval_kv\r"
+send "echo marker; $argv quit\r"
 set timeout 20
 eexpect "marker\r\nok\r\n:/# "
 set timeout 5
@@ -76,7 +76,7 @@ set timeout 5
 # that the default logging level is WARNING, so that no INFO messages
 # are printed between the marker and the (first line) error message
 # from quit. Quit will error out because the server is already stopped.
-send "echo marker; $argv quit --logtostderr $silence_prop_eval_kv\r"
+send "echo marker; $argv quit --logtostderr\r"
 eexpect "marker\r\nError"
 eexpect ":/# "
 
