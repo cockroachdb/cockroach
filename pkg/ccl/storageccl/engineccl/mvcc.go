@@ -9,12 +9,11 @@
 package engineccl
 
 import (
-	"errors"
-
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/pkg/errors"
 )
 
 // MVCCIncrementalIterator iterates over the diff of the key range [start,end)
@@ -110,7 +109,8 @@ func (i *MVCCIncrementalIterator) Next() {
 			// for backup, so they're not handled by this method. If one shows
 			// up, throw an error so it's obvious something is wrong.
 			i.valid = false
-			i.err = errors.New("inline values are unsupported by MVCCIncrementalIterator")
+			i.err = errors.Errorf("inline values are unsupported by MVCCIncrementalIterator: %s",
+				metaKey.Key)
 			return
 		}
 		if metaKey.Key == nil {
