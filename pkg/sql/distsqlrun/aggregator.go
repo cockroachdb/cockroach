@@ -64,7 +64,6 @@ func GetAggregateInfo(
 // accompanying SELECT expressions.
 type aggregator struct {
 	input       RowSource
-	ctx         context.Context
 	funcs       []*aggregateFuncHolder
 	outputTypes []sqlbase.ColumnType
 	datumAlloc  sqlbase.DatumAlloc
@@ -87,7 +86,6 @@ func newAggregator(
 ) (*aggregator, error) {
 	ag := &aggregator{
 		input:       input,
-		ctx:         log.WithLogTag(flowCtx.Context, "Agg", nil),
 		buckets:     make(map[string]struct{}),
 		inputCols:   make(columns, len(spec.Aggregations)),
 		funcs:       make([]*aggregateFuncHolder, len(spec.Aggregations)),
@@ -127,12 +125,13 @@ func newAggregator(
 }
 
 // Run is part of the processor interface.
-func (ag *aggregator) Run(wg *sync.WaitGroup) {
+func (ag *aggregator) Run(ctx context.Context, wg *sync.WaitGroup) {
 	if wg != nil {
 		defer wg.Done()
 	}
 
-	ctx, span := tracing.ChildSpan(ag.ctx, "aggregator")
+	ctx = log.WithLogTag(ctx, "Agg", nil)
+	ctx, span := tracing.ChildSpan(ctx, "aggregator")
 	defer tracing.FinishSpan(span)
 
 	if log.V(2) {

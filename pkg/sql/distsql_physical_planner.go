@@ -1930,14 +1930,14 @@ func (dsp *distSQLPlanner) PlanAndRun(
 	if err := distsqlrun.SetFlowRequestTrace(ctx, &localReq); err != nil {
 		return err
 	}
-	flow, err := dsp.distSQLSrv.SetupSyncFlow(ctx, &localReq, recv)
+	ctx, flow, err := dsp.distSQLSrv.SetupSyncFlow(ctx, &localReq, recv)
 	if err != nil {
 		return err
 	}
 	// TODO(radu): this should go through the flow scheduler.
-	flow.Start(func() {})
+	flow.Start(ctx, func() {})
 	flow.Wait()
-	flow.Cleanup()
+	flow.Cleanup(ctx)
 
 	return nil
 }
