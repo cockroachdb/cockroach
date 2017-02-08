@@ -19,6 +19,8 @@ package distsqlrun
 import (
 	"container/list"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -42,6 +44,12 @@ type flowScheduler struct {
 	}
 }
 
+// runFlowNode stores a flow to run and a context to run it with.
+type runFlowNode struct {
+	ctx  context.Context
+	flow *Flow
+}
+
 func newFlowScheduler(ambient log.AmbientContext, stopper *stop.Stopper) *flowScheduler {
 	fs := &flowScheduler{
 		AmbientContext: ambient,
@@ -59,28 +67,31 @@ func (fs *flowScheduler) canRunFlow(_ *Flow) bool {
 }
 
 // runFlowNow starts the given flow; does not wait for the flow to complete.
-func (fs *flowScheduler) runFlowNow(f *Flow) {
+func (fs *flowScheduler) runFlowNow(ctx context.Context, f *Flow) {
 	fs.mu.numRunning++
-	f.Start(func() { fs.flowDoneCh <- f })
+	f.Start(ctx, func() { fs.flowDoneCh <- f })
 	// TODO(radu): we could replace the WaitGroup with a structure that keeps a
 	// refcount and automatically runs Cleanup() when the count reaches 0.
 	go func() {
 		f.Wait()
-		f.Cleanup()
+		f.Cleanup(ctx)
 	}()
 }
 
 // ScheduleFlow is the main interface of the flow scheduler: it runs or enqueues
 // the given flow.
-func (fs *flowScheduler) ScheduleFlow(f *Flow) error {
+func (fs *flowScheduler) ScheduleFlow(ctx context.Context, f *Flow) error {
 	return fs.stopper.RunTask(func() {
 		fs.mu.Lock()
 		defer fs.mu.Unlock()
 
 		if fs.canRunFlow(f) {
-			fs.runFlowNow(f)
+			fs.runFlowNow(ctx, f)
 		} else {
-			fs.mu.queue.PushBack(f)
+			fs.mu.queue.PushBack(&runFlowNode{
+				ctx:  ctx,
+				flow: f,
+			})
 		}
 	})
 }
@@ -104,9 +115,9 @@ func (fs *flowScheduler) Start() {
 				fs.mu.numRunning--
 				if !stopped {
 					if frElem := fs.mu.queue.Front(); frElem != nil {
-						f := frElem.Value.(*Flow)
+						n := frElem.Value.(*runFlowNode)
 						fs.mu.queue.Remove(frElem)
-						fs.runFlowNow(f)
+						fs.runFlowNow(n.ctx, n.flow)
 					}
 				}
 

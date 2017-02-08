@@ -20,6 +20,8 @@ import (
 	"errors"
 	"sync"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
@@ -70,12 +72,13 @@ func newMergeJoiner(
 }
 
 // Run is part of the processor interface.
-func (m *mergeJoiner) Run(wg *sync.WaitGroup) {
+func (m *mergeJoiner) Run(ctx context.Context, wg *sync.WaitGroup) {
 	if wg != nil {
 		defer wg.Done()
 	}
 
-	ctx, span := tracing.ChildSpan(m.ctx, "merge joiner")
+	ctx = m.ctxWithJoinerTag(ctx)
+	ctx, span := tracing.ChildSpan(ctx, "merge joiner")
 	defer tracing.FinishSpan(span)
 
 	if log.V(2) {

@@ -71,7 +71,7 @@ func (ds *ServerImpl) Start() {
 
 func (ds *ServerImpl) setupFlow(
 	ctx context.Context, req *SetupFlowRequest, syncFlowConsumer RowReceiver,
-) (*Flow, error) {
+) (context.Context, *Flow, error) {
 	const opName = "flow"
 	var sp opentracing.Span
 	if req.TraceContext == nil {
@@ -93,7 +93,6 @@ func (ds *ServerImpl) setupFlow(
 	// TODO(radu): we should sanity check some of these fields (especially
 	// txnProto).
 	flowCtx := FlowCtx{
-		Context:  ctx,
 		id:       req.Flow.FlowID,
 		evalCtx:  &ds.evalCtx,
 		rpcCtx:   ds.RPCContext,
@@ -102,12 +101,13 @@ func (ds *ServerImpl) setupFlow(
 	}
 
 	f := newFlow(flowCtx, ds.flowRegistry, syncFlowConsumer)
-	if err := f.setupFlow(&req.Flow); err != nil {
+	ctx = log.WithLogTagStr(ctx, "f", f.id.Short())
+	if err := f.setupFlow(ctx, &req.Flow); err != nil {
 		log.Error(ctx, err)
 		sp.Finish()
-		return nil, err
+		return nil, nil, err
 	}
-	return f, nil
+	return ctx, f, nil
 }
 
 // SetupSyncFlow sets up a synchoronous flow, connecting the sync response
@@ -115,7 +115,7 @@ func (ds *ServerImpl) setupFlow(
 // will be associated with the given context.
 func (ds *ServerImpl) SetupSyncFlow(
 	ctx context.Context, req *SetupFlowRequest, output RowReceiver,
-) (*Flow, error) {
+) (context.Context, *Flow, error) {
 	return ds.setupFlow(ds.AnnotateCtx(ctx), req, output)
 }
 
@@ -125,7 +125,7 @@ func (ds *ServerImpl) RunSyncFlow(req *SetupFlowRequest, stream DistSQL_RunSyncF
 	mbox := newOutboxSyncFlowStream(stream)
 	ctx := ds.AnnotateCtx(stream.Context())
 
-	f, err := ds.SetupSyncFlow(ctx, req, mbox)
+	ctx, f, err := ds.SetupSyncFlow(ctx, req, mbox)
 	if err != nil {
 		log.Error(ctx, err)
 		return err
@@ -134,10 +134,10 @@ func (ds *ServerImpl) RunSyncFlow(req *SetupFlowRequest, stream DistSQL_RunSyncF
 
 	if err := ds.Stopper.RunTask(func() {
 		f.waitGroup.Add(1)
-		mbox.start(&f.waitGroup)
-		f.Start(func() {})
+		mbox.start(ctx, &f.waitGroup)
+		f.Start(ctx, func() {})
 		f.Wait()
-		f.Cleanup()
+		f.Cleanup(ctx)
 	}); err != nil {
 		return err
 	}
@@ -149,11 +149,12 @@ func (ds *ServerImpl) SetupFlow(_ context.Context, req *SetupFlowRequest) (*Simp
 	// Note: the passed context will be canceled when this RPC completes, so we
 	// can't associate it with the flow.
 	ctx := ds.AnnotateCtx(context.TODO())
-	f, err := ds.setupFlow(ctx, req, nil)
+	ctx, f, err := ds.setupFlow(ctx, req, nil)
 	if err != nil {
 		return nil, err
 	}
-	if err := ds.flowScheduler.ScheduleFlow(f); err != nil {
+
+	if err := ds.flowScheduler.ScheduleFlow(ctx, f); err != nil {
 		return nil, err
 	}
 	return &SimpleResponse{}, nil
@@ -176,13 +177,13 @@ func (ds *ServerImpl) flowStreamInt(ctx context.Context, stream DistSQL_FlowStre
 	if log.V(1) {
 		log.Infof(ctx, "connecting inbound stream %s/%d", flowID.Short(), streamID)
 	}
-	f, streamInfo, err := ds.flowRegistry.ConnectInboundStream(flowID, streamID)
+	streamInfo, err := ds.flowRegistry.ConnectInboundStream(flowID, streamID)
 	if err != nil {
 		return err
 	}
 	log.VEventf(ctx, 1, "connected inbound stream %s/%d", flowID.Short(), streamID)
 	defer ds.flowRegistry.FinishInboundStream(streamInfo)
-	return ProcessInboundStream(&f.FlowCtx, stream, msg, streamInfo.receiver)
+	return ProcessInboundStream(ctx, stream, msg, streamInfo.receiver)
 }
 
 // FlowStream is part of the DistSQLServer interface.

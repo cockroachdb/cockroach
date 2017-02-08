@@ -111,7 +111,6 @@ func TestTableReader(t *testing.T) {
 		ts.Table = *td
 
 		flowCtx := FlowCtx{
-			Context:  context.Background(),
 			evalCtx:  &parser.EvalContext{},
 			txnProto: &roachpb.Transaction{},
 			clientDB: kvDB,
@@ -122,7 +121,7 @@ func TestTableReader(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		tr.Run(nil)
+		tr.Run(context.Background(), nil)
 		if out.Err != nil {
 			t.Fatal(out.Err)
 		}

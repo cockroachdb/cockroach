@@ -25,7 +25,6 @@ import (
 )
 
 type joinerBase struct {
-	ctx                     context.Context
 	leftSource, rightSource RowSource
 
 	joinType    joinType
@@ -48,7 +47,6 @@ func (jb *joinerBase) init(
 ) error {
 	jb.leftSource = leftSource
 	jb.rightSource = rightSource
-	jb.ctx = log.WithLogTag(flowCtx.Context, "Joiner", nil)
 	jb.joinType = joinType(jType)
 
 	leftTypes := leftSource.Types()
@@ -118,4 +116,8 @@ func (jb *joinerBase) render(
 		jb.combinedRow = append(jb.combinedRow[:len(lrow)], jb.emptyRight...)
 	}
 	return jb.combinedRow, !res, nil
+}
+
+func (jb *joinerBase) ctxWithJoinerTag(ctx context.Context) context.Context {
+	return log.WithLogTag(ctx, "Joiner", nil)
 }

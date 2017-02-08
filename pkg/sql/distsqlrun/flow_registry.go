@@ -21,6 +21,8 @@ import (
 	"sync"
 	"time"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/pkg/errors"
@@ -121,7 +123,7 @@ func (fr *flowRegistry) releaseEntryLocked(id FlowID) {
 // It is expected that UnregisterFlow will be called at some point to remove the
 // flow from the registry.
 func (fr *flowRegistry) RegisterFlow(
-	id FlowID, f *Flow, inboundStreams map[StreamID]*inboundStreamInfo,
+	ctx context.Context, id FlowID, f *Flow, inboundStreams map[StreamID]*inboundStreamInfo,
 ) {
 	fr.Lock()
 	defer fr.Unlock()
@@ -156,8 +158,12 @@ func (fr *flowRegistry) RegisterFlow(
 				}
 			}
 			if numTimedOut != 0 {
-				log.Errorf(entry.flow.Context, "%d inbound streams timed out after %s; stopping flow",
-					numTimedOut, flowStreamTimeout)
+				log.Errorf(
+					ctx,
+					"%d inbound streams timed out after %s; stopping flow",
+					numTimedOut,
+					flowStreamTimeout,
+				)
 			}
 		})
 	}
@@ -234,26 +240,26 @@ func (fr *flowRegistry) LookupFlow(id FlowID, timeout time.Duration) *Flow {
 // transferred.
 func (fr *flowRegistry) ConnectInboundStream(
 	flowID FlowID, streamID StreamID,
-) (*Flow, *inboundStreamInfo, error) {
+) (*inboundStreamInfo, error) {
 	fr.Lock()
 	defer fr.Unlock()
 	entry := fr.waitForFlowLocked(flowID, flowStreamTimeout)
 	if entry == nil {
-		return nil, nil, errors.Errorf("flow %s not found", flowID)
+		return nil, errors.Errorf("flow %s not found", flowID)
 	}
 
 	s, ok := entry.inboundStreams[streamID]
 	if !ok {
-		return nil, nil, errors.Errorf("flow %s: no inbound stream %d", flowID, streamID)
+		return nil, errors.Errorf("flow %s: no inbound stream %d", flowID, streamID)
 	}
 	if s.connected {
-		return nil, nil, errors.Errorf("flow %s: inbound stream %d already connected", flowID, streamID)
+		return nil, errors.Errorf("flow %s: inbound stream %d already connected", flowID, streamID)
 	}
 	if s.timedOut {
-		return nil, nil, errors.Errorf("flow %s: inbound stream %d came too late", flowID, streamID)
+		return nil, errors.Errorf("flow %s: inbound stream %d came too late", flowID, streamID)
 	}
 	s.connected = true
-	return entry.flow, s, nil
+	return s, nil
 }
 
 func (fr *flowRegistry) finishInboundStreamLocked(is *inboundStreamInfo) {

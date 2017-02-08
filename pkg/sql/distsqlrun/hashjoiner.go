@@ -77,12 +77,13 @@ func newHashJoiner(
 }
 
 // Run is part of the processor interface.
-func (h *hashJoiner) Run(wg *sync.WaitGroup) {
+func (h *hashJoiner) Run(ctx context.Context, wg *sync.WaitGroup) {
 	if wg != nil {
 		defer wg.Done()
 	}
 
-	ctx, span := tracing.ChildSpan(h.ctx, "hash joiner")
+	ctx = h.ctxWithJoinerTag(ctx)
+	ctx, span := tracing.ChildSpan(ctx, "hash joiner")
 	defer tracing.FinishSpan(span)
 
 	if log.V(2) {

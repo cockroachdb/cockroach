@@ -35,7 +35,6 @@ type sorter struct {
 	ordering sqlbase.ColumnOrdering
 	matchLen uint32
 	limit    int64
-	ctx      context.Context
 }
 
 var _ processor = &sorter{}
@@ -48,7 +47,6 @@ func newSorter(
 		ordering: convertToColumnOrdering(spec.OutputOrdering),
 		matchLen: spec.OrderingMatchLen,
 		limit:    spec.Limit,
-		ctx:      log.WithLogTag(flowCtx.Context, "Sorter", nil),
 	}
 	if err := s.out.init(post, input.Types(), flowCtx.evalCtx, output); err != nil {
 		return nil, err
@@ -57,12 +55,13 @@ func newSorter(
 }
 
 // Run is part of the processor interface.
-func (s *sorter) Run(wg *sync.WaitGroup) {
+func (s *sorter) Run(ctx context.Context, wg *sync.WaitGroup) {
 	if wg != nil {
 		defer wg.Done()
 	}
 
-	ctx, span := tracing.ChildSpan(s.ctx, "sorter")
+	ctx = log.WithLogTag(ctx, "Sorter", nil)
+	ctx, span := tracing.ChildSpan(ctx, "sorter")
 	defer tracing.FinishSpan(span)
 
 	if log.V(2) {
@@ -79,7 +78,7 @@ func (s *sorter) Run(wg *sync.WaitGroup) {
 			&sorterValues{
 				ordering: s.ordering,
 			})
-		err := ss.Execute(s)
+		err := ss.Execute(ctx, s)
 		if err != nil {
 			log.Errorf(ctx, "error sorting rows in memory: %s", err)
 		}
@@ -93,7 +92,7 @@ func (s *sorter) Run(wg *sync.WaitGroup) {
 			&sorterValues{
 				ordering: s.ordering,
 			}, s.limit)
-		err := ss.Execute(s)
+		err := ss.Execute(ctx, s)
 		if err != nil {
 			log.Errorf(ctx, "error sorting rows: %s", err)
 		}
@@ -108,7 +107,7 @@ func (s *sorter) Run(wg *sync.WaitGroup) {
 			&sorterValues{
 				ordering: s.ordering,
 			})
-		err := ss.Execute(s)
+		err := ss.Execute(ctx, s)
 		if err != nil {
 			log.Errorf(ctx, "error sorting rows: %s", err)
 		}

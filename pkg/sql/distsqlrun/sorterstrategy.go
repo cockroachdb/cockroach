@@ -19,6 +19,8 @@ package distsqlrun
 import (
 	"container/heap"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/pkg/errors"
@@ -26,7 +28,7 @@ import (
 
 type sorterStrategy interface {
 	// Execute runs the main execution loop of the strategy on a given sorter.
-	Execute(*sorter) error
+	Execute(context.Context, *sorter) error
 
 	// Add adds a single element to the strategy.
 	Add(sqlbase.EncDatumRow)
@@ -99,7 +101,7 @@ func newSortAllStrategy(sValues *sorterValues) sorterStrategy {
 // The execution loop for the SortAll strategy is trivial in that it simply
 // loads all rows into memory, runs sort.Sort to sort rows in place following
 // which it sends each row out to the output stream.
-func (ss *sortAllStrategy) Execute(s *sorter) error {
+func (ss *sortAllStrategy) Execute(ctx context.Context, s *sorter) error {
 	for {
 		row, err := s.input.NextRow()
 		if err != nil {
@@ -123,7 +125,7 @@ func (ss *sortAllStrategy) Execute(s *sorter) error {
 		}
 
 		// Push the row to the output; stop if they don't need more rows.
-		if !s.out.emitRow(s.ctx, row) {
+		if !s.out.emitRow(ctx, row) {
 			break
 		}
 	}
@@ -170,7 +172,7 @@ func newSortTopKStrategy(sValues *sorterValues, k int64) sorterStrategy {
 // The execution loop for the SortTopK strategy is completely identical to that
 // of the SortAll strategy, the key difference comes about in the Push
 // implementation shown below.
-func (ss *sortTopKStrategy) Execute(s *sorter) error {
+func (ss *sortTopKStrategy) Execute(ctx context.Context, s *sorter) error {
 	for {
 		row, err := s.input.NextRow()
 		if err != nil {
@@ -193,7 +195,7 @@ func (ss *sortTopKStrategy) Execute(s *sorter) error {
 			break
 		}
 		// Push the row to the output; stop if they don't need more rows.
-		if !s.out.emitRow(s.ctx, row) {
+		if !s.out.emitRow(ctx, row) {
 			break
 		}
 	}
@@ -232,7 +234,7 @@ func newSortChunksStrategy(sValues *sorterValues) sorterStrategy {
 	}
 }
 
-func (ss *sortChunksStrategy) Execute(s *sorter) error {
+func (ss *sortChunksStrategy) Execute(ctx context.Context, s *sorter) error {
 	// pivoted is a helper function that determines if the given row shares the same values for the
 	// first s.matchLen ordering columns with the given pivot.
 	pivoted := func(row, pivot sqlbase.EncDatumRow) (bool, error) {
@@ -257,7 +259,7 @@ func (ss *sortChunksStrategy) Execute(s *sorter) error {
 		// for the first s.matchLen ordering columns.
 		for {
 			if log.V(3) {
-				log.Infof(s.ctx, "pushing row %s", nextRow)
+				log.Infof(ctx, "pushing row %s", nextRow)
 			}
 			ss.Add(nextRow)
 
@@ -299,7 +301,7 @@ func (ss *sortChunksStrategy) Execute(s *sorter) error {
 				break
 			}
 
-			if !s.out.emitRow(s.ctx, res) {
+			if !s.out.emitRow(ctx, res) {
 				// We don't need any more rows; clear out ss so to not hold on to that memory.
 				ss = &sortChunksStrategy{}
 				return nil
