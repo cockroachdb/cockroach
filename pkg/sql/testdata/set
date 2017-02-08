@@ -36,7 +36,7 @@ SET DATABASE = ""
 query T colnames
 SHOW DATABASE
 ----
-DATABASE
+database
 
 
 statement error no database specified
@@ -49,7 +49,7 @@ SET DATABASE = foo; CREATE TABLE bar (k INT PRIMARY KEY)
 query T colnames
 SHOW DATABASE
 ----
-DATABASE
+database
 foo
 
 # SET succeeds
@@ -65,7 +65,7 @@ SET SYNTAX = traditional
 query T colnames
 SHOW SYNTAX
 ----
-SYNTAX
+syntax
 Traditional
 
 statement ok
@@ -74,7 +74,7 @@ SET SYNTAX = modern
 query T colnames
 SHOW SYNTAX
 ----
-SYNTAX
+syntax
 Modern
 
 statement error SYNTAX: "a" is not in \("Modern", "Traditional"\)
@@ -83,7 +83,7 @@ SET SYNTAX = a
 query T colnames
 SHOW SYNTAX
 ----
-SYNTAX
+syntax
 Modern
 
 statement error SYNTAX: requires a single string value
@@ -92,7 +92,7 @@ SET SYNTAX = a, b
 query T colnames
 SHOW SYNTAX
 ----
-SYNTAX
+syntax
 Modern
 
 statement error invalid statement
@@ -101,15 +101,15 @@ SET ROW (1, TRUE, NULL)
 query TT
 SHOW ALL
 ----
-DATABASE                       foo
-DEFAULT_TRANSACTION_ISOLATION  SERIALIZABLE
-MAX_INDEX_KEYS                 32
-SEARCH_PATH                    pg_catalog
-SERVER_VERSION                 9.5.0
-SYNTAX                         Modern
-TIME ZONE                      UTC
-TRANSACTION ISOLATION LEVEL    SERIALIZABLE
-TRANSACTION PRIORITY           NORMAL
+database                       foo
+default_transaction_isolation  SERIALIZABLE
+max_index_keys                 32
+search_path                    pg_catalog
+server_version                 9.5.0
+syntax                         Modern
+time zone                      UTC
+transaction isolation level    SERIALIZABLE
+transaction priority           NORMAL
 
 ## Test that our no-op compatibility vars work
 
@@ -148,3 +148,9 @@ SET DIST_SQL = OFF
 
 statement error not supported
 SET DIST_SQL = bogus
+
+query T colnames
+SHOW SERVER_VERSION
+----
+server_version
+9.5.0
