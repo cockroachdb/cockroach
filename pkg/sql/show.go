@@ -34,16 +34,16 @@ const (
 )
 
 var varGen = map[string]func(p *planner) string{
-	`DATABASE`:                      func(p *planner) string { return p.session.Database },
-	`DEFAULT_TRANSACTION_ISOLATION`: func(p *planner) string { return p.session.DefaultIsolationLevel.String() },
-	`SYNTAX`:                        func(p *planner) string { return parser.Syntax(p.session.Syntax).String() },
-	`TIME ZONE`:                     func(p *planner) string { return p.session.Location.String() },
-	`TRANSACTION ISOLATION LEVEL`:   func(p *planner) string { return p.txn.Proto.Isolation.String() },
-	`TRANSACTION PRIORITY`:          func(p *planner) string { return p.txn.UserPriority.String() },
-	`MAX_INDEX_KEYS`:                func(_ *planner) string { return "32" },
-	`SEARCH_PATH`:                   func(p *planner) string { return strings.Join(p.session.SearchPath, ", ") },
-	`SERVER_VERSION`:                func(_ *planner) string { return PgServerVersion },
-	`SESSION_USER`:                  func(p *planner) string { return p.session.User },
+	`database`:                      func(p *planner) string { return p.session.Database },
+	`default_transaction_isolation`: func(p *planner) string { return p.session.DefaultIsolationLevel.String() },
+	`syntax`:                        func(p *planner) string { return parser.Syntax(p.session.Syntax).String() },
+	`time zone`:                     func(p *planner) string { return p.session.Location.String() },
+	`transaction isolation level`:   func(p *planner) string { return p.txn.Proto.Isolation.String() },
+	`transaction priority`:          func(p *planner) string { return p.txn.UserPriority.String() },
+	`max_index_keys`:                func(_ *planner) string { return "32" },
+	`search_path`:                   func(p *planner) string { return strings.Join(p.session.SearchPath, ", ") },
+	`server_version`:                func(_ *planner) string { return PgServerVersion },
+	`session_user`:                  func(p *planner) string { return p.session.User },
 }
 var varNames = func() []string {
 	res := make([]string, 0, len(varGen))
@@ -158,31 +158,32 @@ func queryInfoSchema(
 
 // Show a session-local variable name.
 func (p *planner) Show(n *parser.Show) (planNode, error) {
-	name := strings.ToUpper(n.Name)
+	origName := n.Name
+	name := strings.ToLower(n.Name)
 
 	var columns ResultColumns
 
 	switch name {
-	case `ALL`:
+	case `all`:
 		columns = ResultColumns{
 			{Name: "Variable", Typ: parser.TypeString},
 			{Name: "Value", Typ: parser.TypeString},
 		}
 	default:
 		if _, ok := varGen[name]; !ok {
-			return nil, fmt.Errorf("unknown variable: %q", name)
+			return nil, fmt.Errorf("unknown variable: %q", origName)
 		}
 		columns = ResultColumns{{Name: name, Typ: parser.TypeString}}
 	}
 
 	return &delayedNode{
-		name:    "SHOW " + name,
+		name:    "SHOW " + origName,
 		columns: columns,
 		constructor: func(p *planner) (planNode, error) {
 			v := p.newContainerValuesNode(columns, 0)
 
 			switch name {
-			case `ALL`:
+			case `all`:
 				for _, vName := range varNames {
 					gen := varGen[vName]
 					value := gen(p)
