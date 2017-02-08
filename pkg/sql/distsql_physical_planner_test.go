@@ -206,4 +206,43 @@ func TestDistSQLPlanner(t *testing.T) {
 			t.Errorf("expected [[%d]], got %s", exp, res)
 		}
 	})
+
+	t.Run("Limit", func(t *testing.T) {
+		r = r.Subtest(t)
+
+		res := r.QueryStr("SELECT y FROM NumToStr LIMIT 5")
+		if len(res) != 5 || len(res[0]) != 1 {
+			t.Errorf("expected 5 rows, 1 cols; got %v", res)
+		}
+
+		r.CheckQueryResults(
+			"SELECT y FROM NumToStr ORDER BY y LIMIT 5",
+			[][]string{{"1"}, {"2"}, {"3"}, {"4"}, {"5"}},
+		)
+
+		r.CheckQueryResults(
+			"SELECT y FROM NumToStr ORDER BY y OFFSET 5 LIMIT 2",
+			[][]string{{"6"}, {"7"}},
+		)
+
+		r.CheckQueryResults(
+			"SELECT y FROM NumToStr ORDER BY y LIMIT 0",
+			[][]string{},
+		)
+
+		r.CheckQueryResults(
+			"SELECT * FROM (SELECT y FROM NumToStr LIMIT 3) AS a ORDER BY y OFFSET 3",
+			[][]string{},
+		)
+
+		r.CheckQueryResults(
+			"SELECT y FROM NumToStr ORDER BY str LIMIT 5",
+			[][]string{{"8"}, {"88"}, {"888"}, {"8888"}, {"8885"}},
+		)
+
+		r.CheckQueryResults(
+			"SELECT y FROM (SELECT y FROM NumToStr ORDER BY y LIMIT 5) AS a WHERE y <> 2",
+			[][]string{{"1"}, {"3"}, {"4"}, {"5"}},
+		)
+	})
 }
