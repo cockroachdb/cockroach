@@ -171,7 +171,8 @@ func (p *planner) Show(n *parser.Show) (planNode, error) {
 		if _, ok := varGen[name]; !ok {
 			return nil, fmt.Errorf("unknown variable: %q", name)
 		}
-		columns = ResultColumns{{Name: name, Typ: parser.TypeString}}
+		// Lower-case variable names, because ORMs expect that.
+		columns = ResultColumns{{Name: strings.ToLower(name), Typ: parser.TypeString}}
 	}
 
 	return &delayedNode{
@@ -185,8 +186,9 @@ func (p *planner) Show(n *parser.Show) (planNode, error) {
 				for _, vName := range varNames {
 					gen := varGen[vName]
 					value := gen(p)
+					// Lower-case variable names, because ORMs expect that.
 					if _, err := v.rows.AddRow(
-						parser.Datums{parser.NewDString(vName), parser.NewDString(value)},
+						parser.Datums{parser.NewDString(strings.ToLower(vName)), parser.NewDString(value)},
 					); err != nil {
 						v.rows.Close()
 						return nil, err
