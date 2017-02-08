@@ -34,7 +34,7 @@ import (
 type processor interface {
 	// Run is the main loop of the processor.
 	// If wg is non-nil, wg.Done is called before exiting.
-	Run(wg *sync.WaitGroup)
+	Run(ctx context.Context, wg *sync.WaitGroup)
 }
 
 // procOutputHelper is a helper type that performs filtering and projection on
@@ -235,11 +235,11 @@ func newNoopProcessor(
 }
 
 // Run is part of the processor interface.
-func (n *noopProcessor) Run(wg *sync.WaitGroup) {
+func (n *noopProcessor) Run(ctx context.Context, wg *sync.WaitGroup) {
 	if wg != nil {
 		defer wg.Done()
 	}
-	ctx, span := tracing.ChildSpan(n.flowCtx.Context, "noop")
+	ctx, span := tracing.ChildSpan(ctx, "noop")
 	defer tracing.FinishSpan(span)
 
 	for {

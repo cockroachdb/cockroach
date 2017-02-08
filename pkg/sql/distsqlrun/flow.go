@@ -45,7 +45,8 @@ type FlowID struct {
 
 // FlowCtx encompasses the contexts needed for various flow components.
 type FlowCtx struct {
-	Context  context.Context
+	log.AmbientContext
+
 	id       FlowID
 	evalCtx  *parser.EvalContext
 	rpcCtx   *rpc.Context
@@ -98,10 +99,6 @@ type Flow struct {
 }
 
 func newFlow(flowCtx FlowCtx, flowReg *flowRegistry, syncFlowConsumer RowReceiver) *Flow {
-	if opentracing.SpanFromContext(flowCtx.Context) == nil {
-		panic("flow context has no span")
-	}
-	flowCtx.Context = log.WithLogTagStr(flowCtx.Context, "f", flowCtx.id.Short())
 	f := &Flow{
 		FlowCtx:          flowCtx,
 		flowRegistry:     flowReg,
@@ -113,7 +110,9 @@ func newFlow(flowCtx FlowCtx, flowReg *flowRegistry, syncFlowConsumer RowReceive
 
 // setupInboundStream adds a stream to the stream map (inboundStreams or
 // localStreams).
-func (f *Flow) setupInboundStream(spec StreamEndpointSpec, receiver RowReceiver) error {
+func (f *Flow) setupInboundStream(
+	ctx context.Context, spec StreamEndpointSpec, receiver RowReceiver,
+) error {
 	if spec.TargetAddr != "" {
 		return errors.Errorf("inbound stream has target address set: %s", spec.TargetAddr)
 	}
@@ -130,7 +129,7 @@ func (f *Flow) setupInboundStream(spec StreamEndpointSpec, receiver RowReceiver)
 			f.inboundStreams = make(map[StreamID]*inboundStreamInfo)
 		}
 		if log.V(2) {
-			log.Infof(f.FlowCtx.Context, "set up inbound stream %d", sid)
+			log.Infof(ctx, "set up inbound stream %d", sid)
 		}
 		f.inboundStreams[sid] = &inboundStreamInfo{receiver: receiver, waitGroup: &f.waitGroup}
 
@@ -217,7 +216,7 @@ func (f *Flow) makeProcessor(ps *ProcessorSpec, inputs []RowSource) (processor, 
 	return newProcessor(&f.FlowCtx, &ps.Core, &ps.Post, inputs, outputs)
 }
 
-func (f *Flow) setupFlow(spec *FlowSpec) error {
+func (f *Flow) setupFlow(ctx context.Context, spec *FlowSpec) error {
 	// First step: setup the input synchronizers for all processors.
 	inputSyncs := make([][]RowSource, len(spec.Processors))
 	for pIdx, ps := range spec.Processors {
@@ -231,7 +230,7 @@ func (f *Flow) setupFlow(spec *FlowSpec) error {
 				if len(is.Streams) == 1 {
 					rowChan := &RowChannel{}
 					rowChan.Init(is.ColumnTypes)
-					if err := f.setupInboundStream(is.Streams[0], rowChan); err != nil {
+					if err := f.setupInboundStream(ctx, is.Streams[0], rowChan); err != nil {
 						return err
 					}
 					sync = rowChan
@@ -239,7 +238,7 @@ func (f *Flow) setupFlow(spec *FlowSpec) error {
 					mrc := &MultiplexedRowChannel{}
 					mrc.Init(len(is.Streams), is.ColumnTypes)
 					for _, s := range is.Streams {
-						if err := f.setupInboundStream(s, mrc); err != nil {
+						if err := f.setupInboundStream(ctx, s, mrc); err != nil {
 							return err
 						}
 					}
@@ -251,7 +250,7 @@ func (f *Flow) setupFlow(spec *FlowSpec) error {
 				for i, s := range is.Streams {
 					rowChan := &RowChannel{}
 					rowChan.Init(is.ColumnTypes)
-					if err := f.setupInboundStream(s, rowChan); err != nil {
+					if err := f.setupInboundStream(ctx, s, rowChan); err != nil {
 						return err
 					}
 					streams[i] = rowChan
@@ -282,10 +281,10 @@ func (f *Flow) setupFlow(spec *FlowSpec) error {
 }
 
 // Start starts the flow (each processor runs in their own goroutine).
-func (f *Flow) Start(doneFn func()) {
+func (f *Flow) Start(ctx context.Context, doneFn func()) {
 	f.doneFn = doneFn
 	log.VEventf(
-		f.Context, 1, "starting (%d processors, %d outboxes)", len(f.outboxes), len(f.processors),
+		ctx, 1, "starting (%d processors, %d outboxes)", len(f.outboxes), len(f.processors),
 	)
 	f.status = FlowRunning
 
@@ -293,15 +292,15 @@ func (f *Flow) Start(doneFn func()) {
 	// set up the WaitGroup counter before.
 	f.waitGroup.Add(len(f.inboundStreams) + len(f.outboxes) + len(f.processors))
 
-	f.flowRegistry.RegisterFlow(f.id, f, f.inboundStreams)
+	f.flowRegistry.RegisterFlow(ctx, f.id, f, f.inboundStreams)
 	if log.V(1) {
-		log.Infof(f.Context, "registered flow %s", f.id.Short())
+		log.Infof(ctx, "registered flow %s", f.id.Short())
 	}
 	for _, o := range f.outboxes {
-		o.start(&f.waitGroup)
+		o.start(ctx, &f.waitGroup)
 	}
 	for _, p := range f.processors {
-		go p.Run(&f.waitGroup)
+		go p.Run(ctx, &f.waitGroup)
 	}
 }
 
@@ -312,14 +311,14 @@ func (f *Flow) Wait() {
 
 // Cleanup should be called when the flow completes (after all processors and
 // mailboxes exited).
-func (f *Flow) Cleanup() {
+func (f *Flow) Cleanup(ctx context.Context) {
 	if f.status == FlowFinished {
 		panic("flow cleanup called twice")
 	}
 	if log.V(1) {
-		log.Infof(f.Context, "cleaning up")
+		log.Infof(ctx, "cleaning up")
 	}
-	sp := opentracing.SpanFromContext(f.Context)
+	sp := opentracing.SpanFromContext(ctx)
 	sp.Finish()
 	if f.status != FlowNotStarted {
 		f.flowRegistry.UnregisterFlow(f.id)
@@ -331,11 +330,11 @@ func (f *Flow) Cleanup() {
 
 // RunSync runs the processors in the flow in order (serially), in the same
 // context (no goroutines are spawned).
-func (f *Flow) RunSync() {
+func (f *Flow) RunSync(ctx context.Context) {
 	for _, p := range f.processors {
-		p.Run(nil)
+		p.Run(ctx, nil)
 	}
-	f.Cleanup()
+	f.Cleanup(ctx)
 }
 
 var _ = (*Flow).RunSync

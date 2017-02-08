@@ -17,15 +17,11 @@
 package distsqlrun
 
 import (
-	"golang.org/x/net/context"
-
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 type joinerBase struct {
-	ctx                     context.Context
 	leftSource, rightSource RowSource
 
 	joinType    joinType
@@ -48,7 +44,6 @@ func (jb *joinerBase) init(
 ) error {
 	jb.leftSource = leftSource
 	jb.rightSource = rightSource
-	jb.ctx = log.WithLogTag(flowCtx.Context, "Joiner", nil)
 	jb.joinType = joinType(jType)
 
 	leftTypes := leftSource.Types()

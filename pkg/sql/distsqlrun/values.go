@@ -19,6 +19,8 @@ package distsqlrun
 import (
 	"sync"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
@@ -53,12 +55,12 @@ func newValuesProcessor(
 }
 
 // Run is part of the processor interface.
-func (v *valuesProcessor) Run(wg *sync.WaitGroup) {
+func (v *valuesProcessor) Run(ctx context.Context, wg *sync.WaitGroup) {
 	if wg != nil {
 		defer wg.Done()
 	}
 
-	ctx, span := tracing.ChildSpan(v.flowCtx.Context, "values")
+	ctx, span := tracing.ChildSpan(ctx, "values")
 	defer tracing.FinishSpan(span)
 
 	// We reuse the code in StreamDecoder for decoding the raw data. We just need

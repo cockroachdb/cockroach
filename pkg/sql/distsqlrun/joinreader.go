@@ -35,7 +35,6 @@ const joinReaderBatchSize = 100
 
 type joinReader struct {
 	flowCtx *FlowCtx
-	ctx     context.Context
 
 	desc  sqlbase.TableDescriptor
 	index *sqlbase.IndexDescriptor
@@ -83,7 +82,6 @@ func newJoinReader(
 		return nil, err
 	}
 
-	jr.ctx = log.WithLogTagInt(jr.flowCtx.Context, "JoinReader", int(jr.desc.ID))
 	return jr, nil
 }
 
@@ -102,13 +100,14 @@ func (jr *joinReader) generateKey(
 
 // mainLoop runs the mainLoop and returns any error.
 // It does not close the output.
-func (jr *joinReader) mainLoop() error {
+func (jr *joinReader) mainLoop(ctx context.Context) error {
 	primaryKeyPrefix := sqlbase.MakeIndexKeyPrefix(&jr.desc, jr.index.ID)
 
 	var alloc sqlbase.DatumAlloc
 	spans := make(roachpb.Spans, 0, joinReaderBatchSize)
 
-	ctx, span := tracing.ChildSpan(jr.ctx, "join reader")
+	ctx = log.WithLogTagInt(ctx, "JoinReader", int(jr.desc.ID))
+	ctx, span := tracing.ChildSpan(ctx, "join reader")
 	defer tracing.FinishSpan(span)
 
 	txn := jr.flowCtx.setupTxn(ctx)
@@ -178,11 +177,11 @@ func (jr *joinReader) mainLoop() error {
 }
 
 // Run is part of the processor interface.
-func (jr *joinReader) Run(wg *sync.WaitGroup) {
+func (jr *joinReader) Run(ctx context.Context, wg *sync.WaitGroup) {
 	if wg != nil {
 		defer wg.Done()
 	}
 
-	err := jr.mainLoop()
+	err := jr.mainLoop(ctx)
 	jr.out.close(err)
 }

@@ -21,10 +21,11 @@ import (
 	"strings"
 	"testing"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
-	"golang.org/x/net/context"
 )
 
 // TODO(irfansharif): Add tests to verify the following aggregation functions:
@@ -281,7 +282,6 @@ func TestAggregator(t *testing.T) {
 		out := &RowBuffer{}
 
 		flowCtx := FlowCtx{
-			Context: context.Background(),
 			evalCtx: &parser.EvalContext{},
 		}
 
@@ -290,7 +290,7 @@ func TestAggregator(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		ag.Run(nil)
+		ag.Run(context.Background(), nil)
 
 		var expected []string
 		for _, row := range c.expected {
