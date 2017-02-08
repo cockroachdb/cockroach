@@ -126,13 +126,13 @@ DBStatus DBDeleteIterRange(DBEngine* db, DBIterator *iter, DBKey start, DBKey en
 // this function on an engine created by DBNewBatch. If an error is
 // returned, the batch is not closed and it is the caller's
 // responsibility to call DBClose.
-DBStatus DBCommitAndCloseBatch(DBEngine* db);
+DBStatus DBCommitAndCloseBatch(DBEngine* db, bool sync);
 
 // ApplyBatchRepr applies a batch of mutations encoded using that
 // batch representation returned by DBBatchRepr(). It is only valid to
 // call this function on an engine created by DBOpen() or DBNewBatch()
 // (i.e. not a snapshot).
-DBStatus DBApplyBatchRepr(DBEngine* db, DBSlice repr);
+DBStatus DBApplyBatchRepr(DBEngine* db, DBSlice repr, bool sync);
 
 // Returns the internal batch representation. The returned value is
 // only valid until the next call to a method using the DBEngine and
