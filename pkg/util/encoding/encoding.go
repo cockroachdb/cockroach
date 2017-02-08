@@ -257,7 +257,7 @@ func DecodeVarintAscending(b []byte) ([]byte, int64, error) {
 		length = -length
 		remB := b[1:]
 		if len(remB) < length {
-			return nil, 0, errors.Errorf("insufficient bytes to decode uvarint value: %s", remB)
+			return nil, 0, errors.Errorf("insufficient bytes to decode uvarint value: %q", remB)
 		}
 		var v int64
 		// Use the ones-complement of each encoded byte in order to build
@@ -406,7 +406,7 @@ func DecodeUvarintAscending(b []byte) ([]byte, uint64, error) {
 	if length < 0 || length > 8 {
 		return nil, 0, errors.Errorf("invalid uvarint length of %d", length)
 	} else if len(b) < length {
-		return nil, 0, errors.Errorf("insufficient bytes to decode uvarint value: %v", b)
+		return nil, 0, errors.Errorf("insufficient bytes to decode uvarint value: %q", b)
 	}
 	var v uint64
 	// It is faster to range over the elements in a slice than to index
@@ -428,7 +428,7 @@ func DecodeUvarintDescending(b []byte) ([]byte, uint64, error) {
 	if length < 0 || length > 8 {
 		return nil, 0, errors.Errorf("invalid uvarint length of %d", length)
 	} else if len(b) < length {
-		return nil, 0, errors.Errorf("insufficient bytes to decode uvarint value: %v", b)
+		return nil, 0, errors.Errorf("insufficient bytes to decode uvarint value: %q", b)
 	}
 	var x uint64
 	for _, t := range b[:length] {
