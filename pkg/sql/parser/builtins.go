@@ -1663,6 +1663,28 @@ var Builtins = map[string][]Builtin{
 			Info:     "Not usable; exposed only for ORM compatibility with PostgreSQL.",
 		},
 	},
+	"pg_try_advisory_lock": {
+		Builtin{
+			Types:      ArgTypes{{"int", TypeInt}},
+			ReturnType: fixedReturnType(TypeBool),
+			fn: func(_ *EvalContext, _ Datums) (Datum, error) {
+				return DBoolTrue, nil
+			},
+			category: categoryCompatibility,
+			Info:     "Not usable; exposed only for ORM compatibility.",
+		},
+	},
+	"pg_advisory_unlock": {
+		Builtin{
+			Types:      ArgTypes{{"int", TypeInt}},
+			ReturnType: fixedReturnType(TypeBool),
+			fn: func(_ *EvalContext, _ Datums) (Datum, error) {
+				return DBoolTrue, nil
+			},
+			category: categoryCompatibility,
+			Info:     "Not usable; exposed only for ORM compatibility.",
+		},
+	},
 	"array_in": {
 		Builtin{
 			Types:      ArgTypes{{"string", TypeString}, {"element_oid", TypeInt}, {"element_typmod", TypeInt}},
