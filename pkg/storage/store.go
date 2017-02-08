@@ -1040,7 +1040,7 @@ func (s *Store) migrate(ctx context.Context, desc roachpb.RangeDescriptor) {
 	if err := migrate7310And6991(ctx, batch, desc); err != nil {
 		log.Fatal(ctx, errors.Wrap(err, "during migration"))
 	}
-	if err := batch.Commit(); err != nil {
+	if err := batch.Commit(false /* !sync */); err != nil {
 		log.Fatal(ctx, errors.Wrap(err, "could not migrate Raft state"))
 	}
 }
@@ -1719,7 +1719,7 @@ func (s *Store) BootstrapRange(initialValues []roachpb.KeyValue) error {
 	}
 	*ms = updatedMS
 
-	return batch.Commit()
+	return batch.Commit(true /* sync */)
 }
 
 // ClusterID accessor.

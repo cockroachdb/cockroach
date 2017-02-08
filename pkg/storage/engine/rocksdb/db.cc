@@ -62,8 +62,8 @@ struct DBEngine {
   virtual DBStatus Merge(DBKey key, DBSlice value) = 0;
   virtual DBStatus Delete(DBKey key) = 0;
   virtual DBStatus DeleteRange(DBKey start, DBKey end) = 0;
-  virtual DBStatus CommitBatch() = 0;
-  virtual DBStatus ApplyBatchRepr(DBSlice repr) = 0;
+  virtual DBStatus CommitBatch(bool sync) = 0;
+  virtual DBStatus ApplyBatchRepr(DBSlice repr, bool sync) = 0;
   virtual DBSlice BatchRepr() = 0;
   virtual DBStatus Get(DBKey key, DBString* value) = 0;
   virtual DBIterator* NewIter(bool prefix) = 0;
@@ -103,8 +103,8 @@ struct DBImpl : public DBEngine {
   virtual DBStatus Merge(DBKey key, DBSlice value);
   virtual DBStatus Delete(DBKey key);
   virtual DBStatus DeleteRange(DBKey start, DBKey end);
-  virtual DBStatus CommitBatch();
-  virtual DBStatus ApplyBatchRepr(DBSlice repr);
+  virtual DBStatus CommitBatch(bool sync);
+  virtual DBStatus ApplyBatchRepr(DBSlice repr, bool sync);
   virtual DBSlice BatchRepr();
   virtual DBStatus Get(DBKey key, DBString* value);
   virtual DBIterator* NewIter(bool prefix);
@@ -124,8 +124,8 @@ struct DBBatch : public DBEngine {
   virtual DBStatus Merge(DBKey key, DBSlice value);
   virtual DBStatus Delete(DBKey key);
   virtual DBStatus DeleteRange(DBKey start, DBKey end);
-  virtual DBStatus CommitBatch();
-  virtual DBStatus ApplyBatchRepr(DBSlice repr);
+  virtual DBStatus CommitBatch(bool sync);
+  virtual DBStatus ApplyBatchRepr(DBSlice repr, bool sync);
   virtual DBSlice BatchRepr();
   virtual DBStatus Get(DBKey key, DBString* value);
   virtual DBIterator* NewIter(bool prefix);
@@ -144,8 +144,8 @@ struct DBWriteOnlyBatch : public DBEngine {
   virtual DBStatus Merge(DBKey key, DBSlice value);
   virtual DBStatus Delete(DBKey key);
   virtual DBStatus DeleteRange(DBKey start, DBKey end);
-  virtual DBStatus CommitBatch();
-  virtual DBStatus ApplyBatchRepr(DBSlice repr);
+  virtual DBStatus CommitBatch(bool sync);
+  virtual DBStatus ApplyBatchRepr(DBSlice repr, bool sync);
   virtual DBSlice BatchRepr();
   virtual DBStatus Get(DBKey key, DBString* value);
   virtual DBIterator* NewIter(bool prefix);
@@ -169,8 +169,8 @@ struct DBSnapshot : public DBEngine {
   virtual DBStatus Merge(DBKey key, DBSlice value);
   virtual DBStatus Delete(DBKey key);
   virtual DBStatus DeleteRange(DBKey start, DBKey end);
-  virtual DBStatus CommitBatch();
-  virtual DBStatus ApplyBatchRepr(DBSlice repr);
+  virtual DBStatus CommitBatch(bool sync);
+  virtual DBStatus ApplyBatchRepr(DBSlice repr, bool sync);
   virtual DBSlice BatchRepr();
   virtual DBStatus Get(DBKey key, DBString* value);
   virtual DBIterator* NewIter(bool prefix);
@@ -1554,6 +1554,10 @@ rocksdb::Options DBMakeOptions(DBOptions db_opts) {
   options.statistics = rocksdb::CreateDBStatistics();
   options.table_factory.reset(rocksdb::NewBlockBasedTableFactory(table_options));
   options.max_open_files = db_opts.max_open_files;
+  // Periodically sync the WAL to smooth out writes. Not performing
+  // such syncs can be faster but can cause performance blips when the
+  // OS decides it needs to flush data.
+  options.wal_bytes_per_sync = 256 << 10;   // 256 KB
 
   // Do not create bloom filters for the last level (i.e. the largest
   // level which contains data in the LSM store). Setting this option
@@ -1837,45 +1841,48 @@ DBStatus DBDeleteIterRange(DBEngine* db, DBIterator *iter, DBKey start, DBKey en
   return kSuccess;
 }
 
-DBStatus DBImpl::CommitBatch() {
+DBStatus DBImpl::CommitBatch(bool sync) {
   return FmtStatus("unsupported");
 }
 
-DBStatus DBBatch::CommitBatch() {
+DBStatus DBBatch::CommitBatch(bool sync) {
   if (updates == 0) {
     return kSuccess;
   }
   rocksdb::WriteOptions options;
+  options.sync = sync;
   return ToDBStatus(rep->Write(options, batch.GetWriteBatch()));
 }
 
-DBStatus DBWriteOnlyBatch::CommitBatch() {
+DBStatus DBWriteOnlyBatch::CommitBatch(bool sync) {
   if (updates == 0) {
     return kSuccess;
   }
   rocksdb::WriteOptions options;
+  options.sync = sync;
   return ToDBStatus(rep->Write(options, &batch));
 }
 
-DBStatus DBSnapshot::CommitBatch() {
+DBStatus DBSnapshot::CommitBatch(bool sync) {
   return FmtStatus("unsupported");
 }
 
-DBStatus DBCommitAndCloseBatch(DBEngine* db) {
-  DBStatus status = db->CommitBatch();
+DBStatus DBCommitAndCloseBatch(DBEngine* db, bool sync) {
+  DBStatus status = db->CommitBatch(sync);
   if (status.data == NULL) {
     DBClose(db);
   }
   return status;
 }
 
-DBStatus DBImpl::ApplyBatchRepr(DBSlice repr) {
+DBStatus DBImpl::ApplyBatchRepr(DBSlice repr, bool sync) {
   rocksdb::WriteBatch batch(ToString(repr));
   rocksdb::WriteOptions options;
+  options.sync = sync;
   return ToDBStatus(rep->Write(options, &batch));
 }
 
-DBStatus DBBatch::ApplyBatchRepr(DBSlice repr) {
+DBStatus DBBatch::ApplyBatchRepr(DBSlice repr, bool sync) {
   // TODO(peter): It would be slightly more efficient to iterate over
   // repr directly instead of first converting it to a string.
   DBBatchInserter inserter(&batch);
@@ -1885,7 +1892,7 @@ DBStatus DBBatch::ApplyBatchRepr(DBSlice repr) {
   return kSuccess;
 }
 
-DBStatus DBWriteOnlyBatch::ApplyBatchRepr(DBSlice repr) {
+DBStatus DBWriteOnlyBatch::ApplyBatchRepr(DBSlice repr, bool sync) {
   // TODO(peter): It would be slightly more efficient to iterate over
   // repr directly instead of first converting it to a string.
   DBBatchInserter inserter(&batch);
@@ -1895,12 +1902,12 @@ DBStatus DBWriteOnlyBatch::ApplyBatchRepr(DBSlice repr) {
   return kSuccess;
 }
 
-DBStatus DBSnapshot::ApplyBatchRepr(DBSlice repr) {
+DBStatus DBSnapshot::ApplyBatchRepr(DBSlice repr, bool sync) {
   return FmtStatus("unsupported");
 }
 
-DBStatus DBApplyBatchRepr(DBEngine* db, DBSlice repr) {
-  return db->ApplyBatchRepr(repr);
+DBStatus DBApplyBatchRepr(DBEngine* db, DBSlice repr, bool sync) {
+  return db->ApplyBatchRepr(repr, sync);
 }
 
 DBSlice DBImpl::BatchRepr() {

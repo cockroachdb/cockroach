@@ -94,7 +94,7 @@ func (sc *AbortCache) ClearData(e engine.Engine) error {
 	if err != nil {
 		return err
 	}
-	return b.Commit()
+	return b.Commit(false /* !sync */)
 }
 
 // Get looks up an abort cache entry recorded for this transaction ID.
