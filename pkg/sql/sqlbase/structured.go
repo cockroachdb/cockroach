@@ -591,6 +591,12 @@ func (desc *TableDescriptor) allocateIndexIDs(columnNames map[string]ColumnID) e
 				}
 				index.ExtraColumnIDs = append(index.ExtraColumnIDs, col.ID)
 			}
+
+			for _, col := range desc.Columns {
+				if col.Type.Kind == ColumnType_COLLATEDSTRING && index.ContainsColumnID(col.ID) {
+					index.CollatedStringColumnIDs = append(index.CollatedStringColumnIDs, col.ID)
+				}
+			}
 		}
 	}
 	return nil

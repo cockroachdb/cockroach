@@ -80,6 +80,9 @@ type RowFetcher struct {
 	// If set, GetRangeInfo() can be used to retrieve the accumulated info.
 	returnRangeInfo bool
 
+	// Locale for collated string columns.
+	locale map[ColumnID]string
+
 	// -- Fields updated during a scan --
 
 	kvFetcher      kvFetcher
@@ -117,7 +120,8 @@ func (rf *RowFetcher) Init(
 	rf.reverse = reverse
 	rf.isSecondaryIndex = isSecondaryIndex
 	rf.cols = cols
-	rf.valNeededForCol = valNeededForCol
+	// rf.valNeededForCol is modified below.
+	rf.valNeededForCol = append([]bool(nil), valNeededForCol...)
 	rf.returnRangeInfo = returnRangeInfo
 	rf.row = make([]EncDatum, len(rf.cols))
 	rf.decodedRow = make([]parser.Datum, len(rf.cols))
@@ -128,6 +132,13 @@ func (rf *RowFetcher) Init(
 	rf.indexColIdx = make([]int, len(indexColumnIDs))
 	for i, id := range indexColumnIDs {
 		rf.indexColIdx[i] = rf.colIdxMap[id]
+	}
+	// Add all of the key columns to valNeededForCol so that, like other keys,
+	// collated string keys can be decoded even when not requested. The map
+	// rf.valNeededForCol controls value decoding only, so only collated string
+	// columns are affected.
+	for _, idx := range rf.indexColIdx {
+		rf.valNeededForCol[idx] = true
 	}
 
 	if isSecondaryIndex {
@@ -153,6 +164,13 @@ func (rf *RowFetcher) Init(
 		rf.extraVals, err = MakeEncodedKeyVals(desc, index.ExtraColumnIDs)
 		if err != nil {
 			return err
+		}
+	}
+
+	rf.locale = make(map[ColumnID]string)
+	for _, col := range desc.Columns {
+		if col.Type.Kind == ColumnType_COLLATEDSTRING {
+			rf.locale[col.ID] = *col.Type.Locale
 		}
 	}
 	return nil
@@ -304,10 +322,12 @@ func (rf *RowFetcher) ProcessKV(
 			return "", "", err
 		}
 	} else {
+		rvalue := kv.ValueBytes()
 		if rf.extraVals != nil {
 			// This is a unique index; decode the extra column values from
 			// the value.
-			_, err := DecodeKeyVals(&rf.alloc, rf.extraVals, nil, kv.ValueBytes())
+			var err error
+			rvalue, err = DecodeKeyVals(&rf.alloc, rf.extraVals, nil, rvalue)
 			if err != nil {
 				return "", "", err
 			}
@@ -318,6 +338,18 @@ func (rf *RowFetcher) ProcessKV(
 			}
 			if debugStrings {
 				prettyValue = prettyEncDatums(rf.extraVals)
+			}
+		}
+
+		for _, id := range rf.index.CollatedStringColumnIDs {
+			var r string
+			var err error
+			rvalue, r, err = encoding.DecodeUnsafeStringAscending(rvalue, nil)
+			if err != nil {
+				return "", "", err
+			}
+			if idx, ok := rf.colIdxMap[id]; ok && rf.valNeededForCol[idx] {
+				rf.row[idx].Datum = parser.NewDCollatedString(r, "en", &rf.alloc.env)
 			}
 		}
 
@@ -446,7 +478,7 @@ func (rf *RowFetcher) processValueTuple(
 			}
 			fmt.Fprintf(&rf.prettyValueBuf, "/%v", encValue.Datum)
 		}
-		if !rf.row[idx].IsUnset() {
+		if !rf.row[idx].IsUnset() && rf.cols[idx].Type.Kind != ColumnType_COLLATEDSTRING {
 			panic(fmt.Sprintf("duplicate value for column %d", idx))
 		}
 		rf.row[idx] = encValue

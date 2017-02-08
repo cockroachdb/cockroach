@@ -185,14 +185,15 @@ func TestEncDatumCompare(t *testing.T) {
 
 	for kind := range ColumnType_Kind_name {
 		kind := ColumnType_Kind(kind)
-		// TODO(cuongdo,eisen): we don't support persistence for arrays or collated
-		// strings yet
-		if kind == ColumnType_COLLATEDSTRING ||
-			kind == ColumnType_INT_ARRAY ||
+		// TODO(cuongdo): we don't support persistence for arrays yet.
+		if kind == ColumnType_INT_ARRAY ||
 			kind == ColumnType_INT2VECTOR {
 			continue
 		}
 		typ := ColumnType{Kind: kind}
+		if kind == ColumnType_COLLATEDSTRING {
+			typ.Locale = RandCollationLocale(rng)
+		}
 
 		// Generate two datums d1 < d2
 		var d1, d2 parser.Datum
@@ -226,10 +227,14 @@ func TestEncDatumCompare(t *testing.T) {
 		checkEncDatumCmp(t, a, &v1, &v1, desc, desc, 0, false)
 		checkEncDatumCmp(t, a, &v2, &v2, desc, desc, 0, false)
 
-		checkEncDatumCmp(t, a, &v1, &v2, noncmp, noncmp, -1, true)
-		checkEncDatumCmp(t, a, &v2, &v1, desc, noncmp, +1, true)
-		checkEncDatumCmp(t, a, &v1, &v1, asc, desc, 0, true)
-		checkEncDatumCmp(t, a, &v2, &v2, desc, asc, 0, true)
+		// These cases require decoding. Collated strings cannot be decoded from
+		// their key part alone.
+		if kind != ColumnType_COLLATEDSTRING {
+			checkEncDatumCmp(t, a, &v1, &v2, noncmp, noncmp, -1, true)
+			checkEncDatumCmp(t, a, &v2, &v1, desc, noncmp, +1, true)
+			checkEncDatumCmp(t, a, &v1, &v1, asc, desc, 0, true)
+			checkEncDatumCmp(t, a, &v2, &v2, desc, asc, 0, true)
+		}
 	}
 }
 
@@ -249,7 +254,13 @@ func TestEncDatumFromBuffer(t *testing.T) {
 		var buf []byte
 		enc := make([]DatumEncoding, len(ed))
 		for i := range ed {
-			enc[i] = RandDatumEncoding(rng)
+			if ed[i].Type.Kind == ColumnType_COLLATEDSTRING {
+				// There's no way to reconstruct a collated string from its key
+				// encoding, since that's just the collation key.
+				enc[i] = DatumEncoding_VALUE
+			} else {
+				enc[i] = RandDatumEncoding(rng)
+			}
 			buf, err = ed[i].Encode(&alloc, enc[i], buf)
 			if err != nil {
 				t.Fatal(err)

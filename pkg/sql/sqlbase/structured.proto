@@ -39,6 +39,12 @@ message ColumnType {
     BYTES = 8;
     TIMESTAMPTZ = 9;
     COLLATEDSTRING = 10;  // Collated STRING, CHAR, and VARCHAR
+    // Collated string key columns are encoded partly as a key and partly as a
+    // value. The key part is the collation key, so that different strings that
+    // collate equal cannot both be used as keys. The value part is the usual
+    // UTF-8 encoding of the string. This creates several special cases in the
+    // encode/decode logic.
+
     NAME = 11;
     OID = 12;
 
@@ -238,6 +244,11 @@ message IndexDescriptor {
   // value rather than the key, but we don't currently do this.
   repeated uint32 extra_column_ids = 7 [(gogoproto.customname) = "ExtraColumnIDs",
       (gogoproto.casttype) = "ColumnID"];
+
+  // For secondary indexes, an ordered list of IDs for the collated string
+  // columns associated with the index.
+  repeated uint32 collated_string_column_ids = 13
+      [(gogoproto.customname) = "CollatedStringColumnIDs", (gogoproto.casttype) = "ColumnID"];
 
   optional ForeignKeyReference foreign_key = 9 [(gogoproto.nullable) = false];
   repeated ForeignKeyReference referenced_by = 10 [(gogoproto.nullable) = false];
