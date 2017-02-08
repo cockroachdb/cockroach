@@ -1392,6 +1392,21 @@ var Builtins = map[string][]Builtin{
 		},
 	},
 
+	"current_database": {
+		Builtin{
+			Types:      ArgTypes{},
+			ReturnType: TypeString,
+			category:   categorySystemInfo,
+			fn: func(ctx *EvalContext, args DTuple) (Datum, error) {
+				if len(ctx.Database) == 0 {
+					return DNull, nil
+				}
+				return NewDString(ctx.Database), nil
+			},
+			Info: "Returns the current database.",
+		},
+	},
+
 	"current_schema": {
 		Builtin{
 			Types:      ArgTypes{},
