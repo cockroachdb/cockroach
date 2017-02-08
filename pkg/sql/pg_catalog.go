@@ -272,7 +272,7 @@ CREATE TABLE pg_catalog.pg_class (
 				if err := addRow(
 					h.TableOid(db, table),       // oid
 					parser.NewDName(table.Name), // relname
-					pgNamespaceForDB(db).Oid,    // relnamespace
+					pgNamespaceForDB(db, h).Oid, // relnamespace
 					oidZero,                     // reltype (PG creates a composite type in pg_type for each table)
 					parser.DNull,                // relowner
 					parser.DNull,                // relam
@@ -305,7 +305,7 @@ CREATE TABLE pg_catalog.pg_class (
 					return addRow(
 						h.IndexOid(db, table, index), // oid
 						parser.NewDName(index.Name),  // relname
-						pgNamespaceForDB(db).Oid,     // relnamespace
+						pgNamespaceForDB(db, h).Oid,  // relnamespace
 						oidZero,                      // reltype
 						parser.DNull,                 // relowner
 						parser.DNull,                 // relam
@@ -518,7 +518,7 @@ CREATE TABLE pg_catalog.pg_constraint (
 					if err := addRow(
 						oid,                                            // oid
 						dNameOrNull(name),                              // conname
-						pgNamespaceForDB(db).Oid,                       // connamespace
+						pgNamespaceForDB(db, h).Oid,                    // connamespace
 						contype,                                        // contype
 						parser.MakeDBool(false),                        // condeferrable
 						parser.MakeDBool(false),                        // condeferred
@@ -901,12 +901,12 @@ CREATE TABLE pg_catalog.pg_indexes (
 						return err
 					}
 					return addRow(
-						h.IndexOid(db, table, index), // oid
-						pgNamespaceForDB(db).NameStr, // schemaname
-						parser.NewDName(table.Name),  // tablename
-						parser.NewDName(index.Name),  // indexname
-						parser.DNull,                 // tablespace
-						parser.NewDString(def),       // indexdef
+						h.IndexOid(db, table, index),    // oid
+						pgNamespaceForDB(db, h).NameStr, // schemaname
+						parser.NewDName(table.Name),     // tablename
+						parser.NewDName(index.Name),     // indexname
+						parser.DNull,                    // tablespace
+						parser.NewDString(def),          // indexdef
 					)
 				})
 			},
@@ -1001,17 +1001,15 @@ CREATE TABLE pg_catalog.pg_namespace (
 );
 `,
 	populate: func(p *planner, addRow func(...parser.Datum) error) error {
-		for _, nsp := range pgNamespaces {
-			if err := addRow(
-				nsp.Oid,      // oid
-				nsp.NameStr,  // nspname
-				parser.DNull, // nspowner
-				parser.DNull, // aclitem
-			); err != nil {
-				return err
-			}
-		}
-		return nil
+		h := makeOidHasher()
+		return forEachDatabaseDesc(p, func(db *sqlbase.DatabaseDescriptor) error {
+			return addRow(
+				h.NamespaceOid(db.Name),    // oid
+				parser.NewDString(db.Name), // nspname
+				parser.DNull,               // nspowner
+				parser.DNull,               // aclitem
+			)
+		})
 	},
 }
 
@@ -1071,7 +1069,7 @@ CREATE TABLE pg_catalog.pg_proc (
 		if err != nil {
 			return err
 		}
-		nspOid := pgNamespaceForDB(dbDesc).Oid
+		nspOid := pgNamespaceForDB(dbDesc, h).Oid
 		for name, builtins := range parser.Builtins {
 			// parser.Builtins contains duplicate uppercase and lowercase keys.
 			// Only return the lowercase ones for compatibility with postgres.
@@ -1812,13 +1810,11 @@ type pgNamespace struct {
 }
 
 var (
-	pgNamespacePublic            = &pgNamespace{name: "public"}
 	pgNamespaceSystem            = &pgNamespace{name: "system"}
 	pgNamespacePGCatalog         = &pgNamespace{name: "pg_catalog"}
 	pgNamespaceInformationSchema = &pgNamespace{name: "information_schema"}
 
 	pgNamespaces = []*pgNamespace{
-		pgNamespacePublic,
 		pgNamespaceSystem,
 		pgNamespacePGCatalog,
 		pgNamespaceInformationSchema,
@@ -1835,7 +1831,7 @@ func init() {
 
 // pgNamespaceForDB maps a DatabaseDescriptor to its corresponding pgNamespace.
 // See the comment above pgNamespace for more details.
-func pgNamespaceForDB(db *sqlbase.DatabaseDescriptor) *pgNamespace {
+func pgNamespaceForDB(db *sqlbase.DatabaseDescriptor, h oidHasher) *pgNamespace {
 	switch db.Name {
 	case sqlbase.SystemDB.Name:
 		return pgNamespaceSystem
@@ -1844,6 +1840,6 @@ func pgNamespaceForDB(db *sqlbase.DatabaseDescriptor) *pgNamespace {
 	case informationSchemaName:
 		return pgNamespaceInformationSchema
 	default:
-		return pgNamespacePublic
+		return &pgNamespace{name: db.Name, NameStr: parser.NewDName(db.Name), Oid: h.NamespaceOid(db.Name)}
 	}
 }
