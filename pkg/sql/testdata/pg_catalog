@@ -144,10 +144,11 @@ query OTOT colnames
 SELECT * FROM pg_catalog.pg_namespace
 ----
 oid         nspname             nspowner  aclitem
-268867073   public              NULL      NULL
-2939540337  system              NULL      NULL
-1782195457  pg_catalog          NULL      NULL
+1708731312  constraint_db       NULL      NULL
 719671438   information_schema  NULL      NULL
+1782195457  pg_catalog          NULL      NULL
+2939540337  system              NULL      NULL
+984021886   test                NULL      NULL
 
 ## pg_catalog.pg_database
 
@@ -207,26 +208,26 @@ query OTOOOOOO colnames
 SELECT c.oid, relname, relnamespace, reltype, relowner, relam, relfilenode, reltablespace
 FROM pg_catalog.pg_class c
 JOIN pg_catalog.pg_namespace n ON c.relnamespace = n.oid
-WHERE n.nspname = 'public'
+WHERE n.nspname = 'constraint_db'
 ----
 oid         relname       relnamespace  reltype  relowner  relam  relfilenode  reltablespace
-2876473678  t1            268867073     0        NULL      NULL   0            0
-335779562   primary       268867073     0        NULL      NULL   0            0
-335779561   t1_a_key      268867073     0        NULL      NULL   0            0
-335779560   index_key     268867073     0        NULL      NULL   0            0
-3110815990  t2            268867073     0        NULL      NULL   0            0
-4235777034  primary       268867073     0        NULL      NULL   0            0
-4235777033  t2_t1_ID_idx  268867073     0        NULL      NULL   0            0
-3211628798  t3            268867073     0        NULL      NULL   0            0
-624432002   primary       268867073     0        NULL      NULL   0            0
-624432001   t3_a_b_idx    268867073     0        NULL      NULL   0            0
-2875635133  v1            268867073     0        NULL      NULL   0            0
+2876473678  t1            1708731312    0        NULL      NULL   0            0
+335779562   primary       1708731312    0        NULL      NULL   0            0
+335779561   t1_a_key      1708731312    0        NULL      NULL   0            0
+335779560   index_key     1708731312    0        NULL      NULL   0            0
+3110815990  t2            1708731312    0        NULL      NULL   0            0
+4235777034  primary       1708731312    0        NULL      NULL   0            0
+4235777033  t2_t1_ID_idx  1708731312    0        NULL      NULL   0            0
+3211628798  t3            1708731312    0        NULL      NULL   0            0
+624432002   primary       1708731312    0        NULL      NULL   0            0
+624432001   t3_a_b_idx    1708731312    0        NULL      NULL   0            0
+2875635133  v1            1708731312    0        NULL      NULL   0            0
 
 query TIRIOBB colnames
 SELECT relname, relpages, reltuples, relallvisible, reltoastrelid, relhasindex, relisshared
 FROM pg_catalog.pg_class c
 JOIN pg_catalog.pg_namespace n ON c.relnamespace = n.oid
-WHERE n.nspname = 'public'
+WHERE n.nspname = 'constraint_db'
 ----
 relname       relpages  reltuples  relallvisible  reltoastrelid  relhasindex  relisshared
 t1            NULL      NULL       0              0              true         false
@@ -245,7 +246,7 @@ query TBTIIBB colnames
 SELECT relname, relistemp, relkind, relnatts, relchecks, relhasoids, relhaspkey
 FROM pg_catalog.pg_class c
 JOIN pg_catalog.pg_namespace n ON c.relnamespace = n.oid
-WHERE n.nspname = 'public'
+WHERE n.nspname = 'constraint_db'
 ----
 relname       relistemp  relkind  relnatts  relchecks  relhasoids  relhaspkey
 t1            false      r        4         0          false       true
@@ -264,7 +265,7 @@ query TBBBITT colnames
 SELECT relname, relhasrules, relhastriggers, relhassubclass, relfrozenxid, relacl, reloptions
 FROM pg_catalog.pg_class c
 JOIN pg_catalog.pg_namespace n ON c.relnamespace = n.oid
-WHERE n.nspname = 'public'
+WHERE n.nspname = 'constraint_db'
 ----
 relname       relhasrules  relhastriggers  relhassubclass  relfrozenxid  relacl  reloptions
 t1            false        false           false           0             NULL    NULL
@@ -286,7 +287,7 @@ SELECT attrelid, c.relname, attname, atttypid, attstattarget, attlen, attnum, at
 FROM pg_catalog.pg_attribute a
 JOIN pg_catalog.pg_class c ON a.attrelid = c.oid
 JOIN pg_catalog.pg_namespace n ON c.relnamespace = n.oid
-WHERE n.nspname = 'public'
+WHERE n.nspname = 'constraint_db'
 ----
 attrelid    relname       attname  atttypid  attstattarget  attlen  attnum  attndims  attcacheoff
 2876473678  t1            p        701       0              8       1       0         -1
@@ -314,7 +315,7 @@ SELECT c.relname, attname, atttypmod, attbyval, attstorage, attalign, attnotnull
 FROM pg_catalog.pg_attribute a
 JOIN pg_catalog.pg_class c ON a.attrelid = c.oid
 JOIN pg_catalog.pg_namespace n ON c.relnamespace = n.oid
-WHERE n.nspname = 'public'
+WHERE n.nspname = 'constraint_db'
 ----
 relname       attname  atttypmod  attbyval  attstorage  attalign  attnotnull  atthasdef
 t1            p        -1         NULL      NULL        NULL      true        false
@@ -342,7 +343,7 @@ SELECT c.relname, attname, attisdropped, attislocal, attinhcount, attacl, attopt
 FROM pg_catalog.pg_attribute a
 JOIN pg_catalog.pg_class c ON a.attrelid = c.oid
 JOIN pg_catalog.pg_namespace n ON c.relnamespace = n.oid
-WHERE n.nspname = 'public'
+WHERE n.nspname = 'constraint_db'
 ----
 relname       attname  attisdropped  attislocal  attinhcount  attacl  attoptions  attfdwoptions
 t1            p        false         true        0            NULL    NULL        NULL
@@ -374,7 +375,7 @@ JOIN pg_catalog.pg_class c ON a.attrelid = c.oid
 JOIN pg_catalog.pg_type t ON a.atttypid = t.oid
 JOIN pg_catalog.pg_collation k ON a.attcollation = k.oid
 JOIN pg_catalog.pg_namespace n ON c.relnamespace = n.oid
-WHERE n.nspname = 'public'
+WHERE n.nspname = 'constraint_db'
 ----
 relname  attname  typname  attcollation  collname
 t3       c        text     1661428263    en-US
@@ -396,7 +397,7 @@ SELECT ad.oid, c.relname, adrelid, adnum, adbin, adsrc
 FROM pg_catalog.pg_attrdef ad
 JOIN pg_catalog.pg_class c ON ad.adrelid = c.oid
 JOIN pg_catalog.pg_namespace n ON c.relnamespace = n.oid
-WHERE n.nspname = 'public'
+WHERE n.nspname = 'constraint_db'
 ----
 oid         relname  adrelid     adnum  adbin  adsrc
 2737381215  t1       2876473678  4      12     12
@@ -407,21 +408,21 @@ oid         relname  adrelid     adnum  adbin  adsrc
 query OTTTT colnames
 SELECT crdb_oid, schemaname, tablename, indexname, tablespace
 FROM pg_catalog.pg_indexes
-WHERE schemaname = 'public'
+WHERE schemaname = 'constraint_db'
 ----
-crdb_oid    schemaname  tablename  indexname     tablespace
-335779562   public      t1         primary       NULL
-335779561   public      t1         t1_a_key      NULL
-335779560   public      t1         index_key     NULL
-4235777034  public      t2         primary       NULL
-4235777033  public      t2         t2_t1_ID_idx  NULL
-624432002   public      t3         primary       NULL
-624432001   public      t3         t3_a_b_idx    NULL
+crdb_oid    schemaname     tablename  indexname     tablespace
+335779562   constraint_db  t1         primary       NULL
+335779561   constraint_db  t1         t1_a_key      NULL
+335779560   constraint_db  t1         index_key     NULL
+4235777034  constraint_db  t2         primary       NULL
+4235777033  constraint_db  t2         t2_t1_ID_idx  NULL
+624432002   constraint_db  t3         primary       NULL
+624432001   constraint_db  t3         t3_a_b_idx    NULL
 
 query OTTT colnames
 SELECT crdb_oid, tablename, indexname, indexdef
 FROM pg_catalog.pg_indexes
-WHERE schemaname = 'public'
+WHERE schemaname = 'constraint_db'
 ----
 crdb_oid    tablename  indexname     indexdef
 335779562   t1         primary       CREATE UNIQUE INDEX "primary" ON constraint_db.t1 (p ASC)
@@ -488,24 +489,24 @@ query OTOT colnames
 SELECT con.oid, conname, connamespace, contype
 FROM pg_catalog.pg_constraint con
 JOIN pg_catalog.pg_namespace n ON con.connamespace = n.oid
-WHERE n.nspname = 'public'
+WHERE n.nspname = 'constraint_db'
 ORDER BY con.oid
 ----
 oid         conname    connamespace  contype
-229825094   t1_a_key   268867073     u
-229825095   index_key  268867073     u
-453404206   check_b    268867073     c
-1201123742  primary    268867073     p
-2684964110  primary    268867073     p
-3368586374  primary    268867073     p
-4150478613  fk         268867073     f
-4206367032  fk         268867073     f
+229825094   t1_a_key   1708731312    u
+229825095   index_key  1708731312    u
+453404206   check_b    1708731312    c
+1201123742  primary    1708731312    p
+2684964110  primary    1708731312    p
+3368586374  primary    1708731312    p
+4150478613  fk         1708731312    f
+4206367032  fk         1708731312    f
 
 query TTBBBOOO colnames
 SELECT conname, contype, condeferrable, condeferred, convalidated, conrelid, contypid, conindid
 FROM pg_catalog.pg_constraint con
 JOIN pg_catalog.pg_namespace n ON con.connamespace = n.oid
-WHERE n.nspname = 'public'
+WHERE n.nspname = 'constraint_db'
 ORDER BY con.oid
 ----
 conname    contype  condeferrable  condeferred  convalidated  conrelid    contypid  conindid
@@ -522,7 +523,7 @@ query T
 SELECT conname
 FROM pg_catalog.pg_constraint con
 JOIN pg_catalog.pg_namespace n ON con.connamespace = n.oid
-WHERE n.nspname = 'public' AND contype NOT IN ('c', 'f', 'p', 'u')
+WHERE n.nspname = 'constraint_db' AND contype NOT IN ('c', 'f', 'p', 'u')
 ORDER BY con.oid
 ----
 
@@ -530,7 +531,7 @@ query TOTTT colnames
 SELECT conname, confrelid, confupdtype, confdeltype, confmatchtype
 FROM pg_catalog.pg_constraint con
 JOIN pg_catalog.pg_namespace n ON con.connamespace = n.oid
-WHERE n.nspname = 'public' AND contype IN ('c', 'p', 'u')
+WHERE n.nspname = 'constraint_db' AND contype IN ('c', 'p', 'u')
 ORDER BY con.oid
 ----
 conname    confrelid  confupdtype  confdeltype  confmatchtype
@@ -545,7 +546,7 @@ query TOTTT colnames
 SELECT conname, confrelid, confupdtype, confdeltype, confmatchtype
 FROM pg_catalog.pg_constraint con
 JOIN pg_catalog.pg_namespace n ON con.connamespace = n.oid
-WHERE n.nspname = 'public' AND contype = 'f'
+WHERE n.nspname = 'constraint_db' AND contype = 'f'
 ORDER BY con.oid
 ----
 conname  confrelid   confupdtype  confdeltype  confmatchtype
@@ -556,7 +557,7 @@ query TBIBT colnames
 SELECT conname, conislocal, coninhcount, connoinherit, conkey
 FROM pg_catalog.pg_constraint con
 JOIN pg_catalog.pg_namespace n ON con.connamespace = n.oid
-WHERE n.nspname = 'public'
+WHERE n.nspname = 'constraint_db'
 ORDER BY con.oid
 ----
 conname    conislocal  coninhcount  connoinherit  conkey
@@ -573,7 +574,7 @@ query TTTTTTTT colnames
 SELECT conname, confkey, conpfeqop, conppeqop, conffeqop, conexclop, conbin, consrc
 FROM pg_catalog.pg_constraint con
 JOIN pg_catalog.pg_namespace n ON con.connamespace = n.oid
-WHERE n.nspname = 'public' AND contype IN ('c', 'p', 'u')
+WHERE n.nspname = 'constraint_db' AND contype IN ('c', 'p', 'u')
 ORDER BY con.oid
 ----
 conname    confkey  conpfeqop  conppeqop  conffeqop  conexclop  conbin  consrc
@@ -588,7 +589,7 @@ query TTTTTTTT colnames
 SELECT conname, confkey, conpfeqop, conppeqop, conffeqop, conexclop, conbin, consrc
 FROM pg_catalog.pg_constraint con
 JOIN pg_catalog.pg_namespace n ON con.connamespace = n.oid
-WHERE n.nspname = 'public' AND contype = 'f'
+WHERE n.nspname = 'constraint_db' AND contype = 'f'
 ORDER BY con.oid
 ----
 conname  confkey  conpfeqop  conppeqop  conffeqop  conexclop  conbin  consrc
@@ -966,7 +967,7 @@ SELECT def.oid, c.relname, pg_catalog.pg_get_expr(def.adbin, def.adrelid)
 FROM pg_catalog.pg_attrdef def
 JOIN pg_catalog.pg_class c ON def.adrelid = c.oid
 JOIN pg_catalog.pg_namespace n ON c.relnamespace = n.oid
-WHERE n.nspname = 'public'
+WHERE n.nspname = 'constraint_db'
 ----
 2737381215  t1  12
 2989572986  t3  'FOO'
@@ -1006,14 +1007,14 @@ SELECT COUNT(*) FROM pg_catalog.pg_views WHERE schemaname='constraint_db';
 query I
 SELECT COUNT(*) FROM pg_catalog.pg_class c
 JOIN pg_catalog.pg_namespace n ON c.relnamespace = n.oid
-WHERE nspname='public'
+WHERE nspname='constraint_db'
 ----
 0
 
 query I
 SELECT COUNT(*) FROM pg_catalog.pg_constraint con
 JOIN pg_catalog.pg_namespace n ON con.connamespace = n.oid
-WHERE n.nspname = 'public'
+WHERE n.nspname = 'constraint_db'
 ----
 0
 
@@ -1040,14 +1041,14 @@ SELECT COUNT(*) FROM pg_catalog.pg_views WHERE schemaname='constraint_db';
 query I
 SELECT COUNT(*) FROM pg_catalog.pg_class c
 JOIN pg_catalog.pg_namespace n ON c.relnamespace = n.oid
-WHERE nspname='public'
+WHERE nspname='constraint_db'
 ----
 11
 
 query I
 SELECT COUNT(*) FROM pg_catalog.pg_constraint con
 JOIN pg_catalog.pg_namespace n ON con.connamespace = n.oid
-WHERE n.nspname = 'public'
+WHERE n.nspname = 'constraint_db'
 ----
 8
 
