@@ -1401,7 +1401,7 @@ var Builtins = map[string][]Builtin{
 		},
 	},
 
-	"current_schema": {
+	"current_database": {
 		Builtin{
 			Types:      ArgTypes{},
 			ReturnType: fixedReturnType(TypeString),
@@ -1413,6 +1413,23 @@ var Builtins = map[string][]Builtin{
 				return NewDString(ctx.Database), nil
 			},
 			Info: "Returns the current database.",
+		},
+	},
+
+	"current_schema": {
+		Builtin{
+			Types:      ArgTypes{},
+			ReturnType: fixedReturnType(TypeString),
+			category:   categorySystemInfo,
+			fn: func(ctx *EvalContext, args Datums) (Datum, error) {
+				if len(ctx.Database) == 0 {
+					return DNull, nil
+				}
+				return NewDString(ctx.Database), nil
+			},
+			Info: "Returns the current schema. This function is provided for " +
+				"compatibility with PostgreSQL. For a new CockroachDB application, " +
+				"consider using current_database() instead.",
 		},
 	},
 
