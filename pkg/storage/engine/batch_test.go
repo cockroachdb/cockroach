@@ -129,7 +129,7 @@ func testBatchBasics(t *testing.T, writeOnly bool, commit func(e Engine, b Batch
 func TestBatchBasics(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	testBatchBasics(t, false /* writeOnly */, func(e Engine, b Batch) error {
-		return b.Commit()
+		return b.Commit(false /* !sync */)
 	})
 }
 
@@ -231,14 +231,14 @@ func TestBatchRepr(t *testing.T) {
 			t.Fatalf("expected %v, but found %v", expOps, ops)
 		}
 
-		return e.ApplyBatchRepr(repr)
+		return e.ApplyBatchRepr(repr, false /* !sync */)
 	})
 }
 
 func TestWriteBatchBasics(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	testBatchBasics(t, true /* writeOnly */, func(e Engine, b Batch) error {
-		return b.Commit()
+		return b.Commit(false /* !sync */)
 	})
 }
 
@@ -264,7 +264,7 @@ func TestApplyBatchRepr(t *testing.T) {
 
 		b2 := e.NewBatch()
 		defer b2.Close()
-		if err := b2.ApplyBatchRepr(repr1); err != nil {
+		if err := b2.ApplyBatchRepr(repr1, false /* !sync */); err != nil {
 			t.Fatal(err)
 		}
 		repr2 := b2.Repr()
@@ -290,11 +290,11 @@ func TestApplyBatchRepr(t *testing.T) {
 
 		b4 := e.NewBatch()
 		defer b4.Close()
-		if err := b4.ApplyBatchRepr(repr); err != nil {
+		if err := b4.ApplyBatchRepr(repr, false /* !sync */); err != nil {
 			t.Fatal(err)
 		}
 		// Intentionally don't call Repr() because the expected user wouldn't.
-		if err := b4.Commit(); err != nil {
+		if err := b4.Commit(false /* !sync */); err != nil {
 			t.Fatal(err)
 		}
 
@@ -456,7 +456,7 @@ func TestBatchProto(t *testing.T) {
 		t.Fatalf("expected GetProto to fail ok=%t: %s", ok, err)
 	}
 	// Commit and verify the proto can be read directly from the engine.
-	if err := b.Commit(); err != nil {
+	if err := b.Commit(false /* !sync */); err != nil {
 		t.Fatal(err)
 	}
 	if ok, _, _, err := e.GetProto(mvccKey("proto"), getVal); !ok || err != nil {
@@ -545,7 +545,7 @@ func TestBatchScan(t *testing.T) {
 	}
 
 	// Now, commit batch and re-scan using engine direct to compare results.
-	if err := b.Commit(); err != nil {
+	if err := b.Commit(false /* !sync */); err != nil {
 		t.Fatal(err)
 	}
 	for i, scan := range scans {
@@ -912,7 +912,7 @@ func TestBatchDistinctPanics(t *testing.T) {
 		func() { _ = batch.Put(a, nil) },
 		func() { _ = batch.Merge(a, nil) },
 		func() { _ = batch.Clear(a) },
-		func() { _ = batch.ApplyBatchRepr(nil) },
+		func() { _ = batch.ApplyBatchRepr(nil, false) },
 		func() { _, _ = batch.Get(a) },
 		func() { _, _, _, _ = batch.GetProto(a, nil) },
 		func() { _ = batch.Iterate(a, a, nil) },
