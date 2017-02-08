@@ -130,7 +130,7 @@ type planNode interface {
 	// until the next call to Next().
 	//
 	// Available after Next().
-	Values() parser.DTuple
+	Values() parser.Datums
 
 	// DebugValues returns a set of debug values, valid until the next call to
 	// Next(). This is only available for nodes that have been put in a special

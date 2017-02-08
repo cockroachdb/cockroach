@@ -37,7 +37,7 @@ type ordinalityNode struct {
 	source   planNode
 	ordering orderingInfo
 	columns  ResultColumns
-	row      parser.DTuple
+	row      parser.Datums
 	curCnt   int64
 }
 
@@ -48,7 +48,7 @@ func (p *planner) wrapOrdinality(ds planDataSource) planDataSource {
 	res := &ordinalityNode{
 		source:   src,
 		ordering: src.Ordering(),
-		row:      make(parser.DTuple, len(srcColumns)+1),
+		row:      make(parser.Datums, len(srcColumns)+1),
 		curCnt:   1,
 	}
 
@@ -93,7 +93,7 @@ func (o *ordinalityNode) Next() (bool, error) {
 }
 
 func (o *ordinalityNode) Ordering() orderingInfo     { return o.ordering }
-func (o *ordinalityNode) Values() parser.DTuple      { return o.row }
+func (o *ordinalityNode) Values() parser.Datums      { return o.row }
 func (o *ordinalityNode) DebugValues() debugValues   { return o.source.DebugValues() }
 func (o *ordinalityNode) MarkDebug(mode explainMode) { o.source.MarkDebug(mode) }
 func (o *ordinalityNode) Columns() ResultColumns     { return o.columns }

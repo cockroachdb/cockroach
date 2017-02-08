@@ -29,16 +29,16 @@ const (
 	// targetChunkSize is the target number of Datums in a RowContainer chunk.
 	targetChunkSize = 64
 	sizeOfDatum     = int64(unsafe.Sizeof(parser.Datum(nil)))
-	sizeOfDTuple    = int64(unsafe.Sizeof(parser.DTuple(nil)))
+	sizeOfDatums    = int64(unsafe.Sizeof(parser.Datums(nil)))
 )
 
-// RowContainer is a container for rows of DTuples which tracks the
+// RowContainer is a container for rows of Datums which tracks the
 // approximate amount of memory allocated for row data.
 // Rows must be added using AddRow(); once the work is done
 // the Close() method must be called to release the allocated memory.
 //
 // TODO(knz): this does not currently track the amount of memory used
-// for the outer array of DTuple references.
+// for the outer array of Datums references.
 type RowContainer struct {
 	numCols int
 
@@ -123,7 +123,7 @@ func NewRowContainer(acc mon.BoundAccount, h ResultColumns, rowCapacity int) *Ro
 	// Precalculate the memory used for a chunk, specifically by the Datums in the
 	// chunk and the slice pointing at the chunk.
 	c.chunkMemSize = sizeOfDatum * int64(c.rowsPerChunk*c.numCols)
-	c.chunkMemSize += sizeOfDTuple
+	c.chunkMemSize += sizeOfDatums
 
 	return c
 }
@@ -155,7 +155,7 @@ func (c *RowContainer) allocChunks(numChunks int) error {
 }
 
 // rowSize computes the size of a single row.
-func (c *RowContainer) rowSize(row parser.DTuple) int64 {
+func (c *RowContainer) rowSize(row parser.Datums) int64 {
 	rsz := c.fixedColsSize
 	for _, i := range c.varSizedColumns {
 		rsz += int64(row[i].Size())
@@ -173,9 +173,9 @@ func (c *RowContainer) getChunkAndPos(rowIdx int) (chunk int, pos int) {
 }
 
 // AddRow attempts to insert a new row in the RowContainer. The row slice is not
-// used directly: the Datums inside the DTuple are copied to internal storage.
+// used directly: the Datum values inside the Datums are copied to internal storage.
 // Returns an error if the allocation was denied by the MemoryMonitor.
-func (c *RowContainer) AddRow(row parser.DTuple) (parser.DTuple, error) {
+func (c *RowContainer) AddRow(row parser.Datums) (parser.Datums, error) {
 	if len(row) != c.numCols {
 		panic(fmt.Sprintf("invalid row length %d, expected %d", len(row), c.numCols))
 	}
@@ -213,7 +213,7 @@ func (c *RowContainer) NumCols() int {
 }
 
 // At accesses a row at a specific index.
-func (c *RowContainer) At(i int) parser.DTuple {
+func (c *RowContainer) At(i int) parser.Datums {
 	if i < 0 || i >= c.numRows {
 		panic(fmt.Sprintf("row index %d out of range", i))
 	}
@@ -249,7 +249,7 @@ func (c *RowContainer) PopFirst() {
 // Replace substitutes one row for another. This does query the
 // MemoryMonitor to determine whether the new row fits the
 // allowance.
-func (c *RowContainer) Replace(i int, newRow parser.DTuple) error {
+func (c *RowContainer) Replace(i int, newRow parser.Datums) error {
 	newSz := c.rowSize(newRow)
 	row := c.At(i)
 	oldSz := c.rowSize(row)

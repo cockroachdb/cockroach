@@ -58,8 +58,8 @@ func TestValues(t *testing.T) {
 			Type: &parser.FloatColType{},
 		}
 	}
-	asRow := func(datums ...parser.Datum) []parser.DTuple {
-		return []parser.DTuple{datums}
+	asRow := func(datums ...parser.Datum) []parser.Datums {
+		return []parser.Datums{datums}
 	}
 
 	makeValues := func(tuples ...*parser.Tuple) *parser.ValuesClause {
@@ -71,7 +71,7 @@ func TestValues(t *testing.T) {
 
 	testCases := []struct {
 		stmt *parser.ValuesClause
-		rows []parser.DTuple
+		rows []parser.Datums
 		ok   bool
 	}{
 		{
@@ -134,7 +134,7 @@ func TestValues(t *testing.T) {
 				t.Errorf("%d: unexpected error in Start: %v", i, err)
 				continue
 			}
-			var rows []parser.DTuple
+			var rows []parser.Datums
 			next, err := plan.Next()
 			for ; next; next, err = plan.Next() {
 				rows = append(rows, plan.Values())

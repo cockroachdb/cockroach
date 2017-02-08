@@ -295,7 +295,7 @@ func (n *groupNode) Ordering() orderingInfo {
 	return orderingInfo{}
 }
 
-func (n *groupNode) Values() parser.DTuple {
+func (n *groupNode) Values() parser.Datums {
 	return n.values.Values()
 }
 
@@ -356,7 +356,7 @@ func (n *groupNode) Next() (bool, error) {
 
 		// TODO(dt): optimization: skip buckets when underlying plan is ordered by grouped values.
 
-		bucket, err := sqlbase.EncodeDTuple(scratch, valuesToGroupBy)
+		bucket, err := sqlbase.EncodeDatums(scratch, valuesToGroupBy)
 		if err != nil {
 			return false, err
 		}
@@ -400,7 +400,7 @@ func (n *groupNode) computeAggregates() error {
 		n.planner.session.TxnState.makeBoundAccount(),
 		n.values.Columns(), len(n.buckets),
 	)
-	row := make(parser.DTuple, len(n.render))
+	row := make(parser.Datums, len(n.render))
 	for k := range n.buckets {
 		n.currentBucket = k
 
