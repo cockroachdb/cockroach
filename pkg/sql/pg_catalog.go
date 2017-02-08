@@ -566,6 +566,19 @@ func colIDArrayToDatum(arr []sqlbase.ColumnID) (parser.Datum, error) {
 	return d, nil
 }
 
+// colIDArrayToVector returns an INT2VECTOR containing the ColumnIDs, or NULL if
+// there are no ColumnIDs.
+func colIDArrayToVector(arr []sqlbase.ColumnID) (parser.Datum, error) {
+	dArr, err := colIDArrayToDatum(arr)
+	if err != nil {
+		return nil, err
+	}
+	if dArr == parser.DNull {
+		return dArr, nil
+	}
+	return parser.NewDIntVectorFromDArray(parser.MustBeDArray(dArr)), nil
+}
+
 var (
 	// http://doxygen.postgresql.org/pg__wchar_8h.html#a22e0c8b9f59f6e226a5968620b4bb6a9aac3b065b882d3231ba59297524da2f23
 	datEncodingUTFId  = parser.NewDInt(6)
@@ -818,7 +831,7 @@ CREATE TABLE pg_catalog.pg_index (
     indisready BOOL,
     indislive BOOL,
     indisreplident BOOL,
-    indkey INT[],
+    indkey INT2VECTOR,
     indcollation INT,
     indclass INT,
     indoption INT,
@@ -845,7 +858,7 @@ CREATE TABLE pg_catalog.pg_index (
 							}
 						}
 					}
-					indkey, err := colIDArrayToDatum(index.ColumnIDs)
+					indkey, err := colIDArrayToVector(index.ColumnIDs)
 					if err != nil {
 						return err
 					}
@@ -1266,8 +1279,8 @@ CREATE TABLE pg_catalog.pg_settings (
     reset_val STRING,
     sourcefile STRING,
     sourceline INT,
-    pending_restart BOOL  
-);    
+    pending_restart BOOL
+);
 `,
 	populate: func(p *planner, addRow func(...parser.Datum) error) error {
 		for _, vName := range varNames {
