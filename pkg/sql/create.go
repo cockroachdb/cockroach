@@ -1157,7 +1157,7 @@ func MakeTableDesc(
 		if d, ok := def.(*parser.ColumnTableDef); ok {
 			if !desc.IsVirtualTable() {
 				if _, ok := d.Type.(*parser.ArrayColType); ok {
-					return desc, util.UnimplementedWithIssueErrorf(2115, "ARRAY column types are unsupported")
+					return desc, util.UnimplementedWithIssueErrorf(2115, "ARRAY and INT2VECTOR column types are unsupported")
 				}
 			}
 

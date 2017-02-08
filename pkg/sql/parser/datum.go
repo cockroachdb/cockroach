@@ -2005,6 +2005,7 @@ func wrapWithOid(d Datum, oid oid.Oid) Datum {
 		return nil
 	case *DInt:
 	case *DString:
+	case *DArray:
 	case dNull, *DOidWrapper:
 		panic(fmt.Errorf("cannot wrap %T with an Oid", v))
 	default:
@@ -2153,4 +2154,10 @@ func mixedTypeCompare(l, r Datum) (int, bool) {
 		return -1, true
 	}
 	return 1, true
+}
+
+// NewDIntVectorFromDArray is a helper routine to create a *DIntVector
+// (implemented as a *DOidWrapper) initialized from an existing *DArray.
+func NewDIntVectorFromDArray(d *DArray) Datum {
+	return wrapWithOid(d, oid.T_int2vector)
 }

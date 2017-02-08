@@ -41,10 +41,11 @@ message ColumnType {
     COLLATEDSTRING = 10;  // Collated STRING, CHAR, and VARCHAR
     NAME = 11;
     OID = 12;
+    INT2VECTOR = 13;
 
     // Array types.
     //
-    // TODO(cuongdo): Fix this before allowing persistence of array types. 
+    // TODO(cuongdo): Fix this before allowing persistence of array types.
     // It would be cleaner if when array_dimensions are specified, Kind is
     // simply the parameterized type of the array. However, because Kind is used
     // to determine type information elsewhere, it isn't possible to take the

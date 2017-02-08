@@ -178,15 +178,34 @@ func (b *writeBuffer) writeTextDatum(d parser.Datum, sessionLoc *time.Location) 
 		b.writeLengthPrefixedVariablePutbuf()
 
 	case *parser.DArray:
-		b.variablePutbuf.WriteString("{")
-		for i, d := range v.Array {
-			if i > 0 {
-				b.variablePutbuf.WriteString(",")
+		if w, ok := d.(*parser.DOidWrapper); ok {
+			switch w.Oid {
+			case oid.T_int2vector:
+				// int2vectors are serialized as a string of space-separated values.
+				a := w.Wrapped.(*parser.DArray)
+				for i, d := range a.Array {
+					if i > 0 {
+						b.variablePutbuf.WriteString(" ")
+					}
+					d.Format(&b.variablePutbuf, parser.FmtBareStrings)
+				}
+				b.writeLengthPrefixedVariablePutbuf()
+			default:
+				b.setError(errors.Errorf("unsupported wrapped OID %d", int(w.Oid)))
 			}
-			d.Format(&b.variablePutbuf, parser.FmtBareStrings)
+		} else {
+			// Arrays are serialized as a string of comma-separated values, surrounded
+			// by braces.
+			b.variablePutbuf.WriteString("{")
+			for i, d := range v.Array {
+				if i > 0 {
+					b.variablePutbuf.WriteString(",")
+				}
+				d.Format(&b.variablePutbuf, parser.FmtBareStrings)
+			}
+			b.variablePutbuf.WriteString("}")
+			b.writeLengthPrefixedVariablePutbuf()
 		}
-		b.variablePutbuf.WriteString("}")
-		b.writeLengthPrefixedVariablePutbuf()
 
 	default:
 		b.setError(errors.Errorf("unsupported type %T", d))

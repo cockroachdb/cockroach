@@ -325,6 +325,12 @@ func arrayOf(colType ColumnType, boundsExprs Exprs) (ColumnType, error) {
 	}
 }
 
+var int2vectorColType = &ArrayColType{
+	Name:        "INT2VECTOR",
+	ParamType:   intColTypeInt,
+	BoundsExprs: Exprs{NewDInt(DInt(-1))},
+}
+
 // Pre-allocated immutable postgres oid column type.
 var oidColTypeOid = &OidColType{}
 
@@ -440,6 +446,9 @@ func CastTargetToDatumType(t CastTargetType) Type {
 	case *CollatedStringColType:
 		return TCollatedString{Locale: ct.Locale}
 	case *ArrayColType:
+		if ct.Name == "INT2VECTOR" {
+			return TypeIntVector
+		}
 		return tArray{CastTargetToDatumType(ct.ParamType)}
 	case *OidColType:
 		return TypeOid
