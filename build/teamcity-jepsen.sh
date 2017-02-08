@@ -76,7 +76,7 @@ for test in "${tests[@]}"; do
         else
             # Test passed. grab just the results file.
             echo "Test passed. Grabbing minimal logs..."
-            scp -o "StrictHostKeyChecking no" -ri "$HOME/.ssh/${KEY_NAME}" "ubuntu@${controller}:jepsen/cockroachdb/store/latest/test.fressian" "${artifacts_dir}"
+            scp -o "StrictHostKeyChecking no" -ri "$HOME/.ssh/${KEY_NAME}" "ubuntu@${controller}:jepsen/cockroachdb/store/latest/{test.fressian,results.edn,latency-quantiles.png,latency-raw.png,rate.png}" "${artifacts_dir}"
         fi
         echo "##teamcity[testFinished name='${test} ${nemesis}']"
         echo "##teamcity[publishArtifacts '${LOG_DIR}']"
