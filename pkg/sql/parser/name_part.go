@@ -78,11 +78,6 @@ func (n Name) Normalize() string {
 	return norm.NFC.String(lower)
 }
 
-// Equal returns true iff the normalizations of a and b are equal.
-func (n Name) Equal(b Name) bool {
-	return n.Normalize() == b.Normalize()
-}
-
 // ReNormalizeName performs the same work as NormalizeName but when
 // the string originates from the database. We define a different
 // function so as to be able to track usage of this function (cf. #8200).
