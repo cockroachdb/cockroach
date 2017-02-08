@@ -1,4 +1,5 @@
 # Docker Deploy
+
 Installing docker is a prerequisite. The instructions differ depending on the
 environment. Docker is comprised of two parts: the daemon server which runs on
 Linux and accepts commands, and the client which is a Go program capable of
@@ -34,61 +35,100 @@ resulting image `cockroachdb/cockroach` can be run via `docker run` in the
 usual fashion.
 
 #  Dependencies
+
 A snapshot of CockroachDB's dependencies is maintained at https://github.com/cockroachdb/vendored
-and checked out as a sub-module at `./vendor`.
+and checked out as a submodule at `./vendor`.
 
 ## Updating Dependencies
+
 This snapshot was built and is managed using `glide`.
 
-The [docs](https://github.com/Masterminds/glide) have detailed instructions, but in brief:
-* `go get -u github.com/Masterminds/glide`
-  * If installing from master becomes unstable, you can use the oldest version that correctly handles
-  submodules (`ab0972eb`), e.g.
-  ```
-  git -C $GOPATH/src/github.com/Masterminds/glide checkout ab0972eb && \
-  go install github.com/Masterminds/glide
-  ```
-* run `./scripts/glide.sh` in `cockroachdb/cockroach`.
-* add new dependencies with `./scripts/glide.sh get -s github.com/my/dependency`
-	- Note: if you are adding a non-import dependency (e.g. a binary tool to be used in development),
-		please add a dummy import to `build/tool_imports.go`. This is a workaround for an upstream issue:
-		https://github.com/Masterminds/glide/issues/690.
-* update dependencies to their latest version with `./scripts/glide.sh up`
-  - to pin a dependency to a particular version, add a `version: ...` line to `glide.yaml`, then update.
-  - to update a pinned dependency, change the version in `glide.yaml`, then update.
+### Installing Glide
 
-Updating a single dependency? glide does *not* expose a method to just update a single dependency.
-Since glide attempts to consider the expressed version requirements for all transitive dependencies,
-updating a single dependency could transitively change the resolution of others, and glide currently
-chooses to always do a full resolution to address this.
+Get or update glide with `go get -u github.com/Masterminds/glide`
+- Note that versions in `brew` or elsewhere are sometimes missing recent fixes.
+- If installing from master becomes unstable, you can use the oldest version that correctly handles
+submodules (`ab0972eb`), e.g.
+```
+git -C $GOPATH/src/github.com/Masterminds/glide checkout ab0972eb && \
+go install github.com/Masterminds/glide
+```
 
-If an attempt to update a dependency is pulling in unwanted/risky changes to another library, you
-can and perhaps should pin the other library.
+### Using Glide
 
-You can also, if you *really* want to, just change the resolution of a single dependency, by editing
-its resolved version in glide.lock, then re-generating `vendor` from the edited resolution with
-`scripts/glide.sh install`. This is not recommended, as it circumvents the normal resolution logic.
+`glide` uses import statements in our code to discover what it needs to vendor.
 
-## Working with Sub-modules
+- When introducing a new library, adding an import and running `glide up` will fetch it to `vendor`.
+  - Don't try to use `glide get`, since it [will delete all comments](Masterminds/glide/issues/691) in `glide.yaml`.
+- If you are adding a non-import dependency (e.g. a binary tool to be used in development),
+  please add a dummy import to `build/tool_imports.go` to ensure glide remains [aware of it](Masterminds/glide/issues/690).
+- [glide-diff-parser](cockroachdb/glide-diff-parser) can be useful to inspect or summarize changes.
 
-Since dependencies are stored in their own repository, and `cockroachdb/cockroach` depends on it,
-changing a dependency requires pushing two things, in order: first the changes to the `vendored`
-repository, then the reference to those changes to the main repository.
+### Version Pins
 
-After adding or updating dependencies (and running all tests), switch into the `vendor` sub-module
-and commit changes (or use `git -C`). The commit must be available on `github.com/cockroachdb/vendored`
-*before* submitting a pull request to `cockroachdb/cockroach` that references it.
-* Organization members can push new refs directly.
-  * Likely want to `git remote set-url origin git@github.com:cockroachdb/vendored.git`.
-  * If not pushing to `master`, be sure to tag the ref so that it will not be GC'ed.
-* Non-members should fork the `vendored` repo, add their fork as a second remote, and submit a pull
-request.
-  * After the pull request is merged, fetch and checkout the new `origin/master`, and commit *that* as the
-  new ref in `cockroachdb/cockroach`.
+We pin many of our dependencies in `glide.yaml` to make it easier to update or add a single dependency.
+
+Glide always re-resolves everything when updating any dependency (to preserve correctness given
+potential changes in transitive requirements). Unfortunately it always picks the latest version of a
+dependency unless it has a direct or transitive pin, which means even when attempting to `update` or
+`get` even just one dependency, any other unreleated dependencies could unexpectedly change versions
+unless they are pinned.
+
+Thus for libraries where we care about what version we resolve -- e.g. if they affect stability, if we
+want to vet upstream chanages, if we rely on features or fixes in specific upstream versions, etc --
+we pin revisions to make them stable between `update` runs, and only unpin them when we actually want
+them to change. While not a hard rule, if we directly import something in our code, there's a decent
+chance we care about it enough that we want its version to remain stable unless intentionally changed,
+and thus it may benefit from being pinned.
+
+In cases where a sweeping update of all deps is actually desired, comment out all the stability pins
+section of `glide.yaml`, run `update`, then restore the pins with their new revisions.
+
+### Working with Submodules
+
+To keep the bloat of all the changes in all our dependencies out of our main repository, we embed
+`vendor` as a git submodule, storing its content and history in [`vendored`](cockroachdb/vendored) instead.
+
+This split across two repositories however means that changes involving changed dependencies require
+a two step process.
+
+- After using glide as described above to add or update dependencies and making related code changes,
+`git status` in `cockroachdb/cockroach` checkout will report that the `vendor` submodule has
+`modified/untracked content`
+- Switch into `vendor` and commit all changes (or use `git -C vendor`), on a new named branch.
+  - At this point the `git status` in your `cockroachdb/cockroach` checkout will report
+  `new commits` for `vendor` instead of `modified content`.
+- Commit your code changes and new `vendor` submodule ref.
+- Before this commit can be submitted in a pull request to `cockroachdb/cockroach`, the submodule
+commit it references must be available on `github.com/cockroachdb/vendored`.
+* Organization members can push their named branches there directly.
+* Non-members should fork the `vendored` repo and submit a pull request to `cockroachdb/vendored`,
+  and need wait for it to merge before they will be able to use it in a `cockroachdb/cockroach` PR.
+
+#### `master` Branch Pointer in Vendored Repo
+
+Since the `cockroachdb/cockroach` submodule references individual commit hashes in `vendored`, there
+is little significance to the `master` branch in `vendored` -- as outlined above, new commits are
+always authored with the previously referenced commit as their parent, regardless of what `master`
+happens to be.
+
+That said, it is critical that any ref in `vendored` that is referenced from `cockroachdb/cockroach`
+remain available in `vendored` in perpetuity: after a PR referencing a ref merges, the `vendored`
+`master` branch should be updated to point to it before the named feature branch can be deleted, to
+ensure the ref remains reachable and thus is never garbage collected.
+
+#### Conflicting Submodule Changes
+
+The canonical linearization of history is always the main repo. In the event of concurrent
+changes to `vendor`, the first should cause the second to see a conflict on the `vendor` submodule
+pointer. When resolving that conflict, it is important to re-run glide against the fetched, updated
+`vendor` ref, thus generating a new commit in the submodule that has as its parent the one from the
+earlier change.
 
 ## Repository Name
+
 We only want the vendor directory used by builds when it is explicitly checked out *and managed* as a
-sub-module at `./vendor`.
+submodule at `./vendor`.
 
 If a go build fails to find a dependency in `./vendor`, it will continue searching anything named
 "vendor" in parent directories. Thus the vendor repository is _not_ named "vendor", to minimize the risk
