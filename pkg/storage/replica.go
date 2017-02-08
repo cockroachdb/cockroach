@@ -92,13 +92,7 @@ var txnAutoGC = true
 var tickQuiesced = envutil.EnvOrDefaultBool("COCKROACH_TICK_QUIESCED", true)
 
 // Whether to enable experimental support for proposer-evaluated KV.
-var propEvalKV = func() bool {
-	enabled := envutil.EnvOrDefaultBool("COCKROACH_PROPOSER_EVALUATED_KV", false)
-	if enabled {
-		log.Warningf(context.Background(), "running with experimental support for proposer-evaluated KV, see #10431")
-	}
-	return enabled
-}()
+var propEvalKV = envutil.EnvOrDefaultBool("COCKROACH_PROPOSER_EVALUATED_KV", false)
 
 // ProposerEvaluatedKVEnabled returns whether experimental support for
 // proposer-evaluated KV is enabled.

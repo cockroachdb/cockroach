@@ -18,7 +18,7 @@ eexpect ":/# "
 
 # Check that tables are not pretty-printed when input is not a terminal
 # and --format=pretty is not speciifed.
-send "echo begin; echo 'select 1;' | $argv sql $silence_prop_eval_kv\r"
+send "echo begin; echo 'select 1;' | $argv sql\r"
 eexpect "begin\r\n1 row\r\n1\r\n1\r\n"
 
 # Check that tables are pretty-printed when input is a terminal
