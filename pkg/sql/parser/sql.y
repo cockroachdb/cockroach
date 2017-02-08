@@ -633,7 +633,7 @@ func (u *sqlSymUnion) kvOptions() []KVOption {
 
 %token <str>   INCREMENTAL IF IFNULL ILIKE IN INTERLEAVE
 %token <str>   INDEX INDEXES INITIALLY
-%token <str>   INNER INSERT INT INT8 INT64 INTEGER
+%token <str>   INNER INSERT INT INT2VECTOR INT8 INT64 INTEGER
 %token <str>   INTERSECT INTERVAL INTO IS ISOLATION
 
 %token <str>   JOIN
@@ -3254,6 +3254,10 @@ simple_typename:
   {
     $$.val = oidColTypeOid
   }
+| INT2VECTOR
+  {
+    $$.val = int2vectorColType
+  }
 
 // We have a separate const_typename to allow defaulting fixed-length types
 // such as CHAR() and BIT() to an unspecified length. SQL9x requires that these
@@ -5044,6 +5048,7 @@ unreserved_keyword:
 | INCREMENTAL
 | INDEXES
 | INSERT
+| INT2VECTOR
 | INTERLEAVE
 | ISOLATION
 | KEY

@@ -1789,6 +1789,30 @@ func NewDArray(paramTyp Type) *DArray {
 	return &DArray{ParamTyp: paramTyp}
 }
 
+// AsDArray attempts to retrieve a *DArray from an Expr, returning a *DArray and
+// a flag signifying whether the assertion was successful. The function should
+// be used instead of direct type assertions wherever a *DArray wrapped by a
+// *DOidWrapper is possible.
+func AsDArray(e Expr) (*DArray, bool) {
+	switch t := e.(type) {
+	case *DArray:
+		return t, true
+	case *DOidWrapper:
+		return AsDArray(t.Wrapped)
+	}
+	return nil, false
+}
+
+// MustBeDArray attempts to retrieve a *DArray from an Expr, panicking if the
+// assertion fails.
+func MustBeDArray(e Expr) *DArray {
+	i, ok := AsDArray(e)
+	if !ok {
+		panic(fmt.Errorf("expected *DArray, found %T", e))
+	}
+	return i
+}
+
 // ResolvedType implements the TypedExpr interface.
 func (d *DArray) ResolvedType() Type {
 	return tArray{Typ: d.ParamTyp}
@@ -1800,7 +1824,7 @@ func (d *DArray) Compare(other Datum) int {
 		// NULL is less than any non-NULL value.
 		return 1
 	}
-	v, ok := other.(*DArray)
+	v, ok := AsDArray(other)
 	if !ok {
 		panic(makeUnsupportedComparisonMessage(d, other))
 	}
@@ -1911,8 +1935,8 @@ func (d *DArray) Append(v Datum) error {
 			if prevItem == DNull {
 				return errNonHomogeneousArray
 			}
-			expectedLen := prevItem.(*DArray).Len()
-			if v.(*DArray).Len() != expectedLen {
+			expectedLen := MustBeDArray(prevItem).Len()
+			if MustBeDArray(v).Len() != expectedLen {
 				return errNonHomogeneousArray
 			}
 		}
@@ -2005,12 +2029,14 @@ func wrapWithOid(d Datum, oid oid.Oid) Datum {
 		return nil
 	case *DInt:
 	case *DString:
+	case *DArray:
 	case dNull, *DOidWrapper:
 		panic(fmt.Errorf("cannot wrap %T with an Oid", v))
 	default:
-		// Currently only *DInt and *DString are hooked up to work with *DOidWrapper.
-		// To support another base Datum type, replace all type assertions to that type
-		// with calls to functions like AsDInt and MustBeDInt.
+		// Currently only *DInt, *DString, *DArray are hooked up to work with
+		// *DOidWrapper. To support another base Datum type, replace all type
+		// assertions to that type with calls to functions like AsDInt and
+		// MustBeDInt.
 		panic(fmt.Errorf("unsupported Datum type passed to wrapWithOid: %T", d))
 	}
 	return &DOidWrapper{
@@ -2118,6 +2144,12 @@ func NewDOidFromDInt(d *DInt) Datum {
 // initialized from a DInt.
 func NewDOid(d DInt) Datum {
 	return NewDOidFromDInt(NewDInt(d))
+}
+
+// NewDIntVectorFromDArray is a helper routine to create a *DIntVector
+// (implemented as a *DOidWrapper) initialized from an existing *DArray.
+func NewDIntVectorFromDArray(d *DArray) Datum {
+	return wrapWithOid(d, oid.T_int2vector)
 }
 
 // Temporary workaround for #3633, allowing comparisons between
