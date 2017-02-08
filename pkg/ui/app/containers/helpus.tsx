@@ -131,7 +131,7 @@ export class HelpUs extends React.Component<HelpUsProps, HelpUsState> {
                   which may include capacity and usage, server and storage device metadata, basic network topology,
                   and other information that helps us improve our products and services. We never collect any of
                   the actual data that you store in your CockroachDB cluster.
-                  Except as set out above, our <a href="/assets/privacyPolicy.html" target="_blank">"Privacy Policy")</a> governs our collection
+                  Except as set out above, our <a href="/assets/privacyPolicy.html" target="_blank">"Privacy Policy"</a> governs our collection
                   and use of information from users of our products and services.
             </div>
           </div>
