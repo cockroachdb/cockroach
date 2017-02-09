@@ -28,7 +28,7 @@ import (
 func newEntry(index, size uint64) raftpb.Entry {
 	return raftpb.Entry{
 		Index: index,
-		Data:  make([]byte, size, size),
+		Data:  make([]byte, size),
 	}
 }
 

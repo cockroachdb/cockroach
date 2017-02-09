@@ -77,7 +77,7 @@ func (pl List) Less(i, j int) bool {
 // names returns a list of privilege names in the same
 // order as 'pl'.
 func (pl List) names() []string {
-	ret := make([]string, len(pl), len(pl))
+	ret := make([]string, len(pl))
 	for i, p := range pl {
 		ret[i] = p.String()
 	}
