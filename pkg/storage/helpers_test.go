@@ -101,6 +101,13 @@ func (s *Store) ForceTimeSeriesMaintenanceQueueProcess() {
 	forceScanAndProcess(s, s.tsMaintenanceQueue.baseQueue)
 }
 
+// ForceRaftSnapshotQueueProcess iterates over all ranges, enqueuing
+// any that need raft snapshots, then processes the raft snapshot
+// queue.
+func (s *Store) ForceRaftSnapshotQueueProcess() {
+	forceScanAndProcess(s, s.raftSnapshotQueue.baseQueue)
+}
+
 // ConsistencyQueueShouldQueue invokes the shouldQueue method on the
 // store's consistency queue.
 func (s *Store) ConsistencyQueueShouldQueue(
@@ -144,6 +151,11 @@ func (s *Store) SetReplicaGCQueueActive(active bool) {
 // SetSplitQueueActive enables or disables the split queue.
 func (s *Store) SetSplitQueueActive(active bool) {
 	s.setSplitQueueActive(active)
+}
+
+// SetRaftSnapshotQueueActive enables or disables the raft snapshotqueue.
+func (s *Store) SetRaftSnapshotQueueActive(active bool) {
+	s.setRaftSnapshotQueueActive(active)
 }
 
 // SetReplicaScannerActive enables or disables the scanner. Note that while
