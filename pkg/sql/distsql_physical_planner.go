@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"math"
 	"strings"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
@@ -930,6 +931,69 @@ func (dsp *distSQLPlanner) createTableReaders(
 
 		proc.spec.Core.SetValue(tr)
 		proc.spec.Post = post
+		proc.spec.Output = make([]distsqlrun.OutputRouterSpec, 1)
+		proc.spec.Output[0].Type = distsqlrun.OutputRouterSpec_PASS_THROUGH
+
+		pIdx := p.addProcessor(proc)
+		p.resultRouters = append(p.resultRouters, pIdx)
+	}
+	return p, nil
+}
+
+func initBackfillerSpec(
+	backfillType int, desc sqlbase.TableDescriptor, duration time.Duration, chunkSize int64,
+) (distsqlrun.BackfillerSpec, error) {
+	switch backfillType {
+	case indexBackfill:
+		return distsqlrun.BackfillerSpec{
+			Type:      distsqlrun.BackfillerSpec_Index,
+			Table:     desc,
+			Duration:  duration,
+			ChunkSize: chunkSize,
+		}, nil
+
+	case columnBackfill:
+		return distsqlrun.BackfillerSpec{}, errors.Errorf("column backfillNode not implemented")
+
+	default:
+		return distsqlrun.BackfillerSpec{}, errors.Errorf("bad backfill type %d", backfillType)
+	}
+}
+
+// CreateBackfiller generates a plan consisting of index/column backfiller
+// processors, one for each node that has spans that we are reading.
+func (dsp *distSQLPlanner) CreateBackfiller(
+	planCtx *planningCtx,
+	backfillType int,
+	desc sqlbase.TableDescriptor,
+	duration time.Duration,
+	chunkSize int64,
+	spans []roachpb.Span,
+) (physicalPlan, error) {
+	spec, err := initBackfillerSpec(backfillType, desc, duration, chunkSize)
+	if err != nil {
+		return physicalPlan{}, err
+	}
+
+	spanPartitions, err := dsp.partitionSpans(planCtx, spans)
+	if err != nil {
+		return physicalPlan{}, err
+	}
+
+	p := physicalPlan{}
+	for _, sp := range spanPartitions {
+		proc := processor{
+			node: sp.node,
+		}
+
+		ib := &distsqlrun.BackfillerSpec{}
+		*ib = spec
+		ib.Spans = make([]distsqlrun.TableReaderSpan, len(sp.spans))
+		for i := range sp.spans {
+			ib.Spans[i].Span = sp.spans[i]
+		}
+
+		proc.spec.Core.SetValue(ib)
 		proc.spec.Output = make([]distsqlrun.OutputRouterSpec, 1)
 		proc.spec.Output[0].Type = distsqlrun.OutputRouterSpec_PASS_THROUGH
 

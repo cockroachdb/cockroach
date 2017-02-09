@@ -627,6 +627,9 @@ type SchemaChangerTestingKnobs struct {
 	// AsyncExecNotification.
 	SyncFilter SyncSchemaChangersFilter
 
+	// RunBeforeBackfille is called just before starting the backfill.
+	RunBeforeBackfill func() error
+
 	// RunBeforeBackfillChunk is called before executing each chunk of a
 	// backfill during a schema change operation. It is called with the
 	// current span and returns an error which eventually is returned to the

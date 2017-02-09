@@ -24,6 +24,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/pkg/errors"
@@ -1463,6 +1464,8 @@ func (desc *TableDescriptor) AddIndexMutation(
 	idx IndexDescriptor, direction DescriptorMutation_Direction,
 ) {
 	m := DescriptorMutation{Descriptor_: &DescriptorMutation_Index{Index: &idx}, Direction: direction}
+	prefix := roachpb.Key(MakeIndexKeyPrefix(desc, desc.PrimaryIndex.ID))
+	m.ResumeSpan = append(m.ResumeSpan, roachpb.Span{Key: prefix, EndKey: prefix.PrefixEnd()})
 	desc.addMutation(m)
 }
 
