@@ -1651,6 +1651,15 @@ var Builtins = map[string][]Builtin{
 			category: categoryCompatibility,
 			Info:     "Not usable; exposed only for ORM compatibility with PostgreSQL.",
 		},
+		Builtin{
+			Types:      ArgTypes{{"object_oid", TypeInt}, {"catalog_name", TypeString}},
+			ReturnType: fixedReturnType(TypeString),
+			fn: func(_ *EvalContext, _ Datums) (Datum, error) {
+				return DNull, nil
+			},
+			category: categoryCompatibility,
+			Info:     "Not usable; exposed only for ORM compatibility.",
+		},
 	},
 	"shobj_description": {
 		Builtin{
