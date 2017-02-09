@@ -133,16 +133,16 @@ func (p *planner) makeUpsertHelper(
 	helper.evalExprs = evalExprs
 
 	helper.allExprsIdentity = true
-	for i, expr := range evalExprs {
-		// analyzeExpr above has normalized all direct column names to ColumnItems.
-		c, ok := expr.(*parser.ColumnItem)
+	for _, expr := range evalExprs {
+		ivar, ok := expr.(*parser.IndexedVar)
 		if !ok {
 			helper.allExprsIdentity = false
 			break
 		}
-		if len(c.Selector) > 0 ||
-			!c.TableName.TableName.Equal(upsertExcludedTable.TableName) ||
-			c.ColumnName.Normalize() != parser.ReNormalizeName(updateCols[i].Name) {
+		// Idx on the IndexedVar references a columns from one of the two
+		// sources. They're ordered table source then excluded source. If any
+		// expr references a table column, then the fast path doesn't apply.
+		if ivar.Idx < len(sourceInfo.sourceColumns) {
 			helper.allExprsIdentity = false
 			break
 		}

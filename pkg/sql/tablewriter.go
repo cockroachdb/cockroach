@@ -227,7 +227,11 @@ func (tu *tableUpserter) init(txn *client.Txn) error {
 
 	allColsIdentityExpr := len(tu.ri.insertCols) == len(tu.tableDesc.Columns) &&
 		tu.evaler != nil && tu.evaler.isIdentityEvaler()
-	if len(tu.tableDesc.Indexes) == 0 && allColsIdentityExpr {
+	// When adding or removing a column in a schema change (mutation), the user
+	// can't specify it, which means we need to do a lookup and so we can't use
+	// the fast path. When adding or removing an index, same result, so the fast
+	// path is disabled during all mutations.
+	if len(tu.tableDesc.Indexes) == 0 && len(tu.tableDesc.Mutations) == 0 && allColsIdentityExpr {
 		tu.fastPathBatch = tu.txn.NewBatch()
 		tu.fastPathKeys = make(map[string]struct{})
 		return nil
