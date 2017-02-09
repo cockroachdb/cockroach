@@ -186,6 +186,7 @@ type tableUpsertEvaler interface {
 // as the other `tableFoo`s, which are more simple than upsert.
 type tableUpserter struct {
 	ri            RowInserter
+	autoCommit    bool
 	conflictIndex sqlbase.IndexDescriptor
 
 	// These are set for ON CONFLICT DO UPDATE, but not for DO NOTHING
@@ -452,7 +453,19 @@ func (tu *tableUpserter) fetchExisting(ctx context.Context) ([]parser.Datums, er
 
 func (tu *tableUpserter) finalize(ctx context.Context) error {
 	if tu.fastPathBatch != nil {
-		return tu.txn.Run(tu.fastPathBatch)
+		var err error
+		if tu.autoCommit {
+			// An auto-txn can commit the transaction with the batch. This is an
+			// optimization to avoid an extra round-trip to the transaction
+			// coordinator.
+			err = tu.txn.CommitInBatch(tu.fastPathBatch)
+		} else {
+			err = tu.txn.Run(tu.fastPathBatch)
+		}
+		if err != nil {
+			return sqlbase.ConvertBatchError(tu.ri.helper.tableDesc, tu.fastPathBatch)
+		}
+		return nil
 	}
 	return tu.flush(ctx)
 }
