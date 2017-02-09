@@ -149,7 +149,11 @@ func (p *planner) Insert(
 			// TODO(dan): Postgres allows ON CONFLICT DO NOTHING without specifying a
 			// conflict index, which means do nothing on any conflict. Support this if
 			// someone needs it.
-			tw = &tableUpserter{ri: ri, conflictIndex: *conflictIndex}
+			tw = &tableUpserter{
+				ri:            ri,
+				autoCommit:    autoCommit,
+				conflictIndex: *conflictIndex,
+			}
 		} else {
 			names, err := p.namesForExprs(updateExprs)
 			if err != nil {
@@ -184,7 +188,14 @@ func (p *planner) Insert(
 			if err := p.fillFKTableMap(fkTables); err != nil {
 				return nil, err
 			}
-			tw = &tableUpserter{ri: ri, fkTables: fkTables, updateCols: updateCols, conflictIndex: *conflictIndex, evaler: helper}
+			tw = &tableUpserter{
+				ri:            ri,
+				autoCommit:    autoCommit,
+				fkTables:      fkTables,
+				updateCols:    updateCols,
+				conflictIndex: *conflictIndex,
+				evaler:        helper,
+			}
 		}
 	}
 
