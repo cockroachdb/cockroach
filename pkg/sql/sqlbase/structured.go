@@ -1464,6 +1464,8 @@ func (desc *TableDescriptor) AddIndexMutation(
 	idx IndexDescriptor, direction DescriptorMutation_Direction,
 ) {
 	m := DescriptorMutation{Descriptor_: &DescriptorMutation_Index{Index: &idx}, Direction: direction}
+	prefix := roachpb.Key(MakeIndexKeyPrefix(desc, desc.PrimaryIndex.ID))
+	m.ResumeSpans = append(m.ResumeSpans, roachpb.Span{Key: prefix, EndKey: prefix.PrefixEnd()})
 	desc.addMutation(m)
 }
 
