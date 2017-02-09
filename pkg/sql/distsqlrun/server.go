@@ -111,7 +111,9 @@ func (ds *ServerImpl) setupFlow(
 	ctx = flowCtx.AnnotateCtx(ctx)
 	if err := f.setupFlow(ctx, &req.Flow); err != nil {
 		log.Error(ctx, err)
-		sp.Finish()
+		if sp != nil {
+			sp.Finish()
+		}
 		return nil, nil, err
 	}
 	return ctx, f, nil
