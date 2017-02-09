@@ -424,6 +424,16 @@ func (c *cliState) refreshTransactionStatus(nextState cliStateEnum) cliStateEnum
 		fmt.Fprintf(osStderr, "invalid transaction status: %v\n", err)
 		return c.refreshDatabaseName(" ?", nextState)
 	}
+
+	// rows is now done being used so we can close it. Closing it twice (due
+	// to the defer above) is safe because Close is idempotent. Without this
+	// close, refreshDatabaseName below will run a query on the same connection,
+	// which causes an error with lib/pq. This normally isn't a problem because
+	// database/sql will use an unused connection instead of the existing
+	// one. However since we aren't using database/sql, we have to manually
+	// ensure rows is closed before executing another query on the connection.
+	_ = rows.Close()
+
 	txnString := formatVal(val[0], false /* showPrintableUnicode */, false /* shownewLinesAndTabs */)
 
 	// Change the prompt based on the response from the server.
