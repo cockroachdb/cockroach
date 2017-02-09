@@ -90,7 +90,7 @@ func TestSplitQueueShouldQueue(t *testing.T) {
 			tc.repl.mu.Lock()
 			defer tc.repl.mu.Unlock()
 			ms := enginepb.MVCCStats{KeyBytes: test.bytes}
-			if err := setMVCCStats(context.Background(), tc.repl.store.Engine(), tc.repl.RangeID, ms); err != nil {
+			if err := tc.repl.stateLoader.setMVCCStats(context.Background(), tc.repl.store.Engine(), &ms); err != nil {
 				t.Fatal(err)
 			}
 			tc.repl.mu.state.Stats = ms
