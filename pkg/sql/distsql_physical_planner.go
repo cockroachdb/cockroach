@@ -1805,6 +1805,16 @@ func (dsp *distSQLPlanner) populateEndpoints(planCtx *planningCtx, p *physicalPl
 	}
 }
 
+func (dsp *distSQLPlanner) NewPlanningCtx(ctx context.Context, txn *client.Txn) planningCtx {
+	planCtx := planningCtx{
+		ctx:           ctx,
+		spanIter:      dsp.spanResolver.NewSpanResolverIterator(txn),
+		nodeAddresses: make(map[roachpb.NodeID]string),
+	}
+	planCtx.nodeAddresses[dsp.nodeDesc.NodeID] = dsp.nodeDesc.Address.String()
+	return planCtx
+}
+
 // PlanAndRun generates a physical plan from a planNode tree and executes it. It
 // assumes that the tree is supported (see CheckSupport).
 //
@@ -1816,13 +1826,7 @@ func (dsp *distSQLPlanner) PlanAndRun(
 	// Trigger limit propagation.
 	setUnlimited(tree)
 
-	planCtx := planningCtx{
-		ctx:           ctx,
-		spanIter:      dsp.spanResolver.NewSpanResolverIterator(txn),
-		nodeAddresses: make(map[roachpb.NodeID]string),
-	}
-	thisNodeID := dsp.nodeDesc.NodeID
-	planCtx.nodeAddresses[thisNodeID] = dsp.nodeDesc.Address.String()
+	planCtx := dsp.NewPlanningCtx(ctx, txn)
 
 	log.VEvent(ctx, 1, "creating DistSQL plan")
 
@@ -1830,7 +1834,18 @@ func (dsp *distSQLPlanner) PlanAndRun(
 	if err != nil {
 		return err
 	}
+	return dsp.Run(planCtx, txn, plan, recv)
+}
 
+// Run executes a physical plan.
+//
+// Note that errors that happen while actually running the flow are reported to
+// recv, not returned by this function.
+func (dsp *distSQLPlanner) Run(
+	planCtx planningCtx, txn *client.Txn, plan physicalPlan, recv *distSQLReceiver,
+) error {
+	ctx := planCtx.ctx
+	thisNodeID := dsp.nodeDesc.NodeID
 	// If we don't already have a single result router on this node, add a final
 	// stage.
 	if len(plan.resultRouters) != 1 ||
