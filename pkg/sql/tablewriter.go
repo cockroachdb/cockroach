@@ -186,6 +186,7 @@ type tableUpsertEvaler interface {
 // as the other `tableFoo`s, which are more simple than upsert.
 type tableUpserter struct {
 	ri            RowInserter
+	autoCommit    bool
 	conflictIndex sqlbase.IndexDescriptor
 
 	// These are set for ON CONFLICT DO UPDATE, but not for DO NOTHING
@@ -296,7 +297,7 @@ func (tu *tableUpserter) row(ctx context.Context, row parser.Datums) (parser.Dat
 }
 
 // flush commits to tu.txn any rows batched up in tu.insertRows.
-func (tu *tableUpserter) flush(ctx context.Context) error {
+func (tu *tableUpserter) flush(ctx context.Context, finalize bool) error {
 	defer func() {
 		tu.insertRows = nil
 	}()
@@ -331,7 +332,15 @@ func (tu *tableUpserter) flush(ctx context.Context) error {
 		}
 	}
 
-	if err := tu.txn.Run(b); err != nil {
+	if finalize && tu.autoCommit {
+		// An auto-txn can commit the transaction with the batch. This is an
+		// optimization to avoid an extra round-trip to the transaction
+		// coordinator.
+		err = tu.txn.CommitInBatch(b)
+	} else {
+		err = tu.txn.Run(b)
+	}
+	if err != nil {
 		return sqlbase.ConvertBatchError(tu.tableDesc, b)
 	}
 	return nil
@@ -456,9 +465,15 @@ func (tu *tableUpserter) fetchExisting(ctx context.Context) ([]parser.Datums, er
 
 func (tu *tableUpserter) finalize(ctx context.Context) error {
 	if tu.fastPathBatch != nil {
+		if tu.autoCommit {
+			// An auto-txn can commit the transaction with the batch. This is an
+			// optimization to avoid an extra round-trip to the transaction
+			// coordinator.
+			return tu.txn.CommitInBatch(tu.fastPathBatch)
+		}
 		return tu.txn.Run(tu.fastPathBatch)
 	}
-	return tu.flush(ctx)
+	return tu.flush(ctx, true /* finalize */)
 }
 
 // tableDeleter handles writing kvs and forming table rows for deletes.
