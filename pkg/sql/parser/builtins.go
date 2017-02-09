@@ -1644,6 +1644,15 @@ var Builtins = map[string][]Builtin{
 			category: categoryCompatibility,
 			Info:     "Not usable; exposed only for ORM compatibility.",
 		},
+		Builtin{
+			Types:      ArgTypes{{"object_oid", TypeInt}, {"catalog_name", TypeString}},
+			ReturnType: TypeString,
+			fn: func(_ *EvalContext, _ DTuple) (Datum, error) {
+				return DNull, nil
+			},
+			category: categoryCompatibility,
+			Info:     "Not usable; exposed only for ORM compatibility.",
+		},
 	},
 	"pg_catalog.shobj_description": {
 		Builtin{
