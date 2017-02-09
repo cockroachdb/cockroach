@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	csql "github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -522,18 +523,27 @@ func TestRaceWithBackfill(t *testing.T) {
 	partialBackfillDone.Store(false)
 	var partialBackfill bool
 	params, _ := createTestServerParams()
+	notifyBackfill := func() {
+		if backfillNotification != nil {
+			// Close channel to notify that the backfill has started.
+			close(backfillNotification)
+			backfillNotification = nil
+		}
+	}
 	// Disable asynchronous schema change execution to allow synchronous path
 	// to trigger start of backfill notification.
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &csql.SchemaChangerTestingKnobs{
 			RunBeforeBackfillChunk: func(sp roachpb.Span) error {
-				notifyBackfill := func() {
-					if backfillNotification != nil {
-						// Close channel to notify that the backfill has started.
-						close(backfillNotification)
-						backfillNotification = nil
-					}
+				if !partialBackfill {
+					notifyBackfill()
 				}
+				return nil
+			},
+			AsyncExecNotification: asyncSchemaChangerDisabled,
+		},
+		DistSQL: &distsqlrun.TestingKnobs{
+			RunBeforeBackfillChunk: func(sp roachpb.Span) error {
 				if partialBackfill {
 					if partialBackfillDone.Load().(bool) {
 						notifyBackfill()
@@ -547,7 +557,6 @@ func TestRaceWithBackfill(t *testing.T) {
 				}
 				return nil
 			},
-			AsyncExecNotification: asyncSchemaChangerDisabled,
 		},
 	}
 	server, sqlDB, kvDB := serverutils.StartServer(t, params)
@@ -750,6 +759,37 @@ func TestAbortSchemaChangeBackfill(t *testing.T) {
 			},
 			AsyncExecNotification: asyncSchemaChangerDisabled,
 			BackfillChunkSize:     maxValue,
+		},
+		DistSQL: &distsqlrun.TestingKnobs{
+			RunBeforeBackfillChunk: func(sp roachpb.Span) error {
+				switch atomic.LoadInt64(&backfillCount) {
+				case 0:
+					// Keep track of the span provided with the first backfill
+					// attempt.
+					retriedSpan = sp
+				case 1:
+					// Ensure that the second backfill attempt provides the
+					// same span as the first.
+					if sp.Equal(retriedSpan) {
+						atomic.AddInt64(&retriedBackfill, 1)
+					}
+				}
+				return nil
+			},
+			RunAfterBackfillChunk: func() {
+				atomic.AddInt64(&backfillCount, 1)
+				if atomic.SwapUint32(&dontAbortBackfill, 1) == 1 {
+					return
+				}
+				// Close channel to notify that the backfill has been
+				// completed but hasn't yet committed.
+				close(backfillNotification)
+				// Receive signal that the commands that push the backfill
+				// transaction have completed; The backfill will attempt
+				// to commit and will abort.
+				<-commandsDone
+			},
+			BackfillChunkSize: maxValue,
 		},
 	}
 	server, sqlDB, kvDB := serverutils.StartServer(t, params)
@@ -999,6 +1039,26 @@ func TestSchemaChangeRetry(t *testing.T) {
 			AsyncExecNotification:   asyncSchemaChangerDisabled,
 			WriteCheckpointInterval: time.Nanosecond,
 		},
+		DistSQL: &distsqlrun.TestingKnobs{
+			RunBeforeBackfillChunk: func(sp roachpb.Span) error {
+				attempts++
+				// Fail somewhere in the middle.
+				if attempts == 3 {
+					return context.DeadlineExceeded
+				}
+				if seenSpan.Key != nil {
+					// Check that the keys are never reevaluated
+					if seenSpan.Key.Compare(sp.Key) >= 0 {
+						t.Errorf("reprocessing span %s, already seen span %s", sp, seenSpan)
+					}
+					if !seenSpan.EndKey.Equal(sp.EndKey) {
+						t.Errorf("different EndKey: span %s, already seen span %s", sp, seenSpan)
+					}
+				}
+				seenSpan = sp
+				return nil
+			},
+		},
 	}
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop()
@@ -1038,9 +1098,14 @@ func TestSchemaChangeRetryOnVersionChange(t *testing.T) {
 	// This represents the number of backfill chunks that get reevaluated.
 	// A retry results in a reevaluation of a chunk.
 	var numReevaluated uint32
+	var numBackfills uint32
 	seenSpan := roachpb.Span{}
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &csql.SchemaChangerTestingKnobs{
+			RunBeforeBackfill: func() error {
+				atomic.AddUint32(&numBackfills, 1)
+				return nil
+			},
 			RunBeforeBackfillChunk: func(sp roachpb.Span) error {
 				attempts++
 				// Fail somewhere in the middle.
@@ -1064,6 +1129,27 @@ func TestSchemaChangeRetryOnVersionChange(t *testing.T) {
 			// synchronous path to run schema changes.
 			AsyncExecNotification:   asyncSchemaChangerDisabled,
 			WriteCheckpointInterval: time.Nanosecond,
+		},
+		DistSQL: &distsqlrun.TestingKnobs{
+			RunBeforeBackfillChunk: func(sp roachpb.Span) error {
+				attempts++
+				// Fail somewhere in the middle.
+				if attempts == 3 {
+					// Publish a new version of the table.
+					upTableVersion()
+				}
+				if seenSpan.Key != nil {
+					// Keep track of the number of reevaluations.
+					if seenSpan.Key.Compare(sp.Key) >= 0 {
+						atomic.AddUint32(&numReevaluated, 1)
+					}
+					if !seenSpan.EndKey.Equal(sp.EndKey) {
+						t.Errorf("different EndKey: span %s, already seen span %s", sp, seenSpan)
+					}
+				}
+				seenSpan = sp
+				return nil
+			},
 		},
 	}
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
@@ -1105,22 +1191,31 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 	}
 
 	addIndexSchemaChange(t, sqlDB, kvDB, maxValue, 2)
-	if reevaluated := atomic.SwapUint32(&numReevaluated, 0); reevaluated != 1 {
-		t.Fatalf("exected %d reevaluations, but seen %d", 1, reevaluated)
+	if reevaluated := atomic.SwapUint32(&numReevaluated, 0); reevaluated != 0 {
+		t.Fatalf("expected %d reevaluations, but seen %d", 0, reevaluated)
+	}
+	if num := atomic.SwapUint32(&numBackfills, 0); num != 2 {
+		t.Fatalf("expected %d backfills, but seen %d", 2, num)
 	}
 
 	attempts = 0
 	seenSpan = roachpb.Span{}
 	addColumnSchemaChange(t, sqlDB, kvDB, maxValue, 2)
 	if reevaluated := atomic.SwapUint32(&numReevaluated, 0); reevaluated != 1 {
-		t.Fatalf("exected %d reevaluations, but seen %d", 1, reevaluated)
+		t.Fatalf("expected %d reevaluations, but seen %d", 1, reevaluated)
+	}
+	if num := atomic.SwapUint32(&numBackfills, 0); num != 2 {
+		t.Fatalf("expected %d backfills, but seen %d", 2, num)
 	}
 
 	attempts = 0
 	seenSpan = roachpb.Span{}
 	dropColumnSchemaChange(t, sqlDB, kvDB, maxValue, 2)
 	if reevaluated := atomic.SwapUint32(&numReevaluated, 0); reevaluated != 1 {
-		t.Fatalf("exected %d reevaluations, but seen %d", 1, reevaluated)
+		t.Fatalf("expected %d reevaluations, but seen %d", 1, reevaluated)
+	}
+	if num := atomic.SwapUint32(&numBackfills, 0); num != 2 {
+		t.Fatalf("expected %d backfills, but seen %d", 2, num)
 	}
 }
 
@@ -1157,6 +1252,18 @@ func TestSchemaChangePurgeFailure(t *testing.T) {
 			// Speed up evaluation of async schema changes so that it
 			// processes a purged schema change quickly.
 			AsyncExecQuickly:  true,
+			BackfillChunkSize: chunkSize,
+		},
+		DistSQL: &distsqlrun.TestingKnobs{
+			RunBeforeBackfillChunk: func(sp roachpb.Span) error {
+				attempts++
+				// Return a deadline exceeded error during the third attempt
+				// which attempts to clean up the schema change.
+				if attempts == expectedAttempts {
+					return context.DeadlineExceeded
+				}
+				return nil
+			},
 			BackfillChunkSize: chunkSize,
 		},
 	}
