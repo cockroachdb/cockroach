@@ -91,7 +91,9 @@ var txnAutoGC = true
 
 var tickQuiesced = envutil.EnvOrDefaultBool("COCKROACH_TICK_QUIESCED", true)
 
-var syncRaftLog = envutil.EnvOrDefaultBool("COCKROACH_SYNC_RAFT_LOG", true)
+// TODO(peter): Off by default until we can figure out the performance
+// degradation see on test clusters.
+var syncRaftLog = envutil.EnvOrDefaultBool("COCKROACH_SYNC_RAFT_LOG", false)
 
 // Whether to enable experimental support for proposer-evaluated KV.
 var propEvalKV = envutil.EnvOrDefaultBool("COCKROACH_PROPOSER_EVALUATED_KV", false)
