@@ -696,7 +696,7 @@ func Example_sql() {
 
 	// Output:
 	// sql -e create database t; create table t.f (x int, y int); insert into t.f values (42, 69)
-	// INSERT 1
+	// CREATE DATABASE
 	// sql -e select 3 -e select * from t.f
 	// 1 row
 	// 3
@@ -740,7 +740,7 @@ func Example_sql_format() {
 
 	// Output:
 	// sql -e create database t; create table t.times (bare timestamp, withtz timestamptz)
-	// CREATE TABLE
+	// CREATE DATABASE
 	// sql -e insert into t.times values ('2016-01-25 10:10:10', '2016-01-25 10:10:10-05:00')
 	// INSERT 1
 	// sql -e select * from t.times
@@ -768,7 +768,7 @@ func Example_sql_column_labels() {
 	// Output:
 	// sql -e create database t; create table t.u ("""foo" int, "\foo" int, "foo
 	// bar" int, "κόσμε" int, "a|b" int, "܈85" int)
-	// CREATE TABLE
+	// CREATE DATABASE
 	// sql -e insert into t.u values (0, 0, 0, 0, 0, 0)
 	// INSERT 1
 	// sql -e show columns from t.u
@@ -868,7 +868,7 @@ func Example_sql_table() {
 
 	// Output:
 	// sql -e create database t; create table t.t (s string, d string);
-	// CREATE TABLE
+	// CREATE DATABASE
 	// sql -e insert into t.t values (e'foo', 'printable ASCII')
 	// INSERT 1
 	// sql -e insert into t.t values (e'"foo', 'printable ASCII with quotes')

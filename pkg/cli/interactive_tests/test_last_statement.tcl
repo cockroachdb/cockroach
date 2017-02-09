@@ -26,7 +26,7 @@ eexpect ":/# "
 send "$argv sql\r"
 eexpect root@
 send "drop database if exists t; create database t; create table t.foo(x int);\r"
-eexpect "CREATE TABLE"
+eexpect "DROP DATABASE"
 eexpect root@
 send "insert into t.foo(x) values (42)\r"
 eexpect " ->"

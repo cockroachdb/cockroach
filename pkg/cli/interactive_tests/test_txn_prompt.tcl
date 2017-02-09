@@ -43,7 +43,7 @@ eexpect "\nROLLBACK\r\n"
 eexpect root@
 
 send "BEGIN; SAVEPOINT cockroach_restart;\r\r"
-eexpect OK
+eexpect BEGIN
 eexpect root@
 send "SELECT 1;\r"
 eexpect "1 row"
@@ -58,7 +58,7 @@ send "COMMIT;\r"
 eexpect root@
 
 send "BEGIN; SAVEPOINT cockroach_restart;\r\r"
-eexpect OK
+eexpect BEGIN
 eexpect root@
 send "SELECT CRDB_INTERNAL.FORCE_RETRY('1s':::INTERVAL);\r"
 eexpect "pq: restart transaction"
