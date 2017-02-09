@@ -636,56 +636,123 @@ func TestRaftLogSizeAfterTruncation(t *testing.T) {
 // truncated.
 func TestSnapshotAfterTruncation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	mtc := &multiTestContext{}
-	defer mtc.Stop()
-	mtc.Start(t, 3)
-	repl, err := mtc.stores[0].GetReplica(1)
-	if err != nil {
-		t.Fatal(err)
+
+	for _, changeTerm := range []bool{false, true} {
+		name := "sameTerm"
+		if changeTerm {
+			name = "differentTerm"
+		}
+		t.Run(name, func(t *testing.T) {
+			mtc := &multiTestContext{}
+			defer mtc.Stop()
+			mtc.Start(t, 3)
+			const stoppedStore = 1
+			repl, err := mtc.stores[0].GetReplica(1)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			key := roachpb.Key("a")
+			incA := int64(5)
+			incB := int64(7)
+			incAB := incA + incB
+
+			// Set up a key to replicate across the cluster. We're going to modify this
+			// key and truncate the raft logs from that command after killing one of the
+			// nodes to check that it gets the new value after it comes up.
+			incArgs := incrementArgs(key, incA)
+			if _, err := client.SendWrapped(context.Background(), rg1(mtc.stores[0]), incArgs); err != nil {
+				t.Fatal(err)
+			}
+
+			mtc.replicateRange(1, 1, 2)
+			mtc.waitForValues(key, []int64{incA, incA, incA})
+
+			// Now kill one store, increment the key on the other stores and truncate
+			// their logs to make sure that when store 1 comes back up it will require a
+			// non-preemptive snapshot from Raft.
+			mtc.stopStore(stoppedStore)
+
+			incArgs = incrementArgs(key, incB)
+			if _, err := client.SendWrapped(context.Background(), rg1(mtc.stores[0]), incArgs); err != nil {
+				t.Fatal(err)
+			}
+
+			mtc.waitForValues(key, []int64{incAB, incA, incAB})
+
+			index, err := repl.GetLastIndex()
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			// Truncate the log at index+1 (log entries < N are removed, so this
+			// includes the increment).
+			truncArgs := truncateLogArgs(index+1, 1)
+			if _, err := client.SendWrapped(context.Background(), rg1(mtc.stores[0]), truncArgs); err != nil {
+				t.Fatal(err)
+			}
+
+			if changeTerm {
+				for i := range mtc.stores {
+					if i != stoppedStore {
+						// Stop and restart all the live stores, which guarantees that
+						// we won't be in the same term we started with.
+						mtc.stopStore(i)
+						mtc.restartStore(i)
+						// Disable the snapshot queue on the live stores so that
+						// stoppedStore won't get a snapshot as soon as it starts
+						// back up.
+						mtc.stores[i].SetRaftSnapshotQueueActive(false)
+					}
+				}
+
+				// Restart the stopped store and wait for raft
+				// election/heartbeat traffic to settle down. Specifically, we
+				// need stoppedStore to know about the new term number before
+				// the snapshot is sent to reproduce #13506. If the snapshot
+				// happened before it learned the term, it would accept the
+				// snapshot no matter what term it contained.
+				mtc.restartStore(stoppedStore)
+				testutils.SucceedsSoon(t, func() error {
+					hasLeader := false
+					term := uint64(0)
+					for i := range mtc.stores {
+						repl, err := mtc.stores[i].GetReplica(1)
+						if err != nil {
+							return err
+						}
+						status := repl.RaftStatus()
+						if status == nil {
+							return errors.New("raft status not initialized")
+						}
+						if status.RaftState == raft.StateLeader {
+							hasLeader = true
+						}
+						if term == 0 {
+							term = status.Term
+						} else if status.Term != term {
+							return errors.Errorf("terms do not agree: %d vs %d", status.Term, term)
+						}
+					}
+					if !hasLeader {
+						return errors.New("no leader")
+					}
+					return nil
+				})
+
+				// Turn the queues back on and wait for the snapshot to be sent and processed.
+				for i, store := range mtc.stores {
+					if i != stoppedStore {
+						store.SetRaftSnapshotQueueActive(true)
+						store.ForceRaftSnapshotQueueProcess()
+					}
+				}
+			} else { // !changeTerm
+				mtc.restartStore(stoppedStore)
+			}
+			mtc.waitForValues(key, []int64{incAB, incAB, incAB})
+		})
 	}
-
-	key := roachpb.Key("a")
-	incA := int64(5)
-	incB := int64(7)
-	incAB := incA + incB
-
-	// Set up a key to replicate across the cluster. We're going to modify this
-	// key and truncate the raft logs from that command after killing one of the
-	// nodes to check that it gets the new value after it comes up.
-	incArgs := incrementArgs(key, incA)
-	if _, err := client.SendWrapped(context.Background(), rg1(mtc.stores[0]), incArgs); err != nil {
-		t.Fatal(err)
-	}
-
-	mtc.replicateRange(1, 1, 2)
-	mtc.waitForValues(key, []int64{incA, incA, incA})
-
-	// Now kill store 1, increment the key on the other stores and truncate
-	// their logs to make sure that when store 1 comes back up it will require a
-	// non-preemptive snapshot from Raft.
-	mtc.stopStore(1)
-
-	incArgs = incrementArgs(key, incB)
-	if _, err := client.SendWrapped(context.Background(), rg1(mtc.stores[0]), incArgs); err != nil {
-		t.Fatal(err)
-	}
-
-	mtc.waitForValues(key, []int64{incAB, incA, incAB})
-
-	index, err := repl.GetLastIndex()
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	// Truncate the log at index+1 (log entries < N are removed, so this
-	// includes the increment).
-	truncArgs := truncateLogArgs(index+1, 1)
-	if _, err := client.SendWrapped(context.Background(), rg1(mtc.stores[0]), truncArgs); err != nil {
-		t.Fatal(err)
-	}
-	mtc.restartStore(1)
-
-	mtc.waitForValues(key, []int64{incAB, incAB, incAB})
 }
 
 type fakeSnapshotStream struct {

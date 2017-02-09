@@ -4001,6 +4001,9 @@ func (s *Store) setSplitQueueActive(active bool) {
 func (s *Store) setTimeSeriesMaintenanceQueueActive(active bool) {
 	s.tsMaintenanceQueue.SetDisabled(!active)
 }
+func (s *Store) setRaftSnapshotQueueActive(active bool) {
+	s.raftSnapshotQueue.SetDisabled(!active)
+}
 func (s *Store) setScannerActive(active bool) {
 	s.scanner.SetDisabled(!active)
 }
