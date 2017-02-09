@@ -36,7 +36,7 @@ func TestImportChunking(t *testing.T) {
 	const chunkSize = 1024 * 500
 	numAccounts := int(chunkSize / backupRestoreRowPayloadSize * 2)
 
-	ctx, dir, _, _, sqlDB, cleanupFn := backupRestoreTestSetup(t, singleNode, 0)
+	ctx, dir, _, sqlDB, cleanupFn := backupRestoreTestSetup(t, singleNode, 0)
 	defer cleanupFn()
 
 	ts := hlc.Timestamp{WallTime: hlc.UnixNano()}
@@ -50,7 +50,7 @@ func TestImportChunking(t *testing.T) {
 }
 
 func TestImportOutOfOrder(t *testing.T) {
-	ctx, dir, _, _, sqlDB, cleanupFn := backupRestoreTestSetup(t, singleNode, 0)
+	ctx, dir, _, sqlDB, cleanupFn := backupRestoreTestSetup(t, singleNode, 0)
 	defer cleanupFn()
 
 	var buf bytes.Buffer
@@ -68,7 +68,7 @@ func TestImportOutOfOrder(t *testing.T) {
 
 func BenchmarkImport(b *testing.B) {
 	defer tracing.Disable()()
-	ctx, dir, _, _, sqlDB, cleanup := backupRestoreTestSetup(b, multiNode, 0)
+	ctx, dir, _, sqlDB, cleanup := backupRestoreTestSetup(b, multiNode, 0)
 	defer cleanup()
 
 	buf := bankStatementBuf(b.N)
@@ -82,7 +82,7 @@ func BenchmarkImport(b *testing.B) {
 
 func BenchmarkRestore(b *testing.B) {
 	defer tracing.Disable()()
-	ctx, dir, _, _, sqlDB, cleanup := backupRestoreTestSetup(b, multiNode, 0)
+	ctx, dir, _, sqlDB, cleanup := backupRestoreTestSetup(b, multiNode, 0)
 	defer cleanup()
 
 	ts := hlc.Timestamp{WallTime: hlc.UnixNano()}
@@ -97,7 +97,7 @@ func BenchmarkRestore(b *testing.B) {
 
 func BenchmarkImportRestore(b *testing.B) {
 	defer tracing.Disable()()
-	ctx, dir, _, _, sqlDB, cleanup := backupRestoreTestSetup(b, multiNode, 0)
+	ctx, dir, _, sqlDB, cleanup := backupRestoreTestSetup(b, multiNode, 0)
 	defer cleanup()
 
 	buf := bankStatementBuf(b.N)
@@ -111,7 +111,7 @@ func BenchmarkImportRestore(b *testing.B) {
 }
 
 func BenchmarkImportSQL(b *testing.B) {
-	_, _, _, _, sqlDB, cleanup := backupRestoreTestSetup(b, multiNode, 0)
+	_, _, _, sqlDB, cleanup := backupRestoreTestSetup(b, multiNode, 0)
 	defer cleanup()
 
 	buf := bankStatementBuf(b.N)
