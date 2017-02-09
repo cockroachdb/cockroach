@@ -3340,6 +3340,11 @@ func (r *Replica) sendSnapshot(
 		}
 	}
 
+	status := r.RaftStatus()
+	if status == nil {
+		return errors.New("raft status not initialized")
+	}
+
 	req := SnapshotRequest_Header{
 		State: snap.State,
 		RaftMessageRequest: RaftMessageRequest{
@@ -3350,7 +3355,7 @@ func (r *Replica) sendSnapshot(
 				Type:     raftpb.MsgSnap,
 				To:       uint64(repDesc.ReplicaID),
 				From:     uint64(fromRepDesc.ReplicaID),
-				Term:     snap.RaftSnap.Metadata.Term,
+				Term:     status.Term,
 				Snapshot: snap.RaftSnap,
 			},
 		},
