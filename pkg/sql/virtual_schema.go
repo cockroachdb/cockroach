@@ -260,3 +260,16 @@ func (vs *virtualSchemaHolder) getVirtualTableDesc(
 func isVirtualDescriptor(desc sqlbase.DescriptorProto) bool {
 	return desc.GetID() == keys.VirtualDescriptorID
 }
+
+// NilVirtualTabler implements VirtualTabler that returns nil.
+var NilVirtualTabler nilVirtualTabler
+
+type nilVirtualTabler struct{}
+
+func (nilVirtualTabler) getVirtualTableDesc(tn *parser.TableName) (*sqlbase.TableDescriptor, error) {
+	return nil, nil
+}
+
+func (nilVirtualTabler) getVirtualDatabaseDesc(name string) *sqlbase.DatabaseDescriptor {
+	return nil
+}

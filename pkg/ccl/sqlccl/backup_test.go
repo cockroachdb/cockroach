@@ -47,6 +47,7 @@ import (
 )
 
 const (
+	singleNode                  = 1
 	multiNode                   = 3
 	backupRestoreDefaultRanges  = 10
 	backupRestoreRowPayloadSize = 100
@@ -58,6 +59,7 @@ const (
 		payload STRING,
 		FAMILY (id, balance, payload)
 	)`
+	bankDataInsertRows = 1000
 )
 
 func bankDataInsertStmts(count int) []string {
@@ -65,10 +67,10 @@ func bankDataInsertStmts(count int) []string {
 
 	var statements []string
 	var insert bytes.Buffer
-	for i := 0; i < count; i += 1000 {
+	for i := 0; i < count; i += bankDataInsertRows {
 		insert.Reset()
 		insert.WriteString(`INSERT INTO bench.bank VALUES `)
-		for j := i; j < i+1000 && j < count; j++ {
+		for j := i; j < i+bankDataInsertRows && j < count; j++ {
 			if j != i {
 				insert.WriteRune(',')
 			}
@@ -142,11 +144,19 @@ func backupRestoreTestSetup(
 
 	dir, dirCleanupFn := testutils.TempDir(t, 1)
 
+	// TODO(dan): Some tests don't need multiple nodes, but the test setup
+	// hangs with 1. Investigate.
+	if numAccounts == 0 && clusterSize < multiNode {
+		clusterSize = multiNode
+		t.Logf("setting cluster size to %d due to a bug", clusterSize)
+	}
+
 	tc = testcluster.StartTestCluster(t, clusterSize, base.TestClusterArgs{})
 	sqlDB = sqlutils.MakeSQLRunner(t, tc.Conns[0])
 	kvDB = tc.Server(0).KVClient().(*client.DB)
 
 	sqlDB.Exec(bankCreateDatabase)
+
 	if numAccounts > 0 {
 		sqlDB.Exec(bankCreateTable)
 		for _, insert := range bankDataInsertStmts(numAccounts) {
@@ -538,11 +548,8 @@ func TestPresplitRanges(t *testing.T) {
 
 func TestBackupLevelDB(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	const numAccounts = 1
 
-	// TODO(dan): This test doesn't need multiple nodes, but the test setup
-	// hangs with 1. Investigate.
-	_, dir, _, _, sqlDB, cleanupFn := backupRestoreTestSetup(t, multiNode, numAccounts)
+	_, dir, _, _, sqlDB, cleanupFn := backupRestoreTestSetup(t, singleNode, 0)
 	defer cleanupFn()
 
 	_ = sqlDB.Exec(fmt.Sprintf(`BACKUP DATABASE bench TO '%s'`, dir))
@@ -574,22 +581,28 @@ func TestBackupLevelDB(t *testing.T) {
 func BenchmarkClusterBackup(b *testing.B) {
 	defer tracing.Disable()()
 
-	for _, numAccounts := range []int{10, 100, 1000, 10000} {
-		b.Run(strconv.Itoa(numAccounts), func(b *testing.B) {
-			ctx, dir, tc, kvDB, _, cleanupFn := backupRestoreTestSetup(b, multiNode, numAccounts)
-			defer cleanupFn()
-			rebalanceLeases(b, tc)
+	ctx, dir, tc, _, sqlDB, cleanupFn := backupRestoreTestSetup(b, multiNode, 0)
+	defer cleanupFn()
 
-			b.ResetTimer()
-			for i := 0; i < b.N; i++ {
-				desc, err := Backup(ctx, *kvDB, dir, hlc.ZeroTimestamp, tc.Server(0).Clock().Now())
-				if err != nil {
-					b.Fatal(err)
-				}
-				b.SetBytes(desc.DataSize)
-			}
-		})
+	ts := hlc.Timestamp{WallTime: hlc.UnixNano()}
+	if _, err := Load(ctx, sqlDB.DB, bankStatementBuf(b.N), "bench", dir, ts, 0); err != nil {
+		b.Fatalf("%+v", err)
 	}
+	sqlDB.Exec(fmt.Sprintf(`RESTORE DATABASE bench FROM '%s'`, dir))
+
+	for _, split := range bankSplitStmts(b.N, backupRestoreDefaultRanges) {
+		sqlDB.Exec(split)
+	}
+	rebalanceLeases(b, tc)
+
+	b.ResetTimer()
+	var unused string
+	var dataSize int64
+	sqlDB.QueryRow(fmt.Sprintf(`BACKUP DATABASE bench TO '%s'`, dir)).Scan(
+		&unused, &unused, &unused, &dataSize,
+	)
+	b.StopTimer()
+	b.SetBytes(dataSize / int64(b.N))
 }
 
 func BenchmarkClusterRestore(b *testing.B) {
