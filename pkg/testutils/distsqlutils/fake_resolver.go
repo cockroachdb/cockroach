@@ -17,7 +17,6 @@
 package distsqlutils
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlplan"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -36,6 +35,5 @@ func FakeResolverForTestCluster(tc serverutils.TestClusterInterface) distsqlplan
 		}
 	}
 
-	db := tc.Server(0).KVClient().(*client.DB)
-	return distsqlplan.NewFakeSpanResolver(nodeDescs, db)
+	return distsqlplan.NewFakeSpanResolver(nodeDescs)
 }

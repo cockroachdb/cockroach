@@ -21,6 +21,7 @@ import (
 	"math/rand"
 
 	"github.com/cockroachdb/cockroach/pkg/gossip"
+	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -43,7 +44,7 @@ import (
 //   lr := distsql.NewSpanResolver(
 //     distSender, gossip, nodeDescriptor,
 //     distsql.BinPackingLeaseHolderChoice)
-//   it := lr.NewSpanResolverIterator()
+//   it := lr.NewSpanResolverIterator(nil)
 //   res := make([][]kv.ReplicaInfo, 0)
 //   for _, span := range spans {
 //     repls := make([]kv.ReplicaInfo, 0)
@@ -68,7 +69,8 @@ import (
 //
 type SpanResolver interface {
 	// NewSpanResolverIterator creates a new SpanResolverIterator.
-	NewSpanResolverIterator() SpanResolverIterator
+	// The txn is only used by the "fake" implementation (used for testing).
+	NewSpanResolverIterator(txn *client.Txn) SpanResolverIterator
 }
 
 // SpanResolverIterator is used to iterate over the ranges composing a key span.
@@ -209,7 +211,7 @@ type spanResolverIterator struct {
 var _ SpanResolverIterator = &spanResolverIterator{}
 
 // NewSpanResolverIterator creates a new SpanResolverIterator.
-func (sr *spanResolver) NewSpanResolverIterator() SpanResolverIterator {
+func (sr *spanResolver) NewSpanResolverIterator(_ *client.Txn) SpanResolverIterator {
 	return &spanResolverIterator{
 		gossip:     sr.gossip,
 		it:         kv.NewRangeIterator(sr.distSender),

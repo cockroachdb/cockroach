@@ -89,6 +89,12 @@ func newDistSQLPlanner(
 	}
 }
 
+// setSpanResolver switches to a different SpanResolver. It is the caller's
+// responsibility to make sure the distSQLPlanner is not in use.
+func (dsp *distSQLPlanner) setSpanResolver(spanResolver distsqlplan.SpanResolver) {
+	dsp.spanResolver = spanResolver
+}
+
 // distSQLExprCheckVisitor is a parser.Visitor that checks if expressions
 // contain things not supported by distSQL (like subqueries).
 type distSQLExprCheckVisitor struct {
@@ -106,11 +112,16 @@ func (v *distSQLExprCheckVisitor) VisitPre(expr parser.Expr) (recurse bool, newE
 		v.err = errors.Errorf("subqueries not supported yet")
 		return false, expr
 
+	case *parser.CollateExpr:
+		v.err = errors.Errorf("collations not supported yet (#13496)")
+		return false, expr
+
 	case *parser.FuncExpr:
 		if t.IsContextDependent() {
 			v.err = errors.Errorf("context-dependent function %s not supported", t)
 			return false, expr
 		}
+
 	case *parser.CastExpr:
 		switch t.Type.(type) {
 		case *parser.DateColType, *parser.TimestampTZColType:
@@ -1807,7 +1818,7 @@ func (dsp *distSQLPlanner) PlanAndRun(
 
 	planCtx := planningCtx{
 		ctx:           ctx,
-		spanIter:      dsp.spanResolver.NewSpanResolverIterator(),
+		spanIter:      dsp.spanResolver.NewSpanResolverIterator(txn),
 		nodeAddresses: make(map[roachpb.NodeID]string),
 	}
 	thisNodeID := dsp.nodeDesc.NodeID
