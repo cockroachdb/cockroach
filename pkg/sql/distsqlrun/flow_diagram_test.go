@@ -33,6 +33,7 @@ func compareDiagrams(t *testing.T, result string, expected string) {
 	dec := json.NewDecoder(strings.NewReader(result))
 	var resData, expData diagramData
 	if err := dec.Decode(&resData); err != nil {
+		t.Log(result)
 		t.Fatal(err)
 	}
 	dec = json.NewDecoder(strings.NewReader(expected))
@@ -122,10 +123,8 @@ func TestPlanDiagramIndexJoin(t *testing.T) {
 		},
 	}
 
-	var buf bytes.Buffer
-	if err := GeneratePlanDiagram(
-		[]FlowSpec{f1, f2, f3}, []string{"1", "2", "3"}, &buf,
-	); err != nil {
+	json, url, err := GeneratePlanDiagramWithURL([]FlowSpec{f1, f2, f3}, []string{"1", "2", "3"})
+	if err != nil {
 		t.Fatal(err)
 	}
 
@@ -148,7 +147,12 @@ func TestPlanDiagramIndexJoin(t *testing.T) {
 	  }
 	`
 
-	compareDiagrams(t, buf.String(), expected)
+	compareDiagrams(t, json, expected)
+
+	expectedURL := "https://raduberinde.github.io/decode.html?eJzEkk9L9DAQxu_vp3h5rptDm3jqKSehHlxZvWkOtRkk0CZlksLK0u8uTXHdyuKloMeZef78WnKCD5bum54iqmeUEJAQUDACA4eWYgw8nxZhbY-oCgHnhzHNayPQBiZUJySXOkKFp-a1owM1lhgCllLjuhz-GHqqvaWjzhII7MdU_del0BJmEghj-oydxEVh-duF8i8Lv3oCW2Ky6w4tdzDTFaq74Pw1qIFd3_D7GenWdYl4ptpp-TIWhWq1OqOqLT_mQHEIPtIK4HueESD7RsunxjBySw8c2vyulnGf1XlhKablqpah9vlUzliX5nKLWW4xqx_NNytzMZnp30cAAAD__-sRIow="
+	if url.String() != expectedURL {
+		t.Errorf("expected `%s` got `%s`", expectedURL, &url)
+	}
 }
 
 func TestPlanDiagramJoin(t *testing.T) {
