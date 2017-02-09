@@ -117,7 +117,7 @@ func (ds *ServerImpl) setupFlow(
 	flowCtx.AddLogTagStr("f", f.id.Short())
 	if err := f.setupFlow(ctx, &req.Flow); err != nil {
 		log.Errorf(ctx, "error setting up flow: %s", err)
-		sp.Finish()
+		tracing.FinishSpan(sp)
 		ctx = opentracing.ContextWithSpan(ctx, nil)
 		return ctx, nil, err
 	}
