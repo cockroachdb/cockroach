@@ -114,6 +114,31 @@ func allSQLDescriptors(txn *client.Txn) ([]sqlbase.Descriptor, error) {
 	return sqlDescs, nil
 }
 
+// spansForAllTableIndexes returns non-overlapping spans for every index and
+// table passed in. They would normally overlap if any of them are interleaved.
+func spansForAllTableIndexes(tables []*sqlbase.TableDescriptor) []roachpb.Span {
+	sstIntervalTree := interval.Tree{Overlapper: interval.Range.OverlapExclusive}
+	for _, table := range tables {
+		for _, index := range table.AllNonDropIndexes() {
+			startKey := roachpb.Key(sqlbase.MakeIndexKeyPrefix(table, index.ID))
+			ie := intervalSpan(roachpb.Span{Key: startKey, EndKey: startKey.PrefixEnd()})
+			// Errors are only returned if end <= start, which is never the case
+			// here because we use `PrefixEnd` to compute end.
+			_ = sstIntervalTree.Insert(ie, false)
+		}
+	}
+
+	var spans []roachpb.Span
+	_ = sstIntervalTree.Do(func(r interval.Interface) bool {
+		spans = append(spans, roachpb.Span{
+			Key:    roachpb.Key(r.Range().Start),
+			EndKey: roachpb.Key(r.Range().End),
+		})
+		return false
+	})
+	return spans
+}
+
 type backupFileDescriptors []BackupDescriptor_File
 
 func (r backupFileDescriptors) Len() int      { return len(r) }
@@ -133,14 +158,18 @@ func (r backupFileDescriptors) Less(i, j int) bool {
 // - Each file contains data for a key range that doesn't overlap with any other
 //   file.
 func Backup(
-	ctx context.Context, db client.DB, target string, startTime hlc.Timestamp, endTime hlc.Timestamp,
+	ctx context.Context,
+	db client.DB,
+	uri string,
+	targets parser.TargetList,
+	startTime, endTime hlc.Timestamp,
 ) (BackupDescriptor, error) {
 	// TODO(dan): Figure out how permissions should work. #6713 is tracking this
 	// for grpc.
 
 	var sqlDescs []sqlbase.Descriptor
 
-	exportStore, err := storageccl.ExportStorageFromURI(ctx, target)
+	exportStore, err := storageccl.ExportStorageFromURI(ctx, uri)
 	if err != nil {
 		return BackupDescriptor{}, err
 	}
@@ -160,31 +189,24 @@ func Backup(
 		}
 	}
 
+	// TODO(dan): Plumb the session database down.
+	sessionDatabase := ""
+	if sqlDescs, err = descriptorsMatchingTargets(sessionDatabase, sqlDescs, targets); err != nil {
+		return BackupDescriptor{}, err
+	}
+
 	// Backup users, descriptors, and the entire keyspace for user data.
-	// TODO(dan): Tighten this up to only the data for the tables requested in
-	// the BACKUP request.
-	descriptorStartKey := roachpb.Key(keys.MakeTablePrefix(keys.DescriptorTableID))
-	usersStartKey := roachpb.Key(keys.MakeTablePrefix(keys.UsersTableID))
-	requests := []roachpb.Span{
-		{
-			Key:    descriptorStartKey,
-			EndKey: descriptorStartKey.PrefixEnd(),
-		},
-		{
-			Key:    usersStartKey,
-			EndKey: usersStartKey.PrefixEnd(),
-		},
-		// TODO(dan): Only backup the data in the requested database(s).
-		{
-			Key:    keys.UserTableDataMin,
-			EndKey: keys.MaxKey,
-		},
+	tables := []*sqlbase.TableDescriptor{&sqlbase.DescriptorTable, &sqlbase.UsersTable}
+	for _, desc := range sqlDescs {
+		if tableDesc := desc.GetTable(); tableDesc != nil {
+			tables = append(tables, tableDesc)
+		}
 	}
 
 	desc := BackupDescriptor{StartTime: startTime, EndTime: endTime, Descriptors: sqlDescs}
-	for _, req := range requests {
-		desc.Spans = append(desc.Spans, req)
-		file, dataSize, err := export(ctx, db, startTime, endTime, req, exportStore)
+	desc.Spans = spansForAllTableIndexes(tables)
+	for _, span := range desc.Spans {
+		file, dataSize, err := export(ctx, db, startTime, endTime, span, exportStore)
 		if err != nil {
 			return BackupDescriptor{}, err
 		}
@@ -547,39 +569,19 @@ type importEntry struct {
 func makeImportRequests(
 	tables []*sqlbase.TableDescriptor, backups []BackupDescriptor,
 ) ([]importEntry, error) {
-	// Put the prefix begin to prefix end for every index of every table being
-	// restored into an interval tree to figure out which keyranges of the
-	// backups we need to restore. They only overlap if any of them are
-	// interleaved.
-	sstIntervalTree := interval.Tree{Overlapper: interval.Range.OverlapExclusive}
-	for _, table := range tables {
-		for _, index := range table.AllNonDropIndexes() {
-			indexSSTStartKey := roachpb.Key(sqlbase.MakeIndexKeyPrefix(table, index.ID))
-			indexSSTEndKey := indexSSTStartKey.PrefixEnd()
-			ie := intervalSpan(roachpb.Span{
-				Key:    []byte(indexSSTStartKey),
-				EndKey: []byte(indexSSTEndKey),
-			})
-			if err := sstIntervalTree.Insert(ie, false); err != nil {
-				return nil, err
-			}
-		}
-	}
-
-	// Now put the merged table data covering first into the
-	// OverlapCoveringMerge input.
+	// Put the merged table data covering first into the OverlapCoveringMerge
+	// input.
 	var tableSpanCovering intervalccl.Covering
-	_ = sstIntervalTree.Do(func(r interval.Interface) bool {
+	for _, span := range spansForAllTableIndexes(tables) {
 		tableSpanCovering = append(tableSpanCovering, intervalccl.Range{
-			Start: r.Range().Start,
-			End:   r.Range().End,
+			Start: span.Key,
+			End:   span.EndKey,
 			Payload: importEntry{
-				Span:      roachpb.Span{Key: []byte(r.Range().Start), EndKey: []byte(r.Range().End)},
+				Span:      span,
 				entryType: tableSpan,
 			},
 		})
-		return false
-	})
+	}
 	backupCoverings := []intervalccl.Covering{tableSpanCovering}
 
 	// Iterate over backups creating two coverings for each. First the spans
@@ -849,45 +851,10 @@ func restoreTableDesc(
 	return txn.Run(b)
 }
 
-// userTablesAndDBsMatchingName returns the Descriptors in `descs` that match
-// `name`. Databases are returned in a map that is keyed by ID, tables are
-// returned in a slice.
-func userTablesAndDBsMatchingName(
-	descs []sqlbase.Descriptor, name parser.TableName,
-) (map[sqlbase.ID]*sqlbase.DatabaseDescriptor, []*sqlbase.TableDescriptor, error) {
-	tableName := name.TableName.Normalize()
-	dbName := name.DatabaseName.Normalize()
-
-	databasesByID := make(map[sqlbase.ID]*sqlbase.DatabaseDescriptor, len(descs))
-	tables := make([]*sqlbase.TableDescriptor, 0, len(descs))
-	for _, desc := range descs {
-		if db := desc.GetDatabase(); db != nil {
-			if db.ID == keys.SystemDatabaseID {
-				continue // Not a user database.
-			}
-			if n := parser.Name(db.Name).Normalize(); dbName == "*" || n == dbName {
-				databasesByID[db.ID] = db
-			}
-			continue
-		}
-	}
-	for _, desc := range descs {
-		if table := desc.GetTable(); table != nil {
-			if _, ok := databasesByID[table.ParentID]; !ok {
-				continue
-			}
-			if tableName == "*" || parser.Name(table.Name).Normalize() == tableName {
-				tables = append(tables, table)
-			}
-		}
-	}
-	return databasesByID, tables, nil
-}
-
 // Restore imports a SQL table (or tables) from sets of non-overlapping sstable
 // files.
 func Restore(
-	ctx context.Context, db client.DB, uris []string, table parser.TableName,
+	ctx context.Context, db client.DB, uris []string, targets parser.TargetList,
 ) ([]sqlbase.TableDescriptor, error) {
 	backupDescs := make([]BackupDescriptor, len(uris))
 	for i, uri := range uris {
@@ -906,14 +873,29 @@ func Restore(
 	}
 	lastBackupDesc := backupDescs[len(backupDescs)-1]
 
-	// TODO(dan): The descriptors are also stored in the backup, use those
-	// instead and stop saving them in the BackupDescriptor.
-	databasesByID, tables, err := userTablesAndDBsMatchingName(lastBackupDesc.Descriptors, table)
-	if err != nil {
-		return nil, err
-	}
-	if len(tables) == 0 {
-		return nil, errors.Errorf("no tables found: %s", table.String())
+	databasesByID := make(map[sqlbase.ID]*sqlbase.DatabaseDescriptor)
+	var tables []*sqlbase.TableDescriptor
+	{
+		// TODO(dan): Plumb the session database down.
+		sessionDatabase := ""
+		sqlDescs := lastBackupDesc.Descriptors
+		var err error
+		if sqlDescs, err = descriptorsMatchingTargets(sessionDatabase, sqlDescs, targets); err != nil {
+			return nil, err
+		}
+		for _, desc := range sqlDescs {
+			if dbDesc := desc.GetDatabase(); dbDesc != nil {
+				databasesByID[dbDesc.ID] = dbDesc
+			} else if tableDesc := desc.GetTable(); tableDesc != nil {
+				if tableDesc.ParentID == keys.SystemDatabaseID {
+					return nil, errors.Errorf("cannot restore system table: %s", tableDesc.Name)
+				}
+				tables = append(tables, tableDesc)
+			}
+		}
+		if len(tables) == 0 {
+			return nil, errors.Errorf("no tables found: %s", parser.AsString(targets))
+		}
 	}
 
 	// Fail fast if the necessary databases don't exist since the below logic
@@ -1044,7 +1026,6 @@ func backupPlanHook(
 				return nil, err
 			}
 		}
-		// TODO(dan): Don't ignore the database named passed in.
 		endTime := cfg.Clock.Now()
 		if backup.AsOf.Expr != nil {
 			var err error
@@ -1052,7 +1033,7 @@ func backupPlanHook(
 				return nil, err
 			}
 		}
-		desc, err := Backup(ctx, *cfg.DB, backup.To, startTime, endTime)
+		desc, err := Backup(ctx, *cfg.DB, backup.To, backup.Targets, startTime, endTime)
 		if err != nil {
 			return nil, err
 		}
@@ -1079,16 +1060,7 @@ func restorePlanHook(
 		ctx, span := tracing.ChildSpan(baseCtx, stmt.StatementTag())
 		defer tracing.FinishSpan(span)
 
-		// TODO(dan): To keep PRs more manageable, this only allows the previous
-		// behavior of one database. Support all the various options this syntax
-		// allows.
-		if len(restore.Targets.Databases) != 1 || len(restore.Targets.Tables) != 0 {
-			targets := parser.AsString(restore.Targets)
-			return nil, errors.Errorf("only one DATABASE is currently supported, got: %q", targets)
-		}
-		table := parser.TableName{DatabaseName: restore.Targets.Databases[0], TableName: "*"}
-
-		_, err := Restore(ctx, *cfg.DB, restore.From, table)
+		_, err := Restore(ctx, *cfg.DB, restore.From, restore.Targets)
 		return nil, err
 	}
 	return fn, nil, nil

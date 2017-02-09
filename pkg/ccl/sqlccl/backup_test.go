@@ -32,7 +32,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
@@ -136,7 +135,6 @@ func backupRestoreTestSetup(
 	ctx context.Context,
 	tempDir string,
 	tc *testcluster.TestCluster,
-	kvDB *client.DB,
 	sqlDB *sqlutils.SQLRunner,
 	cleanup func(),
 ) {
@@ -153,7 +151,6 @@ func backupRestoreTestSetup(
 
 	tc = testcluster.StartTestCluster(t, clusterSize, base.TestClusterArgs{})
 	sqlDB = sqlutils.MakeSQLRunner(t, tc.Conns[0])
-	kvDB = tc.Server(0).KVClient().(*client.DB)
 
 	sqlDB.Exec(bankCreateDatabase)
 
@@ -177,7 +174,7 @@ func backupRestoreTestSetup(
 		dirCleanupFn()
 	}
 
-	return ctx, dir, tc, kvDB, sqlDB, cleanupFn
+	return ctx, dir, tc, sqlDB, cleanupFn
 }
 
 func TestBackupRestoreLocal(t *testing.T) {
@@ -186,7 +183,7 @@ func TestBackupRestoreLocal(t *testing.T) {
 	defer sql.TestDisableTableLeases()()
 	const numAccounts = 1000
 
-	ctx, dir, _, _, sqlDB, cleanupFn := backupRestoreTestSetup(t, multiNode, numAccounts)
+	ctx, dir, _, sqlDB, cleanupFn := backupRestoreTestSetup(t, multiNode, numAccounts)
 	defer cleanupFn()
 	backupAndRestore(ctx, t, sqlDB, dir, numAccounts)
 }
@@ -213,7 +210,7 @@ func TestBackupRestoreS3(t *testing.T) {
 	defer sql.TestDisableTableLeases()()
 	const numAccounts = 1000
 
-	ctx, _, _, _, sqlDB, cleanupFn := backupRestoreTestSetup(t, 1, numAccounts)
+	ctx, _, _, sqlDB, cleanupFn := backupRestoreTestSetup(t, 1, numAccounts)
 	defer cleanupFn()
 	prefix := fmt.Sprintf("TestBackupRestoreS3-%d", timeutil.Now().UnixNano())
 	uri := url.URL{Scheme: "s3", Host: bucket, Path: prefix}
@@ -242,7 +239,7 @@ func TestBackupRestoreGoogleCloudStorage(t *testing.T) {
 	// TODO(dt): this prevents leaking an http conn goroutine.
 	http.DefaultTransport.(*http.Transport).DisableKeepAlives = true
 
-	ctx, _, _, _, sqlDB, cleanupFn := backupRestoreTestSetup(t, 1, numAccounts)
+	ctx, _, _, sqlDB, cleanupFn := backupRestoreTestSetup(t, 1, numAccounts)
 	defer cleanupFn()
 	prefix := fmt.Sprintf("TestBackupRestoreGoogleCloudStorage-%d", timeutil.Now().UnixNano())
 	uri := url.URL{Scheme: "gs", Host: bucket, Path: prefix}
@@ -292,7 +289,7 @@ func TestBackupRestoreInterleaved(t *testing.T) {
 	defer sql.TestDisableTableLeases()()
 	const numAccounts = 10
 
-	ctx, dir, _, _, sqlDB, cleanupFn := backupRestoreTestSetup(t, multiNode, numAccounts)
+	_, dir, _, sqlDB, cleanupFn := backupRestoreTestSetup(t, multiNode, numAccounts)
 	defer cleanupFn()
 
 	// TODO(dan): The INTERLEAVE IN PARENT clause currently doesn't allow the
@@ -315,17 +312,9 @@ func TestBackupRestoreInterleaved(t *testing.T) {
 		tcRestore := testcluster.StartTestCluster(t, multiNode, base.TestClusterArgs{})
 		defer tcRestore.Stopper().Stop()
 		sqlDBRestore := sqlutils.MakeSQLRunner(t, tcRestore.Conns[0])
-		kvDBRestore := tcRestore.Server(0).KVClient().(*client.DB)
 		sqlDBRestore.Exec(bankCreateDatabase)
 
-		table := parser.TableName{DatabaseName: "bench", TableName: "*"}
-		newTables, err := Restore(ctx, *kvDBRestore, []string{dir}, table)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if len(newTables) != 4 {
-			t.Fatalf("expected to restore 1 table, got %d", len(newTables))
-		}
+		sqlDBRestore.Exec(fmt.Sprintf(`RESTORE DATABASE bench FROM '%s'`, dir))
 
 		var rowCount int64
 		sqlDBRestore.QueryRow(`SELECT COUNT(*) FROM bench.bank`).Scan(&rowCount)
@@ -350,11 +339,9 @@ func TestBackupRestoreInterleaved(t *testing.T) {
 		tcRestore := testcluster.StartTestCluster(t, multiNode, base.TestClusterArgs{})
 		defer tcRestore.Stopper().Stop()
 		sqlDBRestore := sqlutils.MakeSQLRunner(t, tcRestore.Conns[0])
-		kvDBRestore := tcRestore.Server(0).KVClient().(*client.DB)
 		sqlDBRestore.Exec(bankCreateDatabase)
 
-		table := parser.TableName{DatabaseName: "bench", TableName: "i0"}
-		_, err := Restore(ctx, *kvDBRestore, []string{dir}, table)
+		_, err := sqlDBRestore.DB.Exec(fmt.Sprintf(`RESTORE TABLE bench.i0 FROM '%s'`, dir))
 		if !testutils.IsError(err, "without interleave parent") {
 			t.Fatalf("expected 'without interleave parent' error but got: %+v", err)
 		}
@@ -364,11 +351,9 @@ func TestBackupRestoreInterleaved(t *testing.T) {
 		tcRestore := testcluster.StartTestCluster(t, multiNode, base.TestClusterArgs{})
 		defer tcRestore.Stopper().Stop()
 		sqlDBRestore := sqlutils.MakeSQLRunner(t, tcRestore.Conns[0])
-		kvDBRestore := tcRestore.Server(0).KVClient().(*client.DB)
 		sqlDBRestore.Exec(bankCreateDatabase)
 
-		table := parser.TableName{DatabaseName: "bench", TableName: "bank"}
-		_, err := Restore(ctx, *kvDBRestore, []string{dir}, table)
+		_, err := sqlDBRestore.DB.Exec(fmt.Sprintf(`RESTORE TABLE bench.bank FROM '%s'`, dir))
 		if !testutils.IsError(err, "without interleave child") {
 			t.Fatalf("expected 'without interleave child' error but got: %+v", err)
 		}
@@ -415,7 +400,7 @@ func TestBackupRestoreBank(t *testing.T) {
 	const numTransferTasks = multiNode
 	const backupRestoreIterations = 3
 
-	_, baseDir, tc, _, sqlDB, cleanupFn := backupRestoreTestSetup(t, multiNode, numAccounts)
+	_, baseDir, tc, sqlDB, cleanupFn := backupRestoreTestSetup(t, multiNode, numAccounts)
 	defer cleanupFn()
 
 	for i := 0; i < numTransferTasks; i++ {
@@ -496,7 +481,7 @@ func TestBackupAsOfSystemTime(t *testing.T) {
 	defer sql.TestDisableTableLeases()()
 	const numAccounts = 1000
 
-	_, dir, _, _, sqlDB, cleanupFn := backupRestoreTestSetup(t, multiNode, numAccounts)
+	_, dir, _, sqlDB, cleanupFn := backupRestoreTestSetup(t, multiNode, numAccounts)
 	defer cleanupFn()
 
 	var ts string
@@ -519,8 +504,9 @@ func TestBackupAsOfSystemTime(t *testing.T) {
 func TestPresplitRanges(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	ctx, _, _, kvDB, _, cleanupFn := backupRestoreTestSetup(t, multiNode, 0)
+	ctx, _, tc, _, cleanupFn := backupRestoreTestSetup(t, multiNode, 0)
 	defer cleanupFn()
+	kvDB := tc.Server(0).KVClient().(*client.DB)
 
 	numRangesTests := []int{0, 1, 2, 3, 4, 10}
 	for testNum, numRanges := range numRangesTests {
@@ -549,7 +535,7 @@ func TestPresplitRanges(t *testing.T) {
 func TestBackupLevelDB(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	_, dir, _, _, sqlDB, cleanupFn := backupRestoreTestSetup(t, singleNode, 0)
+	_, dir, _, sqlDB, cleanupFn := backupRestoreTestSetup(t, singleNode, 0)
 	defer cleanupFn()
 
 	_ = sqlDB.Exec(fmt.Sprintf(`BACKUP DATABASE bench TO '%s'`, dir))
@@ -581,7 +567,7 @@ func TestBackupLevelDB(t *testing.T) {
 func BenchmarkClusterBackup(b *testing.B) {
 	defer tracing.Disable()()
 
-	ctx, dir, tc, _, sqlDB, cleanupFn := backupRestoreTestSetup(b, multiNode, 0)
+	ctx, dir, tc, sqlDB, cleanupFn := backupRestoreTestSetup(b, multiNode, 0)
 	defer cleanupFn()
 
 	ts := hlc.Timestamp{WallTime: hlc.UnixNano()}
@@ -611,26 +597,23 @@ func BenchmarkClusterRestore(b *testing.B) {
 	// TODO(dan): count=10000 has some issues replicating. Investigate.
 	for _, numAccounts := range []int{10, 100, 1000} {
 		b.Run(strconv.Itoa(numAccounts), func(b *testing.B) {
-			ctx, dir, tc, kvDB, _, cleanupFn := backupRestoreTestSetup(b, multiNode, numAccounts)
+			_, dir, tc, sqlDB, cleanupFn := backupRestoreTestSetup(b, multiNode, numAccounts)
 			defer cleanupFn()
 
 			// TODO(dan): Once mjibson's sql -> kv function is committed, use it
 			// here on the output of bankDataInsert to generate the backup data
 			// instead of this call.
-			desc, err := Backup(ctx, *kvDB, dir, hlc.ZeroTimestamp, tc.Server(0).Clock().Now())
-			if err != nil {
-				b.Fatal(err)
-			}
-			b.SetBytes(desc.DataSize)
+			var dataSize int64
+			sqlDB.QueryRow(
+				fmt.Sprintf(`BACKUP DATABASE bench TO '%s'`, dir),
+			).Scan(nil, nil, nil, &dataSize)
+			b.SetBytes(dataSize)
 
 			rebalanceLeases(b, tc)
 
 			b.ResetTimer()
-			table := parser.TableName{DatabaseName: "bench", TableName: "bank"}
 			for i := 0; i < b.N; i++ {
-				if _, err := Restore(ctx, *kvDB, []string{dir}, table); err != nil {
-					b.Fatal(err)
-				}
+				sqlDB.Exec(fmt.Sprintf(`RESTORE DATABASE bench FROM '%s'`, dir))
 			}
 		})
 	}
