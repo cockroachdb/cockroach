@@ -152,8 +152,10 @@ func TestComputeOrderingMatch(t *testing.T) {
 
 	for _, ts := range testSets {
 		for _, tc := range ts.cases {
-			res := computeOrderingMatch(tc.desired, ts.existing, false)
-			resRev := computeOrderingMatch(tc.desired, ts.existing, true)
+			res := ts.existing.computeMatch(tc.desired)
+			ts.existing.reverse()
+			resRev := ts.existing.computeMatch(tc.desired)
+			ts.existing.reverse()
 			if res != tc.expected || resRev != tc.expectedReverse {
 				t.Errorf("Test defined on line %d failed: expected:%d/%d got:%d/%d",
 					tc.line, tc.expected, tc.expectedReverse, res, resRev)

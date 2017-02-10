@@ -192,8 +192,7 @@ func doExpandPlan(p *planner, params expandParameters, plan planNode) (planNode,
 
 		// Check to see if the requested ordering is compatible with the existing
 		// ordering.
-		existingOrdering := n.plan.Ordering()
-		match := computeOrderingMatch(n.ordering, existingOrdering, false)
+		match := n.plan.Ordering().computeMatch(n.ordering)
 		if match < len(n.ordering) {
 			n.needSort = true
 		} else if len(n.columns) < len(n.plan.Columns()) {
@@ -260,7 +259,7 @@ func expandScanNode(p *planner, params expandParameters, s *scanNode) (planNode,
 	var analyzeOrdering analyzeOrderingFn
 	if len(params.desiredOrdering) > 0 {
 		analyzeOrdering = func(indexOrdering orderingInfo) (matchingCols, totalCols int) {
-			match := computeOrderingMatch(params.desiredOrdering, indexOrdering, false)
+			match := indexOrdering.computeMatch(params.desiredOrdering)
 			return match, len(params.desiredOrdering)
 		}
 	}

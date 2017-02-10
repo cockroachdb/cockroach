@@ -131,30 +131,37 @@ func (ord *orderingInfo) addColumn(colIdx int, dir encoding.Direction) {
 	}
 }
 
-// Computes how long of a prefix of a desired ColumnOrdering is matched by an existing ordering. If
-// reverse is set, we assume the reverse of the existing ordering.
+// reverse reverses the ordering.
+func (ord *orderingInfo) reverse() {
+	for i := range ord.ordering {
+		ord.ordering[i].Direction = ord.ordering[i].Direction.Reverse()
+	}
+}
+
+// computeMatch computes how long of a prefix of a desired ColumnOrdering is
+// matched by the orderingInfo.
 //
 // Returns a value between 0 and len(desired).
-func computeOrderingMatch(desired sqlbase.ColumnOrdering, existing orderingInfo, reverse bool) int {
-	// position in existing.ordering
+func (ord orderingInfo) computeMatch(desired sqlbase.ColumnOrdering) int {
+	// position in ord.ordering
 	pos := 0
 	for i, col := range desired {
-		if pos < len(existing.ordering) {
-			ci := existing.ordering[pos]
+		if pos < len(ord.ordering) {
+			ci := ord.ordering[pos]
 
-			// Check that the next column matches. Note: "!=" acts as logical XOR.
-			if ci.ColIdx == col.ColIdx && (ci.Direction == col.Direction) != reverse {
+			// Check that the next column matches.
+			if ci.ColIdx == col.ColIdx && ci.Direction == col.Direction {
 				pos++
 				continue
 			}
-		} else if existing.unique {
+		} else if ord.unique {
 			// Everything matched up to the last column and we know there are no duplicate
 			// combinations of values for these columns. Any other columns we may want to "refine"
 			// the ordering by don't make a difference.
 			return len(desired)
 		}
 		// If the column did not match, check if it is one of the exact match columns.
-		if _, ok := existing.exactMatchCols[col.ColIdx]; !ok {
+		if _, ok := ord.exactMatchCols[col.ColIdx]; !ok {
 			// Everything matched up to this point.
 			return i
 		}
