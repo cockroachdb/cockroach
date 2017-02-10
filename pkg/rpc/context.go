@@ -53,6 +53,28 @@ const (
 	maximumPingDurationMult = 2
 )
 
+// ArtificialLatencies provides a way to inject fake latency into requests
+// to/from particular nodes. It should only ever be set by testing code, and
+// is not thread safe (so it must be initialized before the server starts).
+var ArtificialLatencies = make(map[string]time.Duration)
+
+type clientStreamWithDelay struct {
+	grpc.ClientStream
+	delay time.Duration
+}
+
+func (c *clientStreamWithDelay) RecvMsg(m interface{}) error {
+	timer := timeutil.NewTimer()
+	defer timer.Stop()
+	timer.Reset(c.delay)
+	select {
+	case <-timer.C:
+	case <-c.Context().Done():
+		return c.Context().Err()
+	}
+	return c.ClientStream.RecvMsg(m)
+}
+
 // NewServer is a thin wrapper around grpc.NewServer that registers a heartbeat
 // service.
 func NewServer(ctx *Context) *grpc.Server {
@@ -215,6 +237,48 @@ func (ctx *Context) GRPCDial(target string, opts ...grpc.DialOption) (*grpc.Clie
 		dialOpts = append(dialOpts, dialOpt)
 		dialOpts = append(dialOpts, grpc.WithBackoffMaxDelay(maxBackoff))
 		dialOpts = append(dialOpts, opts...)
+
+		if delay, ok := ArtificialLatencies[target]; ok {
+			dialOpts = append(dialOpts, grpc.WithUnaryInterceptor(
+				func(
+					ctx context.Context,
+					method string,
+					req, reply interface{},
+					cc *grpc.ClientConn,
+					invoker grpc.UnaryInvoker,
+					opts ...grpc.CallOption,
+				) error {
+					timer := timeutil.NewTimer()
+					defer timer.Stop()
+					timer.Reset(delay)
+					select {
+					case <-timer.C:
+					case <-ctx.Done():
+						return ctx.Err()
+					}
+					return invoker(ctx, method, req, reply, cc, opts...)
+				},
+			))
+			dialOpts = append(dialOpts, grpc.WithStreamInterceptor(
+				func(
+					ctx context.Context,
+					desc *grpc.StreamDesc,
+					cc *grpc.ClientConn,
+					method string,
+					streamer grpc.Streamer,
+					opts ...grpc.CallOption,
+				) (grpc.ClientStream, error) {
+					s, err := streamer(ctx, desc, cc, method, opts...)
+					if err != nil {
+						return nil, err
+					}
+					return &clientStreamWithDelay{
+						ClientStream: s,
+						delay:        delay,
+					}, nil
+				},
+			))
+		}
 
 		if log.V(1) {
 			log.Infof(ctx.masterCtx, "dialing %s", target)
