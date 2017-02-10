@@ -7,16 +7,15 @@ set -euxo pipefail
 
 sudo apt-get update
 sudo apt-get dist-upgrade -y
-sudo apt-get install -y --no-install-recommends docker.io git
+sudo apt-get install -y --no-install-recommends docker.io git golang
 
 sudo adduser "${USER}" docker
 
 # Configure environment variables
 echo 'export GOPATH=${HOME}/go' >> ~/.bashrc_go
+echo 'export PATH=${GOPATH}/bin:${PATH}' >> ~/.bashrc_go
 echo '. ~/.bashrc_go' >> ~/.bashrc
 
 . ~/.bashrc_go
 
-mkdir -p "$GOPATH/src/github.com/cockroachdb"
-
-git clone https://github.com/cockroachdb/cockroach.git "$GOPATH/src/github.com/cockroachdb/cockroach"
+go get -d github.com/cockroachdb/cockroach
