@@ -1426,8 +1426,10 @@ CREATE TABLE pg_catalog.pg_type (
 		for oid, typ := range parser.OidToType {
 			cat := typCategory(typ)
 			typInput := oidZero
+			typElem := oidZero
 			if cat == typCategoryArray {
 				typInput = arrayInProcOid
+				typElem = parser.NewDOid(parser.DInt(arrayOidToElemOid[oid]))
 			}
 			typname := typ.String()
 			if n, ok := aliasedOidToName[oid]; ok {
@@ -1446,7 +1448,7 @@ CREATE TABLE pg_catalog.pg_type (
 				parser.MakeDBool(true),  // typisdefined
 				typDelim,                // typdelim
 				oidZero,                 // typrelid
-				oidZero,                 // typelem
+				typElem,                 // typelem
 				oidZero,                 // typarray
 
 				// regproc references
@@ -1493,6 +1495,15 @@ var aliasedOidToName = map[oid.Oid]string{
 	oid.T__int4:   "int4[]",
 	oid.T__int8:   "int8[]",
 	oid.T__text:   "text[]",
+}
+
+// arrayOidToElemOid maps the OIDs of Postgres array types to the OIDs of the
+// types of their elements.
+var arrayOidToElemOid = map[oid.Oid]oid.Oid{
+	oid.T__int2: oid.T_int2,
+	oid.T__int4: oid.T_int4,
+	oid.T__int8: oid.T_int8,
+	oid.T__text: oid.T_text,
 }
 
 // typOid is the only OID generation approach that does not use oidHasher, because
