@@ -18,6 +18,7 @@ package rpc
 
 import (
 	"math"
+	"net"
 	"sync"
 	"time"
 
@@ -44,6 +45,7 @@ func init() {
 	// in traces, we must disable tracing entirely.
 	// https://github.com/grpc/grpc-go/issues/695
 	grpc.EnableTracing = false
+	ArtificialLatencies = make(map[string]time.Duration)
 }
 
 const (
@@ -52,6 +54,13 @@ const (
 	// maximum acceptable measurement latency.
 	maximumPingDurationMult = 2
 )
+
+// ArtificialLatencies provides a way to inject fake latency into requests to
+// particular nodes. It should only ever be set by testing code, and is not
+// thread safe (so it must be initialized before the server starts).
+// The latency is only injected on outgoing requests, so it's recommended to
+// set up the same artificial latency on the remote node.
+var ArtificialLatencies map[string]time.Duration
 
 // NewServer is a thin wrapper around grpc.NewServer that registers a heartbeat
 // service.
@@ -216,6 +225,21 @@ func (ctx *Context) GRPCDial(target string, opts ...grpc.DialOption) (*grpc.Clie
 		dialOpts = append(dialOpts, grpc.WithBackoffMaxDelay(maxBackoff))
 		dialOpts = append(dialOpts, opts...)
 
+		if delay, ok := ArtificialLatencies[target]; ok {
+			dialOpts = append(dialOpts, grpc.WithDialer(
+				func(addr string, timeout time.Duration) (net.Conn, error) {
+					conn, err := net.DialTimeout("tcp", addr, timeout)
+					if err != nil {
+						return nil, err
+					}
+					return artificialLatencyConn{
+						Conn:            conn,
+						outgoingLatency: delay,
+					}, nil
+				},
+			))
+		}
+
 		if log.V(1) {
 			log.Infof(ctx.masterCtx, "dialing %s", target)
 		}
@@ -241,6 +265,16 @@ func (ctx *Context) GRPCDial(target string, opts ...grpc.DialOption) (*grpc.Clie
 	})
 
 	return meta.conn, meta.err
+}
+
+type artificialLatencyConn struct {
+	net.Conn
+	outgoingLatency time.Duration
+}
+
+func (alc artificialLatencyConn) Write(b []byte) (n int, err error) {
+	time.Sleep(alc.outgoingLatency)
+	return alc.Conn.Write(b)
 }
 
 // NewBreaker creates a new circuit breaker properly configured for RPC
