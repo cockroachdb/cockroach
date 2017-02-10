@@ -1886,11 +1886,12 @@ func (dsp *distSQLPlanner) PlanAndRun(
 			nodeNames[i] = n.String()
 		}
 
-		var buf bytes.Buffer
-		if err := distsqlrun.GeneratePlanDiagram(flows, nodeNames, &buf); err != nil {
+		json, url, err := distsqlrun.GeneratePlanDiagramWithURL(flows, nodeNames)
+		if err != nil {
 			log.Infof(ctx, "Error generating diagram: %s", err)
 		} else {
-			log.Infof(ctx, "Plan diagram JSON:\n%s", buf.String())
+			log.Infof(ctx, "Plan diagram JSON:\n%s", json)
+			log.Infof(ctx, "Plan diagram URL:\n%s", url.String())
 		}
 	}
 
