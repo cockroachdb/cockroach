@@ -44,7 +44,7 @@ func TestDescriptorsMatchingTargets(t *testing.T) {
 
 		{"", "TABLE foo", nil},
 		{"system", "TABLE foo", []string{"system", "foo"}},
-		{"data", "TABLE foo", []string{"data"}},
+		{"data", "TABLE foo", nil},
 
 		{"", "TABLE *", nil},
 		{"system", "TABLE *", []string{"system", "foo", "bar"}},
@@ -73,8 +73,8 @@ func TestDescriptorsMatchingTargets(t *testing.T) {
 		// {"", `TABLE system."FOO"`, []string{"system"}},
 		// {"system", `TABLE "FOO"`, []string{"system"}},
 	}
-	for _, test := range tests {
-		t.Run("", func(t *testing.T) {
+	for i, test := range tests {
+		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
 			sql := fmt.Sprintf(`GRANT ALL ON %s TO ignored`, test.pattern)
 			stmt, err := parser.ParseOne(sql, parser.Traditional)
 			if err != nil {
@@ -82,7 +82,7 @@ func TestDescriptorsMatchingTargets(t *testing.T) {
 			}
 			targets := stmt.(*parser.Grant).Targets
 
-			matched, err := descriptorsMatchingTargets(test.sessionDatabase, descriptors, targets)
+			matched, err := descriptorsMatchingTargets(test.sessionDatabase, parser.SearchPath{}, descriptors, targets)
 			if err != nil {
 				t.Fatal(err)
 			}

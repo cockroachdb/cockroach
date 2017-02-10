@@ -1485,7 +1485,6 @@ var Builtins = map[string][]Builtin{
 		},
 	},
 
-	// pg_catalog functions.
 	// See https://www.postgresql.org/docs/9.6/static/functions-info.html.
 	"pg_backend_pid": {
 		Builtin{
