@@ -87,16 +87,14 @@ func TestDistinct(t *testing.T) {
 		in := NewRowBuffer(nil, c.input)
 		out := &RowBuffer{}
 
-		flowCtx := FlowCtx{
-			Context: context.Background(),
-		}
+		flowCtx := FlowCtx{}
 
 		d, err := newDistinct(&flowCtx, &ds, in, &PostProcessSpec{}, out)
 		if err != nil {
 			t.Fatal(err)
 		}
 
-		d.Run(nil)
+		d.Run(context.Background(), nil)
 		if out.Err != nil {
 			t.Fatal(out.Err)
 		}

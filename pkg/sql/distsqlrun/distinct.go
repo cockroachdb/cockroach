@@ -27,7 +27,6 @@ import (
 
 type distinct struct {
 	input        RowSource
-	ctx          context.Context
 	lastGroupKey sqlbase.EncDatumRow
 	seen         map[string]struct{}
 	orderedCols  map[uint32]struct{}
@@ -42,7 +41,6 @@ func newDistinct(
 ) (*distinct, error) {
 	d := &distinct{
 		input:       input,
-		ctx:         log.WithLogTag(flowCtx.Context, "Evaluator", nil),
 		orderedCols: make(map[uint32]struct{}),
 	}
 	for _, col := range spec.OrderedColumns {
@@ -57,12 +55,13 @@ func newDistinct(
 }
 
 // Run is part of the processor interface.
-func (d *distinct) Run(wg *sync.WaitGroup) {
+func (d *distinct) Run(ctx context.Context, wg *sync.WaitGroup) {
 	if wg != nil {
 		defer wg.Done()
 	}
 
-	ctx, span := tracing.ChildSpan(d.ctx, "distinct")
+	ctx = log.WithLogTag(ctx, "Evaluator", nil)
+	ctx, span := tracing.ChildSpan(ctx, "distinct")
 	defer tracing.FinishSpan(span)
 
 	if log.V(2) {

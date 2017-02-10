@@ -96,7 +96,6 @@ func TestJoinReader(t *testing.T) {
 	}
 	for _, c := range testCases {
 		flowCtx := FlowCtx{
-			Context:  context.Background(),
 			evalCtx:  &parser.EvalContext{},
 			txnProto: &roachpb.Transaction{},
 			clientDB: kvDB,
@@ -117,7 +116,7 @@ func TestJoinReader(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		jr.Run(nil)
+		jr.Run(context.Background(), nil)
 
 		if out.Err != nil {
 			t.Fatal(out.Err)

@@ -68,13 +68,13 @@ func TestValues(t *testing.T) {
 					}
 
 					out := &RowBuffer{}
-					flowCtx := FlowCtx{Context: context.Background()}
+					flowCtx := FlowCtx{}
 
 					v, err := newValuesProcessor(&flowCtx, &spec, &PostProcessSpec{}, out)
 					if err != nil {
 						t.Fatal(err)
 					}
-					v.Run(nil)
+					v.Run(context.Background(), nil)
 					if out.Err != nil {
 						t.Fatal(out.Err)
 					}

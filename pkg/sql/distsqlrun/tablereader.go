@@ -34,8 +34,8 @@ import (
 // See docs/RFCS/distributed_sql.md
 type tableReader struct {
 	flowCtx *FlowCtx
-	ctx     context.Context
 
+	tableID   sqlbase.ID
 	spans     roachpb.Spans
 	limitHint int64
 
@@ -52,6 +52,7 @@ func newTableReader(
 ) (*tableReader, error) {
 	tr := &tableReader{
 		flowCtx: flowCtx,
+		tableID: spec.Table.ID,
 	}
 
 	// We ignore any limits that are higher than this value to avoid any
@@ -102,8 +103,6 @@ func newTableReader(
 		return nil, err
 	}
 
-	tr.ctx = log.WithLogTagInt(tr.flowCtx.Context, "TableReader", int(spec.Table.ID))
-
 	tr.spans = make(roachpb.Spans, len(spec.Spans))
 	for i, s := range spec.Spans {
 		tr.spans[i] = s.Span
@@ -146,12 +145,13 @@ func initRowFetcher(
 }
 
 // Run is part of the processor interface.
-func (tr *tableReader) Run(wg *sync.WaitGroup) {
+func (tr *tableReader) Run(ctx context.Context, wg *sync.WaitGroup) {
 	if wg != nil {
 		defer wg.Done()
 	}
 
-	ctx, span := tracing.ChildSpan(tr.ctx, "table reader")
+	ctx = log.WithLogTagInt(ctx, "TableReader", int(tr.tableID))
+	ctx, span := tracing.ChildSpan(ctx, "table reader")
 	defer tracing.FinishSpan(span)
 
 	txn := tr.flowCtx.setupTxn(ctx)

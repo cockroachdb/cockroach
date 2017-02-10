@@ -486,7 +486,7 @@ func TestHashJoiner(t *testing.T) {
 		leftInput := NewRowBuffer(nil, c.inputs[0])
 		rightInput := NewRowBuffer(nil, c.inputs[1])
 		out := &RowBuffer{}
-		flowCtx := FlowCtx{Context: context.Background(), evalCtx: &parser.EvalContext{}}
+		flowCtx := FlowCtx{evalCtx: &parser.EvalContext{}}
 
 		post := PostProcessSpec{OutputColumns: c.outCols}
 		h, err := newHashJoiner(&flowCtx, &hs, leftInput, rightInput, &post, out)
@@ -494,7 +494,7 @@ func TestHashJoiner(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		h.Run(nil)
+		h.Run(context.Background(), nil)
 
 		if out.Err != nil {
 			t.Fatal(out.Err)
