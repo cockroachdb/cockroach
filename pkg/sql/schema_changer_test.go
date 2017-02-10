@@ -400,6 +400,115 @@ CREATE INDEX foo ON t.test (v)
 	}
 }
 
+// Run a particular schema change.
+func runSchemaChange(
+	t *testing.T,
+	sqlDB *gosql.DB,
+	kvDB *client.DB,
+	schemaChange string,
+	maxValue int,
+	keyMultiple int,
+) {
+	start := timeutil.Now()
+	// Start schema change that eventually runs a backfill.
+	if _, err := sqlDB.Exec(schemaChange); err != nil {
+		t.Error(err)
+	}
+	t.Logf("schema change %s took %v", schemaChange, timeutil.Since(start))
+
+	// Verify the number of keys left behind in the table to validate schema
+	// change operations.
+	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
+	tablePrefix := roachpb.Key(keys.MakeTablePrefix(uint32(tableDesc.ID)))
+	if kvs, err := kvDB.Scan(context.TODO(), tablePrefix, tablePrefix.PrefixEnd(), 0); err != nil {
+		t.Fatal(err)
+	} else if e := keyMultiple * (maxValue + 1); len(kvs) != e {
+		t.Fatalf("expected %d key value pairs, but got %d", e, len(kvs))
+	}
+}
+
+// Test that schema change backfill completes on chunk boundary.
+func TestBackfillCompletesOnChunkBoundary(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	const numNodes, chunkSize = 5, 100
+	// The number of entries in the table is a multiple of chunkSize.
+	// [0...maxValue-1].
+	const maxValue = 5*chunkSize - 1
+	params, _ := createTestServerParams()
+	params.Knobs = base.TestingKnobs{
+		SQLSchemaChanger: &csql.SchemaChangerTestingKnobs{
+			BackfillChunkSize: chunkSize,
+		},
+	}
+
+	tc := serverutils.StartTestCluster(t, numNodes,
+		base.TestClusterArgs{
+			ReplicationMode: base.ReplicationManual,
+			ServerArgs:      params,
+		})
+	defer tc.Stopper().Stop()
+	kvDB := tc.Server(0).KVClient().(*client.DB)
+	sqlDB := tc.ServerConn(0)
+
+	if _, err := sqlDB.Exec(`
+CREATE DATABASE t;
+CREATE TABLE t.test (k INT PRIMARY KEY, v INT, pi DECIMAL DEFAULT (DECIMAL '3.14'));
+CREATE UNIQUE INDEX vidx ON t.test (v);
+`); err != nil {
+		t.Fatal(err)
+	}
+
+	// Bulk insert.
+	if err := bulkInsertIntoTable(sqlDB, maxValue); err != nil {
+		t.Fatal(err)
+	}
+
+	// Split the table into multiple ranges.
+	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
+	// SplitTable moves the right range, so we split things back to front.
+	for i := numNodes - 1; i > 0; i-- {
+		csql.SplitTable(t, tc, tableDesc, i, maxValue/numNodes*i)
+	}
+
+	// Run some schema changes.
+
+	// Add column.
+	runSchemaChange(
+		t,
+		sqlDB,
+		kvDB,
+		"ALTER TABLE t.test ADD COLUMN x DECIMAL DEFAULT (DECIMAL '1.4')",
+		maxValue,
+		2)
+
+	// Drop column.
+	runSchemaChange(
+		t,
+		sqlDB,
+		kvDB,
+		"ALTER TABLE t.test DROP pi",
+		maxValue,
+		2)
+
+	// Add index.
+	runSchemaChange(
+		t,
+		sqlDB,
+		kvDB,
+		"CREATE UNIQUE INDEX foo ON t.test (v)",
+		maxValue,
+		3)
+
+	// Drop index.
+	runSchemaChange(
+		t,
+		sqlDB,
+		kvDB,
+		"DROP INDEX t.test@vidx",
+		maxValue,
+		2)
+}
+
 // Run a particular schema change and run some OLTP operations in parallel, as
 // soon as the schema change starts executing its backfill.
 func runSchemaChangeWithOperations(

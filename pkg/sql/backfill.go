@@ -620,7 +620,7 @@ func (sc *SchemaChanger) backfillIndexes(
 	// Backfill the index entries for all the rows.
 	chunkSize := sc.getChunkSize(indexBackfillChunkSize)
 	lastCheckpoint := timeutil.Now()
-	for row, done := int64(0), false; !done; row += chunkSize {
+	for row := int64(0); sp.Key != nil; row += chunkSize {
 		// First extend the schema change lease.
 		if err := sc.ExtendLease(lease); err != nil {
 			return err
@@ -629,7 +629,7 @@ func (sc *SchemaChanger) backfillIndexes(
 			log.Infof(context.TODO(), "index add (%d, %d) at row: %d, span: %s",
 				sc.tableID, sc.mutationID, row, sp)
 		}
-		sp.Key, done, err = sc.backfillIndexesChunk(version, added, sp, chunkSize, mutationIdx, &lastCheckpoint)
+		sp.Key, err = sc.backfillIndexesChunk(version, added, sp, chunkSize, mutationIdx, &lastCheckpoint)
 		if err != nil {
 			return err
 		}
@@ -637,8 +637,7 @@ func (sc *SchemaChanger) backfillIndexes(
 	return nil
 }
 
-// backfillIndexesChunk returns the next-key, done and an error. next-key and
-// done are invalid if error != nil. next-key is invalid if done is true.
+// backfillIndexesChunk returns the next-key and an error.
 func (sc *SchemaChanger) backfillIndexesChunk(
 	version sqlbase.DescriptorVersion,
 	added []sqlbase.IndexDescriptor,
@@ -646,9 +645,8 @@ func (sc *SchemaChanger) backfillIndexesChunk(
 	chunkSize int64,
 	mutationIdx int,
 	lastCheckpoint *time.Time,
-) (roachpb.Key, bool, error) {
+) (roachpb.Key, error) {
 	var nextKey roachpb.Key
-	done := false
 	secondaryIndexEntries := make([]sqlbase.IndexEntry, len(added))
 	err := sc.db.Txn(context.TODO(), func(txn *client.Txn) error {
 		if sc.testingKnobs.RunBeforeBackfillChunk != nil {
@@ -739,10 +737,6 @@ func (sc *SchemaChanger) backfillIndexesChunk(
 		if err := txn.Run(b); err != nil {
 			return convertBackfillError(tableDesc, b)
 		}
-		// Have we processed all the table rows?
-		if done = numRows < chunkSize; done {
-			return nil
-		}
 		// Keep track of the next key.
 		resume := roachpb.Span{Key: scan.fetcher.Key(), EndKey: sp.EndKey}
 		if err := sc.maybeWriteResumeSpan(txn, version, resume, mutationIdx, lastCheckpoint); err != nil {
@@ -751,5 +745,5 @@ func (sc *SchemaChanger) backfillIndexesChunk(
 		nextKey = resume.Key
 		return nil
 	})
-	return nextKey, done, err
+	return nextKey, err
 }
