@@ -87,7 +87,7 @@ var Aggregates = map[string][]Builtin{
 				if len(args) == 0 {
 					return unknownReturnType
 				}
-				return tArray{args[0].ResolvedType()}
+				return TArray{args[0].ResolvedType()}
 			},
 			newArrayAggregate,
 			"Aggregates the selected values into an array.",

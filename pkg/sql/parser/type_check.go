@@ -260,12 +260,12 @@ func (expr *IndirectionExpr) TypeCheck(ctx *SemaContext, desired Type) (TypedExp
 		}
 	}
 
-	subExpr, err := expr.Expr.TypeCheck(ctx, tArray{desired})
+	subExpr, err := expr.Expr.TypeCheck(ctx, TArray{desired})
 	if err != nil {
 		return nil, err
 	}
 	typ := subExpr.ResolvedType()
-	arrType, ok := typ.(tArray)
+	arrType, ok := typ.(TArray)
 	if !ok {
 		return nil, errors.Errorf("cannot subscript type %s because it is not an array", typ)
 	}
@@ -664,7 +664,7 @@ var errAmbiguousArrayType = errors.Errorf("cannot determine type of empty array.
 // TypeCheck implements the Expr interface.
 func (expr *Array) TypeCheck(ctx *SemaContext, desired Type) (TypedExpr, error) {
 	desiredParam := TypeAny
-	if arr, ok := desired.(tArray); ok {
+	if arr, ok := desired.(TArray); ok {
 		desiredParam = arr.Typ
 	}
 
@@ -672,7 +672,7 @@ func (expr *Array) TypeCheck(ctx *SemaContext, desired Type) (TypedExpr, error) 
 		if desiredParam == TypeAny {
 			return nil, errAmbiguousArrayType
 		}
-		expr.typ = tArray{desiredParam}
+		expr.typ = TArray{desiredParam}
 		return expr, nil
 	}
 
@@ -681,7 +681,7 @@ func (expr *Array) TypeCheck(ctx *SemaContext, desired Type) (TypedExpr, error) 
 		return nil, err
 	}
 
-	expr.typ = tArray{typ}
+	expr.typ = TArray{typ}
 	for i := range typedSubExprs {
 		expr.Exprs[i] = typedSubExprs[i]
 	}
@@ -691,7 +691,7 @@ func (expr *Array) TypeCheck(ctx *SemaContext, desired Type) (TypedExpr, error) 
 // TypeCheck implements the Expr interface.
 func (expr *ArrayFlatten) TypeCheck(ctx *SemaContext, desired Type) (TypedExpr, error) {
 	desiredParam := TypeAny
-	if arr, ok := desired.(tArray); ok {
+	if arr, ok := desired.(TArray); ok {
 		desiredParam = arr.Typ
 	}
 
@@ -852,7 +852,7 @@ func typeCheckComparisonOpWithSubOperator(
 		for i, typedExpr := range typedSubExprs[1:] {
 			array.Exprs[i] = typedExpr
 		}
-		array.typ = tArray{retType}
+		array.typ = TArray{retType}
 
 		rightParen := right
 		for {
@@ -881,7 +881,7 @@ func typeCheckComparisonOpWithSubOperator(
 		cmpTypeLeft = leftTyped.ResolvedType()
 
 		// We then type the right expression desiring an array of the left's type.
-		rightTyped, err = right.TypeCheck(ctx, tArray{cmpTypeLeft})
+		rightTyped, err = right.TypeCheck(ctx, TArray{cmpTypeLeft})
 		if err != nil {
 			return nil, nil, CmpOp{}, err
 		}
@@ -891,7 +891,7 @@ func typeCheckComparisonOpWithSubOperator(
 			return leftTyped, rightTyped, CmpOp{}, nil
 		}
 
-		rightArr, ok := rightReturn.(tArray)
+		rightArr, ok := rightReturn.(TArray)
 		if !ok {
 			return nil, nil, CmpOp{},
 				errors.Errorf(unsupportedCompErrFmtWithExprsAndSubOp, left, subOp, op, right,
@@ -903,7 +903,7 @@ func typeCheckComparisonOpWithSubOperator(
 	fn, ok := ops.lookupImpl(cmpTypeLeft, cmpTypeRight)
 	if !ok {
 		return nil, nil, CmpOp{}, fmt.Errorf(unsupportedCompErrFmtWithTypesAndSubOp,
-			cmpTypeLeft, subOp, op, tArray{cmpTypeRight})
+			cmpTypeLeft, subOp, op, TArray{cmpTypeRight})
 	}
 	return leftTyped, rightTyped, fn, nil
 }

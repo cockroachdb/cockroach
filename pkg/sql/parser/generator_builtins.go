@@ -119,7 +119,7 @@ var generators = map[string][]Builtin{
 				if len(args) == 0 {
 					return unknownReturnType
 				}
-				return TTable{Cols: TTuple{args[0].ResolvedType().(tArray).Typ}}
+				return TTable{Cols: TTuple{args[0].ResolvedType().(TArray).Typ}}
 			},
 			makeArrayGenerator,
 			"Returns the input array as a set of rows",

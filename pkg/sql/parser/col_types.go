@@ -462,7 +462,7 @@ func CastTargetToDatumType(t CastTargetType) Type {
 	case *CollatedStringColType:
 		return TCollatedString{Locale: ct.Locale}
 	case *ArrayColType:
-		return tArray{CastTargetToDatumType(ct.ParamType)}
+		return TArray{CastTargetToDatumType(ct.ParamType)}
 	case *VectorColType:
 		return TypeIntVector
 	case *OidColType:
