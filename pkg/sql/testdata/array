@@ -177,7 +177,7 @@ c
 query T
 SELECT current_schemas(true)[1]
 ----
-pg_catalog
+test
 
 # From a CASE sub-expression.
 query I
