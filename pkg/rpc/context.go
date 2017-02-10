@@ -44,6 +44,7 @@ func init() {
 	// in traces, we must disable tracing entirely.
 	// https://github.com/grpc/grpc-go/issues/695
 	grpc.EnableTracing = false
+	ArtificialLatencies = make(map[string]time.Duration)
 }
 
 const (
@@ -52,6 +53,13 @@ const (
 	// maximum acceptable measurement latency.
 	maximumPingDurationMult = 2
 )
+
+// ArtificialLatencies provides a way to inject fake latency into requests to
+// particular nodes. It should only ever be set by testing code, and is not
+// thread safe (so it must be initialized before the server starts).
+// The latency is only injected on outgoing requests, so it's recommended to
+// set up the same artificial latency on the remote node.
+var ArtificialLatencies map[string]time.Duration
 
 // NewServer is a thin wrapper around grpc.NewServer that registers a heartbeat
 // service.
@@ -215,6 +223,37 @@ func (ctx *Context) GRPCDial(target string, opts ...grpc.DialOption) (*grpc.Clie
 		dialOpts = append(dialOpts, dialOpt)
 		dialOpts = append(dialOpts, grpc.WithBackoffMaxDelay(maxBackoff))
 		dialOpts = append(dialOpts, opts...)
+
+		if delay, ok := ArtificialLatencies[target]; ok {
+			dialOpts = append(dialOpts, grpc.WithUnaryInterceptor(
+				func(
+					ctx context.Context,
+					method string,
+					req, reply interface{},
+					cc *grpc.ClientConn,
+					invoker grpc.UnaryInvoker,
+					opts ...grpc.CallOption,
+				) error {
+					time.Sleep(delay)
+					return invoker(ctx, method, req, reply, cc, opts...)
+				},
+			))
+			// Note that this only injects latency when opening a stream, not on
+			// all traffic that uses the stream, unfortunately.
+			dialOpts = append(dialOpts, grpc.WithStreamInterceptor(
+				func(
+					ctx context.Context,
+					desc *grpc.StreamDesc,
+					cc *grpc.ClientConn,
+					method string,
+					streamer grpc.Streamer,
+					opts ...grpc.CallOption,
+				) (grpc.ClientStream, error) {
+					time.Sleep(delay)
+					return streamer(ctx, desc, cc, method, opts...)
+				},
+			))
+		}
 
 		if log.V(1) {
 			log.Infof(ctx.masterCtx, "dialing %s", target)

@@ -54,7 +54,8 @@ import (
 const basePort = 26257
 const dataDir = "cockroach-data"
 
-var cockroachBin = func() string {
+// CockroachBin is the path to the cockroach binary.
+var CockroachBin = func() string {
 	bin := "./cockroach"
 	if _, err := os.Stat(bin); err == nil {
 		return bin
@@ -97,7 +98,7 @@ func New(size int) *Cluster {
 // can be used to pass extra arguments to an individual node. If not nil, its
 // size must equal the number of nodes.
 func (c *Cluster) Start(
-	db string, numWorkers int, env, allNodeArgs []string, perNodeArgs map[int][]string,
+	db string, numWorkers int, binary string, env, allNodeArgs []string, perNodeArgs map[int][]string,
 ) {
 	c.started = timeutil.Now()
 
@@ -114,7 +115,7 @@ func (c *Cluster) Start(
 	}
 
 	for i := range c.Nodes {
-		c.Nodes[i] = c.makeNode(i, append(append([]string(nil), allNodeArgs...), perNodeArgs[i]...), env)
+		c.Nodes[i] = c.makeNode(i, binary, append(append([]string(nil), allNodeArgs...), perNodeArgs[i]...), env)
 		c.Clients[i] = c.makeClient(i)
 		c.Status[i] = c.makeStatus(i)
 		c.DB[i] = c.makeDB(i, numWorkers, db)
@@ -133,21 +134,21 @@ func (c *Cluster) Close() {
 }
 
 // RPCPort returns the RPC port of the specified node.
-func (c *Cluster) RPCPort(nodeIdx int) int {
+func RPCPort(nodeIdx int) int {
 	return basePort + nodeIdx*2
 }
 
 // RPCAddr returns the RPC address of the specified node.
-func (c *Cluster) RPCAddr(nodeIdx int) string {
-	return fmt.Sprintf("localhost:%d", c.RPCPort(nodeIdx))
+func RPCAddr(nodeIdx int) string {
+	return fmt.Sprintf("localhost:%d", RPCPort(nodeIdx))
 }
 
 // HTTPPort returns the HTTP port of the specified node.
-func (c *Cluster) HTTPPort(nodeIdx int) int {
-	return c.RPCPort(nodeIdx) + 1
+func HTTPPort(nodeIdx int) int {
+	return RPCPort(nodeIdx) + 1
 }
 
-func (c *Cluster) makeNode(nodeIdx int, extraArgs, extraEnv []string) *Node {
+func (c *Cluster) makeNode(nodeIdx int, binary string, extraArgs, extraEnv []string) *Node {
 	name := fmt.Sprintf("%d", nodeIdx+1)
 	dir := filepath.Join(dataDir, name)
 	logDir := filepath.Join(dir, "logs")
@@ -156,17 +157,18 @@ func (c *Cluster) makeNode(nodeIdx int, extraArgs, extraEnv []string) *Node {
 	}
 
 	args := []string{
-		cockroachBin,
+		binary,
 		"start",
 		"--insecure",
-		fmt.Sprintf("--port=%d", c.RPCPort(nodeIdx)),
-		fmt.Sprintf("--http-port=%d", c.HTTPPort(nodeIdx)),
+		"--host=localhost",
+		fmt.Sprintf("--port=%d", RPCPort(nodeIdx)),
+		fmt.Sprintf("--http-port=%d", HTTPPort(nodeIdx)),
 		fmt.Sprintf("--store=%s", dir),
 		fmt.Sprintf("--cache=256MiB"),
 		fmt.Sprintf("--logtostderr"),
 	}
 	if nodeIdx > 0 {
-		args = append(args, fmt.Sprintf("--join=localhost:%d", c.RPCPort(0)))
+		args = append(args, fmt.Sprintf("--join=localhost:%d", RPCPort(0)))
 	}
 	args = append(args, extraArgs...)
 
@@ -180,7 +182,7 @@ func (c *Cluster) makeNode(nodeIdx int, extraArgs, extraEnv []string) *Node {
 }
 
 func (c *Cluster) makeClient(nodeIdx int) *client.DB {
-	conn, err := c.rpcCtx.GRPCDial(c.RPCAddr(nodeIdx))
+	conn, err := c.rpcCtx.GRPCDial(RPCAddr(nodeIdx))
 	if err != nil {
 		log.Fatalf(context.Background(), "failed to initialize KV client: %s", err)
 	}
@@ -188,7 +190,7 @@ func (c *Cluster) makeClient(nodeIdx int) *client.DB {
 }
 
 func (c *Cluster) makeStatus(nodeIdx int) serverpb.StatusClient {
-	conn, err := c.rpcCtx.GRPCDial(c.RPCAddr(nodeIdx))
+	conn, err := c.rpcCtx.GRPCDial(RPCAddr(nodeIdx))
 	if err != nil {
 		log.Fatalf(context.Background(), "failed to initialize status client: %s", err)
 	}
@@ -197,7 +199,7 @@ func (c *Cluster) makeStatus(nodeIdx int) serverpb.StatusClient {
 
 func (c *Cluster) makeDB(nodeIdx, numWorkers int, dbName string) *gosql.DB {
 	url := fmt.Sprintf("postgresql://root@localhost:%d/%s?sslmode=disable",
-		c.RPCPort(nodeIdx), dbName)
+		RPCPort(nodeIdx), dbName)
 	conn, err := gosql.Open("postgres", url)
 	if err != nil {
 		log.Fatal(context.Background(), err)
@@ -324,7 +326,7 @@ func (c *Cluster) lookupRange(nodeIdx int, key roachpb.Key) (*roachpb.RangeDescr
 // Freeze freezes (or thaws) the cluster. The freeze request is sent to the
 // specified node.
 func (c *Cluster) Freeze(nodeIdx int, freeze bool) {
-	addr := c.RPCAddr(nodeIdx)
+	addr := RPCAddr(nodeIdx)
 	conn, err := c.rpcCtx.GRPCDial(addr)
 	if err != nil {
 		log.Fatalf(context.Background(), "unable to dial: %s: %v", addr, err)

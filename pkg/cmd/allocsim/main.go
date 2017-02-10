@@ -25,6 +25,7 @@ import (
 	"math/rand"
 	"os"
 	"os/signal"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"syscall"
@@ -32,12 +33,15 @@ import (
 
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/pkg/cli"
 	"github.com/cockroachdb/cockroach/pkg/cmd/internal/localcluster"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/pkg/errors"
 )
 
 var workers = flag.Int("w", 1, "number of workers; the i'th worker talks to node i%numNodes")
@@ -50,13 +54,12 @@ func newRand() *rand.Rand {
 	return rand.New(rand.NewSource(timeutil.Now().UnixNano()))
 }
 
-// allocSim is allows investigation of allocation/rebalancing heuristics. A
+// allocSim allows investigation of allocation/rebalancing heuristics. A
 // pool of workers generates block_writer-style load where the i'th worker
 // talks to node i%numNodes. Every second a monitor goroutine outputs status
 // such as the per-node replica and leaseholder counts.
 //
-// TODO(peter): Allow configuration zone-config constraints.
-
+// TODO(peter/a-robinson): Allow configuration of zone-config constraints.
 type allocSim struct {
 	*localcluster.Cluster
 	stats struct {
@@ -277,7 +280,59 @@ func (a *allocSim) finalStatus() {
 	genStats("leases", a.ranges.leases)
 }
 
+func handleStart() bool {
+	if len(os.Args) < 2 || os.Args[1] != "start" {
+		return false
+	}
+
+	// Do our own hacky flag parsing here to get around the fact that the default
+	// flag package complains about any unknown flags while still allowing the
+	// pflags package used by cli.Start to manage the rest of the flags as usual.
+	var latenciesStr string
+	for i, arg := range os.Args {
+		if strings.HasPrefix(arg, "--latencies=") || strings.HasPrefix(arg, "-latencies=") {
+			latenciesStr = strings.SplitAfterN(arg, "=", 2)[1]
+			os.Args = append(os.Args[:i], os.Args[i+1:]...)
+			break
+		}
+	}
+	if latenciesStr != "" {
+		if err := configureArtificialLatencies(latenciesStr); err != nil {
+			log.Fatal(context.Background(), err)
+		}
+	}
+
+	cli.Main()
+	return true
+}
+
+func configureArtificialLatencies(latenciesConfig string) error {
+	if latenciesConfig == "" {
+		return nil
+	}
+	delays := make(map[string]time.Duration)
+	for _, latency := range strings.Split(latenciesConfig, ",") {
+		parts := strings.Split(latency, "=")
+		if len(parts) != 2 {
+			return errors.Errorf("unexpected latency config format %q", latency)
+		}
+		addr := parts[0]
+		delay, err := time.ParseDuration(parts[1])
+		if err != nil {
+			return errors.Wrapf(err, "unable to parse %q as a duration", parts[1])
+		}
+		delays[addr] = delay
+		log.Infof(context.Background(), "adding delay %s to address %q", delay, addr)
+	}
+	rpc.ArtificialLatencies = delays
+	return nil
+}
+
 func main() {
+	if handleStart() {
+		return
+	}
+
 	flag.Parse()
 
 	c := localcluster.New(*numNodes)
@@ -308,6 +363,23 @@ func main() {
 			perNodeArgs[i] = []string{fmt.Sprintf("--locality=%s", locality)}
 			a.localities[i] = locality
 		}
+
+		// TODO(a-robinson): Enable actual configuration of this and make it work for
+		// different numbers of nodes.
+		if len(c.Nodes) != 4 {
+			log.Fatal(context.Background(), "localities/latencies are currently only supported for 4 nodes")
+		}
+		if *numLocalities != 2 {
+			log.Fatal(context.Background(), "localities/latencies are currently only supported for 4 nodes and 2 localities")
+		}
+		perNodeArgs[0] = append(perNodeArgs[0],
+			fmt.Sprintf("--latencies=%s=%s,%s=%s,%s=%s", localcluster.RPCAddr(1), 50*time.Millisecond, localcluster.RPCAddr(2), 0*time.Millisecond, localcluster.RPCAddr(3), 50*time.Millisecond))
+		perNodeArgs[1] = append(perNodeArgs[1],
+			fmt.Sprintf("--latencies=%s=%s,%s=%s,%s=%s", localcluster.RPCAddr(0), 50*time.Millisecond, localcluster.RPCAddr(2), 50*time.Millisecond, localcluster.RPCAddr(3), 0*time.Millisecond))
+		perNodeArgs[2] = append(perNodeArgs[2],
+			fmt.Sprintf("--latencies=%s=%s,%s=%s,%s=%s", localcluster.RPCAddr(0), 0*time.Millisecond, localcluster.RPCAddr(1), 50*time.Millisecond, localcluster.RPCAddr(3), 50*time.Millisecond))
+		perNodeArgs[3] = append(perNodeArgs[3],
+			fmt.Sprintf("--latencies=%s=%s,%s=%s,%s=%s", localcluster.RPCAddr(0), 50*time.Millisecond, localcluster.RPCAddr(1), 0*time.Millisecond, localcluster.RPCAddr(2), 50*time.Millisecond))
 	}
 
 	go func() {
@@ -324,7 +396,7 @@ func main() {
 		os.Exit(exitStatus)
 	}()
 
-	c.Start("allocsim", *workers, nil, flag.Args(), perNodeArgs)
+	c.Start("allocsim", *workers, os.Args[0], nil, flag.Args(), perNodeArgs)
 	c.UpdateZoneConfig(1, 1<<20)
 	a.run(*workers)
 }
