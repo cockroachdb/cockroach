@@ -94,7 +94,7 @@ func applyLimit(plan planNode, numRows int64, soft bool) {
 
 	case *groupNode:
 		if len(n.desiredOrdering) > 0 {
-			match := computeOrderingMatch(n.desiredOrdering, n.plan.Ordering(), false)
+			match := n.plan.Ordering().computeMatch(n.desiredOrdering)
 			if match == len(n.desiredOrdering) {
 				// We have a single MIN/MAX function and the underlying plan's
 				// ordering matches the function. We only need to retrieve one row.
