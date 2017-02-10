@@ -1416,34 +1416,30 @@ var Builtins = map[string][]Builtin{
 		},
 	},
 
-	// For now, schemas are the same as databases. So, current_schemas returns the
-	// current database (if one has been set by the user) and, if the passed in
-	// parameter is true, the session's database search path.
+	// For now, schemas are the same as databases. So, current_schemas
+	// returns the current database (if one has been set by the user)
+	// and the session's database search path.
 	"current_schemas": {
 		Builtin{
-			Types:        ArgTypes{{"include_implicit", TypeBool}},
+			Types:        ArgTypes{{"unused", TypeBool}},
 			ReturnType:   fixedReturnType(TypeStringArray),
 			category:     categorySystemInfo,
 			ctxDependent: true,
 			fn: func(ctx *EvalContext, args Datums) (Datum, error) {
 				schemas := NewDArray(TypeString)
-				showImplicitSchemas := args[0].(*DBool)
-				if showImplicitSchemas == DBoolTrue {
-					for _, p := range ctx.SearchPath {
-						if err := schemas.Append(NewDString(p)); err != nil {
-							return nil, err
-						}
-					}
-				}
 				if len(ctx.Database) != 0 {
 					if err := schemas.Append(NewDString(ctx.Database)); err != nil {
 						return nil, err
 					}
 				}
+				for _, p := range ctx.SearchPath {
+					if err := schemas.Append(NewDString(p)); err != nil {
+						return nil, err
+					}
+				}
 				return schemas, nil
 			},
-			Info: "Returns the current database; optionally include implicit schemas (e.g. " +
-				"`pg_catalog`).",
+			Info: "Returns the current search path for unqualified names.",
 		},
 	},
 
@@ -1491,7 +1487,7 @@ var Builtins = map[string][]Builtin{
 
 	// pg_catalog functions.
 	// See https://www.postgresql.org/docs/9.6/static/functions-info.html.
-	"pg_catalog.pg_backend_pid": {
+	"pg_backend_pid": {
 		Builtin{
 			Types:      ArgTypes{},
 			ReturnType: fixedReturnType(TypeInt),
@@ -1499,7 +1495,7 @@ var Builtins = map[string][]Builtin{
 				return NewDInt(-1), nil
 			},
 			category: categoryCompatibility,
-			Info:     "Not usable; exposed only for ORM compatibility.",
+			Info:     "Not usable; exposed only for ORM compatibility with PostgreSQL.",
 		},
 	},
 
@@ -1509,7 +1505,7 @@ var Builtins = map[string][]Builtin{
 	// corresponding expression as a string, which means that this function can simply
 	// return the first argument directly. It also means we can ignore the second and
 	// optional third argument.
-	"pg_catalog.pg_get_expr": {
+	"pg_get_expr": {
 		Builtin{
 			Types: ArgTypes{
 				{"pg_node_tree", TypeString},
@@ -1520,7 +1516,7 @@ var Builtins = map[string][]Builtin{
 				return args[0], nil
 			},
 			category: categoryCompatibility,
-			Info:     "Not usable; exposed only for ORM compatibility.",
+			Info:     "Not usable; exposed only for ORM compatibility with PostgreSQL.",
 		},
 		Builtin{
 			Types: ArgTypes{
@@ -1533,13 +1529,13 @@ var Builtins = map[string][]Builtin{
 				return args[0], nil
 			},
 			category: categoryCompatibility,
-			Info:     "Not usable; exposed only for ORM compatibility.",
+			Info:     "Not usable; exposed only for ORM compatibility with PostgreSQL.",
 		},
 	},
 
 	// pg_get_indexdef functions like SHOW CREATE INDEX would if we supported that
 	// statement.
-	"pg_catalog.pg_get_indexdef": {
+	"pg_get_indexdef": {
 		Builtin{
 			Types: ArgTypes{
 				{"index_oid", TypeInt},
@@ -1558,14 +1554,14 @@ var Builtins = map[string][]Builtin{
 				return r[0], nil
 			},
 			category: categoryCompatibility,
-			Info:     "Not usable; exposed only for ORM compatibility.",
+			Info:     "Not usable; exposed only for ORM compatibility with PostgreSQL.",
 		},
 		// The other overload for this function, pg_get_indexdef(index_oid,
 		// column_no, pretty_bool), is unimplemented, because it isn't used by
 		// supported ORMs.
 	},
 
-	"pg_catalog.pg_typeof": {
+	"pg_typeof": {
 		// TODO(knz): This is a proof-of-concept until TypeAny works
 		// properly.
 		Builtin{
@@ -1575,10 +1571,10 @@ var Builtins = map[string][]Builtin{
 				return NewDString(args[0].ResolvedType().String()), nil
 			},
 			category: categoryCompatibility,
-			Info:     "Not usable; exposed only for ORM compatibility.",
+			Info:     "Not usable; exposed only for ORM compatibility with PostgreSQL.",
 		},
 	},
-	"pg_catalog.pg_get_userbyid": {
+	"pg_get_userbyid": {
 		Builtin{
 			Types: ArgTypes{
 				{"role_oid", TypeInt},
@@ -1596,10 +1592,10 @@ var Builtins = map[string][]Builtin{
 				return t[0], nil
 			},
 			category: categoryCompatibility,
-			Info:     "Not usable; exposed only for ORM compatibility.",
+			Info:     "Not usable; exposed only for ORM compatibility with PostgreSQL.",
 		},
 	},
-	"pg_catalog.format_type": {
+	"format_type": {
 		Builtin{
 			// TODO(jordan) typemod should be a Nullable TypeInt when supported.
 			Types:      ArgTypes{{"type_oid", TypeInt}, {"typemod", TypeInt}},
@@ -1617,7 +1613,7 @@ var Builtins = map[string][]Builtin{
 				"Currently, the type modifier is ignored.",
 		},
 	},
-	"pg_catalog.col_description": {
+	"col_description": {
 		Builtin{
 			Types:      ArgTypes{{"table_oid", TypeInt}, {"column_number", TypeInt}},
 			ReturnType: fixedReturnType(TypeString),
@@ -1625,10 +1621,10 @@ var Builtins = map[string][]Builtin{
 				return DNull, nil
 			},
 			category: categoryCompatibility,
-			Info:     "Not usable; exposed only for ORM compatibility.",
+			Info:     "Not usable; exposed only for ORM compatibility with PostgreSQL.",
 		},
 	},
-	"pg_catalog.obj_description": {
+	"obj_description": {
 		Builtin{
 			Types:      ArgTypes{{"object_oid", TypeInt}},
 			ReturnType: fixedReturnType(TypeString),
@@ -1636,10 +1632,10 @@ var Builtins = map[string][]Builtin{
 				return DNull, nil
 			},
 			category: categoryCompatibility,
-			Info:     "Not usable; exposed only for ORM compatibility.",
+			Info:     "Not usable; exposed only for ORM compatibility with PostgreSQL.",
 		},
 	},
-	"pg_catalog.shobj_description": {
+	"shobj_description": {
 		Builtin{
 			Types:      ArgTypes{{"object_oid", TypeInt}, {"catalog_name", TypeString}},
 			ReturnType: fixedReturnType(TypeString),
@@ -1647,10 +1643,10 @@ var Builtins = map[string][]Builtin{
 				return DNull, nil
 			},
 			category: categoryCompatibility,
-			Info:     "Not usable; exposed only for ORM compatibility.",
+			Info:     "Not usable; exposed only for ORM compatibility with PostgreSQL.",
 		},
 	},
-	"pg_catalog.array_in": {
+	"array_in": {
 		Builtin{
 			Types:      ArgTypes{{"string", TypeString}, {"element_oid", TypeInt}, {"element_typmod", TypeInt}},
 			ReturnType: fixedReturnType(TypeString),
@@ -1658,7 +1654,7 @@ var Builtins = map[string][]Builtin{
 				return nil, errors.New("unimplemented")
 			},
 			category: categoryCompatibility,
-			Info:     "Not usable; exposed only for ORM compatibility.",
+			Info:     "Not usable; exposed only for ORM compatibility with PostgreSQL.",
 		},
 	},
 }

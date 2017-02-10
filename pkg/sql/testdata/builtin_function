@@ -1144,12 +1144,12 @@ SELECT foo.* IS NOT TRUE FROM (VALUES (1)) AS foo(x)
 query T
 SELECT CURRENT_SCHEMAS(true)
 ----
-{pg_catalog,test}
+{test,pg_catalog}
 
 query T
 SELECT CURRENT_SCHEMAS(false)
 ----
-{test}
+{test,pg_catalog}
 
 query error pq: unknown signature: current_schemas()
 SELECT CURRENT_SCHEMAS()
@@ -1436,7 +1436,7 @@ SELECT pg_catalog.pg_get_indexdef((SELECT oid from pg_class WHERE relname='pg_in
 ----
 CREATE INDEX pg_indexdef_idx ON test.pg_indexdef_test (a ASC)
 
-query error pq: unknown signature: pg_catalog.pg_get_indexdef\(int, int, bool\)
+query error pq: unknown signature: pg_get_indexdef\(int, int, bool\)
 SELECT pg_catalog.pg_get_indexdef(0, 0, true)
 
 # This function always returns NULL since we don't support column comments.
@@ -1445,5 +1445,11 @@ SELECT col_description('pg_class'::regclass::oid, 2)
 ----
 NULL
 
-query error pq: pg_catalog.array_in\(\): unimplemented
+query error pq: array_in\(\): unimplemented
 SELECT array_in('foo', 3, -1)
+
+# Check that base function names are also visible in namespace pg_catalog.
+query I
+SELECT pg_catalog.length('hello')
+----
+5
