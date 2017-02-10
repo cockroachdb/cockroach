@@ -150,6 +150,16 @@ func (sd *storeDetail) status(
 	return storeStatusAvailable
 }
 
+// localityWithString maintains a string representation of each locality along
+// with its protocol buffer implementation. This is for the sake of optimizing
+// memory usage by allocating a single copy of each that can be returned to
+// callers of getNodeLocalityString rather than each caller (which is currently
+// each replica in the local store) making its own copy.
+type localityWithString struct {
+	locality roachpb.Locality
+	str      string
+}
+
 // StorePool maintains a list of all known stores in the cluster and
 // information on their health.
 type StorePool struct {
@@ -161,10 +171,17 @@ type StorePool struct {
 	failedReservationsTimeout   time.Duration
 	declinedReservationsTimeout time.Duration
 	deterministic               bool
-	mu                          struct {
+	// We use separate mutexes for storeDetails and nodeLocalities because the
+	// nodeLocalities map is used in the critical code path of Replica.Send()
+	// and we'd rather not block that on something less important accessing
+	// storeDetails.
+	detailsMu struct {
 		syncutil.RWMutex
-		storeDetails   map[roachpb.StoreID]*storeDetail
-		nodeLocalities map[roachpb.NodeID]roachpb.Locality
+		storeDetails map[roachpb.StoreID]*storeDetail
+	}
+	localitiesMu struct {
+		syncutil.RWMutex
+		nodeLocalities map[roachpb.NodeID]localityWithString
 	}
 }
 
@@ -189,8 +206,8 @@ func NewStorePool(
 			defaultDeclinedReservationsTimeout),
 		deterministic: deterministic,
 	}
-	sp.mu.storeDetails = make(map[roachpb.StoreID]*storeDetail)
-	sp.mu.nodeLocalities = make(map[roachpb.NodeID]roachpb.Locality)
+	sp.detailsMu.storeDetails = make(map[roachpb.StoreID]*storeDetail)
+	sp.localitiesMu.nodeLocalities = make(map[roachpb.NodeID]localityWithString)
 
 	storeRegex := gossip.MakePrefixPattern(gossip.KeyStorePrefix)
 	g.RegisterCallback(storeRegex, sp.storeGossipUpdate)
@@ -201,11 +218,11 @@ func NewStorePool(
 }
 
 func (sp *StorePool) String() string {
-	sp.mu.Lock()
-	defer sp.mu.Unlock()
+	sp.detailsMu.RLock()
+	defer sp.detailsMu.RUnlock()
 
-	ids := make(roachpb.StoreIDSlice, 0, len(sp.mu.storeDetails))
-	for id := range sp.mu.storeDetails {
+	ids := make(roachpb.StoreIDSlice, 0, len(sp.detailsMu.storeDetails))
+	for id := range sp.detailsMu.storeDetails {
 		ids = append(ids, id)
 	}
 	sort.Sort(ids)
@@ -214,7 +231,7 @@ func (sp *StorePool) String() string {
 	now := sp.clock.PhysicalTime()
 
 	for _, id := range ids {
-		detail := sp.mu.storeDetails[id]
+		detail := sp.detailsMu.storeDetails[id]
 		fmt.Fprintf(&buf, "%d", id)
 		if detail.isDead(now, sp.timeUntilStoreDead, sp.nodeLivenessFn) {
 			_, _ = buf.WriteString("*")
@@ -239,12 +256,16 @@ func (sp *StorePool) storeGossipUpdate(_ string, content roachpb.Value) {
 		return
 	}
 
-	sp.mu.Lock()
-	defer sp.mu.Unlock()
+	sp.detailsMu.Lock()
 	detail := sp.getStoreDetailLocked(storeDesc.StoreID)
 	detail.desc = &storeDesc
 	detail.lastUpdatedTime = sp.clock.PhysicalTime()
-	sp.mu.nodeLocalities[storeDesc.Node.NodeID] = storeDesc.Node.Locality
+	sp.detailsMu.Unlock()
+
+	sp.localitiesMu.Lock()
+	sp.localitiesMu.nodeLocalities[storeDesc.Node.NodeID] =
+		localityWithString{storeDesc.Node.Locality, storeDesc.Node.Locality.String()}
+	sp.localitiesMu.Unlock()
 }
 
 // deadReplicasGossipUpdate is the gossip callback used to keep the StorePool up to date.
@@ -256,8 +277,8 @@ func (sp *StorePool) deadReplicasGossipUpdate(_ string, content roachpb.Value) {
 		return
 	}
 
-	sp.mu.Lock()
-	defer sp.mu.Unlock()
+	sp.detailsMu.Lock()
+	defer sp.detailsMu.Unlock()
 	detail := sp.getStoreDetailLocked(replicas.StoreID)
 	deadReplicas := make(map[roachpb.RangeID][]roachpb.ReplicaDescriptor)
 	for _, r := range replicas.Replicas {
@@ -278,7 +299,7 @@ func newStoreDetail() *storeDetail {
 // The lock must be held *in write mode* even though this looks like a
 // read-only method.
 func (sp *StorePool) getStoreDetailLocked(storeID roachpb.StoreID) *storeDetail {
-	detail, ok := sp.mu.storeDetails[storeID]
+	detail, ok := sp.detailsMu.storeDetails[storeID]
 	if !ok {
 		// We don't have this store yet (this is normal when we're
 		// starting up and don't have full information from the gossip
@@ -287,7 +308,7 @@ func (sp *StorePool) getStoreDetailLocked(storeID roachpb.StoreID) *storeDetail 
 		// time passes without updates from gossip.
 		detail = newStoreDetail()
 		detail.lastUpdatedTime = sp.clock.PhysicalTime()
-		sp.mu.storeDetails[storeID] = detail
+		sp.detailsMu.storeDetails[storeID] = detail
 	}
 	return detail
 }
@@ -295,10 +316,10 @@ func (sp *StorePool) getStoreDetailLocked(storeID roachpb.StoreID) *storeDetail 
 // getStoreDescriptor returns the latest store descriptor for the given
 // storeID.
 func (sp *StorePool) getStoreDescriptor(storeID roachpb.StoreID) (roachpb.StoreDescriptor, bool) {
-	sp.mu.RLock()
-	defer sp.mu.RUnlock()
+	sp.detailsMu.RLock()
+	defer sp.detailsMu.RUnlock()
 
-	if detail, ok := sp.mu.storeDetails[storeID]; ok && detail.desc != nil {
+	if detail, ok := sp.detailsMu.storeDetails[storeID]; ok && detail.desc != nil {
 		return *detail.desc, true
 	}
 	return roachpb.StoreDescriptor{}, false
@@ -309,8 +330,8 @@ func (sp *StorePool) getStoreDescriptor(storeID roachpb.StoreID) (roachpb.StoreD
 func (sp *StorePool) deadReplicas(
 	rangeID roachpb.RangeID, repls []roachpb.ReplicaDescriptor,
 ) []roachpb.ReplicaDescriptor {
-	sp.mu.Lock()
-	defer sp.mu.Unlock()
+	sp.detailsMu.Lock()
+	defer sp.detailsMu.Unlock()
 
 	var deadReplicas []roachpb.ReplicaDescriptor
 	now := sp.clock.PhysicalTime()
@@ -416,11 +437,11 @@ storeLoop:
 // contain the required attributes and their associated stats. It also returns
 // the total number of alive and throttled stores.
 func (sp *StorePool) getStoreList(rangeID roachpb.RangeID) (StoreList, int, int) {
-	sp.mu.RLock()
-	defer sp.mu.RUnlock()
+	sp.detailsMu.RLock()
+	defer sp.detailsMu.RUnlock()
 
 	var storeIDs roachpb.StoreIDSlice
-	for storeID := range sp.mu.storeDetails {
+	for storeID := range sp.detailsMu.storeDetails {
 		storeIDs = append(storeIDs, storeID)
 	}
 
@@ -436,7 +457,7 @@ func (sp *StorePool) getStoreList(rangeID roachpb.RangeID) (StoreList, int, int)
 
 	now := sp.clock.PhysicalTime()
 	for _, storeID := range storeIDs {
-		detail := sp.mu.storeDetails[storeID]
+		detail := sp.detailsMu.storeDetails[storeID]
 		switch s := detail.status(now, sp.timeUntilStoreDead, rangeID, sp.nodeLivenessFn); s {
 		case storeStatusThrottled:
 			aliveStoreCount++
@@ -470,8 +491,8 @@ const (
 // has elapsed. Declined being true indicates that the remote store explicitly
 // declined a snapshot.
 func (sp *StorePool) throttle(reason throttleReason, storeID roachpb.StoreID) {
-	sp.mu.Lock()
-	defer sp.mu.Unlock()
+	sp.detailsMu.Lock()
+	defer sp.detailsMu.Unlock()
 	detail := sp.getStoreDetailLocked(storeID)
 
 	// If a snapshot is declined, be it due to an error or because it was
@@ -496,21 +517,33 @@ func (sp *StorePool) throttle(reason throttleReason, storeID roachpb.StoreID) {
 	}
 }
 
-// getNodeLocalities returns the localities for the provided replicas.
+// getLocalities returns the localities for the provided replicas.
 // TODO(bram): consider storing a full list of all node to node diversity
 // scores for faster lookups.
-func (sp *StorePool) getNodeLocalities(
+func (sp *StorePool) getLocalities(
 	replicas []roachpb.ReplicaDescriptor,
 ) map[roachpb.NodeID]roachpb.Locality {
-	sp.mu.Lock()
-	defer sp.mu.Unlock()
+	sp.localitiesMu.RLock()
+	defer sp.localitiesMu.RUnlock()
 	localities := make(map[roachpb.NodeID]roachpb.Locality)
 	for _, replica := range replicas {
-		if locality, ok := sp.mu.nodeLocalities[replica.NodeID]; ok {
-			localities[replica.NodeID] = locality
+		if locality, ok := sp.localitiesMu.nodeLocalities[replica.NodeID]; ok {
+			localities[replica.NodeID] = locality.locality
 		} else {
 			localities[replica.NodeID] = roachpb.Locality{}
 		}
 	}
 	return localities
+}
+
+// getNodeLocalityString returns the locality information for the given node
+// in its string format.
+func (sp *StorePool) getNodeLocalityString(nodeID roachpb.NodeID) string {
+	sp.localitiesMu.RLock()
+	defer sp.localitiesMu.RUnlock()
+	locality, ok := sp.localitiesMu.nodeLocalities[nodeID]
+	if !ok {
+		return ""
+	}
+	return locality.str
 }
