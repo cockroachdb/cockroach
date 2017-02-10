@@ -116,19 +116,19 @@ func TestStorePoolGossipUpdate(t *testing.T) {
 	defer stopper.Stop()
 	sg := gossiputil.NewStoreGossiper(g)
 
-	sp.mu.RLock()
-	if _, ok := sp.mu.storeDetails[2]; ok {
+	sp.detailsMu.RLock()
+	if _, ok := sp.detailsMu.storeDetails[2]; ok {
 		t.Fatalf("store 2 is already in the pool's store list")
 	}
-	sp.mu.RUnlock()
+	sp.detailsMu.RUnlock()
 
 	sg.GossipStores(uniqueStore, t)
 
-	sp.mu.RLock()
-	if _, ok := sp.mu.storeDetails[2]; !ok {
+	sp.detailsMu.RLock()
+	if _, ok := sp.detailsMu.storeDetails[2]; !ok {
 		t.Fatalf("store 2 isn't in the pool's store list")
 	}
-	sp.mu.RUnlock()
+	sp.detailsMu.RUnlock()
 }
 
 // verifyStoreList ensures that the returned list of stores is correct.
@@ -233,23 +233,23 @@ func TestStorePoolGetStoreList(t *testing.T) {
 	}
 
 	// Add some corrupt replicas that should not affect getStoreList().
-	sp.mu.Lock()
-	sp.mu.storeDetails[matchingStore.StoreID].deadReplicas[roachpb.RangeID(10)] =
+	sp.detailsMu.Lock()
+	sp.detailsMu.storeDetails[matchingStore.StoreID].deadReplicas[roachpb.RangeID(10)] =
 		[]roachpb.ReplicaDescriptor{{
 			StoreID: matchingStore.StoreID,
 			NodeID:  matchingStore.Node.NodeID,
 		}}
-	sp.mu.storeDetails[matchingStore.StoreID].deadReplicas[roachpb.RangeID(11)] =
+	sp.detailsMu.storeDetails[matchingStore.StoreID].deadReplicas[roachpb.RangeID(11)] =
 		[]roachpb.ReplicaDescriptor{{
 			StoreID: matchingStore.StoreID,
 			NodeID:  matchingStore.Node.NodeID,
 		}}
-	sp.mu.storeDetails[corruptReplicaStore.StoreID].deadReplicas[roachpb.RangeID(10)] =
+	sp.detailsMu.storeDetails[corruptReplicaStore.StoreID].deadReplicas[roachpb.RangeID(10)] =
 		[]roachpb.ReplicaDescriptor{{
 			StoreID: corruptReplicaStore.StoreID,
 			NodeID:  corruptReplicaStore.Node.NodeID,
 		}}
-	sp.mu.Unlock()
+	sp.detailsMu.Unlock()
 
 	if err := verifyStoreList(
 		sp,
@@ -270,16 +270,16 @@ func TestStorePoolGetStoreList(t *testing.T) {
 
 	// Set deadStore as dead.
 	mnl.setLive(deadStore.Node.NodeID, false)
-	sp.mu.Lock()
+	sp.detailsMu.Lock()
 	// Set declinedStore as throttled.
-	sp.mu.storeDetails[declinedStore.StoreID].throttledUntil = sp.clock.Now().GoTime().Add(time.Hour)
+	sp.detailsMu.storeDetails[declinedStore.StoreID].throttledUntil = sp.clock.Now().GoTime().Add(time.Hour)
 	// Add a corrupt replica to corruptReplicaStore.
-	sp.mu.storeDetails[corruptReplicaStore.StoreID].deadReplicas[roachpb.RangeID(1)] =
+	sp.detailsMu.storeDetails[corruptReplicaStore.StoreID].deadReplicas[roachpb.RangeID(1)] =
 		[]roachpb.ReplicaDescriptor{{
 			StoreID: corruptReplicaStore.StoreID,
 			NodeID:  corruptReplicaStore.Node.NodeID,
 		}}
-	sp.mu.Unlock()
+	sp.detailsMu.Unlock()
 
 	if err := verifyStoreList(
 		sp,
@@ -304,8 +304,8 @@ func TestStorePoolGetStoreDetails(t *testing.T) {
 	sg := gossiputil.NewStoreGossiper(g)
 	sg.GossipStores(uniqueStore, t)
 
-	sp.mu.Lock()
-	defer sp.mu.Unlock()
+	sp.detailsMu.Lock()
+	defer sp.detailsMu.Unlock()
 	if detail := sp.getStoreDetailLocked(roachpb.StoreID(1)); detail.desc != nil {
 		t.Errorf("unexpected fetched store ID 1: %+v", detail.desc)
 	}
@@ -433,9 +433,9 @@ func TestStorePoolThrottle(t *testing.T) {
 		expected := sp.clock.Now().GoTime().Add(sp.declinedReservationsTimeout)
 		sp.throttle(throttleDeclined, 1)
 
-		sp.mu.Lock()
+		sp.detailsMu.Lock()
 		detail := sp.getStoreDetailLocked(1)
-		sp.mu.Unlock()
+		sp.detailsMu.Unlock()
 		if !detail.throttledUntil.Equal(expected) {
 			t.Errorf("expected store to have been throttled to %v, found %v",
 				expected, detail.throttledUntil)
@@ -446,9 +446,9 @@ func TestStorePoolThrottle(t *testing.T) {
 		expected := sp.clock.Now().GoTime().Add(sp.failedReservationsTimeout)
 		sp.throttle(throttleFailed, 1)
 
-		sp.mu.Lock()
+		sp.detailsMu.Lock()
 		detail := sp.getStoreDetailLocked(1)
-		sp.mu.Unlock()
+		sp.detailsMu.Unlock()
 		if !detail.throttledUntil.Equal(expected) {
 			t.Errorf("expected store to have been throttled to %v, found %v",
 				expected, detail.throttledUntil)
@@ -456,7 +456,7 @@ func TestStorePoolThrottle(t *testing.T) {
 	}
 }
 
-func TestGetNodeLocalities(t *testing.T) {
+func TestGetLocalities(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper, g, _, sp, _ := createTestStorePool(
 		TestTimeUntilStoreDead, false /* deterministic */, false /* defaultNodeLiveness */)
@@ -465,16 +465,22 @@ func TestGetNodeLocalities(t *testing.T) {
 
 	// Creates a node with a locality with the number of tiers passed in. The
 	// NodeID is the same as the tier count.
-	createDescWithLocality := func(tierCount int) roachpb.NodeDescriptor {
-		nodeDescriptor := roachpb.NodeDescriptor{NodeID: roachpb.NodeID(tierCount)}
+	createLocality := func(tierCount int) roachpb.Locality {
+		var locality roachpb.Locality
 		for i := 1; i <= tierCount; i++ {
 			value := fmt.Sprintf("%d", i)
-			nodeDescriptor.Locality.Tiers = append(nodeDescriptor.Locality.Tiers, roachpb.Tier{
+			locality.Tiers = append(locality.Tiers, roachpb.Tier{
 				Key:   value,
 				Value: value,
 			})
 		}
-		return nodeDescriptor
+		return locality
+	}
+	createDescWithLocality := func(tierCount int) roachpb.NodeDescriptor {
+		return roachpb.NodeDescriptor{
+			NodeID:   roachpb.NodeID(tierCount),
+			Locality: createLocality(tierCount),
+		}
 	}
 
 	stores := []*roachpb.StoreDescriptor{
@@ -503,14 +509,18 @@ func TestGetNodeLocalities(t *testing.T) {
 		existingReplicas = append(existingReplicas, roachpb.ReplicaDescriptor{NodeID: store.Node.NodeID})
 	}
 
-	localities := sp.getNodeLocalities(existingReplicas)
+	localities := sp.getLocalities(existingReplicas)
 	for _, store := range stores {
-		locality, ok := localities[store.Node.NodeID]
+		nodeID := store.Node.NodeID
+		locality, ok := localities[nodeID]
 		if !ok {
-			t.Fatalf("could not find locality for node %d", store.Node.NodeID)
+			t.Fatalf("could not find locality for node %d", nodeID)
 		}
-		if e, a := int(store.Node.NodeID), len(locality.Tiers); e != a {
-			t.Fatalf("for node %d, expected %d tiers, only got %d", store.Node.NodeID, e, a)
+		if e, a := int(nodeID), len(locality.Tiers); e != a {
+			t.Fatalf("for node %d, expected %d tiers, only got %d", nodeID, e, a)
+		}
+		if e, a := createLocality(int(nodeID)).String(), sp.getNodeLocalityString(nodeID); e != a {
+			t.Fatalf("for getNodeLocalityString(%d), expected %q, got %q", nodeID, e, a)
 		}
 	}
 }

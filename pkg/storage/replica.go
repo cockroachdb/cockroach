@@ -258,6 +258,8 @@ type Replica struct {
 	store      *Store
 	abortCache *AbortCache // Avoids anomalous reads after abort
 
+	stats *replicaStats
+
 	// creatingReplica is set when a replica is created as uninitialized
 	// via a raft message.
 	creatingReplica *roachpb.ReplicaDescriptor
@@ -560,6 +562,9 @@ func newReplica(rangeID roachpb.RangeID, store *Store) *Replica {
 		stateLoader:    makeReplicaStateLoader(rangeID),
 		store:          store,
 		abortCache:     NewAbortCache(rangeID),
+	}
+	if store.cfg.StorePool != nil {
+		r.stats = newReplicaStats(store.cfg.StorePool.getNodeLocalityString)
 	}
 
 	// Init rangeStr with the range ID.
@@ -1373,6 +1378,10 @@ func (r *Replica) Send(
 	ctx context.Context, ba roachpb.BatchRequest,
 ) (*roachpb.BatchResponse, *roachpb.Error) {
 	var br *roachpb.BatchResponse
+
+	if r.stats != nil {
+		r.stats.record(ba.Header.GatewayNodeID)
+	}
 
 	if err := r.checkBatchRequest(ba); err != nil {
 		return nil, roachpb.NewError(err)
