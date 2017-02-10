@@ -9,6 +9,16 @@ SELECT 'pg_constraint'::REGCLASS
 402060402
 
 query OO
+SELECT '"pg_constraint"'::REGCLASS, '  "pg_constraint" '::REGCLASS
+----
+402060402  402060402
+
+query OO
+SELECT 'pg_constraint '::REGCLASS, '  pg_constraint '::REGCLASS
+----
+402060402  402060402
+
+query OO
 SELECT 'upper'::REGPROC, 'upper'::REGPROCEDURE
 ----
 1736923753  1736923753
@@ -47,9 +57,9 @@ SELECT 'array_in'::REGPROCEDURE, 'array_in(a,b,c)'::REGPROCEDURE, 'pg_catalog.ar
 4288767817  4288767817  4288767817  4288767817
 
 query O
-SELECT 'public'::REGNAMESPACE
+SELECT 'system'::REGNAMESPACE
 ----
-268867073
+2939540337
 
 query O
 SELECT 'bool'::REGTYPE

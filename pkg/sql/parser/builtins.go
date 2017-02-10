@@ -1401,7 +1401,7 @@ var Builtins = map[string][]Builtin{
 		},
 	},
 
-	"current_schema": {
+	"current_database": {
 		Builtin{
 			Types:      ArgTypes{},
 			ReturnType: fixedReturnType(TypeString),
@@ -1413,6 +1413,23 @@ var Builtins = map[string][]Builtin{
 				return NewDString(ctx.Database), nil
 			},
 			Info: "Returns the current database.",
+		},
+	},
+
+	"current_schema": {
+		Builtin{
+			Types:      ArgTypes{},
+			ReturnType: fixedReturnType(TypeString),
+			category:   categorySystemInfo,
+			fn: func(ctx *EvalContext, args Datums) (Datum, error) {
+				if len(ctx.Database) == 0 {
+					return DNull, nil
+				}
+				return NewDString(ctx.Database), nil
+			},
+			Info: "Returns the current schema. This function is provided for " +
+				"compatibility with PostgreSQL. For a new CockroachDB application, " +
+				"consider using current_database() instead.",
 		},
 	},
 
@@ -1634,6 +1651,15 @@ var Builtins = map[string][]Builtin{
 			category: categoryCompatibility,
 			Info:     "Not usable; exposed only for ORM compatibility with PostgreSQL.",
 		},
+		Builtin{
+			Types:      ArgTypes{{"object_oid", TypeInt}, {"catalog_name", TypeString}},
+			ReturnType: fixedReturnType(TypeString),
+			fn: func(_ *EvalContext, _ Datums) (Datum, error) {
+				return DNull, nil
+			},
+			category: categoryCompatibility,
+			Info:     "Not usable; exposed only for ORM compatibility.",
+		},
 	},
 	"shobj_description": {
 		Builtin{
@@ -1644,6 +1670,28 @@ var Builtins = map[string][]Builtin{
 			},
 			category: categoryCompatibility,
 			Info:     "Not usable; exposed only for ORM compatibility with PostgreSQL.",
+		},
+	},
+	"pg_try_advisory_lock": {
+		Builtin{
+			Types:      ArgTypes{{"int", TypeInt}},
+			ReturnType: fixedReturnType(TypeBool),
+			fn: func(_ *EvalContext, _ Datums) (Datum, error) {
+				return DBoolTrue, nil
+			},
+			category: categoryCompatibility,
+			Info:     "Not usable; exposed only for ORM compatibility.",
+		},
+	},
+	"pg_advisory_unlock": {
+		Builtin{
+			Types:      ArgTypes{{"int", TypeInt}},
+			ReturnType: fixedReturnType(TypeBool),
+			fn: func(_ *EvalContext, _ Datums) (Datum, error) {
+				return DBoolTrue, nil
+			},
+			category: categoryCompatibility,
+			Info:     "Not usable; exposed only for ORM compatibility.",
 		},
 	},
 	"array_in": {
