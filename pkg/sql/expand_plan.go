@@ -30,7 +30,13 @@ import (
 // expansion of sub-queries. Returns an error if the initialization
 // fails.
 func (p *planner) expandPlan(plan planNode) (planNode, error) {
-	return doExpandPlan(p, noParams, plan)
+	var err error
+	plan, err = doExpandPlan(p, noParams, plan)
+	if err != nil {
+		return plan, err
+	}
+	plan = simplifyOrderings(plan, nil)
+	return plan, nil
 }
 
 // expandParameters propagates the known row limit and desired ordering at
@@ -44,10 +50,6 @@ var noParams = expandParameters{numRowsHint: math.MaxInt64, desiredOrdering: nil
 
 // doExpandPlan is the algorithm that supports expandPlan().
 func doExpandPlan(p *planner, params expandParameters, plan planNode) (planNode, error) {
-	if plan == nil {
-		return nil, nil
-	}
-
 	var err error
 	switch n := plan.(type) {
 	case *createTableNode:
@@ -178,6 +180,16 @@ func doExpandPlan(p *planner, params expandParameters, plan planNode) (planNode,
 		params.numRowsHint = math.MaxInt64
 		n.plan, err = doExpandPlan(p, params, n.plan)
 
+		if len(n.desiredOrdering) > 0 {
+			match := n.plan.Ordering().computeMatch(n.desiredOrdering)
+			if match == len(n.desiredOrdering) {
+				// We have a single MIN/MAX function and the underlying plan's
+				// ordering matches the function. We only need to retrieve one row.
+				// See desiredAggregateOrdering.
+				n.needOnlyOneRow = true
+			}
+		}
+
 	case *windowNode:
 		n.plan, err = doExpandPlan(p, noParams, n.plan)
 
@@ -193,15 +205,7 @@ func doExpandPlan(p *planner, params expandParameters, plan planNode) (planNode,
 		// Check to see if the requested ordering is compatible with the existing
 		// ordering.
 		match := n.plan.Ordering().computeMatch(n.ordering)
-		if match < len(n.ordering) {
-			n.needSort = true
-		} else if len(n.columns) < len(n.plan.Columns()) {
-			// No sorting required, but we have to strip off the extra render
-			// expressions we added. So keep the sort node.
-		} else {
-			// Sort node fully disappears.
-			plan = n.plan
-		}
+		n.needSort = (match < len(n.ordering))
 
 	case *distinctNode:
 		// TODO(radu/knz) perhaps we can propagate the DISTINCT
@@ -248,6 +252,7 @@ func doExpandPlan(p *planner, params expandParameters, plan planNode) (planNode,
 	case *hookFnNode:
 	case *splitNode:
 	case *valueGenerator:
+	case nil:
 
 	default:
 		panic(fmt.Sprintf("unhandled node type: %T", plan))
@@ -362,4 +367,160 @@ func translateOrdering(desiredDown sqlbase.ColumnOrdering, r *renderNode) sqlbas
 	}
 
 	return desiredUp
+}
+
+// simplifyOrderings reduces the Ordering() guarantee of each node in the plan
+// to that which is actually used by the parent(s). It also performs sortNode
+// elision when possible.
+//
+// Simplification of orderings is useful for DistSQL, where maintaining
+// orderings between parallel streams is not free.
+//
+// This determination cannot be done directly as part of the doExpandPlan
+// recursion (using desiredOrdering) because some nodes (distinctNode) make use
+// of whatever ordering the underlying node happens to provide.
+func simplifyOrderings(plan planNode, usefulOrdering sqlbase.ColumnOrdering) planNode {
+	if plan == nil {
+		return nil
+	}
+
+	switch n := plan.(type) {
+	case *createTableNode:
+		n.sourcePlan = simplifyOrderings(n.sourcePlan, nil)
+
+	case *updateNode:
+		n.run.rows = simplifyOrderings(n.run.rows, nil)
+
+	case *insertNode:
+		n.run.rows = simplifyOrderings(n.run.rows, nil)
+
+	case *deleteNode:
+		n.run.rows = simplifyOrderings(n.run.rows, nil)
+
+	case *createViewNode:
+		n.sourcePlan = simplifyOrderings(n.sourcePlan, nil)
+
+	case *explainDebugNode:
+		n.plan = simplifyOrderings(n.plan, nil)
+
+	case *explainTraceNode:
+		n.plan = simplifyOrderings(n.plan, nil)
+
+	case *explainPlanNode:
+		if n.expanded {
+			n.plan = simplifyOrderings(n.plan, nil)
+		}
+
+	case *indexJoinNode:
+		n.index.ordering.trim(usefulOrdering)
+		n.table.ordering = orderingInfo{}
+
+	case *unionNode:
+		n.right = simplifyOrderings(n.right, nil)
+		n.left = simplifyOrderings(n.left, nil)
+
+	case *filterNode:
+		n.source.plan = simplifyOrderings(n.source.plan, usefulOrdering)
+
+	case *joinNode:
+		n.left.plan = simplifyOrderings(n.left.plan, nil)
+		n.right.plan = simplifyOrderings(n.right.plan, nil)
+
+	case *ordinalityNode:
+		// The ordinality node either passes through the source ordering, or if
+		// there is none it creates an ordering on the ordinality column (see the
+		// corresponding code in doExpandPlan).
+		// TODO(radu): better encapsulate this code in ordinalityNode (#13594).
+		if len(n.ordering.ordering) == 1 && n.ordering.ordering[0].ColIdx == len(n.columns)-1 {
+			n.source = simplifyOrderings(n.source, nil)
+		} else {
+			n.source = simplifyOrderings(n.source, n.ordering.ordering)
+		}
+
+	case *limitNode:
+		n.plan = simplifyOrderings(n.plan, usefulOrdering)
+
+	case *groupNode:
+		if n.needOnlyOneRow {
+			n.plan = simplifyOrderings(n.plan, n.desiredOrdering)
+		} else {
+			n.plan = simplifyOrderings(n.plan, nil)
+		}
+
+	case *windowNode:
+		n.plan = simplifyOrderings(n.plan, nil)
+
+	case *sortNode:
+		if n.needSort {
+			// We could pass no ordering below, but a partial ordering can speed up
+			// the sort (and save memory), at least for DistSQL.
+			n.plan = simplifyOrderings(n.plan, n.ordering)
+		} else {
+			exactMatchCols := n.plan.Ordering().exactMatchCols
+			// Normally we would pass n.ordering; but n.ordering could be a prefix of
+			// the useful ordering. Check for this, ignoring any exact match columns.
+			sortOrder := make(sqlbase.ColumnOrdering, 0, len(n.ordering))
+			for _, c := range n.ordering {
+				if _, ok := exactMatchCols[c.ColIdx]; !ok {
+					sortOrder = append(sortOrder, c)
+				}
+			}
+			givenOrder := make(sqlbase.ColumnOrdering, 0, len(usefulOrdering))
+			for _, c := range usefulOrdering {
+				if _, ok := exactMatchCols[c.ColIdx]; !ok {
+					givenOrder = append(givenOrder, c)
+				}
+			}
+			if sortOrder.IsPrefixOf(givenOrder) {
+				n.plan = simplifyOrderings(n.plan, givenOrder)
+			} else {
+				n.plan = simplifyOrderings(n.plan, sortOrder)
+			}
+		}
+
+		if !n.needSort {
+			if len(n.columns) < len(n.plan.Columns()) {
+				// No sorting required, but we have to strip off the extra render
+				// expressions we added. So keep the sort node.
+				// TODO(radu): replace with a renderNode
+			} else {
+				// Sort node fully disappears.
+				plan = n.plan
+			}
+		}
+
+	case *distinctNode:
+		// distinctNode uses whatever order the underlying node presents (regardless
+		// of any ordering requirement on distinctNode itself).
+		n.plan = simplifyOrderings(n.plan, n.plan.Ordering().ordering)
+
+	case *scanNode:
+		n.ordering.trim(usefulOrdering)
+
+	case *renderNode:
+		n.ordering.trim(usefulOrdering)
+		n.source.plan = simplifyOrderings(n.source.plan, translateOrdering(usefulOrdering, n))
+
+	case *delayedNode:
+		n.plan = simplifyOrderings(n.plan, usefulOrdering)
+
+	case *valuesNode:
+	case *alterTableNode:
+	case *copyNode:
+	case *createDatabaseNode:
+	case *createIndexNode:
+	case *createUserNode:
+	case *dropDatabaseNode:
+	case *dropIndexNode:
+	case *dropTableNode:
+	case *dropViewNode:
+	case *emptyNode:
+	case *hookFnNode:
+	case *splitNode:
+	case *valueGenerator:
+
+	default:
+		panic(fmt.Sprintf("unhandled node type: %T", plan))
+	}
+	return plan
 }
