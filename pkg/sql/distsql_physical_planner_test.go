@@ -32,6 +32,48 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
+// SplitTable splits a range in the table, with each range having a single
+// replica on a certain node. This forces the querying against the table
+// to be distributed. vals is a list of values forming a primary key for
+// the table. targetNode will own the lease for right side of the split.
+//
+// TODO(radu): this approach should be generalized into test infrastructure
+// (perhaps by adding functionality to logic tests).
+// TODO(radu): we should verify that the plan is indeed distributed as
+// intended.
+func SplitTable(
+	t *testing.T,
+	tc serverutils.TestClusterInterface,
+	desc *sqlbase.TableDescriptor,
+	targetNode int,
+	vals ...interface{},
+) {
+	pik, err := sqlbase.MakePrimaryIndexKey(desc, vals...)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	splitKey := keys.MakeRowSentinelKey(pik)
+	_, rightRange, err := tc.Server(0).SplitRange(splitKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	splitKey = rightRange.StartKey.AsRawKey()
+	rightRange, err = tc.AddReplicas(splitKey, tc.Target(targetNode))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// This transfer is necessary to avoid waiting for the lease to expire when
+	// removing the first replica.
+	if err := tc.TransferRangeLease(rightRange, tc.Target(targetNode)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tc.RemoveReplicas(splitKey, tc.Target(0)); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestDistSQLPlanner(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -66,45 +108,11 @@ func TestDistSQLPlanner(t *testing.T) {
 		n*n,
 		sqlutils.ToRowFn(sqlutils.RowIdxFn, sqlutils.RowEnglishFn),
 	)
-	// Split the table into multiple ranges, with each range having a single
-	// replica on a certain node. This forces the query to be distributed.
-	//
-	// TODO(radu): this approach should be generalized into test infrastructure
-	// (perhaps by adding functionality to logic tests).
-	// TODO(radu): we should verify that the plan is indeed distributed as
-	// intended.
+	// Split the table into multiple ranges.
 	descNumToStr := sqlbase.GetTableDescriptor(cdb, "test", "NumToStr")
-
-	// split introduces a split and moves the right range to a given node.
-	split := func(val int, targetNode int) {
-		pik, err := sqlbase.MakePrimaryIndexKey(descNumToStr, val)
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		splitKey := keys.MakeRowSentinelKey(pik)
-		_, rightRange, err := tc.Server(0).SplitRange(splitKey)
-		if err != nil {
-			t.Fatal(err)
-		}
-		splitKey = rightRange.StartKey.AsRawKey()
-		rightRange, err = tc.AddReplicas(splitKey, tc.Target(targetNode))
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		// This transfer is necessary to avoid waiting for the lease to expire when
-		// removing the first replica.
-		if err := tc.TransferRangeLease(rightRange, tc.Target(targetNode)); err != nil {
-			t.Fatal(err)
-		}
-		if _, err := tc.RemoveReplicas(splitKey, tc.Target(0)); err != nil {
-			t.Fatal(err)
-		}
-	}
-	// split moves the right range, so we split things back to front.
+	// SplitTable moves the right range, so we split things back to front.
 	for i := numNodes - 1; i > 0; i-- {
-		split(n*n/numNodes*i, i)
+		SplitTable(t, tc, descNumToStr, i, n*n/numNodes*i)
 	}
 
 	r := sqlutils.MakeSQLRunner(t, tc.ServerConn(0))

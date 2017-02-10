@@ -521,6 +521,7 @@ func TestRaceWithBackfill(t *testing.T) {
 	var partialBackfillDone atomic.Value
 	partialBackfillDone.Store(false)
 	var partialBackfill bool
+	const numNodes, chunkSize, maxValue = 5, 100, 4000
 	params, _ := createTestServerParams()
 	// Disable asynchronous schema change execution to allow synchronous path
 	// to trigger start of backfill notification.
@@ -548,10 +549,18 @@ func TestRaceWithBackfill(t *testing.T) {
 				return nil
 			},
 			AsyncExecNotification: asyncSchemaChangerDisabled,
+			BackfillChunkSize:     chunkSize,
 		},
 	}
-	server, sqlDB, kvDB := serverutils.StartServer(t, params)
-	defer server.Stopper().Stop()
+
+	tc := serverutils.StartTestCluster(t, numNodes,
+		base.TestClusterArgs{
+			ReplicationMode: base.ReplicationManual,
+			ServerArgs:      params,
+		})
+	defer tc.Stopper().Stop()
+	kvDB := tc.Server(0).KVClient().(*client.DB)
+	sqlDB := tc.ServerConn(0)
 
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
@@ -562,13 +571,18 @@ CREATE UNIQUE INDEX vidx ON t.test (v);
 	}
 
 	// Bulk insert.
-	maxValue := 4000
 	if err := bulkInsertIntoTable(sqlDB, maxValue); err != nil {
 		t.Fatal(err)
 	}
 
-	// Read table descriptor for version.
+	// Split the table into multiple ranges.
 	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
+	// SplitTable moves the right range, so we split things back to front.
+	for i := numNodes - 1; i > 0; i-- {
+		csql.SplitTable(t, tc, tableDesc, i, maxValue/numNodes*i)
+	}
+
+	// Read table descriptor for version.
 	tablePrefix := roachpb.Key(keys.MakeTablePrefix(uint32(tableDesc.ID)))
 	tableEnd := tablePrefix.PrefixEnd()
 	// number of keys == 2 * number of rows; 1 column family and 1 index entry
