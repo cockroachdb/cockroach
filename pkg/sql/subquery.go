@@ -214,11 +214,13 @@ func (s *subquery) subqueryTupleOrdering() (bool, encoding.Direction) {
 
 	// Check Ascending direction.
 	order := s.plan.Ordering()
-	if match := computeOrderingMatch(desired, order, false); match == len(desired) {
+	match := order.computeMatch(desired)
+	if match == len(desired) {
 		return true, encoding.Ascending
 	}
 	// Check Descending direction.
-	if match := computeOrderingMatch(desired, order, true); match == len(desired) {
+	match = order.reverse().computeMatch(desired)
+	if match == len(desired) {
 		return true, encoding.Descending
 	}
 	return false, 0
