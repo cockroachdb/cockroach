@@ -1815,7 +1815,7 @@ func MustBeDArray(e Expr) *DArray {
 
 // ResolvedType implements the TypedExpr interface.
 func (d *DArray) ResolvedType() Type {
-	return tArray{Typ: d.ParamTyp}
+	return TArray{Typ: d.ParamTyp}
 }
 
 // Compare implements the Datum interface.
@@ -1926,7 +1926,7 @@ func (d *DArray) Append(v Datum) error {
 		return errors.Errorf("cannot append %s to array containing %s", d.ParamTyp,
 			v.ResolvedType())
 	}
-	if _, ok := d.ParamTyp.(tArray); ok {
+	if _, ok := d.ParamTyp.(TArray); ok {
 		if v == DNull {
 			return errNonHomogeneousArray
 		}

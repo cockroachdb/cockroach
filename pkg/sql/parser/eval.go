@@ -2602,9 +2602,9 @@ func (t *Tuple) Eval(ctx *EvalContext) (Datum, error) {
 
 // arrayOfType returns a fresh DArray of the input type.
 func arrayOfType(typ Type) (*DArray, error) {
-	arrayTyp, ok := typ.(tArray)
+	arrayTyp, ok := typ.(TArray)
 	if !ok {
-		return nil, errors.Errorf("array node type (%v) is not tArray", typ)
+		return nil, errors.Errorf("array node type (%v) is not TArray", typ)
 	}
 	return NewDArray(arrayTyp.Typ), nil
 }

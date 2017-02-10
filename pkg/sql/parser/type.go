@@ -98,13 +98,13 @@ var (
 	TypePlaceholder Type = TPlaceholder{}
 	// TypeStringArray is the type family of a DArray containing strings. Can be
 	// compared with ==.
-	TypeStringArray Type = tArray{TypeString}
+	TypeStringArray Type = TArray{TypeString}
 	// TypeIntArray is the type family of a DArray containing ints. Can be
 	// compared with ==.
-	TypeIntArray Type = tArray{TypeInt}
+	TypeIntArray Type = TArray{TypeInt}
 	// TypeAnyArray is the type of a DArray with a wildcard parameterized type.
 	// Can be compared with ==.
-	TypeAnyArray Type = tArray{TypeAny}
+	TypeAnyArray Type = TArray{TypeAny}
 	// TypeAny can be any type. Can be compared with ==.
 	TypeAny Type = tAny{}
 
@@ -119,7 +119,7 @@ var (
 	TypeIntVector = wrapTypeWithOid(TypeIntArray, oid.T_int2vector)
 	// TypeNameArray is the type family of a DArray containing the Name alias type.
 	// Can be compared with ==.
-	TypeNameArray Type = tArray{TypeName}
+	TypeNameArray Type = TArray{TypeName}
 
 	// TypesAnyNonArray contains all non-array types.
 	TypesAnyNonArray = []Type{
@@ -136,16 +136,26 @@ var (
 	}
 )
 
+var (
+	// Unexported wrapper types. These exist for Postgres type compatibility.
+	typeInt2      = wrapTypeWithOid(TypeInt, oid.T_int2)
+	typeInt4      = wrapTypeWithOid(TypeInt, oid.T_int4)
+	typeFloat4    = wrapTypeWithOid(TypeFloat, oid.T_float4)
+	typeVarChar   = wrapTypeWithOid(TypeString, oid.T_varchar)
+	typeInt2Array = TArray{typeInt2}
+	typeInt4Array = TArray{typeInt4}
+)
+
 // OidToType maps Postgres object IDs to CockroachDB types.
 var OidToType = map[oid.Oid]Type{
 	oid.T_anyelement:  TypeAny,
 	oid.T_bool:        TypeBool,
 	oid.T_bytea:       TypeBytes,
 	oid.T_date:        TypeDate,
-	oid.T_float4:      TypeFloat,
+	oid.T_float4:      typeFloat4,
 	oid.T_float8:      TypeFloat,
-	oid.T_int2:        TypeInt,
-	oid.T_int4:        TypeInt,
+	oid.T_int2:        typeInt2,
+	oid.T_int4:        typeInt4,
 	oid.T_int8:        TypeInt,
 	oid.T_interval:    TypeInterval,
 	oid.T_name:        TypeName,
@@ -153,13 +163,13 @@ var OidToType = map[oid.Oid]Type{
 	oid.T_oid:         TypeOid,
 	oid.T_text:        TypeString,
 	oid.T__text:       TypeStringArray,
-	oid.T__int2:       TypeIntArray,
-	oid.T__int4:       TypeIntArray,
+	oid.T__int2:       typeInt2Array,
+	oid.T__int4:       typeInt4Array,
 	oid.T__int8:       TypeIntArray,
 	oid.T_record:      TypeTuple,
 	oid.T_timestamp:   TypeTimestamp,
 	oid.T_timestamptz: TypeTimestampTZ,
-	oid.T_varchar:     TypeString,
+	oid.T_varchar:     typeVarChar,
 }
 
 // Do not instantiate the tXxx types elsewhere. The variables above are intended
@@ -433,29 +443,29 @@ func (TPlaceholder) SQLName() string { panic("TPlaceholder.SQLName() is undefine
 func (TPlaceholder) IsAmbiguous() bool { panic("TPlaceholder.IsAmbiguous() is undefined") }
 
 // TArray is the type of a DArray.
-type tArray struct{ Typ Type }
+type TArray struct{ Typ Type }
 
-func (a tArray) String() string { return a.Typ.String() + "[]" }
+func (a TArray) String() string { return a.Typ.String() + "[]" }
 
-// Equal implements the Type interface.
-func (a tArray) Equivalent(other Type) bool {
+// Equivalent implements the Type interface.
+func (a TArray) Equivalent(other Type) bool {
 	if other == TypeAny {
 		return true
 	}
-	if u, ok := UnwrapType(other).(tArray); ok {
+	if u, ok := UnwrapType(other).(TArray); ok {
 		return a.Typ.Equivalent(u.Typ)
 	}
 	return false
 }
 
 // FamilyEqual implements the Type interface.
-func (tArray) FamilyEqual(other Type) bool {
-	_, ok := UnwrapType(other).(tArray)
+func (TArray) FamilyEqual(other Type) bool {
+	_, ok := UnwrapType(other).(TArray)
 	return ok
 }
 
 // Size implements the Type interface.
-func (tArray) Size() (uintptr, bool) {
+func (TArray) Size() (uintptr, bool) {
 	return unsafe.Sizeof(DString("")), variableSize
 }
 
@@ -467,7 +477,7 @@ var oidToArrayOid = map[oid.Oid]oid.Oid{
 }
 
 // Oid implements the Type interface.
-func (a tArray) Oid() oid.Oid {
+func (a TArray) Oid() oid.Oid {
 	if o, ok := oidToArrayOid[a.Typ.Oid()]; ok {
 		return o
 	}
@@ -475,12 +485,12 @@ func (a tArray) Oid() oid.Oid {
 }
 
 // SQLName implements the Type interface.
-func (a tArray) SQLName() string {
+func (a TArray) SQLName() string {
 	return a.Typ.SQLName() + "[]"
 }
 
 // IsAmbiguous implements the Type interface.
-func (a tArray) IsAmbiguous() bool {
+func (a TArray) IsAmbiguous() bool {
 	return a.Typ == nil || a.Typ.IsAmbiguous()
 }
 

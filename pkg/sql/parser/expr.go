@@ -399,7 +399,7 @@ func (node *ComparisonExpr) memoizeFn() {
 	case Any, Some, All:
 		// Array operators memoize the SubOperator's CmpOp.
 		fOp, _, _, _, _ = foldComparisonExpr(node.SubOperator, nil, nil)
-		rightRet = rightRet.(tArray).Typ
+		rightRet = rightRet.(TArray).Typ
 	}
 
 	fn, ok := CmpOps[fOp].lookupImpl(leftRet, rightRet)
@@ -433,7 +433,7 @@ func (node *ComparisonExpr) IsMixedTypeComparison() bool {
 		}
 		return false
 	case Any, Some, All:
-		array := node.TypedRight().ResolvedType().(tArray)
+		array := node.TypedRight().ResolvedType().(TArray)
 		return !sameTypeOrNull(node.TypedLeft().ResolvedType(), array.Typ)
 	default:
 		return !sameTypeOrNull(node.TypedLeft().ResolvedType(), node.TypedRight().ResolvedType())
