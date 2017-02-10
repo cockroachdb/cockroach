@@ -522,13 +522,13 @@ EXPLAIN (TYPES) SELECT k, stddev(d) OVER w FROM kv WINDOW w as (PARTITION BY v) 
 1          window 1  (variance((d)[decimal]) OVER w)[decimal]
 1          render 1  (stddev((d)[decimal]) OVER w)[decimal]
 1          render 2  (variance((d)[decimal]) OVER w)[decimal]
-2  render                                                      (k int, d decimal, d decimal, v int, v int)                                                      +k,unique
+2  render                                                      (k int, d decimal, d decimal, v int, v int)
 2          render 0  (k)[int]
 2          render 1  (d)[decimal]
 2          render 2  (d)[decimal]
 2          render 3  (v)[int]
 2          render 4  (v)[int]
-3  scan                                                        (k int, v int, w[omitted] int, f[omitted] float, d decimal, s[omitted] string, b[omitted] bool)  +k,unique
+3  scan                                                        (k int, v int, w[omitted] int, f[omitted] float, d decimal, s[omitted] string, b[omitted] bool)
 3          table     kv@primary
 3          spans     ALL
 
@@ -542,7 +542,7 @@ EXPLAIN (TYPES) SELECT k, stddev(d) OVER (PARTITION BY v, 'a') FROM kv ORDER BY 
 1          window 1  (variance((d)[decimal]) OVER (PARTITION BY (v)[int], (100)[int]))[decimal]
 1          render 1  (stddev((d)[decimal]) OVER (PARTITION BY (v)[int], ('a')[string]))[decimal]
 1          render 2  (variance((d)[decimal]) OVER (PARTITION BY (v)[int], (100)[int]))[decimal]
-2  render                                                                                         (k int, d decimal, d decimal, v int, "'a'" string, v int, "100" int)                                       +k,unique
+2  render                                                                                         (k int, d decimal, d decimal, v int, "'a'" string, v int, "100" int)
 2          render 0  (k)[int]
 2          render 1  (d)[decimal]
 2          render 2  (d)[decimal]
@@ -550,7 +550,7 @@ EXPLAIN (TYPES) SELECT k, stddev(d) OVER (PARTITION BY v, 'a') FROM kv ORDER BY 
 2          render 4  ('a')[string]
 2          render 5  (v)[int]
 2          render 6  (100)[int]
-3  scan                                                                                           (k int, v int, w[omitted] int, f[omitted] float, d decimal, s[omitted] string, b[omitted] bool)            +k,unique
+3  scan                                                                                           (k int, v int, w[omitted] int, f[omitted] float, d decimal, s[omitted] string, b[omitted] bool)
 3          table     kv@primary
 3          spans     ALL
 
@@ -562,12 +562,12 @@ EXPLAIN (TYPES,NONORMALIZE) SELECT k, stddev(d) OVER (PARTITION BY v, 'a') FROM 
 1  window                                                                                         (k int, "stddev(d) OVER (PARTITION BY v, 'a')" decimal)
 1          window 0  (stddev((d)[decimal]) OVER (PARTITION BY (v)[int], ('a')[string]))[decimal]
 1          render 1  (stddev((d)[decimal]) OVER (PARTITION BY (v)[int], ('a')[string]))[decimal]
-2  render                                                                                         (k int, d decimal, v int, "'a'" string)                                                          +k,unique
+2  render                                                                                         (k int, d decimal, v int, "'a'" string)
 2          render 0  (k)[int]
 2          render 1  (d)[decimal]
 2          render 2  (v)[int]
 2          render 3  ('a')[string]
-3  scan                                                                                           (k int, v int, w[omitted] int, f[omitted] float, d decimal, s[omitted] string, b[omitted] bool)  +k,unique
+3  scan                                                                                           (k int, v int, w[omitted] int, f[omitted] float, d decimal, s[omitted] string, b[omitted] bool)
 3          table     kv@primary
 3          spans     ALL
 
@@ -581,7 +581,7 @@ EXPLAIN (TYPES) SELECT k, k + stddev(d) OVER (PARTITION BY v, 'a') FROM kv ORDER
 1          window 1  (variance((d)[decimal]) OVER (PARTITION BY (v)[int], (100)[int]))[decimal]
 1          render 1  ((k)[int] + (stddev((d)[decimal]) OVER (PARTITION BY (v)[int], ('a')[string]))[decimal])[decimal]
 1          render 2  (variance((d)[decimal]) OVER (PARTITION BY (v)[int], (100)[int]))[decimal]
-2  render                                                                                                               (k int, d decimal, d decimal, v int, "'a'" string, v int, "100" int, k int)                                    +k,unique
+2  render                                                                                                               (k int, d decimal, d decimal, v int, "'a'" string, v int, "100" int, k int)
 2          render 0  (k)[int]
 2          render 1  (d)[decimal]
 2          render 2  (d)[decimal]
@@ -590,7 +590,7 @@ EXPLAIN (TYPES) SELECT k, k + stddev(d) OVER (PARTITION BY v, 'a') FROM kv ORDER
 2          render 5  (v)[int]
 2          render 6  (100)[int]
 2          render 7  (k)[int]
-3  scan                                                                                                                 (k int, v int, w[omitted] int, f[omitted] float, d decimal, s[omitted] string, b[omitted] bool)                +k,unique
+3  scan                                                                                                                 (k int, v int, w[omitted] int, f[omitted] float, d decimal, s[omitted] string, b[omitted] bool)
 3          table     kv@primary
 3          spans     ALL
 

@@ -297,7 +297,7 @@ EXPLAIN(METADATA) SELECT b+2 FROM t ORDER BY b+2
 0  sort                      ("b + 2")                    +"b + 2"
 0          order  +"b + 2"
 1  render                    ("b + 2")
-2  scan                      (a[omitted], b, c[omitted])  +a,unique
+2  scan                      (a[omitted], b, c[omitted])
 2          table  t@primary
 2          spans  ALL
 
@@ -308,7 +308,7 @@ EXPLAIN(METADATA) SELECT b+2 AS y FROM t ORDER BY y
 0  sort                      (y)                          +y
 0          order  +y
 1  render                    (y)
-2  scan                      (a[omitted], b, c[omitted])  +a,unique
+2  scan                      (a[omitted], b, c[omitted])
 2          table  t@primary
 2          spans  ALL
 
@@ -319,7 +319,7 @@ EXPLAIN(METADATA) SELECT b+2 AS y FROM t ORDER BY b+2
 0  sort                      (y)                          +y
 0          order  +y
 1  render                    (y)
-2  scan                      (a[omitted], b, c[omitted])  +a,unique
+2  scan                      (a[omitted], b, c[omitted])
 2          table  t@primary
 2          spans  ALL
 
@@ -653,7 +653,7 @@ EXPLAIN (METADATA) DELETE FROM t WHERE a = 3 RETURNING b
 ----
 0  delete                    (b)
 0          from   t
-1  scan                      (a, b, c)  +a,unique
+1  scan                      (a, b, c)
 1          table  t@primary
 1          spans  /3-/4
 
@@ -663,8 +663,8 @@ EXPLAIN (METADATA) UPDATE t SET c = TRUE RETURNING b
 0  update                    (b)
 0          table  t
 0          set    c
-1  render                    (a, b, c, "true")  +a,unique
-2  scan                      (a, b, c)          +a,unique
+1  render                    (a, b, c, "true")
+2  scan                      (a, b, c)
 2          table  t@primary
 2          spans  ALL
 
@@ -686,6 +686,6 @@ query ITTTTT
 EXPLAIN (METADATA) SELECT * FROM (SELECT y, w, x FROM uvwxyz WHERE y = 1 ORDER BY w) ORDER BY w, x
 ----
 0  render                      (y, w, x)                                                             =y,+w,+x
-1  scan                        (u[omitted], v[omitted], w, x, y, z[omitted], rowid[hidden,omitted])  =y,+w,+x,+z,+u,+v,+rowid,unique
+1  scan                        (u[omitted], v[omitted], w, x, y, z[omitted], rowid[hidden,omitted])  =y,+w,+x
 1          table  uvwxyz@ywxz
 1          spans  /1-/2

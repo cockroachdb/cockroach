@@ -181,3 +181,34 @@ func (ord orderingInfo) computeMatch(desired sqlbase.ColumnOrdering) int {
 	// Everything matched!
 	return len(desired)
 }
+
+// trim simplifies ord.ordering, retaining only the columns that are needed to
+// to match a desired ordering (or a prefix of it); exact match columns are left
+// untouched.
+//
+// A trimmed ordering is guaranteed to still match the desired ordering to the
+// same extent, i.e. before and after are equal in:
+//   before := ord.computeMatch(desired)
+//   ord.trim(desired)
+//   after := ord.computeMatch(desired)
+func (ord *orderingInfo) trim(desired sqlbase.ColumnOrdering) {
+	// position in ord.ordering
+	pos := 0
+	// The code in this loop follows the one in computeMatch.
+	for _, col := range desired {
+		if pos == len(ord.ordering) {
+			return
+		}
+		ci := ord.ordering[pos]
+		// Check that the next column matches.
+		if ci.ColIdx == col.ColIdx && ci.Direction == col.Direction {
+			pos++
+		} else if _, ok := ord.exactMatchCols[col.ColIdx]; !ok {
+			break
+		}
+	}
+	if pos < len(ord.ordering) {
+		ord.ordering = ord.ordering[:pos]
+		ord.unique = false
+	}
+}
