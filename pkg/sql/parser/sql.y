@@ -357,7 +357,31 @@ func (u *sqlSymUnion) kvOptions() []KVOption {
 %type <[]Statement> stmt_list
 %type <Statement> stmt
 
+%type <Statement> alter_stmt
 %type <Statement> alter_table_stmt
+%type <Statement> alter_index_stmt
+%type <Statement> alter_view_stmt
+%type <Statement> alter_database_stmt
+
+// ALTER TABLE
+%type <Statement> alter_onetable_stmt
+%type <Statement> alter_split_stmt
+%type <Statement> alter_rename_stmt
+%type <Statement> alter_scatter_stmt
+%type <Statement> alter_testing_relocate_stmt
+
+// ALTER DATABASE
+%type <Statement> alter_rename_database_stmt
+
+// ALTER INDEX
+%type <Statement> alter_scatter_index_stmt
+%type <Statement> alter_split_index_stmt
+%type <Statement> alter_rename_index_stmt
+%type <Statement> alter_testing_relocate_index_stmt
+
+// ALTER VIEW
+%type <Statement> alter_rename_view_stmt
+
 %type <Statement> backup_stmt
 %type <Statement> copy_from_stmt
 %type <Statement> create_stmt
@@ -369,6 +393,10 @@ func (u *sqlSymUnion) kvOptions() []KVOption {
 %type <Statement> create_view_stmt
 %type <Statement> delete_stmt
 %type <Statement> drop_stmt
+%type <Statement> drop_database_stmt
+%type <Statement> drop_index_stmt
+%type <Statement> drop_table_stmt
+%type <Statement> drop_view_stmt
 %type <Statement> explain_stmt
 %type <Statement> explainable_stmt
 %type <Statement> help_stmt
@@ -379,20 +407,32 @@ func (u *sqlSymUnion) kvOptions() []KVOption {
 %type <Statement> grant_stmt
 %type <Statement> insert_stmt
 %type <Statement> release_stmt
-%type <Statement> rename_stmt
 %type <Statement> reset_stmt
+%type <Statement> restore_stmt
 %type <Statement> revoke_stmt
 %type <*Select> select_stmt
 %type <Statement> savepoint_stmt
-%type <Statement> set_stmt
+%type <Statement> set_stmt set_session_stmt set_csetting_stmt
 %type <Statement> show_stmt
-%type <Statement> split_stmt
-%type <Statement> testing_relocate_stmt
-%type <Statement> scatter_stmt
-%type <Statement> transaction_stmt
+%type <Statement> show_backup_stmt
+%type <Statement> show_columns_stmt
+%type <Statement> show_constraints_stmt
+%type <Statement> show_create_table_stmt
+%type <Statement> show_create_view_stmt
+%type <Statement> show_csettings_stmt
+%type <Statement> show_databases_stmt
+%type <Statement> show_grants_stmt
+%type <Statement> show_indexes_stmt
+%type <Statement> show_session_stmt
+%type <Statement> show_tables_stmt
+%type <Statement> show_testing_stmt
+%type <Statement> show_transaction_stmt
+%type <Statement> show_users_stmt
+%type <Statement> transaction_stmt begin_stmt rollback_stmt commit_stmt
 %type <Statement> truncate_stmt
 %type <Statement> update_stmt
 %type <Statement> use_stmt
+%type <Statement> upsert_stmt
 
 %type <[]string> opt_incremental
 %type <KVOption> kv_option
@@ -400,7 +440,7 @@ func (u *sqlSymUnion) kvOptions() []KVOption {
 %type <str> opt_equal_value
 
 %type <*Select> select_no_parens
-%type <SelectStatement> select_clause select_with_parens simple_select values_clause
+%type <SelectStatement> select_clause select_with_parens simple_select simple_select_clause values_clause table_clause
 
 %type <empty> alter_using
 %type <Expr> alter_column_default
@@ -423,7 +463,7 @@ func (u *sqlSymUnion) kvOptions() []KVOption {
 %type <UserPriority>  transaction_user_priority
 
 %type <str>   name opt_name opt_name_parens opt_to_savepoint
-%type <str>   savepoint_name
+%type <str>   savepoint_name session_var
 
 %type <operator> subquery_op
 %type <FunctionReference> func_name
@@ -500,8 +540,11 @@ func (u *sqlSymUnion) kvOptions() []KVOption {
 %type <NameList> opt_conf_expr
 %type <*OnConflict> on_conflict
 
-%type <Statement>  generic_set set_rest set_rest_more transaction_mode_list
-%type <Statement>  opt_transaction_mode_list set_exprs_internal set_name
+%type <Statement> generic_set set_rest_more transaction_mode_list
+%type <Statement> opt_transaction_mode_list set_exprs_internal
+%type <Statement> set_transaction_stmt set_name
+
+%type <empty> opt_default
 
 %type <NameList> opt_storing
 %type <*ColumnTableDef> column_def
@@ -609,7 +652,7 @@ func (u *sqlSymUnion) kvOptions() []KVOption {
 %token <str>   TYPECAST TYPEANNOTATE DOT_DOT
 %token <str>   LESS_EQUALS GREATER_EQUALS NOT_EQUALS
 %token <str>   NOT_REGMATCH REGIMATCH NOT_REGIMATCH
-%token <str>   ERROR
+%token <str>   ERROR HELPTOKEN
 
 // If you want to make any keyword changes, update the keyword table in
 // src/include/parser/kwlist.h and add new keywords to the appropriate one of
@@ -771,6 +814,7 @@ func (u *sqlSymUnion) kvOptions() []KVOption {
 // They wouldn't be given a precedence at all, were it not that we need
 // left-associativity among the JOIN rules themselves.
 %left      JOIN CROSS LEFT FULL RIGHT INNER NATURAL
+%right     HELPTOKEN
 
 %%
 
@@ -797,43 +841,99 @@ stmt_list:
   }
 
 stmt:
-  alter_table_stmt
+  alter_stmt // help texts in sub-rule
 | backup_stmt
+| backup_stmt HELPTOKEN { return helpWith(sqllex, "BACKUP") }
+| restore_stmt
+| restore_stmt HELPTOKEN { return helpWith(sqllex, "RESTORE") }
 | copy_from_stmt
-| create_stmt
+| create_stmt // help texts in sub-rule
 | delete_stmt
-| drop_stmt
+| delete_stmt HELPTOKEN { return helpWith(sqllex, "DELETE") }
+| drop_stmt // help texts in sub-rule
 | explain_stmt
+| explain_stmt HELPTOKEN { return helpWith(sqllex, "EXPLAIN") }
 | help_stmt
 | prepare_stmt
+| prepare_stmt HELPTOKEN { return helpWith(sqllex, "PREPARE") }
 | execute_stmt
+| execute_stmt HELPTOKEN { return helpWith(sqllex, "EXECUTE") }
 | deallocate_stmt
+| deallocate_stmt HELPTOKEN { return helpWith(sqllex, "DEALLOCATE") }
 | grant_stmt
+| grant_stmt HELPTOKEN { return helpWith(sqllex, "GRANT") }
 | insert_stmt
-| rename_stmt
+| insert_stmt HELPTOKEN { return helpWith(sqllex, "INSERT") }
+| upsert_stmt
+| upsert_stmt HELPTOKEN { return helpWith(sqllex, "UPSERT") }
 | revoke_stmt
+| revoke_stmt HELPTOKEN { return helpWith(sqllex, "REVOKE") }
 | savepoint_stmt
-| select_stmt
+| savepoint_stmt HELPTOKEN { return helpWith(sqllex, "SAVEPOINT") }
+| select_stmt // help texts in sub-rule
   {
     $$.val = $1.slct()
   }
-| set_stmt
-| show_stmt
-| split_stmt
-| testing_relocate_stmt
-| scatter_stmt
-| transaction_stmt
+| set_stmt // help texts in sub-rule
+| show_stmt // help texts in sub-rule
+| transaction_stmt // help texts in sub-rule
 | release_stmt
+| release_stmt HELPTOKEN { return helpWith(sqllex, "RELEASE") }
 | reset_stmt
+| reset_stmt HELPTOKEN { return helpWith(sqllex, "RESET") }
 | truncate_stmt
+| truncate_stmt HELPTOKEN { return helpWith(sqllex, "TRUNCATE") }
 | update_stmt
+| update_stmt HELPTOKEN { return helpWith(sqllex, "UPDATE") }
 | use_stmt
 | /* EMPTY */
   {
     $$.val = Statement(nil)
   }
 
+alter_stmt:
+  ALTER error { return helpWith(sqllex, "ALTER") }
+| alter_table_stmt              %prec VALUES
+| alter_table_stmt HELPTOKEN    %prec UMINUS { return helpWith(sqllex, "ALTER TABLE") }
+| alter_index_stmt              %prec VALUES
+| alter_index_stmt HELPTOKEN    %prec UMINUS { return helpWith(sqllex, "ALTER INDEX") }
+| alter_view_stmt               %prec VALUES
+| alter_view_stmt HELPTOKEN     %prec UMINUS { return helpWith(sqllex, "ALTER VIEW") }
+| alter_database_stmt           %prec VALUES
+| alter_database_stmt HELPTOKEN %prec UMINUS { return helpWith(sqllex, "ALTER DATABASE") }
+
 alter_table_stmt:
+// ALTER TABLE has its error help token here because the ALTER TABLE
+// prefix is spread over multiple non-terminals.
+  ALTER TABLE error { return helpWith(sqllex, "ALTER TABLE") }
+| alter_onetable_stmt
+| alter_split_stmt
+| alter_testing_relocate_stmt
+| alter_scatter_stmt
+| alter_rename_stmt
+
+alter_view_stmt:
+// ALTER VIEW has its error help token here because the ALTER VIEW
+// prefix is spread over multiple non-terminals.
+  ALTER VIEW error { return helpWith(sqllex, "ALTER VIEW") }
+| alter_rename_view_stmt
+
+alter_database_stmt:
+// ALTER DATABASE has its error help token here because the ALTER DATABASE
+// prefix is spread over multiple non-terminals.
+  ALTER DATABASE error { return helpWith(sqllex, "ALTER DATABASE") }
+| alter_rename_database_stmt
+
+alter_index_stmt:
+// ALTER INDEX has its error help token here because the ALTER INDEX
+// prefix is spread over multiple non-terminals.
+  ALTER INDEX error { return helpWith(sqllex, "ALTER INDEX") }
+| alter_split_index_stmt
+| alter_testing_relocate_index_stmt
+| alter_scatter_index_stmt
+| alter_rename_index_stmt
+
+alter_onetable_stmt:
   ALTER TABLE relation_expr alter_table_cmds
   {
     $$.val = &AlterTable{Table: $3.normalizableTableName(), IfExists: false, Cmds: $4.alterTableCmds()}
@@ -841,6 +941,58 @@ alter_table_stmt:
 | ALTER TABLE IF EXISTS relation_expr alter_table_cmds
   {
     $$.val = &AlterTable{Table: $5.normalizableTableName(), IfExists: true, Cmds: $6.alterTableCmds()}
+  }
+
+alter_split_stmt:
+  ALTER TABLE qualified_name SPLIT AT select_stmt
+  {
+    /* SKIP DOC */
+    $$.val = &Split{Table: $3.newNormalizableTableName(), Rows: $6.slct()}
+  }
+
+alter_split_index_stmt:
+  ALTER INDEX table_name_with_index SPLIT AT select_stmt
+  {
+    /* SKIP DOC */
+    $$.val = &Split{Index: $3.tableWithIdx(), Rows: $6.slct()}
+  }
+
+alter_testing_relocate_stmt:
+  ALTER TABLE qualified_name TESTING_RELOCATE select_stmt
+  {
+    /* SKIP DOC */
+    $$.val = &Relocate{Table: $3.newNormalizableTableName(), Rows: $5.slct()}
+  }
+
+alter_testing_relocate_index_stmt:
+  ALTER INDEX table_name_with_index TESTING_RELOCATE select_stmt
+  {
+    /* SKIP DOC */
+    $$.val = &Relocate{Index: $3.tableWithIdx(), Rows: $5.slct()}
+  }
+
+alter_scatter_stmt:
+  ALTER TABLE qualified_name SCATTER
+  {
+    /* SKIP DOC */
+    $$.val = &Scatter{Table: $3.newNormalizableTableName()}
+  }
+| ALTER TABLE qualified_name SCATTER FROM '(' expr_list ')' TO '(' expr_list ')'
+  {
+    /* SKIP DOC */
+    $$.val = &Scatter{Table: $3.newNormalizableTableName(), From: $7.exprs(), To: $11.exprs()}
+  }
+
+alter_scatter_index_stmt:
+  ALTER INDEX table_name_with_index SCATTER
+  {
+    /* SKIP DOC */
+    $$.val = &Scatter{Index: $3.tableWithIdx()}
+  }
+| ALTER INDEX table_name_with_index SCATTER FROM '(' expr_list ')' TO '(' expr_list ')'
+  {
+    /* SKIP DOC */
+    $$.val = &Scatter{Index: $3.tableWithIdx(), From: $7.exprs(), To: $11.exprs()}
   }
 
 alter_table_cmds:
@@ -988,10 +1140,14 @@ alter_using:
 | /* EMPTY */ {}
 
 backup_stmt:
-  BACKUP targets TO string_or_placeholder opt_as_of_clause opt_incremental opt_with_options
+  BACKUP error { return helpWith(sqllex, "BACKUP") }
+| BACKUP targets TO string_or_placeholder opt_as_of_clause opt_incremental opt_with_options
   {
     $$.val = &Backup{Targets: $2.targetList(), To: $4.expr(), IncrementalFrom: $6.exprs(), AsOf: $5.asOfClause(), Options: $7.kvOptions()}
   }
+
+restore_stmt:
+  RESTORE error { return helpWith(sqllex, "RESTORE") }
 | RESTORE targets FROM string_or_placeholder_list opt_as_of_clause opt_with_options
   {
     $$.val = &Restore{Targets: $2.targetList(), From: $4.exprs(), AsOf: $5.asOfClause(), Options: $6.kvOptions()}
@@ -1076,31 +1232,70 @@ copy_from_stmt:
 
 // CREATE [DATABASE|INDEX|TABLE|TABLE AS|VIEW]
 create_stmt:
-  create_database_stmt
-| create_index_stmt
-| create_table_stmt
-| create_table_as_stmt
-| create_user_stmt
-| create_view_stmt
+  CREATE error { return helpWith(sqllex, "CREATE") }
+// For each rule below we need to give manually a higher priority to
+// the HELPTOKEN rule, otherwise there is an ambiguity.
+| create_database_stmt           %prec VALUES
+| create_database_stmt HELPTOKEN %prec UMINUS { return helpWith(sqllex, "CREATE DATABASE") }
+| create_index_stmt              %prec VALUES
+| create_index_stmt HELPTOKEN    %prec UMINUS { return helpWith(sqllex, "CREATE INDEX") }
+| create_table_stmt              %prec VALUES
+| create_table_stmt HELPTOKEN    %prec UMINUS { return helpWith(sqllex, "CREATE TABLE") }
+| create_table_as_stmt           %prec VALUES
+| create_table_as_stmt HELPTOKEN %prec UMINUS { return helpWith(sqllex, "CREATE TABLE") }
+// Error case for both CREATE TABLE and CREATE TABLE ... AS in one
+| CREATE TABLE error { return helpWith(sqllex, "CREATE TABLE") }
+| create_user_stmt               %prec VALUES
+| create_user_stmt HELPTOKEN     %prec UMINUS { return helpWith(sqllex, "CREATE USER") }
+| create_view_stmt               %prec VALUES
+| create_view_stmt HELPTOKEN     %prec UMINUS { return helpWith(sqllex, "CREATE VIEW") }
 
 // DELETE FROM query
 delete_stmt:
-  opt_with_clause DELETE FROM relation_expr_opt_alias where_clause returning_clause
+  opt_with_clause DELETE error { return helpWith(sqllex, "DELETE") }
+| opt_with_clause DELETE FROM relation_expr_opt_alias where_clause returning_clause
   {
     $$.val = &Delete{Table: $4.tblExpr(), Where: newWhere(astWhere, $5.expr()), Returning: $6.retClause()}
   }
 
 // DROP itemtype [ IF EXISTS ] itemname [, itemname ...] [ RESTRICT | CASCADE ]
 drop_stmt:
-  DROP DATABASE name
+  DROP error          { return helpWith(sqllex, "DROP") }
+// For each rule below we need to give manually a higher priority to
+// the HELPTOKEN rule, otherwise there is an ambiguity.
+| drop_database_stmt           %prec VALUES
+| drop_database_stmt HELPTOKEN %prec UMINUS { return helpWith(sqllex, "DROP DATABASE") }
+| drop_index_stmt              %prec VALUES
+| drop_index_stmt HELPTOKEN    %prec UMINUS { return helpWith(sqllex, "DROP INDEX") }
+| drop_table_stmt              %prec VALUES
+| drop_table_stmt HELPTOKEN    %prec UMINUS { return helpWith(sqllex, "DROP TABLE") }
+| drop_view_stmt               %prec VALUES
+| drop_view_stmt HELPTOKEN     %prec UMINUS { return helpWith(sqllex, "DROP VIEW") }
+
+drop_view_stmt:
+  DROP VIEW table_name_list opt_drop_behavior
   {
-    $$.val = &DropDatabase{Name: Name($3), IfExists: false}
+    $$.val = &DropView{Names: $3.tableNameReferences(), IfExists: false, DropBehavior: $4.dropBehavior()}
   }
-| DROP DATABASE IF EXISTS name
+| DROP VIEW IF EXISTS table_name_list opt_drop_behavior
   {
-    $$.val = &DropDatabase{Name: Name($5), IfExists: true}
+    $$.val = &DropView{Names: $5.tableNameReferences(), IfExists: true, DropBehavior: $6.dropBehavior()}
   }
-| DROP INDEX table_name_with_index_list opt_drop_behavior
+| DROP VIEW error     { return helpWith(sqllex, "DROP VIEW") }
+
+drop_table_stmt:
+  DROP TABLE table_name_list opt_drop_behavior
+  {
+    $$.val = &DropTable{Names: $3.tableNameReferences(), IfExists: false, DropBehavior: $4.dropBehavior()}
+  }
+| DROP TABLE IF EXISTS table_name_list opt_drop_behavior
+  {
+    $$.val = &DropTable{Names: $5.tableNameReferences(), IfExists: true, DropBehavior: $6.dropBehavior()}
+  }
+| DROP TABLE error    { return helpWith(sqllex, "DROP TABLE") }
+
+drop_index_stmt:
+  DROP INDEX table_name_with_index_list opt_drop_behavior
   {
     $$.val = &DropIndex{
       IndexList: $3.tableWithIdxList(),
@@ -1116,22 +1311,19 @@ drop_stmt:
       DropBehavior: $6.dropBehavior(),
     }
   }
-| DROP TABLE table_name_list opt_drop_behavior
+| DROP INDEX error    { return helpWith(sqllex, "DROP INDEX") }
+
+drop_database_stmt:
+  DROP DATABASE name
   {
-    $$.val = &DropTable{Names: $3.tableNameReferences(), IfExists: false, DropBehavior: $4.dropBehavior()}
+    $$.val = &DropDatabase{Name: Name($3), IfExists: false}
   }
-| DROP TABLE IF EXISTS table_name_list opt_drop_behavior
+| DROP DATABASE IF EXISTS name
   {
-    $$.val = &DropTable{Names: $5.tableNameReferences(), IfExists: true, DropBehavior: $6.dropBehavior()}
+    $$.val = &DropDatabase{Name: Name($5), IfExists: true}
   }
-| DROP VIEW table_name_list opt_drop_behavior
-  {
-    $$.val = &DropView{Names: $3.tableNameReferences(), IfExists: false, DropBehavior: $4.dropBehavior()}
-  }
-| DROP VIEW IF EXISTS table_name_list opt_drop_behavior
-  {
-    $$.val = &DropView{Names: $5.tableNameReferences(), IfExists: true, DropBehavior: $6.dropBehavior()}
-  }
+| DROP DATABASE error { return helpWith(sqllex, "DROP DATABASE") }
+
 
 table_name_list:
   any_name
@@ -1165,7 +1357,13 @@ attrs:
 
 // EXPLAIN (options) query
 explain_stmt:
-  EXPLAIN explainable_stmt
+  EXPLAIN error { return helpWith(sqllex, "EXPLAIN") }
+// This second error rule is necessary, because otherwise
+// explainable_stmt also provides "selectclause := '(' error ..."  and
+// cause a help text for the select clause, which will be confusing in
+// the context of EXPLAIN.
+| EXPLAIN '(' error { return helpWith(sqllex, "EXPLAIN") }
+| EXPLAIN explainable_stmt
   {
     $$.val = &Explain{Statement: $2.stmt()}
   }
@@ -1175,21 +1373,23 @@ explain_stmt:
   }
 
 explainable_stmt:
-  select_stmt
+select_stmt // help texts in sub-rule
   {
     $$.val = $1.slct()
   }
-| create_stmt
-| drop_stmt
-| alter_table_stmt
-| insert_stmt
-| update_stmt
-| delete_stmt
-| show_stmt
+| create_stmt // help texts in sub-rule
+| drop_stmt // help texts in sub-rule
+| alter_stmt // help texts in sub-rule
+| insert_stmt           %prec VALUES
+| insert_stmt HELPTOKEN %prec UMINUS { return helpWith(sqllex, "INSERT") }
+| upsert_stmt           %prec VALUES
+| upsert_stmt HELPTOKEN %prec UMINUS { return helpWith(sqllex, "UPSERT") }
+| update_stmt           %prec VALUES
+| update_stmt HELPTOKEN %prec UMINUS { return helpWith(sqllex, "UPDATE") }
+| delete_stmt           %prec VALUES
+| delete_stmt HELPTOKEN %prec UMINUS { return helpWith(sqllex, "DELETE") }
+| show_stmt // help texts ion sub-rule
 | help_stmt
-| split_stmt
-| testing_relocate_stmt
-| scatter_stmt
 | explain_stmt { /* SKIP DOC */ }
 
 explain_option_list:
@@ -1207,7 +1407,8 @@ explain_option_name:
 
 // PREPARE <plan_name> [(args, ...)] AS <query>
 prepare_stmt:
-  PREPARE name prep_type_clause AS preparable_stmt
+  PREPARE error { return helpWith(sqllex, "PREPARE") }
+| PREPARE name prep_type_clause AS preparable_stmt
   {
     $$.val = &Prepare{
       Name: Name($2),
@@ -1227,17 +1428,23 @@ prep_type_clause:
   }
 
 preparable_stmt:
-  select_stmt
+  select_stmt // help texts in sub-rule
   {
     $$.val = $1.slct()
   }
-| insert_stmt
-| update_stmt
-| delete_stmt
+| insert_stmt           %prec VALUES
+| insert_stmt HELPTOKEN %prec UMINUS { return helpWith(sqllex, "INSERT") }
+| upsert_stmt           %prec VALUES
+| upsert_stmt HELPTOKEN %prec UMINUS { return helpWith(sqllex, "UPSERT") }
+| update_stmt           %prec VALUES
+| update_stmt HELPTOKEN %prec UMINUS { return helpWith(sqllex, "UPDATE") }
+| delete_stmt           %prec VALUES
+| delete_stmt HELPTOKEN %prec UMINUS { return helpWith(sqllex, "DELETE") }
 
 execute_stmt:
+  EXECUTE error { return helpWith(sqllex, "EXECUTE") }
   // EXECUTE <plan_name> [(params, ...)]
-  EXECUTE name execute_param_clause
+| EXECUTE name execute_param_clause
   {
     $$.val = &Execute{
       Name: Name($2),
@@ -1259,7 +1466,8 @@ execute_param_clause:
 
 // DEALLOCATE [PREPARE] <plan_name>
 deallocate_stmt:
-  DEALLOCATE name
+  DEALLOCATE error { return helpWith(sqllex, "DEALLOCATE") }
+| DEALLOCATE name
   {
     $$.val = &Deallocate{
       Name: Name($2),
@@ -1286,6 +1494,7 @@ grant_stmt:
   {
     $$.val = &Grant{Privileges: $2.privilegeList(), Grantees: $6.nameList(), Targets: $4.targetList()}
   }
+| GRANT error { return helpWith(sqllex, "GRANT") }
 
 // REVOKE privileges ON targets FROM grantee_list
 revoke_stmt:
@@ -1293,7 +1502,7 @@ revoke_stmt:
   {
     $$.val = &Revoke{Privileges: $2.privilegeList(), Grantees: $6.nameList(), Targets: $4.targetList()}
   }
-
+| REVOKE error { return helpWith(sqllex, "REVOKE") }
 
 targets:
   table_pattern_list
@@ -1372,26 +1581,14 @@ grantee_list:
 
 // RESET name
 reset_stmt:
-  RESET IDENT
+  RESET error { return helpWith(sqllex, "RESET" ) }
+| RESET session_var
   {
     $$.val = &Set{Name: UnresolvedName{Name($2)}, SetMode: SetModeReset}
   }
-| RESET DATABASE
+| RESET SESSION session_var
   {
-    /* SKIP DOC */
-    $$.val = &Set{Name: UnresolvedName{Name($2)}, SetMode: SetModeReset}
-  }
-| RESET SESSION_USER
-  {
-    /* SKIP DOC */
-    $$.val = &Set{Name: UnresolvedName{Name($2)}, SetMode: SetModeReset}
-  }
-// SET NAMES is the SQL standard syntax for SET client_encoding.
-// See https://www.postgresql.org/docs/9.6/static/multibyte.html#AEN39236
-| RESET NAMES
-  {
-    /* SKIP DOC */
-    $$.val = &Set{Name: UnresolvedName{Name("client_encoding")}, SetMode: SetModeReset}
+    $$.val = &Set{Name: UnresolvedName{Name($3)}, SetMode: SetModeReset}
   }
 
 // USE is the MSSQL/MySQL equivalent of SET DATABASE. Alias it for convenience.
@@ -1406,25 +1603,22 @@ use_stmt:
 // SET name TO 'var_value'
 // SET TIME ZONE 'var_value'
 set_stmt:
-  SET set_rest
-  {
-    $$.val = $2.stmt()
-  }
-| SET LOCAL set_rest { return unimplemented(sqllex, "set local") }
-| SET SESSION CHARACTERISTICS AS TRANSACTION transaction_iso_level
-  {
-    $$.val = &SetDefaultIsolation{Isolation: $6.isoLevel()}
-  }
-| SET SESSION set_rest
-  {
-    $$.val = $3.stmt()
-  }
+  set_session_stmt
+| set_session_stmt HELPTOKEN { return helpWith(sqllex, "SET SESSION") }
+| set_csetting_stmt
+| set_csetting_stmt HELPTOKEN { return helpWith(sqllex, "SET CLUSTER SETTING") }
+| set_transaction_stmt
+| set_transaction_stmt HELPTOKEN { return helpWith(sqllex, "SET TRANSACTION") }
+| set_exprs_internal { /* SKIP DOC */ }
+| SET LOCAL error { return unimplemented(sqllex, "set local") }
+
+set_csetting_stmt:
+  SET CLUSTER error { return helpWith(sqllex, "SET CLUSTER SETTING") }
 | SET CLUSTER SETTING generic_set
   {
     $$.val = $4.stmt()
     $$.val.(*Set).SetMode = SetModeClusterSetting
   }
-| set_exprs_internal { /* SKIP DOC */ }
 
 set_exprs_internal:
   /* SET ROW serves to accelerate parser.parseExprs().
@@ -1434,12 +1628,32 @@ set_exprs_internal:
     $$.val = &Set{Values: $4.exprs()}
   }
 
-set_rest:
-  TRANSACTION transaction_mode_list
+set_session_stmt:
+ SET SESSION set_rest_more
+  {
+    $$.val = $3.stmt()
+  }
+| SET set_rest_more
   {
     $$.val = $2.stmt()
   }
-| set_rest_more
+// Special form for pg compatibility:
+| SET SESSION CHARACTERISTICS AS TRANSACTION transaction_iso_level
+  {
+    $$.val = &SetDefaultIsolation{Isolation: $6.isoLevel()}
+  }
+
+set_transaction_stmt:
+  SET TRANSACTION error { return helpWith(sqllex, "SET TRANSACTION") }
+| SET TRANSACTION transaction_mode_list
+  {
+    $$.val = $3.stmt()
+  }
+| SET SESSION TRANSACTION error { return helpWith(sqllex, "SET TRANSACTION") }
+| SET SESSION TRANSACTION transaction_mode_list
+  {
+    $$.val = $4.stmt()
+  }
 
 transaction_mode_list:
   transaction_iso_level
@@ -1485,15 +1699,16 @@ generic_set:
   }
 
 set_rest_more:
-  // Generic SET syntaxes:
-  generic_set
-| var_name FROM CURRENT { return unimplemented(sqllex, "set from current") }
-  // Special syntaxes mandated by SQL standard:
+   error { return helpWith(sqllex, "SET SESSION") }
+// Generic SET syntaxes:
+|  generic_set
+// Special syntaxes mandated by SQL standard:
 | TIME ZONE zone_value
   {
     /* SKIP DOC */
     $$.val = &SetTimeZone{Value: $3.expr()}
   }
+| var_name FROM CURRENT { return unimplemented(sqllex, "set from current") }
 | set_name
 
 // SET NAMES is the SQL standard syntax for SET client_encoding.
@@ -1623,35 +1838,63 @@ non_reserved_word_or_sconst:
 | SCONST
 
 show_stmt:
-  SHOW IDENT
-  {
-    $$.val = &Show{Name: $2}
-  }
-// SET NAMES is the SQL standard syntax for SET client_encoding.
+  SHOW error { return helpWith(sqllex, "SHOW") }
+| show_backup_stmt                 %prec VALUES
+| show_backup_stmt HELPTOKEN       %prec UMINUS { return helpWith(sqllex, "SHOW BACKUP") }
+| show_columns_stmt                %prec VALUES
+| show_columns_stmt HELPTOKEN      %prec UMINUS { return helpWith(sqllex, "SHOW COLUMNS") }
+| show_constraints_stmt            %prec VALUES
+| show_constraints_stmt HELPTOKEN  %prec UMINUS { return helpWith(sqllex, "SHOW CONSTRAINTS") }
+| show_create_table_stmt           %prec VALUES
+| show_create_table_stmt HELPTOKEN %prec UMINUS { return helpWith(sqllex, "SHOW CREATE TABLE") }
+| show_create_view_stmt            %prec VALUES
+| show_create_view_stmt HELPTOKEN  %prec UMINUS { return helpWith(sqllex, "SHOW CREATE VIEW") }
+| show_csettings_stmt              %prec VALUES
+| show_csettings_stmt HELPTOKEN    %prec UMINUS { return helpWith(sqllex, "SHOW CLUSTER SETTING") }
+| show_databases_stmt              %prec VALUES
+| show_databases_stmt HELPTOKEN    %prec UMINUS { return helpWith(sqllex, "SHOW DATABASES") }
+| show_grants_stmt                 %prec VALUES
+| show_grants_stmt HELPTOKEN       %prec UMINUS { return helpWith(sqllex, "SHOW GRANTS") }
+| show_indexes_stmt                %prec VALUES
+| show_indexes_stmt HELPTOKEN      %prec UMINUS { return helpWith(sqllex, "SHOW INDEXES") }
+| show_session_stmt                %prec VALUES
+| show_session_stmt HELPTOKEN      %prec UMINUS { return helpWith(sqllex, "SHOW SESSION") }
+| show_tables_stmt                 %prec VALUES
+| show_tables_stmt HELPTOKEN       %prec UMINUS { return helpWith(sqllex, "SHOW TABLES") }
+| show_testing_stmt
+| show_transaction_stmt            %prec VALUES
+| show_transaction_stmt HELPTOKEN  %prec UMINUS { return helpWith(sqllex, "SHOW TRANSACTION") }
+| show_users_stmt                  %prec VALUES
+| show_users_stmt HELPTOKEN        %prec UMINUS { return helpWith(sqllex, "SHOW USERS") }
+
+show_session_stmt:
+  SHOW SESSION error       { return helpWith(sqllex, "SHOW SESSION") }
+| SHOW session_var         { $$.val = &Show{Name: $2} }
+| SHOW SESSION session_var { $$.val = &Show{Name: $3} }
+
+session_var:
+  IDENT
+// Although ALL, SESSION_USER and DATABASE are identifiers for the
+// purpose of SHOW, they lex as separate token types, so they need
+// separate rules.
+| ALL
+| SESSION_USER
+| DATABASE
+// TIME ZONE is special: it is two tokens, but is really the identifier "TIME ZONE".
+| TIME ZONE { $$ = "TIME ZONE" }
+// SET NAMES is standard SQL for SET client_encoding.
 // See https://www.postgresql.org/docs/9.6/static/multibyte.html#AEN39236
-| SHOW NAMES
-  {
-    /* SKIP DOC */
-    $$.val = &Show{Name: "client_encoding"}
-  }
-| SHOW SESSION_USER
-  {
-    /* SKIP DOC */
-    $$.val = &Show{Name: $2}
-  }
-| SHOW DATABASE
-  {
-    /* SKIP DOC */
-    $$.val = &Show{Name: $2}
-  }
-| SHOW ALL
-  {
-    $$.val = &Show{Name: $2}
-  }
+| NAMES { $$ = "client_encoding" }
+
+show_backup_stmt:
+  SHOW BACKUP error { return helpWith(sqllex, "SHOW BACKUP") }
 | SHOW BACKUP string_or_placeholder
   {
     $$.val = &ShowBackup{Path: $3.expr()}
   }
+
+show_csettings_stmt:
+  SHOW CLUSTER error { return helpWith(sqllex, "SHOW CLUSTER SETTING") }
 | SHOW CLUSTER SETTING any_name
   {
     $$.val = &Show{Name: $4.unresolvedName().String(), ClusterSetting: true}
@@ -1660,42 +1903,65 @@ show_stmt:
   {
     $$.val = &Show{Name: "all", ClusterSetting: true}
   }
+| SHOW ALL CLUSTER error { return helpWith(sqllex, "SHOW CLUSTER SETTING") }
 | SHOW ALL CLUSTER SETTINGS
   {
     $$.val = &Show{Name: "all", ClusterSetting: true}
   }
-| SHOW COLUMNS FROM var_name
-  {
-    $$.val = &ShowColumns{Table: $4.normalizableTableName()}
-  }
-| SHOW DATABASES
-  {
-    $$.val = &ShowDatabases{}
-  }
+
+show_grants_stmt:
+  SHOW GRANTS error { return helpWith(sqllex, "SHOW GRANTS") }
 | SHOW GRANTS on_privilege_target_clause for_grantee_clause
   {
     $$.val = &ShowGrants{Targets: $3.targetListPtr(), Grantees: $4.nameList()}
   }
-| SHOW INDEX FROM var_name
+
+show_columns_stmt:
+  SHOW COLUMNS error { return helpWith(sqllex, "SHOW COLUMNS") }
+| SHOW COLUMNS FROM var_name
   {
-    $$.val = &ShowIndex{Table: $4.normalizableTableName()}
+    $$.val = &ShowColumns{Table: $4.normalizableTableName()}
   }
-| SHOW INDEXES FROM var_name
+
+show_databases_stmt:
+  SHOW DATABASES error { return helpWith(sqllex, "SHOW DATABASES") }
+| SHOW DATABASES
   {
-    $$.val = &ShowIndex{Table: $4.normalizableTableName()}
+    $$.val = &ShowDatabases{}
   }
+
+show_constraints_stmt:
+  SHOW CONSTRAINT error { return helpWith(sqllex, "SHOW CONSTRAINTS") }
 | SHOW CONSTRAINT FROM var_name
   {
     $$.val = &ShowConstraints{Table: $4.normalizableTableName()}
   }
+| SHOW CONSTRAINTS error { return helpWith(sqllex, "SHOW CONSTRAINTS") }
 | SHOW CONSTRAINTS FROM var_name
   {
     $$.val = &ShowConstraints{Table: $4.normalizableTableName()}
   }
+
+show_indexes_stmt:
+  SHOW INDEX error { return helpWith(sqllex, "SHOW INDEXES") }
+| SHOW INDEX FROM var_name
+  {
+    $$.val = &ShowIndex{Table: $4.normalizableTableName()}
+  }
+| SHOW INDEXES error { return helpWith(sqllex, "SHOW INDEXES") }
+| SHOW INDEXES FROM var_name
+  {
+    $$.val = &ShowIndex{Table: $4.normalizableTableName()}
+  }
+| SHOW KEYS error { return helpWith(sqllex, "SHOW INDEXES") }
 | SHOW KEYS FROM var_name
   {
     $$.val = &ShowIndex{Table: $4.normalizableTableName()}
   }
+
+
+show_tables_stmt:
+  SHOW TABLES error { return helpWith(sqllex, "SHOW TABLES") }
 | SHOW TABLES FROM name
   {
     $$.val = &ShowTables{Database: Name($4)}
@@ -1704,11 +1970,9 @@ show_stmt:
   {
     $$.val = &ShowTables{}
   }
-| SHOW TIME ZONE
-  {
-    /* SKIP DOC */
-    $$.val = &Show{Name: "TIME ZONE"}
-  }
+
+show_transaction_stmt:
+  SHOW TRANSACTION error { return helpWith(sqllex, "SHOW TRANSACTION") }
 | SHOW TRANSACTION ISOLATION LEVEL
   {
     /* SKIP DOC */
@@ -1724,19 +1988,30 @@ show_stmt:
     /* SKIP DOC */
     $$.val = &ShowTransactionStatus{}
   }
+
+show_create_table_stmt:
+  SHOW CREATE TABLE error { return helpWith(sqllex, "SHOW CREATE TABLE") }
 | SHOW CREATE TABLE var_name
   {
     $$.val = &ShowCreateTable{Table: $4.normalizableTableName()}
   }
+
+show_create_view_stmt:
+  SHOW CREATE VIEW error { return helpWith(sqllex, "SHOW CREATE VIEW") }
 | SHOW CREATE VIEW var_name
   {
     $$.val = &ShowCreateView{View: $4.normalizableTableName()}
   }
+
+show_users_stmt:
+  SHOW USERS error { return helpWith(sqllex, "SHOW USERS") }
 | SHOW USERS
   {
     $$.val = &ShowUsers{}
   }
-| SHOW TESTING_RANGES FROM TABLE qualified_name
+
+show_testing_stmt:
+  SHOW TESTING_RANGES FROM TABLE qualified_name
   {
     /* SKIP DOC */
     $$.val = &ShowRanges{Table: $5.newNormalizableTableName()}
@@ -1777,50 +2052,6 @@ for_grantee_clause:
 | /* EMPTY */
   {
     $$.val = NameList(nil)
-  }
-
-split_stmt:
-  ALTER TABLE qualified_name SPLIT AT select_stmt
-  {
-    $$.val = &Split{Table: $3.newNormalizableTableName(), Rows: $6.slct()}
-  }
-| ALTER INDEX table_name_with_index SPLIT AT select_stmt
-  {
-    $$.val = &Split{Index: $3.tableWithIdx(), Rows: $6.slct()}
-  }
-
-testing_relocate_stmt:
-  ALTER TABLE qualified_name TESTING_RELOCATE select_stmt
-  {
-    /* SKIP DOC */
-    $$.val = &Relocate{Table: $3.newNormalizableTableName(), Rows: $5.slct()}
-  }
-| ALTER INDEX table_name_with_index TESTING_RELOCATE select_stmt
-  {
-    /* SKIP DOC */
-    $$.val = &Relocate{Index: $3.tableWithIdx(), Rows: $5.slct()}
-  }
-
-scatter_stmt:
-  ALTER TABLE qualified_name SCATTER
-  {
-    /* SKIP DOC */
-    $$.val = &Scatter{Table: $3.newNormalizableTableName()}
-  }
-| ALTER TABLE qualified_name SCATTER FROM '(' expr_list ')' TO '(' expr_list ')'
-  {
-    /* SKIP DOC */
-    $$.val = &Scatter{Table: $3.newNormalizableTableName(), From: $7.exprs(), To: $11.exprs()}
-  }
-| ALTER INDEX table_name_with_index SCATTER
-  {
-    /* SKIP DOC */
-    $$.val = &Scatter{Index: $3.tableWithIdx()}
-  }
-| ALTER INDEX table_name_with_index SCATTER FROM '(' expr_list ')' TO '(' expr_list ')'
-  {
-    /* SKIP DOC */
-    $$.val = &Scatter{Index: $3.tableWithIdx(), From: $7.exprs(), To: $11.exprs()}
   }
 
 // CREATE TABLE relname
@@ -2161,18 +2392,20 @@ truncate_stmt:
   {
     $$.val = &Truncate{Tables: $3.tableNameReferences(), DropBehavior: $4.dropBehavior()}
   }
+| TRUNCATE error { return helpWith(sqllex, "TRUNCATE") }
 
 // CREATE USER
 create_user_stmt:
-  CREATE USER name opt_with opt_password
+  CREATE USER name opt_password
   {
-    $$.val = &CreateUser{Name: Name($3), Password: $5.strPtr()}
+    $$.val = &CreateUser{Name: Name($3), Password: $4.strPtr()}
   }
+| CREATE USER error { return helpWith(sqllex, "CREATE USER") }
 
 opt_password:
-  PASSWORD SCONST
+  opt_with PASSWORD SCONST
   {
-    pwd := $2
+    pwd := $3
     $$.val = &pwd
   }
 | /* EMPTY */ {
@@ -2189,12 +2422,14 @@ create_view_stmt:
       AsSource: $6.slct(),
     }
   }
+| CREATE VIEW error { return helpWith(sqllex, "CREATE VIEW") }
 
 // TODO(a-robinson): CREATE OR REPLACE VIEW support (#2971).
 
 // CREATE INDEX
 create_index_stmt:
-  CREATE opt_unique INDEX opt_name ON qualified_name '(' index_params ')' opt_storing opt_interleave
+  CREATE opt_unique INDEX error { return helpWith(sqllex, "CREATE INDEX") }
+| CREATE opt_unique INDEX opt_name ON qualified_name '(' index_params ')' opt_storing opt_interleave
   {
     $$.val = &CreateIndex{
       Name:    Name($4),
@@ -2267,35 +2502,20 @@ opt_asc_desc:
     $$.val = DefaultDirection
   }
 
-// ALTER THING name RENAME TO newname
-rename_stmt:
+alter_rename_database_stmt:
   ALTER DATABASE name RENAME TO name
   {
     $$.val = &RenameDatabase{Name: Name($3), NewName: Name($6)}
   }
-| ALTER TABLE relation_expr RENAME TO qualified_name
+
+alter_rename_stmt:
+  ALTER TABLE relation_expr RENAME TO qualified_name
   {
     $$.val = &RenameTable{Name: $3.normalizableTableName(), NewName: $6.normalizableTableName(), IfExists: false, IsView: false}
   }
 | ALTER TABLE IF EXISTS relation_expr RENAME TO qualified_name
   {
     $$.val = &RenameTable{Name: $5.normalizableTableName(), NewName: $8.normalizableTableName(), IfExists: true, IsView: false}
-  }
-| ALTER VIEW relation_expr RENAME TO qualified_name
-  {
-    $$.val = &RenameTable{Name: $3.normalizableTableName(), NewName: $6.normalizableTableName(), IfExists: false, IsView: true}
-  }
-| ALTER VIEW IF EXISTS relation_expr RENAME TO qualified_name
-  {
-    $$.val = &RenameTable{Name: $5.normalizableTableName(), NewName: $8.normalizableTableName(), IfExists: true, IsView: true}
-  }
-| ALTER INDEX table_name_with_index RENAME TO name
-  {
-    $$.val = &RenameIndex{Index: $3.tableWithIdx(), NewName: Name($6), IfExists: false}
-  }
-| ALTER INDEX IF EXISTS table_name_with_index RENAME TO name
-  {
-    $$.val = &RenameIndex{Index: $5.tableWithIdx(), NewName: Name($8), IfExists: true}
   }
 | ALTER TABLE relation_expr RENAME opt_column name TO name
   {
@@ -2305,8 +2525,30 @@ rename_stmt:
   {
     $$.val = &RenameColumn{Table: $5.normalizableTableName(), Name: Name($8), NewName: Name($10), IfExists: true}
   }
-| ALTER TABLE relation_expr RENAME CONSTRAINT name TO name { return unimplemented(sqllex, "alter table rename constraint") }
-| ALTER TABLE IF EXISTS relation_expr RENAME CONSTRAINT name TO name { return unimplemented(sqllex, "alter table rename constraint") }
+| ALTER TABLE relation_expr RENAME CONSTRAINT name TO name
+  { return unimplemented(sqllex, "alter table rename constraint") }
+| ALTER TABLE IF EXISTS relation_expr RENAME CONSTRAINT name TO name
+  { return unimplemented(sqllex, "alter table rename constraint") }
+
+alter_rename_view_stmt:
+  ALTER VIEW relation_expr RENAME TO qualified_name
+  {
+    $$.val = &RenameTable{Name: $3.normalizableTableName(), NewName: $6.normalizableTableName(), IfExists: false, IsView: true}
+  }
+| ALTER VIEW IF EXISTS relation_expr RENAME TO qualified_name
+  {
+    $$.val = &RenameTable{Name: $5.normalizableTableName(), NewName: $8.normalizableTableName(), IfExists: true, IsView: true}
+  }
+
+alter_rename_index_stmt:
+  ALTER INDEX table_name_with_index RENAME TO name
+  {
+    $$.val = &RenameIndex{Index: $3.tableWithIdx(), NewName: Name($6), IfExists: false}
+  }
+| ALTER INDEX IF EXISTS table_name_with_index RENAME TO name
+  {
+    $$.val = &RenameIndex{Index: $5.tableWithIdx(), NewName: Name($8), IfExists: true}
+  }
 
 opt_column:
   COLUMN
@@ -2323,35 +2565,54 @@ opt_set_data:
 | /* EMPTY */ {}
 
 release_stmt:
- RELEASE savepoint_name
- {
-  $$.val = &ReleaseSavepoint{Savepoint: $2}
- }
+  RELEASE error { return helpWith(sqllex, "RELEASE") }
+| RELEASE savepoint_name
+  {
+    $$.val = &ReleaseSavepoint{Savepoint: $2}
+  }
 
 savepoint_stmt:
- SAVEPOINT savepoint_name
- {
-  $$.val = &Savepoint{Name: $2}
- }
+  SAVEPOINT error { return helpWith(sqllex, "SAVEPOINT") }
+| SAVEPOINT name
+  {
+    $$.val = &Savepoint{Name: $2}
+  }
 
 // BEGIN / START / COMMIT / END / ROLLBACK / ...
 transaction_stmt:
-  BEGIN opt_transaction opt_transaction_mode_list
+  begin_stmt              %prec VALUES
+| begin_stmt HELPTOKEN    %prec UMINUS { return helpWith(sqllex, "BEGIN") }
+| commit_stmt             %prec VALUES
+| commit_stmt HELPTOKEN   %prec UMINUS { return helpWith(sqllex, "COMMIT") }
+| rollback_stmt           %prec VALUES
+| rollback_stmt HELPTOKEN %prec UMINUS { return helpWith(sqllex, "ROLLBACK") }
+
+begin_stmt:
+  BEGIN error { return helpWith(sqllex, "BEGIN") }
+| BEGIN opt_transaction opt_transaction_mode_list
   {
     $$.val = $3.stmt()
   }
+| START error { return helpWith(sqllex, "BEGIN") }
 | START TRANSACTION opt_transaction_mode_list
   {
     $$.val = $3.stmt()
   }
+
+commit_stmt:
+  COMMIT error { return helpWith(sqllex, "COMMIT") }
 | COMMIT opt_transaction
   {
     $$.val = &CommitTransaction{}
   }
+| END error { return helpWith(sqllex, "COMMIT") }
 | END opt_transaction
   {
     $$.val = &CommitTransaction{}
   }
+
+rollback_stmt:
+  ROLLBACK error { return helpWith(sqllex, "ROLLBACK") }
 | ROLLBACK opt_to_savepoint
   {
     if $2 != "" {
@@ -2422,7 +2683,8 @@ transaction_iso_level:
   }
 
 create_database_stmt:
-  CREATE DATABASE name opt_with opt_template_clause opt_encoding_clause opt_lc_collate_clause opt_lc_ctype_clause
+  CREATE DATABASE error { return helpWith(sqllex, "CREATE DATABASE") }
+| CREATE DATABASE name opt_with opt_template_clause opt_encoding_clause opt_lc_collate_clause opt_lc_ctype_clause
   {
     $$.val = &CreateDatabase{
       Name: Name($3),
@@ -2442,7 +2704,7 @@ create_database_stmt:
       Collate: $10,
       CType: $11,
     }
-  }
+   }
 
 opt_template_clause:
   TEMPLATE opt_equal non_reserved_word_or_sconst
@@ -2489,7 +2751,8 @@ opt_equal:
 | /* EMPTY */ {}
 
 insert_stmt:
-  opt_with_clause INSERT INTO insert_target insert_rest returning_clause
+  opt_with_clause INSERT error { return helpWith(sqllex, "INSERT") }
+| opt_with_clause INSERT INTO insert_target insert_rest returning_clause
   {
     $$.val = $5.stmt()
     $$.val.(*Insert).Table = $4.tblExpr()
@@ -2502,6 +2765,9 @@ insert_stmt:
     $$.val.(*Insert).OnConflict = $6.onConflict()
     $$.val.(*Insert).Returning = $7.retClause()
   }
+
+upsert_stmt:
+  opt_with_clause UPSERT error { return helpWith(sqllex, "UPSERT") }
 | opt_with_clause UPSERT INTO insert_target insert_rest returning_clause
   {
     $$.val = $5.stmt()
@@ -2576,7 +2842,8 @@ returning_clause:
   }
 
 update_stmt:
-  opt_with_clause UPDATE relation_expr_opt_alias
+  opt_with_clause UPDATE error { return helpWith(sqllex, "UPDATE") }
+| opt_with_clause UPDATE relation_expr_opt_alias
     SET set_clause_list update_from_clause where_clause returning_clause
   {
     $$.val = &Update{Table: $3.tblExpr(), Exprs: $5.updateExprs(), Where: newWhere(astWhere, $7.expr()), Returning: $8.retClause()}
@@ -2713,7 +2980,10 @@ select_no_parens:
   }
 
 select_clause:
-  simple_select
+// We only provide help if an open parenthesis is provided, because
+// otherwise the rule is ambiguous with the top-level statement list.
+  '(' error { return helpWith(sqllex, "<SELECTCLAUSE>") }
+| simple_select
 | select_with_parens
 
 // This rule parses SELECT statements that can appear within set operations,
@@ -2739,7 +3009,12 @@ select_clause:
 // NOTE: only the leftmost component select_stmt should have INTO. However,
 // this is not checked by the grammar; parse analysis must check it.
 simple_select:
-  SELECT opt_all_clause target_list
+  simple_select_clause           %prec VALUES
+| simple_select_clause HELPTOKEN %prec UMINUS { return helpWith(sqllex, "SELECT") }
+
+simple_select_clause:
+  SELECT error { return helpWith(sqllex, "SELECT") }
+| SELECT opt_all_clause target_list
     from_clause where_clause
     group_clause having_clause window_clause
   {
@@ -2766,15 +3041,10 @@ simple_select:
       Window:   $8.window(),
     }
   }
-| values_clause
-| TABLE relation_expr
-  {
-    $$.val = &SelectClause{
-      Exprs:       SelectExprs{starSelectExpr()},
-      From:        &From{Tables: TableExprs{$2.newNormalizableTableName()}},
-      tableSelect: true,
-    }
-  }
+| values_clause           %prec VALUES
+| values_clause HELPTOKEN %prec UMINUS { return helpWith(sqllex, "VALUES") }
+| table_clause            %prec VALUES
+| table_clause HELPTOKEN  %prec UMINUS { return helpWith(sqllex, "TABLE") }
 | select_clause UNION all_or_distinct select_clause
   {
     $$.val = &UnionClause{
@@ -2800,6 +3070,17 @@ simple_select:
       Left:  &Select{Select: $1.selectStmt()},
       Right: &Select{Select: $4.selectStmt()},
       All:   $3.bool(),
+    }
+  }
+
+table_clause:
+  TABLE error { return helpWith(sqllex, "TABLE") }
+| TABLE relation_expr
+  {
+    $$.val = &SelectClause{
+      Exprs:       SelectExprs{starSelectExpr()},
+      From:        &From{Tables: TableExprs{$2.newNormalizableTableName()}},
+      tableSelect: true,
     }
   }
 
@@ -3021,7 +3302,8 @@ having_clause:
 // the parser to prefer to reduce, in effect assuming that the VALUES
 // is not a function name.
 values_clause:
-  VALUES ctext_row %prec UMINUS
+  VALUES error { return helpWith(sqllex, "VALUES") }
+| VALUES ctext_row %prec UMINUS
   {
     $$.val = &ValuesClause{[]*Tuple{{Exprs: $2.exprs()}}}
   }
@@ -3041,6 +3323,7 @@ from_clause:
   {
     $$.val = &From{Tables: $2.tblExprs(), AsOf: $3.asOfClause()}
   }
+| FROM error { return helpWith(sqllex, "<SOURCE>")  }
 | /* EMPTY */
   {
     $$.val = &From{}
@@ -3144,6 +3427,7 @@ table_ref:
   {
     $$.val = &AliasedTableExpr{Expr: &FuncExpr{Func: $1.resolvableFunctionReference(), Exprs: $3.exprs()}, Ordinality: $5.bool(), As: $6.aliasClause() }
   }
+| qualified_name '(' error { return helpWithFunction(sqllex, $1.resolvableFunctionReference()) }
 | select_with_parens opt_ordinality opt_alias_clause
   {
     $$.val = &AliasedTableExpr{Expr: &Subquery{Select: $1.selectStmt()}, Ordinality: $2.bool(), As: $3.aliasClause() }
@@ -3181,6 +3465,7 @@ table_ref:
   {
     $$.val = &AliasedTableExpr{Expr: &Explain{ Options: $4.strs(), Statement: $6.stmt(), Enclosed: true }, Ordinality: $8.bool(), As: $9.aliasClause() }
   }
+| '[' EXPLAIN error { return helpWith(sqllex, "EXPLAIN") }
 | '[' show_stmt ']' opt_ordinality opt_alias_clause
   {
     $$.val = &AliasedTableExpr{Expr: &ShowSource{ Statement: $2.stmt() }, Ordinality: $4.bool(), As: $5.aliasClause() }
@@ -4306,7 +4591,8 @@ d_expr:
 // | GROUPING '(' expr_list ')' { return unimplemented(sqllex) }
 
 func_application:
-  func_name '(' ')'
+  func_name '(' error { return helpWithFunction(sqllex, $1.resolvableFunctionReference()) }
+| func_name '(' ')'
   {
     $$.val = &FuncExpr{Func: $1.resolvableFunctionReference()}
   }
@@ -4368,6 +4654,7 @@ func_expr_common_subexpr:
   {
     $$.val = &FuncExpr{Func: wrapFunction($1)}
   }
+| CURRENT_DATE '(' error { return helpWithFunction(sqllex, ResolvableFunctionReference{UnresolvedName{Name($1)}}) }
 | CURRENT_TIMESTAMP
   {
     $$.val = &FuncExpr{Func: wrapFunction($1)}
@@ -4376,6 +4663,7 @@ func_expr_common_subexpr:
   {
     $$.val = &FuncExpr{Func: wrapFunction($1)}
   }
+| CURRENT_TIMESTAMP '(' error { return helpWithFunction(sqllex, ResolvableFunctionReference{UnresolvedName{Name($1)}}) }
 | CURRENT_ROLE { return unimplemented(sqllex, "current role") }
 | CURRENT_USER { return unimplemented(sqllex, "current user") }
 | SESSION_USER { return unimplemented(sqllex, "session user") }
@@ -4392,14 +4680,17 @@ func_expr_common_subexpr:
   {
     $$.val = &FuncExpr{Func: wrapFunction($1), Exprs: $3.exprs()}
   }
+| EXTRACT '(' error { return helpWithFunction(sqllex, ResolvableFunctionReference{UnresolvedName{Name($1)}}) }
 | EXTRACT_DURATION '(' extract_list ')'
   {
     $$.val = &FuncExpr{Func: wrapFunction($1), Exprs: $3.exprs()}
   }
+| EXTRACT_DURATION '(' error { return helpWithFunction(sqllex, ResolvableFunctionReference{UnresolvedName{Name($1)}}) }
 | OVERLAY '(' overlay_list ')'
   {
     $$.val = &FuncExpr{Func: wrapFunction($1), Exprs: $3.exprs()}
   }
+| OVERLAY '(' error { return helpWithFunction(sqllex, ResolvableFunctionReference{UnresolvedName{Name($1)}}) }
 | POSITION '(' position_list ')'
   {
     $$.val = &FuncExpr{Func: wrapFunction("STRPOS"), Exprs: $3.exprs()}
@@ -4408,6 +4699,7 @@ func_expr_common_subexpr:
   {
     $$.val = &FuncExpr{Func: wrapFunction($1), Exprs: $3.exprs()}
   }
+| SUBSTRING '(' error { return helpWithFunction(sqllex, ResolvableFunctionReference{UnresolvedName{Name($1)}}) }
 | TREAT '(' a_expr AS typename ')' { return unimplemented(sqllex, "treat") }
 | TRIM '(' BOTH trim_list ')'
   {
@@ -4445,10 +4737,12 @@ func_expr_common_subexpr:
   {
     $$.val = &FuncExpr{Func: wrapFunction($1), Exprs: $3.exprs()}
   }
+| GREATEST '(' error { return helpWithFunction(sqllex, ResolvableFunctionReference{UnresolvedName{Name($1)}}) }
 | LEAST '(' expr_list ')'
   {
     $$.val = &FuncExpr{Func: wrapFunction($1), Exprs: $3.exprs()}
   }
+| LEAST '(' error { return helpWithFunction(sqllex, ResolvableFunctionReference{UnresolvedName{Name($1)}}) }
 
 // Aggregate decoration clauses
 within_group_clause:
