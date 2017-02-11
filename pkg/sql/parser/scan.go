@@ -141,11 +141,30 @@ func (s *Scanner) UnimplementedWithIssue(issue int) {
 	s.lastError.unimplementedFeature = fmt.Sprintf("#%d", issue)
 }
 
+// SetHelp marks the "last error" field in the Scanner to become a
+// help text. This method is invoked in the error action of the
+// parser, so the help text is only produced if the last token
+// encountered was HELPTOKEN -- other cases are just syntax errors,
+// and in that case we do not want the help text to overwrite the
+// lastError field, which was set earlier to contain details about the
+// syntax error.
+func (s *Scanner) SetHelp(msg HelpMessage) {
+	if s.lastTok.id == HELPTOKEN {
+		s.lastError.unimplementedFeature = ""
+		s.lastError.msg = msg.String()
+	}
+}
+
 func (s *Scanner) Error(e string) {
 	var buf bytes.Buffer
-	if s.lastTok.id == ERROR {
+	switch s.lastTok.id {
+	case ERROR:
+		// This is a tokenizer (lexical) error: just emit the invalid
+		// input as error.
 		fmt.Fprintf(&buf, "%s", s.lastTok.str)
-	} else {
+	default:
+		// This is a contextual error. Print the provided error message
+		// and the error context.
 		fmt.Fprintf(&buf, "%s at or near \"%s\"", e, s.lastTok.str)
 	}
 
@@ -288,6 +307,10 @@ func (s *Scanner) scan(lval *sqlSymType) {
 			lval.id = NOT_REGMATCH
 			return
 		}
+		return
+
+	case '?':
+		lval.id = HELPTOKEN
 		return
 
 	case '<':
