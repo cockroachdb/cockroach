@@ -189,6 +189,7 @@ func (a distRecommendation) compose(b distRecommendation) distRecommendation {
 
 // checkSupportForNode returns a distRecommendation (as described above) or an
 // error if the plan subtree is not supported by DistSQL.
+// TODO(radu): add tests for this.
 func (dsp *distSQLPlanner) checkSupportForNode(node planNode) (distRecommendation, error) {
 	switch n := node.(type) {
 	case *filterNode:
@@ -261,8 +262,8 @@ func (dsp *distSQLPlanner) checkSupportForNode(node planNode) (distRecommendatio
 			}
 			rec = rec.compose(shouldDistribute)
 		}
-		if len(n.spans) == 0 {
-			// No spans means we are doing a full table scan.
+		// Check if we are doing a full scan.
+		if len(n.spans) == 1 && n.spans[0].Equal(n.desc.IndexSpan(n.index.ID)) {
 			rec = rec.compose(shouldDistribute)
 		}
 		return rec, nil
@@ -898,15 +899,7 @@ func (dsp *distSQLPlanner) createTableReaders(
 	}
 	ordering := dsp.convertOrdering(n.ordering.ordering, planToStreamColMap)
 
-	spans := n.spans
-	if len(n.spans) == 0 {
-		// If no spans were specified retrieve all of the keys that start with our
-		// index key prefix.
-		start := roachpb.Key(sqlbase.MakeIndexKeyPrefix(&n.desc, n.index.ID))
-		spans = roachpb.Spans{{Key: start, EndKey: start.PrefixEnd()}}
-	}
-
-	spanPartitions, err := dsp.partitionSpans(planCtx, spans)
+	spanPartitions, err := dsp.partitionSpans(planCtx, n.spans)
 	if err != nil {
 		return physicalPlan{}, err
 	}

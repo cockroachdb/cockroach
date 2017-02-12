@@ -499,6 +499,7 @@ EXPLAIN(EXPRS) SELECT COUNT(k) FROM kv
 1                 render 0     k
 2  scan
 2                 table        kv@primary
+2                 spans        ALL
 
 statement ok
 CREATE TABLE abc (
@@ -956,6 +957,7 @@ EXPLAIN(EXPRS) SELECT v, COUNT(k) FROM kv GROUP BY v ORDER BY COUNT(k)
 2                 render 2     v
 3  scan
 3                 table        kv@primary
+3                 spans        ALL
 
 query ITTT
 EXPLAIN(EXPRS) SELECT v, COUNT(*) FROM kv GROUP BY v ORDER BY COUNT(*)
@@ -973,6 +975,7 @@ EXPLAIN(EXPRS) SELECT v, COUNT(*) FROM kv GROUP BY v ORDER BY COUNT(*)
 2                 render 2     v
 3  scan
 3                 table        kv@primary
+3                 spans        ALL
 
 query ITTT
 EXPLAIN(EXPRS) SELECT v, COUNT(1) FROM kv GROUP BY v ORDER BY COUNT(1)
@@ -990,6 +993,7 @@ EXPLAIN(EXPRS) SELECT v, COUNT(1) FROM kv GROUP BY v ORDER BY COUNT(1)
 2                 render 2     v
 3  scan
 3                 table        kv@primary
+3                 spans        ALL
 
 
 # Verify that FILTER works.
@@ -1052,6 +1056,7 @@ EXPLAIN (exprs) SELECT COUNT(*) FILTER (WHERE k>5), MAX(k>5) FILTER(WHERE k>5) F
 1                 render 2     v
 2  scan
 2                 table        filter_test@primary
+2                 spans        ALL
 
 query ITTTTT
 EXPLAIN (TYPES) SELECT COUNT(*) FILTER (WHERE k > 5) FROM filter_test GROUP BY v
@@ -1065,3 +1070,4 @@ EXPLAIN (TYPES) SELECT COUNT(*) FILTER (WHERE k > 5) FROM filter_test GROUP BY v
 1                 render 2     ((k)[int] > (5)[int])[bool]
 2  scan                                                                                           (k int, v int, mark[omitted] bool, rowid[hidden,omitted] int)  +rowid,unique
 2                 table        filter_test@primary
+2                 spans        ALL

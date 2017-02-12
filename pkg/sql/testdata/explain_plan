@@ -25,12 +25,14 @@ EXPLAIN SELECT * FROM t
 ----
 0  scan
 0        table  t@primary
+0        spans  ALL
 
 query ITTTTT
 EXPLAIN (METADATA) SELECT * FROM t
 ----
 0  scan                      (k, v)  +k,unique
 0          table  t@primary
+0          spans  ALL
 
 query ITTT
 EXPLAIN SELECT * FROM t WHERE k = 1 OR k = 3
@@ -68,6 +70,7 @@ EXPLAIN(EXPRS) SELECT * FROM t WITH ORDINALITY LIMIT 1 OFFSET 1
 1  ordinality
 2  scan
 2                 table     t@primary
+2                 spans     ALL
 2                 limit     2
 
 query ITTT
@@ -77,6 +80,7 @@ EXPLAIN SELECT DISTINCT * FROM t
 0            key    k
 1  scan
 1            table  t@primary
+1            spans  ALL
 
 query ITTT
 EXPLAIN(EXPRS) SELECT DISTINCT * FROM t LIMIT 1 OFFSET 1
@@ -88,6 +92,7 @@ EXPLAIN(EXPRS) SELECT DISTINCT * FROM t LIMIT 1 OFFSET 1
 1                 key       k
 2  scan
 2                 table     t@primary
+2                 spans     ALL
 
 statement ok
 CREATE TABLE tc (a INT, b INT, INDEX c(a))

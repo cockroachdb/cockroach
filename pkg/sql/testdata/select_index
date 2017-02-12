@@ -123,6 +123,7 @@ EXPLAIN SELECT * FROM t x JOIN t y USING(b) WHERE x.b < '3'
 3              table     t@primary
 2  scan
 2              table     t@primary
+2              spans     ALL
 
 statement ok
 TRUNCATE TABLE t

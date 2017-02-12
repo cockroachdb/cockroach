@@ -24,6 +24,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/pkg/errors"
@@ -1790,4 +1791,17 @@ func (desc *TableDescriptor) InvalidateFKConstraints() {
 			desc.Indexes[i].ForeignKey.Validity = ConstraintValidity_Unvalidated
 		}
 	}
+}
+
+// PrimaryIndexSpan returns the Span that corresponds to the entire primary
+// index; can be used for a full table scan.
+func (desc *TableDescriptor) PrimaryIndexSpan() roachpb.Span {
+	return desc.IndexSpan(desc.PrimaryIndex.ID)
+}
+
+// IndexSpan returns the Span that corresponds to an entire index; can be used
+// for a full index scan.
+func (desc *TableDescriptor) IndexSpan(indexID IndexID) roachpb.Span {
+	prefix := roachpb.Key(MakeIndexKeyPrefix(desc, indexID))
+	return roachpb.Span{Key: prefix, EndKey: prefix.PrefixEnd()}
 }
