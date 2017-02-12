@@ -220,7 +220,7 @@ EXPLAIN (TYPES) SELECT v FROM t ORDER BY v
 query ITTTTT
 EXPLAIN (TYPES,NOEXPAND) SELECT v FROM t ORDER BY v
 ----
-0  nosort                       (v int)                  +v
+0  nosort                       (v int)
 0          order     +v
 1  render                       (v int)
 1          render 0  (v)[int]
