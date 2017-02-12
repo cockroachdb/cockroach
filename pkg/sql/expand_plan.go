@@ -179,10 +179,7 @@ func doExpandPlan(p *planner, params expandParameters, plan planNode) (planNode,
 		n.plan, err = doExpandPlan(p, params, n.plan)
 
 	case *windowNode:
-		// Under a window node, there may be arbitrarily more rows
-		// than those required by the context.
-		params.numRowsHint = math.MaxInt64
-		n.plan, err = doExpandPlan(p, params, n.plan)
+		n.plan, err = doExpandPlan(p, noParams, n.plan)
 
 	case *sortNode:
 		params.desiredOrdering = n.ordering
