@@ -80,6 +80,7 @@ EXPLAIN SELECT EXISTS (SELECT a FROM abc)
 2  render
 3  scan
 3           table       abc@primary
+3           spans       ALL
 1  nullrow
 
 query I
@@ -349,6 +350,7 @@ EXPLAIN(METADATA) SELECT x FROM xyz WHERE x IN (SELECT x FROM xyz);
 2  render                           (x)                          +x,unique
 3  scan                             (x, y[omitted], z[omitted])  +x,unique
 3          table       xyz@primary
+3          spans       ALL
 
 # This test checks that the double sub-query plan expansion caused by a
 # sub-expression being shared by two or more plan nodes does not

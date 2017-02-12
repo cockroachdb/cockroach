@@ -281,12 +281,14 @@ EXPLAIN SELECT * FROM t ORDER BY 1+2
 ----
 0  scan
 0        table  t@primary
+0        spans  ALL
 
 query ITTT
 EXPLAIN SELECT * FROM t ORDER BY length('abc')
 ----
 0  scan
 0        table  t@primary
+0        spans  ALL
 
 # Check that the sort key reuses the existing render.
 query ITTTTT
@@ -297,6 +299,7 @@ EXPLAIN(METADATA) SELECT b+2 FROM t ORDER BY b+2
 1  render                    ("b + 2")
 2  scan                      (a[omitted], b, c[omitted])  +a,unique
 2          table  t@primary
+2          spans  ALL
 
 # Check that the sort picks up a renamed render properly.
 query ITTTTT
@@ -307,6 +310,7 @@ EXPLAIN(METADATA) SELECT b+2 AS y FROM t ORDER BY y
 1  render                    (y)
 2  scan                      (a[omitted], b, c[omitted])  +a,unique
 2          table  t@primary
+2          spans  ALL
 
 # Check that the sort reuses a render behind a rename properly.
 query ITTTTT
@@ -317,6 +321,7 @@ EXPLAIN(METADATA) SELECT b+2 AS y FROM t ORDER BY b+2
 1  render                    (y)
 2  scan                      (a[omitted], b, c[omitted])  +a,unique
 2          table  t@primary
+2          spans  ALL
 
 statement ok
 CREATE TABLE abc (
@@ -650,3 +655,4 @@ EXPLAIN (METADATA) UPDATE t SET c = TRUE RETURNING b
 1  render                    (a, b, c, "true")  +a,unique
 2  scan                      (a, b, c)          +a,unique
 2          table  t@primary
+2          spans  ALL

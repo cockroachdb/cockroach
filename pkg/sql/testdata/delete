@@ -140,6 +140,7 @@ Level  Type    Field  Description
 1      render
 2      scan
 2              table  unindexed@primary
+2              spans  ALL
 
 query II colnames
 SELECT k, v FROM unindexed
