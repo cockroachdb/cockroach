@@ -141,9 +141,11 @@ EXPLAIN SELECT v FROM uniontest UNION SELECT k FROM uniontest
 1  render
 2  scan
 2          table  uniontest@primary
+2          spans  ALL
 1  render
 2  scan
 2          table  uniontest@primary
+2          spans  ALL
 
 query ITTT rowsort
 EXPLAIN SELECT v FROM uniontest UNION ALL SELECT k FROM uniontest
@@ -152,9 +154,11 @@ EXPLAIN SELECT v FROM uniontest UNION ALL SELECT k FROM uniontest
 1  render
 2  scan
 2          table  uniontest@primary
+2          spans  ALL
 1  render
 2  scan
 2          table  uniontest@primary
+2          spans  ALL
 
 
 query error each UNION query must have the same number of columns: 2 vs 1

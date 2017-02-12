@@ -75,7 +75,9 @@ func TestTableReader(t *testing.T) {
 		expected string
 	}{
 		{
-			spec: TableReaderSpec{},
+			spec: TableReaderSpec{
+				Spans: []TableReaderSpan{{Span: td.PrimaryIndexSpan()}},
+			},
 			post: PostProcessSpec{
 				Filter:        Expression{Expr: "@3 < 5 AND @2 != 3"}, // sum < 5 && b != 3
 				OutputColumns: []uint32{0, 1},
@@ -83,7 +85,9 @@ func TestTableReader(t *testing.T) {
 			expected: "[[0 1] [0 2] [0 4] [1 0] [1 1] [1 2] [2 0] [2 1] [2 2] [3 0] [3 1] [4 0]]",
 		},
 		{
-			spec: TableReaderSpec{},
+			spec: TableReaderSpec{
+				Spans: []TableReaderSpan{{Span: td.PrimaryIndexSpan()}},
+			},
 			post: PostProcessSpec{
 				Filter:        Expression{Expr: "@3 < 5 AND @2 != 3"},
 				OutputColumns: []uint32{3}, // s
