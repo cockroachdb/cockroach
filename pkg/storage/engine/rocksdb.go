@@ -45,6 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
@@ -281,6 +282,11 @@ func (c RocksDBCache) Release() {
 	}
 }
 
+type pendingBatch struct {
+	batch *rocksDBBatch
+	sync  bool
+}
+
 // RocksDB is a wrapper around a RocksDB database instance.
 type RocksDB struct {
 	rdb          *C.DBEngine
@@ -290,6 +296,15 @@ type RocksDB struct {
 	maxSize      int64              // Used for calculating rebalancing and free space.
 	maxOpenFiles int                // The maximum number of open files this instance will use.
 	deallocated  chan struct{}      // Closed when the underlying handle is deallocated.
+
+	commit struct {
+		syncutil.Mutex
+		cond       *sync.Cond
+		committing bool
+		commitSeq  uint64
+		pendingSeq uint64
+		pending    []pendingBatch
+	}
 }
 
 var _ Engine = &RocksDB{}
@@ -387,6 +402,8 @@ func (r *RocksDB) open() error {
 			return err
 		}
 	}
+
+	r.commit.cond = sync.NewCond(&r.commit.Mutex)
 
 	// Start a goroutine that will finish when the underlying handle
 	// is deallocated. This is used to check a leak in tests.
@@ -930,6 +947,7 @@ type rocksDBBatch struct {
 	distinctOpen       bool
 	distinctNeedsFlush bool
 	writeOnly          bool
+	commitErr          error
 }
 
 func newRocksDBBatch(parent *RocksDB, writeOnly bool) *rocksDBBatch {
@@ -1081,15 +1099,82 @@ func (r *rocksDBBatch) NewIterator(prefix bool) Iterator {
 	return iter
 }
 
-func (r *rocksDBBatch) Commit(sync bool) error {
+func (r *rocksDBBatch) Commit(syncCommit bool) error {
 	if r.closed() {
 		panic("this batch was already committed")
 	}
+	r.distinctOpen = false
 
+	// Combine multiple write-only batch commits into a single call to
+	// RocksDB. RocksDB is supposed to be performing such batching internally,
+	// but whether Cgo or something else, it isn't achieving the same degree of
+	// batching. Instrumentation shows that internally RocksDB almost never
+	// batches commits together. While the batching below often can batch 20 or
+	// 30 concurrent commits.
+	if r.writeOnly {
+		// The leader for the commit is the first batch to be added to the pending
+		// slice. Each commit has an associated sequence number. For a given
+		// sequence number, there can be only a single leader.
+		c := &r.parent.commit
+		c.Lock()
+		leader := len(c.pending) == 0
+		c.pending = append(c.pending, pendingBatch{r, syncCommit})
+		seq := c.pendingSeq
+
+		if leader {
+			// We're the leader. Wait for any running commit to finish.
+			for c.committing {
+				c.cond.Wait()
+			}
+			if seq != c.pendingSeq {
+				log.Fatalf(context.TODO(), "expected commit sequence %d, but found %d", seq, c.pendingSeq)
+			}
+			pending := c.pending
+			c.pending = nil
+			c.pendingSeq++
+			c.committing = true
+			c.Unlock()
+
+			// Bundle all of the batches together.
+			var err error
+			for _, b := range pending[1:] {
+				if err = r.ApplyBatchRepr(b.batch.Repr(), false /* sync */); err != nil {
+					break
+				}
+				// Perform a sync if any of the commits required a sync.
+				syncCommit = syncCommit || b.sync
+			}
+
+			if err == nil {
+				err = r.commitInternal(syncCommit)
+			}
+
+			// Propagate the error to all of the batches involved in the commit.
+			for _, b := range pending {
+				b.batch.commitErr = err
+			}
+
+			c.Lock()
+			c.committing = false
+			c.commitSeq = seq
+			c.cond.Broadcast()
+		} else {
+			// We're a follower. Wait for the commit to finish.
+			for c.commitSeq < seq {
+				c.cond.Wait()
+			}
+		}
+		c.Unlock()
+		return r.commitErr
+	}
+
+	return r.commitInternal(syncCommit)
+}
+
+func (r *rocksDBBatch) commitInternal(sync bool) error {
 	start := timeutil.Now()
 	var count, size int
 
-	r.distinctOpen = false
 	if r.flushes > 0 {
 		// We've previously flushed mutations to the C++ batch, so we have to flush
 		// any remaining mutations as well and then commit the batch.
