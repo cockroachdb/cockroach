@@ -217,20 +217,9 @@ func doExpandPlan(p *planner, params expandParameters, plan planNode) (planNode,
 		if !ordering.isEmpty() {
 			n.columnsInOrder = make([]bool, len(n.plan.Columns()))
 			for colIdx := range ordering.exactMatchCols {
-				if colIdx >= len(n.columnsInOrder) {
-					// If the exact-match column is not part of the output, we can safely ignore it.
-					continue
-				}
 				n.columnsInOrder[colIdx] = true
 			}
 			for _, c := range ordering.ordering {
-				if c.ColIdx >= len(n.columnsInOrder) {
-					// Cannot use sort order. This happens when the
-					// columns used for sorting are not part of the output.
-					// e.g. SELECT a FROM t ORDER BY c.
-					n.columnsInOrder = nil
-					break
-				}
 				n.columnsInOrder[c.ColIdx] = true
 			}
 		}
