@@ -331,6 +331,9 @@ type Replica struct {
 		// of the raft log. This will be correct when all log entries predating this
 		// process have been truncated.
 		raftLogSize int64
+		// raftHardState is an in-memory copy of the Raft hard state. Used to
+		// determine if a new hard state must be synchronously written to disk.
+		raftHardState raftpb.HardState
 		// pendingLeaseRequest is used to coalesce RequestLease requests.
 		pendingLeaseRequest pendingLeaseRequest
 		// minLeaseProposedTS is the minimum acceptable lease.ProposedTS; only
@@ -659,6 +662,10 @@ func (r *Replica) initLocked(
 		return err
 	}
 	r.rangeStr.store(0, r.mu.state.Desc)
+
+	if r.mu.raftHardState, err = r.stateLoader.loadHardState(ctx, r.store.Engine()); err != nil {
+		return err
+	}
 
 	r.mu.lastIndex, err = r.stateLoader.loadLastIndex(ctx, r.store.Engine())
 	if err != nil {
@@ -2616,6 +2623,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 		}
 		return hasReady /* unquiesceAndWakeLeader */, nil
 	})
+	prevHardState := r.mu.raftHardState
 	r.mu.Unlock()
 	if err != nil {
 		return stats, err
@@ -2715,7 +2723,10 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	writer.Close()
 	// Synchronously commit the batch with the Raft log entries and Raft hard
 	// state as we're promising not to lose this data.
-	if err := batch.Commit(syncRaftLog); err != nil {
+	needSync := len(rd.Entries) > 0 ||
+		rd.HardState.Vote != prevHardState.Vote ||
+		rd.HardState.Term != prevHardState.Term
+	if err := batch.Commit(syncRaftLog && needSync); err != nil {
 		return stats, err
 	}
 
@@ -2726,6 +2737,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	r.store.raftEntryCache.addEntries(r.RangeID, rd.Entries)
 	r.mu.lastIndex = lastIndex
 	r.mu.raftLogSize = raftLogSize
+	r.mu.raftHardState = rd.HardState
 	r.mu.leaderID = leaderID
 	r.mu.Unlock()
 

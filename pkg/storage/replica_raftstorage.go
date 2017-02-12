@@ -682,6 +682,7 @@ func (r *Replica) applySnapshot(
 	// raftpb.SnapshotMetadata.
 	r.mu.lastIndex = s.RaftAppliedIndex
 	r.mu.raftLogSize = raftLogSize
+	r.mu.raftHardState = hs
 	// Update the range and store stats.
 	r.store.metrics.subtractMVCCStats(r.mu.state.Stats)
 	r.store.metrics.addMVCCStats(s.Stats)
