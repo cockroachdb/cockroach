@@ -63,16 +63,17 @@ CockroachDB achieves survivability:
   Japan }`, `{ Ireland, US-East, US-West}`, `{ Ireland, US-East,
   US-West, Japan, Australia }`).
 
-CockroachDB provides [snapshot isolation](http://en.wikipedia.org/wiki/Snapshot_isolation) (SI) and
+CockroachDB provides [snapshot
+isolation](http://en.wikipedia.org/wiki/Snapshot_isolation) (SI) and
 serializable snapshot isolation (SSI) semantics, allowing **externally
-consistent, lock-free reads and writes**--both from a historical
-snapshot timestamp and from the current wall clock time. SI provides
-lock-free reads and writes but still allows write skew. SSI eliminates
-write skew, but introduces a performance hit in the case of a
-contentious system. SSI is the default isolation; clients must
-consciously decide to trade correctness for performance. CockroachDB
-implements [a limited form of linearizability](#linearizability),
-providing ordering for any observer or chain of observers.
+consistent, lock-free reads and writes**--both from a historical snapshot
+timestamp and from the current wall clock time. SI provides lock-free reads
+and writes but still allows write skew. SSI eliminates write skew, but
+introduces a performance hit in the case of a contentious system. SSI is the
+default isolation; clients must consciously decide to trade correctness for
+performance. CockroachDB implements [a limited form of linearizability
+](#strict-serializability-linearizability), providing ordering for any
+observer or chain of observers.
 
 Similar to
 [Spanner](http://static.googleusercontent.com/media/research.google.com/en/us/archive/spanner-osdi2012.pdf)
@@ -1399,7 +1400,7 @@ matched by a guarantee), we insert a **sorting aggregator**.
   An optional output filter has access to the group key and all the
   aggregated values (i.e. it can use even values that are not ultimately
   outputted).
-- `SORT` sorts the input according to a configurable set of columns. 
+- `SORT` sorts the input according to a configurable set of columns.
   This is a no-grouping aggregator, hence it can be distributed arbitrarily to
   the data producers. This means that it doesn't produce a global ordering,
   instead it just guarantees an intra-stream ordering on each physical output
