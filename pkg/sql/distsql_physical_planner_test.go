@@ -43,7 +43,7 @@ import (
 // TODO(radu): we should verify that the plan is indeed distributed as
 // intended.
 func SplitTable(
-	t *testing.T,
+	tb testing.TB,
 	tc serverutils.TestClusterInterface,
 	desc *sqlbase.TableDescriptor,
 	targetNode int,
@@ -51,27 +51,27 @@ func SplitTable(
 ) {
 	pik, err := sqlbase.MakePrimaryIndexKey(desc, vals...)
 	if err != nil {
-		t.Fatal(err)
+		tb.Fatal(err)
 	}
 
 	splitKey := keys.MakeRowSentinelKey(pik)
 	_, rightRange, err := tc.Server(0).SplitRange(splitKey)
 	if err != nil {
-		t.Fatal(err)
+		tb.Fatal(err)
 	}
 	splitKey = rightRange.StartKey.AsRawKey()
 	rightRange, err = tc.AddReplicas(splitKey, tc.Target(targetNode))
 	if err != nil {
-		t.Fatal(err)
+		tb.Fatal(err)
 	}
 
 	// This transfer is necessary to avoid waiting for the lease to expire when
 	// removing the first replica.
 	if err := tc.TransferRangeLease(rightRange, tc.Target(targetNode)); err != nil {
-		t.Fatal(err)
+		tb.Fatal(err)
 	}
 	if _, err := tc.RemoveReplicas(splitKey, tc.Target(0)); err != nil {
-		t.Fatal(err)
+		tb.Fatal(err)
 	}
 }
 
