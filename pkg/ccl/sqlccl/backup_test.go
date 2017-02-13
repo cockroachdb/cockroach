@@ -602,7 +602,7 @@ func TestBackupLevelDB(t *testing.T) {
 func BenchmarkClusterBackup(b *testing.B) {
 	defer tracing.Disable()()
 
-	ctx, dir, tc, sqlDB, cleanupFn := backupRestoreTestSetup(b, multiNode, 0)
+	ctx, dir, _, sqlDB, cleanupFn := backupRestoreTestSetup(b, multiNode, 0)
 	defer cleanupFn()
 
 	ts := hlc.Timestamp{WallTime: hlc.UnixNano()}
@@ -611,10 +611,15 @@ func BenchmarkClusterBackup(b *testing.B) {
 	}
 	sqlDB.Exec(fmt.Sprintf(`RESTORE DATABASE bench FROM '%s'`, dir))
 
-	for _, split := range bankSplitStmts(b.N, backupRestoreDefaultRanges) {
-		sqlDB.Exec(split)
-	}
-	rebalanceLeases(b, tc)
+	// TODO(dan): Occasionally, this returns but seems to still be doing work,
+	// which wildly throws off the timing of below and so the results of the
+	// benchmark. When DistSQL improves this infrastructure, use what they've
+	// built.
+	//
+	// for _, split := range bankSplitStmts(b.N, backupRestoreDefaultRanges) {
+	// 	sqlDB.Exec(split)
+	// }
+	// rebalanceLeases(b, tc)
 
 	b.ResetTimer()
 	var unused string
