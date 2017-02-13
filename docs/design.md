@@ -71,7 +71,7 @@ lock-free reads and writes but still allows write skew. SSI eliminates
 write skew, but introduces a performance hit in the case of a
 contentious system. SSI is the default isolation; clients must
 consciously decide to trade correctness for performance. CockroachDB
-implements [a limited form of linearizability](#linearizability),
+implements [a limited form of linearizability](#strict-serializability-linearizability),
 providing ordering for any observer or chain of observers.
 
 Similar to
