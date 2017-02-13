@@ -50,8 +50,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
-// #cgo darwin LDFLAGS: -Wl,-undefined -Wl,dynamic_lookup
-// #cgo !darwin LDFLAGS: -Wl,-unresolved-symbols=ignore-all
+// #cgo !strictld,darwin LDFLAGS: -Wl,-undefined -Wl,dynamic_lookup
+// #cgo !strictld,!darwin LDFLAGS: -Wl,-unresolved-symbols=ignore-all
 // #cgo linux LDFLAGS: -lrt
 //
 // #include <stdlib.h>

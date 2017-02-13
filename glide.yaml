@@ -13,9 +13,9 @@ import:
 - package: github.com/cockroachdb/c-jemalloc
   version: 7eb7980d8a9f68b771568a7eb15196a63a818595
 - package: github.com/cockroachdb/c-protobuf
-  version: 070b64667a22925d971878b61e4f0c1df31e8599
+  version: e80b13e872f9d2d1f746d7423f598fd0b56a9e7b
 - package: github.com/cockroachdb/c-rocksdb
-  version: 608bf6179ca8b317e707394d263059a933808e2f
+  version: b7f2f157e5141db8856a8f8b97c0ccd74baaa4db
 - package: github.com/cockroachdb/cmux
   version: 30d10be492927e2dcae0089c374c455d42414fcb
 - package: github.com/cockroachdb/cockroach-go
