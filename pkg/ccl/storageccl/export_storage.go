@@ -9,6 +9,7 @@
 package storageccl
 
 import (
+	"encoding/base64"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -16,9 +17,11 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	gcs "cloud.google.com/go/storage"
+	azr "github.com/Azure/azure-sdk-for-go/storage"
 	"github.com/pkg/errors"
 	"github.com/rlmcpherson/s3gof3r"
 	"golang.org/x/net/context"
@@ -32,6 +35,11 @@ const (
 	S3AccessKeyParam = "AWS_ACCESS_KEY_ID"
 	// S3SecretParam is the query parameter for the 'secret' in an S3 URI.
 	S3SecretParam = "AWS_SECRET_ACCESS_KEY"
+
+	// AzureAccountNameParam is the query parameter for account_name in an azure URI.
+	AzureAccountNameParam = "AZURE_ACCOUNT_NAME"
+	// AzureAccountKeyParam is the query parameter for account_key in an azure URI.
+	AzureAccountKeyParam = "AZURE_ACCOUNT_KEY"
 )
 
 // ExportStorageConfFromURI generates an ExportStorage config from a URI string.
@@ -64,6 +72,21 @@ func ExportStorageConfFromURI(path string) (roachpb.ExportStorage, error) {
 			Prefix: uri.Path,
 		}
 		conf.GoogleCloudConfig.Prefix = strings.TrimLeft(conf.GoogleCloudConfig.Prefix, "/")
+	case "azure":
+		conf.Provider = roachpb.ExportStorageProvider_Azure
+		conf.AzureConfig = &roachpb.ExportStorage_Azure{
+			Container:   uri.Host,
+			Prefix:      uri.Path,
+			AccountName: uri.Query().Get(AzureAccountNameParam),
+			AccountKey:  uri.Query().Get(AzureAccountKeyParam),
+		}
+		if conf.AzureConfig.AccountName == "" {
+			return conf, errors.Errorf("azure uri missing %q paramer", AzureAccountNameParam)
+		}
+		if conf.AzureConfig.AccountKey == "" {
+			return conf, errors.Errorf("azure uri missing %q paramer", AzureAccountKeyParam)
+		}
+		conf.AzureConfig.Prefix = strings.TrimLeft(conf.AzureConfig.Prefix, "/")
 	case "http", "https":
 		conf.Provider = roachpb.ExportStorageProvider_Http
 		conf.HttpPath.BaseUri = path
@@ -96,6 +119,8 @@ func MakeExportStorage(ctx context.Context, dest roachpb.ExportStorage) (ExportS
 		return makeS3Storage(dest.S3Config)
 	case roachpb.ExportStorageProvider_GoogleCloud:
 		return makeGCSStorage(ctx, dest.GoogleCloudConfig)
+	case roachpb.ExportStorageProvider_Azure:
+		return makeAzureStorage(dest.AzureConfig)
 	}
 	return nil, errors.Errorf("unsupported export destination type: %s", dest.Provider.String())
 }
@@ -509,6 +534,152 @@ func (g *gcsStorage) Close() error {
 		return err
 	}
 	return gErr
+}
+
+type azureStorage struct {
+	conf   *roachpb.ExportStorage_Azure
+	client azr.BlobStorageClient
+	prefix string
+	tmp    tmpHelper
+}
+
+var _ ExportStorage = &azureStorage{}
+
+type azureStorageWriter struct {
+	ctx       context.Context
+	client    azr.BlobStorageClient
+	local     string
+	container string
+	name      string
+}
+
+var _ ExportFileWriter = &azureStorageWriter{}
+
+func makeAzureStorage(conf *roachpb.ExportStorage_Azure) (ExportStorage, error) {
+	if conf == nil {
+		return nil, errors.Errorf("azure upload requested but info missing")
+	}
+	client, err := azr.NewBasicClient(conf.AccountName, conf.AccountKey)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to create azure client")
+	}
+	return &azureStorage{
+		conf:   conf,
+		client: client.GetBlobService(),
+		prefix: conf.Prefix,
+	}, err
+}
+
+func (s *azureStorage) Conf() roachpb.ExportStorage {
+	return roachpb.ExportStorage{
+		Provider:    roachpb.ExportStorageProvider_Azure,
+		AzureConfig: s.conf,
+	}
+}
+
+func (s *azureStorage) PutFile(ctx context.Context, basename string) (ExportFileWriter, error) {
+	local, err := s.tmp.tmpFile(basename)
+	if err != nil {
+		return nil, err
+	}
+	return &azureStorageWriter{
+		ctx:       ctx,
+		local:     local,
+		client:    s.client,
+		container: s.conf.Container,
+		name:      filepath.Join(s.prefix, basename),
+	}, nil
+}
+
+func (s *azureStorageWriter) LocalFile() string {
+	return s.local
+}
+
+func (s *azureStorageWriter) Finish() error {
+	f, err := os.Open(s.local)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	// A blob in Azure is composed of an ordered list of blocks. To create a
+	// blob, we must first create an empty block blob (i.e., a blob backed
+	// by blocks). Then we upload the blocks. Blocks can only by 4 MiB (in
+	// this version of the API) and have some identifier. Once the blocks are
+	// uploaded, then we put a block list, which assigns a list of blocks to a
+	// blob. When assigning blocks to a blob, we can choose between committed
+	// (blocks already assigned to the blob), uncommitted (uploaded blocks not
+	// yet assigned to the blob), or latest. chunkReader takes care of splitting
+	// up the input file into small enough chunks the API can handle.
+
+	if err := s.client.CreateBlockBlob(s.container, s.name); err != nil {
+		return err
+	}
+	const fourMiB = 1024 * 1024 * 4
+	var blocks []azr.Block
+	i := 1
+	if err := chunkReader(f, fourMiB, func(b []byte) error {
+		select {
+		case <-s.ctx.Done():
+			return s.ctx.Err()
+		default:
+		}
+		id := base64.URLEncoding.EncodeToString([]byte(strconv.Itoa(i)))
+		blocks = append(blocks, azr.Block{ID: id, Status: azr.BlockStatusUncommitted})
+		return s.client.PutBlock(s.container, s.name, id, b)
+	}); err != nil {
+		return err
+	}
+	if err := s.client.PutBlockList(s.container, s.name, blocks); err != nil {
+		return err
+	}
+	return nil
+}
+
+// chunkReader calls f with chunks of size from r. The same underlying byte
+// slice is used for each call to f. f can return an error to stop the file
+// reading. If so, that error will be returned.
+func chunkReader(r io.Reader, size int, f func([]byte) error) error {
+	b := make([]byte, size)
+	for {
+		n, err := r.Read(b)
+		if n > 0 {
+			err = f(b[:n])
+			if err != nil {
+				return err
+			}
+		}
+		if err == io.EOF {
+			break
+		} else if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (s *azureStorageWriter) Cleanup() {
+}
+
+func (s *azureStorage) ReadFile(_ context.Context, basename string) (io.ReadCloser, error) {
+	r, err := s.client.GetBlob(s.conf.Container, filepath.Join(s.prefix, basename))
+	return r, errors.Wrap(err, "failed to create azure reader")
+}
+
+func (s *azureStorage) FetchFile(ctx context.Context, basename string) (string, error) {
+	r, err := s.ReadFile(ctx, basename)
+	if err != nil {
+		return "", errors.Wrap(err, "failed to create azure reader for fetch")
+	}
+	return fetchFile(r, &s.tmp, basename)
+}
+
+func (s *azureStorage) Delete(_ context.Context, basename string) error {
+	return s.client.DeleteBlob(s.conf.Container, filepath.Join(s.prefix, basename), nil)
+}
+
+func (s *azureStorage) Close() error {
+	return s.tmp.Close()
 }
 
 type tmpHelper struct {

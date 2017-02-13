@@ -710,6 +710,7 @@ enum ExportStorageProvider {
   Http = 2;
   S3 = 3;
   GoogleCloud = 4;
+  Azure = 5;
 }
 
 message ExportStorage {
@@ -733,10 +734,18 @@ message ExportStorage {
     optional string bucket = 1 [(gogoproto.nullable) = false];
     optional string prefix = 2 [(gogoproto.nullable) = false];
   }
+  message Azure {
+    optional string container = 1 [(gogoproto.nullable) = false];
+    optional string prefix = 2 [(gogoproto.nullable) = false];
+
+    optional string account_name = 3 [(gogoproto.nullable) = false];
+    optional string account_key = 4 [(gogoproto.nullable) = false];
+  }
   optional LocalFilePath LocalFile = 2 [(gogoproto.nullable) = false];
   optional Http HttpPath = 3 [(gogoproto.nullable) = false];
   optional GCS GoogleCloudConfig = 4;
   optional S3 S3Config = 5;
+  optional Azure AzureConfig = 6;
 }
 
 // WriteBatchRequest is arguments to the WriteBatch() method, to apply the
