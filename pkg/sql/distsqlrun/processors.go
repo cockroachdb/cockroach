@@ -17,6 +17,7 @@
 package distsqlrun
 
 import (
+	"math"
 	"sync"
 
 	"golang.org/x/net/context"
@@ -33,7 +34,7 @@ import (
 type processor interface {
 	// Run is the main loop of the processor.
 	// If wg is non-nil, wg.Done is called before exiting.
-	Run(wg *sync.WaitGroup)
+	Run(ctx context.Context, wg *sync.WaitGroup)
 }
 
 // procOutputHelper is a helper type that performs filtering and projection on
@@ -42,13 +43,20 @@ type procOutputHelper struct {
 	numInternalCols int
 	output          RowReceiver
 	rowAlloc        sqlbase.EncDatumRowAlloc
-	filter          *exprHelper
-	outputCols      []uint32
 
-	internalErr error
-
+	filter      *exprHelper
 	renderExprs []exprHelper
 	renderTypes []sqlbase.ColumnType
+	outputCols  []uint32
+
+	// offset is the number of rows that are suppressed.
+	offset uint64
+	// maxRowIdx is the number of rows after which we can stop (offset + limit),
+	// or MaxUint64 if there is no limit.
+	maxRowIdx uint64
+
+	rowIdx      uint64
+	internalErr error
 }
 
 // init sets up a procOutputHelper. The types describe the internal schema of
@@ -87,6 +95,13 @@ func (h *procOutputHelper) init(
 			}
 			h.renderTypes[i] = sqlbase.DatumTypeToColumnType(h.renderExprs[i].expr.ResolvedType())
 		}
+	}
+
+	h.offset = post.Offset
+	if post.Limit == 0 || post.Limit >= math.MaxUint64-h.offset {
+		h.maxRowIdx = math.MaxUint64
+	} else {
+		h.maxRowIdx = h.offset + post.Limit
 	}
 
 	return nil
@@ -131,6 +146,9 @@ func (h *procOutputHelper) neededColumns() []bool {
 // emitRow sends a row through the post-processing stage. The same row can be
 // reused. Returns false if the caller should stop emitting more rows.
 func (h *procOutputHelper) emitRow(ctx context.Context, row sqlbase.EncDatumRow) bool {
+	if h.rowIdx >= h.maxRowIdx {
+		return false
+	}
 	if h.filter != nil {
 		// Filtering.
 		passes, err := h.filter.evalFilter(row)
@@ -144,6 +162,11 @@ func (h *procOutputHelper) emitRow(ctx context.Context, row sqlbase.EncDatumRow)
 			}
 			return true
 		}
+	}
+	h.rowIdx++
+	if h.rowIdx <= h.offset {
+		// Suppress row.
+		return true
 	}
 	var outRow sqlbase.EncDatumRow
 	if h.renderExprs != nil {
@@ -173,6 +196,10 @@ func (h *procOutputHelper) emitRow(ctx context.Context, row sqlbase.EncDatumRow)
 	}
 	if !h.output.PushRow(outRow) {
 		log.VEventf(ctx, 1, "no more rows required")
+		return false
+	}
+	if h.rowIdx == h.maxRowIdx {
+		log.VEventf(ctx, 1, "hit row limit")
 		return false
 	}
 	return true
@@ -208,11 +235,11 @@ func newNoopProcessor(
 }
 
 // Run is part of the processor interface.
-func (n *noopProcessor) Run(wg *sync.WaitGroup) {
+func (n *noopProcessor) Run(ctx context.Context, wg *sync.WaitGroup) {
 	if wg != nil {
 		defer wg.Done()
 	}
-	ctx, span := tracing.ChildSpan(n.flowCtx.Context, "noop")
+	ctx, span := tracing.ChildSpan(ctx, "noop")
 	defer tracing.FinishSpan(span)
 
 	for {
@@ -223,6 +250,7 @@ func (n *noopProcessor) Run(wg *sync.WaitGroup) {
 		}
 		if !n.out.emitRow(ctx, row) {
 			n.input.ConsumerDone()
+			n.out.close(nil)
 			return
 		}
 	}
@@ -240,6 +268,12 @@ func newProcessor(
 			return nil, err
 		}
 		return newNoopProcessor(flowCtx, inputs[0], post, outputs[0])
+	}
+	if core.Values != nil {
+		if err := checkNumInOut(inputs, outputs, 0, 1); err != nil {
+			return nil, err
+		}
+		return newValuesProcessor(flowCtx, core.Values, post, outputs[0])
 	}
 	if core.TableReader != nil {
 		if err := checkNumInOut(inputs, outputs, 0, 1); err != nil {

@@ -37,6 +37,7 @@ import (
 
 func TestManualReplication(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	t.Skip("#13502")
 
 	tc := StartTestCluster(t, 3,
 		base.TestClusterArgs{

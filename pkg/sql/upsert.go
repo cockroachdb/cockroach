@@ -37,8 +37,8 @@ type upsertHelper struct {
 	sourceInfo         *dataSourceInfo
 	excludedSourceInfo *dataSourceInfo
 	allExprsIdentity   bool
-	curSourceRow       parser.DTuple
-	curExcludedRow     parser.DTuple
+	curSourceRow       parser.Datums
+	curExcludedRow     parser.Datums
 
 	// This struct must be allocated on the heap and its location stay
 	// stable after construction because it implements
@@ -133,16 +133,16 @@ func (p *planner) makeUpsertHelper(
 	helper.evalExprs = evalExprs
 
 	helper.allExprsIdentity = true
-	for i, expr := range evalExprs {
-		// analyzeExpr above has normalized all direct column names to ColumnItems.
-		c, ok := expr.(*parser.ColumnItem)
+	for _, expr := range evalExprs {
+		ivar, ok := expr.(*parser.IndexedVar)
 		if !ok {
 			helper.allExprsIdentity = false
 			break
 		}
-		if len(c.Selector) > 0 ||
-			!c.TableName.TableName.Equal(upsertExcludedTable.TableName) ||
-			c.ColumnName.Normalize() != parser.ReNormalizeName(updateCols[i].Name) {
+		// Idx on the IndexedVar references a columns from one of the two
+		// sources. They're ordered table source then excluded source. If any
+		// expr references a table column, then the fast path doesn't apply.
+		if ivar.Idx < len(sourceInfo.sourceColumns) {
 			helper.allExprsIdentity = false
 			break
 		}
@@ -160,8 +160,8 @@ func (uh *upsertHelper) walkExprs(walk func(desc string, index int, expr parser.
 // eval returns the values for the update case of an upsert, given the row
 // that would have been inserted and the existing (conflicting) values.
 func (uh *upsertHelper) eval(
-	insertRow parser.DTuple, existingRow parser.DTuple,
-) (parser.DTuple, error) {
+	insertRow parser.Datums, existingRow parser.Datums,
+) (parser.Datums, error) {
 	uh.curSourceRow = existingRow
 	uh.curExcludedRow = insertRow
 

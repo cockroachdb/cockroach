@@ -172,7 +172,6 @@ func (gt *grpcTransport) SendNext(ctx context.Context, done chan<- BatchCall) {
 	// cancel them when it received the first result.
 	ctx, sp := tracing.ForkCtxSpan(ctx, "grpcTransport SendNext")
 	go func() {
-		defer tracing.FinishSpan(sp)
 		gt.opts.metrics.SentCount.Inc(1)
 		reply, err := func() (*roachpb.BatchResponse, error) {
 			if enableLocalCalls {
@@ -206,6 +205,7 @@ func (gt *grpcTransport) SendNext(ctx context.Context, done chan<- BatchCall) {
 			return reply, err
 		}()
 		gt.setPending(client.args.Replica, false)
+		tracing.FinishSpan(sp)
 		done <- BatchCall{Reply: reply, Err: err}
 	}()
 }

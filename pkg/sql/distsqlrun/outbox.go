@@ -24,6 +24,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/pkg/errors"
 )
 
 const outboxBufRows = 16
@@ -78,27 +79,27 @@ func (m *outbox) setFlowCtx(flowCtx *FlowCtx) {
 
 // addRow encodes a row into rowBuf. If enough rows were accumulated
 // calls flush().
-func (m *outbox) addRow(row sqlbase.EncDatumRow) error {
+func (m *outbox) addRow(ctx context.Context, row sqlbase.EncDatumRow) error {
 	err := m.encoder.AddRow(row)
 	if err != nil {
 		return err
 	}
 	m.numRows++
 	if m.numRows >= outboxBufRows {
-		return m.flush(false, nil)
+		return m.flush(ctx, false, nil)
 	}
 	return nil
 }
 
 // flush sends the rows accumulated so far in a StreamMessage.
-func (m *outbox) flush(last bool, err error) error {
+func (m *outbox) flush(ctx context.Context, last bool, err error) error {
 	if !last && m.numRows == 0 {
 		return nil
 	}
 	msg := m.encoder.FormMessage(last, err)
 
 	if log.V(3) {
-		log.Infof(m.flowCtx.Context, "flushing outbox")
+		log.Infof(ctx, "flushing outbox")
 	}
 	var sendErr error
 	if m.stream != nil {
@@ -108,10 +109,10 @@ func (m *outbox) flush(last bool, err error) error {
 	}
 	if sendErr != nil {
 		if log.V(1) {
-			log.Errorf(m.flowCtx.Context, "outbox flush error: %s", sendErr)
+			log.Errorf(ctx, "outbox flush error: %s", sendErr)
 		}
 	} else if log.V(3) {
-		log.Infof(m.flowCtx.Context, "outbox flushed")
+		log.Infof(ctx, "outbox flushed")
 	}
 	if sendErr != nil {
 		return sendErr
@@ -121,7 +122,7 @@ func (m *outbox) flush(last bool, err error) error {
 	return nil
 }
 
-func (m *outbox) mainLoop() error {
+func (m *outbox) mainLoop(ctx context.Context) error {
 	if m.syncFlowStream == nil {
 		conn, err := m.flowCtx.rpcCtx.GRPCDial(m.addr)
 		if err != nil {
@@ -129,17 +130,17 @@ func (m *outbox) mainLoop() error {
 		}
 		client := NewDistSQLClient(conn)
 		if log.V(2) {
-			log.Infof(m.flowCtx.Context, "outbox: calling FlowStream")
+			log.Infof(ctx, "outbox: calling FlowStream")
 		}
 		m.stream, err = client.FlowStream(context.TODO())
 		if err != nil {
 			if log.V(1) {
-				log.Infof(m.flowCtx.Context, "FlowStream error: %s", err)
+				log.Infof(ctx, "FlowStream error: %s", err)
 			}
 			return err
 		}
 		if log.V(2) {
-			log.Infof(m.flowCtx.Context, "outbox: FlowStream returned")
+			log.Infof(ctx, "outbox: FlowStream returned")
 		}
 	}
 
@@ -151,20 +152,20 @@ func (m *outbox) mainLoop() error {
 		case d, ok := <-m.RowChannel.C:
 			if !ok {
 				// No more data.
-				return m.flush(true, nil)
+				return m.flush(ctx, true, nil)
 			}
 			err := d.Err
 			if err == nil {
-				err = m.addRow(d.Row)
+				err = m.addRow(ctx, d.Row)
 			}
 			if err != nil {
 				// Try to flush to send out the error, but ignore any
 				// send error.
-				_ = m.flush(true, err)
+				_ = m.flush(ctx, true, err)
 				return err
 			}
 		case <-flushTicker.C:
-			err := m.flush(false, nil)
+			err := m.flush(ctx, false, nil)
 			if err != nil {
 				return err
 			}
@@ -172,8 +173,8 @@ func (m *outbox) mainLoop() error {
 	}
 }
 
-func (m *outbox) run() {
-	err := m.mainLoop()
+func (m *outbox) run(ctx context.Context) {
+	err := m.mainLoop(ctx)
 
 	m.RowChannel.ConsumerDone()
 
@@ -183,7 +184,7 @@ func (m *outbox) run() {
 			if recvErr != nil {
 				err = recvErr
 			} else if resp.Error != nil {
-				err = resp.Error.GoError()
+				err = errors.Wrap(resp.Error.GoError(), "consumer signaled error")
 			}
 		}
 	}
@@ -193,8 +194,8 @@ func (m *outbox) run() {
 	}
 }
 
-func (m *outbox) start(wg *sync.WaitGroup) {
+func (m *outbox) start(ctx context.Context, wg *sync.WaitGroup) {
 	m.wg = wg
 	m.RowChannel.Init(nil)
-	go m.run()
+	go m.run(ctx)
 }

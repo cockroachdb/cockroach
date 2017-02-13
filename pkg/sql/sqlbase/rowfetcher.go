@@ -72,6 +72,14 @@ type RowFetcher struct {
 	// index (into cols).
 	indexColIdx []int
 
+	// returnRangeInfo, if set, causes the underlying kvFetcher to return
+	// information about the ranges descriptors/leases uses in servicing the
+	// requests. This has some cost, so it's only enabled by DistSQL when this
+	// info is actually useful for correcting the plan (e.g. not for the PK-side
+	// of an index-join).
+	// If set, GetRangeInfo() can be used to retrieve the accumulated info.
+	returnRangeInfo bool
+
 	// -- Fields updated during a scan --
 
 	kvFetcher      kvFetcher
@@ -79,7 +87,7 @@ type RowFetcher struct {
 	extraVals      EncDatumRow // the extra column values for unique indexes
 	indexKey       []byte      // the index key of the current row
 	row            EncDatumRow
-	decodedRow     parser.DTuple
+	decodedRow     parser.Datums
 	prettyValueBuf bytes.Buffer
 
 	// The current key/value, unless kvEnd is true.
@@ -101,6 +109,7 @@ func (rf *RowFetcher) Init(
 	reverse, isSecondaryIndex bool,
 	cols []ColumnDescriptor,
 	valNeededForCol []bool,
+	returnRangeInfo bool,
 ) error {
 	rf.desc = desc
 	rf.colIdxMap = colIdxMap
@@ -109,6 +118,7 @@ func (rf *RowFetcher) Init(
 	rf.isSecondaryIndex = isSecondaryIndex
 	rf.cols = cols
 	rf.valNeededForCol = valNeededForCol
+	rf.returnRangeInfo = returnRangeInfo
 	rf.row = make([]EncDatum, len(rf.cols))
 	rf.decodedRow = make([]parser.Datum, len(rf.cols))
 
@@ -167,18 +177,15 @@ func (rf *RowFetcher) StartScan(
 	// a very restrictive filter and actually have to retrieve a lot of rows).
 	firstBatchLimit := limitHint
 	if firstBatchLimit != 0 {
-		// For a secondary index, we have one key per row.
-		if !rf.isSecondaryIndex {
-			// We have a sentinel key per row plus at most one key per non-PK column. Of course, we
-			// may have other keys due to a schema change, but this is only a hint.
-			firstBatchLimit *= int64(1 + len(rf.cols) - len(rf.index.ColumnIDs))
-		}
+		// The limitHint is a row limit, but each row could be made up of more
+		// than one key.
+		firstBatchLimit = limitHint * int64(rf.desc.KeysPerRow(rf.index.ID))
 		// We need an extra key to make sure we form the last row.
 		firstBatchLimit++
 	}
 
 	var err error
-	rf.kvFetcher, err = makeKVFetcher(txn, spans, rf.reverse, limitBatches, firstBatchLimit)
+	rf.kvFetcher, err = makeKVFetcher(txn, spans, rf.reverse, limitBatches, firstBatchLimit, rf.returnRangeInfo)
 	if err != nil {
 		return err
 	}
@@ -489,10 +496,10 @@ func (rf *RowFetcher) NextRow() (EncDatumRow, error) {
 	}
 }
 
-// NextRowDecoded calls NextRow and decodes the EncDatumRow into a DTuple.
-// The DTuple should not be modified and is only valid until the next call.
-// When there are no more rows, the DTuple is nil.
-func (rf *RowFetcher) NextRowDecoded() (parser.DTuple, error) {
+// NextRowDecoded calls NextRow and decodes the EncDatumRow into a Datums.
+// The Datums should not be modified and is only valid until the next call.
+// When there are no more rows, the Datums is nil.
+func (rf *RowFetcher) NextRowDecoded() (parser.Datums, error) {
 	encRow, err := rf.NextRow()
 	if err != nil {
 		return nil, err
@@ -500,7 +507,7 @@ func (rf *RowFetcher) NextRowDecoded() (parser.DTuple, error) {
 	if encRow == nil {
 		return nil, nil
 	}
-	err = EncDatumRowToDTuple(rf.decodedRow, encRow, &rf.alloc)
+	err = EncDatumRowToDatums(rf.decodedRow, encRow, &rf.alloc)
 	if err != nil {
 		return nil, err
 	}
@@ -548,3 +555,13 @@ func (rf *RowFetcher) finalizeRow() {
 func (rf *RowFetcher) Key() roachpb.Key {
 	return rf.kv.Key
 }
+
+// GetRangeInfo returns information about the ranges where the rows came from.
+// The RangeInfo's are deduped and not ordered.
+func (rf *RowFetcher) GetRangeInfo() []roachpb.RangeInfo {
+	return rf.kvFetcher.getRangesInfo()
+}
+
+// TODO(andrei): This is only here so that the unused functions linter doesn't
+// complain. Remove it once GetRangeInfo() starts being used.
+var _ func(*RowFetcher) []roachpb.RangeInfo = (*RowFetcher).GetRangeInfo

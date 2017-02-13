@@ -69,8 +69,11 @@ const (
 	// recommended number, than the default value is used.
 	RecommendedMaxOpenFiles = 10000
 	// MinimumMaxOpenFiles is The minimum value that rocksDB's max_open_files
-	// option can be set to.
-	MinimumMaxOpenFiles = 2000
+	// option can be set to. While this should be set as high as possible, the
+	// minimum total for a single store node must be under 2048 for Windows
+	// compatibility. See:
+	// https://wpdev.uservoice.com/forums/266908-command-prompt-console-bash-on-ubuntu-on-windo/suggestions/17310124-add-ability-to-change-max-number-of-open-files-for
+	MinimumMaxOpenFiles = 1700
 )
 
 func init() {
@@ -441,8 +444,8 @@ func (r *RocksDB) Merge(key MVCCKey, value []byte) error {
 // ApplyBatchRepr atomically applies a set of batched updates. Created by
 // calling Repr() on a batch. Using this method is equivalent to constructing
 // and committing a batch whose Repr() equals repr.
-func (r *RocksDB) ApplyBatchRepr(repr []byte) error {
-	return dbApplyBatchRepr(r.rdb, repr)
+func (r *RocksDB) ApplyBatchRepr(repr []byte, sync bool) error {
+	return dbApplyBatchRepr(r.rdb, repr, sync)
 }
 
 // Get returns the value for the given key.
@@ -965,13 +968,13 @@ func (r *rocksDBBatch) Merge(key MVCCKey, value []byte) error {
 
 // ApplyBatchRepr atomically applies a set of batched updates to the current
 // batch (the receiver).
-func (r *rocksDBBatch) ApplyBatchRepr(repr []byte) error {
+func (r *rocksDBBatch) ApplyBatchRepr(repr []byte, sync bool) error {
 	if r.distinctOpen {
 		panic("distinct batch open")
 	}
 	r.flushMutations()
 	r.flushes++ // make sure that Repr() doesn't take a shortcut
-	return dbApplyBatchRepr(r.batch, repr)
+	return dbApplyBatchRepr(r.batch, repr, sync)
 }
 
 func (r *rocksDBBatch) Get(key MVCCKey) ([]byte, error) {
@@ -1065,7 +1068,7 @@ func (r *rocksDBBatch) NewIterator(prefix bool) Iterator {
 	return iter
 }
 
-func (r *rocksDBBatch) Commit() error {
+func (r *rocksDBBatch) Commit(sync bool) error {
 	if r.closed() {
 		panic("this batch was already committed")
 	}
@@ -1078,7 +1081,7 @@ func (r *rocksDBBatch) Commit() error {
 		// We've previously flushed mutations to the C++ batch, so we have to flush
 		// any remaining mutations as well and then commit the batch.
 		r.flushMutations()
-		if err := statusToError(C.DBCommitAndCloseBatch(r.batch)); err != nil {
+		if err := statusToError(C.DBCommitAndCloseBatch(r.batch, C.bool(sync))); err != nil {
 			return err
 		}
 		r.batch = nil
@@ -1088,7 +1091,7 @@ func (r *rocksDBBatch) Commit() error {
 
 		// Fast-path which avoids flushing mutations to the C++ batch. Instead, we
 		// directly apply the mutations to the database.
-		if err := r.parent.ApplyBatchRepr(r.builder.Finish()); err != nil {
+		if err := r.parent.ApplyBatchRepr(r.builder.Finish(), sync); err != nil {
 			return err
 		}
 		C.DBClose(r.batch)
@@ -1132,7 +1135,7 @@ func (r *rocksDBBatch) flushMutations() {
 	r.flushes++
 	r.flushedCount += r.builder.count
 	r.flushedSize += len(r.builder.repr)
-	if err := r.ApplyBatchRepr(r.builder.Finish()); err != nil {
+	if err := r.ApplyBatchRepr(r.builder.Finish(), false); err != nil {
 		panic(err)
 	}
 	// Force a seek of the underlying iterator on the next Seek/ReverseSeek.
@@ -1471,8 +1474,8 @@ func dbMerge(rdb *C.DBEngine, key MVCCKey, value []byte) error {
 	return statusToError(C.DBMerge(rdb, goToCKey(key), goToCSlice(value)))
 }
 
-func dbApplyBatchRepr(rdb *C.DBEngine, repr []byte) error {
-	return statusToError(C.DBApplyBatchRepr(rdb, goToCSlice(repr)))
+func dbApplyBatchRepr(rdb *C.DBEngine, repr []byte, sync bool) error {
+	return statusToError(C.DBApplyBatchRepr(rdb, goToCSlice(repr), C.bool(sync)))
 }
 
 // dbGet returns the value for the given key.
@@ -1558,6 +1561,8 @@ func dbIterate(
 	// Check for any errors during iteration.
 	return it.Error()
 }
+
+// TODO(dan): Rename this to RocksDBSSTFileReader and RocksDBSSTFileWriter.
 
 // RocksDBSstFileReader allows iteration over a number of non-overlapping
 // sstables exported by `RocksDBSstFileWriter`.

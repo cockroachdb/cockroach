@@ -91,14 +91,12 @@ var txnAutoGC = true
 
 var tickQuiesced = envutil.EnvOrDefaultBool("COCKROACH_TICK_QUIESCED", true)
 
+// TODO(peter): Off by default until we can figure out the performance
+// degradation see on test clusters.
+var syncRaftLog = envutil.EnvOrDefaultBool("COCKROACH_SYNC_RAFT_LOG", false)
+
 // Whether to enable experimental support for proposer-evaluated KV.
-var propEvalKV = func() bool {
-	enabled := envutil.EnvOrDefaultBool("COCKROACH_PROPOSER_EVALUATED_KV", false)
-	if enabled {
-		log.Warningf(context.Background(), "running with experimental support for proposer-evaluated KV, see #10431")
-	}
-	return enabled
-}()
+var propEvalKV = envutil.EnvOrDefaultBool("COCKROACH_PROPOSER_EVALUATED_KV", false)
 
 // ProposerEvaluatedKVEnabled returns whether experimental support for
 // proposer-evaluated KV is enabled.
@@ -260,6 +258,8 @@ type Replica struct {
 	store      *Store
 	abortCache *AbortCache // Avoids anomalous reads after abort
 
+	stats *replicaStats
+
 	// creatingReplica is set when a replica is created as uninitialized
 	// via a raft message.
 	creatingReplica *roachpb.ReplicaDescriptor
@@ -280,6 +280,10 @@ type Replica struct {
 	//
 	// TODO(peter): evaluate runtime overhead of the timed mutex.
 	raftMu timedMutex
+
+	// stateLoader provides facilities for loading and saving on-disk replica
+	// state. Requires Replica.raftMu is held.
+	stateLoader replicaStateLoader
 
 	cmdQMu struct {
 		// Protects all fields in the cmdQMu struct.
@@ -555,8 +559,12 @@ func newReplica(rangeID roachpb.RangeID, store *Store) *Replica {
 	r := &Replica{
 		AmbientContext: store.cfg.AmbientCtx,
 		RangeID:        rangeID,
+		stateLoader:    makeReplicaStateLoader(rangeID),
 		store:          store,
 		abortCache:     NewAbortCache(rangeID),
+	}
+	if store.cfg.StorePool != nil {
+		r.stats = newReplicaStats(store.cfg.StorePool.getNodeLocalityString)
 	}
 
 	// Init rangeStr with the range ID.
@@ -647,17 +655,17 @@ func (r *Replica) initLocked(
 
 	var err error
 
-	if r.mu.state, err = loadState(ctx, r.store.Engine(), desc); err != nil {
+	if r.mu.state, err = r.stateLoader.load(ctx, r.store.Engine(), desc); err != nil {
 		return err
 	}
 	r.rangeStr.store(0, r.mu.state.Desc)
 
-	r.mu.lastIndex, err = loadLastIndex(ctx, r.store.Engine(), r.RangeID)
+	r.mu.lastIndex, err = r.stateLoader.loadLastIndex(ctx, r.store.Engine())
 	if err != nil {
 		return err
 	}
 
-	pErr, err := loadReplicaDestroyedError(ctx, r.store.Engine(), r.RangeID)
+	pErr, err := r.stateLoader.loadReplicaDestroyedError(ctx, r.store.Engine())
 	if err != nil {
 		return err
 	}
@@ -714,7 +722,7 @@ func (r *Replica) destroyDataRaftMuLocked(
 	if err := r.setTombstoneKey(ctx, batch, &consistentDesc); err != nil {
 		return err
 	}
-	if err := batch.Commit(); err != nil {
+	if err := batch.Commit(false); err != nil {
 		return err
 	}
 	commitTime := timeutil.Now()
@@ -960,15 +968,8 @@ func (r *Replica) redirectOnOrAcquireLease(ctx context.Context) (LeaseStatus, *r
 				if !status.lease.OwnedBy(r.store.StoreID()) {
 					_, stillMember := r.mu.state.Desc.GetReplicaDescriptor(status.lease.Replica.StoreID)
 					if !stillMember {
-						// If the leaseholder doesn't have a replica of the range, we should try
-						// to take the lease even if it hasn't actually expired, since the range
-						// won't be able to make progress while the lease is in such a state (and
-						// leases can stay in such a state for a very long time when using epoch-
-						// based range leases, as in #12591).
-						// TODO(a-robinson/#12680): Make occurrences of this more visible.
-						log.Errorf(ctx, "lease owned by replica %+v that no longer exists",
-							status.lease.Replica)
-						return r.requestLeaseLocked(ctx, status), nil
+						log.Fatalf(ctx, "lease %s owned by replica %+v that no longer exists",
+							status.lease, status.lease.Replica)
 					}
 					// Otherwise, if the lease is currently held by another replica, redirect
 					// to the holder.
@@ -1045,7 +1046,7 @@ func (r *Replica) redirectOnOrAcquireLease(ctx context.Context) (LeaseStatus, *r
 
 		// Wait for the range lease to finish, or the context to expire.
 		pErr = func() *roachpb.Error {
-			var slowTimer timeutil.Timer
+			slowTimer := timeutil.NewTimer()
 			defer slowTimer.Stop()
 			slowTimer.Reset(base.SlowRequestThreshold)
 			for {
@@ -1131,6 +1132,11 @@ func (r *Replica) Desc() *roachpb.RangeDescriptor {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return r.mu.state.Desc
+}
+
+// NodeID returns the ID of the node this replica belongs to.
+func (r *Replica) NodeID() roachpb.NodeID {
+	return r.store.nodeDesc.NodeID
 }
 
 // setDesc atomically sets the range's descriptor. This method calls
@@ -1322,7 +1328,7 @@ func (r *Replica) assertState(reader engine.Reader) {
 // TODO(tschottdorf): Consider future removal (for example, when #7224 is resolved).
 func (r *Replica) assertStateLocked(reader engine.Reader) {
 	ctx := r.AnnotateCtx(context.TODO())
-	diskState, err := loadState(ctx, reader, r.mu.state.Desc)
+	diskState, err := r.stateLoader.load(ctx, reader, r.mu.state.Desc)
 	if err != nil {
 		log.Fatal(ctx, err)
 	}
@@ -1372,6 +1378,10 @@ func (r *Replica) Send(
 	ctx context.Context, ba roachpb.BatchRequest,
 ) (*roachpb.BatchResponse, *roachpb.Error) {
 	var br *roachpb.BatchResponse
+
+	if r.stats != nil {
+		r.stats.record(ba.Header.GatewayNodeID)
+	}
 
 	if err := r.checkBatchRequest(ba); err != nil {
 		return nil, roachpb.NewError(err)
@@ -1676,7 +1686,7 @@ func (r *Replica) beginCmds(ctx context.Context, ba *roachpb.BatchRequest) (*end
 					// However, the command queue assumes that commands don't drop
 					// out before their prerequisites, so we still have to wait it
 					// out.
-					var slowTimer timeutil.Timer
+					slowTimer := timeutil.NewTimer()
 					defer slowTimer.Stop()
 					slowTimer.Reset(base.SlowRequestThreshold)
 					for _, ch := range chans {
@@ -2158,7 +2168,7 @@ func (r *Replica) tryAddWriteCmd(
 	// If the command was accepted by raft, wait for the range to apply it.
 	ctxDone := ctx.Done()
 	shouldQuiesce := r.store.stopper.ShouldQuiesce()
-	var slowTimer timeutil.Timer
+	slowTimer := timeutil.NewTimer()
 	defer slowTimer.Stop()
 	slowTimer.Reset(base.SlowRequestThreshold)
 	for {
@@ -2666,7 +2676,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 			return stats, err
 		}
 
-		if lastIndex, err = loadLastIndex(ctx, r.store.Engine(), r.RangeID); err != nil {
+		if lastIndex, err = r.stateLoader.loadLastIndex(ctx, r.store.Engine()); err != nil {
 			return stats, err
 		}
 		// We refresh pending commands after applying a snapshot because this
@@ -2698,11 +2708,14 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 		}
 	}
 	if !raft.IsEmptyHardState(rd.HardState) {
-		if err := setHardState(ctx, writer, r.RangeID, rd.HardState); err != nil {
+		if err := r.stateLoader.setHardState(ctx, writer, rd.HardState); err != nil {
 			return stats, err
 		}
 	}
-	if err := batch.Commit(); err != nil {
+	writer.Close()
+	// Synchronously commit the batch with the Raft log entries and Raft hard
+	// state as we're promising not to lose this data.
+	if err := batch.Commit(syncRaftLog); err != nil {
 		return stats, err
 	}
 
@@ -3782,8 +3795,9 @@ func (r *Replica) applyRaftCommand(
 
 	batch := r.store.Engine().NewWriteOnlyBatch()
 	defer batch.Close()
+
 	if writeBatch != nil {
-		if err := batch.ApplyBatchRepr(writeBatch.Data); err != nil {
+		if err := batch.ApplyBatchRepr(writeBatch.Data, false); err != nil {
 			return enginepb.MVCCStats{}, roachpb.NewError(NewReplicaCorruptionError(
 				errors.Wrap(err, "unable to apply WriteBatch")))
 		}
@@ -3798,19 +3812,19 @@ func (r *Replica) applyRaftCommand(
 	// reading the previous applied index keys on every write operation. This
 	// requires a little additional work in order maintain the MVCC stats.
 	var appliedIndexNewMS enginepb.MVCCStats
-	if err := setAppliedIndexBlind(ctx, writer, &appliedIndexNewMS, r.RangeID,
+	if err := r.stateLoader.setAppliedIndexBlind(ctx, writer, &appliedIndexNewMS,
 		rResult.State.RaftAppliedIndex, rResult.State.LeaseAppliedIndex); err != nil {
 		return enginepb.MVCCStats{}, roachpb.NewError(NewReplicaCorruptionError(
 			errors.Wrap(err, "unable to set applied index")))
 	}
 	rResult.Delta.SysBytes += appliedIndexNewMS.SysBytes -
-		calcAppliedIndexSysBytes(r.RangeID, oldRaftAppliedIndex, oldLeaseAppliedIndex)
+		r.stateLoader.calcAppliedIndexSysBytes(oldRaftAppliedIndex, oldLeaseAppliedIndex)
 
 	// Special-cased MVCC stats handling to exploit commutativity of stats
 	// delta upgrades. Thanks to commutativity, the command queue does not
 	// have to serialize on the stats key.
 	ms.Add(rResult.Delta)
-	if err := setMVCCStats(ctx, writer, r.RangeID, ms); err != nil {
+	if err := r.stateLoader.setMVCCStats(ctx, writer, &ms); err != nil {
 		return enginepb.MVCCStats{}, roachpb.NewError(NewReplicaCorruptionError(
 			errors.Wrap(err, "unable to update MVCCStats")))
 	}
@@ -3821,7 +3835,7 @@ func (r *Replica) applyRaftCommand(
 	// the future.
 	writer.Close()
 
-	if err := batch.Commit(); err != nil {
+	if err := batch.Commit(false); err != nil {
 		return enginepb.MVCCStats{}, roachpb.NewError(NewReplicaCorruptionError(
 			errors.Wrap(err, "could not commit batch")))
 	}
@@ -4138,6 +4152,16 @@ func optimizePuts(
 	return reqs
 }
 
+// GCThreshold returns the GC threshold of the Range, typically updated when
+// keys are garbage collected. Reads and writes at timestamps <= this time will
+// not be served.
+func (r *Replica) GCThreshold() hlc.Timestamp {
+	r.mu.Lock()
+	threshold := r.mu.state.GCThreshold
+	r.mu.Unlock()
+	return threshold
+}
+
 func (r *Replica) executeBatch(
 	ctx context.Context,
 	idKey storagebase.CmdIDKey,
@@ -4147,9 +4171,7 @@ func (r *Replica) executeBatch(
 ) (*roachpb.BatchResponse, EvalResult, *roachpb.Error) {
 	br := ba.CreateReply()
 
-	r.mu.Lock()
-	threshold := r.mu.state.GCThreshold
-	r.mu.Unlock()
+	threshold := r.GCThreshold()
 	if !threshold.Less(ba.Timestamp) {
 		return nil, EvalResult{}, roachpb.NewError(fmt.Errorf("batch timestamp %v must be after replica GC threshold %v", ba.Timestamp, threshold))
 	}
@@ -4502,7 +4524,7 @@ func (r *Replica) maybeSetCorrupt(ctx context.Context, pErr *roachpb.Error) *roa
 
 		// Try to persist the destroyed error message. If the underlying store is
 		// corrupted the error won't be processed and a panic will occur.
-		if err := setReplicaDestroyedError(ctx, r.store.Engine(), r.RangeID, pErr); err != nil {
+		if err := r.stateLoader.setReplicaDestroyedError(ctx, r.store.Engine(), pErr); err != nil {
 			cErr.Processed = false
 			return roachpb.NewError(cErr)
 		}

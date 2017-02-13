@@ -82,24 +82,21 @@ func TestTableReader(t *testing.T) {
 			},
 			expected: "[[0 1] [0 2] [0 4] [1 0] [1 1] [1 2] [2 0] [2 1] [2 2] [3 0] [3 1] [4 0]]",
 		},
-		/* TODO(radu): reenable this when we add back support for HardLimit
 		{
-			spec: TableReaderSpec{
-				HardLimit: 4,
-			},
+			spec: TableReaderSpec{},
 			post: PostProcessSpec{
 				Filter:        Expression{Expr: "@3 < 5 AND @2 != 3"},
 				OutputColumns: []uint32{3}, // s
+				Limit:         4,
 			},
 			expected: "[['one'] ['two'] ['four'] ['one-zero']]",
 		},
-		*/
 		{
 			spec: TableReaderSpec{
 				IndexIdx:  1,
 				Reverse:   true,
 				Spans:     []TableReaderSpan{makeIndexSpan(4, 6)},
-				SoftLimit: 1,
+				LimitHint: 1,
 			},
 			post: PostProcessSpec{
 				Filter:        Expression{Expr: "@1 < 3"}, // sum < 8
@@ -114,7 +111,6 @@ func TestTableReader(t *testing.T) {
 		ts.Table = *td
 
 		flowCtx := FlowCtx{
-			Context:  context.Background(),
 			evalCtx:  &parser.EvalContext{},
 			txnProto: &roachpb.Transaction{},
 			clientDB: kvDB,
@@ -125,7 +121,7 @@ func TestTableReader(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		tr.Run(nil)
+		tr.Run(context.Background(), nil)
 		if out.Err != nil {
 			t.Fatal(out.Err)
 		}

@@ -14,10 +14,11 @@
 //
 // Author: Tamir Duberstein (tamird@gmail.com)
 
-package sql_test
+package pgwire_test
 
 import (
 	gosql "database/sql"
+	"database/sql/driver"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -82,8 +83,7 @@ func TestPGWire(t *testing.T) {
 	tempKeyPath := securitytest.RestrictedCopy(t, keyPath, tempDir, "key")
 
 	for _, insecure := range [...]bool{true, false} {
-		params, _ := createTestServerParams()
-		params.Insecure = insecure
+		params := base.TestServerArgs{Insecure: insecure}
 		s, _, _ := serverutils.StartServer(t, params)
 
 		host, port, err := net.SplitHostPort(s.ServingAddr())
@@ -175,12 +175,10 @@ func TestPGWire(t *testing.T) {
 }
 
 // TestPGWireDrainClient makes sure that in draining mode, the server refuses
-// new connections and allows sessions with ongoing transactions to finish
-// before closing them.
+// new connections and allows sessions with ongoing transactions to finish.
 func TestPGWireDrainClient(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	params, _ := createTestServerParams()
-	params.Insecure = true
+	params := base.TestServerArgs{Insecure: true}
 	s, _, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop()
 
@@ -206,8 +204,8 @@ func TestPGWireDrainClient(t *testing.T) {
 	}
 
 	on := []serverpb.DrainMode{serverpb.DrainMode_CLIENT}
-	// Draining runs in a separate goroutine since it won't return until
-	// the connection with an ongoing transaction finishes.
+	// Draining runs in a separate goroutine since it won't return until the
+	// connection with an ongoing transaction finishes.
 	errChan := make(chan error)
 	go func() {
 		defer close(errChan)
@@ -215,7 +213,7 @@ func TestPGWireDrainClient(t *testing.T) {
 			if now, err := s.(*server.TestServer).Drain(on); err != nil {
 				return err
 			} else if !reflect.DeepEqual(on, now) {
-				return fmt.Errorf("expected drain modes %v, got %v", on, now)
+				return errors.Errorf("expected drain modes %v, got %v", on, now)
 			}
 			return nil
 		}()
@@ -224,7 +222,7 @@ func TestPGWireDrainClient(t *testing.T) {
 	// Ensure server is in draining mode and rejects new connections.
 	testutils.SucceedsSoon(t, func() error {
 		if err := trivialQuery(pgBaseURL); !testutils.IsError(err, pgwire.ErrDraining) {
-			return fmt.Errorf("unexpected error: %v", err)
+			return errors.Errorf("unexpected error: %v", err)
 		}
 		return nil
 	})
@@ -245,6 +243,109 @@ func TestPGWireDrainClient(t *testing.T) {
 	if now := s.(*server.TestServer).Undrain(on); len(now) != 0 {
 		t.Fatalf("unexpected active drain modes: %v", now)
 	}
+}
+
+// TestPGWireDrainOngoingTxns tests that connections with open transactions are
+// cancelled when they go on for too long.
+func TestPGWireDrainOngoingTxns(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	params := base.TestServerArgs{Insecure: true}
+	s, _, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop()
+
+	host, port, err := net.SplitHostPort(s.ServingAddr())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	pgBaseURL := url.URL{
+		Scheme:   "postgres",
+		Host:     net.JoinHostPort(host, port),
+		RawQuery: "sslmode=disable",
+	}
+
+	db, err := gosql.Open("postgres", pgBaseURL.String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	pgServer := s.(*server.TestServer).PGServer()
+
+	// Make sure that the server reports correctly the case in which a
+	// connection did not respond to cancellation in time.
+	t.Run("CancelResponseFailure", func(t *testing.T) {
+		txn, err := db.Begin()
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// Overwrite the pgServer's cancel map to avoid race conditions in
+		// which the connection is canceled and closes itself before the
+		// pgServer stops waiting for connections to respond to cancellation.
+		realCancels := pgServer.OverwriteCancelMap()
+
+		// Set draining with no drainWait or cancelWait timeout. The expected
+		// behavior is that the ongoing session is immediately cancelled but
+		// since we overwrote the context.CancelFunc, this cancellation will
+		// not have any effect. The pgServer will not bother to wait for the
+		// connection to close properly and should notify the caller that a
+		// session did not respond to cancellation.
+		if err := pgServer.SetDrainingImpl(
+			true, 0 /* drainWait */, 0, /* cancelWait */
+		); !testutils.IsError(err, "some sessions did not respond to cancellation") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		// Actually cancel the connection.
+		for _, cancel := range realCancels {
+			cancel()
+		}
+
+		// Make sure that the connection was disrupted. A retry loop is needed
+		// because we must wait (since we told the pgServer not to) until the
+		// connection registers the cancellation and closes itself.
+		testutils.SucceedsSoon(t, func() error {
+			if _, err := txn.Exec("SELECT 1"); err != driver.ErrBadConn {
+				return errors.Errorf("unexpected error: %v", err)
+			}
+			return nil
+		})
+
+		if err := txn.Commit(); err != driver.ErrBadConn {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		if err := pgServer.SetDraining(false); err != nil {
+			t.Fatal(err)
+		}
+	})
+
+	// Make sure that a connection gets cancelled and correctly responds to this
+	// cancellation by closing itself.
+	t.Run("CancelResponseSuccess", func(t *testing.T) {
+		txn, err := db.Begin()
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// Set draining with no drainWait timeout and a 1s cancelWait timeout.
+		// The expected behavior is for the pgServer to immediately cancel any
+		// ongoing sessions and wait for 1s for the cancellation to take effect.
+		if err := pgServer.SetDrainingImpl(
+			true, 0 /* drainWait */, 1*time.Second, /* cancelWait */
+		); err != nil {
+			t.Fatal(err)
+		}
+
+		if err := txn.Commit(); err != driver.ErrBadConn {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		if err := pgServer.SetDraining(false); err != nil {
+			t.Fatal(err)
+		}
+	})
 }
 
 func TestPGWireDBName(t *testing.T) {
@@ -1308,9 +1409,10 @@ func TestPGWireOverUnixSocket(t *testing.T) {
 
 	socketFile := filepath.Join(tempDir, ".s.PGSQL.123456")
 
-	params, _ := createTestServerParams()
-	params.Insecure = true
-	params.SocketFile = socketFile
+	params := base.TestServerArgs{
+		Insecure:   true,
+		SocketFile: socketFile,
+	}
 	s, _, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop()
 

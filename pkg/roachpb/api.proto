@@ -755,6 +755,29 @@ message WriteBatchResponse {
   optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }
 
+// ExportRequest is the argument to the Export() method, to dump a keyrange into
+// files under a basepath.
+message ExportRequest {
+  optional Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  optional ExportStorage storage = 2 [(gogoproto.nullable) = false];
+  optional util.hlc.Timestamp start_time = 3 [(gogoproto.nullable) = false];
+}
+
+// ExportResponse is the response to an Export() operation.
+message ExportResponse {
+  // File describes a keyrange that has been dumped to a file at the given
+  // path.
+  message File {
+    optional Span span = 1 [(gogoproto.nullable) = false];
+    optional string path = 2 [(gogoproto.nullable) = false];
+    optional int64 data_size = 3 [(gogoproto.nullable) = false];
+    optional uint32 crc = 4 [(gogoproto.nullable) = false, (gogoproto.customname) = "CRC"];
+  }
+
+  optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  repeated File files = 2 [(gogoproto.nullable) = false];
+}
+
 // A RequestUnion contains exactly one of the optional requests.
 // The values added here must match those in ResponseUnion.
 //
@@ -799,6 +822,7 @@ message RequestUnion {
   optional TransferLeaseRequest transfer_lease = 28;
   optional LeaseInfoRequest lease_info = 30;
   optional WriteBatchRequest write_batch = 31;
+  optional ExportRequest export = 32;
 }
 
 // A ResponseUnion contains exactly one of the optional responses.
@@ -842,6 +866,7 @@ message ResponseUnion {
   reserved 28; // TransferLease and RequestLease both use RequestLeaseResponse
   optional LeaseInfoResponse lease_info = 30;
   optional WriteBatchResponse write_batch = 31;
+  optional ExportResponse export = 32;
 }
 
 // A Header is attached to a BatchRequest, encapsulating routing and auxiliary
@@ -901,6 +926,9 @@ message Header {
   // If set, return_range_info causes RangeInfo details to be returned with
   // each ResponseHeader.
   optional bool return_range_info = 10 [(gogoproto.nullable) = false];
+  // gateway_node_id is the ID of the gateway node where the request originated.
+  optional int32 gateway_node_id = 11 [(gogoproto.nullable) = false,
+      (gogoproto.customname) = "GatewayNodeID", (gogoproto.casttype) = "NodeID"];
 }
 
 

@@ -89,22 +89,19 @@ func (n *limitNode) estimateLimit() {
 	n.count = math.MaxInt64
 	n.offset = 0
 
-	data := []struct {
-		src parser.TypedExpr
-		dst *int64
-	}{
-		{n.countExpr, &n.count},
-		{n.offsetExpr, &n.offset},
+	// Use simple integer datum if available.
+	// The limit can be a simple DInt here either because it was
+	// entered as such in the query, or as a result of constant
+	// folding prior to type checking.
+
+	if n.countExpr != nil {
+		if i, ok := parser.AsDInt(n.countExpr); ok {
+			n.count = int64(i)
+		}
 	}
-	for _, datum := range data {
-		if datum.src != nil {
-			// Use simple integer datum if available.
-			// The limit can be a simple DInt here either because it was
-			// entered as such in the query, or as a result of constant
-			// folding prior to type checking.
-			if i, ok := parser.AsDInt(datum.src); ok {
-				*datum.dst = int64(i)
-			}
+	if n.offsetExpr != nil {
+		if i, ok := parser.AsDInt(n.offsetExpr); ok {
+			n.offset = int64(i)
 		}
 	}
 }
@@ -149,7 +146,7 @@ func (n *limitNode) evalLimit() error {
 }
 
 func (n *limitNode) Columns() ResultColumns { return n.plan.Columns() }
-func (n *limitNode) Values() parser.DTuple  { return n.plan.Values() }
+func (n *limitNode) Values() parser.Datums  { return n.plan.Values() }
 func (n *limitNode) Ordering() orderingInfo { return n.plan.Ordering() }
 
 func (n *limitNode) MarkDebug(mode explainMode) {

@@ -61,6 +61,7 @@
 import "nvd3/build/nv.d3.min.css!";
 import "react-select/dist/react-select.css!";
 import "build/app.css!";
+import "app/js/sim/style.css!";
 
 import * as React from "react";
 import * as ReactDOM from "react-dom";
@@ -84,6 +85,7 @@ import NodeGraphs from "./containers/nodeGraphs";
 import NodeLogs from "./containers/nodeLogs";
 import Raft from "./containers/raft";
 import RaftRanges from "./containers/raftRanges";
+import ClusterViz from "./containers/clusterViz";
 import registrationSyncListener from "./services/registrationService";
 
 // tslint:disable-next-line:variable-name
@@ -101,7 +103,7 @@ ReactDOM.render(
       <Route path="/" component={Layout}>
         <IndexRedirect to="cluster" />
         <Route path="cluster" component={ Nodes }>
-          <IndexRedirect to="all/runtime" />
+          <IndexRedirect to="all/overview" />
           <Route path={`all/:${dashboardNameAttr}`} component={NodeGraphs} />
           <Route path={ `node/:${nodeIDAttr}/:${dashboardNameAttr}` } component={NodeGraphs} />
         </Route>
@@ -129,6 +131,7 @@ ReactDOM.render(
           <IndexRedirect to="ranges" />
           <Route path="ranges" component={ RaftRanges } />
         </Route>
+        <Route path="clusterviz" component={ ClusterViz } />
       </Route>
     </Router>
   </Provider>,

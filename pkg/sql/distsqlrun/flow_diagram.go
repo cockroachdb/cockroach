@@ -18,9 +18,12 @@ package distsqlrun
 
 import (
 	"bytes"
+	"compress/zlib"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
+	"net/url"
 
 	humanize "github.com/dustin/go-humanize"
 	"github.com/pkg/errors"
@@ -175,6 +178,19 @@ func (post *PostProcessSpec) summary() []string {
 		}
 		res = append(res, buf.String())
 	}
+	if post.Limit != 0 || post.Offset != 0 {
+		var buf bytes.Buffer
+		if post.Limit != 0 {
+			fmt.Fprintf(&buf, "Limit %d", post.Limit)
+		}
+		if post.Offset != 0 {
+			if buf.Len() != 0 {
+				buf.WriteByte(' ')
+			}
+			fmt.Fprintf(&buf, "Offset %d", post.Offset)
+		}
+		res = append(res, buf.String())
+	}
 	return res
 }
 
@@ -319,4 +335,36 @@ func GeneratePlanDiagram(flows []FlowSpec, nodeNames []string, w io.Writer) erro
 		return err
 	}
 	return json.NewEncoder(w).Encode(d)
+}
+
+// GeneratePlanDiagramWithURL generates the json data for a flow diagram and a
+// URL which encodes the diagram. There should be one FlowSpec per node. The
+// function assumes that StreamIDs are unique across all flows.
+func GeneratePlanDiagramWithURL(flows []FlowSpec, nodeNames []string) (string, url.URL, error) {
+	var json, compressed bytes.Buffer
+	if err := GeneratePlanDiagram(flows, nodeNames, &json); err != nil {
+		return "", url.URL{}, err
+	}
+	jsonStr := json.String()
+
+	encoder := base64.NewEncoder(base64.URLEncoding, &compressed)
+	compressor := zlib.NewWriter(encoder)
+	if _, err := json.WriteTo(compressor); err != nil {
+		return "", url.URL{}, err
+	}
+	if err := compressor.Close(); err != nil {
+		return "", url.URL{}, err
+	}
+	if err := encoder.Close(); err != nil {
+		return "", url.URL{}, err
+	}
+	// TODO(radu): using raduberinde.github.io is temporary.
+	url := url.URL{
+		Scheme:   "https",
+		Host:     "raduberinde.github.io",
+		Path:     "decode.html",
+		RawQuery: compressed.String(),
+	}
+
+	return jsonStr, url, nil
 }

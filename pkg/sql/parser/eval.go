@@ -22,7 +22,6 @@ import (
 	"math"
 	"math/big"
 	"regexp"
-	"sort"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -1564,8 +1563,8 @@ var errCmpNull = errors.New("NULL comparison")
 func cmpTuple(ldatum, rdatum Datum) (int, error) {
 	left := *ldatum.(*DTuple)
 	right := *rdatum.(*DTuple)
-	for i, l := range left {
-		r := right[i]
+	for i, l := range left.D {
+		r := right.D[i]
 		if l == DNull || r == DNull {
 			return 0, errCmpNull
 		}
@@ -1586,10 +1585,37 @@ func makeEvalTupleIn(typ Type) CmpOp {
 				return DBool(false), nil
 			}
 
-			vtuple := *values.(*DTuple)
-			i := sort.Search(len(vtuple), func(i int) bool { return vtuple[i].Compare(arg) >= 0 })
-			found := i < len(vtuple) && vtuple[i].Compare(arg) == 0
-			return DBool(found), nil
+			// If the tuple was sorted during normalization, we can perform
+			// an efficient binary search to find if the arg is in the tuple.
+			vtuple := values.(*DTuple)
+			if vtuple.Sorted {
+				_, found := vtuple.SearchSorted(arg)
+				if !found && len(vtuple.D) > 0 && vtuple.D[0] == DNull {
+					// If the tuple contained any null elements and no matches are found,
+					// the result of IN will be null. The null element will at the front
+					// if the tuple is sorted because null is less than any non-null value.
+					return DBool(false), errCmpNull
+				}
+				return DBool(found), nil
+			}
+
+			// If the tuple was not sorted, which happens in cases where it
+			// is not constant across rows, then we must fall back to iterating
+			// through the entire tuple.
+			sawNull := false
+			for _, val := range vtuple.D {
+				if val == DNull {
+					sawNull = true
+				} else if val.Compare(arg) == 0 {
+					return DBool(true), nil
+				}
+			}
+			if sawNull {
+				// If the tuple contains any null elements and no matches are found, the
+				// result of IN will be null.
+				return DBool(false), errCmpNull
+			}
+			return DBool(false), nil
 		},
 	}
 }
@@ -1691,7 +1717,7 @@ func (e *MultipleResultsError) Error() string {
 type EvalPlanner interface {
 	// QueryRow executes a SQL query string where exactly 1 result row is
 	// expected and returns that row.
-	QueryRow(sql string, args ...interface{}) (DTuple, error)
+	QueryRow(sql string, args ...interface{}) (Datums, error)
 }
 
 // EvalContext defines the context in which to evaluate an expression, allowing
@@ -2220,6 +2246,12 @@ func (expr *CastExpr) Eval(ctx *EvalContext) (Datum, error) {
 				return results[0], nil
 			}
 			s := string(*v)
+			// Trim whitespace and unwrap outer quotes if necessary.
+			// This is required to mimic postgres.
+			s = strings.TrimSpace(s)
+			if len(s) > 1 && s[0] == '"' && s[len(s)-1] == '"' {
+				s = s[1 : len(s)-1]
+			}
 
 			switch typ {
 			case oidPseudoTypeRegClass:
@@ -2375,13 +2407,13 @@ func (t *ExistsExpr) Eval(ctx *EvalContext) (Datum, error) {
 
 // Eval implements the TypedExpr interface.
 func (expr *FuncExpr) Eval(ctx *EvalContext) (Datum, error) {
-	args := make(DTuple, 0, len(expr.Exprs))
+	args := NewDTupleWithCap(len(expr.Exprs))
 	for _, e := range expr.Exprs {
 		arg, err := e.(TypedExpr).Eval(ctx)
 		if err != nil {
 			return nil, err
 		}
-		args = append(args, arg)
+		args.D = append(args.D, arg)
 	}
 
 	if !expr.fn.Types.match([]Type(args.ResolvedType().(TTuple))) {
@@ -2393,7 +2425,7 @@ func (expr *FuncExpr) Eval(ctx *EvalContext) (Datum, error) {
 		return DNull, nil
 	}
 
-	res, err := expr.fn.fn(ctx, args)
+	res, err := expr.fn.fn(ctx, args.D)
 	if err != nil {
 		// If we are facing a retry error, in particular those generated
 		// by crdb_internal.force_retry(), propagate it unchanged, so that
@@ -2557,15 +2589,15 @@ func (expr *ColumnItem) Eval(ctx *EvalContext) (Datum, error) {
 
 // Eval implements the TypedExpr interface.
 func (t *Tuple) Eval(ctx *EvalContext) (Datum, error) {
-	tuple := make(DTuple, 0, len(t.Exprs))
+	tuple := NewDTupleWithCap(len(t.Exprs))
 	for _, v := range t.Exprs {
 		d, err := v.(TypedExpr).Eval(ctx)
 		if err != nil {
 			return nil, err
 		}
-		tuple = append(tuple, d)
+		tuple.D = append(tuple.D, d)
 	}
-	return &tuple, nil
+	return tuple, nil
 }
 
 // arrayOfType returns a fresh DArray of the input type.
@@ -2612,7 +2644,7 @@ func (t *ArrayFlatten) Eval(ctx *EvalContext) (Datum, error) {
 	if !ok {
 		return nil, errors.Errorf("array subquery result (%v) is not DTuple", d)
 	}
-	array.Array = *tuple
+	array.Array = tuple.D
 	return array, nil
 }
 

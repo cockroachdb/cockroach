@@ -43,6 +43,7 @@ var varGen = map[string]func(p *planner) string{
 	`MAX_INDEX_KEYS`:                func(_ *planner) string { return "32" },
 	`SEARCH_PATH`:                   func(p *planner) string { return strings.Join(p.session.SearchPath, ", ") },
 	`SERVER_VERSION`:                func(_ *planner) string { return PgServerVersion },
+	`SESSION_USER`:                  func(p *planner) string { return p.session.User },
 }
 var varNames = func() []string {
 	res := make([]string, 0, len(varGen))
@@ -186,7 +187,7 @@ func (p *planner) Show(n *parser.Show) (planNode, error) {
 					gen := varGen[vName]
 					value := gen(p)
 					if _, err := v.rows.AddRow(
-						parser.DTuple{parser.NewDString(vName), parser.NewDString(value)},
+						parser.Datums{parser.NewDString(vName), parser.NewDString(value)},
 					); err != nil {
 						v.rows.Close()
 						return nil, err
@@ -197,7 +198,7 @@ func (p *planner) Show(n *parser.Show) (planNode, error) {
 				// check above.
 				gen := varGen[name]
 				value := gen(p)
-				if _, err := v.rows.AddRow(parser.DTuple{parser.NewDString(value)}); err != nil {
+				if _, err := v.rows.AddRow(parser.Datums{parser.NewDString(value)}); err != nil {
 					v.rows.Close()
 					return nil, err
 				}
@@ -392,7 +393,7 @@ func (p *planner) ShowCreateTable(n *parser.ShowCreateTable) (planNode, error) {
 			}
 			buf.WriteString(interleave)
 
-			if _, err := v.rows.AddRow(parser.DTuple{
+			if _, err := v.rows.AddRow(parser.Datums{
 				parser.NewDString(n.Table.String()),
 				parser.NewDString(buf.String()),
 			}); err != nil {
@@ -481,7 +482,7 @@ func (p *planner) ShowCreateView(n *parser.ShowCreateView) (planNode, error) {
 			}
 
 			fmt.Fprintf(&buf, "AS %s", desc.ViewQuery)
-			if _, err := v.rows.AddRow(parser.DTuple{
+			if _, err := v.rows.AddRow(parser.Datums{
 				parser.NewDString(n.View.String()),
 				parser.NewDString(buf.String()),
 			}); err != nil {
@@ -844,7 +845,7 @@ func (p *planner) Help(n *parser.Help) (planNode, error) {
 			}
 
 			for _, f := range matches {
-				row := parser.DTuple{
+				row := parser.Datums{
 					parser.NewDString(name),
 					parser.NewDString(f.Signature()),
 					parser.NewDString(f.Category()),

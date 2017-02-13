@@ -41,7 +41,7 @@ type insertNode struct {
 		editNodeRun
 
 		rowIdxToRetIdx []int
-		rowTemplate    parser.DTuple
+		rowTemplate    parser.Datums
 	}
 }
 
@@ -149,7 +149,11 @@ func (p *planner) Insert(
 			// TODO(dan): Postgres allows ON CONFLICT DO NOTHING without specifying a
 			// conflict index, which means do nothing on any conflict. Support this if
 			// someone needs it.
-			tw = &tableUpserter{ri: ri, conflictIndex: *conflictIndex}
+			tw = &tableUpserter{
+				ri:            ri,
+				autoCommit:    autoCommit,
+				conflictIndex: *conflictIndex,
+			}
 		} else {
 			names, err := p.namesForExprs(updateExprs)
 			if err != nil {
@@ -184,7 +188,14 @@ func (p *planner) Insert(
 			if err := p.fillFKTableMap(fkTables); err != nil {
 				return nil, err
 			}
-			tw = &tableUpserter{ri: ri, fkTables: fkTables, updateCols: updateCols, conflictIndex: *conflictIndex, evaler: helper}
+			tw = &tableUpserter{
+				ri:            ri,
+				autoCommit:    autoCommit,
+				fkTables:      fkTables,
+				updateCols:    updateCols,
+				conflictIndex: *conflictIndex,
+				evaler:        helper,
+			}
 		}
 	}
 
@@ -258,7 +269,7 @@ func (n *insertNode) Start() error {
 		// will use rowTemplate for this. We also need a table that maps row indices to rowTemplate indices
 		// to fill in the row values; any absent values will be NULLs.
 
-		n.run.rowTemplate = make(parser.DTuple, len(n.tableDesc.Columns))
+		n.run.rowTemplate = make(parser.Datums, len(n.tableDesc.Columns))
 		for i := range n.run.rowTemplate {
 			n.run.rowTemplate[i] = parser.DNull
 		}
@@ -337,8 +348,8 @@ func GenerateInsertRow(
 	insertCols []sqlbase.ColumnDescriptor,
 	evalCtx parser.EvalContext,
 	tableDesc *sqlbase.TableDescriptor,
-	rowVals parser.DTuple,
-) (parser.DTuple, error) {
+	rowVals parser.Datums,
+) (parser.Datums, error) {
 	// The values for the row may be shorter than the number of columns being
 	// inserted into. Generate default values for those columns using the
 	// default expressions.
@@ -346,7 +357,7 @@ func GenerateInsertRow(
 	if len(rowVals) < len(insertCols) {
 		// It's not cool to append to the slice returned by a node; make a copy.
 		oldVals := rowVals
-		rowVals = make(parser.DTuple, len(insertCols))
+		rowVals = make(parser.Datums, len(insertCols))
 		copy(rowVals, oldVals)
 
 		for i := len(oldVals); i < len(insertCols); i++ {
@@ -550,7 +561,7 @@ func (n *insertNode) Columns() ResultColumns {
 	return n.rh.columns
 }
 
-func (n *insertNode) Values() parser.DTuple {
+func (n *insertNode) Values() parser.Datums {
 	return n.run.resultRow
 }
 

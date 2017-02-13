@@ -15,21 +15,24 @@ import (
 	"hash/crc32"
 	"io/ioutil"
 	"math/rand"
+	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
 	"testing"
 
 	"github.com/pkg/errors"
+	"github.com/rlmcpherson/s3gof3r"
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
-	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
@@ -44,6 +47,7 @@ import (
 )
 
 const (
+	singleNode                  = 1
 	multiNode                   = 3
 	backupRestoreDefaultRanges  = 10
 	backupRestoreRowPayloadSize = 100
@@ -55,63 +59,18 @@ const (
 		payload STRING,
 		FAMILY (id, balance, payload)
 	)`
+	bankDataInsertRows = 1000
 )
-
-func TestIntersectHalfOpen(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	b1 := []byte{1}
-	b2 := []byte{2}
-	b3 := []byte{3}
-	b4 := []byte{4}
-
-	tests := []struct {
-		start1 []byte
-		end1   []byte
-		start2 []byte
-		end2   []byte
-		starti []byte
-		endi   []byte
-	}{
-		{b1, b2, b2, b3,
-			nil, nil},
-		{b1, b2, b3, b4,
-			nil, nil},
-		{b1, b3, b2, b3,
-			b2, b3},
-		{b1, b4, b2, b3,
-			b2, b3},
-
-		{b2, b3, b1, b2,
-			nil, nil},
-		{b3, b4, b1, b2,
-			nil, nil},
-		{b2, b3, b1, b3,
-			b2, b3},
-		{b2, b3, b1, b4,
-			b2, b3},
-
-		{b1, b4, b1, b4,
-			b1, b4},
-	}
-
-	for i, test := range tests {
-		s, e := IntersectHalfOpen(test.start1, test.end1, test.start2, test.end2)
-		if !bytes.Equal(s, test.starti) || !bytes.Equal(e, test.endi) {
-			t.Errorf("%d: got (%x, %x) expected (%x, %x)", i, s, e, test.starti, test.endi)
-		}
-	}
-}
 
 func bankDataInsertStmts(count int) []string {
 	rng, _ := randutil.NewPseudoRand()
 
 	var statements []string
 	var insert bytes.Buffer
-	for i := 0; i < count; i += 1000 {
+	for i := 0; i < count; i += bankDataInsertRows {
 		insert.Reset()
 		insert.WriteString(`INSERT INTO bench.bank VALUES `)
-		for j := i; j < i+1000 && j < count; j++ {
+		for j := i; j < i+bankDataInsertRows && j < count; j++ {
 			if j != i {
 				insert.WriteRune(',')
 			}
@@ -137,10 +96,26 @@ func bankSplitStmts(numAccounts int, numRanges int) []string {
 	return statements
 }
 
+// allRangeDescriptors fetches all meta2 RangeDescriptors using the given txn.
+func allRangeDescriptors(txn *client.Txn) ([]roachpb.RangeDescriptor, error) {
+	rows, err := txn.Scan(keys.Meta2Prefix, keys.MetaMax, 0)
+	if err != nil {
+		return nil, errors.Wrap(err, "unable to scan range descriptors")
+	}
+
+	rangeDescs := make([]roachpb.RangeDescriptor, len(rows))
+	for i, row := range rows {
+		if err := row.ValueProto(&rangeDescs[i]); err != nil {
+			return nil, errors.Wrapf(err, "%s: unable to unmarshal range descriptor", row.Key)
+		}
+	}
+	return rangeDescs, nil
+}
+
 func rebalanceLeases(t testing.TB, tc *testcluster.TestCluster) {
 	kvDB := tc.Server(0).KVClient().(*client.DB)
 	txn := client.NewTxn(context.Background(), *kvDB)
-	rangeDescs, err := AllRangeDescriptors(txn)
+	rangeDescs, err := allRangeDescriptors(txn)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -169,11 +144,19 @@ func backupRestoreTestSetup(
 
 	dir, dirCleanupFn := testutils.TempDir(t, 1)
 
+	// TODO(dan): Some tests don't need multiple nodes, but the test setup
+	// hangs with 1. Investigate.
+	if numAccounts == 0 && clusterSize < multiNode {
+		clusterSize = multiNode
+		t.Logf("setting cluster size to %d due to a bug", clusterSize)
+	}
+
 	tc = testcluster.StartTestCluster(t, clusterSize, base.TestClusterArgs{})
 	sqlDB = sqlutils.MakeSQLRunner(t, tc.Conns[0])
 	kvDB = tc.Server(0).KVClient().(*client.DB)
 
 	sqlDB.Exec(bankCreateDatabase)
+
 	if numAccounts > 0 {
 		sqlDB.Exec(bankCreateTable)
 		for _, insert := range bankDataInsertStmts(numAccounts) {
@@ -197,7 +180,7 @@ func backupRestoreTestSetup(
 	return ctx, dir, tc, kvDB, sqlDB, cleanupFn
 }
 
-func TestBackupRestoreOnce(t *testing.T) {
+func TestBackupRestoreLocal(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	// TODO(dan): Actually invalidate the descriptor cache and delete this line.
 	defer sql.TestDisableTableLeases()()
@@ -206,6 +189,64 @@ func TestBackupRestoreOnce(t *testing.T) {
 	ctx, dir, _, _, sqlDB, cleanupFn := backupRestoreTestSetup(t, multiNode, numAccounts)
 	defer cleanupFn()
 	backupAndRestore(ctx, t, sqlDB, dir, numAccounts)
+}
+
+// TestBackupRestoreS3 hits the real S3 and so could occasionally be flaky. It's
+// only run if the AWS_S3_BUCKET environment var is set.
+func TestBackupRestoreS3(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	s3Keys, err := s3gof3r.EnvKeys()
+	if err != nil {
+		s3Keys, err = s3gof3r.InstanceKeys()
+		if err != nil {
+			t.Skip("No AWS keys instance or env keys")
+		}
+	}
+	bucket := os.Getenv("AWS_S3_BUCKET")
+	if bucket == "" {
+		// CRL uses a bucket `cockroach-backup-tests` that has a 24h TTL policy.
+		t.Skip("AWS_S3_BUCKET env var must be set")
+	}
+
+	// TODO(dan): Actually invalidate the descriptor cache and delete this line.
+	defer sql.TestDisableTableLeases()()
+	const numAccounts = 1000
+
+	ctx, _, _, _, sqlDB, cleanupFn := backupRestoreTestSetup(t, 1, numAccounts)
+	defer cleanupFn()
+	prefix := fmt.Sprintf("TestBackupRestoreS3-%d", timeutil.Now().UnixNano())
+	uri := url.URL{Scheme: "s3", Host: bucket, Path: prefix}
+	values := uri.Query()
+	values.Add(storageccl.S3AccessKeyParam, s3Keys.AccessKey)
+	values.Add(storageccl.S3SecretParam, s3Keys.SecretKey)
+	uri.RawQuery = values.Encode()
+
+	backupAndRestore(ctx, t, sqlDB, uri.String(), numAccounts)
+}
+
+// TestBackupRestoreGoogleCloudStorage hits the real GCS and so could
+// occasionally be flaky. It's only run if the GS_BUCKET environment var is set.
+func TestBackupRestoreGoogleCloudStorage(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	bucket := os.Getenv("GS_BUCKET")
+	if bucket == "" {
+		t.Skip("GS_BUCKET env var must be set")
+	}
+
+	// TODO(dan): Actually invalidate the descriptor cache and delete this line.
+	defer sql.TestDisableTableLeases()()
+	const numAccounts = 1000
+
+	// TODO(dt): this prevents leaking an http conn goroutine.
+	http.DefaultTransport.(*http.Transport).DisableKeepAlives = true
+
+	ctx, _, _, _, sqlDB, cleanupFn := backupRestoreTestSetup(t, 1, numAccounts)
+	defer cleanupFn()
+	prefix := fmt.Sprintf("TestBackupRestoreGoogleCloudStorage-%d", timeutil.Now().UnixNano())
+	uri := url.URL{Scheme: "gs", Host: bucket, Path: prefix}
+	backupAndRestore(ctx, t, sqlDB, uri.String(), numAccounts)
 }
 
 func backupAndRestore(
@@ -245,6 +286,95 @@ func backupAndRestore(
 	}
 }
 
+func TestBackupRestoreInterleaved(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	// TODO(dan): Actually invalidate the descriptor cache and delete this line.
+	defer sql.TestDisableTableLeases()()
+	const numAccounts = 10
+
+	ctx, dir, _, _, sqlDB, cleanupFn := backupRestoreTestSetup(t, multiNode, numAccounts)
+	defer cleanupFn()
+
+	// TODO(dan): The INTERLEAVE IN PARENT clause currently doesn't allow the
+	// `db.table` syntax. Fix that and use it here instead of `SET DATABASE`.
+	_ = sqlDB.Exec(`SET DATABASE = bench`)
+	_ = sqlDB.Exec(`CREATE TABLE i0 (a INT, b INT, PRIMARY KEY (a, b)) INTERLEAVE IN PARENT bank (a)`)
+	_ = sqlDB.Exec(`CREATE TABLE i0_0 (a INT, b INT, c INT, PRIMARY KEY (a, b, c)) INTERLEAVE IN PARENT i0 (a, b)`)
+	_ = sqlDB.Exec(`CREATE TABLE i1 (a INT, b INT, PRIMARY KEY (a, b)) INTERLEAVE IN PARENT bank (a)`)
+
+	// The bank table has numAccounts accounts, put 2x that in i0, 3x in i0_0,
+	// and 4x in i1.
+	for i := 0; i < numAccounts; i++ {
+		_ = sqlDB.Exec(fmt.Sprintf(`INSERT INTO i0 VALUES (%d, 1), (%d, 2)`, i, i))
+		_ = sqlDB.Exec(fmt.Sprintf(`INSERT INTO i0_0 VALUES (%d, 1, 1), (%d, 2, 2), (%d, 3, 3)`, i, i, i))
+		_ = sqlDB.Exec(fmt.Sprintf(`INSERT INTO i1 VALUES (%d, 1), (%d, 2), (%d, 3), (%d, 4)`, i, i, i, i))
+	}
+	_ = sqlDB.Exec(fmt.Sprintf(`BACKUP DATABASE bench TO '%s'`, dir))
+
+	t.Run("all tables in interleave hierarchy", func(t *testing.T) {
+		tcRestore := testcluster.StartTestCluster(t, multiNode, base.TestClusterArgs{})
+		defer tcRestore.Stopper().Stop()
+		sqlDBRestore := sqlutils.MakeSQLRunner(t, tcRestore.Conns[0])
+		kvDBRestore := tcRestore.Server(0).KVClient().(*client.DB)
+		sqlDBRestore.Exec(bankCreateDatabase)
+
+		table := parser.TableName{DatabaseName: "bench", TableName: "*"}
+		newTables, err := Restore(ctx, *kvDBRestore, []string{dir}, table)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(newTables) != 4 {
+			t.Fatalf("expected to restore 1 table, got %d", len(newTables))
+		}
+
+		var rowCount int64
+		sqlDBRestore.QueryRow(`SELECT COUNT(*) FROM bench.bank`).Scan(&rowCount)
+		if rowCount != numAccounts {
+			t.Errorf("expected %d rows but found %d", numAccounts, rowCount)
+		}
+		sqlDBRestore.QueryRow(`SELECT COUNT(*) FROM bench.i0`).Scan(&rowCount)
+		if rowCount != 2*numAccounts {
+			t.Errorf("expected %d rows but found %d", 2*numAccounts, rowCount)
+		}
+		sqlDBRestore.QueryRow(`SELECT COUNT(*) FROM bench.i0_0`).Scan(&rowCount)
+		if rowCount != 3*numAccounts {
+			t.Errorf("expected %d rows but found %d", 3*numAccounts, rowCount)
+		}
+		sqlDBRestore.QueryRow(`SELECT COUNT(*) FROM bench.i1`).Scan(&rowCount)
+		if rowCount != 4*numAccounts {
+			t.Errorf("expected %d rows but found %d", 4*numAccounts, rowCount)
+		}
+	})
+
+	t.Run("interleaved table without parent", func(t *testing.T) {
+		tcRestore := testcluster.StartTestCluster(t, multiNode, base.TestClusterArgs{})
+		defer tcRestore.Stopper().Stop()
+		sqlDBRestore := sqlutils.MakeSQLRunner(t, tcRestore.Conns[0])
+		kvDBRestore := tcRestore.Server(0).KVClient().(*client.DB)
+		sqlDBRestore.Exec(bankCreateDatabase)
+
+		table := parser.TableName{DatabaseName: "bench", TableName: "i0"}
+		_, err := Restore(ctx, *kvDBRestore, []string{dir}, table)
+		if !testutils.IsError(err, "without interleave parent") {
+			t.Fatalf("expected 'without interleave parent' error but got: %+v", err)
+		}
+	})
+
+	t.Run("interleaved table without child", func(t *testing.T) {
+		tcRestore := testcluster.StartTestCluster(t, multiNode, base.TestClusterArgs{})
+		defer tcRestore.Stopper().Stop()
+		sqlDBRestore := sqlutils.MakeSQLRunner(t, tcRestore.Conns[0])
+		kvDBRestore := tcRestore.Server(0).KVClient().(*client.DB)
+		sqlDBRestore.Exec(bankCreateDatabase)
+
+		table := parser.TableName{DatabaseName: "bench", TableName: "bank"}
+		_, err := Restore(ctx, *kvDBRestore, []string{dir}, table)
+		if !testutils.IsError(err, "without interleave child") {
+			t.Fatalf("expected 'without interleave child' error but got: %+v", err)
+		}
+	})
+}
+
 func startBankTransfers(stopper *stop.Stopper, sqlDB *gosql.DB, numAccounts int) error {
 	rng, _ := randutil.NewPseudoRand()
 
@@ -278,7 +408,6 @@ func startBankTransfers(stopper *stop.Stopper, sqlDB *gosql.DB, numAccounts int)
 
 func TestBackupRestoreBank(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	t.Skip("#13189")
 	// TODO(dan): Actually invalidate the descriptor cache and delete this line.
 	defer sql.TestDisableTableLeases()()
 
@@ -361,6 +490,32 @@ func TestBackupRestoreBank(t *testing.T) {
 	}
 }
 
+func TestBackupAsOfSystemTime(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	// TODO(dan): Actually invalidate the descriptor cache and delete this line.
+	defer sql.TestDisableTableLeases()()
+	const numAccounts = 1000
+
+	_, dir, _, _, sqlDB, cleanupFn := backupRestoreTestSetup(t, multiNode, numAccounts)
+	defer cleanupFn()
+
+	var ts string
+	sqlDB.QueryRow(`SELECT cluster_logical_timestamp()`).Scan(&ts)
+	sqlDB.Exec(`TRUNCATE bench.bank`)
+	sqlDB.Exec(fmt.Sprintf(`BACKUP DATABASE bench TO '%s' AS OF SYSTEM TIME %s`, dir, ts))
+
+	var rowCount int64
+	sqlDB.QueryRow(`SELECT COUNT(*) FROM bench.bank`).Scan(&rowCount)
+	if rowCount != 0 {
+		t.Fatalf("expected 0 rows but found %d", rowCount)
+	}
+	sqlDB.Exec(fmt.Sprintf(`RESTORE DATABASE bench FROM '%s'`, dir))
+	sqlDB.QueryRow(`SELECT COUNT(*) FROM bench.bank`).Scan(&rowCount)
+	if rowCount != numAccounts {
+		t.Fatalf("expected %d rows but found %d", numAccounts, rowCount)
+	}
+}
+
 func TestPresplitRanges(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -393,11 +548,8 @@ func TestPresplitRanges(t *testing.T) {
 
 func TestBackupLevelDB(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	const numAccounts = 1
 
-	// TODO(dan): This test doesn't need multiple nodes, but the test setup
-	// hangs with 1. Investigate.
-	_, dir, _, _, sqlDB, cleanupFn := backupRestoreTestSetup(t, multiNode, numAccounts)
+	_, dir, _, _, sqlDB, cleanupFn := backupRestoreTestSetup(t, singleNode, 0)
 	defer cleanupFn()
 
 	_ = sqlDB.Exec(fmt.Sprintf(`BACKUP DATABASE bench TO '%s'`, dir))
@@ -429,22 +581,28 @@ func TestBackupLevelDB(t *testing.T) {
 func BenchmarkClusterBackup(b *testing.B) {
 	defer tracing.Disable()()
 
-	for _, numAccounts := range []int{10, 100, 1000, 10000} {
-		b.Run(strconv.Itoa(numAccounts), func(b *testing.B) {
-			ctx, dir, tc, kvDB, _, cleanupFn := backupRestoreTestSetup(b, multiNode, numAccounts)
-			defer cleanupFn()
-			rebalanceLeases(b, tc)
+	ctx, dir, tc, _, sqlDB, cleanupFn := backupRestoreTestSetup(b, multiNode, 0)
+	defer cleanupFn()
 
-			b.ResetTimer()
-			for i := 0; i < b.N; i++ {
-				desc, err := Backup(ctx, *kvDB, dir, tc.Server(0).Clock().Now())
-				if err != nil {
-					b.Fatal(err)
-				}
-				b.SetBytes(desc.DataSize)
-			}
-		})
+	ts := hlc.Timestamp{WallTime: hlc.UnixNano()}
+	if _, err := Load(ctx, sqlDB.DB, bankStatementBuf(b.N), "bench", dir, ts, 0); err != nil {
+		b.Fatalf("%+v", err)
 	}
+	sqlDB.Exec(fmt.Sprintf(`RESTORE DATABASE bench FROM '%s'`, dir))
+
+	for _, split := range bankSplitStmts(b.N, backupRestoreDefaultRanges) {
+		sqlDB.Exec(split)
+	}
+	rebalanceLeases(b, tc)
+
+	b.ResetTimer()
+	var unused string
+	var dataSize int64
+	sqlDB.QueryRow(fmt.Sprintf(`BACKUP DATABASE bench TO '%s'`, dir)).Scan(
+		&unused, &unused, &unused, &dataSize,
+	)
+	b.StopTimer()
+	b.SetBytes(dataSize / int64(b.N))
 }
 
 func BenchmarkClusterRestore(b *testing.B) {
@@ -459,7 +617,7 @@ func BenchmarkClusterRestore(b *testing.B) {
 			// TODO(dan): Once mjibson's sql -> kv function is committed, use it
 			// here on the output of bankDataInsert to generate the backup data
 			// instead of this call.
-			desc, err := Backup(ctx, *kvDB, dir, tc.Server(0).Clock().Now())
+			desc, err := Backup(ctx, *kvDB, dir, hlc.ZeroTimestamp, tc.Server(0).Clock().Now())
 			if err != nil {
 				b.Fatal(err)
 			}
@@ -470,83 +628,10 @@ func BenchmarkClusterRestore(b *testing.B) {
 			b.ResetTimer()
 			table := parser.TableName{DatabaseName: "bench", TableName: "bank"}
 			for i := 0; i < b.N; i++ {
-				if _, err := Restore(ctx, *kvDB, dir, table); err != nil {
+				if _, err := Restore(ctx, *kvDB, []string{dir}, table); err != nil {
 					b.Fatal(err)
 				}
 			}
 		})
-	}
-}
-
-func BenchmarkSstRekey(b *testing.B) {
-	// TODO(dan): DRY this with BenchmarkRocksDBSstFileReader.
-
-	dir, cleanupFn := testutils.TempDir(b, 1)
-	defer cleanupFn()
-
-	sstPath := filepath.Join(dir, "sst")
-	{
-		const maxEntries = 100000
-		const keyLen = 10
-		const valLen = 100
-		b.SetBytes(keyLen + valLen)
-
-		ts := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
-		kv := engine.MVCCKeyValue{
-			Key:   engine.MVCCKey{Key: roachpb.Key(make([]byte, keyLen)), Timestamp: ts},
-			Value: make([]byte, valLen),
-		}
-
-		sst := engine.MakeRocksDBSstFileWriter()
-		if err := sst.Open(sstPath); err != nil {
-			b.Fatal(sst)
-		}
-		var entries = b.N
-		if entries > maxEntries {
-			entries = maxEntries
-		}
-		for i := 0; i < entries; i++ {
-			payload := []byte(fmt.Sprintf("%09d", i))
-			kv.Key.Key = kv.Key.Key[:0]
-			kv.Key.Key = encoding.EncodeUvarintAscending(kv.Key.Key, uint64(i)) // tableID
-			kv.Key.Key = encoding.EncodeUvarintAscending(kv.Key.Key, 0)         // indexID
-			kv.Key.Key = encoding.EncodeBytesAscending(kv.Key.Key, payload)
-			kv.Key.Key = keys.MakeRowSentinelKey(kv.Key.Key)
-			copy(kv.Value, payload)
-			if err := sst.Add(kv); err != nil {
-				b.Fatal(err)
-			}
-		}
-		if err := sst.Close(); err != nil {
-			b.Fatal(err)
-		}
-	}
-
-	const newTableID = 100
-
-	b.ResetTimer()
-	sst, err := engine.MakeRocksDBSstFileReader()
-	if err != nil {
-		b.Fatal(err)
-	}
-	if err := sst.AddFile(sstPath); err != nil {
-		b.Fatal(err)
-	}
-	defer sst.Close()
-	count := 0
-	iterateFn := MakeRekeyMVCCKeyValFunc(newTableID, func(kv engine.MVCCKeyValue) (bool, error) {
-		count++
-		if count >= b.N {
-			return true, nil
-		}
-		return false, nil
-	})
-	for {
-		if err := sst.Iterate(engine.MVCCKey{Key: keys.MinKey}, engine.MVCCKey{Key: keys.MaxKey}, iterateFn); err != nil {
-			b.Fatal(err)
-		}
-		if count >= b.N {
-			break
-		}
 	}
 }

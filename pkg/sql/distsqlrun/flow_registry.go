@@ -21,6 +21,8 @@ import (
 	"sync"
 	"time"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/pkg/errors"
@@ -121,7 +123,7 @@ func (fr *flowRegistry) releaseEntryLocked(id FlowID) {
 // It is expected that UnregisterFlow will be called at some point to remove the
 // flow from the registry.
 func (fr *flowRegistry) RegisterFlow(
-	id FlowID, f *Flow, inboundStreams map[StreamID]*inboundStreamInfo,
+	ctx context.Context, id FlowID, f *Flow, inboundStreams map[StreamID]*inboundStreamInfo,
 ) {
 	fr.Lock()
 	defer fr.Unlock()
@@ -156,8 +158,12 @@ func (fr *flowRegistry) RegisterFlow(
 				}
 			}
 			if numTimedOut != 0 {
-				log.Errorf(entry.flow.Context, "%d inbound streams timed out after %s; stopping flow",
-					numTimedOut, flowStreamTimeout)
+				log.Errorf(
+					ctx,
+					"%d inbound streams timed out after %s; stopping flow",
+					numTimedOut,
+					flowStreamTimeout,
+				)
 			}
 		})
 	}

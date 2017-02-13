@@ -1195,6 +1195,7 @@ func (node *CastExpr) String() string         { return AsString(node) }
 func (node *CoalesceExpr) String() string     { return AsString(node) }
 func (node *CollateExpr) String() string      { return AsString(node) }
 func (node *ComparisonExpr) String() string   { return AsString(node) }
+func (node *Datums) String() string           { return AsString(node) }
 func (node *DBool) String() string            { return AsString(node) }
 func (node *DBytes) String() string           { return AsString(node) }
 func (node *DDate) String() string            { return AsString(node) }

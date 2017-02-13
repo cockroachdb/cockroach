@@ -119,6 +119,7 @@ var commands = map[roachpb.Method]Command{
 	roachpb.ComputeChecksum:    {DeclareKeys: DefaultDeclareKeys, Eval: evalComputeChecksum},
 	roachpb.ChangeFrozen:       {DeclareKeys: DefaultDeclareKeys, Eval: evalChangeFrozen},
 	roachpb.WriteBatch:         writeBatchCmd,
+	roachpb.Export:             exportCmd,
 
 	roachpb.DeprecatedVerifyChecksum: {
 		DeclareKeys: DefaultDeclareKeys,
@@ -1218,11 +1219,11 @@ func evalGC(
 	pd.Replicated.State.GCThreshold = newThreshold
 	pd.Replicated.State.TxnSpanGCThreshold = newTxnSpanGCThreshold
 
-	if err := setGCThreshold(ctx, batch, cArgs.Stats, r.Desc().RangeID, &newThreshold); err != nil {
+	if err := r.stateLoader.setGCThreshold(ctx, batch, cArgs.Stats, &newThreshold); err != nil {
 		return EvalResult{}, err
 	}
 
-	if err := setTxnSpanGCThreshold(ctx, batch, cArgs.Stats, r.Desc().RangeID, &newTxnSpanGCThreshold); err != nil {
+	if err := r.stateLoader.setTxnSpanGCThreshold(ctx, batch, cArgs.Stats, &newTxnSpanGCThreshold); err != nil {
 		return EvalResult{}, err
 	}
 
@@ -1592,7 +1593,7 @@ func evalTruncateLog(
 	pd.Replicated.State.TruncatedState = tState
 	pd.Replicated.RaftLogDelta = &diff.SysBytes
 
-	return pd, setTruncatedState(ctx, batch, cArgs.Stats, r.RangeID, tState)
+	return pd, r.stateLoader.setTruncatedState(ctx, batch, cArgs.Stats, tState)
 }
 
 func newFailedLeaseTrigger(isTransfer bool) EvalResult {
@@ -1746,7 +1747,7 @@ func (r *Replica) applyNewLeaseLocked(
 	}
 
 	// Store the lease to disk & in-memory.
-	if err := setLease(ctx, batch, ms, r.RangeID, &lease); err != nil {
+	if err := r.stateLoader.setLease(ctx, batch, ms, &lease); err != nil {
 		return newFailedLeaseTrigger(isTransfer), err
 	}
 
@@ -2061,7 +2062,7 @@ func evalChangeFrozen(
 
 	desc := r.Desc()
 
-	frozen, err := loadFrozenStatus(ctx, batch, desc.RangeID)
+	frozen, err := r.stateLoader.loadFrozenStatus(ctx, batch)
 	if err != nil || (frozen == storagebase.ReplicaState_FROZEN) == args.Frozen {
 		// Something went wrong or we're already in the right frozen state. In
 		// the latter case, we avoid writing the "same thing" because "we"
@@ -2116,7 +2117,7 @@ func evalChangeFrozen(
 	if args.Frozen {
 		frozenStatus = storagebase.ReplicaState_FROZEN
 	}
-	if err := setFrozenStatus(ctx, batch, cArgs.Stats, r.Desc().RangeID, frozenStatus); err != nil {
+	if err := r.stateLoader.setFrozenStatus(ctx, batch, cArgs.Stats, frozenStatus); err != nil {
 		*reply = roachpb.ChangeFrozenResponse{}
 		return EvalResult{}, err
 	}
@@ -2141,12 +2142,20 @@ func makeUnimplementedCommand(method roachpb.Method) Command {
 }
 
 var writeBatchCmd = makeUnimplementedCommand(roachpb.WriteBatch)
+var exportCmd = makeUnimplementedCommand(roachpb.Export)
 
 // SetWriteBatchCmd allows setting the function that will be called as the
 // implementation of the WriteBatch command. Only allowed to be called by Init.
 func SetWriteBatchCmd(cmd Command) {
 	// This is safe if SetWriteBatchCmd is only called at init time.
 	commands[roachpb.WriteBatch] = cmd
+}
+
+// SetExportCmd allows setting the function that will be called as the
+// implementation of the Export command. Only allowed to be called by Init.
+func SetExportCmd(cmd Command) {
+	// This is safe if SetExportCmd is only called at init time.
+	commands[roachpb.Export] = cmd
 }
 
 // ReplicaSnapshotDiff is a part of a []ReplicaSnapshotDiff which represents a diff between
@@ -2772,7 +2781,7 @@ func (r *Replica) splitTrigger(
 		//
 		// TODO(tschottdorf): why would this use r.store.Engine() and not the
 		// batch?
-		leftLease, err := loadLease(ctx, r.store.Engine(), r.RangeID)
+		leftLease, err := r.stateLoader.loadLease(ctx, r.store.Engine())
 		if err != nil {
 			return enginepb.MVCCStats{}, EvalResult{}, errors.Wrap(err, "unable to load lease")
 		}
@@ -3001,7 +3010,7 @@ func (r *Replica) mergeTrigger(
 	mergedMS.Add(msRange)
 
 	// Set stats for updated range.
-	if err := setMVCCStats(ctx, batch, r.RangeID, mergedMS); err != nil {
+	if err := r.stateLoader.setMVCCStats(ctx, batch, &mergedMS); err != nil {
 		return EvalResult{}, errors.Errorf("unable to write MVCC stats: %s", err)
 	}
 
@@ -3331,6 +3340,11 @@ func (r *Replica) sendSnapshot(
 		}
 	}
 
+	status := r.RaftStatus()
+	if status == nil {
+		return errors.New("raft status not initialized")
+	}
+
 	req := SnapshotRequest_Header{
 		State: snap.State,
 		RaftMessageRequest: RaftMessageRequest{
@@ -3341,7 +3355,7 @@ func (r *Replica) sendSnapshot(
 				Type:     raftpb.MsgSnap,
 				To:       uint64(repDesc.ReplicaID),
 				From:     uint64(fromRepDesc.ReplicaID),
-				Term:     snap.RaftSnap.Metadata.Term,
+				Term:     status.Term,
 				Snapshot: snap.RaftSnap,
 			},
 		},

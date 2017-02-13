@@ -688,7 +688,7 @@ func (tm *testModel) assertQuery(
 
 	// Construct an expected result for comparison.
 	var expectedDatapoints []tspb.TimeSeriesDatapoint
-	expectedSources := make([]string, 0, 0)
+	expectedSources := make([]string, 0)
 	dataSpans := make(map[string]*dataSpan)
 
 	// If no specific sources were provided, look for data from every source

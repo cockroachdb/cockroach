@@ -132,12 +132,36 @@ func (p *planner) Set(n *parser.Set) (planNode, error) {
 		if strings.ToUpper(s) != "UTF8" {
 			return nil, fmt.Errorf("non-UTF8 encoding %s not supported", s)
 		}
+
 	case `SEARCH_PATH`:
-	// Controls the schema search order. We don't really support this as we
-	// don't have first-class support for schemas.
-	// TODO(jordan) can we hook this up to EvalContext.SearchPath without
-	// breaking things?
-	// See https://www.postgresql.org/docs/9.6/static/runtime-config-client.html
+		// https://www.postgresql.org/docs/9.6/static/runtime-config-client.html
+		newSearchPath := make(parser.SearchPath, len(typedValues))
+		foundPgCatalog := false
+		for i, v := range typedValues {
+			val, err := v.Eval(&p.evalCtx)
+			if err != nil {
+				return nil, err
+			}
+			s, ok := parser.AsDString(val)
+			if !ok {
+				return nil, fmt.Errorf("%s: requires string values: %s is %s not string",
+					name, v, val.ResolvedType())
+			}
+			if s == pgCatalogName {
+				foundPgCatalog = true
+			}
+			newSearchPath[i] = parser.Name(s).Normalize()
+		}
+		if !foundPgCatalog {
+			// "The system catalog schema, pg_catalog, is always searched,
+			// whether it is mentioned in the path or not. If it is
+			// mentioned in the path then it will be searched in the
+			// specified order. If pg_catalog is not in the path then it
+			// will be searched before searching any of the path items."
+			newSearchPath = append([]string{"pg_catalog"}, newSearchPath...)
+		}
+		p.session.SearchPath = newSearchPath
+
 	case `STANDARD_CONFORMING_STRINGS`:
 		// If true, escape backslash literals in strings. We do this by default,
 		// and we do not support the opposite behavior.

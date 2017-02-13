@@ -59,8 +59,8 @@ type tableWriter interface {
 
 	// row performs a sql row modification (tableInserter performs an insert,
 	// etc). It batches up writes to the init'd txn and periodically sends them.
-	// The returned DTuple is suitable for use with returningHelper.
-	row(context.Context, parser.DTuple) (parser.DTuple, error)
+	// The returned Datums is suitable for use with returningHelper.
+	row(context.Context, parser.Datums) (parser.Datums, error)
 
 	// finalize flushes out any remaining writes. It is called after all calls to
 	// row.
@@ -90,7 +90,7 @@ func (ti *tableInserter) init(txn *client.Txn) error {
 	return nil
 }
 
-func (ti *tableInserter) row(ctx context.Context, values parser.DTuple) (parser.DTuple, error) {
+func (ti *tableInserter) row(ctx context.Context, values parser.Datums) (parser.Datums, error) {
 	return nil, ti.ri.InsertRow(ctx, ti.b, values, false)
 }
 
@@ -129,7 +129,7 @@ func (tu *tableUpdater) init(txn *client.Txn) error {
 	return nil
 }
 
-func (tu *tableUpdater) row(ctx context.Context, values parser.DTuple) (parser.DTuple, error) {
+func (tu *tableUpdater) row(ctx context.Context, values parser.Datums) (parser.Datums, error) {
 	oldValues := values[:len(tu.ru.fetchCols)]
 	updateValues := values[len(tu.ru.fetchCols):]
 	return tu.ru.updateRow(ctx, tu.b, oldValues, updateValues)
@@ -163,7 +163,7 @@ type tableUpsertEvaler interface {
 
 	// eval returns the values for the update case of an upsert, given the row
 	// that would have been inserted and the existing (conflicting) values.
-	eval(insertRow parser.DTuple, existingRow parser.DTuple) (parser.DTuple, error)
+	eval(insertRow parser.Datums, existingRow parser.Datums) (parser.Datums, error)
 
 	isIdentityEvaler() bool
 }
@@ -186,6 +186,7 @@ type tableUpsertEvaler interface {
 // as the other `tableFoo`s, which are more simple than upsert.
 type tableUpserter struct {
 	ri            RowInserter
+	autoCommit    bool
 	conflictIndex sqlbase.IndexDescriptor
 
 	// These are set for ON CONFLICT DO UPDATE, but not for DO NOTHING
@@ -208,7 +209,7 @@ type tableUpserter struct {
 	fastPathKeys  map[string]struct{}
 
 	// Batched up in run/flush.
-	insertRows []parser.DTuple
+	insertRows []parser.Datums
 
 	// For allocation avoidance.
 	indexKeyPrefix []byte
@@ -227,7 +228,11 @@ func (tu *tableUpserter) init(txn *client.Txn) error {
 
 	allColsIdentityExpr := len(tu.ri.insertCols) == len(tu.tableDesc.Columns) &&
 		tu.evaler != nil && tu.evaler.isIdentityEvaler()
-	if len(tu.tableDesc.Indexes) == 0 && allColsIdentityExpr {
+	// When adding or removing a column in a schema change (mutation), the user
+	// can't specify it, which means we need to do a lookup and so we can't use
+	// the fast path. When adding or removing an index, same result, so the fast
+	// path is disabled during all mutations.
+	if len(tu.tableDesc.Indexes) == 0 && len(tu.tableDesc.Mutations) == 0 && allColsIdentityExpr {
 		tu.fastPathBatch = tu.txn.NewBatch()
 		tu.fastPathKeys = make(map[string]struct{})
 		return nil
@@ -266,11 +271,12 @@ func (tu *tableUpserter) init(txn *client.Txn) error {
 	}
 
 	return tu.fetcher.Init(
-		tu.tableDesc, tu.fetchColIDtoRowIndex, &tu.tableDesc.PrimaryIndex, false, false,
-		tu.fetchCols, valNeededForCol)
+		tu.tableDesc, tu.fetchColIDtoRowIndex, &tu.tableDesc.PrimaryIndex,
+		false /* reverse */, false, /* isSecondaryIndex */
+		tu.fetchCols, valNeededForCol, false /*returnRangeInfo*/)
 }
 
-func (tu *tableUpserter) row(ctx context.Context, row parser.DTuple) (parser.DTuple, error) {
+func (tu *tableUpserter) row(ctx context.Context, row parser.Datums) (parser.Datums, error) {
 	if tu.fastPathBatch != nil {
 		primaryKey, _, err := sqlbase.EncodeIndexKey(
 			tu.tableDesc, &tu.tableDesc.PrimaryIndex, tu.ri.InsertColIDtoRowIndex, row, tu.indexKeyPrefix)
@@ -291,7 +297,7 @@ func (tu *tableUpserter) row(ctx context.Context, row parser.DTuple) (parser.DTu
 }
 
 // flush commits to tu.txn any rows batched up in tu.insertRows.
-func (tu *tableUpserter) flush(ctx context.Context) error {
+func (tu *tableUpserter) flush(ctx context.Context, finalize bool) error {
 	defer func() {
 		tu.insertRows = nil
 	}()
@@ -326,7 +332,15 @@ func (tu *tableUpserter) flush(ctx context.Context) error {
 		}
 	}
 
-	if err := tu.txn.Run(b); err != nil {
+	if finalize && tu.autoCommit {
+		// An auto-txn can commit the transaction with the batch. This is an
+		// optimization to avoid an extra round-trip to the transaction
+		// coordinator.
+		err = tu.txn.CommitInBatch(b)
+	} else {
+		err = tu.txn.Run(b)
+	}
+	if err != nil {
 		return sqlbase.ConvertBatchError(tu.tableDesc, b)
 	}
 	return nil
@@ -397,7 +411,7 @@ func (tu *tableUpserter) upsertRowPKs(ctx context.Context) ([]roachpb.Key, error
 // fetchExisting returns any existing rows in the table that conflict with the
 // ones in tu.insertRows. The returned slice is the same length as tu.insertRows
 // and a nil entry indicates no conflict.
-func (tu *tableUpserter) fetchExisting(ctx context.Context) ([]parser.DTuple, error) {
+func (tu *tableUpserter) fetchExisting(ctx context.Context) ([]parser.Datums, error) {
 	primaryKeys, err := tu.upsertRowPKs(ctx)
 	if err != nil {
 		return nil, err
@@ -416,7 +430,7 @@ func (tu *tableUpserter) fetchExisting(ctx context.Context) ([]parser.DTuple, er
 	}
 	if len(pkSpans) == 0 {
 		// Every key was empty, so there's nothing to fetch.
-		return make([]parser.DTuple, len(primaryKeys)), nil
+		return make([]parser.Datums, len(primaryKeys)), nil
 	}
 
 	// We don't limit batches here because the spans are unordered.
@@ -424,7 +438,7 @@ func (tu *tableUpserter) fetchExisting(ctx context.Context) ([]parser.DTuple, er
 		return nil, err
 	}
 
-	rows := make([]parser.DTuple, len(primaryKeys))
+	rows := make([]parser.Datums, len(primaryKeys))
 	for {
 		row, err := tu.fetcher.NextRowDecoded()
 		if err != nil {
@@ -442,7 +456,7 @@ func (tu *tableUpserter) fetchExisting(ctx context.Context) ([]parser.DTuple, er
 
 		// The rows returned by rowFetcher are invalidated after the call to
 		// NextRow, so we have to copy them to save them.
-		rowCopy := make(parser.DTuple, len(row))
+		rowCopy := make(parser.Datums, len(row))
 		copy(rowCopy, row)
 		rows[rowIdxForPrimaryKey[string(rowPrimaryKey)]] = rowCopy
 	}
@@ -451,9 +465,15 @@ func (tu *tableUpserter) fetchExisting(ctx context.Context) ([]parser.DTuple, er
 
 func (tu *tableUpserter) finalize(ctx context.Context) error {
 	if tu.fastPathBatch != nil {
+		if tu.autoCommit {
+			// An auto-txn can commit the transaction with the batch. This is an
+			// optimization to avoid an extra round-trip to the transaction
+			// coordinator.
+			return tu.txn.CommitInBatch(tu.fastPathBatch)
+		}
 		return tu.txn.Run(tu.fastPathBatch)
 	}
-	return tu.flush(ctx)
+	return tu.flush(ctx, true /* finalize */)
 }
 
 // tableDeleter handles writing kvs and forming table rows for deletes.
@@ -474,7 +494,7 @@ func (td *tableDeleter) init(txn *client.Txn) error {
 	return nil
 }
 
-func (td *tableDeleter) row(ctx context.Context, values parser.DTuple) (parser.DTuple, error) {
+func (td *tableDeleter) row(ctx context.Context, values parser.Datums) (parser.Datums, error) {
 	return nil, td.rd.deleteRow(ctx, td.b, values)
 }
 
@@ -618,7 +638,8 @@ func (td *tableDeleter) deleteAllRowsScan(
 	var rf sqlbase.RowFetcher
 	err := rf.Init(
 		td.rd.helper.tableDesc, td.rd.fetchColIDtoRowIndex, &td.rd.helper.tableDesc.PrimaryIndex,
-		false, false, td.rd.fetchCols, valNeededForCol)
+		false /*reverse*/, false, /*isSecondaryIndex*/
+		td.rd.fetchCols, valNeededForCol, false /* returnRangeInfo */)
 	if err != nil {
 		return resume, err
 	}
@@ -710,7 +731,8 @@ func (td *tableDeleter) deleteIndexScan(
 	var rf sqlbase.RowFetcher
 	err := rf.Init(
 		td.rd.helper.tableDesc, td.rd.fetchColIDtoRowIndex, &td.rd.helper.tableDesc.PrimaryIndex,
-		false, false, td.rd.fetchCols, valNeededForCol)
+		false /* reverse */, false, /*isSecondaryIndex */
+		td.rd.fetchCols, valNeededForCol, false /* returnRangeInfo */)
 	if err != nil {
 		return resume, err
 	}

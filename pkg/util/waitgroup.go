@@ -1,12 +1,20 @@
 // Copyright 2016 The Cockroach Authors.
 //
-// Licensed under the Cockroach Community Licence (the "License");
+// Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//     https://github.com/cockroachdb/cockroach/blob/master/LICENSE
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+// implied. See the License for the specific language governing
+// permissions and limitations under the License.
+//
+// Author: Daniel Harrison (dan@cockroachlabs.com)
 
-package utilccl
+package util
 
 import (
 	"sync"
@@ -26,8 +34,7 @@ import (
 //     wg.Done(maybeError())
 //   }
 // }
-// wg.Wait()
-// return wg.FirstError()
+// err := wg.Wait()
 type WaitGroupWithError struct {
 	wg sync.WaitGroup
 
@@ -46,8 +53,15 @@ func (wg *WaitGroupWithError) Add(delta int) {
 }
 
 // Wait blocks until the WaitGroup counter is zero.
-func (wg *WaitGroupWithError) Wait() {
+// It returns a summary of the errors that were passed to Done(err) calls (if
+// any).
+func (wg *WaitGroupWithError) Wait() error {
 	wg.wg.Wait()
+	// Locking no longer required at this point; no more concurrent Done() calls.
+	if wg.mu.numErrs > 0 {
+		return errors.Wrapf(wg.mu.firstErr, "first of %d errors", wg.mu.numErrs)
+	}
+	return nil
 }
 
 // Done decrements the WaitGroup counter and records the error if non-nil.
@@ -62,12 +76,4 @@ func (wg *WaitGroupWithError) Done(err error) {
 	}
 
 	wg.wg.Done()
-}
-
-// FirstError returns the first error that was passed to Done (wrapped in a
-// count of how many total errors there were) or nil if there were no errors.
-func (wg *WaitGroupWithError) FirstError() error {
-	wg.mu.Lock()
-	defer wg.mu.Unlock()
-	return errors.Wrapf(wg.mu.firstErr, "first of %d errors", wg.mu.numErrs)
 }

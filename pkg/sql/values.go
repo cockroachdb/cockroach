@@ -44,7 +44,7 @@ type valuesNode struct {
 
 	nextRow       int           // The index of the next row.
 	invertSorting bool          // Inverts the sorting predicate.
-	tmpValues     parser.DTuple // Used to store temporary values.
+	tmpValues     parser.Datums // Used to store temporary values.
 	err           error         // Used to propagate errors during heap operations.
 }
 
@@ -156,7 +156,7 @@ func (n *valuesNode) Ordering() orderingInfo {
 	return orderingInfo{}
 }
 
-func (n *valuesNode) Values() parser.DTuple {
+func (n *valuesNode) Values() parser.Datums {
 	return n.rows.At(n.nextRow - 1)
 }
 
@@ -199,9 +199,9 @@ func (n *valuesNode) Less(i, j int) bool {
 	return n.invertSorting != n.ValuesLess(ra, rb)
 }
 
-// ValuesLess returns the comparison result between the two provided DTuples
+// ValuesLess returns the comparison result between the two provided Datums slices
 // in the context of the valuesNode ordering.
-func (n *valuesNode) ValuesLess(ra, rb parser.DTuple) bool {
+func (n *valuesNode) ValuesLess(ra, rb parser.Datums) bool {
 	for _, c := range n.ordering {
 		var da, db parser.Datum
 		if c.Direction == encoding.Ascending {
@@ -235,9 +235,9 @@ func (n *valuesNode) Push(x interface{}) {
 	_, n.err = n.rows.AddRow(n.tmpValues)
 }
 
-// PushValues pushes the given DTuple value into the heap representation
+// PushValues pushes the given Datums value into the heap representation
 // of the valuesNode.
-func (n *valuesNode) PushValues(values parser.DTuple) error {
+func (n *valuesNode) PushValues(values parser.Datums) error {
 	// Avoid passing slice through interface{} to avoid allocation.
 	n.tmpValues = values
 	heap.Push(n, nil)
@@ -250,15 +250,15 @@ func (n *valuesNode) Pop() interface{} {
 		panic("no more rows to pop")
 	}
 	n.rowsPopped++
-	// Returning a DTuple as an interface{} involves an allocation. Luckily, the
+	// Returning a Datums as an interface{} involves an allocation. Luckily, the
 	// value of Pop is only used for the return value of heap.Pop, which we can
 	// avoid using.
 	return nil
 }
 
-// PopValues pops the top DTuple value off the heap representation
+// PopValues pops the top Datums value off the heap representation
 // of the valuesNode.
-func (n *valuesNode) PopValues() parser.DTuple {
+func (n *valuesNode) PopValues() parser.Datums {
 	heap.Pop(n)
 	// Return the last popped row.
 	return n.rows.At(n.rows.Len() - n.rowsPopped)

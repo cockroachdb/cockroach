@@ -494,6 +494,11 @@ func (ds *DistSender) sendSingleRange(
 func (ds *DistSender) initAndVerifyBatch(
 	ctx context.Context, ba *roachpb.BatchRequest,
 ) *roachpb.Error {
+	// Attach the local node ID to each request.
+	if ba.Header.GatewayNodeID == 0 && ds.gossip != nil {
+		ba.Header.GatewayNodeID = ds.gossip.NodeID.Get()
+	}
+
 	// In the event that timestamp isn't set and read consistency isn't
 	// required, set the timestamp using the local clock.
 	if ba.ReadConsistency == roachpb.INCONSISTENT && ba.Timestamp.Equal(hlc.ZeroTimestamp) {
@@ -1138,8 +1143,8 @@ func (ds *DistSender) sendToReplicas(
 	// Wait for completions. This loop will retry operations that fail
 	// with errors that reflect per-replica state and may succeed on
 	// other replicas.
-	var sendNextTimer timeutil.Timer
-	var slowTimer timeutil.Timer
+	sendNextTimer := timeutil.NewTimer()
+	slowTimer := timeutil.NewTimer()
 	defer sendNextTimer.Stop()
 	defer slowTimer.Stop()
 	slowTimer.Reset(base.SlowRequestThreshold)

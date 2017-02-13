@@ -34,10 +34,10 @@ import (
 // See docs/RFCS/distributed_sql.md
 type tableReader struct {
 	flowCtx *FlowCtx
-	ctx     context.Context
 
-	spans                roachpb.Spans
-	hardLimit, softLimit int64
+	tableID   sqlbase.ID
+	spans     roachpb.Spans
+	limitHint int64
 
 	fetcher sqlbase.RowFetcher
 
@@ -51,14 +51,41 @@ func newTableReader(
 	flowCtx *FlowCtx, spec *TableReaderSpec, post *PostProcessSpec, output RowReceiver,
 ) (*tableReader, error) {
 	tr := &tableReader{
-		flowCtx:   flowCtx,
-		hardLimit: spec.HardLimit,
-		softLimit: spec.SoftLimit,
+		flowCtx: flowCtx,
+		tableID: spec.Table.ID,
 	}
 
-	if tr.hardLimit != 0 && tr.hardLimit < tr.softLimit {
-		return nil, errors.Errorf("soft limit %d larger than hard limit %d", tr.softLimit,
-			tr.hardLimit)
+	// We ignore any limits that are higher than this value to avoid any
+	// overflows.
+	const overflowProtection = 1000000000
+	if post.Limit != 0 && post.Limit <= overflowProtection {
+		// In this case the procOutputHelper will tell us to stop once we emit
+		// enough rows.
+		tr.limitHint = int64(post.Limit)
+	} else if spec.LimitHint != 0 && spec.LimitHint <= overflowProtection {
+		// If it turns out that limiHint rows are sufficient for our consumer, we
+		// want to avoid asking for another batch. Currently, the only way for us to
+		// "stop" is if we block on sending rows and the consumer sets
+		// ConsumerDone() on the RowChannel while we block. So we want to block
+		// *after* sending all the rows in the limit hint; to do this, we request
+		// rowChannelBufSize + 1 more rows:
+		//  - rowChannelBufSize rows guarantee that we will fill the row channel
+		//    even after limitHint rows are consumed
+		//  - the extra row gives us chance to call PushRow again after we unblock,
+		//    which will notice that ConsumerDone() was called.
+		//
+		// This flimsy mechanism is only useful in the (optimistic) case that the
+		// processor that only needs this many rows is our direct, local consumer.
+		// If we have a chain of processors and RowChannels, or remote streams, this
+		// reasoning goes out the door.
+		//
+		// TODO(radu, andrei): work on a real mechanism for limits.
+		tr.limitHint = spec.LimitHint + rowChannelBufSize + 1
+	}
+
+	if post.Filter.Expr != "" {
+		// We have a filter so we will likely need to read more rows.
+		tr.limitHint *= 2
 	}
 
 	types := make([]sqlbase.ColumnType, len(spec.Table.Columns))
@@ -75,8 +102,6 @@ func newTableReader(
 	); err != nil {
 		return nil, err
 	}
-
-	tr.ctx = log.WithLogTagInt(tr.flowCtx.Context, "TableReader", int(spec.Table.ID))
 
 	tr.spans = make(roachpb.Spans, len(spec.Spans))
 	for i, s := range spec.Spans {
@@ -112,38 +137,21 @@ func initRowFetcher(
 	}
 	if err := fetcher.Init(
 		desc, colIdxMap, index, reverseScan, isSecondaryIndex,
-		desc.Columns, valNeededForCol,
+		desc.Columns, valNeededForCol, true, /* returnRangeInfo */
 	); err != nil {
 		return nil, false, err
 	}
 	return index, isSecondaryIndex, nil
 }
 
-// getLimitHint calculates the row limit hint for the row fetcher.
-func (tr *tableReader) getLimitHint() int64 {
-	softLimit := tr.softLimit
-	if tr.hardLimit != 0 {
-		if tr.out.filter == nil {
-			return tr.hardLimit
-		}
-		// If we have a filter, we don't know how many rows will pass the filter
-		// so the hard limit is actually a "soft" limit at the row fetcher.
-		if softLimit == 0 {
-			softLimit = tr.hardLimit
-		}
-	}
-	// If the limit is soft, we request a multiple of the limit.
-	// If the limit is 0 (no limit), we must return 0.
-	return softLimit * 2
-}
-
 // Run is part of the processor interface.
-func (tr *tableReader) Run(wg *sync.WaitGroup) {
+func (tr *tableReader) Run(ctx context.Context, wg *sync.WaitGroup) {
 	if wg != nil {
 		defer wg.Done()
 	}
 
-	ctx, span := tracing.ChildSpan(tr.ctx, "table reader")
+	ctx = log.WithLogTagInt(ctx, "TableReader", int(tr.tableID))
+	ctx, span := tracing.ChildSpan(ctx, "table reader")
 	defer tracing.FinishSpan(span)
 
 	txn := tr.flowCtx.setupTxn(ctx)
@@ -154,7 +162,7 @@ func (tr *tableReader) Run(wg *sync.WaitGroup) {
 	}
 
 	if err := tr.fetcher.StartScan(
-		txn, tr.spans, true /* limit batches */, tr.getLimitHint(),
+		txn, tr.spans, true /* limit batches */, tr.limitHint,
 	); err != nil {
 		log.Errorf(ctx, "scan error: %s", err)
 		tr.out.close(err)

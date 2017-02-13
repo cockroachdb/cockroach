@@ -47,7 +47,7 @@ type scanNode struct {
 	resultColumns ResultColumns
 	// Contains values for the current row. There is a 1-1 correspondence
 	// between resultColumns and values in row.
-	row parser.DTuple
+	row parser.Datums
 	// For each column in resultColumns, indicates if the value is
 	// needed (used as an optimization when the upper layer doesn't need
 	// all values).
@@ -79,10 +79,18 @@ type scanNode struct {
 	scanInitialized bool
 	fetcher         sqlbase.RowFetcher
 
-	limitHint          int64
-	limitSoft          bool
+	// if non-zero, hardLimit indicates that the scanNode only needs to provide
+	// this many rows (after applying any filter). It is a "hard" guarantee that
+	// Next will only be called this many times.
+	hardLimit int64
+	// if non-zero, softLimit is an estimation that only this many rows (after
+	// applying any filter) might be needed. It is a (potentially optimistic)
+	// "hint". If hardLimit is set (non-zero), softLimit must be unset (zero).
+	softLimit int64
+
 	disableBatchLimits bool
-	scanVisibility     scanVisibility
+
+	scanVisibility scanVisibility
 	// This struct must be allocated on the heap and its location stay
 	// stable after construction because it implements
 	// IndexedVarContainer and the IndexedVar objects in sub-expressions
@@ -103,7 +111,7 @@ func (n *scanNode) Ordering() orderingInfo {
 	return n.ordering
 }
 
-func (n *scanNode) Values() parser.DTuple {
+func (n *scanNode) Values() parser.Datums {
 	return n.row
 }
 
@@ -125,13 +133,13 @@ func (n *scanNode) DebugValues() debugValues {
 // where we scan batches of unordered spans.
 func (n *scanNode) disableBatchLimit() {
 	n.disableBatchLimits = true
-	n.limitHint = 0
-	n.limitSoft = false
+	n.hardLimit = 0
+	n.softLimit = 0
 }
 
 func (n *scanNode) Start() error {
 	return n.fetcher.Init(&n.desc, n.colIdxMap, n.index, n.reverse, n.isSecondaryIndex, n.cols,
-		n.valNeededForCol)
+		n.valNeededForCol, false /* returnRangeInfo */)
 }
 
 func (n *scanNode) Close() {}
@@ -146,10 +154,19 @@ func (n *scanNode) initScan() error {
 		n.spans = append(n.spans, roachpb.Span{Key: start, EndKey: start.PrefixEnd()})
 	}
 
-	limitHint := n.limitHint
-	if limitHint != 0 && n.limitSoft {
-		// Read a multiple of the limit if the limit is "soft".
-		limitHint *= 2
+	var limitHint int64
+	if n.hardLimit == 0 {
+		limitHint = n.hardLimit
+		if !isFilterTrue(n.filter) {
+			// The limit is hard, but it applies after the filter; read a multiple of
+			// the limit to avoid needing a second batch. The multiple should be an
+			// estimate for the selectivity of the filter, but we have no way of
+			// calculating that right now.
+			limitHint *= 2
+		}
+	} else {
+		// Like above, read a multiple of the limit when the limit is "soft".
+		limitHint = n.softLimit * 2
 	}
 
 	if err := n.fetcher.StartScan(n.p.txn, n.spans, !n.disableBatchLimits, limitHint); err != nil {
@@ -174,13 +191,13 @@ func (n *scanNode) debugNext() (bool, error) {
 		n.debugVals.output = debugValuePartial
 		return true, nil
 	}
-	tuple := make(parser.DTuple, len(encRow))
+	datums := make(parser.Datums, len(encRow))
 	var da sqlbase.DatumAlloc
 
-	if err := sqlbase.EncDatumRowToDTuple(tuple, encRow, &da); err != nil {
+	if err := sqlbase.EncDatumRowToDatums(datums, encRow, &da); err != nil {
 		return false, errors.Errorf("Could not decode row: %v", err)
 	}
-	n.row = tuple
+	n.row = datums
 	passesFilter, err := sqlbase.RunFilter(n.filter, &n.p.evalCtx)
 	if err != nil {
 		return false, err

@@ -52,13 +52,13 @@ func runTestFlow(
 
 	var rowBuf distsqlrun.RowBuffer
 
-	flow, err := distSQLSrv.SetupSyncFlow(context.TODO(), &req, &rowBuf)
+	ctx, flow, err := distSQLSrv.SetupSyncFlow(context.TODO(), &req, &rowBuf)
 	if err != nil {
 		t.Fatal(err)
 	}
-	flow.Start(func() {})
+	flow.Start(ctx, func() {})
 	flow.Wait()
-	flow.Cleanup()
+	flow.Cleanup(ctx)
 
 	if rowBuf.Err != nil {
 		t.Fatal(rowBuf.Err)

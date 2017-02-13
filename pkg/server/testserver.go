@@ -34,6 +34,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlplan"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/ts"
@@ -241,6 +243,14 @@ func (ts *TestServer) DB() *client.DB {
 	return nil
 }
 
+// PGServer returns the pgwire.Server used by the TestServer.
+func (ts *TestServer) PGServer() *pgwire.Server {
+	if ts != nil {
+		return ts.pgServer
+	}
+	return nil
+}
+
 // Start starts the TestServer by bootstrapping an in-memory store
 // (defaults to maximum of 100M). The server is started, launching the
 // node RPC server and all HTTP endpoints. Use the value of
@@ -424,6 +434,11 @@ func (ts *TestServer) DistSender() *kv.DistSender {
 // DistSQLServer is part of TestServerInterface.
 func (ts *TestServer) DistSQLServer() interface{} {
 	return ts.distSQLServer
+}
+
+// SetDistSQLSpanResolver is part of TestServerInterface.
+func (ts *Server) SetDistSQLSpanResolver(spanResolver interface{}) {
+	ts.sqlExecutor.SetDistSQLSpanResolver(spanResolver.(distsqlplan.SpanResolver))
 }
 
 // GetFirstStoreID is part of TestServerInterface.

@@ -786,17 +786,17 @@ func Example_sql_column_labels() {
 	// """foo"	\foo	"""foo\nbar"""	κόσμε	a|b	܈85
 	// 0	0	0	0	0	0
 	// sql --format=pretty -e show columns from t.u
-	// +----------+------+------+---------+---------+
-	// |  Field   | Type | Null | Default | Indices |
-	// +----------+------+------+---------+---------+
-	// | "foo     | INT  | true | NULL    | {}      |
-	// | \foo     | INT  | true | NULL    | {}      |
-	// | foo␤     | INT  | true | NULL    | {}      |
-	// | bar      |      |      |         |         |
-	// | κόσμε    | INT  | true | NULL    | {}      |
-	// | a|b      | INT  | true | NULL    | {}      |
-	// | ܈85      | INT  | true | NULL    | {}      |
-	// +----------+------+------+---------+---------+
+	// +---------+------+------+---------+---------+
+	// |  Field  | Type | Null | Default | Indices |
+	// +---------+------+------+---------+---------+
+	// | "foo    | INT  | true | NULL    | {}      |
+	// | \foo    | INT  | true | NULL    | {}      |
+	// | foo␤    | INT  | true | NULL    | {}      |
+	// | bar     |      |      |         |         |
+	// | κόσμε   | INT  | true | NULL    | {}      |
+	// | a|b     | INT  | true | NULL    | {}      |
+	// | ܈85     | INT  | true | NULL    | {}      |
+	// +---------+------+------+---------+---------+
 	// (6 rows)
 	// sql --format=pretty -e select * from t.u
 	// +------+------+------------+-------+-----+-----+

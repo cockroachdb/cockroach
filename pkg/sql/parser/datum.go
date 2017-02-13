@@ -108,6 +108,33 @@ type Datum interface {
 	Size() uintptr
 }
 
+// Datums is a slice of Datum values.
+type Datums []Datum
+
+// Datums implements sort.Interface.
+func (d *Datums) Len() int           { return len(*d) }
+func (d *Datums) Less(i, j int) bool { return (*d)[i].Compare((*d)[j]) < 0 }
+func (d *Datums) Swap(i, j int)      { (*d)[i], (*d)[j] = (*d)[j], (*d)[i] }
+
+// Reverse reverses the order of the Datum values.
+func (d *Datums) Reverse() {
+	for i, j := 0, d.Len()-1; i < j; i, j = i+1, j-1 {
+		d.Swap(i, j)
+	}
+}
+
+// Format implements the NodeFormatter interface.
+func (d *Datums) Format(buf *bytes.Buffer, f FmtFlags) {
+	buf.WriteByte('(')
+	for i, v := range *d {
+		if i > 0 {
+			buf.WriteString(", ")
+		}
+		FormatNode(buf, f, v)
+	}
+	buf.WriteByte(')')
+}
+
 // DBool is the boolean Datum.
 type DBool bool
 
@@ -1431,12 +1458,33 @@ func (d *DInterval) Size() uintptr {
 }
 
 // DTuple is the tuple Datum.
-type DTuple []Datum
+type DTuple struct {
+	D Datums
+
+	Sorted bool
+}
+
+// NewDTuple creates a *DTuple with the provided datums. When creating a new
+// DTuple with Datums that are known to be sorted in ascending order, chain
+// this call with DTuple.SetSorted.
+func NewDTuple(d ...Datum) *DTuple {
+	return &DTuple{D: d}
+}
+
+// NewDTupleWithLen creates a *DTuple with the provided length.
+func NewDTupleWithLen(l int) *DTuple {
+	return &DTuple{D: make(Datums, l)}
+}
+
+// NewDTupleWithCap creates a *DTuple with the provided capacity.
+func NewDTupleWithCap(c int) *DTuple {
+	return &DTuple{D: make(Datums, 0, c)}
+}
 
 // ResolvedType implements the TypedExpr interface.
 func (d *DTuple) ResolvedType() Type {
-	typ := make(TTuple, len(*d))
-	for i, v := range *d {
+	typ := make(TTuple, len(d.D))
+	for i, v := range d.D {
 		typ[i] = v.ResolvedType()
 	}
 	return typ
@@ -1452,20 +1500,20 @@ func (d *DTuple) Compare(other Datum) int {
 	if !ok {
 		panic(makeUnsupportedComparisonMessage(d, other))
 	}
-	n := len(*d)
-	if n > len(*v) {
-		n = len(*v)
+	n := len(d.D)
+	if n > len(v.D) {
+		n = len(v.D)
 	}
 	for i := 0; i < n; i++ {
-		c := (*d)[i].Compare((*v)[i])
+		c := d.D[i].Compare(v.D[i])
 		if c != 0 {
 			return c
 		}
 	}
-	if len(*d) < len(*v) {
+	if len(d.D) < len(v.D) {
 		return -1
 	}
-	if len(*d) > len(*v) {
+	if len(d.D) > len(v.D) {
 		return 1
 	}
 	return 0
@@ -1482,24 +1530,24 @@ func (d *DTuple) Prev() (Datum, bool) {
 	// zero or more values that are a minimum and a maximum value of the
 	// same type exists, and the first element before that has a prev
 	// value.
-	n := make(DTuple, len(*d))
-	copy(n, *d)
-	for i := len(n) - 1; i >= 0; i-- {
-		if !n[i].IsMin() {
-			prevVal, ok := n[i].Prev()
+	res := NewDTupleWithLen(len(d.D))
+	copy(res.D, d.D)
+	for i := len(res.D) - 1; i >= 0; i-- {
+		if !res.D[i].IsMin() {
+			prevVal, ok := res.D[i].Prev()
 			if !ok {
 				return nil, false
 			}
-			n[i] = prevVal
+			res.D[i] = prevVal
 			break
 		}
-		maxVal, ok := n[i].max()
+		maxVal, ok := res.D[i].max()
 		if !ok {
 			return nil, false
 		}
-		n[i] = maxVal
+		res.D[i] = maxVal
 	}
-	return &n, true
+	return res, true
 }
 
 // Next implements the Datum interface.
@@ -1513,55 +1561,55 @@ func (d *DTuple) Next() (Datum, bool) {
 	// zero or more values that are a maximum and a minimum value of the
 	// same type exists, and the first element before that has a next
 	// value.
-	n := make(DTuple, len(*d))
-	copy(n, *d)
-	for i := len(n) - 1; i >= 0; i-- {
-		if !n[i].IsMax() {
-			nextVal, ok := n[i].Next()
+	res := NewDTupleWithLen(len(d.D))
+	copy(res.D, d.D)
+	for i := len(res.D) - 1; i >= 0; i-- {
+		if !res.D[i].IsMax() {
+			nextVal, ok := res.D[i].Next()
 			if !ok {
 				return nil, false
 			}
-			n[i] = nextVal
+			res.D[i] = nextVal
 			break
 		}
-		minVal, ok := n[i].min()
+		minVal, ok := res.D[i].min()
 		if !ok {
 			return nil, false
 		}
-		n[i] = minVal
+		res.D[i] = minVal
 	}
-	return &n, true
+	return res, true
 }
 
 // max implements the Datum interface.
 func (d *DTuple) max() (Datum, bool) {
-	res := make(DTuple, len(*d))
-	for i, v := range *d {
+	res := NewDTupleWithLen(len(d.D))
+	for i, v := range d.D {
 		m, ok := v.max()
 		if !ok {
 			return nil, false
 		}
-		res[i] = m
+		res.D[i] = m
 	}
-	return &res, true
+	return res, true
 }
 
 // max implements the Datum interface.
 func (d *DTuple) min() (Datum, bool) {
-	res := make(DTuple, len(*d))
-	for i, v := range *d {
+	res := NewDTupleWithLen(len(d.D))
+	for i, v := range d.D {
 		m, ok := v.min()
 		if !ok {
 			return nil, false
 		}
-		res[i] = m
+		res.D[i] = m
 	}
-	return &res, true
+	return res, true
 }
 
 // IsMax implements the Datum interface.
 func (d *DTuple) IsMax() bool {
-	for _, v := range *d {
+	for _, v := range d.D {
 		if !v.IsMax() {
 			return false
 		}
@@ -1571,7 +1619,7 @@ func (d *DTuple) IsMax() bool {
 
 // IsMin implements the Datum interface.
 func (d *DTuple) IsMin() bool {
-	for _, v := range *d {
+	for _, v := range d.D {
 		if !v.IsMin() {
 			return false
 		}
@@ -1584,52 +1632,63 @@ func (*DTuple) AmbiguousFormat() bool { return false }
 
 // Format implements the NodeFormatter interface.
 func (d *DTuple) Format(buf *bytes.Buffer, f FmtFlags) {
-	buf.WriteByte('(')
-	for i, v := range *d {
-		if i > 0 {
-			buf.WriteString(", ")
-		}
-		FormatNode(buf, f, v)
+	d.D.Format(buf, f)
+}
+
+// SetSorted sets the sorted flag on the DTuple. This should be used when a
+// DTuple is known to be sorted based on the datums added to it.
+func (d *DTuple) SetSorted() *DTuple {
+	d.Sorted = true
+	return d
+}
+
+// AssertSorted asserts that the DTuple is sorted.
+func (d *DTuple) AssertSorted() {
+	if !d.Sorted {
+		panic(fmt.Sprintf("expected sorted tuple, found %#v", d))
 	}
-	buf.WriteByte(')')
 }
 
-func (d *DTuple) Len() int {
-	return len(*d)
-}
-
-func (d *DTuple) Less(i, j int) bool {
-	return (*d)[i].Compare((*d)[j]) < 0
-}
-
-func (d *DTuple) Swap(i, j int) {
-	(*d)[i], (*d)[j] = (*d)[j], (*d)[i]
+// SearchSorted searches the tuple for the target Datum, returning an int with
+// the same contract as sort.Search and a boolean flag signifying whether the datum
+// was found. It assumes that the DTuple is sorted and panics if it is not.
+func (d *DTuple) SearchSorted(target Datum) (int, bool) {
+	d.AssertSorted()
+	i := sort.Search(len(d.D), func(i int) bool {
+		return d.D[i].Compare(target) >= 0
+	})
+	found := i < len(d.D) && d.D[i].Compare(target) == 0
+	return i, found
 }
 
 // Normalize sorts and uniques the datum tuple.
 func (d *DTuple) Normalize() {
-	sort.Sort(d)
+	d.sort()
 	d.makeUnique()
+}
+
+func (d *DTuple) sort() {
+	if !d.Sorted {
+		sort.Sort(&d.D)
+		d.Sorted = true
+	}
 }
 
 func (d *DTuple) makeUnique() {
 	n := 0
-	for i := 0; i < len(*d); i++ {
-		if (*d)[i] == DNull {
-			continue
-		}
-		if n == 0 || (*d)[n-1].Compare((*d)[i]) < 0 {
-			(*d)[n] = (*d)[i]
+	for i := 0; i < len(d.D); i++ {
+		if n == 0 || d.D[n-1].Compare(d.D[i]) < 0 {
+			d.D[n] = d.D[i]
 			n++
 		}
 	}
-	*d = (*d)[:n]
+	d.D = d.D[:n]
 }
 
 // Size implements the Datum interface.
 func (d *DTuple) Size() uintptr {
 	sz := unsafe.Sizeof(*d)
-	for _, e := range *d {
+	for _, e := range d.D {
 		dsz := e.Size()
 		sz += dsz
 	}
@@ -1639,13 +1698,16 @@ func (d *DTuple) Size() uintptr {
 // SortedDifference finds the elements of d which are not in other,
 // assuming that d and other are already sorted.
 func (d *DTuple) SortedDifference(other *DTuple) *DTuple {
-	var r DTuple
-	a := *d
-	b := *other
+	d.AssertSorted()
+	other.AssertSorted()
+
+	res := NewDTuple().SetSorted()
+	a := d.D
+	b := other.D
 	for len(a) > 0 && len(b) > 0 {
 		switch a[0].Compare(b[0]) {
 		case -1:
-			r = append(r, a[0])
+			res.D = append(res.D, a[0])
 			a = a[1:]
 		case 0:
 			a = a[1:]
@@ -1654,7 +1716,7 @@ func (d *DTuple) SortedDifference(other *DTuple) *DTuple {
 			b = b[1:]
 		}
 	}
-	return &r
+	return res
 }
 
 type dNull struct{}
@@ -1719,7 +1781,7 @@ func (d dNull) Size() uintptr {
 // text during serialization.
 type DArray struct {
 	ParamTyp Type
-	Array    []Datum
+	Array    Datums
 }
 
 // NewDArray returns a DArray containing elements of the specified type.
@@ -1768,7 +1830,7 @@ func (d *DArray) Prev() (Datum, bool) {
 
 // Next implements the Datum interface.
 func (d *DArray) Next() (Datum, bool) {
-	a := DArray{ParamTyp: d.ParamTyp, Array: make([]Datum, d.Len()+1)}
+	a := DArray{ParamTyp: d.ParamTyp, Array: make(Datums, d.Len()+1)}
 	copy(a.Array, d.Array)
 	a.Array[len(a.Array)-1] = DNull
 	return &a, true

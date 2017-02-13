@@ -69,9 +69,6 @@ type Session struct {
 	// SearchPath is a list of databases that will be searched for a table name
 	// before the database. Currently, this is used only for SELECTs.
 	// Names in the search path must have been normalized already.
-	//
-	// NOTE: If we allow the user to set this, we'll need to handle the case where
-	// the session database or pg_catalog are in this path.
 	SearchPath  parser.SearchPath
 	User        string
 	Syntax      int32

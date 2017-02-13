@@ -2019,3 +2019,50 @@ func TestSenderTransport(t *testing.T) {
 	}
 	transport.Close()
 }
+
+func TestGatewayNodeID(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+
+	g, clock := makeGossip(t, stopper)
+	const expNodeID = 42
+	nd := &roachpb.NodeDescriptor{
+		NodeID:  expNodeID,
+		Address: util.MakeUnresolvedAddr("tcp", "foobar:1234"),
+	}
+	g.NodeID.Reset(nd.NodeID)
+	if err := g.SetNodeDescriptor(nd); err != nil {
+		t.Fatal(err)
+	}
+	if err := g.AddInfoProto(gossip.MakeNodeIDKey(expNodeID), nd, time.Hour); err != nil {
+		t.Fatal(err)
+	}
+
+	var observedNodeID roachpb.NodeID
+	var testFn rpcSendFn = func(
+		_ context.Context,
+		_ SendOptions,
+		_ ReplicaSlice,
+		ba roachpb.BatchRequest,
+		_ *rpc.Context,
+	) (*roachpb.BatchResponse, error) {
+		observedNodeID = ba.Header.GatewayNodeID
+		return ba.CreateReply(), nil
+	}
+
+	cfg := DistSenderConfig{
+		Clock:             clock,
+		TransportFactory:  adaptLegacyTransport(testFn),
+		RangeDescriptorDB: defaultMockRangeDescriptorDB,
+	}
+	ds := NewDistSender(cfg, g)
+	var ba roachpb.BatchRequest
+	ba.Add(roachpb.NewPut(roachpb.Key("a"), roachpb.MakeValueFromString("value")))
+	if _, err := ds.Send(context.Background(), ba); err != nil {
+		t.Fatalf("put encountered error: %s", err)
+	}
+	if observedNodeID != expNodeID {
+		t.Errorf("got GatewayNodeID=%d, want %d", observedNodeID, expNodeID)
+	}
+}

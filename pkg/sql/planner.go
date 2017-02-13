@@ -121,11 +121,11 @@ type queryRunner interface {
 	parser.EvalPlanner
 
 	// queryRows executes a SQL query string where multiple result rows are returned.
-	queryRows(sql string, args ...interface{}) ([]parser.DTuple, error)
+	queryRows(sql string, args ...interface{}) ([]parser.Datums, error)
 
 	// queryRowsAsRoot executes a SQL query string using security.RootUser
 	// and multiple result rows are returned.
-	queryRowsAsRoot(sql string, args ...interface{}) ([]parser.DTuple, error)
+	queryRowsAsRoot(sql string, args ...interface{}) ([]parser.Datums, error)
 
 	// exec executes a SQL query string and returns the number of rows
 	// affected.
@@ -240,7 +240,7 @@ func (p *planner) runShowTransactionState(txnState *txnState, implicitTxn bool) 
 	if implicitTxn {
 		state = NoTxn
 	}
-	if _, err := result.Rows.AddRow(parser.DTuple{parser.NewDString(state.String())}); err != nil {
+	if _, err := result.Rows.AddRow(parser.Datums{parser.NewDString(state.String())}); err != nil {
 		result.Rows.Close()
 		return result, err
 	}
@@ -317,7 +317,7 @@ func (p *planner) query(sql string, args ...interface{}) (planNode, error) {
 }
 
 // QueryRow implements the parser.EvalPlanner interface.
-func (p *planner) QueryRow(sql string, args ...interface{}) (parser.DTuple, error) {
+func (p *planner) QueryRow(sql string, args ...interface{}) (parser.Datums, error) {
 	rows, err := p.queryRows(sql, args...)
 	if err != nil {
 		return nil, err
@@ -333,7 +333,7 @@ func (p *planner) QueryRow(sql string, args ...interface{}) (parser.DTuple, erro
 }
 
 // queryRows implements the queryRunner interface.
-func (p *planner) queryRows(sql string, args ...interface{}) ([]parser.DTuple, error) {
+func (p *planner) queryRows(sql string, args ...interface{}) ([]parser.Datums, error) {
 	plan, err := p.query(sql, args...)
 	if err != nil {
 		return nil, err
@@ -346,10 +346,10 @@ func (p *planner) queryRows(sql string, args ...interface{}) ([]parser.DTuple, e
 		return nil, err
 	}
 
-	var rows []parser.DTuple
+	var rows []parser.Datums
 	for {
 		if values := plan.Values(); values != nil {
-			valCopy := append(parser.DTuple(nil), values...)
+			valCopy := append(parser.Datums(nil), values...)
 			rows = append(rows, valCopy)
 		}
 
@@ -365,7 +365,7 @@ func (p *planner) queryRows(sql string, args ...interface{}) ([]parser.DTuple, e
 }
 
 // queryRowsAsRoot implements the queryRunner interface.
-func (p *planner) queryRowsAsRoot(sql string, args ...interface{}) ([]parser.DTuple, error) {
+func (p *planner) queryRowsAsRoot(sql string, args ...interface{}) ([]parser.Datums, error) {
 	currentUser := p.session.User
 	defer func() { p.session.User = currentUser }()
 	p.session.User = security.RootUser

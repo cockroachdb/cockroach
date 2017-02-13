@@ -162,7 +162,7 @@ func TestStoreConfig(clock *hlc.Clock) StoreConfig {
 	if clock == nil {
 		clock = hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	}
-	return StoreConfig{
+	sc := StoreConfig{
 		AmbientCtx:                     log.AmbientContext{Tracer: tracing.NewTracer()},
 		Clock:                          clock,
 		RaftTickInterval:               100 * time.Millisecond,
@@ -177,6 +177,8 @@ func TestStoreConfig(clock *hlc.Clock) StoreConfig {
 		EnableCoalescedHeartbeats:      true,
 		EnableEpochRangeLeases:         true,
 	}
+	sc.SetDefaults()
+	return sc
 }
 
 var (
@@ -830,6 +832,15 @@ func (sc *StoreConfig) SetDefaults() {
 	}
 }
 
+// LeaseExpiration returns an int64 to increment a manual clock with to
+// make sure that all active range leases expire.
+func (sc *StoreConfig) LeaseExpiration() int64 {
+	// Due to lease extensions, the remaining interval can be longer than just
+	// the sum of the offset (=length of stasis period) and the active
+	// duration, but definitely not by 2x.
+	return 2 * int64(sc.RangeLeaseActiveDuration+sc.Clock.MaxOffset())
+}
+
 // NewStore returns a new instance of a store.
 func NewStore(cfg StoreConfig, eng engine.Engine, nodeDesc *roachpb.NodeDescriptor) *Store {
 	// TODO(tschottdorf) find better place to set these defaults.
@@ -1029,7 +1040,7 @@ func (s *Store) migrate(ctx context.Context, desc roachpb.RangeDescriptor) {
 	if err := migrate7310And6991(ctx, batch, desc); err != nil {
 		log.Fatal(ctx, errors.Wrap(err, "during migration"))
 	}
-	if err := batch.Commit(); err != nil {
+	if err := batch.Commit(false /* !sync */); err != nil {
 		log.Fatal(ctx, errors.Wrap(err, "could not migrate Raft state"))
 	}
 }
@@ -1708,7 +1719,7 @@ func (s *Store) BootstrapRange(initialValues []roachpb.KeyValue) error {
 	}
 	*ms = updatedMS
 
-	return batch.Commit()
+	return batch.Commit(true /* sync */)
 }
 
 // ClusterID accessor.
@@ -2993,7 +3004,7 @@ func (s *Store) processRaftRequest(
 			needTombstone := r.mu.state.Desc.NextReplicaID != 0
 			r.mu.Unlock()
 
-			appliedIndex, _, err := loadAppliedIndex(ctx, r.store.Engine(), r.RangeID)
+			appliedIndex, _, err := r.stateLoader.loadAppliedIndex(ctx, r.store.Engine())
 			if err != nil {
 				return roachpb.NewError(err)
 			}
@@ -3989,6 +4000,9 @@ func (s *Store) setSplitQueueActive(active bool) {
 }
 func (s *Store) setTimeSeriesMaintenanceQueueActive(active bool) {
 	s.tsMaintenanceQueue.SetDisabled(!active)
+}
+func (s *Store) setRaftSnapshotQueueActive(active bool) {
+	s.raftSnapshotQueue.SetDisabled(!active)
 }
 func (s *Store) setScannerActive(active bool) {
 	s.scanner.SetDisabled(!active)

@@ -103,7 +103,7 @@ func makeFKInsertHelper(
 	return fks, nil
 }
 
-func (fks fkInsertHelper) checkAll(row parser.DTuple) error {
+func (fks fkInsertHelper) checkAll(row parser.Datums) error {
 	for idx := range fks {
 		if err := fks.checkIdx(idx, row); err != nil {
 			return err
@@ -112,7 +112,7 @@ func (fks fkInsertHelper) checkAll(row parser.DTuple) error {
 	return nil
 }
 
-func (fks fkInsertHelper) checkIdx(idx sqlbase.IndexID, row parser.DTuple) error {
+func (fks fkInsertHelper) checkIdx(idx sqlbase.IndexID, row parser.Datums) error {
 	for _, fk := range fks[idx] {
 		nulls := true
 		for _, colID := range fk.searchIdx.ColumnIDs[:fk.prefixLen] {
@@ -131,7 +131,7 @@ func (fks fkInsertHelper) checkIdx(idx sqlbase.IndexID, row parser.DTuple) error
 			return err
 		}
 		if found == nil {
-			fkValues := make(parser.DTuple, fk.prefixLen)
+			fkValues := make(parser.Datums, fk.prefixLen)
 			for i, colID := range fk.searchIdx.ColumnIDs[:fk.prefixLen] {
 				fkValues[i] = row[fk.ids[colID]]
 			}
@@ -173,7 +173,7 @@ func makeFKDeleteHelper(
 	return fks, nil
 }
 
-func (fks fkDeleteHelper) checkAll(row parser.DTuple) error {
+func (fks fkDeleteHelper) checkAll(row parser.Datums) error {
 	for idx := range fks {
 		if err := fks.checkIdx(idx, row); err != nil {
 			return err
@@ -182,7 +182,7 @@ func (fks fkDeleteHelper) checkAll(row parser.DTuple) error {
 	return nil
 }
 
-func (fks fkDeleteHelper) checkIdx(idx sqlbase.IndexID, row parser.DTuple) error {
+func (fks fkDeleteHelper) checkIdx(idx sqlbase.IndexID, row parser.Datums) error {
 	for _, fk := range fks[idx] {
 		found, err := fk.check(row)
 		if err != nil {
@@ -193,7 +193,7 @@ func (fks fkDeleteHelper) checkIdx(idx sqlbase.IndexID, row parser.DTuple) error
 				return fmt.Errorf("foreign key violation: non-empty columns %s referenced in table %q",
 					fk.writeIdx.ColumnNames[:fk.prefixLen], fk.searchTable.Name)
 			}
-			fkValues := make(parser.DTuple, fk.prefixLen)
+			fkValues := make(parser.Datums, fk.prefixLen)
 			for i, colID := range fk.searchIdx.ColumnIDs[:fk.prefixLen] {
 				fkValues[i] = row[fk.ids[colID]]
 			}
@@ -225,7 +225,7 @@ func makeFKUpdateHelper(
 	return ret, err
 }
 
-func (fks fkUpdateHelper) checkIdx(idx sqlbase.IndexID, oldValues, newValues parser.DTuple) error {
+func (fks fkUpdateHelper) checkIdx(idx sqlbase.IndexID, oldValues, newValues parser.Datums) error {
 	if err := fks.inbound.checkIdx(idx, oldValues); err != nil {
 		return err
 	}
@@ -270,7 +270,9 @@ func makeBaseFKHelper(
 		needed[ids[i]] = true
 	}
 	isSecondary := b.searchTable.PrimaryIndex.ID != searchIdx.ID
-	err = b.rf.Init(b.searchTable, ids, searchIdx, false, isSecondary, b.searchTable.Columns, needed)
+	err = b.rf.Init(b.searchTable, ids, searchIdx, false, /* reverse */
+		isSecondary, b.searchTable.Columns, needed,
+		false /* returnRangeInfo */)
 	if err != nil {
 		return b, err
 	}
@@ -292,7 +294,7 @@ func makeBaseFKHelper(
 }
 
 // TODO(dt): Batch checks of many rows.
-func (f baseFKHelper) check(values parser.DTuple) (parser.DTuple, error) {
+func (f baseFKHelper) check(values parser.Datums) (parser.Datums, error) {
 	var key roachpb.Key
 	if values != nil {
 		keyBytes, _, err := sqlbase.EncodeIndexKey(

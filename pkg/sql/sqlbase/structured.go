@@ -294,6 +294,16 @@ func (desc *TableDescriptor) IsPhysicalTable() bool {
 	return desc.IsTable() && !desc.IsVirtualTable()
 }
 
+// KeysPerRow returns the maximum number of keys used to encode a row for the
+// given index. For secondary indexes, we always only use one, but for primary
+// indexes, we can encode up to one kv per column family.
+func (desc *TableDescriptor) KeysPerRow(indexID IndexID) int {
+	if desc.PrimaryIndex.ID == indexID {
+		return len(desc.Families)
+	}
+	return 1
+}
+
 // allNonDropColumns returns all the columns, including those being added
 // in the mutations.
 func (desc *TableDescriptor) allNonDropColumns() []ColumnDescriptor {
@@ -325,6 +335,29 @@ func (desc *TableDescriptor) AllNonDropIndexes() []IndexDescriptor {
 		}
 	}
 	return indexes
+}
+
+// ForeachNonDropIndex runs a function on all indexes, including those being
+// added in the mutations.
+func (desc *TableDescriptor) ForeachNonDropIndex(f func(*IndexDescriptor) error) error {
+	if desc.IsPhysicalTable() {
+		if err := f(&desc.PrimaryIndex); err != nil {
+			return err
+		}
+	}
+	for i := range desc.Indexes {
+		if err := f(&desc.Indexes[i]); err != nil {
+			return err
+		}
+	}
+	for _, m := range desc.Mutations {
+		if idx := m.GetIndex(); idx != nil && m.Direction == DescriptorMutation_ADD {
+			if err := f(idx); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
 
 func generatedFamilyName(familyID FamilyID, columnNames []string) string {

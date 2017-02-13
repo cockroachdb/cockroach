@@ -341,7 +341,7 @@ func (sc *SchemaChanger) truncateAndBackfillColumns(
 		chunkSize := sc.getChunkSize(columnTruncateAndBackfillChunkSize)
 		// Evaluate default values.
 		updateCols := append(added, dropped...)
-		updateValues := make(parser.DTuple, len(updateCols))
+		updateValues := make(parser.Datums, len(updateCols))
 		var nonNullViolationColumnName string
 		for j, col := range added {
 			if defaultExprs == nil || defaultExprs[j] == nil {
@@ -391,7 +391,7 @@ func (sc *SchemaChanger) truncateAndBackfillColumnsChunk(
 	dropped []sqlbase.ColumnDescriptor,
 	defaultExprs []parser.TypedExpr,
 	sp roachpb.Span,
-	updateValues parser.DTuple,
+	updateValues parser.Datums,
 	nonNullViolationColumnName string,
 	chunkSize int64,
 	mutationIdx int,
@@ -462,8 +462,9 @@ func (sc *SchemaChanger) truncateAndBackfillColumnsChunk(
 			_, valNeededForCol[i] = ru.fetchColIDtoRowIndex[tableDesc.Columns[i].ID]
 		}
 		if err := rf.Init(
-			tableDesc, colIDtoRowIndex, &tableDesc.PrimaryIndex, false, false,
-			tableDesc.Columns, valNeededForCol,
+			tableDesc, colIDtoRowIndex, &tableDesc.PrimaryIndex,
+			false /* reverse */, false, /* isSecondaryIndex */
+			tableDesc.Columns, valNeededForCol, false, /* returnRangeInfo */
 		); err != nil {
 			return err
 		}
@@ -473,10 +474,10 @@ func (sc *SchemaChanger) truncateAndBackfillColumnsChunk(
 			return err
 		}
 
-		oldValues := make(parser.DTuple, len(ru.fetchCols))
+		oldValues := make(parser.Datums, len(ru.fetchCols))
 		writeBatch := txn.NewBatch()
 		rowLength := 0
-		var lastRowSeen parser.DTuple
+		var lastRowSeen parser.Datums
 		i := int64(0)
 		for ; i < chunkSize; i++ {
 			row, err := rf.NextRowDecoded()
@@ -692,7 +693,7 @@ func (sc *SchemaChanger) backfillIndexesChunk(
 
 		// We manually invoke selectIndex() because for now expandPlan()
 		// can only do so itself when looking at a renderNode.
-		rows, err := selectIndex(scan, nil, false)
+		rows, err := planner.selectIndex(scan, nil, false)
 		if err != nil {
 			return err
 		}

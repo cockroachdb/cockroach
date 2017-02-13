@@ -42,6 +42,8 @@ func testTableDesc() *sqlbase.TableDescriptor {
 			{Name: "i", Type: sqlbase.ColumnType{Kind: sqlbase.ColumnType_STRING}},
 			{Name: "j", Type: sqlbase.ColumnType{Kind: sqlbase.ColumnType_INT}},
 			{Name: "k", Type: sqlbase.ColumnType{Kind: sqlbase.ColumnType_BYTES}},
+			{Name: "l", Type: sqlbase.ColumnType{Kind: sqlbase.ColumnType_DECIMAL}},
+			{Name: "m", Type: sqlbase.ColumnType{Kind: sqlbase.ColumnType_DECIMAL}},
 		},
 		PrimaryIndex: sqlbase.IndexDescriptor{
 			Name: "primary", Unique: true, ColumnNames: []string{"a"},
@@ -60,7 +62,7 @@ func makeSelectNode(t *testing.T) *renderNode {
 	}
 	numColumns := len(sel.sourceInfo[0].sourceColumns)
 	sel.ivarHelper = parser.MakeIndexedVarHelper(sel, numColumns)
-	sel.curSourceRow = make(parser.DTuple, numColumns)
+	sel.curSourceRow = make(parser.Datums, numColumns)
 	return sel
 }
 
@@ -199,7 +201,7 @@ func TestSimplifyExpr(t *testing.T) {
 		{`a >= NULL`, `NULL`, true},
 		{`a < NULL`, `NULL`, true},
 		{`a <= NULL`, `NULL`, true},
-		{`a IN (NULL)`, `false`, true},
+		{`a IN (NULL)`, `NULL`, true},
 
 		{`f < false`, `false`, true},
 		{`f < true`, `f < true`, true},
@@ -220,8 +222,8 @@ func TestSimplifyExpr(t *testing.T) {
 
 		{`a IN (1, 1)`, `a IN (1)`, true},
 		{`a IN (2, 3, 1)`, `a IN (1, 2, 3)`, true},
-		{`a IN (1, NULL, 2, NULL)`, `a IN (1, 2)`, true},
-		{`a IN (1, NULL) OR a IN (2, NULL)`, `a IN (1, 2)`, true},
+		{`a IN (1, NULL, 2, NULL)`, `a IN (NULL, 1, 2)`, true},
+		{`a IN (1, NULL) OR a IN (2, NULL)`, `a IN (NULL, 1, 2)`, true},
 
 		{`(a, b) IN ((1, 2))`, `(a, b) IN ((1, 2))`, true},
 		{`(a, b) IN ((1, 2), (1, 2))`, `(a, b) IN ((1, 2))`, true},

@@ -846,62 +846,6 @@ func TestReplicaNotLeaseHolderError(t *testing.T) {
 	}
 }
 
-// TestLeaseOwnedByNodeWithoutReplica verifies that if an epoch-based lease
-// is owned by a node that doesn't hold a replica for the range, the lease will
-// be acquired.
-func TestLeaseOwnedByNodeWithoutReplica(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	tc := testContext{}
-	stopper := stop.NewStopper()
-	defer stopper.Stop()
-	tc.Start(t, stopper)
-	secondReplica, err := tc.addBogusReplicaToRangeDesc(context.Background())
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	// Set up a fake NodeLiveness instance so that an epoch-based range lease can
-	// function well enough for the sake of the test.
-	tc.store.cfg.NodeLiveness = &NodeLiveness{}
-	liveness := Liveness{
-		Epoch:      1,
-		Expiration: hlc.MaxTimestamp,
-	}
-	tc.store.cfg.NodeLiveness.mu.nodes = map[roachpb.NodeID]Liveness{
-		tc.store.Ident.NodeID: liveness,
-		secondReplica.NodeID:  liveness,
-	}
-
-	tc.manualClock.Set(leaseExpiry(tc.repl))
-	if err := sendLeaseRequest(tc.repl, &roachpb.Lease{
-		Start:   tc.Clock().Now(),
-		Replica: secondReplica,
-		Epoch:   proto.Int64(liveness.Epoch),
-	}); err != nil {
-		t.Fatal(err)
-	}
-
-	// Now remove secondReplica from the range descriptor without taking away
-	// its lease.
-	tc.repl.mu.Lock()
-	replicas := tc.repl.mu.state.Desc.Replicas
-	for i := range replicas {
-		if replicas[i] == secondReplica {
-			replicas = append(replicas[:i], replicas[i+1:]...)
-			break
-		}
-	}
-	tc.repl.mu.state.Desc.Replicas = replicas
-	tc.repl.mu.Unlock()
-
-	{
-		_, err := tc.repl.redirectOnOrAcquireLease(context.Background())
-		if err != nil {
-			t.Fatal(err)
-		}
-	}
-}
-
 // TestReplicaLeaseCounters verifies leaseRequest metrics counters are updated
 // correctly after a lease request.
 func TestReplicaLeaseCounters(t *testing.T) {
@@ -4601,12 +4545,12 @@ func verifyRangeStats(eng engine.Reader, rangeID roachpb.RangeID, expMS enginepb
 	return nil
 }
 
-// TestReplicaStatsComputation verifies that commands executed against a
+// TestRangeStatsComputation verifies that commands executed against a
 // range update the range stat counters. The stat values are
 // empirically derived; we're really just testing that they increment
 // in the right ways, not the exact amounts. If the encodings change,
 // will need to update this test.
-func TestReplicaStatsComputation(t *testing.T) {
+func TestRangeStatsComputation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	tc := testContext{
 		bootstrapMode: bootstrapRangeOnly,
@@ -5039,7 +4983,7 @@ func TestReplicaCorruption(t *testing.T) {
 	}
 
 	// Verify destroyed error was persisted.
-	pErr, err = loadReplicaDestroyedError(context.Background(), r.store.Engine(), r.RangeID)
+	pErr, err = r.stateLoader.loadReplicaDestroyedError(context.Background(), r.store.Engine())
 	if err != nil {
 		t.Fatal(err)
 	}

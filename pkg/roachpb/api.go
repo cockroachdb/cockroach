@@ -276,6 +276,20 @@ func (af *ChangeFrozenResponse) combine(c combinable) error {
 
 var _ combinable = &ChangeFrozenResponse{}
 
+// Combine implements the combinable interface.
+func (er *ExportResponse) combine(c combinable) error {
+	if er != nil {
+		otherER := c.(*ExportResponse)
+		if err := er.ResponseHeader.combine(otherER.Header()); err != nil {
+			return err
+		}
+		er.Files = append(er.Files, otherER.Files...)
+	}
+	return nil
+}
+
+var _ combinable = &ExportResponse{}
+
 // Header implements the Request interface.
 func (rh Span) Header() Span {
 	return rh
@@ -471,6 +485,9 @@ func (*DeprecatedVerifyChecksumRequest) Method() Method { return DeprecatedVerif
 // Method implements the Request interface.
 func (*WriteBatchRequest) Method() Method { return WriteBatch }
 
+// Method implements the Request interface.
+func (*ExportRequest) Method() Method { return Export }
+
 // ShallowCopy implements the Request interface.
 func (gr *GetRequest) ShallowCopy() Request {
 	shallowCopy := *gr
@@ -654,6 +671,12 @@ func (dvcr *DeprecatedVerifyChecksumRequest) ShallowCopy() Request {
 // ShallowCopy implements the Request interface.
 func (r *WriteBatchRequest) ShallowCopy() Request {
 	shallowCopy := *r
+	return &shallowCopy
+}
+
+// ShallowCopy implements the Request interface.
+func (ekr *ExportRequest) ShallowCopy() Request {
+	shallowCopy := *ekr
 	return &shallowCopy
 }
 
@@ -871,6 +894,7 @@ func (*DeprecatedVerifyChecksumRequest) flags() int { return isWrite }
 func (*CheckConsistencyRequest) flags() int         { return isAdmin | isRange }
 func (*ChangeFrozenRequest) flags() int             { return isWrite | isRange | isNonKV }
 func (*WriteBatchRequest) flags() int               { return isWrite | isRange }
+func (*ExportRequest) flags() int                   { return isRead | isRange }
 
 // Keys returns credentials in an s3gof3r.Keys
 func (b *ExportStorage_S3) Keys() s3gof3r.Keys {
@@ -878,4 +902,17 @@ func (b *ExportStorage_S3) Keys() s3gof3r.Keys {
 		AccessKey: b.AccessKey,
 		SecretKey: b.Secret,
 	}
+}
+
+// InsertRangeInfo inserts ri into a slice of RangeInfo's if a descriptor for
+// the same range is not already present. If it is present, it's overwritten;
+// the rationale being that ri is newer information than what we had before.
+func InsertRangeInfo(ris []RangeInfo, ri RangeInfo) []RangeInfo {
+	for i := range ris {
+		if ris[i].Desc.RangeID == ri.Desc.RangeID {
+			ris[i] = ri
+			return ris
+		}
+	}
+	return append(ris, ri)
 }
