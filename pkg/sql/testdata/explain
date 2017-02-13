@@ -228,3 +228,4 @@ EXPLAIN SHOW USERS
 0  render
 1  scan
 1        table  users@primary
+1        spans  ALL

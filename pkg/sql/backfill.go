@@ -688,7 +688,6 @@ func (sc *SchemaChanger) backfillIndexesChunk(
 		}
 		scan := planner.Scan()
 		scan.desc = *tableDesc
-		scan.spans = []roachpb.Span{sp}
 		scan.initDescDefaults(publicAndNonPublicColumns)
 
 		// We manually invoke selectIndex() because for now expandPlan()
@@ -697,6 +696,8 @@ func (sc *SchemaChanger) backfillIndexesChunk(
 		if err != nil {
 			return err
 		}
+
+		scan.spans = []roachpb.Span{sp}
 
 		rows = &limitNode{p: planner, plan: rows, countExpr: parser.NewDInt(parser.DInt(chunkSize))}
 

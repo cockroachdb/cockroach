@@ -52,7 +52,7 @@ func TestServer(t *testing.T) {
 		Table:    *td,
 		IndexIdx: 0,
 		Reverse:  false,
-		Spans:    nil,
+		Spans:    []TableReaderSpan{{Span: td.PrimaryIndexSpan()}},
 	}
 	post := PostProcessSpec{
 		Filter:        Expression{Expr: "@1 != 2"}, // a != 2

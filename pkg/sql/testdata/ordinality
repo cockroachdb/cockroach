@@ -97,3 +97,4 @@ EXPLAIN (METADATA) SELECT * FROM foo WITH ORDINALITY WHERE x > 'a';
 1  ordinality                      (x, ordinality)  +x,unique
 2  scan                            (x)              +x,unique
 2              table  foo@primary
+2              spans  ALL

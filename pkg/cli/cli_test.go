@@ -1026,11 +1026,13 @@ func Example_sql_table() {
 	// |     1 | render |       |    -> render       |
 	// |     2 | scan   |       |       -> scan      |
 	// |     2 |        | table |          t@primary |
+	// |     2 |        | spans |          ALL       |
 	// |     1 | render |       |    -> render       |
 	// |     2 | scan   |       |       -> scan      |
 	// |     2 |        | table |          t@primary |
+	// |     2 |        | spans |          ALL       |
 	// +-------+--------+-------+--------------------+
-	// (7 rows)
+	// (9 rows)
 }
 
 func Example_user() {
