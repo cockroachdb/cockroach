@@ -233,7 +233,9 @@ type Replica struct {
 	// Locking notes: Replica.raftMu < Replica.mu
 	//
 	// TODO(peter): evaluate runtime overhead of the timed mutex.
-	raftMu timedMutex
+	raftMu        timedMutex
+	raftBatch     engine.Batch
+	raftBatchSync bool
 
 	// stateLoader provides facilities for loading and saving on-disk replica
 	// state. Requires Replica.raftMu is held.
@@ -2804,14 +2806,16 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 		}
 	}
 
-	// Use a more efficient write-only batch because we don't need to do any
-	// reads from the batch. Any reads are performed via the "distinct" batch
-	// which passes the reads through to the underlying DB.
-	batch := r.store.Engine().NewWriteOnlyBatch()
-	defer batch.Close()
+	r.ensureRaftBatch()
+	defer func() {
+		if r.raftBatch != nil {
+			r.raftBatch.Close()
+			r.raftBatch = nil
+		}
+	}()
 
 	// We know that all of the writes from here forward will be to distinct keys.
-	writer := batch.Distinct()
+	writer := r.raftBatch.Distinct()
 	if len(rd.Entries) > 0 {
 		// All of the entries are appended to distinct keys, returning a new
 		// last index.
@@ -2828,12 +2832,8 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	writer.Close()
 	// Synchronously commit the batch with the Raft log entries and Raft hard
 	// state as we're promising not to lose this data.
-	start := timeutil.Now()
-	if err := batch.Commit(syncRaftLog.Get() && rd.MustSync); err != nil {
-		return stats, err
-	}
-	elapsed := timeutil.Since(start)
-	r.store.metrics.RaftLogCommitLatency.RecordValue(elapsed.Nanoseconds())
+	r.raftBatchSync = syncRaftLog.Get() && rd.MustSync
+	// r.store.metrics.RaftLogCommitLatency.RecordValue(elapsed.Nanoseconds())
 
 	// Update protected state (last index, raft log size and raft leader
 	// ID) and set raft log entry cache. We clear any older, uncommitted
@@ -2845,6 +2845,14 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	r.mu.leaderID = leaderID
 	r.mu.Unlock()
 
+	// TODO(peter): It's unsafe to send any raft messages before committing new
+	// log entries and HardState to stable storage (any new log entries will
+	// always be accompanied by at least one outgoing message). This severely
+	// limits the scope of batches that can be safely combined. We could perhaps
+	// move this down below the processing of CommittedEntries to have more room
+	// to combine batches, but I'm not sure how much of the performance
+	// improvement will be left at that point (and delaying outgoing messages may
+	// make latency worse in other ways) - bdarnell.
 	for _, msg := range rd.Messages {
 		r.sendRaftMessage(ctx, msg)
 	}
@@ -2925,6 +2933,10 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 		r.mu.Unlock()
 	}
 
+	if err := r.maybeCommitRaftBatch(); err != nil {
+		return stats, err
+	}
+
 	// TODO(bdarnell): need to check replica id and not Advance if it
 	// has changed. Or do we need more locking to guarantee that replica
 	// ID cannot change during handleRaftReady?
@@ -2932,6 +2944,30 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 		raftGroup.Advance(rd)
 		return true, nil
 	})
+}
+
+func (r *Replica) ensureRaftBatch() {
+	if r.raftBatch == nil {
+		// Use a more efficient write-only batch because we don't need to do any
+		// reads from the batch. Any reads are performed via the "distinct" batch
+		// which passes the reads through to the underlying DB.
+		r.raftBatch = r.store.Engine().NewWriteOnlyBatch()
+		r.raftBatchSync = false
+	}
+}
+
+func (r *Replica) maybeCommitRaftBatch() error {
+	if r.raftBatch == nil {
+		return nil
+	}
+	start := timeutil.Now()
+	if err := r.raftBatch.Commit(r.raftBatchSync); err != nil {
+		return err
+	}
+	elapsed := timeutil.Since(start)
+	r.store.metrics.RaftCommandCommitLatency.RecordValue(elapsed.Nanoseconds())
+	r.raftBatch = nil
+	return nil
 }
 
 // tick the Raft group, returning any error and true if the raft group exists
@@ -3893,11 +3929,10 @@ func (r *Replica) applyRaftCommand(
 				oldRaftAppliedIndex, rResult.State.RaftAppliedIndex)))
 	}
 
-	batch := r.store.Engine().NewWriteOnlyBatch()
-	defer batch.Close()
+	r.ensureRaftBatch()
 
 	if writeBatch != nil {
-		if err := batch.ApplyBatchRepr(writeBatch.Data, false); err != nil {
+		if err := r.raftBatch.ApplyBatchRepr(writeBatch.Data, false); err != nil {
 			return enginepb.MVCCStats{}, roachpb.NewError(NewReplicaCorruptionError(
 				errors.Wrap(err, "unable to apply WriteBatch")))
 		}
@@ -3906,7 +3941,7 @@ func (r *Replica) applyRaftCommand(
 	// The only remaining use of the batch is for range-local keys which we know
 	// have not been previously written within this batch. Currently the only
 	// remaining writes are the raft applied index and the updated MVCC stats.
-	writer := batch.Distinct()
+	writer := r.raftBatch.Distinct()
 
 	// Advance the last applied index. We use a blind write in order to avoid
 	// reading the previous applied index keys on every write operation. This
@@ -3935,13 +3970,14 @@ func (r *Replica) applyRaftCommand(
 	// the future.
 	writer.Close()
 
-	start := timeutil.Now()
-	if err := batch.Commit(false); err != nil {
-		return enginepb.MVCCStats{}, roachpb.NewError(NewReplicaCorruptionError(
-			errors.Wrap(err, "could not commit batch")))
-	}
-	elapsed := timeutil.Since(start)
-	r.store.metrics.RaftCommandCommitLatency.RecordValue(elapsed.Nanoseconds())
+	// TODO(peter): Not committing the batch isn't actually safe as the caller
+	// (processRaftCommand) will be finishing the pending command. We could fix
+	// this by only finishing the pending commands once the batch is finally
+	// committed.
+	// if err := r.maybeCommitRaftBatch(); err != nil {
+	// 	return enginepb.MVCCStats{}, roachpb.NewError(NewReplicaCorruptionError(
+	// 		errors.Wrap(err, "could not commit batch")))
+	// }
 	return rResult.Delta, nil
 }
 
