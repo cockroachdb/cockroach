@@ -43,9 +43,9 @@ The last goal is to place the leaseholder for a range near the gateway
 node that is accessing the range in order to minimize network RTT. As
 an obvious example: it is preferable for the leaseholder to be in the
 same datacenter as the gateway node. Note that there is usually more
-than one gateway node accessing a range and there will common
-workloads where the traffic from gatetway nodes is not coming from a
-single locality making it impossible to satisfy this goal. In general,
+than one gateway node accessing a range and there will be common
+workloads where the traffic from gateway nodes is not coming from a
+single locality, making it impossible to satisfy this goal. In general,
 we'd like to minimize the aggregate RTT for accessing the range which
 makes the mixture of reads and writes important (reads only need a
 round-trip from the gateway to the leaseholder while writes need a
@@ -136,7 +136,7 @@ placement. For that we'll need to pass additional information in each
 request and to maintain per-range metrics about how much load a range
 is seeing from each locality. The rebalancer would then attempt to
 place leases such that they are spread within the localities they
-receiving load from, modulo they other placement constraints
+receiving load from, modulo their other placement constraints
 (i.e. diversity).
 
 # Drawbacks

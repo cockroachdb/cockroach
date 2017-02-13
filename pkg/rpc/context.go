@@ -265,8 +265,8 @@ func (ctx *Context) setConnHealthy(remoteAddr string, healthy bool) {
 }
 
 // IsConnHealthy returns whether the most recent heartbeat succeeded or not.
-// This should not be used as a definite status of a nodes health and just used
-// to prioritized healthy nodes over unhealthy ones.
+// This should not be used as a definite status of a node's health and just used
+// to prioritize healthy nodes over unhealthy ones.
 func (ctx *Context) IsConnHealthy(remoteAddr string) bool {
 	ctx.conns.Lock()
 	defer ctx.conns.Unlock()

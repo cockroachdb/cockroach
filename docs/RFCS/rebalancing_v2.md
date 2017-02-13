@@ -120,12 +120,12 @@ in no particular order:
   The choice of 32 nodes here matches our OKRs. This limit is to make testing more tractable.
   Performance will be measured using the metrics described in the Metrics section below.
 
-- Is performant in a dynamic cluster. A dynamic cluster is one is which nodes can be added and
+- Is performant in a dynamic cluster. A dynamic cluster is one in which nodes can be added and
   removed arbitrarily.
 
-  While this may seem like an obvious goal, concentrating on cases when one or more nodes are added
-  and removed at once to ensure that equilibrium is reached quickly. It should be noted that only a
-  single node can be removed at a time but any number of nodes can be added.
+  While this may seem like an obvious goal, we should ensure that equilibrium is reached quickly
+  in cases when one or more nodes are added and removed at once. It should be noted that only
+  a single node can be removed at a time but any number of nodes can be added.
 
 - Handles outages of any number of nodes gracefully, as long as quorum is maintained.
 
@@ -477,8 +477,8 @@ The likely failure modes can largely be alleviated by using short allocation lea
 - When making rebalancing decisions, there is a lack of information that must be overcome.
   Specifically, the lack of `RangeDescriptor`s that are required when actually making the final
   decision. These are too numerous to be gossiped and must be stored and retrieved from the db
-  directly. In a decentralized system, all `RangeDescriptor`s are already available directly in
-  memory in the store, while in a decentralize .
+  directly. On the other hand, in a decentralized system, all `RangeDescriptor`s are already
+  available directly in memory in the store.
 - When dealing with a cluster that use attributes, the central allocator will have to handle all
   rebalancing decisions by either using a full knowledge of a cluster or by using subsets of the
   cluster based on combinations of all available attributes.
