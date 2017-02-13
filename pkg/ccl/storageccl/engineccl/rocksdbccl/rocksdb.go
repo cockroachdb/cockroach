@@ -17,7 +17,7 @@ import (
 // #cgo CPPFLAGS: -I ../../../../../vendor/github.com/cockroachdb/c-rocksdb/internal/include
 // #cgo CPPFLAGS: -I ../../../../../pkg/storage/engine/rocksdb
 // #cgo CXXFLAGS: -std=c++11
-// #cgo darwin LDFLAGS: -Wl,-undefined -Wl,dynamic_lookup
-// #cgo !darwin LDFLAGS: -Wl,-unresolved-symbols=ignore-all
+// #cgo !strictld,darwin LDFLAGS: -Wl,-undefined -Wl,dynamic_lookup
+// #cgo !strictld,!darwin LDFLAGS: -Wl,-unresolved-symbols=ignore-all
 // #cgo linux LDFLAGS: -lrt
 import "C"
