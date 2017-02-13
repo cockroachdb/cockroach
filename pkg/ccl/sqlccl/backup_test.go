@@ -37,12 +37,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
 const (
@@ -93,40 +91,6 @@ func bankSplitStmts(numAccounts int, numRanges int) []string {
 		statements = append(statements, s)
 	}
 	return statements
-}
-
-// allRangeDescriptors fetches all meta2 RangeDescriptors using the given txn.
-func allRangeDescriptors(txn *client.Txn) ([]roachpb.RangeDescriptor, error) {
-	rows, err := txn.Scan(keys.Meta2Prefix, keys.MetaMax, 0)
-	if err != nil {
-		return nil, errors.Wrap(err, "unable to scan range descriptors")
-	}
-
-	rangeDescs := make([]roachpb.RangeDescriptor, len(rows))
-	for i, row := range rows {
-		if err := row.ValueProto(&rangeDescs[i]); err != nil {
-			return nil, errors.Wrapf(err, "%s: unable to unmarshal range descriptor", row.Key)
-		}
-	}
-	return rangeDescs, nil
-}
-
-func rebalanceLeases(t testing.TB, tc *testcluster.TestCluster) {
-	kvDB := tc.Server(0).KVClient().(*client.DB)
-	txn := client.NewTxn(context.Background(), *kvDB)
-	rangeDescs, err := allRangeDescriptors(txn)
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, r := range rangeDescs {
-		target := tc.Target(int(r.RangeID) % tc.NumServers())
-		if err := tc.TransferRangeLease(r, target); err != nil {
-			t.Fatal(err)
-		}
-	}
-	if err := tc.WaitForFullReplication(); err != nil {
-		t.Fatal(err)
-	}
 }
 
 func backupRestoreTestSetup(
@@ -596,65 +560,5 @@ func TestBackupLevelDB(t *testing.T) {
 	}
 	if foundSSTs == 0 {
 		t.Fatal("found no sstables")
-	}
-}
-
-func BenchmarkClusterBackup(b *testing.B) {
-	defer tracing.Disable()()
-
-	ctx, dir, _, sqlDB, cleanupFn := backupRestoreTestSetup(b, multiNode, 0)
-	defer cleanupFn()
-
-	ts := hlc.Timestamp{WallTime: hlc.UnixNano()}
-	if _, err := Load(ctx, sqlDB.DB, bankStatementBuf(b.N), "bench", dir, ts, 0); err != nil {
-		b.Fatalf("%+v", err)
-	}
-	sqlDB.Exec(fmt.Sprintf(`RESTORE DATABASE bench FROM '%s'`, dir))
-
-	// TODO(dan): Occasionally, this returns but seems to still be doing work,
-	// which wildly throws off the timing of below and so the results of the
-	// benchmark. When DistSQL improves this infrastructure, use what they've
-	// built.
-	//
-	// for _, split := range bankSplitStmts(b.N, backupRestoreDefaultRanges) {
-	// 	sqlDB.Exec(split)
-	// }
-	// rebalanceLeases(b, tc)
-
-	b.ResetTimer()
-	var unused string
-	var dataSize int64
-	sqlDB.QueryRow(fmt.Sprintf(`BACKUP DATABASE bench TO '%s'`, dir)).Scan(
-		&unused, &unused, &unused, &dataSize,
-	)
-	b.StopTimer()
-	b.SetBytes(dataSize / int64(b.N))
-}
-
-func BenchmarkClusterRestore(b *testing.B) {
-	defer tracing.Disable()()
-
-	// TODO(dan): count=10000 has some issues replicating. Investigate.
-	for _, numAccounts := range []int{10, 100, 1000} {
-		b.Run(strconv.Itoa(numAccounts), func(b *testing.B) {
-			_, dir, tc, sqlDB, cleanupFn := backupRestoreTestSetup(b, multiNode, numAccounts)
-			defer cleanupFn()
-
-			// TODO(dan): Once mjibson's sql -> kv function is committed, use it
-			// here on the output of bankDataInsert to generate the backup data
-			// instead of this call.
-			var dataSize int64
-			sqlDB.QueryRow(
-				fmt.Sprintf(`BACKUP DATABASE bench TO '%s'`, dir),
-			).Scan(nil, nil, nil, &dataSize)
-			b.SetBytes(dataSize)
-
-			rebalanceLeases(b, tc)
-
-			b.ResetTimer()
-			for i := 0; i < b.N; i++ {
-				sqlDB.Exec(fmt.Sprintf(`RESTORE DATABASE bench FROM '%s'`, dir))
-			}
-		})
 	}
 }
