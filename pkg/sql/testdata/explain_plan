@@ -100,7 +100,7 @@ CREATE TABLE tc (a INT, b INT, INDEX c(a))
 query ITTTTT
 EXPLAIN(METADATA) SELECT * FROM tc WHERE a = 10 ORDER BY b
 ----
-0  sort                           (a, b)                                   +b
+0  sort                           (a, b)                                   =a,+b
 0              order  +b
 1  render                         (a, b)                                   =a
 2  index-join                     (a, b, rowid[hidden,omitted])            =a,+rowid,unique

@@ -512,8 +512,19 @@ EXPLAIN SELECT c FROM abc WHERE b = 2 ORDER BY c DESC
 1           table  abc@bc
 1           spans  /2-/3
 
+# Verify that the ordering of the primary index is still used for the outer sort.
+query ITTTTT
+EXPLAIN (METADATA) SELECT * FROM (SELECT b, c FROM abc WHERE a=1 ORDER BY a,b) ORDER BY b,c
+----
+0  nosort                      (b, c)                 +b,+c
+0          order  +a,+b
+1  render                      (b, c, a)              =a,+b,+c,unique
+2  scan                        (a, b, c, d[omitted])  =a,+b,+c,unique
+2          table  abc@primary
+2          spans  /1-/2
+
 statement ok
-CREATE TABLE bar (id INT PRIMARY KEY, baz STRING, UNIQUE INDEX i_bar (baz));
+CREATE TABLE bar (id INT PRIMARY KEY, baz STRING, UNIQUE INDEX i_bar (baz))
 
 statement ok
 INSERT INTO bar VALUES (0, NULL), (1, NULL);
