@@ -381,7 +381,7 @@ func (r *Replica) leasePostApply(
 		// If this replica is a new holder of the lease, update the low water
 		// mark of the timestamp cache. Note that clock offset scenarios are
 		// handled via a stasis period inherent in the lease which is documented
-		// in on the Lease struct.
+		// in the Lease struct.
 		//
 		// The introduction of lease transfers implies that the previous lease
 		// may have been shortened and we are now applying a formally overlapping
