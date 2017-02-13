@@ -37,6 +37,7 @@ EXPLAIN SELECT DISTINCT y, z FROM xyz
 1  render
 2  scan
 2            table  xyz@primary
+2            spans  ALL
 
 query II
 SELECT DISTINCT y, z FROM xyz ORDER BY z
@@ -116,6 +117,7 @@ EXPLAIN SELECT DISTINCT y + z FROM xyz ORDER BY y + z
 2  render
 3  scan
 3            table  xyz@primary
+3            spans  ALL
 
 query I
 SELECT DISTINCT y AS w FROM xyz ORDER by z

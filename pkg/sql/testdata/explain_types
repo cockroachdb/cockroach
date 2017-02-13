@@ -30,6 +30,7 @@ EXPLAIN (TYPES) SELECT * FROM t
 ----
 0  scan                                (k int, v int)  +k,unique
 0                 table     t@primary
+0                 spans     ALL
 
 query ITTTTT
 EXPLAIN (TYPES, SYMVARS) SELECT k FROM t
@@ -38,6 +39,7 @@ EXPLAIN (TYPES, SYMVARS) SELECT k FROM t
 0         render 0  (@1)[int]
 1  scan                        (k int, v[omitted] int)  +k,unique
 1         table     t@primary
+1         spans     ALL
 
 query ITTTTT
 EXPLAIN (TYPES, QUALIFY) SELECT k FROM t
@@ -46,6 +48,7 @@ EXPLAIN (TYPES, QUALIFY) SELECT k FROM t
 0         render 0  (test.t.k)[int]
 1  scan                              (k int, v[omitted] int)  +k,unique
 1         table     t@primary
+1         spans     ALL
 
 query ITTTTT
 EXPLAIN (TYPES,NOEXPAND) SELECT * FROM t WHERE v > 123
@@ -192,6 +195,7 @@ EXPLAIN (TYPES) SELECT DISTINCT k FROM t
 1                 render 0  (k)[int]
 2  scan                                (k int, v[omitted] int)  +k,unique
 2                 table     t@primary
+2                 spans     ALL
 
 query ITTTTT
 EXPLAIN (TYPES,NOEXPAND) SELECT DISTINCT k FROM t
@@ -232,6 +236,7 @@ EXPLAIN (TYPES) SELECT v FROM t LIMIT 1
 1                 render 0  (v)[int]
 2  scan                                (k[omitted] int, v int)  +k,unique
 2                 table     t@primary
+2                 spans     ALL
 2                 limit     1
 
 query ITTTTT
