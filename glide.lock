@@ -1,8 +1,8 @@
-hash: 2e3b023646c495521fb9dd7833477ddb3a8b92852a96d8a5428a96bbdbad3003
-updated: 2017-02-13T11:02:33.25499013-05:00
+hash: 412957daee4b65f2dd293a1ac39c13ffb1413ba7c2d1f61720d49878e7e84df7
+updated: 2017-02-13T18:11:03.534890953Z
 imports:
 - name: cloud.google.com/go
-  version: 5c2083b36af4e7d8ecb33ba5a5759bcfddfae591
+  version: 493be1e01d757f0367be406d775bd51a391fc84d
   subpackages:
   - compute/metadata
   - internal
@@ -12,6 +12,10 @@ imports:
   version: 6dde447fa54bc5b08b1a7bb1b85e39089cf27fb1
 - name: github.com/agtorre/gocolorize
   version: f42b554bf7f006936130c9bb4f971afd2d87f671
+- name: github.com/Azure/azure-sdk-for-go
+  version: 8e625d1702a32d01cef05a9252198d231c4af113
+  subpackages:
+  - storage
 - name: github.com/Azure/go-ansiterm
   version: fa152c58bc15761d0200cb75fe958b89a9d4888e
   subpackages:
