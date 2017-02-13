@@ -341,12 +341,23 @@ func (p *planner) CreateView(n *parser.CreateView) (planNode, error) {
 	p.avoidCachedDescriptors = true
 	sourcePlan, err := p.Select(n.AsSource, []parser.Type{}, false)
 	if err != nil {
+		p.avoidCachedDescriptors = false
 		return nil, err
 	}
+
+	var result *createViewNode
+	defer func() {
+		// Ensure that we clean up after ourselves if an error occurs, because if
+		// construction of the planNode fails, Close() won't be called on it.
+		if result == nil {
+			sourcePlan.Close()
+			p.avoidCachedDescriptors = false
+		}
+	}()
+
 	numColNames := len(n.ColumnNames)
 	numColumns := len(sourcePlan.Columns())
 	if numColNames != 0 && numColNames != numColumns {
-		sourcePlan.Close()
 		return nil, sqlbase.NewSyntaxError(fmt.Sprintf(
 			"CREATE VIEW specifies %d column name%s, but data source has %d column%s",
 			numColNames, util.Pluralize(int64(numColNames)),
@@ -379,13 +390,16 @@ func (p *planner) CreateView(n *parser.CreateView) (planNode, error) {
 		return nil, fmt.Errorf("views do not currently support * expressions")
 	}
 
-	return &createViewNode{
+	// Set result rather than just returnning to ensure the defer'ed cleanup
+	// doesn't trigger.
+	result = &createViewNode{
 		p:           p,
 		n:           n,
 		dbDesc:      dbDesc,
 		sourcePlan:  sourcePlan,
 		sourceQuery: queryBuf.String(),
-	}, nil
+	}
+	return result, nil
 }
 
 func (n *createViewNode) Start() error {
@@ -456,6 +470,7 @@ func (n *createViewNode) Start() error {
 func (n *createViewNode) Close() {
 	n.sourcePlan.Close()
 	n.sourcePlan = nil
+	n.p.avoidCachedDescriptors = false
 }
 
 func (n *createViewNode) Next() (bool, error)        { return false, nil }
