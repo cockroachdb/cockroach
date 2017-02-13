@@ -848,7 +848,7 @@ func (t *logicTest) verifyError(sql, pos, expectErr, expectErrCode string, err e
 	}
 	if !testutils.IsError(err, expectErr) {
 		t.Errorf("%s: expected %q, but found %v", pos, expectErr, err)
-		if strings.Contains(err.Error(), expectErr) {
+		if err != nil && strings.Contains(err.Error(), expectErr) {
 			t.t.Logf("The output string contained the input regexp. Perhaps you meant to write:\n"+
 				"query error %s", regexp.QuoteMeta(err.Error()))
 		}
