@@ -448,6 +448,9 @@ func (r *Replica) leasePostApply(
 	// gossip the updated store descriptor (with updated capacity).
 	if leaseChangingHands && (prevLease.OwnedBy(r.store.StoreID()) ||
 		newLease.OwnedBy(r.store.StoreID())) {
+		if err := r.maybeCommitRaftBatch(); err != nil {
+			log.Fatal(ctx, errors.Wrap(err, "unable to commit batch"))
+		}
 		r.store.maybeGossipOnCapacityChange(ctx, leaseChangeEvent)
 	}
 
@@ -459,6 +462,9 @@ func (r *Replica) leasePostApply(
 	// will be gossiped rarely because it falls on a range with an epoch-based
 	// range lease that is only reacquired extremely infrequently.
 	if iAmTheLeaseHolder {
+		if err := r.maybeCommitRaftBatch(); err != nil {
+			log.Fatal(ctx, errors.Wrap(err, "unable to commit batch"))
+		}
 		if err := r.maybeGossipSystemConfig(ctx); err != nil {
 			log.Error(ctx, err)
 		}
@@ -557,6 +563,10 @@ func (r *Replica) handleReplicatedEvalResult(
 	// of the ContainsEstimates hack.
 
 	if rResult.Split != nil {
+		if err := r.maybeCommitRaftBatch(); err != nil {
+			log.Fatal(ctx, errors.Wrap(err, "unable to commit batch"))
+		}
+
 		// TODO(tschottdorf): We want to let the usual MVCCStats-delta
 		// machinery update our stats for the left-hand side. But there is no
 		// way to pass up an MVCCStats object that will clear out the
@@ -741,12 +751,18 @@ func (r *Replica) handleLocalEvalResult(
 	}
 
 	if lResult.maybeGossipSystemConfig {
+		if err := r.maybeCommitRaftBatch(); err != nil {
+			log.Fatal(ctx, errors.Wrap(err, "unable to commit batch"))
+		}
 		if err := r.maybeGossipSystemConfig(ctx); err != nil {
 			log.Error(ctx, err)
 		}
 		lResult.maybeGossipSystemConfig = false
 	}
 	if lResult.maybeGossipNodeLiveness != nil {
+		if err := r.maybeCommitRaftBatch(); err != nil {
+			log.Fatal(ctx, errors.Wrap(err, "unable to commit batch"))
+		}
 		if err := r.maybeGossipNodeLiveness(ctx, *lResult.maybeGossipNodeLiveness); err != nil {
 			log.Error(ctx, err)
 		}
@@ -789,6 +805,9 @@ func (r *Replica) handleEvalResult(
 	if shouldAssert {
 		// Assert that the on-disk state doesn't diverge from the in-memory
 		// state as a result of the side effects.
+		if err := r.maybeCommitRaftBatch(); err != nil {
+			log.Fatal(ctx, err)
+		}
 		r.assertState(r.store.Engine())
 	}
 }
