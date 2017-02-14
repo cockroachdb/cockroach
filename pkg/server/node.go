@@ -833,7 +833,10 @@ func (n *Node) Batch(
 ) (*roachpb.BatchResponse, error) {
 	growStack()
 
-	ctx = n.AnnotateCtx(ctx)
+	// NB: Node.Batch is called directly for "local" calls. We don't want to
+	// carry the associated log tags forward as doing so makes adding additional
+	// log tags more expensive and makes local calls differ from remote calls.
+	ctx = n.storeCfg.AmbientCtx.ResetAndAnnotateCtx(ctx)
 
 	br, err := n.batchInternal(ctx, args)
 

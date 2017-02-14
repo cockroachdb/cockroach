@@ -142,6 +142,13 @@ func augmentTagChain(ctx context.Context, bottomTag *logTag) context.Context {
 // - copying c2
 // - linking c2's copy in front of what's left of c1
 func mergeChains(c1 *logTag, c2 *logTag) *logTag {
+	// Check to see if c1 is already included in c2.
+	for t := c2; t != nil; t = t.parent {
+		if t == c1 {
+			return c2
+		}
+	}
+
 	c1 = subtractChain(c1, c2)
 	bottom, top := copyChain(c2, nil)
 	top.parent = c1
