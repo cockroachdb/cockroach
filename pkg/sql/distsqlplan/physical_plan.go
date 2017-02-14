@@ -96,7 +96,9 @@ type PhysicalPlan struct {
 	ResultTypes []sqlbase.ColumnType
 
 	// Ordering guarantee for the result streams that must be maintained when the
-	// streams eventually merge.
+	// streams eventually merge. The column indexes refer to columns for the rows
+	// produced by ResultRouters.
+	// Ignored when there is a single result router.
 	Ordering distsqlrun.Ordering
 }
 
@@ -108,11 +110,20 @@ func (p *PhysicalPlan) AddProcessor(proc Processor) ProcessorIdx {
 	return idx
 }
 
+// SetOrdering sets p.Ordering.
+func (p *PhysicalPlan) SetOrdering(o distsqlrun.Ordering) {
+	if len(p.ResultRouters) > 1 {
+		p.Ordering = o
+	} else {
+		p.Ordering = distsqlrun.Ordering{}
+	}
+}
+
 // AddNoGroupingStage adds a processor for each result router, on the same node
 // with the source of the stream; all processors have the same core. This is for
 // stages that correspond to logical blocks that don't require any grouping
 // (e.g. evaluator, sorting, etc).
-// The caller must update p.Ordering.
+// The caller must update the ordering via SetOrdering.
 func (p *PhysicalPlan) AddNoGroupingStage(
 	core distsqlrun.ProcessorCoreUnion,
 	post distsqlrun.PostProcessSpec,
@@ -181,7 +192,7 @@ func (p *PhysicalPlan) MergeResultStreams(
 // parallelized) which consists of a single processor on the specified node. The
 // previous stage (ResultRouters) are all connected to this processor.
 //
-// The caller must update p.Ordering.
+// The caller must update the ordering via SetOrdering.
 func (p *PhysicalPlan) AddSingleGroupStage(
 	nodeID roachpb.NodeID,
 	core distsqlrun.ProcessorCoreUnion,
@@ -238,7 +249,8 @@ func (p *PhysicalPlan) GetLastStagePost() distsqlrun.PostProcessSpec {
 }
 
 // SetLastStagePost changes the PostProcess spec of the processors in the last
-// stage (ResultRouters). The caller must update p.Ordering accordingly.
+// stage (ResultRouters).
+// The caller must update the ordering via SetOrdering.
 func (p *PhysicalPlan) SetLastStagePost(
 	post distsqlrun.PostProcessSpec, outputTypes []sqlbase.ColumnType,
 ) {
@@ -249,14 +261,35 @@ func (p *PhysicalPlan) SetLastStagePost(
 }
 
 // AddProjection applies a projection to a plan. The new plan outputs the
-// columns of the old plan as listed in the slice.
+// columns of the old plan as listed in the slice. The Ordering is updated;
+// columns in the ordering are added to the projection as needed.
 //
 // Note: the columns slice is relinquished to this function, which can modify it
 // or use it directly in specs.
-//
-// The caller must update p.Ordering.
 func (p *PhysicalPlan) AddProjection(columns []uint32) {
 	post := p.GetLastStagePost()
+
+	if len(p.Ordering.Columns) > 0 {
+		newOrdering := make([]distsqlrun.Ordering_Column, len(p.Ordering.Columns))
+		for i, c := range p.Ordering.Columns {
+			// Look for the column in the new projection.
+			found := -1
+			for j, projCol := range columns {
+				if projCol == c.ColIdx {
+					found = j
+				}
+			}
+			if found == -1 {
+				// We have a column that is not in the projection but will be necessary
+				// later when the streams are merged; add it.
+				found = len(columns)
+				columns = append(columns, c.ColIdx)
+			}
+			newOrdering[i].ColIdx = uint32(found)
+			newOrdering[i].Direction = c.Direction
+		}
+		p.Ordering.Columns = newOrdering
+	}
 
 	newResultTypes := make([]sqlbase.ColumnType, len(columns))
 	for i, c := range columns {
@@ -287,13 +320,26 @@ func (p *PhysicalPlan) AddProjection(columns []uint32) {
 	p.SetLastStagePost(post, newResultTypes)
 }
 
+// exprColumn returns the column that is referenced by the expression, if the
+// expression is just an IndexedVar.
+//
+// See MakeExpression for a description of indexVarMap.
+func exprColumn(expr parser.TypedExpr, indexVarMap []int) (int, bool) {
+	v, ok := expr.(*parser.IndexedVar)
+	if !ok {
+		return 0, false
+	}
+	return indexVarMap[v.Idx], true
+}
+
 // AddRendering adds a rendering (expression evaluation) to the output of a
 // plan. The rendering is achieved either through an adjustment on the last
 // stage post-process spec, or via a new stage.
 //
-// See MakeExpression for a description of indexVarMap.
+// The Ordering is updated; columns in the ordering are added to the render
+// expressions as necessary.
 //
-// The caller must update p.Ordering.
+// See MakeExpression for a description of indexVarMap.
 func (p *PhysicalPlan) AddRendering(
 	exprs []parser.TypedExpr, indexVarMap []int, outTypes []sqlbase.ColumnType,
 ) {
@@ -303,12 +349,12 @@ func (p *PhysicalPlan) AddRendering(
 	identity := (len(exprs) == len(p.ResultTypes))
 
 	for exprIdx, e := range exprs {
-		if varIdx, ok := e.(*parser.IndexedVar); ok {
-			identity = identity && (exprIdx == varIdx.Idx)
-		} else {
+		varIdx, ok := exprColumn(e, indexVarMap)
+		if !ok {
 			needRendering = true
 			break
 		}
+		identity = identity && (varIdx == exprIdx)
 	}
 
 	if !needRendering {
@@ -320,10 +366,9 @@ func (p *PhysicalPlan) AddRendering(
 		// just a projection.
 		cols := make([]uint32, len(exprs))
 		for i, e := range exprs {
-			idx := e.(*parser.IndexedVar).Idx
-			streamCol := indexVarMap[idx]
+			streamCol, _ := exprColumn(e, indexVarMap)
 			if streamCol == -1 {
-				panic(fmt.Sprintf("render %d refers to column %d not in source", i, idx))
+				panic(fmt.Sprintf("render %d refers to column not in source: %s", i, e))
 			}
 			cols[i] = uint32(streamCol)
 		}
@@ -349,6 +394,40 @@ func (p *PhysicalPlan) AddRendering(
 	for i, e := range exprs {
 		post.RenderExprs[i] = MakeExpression(e, compositeMap)
 	}
+
+	if len(p.Ordering.Columns) > 0 {
+		outTypes = outTypes[:len(outTypes):len(outTypes)]
+		newOrdering := make([]distsqlrun.Ordering_Column, len(p.Ordering.Columns))
+		for i, c := range p.Ordering.Columns {
+			found := -1
+			// Look for the column in the new projection.
+			for exprIdx, e := range exprs {
+				if varIdx, ok := exprColumn(e, indexVarMap); ok && varIdx == int(c.ColIdx) {
+					found = exprIdx
+					break
+				}
+			}
+			if found == -1 {
+				// We have a column that is not being rendered but will be necessary
+				// later when the streams are merged; add it.
+
+				// The new expression refers to column post.OutputColumns[c.ColIdx].
+				internalColIdx := c.ColIdx
+				if post.OutputColumns != nil {
+					internalColIdx = post.OutputColumns[internalColIdx]
+				}
+				newExpr := MakeExpression(&parser.IndexedVar{Idx: int(internalColIdx)}, nil)
+
+				found = len(post.RenderExprs)
+				post.RenderExprs = append(post.RenderExprs, newExpr)
+				outTypes = append(outTypes, p.ResultTypes[c.ColIdx])
+			}
+			newOrdering[i].ColIdx = uint32(found)
+			newOrdering[i].Direction = c.Direction
+		}
+		p.Ordering.Columns = newOrdering
+	}
+
 	post.OutputColumns = nil
 	p.SetLastStagePost(post, outTypes)
 }
@@ -397,6 +476,9 @@ func (p *PhysicalPlan) AddRendering(
 //  means the second internal column (B), 3 means the fourth internal column
 //  (D).
 func reverseProjection(outputColumns []uint32, indexVarMap []int) []int {
+	if indexVarMap == nil {
+		panic("no indexVarMap")
+	}
 	if len(outputColumns) == 0 {
 		// No projection.
 		return indexVarMap
@@ -535,6 +617,8 @@ func (p *PhysicalPlan) AddLimit(count int64, offset int64, node roachpb.NodeID) 
 		post,
 		p.ResultTypes,
 	)
+	// We have a single stream now.
+	p.Ordering = distsqlrun.Ordering{}
 	return nil
 }
 

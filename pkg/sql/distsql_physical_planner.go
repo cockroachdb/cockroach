@@ -657,8 +657,6 @@ func (dsp *distSQLPlanner) selectRenders(p *physicalPlan, n *renderNode) {
 	for i := range n.render {
 		p.planToStreamColMap = append(p.planToStreamColMap, i)
 	}
-
-	p.Ordering = dsp.convertOrdering(n.ordering.ordering, p.planToStreamColMap)
 }
 
 // addSorters adds sorters corresponding to a sortNode and updates the plan to
@@ -685,7 +683,7 @@ func (dsp *distSQLPlanner) addSorters(p *physicalPlan, n *sortNode) {
 			distsqlrun.PostProcessSpec{},
 			p.ResultTypes,
 		)
-		p.Ordering = ordering
+		p.SetOrdering(ordering)
 	}
 
 	if len(n.columns) != len(p.planToStreamColMap) {
@@ -695,19 +693,16 @@ func (dsp *distSQLPlanner) addSorters(p *physicalPlan, n *sortNode) {
 		// in the output columns of the sortNode; we set a projection such that the
 		// plan results map 1-to-1 to sortNode columns.
 		//
-		// We can only do this when there is a single result stream. With multiple
-		// result streams, we need the columns to later merge the streams correctly
-		// with an ordered synchronizer.
+		// Note that internally, AddProjection might retain more columns as
+		// necessary so we can preserve the p.Ordering between parallel streams when
+		// they merge later.
 		p.planToStreamColMap = p.planToStreamColMap[:len(n.columns)]
-		if len(p.ResultRouters) == 1 {
-			columns := make([]uint32, len(n.columns))
-			for i, col := range p.planToStreamColMap {
-				columns[i] = uint32(col)
-				p.planToStreamColMap[i] = i
-			}
-			p.AddProjection(columns)
-			p.Ordering = dsp.convertOrdering(n.Ordering().ordering, p.planToStreamColMap)
+		columns := make([]uint32, len(n.columns))
+		for i, col := range p.planToStreamColMap {
+			columns[i] = uint32(col)
+			p.planToStreamColMap[i] = i
 		}
+		p.AddProjection(columns)
 	}
 }
 
@@ -784,15 +779,6 @@ func (dsp *distSQLPlanner) addAggregators(
 		}
 	}
 
-	// The aggregators don't care about the input ordering, so don't guarantee
-	// one (p.Ordering gets factored in when we add stages). This one-off
-	// optimization is a symptom of the larger issue that we don't yet determine
-	// what orderings are actually needed by each node's parent.
-	//
-	// Note that this won't be the case if we implement certain optimizations
-	// (like groupNode.needOnlyOneRow).
-	p.Ordering = distsqlrun.Ordering{}
-
 	var finalAggSpec distsqlrun.AggregatorSpec
 
 	if !multiStage {
@@ -848,7 +834,7 @@ func (dsp *distSQLPlanner) addAggregators(
 			intermediateTypes,
 		)
 		// The local aggregators don't guarantee any output ordering.
-		p.Ordering = orderingTerminated
+		p.SetOrdering(orderingTerminated)
 
 		finalAggSpec = distsqlrun.AggregatorSpec{
 			Aggregations: finalAgg,
@@ -892,7 +878,7 @@ func (dsp *distSQLPlanner) addAggregators(
 	}
 
 	// We don't guarantee any ordering. Thankfully the groupNode doesn't either.
-	p.Ordering = orderingTerminated
+	p.SetOrdering(orderingTerminated)
 	if len(n.Ordering().ordering) != 0 {
 		panic("groupNode promises ordering")
 	}
@@ -1196,7 +1182,7 @@ func (dsp *distSQLPlanner) createPlanForJoin(
 
 	p.planToStreamColMap = joinToStreamColMap
 	p.ResultTypes = getTypesForPlanResult(n, joinToStreamColMap)
-	p.Ordering = dsp.convertOrdering(n.Ordering().ordering, joinToStreamColMap)
+	p.SetOrdering(orderingTerminated)
 	return p, nil
 }
 
