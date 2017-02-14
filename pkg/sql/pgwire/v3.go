@@ -532,7 +532,7 @@ func (c *v3Conn) handleParse(ctx context.Context, buf *readBuffer) error {
 		if !ok {
 			return c.sendInternalError(fmt.Sprintf("unknown oid type: %v", t))
 		}
-		sqlTypeHints[fmt.Sprint(i+1)] = v
+		sqlTypeHints[strconv.Itoa(i+1)] = v
 	}
 	// Create the new PreparedStatement in the connection's Session.
 	stmt, err := c.session.PreparedStatements.New(ctx, c.executor, name, query, sqlTypeHints)
@@ -709,7 +709,7 @@ func (c *v3Conn) handleBind(buf *readBuffer) error {
 		if err != nil {
 			return err
 		}
-		k := fmt.Sprint(i + 1)
+		k := strconv.Itoa(i + 1)
 		if int32(plen) == -1 {
 			// The argument is a NULL value.
 			qargs[k] = parser.DNull
