@@ -275,6 +275,76 @@ type importFile struct {
 	CRC  uint32
 }
 
+type writeBatcher struct {
+	ctx            context.Context
+	cancel         func()
+	db             client.DB
+	batchSizeBytes int
+
+	wg            util.WaitGroupWithError
+	batchStartKey []byte
+	batchEndKey   []byte
+	b             engine.RocksDBBatchBuilder
+}
+
+func makeWriteBatcher(ctx context.Context, db client.DB) writeBatcher {
+	// Arrived at by tuning and watching the effect on BenchmarkRestore.
+	const batchSizeBytes = 1000000
+	ctx, cancel := context.WithCancel(ctx)
+	return writeBatcher{
+		ctx:            ctx,
+		cancel:         cancel,
+		db:             db,
+		batchSizeBytes: batchSizeBytes,
+	}
+}
+
+func (wb *writeBatcher) Put(key engine.MVCCKey, value []byte) {
+	wb.b.Put(key, value)
+
+	if len(wb.batchStartKey) == 0 {
+		wb.batchStartKey = append(wb.batchStartKey, key.Key...)
+	}
+	wb.batchEndKey = append(wb.batchEndKey[:0], key.Key...)
+
+	if wb.b.Len() > wb.batchSizeBytes {
+		wb.send()
+	}
+}
+
+func (wb *writeBatcher) send() {
+	// Copy all the args to db.WriteBatch because they may be overwritten before
+	// the goroutine gets scheduled and it gets called.
+	batchStartKey := roachpb.Key(append([]byte(nil), wb.batchStartKey...))
+	batchEndKey := roachpb.Key(append([]byte(nil), wb.batchEndKey...)).PrefixEnd()
+	repr := append([]byte(nil), wb.b.Finish()...)
+
+	wb.batchStartKey = wb.batchStartKey[:0]
+	wb.batchEndKey = wb.batchEndKey[:0]
+	// Calling Finish on a RocksDBBatchBuilder resets it.
+
+	if log.V(1) {
+		log.Infof(wb.ctx, "WriteBatch %s-%s", batchStartKey, batchEndKey)
+	}
+	wb.wg.Add(1)
+	go func() {
+		if err := wb.db.WriteBatch(wb.ctx, batchStartKey, batchEndKey, repr); err != nil {
+			log.Errorf(wb.ctx, "WriteBatch: %+v", err)
+			wb.wg.Done(err)
+			wb.cancel()
+			return
+		}
+		wb.wg.Done(nil)
+	}()
+}
+
+func (wb *writeBatcher) Finish() error {
+	if wb.b.Len() > 0 {
+		wb.send()
+	}
+	return wb.wg.Wait()
+}
+
 // Import loads some data in sstables into an empty range. Only the keys between
 // startKey and endKey are loaded. Every row's key is rewritten to be for
 // newTableID.
@@ -292,22 +362,8 @@ func Import(
 		return nil
 	}
 
-	// Arrived at by tuning and watching the effect on BenchmarkRestore.
-	const batchSizeBytes = 1000000
-
-	b := &client.Batch{}
+	b := makeWriteBatcher(ctx, db)
 	var v roachpb.Value
-	bytes := 0
-
-	writeBatch := func() error {
-		if err := db.Run(ctx, b); err != nil {
-			return err
-		}
-		b = &client.Batch{}
-		bytes = 0
-		return nil
-	}
-
 	importFunc := func(kv engine.MVCCKeyValue) (bool, error) {
 		var ok bool
 		kv.Key.Key, ok = kr.RewriteKey(append([]byte(nil), kv.Key.Key...))
@@ -315,7 +371,7 @@ func Import(
 			// If the key rewriter didn't match this key, it's not data for the
 			// table(s) we're interested in.
 			if log.V(3) {
-				log.Infof(ctx, "skipping %s\n", kv.Key.Key)
+				log.Infof(ctx, "Skipping %s %s\n", kv.Key.Key, v.PrettyPrint())
 			}
 			return false, nil
 		}
@@ -323,17 +379,12 @@ func Import(
 		// Rewriting the key means the checksum needs to be updated.
 		v = roachpb.Value{RawBytes: kv.Value}
 		v.ClearChecksum()
+		v.InitChecksum(kv.Key.Key)
 
 		if log.V(3) {
 			log.Infof(ctx, "Put %s %s\n", kv.Key.Key, v.PrettyPrint())
 		}
-		b.CPut(kv.Key.Key, &v, nil)
-		bytes += len(kv.Key.Key) + len(v.RawBytes)
-		if bytes > batchSizeBytes {
-			if err := writeBatch(); err != nil {
-				return false, err
-			}
-		}
+		b.Put(kv.Key, v.RawBytes)
 
 		return false, nil
 	}
@@ -373,13 +424,7 @@ func Import(
 		}
 	}
 
-	if bytes > 0 {
-		if err := writeBatch(); err != nil {
-			return err
-		}
-	}
-
-	return nil
+	return b.Finish()
 }
 
 func assertDatabasesExist(
