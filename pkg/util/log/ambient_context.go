@@ -140,6 +140,29 @@ func (ac *AmbientContext) AnnotateCtx(ctx context.Context) context.Context {
 	}
 }
 
+// ResetAndAnnotateCtx annotates a given context with the information in
+// AmbientContext, but unlike AnnotateCtx, it overwrites log tags instead of
+// merging with existing ones.
+func (ac *AmbientContext) ResetAndAnnotateCtx(ctx context.Context) context.Context {
+	switch ctx {
+	case context.TODO(), context.Background():
+		// NB: context.TODO and context.Background are identical except for their
+		// names.
+		if ac.backgroundCtx != nil {
+			return ac.backgroundCtx
+		}
+		return ctx
+	default:
+		if ac.eventLog != nil && opentracing.SpanFromContext(ctx) == nil && eventLogFromCtx(ctx) == nil {
+			ctx = embedCtxEventLog(ctx, ac.eventLog)
+		}
+		if ac.tags != nil {
+			ctx = context.WithValue(ctx, contextTagKeyType{}, ac.tags)
+		}
+		return ctx
+	}
+}
+
 func (ac *AmbientContext) annotateCtxInternal(ctx context.Context) context.Context {
 	if ac.eventLog != nil && opentracing.SpanFromContext(ctx) == nil && eventLogFromCtx(ctx) == nil {
 		ctx = embedCtxEventLog(ctx, ac.eventLog)

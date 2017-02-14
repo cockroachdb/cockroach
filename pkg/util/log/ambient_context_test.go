@@ -84,3 +84,24 @@ func TestAnnotateCtxSpan(t *testing.T) {
 		t.Errorf("expected events '%s', got '%v'", expected, traceEv)
 	}
 }
+
+func TestAnnotateCtxNodeStoreReplica(t *testing.T) {
+	// Test the scenario of a context being continually re-annotated as it is
+	// passed down a call stack.
+	n := AmbientContext{}
+	n.AddLogTagInt("n", 1)
+	s := n
+	s.AddLogTagInt("s", 2)
+	r := s
+	r.AddLogTagInt("r", 3)
+
+	ctx := n.AnnotateCtx(context.Background())
+	ctx = s.AnnotateCtx(ctx)
+	ctx = r.AnnotateCtx(ctx)
+	if exp, val := "[n1,s2,r3] test", makeMessage(ctx, "test", nil); val != exp {
+		t.Errorf("expected '%s', got '%s'", exp, val)
+	}
+	if bottom := contextBottomTag(ctx); bottom != r.tags {
+		t.Errorf("expected %p, got %p", r.tags, bottom)
+	}
+}
