@@ -102,6 +102,8 @@ message RangesRequest {
   // node_id is a string so that "local" can be used to specify that no
   // forwarding is necessary.
   string node_id = 1;
+  repeated int64 ranges = 2
+    [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"];
 }
 
 message RangesResponse {
@@ -198,6 +200,8 @@ message RaftRangeStatus {
 }
 
 message RaftDebugRequest {
+  repeated int64 ranges = 1
+    [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"];
 }
 
 message RaftDebugResponse {

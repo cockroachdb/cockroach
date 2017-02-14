@@ -451,7 +451,7 @@ func (s *statusServer) Metrics(
 
 // RaftDebug returns raft debug information for all known nodes.
 func (s *statusServer) RaftDebug(
-	ctx context.Context, _ *serverpb.RaftDebugRequest,
+	ctx context.Context, req *serverpb.RaftDebugRequest,
 ) (*serverpb.RaftDebugResponse, error) {
 	ctx = s.AnnotateCtx(ctx)
 	nodes, err := s.Nodes(ctx, nil)
@@ -483,7 +483,7 @@ func (s *statusServer) RaftDebug(
 		nodeID := node.Desc.NodeID
 		go func() {
 			defer wg.Done()
-			ranges, err := s.Ranges(ctx, &serverpb.RangesRequest{NodeId: nodeID.String()})
+			ranges, err := s.Ranges(ctx, &serverpb.RangesRequest{NodeId: nodeID.String(), Ranges: req.Ranges})
 
 			mu.Lock()
 			defer mu.Unlock()
@@ -607,25 +607,47 @@ func (s *statusServer) Ranges(
 	}
 
 	err = s.stores.VisitStores(func(store *storage.Store) error {
-		// Use IterateRangeDescriptors to read from the engine only
-		// because it's already exported.
-		err := storage.IterateRangeDescriptors(ctx, store.Engine(),
-			func(desc roachpb.RangeDescriptor) (bool, error) {
-				rep, err := store.GetReplica(desc.RangeID)
-				if err != nil {
-					return true, err
-				}
-				output.Ranges = append(output.Ranges, serverpb.RangeInfo{
-					Span: serverpb.PrettySpan{
-						StartKey: desc.StartKey.String(),
-						EndKey:   desc.EndKey.String(),
-					},
-					RaftState: convertRaftStatus(rep.RaftStatus()),
-					State:     rep.State(),
+		if len(req.Ranges) == 0 {
+			// All ranges requested:
+			// Use IterateRangeDescriptors to read from the engine only
+			// because it's already exported.
+			err := storage.IterateRangeDescriptors(ctx, store.Engine(),
+				func(desc roachpb.RangeDescriptor) (bool, error) {
+					rep, err := store.GetReplica(desc.RangeID)
+					if err != nil {
+						return true, err
+					}
+					output.Ranges = append(output.Ranges, serverpb.RangeInfo{
+						Span: serverpb.PrettySpan{
+							StartKey: desc.StartKey.String(),
+							EndKey:   desc.EndKey.String(),
+						},
+						RaftState: convertRaftStatus(rep.RaftStatus()),
+						State:     rep.State(),
+					})
+					return false, nil
 				})
-				return false, nil
+			return err
+		}
+
+		// Specific ranges requested:
+		for _, rid := range req.Ranges {
+			rep, err := store.GetReplica(rid)
+			if err != nil {
+				// Not found: continue.
+				continue
+			}
+			desc := rep.Desc()
+			output.Ranges = append(output.Ranges, serverpb.RangeInfo{
+				Span: serverpb.PrettySpan{
+					StartKey: desc.StartKey.String(),
+					EndKey:   desc.EndKey.String(),
+				},
+				RaftState: convertRaftStatus(rep.RaftStatus()),
+				State:     rep.State(),
 			})
-		return err
+		}
+		return nil
 	})
 	if err != nil {
 		return nil, grpc.Errorf(codes.Internal, err.Error())
