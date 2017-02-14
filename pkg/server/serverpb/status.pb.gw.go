@@ -107,14 +107,26 @@ func request_Status_Node_0(ctx context.Context, marshaler runtime.Marshaler, cli
 
 }
 
+var (
+	filter_Status_RaftDebug_0 = &utilities.DoubleArray{Encoding: map[string]int{}, Base: []int(nil), Check: []int(nil)}
+)
+
 func request_Status_RaftDebug_0(ctx context.Context, marshaler runtime.Marshaler, client StatusClient, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
 	var protoReq RaftDebugRequest
 	var metadata runtime.ServerMetadata
+
+	if err := runtime.PopulateQueryParameters(&protoReq, req.URL.Query(), filter_Status_RaftDebug_0); err != nil {
+		return nil, metadata, grpc.Errorf(codes.InvalidArgument, "%v", err)
+	}
 
 	msg, err := client.RaftDebug(ctx, &protoReq, grpc.Header(&metadata.HeaderMD), grpc.Trailer(&metadata.TrailerMD))
 	return msg, metadata, err
 
 }
+
+var (
+	filter_Status_Ranges_0 = &utilities.DoubleArray{Encoding: map[string]int{"node_id": 0}, Base: []int{1, 1, 0}, Check: []int{0, 1, 2}}
+)
 
 func request_Status_Ranges_0(ctx context.Context, marshaler runtime.Marshaler, client StatusClient, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
 	var protoReq RangesRequest
@@ -136,6 +148,10 @@ func request_Status_Ranges_0(ctx context.Context, marshaler runtime.Marshaler, c
 
 	if err != nil {
 		return nil, metadata, err
+	}
+
+	if err := runtime.PopulateQueryParameters(&protoReq, req.URL.Query(), filter_Status_Ranges_0); err != nil {
+		return nil, metadata, grpc.Errorf(codes.InvalidArgument, "%v", err)
 	}
 
 	msg, err := client.Ranges(ctx, &protoReq, grpc.Header(&metadata.HeaderMD), grpc.Trailer(&metadata.TrailerMD))
