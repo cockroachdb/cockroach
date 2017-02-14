@@ -29,3 +29,18 @@ type ColumnOrderInfo struct {
 //     []ColumnOrderInfo{ {3, true}, {1, false} }
 // represents an ordering first by column 3 (descending), then by column 1 (ascending).
 type ColumnOrdering []ColumnOrderInfo
+
+// IsPrefixOf returns true if the receiver ordering matches a prefix of the
+// given ordering. In this case, rows with an order conforming to b
+// automatically conform to a.
+func (a ColumnOrdering) IsPrefixOf(b ColumnOrdering) bool {
+	if len(a) > len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
