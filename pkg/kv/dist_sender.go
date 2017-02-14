@@ -1137,7 +1137,9 @@ func (ds *DistSender) sendToReplicas(
 
 	// Send the first request.
 	pending := 1
-	log.VEventf(ctx, 2, "sending batch %s to range %d", args.Summary(), rangeID)
+	if log.V(2) || log.HasSpanOrEvent(ctx) {
+		log.VEventf(ctx, 2, "sending batch %s to range %d", args.Summary(), rangeID)
+	}
 	transport.SendNext(ctx, done)
 
 	// Wait for completions. This loop will retry operations that fail

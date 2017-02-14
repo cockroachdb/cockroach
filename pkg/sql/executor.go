@@ -861,7 +861,9 @@ func (e *Executor) execStmtsInCurrentTxn(
 
 	for i, stmt := range stmts {
 		ctx := planMaker.session.Ctx()
-		log.VEventf(ctx, 2, "executing %d/%d: %s", i+1, len(stmts), stmt)
+		if log.V(2) || log.HasSpanOrEvent(ctx) {
+			log.VEventf(ctx, 2, "executing %d/%d: %s", i+1, len(stmts), stmt)
+		}
 		txnState.schemaChangers.curStatementIdx = i
 
 		var stmtStrBefore string
@@ -1432,7 +1434,7 @@ func golangFillQueryArguments(pinfo *parser.PlaceholderInfo, args []interface{})
 	pinfo.Clear()
 
 	for i, arg := range args {
-		k := fmt.Sprint(i + 1)
+		k := strconv.Itoa(i + 1)
 		if arg == nil {
 			pinfo.SetValue(k, parser.DNull)
 			continue
