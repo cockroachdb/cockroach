@@ -2766,6 +2766,32 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                                             "options": {
                                                 "(gogoproto.nullable)": false
                                             }
+                                        },
+                                        {
+                                            "rule": "optional",
+                                            "type": "int32",
+                                            "name": "source_node_id",
+                                            "id": 5,
+                                            "options": {
+                                                "(gogoproto.customname)": "SourceNodeID",
+                                                "(gogoproto.casttype)": "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"
+                                            }
+                                        },
+                                        {
+                                            "rule": "optional",
+                                            "type": "int32",
+                                            "name": "source_store_id",
+                                            "id": 6,
+                                            "options": {
+                                                "(gogoproto.customname)": "SourceStoreID",
+                                                "(gogoproto.casttype)": "github.com/cockroachdb/cockroach/pkg/roachpb.StoreID"
+                                            }
+                                        },
+                                        {
+                                            "rule": "optional",
+                                            "type": "string",
+                                            "name": "error_message",
+                                            "id": 7
                                         }
                                     ]
                                 },

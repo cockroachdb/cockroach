@@ -350,7 +350,14 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 
 	s.admin = newAdminServer(s)
 	s.status = newStatusServer(
-		s.cfg.AmbientCtx, s.db, s.gossip, s.recorder, s.rpcContext, s.node.stores,
+		s.cfg.AmbientCtx,
+		s.db,
+		s.gossip,
+		s.recorder,
+		s.nodeLiveness,
+		s.rpcContext,
+		s.node.stores,
+		s.stopper,
 	)
 	for _, gw := range []grpcGatewayServer{s.admin, s.status, &s.tsServer} {
 		gw.RegisterService(s.grpc)
@@ -757,6 +764,7 @@ func (s *Server) Start(ctx context.Context) error {
 	s.mux.Handle(statusPrefix, gwMux)
 	s.mux.Handle("/health", gwMux)
 	s.mux.Handle(statusVars, http.HandlerFunc(s.status.handleVars))
+	s.mux.Handle(rangeDebugEndpoint, http.HandlerFunc(s.status.handleDebugRange))
 	log.Event(ctx, "added http endpoints")
 
 	// Before serving SQL requests, we have to make sure the database is
