@@ -2429,7 +2429,7 @@ func (s *Store) Send(
 
 	if log.V(1) {
 		log.Eventf(ctx, "executing %s", ba)
-	} else {
+	} else if log.HasSpanOrEvent(ctx) {
 		log.Eventf(ctx, "executing %d requests", len(ba.Requests))
 	}
 	// Backoff and retry loop for handling errors. Backoff times are measured

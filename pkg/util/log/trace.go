@@ -203,3 +203,10 @@ func VEventf(ctx context.Context, level level, format string, args ...interface{
 		eventInternal(ctx, false /*isErr*/, true /*withTags*/, format, args...)
 	}
 }
+
+// HasSpanOrEvent returns true if the context has a span or event that should
+// be logged to.
+func HasSpanOrEvent(ctx context.Context) bool {
+	_, _, ok := getSpanOrEventLog(ctx)
+	return ok
+}
