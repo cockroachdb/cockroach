@@ -462,6 +462,38 @@ func TestRaftDebug(t *testing.T) {
 	if len(resp.Ranges) == 0 {
 		t.Errorf("didn't get any ranges")
 	}
+
+	if len(resp.Ranges) < 3 {
+		t.Errorf("expected more than 2 ranges, got %d", len(resp.Ranges))
+	}
+
+	req := "raft"
+	requestedIDs := []roachpb.RangeID{}
+	for id, _ := range resp.Ranges {
+		if len(requestedIDs) == 0 {
+			req += "?"
+		} else {
+			req += "&"
+		}
+		req += fmt.Sprintf("range_ids=%d", id)
+		requestedIDs = append(requestedIDs, id)
+		if len(requestedIDs) >= 2 {
+			break
+		}
+	}
+
+	if err := getStatusJSONProto(s, req, &resp); err != nil {
+		t.Fatal(err)
+	}
+	if len(resp.Ranges) != 2 {
+		t.Errorf("expected exactly two ranges in response, got %d", len(resp.Ranges))
+	}
+
+	for _, reqID := range requestedIDs {
+		if _, ok := resp.Ranges[reqID]; !ok {
+			t.Errorf("request was %s, but range ID %d not returned: %+v", req, reqID, resp.Ranges)
+		}
+	}
 }
 
 // TestStatusVars verifies that prometheus metrics are available via the
