@@ -31,7 +31,7 @@ import:
 - package: github.com/grpc-ecosystem/grpc-gateway
   version: 6193f51e51b0bfea774a33f535bc10e983832710
 - package: github.com/lib/pq
-  version: 8df6253d1317616f36b0c3740eb30c239a7372cb
+  version: ba5d4f7a35561e22fbdf7a39aa0070f4d460cfc0
 - package: github.com/olekukonko/tablewriter
   version: a0225b3f23b5ce0cbec6d7a66a968f8a59eca9c4
 - package: github.com/spf13/cobra
