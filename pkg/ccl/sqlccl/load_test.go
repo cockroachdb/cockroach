@@ -10,26 +10,12 @@ package sqlccl
 
 import (
 	"bytes"
-	"fmt"
-	"io"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
-
-func bankStatementBuf(numAccounts int) *bytes.Buffer {
-	var buf bytes.Buffer
-	buf.WriteString(bankCreateTable)
-	buf.WriteString(";\n")
-	stmts := bankDataInsertStmts(numAccounts)
-	for _, s := range stmts {
-		buf.WriteString(s)
-		buf.WriteString(";\n")
-	}
-	return &buf
-}
 
 func TestImportChunking(t *testing.T) {
 	// Generate at least 2 chunks.
@@ -77,58 +63,5 @@ func BenchmarkImport(b *testing.B) {
 	b.ResetTimer()
 	if _, err := Load(ctx, sqlDB.DB, buf, "bench", dir, ts, 0); err != nil {
 		b.Fatalf("%+v", err)
-	}
-}
-
-func BenchmarkRestore(b *testing.B) {
-	defer tracing.Disable()()
-	ctx, dir, _, sqlDB, cleanup := backupRestoreTestSetup(b, multiNode, 0)
-	defer cleanup()
-
-	ts := hlc.Timestamp{WallTime: hlc.UnixNano()}
-	backup, err := Load(ctx, sqlDB.DB, bankStatementBuf(b.N), "bench", dir, ts, 0)
-	if err != nil {
-		b.Fatalf("%+v", err)
-	}
-	b.SetBytes(backup.DataSize / int64(b.N))
-	b.ResetTimer()
-	sqlDB.Exec(fmt.Sprintf(`RESTORE DATABASE bench FROM '%s'`, dir))
-}
-
-func BenchmarkImportRestore(b *testing.B) {
-	defer tracing.Disable()()
-	ctx, dir, _, sqlDB, cleanup := backupRestoreTestSetup(b, multiNode, 0)
-	defer cleanup()
-
-	buf := bankStatementBuf(b.N)
-	b.SetBytes(int64(buf.Len() / b.N))
-	ts := hlc.Timestamp{WallTime: hlc.UnixNano()}
-	b.ResetTimer()
-	if _, err := Load(ctx, sqlDB.DB, buf, "bench", dir, ts, 0); err != nil {
-		b.Fatalf("%+v", err)
-	}
-	sqlDB.Exec(fmt.Sprintf(`RESTORE DATABASE bench FROM '%s'`, dir))
-}
-
-func BenchmarkImportSQL(b *testing.B) {
-	_, _, _, sqlDB, cleanup := backupRestoreTestSetup(b, multiNode, 0)
-	defer cleanup()
-
-	buf := bankStatementBuf(b.N)
-	b.SetBytes(int64(buf.Len() / b.N))
-	lines := make([]string, 0, b.N)
-	for {
-		line, err := buf.ReadString(';')
-		if err == io.EOF {
-			break
-		} else if err != nil {
-			b.Fatalf("%+v", err)
-		}
-		lines = append(lines, line)
-	}
-
-	b.ResetTimer()
-	for _, line := range lines {
-		sqlDB.Exec(line)
 	}
 }
