@@ -1434,7 +1434,7 @@ func golangFillQueryArguments(pinfo *parser.PlaceholderInfo, args []interface{})
 	pinfo.Clear()
 
 	for i, arg := range args {
-		k := fmt.Sprint(i + 1)
+		k := strconv.Itoa(i + 1)
 		if arg == nil {
 			pinfo.SetValue(k, parser.DNull)
 			continue
