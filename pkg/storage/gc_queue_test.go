@@ -439,7 +439,7 @@ func TestGCQueueTransactionTable(t *testing.T) {
 
 	resolved := map[string][]roachpb.Span{}
 
-	tsc.TestingKnobs.TestingCommandFilter =
+	tsc.TestingKnobs.TestingEvalFilter =
 		func(filterArgs storagebase.FilterArgs) *roachpb.Error {
 			if resArgs, ok := filterArgs.Req.(*roachpb.ResolveIntentRequest); ok {
 				id := string(resArgs.IntentTxn.Key)

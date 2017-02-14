@@ -1047,7 +1047,7 @@ func TestPropagateTxnOnError(t *testing.T) {
 	// get a ReadWithinUncertaintyIntervalError.
 	targetKey := roachpb.Key("b")
 	var numGets int32
-	storeKnobs.TestingCommandFilter =
+	storeKnobs.TestingEvalFilter =
 		func(fArgs storagebase.FilterArgs) *roachpb.Error {
 			_, ok := fArgs.Req.(*roachpb.ConditionalPutRequest)
 			if ok && fArgs.Req.Header().Key.Equal(targetKey) {

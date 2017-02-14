@@ -172,7 +172,7 @@ func TestStoreRecoverWithErrors(t *testing.T) {
 		stopper := stop.NewStopper()
 		defer stopper.Stop()
 		storeCfg := storeCfg // copy
-		storeCfg.TestingKnobs.TestingCommandFilter =
+		storeCfg.TestingKnobs.TestingEvalFilter =
 			func(filterArgs storagebase.FilterArgs) *roachpb.Error {
 				_, ok := filterArgs.Req.(*roachpb.IncrementRequest)
 				if ok && filterArgs.Req.Header().Key.Equal(roachpb.Key("a")) {
@@ -408,7 +408,7 @@ func TestFailedReplicaChange(t *testing.T) {
 	runFilter.Store(true)
 
 	sc := storage.TestStoreConfig(nil)
-	sc.TestingKnobs.TestingCommandFilter = func(filterArgs storagebase.FilterArgs) *roachpb.Error {
+	sc.TestingKnobs.TestingEvalFilter = func(filterArgs storagebase.FilterArgs) *roachpb.Error {
 		if runFilter.Load().(bool) {
 			if et, ok := filterArgs.Req.(*roachpb.EndTransactionRequest); ok && et.Commit {
 				return roachpb.NewErrorWithTxn(errors.Errorf("boom"), filterArgs.Hdr.Txn)
@@ -1142,7 +1142,10 @@ func TestStoreRangeCorruptionChangeReplicas(t *testing.T) {
 		syncutil.Mutex
 		store *storage.Store
 	}
-	sc.TestingKnobs.TestingApplyFilter = func(filterArgs storagebase.ApplyFilterArgs) *roachpb.Error {
+	// TODO(bdarnell): I think this should be a TestingApplyFilter
+	// instead of a TestingPostApplyFilter, but making that change
+	// causes this test to fail.
+	sc.TestingKnobs.TestingPostApplyFilter = func(filterArgs storagebase.ApplyFilterArgs) *roachpb.Error {
 		corrupt.Lock()
 		defer corrupt.Unlock()
 
