@@ -286,62 +286,48 @@ func Import(
 	kr storageccl.KeyRewriter,
 ) error {
 	if log.V(1) {
-		log.Infof(ctx, "Import %s-%s (%d files)", startKey, endKey, len(files))
+		log.Infof(ctx, "import %s-%s (%d files)", startKey, endKey, len(files))
 	}
 	if len(files) == 0 {
 		return nil
 	}
 
+	ctx, cancel := context.WithCancel(ctx)
+
 	// Arrived at by tuning and watching the effect on BenchmarkRestore.
 	const batchSizeBytes = 1000000
 
-	b := &client.Batch{}
-	var v roachpb.Value
-	bytes := 0
-
-	writeBatch := func() error {
-		if err := db.Run(ctx, b); err != nil {
-			return err
+	var wg util.WaitGroupWithError
+	var b engine.RocksDBBatchBuilder
+	var batchStartKey []byte
+	var batchEndKey []byte
+	sendWriteBatch := func() {
+		// The end key of the WriteBatch request is exclusive, but batchEndKey
+		// is currently the largest key in the batch. Increment it.
+		end := roachpb.Key(batchEndKey).PrefixEnd()
+		if log.V(1) {
+			log.Infof(ctx, "writebatch %s-%s", roachpb.Key(batchStartKey), end)
 		}
-		b = &client.Batch{}
-		bytes = 0
-		return nil
-	}
 
-	importFunc := func(kv engine.MVCCKeyValue) (bool, error) {
-		var ok bool
-		kv.Key.Key, ok = kr.RewriteKey(append([]byte(nil), kv.Key.Key...))
-		if !ok {
-			// If the key rewriter didn't match this key, it's not data for the
-			// table(s) we're interested in.
-			if log.V(3) {
-				log.Infof(ctx, "skipping %s\n", kv.Key.Key)
+		wg.Add(1)
+		func() {
+			if err := db.WriteBatch(ctx, batchStartKey, end, b.Finish()); err != nil {
+				log.Errorf(ctx, "writebatch %s-%s: %+v", roachpb.Key(batchStartKey), end, err)
+				wg.Done(err)
+				cancel()
+				return
 			}
-			return false, nil
-		}
-
-		// Rewriting the key means the checksum needs to be updated.
-		v = roachpb.Value{RawBytes: kv.Value}
-		v.ClearChecksum()
-
-		if log.V(3) {
-			log.Infof(ctx, "Put %s %s\n", kv.Key.Key, v.PrettyPrint())
-		}
-		b.CPut(kv.Key.Key, &v, nil)
-		bytes += len(kv.Key.Key) + len(v.RawBytes)
-		if bytes > batchSizeBytes {
-			if err := writeBatch(); err != nil {
-				return false, err
-			}
-		}
-
-		return false, nil
+			wg.Done(nil)
+		}()
+		batchStartKey = nil
+		batchEndKey = nil
+		b = engine.RocksDBBatchBuilder{}
 	}
 
 	startKeyMVCC, endKeyMVCC := engine.MVCCKey{Key: startKey}, engine.MVCCKey{Key: endKey}
 	for _, file := range files {
 		if log.V(1) {
-			log.Infof(ctx, "Import %s-%s %s\n", startKey, endKey, file.Path)
+			log.Infof(ctx, "import file %s-%s %s", startKey, endKey, file.Path)
 		}
 
 		dir, err := storageccl.MakeExportStorage(ctx, file.Dir)
@@ -368,18 +354,54 @@ func Import(
 			return err
 		}
 
-		if err := sst.Iterate(startKeyMVCC, endKeyMVCC, importFunc); err != nil {
-			return err
+		iter := sst.NewIterator(false)
+		defer iter.Close()
+		iter.Seek(startKeyMVCC)
+		for ; iter.Valid(); iter.Next() {
+			key := iter.Key()
+			if endKeyMVCC.Less(key) {
+				break
+			}
+			value := roachpb.Value{RawBytes: iter.Value()}
+
+			var ok bool
+			key.Key, ok = kr.RewriteKey(key.Key)
+			if !ok {
+				// If the key rewriter didn't match this key, it's not data for the
+				// table(s) we're interested in.
+				if log.V(3) {
+					log.Infof(ctx, "skipping %s %s", key.Key, value.PrettyPrint())
+				}
+				continue
+			}
+
+			// Rewriting the key means the checksum needs to be updated.
+			value.ClearChecksum()
+			value.InitChecksum(key.Key)
+
+			if log.V(3) {
+				log.Infof(ctx, "put %s %s", key.Key, value.PrettyPrint())
+			}
+			b.Put(key, value.RawBytes)
+
+			// Update the range currently represented in this batch, as
+			// necessary.
+			if len(batchStartKey) == 0 {
+				batchStartKey = append(batchStartKey, key.Key...)
+			}
+			batchEndKey = append(batchEndKey[:0], key.Key...)
+
+			if b.Len() > batchSizeBytes {
+				sendWriteBatch()
+			}
 		}
 	}
-
-	if bytes > 0 {
-		if err := writeBatch(); err != nil {
-			return err
-		}
+	// Flush out the last batch.
+	if b.Len() > 0 {
+		sendWriteBatch()
 	}
 
-	return nil
+	return wg.Wait()
 }
 
 func assertDatabasesExist(
