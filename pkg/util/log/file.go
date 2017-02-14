@@ -232,7 +232,7 @@ func create(
 	if err == nil {
 		symlink := filepath.Join(dir, link)
 		_ = os.Remove(symlink) // ignore err
-		err = os.Symlink(fname, symlink)
+		err = os.Symlink(filepath.Base(fname), symlink)
 	}
 	return f, updatedRotation, fname, errors.Wrapf(err, "log: cannot create log")
 }
