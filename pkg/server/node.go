@@ -806,7 +806,9 @@ func (n *Node) batchInternal(
 		defer func(br **roachpb.BatchResponse) {
 			finishSpan(*br)
 		}(&br)
-		log.Event(ctx, args.Summary())
+		if log.HasSpanOrEvent(ctx) {
+			log.Event(ctx, args.Summary())
+		}
 
 		tStart := timeutil.Now()
 		var pErr *roachpb.Error
