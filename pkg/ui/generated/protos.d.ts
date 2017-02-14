@@ -3140,6 +3140,8 @@ export interface serverpbBuilder {
 	NodeRequest: serverpb.NodeRequestBuilder;
 	RaftState: serverpb.RaftStateBuilder;
 	RangeInfo: serverpb.RangeInfoBuilder;
+	RangeRequest: serverpb.RangeRequestBuilder;
+	RangeResponse: serverpb.RangeResponseBuilder;
 	RangesRequest: serverpb.RangesRequestBuilder;
 	RangesResponse: serverpb.RangesResponseBuilder;
 	GossipRequest: serverpb.GossipRequestBuilder;
@@ -5091,6 +5093,42 @@ getState?() : storage.storagebase.RangeInfo;
 
 
 
+desc?: roachpb.RangeDescriptor;
+		
+
+getDesc?() : roachpb.RangeDescriptor;
+		setDesc?(desc : roachpb.RangeDescriptor): void;
+		
+
+
+
+source_node_id?: number;
+		
+
+getSourceNodeId?() : number;
+		setSourceNodeId?(sourceNodeId : number): void;
+		
+
+
+
+source_store_id?: number;
+		
+
+getSourceStoreId?() : number;
+		setSourceStoreId?(sourceStoreId : number): void;
+		
+
+
+
+error_message?: string;
+		
+
+getErrorMessage?() : string;
+		setErrorMessage?(errorMessage : string): void;
+		
+
+
+
 }
 
 	export interface RangeInfoMessage extends RangeInfo {
@@ -5106,6 +5144,78 @@ export interface RangeInfoBuilder {
 	decode(buffer: ArrayBuffer) : RangeInfoMessage;
 	decode(buffer: ByteBuffer) : RangeInfoMessage;
 	decode64(buffer: string) : RangeInfoMessage;
+	
+}
+
+}
+
+
+declare module Proto2TypeScript.cockroach.server.serverpb {
+
+	export interface RangeRequest {
+
+		
+
+range_id?: string;
+		
+
+getRangeId?() : string;
+		setRangeId?(rangeId : string): void;
+		
+
+
+
+}
+
+	export interface RangeRequestMessage extends RangeRequest {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface RangeRequestBuilder {
+	new(data?: RangeRequest): RangeRequestMessage;
+	decode(buffer: ArrayBuffer) : RangeRequestMessage;
+	decode(buffer: ByteBuffer) : RangeRequestMessage;
+	decode64(buffer: string) : RangeRequestMessage;
+	
+}
+
+}
+
+
+declare module Proto2TypeScript.cockroach.server.serverpb {
+
+	export interface RangeResponse {
+
+		
+
+range_infos?: RangeInfo[];
+		
+
+getRangeInfos?() : RangeInfo[];
+		setRangeInfos?(rangeInfos : RangeInfo[]): void;
+		
+
+
+
+}
+
+	export interface RangeResponseMessage extends RangeResponse {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface RangeResponseBuilder {
+	new(data?: RangeResponse): RangeResponseMessage;
+	decode(buffer: ArrayBuffer) : RangeResponseMessage;
+	decode(buffer: ByteBuffer) : RangeResponseMessage;
+	decode64(buffer: string) : RangeResponseMessage;
 	
 }
 

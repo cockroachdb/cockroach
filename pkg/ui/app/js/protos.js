@@ -2766,6 +2766,66 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                                             "options": {
                                                 "(gogoproto.nullable)": false
                                             }
+                                        },
+                                        {
+                                            "rule": "optional",
+                                            "type": "roachpb.RangeDescriptor",
+                                            "name": "desc",
+                                            "id": 5,
+                                            "options": {
+                                                "(gogoproto.nullable)": false
+                                            }
+                                        },
+                                        {
+                                            "rule": "optional",
+                                            "type": "int32",
+                                            "name": "source_node_id",
+                                            "id": 6,
+                                            "options": {
+                                                "(gogoproto.customname)": "SourceNodeID",
+                                                "(gogoproto.casttype)": "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"
+                                            }
+                                        },
+                                        {
+                                            "rule": "optional",
+                                            "type": "int32",
+                                            "name": "source_store_id",
+                                            "id": 7,
+                                            "options": {
+                                                "(gogoproto.customname)": "SourceStoreID",
+                                                "(gogoproto.casttype)": "github.com/cockroachdb/cockroach/pkg/roachpb.StoreID"
+                                            }
+                                        },
+                                        {
+                                            "rule": "optional",
+                                            "type": "string",
+                                            "name": "error_message",
+                                            "id": 8
+                                        }
+                                    ]
+                                },
+                                {
+                                    "name": "RangeRequest",
+                                    "fields": [
+                                        {
+                                            "rule": "optional",
+                                            "type": "string",
+                                            "name": "range_id",
+                                            "id": 1
+                                        }
+                                    ]
+                                },
+                                {
+                                    "name": "RangeResponse",
+                                    "fields": [
+                                        {
+                                            "rule": "repeated",
+                                            "type": "RangeInfo",
+                                            "name": "range_infos",
+                                            "id": 1,
+                                            "options": {
+                                                "(gogoproto.nullable)": false
+                                            }
                                         }
                                     ]
                                 },
@@ -3263,6 +3323,13 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                                             "response": "RaftDebugResponse",
                                             "options": {
                                                 "(google.api.http).get": "/_status/raft"
+                                            }
+                                        },
+                                        "Range": {
+                                            "request": "RangeRequest",
+                                            "response": "RangeResponse",
+                                            "options": {
+                                                "(google.api.http).get": "/_status/range/{range_id}"
                                             }
                                         },
                                         "Ranges": {

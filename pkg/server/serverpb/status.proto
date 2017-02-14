@@ -22,6 +22,7 @@ import "cockroach/pkg/build/info.proto";
 import "cockroach/pkg/gossip/gossip.proto";
 import "cockroach/pkg/server/status/status.proto";
 import "cockroach/pkg/storage/engine/enginepb/mvcc.proto";
+import "cockroach/pkg/roachpb/metadata.proto";
 import "cockroach/pkg/storage/storagebase/state.proto";
 import "cockroach/pkg/util/log/log.proto";
 import "cockroach/pkg/util/unresolved_addr.proto";
@@ -93,6 +94,24 @@ message RangeInfo {
   PrettySpan span = 1 [(gogoproto.nullable) = false];
   RaftState raft_state = 2 [(gogoproto.nullable) = false];
   storage.storagebase.RangeInfo state = 4 [(gogoproto.nullable) = false];
+  roachpb.RangeDescriptor desc = 5 [(gogoproto.nullable) = false];
+  int32 source_node_id = 6 [
+    (gogoproto.customname) = "SourceNodeID",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"
+  ];
+  int32 source_store_id = 7 [
+     (gogoproto.customname) = "SourceStoreID",
+     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.StoreID"
+  ];
+  string error_message = 8;
+}
+
+message RangeRequest {
+  string range_id = 1;
+}
+
+message RangeResponse {
+  repeated RangeInfo range_infos = 1 [(gogoproto.nullable) = false];
 }
 
 message RangesRequest {
@@ -239,6 +258,11 @@ service Status {
   rpc RaftDebug(RaftDebugRequest) returns (RaftDebugResponse) {
     option (google.api.http) = {
       get: "/_status/raft"
+    };
+  }
+  rpc Range(RangeRequest) returns (RangeResponse) {
+    option (google.api.http) = {
+      get: "/_status/range/{range_id}"
     };
   }
   rpc Ranges(RangesRequest) returns (RangesResponse) {

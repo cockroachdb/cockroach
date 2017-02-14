@@ -41,6 +41,8 @@
 		NodeRequest
 		RaftState
 		RangeInfo
+		RangeRequest
+		RangeResponse
 		RangesRequest
 		RangesResponse
 		GossipRequest
