@@ -44,7 +44,7 @@ message ColumnType {
 
     // Array types.
     //
-    // TODO(cuongdo): Fix this before allowing persistence of array types. 
+    // TODO(cuongdo): Fix this before allowing persistence of array types.
     // It would be cleaner if when array_dimensions are specified, Kind is
     // simply the parameterized type of the array. However, because Kind is used
     // to determine type information elsewhere, it isn't possible to take the
@@ -74,6 +74,9 @@ message ForeignKeyReference {
   optional uint32 index = 2 [(gogoproto.nullable) = false, (gogoproto.casttype) = "IndexID"];
   optional string name = 3 [(gogoproto.nullable) = false];
   optional ConstraintValidity validity = 4 [(gogoproto.nullable) = false];
+  // If this FK only uses a prefix of the columns in its index, we record how
+  // many to avoid spuriously counting the additional cols as used by this FK.
+  optional int32 shared_prefix_len = 5 [(gogoproto.nullable) = false];
 }
 
 message ColumnDescriptor {
