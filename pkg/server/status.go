@@ -19,11 +19,14 @@ package server
 import (
 	"encoding/json"
 	"fmt"
+	"html/template"
 	"io"
 	"net/http"
+	"path/filepath"
 	"reflect"
 	"regexp"
 	"runtime"
+	"sort"
 	"strconv"
 	"sync"
 
@@ -62,6 +65,9 @@ const (
 
 	// statusVars exposes prometheus metrics for monitoring consumption.
 	statusVars = statusPrefix + "vars"
+
+	// statusRange exposes an html page with information about a specific range.
+	rangeDebugEndpoint = "/debug/range/"
 )
 
 // Pattern for local used when determining the node ID.
@@ -79,6 +85,7 @@ type statusServer struct {
 	db           *client.DB
 	gossip       *gossip.Gossip
 	metricSource metricMarshaler
+	nodeLiveness *storage.NodeLiveness
 	rpcCtx       *rpc.Context
 	stores       *storage.Stores
 }
@@ -89,6 +96,7 @@ func newStatusServer(
 	db *client.DB,
 	gossip *gossip.Gossip,
 	metricSource metricMarshaler,
+	nodeLiveness *storage.NodeLiveness,
 	rpcCtx *rpc.Context,
 	stores *storage.Stores,
 ) *statusServer {
@@ -98,6 +106,7 @@ func newStatusServer(
 		db:             db,
 		gossip:         gossip,
 		metricSource:   metricSource,
+		nodeLiveness:   nodeLiveness,
 		rpcCtx:         rpcCtx,
 		stores:         stores,
 	}
@@ -131,6 +140,18 @@ func (s *statusServer) parseNodeID(nodeIDParam string) (roachpb.NodeID, bool, er
 	}
 	nodeID := roachpb.NodeID(id)
 	return nodeID, nodeID == s.gossip.NodeID.Get(), nil
+}
+
+func (s *statusServer) parseRangeID(rangeIDParam string) (roachpb.RangeID, error) {
+	if len(rangeIDParam) == 0 || localRE.MatchString(rangeIDParam) {
+		return 0, fmt.Errorf("no range id provided")
+	}
+
+	id, err := strconv.ParseInt(rangeIDParam, 10, 64)
+	if err != nil {
+		return 0, fmt.Errorf("range id could not be parsed: %s", err)
+	}
+	return roachpb.RangeID(id), nil
 }
 
 func (s *statusServer) dialNode(nodeID roachpb.NodeID) (serverpb.StatusClient, error) {
@@ -555,7 +576,39 @@ func (s *statusServer) handleVars(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// Ranges returns range info for the server specified
+// Range returns local range details for the specified range.
+func (s *statusServer) Range(
+	_ context.Context, req *serverpb.RangeRequest,
+) (*serverpb.RangeResponse, error) {
+	rangeID, err := s.parseRangeID(req.RangeId)
+	if err != nil {
+		return nil, grpc.Errorf(codes.InvalidArgument, err.Error())
+	}
+
+	output := serverpb.RangeResponse{
+		Details: make([]serverpb.RangeDetail, 0, s.stores.GetStoreCount()),
+	}
+	if err = s.stores.VisitStores(func(store *storage.Store) error {
+		replica, err := store.GetReplica(rangeID)
+		detail := serverpb.RangeDetail{
+			NodeID:  store.Ident.NodeID,
+			StoreID: store.Ident.StoreID,
+		}
+		if err != nil {
+			detail.Err = err.Error()
+		}
+		if replica != nil {
+			detail.Desc = *replica.Desc()
+		}
+		output.Details = append(output.Details, detail)
+		return nil
+	}); err != nil {
+		return nil, grpc.Errorf(codes.Internal, err.Error())
+	}
+	return &output, nil
+}
+
+// Ranges returns range info for the specified node.
 func (s *statusServer) Ranges(
 	ctx context.Context, req *serverpb.RangesRequest,
 ) (*serverpb.RangesResponse, error) {
@@ -666,6 +719,73 @@ func (s *statusServer) SpanStats(
 	return output, nil
 }
 
+// Returns an HTML page displaying information about all node's view of a
+// specific range.
+func (s *statusServer) handleDebugRange(w http.ResponseWriter, r *http.Request) {
+	ctx := s.AnnotateCtx(context.TODO())
+	w.Header().Add("Content-type", "text/html")
+	rangeIDString := filepath.Base(r.URL.Path)
+	rangeID, err := parseInt64WithDefault(rangeIDString, 1)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+
+	data := debugRangeData{
+		RangeID:             rangeID,
+		ReplicaDescPerStore: make(map[roachpb.StoreID]map[roachpb.ReplicaID]roachpb.ReplicaDescriptor),
+	}
+
+	existingReplicaIDs := make(map[roachpb.ReplicaID]struct{})
+	// TODO(bram): Parallelize this to speed it up for large clusters.
+	for nodeID, alive := range s.nodeLiveness.GetLivenessMap() {
+		if !alive {
+			continue
+		}
+		status, err := s.dialNode(nodeID)
+		if err != nil {
+			data.Failures = append(data.Failures, serverpb.RangeDetail{
+				NodeID: nodeID,
+				Err:    "node unreachable",
+			})
+			continue
+		}
+		req := &serverpb.RangeRequest{RangeId: rangeIDString}
+		results, err := status.Range(ctx, req)
+		if err != nil {
+			data.Failures = append(data.Failures, serverpb.RangeDetail{
+				NodeID: nodeID,
+				Err:    err.Error(),
+			})
+			continue
+		}
+		for _, det := range results.Details {
+			if len(det.Err) != 0 {
+				data.NotFound = append(data.NotFound, det)
+			} else {
+				data.RangeDetails = append(data.RangeDetails, det)
+				data.ReplicaDescPerStore[det.StoreID] = make(map[roachpb.ReplicaID]roachpb.ReplicaDescriptor)
+				for _, rep := range det.Desc.Replicas {
+					data.ReplicaDescPerStore[det.StoreID][rep.ReplicaID] = rep
+					if _, exists := existingReplicaIDs[rep.ReplicaID]; !exists {
+						existingReplicaIDs[rep.ReplicaID] = struct{}{}
+						data.ReplicaIDs = append(data.ReplicaIDs, rep.ReplicaID)
+					}
+				}
+			}
+		}
+	}
+
+	data.sort()
+	t, err := template.New("webpage").Parse(debugRangeTemplate)
+	if err != nil {
+		fmt.Fprintf(w, err.Error())
+		return
+	}
+	if err = t.Execute(w, data); err != nil {
+		fmt.Fprintf(w, err.Error())
+	}
+}
+
 // jsonWrapper provides a wrapper on any slice data type being
 // marshaled to JSON. This prevents a security vulnerability
 // where a phishing attack can trick a user's browser into
@@ -700,3 +820,160 @@ func marshalJSONResponse(value interface{}) (*serverpb.JSONResponse, error) {
 	}
 	return &serverpb.JSONResponse{Data: data}, nil
 }
+
+// replicaIDSlice implements sort.Interface.
+type replicaIDSlice []roachpb.ReplicaID
+
+func (r replicaIDSlice) Len() int           { return len(r) }
+func (r replicaIDSlice) Swap(i, j int)      { r[i], r[j] = r[j], r[i] }
+func (r replicaIDSlice) Less(i, j int) bool { return r[i] < r[j] }
+
+type rangeDetailsSlice []serverpb.RangeDetail
+
+func (r rangeDetailsSlice) Len() int      { return len(r) }
+func (r rangeDetailsSlice) Swap(i, j int) { r[i], r[j] = r[j], r[i] }
+func (r rangeDetailsSlice) Less(i, j int) bool {
+	if r[i].NodeID != r[j].NodeID {
+		return r[i].NodeID < r[j].NodeID
+	}
+	return r[i].StoreID < r[j].StoreID
+}
+
+type debugRangeData struct {
+	RangeID             int64
+	RangeDetails        rangeDetailsSlice
+	ReplicaIDs          replicaIDSlice
+	ReplicaDescPerStore map[roachpb.StoreID]map[roachpb.ReplicaID]roachpb.ReplicaDescriptor
+	NotFound            rangeDetailsSlice
+	Failures            rangeDetailsSlice
+}
+
+func (d *debugRangeData) sort() {
+	sort.Sort(d.ReplicaIDs)
+	sort.Sort(d.RangeDetails)
+	sort.Sort(d.NotFound)
+	sort.Sort(d.Failures)
+}
+
+const debugRangeTemplate = `
+<!DOCTYPE html>
+<HTML>
+  <HEAD>
+  	<META CHARSET="UTF-8"/>
+    <TITLE>Range ID:{{.RangeID}}</TITLE>
+    <STYLE>
+      body {
+        font-family: "Helvetica Neue", Helvetica, Arial;
+        font-size: 14px;
+        line-height: 20px;
+        font-weight: 400;
+        color: #3b3b3b;
+        -webkit-font-smoothing: antialiased;
+        font-smoothing: antialiased;
+        background: #e4e4e4;
+      }
+      .wrapper {
+        margin: 0 auto;
+        padding: 0 40px;
+      }
+      .table {
+        margin: 0 0 40px 0;
+        width: 100%;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+        display: table;
+      }
+      .row {
+        display: table-row;
+        background: #f6f6f6;
+      }
+      .row:nth-of-type(odd) {
+        background: #e9e9e9;
+      }
+      .row.header {
+        font-weight: 900;
+        color: #ffffff;
+        background: #000000;
+      }
+      .row.green {
+        background: #27ae60;
+      }
+      .row.blue {
+        background: #2980b9;
+      }
+      .row.red {
+        background: #ea6153;
+      }
+      .cell {
+        padding: 6px 12px;
+        display: table-cell;
+      }
+    </STYLE>
+  </HEAD>
+  <BODY>
+    <DIV CLASS="wrapper">
+      <H1>Range ID:{{$.RangeID}}</H1>
+      <H2>Found on:</H2>
+      <DIV CLASS="table">
+        <DIV CLASS="row header blue">
+          <DIV CLASS="cell">Node ID</DIV>
+          <DIV CLASS="cell">Store ID</DIV>
+          <DIV CLASS="cell">Key Range</DIV>
+          {{range $.ReplicaIDs}}
+            <DIV CLASS="cell">Replica {{.}}</DIV>
+          {{end}}
+        </DIV>
+        {{range $index, $det := $.RangeDetails}}
+          <DIV CLASS="row">
+            <DIV CLASS="cell">{{$det.NodeID}}</DIV>
+            <DIV CLASS="cell">{{$det.StoreID}}</DIV>
+            <DIV CLASS="cell">{{$det.Desc.StartKey}}:{{$det.Desc.EndKey}}</DIV>
+            {{range $index2, $repID := $.ReplicaIDs}}
+              <DIV CLASS="cell">
+                {{with index (index $.ReplicaDescPerStore $det.StoreID) $repID}}
+                  {{if eq .ReplicaID 0}}
+                    -
+                  {{else}}
+                    N:{{.NodeID}} S:{{.StoreID}}
+                  {{end}}
+                {{end}}
+              </DIV>
+            {{end}}
+          </DIV>
+        {{end}}
+      </DIV>
+      {{if not (eq (len $.NotFound) 0)}}
+        <H2>Not Found on:</H2>
+        <DIV CLASS="table">
+          <DIV CLASS="row header green">
+            <DIV CLASS="cell">Node ID</DIV>
+            <DIV CLASS="cell">Store ID</DIV>
+          </DIV>
+          {{range $index, $det := $.NotFound}}
+            <DIV CLASS="row">
+              <DIV CLASS="cell">{{$det.NodeID}}</DIV>
+              <DIV CLASS="cell">{{$det.StoreID}}</DIV>
+            </DIV>
+          {{end}}
+        </DIV>
+      {{end}}
+      {{if not (eq (len $.Failures) 0)}}
+        <H2>Failures:</H2>
+        <DIV CLASS="table">
+          <DIV CLASS="row header red">
+            <DIV CLASS="cell">Node ID</DIV>
+            <DIV CLASS="cell">Store ID</DIV>
+            <DIV CLASS="cell">Error</DIV>
+          </DIV>
+          {{range $index, $det := $.Failures}}
+            <DIV CLASS="row">
+              <DIV CLASS="cell">{{$det.NodeID}}</DIV>
+              <DIV CLASS="cell">{{$det.StoreID}}</DIV>
+              <DIV CLASS="cell">{{$det.Err}}</DIV>
+            </DIV>
+          {{end}}
+        </DIV>
+      {{end}}
+    </DIV>
+  </BODY>
+</HTML>
+`
