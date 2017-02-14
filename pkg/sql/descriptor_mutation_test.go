@@ -27,7 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	csql "github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -152,10 +152,10 @@ func TestOperationsWithColumnMutation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	// The descriptor changes made must have an immediate effect
 	// so disable leases on tables.
-	defer csql.TestDisableTableLeases()()
+	defer sql.TestDisableTableLeases()()
 	// Disable external processing of mutations.
 	params, _ := createTestServerParams()
-	params.Knobs.SQLSchemaChanger = &csql.SchemaChangerTestingKnobs{
+	params.Knobs.SQLSchemaChanger = &sql.SchemaChangerTestingKnobs{
 		AsyncExecNotification: asyncSchemaChangerDisabled,
 	}
 	server, sqlDB, kvDB := serverutils.StartServer(t, params)
@@ -361,10 +361,10 @@ func (mt mutationTest) writeIndexMutation(index string, m sqlbase.DescriptorMuta
 func TestOperationsWithIndexMutation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	// The descriptor changes made must have an immediate effect.
-	defer csql.TestDisableTableLeases()()
+	defer sql.TestDisableTableLeases()()
 	// Disable external processing of mutations.
 	params, _ := createTestServerParams()
-	params.Knobs.SQLSchemaChanger = &csql.SchemaChangerTestingKnobs{
+	params.Knobs.SQLSchemaChanger = &sql.SchemaChangerTestingKnobs{
 		AsyncExecNotification: asyncSchemaChangerDisabled,
 	}
 	server, sqlDB, kvDB := serverutils.StartServer(t, params)
@@ -501,10 +501,10 @@ func TestOperationsWithColumnAndIndexMutation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	// The descriptor changes made must have an immediate effect
 	// so disable leases on tables.
-	defer csql.TestDisableTableLeases()()
+	defer sql.TestDisableTableLeases()()
 	// Disable external processing of mutations.
 	params, _ := createTestServerParams()
-	params.Knobs.SQLSchemaChanger = &csql.SchemaChangerTestingKnobs{
+	params.Knobs.SQLSchemaChanger = &sql.SchemaChangerTestingKnobs{
 		AsyncExecNotification: asyncSchemaChangerDisabled,
 	}
 	server, sqlDB, kvDB := serverutils.StartServer(t, params)
@@ -666,10 +666,10 @@ func TestSchemaChangeCommandsWithPendingMutations(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	// The descriptor changes made must have an immediate effect
 	// so disable leases on tables.
-	defer csql.TestDisableTableLeases()()
+	defer sql.TestDisableTableLeases()()
 	// Disable external processing of mutations.
 	params, _ := createTestServerParams()
-	params.Knobs.SQLSchemaChanger = &csql.SchemaChangerTestingKnobs{
+	params.Knobs.SQLSchemaChanger = &sql.SchemaChangerTestingKnobs{
 		AsyncExecNotification: asyncSchemaChangerDisabled,
 	}
 	server, sqlDB, kvDB := serverutils.StartServer(t, params)
@@ -883,8 +883,8 @@ func TestTableMutationQueue(t *testing.T) {
 	// the mutations get queued up.
 	params, _ := createTestServerParams()
 	params.Knobs = base.TestingKnobs{
-		SQLSchemaChanger: &csql.SchemaChangerTestingKnobs{
-			SyncFilter: func(tscc csql.TestingSchemaChangerCollection) {
+		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
+			SyncFilter: func(tscc sql.TestingSchemaChangerCollection) {
 				tscc.ClearSchemaChangers()
 			},
 			AsyncExecNotification: asyncSchemaChangerDisabled,
