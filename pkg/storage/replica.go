@@ -3620,7 +3620,7 @@ func (r *Replica) processRaftCommand(
 		raftCmd.ReplicatedEvalResult.Delta, pErr = r.applyRaftCommand(
 			ctx, idKey, *raftCmd.ReplicatedEvalResult, writeBatch)
 
-		if filter := r.store.cfg.TestingKnobs.TestingApplyFilter; pErr == nil && filter != nil {
+		if filter := r.store.cfg.TestingKnobs.TestingPostApplyFilter; pErr == nil && filter != nil {
 			pErr = filter(storagebase.ApplyFilterArgs{
 				CmdID:                idKey,
 				ReplicatedEvalResult: *raftCmd.ReplicatedEvalResult,

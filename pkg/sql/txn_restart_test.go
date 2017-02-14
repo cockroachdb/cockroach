@@ -1148,7 +1148,7 @@ func TestReacquireLeaseOnRestart(t *testing.T) {
 	var clockUpdate int32
 	testKey := []byte("test_key")
 	testingKnobs := &storage.StoreTestingKnobs{
-		TestingCommandFilter:  cmdFilters.runFilters,
+		TestingEvalFilter:     cmdFilters.runFilters,
 		DisableMaxOffsetCheck: true,
 		ClockBeforeSend: func(c *hlc.Clock, ba roachpb.BatchRequest) {
 			if atomic.LoadInt32(&clockUpdate) > 0 {
