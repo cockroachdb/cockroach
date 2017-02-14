@@ -82,7 +82,11 @@ node 7 even if node 7 itself isn't sending the range much traffic, because node
 Luckily, each node already has a `NodeDescriptor` for every other node in the
 cluster, and the `NodeDescriptor` proto contains its node's locality
 information. Thus, all we need to add to the `BatchRequest` `Header` proto is a
-`gateway_node_id` field that gets filled in by the client kv transport.
+`gateway_node_id` field that gets filled in by the client kv transport. While
+the client transport will typically fill this field in with its own ID, it can
+also be spoofed when appropriate, such as by DistSQL when a node that wasn't
+actually the gateway for a given request makes KV requests on behalf of the real
+gateway.
 
 ### Alternatives for tracking request origins
 
@@ -296,6 +300,13 @@ heuristic.
   so that users and developers can better understand what's happening in their
   clusters, which will be particularly important when bad decisions are made,
   causing performance dips.
+
+* There could be situations in which the locality that's generating most of the
+  requests to a range doesn't have a local replica for that range. While ideally
+  cluster admins would construct `ZoneConfig` settings that make sense for their
+  environments and workloads, we could potentially benefit from taking
+  per-locality load into account when making replica placement decisions (not
+  just lease placement decisions).
 
 * As mentioned above, we should start using the recent request counts being
   added as part of this work to improve the existing replica and lease placement
