@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"math"
 	"strings"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
@@ -932,6 +933,69 @@ func (dsp *distSQLPlanner) createTableReaders(
 	return p, nil
 }
 
+func initBackfillerSpec(
+	backfillType int, desc sqlbase.TableDescriptor, duration time.Duration, chunkSize int64,
+) (distsqlrun.BackfillerSpec, error) {
+	switch backfillType {
+	case indexBackfill:
+		return distsqlrun.BackfillerSpec{
+			Type:      distsqlrun.BackfillerSpec_Index,
+			Table:     desc,
+			Duration:  duration,
+			ChunkSize: chunkSize,
+		}, nil
+
+	case columnBackfill:
+		return distsqlrun.BackfillerSpec{}, errors.Errorf("column backfillNode not implemented")
+
+	default:
+		return distsqlrun.BackfillerSpec{}, errors.Errorf("bad backfill type %d", backfillType)
+	}
+}
+
+// CreateBackfiller generates a plan consisting of index/column backfiller
+// processors, one for each node that has spans that we are reading.
+func (dsp *distSQLPlanner) CreateBackfiller(
+	planCtx *planningCtx,
+	backfillType int,
+	desc sqlbase.TableDescriptor,
+	duration time.Duration,
+	chunkSize int64,
+	spans []roachpb.Span,
+) (physicalPlan, error) {
+	spec, err := initBackfillerSpec(backfillType, desc, duration, chunkSize)
+	if err != nil {
+		return physicalPlan{}, err
+	}
+
+	spanPartitions, err := dsp.partitionSpans(planCtx, spans)
+	if err != nil {
+		return physicalPlan{}, err
+	}
+
+	p := physicalPlan{}
+	for _, sp := range spanPartitions {
+		proc := processor{
+			node: sp.node,
+		}
+
+		ib := &distsqlrun.BackfillerSpec{}
+		*ib = spec
+		ib.Spans = make([]distsqlrun.TableReaderSpan, len(sp.spans))
+		for i := range sp.spans {
+			ib.Spans[i].Span = sp.spans[i]
+		}
+
+		proc.spec.Core.SetValue(ib)
+		proc.spec.Output = make([]distsqlrun.OutputRouterSpec, 1)
+		proc.spec.Output[0].Type = distsqlrun.OutputRouterSpec_PASS_THROUGH
+
+		pIdx := p.addProcessor(proc)
+		p.resultRouters = append(p.resultRouters, pIdx)
+	}
+	return p, nil
+}
+
 // addNoGroupingStage adds a processor for each result router, on the same node
 // with the source of the stream; all processors have the same core. This is for
 // stages that correspond to logical blocks that don't require any grouping
@@ -1798,6 +1862,16 @@ func (dsp *distSQLPlanner) populateEndpoints(planCtx *planningCtx, p *physicalPl
 	}
 }
 
+func (dsp *distSQLPlanner) NewPlanningCtx(ctx context.Context, txn *client.Txn) planningCtx {
+	planCtx := planningCtx{
+		ctx:           ctx,
+		spanIter:      dsp.spanResolver.NewSpanResolverIterator(txn),
+		nodeAddresses: make(map[roachpb.NodeID]string),
+	}
+	planCtx.nodeAddresses[dsp.nodeDesc.NodeID] = dsp.nodeDesc.Address.String()
+	return planCtx
+}
+
 // PlanAndRun generates a physical plan from a planNode tree and executes it. It
 // assumes that the tree is supported (see CheckSupport).
 //
@@ -1809,13 +1883,7 @@ func (dsp *distSQLPlanner) PlanAndRun(
 	// Trigger limit propagation.
 	setUnlimited(tree)
 
-	planCtx := planningCtx{
-		ctx:           ctx,
-		spanIter:      dsp.spanResolver.NewSpanResolverIterator(txn),
-		nodeAddresses: make(map[roachpb.NodeID]string),
-	}
-	thisNodeID := dsp.nodeDesc.NodeID
-	planCtx.nodeAddresses[thisNodeID] = dsp.nodeDesc.Address.String()
+	planCtx := dsp.NewPlanningCtx(ctx, txn)
 
 	log.VEvent(ctx, 1, "creating DistSQL plan")
 
@@ -1823,7 +1891,18 @@ func (dsp *distSQLPlanner) PlanAndRun(
 	if err != nil {
 		return err
 	}
+	return dsp.Run(planCtx, txn, plan, recv)
+}
 
+// Run executes a physical plan.
+//
+// Note that errors that happen while actually running the flow are reported to
+// recv, not returned by this function.
+func (dsp *distSQLPlanner) Run(
+	planCtx planningCtx, txn *client.Txn, plan physicalPlan, recv *distSQLReceiver,
+) error {
+	ctx := planCtx.ctx
+	thisNodeID := dsp.nodeDesc.NodeID
 	// If we don't already have a single result router on this node, add a final
 	// stage.
 	if len(plan.resultRouters) != 1 ||

@@ -22,6 +22,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -36,9 +37,10 @@ import (
 type ServerConfig struct {
 	log.AmbientContext
 
-	DB         *client.DB
-	RPCContext *rpc.Context
-	Stopper    *stop.Stopper
+	DB           *client.DB
+	RPCContext   *rpc.Context
+	Stopper      *stop.Stopper
+	TestingKnobs TestingKnobs
 }
 
 // ServerImpl implements the server for the distributed SQL APIs.
@@ -101,6 +103,7 @@ func (ds *ServerImpl) setupFlow(
 		rpcCtx:         ds.RPCContext,
 		txnProto:       &req.Txn,
 		clientDB:       ds.DB,
+		testingKnobs:   ds.TestingKnobs,
 	}
 
 	f := newFlow(flowCtx, ds.flowRegistry, syncFlowConsumer)
@@ -200,3 +203,26 @@ func (ds *ServerImpl) FlowStream(stream DistSQL_FlowStreamServer) error {
 	}
 	return err
 }
+
+// TestingKnobs are the testing knobs.
+type TestingKnobs struct {
+	// RunBeforeBackfillChunk is called before executing each chunk of a
+	// backfill during a schema change operation. It is called with the
+	// current span and returns an error which eventually is returned to the
+	// caller of SchemaChanger.exec(). It is called at the start of the
+	// backfill function passed into the transaction executing the chunk.
+	RunBeforeBackfillChunk func(sp roachpb.Span) error
+
+	// RunAfterBackfillChunk is called after executing each chunk of a
+	// backfill during a schema change operation. It is called just before
+	// returning from the backfill function passed into the transaction
+	// executing the chunk. It is always called even when the backfill
+	// function returns an error, or if the table has already been dropped.
+	RunAfterBackfillChunk func()
+
+	// BackfillChunkSize is to be used for all backfill chunked operations.
+	BackfillChunkSize int64
+}
+
+// ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
+func (*TestingKnobs) ModuleTestingKnobs() {}
