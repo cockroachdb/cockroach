@@ -122,6 +122,7 @@ func TestDistSQLPlanner(t *testing.T) {
 
 	t.Run("Basic", func(t *testing.T) {
 		r = r.Subtest(t)
+		// Query with a restricted span.
 		r.CheckQueryResults(
 			"SELECT 5, 2 + y, * FROM NumToStr WHERE y <= 10 ORDER BY str",
 			[][]string{
@@ -137,6 +138,23 @@ func TestDistSQLPlanner(t *testing.T) {
 				strings.Fields("5  4  2 two"),
 			},
 		)
+		// Query which requires a full table scan.
+		r.CheckQueryResults(
+			"SELECT 5, 2 + y, * FROM NumToStr WHERE y % 1000 = 0 ORDER BY str",
+			[][]string{
+				strings.Fields("5 8002 8000 eight-zero-zero-zero"),
+				strings.Fields("5 5002 5000 five-zero-zero-zero"),
+				strings.Fields("5 4002 4000 four-zero-zero-zero"),
+				strings.Fields("5 9002 9000 nine-zero-zero-zero"),
+				strings.Fields("5 1002 1000 one-zero-zero-zero"),
+				strings.Fields("5 10002 10000 one-zero-zero-zero-zero"),
+				strings.Fields("5 7002 7000 seven-zero-zero-zero"),
+				strings.Fields("5 6002 6000 six-zero-zero-zero"),
+				strings.Fields("5 3002 3000 three-zero-zero-zero"),
+				strings.Fields("5 2002 2000 two-zero-zero-zero"),
+			},
+		)
+		// Query with a restricted span + filter.
 		r.CheckQueryResults(
 			"SELECT str FROM NumToStr WHERE y < 10 AND str LIKE '%e%' ORDER BY y",
 			[][]string{
@@ -146,6 +164,16 @@ func TestDistSQLPlanner(t *testing.T) {
 				{"seven"},
 				{"eight"},
 				{"nine"},
+			},
+		)
+		// Query which requires a full table scan.
+		r.CheckQueryResults(
+			"SELECT str FROM NumToStr WHERE y % 1000 = 0 AND str LIKE '%i%' ORDER BY y",
+			[][]string{
+				{"five-zero-zero-zero"},
+				{"six-zero-zero-zero"},
+				{"eight-zero-zero-zero"},
+				{"nine-zero-zero-zero"},
 			},
 		)
 	})
