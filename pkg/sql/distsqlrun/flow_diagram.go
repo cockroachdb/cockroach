@@ -135,6 +135,14 @@ func (s *SorterSpec) summary() (string, []string) {
 	return "Sorter", details
 }
 
+func (bf *BackfillerSpec) summary() (string, []string) {
+	details := []string{
+		bf.Table.Name,
+		fmt.Sprintf("Type: %s", bf.Type.String()),
+	}
+	return "Backfiller", details
+}
+
 func (is *InputSyncSpec) summary() (string, []string) {
 	switch is.Type {
 	case InputSyncSpec_UNORDERED:
