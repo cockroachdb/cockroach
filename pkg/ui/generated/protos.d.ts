@@ -3139,7 +3139,10 @@ export interface serverpbBuilder {
 	NodesResponse: serverpb.NodesResponseBuilder;
 	NodeRequest: serverpb.NodeRequestBuilder;
 	RaftState: serverpb.RaftStateBuilder;
+	RangeDetail: serverpb.RangeDetailBuilder;
 	RangeInfo: serverpb.RangeInfoBuilder;
+	RangeRequest: serverpb.RangeRequestBuilder;
+	RangeResponse: serverpb.RangeResponseBuilder;
 	RangesRequest: serverpb.RangesRequestBuilder;
 	RangesResponse: serverpb.RangesResponseBuilder;
 	GossipRequest: serverpb.GossipRequestBuilder;
@@ -5060,6 +5063,69 @@ export interface ProgressBuilder {
 
 declare module Proto2TypeScript.cockroach.server.serverpb {
 
+	export interface RangeDetail {
+
+		
+
+node_id?: number;
+		
+
+getNodeId?() : number;
+		setNodeId?(nodeId : number): void;
+		
+
+
+
+store_id?: number;
+		
+
+getStoreId?() : number;
+		setStoreId?(storeId : number): void;
+		
+
+
+
+error_message?: string;
+		
+
+getErrorMessage?() : string;
+		setErrorMessage?(errorMessage : string): void;
+		
+
+
+
+desc?: roachpb.RangeDescriptor;
+		
+
+getDesc?() : roachpb.RangeDescriptor;
+		setDesc?(desc : roachpb.RangeDescriptor): void;
+		
+
+
+
+}
+
+	export interface RangeDetailMessage extends RangeDetail {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface RangeDetailBuilder {
+	new(data?: RangeDetail): RangeDetailMessage;
+	decode(buffer: ArrayBuffer) : RangeDetailMessage;
+	decode(buffer: ByteBuffer) : RangeDetailMessage;
+	decode64(buffer: string) : RangeDetailMessage;
+	
+}
+
+}
+
+
+declare module Proto2TypeScript.cockroach.server.serverpb {
+
 	export interface RangeInfo {
 
 		
@@ -5106,6 +5172,78 @@ export interface RangeInfoBuilder {
 	decode(buffer: ArrayBuffer) : RangeInfoMessage;
 	decode(buffer: ByteBuffer) : RangeInfoMessage;
 	decode64(buffer: string) : RangeInfoMessage;
+	
+}
+
+}
+
+
+declare module Proto2TypeScript.cockroach.server.serverpb {
+
+	export interface RangeRequest {
+
+		
+
+range_id?: string;
+		
+
+getRangeId?() : string;
+		setRangeId?(rangeId : string): void;
+		
+
+
+
+}
+
+	export interface RangeRequestMessage extends RangeRequest {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface RangeRequestBuilder {
+	new(data?: RangeRequest): RangeRequestMessage;
+	decode(buffer: ArrayBuffer) : RangeRequestMessage;
+	decode(buffer: ByteBuffer) : RangeRequestMessage;
+	decode64(buffer: string) : RangeRequestMessage;
+	
+}
+
+}
+
+
+declare module Proto2TypeScript.cockroach.server.serverpb {
+
+	export interface RangeResponse {
+
+		
+
+details?: RangeDetail[];
+		
+
+getDetails?() : RangeDetail[];
+		setDetails?(details : RangeDetail[]): void;
+		
+
+
+
+}
+
+	export interface RangeResponseMessage extends RangeResponse {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface RangeResponseBuilder {
+	new(data?: RangeResponse): RangeResponseMessage;
+	decode(buffer: ArrayBuffer) : RangeResponseMessage;
+	decode(buffer: ByteBuffer) : RangeResponseMessage;
+	decode64(buffer: string) : RangeResponseMessage;
 	
 }
 

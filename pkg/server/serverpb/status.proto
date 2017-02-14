@@ -22,6 +22,7 @@ import "cockroach/pkg/build/info.proto";
 import "cockroach/pkg/gossip/gossip.proto";
 import "cockroach/pkg/server/status/status.proto";
 import "cockroach/pkg/storage/engine/enginepb/mvcc.proto";
+import "cockroach/pkg/roachpb/metadata.proto";
 import "cockroach/pkg/storage/storagebase/state.proto";
 import "cockroach/pkg/util/log/log.proto";
 import "cockroach/pkg/util/unresolved_addr.proto";
@@ -89,10 +90,31 @@ message RaftState {
   map<uint64, Progress> progress = 6 [(gogoproto.nullable) = false];
 }
 
+message RangeDetail {
+   int32 node_id = 1 [(gogoproto.customname) = "NodeID",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
+   int32 store_id = 2 [
+     (gogoproto.customname) = "StoreID",
+     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.StoreID"
+   ];
+   string error_message = 3;
+   roachpb.RangeDescriptor desc = 4 [(gogoproto.nullable) = false];
+}
+
 message RangeInfo {
   PrettySpan span = 1 [(gogoproto.nullable) = false];
   RaftState raft_state = 2 [(gogoproto.nullable) = false];
   storage.storagebase.RangeInfo state = 4 [(gogoproto.nullable) = false];
+}
+
+message RangeRequest {
+  // TODO(tamird): use [(gogoproto.customname) = "RangeID"] below. Need to
+  // figure out how to teach grpc-gateway about custom names.
+  string range_id = 1;
+}
+
+message RangeResponse {
+  repeated RangeDetail details = 1 [(gogoproto.nullable) = false];
 }
 
 message RangesRequest {
@@ -239,6 +261,11 @@ service Status {
   rpc RaftDebug(RaftDebugRequest) returns (RaftDebugResponse) {
     option (google.api.http) = {
       get: "/_status/raft"
+    };
+  }
+  rpc Range(RangeRequest) returns (RangeResponse) {
+    option (google.api.http) = {
+      get: "/_status/range/{range_id}"
     };
   }
   rpc Ranges(RangesRequest) returns (RangesResponse) {
