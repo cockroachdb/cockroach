@@ -533,3 +533,42 @@ func TestSpanStatsGRPCResponse(t *testing.T) {
 		t.Errorf("expected %d ranges, found %d", e, a)
 	}
 }
+
+func TestStatusRangeResponse(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	s := startServer(t)
+	defer s.Stopper().Stop()
+
+	var resp serverpb.RangeResponse
+	if err := getStatusJSONProto(s, "range/1", &resp); err != nil {
+		t.Fatal(err)
+	}
+	if len(resp.Details) == 0 {
+		t.Errorf("didn't get any ranges")
+	}
+
+	var respEmpty serverpb.RangeResponse
+	if err := getStatusJSONProto(s, "range/10", &respEmpty); err != nil {
+		t.Fatal(err)
+	}
+	if len(respEmpty.Details) != 0 {
+		t.Errorf("expected no results, got %s", respEmpty)
+	}
+
+	var respError serverpb.RangeResponse
+	if err := getStatusJSONProto(s, "range/error", &respError); err == nil {
+		t.Errorf("expected error, got none")
+	}
+}
+
+func TestHandleDebugRange(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	s := startServer(t)
+	defer s.Stopper().Stop()
+
+	if body, err := getText(s, s.AdminURL()+rangeDebugEndpoint+"1"); err != nil {
+		t.Fatal(err)
+	} else if !bytes.Contains(body, []byte("<TITLE>Range ID:1</TITLE>")) {
+		t.Errorf("<title>Range Id: 1</title>, got: %s", body)
+	}
+}
