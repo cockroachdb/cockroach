@@ -492,6 +492,7 @@ func TestBackupRestoreBank(t *testing.T) {
 
 func TestBackupAsOfSystemTime(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	t.Skip("#13575")
 	// TODO(dan): Actually invalidate the descriptor cache and delete this line.
 	defer sql.TestDisableTableLeases()()
 	const numAccounts = 1000
