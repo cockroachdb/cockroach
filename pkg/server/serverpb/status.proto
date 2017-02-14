@@ -22,6 +22,7 @@ import "cockroach/pkg/build/info.proto";
 import "cockroach/pkg/gossip/gossip.proto";
 import "cockroach/pkg/server/status/status.proto";
 import "cockroach/pkg/storage/engine/enginepb/mvcc.proto";
+import "cockroach/pkg/roachpb/metadata.proto";
 import "cockroach/pkg/storage/storagebase/state.proto";
 import "cockroach/pkg/util/log/log.proto";
 import "cockroach/pkg/util/unresolved_addr.proto";
@@ -93,6 +94,15 @@ message RangeInfo {
   PrettySpan span = 1 [(gogoproto.nullable) = false];
   RaftState raft_state = 2 [(gogoproto.nullable) = false];
   storage.storagebase.RangeInfo state = 4 [(gogoproto.nullable) = false];
+  int32 source_node_id = 5 [
+    (gogoproto.customname) = "SourceNodeID",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"
+  ];
+  int32 source_store_id = 6 [
+     (gogoproto.customname) = "SourceStoreID",
+     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.StoreID"
+  ];
+  string error_message = 7;
 }
 
 message RangesRequest {
