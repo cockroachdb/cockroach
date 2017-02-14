@@ -292,20 +292,37 @@ func Import(
 		return nil
 	}
 
+	ctx, cancel := context.WithCancel(ctx)
+
 	// Arrived at by tuning and watching the effect on BenchmarkRestore.
 	const batchSizeBytes = 1000000
 
-	b := &client.Batch{}
+	var b engine.RocksDBBatchBuilder
+	var batchStartKey []byte
+	var batchEndKey []byte
 	var v roachpb.Value
-	bytes := 0
 
-	writeBatch := func() error {
-		if err := db.Run(ctx, b); err != nil {
-			return err
+	var wg util.WaitGroupWithError
+	sendWriteBatch := func() {
+		wg.Add(1)
+		if log.V(1) {
+			log.Infof(ctx, "WriteBatch %s-%s", roachpb.Key(batchStartKey), roachpb.Key(batchEndKey))
 		}
-		b = &client.Batch{}
-		bytes = 0
-		return nil
+		func(start []byte, end []byte, repr []byte) {
+			if err := db.WriteBatch(ctx, start, end, repr); err != nil {
+				log.Errorf(ctx, "WriteBatch: %+v", err)
+				wg.Done(err)
+				cancel()
+				return
+			}
+			wg.Done(nil)
+		}(
+			append([]byte(nil), batchStartKey...),
+			append([]byte(nil), roachpb.Key(batchEndKey).PrefixEnd()...),
+			b.Finish(), // Calling Finish on a RocksDBBatchBuilder resets it.
+		)
+		batchStartKey = batchStartKey[:0]
+		batchEndKey = batchEndKey[:0]
 	}
 
 	importFunc := func(kv engine.MVCCKeyValue) (bool, error) {
@@ -315,7 +332,7 @@ func Import(
 			// If the key rewriter didn't match this key, it's not data for the
 			// table(s) we're interested in.
 			if log.V(3) {
-				log.Infof(ctx, "skipping %s\n", kv.Key.Key)
+				log.Infof(ctx, "Skipping %s %s\n", kv.Key.Key, v.PrettyPrint())
 			}
 			return false, nil
 		}
@@ -323,16 +340,20 @@ func Import(
 		// Rewriting the key means the checksum needs to be updated.
 		v = roachpb.Value{RawBytes: kv.Value}
 		v.ClearChecksum()
+		v.InitChecksum(kv.Key.Key)
 
 		if log.V(3) {
 			log.Infof(ctx, "Put %s %s\n", kv.Key.Key, v.PrettyPrint())
 		}
-		b.CPut(kv.Key.Key, &v, nil)
-		bytes += len(kv.Key.Key) + len(v.RawBytes)
-		if bytes > batchSizeBytes {
-			if err := writeBatch(); err != nil {
-				return false, err
-			}
+		b.Put(kv.Key, v.RawBytes)
+
+		if len(batchStartKey) == 0 {
+			batchStartKey = append(batchStartKey, kv.Key.Key...)
+		}
+		batchEndKey = append(batchEndKey[:0], kv.Key.Key...)
+
+		if b.Len() > batchSizeBytes {
+			sendWriteBatch()
 		}
 
 		return false, nil
@@ -373,13 +394,11 @@ func Import(
 		}
 	}
 
-	if bytes > 0 {
-		if err := writeBatch(); err != nil {
-			return err
-		}
+	if b.Len() > 0 {
+		sendWriteBatch()
 	}
 
-	return nil
+	return wg.Wait()
 }
 
 func assertDatabasesExist(
