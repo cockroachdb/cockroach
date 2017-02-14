@@ -27,7 +27,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -56,8 +59,9 @@ type SchemaChanger struct {
 	evalCtx    parser.EvalContext
 	// The SchemaChangeManager can attempt to execute this schema
 	// changer after this time.
-	execAfter    time.Time
-	testingKnobs *SchemaChangerTestingKnobs
+	execAfter      time.Time
+	testingKnobs   *SchemaChangerTestingKnobs
+	distSQLPlanner *distSQLPlanner
 }
 
 func (sc *SchemaChanger) truncateAndDropTable(
@@ -515,7 +519,7 @@ func (sc *SchemaChanger) reverseMutations(causingError error) error {
 				// mutation ID we're looking for.
 				break
 			}
-			desc.Mutations[i].ResumeSpan = roachpb.Span{}
+			desc.Mutations[i].ResumeSpans = nil
 			log.Warningf(context.TODO(), "reverse schema change mutation: %+v", mutation)
 			switch mutation.Direction {
 			case sqlbase.DescriptorMutation_ADD:
@@ -623,6 +627,9 @@ type SchemaChangerTestingKnobs struct {
 	// AsyncExecNotification.
 	SyncFilter SyncSchemaChangersFilter
 
+	// RunBeforeBackfille is called just before starting the backfill.
+	RunBeforeBackfill func() error
+
 	// RunBeforeBackfillChunk is called before executing each chunk of a
 	// backfill during a schema change operation. It is called with the
 	// current span and returns an error which eventually is returned to the
@@ -674,12 +681,17 @@ type SchemaChangeManager struct {
 	testingKnobs *SchemaChangerTestingKnobs
 	// Create a schema changer for every outstanding schema change seen.
 	schemaChangers map[sqlbase.ID]SchemaChanger
+	distSQLPlanner *distSQLPlanner
 }
 
 // NewSchemaChangeManager returns a new SchemaChangeManager.
 func NewSchemaChangeManager(
 	testingKnobs *SchemaChangerTestingKnobs,
 	db client.DB,
+	nodeDesc roachpb.NodeDescriptor,
+	rpcContext *rpc.Context,
+	distSQLServ *distsqlrun.ServerImpl,
+	distSender *kv.DistSender,
 	gossip *gossip.Gossip,
 	leaseMgr *LeaseManager,
 ) *SchemaChangeManager {
@@ -689,6 +701,9 @@ func NewSchemaChangeManager(
 		leaseMgr:       leaseMgr,
 		testingKnobs:   testingKnobs,
 		schemaChangers: make(map[sqlbase.ID]SchemaChanger),
+		distSQLPlanner: newDistSQLPlanner(
+			nodeDesc, rpcContext, distSQLServ, distSender, gossip,
+		),
 	}
 }
 
@@ -730,10 +745,11 @@ func (s *SchemaChangeManager) Start(stopper *stop.Stopper) {
 					log.Info(context.TODO(), "received a new config")
 				}
 				schemaChanger := SchemaChanger{
-					nodeID:       s.leaseMgr.nodeID.Get(),
-					db:           s.db,
-					leaseMgr:     s.leaseMgr,
-					testingKnobs: s.testingKnobs,
+					nodeID:         s.leaseMgr.nodeID.Get(),
+					db:             s.db,
+					leaseMgr:       s.leaseMgr,
+					testingKnobs:   s.testingKnobs,
+					distSQLPlanner: s.distSQLPlanner,
 				}
 				// Keep track of existing schema changers.
 				oldSchemaChangers := make(map[sqlbase.ID]struct{}, len(s.schemaChangers))

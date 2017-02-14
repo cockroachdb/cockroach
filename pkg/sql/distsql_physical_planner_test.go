@@ -21,6 +21,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
@@ -48,6 +49,14 @@ func TestDistSQLPlanner(t *testing.T) {
 			ReplicationMode: base.ReplicationManual,
 			ServerArgs: base.TestServerArgs{
 				UseDatabase: "test",
+				Knobs: base.TestingKnobs{
+					SQLSchemaChanger: &SchemaChangerTestingKnobs{
+						// Aggressively write checkpoints, so that
+						// we test checkpointing functionality while
+						// a schema change backfill is progressing.
+						WriteCheckpointInterval: time.Nanosecond,
+					},
+				},
 			},
 		})
 	defer tc.Stopper().Stop()
@@ -244,5 +253,27 @@ func TestDistSQLPlanner(t *testing.T) {
 			"SELECT y FROM (SELECT y FROM NumToStr ORDER BY y LIMIT 5) AS a WHERE y <> 2",
 			[][]string{{"1"}, {"3"}, {"4"}, {"5"}},
 		)
+	})
+
+	// This test modifies the schema and can affect subsequent tests.
+	t.Run("CreateIndex", func(t *testing.T) {
+		r = r.Subtest(t)
+		r.Exec("SET DIST_SQL = OFF")
+		if _, err := tc.ServerConn(0).Exec("CREATE INDEX foo ON NumToStr (str)"); err != nil {
+			t.Fatal(err)
+		}
+		r.Exec("SET DIST_SQL = ALWAYS")
+		res := r.QueryStr("SELECT str FROM NumToStr@foo")
+		if len(res) != n*n {
+			t.Errorf("expected %d entries, got %d", n*n, len(res))
+		}
+		// Check res is sorted.
+		curr := ""
+		for i, str := range res {
+			if curr > str[0] {
+				t.Errorf("unexpected unsorted %s > %s at %d", curr, str[0], i)
+			}
+			curr = str[0]
+		}
 	})
 }

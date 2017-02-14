@@ -309,11 +309,12 @@ message DescriptorMutation {
   optional uint32 mutation_id = 5 [(gogoproto.nullable) = false,
       (gogoproto.customname) = "MutationID", (gogoproto.casttype) = "MutationID"];
 
-  // A schema change can involve backfilling or deleting data.
-  // It occasionally stores a checkpoint Span of where the backfill/delete
-  // is, so that in the event of a node failure, it can start close to
-  // where it left off.
-  optional roachpb.Span resume_span = 6 [(gogoproto.nullable) = false];
+  // A schema change can involve running multiple processors backfilling
+  // or deleting data. They occasionally checkpoint Spans so that the
+  // processing can resume in the event of a node failure. The spans are
+  // non-overlapping contiguous areas of the KV space that still need to
+  // be processed.
+  repeated roachpb.Span resume_spans = 6 [(gogoproto.nullable) = false];
 }
 
 // A TableDescriptor represents a table or view and is stored in a

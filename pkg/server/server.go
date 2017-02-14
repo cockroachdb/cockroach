@@ -255,6 +255,9 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		RPCContext:     s.rpcContext,
 		Stopper:        s.stopper,
 	}
+	if s.cfg.TestingKnobs.DistSQL != nil {
+		distSQLCfg.TestingKnobs = *s.cfg.TestingKnobs.DistSQL.(*distsqlrun.TestingKnobs)
+	}
 	s.distSQLServer = distsqlrun.NewServer(distSQLCfg)
 	distsqlrun.RegisterDistSQLServer(s.grpc, s.distSQLServer)
 
@@ -624,7 +627,16 @@ func (s *Server) Start(ctx context.Context) error {
 	if s.cfg.TestingKnobs.SQLSchemaChanger != nil {
 		testingKnobs = s.cfg.TestingKnobs.SQLSchemaChanger.(*sql.SchemaChangerTestingKnobs)
 	}
-	sql.NewSchemaChangeManager(testingKnobs, *s.db, s.gossip, s.leaseMgr).Start(s.stopper)
+	sql.NewSchemaChangeManager(
+		testingKnobs,
+		*s.db,
+		s.node.Descriptor,
+		s.rpcContext,
+		s.distSQLServer,
+		s.distSender,
+		s.gossip,
+		s.leaseMgr,
+	).Start(s.stopper)
 
 	s.sqlExecutor.Start(ctx, &s.adminMemMetrics, s.node.Descriptor)
 	s.distSQLServer.Start()
