@@ -679,17 +679,45 @@ type StoreConfig struct {
 	GossipWhenCapacityDeltaExceedsFraction float64
 }
 
-// StoreTestingKnobs is a part of the context used to control parts of the system.
+// StoreTestingKnobs is a part of the context used to control parts of
+// the system. The Testing*Filter functions are called at various
+// points in the request pipeline if they are non-nil. These can be
+// used either for synchronization (e.g. to write to a channel when a
+// particular point is reached) or to change the behavior by returning
+// an error (which aborts all further processing for the command).
 type StoreTestingKnobs struct {
-	// A callback to be called when executing every replica command.
-	// If your filter is not idempotent, consider wrapping it in a
+	// TestingProposalFilter is called before proposing each command.
+	// TODO(bdarnell): Implement this when a test needs it.
+	//TestingProposalFilter storagebase.ReplicaCommandFilter
+
+	// TestingEvalFilter is called before evaluating each command. The
+	// number of times this callback is run depends on the propEvalKV
+	// setting, and it is therefore deprecated in favor of either
+	// TestingProposalFilter (which runs only on the lease holder) or
+	// TestingApplyFilter (which runs on each replica). If your filter is
+	// not idempotent, consider wrapping it in a
 	// ReplayProtectionFilterWrapper.
-	TestingCommandFilter storagebase.ReplicaCommandFilter
-	TestingApplyFilter   storagebase.ReplicaApplyFilter
+	// TODO(bdarnell,tschottdorf): Migrate existing tests which use this
+	// to one of the other filters. See #10493
+	TestingEvalFilter storagebase.ReplicaCommandFilter
+
+	// TestingApplyFilter is called before applying the results of a
+	// command on each replica. If it returns an error, the command will
+	// not be applied. If it returns an error on some replicas but not
+	// others, the behavior is poorly defined unless that error is a
+	// ReplicaCorruptionError.
+	// TODO(bdarnell): Implement this when a test needs it.
+	//TestingApplyFilter storagebase.ReplicaApplyFilter
+
+	// TestingPostApplyFilter is called after a command is applied to
+	// rocksdb but before in-memory side effects have been processed.
+	TestingPostApplyFilter storagebase.ReplicaApplyFilter
+
 	// TestingResponseFilter is called after the replica processes a
 	// command in order for unittests to modify the batch response,
 	// error returned to the client, or to simulate network failures.
 	TestingResponseFilter storagebase.ReplicaResponseFilter
+
 	// If non-nil, BadChecksumPanic is called by CheckConsistency() instead of
 	// panicking on a checksum mismatch.
 	BadChecksumPanic func(roachpb.StoreIdent)

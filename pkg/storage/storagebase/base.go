@@ -48,16 +48,10 @@ func (f *FilterArgs) InRaftCmd() bool {
 	return f.CmdID != ""
 }
 
-// ReplicaCommandFilter may be used in tests through the StorageTestingMocker to
+// ReplicaCommandFilter may be used in tests through the StoreTestingKnobs to
 // intercept the handling of commands and artificially generate errors. Return
 // nil to continue with regular processing or non-nil to terminate processing
-// with the returned error. Note that in a multi-replica test this filter will
-// be run once for each replica and must produce consistent results each time.
-//
-// TODO(tschottdorf): clean this up. Tests which use this all need to be
-// refactored to use explicitly a proposal-intercepting filter (not written
-// yet, but it's basically this one here when proposer-evaluated KV is on) or
-// a ReplicaApplyFilter (see below).
+// with the returned error.
 type ReplicaCommandFilter func(args FilterArgs) *roachpb.Error
 
 // A ReplicaApplyFilter can be used in testing to influence the error returned

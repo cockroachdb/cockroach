@@ -191,7 +191,7 @@ func createTestServerParams() (base.TestServerArgs, *CommandFilters) {
 	cmdFilters.AppendFilter(checkEndTransactionTrigger, true)
 	params := base.TestServerArgs{}
 	params.Knobs.Store = &storage.StoreTestingKnobs{
-		TestingCommandFilter: cmdFilters.runFilters,
+		TestingEvalFilter: cmdFilters.runFilters,
 	}
 	return params, &cmdFilters
 }
