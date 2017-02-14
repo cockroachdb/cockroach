@@ -5081,6 +5081,15 @@ getNodeId?() : string;
 
 
 
+range_ids?: Long[];
+		
+
+getRangeIds?() : Long[];
+		setRangeIds?(rangeIds : Long[]): void;
+		
+
+
+
 }
 
 	export interface RangesRequestMessage extends RangesRequest {
@@ -5656,6 +5665,15 @@ declare module Proto2TypeScript.cockroach.server.serverpb {
 	export interface RaftDebugRequest {
 
 		
+
+range_ids?: Long[];
+		
+
+getRangeIds?() : Long[];
+		setRangeIds?(rangeIds : Long[]): void;
+		
+
+
 
 }
 
