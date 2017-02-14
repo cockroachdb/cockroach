@@ -53,8 +53,6 @@ imports:
   - crdb
 - name: github.com/cockroachdb/crlfmt
   version: f4be2332630e8f33c3262c0d5f0d13d733c8bedf
-- name: github.com/cockroachdb/pq
-  version: 44a6473ebbc26e3af09fe57bbdf761475c2c9f7c
 - name: github.com/cockroachdb/returncheck
   version: f3a399c4b3744afe51001fb5f969bfcb78dc599a
 - name: github.com/cockroachdb/stress
@@ -213,7 +211,7 @@ imports:
 - name: github.com/leekchan/timeutil
   version: 28917288c48df3d2c1cfe468c273e0b2adda0aa5
 - name: github.com/lib/pq
-  version: 8df6253d1317616f36b0c3740eb30c239a7372cb
+  version: ba5d4f7a35561e22fbdf7a39aa0070f4d460cfc0
   subpackages:
   - oid
 - name: github.com/lightstep/lightstep-tracer-go
