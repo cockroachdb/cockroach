@@ -1615,6 +1615,11 @@ func (fr *RocksDBSstFileReader) Iterate(
 	return fr.rocksDB.Iterate(start, end, f)
 }
 
+// NewIterator returns an iterator over this sst reader.
+func (fr *RocksDBSstFileReader) NewIterator(prefix bool) Iterator {
+	return newRocksDBIterator(fr.rocksDB.rdb, prefix, fr.rocksDB)
+}
+
 // Close finishes the reader.
 func (fr *RocksDBSstFileReader) Close() {
 	if fr.rocksDB == nil {
