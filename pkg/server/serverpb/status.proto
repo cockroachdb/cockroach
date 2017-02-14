@@ -93,6 +93,15 @@ message RangeInfo {
   PrettySpan span = 1 [(gogoproto.nullable) = false];
   RaftState raft_state = 2 [(gogoproto.nullable) = false];
   storage.storagebase.RangeInfo state = 4 [(gogoproto.nullable) = false];
+  int32 source_node_id = 5 [
+    (gogoproto.customname) = "SourceNodeID",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"
+  ];
+  int32 source_store_id = 6 [
+     (gogoproto.customname) = "SourceStoreID",
+     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.StoreID"
+  ];
+  string error_message = 7;
 }
 
 message RangesRequest {
