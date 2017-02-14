@@ -60,7 +60,11 @@ func testRowStream(t *testing.T, rng *rand.Rand, rows sqlbase.EncDatumRows, trai
 		// "Send" a message every now and then and once at the end.
 		final := (rowIdx == len(rows))
 		if final || (rowIdx > 0 && rng.Intn(10) == 0) {
-			msg := se.FormMessage(final, trailerErr)
+			var msgErr error
+			if final {
+				msgErr = trailerErr
+			}
+			msg := se.FormMessage(final, msgErr)
 			// Make a copy of the data buffer.
 			msg.Data.RawBytes = append([]byte(nil), msg.Data.RawBytes...)
 			err := sd.AddMessage(msg)
