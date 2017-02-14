@@ -667,3 +667,25 @@ EXPLAIN (METADATA) UPDATE t SET c = TRUE RETURNING b
 2  scan                      (a, b, c)          +a,unique
 2          table  t@primary
 2          spans  ALL
+
+statement ok
+CREATE TABLE uvwxyz (
+  u INT,
+  v INT,
+  w INT,
+  x INT,
+  y INT,
+  z INT,
+  INDEX ywxz (y, w, x, z, u, v),
+  INDEX ywz (y, w, z, x)
+)
+
+# Verify that the outer ordering is propagated to index selection and we choose
+# the index that avoids any sorting.
+query ITTTTT
+EXPLAIN (METADATA) SELECT * FROM (SELECT y, w, x FROM uvwxyz WHERE y = 1 ORDER BY w) ORDER BY w, x
+----
+0  render                      (y, w, x)                                                             =y,+w,+x
+1  scan                        (u[omitted], v[omitted], w, x, y, z[omitted], rowid[hidden,omitted])  =y,+w,+x,+z,+u,+v,+rowid,unique
+1          table  uvwxyz@ywxz
+1          spans  /1-/2
