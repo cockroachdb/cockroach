@@ -182,7 +182,9 @@ func doExpandPlan(p *planner, params expandParameters, plan planNode) (planNode,
 		n.plan, err = doExpandPlan(p, noParams, n.plan)
 
 	case *sortNode:
-		params.desiredOrdering = n.ordering
+		if !n.ordering.IsPrefixOf(params.desiredOrdering) {
+			params.desiredOrdering = n.ordering
+		}
 		n.plan, err = doExpandPlan(p, params, n.plan)
 		if err != nil {
 			return plan, err
