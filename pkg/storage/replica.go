@@ -2715,7 +2715,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	writer.Close()
 	// Synchronously commit the batch with the Raft log entries and Raft hard
 	// state as we're promising not to lose this data.
-	if err := batch.Commit(syncRaftLog); err != nil {
+	if err := batch.Commit(syncRaftLog && rd.MustSync); err != nil {
 		return stats, err
 	}
 
