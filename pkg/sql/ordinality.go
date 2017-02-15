@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 )
 
 // ordinalityNode represents a node that adds an "ordinality" column
@@ -108,4 +109,53 @@ func (o *ordinalityNode) Close(ctx context.Context)       { o.source.Close(ctx) 
 
 func (o *ordinalityNode) Spans(ctx context.Context) (_, _ roachpb.Spans, _ error) {
 	return o.source.Spans(ctx)
+}
+
+// restrictOrdering transforms an ordering requirement on the output
+// of an ordinalityNode into an ordering requirement on its input.
+func (o *ordinalityNode) restrictOrdering(
+	desiredOrdering sqlbase.ColumnOrdering,
+) sqlbase.ColumnOrdering {
+	// If there's a desired ordering on the ordinality column, drop it.
+	if len(desiredOrdering) > 0 {
+		newDesired := make(sqlbase.ColumnOrdering, 0, len(desiredOrdering))
+		for _, ordInfo := range desiredOrdering {
+			if ordInfo.ColIdx == len(o.columns)-1 {
+				break
+			}
+			newDesired = append(newDesired, ordInfo)
+		}
+		desiredOrdering = newDesired
+	}
+	return desiredOrdering
+}
+
+// optimizeOrdering updates the ordinalityNode's ordering based on a
+// potentially new ordering information from its source.
+func (o *ordinalityNode) optimizeOrdering() {
+	// We are going to "optimize" the ordering. We had an ordering
+	// initially from the source, but expand() may have caused it to
+	// change. So here retrieve the ordering of the source again.
+	origOrdering := o.source.Ordering()
+
+	if len(origOrdering.ordering) > 0 {
+		// TODO(knz/radu): we basically have two simultaneous orderings.
+		// What we really want is something that orderingInfo cannot
+		// currently express: that the rows are ordered by a set of
+		// columns AND at the same time they are also ordered by a
+		// different set of columns. However since ordinalityNode is
+		// currently the only case where this happens we consider it's not
+		// worth the hassle and just use the source ordering.
+		o.ordering = origOrdering
+	} else {
+		// No ordering defined in the source, so create a new one.
+		o.ordering.exactMatchCols = origOrdering.exactMatchCols
+		o.ordering.ordering = sqlbase.ColumnOrdering{
+			sqlbase.ColumnOrderInfo{
+				ColIdx:    len(o.columns) - 1,
+				Direction: encoding.Ascending,
+			},
+		}
+		o.ordering.unique = true
+	}
 }
