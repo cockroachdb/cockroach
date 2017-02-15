@@ -760,12 +760,17 @@ func (t *tableState) removeLease(lease *LeaseState, store LeaseStore) {
 	t.active.remove(lease)
 	t.tableNameCache.remove(lease)
 	// Release to the store asynchronously, without the tableState lock.
-	err := t.stopper.RunAsyncTask(context.TODO(), func(ctx context.Context) {
-		if err := store.Release(lease); err != nil {
-			log.Warningf(ctx, "error releasing lease %q: %s", lease, err)
+	if err := t.stopper.RunAsyncTask(context.TODO(), func(ctx context.Context) {
+		retryOptions := base.DefaultRetryOptions()
+		retryOptions.MaxRetries = 5
+		for r := retry.Start(retryOptions); r.Next(); {
+			if err := store.Release(lease); err != nil {
+				log.Warningf(ctx, "error releasing lease %q: %s", lease, err)
+			} else {
+				break
+			}
 		}
-	})
-	if log.V(1) && err != nil {
+	}); err != nil {
 		log.Warningf(context.TODO(), "error removing lease from store: %s", err)
 	}
 }
