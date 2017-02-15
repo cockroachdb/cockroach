@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -224,33 +225,41 @@ func (s LeaseStore) Acquire(
 }
 
 // Release a previously acquired table descriptor lease.
-func (s LeaseStore) Release(lease *LeaseState) error {
-	err := s.db.Txn(context.TODO(), func(txn *client.Txn) error {
-		if log.V(2) {
-			log.Infof(txn.Context, "LeaseStore releasing lease %s", lease)
+func (s LeaseStore) Release(lease *LeaseState) {
+	for r := retry.Start(base.DefaultRetryOptions()); r.Next(); {
+		err := s.db.Txn(context.TODO(), func(txn *client.Txn) error {
+			if log.V(2) {
+				log.Infof(txn.Context, "LeaseStore releasing lease %s", lease)
+			}
+			nodeID := s.nodeID.Get()
+			if nodeID == 0 {
+				panic("zero nodeID")
+			}
+			p := makeInternalPlanner("lease-release", txn, security.RootUser, s.memMetrics)
+			defer finishInternalPlanner(p)
+			const deleteLease = `DELETE FROM system.lease ` +
+				`WHERE (descID, version, nodeID, expiration) = ($1, $2, $3, $4)`
+			count, err := p.exec(deleteLease, lease.ID, int(lease.Version), nodeID, &lease.expiration)
+			if err != nil {
+				return err
+			}
+			if count != 1 {
+				log.Warningf(txn.Context, "unexpected results while deleting lease %s: "+
+					"expected 1 result, found %d", lease, count)
+			}
+			return nil
+		})
+		if s.testingKnobs.LeaseReleasedEvent != nil {
+			s.testingKnobs.LeaseReleasedEvent(lease, err)
 		}
-		nodeID := s.nodeID.Get()
-		if nodeID == 0 {
-			panic("zero nodeID")
+		if err == nil {
+			break
 		}
-		p := makeInternalPlanner("lease-release", txn, security.RootUser, s.memMetrics)
-		defer finishInternalPlanner(p)
-		const deleteLease = `DELETE FROM system.lease ` +
-			`WHERE (descID, version, nodeID, expiration) = ($1, $2, $3, $4)`
-		count, err := p.exec(deleteLease, lease.ID, int(lease.Version), nodeID, &lease.expiration)
-		if err != nil {
-			return err
+		log.Warningf(context.TODO(), "error releasing lease %q: %s", lease, err)
+		if _, ok := err.(*roachpb.NodeUnavailableError); ok {
+			break
 		}
-		if count != 1 {
-			return errors.Errorf("unexpected results while deleting lease %s: "+
-				"expected 1 result, found %d", lease, count)
-		}
-		return nil
-	})
-	if s.testingKnobs.LeaseReleasedEvent != nil {
-		s.testingKnobs.LeaseReleasedEvent(lease, err)
 	}
-	return err
 }
 
 // WaitForOneVersion returns once there are no unexpired leases on the
@@ -760,12 +769,9 @@ func (t *tableState) removeLease(lease *LeaseState, store LeaseStore) {
 	t.active.remove(lease)
 	t.tableNameCache.remove(lease)
 	// Release to the store asynchronously, without the tableState lock.
-	err := t.stopper.RunAsyncTask(context.TODO(), func(ctx context.Context) {
-		if err := store.Release(lease); err != nil {
-			log.Warningf(ctx, "error releasing lease %q: %s", lease, err)
-		}
-	})
-	if log.V(1) && err != nil {
+	if err := t.stopper.RunAsyncTask(context.TODO(), func(ctx context.Context) {
+		store.Release(lease)
+	}); err != nil {
 		log.Warningf(context.TODO(), "error removing lease from store: %s", err)
 	}
 }
