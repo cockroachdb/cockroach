@@ -114,6 +114,9 @@ var (
 	// TypeName is a type-alias for TypeString with a different OID. Can be
 	// compared with ==.
 	TypeName = wrapTypeWithOid(TypeString, oid.T_name)
+	// TypeIntVector is a type-alias for a TypeIntArray with a different OID. Can
+	// be compared with ==.
+	TypeIntVector = wrapTypeWithOid(TypeIntArray, oid.T_int2vector)
 	// TypeNameArray is the type family of a DArray containing the Name alias type.
 	// Can be compared with ==.
 	TypeNameArray Type = tArray{TypeName}

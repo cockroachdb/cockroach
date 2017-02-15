@@ -132,8 +132,8 @@ func RandDatum(rng *rand.Rand, typ ColumnType, null bool) parser.Datum {
 		return parser.NewDName(string(p))
 	case ColumnType_OID:
 		return parser.NewDOid(parser.DInt(rng.Int63()))
-	case ColumnType_INT_ARRAY:
-		// TODO(cuongdo): we don't support for persistence of arrays yet
+	case ColumnType_INT_ARRAY, ColumnType_INT2VECTOR:
+		// TODO(cuongdo): we don't support for persistence of arrays or vectors yet
 		return parser.DNull
 	default:
 		panic(fmt.Sprintf("invalid type %s", typ.String()))

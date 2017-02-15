@@ -424,3 +424,8 @@ query error pq: unimplemented: ARRAY column types are unsupported \(see issue ht
 CREATE TABLE IF NOT EXISTS test.int_array_test (
   arr INT[]
 )
+
+query error pq: unimplemented: VECTOR column types are unsupported \(see issue https://github.com/cockroachdb/cockroach/issues/2115\)
+CREATE TABLE IF NOT EXISTS test.int_array_test (
+  arr INT2VECTOR
+)
