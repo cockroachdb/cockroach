@@ -63,33 +63,28 @@ func ReadBackupDescriptor(
 
 // ValidatePreviousBackups checks that the timestamps of previous backups are
 // consistent. The most recently backed-up time is returned.
-//
-// TODO(dan): This should call into restoreTablesRequests instead to get the
-// full validation logic.
 func ValidatePreviousBackups(ctx context.Context, uris []string) (hlc.Timestamp, error) {
 	if len(uris) == 0 || len(uris) == 1 && uris[0] == "" {
 		// Full backup.
 		return hlc.Timestamp{}, nil
 	}
-	var endTime hlc.Timestamp
-	for _, uri := range uris {
+	backups := make([]BackupDescriptor, len(uris))
+	for i, uri := range uris {
 		dir, err := storageccl.ExportStorageFromURI(ctx, uri)
 		if err != nil {
 			return hlc.Timestamp{}, err
 		}
-		backupDesc, err := ReadBackupDescriptor(ctx, dir)
+		backups[i], err = ReadBackupDescriptor(ctx, dir)
 		if err != nil {
 			return hlc.Timestamp{}, err
 		}
-		// TODO(dan): This check assumes that every backup is of the entire
-		// database, which is stricter than it needs to be.
-		if backupDesc.StartTime != endTime {
-			return hlc.Timestamp{}, errors.Errorf("missing backup between %s and %s in %s",
-				endTime, backupDesc.StartTime, dir)
-		}
-		endTime = backupDesc.EndTime
 	}
-	return endTime, nil
+
+	// This reuses Restore's logic for lining up all the start and end
+	// timestamps to validate the previous backups that this one is incremental
+	// from.
+	_, endTime, err := makeImportRequests(nil, backups)
+	return endTime, err
 }
 
 func allSQLDescriptors(txn *client.Txn) ([]sqlbase.Descriptor, error) {
@@ -427,7 +422,7 @@ type importEntry struct {
 // as they were backed up, not as they're being restored.
 func makeImportRequests(
 	tables []*sqlbase.TableDescriptor, backups []BackupDescriptor,
-) ([]importEntry, error) {
+) ([]importEntry, hlc.Timestamp, error) {
 	// Put the merged table data covering first into the OverlapCoveringMerge
 	// input.
 	var tableSpanCovering intervalccl.Covering
@@ -449,7 +444,12 @@ func makeImportRequests(
 	// backup. These alternate (backup1 spans, backup1 files, backup2 spans,
 	// backup2 files) so they will retain that alternation in the output of
 	// OverlapCoveringMerge.
+	var maxEndTime hlc.Timestamp
 	for _, b := range backups {
+		if maxEndTime.Less(b.EndTime) {
+			maxEndTime = b.EndTime
+		}
+
 		var backupSpanCovering intervalccl.Covering
 		for _, s := range b.Spans {
 			backupSpanCovering = append(backupSpanCovering, intervalccl.Range{
@@ -494,7 +494,10 @@ func makeImportRequests(
 				needed = true
 			case backupSpan:
 				if ts != ie.backup.StartTime {
-					return nil, errors.Errorf("mismatched start time %s vs %s", ts, ie.backup.StartTime)
+					return nil, hlc.Timestamp{}, errors.Errorf(
+						"no backup covers time [%s,%s) for range [%s,%s) (or backups out of order)",
+						ts, ie.backup.StartTime,
+						roachpb.Key(importRange.Start), roachpb.Key(importRange.End))
 				}
 				ts = ie.backup.EndTime
 			case backupFile:
@@ -507,6 +510,11 @@ func makeImportRequests(
 				}
 			}
 		}
+		if ts != maxEndTime {
+			return nil, hlc.Timestamp{}, errors.Errorf(
+				"no backup covers time [%s,%s) for range [%s,%s) (or backups out of order)",
+				ts, maxEndTime, roachpb.Key(importRange.Start), roachpb.Key(importRange.End))
+		}
 		if needed {
 			// If needed is false, we have data backed up that is not necessary
 			// for this restore. Skip it.
@@ -517,7 +525,7 @@ func makeImportRequests(
 			})
 		}
 	}
-	return requestEntries, nil
+	return requestEntries, maxEndTime, nil
 }
 
 // presplitRanges concurrently creates the splits described by `input`. It does
@@ -793,7 +801,7 @@ func Restore(
 
 	// Pivot the backups, which are grouped by time, into requests for import,
 	// which are grouped by keyrange.
-	importRequests, err := makeImportRequests(tables, backupDescs)
+	importRequests, _, err := makeImportRequests(tables, backupDescs)
 	if err != nil {
 		return nil, errors.Wrapf(err, "making import requests for %d backups", len(backupDescs))
 	}
