@@ -63,7 +63,7 @@ func MakeStorePoolNodeLivenessFunc(nodeLiveness *NodeLiveness) NodeLivenessFunc 
 	return func(nodeID roachpb.NodeID, now time.Time, threshold time.Duration) bool {
 		// Mark the store dead if the node it's on is not live.
 		liveness, err := nodeLiveness.GetLiveness(nodeID)
-		if err != nil {
+		if err != nil || liveness.Draining {
 			return false
 		}
 		deadAsOf := liveness.Expiration.GoTime().Add(threshold)
