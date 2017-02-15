@@ -187,7 +187,9 @@ func TestEncDatumCompare(t *testing.T) {
 		kind := ColumnType_Kind(kind)
 		// TODO(cuongdo,eisen): we don't support persistence for arrays or collated
 		// strings yet
-		if kind == ColumnType_COLLATEDSTRING || kind == ColumnType_INT_ARRAY {
+		if kind == ColumnType_COLLATEDSTRING ||
+			kind == ColumnType_INT_ARRAY ||
+			kind == ColumnType_INT2VECTOR {
 			continue
 		}
 		typ := ColumnType{Kind: kind}

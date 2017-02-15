@@ -2319,7 +2319,7 @@ func (expr *IndirectionExpr) Eval(ctx *EvalContext) (Datum, error) {
 	}
 
 	// Index into the DArray, using 1-indexing.
-	arr := d.(*DArray)
+	arr := MustBeDArray(d)
 	if subscriptIdx < 1 || subscriptIdx > arr.Len() {
 		return DNull, nil
 	}
@@ -2385,7 +2385,7 @@ func (expr *ComparisonExpr) Eval(ctx *EvalContext) (Datum, error) {
 
 	op := expr.Operator
 	if op.hasSubOperator() {
-		return evalArrayCmp(ctx, expr.SubOperator, expr.fn, left, right.(*DArray), op == All)
+		return evalArrayCmp(ctx, expr.SubOperator, expr.fn, left, MustBeDArray(right), op == All)
 	}
 
 	_, newLeft, newRight, _, not := foldComparisonExpr(op, left, right)

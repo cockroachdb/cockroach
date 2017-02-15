@@ -134,6 +134,10 @@ func MakeColumnDefDescs(
 			b := parser.MustBeDInt(d)
 			col.Type.ArrayDimensions = append(col.Type.ArrayDimensions, int32(b))
 		}
+	case *parser.VectorColType:
+		if _, ok := t.ParamType.(*parser.IntColType); !ok {
+			return nil, nil, errors.Errorf("vectors of type %s are unsupported", t.ParamType)
+		}
 	case *parser.OidColType:
 	default:
 		return nil, nil, errors.Errorf("unexpected type %T", t)

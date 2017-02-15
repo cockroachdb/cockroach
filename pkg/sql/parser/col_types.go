@@ -51,6 +51,7 @@ func (*NameColType) columnType()           {}
 func (*BytesColType) columnType()          {}
 func (*CollatedStringColType) columnType() {}
 func (*ArrayColType) columnType()          {}
+func (*VectorColType) columnType()         {}
 func (*OidColType) columnType()            {}
 
 // All ColumnTypes also implement CastTargetType.
@@ -67,6 +68,7 @@ func (*NameColType) castTargetType()           {}
 func (*BytesColType) castTargetType()          {}
 func (*CollatedStringColType) castTargetType() {}
 func (*ArrayColType) castTargetType()          {}
+func (*VectorColType) castTargetType()         {}
 func (*OidColType) castTargetType()            {}
 func (*OidPseudoType) castTargetType()         {}
 
@@ -325,6 +327,25 @@ func arrayOf(colType ColumnType, boundsExprs Exprs) (ColumnType, error) {
 	}
 }
 
+// VectorColType is the base for VECTOR column types, which are Postgres's
+// older, limited version of ARRAYs. These are not meant to be persisted,
+// because ARRAYs are a strict superset.
+type VectorColType struct {
+	Name      string
+	ParamType ColumnType
+}
+
+// Format implements the NodeFormatter interface.
+func (node *VectorColType) Format(buf *bytes.Buffer, _ FmtFlags) {
+	buf.WriteString(node.Name)
+}
+
+// Int2VectorColType represents an INT2VECTOR column type.
+var int2vectorColType = &VectorColType{
+	Name:      "INT2VECTOR",
+	ParamType: intColTypeInt,
+}
+
 // Pre-allocated immutable postgres oid column type.
 var oidColTypeOid = &OidColType{}
 
@@ -373,6 +394,7 @@ func (node *NameColType) String() string           { return AsString(node) }
 func (node *BytesColType) String() string          { return AsString(node) }
 func (node *CollatedStringColType) String() string { return AsString(node) }
 func (node *ArrayColType) String() string          { return AsString(node) }
+func (node *VectorColType) String() string         { return AsString(node) }
 func (node *OidColType) String() string            { return AsString(node) }
 func (node *OidPseudoType) String() string         { return AsString(node) }
 
@@ -441,6 +463,8 @@ func CastTargetToDatumType(t CastTargetType) Type {
 		return TCollatedString{Locale: ct.Locale}
 	case *ArrayColType:
 		return tArray{CastTargetToDatumType(ct.ParamType)}
+	case *VectorColType:
+		return TypeIntVector
 	case *OidColType:
 		return TypeOid
 	case *OidPseudoType:

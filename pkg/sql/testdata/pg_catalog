@@ -465,11 +465,11 @@ from pg_catalog.pg_index
 WHERE indnatts = 2
 ----
 indexrelid  indrelid    indislive  indisreplident  indkey  indcollation  indclass  indoption  indexprs  indpred
-335779560   2876473678  true       false           {3,4}   0             0         0          NULL      NULL
-624432001   3211628798  true       false           {1,2}   0             0         0          NULL      NULL
-724530982   908875140   true       false           {1,6}   0             0         0          NULL      NULL
-3505585425  2199392917  true       false           {1,2}   0             0         0          NULL      NULL
-3491800018  3270885600  true       false           {1,7}   0             0         0          NULL      NULL
+335779560   2876473678  true       false           3 4     0             0         0          NULL      NULL
+624432001   3211628798  true       false           1 2     0             0         0          NULL      NULL
+724530982   908875140   true       false           1 6     0             0         0          NULL      NULL
+3505585425  2199392917  true       false           1 2     0             0         0          NULL      NULL
+3491800018  3270885600  true       false           1 7     0             0         0          NULL      NULL
 
 ## pg_catalog.pg_collation
 

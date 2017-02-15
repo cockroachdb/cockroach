@@ -1345,7 +1345,7 @@ var Builtins = map[string][]Builtin{
 			ReturnType: fixedReturnType(TypeInt),
 			category:   categorySystemInfo,
 			fn: func(_ *EvalContext, args Datums) (Datum, error) {
-				arr := args[0].(*DArray)
+				arr := MustBeDArray(args[0])
 				dimen := int64(MustBeDInt(args[1]))
 				return arrayLength(arr, dimen), nil
 			},
@@ -1361,7 +1361,7 @@ var Builtins = map[string][]Builtin{
 			ReturnType: fixedReturnType(TypeInt),
 			category:   categorySystemInfo,
 			fn: func(_ *EvalContext, args Datums) (Datum, error) {
-				arr := args[0].(*DArray)
+				arr := MustBeDArray(args[0])
 				dimen := int64(MustBeDInt(args[1]))
 				return arrayLower(arr, dimen), nil
 			},
@@ -1377,7 +1377,7 @@ var Builtins = map[string][]Builtin{
 			ReturnType: fixedReturnType(TypeInt),
 			category:   categorySystemInfo,
 			fn: func(_ *EvalContext, args Datums) (Datum, error) {
-				arr := args[0].(*DArray)
+				arr := MustBeDArray(args[0])
 				dimen := int64(MustBeDInt(args[1]))
 				return arrayLength(arr, dimen), nil
 			},
@@ -2339,7 +2339,7 @@ func arrayLength(arr *DArray, dim int64) Datum {
 	if dim == 1 {
 		return NewDInt(DInt(arr.Len()))
 	}
-	a, ok := arr.Array[0].(*DArray)
+	a, ok := AsDArray(arr.Array[0])
 	if !ok {
 		return DNull
 	}
@@ -2355,7 +2355,7 @@ func arrayLower(arr *DArray, dim int64) Datum {
 	if dim == 1 {
 		return intOne
 	}
-	a, ok := arr.Array[0].(*DArray)
+	a, ok := AsDArray(arr.Array[0])
 	if !ok {
 		return DNull
 	}
