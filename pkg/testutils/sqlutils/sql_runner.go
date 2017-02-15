@@ -49,7 +49,8 @@ func (sr *SQLRunner) Subtest(tb testing.TB) *SQLRunner {
 func (sr *SQLRunner) Exec(query string, args ...interface{}) gosql.Result {
 	r, err := sr.DB.Exec(query, args...)
 	if err != nil {
-		sr.Fatalf("error executing '%s': %s", query, err)
+		file, line, _ := caller.Lookup(1)
+		sr.Fatalf("%s:%d: error executing '%s': %s", file, line, query, err)
 	}
 	return r
 }
