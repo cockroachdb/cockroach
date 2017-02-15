@@ -35,7 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
-	csql "github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -49,8 +49,8 @@ type leaseTest struct {
 	server                   serverutils.TestServerInterface
 	db                       *gosql.DB
 	kvDB                     *client.DB
-	nodes                    map[uint32]*csql.LeaseManager
-	leaseManagerTestingKnobs csql.LeaseManagerTestingKnobs
+	nodes                    map[uint32]*sql.LeaseManager
+	leaseManagerTestingKnobs sql.LeaseManagerTestingKnobs
 }
 
 func newLeaseTest(t *testing.T, params base.TestServerArgs) *leaseTest {
@@ -60,11 +60,11 @@ func newLeaseTest(t *testing.T, params base.TestServerArgs) *leaseTest {
 		server: s,
 		db:     db,
 		kvDB:   kvDB,
-		nodes:  map[uint32]*csql.LeaseManager{},
+		nodes:  map[uint32]*sql.LeaseManager{},
 	}
 	if params.Knobs.SQLLeaseManager != nil {
 		leaseTest.leaseManagerTestingKnobs =
-			*params.Knobs.SQLLeaseManager.(*csql.LeaseManagerTestingKnobs)
+			*params.Knobs.SQLLeaseManager.(*sql.LeaseManagerTestingKnobs)
 	}
 	return leaseTest
 }
@@ -109,8 +109,8 @@ func (t *leaseTest) expectLeases(descID sqlbase.ID, expected string) {
 
 func (t *leaseTest) acquire(
 	nodeID uint32, descID sqlbase.ID, version sqlbase.DescriptorVersion,
-) (*csql.LeaseState, error) {
-	var lease *csql.LeaseState
+) (*sql.LeaseState, error) {
+	var lease *sql.LeaseState
 	err := t.kvDB.Txn(context.TODO(), func(txn *client.Txn) error {
 		var err error
 		lease, err = t.node(nodeID).Acquire(txn, descID, version)
@@ -121,7 +121,7 @@ func (t *leaseTest) acquire(
 
 func (t *leaseTest) mustAcquire(
 	nodeID uint32, descID sqlbase.ID, version sqlbase.DescriptorVersion,
-) *csql.LeaseState {
+) *sql.LeaseState {
 	lease, err := t.acquire(nodeID, descID, version)
 	if err != nil {
 		t.Fatal(err)
@@ -129,7 +129,7 @@ func (t *leaseTest) mustAcquire(
 	return lease
 }
 
-func (t *leaseTest) release(nodeID uint32, lease *csql.LeaseState) error {
+func (t *leaseTest) release(nodeID uint32, lease *sql.LeaseState) error {
 	return t.node(nodeID).Release(lease)
 }
 
@@ -138,9 +138,9 @@ func (t *leaseTest) release(nodeID uint32, lease *csql.LeaseState) error {
 // store (i.e. it's not expired and it's not for an old descriptor version),
 // this shouldn't be set.
 func (t *leaseTest) mustRelease(
-	nodeID uint32, lease *csql.LeaseState, leaseRemovalTracker *csql.LeaseRemovalTracker,
+	nodeID uint32, lease *sql.LeaseState, leaseRemovalTracker *sql.LeaseRemovalTracker,
 ) {
-	var tracker csql.RemovalTracker
+	var tracker sql.RemovalTracker
 	if leaseRemovalTracker != nil {
 		tracker = leaseRemovalTracker.TrackRemoval(lease)
 	}
@@ -167,17 +167,17 @@ func (t *leaseTest) mustPublish(nodeID uint32, descID sqlbase.ID) {
 	}
 }
 
-func (t *leaseTest) node(nodeID uint32) *csql.LeaseManager {
+func (t *leaseTest) node(nodeID uint32) *sql.LeaseManager {
 	mgr := t.nodes[nodeID]
 	if mgr == nil {
 		nc := &base.NodeIDContainer{}
 		nc.Set(context.TODO(), roachpb.NodeID(nodeID))
-		mgr = csql.NewLeaseManager(
+		mgr = sql.NewLeaseManager(
 			nc, *t.kvDB,
 			t.server.Clock(),
 			t.leaseManagerTestingKnobs,
 			t.server.Stopper(),
-			&csql.MemoryMetrics{},
+			&sql.MemoryMetrics{},
 		)
 		t.nodes[nodeID] = mgr
 	}
@@ -186,11 +186,11 @@ func (t *leaseTest) node(nodeID uint32) *csql.LeaseManager {
 
 func TestLeaseManager(testingT *testing.T) {
 	defer leaktest.AfterTest(testingT)()
-	removalTracker := csql.NewLeaseRemovalTracker()
+	removalTracker := sql.NewLeaseRemovalTracker()
 	params, _ := createTestServerParams()
 	params.Knobs = base.TestingKnobs{
-		SQLLeaseManager: &csql.LeaseManagerTestingKnobs{
-			LeaseStoreTestingKnobs: csql.LeaseStoreTestingKnobs{
+		SQLLeaseManager: &sql.LeaseManagerTestingKnobs{
+			LeaseStoreTestingKnobs: sql.LeaseStoreTestingKnobs{
 				LeaseReleasedEvent: removalTracker.LeaseRemovedNotification,
 			},
 		},
@@ -289,10 +289,10 @@ func TestLeaseManager(testingT *testing.T) {
 func TestLeaseManagerReacquire(testingT *testing.T) {
 	defer leaktest.AfterTest(testingT)()
 	params, _ := createTestServerParams()
-	removalTracker := csql.NewLeaseRemovalTracker()
+	removalTracker := sql.NewLeaseRemovalTracker()
 	params.Knobs = base.TestingKnobs{
-		SQLLeaseManager: &csql.LeaseManagerTestingKnobs{
-			LeaseStoreTestingKnobs: csql.LeaseStoreTestingKnobs{
+		SQLLeaseManager: &sql.LeaseManagerTestingKnobs{
+			LeaseStoreTestingKnobs: sql.LeaseStoreTestingKnobs{
 				LeaseReleasedEvent: removalTracker.LeaseRemovedNotification,
 			},
 		},
@@ -316,12 +316,12 @@ func TestLeaseManagerReacquire(testingT *testing.T) {
 
 	// Set the minimum lease duration such that the next lease acquisition will
 	// require the lease to be reacquired.
-	savedLeaseDuration, savedMinLeaseDuration := csql.LeaseDuration, csql.MinLeaseDuration
+	savedLeaseDuration, savedMinLeaseDuration := sql.LeaseDuration, sql.MinLeaseDuration
 	defer func() {
-		csql.LeaseDuration, csql.MinLeaseDuration = savedLeaseDuration, savedMinLeaseDuration
+		sql.LeaseDuration, sql.MinLeaseDuration = savedLeaseDuration, savedMinLeaseDuration
 	}()
-	csql.MinLeaseDuration = l1.Expiration().Sub(timeutil.Now())
-	csql.LeaseDuration = 2 * csql.MinLeaseDuration
+	sql.MinLeaseDuration = l1.Expiration().Sub(timeutil.Now())
+	sql.LeaseDuration = 2 * sql.MinLeaseDuration
 
 	// Another lease acquisition from the same node will result in a new lease.
 	l3 := t.mustAcquire(1, descID, 0)
@@ -408,10 +408,10 @@ func TestLeaseManagerPublishVersionChanged(testingT *testing.T) {
 func TestLeaseManagerDrain(testingT *testing.T) {
 	defer leaktest.AfterTest(testingT)()
 	params, _ := createTestServerParams()
-	leaseRemovalTracker := csql.NewLeaseRemovalTracker()
+	leaseRemovalTracker := sql.NewLeaseRemovalTracker()
 	params.Knobs = base.TestingKnobs{
-		SQLLeaseManager: &csql.LeaseManagerTestingKnobs{
-			LeaseStoreTestingKnobs: csql.LeaseStoreTestingKnobs{
+		SQLLeaseManager: &sql.LeaseManagerTestingKnobs{
+			LeaseStoreTestingKnobs: sql.LeaseStoreTestingKnobs{
 				LeaseReleasedEvent: leaseRemovalTracker.LeaseRemovedNotification,
 			},
 		},
@@ -471,8 +471,8 @@ func TestCantLeaseDeletedTable(testingT *testing.T) {
 
 	params, _ := createTestServerParams()
 	params.Knobs = base.TestingKnobs{
-		SQLSchemaChanger: &csql.SchemaChangerTestingKnobs{
-			SyncFilter: func(tscc csql.TestingSchemaChangerCollection) {
+		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
+			SyncFilter: func(tscc sql.TestingSchemaChangerCollection) {
 				mu.Lock()
 				defer mu.Unlock()
 				if clearSchemaChangers {
@@ -533,11 +533,11 @@ func isDeleted(tableID sqlbase.ID, cfg config.SystemConfig) bool {
 
 func acquire(
 	s *server.TestServer, descID sqlbase.ID, version sqlbase.DescriptorVersion,
-) (*csql.LeaseState, error) {
-	var lease *csql.LeaseState
+) (*sql.LeaseState, error) {
+	var lease *sql.LeaseState
 	err := s.DB().Txn(context.TODO(), func(txn *client.Txn) error {
 		var err error
-		lease, err = s.LeaseManager().(*csql.LeaseManager).Acquire(txn, descID, version)
+		lease, err = s.LeaseManager().(*sql.LeaseManager).Acquire(txn, descID, version)
 		return err
 	})
 	return lease, err
@@ -557,7 +557,7 @@ func TestLeasesOnDeletedTableAreReleasedImmediately(t *testing.T) {
 
 	params, _ := createTestServerParams()
 	params.Knobs = base.TestingKnobs{
-		SQLLeaseManager: &csql.LeaseManagerTestingKnobs{
+		SQLLeaseManager: &sql.LeaseManagerTestingKnobs{
 			TestingLeasesRefreshedEvent: func(cfg config.SystemConfig) {
 				mu.Lock()
 				defer mu.Unlock()
@@ -569,8 +569,8 @@ func TestLeasesOnDeletedTableAreReleasedImmediately(t *testing.T) {
 				}
 			},
 		},
-		SQLSchemaChanger: &csql.SchemaChangerTestingKnobs{
-			SyncFilter: func(tscc csql.TestingSchemaChangerCollection) {
+		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
+			SyncFilter: func(tscc sql.TestingSchemaChangerCollection) {
 				mu.Lock()
 				defer mu.Unlock()
 				if clearSchemaChangers {
@@ -583,11 +583,11 @@ func TestLeasesOnDeletedTableAreReleasedImmediately(t *testing.T) {
 	s, db, kvDB := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop()
 
-	sql := `
+	stmt := `
 CREATE DATABASE test;
 CREATE TABLE test.t(a INT PRIMARY KEY);
 `
-	_, err := db.Exec(sql)
+	_, err := db.Exec(stmt)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -627,13 +627,13 @@ CREATE TABLE test.t(a INT PRIMARY KEY);
 	}
 
 	// Release everything.
-	if err := s.LeaseManager().(*csql.LeaseManager).Release(lease1); err != nil {
+	if err := s.LeaseManager().(*sql.LeaseManager).Release(lease1); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.LeaseManager().(*csql.LeaseManager).Release(lease2); err != nil {
+	if err := s.LeaseManager().(*sql.LeaseManager).Release(lease2); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.LeaseManager().(*csql.LeaseManager).Release(lease3); err != nil {
+	if err := s.LeaseManager().(*sql.LeaseManager).Release(lease3); err != nil {
 		t.Fatal(err)
 	}
 	// Now we shouldn't be able to acquire any more.
@@ -649,15 +649,15 @@ func TestTxnObeysLeaseExpiration(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	params, _ := createTestServerParams()
 	params.Knobs = base.TestingKnobs{
-		SQLLeaseManager: &csql.LeaseManagerTestingKnobs{
-			LeaseStoreTestingKnobs: csql.LeaseStoreTestingKnobs{
+		SQLLeaseManager: &sql.LeaseManagerTestingKnobs{
+			LeaseStoreTestingKnobs: sql.LeaseStoreTestingKnobs{
 				CanUseExpiredLeases: true,
 			},
 		},
 	}
 	s, sqlDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop()
-	leaseManager := s.LeaseManager().(*csql.LeaseManager)
+	leaseManager := s.LeaseManager().(*sql.LeaseManager)
 
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
@@ -700,15 +700,15 @@ func TestSubqueryLeases(t *testing.T) {
 	fooReleaseCount := int32(0)
 
 	params.Knobs = base.TestingKnobs{
-		SQLLeaseManager: &csql.LeaseManagerTestingKnobs{
-			LeaseStoreTestingKnobs: csql.LeaseStoreTestingKnobs{
+		SQLLeaseManager: &sql.LeaseManagerTestingKnobs{
+			LeaseStoreTestingKnobs: sql.LeaseStoreTestingKnobs{
 				RemoveOnceDereferenced: true,
-				LeaseAcquiredEvent: func(lease *csql.LeaseState, _ error) {
+				LeaseAcquiredEvent: func(lease *sql.LeaseState, _ error) {
 					if lease.Name == "foo" {
 						atomic.AddInt32(&fooAcquiredCount, 1)
 					}
 				},
-				LeaseReleasedEvent: func(lease *csql.LeaseState, _ error) {
+				LeaseReleasedEvent: func(lease *sql.LeaseState, _ error) {
 					if lease.Name == "foo" {
 						// Note: we don't use close(fooRelease) here because the
 						// lease on "foo" may be re-acquired (and re-released)
