@@ -17,10 +17,12 @@
 package rpc
 
 import (
+	"math"
 	"time"
 
 	"golang.org/x/net/context"
 
+	"github.com/VividCortex/ewma"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -30,40 +32,60 @@ import (
 )
 
 // RemoteClockMetrics is the collection of metrics for the clock monitor.
+//
+// TODO(a-robinson): Better expose per-node latency for debugging purposes
+// in addition to this aggregated metric.
 type RemoteClockMetrics struct {
 	ClockOffsetMeanNanos   *metric.Gauge
 	ClockOffsetStdDevNanos *metric.Gauge
+	LatencyHistogramNanos  *metric.Histogram
 }
+
+// avgLatencyMeasurementAge determines how to exponentially weight the
+// moving average of latency measurements. This means that the weight
+// will center around the 20th oldest measurement, such that for measurements
+// that are made every 3 seconds, the average measurement will be about one
+// minute old.
+const avgLatencyMeasurementAge = 20.0
 
 var (
 	metaClockOffsetMeanNanos   = metric.Metadata{Name: "clock-offset.meannanos"}
 	metaClockOffsetStdDevNanos = metric.Metadata{Name: "clock-offset.stddevnanos"}
+	metaLatencyHistogramNanos  = metric.Metadata{Name: "round-trip-latency"}
 )
 
 // RemoteClockMonitor keeps track of the most recent measurements of remote
-// offsets from this node to connected nodes.
+// offsets and round-trip latency from this node to connected nodes.
 type RemoteClockMonitor struct {
 	clock     *hlc.Clock
 	offsetTTL time.Duration
 
 	mu struct {
 		syncutil.Mutex
-		offsets map[string]RemoteOffset
+		offsets        map[string]RemoteOffset
+		latenciesNanos map[string]ewma.MovingAverage
 	}
 
 	metrics RemoteClockMetrics
 }
 
 // newRemoteClockMonitor returns a monitor with the given server clock.
-func newRemoteClockMonitor(clock *hlc.Clock, offsetTTL time.Duration) *RemoteClockMonitor {
+func newRemoteClockMonitor(
+	clock *hlc.Clock, offsetTTL time.Duration, histogramWindowInterval time.Duration,
+) *RemoteClockMonitor {
 	r := RemoteClockMonitor{
 		clock:     clock,
 		offsetTTL: offsetTTL,
 	}
 	r.mu.offsets = make(map[string]RemoteOffset)
+	r.mu.latenciesNanos = make(map[string]ewma.MovingAverage)
+	if histogramWindowInterval == 0 {
+		histogramWindowInterval = time.Duration(math.MaxInt64)
+	}
 	r.metrics = RemoteClockMetrics{
 		ClockOffsetMeanNanos:   metric.NewGauge(metaClockOffsetMeanNanos),
 		ClockOffsetStdDevNanos: metric.NewGauge(metaClockOffsetStdDevNanos),
+		LatencyHistogramNanos:  metric.NewLatency(metaLatencyHistogramNanos, histogramWindowInterval),
 	}
 	return &r
 }
@@ -74,14 +96,19 @@ func (r *RemoteClockMonitor) Metrics() *RemoteClockMetrics {
 	return &r.metrics
 }
 
-// UpdateOffset is a thread-safe way to update the remote clock measurements.
+// UpdateOffset is a thread-safe way to update the remote clock and latency
+// measurements.
 //
 // It only updates the offset for addr if one of the following cases holds:
 // 1. There is no prior offset for that address.
 // 2. The old offset for addr was measured long enough ago to be considered
 // stale.
 // 3. The new offset's error is smaller than the old offset's error.
-func (r *RemoteClockMonitor) UpdateOffset(ctx context.Context, addr string, offset RemoteOffset) {
+//
+// Pass a roundTripLatency of 0 or less to avoid recording the latency.
+func (r *RemoteClockMonitor) UpdateOffset(
+	ctx context.Context, addr string, offset RemoteOffset, roundTripLatency time.Duration,
+) {
 	emptyOffset := offset == RemoteOffset{}
 
 	r.mu.Lock()
@@ -107,6 +134,16 @@ func (r *RemoteClockMonitor) UpdateOffset(ctx context.Context, addr string, offs
 		if !emptyOffset {
 			r.mu.offsets[addr] = offset
 		}
+	}
+
+	if roundTripLatency > 0 {
+		latencyAvg, ok := r.mu.latenciesNanos[addr]
+		if !ok {
+			latencyAvg = ewma.NewMovingAverage(avgLatencyMeasurementAge)
+			r.mu.latenciesNanos[addr] = latencyAvg
+		}
+		latencyAvg.Add(float64(roundTripLatency.Nanoseconds()))
+		r.metrics.LatencyHistogramNanos.RecordValue(roundTripLatency.Nanoseconds())
 	}
 
 	if log.V(2) {
@@ -149,12 +186,11 @@ func (r *RemoteClockMonitor) VerifyClockOffset(ctx context.Context) error {
 		if err != nil && err != stats.EmptyInput {
 			return err
 		}
-		r.metrics.ClockOffsetMeanNanos.Update(int64(mean))
-
 		stdDev, err := offsets.StandardDeviation()
 		if err != nil && err != stats.EmptyInput {
 			return err
 		}
+		r.metrics.ClockOffsetMeanNanos.Update(int64(mean))
 		r.metrics.ClockOffsetStdDevNanos.Update(int64(stdDev))
 
 		if numClocks > 0 && healthyOffsetCount <= numClocks/2 {

@@ -111,6 +111,12 @@ type Config struct {
 
 	// httpClient uses the client TLS config. It is initialized lazily.
 	httpClient lazyHTTPClient
+
+	// HistogramWindowInterval is used to determine the approximate length of time
+	// that individual samples are retained in in-memory histograms. Currently,
+	// it is set to the arbitrary length of six times the Metrics sample interval.
+	// See the comment in server.Config for more details.
+	HistogramWindowInterval time.Duration
 }
 
 // InitDefaults sets up the default values for a config.
