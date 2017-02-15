@@ -311,6 +311,41 @@ func (r EncDatumRow) Compare(a *DatumAlloc, ordering ColumnOrdering, rhs EncDatu
 	return 0, nil
 }
 
+// CompareEncDatumRow EncDatumRow compares two EncDatumRows as with Compare, but
+// allows for the EncDatumRow to be nil.
+func CompareEncDatumRow(
+	lhs, rhs EncDatumRow,
+	leftOrdering, rightOrdering ColumnOrdering,
+	da *DatumAlloc,
+) (int, error) {
+	if lhs == nil && rhs == nil {
+		panic("comparing two nil rows")
+	}
+
+	if lhs == nil {
+		return 1, nil
+	}
+	if rhs == nil {
+		return -1, nil
+	}
+
+	for i, ord := range leftOrdering {
+		lIdx := ord.ColIdx
+		rIdx := rightOrdering[i].ColIdx
+		cmp, err := lhs[lIdx].Compare(da, &rhs[rIdx])
+		if err != nil {
+			return 0, err
+		}
+		if cmp != 0 {
+			if leftOrdering[i].Direction == encoding.Descending {
+				cmp = -cmp
+			}
+			return cmp, nil
+		}
+	}
+	return 0, nil
+}
+
 // EncDatumRows is a slice of EncDatumRows.
 type EncDatumRows []EncDatumRow
 

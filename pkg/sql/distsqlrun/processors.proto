@@ -106,6 +106,7 @@ message ProcessorCoreUnion {
   optional HashJoinerSpec hashJoiner = 9;
   optional ValuesCoreSpec values = 10;
   optional BackfillerSpec backfiller = 11;
+  optional SetSpec set = 12;
 }
 
 // NoopCoreSpec indicates a "no-op" processor core. This is used when we just
@@ -362,4 +363,21 @@ message FlowSpec {
                               (gogoproto.customtype) = "FlowID"];
 
   repeated ProcessorSpec processors = 2 [(gogoproto.nullable) = false];
+}
+
+message SetSpec {
+  enum Type {
+    Union = 0;
+	  UnionAll = 1;
+	  Intersect = 2;
+	  IntersectAll = 3;
+	  Except = 4;
+	  ExceptAll = 5;
+  }
+
+  // If the two streams are both ordered by a shared column ordering, that
+  // ordering will be preserved in the output.
+  optional Ordering ordering = 1 [(gogoproto.nullable) = false];
+
+  optional Type type = 2 [(gogoproto.nullable) = false];
 }
