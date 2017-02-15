@@ -248,7 +248,7 @@ std::string EncodePrefixNextKey(DBSlice k) {
   return s;
 }
 
-bool SplitKey(rocksdb::Slice buf, rocksdb::Slice *key, rocksdb::Slice *timestamp) {
+bool SplitKey(rocksdb::Slice buf, rocksdb::Slice *key, rocksdb::Slice *timestamp) __attribute__((warn_unused_result)) {
   if (buf.empty()) {
     return false;
   }
@@ -261,7 +261,7 @@ bool SplitKey(rocksdb::Slice buf, rocksdb::Slice *key, rocksdb::Slice *timestamp
   return true;
 }
 
-bool DecodeTimestamp(rocksdb::Slice *timestamp, int64_t *wall_time, int32_t *logical) {
+bool DecodeTimestamp(rocksdb::Slice *timestamp, int64_t *wall_time, int32_t *logical) __attribute__((warn_unused_result)) {
   uint64_t w;
   if (!DecodeUint64(timestamp, &w)) {
     return false;
@@ -279,7 +279,7 @@ bool DecodeTimestamp(rocksdb::Slice *timestamp, int64_t *wall_time, int32_t *log
   return true;
 }
 
-bool DecodeHLCTimestamp(rocksdb::Slice buf, cockroach::util::hlc::Timestamp* timestamp) {
+bool DecodeHLCTimestamp(rocksdb::Slice buf, cockroach::util::hlc::Timestamp* timestamp) __attribute__((warn_unused_result)) {
   int64_t wall_time;
   int32_t logical;
   if (!DecodeTimestamp(&buf, &wall_time, &logical)) {
@@ -290,7 +290,7 @@ bool DecodeHLCTimestamp(rocksdb::Slice buf, cockroach::util::hlc::Timestamp* tim
   return true;
 }
 
-bool DecodeKey(rocksdb::Slice buf, rocksdb::Slice *key, int64_t *wall_time, int32_t *logical) {
+bool DecodeKey(rocksdb::Slice buf, rocksdb::Slice *key, int64_t *wall_time, int32_t *logical) __attribute__((warn_unused_result)) {
   key->clear();
 
   rocksdb::Slice timestamp;
@@ -412,7 +412,7 @@ void SetTag(std::string *val, cockroach::roachpb::ValueType tag) {
   (*val)[kTagPos] = tag;
 }
 
-bool ParseProtoFromValue(const std::string &val, google::protobuf::MessageLite *msg) {
+bool ParseProtoFromValue(const std::string &val, google::protobuf::MessageLite *msg) __attribute__((warn_unused_result)) {
   if (val.size() < kHeaderSize) {
     return false;
   }
@@ -556,7 +556,7 @@ void SerializeTimeSeriesToValue(
 // different start timestamps or sample durations. Returns true if the merge is
 // successful.
 bool MergeTimeSeriesValues(
-    std::string *left, const std::string &right, bool full_merge, rocksdb::Logger* logger) {
+    std::string *left, const std::string &right, bool full_merge, rocksdb::Logger* logger) __attribute__((warn_unused_result)) {
   // Attempt to parse TimeSeriesData from both Values.
   cockroach::roachpb::InternalTimeSeriesData left_ts;
   cockroach::roachpb::InternalTimeSeriesData right_ts;
@@ -656,7 +656,7 @@ bool MergeTimeSeriesValues(
 // This method is the single-value equivalent of MergeTimeSeriesValues, and is
 // used in the case where the first value is merged into the key. Returns true
 // if the merge is successful.
-bool ConsolidateTimeSeriesValue(std::string *val, rocksdb::Logger* logger) {
+bool ConsolidateTimeSeriesValue(std::string *val, rocksdb::Logger* logger) __attribute__((warn_unused_result)) {
   // Attempt to parse TimeSeriesData from both Values.
   cockroach::roachpb::InternalTimeSeriesData val_ts;
   if (!ParseProtoFromValue(*val, &val_ts)) {
@@ -699,7 +699,7 @@ bool ConsolidateTimeSeriesValue(std::string *val, rocksdb::Logger* logger) {
 
 bool MergeValues(cockroach::storage::engine::enginepb::MVCCMetadata *left,
                  const cockroach::storage::engine::enginepb::MVCCMetadata &right,
-                 bool full_merge, rocksdb::Logger* logger) {
+                 bool full_merge, rocksdb::Logger* logger) __attribute__((warn_unused_result)) {
   if (left->has_raw_bytes()) {
     if (!right.has_raw_bytes()) {
       rocksdb::Warn(logger, "inconsistent value types for merge (left = bytes, right = ?)");
@@ -762,7 +762,7 @@ class DBMergeOperator : public rocksdb::MergeOperator {
       const rocksdb::Slice* existing_value,
       const std::deque<std::string>& operand_list,
       std::string* new_value,
-      rocksdb::Logger* logger) const {
+      rocksdb::Logger* logger) const __attribute__((warn_unused_result)) {
     // TODO(pmattis): Taken from the old merger code, below are some
     // details about how errors returned by the merge operator are
     // handled. Need to test various error scenarios and decide on
@@ -805,7 +805,7 @@ class DBMergeOperator : public rocksdb::MergeOperator {
       const rocksdb::Slice& key,
       const std::deque<rocksdb::Slice>& operand_list,
       std::string* new_value,
-      rocksdb::Logger* logger) const {
+      rocksdb::Logger* logger) const __attribute__((warn_unused_result)) {
     cockroach::storage::engine::enginepb::MVCCMetadata meta;
 
     for (int i = 0; i < operand_list.size(); i++) {
@@ -825,7 +825,7 @@ class DBMergeOperator : public rocksdb::MergeOperator {
   bool MergeOne(cockroach::storage::engine::enginepb::MVCCMetadata* meta,
                 const rocksdb::Slice& operand,
                 bool full_merge,
-                rocksdb::Logger* logger) const {
+                rocksdb::Logger* logger) const __attribute__((warn_unused_result)) {
     cockroach::storage::engine::enginepb::MVCCMetadata operand_meta;
     if (!operand_meta.ParseFromArray(operand.data(), operand.size())) {
       rocksdb::Warn(logger, "corrupted operand value");
@@ -1173,7 +1173,7 @@ class BaseDeltaIterator : public rocksdb::Iterator {
   // entries for a particular key are stored consecutively in the
   // write batch with the "earlier" entries appearing first. Returns
   // true if the current entry is deleted and false otherwise.
-  bool ProcessDelta() {
+  bool ProcessDelta() __attribute__((warn_unused_result)) {
     IteratorGetter base(equal_keys_ ? base_iterator_.get() : NULL);
     // The contents of WBWIIterator.Entry() are only valid until the
     // next mutation to the write batch. So keep a copy of the key
