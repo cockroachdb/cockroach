@@ -3570,6 +3570,7 @@ func (r *Replica) processRaftCommand(
 	}
 
 	var response proposalResult
+	var returnPErr *roachpb.Error
 	var writeBatch *storagebase.WriteBatch
 	{
 		if raftCmd.ReplicatedEvalResult == nil && forcedErr == nil {
@@ -3597,6 +3598,15 @@ func (r *Replica) processRaftCommand(
 			// go this route, writing an empty entry and returning this error
 			// to the client.
 			forcedErr = pErr
+		}
+
+		if filter := r.store.cfg.TestingKnobs.TestingApplyFilter; forcedErr == nil && filter != nil && raftCmd.ReplicatedEvalResult != nil {
+			forcedErr = filter(storagebase.ApplyFilterArgs{
+				CmdID:                idKey,
+				ReplicatedEvalResult: *raftCmd.ReplicatedEvalResult,
+				StoreID:              r.store.StoreID(),
+				RangeID:              r.RangeID,
+			})
 		}
 
 		if forcedErr != nil {
@@ -3652,6 +3662,9 @@ func (r *Replica) processRaftCommand(
 			}
 			response.Intents = proposal.Local.detachIntents()
 			lResult = proposal.Local
+			returnPErr = response.Err
+		} else {
+			returnPErr = pErr
 		}
 
 		// Handle the EvalResult, executing any side effects of the last
@@ -3670,7 +3683,7 @@ func (r *Replica) processRaftCommand(
 		log.VEventf(ctx, 1, "error executing raft command %s: %s", raftCmd.BatchRequest, response.Err)
 	}
 
-	return response.Err
+	return returnPErr
 }
 
 func (r *Replica) maybeAcquireSplitMergeLock(
