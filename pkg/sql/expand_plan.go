@@ -24,7 +24,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 )
 
 // expandPlan finalizes type checking of placeholders and expands
@@ -133,47 +132,17 @@ func doExpandPlan(
 		n.right.plan, err = doExpandPlan(ctx, p, noParams, n.right.plan)
 
 	case *ordinalityNode:
-		// If there's a desired ordering on the ordinality column, drop it.
-		if len(params.desiredOrdering) > 0 {
-			newDesired := make(sqlbase.ColumnOrdering, 0, len(params.desiredOrdering))
-			for _, ordInfo := range params.desiredOrdering {
-				if ordInfo.ColIdx == len(n.columns)-1 {
-					break
-				}
-				newDesired = append(newDesired, ordInfo)
-			}
-			params.desiredOrdering = newDesired
-		}
+		// There may be too many columns in the required ordering. Filter them.
+		params.desiredOrdering = n.restrictOrdering(params.desiredOrdering)
+
 		n.source, err = doExpandPlan(ctx, p, params, n.source)
 		if err != nil {
 			return plan, err
 		}
 
-		// We are going to "optimize" the ordering. We had an ordering
-		// initially from the source, but expand() may have caused it to
-		// change. So here retrieve the ordering of the source again.
-		origOrdering := n.source.Ordering()
-
-		if len(origOrdering.ordering) > 0 {
-			// TODO(knz/radu): we basically have two simultaneous orderings.
-			// What we really want is something that orderingInfo cannot
-			// currently express: that the rows are ordered by a set of
-			// columns AND at the same time they are also ordered by a
-			// different set of columns. However since ordinalityNode is
-			// currently the only case where this happens we consider it's not
-			// worth the hassle and just use the source ordering.
-			n.ordering = origOrdering
-		} else {
-			// No ordering defined in the source, so create a new one.
-			n.ordering.exactMatchCols = origOrdering.exactMatchCols
-			n.ordering.ordering = sqlbase.ColumnOrdering{
-				sqlbase.ColumnOrderInfo{
-					ColIdx:    len(n.columns) - 1,
-					Direction: encoding.Ascending,
-				},
-			}
-			n.ordering.unique = true
-		}
+		// The source ordering may have been updated. Update the
+		// ordinality ordering accordingly.
+		n.optimizeOrdering()
 
 	case *limitNode:
 		// Estimate the limit parameters. We can't full eval them just yet,
