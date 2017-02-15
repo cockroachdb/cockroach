@@ -35,19 +35,7 @@ func TestHashRouter(t *testing.T) {
 
 	// Generate tables of possible values for each column; we have fewer possible
 	// values than rows to guarantee many occurrences of each value.
-	// TODO(radu): we don't support collated strings yet, as equal strings can
-	// have different key encodings. When we support them, we should revert to
-	// using RandEncDatumSlices.
-	vals := make([][]sqlbase.EncDatum, numCols)
-	for i := range vals {
-		for {
-			vals[i] = sqlbase.RandEncDatumSlice(rng, numRows/10)
-			// If we generated collated string, try again.
-			if vals[i][0].Type.Kind != sqlbase.ColumnType_COLLATEDSTRING {
-				break
-			}
-		}
-	}
+	vals := sqlbase.RandEncDatumSlices(rng, numCols, numRows/10)
 
 	testCases := []struct {
 		hashColumns []uint32
