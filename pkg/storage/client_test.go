@@ -1002,6 +1002,13 @@ func (m *multiTestContext) changeReplicasLocked(
 
 // replicateRange replicates the given range onto the given stores.
 func (m *multiTestContext) replicateRange(rangeID roachpb.RangeID, dests ...int) {
+	if err := m.replicateRangeNonFatal(rangeID, dests...); err != nil {
+		m.t.Fatal(err)
+	}
+}
+
+// replicateRangeNonFatal replicates the given range onto the given stores.
+func (m *multiTestContext) replicateRangeNonFatal(rangeID roachpb.RangeID, dests ...int) error {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
@@ -1012,12 +1019,12 @@ func (m *multiTestContext) replicateRange(rangeID roachpb.RangeID, dests ...int)
 		var err error
 		expectedReplicaIDs[i], err = m.changeReplicasLocked(rangeID, dest, roachpb.ADD_REPLICA)
 		if err != nil {
-			m.t.Fatal(err)
+			return err
 		}
 	}
 
 	// Wait for the replication to complete on all destination nodes.
-	testutils.SucceedsSoon(m.t, func() error {
+	return util.RetryForDuration(testutils.DefaultSucceedsSoonDuration, func() error {
 		for i, dest := range dests {
 			repl, err := m.stores[dest].GetReplica(rangeID)
 			if err != nil {
