@@ -35,7 +35,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cli"
 	"github.com/cockroachdb/cockroach/pkg/cmd/internal/localcluster"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -48,10 +47,55 @@ var workers = flag.Int("w", 1, "number of workers; the i'th worker talks to node
 var numNodes = flag.Int("n", 4, "number of nodes")
 var duration = flag.Duration("duration", math.MaxInt64, "how long to run the simulation for")
 var blockSize = flag.Int("b", 1000, "block size")
-var numLocalities = flag.Int("l", 0, "number of localities")
+var configFile = flag.String("f", "", "config file that specifies an allocsim workload (overrides -n)")
 
-func newRand() *rand.Rand {
-	return rand.New(rand.NewSource(timeutil.Now().UnixNano()))
+// Configuration provides a way to configura allocsim via a JSON file.
+// TODO(a-robinson): Consider moving all the above options into the config file.
+// TODO(a-robinson): Allow for specifying different distributions of requests
+// from different localities.
+type Configuration struct {
+	Localities []Locality `json:"Localities"`
+}
+
+// Locality defines the properties of a single locality as part of a Configuration.
+type Locality struct {
+	Name              string `json:"Name"`
+	NumNodes          int    `json:"NumNodes"`
+	OutgoingLatencies []*struct {
+		Name string `json:"Name"`
+		// Needs to be parsable as a time.Duration
+		Latency    string        `json:"Latency"`
+		LatencyDur time.Duration // for use within this package, not directly parsable
+	} `json:"OutgoingLatencies"`
+}
+
+func loadConfig(file string) (Configuration, error) {
+	fileHandle, err := os.Open(file)
+	if err != nil {
+		return Configuration{}, errors.Wrapf(err, "failed to open config file %q", file)
+	}
+	defer fileHandle.Close()
+
+	var config Configuration
+	jsonParser := json.NewDecoder(fileHandle)
+	if err := jsonParser.Decode(&config); err != nil {
+		return Configuration{}, errors.Wrapf(err, "failed to decode %q as json", file)
+	}
+
+	*numNodes = 0
+	for _, locality := range config.Localities {
+		*numNodes += locality.NumNodes
+		for _, outgoing := range locality.OutgoingLatencies {
+			if outgoing.Latency != "" {
+				var err error
+				outgoing.LatencyDur, err = time.ParseDuration(outgoing.Latency)
+				if err != nil {
+					return Configuration{}, err
+				}
+			}
+		}
+	}
+	return config, nil
 }
 
 // allocSim allows investigation of allocation/rebalancing heuristics. A
@@ -72,7 +116,7 @@ type allocSim struct {
 		replicas []int
 		leases   []int
 	}
-	localities []roachpb.Locality
+	localities []Locality
 }
 
 func newAllocSim(c *localcluster.Cluster) *allocSim {
@@ -132,6 +176,10 @@ func (a *allocSim) worker(i, workers int) {
 	}
 }
 
+func newRand() *rand.Rand {
+	return rand.New(rand.NewSource(timeutil.Now().UnixNano()))
+}
+
 func (a *allocSim) rangeInfo() (total int, replicas []int, leases []int) {
 	replicas = make([]int, len(a.Nodes))
 	leases = make([]int, len(a.Nodes))
@@ -188,13 +236,13 @@ func (a *allocSim) rangeStats(d time.Duration) {
 
 const padding = "__________"
 
-func formatHeader(header string, numberNodes int, localities []roachpb.Locality) string {
+func formatHeader(header string, numberNodes int, localities []Locality) string {
 	var buf bytes.Buffer
 	_, _ = buf.WriteString(header)
 	for i := 1; i <= numberNodes; i++ {
 		node := fmt.Sprintf("%d", i)
 		if localities != nil {
-			node += fmt.Sprintf(":%s", localities[i-1])
+			node += fmt.Sprintf(":%s", localities[i-1].Name)
 		}
 		fmt.Fprintf(&buf, "%s%s", padding[:len(padding)-len(node)], node)
 	}
@@ -332,6 +380,15 @@ func main() {
 
 	flag.Parse()
 
+	var config Configuration
+	if *configFile != "" {
+		var err error
+		config, err = loadConfig(*configFile)
+		if err != nil {
+			log.Fatal(context.Background(), err)
+		}
+	}
+
 	c := localcluster.New(*numNodes)
 	defer c.Close()
 
@@ -345,38 +402,32 @@ func main() {
 	a := newAllocSim(c)
 
 	var perNodeArgs map[int][]string
-	if *numLocalities > 0 {
+	if len(config.Localities) != 0 {
 		perNodeArgs = make(map[int][]string)
-		a.localities = make([]roachpb.Locality, len(c.Nodes), len(c.Nodes))
-		for i := range c.Nodes {
-			locality := roachpb.Locality{
-				Tiers: []roachpb.Tier{
-					{
-						Key:   "l",
-						Value: fmt.Sprintf("%d", i%*numLocalities),
-					},
-				},
+		a.localities = make([]Locality, len(c.Nodes), len(c.Nodes))
+		nodesPerLocality := make(map[string][]int)
+		var nodeIdx int
+		for _, locality := range config.Localities {
+			for i := 0; i < locality.NumNodes; i++ {
+				perNodeArgs[nodeIdx] = []string{fmt.Sprintf("--locality=l=%s", locality.Name)}
+				a.localities[nodeIdx] = locality
+				nodesPerLocality[locality.Name] = append(nodesPerLocality[locality.Name], nodeIdx)
+				nodeIdx++
 			}
-			perNodeArgs[i] = []string{fmt.Sprintf("--locality=%s", locality)}
-			a.localities[i] = locality
 		}
-
-		// TODO(a-robinson): Enable actual configuration of this and make it work for
-		// different numbers of nodes.
-		if len(c.Nodes) != 4 {
-			log.Fatal(context.Background(), "localities/latencies are currently only supported for 4 nodes")
+		for i, locality := range a.localities {
+			var latencies []string
+			for _, outgoing := range locality.OutgoingLatencies {
+				if outgoing.LatencyDur > 0 {
+					for _, nodeIdx := range nodesPerLocality[outgoing.Name] {
+						latencies = append(latencies, fmt.Sprintf("%s=%s", localcluster.RPCAddr(nodeIdx), outgoing.LatencyDur))
+					}
+				}
+			}
+			if len(latencies) != 0 {
+				perNodeArgs[i] = append(perNodeArgs[i], "--latencies="+strings.Join(latencies, ","))
+			}
 		}
-		if *numLocalities != 2 {
-			log.Fatal(context.Background(), "localities/latencies are currently only supported for 4 nodes and 2 localities")
-		}
-		perNodeArgs[0] = append(perNodeArgs[0],
-			fmt.Sprintf("--latencies=%s=%s,%s=%s,%s=%s", localcluster.RPCAddr(1), 50*time.Millisecond, localcluster.RPCAddr(2), 0*time.Millisecond, localcluster.RPCAddr(3), 50*time.Millisecond))
-		perNodeArgs[1] = append(perNodeArgs[1],
-			fmt.Sprintf("--latencies=%s=%s,%s=%s,%s=%s", localcluster.RPCAddr(0), 50*time.Millisecond, localcluster.RPCAddr(2), 50*time.Millisecond, localcluster.RPCAddr(3), 0*time.Millisecond))
-		perNodeArgs[2] = append(perNodeArgs[2],
-			fmt.Sprintf("--latencies=%s=%s,%s=%s,%s=%s", localcluster.RPCAddr(0), 0*time.Millisecond, localcluster.RPCAddr(1), 50*time.Millisecond, localcluster.RPCAddr(3), 50*time.Millisecond))
-		perNodeArgs[3] = append(perNodeArgs[3],
-			fmt.Sprintf("--latencies=%s=%s,%s=%s,%s=%s", localcluster.RPCAddr(0), 50*time.Millisecond, localcluster.RPCAddr(1), 0*time.Millisecond, localcluster.RPCAddr(2), 50*time.Millisecond))
 	}
 
 	go func() {
