@@ -57,6 +57,10 @@ SELECT * FROM kv
 1 2
 7 8
 
+# delete a non-existent value.
+statement ok
+DELETE FROM kv WHERE k=5
+
 query II
 DELETE FROM kv RETURNING k, v
 ----
