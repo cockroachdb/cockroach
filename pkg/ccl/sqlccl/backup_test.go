@@ -511,6 +511,77 @@ func TestBackupAsOfSystemTime(t *testing.T) {
 	}
 }
 
+func TestTimestampMismatch(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	const numAccounts = 1
+
+	_, dir, _, sqlDB, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts)
+	defer cleanupFn()
+	sqlDB.Exec(`CREATE TABLE bench.t2 (a INT PRIMARY KEY)`)
+	sqlDB.Exec(`INSERT INTO bench.t2 VALUES (1)`)
+
+	backupDirs := []string{
+		filepath.Join(dir, "0"), // Full backup.
+		filepath.Join(dir, "1"), // Incremental from 0.
+		filepath.Join(dir, "2"), // Incremental from 1.
+		filepath.Join(dir, "3"), // Incremental from 0, but only one table.
+	}
+	sqlDB.Exec(fmt.Sprintf(`BACKUP DATABASE bench TO '%s'`,
+		backupDirs[0]))
+	sqlDB.Exec(fmt.Sprintf(`BACKUP DATABASE bench TO '%s' INCREMENTAL FROM '%s'`,
+		backupDirs[1], backupDirs[0]))
+	sqlDB.Exec(fmt.Sprintf(`BACKUP TABLE bench.bank TO '%s' INCREMENTAL FROM '%s'`,
+		backupDirs[3], backupDirs[0]))
+	sqlDB.Exec(fmt.Sprintf(`BACKUP DATABASE bench TO '%s' INCREMENTAL FROM '%s', '%s'`,
+		backupDirs[2], backupDirs[0], backupDirs[1]))
+
+	t.Run("Backup", func(t *testing.T) {
+		// Missing the initial full backup.
+		_, err := sqlDB.DB.Exec(fmt.Sprintf(`BACKUP DATABASE bench TO '%s' INCREMENTAL FROM '%s'`,
+			dir, backupDirs[1]))
+		if !testutils.IsError(err, "no backup covers time") {
+			t.Errorf("expected 'no backup covers time' error got: %+v", err)
+		}
+
+		// Missing an intermediate incremental backup.
+		_, err = sqlDB.DB.Exec(fmt.Sprintf(`BACKUP DATABASE bench TO '%s' INCREMENTAL FROM '%s', '%s'`,
+			dir, backupDirs[0], backupDirs[2]))
+		if !testutils.IsError(err, "no backup covers time") {
+			t.Errorf("expected 'no backup covers time' error got: %+v", err)
+		}
+
+		// Missing data for one table in the most recent backup.
+		_, err = sqlDB.DB.Exec(fmt.Sprintf(`BACKUP DATABASE bench TO '%s' INCREMENTAL FROM '%s', '%s'`,
+			dir, backupDirs[0], backupDirs[3]))
+		if !testutils.IsError(err, "not all ranges have maximum end time") {
+			t.Errorf("expected 'not all ranges have maximum end time' error got: %+v", err)
+		}
+	})
+
+	t.Run("Restore", func(t *testing.T) {
+		// Missing the initial full backup.
+		_, err := sqlDB.DB.Exec(fmt.Sprintf(`RESTORE DATABASE bench FROM '%s'`,
+			backupDirs[1]))
+		if !testutils.IsError(err, "no backup covers time") {
+			t.Errorf("expected 'no backup covers time' error got: %+v", err)
+		}
+
+		// Missing an intermediate incremental backup.
+		_, err = sqlDB.DB.Exec(fmt.Sprintf(`RESTORE DATABASE bench FROM '%s', '%s'`,
+			backupDirs[0], backupDirs[2]))
+		if !testutils.IsError(err, "no backup covers time") {
+			t.Errorf("expected 'no backup covers time' error got: %+v", err)
+		}
+
+		// Missing data for one table in the most recent backup.
+		_, err = sqlDB.DB.Exec(fmt.Sprintf(`RESTORE DATABASE bench FROM '%s', '%s'`,
+			backupDirs[0], backupDirs[3]))
+		if !testutils.IsError(err, "not all ranges have maximum end time") {
+			t.Errorf("expected 'not all ranges have maximum end time' error got: %+v", err)
+		}
+	})
+}
+
 func TestPresplitRanges(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
