@@ -127,7 +127,8 @@ func NewContext(
 	var cancel context.CancelFunc
 	ctx.masterCtx, cancel = context.WithCancel(ambient.AnnotateCtx(context.Background()))
 	ctx.Stopper = stopper
-	ctx.RemoteClocks = newRemoteClockMonitor(ctx.localClock, 10*defaultHeartbeatInterval)
+	ctx.RemoteClocks = newRemoteClockMonitor(
+		ctx.localClock, 10*defaultHeartbeatInterval, baseCtx.HistogramWindowInterval)
 	ctx.HeartbeatInterval = defaultHeartbeatInterval
 	ctx.HeartbeatTimeout = 2 * defaultHeartbeatInterval
 	ctx.conns.cache = make(map[string]*connMeta)
@@ -303,7 +304,8 @@ func (ctx *Context) runHeartbeat(cc *grpc.ClientConn, remoteAddr string) error {
 
 			// Only update the clock offset measurement if we actually got a
 			// successful response from the server.
-			if pingDuration := receiveTime.Sub(sendTime); pingDuration > maximumPingDurationMult*ctx.localClock.MaxOffset() {
+			pingDuration := receiveTime.Sub(sendTime)
+			if pingDuration > maximumPingDurationMult*ctx.localClock.MaxOffset() {
 				request.Offset.Reset()
 			} else {
 				// Offset and error are measured using the remote clock reading
@@ -316,7 +318,7 @@ func (ctx *Context) runHeartbeat(cc *grpc.ClientConn, remoteAddr string) error {
 				remoteTimeNow := time.Unix(0, response.ServerTime).Add(pingDuration / 2)
 				request.Offset.Offset = remoteTimeNow.Sub(receiveTime).Nanoseconds()
 			}
-			ctx.RemoteClocks.UpdateOffset(ctx.masterCtx, remoteAddr, request.Offset)
+			ctx.RemoteClocks.UpdateOffset(ctx.masterCtx, remoteAddr, request.Offset, pingDuration)
 
 			if cb := ctx.HeartbeatCB; cb != nil {
 				cb()
