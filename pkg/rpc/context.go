@@ -127,7 +127,8 @@ func NewContext(
 	var cancel context.CancelFunc
 	ctx.masterCtx, cancel = context.WithCancel(ambient.AnnotateCtx(context.Background()))
 	ctx.Stopper = stopper
-	ctx.RemoteClocks = newRemoteClockMonitor(ctx.localClock, 10*defaultHeartbeatInterval)
+	ctx.RemoteClocks = newRemoteClockMonitor(
+		ctx.localClock, 10*defaultHeartbeatInterval, baseCtx.HistogramWindowInterval)
 	ctx.HeartbeatInterval = defaultHeartbeatInterval
 	ctx.HeartbeatTimeout = 2 * defaultHeartbeatInterval
 	ctx.conns.cache = make(map[string]*connMeta)

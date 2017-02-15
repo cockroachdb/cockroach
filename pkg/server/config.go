@@ -496,6 +496,10 @@ func (cfg *Config) InitNode() error {
 	// Initialize attributes.
 	cfg.NodeAttributes = parseAttributes(cfg.Attrs)
 
+	// Expose HistogramWindowInterval to parts of the code that can't import the
+	// server package. This code should be cleaned up within a month or two.
+	cfg.Config.HistogramWindowInterval = cfg.HistogramWindowInterval()
+
 	// Get the gossip bootstrap resolvers.
 	resolvers, err := cfg.parseGossipBootstrapResolvers()
 	if err != nil {

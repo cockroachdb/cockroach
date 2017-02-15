@@ -17,6 +17,7 @@
 package rpc
 
 import (
+	"math"
 	"time"
 
 	"golang.org/x/net/context"
@@ -37,6 +38,7 @@ import (
 type RemoteClockMetrics struct {
 	ClockOffsetMeanNanos   *metric.Gauge
 	ClockOffsetStdDevNanos *metric.Gauge
+	LatencyHistogramNanos  *metric.Histogram
 }
 
 // avgLatencyMeasurementAge determines how to exponentially weight the
@@ -49,6 +51,7 @@ const avgLatencyMeasurementAge = 20.0
 var (
 	metaClockOffsetMeanNanos   = metric.Metadata{Name: "clock-offset.meannanos"}
 	metaClockOffsetStdDevNanos = metric.Metadata{Name: "clock-offset.stddevnanos"}
+	metaLatencyHistogramNanos  = metric.Metadata{Name: "round-trip-latency"}
 )
 
 // RemoteClockMonitor keeps track of the most recent measurements of remote
@@ -67,16 +70,22 @@ type RemoteClockMonitor struct {
 }
 
 // newRemoteClockMonitor returns a monitor with the given server clock.
-func newRemoteClockMonitor(clock *hlc.Clock, offsetTTL time.Duration) *RemoteClockMonitor {
+func newRemoteClockMonitor(
+	clock *hlc.Clock, offsetTTL time.Duration, histogramWindowInterval time.Duration,
+) *RemoteClockMonitor {
 	r := RemoteClockMonitor{
 		clock:     clock,
 		offsetTTL: offsetTTL,
 	}
 	r.mu.offsets = make(map[string]RemoteOffset)
 	r.mu.latenciesNanos = make(map[string]ewma.MovingAverage)
+	if histogramWindowInterval == 0 {
+		histogramWindowInterval = time.Duration(math.MaxInt64)
+	}
 	r.metrics = RemoteClockMetrics{
 		ClockOffsetMeanNanos:   metric.NewGauge(metaClockOffsetMeanNanos),
 		ClockOffsetStdDevNanos: metric.NewGauge(metaClockOffsetStdDevNanos),
+		LatencyHistogramNanos:  metric.NewLatency(metaLatencyHistogramNanos, histogramWindowInterval),
 	}
 	return &r
 }
@@ -134,6 +143,7 @@ func (r *RemoteClockMonitor) UpdateOffset(
 			r.mu.latenciesNanos[addr] = latencyAvg
 		}
 		latencyAvg.Add(float64(roundTripLatency.Nanoseconds()))
+		r.metrics.LatencyHistogramNanos.RecordValue(roundTripLatency.Nanoseconds())
 	}
 
 	if log.V(2) {

@@ -39,7 +39,7 @@ func TestUpdateOffset(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	clock := hlc.NewClock(hlc.NewManualClock(123).UnixNano, time.Nanosecond)
-	monitor := newRemoteClockMonitor(clock, time.Hour)
+	monitor := newRemoteClockMonitor(clock, time.Hour, 0)
 
 	const key = "addr"
 	const latency = 10 * time.Millisecond
@@ -104,7 +104,7 @@ func TestVerifyClockOffset(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	clock := hlc.NewClock(hlc.NewManualClock(123).UnixNano, 50*time.Nanosecond)
-	monitor := newRemoteClockMonitor(clock, time.Hour)
+	monitor := newRemoteClockMonitor(clock, time.Hour, 0)
 
 	for idx, tc := range []struct {
 		offsets       []RemoteOffset
@@ -169,7 +169,7 @@ func TestClockOffsetMetrics(t *testing.T) {
 	defer stopper.Stop()
 
 	clock := hlc.NewClock(hlc.NewManualClock(123).UnixNano, 20*time.Nanosecond)
-	monitor := newRemoteClockMonitor(clock, time.Hour)
+	monitor := newRemoteClockMonitor(clock, time.Hour, 0)
 	monitor.mu.offsets = map[string]RemoteOffset{
 		"0": {
 			Offset:      13,
@@ -195,7 +195,7 @@ func TestLatencies(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	clock := hlc.NewClock(hlc.NewManualClock(123).UnixNano, time.Nanosecond)
-	monitor := newRemoteClockMonitor(clock, time.Hour)
+	monitor := newRemoteClockMonitor(clock, time.Hour, 0)
 
 	// All test cases have to have at least 11 measurement values in order for
 	// the exponentially-weighted moving average to work properly. See the
