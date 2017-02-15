@@ -586,7 +586,8 @@ CREATE UNIQUE INDEX vidx ON t.test (v);
 
 	// Split the table into multiple ranges.
 	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
-	// SplitTable moves the right range, so we split things back to front.
+	// SplitTable moves the right range, so we split things back to front
+	// in order to move less data.
 	for i := numNodes - 1; i > 0; i-- {
 		sql.SplitTable(t, tc, tableDesc, i, maxValue/numNodes*i)
 	}
