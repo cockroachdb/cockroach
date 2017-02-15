@@ -219,9 +219,6 @@ type TestingKnobs struct {
 	// executing the chunk. It is always called even when the backfill
 	// function returns an error, or if the table has already been dropped.
 	RunAfterBackfillChunk func()
-
-	// BackfillChunkSize is to be used for all backfill chunked operations.
-	BackfillChunkSize int64
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.

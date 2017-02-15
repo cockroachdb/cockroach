@@ -542,6 +542,7 @@ func TestRaceWithBackfill(t *testing.T) {
 				return nil
 			},
 			AsyncExecNotification: asyncSchemaChangerDisabled,
+			BackfillChunkSize:     chunkSize,
 		},
 		DistSQL: &distsqlrun.TestingKnobs{
 			RunBeforeBackfillChunk: func(sp roachpb.Span) error {
@@ -558,7 +559,6 @@ func TestRaceWithBackfill(t *testing.T) {
 				}
 				return nil
 			},
-			BackfillChunkSize: chunkSize,
 		},
 	}
 
@@ -803,7 +803,6 @@ func TestAbortSchemaChangeBackfill(t *testing.T) {
 				// to commit and will abort.
 				<-commandsDone
 			},
-			BackfillChunkSize: maxValue,
 		},
 	}
 	server, sqlDB, kvDB := serverutils.StartServer(t, params)
@@ -1278,7 +1277,6 @@ func TestSchemaChangePurgeFailure(t *testing.T) {
 				}
 				return nil
 			},
-			BackfillChunkSize: chunkSize,
 		},
 	}
 	server, sqlDB, kvDB := serverutils.StartServer(t, params)
