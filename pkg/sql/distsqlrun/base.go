@@ -163,7 +163,7 @@ type MultiplexedRowChannel struct {
 	// numSenders is an atomic counter that keeps track of how many senders have
 	// yet to call Close().
 	numSenders int32
-	firstErr   error
+	firstErr   chan error
 }
 
 var _ RowReceiver = &MultiplexedRowChannel{}
@@ -173,7 +173,7 @@ var _ RowSource = &MultiplexedRowChannel{}
 func (mrc *MultiplexedRowChannel) Init(numSenders int, types []sqlbase.ColumnType) {
 	mrc.rowChan.Init(types)
 	atomic.StoreInt32(&mrc.numSenders, int32(numSenders))
-	mrc.firstErr = nil
+	mrc.firstErr = make(chan error, 1)
 }
 
 // PushRow is part of the RowReceiver interface.
@@ -184,14 +184,22 @@ func (mrc *MultiplexedRowChannel) PushRow(row sqlbase.EncDatumRow) bool {
 // Close is part of the RowReceiver interface.
 func (mrc *MultiplexedRowChannel) Close(err error) {
 	if err != nil {
-		mrc.firstErr = err
+		select {
+		case mrc.firstErr <- err:
+
+		default:
+		}
 	}
 	newVal := atomic.AddInt32(&mrc.numSenders, -1)
 	if newVal < 0 {
 		panic("too many Close() calls")
 	}
 	if newVal == 0 {
-		mrc.rowChan.Close(mrc.firstErr)
+		var err error
+		if len(mrc.firstErr) > 0 {
+			err = <-mrc.firstErr
+		}
+		mrc.rowChan.Close(err)
 	}
 }
 
