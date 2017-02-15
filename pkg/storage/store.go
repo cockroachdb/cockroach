@@ -706,8 +706,7 @@ type StoreTestingKnobs struct {
 	// not be applied. If it returns an error on some replicas but not
 	// others, the behavior is poorly defined unless that error is a
 	// ReplicaCorruptionError.
-	// TODO(bdarnell): Implement this when a test needs it.
-	//TestingApplyFilter storagebase.ReplicaApplyFilter
+	TestingApplyFilter storagebase.ReplicaApplyFilter
 
 	// TestingPostApplyFilter is called after a command is applied to
 	// rocksdb but before in-memory side effects have been processed.
