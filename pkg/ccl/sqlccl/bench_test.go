@@ -72,9 +72,10 @@ func BenchmarkClusterRestore(b *testing.B) {
 	b.SetBytes(backup.DataSize / int64(b.N))
 	b.ResetTimer()
 	sqlDB.Exec(fmt.Sprintf(`RESTORE DATABASE bench FROM '%s'`, dir))
+	b.StopTimer()
 }
 
-func BenchmarkImportRestore(b *testing.B) {
+func BenchmarkLoadRestore(b *testing.B) {
 	defer tracing.Disable()()
 	ctx, dir, _, sqlDB, cleanup := backupRestoreTestSetup(b, multiNode, 0)
 	defer cleanup()
@@ -87,9 +88,10 @@ func BenchmarkImportRestore(b *testing.B) {
 		b.Fatalf("%+v", err)
 	}
 	sqlDB.Exec(fmt.Sprintf(`RESTORE DATABASE bench FROM '%s'`, dir))
+	b.StopTimer()
 }
 
-func BenchmarkImportSQL(b *testing.B) {
+func BenchmarkLoadSQL(b *testing.B) {
 	_, _, _, sqlDB, cleanup := backupRestoreTestSetup(b, multiNode, 0)
 	defer cleanup()
 
@@ -110,4 +112,5 @@ func BenchmarkImportSQL(b *testing.B) {
 	for _, line := range lines {
 		sqlDB.Exec(line)
 	}
+	b.StopTimer()
 }
