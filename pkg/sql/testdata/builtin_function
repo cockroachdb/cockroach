@@ -1030,6 +1030,39 @@ SELECT GREATEST(1, 1.2)
 ----
 1.2
 
+query T
+SELECT COALESCE(NULL)
+----
+NULL
+
+query I
+SELECT COALESCE(NULL, GREATEST(NULL), NULL)
+----
+NULL
+
+query I
+SELECT COALESCE(2)
+----
+2
+
+query I
+SELECT COALESCE(2, 3)
+----
+2
+
+query T
+SELECT COALESCE('a', 'b')
+----
+a
+
+query I
+SELECT COALESCE(NULL, GREATEST(NULL), 2, GREATEST(3, 4), NULL)
+----
+2
+
+query error incompatible COALESCE expressions: expected 2 to be of type string, found type int
+SELECT COALESCE(2, '4')
+
 # Test float and int comparison.
 
 query BBBB
