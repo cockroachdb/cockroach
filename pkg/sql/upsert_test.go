@@ -52,7 +52,7 @@ func TestUpsertFastPath(t *testing.T) {
 
 	s, conn, _ := serverutils.StartServer(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{Store: &storage.StoreTestingKnobs{
-			TestingCommandFilter: filter,
+			TestingEvalFilter: filter,
 		}},
 	})
 	defer s.Stopper().Stop()

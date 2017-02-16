@@ -84,7 +84,7 @@ func TestIntentResolution(t *testing.T) {
 			var mu syncutil.Mutex
 			closer := make(chan struct{}, 2)
 			var done bool
-			storeKnobs.TestingCommandFilter =
+			storeKnobs.TestingEvalFilter =
 				func(filterArgs storagebase.FilterArgs) *roachpb.Error {
 					mu.Lock()
 					defer mu.Unlock()

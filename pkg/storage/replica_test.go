@@ -525,7 +525,7 @@ func TestBehaviorDuringLeaseTransfer(t *testing.T) {
 		}
 	}
 	transferSem := make(chan struct{})
-	tsc.TestingKnobs.TestingCommandFilter =
+	tsc.TestingKnobs.TestingEvalFilter =
 		func(filterArgs storagebase.FilterArgs) *roachpb.Error {
 			if _, ok := filterArgs.Req.(*roachpb.TransferLeaseRequest); ok {
 				// Notify the test that the transfer has been trapped.
@@ -1976,7 +1976,7 @@ func TestReplicaCommandQueue(t *testing.T) {
 
 						tc := testContext{}
 						tsc := TestStoreConfig(nil)
-						tsc.TestingKnobs.TestingCommandFilter =
+						tsc.TestingKnobs.TestingEvalFilter =
 							func(filterArgs storagebase.FilterArgs) *roachpb.Error {
 								if filterArgs.Hdr.UserPriority == blockingPriority && filterArgs.Index == 0 {
 									blockingStart <- struct{}{}
@@ -2148,7 +2148,7 @@ func TestReplicaCommandQueueInconsistent(t *testing.T) {
 
 	tc := testContext{}
 	tsc := TestStoreConfig(nil)
-	tsc.TestingKnobs.TestingCommandFilter =
+	tsc.TestingKnobs.TestingEvalFilter =
 		func(filterArgs storagebase.FilterArgs) *roachpb.Error {
 			if put, ok := filterArgs.Req.(*roachpb.PutRequest); ok {
 				putBytes, err := put.Value.GetBytes()
@@ -2219,7 +2219,7 @@ func TestReplicaCommandQueueCancellation(t *testing.T) {
 
 	tc := testContext{}
 	tsc := TestStoreConfig(nil)
-	tsc.TestingKnobs.TestingCommandFilter =
+	tsc.TestingKnobs.TestingEvalFilter =
 		func(filterArgs storagebase.FilterArgs) *roachpb.Error {
 			if filterArgs.Hdr.UserPriority == 42 {
 				log.Infof(context.Background(), "starting to block %s", filterArgs.Req)
@@ -3495,7 +3495,7 @@ func TestEndTransactionLocalGC(t *testing.T) {
 	defer setTxnAutoGC(true)()
 	tc := testContext{}
 	tsc := TestStoreConfig(nil)
-	tsc.TestingKnobs.TestingCommandFilter =
+	tsc.TestingKnobs.TestingEvalFilter =
 		func(filterArgs storagebase.FilterArgs) *roachpb.Error {
 			// Make sure the direct GC path doesn't interfere with this test.
 			if filterArgs.Req.Method() == roachpb.GC {
@@ -3603,7 +3603,7 @@ func TestEndTransactionResolveOnlyLocalIntents(t *testing.T) {
 	tsc := TestStoreConfig(nil)
 	key := roachpb.Key("a")
 	splitKey := roachpb.RKey(key).Next()
-	tsc.TestingKnobs.TestingCommandFilter =
+	tsc.TestingKnobs.TestingEvalFilter =
 		func(filterArgs storagebase.FilterArgs) *roachpb.Error {
 			if filterArgs.Req.Method() == roachpb.ResolveIntent &&
 				filterArgs.Req.Header().Key.Equal(splitKey.AsRawKey()) {
@@ -3711,7 +3711,7 @@ func TestEndTransactionDirectGCFailure(t *testing.T) {
 	splitKey := roachpb.RKey(key).Next()
 	var count int64
 	tsc := TestStoreConfig(nil)
-	tsc.TestingKnobs.TestingCommandFilter =
+	tsc.TestingKnobs.TestingEvalFilter =
 		func(filterArgs storagebase.FilterArgs) *roachpb.Error {
 			if filterArgs.Req.Method() == roachpb.ResolveIntent &&
 				filterArgs.Req.Header().Key.Equal(splitKey.AsRawKey()) {
@@ -3788,7 +3788,7 @@ func TestReplicaResolveIntentNoWait(t *testing.T) {
 	var seen int32
 	key := roachpb.Key("zresolveme")
 	tsc := TestStoreConfig(nil)
-	tsc.TestingKnobs.TestingCommandFilter =
+	tsc.TestingKnobs.TestingEvalFilter =
 		func(filterArgs storagebase.FilterArgs) *roachpb.Error {
 			if filterArgs.Req.Method() == roachpb.ResolveIntent &&
 				filterArgs.Req.Header().Key.Equal(key) {
@@ -4942,7 +4942,7 @@ func TestReplicaCorruption(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	tsc := TestStoreConfig(nil)
-	tsc.TestingKnobs.TestingCommandFilter =
+	tsc.TestingKnobs.TestingEvalFilter =
 		func(filterArgs storagebase.FilterArgs) *roachpb.Error {
 			if filterArgs.Req.Header().Key.Equal(roachpb.Key("boom")) {
 				return roachpb.NewError(NewReplicaCorruptionError(errors.New("boom")))
@@ -5857,7 +5857,7 @@ func TestReplicaCancelRaft(t *testing.T) {
 			ctx, cancel := context.WithCancel(context.Background())
 			cfg := TestStoreConfig(nil)
 			if !cancelEarly {
-				cfg.TestingKnobs.TestingCommandFilter =
+				cfg.TestingKnobs.TestingEvalFilter =
 					func(filterArgs storagebase.FilterArgs) *roachpb.Error {
 						if filterArgs.Req.Header().Key.Equal(key) {
 							cancel()

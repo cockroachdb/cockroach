@@ -178,7 +178,7 @@ func TestClientRetryNonTxn(t *testing.T) {
 	args := base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			Store: &storage.StoreTestingKnobs{
-				TestingCommandFilter: filter,
+				TestingEvalFilter: filter,
 			},
 		},
 	}
