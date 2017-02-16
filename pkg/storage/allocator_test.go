@@ -894,8 +894,16 @@ func TestAllocatorTransferLeaseTarget(t *testing.T) {
 	}
 	for _, c := range testCases {
 		t.Run("", func(t *testing.T) {
-			target := a.TransferLeaseTarget(context.Background(), config.Constraints{},
-				c.existing, c.leaseholder, 0, nil /* replicaStats */, c.check)
+			target := a.TransferLeaseTarget(
+				context.Background(),
+				config.Constraints{},
+				c.existing,
+				c.leaseholder,
+				0,
+				nil, /* replicaStats */
+				c.check,
+				true, /* checkCandidateFullness */
+			)
 			if c.expected != target.StoreID {
 				t.Fatalf("expected %d, but found %d", c.expected, target.StoreID)
 			}
@@ -939,8 +947,16 @@ func TestAllocatorTransferLeaseTargetMultiStore(t *testing.T) {
 	}
 	for _, c := range testCases {
 		t.Run("", func(t *testing.T) {
-			target := a.TransferLeaseTarget(context.Background(), config.Constraints{},
-				existing, c.leaseholder, 0, nil /* replicaStats */, c.check)
+			target := a.TransferLeaseTarget(
+				context.Background(),
+				config.Constraints{},
+				existing,
+				c.leaseholder,
+				0,
+				nil, /* replicaStats */
+				c.check,
+				true, /* checkCandidateFullness */
+			)
 			if c.expected != target.StoreID {
 				t.Fatalf("expected %d, but found %d", c.expected, target.StoreID)
 			}
@@ -1165,8 +1181,16 @@ func TestAllocatorTransferLeaseTargetLoadBased(t *testing.T) {
 			a := MakeAllocator(storePool, func(addr string) (time.Duration, bool) {
 				return c.latency[addr], true
 			})
-			target := a.TransferLeaseTarget(context.Background(), config.Constraints{},
-				existing, c.leaseholder, 0, c.stats, c.check)
+			target := a.TransferLeaseTarget(
+				context.Background(),
+				config.Constraints{},
+				existing,
+				c.leaseholder,
+				0,
+				c.stats,
+				c.check,
+				true, /* checkCandidateFullness */
+			)
 			if c.expected != target.StoreID {
 				t.Errorf("expected %d, got %d", c.expected, target.StoreID)
 			}
