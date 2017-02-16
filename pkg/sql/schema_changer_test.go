@@ -1727,3 +1727,69 @@ INSERT INTO t.test (k, v, length) VALUES (0, 1, 1);
 
 	wg.Wait()
 }
+
+// Create a table with data to be used by benchmarks.
+func initBenchSchemaChange(b *testing.B) serverutils.TestClusterInterface {
+	const numNodes, chunkSize, maxValue = 5, 500, 100000
+	params, _ := createTestServerParams()
+	// Disable asynchronous schema change execution to allow synchronous path
+	// to always execute the schema change.
+	params.Knobs = base.TestingKnobs{
+		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
+			AsyncExecNotification: asyncSchemaChangerDisabled,
+			BackfillChunkSize:     chunkSize,
+		},
+	}
+
+	tc := serverutils.StartTestCluster(b, numNodes,
+		base.TestClusterArgs{
+			ReplicationMode: base.ReplicationManual,
+			ServerArgs:      params,
+		})
+
+	sqlDB := tc.ServerConn(0)
+	kvDB := tc.Server(0).KVClient().(*client.DB)
+	if _, err := sqlDB.Exec(`
+CREATE DATABASE t;
+CREATE TABLE t.test (k INT PRIMARY KEY, v INT, pi DECIMAL DEFAULT (DECIMAL '3.14'), created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP());
+CREATE UNIQUE INDEX vidx ON t.test (v);
+`); err != nil {
+		b.Fatal(err)
+	}
+
+	// Bulk insert.
+	if err := bulkInsertIntoTable(sqlDB, maxValue); err != nil {
+		b.Fatal(err)
+	}
+
+	// Split the table into multiple ranges.
+	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
+	// SplitTable moves the right range, so we split things back to front.
+	for i := numNodes - 1; i > 0; i-- {
+		sql.SplitTable(b, tc, tableDesc, i, maxValue/numNodes*i)
+	}
+
+	return tc
+}
+
+func BenchmarkAddColumn(b *testing.B) {
+	tc := initBenchSchemaChange(b)
+	defer tc.Stopper().Stop()
+	sqlDB := tc.ServerConn(0)
+	for n := 0; n < b.N; n++ {
+		if _, err := sqlDB.Exec(fmt.Sprintf(`ALTER TABLE t.test ADD COLUMN x%d DECIMAL DEFAULT (DECIMAL '1.4')`, n)); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+func BenchmarkCreateIndex(b *testing.B) {
+	tc := initBenchSchemaChange(b)
+	defer tc.Stopper().Stop()
+	sqlDB := tc.ServerConn(0)
+	for n := 0; n < b.N; n++ {
+		if _, err := sqlDB.Exec(fmt.Sprintf(`CREATE UNIQUE INDEX foo%d ON t.test (v)`, n)); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
