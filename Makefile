@@ -86,6 +86,8 @@ else
 $(error unknown build type $(TYPE))
 endif
 
+-include .customenv.mk
+
 .PHONY: all
 all: build test check
 
