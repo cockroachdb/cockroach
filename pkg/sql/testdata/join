@@ -288,7 +288,7 @@ CREATE TABLE twocolumn (x INT, y INT); INSERT INTO twocolumn(x, y) VALUES (44,51
 
 # Natural joins with partial match
 query II colnames
-SELECT * FROM onecolumn NATURAL JOIN twocolumn;
+SELECT * FROM onecolumn NATURAL JOIN twocolumn
 ----
 x    y
 44   51
@@ -368,7 +368,7 @@ NULL 4    false
 
 # Full outer join with filter predicate
 query IIB
-SELECT * FROM a FULL OUTER JOIN b ON (a.i = b.i and a.i>2) ORDER BY a.i, b.i;
+SELECT * FROM a FULL OUTER JOIN b ON (a.i = b.i and a.i>2) ORDER BY a.i, b.i
 ----
 NULL 2    true
 NULL 4    false
@@ -381,7 +381,7 @@ statement ok
 INSERT INTO b VALUES (3, false)
 
 query IIB
-SELECT * FROM a RIGHT OUTER JOIN b ON a.i=b.i ORDER BY b.i, b.b;
+SELECT * FROM a RIGHT OUTER JOIN b ON a.i=b.i ORDER BY b.i, b.b
 ----
 2    2 true
 3    3 false
@@ -389,7 +389,7 @@ SELECT * FROM a RIGHT OUTER JOIN b ON a.i=b.i ORDER BY b.i, b.b;
 NULL 4 false
 
 query IIB
-SELECT * FROM a FULL OUTER JOIN b ON a.i=b.i ORDER BY b.i, b.b;
+SELECT * FROM a FULL OUTER JOIN b ON a.i=b.i ORDER BY b.i, b.b
 ----
 1    NULL NULL
 2    2    true
@@ -572,7 +572,7 @@ query error column "x" appears more than once in USING clause
 SELECT * FROM (onecolumn AS a JOIN onecolumn AS b USING(x, x))
 
 statement ok
-CREATE TABLE othertype (x TEXT);
+CREATE TABLE othertype (x TEXT)
 
 query error JOIN/USING types.*cannot be matched
 SELECT * FROM (onecolumn AS a JOIN othertype AS b USING(x))
@@ -599,7 +599,7 @@ NULL   NULL
 
 # Check that anonymous sources are properly looked up without ambiguity.
 query I
-SELECT x FROM (onecolumn JOIN othercolumn USING (x)) JOIN (onecolumn AS a JOIN othercolumn AS b USING(x)) USING(x);
+SELECT x FROM (onecolumn JOIN othercolumn USING (x)) JOIN (onecolumn AS a JOIN othercolumn AS b USING(x)) USING(x)
 ----
 42
 
@@ -622,7 +622,7 @@ CREATE TABLE s(x INT); INSERT INTO s(x) VALUES (1),(2),(3),(4),(5),(6),(7),(8),(
 #
 # # The following query demands at least 100GB of RAM if unoptimized.
 # query error memory budget exceeded
-# SELECT COUNT(*) FROM s AS a, s AS b, s AS c, s AS d, s AS e, s AS f, s AS g, s AS h, s AS i, s AS j, s AS k;
+# SELECT COUNT(*) FROM s AS a, s AS b, s AS c, s AS d, s AS e, s AS f, s AS g, s AS h, s AS i, s AS j, s AS k
 
 # THe following queries verify that only the necessary columns are scanned.
 query ITTTTT
@@ -700,7 +700,7 @@ EXPLAIN (METADATA) SELECT * FROM (SELECT * FROM (VALUES (9, 1), (8, 2)) AS a (u,
 
 # Ensure that large cross-joins are optimized somehow (#10633)
 statement ok
-CREATE TABLE customers(id INT PRIMARY KEY NOT NULL); CREATE TABLE orders(id INT, cust INT REFERENCES customers(id));
+CREATE TABLE customers(id INT PRIMARY KEY NOT NULL); CREATE TABLE orders(id INT, cust INT REFERENCES customers(id))
 
 query ITTT
 SELECT * FROM [EXPLAIN SELECT

@@ -19,7 +19,7 @@ statement ok
 INSERT INTO t VALUES (1, 2)
 
 query ITTTTT
-EXPLAIN (TYPES) SELECT 42;
+EXPLAIN (TYPES) SELECT 42
 ----
 0  render                              ("42" int)
 0                 render 0  (42)[int]

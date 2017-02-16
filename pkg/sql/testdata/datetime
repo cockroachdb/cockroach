@@ -231,7 +231,7 @@ SELECT * FROM kv;
 BEGIN;
 SELECT * FROM KV;
 INSERT INTO kv (k,v) VALUES ('i', transaction_timestamp());
-COMMIT;
+COMMIT
 
 query I
 SELECT COUNT(DISTINCT (v)) FROM kv
@@ -246,18 +246,18 @@ DELETE FROM kv
 statement ok
 BEGIN;
 INSERT INTO kv (k,v) VALUES ('a', transaction_timestamp());
-SELECT * FROM kv;
+SELECT * FROM kv
 
 statement ok
 INSERT INTO kv (k,v) VALUES ('b', transaction_timestamp());
 SELECT * FROM kv;
-COMMIT;
+COMMIT
 
 statement ok
 BEGIN;
 SELECT * FROM KV;
 INSERT INTO kv (k,v) VALUES ('c', transaction_timestamp());
-COMMIT;
+COMMIT
 
 query I
 SELECT COUNT(DISTINCT (v)) FROM kv
@@ -278,18 +278,18 @@ CREATE TABLE kv (
 statement ok
 BEGIN;
 INSERT INTO kv (k,v) VALUES (1, cluster_logical_timestamp());
-SELECT * FROM kv;
+SELECT * FROM kv
 
 statement ok
 INSERT INTO kv (k,v) VALUES (2, cluster_logical_timestamp());
 SELECT * FROM kv;
-COMMIT;
+COMMIT
 
 statement ok
 BEGIN;
 SELECT * FROM kv;
 INSERT INTO kv (k,v) VALUES (3, cluster_logical_timestamp());
-COMMIT;
+COMMIT
 
 query I
 SELECT COUNT(DISTINCT (v)) FROM kv
@@ -308,27 +308,27 @@ INSERT INTO m VALUES (cluster_logical_timestamp())
 # Test that cluster_logical_timestamp() is monotonic in transaction order
 statement ok
 INSERT INTO kv (k,v) VALUES (1, cluster_logical_timestamp()-(select mints from m));
-SELECT * FROM kv;
+SELECT * FROM kv
 
 statement ok
 INSERT INTO kv (k,v) VALUES (2, cluster_logical_timestamp()-(select mints from m));
-SELECT * FROM kv;
+SELECT * FROM kv
 
 statement ok
 INSERT INTO kv (k,v) VALUES (3, cluster_logical_timestamp()-(select mints from m));
-SELECT * FROM kv;
+SELECT * FROM kv
 
 statement ok
 INSERT INTO kv (k,v) VALUES (4, cluster_logical_timestamp()-(select mints from m));
-SELECT * FROM kv;
+SELECT * FROM kv
 
 statement ok
 INSERT INTO kv (k,v) VALUES (5, cluster_logical_timestamp()-(select mints from m));
-SELECT * FROM kv;
+SELECT * FROM kv
 
 statement ok
 INSERT INTO kv (k,v) VALUES (6, cluster_logical_timestamp()-(select mints from m));
-SELECT * FROM kv;
+SELECT * FROM kv
 
 query I
 SELECT k FROM kv ORDER BY v
@@ -625,7 +625,7 @@ SELECT d::timestamp FROM u WHERE a = 123
 2015-08-30 00:00:00 +0000 +0000
 
 statement ok
-SET TIME ZONE UTC;
+SET TIME ZONE UTC
 
 statement ok
 CREATE TABLE tz (
@@ -697,7 +697,7 @@ SHOW TIME ZONE
 -5
 
 statement ok
-SET TIME ZONE INTERVAL '+04:00' HOUR TO MINUTE;
+SET TIME ZONE INTERVAL '+04:00' HOUR TO MINUTE
 
 query T
 SELECT '2015-08-24 21:45:45.53453'::timestamptz
@@ -705,7 +705,7 @@ SELECT '2015-08-24 21:45:45.53453'::timestamptz
 2015-08-24 21:45:45.53453 +0400 +0400
 
 statement ok
-SET TIME ZONE INTERVAL '-04:00' MINUTE TO SECOND;
+SET TIME ZONE INTERVAL '-04:00' MINUTE TO SECOND
 
 query T
 SELECT '2015-08-24 21:45:45.53453'::timestamptz
@@ -731,66 +731,66 @@ SELECT INTERVAL '4 minutes' + DATE '1999-01-01'
 1999-01-01 00:04:00 +0000 +0000
 
 query T
-SELECT DATE '1999-01-01' - INTERVAL '4 minutes';
+SELECT DATE '1999-01-01' - INTERVAL '4 minutes'
 ----
 1998-12-31 23:56:00 +0000 +0000
 
 query B
-SELECT DATE '1999-01-02' < TIMESTAMPTZ '1999-01-01';
+SELECT DATE '1999-01-02' < TIMESTAMPTZ '1999-01-01'
 ----
 false
 
 query B
-SELECT DATE '1999-01-02' < TIMESTAMP '1999-01-01';
+SELECT DATE '1999-01-02' < TIMESTAMP '1999-01-01'
 ----
 false
 
 query B
-SELECT DATE '1999-01-02' <= TIMESTAMPTZ '1999-01-01';
+SELECT DATE '1999-01-02' <= TIMESTAMPTZ '1999-01-01'
 ----
 false
 
 query B
-SELECT DATE '1999-01-02' <= TIMESTAMP '1999-01-01';
+SELECT DATE '1999-01-02' <= TIMESTAMP '1999-01-01'
 ----
 false
 
 query B
-SELECT DATE '1999-01-02' <= TIMESTAMPTZ '1999-01-02';
+SELECT DATE '1999-01-02' <= TIMESTAMPTZ '1999-01-02'
 ----
 true
 
 query B
-SELECT DATE '1999-01-02' <= TIMESTAMP '1999-01-02';
+SELECT DATE '1999-01-02' <= TIMESTAMP '1999-01-02'
 ----
 true
 
 query B
-SELECT DATE '1999-01-02' > TIMESTAMPTZ '1999-01-01';
+SELECT DATE '1999-01-02' > TIMESTAMPTZ '1999-01-01'
 ----
 true
 
 query B
-SELECT DATE '1999-01-02' > TIMESTAMP '1999-01-01';
+SELECT DATE '1999-01-02' > TIMESTAMP '1999-01-01'
 ----
 true
 
 query B
-SELECT DATE '1999-01-02' >= TIMESTAMPTZ '1999-01-01';
+SELECT DATE '1999-01-02' >= TIMESTAMPTZ '1999-01-01'
 ----
 true
 
 query B
-SELECT DATE '1999-01-02' >= TIMESTAMP '1999-01-01';
+SELECT DATE '1999-01-02' >= TIMESTAMP '1999-01-01'
 ----
 true
 
 query B
-SELECT DATE '1999-01-02' = TIMESTAMPTZ '1999-01-01';
+SELECT DATE '1999-01-02' = TIMESTAMPTZ '1999-01-01'
 ----
 false
 
 query B
-SELECT DATE '1999-01-01' = TIMESTAMP '1999-01-01';
+SELECT DATE '1999-01-01' = TIMESTAMP '1999-01-01'
 ----
 true

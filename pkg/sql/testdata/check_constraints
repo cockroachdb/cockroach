@@ -7,7 +7,7 @@ statement ok
 INSERT INTO t1 VALUES (3, 0, -1)
 
 statement ok
-ALTER TABLE t1 DROP COLUMN to_delete;
+ALTER TABLE t1 DROP COLUMN to_delete
 
 statement ok
 INSERT INTO t1 (a, b) VALUES (4, -2)
@@ -120,72 +120,72 @@ SELECT * from t3
 3 2
 
 statement error failed to satisfy CHECK constraint
-UPDATE t3 SET b = 3 WHERE a = 3;
+UPDATE t3 SET b = 3 WHERE a = 3
 
 statement ok
-UPDATE t3 SET b = 1 WHERE a = 3;
+UPDATE t3 SET b = 1 WHERE a = 3
 
 statement error failed to satisfy CHECK constraint
-UPDATE t4 SET a = 2 WHERE c = 3;
+UPDATE t4 SET a = 2 WHERE c = 3
 
 statement ok
-UPDATE t4 SET a = 0 WHERE c = 3;
+UPDATE t4 SET a = 0 WHERE c = 3
 
 statement ok
-CREATE TABLE t5 (k INT PRIMARY KEY, a INT, b int CHECK (a > b));
+CREATE TABLE t5 (k INT PRIMARY KEY, a INT, b int CHECK (a > b))
 
 statement error failed to satisfy CHECK constraint
-INSERT INTO t5 VALUES (1, 10, 20) ON CONFLICT (k) DO NOTHING;
+INSERT INTO t5 VALUES (1, 10, 20) ON CONFLICT (k) DO NOTHING
 
 statement ok
-INSERT INTO t5 VALUES (1, 10, 9) ON CONFLICT (k) DO NOTHING;
+INSERT INTO t5 VALUES (1, 10, 9) ON CONFLICT (k) DO NOTHING
 
 statement error failed to satisfy CHECK constraint
-INSERT INTO t5 VALUES (1, 10, 20) ON CONFLICT (k) DO NOTHING;
+INSERT INTO t5 VALUES (1, 10, 20) ON CONFLICT (k) DO NOTHING
 
 statement error failed to satisfy CHECK constraint
-INSERT INTO t5 VALUES (2, 11, 12) ON CONFLICT (k) DO UPDATE SET b = 12 WHERE k = 2;
+INSERT INTO t5 VALUES (2, 11, 12) ON CONFLICT (k) DO UPDATE SET b = 12 WHERE k = 2
 
 statement error failed to satisfy CHECK constraint
-UPSERT INTO t5 VALUES (2, 11, 12);
+UPSERT INTO t5 VALUES (2, 11, 12)
 
 statement ok
-UPSERT INTO t5 VALUES (2, 11, 10);
+UPSERT INTO t5 VALUES (2, 11, 10)
 
 query III
-SELECT * FROM t5;
+SELECT * FROM t5
 ----
 1 10  9
 2 11  10
 
 statement ok
-UPSERT INTO t5 VALUES (2, 11, 9);
+UPSERT INTO t5 VALUES (2, 11, 9)
 
 query III
-SELECT * FROM t5;
+SELECT * FROM t5
 ----
 1 10  9
 2 11  9
 
 statement error failed to satisfy CHECK constraint
-INSERT INTO t5 VALUES (2, 11, 12) ON CONFLICT (k) DO UPDATE SET b = 12 WHERE k = 2;
+INSERT INTO t5 VALUES (2, 11, 12) ON CONFLICT (k) DO UPDATE SET b = 12 WHERE k = 2
 
 statement error failed to satisfy CHECK constraint
-UPSERT INTO t5 VALUES (2, 11, 12);
+UPSERT INTO t5 VALUES (2, 11, 12)
 
 statement error failed to satisfy CHECK constraint
-INSERT INTO t5 VALUES (2, 11, 12) ON CONFLICT (k) DO UPDATE SET b = t5.a + 1 WHERE k = 2;
+INSERT INTO t5 VALUES (2, 11, 12) ON CONFLICT (k) DO UPDATE SET b = t5.a + 1 WHERE k = 2
 
 query III
-SELECT * FROM t5;
+SELECT * FROM t5
 ----
 1 10  9
 2 11  9
 
 statement error CHECK expression .* may not contain variable sub-expressions
-CREATE TABLE t6 (x INT CHECK (x = $1));
+CREATE TABLE t6 (x INT CHECK (x = $1))
 
 statement error CHECK expression .* may not contain variable sub-expressions
-CREATE TABLE t6 (x INT CHECK (x = (SELECT 1)));
+CREATE TABLE t6 (x INT CHECK (x = (SELECT 1)))
 
 

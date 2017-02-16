@@ -170,7 +170,7 @@ statement ok
 UPSERT INTO issue_6710 (a, b) VALUES (1, 'test1'), (2, 'test2')
 
 query IT
-SELECT a, b from issue_6710;
+SELECT a, b from issue_6710
 ----
 1 test1
 2 test2

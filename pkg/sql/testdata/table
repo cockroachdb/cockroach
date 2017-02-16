@@ -387,38 +387,38 @@ ak     BYTES                     true   NULL			{}
 al     INTERVAL                  true   NULL            {}
 
 statement ok
-CREATE DATABASE IF NOT EXISTS smtng;
+CREATE DATABASE IF NOT EXISTS smtng
 
 statement ok
 CREATE TABLE IF NOT EXISTS smtng.something (
 ID SERIAL PRIMARY KEY
-);
+)
 
 statement ok
-ALTER TABLE smtng.something ADD COLUMN IF NOT EXISTS OWNER_ID INT;
+ALTER TABLE smtng.something ADD COLUMN IF NOT EXISTS OWNER_ID INT
 
 statement ok
-ALTER TABLE smtng.something ADD COLUMN IF NOT EXISTS MODEL_ID INT;
+ALTER TABLE smtng.something ADD COLUMN IF NOT EXISTS MODEL_ID INT
 
 statement ok
-ALTER TABLE smtng.something ADD COLUMN IF NOT EXISTS NAME STRING;
+ALTER TABLE smtng.something ADD COLUMN IF NOT EXISTS NAME STRING
 
 statement ok
-CREATE DATABASE IF NOT EXISTS smtng;
+CREATE DATABASE IF NOT EXISTS smtng
 
 statement ok
 CREATE TABLE IF NOT EXISTS smtng.something (
 ID SERIAL PRIMARY KEY
-);
+)
 
 statement ok
-ALTER TABLE smtng.something ADD COLUMN IF NOT EXISTS OWNER_ID INT;
+ALTER TABLE smtng.something ADD COLUMN IF NOT EXISTS OWNER_ID INT
 
 statement ok
-ALTER TABLE smtng.something ADD COLUMN IF NOT EXISTS MODEL_ID INT;
+ALTER TABLE smtng.something ADD COLUMN IF NOT EXISTS MODEL_ID INT
 
 statement ok
-ALTER TABLE smtng.something ADD COLUMN IF NOT EXISTS NAME STRING;
+ALTER TABLE smtng.something ADD COLUMN IF NOT EXISTS NAME STRING
 
 query error pq: unimplemented: ARRAY column types are unsupported \(see issue https://github.com/cockroachdb/cockroach/issues/2115\)
 CREATE TABLE IF NOT EXISTS test.int_array_test (
