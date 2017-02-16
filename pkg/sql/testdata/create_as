@@ -16,7 +16,7 @@ statement ok
 CREATE TABLE itemTypes AS (SELECT item, color FROM stock, itemColors)
 
 query TT
-SELECT * FROM itemTypes;
+SELECT * FROM itemTypes
 ----
 cups blue
 cups red
@@ -32,10 +32,10 @@ statement error pq: unexpected AS OF SYSTEM TIME
 CREATE TABLE t AS SELECT * FROM stock AS OF SYSTEM TIME '2016-01-01'
 
 statement error pgcode 42601 CREATE TABLE specifies 3 column names, but data source has 2 columns
-CREATE TABLE t2 (col1, col2, col3) AS SELECT * FROM stock;
+CREATE TABLE t2 (col1, col2, col3) AS SELECT * FROM stock
 
 statement error pgcode 42601 CREATE TABLE specifies 1 column name, but data source has 2 columns
-CREATE TABLE t2 (col1) AS SELECT * FROM stock;
+CREATE TABLE t2 (col1) AS SELECT * FROM stock
 
 statement ok
 CREATE TABLE unionstock AS SELECT * FROM stock UNION VALUES ('spoons', 25), ('knives', 50)
@@ -58,7 +58,7 @@ SELECT * FROM unionstock ORDER BY quantity LIMIT 1
 cups 10
 
 statement ok
-CREATE DATABASE smtng;
+CREATE DATABASE smtng
 
 statement ok
 CREATE TABLE smtng.something AS SELECT * FROM stock

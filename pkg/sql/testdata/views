@@ -14,22 +14,22 @@ statement error pgcode 42P07 relation \"t\" already exists
 CREATE VIEW t AS select a, b from t
 
 statement ok
-CREATE VIEW v2 (x, y) AS select a, b from t;
+CREATE VIEW v2 (x, y) AS select a, b from t
 
 statement error pgcode 42601 CREATE VIEW specifies 1 column name, but data source has 2 columns
-CREATE VIEW v3 (x) AS select a, b from t;
+CREATE VIEW v3 (x) AS select a, b from t
 
 statement error pgcode 42601 CREATE VIEW specifies 3 column names, but data source has 2 columns
-CREATE VIEW v4 (x, y, z) AS select a, b from t;
+CREATE VIEW v4 (x, y, z) AS select a, b from t
 
 statement error pgcode 42P01 table "dne" does not exist
-CREATE VIEW v5 AS select a, b from dne;
+CREATE VIEW v5 AS select a, b from dne
 
 statement ok
-CREATE VIEW v6 (x, y) AS select a, b from v1;
+CREATE VIEW v6 (x, y) AS select a, b from v1
 
 query II colnames
-SELECT * FROM v1;
+SELECT * FROM v1
 ----
 a b
 1 99
@@ -37,7 +37,7 @@ a b
 3 97
 
 query II colnames
-SELECT * FROM v2;
+SELECT * FROM v2
 ----
 x y
 1 99
@@ -45,7 +45,7 @@ x y
 3 97
 
 query II colnames
-SELECT * FROM v6;
+SELECT * FROM v6
 ----
 x y
 1 99
@@ -53,39 +53,39 @@ x y
 3 97
 
 query II
-SELECT * FROM v2 ORDER BY x DESC LIMIT 1;
+SELECT * FROM v2 ORDER BY x DESC LIMIT 1
 ----
 3 97
 
 query I
-SELECT x FROM v2;
+SELECT x FROM v2
 ----
 1
 2
 3
 
 query I
-SELECT y FROM v2;
+SELECT y FROM v2
 ----
 99
 98
 97
 
 query IIII
-SELECT * FROM v1 AS v1 INNER JOIN v2 AS v2 ON v1.a = v2.x;
+SELECT * FROM v1 AS v1 INNER JOIN v2 AS v2 ON v1.a = v2.x
 ----
 1 99 1 99
 2 98 2 98
 3 97 3 97
 
 statement ok
-CREATE DATABASE test2;
+CREATE DATABASE test2
 
 statement ok
-SET DATABASE = test2;
+SET DATABASE = test2
 
 query II colnames
-SELECT * FROM test.v1;
+SELECT * FROM test.v1
 ----
 a b
 1 99
@@ -93,7 +93,7 @@ a b
 3 97
 
 query II colnames
-SELECT * FROM test.v2;
+SELECT * FROM test.v2
 ----
 x y
 1 99
@@ -101,7 +101,7 @@ x y
 3 97
 
 query II colnames
-SELECT * FROM test.v6;
+SELECT * FROM test.v6
 ----
 x y
 1 99
@@ -109,10 +109,10 @@ x y
 3 97
 
 statement ok
-CREATE VIEW v1 AS SELECT x, y FROM test.v2;
+CREATE VIEW v1 AS SELECT x, y FROM test.v2
 
 statement ok
-SET DATABASE = test;
+SET DATABASE = test
 
 query II colnames
 SELECT * FROM test2.v1
@@ -123,92 +123,92 @@ x y
 3 97
 
 query TT
-SHOW CREATE VIEW v1;
+SHOW CREATE VIEW v1
 ----
 v1 CREATE VIEW v1 AS SELECT a, b FROM test.t
 
 query TT
-SHOW CREATE VIEW v2;
+SHOW CREATE VIEW v2
 ----
 v2 CREATE VIEW v2 (x, y) AS SELECT a, b FROM test.t
 
 query TT
-SHOW CREATE VIEW v6;
+SHOW CREATE VIEW v6
 ----
 v6 CREATE VIEW v6 (x, y) AS SELECT a, b FROM test.v1
 
 query TT
-SHOW CREATE VIEW test2.v1;
+SHOW CREATE VIEW test2.v1
 ----
 test2.v1 CREATE VIEW "test2.v1" AS SELECT x, y FROM test.v2
 
 statement ok
-GRANT SELECT ON t TO testuser;
+GRANT SELECT ON t TO testuser
 
 user testuser
 
 query II
-SELECT * FROM t;
+SELECT * FROM t
 ----
 1 99
 2 98
 3 97
 
 query error user testuser does not have SELECT privilege on view v1
-SELECT * FROM v1;
+SELECT * FROM v1
 
 query error user testuser does not have SELECT privilege on view v6
-SELECT * FROM v6;
+SELECT * FROM v6
 
 query error user testuser has no privileges on view v1
-SHOW CREATE VIEW v1;
+SHOW CREATE VIEW v1
 
 user root
 
 statement ok
-REVOKE SELECT ON t FROM testuser;
+REVOKE SELECT ON t FROM testuser
 
 statement ok
-GRANT SELECT ON v1 TO testuser;
+GRANT SELECT ON v1 TO testuser
 
 user testuser
 
 query error user testuser does not have SELECT privilege on table t
-SELECT * FROM t;
+SELECT * FROM t
 
 query II
-SELECT * FROM v1;
+SELECT * FROM v1
 ----
 1 99
 2 98
 3 97
 
 query error user testuser does not have SELECT privilege on view v6
-SELECT * FROM v6;
+SELECT * FROM v6
 
 query TT
-SHOW CREATE VIEW v1;
+SHOW CREATE VIEW v1
 ----
 v1 CREATE VIEW v1 AS SELECT a, b FROM test.t
 
 user root
 
 statement ok
-REVOKE SELECT ON v1 FROM testuser;
+REVOKE SELECT ON v1 FROM testuser
 
 statement ok
-GRANT SELECT ON v6 TO testuser;
+GRANT SELECT ON v6 TO testuser
 
 user testuser
 
 query error user testuser does not have SELECT privilege on table t
-SELECT * FROM t;
+SELECT * FROM t
 
 query error user testuser does not have SELECT privilege on view v1
-SELECT * FROM v1;
+SELECT * FROM v1
 
 query II
-SELECT * FROM v6;
+SELECT * FROM v6
 ----
 1 99
 2 98
@@ -217,31 +217,31 @@ SELECT * FROM v6;
 user root
 
 statement error pgcode 42809 "v1" is not a table
-DROP TABLE v1;
+DROP TABLE v1
 
 statement error pgcode 42809 "t" is not a view
-DROP VIEW t;
+DROP VIEW t
 
 statement error cannot drop view "v1" because view "v6" depends on it
-DROP VIEW v1;
+DROP VIEW v1
 
 statement error cannot drop view "v2" because view "test2.v1" depends on it
-DROP VIEW v2;
+DROP VIEW v2
 
 statement ok
-DROP VIEW test2.v1;
+DROP VIEW test2.v1
 
 statement ok
-DROP VIEW v6;
+DROP VIEW v6
 
 statement ok
-DROP VIEW v2;
+DROP VIEW v2
 
 statement ok
-DROP VIEW v1;
+DROP VIEW v1
 
 statement error pgcode 42P01 view "v1" does not exist
-DROP VIEW v1;
+DROP VIEW v1
 
 # Verify correct rejection of star expressions
 # TODO(a-robinson): Support star expressions as soon as we can (#10028)
@@ -307,19 +307,19 @@ statement ok
 create view s4 AS SELECT a, COUNT(*) FROM t GROUP BY a HAVING a > (SELECT COUNT(*) FROM t)
 
 statement ok
-DROP VIEW s4;
+DROP VIEW s4
 
 statement ok
-DROP VIEW s3;
+DROP VIEW s3
 
 statement ok
-DROP VIEW s2;
+DROP VIEW s2
 
 statement ok
-DROP VIEW s1;
+DROP VIEW s1
 
 statement ok
-DROP TABLE t;
+DROP TABLE t
 
 # Check for memory leak (#10466)
 statement ok

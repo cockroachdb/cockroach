@@ -164,7 +164,7 @@ SELECT k, v FROM unindexed
 k v
 
 statement ok
-CREATE TABLE indexed (id int primary key, value int, other int, index (value));
+CREATE TABLE indexed (id int primary key, value int, other int, index (value))
 
 statement ok
-DELETE FROM indexed WHERE value = 5;
+DELETE FROM indexed WHERE value = 5

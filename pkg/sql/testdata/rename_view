@@ -14,7 +14,7 @@ statement ok
 INSERT INTO kv VALUES (1, 2), (3, 4)
 
 statement ok
-CREATE VIEW v as SELECT k,v FROM kv;
+CREATE VIEW v as SELECT k,v FROM kv
 
 query II
 SELECT * FROM v

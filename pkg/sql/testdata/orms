@@ -26,7 +26,7 @@ SELECT t.typname enum_name, array_agg(e.enumlabel ORDER BY enumsortorder) enum_v
     JOIN pg_enum e ON t.oid = e.enumtypid
     JOIN pg_catalog.pg_namespace n ON n.oid = t.typnamespace
     WHERE n.nspname = 'public'
-    GROUP BY 1;
+    GROUP BY 1
 ----
 
 
