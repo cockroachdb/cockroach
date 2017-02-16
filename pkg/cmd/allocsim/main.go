@@ -22,9 +22,9 @@ import (
 	"flag"
 	"fmt"
 	"math"
-	"math/rand"
 	"os"
 	"os/signal"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"syscall"
@@ -32,31 +32,82 @@ import (
 
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/pkg/cli"
 	"github.com/cockroachdb/cockroach/pkg/cmd/internal/localcluster"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/pkg/errors"
 )
 
 var workers = flag.Int("w", 1, "number of workers; the i'th worker talks to node i%numNodes")
 var numNodes = flag.Int("n", 4, "number of nodes")
 var duration = flag.Duration("duration", math.MaxInt64, "how long to run the simulation for")
 var blockSize = flag.Int("b", 1000, "block size")
-var numLocalities = flag.Int("l", 0, "number of localities")
+var configFile = flag.String("f", "", "config file that specifies an allocsim workload (overrides -n)")
 
-func newRand() *rand.Rand {
-	return rand.New(rand.NewSource(timeutil.Now().UnixNano()))
+// Configuration provides a way to configure allocsim via a JSON file.
+// TODO(a-robinson): Consider moving all the above options into the config file.
+// TODO(a-robinson): Allow for specifying different distributions of requests
+// from different localities.
+type Configuration struct {
+	Localities []Locality `json:"Localities"`
 }
 
-// allocSim is allows investigation of allocation/rebalancing heuristics. A
+// Locality defines the properties of a single locality as part of a Configuration.
+type Locality struct {
+	Name              string `json:"Name"`
+	NumNodes          int    `json:"NumNodes"`
+	OutgoingLatencies []*struct {
+		Name    string       `json:"Name"`
+		Latency jsonDuration `json:"Latency"`
+	} `json:"OutgoingLatencies"`
+}
+
+type jsonDuration time.Duration
+
+func (j *jsonDuration) UnmarshalJSON(b []byte) error {
+	var s string
+	if err := json.Unmarshal(b, &s); err != nil {
+		return err
+	}
+	dur, err := time.ParseDuration(s)
+	if err != nil {
+		return err
+	}
+	*j = jsonDuration(dur)
+	return nil
+}
+
+func loadConfig(file string) (Configuration, error) {
+	fileHandle, err := os.Open(file)
+	if err != nil {
+		return Configuration{}, errors.Wrapf(err, "failed to open config file %q", file)
+	}
+	defer fileHandle.Close()
+
+	var config Configuration
+	jsonParser := json.NewDecoder(fileHandle)
+	if err := jsonParser.Decode(&config); err != nil {
+		return Configuration{}, errors.Wrapf(err, "failed to decode %q as json", file)
+	}
+
+	*numNodes = 0
+	for _, locality := range config.Localities {
+		*numNodes += locality.NumNodes
+	}
+	return config, nil
+}
+
+// allocSim allows investigation of allocation/rebalancing heuristics. A
 // pool of workers generates block_writer-style load where the i'th worker
 // talks to node i%numNodes. Every second a monitor goroutine outputs status
 // such as the per-node replica and leaseholder counts.
 //
-// TODO(peter): Allow configuration zone-config constraints.
-
+// TODO(peter/a-robinson): Allow configuration of zone-config constraints.
 type allocSim struct {
 	*localcluster.Cluster
 	stats struct {
@@ -69,7 +120,7 @@ type allocSim struct {
 		replicas []int
 		leases   []int
 	}
-	localities []roachpb.Locality
+	localities []Locality
 }
 
 func newAllocSim(c *localcluster.Cluster) *allocSim {
@@ -117,7 +168,7 @@ func (a *allocSim) maybeLogError(err error) {
 func (a *allocSim) worker(i, workers int) {
 	const insert = `INSERT INTO allocsim.blocks (id, num, data) VALUES ($1, $2, repeat('a', $3)::bytes)`
 
-	r := newRand()
+	r, _ := randutil.NewPseudoRand()
 	db := a.DB[i%len(a.DB)]
 
 	for num := i; true; num += workers {
@@ -185,13 +236,13 @@ func (a *allocSim) rangeStats(d time.Duration) {
 
 const padding = "__________"
 
-func formatHeader(header string, numberNodes int, localities []roachpb.Locality) string {
+func formatHeader(header string, numberNodes int, localities []Locality) string {
 	var buf bytes.Buffer
 	_, _ = buf.WriteString(header)
 	for i := 1; i <= numberNodes; i++ {
 		node := fmt.Sprintf("%d", i)
 		if localities != nil {
-			node += fmt.Sprintf(":%s", localities[i-1])
+			node += fmt.Sprintf(":%s", localities[i-1].Name)
 		}
 		fmt.Fprintf(&buf, "%s%s", padding[:len(padding)-len(node)], node)
 	}
@@ -277,8 +328,63 @@ func (a *allocSim) finalStatus() {
 	genStats("leases", a.ranges.leases)
 }
 
+func handleStart() bool {
+	if len(os.Args) < 2 || os.Args[1] != "start" {
+		return false
+	}
+
+	// Do our own hacky flag parsing here to get around the fact that the default
+	// flag package complains about any unknown flags while still allowing the
+	// pflags package used by cli.Start to manage the rest of the flags as usual.
+	var latenciesStr string
+	for i, arg := range os.Args {
+		if strings.HasPrefix(arg, "--latencies=") || strings.HasPrefix(arg, "-latencies=") {
+			latenciesStr = strings.SplitAfterN(arg, "=", 2)[1]
+			os.Args = append(os.Args[:i], os.Args[i+1:]...)
+			break
+		}
+	}
+	if err := configureArtificialLatencies(latenciesStr); err != nil {
+		log.Fatal(context.Background(), err)
+	}
+
+	cli.Main()
+	return true
+}
+
+func configureArtificialLatencies(latenciesConfig string) error {
+	for _, latency := range strings.Split(latenciesConfig, ",") {
+		parts := strings.Split(latency, "=")
+		if len(parts) != 2 {
+			return errors.Errorf("unexpected latency config format %q", latency)
+		}
+		addr := parts[0]
+		dur := parts[1]
+		delay, err := time.ParseDuration(dur)
+		if err != nil {
+			return errors.Wrapf(err, "unable to parse %q as a duration", parts[1])
+		}
+		rpc.ArtificialLatencies[addr] = delay
+		log.Infof(context.Background(), "adding delay %s to address %q", delay, addr)
+	}
+	return nil
+}
+
 func main() {
+	if handleStart() {
+		return
+	}
+
 	flag.Parse()
+
+	var config Configuration
+	if *configFile != "" {
+		var err error
+		config, err = loadConfig(*configFile)
+		if err != nil {
+			log.Fatal(context.Background(), err)
+		}
+	}
 
 	c := localcluster.New(*numNodes)
 	defer c.Close()
@@ -293,20 +399,32 @@ func main() {
 	a := newAllocSim(c)
 
 	var perNodeArgs map[int][]string
-	if *numLocalities > 0 {
+	if len(config.Localities) != 0 {
 		perNodeArgs = make(map[int][]string)
-		a.localities = make([]roachpb.Locality, len(c.Nodes))
-		for i := range c.Nodes {
-			locality := roachpb.Locality{
-				Tiers: []roachpb.Tier{
-					{
-						Key:   "l",
-						Value: fmt.Sprintf("%d", i%*numLocalities),
-					},
-				},
+		a.localities = make([]Locality, len(c.Nodes))
+		nodesPerLocality := make(map[string][]int)
+		var nodeIdx int
+		for _, locality := range config.Localities {
+			for i := 0; i < locality.NumNodes; i++ {
+				perNodeArgs[nodeIdx] = []string{fmt.Sprintf("--locality=l=%s", locality.Name)}
+				a.localities[nodeIdx] = locality
+				nodesPerLocality[locality.Name] = append(nodesPerLocality[locality.Name], nodeIdx)
+				nodeIdx++
 			}
-			perNodeArgs[i] = []string{fmt.Sprintf("--locality=%s", locality)}
-			a.localities[i] = locality
+		}
+		for i, locality := range a.localities {
+			var latencies []string
+			for _, outgoing := range locality.OutgoingLatencies {
+				if outgoing.Latency > 0 {
+					for _, nodeIdx := range nodesPerLocality[outgoing.Name] {
+						latencies = append(latencies,
+							fmt.Sprintf("%s=%s", localcluster.RPCAddr(nodeIdx), time.Duration(outgoing.Latency)))
+					}
+				}
+			}
+			if len(latencies) != 0 {
+				perNodeArgs[i] = append(perNodeArgs[i], "--latencies="+strings.Join(latencies, ","))
+			}
 		}
 	}
 
@@ -324,7 +442,7 @@ func main() {
 		os.Exit(exitStatus)
 	}()
 
-	c.Start("allocsim", *workers, nil, flag.Args(), perNodeArgs)
+	c.Start("allocsim", *workers, os.Args[0], nil, flag.Args(), perNodeArgs)
 	c.UpdateZoneConfig(1, 1<<20)
 	a.run(*workers)
 }
