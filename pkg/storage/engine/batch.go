@@ -87,6 +87,11 @@ func (b *RocksDBBatchBuilder) Finish() []byte {
 	return repr
 }
 
+// Len returns the number of bytes currently in the under construction repr.
+func (b *RocksDBBatchBuilder) Len() int {
+	return len(b.repr)
+}
+
 // getRepr constructs the batch representation and returns it.
 func (b *RocksDBBatchBuilder) getRepr() []byte {
 	b.maybeInit()
