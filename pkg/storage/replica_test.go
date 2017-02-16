@@ -160,6 +160,14 @@ func (tc *testContext) StartWithStoreConfig(t testing.TB, stopper *stop.Stopper,
 	if tc.store == nil {
 		cfg.Gossip = tc.gossip
 		cfg.Transport = tc.transport
+		cfg.StorePool = NewStorePool(
+			cfg.AmbientCtx,
+			cfg.Gossip,
+			cfg.Clock,
+			StorePoolNodeLivenessTrue,
+			TestTimeUntilStoreDeadOff,
+			false, /* deterministic */
+		)
 		// Create a test sender without setting a store. This is to deal with the
 		// circular dependency between the test sender and the store. The actual
 		// store will be passed to the sender after it is created and bootstrapped.
@@ -1136,32 +1144,9 @@ func TestReplicaDrainLease(t *testing.T) {
 	if pErr != nil {
 		t.Fatal(pErr)
 	}
-	var slept atomic.Value
-	slept.Store(false)
-	if err := stopper.RunAsyncTask(context.Background(), func(_ context.Context) {
-		// Wait just a bit so that the main thread can check that SetDraining
-		// blocks (false negatives are possible, but 10ms is plenty to make this
-		// fail 99.999% of the time in practice).
-		time.Sleep(10 * time.Millisecond)
-		slept.Store(true)
-		// Expire the lease (and any others that may race in before we drain).
-		for {
-			tc.manualClock.Increment(leaseExpiry(tc.repl))
-			select {
-			case <-time.After(10 * time.Millisecond): // real code would use Ticker
-			case <-stopper.ShouldQuiesce():
-				return
-			}
-		}
-	}); err != nil {
-		t.Fatal(err)
-	}
 
 	if err := tc.store.SetDraining(true); err != nil {
 		t.Fatal(err)
-	}
-	if !slept.Load().(bool) {
-		t.Fatal("SetDraining returned with active lease")
 	}
 	tc.repl.mu.Lock()
 	pErr = <-tc.repl.requestLeaseLocked(context.Background(), status)
