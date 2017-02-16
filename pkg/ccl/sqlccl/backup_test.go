@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
@@ -143,6 +144,10 @@ func backupRestoreTestSetup(
 
 func TestBackupRestoreLocal(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	if !storage.ProposerEvaluatedKVEnabled() {
+		t.Skip("command WriteBatch is not allowed without proposer evaluated KV")
+	}
+
 	// TODO(dan): Actually invalidate the descriptor cache and delete this line.
 	defer sql.TestDisableTableLeases()()
 	const numAccounts = 1000
@@ -190,6 +195,9 @@ func TestBackupRestoreS3(t *testing.T) {
 // occasionally be flaky. It's only run if the GS_BUCKET environment var is set.
 func TestBackupRestoreGoogleCloudStorage(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	if !storage.ProposerEvaluatedKVEnabled() {
+		t.Skip("command WriteBatch is not allowed without proposer evaluated KV")
+	}
 
 	bucket := os.Getenv("GS_BUCKET")
 	if bucket == "" {
@@ -215,6 +223,9 @@ func TestBackupRestoreGoogleCloudStorage(t *testing.T) {
 // AZURE_ACCOUNT_KEY environment vars are set.
 func TestBackupRestoreAzure(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	if !storage.ProposerEvaluatedKVEnabled() {
+		t.Skip("command WriteBatch is not allowed without proposer evaluated KV")
+	}
 
 	accountName := os.Getenv("AZURE_ACCOUNT_NAME")
 	accountKey := os.Getenv("AZURE_ACCOUNT_KEY")
@@ -284,6 +295,10 @@ func backupAndRestore(
 
 func TestBackupRestoreInterleaved(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	if !storage.ProposerEvaluatedKVEnabled() {
+		t.Skip("command WriteBatch is not allowed without proposer evaluated KV")
+	}
+
 	// TODO(dan): Actually invalidate the descriptor cache and delete this line.
 	defer sql.TestDisableTableLeases()()
 	const numAccounts = 10
@@ -393,6 +408,10 @@ func startBankTransfers(stopper *stop.Stopper, sqlDB *gosql.DB, numAccounts int)
 func TestBackupRestoreBank(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	t.Skip("#13189")
+	if !storage.ProposerEvaluatedKVEnabled() {
+		t.Skip("command WriteBatch is not allowed without proposer evaluated KV")
+	}
+
 	// TODO(dan): Actually invalidate the descriptor cache and delete this line.
 	defer sql.TestDisableTableLeases()()
 
@@ -478,6 +497,10 @@ func TestBackupRestoreBank(t *testing.T) {
 func TestBackupAsOfSystemTime(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	t.Skip("#13575")
+	if !storage.ProposerEvaluatedKVEnabled() {
+		t.Skip("command WriteBatch is not allowed without proposer evaluated KV")
+	}
+
 	// TODO(dan): Actually invalidate the descriptor cache and delete this line.
 	defer sql.TestDisableTableLeases()()
 	const numAccounts = 1000
