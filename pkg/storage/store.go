@@ -2726,6 +2726,13 @@ func (s *Store) reserveSnapshot(
 func (s *Store) HandleSnapshot(header *SnapshotRequest_Header, stream SnapshotResponseStream) error {
 	s.metrics.raftRcvdMessages[raftpb.MsgSnap].Inc(1)
 
+	if s.IsDraining() {
+		return stream.Send(&SnapshotResponse{
+			Status:  SnapshotResponse_DECLINED,
+			Message: "store is draining",
+		})
+	}
+
 	ctx := s.AnnotateCtx(stream.Context())
 	cleanup, err := s.reserveSnapshot(ctx, header)
 	if err != nil {

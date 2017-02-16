@@ -1362,3 +1362,33 @@ func TestCampaignOnLazyRaftGroupInitialization(t *testing.T) {
 		})
 	}
 }
+
+// TestDrainRangeRejection verifies that an attempt to transfer a range to a
+// draining store fails.
+func TestDrainRangeRejection(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	mtc := &multiTestContext{}
+	defer mtc.Stop()
+	mtc.Start(t, 2)
+
+	repl, err := mtc.stores[0].GetReplica(1)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	drainingIdx := 1
+	if err := mtc.stores[drainingIdx].SetDraining(true); err != nil {
+		t.Fatal(err)
+	}
+	if err := repl.ChangeReplicas(
+		context.Background(),
+		roachpb.ADD_REPLICA,
+		roachpb.ReplicaDescriptor{
+			NodeID:  mtc.idents[drainingIdx].NodeID,
+			StoreID: mtc.idents[drainingIdx].StoreID,
+		},
+		repl.Desc(),
+	); !testutils.IsError(err, "store is draining") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
