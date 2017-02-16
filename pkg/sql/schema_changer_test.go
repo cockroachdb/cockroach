@@ -43,6 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
@@ -518,13 +519,24 @@ func bulkInsertIntoTable(sqlDB *gosql.DB, maxValue int) error {
 // that run simultaneously.
 func TestRaceWithBackfill(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	// protects backfillNotification
+	var mu syncutil.Mutex
 	var backfillNotification chan bool
+
 	var partialBackfillDone atomic.Value
 	partialBackfillDone.Store(false)
 	var partialBackfill bool
 	const numNodes, chunkSize, maxValue = 5, 100, 4000
 	params, _ := createTestServerParams()
+	initBackfillNotification := func() chan bool {
+		mu.Lock()
+		defer mu.Unlock()
+		backfillNotification = make(chan bool)
+		return backfillNotification
+	}
 	notifyBackfill := func() {
+		mu.Lock()
+		defer mu.Unlock()
 		if backfillNotification != nil {
 			// Close channel to notify that the backfill has started.
 			close(backfillNotification)
@@ -606,7 +618,6 @@ CREATE UNIQUE INDEX vidx ON t.test (v);
 	// Run some schema changes with operations.
 
 	// Add column.
-	backfillNotification = make(chan bool)
 	runSchemaChangeWithOperations(
 		t,
 		sqlDB,
@@ -614,10 +625,9 @@ CREATE UNIQUE INDEX vidx ON t.test (v);
 		"ALTER TABLE t.test ADD COLUMN x DECIMAL DEFAULT (DECIMAL '1.4')",
 		maxValue,
 		2,
-		backfillNotification)
+		initBackfillNotification())
 
 	// Drop column.
-	backfillNotification = make(chan bool)
 	runSchemaChangeWithOperations(
 		t,
 		sqlDB,
@@ -625,10 +635,9 @@ CREATE UNIQUE INDEX vidx ON t.test (v);
 		"ALTER TABLE t.test DROP pi",
 		maxValue,
 		2,
-		backfillNotification)
+		initBackfillNotification())
 
 	// Add index.
-	backfillNotification = make(chan bool)
 	runSchemaChangeWithOperations(
 		t,
 		sqlDB,
@@ -636,10 +645,9 @@ CREATE UNIQUE INDEX vidx ON t.test (v);
 		"CREATE UNIQUE INDEX foo ON t.test (v)",
 		maxValue,
 		3,
-		backfillNotification)
+		initBackfillNotification())
 
 	// Drop index.
-	backfillNotification = make(chan bool)
 	runSchemaChangeWithOperations(
 		t,
 		sqlDB,
@@ -647,7 +655,7 @@ CREATE UNIQUE INDEX vidx ON t.test (v);
 		"DROP INDEX t.test@vidx",
 		maxValue,
 		2,
-		backfillNotification)
+		initBackfillNotification())
 
 	// Verify that the index foo over v is consistent, and that column x has
 	// been backfilled properly.
@@ -686,8 +694,7 @@ CREATE UNIQUE INDEX vidx ON t.test (v);
 	// This test could be made its own test but is placed here to speed up the
 	// testing.
 
-	notification := make(chan bool)
-	backfillNotification = notification
+	notification := initBackfillNotification()
 	partialBackfill = true
 	// Run the schema change in a separate goroutine.
 	var wg sync.WaitGroup
