@@ -830,6 +830,34 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                             ]
                         },
                         {
+                            "name": "ObservedTimestamp",
+                            "options": {
+                                "(gogoproto.populate)": true
+                            },
+                            "fields": [
+                                {
+                                    "rule": "optional",
+                                    "type": "int32",
+                                    "name": "node_id",
+                                    "id": 1,
+                                    "options": {
+                                        "(gogoproto.nullable)": false,
+                                        "(gogoproto.customname)": "NodeID",
+                                        "(gogoproto.casttype)": "NodeID"
+                                    }
+                                },
+                                {
+                                    "rule": "optional",
+                                    "type": "util.hlc.Timestamp",
+                                    "name": "timestamp",
+                                    "id": 2,
+                                    "options": {
+                                        "(gogoproto.nullable)": false
+                                    }
+                                }
+                            ]
+                        },
+                        {
                             "name": "Transaction",
                             "options": {
                                 "(gogoproto.goproto_stringer)": false,
@@ -889,14 +917,12 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                                     }
                                 },
                                 {
-                                    "rule": "map",
-                                    "type": "util.hlc.Timestamp",
-                                    "keytype": "int32",
+                                    "rule": "repeated",
+                                    "type": "ObservedTimestamp",
                                     "name": "observed_timestamps",
                                     "id": 8,
                                     "options": {
-                                        "(gogoproto.nullable)": false,
-                                        "(gogoproto.castkey)": "NodeID"
+                                        "(gogoproto.nullable)": false
                                     }
                                 },
                                 {
