@@ -816,7 +816,7 @@ func (p *planner) ShowTables(n *parser.ShowTables) (planNode, error) {
 // ShowUsers returns all the users.
 // Privileges: SELECT on system.users.
 func (p *planner) ShowUsers(n *parser.ShowUsers) (planNode, error) {
-	stmt, err := parser.ParseOneTraditional(`SELECT username FROM system.users`)
+	stmt, err := parser.ParseOneTraditional(`SELECT username FROM system.users ORDER BY 1`)
 	if err != nil {
 		return nil, err
 	}
