@@ -47,7 +47,7 @@ func TestReplicaGCQueueDropReplicaDirect(t *testing.T) {
 	// waits for the first.
 	cfg := storage.TestStoreConfig(nil)
 	mtc.storeConfig = &cfg
-	mtc.storeConfig.TestingKnobs.TestingCommandFilter =
+	mtc.storeConfig.TestingKnobs.TestingEvalFilter =
 		func(filterArgs storagebase.FilterArgs) *roachpb.Error {
 			et, ok := filterArgs.Req.(*roachpb.EndTransactionRequest)
 			if !ok || filterArgs.Sid != 2 {

@@ -172,7 +172,7 @@ func TestStoreRecoverWithErrors(t *testing.T) {
 		stopper := stop.NewStopper()
 		defer stopper.Stop()
 		storeCfg := storeCfg // copy
-		storeCfg.TestingKnobs.TestingCommandFilter =
+		storeCfg.TestingKnobs.TestingEvalFilter =
 			func(filterArgs storagebase.FilterArgs) *roachpb.Error {
 				_, ok := filterArgs.Req.(*roachpb.IncrementRequest)
 				if ok && filterArgs.Req.Header().Key.Equal(roachpb.Key("a")) {
@@ -408,7 +408,7 @@ func TestFailedReplicaChange(t *testing.T) {
 	runFilter.Store(true)
 
 	sc := storage.TestStoreConfig(nil)
-	sc.TestingKnobs.TestingCommandFilter = func(filterArgs storagebase.FilterArgs) *roachpb.Error {
+	sc.TestingKnobs.TestingEvalFilter = func(filterArgs storagebase.FilterArgs) *roachpb.Error {
 		if runFilter.Load().(bool) {
 			if et, ok := filterArgs.Req.(*roachpb.EndTransactionRequest); ok && et.Commit {
 				return roachpb.NewErrorWithTxn(errors.Errorf("boom"), filterArgs.Hdr.Txn)
@@ -1142,7 +1142,10 @@ func TestStoreRangeCorruptionChangeReplicas(t *testing.T) {
 		syncutil.Mutex
 		store *storage.Store
 	}
-	sc.TestingKnobs.TestingApplyFilter = func(filterArgs storagebase.ApplyFilterArgs) *roachpb.Error {
+	// TODO(bdarnell): I think this should be a TestingApplyFilter
+	// instead of a TestingPostApplyFilter, but making that change
+	// causes this test to fail.
+	sc.TestingKnobs.TestingPostApplyFilter = func(filterArgs storagebase.ApplyFilterArgs) *roachpb.Error {
 		corrupt.Lock()
 		defer corrupt.Unlock()
 
@@ -3325,5 +3328,87 @@ func TestInitRaftGroupOnRequest(t *testing.T) {
 	}
 	if !repl.IsRaftGroupInitialized() {
 		t.Fatal("expected raft group to be initialized")
+	}
+}
+
+// TestFailedConfChange verifies correct behavior after a
+// configuration change experiences an error when applying
+// EndTransaction. Specifically, it verifies that
+// https://github.com/cockroachdb/cockroach/issues/13506 has been
+// fixed.
+func TestFailedConfChange(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	// Trigger errors at apply time so they happen on both leaders and
+	// followers.
+	var filterActive int32
+	sc := storage.TestStoreConfig(nil)
+	sc.TestingKnobs.TestingApplyFilter = func(filterArgs storagebase.ApplyFilterArgs) *roachpb.Error {
+		if atomic.LoadInt32(&filterActive) == 1 && filterArgs.ChangeReplicas != nil {
+			return roachpb.NewErrorf("boom")
+		}
+		return nil
+	}
+	mtc := &multiTestContext{
+		storeConfig: &sc,
+	}
+	defer mtc.Stop()
+	mtc.Start(t, 3)
+	ctx := context.Background()
+
+	// Replicate the range (successfully) to the second node.
+	const rangeID = roachpb.RangeID(1)
+	mtc.replicateRange(rangeID, 1)
+
+	// Try and fail to replicate it to the third node.
+	atomic.StoreInt32(&filterActive, 1)
+	if err := mtc.replicateRangeNonFatal(rangeID, 2); !testutils.IsError(err, "boom") {
+		t.Fatal(err)
+	}
+
+	// Raft state is only exposed on the leader, so we must transfer
+	// leadership and check the stores one at a time.
+	checkLeaderStore := func(i int) error {
+		store := mtc.stores[i]
+		repl, err := store.GetReplica(rangeID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if l := len(repl.Desc().Replicas); l != 2 {
+			return errors.Errorf("store %d: expected 2 replicas in descriptor, found %d in %s",
+				i, l, repl.Desc())
+		}
+		status := repl.RaftStatus()
+		if status.RaftState != raft.StateLeader {
+			return errors.Errorf("store %d: expected StateLeader, was %s", i, status.RaftState)
+		}
+		// In issue #13506, the Progress map would be updated as if the
+		// change had succeeded.
+		if l := len(status.Progress); l != 2 {
+			return errors.Errorf("store %d: expected 2 replicas in raft, found %d in %s", i, l, status)
+		}
+		return nil
+	}
+
+	if err := checkLeaderStore(0); err != nil {
+		t.Fatal(err)
+	}
+
+	// Transfer leadership to the second node and wait for it to become leader.
+	mtc.transferLease(ctx, rangeID, 0, 1)
+	testutils.SucceedsSoon(t, func() error {
+		repl, err := mtc.stores[1].GetReplica(rangeID)
+		if err != nil {
+			return err
+		}
+		status := repl.RaftStatus()
+		if status.RaftState != raft.StateLeader {
+			return errors.Errorf("store %d: expected StateLeader, was %s", 1, status.RaftState)
+		}
+		return nil
+	})
+
+	if err := checkLeaderStore(1); err != nil {
+		t.Fatal(err)
 	}
 }

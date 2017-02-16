@@ -775,7 +775,7 @@ func TestStoreObservedTimestamp(t *testing.T) {
 		func() {
 			manual := hlc.NewManualClock(123)
 			cfg := TestStoreConfig(hlc.NewClock(manual.UnixNano, time.Nanosecond))
-			cfg.TestingKnobs.TestingCommandFilter =
+			cfg.TestingKnobs.TestingEvalFilter =
 				func(filterArgs storagebase.FilterArgs) *roachpb.Error {
 					if bytes.Equal(filterArgs.Req.Header().Key, badKey) {
 						return roachpb.NewError(errors.Errorf("boom"))
@@ -838,7 +838,7 @@ func TestStoreAnnotateNow(t *testing.T) {
 		for _, test := range testCases {
 			func() {
 				cfg := TestStoreConfig(nil)
-				cfg.TestingKnobs.TestingCommandFilter =
+				cfg.TestingKnobs.TestingEvalFilter =
 					func(filterArgs storagebase.FilterArgs) *roachpb.Error {
 						if bytes.Equal(filterArgs.Req.Header().Key, badKey) {
 							return roachpb.NewErrorWithTxn(errors.Errorf("boom"), filterArgs.Hdr.Txn)
@@ -1254,7 +1254,7 @@ func TestStoreResolveWriteIntent(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	manual := hlc.NewManualClock(123)
 	cfg := TestStoreConfig(hlc.NewClock(manual.UnixNano, time.Nanosecond))
-	cfg.TestingKnobs.TestingCommandFilter =
+	cfg.TestingKnobs.TestingEvalFilter =
 		func(filterArgs storagebase.FilterArgs) *roachpb.Error {
 			pr, ok := filterArgs.Req.(*roachpb.PushTxnRequest)
 			if !ok || pr.PusherTxn.Name != "test" {
@@ -1749,7 +1749,7 @@ func TestStoreScanIntents(t *testing.T) {
 	var count int32
 	countPtr := &count
 
-	cfg.TestingKnobs.TestingCommandFilter =
+	cfg.TestingKnobs.TestingEvalFilter =
 		func(filterArgs storagebase.FilterArgs) *roachpb.Error {
 			if _, ok := filterArgs.Req.(*roachpb.ScanRequest); ok {
 				atomic.AddInt32(countPtr, 1)
@@ -1869,7 +1869,7 @@ func TestStoreScanInconsistentResolvesIntents(t *testing.T) {
 	var intercept atomic.Value
 	intercept.Store(true)
 	cfg := TestStoreConfig(nil)
-	cfg.TestingKnobs.TestingCommandFilter =
+	cfg.TestingKnobs.TestingEvalFilter =
 		func(filterArgs storagebase.FilterArgs) *roachpb.Error {
 			_, ok := filterArgs.Req.(*roachpb.ResolveIntentRequest)
 			if ok && intercept.Load().(bool) {

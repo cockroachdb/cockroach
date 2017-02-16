@@ -1134,7 +1134,7 @@ func TestStoreSplitTimestampCacheReadRace(t *testing.T) {
 	var getStarted sync.WaitGroup
 	storeCfg := storage.TestStoreConfig(nil)
 	storeCfg.TestingKnobs.DisableSplitQueue = true
-	storeCfg.TestingKnobs.TestingCommandFilter =
+	storeCfg.TestingKnobs.TestingEvalFilter =
 		func(filterArgs storagebase.FilterArgs) *roachpb.Error {
 			if et, ok := filterArgs.Req.(*roachpb.EndTransactionRequest); ok {
 				st := et.InternalCommitTrigger.GetSplitTrigger()
@@ -1246,7 +1246,7 @@ func TestStoreSplitTimestampCacheDifferentLeaseHolder(t *testing.T) {
 	var args base.TestClusterArgs
 	args.ReplicationMode = base.ReplicationManual
 	args.ServerArgs.Knobs.Store = &storage.StoreTestingKnobs{
-		TestingCommandFilter: filter,
+		TestingEvalFilter: filter,
 	}
 
 	tc := testcluster.StartTestCluster(t, 2, args)
@@ -1381,7 +1381,7 @@ func TestStoreRangeSplitRaceUninitializedRHS(t *testing.T) {
 	}
 	seen.sids = make(map[storagebase.CmdIDKey][2]bool)
 
-	storeCfg.TestingKnobs.TestingCommandFilter = func(args storagebase.FilterArgs) *roachpb.Error {
+	storeCfg.TestingKnobs.TestingEvalFilter = func(args storagebase.FilterArgs) *roachpb.Error {
 		et, ok := args.Req.(*roachpb.EndTransactionRequest)
 		if !ok || et.InternalCommitTrigger == nil {
 			return nil
@@ -1670,7 +1670,7 @@ func TestStoreSplitBeginTxnPushMetaIntentRace(t *testing.T) {
 	manual := hlc.NewManualClock(123)
 	storeCfg := storage.TestStoreConfig(hlc.NewClock(manual.UnixNano, time.Nanosecond))
 	storeCfg.TestingKnobs.DisableSplitQueue = true
-	storeCfg.TestingKnobs.TestingCommandFilter = func(filterArgs storagebase.FilterArgs) *roachpb.Error {
+	storeCfg.TestingKnobs.TestingEvalFilter = func(filterArgs storagebase.FilterArgs) *roachpb.Error {
 		startMu.Lock()
 		start := startMu.time
 		startMu.Unlock()

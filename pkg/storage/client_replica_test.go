@@ -188,7 +188,7 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 	defer stopper.Stop()
 	manual := hlc.NewManualClock(123)
 	cfg := storage.TestStoreConfig(hlc.NewClock(manual.UnixNano, time.Nanosecond))
-	cfg.TestingKnobs.TestingCommandFilter =
+	cfg.TestingKnobs.TestingEvalFilter =
 		func(filterArgs storagebase.FilterArgs) *roachpb.Error {
 			if _, ok := filterArgs.Req.(*roachpb.GetRequest); ok &&
 				filterArgs.Req.Header().Key.Equal(roachpb.Key(key)) &&
@@ -458,7 +458,7 @@ func TestRangeTransferLease(t *testing.T) {
 	cfg := storage.TestStoreConfig(nil)
 	var filterMu syncutil.Mutex
 	var filter func(filterArgs storagebase.FilterArgs) *roachpb.Error
-	cfg.TestingKnobs.TestingCommandFilter =
+	cfg.TestingKnobs.TestingEvalFilter =
 		func(filterArgs storagebase.FilterArgs) *roachpb.Error {
 			filterMu.Lock()
 			filterCopy := filter
@@ -676,7 +676,7 @@ func TestLeaseMetricsOnSplitAndTransfer(t *testing.T) {
 	var injectLeaseTransferError atomic.Value
 	sc := storage.TestStoreConfig(nil)
 	sc.TestingKnobs.DisableSplitQueue = true
-	sc.TestingKnobs.TestingCommandFilter =
+	sc.TestingKnobs.TestingEvalFilter =
 		func(filterArgs storagebase.FilterArgs) *roachpb.Error {
 			if args, ok := filterArgs.Req.(*roachpb.TransferLeaseRequest); ok {
 				if val := injectLeaseTransferError.Load(); val != nil && val.(bool) {
@@ -845,7 +845,7 @@ func TestLeaseExtensionNotBlockedByRead(t *testing.T) {
 		base.TestServerArgs{
 			Knobs: base.TestingKnobs{
 				Store: &storage.StoreTestingKnobs{
-					TestingCommandFilter: cmdFilter,
+					TestingEvalFilter: cmdFilter,
 				},
 			},
 		})
@@ -1026,7 +1026,7 @@ func TestErrorHandlingForNonKVCommand(t *testing.T) {
 		base.TestServerArgs{
 			Knobs: base.TestingKnobs{
 				Store: &storage.StoreTestingKnobs{
-					TestingCommandFilter: cmdFilter,
+					TestingEvalFilter: cmdFilter,
 				},
 			},
 		})

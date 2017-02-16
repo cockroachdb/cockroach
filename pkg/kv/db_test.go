@@ -294,7 +294,7 @@ func TestTxnDelRangeIntentResolutionCounts(t *testing.T) {
 		Knobs: base.TestingKnobs{
 			Store: &storage.StoreTestingKnobs{
 				NumKeysEvaluatedForRangeIntentResolution: &intentResolutionCount,
-				TestingCommandFilter: func(filterArgs storagebase.FilterArgs) *roachpb.Error {
+				TestingEvalFilter: func(filterArgs storagebase.FilterArgs) *roachpb.Error {
 					req, ok := filterArgs.Req.(*roachpb.ResolveIntentRequest)
 					if ok {
 						key := req.Header().Key.String()
