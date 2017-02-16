@@ -3112,6 +3112,8 @@ export interface serverpbBuilder {
 	RaftDebugResponse: serverpb.RaftDebugResponseBuilder;
 	SpanStatsRequest: serverpb.SpanStatsRequestBuilder;
 	SpanStatsResponse: serverpb.SpanStatsResponseBuilder;
+	ProblemRangesRequest: serverpb.ProblemRangesRequestBuilder;
+	ProblemRangesResponse: serverpb.ProblemRangesResponseBuilder;
 	PrettySpan: serverpb.PrettySpanBuilder;
 	ZoneConfigurationLevel: serverpb.ZoneConfigurationLevel;
 	DrainMode: serverpb.DrainMode;
@@ -5816,6 +5818,105 @@ export interface SpanStatsResponseBuilder {
 	decode(buffer: ArrayBuffer) : SpanStatsResponseMessage;
 	decode(buffer: ByteBuffer) : SpanStatsResponseMessage;
 	decode64(buffer: string) : SpanStatsResponseMessage;
+	
+}
+
+}
+
+
+declare module Proto2TypeScript.cockroach.server.serverpb {
+
+	export interface ProblemRangesRequest {
+
+		
+
+node_id?: string;
+		
+
+getNodeId?() : string;
+		setNodeId?(nodeId : string): void;
+		
+
+
+
+want_unavailable?: boolean;
+		
+
+getWantUnavailable?() : boolean;
+		setWantUnavailable?(wantUnavailable : boolean): void;
+		
+
+
+
+want_leader_not_lease_holder?: boolean;
+		
+
+getWantLeaderNotLeaseHolder?() : boolean;
+		setWantLeaderNotLeaseHolder?(wantLeaderNotLeaseHolder : boolean): void;
+		
+
+
+
+}
+
+	export interface ProblemRangesRequestMessage extends ProblemRangesRequest {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface ProblemRangesRequestBuilder {
+	new(data?: ProblemRangesRequest): ProblemRangesRequestMessage;
+	decode(buffer: ArrayBuffer) : ProblemRangesRequestMessage;
+	decode(buffer: ByteBuffer) : ProblemRangesRequestMessage;
+	decode64(buffer: string) : ProblemRangesRequestMessage;
+	
+}
+
+}
+
+
+declare module Proto2TypeScript.cockroach.server.serverpb {
+
+	export interface ProblemRangesResponse {
+
+		
+
+unavailable_range_ids?: Long[];
+		
+
+getUnavailableRangeIds?() : Long[];
+		setUnavailableRangeIds?(unavailableRangeIds : Long[]): void;
+		
+
+
+
+leader_not_lease_holder_range_ids?: Long[];
+		
+
+getLeaderNotLeaseHolderRangeIds?() : Long[];
+		setLeaderNotLeaseHolderRangeIds?(leaderNotLeaseHolderRangeIds : Long[]): void;
+		
+
+
+
+}
+
+	export interface ProblemRangesResponseMessage extends ProblemRangesResponse {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface ProblemRangesResponseBuilder {
+	new(data?: ProblemRangesResponse): ProblemRangesResponseMessage;
+	decode(buffer: ArrayBuffer) : ProblemRangesResponseMessage;
+	decode(buffer: ByteBuffer) : ProblemRangesResponseMessage;
+	decode64(buffer: string) : ProblemRangesResponseMessage;
 	
 }
 

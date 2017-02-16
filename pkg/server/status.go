@@ -666,6 +666,42 @@ func (s *statusServer) SpanStats(
 	return output, nil
 }
 
+// ProglemRanges requests the list of problematic ranges.
+func (s *statusServer) ProblemRanges(
+	ctx context.Context, req *serverpb.ProblemRangesRequest,
+) (*serverpb.ProblemRangesResponse, error) {
+	ctx = s.AnnotateCtx(ctx)
+	nodeID, local, err := s.parseNodeID(req.NodeId)
+	if err != nil {
+		return nil, grpc.Errorf(codes.InvalidArgument, err.Error())
+	}
+
+	if !local {
+		status, err := s.dialNode(nodeID)
+		if err != nil {
+			return nil, err
+		}
+		return status.ProblemRanges(ctx, req)
+	}
+
+	output := &serverpb.ProblemRangesResponse{}
+	err = s.stores.VisitStores(func(store *storage.Store) error {
+		unavailable, noLease, err := store.ListProblemRanges(ctx, req.WantUnavailable, req.WantLeaderNotLeaseHolder)
+		if err != nil {
+			return err
+		}
+
+		output.UnavailableRangeIDs = append(output.UnavailableRangeIDs, unavailable...)
+		output.LeaderNotLeaseHolderRangeIDs = append(output.LeaderNotLeaseHolderRangeIDs, noLease...)
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return output, nil
+}
+
 // jsonWrapper provides a wrapper on any slice data type being
 // marshaled to JSON. This prevents a security vulnerability
 // where a phishing attack can trick a user's browser into
