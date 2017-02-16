@@ -81,7 +81,7 @@ true
 
 # Show that the primary key is used under ordinalityNode.
 query ITTTTT
-EXPLAIN (METADATA) SELECT * FROM (SELECT * FROM foo WHERE x > 'a') WITH ORDINALITY;
+EXPLAIN (METADATA) SELECT * FROM (SELECT * FROM foo WHERE x > 'a') WITH ORDINALITY
 ----
 0  ordinality                      (x, ordinality)  +x,unique
 1  scan                            (x)              +x,unique
@@ -91,7 +91,7 @@ EXPLAIN (METADATA) SELECT * FROM (SELECT * FROM foo WHERE x > 'a') WITH ORDINALI
 # Show that the primary key cannot be used with a PK predicate
 # outside of ordinalityNode.
 query ITTTTT
-EXPLAIN (METADATA) SELECT * FROM foo WITH ORDINALITY WHERE x > 'a';
+EXPLAIN (METADATA) SELECT * FROM foo WITH ORDINALITY WHERE x > 'a'
 ----
 0  filter                          (x, ordinality)  +x,unique
 1  ordinality                      (x, ordinality)  +x,unique

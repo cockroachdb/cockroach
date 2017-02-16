@@ -115,7 +115,7 @@ EXPLAIN(METADATA) SELECT 1 FROM kv
 
 # Propagation through DISTINCT.
 query ITTTTT
-EXPLAIN (METADATA) SELECT DISTINCT v FROM kv;
+EXPLAIN (METADATA) SELECT DISTINCT v FROM kv
 ----
 0  distinct                     (v)
 1  render                       (v)

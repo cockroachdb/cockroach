@@ -19,7 +19,7 @@ statement error unknown signature: length\(int\)
 SELECT LENGTH(23)
 
 query II
-SELECT octet_length('Hello'), octet_length(b'世界');
+SELECT octet_length('Hello'), octet_length(b'世界')
 ----
 5 6
 
@@ -207,12 +207,12 @@ SELECT ascii('x')
 120
 
 query I
-select ascii('禅');
+select ascii('禅')
 ----
 31109
 
 query error ascii\(\): the input string must not be empty
-select ascii('');
+select ascii('')
 
 query T
 SELECT md5('abc')
@@ -263,47 +263,47 @@ query error unknown signature: strpos\(\)
 SELECT position()
 
 query T
-SELECT overlay('123456789' placing 'xxxx' from 3);
+SELECT overlay('123456789' placing 'xxxx' from 3)
 ----
 12xxxx789
 
 query T
-SELECT overlay('123456789' placing 'xxxx' from 3 for 2);
+SELECT overlay('123456789' placing 'xxxx' from 3 for 2)
 ----
 12xxxx56789
 
 query T
-SELECT overlay('123456789' placing 'xxxx' from 3 for 6);
+SELECT overlay('123456789' placing 'xxxx' from 3 for 6)
 ----
 12xxxx9
 
 query T
-SELECT overlay('123456789' placing 'xxxx' from 15 for 6);
+SELECT overlay('123456789' placing 'xxxx' from 15 for 6)
 ----
 123456789xxxx
 
 query T
-SELECT overlay('123456789' placing 'xxxx' from 3 for 10);
+SELECT overlay('123456789' placing 'xxxx' from 3 for 10)
 ----
 12xxxx
 
 query T
-SELECT overlay('123456789' placing 'xxxx' from 3 for -1);
+SELECT overlay('123456789' placing 'xxxx' from 3 for -1)
 ----
 12xxxx23456789
 
 query T
-SELECT overlay('123456789' placing 'xxxx' from 3 for -8);
+SELECT overlay('123456789' placing 'xxxx' from 3 for -8)
 ----
 12xxxx123456789
 
 query T
-SELECT overlay('💩123456789' placing 'xxxxÂ' from 3 for 3);
+SELECT overlay('💩123456789' placing 'xxxxÂ' from 3 for 3)
 ----
 💩1xxxxÂ56789
 
 query error non-positive substring length not allowed: -1
-SELECT overlay('123456789' placing 'xxxx' from -1 for 6);
+SELECT overlay('123456789' placing 'xxxx' from -1 for 6)
 
 query T
 SELECT btrim('xyxtrimyyx', 'xy')
@@ -703,7 +703,7 @@ SELECT round(-1.7976931348623157e-308::float, 1), round(1.7976931348623157e-308:
 -0 0
 
 query RRRR
-SELECT 1.234567890123456789::float,  round(1.234567890123456789::float,15), round(1.234567890123456789::float,16), round(1.234567890123456789::float,17);
+SELECT 1.234567890123456789::float,  round(1.234567890123456789::float,15), round(1.234567890123456789::float,16), round(1.234567890123456789::float,17)
 ----
 1.2345678901234567 1.234567890123457 1.2345678901234567 1.2345678901234567
 
@@ -1194,92 +1194,92 @@ SELECT current_schema()
 NULL
 
 query I
-SELECT array_length(ARRAY['a', 'b'], 1);
+SELECT array_length(ARRAY['a', 'b'], 1)
 ----
 2
 
 query I
-SELECT array_length(ARRAY['a'], 1);
+SELECT array_length(ARRAY['a'], 1)
 ----
 1
 
 query I
-SELECT array_length(ARRAY['a'], 0);
+SELECT array_length(ARRAY['a'], 0)
 ----
 NULL
 
 query I
-SELECT array_length(ARRAY['a'], 2);
+SELECT array_length(ARRAY['a'], 2)
 ----
 NULL
 
 query I
-SELECT array_lower(ARRAY['a', 'b'], 1);
+SELECT array_lower(ARRAY['a', 'b'], 1)
 ----
 1
 
 query I
-SELECT array_lower(ARRAY['a'], 1);
+SELECT array_lower(ARRAY['a'], 1)
 ----
 1
 
 query I
-SELECT array_lower(ARRAY['a'], 0);
+SELECT array_lower(ARRAY['a'], 0)
 ----
 NULL
 
 query I
-SELECT array_lower(ARRAY['a'], 2);
+SELECT array_lower(ARRAY['a'], 2)
 ----
 NULL
 
 query I
-SELECT array_upper(ARRAY['a', 'b'], 1);
+SELECT array_upper(ARRAY['a', 'b'], 1)
 ----
 2
 
 query I
-SELECT array_upper(ARRAY['a'], 1);
+SELECT array_upper(ARRAY['a'], 1)
 ----
 1
 
 query I
-SELECT array_upper(ARRAY['a'], 0);
+SELECT array_upper(ARRAY['a'], 0)
 ----
 NULL
 
 query I
-SELECT array_upper(ARRAY['a'], 2);
+SELECT array_upper(ARRAY['a'], 2)
 ----
 NULL
 
 query I
-SELECT array_length(ARRAY[]:::int[], 1);
+SELECT array_length(ARRAY[]:::int[], 1)
 ----
 NULL
 
 query I
-SELECT array_lower(ARRAY[]:::int[], 1);
+SELECT array_lower(ARRAY[]:::int[], 1)
 ----
 NULL
 
 query I
-SELECT array_upper(ARRAY[]:::int[], 1);
+SELECT array_upper(ARRAY[]:::int[], 1)
 ----
 NULL
 
 query I
-SELECT array_length(ARRAY[ARRAY[1, 2]], 2);
+SELECT array_length(ARRAY[ARRAY[1, 2]], 2)
 ----
 2
 
 query I
-SELECT array_lower(ARRAY[ARRAY[1, 2]], 2);
+SELECT array_lower(ARRAY[ARRAY[1, 2]], 2)
 ----
 1
 
 query I
-SELECT array_upper(ARRAY[ARRAY[1, 2]], 2);
+SELECT array_upper(ARRAY[ARRAY[1, 2]], 2)
 ----
 2
 
@@ -1429,7 +1429,7 @@ query error unknown index \(OID=0\)
 SELECT pg_catalog.pg_get_indexdef(0)
 
 statement ok
-CREATE TABLE test.pg_indexdef_test (a INT, INDEX pg_indexdef_idx (a ASC), INDEX other (a DESC));
+CREATE TABLE test.pg_indexdef_test (a INT, INDEX pg_indexdef_idx (a ASC), INDEX other (a DESC))
 
 query T
 SELECT pg_catalog.pg_get_indexdef((SELECT oid from pg_class WHERE relname='pg_indexdef_idx'))

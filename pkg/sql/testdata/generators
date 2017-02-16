@@ -116,13 +116,13 @@ query error pq: unsupported binary operator: <int> \+ <setof tuple\{int\}>
 SELECT 3 + generate_series(1,2)
 
 query I
-SELECT * from unnest(ARRAY[1,2]);
+SELECT * from unnest(ARRAY[1,2])
 ----
 1
 2
 
 query IT
-SELECT unnest(ARRAY[1,2]), unnest(ARRAY['a', 'b']);
+SELECT unnest(ARRAY[1,2]), unnest(ARRAY['a', 'b'])
 ----
 1  a
 1  b

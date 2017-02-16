@@ -102,7 +102,7 @@ SELECT 1 FROM kv GROUP BY v
 
 # Presence of HAVING triggers aggregation, reducing results to one row (even without GROUP BY).
 query I rowsort
-SELECT 3 FROM kv HAVING TRUE;
+SELECT 3 FROM kv HAVING TRUE
 ----
 3
 
@@ -317,11 +317,11 @@ query error aggregate function calls cannot be nested under max()
 SELECT MAX(k), MIN(v) FROM kv HAVING MAX(MIN(v)) > 2
 
 query error argument of HAVING must be type bool, not type int
-SELECT MAX(k), MIN(v) FROM kv HAVING k;
+SELECT MAX(k), MIN(v) FROM kv HAVING k
 
 # Expressions listed in the HAVING clause must conform to same validation as the SELECT clause (grouped or aggregated).
 query error column "k" must appear in the GROUP BY clause or be used in an aggregate function
-SELECT 3 FROM kv GROUP BY v HAVING k > 5;
+SELECT 3 FROM kv GROUP BY v HAVING k > 5
 
 # pg has a special case for grouping on primary key, which would allow this, but we do not.
 # See http://www.postgresql.org/docs/current/static/sql-select.html#SQL-GROUPBY
@@ -329,28 +329,28 @@ query error column "v" must appear in the GROUP BY clause or be used in an aggre
 SELECT 3 FROM kv GROUP BY k HAVING v > 2
 
 query error column "k" must appear in the GROUP BY clause or be used in an aggregate function
-SELECT k FROM kv HAVING k > 7;
+SELECT k FROM kv HAVING k > 7
 
 query error syntax error at or near ","
 SELECT COUNT(*, 1) FROM kv
 
 query I
-SELECT COUNT(*);
+SELECT COUNT(*)
 ----
 1
 
 query I
-SELECT COUNT(k) from kv;
+SELECT COUNT(k) from kv
 ----
 6
 
 query I
-SELECT COUNT(1);
+SELECT COUNT(1)
 ----
 1
 
 query I
-SELECT COUNT(1) from kv;
+SELECT COUNT(1) from kv
 ----
 6
 

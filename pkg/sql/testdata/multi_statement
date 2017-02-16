@@ -51,13 +51,13 @@ c d
 g h
 
 statement error pq: database "x" does not exist
-BEGIN; INSERT INTO x.y(a) VALUES (1); END;
+BEGIN; INSERT INTO x.y(a) VALUES (1); END
 
 statement error pq: current transaction is aborted, commands ignored until end of transaction block
-SELECT * from kv; ROLLBACK;
+SELECT * from kv; ROLLBACK
 
 statement ok
 ROLLBACK
 
 statement error pq: table "system.t" does not exist
-BEGIN TRANSACTION; SELECT * FROM system.t; INSERT INTO t(a) VALUES (1);
+BEGIN TRANSACTION; SELECT * FROM system.t; INSERT INTO t(a) VALUES (1)
