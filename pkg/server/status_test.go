@@ -467,31 +467,34 @@ func TestRaftDebug(t *testing.T) {
 		t.Errorf("expected more than 2 ranges, got %d", len(resp.Ranges))
 	}
 
-	req := "raft"
+	reqURI := "raft"
 	requestedIDs := []roachpb.RangeID{}
 	for id, _ := range resp.Ranges {
 		if len(requestedIDs) == 0 {
-			req += "?"
+			reqURI += "?"
 		} else {
-			req += "&"
+			reqURI += "&"
 		}
-		req += fmt.Sprintf("range_ids=%d", id)
+		reqURI += fmt.Sprintf("range_ids=%d", id)
 		requestedIDs = append(requestedIDs, id)
 		if len(requestedIDs) >= 2 {
 			break
 		}
 	}
 
-	if err := getStatusJSONProto(s, req, &resp); err != nil {
+	if err := getStatusJSONProto(s, reqURI, &resp); err != nil {
 		t.Fatal(err)
 	}
+
+	// Make sure we get exactly two ranges back.
 	if len(resp.Ranges) != 2 {
 		t.Errorf("expected exactly two ranges in response, got %d", len(resp.Ranges))
 	}
 
+	// Make sure the ranges returned are those requested.
 	for _, reqID := range requestedIDs {
 		if _, ok := resp.Ranges[reqID]; !ok {
-			t.Errorf("request was %s, but range ID %d not returned: %+v", req, reqID, resp.Ranges)
+			t.Errorf("request was %s, but range ID %d not returned: %+v", reqURI, reqID, resp.Ranges)
 		}
 	}
 }
