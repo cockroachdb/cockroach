@@ -79,7 +79,7 @@ SELECT SUM(a) AS s FROM foo GROUP BY @2 ORDER BY s
 
 # Check that GROUP BY picks up column ordinals.
 query ITTTTT
-EXPLAIN(VERBOSE) SELECT min(a) AS m FROM foo GROUP BY @1;
+EXPLAIN(VERBOSE) SELECT min(a) AS m FROM foo GROUP BY @1
 ----
 0  group                                 (m)
 0          aggregate 0  min(test.foo.a)
@@ -92,7 +92,7 @@ EXPLAIN(VERBOSE) SELECT min(a) AS m FROM foo GROUP BY @1;
 2          spans        ALL
 
 query ITTTTT
-EXPLAIN(VERBOSE) SELECT min(a) AS m FROM foo GROUP BY @2;
+EXPLAIN(VERBOSE) SELECT min(a) AS m FROM foo GROUP BY @2
 ----
 0  group                                 (m)
 0          aggregate 0  min(test.foo.a)

@@ -340,7 +340,7 @@ true
 
 # check that residual filters are not expanded twice
 query ITTTTT
-EXPLAIN(METADATA) SELECT x FROM xyz WHERE x IN (SELECT x FROM xyz);
+EXPLAIN(METADATA) SELECT x FROM xyz WHERE x IN (SELECT x FROM xyz)
 ----
 0  render                           (x)                          +x,unique
 1  scan                             (x, y[omitted], z[omitted])  +x,unique
@@ -359,10 +359,10 @@ statement ok
 CREATE TABLE tab4(col0 INTEGER, col1 FLOAT, col3 INTEGER, col4 FLOAT)
 
 statement ok
-INSERT INTO tab4 VALUES (1,1,1,1);
+INSERT INTO tab4 VALUES (1,1,1,1)
 
 statement ok
-CREATE INDEX idx_tab4_0 ON tab4 (col4,col0);
+CREATE INDEX idx_tab4_0 ON tab4 (col4,col0)
 
 query I
 SELECT col0 FROM tab4 WHERE (col0 <= 0 AND col4 <= 5.38) OR (col4 IN (SELECT col1 FROM tab4 WHERE col1 > 8.27)) AND (col3 <= 5 AND (col3 BETWEEN 7 AND 9))

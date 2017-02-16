@@ -1,5 +1,5 @@
 query O
-SELECT 3::OID;
+SELECT 3::OID
 ----
 3
 

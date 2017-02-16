@@ -1,87 +1,87 @@
 statement ok
-CREATE TABLE f (x FLOAT);
+CREATE TABLE f (x FLOAT)
 
 statement ok
-INSERT INTO f(x) VALUES (1e10000 * 1e-9999), (3/2), (1);
+INSERT INTO f(x) VALUES (1e10000 * 1e-9999), (3/2), (1)
 
 query R
-SELECT * FROM f;
+SELECT * FROM f
 ----
 10
 1.5
 1
 
 statement ok
-CREATE TABLE i (x INT);
+CREATE TABLE i (x INT)
 
 statement error value type decimal doesn't match type INT of column "x"
-INSERT INTO i(x) VALUES (4.5);
+INSERT INTO i(x) VALUES (4.5)
 
 statement ok
-INSERT INTO i(x) VALUES (((9 / 3) * (1 / 3))), (2.0), (2.4 + 4.6);
+INSERT INTO i(x) VALUES (((9 / 3) * (1 / 3))), (2.0), (2.4 + 4.6)
 
 query I
-SELECT * FROM i;
+SELECT * FROM i
 ----
 1
 2
 7
 
 statement ok
-CREATE TABLE d (x DECIMAL);
+CREATE TABLE d (x DECIMAL)
 
 statement ok
-INSERT INTO d(x) VALUES (((9 / 3) * (1 / 3))), (2.0), (2.4 + 4.6);
+INSERT INTO d(x) VALUES (((9 / 3) * (1 / 3))), (2.0), (2.4 + 4.6)
 
 query R
-SELECT * FROM d;
+SELECT * FROM d
 ----
 1
 2
 7
 
 statement ok
-UPDATE d SET x = x + 1 WHERE x + SQRT(x) >= 2 + .1;
+UPDATE d SET x = x + 1 WHERE x + SQRT(x) >= 2 + .1
 
 query R
-SELECT * FROM d;
+SELECT * FROM d
 ----
 1
 3
 8
 
 statement ok
-CREATE TABLE s (x STRING);
+CREATE TABLE s (x STRING)
 
 query error unsupported comparison operator: <string> > <bytes>
 SELECT * FROM s WHERE x > b'\x00'
 
 statement ok
-INSERT INTO s(x) VALUES (b'qwe'), ('start' || b'end');
+INSERT INTO s(x) VALUES (b'qwe'), ('start' || b'end')
 
 statement error value type bytes doesn't match type STRING of column "x"
-INSERT INTO s(x) VALUES (b'\xfffefd');
+INSERT INTO s(x) VALUES (b'\xfffefd')
 
 query T
-SELECT * from s;
+SELECT * from s
 ----
 qwe
 startend
 
 statement error incompatible COALESCE expressions: expected 1 to be of type string, found type int
-INSERT INTO s VALUES (COALESCE(1, 'foo'));
+INSERT INTO s VALUES (COALESCE(1, 'foo'))
 
 statement error incompatible COALESCE expressions: expected 1 to be of type string, found type int
-INSERT INTO i VALUES (COALESCE(1, 'foo'));
+INSERT INTO i VALUES (COALESCE(1, 'foo'))
 
 query error incompatible COALESCE expressions: expected 1 to be of type string, found type int
-SELECT COALESCE(1, 'foo');
+SELECT COALESCE(1, 'foo')
 
 query error incompatible COALESCE expressions: expected 'foo' to be of type int, found type string
-SELECT COALESCE(1::INT, 'foo');
+SELECT COALESCE(1::INT, 'foo')
 
 query R
-SELECT GREATEST(-1, 1, 2.3, 123456789, 3 + 5, -(-4));
+SELECT GREATEST(-1, 1, 2.3, 123456789, 3 + 5, -(-4))
 ----
 123456789
 
@@ -93,20 +93,20 @@ SELECT GREATEST(-1, 1, 2.3, 123456789, 3 + 5, -(-4));
 #     of all constants for the first resolvableExpr in typeCheckSameTypedExprs when the parent
 #     expression has no desired type.
 query error greatest\(\): expected -1.123 to be of type int, found type decimal
-SELECT GREATEST(-1.123, 1.21313, 2.3, 123456789.321, 3 + 5.3213, -(-4.3213), ABS(-9));
+SELECT GREATEST(-1.123, 1.21313, 2.3, 123456789.321, 3 + 5.3213, -(-4.3213), ABS(-9))
 
 query R
-SELECT GREATEST(-1, 1, 2.3, 123456789, 3 + 5, -(-4), ABS(-9.0));
+SELECT GREATEST(-1, 1, 2.3, 123456789, 3 + 5, -(-4), ABS(-9.0))
 ----
 123456789
 
 statement ok
-CREATE TABLE time (d DATE, ts TIMESTAMP, tz TIMESTAMPTZ, i INTERVAL);
+CREATE TABLE time (d DATE, ts TIMESTAMP, tz TIMESTAMPTZ, i INTERVAL)
 
 statement ok
-INSERT INTO time VALUES ('2010-09-28', '2010-09-28 12:00:00.1', '2010-09-29 12:00:00.1', 'PT12H2M');
+INSERT INTO time VALUES ('2010-09-28', '2010-09-28 12:00:00.1', '2010-09-29 12:00:00.1', 'PT12H2M')
 
 query TTTT
-SELECT * FROM time;
+SELECT * FROM time
 ----
 2010-09-28 00:00:00 +0000 +0000   2010-09-28 12:00:00.1 +0000 +0000   2010-09-29 12:00:00.1 +0000 +0000   12h2m0s
