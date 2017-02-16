@@ -21,3 +21,6 @@ artifacts
 *.test*
 # Various `sed -i~` invocations in our scripts.
 *~
+
+# Custom or private env vars (e.g. internal keys, access tokens, etc).
+customenv.mk
