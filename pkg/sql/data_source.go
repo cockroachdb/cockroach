@@ -427,8 +427,8 @@ func (p *planner) getTableScanOrViewPlan(
 	if p.avoidCachedDescriptors {
 		// AS OF SYSTEM TIME queries need to fetch the table descriptor at the
 		// specified time, and never lease anything. The proto transaction already
-		// has its timestamps set correctly so mustGetTableDesc will fetch with the
-		// correct timestamp.
+		// has its timestamps set correctly so mustGetTableOrViewDesc will fetch
+		// with the correct timestamp.
 		descFunc = p.mustGetTableOrViewDesc
 	}
 	desc, err := descFunc(tn)
