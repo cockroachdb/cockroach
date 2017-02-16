@@ -123,8 +123,8 @@ func ConvertBackfillError(tableDesc *sqlbase.TableDescriptor, b *client.Batch) e
 	return sqlbase.ConvertBatchError(desc, b)
 }
 
-// runChunk returns the next-key, done and an error. next-key and
-// done are invalid if error != nil. next-key is invalid if done is true.
+// runChunk returns the next-key and an error. next-key is nil
+// once the backfill is complete.
 func (ib *indexBackfiller) runChunk(
 	ctx context.Context,
 	table sqlbase.TableDescriptor,
