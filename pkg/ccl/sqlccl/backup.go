@@ -17,6 +17,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
+	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl/intervalccl"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -963,6 +964,9 @@ func backupPlanHook(
 	if !ok {
 		return nil, nil, nil
 	}
+	if err := utilccl.CheckEnterpriseEnabled("BACKUP"); err != nil {
+		return nil, nil, err
+	}
 	header := sql.ResultColumns{
 		{Name: "to", Typ: parser.TypeString},
 		{Name: "startTs", Typ: parser.TypeString},
@@ -1011,6 +1015,10 @@ func restorePlanHook(
 	if !ok {
 		return nil, nil, nil
 	}
+	if err := utilccl.CheckEnterpriseEnabled("RESTORE"); err != nil {
+		return nil, nil, err
+	}
+
 	fn := func() ([]parser.Datums, error) {
 		// TODO(dan): Move this span into sql.
 		ctx, span := tracing.ChildSpan(baseCtx, stmt.StatementTag())
