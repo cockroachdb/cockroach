@@ -522,9 +522,18 @@ func (p *planner) expandTableGlob(pattern parser.TablePattern) (parser.TableName
 func (p *planner) searchAndQualifyDatabase(tn *parser.TableName) error {
 	t := *tn
 
+	descFunc := p.getTableLease
+	if p.avoidCachedDescriptors {
+		// AS OF SYSTEM TIME queries need to fetch the table descriptor at the
+		// specified time, and never lease anything. The proto transaction already
+		// has its timestamps set correctly so mustGetTableDesc will fetch with the
+		// correct timestamp.
+		descFunc = p.mustGetTableOrViewDesc
+	}
+
 	if p.session.Database != "" {
 		t.DatabaseName = parser.Name(p.session.Database)
-		desc, err := p.getTableOrViewDesc(&t)
+		desc, err := descFunc(&t)
 		if err != nil && !sqlbase.IsUndefinedTableError(err) {
 			return err
 		}
@@ -539,7 +548,7 @@ func (p *planner) searchAndQualifyDatabase(tn *parser.TableName) error {
 	// the search path instead.
 	for _, database := range p.session.SearchPath {
 		t.DatabaseName = parser.Name(database)
-		desc, err := p.getTableOrViewDesc(&t)
+		desc, err := descFunc(&t)
 		if err != nil && !sqlbase.IsUndefinedTableError(err) {
 			return err
 		}
