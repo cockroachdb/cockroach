@@ -877,7 +877,7 @@ func TestAllocatorTransferLeaseTarget(t *testing.T) {
 	for _, c := range testCases {
 		t.Run("", func(t *testing.T) {
 			target := a.TransferLeaseTarget(config.Constraints{},
-				c.existing, c.leaseholder, 0, c.check)
+				c.existing, c.leaseholder, 0, c.check, true /* checkCandidateFullness */)
 			if c.expected != target.StoreID {
 				t.Fatalf("expected %d, but found %d", c.expected, target.StoreID)
 			}
@@ -922,7 +922,7 @@ func TestAllocatorTransferLeaseTargetMultiStore(t *testing.T) {
 	for _, c := range testCases {
 		t.Run("", func(t *testing.T) {
 			target := a.TransferLeaseTarget(config.Constraints{},
-				existing, c.leaseholder, 0, c.check)
+				existing, c.leaseholder, 0, c.check, true /* checkCandidateFullness */)
 			if c.expected != target.StoreID {
 				t.Fatalf("expected %d, but found %d", c.expected, target.StoreID)
 			}

@@ -348,6 +348,7 @@ func (a *Allocator) TransferLeaseTarget(
 	leaseStoreID roachpb.StoreID,
 	rangeID roachpb.RangeID,
 	checkTransferLeaseSource bool,
+	checkCandidateFullness bool,
 ) roachpb.ReplicaDescriptor {
 	sl, _, _ := a.storePool.getStoreList(rangeID)
 	sl = sl.filter(constraints)
@@ -392,7 +393,7 @@ func (a *Allocator) TransferLeaseTarget(
 		if !ok {
 			continue
 		}
-		if float64(storeDesc.Capacity.LeaseCount) < sl.candidateLeases.mean-0.5 {
+		if !checkCandidateFullness || float64(storeDesc.Capacity.LeaseCount) < sl.candidateLeases.mean-0.5 {
 			candidates = append(candidates, repl)
 		}
 	}

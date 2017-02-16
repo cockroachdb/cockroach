@@ -1031,10 +1031,7 @@ func TestRefreshPendingCommands(t *testing.T) {
 			for i := 0; i < 2; i++ {
 				wg.Add(1)
 				go func(i int) {
-					if err := mtc.stores[i].SetDraining(true); err != nil {
-						wg.Done(errors.Wrapf(err, "store %d", i))
-						return
-					}
+					mtc.stores[i].SetDraining(true)
 					wg.Done(nil)
 				}(i)
 			}
