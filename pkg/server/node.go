@@ -397,7 +397,7 @@ func (n *Node) start(
 func (n *Node) IsDraining() bool {
 	var isDraining bool
 	if err := n.stores.VisitStores(func(s *storage.Store) error {
-		isDraining = isDraining || s.IsDrainingLeases()
+		isDraining = isDraining || s.IsDraining()
 		return nil
 	}); err != nil {
 		panic(err)
@@ -412,7 +412,7 @@ func (n *Node) IsDraining() bool {
 // lease acquisition and extensions.
 func (n *Node) SetDraining(drain bool) error {
 	return n.stores.VisitStores(func(s *storage.Store) error {
-		return s.DrainLeases(drain)
+		return s.SetDraining(drain)
 	})
 }
 
