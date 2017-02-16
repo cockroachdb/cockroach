@@ -95,6 +95,7 @@
 		ChangeReplicasTrigger
 		ModifiedSpanTrigger
 		InternalCommitTrigger
+		ObservedTimestamp
 		Transaction
 		Intent
 		Lease

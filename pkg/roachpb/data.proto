@@ -196,6 +196,14 @@ enum TransactionStatus {
   ABORTED = 2;
 }
 
+message ObservedTimestamp {
+  option (gogoproto.populate) = true;
+
+  optional int32 node_id = 1 [(gogoproto.nullable) = false,
+      (gogoproto.customname) = "NodeID", (gogoproto.casttype) = "NodeID"];
+  optional util.hlc.Timestamp timestamp = 2 [(gogoproto.nullable) = false];
+}
+
 // A Transaction is a unit of work performed on the database.
 // Cockroach transactions support two isolation levels: snapshot
 // isolation and serializable snapshot isolation. Each Cockroach
@@ -257,15 +265,19 @@ message Transaction {
   // The case max_timestamp < timestamp is possible for transactions which have
   // been pushed; in this case, max_timestamp should be ignored.
   optional util.hlc.Timestamp max_timestamp = 7 [(gogoproto.nullable) = false];
-  // A map of NodeID to timestamps as observed from their local clock during
-  // this transaction. The purpose of this map is to avoid uncertainty related
-  // restarts which normally occur when reading a value in the near future as
-  // per the max_timestamp field.
-  // When this map holds a corresponding entry for the node the current request
-  // is executing on, we can run the command with the map's timestamp as the
-  // top boundary of our uncertainty interval, limiting (and often avoiding)
-  // uncertainty restarts.
-  map<int32, util.hlc.Timestamp> observed_timestamps = 8 [(gogoproto.nullable) = false, (gogoproto.castkey) = "NodeID"];
+  // A list of <NodeID, timestamp> pairs. The list maps NodeIDs to timestamps
+  // as observed from their local clock during this transaction. The purpose of
+  // this map is to avoid uncertainty related restarts which normally occur
+  // when reading a value in the near future as per the max_timestamp field.
+  //
+  // When this list holds a corresponding entry for the node the current
+  // request is executing on, we can run the command with the map's timestamp
+  // as the top boundary of our uncertainty interval, limiting (and often
+  // avoiding) uncertainty restarts.
+  //
+  // The list of observed timestamps is kept sorted by NodeID. Use
+  // Transaction.UpdateObservedTimestamp to maintain the sorted order.
+  repeated ObservedTimestamp observed_timestamps = 8 [(gogoproto.nullable) = false];
   // Writing is true if the transaction has previously executed a successful
   // write request, i.e. a request that may have left intents (across retries).
   optional bool writing = 9 [(gogoproto.nullable) = false];
