@@ -864,6 +864,10 @@ func (r *Replica) IsDestroyed() error {
 func (r *Replica) getLease() (*roachpb.Lease, *roachpb.Lease) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
+	return r.getLeaseRLocked()
+}
+
+func (r *Replica) getLeaseRLocked() (*roachpb.Lease, *roachpb.Lease) {
 	lease := *r.mu.state.Lease
 	if nextLease, ok := r.mu.pendingLeaseRequest.RequestPending(); ok {
 		return &lease, &nextLease

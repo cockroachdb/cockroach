@@ -319,7 +319,14 @@ func (rq *replicateQueue) processOneChange(
 			// need to be able to transfer leases in AllocatorRemove in order to get
 			// out of situations where this store is overfull and yet holds all the
 			// leases.
-			transferred, err := rq.transferLease(ctx, repl, desc, zone, false /* checkTransferLeaseSource */)
+			transferred, err := rq.transferLease(
+				ctx,
+				repl,
+				desc,
+				zone,
+				false, /* checkTransferLeaseSource */
+				true,  /* checkCandidateFullness */
+			)
 			if err != nil {
 				return false, err
 			}
@@ -364,7 +371,14 @@ func (rq *replicateQueue) processOneChange(
 		if rq.canTransferLease() {
 			// We require the lease in order to process replicas, so
 			// repl.store.StoreID() corresponds to the lease-holder's store ID.
-			transferred, err := rq.transferLease(ctx, repl, desc, zone, true /* checkTransferLeaseSource */)
+			transferred, err := rq.transferLease(
+				ctx,
+				repl,
+				desc,
+				zone,
+				true, /* checkTransferLeaseSource */
+				true, /* checkCandidateFullness */
+			)
 			if err != nil {
 				return false, err
 			}
@@ -415,6 +429,7 @@ func (rq *replicateQueue) transferLease(
 	desc *roachpb.RangeDescriptor,
 	zone config.ZoneConfig,
 	checkTransferLeaseSource bool,
+	checkCandidateFullness bool,
 ) (bool, error) {
 	candidates := filterBehindReplicas(repl.RaftStatus(), desc.Replicas)
 	if target := rq.allocator.TransferLeaseTarget(
@@ -425,6 +440,7 @@ func (rq *replicateQueue) transferLease(
 		desc.RangeID,
 		repl.stats,
 		checkTransferLeaseSource,
+		checkCandidateFullness,
 	); target != (roachpb.ReplicaDescriptor{}) {
 		rq.metrics.TransferLeaseCount.Inc(1)
 		if log.V(1) {

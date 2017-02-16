@@ -405,14 +405,11 @@ func (n *Node) IsDraining() bool {
 	return isDraining
 }
 
-// SetDraining called with 'true' waits until all Replicas' range leases
-// have expired or a reasonable amount of time has passed (in which case an
-// error is returned but draining mode is still active).
-// When called with 'false', returns to the normal mode of allowing lease holder
-// lease acquisition and extensions.
+// SetDraining sets the draining mode on all of the node's underlying stores.
 func (n *Node) SetDraining(drain bool) error {
 	return n.stores.VisitStores(func(s *storage.Store) error {
-		return s.SetDraining(drain)
+		s.SetDraining(drain)
+		return nil
 	})
 }
 
