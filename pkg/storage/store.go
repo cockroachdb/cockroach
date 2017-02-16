@@ -44,7 +44,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -968,38 +967,63 @@ func (s *Store) AnnotateCtx(ctx context.Context) context.Context {
 }
 
 // SetDraining (when called with 'true') prevents all of the Store's
-// Replicas from acquiring or extending range leases and waits until all of
-// them have expired. If an error is returned, the draining state is still
-// active, but there may be active leases held by some of the Store's Replicas.
+// Replicas from acquiring or extending range leases and attempts to transfer
+// away any leases owned. Any attempted range transfers to the store will be
+// rejected.
 // When called with 'false', returns to the normal mode of operation.
+//
+// TODO(asubiotto): Return an error when there may be active leases held by some
+// of the Store's Replicas. This requires some changes to the draining pipeline
+// because we currently abort a shutdown on error.
 func (s *Store) SetDraining(drain bool) error {
 	s.draining.Store(drain)
 	if !drain {
 		return nil
 	}
 
-	return util.RetryForDuration(10*s.cfg.RangeLeaseActiveDuration, func() error {
+	sysCfg, sysCfgSet := s.cfg.Gossip.GetSystemConfig()
+	newStoreReplicaVisitor(s).Visit(func(r *Replica) bool {
 		var drainingLease *roachpb.Lease
-		now := s.Clock().Now()
-		newStoreReplicaVisitor(s).Visit(func(r *Replica) bool {
+		for {
 			lease, nextLease := r.getLease()
-			// If we own an active lease or we're trying to obtain a lease
-			// (and that request is fresh enough), wait.
-			switch {
-			case lease.OwnedBy(s.StoreID()) && r.IsLeaseValid(lease, now):
-				drainingLease = lease
-			case nextLease != nil && nextLease.OwnedBy(s.StoreID()) && r.IsLeaseValid(nextLease, now):
-				drainingLease = nextLease
-			default:
-				return true
+			// If a lease request is in progress for us, we wait on it.
+			if nextLease != nil && nextLease.OwnedBy(s.StoreID()) {
+				r.mu.Lock()
+				requestDone := r.mu.pendingLeaseRequest.JoinRequest()
+				r.mu.Unlock()
+				<-requestDone
+				continue
 			}
-			return false // stop
-		})
-		if drainingLease != nil {
-			return errors.Errorf("lease %s is still active", drainingLease)
+			drainingLease = lease
+			break
 		}
-		return nil
+
+		if drainingLease.OwnedBy(s.StoreID()) && r.IsLeaseValid(drainingLease, s.Clock().Now()) {
+			var zone config.ZoneConfig
+			desc := r.Desc()
+			if sysCfgSet {
+				var err error
+				zone, err = sysCfg.GetZoneConfigForKey(desc.StartKey)
+				if log.V(1) && err != nil {
+					log.Errorf(context.TODO(), "could not get zone config for key %s when draining: %s", desc.StartKey, err)
+				}
+			} else {
+				zone = config.DefaultZoneConfig()
+			}
+			if _, err := s.replicateQueue.transferLease(
+				context.TODO(),
+				r,
+				r.Desc(),
+				zone,
+				false, /* checkTransferLeaseSource */
+				false, /* checkCandidateFullness */
+			); log.V(1) && err != nil {
+				log.Errorf(context.TODO(), "error transferring lease when draining: %s", err)
+			}
+		}
+		return true
 	})
+	return nil
 }
 
 // IsStarted returns true if the Store has been started.
