@@ -665,7 +665,7 @@ func (dsp *distSQLPlanner) selectRenders(p *physicalPlan, n *renderNode) {
 // reflect the sort node.
 func (dsp *distSQLPlanner) addSorters(p *physicalPlan, n *sortNode) {
 
-	matchLen := computeOrderingMatch(n.ordering, n.plan.Ordering(), false /* reverse */)
+	matchLen := n.plan.Ordering().computeMatch(n.ordering)
 
 	if matchLen < len(n.ordering) {
 		// Sorting is needed; we add a stage of sorting processors.

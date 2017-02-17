@@ -93,17 +93,13 @@ func applyLimit(plan planNode, numRows int64, soft bool) {
 		applyLimit(n.plan, numRows, soft)
 
 	case *groupNode:
-		if len(n.desiredOrdering) > 0 {
-			match := computeOrderingMatch(n.desiredOrdering, n.plan.Ordering(), false)
-			if match == len(n.desiredOrdering) {
-				// We have a single MIN/MAX function and the underlying plan's
-				// ordering matches the function. We only need to retrieve one row.
-				applyLimit(n.plan, 1, false /* !soft */)
-				n.needOnlyOneRow = true
-				return
-			}
+		if n.needOnlyOneRow {
+			// We have a single MIN/MAX function and the underlying plan's
+			// ordering matches the function. We only need to retrieve one row.
+			applyLimit(n.plan, 1, false /* !soft */)
+		} else {
+			setUnlimited(n.plan)
 		}
-		setUnlimited(n.plan)
 
 	case *indexJoinNode:
 		applyLimit(n.index, numRows, soft)
