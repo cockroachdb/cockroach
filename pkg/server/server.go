@@ -331,7 +331,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		TimeSeriesDataStore:       s.tsDB,
 
 		EnableEpochRangeLeases: envutil.EnvOrDefaultBool(
-			"COCKROACH_ENABLE_EPOCH_RANGE_LEASES", false),
+			"COCKROACH_ENABLE_EPOCH_RANGE_LEASES", true),
 	}
 	if s.cfg.TestingKnobs.Store != nil {
 		storeCfg.TestingKnobs = *s.cfg.TestingKnobs.Store.(*storage.StoreTestingKnobs)
