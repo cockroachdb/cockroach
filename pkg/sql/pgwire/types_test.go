@@ -82,6 +82,30 @@ func TestTimestampRoundtrip(t *testing.T) {
 	}
 }
 
+func TestIntArrayRoundTrip(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	buf := writeBuffer{bytecount: metric.NewCounter(metric.Metadata{})}
+	d := parser.NewDArray(parser.TypeInt)
+	for i := 0; i < 10; i++ {
+		if err := d.Append(parser.NewDInt(parser.DInt(i))); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	buf.writeTextDatum(d, time.UTC)
+
+	b := buf.wrapped.Bytes()
+
+	got, err := decodeOidDatum(oid.T__int8, formatText, b[4:])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Compare(d) != 0 {
+		t.Fatalf("expected %s, got %s", d, got)
+	}
+}
+
 func benchmarkWriteType(b *testing.B, d parser.Datum, format formatCode) {
 	buf := writeBuffer{bytecount: metric.NewCounter(metric.Metadata{Name: ""})}
 
