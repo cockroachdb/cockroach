@@ -275,10 +275,6 @@ func (txn *Txn) ReverseScan(begin, end interface{}, maxRows int64) ([]KeyValue, 
 	return txn.scan(begin, end, maxRows, true)
 }
 
-// TODO(pmattis): Txn.ReverseScan is neither used or tested. Silence unused
-// warning.
-var _ = (*Txn)(nil).ReverseScan
-
 // Del deletes one or more keys.
 //
 // key can be either a byte slice or a string.
@@ -573,14 +569,7 @@ func IsRetryableErrMeantForTxn(err *roachpb.RetryableTxnError, txn *Txn) bool {
 // sendInternal sends the batch and updates the transaction on error. Depending
 // on the error type, the transaction might be replaced by a new one.
 func (txn *Txn) sendInternal(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
-	if len(ba.Requests) == 0 {
-		return nil, nil
-	}
-	if pErr := txn.db.prepareToSend(&ba); pErr != nil {
-		return nil, pErr
-	}
-
-	// Send call through the DB's sender.
+	// Set transaction-specific BatchRequest fields.
 	ba.Txn = &txn.Proto
 	// For testing purposes, txn.UserPriority can be a negative value (see
 	// MakePriority).
@@ -588,25 +577,27 @@ func (txn *Txn) sendInternal(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *
 		ba.UserPriority = txn.UserPriority
 	}
 
-	// TODO(radu): when db.send supports a context, we can just use that (and
-	// remove the prepareToSend call above).
-	br, pErr := txn.db.sender.Send(txn.Context, ba)
-	if br != nil && br.Error != nil {
-		panic(roachpb.ErrorUnexpectedlySet(txn.db.sender, br))
-	}
-
-	if br != nil && len(br.CollectedSpans) != 0 {
-		if err := tracing.IngestRemoteSpans(txn.Context, br.CollectedSpans); err != nil {
-			return nil, roachpb.NewErrorf("error ingesting remote spans: %s", err)
-		}
-	}
-
-	// Only successful requests can carry an updated Txn in their response
-	// header. Any error (e.g. a restart) can have a Txn attached to them as
-	// well; those update our local state in the same way for the next attempt.
-	// The exception is if our transaction was aborted and needs to restart
-	// from scratch, in which case we do just that.
+	// Send call through the DB.
+	br, pErr := txn.db.send(txn.Context, ba)
 	if pErr == nil {
+		if br == nil {
+			return nil, nil
+		}
+
+		if br.Error != nil {
+			panic(roachpb.ErrorUnexpectedlySet(txn.db.sender, br))
+		}
+		if len(br.CollectedSpans) != 0 {
+			if err := tracing.IngestRemoteSpans(txn.Context, br.CollectedSpans); err != nil {
+				return nil, roachpb.NewErrorf("error ingesting remote spans: %s", err)
+			}
+		}
+
+		// Only successful requests can carry an updated Txn in their response
+		// header. Any error (e.g. a restart) can have a Txn attached to them as
+		// well; those update our local state in the same way for the next attempt.
+		// The exception is if our transaction was aborted and needs to restart
+		// from scratch, in which case we do just that.
 		txn.Proto.Update(br.Txn)
 		return br, nil
 	}
