@@ -16,7 +16,11 @@
 
 package sql
 
-import "github.com/cockroachdb/cockroach/pkg/sql/parser"
+import (
+	"golang.org/x/net/context"
+
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+)
 
 // ordinalityNode represents a node that adds an "ordinality" column
 // to its child node which numbers the rows it produces. Used to
@@ -79,8 +83,8 @@ func (p *planner) wrapOrdinality(ds planDataSource) planDataSource {
 	return ds
 }
 
-func (o *ordinalityNode) Next() (bool, error) {
-	hasNext, err := o.source.Next()
+func (o *ordinalityNode) Next(ctx context.Context) (bool, error) {
+	hasNext, err := o.source.Next(ctx)
 	if !hasNext || err != nil {
 		return hasNext, err
 	}
@@ -97,5 +101,7 @@ func (o *ordinalityNode) Values() parser.Datums      { return o.row }
 func (o *ordinalityNode) DebugValues() debugValues   { return o.source.DebugValues() }
 func (o *ordinalityNode) MarkDebug(mode explainMode) { o.source.MarkDebug(mode) }
 func (o *ordinalityNode) Columns() ResultColumns     { return o.columns }
-func (o *ordinalityNode) Start() error               { return o.source.Start() }
-func (o *ordinalityNode) Close()                     { o.source.Close() }
+func (o *ordinalityNode) Start(ctx context.Context) error {
+	return o.source.Start(ctx)
+}
+func (o *ordinalityNode) Close(ctx context.Context) { o.source.Close(ctx) }

@@ -19,6 +19,8 @@ package sql
 import (
 	"fmt"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -39,7 +41,7 @@ var (
 // Privileges: security.RootUser user, DROP on source database.
 //   Notes: postgres requires superuser, db owner, or "CREATEDB".
 //          mysql >= 5.1.23 does not allow database renames.
-func (p *planner) RenameDatabase(n *parser.RenameDatabase) (planNode, error) {
+func (p *planner) RenameDatabase(ctx context.Context, n *parser.RenameDatabase) (planNode, error) {
 	if n.Name == "" || n.NewName == "" {
 		return nil, errEmptyDatabaseName
 	}
@@ -71,7 +73,7 @@ func (p *planner) RenameDatabase(n *parser.RenameDatabase) (planNode, error) {
 		return nil, err
 	}
 	for i := range tbNames {
-		tbDesc, err := p.getTableOrViewDesc(&tbNames[i])
+		tbDesc, err := p.getTableOrViewDesc(ctx, &tbNames[i])
 		if err != nil {
 			return nil, err
 		}
@@ -111,7 +113,7 @@ func (p *planner) RenameDatabase(n *parser.RenameDatabase) (planNode, error) {
 //   Notes: postgres requires the table owner.
 //          mysql requires ALTER, DROP on the original table, and CREATE, INSERT
 //          on the new table (and does not copy privileges over).
-func (p *planner) RenameTable(n *parser.RenameTable) (planNode, error) {
+func (p *planner) RenameTable(ctx context.Context, n *parser.RenameTable) (planNode, error) {
 	oldTn, err := n.Name.NormalizeWithDatabaseName(p.session.Database)
 	if err != nil {
 		return nil, err
@@ -133,7 +135,7 @@ func (p *planner) RenameTable(n *parser.RenameTable) (planNode, error) {
 	// made more lenient down the road if needed.
 	var tableDesc *sqlbase.TableDescriptor
 	if n.IsView {
-		tableDesc, err = p.getViewDesc(oldTn)
+		tableDesc, err = p.getViewDesc(ctx, oldTn)
 		if err != nil {
 			return nil, err
 		}

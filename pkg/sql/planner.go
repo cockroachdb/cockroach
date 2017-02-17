@@ -124,15 +124,15 @@ type queryRunner interface {
 	parser.EvalPlanner
 
 	// queryRows executes a SQL query string where multiple result rows are returned.
-	queryRows(sql string, args ...interface{}) ([]parser.Datums, error)
+	queryRows(ctx context.Context, sql string, args ...interface{}) ([]parser.Datums, error)
 
 	// queryRowsAsRoot executes a SQL query string using security.RootUser
 	// and multiple result rows are returned.
-	queryRowsAsRoot(sql string, args ...interface{}) ([]parser.Datums, error)
+	queryRowsAsRoot(ctx context.Context, sql string, args ...interface{}) ([]parser.Datums, error)
 
 	// exec executes a SQL query string and returns the number of rows
 	// affected.
-	exec(sql string, args ...interface{}) (int, error)
+	exec(ctx context.Context, sql string, args ...interface{}) (int, error)
 
 	// The following methods can be used during testing.
 
@@ -308,7 +308,7 @@ func (p *planner) resetForBatch(e *Executor) {
 
 // query initializes a planNode from a SQL statement string. Close() must be
 // called on the returned planNode after use.
-func (p *planner) query(sql string, args ...interface{}) (planNode, error) {
+func (p *planner) query(ctx context.Context, sql string, args ...interface{}) (planNode, error) {
 	if log.V(2) {
 		log.Infof(p.ctx(), "internal query: %s", sql)
 		if len(args) > 0 {
@@ -320,12 +320,14 @@ func (p *planner) query(sql string, args ...interface{}) (planNode, error) {
 		return nil, err
 	}
 	golangFillQueryArguments(p.semaCtx.Placeholders, args)
-	return p.makePlan(stmt, false)
+	return p.makePlan(ctx, stmt, false)
 }
 
 // QueryRow implements the parser.EvalPlanner interface.
-func (p *planner) QueryRow(sql string, args ...interface{}) (parser.Datums, error) {
-	rows, err := p.queryRows(sql, args...)
+func (p *planner) QueryRow(
+	ctx context.Context, sql string, args ...interface{},
+) (parser.Datums, error) {
+	rows, err := p.queryRows(ctx, sql, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -340,16 +342,18 @@ func (p *planner) QueryRow(sql string, args ...interface{}) (parser.Datums, erro
 }
 
 // queryRows implements the queryRunner interface.
-func (p *planner) queryRows(sql string, args ...interface{}) ([]parser.Datums, error) {
-	plan, err := p.query(sql, args...)
+func (p *planner) queryRows(
+	ctx context.Context, sql string, args ...interface{},
+) ([]parser.Datums, error) {
+	plan, err := p.query(ctx, sql, args...)
 	if err != nil {
 		return nil, err
 	}
-	defer plan.Close()
-	if err := p.startPlan(plan); err != nil {
+	defer plan.Close(ctx)
+	if err := p.startPlan(ctx, plan); err != nil {
 		return nil, err
 	}
-	if next, err := plan.Next(); err != nil || !next {
+	if next, err := plan.Next(ctx); err != nil || !next {
 		return nil, err
 	}
 
@@ -360,7 +364,7 @@ func (p *planner) queryRows(sql string, args ...interface{}) ([]parser.Datums, e
 			rows = append(rows, valCopy)
 		}
 
-		next, err := plan.Next()
+		next, err := plan.Next(ctx)
 		if err != nil {
 			return nil, err
 		}
@@ -372,24 +376,26 @@ func (p *planner) queryRows(sql string, args ...interface{}) ([]parser.Datums, e
 }
 
 // queryRowsAsRoot implements the queryRunner interface.
-func (p *planner) queryRowsAsRoot(sql string, args ...interface{}) ([]parser.Datums, error) {
+func (p *planner) queryRowsAsRoot(
+	ctx context.Context, sql string, args ...interface{},
+) ([]parser.Datums, error) {
 	currentUser := p.session.User
 	defer func() { p.session.User = currentUser }()
 	p.session.User = security.RootUser
-	return p.queryRows(sql, args...)
+	return p.queryRows(ctx, sql, args...)
 }
 
 // exec implements the queryRunner interface.
-func (p *planner) exec(sql string, args ...interface{}) (int, error) {
-	plan, err := p.query(sql, args...)
+func (p *planner) exec(ctx context.Context, sql string, args ...interface{}) (int, error) {
+	plan, err := p.query(ctx, sql, args...)
 	if err != nil {
 		return 0, err
 	}
-	defer plan.Close()
-	if err := p.startPlan(plan); err != nil {
+	defer plan.Close(ctx)
+	if err := p.startPlan(ctx, plan); err != nil {
 		return 0, err
 	}
-	return countRowsAffected(plan)
+	return countRowsAffected(ctx, plan)
 }
 
 // setTestingVerifyMetadata implements the queryRunner interface.
@@ -440,9 +446,9 @@ func (p *planner) checkTestingVerifyMetadataOrDie(e *Executor, stmts parser.Stat
 	p.testingVerifyMetadataFn = nil
 }
 
-func (p *planner) fillFKTableMap(m tableLookupsByID) error {
+func (p *planner) fillFKTableMap(ctx context.Context, m tableLookupsByID) error {
 	for tableID := range m {
-		table, err := p.getTableLeaseByID(tableID)
+		table, err := p.getTableLeaseByID(ctx, tableID)
 		if err == errTableAdding {
 			m[tableID] = tableLookup{isAdding: true}
 			continue

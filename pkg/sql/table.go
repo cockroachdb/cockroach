@@ -21,6 +21,8 @@ import (
 	"bytes"
 	"fmt"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -79,7 +81,7 @@ type SchemaAccessor interface {
 
 	// getTableOrViewDesc returns a table descriptor for either a table or view,
 	// or nil if the descriptor is not found.
-	getTableOrViewDesc(tn *parser.TableName) (*sqlbase.TableDescriptor, error)
+	getTableOrViewDesc(ctx context.Context, tn *parser.TableName) (*sqlbase.TableDescriptor, error)
 
 	// getTableDesc returns a table descriptor for a table, or nil if the
 	// descriptor is not found. If you want the "not found" condition to
@@ -92,11 +94,13 @@ type SchemaAccessor interface {
 	// descriptor is not found.
 	// Returns an error if the underlying table descriptor actually
 	// represents a table rather than a view.
-	getViewDesc(tn *parser.TableName) (*sqlbase.TableDescriptor, error)
+	getViewDesc(ctx context.Context, tn *parser.TableName) (*sqlbase.TableDescriptor, error)
 
 	// mustGetTableOrViewDesc returns a table descriptor for either a table or
 	// view, or an error if the descriptor is not found.
-	mustGetTableOrViewDesc(tn *parser.TableName) (*sqlbase.TableDescriptor, error)
+	mustGetTableOrViewDesc(
+		ctx context.Context, tn *parser.TableName,
+	) (*sqlbase.TableDescriptor, error)
 
 	// mustGetTableDesc returns a table descriptor for a table, or an error if
 	// the descriptor is not found.
@@ -104,7 +108,7 @@ type SchemaAccessor interface {
 
 	// mustGetViewDesc returns a table descriptor for a view, or an error if the
 	// descriptor is not found.
-	mustGetViewDesc(tn *parser.TableName) (*sqlbase.TableDescriptor, error)
+	mustGetViewDesc(ctx context.Context, tn *parser.TableName) (*sqlbase.TableDescriptor, error)
 
 	// NB: one can use GetTableDescFromID() to retrieve a descriptor for
 	// a table from a transaction using its ID, assuming it was loaded
@@ -116,7 +120,7 @@ type SchemaAccessor interface {
 
 	// getTableLease acquires a lease for the specified table. The lease will be
 	// released when the planner closes.
-	getTableLease(tn *parser.TableName) (*sqlbase.TableDescriptor, error)
+	getTableLease(ctx context.Context, tn *parser.TableName) (*sqlbase.TableDescriptor, error)
 
 	// releaseLeases releases all leases currently held by the planner.
 	releaseLeases()
@@ -128,7 +132,9 @@ type SchemaAccessor interface {
 
 var _ SchemaAccessor = &planner{}
 
-func (p *planner) getTableOrViewDesc(tn *parser.TableName) (*sqlbase.TableDescriptor, error) {
+func (p *planner) getTableOrViewDesc(
+	_ context.Context, tn *parser.TableName,
+) (*sqlbase.TableDescriptor, error) {
 	return getTableOrViewDesc(p.txn, &p.session.virtualSchemas, tn)
 }
 
@@ -178,8 +184,10 @@ func getTableDesc(
 }
 
 // getViewDesc implements the SchemaAccessor interface.
-func (p *planner) getViewDesc(tn *parser.TableName) (*sqlbase.TableDescriptor, error) {
-	desc, err := p.getTableOrViewDesc(tn)
+func (p *planner) getViewDesc(
+	ctx context.Context, tn *parser.TableName,
+) (*sqlbase.TableDescriptor, error) {
+	desc, err := p.getTableOrViewDesc(ctx, tn)
 	if err != nil {
 		return desc, err
 	}
@@ -190,8 +198,10 @@ func (p *planner) getViewDesc(tn *parser.TableName) (*sqlbase.TableDescriptor, e
 }
 
 // mustGetTableOrViewDesc implements the SchemaAccessor interface.
-func (p *planner) mustGetTableOrViewDesc(tn *parser.TableName) (*sqlbase.TableDescriptor, error) {
-	desc, err := p.getTableOrViewDesc(tn)
+func (p *planner) mustGetTableOrViewDesc(
+	ctx context.Context, tn *parser.TableName,
+) (*sqlbase.TableDescriptor, error) {
+	desc, err := p.getTableOrViewDesc(ctx, tn)
 	if err != nil {
 		return nil, err
 	}
@@ -226,8 +236,10 @@ func mustGetTableDesc(
 }
 
 // mustGetViewDesc implements the SchemaAccessor interface.
-func (p *planner) mustGetViewDesc(tn *parser.TableName) (*sqlbase.TableDescriptor, error) {
-	desc, err := p.getViewDesc(tn)
+func (p *planner) mustGetViewDesc(
+	ctx context.Context, tn *parser.TableName,
+) (*sqlbase.TableDescriptor, error) {
+	desc, err := p.getViewDesc(ctx, tn)
 	if err != nil {
 		return nil, err
 	}
@@ -256,7 +268,9 @@ func filterTableState(tableDesc *sqlbase.TableDescriptor) error {
 }
 
 // getTableLease implements the SchemaAccessor interface.
-func (p *planner) getTableLease(tn *parser.TableName) (*sqlbase.TableDescriptor, error) {
+func (p *planner) getTableLease(
+	ctx context.Context, tn *parser.TableName,
+) (*sqlbase.TableDescriptor, error) {
 	if log.V(2) {
 		log.Infof(p.ctx(), "planner acquiring lease on table '%s'", tn)
 	}
@@ -304,9 +318,9 @@ func (p *planner) getTableLease(tn *parser.TableName) (*sqlbase.TableDescriptor,
 	}
 
 	// If we didn't find a lease or the lease is about to expire, acquire one.
-	if lease == nil || p.removeLeaseIfExpiring(lease) {
+	if lease == nil || p.removeLeaseIfExpiring(ctx, lease) {
 		var err error
-		lease, err = p.leaseMgr.AcquireByName(p.txn, dbID, tn.Table())
+		lease, err = p.leaseMgr.AcquireByName(ctx, p.txn, dbID, tn.Table())
 		if err != nil {
 			if err == sqlbase.ErrDescriptorNotFound {
 				// Transform the descriptor error into an error that references the
@@ -317,7 +331,7 @@ func (p *planner) getTableLease(tn *parser.TableName) (*sqlbase.TableDescriptor,
 		}
 		p.leases = append(p.leases, lease)
 		if log.V(2) {
-			log.Infof(p.ctx(), "added lease on table '%s' to planner cache", tn)
+			log.Infof(ctx, "added lease on table '%s' to planner cache", tn)
 		}
 		// If the lease we just acquired expires before the txn's deadline, reduce
 		// the deadline.
@@ -327,9 +341,11 @@ func (p *planner) getTableLease(tn *parser.TableName) (*sqlbase.TableDescriptor,
 }
 
 // getTableLeaseByID is a by-ID variant of getTableLease (i.e. uses same cache).
-func (p *planner) getTableLeaseByID(tableID sqlbase.ID) (*sqlbase.TableDescriptor, error) {
+func (p *planner) getTableLeaseByID(
+	ctx context.Context, tableID sqlbase.ID,
+) (*sqlbase.TableDescriptor, error) {
 	if log.V(2) {
-		log.Infof(p.ctx(), "planner acquiring lease on table ID %d", tableID)
+		log.Infof(ctx, "planner acquiring lease on table ID %d", tableID)
 	}
 
 	if testDisableTableLeases {
@@ -350,16 +366,16 @@ func (p *planner) getTableLeaseByID(tableID sqlbase.ID) (*sqlbase.TableDescripto
 		if l.ID == tableID {
 			lease = l
 			if log.V(2) {
-				log.Infof(p.ctx(), "found lease in planner cache for table %d", tableID)
+				log.Infof(ctx, "found lease in planner cache for table %d", tableID)
 			}
 			break
 		}
 	}
 
 	// If we didn't find a lease or the lease is about to expire, acquire one.
-	if lease == nil || p.removeLeaseIfExpiring(lease) {
+	if lease == nil || p.removeLeaseIfExpiring(ctx, lease) {
 		var err error
-		lease, err = p.leaseMgr.Acquire(p.txn, tableID, 0)
+		lease, err = p.leaseMgr.Acquire(ctx, p.txn, tableID, 0)
 		if err != nil {
 			if err == sqlbase.ErrDescriptorNotFound {
 				// Transform the descriptor error into an error that references the
@@ -378,7 +394,7 @@ func (p *planner) getTableLeaseByID(tableID sqlbase.ID) (*sqlbase.TableDescripto
 
 // removeLeaseIfExpiring removes a lease and returns true if it is about to expire.
 // The method also resets the transaction deadline.
-func (p *planner) removeLeaseIfExpiring(lease *LeaseState) bool {
+func (p *planner) removeLeaseIfExpiring(ctx context.Context, lease *LeaseState) bool {
 	if lease == nil || lease.hasSomeLifeLeft(p.leaseMgr.clock) {
 		return false
 	}
@@ -392,7 +408,7 @@ func (p *planner) removeLeaseIfExpiring(lease *LeaseState) bool {
 		}
 	}
 	if idx == -1 {
-		log.Warningf(p.ctx(), "lease (%s) not found", lease)
+		log.Warningf(ctx, "lease (%s) not found", lease)
 		return false
 	}
 	p.leases[idx] = p.leases[len(p.leases)-1]
@@ -400,7 +416,7 @@ func (p *planner) removeLeaseIfExpiring(lease *LeaseState) bool {
 	p.leases = p.leases[:len(p.leases)-1]
 
 	if err := p.leaseMgr.Release(lease); err != nil {
-		log.Warning(p.ctx(), err)
+		log.Warning(ctx, err)
 	}
 
 	// Reset the deadline so that a new deadline will be set after the lease is acquired.
@@ -519,7 +535,7 @@ func (p *planner) expandTableGlob(pattern parser.TablePattern) (parser.TableName
 // provided TableName is modified in-place in case of success, and
 // left unchanged otherwise.
 // The table name must not be qualified already.
-func (p *planner) searchAndQualifyDatabase(tn *parser.TableName) error {
+func (p *planner) searchAndQualifyDatabase(ctx context.Context, tn *parser.TableName) error {
 	t := *tn
 
 	descFunc := p.getTableLease
@@ -533,7 +549,7 @@ func (p *planner) searchAndQualifyDatabase(tn *parser.TableName) error {
 
 	if p.session.Database != "" {
 		t.DatabaseName = parser.Name(p.session.Database)
-		desc, err := descFunc(&t)
+		desc, err := descFunc(ctx, &t)
 		if err != nil && !sqlbase.IsUndefinedTableError(err) && !sqlbase.IsUndefinedDatabaseError(err) {
 			return err
 		}
@@ -548,7 +564,7 @@ func (p *planner) searchAndQualifyDatabase(tn *parser.TableName) error {
 	// the search path instead.
 	for _, database := range p.session.SearchPath {
 		t.DatabaseName = parser.Name(database)
-		desc, err := descFunc(&t)
+		desc, err := descFunc(ctx, &t)
 		if err != nil && !sqlbase.IsUndefinedTableError(err) && !sqlbase.IsUndefinedDatabaseError(err) {
 			return err
 		}

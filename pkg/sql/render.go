@@ -20,6 +20,8 @@ import (
 	"bytes"
 	"fmt"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/util"
 )
@@ -116,10 +118,12 @@ func (s *renderNode) DebugValues() debugValues {
 	return s.source.plan.DebugValues()
 }
 
-func (s *renderNode) Start() error { return s.source.plan.Start() }
+func (s *renderNode) Start(ctx context.Context) error {
+	return s.source.plan.Start(ctx)
+}
 
-func (s *renderNode) Next() (bool, error) {
-	if next, err := s.source.plan.Next(); !next {
+func (s *renderNode) Next(ctx context.Context) (bool, error) {
+	if next, err := s.source.plan.Next(ctx); !next {
 		return false, err
 	}
 
@@ -135,8 +139,8 @@ func (s *renderNode) Next() (bool, error) {
 	return err == nil, err
 }
 
-func (s *renderNode) Close() {
-	s.source.plan.Close()
+func (s *renderNode) Close(ctx context.Context) {
+	s.source.plan.Close(ctx)
 }
 
 // IndexedVarEval implements the parser.IndexedVarContainer interface.
@@ -156,7 +160,7 @@ func (s *renderNode) IndexedVarFormat(buf *bytes.Buffer, f parser.FmtFlags, idx 
 
 // Select selects rows from a SELECT/UNION/VALUES, ordering and/or limiting them.
 func (p *planner) Select(
-	n *parser.Select, desiredTypes []parser.Type, autoCommit bool,
+	ctx context.Context, n *parser.Select, desiredTypes []parser.Type, autoCommit bool,
 ) (planNode, error) {
 	wrapped := n.Select
 	limit := n.Limit
@@ -182,7 +186,7 @@ func (p *planner) Select(
 	case *parser.SelectClause:
 		// Select can potentially optimize index selection if it's being ordered,
 		// so we allow it to do its own sorting.
-		return p.SelectClause(s, orderBy, limit, desiredTypes, publicColumns)
+		return p.SelectClause(ctx, s, orderBy, limit, desiredTypes, publicColumns)
 
 	// TODO(dan): Union can also do optimizations when it has an ORDER BY, but
 	// currently expects the ordering to be done externally, so we let it fall
@@ -190,11 +194,11 @@ func (p *planner) Select(
 	// investigating a general mechanism for passing some context down during
 	// plan node construction.
 	default:
-		plan, err := p.newPlan(s, desiredTypes, autoCommit)
+		plan, err := p.newPlan(ctx, s, desiredTypes, autoCommit)
 		if err != nil {
 			return nil, err
 		}
-		sort, err := p.orderBy(orderBy, plan)
+		sort, err := p.orderBy(ctx, orderBy, plan)
 		if err != nil {
 			return nil, err
 		}
@@ -202,7 +206,7 @@ func (p *planner) Select(
 			sort.plan = plan
 			plan = sort
 		}
-		limit, err := p.Limit(limit)
+		limit, err := p.Limit(ctx, limit)
 		if err != nil {
 			return nil, err
 		}
@@ -229,6 +233,7 @@ func (p *planner) Select(
 //   Notes: postgres requires SELECT. Also requires UPDATE on "FOR UPDATE".
 //          mysql requires SELECT.
 func (p *planner) SelectClause(
+	ctx context.Context,
 	parsed *parser.SelectClause,
 	orderBy parser.OrderBy,
 	limit *parser.Limit,
@@ -237,32 +242,32 @@ func (p *planner) SelectClause(
 ) (planNode, error) {
 	s := &renderNode{planner: p}
 
-	if err := s.initFrom(parsed, scanVisibility); err != nil {
+	if err := s.initFrom(ctx, parsed, scanVisibility); err != nil {
 		return nil, err
 	}
 
-	where, err := s.initWhere(parsed.Where)
+	where, err := s.initWhere(ctx, parsed.Where)
 	if err != nil {
 		return nil, err
 	}
 
 	s.ivarHelper = parser.MakeIndexedVarHelper(s, len(s.sourceInfo[0].sourceColumns))
 
-	if err := s.initTargets(parsed.Exprs, desiredTypes); err != nil {
+	if err := s.initTargets(ctx, parsed.Exprs, desiredTypes); err != nil {
 		return nil, err
 	}
 
 	// NB: orderBy, window, and groupBy are passed and can modify the renderNode,
 	// but must do so in that order.
-	sort, err := p.orderBy(orderBy, s)
+	sort, err := p.orderBy(ctx, orderBy, s)
 	if err != nil {
 		return nil, err
 	}
-	window, err := p.window(parsed, s)
+	window, err := p.window(ctx, parsed, s)
 	if err != nil {
 		return nil, err
 	}
-	group, err := p.groupBy(parsed, s)
+	group, err := p.groupBy(ctx, parsed, s)
 	if err != nil {
 		return nil, err
 	}
@@ -272,7 +277,7 @@ func (p *planner) SelectClause(
 		where.filter = where.ivarHelper.Rebind(group.isNotNullFilter(where.filter), false, false)
 	}
 
-	limitPlan, err := p.Limit(limit)
+	limitPlan, err := p.Limit(ctx, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -303,12 +308,14 @@ func (p *planner) SelectClause(
 }
 
 // initFrom initializes the table node, given the parsed select expression
-func (s *renderNode) initFrom(parsed *parser.SelectClause, scanVisibility scanVisibility) error {
+func (s *renderNode) initFrom(
+	ctx context.Context, parsed *parser.SelectClause, scanVisibility scanVisibility,
+) error {
 	// AS OF expressions should be handled by the executor.
 	if parsed.From.AsOf.Expr != nil && !s.planner.avoidCachedDescriptors {
 		return fmt.Errorf("unexpected AS OF SYSTEM TIME")
 	}
-	src, err := s.planner.getSources(parsed.From.Tables, scanVisibility)
+	src, err := s.planner.getSources(ctx, parsed.From.Tables, scanVisibility)
 	if err != nil {
 		return err
 	}
@@ -317,7 +324,9 @@ func (s *renderNode) initFrom(parsed *parser.SelectClause, scanVisibility scanVi
 	return nil
 }
 
-func (s *renderNode) initTargets(targets parser.SelectExprs, desiredTypes []parser.Type) error {
+func (s *renderNode) initTargets(
+	ctx context.Context, targets parser.SelectExprs, desiredTypes []parser.Type,
+) error {
 	// Loop over the select expressions and expand them into the expressions
 	// we're going to use to generate the returned column set and the names for
 	// those columns.
@@ -326,7 +335,7 @@ func (s *renderNode) initTargets(targets parser.SelectExprs, desiredTypes []pars
 		if len(desiredTypes) > i {
 			desiredType = desiredTypes[i]
 		}
-		cols, exprs, hasStar, err := s.planner.computeRender(target, desiredType,
+		cols, exprs, hasStar, err := s.planner.computeRender(ctx, target, desiredType,
 			s.source.info, s.ivarHelper, true)
 		if err != nil {
 			return err
@@ -336,7 +345,7 @@ func (s *renderNode) initTargets(targets parser.SelectExprs, desiredTypes []pars
 		// it up to the sources list as a cross join and add a render for the
 		// function's column in the join.
 		if e := extractSetReturningFunction(exprs); e != nil {
-			cols, exprs, hasStar, err = s.transformToCrossJoin(e, desiredType)
+			cols, exprs, hasStar, err = s.transformToCrossJoin(ctx, e, desiredType)
 			if err != nil {
 				return err
 			}
@@ -371,13 +380,13 @@ func extractSetReturningFunction(exprs []parser.TypedExpr) *parser.FuncExpr {
 // cross-joined with the renderNode's existing data sources, returning a
 // render expression that points at the new data source.
 func (s *renderNode) transformToCrossJoin(
-	e *parser.FuncExpr, desiredType parser.Type,
+	ctx context.Context, e *parser.FuncExpr, desiredType parser.Type,
 ) (columns ResultColumns, exprs []parser.TypedExpr, hasStar bool, err error) {
-	src, err := s.planner.getDataSource(e, nil, publicColumns)
+	src, err := s.planner.getDataSource(ctx, e, nil, publicColumns)
 	if err != nil {
 		return nil, nil, false, err
 	}
-	src, err = s.planner.makeJoin("CROSS JOIN", s.source, src, nil)
+	src, err = s.planner.makeJoin(ctx, "CROSS JOIN", s.source, src, nil)
 	if err != nil {
 		return nil, nil, false, err
 	}
@@ -390,11 +399,11 @@ func (s *renderNode) transformToCrossJoin(
 	newTarget := parser.SelectExpr{
 		Expr: s.ivarHelper.IndexedVar(s.ivarHelper.NumVars() - 1),
 	}
-	return s.planner.computeRender(newTarget, desiredType,
+	return s.planner.computeRender(ctx, newTarget, desiredType,
 		s.source.info, s.ivarHelper, true)
 }
 
-func (s *renderNode) initWhere(where *parser.Where) (*filterNode, error) {
+func (s *renderNode) initWhere(ctx context.Context, where *parser.Where) (*filterNode, error) {
 	if where == nil {
 		return nil, nil
 	}
@@ -403,7 +412,7 @@ func (s *renderNode) initWhere(where *parser.Where) (*filterNode, error) {
 	f.ivarHelper = parser.MakeIndexedVarHelper(f, len(s.sourceInfo[0].sourceColumns))
 
 	var err error
-	f.filter, err = s.planner.analyzeExpr(where.Expr, s.sourceInfo, f.ivarHelper,
+	f.filter, err = s.planner.analyzeExpr(ctx, where.Expr, s.sourceInfo, f.ivarHelper,
 		parser.TypeBool, true, "WHERE")
 	if err != nil {
 		return nil, err

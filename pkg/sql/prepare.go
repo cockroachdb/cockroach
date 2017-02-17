@@ -19,8 +19,6 @@ package sql
 import (
 	"unsafe"
 
-	"golang.org/x/net/context"
-
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 )
 
@@ -67,8 +65,10 @@ func (ps PreparedStatements) Exists(name string) bool {
 // New creates a new PreparedStatement with the provided name and corresponding
 // query string, using the given PlaceholderTypes hints to assist in inferring
 // placeholder types.
+//
+// ps.session.Ctx() is used as the logging context for the prepare operation.
 func (ps PreparedStatements) New(
-	ctx context.Context, e *Executor, name, query string, placeholderHints parser.PlaceholderTypes,
+	e *Executor, name, query string, placeholderHints parser.PlaceholderTypes,
 ) (*PreparedStatement, error) {
 	// Prepare the query. This completes the typing of placeholders.
 	stmt, err := e.Prepare(query, ps.session, placeholderHints)

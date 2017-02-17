@@ -21,6 +21,8 @@ import (
 	"fmt"
 	"strconv"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -56,7 +58,9 @@ type sortNode struct {
 // TODO(dan): SQL also allows sorting a VALUES or UNION by an expression.
 // Support this. It will reduce some of the special casing below, but requires a
 // generalization of how to add derived columns to a SelectStatement.
-func (p *planner) orderBy(orderBy parser.OrderBy, n planNode) (*sortNode, error) {
+func (p *planner) orderBy(
+	ctx context.Context, orderBy parser.OrderBy, n planNode,
+) (*sortNode, error) {
 	if orderBy == nil {
 		return nil, nil
 	}
@@ -195,7 +199,8 @@ func (p *planner) orderBy(orderBy parser.OrderBy, n planNode) (*sortNode, error)
 		// If we are dealing with a UNION or something else we would need
 		// to fabricate an intermediate renderNode to add the new render.
 		if index == -1 && s != nil {
-			cols, exprs, hasStar, err := p.computeRender(parser.SelectExpr{Expr: expr}, parser.TypeAny,
+			cols, exprs, hasStar, err := p.computeRender(
+				ctx, parser.SelectExpr{Expr: expr}, parser.TypeAny,
 				s.source.info, s.ivarHelper, true)
 			if err != nil {
 				return nil, err
@@ -348,11 +353,11 @@ func (n *sortNode) DebugValues() debugValues {
 	return n.debugVals
 }
 
-func (n *sortNode) Start() error {
-	return n.plan.Start()
+func (n *sortNode) Start(ctx context.Context) error {
+	return n.plan.Start(ctx)
 }
 
-func (n *sortNode) Next() (bool, error) {
+func (n *sortNode) Next(ctx context.Context) (bool, error) {
 	for n.needSort {
 		if v, ok := n.plan.(*valuesNode); ok {
 			// The plan we wrap is already a values node. Just sort it.
@@ -372,7 +377,7 @@ func (n *sortNode) Next() (bool, error) {
 		// in this prefix, then sort the accumulated chunk and output.
 		// TODO(irfansharif): matching column ordering speed-ups from distsql,
 		// when implemented, could be repurposed and used here.
-		next, err := n.plan.Next()
+		next, err := n.plan.Next(ctx)
 		if err != nil {
 			return false, err
 		}
@@ -406,7 +411,7 @@ func (n *sortNode) Next() (bool, error) {
 	if n.valueIter == nil {
 		n.valueIter = n.plan
 	}
-	next, err := n.valueIter.Next()
+	next, err := n.valueIter.Next(ctx)
 	if !next {
 		return false, err
 	}
@@ -416,13 +421,13 @@ func (n *sortNode) Next() (bool, error) {
 	return true, nil
 }
 
-func (n *sortNode) Close() {
-	n.plan.Close()
+func (n *sortNode) Close(ctx context.Context) {
+	n.plan.Close(ctx)
 	if n.sortStrategy != nil {
-		n.sortStrategy.Close()
+		n.sortStrategy.Close(ctx)
 	}
 	if n.valueIter != nil {
-		n.valueIter.Close()
+		n.valueIter.Close(ctx)
 	}
 }
 
@@ -430,10 +435,10 @@ func (n *sortNode) Close() {
 // debug values. It is a subset of the planNode interface, so all methods
 // should conform to the comments expressed in the planNode definition.
 type valueIterator interface {
-	Next() (bool, error)
+	Next(ctx context.Context) (bool, error)
 	Values() parser.Datums
 	DebugValues() debugValues
-	Close()
+	Close(ctx context.Context)
 }
 
 type sortingStrategy interface {
@@ -473,8 +478,8 @@ func (ss *sortAllStrategy) Finish() {
 	ss.vNode.SortAll()
 }
 
-func (ss *sortAllStrategy) Next() (bool, error) {
-	return ss.vNode.Next()
+func (ss *sortAllStrategy) Next(ctx context.Context) (bool, error) {
+	return ss.vNode.Next(ctx)
 }
 
 func (ss *sortAllStrategy) Values() parser.Datums {
@@ -485,8 +490,8 @@ func (ss *sortAllStrategy) DebugValues() debugValues {
 	return ss.vNode.DebugValues()
 }
 
-func (ss *sortAllStrategy) Close() {
-	ss.vNode.Close()
+func (ss *sortAllStrategy) Close(ctx context.Context) {
+	ss.vNode.Close(ctx)
 }
 
 // iterativeSortStrategy reads in all values into the wrapped valuesNode
@@ -520,7 +525,7 @@ func (ss *iterativeSortStrategy) Finish() {
 	ss.vNode.InitMinHeap()
 }
 
-func (ss *iterativeSortStrategy) Next() (bool, error) {
+func (ss *iterativeSortStrategy) Next(context.Context) (bool, error) {
 	if ss.vNode.Len() == 0 {
 		return false, nil
 	}
@@ -542,8 +547,8 @@ func (ss *iterativeSortStrategy) DebugValues() debugValues {
 	}
 }
 
-func (ss *iterativeSortStrategy) Close() {
-	ss.vNode.Close()
+func (ss *iterativeSortStrategy) Close(ctx context.Context) {
+	ss.vNode.Close(ctx)
 }
 
 // sortTopKStrategy creates a max-heap in its wrapped valuesNode and keeps
@@ -605,8 +610,8 @@ func (ss *sortTopKStrategy) Finish() {
 	ss.vNode.ResetLen()
 }
 
-func (ss *sortTopKStrategy) Next() (bool, error) {
-	return ss.vNode.Next()
+func (ss *sortTopKStrategy) Next(ctx context.Context) (bool, error) {
+	return ss.vNode.Next(ctx)
 }
 
 func (ss *sortTopKStrategy) Values() parser.Datums {
@@ -617,8 +622,8 @@ func (ss *sortTopKStrategy) DebugValues() debugValues {
 	return ss.vNode.DebugValues()
 }
 
-func (ss *sortTopKStrategy) Close() {
-	ss.vNode.Close()
+func (ss *sortTopKStrategy) Close(ctx context.Context) {
+	ss.vNode.Close(ctx)
 }
 
 // TODO(pmattis): If the result set is large, we might need to perform the

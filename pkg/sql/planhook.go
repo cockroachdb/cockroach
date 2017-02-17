@@ -62,13 +62,11 @@ type hookFnNode struct {
 	resIdx int
 }
 
-var _ planNode = &hookFnNode{}
-
 func (*hookFnNode) Ordering() orderingInfo  { return orderingInfo{} }
 func (*hookFnNode) MarkDebug(_ explainMode) {}
-func (*hookFnNode) Close()                  {}
+func (*hookFnNode) Close(context.Context)   {}
 
-func (f *hookFnNode) Start() error {
+func (f *hookFnNode) Start(context.Context) error {
 	var err error
 	f.res, err = f.f()
 	f.resIdx = -1
@@ -77,7 +75,7 @@ func (f *hookFnNode) Start() error {
 func (f *hookFnNode) Columns() ResultColumns {
 	return f.header
 }
-func (f *hookFnNode) Next() (bool, error) {
+func (f *hookFnNode) Next(context.Context) (bool, error) {
 	if f.res == nil {
 		return false, nil
 	}

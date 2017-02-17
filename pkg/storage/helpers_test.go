@@ -124,12 +124,13 @@ func (s *Store) GetDeadReplicas() roachpb.StoreDeadReplicas {
 // LogReplicaChangeTest adds a fake replica change event to the log for the
 // range which contains the given key.
 func (s *Store) LogReplicaChangeTest(
+	ctx context.Context,
 	txn *client.Txn,
 	changeType roachpb.ReplicaChangeType,
 	replica roachpb.ReplicaDescriptor,
 	desc roachpb.RangeDescriptor,
 ) error {
-	return s.logChange(txn, changeType, replica, desc)
+	return s.logChange(ctx, txn, changeType, replica, desc)
 }
 
 // ReplicateQueuePurgatoryLength returns the number of replicas in replicate

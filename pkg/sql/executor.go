@@ -454,14 +454,14 @@ func (e *Executor) Prepare(
 		SetTxnTimestamps(txn, *protoTS)
 	}
 
-	plan, err := session.planner.prepare(stmt)
+	plan, err := session.planner.prepare(session.Ctx(), stmt)
 	if err != nil {
 		return nil, err
 	}
 	if plan == nil {
 		return prepared, nil
 	}
-	defer plan.Close()
+	defer plan.Close(session.Ctx())
 	prepared.Columns = plan.Columns()
 	for _, c := range prepared.Columns {
 		if err := checkResultType(c.Typ); err != nil {
@@ -501,8 +501,8 @@ func (e *Executor) CopyDone(session *Session) StatementResults {
 }
 
 // CopyEnd ends the COPY mode. Any buffered data is discarded.
-func (session *Session) CopyEnd() {
-	session.planner.copyFrom.Close()
+func (session *Session) CopyEnd(ctx context.Context) {
+	session.planner.copyFrom.Close(ctx)
 	session.planner.copyFrom = nil
 }
 
@@ -652,7 +652,8 @@ func (e *Executor) execRequest(session *Session, sql string, copymsg copyMsg) St
 				// Some results were produced by a previous attempt. Discard them.
 				ResultList(results).Close()
 			}
-			results, remainingStmts, err = runTxnAttempt(e, planMaker, origState, txnState, opt, stmtsToExec, isAutomaticRetry)
+			results, remainingStmts, err = runTxnAttempt(
+				e, planMaker, origState, txnState, opt, stmtsToExec, isAutomaticRetry)
 
 			// TODO(andrei): Until #7881 fixed.
 			if err == nil && txnState.State == Aborted {
@@ -777,15 +778,15 @@ func (e *Executor) execRequest(session *Session, sql string, copymsg copyMsg) St
 
 // If the plan has a fast path we attempt to query that,
 // otherwise we fall back to counting via plan.Next().
-func countRowsAffected(p planNode) (int, error) {
+func countRowsAffected(ctx context.Context, p planNode) (int, error) {
 	if a, ok := p.(planNodeFastPath); ok {
 		if count, res := a.FastPathResults(); res {
 			return count, nil
 		}
 	}
 	count := 0
-	next, err := p.Next()
-	for ; next; next, err = p.Next() {
+	next, err := p.Next(ctx)
+	for ; next; next, err = p.Next(ctx) {
 		count++
 	}
 	return count, err
@@ -871,9 +872,8 @@ func (e *Executor) execStmtsInCurrentTxn(
 	}
 
 	for i, stmt := range stmts {
-		ctx := planMaker.session.Ctx()
-		if log.V(2) || log.HasSpanOrEvent(ctx) {
-			log.VEventf(ctx, 2, "executing %d/%d: %s", i+1, len(stmts), stmt)
+		if log.V(2) || log.HasSpanOrEvent(planMaker.session.Ctx()) {
+			log.VEventf(planMaker.session.Ctx(), 2, "executing %d/%d: %s", i+1, len(stmts), stmt)
 		}
 		txnState.schemaChangers.curStatementIdx = i
 
@@ -916,7 +916,7 @@ func (e *Executor) execStmtsInCurrentTxn(
 			}
 		}
 		if filter := e.cfg.TestingKnobs.StatementFilter; filter != nil {
-			filter(ctx, stmt.String(), &res)
+			filter(planMaker.session.Ctx(), stmt.String(), &res)
 		}
 		results = append(results, res)
 		if err != nil {
@@ -1288,21 +1288,21 @@ func (e *Executor) execDistSQL(planMaker *planner, tree planNode, result *Result
 // execClassic runs a plan using the classic (non-distributed) SQL
 // implementation.
 func (e *Executor) execClassic(planMaker *planner, plan planNode, result *Result) error {
-	if err := planMaker.startPlan(plan); err != nil {
+	if err := planMaker.startPlan(planMaker.session.Ctx(), plan); err != nil {
 		return err
 	}
 
 	switch result.Type {
 	case parser.RowsAffected:
-		count, err := countRowsAffected(plan)
+		count, err := countRowsAffected(planMaker.session.Ctx(), plan)
 		if err != nil {
 			return err
 		}
 		result.RowsAffected += count
 
 	case parser.Rows:
-		next, err := plan.Next()
-		for ; next; next, err = plan.Next() {
+		next, err := plan.Next(planMaker.session.Ctx())
+		for ; next; next, err = plan.Next(planMaker.session.Ctx()) {
 			// The plan.Values Datums needs to be copied on each iteration.
 			values := plan.Values()
 
@@ -1380,12 +1380,12 @@ func (e *Executor) execStmt(
 	isAutomaticRetry bool,
 	tStart time.Time,
 ) (Result, error) {
-	plan, err := planMaker.makePlan(stmt, autoCommit)
+	plan, err := planMaker.makePlan(planMaker.session.Ctx(), stmt, autoCommit)
 	if err != nil {
 		return Result{}, err
 	}
 
-	defer plan.Close()
+	defer plan.Close(planMaker.session.Ctx())
 
 	result := Result{
 		PGTag: stmt.StatementTag(),

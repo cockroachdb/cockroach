@@ -20,6 +20,8 @@ import (
 	"bytes"
 	"fmt"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -241,7 +243,7 @@ func newSourceInfoForSingleTable(tn parser.TableName, columns ResultColumns) *da
 
 // getSources combines zero or more FROM sources into cross-joins.
 func (p *planner) getSources(
-	sources []parser.TableExpr, scanVisibility scanVisibility,
+	ctx context.Context, sources []parser.TableExpr, scanVisibility scanVisibility,
 ) (planDataSource, error) {
 	switch len(sources) {
 	case 0:
@@ -252,30 +254,32 @@ func (p *planner) getSources(
 		}, nil
 
 	case 1:
-		return p.getDataSource(sources[0], nil, scanVisibility)
+		return p.getDataSource(ctx, sources[0], nil, scanVisibility)
 
 	default:
-		left, err := p.getDataSource(sources[0], nil, scanVisibility)
+		left, err := p.getDataSource(ctx, sources[0], nil, scanVisibility)
 		if err != nil {
 			return planDataSource{}, err
 		}
-		right, err := p.getSources(sources[1:], scanVisibility)
+		right, err := p.getSources(ctx, sources[1:], scanVisibility)
 		if err != nil {
 			return planDataSource{}, err
 		}
-		return p.makeJoin("CROSS JOIN", left, right, nil)
+		return p.makeJoin(ctx, "CROSS JOIN", left, right, nil)
 	}
 }
 
 // getVirtualDataSource attempts to find a virtual table with the
 // given name.
-func (p *planner) getVirtualDataSource(tn *parser.TableName) (planDataSource, bool, error) {
+func (p *planner) getVirtualDataSource(
+	ctx context.Context, tn *parser.TableName,
+) (planDataSource, bool, error) {
 	virtual, err := p.session.virtualSchemas.getVirtualTableEntry(tn)
 	if err != nil {
 		return planDataSource{}, false, err
 	}
 	if virtual.desc != nil {
-		columns, constructor := virtual.getPlanInfo()
+		columns, constructor := virtual.getPlanInfo(ctx)
 		sourceName := parser.TableName{
 			TableName:    parser.Name(virtual.desc.Name),
 			DatabaseName: tn.DatabaseName,
@@ -295,46 +299,49 @@ func (p *planner) getVirtualDataSource(tn *parser.TableName) (planDataSource, bo
 // getDataSource builds a planDataSource from a single data source clause
 // (TableExpr) in a SelectClause.
 func (p *planner) getDataSource(
-	src parser.TableExpr, hints *parser.IndexHints, scanVisibility scanVisibility,
+	ctx context.Context,
+	src parser.TableExpr,
+	hints *parser.IndexHints,
+	scanVisibility scanVisibility,
 ) (planDataSource, error) {
 	switch t := src.(type) {
 	case *parser.NormalizableTableName:
 		// Usual case: a table.
-		tn, err := p.QualifyWithDatabase(t)
+		tn, err := p.QualifyWithDatabase(ctx, t)
 		if err != nil {
 			return planDataSource{}, err
 		}
 
 		// Is this perhaps a name for a virtual table?
-		ds, foundVirtual, err := p.getVirtualDataSource(tn)
+		ds, foundVirtual, err := p.getVirtualDataSource(ctx, tn)
 		if err != nil {
 			return planDataSource{}, err
 		}
 		if foundVirtual {
 			return ds, nil
 		}
-		return p.getTableScanOrViewPlan(tn, hints, scanVisibility)
+		return p.getTableScanOrViewPlan(ctx, tn, hints, scanVisibility)
 
 	case *parser.FuncExpr:
-		return p.getGeneratorPlan(t)
+		return p.getGeneratorPlan(ctx, t)
 
 	case *parser.Subquery:
-		return p.getSubqueryPlan(t.Select, nil)
+		return p.getSubqueryPlan(ctx, t.Select, nil)
 
 	case *parser.JoinTableExpr:
 		// Joins: two sources.
-		left, err := p.getDataSource(t.Left, nil, scanVisibility)
+		left, err := p.getDataSource(ctx, t.Left, nil, scanVisibility)
 		if err != nil {
 			return left, err
 		}
-		right, err := p.getDataSource(t.Right, nil, scanVisibility)
+		right, err := p.getDataSource(ctx, t.Right, nil, scanVisibility)
 		if err != nil {
 			return right, err
 		}
-		return p.makeJoin(t.Join, left, right, t.Cond)
+		return p.makeJoin(ctx, t.Join, left, right, t.Cond)
 
 	case *parser.Explain:
-		plan, err := p.Explain(t, false)
+		plan, err := p.Explain(ctx, t, false)
 		if err != nil {
 			return planDataSource{}, err
 		}
@@ -344,7 +351,7 @@ func (p *planner) getDataSource(
 		}, nil
 
 	case *parser.ParenTableExpr:
-		return p.getDataSource(t.Expr, hints, scanVisibility)
+		return p.getDataSource(ctx, t.Expr, hints, scanVisibility)
 
 	case *parser.AliasedTableExpr:
 		// Alias clause: source AS alias(cols...)
@@ -358,9 +365,9 @@ func (p *planner) getDataSource(
 
 		if tref, ok := t.Expr.(*parser.TableRef); ok {
 			// Special case: operand is a numeric table reference.
-			src, err = p.getTableScanByRef(tref, hints, scanVisibility)
+			src, err = p.getTableScanByRef(ctx, tref, hints, scanVisibility)
 		} else {
-			src, err = p.getDataSource(t.Expr, hints, scanVisibility)
+			src, err = p.getDataSource(ctx, t.Expr, hints, scanVisibility)
 		}
 		if err != nil {
 			return src, err
@@ -417,13 +424,15 @@ func (p *planner) getDataSource(
 	}
 }
 
-func (p *planner) QualifyWithDatabase(t *parser.NormalizableTableName) (*parser.TableName, error) {
+func (p *planner) QualifyWithDatabase(
+	ctx context.Context, t *parser.NormalizableTableName,
+) (*parser.TableName, error) {
 	tn, err := t.Normalize()
 	if err != nil {
 		return nil, err
 	}
 	if tn.DatabaseName == "" {
-		if err := p.searchAndQualifyDatabase(tn); err != nil {
+		if err := p.searchAndQualifyDatabase(ctx, tn); err != nil {
 			return nil, err
 		}
 	}
@@ -431,7 +440,10 @@ func (p *planner) QualifyWithDatabase(t *parser.NormalizableTableName) (*parser.
 }
 
 func (p *planner) getTableScanByRef(
-	tref *parser.TableRef, hints *parser.IndexHints, scanVisibility scanVisibility,
+	ctx context.Context,
+	tref *parser.TableRef,
+	hints *parser.IndexHints,
+	scanVisibility scanVisibility,
 ) (planDataSource, error) {
 	var desc *sqlbase.TableDescriptor
 	var err error
@@ -440,7 +452,7 @@ func (p *planner) getTableScanByRef(
 	if p.avoidCachedDescriptors {
 		desc, err = sqlbase.GetTableDescFromID(p.txn, tableID)
 	} else {
-		desc, err = p.getTableLeaseByID(tableID)
+		desc, err = p.getTableLeaseByID(ctx, tableID)
 	}
 	if err != nil {
 		return planDataSource{}, err
@@ -459,14 +471,17 @@ func (p *planner) getTableScanByRef(
 		DBNameOriginallyOmitted: true,
 	}
 
-	return p.getPlanForDesc(desc, &tn, hints, scanVisibility, tref.Columns)
+	return p.getPlanForDesc(ctx, desc, &tn, hints, scanVisibility, tref.Columns)
 }
 
 // getTableScanOrViewPlan builds a planDataSource from a single data source
 // clause (either a table or a view) in a SelectClause, expanding views out
 // into subqueries.
 func (p *planner) getTableScanOrViewPlan(
-	tn *parser.TableName, hints *parser.IndexHints, scanVisibility scanVisibility,
+	ctx context.Context,
+	tn *parser.TableName,
+	hints *parser.IndexHints,
+	scanVisibility scanVisibility,
 ) (planDataSource, error) {
 	descFunc := p.getTableLease
 	if p.avoidCachedDescriptors {
@@ -476,15 +491,16 @@ func (p *planner) getTableScanOrViewPlan(
 		// with the correct timestamp.
 		descFunc = p.mustGetTableOrViewDesc
 	}
-	desc, err := descFunc(tn)
+	desc, err := descFunc(ctx, tn)
 	if err != nil {
 		return planDataSource{}, err
 	}
 
-	return p.getPlanForDesc(desc, tn, hints, scanVisibility, nil)
+	return p.getPlanForDesc(ctx, desc, tn, hints, scanVisibility, nil)
 }
 
 func (p *planner) getPlanForDesc(
+	ctx context.Context,
 	desc *sqlbase.TableDescriptor,
 	tn *parser.TableName,
 	hints *parser.IndexHints,
@@ -496,7 +512,7 @@ func (p *planner) getPlanForDesc(
 			return planDataSource{},
 				errors.Errorf("cannot specify an explicit column list when accessing a view by reference")
 		}
-		return p.getViewPlan(tn, desc)
+		return p.getViewPlan(ctx, tn, desc)
 	} else if !desc.IsTable() {
 		return planDataSource{},
 			errors.Errorf("unexpected table descriptor of type %s for %q", desc.TypeName(), tn)
@@ -517,7 +533,7 @@ func (p *planner) getPlanForDesc(
 // getViewPlan builds a planDataSource for the view specified by the
 // table name and descriptor, expanding out its subquery plan.
 func (p *planner) getViewPlan(
-	tn *parser.TableName, desc *sqlbase.TableDescriptor,
+	ctx context.Context, tn *parser.TableName, desc *sqlbase.TableDescriptor,
 ) (planDataSource, error) {
 	// Parse the query as Traditional syntax because we know the query was
 	// saved in the descriptor by printing it with parser.Format.
@@ -547,7 +563,7 @@ func (p *planner) getViewPlan(
 	// TODO(a-robinson): Support ORDER BY and LIMIT in views. Is it as simple as
 	// just passing the entire select here or will inserting an ORDER BY in the
 	// middle of a query plan break things?
-	plan, err := p.getSubqueryPlan(sel.Select, makeResultColumns(desc.Columns))
+	plan, err := p.getSubqueryPlan(ctx, sel.Select, makeResultColumns(desc.Columns))
 	if err != nil {
 		return plan, err
 	}
@@ -558,9 +574,9 @@ func (p *planner) getViewPlan(
 // getSubqueryPlan builds a planDataSource for a select statement, including
 // for simple VALUES statements.
 func (p *planner) getSubqueryPlan(
-	sel parser.SelectStatement, cols ResultColumns,
+	ctx context.Context, sel parser.SelectStatement, cols ResultColumns,
 ) (planDataSource, error) {
-	plan, err := p.newPlan(sel, nil, false)
+	plan, err := p.newPlan(ctx, sel, nil, false)
 	if err != nil {
 		return planDataSource{}, err
 	}
@@ -573,8 +589,8 @@ func (p *planner) getSubqueryPlan(
 	}, nil
 }
 
-func (p *planner) getGeneratorPlan(t *parser.FuncExpr) (planDataSource, error) {
-	plan, err := p.makeGenerator(t)
+func (p *planner) getGeneratorPlan(ctx context.Context, t *parser.FuncExpr) (planDataSource, error) {
+	plan, err := p.makeGenerator(ctx, t)
 	if err != nil {
 		return planDataSource{}, err
 	}
