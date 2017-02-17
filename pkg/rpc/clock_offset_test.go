@@ -227,12 +227,8 @@ func TestLatencies(t *testing.T) {
 		for _, measurement := range tc.measurements {
 			monitor.UpdateOffset(context.Background(), key, RemoteOffset{}, measurement)
 		}
-		monitor.mu.Lock()
-		if l, ok := monitor.mu.latenciesNanos[key]; !ok {
-			t.Errorf("%q: missing latency measurement", key)
-		} else if val := time.Duration(int64(l.Value())); val != tc.expectedAvg {
+		if val := monitor.Latency(key); val != tc.expectedAvg {
 			t.Errorf("%q: expected latency %d, got %d", key, tc.expectedAvg, val)
 		}
-		monitor.mu.Unlock()
 	}
 }

@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/internal/localcluster"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -398,6 +399,13 @@ func handleStart() bool {
 	if err := configureArtificialLatencies(latenciesStr); err != nil {
 		log.Fatal(context.Background(), err)
 	}
+
+	// Speed up lease transfer decisions by not requiring quite as much data
+	// before beginning to make them. Without this, the rapid splitting of ranges
+	// in the few minutes after allocsim starts up causes it to take a long time
+	// for leases to settle onto other nodes even when requests are skewed heavily
+	// onto them.
+	storage.MinLeaseTransferStatsDuration = 10 * time.Second
 
 	cli.Main()
 	return true
