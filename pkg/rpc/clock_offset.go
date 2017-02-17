@@ -96,6 +96,18 @@ func (r *RemoteClockMonitor) Metrics() *RemoteClockMetrics {
 	return &r.metrics
 }
 
+// Latency returns the exponentially weighted moving average latency to the
+// given node address. Returns true if the measurement is valid, or false if
+// we don't have enough samples to compute a reliable average.
+func (r *RemoteClockMonitor) Latency(addr string) (time.Duration, bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if avg, ok := r.mu.latenciesNanos[addr]; ok && avg.Value() != 0.0 {
+		return time.Duration(int64(avg.Value())), true
+	}
+	return 0, false
+}
+
 // UpdateOffset is a thread-safe way to update the remote clock and latency
 // measurements.
 //
