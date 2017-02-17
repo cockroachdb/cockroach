@@ -1150,6 +1150,7 @@ func (ds *DistSender) sendToReplicas(
 	defer sendNextTimer.Stop()
 	defer slowTimer.Stop()
 	slowTimer.Reset(base.SlowRequestThreshold)
+	expiredNotLeaserHolderError := make(chan *roachpb.NotLeaseHolderError)
 	for {
 		if !transport.IsExhausted() {
 			// Only start the send-next timer if we haven't exhausted the transport
@@ -1174,6 +1175,10 @@ func (ds *DistSender) sendToReplicas(
 			ds.metrics.SlowRequestsCount.Inc(1)
 			defer ds.metrics.SlowRequestsCount.Dec(1)
 
+		case nlhe := <-expiredNotLeaserHolderError:
+			log.VEventf(ctx, 2, "range lease %s expired, retrying %+v", nlhe.Lease, nlhe.Replica)
+			transport.MoveToFront(nlhe.Replica)
+
 		case call := <-done:
 			pending--
 			err := call.Err
@@ -1192,6 +1197,27 @@ func (ds *DistSender) sendToReplicas(
 
 						// Move the new lease holder to the head of the queue for the next retry.
 						transport.MoveToFront(*lh)
+
+						// If we're still here when the reported lease is set to expire,
+						// move the reporting replica back to the front of the queue; it
+						// may now have acquired the lease.
+
+						if l := tErr.Lease; l != nil {
+							now := args.Timestamp
+							if now == (hlc.Timestamp{}) {
+								now = l.Start
+							}
+							if now == (hlc.Timestamp{}) {
+								now = ds.clock.Now()
+							}
+							remaining := l.Expiration.GoTime().Sub(now.GoTime())
+							defer time.AfterFunc(remaining, func() {
+								select {
+								case expiredNotLeaserHolderError <- tErr:
+								case <-ctx.Done():
+								}
+							}).Stop()
+						}
 					}
 				default:
 					// The error received is not specific to this replica, so we
