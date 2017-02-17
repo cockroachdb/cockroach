@@ -31,6 +31,7 @@ import (
 	"github.com/coreos/etcd/raft"
 	"github.com/olekukonko/tablewriter"
 	"github.com/pkg/errors"
+	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"
@@ -175,10 +176,12 @@ var multiDCStores = []*roachpb.StoreDescriptor{
 func createTestAllocator(
 	deterministic bool,
 ) (*stop.Stopper, *gossip.Gossip, *StorePool, Allocator, *hlc.ManualClock) {
-	stopper, g, manualClock, storePool, _ := createTestStorePool(
+	stopper, g, manual, storePool, _ := createTestStorePool(
 		TestTimeUntilStoreDeadOff, deterministic, true /* defaultNodeLiveness */)
-	a := MakeAllocator(storePool)
-	return stopper, g, storePool, a, manualClock
+	rpcContext := rpc.NewContext(
+		log.AmbientContext{}, &base.Config{}, hlc.NewClock(manual.UnixNano, time.Nanosecond), stopper)
+	a := MakeAllocator(storePool, rpcContext)
+	return stopper, g, storePool, a, manual
 }
 
 // mockStorePool sets up a collection of a alive and dead stores in the store
@@ -663,7 +666,7 @@ func TestAllocatorRebalanceThrashing(t *testing.T) {
 		for i := range stores {
 			stores[i].rangeCount = mean
 		}
-		surplus := int32(math.Ceil(float64(mean)*rebalanceThreshold + 1))
+		surplus := int32(math.Ceil(float64(mean)*baseRebalanceThreshold + 1))
 		stores[0].rangeCount += surplus
 		stores[0].shouldRebalanceFrom = true
 		for i := 1; i < len(stores); i++ {
@@ -682,7 +685,7 @@ func TestAllocatorRebalanceThrashing(t *testing.T) {
 		// Subtract enough ranges from the first store to make it a suitable
 		// rebalance target. To maintain the specified mean, we then add that delta
 		// back to the rest of the replicas.
-		deficit := int32(math.Ceil(float64(mean)*rebalanceThreshold + 1))
+		deficit := int32(math.Ceil(float64(mean)*baseRebalanceThreshold + 1))
 		stores[0].rangeCount -= deficit
 		for i := 1; i < len(stores); i++ {
 			stores[i].rangeCount += int32(math.Ceil(float64(deficit) / float64(len(stores)-1)))
@@ -702,8 +705,8 @@ func TestAllocatorRebalanceThrashing(t *testing.T) {
 		// Adding an empty node to a 3-node cluster triggers rebalancing from
 		// existing nodes.
 		{"empty-node", []testStore{{100, true}, {100, true}, {100, true}, {0, false}}},
-		// A cluster where all range counts are within RebalanceThreshold should
-		// not rebalance. This assumes RebalanceThreshold > 2%.
+		// A cluster where all range counts are within baseRebalanceThreshold should
+		// not rebalance. This assumes baseRebalanceThreshold > 2%.
 		{"within-threshold", []testStore{{98, false}, {99, false}, {101, false}, {102, false}}},
 
 		{"5-stores-mean-100-one-above", oneStoreAboveRebalanceTarget(100, 5)},
@@ -876,8 +879,8 @@ func TestAllocatorTransferLeaseTarget(t *testing.T) {
 	}
 	for _, c := range testCases {
 		t.Run("", func(t *testing.T) {
-			target := a.TransferLeaseTarget(config.Constraints{},
-				c.existing, c.leaseholder, 0, c.check)
+			target := a.TransferLeaseTarget(context.Background(), config.Constraints{},
+				c.existing, c.leaseholder, 0, nil /* replicaStats */, c.check)
 			if c.expected != target.StoreID {
 				t.Fatalf("expected %d, but found %d", c.expected, target.StoreID)
 			}
@@ -921,8 +924,8 @@ func TestAllocatorTransferLeaseTargetMultiStore(t *testing.T) {
 	}
 	for _, c := range testCases {
 		t.Run("", func(t *testing.T) {
-			target := a.TransferLeaseTarget(config.Constraints{},
-				existing, c.leaseholder, 0, c.check)
+			target := a.TransferLeaseTarget(context.Background(), config.Constraints{},
+				existing, c.leaseholder, 0, nil /* replicaStats */, c.check)
 			if c.expected != target.StoreID {
 				t.Fatalf("expected %d, but found %d", c.expected, target.StoreID)
 			}
@@ -975,7 +978,14 @@ func TestAllocatorShouldTransferLease(t *testing.T) {
 	}
 	for _, c := range testCases {
 		t.Run("", func(t *testing.T) {
-			result := a.ShouldTransferLease(config.Constraints{}, c.existing, c.leaseholder, 0)
+			result := a.ShouldTransferLease(
+				context.Background(),
+				config.Constraints{},
+				c.existing,
+				c.leaseholder,
+				0,
+				nil, /* replicaStats */
+			)
 			if c.expected != result {
 				t.Fatalf("expected %v, but found %v", c.expected, result)
 			}
@@ -1458,7 +1468,7 @@ func TestAllocatorComputeAction(t *testing.T) {
 func TestAllocatorComputeActionNoStorePool(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	a := MakeAllocator(nil /* storePool */)
+	a := MakeAllocator(nil /* storePool */, nil /* rpcContext */)
 	action, priority := a.ComputeAction(config.ZoneConfig{}, nil)
 	if action != AllocatorNoop {
 		t.Errorf("expected AllocatorNoop, but got %v", action)
@@ -1666,7 +1676,7 @@ func Example_rebalancing() {
 		TestTimeUntilStoreDeadOff,
 		/* deterministic */ true,
 	)
-	alloc := MakeAllocator(sp)
+	alloc := MakeAllocator(sp, rpcContext)
 
 	var wg sync.WaitGroup
 	g.RegisterCallback(gossip.MakePrefixPattern(gossip.KeyStorePrefix), func(_ string, _ roachpb.Value) { wg.Done() })
