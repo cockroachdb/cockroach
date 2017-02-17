@@ -125,6 +125,28 @@ func TestBinaryDate(t *testing.T) {
 	})
 }
 
+func TestBinaryIntArray(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	buf := writeBuffer{bytecount: metric.NewCounter(metric.Metadata{})}
+	d := parser.NewDArray(parser.TypeInt)
+	for i := 0; i < 10; i++ {
+		if err := d.Append(parser.NewDInt(parser.DInt(i))); err != nil {
+			t.Fatal(err)
+		}
+	}
+	buf.writeBinaryDatum(d, time.UTC)
+
+	b := buf.wrapped.Bytes()
+
+	got, err := decodeOidDatum(oid.T__int8, formatBinary, b[4:])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Compare(d) != 0 {
+		t.Fatalf("expected %s, got %s", d, got)
+	}
+}
+
 var generateBinaryCmd = flag.String("generate-binary", "", "generate-binary command invocation")
 
 func TestRandomBinaryDecimal(t *testing.T) {
