@@ -18,7 +18,7 @@ INSERT INTO kv VALUES (1, 2), (3, 4), (5, 6), (7, 8)
 statement ok
 INSERT INTO unindexed VALUES (1, 2), (3, 4), (5, 6), (7, 8)
 
-query II
+query II rowsort
 SELECT * FROM kv
 ----
 1 2
@@ -29,7 +29,7 @@ SELECT * FROM kv
 statement ok
 CREATE VIEW kview AS SELECT k,v FROM kv
 
-query II
+query II rowsort
 SELECT * FROM kview
 ----
 1 2
@@ -40,7 +40,7 @@ SELECT * FROM kview
 statement error cannot run DELETE on view "kview" - views are not updateable
 DELETE FROM kview
 
-query II
+query II rowsort
 SELECT * FROM kview
 ----
 1 2
@@ -51,7 +51,7 @@ SELECT * FROM kview
 statement ok
 DELETE FROM kv WHERE k=3 OR v=6
 
-query II
+query II rowsort
 SELECT * FROM kv
 ----
 1 2
@@ -89,7 +89,7 @@ DELETE FROM kv WHERE nonexistent = 1
 statement ok
 DELETE FROM unindexed WHERE k=3 OR v=6
 
-query II
+query II rowsort
 SELECT * FROM unindexed
 ----
 1 2
@@ -125,7 +125,7 @@ k v
 statement ok
 INSERT INTO unindexed VALUES (1, 2), (3, 4), (5, 6), (7, 8)
 
-query II colnames
+query II colnames,rowsort
 SELECT k, v FROM unindexed
 ----
 k v
@@ -146,7 +146,7 @@ Level  Type    Field  Description
 2              table  unindexed@primary
 2              spans  ALL
 
-query II colnames
+query II colnames,rowsort
 SELECT k, v FROM unindexed
 ----
 k v

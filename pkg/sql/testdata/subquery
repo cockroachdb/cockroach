@@ -113,7 +113,7 @@ CREATE TABLE xyz (x INT PRIMARY KEY, y INT, z INT)
 statement ok
 INSERT INTO xyz SELECT * FROM abc
 
-query III
+query III rowsort
 SELECT * FROM xyz
 ----
 1 2 3
@@ -126,7 +126,7 @@ INSERT INTO xyz (x, y, z) VALUES (10, 11, 12)
 statement ok
 UPDATE xyz SET z = (SELECT 10) WHERE x = 7
 
-query III
+query III rowsort
 SELECT * FROM xyz
 ----
 1 2 3
@@ -144,7 +144,7 @@ UPDATE xyz SET (y, z) = (SELECT (11, 12)) WHERE x = 7
 #statement ok
 #UPDATE xyz SET (y, z) = (SELECT 11, 12) WHERE x = 7
 #
-#query III
+#query III rowsort
 #SELECT * FROM xyz
 #----
 #1 2  3
@@ -191,19 +191,19 @@ false
 
 # Tests for subquery in the FROM part of a SELECT
 
-query II colnames
+query II colnames,rowsort
 SELECT * FROM (VALUES (1, 2)) AS foo
 ----
 column1 column2
 1 2
 
-query II colnames
+query II colnames,rowsort
 SELECT * FROM (VALUES (1, 2))
 ----
 column1 column2
 1 2
 
-query IT colnames
+query IT colnames,rowsort
 SELECT * FROM (VALUES (1, 'one'), (2, 'two'), (3, 'three')) AS foo
 ----
 column1 column2
@@ -211,49 +211,49 @@ column1 column2
 2 two
 3 three
 
-query III colnames
+query III colnames,rowsort
 SELECT * FROM (VALUES (1, 2, 3), (4, 5, 6)) AS foo
 ----
 column1 column2 column3
 1       2       3
 4       5       6
 
-query III colnames
+query III colnames,rowsort
 SELECT * FROM (VALUES (1, 2, 3), (4, 5, 6)) AS foo (foo1, foo2, foo3)
 ----
 foo1 foo2 foo3
 1    2    3
 4    5    6
 
-query III colnames
+query III colnames,rowsort
 SELECT * FROM (VALUES (1, 2, 3), (4, 5, 6)) AS foo (foo1, foo2)
 ----
 foo1 foo2 column3
 1    2    3
 4    5    6
 
-query III colnames
+query III colnames,rowsort
 SELECT * FROM (SELECT * FROM xyz) AS foo WHERE x < 7
 ----
 x y  z
 1 2  3
 4 5  6
 
-query III colnames
+query III colnames,rowsort
 SELECT * FROM (SELECT * FROM xyz) AS foo (foo1) WHERE foo1 < 7
 ----
 foo1 y  z
 1    2  3
 4    5  6
 
-query III colnames
+query III colnames,rowsort
 SELECT * FROM (SELECT * FROM xyz AS moo (moo1, moo2, moo3)) as foo (foo1) WHERE foo1 < 7
 ----
 foo1 moo2 moo3
 1    2    3
 4    5    6
 
-query III colnames
+query III colnames,rowsort
 SELECT * FROM (SELECT * FROM xyz AS moo (moo1, moo2, moo3) ORDER BY moo1) as foo (foo1) WHERE foo1 < 7
 ----
 foo1 moo2 moo3
@@ -327,7 +327,7 @@ SELECT x FROM xyz WHERE x = 7 LIMIT (SELECT x FROM xyz WHERE x = 1)
 7
 
 query I
-SELECT x FROM xyz OFFSET (SELECT x FROM xyz WHERE x = 1)
+SELECT x FROM xyz ORDER BY x OFFSET (SELECT x FROM xyz WHERE x = 1)
 ----
 4
 7

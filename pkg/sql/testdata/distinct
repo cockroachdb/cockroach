@@ -9,7 +9,7 @@ CREATE TABLE xyz (
 statement ok
 INSERT INTO xyz VALUES (1, 2, 3), (2, 5, 6), (3, 2, 3), (4, 5, 6), (5, 2, 6), (6, 3, 5), (7, 2, 9)
 
-query II
+query II rowsort
 SELECT y, z FROM xyz
 ----
 2 3
@@ -20,7 +20,7 @@ SELECT y, z FROM xyz
 3 5
 2 9
 
-query II
+query II rowsort
 SELECT DISTINCT y, z FROM xyz
 ----
 2 3
@@ -160,7 +160,7 @@ EXPLAIN SELECT DISTINCT y AS w FROM xyz ORDER BY y
 statement ok
 INSERT INTO xyz (x, y) VALUES (8, 2), (9, 2)
 
-query II
+query II rowsort
 SELECT DISTINCT y,z FROM xyz
 ----
 2 3
@@ -170,7 +170,7 @@ SELECT DISTINCT y,z FROM xyz
 2 9
 2 NULL
 
-query T
+query T rowsort
 SELECT DISTINCT (y,z) FROM xyz
 ----
 (2,3)

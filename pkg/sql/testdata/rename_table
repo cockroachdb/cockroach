@@ -13,7 +13,7 @@ CREATE TABLE kv (
 statement ok
 INSERT INTO kv VALUES (1, 2), (3, 4)
 
-query II
+query II rowsort
 SELECT * FROM kv
 ----
 1 2
@@ -30,7 +30,7 @@ ALTER TABLE kv RENAME TO new_kv
 statement error pgcode 42P01 table "kv" does not exist
 SELECT * FROM kv
 
-query II
+query II rowsort
 SELECT * FROM new_kv
 ----
 1 2
@@ -133,13 +133,13 @@ t2
 
 user root
 
-query II
+query II rowsort
 SELECT * FROM test2.t
 ----
 1 2
 3 4
 
-query II
+query II rowsort
 SELECT * FROM test2.t2
 ----
 4 16

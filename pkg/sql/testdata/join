@@ -7,7 +7,7 @@
 statement ok
 CREATE TABLE onecolumn (x INT); INSERT INTO onecolumn(x) VALUES (44), (NULL), (42)
 
-query II colnames
+query II colnames,rowsort
 SELECT * FROM onecolumn AS a(x) CROSS JOIN onecolumn AS b(y)
 ----
    x     y
@@ -35,7 +35,7 @@ SELECT x FROM (SELECT 1 AS x), onecolumn AS a, onecolumn AS b LIMIT 1
 x
 1
 
-query II colnames
+query II colnames,rowsort
 SELECT * FROM onecolumn AS a(x) JOIN onecolumn AS b(y) ON a.x = b.y
 ----
  x  y
@@ -49,14 +49,14 @@ SELECT * FROM onecolumn AS a JOIN onecolumn as b USING(x) ORDER BY x
 42
 44
 
-query I colnames
+query I colnames,rowsort
 SELECT * FROM onecolumn AS a NATURAL JOIN onecolumn as b
 ----
  x
 44
 42
 
-query II colnames
+query II colnames,rowsort
 SELECT * FROM onecolumn AS a(x) LEFT OUTER JOIN onecolumn AS b(y) ON a.x = b.y
 ----
    x     y
@@ -77,7 +77,7 @@ NULL
 query error ORDER BY "x" is ambiguous
 SELECT * FROM onecolumn AS a, onecolumn AS b ORDER BY x
 
-query I colnames
+query I colnames,rowsort
 SELECT * FROM onecolumn AS a NATURAL LEFT OUTER JOIN onecolumn AS b
 ----
    x
@@ -85,7 +85,7 @@ SELECT * FROM onecolumn AS a NATURAL LEFT OUTER JOIN onecolumn AS b
 NULL
   42
 
-query II colnames
+query II colnames,rowsort
 SELECT * FROM onecolumn AS a(x) RIGHT OUTER JOIN onecolumn AS b(y) ON a.x = b.y
 ----
    x     y
@@ -101,7 +101,7 @@ NULL
   42
   44
 
-query I colnames
+query I colnames,rowsort
 SELECT * FROM onecolumn AS a NATURAL RIGHT OUTER JOIN onecolumn AS b
 ----
    x
@@ -112,7 +112,7 @@ NULL
 statement ok
 CREATE TABLE onecolumn_w(w INT); INSERT INTO onecolumn_w(w) VALUES (42),(43)
 
-query II colnames
+query II colnames,rowsort
 SELECT * FROM onecolumn AS a NATURAL JOIN onecolumn_w as b
 ----
    x  w
@@ -287,14 +287,14 @@ statement ok
 CREATE TABLE twocolumn (x INT, y INT); INSERT INTO twocolumn(x, y) VALUES (44,51), (NULL,52), (42,53), (45,45)
 
 # Natural joins with partial match
-query II colnames
+query II colnames,rowsort
 SELECT * FROM onecolumn NATURAL JOIN twocolumn
 ----
 x    y
 44   51
 42   53
 
-query IIII
+query IIII rowsort
 SELECT * FROM twocolumn AS a JOIN twocolumn AS b ON a.x = a.y
 ----
 45  45  44    51
@@ -309,21 +309,21 @@ SELECT o.x, t.y FROM onecolumn o INNER JOIN twocolumn t ON (o.x=t.x AND t.y=53)
 42   53
 
 # Outer joins with filter predicate
-query II
+query II rowsort
 SELECT o.x, t.y FROM onecolumn o LEFT OUTER JOIN twocolumn t ON (o.x=t.x AND t.y=53)
 ----
 44   NULL
 NULL NULL
 42   53
 
-query II
+query II rowsort
 SELECT o.x, t.y FROM onecolumn o LEFT OUTER JOIN twocolumn t ON (o.x=t.x AND o.x=44)
 ----
 44   51
 NULL NULL
 42   NULL
 
-query II
+query II rowsort
 SELECT o.x, t.y FROM onecolumn o LEFT OUTER JOIN twocolumn t ON (o.x=t.x AND t.x=44)
 ----
 44   51
@@ -338,27 +338,27 @@ CREATE TABLE a (i int); INSERT INTO a VALUES (1), (2), (3)
 statement ok
 CREATE TABLE b (i int, b bool); INSERT INTO b VALUES (2, true), (3, true), (4, false)
 
-query IIB
+query IIB rowsort
 SELECT * FROM a INNER JOIN b ON a.i = b.i
 ----
 2 2 true
 3 3 true
 
-query IIB
+query IIB rowsort
 SELECT * FROM a LEFT OUTER JOIN b ON a.i = b.i
 ----
 1 NULL NULL
 2 2    true
 3 3    true
 
-query IIB
+query IIB rowsort
 SELECT * FROM a RIGHT OUTER JOIN b ON a.i = b.i
 ----
 2    2    true
 3    3    true
 NULL 4    false
 
-query IIB
+query IIB rowsort
 SELECT * FROM a FULL OUTER JOIN b ON a.i = b.i
 ----
 1    NULL NULL
@@ -400,10 +400,11 @@ NULL 4    false
 
 # Check column orders and names.
 query IIIIII colnames
-SELECT * FROM (onecolumn CROSS JOIN twocolumn JOIN onecolumn AS a(b) ON a.b=twocolumn.x JOIN twocolumn AS c(d,e) ON a.b=c.d AND c.d=onecolumn.x) LIMIT 1
+SELECT * FROM (onecolumn CROSS JOIN twocolumn JOIN onecolumn AS a(b) ON a.b=twocolumn.x JOIN twocolumn AS c(d,e) ON a.b=c.d AND c.d=onecolumn.x) ORDER BY 1 LIMIT 1
 ----
 x  x  y  b  d  e
-44 44 51 44 44 51
+42 42 53 42 42 53
+
 
 # Check EXPLAIN.
 query ITTT
@@ -552,10 +553,10 @@ x
 
 # Check that a single column can have multiple table aliases.
 query IIII colnames
-SELECT * FROM (twocolumn AS a JOIN twocolumn AS b USING(x) JOIN twocolumn AS c USING(x)) LIMIT 1
+SELECT * FROM (twocolumn AS a JOIN twocolumn AS b USING(x) JOIN twocolumn AS c USING(x)) ORDER BY x LIMIT 1
 ----
 x  y  y  y
-44 51 51 51
+42 53 53 53
 
 query IIIIII colnames
 SELECT a.x AS s, b.x, c.x, a.y, b.y, c.y FROM (twocolumn AS a JOIN twocolumn AS b USING(x) JOIN twocolumn AS c USING(x)) ORDER BY s
@@ -918,7 +919,7 @@ EXPLAIN SELECT * FROM pairs, square WHERE pairs.b = square.n
 2        table     square@primary
 2        spans     ALL
 
-query IIII
+query IIII rowsort
 SELECT * FROM pairs, square WHERE pairs.b = square.n
 ----
 1  1  1  1
@@ -956,7 +957,7 @@ EXPLAIN (VERBOSE) SELECT * FROM pairs, square WHERE pairs.a + pairs.b = square.s
 2          table     square@primary
 2          spans     ALL
 
-query IIII
+query IIII rowsort
 SELECT * FROM pairs, square WHERE pairs.a + pairs.b = square.sq
 ----
 1  3  2  4
@@ -991,7 +992,7 @@ EXPLAIN (VERBOSE) SELECT a, b, n, sq FROM (SELECT a, b, a + b AS sum, n, sq FROM
 4          table     square@primary
 4          spans     ALL
 
-query IIII
+query IIII rowsort
 SELECT a, b, n, sq FROM (SELECT a, b, a + b AS sum, n, sq FROM pairs, square) WHERE sum = sq
 ----
 1  3  2  4
@@ -1017,7 +1018,7 @@ EXPLAIN (VERBOSE) SELECT * FROM pairs FULL OUTER JOIN square ON pairs.a + pairs.
 2          table     square@primary
 2          spans     ALL
 
-query IIII
+query IIII rowsort
 SELECT * FROM pairs FULL OUTER JOIN square ON pairs.a + pairs.b = square.sq
 ----
 1     1     NULL  NULL
@@ -1060,7 +1061,7 @@ EXPLAIN (VERBOSE) SELECT * FROM pairs FULL OUTER JOIN square ON pairs.a + pairs.
 3          table     square@primary
 3          spans     ALL
 
-query IIII
+query IIII rowsort
 SELECT * FROM pairs FULL OUTER JOIN square ON pairs.a + pairs.b = square.sq WHERE pairs.b%2 <> square.sq%2
 ----
 1     3     2     4

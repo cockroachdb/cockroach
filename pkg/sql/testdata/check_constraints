@@ -152,7 +152,7 @@ UPSERT INTO t5 VALUES (2, 11, 12)
 statement ok
 UPSERT INTO t5 VALUES (2, 11, 10)
 
-query III
+query III rowsort
 SELECT * FROM t5
 ----
 1 10  9
@@ -161,7 +161,7 @@ SELECT * FROM t5
 statement ok
 UPSERT INTO t5 VALUES (2, 11, 9)
 
-query III
+query III rowsort
 SELECT * FROM t5
 ----
 1 10  9
@@ -176,7 +176,7 @@ UPSERT INTO t5 VALUES (2, 11, 12)
 statement error failed to satisfy CHECK constraint
 INSERT INTO t5 VALUES (2, 11, 12) ON CONFLICT (k) DO UPDATE SET b = t5.a + 1 WHERE k = 2
 
-query III
+query III rowsort
 SELECT * FROM t5
 ----
 1 10  9

@@ -26,7 +26,7 @@ abcd  CREATE TABLE abcd (
 statement ok
 INSERT INTO abcd VALUES (1, 2, 3, 4), (5, 6, 7, 8)
 
-query IIII
+query IIII rowsort
 SELECT * FROM abcd
 ----
 1 2 3 4
@@ -35,7 +35,7 @@ SELECT * FROM abcd
 statement ok
 UPDATE abcd SET b = 9, d = 10, c = NULL where c = 7
 
-query IIII
+query IIII rowsort
 SELECT * FROM abcd
 ----
 1 2 3    4
@@ -52,7 +52,7 @@ SELECT * FROM abcd
 statement ok
 UPSERT INTO abcd VALUES (1, 2, 3, 4), (5, 6, 7, 8)
 
-query IIII
+query IIII rowsort
 SELECT * FROM abcd
 ----
 1 2 3 4
@@ -72,7 +72,7 @@ ALTER TABLE abcd ADD e STRING FAMILY f1
 statement ok
 INSERT INTO abcd VALUES (9, 10, 11, 12, 'foo')
 
-query IIIIT
+query IIIIT rowsort
 SELECT * from abcd WHERE a > 1
 ----
 5 6  7  8  NULL

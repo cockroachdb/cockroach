@@ -9,35 +9,35 @@ INSERT INTO abc VALUES (1, 2, 3), (4, 5, 6)
 
 # Verify output column naming with *.
 
-query III colnames
+query III colnames,rowsort
 SELECT * FROM abc
 ----
 a b c
 1 2 3
 4 5 6
 
-query III colnames
+query III colnames,rowsort
 SELECT * FROM abc AS foo
 ----
 a b c
 1 2 3
 4 5 6
 
-query III colnames
+query III colnames,rowsort
 SELECT * FROM abc AS foo (foo1)
 ----
 foo1 b c
 1 2 3
 4 5 6
 
-query III colnames
+query III colnames,rowsort
 SELECT * FROM abc AS foo (foo1, foo2)
 ----
 foo1 foo2 c
 1 2 3
 4 5 6
 
-query III colnames
+query III colnames,rowsort
 SELECT * FROM abc AS foo (foo1, foo2, foo3)
 ----
 foo1 foo2 foo3
@@ -47,26 +47,26 @@ foo1 foo2 foo3
 
 # Verify qualified name resolution.
 
-query IIII colnames
+query IIII colnames,rowsort
 SELECT foo1, foo.foo1, b, foo.c FROM abc AS foo (foo1)
 ----
 foo1 foo1 b c
 1 1 2 3
 4 4 5 6
 
-query III colnames
+query III colnames,rowsort
 SELECT * FROM abc AS foo (foo1, foo2) WHERE foo.foo1 = 1
 ----
 foo1 foo2 c
 1 2 3
 
-query III colnames
+query III colnames,rowsort
 SELECT * FROM abc AS foo (foo1, foo2) WHERE foo.foo2 = 2
 ----
 foo1 foo2 c
 1 2 3
 
-query III colnames
+query III colnames,rowsort
 SELECT * FROM abc AS foo (foo1, foo2) WHERE foo.c = 6
 ----
 foo1 foo2 c
@@ -99,7 +99,7 @@ CREATE TABLE ab (a INT, b INT)
 statement ok
 INSERT INTO ab VALUES (1, 2), (1, 3), (2, 5)
 
-query II colnames
+query II colnames,rowsort
 SELECT * FROM ab AS foo (foo1, foo2)
 ----
 foo1 foo2

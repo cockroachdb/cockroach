@@ -529,7 +529,18 @@ CREATE TABLE bar (id INT PRIMARY KEY, baz STRING, UNIQUE INDEX i_bar (baz))
 statement ok
 INSERT INTO bar VALUES (0, NULL), (1, NULL)
 
-query IT
+query ITTTTT
+EXPLAIN (METADATA) SELECT * FROM bar ORDER BY baz, id
+----
+0  scan                    (id, baz)  +baz,unique
+0        table  bar@i_bar
+0        spans  ALL
+
+# Here rowsort is needed because the ORDER BY clause does not guarantee any
+# relative ordering between rows where baz is NULL. As we see above, because
+# this is a unique index, the ordering `+baz,+id` is deemed equivalent to just
+# `+baz`.
+query IT rowsort
 SELECT * FROM bar ORDER BY baz, id
 ----
 0 NULL

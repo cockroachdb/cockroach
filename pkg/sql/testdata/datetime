@@ -67,7 +67,7 @@ INSERT INTO u VALUES
   (345, '2015-08-29 23:10:09.98763', '2015-08-29 23:10:09.98763', '2015-08-29', '234h45m2s234ms'),
   (456, '2015-08-29 23:10:09.98763 UTC', '2015-08-29 23:10:09.98763 UTC', '2015-08-29', '234h45m2s234ms')
 
-query ITTTT
+query ITTTT valuesort
 SELECT * FROM u
 ----
 123  2015-08-30 03:34:45.34567 +0000 +0000  2015-08-29 22:34:45.34567 -0500 -0500  2015-08-30 00:00:00 +0000 +0000  34h0m2s
@@ -78,7 +78,7 @@ SELECT * FROM u
 statement ok
 SET TIME ZONE UTC
 
-query ITTTT
+query ITTTT valuesort
 SELECT * FROM u
 ----
 123  2015-08-30 03:34:45.34567 +0000 +0000  2015-08-30 03:34:45.34567 +0000 +0000  2015-08-30 00:00:00 +0000 +0000  34h0m2s
@@ -651,7 +651,7 @@ INSERT INTO tz VALUES
 statement ok
 SET TIME ZONE -2
 
-query ITT
+query ITT valuesort
 SELECT a, b, c FROM tz
 ----
 1   2015-08-30 03:34:45 +0000 +0000     2015-08-30 01:34:45 -0200 -0200
@@ -667,7 +667,7 @@ SELECT a FROM tz WHERE c = d
 ----
 1
 
-query I
+query I rowsort
 SELECT a FROM tz WHERE c <= d
 ----
 1
@@ -678,7 +678,7 @@ SELECT a FROM tz WHERE c < d
 ----
 2
 
-query I
+query I rowsort
 SELECT a FROM tz WHERE b = c::timestamp
 ----
 1

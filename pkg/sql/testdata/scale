@@ -70,7 +70,7 @@ INSERT INTO td VALUES (DECIMAL '3.1415')
 statement error too many digits for type DECIMAL\(3,2\) \(column "d"\)
 INSERT INTO td VALUES (DECIMAL '13.1415')
 
-query R
+query R rowsort
 SELECT d FROM td
 ----
 3.1
@@ -85,7 +85,7 @@ UPDATE td SET d = DECIMAL '1.414' WHERE d = DECIMAL '3.14'
 statement error duplicate
 UPDATE td SET d = DECIMAL '1.41' WHERE d = DECIMAL '3.1'
 
-query R
+query R rowsort
 SELECT d FROM td
 ----
 3.1
