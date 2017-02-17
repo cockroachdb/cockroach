@@ -1,0 +1,685 @@
+panic: test timed out after 2m0s
+
+goroutine 6491 [running]:
+panic(0x52edb60, 0xc4235d9c30)
+	/usr/local/opt/go/libexec/src/runtime/panic.go:500 +0x1a1
+testing.startAlarm.func1()
+	/usr/local/opt/go/libexec/src/testing/testing.go:918 +0x10b
+created by time.goFunc
+	/usr/local/opt/go/libexec/src/time/sleep.go:154 +0x44
+
+goroutine 1 [chan receive, 1 minutes]:
+testing.(*T).Run(0xc4202d6480, 0x54ee7c8, 0x12, 0x56f88b0, 0x4060d01)
+	/usr/local/opt/go/libexec/src/testing/testing.go:647 +0x316
+testing.RunTests.func1(0xc4202d6480)
+	/usr/local/opt/go/libexec/src/testing/testing.go:793 +0x6d
+testing.tRunner(0xc4202d6480, 0xc420043e00)
+	/usr/local/opt/go/libexec/src/testing/testing.go:610 +0x81
+testing.RunTests(0x56fbc40, 0x6349aa0, 0x7a, 0x7a, 0x638fd88)
+	/usr/local/opt/go/libexec/src/testing/testing.go:799 +0x2f5
+testing.(*M).Run(0xc420043ef8, 0x638f8c0)
+	/usr/local/opt/go/libexec/src/testing/testing.go:743 +0x85
+github.com/cockroachdb/cockroach/pkg/sql_test.TestMain(0xc420043ef8)
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/sql/main_test.go:227 +0xbd
+main.main()
+	github.com/cockroachdb/cockroach/pkg/sql/_test/_testmain.go:644 +0xc6
+
+goroutine 17 [syscall, 2 minutes, locked to thread]:
+runtime.goexit()
+	/usr/local/opt/go/libexec/src/runtime/asm_amd64.s:2086 +0x1
+
+goroutine 7 [chan receive, 2 minutes]:
+github.com/cockroachdb/cockroach/pkg/util/log.(*loggingT).gcDaemon(0x635a400)
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/util/log/clog.go:1039 +0x5b
+created by github.com/cockroachdb/cockroach/pkg/util/log.init.1
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/util/log/clog.go:584 +0xe8
+
+goroutine 6 [chan receive]:
+github.com/cockroachdb/cockroach/pkg/util/log.(*loggingT).flushDaemon(0x635a400)
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/util/log/clog.go:1012 +0x77
+created by github.com/cockroachdb/cockroach/pkg/util/log.init.1
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/util/log/clog.go:583 +0xc4
+
+goroutine 6195 [semacquire]:
+sync.runtime_notifyListWait(0xc423bcc0d0, 0xc400000003)
+	/usr/local/opt/go/libexec/src/runtime/sema.go:267 +0x122
+sync.(*Cond).Wait(0xc423bcc0c0)
+	/usr/local/opt/go/libexec/src/sync/cond.go:57 +0x80
+github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).Quiesce(0xc422112090)
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:495 +0x1ed
+github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).Stop(0xc422112090)
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:438 +0x20b
+github.com/cockroachdb/cockroach/pkg/sql.TestPurgeOldLeases(0xc4211a4180)
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/sql/lease_internal_test.go:195 +0x60f
+testing.tRunner(0xc4211a4180, 0x56f88b0)
+	/usr/local/opt/go/libexec/src/testing/testing.go:610 +0x81
+created by testing.(*T).Run
+	/usr/local/opt/go/libexec/src/testing/testing.go:646 +0x2ec
+
+goroutine 6244 [semacquire]:
+sync.runtime_notifyListWait(0xc423c52290, 0xc40000103c)
+	/usr/local/opt/go/libexec/src/runtime/sema.go:267 +0x122
+sync.(*Cond).Wait(0xc423c52280)
+	/usr/local/opt/go/libexec/src/sync/cond.go:57 +0x80
+github.com/cockroachdb/cockroach/pkg/storage.(*raftScheduler).worker(0xc420baa790, 0xc422112090)
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/storage/scheduler.go:205 +0xb2
+github.com/cockroachdb/cockroach/pkg/storage.(*raftScheduler).Start.func2()
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/storage/scheduler.go:174 +0x33
+github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunWorker.func1(0xc422112090, 0xc422bfe740)
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:209 +0x7d
+created by github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunWorker
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:210 +0x66
+
+goroutine 6559 [select]:
+github.com/cockroachdb/cockroach/pkg/util/retry.(*Retry).Next(0xc423841df8, 0xc420014de8)
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/util/retry/retry.go:128 +0x1a5
+github.com/cockroachdb/cockroach/pkg/sql.LeaseStore.Release(0x5e4bc40, 0xc422475290, 0x3ff0000000000000, 0x2faf080, 0x12a05f200, 0x4000000000000000, 0x0, 0x0, 0x0, 0xc423bcc880, ...)
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/sql/lease.go:231 +0x184
+github.com/cockroachdb/cockroach/pkg/sql.(*tableState).removeLease.func1(0x6d0c288, 0xc420014de8)
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/sql/lease.go:773 +0x79
+github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunAsyncTask.func1(0xc422112090, 0x5d8e186, 0xc, 0x306, 0x0, 0x0, 0xc420384b40, 0x6d0c288, 0xc420014de8)
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:283 +0xdf
+created by github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunAsyncTask
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:284 +0x14a
+
+goroutine 5609 [select]:
+github.com/cockroachdb/cockroach/pkg/server.(*Node).startGossip.func1()
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/server/node.go:657 +0x4f0
+github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunWorker.func1(0xc422112090, 0xc422bf80a0)
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:209 +0x7d
+created by github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunWorker
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:210 +0x66
+
+goroutine 6240 [semacquire]:
+sync.runtime_notifyListWait(0xc423c52290, 0xc40000103a)
+	/usr/local/opt/go/libexec/src/runtime/sema.go:267 +0x122
+sync.(*Cond).Wait(0xc423c52280)
+	/usr/local/opt/go/libexec/src/sync/cond.go:57 +0x80
+github.com/cockroachdb/cockroach/pkg/storage.(*raftScheduler).worker(0xc420baa790, 0xc422112090)
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/storage/scheduler.go:205 +0xb2
+github.com/cockroachdb/cockroach/pkg/storage.(*raftScheduler).Start.func2()
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/storage/scheduler.go:174 +0x33
+github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunWorker.func1(0xc422112090, 0xc422bfe6c0)
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:209 +0x7d
+created by github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunWorker
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:210 +0x66
+
+goroutine 6239 [semacquire]:
+sync.runtime_notifyListWait(0xc423c52290, 0xc400001031)
+	/usr/local/opt/go/libexec/src/runtime/sema.go:267 +0x122
+sync.(*Cond).Wait(0xc423c52280)
+	/usr/local/opt/go/libexec/src/sync/cond.go:57 +0x80
+github.com/cockroachdb/cockroach/pkg/storage.(*raftScheduler).worker(0xc420baa790, 0xc422112090)
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/storage/scheduler.go:205 +0xb2
+github.com/cockroachdb/cockroach/pkg/storage.(*raftScheduler).Start.func2()
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/storage/scheduler.go:174 +0x33
+github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunWorker.func1(0xc422112090, 0xc422bfe6a0)
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:209 +0x7d
+created by github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunWorker
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:210 +0x66
+
+goroutine 5770 [select, 1 minutes]:
+github.com/cockroachdb/cockroach/pkg/storage.(*baseQueue).processLoop.func1()
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/storage/queue.go:490 +0x383
+github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunWorker.func1(0xc422112090, 0xc422c0c0c0)
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:209 +0x7d
+created by github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunWorker
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:210 +0x66
+
+goroutine 6275 [select]:
+github.com/cockroachdb/cockroach/pkg/rpc.(*Context).runHeartbeat(0xc423998700, 0xc422c22000, 0xc423b2a080, 0xf, 0x0, 0x0)
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/rpc/context.go:356 +0x65a
+github.com/cockroachdb/cockroach/pkg/rpc.(*Context).GRPCDial.func1.3.1()
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/rpc/context.go:291 +0x69
+github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunWorker.func1(0xc422112090, 0xc423c234a0)
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:209 +0x7d
+created by github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunWorker
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:210 +0x66
+
+goroutine 6290 [select]:
+github.com/cockroachdb/cockroach/pkg/storage.(*NodeLiveness).StartHeartbeat.func1()
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/storage/node_liveness.go:261 +0x2a1
+github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunWorker.func1(0xc422112090, 0xc420c9c2d0)
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:209 +0x7d
+created by github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunWorker
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:210 +0x66
+
+goroutine 6392 [chan receive, 1 minutes]:
+database/sql.(*DB).connectionOpener(0xc4209229a0)
+	/usr/local/opt/go/libexec/src/database/sql/sql.go:730 +0x4a
+created by database/sql.Open
+	/usr/local/opt/go/libexec/src/database/sql/sql.go:493 +0x1e9
+
+goroutine 6243 [semacquire]:
+sync.runtime_notifyListWait(0xc423c52290, 0xc400001030)
+	/usr/local/opt/go/libexec/src/runtime/sema.go:267 +0x122
+sync.(*Cond).Wait(0xc423c52280)
+	/usr/local/opt/go/libexec/src/sync/cond.go:57 +0x80
+github.com/cockroachdb/cockroach/pkg/storage.(*raftScheduler).worker(0xc420baa790, 0xc422112090)
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/storage/scheduler.go:205 +0xb2
+github.com/cockroachdb/cockroach/pkg/storage.(*raftScheduler).Start.func2()
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/storage/scheduler.go:174 +0x33
+github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunWorker.func1(0xc422112090, 0xc422bfe720)
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:209 +0x7d
+created by github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunWorker
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:210 +0x66
+
+goroutine 6245 [semacquire]:
+sync.runtime_notifyListWait(0xc423c52290, 0xc40000103e)
+	/usr/local/opt/go/libexec/src/runtime/sema.go:267 +0x122
+sync.(*Cond).Wait(0xc423c52280)
+	/usr/local/opt/go/libexec/src/sync/cond.go:57 +0x80
+github.com/cockroachdb/cockroach/pkg/storage.(*raftScheduler).worker(0xc420baa790, 0xc422112090)
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/storage/scheduler.go:205 +0xb2
+github.com/cockroachdb/cockroach/pkg/storage.(*raftScheduler).Start.func2()
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/storage/scheduler.go:174 +0x33
+github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunWorker.func1(0xc422112090, 0xc422bfe760)
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:209 +0x7d
+created by github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunWorker
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:210 +0x66
+
+goroutine 6246 [semacquire]:
+sync.runtime_notifyListWait(0xc423c52290, 0xc400001033)
+	/usr/local/opt/go/libexec/src/runtime/sema.go:267 +0x122
+sync.(*Cond).Wait(0xc423c52280)
+	/usr/local/opt/go/libexec/src/sync/cond.go:57 +0x80
+github.com/cockroachdb/cockroach/pkg/storage.(*raftScheduler).worker(0xc420baa790, 0xc422112090)
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/storage/scheduler.go:205 +0xb2
+github.com/cockroachdb/cockroach/pkg/storage.(*raftScheduler).Start.func2()
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/storage/scheduler.go:174 +0x33
+github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunWorker.func1(0xc422112090, 0xc422bfe780)
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:209 +0x7d
+created by github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunWorker
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:210 +0x66
+
+goroutine 6251 [semacquire]:
+sync.runtime_notifyListWait(0xc423c52290, 0xc40000103d)
+	/usr/local/opt/go/libexec/src/runtime/sema.go:267 +0x122
+sync.(*Cond).Wait(0xc423c52280)
+	/usr/local/opt/go/libexec/src/sync/cond.go:57 +0x80
+github.com/cockroachdb/cockroach/pkg/storage.(*raftScheduler).worker(0xc420baa790, 0xc422112090)
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/storage/scheduler.go:205 +0xb2
+github.com/cockroachdb/cockroach/pkg/storage.(*raftScheduler).Start.func2()
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/storage/scheduler.go:174 +0x33
+github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunWorker.func1(0xc422112090, 0xc422bfe840)
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:209 +0x7d
+created by github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunWorker
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:210 +0x66
+
+goroutine 6248 [semacquire]:
+sync.runtime_notifyListWait(0xc423c52290, 0xc400001035)
+	/usr/local/opt/go/libexec/src/runtime/sema.go:267 +0x122
+sync.(*Cond).Wait(0xc423c52280)
+	/usr/local/opt/go/libexec/src/sync/cond.go:57 +0x80
+github.com/cockroachdb/cockroach/pkg/storage.(*raftScheduler).worker(0xc420baa790, 0xc422112090)
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/storage/scheduler.go:205 +0xb2
+github.com/cockroachdb/cockroach/pkg/storage.(*raftScheduler).Start.func2()
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/storage/scheduler.go:174 +0x33
+github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunWorker.func1(0xc422112090, 0xc422bfe7c0)
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:209 +0x7d
+created by github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunWorker
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:210 +0x66
+
+goroutine 6247 [semacquire]:
+sync.runtime_notifyListWait(0xc423c52290, 0xc400001038)
+	/usr/local/opt/go/libexec/src/runtime/sema.go:267 +0x122
+sync.(*Cond).Wait(0xc423c52280)
+	/usr/local/opt/go/libexec/src/sync/cond.go:57 +0x80
+github.com/cockroachdb/cockroach/pkg/storage.(*raftScheduler).worker(0xc420baa790, 0xc422112090)
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/storage/scheduler.go:205 +0xb2
+github.com/cockroachdb/cockroach/pkg/storage.(*raftScheduler).Start.func2()
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/storage/scheduler.go:174 +0x33
+github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunWorker.func1(0xc422112090, 0xc422bfe7a0)
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:209 +0x7d
+created by github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunWorker
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:210 +0x66
+
+goroutine 5769 [select, 1 minutes]:
+github.com/cockroachdb/cockroach/pkg/storage.(*baseQueue).processLoop.func1()
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/storage/queue.go:490 +0x383
+github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunWorker.func1(0xc422112090, 0xc422c0c0a0)
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:209 +0x7d
+created by github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunWorker
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:210 +0x66
+
+goroutine 6446 [IO wait]:
+net.runtime_pollWait(0x6d1e588, 0x72, 0xa)
+	/usr/local/opt/go/libexec/src/runtime/netpoll.go:160 +0x59
+net.(*pollDesc).wait(0xc4201ce5a0, 0x72, 0xc421c88f90, 0xc4200141e0)
+	/usr/local/opt/go/libexec/src/net/fd_poll_runtime.go:73 +0x38
+net.(*pollDesc).waitRead(0xc4201ce5a0, 0x5e54180, 0xc4200141e0)
+	/usr/local/opt/go/libexec/src/net/fd_poll_runtime.go:78 +0x34
+net.(*netFD).Read(0xc4201ce540, 0xc421fe2c00, 0x400, 0x400, 0x0, 0x5e54180, 0xc4200141e0)
+	/usr/local/opt/go/libexec/src/net/fd_unix.go:243 +0x1a1
+net.(*conn).Read(0xc420030828, 0xc421fe2c00, 0x400, 0x400, 0x0, 0x0, 0x0)
+	/usr/local/opt/go/libexec/src/net/net.go:173 +0x70
+github.com/cockroachdb/cockroach/vendor/github.com/cockroachdb/cmux.(*MuxConn).Read(0xc420922a50, 0xc421fe2c00, 0x400, 0x400, 0x5434b40, 0x5e50600, 0x8967d28)
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/vendor/github.com/cockroachdb/cmux/cmux.go:218 +0x113
+crypto/tls.(*block).readFromUntil(0xc4219056e0, 0x8967d28, 0xc420922a50, 0x5, 0xc420922a50, 0x14a3f539835cb770)
+	/usr/local/opt/go/libexec/src/crypto/tls/conn.go:476 +0x91
+crypto/tls.(*Conn).readRecord(0xc420b9a380, 0x56fc517, 0xc420b9a488, 0xed0386429)
+	/usr/local/opt/go/libexec/src/crypto/tls/conn.go:578 +0xc4
+crypto/tls.(*Conn).Read(0xc420b9a380, 0xc4209f0000, 0x1000, 0x1000, 0x0, 0x0, 0x0)
+	/usr/local/opt/go/libexec/src/crypto/tls/conn.go:1113 +0x116
+github.com/cockroachdb/cockroach/pkg/sql/pgwire.(*readTimeoutConn).Read(0xc4219ff080, 0xc4209f0000, 0x1000, 0x1000, 0x0, 0x0, 0x0)
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/sql/pgwire/v3.go:156 +0x15c
+bufio.(*Reader).fill(0xc4211fd1a0)
+	/usr/local/opt/go/libexec/src/bufio/bufio.go:97 +0x10c
+bufio.(*Reader).ReadByte(0xc4211fd1a0, 0x0, 0xc423841488, 0x48c1a3b)
+	/usr/local/opt/go/libexec/src/bufio/bufio.go:231 +0x51
+github.com/cockroachdb/cockroach/pkg/sql/pgwire.(*readBuffer).readTypedMsg(0xc420c67828, 0x5e58ec0, 0xc4211fd1a0, 0x0, 0x0, 0x0, 0x0)
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/sql/pgwire/encoding.go:94 +0x35
+github.com/cockroachdb/cockroach/pkg/sql/pgwire.(*v3Conn).serve(0xc420c67800, 0x6d0d300, 0xc422caef60, 0xc4216f93e0, 0x5400, 0xc4223246f0, 0x89631d0, 0xc422227840, 0x0, 0x0)
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/sql/pgwire/v3.go:396 +0x466
+github.com/cockroachdb/cockroach/pkg/sql/pgwire.(*Server).ServeConn(0xc4223245a0, 0x89631d0, 0xc422227840, 0x5e69da0, 0xc420b9a380, 0x0, 0x0)
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/sql/pgwire/server.go:415 +0xa2c
+github.com/cockroachdb/cockroach/pkg/server.(*Server).Start.func8.1(0x5e6bc00, 0xc420922a50)
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/server/server.go:536 +0x106
+github.com/cockroachdb/cockroach/pkg/util/netutil.(*Server).ServeWith.func1(0xc422112090, 0xc4206b40d0, 0x5e6bc00, 0xc420922a50, 0xc422510f40)
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/util/netutil/net.go:136 +0x95
+created by github.com/cockroachdb/cockroach/pkg/util/netutil.(*Server).ServeWith
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/util/netutil/net.go:138 +0x277
+
+goroutine 6250 [semacquire]:
+sync.runtime_notifyListWait(0xc423c52290, 0xc400001032)
+	/usr/local/opt/go/libexec/src/runtime/sema.go:267 +0x122
+sync.(*Cond).Wait(0xc423c52280)
+	/usr/local/opt/go/libexec/src/sync/cond.go:57 +0x80
+github.com/cockroachdb/cockroach/pkg/storage.(*raftScheduler).worker(0xc420baa790, 0xc422112090)
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/storage/scheduler.go:205 +0xb2
+github.com/cockroachdb/cockroach/pkg/storage.(*raftScheduler).Start.func2()
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/storage/scheduler.go:174 +0x33
+github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunWorker.func1(0xc422112090, 0xc422bfe800)
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:209 +0x7d
+created by github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunWorker
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:210 +0x66
+
+goroutine 6237 [semacquire]:
+sync.runtime_notifyListWait(0xc423c52290, 0xc400001039)
+	/usr/local/opt/go/libexec/src/runtime/sema.go:267 +0x122
+sync.(*Cond).Wait(0xc423c52280)
+	/usr/local/opt/go/libexec/src/sync/cond.go:57 +0x80
+github.com/cockroachdb/cockroach/pkg/storage.(*raftScheduler).worker(0xc420baa790, 0xc422112090)
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/storage/scheduler.go:205 +0xb2
+github.com/cockroachdb/cockroach/pkg/storage.(*raftScheduler).Start.func2()
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/storage/scheduler.go:174 +0x33
+github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunWorker.func1(0xc422112090, 0xc422bfe660)
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:209 +0x7d
+created by github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunWorker
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:210 +0x66
+
+goroutine 6249 [semacquire]:
+sync.runtime_notifyListWait(0xc423c52290, 0xc400001037)
+	/usr/local/opt/go/libexec/src/runtime/sema.go:267 +0x122
+sync.(*Cond).Wait(0xc423c52280)
+	/usr/local/opt/go/libexec/src/sync/cond.go:57 +0x80
+github.com/cockroachdb/cockroach/pkg/storage.(*raftScheduler).worker(0xc420baa790, 0xc422112090)
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/storage/scheduler.go:205 +0xb2
+github.com/cockroachdb/cockroach/pkg/storage.(*raftScheduler).Start.func2()
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/storage/scheduler.go:174 +0x33
+github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunWorker.func1(0xc422112090, 0xc422bfe7e0)
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:209 +0x7d
+created by github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunWorker
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:210 +0x66
+
+goroutine 6252 [semacquire, 1 minutes]:
+sync.runtime_Semacquire(0xc420baa834)
+	/usr/local/opt/go/libexec/src/runtime/sema.go:47 +0x30
+sync.(*WaitGroup).Wait(0xc420baa828)
+	/usr/local/opt/go/libexec/src/sync/waitgroup.go:131 +0x97
+github.com/cockroachdb/cockroach/pkg/storage.(*raftScheduler).Wait(0xc420baa790)
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/storage/scheduler.go:180 +0x34
+github.com/cockroachdb/cockroach/pkg/storage.(*raftScheduler).Wait-fm()
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/storage/store.go:3465 +0x2a
+github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunWorker.func1(0xc422112090, 0xc423b68ca0)
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:209 +0x7d
+created by github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunWorker
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:210 +0x66
+
+goroutine 5765 [select, 1 minutes]:
+github.com/cockroachdb/cockroach/pkg/storage.(*baseQueue).processLoop.func1()
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/storage/queue.go:490 +0x383
+github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunWorker.func1(0xc422112090, 0xc422c0c020)
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:209 +0x7d
+created by github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunWorker
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:210 +0x66
+
+goroutine 5608 [select, 1 minutes]:
+github.com/cockroachdb/cockroach/pkg/server.(*Node).startComputePeriodicMetrics.func1()
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/server/node.go:698 +0x2bd
+github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunWorker.func1(0xc422112090, 0xc422bf8080)
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:209 +0x7d
+created by github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunWorker
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:210 +0x66
+
+goroutine 6211 [chan receive, 1 minutes]:
+github.com/cockroachdb/cockroach/pkg/storage/engine.(*RocksDB).open.func1(0xc4237cba90)
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/storage/engine/rocksdb.go:385 +0x44
+created by github.com/cockroachdb/cockroach/pkg/storage/engine.(*RocksDB).open
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/storage/engine/rocksdb.go:386 +0x702
+
+goroutine 6210 [select]:
+github.com/cockroachdb/cockroach/pkg/gossip.(*Gossip).manage.func1()
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/gossip/gossip.go:1075 +0x399
+github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunWorker.func1(0xc422112090, 0xc423aaf4c0)
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:209 +0x7d
+created by github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunWorker
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:210 +0x66
+
+goroutine 5768 [select, 1 minutes]:
+github.com/cockroachdb/cockroach/pkg/storage.(*baseQueue).processLoop.func1()
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/storage/queue.go:490 +0x383
+github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunWorker.func1(0xc422112090, 0xc422c0c080)
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:209 +0x7d
+created by github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunWorker
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:210 +0x66
+
+goroutine 6256 [select, 1 minutes]:
+github.com/cockroachdb/cockroach/pkg/storage.(*Store).Start.func3()
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/storage/store.go:1258 +0x165
+github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunWorker.func1(0xc422112090, 0xc422bfe8c0)
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:209 +0x7d
+created by github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunWorker
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:210 +0x66
+
+goroutine 6197 [select]:
+github.com/cockroachdb/cockroach/pkg/kv.(*TxnCoordSender).printStatsLoop(0xc422475290, 0x6d0d300, 0xc4235917d0)
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/kv/txn_coord_sender.go:209 +0xbec
+github.com/cockroachdb/cockroach/pkg/kv.NewTxnCoordSender.func1()
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/kv/txn_coord_sender.go:193 +0x98
+github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunWorker.func1(0xc422112090, 0xc423aaeaa0)
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:209 +0x7d
+created by github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunWorker
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:210 +0x66
+
+goroutine 6199 [chan receive, 1 minutes]:
+github.com/cockroachdb/cockroach/pkg/util/netutil.MakeServer.func2()
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/util/netutil/net.go:98 +0x70
+github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunWorker.func1(0xc422112090, 0xc423014d40)
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:209 +0x7d
+created by github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunWorker
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:210 +0x66
+
+goroutine 6198 [select]:
+github.com/cockroachdb/cockroach/pkg/sql.(*LeaseManager).RefreshLeases.func1()
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/sql/lease.go:1210 +0xc76
+github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunWorker.func1(0xc422112090, 0xc422eee780)
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:209 +0x7d
+created by github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunWorker
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:210 +0x66
+
+goroutine 5766 [select]:
+github.com/cockroachdb/cockroach/pkg/storage.(*baseQueue).processLoop.func1()
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/storage/queue.go:490 +0x383
+github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunWorker.func1(0xc422112090, 0xc422c0c040)
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:209 +0x7d
+created by github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunWorker
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:210 +0x66
+
+goroutine 6200 [chan receive, 1 minutes]:
+github.com/cockroachdb/cockroach/pkg/util/netutil.MakeServer.func2()
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/util/netutil/net.go:98 +0x70
+github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunWorker.func1(0xc422112090, 0xc423014d80)
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:209 +0x7d
+created by github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunWorker
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:210 +0x66
+
+goroutine 6205 [chan receive]:
+github.com/cockroachdb/cockroach/pkg/server.(*Server).Start.func6()
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/server/server.go:510 +0xe7
+github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunWorker.func1(0xc422112090, 0xc423bccfc0)
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:209 +0x7d
+created by github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunWorker
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:210 +0x66
+
+goroutine 6209 [select]:
+github.com/cockroachdb/cockroach/pkg/gossip.(*Gossip).bootstrap.func1()
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/gossip/gossip.go:1046 +0x485
+github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunWorker.func1(0xc422112090, 0xc423aaf4b0)
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:209 +0x7d
+created by github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunWorker
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:210 +0x66
+
+goroutine 5680 [select, 1 minutes]:
+github.com/cockroachdb/cockroach/pkg/storage.(*idAllocator).start.func1()
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/storage/id_alloc.go:133 +0x7c8
+github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunWorker.func1(0xc422112090, 0xc42216ab10)
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:209 +0x7d
+created by github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunWorker
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:210 +0x66
+
+goroutine 5767 [select, 1 minutes]:
+github.com/cockroachdb/cockroach/pkg/storage.(*baseQueue).processLoop.func1()
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/storage/queue.go:490 +0x383
+github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunWorker.func1(0xc422112090, 0xc422c0c060)
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:209 +0x7d
+created by github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunWorker
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:210 +0x66
+
+goroutine 5612 [select, 1 minutes]:
+github.com/cockroachdb/cockroach/pkg/ts.(*poller).start.func1()
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/ts/db.go:90 +0x16f
+github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunWorker.func1(0xc422112090, 0xc422a041d0)
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:209 +0x7d
+created by github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunWorker
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:210 +0x66
+
+goroutine 5611 [select, 1 minutes]:
+github.com/cockroachdb/cockroach/pkg/server.(*Server).startSampleEnvironment.func1()
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/server/server.go:846 +0x16b
+github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunWorker.func1(0xc422112090, 0xc422bf8120)
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:209 +0x7d
+created by github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunWorker
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:210 +0x66
+
+goroutine 6241 [semacquire]:
+sync.runtime_notifyListWait(0xc423c52290, 0xc400001034)
+	/usr/local/opt/go/libexec/src/runtime/sema.go:267 +0x122
+sync.(*Cond).Wait(0xc423c52280)
+	/usr/local/opt/go/libexec/src/sync/cond.go:57 +0x80
+github.com/cockroachdb/cockroach/pkg/storage.(*raftScheduler).worker(0xc420baa790, 0xc422112090)
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/storage/scheduler.go:205 +0xb2
+github.com/cockroachdb/cockroach/pkg/storage.(*raftScheduler).Start.func2()
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/storage/scheduler.go:174 +0x33
+github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunWorker.func1(0xc422112090, 0xc422bfe6e0)
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:209 +0x7d
+created by github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunWorker
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:210 +0x66
+
+goroutine 6242 [semacquire]:
+sync.runtime_notifyListWait(0xc423c52290, 0xc40000103b)
+	/usr/local/opt/go/libexec/src/runtime/sema.go:267 +0x122
+sync.(*Cond).Wait(0xc423c52280)
+	/usr/local/opt/go/libexec/src/sync/cond.go:57 +0x80
+github.com/cockroachdb/cockroach/pkg/storage.(*raftScheduler).worker(0xc420baa790, 0xc422112090)
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/storage/scheduler.go:205 +0xb2
+github.com/cockroachdb/cockroach/pkg/storage.(*raftScheduler).Start.func2()
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/storage/scheduler.go:174 +0x33
+github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunWorker.func1(0xc422112090, 0xc422bfe700)
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:209 +0x7d
+created by github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunWorker
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:210 +0x66
+
+goroutine 6236 [semacquire]:
+sync.runtime_notifyListWait(0xc423c52290, 0xc400001036)
+	/usr/local/opt/go/libexec/src/runtime/sema.go:267 +0x122
+sync.(*Cond).Wait(0xc423c52280)
+	/usr/local/opt/go/libexec/src/sync/cond.go:57 +0x80
+github.com/cockroachdb/cockroach/pkg/storage.(*raftScheduler).worker(0xc420baa790, 0xc422112090)
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/storage/scheduler.go:205 +0xb2
+github.com/cockroachdb/cockroach/pkg/storage.(*raftScheduler).Start.func2()
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/storage/scheduler.go:174 +0x33
+github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunWorker.func1(0xc422112090, 0xc422bfe640)
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:209 +0x7d
+created by github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunWorker
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:210 +0x66
+
+goroutine 6258 [select]:
+github.com/cockroachdb/cockroach/pkg/util/retry.(*Retry).Next(0xc422578ea0, 0xc422e086f0)
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/util/retry/retry.go:128 +0x1a5
+github.com/cockroachdb/cockroach/pkg/storage.(*Store).startGossip.func4()
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/storage/store.go:1372 +0x221
+github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunWorker.func1(0xc422112090, 0xc423680280)
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:209 +0x7d
+created by github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunWorker
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:210 +0x66
+
+goroutine 6558 [select]:
+github.com/cockroachdb/cockroach/pkg/util/retry.(*Retry).Next(0xc420811df8, 0xc420014de8)
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/util/retry/retry.go:128 +0x1a5
+github.com/cockroachdb/cockroach/pkg/sql.LeaseStore.Release(0x5e4bc40, 0xc422475290, 0x3ff0000000000000, 0x2faf080, 0x12a05f200, 0x4000000000000000, 0x0, 0x0, 0x0, 0xc423bcc880, ...)
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/sql/lease.go:231 +0x184
+github.com/cockroachdb/cockroach/pkg/sql.(*tableState).removeLease.func1(0x6d0c288, 0xc420014de8)
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/sql/lease.go:773 +0x79
+github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunAsyncTask.func1(0xc422112090, 0x5d8e186, 0xc, 0x306, 0x0, 0x0, 0xc420384ab0, 0x6d0c288, 0xc420014de8)
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:283 +0xdf
+created by github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunAsyncTask
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:284 +0x14a
+
+goroutine 5614 [select, 1 minutes]:
+github.com/cockroachdb/cockroach/pkg/sql.(*SchemaChangeManager).Start.func1()
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/sql/schema_changer.go:740 +0x1360
+github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunWorker.func1(0xc422112090, 0xc422bf8140)
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:209 +0x7d
+created by github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunWorker
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:210 +0x66
+
+goroutine 5613 [select, 1 minutes]:
+github.com/cockroachdb/cockroach/pkg/server.(*Node).startWriteSummaries.func1()
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/server/node.go:735 +0x26d
+github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunWorker.func1(0xc422112090, 0xc423b18210)
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:209 +0x7d
+created by github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunWorker
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:210 +0x66
+
+goroutine 6259 [select]:
+github.com/cockroachdb/cockroach/pkg/util/retry.(*Retry).Next(0xc422579ea0, 0xc422e086f0)
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/util/retry/retry.go:128 +0x1a5
+github.com/cockroachdb/cockroach/pkg/storage.(*Store).startGossip.func4()
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/storage/store.go:1372 +0x221
+github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunWorker.func1(0xc422112090, 0xc4236802d0)
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:209 +0x7d
+created by github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunWorker
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:210 +0x66
+
+goroutine 6254 [select]:
+github.com/cockroachdb/cockroach/pkg/storage.(*Store).startCoalescedHeartbeatsLoop.func1()
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/storage/store.go:3513 +0x167
+github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunWorker.func1(0xc422112090, 0xc423b68cc0)
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:209 +0x7d
+created by github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunWorker
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:210 +0x66
+
+goroutine 5615 [select, 1 minutes]:
+github.com/cockroachdb/cockroach/pkg/sql.(*Executor).Start.func1()
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/sql/executor.go:343 +0x165
+github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunWorker.func1(0xc422112090, 0xc422bf81a0)
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:209 +0x7d
+created by github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunWorker
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:210 +0x66
+
+goroutine 6238 [semacquire]:
+sync.runtime_notifyListWait(0xc423c52290, 0xc40000103f)
+	/usr/local/opt/go/libexec/src/runtime/sema.go:267 +0x122
+sync.(*Cond).Wait(0xc423c52280)
+	/usr/local/opt/go/libexec/src/sync/cond.go:57 +0x80
+github.com/cockroachdb/cockroach/pkg/storage.(*raftScheduler).worker(0xc420baa790, 0xc422112090)
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/storage/scheduler.go:205 +0xb2
+github.com/cockroachdb/cockroach/pkg/storage.(*raftScheduler).Start.func2()
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/storage/scheduler.go:174 +0x33
+github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunWorker.func1(0xc422112090, 0xc422bfe680)
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:209 +0x7d
+created by github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunWorker
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:210 +0x66
+
+goroutine 6257 [select]:
+github.com/cockroachdb/cockroach/pkg/util/retry.(*Retry).Next(0xc420761e90, 0xc422e086f0)
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/util/retry/retry.go:128 +0x1a5
+github.com/cockroachdb/cockroach/pkg/storage.(*Store).startGossip.func4()
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/storage/store.go:1372 +0x221
+github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunWorker.func1(0xc422112090, 0xc423680230)
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:209 +0x7d
+created by github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunWorker
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:210 +0x66
+
+goroutine 6253 [select]:
+github.com/cockroachdb/cockroach/pkg/storage.(*Store).raftTickLoop.func1()
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/storage/store.go:3482 +0x334
+github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunWorker.func1(0xc422112090, 0xc423b68cb0)
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:209 +0x7d
+created by github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunWorker
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:210 +0x66
+
+goroutine 5616 [select, 1 minutes]:
+github.com/cockroachdb/cockroach/pkg/sql/distsqlrun.(*flowScheduler).Start.func1()
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/sql/distsqlrun/flow_scheduler.go:114 +0x32c
+github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunWorker.func1(0xc422112090, 0xc423a46740)
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:209 +0x7d
+created by github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunWorker
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:210 +0x66
+
+goroutine 6235 [chan receive, 1 minutes]:
+github.com/cockroachdb/cockroach/pkg/storage.(*raftScheduler).Start.func1()
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/storage/scheduler.go:164 +0x55
+github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunWorker.func1(0xc422112090, 0xc422bfe620)
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:209 +0x7d
+created by github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunWorker
+	/Users/vivek/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:210 +0x66
+FAIL	github.com/cockroachdb/cockroach/pkg/sql	120.066s
+ok  	github.com/cockroachdb/cockroach/pkg/sql/distsqlplan	1.876s
+ok  	github.com/cockroachdb/cockroach/pkg/sql/distsqlrun	1.220s
+ok  	github.com/cockroachdb/cockroach/pkg/sql/mon	0.576s
+ok  	github.com/cockroachdb/cockroach/pkg/sql/parser	0.960s
+?   	github.com/cockroachdb/cockroach/pkg/sql/pgbench	[no test files]
+?   	github.com/cockroachdb/cockroach/pkg/sql/pgbench/cmd/pgbenchsetup	[no test files]
+ok  	github.com/cockroachdb/cockroach/pkg/sql/pgwire	3.143s
+ok  	github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror	0.013s
+ok  	github.com/cockroachdb/cockroach/pkg/sql/privilege	0.024s
+ok  	github.com/cockroachdb/cockroach/pkg/sql/sqlbase	0.464s
+?   	github.com/cockroachdb/cockroach/pkg/sql/sqlutil	[no test files]
+ok  	github.com/cockroachdb/cockroach/pkg/storage	38.223s
+ok  	github.com/cockroachdb/cockroach/pkg/storage/engine	9.341s
+?   	github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb	[no test files]
+?   	github.com/cockroachdb/cockroach/pkg/storage/engine/rocksdb	[no test files]
+?   	github.com/cockroachdb/cockroach/pkg/storage/storagebase	[no test files]
+ok  	github.com/cockroachdb/cockroach/pkg/testutils	0.045s
+?   	github.com/cockroachdb/cockroach/pkg/testutils/buildutil	[no test files]
+?   	github.com/cockroachdb/cockroach/pkg/testutils/distsqlutils	[no test files]
+?   	github.com/cockroachdb/cockroach/pkg/testutils/gossiputil	[no test files]
+?   	github.com/cockroachdb/cockroach/pkg/testutils/localtestcluster	[no test files]
+?   	github.com/cockroachdb/cockroach/pkg/testutils/serverutils	[no test files]
+ok  	github.com/cockroachdb/cockroach/pkg/testutils/sqlutils	0.031s
+?   	github.com/cockroachdb/cockroach/pkg/testutils/storageutils	[no test files]
+ok  	github.com/cockroachdb/cockroach/pkg/testutils/testcluster	1.081s
+ok  	github.com/cockroachdb/cockroach/pkg/testutils/zerofields	0.011s
+ok  	github.com/cockroachdb/cockroach/pkg/ts	0.747s
+?   	github.com/cockroachdb/cockroach/pkg/ts/tspb	[no test files]
+?   	github.com/cockroachdb/cockroach/pkg/ui	[no test files]
+ok  	github.com/cockroachdb/cockroach/pkg/util	0.089s
+?   	github.com/cockroachdb/cockroach/pkg/util/bufalloc	[no test files]
+ok  	github.com/cockroachdb/cockroach/pkg/util/cache	0.025s
+ok  	github.com/cockroachdb/cockroach/pkg/util/caller	0.029s
+ok  	github.com/cockroachdb/cockroach/pkg/util/decimal	0.713s
+ok  	github.com/cockroachdb/cockroach/pkg/util/duration	0.025s
+ok  	github.com/cockroachdb/cockroach/pkg/util/encoding	1.454s
+ok  	github.com/cockroachdb/cockroach/pkg/util/envutil	0.027s
+?   	github.com/cockroachdb/cockroach/pkg/util/grpcutil	[no test files]
+ok  	github.com/cockroachdb/cockroach/pkg/util/hlc	0.026s
+?   	github.com/cockroachdb/cockroach/pkg/util/httputil	[no test files]
+ok  	github.com/cockroachdb/cockroach/pkg/util/humanizeutil	0.028s
+ok  	github.com/cockroachdb/cockroach/pkg/util/interval	0.032s
+?   	github.com/cockroachdb/cockroach/pkg/util/leaktest	[no test files]
+ok  	github.com/cockroachdb/cockroach/pkg/util/log	0.097s
+?   	github.com/cockroachdb/cockroach/pkg/util/log/logflags	[no test files]
+ok  	github.com/cockroachdb/cockroach/pkg/util/metric	0.029s
+?   	github.com/cockroachdb/cockroach/pkg/util/netutil	[no test files]
+ok  	github.com/cockroachdb/cockroach/pkg/util/protoutil	0.035s
+ok  	github.com/cockroachdb/cockroach/pkg/util/randutil	0.028s
+ok  	github.com/cockroachdb/cockroach/pkg/util/retry	0.025s
+ok  	github.com/cockroachdb/cockroach/pkg/util/sdnotify	0.024s
+ok  	github.com/cockroachdb/cockroach/pkg/util/shuffle	0.027s
+ok  	github.com/cockroachdb/cockroach/pkg/util/stop	0.356s
+?   	github.com/cockroachdb/cockroach/pkg/util/syncutil	[no test files]
+ok  	github.com/cockroachdb/cockroach/pkg/util/timeutil	0.428s
+ok  	github.com/cockroachdb/cockroach/pkg/util/tracing	0.022s
+?   	github.com/cockroachdb/cockroach/pkg/ut

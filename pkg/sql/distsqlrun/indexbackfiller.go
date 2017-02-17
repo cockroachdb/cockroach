@@ -232,10 +232,8 @@ func (ib *indexBackfiller) mainLoop(ctx context.Context) error {
 	var resume roachpb.Span
 	sp := work
 	for row := int64(0); sp.Key != nil; row += chunkSize {
-		if log.V(2) {
-			log.Infof(ctx, "index add (%d, %d) at row: %d, span: %s",
-				desc.ID, mutationID, row, sp)
-		}
+		log.VEventf(ctx, 2, "index add (%d, %d) at row: %d, span: %s",
+			desc.ID, mutationID, row, sp)
 		var err error
 		sp.Key, err = ib.runChunk(ctx, desc, addedIndexDescs, sp, chunkSize)
 		if err != nil {
@@ -330,13 +328,13 @@ func WriteResumeSpan(
 				addSpan(sp.Key, origSpan.Key)
 				if resume.Key != nil {
 					addSpan(resume.Key, resume.EndKey)
+				} else {
+					log.VEventf(txn.Context, 2, "completed processing of span: %+v", origSpan)
 				}
 				addSpan(origSpan.EndKey, sp.EndKey)
 				mutation.ResumeSpans = append(before, after...)
 
-				if log.V(2) {
-					log.Infof(txn.Context, "ckpt %+v", mutation.ResumeSpans)
-				}
+				log.VEventf(txn.Context, 2, "ckpt %+v", mutation.ResumeSpans)
 				txn.SetSystemConfigTrigger()
 				return txn.Put(sqlbase.MakeDescMetadataKey(tableDesc.GetID()), sqlbase.WrapDescriptor(tableDesc))
 			}

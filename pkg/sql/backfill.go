@@ -617,6 +617,7 @@ func (sc *SchemaChanger) backfillIndexes(
 		if err := sc.ExtendLease(lease); err != nil {
 			return err
 		}
+		log.VEventf(context.TODO(), 2, "index backfill: process %+v spans", spans)
 		if err := sc.db.Txn(context.TODO(), func(txn *client.Txn) error {
 			p := &planner{
 				txn:      txn,
