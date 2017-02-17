@@ -91,29 +91,23 @@ func evalExport(
 	// TODO(dan): Move all this iteration into cpp to avoid the cgo calls.
 	// TODO(dan): Consider checking ctx periodically during the MVCCIterate call.
 	var entries int64
-	for {
-		entries = 0
-		iter := engineccl.NewMVCCIncrementalIterator(batch)
-		defer iter.Close()
-		iter.Reset(args.Key, args.EndKey, args.StartTime, h.Timestamp)
-		for ; iter.Valid(); iter.Next() {
-			key, value := iter.Key(), iter.Value()
-			if log.V(3) {
-				log.Infof(ctx, "Export %+v %+v", key, value)
-			}
-			entries++
-			if err := sst.Add(engine.MVCCKeyValue{Key: key, Value: value}); err != nil {
-				return storage.EvalResult{}, errors.Wrapf(err, "adding key %s", key)
-			}
+	iter := engineccl.NewMVCCIncrementalIterator(batch)
+	defer iter.Close()
+	iter.Reset(args.Key, args.EndKey, args.StartTime, h.Timestamp)
+	for ; iter.Valid(); iter.Next() {
+		key, value := iter.Key(), iter.Value()
+		if log.V(3) {
+			log.Infof(ctx, "Export %+v %+v", key, value)
 		}
-		err := iter.Error()
-		if _, ok := err.(*roachpb.WriteIntentError); ok {
-			continue
+		entries++
+		if err := sst.Add(engine.MVCCKeyValue{Key: key, Value: value}); err != nil {
+			return storage.EvalResult{}, errors.Wrapf(err, "adding key %s", key)
 		}
-		if err != nil {
-			return storage.EvalResult{}, err
-		}
-		break
+	}
+	if err := iter.Error(); err != nil {
+		// The error may be a WriteIntentError. In which case, returning it will
+		// cause this command to be retried.
+		return storage.EvalResult{}, err
 	}
 
 	if entries == 0 {
