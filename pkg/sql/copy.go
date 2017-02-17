@@ -23,6 +23,8 @@ import (
 	"time"
 	"unsafe"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 )
@@ -50,13 +52,13 @@ type copyNode struct {
 	rowsMemAcc    WrappableMemoryAccount
 }
 
-func (n *copyNode) Columns() ResultColumns { return n.resultColumns }
-func (*copyNode) Ordering() orderingInfo   { return orderingInfo{} }
-func (*copyNode) Values() parser.Datums    { return nil }
-func (*copyNode) MarkDebug(_ explainMode)  {}
-func (*copyNode) Next() (bool, error)      { return false, nil }
+func (n *copyNode) Columns() ResultColumns           { return n.resultColumns }
+func (*copyNode) Ordering() orderingInfo             { return orderingInfo{} }
+func (*copyNode) Values() parser.Datums              { return nil }
+func (*copyNode) MarkDebug(_ explainMode)            {}
+func (*copyNode) Next(context.Context) (bool, error) { return false, nil }
 
-func (n *copyNode) Close() {
+func (n *copyNode) Close(context.Context) {
 	n.rowsMemAcc.Wsession(n.p.session).Close()
 }
 
@@ -71,7 +73,9 @@ func (*copyNode) DebugValues() debugValues {
 
 // CopyFrom begins a COPY.
 // Privileges: INSERT on table.
-func (p *planner) CopyFrom(n *parser.CopyFrom, autoCommit bool) (planNode, error) {
+func (p *planner) CopyFrom(
+	ctx context.Context, n *parser.CopyFrom, autoCommit bool,
+) (planNode, error) {
 	cn := &copyNode{
 		table:   &n.Table,
 		columns: n.Columns,
@@ -81,7 +85,7 @@ func (p *planner) CopyFrom(n *parser.CopyFrom, autoCommit bool) (planNode, error
 	if err != nil {
 		return nil, err
 	}
-	en, err := p.makeEditNode(tn, autoCommit, privilege.INSERT)
+	en, err := p.makeEditNode(ctx, tn, autoCommit, privilege.INSERT)
 	if err != nil {
 		return nil, err
 	}
@@ -99,7 +103,7 @@ func (p *planner) CopyFrom(n *parser.CopyFrom, autoCommit bool) (planNode, error
 }
 
 // Start implements the planNode interface.
-func (n *copyNode) Start() error {
+func (n *copyNode) Start(context.Context) error {
 	// Should never happen because the executor prevents non-COPY messages during
 	// a COPY.
 	if n.p.copyFrom != nil {
@@ -350,7 +354,7 @@ var decodeMap = map[byte]byte{
 // CopyData is the statement type after a block of COPY data has been
 // received. There may be additional rows ready to insert. If so, return an
 // insertNode, otherwise emptyNode.
-func (p *planner) CopyData(n CopyDataBlock, autoCommit bool) (planNode, error) {
+func (p *planner) CopyData(ctx context.Context, n CopyDataBlock, autoCommit bool) (planNode, error) {
 	// When this many rows are in the copy buffer, they are inserted.
 	const copyRowSize = 100
 
@@ -374,7 +378,7 @@ func (p *planner) CopyData(n CopyDataBlock, autoCommit bool) (planNode, error) {
 		},
 		Returning: parser.AbsentReturningClause,
 	}
-	return p.Insert(&in, nil, autoCommit)
+	return p.Insert(ctx, &in, nil, autoCommit)
 }
 
 // Format implements the NodeFormatter interface.

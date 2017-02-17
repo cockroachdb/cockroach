@@ -423,7 +423,7 @@ func (c *v3Conn) serve(ctx context.Context, draining func() bool, reserved mon.B
 
 		case clientMsgParse:
 			c.doingExtendedQueryMessage = true
-			err = c.handleParse(ctx, &c.readBuf)
+			err = c.handleParse(&c.readBuf)
 
 		case clientMsgDescribe:
 			c.doingExtendedQueryMessage = true
@@ -491,7 +491,7 @@ func (c *v3Conn) handleSimpleQuery(ctx context.Context, buf *readBuffer) error {
 	return c.executeStatements(ctx, query, nil, nil, true, 0)
 }
 
-func (c *v3Conn) handleParse(ctx context.Context, buf *readBuffer) error {
+func (c *v3Conn) handleParse(buf *readBuffer) error {
 	name, err := buf.getString()
 	if err != nil {
 		return err
@@ -535,7 +535,7 @@ func (c *v3Conn) handleParse(ctx context.Context, buf *readBuffer) error {
 		sqlTypeHints[strconv.Itoa(i+1)] = v
 	}
 	// Create the new PreparedStatement in the connection's Session.
-	stmt, err := c.session.PreparedStatements.New(ctx, c.executor, name, query, sqlTypeHints)
+	stmt, err := c.session.PreparedStatements.New(c.executor, name, query, sqlTypeHints)
 	if err != nil {
 		return c.sendError(err)
 	}
@@ -987,7 +987,7 @@ func (c *v3Conn) sendResponse(
 			}
 
 		case parser.CopyIn:
-			rows, err := c.copyIn(result.Columns)
+			rows, err := c.copyIn(ctx, result.Columns)
 			if err != nil {
 				return err
 			}
@@ -1048,9 +1048,9 @@ func (c *v3Conn) sendRowDescription(
 
 // copyIn processes COPY IN data and returns the number of rows inserted.
 // See: https://www.postgresql.org/docs/current/static/protocol-flow.html#PROTOCOL-COPY
-func (c *v3Conn) copyIn(columns []sql.ResultColumn) (int64, error) {
+func (c *v3Conn) copyIn(ctx context.Context, columns []sql.ResultColumn) (int64, error) {
 	var rows int64
-	defer c.session.CopyEnd()
+	defer c.session.CopyEnd(ctx)
 
 	c.writeBuf.initMsg(serverMsgCopyInResponse)
 	c.writeBuf.writeByte(byte(formatText))

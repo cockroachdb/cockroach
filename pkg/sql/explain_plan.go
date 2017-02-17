@@ -19,6 +19,8 @@ import (
 	"bytes"
 	"fmt"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 )
 
@@ -102,7 +104,9 @@ var emptyString = parser.NewDString("")
 
 // populateExplain invokes explain() with a makeRow method
 // which populates a valuesNode.
-func (p *planner) populateExplain(e *explainer, v *valuesNode, plan planNode) error {
+func (p *planner) populateExplain(
+	ctx context.Context, e *explainer, v *valuesNode, plan planNode,
+) error {
 	e.makeRow = func(level int, name, field, description string, plan planNode) {
 		if e.err != nil {
 			return
@@ -128,12 +132,12 @@ func (p *planner) populateExplain(e *explainer, v *valuesNode, plan planNode) er
 	}
 
 	e.err = nil
-	_ = walkPlan(plan, e.observer())
+	_ = walkPlan(ctx, plan, e.observer())
 	return e.err
 }
 
 // planToString uses explain() to build a string representation of the planNode.
-func planToString(plan planNode) string {
+func planToString(ctx context.Context, plan planNode) string {
 	var buf bytes.Buffer
 	e := explainer{
 		showMetadata: true,
@@ -154,7 +158,7 @@ func planToString(plan planNode) string {
 			}
 		},
 	}
-	_ = walkPlan(plan, e.observer())
+	_ = walkPlan(ctx, plan, e.observer())
 	return buf.String()
 }
 
@@ -184,7 +188,7 @@ func (e *explainer) expr(nodeName, fieldName string, n int, expr parser.Expr) {
 }
 
 // enterNode implements the planObserver interface.
-func (e *explainer) enterNode(name string, plan planNode) bool {
+func (e *explainer) enterNode(_ context.Context, name string, plan planNode) bool {
 	desc := ""
 	if e.doIndent {
 		desc = fmt.Sprintf("%*s-> %s", e.level*3, " ", name)
@@ -267,20 +271,22 @@ type explainPlanNode struct {
 	optimized bool
 }
 
-func (e *explainPlanNode) Next() (bool, error)        { return e.results.Next() }
+func (e *explainPlanNode) Next(ctx context.Context) (bool, error) {
+	return e.results.Next(ctx)
+}
 func (e *explainPlanNode) Columns() ResultColumns     { return e.results.Columns() }
 func (e *explainPlanNode) Ordering() orderingInfo     { return e.results.Ordering() }
 func (e *explainPlanNode) Values() parser.Datums      { return e.results.Values() }
 func (e *explainPlanNode) DebugValues() debugValues   { return debugValues{} }
 func (e *explainPlanNode) MarkDebug(mode explainMode) {}
-func (e *explainPlanNode) Start() error {
+func (e *explainPlanNode) Start(ctx context.Context) error {
 	// Note that we don't call start on e.plan. That's on purpose, Start() can
 	// have side effects. And it's supposed to not be needed for the way in which
 	// we're going to use e.plan.
-	return e.p.populateExplain(&e.explainer, e.results, e.plan)
+	return e.p.populateExplain(ctx, &e.explainer, e.results, e.plan)
 }
 
-func (e *explainPlanNode) Close() {
-	e.plan.Close()
-	e.results.Close()
+func (e *explainPlanNode) Close(ctx context.Context) {
+	e.plan.Close(ctx)
+	e.results.Close(ctx)
 }

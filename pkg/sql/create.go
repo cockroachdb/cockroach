@@ -86,7 +86,7 @@ func (p *planner) CreateDatabase(n *parser.CreateDatabase) (planNode, error) {
 	return &createDatabaseNode{p: p, n: n}, nil
 }
 
-func (n *createDatabaseNode) Start() error {
+func (n *createDatabaseNode) Start(ctx context.Context) error {
 	desc := makeDatabaseDesc(n.n)
 
 	created, err := n.p.createDatabase(&desc, n.n.IfNotExists)
@@ -96,7 +96,9 @@ func (n *createDatabaseNode) Start() error {
 	if created {
 		// Log Create Database event. This is an auditable log event and is
 		// recorded in the same transaction as the table descriptor update.
-		if err := MakeEventLogger(n.p.leaseMgr).InsertEventRecord(n.p.txn,
+		if err := MakeEventLogger(n.p.leaseMgr).InsertEventRecord(
+			ctx,
+			n.p.txn,
 			EventLogCreateDatabase,
 			int32(desc.ID),
 			int32(n.p.evalCtx.NodeID),
@@ -112,13 +114,13 @@ func (n *createDatabaseNode) Start() error {
 	return nil
 }
 
-func (n *createDatabaseNode) Next() (bool, error)        { return false, nil }
-func (n *createDatabaseNode) Close()                     {}
-func (n *createDatabaseNode) Columns() ResultColumns     { return make(ResultColumns, 0) }
-func (n *createDatabaseNode) Ordering() orderingInfo     { return orderingInfo{} }
-func (n *createDatabaseNode) Values() parser.Datums      { return parser.Datums{} }
-func (n *createDatabaseNode) DebugValues() debugValues   { return debugValues{} }
-func (n *createDatabaseNode) MarkDebug(mode explainMode) {}
+func (n *createDatabaseNode) Next(context.Context) (bool, error) { return false, nil }
+func (n *createDatabaseNode) Close(context.Context)              {}
+func (n *createDatabaseNode) Columns() ResultColumns             { return make(ResultColumns, 0) }
+func (n *createDatabaseNode) Ordering() orderingInfo             { return orderingInfo{} }
+func (n *createDatabaseNode) Values() parser.Datums              { return parser.Datums{} }
+func (n *createDatabaseNode) DebugValues() debugValues           { return debugValues{} }
+func (n *createDatabaseNode) MarkDebug(mode explainMode)         {}
 
 type createIndexNode struct {
 	p         *planner
@@ -148,7 +150,7 @@ func (p *planner) CreateIndex(n *parser.CreateIndex) (planNode, error) {
 	return &createIndexNode{p: p, tableDesc: tableDesc, n: n}, nil
 }
 
-func (n *createIndexNode) Start() error {
+func (n *createIndexNode) Start(ctx context.Context) error {
 	status, i, err := n.tableDesc.FindIndexByName(n.n.Name)
 	if err == nil {
 		if status == sqlbase.DescriptorIncomplete {
@@ -203,7 +205,9 @@ func (n *createIndexNode) Start() error {
 	// Record index creation in the event log. This is an auditable log
 	// event and is recorded in the same transaction as the table descriptor
 	// update.
-	if err := MakeEventLogger(n.p.leaseMgr).InsertEventRecord(n.p.txn,
+	if err := MakeEventLogger(n.p.leaseMgr).InsertEventRecord(
+		ctx,
+		n.p.txn,
 		EventLogCreateIndex,
 		int32(n.tableDesc.ID),
 		int32(n.p.evalCtx.NodeID),
@@ -222,13 +226,13 @@ func (n *createIndexNode) Start() error {
 	return nil
 }
 
-func (n *createIndexNode) Next() (bool, error)        { return false, nil }
-func (n *createIndexNode) Close()                     {}
-func (n *createIndexNode) Columns() ResultColumns     { return make(ResultColumns, 0) }
-func (n *createIndexNode) Ordering() orderingInfo     { return orderingInfo{} }
-func (n *createIndexNode) Values() parser.Datums      { return parser.Datums{} }
-func (n *createIndexNode) DebugValues() debugValues   { return debugValues{} }
-func (n *createIndexNode) MarkDebug(mode explainMode) {}
+func (n *createIndexNode) Next(context.Context) (bool, error) { return false, nil }
+func (n *createIndexNode) Close(context.Context)              {}
+func (n *createIndexNode) Columns() ResultColumns             { return make(ResultColumns, 0) }
+func (n *createIndexNode) Ordering() orderingInfo             { return orderingInfo{} }
+func (n *createIndexNode) Values() parser.Datums              { return parser.Datums{} }
+func (n *createIndexNode) DebugValues() debugValues           { return debugValues{} }
+func (n *createIndexNode) MarkDebug(mode explainMode)         {}
 
 type createUserNode struct {
 	p        *planner
@@ -265,7 +269,7 @@ func (p *planner) CreateUser(n *parser.CreateUser) (planNode, error) {
 	return &createUserNode{p: p, n: n, password: resolvedPassword}, nil
 }
 
-func (n *createUserNode) Start() error {
+func (n *createUserNode) Start(ctx context.Context) error {
 	var hashedPassword []byte
 	if n.password != "" {
 		var err error
@@ -279,6 +283,7 @@ func (n *createUserNode) Start() error {
 
 	internalExecutor := InternalExecutor{LeaseManager: n.p.leaseMgr}
 	rowsAffected, err := internalExecutor.ExecuteStatementInTransaction(
+		ctx,
 		"create-user",
 		n.p.txn,
 		"INSERT INTO system.users VALUES ($1, $2);",
@@ -299,13 +304,13 @@ func (n *createUserNode) Start() error {
 	return nil
 }
 
-func (n *createUserNode) Next() (bool, error)        { return false, nil }
-func (n *createUserNode) Close()                     {}
-func (n *createUserNode) Columns() ResultColumns     { return make(ResultColumns, 0) }
-func (n *createUserNode) Ordering() orderingInfo     { return orderingInfo{} }
-func (n *createUserNode) Values() parser.Datums      { return parser.Datums{} }
-func (n *createUserNode) DebugValues() debugValues   { return debugValues{} }
-func (n *createUserNode) MarkDebug(mode explainMode) {}
+func (n *createUserNode) Next(context.Context) (bool, error) { return false, nil }
+func (n *createUserNode) Close(context.Context)              {}
+func (n *createUserNode) Columns() ResultColumns             { return make(ResultColumns, 0) }
+func (n *createUserNode) Ordering() orderingInfo             { return orderingInfo{} }
+func (n *createUserNode) Values() parser.Datums              { return parser.Datums{} }
+func (n *createUserNode) DebugValues() debugValues           { return debugValues{} }
+func (n *createUserNode) MarkDebug(mode explainMode)         {}
 
 type createViewNode struct {
 	p           *planner
@@ -320,7 +325,7 @@ type createViewNode struct {
 //   notes: postgres requires CREATE on database plus SELECT on all the
 //						selected columns.
 //          mysql requires CREATE VIEW plus SELECT on all the selected columns.
-func (p *planner) CreateView(n *parser.CreateView) (planNode, error) {
+func (p *planner) CreateView(ctx context.Context, n *parser.CreateView) (planNode, error) {
 	name, err := n.Name.NormalizeWithDatabaseName(p.session.Database)
 	if err != nil {
 		return nil, err
@@ -339,7 +344,7 @@ func (p *planner) CreateView(n *parser.CreateView) (planNode, error) {
 	// depends on, make sure we use the most recent versions of table
 	// descriptors rather than the copies in the lease cache.
 	p.avoidCachedDescriptors = true
-	sourcePlan, err := p.Select(n.AsSource, []parser.Type{}, false)
+	sourcePlan, err := p.Select(ctx, n.AsSource, []parser.Type{}, false)
 	if err != nil {
 		p.avoidCachedDescriptors = false
 		return nil, err
@@ -350,7 +355,7 @@ func (p *planner) CreateView(n *parser.CreateView) (planNode, error) {
 		// Ensure that we clean up after ourselves if an error occurs, because if
 		// construction of the planNode fails, Close() won't be called on it.
 		if result == nil {
-			sourcePlan.Close()
+			sourcePlan.Close(ctx)
 			p.avoidCachedDescriptors = false
 		}
 	}()
@@ -371,7 +376,7 @@ func (p *planner) CreateView(n *parser.CreateView) (planNode, error) {
 		parser.FmtNormalizeTableNames(
 			parser.FmtParsable,
 			func(t *parser.NormalizableTableName) *parser.TableName {
-				tn, err := p.QualifyWithDatabase(t)
+				tn, err := p.QualifyWithDatabase(ctx, t)
 				if err != nil {
 					log.Warningf(p.ctx(), "failed to qualify table name %q with database name: %v", t, err)
 					fmtErr = err
@@ -386,7 +391,7 @@ func (p *planner) CreateView(n *parser.CreateView) (planNode, error) {
 	}
 
 	// TODO(a-robinson): Support star expressions as soon as we can (#10028).
-	if p.planContainsStar(sourcePlan) {
+	if p.planContainsStar(ctx, sourcePlan) {
 		return nil, fmt.Errorf("views do not currently support * expressions")
 	}
 
@@ -402,7 +407,7 @@ func (p *planner) CreateView(n *parser.CreateView) (planNode, error) {
 	return result, nil
 }
 
-func (n *createViewNode) Start() error {
+func (n *createViewNode) Start(ctx context.Context) error {
 	tKey := tableKey{parentID: n.dbDesc.ID, name: n.n.Name.TableName().Table()}
 	key := tKey.Key()
 	if exists, err := n.p.descExists(key); err == nil && exists {
@@ -421,7 +426,8 @@ func (n *createViewNode) Start() error {
 	privs := n.dbDesc.GetPrivileges()
 
 	affected := make(map[sqlbase.ID]*sqlbase.TableDescriptor)
-	desc, err := n.makeViewTableDesc(n.n, n.dbDesc.ID, id, n.sourcePlan.Columns(), privs, affected)
+	desc, err := n.makeViewTableDesc(
+		ctx, n.n, n.dbDesc.ID, id, n.sourcePlan.Columns(), privs, affected)
 	if err != nil {
 		return err
 	}
@@ -451,7 +457,9 @@ func (n *createViewNode) Start() error {
 
 	// Log Create View event. This is an auditable log event and is
 	// recorded in the same transaction as the table descriptor update.
-	if err := MakeEventLogger(n.p.leaseMgr).InsertEventRecord(n.p.txn,
+	if err := MakeEventLogger(n.p.leaseMgr).InsertEventRecord(
+		ctx,
+		n.p.txn,
 		EventLogCreateView,
 		int32(desc.ID),
 		int32(n.p.evalCtx.NodeID),
@@ -467,18 +475,18 @@ func (n *createViewNode) Start() error {
 	return nil
 }
 
-func (n *createViewNode) Close() {
-	n.sourcePlan.Close()
+func (n *createViewNode) Close(ctx context.Context) {
+	n.sourcePlan.Close(ctx)
 	n.sourcePlan = nil
 	n.p.avoidCachedDescriptors = false
 }
 
-func (n *createViewNode) Next() (bool, error)        { return false, nil }
-func (n *createViewNode) Columns() ResultColumns     { return make(ResultColumns, 0) }
-func (n *createViewNode) Ordering() orderingInfo     { return orderingInfo{} }
-func (n *createViewNode) Values() parser.Datums      { return parser.Datums{} }
-func (n *createViewNode) DebugValues() debugValues   { return debugValues{} }
-func (n *createViewNode) MarkDebug(mode explainMode) {}
+func (n *createViewNode) Next(context.Context) (bool, error) { return false, nil }
+func (n *createViewNode) Columns() ResultColumns             { return make(ResultColumns, 0) }
+func (n *createViewNode) Ordering() orderingInfo             { return orderingInfo{} }
+func (n *createViewNode) Values() parser.Datums              { return parser.Datums{} }
+func (n *createViewNode) DebugValues() debugValues           { return debugValues{} }
+func (n *createViewNode) MarkDebug(mode explainMode)         {}
 
 type createTableNode struct {
 	p          *planner
@@ -490,7 +498,7 @@ type createTableNode struct {
 // CreateTable creates a table.
 // Privileges: CREATE on database.
 //   Notes: postgres/mysql require CREATE on database.
-func (p *planner) CreateTable(n *parser.CreateTable) (planNode, error) {
+func (p *planner) CreateTable(ctx context.Context, n *parser.CreateTable) (planNode, error) {
 	tn, err := n.Table.NormalizeWithDatabaseName(p.session.Database)
 	if err != nil {
 		return nil, err
@@ -521,14 +529,14 @@ func (p *planner) CreateTable(n *parser.CreateTable) (planNode, error) {
 		// to populate the new table descriptor in Start() below. We
 		// instantiate the sourcePlan as early as here so that EXPLAIN has
 		// something useful to show about CREATE TABLE .. AS ...
-		sourcePlan, err = p.Select(n.AsSource, []parser.Type{}, false)
+		sourcePlan, err = p.Select(ctx, n.AsSource, []parser.Type{}, false)
 		if err != nil {
 			return nil, err
 		}
 		numColNames := len(n.AsColumnNames)
 		numColumns := len(sourcePlan.Columns())
 		if numColNames != 0 && numColNames != numColumns {
-			sourcePlan.Close()
+			sourcePlan.Close(ctx)
 			return nil, sqlbase.NewSyntaxError(fmt.Sprintf(
 				"CREATE TABLE specifies %d column name%s, but data source has %d column%s",
 				numColNames, util.Pluralize(int64(numColNames)),
@@ -568,7 +576,7 @@ func hoistConstraints(n *parser.CreateTable) {
 	}
 }
 
-func (n *createTableNode) Start() error {
+func (n *createTableNode) Start(ctx context.Context) error {
 	tKey := tableKey{parentID: n.dbDesc.ID, name: n.n.Table.TableName().Table()}
 	key := tKey.Key()
 	if exists, err := n.p.descExists(key); err == nil && exists {
@@ -639,7 +647,9 @@ func (n *createTableNode) Start() error {
 
 	// Log Create Table event. This is an auditable log event and is
 	// recorded in the same transaction as the table descriptor update.
-	if err := MakeEventLogger(n.p.leaseMgr).InsertEventRecord(n.p.txn,
+	if err := MakeEventLogger(n.p.leaseMgr).InsertEventRecord(
+		ctx,
+		n.p.txn,
 		EventLogCreateTable,
 		int32(desc.ID),
 		int32(n.p.evalCtx.NodeID),
@@ -661,7 +671,7 @@ func (n *createTableNode) Start() error {
 		// below would cause a 2nd invocation and cause a panic. So
 		// instead we close this sourcePlan and let the insertNode create
 		// it anew from the AsSource syntax node.
-		n.sourcePlan.Close()
+		n.sourcePlan.Close(ctx)
 		n.sourcePlan = nil
 
 		insert := &parser.Insert{
@@ -669,22 +679,22 @@ func (n *createTableNode) Start() error {
 			Rows:      n.n.AsSource,
 			Returning: parser.AbsentReturningClause,
 		}
-		insertPlan, err := n.p.Insert(insert, nil, false)
+		insertPlan, err := n.p.Insert(ctx, insert, nil /* desiredTypes */, false /* autoCommit */)
 		if err != nil {
 			return err
 		}
-		defer insertPlan.Close()
-		insertPlan, err = n.p.optimizePlan(insertPlan, allColumns(insertPlan))
+		defer insertPlan.Close(ctx)
+		insertPlan, err = n.p.optimizePlan(ctx, insertPlan, allColumns(insertPlan))
 		if err != nil {
 			return err
 		}
-		if err = n.p.startPlan(insertPlan); err != nil {
+		if err = n.p.startPlan(ctx, insertPlan); err != nil {
 			return err
 		}
 		// This loop is done here instead of in the Next method
 		// since CREATE TABLE is a DDL statement and Executor only
 		// runs Next() for statements with type "Rows".
-		for done := true; done; done, err = insertPlan.Next() {
+		for done := true; done; done, err = insertPlan.Next(ctx) {
 			if err != nil {
 				return err
 			}
@@ -693,19 +703,19 @@ func (n *createTableNode) Start() error {
 	return nil
 }
 
-func (n *createTableNode) Close() {
+func (n *createTableNode) Close(ctx context.Context) {
 	if n.sourcePlan != nil {
-		n.sourcePlan.Close()
+		n.sourcePlan.Close(ctx)
 		n.sourcePlan = nil
 	}
 }
 
-func (n *createTableNode) Next() (bool, error)        { return false, nil }
-func (n *createTableNode) Columns() ResultColumns     { return make(ResultColumns, 0) }
-func (n *createTableNode) Ordering() orderingInfo     { return orderingInfo{} }
-func (n *createTableNode) Values() parser.Datums      { return parser.Datums{} }
-func (n *createTableNode) DebugValues() debugValues   { return debugValues{} }
-func (n *createTableNode) MarkDebug(mode explainMode) {}
+func (n *createTableNode) Next(context.Context) (bool, error) { return false, nil }
+func (n *createTableNode) Columns() ResultColumns             { return make(ResultColumns, 0) }
+func (n *createTableNode) Ordering() orderingInfo             { return orderingInfo{} }
+func (n *createTableNode) Values() parser.Datums              { return parser.Datums{} }
+func (n *createTableNode) DebugValues() debugValues           { return debugValues{} }
+func (n *createTableNode) MarkDebug(mode explainMode)         {}
 
 type indexMatch bool
 
@@ -1077,6 +1087,7 @@ func (p *planner) finalizeInterleave(
 // doesn't matter if reads/writes use a cached descriptor that doesn't
 // include the back-references.
 func (n *createViewNode) makeViewTableDesc(
+	ctx context.Context,
 	p *parser.CreateView,
 	parentID sqlbase.ID,
 	id sqlbase.ID,
@@ -1111,7 +1122,7 @@ func (n *createViewNode) makeViewTableDesc(
 		desc.AddColumn(*col)
 	}
 
-	n.resolveViewDependencies(&desc, affected)
+	n.resolveViewDependencies(ctx, &desc, affected)
 
 	return desc, desc.AllocateIDs()
 }
@@ -1503,9 +1514,11 @@ func CreateTestTableDescriptor(
 // descriptors are put into the backrefs map of other tables so that they can
 // be updated when this view is created.
 func (n *createViewNode) resolveViewDependencies(
-	tbl *sqlbase.TableDescriptor, backrefs map[sqlbase.ID]*sqlbase.TableDescriptor,
+	ctx context.Context,
+	tbl *sqlbase.TableDescriptor,
+	backrefs map[sqlbase.ID]*sqlbase.TableDescriptor,
 ) {
-	n.p.populateViewBackrefs(n.sourcePlan, tbl, backrefs)
+	n.p.populateViewBackrefs(ctx, n.sourcePlan, tbl, backrefs)
 
 	// Also create the forward references in the new view's descriptor.
 	tbl.DependsOn = make([]sqlbase.ID, 0, len(backrefs))
@@ -1517,10 +1530,13 @@ func (n *createViewNode) resolveViewDependencies(
 // populateViewBackrefs adds back-references to the descriptor for each referenced
 // table / view in the plan.
 func (p *planner) populateViewBackrefs(
-	plan planNode, tbl *sqlbase.TableDescriptor, backrefs map[sqlbase.ID]*sqlbase.TableDescriptor,
+	ctx context.Context,
+	plan planNode,
+	tbl *sqlbase.TableDescriptor,
+	backrefs map[sqlbase.ID]*sqlbase.TableDescriptor,
 ) {
 	b := &backrefCollector{p: p, tbl: tbl, backrefs: backrefs}
-	_ = walkPlan(plan, planObserver{enterNode: b.enterNode})
+	_ = walkPlan(ctx, plan, planObserver{enterNode: b.enterNode})
 }
 
 type backrefCollector struct {
@@ -1529,8 +1545,8 @@ type backrefCollector struct {
 	backrefs map[sqlbase.ID]*sqlbase.TableDescriptor
 }
 
-// enterNode implements the planObserver interface.
-func (b *backrefCollector) enterNode(_ string, plan planNode) bool {
+// enterNode is used by a planObserver.
+func (b *backrefCollector) enterNode(ctx context.Context, _ string, plan planNode) bool {
 	// I was initially concerned about doing type assertions on every node in
 	// the tree, but it's actually faster than a string comparison on the name
 	// returned by ExplainPlan, judging by a mini-benchmark run on my laptop
@@ -1548,12 +1564,12 @@ func (b *backrefCollector) enterNode(_ string, plan planNode) bool {
 		if join.left.info.viewDesc != nil {
 			populateViewBackrefFromViewDesc(join.left.info.viewDesc, b.tbl, b.backrefs)
 		} else {
-			b.p.populateViewBackrefs(join.left.plan, b.tbl, b.backrefs)
+			b.p.populateViewBackrefs(ctx, join.left.plan, b.tbl, b.backrefs)
 		}
 		if join.right.info.viewDesc != nil {
 			populateViewBackrefFromViewDesc(join.right.info.viewDesc, b.tbl, b.backrefs)
 		} else {
-			b.p.populateViewBackrefs(join.right.plan, b.tbl, b.backrefs)
+			b.p.populateViewBackrefs(ctx, join.right.plan, b.tbl, b.backrefs)
 		}
 		// Return early to avoid re-processing the children.
 		return false
@@ -1597,9 +1613,9 @@ func populateViewBackrefFromViewDesc(
 
 // planContainsStar returns true if one of the render nodes in the
 // plan contains a star expansion.
-func (p *planner) planContainsStar(plan planNode) bool {
+func (p *planner) planContainsStar(ctx context.Context, plan planNode) bool {
 	s := &starDetector{}
-	_ = walkPlan(plan, planObserver{enterNode: s.enterNode})
+	_ = walkPlan(ctx, plan, planObserver{enterNode: s.enterNode})
 	return s.foundStar
 }
 
@@ -1609,7 +1625,7 @@ type starDetector struct {
 }
 
 // enterNode implements the planObserver interface.
-func (s *starDetector) enterNode(_ string, plan planNode) bool {
+func (s *starDetector) enterNode(_ context.Context, _ string, plan planNode) bool {
 	if s.foundStar {
 		return false
 	}

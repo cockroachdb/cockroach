@@ -19,6 +19,8 @@ package sql
 import (
 	"fmt"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -237,14 +239,14 @@ func (n *indexJoinNode) DebugValues() debugValues {
 	return n.debugVals
 }
 
-func (n *indexJoinNode) Start() error {
-	if err := n.table.Start(); err != nil {
+func (n *indexJoinNode) Start(ctx context.Context) error {
+	if err := n.table.Start(ctx); err != nil {
 		return err
 	}
-	return n.index.Start()
+	return n.index.Start(ctx)
 }
 
-func (n *indexJoinNode) Next() (bool, error) {
+func (n *indexJoinNode) Next(ctx context.Context) (bool, error) {
 	// Loop looking up the next row. We either are going to pull a row from the
 	// table or a batch of rows from the index. If we pull a batch of rows from
 	// the index we perform another iteration of the loop looking for rows in the
@@ -253,7 +255,7 @@ func (n *indexJoinNode) Next() (bool, error) {
 	for tableLookup := (len(n.table.spans) > 0); true; tableLookup = true {
 		// First, try to pull a row from the table.
 		if tableLookup {
-			next, err := n.table.Next()
+			next, err := n.table.Next(ctx)
 			if err != nil {
 				return false, err
 			}
@@ -270,7 +272,7 @@ func (n *indexJoinNode) Next() (bool, error) {
 		n.table.spans = n.table.spans[:0]
 
 		for len(n.table.spans) < indexJoinBatchSize {
-			if next, err := n.index.Next(); !next {
+			if next, err := n.index.Next(ctx); !next {
 				// The index is out of rows or an error occurred.
 				if err != nil {
 					return false, err
@@ -315,7 +317,7 @@ func (n *indexJoinNode) Next() (bool, error) {
 	return false, nil
 }
 
-func (n *indexJoinNode) Close() {
-	n.index.Close()
-	n.table.Close()
+func (n *indexJoinNode) Close(ctx context.Context) {
+	n.index.Close(ctx)
+	n.table.Close(ctx)
 }

@@ -1720,7 +1720,7 @@ func (e *MultipleResultsError) Error() string {
 type EvalPlanner interface {
 	// QueryRow executes a SQL query string where exactly 1 result row is
 	// expected and returns that row.
-	QueryRow(sql string, args ...interface{}) (Datums, error)
+	QueryRow(ctx context.Context, sql string, args ...interface{}) (Datums, error)
 }
 
 // EvalContext defines the context in which to evaluate an expression, allowing
@@ -1745,6 +1745,10 @@ type EvalContext struct {
 	// unqualified table name. Names in the search path are normalized already.
 	// This must not be modified (this is shared from the session).
 	SearchPath SearchPath
+	// Ctx represents the context in which the expression is evaluated. This comes
+	// from the Session.
+	// !!! set this
+	Ctx context.Context
 
 	Planner EvalPlanner
 
@@ -1995,7 +1999,11 @@ func queryOid(ctx *EvalContext, typ *OidColType, d Datum) (Datum, error) {
 		panic(fmt.Sprintf("invalid argument to OID cast: %s", d))
 	}
 	results, err := ctx.Planner.QueryRow(
-		fmt.Sprintf("SELECT oid, %s FROM pg_catalog.%s WHERE %s = $1", info.nameCol, info.tableName, queryCol), d)
+		ctx.Ctx,
+		fmt.Sprintf(
+			"SELECT oid, %s FROM pg_catalog.%s WHERE %s = $1",
+			info.nameCol, info.tableName, queryCol),
+		d)
 	if err != nil {
 		if _, ok := err.(*MultipleResultsError); ok {
 			return nil, errors.Errorf("more than one %s named %s", info.objName, d)

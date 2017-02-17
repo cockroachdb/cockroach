@@ -17,6 +17,8 @@
 package sql
 
 import (
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -39,12 +41,12 @@ var _ sqlutil.InternalExecutor = InternalExecutor{}
 // ExecuteStatementInTransaction executes the supplied SQL statement as part of
 // the supplied transaction. Statements are currently executed as the root user.
 func (ie InternalExecutor) ExecuteStatementInTransaction(
-	opName string, txn *client.Txn, statement string, qargs ...interface{},
+	ctx context.Context, opName string, txn *client.Txn, statement string, qargs ...interface{},
 ) (int, error) {
 	p := makeInternalPlanner(opName, txn, security.RootUser, ie.LeaseManager.memMetrics)
 	defer finishInternalPlanner(p)
 	p.leaseMgr = ie.LeaseManager
-	return p.exec(statement, qargs...)
+	return p.exec(ctx, statement, qargs...)
 }
 
 // GetTableSpan gets the key span for a SQL table, including any indices.

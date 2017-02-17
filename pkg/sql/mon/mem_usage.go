@@ -452,7 +452,7 @@ type BoundAccount struct {
 // MakeStandaloneBudget creates a BoundAccount suitable for root
 // monitors.
 func MakeStandaloneBudget(capacity int64) BoundAccount {
-	return BoundAccount{MemoryAccount{curAllocated: capacity}, nil, nil}
+	return BoundAccount{MemoryAccount: MemoryAccount{curAllocated: capacity}}
 }
 
 // MakeBoundAccount greates a BoundAccount connected to the given monitor.
