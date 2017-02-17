@@ -166,6 +166,7 @@ type StorePool struct {
 	log.AmbientContext
 
 	clock                       *hlc.Clock
+	gossip                      *gossip.Gossip
 	nodeLivenessFn              NodeLivenessFunc
 	timeUntilStoreDead          time.Duration
 	failedReservationsTimeout   time.Duration
@@ -198,6 +199,7 @@ func NewStorePool(
 	sp := &StorePool{
 		AmbientContext:     ambient,
 		clock:              clock,
+		gossip:             g,
 		nodeLivenessFn:     nodeLivenessFn,
 		timeUntilStoreDead: timeUntilStoreDead,
 		failedReservationsTimeout: envutil.EnvOrDefaultDuration("COCKROACH_FAILED_RESERVATION_TIMEOUT",
