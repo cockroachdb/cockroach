@@ -1,12 +1,14 @@
 #!/usr/bin/env bash
 set -euxo pipefail
 
+build_dir="$(dirname $0)"
+
 # Ensure that no stale binary remains.
 rm -f acceptance.test
 
-build/builder.sh make build
-build/builder.sh make install
-build/builder.sh go test -v -c -tags acceptance ./pkg/acceptance
+"${build_dir}"/builder.sh make build
+"${build_dir}"/builder.sh make install
+"${build_dir}"/builder.sh go test -v -c -tags acceptance ./pkg/acceptance
 
 # The log files that should be created by -l below can only
 # be created if the parent directory already exists. Ensure
