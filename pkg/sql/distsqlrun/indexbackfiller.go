@@ -330,13 +330,13 @@ func WriteResumeSpan(
 				addSpan(sp.Key, origSpan.Key)
 				if resume.Key != nil {
 					addSpan(resume.Key, resume.EndKey)
+				} else {
+					log.VEventf(txn.Context, 2, "completed processing of span: %+v", origSpan)
 				}
 				addSpan(origSpan.EndKey, sp.EndKey)
 				mutation.ResumeSpans = append(before, after...)
 
-				if log.V(2) {
-					log.Infof(txn.Context, "ckpt %+v", mutation.ResumeSpans)
-				}
+				log.VEventf(txn.Context, 2, "ckpt %+v", mutation.ResumeSpans)
 				txn.SetSystemConfigTrigger()
 				return txn.Put(sqlbase.MakeDescMetadataKey(tableDesc.GetID()), sqlbase.WrapDescriptor(tableDesc))
 			}
