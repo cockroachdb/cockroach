@@ -549,6 +549,7 @@ func (rf *RowFetcher) finalizeRow() {
 }
 
 // Key returns the next key (the key that follows the last returned row).
+// Key returns nil when there are no more rows.
 func (rf *RowFetcher) Key() roachpb.Key {
 	return rf.kv.Key
 }
