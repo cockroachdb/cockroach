@@ -1178,10 +1178,6 @@ func (ds *DistSender) sendToReplicas(
 			pending--
 			err := call.Err
 			if err == nil {
-				if log.V(2) {
-					log.Infof(ctx, "RPC reply: %s", call.Reply)
-				}
-
 				switch tErr := call.Reply.Error.GetDetail().(type) {
 				case nil:
 					return call.Reply, nil
