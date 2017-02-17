@@ -480,7 +480,7 @@ func (n *Node) initStores(
 
 	// Compute the time this node was last up; this is done by reading the
 	// "last up time" from every store and choosing the most recent timestamp.
-	mostRecentTimestamp := hlc.ZeroTimestamp
+	var mostRecentTimestamp hlc.Timestamp
 	if err := n.stores.VisitStores(func(s *storage.Store) error {
 		timestamp, err := s.ReadLastUpTimestamp(ctx)
 		if err != nil {

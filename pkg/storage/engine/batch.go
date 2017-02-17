@@ -153,7 +153,7 @@ func putUint64(b []byte, v uint64) {
 func (b *RocksDBBatchBuilder) encodeKey(key MVCCKey, extra int) {
 	length := 1 + len(key.Key)
 	timestampLength := 0
-	if key.Timestamp != hlc.ZeroTimestamp {
+	if key.Timestamp != (hlc.Timestamp{}) {
 		timestampLength = 1 + 8
 		if key.Timestamp.Logical != 0 {
 			timestampLength += 4

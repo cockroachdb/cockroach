@@ -201,7 +201,7 @@ func (p *planner) setTxn(txn *client.Txn) {
 	} else {
 		p.evalCtx.SetTxnTimestamp(time.Time{})
 		p.evalCtx.SetStmtTimestamp(time.Time{})
-		p.evalCtx.SetClusterTimestamp(hlc.ZeroTimestamp)
+		p.evalCtx.SetClusterTimestamp(hlc.Timestamp{})
 	}
 }
 

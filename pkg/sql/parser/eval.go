@@ -1777,7 +1777,7 @@ func (ctx *EvalContext) GetClusterTimestamp() *DDecimal {
 	// TODO(knz) a zero timestamp should never be read, even during
 	// Prepare. This will need to be addressed.
 	if !ctx.PrepareOnly {
-		if ctx.clusterTimestamp == hlc.ZeroTimestamp {
+		if ctx.clusterTimestamp == (hlc.Timestamp{}) {
 			panic("zero cluster timestamp in EvalContext")
 		}
 	}

@@ -87,16 +87,16 @@ func TestHLCEqual(t *testing.T) {
 	c := NewClock(m.UnixNano, time.Nanosecond)
 	a := c.Now()
 	b := a
-	if !a.Equal(b) {
+	if a != b {
 		t.Errorf("expected %+v == %+v", a, b)
 	}
 	m.Increment(1)
 	b = c.Now()
-	if a.Equal(b) {
+	if a == b {
 		t.Errorf("expected %+v < %+v", a, b)
 	}
 	a = c.Now() // add one to logical clock from b
-	if b.Equal(a) {
+	if b == a {
 		t.Errorf("expected %+v < %+v", b, a)
 	}
 }
@@ -141,11 +141,11 @@ func TestHLCClock(t *testing.T) {
 		default:
 			previous := c.Now()
 			current = c.Update(*step.input)
-			if current.Equal(previous) {
+			if current == previous {
 				t.Errorf("%d: clock not updated", i)
 			}
 		}
-		if !current.Equal(step.expected) {
+		if current != step.expected {
 			t.Fatalf("HLC error: %d expected %v, got %v", i, step.expected, current)
 		}
 	}

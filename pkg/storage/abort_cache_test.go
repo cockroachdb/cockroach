@@ -42,7 +42,7 @@ var (
 	testTxnID        = uuidFromString("0ce61c17-5eb4-4587-8c36-dcf4062ada4c")
 	testTxnID2       = uuidFromString("9855a1ef-8eb9-4c06-a106-cab1dda78a2b")
 	testTxnKey       = []byte("a")
-	testTxnTimestamp = hlc.ZeroTimestamp.Add(123, 456)
+	testTxnTimestamp = hlc.Timestamp{WallTime: 123, Logical: 456}
 	testTxnPriority  = int32(123)
 )
 

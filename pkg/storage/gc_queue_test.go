@@ -119,11 +119,11 @@ func TestGCQueueShouldQueue(t *testing.T) {
 		// a later timestamp.
 
 		// One normalized unit of unaged gc'able bytes at time zero.
-		{ttl * bc, 0, 0, 0, hlc.ZeroTimestamp, true, float64(now.WallTime) / (1E9 * considerThreshold)},
+		{ttl * bc, 0, 0, 0, hlc.Timestamp{}, true, float64(now.WallTime) / (1E9 * considerThreshold)},
 
 		// 2 intents aging from zero to now (which is exactly the intent age
 		// normalization).
-		{0, 0, 2, 0, hlc.ZeroTimestamp, true, 1},
+		{0, 0, 2, 0, hlc.Timestamp{}, true, 1},
 	}
 
 	gcQ := newGCQueue(tc.store, tc.gossip)
@@ -288,14 +288,14 @@ func TestGCQueueProcess(t *testing.T) {
 		{key1, ts2},
 		{key2, ts5},
 		{key2, ts2m1},
-		{key3, hlc.ZeroTimestamp},
+		{key3, hlc.Timestamp{}},
 		{key3, ts5},
 		{key3, ts2},
 		{key4, ts2},
-		{key6, hlc.ZeroTimestamp},
+		{key6, hlc.Timestamp{}},
 		{key6, ts5},
 		{key6, ts1},
-		{key7, hlc.ZeroTimestamp},
+		{key7, hlc.Timestamp{}},
 		{key7, ts4},
 		{key7, ts2},
 		{key8, ts2},
@@ -325,7 +325,7 @@ func TestGCQueueProcess(t *testing.T) {
 		if !kv.Key.Key.Equal(expKVs[i].key) {
 			t.Errorf("%d: expected key %q; got %q", i, expKVs[i].key, kv.Key.Key)
 		}
-		if !kv.Key.Timestamp.Equal(expKVs[i].ts) {
+		if kv.Key.Timestamp != expKVs[i].ts {
 			t.Errorf("%d: expected ts=%s; got %s", i, expKVs[i].ts, kv.Key.Timestamp)
 		}
 		if log.V(1) {
@@ -352,7 +352,7 @@ func TestGCQueueTransactionTable(t *testing.T) {
 	type spec struct {
 		status      roachpb.TransactionStatus
 		orig        int64
-		hb          int64                     // last heartbeat (none if ZeroTimestamp)
+		hb          int64                     // last heartbeat (none if Timestamp{})
 		newStatus   roachpb.TransactionStatus // -1 for GCed
 		failResolve bool                      // do we want to fail resolves in this trial?
 		expResolve  bool                      // expect attempt at removing txn-persisted intents?
@@ -479,7 +479,7 @@ func TestGCQueueTransactionTable(t *testing.T) {
 		txns[strKey] = *txn
 		for _, addrKey := range []roachpb.Key{baseKey, outsideKey} {
 			key := keys.TransactionKey(addrKey, *txn.ID)
-			if err := engine.MVCCPutProto(context.Background(), tc.engine, nil, key, hlc.ZeroTimestamp, nil, txn); err != nil {
+			if err := engine.MVCCPutProto(context.Background(), tc.engine, nil, key, hlc.Timestamp{}, nil, txn); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -504,7 +504,7 @@ func TestGCQueueTransactionTable(t *testing.T) {
 		for strKey, sp := range testCases {
 			txn := &roachpb.Transaction{}
 			key := keys.TransactionKey(roachpb.Key(strKey), *txns[strKey].ID)
-			ok, err := engine.MVCCGetProto(context.Background(), tc.engine, key, hlc.ZeroTimestamp, true, nil, txn)
+			ok, err := engine.MVCCGetProto(context.Background(), tc.engine, key, hlc.Timestamp{}, true, nil, txn)
 			if err != nil {
 				return err
 			}
@@ -538,7 +538,7 @@ func TestGCQueueTransactionTable(t *testing.T) {
 	outsideTxnPrefix := keys.TransactionKey(outsideKey, uuid.UUID{})
 	outsideTxnPrefixEnd := keys.TransactionKey(outsideKey.Next(), uuid.UUID{})
 	var count int
-	if _, err := engine.MVCCIterate(context.Background(), tc.store.Engine(), outsideTxnPrefix, outsideTxnPrefixEnd, hlc.ZeroTimestamp,
+	if _, err := engine.MVCCIterate(context.Background(), tc.store.Engine(), outsideTxnPrefix, outsideTxnPrefixEnd, hlc.Timestamp{},
 		true, nil, false, func(roachpb.KeyValue) (bool, error) {
 			count++
 			return false, nil
@@ -654,7 +654,7 @@ func TestGCQueueLastProcessedTimestamps(t *testing.T) {
 
 	ts := tc.Clock().Now()
 	for _, lpv := range lastProcessedVals {
-		if err := engine.MVCCPutProto(context.Background(), tc.engine, nil, lpv.key, hlc.ZeroTimestamp, nil, &ts); err != nil {
+		if err := engine.MVCCPutProto(context.Background(), tc.engine, nil, lpv.key, hlc.Timestamp{}, nil, &ts); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -673,7 +673,7 @@ func TestGCQueueLastProcessedTimestamps(t *testing.T) {
 	// Verify GC.
 	testutils.SucceedsSoon(t, func() error {
 		for _, lpv := range lastProcessedVals {
-			ok, err := engine.MVCCGetProto(context.Background(), tc.engine, lpv.key, hlc.ZeroTimestamp, true, nil, &ts)
+			ok, err := engine.MVCCGetProto(context.Background(), tc.engine, lpv.key, hlc.Timestamp{}, true, nil, &ts)
 			if err != nil {
 				return err
 			}
