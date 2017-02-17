@@ -260,7 +260,7 @@ CREATE TABLE t (
 statement ok
 INSERT INTO t VALUES (1, 2, 3), (3, 4, 5), (5, 6, 7)
 
-query I
+query I rowsort
 SELECT a FROM t WHERE a < 4.0
 ----
 1
@@ -380,7 +380,7 @@ CREATE TABLE ab (
   i INT
 ); INSERT INTO ab VALUES ('a', 1), ('b', 1), ('c', 1)
 
-query IT
+query IT rowsort
 SELECT i, s FROM ab WHERE (i, s) < (1, 'c')
 ----
 1 a
@@ -389,7 +389,7 @@ SELECT i, s FROM ab WHERE (i, s) < (1, 'c')
 statement ok
 CREATE INDEX baz ON ab (i, s)
 
-query IT
+query IT rowsort
 SELECT i, s FROM ab@baz WHERE (i, s) < (1, 'c')
 ----
 1 a

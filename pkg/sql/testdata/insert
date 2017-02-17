@@ -174,7 +174,7 @@ EXPLAIN (DEBUG) SELECT * FROM kv@a
 9  /kv/a/'g'  /'f'     ROW
 
 query TT
-SELECT * FROM kv
+SELECT * FROM kv ORDER BY k
 ----
 A    NULL
 a    b
@@ -198,7 +198,7 @@ CREATE TABLE kv2 (
 statement ok
 INSERT INTO kv2 VALUES ('a', 'b'), ('c', 'd'), ('e', 'f'), ('f', 'g')
 
-query TT
+query TT rowsort
 SELECT * FROM kv2
 ----
 a   b
@@ -264,7 +264,7 @@ INSERT INTO kv4 (int, float) VALUES (5, 1::INT)
 statement ok
 INSERT INTO kv4 (int, float) VALUES (5, 2.3)
 
-query IIBTR
+query IIBTR rowsort
 SELECT * from kv4
 ----
 1    NULL NULL NULL NULL

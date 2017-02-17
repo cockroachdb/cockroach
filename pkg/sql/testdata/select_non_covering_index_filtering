@@ -132,7 +132,7 @@ EXPLAIN(VERBOSE) SELECT a FROM t WHERE b = 2 OR ((b BETWEEN 2 AND 1) AND ((s != 
 2  scan                             (a, b[omitted], c[omitted], s[omitted])
 2              table     t@primary
 
-query I
+query I rowsort
 SELECT a FROM t WHERE b = 2 OR ((b BETWEEN 2 AND 1) AND ((s != 'a') OR (s = 'a')))
 ----
 4

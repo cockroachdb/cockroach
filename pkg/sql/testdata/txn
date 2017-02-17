@@ -131,7 +131,7 @@ statement ok
 COMMIT;
 INSERT INTO kv VALUES('x', 'y')
 
-query TT
+query TT rowsort
 SELECT * FROM kv
 ----
 a c
