@@ -20,6 +20,8 @@ import (
 	"bytes"
 	"fmt"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -59,7 +61,7 @@ func (p *planner) AlterTable(n *parser.AlterTable) (planNode, error) {
 	return &alterTableNode{n: n, p: p, tableDesc: tableDesc}, nil
 }
 
-func (n *alterTableNode) Start() error {
+func (n *alterTableNode) Start(ctx context.Context) error {
 	// Commands can either change the descriptor directly (for
 	// alterations that don't require a backfill) or add a mutation to
 	// the list.
@@ -189,16 +191,16 @@ func (n *alterTableNode) Start() error {
 					continue
 				}
 				err := n.p.canRemoveDependentViewGeneric(
-					"column", string(t.Column), n.tableDesc.ParentID, ref, t.DropBehavior)
+					ctx, "column", string(t.Column), n.tableDesc.ParentID, ref, t.DropBehavior)
 				if err != nil {
 					return err
 				}
 				viewDesc, err := n.p.getViewDescForCascade(
-					"column", string(t.Column), n.tableDesc.ParentID, ref.ID, t.DropBehavior)
+					ctx, "column", string(t.Column), n.tableDesc.ParentID, ref.ID, t.DropBehavior)
 				if err != nil {
 					return err
 				}
-				droppedViews, err = n.p.removeDependentView(n.tableDesc, viewDesc)
+				droppedViews, err = n.p.removeDependentView(ctx, n.tableDesc, viewDesc)
 				if err != nil {
 					return err
 				}
@@ -258,7 +260,7 @@ func (n *alterTableNode) Start() error {
 					if containsThisColumn {
 						if containsOnlyThisColumn || t.DropBehavior == parser.DropCascade {
 							if err := n.p.dropIndexByName(
-								parser.Name(idx.Name), n.tableDesc, false, t.DropBehavior, n.n.String(),
+								ctx, parser.Name(idx.Name), n.tableDesc, false, t.DropBehavior, n.n.String(),
 							); err != nil {
 								return err
 							}
@@ -348,7 +350,9 @@ func (n *alterTableNode) Start() error {
 					panic("constraint returned by GetConstraintInfo not found")
 				}
 				ck := n.tableDesc.Checks[idx]
-				if err := n.p.validateCheckExpr(ck.Expr, &n.n.Table, n.tableDesc); err != nil {
+				if err := n.p.validateCheckExpr(
+					ctx, ck.Expr, &n.n.Table, n.tableDesc,
+				); err != nil {
 					return err
 				}
 				n.tableDesc.Checks[idx].Validity = sqlbase.ConstraintValidity_Validated
@@ -371,7 +375,7 @@ func (n *alterTableNode) Start() error {
 				if err != nil {
 					panic(err)
 				}
-				if err := n.p.validateForeignKey(n.p.ctx(), n.tableDesc, idx); err != nil {
+				if err := n.p.validateForeignKey(ctx, n.tableDesc, idx); err != nil {
 					return err
 				}
 				idx.ForeignKey.Validity = sqlbase.ConstraintValidity_Validated
@@ -444,7 +448,9 @@ func (n *alterTableNode) Start() error {
 	// Record this table alteration in the event log. This is an auditable log
 	// event and is recorded in the same transaction as the table descriptor
 	// update.
-	if err := MakeEventLogger(n.p.leaseMgr).InsertEventRecord(n.p.txn,
+	if err := MakeEventLogger(n.p.leaseMgr).InsertEventRecord(
+		ctx,
+		n.p.txn,
 		EventLogAlterTable,
 		int32(n.tableDesc.ID),
 		int32(n.p.evalCtx.NodeID),
@@ -464,13 +470,13 @@ func (n *alterTableNode) Start() error {
 	return nil
 }
 
-func (n *alterTableNode) Next() (bool, error)        { return false, nil }
-func (n *alterTableNode) Close()                     {}
-func (n *alterTableNode) Columns() ResultColumns     { return make(ResultColumns, 0) }
-func (n *alterTableNode) Ordering() orderingInfo     { return orderingInfo{} }
-func (n *alterTableNode) Values() parser.Datums      { return parser.Datums{} }
-func (n *alterTableNode) DebugValues() debugValues   { return debugValues{} }
-func (n *alterTableNode) MarkDebug(mode explainMode) {}
+func (n *alterTableNode) Next(context.Context) (bool, error) { return false, nil }
+func (n *alterTableNode) Close(context.Context)              {}
+func (n *alterTableNode) Columns() ResultColumns             { return make(ResultColumns, 0) }
+func (n *alterTableNode) Ordering() orderingInfo             { return orderingInfo{} }
+func (n *alterTableNode) Values() parser.Datums              { return parser.Datums{} }
+func (n *alterTableNode) DebugValues() debugValues           { return debugValues{} }
+func (n *alterTableNode) MarkDebug(mode explainMode)         {}
 
 func applyColumnMutation(
 	col *sqlbase.ColumnDescriptor, mut parser.ColumnMutationCmd, searchPath parser.SearchPath,

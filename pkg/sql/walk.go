@@ -22,6 +22,8 @@ import (
 	"reflect"
 	"strconv"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -34,7 +36,7 @@ import (
 type planObserver struct {
 	// enterNode is invoked upon entering a tree node. It can return false to
 	// stop the recursion at this node.
-	enterNode func(nodeName string, plan planNode) bool
+	enterNode func(ctx context.Context, nodeName string, plan planNode) bool
 
 	// expr is invoked for each expression field in each node.
 	expr func(nodeName, fieldName string, n int, expr parser.Expr)
@@ -47,14 +49,14 @@ type planObserver struct {
 
 	// subqueryNode is invoked for each sub-query node. It can return
 	// an error to stop the recursion entirely.
-	subqueryNode func(sq *subquery) error
+	subqueryNode func(ctx context.Context, sq *subquery) error
 }
 
 // walkPlan performs a depth-first traversal of the plan given as
 // argument, informing the planObserver of the node details at each
 // level.
-func walkPlan(plan planNode, observer planObserver) error {
-	v := planVisitor{observer: observer}
+func walkPlan(ctx context.Context, plan planNode, observer planObserver) error {
+	v := makePlanVisitor(ctx, observer)
 	v.visit(plan)
 	return v.err
 }
@@ -62,11 +64,19 @@ func walkPlan(plan planNode, observer planObserver) error {
 // planVisitor is the support structure for walkPlan().
 type planVisitor struct {
 	observer planObserver
+	ctx      context.Context
 
 	// subplans is a temporary accumulator array used when collecting
 	// sub-query plans at each planNode.
 	subplans []planNode
 	err      error
+}
+
+// makePlanVisitor creates a planVisitor instance.
+// ctx will be stored in the planVisitor and used when visiting planNode's and
+// expressions..
+func makePlanVisitor(ctx context.Context, observer planObserver) planVisitor {
+	return planVisitor{observer: observer, ctx: ctx}
 }
 
 // visit is the recursive function that supports walkPlan().
@@ -78,7 +88,7 @@ func (v *planVisitor) visit(plan planNode) {
 	name := nodeName(plan)
 	var recurse bool
 	if v.observer.enterNode != nil {
-		recurse = v.observer.enterNode(name, plan)
+		recurse = v.observer.enterNode(v.ctx, name, plan)
 	}
 	if v.observer.leaveNode != nil {
 		defer v.observer.leaveNode(name)
@@ -436,7 +446,7 @@ func (v *planVisitor) VisitPre(expr parser.Expr) (bool, parser.Expr) {
 	}
 	if sq, ok := expr.(*subquery); ok {
 		if v.observer.subqueryNode != nil {
-			if err := v.observer.subqueryNode(sq); err != nil {
+			if err := v.observer.subqueryNode(v.ctx, sq); err != nil {
 				v.err = err
 				return false, expr
 			}

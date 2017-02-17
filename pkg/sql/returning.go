@@ -19,6 +19,8 @@ package sql
 import (
 	"bytes"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -48,6 +50,7 @@ type returningHelper struct {
 // newReturningHelper creates a new returningHelper for use by an
 // insert/update node.
 func (p *planner) newReturningHelper(
+	ctx context.Context,
 	r parser.ReturningClause,
 	desiredTypes []parser.Type,
 	alias string,
@@ -86,7 +89,8 @@ func (p *planner) newReturningHelper(
 	rh.exprs = make([]parser.TypedExpr, 0, len(rExprs))
 	ivarHelper := parser.MakeIndexedVarHelper(rh, len(tablecols))
 	for _, target := range rExprs {
-		cols, typedExprs, _, err := p.computeRender(target, parser.TypeAny, rh.source, ivarHelper, true)
+		cols, typedExprs, _, err := p.computeRender(
+			ctx, target, parser.TypeAny, rh.source, ivarHelper, true /* allowStars */)
 		if err != nil {
 			return nil, err
 		}

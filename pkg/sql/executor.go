@@ -149,14 +149,14 @@ type StatementResults struct {
 }
 
 // Close ensures that the resources claimed by the results are released.
-func (s *StatementResults) Close() {
-	s.ResultList.Close()
+func (s *StatementResults) Close(ctx context.Context) {
+	s.ResultList.Close(ctx)
 }
 
 // Close ensures that the resources claimed by the results are released.
-func (rl ResultList) Close() {
+func (rl ResultList) Close(ctx context.Context) {
 	for _, r := range rl {
-		r.Close()
+		r.Close(ctx)
 	}
 }
 
@@ -181,11 +181,11 @@ type Result struct {
 }
 
 // Close ensures that the resources claimed by the result are released.
-func (r *Result) Close() {
+func (r *Result) Close(ctx context.Context) {
 	// The Rows pointer may be nil if the statement returned no rows or
 	// if an error occurred.
 	if r.Rows != nil {
-		r.Rows.Close()
+		r.Rows.Close(ctx)
 	}
 }
 
@@ -454,14 +454,14 @@ func (e *Executor) Prepare(
 		SetTxnTimestamps(txn, *protoTS)
 	}
 
-	plan, err := session.planner.prepare(stmt)
+	plan, err := session.planner.prepare(session.Ctx(), stmt)
 	if err != nil {
 		return nil, err
 	}
 	if plan == nil {
 		return prepared, nil
 	}
-	defer plan.Close()
+	defer plan.Close(session.Ctx())
 	prepared.Columns = plan.Columns()
 	for _, c := range prepared.Columns {
 		if err := checkResultType(c.Typ); err != nil {
@@ -501,8 +501,8 @@ func (e *Executor) CopyDone(session *Session) StatementResults {
 }
 
 // CopyEnd ends the COPY mode. Any buffered data is discarded.
-func (session *Session) CopyEnd() {
-	session.planner.copyFrom.Close()
+func (session *Session) CopyEnd(ctx context.Context) {
+	session.planner.copyFrom.Close(ctx)
 	session.planner.copyFrom = nil
 }
 
@@ -550,7 +550,7 @@ func (e *Executor) execRequest(session *Session, sql string, copymsg copyMsg) St
 	}
 
 	if session.planner.copyFrom != nil {
-		stmts, err = session.planner.ProcessCopyData(sql, copymsg)
+		stmts, err = session.planner.ProcessCopyData(session.Ctx(), sql, copymsg)
 	} else if copymsg != copyMsgNone {
 		err = fmt.Errorf("unexpected copy command")
 	} else {
@@ -650,9 +650,10 @@ func (e *Executor) execRequest(session *Session, sql string, copymsg copyMsg) St
 			var err error
 			if results != nil {
 				// Some results were produced by a previous attempt. Discard them.
-				ResultList(results).Close()
+				ResultList(results).Close(session.Ctx())
 			}
-			results, remainingStmts, err = runTxnAttempt(e, planMaker, origState, txnState, opt, stmtsToExec, isAutomaticRetry)
+			results, remainingStmts, err = runTxnAttempt(
+				e, planMaker, origState, txnState, opt, stmtsToExec, isAutomaticRetry)
 
 			// TODO(andrei): Until #7881 fixed.
 			if err == nil && txnState.State == Aborted {
@@ -752,8 +753,8 @@ func (e *Executor) execRequest(session *Session, sql string, copymsg copyMsg) St
 			// Exec the schema changers (if the txn rolled back, the schema changers
 			// will short-circuit because the corresponding descriptor mutation is not
 			// found).
-			planMaker.releaseLeases()
-			txnState.schemaChangers.execSchemaChanges(e, planMaker, res.ResultList)
+			planMaker.releaseLeases(session.Ctx())
+			txnState.schemaChangers.execSchemaChanges(session.Ctx(), e, planMaker, res.ResultList)
 		} else {
 			// We're still in a txn, so we only check that the verifyMetadata callback
 			// fails the first time it's run. The gossip update that will make the
@@ -777,15 +778,15 @@ func (e *Executor) execRequest(session *Session, sql string, copymsg copyMsg) St
 
 // If the plan has a fast path we attempt to query that,
 // otherwise we fall back to counting via plan.Next().
-func countRowsAffected(p planNode) (int, error) {
+func countRowsAffected(ctx context.Context, p planNode) (int, error) {
 	if a, ok := p.(planNodeFastPath); ok {
 		if count, res := a.FastPathResults(); res {
 			return count, nil
 		}
 	}
 	count := 0
-	next, err := p.Next()
-	for ; next; next, err = p.Next() {
+	next, err := p.Next(ctx)
+	for ; next; next, err = p.Next(ctx) {
 		count++
 	}
 	return count, err
@@ -871,9 +872,8 @@ func (e *Executor) execStmtsInCurrentTxn(
 	}
 
 	for i, stmt := range stmts {
-		ctx := planMaker.session.Ctx()
-		if log.V(2) || log.HasSpanOrEvent(ctx) {
-			log.VEventf(ctx, 2, "executing %d/%d: %s", i+1, len(stmts), stmt)
+		if log.V(2) || log.HasSpanOrEvent(planMaker.session.Ctx()) {
+			log.VEventf(planMaker.session.Ctx(), 2, "executing %d/%d: %s", i+1, len(stmts), stmt)
 		}
 		txnState.schemaChangers.curStatementIdx = i
 
@@ -893,7 +893,7 @@ func (e *Executor) execStmtsInCurrentTxn(
 		// Run SHOW TRANSACTION STATUS in a separate code path so it is
 		// always guaranteed to execute regardless of the current transaction state.
 		if _, ok := stmt.(*parser.ShowTransactionStatus); ok {
-			res, err = planMaker.runShowTransactionState(txnState, implicitTxn)
+			res, err = planMaker.runShowTransactionState(planMaker.session.Ctx(), txnState, implicitTxn)
 		} else {
 			switch txnState.State {
 			case Open:
@@ -916,7 +916,7 @@ func (e *Executor) execStmtsInCurrentTxn(
 			}
 		}
 		if filter := e.cfg.TestingKnobs.StatementFilter; filter != nil {
-			filter(ctx, stmt.String(), &res)
+			filter(planMaker.session.Ctx(), stmt.String(), &res)
 		}
 		results = append(results, res)
 		if err != nil {
@@ -1152,9 +1152,11 @@ func (e *Executor) execStmtInOpenTxn(
 		return Result{}, err
 	case *parser.Deallocate:
 		if s.Name == "" {
-			planMaker.session.PreparedStatements.DeleteAll()
+			planMaker.session.PreparedStatements.DeleteAll(session.Ctx())
 		} else {
-			if found := planMaker.session.PreparedStatements.Delete(string(s.Name)); !found {
+			if found := planMaker.session.PreparedStatements.Delete(
+				session.Ctx(), string(s.Name),
+			); !found {
 				err := fmt.Errorf("prepared statement %s does not exist", s.Name)
 				txnState.updateStateAndCleanupOnErr(err, e)
 				return Result{}, err
@@ -1167,7 +1169,7 @@ func (e *Executor) execStmtInOpenTxn(
 	result, err := e.execStmt(stmt, planMaker, autoCommit, isAutomaticRetry, tStart)
 	if err != nil {
 		if result.Rows != nil {
-			result.Rows.Close()
+			result.Rows.Close(session.Ctx())
 			result.Rows = nil
 		}
 		if traceSQL {
@@ -1212,7 +1214,7 @@ func rollbackSQLTransaction(txnState *txnState, p *planner) Result {
 	err := p.txn.Rollback()
 	result := Result{PGTag: (*parser.RollbackTransaction)(nil).StatementTag()}
 	if err != nil {
-		log.Warningf(p.ctx(), "txn rollback failed. The error was swallowed: %s", err)
+		log.Warningf(txnState.Ctx, "txn rollback failed. The error was swallowed: %s", err)
 		result.Err = err
 	}
 	// We're done with this txn.
@@ -1271,7 +1273,7 @@ func commitSQLTransaction(
 // runs it.
 func (e *Executor) execDistSQL(planMaker *planner, tree planNode, result *Result) error {
 	// Note: if we just want the row count, result.Rows is nil here.
-	recv := distSQLReceiver{rows: result.Rows}
+	recv := makeDistSQLReceiver(planMaker.session.Ctx(), result.Rows)
 	err := e.distSQLPlanner.PlanAndRun(planMaker.session.Ctx(), planMaker.txn, tree, &recv)
 	if err != nil {
 		return err
@@ -1288,21 +1290,21 @@ func (e *Executor) execDistSQL(planMaker *planner, tree planNode, result *Result
 // execClassic runs a plan using the classic (non-distributed) SQL
 // implementation.
 func (e *Executor) execClassic(planMaker *planner, plan planNode, result *Result) error {
-	if err := planMaker.startPlan(plan); err != nil {
+	if err := planMaker.startPlan(planMaker.session.Ctx(), plan); err != nil {
 		return err
 	}
 
 	switch result.Type {
 	case parser.RowsAffected:
-		count, err := countRowsAffected(plan)
+		count, err := countRowsAffected(planMaker.session.Ctx(), plan)
 		if err != nil {
 			return err
 		}
 		result.RowsAffected += count
 
 	case parser.Rows:
-		next, err := plan.Next()
-		for ; next; next, err = plan.Next() {
+		next, err := plan.Next(planMaker.session.Ctx())
+		for ; next; next, err = plan.Next(planMaker.session.Ctx()) {
 			// The plan.Values Datums needs to be copied on each iteration.
 			values := plan.Values()
 
@@ -1311,7 +1313,7 @@ func (e *Executor) execClassic(planMaker *planner, plan planNode, result *Result
 					return err
 				}
 			}
-			if _, err := result.Rows.AddRow(values); err != nil {
+			if _, err := result.Rows.AddRow(planMaker.session.Ctx(), values); err != nil {
 				return err
 			}
 		}
@@ -1380,12 +1382,12 @@ func (e *Executor) execStmt(
 	isAutomaticRetry bool,
 	tStart time.Time,
 ) (Result, error) {
-	plan, err := planMaker.makePlan(stmt, autoCommit)
+	plan, err := planMaker.makePlan(planMaker.session.Ctx(), stmt, autoCommit)
 	if err != nil {
 		return Result{}, err
 	}
 
-	defer plan.Close()
+	defer plan.Close(planMaker.session.Ctx())
 
 	result := Result{
 		PGTag: stmt.StatementTag(),

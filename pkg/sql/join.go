@@ -19,8 +19,9 @@ package sql
 
 import (
 	"fmt"
-
 	"unsafe"
+
+	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/pkg/errors"
@@ -68,17 +69,19 @@ func (b *buckets) Buckets() map[string]*bucket {
 	return b.buckets
 }
 
-func (b *buckets) AddRow(acc WrappedMemoryAccount, encoding []byte, row parser.Datums) error {
+func (b *buckets) AddRow(
+	ctx context.Context, acc WrappedMemoryAccount, encoding []byte, row parser.Datums,
+) error {
 	bk, ok := b.buckets[string(encoding)]
 	if !ok {
 		bk = &bucket{}
 	}
 
-	rowCopy, err := b.rowContainer.AddRow(row)
+	rowCopy, err := b.rowContainer.AddRow(ctx, row)
 	if err != nil {
 		return err
 	}
-	if err := acc.Grow(sizeOfDatums); err != nil {
+	if err := acc.Grow(ctx, sizeOfDatums); err != nil {
 		return err
 	}
 	bk.AddRow(rowCopy)
@@ -94,9 +97,11 @@ const sizeOfBool = unsafe.Sizeof(true)
 
 // InitSeen initializes the seen array for each of the buckets. It must be run
 // before the buckets' seen state is used.
-func (b *buckets) InitSeen(acc WrappedMemoryAccount) error {
+func (b *buckets) InitSeen(ctx context.Context, acc WrappedMemoryAccount) error {
 	for _, bucket := range b.buckets {
-		if err := acc.Grow(int64(sizeOfBoolSlice + uintptr(len(bucket.rows))*sizeOfBool)); err != nil {
+		if err := acc.Grow(
+			ctx, int64(sizeOfBoolSlice+uintptr(len(bucket.rows))*sizeOfBool),
+		); err != nil {
 			return err
 		}
 		bucket.seen = make([]bool, len(bucket.rows))
@@ -104,8 +109,8 @@ func (b *buckets) InitSeen(acc WrappedMemoryAccount) error {
 	return nil
 }
 
-func (b *buckets) Close() {
-	b.rowContainer.Close()
+func (b *buckets) Close(ctx context.Context) {
+	b.rowContainer.Close(ctx)
 	b.rowContainer = nil
 	b.buckets = nil
 }
@@ -188,7 +193,11 @@ func commonColumns(left, right *dataSourceInfo) parser.NameList {
 // The tableInfo field from the left node is taken over (overwritten)
 // by the new node.
 func (p *planner) makeJoin(
-	astJoinType string, left planDataSource, right planDataSource, cond parser.JoinCond,
+	ctx context.Context,
+	astJoinType string,
+	left planDataSource,
+	right planDataSource,
+	cond parser.JoinCond,
 ) (planDataSource, error) {
 	var typ joinType
 	switch astJoinType {
@@ -233,7 +242,7 @@ func (p *planner) makeJoin(
 	} else {
 		switch t := cond.(type) {
 		case *parser.OnJoinCond:
-			pred, info, err = p.makeOnPredicate(leftInfo, rightInfo, t.Expr)
+			pred, info, err = p.makeOnPredicate(ctx, leftInfo, rightInfo, t.Expr)
 		case parser.NaturalJoinCond:
 			cols := commonColumns(leftInfo, rightInfo)
 			pred, info, err = makeUsingPredicate(leftInfo, rightInfo, cols)
@@ -287,16 +296,16 @@ func (n *joinNode) MarkDebug(mode explainMode) {
 }
 
 // Start implements the planNode interface.
-func (n *joinNode) Start() error {
-	if err := n.left.plan.Start(); err != nil {
+func (n *joinNode) Start(ctx context.Context) error {
+	if err := n.left.plan.Start(ctx); err != nil {
 		return err
 	}
-	if err := n.right.plan.Start(); err != nil {
+	if err := n.right.plan.Start(ctx); err != nil {
 		return err
 	}
 
 	if n.explain != explainDebug {
-		if err := n.hashJoinStart(); err != nil {
+		if err := n.hashJoinStart(ctx); err != nil {
 			return err
 		}
 	}
@@ -322,12 +331,12 @@ func (n *joinNode) Start() error {
 	return nil
 }
 
-func (n *joinNode) hashJoinStart() error {
+func (n *joinNode) hashJoinStart(ctx context.Context) error {
 	var scratch []byte
 	// Load all the rows from the right side and build our hashmap.
 	acc := n.bucketsMemAcc.Wtxn(n.planner.session)
 	for {
-		hasRow, err := n.right.plan.Next()
+		hasRow, err := n.right.plan.Next(ctx)
 		if err != nil {
 			return err
 		}
@@ -340,21 +349,21 @@ func (n *joinNode) hashJoinStart() error {
 			return err
 		}
 
-		if err := n.buckets.AddRow(acc, encoding, row); err != nil {
+		if err := n.buckets.AddRow(ctx, acc, encoding, row); err != nil {
 			return err
 		}
 
 		scratch = encoding[:0]
 	}
 	if n.joinType == joinTypeFullOuter || n.joinType == joinTypeRightOuter {
-		return n.buckets.InitSeen(acc)
+		return n.buckets.InitSeen(ctx, acc)
 	}
 	return nil
 }
 
-func (n *joinNode) debugNext() (bool, error) {
+func (n *joinNode) debugNext(ctx context.Context) (bool, error) {
 	if !n.doneReadingRight {
-		hasRightRow, err := n.right.plan.Next()
+		hasRightRow, err := n.right.plan.Next(ctx)
 		if err != nil {
 			return false, err
 		}
@@ -364,13 +373,13 @@ func (n *joinNode) debugNext() (bool, error) {
 		n.doneReadingRight = true
 	}
 
-	return n.left.plan.Next()
+	return n.left.plan.Next(ctx)
 }
 
 // Next implements the planNode interface.
-func (n *joinNode) Next() (res bool, err error) {
+func (n *joinNode) Next(ctx context.Context) (res bool, err error) {
 	if n.explain == explainDebug {
-		return n.debugNext()
+		return n.debugNext(ctx)
 	}
 
 	// If results available from from previously computed results, we just
@@ -397,7 +406,7 @@ func (n *joinNode) Next() (res bool, err error) {
 	// Compute next batch of matching rows.
 	var scratch []byte
 	for {
-		leftHasRow, err := n.left.plan.Next()
+		leftHasRow, err := n.left.plan.Next(ctx)
 		if err != nil {
 			return false, nil
 		}
@@ -463,7 +472,7 @@ func (n *joinNode) Next() (res bool, err error) {
 			// We append an empty right row to the left row, adding the result
 			// to our buffer for the subsequent call to Next().
 			n.pred.prepareRow(n.output, lrow, n.emptyRight)
-			if _, err := n.buffer.AddRow(n.output); err != nil {
+			if _, err := n.buffer.AddRow(ctx, n.output); err != nil {
 				return false, err
 			}
 			return n.buffer.Next(), nil
@@ -480,7 +489,7 @@ func (n *joinNode) Next() (res bool, err error) {
 			// empty right row to the left row, adding the result to our buffer
 			// for the subsequent call to Next().
 			n.pred.prepareRow(n.output, lrow, n.emptyRight)
-			if _, err := n.buffer.AddRow(n.output); err != nil {
+			if _, err := n.buffer.AddRow(ctx, n.output); err != nil {
 				return false, err
 			}
 			return n.buffer.Next(), nil
@@ -506,7 +515,7 @@ func (n *joinNode) Next() (res bool, err error) {
 				// without matches for right or full joins later.
 				b.MarkSeen(idx)
 			}
-			if _, err := n.buffer.AddRow(n.output); err != nil {
+			if _, err := n.buffer.AddRow(ctx, n.output); err != nil {
 				return false, err
 			}
 		}
@@ -515,7 +524,7 @@ func (n *joinNode) Next() (res bool, err error) {
 			// left or full outer join, we need to add a row with an empty
 			// right side.
 			n.pred.prepareRow(n.output, lrow, n.emptyRight)
-			if _, err := n.buffer.AddRow(n.output); err != nil {
+			if _, err := n.buffer.AddRow(ctx, n.output); err != nil {
 				return false, err
 			}
 		}
@@ -534,7 +543,7 @@ func (n *joinNode) Next() (res bool, err error) {
 		for idx, rrow := range b.Rows() {
 			if !b.Seen(idx) {
 				n.pred.prepareRow(n.output, n.emptyLeft, rrow)
-				if _, err := n.buffer.AddRow(n.output); err != nil {
+				if _, err := n.buffer.AddRow(ctx, n.output); err != nil {
 					return false, err
 				}
 			}
@@ -565,12 +574,12 @@ func (n *joinNode) DebugValues() debugValues {
 }
 
 // Close implements the planNode interface.
-func (n *joinNode) Close() {
-	n.buffer.Close()
+func (n *joinNode) Close(ctx context.Context) {
+	n.buffer.Close(ctx)
 	n.buffer = nil
-	n.buckets.Close()
-	n.bucketsMemAcc.Wtxn(n.planner.session).Close()
+	n.buckets.Close(ctx)
+	n.bucketsMemAcc.Wtxn(n.planner.session).Close(ctx)
 
-	n.right.plan.Close()
-	n.left.plan.Close()
+	n.right.plan.Close(ctx)
+	n.left.plan.Close(ctx)
 }

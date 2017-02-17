@@ -218,8 +218,8 @@ func TestMemoryAccount(t *testing.T) {
 
 	var a1, a2 MemoryAccount
 
-	m.OpenAccount(ctx, &a1)
-	m.OpenAccount(ctx, &a2)
+	m.OpenAccount(&a1)
+	m.OpenAccount(&a2)
 
 	if err := m.GrowAccount(ctx, &a1, 10); err != nil {
 		t.Fatalf("monitor refused allocation: %v", err)

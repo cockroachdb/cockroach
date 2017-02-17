@@ -36,7 +36,7 @@ type checkHelper struct {
 }
 
 func (c *checkHelper) init(
-	p *planner, tn *parser.TableName, tableDesc *sqlbase.TableDescriptor,
+	ctx context.Context, p *planner, tn *parser.TableName, tableDesc *sqlbase.TableDescriptor,
 ) error {
 	if len(tableDesc.Checks) == 0 {
 		return nil
@@ -57,7 +57,7 @@ func (c *checkHelper) init(
 
 	ivarHelper := parser.MakeIndexedVarHelper(c, len(c.cols))
 	for i, raw := range exprs {
-		typedExpr, err := p.analyzeExpr(raw, multiSourceInfo{c.sourceInfo}, ivarHelper,
+		typedExpr, err := p.analyzeExpr(ctx, raw, multiSourceInfo{c.sourceInfo}, ivarHelper,
 			parser.TypeBool, false, "")
 		if err != nil {
 			return err
@@ -120,7 +120,10 @@ func (c *checkHelper) check(ctx *parser.EvalContext) error {
 }
 
 func (p *planner) validateCheckExpr(
-	exprStr string, tableName parser.TableExpr, tableDesc *sqlbase.TableDescriptor,
+	ctx context.Context,
+	exprStr string,
+	tableName parser.TableExpr,
+	tableDesc *sqlbase.TableDescriptor,
 ) error {
 	expr, err := parser.ParseExprTraditional(exprStr)
 	if err != nil {
@@ -136,18 +139,18 @@ func (p *planner) validateCheckExpr(
 	// use the tableDesc we have, but this is a rare operation and be benefit
 	// would be marginal compared to the work of the actual query, so the added
 	// complexity seems unjustified.
-	rows, err := p.SelectClause(sel, nil, lim, nil, publicColumns)
+	rows, err := p.SelectClause(ctx, sel, nil, lim, nil, publicColumns)
 	if err != nil {
 		return err
 	}
-	rows, err = p.optimizePlan(rows, allColumns(rows))
+	rows, err = p.optimizePlan(ctx, rows, allColumns(rows))
 	if err != nil {
 		return err
 	}
-	if err := p.startPlan(rows); err != nil {
+	if err := p.startPlan(ctx, rows); err != nil {
 		return err
 	}
-	next, err := rows.Next()
+	next, err := rows.Next(ctx)
 	if err != nil {
 		return err
 	}
@@ -214,7 +217,7 @@ func (p *planner) validateForeignKey(
 		query,
 	)
 
-	values, err := p.queryRows(query)
+	values, err := p.queryRows(ctx, query)
 	if err != nil {
 		return err
 	}
