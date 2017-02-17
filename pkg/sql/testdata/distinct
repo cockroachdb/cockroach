@@ -39,7 +39,7 @@ EXPLAIN SELECT DISTINCT y, z FROM xyz
 2            table  xyz@primary
 2            spans  ALL
 
-query II
+query II partialsort(2)
 SELECT DISTINCT y, z FROM xyz ORDER BY z
 ----
 2 3
@@ -58,8 +58,8 @@ EXPLAIN SELECT DISTINCT y, z FROM xyz ORDER BY z
 2            table  xyz@foo
 2            spans  ALL
 
-query II
-SELECT DISTINCT y, z FROM xyz ORDER BY y, z
+query II partialsort(1)
+SELECT DISTINCT y, z FROM xyz ORDER BY y
 ----
 2 3
 2 6

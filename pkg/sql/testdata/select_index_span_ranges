@@ -62,7 +62,7 @@ EXPLAIN SELECT * FROM t WHERE (c >= 80) ORDER BY c
 1  scan
 1              table  t@primary
 
-query IIII
+query IIII partialsort(3)
 SELECT * FROM t WHERE (c >= 80) ORDER BY c
 ----
 2   0  80  0
