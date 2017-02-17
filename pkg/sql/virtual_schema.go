@@ -20,6 +20,8 @@ import (
 	"fmt"
 	"sort"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -99,7 +101,7 @@ type virtualTableEntry struct {
 // valuesNode for the virtual table. We use deferred construction here
 // so as to avoid populating a RowContainer during query preparation,
 // where we can't guarantee it will be Close()d in case of error.
-func (e virtualTableEntry) getPlanInfo() (ResultColumns, nodeConstructor) {
+func (e virtualTableEntry) getPlanInfo(ctx context.Context) (ResultColumns, nodeConstructor) {
 	var columns ResultColumns
 	for _, col := range e.desc.Columns {
 		columns = append(columns, ResultColumn{
@@ -108,7 +110,7 @@ func (e virtualTableEntry) getPlanInfo() (ResultColumns, nodeConstructor) {
 		})
 	}
 
-	constructor := func(p *planner) (planNode, error) {
+	constructor := func(ctx context.Context, p *planner) (planNode, error) {
 		v := p.newContainerValuesNode(columns, 0)
 
 		err := e.tableDef.populate(p, func(datums ...parser.Datum) error {
@@ -126,7 +128,7 @@ func (e virtualTableEntry) getPlanInfo() (ResultColumns, nodeConstructor) {
 			return err
 		})
 		if err != nil {
-			v.Close()
+			v.Close(ctx)
 			return nil, err
 		}
 		return v, nil

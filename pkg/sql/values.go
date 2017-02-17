@@ -22,6 +22,8 @@ import (
 	"sort"
 	"strconv"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -56,7 +58,7 @@ func (p *planner) newContainerValuesNode(columns ResultColumns, capacity int) *v
 }
 
 func (p *planner) ValuesClause(
-	n *parser.ValuesClause, desiredTypes []parser.Type,
+	ctx context.Context, n *parser.ValuesClause, desiredTypes []parser.Type,
 ) (planNode, error) {
 	v := &valuesNode{
 		p:            p,
@@ -94,7 +96,7 @@ func (p *planner) ValuesClause(
 			if len(desiredTypes) > i {
 				desired = desiredTypes[i]
 			}
-			typedExpr, err := p.analyzeExpr(expr, nil, parser.IndexedVarHelper{}, desired, false, "")
+			typedExpr, err := p.analyzeExpr(ctx, expr, nil, parser.IndexedVarHelper{}, desired, false, "")
 			if err != nil {
 				return nil, err
 			}
@@ -116,7 +118,7 @@ func (p *planner) ValuesClause(
 	return v, nil
 }
 
-func (n *valuesNode) Start() error {
+func (n *valuesNode) Start(_ context.Context) error {
 	if n.n == nil {
 		return nil
 	}
@@ -172,7 +174,7 @@ func (n *valuesNode) DebugValues() debugValues {
 	}
 }
 
-func (n *valuesNode) Next() (bool, error) {
+func (n *valuesNode) Next(_ context.Context) (bool, error) {
 	if n.nextRow >= n.rows.Len() {
 		return false, nil
 	}
@@ -180,7 +182,7 @@ func (n *valuesNode) Next() (bool, error) {
 	return true, nil
 }
 
-func (n *valuesNode) Close() {
+func (n *valuesNode) Close(_ context.Context) {
 	if n.rows != nil {
 		n.rows.Close()
 		n.rows = nil

@@ -19,6 +19,8 @@ package sql
 import (
 	"fmt"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/pkg/errors"
 )
@@ -47,7 +49,7 @@ type valueGenerator struct {
 
 // makeGenerator creates a valueGenerator instance that wraps a call to a
 // generator function.
-func (p *planner) makeGenerator(t *parser.FuncExpr) (planNode, error) {
+func (p *planner) makeGenerator(ctx context.Context, t *parser.FuncExpr) (planNode, error) {
 	origName := t.Func.String()
 
 	if err := p.parser.AssertNoAggregationOrWindowing(t, "FROM", p.session.SearchPath); err != nil {
@@ -55,7 +57,7 @@ func (p *planner) makeGenerator(t *parser.FuncExpr) (planNode, error) {
 	}
 
 	normalized, err := p.analyzeExpr(
-		t, multiSourceInfo{}, parser.IndexedVarHelper{}, parser.TypeAny, false, "FROM",
+		ctx, t, multiSourceInfo{}, parser.IndexedVarHelper{}, parser.TypeAny, false, "FROM",
 	)
 	if err != nil {
 		return nil, err
@@ -86,7 +88,7 @@ func (p *planner) makeGenerator(t *parser.FuncExpr) (planNode, error) {
 	}, nil
 }
 
-func (n *valueGenerator) Start() error {
+func (n *valueGenerator) Start(_ context.Context) error {
 	expr, err := n.expr.Eval(&n.p.evalCtx)
 	if err != nil {
 		return err
@@ -102,12 +104,12 @@ func (n *valueGenerator) Start() error {
 	return nil
 }
 
-func (n *valueGenerator) Next() (bool, error) {
+func (n *valueGenerator) Next(_ context.Context) (bool, error) {
 	n.rowCount++
 	return n.gen.Next()
 }
 
-func (n *valueGenerator) Close() {
+func (n *valueGenerator) Close(_ context.Context) {
 	if n.gen != nil {
 		n.gen.Close()
 	}

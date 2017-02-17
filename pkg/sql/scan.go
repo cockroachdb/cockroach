@@ -20,6 +20,8 @@ import (
 	"bytes"
 	"fmt"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -137,12 +139,12 @@ func (n *scanNode) disableBatchLimit() {
 	n.softLimit = 0
 }
 
-func (n *scanNode) Start() error {
+func (n *scanNode) Start(_ context.Context) error {
 	return n.fetcher.Init(&n.desc, n.colIdxMap, n.index, n.reverse, n.isSecondaryIndex, n.cols,
 		n.valNeededForCol, false /* returnRangeInfo */)
 }
 
-func (n *scanNode) Close() {}
+func (n *scanNode) Close(_ context.Context) {}
 
 // initScan sets up the rowFetcher and starts a scan.
 func (n *scanNode) initScan() error {
@@ -177,7 +179,7 @@ func (n *scanNode) initScan() error {
 }
 
 // debugNext is a helper function used by Next() when in explainDebug mode.
-func (n *scanNode) debugNext() (bool, error) {
+func (n *scanNode) debugNext(_ context.Context) (bool, error) {
 	// In debug mode, we output a set of debug values for each key.
 	n.debugVals.rowIdx = n.rowIndex
 	var err error
@@ -211,7 +213,7 @@ func (n *scanNode) debugNext() (bool, error) {
 	return true, nil
 }
 
-func (n *scanNode) Next() (bool, error) {
+func (n *scanNode) Next(ctx context.Context) (bool, error) {
 	tracing.AnnotateTrace()
 	if !n.scanInitialized {
 		if err := n.initScan(); err != nil {
@@ -220,7 +222,7 @@ func (n *scanNode) Next() (bool, error) {
 	}
 
 	if n.explain == explainDebug {
-		return n.debugNext()
+		return n.debugNext(ctx)
 	}
 
 	// We fetch one row at a time until we find one that passes the filter.

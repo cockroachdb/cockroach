@@ -20,6 +20,8 @@ import (
 	"bytes"
 	"fmt"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
@@ -55,9 +57,9 @@ func (p *planner) Distinct(n *parser.SelectClause) *distinctNode {
 	return d
 }
 
-func (n *distinctNode) Start() error {
+func (n *distinctNode) Start(ctx context.Context) error {
 	n.suffixSeen = make(map[string]struct{})
-	return n.plan.Start()
+	return n.plan.Start(ctx)
 }
 
 func (n *distinctNode) Columns() ResultColumns { return n.plan.Columns() }
@@ -88,13 +90,13 @@ func (n *distinctNode) addSuffixSeen(acc WrappedMemoryAccount, sKey string) erro
 	return nil
 }
 
-func (n *distinctNode) Next() (bool, error) {
+func (n *distinctNode) Next(ctx context.Context) (bool, error) {
 
 	prefixMemAcc := n.prefixMemAcc.Wtxn(n.p.session)
 	suffixMemAcc := n.suffixMemAcc.Wtxn(n.p.session)
 
 	for {
-		next, err := n.plan.Next()
+		next, err := n.plan.Next(ctx)
 		if !next {
 			return false, err
 		}
@@ -175,8 +177,8 @@ func (n *distinctNode) encodeValues(values parser.Datums) ([]byte, []byte, error
 	return prefix, suffix, err
 }
 
-func (n *distinctNode) Close() {
-	n.plan.Close()
+func (n *distinctNode) Close(ctx context.Context) {
+	n.plan.Close(ctx)
 	n.prefixSeen = nil
 	n.prefixMemAcc.Wtxn(n.p.session).Close()
 	n.suffixSeen = nil

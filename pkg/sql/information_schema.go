@@ -19,6 +19,8 @@ package sql
 import (
 	"sort"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -756,14 +758,14 @@ func forEachColumnInIndex(
 	return nil
 }
 
-func forEachUser(p *planner, fn func(username string) error) error {
+func forEachUser(ctx context.Context, p *planner, fn func(username string) error) error {
 	query := `SELECT username FROM system.users`
-	plan, err := p.query(query)
+	plan, err := p.query(ctx, query)
 	if err != nil {
 		return nil
 	}
-	defer plan.Close()
-	if err := p.startPlan(plan); err != nil {
+	defer plan.Close(ctx)
+	if err := p.startPlan(ctx, plan); err != nil {
 		return err
 	}
 
@@ -774,7 +776,7 @@ func forEachUser(p *planner, fn func(username string) error) error {
 	}
 
 	for {
-		next, err := plan.Next()
+		next, err := plan.Next(ctx)
 		if err != nil {
 			return err
 		}

@@ -19,6 +19,8 @@ package sql
 import (
 	"fmt"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -50,14 +52,14 @@ type insertNode struct {
 //   Notes: postgres requires INSERT. No "on duplicate key update" option.
 //          mysql requires INSERT. Also requires UPDATE on "ON DUPLICATE KEY UPDATE".
 func (p *planner) Insert(
-	n *parser.Insert, desiredTypes []parser.Type, autoCommit bool,
+	ctx context.Context, n *parser.Insert, desiredTypes []parser.Type, autoCommit bool,
 ) (planNode, error) {
 	tn, err := p.getAliasedTableName(n.Table)
 	if err != nil {
 		return nil, err
 	}
 
-	en, err := p.makeEditNode(tn, autoCommit, privilege.INSERT)
+	en, err := p.makeEditNode(ctx, tn, autoCommit, privilege.INSERT)
 	if err != nil {
 		return nil, err
 	}
@@ -118,7 +120,7 @@ func (p *planner) Insert(
 	// Create the plan for the data source.
 	// This performs type checking on source expressions, collecting
 	// types for placeholders in the process.
-	rows, err := p.newPlan(insertRows, desiredTypesFromSelect, false)
+	rows, err := p.newPlan(ctx, insertRows, desiredTypesFromSelect, false)
 	if err != nil {
 		return nil, err
 	}
@@ -128,7 +130,7 @@ func (p *planner) Insert(
 	}
 
 	fkTables := tablesNeededForFKs(*en.tableDesc, CheckInserts)
-	if err := p.fillFKTableMap(fkTables); err != nil {
+	if err := p.fillFKTableMap(ctx, fkTables); err != nil {
 		return nil, err
 	}
 	ri, err := MakeRowInserter(p.txn, en.tableDesc, fkTables, cols, checkFKs)
@@ -179,13 +181,14 @@ func (p *planner) Insert(
 				}
 			}
 
-			helper, err := p.makeUpsertHelper(tn, en.tableDesc, ri.insertCols, updateCols, updateExprs, conflictIndex)
+			helper, err := p.makeUpsertHelper(
+				ctx, tn, en.tableDesc, ri.insertCols, updateCols, updateExprs, conflictIndex)
 			if err != nil {
 				return nil, err
 			}
 
 			fkTables := tablesNeededForFKs(*en.tableDesc, CheckUpdates)
-			if err := p.fillFKTableMap(fkTables); err != nil {
+			if err := p.fillFKTableMap(ctx, fkTables); err != nil {
 				return nil, err
 			}
 			tw = &tableUpserter{
@@ -208,11 +211,12 @@ func (p *planner) Insert(
 		tw: tw,
 	}
 
-	if err := in.checkHelper.init(p, tn, en.tableDesc); err != nil {
+	if err := in.checkHelper.init(ctx, p, tn, en.tableDesc); err != nil {
 		return nil, err
 	}
 
-	if err := in.run.initEditNode(&in.editNodeBase, rows, n.Returning, desiredTypes); err != nil {
+	if err := in.run.initEditNode(
+		ctx, &in.editNodeBase, rows, n.Returning, desiredTypes); err != nil {
 		return nil, err
 	}
 
@@ -261,7 +265,7 @@ func ProcessDefaultColumns(
 	return cols, defaultExprs, err
 }
 
-func (n *insertNode) Start() error {
+func (n *insertNode) Start(ctx context.Context) error {
 	// Prepare structures for building values to pass to rh.
 	if n.rh.exprs != nil {
 		// In some cases (e.g. `INSERT INTO t (a) ...`) rowVals does not contain all the table
@@ -285,20 +289,19 @@ func (n *insertNode) Start() error {
 		}
 	}
 
-	if err := n.run.startEditNode(&n.editNodeBase, n.tw); err != nil {
+	if err := n.run.startEditNode(ctx, &n.editNodeBase, n.tw); err != nil {
 		return err
 	}
 
 	return n.run.tw.init(n.p.txn)
 }
 
-func (n *insertNode) Close() {
-	n.run.rows.Close()
+func (n *insertNode) Close(ctx context.Context) {
+	n.run.rows.Close(ctx)
 }
 
-func (n *insertNode) Next() (bool, error) {
-	ctx := n.editNodeBase.p.ctx()
-	if next, err := n.run.rows.Next(); !next {
+func (n *insertNode) Next(ctx context.Context) (bool, error) {
+	if next, err := n.run.rows.Next(ctx); !next {
 		if err == nil {
 			// We're done. Finish the batch.
 			err = n.tw.finalize(ctx)

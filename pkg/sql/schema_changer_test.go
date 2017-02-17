@@ -192,8 +192,9 @@ INSERT INTO t.test VALUES ('a', 'b'), ('c', 'd');
 	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
 
 	expectedVersion := tableDesc.Version
+	ctx := context.TODO()
 
-	desc, err := changer.MaybeIncrementVersion()
+	desc, err := changer.MaybeIncrementVersion(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -215,7 +216,7 @@ INSERT INTO t.test VALUES ('a', 'b'), ('c', 'd');
 		t.Fatal(err)
 	}
 
-	desc, err = changer.MaybeIncrementVersion()
+	desc, err = changer.MaybeIncrementVersion(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -232,7 +233,7 @@ INSERT INTO t.test VALUES ('a', 'b'), ('c', 'd');
 
 	// Check that RunStateMachineBeforeBackfill doesn't do anything
 	// if there are no mutations queued.
-	if err := changer.RunStateMachineBeforeBackfill(); err != nil {
+	if err := changer.RunStateMachineBeforeBackfill(ctx); err != nil {
 		t.Fatal(err)
 	}
 
@@ -276,7 +277,7 @@ INSERT INTO t.test VALUES ('a', 'b'), ('c', 'd');
 		}
 		// Run two times to ensure idempotency of operations.
 		for i := 0; i < 2; i++ {
-			if err := changer.RunStateMachineBeforeBackfill(); err != nil {
+			if err := changer.RunStateMachineBeforeBackfill(ctx); err != nil {
 				t.Fatal(err)
 			}
 
@@ -1180,10 +1181,13 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 
 	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
 	id := tableDesc.ID
+	ctx := context.TODO()
 
 	upTableVersion = func() {
 		leaseMgr := s.LeaseManager().(*sql.LeaseManager)
-		if _, err := leaseMgr.Publish(id,
+		if _, err := leaseMgr.Publish(
+			ctx,
+			id,
 			func(table *sqlbase.TableDescriptor) error {
 				table.Version++
 				return nil
@@ -1195,7 +1199,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 			InitialBackoff: time.Millisecond,
 			MaxBackoff:     time.Millisecond,
 		}
-		if _, err := leaseMgr.WaitForOneVersion(id, retryOpts); err != nil {
+		if _, err := leaseMgr.WaitForOneVersion(ctx, id, retryOpts); err != nil {
 			t.Error(err)
 		}
 	}

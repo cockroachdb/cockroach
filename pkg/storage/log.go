@@ -21,6 +21,8 @@ import (
 	"encoding/json"
 	"time"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -57,7 +59,9 @@ type rangeLogEvent struct {
 	info         *string
 }
 
-func (s *Store) insertRangeLogEvent(txn *client.Txn, event rangeLogEvent) error {
+func (s *Store) insertRangeLogEvent(
+	ctx context.Context, txn *client.Txn, event rangeLogEvent,
+) error {
 	// Record range log event to console log.
 	var info string
 	if event.info != nil {
@@ -105,7 +109,7 @@ VALUES(
 		s.metrics.RangeRemoves.Inc(1)
 	}
 
-	rows, err := s.cfg.SQLExecutor.ExecuteStatementInTransaction("log-range-event", txn, insertEventTableStmt, args...)
+	rows, err := s.cfg.SQLExecutor.ExecuteStatementInTransaction(ctx, "log-range-event", txn, insertEventTableStmt, args...)
 	if err != nil {
 		return err
 	}
@@ -120,7 +124,9 @@ VALUES(
 // range is the new range which is being created.
 // TODO(mrtracy): There are several different reasons that a replica split
 // could occur, and that information should be logged.
-func (s *Store) logSplit(txn *client.Txn, updatedDesc, newDesc roachpb.RangeDescriptor) error {
+func (s *Store) logSplit(
+	ctx context.Context, txn *client.Txn, updatedDesc, newDesc roachpb.RangeDescriptor,
+) error {
 	if !s.cfg.LogRangeEvents {
 		return nil
 	}
@@ -133,7 +139,7 @@ func (s *Store) logSplit(txn *client.Txn, updatedDesc, newDesc roachpb.RangeDesc
 		return err
 	}
 	infoStr := string(infoBytes)
-	return s.insertRangeLogEvent(txn, rangeLogEvent{
+	return s.insertRangeLogEvent(ctx, txn, rangeLogEvent{
 		timestamp:    selectEventTimestamp(s, txn.Proto.Timestamp),
 		rangeID:      updatedDesc.RangeID,
 		eventType:    RangeEventLogSplit,
@@ -148,6 +154,7 @@ func (s *Store) logSplit(txn *client.Txn, updatedDesc, newDesc roachpb.RangeDesc
 // TODO(mrtracy): There are several different reasons that a replica change
 // could occur, and that information should be logged.
 func (s *Store) logChange(
+	ctx context.Context,
 	txn *client.Txn,
 	changeType roachpb.ReplicaChangeType,
 	replica roachpb.ReplicaDescriptor,
@@ -181,7 +188,7 @@ func (s *Store) logChange(
 		return err
 	}
 	infoStr := string(infoBytes)
-	return s.insertRangeLogEvent(txn, rangeLogEvent{
+	return s.insertRangeLogEvent(ctx, txn, rangeLogEvent{
 		timestamp: selectEventTimestamp(s, txn.Proto.Timestamp),
 		rangeID:   desc.RangeID,
 		eventType: logType,

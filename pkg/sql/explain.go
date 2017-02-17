@@ -51,7 +51,9 @@ var explainStrings = map[explainMode]string{
 // info about the wrapped statement.
 //
 // Privileges: the same privileges as the statement being explained.
-func (p *planner) Explain(n *parser.Explain, autoCommit bool) (planNode, error) {
+func (p *planner) Explain(
+	ctx context.Context, n *parser.Explain, autoCommit bool,
+) (planNode, error) {
 	mode := explainNone
 
 	optimized := true
@@ -132,7 +134,7 @@ func (p *planner) Explain(n *parser.Explain, autoCommit bool) (planNode, error) 
 
 	p.evalCtx.SkipNormalize = !normalizeExprs
 
-	plan, err := p.newPlan(n.Statement, nil, autoCommit)
+	plan, err := p.newPlan(ctx, n.Statement, nil, autoCommit)
 	if err != nil {
 		return nil, err
 	}
@@ -247,9 +249,15 @@ var debugColumns = ResultColumns{
 
 func (*explainDebugNode) Columns() ResultColumns { return debugColumns }
 func (*explainDebugNode) Ordering() orderingInfo { return orderingInfo{} }
-func (n *explainDebugNode) Start() error         { return n.plan.Start() }
-func (n *explainDebugNode) Next() (bool, error)  { return n.plan.Next() }
-func (n *explainDebugNode) Close()               { n.plan.Close() }
+func (n *explainDebugNode) Start(ctx context.Context) error {
+	return n.plan.Start(ctx)
+}
+func (n *explainDebugNode) Next(ctx context.Context) (bool, error) {
+	return n.plan.Next(ctx)
+}
+func (n *explainDebugNode) Close(ctx context.Context) {
+	n.plan.Close(ctx)
+}
 
 func (n *explainDebugNode) Values() parser.Datums {
 	vals := n.plan.DebugValues()
@@ -286,10 +294,10 @@ type explainDistSQLNode struct {
 	done bool
 }
 
-func (*explainDistSQLNode) Ordering() orderingInfo   { return orderingInfo{} }
-func (*explainDistSQLNode) MarkDebug(_ explainMode)  {}
-func (*explainDistSQLNode) DebugValues() debugValues { return debugValues{} }
-func (n *explainDistSQLNode) Close()                 {}
+func (*explainDistSQLNode) Ordering() orderingInfo    { return orderingInfo{} }
+func (*explainDistSQLNode) MarkDebug(_ explainMode)   {}
+func (*explainDistSQLNode) DebugValues() debugValues  { return debugValues{} }
+func (n *explainDistSQLNode) Close(_ context.Context) {}
 
 var explainDistSQLColumns = ResultColumns{
 	{Name: "Automatic", Typ: parser.TypeBool},
@@ -299,7 +307,7 @@ var explainDistSQLColumns = ResultColumns{
 
 func (*explainDistSQLNode) Columns() ResultColumns { return explainDistSQLColumns }
 
-func (n *explainDistSQLNode) Start() error {
+func (n *explainDistSQLNode) Start(_ context.Context) error {
 	// Trigger limit propagation.
 	setUnlimited(n.plan)
 
@@ -328,7 +336,7 @@ func (n *explainDistSQLNode) Start() error {
 	return nil
 }
 
-func (n *explainDistSQLNode) Next() (bool, error) {
+func (n *explainDistSQLNode) Next(_ context.Context) (bool, error) {
 	if n.done {
 		return false, nil
 	}

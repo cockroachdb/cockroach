@@ -96,7 +96,9 @@ func (sc *SchemaChanger) getChunkSize(chunkSize int64) int64 {
 }
 
 // runBackfill runs the backfill for the schema changer.
-func (sc *SchemaChanger) runBackfill(lease *sqlbase.TableDescriptor_SchemaChangeLease) error {
+func (sc *SchemaChanger) runBackfill(
+	ctx context.Context, lease *sqlbase.TableDescriptor_SchemaChangeLease,
+) error {
 	if sc.testingKnobs.RunBeforeBackfill != nil {
 		if err := sc.testingKnobs.RunBeforeBackfill(); err != nil {
 			return err
@@ -172,21 +174,21 @@ func (sc *SchemaChanger) runBackfill(lease *sqlbase.TableDescriptor_SchemaChange
 
 	// Drop indexes.
 	if err := sc.truncateIndexes(
-		lease, version, droppedIndexDescs, droppedIndexMutationIdx,
+		ctx, lease, version, droppedIndexDescs, droppedIndexMutationIdx,
 	); err != nil {
 		return err
 	}
 
 	// Add and drop columns.
 	if err := sc.truncateAndBackfillColumns(
-		lease, version, addedColumnDescs, droppedColumnDescs, columnMutationIdx,
+		ctx, lease, version, addedColumnDescs, droppedColumnDescs, columnMutationIdx,
 	); err != nil {
 		return err
 	}
 
 	// Add new indexes.
 	if len(addedIndexDescs) > 0 {
-		if err := sc.backfillIndexes(lease, version); err != nil {
+		if err := sc.backfillIndexes(ctx, lease, version); err != nil {
 			return err
 		}
 	}
@@ -259,9 +261,9 @@ func (sc *SchemaChanger) maybeWriteResumeSpan(
 }
 
 func (sc *SchemaChanger) getTableLease(
-	p *planner, version sqlbase.DescriptorVersion,
+	ctx context.Context, p *planner, version sqlbase.DescriptorVersion,
 ) (*sqlbase.TableDescriptor, error) {
-	tableDesc, err := p.getTableLeaseByID(sc.tableID)
+	tableDesc, err := p.getTableLeaseByID(ctx, sc.tableID)
 	if err != nil {
 		return nil, err
 	}
@@ -272,6 +274,7 @@ func (sc *SchemaChanger) getTableLease(
 }
 
 func (sc *SchemaChanger) truncateAndBackfillColumns(
+	ctx context.Context,
 	lease *sqlbase.TableDescriptor_SchemaChangeLease,
 	version sqlbase.DescriptorVersion,
 	added []sqlbase.ColumnDescriptor,
@@ -340,7 +343,7 @@ func (sc *SchemaChanger) truncateAndBackfillColumns(
 
 			// Add and delete columns for a chunk of the key space.
 			sp.Key, done, err = sc.truncateAndBackfillColumnsChunk(
-				version, added, dropped, defaultExprs, sp,
+				ctx, version, added, dropped, defaultExprs, sp,
 				updateValues, nonNullViolationColumnName, chunkSize, mutationIdx, &lastCheckpoint)
 			if err != nil {
 				return err
@@ -354,6 +357,7 @@ func (sc *SchemaChanger) truncateAndBackfillColumns(
 // next-key and done are invalid if error != nil. next-key is invalid if done
 // is true.
 func (sc *SchemaChanger) truncateAndBackfillColumnsChunk(
+	ctx context.Context,
 	version sqlbase.DescriptorVersion,
 	added []sqlbase.ColumnDescriptor,
 	dropped []sqlbase.ColumnDescriptor,
@@ -385,7 +389,7 @@ func (sc *SchemaChanger) truncateAndBackfillColumnsChunk(
 			leaseMgr: sc.leaseMgr,
 		}
 		defer p.releaseLeases()
-		tableDesc, err := sc.getTableLease(p, version)
+		tableDesc, err := sc.getTableLease(ctx, p, version)
 		if err != nil {
 			return err
 		}
@@ -393,7 +397,7 @@ func (sc *SchemaChanger) truncateAndBackfillColumnsChunk(
 		updateCols := append(added, dropped...)
 		fkTables := tablesNeededForFKs(*tableDesc, CheckUpdates)
 		for k := range fkTables {
-			table, err := p.getTableLeaseByID(k)
+			table, err := p.getTableLeaseByID(ctx, k)
 			if err != nil {
 				return err
 			}
@@ -496,6 +500,7 @@ func (sc *SchemaChanger) truncateAndBackfillColumnsChunk(
 }
 
 func (sc *SchemaChanger) truncateIndexes(
+	ctx context.Context,
 	lease *sqlbase.TableDescriptor_SchemaChangeLease,
 	version sqlbase.DescriptorVersion,
 	dropped []sqlbase.IndexDescriptor,
@@ -537,7 +542,7 @@ func (sc *SchemaChanger) truncateIndexes(
 					leaseMgr: sc.leaseMgr,
 				}
 				defer p.releaseLeases()
-				tableDesc, err := sc.getTableLease(p, version)
+				tableDesc, err := sc.getTableLease(ctx, p, version)
 				if err != nil {
 					return err
 				}
@@ -601,7 +606,9 @@ func (sc *SchemaChanger) backfillIndexesSpans() ([]roachpb.Span, error) {
 }
 
 func (sc *SchemaChanger) backfillIndexes(
-	lease *sqlbase.TableDescriptor_SchemaChangeLease, version sqlbase.DescriptorVersion,
+	ctx context.Context,
+	lease *sqlbase.TableDescriptor_SchemaChangeLease,
+	version sqlbase.DescriptorVersion,
 ) error {
 	duration := checkpointInterval
 	if sc.testingKnobs.WriteCheckpointInterval > 0 {
@@ -625,7 +632,7 @@ func (sc *SchemaChanger) backfillIndexes(
 			}
 			// Use a leased table descriptor for the backfill.
 			defer p.releaseLeases()
-			tableDesc, err := sc.getTableLease(p, version)
+			tableDesc, err := sc.getTableLease(ctx, p, version)
 			if err != nil {
 				return err
 			}

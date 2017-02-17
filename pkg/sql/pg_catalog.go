@@ -26,6 +26,8 @@ import (
 	"strings"
 	"unicode"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -1232,7 +1234,7 @@ CREATE TABLE pg_catalog.pg_roles (
 		// need to do the same. This shouldn't be an issue, because pg_roles doesn't
 		// include sensitive information such as password hashes.
 		h := makeOidHasher()
-		return forEachUser(p,
+		return forEachUser(context.TODO(), p,
 			func(username string) error {
 				isRoot := parser.DBool(username == security.RootUser)
 				return addRow(

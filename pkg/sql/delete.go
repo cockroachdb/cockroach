@@ -46,14 +46,14 @@ type deleteNode struct {
 //   Notes: postgres requires DELETE. Also requires SELECT for "USING" and "WHERE" with tables.
 //          mysql requires DELETE. Also requires SELECT if a table is used in the "WHERE" clause.
 func (p *planner) Delete(
-	n *parser.Delete, desiredTypes []parser.Type, autoCommit bool,
+	ctx context.Context, n *parser.Delete, desiredTypes []parser.Type, autoCommit bool,
 ) (planNode, error) {
 	tn, err := p.getAliasedTableName(n.Table)
 	if err != nil {
 		return nil, err
 	}
 
-	en, err := p.makeEditNode(tn, autoCommit, privilege.DELETE)
+	en, err := p.makeEditNode(ctx, tn, autoCommit, privilege.DELETE)
 	if err != nil {
 		return nil, err
 	}
@@ -66,7 +66,7 @@ func (p *planner) Delete(
 	}
 
 	fkTables := tablesNeededForFKs(*en.tableDesc, CheckDeletes)
-	if err := p.fillFKTableMap(fkTables); err != nil {
+	if err := p.fillFKTableMap(ctx, fkTables); err != nil {
 		return nil, err
 	}
 	rd, err := makeRowDeleter(p.txn, en.tableDesc, fkTables, requestedCols, checkFKs)
@@ -80,7 +80,7 @@ func (p *planner) Delete(
 	// this node's initSelect() method both does type checking and also
 	// performs index selection. We cannot perform index selection
 	// properly until the placeholder values are known.
-	rows, err := p.SelectClause(&parser.SelectClause{
+	rows, err := p.SelectClause(ctx, &parser.SelectClause{
 		Exprs: sqlbase.ColumnsSelectors(rd.fetchCols),
 		From:  &parser.From{Tables: []parser.TableExpr{n.Table}},
 		Where: n.Where,
@@ -95,15 +95,16 @@ func (p *planner) Delete(
 		tw:           tw,
 	}
 
-	if err := dn.run.initEditNode(&dn.editNodeBase, rows, n.Returning, desiredTypes); err != nil {
+	if err := dn.run.initEditNode(
+		ctx, &dn.editNodeBase, rows, n.Returning, desiredTypes); err != nil {
 		return nil, err
 	}
 
 	return dn, nil
 }
 
-func (d *deleteNode) Start() error {
-	if err := d.run.startEditNode(&d.editNodeBase, &d.tw); err != nil {
+func (d *deleteNode) Start(ctx context.Context) error {
+	if err := d.run.startEditNode(ctx, &d.editNodeBase, &d.tw); err != nil {
 		return err
 	}
 
@@ -129,8 +130,8 @@ func (d *deleteNode) Start() error {
 	return d.run.tw.init(d.p.txn)
 }
 
-func (d *deleteNode) Close() {
-	d.run.rows.Close()
+func (d *deleteNode) Close(ctx context.Context) {
+	d.run.rows.Close(ctx)
 }
 
 func (d *deleteNode) FastPathResults() (int, bool) {
@@ -140,9 +141,8 @@ func (d *deleteNode) FastPathResults() (int, bool) {
 	return 0, false
 }
 
-func (d *deleteNode) Next() (bool, error) {
-	ctx := context.TODO()
-	next, err := d.run.rows.Next()
+func (d *deleteNode) Next(ctx context.Context) (bool, error) {
+	next, err := d.run.rows.Next(ctx)
 	if !next {
 		if err == nil {
 			// We're done. Finish the batch.

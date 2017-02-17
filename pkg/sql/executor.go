@@ -399,7 +399,7 @@ func (e *Executor) getSystemConfig() (config.SystemConfig, *databaseCache) {
 // populate the missing types. The PreparedStatement is returned (or
 // nil if there are no results).
 func (e *Executor) Prepare(
-	query string, session *Session, pinfo parser.PlaceholderTypes,
+	ctx context.Context, query string, session *Session, pinfo parser.PlaceholderTypes,
 ) (*PreparedStatement, error) {
 	log.VEventf(session.Ctx(), 2, "preparing: %s", query)
 	var p parser.Parser
@@ -454,14 +454,14 @@ func (e *Executor) Prepare(
 		SetTxnTimestamps(txn, *protoTS)
 	}
 
-	plan, err := session.planner.prepare(stmt)
+	plan, err := session.planner.prepare(ctx, stmt)
 	if err != nil {
 		return nil, err
 	}
 	if plan == nil {
 		return prepared, nil
 	}
-	defer plan.Close()
+	defer plan.Close(ctx)
 	prepared.Columns = plan.Columns()
 	for _, c := range prepared.Columns {
 		if err := checkResultType(c.Typ); err != nil {
@@ -501,8 +501,8 @@ func (e *Executor) CopyDone(session *Session) StatementResults {
 }
 
 // CopyEnd ends the COPY mode. Any buffered data is discarded.
-func (session *Session) CopyEnd() {
-	session.planner.copyFrom.Close()
+func (session *Session) CopyEnd(ctx context.Context) {
+	session.planner.copyFrom.Close(ctx)
 	session.planner.copyFrom = nil
 }
 
@@ -777,15 +777,15 @@ func (e *Executor) execRequest(session *Session, sql string, copymsg copyMsg) St
 
 // If the plan has a fast path we attempt to query that,
 // otherwise we fall back to counting via plan.Next().
-func countRowsAffected(p planNode) (int, error) {
+func countRowsAffected(ctx context.Context, p planNode) (int, error) {
 	if a, ok := p.(planNodeFastPath); ok {
 		if count, res := a.FastPathResults(); res {
 			return count, nil
 		}
 	}
 	count := 0
-	next, err := p.Next()
-	for ; next; next, err = p.Next() {
+	next, err := p.Next(ctx)
+	for ; next; next, err = p.Next(ctx) {
 		count++
 	}
 	return count, err
@@ -1288,21 +1288,21 @@ func (e *Executor) execDistSQL(planMaker *planner, tree planNode, result *Result
 // execClassic runs a plan using the classic (non-distributed) SQL
 // implementation.
 func (e *Executor) execClassic(planMaker *planner, plan planNode, result *Result) error {
-	if err := planMaker.startPlan(plan); err != nil {
+	if err := planMaker.startPlan(planMaker.ctx(), plan); err != nil {
 		return err
 	}
 
 	switch result.Type {
 	case parser.RowsAffected:
-		count, err := countRowsAffected(plan)
+		count, err := countRowsAffected(planMaker.ctx(), plan)
 		if err != nil {
 			return err
 		}
 		result.RowsAffected += count
 
 	case parser.Rows:
-		next, err := plan.Next()
-		for ; next; next, err = plan.Next() {
+		next, err := plan.Next(planMaker.ctx())
+		for ; next; next, err = plan.Next(planMaker.ctx()) {
 			// The plan.Values Datums needs to be copied on each iteration.
 			values := plan.Values()
 
@@ -1380,12 +1380,14 @@ func (e *Executor) execStmt(
 	isAutomaticRetry bool,
 	tStart time.Time,
 ) (Result, error) {
-	plan, err := planMaker.makePlan(stmt, autoCommit)
+	// !!! execStmt should take a ctx, and this metod should stop planMaker.ctx()
+	// here and below.
+	plan, err := planMaker.makePlan(planMaker.ctx(), stmt, autoCommit)
 	if err != nil {
 		return Result{}, err
 	}
 
-	defer plan.Close()
+	defer plan.Close(planMaker.ctx())
 
 	result := Result{
 		PGTag: stmt.StatementTag(),

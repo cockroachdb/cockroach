@@ -48,7 +48,7 @@ type dropDatabaseNode struct {
 // (cockroach database == postgres schema). the postgres default of not
 // dropping the schema if there are dependent objects is more sensible
 // (see the RESTRICT and CASCADE options).
-func (p *planner) DropDatabase(n *parser.DropDatabase) (planNode, error) {
+func (p *planner) DropDatabase(ctx context.Context, n *parser.DropDatabase) (planNode, error) {
 	if n.Name == "" {
 		return nil, errEmptyDatabaseName
 	}
@@ -77,7 +77,7 @@ func (p *planner) DropDatabase(n *parser.DropDatabase) (planNode, error) {
 
 	td := make([]*sqlbase.TableDescriptor, len(tbNames))
 	for i := range tbNames {
-		tbDesc, err := p.dropTableOrViewPrepare(&tbNames[i])
+		tbDesc, err := p.dropTableOrViewPrepare(ctx, &tbNames[i])
 		if err != nil {
 			return nil, err
 		}
@@ -144,7 +144,7 @@ func (p *planner) accumulateDependentTables(
 	return nil
 }
 
-func (n *dropDatabaseNode) Start() error {
+func (n *dropDatabaseNode) Start(ctx context.Context) error {
 	tbNameStrings := make([]string, 0, len(n.td))
 	for _, tbDesc := range n.td {
 		if tbDesc.IsView() {
@@ -167,9 +167,9 @@ func (n *dropDatabaseNode) Start() error {
 
 	b := &client.Batch{}
 	if log.V(2) {
-		log.Infof(n.p.ctx(), "Del %s", descKey)
-		log.Infof(n.p.ctx(), "Del %s", nameKey)
-		log.Infof(n.p.ctx(), "Del %s", zoneKey)
+		log.Infof(ctx, "Del %s", descKey)
+		log.Infof(ctx, "Del %s", nameKey)
+		log.Infof(ctx, "Del %s", zoneKey)
 	}
 	b.Del(descKey)
 	b.Del(nameKey)
@@ -191,7 +191,9 @@ func (n *dropDatabaseNode) Start() error {
 
 	// Log Drop Database event. This is an auditable log event and is recorded
 	// in the same transaction as the table descriptor update.
-	if err := MakeEventLogger(n.p.leaseMgr).InsertEventRecord(n.p.txn,
+	if err := MakeEventLogger(n.p.leaseMgr).InsertEventRecord(
+		ctx,
+		n.p.txn,
 		EventLogDropDatabase,
 		int32(n.dbDesc.ID),
 		int32(n.p.evalCtx.NodeID),
@@ -207,13 +209,13 @@ func (n *dropDatabaseNode) Start() error {
 	return nil
 }
 
-func (n *dropDatabaseNode) Next() (bool, error)        { return false, nil }
-func (n *dropDatabaseNode) Close()                     {}
-func (n *dropDatabaseNode) Columns() ResultColumns     { return make(ResultColumns, 0) }
-func (n *dropDatabaseNode) Ordering() orderingInfo     { return orderingInfo{} }
-func (n *dropDatabaseNode) Values() parser.Datums      { return parser.Datums{} }
-func (n *dropDatabaseNode) DebugValues() debugValues   { return debugValues{} }
-func (n *dropDatabaseNode) MarkDebug(mode explainMode) {}
+func (n *dropDatabaseNode) Next(_ context.Context) (bool, error) { return false, nil }
+func (n *dropDatabaseNode) Close(_ context.Context)              {}
+func (n *dropDatabaseNode) Columns() ResultColumns               { return make(ResultColumns, 0) }
+func (n *dropDatabaseNode) Ordering() orderingInfo               { return orderingInfo{} }
+func (n *dropDatabaseNode) Values() parser.Datums                { return parser.Datums{} }
+func (n *dropDatabaseNode) DebugValues() debugValues             { return debugValues{} }
+func (n *dropDatabaseNode) MarkDebug(mode explainMode)           {}
 
 type dropIndexNode struct {
 	p        *planner
@@ -253,7 +255,7 @@ func (p *planner) DropIndex(n *parser.DropIndex) (planNode, error) {
 	return &dropIndexNode{n: n, p: p, idxNames: idxNames}, nil
 }
 
-func (n *dropIndexNode) Start() error {
+func (n *dropIndexNode) Start(ctx context.Context) error {
 	for _, index := range n.idxNames {
 		// Need to retrieve the descriptor again for each index name in
 		// the list: when two or more index names refer to the same table,
@@ -268,7 +270,7 @@ func (n *dropIndexNode) Start() error {
 		}
 
 		if err := n.p.dropIndexByName(
-			index.idxName, tableDesc, n.n.IfExists, n.n.DropBehavior, n.n.String()); err != nil {
+			ctx, index.idxName, tableDesc, n.n.IfExists, n.n.DropBehavior, n.n.String()); err != nil {
 			return err
 		}
 	}
@@ -276,6 +278,7 @@ func (n *dropIndexNode) Start() error {
 }
 
 func (p *planner) dropIndexByName(
+	ctx context.Context,
 	idxName parser.Name,
 	tableDesc *sqlbase.TableDescriptor,
 	ifExists bool,
@@ -373,7 +376,9 @@ func (p *planner) dropIndexByName(
 	// Record index drop in the event log. This is an auditable log event
 	// and is recorded in the same transaction as the table descriptor
 	// update.
-	if err := MakeEventLogger(p.leaseMgr).InsertEventRecord(p.txn,
+	if err := MakeEventLogger(p.leaseMgr).InsertEventRecord(
+		ctx,
+		p.txn,
 		EventLogDropIndex,
 		int32(tableDesc.ID),
 		int32(p.evalCtx.NodeID),
@@ -394,13 +399,13 @@ func (p *planner) dropIndexByName(
 	return nil
 }
 
-func (n *dropIndexNode) Next() (bool, error)        { return false, nil }
-func (n *dropIndexNode) Close()                     {}
-func (n *dropIndexNode) Columns() ResultColumns     { return make(ResultColumns, 0) }
-func (n *dropIndexNode) Ordering() orderingInfo     { return orderingInfo{} }
-func (n *dropIndexNode) Values() parser.Datums      { return parser.Datums{} }
-func (n *dropIndexNode) DebugValues() debugValues   { return debugValues{} }
-func (n *dropIndexNode) MarkDebug(mode explainMode) {}
+func (n *dropIndexNode) Next(_ context.Context) (bool, error) { return false, nil }
+func (n *dropIndexNode) Close(_ context.Context)              {}
+func (n *dropIndexNode) Columns() ResultColumns               { return make(ResultColumns, 0) }
+func (n *dropIndexNode) Ordering() orderingInfo               { return orderingInfo{} }
+func (n *dropIndexNode) Values() parser.Datums                { return parser.Datums{} }
+func (n *dropIndexNode) DebugValues() debugValues             { return debugValues{} }
+func (n *dropIndexNode) MarkDebug(mode explainMode)           {}
 
 type dropViewNode struct {
 	p  *planner
@@ -412,7 +417,7 @@ type dropViewNode struct {
 // Privileges: DROP on view.
 //   Notes: postgres allows only the view owner to DROP a view.
 //          mysql requires the DROP privilege on the view.
-func (p *planner) DropView(n *parser.DropView) (planNode, error) {
+func (p *planner) DropView(ctx context.Context, n *parser.DropView) (planNode, error) {
 	td := make([]*sqlbase.TableDescriptor, 0, len(n.Names))
 	for _, name := range n.Names {
 		tn, err := name.NormalizeTableName()
@@ -423,7 +428,7 @@ func (p *planner) DropView(n *parser.DropView) (planNode, error) {
 			return nil, err
 		}
 
-		droppedDesc, err := p.dropTableOrViewPrepare(tn)
+		droppedDesc, err := p.dropTableOrViewPrepare(ctx, tn)
 		if err != nil {
 			return nil, err
 		}
@@ -472,7 +477,7 @@ func descInSlice(descID sqlbase.ID, td []*sqlbase.TableDescriptor) bool {
 	return false
 }
 
-func (n *dropViewNode) Start() error {
+func (n *dropViewNode) Start(ctx context.Context) error {
 	for _, droppedDesc := range n.td {
 		if droppedDesc == nil {
 			continue
@@ -484,7 +489,9 @@ func (n *dropViewNode) Start() error {
 		// Log a Drop View event for this table. This is an auditable log event
 		// and is recorded in the same transaction as the table descriptor
 		// update.
-		if err := MakeEventLogger(n.p.leaseMgr).InsertEventRecord(n.p.txn,
+		if err := MakeEventLogger(n.p.leaseMgr).InsertEventRecord(
+			ctx,
+			n.p.txn,
 			EventLogDropView,
 			int32(droppedDesc.ID),
 			int32(n.p.evalCtx.NodeID),
@@ -501,13 +508,13 @@ func (n *dropViewNode) Start() error {
 	return nil
 }
 
-func (n *dropViewNode) Next() (bool, error)        { return false, nil }
-func (n *dropViewNode) Close()                     {}
-func (n *dropViewNode) Columns() ResultColumns     { return make(ResultColumns, 0) }
-func (n *dropViewNode) Ordering() orderingInfo     { return orderingInfo{} }
-func (n *dropViewNode) Values() parser.Datums      { return parser.Datums{} }
-func (n *dropViewNode) DebugValues() debugValues   { return debugValues{} }
-func (n *dropViewNode) MarkDebug(mode explainMode) {}
+func (n *dropViewNode) Next(_ context.Context) (bool, error) { return false, nil }
+func (n *dropViewNode) Close(_ context.Context)              {}
+func (n *dropViewNode) Columns() ResultColumns               { return make(ResultColumns, 0) }
+func (n *dropViewNode) Ordering() orderingInfo               { return orderingInfo{} }
+func (n *dropViewNode) Values() parser.Datums                { return parser.Datums{} }
+func (n *dropViewNode) DebugValues() debugValues             { return debugValues{} }
+func (n *dropViewNode) MarkDebug(mode explainMode)           {}
 
 type dropTableNode struct {
 	p  *planner
@@ -519,7 +526,7 @@ type dropTableNode struct {
 // Privileges: DROP on table.
 //   Notes: postgres allows only the table owner to DROP a table.
 //          mysql requires the DROP privilege on the table.
-func (p *planner) DropTable(n *parser.DropTable) (planNode, error) {
+func (p *planner) DropTable(ctx context.Context, n *parser.DropTable) (planNode, error) {
 	td := make([]*sqlbase.TableDescriptor, 0, len(n.Names))
 	for _, name := range n.Names {
 		tn, err := name.NormalizeTableName()
@@ -530,7 +537,7 @@ func (p *planner) DropTable(n *parser.DropTable) (planNode, error) {
 			return nil, err
 		}
 
-		droppedDesc, err := p.dropTableOrViewPrepare(tn)
+		droppedDesc, err := p.dropTableOrViewPrepare(ctx, tn)
 		if err != nil {
 			return nil, err
 		}
@@ -704,7 +711,7 @@ func (p *planner) removeDependentView(
 	return p.dropViewImpl(viewDesc, parser.DropCascade)
 }
 
-func (n *dropTableNode) Start() error {
+func (n *dropTableNode) Start(ctx context.Context) error {
 	for _, droppedDesc := range n.td {
 		if droppedDesc == nil {
 			continue
@@ -716,7 +723,9 @@ func (n *dropTableNode) Start() error {
 		// Log a Drop Table event for this table. This is an auditable log event
 		// and is recorded in the same transaction as the table descriptor
 		// update.
-		if err := MakeEventLogger(n.p.leaseMgr).InsertEventRecord(n.p.txn,
+		if err := MakeEventLogger(n.p.leaseMgr).InsertEventRecord(
+			ctx,
+			n.p.txn,
 			EventLogDropTable,
 			int32(droppedDesc.ID),
 			int32(n.p.evalCtx.NodeID),
@@ -733,13 +742,13 @@ func (n *dropTableNode) Start() error {
 	return nil
 }
 
-func (n *dropTableNode) Next() (bool, error)        { return false, nil }
-func (n *dropTableNode) Close()                     {}
-func (n *dropTableNode) Columns() ResultColumns     { return make(ResultColumns, 0) }
-func (n *dropTableNode) Ordering() orderingInfo     { return orderingInfo{} }
-func (n *dropTableNode) Values() parser.Datums      { return parser.Datums{} }
-func (n *dropTableNode) DebugValues() debugValues   { return debugValues{} }
-func (n *dropTableNode) MarkDebug(mode explainMode) {}
+func (n *dropTableNode) Next(_ context.Context) (bool, error) { return false, nil }
+func (n *dropTableNode) Close(_ context.Context)              {}
+func (n *dropTableNode) Columns() ResultColumns               { return make(ResultColumns, 0) }
+func (n *dropTableNode) Ordering() orderingInfo               { return orderingInfo{} }
+func (n *dropTableNode) Values() parser.Datums                { return parser.Datums{} }
+func (n *dropTableNode) DebugValues() debugValues             { return debugValues{} }
+func (n *dropTableNode) MarkDebug(mode explainMode)           {}
 
 // dropTableOrViewPrepare/dropTableImpl is used to drop a single table by
 // name, which can result from either a DROP TABLE or DROP DATABASE
@@ -753,8 +762,10 @@ func (n *dropTableNode) MarkDebug(mode explainMode) {}
 // the deleted bit set, meaning the lease manager will not hand out
 // new leases for it and existing leases are released).
 // If the table does not exist, this function returns a nil descriptor.
-func (p *planner) dropTableOrViewPrepare(name *parser.TableName) (*sqlbase.TableDescriptor, error) {
-	tableDesc, err := p.getTableOrViewDesc(name)
+func (p *planner) dropTableOrViewPrepare(
+	ctx context.Context, name *parser.TableName,
+) (*sqlbase.TableDescriptor, error) {
+	tableDesc, err := p.getTableOrViewDesc(ctx, name)
 	if err != nil {
 		return nil, err
 	}

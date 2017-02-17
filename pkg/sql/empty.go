@@ -16,7 +16,11 @@
 
 package sql
 
-import "github.com/cockroachdb/cockroach/pkg/sql/parser"
+import (
+	"golang.org/x/net/context"
+
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+)
 
 // emptyNode is a planNode with no columns and either no rows (default) or a single row with empty
 // results (if results is initialized to true). The former is used for nodes that have no results
@@ -27,12 +31,12 @@ type emptyNode struct {
 	results bool
 }
 
-func (*emptyNode) Columns() ResultColumns  { return nil }
-func (*emptyNode) Ordering() orderingInfo  { return orderingInfo{} }
-func (*emptyNode) Values() parser.Datums   { return nil }
-func (*emptyNode) Start() error            { return nil }
-func (*emptyNode) MarkDebug(_ explainMode) {}
-func (*emptyNode) Close()                  {}
+func (*emptyNode) Columns() ResultColumns        { return nil }
+func (*emptyNode) Ordering() orderingInfo        { return orderingInfo{} }
+func (*emptyNode) Values() parser.Datums         { return nil }
+func (*emptyNode) Start(_ context.Context) error { return nil }
+func (*emptyNode) MarkDebug(_ explainMode)       {}
+func (*emptyNode) Close(_ context.Context)       {}
 
 func (e *emptyNode) DebugValues() debugValues {
 	return debugValues{
@@ -43,7 +47,7 @@ func (e *emptyNode) DebugValues() debugValues {
 	}
 }
 
-func (e *emptyNode) Next() (bool, error) {
+func (e *emptyNode) Next(_ context.Context) (bool, error) {
 	r := e.results
 	e.results = false
 	return r, nil
