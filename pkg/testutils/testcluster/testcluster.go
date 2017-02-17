@@ -173,14 +173,10 @@ func StartTestCluster(t testing.TB, nodes int, args base.TestClusterArgs) *TestC
 	tc.stopper.AddCloser(stop.CloserFn(tc.stopServers))
 
 	tc.WaitForStores(t, tc.Servers[0].Gossip())
-
-	// TODO(peter): We should replace the hardcoded 3 with the default ZoneConfig
-	// replication factor.
-	if args.ReplicationMode == base.ReplicationAuto && nodes >= 3 {
-		if err := tc.WaitForFullReplication(); err != nil {
-			t.Fatal(err)
-		}
+	if err := tc.WaitForFullReplication(); err != nil {
+		t.Fatal(err)
 	}
+
 	return tc
 }
 
@@ -494,6 +490,12 @@ func (tc *TestCluster) findMemberStore(storeID roachpb.StoreID) (*storage.Store,
 // WaitForFullReplication waits until all stores in the cluster
 // have no ranges with replication pending.
 func (tc *TestCluster) WaitForFullReplication() error {
+	// TODO: We should replace the hardcoded 3 with the default ZoneConfig
+	// replication factor.
+	if len(tc.Servers) < 3 {
+		return nil
+	}
+
 	opts := retry.Options{
 		InitialBackoff: time.Millisecond * 10,
 		MaxBackoff:     time.Millisecond * 100,
