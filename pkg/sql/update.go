@@ -19,6 +19,8 @@ package sql
 import (
 	"fmt"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -39,9 +41,9 @@ type editNodeBase struct {
 }
 
 func (p *planner) makeEditNode(
-	tn *parser.TableName, autoCommit bool, priv privilege.Kind,
+	ctx context.Context, tn *parser.TableName, autoCommit bool, priv privilege.Kind,
 ) (editNodeBase, error) {
-	tableDesc, err := p.getTableLease(tn)
+	tableDesc, err := p.getTableLease(ctx, tn)
 	if err != nil {
 		return editNodeBase{}, err
 	}
@@ -73,11 +75,15 @@ type editNodeRun struct {
 }
 
 func (r *editNodeRun) initEditNode(
-	en *editNodeBase, rows planNode, re parser.ReturningClause, desiredTypes []parser.Type,
+	ctx context.Context,
+	en *editNodeBase,
+	rows planNode,
+	re parser.ReturningClause,
+	desiredTypes []parser.Type,
 ) error {
 	r.rows = rows
 
-	rh, err := en.p.newReturningHelper(re, desiredTypes, en.tableDesc.Name, en.tableDesc.Columns)
+	rh, err := en.p.newReturningHelper(ctx, re, desiredTypes, en.tableDesc.Name, en.tableDesc.Columns)
 	if err != nil {
 		return err
 	}
@@ -86,7 +92,7 @@ func (r *editNodeRun) initEditNode(
 	return nil
 }
 
-func (r *editNodeRun) startEditNode(en *editNodeBase, tw tableWriter) error {
+func (r *editNodeRun) startEditNode(ctx context.Context, en *editNodeBase, tw tableWriter) error {
 	if sqlbase.IsSystemConfigID(en.tableDesc.GetID()) {
 		// Mark transaction as operating on the system DB.
 		en.p.txn.SetSystemConfigTrigger()
@@ -94,7 +100,7 @@ func (r *editNodeRun) startEditNode(en *editNodeBase, tw tableWriter) error {
 
 	r.tw = tw
 
-	return r.rows.Start()
+	return r.rows.Start(ctx)
 }
 
 type updateNode struct {
@@ -118,7 +124,7 @@ type updateNode struct {
 //          mysql requires UPDATE. Also requires SELECT with WHERE clause with table.
 // TODO(guanqun): need to support CHECK in UPDATE
 func (p *planner) Update(
-	n *parser.Update, desiredTypes []parser.Type, autoCommit bool,
+	ctx context.Context, n *parser.Update, desiredTypes []parser.Type, autoCommit bool,
 ) (planNode, error) {
 	tracing.AnnotateTrace()
 
@@ -127,7 +133,7 @@ func (p *planner) Update(
 		return nil, err
 	}
 
-	en, err := p.makeEditNode(tn, autoCommit, privilege.UPDATE)
+	en, err := p.makeEditNode(ctx, tn, autoCommit, privilege.UPDATE)
 	if err != nil {
 		return nil, err
 	}
@@ -135,7 +141,7 @@ func (p *planner) Update(
 	exprs := make([]*parser.UpdateExpr, len(n.Exprs))
 	for i, expr := range n.Exprs {
 		// Replace the sub-query nodes.
-		newExpr, err := p.replaceSubqueries(expr.Expr, len(expr.Names))
+		newExpr, err := p.replaceSubqueries(ctx, expr.Expr, len(expr.Names))
 		if err != nil {
 			return nil, err
 		}
@@ -166,7 +172,7 @@ func (p *planner) Update(
 	}
 
 	fkTables := tablesNeededForFKs(*en.tableDesc, CheckUpdates)
-	if err := p.fillFKTableMap(fkTables); err != nil {
+	if err := p.fillFKTableMap(ctx, fkTables); err != nil {
 		return nil, err
 	}
 	ru, err := makeRowUpdater(p.txn, en.tableDesc, fkTables, updateCols, requestedCols, rowUpdaterDefault)
@@ -214,7 +220,7 @@ func (p *planner) Update(
 		}
 	}
 
-	rows, err := p.SelectClause(&parser.SelectClause{
+	rows, err := p.SelectClause(ctx, &parser.SelectClause{
 		Exprs: targets,
 		From:  &parser.From{Tables: []parser.TableExpr{n.Table}},
 		Where: n.Where,
@@ -257,32 +263,33 @@ func (p *planner) Update(
 		updateColsIdx: updateColsIdx,
 		tw:            tw,
 	}
-	if err := un.checkHelper.init(p, tn, en.tableDesc); err != nil {
+	if err := un.checkHelper.init(ctx, p, tn, en.tableDesc); err != nil {
 		return nil, err
 	}
-	if err := un.run.initEditNode(&un.editNodeBase, rows, n.Returning, desiredTypes); err != nil {
+	if err := un.run.initEditNode(
+		ctx, &un.editNodeBase, rows, n.Returning, desiredTypes); err != nil {
 		return nil, err
 	}
 	return un, nil
 }
 
-func (u *updateNode) Start() error {
-	if err := u.run.startEditNode(&u.editNodeBase, &u.tw); err != nil {
+func (u *updateNode) Start(ctx context.Context) error {
+	if err := u.run.startEditNode(ctx, &u.editNodeBase, &u.tw); err != nil {
 		return err
 	}
 	return u.run.tw.init(u.p.txn)
 }
 
-func (u *updateNode) Close() {
-	u.run.rows.Close()
+func (u *updateNode) Close(ctx context.Context) {
+	u.run.rows.Close(ctx)
 }
 
-func (u *updateNode) Next() (bool, error) {
-	next, err := u.run.rows.Next()
+func (u *updateNode) Next(ctx context.Context) (bool, error) {
+	next, err := u.run.rows.Next(ctx)
 	if !next {
 		if err == nil {
 			// We're done. Finish the batch.
-			err = u.tw.finalize(u.p.ctx())
+			err = u.tw.finalize(ctx)
 		}
 		return false, err
 	}
@@ -321,7 +328,7 @@ func (u *updateNode) Next() (bool, error) {
 		}
 	}
 
-	newValues, err := u.tw.row(u.p.ctx(), append(oldValues, updateValues...))
+	newValues, err := u.tw.row(ctx, append(oldValues, updateValues...))
 	if err != nil {
 		return false, err
 	}

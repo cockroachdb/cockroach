@@ -48,7 +48,7 @@ type FlowCtx struct {
 	log.AmbientContext
 
 	id           FlowID
-	evalCtx      *parser.EvalContext
+	evalCtx      parser.EvalContext
 	rpcCtx       *rpc.Context
 	txnProto     *roachpb.Transaction
 	clientDB     *client.DB

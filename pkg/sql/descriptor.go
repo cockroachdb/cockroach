@@ -19,6 +19,8 @@ package sql
 import (
 	"fmt"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -43,7 +45,12 @@ type DescriptorAccessor interface {
 	// is actually created, false if it already existed, or an error if one was encountered.
 	// The ifNotExists flag is used to declare if the "already existed" state should be an
 	// error (false) or a no-op (true).
-	createDescriptor(plainKey sqlbase.DescriptorKey, descriptor sqlbase.DescriptorProto, ifNotExists bool) (bool, error)
+	createDescriptor(
+		ctx context.Context,
+		plainKey sqlbase.DescriptorKey,
+		descriptor sqlbase.DescriptorProto,
+		ifNotExists bool,
+	) (bool, error)
 
 	// getDescriptor looks up the descriptor for `plainKey`, validates it,
 	// and unmarshals it into `descriptor`.
@@ -57,7 +64,9 @@ type DescriptorAccessor interface {
 
 	// getDescriptorsFromTargetList examines a TargetList and fetches the
 	// appropriate descriptors.
-	getDescriptorsFromTargetList(targets parser.TargetList) ([]sqlbase.DescriptorProto, error)
+	getDescriptorsFromTargetList(
+		ctx context.Context, targets parser.TargetList,
+	) ([]sqlbase.DescriptorProto, error)
 }
 
 var _ DescriptorAccessor = &planner{}
@@ -84,7 +93,10 @@ func GenerateUniqueDescID(txn *client.Txn) (sqlbase.ID, error) {
 
 // createDescriptor implements the DescriptorAccessor interface.
 func (p *planner) createDescriptor(
-	plainKey sqlbase.DescriptorKey, descriptor sqlbase.DescriptorProto, ifNotExists bool,
+	ctx context.Context,
+	plainKey sqlbase.DescriptorKey,
+	descriptor sqlbase.DescriptorProto,
+	ifNotExists bool,
 ) (bool, error) {
 	idKey := plainKey.Key()
 
@@ -111,7 +123,7 @@ func (p *planner) createDescriptor(
 		return false, err
 	}
 
-	return true, p.createDescriptorWithID(idKey, id, descriptor)
+	return true, p.createDescriptorWithID(ctx, idKey, id, descriptor)
 }
 
 func (p *planner) descExists(idKey roachpb.Key) (bool, error) {
@@ -124,7 +136,7 @@ func (p *planner) descExists(idKey roachpb.Key) (bool, error) {
 }
 
 func (p *planner) createDescriptorWithID(
-	idKey roachpb.Key, id sqlbase.ID, descriptor sqlbase.DescriptorProto,
+	ctx context.Context, idKey roachpb.Key, id sqlbase.ID, descriptor sqlbase.DescriptorProto,
 ) error {
 	descriptor.SetID(id)
 	// TODO(pmattis): The error currently returned below is likely going to be
@@ -142,8 +154,8 @@ func (p *planner) createDescriptorWithID(
 	descID := descriptor.GetID()
 	descDesc := sqlbase.WrapDescriptor(descriptor)
 	if log.V(2) {
-		log.Infof(p.ctx(), "CPut %s -> %d", idKey, descID)
-		log.Infof(p.ctx(), "CPut %s -> %s", descKey, descDesc)
+		log.Infof(ctx, "CPut %s -> %d", idKey, descID)
+		log.Infof(ctx, "CPut %s -> %s", descKey, descDesc)
 	}
 	b.CPut(idKey, descID, nil)
 	b.CPut(descKey, descDesc, nil)
@@ -239,7 +251,7 @@ func (p *planner) getAllDescriptors() ([]sqlbase.DescriptorProto, error) {
 
 // getDescriptorsFromTargetList implements the DescriptorAccessor interface.
 func (p *planner) getDescriptorsFromTargetList(
-	targets parser.TargetList,
+	ctx context.Context, targets parser.TargetList,
 ) ([]sqlbase.DescriptorProto, error) {
 	if targets.Databases != nil {
 		if len(targets.Databases) == 0 {
@@ -270,7 +282,7 @@ func (p *planner) getDescriptorsFromTargetList(
 			return nil, err
 		}
 		for i := range tables {
-			descriptor, err := p.mustGetTableOrViewDesc(&tables[i])
+			descriptor, err := p.mustGetTableOrViewDesc(ctx, &tables[i])
 			if err != nil {
 				return nil, err
 			}

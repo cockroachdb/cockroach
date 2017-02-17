@@ -17,6 +17,8 @@
 package sql
 
 import (
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/pkg/errors"
 )
@@ -25,6 +27,7 @@ import (
 // than one, in case there is a star). Whether star expansion occurred
 // is indicated by the third return value.
 func (p *planner) computeRender(
+	ctx context.Context,
 	target parser.SelectExpr,
 	desiredType parser.Type,
 	info *dataSourceInfo,
@@ -49,7 +52,7 @@ func (p *planner) computeRender(
 	outputName := getRenderColName(target)
 
 	normalized, err := p.analyzeExpr(
-		target.Expr, multiSourceInfo{info}, ivarHelper, desiredType, false, "")
+		ctx, target.Expr, multiSourceInfo{info}, ivarHelper, desiredType, false, "")
 	if err != nil {
 		return nil, nil, false, err
 	}

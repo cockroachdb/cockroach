@@ -1395,6 +1395,8 @@ func (dsp *distSQLPlanner) Run(
 }
 
 type distSQLReceiver struct {
+	ctx context.Context
+
 	// rows is the container where we store the results; if we only need the count
 	// of the rows, it is nil.
 	rows *RowContainer
@@ -1410,6 +1412,10 @@ type distSQLReceiver struct {
 }
 
 var _ distsqlrun.RowReceiver = &distSQLReceiver{}
+
+func makeDistSQLReceiver(ctx context.Context, sink *RowContainer) distSQLReceiver {
+	return distSQLReceiver{ctx: ctx, rows: sink}
+}
 
 // PushRow is part of the RowReceiver interface.
 func (r *distSQLReceiver) PushRow(row sqlbase.EncDatumRow) bool {
@@ -1432,7 +1438,7 @@ func (r *distSQLReceiver) PushRow(row sqlbase.EncDatumRow) bool {
 		r.row[i] = row[resIdx].Datum
 	}
 	// Note that AddRow accounts for the memory used by the Datums.
-	if _, err := r.rows.AddRow(r.row); err != nil {
+	if _, err := r.rows.AddRow(r.ctx, r.row); err != nil {
 		r.err = err
 		return false
 	}

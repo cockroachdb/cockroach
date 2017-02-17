@@ -19,6 +19,8 @@ package sql
 import (
 	"fmt"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/pkg/errors"
@@ -26,7 +28,7 @@ import (
 
 // UnionClause constructs a planNode from a UNION/INTERSECT/EXCEPT expression.
 func (p *planner) UnionClause(
-	n *parser.UnionClause, desiredTypes []parser.Type, autoCommit bool,
+	ctx context.Context, n *parser.UnionClause, desiredTypes []parser.Type, autoCommit bool,
 ) (planNode, error) {
 	var emitAll = false
 	var emit unionNodeEmit
@@ -53,11 +55,11 @@ func (p *planner) UnionClause(
 		return nil, errors.Errorf("%v is not supported", n.Type)
 	}
 
-	left, err := p.newPlan(n.Left, desiredTypes, autoCommit)
+	left, err := p.newPlan(ctx, n.Left, desiredTypes, autoCommit)
 	if err != nil {
 		return nil, err
 	}
-	right, err := p.newPlan(n.Right, desiredTypes, autoCommit)
+	right, err := p.newPlan(ctx, n.Right, desiredTypes, autoCommit)
 	if err != nil {
 		return nil, err
 	}
@@ -165,9 +167,9 @@ func (n *unionNode) DebugValues() debugValues {
 	return n.debugVals
 }
 
-func (n *unionNode) readRight() (bool, error) {
-	next, err := n.right.Next()
-	for ; next; next, err = n.right.Next() {
+func (n *unionNode) readRight(ctx context.Context) (bool, error) {
+	next, err := n.right.Next(ctx)
+	for ; next; next, err = n.right.Next(ctx) {
 		if n.explain == explainDebug {
 			n.debugVals = n.right.DebugValues()
 			if n.debugVals.output != debugValueRow {
@@ -200,13 +202,13 @@ func (n *unionNode) readRight() (bool, error) {
 	}
 
 	n.rightDone = true
-	n.right.Close()
-	return n.readLeft()
+	n.right.Close(ctx)
+	return n.readLeft(ctx)
 }
 
-func (n *unionNode) readLeft() (bool, error) {
-	next, err := n.left.Next()
-	for ; next; next, err = n.left.Next() {
+func (n *unionNode) readLeft(ctx context.Context) (bool, error) {
+	next, err := n.left.Next(ctx)
+	for ; next; next, err = n.left.Next(ctx) {
 		if n.explain == explainDebug {
 			n.debugVals = n.left.DebugValues()
 			if n.debugVals.output != debugValueRow {
@@ -235,34 +237,34 @@ func (n *unionNode) readLeft() (bool, error) {
 		return false, err
 	}
 	n.leftDone = true
-	n.left.Close()
+	n.left.Close(ctx)
 	return false, nil
 }
 
-func (n *unionNode) Start() error {
-	if err := n.right.Start(); err != nil {
+func (n *unionNode) Start(ctx context.Context) error {
+	if err := n.right.Start(ctx); err != nil {
 		return err
 	}
-	return n.left.Start()
+	return n.left.Start(ctx)
 }
 
-func (n *unionNode) Next() (bool, error) {
+func (n *unionNode) Next(ctx context.Context) (bool, error) {
 	switch {
 	case !n.rightDone:
-		return n.readRight()
+		return n.readRight(ctx)
 	case !n.leftDone:
-		return n.readLeft()
+		return n.readLeft(ctx)
 	default:
 		return false, nil
 	}
 }
 
-func (n *unionNode) Close() {
+func (n *unionNode) Close(ctx context.Context) {
 	switch {
 	case !n.rightDone:
-		n.right.Close()
+		n.right.Close(ctx)
 	case !n.leftDone:
-		n.left.Close()
+		n.left.Close(ctx)
 	}
 }
 

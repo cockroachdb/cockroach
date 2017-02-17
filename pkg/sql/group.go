@@ -21,6 +21,8 @@ import (
 	"fmt"
 	"strings"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -29,7 +31,9 @@ import (
 
 // groupBy constructs a groupNode according to grouping functions or clauses. This may adjust the
 // render targets in the renderNode as necessary.
-func (p *planner) groupBy(n *parser.SelectClause, s *renderNode) (*groupNode, error) {
+func (p *planner) groupBy(
+	ctx context.Context, n *parser.SelectClause, s *renderNode,
+) (*groupNode, error) {
 	// Determine if aggregation is being performed. This check is done on the raw
 	// Select expressions as simplification might have removed aggregation
 	// functions (e.g. `SELECT MIN(1)` -> `SELECT 1`).
@@ -95,7 +99,7 @@ func (p *planner) groupBy(n *parser.SelectClause, s *renderNode) (*groupNode, er
 	var typedHaving parser.TypedExpr
 	if n.Having != nil {
 		var err error
-		typedHaving, err = p.analyzeExpr(n.Having.Expr, s.sourceInfo, s.ivarHelper,
+		typedHaving, err = p.analyzeExpr(ctx, n.Having.Expr, s.sourceInfo, s.ivarHelper,
 			parser.TypeBool, true, "HAVING")
 		if err != nil {
 			return nil, err
@@ -173,7 +177,7 @@ func (p *planner) groupBy(n *parser.SelectClause, s *renderNode) (*groupNode, er
 		for _, f := range group.funcs {
 			strs = append(strs, f.String())
 		}
-		log.Infof(p.ctx(), "Group: %s", strings.Join(strs, ", "))
+		log.Infof(ctx, "Group: %s", strings.Join(strs, ", "))
 	}
 
 	// Replace the render expressions in the scanNode with expressions that
@@ -194,7 +198,7 @@ func (p *planner) groupBy(n *parser.SelectClause, s *renderNode) (*groupNode, er
 
 	// Add the group-by expressions so they are available for bucketing.
 	for _, g := range groupByExprs {
-		cols, exprs, hasStar, err := s.planner.computeRender(parser.SelectExpr{Expr: g}, parser.TypeAny,
+		cols, exprs, hasStar, err := s.planner.computeRender(ctx, parser.SelectExpr{Expr: g}, parser.TypeAny,
 			s.source.info, s.ivarHelper, true)
 		if err != nil {
 			return nil, err
@@ -221,7 +225,7 @@ func (p *planner) groupBy(n *parser.SelectClause, s *renderNode) (*groupNode, er
 		}
 
 		cols, exprs, hasStar, err := s.planner.computeRender(
-			parser.SelectExpr{Expr: f.filter}, parser.TypeAny,
+			ctx, parser.SelectExpr{Expr: f.filter}, parser.TypeAny,
 			s.source.info, s.ivarHelper, true)
 		if err != nil {
 			return nil, err
@@ -320,9 +324,11 @@ func (n *groupNode) DebugValues() debugValues {
 	return vals
 }
 
-func (n *groupNode) Start() error { return n.plan.Start() }
+func (n *groupNode) Start(ctx context.Context) error {
+	return n.plan.Start(ctx)
+}
 
-func (n *groupNode) Next() (bool, error) {
+func (n *groupNode) Next(ctx context.Context) (bool, error) {
 	var scratch []byte
 	// We're going to consume n.plan until it's exhausted, feed all the rows to
 	// n.funcs, and then call n.computeAggregated to generate all the results.
@@ -331,14 +337,14 @@ func (n *groupNode) Next() (bool, error) {
 		next := false
 		if !(n.needOnlyOneRow && n.gotOneRow) {
 			var err error
-			next, err = n.plan.Next()
+			next, err = n.plan.Next(ctx)
 			if err != nil {
 				return false, err
 			}
 		}
 		if !next {
 			n.populated = true
-			if err := n.computeAggregates(); err != nil {
+			if err := n.computeAggregates(ctx); err != nil {
 				return false, err
 			}
 			break
@@ -373,7 +379,7 @@ func (n *groupNode) Next() (bool, error) {
 				continue
 			}
 
-			if err := n.funcs[i].add(n.planner.session, bucket, value); err != nil {
+			if err := n.funcs[i].add(ctx, n.planner.session, bucket, value); err != nil {
 				return false, err
 			}
 		}
@@ -387,10 +393,10 @@ func (n *groupNode) Next() (bool, error) {
 		}
 	}
 
-	return n.values.Next()
+	return n.values.Next(ctx)
 }
 
-func (n *groupNode) computeAggregates() error {
+func (n *groupNode) computeAggregates(ctx context.Context) error {
 	if len(n.buckets) < 1 && n.addNullBucketIfEmpty {
 		n.buckets[""] = struct{}{}
 	}
@@ -423,19 +429,19 @@ func (n *groupNode) computeAggregates() error {
 			}
 		}
 
-		if _, err := n.values.rows.AddRow(row); err != nil {
+		if _, err := n.values.rows.AddRow(ctx, row); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (n *groupNode) Close() {
-	n.plan.Close()
+func (n *groupNode) Close(ctx context.Context) {
+	n.plan.Close(ctx)
 	for _, f := range n.funcs {
-		f.close(n.planner.session)
+		f.close(ctx, n.planner.session)
 	}
-	n.values.Close()
+	n.values.Close(ctx)
 	n.buckets = nil
 }
 
@@ -684,16 +690,18 @@ func (n *groupNode) newAggregateFuncHolder(
 	return res
 }
 
-func (a *aggregateFuncHolder) close(s *Session) {
+func (a *aggregateFuncHolder) close(ctx context.Context, s *Session) {
 	a.buckets = nil
 	a.seen = nil
 	a.group = nil
-	a.bucketsMemAcc.Wtxn(s).Close()
+	a.bucketsMemAcc.Wtxn(s).Close(ctx)
 }
 
 // add accumulates one more value for a particular bucket into an aggregation
 // function.
-func (a *aggregateFuncHolder) add(s *Session, bucket []byte, d parser.Datum) error {
+func (a *aggregateFuncHolder) add(
+	ctx context.Context, s *Session, bucket []byte, d parser.Datum,
+) error {
 	// NB: the compiler *should* optimize `myMap[string(myBytes)]`. See:
 	// https://github.com/golang/go/commit/f5f5a8b6209f84961687d993b93ea0d397f5d5bf
 
@@ -706,7 +714,7 @@ func (a *aggregateFuncHolder) add(s *Session, bucket []byte, d parser.Datum) err
 			// skip
 			return nil
 		}
-		if err := a.bucketsMemAcc.Wtxn(s).Grow(int64(len(encoded))); err != nil {
+		if err := a.bucketsMemAcc.Wtxn(s).Grow(ctx, int64(len(encoded))); err != nil {
 			return err
 		}
 		a.seen[string(encoded)] = struct{}{}

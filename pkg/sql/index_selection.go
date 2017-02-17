@@ -21,6 +21,8 @@ import (
 	"fmt"
 	"sort"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -79,7 +81,7 @@ type analyzeOrderingFn func(indexOrdering orderingInfo) (matchingCols, totalCols
 // If preferOrderMatching is true, we prefer an index that matches the desired
 // ordering completely, even if it is not a covering index.
 func (p *planner) selectIndex(
-	s *scanNode, analyzeOrdering analyzeOrderingFn, preferOrderMatching bool,
+	ctx context.Context, s *scanNode, analyzeOrdering analyzeOrderingFn, preferOrderMatching bool,
 ) (planNode, error) {
 	if s.desc.IsEmpty() {
 		// No table.
@@ -124,7 +126,7 @@ func (p *planner) selectIndex(
 		// possibly overlapping ranges.
 		exprs, equivalent := analyzeExpr(s.filter)
 		if log.V(2) {
-			log.Infof(s.p.ctx(), "analyzeExpr: %s -> %s [equivalent=%v]", s.filter, exprs, equivalent)
+			log.Infof(ctx, "analyzeExpr: %s -> %s [equivalent=%v]", s.filter, exprs, equivalent)
 		}
 
 		// Check to see if the filter simplified to a constant.
@@ -186,7 +188,7 @@ func (p *planner) selectIndex(
 
 	if analyzeOrdering != nil {
 		for _, c := range candidates {
-			c.analyzeOrdering(s, analyzeOrdering, preferOrderMatching)
+			c.analyzeOrdering(ctx, s, analyzeOrdering, preferOrderMatching)
 		}
 	}
 
@@ -194,7 +196,7 @@ func (p *planner) selectIndex(
 
 	if log.V(2) {
 		for i, c := range candidates {
-			log.Infof(s.p.ctx(), "%d: selectIndex(%s): cost=%v constraints=%s reverse=%t",
+			log.Infof(ctx, "%d: selectIndex(%s): cost=%v constraints=%s reverse=%t",
 				i, c.index.Name, c.cost, c.constraints, c.reverse)
 		}
 	}
@@ -242,9 +244,9 @@ func (p *planner) selectIndex(
 	}
 
 	if log.V(3) {
-		log.Infof(s.p.ctx(), "%s: filter=%v", c.index.Name, s.filter)
+		log.Infof(ctx, "%s: filter=%v", c.index.Name, s.filter)
 		for i, span := range s.spans {
-			log.Infof(s.p.ctx(), "%s/%d: %s", c.index.Name, i, sqlbase.PrettySpan(span, 2))
+			log.Infof(ctx, "%s/%d: %s", c.index.Name, i, sqlbase.PrettySpan(span, 2))
 		}
 	}
 
@@ -395,7 +397,7 @@ func (v *indexInfo) analyzeExprs(exprs []parser.TypedExprs) {
 // If preferOrderMatching is true, we prefer an index that matches the desired
 // ordering completely, even if it is not a covering index.
 func (v *indexInfo) analyzeOrdering(
-	scan *scanNode, analyzeOrdering analyzeOrderingFn, preferOrderMatching bool,
+	ctx context.Context, scan *scanNode, analyzeOrdering analyzeOrderingFn, preferOrderMatching bool,
 ) {
 	// Compute the prefix of the index for which we have exact constraints. This
 	// prefix is inconsequential for ordering because the values are identical.
@@ -433,7 +435,7 @@ func (v *indexInfo) analyzeOrdering(
 	}
 
 	if log.V(2) {
-		log.Infof(scan.p.ctx(), "%s: analyzeOrdering: weight=%0.2f reverse=%v match=%d",
+		log.Infof(ctx, "%s: analyzeOrdering: weight=%0.2f reverse=%v match=%d",
 			v.index.Name, weight, v.reverse, match)
 	}
 }

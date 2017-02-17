@@ -24,11 +24,12 @@ import (
 	opentracing "github.com/opentracing/opentracing-go"
 	otlog "github.com/opentracing/opentracing-go/log"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	"golang.org/x/net/context"
 )
 
 // explainTraceNode is a planNode that wraps another node and converts DebugValues() results to a
@@ -87,14 +88,15 @@ func (p *planner) makeTraceNode(plan planNode) planNode {
 func (*explainTraceNode) Columns() ResultColumns { return traceColumnsWithTS }
 func (*explainTraceNode) Ordering() orderingInfo { return orderingInfo{} }
 
-func (n *explainTraceNode) Start() error {
-	return n.plan.Start()
+func (n *explainTraceNode) Start(ctx context.Context) error {
+	return n.plan.Start(ctx)
 }
 
 // hijackTxnContext hijacks the session's/txn's context, causing everything
 // happening in the current txn before explainTraceNode.Close() to happen inside
 // a recorded trace.
 //
+// !!! The facts in the TODO below are no longer true. Change accordingly.
 // TODO(andrei): This is currently called from Next(), which means that
 // `n.plan.Start()` is not traced. That's a shame, but unfortunately we can't
 // hijack in explainTraceNode.Start() because we need to only hijack after the
@@ -106,8 +108,8 @@ func (n *explainTraceNode) Start() error {
 // sortNode, which is not part of the user's query.
 // This is caused by the fact that BoundMemoryAccount binds the session's
 // context when it's created, which is bad. Rework this once that is fixed.
-func (n *explainTraceNode) hijackTxnContext() error {
-	tracingCtx, recorder, err := tracing.StartSnowballTrace(n.p.ctx(), "explain trace")
+func (n *explainTraceNode) hijackTxnContext(ctx context.Context) error {
+	tracingCtx, recorder, err := tracing.StartSnowballTrace(ctx, "explain trace")
 	if err != nil {
 		return err
 	}
@@ -120,7 +122,7 @@ func (n *explainTraceNode) hijackTxnContext() error {
 	return nil
 }
 
-func (n *explainTraceNode) Close() {
+func (n *explainTraceNode) Close(ctx context.Context) {
 	// tracingCtx can be nil if hijackTxnContext() hasn't been called (in
 	// particular, if this node is wrapped in an EXPLAIN(PLAN)).
 	if n.tracingCtx == nil {
@@ -131,7 +133,7 @@ func (n *explainTraceNode) Close() {
 		n.unhijackCtx()
 		sp.Finish()
 	}
-	n.plan.Close()
+	n.plan.Close(ctx)
 }
 
 func (n *explainTraceNode) unhijackCtx() {
@@ -140,17 +142,17 @@ func (n *explainTraceNode) unhijackCtx() {
 	n.restorePlannerCtx = nil
 }
 
-func (n *explainTraceNode) Next() (bool, error) {
+func (n *explainTraceNode) Next(ctx context.Context) (bool, error) {
 	first := n.rows == nil
 	if first {
 		n.rows = []parser.Datums{}
-		if err := n.hijackTxnContext(); err != nil {
+		if err := n.hijackTxnContext(ctx); err != nil {
 			return false, err
 		}
 	}
 	for !n.exhausted && len(n.rows) <= 1 {
 		var vals debugValues
-		if next, err := n.plan.Next(); !next {
+		if next, err := n.plan.Next(ctx); !next {
 			sp := opentracing.SpanFromContext(n.tracingCtx)
 			n.exhausted = true
 			// Finish the tracing span that we began in Start().

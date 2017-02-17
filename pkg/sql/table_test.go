@@ -261,7 +261,7 @@ func TestRemoveLeaseIfExpiring(t *testing.T) {
 	txn := client.Txn{Context: context.Background()}
 	p.setTxn(&txn)
 
-	if p.removeLeaseIfExpiring(nil) {
+	if p.removeLeaseIfExpiring(context.TODO(), nil) {
 		t.Error("expected false with nil input")
 	}
 
@@ -272,7 +272,7 @@ func TestRemoveLeaseIfExpiring(t *testing.T) {
 	et := hlc.Timestamp{WallTime: l1.Expiration().UnixNano()}
 	txn.UpdateDeadlineMaybe(et)
 
-	if p.removeLeaseIfExpiring(l1) {
+	if p.removeLeaseIfExpiring(context.TODO(), l1) {
 		t.Error("expected false with a non-expiring lease")
 	}
 	if d := *p.txn.GetDeadline(); d != et {
@@ -285,7 +285,7 @@ func TestRemoveLeaseIfExpiring(t *testing.T) {
 	// Add another lease.
 	l2 := &LeaseState{expiration: parser.DTimestamp{Time: time.Unix(0, mc.UnixNano()+d+1)}}
 	p.leases = append(p.leases, l2)
-	if !p.removeLeaseIfExpiring(l1) {
+	if !p.removeLeaseIfExpiring(context.TODO(), l1) {
 		t.Error("expected true with an expiring lease")
 	}
 	et = hlc.Timestamp{WallTime: l2.Expiration().UnixNano()}

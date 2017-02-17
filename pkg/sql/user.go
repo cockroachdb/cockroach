@@ -42,7 +42,7 @@ func GetUserHashedPassword(
 		defer finishInternalPlanner(p)
 		const getHashedPassword = `SELECT hashedPassword FROM system.users ` +
 			`WHERE username=$1`
-		values, err := p.QueryRow(getHashedPassword, normalizedUsername)
+		values, err := p.QueryRow(ctx, getHashedPassword, normalizedUsername)
 		if err != nil {
 			return errors.Errorf("error looking up user %s", normalizedUsername)
 		}

@@ -48,7 +48,7 @@ func newValuesProcessor(
 	for i := range v.columns {
 		types[i] = v.columns[i].Type
 	}
-	if err := v.out.init(post, types, flowCtx.evalCtx, output); err != nil {
+	if err := v.out.init(post, types, &flowCtx.evalCtx, output); err != nil {
 		return nil, err
 	}
 	return v, nil

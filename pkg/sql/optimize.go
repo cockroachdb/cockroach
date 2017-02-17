@@ -16,26 +16,30 @@
 
 package sql
 
-import "github.com/cockroachdb/cockroach/pkg/sql/parser"
+import (
+	"golang.org/x/net/context"
+
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+)
 
 // optimizePlan transforms the query plan into its final form.  This
 // includes calling expandPlan(). The SQL "prepare" phase, as well as
 // the EXPLAIN statement, should merely build the plan node(s) and
 // call optimizePlan(). This is called automatically by makePlan().
-func (p *planner) optimizePlan(plan planNode, needed []bool) (planNode, error) {
+func (p *planner) optimizePlan(ctx context.Context, plan planNode, needed []bool) (planNode, error) {
 	// We propagate the needed columns a first time. This will remove
 	// any unused renders, which in turn may simplify expansion (remove
 	// sub-expressions).
 	setNeededColumns(plan, needed)
 
-	newPlan, err := p.triggerFilterPropagation(plan)
+	newPlan, err := p.triggerFilterPropagation(ctx, plan)
 	if err != nil {
 		return plan, err
 	}
 
 	// Perform plan expansion; this does index selection, sort
 	// optimization etc.
-	newPlan, err = p.expandPlan(newPlan)
+	newPlan, err = p.expandPlan(ctx, newPlan)
 	if err != nil {
 		return plan, err
 	}
@@ -50,7 +54,7 @@ func (p *planner) optimizePlan(plan planNode, needed []bool) (planNode, error) {
 		subqueryNode: i.subqueryNode,
 		enterNode:    i.enterNode,
 	}
-	if err := walkPlan(newPlan, observer); err != nil {
+	if err := walkPlan(ctx, newPlan, observer); err != nil {
 		return plan, err
 	}
 	return newPlan, nil
@@ -64,7 +68,7 @@ type subqueryInitializer struct {
 }
 
 // subqueryNode implements the planObserver interface.
-func (i *subqueryInitializer) subqueryNode(sq *subquery) error {
+func (i *subqueryInitializer) subqueryNode(ctx context.Context, sq *subquery) error {
 	if sq.plan != nil && !sq.expanded {
 		if sq.execMode == execModeExists || sq.execMode == execModeOneRow {
 			numRows := parser.DInt(1)
@@ -87,7 +91,7 @@ func (i *subqueryInitializer) subqueryNode(sq *subquery) error {
 		}
 
 		var err error
-		sq.plan, err = i.p.optimizePlan(sq.plan, needed)
+		sq.plan, err = i.p.optimizePlan(ctx, sq.plan, needed)
 		if err != nil {
 			return err
 		}
@@ -96,4 +100,6 @@ func (i *subqueryInitializer) subqueryNode(sq *subquery) error {
 	return nil
 }
 
-func (i *subqueryInitializer) enterNode(_ string, _ planNode) bool { return true }
+func (i *subqueryInitializer) enterNode(_ context.Context, _ string, _ planNode) bool {
+	return true
+}

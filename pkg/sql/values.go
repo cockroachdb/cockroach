@@ -22,6 +22,8 @@ import (
 	"sort"
 	"strconv"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -42,10 +44,8 @@ type valuesNode struct {
 
 	desiredTypes []parser.Type // This can be removed when we only type check once.
 
-	nextRow       int           // The index of the next row.
-	invertSorting bool          // Inverts the sorting predicate.
-	tmpValues     parser.Datums // Used to store temporary values.
-	err           error         // Used to propagate errors during heap operations.
+	nextRow       int  // The index of the next row.
+	invertSorting bool // Inverts the sorting predicate.
 }
 
 func (p *planner) newContainerValuesNode(columns ResultColumns, capacity int) *valuesNode {
@@ -56,7 +56,7 @@ func (p *planner) newContainerValuesNode(columns ResultColumns, capacity int) *v
 }
 
 func (p *planner) ValuesClause(
-	n *parser.ValuesClause, desiredTypes []parser.Type,
+	ctx context.Context, n *parser.ValuesClause, desiredTypes []parser.Type,
 ) (planNode, error) {
 	v := &valuesNode{
 		p:            p,
@@ -94,7 +94,7 @@ func (p *planner) ValuesClause(
 			if len(desiredTypes) > i {
 				desired = desiredTypes[i]
 			}
-			typedExpr, err := p.analyzeExpr(expr, nil, parser.IndexedVarHelper{}, desired, false, "")
+			typedExpr, err := p.analyzeExpr(ctx, expr, nil, parser.IndexedVarHelper{}, desired, false, "")
 			if err != nil {
 				return nil, err
 			}
@@ -116,7 +116,7 @@ func (p *planner) ValuesClause(
 	return v, nil
 }
 
-func (n *valuesNode) Start() error {
+func (n *valuesNode) Start(ctx context.Context) error {
 	if n.n == nil {
 		return nil
 	}
@@ -140,7 +140,7 @@ func (n *valuesNode) Start() error {
 				}
 			}
 		}
-		if _, err := n.rows.AddRow(row); err != nil {
+		if _, err := n.rows.AddRow(ctx, row); err != nil {
 			return err
 		}
 	}
@@ -172,7 +172,7 @@ func (n *valuesNode) DebugValues() debugValues {
 	}
 }
 
-func (n *valuesNode) Next() (bool, error) {
+func (n *valuesNode) Next(context.Context) (bool, error) {
 	if n.nextRow >= n.rows.Len() {
 		return false, nil
 	}
@@ -180,9 +180,9 @@ func (n *valuesNode) Next() (bool, error) {
 	return true, nil
 }
 
-func (n *valuesNode) Close() {
+func (n *valuesNode) Close(ctx context.Context) {
 	if n.rows != nil {
-		n.rows.Close()
+		n.rows.Close(ctx)
 		n.rows = nil
 	}
 }
@@ -232,16 +232,14 @@ var _ heap.Interface = (*valuesNode)(nil)
 
 // Push implements the heap.Interface interface.
 func (n *valuesNode) Push(x interface{}) {
-	_, n.err = n.rows.AddRow(n.tmpValues)
 }
 
 // PushValues pushes the given Datums value into the heap representation
 // of the valuesNode.
-func (n *valuesNode) PushValues(values parser.Datums) error {
-	// Avoid passing slice through interface{} to avoid allocation.
-	n.tmpValues = values
+func (n *valuesNode) PushValues(ctx context.Context, values parser.Datums) error {
+	_, err := n.rows.AddRow(ctx, values)
 	heap.Push(n, nil)
-	return n.err
+	return err
 }
 
 // Pop implements the heap.Interface interface.

@@ -19,6 +19,8 @@ package sql
 import (
 	"testing"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -38,11 +40,11 @@ func TestStartSubqueriesReturnsError(t *testing.T) {
 		t.Fatalf("expected to parse 1 statement, got: %d", len(stmts))
 	}
 	stmt := stmts[0]
-	plan, err := p.makePlan(stmt, false /* autoCommit */)
+	plan, err := p.makePlan(context.TODO(), stmt, false /* autoCommit */)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := p.startSubqueryPlans(plan); !testutils.IsError(err, `forced by crdb_internal\.force_retry\(\)`) {
+	if err := p.startSubqueryPlans(context.TODO(), plan); !testutils.IsError(err, `forced by crdb_internal\.force_retry\(\)`) {
 		t.Fatalf("expected error from force_retry(), got: %v", err)
 	}
 }

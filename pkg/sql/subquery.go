@@ -20,6 +20,8 @@ import (
 	"bytes"
 	"fmt"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -106,15 +108,15 @@ func (s *subquery) Eval(_ *parser.EvalContext) (parser.Datum, error) {
 	return s.result, nil
 }
 
-func (s *subquery) doEval() (result parser.Datum, err error) {
+func (s *subquery) doEval(ctx context.Context) (result parser.Datum, err error) {
 	// After evaluation, there is no plan remaining.
-	defer func() { s.plan.Close(); s.plan = nil }()
+	defer func() { s.plan.Close(ctx); s.plan = nil }()
 
 	switch s.execMode {
 	case execModeExists:
 		// For EXISTS expressions, all we want to know is if there is at least one
 		// result.
-		next, err := s.plan.Next()
+		next, err := s.plan.Next(ctx)
 		if err != nil {
 			return result, err
 		}
@@ -127,8 +129,8 @@ func (s *subquery) doEval() (result parser.Datum, err error) {
 
 	case execModeAllRows, execModeAllRowsNormalized:
 		var rows parser.DTuple
-		next, err := s.plan.Next()
-		for ; next; next, err = s.plan.Next() {
+		next, err := s.plan.Next(ctx)
+		for ; next; next, err = s.plan.Next(ctx) {
 			values := s.plan.Values()
 			switch len(values) {
 			case 1:
@@ -162,7 +164,7 @@ func (s *subquery) doEval() (result parser.Datum, err error) {
 
 	case execModeOneRow:
 		result = parser.DNull
-		hasRow, err := s.plan.Next()
+		hasRow, err := s.plan.Next(ctx)
 		if err != nil {
 			return result, err
 		}
@@ -176,7 +178,7 @@ func (s *subquery) doEval() (result parser.Datum, err error) {
 				copy(valuesCopy.D, values)
 				result = valuesCopy
 			}
-			another, err := s.plan.Next()
+			another, err := s.plan.Next(ctx)
 			if err != nil {
 				return result, err
 			}
@@ -234,16 +236,16 @@ type subqueryPlanVisitor struct {
 	p *planner
 }
 
-func (v *subqueryPlanVisitor) subqueryNode(sq *subquery) error {
+func (v *subqueryPlanVisitor) subqueryNode(ctx context.Context, sq *subquery) error {
 	if !sq.expanded {
 		panic("subquery was not expanded properly")
 	}
 	if !sq.started {
-		if err := v.p.startPlan(sq.plan); err != nil {
+		if err := v.p.startPlan(ctx, sq.plan); err != nil {
 			return err
 		}
 		sq.started = true
-		res, err := sq.doEval()
+		res, err := sq.doEval(ctx)
 		if err != nil {
 			return err
 		}
@@ -252,7 +254,7 @@ func (v *subqueryPlanVisitor) subqueryNode(sq *subquery) error {
 	return nil
 }
 
-func (v *subqueryPlanVisitor) enterNode(_ string, n planNode) bool {
+func (v *subqueryPlanVisitor) enterNode(_ context.Context, _ string, n planNode) bool {
 	if _, ok := n.(*explainPlanNode); ok {
 		// EXPLAIN doesn't start/substitute sub-queries.
 		return false
@@ -260,12 +262,12 @@ func (v *subqueryPlanVisitor) enterNode(_ string, n planNode) bool {
 	return true
 }
 
-func (p *planner) startSubqueryPlans(plan planNode) error {
+func (p *planner) startSubqueryPlans(ctx context.Context, plan planNode) error {
 	// We also run and pre-evaluate the subqueries during start,
 	// so as to avoid re-running the sub-query for every row
 	// in the results of the surrounding planNode.
 	p.subqueryPlanVisitor = subqueryPlanVisitor{p: p}
-	return walkPlan(plan, planObserver{
+	return walkPlan(ctx, plan, planObserver{
 		subqueryNode: p.subqueryPlanVisitor.subqueryNode,
 		enterNode:    p.subqueryPlanVisitor.enterNode,
 	})
@@ -280,6 +282,9 @@ type subqueryVisitor struct {
 	path    []parser.Expr // parent expressions
 	pathBuf [4]parser.Expr
 	err     error
+
+	// TODO(andrei): plumb the context through the parser.Visitor.
+	ctx context.Context
 }
 
 var _ parser.Visitor = &subqueryVisitor{}
@@ -312,7 +317,7 @@ func (v *subqueryVisitor) VisitPre(expr parser.Expr) (recurse bool, newExpr pars
 	// Calling newPlan() might recursively invoke expandSubqueries, so we need to preserve
 	// the state of the visitor across the call to newPlan().
 	visitorCopy := v.planner.subqueryVisitor
-	plan, err := v.planner.newPlan(sq.Select, nil, false)
+	plan, err := v.planner.newPlan(v.ctx, sq.Select, nil, false)
 	v.planner.subqueryVisitor = visitorCopy
 	if err != nil {
 		v.err = err
@@ -367,8 +372,10 @@ func (v *subqueryVisitor) VisitPost(expr parser.Expr) parser.Expr {
 	return expr
 }
 
-func (p *planner) replaceSubqueries(expr parser.Expr, columns int) (parser.Expr, error) {
-	p.subqueryVisitor = subqueryVisitor{planner: p, columns: columns}
+func (p *planner) replaceSubqueries(
+	ctx context.Context, expr parser.Expr, columns int,
+) (parser.Expr, error) {
+	p.subqueryVisitor = subqueryVisitor{planner: p, columns: columns, ctx: ctx}
 	p.subqueryVisitor.path = p.subqueryVisitor.pathBuf[:0]
 	expr, _ = parser.WalkExpr(&p.subqueryVisitor, expr)
 	return expr, p.subqueryVisitor.err

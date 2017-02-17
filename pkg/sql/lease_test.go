@@ -113,7 +113,7 @@ func (t *leaseTest) acquire(
 	var lease *sql.LeaseState
 	err := t.kvDB.Txn(context.TODO(), func(txn *client.Txn) error {
 		var err error
-		lease, err = t.node(nodeID).Acquire(txn, descID, version)
+		lease, err = t.node(nodeID).Acquire(txn.Context, txn, descID, version)
 		return err
 	})
 	return lease, err
@@ -154,15 +154,15 @@ func (t *leaseTest) mustRelease(
 	}
 }
 
-func (t *leaseTest) publish(nodeID uint32, descID sqlbase.ID) error {
-	_, err := t.node(nodeID).Publish(descID, func(*sqlbase.TableDescriptor) error {
+func (t *leaseTest) publish(ctx context.Context, nodeID uint32, descID sqlbase.ID) error {
+	_, err := t.node(nodeID).Publish(ctx, descID, func(*sqlbase.TableDescriptor) error {
 		return nil
 	}, nil)
 	return err
 }
 
-func (t *leaseTest) mustPublish(nodeID uint32, descID sqlbase.ID) {
-	if err := t.publish(nodeID, descID); err != nil {
+func (t *leaseTest) mustPublish(ctx context.Context, nodeID uint32, descID sqlbase.ID) {
+	if err := t.publish(ctx, nodeID, descID); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -199,6 +199,7 @@ func TestLeaseManager(testingT *testing.T) {
 	defer t.cleanup()
 
 	const descID = keys.LeaseTableID
+	ctx := context.TODO()
 
 	// We can't acquire a lease on a non-existent table.
 	expected := "descriptor not found"
@@ -224,7 +225,7 @@ func TestLeaseManager(testingT *testing.T) {
 
 	// Publish a new version and explicitly acquire it.
 	l2 := t.mustAcquire(1, descID, 0)
-	t.mustPublish(1, descID)
+	t.mustPublish(ctx, 1, descID)
 	l3 := t.mustAcquire(1, descID, 2)
 	t.expectLeases(descID, "/1/1 /2/1")
 
@@ -255,14 +256,14 @@ func TestLeaseManager(testingT *testing.T) {
 	l5 := t.mustAcquire(1, descID, 2)
 	l6 := t.mustAcquire(2, descID, 2)
 	// Publish version 3. This will succeed immediately.
-	t.mustPublish(3, descID)
+	t.mustPublish(ctx, 3, descID)
 
 	// Start a goroutine to publish version 4 which will block until the version
 	// 2 leases are released.
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {
-		t.mustPublish(3, descID)
+		t.mustPublish(ctx, 3, descID)
 		wg.Done()
 	}()
 
@@ -368,7 +369,7 @@ func TestLeaseManagerPublishVersionChanged(testingT *testing.T) {
 	wg.Add(2)
 
 	go func(n1update, n2start chan struct{}) {
-		_, err := n1.Publish(descID, func(*sqlbase.TableDescriptor) error {
+		_, err := n1.Publish(context.TODO(), descID, func(*sqlbase.TableDescriptor) error {
 			if n2start != nil {
 				// Signal node 2 to start.
 				close(n2start)
@@ -389,7 +390,7 @@ func TestLeaseManagerPublishVersionChanged(testingT *testing.T) {
 		// Wait for node 1 signal indicating that node 1 is in its update()
 		// function.
 		<-n2start
-		_, err := n2.Publish(descID, func(*sqlbase.TableDescriptor) error {
+		_, err := n2.Publish(context.TODO(), descID, func(*sqlbase.TableDescriptor) error {
 			return nil
 		}, nil)
 		if err != nil {
@@ -532,12 +533,12 @@ func isDeleted(tableID sqlbase.ID, cfg config.SystemConfig) bool {
 }
 
 func acquire(
-	s *server.TestServer, descID sqlbase.ID, version sqlbase.DescriptorVersion,
+	ctx context.Context, s *server.TestServer, descID sqlbase.ID, version sqlbase.DescriptorVersion,
 ) (*sql.LeaseState, error) {
 	var lease *sql.LeaseState
 	err := s.DB().Txn(context.TODO(), func(txn *client.Txn) error {
 		var err error
-		lease, err = s.LeaseManager().(*sql.LeaseManager).Acquire(txn, descID, version)
+		lease, err = s.LeaseManager().(*sql.LeaseManager).Acquire(ctx, txn, descID, version)
 		return err
 	})
 	return lease, err
@@ -593,12 +594,13 @@ CREATE TABLE test.t(a INT PRIMARY KEY);
 	}
 
 	tableDesc := sqlbase.GetTableDescriptor(kvDB, "test", "t")
+	ctx := context.TODO()
 
-	lease1, err := acquire(s.(*server.TestServer), tableDesc.ID, 0)
+	lease1, err := acquire(ctx, s.(*server.TestServer), tableDesc.ID, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
-	lease2, err := acquire(s.(*server.TestServer), tableDesc.ID, 0)
+	lease2, err := acquire(ctx, s.(*server.TestServer), tableDesc.ID, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -621,7 +623,7 @@ CREATE TABLE test.t(a INT PRIMARY KEY);
 	<-deleted
 
 	// We should still be able to acquire, because we have an active lease.
-	lease3, err := acquire(s.(*server.TestServer), tableDesc.ID, 0)
+	lease3, err := acquire(ctx, s.(*server.TestServer), tableDesc.ID, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -637,7 +639,7 @@ CREATE TABLE test.t(a INT PRIMARY KEY);
 		t.Fatal(err)
 	}
 	// Now we shouldn't be able to acquire any more.
-	_, err = acquire(s.(*server.TestServer), tableDesc.ID, 0)
+	_, err = acquire(ctx, s.(*server.TestServer), tableDesc.ID, 0)
 	if !testutils.IsError(err, "table is being dropped") {
 		t.Fatalf("got a different error than expected: %v", err)
 	}

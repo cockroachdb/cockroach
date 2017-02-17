@@ -22,6 +22,8 @@ import (
 	"sort"
 	"unsafe"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -62,7 +64,9 @@ import (
 //                                                           ^^^^^^^^^^^^^^^^^
 //     Ex. overridden: SELECT avg(x) OVER (w PARTITION BY z) FROM y WINDOW w AS (ORDER BY z)
 //                                                                         ^^^^^^^^^^^^^^^^^
-func (p *planner) window(n *parser.SelectClause, s *renderNode) (*windowNode, error) {
+func (p *planner) window(
+	ctx context.Context, n *parser.SelectClause, s *renderNode,
+) (*windowNode, error) {
 	// Determine if a window function is being applied. We use the renderNode's
 	// renders to determine this because window functions may be added to the
 	// renderNode by an ORDER BY clause.
@@ -82,7 +86,7 @@ func (p *planner) window(n *parser.SelectClause, s *renderNode) (*windowNode, er
 	}
 	renderCols := s.columns
 
-	if err := window.constructWindowDefinitions(n, s); err != nil {
+	if err := window.constructWindowDefinitions(ctx, n, s); err != nil {
 		return nil, err
 	}
 	windowDefCols := s.columns[len(renderCols):]
@@ -151,7 +155,9 @@ func (n *windowNode) extractWindowFunctions(s *renderNode) error {
 // function application by combining specific window definition from a
 // given window function application with referenced window specifications
 // on the SelectClause.
-func (n *windowNode) constructWindowDefinitions(sc *parser.SelectClause, s *renderNode) error {
+func (n *windowNode) constructWindowDefinitions(
+	ctx context.Context, sc *parser.SelectClause, s *renderNode,
+) error {
 	// Process each named window specification on the select clause.
 	namedWindowSpecs := make(map[string]*parser.WindowDef, len(sc.Window))
 	for _, windowDef := range sc.Window {
@@ -176,7 +182,7 @@ func (n *windowNode) constructWindowDefinitions(sc *parser.SelectClause, s *rend
 
 		// Validate PARTITION BY clause.
 		for _, partition := range windowDef.Partitions {
-			cols, exprs, _, err := s.planner.computeRender(parser.SelectExpr{Expr: partition},
+			cols, exprs, _, err := s.planner.computeRender(ctx, parser.SelectExpr{Expr: partition},
 				parser.TypeAny, s.source.info, s.ivarHelper, true)
 			if err != nil {
 				return err
@@ -193,7 +199,7 @@ func (n *windowNode) constructWindowDefinitions(sc *parser.SelectClause, s *rend
 
 		// Validate ORDER BY clause.
 		for _, orderBy := range windowDef.OrderBy {
-			cols, exprs, _, err := s.planner.computeRender(parser.SelectExpr{Expr: orderBy.Expr},
+			cols, exprs, _, err := s.planner.computeRender(ctx, parser.SelectExpr{Expr: orderBy.Expr},
 				parser.TypeAny, s.source.info, s.ivarHelper, true)
 			if err != nil {
 				return err
@@ -406,20 +412,20 @@ func (n *windowNode) DebugValues() debugValues {
 	return vals
 }
 
-func (n *windowNode) Start() error { return n.plan.Start() }
+func (n *windowNode) Start(ctx context.Context) error { return n.plan.Start(ctx) }
 
-func (n *windowNode) Next() (bool, error) {
+func (n *windowNode) Next(ctx context.Context) (bool, error) {
 	for !n.populated {
-		next, err := n.plan.Next()
+		next, err := n.plan.Next(ctx)
 		if err != nil {
 			return false, err
 		}
 		if !next {
 			n.populated = true
-			if err := n.computeWindows(); err != nil {
+			if err := n.computeWindows(ctx); err != nil {
 				return false, err
 			}
-			if err := n.populateValues(); err != nil {
+			if err := n.populateValues(ctx); err != nil {
 				return false, err
 			}
 			break
@@ -436,15 +442,15 @@ func (n *windowNode) Next() (bool, error) {
 		renderEnd := n.wrappedRenderVals.NumCols()
 		windowDefEnd := renderEnd + n.wrappedWindowDefVals.NumCols()
 		renderVals := values[:renderEnd]
-		if _, err := n.wrappedRenderVals.AddRow(renderVals); err != nil {
+		if _, err := n.wrappedRenderVals.AddRow(ctx, renderVals); err != nil {
 			return false, err
 		}
 		windowDefVals := values[renderEnd:windowDefEnd]
-		if _, err := n.wrappedWindowDefVals.AddRow(windowDefVals); err != nil {
+		if _, err := n.wrappedWindowDefVals.AddRow(ctx, windowDefVals); err != nil {
 			return false, err
 		}
 		indexedVarVals := values[windowDefEnd:]
-		if _, err := n.wrappedIndexedVarVals.AddRow(indexedVarVals); err != nil {
+		if _, err := n.wrappedIndexedVarVals.AddRow(ctx, indexedVarVals); err != nil {
 			return false, err
 		}
 
@@ -454,7 +460,7 @@ func (n *windowNode) Next() (bool, error) {
 		}
 	}
 
-	return n.values.Next()
+	return n.values.Next(ctx)
 }
 
 type partitionSorter struct {
@@ -500,7 +506,7 @@ type peerGroupChecker interface {
 
 // computeWindows populates n.windowValues, adding a column of values to the
 // 2D-slice for each window function in n.funcs.
-func (n *windowNode) computeWindows() error {
+func (n *windowNode) computeWindows(ctx context.Context) error {
 	rowCount := n.wrappedRenderVals.Len()
 	if rowCount == 0 {
 		return nil
@@ -511,7 +517,7 @@ func (n *windowNode) computeWindows() error {
 
 	winValSz := uintptr(rowCount) * unsafe.Sizeof([]parser.Datum{})
 	winAllocSz := uintptr(rowCount*windowCount) * unsafe.Sizeof(parser.Datum(nil))
-	if err := acc.Grow(int64(winValSz + winAllocSz)); err != nil {
+	if err := acc.Grow(ctx, int64(winValSz+winAllocSz)); err != nil {
 		return err
 	}
 
@@ -530,7 +536,7 @@ func (n *windowNode) computeWindows() error {
 			// If no partition indexes are included for the window function, all
 			// rows are added to the same partition, which need to be pre-allocated.
 			sz := int64(uintptr(rowCount) * unsafe.Sizeof(parser.IndexedRow{}))
-			if err := acc.Grow(sz); err != nil {
+			if err := acc.Grow(ctx, sz); err != nil {
 				return err
 			}
 			partitions[""] = make([]parser.IndexedRow, rowCount)
@@ -538,7 +544,7 @@ func (n *windowNode) computeWindows() error {
 
 		if n := len(windowFn.partitionIdxs); n > cap(scratchDatum) {
 			sz := int64(uintptr(n) * unsafe.Sizeof(parser.Datum(nil)))
-			if err := acc.Grow(sz); err != nil {
+			if err := acc.Grow(ctx, sz); err != nil {
 				return err
 			}
 			scratchDatum = make([]parser.Datum, n)
@@ -573,7 +579,7 @@ func (n *windowNode) computeWindows() error {
 				}
 
 				sz := int64(uintptr(len(encoded)) + unsafe.Sizeof(entry))
-				if err := acc.Grow(sz); err != nil {
+				if err := acc.Grow(ctx, sz); err != nil {
 					return err
 				}
 				partitions[string(encoded)] = append(partitions[string(encoded)], entry)
@@ -652,7 +658,7 @@ func (n *windowNode) computeWindows() error {
 
 					// This may overestimate, because WindowFuncs may perform internal caching.
 					sz := res.Size()
-					if err := acc.Grow(int64(sz)); err != nil {
+					if err := acc.Grow(ctx, int64(sz)); err != nil {
 						return err
 					}
 
@@ -665,7 +671,7 @@ func (n *windowNode) computeWindows() error {
 	}
 
 	// Done using window definition values, release memory.
-	n.wrappedWindowDefVals.Close()
+	n.wrappedWindowDefVals.Close(ctx)
 	n.wrappedWindowDefVals = nil
 
 	return nil
@@ -673,7 +679,7 @@ func (n *windowNode) computeWindows() error {
 
 // populateValues populates n.values with final datum values after computing
 // window result values in n.windowValues.
-func (n *windowNode) populateValues() error {
+func (n *windowNode) populateValues(ctx context.Context) error {
 	acc := n.windowsAcc.Wtxn(n.planner.session)
 	rowCount := n.wrappedRenderVals.Len()
 	n.values.rows = NewRowContainer(
@@ -717,42 +723,42 @@ func (n *windowNode) populateValues() error {
 			}
 		}
 
-		if _, err := n.values.rows.AddRow(row); err != nil {
+		if _, err := n.values.rows.AddRow(ctx, row); err != nil {
 			return err
 		}
 	}
 
 	// Done using the output of computeWindows, release memory and clear
 	// accounts.
-	n.wrappedRenderVals.Close()
+	n.wrappedRenderVals.Close(ctx)
 	n.wrappedRenderVals = nil
-	n.wrappedIndexedVarVals.Close()
+	n.wrappedIndexedVarVals.Close(ctx)
 	n.wrappedIndexedVarVals = nil
 	n.windowValues = nil
-	acc.Close()
+	acc.Close(ctx)
 
 	return nil
 }
 
-func (n *windowNode) Close() {
-	n.plan.Close()
+func (n *windowNode) Close(ctx context.Context) {
+	n.plan.Close(ctx)
 	if n.wrappedRenderVals != nil {
-		n.wrappedRenderVals.Close()
+		n.wrappedRenderVals.Close(ctx)
 		n.wrappedRenderVals = nil
 	}
 	if n.wrappedWindowDefVals != nil {
-		n.wrappedWindowDefVals.Close()
+		n.wrappedWindowDefVals.Close(ctx)
 		n.wrappedWindowDefVals = nil
 	}
 	if n.wrappedIndexedVarVals != nil {
-		n.wrappedIndexedVarVals.Close()
+		n.wrappedIndexedVarVals.Close(ctx)
 		n.wrappedIndexedVarVals = nil
 	}
 	if n.windowValues != nil {
 		n.windowValues = nil
-		n.windowsAcc.Wtxn(n.planner.session).Close()
+		n.windowsAcc.Wtxn(n.planner.session).Close(ctx)
 	}
-	n.values.Close()
+	n.values.Close(ctx)
 }
 
 type extractWindowFuncsVisitor struct {

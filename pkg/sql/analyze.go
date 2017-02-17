@@ -22,6 +22,8 @@ import (
 	"regexp"
 	"strings"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 )
@@ -1603,6 +1605,7 @@ func makeIsNotNull(left parser.TypedExpr) parser.TypedExpr {
 // name resolution should be performed. The IndexedVars map will be filled
 // as a result.
 func (p *planner) analyzeExpr(
+	ctx context.Context,
 	raw parser.Expr,
 	sources multiSourceInfo,
 	iVarHelper parser.IndexedVarHelper,
@@ -1615,7 +1618,7 @@ func (p *planner) analyzeExpr(
 	// is expected. Tell this to replaceSubqueries.  (See UPDATE for a
 	// counter-example; cases where a subquery is an operand of a
 	// comparison are handled specially in the subqueryVisitor already.)
-	replaced, err := p.replaceSubqueries(raw, 1 /* one value expected */)
+	replaced, err := p.replaceSubqueries(ctx, raw, 1 /* one value expected */)
 	if err != nil {
 		return nil, err
 	}

@@ -354,7 +354,7 @@ func (mm *MemoryMonitor) Stop(ctx context.Context) {
 	mm.pool = nil
 
 	// Release the reserved budget to its original pool, if any.
-	mm.reserved.Close()
+	mm.reserved.Close(ctx)
 }
 
 // MemoryAccount tracks the cumulated allocations for one client of
@@ -370,7 +370,7 @@ type MemoryAccount struct {
 }
 
 // OpenAccount creates a new empty account.
-func (mm *MemoryMonitor) OpenAccount(_ context.Context, _ *MemoryAccount) {
+func (mm *MemoryMonitor) OpenAccount(_ *MemoryAccount) {
 	// TODO(knz): conditionally track accounts in the memory monitor
 	// (#9122).
 }
@@ -380,7 +380,7 @@ func (mm *MemoryMonitor) OpenAccount(_ context.Context, _ *MemoryAccount) {
 func (mm *MemoryMonitor) OpenAndInitAccount(
 	ctx context.Context, acc *MemoryAccount, initialAllocation int64,
 ) error {
-	mm.OpenAccount(ctx, acc)
+	mm.OpenAccount(acc)
 	return mm.GrowAccount(ctx, acc, initialAllocation)
 }
 
@@ -446,39 +446,38 @@ func (mm *MemoryMonitor) ResizeItem(
 type BoundAccount struct {
 	MemoryAccount
 	mon *MemoryMonitor
-	ctx context.Context
 }
 
 // MakeStandaloneBudget creates a BoundAccount suitable for root
 // monitors.
 func MakeStandaloneBudget(capacity int64) BoundAccount {
-	return BoundAccount{MemoryAccount{curAllocated: capacity}, nil, nil}
+	return BoundAccount{MemoryAccount: MemoryAccount{curAllocated: capacity}}
 }
 
 // MakeBoundAccount greates a BoundAccount connected to the given monitor.
-func (mm *MemoryMonitor) MakeBoundAccount(ctx context.Context) BoundAccount {
-	return BoundAccount{mon: mm, ctx: ctx}
+func (mm *MemoryMonitor) MakeBoundAccount() BoundAccount {
+	return BoundAccount{mon: mm}
 }
 
 // Close is an accessor for b.mon.CloseAccount.
-func (b *BoundAccount) Close() {
+func (b *BoundAccount) Close(ctx context.Context) {
 	if b.mon == nil {
 		// An account created by MakeStandaloneBudget is disconnected
 		// from any monitor -- "memory out of the aether". This needs not be
 		// closed.
 		return
 	}
-	b.mon.CloseAccount(b.ctx, &b.MemoryAccount)
+	b.mon.CloseAccount(ctx, &b.MemoryAccount)
 }
 
 // ResizeItem is an accessor for b.mon.ResizeItem.
-func (b *BoundAccount) ResizeItem(oldSz, newSz int64) error {
-	return b.mon.ResizeItem(b.ctx, &b.MemoryAccount, oldSz, newSz)
+func (b *BoundAccount) ResizeItem(ctx context.Context, oldSz, newSz int64) error {
+	return b.mon.ResizeItem(ctx, &b.MemoryAccount, oldSz, newSz)
 }
 
 // Grow is an accessor for b.mon.Grow.
-func (b *BoundAccount) Grow(x int64) error {
-	return b.mon.GrowAccount(b.ctx, &b.MemoryAccount, x)
+func (b *BoundAccount) Grow(ctx context.Context, x int64) error {
+	return b.mon.GrowAccount(ctx, &b.MemoryAccount, x)
 }
 
 // reserveMemory declares an allocation to this monitor. An error is

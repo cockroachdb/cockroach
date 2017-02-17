@@ -115,7 +115,7 @@ func TestTableReader(t *testing.T) {
 		ts.Table = *td
 
 		flowCtx := FlowCtx{
-			evalCtx:  &parser.EvalContext{},
+			evalCtx:  parser.EvalContext{},
 			txnProto: &roachpb.Transaction{},
 			clientDB: kvDB,
 		}
