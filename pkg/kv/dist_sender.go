@@ -1196,6 +1196,29 @@ func (ds *DistSender) sendToReplicas(
 
 						// Move the new lease holder to the head of the queue for the next retry.
 						transport.MoveToFront(*lh)
+
+						// If we're still here when the reported lease is set to expire,
+						// move the reporting replica back to the front of the queue; it
+						// may now have acquired the lease.
+
+						log.Infof(ctx, "tErr.Lease=%v", tErr.Lease)
+
+						if l := tErr.Lease; l != nil {
+							now := args.Timestamp
+							log.Infof(ctx, "now=%s", now.GoTime())
+							if now == (hlc.Timestamp{}) {
+								now = l.Start
+								log.Infof(ctx, "now=%s", now.GoTime())
+							}
+							if now == (hlc.Timestamp{}) {
+								now = ds.clock.Now()
+								log.Infof(ctx, "now=%s", now.GoTime())
+							}
+							log.Infof(ctx, "l.Expiration=%s", l.Expiration.GoTime())
+							defer time.AfterFunc(l.Expiration.GoTime().Sub(now.GoTime()), func() {
+								transport.MoveToFront(tErr.Replica)
+							}).Stop()
+						}
 					}
 				default:
 					// The error received is not specific to this replica, so we
