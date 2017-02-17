@@ -121,7 +121,9 @@ func (rgcq *replicaGCQueue) shouldQueue(
 		return false, 0
 	}
 
-	lastActivity := hlc.ZeroTimestamp.Add(repl.store.startedAt, 0)
+	lastActivity := hlc.Timestamp{
+		WallTime: repl.store.startedAt,
+	}
 
 	if lease, _ := repl.getLease(); lease != nil && lease.ProposedTS != nil {
 		lastActivity.Forward(*lease.ProposedTS)

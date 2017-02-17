@@ -415,7 +415,7 @@ func TestClientGetAndPut(t *testing.T) {
 	if !bytes.Equal(value, gr.ValueBytes()) {
 		t.Errorf("expected values equal; %s != %s", value, gr.ValueBytes())
 	}
-	if gr.Value.Timestamp.Equal(hlc.ZeroTimestamp) {
+	if gr.Value.Timestamp == (hlc.Timestamp{}) {
 		t.Fatalf("expected non-zero timestamp; got empty")
 	}
 }
@@ -437,7 +437,7 @@ func TestClientPutInline(t *testing.T) {
 	if !bytes.Equal(value, gr.ValueBytes()) {
 		t.Errorf("expected values equal; %s != %s", value, gr.ValueBytes())
 	}
-	if ts := gr.Value.Timestamp; !ts.Equal(hlc.ZeroTimestamp) {
+	if ts := gr.Value.Timestamp; ts != (hlc.Timestamp{}) {
 		t.Fatalf("expected zero timestamp; got %s", ts)
 	}
 }

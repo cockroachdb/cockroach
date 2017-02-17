@@ -55,7 +55,7 @@ func evalExport(
 	// the resulting RocksDB tombstones compacted, which means we'd miss
 	// deletions in the incremental backup.
 	gcThreshold := r.GCThreshold()
-	if !args.StartTime.Equal(hlc.ZeroTimestamp) {
+	if args.StartTime != (hlc.Timestamp{}) {
 		if !gcThreshold.Less(args.StartTime) {
 			return storage.EvalResult{}, errors.Errorf("start timestamp %v must be after replica GC threshold %v", args.StartTime, gcThreshold)
 		}

@@ -141,7 +141,7 @@ func (rsl replicaStateLoader) loadLease(
 ) (roachpb.Lease, error) {
 	var lease roachpb.Lease
 	_, err := engine.MVCCGetProto(ctx, reader, rsl.RangeLeaseKey(),
-		hlc.ZeroTimestamp, true, nil, &lease)
+		hlc.Timestamp{}, true, nil, &lease)
 	return lease, err
 }
 
@@ -152,7 +152,7 @@ func (rsl replicaStateLoader) setLease(
 		return errors.New("cannot persist nil Lease")
 	}
 	return engine.MVCCPutProto(ctx, eng, ms, rsl.RangeLeaseKey(),
-		hlc.ZeroTimestamp, nil, lease)
+		hlc.Timestamp{}, nil, lease)
 }
 
 func loadAppliedIndex(
@@ -168,7 +168,7 @@ func (rsl replicaStateLoader) loadAppliedIndex(
 ) (uint64, uint64, error) {
 	var appliedIndex uint64
 	v, _, err := engine.MVCCGet(ctx, reader, rsl.RaftAppliedIndexKey(),
-		hlc.ZeroTimestamp, true, nil)
+		hlc.Timestamp{}, true, nil)
 	if err != nil {
 		return 0, 0, err
 	}
@@ -182,7 +182,7 @@ func (rsl replicaStateLoader) loadAppliedIndex(
 	// TODO(tschottdorf): code duplication.
 	var leaseAppliedIndex uint64
 	v, _, err = engine.MVCCGet(ctx, reader, rsl.LeaseAppliedIndexKey(),
-		hlc.ZeroTimestamp, true, nil)
+		hlc.Timestamp{}, true, nil)
 	if err != nil {
 		return 0, 0, err
 	}
@@ -210,7 +210,7 @@ func (rsl replicaStateLoader) setAppliedIndex(
 	value.SetInt(int64(appliedIndex))
 	if err := engine.MVCCPut(ctx, eng, ms,
 		rsl.RaftAppliedIndexKey(),
-		hlc.ZeroTimestamp,
+		hlc.Timestamp{},
 		value,
 		nil /* txn */); err != nil {
 		return err
@@ -218,7 +218,7 @@ func (rsl replicaStateLoader) setAppliedIndex(
 	value.SetInt(int64(leaseAppliedIndex))
 	return engine.MVCCPut(ctx, eng, ms,
 		rsl.LeaseAppliedIndexKey(),
-		hlc.ZeroTimestamp,
+		hlc.Timestamp{},
 		value,
 		nil /* txn */)
 }
@@ -239,7 +239,7 @@ func (rsl replicaStateLoader) setAppliedIndexBlind(
 	value.SetInt(int64(appliedIndex))
 	if err := engine.MVCCBlindPut(ctx, eng, ms,
 		rsl.RaftAppliedIndexKey(),
-		hlc.ZeroTimestamp,
+		hlc.Timestamp{},
 		value,
 		nil /* txn */); err != nil {
 		return err
@@ -247,7 +247,7 @@ func (rsl replicaStateLoader) setAppliedIndexBlind(
 	value.SetInt(int64(leaseAppliedIndex))
 	return engine.MVCCBlindPut(ctx, eng, ms,
 		rsl.LeaseAppliedIndexKey(),
-		hlc.ZeroTimestamp,
+		hlc.Timestamp{},
 		value,
 		nil /* txn */)
 }
@@ -282,7 +282,7 @@ func (rsl replicaStateLoader) loadTruncatedState(
 ) (roachpb.RaftTruncatedState, error) {
 	var truncState roachpb.RaftTruncatedState
 	if _, err := engine.MVCCGetProto(ctx, reader,
-		rsl.RaftTruncatedStateKey(), hlc.ZeroTimestamp, true,
+		rsl.RaftTruncatedStateKey(), hlc.Timestamp{}, true,
 		nil, &truncState); err != nil {
 		return roachpb.RaftTruncatedState{}, err
 	}
@@ -299,7 +299,7 @@ func (rsl replicaStateLoader) setTruncatedState(
 		return errors.New("cannot persist empty RaftTruncatedState")
 	}
 	return engine.MVCCPutProto(ctx, eng, ms,
-		rsl.RaftTruncatedStateKey(), hlc.ZeroTimestamp, nil, truncState)
+		rsl.RaftTruncatedStateKey(), hlc.Timestamp{}, nil, truncState)
 }
 
 func (rsl replicaStateLoader) loadGCThreshold(
@@ -307,7 +307,7 @@ func (rsl replicaStateLoader) loadGCThreshold(
 ) (hlc.Timestamp, error) {
 	var t hlc.Timestamp
 	_, err := engine.MVCCGetProto(ctx, reader, rsl.RangeLastGCKey(),
-		hlc.ZeroTimestamp, true, nil, &t)
+		hlc.Timestamp{}, true, nil, &t)
 	return t, err
 }
 
@@ -318,7 +318,7 @@ func (rsl replicaStateLoader) setGCThreshold(
 		return errors.New("cannot persist nil GCThreshold")
 	}
 	return engine.MVCCPutProto(ctx, eng, ms,
-		rsl.RangeLastGCKey(), hlc.ZeroTimestamp, nil, threshold)
+		rsl.RangeLastGCKey(), hlc.Timestamp{}, nil, threshold)
 }
 
 func (rsl replicaStateLoader) loadTxnSpanGCThreshold(
@@ -326,7 +326,7 @@ func (rsl replicaStateLoader) loadTxnSpanGCThreshold(
 ) (hlc.Timestamp, error) {
 	var t hlc.Timestamp
 	_, err := engine.MVCCGetProto(ctx, reader, rsl.RangeTxnSpanGCThresholdKey(),
-		hlc.ZeroTimestamp, true, nil, &t)
+		hlc.Timestamp{}, true, nil, &t)
 	return t, err
 }
 
@@ -338,21 +338,21 @@ func (rsl replicaStateLoader) setTxnSpanGCThreshold(
 	}
 
 	return engine.MVCCPutProto(ctx, eng, ms,
-		rsl.RangeTxnSpanGCThresholdKey(), hlc.ZeroTimestamp, nil, threshold)
+		rsl.RangeTxnSpanGCThresholdKey(), hlc.Timestamp{}, nil, threshold)
 }
 
 func (rsl replicaStateLoader) loadMVCCStats(
 	ctx context.Context, reader engine.Reader,
 ) (enginepb.MVCCStats, error) {
 	var ms enginepb.MVCCStats
-	_, err := engine.MVCCGetProto(ctx, reader, rsl.RangeStatsKey(), hlc.ZeroTimestamp, true, nil, &ms)
+	_, err := engine.MVCCGetProto(ctx, reader, rsl.RangeStatsKey(), hlc.Timestamp{}, true, nil, &ms)
 	return ms, err
 }
 
 func (rsl replicaStateLoader) setMVCCStats(
 	ctx context.Context, eng engine.ReadWriter, newMS *enginepb.MVCCStats,
 ) error {
-	return engine.MVCCPutProto(ctx, eng, nil, rsl.RangeStatsKey(), hlc.ZeroTimestamp, nil, newMS)
+	return engine.MVCCPutProto(ctx, eng, nil, rsl.RangeStatsKey(), hlc.Timestamp{}, nil, newMS)
 }
 
 func (rsl replicaStateLoader) setFrozenStatus(
@@ -366,7 +366,7 @@ func (rsl replicaStateLoader) setFrozenStatus(
 	}
 	var val roachpb.Value
 	val.SetBool(frozen == storagebase.ReplicaState_FROZEN)
-	return engine.MVCCPut(ctx, eng, ms, rsl.RangeFrozenStatusKey(), hlc.ZeroTimestamp, val, nil)
+	return engine.MVCCPut(ctx, eng, ms, rsl.RangeFrozenStatusKey(), hlc.Timestamp{}, val, nil)
 }
 
 func (rsl replicaStateLoader) loadFrozenStatus(
@@ -374,7 +374,7 @@ func (rsl replicaStateLoader) loadFrozenStatus(
 ) (storagebase.ReplicaState_FrozenEnum, error) {
 	var zero storagebase.ReplicaState_FrozenEnum
 	val, _, err := engine.MVCCGet(ctx, reader, rsl.RangeFrozenStatusKey(),
-		hlc.ZeroTimestamp, true, nil)
+		hlc.Timestamp{}, true, nil)
 	if err != nil {
 		return zero, err
 	}
@@ -407,7 +407,7 @@ func (rsl replicaStateLoader) loadLastIndex(
 ) (uint64, error) {
 	var lastIndex uint64
 	v, _, err := engine.MVCCGet(ctx, reader, rsl.RaftLastIndexKey(),
-		hlc.ZeroTimestamp, true /* consistent */, nil)
+		hlc.Timestamp{}, true /* consistent */, nil)
 	if err != nil {
 		return 0, err
 	}
@@ -435,7 +435,7 @@ func (rsl replicaStateLoader) setLastIndex(
 	var value roachpb.Value
 	value.SetInt(int64(lastIndex))
 	return engine.MVCCPut(ctx, eng, nil, rsl.RaftLastIndexKey(),
-		hlc.ZeroTimestamp, value, nil /* txn */)
+		hlc.Timestamp{}, value, nil /* txn */)
 }
 
 // loadReplicaDestroyedError loads the replica destroyed error for the specified
@@ -446,7 +446,7 @@ func (rsl replicaStateLoader) loadReplicaDestroyedError(
 	var v roachpb.Error
 	found, err := engine.MVCCGetProto(ctx, reader,
 		rsl.RangeReplicaDestroyedErrorKey(),
-		hlc.ZeroTimestamp, true /* consistent */, nil, &v)
+		hlc.Timestamp{}, true /* consistent */, nil, &v)
 	if err != nil {
 		return nil, err
 	}
@@ -462,7 +462,7 @@ func (rsl replicaStateLoader) setReplicaDestroyedError(
 	ctx context.Context, eng engine.ReadWriter, err *roachpb.Error,
 ) error {
 	return engine.MVCCPutProto(ctx, eng, nil,
-		rsl.RangeReplicaDestroyedErrorKey(), hlc.ZeroTimestamp, nil /* txn */, err)
+		rsl.RangeReplicaDestroyedErrorKey(), hlc.Timestamp{}, nil /* txn */, err)
 }
 
 func loadHardState(
@@ -478,7 +478,7 @@ func (rsl replicaStateLoader) loadHardState(
 	var hs raftpb.HardState
 	found, err := engine.MVCCGetProto(ctx, reader,
 		rsl.RaftHardStateKey(),
-		hlc.ZeroTimestamp, true, nil, &hs)
+		hlc.Timestamp{}, true, nil, &hs)
 
 	if !found || err != nil {
 		return raftpb.HardState{}, err
@@ -490,7 +490,7 @@ func (rsl replicaStateLoader) setHardState(
 	ctx context.Context, batch engine.ReadWriter, st raftpb.HardState,
 ) error {
 	return engine.MVCCPutProto(ctx, batch, nil,
-		rsl.RaftHardStateKey(), hlc.ZeroTimestamp, nil, &st)
+		rsl.RaftHardStateKey(), hlc.Timestamp{}, nil, &st)
 }
 
 // synthesizeHardState synthesizes a HardState from the given ReplicaState and

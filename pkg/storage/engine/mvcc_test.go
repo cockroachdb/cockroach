@@ -60,13 +60,13 @@ var (
 	testKey4     = roachpb.Key("/db4")
 	testKey5     = roachpb.Key("/db5")
 	testKey6     = roachpb.Key("/db6")
-	txn1         = &roachpb.Transaction{TxnMeta: enginepb.TxnMeta{Key: roachpb.Key("a"), ID: &txn1ID, Epoch: 1, Timestamp: makeTS(0, 1)}}
-	txn1Commit   = &roachpb.Transaction{TxnMeta: enginepb.TxnMeta{Key: roachpb.Key("a"), ID: &txn1ID, Epoch: 1, Timestamp: makeTS(0, 1)}, Status: roachpb.COMMITTED}
+	txn1         = &roachpb.Transaction{TxnMeta: enginepb.TxnMeta{Key: roachpb.Key("a"), ID: &txn1ID, Epoch: 1, Timestamp: hlc.Timestamp{Logical: 1}}}
+	txn1Commit   = &roachpb.Transaction{TxnMeta: enginepb.TxnMeta{Key: roachpb.Key("a"), ID: &txn1ID, Epoch: 1, Timestamp: hlc.Timestamp{Logical: 1}}, Status: roachpb.COMMITTED}
 	txn1Abort    = &roachpb.Transaction{TxnMeta: enginepb.TxnMeta{Key: roachpb.Key("a"), ID: &txn1ID, Epoch: 1}, Status: roachpb.ABORTED}
-	txn1e2       = &roachpb.Transaction{TxnMeta: enginepb.TxnMeta{Key: roachpb.Key("a"), ID: &txn1ID, Epoch: 2, Timestamp: makeTS(0, 1)}}
-	txn1e2Commit = &roachpb.Transaction{TxnMeta: enginepb.TxnMeta{Key: roachpb.Key("a"), ID: &txn1ID, Epoch: 2, Timestamp: makeTS(0, 1)}, Status: roachpb.COMMITTED}
-	txn2         = &roachpb.Transaction{TxnMeta: enginepb.TxnMeta{Key: roachpb.Key("a"), ID: &txn2ID, Timestamp: makeTS(0, 1)}}
-	txn2Commit   = &roachpb.Transaction{TxnMeta: enginepb.TxnMeta{Key: roachpb.Key("a"), ID: &txn2ID, Timestamp: makeTS(0, 1)}, Status: roachpb.COMMITTED}
+	txn1e2       = &roachpb.Transaction{TxnMeta: enginepb.TxnMeta{Key: roachpb.Key("a"), ID: &txn1ID, Epoch: 2, Timestamp: hlc.Timestamp{Logical: 1}}}
+	txn1e2Commit = &roachpb.Transaction{TxnMeta: enginepb.TxnMeta{Key: roachpb.Key("a"), ID: &txn1ID, Epoch: 2, Timestamp: hlc.Timestamp{Logical: 1}}, Status: roachpb.COMMITTED}
+	txn2         = &roachpb.Transaction{TxnMeta: enginepb.TxnMeta{Key: roachpb.Key("a"), ID: &txn2ID, Timestamp: hlc.Timestamp{Logical: 1}}}
+	txn2Commit   = &roachpb.Transaction{TxnMeta: enginepb.TxnMeta{Key: roachpb.Key("a"), ID: &txn2ID, Timestamp: hlc.Timestamp{Logical: 1}}, Status: roachpb.COMMITTED}
 	value1       = roachpb.MakeValueFromString("testValue1")
 	value2       = roachpb.MakeValueFromString("testValue2")
 	value3       = roachpb.MakeValueFromString("testValue3")
@@ -94,14 +94,6 @@ func makeTxn(baseTxn roachpb.Transaction, ts hlc.Timestamp) *roachpb.Transaction
 	txn := baseTxn.Clone()
 	txn.Timestamp = ts
 	return &txn
-}
-
-// makeTS creates a new hybrid logical timestamp.
-func makeTS(nanos int64, logical int32) hlc.Timestamp {
-	return hlc.Timestamp{
-		WallTime: nanos,
-		Logical:  logical,
-	}
 }
 
 type mvccKeys []MVCCKey
@@ -247,13 +239,13 @@ func TestMVCCKeys(t *testing.T) {
 	a0Key := roachpb.Key("a\x00")
 	keys := mvccKeys{
 		mvccKey(aKey),
-		mvccVersionKey(aKey, makeTS(math.MaxInt64, 0)),
-		mvccVersionKey(aKey, makeTS(1, 0)),
-		mvccVersionKey(aKey, makeTS(0, 1)),
+		mvccVersionKey(aKey, hlc.Timestamp{WallTime: math.MaxInt64}),
+		mvccVersionKey(aKey, hlc.Timestamp{WallTime: 1}),
+		mvccVersionKey(aKey, hlc.Timestamp{Logical: 1}),
 		mvccKey(a0Key),
-		mvccVersionKey(a0Key, makeTS(math.MaxInt64, 0)),
-		mvccVersionKey(a0Key, makeTS(1, 0)),
-		mvccVersionKey(a0Key, makeTS(0, 1)),
+		mvccVersionKey(a0Key, hlc.Timestamp{WallTime: math.MaxInt64}),
+		mvccVersionKey(a0Key, hlc.Timestamp{WallTime: 1}),
+		mvccVersionKey(a0Key, hlc.Timestamp{Logical: 1}),
 	}
 	sortKeys := make(mvccKeys, len(keys))
 	copy(sortKeys, keys)
@@ -268,16 +260,16 @@ func TestMVCCEmptyKey(t *testing.T) {
 	engine := createTestEngine()
 	defer engine.Close()
 
-	if _, _, err := MVCCGet(context.Background(), engine, roachpb.Key{}, makeTS(0, 1), true, nil); err == nil {
+	if _, _, err := MVCCGet(context.Background(), engine, roachpb.Key{}, hlc.Timestamp{Logical: 1}, true, nil); err == nil {
 		t.Error("expected empty key error")
 	}
-	if err := MVCCPut(context.Background(), engine, nil, roachpb.Key{}, makeTS(0, 1), value1, nil); err == nil {
+	if err := MVCCPut(context.Background(), engine, nil, roachpb.Key{}, hlc.Timestamp{Logical: 1}, value1, nil); err == nil {
 		t.Error("expected empty key error")
 	}
-	if _, _, _, err := MVCCScan(context.Background(), engine, roachpb.Key{}, testKey1, math.MaxInt64, makeTS(0, 1), true, nil); err != nil {
+	if _, _, _, err := MVCCScan(context.Background(), engine, roachpb.Key{}, testKey1, math.MaxInt64, hlc.Timestamp{Logical: 1}, true, nil); err != nil {
 		t.Errorf("empty key allowed for start key in scan; got %s", err)
 	}
-	if _, _, _, err := MVCCScan(context.Background(), engine, testKey1, roachpb.Key{}, math.MaxInt64, makeTS(0, 1), true, nil); err == nil {
+	if _, _, _, err := MVCCScan(context.Background(), engine, testKey1, roachpb.Key{}, math.MaxInt64, hlc.Timestamp{Logical: 1}, true, nil); err == nil {
 		t.Error("expected empty key error")
 	}
 	if err := MVCCResolveWriteIntent(context.Background(), engine, nil, roachpb.Intent{}); err == nil {
@@ -290,7 +282,7 @@ func TestMVCCGetNotExist(t *testing.T) {
 	engine := createTestEngine()
 	defer engine.Close()
 
-	value, _, err := MVCCGet(context.Background(), engine, testKey1, makeTS(0, 1), true, nil)
+	value, _, err := MVCCGet(context.Background(), engine, testKey1, hlc.Timestamp{Logical: 1}, true, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -304,11 +296,11 @@ func TestMVCCPutWithTxn(t *testing.T) {
 	engine := createTestEngine()
 	defer engine.Close()
 
-	if err := MVCCPut(context.Background(), engine, nil, testKey1, makeTS(0, 1), value1, txn1); err != nil {
+	if err := MVCCPut(context.Background(), engine, nil, testKey1, hlc.Timestamp{Logical: 1}, value1, txn1); err != nil {
 		t.Fatal(err)
 	}
 
-	for _, ts := range []hlc.Timestamp{makeTS(0, 1), makeTS(0, 2), makeTS(1, 0)} {
+	for _, ts := range []hlc.Timestamp{{Logical: 1}, {Logical: 2}, {WallTime: 1}} {
 		value, _, err := MVCCGet(context.Background(), engine, testKey1, ts, true, txn1)
 		if err != nil {
 			t.Fatal(err)
@@ -325,12 +317,12 @@ func TestMVCCPutWithoutTxn(t *testing.T) {
 	engine := createTestEngine()
 	defer engine.Close()
 
-	err := MVCCPut(context.Background(), engine, nil, testKey1, makeTS(0, 1), value1, nil)
+	err := MVCCPut(context.Background(), engine, nil, testKey1, hlc.Timestamp{Logical: 1}, value1, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	for _, ts := range []hlc.Timestamp{makeTS(0, 1), makeTS(0, 2), makeTS(1, 0)} {
+	for _, ts := range []hlc.Timestamp{{Logical: 1}, {Logical: 2}, {WallTime: 1}} {
 		value, _, err := MVCCGet(context.Background(), engine, testKey1, ts, true, nil)
 		if err != nil {
 			t.Fatal(err)
@@ -349,18 +341,18 @@ func TestMVCCPutOutOfOrder(t *testing.T) {
 	engine := createTestEngine()
 	defer engine.Close()
 
-	if err := MVCCPut(context.Background(), engine, nil, testKey1, makeTS(2, 1), value1, txn1); err != nil {
+	if err := MVCCPut(context.Background(), engine, nil, testKey1, hlc.Timestamp{WallTime: 2, Logical: 1}, value1, txn1); err != nil {
 		t.Fatal(err)
 	}
 
 	// Put operation with earlier wall time. Will NOT be ignored.
 	txn := *txn1
 	txn.Sequence++
-	if err := MVCCPut(context.Background(), engine, nil, testKey1, makeTS(1, 0), value2, &txn); err != nil {
+	if err := MVCCPut(context.Background(), engine, nil, testKey1, hlc.Timestamp{WallTime: 1}, value2, &txn); err != nil {
 		t.Fatal(err)
 	}
 
-	value, _, err := MVCCGet(context.Background(), engine, testKey1, makeTS(3, 0), true, &txn)
+	value, _, err := MVCCGet(context.Background(), engine, testKey1, hlc.Timestamp{WallTime: 3}, true, &txn)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -371,11 +363,11 @@ func TestMVCCPutOutOfOrder(t *testing.T) {
 
 	// Another put operation with earlier logical time. Will NOT be ignored.
 	txn.Sequence++
-	if err := MVCCPut(context.Background(), engine, nil, testKey1, makeTS(2, 0), value2, &txn); err != nil {
+	if err := MVCCPut(context.Background(), engine, nil, testKey1, hlc.Timestamp{WallTime: 2}, value2, &txn); err != nil {
 		t.Fatal(err)
 	}
 
-	value, _, err = MVCCGet(context.Background(), engine, testKey1, makeTS(3, 0), true, &txn)
+	value, _, err = MVCCGet(context.Background(), engine, testKey1, hlc.Timestamp{WallTime: 3}, true, &txn)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -392,14 +384,14 @@ func TestMVCCIncrement(t *testing.T) {
 	engine := createTestEngine()
 	defer engine.Close()
 
-	newVal, err := MVCCIncrement(context.Background(), engine, nil, testKey1, makeTS(0, 1), nil, 0)
+	newVal, err := MVCCIncrement(context.Background(), engine, nil, testKey1, hlc.Timestamp{Logical: 1}, nil, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if newVal != 0 {
 		t.Errorf("expected new value of 0; got %d", newVal)
 	}
-	val, _, err := MVCCGet(context.Background(), engine, testKey1, makeTS(0, 1), true, nil)
+	val, _, err := MVCCGet(context.Background(), engine, testKey1, hlc.Timestamp{Logical: 1}, true, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -407,7 +399,7 @@ func TestMVCCIncrement(t *testing.T) {
 		t.Errorf("expected increment of 0 to create key/value")
 	}
 
-	newVal, err = MVCCIncrement(context.Background(), engine, nil, testKey1, makeTS(0, 2), nil, 2)
+	newVal, err = MVCCIncrement(context.Background(), engine, nil, testKey1, hlc.Timestamp{Logical: 2}, nil, 2)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -425,7 +417,7 @@ func TestMVCCIncrementTxn(t *testing.T) {
 	txn := *txn1
 	for i := 1; i <= 2; i++ {
 		txn.Sequence++
-		newVal, err := MVCCIncrement(context.Background(), engine, nil, testKey1, makeTS(0, 1), &txn, 1)
+		newVal, err := MVCCIncrement(context.Background(), engine, nil, testKey1, hlc.Timestamp{Logical: 1}, &txn, 1)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -446,25 +438,25 @@ func TestMVCCIncrementOldTimestamp(t *testing.T) {
 	// Write an integer value.
 	val := roachpb.Value{}
 	val.SetInt(1)
-	err := MVCCPut(context.Background(), engine, nil, testKey1, makeTS(1, 0), val, nil)
+	err := MVCCPut(context.Background(), engine, nil, testKey1, hlc.Timestamp{WallTime: 1}, val, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	// Override value.
 	val.SetInt(2)
-	if err := MVCCPut(context.Background(), engine, nil, testKey1, makeTS(3, 0), val, nil); err != nil {
+	if err := MVCCPut(context.Background(), engine, nil, testKey1, hlc.Timestamp{WallTime: 3}, val, nil); err != nil {
 		t.Fatal(err)
 	}
 
 	// Attempt to increment a value with an older timestamp than
 	// the previous put. This will fail with type mismatch (not
 	// with WriteTooOldError).
-	incVal, err := MVCCIncrement(context.Background(), engine, nil, testKey1, makeTS(2, 0), nil, 1)
+	incVal, err := MVCCIncrement(context.Background(), engine, nil, testKey1, hlc.Timestamp{WallTime: 2}, nil, 1)
 	if wtoErr, ok := err.(*roachpb.WriteTooOldError); !ok {
 		t.Fatalf("unexpectedly not WriteTooOld: %s", err)
-	} else if !wtoErr.ActualTimestamp.Equal(makeTS(3, 1)) {
-		t.Fatalf("expected write too old error with actual ts %s; got %s", makeTS(1, 1), wtoErr.ActualTimestamp)
+	} else if expTS := (hlc.Timestamp{WallTime: 3, Logical: 1}); wtoErr.ActualTimestamp != (expTS) {
+		t.Fatalf("expected write too old error with actual ts %s; got %s", expTS, wtoErr.ActualTimestamp)
 	}
 	if incVal != 3 {
 		t.Fatalf("expected value=%d; got %d", 3, incVal)
@@ -476,12 +468,12 @@ func TestMVCCUpdateExistingKey(t *testing.T) {
 	engine := createTestEngine()
 	defer engine.Close()
 
-	err := MVCCPut(context.Background(), engine, nil, testKey1, makeTS(0, 1), value1, nil)
+	err := MVCCPut(context.Background(), engine, nil, testKey1, hlc.Timestamp{Logical: 1}, value1, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	value, _, err := MVCCGet(context.Background(), engine, testKey1, makeTS(1, 0), true, nil)
+	value, _, err := MVCCGet(context.Background(), engine, testKey1, hlc.Timestamp{WallTime: 1}, true, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -490,12 +482,12 @@ func TestMVCCUpdateExistingKey(t *testing.T) {
 			value1.RawBytes, value.RawBytes)
 	}
 
-	if err := MVCCPut(context.Background(), engine, nil, testKey1, makeTS(2, 0), value2, nil); err != nil {
+	if err := MVCCPut(context.Background(), engine, nil, testKey1, hlc.Timestamp{WallTime: 2}, value2, nil); err != nil {
 		t.Fatal(err)
 	}
 
 	// Read the latest version.
-	value, _, err = MVCCGet(context.Background(), engine, testKey1, makeTS(3, 0), true, nil)
+	value, _, err = MVCCGet(context.Background(), engine, testKey1, hlc.Timestamp{WallTime: 3}, true, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -505,7 +497,7 @@ func TestMVCCUpdateExistingKey(t *testing.T) {
 	}
 
 	// Read the old version.
-	value, _, err = MVCCGet(context.Background(), engine, testKey1, makeTS(1, 0), true, nil)
+	value, _, err = MVCCGet(context.Background(), engine, testKey1, hlc.Timestamp{WallTime: 1}, true, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -520,15 +512,15 @@ func TestMVCCUpdateExistingKeyOldVersion(t *testing.T) {
 	engine := createTestEngine()
 	defer engine.Close()
 
-	if err := MVCCPut(context.Background(), engine, nil, testKey1, makeTS(1, 1), value1, nil); err != nil {
+	if err := MVCCPut(context.Background(), engine, nil, testKey1, hlc.Timestamp{WallTime: 1, Logical: 1}, value1, nil); err != nil {
 		t.Fatal(err)
 	}
 	// Earlier wall time.
-	if err := MVCCPut(context.Background(), engine, nil, testKey1, makeTS(0, 1), value2, nil); err == nil {
+	if err := MVCCPut(context.Background(), engine, nil, testKey1, hlc.Timestamp{Logical: 1}, value2, nil); err == nil {
 		t.Fatal("expected error on old version")
 	}
 	// Earlier logical time.
-	if err := MVCCPut(context.Background(), engine, nil, testKey1, makeTS(1, 0), value2, nil); err == nil {
+	if err := MVCCPut(context.Background(), engine, nil, testKey1, hlc.Timestamp{WallTime: 1}, value2, nil); err == nil {
 		t.Fatal("expected error on old version")
 	}
 }
@@ -539,12 +531,12 @@ func TestMVCCUpdateExistingKeyInTxn(t *testing.T) {
 	defer engine.Close()
 
 	txn := *txn1
-	if err := MVCCPut(context.Background(), engine, nil, testKey1, makeTS(0, 1), value1, &txn); err != nil {
+	if err := MVCCPut(context.Background(), engine, nil, testKey1, hlc.Timestamp{Logical: 1}, value1, &txn); err != nil {
 		t.Fatal(err)
 	}
 
 	txn.Sequence++
-	if err := MVCCPut(context.Background(), engine, nil, testKey1, makeTS(1, 0), value1, &txn); err != nil {
+	if err := MVCCPut(context.Background(), engine, nil, testKey1, hlc.Timestamp{WallTime: 1}, value1, &txn); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -554,11 +546,11 @@ func TestMVCCUpdateExistingKeyDiffTxn(t *testing.T) {
 	engine := createTestEngine()
 	defer engine.Close()
 
-	if err := MVCCPut(context.Background(), engine, nil, testKey1, makeTS(0, 1), value1, txn1); err != nil {
+	if err := MVCCPut(context.Background(), engine, nil, testKey1, hlc.Timestamp{Logical: 1}, value1, txn1); err != nil {
 		t.Fatal(err)
 	}
 
-	if err := MVCCPut(context.Background(), engine, nil, testKey1, makeTS(1, 0), value2, txn2); err == nil {
+	if err := MVCCPut(context.Background(), engine, nil, testKey1, hlc.Timestamp{WallTime: 1}, value2, txn2); err == nil {
 		t.Fatal("expected error on uncommitted write intent")
 	}
 }
@@ -580,14 +572,14 @@ func TestMVCCGetNoMoreOldVersion(t *testing.T) {
 	engine := createTestEngine()
 	defer engine.Close()
 
-	if err := MVCCPut(context.Background(), engine, nil, testKey1, makeTS(3, 0), value1, nil); err != nil {
+	if err := MVCCPut(context.Background(), engine, nil, testKey1, hlc.Timestamp{WallTime: 3}, value1, nil); err != nil {
 		t.Fatal(err)
 	}
-	if err := MVCCPut(context.Background(), engine, nil, testKey2, makeTS(1, 0), value2, nil); err != nil {
+	if err := MVCCPut(context.Background(), engine, nil, testKey2, hlc.Timestamp{WallTime: 1}, value2, nil); err != nil {
 		t.Fatal(err)
 	}
 
-	value, _, err := MVCCGet(context.Background(), engine, testKey1, makeTS(2, 0), true, nil)
+	value, _, err := MVCCGet(context.Background(), engine, testKey1, hlc.Timestamp{WallTime: 2}, true, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -605,17 +597,17 @@ func TestMVCCGetUncertainty(t *testing.T) {
 	defer engine.Close()
 
 	u := uuid.MakeV4()
-	txn := &roachpb.Transaction{TxnMeta: enginepb.TxnMeta{ID: &u, Timestamp: makeTS(5, 0)}, MaxTimestamp: makeTS(10, 0)}
+	txn := &roachpb.Transaction{TxnMeta: enginepb.TxnMeta{ID: &u, Timestamp: hlc.Timestamp{WallTime: 5}}, MaxTimestamp: hlc.Timestamp{WallTime: 10}}
 	// Put a value from the past.
-	if err := MVCCPut(context.Background(), engine, nil, testKey1, makeTS(1, 0), value1, nil); err != nil {
+	if err := MVCCPut(context.Background(), engine, nil, testKey1, hlc.Timestamp{WallTime: 1}, value1, nil); err != nil {
 		t.Fatal(err)
 	}
 	// Put a value that is ahead of MaxTimestamp, it should not interfere.
-	if err := MVCCPut(context.Background(), engine, nil, testKey1, makeTS(12, 0), value2, nil); err != nil {
+	if err := MVCCPut(context.Background(), engine, nil, testKey1, hlc.Timestamp{WallTime: 12}, value2, nil); err != nil {
 		t.Fatal(err)
 	}
 	// Read with transaction, should get a value back.
-	val, _, err := MVCCGet(context.Background(), engine, testKey1, makeTS(7, 0), true, txn)
+	val, _, err := MVCCGet(context.Background(), engine, testKey1, hlc.Timestamp{WallTime: 7}, true, txn)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -625,42 +617,42 @@ func TestMVCCGetUncertainty(t *testing.T) {
 
 	// Now using testKey2.
 	// Put a value that conflicts with MaxTimestamp.
-	if err := MVCCPut(context.Background(), engine, nil, testKey2, makeTS(9, 0), value2, nil); err != nil {
+	if err := MVCCPut(context.Background(), engine, nil, testKey2, hlc.Timestamp{WallTime: 9}, value2, nil); err != nil {
 		t.Fatal(err)
 	}
 	// Read with transaction, should get error back.
-	if _, _, err := MVCCGet(context.Background(), engine, testKey2, makeTS(7, 0), true, txn); err == nil {
+	if _, _, err := MVCCGet(context.Background(), engine, testKey2, hlc.Timestamp{WallTime: 7}, true, txn); err == nil {
 		t.Fatal("wanted an error")
 	} else if e, ok := err.(*roachpb.ReadWithinUncertaintyIntervalError); !ok {
 		t.Fatalf("wanted a ReadWithinUncertaintyIntervalError, got %+v", e)
 	}
-	if _, _, _, err := MVCCScan(context.Background(), engine, testKey2, testKey2.PrefixEnd(), 10, makeTS(7, 0), true, txn); err == nil {
+	if _, _, _, err := MVCCScan(context.Background(), engine, testKey2, testKey2.PrefixEnd(), 10, hlc.Timestamp{WallTime: 7}, true, txn); err == nil {
 		t.Fatal("wanted an error")
 	}
 	// Adjust MaxTimestamp and retry.
-	txn.MaxTimestamp = makeTS(7, 0)
-	if _, _, err := MVCCGet(context.Background(), engine, testKey2, makeTS(7, 0), true, txn); err != nil {
+	txn.MaxTimestamp = hlc.Timestamp{WallTime: 7}
+	if _, _, err := MVCCGet(context.Background(), engine, testKey2, hlc.Timestamp{WallTime: 7}, true, txn); err != nil {
 		t.Fatal(err)
 	}
-	if _, _, _, err := MVCCScan(context.Background(), engine, testKey2, testKey2.PrefixEnd(), 10, makeTS(7, 0), true, txn); err != nil {
+	if _, _, _, err := MVCCScan(context.Background(), engine, testKey2, testKey2.PrefixEnd(), 10, hlc.Timestamp{WallTime: 7}, true, txn); err != nil {
 		t.Fatal(err)
 	}
 
-	txn.MaxTimestamp = makeTS(10, 0)
+	txn.MaxTimestamp = hlc.Timestamp{WallTime: 10}
 	// Now using testKey3.
 	// Put a value that conflicts with MaxTimestamp and another write further
 	// ahead and not conflicting any longer. The first write should still ruin
 	// it.
-	if err := MVCCPut(context.Background(), engine, nil, testKey3, makeTS(9, 0), value2, nil); err != nil {
+	if err := MVCCPut(context.Background(), engine, nil, testKey3, hlc.Timestamp{WallTime: 9}, value2, nil); err != nil {
 		t.Fatal(err)
 	}
-	if err := MVCCPut(context.Background(), engine, nil, testKey3, makeTS(99, 0), value2, nil); err != nil {
+	if err := MVCCPut(context.Background(), engine, nil, testKey3, hlc.Timestamp{WallTime: 99}, value2, nil); err != nil {
 		t.Fatal(err)
 	}
-	if _, _, _, err := MVCCScan(context.Background(), engine, testKey3, testKey3.PrefixEnd(), 10, makeTS(7, 0), true, txn); err == nil {
+	if _, _, _, err := MVCCScan(context.Background(), engine, testKey3, testKey3.PrefixEnd(), 10, hlc.Timestamp{WallTime: 7}, true, txn); err == nil {
 		t.Fatal("wanted an error")
 	}
-	if _, _, err := MVCCGet(context.Background(), engine, testKey3, makeTS(7, 0), true, txn); err == nil {
+	if _, _, err := MVCCGet(context.Background(), engine, testKey3, hlc.Timestamp{WallTime: 7}, true, txn); err == nil {
 		t.Fatalf("wanted an error")
 	}
 }
@@ -670,10 +662,10 @@ func TestMVCCGetAndDelete(t *testing.T) {
 	engine := createTestEngine()
 	defer engine.Close()
 
-	if err := MVCCPut(context.Background(), engine, nil, testKey1, makeTS(1, 0), value1, nil); err != nil {
+	if err := MVCCPut(context.Background(), engine, nil, testKey1, hlc.Timestamp{WallTime: 1}, value1, nil); err != nil {
 		t.Fatal(err)
 	}
-	value, _, err := MVCCGet(context.Background(), engine, testKey1, makeTS(2, 0), true, nil)
+	value, _, err := MVCCGet(context.Background(), engine, testKey1, hlc.Timestamp{WallTime: 2}, true, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -681,13 +673,13 @@ func TestMVCCGetAndDelete(t *testing.T) {
 		t.Fatal("the value should not be empty")
 	}
 
-	err = MVCCDelete(context.Background(), engine, nil, testKey1, makeTS(3, 0), nil)
+	err = MVCCDelete(context.Background(), engine, nil, testKey1, hlc.Timestamp{WallTime: 3}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	// Read the latest version which should be deleted.
-	value, _, err = MVCCGet(context.Background(), engine, testKey1, makeTS(4, 0), true, nil)
+	value, _, err = MVCCGet(context.Background(), engine, testKey1, hlc.Timestamp{WallTime: 4}, true, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -697,7 +689,7 @@ func TestMVCCGetAndDelete(t *testing.T) {
 
 	// Read the old version which should still exist.
 	for _, logical := range []int32{0, math.MaxInt32} {
-		value, _, err = MVCCGet(context.Background(), engine, testKey1, makeTS(2, logical), true, nil)
+		value, _, err = MVCCGet(context.Background(), engine, testKey1, hlc.Timestamp{WallTime: 2, Logical: logical}, true, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -717,20 +709,20 @@ func TestMVCCWriteWithOlderTimestampAfterDeletionOfNonexistentKey(t *testing.T) 
 	defer engine.Close()
 
 	if err := MVCCDelete(
-		context.Background(), engine, nil, testKey1, makeTS(3, 0), nil,
+		context.Background(), engine, nil, testKey1, hlc.Timestamp{WallTime: 3}, nil,
 	); err != nil {
 		t.Fatal(err)
 	}
 
 	if err := MVCCPut(
-		context.Background(), engine, nil, testKey1, makeTS(1, 0), value1, nil,
+		context.Background(), engine, nil, testKey1, hlc.Timestamp{WallTime: 1}, value1, nil,
 	); !testutils.IsError(
 		err, "write at timestamp 0.000000001,0 too old; wrote at 0.000000003,1",
 	) {
 		t.Fatal(err)
 	}
 
-	value, _, err := MVCCGet(context.Background(), engine, testKey1, makeTS(2, 0), true, nil)
+	value, _, err := MVCCGet(context.Background(), engine, testKey1, hlc.Timestamp{WallTime: 2}, true, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -741,7 +733,7 @@ func TestMVCCWriteWithOlderTimestampAfterDeletionOfNonexistentKey(t *testing.T) 
 	}
 
 	// Read the latest version which will be the value written with the timestamp pushed.
-	value, _, err = MVCCGet(context.Background(), engine, testKey1, makeTS(4, 0), true, nil)
+	value, _, err = MVCCGet(context.Background(), engine, testKey1, hlc.Timestamp{WallTime: 4}, true, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -751,8 +743,8 @@ func TestMVCCWriteWithOlderTimestampAfterDeletionOfNonexistentKey(t *testing.T) 
 	if !bytes.Equal(value.RawBytes, value1.RawBytes) {
 		t.Errorf("expected %q; got %q", value1.RawBytes, value.RawBytes)
 	}
-	if !value.Timestamp.Equal(makeTS(3, 1)) {
-		t.Fatalf("timestamp was not pushed: %s", value.Timestamp)
+	if expTS := (hlc.Timestamp{WallTime: 3, Logical: 1}); value.Timestamp != expTS {
+		t.Fatalf("timestamp was not pushed: %s, expected %s", value.Timestamp, expTS)
 	}
 }
 
@@ -762,12 +754,12 @@ func TestMVCCInlineWithTxn(t *testing.T) {
 	defer engine.Close()
 
 	// Put an inline value.
-	if err := MVCCPut(context.Background(), engine, nil, testKey1, hlc.ZeroTimestamp, value1, nil); err != nil {
+	if err := MVCCPut(context.Background(), engine, nil, testKey1, hlc.Timestamp{}, value1, nil); err != nil {
 		t.Fatal(err)
 	}
 
 	// Now verify inline get.
-	value, _, err := MVCCGet(context.Background(), engine, testKey1, hlc.ZeroTimestamp, true, nil)
+	value, _, err := MVCCGet(context.Background(), engine, testKey1, hlc.Timestamp{}, true, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -777,12 +769,12 @@ func TestMVCCInlineWithTxn(t *testing.T) {
 
 	// Verify inline get with txn does still work (this will happen on a
 	// scan if the distributed sender is forced to wrap it in a txn).
-	if _, _, err = MVCCGet(context.Background(), engine, testKey1, hlc.ZeroTimestamp, true, txn1); err != nil {
+	if _, _, err = MVCCGet(context.Background(), engine, testKey1, hlc.Timestamp{}, true, txn1); err != nil {
 		t.Error(err)
 	}
 
 	// Verify inline put with txn is an error.
-	if err = MVCCPut(context.Background(), engine, nil, testKey2, hlc.ZeroTimestamp, value2, txn2); !testutils.IsError(err, "writes not allowed within transactions") {
+	if err = MVCCPut(context.Background(), engine, nil, testKey2, hlc.Timestamp{}, value2, txn2); !testutils.IsError(err, "writes not allowed within transactions") {
 		t.Errorf("unexpected error: %v", err)
 	}
 }
@@ -792,7 +784,7 @@ func TestMVCCDeleteMissingKey(t *testing.T) {
 	engine := createTestEngine()
 	defer engine.Close()
 
-	if err := MVCCDelete(context.Background(), engine, nil, testKey1, makeTS(1, 0), nil); err != nil {
+	if err := MVCCDelete(context.Background(), engine, nil, testKey1, hlc.Timestamp{WallTime: 1}, nil); err != nil {
 		t.Fatal(err)
 	}
 	// Verify nothing is written to the engine.
@@ -808,23 +800,23 @@ func TestMVCCGetAndDeleteInTxn(t *testing.T) {
 
 	txn := *txn1
 	txn.Sequence++
-	if err := MVCCPut(context.Background(), engine, nil, testKey1, makeTS(1, 0), value1, &txn); err != nil {
+	if err := MVCCPut(context.Background(), engine, nil, testKey1, hlc.Timestamp{WallTime: 1}, value1, &txn); err != nil {
 		t.Fatal(err)
 	}
 
-	if value, _, err := MVCCGet(context.Background(), engine, testKey1, makeTS(2, 0), true, &txn); err != nil {
+	if value, _, err := MVCCGet(context.Background(), engine, testKey1, hlc.Timestamp{WallTime: 2}, true, &txn); err != nil {
 		t.Fatal(err)
 	} else if value == nil {
 		t.Fatal("the value should not be empty")
 	}
 
 	txn.Sequence++
-	if err := MVCCDelete(context.Background(), engine, nil, testKey1, makeTS(3, 0), &txn); err != nil {
+	if err := MVCCDelete(context.Background(), engine, nil, testKey1, hlc.Timestamp{WallTime: 3}, &txn); err != nil {
 		t.Fatal(err)
 	}
 
 	// Read the latest version which should be deleted.
-	if value, _, err := MVCCGet(context.Background(), engine, testKey1, makeTS(4, 0), true, &txn); err != nil {
+	if value, _, err := MVCCGet(context.Background(), engine, testKey1, hlc.Timestamp{WallTime: 4}, true, &txn); err != nil {
 		t.Fatal(err)
 	} else if value != nil {
 		t.Fatal("the value should be empty")
@@ -832,7 +824,7 @@ func TestMVCCGetAndDeleteInTxn(t *testing.T) {
 
 	// Read the old version which shouldn't exist, as within a
 	// transaction, we delete previous values.
-	if value, _, err := MVCCGet(context.Background(), engine, testKey1, makeTS(2, 0), true, nil); err != nil {
+	if value, _, err := MVCCGet(context.Background(), engine, testKey1, hlc.Timestamp{WallTime: 2}, true, nil); err != nil {
 		t.Fatal(err)
 	} else if value != nil {
 		t.Fatalf("expected value nil, got: %s", value)
@@ -844,15 +836,15 @@ func TestMVCCGetWriteIntentError(t *testing.T) {
 	engine := createTestEngine()
 	defer engine.Close()
 
-	if err := MVCCPut(context.Background(), engine, nil, testKey1, makeTS(0, 1), value1, txn1); err != nil {
+	if err := MVCCPut(context.Background(), engine, nil, testKey1, hlc.Timestamp{Logical: 1}, value1, txn1); err != nil {
 		t.Fatal(err)
 	}
 
-	if _, _, err := MVCCGet(context.Background(), engine, testKey1, makeTS(1, 0), true, nil); err == nil {
+	if _, _, err := MVCCGet(context.Background(), engine, testKey1, hlc.Timestamp{WallTime: 1}, true, nil); err == nil {
 		t.Fatal("cannot read the value of a write intent without TxnID")
 	}
 
-	if _, _, err := MVCCGet(context.Background(), engine, testKey1, makeTS(1, 0), true, txn2); err == nil {
+	if _, _, err := MVCCGet(context.Background(), engine, testKey1, hlc.Timestamp{WallTime: 1}, true, txn2); err == nil {
 		t.Fatal("cannot read the value of a write intent from a different TxnID")
 	}
 }
@@ -868,7 +860,7 @@ func TestMVCCScanWriteIntentError(t *testing.T) {
 	engine := createTestEngine()
 	defer engine.Close()
 
-	ts := []hlc.Timestamp{makeTS(0, 1), makeTS(0, 2), makeTS(0, 3), makeTS(0, 4), makeTS(0, 5), makeTS(0, 6)}
+	ts := []hlc.Timestamp{{Logical: 1}, {Logical: 2}, {Logical: 3}, {Logical: 4}, {Logical: 5}, {Logical: 6}}
 
 	fixtureKVs := []roachpb.KeyValue{
 		{Key: testKey1, Value: mkVal("testValue1 pre", ts[0])},
@@ -886,7 +878,7 @@ func TestMVCCScanWriteIntentError(t *testing.T) {
 			txn = txn2
 		}
 		v := *protoutil.Clone(&kv.Value).(*roachpb.Value)
-		v.Timestamp = hlc.ZeroTimestamp
+		v.Timestamp = hlc.Timestamp{}
 		if err := MVCCPut(context.Background(), engine, nil, kv.Key, kv.Value.Timestamp, v, txn); err != nil {
 			t.Fatal(err)
 		}
@@ -940,7 +932,7 @@ func TestMVCCScanWriteIntentError(t *testing.T) {
 		if scan.consistent {
 			cStr = "consistent"
 		}
-		kvs, _, intents, err := MVCCScan(context.Background(), engine, testKey1, testKey4.Next(), math.MaxInt64, makeTS(1, 0), scan.consistent, scan.txn)
+		kvs, _, intents, err := MVCCScan(context.Background(), engine, testKey1, testKey4.Next(), math.MaxInt64, hlc.Timestamp{WallTime: 1}, scan.consistent, scan.txn)
 		wiErr, _ := err.(*roachpb.WriteIntentError)
 		if (err == nil) != (wiErr == nil) {
 			t.Errorf("%s(%d): unexpected error: %s", cStr, i, err)
@@ -980,22 +972,22 @@ func TestMVCCGetInconsistent(t *testing.T) {
 	defer engine.Close()
 
 	// Put two values to key 1, the latest with a txn.
-	if err := MVCCPut(context.Background(), engine, nil, testKey1, makeTS(1, 0), value1, nil); err != nil {
+	if err := MVCCPut(context.Background(), engine, nil, testKey1, hlc.Timestamp{WallTime: 1}, value1, nil); err != nil {
 		t.Fatal(err)
 	}
-	if err := MVCCPut(context.Background(), engine, nil, testKey1, makeTS(2, 0), value2, txn1); err != nil {
+	if err := MVCCPut(context.Background(), engine, nil, testKey1, hlc.Timestamp{WallTime: 2}, value2, txn1); err != nil {
 		t.Fatal(err)
 	}
 
 	// A get with consistent=false should fail in a txn.
-	if _, _, err := MVCCGet(context.Background(), engine, testKey1, makeTS(1, 0), false, txn1); err == nil {
+	if _, _, err := MVCCGet(context.Background(), engine, testKey1, hlc.Timestamp{WallTime: 1}, false, txn1); err == nil {
 		t.Error("expected an error getting with consistent=false in txn")
 	}
 
 	// Inconsistent get will fetch value1 for any timestamp.
-	for _, ts := range []hlc.Timestamp{makeTS(1, 0), makeTS(2, 0)} {
+	for _, ts := range []hlc.Timestamp{{WallTime: 1}, {WallTime: 2}} {
 		val, intents, err := MVCCGet(context.Background(), engine, testKey1, ts, false, nil)
-		if ts.Less(makeTS(2, 0)) {
+		if ts.Less(hlc.Timestamp{WallTime: 2}) {
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -1010,10 +1002,10 @@ func TestMVCCGetInconsistent(t *testing.T) {
 	}
 
 	// Write a single intent for key 2 and verify get returns empty.
-	if err := MVCCPut(context.Background(), engine, nil, testKey2, makeTS(2, 0), value1, txn2); err != nil {
+	if err := MVCCPut(context.Background(), engine, nil, testKey2, hlc.Timestamp{WallTime: 2}, value1, txn2); err != nil {
 		t.Fatal(err)
 	}
-	val, intents, err := MVCCGet(context.Background(), engine, testKey2, makeTS(2, 0), false, nil)
+	val, intents, err := MVCCGet(context.Background(), engine, testKey2, hlc.Timestamp{WallTime: 2}, false, nil)
 	if len(intents) == 0 || !intents[0].Key.Equal(testKey2) {
 		t.Fatal(err)
 	}
@@ -1042,15 +1034,15 @@ func TestMVCCGetProtoInconsistent(t *testing.T) {
 	v2 := roachpb.MakeValueFromBytes(bytes2)
 
 	// Put two values to key 1, the latest with a txn.
-	if err := MVCCPut(context.Background(), engine, nil, testKey1, makeTS(1, 0), v1, nil); err != nil {
+	if err := MVCCPut(context.Background(), engine, nil, testKey1, hlc.Timestamp{WallTime: 1}, v1, nil); err != nil {
 		t.Fatal(err)
 	}
-	if err := MVCCPut(context.Background(), engine, nil, testKey1, makeTS(2, 0), v2, txn1); err != nil {
+	if err := MVCCPut(context.Background(), engine, nil, testKey1, hlc.Timestamp{WallTime: 2}, v2, txn1); err != nil {
 		t.Fatal(err)
 	}
 
 	// A get with consistent=false should fail in a txn.
-	if _, err := MVCCGetProto(context.Background(), engine, testKey1, makeTS(1, 0), false, txn1, nil); err == nil {
+	if _, err := MVCCGetProto(context.Background(), engine, testKey1, hlc.Timestamp{WallTime: 1}, false, txn1, nil); err == nil {
 		t.Error("expected an error getting with consistent=false in txn")
 	} else if _, ok := err.(*roachpb.WriteIntentError); ok {
 		t.Error("expected non-WriteIntentError with inconsistent read in txn")
@@ -1058,10 +1050,10 @@ func TestMVCCGetProtoInconsistent(t *testing.T) {
 
 	// Inconsistent get will fetch value1 for any timestamp.
 
-	for _, ts := range []hlc.Timestamp{makeTS(1, 0), makeTS(2, 0)} {
+	for _, ts := range []hlc.Timestamp{{WallTime: 1}, {WallTime: 2}} {
 		val := roachpb.Value{}
 		found, err := MVCCGetProto(context.Background(), engine, testKey1, ts, false, nil, &val)
-		if ts.Less(makeTS(2, 0)) {
+		if ts.Less(hlc.Timestamp{WallTime: 2}) {
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -1082,11 +1074,11 @@ func TestMVCCGetProtoInconsistent(t *testing.T) {
 
 	{
 		// Write a single intent for key 2 and verify get returns empty.
-		if err := MVCCPut(context.Background(), engine, nil, testKey2, makeTS(2, 0), v1, txn2); err != nil {
+		if err := MVCCPut(context.Background(), engine, nil, testKey2, hlc.Timestamp{WallTime: 2}, v1, txn2); err != nil {
 			t.Fatal(err)
 		}
 		val := roachpb.Value{}
-		found, err := MVCCGetProto(context.Background(), engine, testKey2, makeTS(2, 0), false, nil, &val)
+		found, err := MVCCGetProto(context.Background(), engine, testKey2, hlc.Timestamp{WallTime: 2}, false, nil, &val)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1099,14 +1091,14 @@ func TestMVCCGetProtoInconsistent(t *testing.T) {
 		// Write a malformed value (not an encoded MVCCKeyValue) and a
 		// write intent to key 3; the parse error is returned instead of the
 		// write intent.
-		if err := MVCCPut(context.Background(), engine, nil, testKey3, makeTS(1, 0), value3, nil); err != nil {
+		if err := MVCCPut(context.Background(), engine, nil, testKey3, hlc.Timestamp{WallTime: 1}, value3, nil); err != nil {
 			t.Fatal(err)
 		}
-		if err := MVCCPut(context.Background(), engine, nil, testKey3, makeTS(2, 0), v2, txn1); err != nil {
+		if err := MVCCPut(context.Background(), engine, nil, testKey3, hlc.Timestamp{WallTime: 2}, v2, txn1); err != nil {
 			t.Fatal(err)
 		}
 		val := roachpb.Value{}
-		found, err := MVCCGetProto(context.Background(), engine, testKey3, makeTS(1, 0), false, nil, &val)
+		found, err := MVCCGetProto(context.Background(), engine, testKey3, hlc.Timestamp{WallTime: 1}, false, nil, &val)
 		if err == nil {
 			t.Errorf("expected error reading malformed data")
 		} else if !strings.HasPrefix(err.Error(), "proto: ") {
@@ -1123,32 +1115,32 @@ func TestMVCCScan(t *testing.T) {
 	engine := createTestEngine()
 	defer engine.Close()
 
-	if err := MVCCPut(context.Background(), engine, nil, testKey1, makeTS(1, 0), value1, nil); err != nil {
+	if err := MVCCPut(context.Background(), engine, nil, testKey1, hlc.Timestamp{WallTime: 1}, value1, nil); err != nil {
 		t.Fatal(err)
 	}
-	if err := MVCCPut(context.Background(), engine, nil, testKey1, makeTS(2, 0), value4, nil); err != nil {
+	if err := MVCCPut(context.Background(), engine, nil, testKey1, hlc.Timestamp{WallTime: 2}, value4, nil); err != nil {
 		t.Fatal(err)
 	}
-	if err := MVCCPut(context.Background(), engine, nil, testKey2, makeTS(1, 0), value2, nil); err != nil {
+	if err := MVCCPut(context.Background(), engine, nil, testKey2, hlc.Timestamp{WallTime: 1}, value2, nil); err != nil {
 		t.Fatal(err)
 	}
-	if err := MVCCPut(context.Background(), engine, nil, testKey2, makeTS(3, 0), value3, nil); err != nil {
+	if err := MVCCPut(context.Background(), engine, nil, testKey2, hlc.Timestamp{WallTime: 3}, value3, nil); err != nil {
 		t.Fatal(err)
 	}
-	if err := MVCCPut(context.Background(), engine, nil, testKey3, makeTS(1, 0), value3, nil); err != nil {
+	if err := MVCCPut(context.Background(), engine, nil, testKey3, hlc.Timestamp{WallTime: 1}, value3, nil); err != nil {
 		t.Fatal(err)
 	}
-	if err := MVCCPut(context.Background(), engine, nil, testKey3, makeTS(4, 0), value2, nil); err != nil {
+	if err := MVCCPut(context.Background(), engine, nil, testKey3, hlc.Timestamp{WallTime: 4}, value2, nil); err != nil {
 		t.Fatal(err)
 	}
-	if err := MVCCPut(context.Background(), engine, nil, testKey4, makeTS(1, 0), value4, nil); err != nil {
+	if err := MVCCPut(context.Background(), engine, nil, testKey4, hlc.Timestamp{WallTime: 1}, value4, nil); err != nil {
 		t.Fatal(err)
 	}
-	if err := MVCCPut(context.Background(), engine, nil, testKey4, makeTS(5, 0), value1, nil); err != nil {
+	if err := MVCCPut(context.Background(), engine, nil, testKey4, hlc.Timestamp{WallTime: 5}, value1, nil); err != nil {
 		t.Fatal(err)
 	}
 
-	kvs, resumeSpan, _, err := MVCCScan(context.Background(), engine, testKey2, testKey4, math.MaxInt64, makeTS(1, 0), true, nil)
+	kvs, resumeSpan, _, err := MVCCScan(context.Background(), engine, testKey2, testKey4, math.MaxInt64, hlc.Timestamp{WallTime: 1}, true, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1163,7 +1155,7 @@ func TestMVCCScan(t *testing.T) {
 		t.Fatalf("resumeSpan = %+v", resumeSpan)
 	}
 
-	kvs, resumeSpan, _, err = MVCCScan(context.Background(), engine, testKey2, testKey4, math.MaxInt64, makeTS(4, 0), true, nil)
+	kvs, resumeSpan, _, err = MVCCScan(context.Background(), engine, testKey2, testKey4, math.MaxInt64, hlc.Timestamp{WallTime: 4}, true, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1178,7 +1170,7 @@ func TestMVCCScan(t *testing.T) {
 		t.Fatalf("resumeSpan = %+v", resumeSpan)
 	}
 
-	kvs, resumeSpan, _, err = MVCCScan(context.Background(), engine, testKey4, keyMax, math.MaxInt64, makeTS(1, 0), true, nil)
+	kvs, resumeSpan, _, err = MVCCScan(context.Background(), engine, testKey4, keyMax, math.MaxInt64, hlc.Timestamp{WallTime: 1}, true, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1191,10 +1183,10 @@ func TestMVCCScan(t *testing.T) {
 		t.Fatalf("resumeSpan = %+v", resumeSpan)
 	}
 
-	if _, _, err := MVCCGet(context.Background(), engine, testKey1, makeTS(1, 0), true, txn2); err != nil {
+	if _, _, err := MVCCGet(context.Background(), engine, testKey1, hlc.Timestamp{WallTime: 1}, true, txn2); err != nil {
 		t.Fatal(err)
 	}
-	kvs, _, _, err = MVCCScan(context.Background(), engine, keyMin, testKey2, math.MaxInt64, makeTS(1, 0), true, nil)
+	kvs, _, _, err = MVCCScan(context.Background(), engine, keyMin, testKey2, math.MaxInt64, hlc.Timestamp{WallTime: 1}, true, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1210,20 +1202,20 @@ func TestMVCCScanMaxNum(t *testing.T) {
 	engine := createTestEngine()
 	defer engine.Close()
 
-	if err := MVCCPut(context.Background(), engine, nil, testKey1, makeTS(1, 0), value1, nil); err != nil {
+	if err := MVCCPut(context.Background(), engine, nil, testKey1, hlc.Timestamp{WallTime: 1}, value1, nil); err != nil {
 		t.Fatal(err)
 	}
-	if err := MVCCPut(context.Background(), engine, nil, testKey2, makeTS(1, 0), value2, nil); err != nil {
+	if err := MVCCPut(context.Background(), engine, nil, testKey2, hlc.Timestamp{WallTime: 1}, value2, nil); err != nil {
 		t.Fatal(err)
 	}
-	if err := MVCCPut(context.Background(), engine, nil, testKey3, makeTS(1, 0), value3, nil); err != nil {
+	if err := MVCCPut(context.Background(), engine, nil, testKey3, hlc.Timestamp{WallTime: 1}, value3, nil); err != nil {
 		t.Fatal(err)
 	}
-	if err := MVCCPut(context.Background(), engine, nil, testKey4, makeTS(1, 0), value4, nil); err != nil {
+	if err := MVCCPut(context.Background(), engine, nil, testKey4, hlc.Timestamp{WallTime: 1}, value4, nil); err != nil {
 		t.Fatal(err)
 	}
 
-	kvs, resumeSpan, _, err := MVCCScan(context.Background(), engine, testKey2, testKey4, 1, makeTS(1, 0), true, nil)
+	kvs, resumeSpan, _, err := MVCCScan(context.Background(), engine, testKey2, testKey4, 1, hlc.Timestamp{WallTime: 1}, true, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1236,7 +1228,7 @@ func TestMVCCScanMaxNum(t *testing.T) {
 		t.Fatalf("expected = %+v, resumeSpan = %+v", expected, resumeSpan)
 	}
 
-	kvs, resumeSpan, _, err = MVCCScan(context.Background(), engine, testKey2, testKey4, 0, makeTS(1, 0), true, nil)
+	kvs, resumeSpan, _, err = MVCCScan(context.Background(), engine, testKey2, testKey4, 0, hlc.Timestamp{WallTime: 1}, true, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1264,23 +1256,23 @@ func TestMVCCScanWithKeyPrefix(t *testing.T) {
 	// b<T=5>
 	// In this case, if we scan from "a"-"b", we wish to skip
 	// a<T=2> and a<T=1> and find "aa'.
-	if err := MVCCPut(context.Background(), engine, nil, roachpb.Key("/a"), makeTS(1, 0), value1, nil); err != nil {
+	if err := MVCCPut(context.Background(), engine, nil, roachpb.Key("/a"), hlc.Timestamp{WallTime: 1}, value1, nil); err != nil {
 		t.Fatal(err)
 	}
-	if err := MVCCPut(context.Background(), engine, nil, roachpb.Key("/a"), makeTS(2, 0), value2, nil); err != nil {
+	if err := MVCCPut(context.Background(), engine, nil, roachpb.Key("/a"), hlc.Timestamp{WallTime: 2}, value2, nil); err != nil {
 		t.Fatal(err)
 	}
-	if err := MVCCPut(context.Background(), engine, nil, roachpb.Key("/aa"), makeTS(2, 0), value2, nil); err != nil {
+	if err := MVCCPut(context.Background(), engine, nil, roachpb.Key("/aa"), hlc.Timestamp{WallTime: 2}, value2, nil); err != nil {
 		t.Fatal(err)
 	}
-	if err := MVCCPut(context.Background(), engine, nil, roachpb.Key("/aa"), makeTS(3, 0), value3, nil); err != nil {
+	if err := MVCCPut(context.Background(), engine, nil, roachpb.Key("/aa"), hlc.Timestamp{WallTime: 3}, value3, nil); err != nil {
 		t.Fatal(err)
 	}
-	if err := MVCCPut(context.Background(), engine, nil, roachpb.Key("/b"), makeTS(1, 0), value3, nil); err != nil {
+	if err := MVCCPut(context.Background(), engine, nil, roachpb.Key("/b"), hlc.Timestamp{WallTime: 1}, value3, nil); err != nil {
 		t.Fatal(err)
 	}
 
-	kvs, _, _, err := MVCCScan(context.Background(), engine, roachpb.Key("/a"), roachpb.Key("/b"), math.MaxInt64, makeTS(2, 0), true, nil)
+	kvs, _, _, err := MVCCScan(context.Background(), engine, roachpb.Key("/a"), roachpb.Key("/b"), math.MaxInt64, hlc.Timestamp{WallTime: 2}, true, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1298,20 +1290,20 @@ func TestMVCCScanInTxn(t *testing.T) {
 	engine := createTestEngine()
 	defer engine.Close()
 
-	if err := MVCCPut(context.Background(), engine, nil, testKey1, makeTS(1, 0), value1, nil); err != nil {
+	if err := MVCCPut(context.Background(), engine, nil, testKey1, hlc.Timestamp{WallTime: 1}, value1, nil); err != nil {
 		t.Fatal(err)
 	}
-	if err := MVCCPut(context.Background(), engine, nil, testKey2, makeTS(1, 0), value2, nil); err != nil {
+	if err := MVCCPut(context.Background(), engine, nil, testKey2, hlc.Timestamp{WallTime: 1}, value2, nil); err != nil {
 		t.Fatal(err)
 	}
-	if err := MVCCPut(context.Background(), engine, nil, testKey3, makeTS(1, 0), value3, txn1); err != nil {
+	if err := MVCCPut(context.Background(), engine, nil, testKey3, hlc.Timestamp{WallTime: 1}, value3, txn1); err != nil {
 		t.Fatal(err)
 	}
-	if err := MVCCPut(context.Background(), engine, nil, testKey4, makeTS(1, 0), value4, nil); err != nil {
+	if err := MVCCPut(context.Background(), engine, nil, testKey4, hlc.Timestamp{WallTime: 1}, value4, nil); err != nil {
 		t.Fatal(err)
 	}
 
-	kvs, _, _, err := MVCCScan(context.Background(), engine, testKey2, testKey4, math.MaxInt64, makeTS(1, 0), true, txn1)
+	kvs, _, _, err := MVCCScan(context.Background(), engine, testKey2, testKey4, math.MaxInt64, hlc.Timestamp{WallTime: 1}, true, txn1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1323,7 +1315,7 @@ func TestMVCCScanInTxn(t *testing.T) {
 		t.Fatal("the value should not be empty")
 	}
 
-	if _, _, _, err := MVCCScan(context.Background(), engine, testKey2, testKey4, math.MaxInt64, makeTS(1, 0), true, nil); err == nil {
+	if _, _, _, err := MVCCScan(context.Background(), engine, testKey2, testKey4, math.MaxInt64, hlc.Timestamp{WallTime: 1}, true, nil); err == nil {
 		t.Fatal("expected error on uncommitted write intent")
 	}
 }
@@ -1336,16 +1328,16 @@ func TestMVCCScanInconsistent(t *testing.T) {
 	defer engine.Close()
 
 	// A scan with consistent=false should fail in a txn.
-	if _, _, _, err := MVCCScan(context.Background(), engine, keyMin, keyMax, math.MaxInt64, makeTS(1, 0), false, txn1); err == nil {
+	if _, _, _, err := MVCCScan(context.Background(), engine, keyMin, keyMax, math.MaxInt64, hlc.Timestamp{WallTime: 1}, false, txn1); err == nil {
 		t.Error("expected an error scanning with consistent=false in txn")
 	}
 
-	ts1 := makeTS(1, 0)
-	ts2 := makeTS(2, 0)
-	ts3 := makeTS(3, 0)
-	ts4 := makeTS(4, 0)
-	ts5 := makeTS(5, 0)
-	ts6 := makeTS(6, 0)
+	ts1 := hlc.Timestamp{WallTime: 1}
+	ts2 := hlc.Timestamp{WallTime: 2}
+	ts3 := hlc.Timestamp{WallTime: 3}
+	ts4 := hlc.Timestamp{WallTime: 4}
+	ts5 := hlc.Timestamp{WallTime: 5}
+	ts6 := hlc.Timestamp{WallTime: 6}
 	if err := MVCCPut(context.Background(), engine, nil, testKey1, ts1, value1, nil); err != nil {
 		t.Fatal(err)
 	}
@@ -1369,7 +1361,7 @@ func TestMVCCScanInconsistent(t *testing.T) {
 		{Span: roachpb.Span{Key: testKey1}, Txn: txn1.TxnMeta},
 		{Span: roachpb.Span{Key: testKey3}, Txn: txn2.TxnMeta},
 	}
-	kvs, _, intents, err := MVCCScan(context.Background(), engine, testKey1, testKey4.Next(), math.MaxInt64, makeTS(7, 0), false, nil)
+	kvs, _, intents, err := MVCCScan(context.Background(), engine, testKey1, testKey4.Next(), math.MaxInt64, hlc.Timestamp{WallTime: 7}, false, nil)
 	if !reflect.DeepEqual(intents, expIntents) {
 		t.Fatal(err)
 	}
@@ -1390,7 +1382,7 @@ func TestMVCCScanInconsistent(t *testing.T) {
 
 	// Now try a scan at a historical timestamp.
 	expIntents = expIntents[:1]
-	kvs, _, intents, err = MVCCScan(context.Background(), engine, testKey1, testKey4.Next(), math.MaxInt64, makeTS(3, 0), false, nil)
+	kvs, _, intents, err = MVCCScan(context.Background(), engine, testKey1, testKey4.Next(), math.MaxInt64, hlc.Timestamp{WallTime: 3}, false, nil)
 	if !reflect.DeepEqual(intents, expIntents) {
 		t.Fatal(err)
 	}
@@ -1408,28 +1400,28 @@ func TestMVCCDeleteRange(t *testing.T) {
 	engine := createTestEngine()
 	defer engine.Close()
 
-	if err := MVCCPut(context.Background(), engine, nil, testKey1, makeTS(1, 0), value1, nil); err != nil {
+	if err := MVCCPut(context.Background(), engine, nil, testKey1, hlc.Timestamp{WallTime: 1}, value1, nil); err != nil {
 		t.Fatal(err)
 	}
-	if err := MVCCPut(context.Background(), engine, nil, testKey2, makeTS(1, 0), value2, nil); err != nil {
+	if err := MVCCPut(context.Background(), engine, nil, testKey2, hlc.Timestamp{WallTime: 1}, value2, nil); err != nil {
 		t.Fatal(err)
 	}
-	if err := MVCCPut(context.Background(), engine, nil, testKey3, makeTS(1, 0), value3, nil); err != nil {
+	if err := MVCCPut(context.Background(), engine, nil, testKey3, hlc.Timestamp{WallTime: 1}, value3, nil); err != nil {
 		t.Fatal(err)
 	}
-	if err := MVCCPut(context.Background(), engine, nil, testKey4, makeTS(1, 0), value4, nil); err != nil {
+	if err := MVCCPut(context.Background(), engine, nil, testKey4, hlc.Timestamp{WallTime: 1}, value4, nil); err != nil {
 		t.Fatal(err)
 	}
-	if err := MVCCPut(context.Background(), engine, nil, testKey5, makeTS(1, 0), value5, nil); err != nil {
+	if err := MVCCPut(context.Background(), engine, nil, testKey5, hlc.Timestamp{WallTime: 1}, value5, nil); err != nil {
 		t.Fatal(err)
 	}
-	if err := MVCCPut(context.Background(), engine, nil, testKey6, makeTS(1, 0), value6, nil); err != nil {
+	if err := MVCCPut(context.Background(), engine, nil, testKey6, hlc.Timestamp{WallTime: 1}, value6, nil); err != nil {
 		t.Fatal(err)
 	}
 
 	// Attempt to delete two keys.
 	deleted, resumeSpan, num, err := MVCCDeleteRange(
-		context.Background(), engine, nil, testKey2, testKey6, 2, makeTS(2, 0), nil, false,
+		context.Background(), engine, nil, testKey2, testKey6, 2, hlc.Timestamp{WallTime: 2}, nil, false,
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -1443,7 +1435,7 @@ func TestMVCCDeleteRange(t *testing.T) {
 	if expected := (roachpb.Span{Key: testKey4, EndKey: testKey6}); !resumeSpan.Equal(expected) {
 		t.Fatalf("expected = %+v, resumeSpan = %+v", expected, resumeSpan)
 	}
-	kvs, _, _, _ := MVCCScan(context.Background(), engine, keyMin, keyMax, math.MaxInt64, makeTS(2, 0), true, nil)
+	kvs, _, _, _ := MVCCScan(context.Background(), engine, keyMin, keyMax, math.MaxInt64, hlc.Timestamp{WallTime: 2}, true, nil)
 	if len(kvs) != 4 ||
 		!bytes.Equal(kvs[0].Key, testKey1) ||
 		!bytes.Equal(kvs[1].Key, testKey4) ||
@@ -1458,7 +1450,7 @@ func TestMVCCDeleteRange(t *testing.T) {
 
 	// Attempt to delete no keys.
 	deleted, resumeSpan, num, err = MVCCDeleteRange(
-		context.Background(), engine, nil, testKey2, testKey6, 0, makeTS(2, 0), nil, false,
+		context.Background(), engine, nil, testKey2, testKey6, 0, hlc.Timestamp{WallTime: 2}, nil, false,
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -1472,7 +1464,7 @@ func TestMVCCDeleteRange(t *testing.T) {
 	if expected := (roachpb.Span{Key: testKey2, EndKey: testKey6}); !resumeSpan.Equal(expected) {
 		t.Fatalf("expected = %+v, resumeSpan = %+v", expected, resumeSpan)
 	}
-	kvs, _, _, _ = MVCCScan(context.Background(), engine, keyMin, keyMax, math.MaxInt64, makeTS(2, 0), true, nil)
+	kvs, _, _, _ = MVCCScan(context.Background(), engine, keyMin, keyMax, math.MaxInt64, hlc.Timestamp{WallTime: 2}, true, nil)
 	if len(kvs) != 4 ||
 		!bytes.Equal(kvs[0].Key, testKey1) ||
 		!bytes.Equal(kvs[1].Key, testKey4) ||
@@ -1486,7 +1478,7 @@ func TestMVCCDeleteRange(t *testing.T) {
 	}
 
 	deleted, resumeSpan, num, err = MVCCDeleteRange(
-		context.Background(), engine, nil, testKey4, keyMax, math.MaxInt64, makeTS(2, 0), nil, false,
+		context.Background(), engine, nil, testKey4, keyMax, math.MaxInt64, hlc.Timestamp{WallTime: 2}, nil, false,
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -1500,7 +1492,7 @@ func TestMVCCDeleteRange(t *testing.T) {
 	if resumeSpan != nil {
 		t.Fatalf("wrong resume key: expected nil, found %v", resumeSpan)
 	}
-	kvs, _, _, _ = MVCCScan(context.Background(), engine, keyMin, keyMax, math.MaxInt64, makeTS(2, 0), true, nil)
+	kvs, _, _, _ = MVCCScan(context.Background(), engine, keyMin, keyMax, math.MaxInt64, hlc.Timestamp{WallTime: 2}, true, nil)
 	if len(kvs) != 1 ||
 		!bytes.Equal(kvs[0].Key, testKey1) ||
 		!bytes.Equal(kvs[0].Value.RawBytes, value1.RawBytes) {
@@ -1508,7 +1500,7 @@ func TestMVCCDeleteRange(t *testing.T) {
 	}
 
 	deleted, resumeSpan, num, err = MVCCDeleteRange(
-		context.Background(), engine, nil, keyMin, testKey2, math.MaxInt64, makeTS(2, 0), nil, false,
+		context.Background(), engine, nil, keyMin, testKey2, math.MaxInt64, hlc.Timestamp{WallTime: 2}, nil, false,
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -1522,7 +1514,7 @@ func TestMVCCDeleteRange(t *testing.T) {
 	if resumeSpan != nil {
 		t.Fatalf("wrong resume key: expected nil, found %v", resumeSpan)
 	}
-	kvs, _, _, _ = MVCCScan(context.Background(), engine, keyMin, keyMax, math.MaxInt64, makeTS(2, 0), true, nil)
+	kvs, _, _, _ = MVCCScan(context.Background(), engine, keyMin, keyMax, math.MaxInt64, hlc.Timestamp{WallTime: 2}, true, nil)
 	if len(kvs) != 0 {
 		t.Fatal("the value should be empty")
 	}
@@ -1533,28 +1525,28 @@ func TestMVCCDeleteRangeReturnKeys(t *testing.T) {
 	engine := createTestEngine()
 	defer engine.Close()
 
-	if err := MVCCPut(context.Background(), engine, nil, testKey1, makeTS(1, 0), value1, nil); err != nil {
+	if err := MVCCPut(context.Background(), engine, nil, testKey1, hlc.Timestamp{WallTime: 1}, value1, nil); err != nil {
 		t.Fatal(err)
 	}
-	if err := MVCCPut(context.Background(), engine, nil, testKey2, makeTS(1, 0), value2, nil); err != nil {
+	if err := MVCCPut(context.Background(), engine, nil, testKey2, hlc.Timestamp{WallTime: 1}, value2, nil); err != nil {
 		t.Fatal(err)
 	}
-	if err := MVCCPut(context.Background(), engine, nil, testKey3, makeTS(1, 0), value3, nil); err != nil {
+	if err := MVCCPut(context.Background(), engine, nil, testKey3, hlc.Timestamp{WallTime: 1}, value3, nil); err != nil {
 		t.Fatal(err)
 	}
-	if err := MVCCPut(context.Background(), engine, nil, testKey4, makeTS(1, 0), value4, nil); err != nil {
+	if err := MVCCPut(context.Background(), engine, nil, testKey4, hlc.Timestamp{WallTime: 1}, value4, nil); err != nil {
 		t.Fatal(err)
 	}
-	if err := MVCCPut(context.Background(), engine, nil, testKey5, makeTS(1, 0), value5, nil); err != nil {
+	if err := MVCCPut(context.Background(), engine, nil, testKey5, hlc.Timestamp{WallTime: 1}, value5, nil); err != nil {
 		t.Fatal(err)
 	}
-	if err := MVCCPut(context.Background(), engine, nil, testKey6, makeTS(1, 0), value6, nil); err != nil {
+	if err := MVCCPut(context.Background(), engine, nil, testKey6, hlc.Timestamp{WallTime: 1}, value6, nil); err != nil {
 		t.Fatal(err)
 	}
 
 	// Attempt to delete two keys.
 	deleted, resumeSpan, num, err := MVCCDeleteRange(
-		context.Background(), engine, nil, testKey2, testKey6, 2, makeTS(2, 0), nil, true,
+		context.Background(), engine, nil, testKey2, testKey6, 2, hlc.Timestamp{WallTime: 2}, nil, true,
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -1574,7 +1566,7 @@ func TestMVCCDeleteRangeReturnKeys(t *testing.T) {
 	if expected := (roachpb.Span{Key: testKey4, EndKey: testKey6}); !resumeSpan.Equal(expected) {
 		t.Fatalf("expected = %+v, resumeSpan = %+v", expected, resumeSpan)
 	}
-	kvs, _, _, _ := MVCCScan(context.Background(), engine, keyMin, keyMax, math.MaxInt64, makeTS(2, 0), true, nil)
+	kvs, _, _, _ := MVCCScan(context.Background(), engine, keyMin, keyMax, math.MaxInt64, hlc.Timestamp{WallTime: 2}, true, nil)
 	if len(kvs) != 4 ||
 		!bytes.Equal(kvs[0].Key, testKey1) ||
 		!bytes.Equal(kvs[1].Key, testKey4) ||
@@ -1589,7 +1581,7 @@ func TestMVCCDeleteRangeReturnKeys(t *testing.T) {
 
 	// Attempt to delete no keys.
 	deleted, resumeSpan, num, err = MVCCDeleteRange(
-		context.Background(), engine, nil, testKey2, testKey6, 0, makeTS(2, 0), nil, true,
+		context.Background(), engine, nil, testKey2, testKey6, 0, hlc.Timestamp{WallTime: 2}, nil, true,
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -1603,7 +1595,7 @@ func TestMVCCDeleteRangeReturnKeys(t *testing.T) {
 	if expected := (roachpb.Span{Key: testKey2, EndKey: testKey6}); !resumeSpan.Equal(expected) {
 		t.Fatalf("expected = %+v, resumeSpan = %+v", expected, resumeSpan)
 	}
-	kvs, _, _, _ = MVCCScan(context.Background(), engine, keyMin, keyMax, math.MaxInt64, makeTS(2, 0), true, nil)
+	kvs, _, _, _ = MVCCScan(context.Background(), engine, keyMin, keyMax, math.MaxInt64, hlc.Timestamp{WallTime: 2}, true, nil)
 	if len(kvs) != 4 ||
 		!bytes.Equal(kvs[0].Key, testKey1) ||
 		!bytes.Equal(kvs[1].Key, testKey4) ||
@@ -1617,7 +1609,7 @@ func TestMVCCDeleteRangeReturnKeys(t *testing.T) {
 	}
 
 	deleted, resumeSpan, num, err = MVCCDeleteRange(
-		context.Background(), engine, nil, testKey4, keyMax, math.MaxInt64, makeTS(2, 0), nil, true,
+		context.Background(), engine, nil, testKey4, keyMax, math.MaxInt64, hlc.Timestamp{WallTime: 2}, nil, true,
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -1640,7 +1632,7 @@ func TestMVCCDeleteRangeReturnKeys(t *testing.T) {
 	if resumeSpan != nil {
 		t.Fatalf("wrong resume key: expected nil, found %v", resumeSpan)
 	}
-	kvs, _, _, _ = MVCCScan(context.Background(), engine, keyMin, keyMax, math.MaxInt64, makeTS(2, 0), true, nil)
+	kvs, _, _, _ = MVCCScan(context.Background(), engine, keyMin, keyMax, math.MaxInt64, hlc.Timestamp{WallTime: 2}, true, nil)
 	if len(kvs) != 1 ||
 		!bytes.Equal(kvs[0].Key, testKey1) ||
 		!bytes.Equal(kvs[0].Value.RawBytes, value1.RawBytes) {
@@ -1648,7 +1640,7 @@ func TestMVCCDeleteRangeReturnKeys(t *testing.T) {
 	}
 
 	deleted, resumeSpan, num, err = MVCCDeleteRange(
-		context.Background(), engine, nil, keyMin, testKey2, math.MaxInt64, makeTS(2, 0), nil, true,
+		context.Background(), engine, nil, keyMin, testKey2, math.MaxInt64, hlc.Timestamp{WallTime: 2}, nil, true,
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -1665,7 +1657,7 @@ func TestMVCCDeleteRangeReturnKeys(t *testing.T) {
 	if resumeSpan != nil {
 		t.Fatalf("wrong resume key: %v", resumeSpan)
 	}
-	kvs, _, _, _ = MVCCScan(context.Background(), engine, keyMin, keyMax, math.MaxInt64, makeTS(2, 0), true, nil)
+	kvs, _, _, _ = MVCCScan(context.Background(), engine, keyMin, keyMax, math.MaxInt64, hlc.Timestamp{WallTime: 2}, true, nil)
 	if len(kvs) != 0 {
 		t.Fatal("the value should be empty")
 	}
@@ -1677,27 +1669,27 @@ func TestMVCCDeleteRangeFailed(t *testing.T) {
 	defer engine.Close()
 
 	txn := *txn1
-	if err := MVCCPut(context.Background(), engine, nil, testKey1, makeTS(1, 0), value1, nil); err != nil {
+	if err := MVCCPut(context.Background(), engine, nil, testKey1, hlc.Timestamp{WallTime: 1}, value1, nil); err != nil {
 		t.Fatal(err)
 	}
 	txn.Sequence++
-	if err := MVCCPut(context.Background(), engine, nil, testKey2, makeTS(1, 0), value2, &txn); err != nil {
+	if err := MVCCPut(context.Background(), engine, nil, testKey2, hlc.Timestamp{WallTime: 1}, value2, &txn); err != nil {
 		t.Fatal(err)
 	}
 	txn.Sequence++
-	if err := MVCCPut(context.Background(), engine, nil, testKey3, makeTS(1, 0), value3, &txn); err != nil {
+	if err := MVCCPut(context.Background(), engine, nil, testKey3, hlc.Timestamp{WallTime: 1}, value3, &txn); err != nil {
 		t.Fatal(err)
 	}
-	if err := MVCCPut(context.Background(), engine, nil, testKey4, makeTS(1, 0), value4, nil); err != nil {
+	if err := MVCCPut(context.Background(), engine, nil, testKey4, hlc.Timestamp{WallTime: 1}, value4, nil); err != nil {
 		t.Fatal(err)
 	}
 
-	if _, _, _, err := MVCCDeleteRange(context.Background(), engine, nil, testKey2, testKey4, math.MaxInt64, makeTS(1, 0), nil, false); err == nil {
+	if _, _, _, err := MVCCDeleteRange(context.Background(), engine, nil, testKey2, testKey4, math.MaxInt64, hlc.Timestamp{WallTime: 1}, nil, false); err == nil {
 		t.Fatal("expected error on uncommitted write intent")
 	}
 
 	txn.Sequence++
-	if _, _, _, err := MVCCDeleteRange(context.Background(), engine, nil, testKey2, testKey4, math.MaxInt64, makeTS(1, 0), &txn, false); err != nil {
+	if _, _, _, err := MVCCDeleteRange(context.Background(), engine, nil, testKey2, testKey4, math.MaxInt64, hlc.Timestamp{WallTime: 1}, &txn, false); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -1707,20 +1699,20 @@ func TestMVCCDeleteRangeConcurrentTxn(t *testing.T) {
 	engine := createTestEngine()
 	defer engine.Close()
 
-	if err := MVCCPut(context.Background(), engine, nil, testKey1, makeTS(1, 0), value1, nil); err != nil {
+	if err := MVCCPut(context.Background(), engine, nil, testKey1, hlc.Timestamp{WallTime: 1}, value1, nil); err != nil {
 		t.Fatal(err)
 	}
-	if err := MVCCPut(context.Background(), engine, nil, testKey2, makeTS(1, 0), value2, txn1); err != nil {
+	if err := MVCCPut(context.Background(), engine, nil, testKey2, hlc.Timestamp{WallTime: 1}, value2, txn1); err != nil {
 		t.Fatal(err)
 	}
-	if err := MVCCPut(context.Background(), engine, nil, testKey3, makeTS(2, 0), value3, txn2); err != nil {
+	if err := MVCCPut(context.Background(), engine, nil, testKey3, hlc.Timestamp{WallTime: 2}, value3, txn2); err != nil {
 		t.Fatal(err)
 	}
-	if err := MVCCPut(context.Background(), engine, nil, testKey4, makeTS(1, 0), value4, nil); err != nil {
+	if err := MVCCPut(context.Background(), engine, nil, testKey4, hlc.Timestamp{WallTime: 1}, value4, nil); err != nil {
 		t.Fatal(err)
 	}
 
-	if _, _, _, err := MVCCDeleteRange(context.Background(), engine, nil, testKey2, testKey4, math.MaxInt64, makeTS(1, 0), txn1, false); err == nil {
+	if _, _, _, err := MVCCDeleteRange(context.Background(), engine, nil, testKey2, testKey4, math.MaxInt64, hlc.Timestamp{WallTime: 1}, txn1, false); err == nil {
 		t.Fatal("expected error on uncommitted write intent")
 	}
 }
@@ -1733,36 +1725,36 @@ func TestMVCCUncommittedDeleteRangeVisible(t *testing.T) {
 	defer engine.Close()
 
 	if err := MVCCPut(
-		context.Background(), engine, nil, testKey1, makeTS(1, 0), value1, nil,
+		context.Background(), engine, nil, testKey1, hlc.Timestamp{WallTime: 1}, value1, nil,
 	); err != nil {
 		t.Fatal(err)
 	}
 	if err := MVCCPut(
-		context.Background(), engine, nil, testKey2, makeTS(1, 0), value2, nil,
+		context.Background(), engine, nil, testKey2, hlc.Timestamp{WallTime: 1}, value2, nil,
 	); err != nil {
 		t.Fatal(err)
 	}
 	if err := MVCCPut(
-		context.Background(), engine, nil, testKey3, makeTS(1, 0), value3, nil,
+		context.Background(), engine, nil, testKey3, hlc.Timestamp{WallTime: 1}, value3, nil,
 	); err != nil {
 		t.Fatal(err)
 	}
 
 	if err := MVCCDelete(
-		context.Background(), engine, nil, testKey2, makeTS(2, 1), nil,
+		context.Background(), engine, nil, testKey2, hlc.Timestamp{WallTime: 2, Logical: 1}, nil,
 	); err != nil {
 		t.Fatal(err)
 	}
 
 	txn := txn1.Clone()
 	if _, _, _, err := MVCCDeleteRange(
-		context.Background(), engine, nil, testKey1, testKey4, math.MaxInt64, makeTS(2, 0), &txn, false,
+		context.Background(), engine, nil, testKey1, testKey4, math.MaxInt64, hlc.Timestamp{WallTime: 2}, &txn, false,
 	); err != nil {
 		t.Fatal(err)
 	}
 
 	txn.Epoch++
-	kvs, _, _, _ := MVCCScan(context.Background(), engine, testKey1, testKey4, math.MaxInt64, makeTS(3, 0), true, &txn)
+	kvs, _, _, _ := MVCCScan(context.Background(), engine, testKey1, testKey4, math.MaxInt64, hlc.Timestamp{WallTime: 3}, true, &txn)
 	if e := 2; len(kvs) != e {
 		t.Fatalf("e = %d, got %d", e, len(kvs))
 	}
@@ -1784,19 +1776,19 @@ func TestMVCCDeleteRangeInline(t *testing.T) {
 		{testKey4, value4},
 		{testKey5, value5},
 	} {
-		if err := MVCCPut(context.Background(), engine, nil, kv.key, makeTS(0, 0), kv.value, nil); err != nil {
+		if err := MVCCPut(context.Background(), engine, nil, kv.key, hlc.Timestamp{Logical: 0}, kv.value, nil); err != nil {
 			t.Fatalf("%d: %s", i, err)
 		}
 	}
 
 	// Create one non-inline value (non-zero timestamp).
-	if err := MVCCPut(context.Background(), engine, nil, testKey6, makeTS(1, 0), value6, nil); err != nil {
+	if err := MVCCPut(context.Background(), engine, nil, testKey6, hlc.Timestamp{WallTime: 1}, value6, nil); err != nil {
 		t.Fatal(err)
 	}
 
 	// Attempt to delete two inline keys, should succeed.
 	deleted, resumeSpan, num, err := MVCCDeleteRange(
-		context.Background(), engine, nil, testKey2, testKey6, 2, makeTS(0, 0), nil, true,
+		context.Background(), engine, nil, testKey2, testKey6, 2, hlc.Timestamp{Logical: 0}, nil, true,
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -1815,21 +1807,21 @@ func TestMVCCDeleteRangeInline(t *testing.T) {
 
 	// Attempt to delete inline keys at a timestamp; should fail.
 	if _, _, _, err := MVCCDeleteRange(
-		context.Background(), engine, nil, testKey1, testKey6, 1, makeTS(2, 0), nil, true,
+		context.Background(), engine, nil, testKey1, testKey6, 1, hlc.Timestamp{WallTime: 2}, nil, true,
 	); !testutils.IsError(err, inlineMismatchErrString) {
 		t.Fatalf("got error %v, expected error with text '%s'", err, inlineMismatchErrString)
 	}
 
 	// Attempt to delete non-inline key at zero timestamp; should fail.
 	if _, _, _, err := MVCCDeleteRange(
-		context.Background(), engine, nil, testKey6, keyMax, 1, makeTS(0, 0), nil, true,
+		context.Background(), engine, nil, testKey6, keyMax, 1, hlc.Timestamp{Logical: 0}, nil, true,
 	); !testutils.IsError(err, inlineMismatchErrString) {
 		t.Fatalf("got error %v, expected error with text '%s'", err, inlineMismatchErrString)
 	}
 
 	// Attempt to delete inline keys in a transaction; should fail.
 	if _, _, _, err := MVCCDeleteRange(
-		context.Background(), engine, nil, testKey2, testKey6, 2, makeTS(0, 0), txn1, true,
+		context.Background(), engine, nil, testKey2, testKey6, 2, hlc.Timestamp{Logical: 0}, txn1, true,
 	); !testutils.IsError(err, "writes not allowed within transactions") {
 		t.Errorf("unexpected error: %v", err)
 	}
@@ -1853,11 +1845,11 @@ func TestMVCCDeleteRangeInline(t *testing.T) {
 			Value: value6,
 		},
 	}
-	kvs, _, _, _ := MVCCScan(context.Background(), engine, keyMin, keyMax, math.MaxInt64, makeTS(2, 0), true, nil)
+	kvs, _, _, _ := MVCCScan(context.Background(), engine, keyMin, keyMax, math.MaxInt64, hlc.Timestamp{WallTime: 2}, true, nil)
 	if a, e := len(kvs), len(expectedKvs); a != e {
 		t.Fatalf("engine scan found %d keys; expected %d", a, e)
 	}
-	kvs[3].Value.Timestamp = hlc.ZeroTimestamp
+	kvs[3].Value.Timestamp = hlc.Timestamp{}
 	if !reflect.DeepEqual(expectedKvs, kvs) {
 		t.Fatalf(
 			"engine scan found key/values: %v; expected %v. Diff: %s",
@@ -1999,7 +1991,7 @@ func TestMVCCConditionalPutWithTxn(t *testing.T) {
 		t.Fatalf("expected write too old error; got %s", err)
 	}
 	expTS := txnCommit.Timestamp.Next()
-	if wtoErr, ok := err.(*roachpb.WriteTooOldError); !ok || !wtoErr.ActualTimestamp.Equal(expTS) {
+	if wtoErr, ok := err.(*roachpb.WriteTooOldError); !ok || wtoErr.ActualTimestamp != expTS {
 		t.Fatalf("expected wto error with actual timestamp = %s; got %s", expTS, wtoErr)
 	}
 }
@@ -2009,19 +2001,19 @@ func TestMVCCInitPut(t *testing.T) {
 	engine := createTestEngine()
 	defer engine.Close()
 
-	err := MVCCInitPut(context.Background(), engine, nil, testKey1, makeTS(0, 1), value1, nil)
+	err := MVCCInitPut(context.Background(), engine, nil, testKey1, hlc.Timestamp{Logical: 1}, value1, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	// A repeat of the command will still succeed
-	err = MVCCInitPut(context.Background(), engine, nil, testKey1, makeTS(0, 2), value1, nil)
+	err = MVCCInitPut(context.Background(), engine, nil, testKey1, hlc.Timestamp{Logical: 2}, value1, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	// A repeat of the command with a different value will fail.
-	err = MVCCInitPut(context.Background(), engine, nil, testKey1, makeTS(0, 3), value2, nil)
+	err = MVCCInitPut(context.Background(), engine, nil, testKey1, hlc.Timestamp{Logical: 3}, value2, nil)
 	switch e := err.(type) {
 	case *roachpb.ConditionFailedError:
 		if !bytes.Equal(e.ActualValue.RawBytes, value1.RawBytes) {
@@ -2034,7 +2026,7 @@ func TestMVCCInitPut(t *testing.T) {
 		t.Fatalf("unexpected error %T", e)
 	}
 
-	for _, ts := range []hlc.Timestamp{makeTS(0, 1), makeTS(0, 2), makeTS(1, 0)} {
+	for _, ts := range []hlc.Timestamp{{Logical: 1}, {Logical: 2}, {WallTime: 1}} {
 		value, _, err := MVCCGet(context.Background(), engine, testKey1, ts, true, nil)
 		if err != nil {
 			t.Fatal(err)
@@ -2044,12 +2036,12 @@ func TestMVCCInitPut(t *testing.T) {
 				value1.RawBytes, value.RawBytes)
 		}
 		// Ensure that the timestamp didn't get updated.
-		if !value.Timestamp.Equal(makeTS(0, 1)) {
-			t.Errorf("value at timestamp %s seen", value.Timestamp)
+		if expTS := (hlc.Timestamp{Logical: 1}); value.Timestamp != expTS {
+			t.Errorf("value at timestamp %s seen, expected %s", value.Timestamp, expTS)
 		}
 	}
 
-	value, _, pErr := MVCCGet(context.Background(), engine, testKey1, makeTS(0, 0), true, nil)
+	value, _, pErr := MVCCGet(context.Background(), engine, testKey1, hlc.Timestamp{Logical: 0}, true, nil)
 	if pErr != nil {
 		t.Fatal(pErr)
 	}
@@ -2127,26 +2119,28 @@ func TestMVCCConditionalPutWriteTooOld(t *testing.T) {
 	defer engine.Close()
 
 	// Write value1 @t=10ns.
-	if err := MVCCPut(context.Background(), engine, nil, testKey1, makeTS(10, 0), value1, nil); err != nil {
+	if err := MVCCPut(context.Background(), engine, nil, testKey1, hlc.Timestamp{WallTime: 10}, value1, nil); err != nil {
 		t.Fatal(err)
 	}
 	// Try a non-transactional put @t=1ns with expectation of nil; should fail.
-	if err := MVCCConditionalPut(context.Background(), engine, nil, testKey1, makeTS(1, 0), value2, nil, nil); err == nil {
+	if err := MVCCConditionalPut(context.Background(), engine, nil, testKey1, hlc.Timestamp{WallTime: 1}, value2, nil, nil); err == nil {
 		t.Fatal("expected error on conditional put")
 	}
 	// Now do a non-transactional put @t=1ns with expectation of value1; will succeed @t=10,1.
-	err := MVCCConditionalPut(context.Background(), engine, nil, testKey1, makeTS(1, 0), value2, &value1, nil)
-	if wtoErr, ok := err.(*roachpb.WriteTooOldError); !ok || !wtoErr.ActualTimestamp.Equal(makeTS(10, 1)) {
-		t.Fatalf("expected WriteTooOldError with actual time = 10,1; got %s", err)
+	err := MVCCConditionalPut(context.Background(), engine, nil, testKey1, hlc.Timestamp{WallTime: 1}, value2, &value1, nil)
+	expTS := hlc.Timestamp{WallTime: 10, Logical: 1}
+	if wtoErr, ok := err.(*roachpb.WriteTooOldError); !ok || wtoErr.ActualTimestamp != expTS {
+		t.Fatalf("expected WriteTooOldError with actual time = %s; got %s", expTS, err)
 	}
 	// Try a transactional put @t=1ns with expectation of value2; should fail.
-	if err := MVCCConditionalPut(context.Background(), engine, nil, testKey1, makeTS(1, 0), value2, &value1, txn1); err == nil {
+	if err := MVCCConditionalPut(context.Background(), engine, nil, testKey1, hlc.Timestamp{WallTime: 1}, value2, &value1, txn1); err == nil {
 		t.Fatal("expected error on conditional put")
 	}
 	// Now do a transactional put @t=1ns with expectation of nil; will succeed @t=10,2.
-	err = MVCCConditionalPut(context.Background(), engine, nil, testKey1, makeTS(1, 0), value3, nil, txn1)
-	if wtoErr, ok := err.(*roachpb.WriteTooOldError); !ok || !wtoErr.ActualTimestamp.Equal(makeTS(10, 2)) {
-		t.Fatalf("expected WriteTooOldError with actual time = 10,2; got %s", err)
+	err = MVCCConditionalPut(context.Background(), engine, nil, testKey1, hlc.Timestamp{WallTime: 1}, value3, nil, txn1)
+	expTS = hlc.Timestamp{WallTime: 10, Logical: 2}
+	if wtoErr, ok := err.(*roachpb.WriteTooOldError); !ok || wtoErr.ActualTimestamp != expTS {
+		t.Fatalf("expected WriteTooOldError with actual time = %s; got %s", expTS, err)
 	}
 }
 
@@ -2159,24 +2153,26 @@ func TestMVCCIncrementWriteTooOld(t *testing.T) {
 	defer engine.Close()
 
 	// Start with an increment.
-	if val, err := MVCCIncrement(context.Background(), engine, nil, testKey1, makeTS(10, 0), nil, 1); val != 1 || err != nil {
+	if val, err := MVCCIncrement(context.Background(), engine, nil, testKey1, hlc.Timestamp{WallTime: 10}, nil, 1); val != 1 || err != nil {
 		t.Fatalf("expected val=1 (got %d): %s", val, err)
 	}
 	// Try a non-transactional increment @t=1ns.
-	val, err := MVCCIncrement(context.Background(), engine, nil, testKey1, makeTS(1, 0), nil, 1)
+	val, err := MVCCIncrement(context.Background(), engine, nil, testKey1, hlc.Timestamp{WallTime: 1}, nil, 1)
 	if val != 2 || err == nil {
 		t.Fatalf("expected val=2 (got %d) and nil error: %s", val, err)
 	}
-	if wtoErr, ok := err.(*roachpb.WriteTooOldError); !ok || !wtoErr.ActualTimestamp.Equal(makeTS(10, 1)) {
-		t.Fatalf("expected WriteTooOldError with actual time = 10,1; got %s", wtoErr)
+	expTS := hlc.Timestamp{WallTime: 10, Logical: 1}
+	if wtoErr, ok := err.(*roachpb.WriteTooOldError); !ok || wtoErr.ActualTimestamp != expTS {
+		t.Fatalf("expected WriteTooOldError with actual time = %s; got %s", expTS, wtoErr)
 	}
 	// Try a transaction increment @t=1ns.
-	val, err = MVCCIncrement(context.Background(), engine, nil, testKey1, makeTS(1, 0), txn1, 1)
+	val, err = MVCCIncrement(context.Background(), engine, nil, testKey1, hlc.Timestamp{WallTime: 1}, txn1, 1)
 	if val != 1 || err == nil {
 		t.Fatalf("expected val=1 (got %d) and nil error: %s", val, err)
 	}
-	if wtoErr, ok := err.(*roachpb.WriteTooOldError); !ok || !wtoErr.ActualTimestamp.Equal(makeTS(10, 2)) {
-		t.Fatalf("expected WriteTooOldError with actual time = 10,2; got %s", wtoErr)
+	expTS = hlc.Timestamp{WallTime: 10, Logical: 2}
+	if wtoErr, ok := err.(*roachpb.WriteTooOldError); !ok || wtoErr.ActualTimestamp != expTS {
+		t.Fatalf("expected WriteTooOldError with actual time = %s; got %s", expTS, wtoErr)
 	}
 }
 
@@ -2187,26 +2183,26 @@ func TestMVCCReverseScan(t *testing.T) {
 	engine := createTestEngine()
 	defer engine.Close()
 
-	if err := MVCCPut(context.Background(), engine, nil, testKey1, makeTS(1, 0), value1, nil); err != nil {
+	if err := MVCCPut(context.Background(), engine, nil, testKey1, hlc.Timestamp{WallTime: 1}, value1, nil); err != nil {
 		t.Fatal(err)
 	}
-	if err := MVCCPut(context.Background(), engine, nil, testKey1, makeTS(2, 0), value2, nil); err != nil {
+	if err := MVCCPut(context.Background(), engine, nil, testKey1, hlc.Timestamp{WallTime: 2}, value2, nil); err != nil {
 		t.Fatal(err)
 	}
-	if err := MVCCPut(context.Background(), engine, nil, testKey2, makeTS(1, 0), value3, nil); err != nil {
+	if err := MVCCPut(context.Background(), engine, nil, testKey2, hlc.Timestamp{WallTime: 1}, value3, nil); err != nil {
 		t.Fatal(err)
 	}
-	if err := MVCCPut(context.Background(), engine, nil, testKey2, makeTS(3, 0), value4, nil); err != nil {
+	if err := MVCCPut(context.Background(), engine, nil, testKey2, hlc.Timestamp{WallTime: 3}, value4, nil); err != nil {
 		t.Fatal(err)
 	}
-	if err := MVCCPut(context.Background(), engine, nil, testKey3, makeTS(1, 0), value1, nil); err != nil {
+	if err := MVCCPut(context.Background(), engine, nil, testKey3, hlc.Timestamp{WallTime: 1}, value1, nil); err != nil {
 		t.Fatal(err)
 	}
-	if err := MVCCPut(context.Background(), engine, nil, testKey4, makeTS(1, 0), value2, nil); err != nil {
+	if err := MVCCPut(context.Background(), engine, nil, testKey4, hlc.Timestamp{WallTime: 1}, value2, nil); err != nil {
 		t.Fatal(err)
 	}
 
-	kvs, resumeSpan, _, err := MVCCReverseScan(context.Background(), engine, testKey2, testKey4, math.MaxInt64, makeTS(1, 0), true, nil)
+	kvs, resumeSpan, _, err := MVCCReverseScan(context.Background(), engine, testKey2, testKey4, math.MaxInt64, hlc.Timestamp{WallTime: 1}, true, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2221,7 +2217,7 @@ func TestMVCCReverseScan(t *testing.T) {
 		t.Fatalf("resumeSpan = %+v", resumeSpan)
 	}
 
-	kvs, resumeSpan, _, err = MVCCReverseScan(context.Background(), engine, testKey2, testKey4, 1, makeTS(1, 0), true, nil)
+	kvs, resumeSpan, _, err = MVCCReverseScan(context.Background(), engine, testKey2, testKey4, 1, hlc.Timestamp{WallTime: 1}, true, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2233,7 +2229,7 @@ func TestMVCCReverseScan(t *testing.T) {
 	if expected := (roachpb.Span{Key: testKey2, EndKey: testKey2.Next()}); !resumeSpan.Equal(expected) {
 		t.Fatalf("expected = %+v, resumeSpan = %+v", expected, resumeSpan)
 	}
-	kvs, resumeSpan, _, err = MVCCReverseScan(context.Background(), engine, testKey2, testKey4, 0, makeTS(1, 0), true, nil)
+	kvs, resumeSpan, _, err = MVCCReverseScan(context.Background(), engine, testKey2, testKey4, 0, hlc.Timestamp{WallTime: 1}, true, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2250,12 +2246,12 @@ func TestMVCCResolveTxn(t *testing.T) {
 	engine := createTestEngine()
 	defer engine.Close()
 
-	if err := MVCCPut(context.Background(), engine, nil, testKey1, makeTS(0, 1), value1, txn1); err != nil {
+	if err := MVCCPut(context.Background(), engine, nil, testKey1, hlc.Timestamp{Logical: 1}, value1, txn1); err != nil {
 		t.Fatal(err)
 	}
 
 	{
-		value, _, err := MVCCGet(context.Background(), engine, testKey1, makeTS(0, 1), true, txn1)
+		value, _, err := MVCCGet(context.Background(), engine, testKey1, hlc.Timestamp{Logical: 1}, true, txn1)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -2271,7 +2267,7 @@ func TestMVCCResolveTxn(t *testing.T) {
 	}
 
 	{
-		value, _, err := MVCCGet(context.Background(), engine, testKey1, makeTS(0, 1), true, nil)
+		value, _, err := MVCCGet(context.Background(), engine, testKey1, hlc.Timestamp{Logical: 1}, true, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -2295,7 +2291,7 @@ func TestMVCCResolveNewerIntent(t *testing.T) {
 	}
 	// Now, put down an intent which should return a write too old error
 	// (but will still write the intent at tx1Commit.Timestmap+1.
-	err := MVCCPut(context.Background(), engine, nil, testKey1, makeTS(0, 1), value2, txn1)
+	err := MVCCPut(context.Background(), engine, nil, testKey1, hlc.Timestamp{Logical: 1}, value2, txn1)
 	if _, ok := err.(*roachpb.WriteTooOldError); !ok {
 		t.Fatalf("expected write too old error; got %s", err)
 	}
@@ -2305,7 +2301,7 @@ func TestMVCCResolveNewerIntent(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	value, _, err := MVCCGet(context.Background(), engine, testKey1, makeTS(0, 2), true, nil)
+	value, _, err := MVCCGet(context.Background(), engine, testKey1, hlc.Timestamp{Logical: 2}, true, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2377,17 +2373,17 @@ func TestMVCCConditionalPutOldTimestamp(t *testing.T) {
 	engine := createTestEngine()
 	defer engine.Close()
 
-	err := MVCCPut(context.Background(), engine, nil, testKey1, makeTS(1, 0), value1, nil)
+	err := MVCCPut(context.Background(), engine, nil, testKey1, hlc.Timestamp{WallTime: 1}, value1, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = MVCCPut(context.Background(), engine, nil, testKey1, makeTS(3, 0), value2, nil)
+	err = MVCCPut(context.Background(), engine, nil, testKey1, hlc.Timestamp{WallTime: 3}, value2, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	// Check nothing is written if the value doesn't match.
-	err = MVCCConditionalPut(context.Background(), engine, nil, testKey1, makeTS(2, 0), value3, &value1, nil)
+	err = MVCCConditionalPut(context.Background(), engine, nil, testKey1, hlc.Timestamp{WallTime: 2}, value3, &value1, nil)
 	if err == nil {
 		t.Errorf("unexpected success on conditional put")
 	}
@@ -2397,7 +2393,7 @@ func TestMVCCConditionalPutOldTimestamp(t *testing.T) {
 
 	// But if value does match the most recently written version, we'll get
 	// a write too old error but still write updated value.
-	err = MVCCConditionalPut(context.Background(), engine, nil, testKey1, makeTS(2, 0), value3, &value2, nil)
+	err = MVCCConditionalPut(context.Background(), engine, nil, testKey1, hlc.Timestamp{WallTime: 2}, value3, &value2, nil)
 	if err == nil {
 		t.Errorf("unexpected success on conditional put")
 	}
@@ -2405,10 +2401,11 @@ func TestMVCCConditionalPutOldTimestamp(t *testing.T) {
 		t.Errorf("unexpected error on conditional put: %s", err)
 	}
 	// Verify new value was actually written at (3, 1).
-	value, _, err := MVCCGet(context.Background(), engine, testKey1, makeTS(3, 1), true, nil)
-	if err != nil || !value.Timestamp.Equal(makeTS(3, 1)) || !bytes.Equal(value3.RawBytes, value.RawBytes) {
+	ts := hlc.Timestamp{WallTime: 3, Logical: 1}
+	value, _, err := MVCCGet(context.Background(), engine, testKey1, ts, true, nil)
+	if err != nil || value.Timestamp != ts || !bytes.Equal(value3.RawBytes, value.RawBytes) {
 		t.Fatalf("expected err=nil (got %s), timestamp=%s (got %s), value=%q (got %q)",
-			err, value.Timestamp, makeTS(1, 1), value3.RawBytes, value.RawBytes)
+			err, value.Timestamp, ts, value3.RawBytes, value.RawBytes)
 	}
 }
 
@@ -2417,18 +2414,18 @@ func TestMVCCAbortTxn(t *testing.T) {
 	engine := createTestEngine()
 	defer engine.Close()
 
-	if err := MVCCPut(context.Background(), engine, nil, testKey1, makeTS(0, 1), value1, txn1); err != nil {
+	if err := MVCCPut(context.Background(), engine, nil, testKey1, hlc.Timestamp{Logical: 1}, value1, txn1); err != nil {
 		t.Fatal(err)
 	}
 
 	txn1AbortWithTS := txn1Abort.Clone()
-	txn1AbortWithTS.Timestamp = makeTS(0, 1)
+	txn1AbortWithTS.Timestamp = hlc.Timestamp{Logical: 1}
 
 	if err := MVCCResolveWriteIntent(context.Background(), engine, nil, roachpb.Intent{Span: roachpb.Span{Key: testKey1}, Txn: txn1AbortWithTS.TxnMeta, Status: txn1AbortWithTS.Status}); err != nil {
 		t.Fatal(err)
 	}
 
-	if value, _, err := MVCCGet(context.Background(), engine, testKey1, makeTS(1, 0), true, nil); err != nil {
+	if value, _, err := MVCCGet(context.Background(), engine, testKey1, hlc.Timestamp{WallTime: 1}, true, nil); err != nil {
 		t.Fatal(err)
 	} else if value != nil {
 		t.Fatalf("expected the value to be empty: %s", value)
@@ -2445,18 +2442,18 @@ func TestMVCCAbortTxnWithPreviousVersion(t *testing.T) {
 	engine := createTestEngine()
 	defer engine.Close()
 
-	if err := MVCCPut(context.Background(), engine, nil, testKey1, makeTS(0, 1), value1, nil); err != nil {
+	if err := MVCCPut(context.Background(), engine, nil, testKey1, hlc.Timestamp{Logical: 1}, value1, nil); err != nil {
 		t.Fatal(err)
 	}
-	if err := MVCCPut(context.Background(), engine, nil, testKey1, makeTS(1, 0), value2, nil); err != nil {
+	if err := MVCCPut(context.Background(), engine, nil, testKey1, hlc.Timestamp{WallTime: 1}, value2, nil); err != nil {
 		t.Fatal(err)
 	}
-	if err := MVCCPut(context.Background(), engine, nil, testKey1, makeTS(2, 0), value3, txn1); err != nil {
+	if err := MVCCPut(context.Background(), engine, nil, testKey1, hlc.Timestamp{WallTime: 2}, value3, txn1); err != nil {
 		t.Fatal(err)
 	}
 
 	txn1AbortWithTS := txn1Abort.Clone()
-	txn1AbortWithTS.Timestamp = makeTS(2, 0)
+	txn1AbortWithTS.Timestamp = hlc.Timestamp{WallTime: 2}
 
 	if err := MVCCResolveWriteIntent(context.Background(), engine, nil, roachpb.Intent{Span: roachpb.Span{Key: testKey1}, Status: txn1AbortWithTS.Status, Txn: txn1AbortWithTS.TxnMeta}); err != nil {
 		t.Fatal(err)
@@ -2468,9 +2465,9 @@ func TestMVCCAbortTxnWithPreviousVersion(t *testing.T) {
 		t.Fatalf("expected no more MVCCMetadata, got: %s", meta)
 	}
 
-	if value, _, err := MVCCGet(context.Background(), engine, testKey1, makeTS(3, 0), true, nil); err != nil {
+	if value, _, err := MVCCGet(context.Background(), engine, testKey1, hlc.Timestamp{WallTime: 3}, true, nil); err != nil {
 		t.Fatal(err)
-	} else if expTS := makeTS(1, 0); !value.Timestamp.Equal(expTS) {
+	} else if expTS := (hlc.Timestamp{WallTime: 1}); value.Timestamp != expTS {
 		t.Fatalf("expected timestamp %+v == %+v", value.Timestamp, expTS)
 	} else if !bytes.Equal(value2.RawBytes, value.RawBytes) {
 		t.Fatalf("the value %q in get result does not match the value %q in request",
@@ -2486,75 +2483,79 @@ func TestMVCCWriteWithDiffTimestampsAndEpochs(t *testing.T) {
 	// Start with epoch 1.
 	txn := *txn1
 	txn.Sequence++
-	if err := MVCCPut(context.Background(), engine, nil, testKey1, makeTS(0, 1), value1, &txn); err != nil {
+	if err := MVCCPut(context.Background(), engine, nil, testKey1, hlc.Timestamp{Logical: 1}, value1, &txn); err != nil {
 		t.Fatal(err)
 	}
 	// Now write with greater timestamp and epoch 2.
 	txne2 := txn
 	txne2.Sequence++
 	txne2.Epoch = 2
-	if err := MVCCPut(context.Background(), engine, nil, testKey1, makeTS(1, 0), value2, &txne2); err != nil {
+	if err := MVCCPut(context.Background(), engine, nil, testKey1, hlc.Timestamp{WallTime: 1}, value2, &txne2); err != nil {
 		t.Fatal(err)
 	}
 	// Try a write with an earlier timestamp; this is just ignored.
 	txne2.Sequence++
-	if err := MVCCPut(context.Background(), engine, nil, testKey1, makeTS(0, 1), value1, &txne2); err != nil {
+	if err := MVCCPut(context.Background(), engine, nil, testKey1, hlc.Timestamp{Logical: 1}, value1, &txne2); err != nil {
 		t.Fatal(err)
 	}
 	// Try a write with an earlier epoch; again ignored.
-	if err := MVCCPut(context.Background(), engine, nil, testKey1, makeTS(1, 0), value1, &txn); err == nil {
+	if err := MVCCPut(context.Background(), engine, nil, testKey1, hlc.Timestamp{WallTime: 1}, value1, &txn); err == nil {
 		t.Fatal("unexpected success of a write with an earlier epoch")
 	}
 	// Try a write with different value using both later timestamp and epoch.
 	txne2.Sequence++
-	if err := MVCCPut(context.Background(), engine, nil, testKey1, makeTS(1, 0), value3, &txne2); err != nil {
+	if err := MVCCPut(context.Background(), engine, nil, testKey1, hlc.Timestamp{WallTime: 1}, value3, &txne2); err != nil {
 		t.Fatal(err)
 	}
 	// Resolve the intent.
 	txne2Commit := txne2
 	txne2Commit.Status = roachpb.COMMITTED
-	txne2Commit.Timestamp = makeTS(1, 0)
+	txne2Commit.Timestamp = hlc.Timestamp{WallTime: 1}
 	if err := MVCCResolveWriteIntent(context.Background(), engine, nil, roachpb.Intent{Span: roachpb.Span{Key: testKey1}, Status: txne2Commit.Status, Txn: txne2Commit.TxnMeta}); err != nil {
 		t.Fatal(err)
 	}
+
+	expTS := txne2Commit.Timestamp.Add(0, 1)
+
 	// Now try writing an earlier value without a txn--should get WriteTooOldError.
-	err := MVCCPut(context.Background(), engine, nil, testKey1, makeTS(0, 1), value4, nil)
+	err := MVCCPut(context.Background(), engine, nil, testKey1, hlc.Timestamp{Logical: 1}, value4, nil)
 	if wtoErr, ok := err.(*roachpb.WriteTooOldError); !ok {
 		t.Fatal("unexpected success")
-	} else if !wtoErr.ActualTimestamp.Equal(makeTS(1, 1)) {
-		t.Fatalf("expected write too old error with actual ts %s; got %s", makeTS(1, 1), wtoErr.ActualTimestamp)
+	} else if wtoErr.ActualTimestamp != expTS {
+		t.Fatalf("expected write too old error with actual ts %s; got %s", expTS, wtoErr.ActualTimestamp)
 	}
 	// Verify value was actually written at (1, 1).
-	value, _, err := MVCCGet(context.Background(), engine, testKey1, makeTS(1, 1), true, nil)
-	if err != nil || !value.Timestamp.Equal(makeTS(1, 1)) || !bytes.Equal(value4.RawBytes, value.RawBytes) {
+	value, _, err := MVCCGet(context.Background(), engine, testKey1, expTS, true, nil)
+	if err != nil || value.Timestamp != expTS || !bytes.Equal(value4.RawBytes, value.RawBytes) {
 		t.Fatalf("expected err=nil (got %s), timestamp=%s (got %s), value=%q (got %q)",
-			err, value.Timestamp, makeTS(1, 1), value4.RawBytes, value.RawBytes)
+			err, value.Timestamp, expTS, value4.RawBytes, value.RawBytes)
 	}
 	// Now write an intent with exactly the same timestamp--ties also get WriteTooOldError.
-	err = MVCCPut(context.Background(), engine, nil, testKey1, makeTS(1, 1), value5, txn2)
+	err = MVCCPut(context.Background(), engine, nil, testKey1, expTS, value5, txn2)
+	intentTS := expTS.Add(0, 1)
 	if wtoErr, ok := err.(*roachpb.WriteTooOldError); !ok {
 		t.Fatal("unexpected success")
-	} else if !wtoErr.ActualTimestamp.Equal(makeTS(1, 2)) {
-		t.Fatalf("expected write too old error with actual ts %s; got %s", makeTS(1, 2), wtoErr.ActualTimestamp)
+	} else if wtoErr.ActualTimestamp != intentTS {
+		t.Fatalf("expected write too old error with actual ts %s; got %s", intentTS, wtoErr.ActualTimestamp)
 	}
 	// Verify intent value was actually written at (1, 2).
-	value, _, err = MVCCGet(context.Background(), engine, testKey1, makeTS(1, 2), true, txn2)
-	if err != nil || !value.Timestamp.Equal(makeTS(1, 2)) || !bytes.Equal(value5.RawBytes, value.RawBytes) {
+	value, _, err = MVCCGet(context.Background(), engine, testKey1, intentTS, true, txn2)
+	if err != nil || value.Timestamp != intentTS || !bytes.Equal(value5.RawBytes, value.RawBytes) {
 		t.Fatalf("expected err=nil (got %s), timestamp=%s (got %s), value=%q (got %q)",
-			err, value.Timestamp, makeTS(1, 2), value5.RawBytes, value.RawBytes)
+			err, value.Timestamp, intentTS, value5.RawBytes, value.RawBytes)
 	}
 	// Attempt to read older timestamp; should fail.
-	value, _, err = MVCCGet(context.Background(), engine, testKey1, makeTS(0, 0), true, nil)
+	value, _, err = MVCCGet(context.Background(), engine, testKey1, hlc.Timestamp{Logical: 0}, true, nil)
 	if value != nil || err != nil {
 		t.Fatalf("expected value nil, err nil; got %+v, %v", value, err)
 	}
 	// Read at correct timestamp.
-	value, _, err = MVCCGet(context.Background(), engine, testKey1, makeTS(1, 0), true, nil)
+	value, _, err = MVCCGet(context.Background(), engine, testKey1, hlc.Timestamp{WallTime: 1}, true, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !value.Timestamp.Equal(makeTS(1, 0)) {
-		t.Fatalf("expected timestamp %+v == %+v", value.Timestamp, makeTS(1, 0))
+	if expTS := (hlc.Timestamp{WallTime: 1}); value.Timestamp != expTS {
+		t.Fatalf("expected timestamp %+v == %+v", value.Timestamp, expTS)
 	}
 	if !bytes.Equal(value3.RawBytes, value.RawBytes) {
 		t.Fatalf("the value %s in get result does not match the value %s in request",
@@ -2571,11 +2572,11 @@ func TestMVCCReadWithDiffEpochs(t *testing.T) {
 	defer engine.Close()
 
 	// Write initial value without a txn.
-	if err := MVCCPut(context.Background(), engine, nil, testKey1, makeTS(0, 1), value1, nil); err != nil {
+	if err := MVCCPut(context.Background(), engine, nil, testKey1, hlc.Timestamp{Logical: 1}, value1, nil); err != nil {
 		t.Fatal(err)
 	}
 	// Now write using txn1, epoch 1.
-	if err := MVCCPut(context.Background(), engine, nil, testKey1, makeTS(1, 0), value2, txn1); err != nil {
+	if err := MVCCPut(context.Background(), engine, nil, testKey1, hlc.Timestamp{WallTime: 1}, value2, txn1); err != nil {
 		t.Fatal(err)
 	}
 	// Try reading using different txns & epochs.
@@ -2594,7 +2595,7 @@ func TestMVCCReadWithDiffEpochs(t *testing.T) {
 		{txn2, nil, true},
 	}
 	for i, test := range testCases {
-		value, _, err := MVCCGet(context.Background(), engine, testKey1, makeTS(2, 0), true, test.txn)
+		value, _, err := MVCCGet(context.Background(), engine, testKey1, hlc.Timestamp{WallTime: 2}, true, test.txn)
 		if test.expErr {
 			if err == nil {
 				t.Errorf("test %d: unexpected success", i)
@@ -2614,10 +2615,10 @@ func TestMVCCReadWithOldEpoch(t *testing.T) {
 	engine := createTestEngine()
 	defer engine.Close()
 
-	if err := MVCCPut(context.Background(), engine, nil, testKey1, makeTS(1, 0), value2, txn1e2); err != nil {
+	if err := MVCCPut(context.Background(), engine, nil, testKey1, hlc.Timestamp{WallTime: 1}, value2, txn1e2); err != nil {
 		t.Fatal(err)
 	}
-	_, _, err := MVCCGet(context.Background(), engine, testKey1, makeTS(2, 0), true, txn1)
+	_, _, err := MVCCGet(context.Background(), engine, testKey1, hlc.Timestamp{WallTime: 2}, true, txn1)
 	if err == nil {
 		t.Fatalf("unexpected success of get")
 	}
@@ -2648,7 +2649,7 @@ func TestMVCCWriteWithSequenceAndBatchIndex(t *testing.T) {
 		{3, 2, false}, // new sequence, new batch index
 	}
 
-	ts := makeTS(0, 1)
+	ts := hlc.Timestamp{Logical: 1}
 	for i, tc := range testCases {
 		key := roachpb.Key(fmt.Sprintf("key-%d", i))
 		// Start with sequence 2, batch index 1.
@@ -2682,16 +2683,16 @@ func TestMVCCReadWithPushedTimestamp(t *testing.T) {
 	defer engine.Close()
 
 	// Start with epoch 1.
-	if err := MVCCPut(context.Background(), engine, nil, testKey1, makeTS(0, 1), value1, txn1); err != nil {
+	if err := MVCCPut(context.Background(), engine, nil, testKey1, hlc.Timestamp{Logical: 1}, value1, txn1); err != nil {
 		t.Fatal(err)
 	}
 	// Resolve the intent, pushing its timestamp forward.
-	txn := makeTxn(*txn1, makeTS(1, 0))
+	txn := makeTxn(*txn1, hlc.Timestamp{WallTime: 1})
 	if err := MVCCResolveWriteIntent(context.Background(), engine, nil, roachpb.Intent{Span: roachpb.Span{Key: testKey1}, Status: txn.Status, Txn: txn.TxnMeta}); err != nil {
 		t.Fatal(err)
 	}
 	// Attempt to read using naive txn's previous timestamp.
-	value, _, err := MVCCGet(context.Background(), engine, testKey1, makeTS(0, 1), true, txn1)
+	value, _, err := MVCCGet(context.Background(), engine, testKey1, hlc.Timestamp{Logical: 1}, true, txn1)
 	if err != nil || value == nil || !bytes.Equal(value.RawBytes, value1.RawBytes) {
 		t.Errorf("expected value %q, err nil; got %+v, %v", value1.RawBytes, value, err)
 	}
@@ -2702,10 +2703,10 @@ func TestMVCCResolveWithDiffEpochs(t *testing.T) {
 	engine := createTestEngine()
 	defer engine.Close()
 
-	if err := MVCCPut(context.Background(), engine, nil, testKey1, makeTS(0, 1), value1, txn1); err != nil {
+	if err := MVCCPut(context.Background(), engine, nil, testKey1, hlc.Timestamp{Logical: 1}, value1, txn1); err != nil {
 		t.Fatal(err)
 	}
-	if err := MVCCPut(context.Background(), engine, nil, testKey2, makeTS(0, 1), value2, txn1e2); err != nil {
+	if err := MVCCPut(context.Background(), engine, nil, testKey2, hlc.Timestamp{Logical: 1}, value2, txn1e2); err != nil {
 		t.Fatal(err)
 	}
 	num, err := MVCCResolveWriteIntentRange(context.Background(), engine, nil, roachpb.Intent{Span: roachpb.Span{Key: testKey1, EndKey: testKey2.Next()}, Txn: txn1e2Commit.TxnMeta, Status: txn1e2Commit.Status}, 2)
@@ -2718,12 +2719,12 @@ func TestMVCCResolveWithDiffEpochs(t *testing.T) {
 
 	// Verify key1 is empty, as resolution with epoch 2 would have
 	// aborted the epoch 1 intent.
-	if value, _, err := MVCCGet(context.Background(), engine, testKey1, makeTS(0, 1), true, nil); value != nil || err != nil {
+	if value, _, err := MVCCGet(context.Background(), engine, testKey1, hlc.Timestamp{Logical: 1}, true, nil); value != nil || err != nil {
 		t.Errorf("expected value nil, err nil; got %+v, %v", value, err)
 	}
 
 	// Key2 should be committed.
-	value, _, err := MVCCGet(context.Background(), engine, testKey2, makeTS(0, 1), true, nil)
+	value, _, err := MVCCGet(context.Background(), engine, testKey2, hlc.Timestamp{Logical: 1}, true, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2738,11 +2739,11 @@ func TestMVCCResolveWithUpdatedTimestamp(t *testing.T) {
 	engine := createTestEngine()
 	defer engine.Close()
 
-	if err := MVCCPut(context.Background(), engine, nil, testKey1, makeTS(0, 1), value1, txn1); err != nil {
+	if err := MVCCPut(context.Background(), engine, nil, testKey1, hlc.Timestamp{Logical: 1}, value1, txn1); err != nil {
 		t.Fatal(err)
 	}
 
-	value, _, err := MVCCGet(context.Background(), engine, testKey1, makeTS(1, 0), true, txn1)
+	value, _, err := MVCCGet(context.Background(), engine, testKey1, hlc.Timestamp{WallTime: 1}, true, txn1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2753,21 +2754,21 @@ func TestMVCCResolveWithUpdatedTimestamp(t *testing.T) {
 
 	// Resolve with a higher commit timestamp -- this should rewrite the
 	// intent when making it permanent.
-	txn := makeTxn(*txn1Commit, makeTS(1, 0))
+	txn := makeTxn(*txn1Commit, hlc.Timestamp{WallTime: 1})
 	if err = MVCCResolveWriteIntent(context.Background(), engine, nil, roachpb.Intent{Span: roachpb.Span{Key: testKey1}, Status: txn.Status, Txn: txn.TxnMeta}); err != nil {
 		t.Fatal(err)
 	}
 
-	if value, _, err = MVCCGet(context.Background(), engine, testKey1, makeTS(0, 1), true, nil); value != nil || err != nil {
+	if value, _, err = MVCCGet(context.Background(), engine, testKey1, hlc.Timestamp{Logical: 1}, true, nil); value != nil || err != nil {
 		t.Fatalf("expected both value and err to be nil: %+v, %v", value, err)
 	}
 
-	value, _, err = MVCCGet(context.Background(), engine, testKey1, makeTS(1, 0), true, nil)
+	value, _, err = MVCCGet(context.Background(), engine, testKey1, hlc.Timestamp{WallTime: 1}, true, nil)
 	if err != nil {
 		t.Error(err)
 	}
-	if !value.Timestamp.Equal(makeTS(1, 0)) {
-		t.Fatalf("expected timestamp %+v == %+v", value.Timestamp, makeTS(1, 0))
+	if expTS := (hlc.Timestamp{WallTime: 1}); value.Timestamp != expTS {
+		t.Fatalf("expected timestamp %+v == %+v", value.Timestamp, expTS)
 	}
 	if !bytes.Equal(value1.RawBytes, value.RawBytes) {
 		t.Fatalf("the value %s in get result does not match the value %s in request",
@@ -2780,10 +2781,10 @@ func TestMVCCResolveWithPushedTimestamp(t *testing.T) {
 	engine := createTestEngine()
 	defer engine.Close()
 
-	if err := MVCCPut(context.Background(), engine, nil, testKey1, makeTS(0, 1), value1, txn1); err != nil {
+	if err := MVCCPut(context.Background(), engine, nil, testKey1, hlc.Timestamp{Logical: 1}, value1, txn1); err != nil {
 		t.Fatal(err)
 	}
-	value, _, err := MVCCGet(context.Background(), engine, testKey1, makeTS(1, 0), true, txn1)
+	value, _, err := MVCCGet(context.Background(), engine, testKey1, hlc.Timestamp{WallTime: 1}, true, txn1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2794,22 +2795,22 @@ func TestMVCCResolveWithPushedTimestamp(t *testing.T) {
 
 	// Resolve with a higher commit timestamp, but with still-pending transaction.
 	// This represents a straightforward push (i.e. from a read/write conflict).
-	txn := makeTxn(*txn1, makeTS(1, 0))
+	txn := makeTxn(*txn1, hlc.Timestamp{WallTime: 1})
 	if err = MVCCResolveWriteIntent(context.Background(), engine, nil, roachpb.Intent{Span: roachpb.Span{Key: testKey1}, Status: txn.Status, Txn: txn.TxnMeta}); err != nil {
 		t.Fatal(err)
 	}
 
-	if value, _, err = MVCCGet(context.Background(), engine, testKey1, makeTS(1, 0), true, nil); value != nil || err == nil {
+	if value, _, err = MVCCGet(context.Background(), engine, testKey1, hlc.Timestamp{WallTime: 1}, true, nil); value != nil || err == nil {
 		t.Fatalf("expected both value nil and err to be a writeIntentError: %+v", value)
 	}
 
 	// Can still fetch the value using txn1.
-	value, _, err = MVCCGet(context.Background(), engine, testKey1, makeTS(1, 0), true, txn1)
+	value, _, err = MVCCGet(context.Background(), engine, testKey1, hlc.Timestamp{WallTime: 1}, true, txn1)
 	if err != nil {
 		t.Error(err)
 	}
-	if !value.Timestamp.Equal(makeTS(1, 0)) {
-		t.Fatalf("expected timestamp %+v == %+v", value.Timestamp, makeTS(1, 0))
+	if expTS := (hlc.Timestamp{WallTime: 1}); value.Timestamp != expTS {
+		t.Fatalf("expected timestamp %+v == %+v", value.Timestamp, expTS)
 	}
 	if !bytes.Equal(value1.RawBytes, value.RawBytes) {
 		t.Fatalf("the value %s in get result does not match the value %s in request",
@@ -2828,7 +2829,7 @@ func TestMVCCResolveTxnNoOps(t *testing.T) {
 	}
 
 	// Add key and resolve despite there being no intent.
-	if err := MVCCPut(context.Background(), engine, nil, testKey1, makeTS(0, 1), value1, nil); err != nil {
+	if err := MVCCPut(context.Background(), engine, nil, testKey1, hlc.Timestamp{Logical: 1}, value1, nil); err != nil {
 		t.Fatal(err)
 	}
 	if err := MVCCResolveWriteIntent(context.Background(), engine, nil, roachpb.Intent{Span: roachpb.Span{Key: testKey1}, Status: txn2Commit.Status, Txn: txn2Commit.TxnMeta}); err != nil {
@@ -2836,12 +2837,12 @@ func TestMVCCResolveTxnNoOps(t *testing.T) {
 	}
 
 	// Write intent and resolve with different txn.
-	if err := MVCCPut(context.Background(), engine, nil, testKey1, makeTS(1, 0), value2, txn1); err != nil {
+	if err := MVCCPut(context.Background(), engine, nil, testKey1, hlc.Timestamp{WallTime: 1}, value2, txn1); err != nil {
 		t.Fatal(err)
 	}
 
 	txn1CommitWithTS := txn2Commit.Clone()
-	txn1CommitWithTS.Timestamp = makeTS(1, 0)
+	txn1CommitWithTS.Timestamp = hlc.Timestamp{WallTime: 1}
 	if err := MVCCResolveWriteIntent(context.Background(), engine, nil, roachpb.Intent{Span: roachpb.Span{Key: testKey1}, Status: txn1CommitWithTS.Status, Txn: txn1CommitWithTS.TxnMeta}); err != nil {
 		t.Fatal(err)
 	}
@@ -2852,16 +2853,16 @@ func TestMVCCResolveTxnRange(t *testing.T) {
 	engine := createTestEngine()
 	defer engine.Close()
 
-	if err := MVCCPut(context.Background(), engine, nil, testKey1, makeTS(0, 1), value1, txn1); err != nil {
+	if err := MVCCPut(context.Background(), engine, nil, testKey1, hlc.Timestamp{Logical: 1}, value1, txn1); err != nil {
 		t.Fatal(err)
 	}
-	if err := MVCCPut(context.Background(), engine, nil, testKey2, makeTS(0, 1), value2, nil); err != nil {
+	if err := MVCCPut(context.Background(), engine, nil, testKey2, hlc.Timestamp{Logical: 1}, value2, nil); err != nil {
 		t.Fatal(err)
 	}
-	if err := MVCCPut(context.Background(), engine, nil, testKey3, makeTS(0, 1), value3, txn2); err != nil {
+	if err := MVCCPut(context.Background(), engine, nil, testKey3, hlc.Timestamp{Logical: 1}, value3, txn2); err != nil {
 		t.Fatal(err)
 	}
-	if err := MVCCPut(context.Background(), engine, nil, testKey4, makeTS(0, 1), value4, txn1); err != nil {
+	if err := MVCCPut(context.Background(), engine, nil, testKey4, hlc.Timestamp{Logical: 1}, value4, txn1); err != nil {
 		t.Fatal(err)
 	}
 
@@ -2874,7 +2875,7 @@ func TestMVCCResolveTxnRange(t *testing.T) {
 	}
 
 	{
-		value, _, err := MVCCGet(context.Background(), engine, testKey1, makeTS(0, 1), true, nil)
+		value, _, err := MVCCGet(context.Background(), engine, testKey1, hlc.Timestamp{Logical: 1}, true, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -2885,7 +2886,7 @@ func TestMVCCResolveTxnRange(t *testing.T) {
 	}
 
 	{
-		value, _, err := MVCCGet(context.Background(), engine, testKey2, makeTS(0, 1), true, nil)
+		value, _, err := MVCCGet(context.Background(), engine, testKey2, hlc.Timestamp{Logical: 1}, true, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -2896,7 +2897,7 @@ func TestMVCCResolveTxnRange(t *testing.T) {
 	}
 
 	{
-		value, _, err := MVCCGet(context.Background(), engine, testKey3, makeTS(0, 1), true, txn2)
+		value, _, err := MVCCGet(context.Background(), engine, testKey3, hlc.Timestamp{Logical: 1}, true, txn2)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -2908,7 +2909,7 @@ func TestMVCCResolveTxnRange(t *testing.T) {
 
 	// The fourth key is unresolved.
 	{
-		_, _, err := MVCCGet(context.Background(), engine, testKey4, makeTS(0, 1), true, nil)
+		_, _, err := MVCCGet(context.Background(), engine, testKey4, hlc.Timestamp{Logical: 1}, true, nil)
 		if !testutils.IsError(err, "conflicting intents on") {
 			t.Fatal(err)
 		}
@@ -2963,7 +2964,7 @@ func TestFindSplitKey(t *testing.T) {
 		v := strings.Repeat("X", 10-len(k))
 		val := roachpb.MakeValueFromString(v)
 		// Write the key and value through MVCC
-		if err := MVCCPut(context.Background(), engine, ms, []byte(k), makeTS(0, 1), val, nil); err != nil {
+		if err := MVCCPut(context.Background(), engine, ms, []byte(k), hlc.Timestamp{Logical: 1}, val, nil); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -3091,7 +3092,7 @@ func TestFindValidSplitKeys(t *testing.T) {
 		ms := &enginepb.MVCCStats{}
 		val := roachpb.MakeValueFromString(strings.Repeat("X", 10))
 		for _, k := range test.keys {
-			if err := MVCCPut(context.Background(), engine, ms, []byte(k), makeTS(0, 1), val, nil); err != nil {
+			if err := MVCCPut(context.Background(), engine, ms, []byte(k), hlc.Timestamp{Logical: 1}, val, nil); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -3189,7 +3190,7 @@ func TestFindBalancedSplitKeys(t *testing.T) {
 				expKey = key
 			}
 			val := roachpb.MakeValueFromString(strings.Repeat("X", test.valSizes[j]))
-			if err := MVCCPut(context.Background(), engine, ms, key, makeTS(0, 1), val, nil); err != nil {
+			if err := MVCCPut(context.Background(), engine, ms, key, hlc.Timestamp{Logical: 1}, val, nil); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -3276,7 +3277,7 @@ func TestMVCCStatsBasic(t *testing.T) {
 	ms := &enginepb.MVCCStats{}
 
 	// Verify size of mvccVersionTimestampSize.
-	ts := makeTS(1*1E9, 0)
+	ts := hlc.Timestamp{WallTime: 1 * 1E9}
 	key := roachpb.Key("a")
 	keySize := int64(mvccVersionKey(key, ts).EncodedSize() - mvccKey(key).EncodedSize())
 	if keySize != mvccVersionTimestampSize {
@@ -3308,8 +3309,8 @@ func TestMVCCStatsBasic(t *testing.T) {
 
 	// Delete the value using a transaction.
 	u := uuid.MakeV4()
-	txn := &roachpb.Transaction{TxnMeta: enginepb.TxnMeta{ID: &u, Timestamp: makeTS(1*1E9, 0)}}
-	ts2 := makeTS(2*1E9, 0)
+	txn := &roachpb.Transaction{TxnMeta: enginepb.TxnMeta{ID: &u, Timestamp: hlc.Timestamp{WallTime: 1 * 1E9}}}
+	ts2 := hlc.Timestamp{WallTime: 2 * 1E9}
 	if err := MVCCDelete(context.Background(), engine, ms, key, ts2, txn); err != nil {
 		t.Fatal(err)
 	}
@@ -3347,7 +3348,7 @@ func TestMVCCStatsBasic(t *testing.T) {
 
 	// Re-delete, but this time, we're going to commit it.
 	txn.Status = roachpb.PENDING
-	ts3 := makeTS(3*1E9, 0)
+	ts3 := hlc.Timestamp{WallTime: 3 * 1E9}
 	txn.Timestamp.Forward(ts3)
 	if err := MVCCDelete(context.Background(), engine, ms, key, ts3, txn); err != nil {
 		t.Fatal(err)
@@ -3361,7 +3362,7 @@ func TestMVCCStatsBasic(t *testing.T) {
 	}
 
 	// Write a second transactional value (i.e. an intent).
-	ts4 := makeTS(4*1E9, 0)
+	ts4 := hlc.Timestamp{WallTime: 4 * 1E9}
 	txn.Timestamp = ts4
 	key2 := roachpb.Key("b")
 	value2 := roachpb.MakeValueFromString("value")
@@ -3450,7 +3451,7 @@ func TestMVCCStatsBasic(t *testing.T) {
 	}
 
 	// Write over existing value to create GC'able bytes.
-	ts5 := makeTS(10*1E9, 0) // skip ahead 6s
+	ts5 := hlc.Timestamp{WallTime: 10 * 1E9} // skip ahead 6s
 	if err := MVCCPut(context.Background(), engine, ms, key2, ts5, value2, nil); err != nil {
 		t.Fatal(err)
 	}
@@ -3466,7 +3467,7 @@ func TestMVCCStatsBasic(t *testing.T) {
 	// Write a transaction record which is a system-local key.
 	txnKey := keys.TransactionKey(txn.Key, *txn.ID)
 	txnVal := roachpb.MakeValueFromString("txn-data")
-	if err := MVCCPut(context.Background(), engine, ms, txnKey, hlc.ZeroTimestamp, txnVal, nil); err != nil {
+	if err := MVCCPut(context.Background(), engine, ms, txnKey, hlc.Timestamp{}, txnVal, nil); err != nil {
 		t.Fatal(err)
 	}
 	txnKeySize := int64(mvccKey(txnKey).EncodedSize())
@@ -3497,7 +3498,7 @@ func TestMVCCStatsWithRandomRuns(t *testing.T) {
 	var lastWT int64
 	for i := int32(0); i < int32(1000); i++ {
 		// Create random future timestamp, up to a few seconds ahead.
-		ts := makeTS(lastWT+int64(rng.Float32()*4E9), int32(rng.Int()))
+		ts := hlc.Timestamp{WallTime: lastWT + int64(rng.Float32()*4E9), Logical: int32(rng.Int())}
 		lastWT = ts.WallTime
 
 		if log.V(1) {
@@ -3599,13 +3600,13 @@ func TestMVCCGarbageCollect(t *testing.T) {
 	ms := &enginepb.MVCCStats{}
 
 	bytes := []byte("value")
-	ts1 := makeTS(1E9, 0)
-	ts2 := makeTS(2E9, 0)
-	ts3 := makeTS(3E9, 0)
+	ts1 := hlc.Timestamp{WallTime: 1E9}
+	ts2 := hlc.Timestamp{WallTime: 2E9}
+	ts3 := hlc.Timestamp{WallTime: 3E9}
 	val1 := roachpb.MakeValueFromBytesAndTimestamp(bytes, ts1)
 	val2 := roachpb.MakeValueFromBytesAndTimestamp(bytes, ts2)
 	val3 := roachpb.MakeValueFromBytesAndTimestamp(bytes, ts3)
-	valInline := roachpb.MakeValueFromBytesAndTimestamp(bytes, hlc.ZeroTimestamp)
+	valInline := roachpb.MakeValueFromBytesAndTimestamp(bytes, hlc.Timestamp{})
 
 	testData := []struct {
 		key       roachpb.Key
@@ -3632,7 +3633,7 @@ func TestMVCCGarbageCollect(t *testing.T) {
 					continue
 				}
 				valCpy := *protoutil.Clone(&val).(*roachpb.Value)
-				valCpy.Timestamp = hlc.ZeroTimestamp
+				valCpy.Timestamp = hlc.Timestamp{}
 				if err := MVCCPut(context.Background(), engine, ms, test.key, val.Timestamp, valCpy, nil); err != nil {
 					t.Fatal(err)
 				}
@@ -3654,10 +3655,10 @@ func TestMVCCGarbageCollect(t *testing.T) {
 		{Key: roachpb.Key("a-del"), Timestamp: ts2},
 		{Key: roachpb.Key("b"), Timestamp: ts1},
 		{Key: roachpb.Key("b-del"), Timestamp: ts2},
-		{Key: roachpb.Key("inline"), Timestamp: hlc.ZeroTimestamp},
+		{Key: roachpb.Key("inline"), Timestamp: hlc.Timestamp{}},
 		// Keys that don't exist, which should result in a no-op.
 		{Key: roachpb.Key("a-bad"), Timestamp: ts2},
-		{Key: roachpb.Key("inline-bad"), Timestamp: hlc.ZeroTimestamp},
+		{Key: roachpb.Key("inline-bad"), Timestamp: hlc.Timestamp{}},
 	}
 	if err := MVCCGarbageCollect(context.Background(), engine, ms, keys, ts3); err != nil {
 		t.Fatal(err)
@@ -3721,11 +3722,11 @@ func TestMVCCGarbageCollectNonDeleted(t *testing.T) {
 	defer engine.Close()
 
 	s := "string"
-	ts1 := makeTS(1E9, 0)
-	ts2 := makeTS(2E9, 0)
+	ts1 := hlc.Timestamp{WallTime: 1E9}
+	ts2 := hlc.Timestamp{WallTime: 2E9}
 	val1 := mkVal(s, ts1)
 	val2 := mkVal(s, ts2)
-	valInline := mkVal(s, hlc.ZeroTimestamp)
+	valInline := mkVal(s, hlc.Timestamp{})
 
 	testData := []struct {
 		key      roachpb.Key
@@ -3739,7 +3740,7 @@ func TestMVCCGarbageCollectNonDeleted(t *testing.T) {
 	for _, test := range testData {
 		for _, val := range test.vals {
 			valCpy := *protoutil.Clone(&val).(*roachpb.Value)
-			valCpy.Timestamp = hlc.ZeroTimestamp
+			valCpy.Timestamp = hlc.Timestamp{}
 			if err := MVCCPut(context.Background(), engine, nil, test.key, val.Timestamp, valCpy, nil); err != nil {
 				t.Fatal(err)
 			}
@@ -3762,8 +3763,8 @@ func TestMVCCGarbageCollectIntent(t *testing.T) {
 	defer engine.Close()
 
 	bytes := []byte("value")
-	ts1 := makeTS(1E9, 0)
-	ts2 := makeTS(2E9, 0)
+	ts1 := hlc.Timestamp{WallTime: 1E9}
+	ts2 := hlc.Timestamp{WallTime: 2E9}
 	key := roachpb.Key("a")
 	{
 		val1 := roachpb.MakeValueFromBytes(bytes)
@@ -3793,7 +3794,7 @@ func TestResolveIntentWithLowerEpoch(t *testing.T) {
 	defer engine.Close()
 
 	// Lay down an intent with a high epoch.
-	if err := MVCCPut(context.Background(), engine, nil, testKey1, makeTS(0, 1), value1, txn1e2); err != nil {
+	if err := MVCCPut(context.Background(), engine, nil, testKey1, hlc.Timestamp{Logical: 1}, value1, txn1e2); err != nil {
 		t.Fatal(err)
 	}
 	// Resolve the intent with a low epoch.
@@ -3826,23 +3827,10 @@ func TestMVCCTimeSeriesPartialMerge(t *testing.T) {
 	vals := make([]*roachpb.Value, 2)
 
 	for i, k := range []roachpb.Key{testKey1, testKey2} {
-		if err := MVCCMerge(context.Background(), engine, nil, k, makeTS(0, 1), tsvalue1); err != nil {
+		if err := MVCCMerge(context.Background(), engine, nil, k, hlc.Timestamp{Logical: 1}, tsvalue1); err != nil {
 			t.Fatal(err)
 		}
-		if err := MVCCMerge(context.Background(), engine, nil, k, makeTS(0, 2), tsvalue2); err != nil {
-			t.Fatal(err)
-		}
-
-		if i == 1 {
-			if err := engine.(InMem).Compact(); err != nil {
-				t.Fatal(err)
-			}
-		}
-
-		if err := MVCCMerge(context.Background(), engine, nil, k, makeTS(0, 2), tsvalue2); err != nil {
-			t.Fatal(err)
-		}
-		if err := MVCCMerge(context.Background(), engine, nil, k, makeTS(0, 1), tsvalue1); err != nil {
+		if err := MVCCMerge(context.Background(), engine, nil, k, hlc.Timestamp{Logical: 2}, tsvalue2); err != nil {
 			t.Fatal(err)
 		}
 
@@ -3852,7 +3840,20 @@ func TestMVCCTimeSeriesPartialMerge(t *testing.T) {
 			}
 		}
 
-		if v, _, err := MVCCGet(context.Background(), engine, k, hlc.ZeroTimestamp, true, nil); err != nil {
+		if err := MVCCMerge(context.Background(), engine, nil, k, hlc.Timestamp{Logical: 2}, tsvalue2); err != nil {
+			t.Fatal(err)
+		}
+		if err := MVCCMerge(context.Background(), engine, nil, k, hlc.Timestamp{Logical: 1}, tsvalue1); err != nil {
+			t.Fatal(err)
+		}
+
+		if i == 1 {
+			if err := engine.(InMem).Compact(); err != nil {
+				t.Fatal(err)
+			}
+		}
+
+		if v, _, err := MVCCGet(context.Background(), engine, k, hlc.Timestamp{}, true, nil); err != nil {
 			t.Fatal(err)
 		} else {
 			vals[i] = v

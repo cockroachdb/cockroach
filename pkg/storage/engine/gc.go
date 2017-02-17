@@ -41,38 +41,37 @@ func MakeGarbageCollector(now hlc.Timestamp, policy config.GCPolicy) GarbageColl
 	}
 }
 
-// Filter makes decisions about garbage collection based on the
-// garbage collection policy for batches of values for the same key.
-// Returns the timestamp including, and after which, all values should
-// be garbage collected. If no values should be GC'd, returns
-// hlc.ZeroTimestamp. keys must be in descending time order.
-// Values deleted at or before the returned timestamp can be deleted without
-// invalidating any reads in the time interval (gc.expiration, \infinity).
+// Filter makes decisions about garbage collection based on the garbage
+// collection policy for batches of values for the same key. Returns the
+// timestamp including, and after which, all values should be garbage
+// collected. If no values should be GC'd, returns the zero timestamp. keys
+// must be in descending time order. Values deleted at or before the returned
+// timestamp can be deleted without invalidating any reads in the time
+// interval (gc.expiration, \infinity).
 //
 // The GC keeps all values (including deletes) above the expiration time, plus
 // the first value before or at the expiration time. This allows reads to be
-// guaranteed as described above. However if this were the only rule, then
-// if the most recent write was a delete, it would never be removed. Thus,
-// when a deleted value is the most recent before expiration, it can be
-// deleted. This would still allow for the tombstone bugs in #6227, so in
-// the future we will add checks that disallow writes before the last GC
-// expiration time.
+// guaranteed as described above. However if this were the only rule, then if
+// the most recent write was a delete, it would never be removed. Thus, when a
+// deleted value is the most recent before expiration, it can be deleted. This
+// would still allow for the tombstone bugs in #6227, so in the future we will
+// add checks that disallow writes before the last GC expiration time.
 func (gc GarbageCollector) Filter(keys []MVCCKey, values [][]byte) hlc.Timestamp {
 	if gc.policy.TTLSeconds <= 0 {
-		return hlc.ZeroTimestamp
+		return hlc.Timestamp{}
 	}
 	if len(keys) == 0 {
-		return hlc.ZeroTimestamp
+		return hlc.Timestamp{}
 	}
 
 	// Loop over values. All should be MVCC versions.
 	var i int
 	var key MVCCKey
-	delTS := hlc.ZeroTimestamp
+	var delTS hlc.Timestamp
 	for i, key = range keys {
 		if !key.IsValue() {
 			log.Errorf(context.TODO(), "unexpected MVCC metadata encountered: %q", key)
-			return hlc.ZeroTimestamp
+			return hlc.Timestamp{}
 		}
 		if gc.Threshold.Less(key.Timestamp) {
 			continue

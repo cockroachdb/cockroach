@@ -95,7 +95,7 @@ func printKey(kv engine.MVCCKeyValue) (bool, error) {
 }
 
 func printKeyValue(kv engine.MVCCKeyValue) (bool, error) {
-	if kv.Key.Timestamp != hlc.ZeroTimestamp {
+	if kv.Key.Timestamp != (hlc.Timestamp{}) {
 		fmt.Printf("%s %s: ", kv.Key.Timestamp, kv.Key.Key)
 	} else {
 		fmt.Printf("%s: ", kv.Key.Key)
@@ -239,7 +239,7 @@ func tryTxn(kv engine.MVCCKeyValue) (string, error) {
 }
 
 func tryRangeIDKey(kv engine.MVCCKeyValue) (string, error) {
-	if kv.Key.Timestamp != hlc.ZeroTimestamp {
+	if kv.Key.Timestamp != (hlc.Timestamp{}) {
 		return "", fmt.Errorf("range ID keys shouldn't have timestamps: %s", kv.Key)
 	}
 	_, _, suffix, _, err := keys.DecodeRangeIDKey(kv.Key.Key)
@@ -359,7 +359,7 @@ func loadRangeDescriptor(
 ) (roachpb.RangeDescriptor, error) {
 	var desc roachpb.RangeDescriptor
 	handleKV := func(kv engine.MVCCKeyValue) (bool, error) {
-		if kv.Key.Timestamp == hlc.ZeroTimestamp {
+		if kv.Key.Timestamp == (hlc.Timestamp{}) {
 			// We only want values, not MVCCMetadata.
 			return false, nil
 		}

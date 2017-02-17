@@ -1078,7 +1078,7 @@ func (s *Store) migrate(ctx context.Context, desc roachpb.RangeDescriptor) {
 func ReadStoreIdent(ctx context.Context, eng engine.Engine) (roachpb.StoreIdent, error) {
 	var ident roachpb.StoreIdent
 	ok, err := engine.MVCCGetProto(
-		ctx, eng, keys.StoreIdentKey(), hlc.ZeroTimestamp, true, nil, &ident)
+		ctx, eng, keys.StoreIdentKey(), hlc.Timestamp{}, true, nil, &ident)
 	if err != nil {
 		return roachpb.StoreIdent{}, err
 	} else if !ok {
@@ -1533,7 +1533,7 @@ func (s *Store) Bootstrap(ident roachpb.StoreIdent) error {
 		s.engine,
 		nil,
 		keys.StoreIdentKey(),
-		hlc.ZeroTimestamp,
+		hlc.Timestamp{},
 		nil,
 		&s.Ident,
 	); err != nil {
@@ -1555,7 +1555,7 @@ func (s *Store) WriteLastUpTimestamp(ctx context.Context, time hlc.Timestamp) er
 		s.engine,
 		nil,
 		keys.StoreLastUpKey(),
-		hlc.ZeroTimestamp,
+		hlc.Timestamp{},
 		nil,
 		&time,
 	)
@@ -1569,11 +1569,11 @@ func (s *Store) WriteLastUpTimestamp(ctx context.Context, time hlc.Timestamp) er
 func (s *Store) ReadLastUpTimestamp(ctx context.Context) (hlc.Timestamp, error) {
 	var timestamp hlc.Timestamp
 	ok, err := engine.MVCCGetProto(
-		ctx, s.Engine(), keys.StoreLastUpKey(), hlc.ZeroTimestamp, true, nil, &timestamp)
+		ctx, s.Engine(), keys.StoreLastUpKey(), hlc.Timestamp{}, true, nil, &timestamp)
 	if err != nil {
 		return hlc.Timestamp{}, err
 	} else if !ok {
-		return hlc.ZeroTimestamp, nil
+		return hlc.Timestamp{}, nil
 	}
 	return timestamp, nil
 }
@@ -1743,7 +1743,7 @@ func (s *Store) BootstrapRange(initialValues []roachpb.KeyValue) error {
 		return err
 	}
 	// Replica GC timestamp.
-	if err := engine.MVCCPutProto(ctx, batch, nil /* ms */, keys.RangeLastReplicaGCTimestampKey(desc.RangeID), hlc.ZeroTimestamp, nil, &now); err != nil {
+	if err := engine.MVCCPutProto(ctx, batch, nil /* ms */, keys.RangeLastReplicaGCTimestampKey(desc.RangeID), hlc.Timestamp{}, nil, &now); err != nil {
 		return err
 	}
 	// Range addressing for meta2.
@@ -3668,7 +3668,7 @@ func (s *Store) tryGetOrCreateReplica(
 	tombstoneKey := keys.RaftTombstoneKey(rangeID)
 	var tombstone roachpb.RaftTombstone
 	if ok, err := engine.MVCCGetProto(
-		ctx, s.Engine(), tombstoneKey, hlc.ZeroTimestamp, true, nil, &tombstone,
+		ctx, s.Engine(), tombstoneKey, hlc.Timestamp{}, true, nil, &tombstone,
 	); err != nil {
 		return nil, false, err
 	} else if ok {

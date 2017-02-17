@@ -62,7 +62,7 @@ func fakePrevKey(k []byte) roachpb.Key {
 // the key space. Returns a slice of the encoded keys of all created
 // data.
 func createRangeData(t *testing.T, r *Replica) []engine.MVCCKey {
-	ts0 := hlc.ZeroTimestamp
+	ts0 := hlc.Timestamp{}
 	ts := hlc.Timestamp{WallTime: 1}
 	desc := r.Desc()
 	keyTSs := []struct {

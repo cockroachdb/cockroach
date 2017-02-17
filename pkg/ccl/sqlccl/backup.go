@@ -71,22 +71,22 @@ func ReadBackupDescriptor(
 func ValidatePreviousBackups(ctx context.Context, uris []string) (hlc.Timestamp, error) {
 	if len(uris) == 0 || len(uris) == 1 && uris[0] == "" {
 		// Full backup.
-		return hlc.ZeroTimestamp, nil
+		return hlc.Timestamp{}, nil
 	}
 	var endTime hlc.Timestamp
 	for _, uri := range uris {
 		dir, err := storageccl.ExportStorageFromURI(ctx, uri)
 		if err != nil {
-			return hlc.ZeroTimestamp, err
+			return hlc.Timestamp{}, err
 		}
 		backupDesc, err := ReadBackupDescriptor(ctx, dir)
 		if err != nil {
-			return hlc.ZeroTimestamp, err
+			return hlc.Timestamp{}, err
 		}
 		// TODO(dan): This check assumes that every backup is of the entire
 		// database, which is stricter than it needs to be.
 		if backupDesc.StartTime != endTime {
-			return hlc.ZeroTimestamp, errors.Errorf("missing backup between %s and %s in %s",
+			return hlc.Timestamp{}, errors.Errorf("missing backup between %s and %s in %s",
 				endTime, backupDesc.StartTime, dir)
 		}
 		endTime = backupDesc.EndTime
@@ -582,7 +582,7 @@ func makeImportRequests(
 	var requestEntries []importEntry
 	for _, importRange := range importRanges {
 		needed := false
-		ts := hlc.ZeroTimestamp
+		var ts hlc.Timestamp
 		var files []importFile
 		payloads := importRange.Payload.([]interface{})
 		for _, p := range payloads {
@@ -591,7 +591,7 @@ func makeImportRequests(
 			case tableSpan:
 				needed = true
 			case backupSpan:
-				if !ts.Equal(ie.backup.StartTime) {
+				if ts != ie.backup.StartTime {
 					return nil, errors.Errorf("mismatched start time %s vs %s", ts, ie.backup.StartTime)
 				}
 				ts = ie.backup.EndTime
@@ -978,7 +978,7 @@ func backupPlanHook(
 		ctx, span := tracing.ChildSpan(baseCtx, stmt.StatementTag())
 		defer tracing.FinishSpan(span)
 
-		startTime := hlc.ZeroTimestamp
+		var startTime hlc.Timestamp
 		if backup.IncrementalFrom != nil {
 			var err error
 			startTime, err = ValidatePreviousBackups(ctx, backup.IncrementalFrom)

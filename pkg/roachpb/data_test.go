@@ -364,7 +364,7 @@ func TestTransactionObservedTimestamp(t *testing.T) {
 	ids := append([]int{109, 104, 102, 108, 1000}, rand.Perm(100)...)
 	timestamps := make(map[NodeID]hlc.Timestamp, len(ids))
 	for i := 0; i < len(ids); i++ {
-		timestamps[NodeID(i)] = hlc.ZeroTimestamp.Add(rng.Int63(), 0)
+		timestamps[NodeID(i)] = hlc.Timestamp{WallTime: rng.Int63()}
 	}
 	for i, n := range ids {
 		nodeID := NodeID(n)
@@ -379,16 +379,16 @@ func TestTransactionObservedTimestamp(t *testing.T) {
 	}
 	for _, m := range ids {
 		checkID := NodeID(m)
-		exp := timestamps[checkID]
-		if act, _ := txn.GetObservedTimestamp(checkID); !act.Equal(exp) {
-			t.Fatalf("%d: expected %s, got %s", checkID, exp, act)
+		expTS := timestamps[checkID]
+		if actTS, _ := txn.GetObservedTimestamp(checkID); actTS != expTS {
+			t.Fatalf("%d: expected %s, got %s", checkID, expTS, actTS)
 		}
 	}
 
 	var emptyTxn Transaction
-	ts := hlc.ZeroTimestamp.Add(1, 2)
+	ts := hlc.Timestamp{WallTime: 1, Logical: 2}
 	emptyTxn.UpdateObservedTimestamp(NodeID(1), ts)
-	if actTS, _ := emptyTxn.GetObservedTimestamp(NodeID(1)); !actTS.Equal(ts) {
+	if actTS, _ := emptyTxn.GetObservedTimestamp(NodeID(1)); actTS != ts {
 		t.Fatalf("unexpected: %s (wanted %s)", actTS, ts)
 	}
 }

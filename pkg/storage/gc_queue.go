@@ -263,7 +263,7 @@ func processLocalKeyRange(
 	endKey := keys.MakeRangeKeyPrefix(desc.EndKey)
 
 	_, err := engine.MVCCIterate(ctx, snap, startKey, endKey,
-		hlc.ZeroTimestamp, true /* consistent */, nil, /* txn */
+		hlc.Timestamp{}, true /* consistent */, nil, /* txn */
 		false /* !reverse */, func(kv roachpb.KeyValue) (bool, error) {
 			return false, handleOne(kv)
 		})
@@ -530,7 +530,7 @@ func RunGC(
 					startIdx = 2
 				}
 				// See if any values may be GC'd.
-				if gcTS := gc.Filter(keys[startIdx:], vals[startIdx:]); !gcTS.Equal(hlc.ZeroTimestamp) {
+				if gcTS := gc.Filter(keys[startIdx:], vals[startIdx:]); gcTS != (hlc.Timestamp{}) {
 					// TODO(spencer): need to split the requests up into
 					// multiple requests in the event that more than X keys
 					// are added to the request.

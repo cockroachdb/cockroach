@@ -117,7 +117,7 @@ func injectErrors(req roachpb.Request, hdr roachpb.Header, magicVals *filterVals
 			if count > 0 && bytes.Contains(req.Value.RawBytes, []byte(key)) {
 				magicVals.restartCounts[key]--
 				err := roachpb.NewReadWithinUncertaintyIntervalError(
-					hlc.ZeroTimestamp, hlc.ZeroTimestamp)
+					hlc.Timestamp{}, hlc.Timestamp{})
 				magicVals.failedValues[string(req.Value.RawBytes)] =
 					failureRecord{err, hdr.Txn}
 				return err

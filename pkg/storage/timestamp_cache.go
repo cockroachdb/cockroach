@@ -625,7 +625,7 @@ func (tc *timestampCache) getMax(
 			ok = true
 			maxTS = ce.timestamp
 			maxTxnID = ce.txnID
-		} else if maxTS.Equal(ce.timestamp) && maxTxnID != nil &&
+		} else if maxTS == ce.timestamp && maxTxnID != nil &&
 			(ce.txnID == nil || *maxTxnID != *ce.txnID) {
 			maxTxnID = nil
 		}
