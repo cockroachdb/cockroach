@@ -957,7 +957,7 @@ func PrettyPrintValue(b []byte, sep string) string {
 	for len(b) > 0 {
 		bb, s, err := prettyPrintFirstValue(b)
 		if err != nil {
-			fmt.Fprintf(&buf, "%s<%v>", sep, err)
+			fmt.Fprintf(&buf, "%s???", sep)
 		} else {
 			fmt.Fprintf(&buf, "%s%s", sep, s)
 		}

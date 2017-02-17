@@ -483,12 +483,13 @@ func TestMakeSpans(t *testing.T) {
 
 		// When encoding an end constraint for a maximal datum, we use
 		// bytes.PrefixEnd() to go beyond the normal encodings of that datatype.
+		// This is the reason for the "???" suffix of the pretty-printed spans.
 		{fmt.Sprintf(`a = %d`, math.MaxInt64), `a`,
-			`/9223372036854775807-/<varint 9223372036854775808 overflows int64>`,
+			`/9223372036854775807-/???`,
 			`/9223372036854775807-/9223372036854775806`},
 		{fmt.Sprintf(`a = %d`, math.MinInt64), `a`,
 			`/-9223372036854775808-/-9223372036854775807`,
-			`/-9223372036854775808-/<varint 9223372036854775808 overflows int64>`},
+			`/-9223372036854775808-/???`},
 
 		{`(a, b) >= (1, 4)`, `a,b`, `/1/4-`, `-/1/3`},
 		{`(a, b) > (1, 4)`, `a,b`, `/1/5-`, `-/1/4`},

@@ -627,22 +627,6 @@ func MassagePrettyPrintedSpanForTest(span string, dirs []encoding.Direction) str
 				// We're switching from the start constraints to the end constraints,
 				// or starting another span.
 				colIdx = -1
-			case '<':
-				// This is an error message, like <util/encoding/encoding.go:256: ....>.
-				end := strings.Index(span[i:], ">")
-				if end == -1 {
-					panic("parse error")
-				}
-				errMsg := span[i+1 : i+end+1]
-				lineIdx := strings.Index(errMsg, ":")
-				if lineIdx != -1 {
-					var lineEnd int
-					for lineEnd = lineIdx + 1; errMsg[lineEnd] >= '0' && errMsg[lineEnd] <= '9'; lineEnd++ {
-					}
-					errMsg = errMsg[:lineIdx] + errMsg[lineIdx+(lineEnd-lineIdx):]
-				}
-				r += errMsg
-				i += end
 			}
 		}
 	}
