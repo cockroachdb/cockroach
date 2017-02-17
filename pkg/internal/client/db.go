@@ -493,25 +493,6 @@ func (db *DB) Txn(ctx context.Context, retryable func(txn *Txn) error) error {
 	return err
 }
 
-func (db *DB) prepareToSend(ba *roachpb.BatchRequest) *roachpb.Error {
-	if ba.ReadConsistency == roachpb.INCONSISTENT {
-		for _, ru := range ba.Requests {
-			req := ru.GetInner()
-			if req.Method() != roachpb.Get && req.Method() != roachpb.Scan &&
-				req.Method() != roachpb.ReverseScan {
-				return roachpb.NewErrorf("method %s not allowed with INCONSISTENT batch", req.Method)
-			}
-		}
-	}
-
-	if db.ctx.UserPriority != 1 {
-		ba.UserPriority = db.ctx.UserPriority
-	}
-
-	tracing.AnnotateTrace()
-	return nil
-}
-
 // send runs the specified calls synchronously in a single batch and returns
 // any errors. Returns (nil, nil) for an empty batch.
 func (db *DB) send(
@@ -520,10 +501,22 @@ func (db *DB) send(
 	if len(ba.Requests) == 0 {
 		return nil, nil
 	}
-	if pErr := db.prepareToSend(&ba); pErr != nil {
-		return nil, pErr
+	if ba.UserPriority == 0 && db.ctx.UserPriority != 1 {
+		ba.UserPriority = db.ctx.UserPriority
 	}
 
+	if ba.ReadConsistency == roachpb.INCONSISTENT {
+		for _, ru := range ba.Requests {
+			m := ru.GetInner().Method()
+			switch m {
+			case roachpb.Get, roachpb.Scan, roachpb.ReverseScan:
+			default:
+				return nil, roachpb.NewErrorf("method %s not allowed with INCONSISTENT batch", m)
+			}
+		}
+	}
+
+	tracing.AnnotateTrace()
 	br, pErr := db.sender.Send(ctx, ba)
 	if pErr != nil {
 		if log.V(1) {
