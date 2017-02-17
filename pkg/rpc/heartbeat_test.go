@@ -73,7 +73,7 @@ type ManualHeartbeatService struct {
 	clock              *hlc.Clock
 	remoteClockMonitor *RemoteClockMonitor
 	// Heartbeats are processed when a value is sent here.
-	ready   chan struct{}
+	ready   chan error
 	stopper *stop.Stopper
 }
 
@@ -82,7 +82,10 @@ func (mhs *ManualHeartbeatService) Ping(
 	ctx context.Context, args *PingRequest,
 ) (*PingResponse, error) {
 	select {
-	case <-mhs.ready:
+	case err := <-mhs.ready:
+		if err != nil {
+			return nil, err
+		}
 	case <-ctx.Done():
 		return nil, ctx.Err()
 	case <-mhs.stopper.ShouldStop():
@@ -101,7 +104,7 @@ func TestManualHeartbeat(t *testing.T) {
 	manualHeartbeat := &ManualHeartbeatService{
 		clock:              clock,
 		remoteClockMonitor: newRemoteClockMonitor(clock, time.Hour, 0),
-		ready:              make(chan struct{}, 1),
+		ready:              make(chan error, 1),
 	}
 	regularHeartbeat := &HeartbeatService{
 		clock:              clock,
@@ -111,7 +114,7 @@ func TestManualHeartbeat(t *testing.T) {
 	request := &PingRequest{
 		Ping: "testManual",
 	}
-	manualHeartbeat.ready <- struct{}{}
+	manualHeartbeat.ready <- nil
 	ctx := context.Background()
 	regularResponse, err := regularHeartbeat.Ping(ctx, request)
 	if err != nil {
