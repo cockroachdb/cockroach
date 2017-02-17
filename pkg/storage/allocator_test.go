@@ -24,6 +24,7 @@ import (
 	"os"
 	"reflect"
 	"sort"
+	"strconv"
 	"sync"
 	"testing"
 	"time"
@@ -31,6 +32,7 @@ import (
 	"github.com/coreos/etcd/raft"
 	"github.com/olekukonko/tablewriter"
 	"github.com/pkg/errors"
+	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"
@@ -39,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/gossiputil"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -175,10 +178,12 @@ var multiDCStores = []*roachpb.StoreDescriptor{
 func createTestAllocator(
 	deterministic bool,
 ) (*stop.Stopper, *gossip.Gossip, *StorePool, Allocator, *hlc.ManualClock) {
-	stopper, g, manualClock, storePool, _ := createTestStorePool(
+	stopper, g, manual, storePool, _ := createTestStorePool(
 		TestTimeUntilStoreDeadOff, deterministic, true /* defaultNodeLiveness */)
-	a := MakeAllocator(storePool)
-	return stopper, g, storePool, a, manualClock
+	a := MakeAllocator(storePool, func(string) (time.Duration, bool) {
+		return 0, true
+	})
+	return stopper, g, storePool, a, manual
 }
 
 // mockStorePool sets up a collection of a alive and dead stores in the store
@@ -663,7 +668,7 @@ func TestAllocatorRebalanceThrashing(t *testing.T) {
 		for i := range stores {
 			stores[i].rangeCount = mean
 		}
-		surplus := int32(math.Ceil(float64(mean)*rebalanceThreshold + 1))
+		surplus := int32(math.Ceil(float64(mean)*baseRebalanceThreshold + 1))
 		stores[0].rangeCount += surplus
 		stores[0].shouldRebalanceFrom = true
 		for i := 1; i < len(stores); i++ {
@@ -682,7 +687,7 @@ func TestAllocatorRebalanceThrashing(t *testing.T) {
 		// Subtract enough ranges from the first store to make it a suitable
 		// rebalance target. To maintain the specified mean, we then add that delta
 		// back to the rest of the replicas.
-		deficit := int32(math.Ceil(float64(mean)*rebalanceThreshold + 1))
+		deficit := int32(math.Ceil(float64(mean)*baseRebalanceThreshold + 1))
 		stores[0].rangeCount -= deficit
 		for i := 1; i < len(stores); i++ {
 			stores[i].rangeCount += int32(math.Ceil(float64(deficit) / float64(len(stores)-1)))
@@ -702,8 +707,8 @@ func TestAllocatorRebalanceThrashing(t *testing.T) {
 		// Adding an empty node to a 3-node cluster triggers rebalancing from
 		// existing nodes.
 		{"empty-node", []testStore{{100, true}, {100, true}, {100, true}, {0, false}}},
-		// A cluster where all range counts are within RebalanceThreshold should
-		// not rebalance. This assumes RebalanceThreshold > 2%.
+		// A cluster where all range counts are within baseRebalanceThreshold should
+		// not rebalance. This assumes baseRebalanceThreshold > 2%.
 		{"within-threshold", []testStore{{98, false}, {99, false}, {101, false}, {102, false}}},
 
 		{"5-stores-mean-100-one-above", oneStoreAboveRebalanceTarget(100, 5)},
@@ -876,8 +881,8 @@ func TestAllocatorTransferLeaseTarget(t *testing.T) {
 	}
 	for _, c := range testCases {
 		t.Run("", func(t *testing.T) {
-			target := a.TransferLeaseTarget(config.Constraints{},
-				c.existing, c.leaseholder, 0, c.check)
+			target := a.TransferLeaseTarget(context.Background(), config.Constraints{},
+				c.existing, c.leaseholder, 0, nil /* replicaStats */, c.check)
 			if c.expected != target.StoreID {
 				t.Fatalf("expected %d, but found %d", c.expected, target.StoreID)
 			}
@@ -921,8 +926,8 @@ func TestAllocatorTransferLeaseTargetMultiStore(t *testing.T) {
 	}
 	for _, c := range testCases {
 		t.Run("", func(t *testing.T) {
-			target := a.TransferLeaseTarget(config.Constraints{},
-				existing, c.leaseholder, 0, c.check)
+			target := a.TransferLeaseTarget(context.Background(), config.Constraints{},
+				existing, c.leaseholder, 0, nil /* replicaStats */, c.check)
 			if c.expected != target.StoreID {
 				t.Fatalf("expected %d, but found %d", c.expected, target.StoreID)
 			}
@@ -975,11 +980,287 @@ func TestAllocatorShouldTransferLease(t *testing.T) {
 	}
 	for _, c := range testCases {
 		t.Run("", func(t *testing.T) {
-			result := a.ShouldTransferLease(config.Constraints{}, c.existing, c.leaseholder, 0)
+			result := a.ShouldTransferLease(
+				context.Background(),
+				config.Constraints{},
+				c.existing,
+				c.leaseholder,
+				0,
+				nil, /* replicaStats */
+			)
 			if c.expected != result {
 				t.Fatalf("expected %v, but found %v", c.expected, result)
 			}
 		})
+	}
+}
+
+// Test out the load-based lease transfer algorithm against a variety of
+// request distributions and inter-node latencies.
+func TestAllocatorTransferLeaseTargetLoadBased(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	// TODO(a-robinson): Remove when load-based lease rebalancing is the default.
+	defer func(v bool) {
+		EnableLoadBasedLeaseRebalancing = v
+	}(EnableLoadBasedLeaseRebalancing)
+	EnableLoadBasedLeaseRebalancing = true
+
+	stopper, g, _, storePool, _ := createTestStorePool(
+		TestTimeUntilStoreDeadOff, true /* deterministic */, true /* defaultNodeLiveness */)
+	defer stopper.Stop()
+
+	// 3 stores where the lease count for each store is equal to 10x the store ID.
+	var stores []*roachpb.StoreDescriptor
+	for i := 1; i <= 3; i++ {
+		stores = append(stores, &roachpb.StoreDescriptor{
+			StoreID: roachpb.StoreID(i),
+			Node: roachpb.NodeDescriptor{
+				NodeID:  roachpb.NodeID(i),
+				Address: util.MakeUnresolvedAddr("tcp", strconv.Itoa(i)),
+				Locality: roachpb.Locality{
+					Tiers: []roachpb.Tier{
+						{Key: "l", Value: strconv.Itoa(i)},
+					},
+				},
+			},
+			Capacity: roachpb.StoreCapacity{LeaseCount: int32(10 * i)},
+		})
+	}
+	sg := gossiputil.NewStoreGossiper(g)
+	sg.GossipStores(stores, t)
+
+	// Nodes need to have descriptors in gossip for the load-based algorithm to
+	// consider transferring a lease to them.
+	for _, store := range stores {
+		if err := g.SetNodeDescriptor(&store.Node); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	localities := map[roachpb.NodeID]string{
+		1: "l=1",
+		2: "l=2",
+		3: "l=3",
+	}
+	localityFn := func(nodeID roachpb.NodeID) string {
+		return localities[nodeID]
+	}
+	manual := hlc.NewManualClock(123)
+	clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
+
+	// Set up four different load distributions. Record a bunch of requests to
+	// the unknown node 99 in evenlyBalanced to verify that requests from
+	// unknown localities don't affect the algorithm.
+	evenlyBalanced := newReplicaStats(clock, localityFn)
+	evenlyBalanced.record(1)
+	evenlyBalanced.record(2)
+	evenlyBalanced.record(3)
+	imbalanced1 := newReplicaStats(clock, localityFn)
+	imbalanced2 := newReplicaStats(clock, localityFn)
+	imbalanced3 := newReplicaStats(clock, localityFn)
+	for i := 0; i < 100; i++ {
+		evenlyBalanced.record(99)
+		imbalanced1.record(1)
+		imbalanced2.record(2)
+		imbalanced3.record(3)
+	}
+
+	manual.Increment(int64(MinLeaseTransferStatsDuration))
+
+	noLatency := map[string]time.Duration{}
+	highLatency := map[string]time.Duration{
+		stores[0].Node.Address.String(): 50 * time.Millisecond,
+		stores[1].Node.Address.String(): 50 * time.Millisecond,
+		stores[2].Node.Address.String(): 50 * time.Millisecond,
+	}
+
+	existing := []roachpb.ReplicaDescriptor{
+		{NodeID: 1, StoreID: 1},
+		{NodeID: 2, StoreID: 2},
+		{NodeID: 3, StoreID: 3},
+	}
+
+	testCases := []struct {
+		leaseholder roachpb.StoreID
+		latency     map[string]time.Duration
+		stats       *replicaStats
+		check       bool
+		expected    roachpb.StoreID
+	}{
+		// No existing lease holder, nothing to do.
+		{leaseholder: 0, latency: noLatency, stats: evenlyBalanced, check: true, expected: 0},
+		{leaseholder: 1, latency: noLatency, stats: evenlyBalanced, check: true, expected: 0},
+		{leaseholder: 1, latency: noLatency, stats: evenlyBalanced, check: false, expected: 2},
+		{leaseholder: 2, latency: noLatency, stats: evenlyBalanced, check: true, expected: 1},
+		{leaseholder: 2, latency: noLatency, stats: evenlyBalanced, check: false, expected: 1},
+		{leaseholder: 3, latency: noLatency, stats: evenlyBalanced, check: true, expected: 1},
+		{leaseholder: 3, latency: noLatency, stats: evenlyBalanced, check: false, expected: 1},
+		{leaseholder: 0, latency: noLatency, stats: imbalanced1, check: true, expected: 0},
+		{leaseholder: 1, latency: noLatency, stats: imbalanced1, check: true, expected: 0},
+		{leaseholder: 1, latency: noLatency, stats: imbalanced1, check: false, expected: 2},
+		{leaseholder: 2, latency: noLatency, stats: imbalanced1, check: true, expected: 1},
+		{leaseholder: 2, latency: noLatency, stats: imbalanced1, check: false, expected: 1},
+		{leaseholder: 3, latency: noLatency, stats: imbalanced1, check: true, expected: 1},
+		{leaseholder: 3, latency: noLatency, stats: imbalanced1, check: false, expected: 1},
+		{leaseholder: 0, latency: noLatency, stats: imbalanced2, check: true, expected: 0},
+		{leaseholder: 1, latency: noLatency, stats: imbalanced2, check: true, expected: 0},
+		{leaseholder: 1, latency: noLatency, stats: imbalanced2, check: false, expected: 2},
+		{leaseholder: 2, latency: noLatency, stats: imbalanced2, check: true, expected: 1},
+		{leaseholder: 2, latency: noLatency, stats: imbalanced2, check: false, expected: 1},
+		{leaseholder: 3, latency: noLatency, stats: imbalanced2, check: true, expected: 1},
+		{leaseholder: 3, latency: noLatency, stats: imbalanced2, check: false, expected: 1},
+		{leaseholder: 0, latency: noLatency, stats: imbalanced3, check: true, expected: 0},
+		{leaseholder: 1, latency: noLatency, stats: imbalanced3, check: true, expected: 0},
+		{leaseholder: 1, latency: noLatency, stats: imbalanced3, check: false, expected: 2},
+		{leaseholder: 2, latency: noLatency, stats: imbalanced3, check: true, expected: 1},
+		{leaseholder: 2, latency: noLatency, stats: imbalanced3, check: false, expected: 1},
+		{leaseholder: 3, latency: noLatency, stats: imbalanced3, check: true, expected: 1},
+		{leaseholder: 3, latency: noLatency, stats: imbalanced3, check: false, expected: 1},
+		{leaseholder: 0, latency: highLatency, stats: evenlyBalanced, check: true, expected: 0},
+		{leaseholder: 1, latency: highLatency, stats: evenlyBalanced, check: true, expected: 0},
+		{leaseholder: 1, latency: highLatency, stats: evenlyBalanced, check: false, expected: 2},
+		{leaseholder: 2, latency: highLatency, stats: evenlyBalanced, check: true, expected: 1},
+		{leaseholder: 2, latency: highLatency, stats: evenlyBalanced, check: false, expected: 1},
+		{leaseholder: 3, latency: highLatency, stats: evenlyBalanced, check: true, expected: 1},
+		{leaseholder: 3, latency: highLatency, stats: evenlyBalanced, check: false, expected: 1},
+		{leaseholder: 0, latency: highLatency, stats: imbalanced1, check: true, expected: 0},
+		{leaseholder: 1, latency: highLatency, stats: imbalanced1, check: true, expected: 0},
+		{leaseholder: 1, latency: highLatency, stats: imbalanced1, check: false, expected: 2},
+		{leaseholder: 2, latency: highLatency, stats: imbalanced1, check: true, expected: 1},
+		{leaseholder: 2, latency: highLatency, stats: imbalanced1, check: false, expected: 1},
+		{leaseholder: 3, latency: highLatency, stats: imbalanced1, check: true, expected: 1},
+		{leaseholder: 3, latency: highLatency, stats: imbalanced1, check: false, expected: 1},
+		{leaseholder: 0, latency: highLatency, stats: imbalanced2, check: true, expected: 0},
+		{leaseholder: 1, latency: highLatency, stats: imbalanced2, check: true, expected: 2},
+		{leaseholder: 1, latency: highLatency, stats: imbalanced2, check: false, expected: 2},
+		{leaseholder: 2, latency: highLatency, stats: imbalanced2, check: true, expected: 0},
+		{leaseholder: 2, latency: highLatency, stats: imbalanced2, check: false, expected: 1},
+		{leaseholder: 3, latency: highLatency, stats: imbalanced2, check: true, expected: 2},
+		{leaseholder: 3, latency: highLatency, stats: imbalanced2, check: false, expected: 2},
+		{leaseholder: 0, latency: highLatency, stats: imbalanced3, check: true, expected: 0},
+		{leaseholder: 1, latency: highLatency, stats: imbalanced3, check: true, expected: 3},
+		{leaseholder: 1, latency: highLatency, stats: imbalanced3, check: false, expected: 3},
+		{leaseholder: 2, latency: highLatency, stats: imbalanced3, check: true, expected: 3},
+		{leaseholder: 2, latency: highLatency, stats: imbalanced3, check: false, expected: 3},
+		{leaseholder: 3, latency: highLatency, stats: imbalanced3, check: true, expected: 0},
+		{leaseholder: 3, latency: highLatency, stats: imbalanced3, check: false, expected: 1},
+	}
+
+	for _, c := range testCases {
+		t.Run("", func(t *testing.T) {
+			a := MakeAllocator(storePool, func(addr string) (time.Duration, bool) {
+				return c.latency[addr], true
+			})
+			target := a.TransferLeaseTarget(context.Background(), config.Constraints{},
+				existing, c.leaseholder, 0, c.stats, c.check)
+			if c.expected != target.StoreID {
+				t.Errorf("expected %d, got %d", c.expected, target.StoreID)
+			}
+		})
+	}
+}
+
+func TestLoadBasedLeaseRebalanceScore(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	remoteStore := roachpb.StoreDescriptor{
+		Node: roachpb.NodeDescriptor{
+			NodeID: 2,
+		},
+	}
+	sourceStore := roachpb.StoreDescriptor{
+		Node: roachpb.NodeDescriptor{
+			NodeID: 1,
+		},
+	}
+
+	testCases := []struct {
+		remoteWeight  float64
+		remoteLatency time.Duration
+		remoteLeases  int32
+		sourceWeight  float64
+		sourceLeases  int32
+		meanLeases    float64
+		expected      int32
+	}{
+		// Evenly balanced leases stay balanced if requests are even
+		{1, 0 * time.Millisecond, 10, 1, 10, 10, -1},
+		{1, 0 * time.Millisecond, 100, 1, 100, 100, -10},
+		{1, 0 * time.Millisecond, 1000, 1, 1000, 1000, -100},
+		{1, 10 * time.Millisecond, 10, 1, 10, 10, -1},
+		{1, 10 * time.Millisecond, 100, 1, 100, 100, -10},
+		{1, 10 * time.Millisecond, 1000, 1, 1000, 1000, -100},
+		{1, 50 * time.Millisecond, 10, 1, 10, 10, -1},
+		{1, 50 * time.Millisecond, 100, 1, 100, 100, -10},
+		{1, 50 * time.Millisecond, 1000, 1, 1000, 1000, -100},
+		{1000, 0 * time.Millisecond, 10, 1000, 10, 10, -1},
+		{1000, 0 * time.Millisecond, 100, 1000, 100, 100, -10},
+		{1000, 0 * time.Millisecond, 1000, 1000, 1000, 1000, -100},
+		{1000, 10 * time.Millisecond, 10, 1000, 10, 10, -1},
+		{1000, 10 * time.Millisecond, 100, 1000, 100, 100, -10},
+		{1000, 10 * time.Millisecond, 1000, 1000, 1000, 1000, -100},
+		{1000, 50 * time.Millisecond, 10, 1000, 10, 10, -1},
+		{1000, 50 * time.Millisecond, 100, 1000, 100, 100, -10},
+		{1000, 50 * time.Millisecond, 1000, 1000, 1000, 1000, -100},
+		// No latency favors lease balance despite request imbalance
+		{10, 0 * time.Millisecond, 100, 1, 100, 100, -10},
+		{100, 0 * time.Millisecond, 100, 1, 100, 100, -10},
+		{1000, 0 * time.Millisecond, 100, 1, 100, 100, -10},
+		{10000, 0 * time.Millisecond, 100, 1, 100, 100, -10},
+		// Adding some latency changes that (perhaps a bit too much?)
+		{10, 1 * time.Millisecond, 100, 1, 100, 100, 3},
+		{100, 1 * time.Millisecond, 100, 1, 100, 100, 17},
+		{1000, 1 * time.Millisecond, 100, 1, 100, 100, 31},
+		{10000, 1 * time.Millisecond, 100, 1, 100, 100, 45},
+		{10, 10 * time.Millisecond, 100, 1, 100, 100, 37},
+		{100, 10 * time.Millisecond, 100, 1, 100, 100, 85},
+		{1000, 10 * time.Millisecond, 100, 1, 100, 100, 133},
+		{10000, 10 * time.Millisecond, 100, 1, 100, 100, 181},
+		// Moving from very unbalanced to more balanced
+		{1, 1 * time.Millisecond, 0, 1, 500, 200, 480},
+		{1, 1 * time.Millisecond, 0, 10, 500, 200, 453},
+		{1, 1 * time.Millisecond, 0, 100, 500, 200, 425},
+		{1, 10 * time.Millisecond, 0, 1, 500, 200, 480},
+		{1, 10 * time.Millisecond, 0, 10, 500, 200, 385},
+		{1, 10 * time.Millisecond, 0, 100, 500, 200, 289},
+		{1, 50 * time.Millisecond, 0, 1, 500, 200, 480},
+		{1, 50 * time.Millisecond, 0, 10, 500, 200, 323},
+		{1, 50 * time.Millisecond, 0, 100, 500, 200, 165},
+		{1, 1 * time.Millisecond, 50, 1, 500, 250, 425},
+		{1, 1 * time.Millisecond, 50, 10, 500, 250, 391},
+		{1, 1 * time.Millisecond, 50, 100, 500, 250, 355},
+		{1, 10 * time.Millisecond, 50, 1, 500, 250, 425},
+		{1, 10 * time.Millisecond, 50, 10, 500, 250, 305},
+		{1, 10 * time.Millisecond, 50, 100, 500, 250, 185},
+		{1, 50 * time.Millisecond, 50, 1, 500, 250, 425},
+		{1, 50 * time.Millisecond, 50, 10, 500, 250, 229},
+		{1, 50 * time.Millisecond, 50, 100, 500, 250, 31},
+		// Miscellaneous cases with uneven balance
+		{10, 1 * time.Millisecond, 100, 1, 50, 67, -47},
+		{1, 1 * time.Millisecond, 50, 10, 100, 67, 35},
+		{10, 10 * time.Millisecond, 100, 1, 50, 67, -25},
+		{1, 10 * time.Millisecond, 50, 10, 100, 67, 11},
+		{10, 1 * time.Millisecond, 100, 1, 50, 80, -47},
+		{1, 1 * time.Millisecond, 50, 10, 100, 80, 31},
+		{10, 10 * time.Millisecond, 100, 1, 50, 80, -19},
+		{1, 10 * time.Millisecond, 50, 10, 100, 80, 3},
+	}
+
+	for _, c := range testCases {
+		remoteStore.Capacity.LeaseCount = c.remoteLeases
+		sourceStore.Capacity.LeaseCount = c.sourceLeases
+		score := loadBasedLeaseRebalanceScore(
+			context.Background(),
+			c.remoteWeight,
+			c.remoteLatency,
+			remoteStore,
+			c.sourceWeight,
+			sourceStore,
+			c.meanLeases,
+		)
+		if c.expected != score {
+			t.Errorf("%+v: expected %d, got %d", c, c.expected, score)
+		}
 	}
 }
 
@@ -1458,7 +1739,7 @@ func TestAllocatorComputeAction(t *testing.T) {
 func TestAllocatorComputeActionNoStorePool(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	a := MakeAllocator(nil /* storePool */)
+	a := MakeAllocator(nil /* storePool */, nil /* rpcContext */)
 	action, priority := a.ComputeAction(config.ZoneConfig{}, nil)
 	if action != AllocatorNoop {
 		t.Errorf("expected AllocatorNoop, but got %v", action)
@@ -1666,7 +1947,9 @@ func Example_rebalancing() {
 		TestTimeUntilStoreDeadOff,
 		/* deterministic */ true,
 	)
-	alloc := MakeAllocator(sp)
+	alloc := MakeAllocator(sp, func(string) (time.Duration, bool) {
+		return 0, false
+	})
 
 	var wg sync.WaitGroup
 	g.RegisterCallback(gossip.MakePrefixPattern(gossip.KeyStorePrefix), func(_ string, _ roachpb.Value) { wg.Done() })
