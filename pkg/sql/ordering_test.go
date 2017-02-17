@@ -17,6 +17,7 @@
 package sql
 
 import (
+	"reflect"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -152,12 +153,107 @@ func TestComputeOrderingMatch(t *testing.T) {
 
 	for _, ts := range testSets {
 		for _, tc := range ts.cases {
-			res := computeOrderingMatch(tc.desired, ts.existing, false)
-			resRev := computeOrderingMatch(tc.desired, ts.existing, true)
+			res := ts.existing.computeMatch(tc.desired)
+			ts.existing.reverse()
+			resRev := ts.existing.computeMatch(tc.desired)
+			ts.existing.reverse()
 			if res != tc.expected || resRev != tc.expectedReverse {
 				t.Errorf("Test defined on line %d failed: expected:%d/%d got:%d/%d",
 					tc.line, tc.expected, tc.expectedReverse, res, resRev)
 			}
+		}
+	}
+}
+
+func TestTrimOrdering(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	// Helper function to create a ColumnOrderInfo. The "simple" composite
+	// literal syntax causes vet to warn about unkeyed literals and the explicit
+	// syntax is too verbose.
+	o := func(colIdx int, direction encoding.Direction) sqlbase.ColumnOrderInfo {
+		return sqlbase.ColumnOrderInfo{ColIdx: colIdx, Direction: direction}
+	}
+
+	e := struct{}{}
+	asc := encoding.Ascending
+	desc := encoding.Descending
+	testCases := []struct {
+		ord      orderingInfo
+		desired  sqlbase.ColumnOrdering
+		expected orderingInfo
+	}{
+		{
+			ord: orderingInfo{
+				exactMatchCols: nil,
+				ordering:       sqlbase.ColumnOrdering{o(1, asc), o(2, desc)},
+				unique:         true,
+			},
+			desired: sqlbase.ColumnOrdering{o(1, asc)},
+			expected: orderingInfo{
+				exactMatchCols: nil,
+				ordering:       sqlbase.ColumnOrdering{o(1, asc)},
+				unique:         false,
+			},
+		},
+		{
+			ord: orderingInfo{
+				exactMatchCols: nil,
+				ordering:       sqlbase.ColumnOrdering{o(1, asc), o(2, desc)},
+				unique:         true,
+			},
+			desired: sqlbase.ColumnOrdering{o(1, desc)},
+			expected: orderingInfo{
+				exactMatchCols: nil,
+				ordering:       sqlbase.ColumnOrdering{},
+				unique:         false,
+			},
+		},
+		{
+			ord: orderingInfo{
+				exactMatchCols: map[int]struct{}{0: e, 5: e, 6: e},
+				ordering:       sqlbase.ColumnOrdering{o(1, desc), o(2, desc)},
+				unique:         true,
+			},
+			desired: sqlbase.ColumnOrdering{o(5, asc), o(1, desc)},
+			expected: orderingInfo{
+				exactMatchCols: map[int]struct{}{0: e, 5: e, 6: e},
+				ordering:       sqlbase.ColumnOrdering{o(1, desc)},
+				unique:         false,
+			},
+		},
+		{
+			ord: orderingInfo{
+				exactMatchCols: map[int]struct{}{0: e, 5: e, 6: e},
+				ordering:       sqlbase.ColumnOrdering{o(1, desc), o(2, desc), o(3, asc)},
+				unique:         true,
+			},
+			desired: sqlbase.ColumnOrdering{o(5, asc), o(1, desc), o(0, desc), o(2, desc)},
+			expected: orderingInfo{
+				exactMatchCols: map[int]struct{}{0: e, 5: e, 6: e},
+				ordering:       sqlbase.ColumnOrdering{o(1, desc), o(2, desc)},
+				unique:         false,
+			},
+		},
+		{
+			ord: orderingInfo{
+				exactMatchCols: map[int]struct{}{0: e, 5: e, 6: e},
+				ordering:       sqlbase.ColumnOrdering{o(1, desc), o(2, desc), o(3, asc)},
+				unique:         true,
+			},
+			desired: sqlbase.ColumnOrdering{o(5, asc), o(4, asc)},
+			expected: orderingInfo{
+				exactMatchCols: map[int]struct{}{0: e, 5: e, 6: e},
+				ordering:       sqlbase.ColumnOrdering{},
+				unique:         false,
+			},
+		},
+	}
+
+	for i, tc := range testCases {
+		tc.ord.trim(tc.desired)
+		if !reflect.DeepEqual(tc.ord, tc.expected) {
+			t.Errorf("%d: expected %v, got %v", i, tc.expected, tc.ord)
 		}
 	}
 }

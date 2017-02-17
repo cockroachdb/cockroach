@@ -53,7 +53,7 @@ EXPLAIN(VERBOSE) SELECT b, a FROM foo ORDER BY @1
 1  render                         (b, a)
 1          render 0  test.foo.b
 1          render 1  test.foo.a
-2  scan                           (a, b, rowid[hidden,omitted])  +rowid,unique
+2  scan                           (a, b, rowid[hidden,omitted])
 2          table     foo@primary
 2          spans     ALL
 
@@ -87,7 +87,7 @@ EXPLAIN(VERBOSE) SELECT min(a) AS m FROM foo GROUP BY @1
 1  render                                (a, a)
 1          render 0     test.foo.a
 1          render 1     test.foo.a
-2  scan                                  (a, b[omitted], rowid[hidden,omitted])  +rowid,unique
+2  scan                                  (a, b[omitted], rowid[hidden,omitted])
 2          table        foo@primary
 2          spans        ALL
 
@@ -100,7 +100,7 @@ EXPLAIN(VERBOSE) SELECT min(a) AS m FROM foo GROUP BY @2
 1  render                                (a, b)
 1          render 0     test.foo.a
 1          render 1     test.foo.b
-2  scan                                  (a, b, rowid[hidden,omitted])  +rowid,unique
+2  scan                                  (a, b, rowid[hidden,omitted])
 2          table        foo@primary
 2          spans        ALL
 
