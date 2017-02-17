@@ -1349,7 +1349,7 @@ func TestLogicDistSQL(t *testing.T) {
 	defer sql.SetDefaultDistSQLMode("ON")()
 
 	// TODO(radu): make this run on 3 nodes (#13377)
-	l := makeLogicTest(t, 1 /* numNodes */, true /* useFakeSpanResolver */)
+	l := makeLogicTest(t, 3 /* numNodes */, true /* useFakeSpanResolver */)
 	l.run()
 }
 
