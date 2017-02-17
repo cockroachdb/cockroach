@@ -20,6 +20,8 @@ import (
 	"fmt"
 	"math"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 )
 
@@ -39,7 +41,7 @@ type limitNode struct {
 }
 
 // limit constructs a limitNode based on the LIMIT and OFFSET clauses.
-func (p *planner) Limit(n *parser.Limit) (*limitNode, error) {
+func (p *planner) Limit(ctx context.Context, n *parser.Limit) (*limitNode, error) {
 	if n == nil || (n.Count == nil && n.Offset == nil) {
 		// No LIMIT nor OFFSET; there is nothing special to do.
 		return nil, nil
@@ -64,7 +66,7 @@ func (p *planner) Limit(n *parser.Limit) (*limitNode, error) {
 				return nil, err
 			}
 
-			normalized, err := p.analyzeExpr(datum.src, nil, parser.IndexedVarHelper{}, parser.TypeInt, true, datum.name)
+			normalized, err := p.analyzeExpr(ctx, datum.src, nil, parser.IndexedVarHelper{}, parser.TypeInt, true, datum.name)
 			if err != nil {
 				return nil, err
 			}
@@ -74,8 +76,8 @@ func (p *planner) Limit(n *parser.Limit) (*limitNode, error) {
 	return &res, nil
 }
 
-func (n *limitNode) Start() error {
-	if err := n.plan.Start(); err != nil {
+func (n *limitNode) Start(ctx context.Context) error {
+	if err := n.plan.Start(ctx); err != nil {
 		return err
 	}
 
@@ -164,7 +166,7 @@ func (n *limitNode) DebugValues() debugValues {
 	return n.debugVals
 }
 
-func (n *limitNode) Next() (bool, error) {
+func (n *limitNode) Next(ctx context.Context) (bool, error) {
 	// n.rowIndex is the 0-based index of the next row.
 	// We don't do (n.rowIndex >= n.offset + n.count) to avoid overflow (count can be MaxInt64).
 	if n.rowIndex-n.offset >= n.count {
@@ -172,7 +174,7 @@ func (n *limitNode) Next() (bool, error) {
 	}
 
 	for {
-		if next, err := n.plan.Next(); !next {
+		if next, err := n.plan.Next(ctx); !next {
 			return false, err
 		}
 
@@ -200,6 +202,6 @@ func (n *limitNode) Next() (bool, error) {
 	return true, nil
 }
 
-func (n *limitNode) Close() {
-	n.plan.Close()
+func (n *limitNode) Close(ctx context.Context) {
+	n.plan.Close(ctx)
 }

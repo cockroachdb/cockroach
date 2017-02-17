@@ -20,6 +20,8 @@ import (
 	"bytes"
 	"fmt"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -79,6 +81,7 @@ func (uh *upsertHelper) IndexedVarFormat(buf *bytes.Buffer, f parser.FmtFlags, i
 }
 
 func (p *planner) makeUpsertHelper(
+	ctx context.Context,
 	tn *parser.TableName,
 	tableDesc *sqlbase.TableDescriptor,
 	insertCols []sqlbase.ColumnDescriptor,
@@ -124,7 +127,7 @@ func (p *planner) makeUpsertHelper(
 	ivarHelper := parser.MakeIndexedVarHelper(helper, len(sourceInfo.sourceColumns)+len(excludedSourceInfo.sourceColumns))
 	sources := multiSourceInfo{sourceInfo, excludedSourceInfo}
 	for _, expr := range untupledExprs {
-		normExpr, err := p.analyzeExpr(expr, sources, ivarHelper, parser.TypeAny, false, "")
+		normExpr, err := p.analyzeExpr(ctx, expr, sources, ivarHelper, parser.TypeAny, false, "")
 		if err != nil {
 			return nil, err
 		}

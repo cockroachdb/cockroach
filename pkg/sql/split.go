@@ -28,7 +28,7 @@ import (
 
 // Split executes a KV split.
 // Privileges: INSERT on table.
-func (p *planner) Split(n *parser.Split) (planNode, error) {
+func (p *planner) Split(ctx context.Context, n *parser.Split) (planNode, error) {
 	var tn *parser.TableName
 	var err error
 	if n.Index == nil {
@@ -80,7 +80,7 @@ func (p *planner) Split(n *parser.Split) (planNode, error) {
 			return nil, err
 		}
 		desired := c.Type.ToDatumType()
-		typedExpr, err := p.analyzeExpr(expr, nil, parser.IndexedVarHelper{}, desired, true, "SPLIT AT")
+		typedExpr, err := p.analyzeExpr(ctx, expr, nil, parser.IndexedVarHelper{}, desired, true, "SPLIT AT")
 		if err != nil {
 			return nil, err
 		}
@@ -103,7 +103,7 @@ type splitNode struct {
 	key       []byte
 }
 
-func (n *splitNode) Start() error {
+func (n *splitNode) Start(context.Context) error {
 	values := make([]parser.Datum, len(n.exprs))
 	colMap := make(map[sqlbase.ColumnID]int)
 	for i, e := range n.exprs {
@@ -128,7 +128,7 @@ func (n *splitNode) Start() error {
 	return n.p.execCfg.DB.AdminSplit(context.TODO(), n.key)
 }
 
-func (n *splitNode) Next() (bool, error) {
+func (n *splitNode) Next(context.Context) (bool, error) {
 	return n.key != nil, nil
 }
 
@@ -154,7 +154,7 @@ func (*splitNode) Columns() ResultColumns {
 	}
 }
 
-func (*splitNode) Close()                  {}
+func (*splitNode) Close(context.Context)   {}
 func (*splitNode) Ordering() orderingInfo  { return orderingInfo{} }
 func (*splitNode) MarkDebug(_ explainMode) {}
 

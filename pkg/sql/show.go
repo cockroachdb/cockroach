@@ -22,6 +22,8 @@ import (
 	"sort"
 	"strings"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -78,8 +80,8 @@ const (
 )
 
 // checkDBExists checks if the database exists by using the security.RootUser.
-func checkDBExists(p *planner, db string) error {
-	values, err := p.queryRowsAsRoot(checkSchemaQuery, db)
+func checkDBExists(ctx context.Context, p *planner, db string) error {
+	values, err := p.queryRowsAsRoot(ctx, checkSchemaQuery, db)
 	if err != nil {
 		return err
 	}
@@ -90,8 +92,8 @@ func checkDBExists(p *planner, db string) error {
 }
 
 // checkTableExists checks if the table exists by using the security.RootUser.
-func checkTableExists(p *planner, tn *parser.TableName) error {
-	values, err := p.queryRowsAsRoot(checkTableQuery, tn.Database(), tn.Table())
+func checkTableExists(ctx context.Context, p *planner, tn *parser.TableName) error {
+	values, err := p.queryRowsAsRoot(ctx, checkTableQuery, tn.Database(), tn.Table())
 	if err != nil {
 		return err
 	}
@@ -103,7 +105,7 @@ func checkTableExists(p *planner, tn *parser.TableName) error {
 
 // checkTablePrivileges checks if the user has been granted privileges to
 // see the specified table.
-func checkTablePrivileges(p *planner, tn *parser.TableName) error {
+func checkTablePrivileges(ctx context.Context, p *planner, tn *parser.TableName) error {
 	// Skip the checking if the table is a virtual table.
 	if virDesc, err := p.session.virtualSchemas.getVirtualTableDesc(tn); err != nil {
 		return err
@@ -111,7 +113,8 @@ func checkTablePrivileges(p *planner, tn *parser.TableName) error {
 		return nil
 	}
 
-	values, err := p.queryRowsAsRoot(checkTablePrivilegesQuery, tn.Database(), tn.Table(), p.session.User)
+	values, err := p.queryRowsAsRoot(
+		ctx, checkTablePrivilegesQuery, tn.Database(), tn.Table(), p.session.User)
 	if err != nil {
 		return err
 	}
@@ -135,11 +138,16 @@ func runInDB(p *planner, tempDB string, f func() error) error {
 // queryInfoSchema queries the information_schema with the provided SQL query and
 // uses the results to populate a valuesNode.
 func queryInfoSchema(
-	p *planner, columns ResultColumns, db string, sql string, args ...interface{},
+	ctx context.Context,
+	p *planner,
+	columns ResultColumns,
+	db string,
+	sql string,
+	args ...interface{},
 ) (*valuesNode, error) {
 	v := p.newContainerValuesNode(columns, 0)
 	if err := runInDB(p, db, func() error {
-		rows, err := p.queryRows(sql, args...)
+		rows, err := p.queryRows(ctx, sql, args...)
 		if err != nil {
 			return err
 		}
@@ -179,7 +187,7 @@ func (p *planner) Show(n *parser.Show) (planNode, error) {
 	return &delayedNode{
 		name:    "SHOW " + origName,
 		columns: columns,
-		constructor: func(p *planner) (planNode, error) {
+		constructor: func(ctx context.Context, p *planner) (planNode, error) {
 			v := p.newContainerValuesNode(columns, 0)
 
 			switch name {
@@ -214,7 +222,7 @@ func (p *planner) Show(n *parser.Show) (planNode, error) {
 // Privileges: Any privilege on table.
 //   Notes: postgres does not have a SHOW COLUMNS statement.
 //          mysql only returns columns you have privileges on.
-func (p *planner) ShowColumns(n *parser.ShowColumns) (planNode, error) {
+func (p *planner) ShowColumns(ctx context.Context, n *parser.ShowColumns) (planNode, error) {
 	tn, err := n.Table.NormalizeWithDatabaseName(p.session.Database)
 	if err != nil {
 		return nil, err
@@ -230,7 +238,7 @@ func (p *planner) ShowColumns(n *parser.ShowColumns) (planNode, error) {
 	return &delayedNode{
 		name:    "SHOW COLUMNS FROM " + tn.String(),
 		columns: columns,
-		constructor: func(p *planner) (planNode, error) {
+		constructor: func(ctx context.Context, p *planner) (planNode, error) {
 			const getColumnsQuery = `
 				SELECT
 					COLUMN_NAME AS "Field",
@@ -255,19 +263,19 @@ func (p *planner) ShowColumns(n *parser.ShowColumns) (planNode, error) {
 				ORDER BY ORDINAL_POSITION`
 
 			db := tn.Database()
-			if err := checkDBExists(p, db); err != nil {
+			if err := checkDBExists(ctx, p, db); err != nil {
 				return nil, err
 			}
 
-			if err := checkTableExists(p, tn); err != nil {
+			if err := checkTableExists(ctx, p, tn); err != nil {
 				return nil, err
 			}
 
-			if err := checkTablePrivileges(p, tn); err != nil {
+			if err := checkTablePrivileges(ctx, p, tn); err != nil {
 				return nil, err
 			}
 
-			return queryInfoSchema(p, columns, db, getColumnsQuery, tn.Database(), tn.Table())
+			return queryInfoSchema(ctx, p, columns, db, getColumnsQuery, tn.Database(), tn.Table())
 		},
 	}, nil
 }
@@ -317,7 +325,7 @@ func (p *planner) ShowCreateTable(n *parser.ShowCreateTable) (planNode, error) {
 	return &delayedNode{
 		name:    "SHOW CREATE TABLE " + tn.String(),
 		columns: columns,
-		constructor: func(p *planner) (planNode, error) {
+		constructor: func(_ context.Context, p *planner) (planNode, error) {
 			v := p.newContainerValuesNode(columns, 0)
 
 			s, err := p.showCreateTable(tn.TableName, desc)
@@ -428,13 +436,13 @@ func quoteNames(names ...string) string {
 // ShowCreateView returns a CREATE VIEW statement for the specified view in
 // Traditional syntax.
 // Privileges: Any privilege on view.
-func (p *planner) ShowCreateView(n *parser.ShowCreateView) (planNode, error) {
+func (p *planner) ShowCreateView(ctx context.Context, n *parser.ShowCreateView) (planNode, error) {
 	tn, err := n.View.NormalizeWithDatabaseName(p.session.Database)
 	if err != nil {
 		return nil, err
 	}
 
-	desc, err := p.mustGetViewDesc(tn)
+	desc, err := p.mustGetViewDesc(ctx, tn)
 	if err != nil {
 		return nil, err
 	}
@@ -449,7 +457,7 @@ func (p *planner) ShowCreateView(n *parser.ShowCreateView) (planNode, error) {
 	return &delayedNode{
 		name:    "SHOW CREATE VIEW " + tn.String(),
 		columns: columns,
-		constructor: func(p *planner) (planNode, error) {
+		constructor: func(ctx context.Context, p *planner) (planNode, error) {
 			v := p.newContainerValuesNode(columns, 0)
 
 			var buf bytes.Buffer
@@ -472,7 +480,7 @@ func (p *planner) ShowCreateView(n *parser.ShowCreateView) (planNode, error) {
 			p.skipSelectPrivilegeChecks = true
 			defer func() { p.skipSelectPrivilegeChecks = false }()
 
-			sourcePlan, err := p.Select(sel, []parser.Type{}, false)
+			sourcePlan, err := p.Select(ctx, sel, []parser.Type{}, false)
 			if err != nil {
 				return nil, err
 			}
@@ -507,14 +515,14 @@ func (p *planner) ShowCreateView(n *parser.ShowCreateView) (planNode, error) {
 // Privileges: None.
 //   Notes: postgres does not have a "show databases"
 //          mysql has a "SHOW DATABASES" permission, but we have no system-level permissions.
-func (p *planner) ShowDatabases(n *parser.ShowDatabases) (planNode, error) {
+func (p *planner) ShowDatabases(ctx context.Context, n *parser.ShowDatabases) (planNode, error) {
 	const getDatabases = `SELECT SCHEMA_NAME AS "Database" FROM information_schema.schemata
 							ORDER BY "Database"`
 	stmt, err := parser.ParseOneTraditional(getDatabases)
 	if err != nil {
 		return nil, err
 	}
-	return p.newPlan(stmt, nil, true)
+	return p.newPlan(ctx, stmt, nil, true)
 }
 
 // ShowGrants returns grant details for the specified objects and users.
@@ -522,7 +530,7 @@ func (p *planner) ShowDatabases(n *parser.ShowDatabases) (planNode, error) {
 // Privileges: None.
 //   Notes: postgres does not have a SHOW GRANTS statement.
 //          mysql only returns the user's privileges.
-func (p *planner) ShowGrants(n *parser.ShowGrants) (planNode, error) {
+func (p *planner) ShowGrants(ctx context.Context, n *parser.ShowGrants) (planNode, error) {
 	if n.Targets == nil {
 		return nil, errors.Errorf("TODO(marc): implement SHOW GRANT with no targets")
 	}
@@ -541,11 +549,11 @@ func (p *planner) ShowGrants(n *parser.ShowGrants) (planNode, error) {
 	return &delayedNode{
 		name:    "SHOW GRANTS",
 		columns: columns,
-		constructor: func(p *planner) (planNode, error) {
+		constructor: func(ctx context.Context, p *planner) (planNode, error) {
 			v := p.newContainerValuesNode(columns, 0)
 
 			queryFn := func(sql string, args ...interface{}) error {
-				rows, err := p.queryRows(sql, args...)
+				rows, err := p.queryRows(ctx, sql, args...)
 				if err != nil {
 					return err
 				}
@@ -565,7 +573,7 @@ func (p *planner) ShowGrants(n *parser.ShowGrants) (planNode, error) {
 				var paramHolders []string
 				paramSeq := 1
 				for _, db := range n.Targets.Databases.ToStrings() {
-					if err := checkDBExists(p, db); err != nil {
+					if err := checkDBExists(ctx, p, db); err != nil {
 						v.rows.Close()
 						return nil, err
 					}
@@ -611,7 +619,7 @@ func (p *planner) ShowGrants(n *parser.ShowGrants) (planNode, error) {
 						return nil, err
 					}
 					for i := range tables {
-						if err := checkTableExists(p, &tables[i]); err != nil {
+						if err := checkTableExists(ctx, p, &tables[i]); err != nil {
 							v.rows.Close()
 							return nil, err
 						}
@@ -659,7 +667,7 @@ func (p *planner) ShowGrants(n *parser.ShowGrants) (planNode, error) {
 // Privileges: Any privilege on table.
 //   Notes: postgres does not have a SHOW INDEXES statement.
 //          mysql requires some privilege for any column.
-func (p *planner) ShowIndex(n *parser.ShowIndex) (planNode, error) {
+func (p *planner) ShowIndex(ctx context.Context, n *parser.ShowIndex) (planNode, error) {
 	tn, err := n.Table.NormalizeWithDatabaseName(p.session.Database)
 	if err != nil {
 		return nil, err
@@ -678,7 +686,7 @@ func (p *planner) ShowIndex(n *parser.ShowIndex) (planNode, error) {
 	return &delayedNode{
 		name:    "SHOW INDEXES FROM " + tn.String(),
 		columns: columns,
-		constructor: func(p *planner) (planNode, error) {
+		constructor: func(ctx context.Context, p *planner) (planNode, error) {
 			const getIndexes = `
 				SELECT
 					TABLE_NAME AS "Table",
@@ -695,19 +703,19 @@ func (p *planner) ShowIndex(n *parser.ShowIndex) (planNode, error) {
 					TABLE_NAME=$2`
 
 			db := tn.Database()
-			if err := checkDBExists(p, db); err != nil {
+			if err := checkDBExists(ctx, p, db); err != nil {
 				return nil, err
 			}
 
-			if err := checkTableExists(p, tn); err != nil {
+			if err := checkTableExists(ctx, p, tn); err != nil {
 				return nil, err
 			}
 
-			if err := checkTablePrivileges(p, tn); err != nil {
+			if err := checkTablePrivileges(ctx, p, tn); err != nil {
 				return nil, err
 			}
 
-			return queryInfoSchema(p, columns, db, getIndexes, tn.Database(), tn.Table())
+			return queryInfoSchema(ctx, p, columns, db, getIndexes, tn.Database(), tn.Table())
 		},
 	}, nil
 }
@@ -716,7 +724,7 @@ func (p *planner) ShowIndex(n *parser.ShowIndex) (planNode, error) {
 // Privileges: Any privilege on table.
 //   Notes: postgres does not have a SHOW CONSTRAINTS statement.
 //          mysql requires some privilege for any column.
-func (p *planner) ShowConstraints(n *parser.ShowConstraints) (planNode, error) {
+func (p *planner) ShowConstraints(ctx context.Context, n *parser.ShowConstraints) (planNode, error) {
 	tn, err := n.Table.NormalizeWithDatabaseName(p.session.Database)
 	if err != nil {
 		return nil, err
@@ -741,7 +749,7 @@ func (p *planner) ShowConstraints(n *parser.ShowConstraints) (planNode, error) {
 	return &delayedNode{
 		name:    "SHOW CONSTRAINTS FROM " + tn.String(),
 		columns: columns,
-		constructor: func(p *planner) (planNode, error) {
+		constructor: func(ctx context.Context, p *planner) (planNode, error) {
 			v := p.newContainerValuesNode(columns, 0)
 
 			info, err := desc.GetConstraintInfo(p.txn)
@@ -769,7 +777,7 @@ func (p *planner) ShowConstraints(n *parser.ShowConstraints) (planNode, error) {
 					detailsDatum,
 				}
 				if _, err := v.rows.AddRow(newRow); err != nil {
-					v.Close()
+					v.Close(ctx)
 					return nil, err
 				}
 			}
@@ -792,7 +800,7 @@ func (p *planner) ShowConstraints(n *parser.ShowConstraints) (planNode, error) {
 // Privileges: None.
 //   Notes: postgres does not have a SHOW TABLES statement.
 //          mysql only returns tables you have privileges on.
-func (p *planner) ShowTables(n *parser.ShowTables) (planNode, error) {
+func (p *planner) ShowTables(ctx context.Context, n *parser.ShowTables) (planNode, error) {
 	name := p.session.Database
 	if n.Database != "" {
 		name = string(n.Database)
@@ -805,35 +813,35 @@ func (p *planner) ShowTables(n *parser.ShowTables) (planNode, error) {
 	return &delayedNode{
 		name:    "SHOW TABLES FROM " + name,
 		columns: columns,
-		constructor: func(p *planner) (planNode, error) {
+		constructor: func(ctx context.Context, p *planner) (planNode, error) {
 			const getTablesQuery = `
 				SELECT TABLE_NAME
 				FROM information_schema.tables
 				WHERE tables.TABLE_SCHEMA=$1
 				ORDER BY tables.TABLE_NAME`
 
-			if err := checkDBExists(p, name); err != nil {
+			if err := checkDBExists(ctx, p, name); err != nil {
 				return nil, err
 			}
 
-			return queryInfoSchema(p, columns, name, getTablesQuery, name)
+			return queryInfoSchema(ctx, p, columns, name, getTablesQuery, name)
 		},
 	}, nil
 }
 
 // ShowUsers returns all the users.
 // Privileges: SELECT on system.users.
-func (p *planner) ShowUsers(n *parser.ShowUsers) (planNode, error) {
+func (p *planner) ShowUsers(ctx context.Context, n *parser.ShowUsers) (planNode, error) {
 	stmt, err := parser.ParseOneTraditional(`SELECT username FROM system.users ORDER BY 1`)
 	if err != nil {
 		return nil, err
 	}
-	return p.newPlan(stmt, nil, true)
+	return p.newPlan(ctx, stmt, nil, true)
 }
 
 // Help returns usage information for the builtin functions
 // Privileges: None
-func (p *planner) Help(n *parser.Help) (planNode, error) {
+func (p *planner) Help(ctx context.Context, n *parser.Help) (planNode, error) {
 	name := strings.ToLower(n.Name.String())
 	columns := ResultColumns{
 		{Name: "Function", Typ: parser.TypeString},
@@ -844,7 +852,7 @@ func (p *planner) Help(n *parser.Help) (planNode, error) {
 	return &delayedNode{
 		name:    "HELP " + name,
 		columns: columns,
-		constructor: func(p *planner) (planNode, error) {
+		constructor: func(ctx context.Context, p *planner) (planNode, error) {
 			v := p.newContainerValuesNode(columns, 0)
 
 			matches, ok := parser.Builtins[name]
@@ -861,7 +869,7 @@ func (p *planner) Help(n *parser.Help) (planNode, error) {
 					parser.NewDString(f.Info),
 				}
 				if _, err := v.rows.AddRow(row); err != nil {
-					v.Close()
+					v.Close(ctx)
 					return nil, err
 				}
 			}

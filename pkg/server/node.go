@@ -778,7 +778,9 @@ func (n *Node) recordJoinEvent() {
 		retryOpts.Closer = n.stopper.ShouldStop()
 		for r := retry.Start(retryOpts); r.Next(); {
 			if err := n.storeCfg.DB.Txn(ctx, func(txn *client.Txn) error {
-				return n.eventLogger.InsertEventRecord(txn,
+				return n.eventLogger.InsertEventRecord(
+					ctx,
+					txn,
 					logEventType,
 					int32(n.Descriptor.NodeID),
 					int32(n.Descriptor.NodeID),

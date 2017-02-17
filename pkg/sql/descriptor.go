@@ -19,6 +19,8 @@ package sql
 import (
 	"fmt"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -64,7 +66,9 @@ type DescriptorAccessor interface {
 
 	// getDescriptorsFromTargetList examines a TargetList and fetches the
 	// appropriate descriptors.
-	getDescriptorsFromTargetList(targets parser.TargetList) ([]sqlbase.DescriptorProto, error)
+	getDescriptorsFromTargetList(
+		ctx context.Context, targets parser.TargetList,
+	) ([]sqlbase.DescriptorProto, error)
 }
 
 var _ DescriptorAccessor = &planner{}
@@ -270,7 +274,7 @@ func (p *planner) getAllDescriptors() ([]sqlbase.DescriptorProto, error) {
 
 // getDescriptorsFromTargetList implements the DescriptorAccessor interface.
 func (p *planner) getDescriptorsFromTargetList(
-	targets parser.TargetList,
+	ctx context.Context, targets parser.TargetList,
 ) ([]sqlbase.DescriptorProto, error) {
 	if targets.Databases != nil {
 		if len(targets.Databases) == 0 {
@@ -301,7 +305,7 @@ func (p *planner) getDescriptorsFromTargetList(
 			return nil, err
 		}
 		for i := range tables {
-			descriptor, err := p.mustGetTableOrViewDesc(&tables[i])
+			descriptor, err := p.mustGetTableOrViewDesc(ctx, &tables[i])
 			if err != nil {
 				return nil, err
 			}

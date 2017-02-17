@@ -399,7 +399,7 @@ func (e *Executor) getSystemConfig() (config.SystemConfig, *databaseCache) {
 // populate the missing types. The PreparedStatement is returned (or
 // nil if there are no results).
 func (e *Executor) Prepare(
-	query string, session *Session, pinfo parser.PlaceholderTypes,
+	ctx context.Context, query string, session *Session, pinfo parser.PlaceholderTypes,
 ) (*PreparedStatement, error) {
 	log.VEventf(session.Ctx(), 2, "preparing: %s", query)
 	var p parser.Parser
@@ -454,14 +454,14 @@ func (e *Executor) Prepare(
 		SetTxnTimestamps(txn, *protoTS)
 	}
 
-	plan, err := session.planner.prepare(stmt)
+	plan, err := session.planner.prepare(ctx, stmt)
 	if err != nil {
 		return nil, err
 	}
 	if plan == nil {
 		return prepared, nil
 	}
-	defer plan.Close()
+	defer plan.Close(ctx)
 	prepared.Columns = plan.Columns()
 	for _, c := range prepared.Columns {
 		if err := checkResultType(c.Typ); err != nil {
@@ -501,8 +501,8 @@ func (e *Executor) CopyDone(session *Session) StatementResults {
 }
 
 // CopyEnd ends the COPY mode. Any buffered data is discarded.
-func (session *Session) CopyEnd() {
-	session.planner.copyFrom.Close()
+func (session *Session) CopyEnd(ctx context.Context) {
+	session.planner.copyFrom.Close(ctx)
 	session.planner.copyFrom = nil
 }
 
@@ -652,7 +652,8 @@ func (e *Executor) execRequest(session *Session, sql string, copymsg copyMsg) St
 				// Some results were produced by a previous attempt. Discard them.
 				ResultList(results).Close()
 			}
-			results, remainingStmts, err = runTxnAttempt(e, planMaker, origState, txnState, opt, stmtsToExec, isAutomaticRetry)
+			results, remainingStmts, err = runTxnAttempt(
+				session.Ctx(), e, planMaker, origState, txnState, opt, stmtsToExec, isAutomaticRetry)
 
 			// TODO(andrei): Until #7881 fixed.
 			if err == nil && txnState.State == Aborted {
@@ -777,15 +778,15 @@ func (e *Executor) execRequest(session *Session, sql string, copymsg copyMsg) St
 
 // If the plan has a fast path we attempt to query that,
 // otherwise we fall back to counting via plan.Next().
-func countRowsAffected(p planNode) (int, error) {
+func countRowsAffected(ctx context.Context, p planNode) (int, error) {
 	if a, ok := p.(planNodeFastPath); ok {
 		if count, res := a.FastPathResults(); res {
 			return count, nil
 		}
 	}
 	count := 0
-	next, err := p.Next()
-	for ; next; next, err = p.Next() {
+	next, err := p.Next(ctx)
+	for ; next; next, err = p.Next(ctx) {
 		count++
 	}
 	return count, err
@@ -796,6 +797,7 @@ func countRowsAffected(p planNode) (int, error) {
 // It sets up a planner and delegates execution of statements to
 // execStmtsInCurrentTxn().
 func runTxnAttempt(
+	ctx context.Context,
 	e *Executor,
 	planMaker *planner,
 	origState TxnStateEnum,
@@ -812,7 +814,7 @@ func runTxnAttempt(
 
 	planMaker.setTxn(txnState.txn)
 	results, remainingStmts, err := e.execStmtsInCurrentTxn(
-		stmts, planMaker, txnState,
+		ctx, stmts, planMaker, txnState,
 		opt.AutoCommit /* implicitTxn */, opt.AutoRetry /* txnBeginning */, isAutomaticRetry)
 	if opt.AutoCommit {
 		if len(remainingStmts) > 0 {
@@ -855,6 +857,7 @@ func runTxnAttempt(
 //    this last result; the caller is responsible copying it into the result
 //    after converting it adequately.
 func (e *Executor) execStmtsInCurrentTxn(
+	ctx context.Context,
 	stmts parser.StatementList,
 	planMaker *planner,
 	txnState *txnState,
@@ -871,7 +874,6 @@ func (e *Executor) execStmtsInCurrentTxn(
 	}
 
 	for i, stmt := range stmts {
-		ctx := planMaker.session.Ctx()
 		if log.V(2) || log.HasSpanOrEvent(ctx) {
 			log.VEventf(ctx, 2, "executing %d/%d: %s", i+1, len(stmts), stmt)
 		}
@@ -898,7 +900,7 @@ func (e *Executor) execStmtsInCurrentTxn(
 			switch txnState.State {
 			case Open:
 				res, err = e.execStmtInOpenTxn(
-					stmt, planMaker, implicitTxn, txnBeginning && (i == 0), /* firstInTxn */
+					ctx, stmt, planMaker, implicitTxn, txnBeginning && (i == 0), /* firstInTxn */
 					txnState, isAutomaticRetry)
 			case Aborted, RestartWait:
 				res, err = e.execStmtInAbortedTxn(stmt, txnState, planMaker)
@@ -1039,6 +1041,7 @@ func (e *Executor) execStmtInCommitWaitTxn(
 // - a Result
 // - an error, if any. In case of error, the result returned also reflects this error.
 func (e *Executor) execStmtInOpenTxn(
+	ctx context.Context,
 	stmt parser.Statement,
 	planMaker *planner,
 	implicitTxn bool,
@@ -1164,7 +1167,7 @@ func (e *Executor) execStmtInOpenTxn(
 	}
 
 	autoCommit := implicitTxn && !e.cfg.TestingKnobs.DisableAutoCommit
-	result, err := e.execStmt(stmt, planMaker, autoCommit, isAutomaticRetry, tStart)
+	result, err := e.execStmt(ctx, stmt, planMaker, autoCommit, isAutomaticRetry, tStart)
 	if err != nil {
 		if result.Rows != nil {
 			result.Rows.Close()
@@ -1287,22 +1290,24 @@ func (e *Executor) execDistSQL(planMaker *planner, tree planNode, result *Result
 
 // execClassic runs a plan using the classic (non-distributed) SQL
 // implementation.
-func (e *Executor) execClassic(planMaker *planner, plan planNode, result *Result) error {
-	if err := planMaker.startPlan(plan); err != nil {
+func (e *Executor) execClassic(
+	ctx context.Context, planMaker *planner, plan planNode, result *Result,
+) error {
+	if err := planMaker.startPlan(ctx, plan); err != nil {
 		return err
 	}
 
 	switch result.Type {
 	case parser.RowsAffected:
-		count, err := countRowsAffected(plan)
+		count, err := countRowsAffected(ctx, plan)
 		if err != nil {
 			return err
 		}
 		result.RowsAffected += count
 
 	case parser.Rows:
-		next, err := plan.Next()
-		for ; next; next, err = plan.Next() {
+		next, err := plan.Next(ctx)
+		for ; next; next, err = plan.Next(ctx) {
 			// The plan.Values Datums needs to be copied on each iteration.
 			values := plan.Values()
 
@@ -1374,18 +1379,19 @@ func (e *Executor) shouldUseDistSQL(planMaker *planner, plan planNode) (bool, er
 // The current transaction might have been committed/rolled back when this returns.
 // The caller closes result.Rows (even in error cases).
 func (e *Executor) execStmt(
+	ctx context.Context,
 	stmt parser.Statement,
 	planMaker *planner,
 	autoCommit bool,
 	isAutomaticRetry bool,
 	tStart time.Time,
 ) (Result, error) {
-	plan, err := planMaker.makePlan(stmt, autoCommit)
+	plan, err := planMaker.makePlan(ctx, stmt, autoCommit)
 	if err != nil {
 		return Result{}, err
 	}
 
-	defer plan.Close()
+	defer plan.Close(ctx)
 
 	result := Result{
 		PGTag: stmt.StatementTag(),
@@ -1414,7 +1420,7 @@ func (e *Executor) execStmt(
 		execDuration := timeutil.Since(tStart).Nanoseconds()
 		e.DistSQLExecLatency.RecordValue(execDuration)
 	} else {
-		err = e.execClassic(planMaker, plan, &result)
+		err = e.execClassic(ctx, planMaker, plan, &result)
 		execDuration := timeutil.Since(tStart).Nanoseconds()
 		e.SQLExecLatency.RecordValue(execDuration)
 	}

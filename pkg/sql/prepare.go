@@ -71,7 +71,7 @@ func (ps PreparedStatements) New(
 	ctx context.Context, e *Executor, name, query string, placeholderHints parser.PlaceholderTypes,
 ) (*PreparedStatement, error) {
 	// Prepare the query. This completes the typing of placeholders.
-	stmt, err := e.Prepare(query, ps.session, placeholderHints)
+	stmt, err := e.Prepare(ctx, query, ps.session, placeholderHints)
 	if err != nil {
 		return nil, err
 	}

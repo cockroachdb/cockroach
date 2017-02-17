@@ -19,6 +19,8 @@ package sql
 import (
 	"fmt"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 )
 
@@ -168,7 +170,7 @@ import (
 // case perhaps propagateFilter and propagateOrWrapFilter can merge,
 // but we are not there yet.
 func (p *planner) propagateFilters(
-	plan planNode, info *dataSourceInfo, extraFilter parser.TypedExpr,
+	ctx context.Context, plan planNode, info *dataSourceInfo, extraFilter parser.TypedExpr,
 ) (newPlan planNode, remainingFilter parser.TypedExpr, err error) {
 	remainingFilter = extraFilter
 	switch n := plan.(type) {
@@ -184,7 +186,7 @@ func (p *planner) propagateFilters(
 
 	case *filterNode:
 		newFilter := mergeConj(n.filter, extraFilter)
-		newPlan, err = p.propagateOrWrapFilters(n.source.plan, n.source.info, newFilter)
+		newPlan, err = p.propagateOrWrapFilters(ctx, n.source.plan, n.source.info, newFilter)
 		if err != nil {
 			return plan, extraFilter, err
 		}
@@ -195,10 +197,10 @@ func (p *planner) propagateFilters(
 		return plan, parser.DBoolTrue, nil
 
 	case *renderNode:
-		return p.addRenderFilter(n, extraFilter)
+		return p.addRenderFilter(ctx, n, extraFilter)
 
 	case *joinNode:
-		return p.addJoinFilter(n, extraFilter)
+		return p.addJoinFilter(ctx, n, extraFilter)
 
 	case *indexJoinNode:
 		panic("filter optimization must occur before index selection")
@@ -206,7 +208,7 @@ func (p *planner) propagateFilters(
 	case *distinctNode:
 		// A distinct node can propagate a filter. Source filtering
 		// reduces the amount of work.
-		n.plan, err = p.propagateOrWrapFilters(n.plan, nil, extraFilter)
+		n.plan, err = p.propagateOrWrapFilters(ctx, n.plan, nil, extraFilter)
 		if err != nil {
 			return plan, extraFilter, err
 		}
@@ -215,7 +217,7 @@ func (p *planner) propagateFilters(
 	case *sortNode:
 		// A sort node can propagate a filter, and source filtering
 		// reduces the amount of work.
-		n.plan, err = p.propagateOrWrapFilters(n.plan, nil, extraFilter)
+		n.plan, err = p.propagateOrWrapFilters(ctx, n.plan, nil, extraFilter)
 		if err != nil {
 			return plan, extraFilter, err
 		}
@@ -224,12 +226,12 @@ func (p *planner) propagateFilters(
 	case *unionNode:
 		// Filtering is distributive over set operations.
 		// Source filtering reduces the amount of work, so force propagation.
-		newLeft, err := p.propagateOrWrapFilters(n.left, nil, extraFilter)
+		newLeft, err := p.propagateOrWrapFilters(ctx, n.left, nil, extraFilter)
 		if err != nil {
 			return plan, extraFilter, err
 		}
 
-		newRight, err := p.propagateOrWrapFilters(n.right, nil, extraFilter)
+		newRight, err := p.propagateOrWrapFilters(ctx, n.right, nil, extraFilter)
 		if err != nil {
 			return plan, extraFilter, err
 		}
@@ -251,71 +253,71 @@ func (p *planner) propagateFilters(
 		//
 		// TODO(knz) implement the aforementioned optimization.
 		//
-		if n.plan, err = p.triggerFilterPropagation(n.plan); err != nil {
+		if n.plan, err = p.triggerFilterPropagation(ctx, n.plan); err != nil {
 			return plan, extraFilter, err
 		}
 
 	case *limitNode:
-		if n.plan, err = p.triggerFilterPropagation(n.plan); err != nil {
+		if n.plan, err = p.triggerFilterPropagation(ctx, n.plan); err != nil {
 			return plan, extraFilter, err
 		}
 
 	case *windowNode:
-		if n.plan, err = p.triggerFilterPropagation(n.plan); err != nil {
+		if n.plan, err = p.triggerFilterPropagation(ctx, n.plan); err != nil {
 			return plan, extraFilter, err
 		}
 
 	case *ordinalityNode:
-		if n.source, err = p.triggerFilterPropagation(n.source); err != nil {
+		if n.source, err = p.triggerFilterPropagation(ctx, n.source); err != nil {
 			return plan, extraFilter, err
 		}
 
 	case *createTableNode:
 		if n.n.As() {
-			if n.sourcePlan, err = p.triggerFilterPropagation(n.sourcePlan); err != nil {
+			if n.sourcePlan, err = p.triggerFilterPropagation(ctx, n.sourcePlan); err != nil {
 				return plan, extraFilter, err
 			}
 		}
 
 	case *createViewNode:
-		if n.sourcePlan, err = p.triggerFilterPropagation(n.sourcePlan); err != nil {
+		if n.sourcePlan, err = p.triggerFilterPropagation(ctx, n.sourcePlan); err != nil {
 			return plan, extraFilter, err
 		}
 
 	case *deleteNode:
-		if n.run.rows, err = p.triggerFilterPropagation(n.run.rows); err != nil {
+		if n.run.rows, err = p.triggerFilterPropagation(ctx, n.run.rows); err != nil {
 			return plan, extraFilter, err
 		}
 
 	case *insertNode:
-		if n.run.rows, err = p.triggerFilterPropagation(n.run.rows); err != nil {
+		if n.run.rows, err = p.triggerFilterPropagation(ctx, n.run.rows); err != nil {
 			return plan, extraFilter, err
 		}
 
 	case *updateNode:
-		if n.run.rows, err = p.triggerFilterPropagation(n.run.rows); err != nil {
+		if n.run.rows, err = p.triggerFilterPropagation(ctx, n.run.rows); err != nil {
 			return plan, extraFilter, err
 		}
 
 	case *explainDebugNode:
-		if n.plan, err = p.triggerFilterPropagation(n.plan); err != nil {
+		if n.plan, err = p.triggerFilterPropagation(ctx, n.plan); err != nil {
 			return plan, extraFilter, err
 		}
 
 	case *explainDistSQLNode:
-		if n.plan, err = p.triggerFilterPropagation(n.plan); err != nil {
+		if n.plan, err = p.triggerFilterPropagation(ctx, n.plan); err != nil {
 			return plan, extraFilter, err
 		}
 
 	case *explainPlanNode:
 		if n.optimized {
-			if n.plan, err = p.triggerFilterPropagation(n.plan); err != nil {
+			if n.plan, err = p.triggerFilterPropagation(ctx, n.plan); err != nil {
 				return plan, extraFilter, err
 			}
 		}
 
 	case *explainTraceNode:
-		if n.plan, err = p.triggerFilterPropagation(n.plan); err != nil {
+		if n.plan, err = p.triggerFilterPropagation(ctx, n.plan); err != nil {
 			return plan, extraFilter, err
 		}
 
@@ -342,15 +344,15 @@ func (p *planner) propagateFilters(
 }
 
 // triggerFilterPropagation initiates filter propagation on the given plan.
-func (p *planner) triggerFilterPropagation(plan planNode) (planNode, error) {
-	newPlan, remainingFilter, err := p.propagateFilters(plan, nil, parser.DBoolTrue)
+func (p *planner) triggerFilterPropagation(ctx context.Context, plan planNode) (planNode, error) {
+	newPlan, remainingFilter, err := p.propagateFilters(ctx, plan, nil, parser.DBoolTrue)
 	if err != nil {
 		return plan, err
 	}
 
 	if !isFilterTrue(remainingFilter) {
 		panic(fmt.Sprintf("propagateFilters on \n%s\n spilled a non-trivial remaining filter: %s",
-			planToString(plan), remainingFilter))
+			planToString(ctx, plan), remainingFilter))
 	}
 
 	return newPlan, nil
@@ -360,9 +362,9 @@ func (p *planner) triggerFilterPropagation(plan planNode) (planNode, error) {
 // node, and creates a new filterNode if there is any remaining filter
 // after the propagation.
 func (p *planner) propagateOrWrapFilters(
-	plan planNode, info *dataSourceInfo, filter parser.TypedExpr,
+	ctx context.Context, plan planNode, info *dataSourceInfo, filter parser.TypedExpr,
 ) (planNode, error) {
-	newPlan, remainingFilter, err := p.propagateFilters(plan, info, filter)
+	newPlan, remainingFilter, err := p.propagateFilters(ctx, plan, info, filter)
 	if err != nil {
 		return plan, err
 	}
@@ -391,7 +393,7 @@ func (p *planner) propagateOrWrapFilters(
 // using renders that are either simple datums or simple column
 // references to the source.
 func (p *planner) addRenderFilter(
-	s *renderNode, extraFilter parser.TypedExpr,
+	ctx context.Context, s *renderNode, extraFilter parser.TypedExpr,
 ) (planNode, parser.TypedExpr, error) {
 	// outerFilter is the filter expressed using values rendered by this renderNode.
 	var outerFilter parser.TypedExpr = parser.DBoolTrue
@@ -465,7 +467,7 @@ func (p *planner) addRenderFilter(
 
 	// Propagate the inner filter.
 	newPlan, err := s.planner.propagateOrWrapFilters(
-		s.source.plan, s.source.info, innerFilter)
+		ctx, s.source.plan, s.source.info, innerFilter)
 	if err != nil {
 		return s, extraFilter, err
 	}
@@ -478,14 +480,14 @@ func (p *planner) addRenderFilter(
 
 // addJoinFilter propagates the given filter to a joinNode.
 func (p *planner) addJoinFilter(
-	n *joinNode, extraFilter parser.TypedExpr,
+	ctx context.Context, n *joinNode, extraFilter parser.TypedExpr,
 ) (planNode, parser.TypedExpr, error) {
 	// TODO(knz) support outer joins.
 	if n.joinType != joinTypeInner {
 		// Outer joins not supported; simply trigger filter optimization in the sub-nodes.
 		var err error
-		if n.left.plan, err = p.triggerFilterPropagation(n.left.plan); err == nil {
-			n.right.plan, err = p.triggerFilterPropagation(n.right.plan)
+		if n.left.plan, err = p.triggerFilterPropagation(ctx, n.left.plan); err == nil {
+			n.right.plan, err = p.triggerFilterPropagation(ctx, n.right.plan)
 		}
 		return n, extraFilter, err
 	}
@@ -615,18 +617,18 @@ func (p *planner) addJoinFilter(
 	// i.e. their IndexedVars which are relative to the join columns
 	// must be modified to become relative to the operand's columns.
 
-	propagate := func(pred parser.TypedExpr, side *planDataSource) error {
-		newPlan, err := p.propagateOrWrapFilters(side.plan, side.info, pred)
+	propagate := func(ctx context.Context, pred parser.TypedExpr, side *planDataSource) error {
+		newPlan, err := p.propagateOrWrapFilters(ctx, side.plan, side.info, pred)
 		if err != nil {
 			return err
 		}
 		side.plan = newPlan
 		return nil
 	}
-	if err := propagate(leftExpr, &n.left); err != nil {
+	if err := propagate(ctx, leftExpr, &n.left); err != nil {
 		return n, extraFilter, err
 	}
-	if err := propagate(rightExpr, &n.right); err != nil {
+	if err := propagate(ctx, rightExpr, &n.right); err != nil {
 		return n, extraFilter, err
 	}
 

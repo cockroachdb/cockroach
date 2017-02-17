@@ -987,7 +987,7 @@ func (c *v3Conn) sendResponse(
 			}
 
 		case parser.CopyIn:
-			rows, err := c.copyIn(result.Columns)
+			rows, err := c.copyIn(ctx, result.Columns)
 			if err != nil {
 				return err
 			}
@@ -1048,9 +1048,9 @@ func (c *v3Conn) sendRowDescription(
 
 // copyIn processes COPY IN data and returns the number of rows inserted.
 // See: https://www.postgresql.org/docs/current/static/protocol-flow.html#PROTOCOL-COPY
-func (c *v3Conn) copyIn(columns []sql.ResultColumn) (int64, error) {
+func (c *v3Conn) copyIn(ctx context.Context, columns []sql.ResultColumn) (int64, error) {
 	var rows int64
-	defer c.session.CopyEnd()
+	defer c.session.CopyEnd(ctx)
 
 	c.writeBuf.initMsg(serverMsgCopyInResponse)
 	c.writeBuf.writeByte(byte(formatText))

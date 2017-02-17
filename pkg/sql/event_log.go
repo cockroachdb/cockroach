@@ -21,6 +21,8 @@ import (
 	"encoding/json"
 	"time"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -85,7 +87,11 @@ func MakeEventLogger(leaseMgr *LeaseManager) EventLogger {
 // InsertEventRecord inserts a single event into the event log as part of the
 // provided transaction.
 func (ev EventLogger) InsertEventRecord(
-	txn *client.Txn, eventType EventLogType, targetID, reportingID int32, info interface{},
+	ctx context.Context,
+	txn *client.Txn,
+	eventType EventLogType,
+	targetID, reportingID int32,
+	info interface{},
 ) error {
 	// Record event record insertion in local log output.
 	txn.AddCommitTrigger(func() {
@@ -118,7 +124,8 @@ VALUES(
 		args[4] = string(infoBytes)
 	}
 
-	rows, err := ev.ExecuteStatementInTransaction("log-event", txn, insertEventTableStmt, args...)
+	rows, err := ev.ExecuteStatementInTransaction(
+		ctx, "log-event", txn, insertEventTableStmt, args...)
 	if err != nil {
 		return err
 	}
