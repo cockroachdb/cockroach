@@ -506,9 +506,7 @@ func (dsp *distSQLPlanner) convertOrdering(
 	for _, col := range planOrdering {
 		streamColIdx := planToStreamColMap[col.ColIdx]
 		if streamColIdx == -1 {
-			// This column is not part of the output. The rest of the ordering is
-			// irrelevant.
-			break
+			panic("column in ordering not part of processor output")
 		}
 		oc := distsqlrun.Ordering_Column{
 			ColIdx:    uint32(streamColIdx),
@@ -533,30 +531,13 @@ func (dsp *distSQLPlanner) createTableReaders(
 		return physicalPlan{}, err
 	}
 
-	if overrideResultColumns != nil {
-		post.OutputColumns = overrideResultColumns
-	} else {
-		post.OutputColumns = getOutputColumnsFromScanNode(n)
-	}
-
-	planToStreamColMap := makePlanToStreamColMap(len(n.resultColumns))
-	for i, col := range post.OutputColumns {
-		planToStreamColMap[col] = i
-	}
-	ordering := dsp.convertOrdering(n.ordering.ordering, planToStreamColMap)
-
 	spanPartitions, err := dsp.partitionSpans(planCtx, n.spans)
 	if err != nil {
 		return physicalPlan{}, err
 	}
 
-	p := physicalPlan{
-		PhysicalPlan: distsqlplan.PhysicalPlan{
-			Ordering:    ordering,
-			ResultTypes: getTypesForPlanResult(n, planToStreamColMap),
-		},
-		planToStreamColMap: planToStreamColMap,
-	}
+	var p physicalPlan
+
 	for _, sp := range spanPartitions {
 		tr := &distsqlrun.TableReaderSpec{}
 		*tr = spec
@@ -569,7 +550,6 @@ func (dsp *distSQLPlanner) createTableReaders(
 			Node: sp.node,
 			Spec: distsqlrun.ProcessorSpec{
 				Core:   distsqlrun.ProcessorCoreUnion{TableReader: tr},
-				Post:   post,
 				Output: []distsqlrun.OutputRouterSpec{{Type: distsqlrun.OutputRouterSpec_PASS_THROUGH}},
 			},
 		}
@@ -577,6 +557,31 @@ func (dsp *distSQLPlanner) createTableReaders(
 		pIdx := p.AddProcessor(proc)
 		p.ResultRouters = append(p.ResultRouters, pIdx)
 	}
+
+	if overrideResultColumns != nil {
+		post.OutputColumns = overrideResultColumns
+	} else {
+		post.OutputColumns = getOutputColumnsFromScanNode(n)
+	}
+
+	planToStreamColMap := makePlanToStreamColMap(len(n.resultColumns))
+	for i, col := range post.OutputColumns {
+		planToStreamColMap[col] = i
+	}
+	if len(p.ResultRouters) > 1 && len(n.ordering.ordering) > 0 {
+		// We have to maintain a certain ordering between the parallel streams. This
+		// might mean we need to add output columns.
+		for _, col := range n.ordering.ordering {
+			if planToStreamColMap[col.ColIdx] == -1 {
+				// This column is not part of the output; add it.
+				planToStreamColMap[col.ColIdx] = len(post.OutputColumns)
+				post.OutputColumns = append(post.OutputColumns, uint32(col.ColIdx))
+			}
+		}
+		p.SetOrdering(dsp.convertOrdering(n.ordering.ordering, planToStreamColMap))
+	}
+	p.SetLastStagePost(post, getTypesForPlanResult(n, planToStreamColMap))
+	p.planToStreamColMap = planToStreamColMap
 	return p, nil
 }
 
