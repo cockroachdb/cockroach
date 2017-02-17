@@ -4044,6 +4044,48 @@ func (s *Store) FrozenStatus(collectFrozen bool) (repDescs []roachpb.ReplicaDesc
 	return
 }
 
+// ListProblemRanges iterates over all replicas and returns the range IDs of ranges that
+// have requested problems.
+func (s *Store) ListProblemRanges(ctx context.Context, wantUnavailable bool, wantNotLeaseHolder bool) (
+	[]roachpb.RangeID, []roachpb.RangeID, error) {
+	if !wantUnavailable && !wantNotLeaseHolder {
+		return nil, nil, nil
+	}
+
+	// Load the system config.
+	cfg, ok := s.Gossip().GetSystemConfig()
+	if !ok {
+		return nil, nil, errors.Errorf("%s: system config not yet available", s)
+	}
+
+	timestamp := s.cfg.Clock.Now()
+	var livenessMap map[roachpb.NodeID]bool
+	if s.cfg.NodeLiveness != nil {
+		livenessMap = s.cfg.NodeLiveness.GetLivenessMap()
+	}
+
+	unavailable := []roachpb.RangeID{}
+	notLeaseHolder := []roachpb.RangeID{}
+
+	newStoreReplicaVisitor(s).Visit(func(rep *Replica) bool {
+		rangeID := rep.Desc().RangeID
+		metrics := rep.metrics(ctx, timestamp, cfg, livenessMap)
+		if wantNotLeaseHolder {
+			if metrics.leader && metrics.leaseValid && !metrics.leaseholder {
+				notLeaseHolder = append(notLeaseHolder, rangeID)
+			}
+		}
+		if wantUnavailable {
+			if metrics.rangeCounter && metrics.unavailable {
+				unavailable = append(unavailable, rangeID)
+			}
+		}
+		return true // more
+	})
+
+	return unavailable, notLeaseHolder, nil
+}
+
 // The methods below can be used to control a store's queues. Stopping a queue
 // is only meant to happen in tests.
 

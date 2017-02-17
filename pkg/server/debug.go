@@ -101,7 +101,7 @@ table tr td {
 <td>node status</td>
 <td>
 <a href="/_status/gossip/local">gossip</a><br />
-<a href="/_status/ranges/local">ranges</a><br />
+<a href="/_status/ranges/local">ranges</a>(<a href="/_status/problem_ranges/local?want_leader_not_lease_holder=false&want_unavailable=true">unavailable</a> <a href="/_status/problem_ranges/local?want_leader_not_lease_holder=true&want_unavailable=false">leader-not-lease-holder</a> <a href="/_status/problem_ranges/local?want_leader_not_lease_holder=true&want_unavailable=true">both</a>)<br />
 </td>
 </tr>
 <tr>

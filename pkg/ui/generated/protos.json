@@ -3058,6 +3058,54 @@
                                     ]
                                 },
                                 {
+                                    "name": "ProblemRangesRequest",
+                                    "fields": [
+                                        {
+                                            "rule": "optional",
+                                            "type": "string",
+                                            "name": "node_id",
+                                            "id": 1
+                                        },
+                                        {
+                                            "rule": "optional",
+                                            "type": "bool",
+                                            "name": "want_unavailable",
+                                            "id": 2
+                                        },
+                                        {
+                                            "rule": "optional",
+                                            "type": "bool",
+                                            "name": "want_leader_not_lease_holder",
+                                            "id": 3
+                                        }
+                                    ]
+                                },
+                                {
+                                    "name": "ProblemRangesResponse",
+                                    "fields": [
+                                        {
+                                            "rule": "repeated",
+                                            "type": "int64",
+                                            "name": "unavailable_range_ids",
+                                            "id": 1,
+                                            "options": {
+                                                "(gogoproto.customname)": "UnavailableRangeIDs",
+                                                "(gogoproto.casttype)": "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"
+                                            }
+                                        },
+                                        {
+                                            "rule": "repeated",
+                                            "type": "int64",
+                                            "name": "leader_not_lease_holder_range_ids",
+                                            "id": 2,
+                                            "options": {
+                                                "(gogoproto.customname)": "LeaderNotLeaseHolderRangeIDs",
+                                                "(gogoproto.casttype)": "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"
+                                            }
+                                        }
+                                    ]
+                                },
+                                {
                                     "name": "PrettySpan",
                                     "fields": [
                                         {
@@ -3293,6 +3341,13 @@
                                             "response": "LogEntriesResponse",
                                             "options": {
                                                 "(google.api.http).get": "/_status/logs/{node_id}"
+                                            }
+                                        },
+                                        "ProblemRanges": {
+                                            "request": "ProblemRangesRequest",
+                                            "response": "ProblemRangesResponse",
+                                            "options": {
+                                                "(google.api.http).get": "/_status/problem_ranges/{node_id}"
                                             }
                                         }
                                     }
