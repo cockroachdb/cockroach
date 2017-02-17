@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"math"
 	"math/rand"
+	"time"
 
 	"github.com/coreos/etcd/raft"
 	"github.com/pkg/errors"
@@ -48,6 +49,14 @@ const (
 	removeExtraReplicaPriority float64 = 100
 )
 
+var (
+	// MinLeaseTransferStatsDuration configures the minimum amount of time a
+	// replica must wait for stats about request counts to accumulate before
+	// making decisions based on them.
+	// Made configurable for the sake of testing.
+	MinLeaseTransferStatsDuration = time.Minute
+)
+
 // AllocatorAction enumerates the various replication adjustments that may be
 // recommended by the allocator.
 type AllocatorAction int
@@ -71,6 +80,15 @@ var allocatorActionNames = map[AllocatorAction]string{
 func (a AllocatorAction) String() string {
 	return allocatorActionNames[a]
 }
+
+type transferDecision int
+
+const (
+	_ transferDecision = iota
+	shouldTransfer
+	shouldNotTransfer
+	decideWithoutStats
+)
 
 // allocatorError indicates a retryable error condition which sends replicas
 // being processed through the replicate_queue into purgatory so that they
@@ -123,12 +141,15 @@ func makeAllocatorRand(source rand.Source) allocatorRand {
 // Allocator tries to spread replicas as evenly as possible across the stores
 // in the cluster.
 type Allocator struct {
-	storePool *StorePool
-	randGen   allocatorRand
+	storePool     *StorePool
+	nodeLatencyFn func(addr string) (time.Duration, bool)
+	randGen       allocatorRand
 }
 
 // MakeAllocator creates a new allocator using the specified StorePool.
-func MakeAllocator(storePool *StorePool) Allocator {
+func MakeAllocator(
+	storePool *StorePool, nodeLatencyFn func(addr string) (time.Duration, bool),
+) Allocator {
 	var randSource rand.Source
 	// There are number of test cases that make a test store but don't add
 	// gossip or a store pool. So we can't rely on the existence of the
@@ -139,8 +160,9 @@ func MakeAllocator(storePool *StorePool) Allocator {
 		randSource = rand.NewSource(rand.Int63())
 	}
 	return Allocator{
-		storePool: storePool,
-		randGen:   makeAllocatorRand(randSource),
+		storePool:     storePool,
+		nodeLatencyFn: nodeLatencyFn,
+		randGen:       makeAllocatorRand(randSource),
 	}
 }
 
@@ -341,12 +363,15 @@ func (a Allocator) RebalanceTarget(
 }
 
 // TransferLeaseTarget returns a suitable replica to transfer the range lease
-// to from the provided list. It excludes the current lease holder replica.
+// to from the provided list. It excludes the current lease holder replica
+// unless asked to do otherwise by the checkTransferLeaseSource parameter.
 func (a *Allocator) TransferLeaseTarget(
+	ctx context.Context,
 	constraints config.Constraints,
 	existing []roachpb.ReplicaDescriptor,
 	leaseStoreID roachpb.StoreID,
 	rangeID roachpb.RangeID,
+	stats *replicaStats,
 	checkTransferLeaseSource bool,
 ) roachpb.ReplicaDescriptor {
 	sl, _, _ := a.storePool.getStoreList(rangeID)
@@ -379,10 +404,31 @@ func (a *Allocator) TransferLeaseTarget(
 	if !ok {
 		return roachpb.ReplicaDescriptor{}
 	}
-	if checkTransferLeaseSource && !a.shouldTransferLease(sl, source, existing) {
-		return roachpb.ReplicaDescriptor{}
+
+	// Try to pick a replica to transfer the lease to while also determining
+	// whether we actually should be transferring the lease. The transfer
+	// decision is only needed if we've been asked to check the source.
+	transferDec, repl := a.shouldTransferLeaseUsingStats(ctx, sl, source, existing, stats)
+	if checkTransferLeaseSource {
+		switch transferDec {
+		case shouldNotTransfer:
+			return roachpb.ReplicaDescriptor{}
+		case shouldTransfer:
+		case decideWithoutStats:
+			if !a.shouldTransferLeaseWithoutStats(ctx, sl, source, existing) {
+				return roachpb.ReplicaDescriptor{}
+			}
+		default:
+			log.Fatalf(ctx, "unexpected transfer decision %d with replica %+v", transferDec, repl)
+		}
 	}
 
+	if repl != (roachpb.ReplicaDescriptor{}) {
+		return repl
+	}
+
+	// Fall back to logic that doesn't take request counts and latency into
+	// account if the counts/latency-based logic couldn't pick a best replica.
 	candidates := make([]roachpb.ReplicaDescriptor, 0, len(existing))
 	for _, repl := range existing {
 		if leaseStoreID == repl.StoreID {
@@ -404,15 +450,30 @@ func (a *Allocator) TransferLeaseTarget(
 	return candidates[a.randGen.Intn(len(candidates))]
 }
 
+// EnableLeaseRebalancing controls whether lease rebalancing is enabled or
+// not. Exported for testing.
+var EnableLeaseRebalancing = envutil.EnvOrDefaultBool("COCKROACH_ENABLE_LEASE_REBALANCING", true)
+
+// EnableLoadBasedLeaseRebalancing controls whether lease rebalancing is done
+// via the new heuristic based on request load and latency or via the simpler
+// approach that purely seeks to balance the number of leases per node evenly.
+var EnableLoadBasedLeaseRebalancing = envutil.EnvOrDefaultBool("COCKROACH_ENABLE_LOAD_BASED_LEASE_REBALANCING", false)
+
 // ShouldTransferLease returns true if the specified store is overfull in terms
 // of leases with respect to the other stores matching the specified
 // attributes.
 func (a *Allocator) ShouldTransferLease(
+	ctx context.Context,
 	constraints config.Constraints,
 	existing []roachpb.ReplicaDescriptor,
 	leaseStoreID roachpb.StoreID,
 	rangeID roachpb.RangeID,
+	stats *replicaStats,
 ) bool {
+	if !EnableLeaseRebalancing {
+		return false
+	}
+
 	source, ok := a.storePool.getStoreDescriptor(leaseStoreID)
 	if !ok {
 		return false
@@ -420,24 +481,157 @@ func (a *Allocator) ShouldTransferLease(
 	sl, _, _ := a.storePool.getStoreList(rangeID)
 	sl = sl.filter(constraints)
 	if log.V(3) {
-		log.Infof(context.TODO(), "transfer-lease-source (lease-holder=%d):\n%s", leaseStoreID, sl)
+		log.Infof(ctx, "ShouldTransferLease source (lease-holder=%d):\n%s", leaseStoreID, sl)
 	}
-	return a.shouldTransferLease(sl, source, existing)
+
+	transferDec, _ := a.shouldTransferLeaseUsingStats(ctx, sl, source, existing, stats)
+	switch transferDec {
+	case shouldNotTransfer:
+		return false
+	case shouldTransfer:
+		return true
+	case decideWithoutStats:
+	default:
+		log.Fatalf(ctx, "unexpected transfer decision %d", transferDec)
+	}
+
+	return a.shouldTransferLeaseWithoutStats(ctx, sl, source, existing)
 }
 
-// EnableLeaseRebalancing controls whether lease rebalancing is enabled or
-// not. Exported for testing.
-var EnableLeaseRebalancing = envutil.EnvOrDefaultBool("COCKROACH_ENABLE_LEASE_REBALANCING", true)
-
-func (a Allocator) shouldTransferLease(
-	sl StoreList, source roachpb.StoreDescriptor, existing []roachpb.ReplicaDescriptor,
-) bool {
-	if !EnableLeaseRebalancing {
-		return false
+func (a Allocator) shouldTransferLeaseUsingStats(
+	ctx context.Context,
+	sl StoreList,
+	source roachpb.StoreDescriptor,
+	existing []roachpb.ReplicaDescriptor,
+	stats *replicaStats,
+) (transferDecision, roachpb.ReplicaDescriptor) {
+	if stats == nil || !EnableLoadBasedLeaseRebalancing {
+		return decideWithoutStats, roachpb.ReplicaDescriptor{}
 	}
+	requestCounts, requestCountsDur := stats.getRequestCounts()
+
+	// If we haven't yet accumulated enough data, avoid transferring for now. Do
+	// not fall back to the algorithm that doesn't use stats, since it can easily
+	// start fighting with the stats-based algorithm. This provides some amount of
+	// safety from lease thrashing, since leases cannot transfer more frequently
+	// than this threshold (because replica stats get reset upon lease transfer).
+	if requestCountsDur < MinLeaseTransferStatsDuration {
+		return shouldNotTransfer, roachpb.ReplicaDescriptor{}
+	}
+
+	// On the other hand, if we don't have any stats with associated localities,
+	// then do fall back to the algorithm that doesn't use request stats.
+	delete(requestCounts, "")
+	if len(requestCounts) == 0 {
+		return decideWithoutStats, roachpb.ReplicaDescriptor{}
+	}
+
+	replicaWeights := make(map[roachpb.NodeID]float64)
+	replicaLocalities := a.storePool.getLocalities(existing)
+	for requestLocalityStr, count := range requestCounts {
+		var requestLocality roachpb.Locality
+		if err := requestLocality.Set(requestLocalityStr); err != nil {
+			log.Errorf(ctx, "unable to parse locality string %q: %s", requestLocalityStr, err)
+			continue
+		}
+		for nodeID, replicaLocality := range replicaLocalities {
+			// Add weights to each replica based on the number of requests from
+			// that replica's locality and neighboring localities.
+			replicaWeights[nodeID] += (1 - replicaLocality.DiversityScore(requestLocality)) * count
+		}
+	}
+	sourceWeight := math.Max(1.0, replicaWeights[source.Node.NodeID])
+
+	if log.V(1) {
+		log.Infof(ctx, "shouldTransferLease requestCounts: %+v, replicaWeights: %+v",
+			requestCounts, replicaWeights)
+	}
+
+	// TODO(a-robinson): This may not have enough protection against all leases
+	// ending up on a single node in extreme cases. Continue testing against
+	// different situations.
+	var bestRepl roachpb.ReplicaDescriptor
+	bestReplScore := int32(math.MinInt32)
+	for _, repl := range existing {
+		if repl.NodeID == source.Node.NodeID {
+			continue
+		}
+		storeDesc, ok := a.storePool.getStoreDescriptor(repl.StoreID)
+		if !ok {
+			continue
+		}
+		addr, err := a.storePool.gossip.GetNodeIDAddress(repl.NodeID)
+		if err != nil {
+			log.Errorf(ctx, "missing address for node %d: %s", repl.NodeID, err)
+			continue
+		}
+		remoteLatency, ok := a.nodeLatencyFn(addr.String())
+		if !ok {
+			continue
+		}
+
+		remoteWeight := math.Max(1.0, replicaWeights[repl.NodeID])
+		score := loadBasedLeaseRebalanceScore(
+			ctx, remoteWeight, remoteLatency, storeDesc, sourceWeight, source, sl.candidateLeases.mean)
+		if score > bestReplScore {
+			bestReplScore = score
+			bestRepl = repl
+		}
+	}
+
+	// Return the best replica even in cases where transferring is not advised in
+	// order to support forced lease transfers, such as when removing a replica or
+	// draining all leases before shutdown.
+	if bestReplScore > 0 {
+		return shouldTransfer, bestRepl
+	}
+	return shouldNotTransfer, bestRepl
+}
+
+// This is a bit of magic that was determined to work well via a bunch of
+// testing. See #13232 for context.
+// TODO(a-robinson): Document the thinking behind this logic.
+func loadBasedLeaseRebalanceScore(
+	ctx context.Context,
+	remoteWeight float64,
+	remoteLatency time.Duration,
+	remoteStore roachpb.StoreDescriptor,
+	sourceWeight float64,
+	source roachpb.StoreDescriptor,
+	meanLeases float64,
+) int32 {
+	remoteLatencyMillis := float64(remoteLatency) / float64(time.Millisecond)
+	rebalanceThreshold :=
+		baseRebalanceThreshold - 0.1*math.Log10(remoteWeight/sourceWeight)*math.Log1p(remoteLatencyMillis)
+
+	overfullLeaseThreshold := int32(math.Ceil(meanLeases * (1 + rebalanceThreshold)))
+	overfullScore := source.Capacity.LeaseCount - overfullLeaseThreshold
+	underfullLeaseThreshold := int32(math.Ceil(meanLeases * (1 - rebalanceThreshold)))
+	underfullScore := underfullLeaseThreshold - remoteStore.Capacity.LeaseCount
+	totalScore := overfullScore + underfullScore
+
+	if log.V(1) {
+		log.Infof(ctx,
+			"node: %d, remoteWeight: %.2f, sourceWeight %.2f, rebalanceThreshold: %.2f, "+
+				"remoteLeaseCount: %d, overfullThreshold: %d, sourceLeaseCount: %d, "+
+				"underfullThreshold: %d, totalScore: %d",
+			remoteStore.Node.NodeID, remoteWeight, sourceWeight, rebalanceThreshold,
+			source.Capacity.LeaseCount, overfullLeaseThreshold, remoteStore.Capacity.LeaseCount,
+			underfullLeaseThreshold, totalScore,
+		)
+	}
+	return totalScore
+}
+
+func (a Allocator) shouldTransferLeaseWithoutStats(
+	ctx context.Context,
+	sl StoreList,
+	source roachpb.StoreDescriptor,
+	existing []roachpb.ReplicaDescriptor,
+) bool {
 	// Allow lease transfer if we're above the overfull threshold, which is
-	// mean*(1+rebalanceThreshold).
-	overfullLeaseThreshold := int32(math.Ceil(sl.candidateLeases.mean * (1 + rebalanceThreshold)))
+	// mean*(1+baseRebalanceThreshold).
+	overfullLeaseThreshold := int32(math.Ceil(sl.candidateLeases.mean * (1 + baseRebalanceThreshold)))
 	minOverfullThreshold := int32(math.Ceil(sl.candidateLeases.mean + 5))
 	if overfullLeaseThreshold < minOverfullThreshold {
 		overfullLeaseThreshold = minOverfullThreshold
@@ -447,7 +641,7 @@ func (a Allocator) shouldTransferLease(
 	}
 
 	if float64(source.Capacity.LeaseCount) > sl.candidateLeases.mean {
-		underfullLeaseThreshold := int32(math.Ceil(sl.candidateLeases.mean * (1 - rebalanceThreshold)))
+		underfullLeaseThreshold := int32(math.Ceil(sl.candidateLeases.mean * (1 - baseRebalanceThreshold)))
 		minUnderfullThreshold := int32(math.Ceil(sl.candidateLeases.mean - 5))
 		if underfullLeaseThreshold > minUnderfullThreshold {
 			underfullLeaseThreshold = minUnderfullThreshold
@@ -466,10 +660,10 @@ func (a Allocator) shouldTransferLease(
 	return false
 }
 
-// rebalanceThreshold is the minimum ratio of a store's range/lease surplus to
+// baseRebalanceThreshold is the minimum ratio of a store's range/lease surplus to
 // the mean range/lease count that permits rebalances/lease-transfers away from
 // that store.
-var rebalanceThreshold = envutil.EnvOrDefaultFloat("COCKROACH_REBALANCE_THRESHOLD", 0.05)
+var baseRebalanceThreshold = envutil.EnvOrDefaultFloat("COCKROACH_REBALANCE_THRESHOLD", 0.05)
 
 // shouldRebalance returns whether the specified store is a candidate for
 // having a replica removed from it given the candidate store list.
@@ -480,16 +674,16 @@ func (a Allocator) shouldRebalance(store roachpb.StoreDescriptor, sl StoreList) 
 	maxCapacityUsed := store.Capacity.FractionUsed() >= maxFractionUsedThreshold
 
 	// Rebalance if we're above the rebalance target, which is
-	// mean*(1+rebalanceThreshold).
-	target := int32(math.Ceil(sl.candidateCount.mean * (1 + rebalanceThreshold)))
+	// mean*(1+baseRebalanceThreshold).
+	target := int32(math.Ceil(sl.candidateCount.mean * (1 + baseRebalanceThreshold)))
 	rangeCountAboveTarget := store.Capacity.RangeCount > target
 
 	// Rebalance if the candidate store has a range count above the mean, and
 	// there exists another store that is underfull: its range count is smaller
-	// than mean*(1-rebalanceThreshold).
+	// than mean*(1-baseRebalanceThreshold).
 	var rebalanceToUnderfullStore bool
 	if float64(store.Capacity.RangeCount) > sl.candidateCount.mean {
-		underfullThreshold := int32(math.Floor(sl.candidateCount.mean * (1 - rebalanceThreshold)))
+		underfullThreshold := int32(math.Floor(sl.candidateCount.mean * (1 - baseRebalanceThreshold)))
 		for _, desc := range sl.stores {
 			if desc.Capacity.RangeCount < underfullThreshold {
 				rebalanceToUnderfullStore = true

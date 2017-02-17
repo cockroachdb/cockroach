@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
@@ -572,6 +573,7 @@ type StoreConfig struct {
 	NodeLiveness *NodeLiveness
 	StorePool    *StorePool
 	Transport    *RaftTransport
+	RPCContext   *rpc.Context
 
 	// SQLExecutor is used by the store to execute SQL statements in a way that
 	// is more direct than using a sql.Executor.
@@ -879,12 +881,11 @@ func NewStore(cfg StoreConfig, eng engine.Engine, nodeDesc *roachpb.NodeDescript
 		panic(fmt.Sprintf("invalid store configuration: %+v", &cfg))
 	}
 	s := &Store{
-		cfg:       cfg,
-		db:        cfg.DB, // TODO(tschottdorf) remove redundancy.
-		engine:    eng,
-		allocator: MakeAllocator(cfg.StorePool),
-		nodeDesc:  nodeDesc,
-		metrics:   newStoreMetrics(cfg.HistogramWindowInterval),
+		cfg:      cfg,
+		db:       cfg.DB, // TODO(tschottdorf) remove redundancy.
+		engine:   eng,
+		nodeDesc: nodeDesc,
+		metrics:  newStoreMetrics(cfg.HistogramWindowInterval),
 	}
 	// EnableCoalescedHeartbeats is enabled by TestStoreConfig, so in that case
 	// ignore the environment variable. Otherwise, use whatever the environment
@@ -894,6 +895,13 @@ func NewStore(cfg StoreConfig, eng engine.Engine, nodeDesc *roachpb.NodeDescript
 			"COCKROACH_ENABLE_COALESCED_HEARTBEATS", true)
 	}
 
+	if cfg.RPCContext != nil {
+		s.allocator = MakeAllocator(cfg.StorePool, cfg.RPCContext.RemoteClocks.Latency)
+	} else {
+		s.allocator = MakeAllocator(cfg.StorePool, func(string) (time.Duration, bool) {
+			return 0, false
+		})
+	}
 	s.intentResolver = newIntentResolver(s)
 	s.raftEntryCache = newRaftEntryCache(cfg.RaftEntryCacheSize)
 	s.draining.Store(false)
