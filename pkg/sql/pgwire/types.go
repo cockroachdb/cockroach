@@ -315,6 +315,27 @@ func (b *writeBuffer) writeBinaryDatum(d parser.Datum, sessionLoc *time.Location
 		b.putInt32(4)
 		b.putInt32(dateToPgBinary(v))
 
+	case *parser.DArray:
+		// Put the number of dimensions. We currently support 1d arrays only.
+		subWriter := &writeBuffer{wrapped: b.variablePutbuf}
+		if v.ParamTyp.FamilyEqual(parser.TypeAnyArray) {
+			b.setError(errors.New("unsupported binary serialization of multidimensional arrays"))
+			return
+		}
+		subWriter.putInt32(1)
+		hasNulls := 0
+		if v.HasNulls {
+			hasNulls = 1
+		}
+		subWriter.putInt32(int32(hasNulls))
+		subWriter.putInt32(int32(v.ParamTyp.Oid()))
+		subWriter.putInt32(int32(v.Len()))
+		subWriter.putInt32(int32(v.Len()))
+		for _, elem := range v.Array {
+			subWriter.writeBinaryDatum(elem, sessionLoc)
+		}
+		b.variablePutbuf = subWriter.wrapped
+		b.writeLengthPrefixedVariablePutbuf()
 	default:
 		b.setError(errors.Errorf("unsupported type %T", d))
 	}
@@ -735,6 +756,64 @@ func decodeOidDatum(id oid.Oid, code formatCode, b []byte) (parser.Datum, error)
 		default:
 			return d, errors.Errorf("unsupported interval format code: %d", code)
 		}
+	case oid.T__int2, oid.T__int4, oid.T__int8:
+		switch code {
+		case formatBinary:
+			hdr := struct {
+				Ndims int32
+				// Nullflag
+				_       int32
+				ElemOid int32
+				// The next two fields should be arrays of size Ndims. However, since
+				// we only support 1-dimensional arrays for now, for convenience we can
+				// leave them in this struct as such for `binary.Read` to parse for us.
+				DimSize int32
+				// Dim lower bound
+				_ int32
+			}{}
+			r := bytes.NewBuffer(b)
+			if err := binary.Read(r, binary.BigEndian, &hdr); err != nil {
+				return d, err
+			}
+			// Only 1-dimensional arrays are supported for now.
+			if hdr.Ndims != 1 {
+				return d, errors.Errorf("unsupported number of array dimensions: %d", hdr.Ndims)
+			}
+
+			elemOid := oid.Oid(hdr.ElemOid)
+			arr := parser.NewDArray(parser.TypeInt)
+			vlen := int32(0)
+			for i := int32(0); i < hdr.DimSize; i++ {
+				if err := binary.Read(r, binary.BigEndian, &vlen); err != nil {
+					return d, err
+				}
+				buf := r.Next(int(vlen))
+				elem, err := decodeOidDatum(elemOid, code, buf)
+				if err != nil {
+					return d, err
+				}
+				if err := arr.Append(elem); err != nil {
+					return d, err
+				}
+			}
+			d = arr
+		case formatText:
+			arr := &pq.Int64Array{}
+			if err := arr.Scan(b); err != nil {
+				return d, err
+			}
+			out := parser.NewDArray(parser.TypeInt)
+			for _, v := range *arr {
+				if err := out.Append(parser.NewDInt(parser.DInt(v))); err != nil {
+					return d, err
+				}
+			}
+			d = out
+
+		default:
+			return d, errors.Errorf("unsupported array format code: %d", code)
+		}
+
 	default:
 		return d, errors.Errorf("unsupported OID: %v", id)
 	}
