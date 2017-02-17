@@ -1735,3 +1735,87 @@ INSERT INTO t.test (k, v, length) VALUES (0, 1, 1);
 
 	wg.Wait()
 }
+
+// Test that a schema change backfill that completes on a
+// backfill chunk boundary works correctly. A backfill is done
+// by scanning a table in chunks and backfilling the schema
+// element for each chunk. Normally the last chunk is smaller
+// than the other chunks (configured chunk size), but it can
+// sometimes be equal in size. This test deliberately runs a
+// schema change where the last chunk size is equal to the
+// configured chunk size.
+func TestBackfillCompletesOnChunkBoundary(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	const numNodes = 5
+	const chunkSize = 100
+	// The number of rows in the table is a multiple of chunkSize.
+	// [0...maxValue], so that the backfill processing ends on
+	// a chunk boundary.
+	const maxValue = 3*chunkSize - 1
+	params, _ := createTestServerParams()
+	params.Knobs = base.TestingKnobs{
+		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
+			BackfillChunkSize: chunkSize,
+		},
+	}
+
+	tc := serverutils.StartTestCluster(t, numNodes,
+		base.TestClusterArgs{
+			ReplicationMode: base.ReplicationManual,
+			ServerArgs:      params,
+		})
+	defer tc.Stopper().Stop()
+	kvDB := tc.Server(0).KVClient().(*client.DB)
+	sqlDB := tc.ServerConn(0)
+
+	if _, err := sqlDB.Exec(`
+ CREATE DATABASE t;
+ CREATE TABLE t.test (k INT PRIMARY KEY, v INT, pi DECIMAL DEFAULT (DECIMAL '3.14'));
+ CREATE UNIQUE INDEX vidx ON t.test (v);
+ `); err != nil {
+		t.Fatal(err)
+	}
+
+	// Bulk insert.
+	if err := bulkInsertIntoTable(sqlDB, maxValue); err != nil {
+		t.Fatal(err)
+	}
+
+	// Split the table into multiple ranges.
+	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
+	// SplitTable moves the right range, so we split things back to front
+	// in order to move less data.
+	for i := numNodes - 1; i > 0; i-- {
+		sql.SplitTable(t, tc, tableDesc, i, maxValue/numNodes*i)
+	}
+
+	// Run some schema changes.
+	testCases := []struct {
+		sql           string
+		numKeysPerRow int
+	}{
+		{sql: "ALTER TABLE t.test ADD COLUMN x DECIMAL DEFAULT (DECIMAL '1.4')", numKeysPerRow: 2},
+		{sql: "ALTER TABLE t.test DROP pi", numKeysPerRow: 2},
+		{sql: "CREATE UNIQUE INDEX foo ON t.test (v)", numKeysPerRow: 3},
+		{sql: "DROP INDEX t.test@vidx", numKeysPerRow: 2},
+	}
+
+	for _, tc := range testCases {
+		t.Run(fmt.Sprintf("%s", tc.sql), func(t *testing.T) {
+			// Start schema change that eventually runs a backfill.
+			if _, err := sqlDB.Exec(tc.sql); err != nil {
+				t.Error(err)
+			}
+
+			// Verify the number of keys left behind in the table to
+			// validate schema change operations.
+			tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
+			tablePrefix := roachpb.Key(keys.MakeTablePrefix(uint32(tableDesc.ID)))
+			if kvs, err := kvDB.Scan(context.TODO(), tablePrefix, tablePrefix.PrefixEnd(), 0); err != nil {
+				t.Fatal(err)
+			} else if e := tc.numKeysPerRow * (maxValue + 1); len(kvs) != e {
+				t.Fatalf("expected %d key value pairs, but got %d", e, len(kvs))
+			}
+		})
+	}
+}
