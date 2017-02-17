@@ -104,7 +104,7 @@ func TestHeartbeatHealth(t *testing.T) {
 	remoteAddr := ln.Addr().String()
 
 	heartbeat := &ManualHeartbeatService{
-		ready:              make(chan struct{}),
+		ready:              make(chan error),
 		stopper:            stopper,
 		clock:              clock,
 		remoteClockMonitor: serverCtx.RemoteClocks,
@@ -114,59 +114,56 @@ func TestHeartbeatHealth(t *testing.T) {
 	clientCtx := newNodeTestContext(clock, stopper)
 	// Make the intervals and timeouts shorter to speed up the tests.
 	clientCtx.HeartbeatInterval = 1 * time.Millisecond
-	clientCtx.HeartbeatTimeout = 1 * time.Millisecond
 	if _, err := clientCtx.GRPCDial(remoteAddr); err != nil {
 		t.Fatal(err)
 	}
 
-	// This code is inherently racy so when we need to verify heartbeats we
-	// want them to always succeed.
-	sendHeartbeats := func() func() {
-		done := make(chan struct{})
-		go func() {
-			for {
-				select {
-				case <-done:
-					return
-				case heartbeat.ready <- struct{}{}:
-				}
-			}
-		}()
-		return func() {
-			done <- struct{}{}
-		}
-	}
+	errFailedHeartbeat := errors.New("failed heartbeat")
 
-	// Should be unhealthy in the absence of heartbeats.
+	var hbSuccess atomic.Value
+	hbSuccess.Store(true)
+
+	go func() {
+		for {
+			var err error
+			if !hbSuccess.Load().(bool) {
+				err = errFailedHeartbeat
+			}
+
+			select {
+			case <-stopper.ShouldStop():
+				return
+			case heartbeat.ready <- err:
+			}
+		}
+	}()
+
+	// Should be unhealthy in the presence of failing heartbeats.
+	hbSuccess.Store(false)
 	if err := clientCtx.ConnHealth(remoteAddr); err != errNotHeartbeated {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	func() {
-		defer sendHeartbeats()()
-
-		// Should become healthy in the presence of heartbeats.
-		testutils.SucceedsSoon(t, func() error {
-			return clientCtx.ConnHealth(remoteAddr)
-		})
-	}()
-
-	// Should become unhealthy again in the absence of heartbeats.
+	// Should become healthy in the presence of successful heartbeats.
+	hbSuccess.Store(true)
 	testutils.SucceedsSoon(t, func() error {
-		if err := clientCtx.ConnHealth(remoteAddr); grpc.Code(err) != codes.DeadlineExceeded {
+		return clientCtx.ConnHealth(remoteAddr)
+	})
+
+	// Should become unhealthy again in the presence of failing heartbeats.
+	hbSuccess.Store(false)
+	testutils.SucceedsSoon(t, func() error {
+		if err := clientCtx.ConnHealth(remoteAddr); !testutils.IsError(err, errFailedHeartbeat.Error()) {
 			return errors.Errorf("unexpected error: %v", err)
 		}
 		return nil
 	})
 
-	func() {
-		defer sendHeartbeats()()
-
-		// Should become healthy again in the presence of heartbeats.
-		testutils.SucceedsSoon(t, func() error {
-			return clientCtx.ConnHealth(remoteAddr)
-		})
-	}()
+	// Should become healthy in the presence of successful heartbeats.
+	hbSuccess.Store(true)
+	testutils.SucceedsSoon(t, func() error {
+		return clientCtx.ConnHealth(remoteAddr)
+	})
 
 	if err := clientCtx.ConnHealth("non-existent connection"); err != errNotConnected {
 		t.Errorf("unexpected error: %v", err)
@@ -175,12 +172,10 @@ func TestHeartbeatHealth(t *testing.T) {
 
 type interceptingListener struct {
 	net.Listener
-	connectChan chan struct{}
-	connCB      func(net.Conn)
+	connCB func(net.Conn)
 }
 
 func (ln *interceptingListener) Accept() (net.Conn, error) {
-	<-ln.connectChan
 	conn, err := ln.Listener.Accept()
 	if err == nil {
 		ln.connCB(conn)
@@ -218,9 +213,7 @@ func TestHeartbeatHealthTransport(t *testing.T) {
 		syncutil.Mutex
 		conns []net.Conn
 	}{}
-	connectChan := make(chan struct{})
-	defer close(connectChan)
-	ln = &interceptingListener{Listener: ln, connectChan: connectChan, connCB: func(conn net.Conn) {
+	ln = &interceptingListener{Listener: ln, connCB: func(conn net.Conn) {
 		mu.Lock()
 		mu.conns = append(mu.conns, conn)
 		mu.Unlock()
@@ -249,9 +242,6 @@ func TestHeartbeatHealthTransport(t *testing.T) {
 	if _, err := clientCtx.GRPCDial(remoteAddr); err != nil {
 		t.Fatal(err)
 	}
-	// Allow the connection to go through.
-	connectChan <- struct{}{}
-
 	// Everything is normal; should become healthy.
 	testutils.SucceedsSoon(t, func() error {
 		return clientCtx.ConnHealth(remoteAddr)
@@ -270,21 +260,19 @@ func TestHeartbeatHealthTransport(t *testing.T) {
 		return nil
 	}
 
-	// Close all the connections.
-	if err := closeConns(); err != nil {
-		t.Fatal(err)
-	}
-
-	// Should become unhealthy now that the connection was closed.
 	testutils.SucceedsSoon(t, func() error {
-		if err := clientCtx.ConnHealth(remoteAddr); grpc.Code(err) != codes.DeadlineExceeded {
+		// Close all the connections until we see a failure.
+		if err := closeConns(); err != nil {
+			t.Fatal(err)
+		}
+
+		if err := clientCtx.ConnHealth(remoteAddr); grpc.Code(err) != codes.Unavailable {
 			return errors.Errorf("unexpected error: %v", err)
 		}
 		return nil
 	})
 
 	// Should become healthy again after GRPC reconnects.
-	connectChan <- struct{}{}
 	testutils.SucceedsSoon(t, func() error {
 		return clientCtx.ConnHealth(remoteAddr)
 	})
@@ -388,7 +376,7 @@ func TestFailedOffsetMeasurement(t *testing.T) {
 	heartbeat := &ManualHeartbeatService{
 		clock:              clock,
 		remoteClockMonitor: serverCtx.RemoteClocks,
-		ready:              make(chan struct{}),
+		ready:              make(chan error),
 		stopper:            stopper,
 	}
 	RegisterHeartbeatServer(s, heartbeat)
@@ -401,7 +389,7 @@ func TestFailedOffsetMeasurement(t *testing.T) {
 	if _, err := clientCtx.GRPCDial(remoteAddr); err != nil {
 		t.Fatal(err)
 	}
-	heartbeat.ready <- struct{}{} // Allow one heartbeat for initialization.
+	heartbeat.ready <- nil // Allow one heartbeat for initialization.
 
 	testutils.SucceedsSoon(t, func() error {
 		clientCtx.RemoteClocks.mu.Lock()

@@ -346,9 +346,8 @@ func (ctx *Context) runHeartbeat(meta *connMeta, remoteAddr string) error {
 	defer heartbeatTimer.Stop()
 
 	// Give the first iteration a wait-free heartbeat attempt.
-	nextHeartbeat := 0 * time.Nanosecond
+	heartbeatTimer.Reset(0)
 	for {
-		heartbeatTimer.Reset(nextHeartbeat)
 		select {
 		case <-ctx.Stopper.ShouldStop():
 			return nil
@@ -361,6 +360,16 @@ func (ctx *Context) runHeartbeat(meta *connMeta, remoteAddr string) error {
 		ctx.conns.Lock()
 		meta.heartbeatErr = err
 		ctx.conns.Unlock()
+
+		// If we got a timeout, we might be experiencing a network partition. We
+		// close the connection so that all other pending RPCs (which may not have
+		// timeouts) fail eagerly. Any other error is likely to be noticed by
+		// other RPCs, so it's OK to leave the connection open while grpc
+		// internally reconnects if necessary.
+		if grpc.Code(err) == codes.DeadlineExceeded {
+			return err
+		}
+
 		if err == nil {
 			receiveTime := ctx.localClock.PhysicalTime()
 
@@ -387,13 +396,7 @@ func (ctx *Context) runHeartbeat(meta *connMeta, remoteAddr string) error {
 			}
 		}
 
-		// If the heartbeat timed out, run the next one immediately. Otherwise,
-		// wait out the heartbeat interval on the next iteration.
-		if grpc.Code(err) == codes.DeadlineExceeded {
-			nextHeartbeat = 0
-		} else {
-			nextHeartbeat = ctx.HeartbeatInterval
-		}
+		heartbeatTimer.Reset(ctx.HeartbeatInterval)
 	}
 }
 
