@@ -504,7 +504,7 @@ func (db *DB) prepareToSend(ba *roachpb.BatchRequest) *roachpb.Error {
 		}
 	}
 
-	if db.ctx.UserPriority != 1 {
+	if ba.UserPriority == 0 && db.ctx.UserPriority != 1 {
 		ba.UserPriority = db.ctx.UserPriority
 	}
 
