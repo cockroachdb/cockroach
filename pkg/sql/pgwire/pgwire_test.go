@@ -550,10 +550,9 @@ func TestPGPreparedQuery(t *testing.T) {
 			baseTest.SetArgs(2, 3).Results(2),
 			baseTest.SetArgs(true, 0).Error(`pq: error in argument for $1: strconv.ParseInt: parsing "true": invalid syntax`),
 		},
-		// TODO(nvanbenschoten) Blocked on #10713.
-		// "SELECT $1[2] LIKE 'b'": {
-		// 	baseTest.SetArgs(pq.Array([]string{"a", "b", "c"})).Results(true),
-		// },
+		"SELECT $1[2] LIKE 'b'": {
+			baseTest.SetArgs(pq.Array([]string{"a", "b", "c"})).Results(true),
+		},
 		"SHOW DATABASE": {
 			baseTest.Results(""),
 		},
@@ -722,6 +721,17 @@ func TestPGPreparedQuery(t *testing.T) {
 		"INSERT INTO d.intStr VALUES ($1, 'hello ' || $1::TEXT) RETURNING *": {
 			baseTest.SetArgs(123).Results(123, "hello 123"),
 		},
+		"SELECT * from d.T WHERE a = ANY($1)": {
+			baseTest.SetArgs(pq.Array([]int{10})).Results(10),
+		},
+		"SELECT s from (VALUES ('foo'), ('bar')) as t(s) WHERE s = ANY($1)": {
+			baseTest.SetArgs(pq.StringArray([]string{"foo"})).Results("foo"),
+		},
+
+		// TODO(jordan) blocked on #13651
+		//"SELECT $1::INT[]": {
+		//	baseTest.SetArgs(pq.Array([]int{10})).Results(pq.Array([]int{10})),
+		//},
 	}
 
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})

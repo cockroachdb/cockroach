@@ -31,7 +31,7 @@ func TestDockerC(t *testing.T) {
 
 	ctx := context.Background()
 	t.Run("Success", func(t *testing.T) {
-		testDockerSuccess(ctx, t, "c", []string{"/bin/sh", "-c", strings.Replace(c, "%v", "SELECT $1, $2, $3, $4, $5, $6, $7, $8, $9, $10", 1)})
+		testDockerSuccess(ctx, t, "c", []string{"/bin/sh", "-c", strings.Replace(c, "%v", "SELECT $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11", 1)})
 	})
 	t.Run("Fail", func(t *testing.T) {
 		testDockerFail(ctx, t, "c", []string{"/bin/sh", "-c", strings.Replace(c, "%v", "SELECT 1", 1)})
@@ -285,6 +285,26 @@ int main(int argc, char const *argv[]) {
 		return 1;
 	}
 
+	PGint8 i;
+	PGarray arr;
+
+	arr.ndims = 0;
+	arr.param = PQparamCreate(conn);
+	int arrLen = 100;
+	PGint8 expectedArr[arrLen];
+
+	for (i = 0; i < arrLen; i++) {
+		expectedArr[i] = i;
+		if (!PQputf(arr.param, "%int8", i)) {
+			fprintf(stderr, "ERROR PQputf(arr elem): %s\n", PQgeterror());
+			return 1;
+		}
+	}
+	if (!PQputf(param, "%int8[]", &arr)) {
+		fprintf(stderr, "ERROR PQputf(arr): %s\n", PQgeterror());
+		return 1;
+	}
+
 	// resultFormat: 0 for text, 1 for binary.
 	for (int resultFormat = 0; resultFormat <= 1; ++resultFormat) {
 			PGresult *result = PQparamExec(conn, param, query, resultFormat);
@@ -426,6 +446,30 @@ int main(int argc, char const *argv[]) {
 				fprintf(stderr, "\ngot:\n");
 				timestampPrint(recvtstz);
 				return 1;
+			}
+
+
+			// Libpqtypes doesn't support text array decoding.
+			if (resultFormat == 1) {
+				PGarray recvarr;
+				if (!PQgetf(result, 0, "%int8[]", i++, &recvarr)) {
+					fprintf(stderr, "ERROR resultFormat=%d PQgetf(arr): %s\n", resultFormat, PQgeterror());
+					return 1;
+				}
+				int n = PQntuples(recvarr.res);
+				if (arrLen != n) {
+					fprintf(stderr, "expected array of size %d, got %d\n", arrLen, n);
+					return 1;
+				}
+				int result[arrLen];
+				PGint8 val;
+				for (int i = 0; i < arrLen; i++) {
+					PQgetf(recvarr.res, i, "%int8", 0, &val);
+					if (val != expectedArr[i]) {
+						fprintf(stderr, "resultFormat=%d expected %d at pos %d; got %d\n", resultFormat, expectedArr[i], i, val);
+						return 1;
+					}
+				}
 			}
 	}
 

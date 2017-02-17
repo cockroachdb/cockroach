@@ -1782,6 +1782,9 @@ func (d dNull) Size() uintptr {
 type DArray struct {
 	ParamTyp Type
 	Array    Datums
+	// HasNulls is set to true if any of the datums within the array are null.
+	// This is used in the binary array serialization format.
+	HasNulls bool
 }
 
 // NewDArray returns a DArray containing elements of the specified type.
@@ -1940,6 +1943,9 @@ func (d *DArray) Append(v Datum) error {
 				return errNonHomogeneousArray
 			}
 		}
+	}
+	if v == DNull {
+		d.HasNulls = true
 	}
 	d.Array = append(d.Array, v)
 	return nil
