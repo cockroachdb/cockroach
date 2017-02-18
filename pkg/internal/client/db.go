@@ -424,10 +424,7 @@ func sendAndFill(
 	// here to do because we want to run fillResults() so that the individual
 	// result gets initialized with an error from the corresponding call.
 	var ba roachpb.BatchRequest
-	// TODO(tschottdorf): this nonsensical copy is required since (at least at
-	// the time of writing, the chunking and masking in DistSender operates on
-	// the original data (as attested to by a whole bunch of test failures).
-	ba.Requests = append([]roachpb.RequestUnion(nil), b.reqs...)
+	ba.Requests = b.reqs
 	ba.Header = b.Header
 	b.response, b.pErr = send(ba)
 	if b.pErr != nil {
