@@ -4,7 +4,7 @@
 
 set -euxo pipefail
 
-GOVERSION=1.7.4
+GOVERSION=1.8
 
 sudo apt-get install -y gcc g++ make
 

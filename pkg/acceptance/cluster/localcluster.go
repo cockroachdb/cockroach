@@ -58,7 +58,7 @@ import (
 
 const (
 	builderImage     = "cockroachdb/builder"
-	builderTag       = "20170204-121401"
+	builderTag       = "20170219-193659"
 	builderImageFull = builderImage + ":" + builderTag
 	networkPrefix    = "cockroachdb_acceptance"
 )
