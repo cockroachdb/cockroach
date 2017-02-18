@@ -74,13 +74,13 @@ export GIT_PAGER :=
 ifeq ($(TYPE),)
 override LDFLAGS += -X github.com/cockroachdb/cockroach/pkg/build.typ=development
 else ifeq ($(TYPE),release)
-override LDFLAGS += -linkmode external -extldflags "-static-libgcc -static-libstdc++" -X github.com/cockroachdb/cockroach/pkg/build.typ=release
+override LDFLAGS += -X github.com/cockroachdb/cockroach/pkg/build.typ=release
 else ifeq ($(TYPE),musl)
 # This tag disables jemalloc profiling. See https://github.com/jemalloc/jemalloc/issues/585.
 override TAGS += musl
 export CC  = /x-tools/x86_64-unknown-linux-musl/bin/x86_64-unknown-linux-musl-gcc
 export CXX = /x-tools/x86_64-unknown-linux-musl/bin/x86_64-unknown-linux-musl-g++
-override LDFLAGS += -linkmode external -extldflags -static -X github.com/cockroachdb/cockroach/pkg/build.typ=release-musl
+override LDFLAGS += -extldflags -static -X github.com/cockroachdb/cockroach/pkg/build.typ=release-musl
 override GOFLAGS += -installsuffix musl
 else
 $(error unknown build type $(TYPE))

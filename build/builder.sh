@@ -32,7 +32,7 @@ if [ "${1-}" = "push" ]; then
   init
   tag="$(date +%Y%m%d-%H%M%S)"
   docker tag "${image}" "${image}:${tag}"
-  docker push "${image}"
+  docker push "${image}:${tag}"
   exit 0
 fi
 
