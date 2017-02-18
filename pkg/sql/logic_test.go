@@ -297,6 +297,78 @@ func valueSort(numCols int, values []string) {
 	sort.Strings(values)
 }
 
+// partialSort rearranges consecutive rows that have the same values on a
+// certain set of columns (orderedCols).
+//
+// More specifically: rows are partitioned into groups of consecutive rows that
+// have the same values for columns orderedCols. Inside each group, the rows are
+// sorted. The relative order of any two rows that differ on orderedCols is
+// preserved.
+//
+// This is useful when comparing results for a statement that guarantees a
+// partial, but not a total order. Consider:
+//
+//   SELECT a, b FROM ab ORDER BY a
+//
+// Some possible outputs for the same data:
+//   1 2        1 5        1 2
+//   1 5        1 4        1 4
+//   1 4   or   1 2   or   1 5
+//   2 3        2 2        2 3
+//   2 2        2 3        2 2
+//
+// After a partialSort with orderedCols = {0} all become:
+//   1 2
+//   1 4
+//   1 5
+//   2 2
+//   2 3
+//
+// An incorrect output like:
+//   1 5                          1 2
+//   1 2                          1 5
+//   2 3          becomes:        2 2
+//   2 2                          2 3
+//   1 4                          1 4
+// and it is detected as different.
+func partialSort(numCols int, orderedCols []int, values []string) {
+	// We use rowSorter here only as a container.
+	c := rowSorter{
+		numCols: numCols,
+		numRows: len(values) / numCols,
+		values:  values,
+	}
+
+	// Sort the group of rows [rowStart, rowEnd).
+	sortGroup := func(rowStart, rowEnd int) {
+		sort.Sort(rowSorter{
+			numCols: numCols,
+			numRows: rowEnd - rowStart,
+			values:  values[rowStart*numCols : rowEnd*numCols],
+		})
+	}
+
+	groupStart := 0
+	for rIdx := 1; rIdx < c.numRows; rIdx++ {
+		// See if this row belongs in the group with the previous row.
+		row := c.row(rIdx)
+		start := c.row(groupStart)
+		differs := false
+		for _, i := range orderedCols {
+			if start[i] != row[i] {
+				differs = true
+				break
+			}
+		}
+		if differs {
+			// Sort the group and start a new group with just this row in it.
+			sortGroup(groupStart, rIdx)
+			groupStart = rIdx
+		}
+	}
+	sortGroup(groupStart, c.numRows)
+}
+
 // logicQuery represents a single query test in Test-Script.
 type logicQuery struct {
 	// pos and sql are as in logicStatement.
@@ -635,9 +707,19 @@ func (t *logicTest) processTestFile(path string) error {
 				//   - B for boolean
 				// The sort mode is one of:
 				//   - "nosort" (default)
-				//   - "rowsort"
-				//   - "valuesort"
-				//   - "colnames"
+				//   - "rowsort": sorts both the returned and the expected rows assuming
+				//         one white-space separated word per column.
+				//   - "valuesort": sorts all values on all rows as one big set of
+				//         strings (for both the returned and the expected rows).
+				//   - "partialsort(x,y,..)": performs a partial sort on both the
+				//         returned and the expected results, preserving the relative
+				//         order of rows that differ on the specified columns
+				//         (1-indexed); for results that are expected to be already
+				//         ordered according to these columns. See partialSort() for
+				//         more information.
+				//
+				//   - "colnames": column names are verified (the expected column names
+				//                 are the first line in the expected results).
 				//
 				// The label is optional. If specified, the test runner stores a hash
 				// of the results of the query under the given label. If the label is
@@ -649,6 +731,30 @@ func (t *logicTest) processTestFile(path string) error {
 				if len(fields) >= 3 {
 					query.rawOpts = fields[2]
 					for _, opt := range strings.Split(query.rawOpts, ",") {
+
+						if strings.HasPrefix(opt, "partialsort(") && strings.HasSuffix(opt, ")") {
+							s := opt
+							s = strings.TrimPrefix(s, "partialsort(")
+							s = strings.TrimSuffix(s, ")")
+
+							var orderedCols []int
+							for _, c := range strings.Split(s, ",") {
+								colIdx, err := strconv.Atoi(c)
+								if err != nil || colIdx < 1 {
+									return fmt.Errorf("%s: invalid sort mode: %s", query.pos, opt)
+								}
+								orderedCols = append(orderedCols, colIdx-1)
+							}
+							if len(orderedCols) == 0 {
+								return fmt.Errorf("%s: invalid sort mode: %s", query.pos, opt)
+							}
+
+							query.sorter = func(numCols int, values []string) {
+								partialSort(numCols, orderedCols, values)
+							}
+							continue
+						}
+
 						switch opt {
 						case "nosort":
 							query.sorter = nil
