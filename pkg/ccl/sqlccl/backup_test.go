@@ -102,13 +102,6 @@ func backupRestoreTestSetup(
 
 	dir, dirCleanupFn := testutils.TempDir(t, 1)
 
-	// TODO(dan): Some tests don't need multiple nodes, but the test setup
-	// hangs with 1. Investigate.
-	if numAccounts == 0 && clusterSize < multiNode {
-		clusterSize = multiNode
-		t.Logf("setting cluster size to %d due to a bug", clusterSize)
-	}
-
 	tc = testcluster.StartTestCluster(t, clusterSize, base.TestClusterArgs{})
 	sqlDB = sqlutils.MakeSQLRunner(t, tc.Conns[0])
 
