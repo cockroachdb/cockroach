@@ -26,6 +26,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -174,9 +175,7 @@ func StartTestCluster(t testing.TB, nodes int, args base.TestClusterArgs) *TestC
 
 	tc.WaitForStores(t, tc.Servers[0].Gossip())
 
-	// TODO(peter): We should replace the hardcoded 3 with the default ZoneConfig
-	// replication factor.
-	if args.ReplicationMode == base.ReplicationAuto && nodes >= 3 {
+	if args.ReplicationMode == base.ReplicationAuto {
 		if err := tc.WaitForFullReplication(); err != nil {
 			t.Fatal(err)
 		}
@@ -494,6 +493,10 @@ func (tc *TestCluster) findMemberStore(storeID roachpb.StoreID) (*storage.Store,
 // WaitForFullReplication waits until all stores in the cluster
 // have no ranges with replication pending.
 func (tc *TestCluster) WaitForFullReplication() error {
+	if int32(len(tc.Servers)) < config.DefaultZoneConfig().NumReplicas {
+		return nil
+	}
+
 	opts := retry.Options{
 		InitialBackoff: time.Millisecond * 10,
 		MaxBackoff:     time.Millisecond * 100,
