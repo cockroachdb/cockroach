@@ -3064,18 +3064,18 @@ func (r *Replica) changeReplicasTrigger(
 	return pd
 }
 
-type preemptiveSnapshotError struct {
+type snapshotError struct {
 	cause error
 }
 
-func (s *preemptiveSnapshotError) Error() string {
-	return s.cause.Error()
+func (s *snapshotError) Error() string {
+	return fmt.Sprintf("snapshot failed: %s", s.cause.Error())
 }
 
-// IsPreemptiveSnapshotError returns true iff the error indicates a preemptive
+// IsSnapshotError returns true iff the error indicates a preemptive
 // snapshot failed.
-func IsPreemptiveSnapshotError(err error) bool {
-	_, ok := err.(*preemptiveSnapshotError)
+func IsSnapshotError(err error) bool {
+	_, ok := err.(*snapshotError)
 	return ok
 }
 
@@ -3368,9 +3368,7 @@ func (r *Replica) sendSnapshot(
 	}
 	if err := r.store.cfg.Transport.SendSnapshot(
 		ctx, r.store.allocator.storePool, req, snap, r.store.Engine().NewBatch, sent); err != nil {
-		return &preemptiveSnapshotError{
-			errors.Wrapf(err, "%s: change replicas aborted due to failed preemptive snapshot", r),
-		}
+		return &snapshotError{err}
 	}
 	return nil
 }
