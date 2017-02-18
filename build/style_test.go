@@ -538,7 +538,7 @@ func TestStyle(t *testing.T) {
 	}
 
 	t.Run("TestErrCheck", func(t *testing.T) {
-		t.Parallel()
+		// errcheck uses 1GB of ram (as of 2017-02-18), so don't parallelize it.
 		cmd, stderr, filter, err := dirCmd(
 			pkg.Dir,
 			"errcheck",
@@ -568,7 +568,7 @@ func TestStyle(t *testing.T) {
 	})
 
 	t.Run("TestReturnCheck", func(t *testing.T) {
-		t.Parallel()
+		// returncheck uses 1GB of ram (as of 2017-02-18), so don't parallelize it.
 		cmd, stderr, filter, err := dirCmd(pkg.Dir, "returncheck", pkgScope)
 		if err != nil {
 			t.Fatal(err)
@@ -652,7 +652,7 @@ func TestStyle(t *testing.T) {
 		if testing.Short() {
 			t.Skip("short flag")
 		}
-		t.Parallel()
+		// metacheck uses 2.5GB of ram (as of 2017-02-18), so don't parallelize it.
 		cmd, stderr, filter, err := dirCmd(
 			pkg.Dir,
 			"metacheck",
