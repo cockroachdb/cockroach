@@ -506,9 +506,7 @@ func (dsp *distSQLPlanner) convertOrdering(
 	for _, col := range planOrdering {
 		streamColIdx := planToStreamColMap[col.ColIdx]
 		if streamColIdx == -1 {
-			// This column is not part of the output. The rest of the ordering is
-			// irrelevant.
-			break
+			panic("column in ordering not part of processor output")
 		}
 		oc := distsqlrun.Ordering_Column{
 			ColIdx:    uint32(streamColIdx),
@@ -533,30 +531,13 @@ func (dsp *distSQLPlanner) createTableReaders(
 		return physicalPlan{}, err
 	}
 
-	if overrideResultColumns != nil {
-		post.OutputColumns = overrideResultColumns
-	} else {
-		post.OutputColumns = getOutputColumnsFromScanNode(n)
-	}
-
-	planToStreamColMap := makePlanToStreamColMap(len(n.resultColumns))
-	for i, col := range post.OutputColumns {
-		planToStreamColMap[col] = i
-	}
-	ordering := dsp.convertOrdering(n.ordering.ordering, planToStreamColMap)
-
 	spanPartitions, err := dsp.partitionSpans(planCtx, n.spans)
 	if err != nil {
 		return physicalPlan{}, err
 	}
 
-	p := physicalPlan{
-		PhysicalPlan: distsqlplan.PhysicalPlan{
-			Ordering:    ordering,
-			ResultTypes: getTypesForPlanResult(n, planToStreamColMap),
-		},
-		planToStreamColMap: planToStreamColMap,
-	}
+	var p physicalPlan
+
 	for _, sp := range spanPartitions {
 		tr := &distsqlrun.TableReaderSpec{}
 		*tr = spec
@@ -569,7 +550,6 @@ func (dsp *distSQLPlanner) createTableReaders(
 			Node: sp.node,
 			Spec: distsqlrun.ProcessorSpec{
 				Core:   distsqlrun.ProcessorCoreUnion{TableReader: tr},
-				Post:   post,
 				Output: []distsqlrun.OutputRouterSpec{{Type: distsqlrun.OutputRouterSpec_PASS_THROUGH}},
 			},
 		}
@@ -577,6 +557,31 @@ func (dsp *distSQLPlanner) createTableReaders(
 		pIdx := p.AddProcessor(proc)
 		p.ResultRouters = append(p.ResultRouters, pIdx)
 	}
+
+	if overrideResultColumns != nil {
+		post.OutputColumns = overrideResultColumns
+	} else {
+		post.OutputColumns = getOutputColumnsFromScanNode(n)
+	}
+
+	planToStreamColMap := makePlanToStreamColMap(len(n.resultColumns))
+	for i, col := range post.OutputColumns {
+		planToStreamColMap[col] = i
+	}
+	if len(p.ResultRouters) > 1 && len(n.ordering.ordering) > 0 {
+		// We have to maintain a certain ordering between the parallel streams. This
+		// might mean we need to add output columns.
+		for _, col := range n.ordering.ordering {
+			if planToStreamColMap[col.ColIdx] == -1 {
+				// This column is not part of the output; add it.
+				planToStreamColMap[col.ColIdx] = len(post.OutputColumns)
+				post.OutputColumns = append(post.OutputColumns, uint32(col.ColIdx))
+			}
+		}
+		p.SetMergeOrdering(dsp.convertOrdering(n.ordering.ordering, planToStreamColMap))
+	}
+	p.SetLastStagePost(post, getTypesForPlanResult(n, planToStreamColMap))
+	p.planToStreamColMap = planToStreamColMap
 	return p, nil
 }
 
@@ -657,8 +662,6 @@ func (dsp *distSQLPlanner) selectRenders(p *physicalPlan, n *renderNode) {
 	for i := range n.render {
 		p.planToStreamColMap = append(p.planToStreamColMap, i)
 	}
-
-	p.Ordering = dsp.convertOrdering(n.ordering.ordering, p.planToStreamColMap)
 }
 
 // addSorters adds sorters corresponding to a sortNode and updates the plan to
@@ -684,8 +687,8 @@ func (dsp *distSQLPlanner) addSorters(p *physicalPlan, n *sortNode) {
 			},
 			distsqlrun.PostProcessSpec{},
 			p.ResultTypes,
+			ordering,
 		)
-		p.Ordering = ordering
 	}
 
 	if len(n.columns) != len(p.planToStreamColMap) {
@@ -695,19 +698,16 @@ func (dsp *distSQLPlanner) addSorters(p *physicalPlan, n *sortNode) {
 		// in the output columns of the sortNode; we set a projection such that the
 		// plan results map 1-to-1 to sortNode columns.
 		//
-		// We can only do this when there is a single result stream. With multiple
-		// result streams, we need the columns to later merge the streams correctly
-		// with an ordered synchronizer.
+		// Note that internally, AddProjection might retain more columns as
+		// necessary so we can preserve the p.Ordering between parallel streams when
+		// they merge later.
 		p.planToStreamColMap = p.planToStreamColMap[:len(n.columns)]
-		if len(p.ResultRouters) == 1 {
-			columns := make([]uint32, len(n.columns))
-			for i, col := range p.planToStreamColMap {
-				columns[i] = uint32(col)
-				p.planToStreamColMap[i] = i
-			}
-			p.AddProjection(columns)
-			p.Ordering = dsp.convertOrdering(n.Ordering().ordering, p.planToStreamColMap)
+		columns := make([]uint32, len(n.columns))
+		for i, col := range p.planToStreamColMap {
+			columns[i] = uint32(col)
+			p.planToStreamColMap[i] = i
 		}
+		p.AddProjection(columns)
 	}
 }
 
@@ -784,15 +784,6 @@ func (dsp *distSQLPlanner) addAggregators(
 		}
 	}
 
-	// The aggregators don't care about the input ordering, so don't guarantee
-	// one (p.Ordering gets factored in when we add stages). This one-off
-	// optimization is a symptom of the larger issue that we don't yet determine
-	// what orderings are actually needed by each node's parent.
-	//
-	// Note that this won't be the case if we implement certain optimizations
-	// (like groupNode.needOnlyOneRow).
-	p.Ordering = distsqlrun.Ordering{}
-
 	var finalAggSpec distsqlrun.AggregatorSpec
 
 	if !multiStage {
@@ -846,9 +837,8 @@ func (dsp *distSQLPlanner) addAggregators(
 			distsqlrun.ProcessorCoreUnion{Aggregator: &localAggSpec},
 			distsqlrun.PostProcessSpec{},
 			intermediateTypes,
+			orderingTerminated, // The local aggregators don't guarantee any output ordering.
 		)
-		// The local aggregators don't guarantee any output ordering.
-		p.Ordering = orderingTerminated
 
 		finalAggSpec = distsqlrun.AggregatorSpec{
 			Aggregations: finalAgg,
@@ -889,12 +879,6 @@ func (dsp *distSQLPlanner) addAggregators(
 	p.planToStreamColMap = p.planToStreamColMap[:0]
 	for i := range n.Columns() {
 		p.planToStreamColMap = append(p.planToStreamColMap, i)
-	}
-
-	// We don't guarantee any ordering. Thankfully the groupNode doesn't either.
-	p.Ordering = orderingTerminated
-	if len(n.Ordering().ordering) != 0 {
-		panic("groupNode promises ordering")
 	}
 	return nil
 }
@@ -1196,7 +1180,7 @@ func (dsp *distSQLPlanner) createPlanForJoin(
 
 	p.planToStreamColMap = joinToStreamColMap
 	p.ResultTypes = getTypesForPlanResult(n, joinToStreamColMap)
-	p.Ordering = dsp.convertOrdering(n.Ordering().ordering, joinToStreamColMap)
+	p.SetMergeOrdering(orderingTerminated)
 	return p, nil
 }
 
