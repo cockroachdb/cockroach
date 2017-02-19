@@ -52,7 +52,7 @@ SELECT to_hex(a), reverse(b) FROM aliases ORDER BY a
 10  ihg
 64  cba
 
-query RI
+query RI trimdecimals
 SELECT sqrt(a::DECIMAL), length(b::BYTES) FROM aliases ORDER BY a
 ----
 1.414213562373095   3
