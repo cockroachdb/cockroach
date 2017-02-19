@@ -2041,7 +2041,7 @@ func TestRemovePlaceholderRace(t *testing.T) {
 					},
 					repl.Desc(),
 				); err != nil {
-					if storage.IsPreemptiveSnapshotError(err) {
+					if storage.IsSnapshotError(err) {
 						continue
 					} else {
 						t.Fatal(err)
@@ -3142,12 +3142,12 @@ func TestFailedPreemptiveSnapshot(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	const expErr = "aborted due to failed preemptive snapshot: unknown peer 3"
+	const expErr = "snapshot failed: unknown peer 3"
 	if err := rep.ChangeReplicas(context.Background(), roachpb.ADD_REPLICA,
 		roachpb.ReplicaDescriptor{NodeID: 3, StoreID: 3},
 		rep.Desc()); !testutils.IsError(err, expErr) {
 		t.Fatalf("expected %s; got %v", expErr, err)
-	} else if !storage.IsPreemptiveSnapshotError(err) {
+	} else if !storage.IsSnapshotError(err) {
 		t.Fatalf("expected preemptive snapshot failed error; got %T: %v", err, err)
 	}
 }
