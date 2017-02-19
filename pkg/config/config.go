@@ -204,7 +204,7 @@ func (s SystemConfig) Equal(other SystemConfig) bool {
 		if !bytes.Equal(leftVal.RawBytes, rightVal.RawBytes) {
 			return false
 		}
-		if !leftVal.Timestamp.Equal(rightVal.Timestamp) {
+		if leftVal.Timestamp != rightVal.Timestamp {
 			return false
 		}
 	}

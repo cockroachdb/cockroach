@@ -246,7 +246,7 @@ func evalPut(
 	h := cArgs.Header
 	ms := cArgs.Stats
 
-	ts := hlc.ZeroTimestamp
+	var ts hlc.Timestamp
 	if !args.Inline {
 		ts = h.Timestamp
 	}
@@ -335,7 +335,7 @@ func evalDeleteRange(
 	h := cArgs.Header
 	reply := resp.(*roachpb.DeleteRangeResponse)
 
-	timestamp := hlc.ZeroTimestamp
+	var timestamp hlc.Timestamp
 	if !args.Inline {
 		timestamp = h.Timestamp
 	}
@@ -429,7 +429,7 @@ func evalBeginTransaction(
 
 	// Verify transaction does not already exist.
 	tmpTxn := roachpb.Transaction{}
-	ok, err := engine.MVCCGetProto(ctx, batch, key, hlc.ZeroTimestamp, true, nil, &tmpTxn)
+	ok, err := engine.MVCCGetProto(ctx, batch, key, hlc.Timestamp{}, true, nil, &tmpTxn)
 	if err != nil {
 		return EvalResult{}, err
 	}
@@ -482,7 +482,7 @@ func evalBeginTransaction(
 
 	// Write the txn record.
 	reply.Txn.Writing = true
-	return EvalResult{}, engine.MVCCPutProto(ctx, batch, cArgs.Stats, key, hlc.ZeroTimestamp, nil, reply.Txn)
+	return EvalResult{}, engine.MVCCPutProto(ctx, batch, cArgs.Stats, key, hlc.Timestamp{}, nil, reply.Txn)
 }
 
 // evalEndTransaction either commits or aborts (rolls back) an extant
@@ -506,7 +506,7 @@ func evalEndTransaction(
 	// Fetch existing transaction.
 	var existingTxn roachpb.Transaction
 	if ok, err := engine.MVCCGetProto(
-		ctx, batch, key, hlc.ZeroTimestamp, true, nil, &existingTxn,
+		ctx, batch, key, hlc.Timestamp{}, true, nil, &existingTxn,
 	); err != nil {
 		return EvalResult{}, err
 	} else if !ok {
@@ -661,7 +661,7 @@ func isEndTransactionTriggeringRetryError(headerTxn, currentTxn *roachpb.Transac
 		return true
 	}
 
-	isTxnPushed := !currentTxn.Timestamp.Equal(headerTxn.OrigTimestamp)
+	isTxnPushed := currentTxn.Timestamp != headerTxn.OrigTimestamp
 
 	// If pushing requires a retry and the transaction was pushed, retry.
 	if headerTxn.RetryOnPush && isTxnPushed {
@@ -768,13 +768,13 @@ func updateTxnWithExternalIntents(
 		if log.V(2) {
 			log.Infof(ctx, "auto-gc'ed %s (%d intents)", txn.Short(), len(args.IntentSpans))
 		}
-		return engine.MVCCDelete(ctx, batch, ms, key, hlc.ZeroTimestamp, nil /* txn */)
+		return engine.MVCCDelete(ctx, batch, ms, key, hlc.Timestamp{}, nil /* txn */)
 	}
 	txn.Intents = make([]roachpb.Span, len(externalIntents))
 	for i := range externalIntents {
 		txn.Intents[i] = externalIntents[i].Span
 	}
-	return engine.MVCCPutProto(ctx, batch, ms, key, hlc.ZeroTimestamp, nil /* txn */, txn)
+	return engine.MVCCPutProto(ctx, batch, ms, key, hlc.Timestamp{}, nil /* txn */, txn)
 }
 
 // intersectSpan takes an intent and a descriptor. It then splits the
@@ -1153,7 +1153,7 @@ func evalHeartbeatTxn(
 	key := keys.TransactionKey(h.Txn.Key, *h.Txn.ID)
 
 	var txn roachpb.Transaction
-	if ok, err := engine.MVCCGetProto(ctx, batch, key, hlc.ZeroTimestamp, true, nil, &txn); err != nil {
+	if ok, err := engine.MVCCGetProto(ctx, batch, key, hlc.Timestamp{}, true, nil, &txn); err != nil {
 		return EvalResult{}, err
 	} else if !ok {
 		// If no existing transaction record was found, skip heartbeat.
@@ -1168,7 +1168,7 @@ func evalHeartbeatTxn(
 			txn.LastHeartbeat = &hlc.Timestamp{}
 		}
 		txn.LastHeartbeat.Forward(args.Now)
-		if err := engine.MVCCPutProto(ctx, batch, cArgs.Stats, key, hlc.ZeroTimestamp, nil, &txn); err != nil {
+		if err := engine.MVCCPutProto(ctx, batch, cArgs.Stats, key, hlc.Timestamp{}, nil, &txn); err != nil {
 			return EvalResult{}, err
 		}
 	}
@@ -1283,7 +1283,7 @@ func evalPushTxn(
 	if h.Txn != nil {
 		return EvalResult{}, errTransactionUnsupported
 	}
-	if args.Now.Equal(hlc.ZeroTimestamp) {
+	if args.Now == (hlc.Timestamp{}) {
 		return EvalResult{}, errors.Errorf("the field Now must be provided")
 	}
 
@@ -1294,7 +1294,7 @@ func evalPushTxn(
 
 	// Fetch existing transaction; if missing, we're allowed to abort.
 	existTxn := &roachpb.Transaction{}
-	ok, err := engine.MVCCGetProto(ctx, batch, key, hlc.ZeroTimestamp,
+	ok, err := engine.MVCCGetProto(ctx, batch, key, hlc.Timestamp{},
 		true /* consistent */, nil /* txn */, existTxn)
 	if err != nil {
 		return EvalResult{}, err
@@ -1342,7 +1342,7 @@ func evalPushTxn(
 		reply.PusheeTxn.Timestamp = args.Now // see method comment
 		// Setting OrigTimestamp bumps LastActive(); see #9265.
 		reply.PusheeTxn.OrigTimestamp = args.Now
-		return EvalResult{}, engine.MVCCPutProto(ctx, batch, cArgs.Stats, key, hlc.ZeroTimestamp, nil, &reply.PusheeTxn)
+		return EvalResult{}, engine.MVCCPutProto(ctx, batch, cArgs.Stats, key, hlc.Timestamp{}, nil, &reply.PusheeTxn)
 	}
 	// Start with the persisted transaction record as final transaction.
 	reply.PusheeTxn = existTxn.Clone()
@@ -1437,7 +1437,7 @@ func evalPushTxn(
 	}
 
 	// Persist the pushed transaction using zero timestamp for inline value.
-	if err := engine.MVCCPutProto(ctx, batch, cArgs.Stats, key, hlc.ZeroTimestamp, nil, &reply.PusheeTxn); err != nil {
+	if err := engine.MVCCPutProto(ctx, batch, cArgs.Stats, key, hlc.Timestamp{}, nil, &reply.PusheeTxn); err != nil {
 		return EvalResult{}, err
 	}
 	return EvalResult{}, nil
@@ -1580,7 +1580,7 @@ func evalTruncateLog(
 	// Passing zero timestamp to MVCCDeleteRange is equivalent to a ranged clear
 	// but it also computes stats.
 	if _, _, _, err := engine.MVCCDeleteRange(ctx, batch, &diff, start, end, math.MaxInt64, /* max */
-		hlc.ZeroTimestamp, nil /* txn */, false /* returnKeys */); err != nil {
+		hlc.Timestamp{}, nil /* txn */, false /* returnKeys */); err != nil {
 		return EvalResult{}, err
 	}
 
@@ -1632,7 +1632,7 @@ func evalRequestLease(
 
 	// MIGRATION(tschottdorf): needed to apply Raft commands which got proposed
 	// before the StartStasis field was introduced.
-	if args.Lease.DeprecatedStartStasis.Equal(hlc.ZeroTimestamp) {
+	if args.Lease.DeprecatedStartStasis == (hlc.Timestamp{}) {
 		args.Lease.DeprecatedStartStasis = args.Lease.Expiration
 	}
 	isExtension := prevLease.Replica.StoreID == args.Lease.Replica.StoreID
@@ -1725,7 +1725,7 @@ func (r *Replica) applyNewLeaseLocked(
 
 	// Ensure either an Epoch is set or Start < Expiration.
 	if (lease.Type() == roachpb.LeaseExpiration && !lease.Start.Less(lease.Expiration)) ||
-		(lease.Type() == roachpb.LeaseEpoch && !lease.Expiration.Equal(hlc.ZeroTimestamp)) {
+		(lease.Type() == roachpb.LeaseEpoch && lease.Expiration != (hlc.Timestamp{})) {
 		// This amounts to a bug.
 		return newFailedLeaseTrigger(isTransfer),
 			&roachpb.LeaseRejectedError{
@@ -2194,7 +2194,7 @@ func (rsds ReplicaSnapshotDiffSlice) WriteTo(w io.Writer) (int64, error) {
 		// TODO(tschottdorf): add pretty-printed value. We have the code in
 		// cli/debug.go (printKeyValue).
 		var prettyTime string
-		if d.Timestamp == hlc.ZeroTimestamp {
+		if d.Timestamp == (hlc.Timestamp{}) {
 			prettyTime = "<zero>"
 		} else {
 			prettyTime = d.Timestamp.GoTime().UTC().String()
@@ -2267,12 +2267,12 @@ func diffRange(l, r *roachpb.RaftSnapshotData) ReplicaSnapshotDiffSlice {
 			addLeaseHolder()
 
 		case 0:
-			// Timestamp sorting is weird. ZeroTimestamp sorts first, the
+			// Timestamp sorting is weird. Timestamp{} sorts first, the
 			// remainder sort in descending order. See storage/engine/doc.go.
-			if !e.Timestamp.Equal(v.Timestamp) {
-				if e.Timestamp.Equal(hlc.ZeroTimestamp) {
+			if e.Timestamp != v.Timestamp {
+				if e.Timestamp == (hlc.Timestamp{}) {
 					addLeaseHolder()
-				} else if v.Timestamp.Equal(hlc.ZeroTimestamp) {
+				} else if v.Timestamp == (hlc.Timestamp{}) {
 					addReplica()
 				} else if v.Timestamp.Less(e.Timestamp) {
 					addLeaseHolder()
@@ -2671,7 +2671,7 @@ func (r *Replica) splitTrigger(
 	if err != nil {
 		return enginepb.MVCCStats{}, EvalResult{}, errors.Wrap(err, "unable to fetch last replica GC timestamp")
 	}
-	if err := engine.MVCCPutProto(ctx, batch, nil, keys.RangeLastReplicaGCTimestampKey(split.RightDesc.RangeID), hlc.ZeroTimestamp, nil, &replicaGCTS); err != nil {
+	if err := engine.MVCCPutProto(ctx, batch, nil, keys.RangeLastReplicaGCTimestampKey(split.RightDesc.RangeID), hlc.Timestamp{}, nil, &replicaGCTS); err != nil {
 		return enginepb.MVCCStats{}, EvalResult{}, errors.Wrap(err, "unable to copy last replica GC timestamp")
 	}
 
@@ -2994,7 +2994,7 @@ func (r *Replica) mergeTrigger(
 	// keep track of stats here, because we already set the right range's
 	// system-local stats contribution to 0.
 	localRangeIDKeyPrefix := keys.MakeRangeIDPrefix(rightRangeID)
-	if _, _, _, err := engine.MVCCDeleteRange(ctx, batch, nil, localRangeIDKeyPrefix, localRangeIDKeyPrefix.PrefixEnd(), math.MaxInt64, hlc.ZeroTimestamp, nil, false); err != nil {
+	if _, _, _, err := engine.MVCCDeleteRange(ctx, batch, nil, localRangeIDKeyPrefix, localRangeIDKeyPrefix.PrefixEnd(), math.MaxInt64, hlc.Timestamp{}, nil, false); err != nil {
 		return EvalResult{}, errors.Errorf("cannot remove range metadata %s", err)
 	}
 

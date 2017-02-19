@@ -760,7 +760,7 @@ func (r *Replica) setTombstoneKey(
 		NextReplicaID: desc.NextReplicaID,
 	}
 	return engine.MVCCPutProto(ctx, eng, nil, tombstoneKey,
-		hlc.ZeroTimestamp, nil, tombstone)
+		hlc.Timestamp{}, nil, tombstone)
 }
 
 func (r *Replica) setReplicaID(replicaID roachpb.ReplicaID) error {
@@ -1250,16 +1250,16 @@ func containsKeyRange(desc roachpb.RangeDescriptor, start, end roachpb.Key) bool
 func (r *Replica) getLastReplicaGCTimestamp(ctx context.Context) (hlc.Timestamp, error) {
 	key := keys.RangeLastReplicaGCTimestampKey(r.RangeID)
 	var timestamp hlc.Timestamp
-	_, err := engine.MVCCGetProto(ctx, r.store.Engine(), key, hlc.ZeroTimestamp, true, nil, &timestamp)
+	_, err := engine.MVCCGetProto(ctx, r.store.Engine(), key, hlc.Timestamp{}, true, nil, &timestamp)
 	if err != nil {
-		return hlc.ZeroTimestamp, err
+		return hlc.Timestamp{}, err
 	}
 	return timestamp, nil
 }
 
 func (r *Replica) setLastReplicaGCTimestamp(ctx context.Context, timestamp hlc.Timestamp) error {
 	key := keys.RangeLastReplicaGCTimestampKey(r.RangeID)
-	return engine.MVCCPutProto(ctx, r.store.Engine(), nil, key, hlc.ZeroTimestamp, nil, &timestamp)
+	return engine.MVCCPutProto(ctx, r.store.Engine(), nil, key, hlc.Timestamp{}, nil, &timestamp)
 }
 
 // getQueueLastProcessed returns the last processed timestamp for the
@@ -1268,9 +1268,9 @@ func (r *Replica) getQueueLastProcessed(ctx context.Context, queue string) (hlc.
 	key := keys.QueueLastProcessedKey(r.Desc().StartKey, queue)
 	var timestamp hlc.Timestamp
 	if r.store != nil {
-		_, err := engine.MVCCGetProto(ctx, r.store.Engine(), key, hlc.ZeroTimestamp, true, nil, &timestamp)
+		_, err := engine.MVCCGetProto(ctx, r.store.Engine(), key, hlc.Timestamp{}, true, nil, &timestamp)
 		if err != nil {
-			return hlc.ZeroTimestamp, err
+			return hlc.Timestamp{}, err
 		}
 	}
 	return timestamp, nil
@@ -1739,9 +1739,9 @@ func (r *Replica) beginCmds(ctx context.Context, ba *roachpb.BatchRequest) (*end
 	//   This isn't just unittests (which would require revamping the test
 	//   context sender), but also some of the scanner queues place batches
 	//   directly into the local range they're servicing.
-	if ba.Timestamp.Equal(hlc.ZeroTimestamp) {
-		if ba.Txn != nil {
-			ba.Timestamp = ba.Txn.OrigTimestamp
+	if ba.Timestamp == (hlc.Timestamp{}) {
+		if txn := ba.Txn; txn != nil {
+			ba.Timestamp = txn.OrigTimestamp
 		} else {
 			ba.Timestamp = r.store.Clock().Now()
 		}
@@ -2275,7 +2275,7 @@ func (r *Replica) evaluateProposal(
 	// evaluated KV).
 	var result EvalResult
 
-	if ba.Timestamp == hlc.ZeroTimestamp {
+	if ba.Timestamp == (hlc.Timestamp{}) {
 		return nil, roachpb.NewErrorf("can't propose Raft command with zero timestamp")
 	}
 

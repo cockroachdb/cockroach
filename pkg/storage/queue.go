@@ -119,7 +119,7 @@ func isExpectedQueueError(err error) bool {
 // Returns a bool for whether to queue as well as a priority based
 // on how long it's been since last processed.
 func shouldQueueAgain(now, last hlc.Timestamp, minInterval time.Duration) (bool, float64) {
-	if minInterval == 0 || last == hlc.ZeroTimestamp {
+	if minInterval == 0 || last == (hlc.Timestamp{}) {
 		return true, 0
 	}
 	if diff := now.GoTime().Sub(last.GoTime()); diff >= minInterval {
@@ -127,7 +127,7 @@ func shouldQueueAgain(now, last hlc.Timestamp, minInterval time.Duration) (bool,
 		// If there's a non-zero last processed timestamp, adjust the
 		// priority by a multiple of how long it's been since the last
 		// time this replica was processed.
-		if last != hlc.ZeroTimestamp {
+		if last != (hlc.Timestamp{}) {
 			priority = float64(diff.Nanoseconds()) / float64(minInterval.Nanoseconds())
 		}
 		return true, priority

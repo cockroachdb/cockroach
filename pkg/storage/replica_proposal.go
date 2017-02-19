@@ -219,9 +219,9 @@ func (p *EvalResult) MergeAndDestroy(q EvalResult) error {
 	q.Replicated.State.TruncatedState = nil
 
 	p.Replicated.State.GCThreshold.Forward(q.Replicated.State.GCThreshold)
-	q.Replicated.State.GCThreshold = hlc.ZeroTimestamp
+	q.Replicated.State.GCThreshold = hlc.Timestamp{}
 	p.Replicated.State.TxnSpanGCThreshold.Forward(q.Replicated.State.TxnSpanGCThreshold)
-	q.Replicated.State.TxnSpanGCThreshold = hlc.ZeroTimestamp
+	q.Replicated.State.TxnSpanGCThreshold = hlc.Timestamp{}
 
 	if (q.Replicated.State.Stats != enginepb.MVCCStats{}) {
 		return errors.New("must not specify Stats")
@@ -488,7 +488,7 @@ func (r *Replica) handleReplicatedEvalResult(
 		rResult.IsLeaseRequest = false
 		rResult.IsConsistencyRelated = false
 		rResult.IsFreeze = false
-		rResult.Timestamp = hlc.ZeroTimestamp
+		rResult.Timestamp = hlc.Timestamp{}
 	}
 
 	if rResult.BlockReads {
@@ -627,18 +627,18 @@ func (r *Replica) handleReplicatedEvalResult(
 		r.store.raftEntryCache.clearTo(r.RangeID, newTruncState.Index+1)
 	}
 
-	if newThresh := rResult.State.GCThreshold; newThresh != hlc.ZeroTimestamp {
+	if newThresh := rResult.State.GCThreshold; newThresh != (hlc.Timestamp{}) {
 		r.mu.Lock()
 		r.mu.state.GCThreshold = newThresh
 		r.mu.Unlock()
-		rResult.State.GCThreshold = hlc.ZeroTimestamp
+		rResult.State.GCThreshold = hlc.Timestamp{}
 	}
 
-	if newThresh := rResult.State.TxnSpanGCThreshold; newThresh != hlc.ZeroTimestamp {
+	if newThresh := rResult.State.TxnSpanGCThreshold; newThresh != (hlc.Timestamp{}) {
 		r.mu.Lock()
 		r.mu.state.TxnSpanGCThreshold = newThresh
 		r.mu.Unlock()
-		rResult.State.TxnSpanGCThreshold = hlc.ZeroTimestamp
+		rResult.State.TxnSpanGCThreshold = hlc.Timestamp{}
 	}
 
 	if rResult.ComputeChecksum != nil {

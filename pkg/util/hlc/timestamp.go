@@ -28,18 +28,11 @@ var (
 	MaxTimestamp = Timestamp{WallTime: math.MaxInt64, Logical: math.MaxInt32}
 	// MinTimestamp is the min value allowed for Timestamp.
 	MinTimestamp = Timestamp{WallTime: 0, Logical: 1}
-	// ZeroTimestamp is an empty timestamp.
-	ZeroTimestamp = Timestamp{WallTime: 0, Logical: 0}
 )
 
 // Less compares two timestamps.
 func (t Timestamp) Less(s Timestamp) bool {
 	return t.WallTime < s.WallTime || (t.WallTime == s.WallTime && t.Logical < s.Logical)
-}
-
-// Equal returns whether two timestamps are the same.
-func (t Timestamp) Equal(s Timestamp) bool {
-	return t.WallTime == s.WallTime && t.Logical == s.Logical
 }
 
 func (t Timestamp) String() string {

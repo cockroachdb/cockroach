@@ -1544,11 +1544,11 @@ func EvalAsOfTimestamp(
 	var ts hlc.Timestamp
 	te, err := asOf.Expr.TypeCheck(nil, parser.TypeString)
 	if err != nil {
-		return hlc.ZeroTimestamp, err
+		return hlc.Timestamp{}, err
 	}
 	d, err := te.Eval(evalCtx)
 	if err != nil {
-		return hlc.ZeroTimestamp, err
+		return hlc.Timestamp{}, err
 	}
 	switch d := d.(type) {
 	case *parser.DString:
@@ -1556,7 +1556,7 @@ func EvalAsOfTimestamp(
 		// system and won't be returned to the user over pgwire.
 		dt, err := parser.ParseDTimestamp(string(*d), time.Nanosecond)
 		if err != nil {
-			return hlc.ZeroTimestamp, err
+			return hlc.Timestamp{}, err
 		}
 		ts.WallTime = dt.Time.UnixNano()
 	case *parser.DInt:
@@ -1568,7 +1568,7 @@ func EvalAsOfTimestamp(
 		parts := strings.SplitN(s, ".", 2)
 		nanos, err := strconv.ParseInt(parts[0], 10, 64)
 		if err != nil {
-			return hlc.ZeroTimestamp, errors.Wrap(err, "parse AS OF SYSTEM TIME argument")
+			return hlc.Timestamp{}, errors.Wrap(err, "parse AS OF SYSTEM TIME argument")
 		}
 		var logical int64
 		if len(parts) > 1 {
@@ -1578,22 +1578,22 @@ func EvalAsOfTimestamp(
 			const logicalLength = 10
 			p := parts[1]
 			if lp := len(p); lp > logicalLength {
-				return hlc.ZeroTimestamp, errors.Errorf("bad AS OF SYSTEM TIME argument: logical part has too many digits")
+				return hlc.Timestamp{}, errors.Errorf("bad AS OF SYSTEM TIME argument: logical part has too many digits")
 			} else if lp < logicalLength {
 				p += strings.Repeat("0", logicalLength-lp)
 			}
 			logical, err = strconv.ParseInt(p, 10, 32)
 			if err != nil {
-				return hlc.ZeroTimestamp, errors.Wrap(err, "parse AS OF SYSTEM TIME argument")
+				return hlc.Timestamp{}, errors.Wrap(err, "parse AS OF SYSTEM TIME argument")
 			}
 		}
 		ts.WallTime = nanos
 		ts.Logical = int32(logical)
 	default:
-		return hlc.ZeroTimestamp, fmt.Errorf("unexpected AS OF SYSTEM TIME argument: %s (%T)", d.ResolvedType(), d)
+		return hlc.Timestamp{}, fmt.Errorf("unexpected AS OF SYSTEM TIME argument: %s (%T)", d.ResolvedType(), d)
 	}
 	if max.Less(ts) {
-		return hlc.ZeroTimestamp, fmt.Errorf("cannot specify timestamp in the future")
+		return hlc.Timestamp{}, fmt.Errorf("cannot specify timestamp in the future")
 	}
 	return ts, nil
 }

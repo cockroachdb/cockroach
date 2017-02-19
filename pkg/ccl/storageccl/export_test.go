@@ -79,7 +79,7 @@ func TestExport(t *testing.T) {
 	sqlDB.Exec(`CREATE DATABASE export`)
 	sqlDB.Exec(`CREATE TABLE export.export (id INT PRIMARY KEY)`)
 	sqlDB.Exec(`INSERT INTO export.export VALUES (1), (3)`)
-	ts1, paths1, kvs1 := exportAndSlurp(hlc.ZeroTimestamp)
+	ts1, paths1, kvs1 := exportAndSlurp(hlc.Timestamp{})
 	if expected := 1; len(paths1) != expected {
 		t.Fatalf("expected %d files in export got %d", expected, len(paths1))
 	}
@@ -110,7 +110,7 @@ func TestExport(t *testing.T) {
 	}
 
 	sqlDB.Exec(`ALTER TABLE export.export SPLIT AT (2)`)
-	_, paths5, kvs5 := exportAndSlurp(hlc.ZeroTimestamp)
+	_, paths5, kvs5 := exportAndSlurp(hlc.Timestamp{})
 	if expected := 2; len(paths5) != expected {
 		t.Fatalf("expected %d files in export got %d", expected, len(paths5))
 	}

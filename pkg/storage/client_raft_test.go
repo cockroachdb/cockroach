@@ -2002,7 +2002,7 @@ func TestRaftRemoveRace(t *testing.T) {
 		var tombstone roachpb.RaftTombstone
 		if ok, err := engine.MVCCGetProto(
 			context.Background(), mtc.stores[2].Engine(), tombstoneKey,
-			hlc.ZeroTimestamp, true, nil, &tombstone,
+			hlc.Timestamp{}, true, nil, &tombstone,
 		); err != nil {
 			t.Fatal(err)
 		} else if ok {
@@ -2939,7 +2939,7 @@ func TestCheckInconsistent(t *testing.T) {
 				t.Errorf("diff length = %d, diff = %v", len(diff), diff)
 			}
 			d := diff[0]
-			if d.LeaseHolder || !bytes.Equal(diffKey, d.Key) || !diffTimestamp.Equal(d.Timestamp) {
+			if d.LeaseHolder || !bytes.Equal(diffKey, d.Key) || diffTimestamp != d.Timestamp {
 				t.Errorf("diff = %v", d)
 			}
 			notifyReportDiff <- struct{}{}

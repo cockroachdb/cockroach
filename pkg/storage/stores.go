@@ -99,7 +99,7 @@ func (ls *Stores) AddStore(s *Store) {
 	ls.storeMap[s.Ident.StoreID] = s
 	// If we've already read the gossip bootstrap info, ensure that
 	// all stores have the most recent values.
-	if !ls.biLatestTS.Equal(hlc.ZeroTimestamp) {
+	if ls.biLatestTS != (hlc.Timestamp{}) {
 		if err := ls.updateBootstrapInfo(ls.latestBI); err != nil {
 			ctx := ls.AnnotateCtx(context.TODO())
 			log.Errorf(ctx, "failed to update bootstrap info on newly added store: %s", err)
@@ -277,14 +277,14 @@ func (ls *Stores) FirstRange() (*roachpb.RangeDescriptor, error) {
 func (ls *Stores) ReadBootstrapInfo(bi *gossip.BootstrapInfo) error {
 	ls.mu.RLock()
 	defer ls.mu.RUnlock()
-	latestTS := hlc.ZeroTimestamp
+	var latestTS hlc.Timestamp
 
 	ctx := ls.AnnotateCtx(context.TODO())
 
 	// Find the most recent bootstrap info.
 	for _, s := range ls.storeMap {
 		var storeBI gossip.BootstrapInfo
-		ok, err := engine.MVCCGetProto(ctx, s.engine, keys.StoreGossipKey(), hlc.ZeroTimestamp, true, nil, &storeBI)
+		ok, err := engine.MVCCGetProto(ctx, s.engine, keys.StoreGossipKey(), hlc.Timestamp{}, true, nil, &storeBI)
 		if err != nil {
 			return err
 		}
@@ -323,7 +323,7 @@ func (ls *Stores) updateBootstrapInfo(bi *gossip.BootstrapInfo) error {
 	ls.latestBI = protoutil.Clone(bi).(*gossip.BootstrapInfo)
 	// Update all stores.
 	for _, s := range ls.storeMap {
-		if err := engine.MVCCPutProto(ctx, s.engine, nil, keys.StoreGossipKey(), hlc.ZeroTimestamp, nil, bi); err != nil {
+		if err := engine.MVCCPutProto(ctx, s.engine, nil, keys.StoreGossipKey(), hlc.Timestamp{}, nil, bi); err != nil {
 			return err
 		}
 	}

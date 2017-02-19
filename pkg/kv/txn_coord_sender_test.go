@@ -743,7 +743,7 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 			// Timestamp moves ahead of the existing write.
 			pErr: func() *roachpb.Error {
 				pErr := roachpb.NewErrorWithTxn(
-					roachpb.NewReadWithinUncertaintyIntervalError(hlc.ZeroTimestamp, hlc.ZeroTimestamp),
+					roachpb.NewReadWithinUncertaintyIntervalError(hlc.Timestamp{}, hlc.Timestamp{}),
 					&roachpb.Transaction{})
 				const nodeID = 1
 				pErr.GetTxn().UpdateObservedTimestamp(nodeID, plus10)
@@ -835,11 +835,11 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 			t.Errorf("%d: expected priority = %d; got %d",
 				i, test.expPri, txn.Proto.Priority)
 		}
-		if !txn.Proto.Timestamp.Equal(test.expTS) {
+		if txn.Proto.Timestamp != test.expTS {
 			t.Errorf("%d: expected timestamp to be %s; got %s",
 				i, test.expTS, txn.Proto.Timestamp)
 		}
-		if !txn.Proto.OrigTimestamp.Equal(test.expOrigTS) {
+		if txn.Proto.OrigTimestamp != test.expOrigTS {
 			t.Errorf("%d: expected orig timestamp to be %s; got %s",
 				i, test.expOrigTS, txn.Proto.OrigTimestamp)
 		}

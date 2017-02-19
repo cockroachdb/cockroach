@@ -1052,8 +1052,7 @@ func TestPropagateTxnOnError(t *testing.T) {
 			_, ok := fArgs.Req.(*roachpb.ConditionalPutRequest)
 			if ok && fArgs.Req.Header().Key.Equal(targetKey) {
 				if atomic.AddInt32(&numGets, 1) == 1 {
-					z := hlc.ZeroTimestamp
-					pErr := roachpb.NewReadWithinUncertaintyIntervalError(z, z)
+					pErr := roachpb.NewReadWithinUncertaintyIntervalError(hlc.Timestamp{}, hlc.Timestamp{})
 					return roachpb.NewErrorWithTxn(pErr, fArgs.Hdr.Txn)
 				}
 			}
