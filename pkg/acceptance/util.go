@@ -96,8 +96,8 @@ var flagTestConfigs = flag.Bool("test-configs", false, "instead of using the pas
 	"against a collection of pre-specified cluster configurations.")
 var flagConfig = flag.String("config", "", "a json TestConfig proto, see testconfig.proto")
 
-var flagPrivileged = flag.Bool("privileged", os.Getenv("CIRCLECI") != "true",
-	"run containers in privileged mode (required for nemesis tests")
+var flagPrivileged = flag.Bool("privileged", true,
+	"run containers in privileged mode (required for nemesis tests)")
 
 // Terrafarm flags.
 var flagTFReuseCluster = flag.String("reuse", "",
