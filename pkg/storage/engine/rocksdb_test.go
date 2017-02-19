@@ -567,10 +567,10 @@ func TestRocksDBTimeBound(t *testing.T) {
 		t.Fatalf("expected 1 sstable got %d", len(ssts.Sst))
 	}
 	sst := ssts.Sst[0]
-	if sst.TsMin == nil || !sst.TsMin.Equal(minTimestamp) {
+	if sst.TsMin == nil || *sst.TsMin != minTimestamp {
 		t.Fatalf("got min %v expected %v", sst.TsMin, minTimestamp)
 	}
-	if sst.TsMax == nil || !sst.TsMax.Equal(maxTimestamp) {
+	if sst.TsMax == nil || *sst.TsMax != maxTimestamp {
 		t.Fatalf("got max %v expected %v", sst.TsMax, maxTimestamp)
 	}
 }

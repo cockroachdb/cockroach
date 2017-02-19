@@ -96,7 +96,7 @@ func MakeMVCCMetadataKey(key roachpb.Key) MVCCKey {
 // Next returns the next key.
 func (k MVCCKey) Next() MVCCKey {
 	ts := k.Timestamp.Prev()
-	if ts == hlc.ZeroTimestamp {
+	if ts == (hlc.Timestamp{}) {
 		return MVCCKey{
 			Key: k.Key.Next(),
 		}
@@ -125,7 +125,7 @@ func (k MVCCKey) Equal(l MVCCKey) bool {
 
 // IsValue returns true iff the timestamp is non-zero.
 func (k MVCCKey) IsValue() bool {
-	return k.Timestamp != hlc.ZeroTimestamp
+	return k.Timestamp != (hlc.Timestamp{})
 }
 
 // EncodedSize returns the size of the MVCCKey when encoded.
@@ -431,7 +431,7 @@ func MVCCGetRangeStats(
 	ctx context.Context, engine Reader, rangeID roachpb.RangeID,
 ) (enginepb.MVCCStats, error) {
 	var ms enginepb.MVCCStats
-	_, err := MVCCGetProto(ctx, engine, keys.RangeStatsKey(rangeID), hlc.ZeroTimestamp, true, nil, &ms)
+	_, err := MVCCGetProto(ctx, engine, keys.RangeStatsKey(rangeID), hlc.Timestamp{}, true, nil, &ms)
 	return ms, err
 }
 
@@ -439,7 +439,7 @@ func MVCCGetRangeStats(
 func MVCCSetRangeStats(
 	ctx context.Context, engine ReadWriter, rangeID roachpb.RangeID, ms *enginepb.MVCCStats,
 ) error {
-	return MVCCPutProto(ctx, engine, nil, keys.RangeStatsKey(rangeID), hlc.ZeroTimestamp, nil, ms)
+	return MVCCPutProto(ctx, engine, nil, keys.RangeStatsKey(rangeID), hlc.Timestamp{}, nil, ms)
 }
 
 // MVCCGetProto fetches the value at the specified key and unmarshals it into
@@ -759,7 +759,7 @@ func mvccGetInternal(
 		// transaction, or in the absence of future versions that clock uncertainty
 		// would apply to.
 		seekKey.Timestamp = timestamp
-		if seekKey.Timestamp == hlc.ZeroTimestamp {
+		if seekKey.Timestamp == (hlc.Timestamp{}) {
 			return nil, ignoredIntents, safeValue, nil
 		}
 	}
@@ -876,7 +876,7 @@ func (b *putBuffer) putMeta(
 // key metadata. The timestamp must be passed as a parameter; using
 // the Timestamp field on the value results in an error.
 //
-// If the timestamp is specified as hlc.ZeroTimestamp, the value is
+// If the timestamp is specified as hlc.Timestamp{}, the value is
 // inlined instead of being written as a timestamp-versioned value. A
 // zero timestamp write to a key precludes a subsequent write using a
 // non-zero timestamp and vice versa. Inlined values require only a
@@ -895,7 +895,7 @@ func MVCCPut(
 	// If we're not tracking stats for the key and we're writing a non-versioned
 	// key we can utilize a blind put to avoid reading any existing value.
 	var iter Iterator
-	blind := ms == nil && timestamp == hlc.ZeroTimestamp
+	blind := ms == nil && timestamp == (hlc.Timestamp{})
 	if !blind {
 		iter = engine.NewIterator(true)
 		defer iter.Close()
@@ -956,7 +956,7 @@ func mvccPutUsingIter(
 ) error {
 	var rawBytes []byte
 	if valueFn == nil {
-		if value.Timestamp != hlc.ZeroTimestamp {
+		if value.Timestamp != (hlc.Timestamp{}) {
 			return errors.Errorf("cannot have timestamp set in value on Put")
 		}
 		rawBytes = value.RawBytes
@@ -1033,7 +1033,7 @@ func mvccPutInternal(
 	}
 
 	// Verify we're not mixing inline and non-inline values.
-	putIsInline := timestamp.Equal(hlc.ZeroTimestamp)
+	putIsInline := timestamp == (hlc.Timestamp{})
 	if ok && putIsInline != buf.meta.IsInline() {
 		return errors.Errorf("%q: put is inline=%t, but existing value is inline=%t",
 			metaKey, putIsInline, buf.meta.IsInline())
@@ -1091,7 +1091,7 @@ func mvccPutInternal(
 			// We are replacing our own older write intent. If we are
 			// writing at the same timestamp we can simply overwrite it;
 			// otherwise we must explicitly delete the obsolete intent.
-			if !timestamp.Equal(meta.Timestamp) {
+			if timestamp != meta.Timestamp {
 				versionKey := metaKey
 				versionKey.Timestamp = meta.Timestamp
 				if err = engine.Clear(versionKey); err != nil {
@@ -1361,7 +1361,7 @@ func MVCCMerge(
 	meta := &buf.meta
 	*meta = enginepb.MVCCMetadata{RawBytes: rawBytes}
 	// If non-zero, set the merge timestamp to provide some replay protection.
-	if !timestamp.Equal(hlc.ZeroTimestamp) {
+	if timestamp != (hlc.Timestamp{}) {
 		buf.ts = timestamp
 		meta.MergeTimestamp = &buf.ts
 	}
@@ -1888,7 +1888,7 @@ func mvccResolveWriteIntent(
 		}
 
 		// If timestamp of value changed, need to rewrite versioned value.
-		if !meta.Timestamp.Equal(intent.Txn.Timestamp) {
+		if meta.Timestamp != intent.Txn.Timestamp {
 			origKey := MVCCKey{Key: intent.Key, Timestamp: meta.Timestamp}
 			newKey := MVCCKey{Key: intent.Key, Timestamp: intent.Txn.Timestamp}
 			valBytes, err := engine.Get(origKey)

@@ -105,7 +105,7 @@ func (sc *AbortCache) Get(
 
 	// Pull response from disk and read into reply if available.
 	key := keys.AbortCacheKey(sc.rangeID, txnID)
-	ok, err := engine.MVCCGetProto(ctx, e, key, hlc.ZeroTimestamp, true /* consistent */, nil /* txn */, entry)
+	ok, err := engine.MVCCGetProto(ctx, e, key, hlc.Timestamp{}, true /* consistent */, nil /* txn */, entry)
 	return ok, err
 }
 
@@ -116,7 +116,7 @@ func (sc *AbortCache) Get(
 func (sc *AbortCache) Iterate(
 	ctx context.Context, e engine.Reader, f func([]byte, roachpb.AbortCacheEntry),
 ) {
-	_, _ = engine.MVCCIterate(ctx, e, sc.min(), sc.max(), hlc.ZeroTimestamp,
+	_, _ = engine.MVCCIterate(ctx, e, sc.min(), sc.max(), hlc.Timestamp{},
 		true /* consistent */, nil /* txn */, false, /* !reverse */
 		func(kv roachpb.KeyValue) (bool, error) {
 			var entry roachpb.AbortCacheEntry
@@ -205,7 +205,7 @@ func (sc *AbortCache) Del(
 	ctx context.Context, e engine.ReadWriter, ms *enginepb.MVCCStats, txnID uuid.UUID,
 ) error {
 	key := keys.AbortCacheKey(sc.rangeID, txnID)
-	return engine.MVCCDelete(ctx, e, ms, key, hlc.ZeroTimestamp, nil /* txn */)
+	return engine.MVCCDelete(ctx, e, ms, key, hlc.Timestamp{}, nil /* txn */)
 }
 
 // Put writes an entry for the specified transaction ID.
@@ -217,7 +217,7 @@ func (sc *AbortCache) Put(
 	entry *roachpb.AbortCacheEntry,
 ) error {
 	key := keys.AbortCacheKey(sc.rangeID, txnID)
-	return engine.MVCCPutProto(ctx, e, ms, key, hlc.ZeroTimestamp, nil /* txn */, entry)
+	return engine.MVCCPutProto(ctx, e, ms, key, hlc.Timestamp{}, nil /* txn */, entry)
 }
 
 func decodeAbortCacheMVCCKey(encKey engine.MVCCKey, dest []byte) (uuid.UUID, error) {

@@ -403,7 +403,7 @@ func TestOwnNodeCertain(t *testing.T) {
 		TransportFactory:  adaptLegacyTransport(testFn),
 		RangeDescriptorDB: defaultMockRangeDescriptorDB,
 	}
-	expTS := hlc.ZeroTimestamp.Add(1, 2)
+	expTS := hlc.Timestamp{WallTime: 1, Logical: 2}
 	ds := NewDistSender(cfg, g)
 	v := roachpb.MakeValueFromString("value")
 	put := roachpb.NewPut(roachpb.Key("a"), v)
@@ -465,7 +465,7 @@ func TestImmutableBatchArgs(t *testing.T) {
 		t.Fatal(pErr)
 	}
 
-	if !txn.Timestamp.Equal(hlc.ZeroTimestamp) {
+	if txn.Timestamp != (hlc.Timestamp{}) {
 		t.Fatal("Transaction was mutated by DistSender")
 	}
 }

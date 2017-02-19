@@ -230,7 +230,7 @@ func (tc *testContext) Sender() client.Sender {
 		if ba.RangeID != 0 {
 			ba.RangeID = 1
 		}
-		if ba.Timestamp == hlc.ZeroTimestamp {
+		if ba.Timestamp == (hlc.Timestamp{}) {
 			if err := ba.SetActiveTimestamp(tc.Clock().Now); err != nil {
 				tc.Fatal(err)
 			}
@@ -729,9 +729,9 @@ func TestReplicaLease(t *testing.T) {
 
 	// Test that leases with invalid times are rejected.
 	// Start leases at a point that avoids overlapping with the existing lease.
-	one := hlc.ZeroTimestamp.Add(time.Second.Nanoseconds(), 0)
+	one := hlc.Timestamp{WallTime: time.Second.Nanoseconds(), Logical: 0}
 	for _, lease := range []roachpb.Lease{
-		{Start: one, Expiration: hlc.ZeroTimestamp},
+		{Start: one, Expiration: hlc.Timestamp{}},
 	} {
 		if _, err := evalRequestLease(context.Background(), tc.store.Engine(),
 			CommandArgs{
@@ -1327,7 +1327,7 @@ func TestReplicaNoGossipFromNonLeader(t *testing.T) {
 	// Increment the clock's timestamp to expire the range lease.
 	tc.manualClock.Set(leaseExpiry(tc.repl))
 	lease, _ := tc.repl.getLease()
-	if tc.repl.leaseStatus(lease, tc.Clock().Now(), hlc.ZeroTimestamp).state != leaseExpired {
+	if tc.repl.leaseStatus(lease, tc.Clock().Now(), hlc.Timestamp{}).state != leaseExpired {
 		t.Fatal("range lease should have been expired")
 	}
 
@@ -1644,7 +1644,7 @@ func TestOptimizePuts(t *testing.T) {
 	for i, c := range testCases {
 		if c.exKey != nil {
 			if err := engine.MVCCPut(context.Background(), tc.engine, nil, c.exKey,
-				hlc.ZeroTimestamp, roachpb.MakeValueFromString("foo"), nil); err != nil {
+				hlc.Timestamp{}, roachpb.MakeValueFromString("foo"), nil); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -1727,11 +1727,11 @@ func TestAcquireLease(t *testing.T) {
 				t.Errorf("expected lease acquisition")
 			}
 			lease, _ = tc.repl.getLease()
-			if !lease.Start.Equal(expStart) {
+			if lease.Start != expStart {
 				t.Errorf("unexpected lease start: %s; expected %s", lease.Start, expStart)
 			}
 
-			if !lease.DeprecatedStartStasis.Equal(lease.Expiration) {
+			if lease.DeprecatedStartStasis != lease.Expiration {
 				t.Errorf("%s already in stasis (or beyond): %+v", ts, lease)
 			}
 			if !ts.Less(lease.Expiration) {
@@ -1818,7 +1818,7 @@ func TestLeaseConcurrent(t *testing.T) {
 			for i := 0; i < num; i++ {
 				if err := stopper.RunAsyncTask(context.Background(), func(ctx context.Context) {
 					tc.repl.mu.Lock()
-					status := tc.repl.leaseStatus(tc.repl.mu.state.Lease, ts, hlc.ZeroTimestamp)
+					status := tc.repl.leaseStatus(tc.repl.mu.state.Lease, ts, hlc.Timestamp{})
 					leaseCh := tc.repl.requestLeaseLocked(ctx, status)
 					tc.repl.mu.Unlock()
 					wg.Done()
@@ -1895,7 +1895,7 @@ func TestReplicaUpdateTSCache(t *testing.T) {
 	if rOK || wOK {
 		t.Errorf("expected rOK=false and wOK=false; rOK=%t, wOK=%t", rOK, wOK)
 	}
-	tc.repl.mu.tsCache.ExpandRequests(hlc.ZeroTimestamp)
+	tc.repl.mu.tsCache.ExpandRequests(hlc.Timestamp{})
 	rTS, _, rOK := tc.repl.mu.tsCache.GetMaxRead(roachpb.Key("a"), nil)
 	wTS, _, wOK := tc.repl.mu.tsCache.GetMaxWrite(roachpb.Key("a"), nil)
 	if rTS.WallTime != t0.Nanoseconds() || wTS.WallTime != startNanos || !rOK || wOK {
@@ -2405,7 +2405,7 @@ func TestReplicaNoTSCacheInconsistent(t *testing.T) {
 	}
 	pArgs := putArgs([]byte("a"), []byte("value"))
 
-	_, respH, pErr := SendWrapped(context.Background(), tc.Sender(), roachpb.Header{Timestamp: hlc.ZeroTimestamp.Add(0, 1)}, &pArgs)
+	_, respH, pErr := SendWrapped(context.Background(), tc.Sender(), roachpb.Header{Timestamp: hlc.Timestamp{WallTime: 0, Logical: 1}}, &pArgs)
 	if pErr != nil {
 		t.Fatal(pErr)
 	}
@@ -2453,7 +2453,7 @@ func TestReplicaNoTSCacheUpdateOnFailure(t *testing.T) {
 		txn.Sequence++
 		if _, respH, pErr := SendWrapped(context.Background(), tc.Sender(), roachpb.Header{Txn: txn}, &pArgs); pErr != nil {
 			t.Fatalf("test %d: %s", i, pErr)
-		} else if !respH.Txn.Timestamp.Equal(txn.Timestamp) {
+		} else if respH.Txn.Timestamp != txn.Timestamp {
 			t.Errorf("expected timestamp not to advance %s != %s", respH.Timestamp, txn.Timestamp)
 		}
 	}
@@ -2490,7 +2490,7 @@ func TestReplicaNoTimestampIncrementWithinTxn(t *testing.T) {
 	if pErr != nil {
 		t.Fatal(pErr)
 	}
-	if !respH.Txn.Timestamp.Equal(txn.Timestamp) {
+	if respH.Txn.Timestamp != txn.Timestamp {
 		t.Errorf("expected timestamp to remain %s; got %s", txn.Timestamp, respH.Timestamp)
 	}
 
@@ -2514,7 +2514,7 @@ func TestReplicaNoTimestampIncrementWithinTxn(t *testing.T) {
 	if pErr != nil {
 		t.Errorf("unexpected pError: %s", pErr)
 	}
-	if !respH.Timestamp.Equal(expTS) {
+	if respH.Timestamp != expTS {
 		t.Errorf("expected timestamp to increment to %s; got %s", expTS, respH.Timestamp)
 	}
 }
@@ -2542,7 +2542,7 @@ func TestReplicaAbortCacheReadError(t *testing.T) {
 
 	// Overwrite Abort cache entry with garbage for the last op.
 	key := keys.AbortCacheKey(tc.repl.RangeID, *txn.ID)
-	err := engine.MVCCPut(context.Background(), tc.engine, nil, key, hlc.ZeroTimestamp, roachpb.MakeValueFromString("never read in this test"), nil)
+	err := engine.MVCCPut(context.Background(), tc.engine, nil, key, hlc.Timestamp{}, roachpb.MakeValueFromString("never read in this test"), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -3021,7 +3021,7 @@ func TestEndTransactionAfterHeartbeat(t *testing.T) {
 		if reply.Txn.Status != expStatus {
 			t.Errorf("expected transaction status to be %s; got %s", expStatus, reply.Txn.Status)
 		}
-		if reply.Txn.LastHeartbeat == nil || !reply.Txn.LastHeartbeat.Equal(*hBR.Txn.LastHeartbeat) {
+		if reply.Txn.LastHeartbeat == nil || *reply.Txn.LastHeartbeat != *hBR.Txn.LastHeartbeat {
 			t.Errorf("expected heartbeats to remain equal: %+v != %+v",
 				reply.Txn.LastHeartbeat, hBR.Txn.LastHeartbeat)
 		}
@@ -3182,7 +3182,7 @@ func TestEndTransactionWithErrors(t *testing.T) {
 		txnKey := keys.TransactionKey(test.key, *txn.ID)
 
 		if test.existStatus != doesNotExist {
-			if err := engine.MVCCPutProto(context.Background(), tc.repl.store.Engine(), nil, txnKey, hlc.ZeroTimestamp,
+			if err := engine.MVCCPutProto(context.Background(), tc.repl.store.Engine(), nil, txnKey, hlc.Timestamp{},
 				nil, &existTxn); err != nil {
 				t.Fatal(err)
 			}
@@ -3419,7 +3419,7 @@ func TestRaftRetryCantCommitIntents(t *testing.T) {
 			// Verify txn record is cleaned.
 			var readTxn roachpb.Transaction
 			txnKey := keys.TransactionKey(txn.Key, *txn.ID)
-			ok, err := engine.MVCCGetProto(context.Background(), tc.repl.store.Engine(), txnKey, hlc.ZeroTimestamp, true /* consistent */, nil /* txn */, &readTxn)
+			ok, err := engine.MVCCGetProto(context.Background(), tc.repl.store.Engine(), txnKey, hlc.Timestamp{}, true /* consistent */, nil /* txn */, &readTxn)
 			if err != nil || ok {
 				t.Errorf("expected transaction record to be cleared (%t): %s", ok, err)
 			}
@@ -3541,7 +3541,7 @@ func TestEndTransactionLocalGC(t *testing.T) {
 		}
 		var readTxn roachpb.Transaction
 		txnKey := keys.TransactionKey(txn.Key, *txn.ID)
-		ok, err := engine.MVCCGetProto(context.Background(), tc.repl.store.Engine(), txnKey, hlc.ZeroTimestamp,
+		ok, err := engine.MVCCGetProto(context.Background(), tc.repl.store.Engine(), txnKey, hlc.Timestamp{},
 			true /* consistent */, nil /* txn */, &readTxn)
 		if err != nil {
 			t.Fatal(err)
@@ -4132,22 +4132,22 @@ func TestPushTxnHeartbeatTimeout(t *testing.T) {
 	}{
 		// Avoid using 0 as timeOffset to avoid having outcomes depend on random
 		// logical ticks.
-		{hlc.ZeroTimestamp, 1, roachpb.PUSH_TIMESTAMP, false},
-		{hlc.ZeroTimestamp, 1, roachpb.PUSH_ABORT, false},
-		{hlc.ZeroTimestamp, 1, roachpb.PUSH_TOUCH, false},
-		{hlc.ZeroTimestamp, 1, roachpb.PUSH_QUERY, true},
-		{hlc.ZeroTimestamp, ns, roachpb.PUSH_TIMESTAMP, false},
-		{hlc.ZeroTimestamp, ns, roachpb.PUSH_ABORT, false},
-		{hlc.ZeroTimestamp, ns, roachpb.PUSH_TOUCH, false},
-		{hlc.ZeroTimestamp, ns, roachpb.PUSH_QUERY, true},
-		{hlc.ZeroTimestamp, ns*2 - 1, roachpb.PUSH_TIMESTAMP, false},
-		{hlc.ZeroTimestamp, ns*2 - 1, roachpb.PUSH_ABORT, false},
-		{hlc.ZeroTimestamp, ns*2 - 1, roachpb.PUSH_TOUCH, false},
-		{hlc.ZeroTimestamp, ns*2 - 1, roachpb.PUSH_QUERY, true},
-		{hlc.ZeroTimestamp, ns * 2, roachpb.PUSH_TIMESTAMP, false},
-		{hlc.ZeroTimestamp, ns * 2, roachpb.PUSH_ABORT, false},
-		{hlc.ZeroTimestamp, ns * 2, roachpb.PUSH_TOUCH, false},
-		{hlc.ZeroTimestamp, ns * 2, roachpb.PUSH_QUERY, true},
+		{hlc.Timestamp{}, 1, roachpb.PUSH_TIMESTAMP, false},
+		{hlc.Timestamp{}, 1, roachpb.PUSH_ABORT, false},
+		{hlc.Timestamp{}, 1, roachpb.PUSH_TOUCH, false},
+		{hlc.Timestamp{}, 1, roachpb.PUSH_QUERY, true},
+		{hlc.Timestamp{}, ns, roachpb.PUSH_TIMESTAMP, false},
+		{hlc.Timestamp{}, ns, roachpb.PUSH_ABORT, false},
+		{hlc.Timestamp{}, ns, roachpb.PUSH_TOUCH, false},
+		{hlc.Timestamp{}, ns, roachpb.PUSH_QUERY, true},
+		{hlc.Timestamp{}, ns*2 - 1, roachpb.PUSH_TIMESTAMP, false},
+		{hlc.Timestamp{}, ns*2 - 1, roachpb.PUSH_ABORT, false},
+		{hlc.Timestamp{}, ns*2 - 1, roachpb.PUSH_TOUCH, false},
+		{hlc.Timestamp{}, ns*2 - 1, roachpb.PUSH_QUERY, true},
+		{hlc.Timestamp{}, ns * 2, roachpb.PUSH_TIMESTAMP, false},
+		{hlc.Timestamp{}, ns * 2, roachpb.PUSH_ABORT, false},
+		{hlc.Timestamp{}, ns * 2, roachpb.PUSH_TOUCH, false},
+		{hlc.Timestamp{}, ns * 2, roachpb.PUSH_QUERY, true},
 		{ts, ns*2 + 1, roachpb.PUSH_TIMESTAMP, false},
 		{ts, ns*2 + 1, roachpb.PUSH_ABORT, false},
 		{ts, ns*2 + 1, roachpb.PUSH_TOUCH, false},
@@ -4166,7 +4166,7 @@ func TestPushTxnHeartbeatTimeout(t *testing.T) {
 		pusher.Priority = 1 // Pusher won't win based on priority.
 
 		// First, establish "start" of existing pushee's txn via BeginTransaction.
-		if !test.heartbeat.Equal(hlc.ZeroTimestamp) {
+		if test.heartbeat != (hlc.Timestamp{}) {
 			pushee.LastHeartbeat = &test.heartbeat
 		}
 		_, btH := beginTxnArgs(key, pushee)
@@ -4367,7 +4367,7 @@ func TestPushTxnPushTimestamp(t *testing.T) {
 	expTS := pusher.Timestamp
 	expTS.Logical++
 	reply := resp.(*roachpb.PushTxnResponse)
-	if !reply.PusheeTxn.Timestamp.Equal(expTS) {
+	if reply.PusheeTxn.Timestamp != expTS {
 		t.Errorf("expected timestamp to be pushed to %+v; got %+v", expTS, reply.PusheeTxn.Timestamp)
 	}
 	if reply.PusheeTxn.Status != roachpb.PENDING {
@@ -4409,7 +4409,7 @@ func TestPushTxnPushTimestampAlreadyPushed(t *testing.T) {
 		t.Errorf("unexpected pError on push: %s", pErr)
 	}
 	reply := resp.(*roachpb.PushTxnResponse)
-	if !reply.PusheeTxn.Timestamp.Equal(pushee.Timestamp) {
+	if reply.PusheeTxn.Timestamp != pushee.Timestamp {
 		t.Errorf("expected timestamp to be equal to original %+v; got %+v", pushee.Timestamp, reply.PusheeTxn.Timestamp)
 	}
 	if reply.PusheeTxn.Status != roachpb.PENDING {
@@ -4484,7 +4484,7 @@ func TestPushTxnSerializableRestart(t *testing.T) {
 	// Verify that the returned transaction has timestamp equal to the
 	// pushed timestamp. This verifies that the BeginTransaction found
 	// the pushed record and propagated it.
-	if txn := pErr.GetTxn(); !txn.Timestamp.Equal(pusher.Timestamp.Next()) {
+	if txn := pErr.GetTxn(); txn.Timestamp != pusher.Timestamp.Next() {
 		t.Errorf("expected retry error txn timestamp %s; got %s", pusher.Timestamp, txn.Timestamp)
 	}
 }
@@ -5676,7 +5676,7 @@ func TestEntries(t *testing.T) {
 	repl.mu.Unlock()
 
 	// Case 24: add a gap to the indexes.
-	if err := engine.MVCCDelete(context.Background(), tc.store.Engine(), nil, keys.RaftLogKey(rangeID, indexes[6]), hlc.ZeroTimestamp, nil); err != nil {
+	if err := engine.MVCCDelete(context.Background(), tc.store.Engine(), nil, keys.RaftLogKey(rangeID, indexes[6]), hlc.Timestamp{}, nil); err != nil {
 		t.Fatal(err)
 	}
 	repl.store.raftEntryCache.delEntries(rangeID, indexes[6], indexes[6]+1)
@@ -6049,7 +6049,7 @@ func TestDiffRange(t *testing.T) {
 			{Key: []byte("abcde"), Timestamp: timestamp, Value: value},
 			// Timestamps sort in descending order, with the notable exception
 			// of the zero timestamp, which sorts first.
-			{Key: []byte("abcdefg"), Timestamp: hlc.ZeroTimestamp, Value: value},
+			{Key: []byte("abcdefg"), Timestamp: hlc.Timestamp{}, Value: value},
 			{Key: []byte("abcdefg"), Timestamp: timestamp, Value: value},
 			{Key: []byte("abcdefg"), Timestamp: timestamp.Add(0, -1), Value: value},
 			{Key: []byte("abcdefgh"), Timestamp: timestamp, Value: value},
@@ -6058,9 +6058,9 @@ func TestDiffRange(t *testing.T) {
 			// Both 'zeroleft' and 'zeroright' share the version at (1,1), but
 			// a zero timestamp (=meta) key pair exists on the leader or
 			// follower, respectively.
-			{Key: []byte("zeroleft"), Timestamp: hlc.ZeroTimestamp, Value: value},
-			{Key: []byte("zeroleft"), Timestamp: hlc.ZeroTimestamp.Add(1, 1), Value: value},
-			{Key: []byte("zeroright"), Timestamp: hlc.ZeroTimestamp.Add(1, 1), Value: value},
+			{Key: []byte("zeroleft"), Timestamp: hlc.Timestamp{}, Value: value},
+			{Key: []byte("zeroleft"), Timestamp: hlc.Timestamp{WallTime: 1, Logical: 1}, Value: value},
+			{Key: []byte("zeroright"), Timestamp: hlc.Timestamp{WallTime: 1, Logical: 1}, Value: value},
 		},
 	}
 
@@ -6075,15 +6075,15 @@ func TestDiffRange(t *testing.T) {
 			{Key: []byte("abc"), Timestamp: timestamp, Value: value},
 			{Key: []byte("abcde"), Timestamp: timestamp, Value: value},
 			{Key: []byte("abcdef"), Timestamp: timestamp, Value: value},
-			{Key: []byte("abcdefg"), Timestamp: hlc.ZeroTimestamp, Value: value},
+			{Key: []byte("abcdefg"), Timestamp: hlc.Timestamp{}, Value: value},
 			{Key: []byte("abcdefg"), Timestamp: timestamp.Add(0, 1), Value: value},
 			{Key: []byte("abcdefg"), Timestamp: timestamp, Value: value},
 			{Key: []byte("abcdefgh"), Timestamp: timestamp, Value: value},
 			{Key: []byte("x"), Timestamp: timestamp, Value: []byte("bar")},
 			{Key: []byte("z"), Timestamp: timestamp, Value: value},
-			{Key: []byte("zeroleft"), Timestamp: hlc.ZeroTimestamp.Add(1, 1), Value: value},
-			{Key: []byte("zeroright"), Timestamp: hlc.ZeroTimestamp, Value: value},
-			{Key: []byte("zeroright"), Timestamp: hlc.ZeroTimestamp.Add(1, 1), Value: value},
+			{Key: []byte("zeroleft"), Timestamp: hlc.Timestamp{WallTime: 1, Logical: 1}, Value: value},
+			{Key: []byte("zeroright"), Timestamp: hlc.Timestamp{}, Value: value},
+			{Key: []byte("zeroright"), Timestamp: hlc.Timestamp{WallTime: 1, Logical: 1}, Value: value},
 		},
 	}
 
@@ -6099,15 +6099,15 @@ func TestDiffRange(t *testing.T) {
 		{LeaseHolder: false, Key: []byte("x"), Timestamp: timestamp, Value: []byte("bar")},
 		{LeaseHolder: true, Key: []byte("y"), Timestamp: timestamp, Value: value},
 		{LeaseHolder: false, Key: []byte("z"), Timestamp: timestamp, Value: value},
-		{LeaseHolder: true, Key: []byte("zeroleft"), Timestamp: hlc.ZeroTimestamp, Value: value},
-		{LeaseHolder: false, Key: []byte("zeroright"), Timestamp: hlc.ZeroTimestamp, Value: value},
+		{LeaseHolder: true, Key: []byte("zeroleft"), Timestamp: hlc.Timestamp{}, Value: value},
+		{LeaseHolder: false, Key: []byte("zeroright"), Timestamp: hlc.Timestamp{}, Value: value},
 	}
 
 	diff := diffRange(leaderSnapshot, replicaSnapshot)
 
 	for i, e := range eDiff {
 		v := diff[i]
-		if e.LeaseHolder != v.LeaseHolder || !bytes.Equal(e.Key, v.Key) || !e.Timestamp.Equal(v.Timestamp) || !bytes.Equal(e.Value, v.Value) {
+		if e.LeaseHolder != v.LeaseHolder || !bytes.Equal(e.Key, v.Key) || e.Timestamp != v.Timestamp || !bytes.Equal(e.Value, v.Value) {
 			t.Fatalf("diff varies at row %d, want %v and got %v\n\ngot:\n%s\nexpected:\n%s", i, e, v, diff, eDiff)
 		}
 	}
@@ -6210,7 +6210,7 @@ func TestReplicaIDChangePending(t *testing.T) {
 	commandProposed := make(chan struct{}, 1)
 	repl.mu.Lock()
 	repl.mu.submitProposalFn = func(p *ProposalData) error {
-		if p.Request.Timestamp.Equal(magicTS) {
+		if p.Request.Timestamp == magicTS {
 			commandProposed <- struct{}{}
 		}
 		return nil

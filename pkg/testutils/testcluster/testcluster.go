@@ -371,7 +371,7 @@ func (tc *TestCluster) FindRangeLease(
 	if hint != nil {
 		var ok bool
 		if _, ok = rangeDesc.GetReplicaDescriptor(hint.StoreID); !ok {
-			return nil, hlc.ZeroTimestamp, errors.Errorf(
+			return nil, hlc.Timestamp{}, errors.Errorf(
 				"bad hint: %+v; store doesn't have a replica of the range", hint)
 		}
 	} else {
@@ -390,7 +390,7 @@ func (tc *TestCluster) FindRangeLease(
 		}
 	}
 	if hintServer == nil {
-		return nil, hlc.ZeroTimestamp, errors.Errorf("bad hint: %+v; no such node", hint)
+		return nil, hlc.Timestamp{}, errors.Errorf("bad hint: %+v; no such node", hint)
 	}
 	leaseReq := roachpb.LeaseInfoRequest{
 		Span: roachpb.Span{
@@ -408,7 +408,7 @@ func (tc *TestCluster) FindRangeLease(
 		},
 		&leaseReq)
 	if pErr != nil {
-		return nil, hlc.ZeroTimestamp, pErr.GoError()
+		return nil, hlc.Timestamp{}, pErr.GoError()
 	}
 	return leaseResp.(*roachpb.LeaseInfoResponse).Lease, hintServer.Clock().Now(), nil
 }

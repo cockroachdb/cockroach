@@ -185,7 +185,7 @@ func iterateEntries(
 		ctx, e,
 		keys.RaftLogKey(rangeID, lo),
 		keys.RaftLogKey(rangeID, hi),
-		hlc.ZeroTimestamp,
+		hlc.Timestamp{},
 		true,  /* consistent */
 		nil,   /* txn */
 		false, /* !reverse */
@@ -453,9 +453,9 @@ func (r *Replica) append(
 		value.InitChecksum(key)
 		var err error
 		if ent.Index > prevLastIndex {
-			err = engine.MVCCBlindPut(ctx, batch, &diff, key, hlc.ZeroTimestamp, value, nil /* txn */)
+			err = engine.MVCCBlindPut(ctx, batch, &diff, key, hlc.Timestamp{}, value, nil /* txn */)
 		} else {
-			err = engine.MVCCPut(ctx, batch, &diff, key, hlc.ZeroTimestamp, value, nil /* txn */)
+			err = engine.MVCCPut(ctx, batch, &diff, key, hlc.Timestamp{}, value, nil /* txn */)
 		}
 		if err != nil {
 			return 0, 0, err
@@ -466,7 +466,7 @@ func (r *Replica) append(
 	lastIndex := entries[len(entries)-1].Index
 	for i := lastIndex + 1; i <= prevLastIndex; i++ {
 		err := engine.MVCCDelete(ctx, batch, &diff, r.stateLoader.RaftLogKey(i),
-			hlc.ZeroTimestamp, nil /* txn */)
+			hlc.Timestamp{}, nil /* txn */)
 		if err != nil {
 			return 0, 0, err
 		}

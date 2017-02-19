@@ -167,8 +167,8 @@ func TestBaseQueueAddUpdateAndRemove(t *testing.T) {
 	}
 	bq := makeTestBaseQueue("test", testQueue, tc.store, tc.gossip, queueConfig{maxSize: 2})
 
-	bq.MaybeAdd(r1, hlc.ZeroTimestamp)
-	bq.MaybeAdd(r2, hlc.ZeroTimestamp)
+	bq.MaybeAdd(r1, hlc.Timestamp{})
+	bq.MaybeAdd(r2, hlc.Timestamp{})
 	if bq.Length() != 2 {
 		t.Fatalf("expected length 2; got %d", bq.Length())
 	}
@@ -193,14 +193,14 @@ func TestBaseQueueAddUpdateAndRemove(t *testing.T) {
 
 	// Add again, but this time r2 shouldn't add.
 	shouldAddMap[r2] = false
-	bq.MaybeAdd(r1, hlc.ZeroTimestamp)
-	bq.MaybeAdd(r2, hlc.ZeroTimestamp)
+	bq.MaybeAdd(r1, hlc.Timestamp{})
+	bq.MaybeAdd(r2, hlc.Timestamp{})
 	if bq.Length() != 1 {
 		t.Errorf("expected length 1; got %d", bq.Length())
 	}
 
 	// Try adding same replica twice.
-	bq.MaybeAdd(r1, hlc.ZeroTimestamp)
+	bq.MaybeAdd(r1, hlc.Timestamp{})
 	if bq.Length() != 1 {
 		t.Errorf("expected length 1; got %d", bq.Length())
 	}
@@ -208,8 +208,8 @@ func TestBaseQueueAddUpdateAndRemove(t *testing.T) {
 	// Re-add r2 and update priority of r1.
 	shouldAddMap[r2] = true
 	priorityMap[r1] = 3.0
-	bq.MaybeAdd(r1, hlc.ZeroTimestamp)
-	bq.MaybeAdd(r2, hlc.ZeroTimestamp)
+	bq.MaybeAdd(r1, hlc.Timestamp{})
+	bq.MaybeAdd(r2, hlc.Timestamp{})
 	if bq.Length() != 2 {
 		t.Fatalf("expected length 2; got %d", bq.Length())
 	}
@@ -224,10 +224,10 @@ func TestBaseQueueAddUpdateAndRemove(t *testing.T) {
 	}
 
 	// Set !shouldAdd for r2 and add it; this has effect of removing it.
-	bq.MaybeAdd(r1, hlc.ZeroTimestamp)
-	bq.MaybeAdd(r2, hlc.ZeroTimestamp)
+	bq.MaybeAdd(r1, hlc.Timestamp{})
+	bq.MaybeAdd(r2, hlc.Timestamp{})
 	shouldAddMap[r2] = false
-	bq.MaybeAdd(r2, hlc.ZeroTimestamp)
+	bq.MaybeAdd(r2, hlc.Timestamp{})
 	if bq.Length() != 1 {
 		t.Fatalf("expected length 1; got %d", bq.Length())
 	}
@@ -262,7 +262,7 @@ func TestBaseQueueAdd(t *testing.T) {
 		},
 	}
 	bq := makeTestBaseQueue("test", testQueue, tc.store, tc.gossip, queueConfig{maxSize: 1})
-	bq.MaybeAdd(r, hlc.ZeroTimestamp)
+	bq.MaybeAdd(r, hlc.Timestamp{})
 	if bq.Length() != 0 {
 		t.Fatalf("expected length 0; got %d", bq.Length())
 	}
@@ -317,8 +317,8 @@ func TestBaseQueueProcess(t *testing.T) {
 	bq := makeTestBaseQueue("test", testQueue, tc.store, tc.gossip, queueConfig{maxSize: 2})
 	bq.Start(tc.Clock(), stopper)
 
-	bq.MaybeAdd(r1, hlc.ZeroTimestamp)
-	bq.MaybeAdd(r2, hlc.ZeroTimestamp)
+	bq.MaybeAdd(r1, hlc.Timestamp{})
+	bq.MaybeAdd(r2, hlc.Timestamp{})
 	if pc := testQueue.getProcessed(); pc != 0 {
 		t.Errorf("expected no processed ranges; got %d", pc)
 	}
@@ -389,7 +389,7 @@ func TestBaseQueueAddRemove(t *testing.T) {
 	clock := hlc.NewClock(mc.UnixNano, time.Nanosecond)
 	bq.Start(clock, stopper)
 
-	bq.MaybeAdd(r, hlc.ZeroTimestamp)
+	bq.MaybeAdd(r, hlc.Timestamp{})
 	bq.MaybeRemove(r.RangeID)
 
 	// Wake the queue
@@ -470,8 +470,8 @@ func TestAcceptsUnsplitRanges(t *testing.T) {
 
 	// There are no user db/table entries, everything should be added and
 	// processed as usual.
-	bq.MaybeAdd(neverSplits, hlc.ZeroTimestamp)
-	bq.MaybeAdd(willSplit, hlc.ZeroTimestamp)
+	bq.MaybeAdd(neverSplits, hlc.Timestamp{})
+	bq.MaybeAdd(willSplit, hlc.Timestamp{})
 
 	testutils.SucceedsSoon(t, func() error {
 		if pc := testQueue.getProcessed(); pc != 2 {
@@ -502,8 +502,8 @@ func TestAcceptsUnsplitRanges(t *testing.T) {
 		t.Fatal("System config says range does not need to be split")
 	}
 
-	bq.MaybeAdd(neverSplits, hlc.ZeroTimestamp)
-	bq.MaybeAdd(willSplit, hlc.ZeroTimestamp)
+	bq.MaybeAdd(neverSplits, hlc.Timestamp{})
+	bq.MaybeAdd(willSplit, hlc.Timestamp{})
 
 	testutils.SucceedsSoon(t, func() error {
 		if pc := testQueue.getProcessed(); pc != 3 {
@@ -570,7 +570,7 @@ func TestBaseQueuePurgatory(t *testing.T) {
 		if err := tc.store.AddReplica(r); err != nil {
 			t.Fatal(err)
 		}
-		bq.MaybeAdd(r, hlc.ZeroTimestamp)
+		bq.MaybeAdd(r, hlc.Timestamp{})
 	}
 
 	testutils.SucceedsSoon(t, func() error {
@@ -711,7 +711,7 @@ func TestBaseQueueProcessTimeout(t *testing.T) {
 			acceptsUnsplitRanges: true,
 		})
 	bq.Start(tc.Clock(), stopper)
-	bq.MaybeAdd(r, hlc.ZeroTimestamp)
+	bq.MaybeAdd(r, hlc.Timestamp{})
 
 	if l := bq.Length(); l != 1 {
 		t.Errorf("expected one queued replica; got %d", l)
@@ -765,7 +765,7 @@ func TestBaseQueueTimeMetric(t *testing.T) {
 			acceptsUnsplitRanges: true,
 		})
 	bq.Start(tc.Clock(), stopper)
-	bq.MaybeAdd(r, hlc.ZeroTimestamp)
+	bq.MaybeAdd(r, hlc.Timestamp{})
 
 	testutils.SucceedsSoon(t, func() error {
 		if v := bq.successes.Count(); v != 1 {
@@ -836,7 +836,7 @@ func TestBaseQueueDisable(t *testing.T) {
 	bq.Start(clock, stopper)
 
 	bq.SetDisabled(true)
-	bq.MaybeAdd(r, hlc.ZeroTimestamp)
+	bq.MaybeAdd(r, hlc.Timestamp{})
 	if shouldQueueCalled {
 		t.Error("shouldQueue should not have been called")
 	}

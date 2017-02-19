@@ -275,8 +275,8 @@ func TestRemoveLeaseIfExpiring(t *testing.T) {
 	if p.removeLeaseIfExpiring(l1) {
 		t.Error("expected false with a non-expiring lease")
 	}
-	if !p.txn.GetDeadline().Equal(et) {
-		t.Errorf("expected deadline %s but got %s", et, p.txn.GetDeadline())
+	if d := *p.txn.GetDeadline(); d != et {
+		t.Errorf("expected deadline %s but got %s", et, d)
 	}
 
 	// Advance the clock so that l1 will be expired.
@@ -295,7 +295,7 @@ func TestRemoveLeaseIfExpiring(t *testing.T) {
 		t.Errorf("expected leases to contain %s but has %s", l2, p.leases)
 	}
 
-	if !p.txn.GetDeadline().Equal(et) {
-		t.Errorf("expected deadline %s, but got %s", et, p.txn.GetDeadline())
+	if d := *p.txn.GetDeadline(); d != et {
+		t.Errorf("expected deadline %s, but got %s", et, d)
 	}
 }
