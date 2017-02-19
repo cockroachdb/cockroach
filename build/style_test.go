@@ -677,6 +677,9 @@ func TestStyle(t *testing.T) {
 				"github.com/cockroachdb/cockroach/pkg/sql/parser/sql.y:SA4006",
 				// Generated file containing many unused postgres error codes.
 				"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror/codes.go:U1000",
+				// Deprecated database/sql/driver interfaces not compatible with 1.7.
+				"github.com/cockroachdb/cockroach/pkg/sql/*.go:SA1019",
+				"github.com/cockroachdb/cockroach/pkg/cli/sql_util.go:SA1019",
 			}, " "),
 			// NB: this doesn't use `pkgScope` because `honnef.co/go/unused`
 			// produces many false positives unless it inspects all our packages.
