@@ -392,8 +392,8 @@ func TestOwnNodeCertain(t *testing.T) {
 		ba roachpb.BatchRequest,
 		_ *rpc.Context,
 	) (*roachpb.BatchResponse, error) {
-		for k, v := range ba.Txn.ObservedTimestamps {
-			act[k] = v
+		for _, v := range ba.Txn.ObservedTimestamps {
+			act[v.NodeID] = v.Timestamp
 		}
 		return ba.CreateReply(), nil
 	}

@@ -544,6 +544,7 @@ export interface roachpbBuilder {
 	ChangeReplicasTrigger: roachpb.ChangeReplicasTriggerBuilder;
 	ModifiedSpanTrigger: roachpb.ModifiedSpanTriggerBuilder;
 	InternalCommitTrigger: roachpb.InternalCommitTriggerBuilder;
+	ObservedTimestamp: roachpb.ObservedTimestampBuilder;
 	Transaction: roachpb.TransactionBuilder;
 	Intent: roachpb.IntentBuilder;
 	Lease: roachpb.LeaseBuilder;
@@ -1533,6 +1534,51 @@ export interface InternalCommitTriggerBuilder {
 
 declare module Proto2TypeScript.cockroach.roachpb {
 
+	export interface ObservedTimestamp {
+
+		
+
+node_id?: number;
+		
+
+getNodeId?() : number;
+		setNodeId?(nodeId : number): void;
+		
+
+
+
+timestamp?: util.hlc.Timestamp;
+		
+
+getTimestamp?() : util.hlc.Timestamp;
+		setTimestamp?(timestamp : util.hlc.Timestamp): void;
+		
+
+
+
+}
+
+	export interface ObservedTimestampMessage extends ObservedTimestamp {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface ObservedTimestampBuilder {
+	new(data?: ObservedTimestamp): ObservedTimestampMessage;
+	decode(buffer: ArrayBuffer) : ObservedTimestampMessage;
+	decode(buffer: ByteBuffer) : ObservedTimestampMessage;
+	decode64(buffer: string) : ObservedTimestampMessage;
+	
+}
+
+}
+
+
+declare module Proto2TypeScript.cockroach.roachpb {
+
 	export interface Transaction {
 
 		
@@ -1591,11 +1637,11 @@ getMaxTimestamp?() : util.hlc.Timestamp;
 
 
 
-observed_timestamps?: ProtoBufMap<number, util.hlc.Timestamp>;
+observed_timestamps?: ObservedTimestamp[];
 		
 
-getObservedTimestamps?() : ProtoBufMap<number, util.hlc.Timestamp>;
-		setObservedTimestamps?(observedTimestamps : ProtoBufMap<number, util.hlc.Timestamp>): void;
+getObservedTimestamps?() : ObservedTimestamp[];
+		setObservedTimestamps?(observedTimestamps : ObservedTimestamp[]): void;
 		
 
 
