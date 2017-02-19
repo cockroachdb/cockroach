@@ -703,11 +703,9 @@ func (t Transaction) Clone() Transaction {
 		t.LastHeartbeat = &h
 	}
 	mt := t.ObservedTimestamps
-	if mt != nil {
-		t.ObservedTimestamps = make(map[NodeID]hlc.Timestamp)
-		for k, v := range mt {
-			t.ObservedTimestamps[k] = v
-		}
+	if len(mt) != 0 {
+		t.ObservedTimestamps = make([]ObservedTimestamp, len(mt))
+		copy(t.ObservedTimestamps, mt)
 	}
 	// Note that we're not cloning the span keys under the assumption that the
 	// keys themselves are not mutable.
@@ -874,8 +872,8 @@ func (t *Transaction) Update(o *Transaction) {
 	}
 
 	// Absorb the collected clock uncertainty information.
-	for k, v := range o.ObservedTimestamps {
-		t.UpdateObservedTimestamp(k, v)
+	for _, v := range o.ObservedTimestamps {
+		t.UpdateObservedTimestamp(v.NodeID, v.Timestamp)
 	}
 	t.UpgradePriority(o.Priority)
 	// We can't assert against regression here since it can actually happen
@@ -929,12 +927,8 @@ func (t *Transaction) ResetObservedTimestamps() {
 // operations in the transaction. When multiple calls are made for a single
 // nodeID, the lowest timestamp prevails.
 func (t *Transaction) UpdateObservedTimestamp(nodeID NodeID, maxTS hlc.Timestamp) {
-	if t.ObservedTimestamps == nil {
-		t.ObservedTimestamps = make(map[NodeID]hlc.Timestamp)
-	}
-	if ts, ok := t.ObservedTimestamps[nodeID]; !ok || maxTS.Less(ts) {
-		t.ObservedTimestamps[nodeID] = maxTS
-	}
+	s := observedTimestampSlice(t.ObservedTimestamps)
+	t.ObservedTimestamps = s.update(nodeID, maxTS)
 }
 
 // GetObservedTimestamp returns the lowest HLC timestamp recorded from the
@@ -942,8 +936,8 @@ func (t *Transaction) UpdateObservedTimestamp(nodeID NodeID, maxTS hlc.Timestamp
 // no observation about the requested node was found. Otherwise, MaxTimestamp
 // can be lowered to the returned timestamp when reading from nodeID.
 func (t Transaction) GetObservedTimestamp(nodeID NodeID) (hlc.Timestamp, bool) {
-	ts, ok := t.ObservedTimestamps[nodeID]
-	return ts, ok
+	s := observedTimestampSlice(t.ObservedTimestamps)
+	return s.get(nodeID)
 }
 
 var _ fmt.Stringer = &Lease{}
@@ -1126,3 +1120,42 @@ func (kv KeyValueByKey) Swap(i, j int) {
 }
 
 var _ sort.Interface = KeyValueByKey{}
+
+// observedTimestampSlice maintains a sorted list of observed timestamps.
+type observedTimestampSlice []ObservedTimestamp
+
+func (s observedTimestampSlice) index(nodeID NodeID) int {
+	return sort.Search(len(s),
+		func(i int) bool {
+			return s[i].NodeID >= nodeID
+		},
+	)
+}
+
+// get the observed timestamp for the specified node, returning false if no
+// timestamp exists.
+func (s observedTimestampSlice) get(nodeID NodeID) (hlc.Timestamp, bool) {
+	i := s.index(nodeID)
+	if i < len(s) && s[i].NodeID == nodeID {
+		return s[i].Timestamp, true
+	}
+	return hlc.Timestamp{}, false
+}
+
+// update the timestamp for the specified node, or add a new entry in the
+// correct (sorted) location.
+func (s observedTimestampSlice) update(
+	nodeID NodeID, timestamp hlc.Timestamp,
+) observedTimestampSlice {
+	i := s.index(nodeID)
+	if i < len(s) && s[i].NodeID == nodeID {
+		if timestamp.Less(s[i].Timestamp) {
+			s[i].Timestamp = timestamp
+		}
+		return s
+	}
+	s = append(s, ObservedTimestamp{})
+	copy(s[i+1:], s[i:])
+	s[i] = ObservedTimestamp{NodeID: nodeID, Timestamp: timestamp}
+	return s
+}

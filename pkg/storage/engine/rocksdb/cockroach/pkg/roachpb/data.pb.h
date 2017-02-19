@@ -25,8 +25,6 @@
 #include <google/protobuf/message_lite.h>
 #include <google/protobuf/repeated_field.h>
 #include <google/protobuf/extension_set.h>
-#include <google/protobuf/map.h>
-#include <google/protobuf/map_field_lite.h>
 #include <google/protobuf/generated_enum_util.h>
 #include "cockroach/pkg/roachpb/metadata.pb.h"
 #include "cockroach/pkg/storage/engine/enginepb/mvcc.pb.h"
@@ -50,6 +48,7 @@ class KeyValue;
 class Lease;
 class MergeTrigger;
 class ModifiedSpanTrigger;
+class ObservedTimestamp;
 class Span;
 class SplitTrigger;
 class StoreIdent;
@@ -1152,6 +1151,114 @@ extern ::google::protobuf::internal::ExplicitlyConstructed<InternalCommitTrigger
 
 // -------------------------------------------------------------------
 
+class ObservedTimestamp : public ::google::protobuf::MessageLite /* @@protoc_insertion_point(class_definition:cockroach.roachpb.ObservedTimestamp) */ {
+ public:
+  ObservedTimestamp();
+  virtual ~ObservedTimestamp();
+
+  ObservedTimestamp(const ObservedTimestamp& from);
+
+  inline ObservedTimestamp& operator=(const ObservedTimestamp& from) {
+    CopyFrom(from);
+    return *this;
+  }
+
+  inline const ::std::string& unknown_fields() const {
+    return _unknown_fields_.GetNoArena(
+        &::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  }
+
+  inline ::std::string* mutable_unknown_fields() {
+    return _unknown_fields_.MutableNoArena(
+        &::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  }
+
+  static const ObservedTimestamp& default_instance();
+
+  static const ObservedTimestamp* internal_default_instance();
+
+  void Swap(ObservedTimestamp* other);
+
+  // implements Message ----------------------------------------------
+
+  inline ObservedTimestamp* New() const { return New(NULL); }
+
+  ObservedTimestamp* New(::google::protobuf::Arena* arena) const;
+  void CheckTypeAndMergeFrom(const ::google::protobuf::MessageLite& from);
+  void CopyFrom(const ObservedTimestamp& from);
+  void MergeFrom(const ObservedTimestamp& from);
+  void Clear();
+  bool IsInitialized() const;
+
+  size_t ByteSizeLong() const;
+  bool MergePartialFromCodedStream(
+      ::google::protobuf::io::CodedInputStream* input);
+  void SerializeWithCachedSizes(
+      ::google::protobuf::io::CodedOutputStream* output) const;
+  void DiscardUnknownFields();
+  int GetCachedSize() const { return _cached_size_; }
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const;
+  void InternalSwap(ObservedTimestamp* other);
+  void UnsafeMergeFrom(const ObservedTimestamp& from);
+  private:
+  inline ::google::protobuf::Arena* GetArenaNoVirtual() const {
+    return _arena_ptr_;
+  }
+  inline ::google::protobuf::Arena* MaybeArenaPtr() const {
+    return _arena_ptr_;
+  }
+  public:
+
+  ::std::string GetTypeName() const;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  // optional int32 node_id = 1;
+  bool has_node_id() const;
+  void clear_node_id();
+  static const int kNodeIdFieldNumber = 1;
+  ::google::protobuf::int32 node_id() const;
+  void set_node_id(::google::protobuf::int32 value);
+
+  // optional .cockroach.util.hlc.Timestamp timestamp = 2;
+  bool has_timestamp() const;
+  void clear_timestamp();
+  static const int kTimestampFieldNumber = 2;
+  const ::cockroach::util::hlc::Timestamp& timestamp() const;
+  ::cockroach::util::hlc::Timestamp* mutable_timestamp();
+  ::cockroach::util::hlc::Timestamp* release_timestamp();
+  void set_allocated_timestamp(::cockroach::util::hlc::Timestamp* timestamp);
+
+  // @@protoc_insertion_point(class_scope:cockroach.roachpb.ObservedTimestamp)
+ private:
+  inline void set_has_node_id();
+  inline void clear_has_node_id();
+  inline void set_has_timestamp();
+  inline void clear_has_timestamp();
+
+  ::google::protobuf::internal::ArenaStringPtr _unknown_fields_;
+  ::google::protobuf::Arena* _arena_ptr_;
+
+  ::google::protobuf::internal::HasBits<1> _has_bits_;
+  mutable int _cached_size_;
+  ::cockroach::util::hlc::Timestamp* timestamp_;
+  ::google::protobuf::int32 node_id_;
+  friend void  protobuf_InitDefaults_cockroach_2fpkg_2froachpb_2fdata_2eproto_impl();
+  friend void  protobuf_AddDesc_cockroach_2fpkg_2froachpb_2fdata_2eproto_impl();
+  friend void protobuf_AssignDesc_cockroach_2fpkg_2froachpb_2fdata_2eproto();
+  friend void protobuf_ShutdownFile_cockroach_2fpkg_2froachpb_2fdata_2eproto();
+
+  void InitAsDefaultInstance();
+};
+extern ::google::protobuf::internal::ExplicitlyConstructed<ObservedTimestamp> ObservedTimestamp_default_instance_;
+
+// -------------------------------------------------------------------
+
 class Transaction : public ::google::protobuf::MessageLite /* @@protoc_insertion_point(class_definition:cockroach.roachpb.Transaction) */ {
  public:
   Transaction();
@@ -1217,7 +1324,6 @@ class Transaction : public ::google::protobuf::MessageLite /* @@protoc_insertion
 
   // nested types ----------------------------------------------------
 
-
   // accessors -------------------------------------------------------
 
   // optional .cockroach.storage.engine.enginepb.TxnMeta meta = 1;
@@ -1275,14 +1381,17 @@ class Transaction : public ::google::protobuf::MessageLite /* @@protoc_insertion
   ::cockroach::util::hlc::Timestamp* release_max_timestamp();
   void set_allocated_max_timestamp(::cockroach::util::hlc::Timestamp* max_timestamp);
 
-  // map<int32, .cockroach.util.hlc.Timestamp> observed_timestamps = 8;
+  // repeated .cockroach.roachpb.ObservedTimestamp observed_timestamps = 8;
   int observed_timestamps_size() const;
   void clear_observed_timestamps();
   static const int kObservedTimestampsFieldNumber = 8;
-  const ::google::protobuf::Map< ::google::protobuf::int32, ::cockroach::util::hlc::Timestamp >&
-      observed_timestamps() const;
-  ::google::protobuf::Map< ::google::protobuf::int32, ::cockroach::util::hlc::Timestamp >*
+  const ::cockroach::roachpb::ObservedTimestamp& observed_timestamps(int index) const;
+  ::cockroach::roachpb::ObservedTimestamp* mutable_observed_timestamps(int index);
+  ::cockroach::roachpb::ObservedTimestamp* add_observed_timestamps();
+  ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::ObservedTimestamp >*
       mutable_observed_timestamps();
+  const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::ObservedTimestamp >&
+      observed_timestamps() const;
 
   // optional bool writing = 9;
   bool has_writing() const;
@@ -1343,17 +1452,7 @@ class Transaction : public ::google::protobuf::MessageLite /* @@protoc_insertion
 
   ::google::protobuf::internal::HasBits<1> _has_bits_;
   mutable int _cached_size_;
-  typedef ::google::protobuf::internal::MapEntryLite<
-      ::google::protobuf::int32, ::cockroach::util::hlc::Timestamp,
-      ::google::protobuf::internal::WireFormatLite::TYPE_INT32,
-      ::google::protobuf::internal::WireFormatLite::TYPE_MESSAGE,
-      0 >
-      Transaction_ObservedTimestampsEntry;
-  ::google::protobuf::internal::MapFieldLite<
-      ::google::protobuf::int32, ::cockroach::util::hlc::Timestamp,
-      ::google::protobuf::internal::WireFormatLite::TYPE_INT32,
-      ::google::protobuf::internal::WireFormatLite::TYPE_MESSAGE,
-      0 > observed_timestamps_;
+  ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::ObservedTimestamp > observed_timestamps_;
   ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::Span > intents_;
   ::google::protobuf::internal::ArenaStringPtr name_;
   ::cockroach::storage::engine::enginepb::TxnMeta* meta_;
@@ -2802,6 +2901,82 @@ inline const InternalCommitTrigger* InternalCommitTrigger::internal_default_inst
 }
 // -------------------------------------------------------------------
 
+// ObservedTimestamp
+
+// optional int32 node_id = 1;
+inline bool ObservedTimestamp::has_node_id() const {
+  return (_has_bits_[0] & 0x00000001u) != 0;
+}
+inline void ObservedTimestamp::set_has_node_id() {
+  _has_bits_[0] |= 0x00000001u;
+}
+inline void ObservedTimestamp::clear_has_node_id() {
+  _has_bits_[0] &= ~0x00000001u;
+}
+inline void ObservedTimestamp::clear_node_id() {
+  node_id_ = 0;
+  clear_has_node_id();
+}
+inline ::google::protobuf::int32 ObservedTimestamp::node_id() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.ObservedTimestamp.node_id)
+  return node_id_;
+}
+inline void ObservedTimestamp::set_node_id(::google::protobuf::int32 value) {
+  set_has_node_id();
+  node_id_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.ObservedTimestamp.node_id)
+}
+
+// optional .cockroach.util.hlc.Timestamp timestamp = 2;
+inline bool ObservedTimestamp::has_timestamp() const {
+  return (_has_bits_[0] & 0x00000002u) != 0;
+}
+inline void ObservedTimestamp::set_has_timestamp() {
+  _has_bits_[0] |= 0x00000002u;
+}
+inline void ObservedTimestamp::clear_has_timestamp() {
+  _has_bits_[0] &= ~0x00000002u;
+}
+inline void ObservedTimestamp::clear_timestamp() {
+  if (timestamp_ != NULL) timestamp_->::cockroach::util::hlc::Timestamp::Clear();
+  clear_has_timestamp();
+}
+inline const ::cockroach::util::hlc::Timestamp& ObservedTimestamp::timestamp() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.ObservedTimestamp.timestamp)
+  return timestamp_ != NULL ? *timestamp_
+                         : *::cockroach::util::hlc::Timestamp::internal_default_instance();
+}
+inline ::cockroach::util::hlc::Timestamp* ObservedTimestamp::mutable_timestamp() {
+  set_has_timestamp();
+  if (timestamp_ == NULL) {
+    timestamp_ = new ::cockroach::util::hlc::Timestamp;
+  }
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.ObservedTimestamp.timestamp)
+  return timestamp_;
+}
+inline ::cockroach::util::hlc::Timestamp* ObservedTimestamp::release_timestamp() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.ObservedTimestamp.timestamp)
+  clear_has_timestamp();
+  ::cockroach::util::hlc::Timestamp* temp = timestamp_;
+  timestamp_ = NULL;
+  return temp;
+}
+inline void ObservedTimestamp::set_allocated_timestamp(::cockroach::util::hlc::Timestamp* timestamp) {
+  delete timestamp_;
+  timestamp_ = timestamp;
+  if (timestamp) {
+    set_has_timestamp();
+  } else {
+    clear_has_timestamp();
+  }
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.ObservedTimestamp.timestamp)
+}
+
+inline const ObservedTimestamp* ObservedTimestamp::internal_default_instance() {
+  return &ObservedTimestamp_default_instance_.get();
+}
+// -------------------------------------------------------------------
+
 // Transaction
 
 // optional .cockroach.storage.engine.enginepb.TxnMeta meta = 1;
@@ -3063,22 +3238,34 @@ inline void Transaction::set_allocated_max_timestamp(::cockroach::util::hlc::Tim
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.Transaction.max_timestamp)
 }
 
-// map<int32, .cockroach.util.hlc.Timestamp> observed_timestamps = 8;
+// repeated .cockroach.roachpb.ObservedTimestamp observed_timestamps = 8;
 inline int Transaction::observed_timestamps_size() const {
   return observed_timestamps_.size();
 }
 inline void Transaction::clear_observed_timestamps() {
   observed_timestamps_.Clear();
 }
-inline const ::google::protobuf::Map< ::google::protobuf::int32, ::cockroach::util::hlc::Timestamp >&
-Transaction::observed_timestamps() const {
-  // @@protoc_insertion_point(field_map:cockroach.roachpb.Transaction.observed_timestamps)
-  return observed_timestamps_.GetMap();
+inline const ::cockroach::roachpb::ObservedTimestamp& Transaction::observed_timestamps(int index) const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.Transaction.observed_timestamps)
+  return observed_timestamps_.Get(index);
 }
-inline ::google::protobuf::Map< ::google::protobuf::int32, ::cockroach::util::hlc::Timestamp >*
+inline ::cockroach::roachpb::ObservedTimestamp* Transaction::mutable_observed_timestamps(int index) {
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.Transaction.observed_timestamps)
+  return observed_timestamps_.Mutable(index);
+}
+inline ::cockroach::roachpb::ObservedTimestamp* Transaction::add_observed_timestamps() {
+  // @@protoc_insertion_point(field_add:cockroach.roachpb.Transaction.observed_timestamps)
+  return observed_timestamps_.Add();
+}
+inline ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::ObservedTimestamp >*
 Transaction::mutable_observed_timestamps() {
-  // @@protoc_insertion_point(field_mutable_map:cockroach.roachpb.Transaction.observed_timestamps)
-  return observed_timestamps_.MutableMap();
+  // @@protoc_insertion_point(field_mutable_list:cockroach.roachpb.Transaction.observed_timestamps)
+  return &observed_timestamps_;
+}
+inline const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::ObservedTimestamp >&
+Transaction::observed_timestamps() const {
+  // @@protoc_insertion_point(field_list:cockroach.roachpb.Transaction.observed_timestamps)
+  return observed_timestamps_;
 }
 
 // optional bool writing = 9;
@@ -3695,6 +3882,8 @@ inline const AbortCacheEntry* AbortCacheEntry::internal_default_instance() {
   return &AbortCacheEntry_default_instance_.get();
 }
 #endif  // !PROTOBUF_INLINE_NOT_IN_HEADERS
+// -------------------------------------------------------------------
+
 // -------------------------------------------------------------------
 
 // -------------------------------------------------------------------

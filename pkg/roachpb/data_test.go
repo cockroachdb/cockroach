@@ -26,6 +26,7 @@ import (
 	"time"
 
 	"github.com/gogo/protobuf/proto"
+	"github.com/kr/pretty"
 	"gopkg.in/inf.v0"
 
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
@@ -412,7 +413,7 @@ var nonZeroTxn = Transaction{
 	LastHeartbeat:      &hlc.Timestamp{WallTime: 1, Logical: 2},
 	OrigTimestamp:      makeTS(30, 31),
 	MaxTimestamp:       makeTS(40, 41),
-	ObservedTimestamps: map[NodeID]hlc.Timestamp{1: makeTS(1, 2)},
+	ObservedTimestamps: []ObservedTimestamp{{NodeID: 1, Timestamp: makeTS(1, 2)}},
 	Writing:            true,
 	WriteTooOld:        true,
 	RetryOnPush:        true,
@@ -999,5 +1000,66 @@ func TestValuePrettyPrint(t *testing.T) {
 		if str := test.v.PrettyPrint(); str != test.expected {
 			t.Errorf("%d: got %q expected %q", i, str, test.expected)
 		}
+	}
+}
+
+func TestUpdateObservedTimestamps(t *testing.T) {
+	f := func(nodeID NodeID, walltime int64) ObservedTimestamp {
+		return ObservedTimestamp{
+			NodeID: nodeID,
+			Timestamp: hlc.Timestamp{
+				WallTime: walltime,
+			},
+		}
+	}
+
+	testCases := []struct {
+		input    observedTimestampSlice
+		expected observedTimestampSlice
+	}{
+		{nil, nil},
+		{
+			observedTimestampSlice{f(1, 1)},
+			observedTimestampSlice{f(1, 1)},
+		},
+		{
+			observedTimestampSlice{f(1, 1), f(1, 2)},
+			observedTimestampSlice{f(1, 1)},
+		},
+		{
+			observedTimestampSlice{f(1, 2), f(1, 1)},
+			observedTimestampSlice{f(1, 1)},
+		},
+		{
+			observedTimestampSlice{f(1, 1), f(2, 1)},
+			observedTimestampSlice{f(1, 1), f(2, 1)},
+		},
+		{
+			observedTimestampSlice{f(2, 1), f(1, 1)},
+			observedTimestampSlice{f(1, 1), f(2, 1)},
+		},
+		{
+			observedTimestampSlice{f(1, 1), f(2, 1), f(3, 1)},
+			observedTimestampSlice{f(1, 1), f(2, 1), f(3, 1)},
+		},
+		{
+			observedTimestampSlice{f(3, 1), f(2, 1), f(1, 1)},
+			observedTimestampSlice{f(1, 1), f(2, 1), f(3, 1)},
+		},
+		{
+			observedTimestampSlice{f(2, 1), f(3, 1), f(1, 1)},
+			observedTimestampSlice{f(1, 1), f(2, 1), f(3, 1)},
+		},
+	}
+	for _, c := range testCases {
+		t.Run("", func(t *testing.T) {
+			var s observedTimestampSlice
+			for _, v := range c.input {
+				s = s.update(v.NodeID, v.Timestamp)
+			}
+			if !reflect.DeepEqual(c.expected, s) {
+				t.Fatalf("%s", pretty.Diff(c.expected, s))
+			}
+		})
 	}
 }
