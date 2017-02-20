@@ -105,8 +105,8 @@ func (t *Timer) Stop() bool {
 			// it. Otherwise, we'd have to read from the channel if !t.Read.
 			timeTimerPool.Put(t.timer)
 		}
-		t.timer = nil
 	}
+	*t = Timer{}
 	timerPool.Put(t)
 	return res
 }
