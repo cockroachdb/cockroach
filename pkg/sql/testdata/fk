@@ -189,8 +189,11 @@ ALTER TABLE delivery DROP CONSTRAINT fk_item_ref_products
 statement ok
 UPDATE products SET upc = 'blah' WHERE sku = '780'
 
-statement ok
+statement error foreign key violation: "delivery" row item='885155001450' has no match in "products"
 ALTER TABLE delivery ADD FOREIGN KEY (item) REFERENCES products (upc)
+
+statement ok
+ALTER TABLE delivery ADD FOREIGN KEY (item) REFERENCES products (upc) NOT VALID
 
 query TTTTT
 SHOW CONSTRAINTS FROM delivery
@@ -232,7 +235,7 @@ INSERT INTO "user content"."customer reviews" (id, product, body, "order") VALUE
 
 statement ok
 ALTER TABLE "user content"."customer reviews"
-  ADD CONSTRAINT orderfk2 FOREIGN KEY ("order", shipment) REFERENCES orders (id, shipment)
+  ADD CONSTRAINT orderfk2 FOREIGN KEY ("order", shipment) REFERENCES orders (id, shipment) NOT VALID
 
 statement error missing value for column "shipment" in multi-part foreign key
 INSERT INTO "user content"."customer reviews" (id, product, body, "order") VALUES (4, '780', 'i ordered 101 of them', 9)

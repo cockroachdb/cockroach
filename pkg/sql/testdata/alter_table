@@ -560,3 +560,6 @@ ALTER TABLE privsview ADD d INT
 
 statement error pgcode 42809 "privsview" is not a table
 ALTER TABLE privsview SPLIT AT (42)
+
+statement error constraint cannot be marked NOT VALID
+ALTER TABLE privs ADD CONSTRAINT bar UNIQUE (c) NOT VALID
