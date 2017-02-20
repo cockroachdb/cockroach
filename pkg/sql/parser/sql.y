@@ -1470,6 +1470,7 @@ set_rest_more:
   // Special syntaxes mandated by SQL standard:
 | TIME ZONE zone_value
   {
+    /* SKIP DOC */
     $$.val = &SetTimeZone{Value: $3.expr()}
   }
 | NAMES opt_encoding { return unimplemented(sqllex) }
@@ -1610,8 +1611,14 @@ show_stmt:
   {
     $$.val = &Show{Name: "all", ClusterSetting: true}
   }
+| SHOW SESSION_USER
+  {
+    /* SKIP DOC */
+    $$.val = &Show{Name: $2}
+  }
 | SHOW DATABASE
   {
+    /* SKIP DOC */
     $$.val = &Show{Name: $2}
   }
 | SHOW COLUMNS FROM var_name
@@ -1656,18 +1663,22 @@ show_stmt:
   }
 | SHOW TIME ZONE
   {
+    /* SKIP DOC */
     $$.val = &Show{Name: "TIME ZONE"}
   }
 | SHOW TRANSACTION ISOLATION LEVEL
   {
+    /* SKIP DOC */
     $$.val = &Show{Name: "TRANSACTION ISOLATION LEVEL"}
   }
 | SHOW TRANSACTION PRIORITY
   {
+    /* SKIP DOC */
     $$.val = &Show{Name: "TRANSACTION PRIORITY"}
   }
 | SHOW TRANSACTION STATUS
   {
+    /* SKIP DOC */
     $$.val = &ShowTransactionStatus{}
   }
 | SHOW CREATE TABLE var_name

@@ -978,6 +978,15 @@ func (e *Executor) execStmtsInCurrentTxn(
 	return results, nil, nil
 }
 
+// getTransactionState retrieves a text representation of the given state.
+func getTransactionState(txnState *txnState, implicitTxn bool) string {
+	state := txnState.State
+	if implicitTxn {
+		state = NoTxn
+	}
+	return state.String()
+}
+
 // runShowTransactionState returns the state of current transaction.
 func runShowTransactionState(session *Session, implicitTxn bool) (Result, error) {
 	var result Result
@@ -987,12 +996,9 @@ func runShowTransactionState(session *Session, implicitTxn bool) (Result, error)
 	result.Rows = sqlbase.NewRowContainer(
 		session.makeBoundAccount(), sqlbase.ColTypeInfoFromResCols(result.Columns), 0,
 	)
-	state := session.TxnState.State
-	if implicitTxn {
-		state = NoTxn
-	}
+	state := getTransactionState(&session.TxnState, implicitTxn)
 	if _, err := result.Rows.AddRow(
-		session.Ctx(), parser.Datums{parser.NewDString(state.String())},
+		session.Ctx(), parser.Datums{parser.NewDString(state)},
 	); err != nil {
 		result.Rows.Close(session.Ctx())
 		return result, err
