@@ -106,6 +106,7 @@ func (t *Timer) Stop() bool {
 			timeTimerPool.Put(t.timer)
 		}
 		t.timer = nil
+		t.C = nil
 	}
 	timerPool.Put(t)
 	return res
