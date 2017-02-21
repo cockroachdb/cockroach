@@ -2356,7 +2356,7 @@ func (s *Store) LeaseCount() int {
 
 	var leaseCount int
 	newStoreReplicaVisitor(s).Visit(func(r *Replica) bool {
-		if r.hasLease(now) {
+		if r.ownsValidLease(now) {
 			leaseCount++
 		}
 		return true

@@ -864,8 +864,11 @@ func (r *Replica) getLease() (*roachpb.Lease, *roachpb.Lease) {
 	return &lease, nil
 }
 
-// hasLease returns whether this replica is the current valid leaseholder.
-func (r *Replica) hasLease(ts hlc.Timestamp) bool {
+// ownsValidLease returns whether this replica is the current valid
+// leaseholder. Note that this method does not check to see if a transfer is
+// pending, but returns the status of the current lease and ownership at the
+// specified point in time.
+func (r *Replica) ownsValidLease(ts hlc.Timestamp) bool {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return r.mu.state.Lease.OwnedBy(r.store.StoreID()) &&
@@ -912,6 +915,35 @@ func newNotLeaseHolderError(
 	return err
 }
 
+// leaseGoodToGo is a fast-path for lease checks which verifies that an
+// existing lease is valid and owned by the current store. This method should
+// not be called directly. Use redirectOnOrAcquireLease instead.
+func (r *Replica) leaseGoodToGo(ctx context.Context) (LeaseStatus, bool) {
+	if r.requiresExpiringLease() {
+		// Slow-path for expiration-based leases.
+		return LeaseStatus{}, false
+	}
+
+	timestamp := r.store.Clock().Now()
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	status := r.leaseStatus(r.mu.state.Lease, timestamp, r.mu.minLeaseProposedTS)
+	switch status.state {
+	case leaseValid:
+		if status.lease.OwnedBy(r.store.StoreID()) {
+			// We own the lease...
+			if repDesc, err := r.getReplicaDescriptorRLocked(); err == nil {
+				if _, ok := r.mu.pendingLeaseRequest.TransferInProgress(repDesc.ReplicaID); !ok {
+					// ...and there is no transfer pending.
+					return status, true
+				}
+			}
+		}
+	}
+	return LeaseStatus{}, false
+}
+
 // redirectOnOrAcquireLease checks whether this replica has the lease
 // at the current timestamp. If it does, returns success. If another
 // replica currently holds the lease, redirects by returning
@@ -926,6 +958,10 @@ func newNotLeaseHolderError(
 //  will not incur latency waiting for the command to complete.
 //  Reads, however, must wait.
 func (r *Replica) redirectOnOrAcquireLease(ctx context.Context) (LeaseStatus, *roachpb.Error) {
+	if status, ok := r.leaseGoodToGo(ctx); ok {
+		return status, nil
+	}
+
 	// Loop until the lease is held or the replica ascertains the actual
 	// lease holder. Returns also on context.Done() (timeout or cancellation).
 	var status LeaseStatus
@@ -4394,7 +4430,7 @@ func (r *Replica) gossipFirstRange(ctx context.Context) {
 // inherently inconsistent and asynchronous, we're using the lease as a way to
 // ensure that only one node gossips at a time.
 func (r *Replica) shouldGossip() bool {
-	return r.hasLease(r.store.Clock().Now())
+	return r.ownsValidLease(r.store.Clock().Now())
 }
 
 // maybeGossipSystemConfig scans the entire SystemConfig span and gossips it.
