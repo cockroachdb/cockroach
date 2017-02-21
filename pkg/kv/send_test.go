@@ -26,6 +26,7 @@ import (
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
@@ -125,16 +126,13 @@ func TestRetryableError(t *testing.T) {
 	}
 	// Wait until the client becomes healthy and shut down the server.
 	testutils.SucceedsSoon(t, func() error {
-		if !clientContext.IsConnHealthy(addr) {
-			return errors.Errorf("client not yet healthy")
-		}
-		return nil
+		return clientContext.ConnHealth(addr)
 	})
 	serverStopper.Stop()
 	// Wait until the client becomes unhealthy.
 	testutils.SucceedsSoon(t, func() error {
-		if clientContext.IsConnHealthy(addr) {
-			return errors.Errorf("client not yet unhealthy")
+		if err := clientContext.ConnHealth(addr); grpc.Code(err) != codes.Unavailable {
+			return errors.Errorf("unexpected error: %v", err)
 		}
 		return nil
 	})
