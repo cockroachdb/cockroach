@@ -100,7 +100,7 @@ type ProposalData struct {
 // application of this proposal.
 func (proposal *ProposalData) finishLocked(pr proposalResult) {
 	if proposal.endCmds != nil {
-		proposal.endCmds.doneLocked(pr.Reply, pr.Err, pr.ProposalRetry)
+		proposal.endCmds.done(pr.Reply, pr.Err, pr.ProposalRetry)
 		proposal.endCmds = nil
 	}
 	proposal.doneCh <- pr
@@ -393,9 +393,9 @@ func (r *Replica) leasePostApply(
 			log.Infof(ctx, "new range lease %s following %s [physicalTime=%s]",
 				newLease, prevLease, r.store.Clock().PhysicalTime())
 		}
-		r.mu.Lock()
-		r.mu.tsCache.SetLowWater(newLease.Start)
-		r.mu.Unlock()
+		r.tsCacheMu.Lock()
+		r.tsCacheMu.cache.SetLowWater(newLease.Start)
+		r.tsCacheMu.Unlock()
 
 		// Gossip the first range whenever its lease is acquired. We check to
 		// make sure the lease is active so that a trailing replica won't process
@@ -409,9 +409,9 @@ func (r *Replica) leasePostApply(
 		// anything currently cached. The timestamp cache is only used by the
 		// lease holder. Note that we'll call SetLowWater when we next acquire
 		// the lease.
-		r.mu.Lock()
-		r.mu.tsCache.Clear(r.store.Clock().Now())
-		r.mu.Unlock()
+		r.tsCacheMu.Lock()
+		r.tsCacheMu.cache.Clear(r.store.Clock().Now())
+		r.tsCacheMu.Unlock()
 	}
 
 	if !iAmTheLeaseHolder && r.IsLeaseValid(newLease, r.store.Clock().Now()) {
