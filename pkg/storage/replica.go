@@ -80,7 +80,6 @@ const (
 	replicaChangeTxnName = "change-replica"
 
 	defaultReplicaRaftMuWarnThreshold = 500 * time.Millisecond
-	defaultReplicaMuWarnThreshold     = 500 * time.Millisecond
 )
 
 // This flag controls whether Transaction entries are automatically gc'ed
@@ -289,7 +288,7 @@ type Replica struct {
 		// Protects all fields in the cmdQMu struct.
 		//
 		// Locking notes: Replica.mu < Replica.cmdQMu
-		timedMutex
+		syncutil.Mutex
 		// Enforces at most one command is running per key(s). The global
 		// component tracks user writes (i.e. all keys for which keys.Addr is
 		// the identity), the local component the rest (e.g. RangeDescriptor,
@@ -299,9 +298,7 @@ type Replica struct {
 
 	mu struct {
 		// Protects all fields in the mu struct.
-		//
-		// TODO(peter): evaluate runtime overhead of the timed mutex.
-		timedMutex
+		syncutil.RWMutex
 		// Has the replica been destroyed.
 		destroyed error
 		// Corrupted persistently (across process restarts) indicates whether the
@@ -520,7 +517,7 @@ func (r *Replica) withRaftGroupLocked(
 			// performed. Perhaps we should move the logic for campaigning single
 			// replica ranges there so that normally we only eagerly campaign when
 			// proposing.
-			shouldCampaignOnCreation = r.isSoloReplicaLocked()
+			shouldCampaignOnCreation = r.isSoloReplicaRLocked()
 		}
 		if shouldCampaignOnCreation {
 			log.VEventf(ctx, 3, "campaigning")
@@ -582,24 +579,6 @@ func newReplica(rangeID roachpb.RangeID, store *Store) *Replica {
 		},
 	)
 	r.raftMu = makeTimedMutex(raftMuLogger)
-
-	replicaMuLogger := thresholdLogger(
-		r.AnnotateCtx(context.Background()),
-		defaultReplicaMuWarnThreshold,
-		func(ctx context.Context, msg string, args ...interface{}) {
-			log.Warningf(ctx, "replicaMu: "+msg, args...)
-		},
-	)
-	r.mu.timedMutex = makeTimedMutex(replicaMuLogger)
-
-	cmdQMuLogger := thresholdLogger(
-		r.AnnotateCtx(context.Background()),
-		defaultReplicaMuWarnThreshold,
-		func(ctx context.Context, msg string, args ...interface{}) {
-			log.Warningf(ctx, "cmdQMu: "+msg, args...)
-		},
-	)
-	r.cmdQMu.timedMutex = makeTimedMutex(cmdQMuLogger)
 	return r
 }
 
@@ -626,7 +605,7 @@ func (r *Replica) initLocked(
 	desc *roachpb.RangeDescriptor, clock *hlc.Clock, replicaID roachpb.ReplicaID,
 ) error {
 	ctx := r.AnnotateCtx(context.TODO())
-	if r.mu.state.Desc != nil && r.isInitializedLocked() {
+	if r.mu.state.Desc != nil && r.isInitializedRLocked() {
 		log.Fatalf(ctx, "r%d: cannot reinitialize an initialized replica", desc.RangeID)
 	}
 	if desc.IsInitialized() && replicaID != 0 {
@@ -686,7 +665,7 @@ func (r *Replica) initLocked(
 	if err := r.setReplicaIDLocked(replicaID); err != nil {
 		return err
 	}
-	r.assertStateLocked(r.store.Engine())
+	r.assertStateRLocked(r.store.Engine())
 	return nil
 }
 
@@ -814,9 +793,9 @@ func (r *Replica) setEstimatedCommitIndexLocked(commit uint64) {
 	}
 }
 
-// getEstimatedBehindCountLocked returns an estimate of how far this replica is
+// getEstimatedBehindCountRLocked returns an estimate of how far this replica is
 // behind. A return value of 0 indicates that the replica is up to date.
-func (r *Replica) getEstimatedBehindCountLocked(raftStatus *raft.Status) int64 {
+func (r *Replica) getEstimatedBehindCountRLocked(raftStatus *raft.Status) int64 {
 	if r.mu.quiescent {
 		// The range is quiescent, so it is up to date.
 		return 0
@@ -848,8 +827,8 @@ func (r *Replica) getEstimatedBehindCountLocked(raftStatus *raft.Status) int64 {
 
 // GetMaxBytes atomically gets the range maximum byte limit.
 func (r *Replica) GetMaxBytes() int64 {
-	r.mu.Lock()
-	defer r.mu.Unlock()
+	r.mu.RLock()
+	defer r.mu.RUnlock()
 	return r.mu.maxBytes
 }
 
@@ -868,16 +847,16 @@ func (r *Replica) IsFirstRange() bool {
 
 // IsDestroyed returns a non-nil error if the replica has been destroyed.
 func (r *Replica) IsDestroyed() error {
-	r.mu.Lock()
-	defer r.mu.Unlock()
+	r.mu.RLock()
+	defer r.mu.RUnlock()
 	return r.mu.destroyed
 }
 
 // getLease returns the current lease, and the tentative next one, if a lease
 // request initiated by this replica is in progress.
 func (r *Replica) getLease() (*roachpb.Lease, *roachpb.Lease) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
+	r.mu.RLock()
+	defer r.mu.RUnlock()
 	lease := *r.mu.state.Lease
 	if nextLease, ok := r.mu.pendingLeaseRequest.RequestPending(); ok {
 		return &lease, &nextLease
@@ -887,8 +866,8 @@ func (r *Replica) getLease() (*roachpb.Lease, *roachpb.Lease) {
 
 // hasLease returns whether this replica is the current valid leaseholder.
 func (r *Replica) hasLease(ts hlc.Timestamp) bool {
-	r.mu.Lock()
-	defer r.mu.Unlock()
+	r.mu.RLock()
+	defer r.mu.RUnlock()
 	return r.mu.state.Lease.OwnedBy(r.store.StoreID()) &&
 		r.leaseStatus(r.mu.state.Lease, ts, r.mu.minLeaseProposedTS).state == leaseValid
 }
@@ -896,12 +875,12 @@ func (r *Replica) hasLease(ts hlc.Timestamp) bool {
 // IsLeaseValid returns true if the replica's lease is owned by this
 // replica and is valid (not expired, not in stasis).
 func (r *Replica) IsLeaseValid(lease *roachpb.Lease, ts hlc.Timestamp) bool {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	return r.isLeaseValidLocked(lease, ts)
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.isLeaseValidRLocked(lease, ts)
 }
 
-func (r *Replica) isLeaseValidLocked(lease *roachpb.Lease, ts hlc.Timestamp) bool {
+func (r *Replica) isLeaseValidRLocked(lease *roachpb.Lease, ts hlc.Timestamp) bool {
 	return r.leaseStatus(lease, ts, r.mu.minLeaseProposedTS).state == leaseValid
 }
 
@@ -982,7 +961,7 @@ func (r *Replica) redirectOnOrAcquireLease(ctx context.Context) (LeaseStatus, *r
 				// TODO(andrei): If the lease is being transferred, consider returning a
 				// new error type so the client backs off until the transfer is
 				// completed.
-				repDesc, err := r.getReplicaDescriptorLocked()
+				repDesc, err := r.getReplicaDescriptorRLocked()
 				if err != nil {
 					return nil, roachpb.NewError(err)
 				}
@@ -1112,25 +1091,25 @@ func (r *Replica) redirectOnOrAcquireLease(ctx context.Context) (LeaseStatus, *r
 // another node. It is false when a range has been created in response
 // to an incoming message but we are waiting for our initial snapshot.
 func (r *Replica) IsInitialized() bool {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	return r.isInitializedLocked()
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.isInitializedRLocked()
 }
 
-// isInitializedLocked is true if we know the metadata of this range, either
+// isInitializedRLocked is true if we know the metadata of this range, either
 // because we created it or we have received an initial snapshot from
 // another node. It is false when a range has been created in response
 // to an incoming message but we are waiting for our initial snapshot.
 // isInitializedLocked requires that the replica lock is held.
-func (r *Replica) isInitializedLocked() bool {
+func (r *Replica) isInitializedRLocked() bool {
 	return r.mu.state.Desc.IsInitialized()
 }
 
 // Desc returns the authoritative range descriptor, acquiring a replica lock in
 // the process.
 func (r *Replica) Desc() *roachpb.RangeDescriptor {
-	r.mu.Lock()
-	defer r.mu.Unlock()
+	r.mu.RLock()
+	defer r.mu.RUnlock()
 	return r.mu.state.Desc
 }
 
@@ -1177,13 +1156,14 @@ func (r *Replica) setDescWithoutProcessUpdate(desc *roachpb.RangeDescriptor) {
 // descriptor. Returns a *RangeNotFoundError if the replica is not found.
 // No other errors are returned.
 func (r *Replica) GetReplicaDescriptor() (roachpb.ReplicaDescriptor, error) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	return r.getReplicaDescriptorLocked()
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.getReplicaDescriptorRLocked()
 }
 
-// getReplicaDescriptorLocked is like getReplicaDescriptor, but assumes that r.mu is held.
-func (r *Replica) getReplicaDescriptorLocked() (roachpb.ReplicaDescriptor, error) {
+// getReplicaDescriptorRLocked is like getReplicaDescriptor, but assumes that
+// r.mu is held for either reading or writing.
+func (r *Replica) getReplicaDescriptorRLocked() (roachpb.ReplicaDescriptor, error) {
 	repDesc, ok := r.mu.state.Desc.GetReplicaDescriptor(r.store.StoreID())
 	if ok {
 		return repDesc, nil
@@ -1203,8 +1183,8 @@ func (r *Replica) setLastReplicaDescriptors(req *RaftMessageRequest) {
 
 // GetMVCCStats returns a copy of the MVCC stats object for this range.
 func (r *Replica) GetMVCCStats() enginepb.MVCCStats {
-	r.mu.Lock()
-	defer r.mu.Unlock()
+	r.mu.RLock()
+	defer r.mu.RUnlock()
 	return r.mu.state.Stats
 }
 
@@ -1288,12 +1268,12 @@ func (r *Replica) setQueueLastProcessed(
 // RaftStatus returns the current raft status of the replica. It returns nil
 // if the Raft group has not been initialized yet.
 func (r *Replica) RaftStatus() *raft.Status {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	return r.raftStatusLocked()
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.raftStatusRLocked()
 }
 
-func (r *Replica) raftStatusLocked() *raft.Status {
+func (r *Replica) raftStatusRLocked() *raft.Status {
 	if rg := r.mu.internalRaftGroup; rg != nil {
 		return rg.Status()
 	}
@@ -1303,8 +1283,8 @@ func (r *Replica) raftStatusLocked() *raft.Status {
 // State returns a copy of the internal state of the Replica, along with some
 // auxiliary information.
 func (r *Replica) State() storagebase.RangeInfo {
-	r.mu.Lock()
-	defer r.mu.Unlock()
+	r.mu.RLock()
+	defer r.mu.RUnlock()
 	var ri storagebase.RangeInfo
 	ri.ReplicaState = *(protoutil.Clone(&r.mu.state)).(*storagebase.ReplicaState)
 	ri.LastIndex = r.mu.lastIndex
@@ -1316,17 +1296,17 @@ func (r *Replica) State() storagebase.RangeInfo {
 }
 
 func (r *Replica) assertState(reader engine.Reader) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.assertStateLocked(reader)
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	r.assertStateRLocked(reader)
 }
 
-// assertStateLocked can be called from the Raft goroutine to check that the
+// assertStateRLocked can be called from the Raft goroutine to check that the
 // in-memory and on-disk states of the Replica are congruent. See also
 // assertState if the replica mutex is not currently held.
 //
 // TODO(tschottdorf): Consider future removal (for example, when #7224 is resolved).
-func (r *Replica) assertStateLocked(reader engine.Reader) {
+func (r *Replica) assertStateRLocked(reader engine.Reader) {
 	ctx := r.AnnotateCtx(context.TODO())
 	diskState, err := r.stateLoader.load(ctx, reader, r.mu.state.Desc)
 	if err != nil {
@@ -1341,30 +1321,33 @@ func (r *Replica) assertStateLocked(reader engine.Reader) {
 // not yet been initialized. If not, it is created and set to campaign
 // if this replica is the most recent owner of the range lease.
 func (r *Replica) maybeInitializeRaftGroup(ctx context.Context) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
+	r.mu.RLock()
 	// If this replica hasn't initialized the Raft group, create it and
 	// unquiesce and wake the leader to ensure the replica comes up to date.
-	if r.mu.internalRaftGroup == nil {
-		// Acquire raftMu, but need to maintain lock ordering (raftMu then mu).
-		r.mu.Unlock()
-		r.raftMu.Lock()
-		defer r.raftMu.Unlock()
-		r.mu.Lock()
-		// Campaign if this replica is the current lease holder to avoid
-		// an election storm after a recent split. If no replica is the
-		// lease holder, all replicas must campaign to avoid waiting for
-		// an election timeout to acquire the lease. In the latter case,
-		// there's less chance of an election storm because this replica
-		// will only campaign if it's been idle for >= election timeout,
-		// so there's most likely been no traffic to the range.
-		shouldCampaignOnCreation := r.mu.state.Lease.OwnedBy(r.store.StoreID()) ||
-			r.leaseStatus(r.mu.state.Lease, r.store.Clock().Now(), r.mu.minLeaseProposedTS).state != leaseValid
-		if err := r.withRaftGroupLocked(shouldCampaignOnCreation, func(raftGroup *raft.RawNode) (bool, error) {
-			return true, nil
-		}); err != nil {
-			log.ErrEventf(ctx, "unable to initialize raft group: %s", err)
-		}
+	initialized := r.mu.internalRaftGroup != nil
+	r.mu.RUnlock()
+	if initialized {
+		return
+	}
+
+	// Acquire raftMu, but need to maintain lock ordering (raftMu then mu).
+	r.raftMu.Lock()
+	defer r.raftMu.Unlock()
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	// Campaign if this replica is the current lease holder to avoid
+	// an election storm after a recent split. If no replica is the
+	// lease holder, all replicas must campaign to avoid waiting for
+	// an election timeout to acquire the lease. In the latter case,
+	// there's less chance of an election storm because this replica
+	// will only campaign if it's been idle for >= election timeout,
+	// so there's most likely been no traffic to the range.
+	shouldCampaignOnCreation := r.mu.state.Lease.OwnedBy(r.store.StoreID()) ||
+		r.leaseStatus(r.mu.state.Lease, r.store.Clock().Now(), r.mu.minLeaseProposedTS).state != leaseValid
+	if err := r.withRaftGroupLocked(shouldCampaignOnCreation, func(raftGroup *raft.RawNode) (bool, error) {
+		return true, nil
+	}); err != nil {
+		log.ErrEventf(ctx, "unable to initialize raft group: %s", err)
 	}
 }
 
@@ -1940,10 +1923,7 @@ func (r *Replica) addReadOnlyCmd(
 		}
 	}()
 
-	r.mu.Lock()
-	err := r.mu.destroyed
-	r.mu.Unlock()
-	if err != nil {
+	if err := r.IsDestroyed(); err != nil {
 		return nil, roachpb.NewError(err)
 	}
 
@@ -2362,10 +2342,7 @@ func makeIDKey() storagebase.CmdIDKey {
 func (r *Replica) propose(
 	ctx context.Context, lease *roachpb.Lease, ba roachpb.BatchRequest, endCmds *endCmds,
 ) (chan proposalResult, func() bool, error) {
-	r.mu.Lock()
-	err := r.mu.destroyed
-	r.mu.Unlock()
-	if err != nil {
+	if err := r.IsDestroyed(); err != nil {
 		return nil, nil, err
 	}
 
@@ -2392,7 +2369,7 @@ func (r *Replica) propose(
 	if pErr != nil {
 		if proposal.Local == nil || proposal.command.ReplicatedEvalResult == nil {
 			return nil, nil, errors.Errorf(
-				"requestToProposal returned error %s without eval results", err)
+				"requestToProposal returned error %s without eval results", pErr)
 		}
 		intents := proposal.Local.detachIntents()
 		r.handleEvalResult(ctx, proposal.Local, proposal.command.ReplicatedEvalResult)
@@ -2408,7 +2385,7 @@ func (r *Replica) propose(
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	repDesc, err := r.getReplicaDescriptorLocked()
+	repDesc, err := r.getReplicaDescriptorRLocked()
 	if err != nil {
 		return nil, nil, err
 	}
@@ -2451,7 +2428,7 @@ func (r *Replica) submitProposalLocked(p *ProposalData) error {
 	return defaultSubmitProposalLocked(r, p)
 }
 
-func (r *Replica) isSoloReplicaLocked() bool {
+func (r *Replica) isSoloReplicaRLocked() bool {
 	return len(r.mu.state.Desc.Replicas) == 1 &&
 		r.mu.state.Desc.Replicas[0].ReplicaID == r.mu.replicaID
 }
@@ -2970,7 +2947,7 @@ func (r *Replica) maybeQuiesceLocked() bool {
 	// otherwise the replica which is the valid leaseholder may have
 	// pending commands which it's waiting on this leader to propose.
 	if l := r.mu.state.Lease; !l.OwnedBy(r.store.StoreID()) &&
-		r.isLeaseValidLocked(l, r.store.Clock().Now()) {
+		r.isLeaseValidRLocked(l, r.store.Clock().Now()) {
 		if log.V(4) {
 			log.Infof(ctx, "not quiescing: not leaseholder")
 		}
@@ -3025,7 +3002,7 @@ func (r *Replica) maybeQuiesceLocked() bool {
 		}
 		return false
 	}
-	fromReplica, fromErr := r.getReplicaDescriptorByIDLocked(r.mu.replicaID, r.mu.lastToReplica)
+	fromReplica, fromErr := r.getReplicaDescriptorByIDRLocked(r.mu.replicaID, r.mu.lastToReplica)
 	if fromErr != nil {
 		if log.V(4) {
 			log.Infof(ctx, "not quiescing: cannot find from replica (%d)", r.mu.replicaID)
@@ -3038,7 +3015,7 @@ func (r *Replica) maybeQuiesceLocked() bool {
 		if roachpb.ReplicaID(id) == r.mu.replicaID {
 			continue
 		}
-		toReplica, toErr := r.getReplicaDescriptorByIDLocked(
+		toReplica, toErr := r.getReplicaDescriptorByIDRLocked(
 			roachpb.ReplicaID(id), r.mu.lastFromReplica)
 		if toErr != nil {
 			if log.V(4) {
@@ -3210,7 +3187,7 @@ func (r *Replica) refreshProposalsLocked(refreshAtDelta int, reason refreshRaftR
 	}
 }
 
-func (r *Replica) getReplicaDescriptorByIDLocked(
+func (r *Replica) getReplicaDescriptorByIDRLocked(
 	replicaID roachpb.ReplicaID, fallback roachpb.ReplicaDescriptor,
 ) (roachpb.ReplicaDescriptor, error) {
 	if repDesc, ok := r.mu.state.Desc.GetReplicaDescriptorByID(replicaID); ok {
@@ -3267,8 +3244,8 @@ func (r *Replica) maybeCoalesceHeartbeat(
 
 func (r *Replica) sendRaftMessage(ctx context.Context, msg raftpb.Message) {
 	r.mu.Lock()
-	fromReplica, fromErr := r.getReplicaDescriptorByIDLocked(roachpb.ReplicaID(msg.From), r.mu.lastToReplica)
-	toReplica, toErr := r.getReplicaDescriptorByIDLocked(roachpb.ReplicaID(msg.To), r.mu.lastFromReplica)
+	fromReplica, fromErr := r.getReplicaDescriptorByIDRLocked(roachpb.ReplicaID(msg.From), r.mu.lastToReplica)
+	toReplica, toErr := r.getReplicaDescriptorByIDRLocked(roachpb.ReplicaID(msg.To), r.mu.lastFromReplica)
 	r.mu.Unlock()
 
 	if fromErr != nil {
@@ -3947,8 +3924,8 @@ func (r *Replica) applyRaftCommandInBatch(
 func (r *Replica) checkIfTxnAborted(
 	ctx context.Context, b engine.Reader, txn roachpb.Transaction,
 ) *roachpb.Error {
-	r.mu.Lock()
-	defer r.mu.Unlock()
+	r.mu.RLock()
+	defer r.mu.RUnlock()
 
 	var entry roachpb.AbortCacheEntry
 	aborted, err := r.abortCache.Get(ctx, b, *txn.ID, &entry)
@@ -4169,9 +4146,9 @@ func optimizePuts(
 // keys are garbage collected. Reads and writes at timestamps <= this time will
 // not be served.
 func (r *Replica) GCThreshold() hlc.Timestamp {
-	r.mu.Lock()
+	r.mu.RLock()
 	threshold := r.mu.state.GCThreshold
-	r.mu.Unlock()
+	r.mu.RUnlock()
 	return threshold
 }
 
@@ -4575,18 +4552,18 @@ func (r *Replica) loadSystemConfig(ctx context.Context) (config.SystemConfig, er
 // needsSplitBySize returns true if the size of the range requires it
 // to be split.
 func (r *Replica) needsSplitBySize() bool {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	return r.needsSplitBySizeLocked()
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.needsSplitBySizeRLocked()
 }
 
-func (r *Replica) needsSplitBySizeLocked() bool {
+func (r *Replica) needsSplitBySizeRLocked() bool {
 	maxBytes := r.mu.maxBytes
 	size := r.mu.state.Stats.Total()
 	return maxBytes > 0 && size > maxBytes
 }
 
-func (r *Replica) exceedsDoubleSplitSizeLocked() bool {
+func (r *Replica) exceedsDoubleSplitSizeRLocked() bool {
 	maxBytes := r.mu.maxBytes
 	size := r.mu.state.Stats.Total()
 	return maxBytes > 0 && size > maxBytes*2
@@ -4642,13 +4619,13 @@ func (r *Replica) metrics(
 	cfg config.SystemConfig,
 	livenessMap map[roachpb.NodeID]bool,
 ) replicaMetrics {
-	r.mu.Lock()
-	raftStatus := r.raftStatusLocked()
+	r.mu.RLock()
+	raftStatus := r.raftStatusRLocked()
 	status := r.leaseStatus(r.mu.state.Lease, now, r.mu.minLeaseProposedTS)
 	quiescent := r.mu.quiescent || r.mu.internalRaftGroup == nil
 	desc := r.mu.state.Desc
-	selfBehindCount := r.getEstimatedBehindCountLocked(raftStatus)
-	r.mu.Unlock()
+	selfBehindCount := r.getEstimatedBehindCountRLocked(raftStatus)
+	r.mu.RUnlock()
 
 	return calcReplicaMetrics(ctx, now, cfg, livenessMap, desc,
 		raftStatus, status, r.store.StoreID(), quiescent, selfBehindCount)
