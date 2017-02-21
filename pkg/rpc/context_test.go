@@ -25,6 +25,7 @@ import (
 
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
 
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -137,8 +138,8 @@ func TestHeartbeatHealth(t *testing.T) {
 	}
 
 	// Should be unhealthy in the absence of heartbeats.
-	if clientCtx.IsConnHealthy(remoteAddr) {
-		t.Fatalf("expected %s to be unhealthy", remoteAddr)
+	if err := clientCtx.ConnHealth(remoteAddr); err != errNotHeartbeated {
+		t.Fatalf("unexpected error: %v", err)
 	}
 
 	func() {
@@ -146,17 +147,14 @@ func TestHeartbeatHealth(t *testing.T) {
 
 		// Should become healthy in the presence of heartbeats.
 		testutils.SucceedsSoon(t, func() error {
-			if !clientCtx.IsConnHealthy(remoteAddr) {
-				return errors.Errorf("expected %s to be healthy", remoteAddr)
-			}
-			return nil
+			return clientCtx.ConnHealth(remoteAddr)
 		})
 	}()
 
 	// Should become unhealthy again in the absence of heartbeats.
 	testutils.SucceedsSoon(t, func() error {
-		if clientCtx.IsConnHealthy(remoteAddr) {
-			return errors.Errorf("expected %s to be unhealthy", remoteAddr)
+		if err := clientCtx.ConnHealth(remoteAddr); grpc.Code(err) != codes.DeadlineExceeded {
+			return errors.Errorf("unexpected error: %v", err)
 		}
 		return nil
 	})
@@ -166,15 +164,12 @@ func TestHeartbeatHealth(t *testing.T) {
 
 		// Should become healthy again in the presence of heartbeats.
 		testutils.SucceedsSoon(t, func() error {
-			if !clientCtx.IsConnHealthy(remoteAddr) {
-				return errors.Errorf("expected %s to be healthy", remoteAddr)
-			}
-			return nil
+			return clientCtx.ConnHealth(remoteAddr)
 		})
 	}()
 
-	if clientCtx.IsConnHealthy("non-existent connection") {
-		t.Errorf("non-existent connection is reported as healthy")
+	if err := clientCtx.ConnHealth("non-existent connection"); err != errNotConnected {
+		t.Errorf("unexpected error: %v", err)
 	}
 }
 
@@ -259,10 +254,7 @@ func TestHeartbeatHealthTransport(t *testing.T) {
 
 	// Everything is normal; should become healthy.
 	testutils.SucceedsSoon(t, func() error {
-		if !clientCtx.IsConnHealthy(remoteAddr) {
-			return errors.Errorf("expected %s to be healthy", remoteAddr)
-		}
-		return nil
+		return clientCtx.ConnHealth(remoteAddr)
 	})
 
 	closeConns := func() error {
@@ -285,8 +277,8 @@ func TestHeartbeatHealthTransport(t *testing.T) {
 
 	// Should become unhealthy now that the connection was closed.
 	testutils.SucceedsSoon(t, func() error {
-		if clientCtx.IsConnHealthy(remoteAddr) {
-			return errors.Errorf("expected %s to be unhealthy", remoteAddr)
+		if err := clientCtx.ConnHealth(remoteAddr); grpc.Code(err) != codes.DeadlineExceeded {
+			return errors.Errorf("unexpected error: %v", err)
 		}
 		return nil
 	})
@@ -294,10 +286,7 @@ func TestHeartbeatHealthTransport(t *testing.T) {
 	// Should become healthy again after GRPC reconnects.
 	connectChan <- struct{}{}
 	testutils.SucceedsSoon(t, func() error {
-		if !clientCtx.IsConnHealthy(remoteAddr) {
-			return errors.Errorf("expected %s to be healthy", remoteAddr)
-		}
-		return nil
+		return clientCtx.ConnHealth(remoteAddr)
 	})
 
 	// Close the listener and all the connections.
@@ -310,8 +299,8 @@ func TestHeartbeatHealthTransport(t *testing.T) {
 
 	// Should become unhealthy again now that the connection was closed.
 	testutils.SucceedsSoon(t, func() error {
-		if clientCtx.IsConnHealthy(remoteAddr) {
-			return errors.Errorf("expected %s to be unhealthy", remoteAddr)
+		if err := clientCtx.ConnHealth(remoteAddr); grpc.Code(err) != codes.Unavailable {
+			return errors.Errorf("unexpected error: %v", err)
 		}
 		return nil
 	})
@@ -319,8 +308,8 @@ func TestHeartbeatHealthTransport(t *testing.T) {
 	// Should stay unhealthy despite reconnection attempts.
 	errUnhealthy := errors.New("connection is still unhealthy")
 	if err := util.RetryForDuration(100*clientCtx.HeartbeatInterval, func() error {
-		if clientCtx.IsConnHealthy(remoteAddr) {
-			return errors.Errorf("expected %s to be unhealthy", remoteAddr)
+		if err := clientCtx.ConnHealth(remoteAddr); grpc.Code(err) != codes.Unavailable {
+			return errors.Errorf("unexpected error: %v", err)
 		}
 		return errUnhealthy
 	}); err != errUnhealthy {
