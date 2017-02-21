@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/pkg/errors"
 )
 
@@ -667,6 +668,32 @@ func (p *PhysicalPlan) PopulateEndpoints(nodeAddresses map[roachpb.NodeID]string
 		}
 		router.Streams = append(router.Streams, endpoint)
 	}
+}
+
+// GenerateFlowSpecs takes a plan (with populated endpoints) and generates the
+// set of FlowSpecs (one per node involved in the plan).
+//
+// The nodeAddresses map contains the address of all the nodes referenced in the
+// plan.
+func (p *PhysicalPlan) GenerateFlowSpecs(
+	nodeAddresses map[roachpb.NodeID]string,
+) map[roachpb.NodeID]distsqlrun.FlowSpec {
+	flowID := distsqlrun.FlowID{UUID: uuid.MakeV4()}
+
+	// nodeAddresses contains addresses for the nodes that were referenced during
+	// planning, so we're likely going to have this many nodes (and we have one
+	// flow per node).
+	flows := make(map[roachpb.NodeID]distsqlrun.FlowSpec, len(nodeAddresses))
+
+	for _, proc := range p.Processors {
+		flowSpec, ok := flows[proc.Node]
+		if !ok {
+			flowSpec = distsqlrun.FlowSpec{FlowID: flowID}
+		}
+		flowSpec.Processors = append(flowSpec.Processors, proc.Spec)
+		flows[proc.Node] = flowSpec
+	}
+	return flows
 }
 
 // MergePlans merges the processors and streams of two plan into a new plan.

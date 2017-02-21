@@ -35,7 +35,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 )
@@ -1322,35 +1321,11 @@ func (dsp *distSQLPlanner) Run(
 
 	recv.resultToStreamColMap = plan.planToStreamColMap
 
-	// Split the processors by nodeID to create the FlowSpecs.
-	flowID := distsqlrun.FlowID{UUID: uuid.MakeV4()}
-	nodeIDMap := make(map[roachpb.NodeID]int)
-	// nodeAddresses contains addresses for the nodes that were referenced during
-	// planning, so we're likely going to have this many nodes (and we have one
-	// flow per node).
-	nodeIDs := make([]roachpb.NodeID, 0, len(planCtx.nodeAddresses))
-	flows := make([]distsqlrun.FlowSpec, 0, len(planCtx.nodeAddresses))
-
-	for _, p := range plan.Processors {
-		idx, ok := nodeIDMap[p.Node]
-		if !ok {
-			flow := distsqlrun.FlowSpec{FlowID: flowID}
-			idx = len(flows)
-			flows = append(flows, flow)
-			nodeIDs = append(nodeIDs, p.Node)
-			nodeIDMap[p.Node] = idx
-		}
-		flows[idx].Processors = append(flows[idx].Processors, p.Spec)
-	}
+	flows := plan.GenerateFlowSpecs(planCtx.nodeAddresses)
 
 	if logPlanDiagram {
 		log.VEvent(ctx, 1, "creating plan diagram")
-		nodeNames := make([]string, len(nodeIDs))
-		for i, n := range nodeIDs {
-			nodeNames[i] = n.String()
-		}
-
-		json, url, err := distsqlrun.GeneratePlanDiagramWithURL(flows, nodeNames)
+		json, url, err := distsqlrun.GeneratePlanDiagramWithURL(flows)
 		if err != nil {
 			log.Infof(ctx, "Error generating diagram: %s", err)
 		} else {
@@ -1362,14 +1337,14 @@ func (dsp *distSQLPlanner) Run(
 	log.VEvent(ctx, 1, "running DistSQL plan")
 
 	// Start the flows on all other nodes.
-	for i, nodeID := range nodeIDs {
+	for nodeID, flowSpec := range flows {
 		if nodeID == thisNodeID {
 			// Skip this node.
 			continue
 		}
 		req := distsqlrun.SetupFlowRequest{
 			Txn:  txn.Proto,
-			Flow: flows[i],
+			Flow: flowSpec,
 		}
 		if err := distsqlrun.SetFlowRequestTrace(ctx, &req); err != nil {
 			return err
@@ -1390,7 +1365,7 @@ func (dsp *distSQLPlanner) Run(
 	}
 	localReq := distsqlrun.SetupFlowRequest{
 		Txn:  txn.Proto,
-		Flow: flows[nodeIDMap[thisNodeID]],
+		Flow: flows[thisNodeID],
 	}
 	if err := distsqlrun.SetFlowRequestTrace(ctx, &localReq); err != nil {
 		return err
