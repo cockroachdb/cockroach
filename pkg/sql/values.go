@@ -31,7 +31,6 @@ import (
 
 type valuesNode struct {
 	n        *parser.ValuesClause
-	ctx      context.Context
 	p        *planner
 	columns  ResultColumns
 	ordering sqlbase.ColumnOrdering
@@ -45,15 +44,12 @@ type valuesNode struct {
 
 	desiredTypes []parser.Type // This can be removed when we only type check once.
 
-	nextRow       int           // The index of the next row.
-	invertSorting bool          // Inverts the sorting predicate.
-	tmpValues     parser.Datums // Used to store temporary values.
-	err           error         // Used to propagate errors during heap operations.
+	nextRow       int  // The index of the next row.
+	invertSorting bool // Inverts the sorting predicate.
 }
 
 func (p *planner) newContainerValuesNode(columns ResultColumns, capacity int) *valuesNode {
 	return &valuesNode{
-		ctx:     p.ctx(),
 		columns: columns,
 		rows:    NewRowContainer(p.session.TxnState.makeBoundAccount(), columns, capacity),
 	}
@@ -63,7 +59,6 @@ func (p *planner) ValuesClause(
 	ctx context.Context, n *parser.ValuesClause, desiredTypes []parser.Type,
 ) (planNode, error) {
 	v := &valuesNode{
-		ctx:          p.ctx(),
 		p:            p,
 		n:            n,
 		desiredTypes: desiredTypes,
@@ -121,7 +116,7 @@ func (p *planner) ValuesClause(
 	return v, nil
 }
 
-func (n *valuesNode) Start(_ context.Context) error {
+func (n *valuesNode) Start(ctx context.Context) error {
 	if n.n == nil {
 		return nil
 	}
@@ -145,7 +140,7 @@ func (n *valuesNode) Start(_ context.Context) error {
 				}
 			}
 		}
-		if _, err := n.rows.AddRow(n.p.ctx(), row); err != nil {
+		if _, err := n.rows.AddRow(ctx, row); err != nil {
 			return err
 		}
 	}
@@ -185,9 +180,9 @@ func (n *valuesNode) Next(_ context.Context) (bool, error) {
 	return true, nil
 }
 
-func (n *valuesNode) Close(_ context.Context) {
+func (n *valuesNode) Close(ctx context.Context) {
 	if n.rows != nil {
-		n.rows.Close(n.ctx)
+		n.rows.Close(ctx)
 		n.rows = nil
 	}
 }
@@ -237,16 +232,14 @@ var _ heap.Interface = (*valuesNode)(nil)
 
 // Push implements the heap.Interface interface.
 func (n *valuesNode) Push(x interface{}) {
-	_, n.err = n.rows.AddRow(n.ctx, n.tmpValues)
 }
 
 // PushValues pushes the given Datums value into the heap representation
 // of the valuesNode.
-func (n *valuesNode) PushValues(values parser.Datums) error {
-	// Avoid passing slice through interface{} to avoid allocation.
-	n.tmpValues = values
+func (n *valuesNode) PushValues(ctx context.Context, values parser.Datums) error {
+	_, err := n.rows.AddRow(ctx, values)
 	heap.Push(n, nil)
-	return n.err
+	return err
 }
 
 // Pop implements the heap.Interface interface.

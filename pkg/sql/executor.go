@@ -752,7 +752,7 @@ func (e *Executor) execRequest(session *Session, sql string, copymsg copyMsg) St
 			// Exec the schema changers (if the txn rolled back, the schema changers
 			// will short-circuit because the corresponding descriptor mutation is not
 			// found).
-			planMaker.releaseLeases()
+			planMaker.releaseLeases(session.Ctx())
 			txnState.schemaChangers.execSchemaChanges(e, planMaker, res.ResultList)
 		} else {
 			// We're still in a txn, so we only check that the verifyMetadata callback
@@ -1214,7 +1214,7 @@ func rollbackSQLTransaction(txnState *txnState, p *planner) Result {
 	err := p.txn.Rollback()
 	result := Result{PGTag: (*parser.RollbackTransaction)(nil).StatementTag()}
 	if err != nil {
-		log.Warningf(p.ctx(), "txn rollback failed. The error was swallowed: %s", err)
+		log.Warningf(txnState.Ctx, "txn rollback failed. The error was swallowed: %s", err)
 		result.Err = err
 	}
 	// We're done with this txn.
@@ -1290,21 +1290,21 @@ func (e *Executor) execDistSQL(planMaker *planner, tree planNode, result *Result
 // execClassic runs a plan using the classic (non-distributed) SQL
 // implementation.
 func (e *Executor) execClassic(planMaker *planner, plan planNode, result *Result) error {
-	if err := planMaker.startPlan(planMaker.ctx(), plan); err != nil {
+	if err := planMaker.startPlan(planMaker.session.Ctx(), plan); err != nil {
 		return err
 	}
 
 	switch result.Type {
 	case parser.RowsAffected:
-		count, err := countRowsAffected(planMaker.ctx(), plan)
+		count, err := countRowsAffected(planMaker.session.Ctx(), plan)
 		if err != nil {
 			return err
 		}
 		result.RowsAffected += count
 
 	case parser.Rows:
-		next, err := plan.Next(planMaker.ctx())
-		for ; next; next, err = plan.Next(planMaker.ctx()) {
+		next, err := plan.Next(planMaker.session.Ctx())
+		for ; next; next, err = plan.Next(planMaker.session.Ctx()) {
 			// The plan.Values Datums needs to be copied on each iteration.
 			values := plan.Values()
 
@@ -1313,7 +1313,7 @@ func (e *Executor) execClassic(planMaker *planner, plan planNode, result *Result
 					return err
 				}
 			}
-			if _, err := result.Rows.AddRow(planMaker.ctx(), values); err != nil {
+			if _, err := result.Rows.AddRow(planMaker.session.Ctx(), values); err != nil {
 				return err
 			}
 		}
@@ -1382,14 +1382,12 @@ func (e *Executor) execStmt(
 	isAutomaticRetry bool,
 	tStart time.Time,
 ) (Result, error) {
-	// !!! execStmt should take a ctx, and this metod should stop planMaker.ctx()
-	// here and below.
-	plan, err := planMaker.makePlan(planMaker.ctx(), stmt, autoCommit)
+	plan, err := planMaker.makePlan(planMaker.session.Ctx(), stmt, autoCommit)
 	if err != nil {
 		return Result{}, err
 	}
 
-	defer plan.Close(planMaker.ctx())
+	defer plan.Close(planMaker.session.Ctx())
 
 	result := Result{
 		PGTag: stmt.StatementTag(),

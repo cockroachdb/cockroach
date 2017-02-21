@@ -173,7 +173,7 @@ func (s *Session) Finish(e *Executor) {
 	// Cleanup leases. We might have unreleased leases if we're finishing the
 	// session abruptly in the middle of a transaction, or, until #7648 is
 	// addressed, there might be leases accumulated by preparing statements.
-	s.planner.releaseLeases()
+	s.planner.releaseLeases(s.Ctx())
 
 	s.ClearStatementsAndPortals(s.context)
 	s.sessionMon.Stop(s.context)
@@ -474,7 +474,7 @@ func (scc *schemaChangerCollection) execSchemaChanges(
 	}
 	ctx := e.AnnotateCtx(context.TODO())
 	// Release the leases once a transaction is complete.
-	planMaker.releaseLeases()
+	planMaker.releaseLeases(ctx)
 	if e.cfg.SchemaChangerTestingKnobs.SyncFilter != nil {
 		e.cfg.SchemaChangerTestingKnobs.SyncFilter(TestingSchemaChangerCollection{scc})
 	}

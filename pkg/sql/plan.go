@@ -267,7 +267,7 @@ func (p *planner) newPlan(
 		p.txn.SetSystemConfigTrigger()
 	}
 
-	if plan, err := maybePlanHook(p.ctx(), stmt, p.execCfg); plan != nil || err != nil {
+	if plan, err := maybePlanHook(ctx, stmt, p.execCfg); plan != nil || err != nil {
 		return plan, err
 	}
 
@@ -311,11 +311,11 @@ func (p *planner) newPlan(
 	case *parser.ParenSelect:
 		return p.newPlan(ctx, n.Select, desiredTypes, autoCommit)
 	case *parser.RenameColumn:
-		return p.RenameColumn(n)
+		return p.RenameColumn(ctx, n)
 	case *parser.RenameDatabase:
 		return p.RenameDatabase(ctx, n)
 	case *parser.RenameIndex:
-		return p.RenameIndex(n)
+		return p.RenameIndex(ctx, n)
 	case *parser.RenameTable:
 		return p.RenameTable(ctx, n)
 	case *parser.Revoke:
@@ -368,7 +368,7 @@ func (p *planner) newPlan(
 }
 
 func (p *planner) prepare(ctx context.Context, stmt parser.Statement) (planNode, error) {
-	if plan, err := maybePlanHook(p.ctx(), stmt, p.execCfg); plan != nil || err != nil {
+	if plan, err := maybePlanHook(ctx, stmt, p.execCfg); plan != nil || err != nil {
 		return plan, err
 	}
 

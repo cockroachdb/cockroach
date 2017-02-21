@@ -89,7 +89,7 @@ func (p *planner) DropDatabase(ctx context.Context, n *parser.DropDatabase) (pla
 		// Recursively check permissions on all dependent views, since some may
 		// be in different databases.
 		for _, ref := range tbDesc.DependedOnBy {
-			if err := p.canRemoveDependentView(tbDesc, ref, parser.DropCascade); err != nil {
+			if err := p.canRemoveDependentView(ctx, tbDesc, ref, parser.DropCascade); err != nil {
 				return nil, err
 			}
 		}
@@ -148,13 +148,13 @@ func (n *dropDatabaseNode) Start(ctx context.Context) error {
 	tbNameStrings := make([]string, 0, len(n.td))
 	for _, tbDesc := range n.td {
 		if tbDesc.IsView() {
-			cascadedViews, err := n.p.dropViewImpl(tbDesc, parser.DropCascade)
+			cascadedViews, err := n.p.dropViewImpl(ctx, tbDesc, parser.DropCascade)
 			if err != nil {
 				return err
 			}
 			tbNameStrings = append(tbNameStrings, cascadedViews...)
 		} else {
-			cascadedViews, err := n.p.dropTableImpl(tbDesc)
+			cascadedViews, err := n.p.dropTableImpl(ctx, tbDesc)
 			if err != nil {
 				return err
 			}
@@ -333,16 +333,16 @@ func (p *planner) dropIndexByName(
 			if tableRef.IndexID == idx.ID {
 				// Ensure that we have DROP privilege on all dependent views
 				err := p.canRemoveDependentViewGeneric(
-					"index", idx.Name, tableDesc.ParentID, tableRef, behavior)
+					ctx, "index", idx.Name, tableDesc.ParentID, tableRef, behavior)
 				if err != nil {
 					return err
 				}
 				viewDesc, err := p.getViewDescForCascade(
-					"index", idx.Name, tableDesc.ParentID, tableRef.ID, behavior)
+					ctx, "index", idx.Name, tableDesc.ParentID, tableRef.ID, behavior)
 				if err != nil {
 					return err
 				}
-				cascadedViews, err := p.removeDependentView(tableDesc, viewDesc)
+				cascadedViews, err := p.removeDependentView(ctx, tableDesc, viewDesc)
 				if err != nil {
 					return err
 				}
@@ -456,7 +456,7 @@ func (p *planner) DropView(ctx context.Context, n *parser.DropView) (planNode, e
 			if descInSlice(ref.ID, td) {
 				continue
 			}
-			if err := p.canRemoveDependentView(droppedDesc, ref, n.DropBehavior); err != nil {
+			if err := p.canRemoveDependentView(ctx, droppedDesc, ref, n.DropBehavior); err != nil {
 				return nil, err
 			}
 		}
@@ -482,7 +482,7 @@ func (n *dropViewNode) Start(ctx context.Context) error {
 		if droppedDesc == nil {
 			continue
 		}
-		cascadeDroppedViews, err := n.p.dropViewImpl(droppedDesc, n.n.DropBehavior)
+		cascadeDroppedViews, err := n.p.dropViewImpl(ctx, droppedDesc, n.n.DropBehavior)
 		if err != nil {
 			return err
 		}
@@ -578,7 +578,7 @@ func (p *planner) DropTable(ctx context.Context, n *parser.DropTable) (planNode,
 		}
 		for _, ref := range droppedDesc.DependedOnBy {
 			if !dropping[ref.ID] {
-				if err := p.canRemoveDependentView(droppedDesc, ref, n.DropBehavior); err != nil {
+				if err := p.canRemoveDependentView(ctx, droppedDesc, ref, n.DropBehavior); err != nil {
 					return nil, err
 				}
 			}
@@ -631,21 +631,23 @@ func (p *planner) canRemoveInterleave(
 }
 
 func (p *planner) canRemoveDependentView(
+	ctx context.Context,
 	from *sqlbase.TableDescriptor,
 	ref sqlbase.TableDescriptor_Reference,
 	behavior parser.DropBehavior,
 ) error {
-	return p.canRemoveDependentViewGeneric(from.TypeName(), from.Name, from.ParentID, ref, behavior)
+	return p.canRemoveDependentViewGeneric(ctx, from.TypeName(), from.Name, from.ParentID, ref, behavior)
 }
 
 func (p *planner) canRemoveDependentViewGeneric(
+	ctx context.Context,
 	typeName string,
 	objName string,
 	parentID sqlbase.ID,
 	ref sqlbase.TableDescriptor_Reference,
 	behavior parser.DropBehavior,
 ) error {
-	viewDesc, err := p.getViewDescForCascade(typeName, objName, parentID, ref.ID, behavior)
+	viewDesc, err := p.getViewDescForCascade(ctx, typeName, objName, parentID, ref.ID, behavior)
 	if err != nil {
 		return err
 	}
@@ -654,7 +656,7 @@ func (p *planner) canRemoveDependentViewGeneric(
 	}
 	// If this view is depended on by other views, we have to check them as well.
 	for _, ref := range viewDesc.DependedOnBy {
-		if err := p.canRemoveDependentView(viewDesc, ref, behavior); err != nil {
+		if err := p.canRemoveDependentView(ctx, viewDesc, ref, behavior); err != nil {
 			return err
 		}
 	}
@@ -702,13 +704,13 @@ func (p *planner) removeInterleave(ref sqlbase.ForeignKeyReference) error {
 // Returns the names of any additional views that were also dropped
 // due to `cascade` behavior.
 func (p *planner) removeDependentView(
-	tableDesc, viewDesc *sqlbase.TableDescriptor,
+	ctx context.Context, tableDesc, viewDesc *sqlbase.TableDescriptor,
 ) ([]string, error) {
 	// In the table whose index is being removed, filter out all back-references
 	// that refer to the view that's being removed.
 	tableDesc.DependedOnBy = removeMatchingReferences(tableDesc.DependedOnBy, viewDesc.ID)
 	// Then proceed to actually drop the view and log an event for it.
-	return p.dropViewImpl(viewDesc, parser.DropCascade)
+	return p.dropViewImpl(ctx, viewDesc, parser.DropCascade)
 }
 
 func (n *dropTableNode) Start(ctx context.Context) error {
@@ -716,7 +718,7 @@ func (n *dropTableNode) Start(ctx context.Context) error {
 		if droppedDesc == nil {
 			continue
 		}
-		droppedViews, err := n.p.dropTableImpl(droppedDesc)
+		droppedViews, err := n.p.dropTableImpl(ctx, droppedDesc)
 		if err != nil {
 			return err
 		}
@@ -782,7 +784,9 @@ func (p *planner) dropTableOrViewPrepare(
 // dropTableImpl does the work of dropping a table (and everything that depends
 // on it if `cascade` is enabled). It returns a list of view names that were
 // dropped due to `cascade` behavior.
-func (p *planner) dropTableImpl(tableDesc *sqlbase.TableDescriptor) ([]string, error) {
+func (p *planner) dropTableImpl(
+	ctx context.Context, tableDesc *sqlbase.TableDescriptor,
+) ([]string, error) {
 	var droppedViews []string
 
 	// Remove FK and interleave relationships.
@@ -814,11 +818,11 @@ func (p *planner) dropTableImpl(tableDesc *sqlbase.TableDescriptor) ([]string, e
 	// made it to this point if `cascade` wasn't enabled.
 	for _, ref := range tableDesc.DependedOnBy {
 		viewDesc, err := p.getViewDescForCascade(
-			tableDesc.TypeName(), tableDesc.Name, tableDesc.ParentID, ref.ID, parser.DropCascade)
+			ctx, tableDesc.TypeName(), tableDesc.Name, tableDesc.ParentID, ref.ID, parser.DropCascade)
 		if err != nil {
 			return droppedViews, err
 		}
-		cascadedViews, err := p.dropViewImpl(viewDesc, parser.DropCascade)
+		cascadedViews, err := p.dropViewImpl(ctx, viewDesc, parser.DropCascade)
 		if err != nil {
 			return droppedViews, err
 		}
@@ -918,7 +922,7 @@ func verifyDropTableMetadata(
 // if `cascade is specified`). Returns the names of any additional views that
 // were also dropped due to `cascade` behavior.
 func (p *planner) dropViewImpl(
-	viewDesc *sqlbase.TableDescriptor, behavior parser.DropBehavior,
+	ctx context.Context, viewDesc *sqlbase.TableDescriptor, behavior parser.DropBehavior,
 ) ([]string, error) {
 	var cascadeDroppedViews []string
 
@@ -944,11 +948,11 @@ func (p *planner) dropViewImpl(
 	if behavior == parser.DropCascade {
 		for _, ref := range viewDesc.DependedOnBy {
 			dependentDesc, err := p.getViewDescForCascade(
-				viewDesc.TypeName(), viewDesc.Name, viewDesc.ParentID, ref.ID, behavior)
+				ctx, viewDesc.TypeName(), viewDesc.Name, viewDesc.ParentID, ref.ID, behavior)
 			if err != nil {
 				return cascadeDroppedViews, err
 			}
-			cascadedViews, err := p.dropViewImpl(dependentDesc, behavior)
+			cascadedViews, err := p.dropViewImpl(ctx, dependentDesc, behavior)
 			if err != nil {
 				return cascadeDroppedViews, err
 			}
@@ -1011,11 +1015,15 @@ func removeMatchingReferences(
 }
 
 func (p *planner) getViewDescForCascade(
-	typeName string, objName string, parentID, viewID sqlbase.ID, behavior parser.DropBehavior,
+	ctx context.Context,
+	typeName string,
+	objName string,
+	parentID, viewID sqlbase.ID,
+	behavior parser.DropBehavior,
 ) (*sqlbase.TableDescriptor, error) {
 	viewDesc, err := sqlbase.GetTableDescFromID(p.txn, viewID)
 	if err != nil {
-		log.Warningf(p.ctx(), "unable to retrieve descriptor for view %d: %v", viewID, err)
+		log.Warningf(ctx, "unable to retrieve descriptor for view %d: %v", viewID, err)
 		return nil, errors.Wrapf(err, "error resolving dependent view ID %d", viewID)
 	}
 	if behavior != parser.DropCascade {
@@ -1024,7 +1032,7 @@ func (p *planner) getViewDescForCascade(
 			var err error
 			viewName, err = p.getQualifiedTableName(viewDesc)
 			if err != nil {
-				log.Warningf(p.ctx(), "unable to retrieve qualified name of view %d: %v", viewID, err)
+				log.Warningf(ctx, "unable to retrieve qualified name of view %d: %v", viewID, err)
 				msg := fmt.Sprintf("cannot drop %s %q because a view depends on it", typeName, objName)
 				return nil, sqlbase.NewDependentObjectError(msg)
 			}

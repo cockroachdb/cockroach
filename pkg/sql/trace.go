@@ -96,6 +96,7 @@ func (n *explainTraceNode) Start(ctx context.Context) error {
 // happening in the current txn before explainTraceNode.Close() to happen inside
 // a recorded trace.
 //
+// !!! The facts in the TODO below are no longer true. Change accordingly.
 // TODO(andrei): This is currently called from Next(), which means that
 // `n.plan.Start()` is not traced. That's a shame, but unfortunately we can't
 // hijack in explainTraceNode.Start() because we need to only hijack after the
@@ -107,8 +108,8 @@ func (n *explainTraceNode) Start(ctx context.Context) error {
 // sortNode, which is not part of the user's query.
 // This is caused by the fact that BoundMemoryAccount binds the session's
 // context when it's created, which is bad. Rework this once that is fixed.
-func (n *explainTraceNode) hijackTxnContext() error {
-	tracingCtx, recorder, err := tracing.StartSnowballTrace(n.p.ctx(), "explain trace")
+func (n *explainTraceNode) hijackTxnContext(ctx context.Context) error {
+	tracingCtx, recorder, err := tracing.StartSnowballTrace(ctx, "explain trace")
 	if err != nil {
 		return err
 	}
@@ -145,7 +146,7 @@ func (n *explainTraceNode) Next(ctx context.Context) (bool, error) {
 	first := n.rows == nil
 	if first {
 		n.rows = []parser.Datums{}
-		if err := n.hijackTxnContext(); err != nil {
+		if err := n.hijackTxnContext(ctx); err != nil {
 			return false, err
 		}
 	}

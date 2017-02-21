@@ -196,9 +196,9 @@ func (p *planner) Show(n *parser.Show) (planNode, error) {
 					gen := varGen[vName]
 					value := gen(p)
 					if _, err := v.rows.AddRow(
-						p.ctx(), parser.Datums{parser.NewDString(vName), parser.NewDString(value)},
+						ctx, parser.Datums{parser.NewDString(vName), parser.NewDString(value)},
 					); err != nil {
-						v.rows.Close(p.ctx())
+						v.rows.Close(ctx)
 						return nil, err
 					}
 				}
@@ -207,8 +207,8 @@ func (p *planner) Show(n *parser.Show) (planNode, error) {
 				// check above.
 				gen := varGen[name]
 				value := gen(p)
-				if _, err := v.rows.AddRow(p.ctx(), parser.Datums{parser.NewDString(value)}); err != nil {
-					v.rows.Close(p.ctx())
+				if _, err := v.rows.AddRow(ctx, parser.Datums{parser.NewDString(value)}); err != nil {
+					v.rows.Close(ctx)
 					return nil, err
 				}
 			}
@@ -325,7 +325,7 @@ func (p *planner) ShowCreateTable(n *parser.ShowCreateTable) (planNode, error) {
 	return &delayedNode{
 		name:    "SHOW CREATE TABLE " + tn.String(),
 		columns: columns,
-		constructor: func(_ context.Context, p *planner) (planNode, error) {
+		constructor: func(ctx context.Context, p *planner) (planNode, error) {
 			v := p.newContainerValuesNode(columns, 0)
 
 			var buf bytes.Buffer
@@ -361,7 +361,7 @@ func (p *planner) ShowCreateTable(n *parser.ShowCreateTable) (planNode, error) {
 				}
 				interleave, err := p.showCreateInterleave(&idx)
 				if err != nil {
-					v.rows.Close(p.ctx())
+					v.rows.Close(ctx)
 					return nil, err
 				}
 				fmt.Fprintf(&buf, ",\n\t%sINDEX %s (%s)%s%s",
@@ -397,16 +397,16 @@ func (p *planner) ShowCreateTable(n *parser.ShowCreateTable) (planNode, error) {
 
 			interleave, err := p.showCreateInterleave(&desc.PrimaryIndex)
 			if err != nil {
-				v.rows.Close(p.ctx())
+				v.rows.Close(ctx)
 				return nil, err
 			}
 			buf.WriteString(interleave)
 
-			if _, err := v.rows.AddRow(p.ctx(), parser.Datums{
+			if _, err := v.rows.AddRow(ctx, parser.Datums{
 				parser.NewDString(n.Table.String()),
 				parser.NewDString(buf.String()),
 			}); err != nil {
-				v.rows.Close(p.ctx())
+				v.rows.Close(ctx)
 				return nil, err
 			}
 			return v, nil
@@ -491,11 +491,11 @@ func (p *planner) ShowCreateView(ctx context.Context, n *parser.ShowCreateView) 
 			}
 
 			fmt.Fprintf(&buf, "AS %s", desc.ViewQuery)
-			if _, err := v.rows.AddRow(p.ctx(), parser.Datums{
+			if _, err := v.rows.AddRow(ctx, parser.Datums{
 				parser.NewDString(n.View.String()),
 				parser.NewDString(buf.String()),
 			}); err != nil {
-				v.rows.Close(p.ctx())
+				v.rows.Close(ctx)
 				return nil, err
 			}
 			return v, nil

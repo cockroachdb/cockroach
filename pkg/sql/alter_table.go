@@ -191,16 +191,16 @@ func (n *alterTableNode) Start(ctx context.Context) error {
 					continue
 				}
 				err := n.p.canRemoveDependentViewGeneric(
-					"column", string(t.Column), n.tableDesc.ParentID, ref, t.DropBehavior)
+					ctx, "column", string(t.Column), n.tableDesc.ParentID, ref, t.DropBehavior)
 				if err != nil {
 					return err
 				}
 				viewDesc, err := n.p.getViewDescForCascade(
-					"column", string(t.Column), n.tableDesc.ParentID, ref.ID, t.DropBehavior)
+					ctx, "column", string(t.Column), n.tableDesc.ParentID, ref.ID, t.DropBehavior)
 				if err != nil {
 					return err
 				}
-				droppedViews, err = n.p.removeDependentView(n.tableDesc, viewDesc)
+				droppedViews, err = n.p.removeDependentView(ctx, n.tableDesc, viewDesc)
 				if err != nil {
 					return err
 				}
@@ -375,7 +375,7 @@ func (n *alterTableNode) Start(ctx context.Context) error {
 				if err != nil {
 					panic(err)
 				}
-				if err := n.p.validateForeignKey(n.p.ctx(), n.tableDesc, idx); err != nil {
+				if err := n.p.validateForeignKey(ctx, n.tableDesc, idx); err != nil {
 					return err
 				}
 				idx.ForeignKey.Validity = sqlbase.ConstraintValidity_Validated

@@ -89,7 +89,7 @@ func (p *planner) CreateDatabase(n *parser.CreateDatabase) (planNode, error) {
 func (n *createDatabaseNode) Start(ctx context.Context) error {
 	desc := makeDatabaseDesc(n.n)
 
-	created, err := n.p.createDatabase(&desc, n.n.IfNotExists)
+	created, err := n.p.createDatabase(ctx, &desc, n.n.IfNotExists)
 	if err != nil {
 		return err
 	}
@@ -378,7 +378,7 @@ func (p *planner) CreateView(ctx context.Context, n *parser.CreateView) (planNod
 			func(t *parser.NormalizableTableName) *parser.TableName {
 				tn, err := p.QualifyWithDatabase(ctx, t)
 				if err != nil {
-					log.Warningf(p.ctx(), "failed to qualify table name %q with database name: %v", t, err)
+					log.Warningf(ctx, "failed to qualify table name %q with database name: %v", t, err)
 					fmtErr = err
 					return nil
 				}
@@ -437,7 +437,7 @@ func (n *createViewNode) Start(ctx context.Context) error {
 		return err
 	}
 
-	err = n.p.createDescriptorWithID(key, id, &desc)
+	err = n.p.createDescriptorWithID(ctx, key, id, &desc)
 	if err != nil {
 		return err
 	}
@@ -620,7 +620,7 @@ func (n *createTableNode) Start(ctx context.Context) error {
 		return err
 	}
 
-	if err := n.p.createDescriptorWithID(key, id, &desc); err != nil {
+	if err := n.p.createDescriptorWithID(ctx, key, id, &desc); err != nil {
 		return err
 	}
 

@@ -19,6 +19,8 @@ package sql
 import (
 	"fmt"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -107,13 +109,15 @@ type DatabaseAccessor interface {
 	// getDatabaseID returns the ID of a database given its name.  It
 	// uses the descriptor cache if possible, otherwise falls back to KV
 	// operations.
-	getDatabaseID(name string) (sqlbase.ID, error)
+	getDatabaseID(ctx context.Context, name string) (sqlbase.ID, error)
 
 	// createDatabase attempts to create a database with the provided DatabaseDescriptor.
 	// Returns true if the database is actually created, false if it already existed,
 	// or an error if one was encountered. The ifNotExists flag is used to declare
 	// if the "already existed" state should be an error (false) or a no-op (true).
-	createDatabase(desc *sqlbase.DatabaseDescriptor, ifNotExists bool) (bool, error)
+	createDatabase(
+		ctx context.Context, desc *sqlbase.DatabaseDescriptor, ifNotExists bool,
+	) (bool, error)
 
 	// renameDatabase attempts to rename the database with the provided DatabaseDescriptor
 	// to a new name. The method will mutate the provided DatabaseDescriptor, updating its
@@ -215,7 +219,7 @@ func (p *planner) getAllDatabaseDescs() ([]*sqlbase.DatabaseDescriptor, error) {
 }
 
 // getDatabaseID implements the DatabaseAccessor interface.
-func (p *planner) getDatabaseID(name string) (sqlbase.ID, error) {
+func (p *planner) getDatabaseID(ctx context.Context, name string) (sqlbase.ID, error) {
 	if virtual := p.session.virtualSchemas.getVirtualDatabaseDesc(name); virtual != nil {
 		return virtual.GetID(), nil
 	}
@@ -230,7 +234,7 @@ func (p *planner) getDatabaseID(name string) (sqlbase.ID, error) {
 	desc, err := p.getCachedDatabaseDesc(name)
 	if err != nil {
 		if log.V(3) {
-			log.Infof(p.ctx(), "%v", err)
+			log.Infof(ctx, "error getting database descriptor: %s", err)
 		}
 		var err error
 		desc, err = p.mustGetDatabaseDesc(name)
@@ -244,7 +248,9 @@ func (p *planner) getDatabaseID(name string) (sqlbase.ID, error) {
 }
 
 // createDatabase implements the DatabaseAccessor interface.
-func (p *planner) createDatabase(desc *sqlbase.DatabaseDescriptor, ifNotExists bool) (bool, error) {
+func (p *planner) createDatabase(
+	ctx context.Context, desc *sqlbase.DatabaseDescriptor, ifNotExists bool,
+) (bool, error) {
 	if p.session.virtualSchemas.isVirtualDatabase(desc.Name) {
 		if ifNotExists {
 			// Noop.
@@ -252,7 +258,7 @@ func (p *planner) createDatabase(desc *sqlbase.DatabaseDescriptor, ifNotExists b
 		}
 		return false, descriptorAlreadyExistsErr{desc, desc.Name}
 	}
-	return p.createDescriptor(databaseKey{desc.Name}, desc, ifNotExists)
+	return p.createDescriptor(ctx, databaseKey{desc.Name}, desc, ifNotExists)
 }
 
 // renameDatabase implements the DatabaseAccessor interface.

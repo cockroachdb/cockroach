@@ -585,7 +585,7 @@ func (ss *sortTopKStrategy) Add(ctx context.Context, values parser.Datums) error
 	switch {
 	case int64(ss.vNode.Len()) < ss.topK:
 		// The first k values all go into the max-heap.
-		if err := ss.vNode.PushValues(values); err != nil {
+		if err := ss.vNode.PushValues(ctx, values); err != nil {
 			return err
 		}
 	case ss.vNode.ValuesLess(values, ss.vNode.rows.At(0)):

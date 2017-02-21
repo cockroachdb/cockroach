@@ -109,7 +109,6 @@ func (p *planner) groupBy(
 
 	group := &groupNode{
 		planner:            p,
-		ctx:                p.ctx(),
 		values:             valuesNode{columns: s.columns},
 		render:             s.render,
 		filterToRenderIdxs: make(map[int]int),
@@ -249,7 +248,6 @@ func (p *planner) groupBy(
 // It "wraps" a planNode which is used to retrieve the ungrouped results.
 type groupNode struct {
 	planner *planner
-	ctx     context.Context
 
 	// The "wrapped" node (which returns ungrouped results).
 	plan planNode
@@ -346,7 +344,7 @@ func (n *groupNode) Next(ctx context.Context) (bool, error) {
 		}
 		if !next {
 			n.populated = true
-			if err := n.computeAggregates(); err != nil {
+			if err := n.computeAggregates(ctx); err != nil {
 				return false, err
 			}
 			break
@@ -398,7 +396,7 @@ func (n *groupNode) Next(ctx context.Context) (bool, error) {
 	return n.values.Next(ctx)
 }
 
-func (n *groupNode) computeAggregates() error {
+func (n *groupNode) computeAggregates(ctx context.Context) error {
 	if len(n.buckets) < 1 && n.addNullBucketIfEmpty {
 		n.buckets[""] = struct{}{}
 	}
@@ -431,7 +429,7 @@ func (n *groupNode) computeAggregates() error {
 			}
 		}
 
-		if _, err := n.values.rows.AddRow(n.ctx, row); err != nil {
+		if _, err := n.values.rows.AddRow(ctx, row); err != nil {
 			return err
 		}
 	}

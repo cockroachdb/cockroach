@@ -1565,7 +1565,7 @@ var Builtins = map[string][]Builtin{
 			fn: func(ctx *EvalContext, args Datums) (Datum, error) {
 				oid := args[0]
 				r, err := ctx.Planner.QueryRow(
-					ctx.Ctx, "SELECT indexdef FROM pg_catalog.pg_indexes WHERE crdb_oid=$1", oid)
+					ctx.Ctx(), "SELECT indexdef FROM pg_catalog.pg_indexes WHERE crdb_oid=$1", oid)
 				if err != nil {
 					return nil, err
 				}
@@ -1604,7 +1604,7 @@ var Builtins = map[string][]Builtin{
 			fn: func(ctx *EvalContext, args Datums) (Datum, error) {
 				oid := args[0]
 				t, err := ctx.Planner.QueryRow(
-					ctx.Ctx, "SELECT rolname FROM pg_catalog.pg_roles WHERE oid=$1", oid)
+					ctx.Ctx(), "SELECT rolname FROM pg_catalog.pg_roles WHERE oid=$1", oid)
 				if err != nil {
 					return nil, err
 				}

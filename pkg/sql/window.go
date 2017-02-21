@@ -77,7 +77,7 @@ func (p *planner) window(
 
 	window := &windowNode{
 		planner:      p,
-		values:       valuesNode{columns: s.columns, ctx: p.ctx()},
+		values:       valuesNode{columns: s.columns},
 		windowRender: make([]parser.TypedExpr, len(s.render)),
 	}
 
