@@ -362,8 +362,9 @@ func (nl *NodeLiveness) setSelf(liveness Liveness) {
 	nl.mu.Unlock()
 }
 
-// GetLivenessMap returns a map of nodeID to liveness.
-func (nl *NodeLiveness) GetLivenessMap() map[roachpb.NodeID]bool {
+// GetIsLiveMap returns a map of nodeID to boolean liveness status of
+// each node.
+func (nl *NodeLiveness) GetIsLiveMap() map[roachpb.NodeID]bool {
 	nl.mu.Lock()
 	defer nl.mu.Unlock()
 	lMap := map[roachpb.NodeID]bool{}
@@ -376,6 +377,22 @@ func (nl *NodeLiveness) GetLivenessMap() map[roachpb.NodeID]bool {
 		lMap[nl.mu.self.NodeID] = nl.mu.self.isLive(now, maxOffset)
 	}
 	return lMap
+}
+
+// GetLivenesses returns a slice containing the liveness status of every node
+// on the cluster.
+func (nl *NodeLiveness) GetLivenesses() []Liveness {
+	nl.mu.Lock()
+	defer nl.mu.Unlock()
+	livenesses := make([]Liveness, 0, len(nl.mu.nodes))
+	for _, l := range nl.mu.nodes {
+		if l.NodeID == nl.mu.self.NodeID {
+			livenesses = append(livenesses, nl.mu.self)
+		} else {
+			livenesses = append(livenesses, l)
+		}
+	}
+	return livenesses
 }
 
 // GetLiveness returns the liveness record for the specified nodeID.
