@@ -1439,8 +1439,10 @@ CREATE TABLE pg_catalog.pg_type (
 		for oid, typ := range parser.OidToType {
 			cat := typCategory(typ)
 			typInput := oidZero
+			typElem := oidZero
 			if cat == typCategoryArray {
 				typInput = arrayInProcOid
+				typElem = parser.NewDOid(parser.DInt(typ.(parser.TArray).Typ.Oid()))
 			}
 			typname := typ.String()
 			if n, ok := aliasedOidToName[oid]; ok {
@@ -1459,7 +1461,7 @@ CREATE TABLE pg_catalog.pg_type (
 				parser.MakeDBool(true),  // typisdefined
 				typDelim,                // typdelim
 				oidZero,                 // typrelid
-				oidZero,                 // typelem
+				typElem,                 // typelem
 				oidZero,                 // typarray
 
 				// regproc references
