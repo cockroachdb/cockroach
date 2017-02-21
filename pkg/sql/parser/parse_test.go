@@ -364,7 +364,6 @@ func TestParse(t *testing.T) {
 		{`SELECT DATE 'foo'`},
 		{`SELECT TIMESTAMP 'foo'`},
 		{`SELECT TIMESTAMP WITH TIME ZONE 'foo'`},
-		{`SELECT INTERVAL 'foo'`},
 		{`SELECT CHAR 'foo'`},
 
 		{`SELECT 'a' AS "12345"`},
@@ -923,6 +922,10 @@ b = 2
 		{`SET TIME ZONE INTERVAL 'foobar'`, `could not parse 'foobar' as type interval: time: invalid duration foobar at or near "EOF"
 SET TIME ZONE INTERVAL 'foobar'
                                ^
+`},
+		{`SELECT INTERVAL 'foo'`, `could not parse 'foo' as type interval: time: invalid duration foo at or near "EOF"
+SELECT INTERVAL 'foo'
+                     ^
 `},
 		{`SELECT 1 /* hello`, `unterminated comment
 SELECT 1 /* hello
