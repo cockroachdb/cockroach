@@ -3,7 +3,7 @@
     {
       "Name": "1",
       "NumNodes": 1,
-      "NumWorkers": 1,
+      "NumWorkers": 11,
       "OutgoingLatencies": [
         {
           "Name": "2",
@@ -18,7 +18,7 @@
     {
       "Name": "2",
       "NumNodes": 1,
-      "NumWorkers": 30,
+      "NumWorkers": 11,
       "OutgoingLatencies": [
         {
           "Name": "1",
@@ -33,7 +33,7 @@
     {
       "Name": "3",
       "NumNodes": 1,
-      "NumWorkers": 1,
+      "NumWorkers": 10,
       "OutgoingLatencies": [
         {
           "Name": "1",
