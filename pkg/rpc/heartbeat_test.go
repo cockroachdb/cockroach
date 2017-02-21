@@ -26,6 +26,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 )
 
 func TestRemoteOffsetString(t *testing.T) {
@@ -65,6 +66,32 @@ func TestHeartbeatReply(t *testing.T) {
 	if response.ServerTime != 5 {
 		t.Errorf("expected server time 5, instead %d", response.ServerTime)
 	}
+}
+
+// A ManualHeartbeatService allows manual control of when heartbeats occur.
+type ManualHeartbeatService struct {
+	clock              *hlc.Clock
+	remoteClockMonitor *RemoteClockMonitor
+	// Heartbeats are processed when a value is sent here.
+	ready   chan struct{}
+	stopper *stop.Stopper
+}
+
+// Ping waits until the heartbeat service is ready to respond to a Heartbeat.
+func (mhs *ManualHeartbeatService) Ping(
+	ctx context.Context, args *PingRequest,
+) (*PingResponse, error) {
+	select {
+	case <-mhs.ready:
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case <-mhs.stopper.ShouldStop():
+	}
+	hs := HeartbeatService{
+		clock:              mhs.clock,
+		remoteClockMonitor: mhs.remoteClockMonitor,
+	}
+	return hs.Ping(ctx, args)
 }
 
 func TestManualHeartbeat(t *testing.T) {
