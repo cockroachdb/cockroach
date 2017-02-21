@@ -18,11 +18,6 @@ package rocksdb
 
 import (
 	"unsafe"
-
-	// Link against the protobuf, rocksdb, and snappy libraries. This is
-	// explicit because these Go libraries do not export any Go symbols.
-	_ "github.com/cockroachdb/c-protobuf"
-	_ "github.com/cockroachdb/c-rocksdb"
 )
 
 // #cgo CPPFLAGS: -I ../../../../vendor/github.com/cockroachdb/c-protobuf/internal/src -I ../../../../vendor/github.com/cockroachdb/c-rocksdb/internal/include
