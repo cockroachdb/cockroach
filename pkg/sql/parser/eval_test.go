@@ -63,10 +63,10 @@ func TestEval(t *testing.T) {
 		{`2:::int %  2.1:::decimal`, `2.0`},
 		{`4:::int // 2.1:::decimal`, `1`},
 		// Division is always done on floats or decimals.
-		{`4 / 5`, `0.8000000000000000`},
-		{`1.1:::decimal / 2.2:::decimal`, `0.5000000000000000`},
+		{`4 / 5`, `0.8`},
+		{`1.1:::decimal / 2.2:::decimal`, `0.5`},
 		{`1:::int / 2.2:::decimal`, `0.4545454545454545`},
-		{`1.1:::decimal / 2:::int`, `0.5500000000000000`},
+		{`1.1:::decimal / 2:::int`, `0.55`},
 		// Only floats support infinity.
 		{`1.0:::float / 0.0`, `+Inf`},
 		{`-1.0:::float * (1.0:::float / 0.0)`, `-Inf`},
@@ -911,7 +911,7 @@ func TestClusterTimestampConversion(t *testing.T) {
 		ts := hlc.Timestamp{WallTime: d.walltime, Logical: d.logical}
 		ctx.SetClusterTimestamp(ts)
 		dec := ctx.GetClusterTimestamp()
-		final := dec.String()
+		final := dec.ToStandard()
 		if final != d.expected {
 			t.Errorf("expected %s, but found %s", d.expected, final)
 		}

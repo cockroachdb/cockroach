@@ -28,7 +28,7 @@ import (
 	"unicode"
 	"unsafe"
 
-	"gopkg.in/inf.v0"
+	"github.com/cockroachdb/apd"
 
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/pkg/errors"
@@ -993,7 +993,7 @@ func prettyPrintFirstValue(b []byte) ([]byte, string, error) {
 		}
 		return b, strconv.FormatFloat(f, 'g', -1, 64), nil
 	case Decimal:
-		var d *inf.Dec
+		var d *apd.Decimal
 		b, d, err = DecodeDecimalAscending(b, nil)
 		if err != nil {
 			return b, "", err
@@ -1198,9 +1198,9 @@ func EncodeTimeValue(appendTo []byte, colID uint32, t time.Time) []byte {
 	return EncodeNonsortingVarint(appendTo, int64(t.Nanosecond()))
 }
 
-// EncodeDecimalValue encodes an inf.Dec value, appends it to the supplied
+// EncodeDecimalValue encodes an apd.Decimal value, appends it to the supplied
 // buffer, and returns the final buffer.
-func EncodeDecimalValue(appendTo []byte, colID uint32, d *inf.Dec) []byte {
+func EncodeDecimalValue(appendTo []byte, colID uint32, d *apd.Decimal) []byte {
 	appendTo = encodeValueTag(appendTo, colID, Decimal)
 	// To avoid the allocation, leave space for the varint, encode the decimal,
 	// encode the varint, and shift the encoded decimal to the end of the
@@ -1345,7 +1345,7 @@ func DecodeTimeValue(b []byte) (remaining []byte, t time.Time, err error) {
 }
 
 // DecodeDecimalValue decodes a value encoded by EncodeDecimalValue.
-func DecodeDecimalValue(b []byte) (remaining []byte, d *inf.Dec, err error) {
+func DecodeDecimalValue(b []byte) (remaining []byte, d *apd.Decimal, err error) {
 	b, err = decodeValueTypeAssert(b, Decimal)
 	if err != nil {
 		return b, nil, err
@@ -1503,7 +1503,7 @@ func PrettyPrintValueEncoded(b []byte) ([]byte, string, error) {
 		}
 		return b, strconv.FormatFloat(f, 'g', -1, 64), nil
 	case Decimal:
-		var d *inf.Dec
+		var d *apd.Decimal
 		b, d, err = DecodeDecimalValue(b)
 		if err != nil {
 			return b, "", err

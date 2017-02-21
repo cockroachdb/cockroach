@@ -35,6 +35,8 @@ imports:
   version: 9a1fc2456ac9e8c9b4cbe9d005b6e7adac0d357f
   subpackages:
   - cmd/misspell
+- name: github.com/cockroachdb/apd
+  version: e27f61fae8b145c53cfd4b3d70853c189f222329
 - name: github.com/cockroachdb/c-jemalloc
   version: 7eb7980d8a9f68b771568a7eb15196a63a818595
 - name: github.com/cockroachdb/c-protobuf
@@ -404,8 +406,6 @@ imports:
   - stats
   - tap
   - transport
-- name: gopkg.in/inf.v0
-  version: 3887ee99ecf07df5b447e9b00d9c0b2adaa9f3e4
 - name: gopkg.in/yaml.v2
   version: a5b47d31c556af34a302ce5d659e6fea44d90de0
 - name: honnef.co/go/tools
