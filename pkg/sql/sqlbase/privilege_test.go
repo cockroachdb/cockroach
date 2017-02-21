@@ -193,86 +193,93 @@ func TestPrivilegeValidate(t *testing.T) {
 }
 
 // TestSystemPrivilegeValidate exercises validation for system config
-// descriptors. We use 1 (the system database ID).
+// descriptors. We use a dummy system table installed for testing
+// purposes.
 func TestSystemPrivilegeValidate(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	id := ID(1)
-	allowedPrivileges := SystemConfigAllowedPrivileges[id]
+	id := ID(keys.MaxReservedDescID)
 
-	hasPrivilege := func(pl privilege.List, p privilege.Kind) bool {
-		for _, i := range pl {
-			if i == p {
-				return true
-			}
-		}
-		return false
+	SystemAllowedPrivileges[id] = privilege.Lists{
+		{privilege.SELECT},
+		{privilege.SELECT, privilege.GRANT},
+		{privilege.ALL},
 	}
+	defer func() {
+		delete(SystemAllowedPrivileges, id)
+	}()
 
-	// Exhaustively grant/revoke all privileges.
-	// Due to the way validation is done after Grant/Revoke,
-	// we need to revert the just-performed change after errors.
-	descriptor := NewPrivilegeDescriptor(security.RootUser, allowedPrivileges)
+	var descriptor *PrivilegeDescriptor
+
+	// New sequence.
+	// Valid: root user has one of the allowable privilege sets.
+	descriptor = NewPrivilegeDescriptor(security.RootUser, privilege.List{privilege.SELECT})
 	if err := descriptor.Validate(id); err != nil {
 		t.Fatal(err)
 	}
-	for _, p := range privilege.ByValue {
-		if hasPrivilege(allowedPrivileges, p) {
-			// Grant allowed privileges. Either they are already
-			// on (noop), or they're accepted.
-			descriptor.Grant(security.RootUser, privilege.List{p})
-			if err := descriptor.Validate(id); err != nil {
-				t.Fatal(err)
-			}
-			descriptor.Grant("foo", privilege.List{p})
-			if err := descriptor.Validate(id); err != nil {
-				t.Fatal(err)
-			}
 
-			// Remove allowed privileges. This fails for root,
-			// but passes for other users.
-			descriptor.Revoke(security.RootUser, privilege.List{p})
-			if err := descriptor.Validate(id); err == nil {
-				t.Fatal("unexpected success")
-			}
-			descriptor.Grant(security.RootUser, privilege.List{p})
-		} else {
-			// Granting non-allowed privileges always.
-			descriptor.Grant(security.RootUser, privilege.List{p})
-			if err := descriptor.Validate(id); err == nil {
-				t.Fatal("unexpected success")
-			}
-			descriptor.Revoke(security.RootUser, privilege.List{p})
-			descriptor.Grant(security.RootUser, allowedPrivileges)
+	// Valid: foo has the same privileges as root.
+	descriptor.Grant("foo", privilege.List{privilege.SELECT})
+	if err := descriptor.Validate(id); err != nil {
+		t.Fatal(err)
+	}
 
-			descriptor.Grant("foo", privilege.List{p})
-			if err := descriptor.Validate(id); err == nil {
-				t.Fatal("unexpected success")
-			}
-			descriptor.Revoke("foo", privilege.List{p})
-			descriptor.Grant("foo", allowedPrivileges)
+	// Invalid: foo has more privileges than root.
+	descriptor.Grant("foo", privilege.List{privilege.GRANT})
+	if err := descriptor.Validate(id); err == nil {
+		t.Fatal("unexpected success")
+	}
 
-			// Revoking non-allowed privileges always succeeds,
-			// except when removing ALL for root.
-			if p == privilege.ALL {
-				// We need to reset privileges as Revoke(ALL) will clear
-				// all bits.
-				descriptor.Revoke(security.RootUser, privilege.List{p})
-				if err := descriptor.Validate(id); err == nil {
-					t.Fatal("unexpected success")
-				}
-				descriptor.Grant(security.RootUser, allowedPrivileges)
-			} else {
-				descriptor.Revoke(security.RootUser, privilege.List{p})
-				if err := descriptor.Validate(id); err != nil {
-					t.Fatal(err)
-				}
-			}
-		}
+	// New sequence.
+	// Valid: root user has a different allowable privilege set.
+	descriptor = NewPrivilegeDescriptor(security.RootUser,
+		privilege.List{privilege.SELECT, privilege.GRANT})
+	if err := descriptor.Validate(id); err != nil {
+		t.Fatal(err)
+	}
 
-		// We can always revoke anything from non-root users.
-		descriptor.Revoke("foo", privilege.List{p})
-		if err := descriptor.Validate(id); err != nil {
-			t.Fatal(err)
-		}
+	// Valid: foo has less privileges than root.
+	descriptor.Grant("foo", privilege.List{privilege.GRANT})
+	if err := descriptor.Validate(id); err != nil {
+		t.Fatal(err)
+	}
+
+	// Valid: foo can have privileges revoked, including privileges it doesn't currently have.
+	descriptor.Revoke("foo", privilege.List{privilege.GRANT, privilege.UPDATE, privilege.ALL})
+	if err := descriptor.Validate(id); err != nil {
+		t.Fatal(err)
+	}
+
+	// Invalid: root user has too many privileges.
+	descriptor.Grant(security.RootUser, privilege.List{privilege.UPDATE})
+	if err := descriptor.Validate(id); err == nil {
+		t.Fatal("unexpected success")
+	}
+
+	// New sequence.
+	// Invalid: root has a non-allowable privilege set.
+	descriptor = NewPrivilegeDescriptor(security.RootUser, privilege.List{privilege.UPDATE})
+	if err := descriptor.Validate(id); err == nil {
+		t.Fatal("unexpected success")
+	}
+
+	// Valid: root's invalid privileges are revoked and replaced with allowable privileges.
+	descriptor.Revoke(security.RootUser, privilege.List{privilege.UPDATE})
+	descriptor.Grant(security.RootUser, privilege.List{privilege.ALL})
+	if err := descriptor.Validate(id); err != nil {
+		t.Fatal(err)
+	}
+
+	// Valid: foo has less privileges than root.
+	descriptor.Grant("foo", privilege.List{privilege.GRANT})
+	if err := descriptor.Validate(id); err != nil {
+		t.Fatal(err)
+	}
+
+	// TODO(marc): validate fails here because we do not aggregate
+	// privileges into ALL when all are set.
+	descriptor.Revoke(security.RootUser, privilege.List{privilege.SELECT})
+	descriptor.Grant(security.RootUser, privilege.List{privilege.SELECT})
+	if err := descriptor.Validate(id); err == nil {
+		t.Fatal("unexpected success")
 	}
 }
