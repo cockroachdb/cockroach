@@ -158,17 +158,29 @@ zones  root  UPDATE
 query TTT
 SHOW GRANTS ON system.lease
 ----
-lease root ALL
+lease  root  DELETE
+lease  root  GRANT
+lease  root  INSERT
+lease  root  SELECT
+lease  root  UPDATE
 
 query TTT
 SHOW GRANTS ON system.ui
 ----
-ui root ALL
+ui  root  DELETE
+ui  root  GRANT
+ui  root  INSERT
+ui  root  SELECT
+ui  root  UPDATE
 
 query TTT
 SHOW GRANTS ON system.rangelog
 ----
-rangelog root ALL
+rangelog  root  DELETE
+rangelog  root  GRANT
+rangelog  root  INSERT
+rangelog  root  SELECT
+rangelog  root  UPDATE
 
 statement error user root does not have DROP privilege on database system
 ALTER DATABASE system RENAME TO not_system
