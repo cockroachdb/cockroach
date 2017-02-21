@@ -13,7 +13,7 @@
 #include "rocksdb/write_batch_base.h"
 #include "rocksdb/utilities/write_batch_with_index.h"
 #include "cockroach/pkg/storage/engine/enginepb/mvcc.pb.h"
-#include "db.h"
+#include "dbccl.h"
 #include "db_internal.h"
 
 #include <iostream>

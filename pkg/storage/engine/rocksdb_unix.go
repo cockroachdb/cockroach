@@ -14,7 +14,7 @@
 
 // +build !windows
 
-package rocksdb
+package engine
 
 import (
 	// Link against the protobuf, rocksdb, and snappy libraries. This is
@@ -22,3 +22,7 @@ import (
 	_ "github.com/cockroachdb/c-protobuf"
 	_ "github.com/cockroachdb/c-rocksdb"
 )
+
+// #cgo !strictld,darwin LDFLAGS: -Wl,-undefined -Wl,dynamic_lookup
+// #cgo !strictld,!darwin LDFLAGS: -Wl,-unresolved-symbols=ignore-all
+import "C"
