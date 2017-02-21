@@ -155,7 +155,6 @@ func TestClockOffsetMismatch(t *testing.T) {
 		Addr:           "test",
 		MaxOffsetNanos: (500 * time.Millisecond).Nanoseconds(),
 	}
-	ctx := context.Background()
-	_, _ = hs.Ping(ctx, request)
-	t.Fatal("should not reach")
+	response, err := hs.Ping(context.Background(), request)
+	t.Fatalf("should not have reached but got response=%v err=%v", response, err)
 }
