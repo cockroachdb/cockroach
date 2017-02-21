@@ -395,7 +395,7 @@ func (sc *SchemaChanger) truncateAndBackfillColumnsChunk(
 		txn.SetSystemConfigTrigger()
 
 		p := sc.makePlanner(txn)
-		defer p.releaseLeases()
+		defer p.releaseLeases(ctx)
 		tableDesc, err := sc.getTableLease(ctx, p, version)
 		if err != nil {
 			return err
@@ -545,7 +545,7 @@ func (sc *SchemaChanger) truncateIndexes(
 				txn.SetSystemConfigTrigger()
 
 				p := sc.makePlanner(txn)
-				defer p.releaseLeases()
+				defer p.releaseLeases(ctx)
 				tableDesc, err := sc.getTableLease(ctx, p, version)
 				if err != nil {
 					return err
@@ -637,7 +637,7 @@ func (sc *SchemaChanger) backfillIndexes(
 		if err := sc.db.Txn(context.TODO(), func(txn *client.Txn) error {
 			p := sc.makePlanner(txn)
 			// Use a leased table descriptor for the backfill.
-			defer p.releaseLeases()
+			defer p.releaseLeases(ctx)
 			tableDesc, err := sc.getTableLease(ctx, p, version)
 			if err != nil {
 				return err

@@ -237,7 +237,7 @@ func doExpandPlan(
 		}
 
 	case *scanNode:
-		plan, err = expandScanNode(p, params, n)
+		plan, err = expandScanNode(ctx, p, params, n)
 
 	case *renderNode:
 		plan, err = expandRenderNode(ctx, p, params, n)
@@ -270,7 +270,9 @@ func doExpandPlan(
 	return plan, err
 }
 
-func expandScanNode(p *planner, params expandParameters, s *scanNode) (planNode, error) {
+func expandScanNode(
+	ctx context.Context, p *planner, params expandParameters, s *scanNode,
+) (planNode, error) {
 	var analyzeOrdering analyzeOrderingFn
 	if len(params.desiredOrdering) > 0 {
 		analyzeOrdering = func(indexOrdering orderingInfo) (matchingCols, totalCols int) {
@@ -286,7 +288,7 @@ func expandScanNode(p *planner, params expandParameters, s *scanNode) (planNode,
 		preferOrderMatchingIndex = true
 	}
 
-	plan, err := p.selectIndex(s, analyzeOrdering, preferOrderMatchingIndex)
+	plan, err := p.selectIndex(ctx, s, analyzeOrdering, preferOrderMatchingIndex)
 	if err != nil {
 		return s, err
 	}

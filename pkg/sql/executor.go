@@ -753,8 +753,8 @@ func (e *Executor) execRequest(session *Session, sql string, copymsg copyMsg) St
 			// Exec the schema changers (if the txn rolled back, the schema changers
 			// will short-circuit because the corresponding descriptor mutation is not
 			// found).
-			planMaker.releaseLeases()
-			txnState.schemaChangers.execSchemaChanges(e, planMaker, res.ResultList)
+			planMaker.releaseLeases(session.Ctx())
+			txnState.schemaChangers.execSchemaChanges(session.Ctx(), e, planMaker, res.ResultList)
 		} else {
 			// We're still in a txn, so we only check that the verifyMetadata callback
 			// fails the first time it's run. The gossip update that will make the
@@ -1214,7 +1214,7 @@ func rollbackSQLTransaction(txnState *txnState, p *planner) Result {
 	err := p.txn.Rollback()
 	result := Result{PGTag: (*parser.RollbackTransaction)(nil).StatementTag()}
 	if err != nil {
-		log.Warningf(p.ctx(), "txn rollback failed. The error was swallowed: %s", err)
+		log.Warningf(txnState.Ctx, "txn rollback failed. The error was swallowed: %s", err)
 		result.Err = err
 	}
 	// We're done with this txn.
@@ -1313,7 +1313,7 @@ func (e *Executor) execClassic(planMaker *planner, plan planNode, result *Result
 					return err
 				}
 			}
-			if _, err := result.Rows.AddRow(planMaker.ctx(), values); err != nil {
+			if _, err := result.Rows.AddRow(planMaker.session.Ctx(), values); err != nil {
 				return err
 			}
 		}

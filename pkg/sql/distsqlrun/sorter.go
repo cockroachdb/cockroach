@@ -48,7 +48,7 @@ func newSorter(
 		matchLen: spec.OrderingMatchLen,
 		limit:    spec.Limit,
 	}
-	if err := s.out.init(post, input.Types(), flowCtx.evalCtx, output); err != nil {
+	if err := s.out.init(post, input.Types(), &flowCtx.evalCtx, output); err != nil {
 		return nil, err
 	}
 	return s, nil

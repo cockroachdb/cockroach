@@ -474,7 +474,7 @@ func (ss *sortAllStrategy) Add(ctx context.Context, values parser.Datums) error 
 	return err
 }
 
-func (ss *sortAllStrategy) Finish(_ context.Context) {
+func (ss *sortAllStrategy) Finish(context.Context) {
 	ss.vNode.SortAll()
 }
 
@@ -521,7 +521,7 @@ func (ss *iterativeSortStrategy) Add(ctx context.Context, values parser.Datums) 
 	return err
 }
 
-func (ss *iterativeSortStrategy) Finish(_ context.Context) {
+func (ss *iterativeSortStrategy) Finish(context.Context) {
 	ss.vNode.InitMinHeap()
 }
 
@@ -585,7 +585,7 @@ func (ss *sortTopKStrategy) Add(ctx context.Context, values parser.Datums) error
 	switch {
 	case int64(ss.vNode.Len()) < ss.topK:
 		// The first k values all go into the max-heap.
-		if err := ss.vNode.PushValues(values); err != nil {
+		if err := ss.vNode.PushValues(ctx, values); err != nil {
 			return err
 		}
 	case ss.vNode.ValuesLess(values, ss.vNode.rows.At(0)):
@@ -600,7 +600,7 @@ func (ss *sortTopKStrategy) Add(ctx context.Context, values parser.Datums) error
 	return nil
 }
 
-func (ss *sortTopKStrategy) Finish(_ context.Context) {
+func (ss *sortTopKStrategy) Finish(context.Context) {
 	// Pop all values in the heap, resulting in the inverted ordering
 	// being sorted in reverse. Therefore, the slice is ordered correctly
 	// in-place.

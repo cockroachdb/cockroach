@@ -51,7 +51,7 @@ func (ie InternalExecutor) ExecuteStatementInTransaction(
 
 // GetTableSpan gets the key span for a SQL table, including any indices.
 func (ie InternalExecutor) GetTableSpan(
-	user string, txn *client.Txn, dbName, tableName string,
+	ctx context.Context, user string, txn *client.Txn, dbName, tableName string,
 ) (roachpb.Span, error) {
 	// Lookup the table ID.
 	p := makeInternalPlanner("get-table-span", txn, user, ie.LeaseManager.memMetrics)
@@ -59,7 +59,7 @@ func (ie InternalExecutor) GetTableSpan(
 	p.leaseMgr = ie.LeaseManager
 
 	tn := parser.TableName{DatabaseName: parser.Name(dbName), TableName: parser.Name(tableName)}
-	tableID, err := getTableID(p, &tn)
+	tableID, err := getTableID(ctx, p, &tn)
 	if err != nil {
 		return roachpb.Span{}, err
 	}
@@ -72,7 +72,7 @@ func (ie InternalExecutor) GetTableSpan(
 }
 
 // getTableID retrieves the table ID for the specified table.
-func getTableID(p *planner, tn *parser.TableName) (sqlbase.ID, error) {
+func getTableID(ctx context.Context, p *planner, tn *parser.TableName) (sqlbase.ID, error) {
 	if err := tn.QualifyWithDatabase(p.session.Database); err != nil {
 		return 0, err
 	}
@@ -85,7 +85,7 @@ func getTableID(p *planner, tn *parser.TableName) (sqlbase.ID, error) {
 		return virtual.GetID(), nil
 	}
 
-	dbID, err := p.getDatabaseID(tn.Database())
+	dbID, err := p.getDatabaseID(ctx, tn.Database())
 	if err != nil {
 		return 0, err
 	}
