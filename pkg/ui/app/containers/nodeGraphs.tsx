@@ -16,7 +16,7 @@ import { SummaryBar, SummaryLabel, SummaryStat, SummaryMetricStat } from "../com
 import { Axis, AxisUnits } from "../components/graphs";
 import { LineGraph } from "../components/linegraph";
 import { Metric } from "../components/metric";
-import Events from "../containers/events";
+import { EventBox } from "../containers/events";
 import { Bytes } from "../util/format";
 import { NanoToMilli } from "../util/convert";
 import { NodeStatus, MetricConstants, BytesUsed } from "../util/proto";
@@ -605,7 +605,7 @@ class NodeGraphs extends React.Component<NodeGraphsProps, {}> {
         </SummaryBar>
         <SummaryBar>
           <SummaryLabel>Events</SummaryLabel>
-          <Events />
+          <EventBox />
         </SummaryBar>
       </div>
     </div>;
