@@ -117,6 +117,52 @@ func pk(name string) IndexDescriptor {
 	}
 }
 
+// SystemAllowedPrivileges describes the allowable privilege lists for each
+// system object. The root user must have the privileges of exactly one of those
+// privilege lists. No user may have more privileges than the root user.
+//
+// Some system objects were created with different privileges in previous
+// versions of the system. These privileges are no longer "desired" but must
+// still be "allowed," or this version and the previous version with different
+// privileges will be unable to coexist in the same cluster because one version
+// will think it has invalid table descriptors.
+//
+// The currently-desired privileges (i.e., the privileges with which the object
+// will be created in fresh clusters) must be listed first in the mapped value,
+// followed by previously-desirable but still allowable privileges in any order.
+//
+// IMPORTANT: CREATE|DROP|ALL privileges should always be denied or database
+// users will be able to modify system tables' schema at will. CREATE and DROP
+// privileges are allowed on some system tables for backwards compatibility
+// reasons only!
+//
+// If we supported backwards-incompatible migrations, pruning allowed privileges
+// would require a two-step migration process. First, a new version that allows
+// both must be deployed to all nodes, after which a a migration to upgrade from
+// the old privileges to the new privileges can be run. Only then can a version
+// that removes the old allowed versions be deployed. TODO(benesch): Once we
+// support backwards-incompatible migrations, prune old allowed privileges.
+var SystemAllowedPrivileges = map[ID]privilege.Lists{
+	keys.SystemDatabaseID:  {privilege.ReadData},
+	keys.NamespaceTableID:  {privilege.ReadData},
+	keys.DescriptorTableID: {privilege.ReadData},
+	keys.UsersTableID:      {privilege.ReadWriteData},
+	keys.ZonesTableID:      {privilege.ReadWriteData},
+	keys.LeaseTableID:      {privilege.ReadWriteData, {privilege.ALL}},
+	keys.EventLogTableID:   {privilege.ReadWriteData, {privilege.ALL}},
+	keys.RangeEventTableID: {privilege.ReadWriteData, {privilege.ALL}},
+	keys.UITableID:         {privilege.ReadWriteData, {privilege.ALL}},
+}
+
+// SystemDesiredPrivileges returns the desired privilege list (i.e., the
+// privilege list with which the object should be created with in a fresh
+// cluster) for a given system object ID. This function panics if id does not
+// exist in the SystemAllowedPrivileges map and should only be used in contexts
+// where id is guaranteed to exist.
+func SystemDesiredPrivileges(id ID) privilege.List {
+	return SystemAllowedPrivileges[id][0]
+}
+
 // Helpers used to make some of the TableDescriptor literals below more concise.
 var (
 	colTypeInt       = ColumnType{Kind: ColumnType_INT}
@@ -138,7 +184,7 @@ var (
 		ID:   keys.SystemDatabaseID,
 		// Assign max privileges to root user.
 		Privileges: NewPrivilegeDescriptor(security.RootUser,
-			SystemConfigAllowedPrivileges[keys.SystemDatabaseID]),
+			SystemDesiredPrivileges(keys.SystemDatabaseID)),
 	}
 
 	// NamespaceTable is the descriptor for the namespace table.
@@ -167,7 +213,7 @@ var (
 			ColumnIDs:        []ColumnID{1, 2},
 		},
 		NextIndexID:    2,
-		Privileges:     NewPrivilegeDescriptor(security.RootUser, SystemConfigAllowedPrivileges[2]),
+		Privileges:     NewPrivilegeDescriptor(security.RootUser, SystemDesiredPrivileges(keys.NamespaceTableID)),
 		FormatVersion:  InterleavedFormatVersion,
 		NextMutationID: 1,
 	}
@@ -176,7 +222,7 @@ var (
 	DescriptorTable = TableDescriptor{
 		Name:       "descriptor",
 		ID:         keys.DescriptorTableID,
-		Privileges: NewPrivilegeDescriptor(security.RootUser, SystemConfigAllowedPrivileges[3]),
+		Privileges: NewPrivilegeDescriptor(security.RootUser, SystemDesiredPrivileges(keys.DescriptorTableID)),
 		ParentID:   1,
 		Version:    1,
 		Columns: []ColumnDescriptor{
@@ -213,7 +259,7 @@ var (
 		PrimaryIndex:   pk("username"),
 		NextFamilyID:   3,
 		NextIndexID:    2,
-		Privileges:     NewPrivilegeDescriptor(security.RootUser, SystemConfigAllowedPrivileges[4]),
+		Privileges:     NewPrivilegeDescriptor(security.RootUser, SystemDesiredPrivileges(keys.UsersTableID)),
 		FormatVersion:  InterleavedFormatVersion,
 		NextMutationID: 1,
 	}
@@ -236,21 +282,9 @@ var (
 		PrimaryIndex:   pk("id"),
 		NextFamilyID:   3,
 		NextIndexID:    2,
-		Privileges:     NewPrivilegeDescriptor(security.RootUser, SystemConfigAllowedPrivileges[5]),
+		Privileges:     NewPrivilegeDescriptor(security.RootUser, SystemDesiredPrivileges(keys.ZonesTableID)),
 		FormatVersion:  InterleavedFormatVersion,
 		NextMutationID: 1,
-	}
-
-	// SystemConfigAllowedPrivileges describes the privileges allowed for each
-	// system config object. No user may have more than those privileges, and
-	// the root user must have exactly those privileges. CREATE|DROP|ALL
-	// should always be denied.
-	SystemConfigAllowedPrivileges = map[ID]privilege.List{
-		keys.SystemDatabaseID:  privilege.ReadData,
-		keys.NamespaceTableID:  privilege.ReadData,
-		keys.DescriptorTableID: privilege.ReadData,
-		keys.UsersTableID:      privilege.ReadWriteData,
-		keys.ZonesTableID:      privilege.ReadWriteData,
 	}
 )
 
@@ -286,7 +320,7 @@ var (
 		},
 		NextFamilyID:   1,
 		NextIndexID:    2,
-		Privileges:     NewDefaultPrivilegeDescriptor(),
+		Privileges:     NewPrivilegeDescriptor(security.RootUser, SystemDesiredPrivileges(keys.LeaseTableID)),
 		FormatVersion:  InterleavedFormatVersion,
 		NextMutationID: 1,
 	}
@@ -325,7 +359,7 @@ var (
 		},
 		NextFamilyID:   6,
 		NextIndexID:    2,
-		Privileges:     NewDefaultPrivilegeDescriptor(),
+		Privileges:     NewPrivilegeDescriptor(security.RootUser, SystemDesiredPrivileges(keys.EventLogTableID)),
 		FormatVersion:  InterleavedFormatVersion,
 		NextMutationID: 1,
 	}
@@ -366,7 +400,7 @@ var (
 		},
 		NextFamilyID:   7,
 		NextIndexID:    2,
-		Privileges:     NewDefaultPrivilegeDescriptor(),
+		Privileges:     NewPrivilegeDescriptor(security.RootUser, SystemDesiredPrivileges(keys.RangeEventTableID)),
 		FormatVersion:  InterleavedFormatVersion,
 		NextMutationID: 1,
 	}
@@ -391,7 +425,7 @@ var (
 		NextFamilyID:   4,
 		PrimaryIndex:   pk("key"),
 		NextIndexID:    2,
-		Privileges:     NewDefaultPrivilegeDescriptor(),
+		Privileges:     NewPrivilegeDescriptor(security.RootUser, SystemDesiredPrivileges(keys.UITableID)),
 		FormatVersion:  InterleavedFormatVersion,
 		NextMutationID: 1,
 	}
@@ -435,7 +469,12 @@ func addSystemDatabaseToSchema(target *MetadataSchema) {
 	target.otherKV = append(target.otherKV, createDefaultZoneConfig()...)
 }
 
-// IsSystemConfigID returns true if this ID is for a system config object.
+// IsSystemConfigID returns whether this ID is for a system config object.
 func IsSystemConfigID(id ID) bool {
 	return id > 0 && id <= keys.MaxSystemConfigDescID
+}
+
+// IsReservedID returns whether this ID is for any system object.
+func IsReservedID(id ID) bool {
+	return id > 0 && id <= keys.MaxReservedDescID
 }
