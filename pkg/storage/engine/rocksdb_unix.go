@@ -14,10 +14,14 @@
 
 // +build !windows
 
-package rocksdb
+package engine
 
 import (
 	// This is explicit because these Go libraries do not export any Go symbols.
 	_ "github.com/cockroachdb/c-protobuf"
 	_ "github.com/cockroachdb/c-rocksdb"
 )
+
+// #cgo !strictld,darwin LDFLAGS: -Wl,-undefined -Wl,dynamic_lookup
+// #cgo !strictld,!darwin LDFLAGS: -Wl,-unresolved-symbols=ignore-all
+import "C"
