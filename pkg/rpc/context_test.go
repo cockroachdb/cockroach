@@ -265,19 +265,23 @@ func TestHeartbeatHealthTransport(t *testing.T) {
 		return nil
 	})
 
-	closeConns := func() {
+	closeConns := func() error {
 		mu.Lock()
-		for _, conn := range mu.conns {
-			if err := conn.Close(); err != nil {
-				t.Fatal(err)
+		defer mu.Unlock()
+
+		for i := len(mu.conns) - 1; i >= 0; i-- {
+			if err := mu.conns[i].Close(); err != nil {
+				return err
 			}
+			mu.conns = mu.conns[:i]
 		}
-		mu.conns = mu.conns[:0]
-		mu.Unlock()
+		return nil
 	}
 
 	// Close all the connections.
-	closeConns()
+	if err := closeConns(); err != nil {
+		t.Fatal(err)
+	}
 
 	// Should become unhealthy now that the connection was closed.
 	testutils.SucceedsSoon(t, func() error {
@@ -300,7 +304,9 @@ func TestHeartbeatHealthTransport(t *testing.T) {
 	if err := ln.Close(); err != nil {
 		t.Fatal(err)
 	}
-	closeConns()
+	if err := closeConns(); err != nil {
+		t.Fatal(err)
+	}
 
 	// Should become unhealthy again now that the connection was closed.
 	testutils.SucceedsSoon(t, func() error {
