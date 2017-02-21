@@ -546,3 +546,31 @@ Open
 
 statement ok
 COMMIT
+
+# General savepoints
+statement ok
+BEGIN TRANSACTION
+
+statement error SAVEPOINT not supported except for COCKROACH_RESTART
+SAVEPOINT other
+
+statement ok
+ROLLBACK
+
+statement ok
+BEGIN TRANSACTION
+
+statement error SAVEPOINT not supported except for COCKROACH_RESTART
+RELEASE SAVEPOINT other
+
+statement ok
+ROLLBACK
+
+statement ok
+BEGIN TRANSACTION
+
+statement error SAVEPOINT not supported except for COCKROACH_RESTART
+ROLLBACK TO SAVEPOINT other
+
+statement ok
+ROLLBACK
