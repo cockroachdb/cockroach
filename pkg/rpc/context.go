@@ -17,6 +17,7 @@
 package rpc
 
 import (
+	"errors"
 	"math"
 	"sync"
 	"time"
@@ -102,9 +103,10 @@ func NewServer(ctx *Context) *grpc.Server {
 
 type connMeta struct {
 	sync.Once
-	conn    *grpc.ClientConn
-	err     error
-	healthy bool
+	conn *grpc.ClientConn
+	err  error
+
+	heartbeatErr error
 }
 
 // Context contains the fields required by the rpc framework.
@@ -216,7 +218,9 @@ func (ctx *Context) GRPCDial(target string, opts ...grpc.DialOption) (*grpc.Clie
 	ctx.conns.Lock()
 	meta, ok := ctx.conns.cache[target]
 	if !ok {
-		meta = &connMeta{}
+		meta = &connMeta{
+			heartbeatErr: errNotHeartbeated,
+		}
 		ctx.conns.cache[target] = meta
 	}
 	ctx.conns.Unlock()
@@ -288,7 +292,7 @@ func (ctx *Context) GRPCDial(target string, opts ...grpc.DialOption) (*grpc.Clie
 		if meta.err == nil {
 			if err := ctx.Stopper.RunTask(func() {
 				ctx.Stopper.RunWorker(func() {
-					err := ctx.runHeartbeat(meta.conn, target)
+					err := ctx.runHeartbeat(meta, target)
 					if err != nil && !grpcutil.IsClosedConnection(err) {
 						log.Error(ctx.masterCtx, err)
 					}
@@ -317,34 +321,27 @@ func (ctx *Context) NewBreaker() *circuit.Breaker {
 	return newBreaker(&ctx.breakerClock)
 }
 
-// setConnHealthy sets the health status of the connection.
-func (ctx *Context) setConnHealthy(remoteAddr string, healthy bool) {
-	ctx.conns.Lock()
-	defer ctx.conns.Unlock()
+var errNotConnected = errors.New("not connected")
+var errNotHeartbeated = errors.New("not yet heartbeated")
 
-	meta, ok := ctx.conns.cache[remoteAddr]
-	if ok {
-		meta.healthy = healthy
-		ctx.conns.cache[remoteAddr] = meta
-	}
-}
-
-// IsConnHealthy returns whether the most recent heartbeat succeeded or not.
+// ConnHealth returns whether the most recent heartbeat succeeded or not.
 // This should not be used as a definite status of a node's health and just used
 // to prioritize healthy nodes over unhealthy ones.
-func (ctx *Context) IsConnHealthy(remoteAddr string) bool {
+func (ctx *Context) ConnHealth(remoteAddr string) error {
 	ctx.conns.Lock()
 	defer ctx.conns.Unlock()
-	meta, ok := ctx.conns.cache[remoteAddr]
-	return ok && meta.healthy
+	if meta, ok := ctx.conns.cache[remoteAddr]; ok {
+		return meta.heartbeatErr
+	}
+	return errNotConnected
 }
 
-func (ctx *Context) runHeartbeat(cc *grpc.ClientConn, remoteAddr string) error {
+func (ctx *Context) runHeartbeat(meta *connMeta, remoteAddr string) error {
 	request := PingRequest{
 		Addr:           ctx.Addr,
 		MaxOffsetNanos: ctx.localClock.MaxOffset().Nanoseconds(),
 	}
-	heartbeatClient := NewHeartbeatClient(cc)
+	heartbeatClient := NewHeartbeatClient(meta.conn)
 
 	var heartbeatTimer timeutil.Timer
 	defer heartbeatTimer.Stop()
@@ -362,7 +359,9 @@ func (ctx *Context) runHeartbeat(cc *grpc.ClientConn, remoteAddr string) error {
 
 		sendTime := ctx.localClock.PhysicalTime()
 		response, err := ctx.heartbeat(heartbeatClient, request)
-		ctx.setConnHealthy(remoteAddr, err == nil)
+		ctx.conns.Lock()
+		meta.heartbeatErr = err
+		ctx.conns.Unlock()
 		if err == nil {
 			receiveTime := ctx.localClock.PhysicalTime()
 
