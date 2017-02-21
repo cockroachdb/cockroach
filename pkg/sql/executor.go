@@ -1071,6 +1071,7 @@ func (e *Executor) execStmtInOpenTxn(
 			return e.noTransactionHelper(txnState)
 		}
 		if err := parser.ValidateRestartCheckpoint(s.Savepoint); err != nil {
+			txnState.updateStateAndCleanupOnErr(err, e)
 			return Result{}, err
 		}
 		// ReleaseSavepoint is executed fully here; there's no planNode for it
@@ -1094,6 +1095,7 @@ func (e *Executor) execStmtInOpenTxn(
 			return e.noTransactionHelper(txnState)
 		}
 		if err := parser.ValidateRestartCheckpoint(s.Name); err != nil {
+			txnState.updateStateAndCleanupOnErr(err, e)
 			return Result{}, err
 		}
 		// We want to disallow SAVEPOINTs to be issued after a transaction has
