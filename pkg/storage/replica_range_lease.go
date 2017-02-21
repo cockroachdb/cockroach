@@ -390,7 +390,7 @@ func (r *Replica) requestLeaseLocked(ctx context.Context, status LeaseStatus) <-
 		r.store.TestingKnobs().LeaseRequestEvent(status.timestamp)
 	}
 	// Propose a Raft command to get a lease for this replica.
-	repDesc, err := r.getReplicaDescriptorLocked()
+	repDesc, err := r.getReplicaDescriptorRLocked()
 	if err != nil {
 		llChan := make(chan *roachpb.Error, 1)
 		llChan <- roachpb.NewError(err)
@@ -456,7 +456,7 @@ func (r *Replica) AdminTransferLease(ctx context.Context, target roachpb.StoreID
 
 		if nextLease, ok := r.mu.pendingLeaseRequest.RequestPending(); ok &&
 			nextLease.Replica != nextLeaseHolder {
-			repDesc, err := r.getReplicaDescriptorLocked()
+			repDesc, err := r.getReplicaDescriptorRLocked()
 			if err != nil {
 				return nil, nil, err
 			}

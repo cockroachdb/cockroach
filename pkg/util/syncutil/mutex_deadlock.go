@@ -33,7 +33,15 @@ type Mutex struct {
 	deadlock.Mutex
 }
 
+// AssertHeld is a no-op for deadlock mutexes.
+func (m *Mutex) AssertHeld() {
+}
+
 // An RWMutex is a reader/writer mutual exclusion lock.
 type RWMutex struct {
 	deadlock.RWMutex
+}
+
+// AssertHeld is a no-op for deadlock mutexes.
+func (m *RWMutex) AssertHeld() {
 }
