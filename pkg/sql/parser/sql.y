@@ -501,6 +501,7 @@ func (u *sqlSymUnion) kvOptions() []KVOption {
 %type <Expr>  in_expr
 %type <Expr>  having_clause
 %type <Expr>  array_expr
+%type <Expr>  interval
 %type <[]ColumnType> type_list prep_type_clause
 %type <Exprs> array_expr_list
 %type <Expr>  row explicit_row implicit_row
@@ -1519,20 +1520,9 @@ zone_value:
   {
     $$.val = &StrVal{s: $1}
   }
-| const_interval SCONST opt_interval
+| interval
   {
-    var err error
-    var d Datum
-    if $3.val == nil {
-      d, err = ParseDInterval($2)
-    } else {
-      d, err = ParseDIntervalWithField($2, $3.durationField())
-    }
-    if err != nil {
-      sqllex.Error(err.Error())
-      return 1
-    }
-    $$.val = d
+    $$.val = $1.expr()
   }
 | numeric_only
 | DEFAULT
@@ -3586,7 +3576,10 @@ opt_interval:
   {
     $$.val = $3.durationField()
   }
-| /* EMPTY */ {}
+| /* EMPTY */
+  {
+    $$.val = nil
+  }
 
 interval_second:
   SECOND
@@ -4908,9 +4901,9 @@ a_expr_const:
   {
     $$.val = &CastExpr{Expr: &StrVal{s: $2}, Type: $1.colType(), syntaxMode: castPrepend}
   }
-| const_interval SCONST opt_interval
+| interval
   {
-    $$.val = &CastExpr{Expr: &StrVal{s: $2}, Type: $1.colType(), syntaxMode: castPrepend}
+    $$.val = $1.expr()
   }
 | const_interval '(' ICONST ')' SCONST
   {
@@ -4938,6 +4931,25 @@ signed_iconst:
 | '-' ICONST
   {
     $$.val = &NumVal{Value: constant.UnaryOp(token.SUB, $2.numVal().Value, 0)}
+  }
+
+interval:
+  const_interval SCONST opt_interval
+  {
+    // We don't carry opt_interval information into the column type, so we need
+    // to parse the interval directly.
+    var err error
+    var d Datum
+    if $3.val == nil {
+      d, err = ParseDInterval($2)
+    } else {
+      d, err = ParseDIntervalWithField($2, $3.durationField())
+    }
+    if err != nil {
+      sqllex.Error(err.Error())
+      return 1
+    }
+    $$.val = d
   }
 
 // Name classification hierarchy.
