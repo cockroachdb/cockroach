@@ -297,6 +297,13 @@ type Replica struct {
 		global, local *CommandQueue
 	}
 
+	tsCacheMu struct {
+		// Protects all fields in the tsCacheMu struct.
+		syncutil.Mutex
+		// Most recent timestamps for keys / key ranges.
+		cache *timestampCache
+	}
+
 	mu struct {
 		// Protects all fields in the mu struct.
 		syncutil.RWMutex
@@ -413,8 +420,6 @@ type Replica struct {
 		// newly recreated replica will have a complete range descriptor.
 		lastToReplica, lastFromReplica roachpb.ReplicaDescriptor
 
-		// Most recent timestamps for keys / key ranges.
-		tsCache *timestampCache
 		// submitProposalFn can be set to mock out the propose operation.
 		submitProposalFn func(*ProposalData) error
 		// Computed checksum at a snapshot UUID.
@@ -619,7 +624,7 @@ func (r *Replica) initLocked(
 	r.cmdQMu.local = NewCommandQueue(false /* !optimizeOverlap */)
 	r.cmdQMu.Unlock()
 
-	r.mu.tsCache = newTimestampCache(clock)
+	r.tsCacheMu.cache = newTimestampCache(clock)
 	r.mu.proposals = map[storagebase.CmdIDKey]*ProposalData{}
 	r.mu.checksums = map[uuid.UUID]replicaChecksum{}
 	// Clear the internal raft group in case we're being reset. Since we're
@@ -1513,23 +1518,14 @@ type endCmds struct {
 // done removes pending commands from the command queue and updates
 // the timestamp cache using the final timestamp of each command.
 func (ec *endCmds) done(br *roachpb.BatchResponse, pErr *roachpb.Error, retry proposalRetryReason) {
-	ec.repl.mu.Lock()
-	ec.doneLocked(br, pErr, retry)
-	ec.repl.mu.Unlock()
-}
-
-// doneLocked is like done but should be called when the replica.mu is already
-// held.
-func (ec *endCmds) doneLocked(
-	br *roachpb.BatchResponse, pErr *roachpb.Error, retry proposalRetryReason,
-) {
-	ec.repl.mu.AssertHeld()
 	// Update the timestamp cache if the command succeeded and is not
 	// being retried. Each request is considered in turn; only those
 	// marked as affecting the cache are processed. Inconsistent reads
 	// are excluded.
 	if pErr == nil && retry == proposalNoRetry && ec.ba.ReadConsistency != roachpb.INCONSISTENT {
-		ec.repl.mu.tsCache.AddRequest(makeCacheRequest(&ec.ba, br))
+		ec.repl.tsCacheMu.Lock()
+		ec.repl.tsCacheMu.cache.AddRequest(makeCacheRequest(&ec.ba, br))
+		ec.repl.tsCacheMu.Unlock()
 	}
 
 	ec.repl.cmdQMu.Lock()
@@ -1791,13 +1787,13 @@ func (r *Replica) beginCmds(ctx context.Context, ba *roachpb.BatchRequest) (*end
 // will inform the batch response timestamp or batch response txn
 // timestamp.
 func (r *Replica) applyTimestampCache(ba *roachpb.BatchRequest) (bool, *roachpb.Error) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
+	r.tsCacheMu.Lock()
+	defer r.tsCacheMu.Unlock()
 
 	if ba.Txn != nil {
-		r.mu.tsCache.ExpandRequests(ba.Txn.Timestamp)
+		r.tsCacheMu.cache.ExpandRequests(ba.Txn.Timestamp)
 	} else {
-		r.mu.tsCache.ExpandRequests(ba.Timestamp)
+		r.tsCacheMu.cache.ExpandRequests(ba.Timestamp)
 	}
 
 	var bumped bool
@@ -1810,7 +1806,7 @@ func (r *Replica) applyTimestampCache(ba *roachpb.BatchRequest) (bool, *roachpb.
 			// has already been finalized, in which case this is a replay.
 			if _, ok := args.(*roachpb.BeginTransactionRequest); ok {
 				key := keys.TransactionKey(header.Key, *ba.GetTxnID())
-				wTS, _, wOK := r.mu.tsCache.GetMaxWrite(key, nil)
+				wTS, _, wOK := r.tsCacheMu.cache.GetMaxWrite(key, nil)
 				if wOK {
 					return bumped, roachpb.NewError(roachpb.NewTransactionReplayError())
 				} else if !wTS.Less(ba.Txn.Timestamp) {
@@ -1828,7 +1824,7 @@ func (r *Replica) applyTimestampCache(ba *roachpb.BatchRequest) (bool, *roachpb.
 			}
 
 			// Forward the timestamp if there's been a more recent read (by someone else).
-			rTS, rTxnID, _ := r.mu.tsCache.GetMaxRead(header.Key, header.EndKey)
+			rTS, rTxnID, _ := r.tsCacheMu.cache.GetMaxRead(header.Key, header.EndKey)
 			if ba.Txn != nil {
 				if rTxnID == nil || *ba.Txn.ID != *rTxnID {
 					nextTS := rTS.Next()
@@ -1846,7 +1842,7 @@ func (r *Replica) applyTimestampCache(ba *roachpb.BatchRequest) (bool, *roachpb.
 			// write too old boolean for transactions. Note that currently
 			// only EndTransaction and DeleteRange requests update the
 			// write timestamp cache.
-			wTS, wTxnID, _ := r.mu.tsCache.GetMaxWrite(header.Key, header.EndKey)
+			wTS, wTxnID, _ := r.tsCacheMu.cache.GetMaxWrite(header.Key, header.EndKey)
 			if ba.Txn != nil {
 				if wTxnID == nil || *ba.Txn.ID != *wTxnID {
 					if !wTS.Less(ba.Txn.Timestamp) {

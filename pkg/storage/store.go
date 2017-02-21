@@ -1844,12 +1844,18 @@ func splitPostApply(
 	}
 
 	// Finish initialization of the RHS.
-	r.mu.Lock()
-	rightRng.mu.Lock()
+
 	// Copy the timestamp cache from the LHS.
 	// TODO(andrei): We should truncate the entries in both LHS and RHS' timestamp
 	// caches to the respective spans of these new ranges.
-	r.mu.tsCache.MergeInto(rightRng.mu.tsCache, true /* clear */)
+	r.tsCacheMu.Lock()
+	rightRng.tsCacheMu.Lock()
+	r.tsCacheMu.cache.MergeInto(rightRng.tsCacheMu.cache, true /* clear */)
+	rightRng.tsCacheMu.Unlock()
+	r.tsCacheMu.Unlock()
+
+	r.mu.Lock()
+	rightRng.mu.Lock()
 	// Copy the minLeaseProposedTS from the LHS.
 	rightRng.mu.minLeaseProposedTS = r.mu.minLeaseProposedTS
 	rightRng.mu.Unlock()
@@ -2023,7 +2029,11 @@ func (s *Store) maybeMergeTimestampCaches(
 
 	if subsumingRep.isLeaseValidRLocked(subsumingLease, now) &&
 		subsumingLease.OwnedBy(s.StoreID()) {
-		subsumedRep.mu.tsCache.MergeInto(subsumingRep.mu.tsCache, false /* clear */)
+		subsumingRep.tsCacheMu.Lock()
+		subsumedRep.tsCacheMu.Lock()
+		subsumedRep.tsCacheMu.cache.MergeInto(subsumingRep.tsCacheMu.cache, false /* clear */)
+		subsumedRep.tsCacheMu.Unlock()
+		subsumingRep.tsCacheMu.Unlock()
 	}
 	return nil
 }

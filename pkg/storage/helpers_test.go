@@ -235,9 +235,9 @@ func (r *Replica) GetLease() (*roachpb.Lease, *roachpb.Lease) {
 
 // GetTimestampCacheLowWater returns the timestamp cache low water mark.
 func (r *Replica) GetTimestampCacheLowWater() hlc.Timestamp {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	return r.mu.tsCache.lowWater
+	r.tsCacheMu.Lock()
+	defer r.tsCacheMu.Unlock()
+	return r.tsCacheMu.cache.lowWater
 }
 
 // GetRaftLogSize returns the raft log size.
