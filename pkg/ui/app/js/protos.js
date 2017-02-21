@@ -2777,6 +2777,16 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                                             "type": "string",
                                             "name": "node_id",
                                             "id": 1
+                                        },
+                                        {
+                                            "rule": "repeated",
+                                            "type": "int64",
+                                            "name": "range_ids",
+                                            "id": 2,
+                                            "options": {
+                                                "(gogoproto.customname)": "RangeIDs",
+                                                "(gogoproto.casttype)": "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"
+                                            }
                                         }
                                     ]
                                 },
@@ -3005,7 +3015,18 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                                 },
                                 {
                                     "name": "RaftDebugRequest",
-                                    "fields": []
+                                    "fields": [
+                                        {
+                                            "rule": "repeated",
+                                            "type": "int64",
+                                            "name": "range_ids",
+                                            "id": 1,
+                                            "options": {
+                                                "(gogoproto.customname)": "RangeIDs",
+                                                "(gogoproto.casttype)": "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"
+                                            }
+                                        }
+                                    ]
                                 },
                                 {
                                     "name": "RaftDebugResponse",
