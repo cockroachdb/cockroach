@@ -47,6 +47,9 @@ type planner struct {
 	evalCtx  parser.EvalContext
 	leases   []*LeaseState
 	leaseMgr *LeaseManager
+
+	distSQLPlanner *distSQLPlanner
+
 	// This is used as a cache for database names.
 	// TODO(andrei): get rid of it and replace it with a leasing system for
 	// database descriptors.

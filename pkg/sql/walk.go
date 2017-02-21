@@ -366,6 +366,9 @@ func (v *planVisitor) visit(plan planNode) {
 	case *explainDebugNode:
 		v.visit(n.plan)
 
+	case *explainDistSQLNode:
+		v.visit(n.plan)
+
 	case *ordinalityNode:
 		v.visit(n.source)
 
@@ -500,6 +503,7 @@ var planNodeNames = map[reflect.Type]string{
 	reflect.TypeOf(&dropViewNode{}):       "drop view",
 	reflect.TypeOf(&emptyNode{}):          "empty",
 	reflect.TypeOf(&explainDebugNode{}):   "explain debug",
+	reflect.TypeOf(&explainDistSQLNode{}): "explain dist_sql",
 	reflect.TypeOf(&explainPlanNode{}):    "explain plan",
 	reflect.TypeOf(&explainTraceNode{}):   "explain trace",
 	reflect.TypeOf(&filterNode{}):         "filter",
