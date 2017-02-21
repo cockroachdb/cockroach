@@ -912,6 +912,34 @@ func newNotLeaseHolderError(
 	return err
 }
 
+// leaseGoodToGo is a fast-path for lease checks which verifies that an
+// existing lease is valid and owned by the current store.
+func (r *Replica) leaseGoodToGo(ctx context.Context) (LeaseStatus, bool) {
+	if r.requiresExpiringLease() {
+		// Slow-path for expiration-based leases.
+		return LeaseStatus{}, false
+	}
+
+	timestamp := r.store.Clock().Now()
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	status := r.leaseStatus(r.mu.state.Lease, timestamp, r.mu.minLeaseProposedTS)
+	switch status.state {
+	case leaseValid:
+		if status.lease.OwnedBy(r.store.StoreID()) {
+			// We own the lease...
+			if repDesc, err := r.getReplicaDescriptorLocked(); err == nil {
+				if _, ok := r.mu.pendingLeaseRequest.TransferInProgress(repDesc.ReplicaID); !ok {
+					// ...and there is no transfer pending.
+					return status, true
+				}
+			}
+		}
+	}
+	return status, false
+}
+
 // redirectOnOrAcquireLease checks whether this replica has the lease
 // at the current timestamp. If it does, returns success. If another
 // replica currently holds the lease, redirects by returning
@@ -926,6 +954,10 @@ func newNotLeaseHolderError(
 //  will not incur latency waiting for the command to complete.
 //  Reads, however, must wait.
 func (r *Replica) redirectOnOrAcquireLease(ctx context.Context) (LeaseStatus, *roachpb.Error) {
+	if status, ok := r.leaseGoodToGo(ctx); ok {
+		return status, nil
+	}
+
 	// Loop until the lease is held or the replica ascertains the actual
 	// lease holder. Returns also on context.Done() (timeout or cancellation).
 	var status LeaseStatus
