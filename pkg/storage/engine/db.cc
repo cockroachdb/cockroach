@@ -16,9 +16,6 @@
 // Author: Spencer Kimball (spencer.kimball@gmail.com)
 
 #include <algorithm>
-#include <atomic>
-#include <stdarg.h>
-#include <google/protobuf/repeated_field.h>
 #include <google/protobuf/stubs/stringprintf.h>
 #include "rocksdb/cache.h"
 #include "rocksdb/db.h"
@@ -31,7 +28,6 @@
 #include "rocksdb/statistics.h"
 #include "rocksdb/sst_file_writer.h"
 #include "rocksdb/table.h"
-#include "rocksdb/utilities/checkpoint.h"
 #include "rocksdb/utilities/write_batch_with_index.h"
 #include "cockroach/pkg/roachpb/data.pb.h"
 #include "cockroach/pkg/roachpb/internal.pb.h"
@@ -40,8 +36,6 @@
 #include "db.h"
 #include "encoding.h"
 #include "eventlistener.h"
-
-#include <iostream>
 
 extern "C" {
 #include "_cgo_export.h"

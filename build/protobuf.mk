@@ -24,7 +24,7 @@ GITHUB_ROOT    := $(REPO_ROOT)/vendor/github.com
 GOGOPROTO_ROOT := $(GITHUB_ROOT)/gogo/protobuf
 PROTOBUF_ROOT  := $(GOGOPROTO_ROOT)/protobuf
 
-NATIVE_ROOT := $(PKG_ROOT)/storage/engine/rocksdb
+NATIVE_ROOT := $(PKG_ROOT)/storage/engine
 
 # Ensure we have an unambiguous GOPATH
 GOPATH := $(realpath $(ORG_ROOT)/../../..)

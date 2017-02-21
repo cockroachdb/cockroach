@@ -10,13 +10,9 @@
 #include "rocksdb/iterator.h"
 #include "rocksdb/comparator.h"
 #include "rocksdb/write_batch.h"
-#include "rocksdb/write_batch_base.h"
 #include "rocksdb/utilities/write_batch_with_index.h"
-#include "cockroach/pkg/storage/engine/enginepb/mvcc.pb.h"
+#include "../../../storage/engine/db_internal.h"
 #include "db.h"
-#include "db_internal.h"
-
-#include <iostream>
 
 extern "C" {
 #include "_cgo_export.h"

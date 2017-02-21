@@ -16,6 +16,7 @@
 // Author: Peter Mattis (peter@cockroachlabs.com)
 
 #include "rocksdb/slice.h"
+#include "encoding.h"
 
 // TODO(pmattis): These functions are not tested. Doing so is made
 // difficult by "go test" because _test.go files cannot 'import "C"'.

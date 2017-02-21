@@ -12,18 +12,19 @@ import (
 	"errors"
 	"unsafe"
 
-	// rocksdbccl only exports cgo code.
-	_ "github.com/cockroachdb/cockroach/pkg/ccl/storageccl/engineccl/rocksdbccl"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 )
 
+// #cgo CPPFLAGS: -I../../../../vendor/github.com/cockroachdb/c-protobuf/internal/src
+// #cgo CPPFLAGS: -I../../../../vendor/github.com/cockroachdb/c-rocksdb/internal/include
+// #cgo CXXFLAGS: -std=c++11
 // #cgo !strictld,darwin LDFLAGS: -Wl,-undefined -Wl,dynamic_lookup
 // #cgo !strictld,!darwin LDFLAGS: -Wl,-unresolved-symbols=ignore-all
 // #cgo linux LDFLAGS: -lrt
 //
 // #include <stdlib.h>
-// #include "rocksdbccl/db.h"
+// #include "db.h"
 import "C"
 
 // VerifyBatchRepr asserts that all keys in a BatchRepr are between the specified
