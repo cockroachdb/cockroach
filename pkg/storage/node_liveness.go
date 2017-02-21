@@ -105,13 +105,13 @@ type NodeLiveness struct {
 	pauseHeartbeat    atomic.Value // contains a bool
 	sem               chan struct{}
 	metrics           LivenessMetrics
-	heartbeatCallback HeartbeatCallback
 
 	mu struct {
 		syncutil.Mutex
-		self      Liveness
-		callbacks []IsLiveCallback
-		nodes     map[roachpb.NodeID]Liveness
+		self              Liveness
+		callbacks         []IsLiveCallback
+		nodes             map[roachpb.NodeID]Liveness
+		heartbeatCallback HeartbeatCallback
 	}
 }
 
@@ -229,7 +229,10 @@ func (nl *NodeLiveness) StartHeartbeat(
 	log.VEventf(ctx, 1, "starting liveness heartbeat")
 	retryOpts := base.DefaultRetryOptions()
 	retryOpts.Closer = stopper.ShouldQuiesce()
-	nl.heartbeatCallback = alive
+
+	nl.mu.Lock()
+	nl.mu.heartbeatCallback = alive
+	nl.mu.Unlock()
 
 	stopper.RunWorker(func() {
 		ambient := nl.ambientCtx
@@ -521,8 +524,12 @@ func (nl *NodeLiveness) updateLiveness(
 		}
 		return err
 	}
-	if nl.heartbeatCallback != nil {
-		return nl.heartbeatCallback(ctx)
+
+	nl.mu.Lock()
+	cb := nl.mu.heartbeatCallback
+	nl.mu.Unlock()
+	if cb != nil {
+		return cb(ctx)
 	}
 	return nil
 }
