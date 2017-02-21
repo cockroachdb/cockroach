@@ -51,8 +51,6 @@ var configFile = flag.String("f", "", "config file that specifies an allocsim wo
 
 // Configuration provides a way to configure allocsim via a JSON file.
 // TODO(a-robinson): Consider moving all the above options into the config file.
-// TODO(a-robinson): Allow for specifying different distributions of requests
-// from different localities.
 type Configuration struct {
 	Localities []Locality `json:"Localities"`
 }
@@ -61,6 +59,7 @@ type Configuration struct {
 type Locality struct {
 	Name              string `json:"Name"`
 	NumNodes          int    `json:"NumNodes"`
+	NumWorkers        int    `json:"NumWorkers"`
 	OutgoingLatencies []*struct {
 		Name    string       `json:"Name"`
 		Latency jsonDuration `json:"Latency"`
@@ -96,8 +95,10 @@ func loadConfig(file string) (Configuration, error) {
 	}
 
 	*numNodes = 0
+	*workers = 0
 	for _, locality := range config.Localities {
 		*numNodes += locality.NumNodes
+		*workers += locality.NumWorkers
 	}
 	return config, nil
 }
@@ -132,8 +133,30 @@ func newAllocSim(c *localcluster.Cluster) *allocSim {
 func (a *allocSim) run(workers int) {
 	a.setup()
 	for i := 0; i < workers; i++ {
-		go a.worker(i, workers)
+		go a.worker(i, i, workers)
 	}
+	go a.rangeStats(time.Second)
+	a.monitor(time.Second)
+}
+
+func (a *allocSim) runWithConfig(config Configuration) {
+	a.setup()
+
+	numWorkers := 0
+	for _, locality := range config.Localities {
+		numWorkers += locality.NumWorkers
+	}
+
+	firstNodeInLocality := 0
+	for _, locality := range config.Localities {
+		for i := 0; i < locality.NumWorkers; i++ {
+			node := firstNodeInLocality + (i % locality.NumNodes)
+			startNum := firstNodeInLocality + i
+			go a.worker(node, startNum, numWorkers)
+		}
+		firstNodeInLocality += locality.NumNodes
+	}
+
 	go a.rangeStats(time.Second)
 	a.monitor(time.Second)
 }
@@ -165,13 +188,14 @@ func (a *allocSim) maybeLogError(err error) {
 	atomic.AddUint64(&a.stats.errors, 1)
 }
 
-func (a *allocSim) worker(i, workers int) {
+// TODO: Also record average latency!
+func (a *allocSim) worker(dbIdx, startNum, workers int) {
 	const insert = `INSERT INTO allocsim.blocks (id, num, data) VALUES ($1, $2, repeat('a', $3)::bytes)`
 
 	r, _ := randutil.NewPseudoRand()
-	db := a.DB[i%len(a.DB)]
+	db := a.DB[dbIdx%len(a.DB)]
 
-	for num := i; true; num += workers {
+	for num := startNum; true; num += workers {
 		if _, err := db.Exec(insert, r.Int63(), num, *blockSize); err != nil {
 			a.maybeLogError(err)
 		} else {
@@ -285,13 +309,13 @@ func (a *allocSim) monitor(d time.Duration) {
 
 		if ticks%20 == 0 || numReplicas != len(replicas) {
 			numReplicas = len(replicas)
-			fmt.Println(formatHeader("_elapsed__ops/sec___errors_replicas", numReplicas, a.localities))
+			fmt.Println(formatHeader("_elapsed__ops/sec_aggregate___errors_replicas", numReplicas, a.localities))
 		}
 
-		fmt.Printf("%8s %8.1f %8d %8d%s\n",
+		fmt.Printf("%8s %8.1f %9.1f %8d %8d%s\n",
 			time.Duration(now.Sub(start).Seconds()+0.5)*time.Second,
-			float64(ops-lastOps)/elapsed, atomic.LoadUint64(&a.stats.errors),
-			ranges, formatNodes(replicas, leases))
+			float64(ops-lastOps)/elapsed, float64(ops)/now.Sub(start).Seconds(),
+			atomic.LoadUint64(&a.stats.errors), ranges, formatNodes(replicas, leases))
 		lastTime = now
 		lastOps = ops
 	}
@@ -444,5 +468,9 @@ func main() {
 
 	c.Start("allocsim", *workers, os.Args[0], nil, flag.Args(), perNodeArgs)
 	c.UpdateZoneConfig(1, 1<<20)
-	a.run(*workers)
+	if len(config.Localities) != 0 {
+		a.runWithConfig(config)
+	} else {
+		a.run(*workers)
+	}
 }
