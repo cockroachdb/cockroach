@@ -1125,7 +1125,7 @@ func TestReplicaLeaseRejectUnknownRaftNodeID(t *testing.T) {
 }
 
 // TestReplicaDrainLease makes sure that no new leases are granted when
-// the Store is in DrainLeases mode.
+// the Store is draining.
 func TestReplicaDrainLease(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	tc := testContext{}
@@ -1141,9 +1141,9 @@ func TestReplicaDrainLease(t *testing.T) {
 	var slept atomic.Value
 	slept.Store(false)
 	if err := stopper.RunAsyncTask(context.Background(), func(_ context.Context) {
-		// Wait just a bit so that the main thread can check that
-		// DrainLeases blocks (false negatives are possible, but 10ms is
-		// plenty to make this fail 99.999% of the time in practice).
+		// Wait just a bit so that the main thread can check that SetDraining
+		// blocks (false negatives are possible, but 10ms is plenty to make this
+		// fail 99.999% of the time in practice).
 		time.Sleep(10 * time.Millisecond)
 		slept.Store(true)
 		// Expire the lease (and any others that may race in before we drain).
@@ -1159,11 +1159,11 @@ func TestReplicaDrainLease(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := tc.store.DrainLeases(true); err != nil {
+	if err := tc.store.SetDraining(true); err != nil {
 		t.Fatal(err)
 	}
 	if !slept.Load().(bool) {
-		t.Fatal("DrainLeases returned with active lease")
+		t.Fatal("SetDraining returned with active lease")
 	}
 	tc.repl.mu.Lock()
 	pErr = <-tc.repl.requestLeaseLocked(context.Background(), status)
@@ -1172,7 +1172,7 @@ func TestReplicaDrainLease(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected NotLeaseHolderError, not %v", pErr)
 	}
-	if err := tc.store.DrainLeases(false); err != nil {
+	if err := tc.store.SetDraining(false); err != nil {
 		t.Fatal(err)
 	}
 	// Newly unfrozen, leases work again.

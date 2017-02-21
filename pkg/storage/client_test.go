@@ -1108,7 +1108,7 @@ func (m *multiTestContext) waitForValues(key roachpb.Key, expected []int64) {
 func (m *multiTestContext) transferLease(
 	ctx context.Context, rangeID roachpb.RangeID, source int, dest int,
 ) {
-	live := m.stores[dest] != nil && !m.stores[dest].IsDrainingLeases()
+	live := m.stores[dest] != nil && !m.stores[dest].IsDraining()
 	if !live {
 		m.t.Fatalf("can't transfer lease to down or draining node at index %d", dest)
 	}

@@ -433,13 +433,13 @@ type Store struct {
 	// being restarted.
 	rebalancesDisabled int32
 
-	// drainLeases holds a bool which indicates whether Replicas should be
-	// allowed to acquire or extend range leases; see DrainLeases().
+	// draining holds a bool which indicates whether this store is draining. See
+	// SetDraining() for a more detailed explanation of behavior changes.
 	//
 	// TODO(bdarnell,tschottdorf): Would look better inside of `mu`, which at
 	// the time of its creation was riddled with deadlock (but that situation
 	// has likely improved).
-	drainLeases atomic.Value
+	draining atomic.Value
 
 	// Locking notes: To avoid deadlocks, the following lock order must be
 	// obeyed: Replica.raftMu < Replica.readOnlyCmdMu < Store.mu < Replica.mu
@@ -894,7 +894,7 @@ func NewStore(cfg StoreConfig, eng engine.Engine, nodeDesc *roachpb.NodeDescript
 
 	s.intentResolver = newIntentResolver(s)
 	s.raftEntryCache = newRaftEntryCache(cfg.RaftEntryCacheSize)
-	s.drainLeases.Store(false)
+	s.draining.Store(false)
 	s.scheduler = newRaftScheduler(s.cfg.AmbientCtx, s.metrics, s, storeSchedulerConcurrency)
 
 	storeMuLogger := thresholdLogger(
@@ -981,13 +981,13 @@ func (s *Store) AnnotateCtxWithSpan(
 	return s.cfg.AmbientCtx.AnnotateCtxWithSpan(ctx, opName)
 }
 
-// DrainLeases (when called with 'true') prevents all of the Store's
+// SetDraining (when called with 'true') prevents all of the Store's
 // Replicas from acquiring or extending range leases and waits until all of
 // them have expired. If an error is returned, the draining state is still
 // active, but there may be active leases held by some of the Store's Replicas.
 // When called with 'false', returns to the normal mode of operation.
-func (s *Store) DrainLeases(drain bool) error {
-	s.drainLeases.Store(drain)
+func (s *Store) SetDraining(drain bool) error {
+	s.draining.Store(drain)
 	if !drain {
 		return nil
 	}
@@ -1810,9 +1810,9 @@ func (s *Store) Tracer() opentracing.Tracer { return s.cfg.AmbientCtx.Tracer }
 // TestingKnobs accessor.
 func (s *Store) TestingKnobs() *StoreTestingKnobs { return &s.cfg.TestingKnobs }
 
-// IsDrainingLeases accessor.
-func (s *Store) IsDrainingLeases() bool {
-	return s.drainLeases.Load().(bool)
+// IsDraining accessor.
+func (s *Store) IsDraining() bool {
+	return s.draining.Load().(bool)
 }
 
 // NewRangeDescriptor creates a new descriptor based on start and end
@@ -2725,6 +2725,13 @@ func (s *Store) reserveSnapshot(
 // possible.
 func (s *Store) HandleSnapshot(header *SnapshotRequest_Header, stream SnapshotResponseStream) error {
 	s.metrics.raftRcvdMessages[raftpb.MsgSnap].Inc(1)
+
+	if s.IsDraining() {
+		return stream.Send(&SnapshotResponse{
+			Status:  SnapshotResponse_DECLINED,
+			Message: "store is draining",
+		})
+	}
 
 	ctx := s.AnnotateCtx(stream.Context())
 	cleanup, err := s.reserveSnapshot(ctx, header)
