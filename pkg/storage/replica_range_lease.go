@@ -402,7 +402,7 @@ func (r *Replica) requestLeaseLocked(ctx context.Context, status LeaseStatus) <-
 			newNotLeaseHolderError(&transferLease, r.store.StoreID(), r.mu.state.Desc))
 		return llChan
 	}
-	if r.store.IsDrainingLeases() {
+	if r.store.IsDraining() {
 		// We've retired from active duty.
 		llChan := make(chan *roachpb.Error, 1)
 		llChan <- roachpb.NewError(newNotLeaseHolderError(nil, r.store.StoreID(), r.mu.state.Desc))

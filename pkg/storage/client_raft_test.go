@@ -1032,7 +1032,7 @@ func TestRefreshPendingCommands(t *testing.T) {
 			for i := 0; i < 2; i++ {
 				wg.Add(1)
 				go func(i int) {
-					if err := mtc.stores[i].DrainLeases(true); err != nil {
+					if err := mtc.stores[i].SetDraining(true); err != nil {
 						wg.Done(errors.Wrapf(err, "store %d", i))
 						return
 					}
@@ -1042,13 +1042,13 @@ func TestRefreshPendingCommands(t *testing.T) {
 
 			// Wait for the stores 0 and 1 to have entered draining mode, and then
 			// advance the clock. Advancing the clock will leave the liveness records
-			// of draining nodes in an expired state, so the DrainLeases() call above
+			// of draining nodes in an expired state, so the SetDraining() call above
 			// will be able to terminate.
 			draining := false
 			for !draining {
 				draining = true
 				for i := 0; i < 2; i++ {
-					draining = draining && mtc.stores[i].IsDrainingLeases()
+					draining = draining && mtc.stores[i].IsDraining()
 				}
 			}
 			mtc.advanceClock(context.Background())
