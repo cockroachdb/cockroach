@@ -25,8 +25,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cockroachdb/apd"
 	"golang.org/x/net/context"
-	"gopkg.in/inf.v0"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"
@@ -1451,7 +1451,7 @@ func golangFillQueryArguments(pinfo *parser.PlaceholderInfo, args []interface{})
 			d = parser.MakeDTimestamp(t, time.Microsecond)
 		case time.Duration:
 			d = &parser.DInterval{Duration: duration.Duration{Nanos: t.Nanoseconds()}}
-		case *inf.Dec:
+		case *apd.Decimal:
 			dd := &parser.DDecimal{}
 			dd.Set(t)
 			d = dd
@@ -1564,7 +1564,8 @@ func EvalAsOfTimestamp(
 	case *parser.DDecimal:
 		// Format the decimal into a string and split on `.` to extract the nanosecond
 		// walltime and logical tick parts.
-		s := d.String()
+		// TODO(mjibson): use d.Modf() instead of converting to a string.
+		s := d.ToStandard()
 		parts := strings.SplitN(s, ".", 2)
 		nanos, err := strconv.ParseInt(parts[0], 10, 64)
 		if err != nil {

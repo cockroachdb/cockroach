@@ -18,17 +18,15 @@ package parser
 
 import (
 	"bytes"
-	"errors"
 	"fmt"
 	"go/constant"
 	"go/token"
-	"strconv"
 	"strings"
 	"time"
 	"unicode/utf8"
 
-	"github.com/cockroachdb/cockroach/pkg/util/decimal"
-	"gopkg.in/inf.v0"
+	"github.com/cockroachdb/apd"
+	"github.com/pkg/errors"
 )
 
 // Constant is an constant literal expression which may be resolved to more than one type.
@@ -225,35 +223,24 @@ func (expr *NumVal) ResolveAsType(ctx *SemaContext, typ Type) (Datum, error) {
 			// Handle constant.ratVal, which will return a rational string
 			// like 6/7. If only we could call big.Rat.FloatString() on it...
 			num, den := s[:idx], s[idx+1:]
-			if _, ok := dd.SetString(num); !ok {
-				return nil, fmt.Errorf("could not evaluate numerator of %v as Datum type DDecimal "+
+			if _, _, err := dd.SetString(num); err != nil {
+				return nil, errors.Wrapf(err, "could not evaluate numerator of %v as Datum type DDecimal "+
 					"from string %q", expr, num)
 			}
 			// TODO(nvanbenschoten) Should we try to avoid this allocation?
-			denDec := new(inf.Dec)
-			if _, ok := denDec.SetString(den); !ok {
-				return nil, fmt.Errorf("could not evaluate denominator %v as Datum type DDecimal "+
+			denDec := new(apd.Decimal)
+			if _, _, err := denDec.SetString(den); err != nil {
+				return nil, errors.Wrapf(err, "could not evaluate denominator %v as Datum type DDecimal "+
 					"from string %q", expr, den)
 			}
-			dd.QuoRound(&dd.Dec, denDec, decimal.Precision, inf.RoundHalfUp)
-		} else {
-			// TODO(nvanbenschoten) Handling e will not be necessary once the TODO about the
-			// OrigString workaround from above is addressed.
-			eScale := inf.Scale(0)
-			if eIdx := strings.IndexAny(s, "eE"); eIdx != -1 {
-				eInt, err := strconv.ParseInt(s[eIdx+1:], 10, 32)
-				if err != nil {
-					return nil, fmt.Errorf("could not evaluate %v as Datum type DDecimal from "+
-						"string %q: %v", expr, s, err)
-				}
-				eScale = inf.Scale(eInt)
-				s = s[:eIdx]
+			if _, err := DecimalCtx.Quo(&dd.Decimal, &dd.Decimal, denDec); err != nil {
+				return nil, err
 			}
-			if _, ok := dd.SetString(s); !ok {
-				return nil, fmt.Errorf("could not evaluate %v as Datum type DDecimal from "+
+		} else {
+			if _, _, err := dd.SetString(s); err != nil {
+				return nil, errors.Wrapf(err, "could not evaluate %v as Datum type DDecimal from "+
 					"string %q", expr, s)
 			}
-			dd.SetScale(dd.Scale() - eScale)
 		}
 		return dd, nil
 	case TypeOid:
