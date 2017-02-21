@@ -53,42 +53,43 @@ func (p *planner) Explain(n *parser.Explain, autoCommit bool) (planNode, error) 
 
 	for _, opt := range n.Options {
 		newMode := explainNone
-		if strings.EqualFold(opt, "DEBUG") {
+		switch {
+		case strings.EqualFold(opt, "DEBUG"):
 			newMode = explainDebug
-		} else if strings.EqualFold(opt, "TRACE") {
+		case strings.EqualFold(opt, "TRACE"):
 			newMode = explainTrace
-		} else if strings.EqualFold(opt, "PLAN") {
+		case strings.EqualFold(opt, "PLAN"):
 			newMode = explainPlan
-		} else if strings.EqualFold(opt, "TYPES") {
+		case strings.EqualFold(opt, "TYPES"):
 			newMode = explainPlan
 			explainer.showExprs = true
 			explainer.showTypes = true
 			// TYPES implies METADATA.
 			explainer.showMetadata = true
-		} else if strings.EqualFold(opt, "INDENT") {
+		case strings.EqualFold(opt, "INDENT"):
 			explainer.doIndent = true
-		} else if strings.EqualFold(opt, "SYMVARS") {
+		case strings.EqualFold(opt, "SYMVARS"):
 			explainer.symbolicVars = true
-		} else if strings.EqualFold(opt, "METADATA") {
+		case strings.EqualFold(opt, "METADATA"):
 			explainer.showMetadata = true
-		} else if strings.EqualFold(opt, "QUALIFY") {
+		case strings.EqualFold(opt, "QUALIFY"):
 			explainer.qualifyNames = true
-		} else if strings.EqualFold(opt, "VERBOSE") {
+		case strings.EqualFold(opt, "VERBOSE"):
 			// VERBOSE implies EXPRS.
 			explainer.showExprs = true
 			// VERBOSE implies QUALIFY.
 			explainer.qualifyNames = true
 			// VERBOSE implies METADATA.
 			explainer.showMetadata = true
-		} else if strings.EqualFold(opt, "EXPRS") {
+		case strings.EqualFold(opt, "EXPRS"):
 			explainer.showExprs = true
-		} else if strings.EqualFold(opt, "NOEXPAND") {
+		case strings.EqualFold(opt, "NOEXPAND"):
 			expanded = false
-		} else if strings.EqualFold(opt, "NONORMALIZE") {
+		case strings.EqualFold(opt, "NONORMALIZE"):
 			normalizeExprs = false
-		} else if strings.EqualFold(opt, "NOOPTIMIZE") {
+		case strings.EqualFold(opt, "NOOPTIMIZE"):
 			optimized = false
-		} else {
+		default:
 			return nil, fmt.Errorf("unsupported EXPLAIN option: %s", opt)
 		}
 		if newMode != explainNone {
