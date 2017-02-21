@@ -31,7 +31,7 @@ import (
 	"golang.org/x/text/collate"
 	"golang.org/x/text/language"
 
-	"gopkg.in/inf.v0"
+	"github.com/cockroachdb/apd"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
@@ -479,14 +479,18 @@ func (d *DFloat) Size() uintptr {
 
 // DDecimal is the decimal Datum.
 type DDecimal struct {
-	inf.Dec
+	apd.Decimal
 }
 
 // ParseDDecimal parses and returns the *DDecimal Datum value represented by the
 // provided string, or an error if parsing is unsuccessful.
 func ParseDDecimal(s string) (*DDecimal, error) {
+	// Using HighPrecisionCtx here restricts the max and min exponents to 2000,
+	// and the precision to 2000 places. Any rounding or other inexact conversion
+	// will result in an error.
 	dd := &DDecimal{}
-	if _, ok := dd.SetString(s); !ok {
+	_, res, err := HighPrecisionCtx.SetString(&dd.Decimal, s)
+	if res != 0 || err != nil {
 		return nil, makeParseError(s, TypeDecimal, nil)
 	}
 	return dd, nil
@@ -511,7 +515,7 @@ func (d *DDecimal) Compare(other Datum) int {
 		}
 		return cmp
 	}
-	return d.Cmp(&v.Dec)
+	return d.Cmp(&v.Decimal)
 }
 
 // Prev implements the Datum interface.
@@ -549,12 +553,12 @@ func (*DDecimal) AmbiguousFormat() bool { return true }
 
 // Format implements the NodeFormatter interface.
 func (d *DDecimal) Format(buf *bytes.Buffer, f FmtFlags) {
-	buf.WriteString(d.Dec.String())
+	buf.WriteString(d.Decimal.ToStandard())
 }
 
 // Size implements the Datum interface.
 func (d *DDecimal) Size() uintptr {
-	intVal := d.Dec.UnscaledBig()
+	intVal := d.Decimal.Coeff
 	return unsafe.Sizeof(*d) + uintptr(cap(intVal.Bits()))*unsafe.Sizeof(big.Word(0))
 }
 

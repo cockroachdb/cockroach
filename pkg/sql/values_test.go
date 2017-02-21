@@ -22,7 +22,8 @@ import (
 	"testing"
 	"time"
 
-	"gopkg.in/inf.v0"
+	"github.com/cockroachdb/apd"
+	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -30,7 +31,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/pkg/errors"
 )
 
 func makeTestPlanner() *planner {
@@ -185,7 +185,7 @@ func TestGolangQueryArgs(t *testing.T) {
 		{float64(1.0), reflect.TypeOf(parser.TypeFloat)},
 
 		// Decimal type.
-		{inf.NewDec(55, 1), reflect.TypeOf(parser.TypeDecimal)},
+		{apd.New(55, 1), reflect.TypeOf(parser.TypeDecimal)},
 
 		// String type.
 		{"test", reflect.TypeOf(parser.TypeString)},

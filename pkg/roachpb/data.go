@@ -32,9 +32,9 @@ import (
 	"unicode"
 
 	"github.com/biogo/store/interval"
+	"github.com/cockroachdb/apd"
 	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
-	"gopkg.in/inf.v0"
 
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
@@ -411,7 +411,7 @@ func (v *Value) SetDuration(t duration.Duration) error {
 
 // SetDecimal encodes the specified decimal value into the bytes field of
 // the receiver using Gob encoding, sets the tag and clears the checksum.
-func (v *Value) SetDecimal(dec *inf.Dec) error {
+func (v *Value) SetDecimal(dec *apd.Decimal) error {
 	decSize := encoding.UpperBoundNonsortingDecimalSize(dec)
 	v.RawBytes = make([]byte, headerSize, headerSize+decSize)
 	v.RawBytes = encoding.EncodeNonsortingDecimal(v.RawBytes, dec)
@@ -525,7 +525,7 @@ func (v Value) GetDuration() (duration.Duration, error) {
 
 // GetDecimal decodes a decimal value from the bytes of the receiver. If the
 // tag is not DECIMAL an error will be returned.
-func (v Value) GetDecimal() (*inf.Dec, error) {
+func (v Value) GetDecimal() (*apd.Decimal, error) {
 	if tag := v.GetTag(); tag != ValueType_DECIMAL {
 		return nil, fmt.Errorf("value type is not %s: %s", ValueType_DECIMAL, tag)
 	}
@@ -635,7 +635,7 @@ func (v Value) PrettyPrint() string {
 		t, err = v.GetTime()
 		buf.WriteString(t.UTC().Format(time.RFC3339Nano))
 	case ValueType_DECIMAL:
-		var d *inf.Dec
+		var d *apd.Decimal
 		d, err = v.GetDecimal()
 		buf.WriteString(d.String())
 	case ValueType_DURATION:

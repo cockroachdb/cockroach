@@ -23,7 +23,7 @@ import (
 	"testing"
 	"time"
 
-	"gopkg.in/inf.v0"
+	"github.com/cockroachdb/apd"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
@@ -135,10 +135,10 @@ func TestPrettyPrint(t *testing.T) {
 			roachpb.RKey(encoding.EncodeTimeDescending(nil, tm))),
 			"/Table/42/1923-10-04T10:19:23.946274991Z"},
 		{makeKey(MakeTablePrefix(42),
-			roachpb.RKey(encoding.EncodeDecimalAscending(nil, inf.NewDec(1234, 2)))),
+			roachpb.RKey(encoding.EncodeDecimalAscending(nil, apd.New(1234, -2)))),
 			"/Table/42/12.34"},
 		{makeKey(MakeTablePrefix(42),
-			roachpb.RKey(encoding.EncodeDecimalDescending(nil, inf.NewDec(1234, 2)))),
+			roachpb.RKey(encoding.EncodeDecimalDescending(nil, apd.New(1234, -2)))),
 			"/Table/42/-12.34"},
 		{makeKey(MakeTablePrefix(42),
 			roachpb.RKey(durationAsc)),

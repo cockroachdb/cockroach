@@ -18,7 +18,6 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/util/decimal"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
@@ -194,7 +193,9 @@ func makeDecimalTestDatum(count int) []Datum {
 	vals := make([]Datum, count)
 	for i := range vals {
 		dd := &DDecimal{}
-		decimal.SetFromFloat(&dd.Dec, rng.Float64())
+		if _, err := dd.SetFloat64(rng.Float64()); err != nil {
+			panic(err)
+		}
 		vals[i] = dd
 	}
 	return vals
