@@ -302,6 +302,11 @@ func (p *planner) propagateFilters(
 			return plan, extraFilter, err
 		}
 
+	case *explainDistSQLNode:
+		if n.plan, err = p.triggerFilterPropagation(n.plan); err != nil {
+			return plan, extraFilter, err
+		}
+
 	case *explainPlanNode:
 		if n.optimized {
 			if n.plan, err = p.triggerFilterPropagation(n.plan); err != nil {
