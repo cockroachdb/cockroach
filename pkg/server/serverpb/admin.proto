@@ -20,6 +20,7 @@ option go_package = "serverpb";
 
 import "cockroach/pkg/config/config.proto";
 import "cockroach/pkg/storage/engine/enginepb/mvcc.proto";
+import "cockroach/pkg/storage/liveness.proto";
 import "gogoproto/gogo.proto";
 import "google/api/annotations.proto";
 
@@ -357,6 +358,15 @@ message HealthRequest {
 message HealthResponse {
 }
 
+// LivenessRequest requests liveness data for all nodes on the cluster.
+message LivenessRequest {
+}
+
+// LivenessResponse contains the liveness status of each node on the cluster.
+message LivenessResponse {
+  repeated cockroach.storage.Liveness livenesses = 1 [(gogoproto.nullable) = false];
+}
+
 // ClusterFreezeRequest lets the receiving node go through all Ranges in the
 // cluster, freezing them in preparation for an upgrade.
 message ClusterFreezeRequest {
@@ -468,6 +478,13 @@ service Admin {
   rpc Health(HealthRequest) returns (HealthResponse) {
     option (google.api.http) = {
       get: "/_admin/v1/health"
+    };
+  }
+
+  // Liveness returns the liveness state of all nodes on the cluster.
+  rpc Liveness(LivenessRequest) returns (LivenessResponse) {
+    option (google.api.http) = {
+      get: "/_admin/v1/liveness"
     };
   }
 

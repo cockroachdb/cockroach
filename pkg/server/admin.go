@@ -876,6 +876,14 @@ func (s *adminServer) Health(
 	return &serverpb.HealthResponse{}, nil
 }
 
+func (s *adminServer) Liveness(
+	context.Context, *serverpb.LivenessRequest,
+) (*serverpb.LivenessResponse, error) {
+	return &serverpb.LivenessResponse{
+		Livenesses: s.server.nodeLiveness.GetLivenesses(),
+	}, nil
+}
+
 func (s *adminServer) Drain(req *serverpb.DrainRequest, stream serverpb.Admin_DrainServer) error {
 	on := make([]serverpb.DrainMode, len(req.On))
 	for i := range req.On {
