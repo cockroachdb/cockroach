@@ -469,7 +469,7 @@ func (s *adminServer) TableDetails(
 		if err := s.server.db.Txn(ctx, func(txn *client.Txn) error {
 			var err error
 			tableSpan, err = iexecutor.GetTableSpan(
-				s.getUser(req), txn, req.Database, req.Table,
+				ctx, s.getUser(req), txn, req.Database, req.Table,
 			)
 			return err
 		}); err != nil {
@@ -538,7 +538,7 @@ func (s *adminServer) TableStats(
 	iexecutor := sql.InternalExecutor{LeaseManager: s.server.leaseMgr}
 	if err := s.server.db.Txn(ctx, func(txn *client.Txn) error {
 		var err error
-		tableSpan, err = iexecutor.GetTableSpan(s.getUser(req), txn, req.Database, req.Table)
+		tableSpan, err = iexecutor.GetTableSpan(ctx, s.getUser(req), txn, req.Database, req.Table)
 		return err
 	}); err != nil {
 		return nil, s.serverError(err)

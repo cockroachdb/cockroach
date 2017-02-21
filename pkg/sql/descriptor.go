@@ -45,7 +45,12 @@ type DescriptorAccessor interface {
 	// is actually created, false if it already existed, or an error if one was encountered.
 	// The ifNotExists flag is used to declare if the "already existed" state should be an
 	// error (false) or a no-op (true).
-	createDescriptor(plainKey sqlbase.DescriptorKey, descriptor sqlbase.DescriptorProto, ifNotExists bool) (bool, error)
+	createDescriptor(
+		ctx context.Context,
+		plainKey sqlbase.DescriptorKey,
+		descriptor sqlbase.DescriptorProto,
+		ifNotExists bool,
+	) (bool, error)
 
 	// getDescriptor looks up the descriptor for `plainKey`, validates it,
 	// and unmarshals it into `descriptor`.
@@ -88,7 +93,10 @@ func GenerateUniqueDescID(txn *client.Txn) (sqlbase.ID, error) {
 
 // createDescriptor implements the DescriptorAccessor interface.
 func (p *planner) createDescriptor(
-	plainKey sqlbase.DescriptorKey, descriptor sqlbase.DescriptorProto, ifNotExists bool,
+	ctx context.Context,
+	plainKey sqlbase.DescriptorKey,
+	descriptor sqlbase.DescriptorProto,
+	ifNotExists bool,
 ) (bool, error) {
 	idKey := plainKey.Key()
 
@@ -115,7 +123,7 @@ func (p *planner) createDescriptor(
 		return false, err
 	}
 
-	return true, p.createDescriptorWithID(idKey, id, descriptor)
+	return true, p.createDescriptorWithID(ctx, idKey, id, descriptor)
 }
 
 func (p *planner) descExists(idKey roachpb.Key) (bool, error) {
@@ -128,7 +136,7 @@ func (p *planner) descExists(idKey roachpb.Key) (bool, error) {
 }
 
 func (p *planner) createDescriptorWithID(
-	idKey roachpb.Key, id sqlbase.ID, descriptor sqlbase.DescriptorProto,
+	ctx context.Context, idKey roachpb.Key, id sqlbase.ID, descriptor sqlbase.DescriptorProto,
 ) error {
 	descriptor.SetID(id)
 	// TODO(pmattis): The error currently returned below is likely going to be
@@ -146,8 +154,8 @@ func (p *planner) createDescriptorWithID(
 	descID := descriptor.GetID()
 	descDesc := sqlbase.WrapDescriptor(descriptor)
 	if log.V(2) {
-		log.Infof(p.ctx(), "CPut %s -> %d", idKey, descID)
-		log.Infof(p.ctx(), "CPut %s -> %s", descKey, descDesc)
+		log.Infof(ctx, "CPut %s -> %d", idKey, descID)
+		log.Infof(ctx, "CPut %s -> %s", descKey, descDesc)
 	}
 	b.CPut(idKey, descID, nil)
 	b.CPut(descKey, descDesc, nil)

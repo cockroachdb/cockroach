@@ -123,7 +123,7 @@ type SchemaAccessor interface {
 	getTableLease(ctx context.Context, tn *parser.TableName) (*sqlbase.TableDescriptor, error)
 
 	// releaseLeases releases all leases currently held by the planner.
-	releaseLeases()
+	releaseLeases(ctx context.Context)
 
 	// writeTableDesc effectively writes a table descriptor to the
 	// database within the current planner transaction.
@@ -272,7 +272,7 @@ func (p *planner) getTableLease(
 	ctx context.Context, tn *parser.TableName,
 ) (*sqlbase.TableDescriptor, error) {
 	if log.V(2) {
-		log.Infof(p.ctx(), "planner acquiring lease on table '%s'", tn)
+		log.Infof(ctx, "planner acquiring lease on table '%s'", tn)
 	}
 
 	isSystemDB := tn.Database() == sqlbase.SystemDB.Name
@@ -296,7 +296,7 @@ func (p *planner) getTableLease(
 		return tbl, nil
 	}
 
-	dbID, err := p.getDatabaseID(tn.Database())
+	dbID, err := p.getDatabaseID(ctx, tn.Database())
 	if err != nil {
 		return nil, err
 	}
@@ -311,7 +311,7 @@ func (p *planner) getTableLease(
 			l.ParentID == dbID {
 			lease = l
 			if log.V(2) {
-				log.Infof(p.ctx(), "found lease in planner cache for table '%s'", tn)
+				log.Infof(ctx, "found lease in planner cache for table '%s'", tn)
 			}
 			break
 		}
@@ -478,14 +478,14 @@ func (p *planner) notifySchemaChange(id sqlbase.ID, mutationID sqlbase.MutationI
 }
 
 // releaseLeases implements the SchemaAccessor interface.
-func (p *planner) releaseLeases() {
+func (p *planner) releaseLeases(ctx context.Context) {
 	if p.leases != nil {
 		if log.V(2) {
-			log.Infof(p.ctx(), "planner releasing %d leases", len(p.leases))
+			log.Infof(ctx, "planner releasing %d leases", len(p.leases))
 		}
 		for _, lease := range p.leases {
 			if err := p.leaseMgr.Release(lease); err != nil {
-				log.Warning(p.ctx(), err)
+				log.Warning(ctx, err)
 			}
 		}
 		p.leases = nil

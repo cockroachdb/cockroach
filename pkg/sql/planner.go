@@ -175,11 +175,6 @@ type queryRunner interface {
 
 var _ queryRunner = &planner{}
 
-// ctx returns the current session context (suitable for logging/tracing).
-func (p *planner) ctx() context.Context {
-	return p.session.Ctx()
-}
-
 func (p *planner) ExecCfg() *ExecutorConfig {
 	return p.execCfg
 }
@@ -233,6 +228,7 @@ func (p *planner) resetContexts() {
 		Database:   p.session.Database,
 		SearchPath: p.session.SearchPath,
 		Planner:    p,
+		Ctx:        p.session.Ctx,
 	}
 }
 
@@ -314,9 +310,9 @@ func (p *planner) resetForBatch(e *Executor) {
 // called on the returned planNode after use.
 func (p *planner) query(ctx context.Context, sql string, args ...interface{}) (planNode, error) {
 	if log.V(2) {
-		log.Infof(p.ctx(), "internal query: %s", sql)
+		log.Infof(ctx, "internal query: %s", sql)
 		if len(args) > 0 {
-			log.Infof(p.ctx(), "placeholders: %q", args)
+			log.Infof(ctx, "placeholders: %q", args)
 		}
 	}
 	stmt, err := parser.ParseOneTraditional(sql)

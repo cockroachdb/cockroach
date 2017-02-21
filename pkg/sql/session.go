@@ -173,7 +173,7 @@ func (s *Session) Finish(e *Executor) {
 	// Cleanup leases. We might have unreleased leases if we're finishing the
 	// session abruptly in the middle of a transaction, or, until #7648 is
 	// addressed, there might be leases accumulated by preparing statements.
-	s.planner.releaseLeases()
+	s.planner.releaseLeases(s.context)
 
 	s.ClearStatementsAndPortals(s.context)
 	s.sessionMon.Stop(s.context)
@@ -467,14 +467,13 @@ func (scc *schemaChangerCollection) queueSchemaChanger(schemaChanger SchemaChang
 //    schema changes we're about to execute. Results corresponding to the
 //    schema change statements will be changed in case an error occurs.
 func (scc *schemaChangerCollection) execSchemaChanges(
-	e *Executor, planMaker *planner, results ResultList,
+	ctx context.Context, e *Executor, planMaker *planner, results ResultList,
 ) {
 	if planMaker.txn != nil {
 		panic("trying to execute schema changes while still in a transaction")
 	}
-	ctx := e.AnnotateCtx(context.TODO())
 	// Release the leases once a transaction is complete.
-	planMaker.releaseLeases()
+	planMaker.releaseLeases(ctx)
 	if e.cfg.SchemaChangerTestingKnobs.SyncFilter != nil {
 		e.cfg.SchemaChangerTestingKnobs.SyncFilter(TestingSchemaChangerCollection{scc})
 	}

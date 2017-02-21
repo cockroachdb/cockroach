@@ -99,16 +99,22 @@ func (ds *ServerImpl) setupFlow(
 	flowCtx := FlowCtx{
 		AmbientContext: ds.AmbientContext,
 		id:             req.Flow.FlowID,
-		evalCtx:        &ds.evalCtx,
-		rpcCtx:         ds.RPCContext,
-		txnProto:       &req.Txn,
-		clientDB:       ds.DB,
-		testingKnobs:   ds.TestingKnobs,
+		// TODO(andrei): more fields from evalCtx need to be initialized.
+		evalCtx:      ds.evalCtx,
+		rpcCtx:       ds.RPCContext,
+		txnProto:     &req.Txn,
+		clientDB:     ds.DB,
+		testingKnobs: ds.TestingKnobs,
+	}
+	ctx = flowCtx.AnnotateCtx(ctx)
+	flowCtx.evalCtx.Ctx = func() context.Context {
+		// TODO(andrei): This is wrong. Each processor should override Ctx with its
+		// own context.
+		return ctx
 	}
 
 	f := newFlow(flowCtx, ds.flowRegistry, syncFlowConsumer)
 	flowCtx.AddLogTagStr("f", f.id.Short())
-	ctx = flowCtx.AnnotateCtx(ctx)
 	if err := f.setupFlow(ctx, &req.Flow); err != nil {
 		log.Error(ctx, err)
 		sp.Finish()
