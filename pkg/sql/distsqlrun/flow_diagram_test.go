@@ -23,6 +23,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
@@ -47,6 +48,8 @@ func compareDiagrams(t *testing.T, result string, expected string) {
 func TestPlanDiagramIndexJoin(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	flows := make(map[roachpb.NodeID]FlowSpec)
+
 	desc := &sqlbase.TableDescriptor{
 		Name:    "Table",
 		Indexes: []sqlbase.IndexDescriptor{{Name: "SomeIndex"}},
@@ -56,7 +59,7 @@ func TestPlanDiagramIndexJoin(t *testing.T) {
 		IndexIdx: 1,
 	}
 
-	f1 := FlowSpec{
+	flows[1] = FlowSpec{
 		Processors: []ProcessorSpec{{
 			Core: ProcessorCoreUnion{TableReader: &tr},
 			Post: PostProcessSpec{
@@ -71,7 +74,7 @@ func TestPlanDiagramIndexJoin(t *testing.T) {
 		}},
 	}
 
-	f2 := FlowSpec{
+	flows[2] = FlowSpec{
 		Processors: []ProcessorSpec{{
 			Core: ProcessorCoreUnion{TableReader: &tr},
 			Post: PostProcessSpec{
@@ -86,7 +89,7 @@ func TestPlanDiagramIndexJoin(t *testing.T) {
 		}},
 	}
 
-	f3 := FlowSpec{
+	flows[3] = FlowSpec{
 		Processors: []ProcessorSpec{
 			{
 				Core: ProcessorCoreUnion{TableReader: &tr},
@@ -122,7 +125,7 @@ func TestPlanDiagramIndexJoin(t *testing.T) {
 		},
 	}
 
-	json, url, err := GeneratePlanDiagramWithURL([]FlowSpec{f1, f2, f3}, []string{"1", "2", "3"})
+	json, url, err := GeneratePlanDiagramWithURL(flows)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -157,6 +160,8 @@ func TestPlanDiagramIndexJoin(t *testing.T) {
 func TestPlanDiagramJoin(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	flows := make(map[roachpb.NodeID]FlowSpec)
+
 	descA := &sqlbase.TableDescriptor{Name: "TableA"}
 	descB := &sqlbase.TableDescriptor{Name: "TableB"}
 
@@ -170,7 +175,7 @@ func TestPlanDiagramJoin(t *testing.T) {
 		OnExpr:         Expression{Expr: "@1+@2<@6"},
 	}
 
-	f1 := FlowSpec{
+	flows[1] = FlowSpec{
 		Processors: []ProcessorSpec{
 			{
 				Core: ProcessorCoreUnion{TableReader: &trA},
@@ -189,7 +194,7 @@ func TestPlanDiagramJoin(t *testing.T) {
 		},
 	}
 
-	f2 := FlowSpec{
+	flows[2] = FlowSpec{
 		Processors: []ProcessorSpec{
 			{
 				Core: ProcessorCoreUnion{TableReader: &trA},
@@ -250,7 +255,7 @@ func TestPlanDiagramJoin(t *testing.T) {
 		},
 	}
 
-	f3 := FlowSpec{
+	flows[3] = FlowSpec{
 		Processors: []ProcessorSpec{
 			{
 				Core: ProcessorCoreUnion{TableReader: &trA},
@@ -309,7 +314,7 @@ func TestPlanDiagramJoin(t *testing.T) {
 		},
 	}
 
-	f4 := FlowSpec{
+	flows[4] = FlowSpec{
 		Processors: []ProcessorSpec{{
 			Core: ProcessorCoreUnion{TableReader: &trB},
 			Post: PostProcessSpec{
@@ -327,9 +332,7 @@ func TestPlanDiagramJoin(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	if err := GeneratePlanDiagram(
-		[]FlowSpec{f1, f2, f3, f4}, []string{"1", "2", "3", "4"}, &buf,
-	); err != nil {
+	if err := GeneratePlanDiagram(flows, &buf); err != nil {
 		t.Fatal(err)
 	}
 

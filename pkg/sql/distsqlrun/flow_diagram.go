@@ -24,7 +24,9 @@ import (
 	"fmt"
 	"io"
 	"net/url"
+	"sort"
 
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	humanize "github.com/dustin/go-humanize"
 	"github.com/pkg/errors"
 )
@@ -337,8 +339,25 @@ func generateDiagramData(flows []FlowSpec, nodeNames []string) (diagramData, err
 // GeneratePlanDiagram generates the json data for a flow diagram.  There should
 // be one FlowSpec per node. The function assumes that StreamIDs are unique
 // across all flows.
-func GeneratePlanDiagram(flows []FlowSpec, nodeNames []string, w io.Writer) error {
-	d, err := generateDiagramData(flows, nodeNames)
+func GeneratePlanDiagram(flows map[roachpb.NodeID]FlowSpec, w io.Writer) error {
+	// We sort the flows by node because we want the diagram data to be
+	// deterministic.
+	nodeIDs := make([]int, 0, len(flows))
+	for n := range flows {
+		nodeIDs = append(nodeIDs, int(n))
+	}
+	sort.Ints(nodeIDs)
+
+	flowSlice := make([]FlowSpec, len(nodeIDs))
+	nodeNames := make([]string, len(nodeIDs))
+	for i, nVal := range nodeIDs {
+		n := roachpb.NodeID(nVal)
+
+		flowSlice[i] = flows[n]
+		nodeNames[i] = n.String()
+	}
+
+	d, err := generateDiagramData(flowSlice, nodeNames)
 	if err != nil {
 		return err
 	}
@@ -348,9 +367,9 @@ func GeneratePlanDiagram(flows []FlowSpec, nodeNames []string, w io.Writer) erro
 // GeneratePlanDiagramWithURL generates the json data for a flow diagram and a
 // URL which encodes the diagram. There should be one FlowSpec per node. The
 // function assumes that StreamIDs are unique across all flows.
-func GeneratePlanDiagramWithURL(flows []FlowSpec, nodeNames []string) (string, url.URL, error) {
+func GeneratePlanDiagramWithURL(flows map[roachpb.NodeID]FlowSpec) (string, url.URL, error) {
 	var json, compressed bytes.Buffer
-	if err := GeneratePlanDiagram(flows, nodeNames, &json); err != nil {
+	if err := GeneratePlanDiagram(flows, &json); err != nil {
 		return "", url.URL{}, err
 	}
 	jsonStr := json.String()
