@@ -93,8 +93,6 @@ const (
 
 	defaultGossipWhenCapacityDeltaExceedsFraction = 0.01
 
-	defaultStoreMutexWarnThreshold = 100 * time.Millisecond
-
 	// systemDataGossipInterval is the interval at which range lease
 	// holders verify that the most recent system data is gossiped.
 	// This ensures that system data is always eventually gossiped, even
@@ -323,12 +321,12 @@ func (rs *storeReplicaVisitor) Visit(visitor func(*Replica) bool) {
 	// Copy the range IDs to a slice so that we iterate over some (possibly
 	// stale) consistent view of all Replicas without holding the Store lock.
 	// In particular, no locks are acquired during the copy process.
-	rs.store.mu.Lock()
+	rs.store.mu.RLock()
 	rs.repls = make([]*Replica, 0, len(rs.store.mu.replicas))
 	for _, repl := range rs.store.mu.replicas {
 		rs.repls = append(rs.repls, repl)
 	}
-	rs.store.mu.Unlock()
+	rs.store.mu.RUnlock()
 
 	// The Replicas are already in "unspecified order" due to map iteration,
 	// but we want to make sure it's completely random to prevent issues in
@@ -346,10 +344,10 @@ func (rs *storeReplicaVisitor) Visit(visitor func(*Replica) bool) {
 		// destroyed once we return errors from mutexes (#9190). After all, it
 		// can still happen with this code.
 		rs.visited++
-		repl.mu.Lock()
+		repl.mu.RLock()
 		destroyed := repl.mu.destroyed
 		initialized := repl.isInitializedLocked()
-		repl.mu.Unlock()
+		repl.mu.RUnlock()
 		if initialized && destroyed == nil && !visitor(repl) {
 			break
 		}
@@ -363,8 +361,8 @@ func (rs *storeReplicaVisitor) Visit(visitor func(*Replica) bool) {
 // TODO(tschottdorf): this method has highly doubtful semantics.
 func (rs *storeReplicaVisitor) EstimatedCount() int {
 	if rs.visited <= 0 {
-		rs.store.mu.Lock()
-		defer rs.store.mu.Unlock()
+		rs.store.mu.RLock()
+		defer rs.store.mu.RUnlock()
 		return len(rs.store.mu.replicas)
 	}
 	return len(rs.repls) - rs.visited
@@ -527,8 +525,7 @@ type Store struct {
 	// modified by a concurrent HandleRaftRequest. (#4476)
 
 	mu struct {
-		// TODO(peter): evaluate runtime overhead of the timed mutex.
-		timedMutex // Protects all variables in the mu struct.
+		syncutil.RWMutex
 		// Map of replicas by Range ID. This includes `uninitReplicas`.
 		replicas map[roachpb.RangeID]*Replica
 		// A btree key containing objects of type *Replica or
@@ -897,15 +894,6 @@ func NewStore(cfg StoreConfig, eng engine.Engine, nodeDesc *roachpb.NodeDescript
 	s.drainLeases.Store(false)
 	s.scheduler = newRaftScheduler(s.cfg.AmbientCtx, s.metrics, s, storeSchedulerConcurrency)
 
-	storeMuLogger := thresholdLogger(
-		s.AnnotateCtx(context.Background()),
-		defaultStoreMutexWarnThreshold,
-		func(ctx context.Context, msg string, args ...interface{}) {
-			log.Warningf(ctx, "storeMu: "+msg, args...)
-		},
-	)
-	s.mu.timedMutex = makeTimedMutex(storeMuLogger)
-
 	s.coalescedMu.Lock()
 	s.coalescedMu.heartbeats = map[roachpb.StoreIdent][]RaftHeartbeat{}
 	s.coalescedMu.heartbeatResponses = map[roachpb.StoreIdent][]RaftHeartbeat{}
@@ -1192,9 +1180,9 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 		var wg sync.WaitGroup // wait for unfreeze goroutines
 		var unfrozen int64    // updated atomically
 		newStoreReplicaVisitor(s).Visit(func(r *Replica) bool {
-			r.mu.Lock()
+			r.mu.RLock()
 			frozen := r.mu.state.IsFrozen()
-			r.mu.Unlock()
+			r.mu.RUnlock()
 			if !frozen {
 				return true
 			}
@@ -1613,8 +1601,8 @@ func (s *Store) NotifyBootstrapped() {
 
 // GetReplica fetches a replica by Range ID. Returns an error if no replica is found.
 func (s *Store) GetReplica(rangeID roachpb.RangeID) (*Replica, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 	return s.getReplicaLocked(rangeID)
 }
 
@@ -1632,8 +1620,8 @@ func (s *Store) getReplicaLocked(rangeID roachpb.RangeID) (*Replica, error) {
 // using Key.Address() to ensure we lookup replicas correctly for local
 // keys. When end is nil, a replica that contains start is looked up.
 func (s *Store) LookupReplica(start, end roachpb.RKey) *Replica {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 
 	var repl *Replica
 	s.visitReplicasLocked(start, roachpb.RKeyMax, func(replIter *Replica) bool {
@@ -1698,8 +1686,8 @@ func (s *Store) visitReplicasLocked(startKey, endKey roachpb.RKey, iterator func
 // RaftStatus returns the current raft status of the local replica of
 // the given range.
 func (s *Store) RaftStatus(rangeID roachpb.RangeID) *raft.Status {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 	if r, ok := s.mu.replicas[rangeID]; ok {
 		return r.RaftStatus()
 	}
@@ -2326,19 +2314,19 @@ func (s *Store) deadReplicas() roachpb.StoreDeadReplicas {
 	// processing.
 	// TODO(bram): does this need to visit all the replicas? Could we just use the
 	// store pool to locate any dead replicas on this store directly?
-	s.mu.Lock()
+	s.mu.RLock()
 	replicas := make([]*Replica, 0, len(s.mu.replicas))
 	for _, repl := range s.mu.replicas {
 		replicas = append(replicas, repl)
 	}
-	s.mu.Unlock()
+	s.mu.RUnlock()
 
 	var deadReplicas []roachpb.ReplicaIdent
 	for _, r := range replicas {
-		r.mu.Lock()
+		r.mu.RLock()
 		corrupted := r.mu.corrupted
 		desc := r.mu.state.Desc
-		r.mu.Unlock()
+		r.mu.RUnlock()
 		replicaDesc, ok := desc.GetReplicaDescriptor(s.Ident.StoreID)
 		if ok && corrupted {
 			deadReplicas = append(deadReplicas, roachpb.ReplicaIdent{
@@ -2355,8 +2343,8 @@ func (s *Store) deadReplicas() roachpb.StoreDeadReplicas {
 
 // ReplicaCount returns the number of replicas contained by this store.
 func (s *Store) ReplicaCount() int {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 	return len(s.mu.replicas)
 }
 
@@ -2513,9 +2501,9 @@ func (s *Store) Send(
 			return nil, roachpb.NewError(err)
 		}
 		if !repl.IsInitialized() {
-			repl.mu.Lock()
+			repl.mu.RLock()
 			replicaID := repl.mu.replicaID
-			repl.mu.Unlock()
+			repl.mu.RUnlock()
 
 			// If we have an uninitialized copy of the range, then we are
 			// probably a valid member of the range, we're just in the
@@ -3103,9 +3091,9 @@ func (s *Store) processRaftRequest(
 				// is present and applySnapshot would delete the key in most cases. If
 				// Raft has decided the snapshot shouldn't be applied we would be
 				// writing the tombstone key incorrectly.
-				r.mu.Lock()
+				r.mu.RLock()
 				r.mu.minReplicaID = r.mu.state.Desc.NextReplicaID
-				r.mu.Unlock()
+				r.mu.RUnlock()
 			}
 
 			// Apply the snapshot, as Raft told us to.
@@ -3398,9 +3386,9 @@ func (s *Store) processRequestQueue(rangeID roachpb.RangeID) {
 func (s *Store) processReady(rangeID roachpb.RangeID) {
 	start := timeutil.Now()
 
-	s.mu.Lock()
+	s.mu.RLock()
 	r, ok := s.mu.replicas[rangeID]
-	s.mu.Unlock()
+	s.mu.RUnlock()
 
 	if ok {
 		stats, err := r.handleRaftReady(IncomingSnapshot{})
@@ -3439,9 +3427,9 @@ func (s *Store) processReady(rangeID roachpb.RangeID) {
 func (s *Store) processTick(rangeID roachpb.RangeID) bool {
 	start := timeutil.Now()
 
-	s.mu.Lock()
+	s.mu.RLock()
 	r, ok := s.mu.replicas[rangeID]
-	s.mu.Unlock()
+	s.mu.RUnlock()
 
 	var exists bool
 	if ok {
@@ -3483,11 +3471,11 @@ func (s *Store) raftTickLoop() {
 			case <-ticker.C:
 				rangeIDs = rangeIDs[:0]
 
-				s.mu.Lock()
+				s.mu.RLock()
 				for rangeID := range s.mu.replicas {
 					rangeIDs = append(rangeIDs, rangeID)
 				}
-				s.mu.Unlock()
+				s.mu.RUnlock()
 
 				s.scheduler.EnqueueRaftTick(rangeIDs...)
 				s.metrics.RaftTicks.Inc(1)
@@ -3559,7 +3547,7 @@ func (s *Store) sendQueuedHeartbeatsToNode(beats, resps []RaftHeartbeat, to roac
 	}
 
 	if !s.cfg.Transport.SendAsync(chReq) {
-		s.mu.Lock()
+		s.mu.RLock()
 		for _, beat := range beats {
 			if replica, ok := s.mu.replicas[beat.RangeID]; ok {
 				replica.addUnreachableRemoteReplica(beat.ToReplicaID)
@@ -3570,7 +3558,7 @@ func (s *Store) sendQueuedHeartbeatsToNode(beats, resps []RaftHeartbeat, to roac
 				replica.addUnreachableRemoteReplica(resp.ToReplicaID)
 			}
 		}
-		s.mu.Unlock()
+		s.mu.RUnlock()
 		return 0
 	}
 	return len(beats) + len(resps)
@@ -3627,9 +3615,9 @@ func (s *Store) tryGetOrCreateReplica(
 	rangeID roachpb.RangeID, replicaID roachpb.ReplicaID, creatingReplica *roachpb.ReplicaDescriptor,
 ) (_ *Replica, created bool, _ error) {
 	// The common case: look up an existing (initialized) replica.
-	s.mu.Lock()
+	s.mu.RLock()
 	repl, ok := s.mu.replicas[rangeID]
-	s.mu.Unlock()
+	s.mu.RUnlock()
 	if ok {
 		if creatingReplica != nil {
 			// Drop messages that come from a node that we believe was once a member of
@@ -3643,9 +3631,9 @@ func (s *Store) tryGetOrCreateReplica(
 		}
 
 		repl.raftMu.Lock()
-		repl.mu.Lock()
+		repl.mu.RLock()
 		destroyed, corrupted := repl.mu.destroyed, repl.mu.corrupted
-		repl.mu.Unlock()
+		repl.mu.RUnlock()
 		if destroyed != nil {
 			repl.raftMu.Unlock()
 			if corrupted {
@@ -4007,9 +3995,7 @@ func (s *Store) ComputeStatsForKeySpan(startKey, endKey roachpb.RKey) (enginepb.
 			return true // continue
 		}
 
-		repl.mu.Lock()
-		output.Add(repl.mu.state.Stats)
-		repl.mu.Unlock()
+		output.Add(repl.GetMVCCStats())
 		count++
 		return true
 	})
@@ -4034,11 +4020,11 @@ func (s *Store) FrozenStatus(collectFrozen bool) (repDescs []roachpb.ReplicaDesc
 			ctx := s.AnnotateCtx(context.TODO())
 			log.Fatalf(ctx, "unexpected error: %s", err)
 		}
-		r.mu.Lock()
+		r.mu.RLock()
 		if r.mu.state.IsFrozen() == collectFrozen {
 			repDescs = append(repDescs, repDesc)
 		}
-		r.mu.Unlock()
+		r.mu.RUnlock()
 		return true // want more
 	})
 	return

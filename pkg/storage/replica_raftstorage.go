@@ -263,8 +263,8 @@ func (r *Replica) FirstIndex() (uint64, error) {
 // GetFirstIndex is the same function as FirstIndex but it does not
 // require that the replica lock is held.
 func (r *Replica) GetFirstIndex() (uint64, error) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
+	r.mu.RLock()
+	defer r.mu.RUnlock()
 	return r.FirstIndex()
 }
 
@@ -291,8 +291,8 @@ func (r *Replica) Snapshot() (raftpb.Snapshot, error) {
 // replica. If this method returns without error, callers must eventually call
 // OutgoingSnapshot.Close.
 func (r *Replica) GetSnapshot(ctx context.Context, snapType string) (*OutgoingSnapshot, error) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
+	r.mu.RLock()
+	defer r.mu.RUnlock()
 	rangeID := r.RangeID
 
 	if r.exceedsDoubleSplitSizeLocked() {
@@ -553,9 +553,9 @@ func (r *Replica) applySnapshot(
 		log.Fatalf(ctx, "unexpected range ID %d", s.Desc.RangeID)
 	}
 
-	r.mu.Lock()
+	r.mu.RLock()
 	raftLogSize := r.mu.raftLogSize
-	r.mu.Unlock()
+	r.mu.RUnlock()
 
 	snapType := inSnap.snapType
 	defer func() {
