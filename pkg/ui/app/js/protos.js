@@ -1291,7 +1291,46 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                 {
                     "name": "storage",
                     "fields": [],
+                    "options": {
+                        "go_package": "storage"
+                    },
                     "messages": [
+                        {
+                            "name": "Liveness",
+                            "fields": [
+                                {
+                                    "rule": "optional",
+                                    "type": "int32",
+                                    "name": "node_id",
+                                    "id": 1,
+                                    "options": {
+                                        "(gogoproto.customname)": "NodeID",
+                                        "(gogoproto.casttype)": "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"
+                                    }
+                                },
+                                {
+                                    "rule": "optional",
+                                    "type": "int64",
+                                    "name": "epoch",
+                                    "id": 2
+                                },
+                                {
+                                    "rule": "optional",
+                                    "type": "util.hlc.Timestamp",
+                                    "name": "expiration",
+                                    "id": 3,
+                                    "options": {
+                                        "(gogoproto.nullable)": false
+                                    }
+                                },
+                                {
+                                    "rule": "optional",
+                                    "type": "bool",
+                                    "name": "draining",
+                                    "id": 4
+                                }
+                            ]
+                        },
                         {
                             "name": "engine",
                             "fields": [],
@@ -2549,6 +2588,25 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                                     "fields": []
                                 },
                                 {
+                                    "name": "LivenessRequest",
+                                    "fields": []
+                                },
+                                {
+                                    "name": "LivenessResponse",
+                                    "fields": [
+                                        {
+                                            "rule": "map",
+                                            "type": "storage.Liveness",
+                                            "keytype": "int32",
+                                            "name": "liveness_map",
+                                            "id": 1,
+                                            "options": {
+                                                "(gogoproto.nullable)": false
+                                            }
+                                        }
+                                    ]
+                                },
+                                {
                                     "name": "ClusterFreezeRequest",
                                     "fields": [
                                         {
@@ -3233,6 +3291,13 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                                             "response": "HealthResponse",
                                             "options": {
                                                 "(google.api.http).get": "/_admin/v1/health"
+                                            }
+                                        },
+                                        "Liveness": {
+                                            "request": "LivenessRequest",
+                                            "response": "LivenessResponse",
+                                            "options": {
+                                                "(google.api.http).get": "/_admin/v1/liveness"
                                             }
                                         },
                                         "Drain": {

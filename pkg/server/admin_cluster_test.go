@@ -25,9 +25,16 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+)
+
+const (
+	// adminPrefix is the prefix for RESTful endpoints used to provide an
+	// administrative interface to the cockroach cluster.
+	adminPrefix = "/_admin/v1/"
 )
 
 func TestAdminAPITableStats(t *testing.T) {
@@ -139,4 +146,40 @@ func TestAdminAPITableStats(t *testing.T) {
 	// detecting leaks.
 	client.Timeout = 1 * time.Nanosecond
 	_ = httputil.GetJSON(client, url, &tsResponse)
+}
+
+func TestLivenessAPI(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{})
+	defer tc.Stopper().Stop()
+
+	startTime := tc.Server(0).Clock().PhysicalNow()
+
+	// We need to retry because the node ID isn't set until after
+	// bootstrapping.
+	testutils.SucceedsSoon(t, func() error {
+		var resp serverpb.LivenessResponse
+		if err := serverutils.GetJSONProto(tc.Server(0), adminPrefix+"liveness", &resp); err != nil {
+			return err
+		}
+		if a, e := len(resp.LivenessMap), tc.NumServers(); a != e {
+			return errors.Errorf("found %d liveness records, got %d", a, e)
+		}
+		for i := 0; i < tc.NumServers(); i++ {
+			s := tc.Server(i)
+			sl, ok := resp.LivenessMap[int32(s.NodeID())]
+			if !ok {
+				return errors.Errorf("found no liveness record for node %d", s.NodeID())
+			}
+			if sl.Expiration.WallTime < startTime {
+				return errors.Errorf(
+					"expected node %d liveness to expire in future (after %d), expiration was %d",
+					s.NodeID(),
+					startTime,
+					sl.Expiration,
+				)
+			}
+		}
+		return nil
+	})
 }

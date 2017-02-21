@@ -876,6 +876,15 @@ func (s *adminServer) Health(
 	return &serverpb.HealthResponse{}, nil
 }
 
+func (s *adminServer) Liveness(
+	ctx context.Context, req *serverpb.LivenessRequest,
+) (*serverpb.LivenessResponse, error) {
+	lMap := s.server.nodeLiveness.GetLivenessMap()
+	return &serverpb.LivenessResponse{
+		LivenessMap: lMap,
+	}, nil
+}
+
 func (s *adminServer) Drain(req *serverpb.DrainRequest, stream serverpb.Admin_DrainServer) error {
 	on := make([]serverpb.DrainMode, len(req.On))
 	for i := range req.On {

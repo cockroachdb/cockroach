@@ -411,7 +411,7 @@ func TestNodeLivenessSelf(t *testing.T) {
 	}
 }
 
-func TestNodeLivenessGetLivenessMap(t *testing.T) {
+func TestNodeLivenessGetIsLiveMap(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	mtc := &multiTestContext{}
 	defer mtc.Stop()
@@ -419,7 +419,7 @@ func TestNodeLivenessGetLivenessMap(t *testing.T) {
 
 	verifyLiveness(t, mtc)
 	pauseNodeLivenessHeartbeats(mtc, true)
-	lMap := mtc.nodeLivenesses[0].GetLivenessMap()
+	lMap := mtc.nodeLivenesses[0].GetIsLiveMap()
 	expectedLMap := map[roachpb.NodeID]bool{1: true, 2: true, 3: true}
 	if !reflect.DeepEqual(expectedLMap, lMap) {
 		t.Errorf("expected liveness map %+v; got %+v", expectedLMap, lMap)
@@ -433,10 +433,70 @@ func TestNodeLivenessGetLivenessMap(t *testing.T) {
 	}
 
 	// Now verify only node 0 is live.
-	lMap = mtc.nodeLivenesses[0].GetLivenessMap()
+	lMap = mtc.nodeLivenesses[0].GetIsLiveMap()
 	expectedLMap = map[roachpb.NodeID]bool{1: true, 2: false, 3: false}
 	if !reflect.DeepEqual(expectedLMap, lMap) {
 		t.Errorf("expected liveness map %+v; got %+v", expectedLMap, lMap)
+	}
+}
+
+func TestNodeLivenessGetLivenessMap(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	mtc := &multiTestContext{}
+	defer mtc.Stop()
+	mtc.Start(t, 3)
+
+	verifyLiveness(t, mtc)
+	pauseNodeLivenessHeartbeats(mtc, true)
+
+	lMap := mtc.nodeLivenesses[0].GetLivenessMap()
+	actualLMapNodes := make(map[int32]struct{})
+	originalExpiration := mtc.clock.PhysicalNow() + mtc.nodeLivenesses[0].GetLivenessThreshold().Nanoseconds() + 1
+	for nid, l := range lMap {
+		if int32(l.NodeID) != nid {
+			t.Errorf("Liveness record node ID %d did not match key in collection %d", l.NodeID, nid)
+		}
+		if a, e := l.Epoch, int64(1); a != e {
+			t.Errorf("Liveness record had epoch %d, wanted %d", a, e)
+		}
+		if a, e := l.Expiration.WallTime, originalExpiration; a != e {
+			t.Errorf("Liveness record had expiration %d, wanted %d", a, e)
+		}
+		actualLMapNodes[nid] = struct{}{}
+	}
+	expectedLMapNodes := map[int32]struct{}{1: {}, 2: {}, 3: {}}
+	if !reflect.DeepEqual(actualLMapNodes, expectedLMapNodes) {
+		t.Errorf("got liveness map nodes %+v; wanted %+v", actualLMapNodes, expectedLMapNodes)
+	}
+
+	// Advance the clock but only heartbeat node 0.
+	mtc.manualClock.Increment(mtc.nodeLivenesses[0].GetLivenessThreshold().Nanoseconds() + 1)
+	liveness, _ := mtc.nodeLivenesses[0].GetLiveness(mtc.gossips[0].NodeID.Get())
+	if err := mtc.nodeLivenesses[0].Heartbeat(context.Background(), liveness); err != nil {
+		t.Fatal(err)
+	}
+
+	// Verify that node liveness receives the change.
+	lMap = mtc.nodeLivenesses[0].GetLivenessMap()
+	actualLMapNodes = make(map[int32]struct{})
+	for nid, l := range lMap {
+		if int32(l.NodeID) != nid {
+			t.Errorf("Liveness record node ID %d did not match key in collection %d", l.NodeID, nid)
+		}
+		if a, e := l.Epoch, int64(1); a != e {
+			t.Errorf("Liveness record had epoch %d, wanted %d", a, e)
+		}
+		expectedExpiration := originalExpiration
+		if nid == 1 {
+			expectedExpiration += mtc.nodeLivenesses[0].GetLivenessThreshold().Nanoseconds() + 1
+		}
+		if a, e := l.Expiration.WallTime, expectedExpiration; a != e {
+			t.Errorf("Liveness record had expiration %d, wanted %d", a, e)
+		}
+		actualLMapNodes[nid] = struct{}{}
+	}
+	if !reflect.DeepEqual(actualLMapNodes, expectedLMapNodes) {
+		t.Errorf("got liveness map nodes %+v; wanted %+v", actualLMapNodes, expectedLMapNodes)
 	}
 }
 

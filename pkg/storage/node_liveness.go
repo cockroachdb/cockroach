@@ -362,8 +362,9 @@ func (nl *NodeLiveness) setSelf(liveness Liveness) {
 	nl.mu.Unlock()
 }
 
-// GetLivenessMap returns a map of nodeID to liveness.
-func (nl *NodeLiveness) GetLivenessMap() map[roachpb.NodeID]bool {
+// GetIsLiveMap returns a map of nodeID to boolean liveness status of
+// each node.
+func (nl *NodeLiveness) GetIsLiveMap() map[roachpb.NodeID]bool {
 	nl.mu.Lock()
 	defer nl.mu.Unlock()
 	lMap := map[roachpb.NodeID]bool{}
@@ -374,6 +375,20 @@ func (nl *NodeLiveness) GetLivenessMap() map[roachpb.NodeID]bool {
 	}
 	if nl.mu.self.NodeID != 0 {
 		lMap[nl.mu.self.NodeID] = nl.mu.self.isLive(now, maxOffset)
+	}
+	return lMap
+}
+
+// GetLivenessMap returns a map from NodeID to a full Liveness status.
+func (nl *NodeLiveness) GetLivenessMap() map[int32]Liveness {
+	nl.mu.Lock()
+	defer nl.mu.Unlock()
+	lMap := make(map[int32]Liveness)
+	for nID, l := range nl.mu.nodes {
+		lMap[int32(nID)] = l
+	}
+	if nl.mu.self.NodeID != 0 {
+		lMap[int32(nl.mu.self.NodeID)] = nl.mu.self
 	}
 	return lMap
 }
