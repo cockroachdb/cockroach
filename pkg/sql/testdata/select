@@ -19,7 +19,7 @@ CREATE TABLE abc (a INT PRIMARY KEY, b INT, c INT)
 query error syntax error at or near \"FROM\"
 SELECT FROM abc
 
-query error argument of WHERE must be type bool, not type string
+query error could not parse 'hello' as type bool
 SELECT * FROM abc WHERE 'hello'
 
 statement ok

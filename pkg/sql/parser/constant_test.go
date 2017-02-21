@@ -147,10 +147,12 @@ func TestStringConstantVerifyAvailableTypes(t *testing.T) {
 		avail []Type
 	}{
 		{&StrVal{s: "abc 世界", bytesEsc: false}, wantStringButCanBeAll},
+		{&StrVal{s: "t", bytesEsc: false}, wantStringButCanBeAll},
 		{&StrVal{s: "2010-09-28", bytesEsc: false}, wantStringButCanBeAll},
 		{&StrVal{s: "2010-09-28 12:00:00.1", bytesEsc: false}, wantStringButCanBeAll},
 		{&StrVal{s: "PT12H2M", bytesEsc: false}, wantStringButCanBeAll},
 		{&StrVal{s: "abc 世界", bytesEsc: true}, wantBytesButCanBeString},
+		{&StrVal{s: "t", bytesEsc: true}, wantBytesButCanBeString},
 		{&StrVal{s: "2010-09-28", bytesEsc: true}, wantBytesButCanBeString},
 		{&StrVal{s: "2010-09-28 12:00:00.1", bytesEsc: true}, wantBytesButCanBeString},
 		{&StrVal{s: "PT12H2M", bytesEsc: true}, wantBytesButCanBeString},
@@ -181,6 +183,13 @@ func TestStringConstantVerifyAvailableTypes(t *testing.T) {
 	}
 }
 
+func mustParseDBool(t *testing.T, s string) Datum {
+	d, err := ParseDBool(s)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return d
+}
 func mustParseDDate(t *testing.T, s string) Datum {
 	d, err := ParseDDate(s, time.UTC)
 	if err != nil {
@@ -210,19 +219,20 @@ func mustParseDInterval(t *testing.T, s string) Datum {
 	return d
 }
 
-var parseFuncs = map[string]func(*testing.T, string) Datum{
-	"string":      func(t *testing.T, s string) Datum { return NewDString(s) },
-	"bytes":       func(t *testing.T, s string) Datum { return NewDBytes(DBytes(s)) },
-	"date":        mustParseDDate,
-	"timestamp":   mustParseDTimestamp,
-	"timestamptz": mustParseDTimestampTZ,
-	"interval":    mustParseDInterval,
+var parseFuncs = map[Type]func(*testing.T, string) Datum{
+	TypeString:      func(t *testing.T, s string) Datum { return NewDString(s) },
+	TypeBytes:       func(t *testing.T, s string) Datum { return NewDBytes(DBytes(s)) },
+	TypeBool:        mustParseDBool,
+	TypeDate:        mustParseDDate,
+	TypeTimestamp:   mustParseDTimestamp,
+	TypeTimestampTZ: mustParseDTimestampTZ,
+	TypeInterval:    mustParseDInterval,
 }
 
-func strSet(ss ...string) map[string]struct{} {
-	set := make(map[string]struct{}, len(ss))
-	for _, s := range ss {
-		set[s] = struct{}{}
+func typeSet(types ...Type) map[Type]struct{} {
+	set := make(map[Type]struct{}, len(types))
+	for _, t := range types {
+		set[t] = struct{}{}
 	}
 	return set
 }
@@ -235,43 +245,51 @@ func strSet(ss ...string) map[string]struct{} {
 func TestStringConstantResolveAvailableTypes(t *testing.T) {
 	testCases := []struct {
 		c            *StrVal
-		parseOptions map[string]struct{}
+		parseOptions map[Type]struct{}
 	}{
 		{
 			c:            &StrVal{s: "abc 世界", bytesEsc: false},
-			parseOptions: strSet("string", "bytes"),
+			parseOptions: typeSet(TypeString, TypeBytes),
+		},
+		{
+			c:            &StrVal{s: "true", bytesEsc: false},
+			parseOptions: typeSet(TypeString, TypeBytes, TypeBool),
 		},
 		{
 			c:            &StrVal{s: "2010-09-28", bytesEsc: false},
-			parseOptions: strSet("string", "bytes", "date", "timestamp", "timestamptz"),
+			parseOptions: typeSet(TypeString, TypeBytes, TypeDate, TypeTimestamp, TypeTimestampTZ),
 		},
 		{
 			c:            &StrVal{s: "2010-09-28 12:00:00.1", bytesEsc: false},
-			parseOptions: strSet("string", "bytes", "timestamp", "timestamptz"),
+			parseOptions: typeSet(TypeString, TypeBytes, TypeTimestamp, TypeTimestampTZ),
 		},
 		{
 			c:            &StrVal{s: "PT12H2M", bytesEsc: false},
-			parseOptions: strSet("string", "bytes", "interval"),
+			parseOptions: typeSet(TypeString, TypeBytes, TypeInterval),
 		},
 		{
 			c:            &StrVal{s: "abc 世界", bytesEsc: true},
-			parseOptions: strSet("string", "bytes"),
+			parseOptions: typeSet(TypeString, TypeBytes),
+		},
+		{
+			c:            &StrVal{s: "true", bytesEsc: true},
+			parseOptions: typeSet(TypeString, TypeBytes),
 		},
 		{
 			c:            &StrVal{s: "2010-09-28", bytesEsc: true},
-			parseOptions: strSet("string", "bytes"),
+			parseOptions: typeSet(TypeString, TypeBytes),
 		},
 		{
 			c:            &StrVal{s: "2010-09-28 12:00:00.1", bytesEsc: true},
-			parseOptions: strSet("string", "bytes"),
+			parseOptions: typeSet(TypeString, TypeBytes),
 		},
 		{
 			c:            &StrVal{s: "PT12H2M", bytesEsc: true},
-			parseOptions: strSet("string", "bytes"),
+			parseOptions: typeSet(TypeString, TypeBytes),
 		},
 		{
 			c:            &StrVal{s: string([]byte{0xff, 0xfe, 0xfd}), bytesEsc: true},
-			parseOptions: strSet("bytes"),
+			parseOptions: typeSet(TypeBytes),
 		},
 	}
 
@@ -280,7 +298,6 @@ func TestStringConstantResolveAvailableTypes(t *testing.T) {
 
 		// Make sure it can be resolved as each of those types or throws a parsing error.
 		for _, availType := range test.c.AvailableTypes() {
-			typeName := availType.String()
 			res, err := test.c.ResolveAsType(&SemaContext{}, availType)
 			if err != nil {
 				if !strings.Contains(err.Error(), "could not parse") {
@@ -288,21 +305,21 @@ func TestStringConstantResolveAvailableTypes(t *testing.T) {
 					// parseable types will be verified. Any other error should throw a failure.
 					t.Errorf("%d: expected resolving %v as available type %s would either succeed"+
 						" or throw a parsing error, found %v",
-						i, test.c, typeName, err)
+						i, test.c, availType, err)
 				}
 				continue
 			}
 			parseableCount++
 
-			if _, isExpected := test.parseOptions[typeName]; !isExpected {
+			if _, isExpected := test.parseOptions[availType]; !isExpected {
 				t.Errorf("%d: type %s not expected to be resolvable from the StrVal %v, found %v",
-					i, typeName, test.c, res)
+					i, availType, test.c, res)
 			} else {
-				expectedDatum := parseFuncs[typeName](t, test.c.s)
+				expectedDatum := parseFuncs[availType](t, test.c.s)
 				if res.Compare(expectedDatum) != 0 {
 					t.Errorf("%d: type %s expected to be resolved from the StrVal %v to Datum %v"+
 						", found %v",
-						i, typeName, test.c, expectedDatum, res)
+						i, availType, test.c, expectedDatum, res)
 				}
 			}
 		}
