@@ -289,7 +289,7 @@ func (u *updateNode) Next(ctx context.Context) (bool, error) {
 	if !next {
 		if err == nil {
 			// We're done. Finish the batch.
-			err = u.tw.finalize(u.p.ctx())
+			err = u.tw.finalize(ctx)
 		}
 		return false, err
 	}
@@ -328,7 +328,7 @@ func (u *updateNode) Next(ctx context.Context) (bool, error) {
 		}
 	}
 
-	newValues, err := u.tw.row(u.p.ctx(), append(oldValues, updateValues...))
+	newValues, err := u.tw.row(ctx, append(oldValues, updateValues...))
 	if err != nil {
 		return false, err
 	}

@@ -1716,6 +1716,9 @@ type EvalPlanner interface {
 	QueryRow(ctx context.Context, sql string, args ...interface{}) (Datums, error)
 }
 
+// contextHolder is a wrapper that returns a Context.
+type contextHolder func() context.Context
+
 // EvalContext defines the context in which to evaluate an expression, allowing
 // the retrieval of state such as the node ID or statement start time.
 type EvalContext struct {
@@ -1738,10 +1741,14 @@ type EvalContext struct {
 	// unqualified table name. Names in the search path are normalized already.
 	// This must not be modified (this is shared from the session).
 	SearchPath SearchPath
-	// Ctx represents the context in which the expression is evaluated. This comes
-	// from the Session.
-	// !!! set this
-	Ctx context.Context
+	// Ctx represents the context in which the expression is evaluated. This will
+	// point to the Session's context container.
+	// NOTE: seems a bit lazy to hold a pointer to the session's context here,
+	// instead of making sure the right context is explicitly set before the
+	// EvalContext is used. But there's already precedent with the Location field,
+	// and also at the time of writing, EvalContexts are initialized with the
+	// planner and not mutated.
+	Ctx contextHolder
 
 	Planner EvalPlanner
 
@@ -2243,7 +2250,7 @@ func (expr *CastExpr) Eval(ctx *EvalContext) (Datum, error) {
 		case *DString:
 			queryOid := func(s string, table_name string, col_name string, obj_name string) (Datum, error) {
 				results, err := ctx.Planner.QueryRow(
-					ctx.Ctx,
+					ctx.Ctx(),
 					fmt.Sprintf("SELECT oid FROM pg_catalog.%s WHERE %s = $1",
 						table_name, col_name),
 					s)
