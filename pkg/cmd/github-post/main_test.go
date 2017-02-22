@@ -17,6 +17,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -133,7 +134,7 @@ Stress build found a failed test: %s`,
 
 				issueCount := 0
 				commentCount := 0
-				postIssue := func(owner string, repo string, issue *github.IssueRequest) (*github.Issue, *github.Response, error) {
+				postIssue := func(_ context.Context, owner string, repo string, issue *github.IssueRequest) (*github.Issue, *github.Response, error) {
 					issueCount++
 					if owner != expOwner {
 						t.Fatalf("got %s, expected %s", owner, expOwner)
@@ -152,7 +153,7 @@ Stress build found a failed test: %s`,
 					}
 					return &github.Issue{ID: github.Int(issueID)}, nil, nil
 				}
-				searchIssues := func(query string, opt *github.SearchOptions) (*github.IssuesSearchResult, *github.Response, error) {
+				searchIssues := func(_ context.Context, query string, opt *github.SearchOptions) (*github.IssuesSearchResult, *github.Response, error) {
 					total := 0
 					if foundIssue {
 						total = 1
@@ -164,7 +165,7 @@ Stress build found a failed test: %s`,
 						},
 					}, nil, nil
 				}
-				postComment := func(owner string, repo string, number int, comment *github.IssueComment) (*github.IssueComment, *github.Response, error) {
+				postComment := func(_ context.Context, owner string, repo string, number int, comment *github.IssueComment) (*github.IssueComment, *github.Response, error) {
 					if owner != expOwner {
 						t.Fatalf("got %s, expected %s", owner, expOwner)
 					}
@@ -182,7 +183,7 @@ Stress build found a failed test: %s`,
 					return nil, nil, nil
 				}
 
-				if err := runGH(file, postIssue, searchIssues, postComment); err != nil {
+				if err := runGH(context.Background(), file, postIssue, searchIssues, postComment); err != nil {
 					t.Fatal(err)
 				}
 				expectedIssues := 1

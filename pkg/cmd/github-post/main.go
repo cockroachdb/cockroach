@@ -18,6 +18,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"log"
@@ -25,7 +26,6 @@ import (
 	"os"
 	"strings"
 
-	"golang.org/x/net/context"
 	"golang.org/x/oauth2"
 
 	"github.com/google/go-github/github"
@@ -58,11 +58,13 @@ func main() {
 		log.Fatalf("GitHub API token environment variable %s is not set", githubAPITokenEnv)
 	}
 
-	client := github.NewClient(oauth2.NewClient(context.Background(), oauth2.StaticTokenSource(
+	ctx := context.Background()
+
+	client := github.NewClient(oauth2.NewClient(ctx, oauth2.StaticTokenSource(
 		&oauth2.Token{AccessToken: token},
 	)))
 
-	if err := runGH(os.Stdin, client.Issues.Create, client.Search.Issues, client.Issues.CreateComment); err != nil {
+	if err := runGH(ctx, os.Stdin, client.Issues.Create, client.Search.Issues, client.Issues.CreateComment); err != nil {
 		log.Fatal(err)
 	}
 }
@@ -81,10 +83,11 @@ func trimIssueRequestBody(message string, usedCharacters int) string {
 }
 
 func runGH(
+	ctx context.Context,
 	input io.Reader,
-	createIssue func(owner string, repo string, issue *github.IssueRequest) (*github.Issue, *github.Response, error),
-	searchIssues func(query string, opt *github.SearchOptions) (*github.IssuesSearchResult, *github.Response, error),
-	createComment func(owner string, repo string, number int, comment *github.IssueComment) (*github.IssueComment, *github.Response, error),
+	createIssue func(ctx context.Context, owner string, repo string, issue *github.IssueRequest) (*github.Issue, *github.Response, error),
+	searchIssues func(ctx context.Context, query string, opt *github.SearchOptions) (*github.IssuesSearchResult, *github.Response, error),
+	createComment func(ctx context.Context, owner string, repo string, number int, comment *github.IssueComment) (*github.IssueComment, *github.Response, error),
 ) error {
 	sha, ok := os.LookupEnv(teamcityVCSNumberEnv)
 	if !ok {
@@ -181,7 +184,7 @@ Stress build found a failed test: %s`
 
 				var foundIssue *int
 
-				result, _, err := searchIssues(searchQuery, &github.SearchOptions{
+				result, _, err := searchIssues(ctx, searchQuery, &github.SearchOptions{
 					ListOptions: github.ListOptions{
 						PerPage: 1,
 					},
@@ -194,12 +197,12 @@ Stress build found a failed test: %s`
 				}
 
 				if foundIssue == nil {
-					if _, _, err := createIssue(githubUser, githubRepo, issueRequest); err != nil {
+					if _, _, err := createIssue(ctx, githubUser, githubRepo, issueRequest); err != nil {
 						return errors.Wrapf(err, "failed to create GitHub issue %s", github.Stringify(issueRequest))
 					}
 				} else {
 					comment := newIssueComment(packageName, test.Name)
-					if _, _, err := createComment(githubUser, githubRepo, *foundIssue, comment); err != nil {
+					if _, _, err := createComment(ctx, githubUser, githubRepo, *foundIssue, comment); err != nil {
 						return errors.Wrapf(err, "failed to update issue #%d with %s", *foundIssue, github.Stringify(comment))
 					}
 				}
@@ -216,7 +219,7 @@ Stress build found a failed test: %s`
 			packageName = unknown
 		}
 		issueRequest := newIssueRequest(packageName, unknown, inputBuf.String())
-		if _, _, err := createIssue(githubUser, githubRepo, issueRequest); err != nil {
+		if _, _, err := createIssue(ctx, githubUser, githubRepo, issueRequest); err != nil {
 			return errors.Wrapf(err, "failed to create GitHub issue %s", github.Stringify(issueRequest))
 		}
 	}

@@ -13,34 +13,32 @@ import:
 - package: github.com/cockroachdb/c-jemalloc
   version: 7eb7980d8a9f68b771568a7eb15196a63a818595
 - package: github.com/cockroachdb/c-protobuf
-  version: e80b13e872f9d2d1f746d7423f598fd0b56a9e7b
+  version: 323984796a7b4794ee62a00e12456743a5b66765
 - package: github.com/cockroachdb/c-rocksdb
   version: b7f2f157e5141db8856a8f8b97c0ccd74baaa4db
 - package: github.com/cockroachdb/cmux
   version: 30d10be492927e2dcae0089c374c455d42414fcb
 - package: github.com/cockroachdb/cockroach-go
-  version: ba57380fe1f490388284806affe325d081e62be6
+  version: 6fd53f6d2eea06acb0c7f7aa88e0547acb32441b
 - package: github.com/coreos/etcd
-  version: 808ee4e57c4c4f264f3c29a403ad9043234d00cb
+  version: c0c4c7cb76bcf8dc3bf89c09cc0bb77575364452
 - package: github.com/gogo/protobuf
-  version: f9114dace7bd920b32f943b3c73fafbcbab2bf31
+  version: 3ea128ab69017b2bb9720f38a32e2dcfc22c0546
 - package: github.com/golang/protobuf
-  version: 8ee79997227bf9b34611aee7946ae64735e6fd93
+  version: 69b215d01a5606c843240eab4937eab3acee6530
 - package: github.com/google/btree
   version: 316fb6d3f031ae8f4d457c6c5186b9e3ded70435
 - package: github.com/grpc-ecosystem/grpc-gateway
-  version: 6193f51e51b0bfea774a33f535bc10e983832710
+  version: b855144721c1eeda1c8c78215662d14da4cf1700
 - package: github.com/lib/pq
   version: ba5d4f7a35561e22fbdf7a39aa0070f4d460cfc0
-- package: github.com/olekukonko/tablewriter
-  version: a0225b3f23b5ce0cbec6d7a66a968f8a59eca9c4
 - package: github.com/spf13/cobra
-  version: 1dd5ff2e11b6dca62fdcb275eb804b94607d8b06
+  version: ee4055870c2d5f7ce112642377e32c9929c3bbaf
 - package: gopkg.in/yaml.v2
-  version: a5b47d31c556af34a302ce5d659e6fea44d90de0
+  version: a3f3340b5840cee44f372bddb5880fcbc419b46a
 - package: golang.org/x/crypto
-  version: c3b1d0d6d8690eaebe3064711b026770cc37efa3
+  version: 453249f01cfeb54c3d549ddb75ff152ca243f9d8
 - package: golang.org/x/net
-  version: da2b4fa28524a3baf148c1b94df4440267063c88
+  version: 6b27048ae5e6ad1ef927e72e437531493de612fe
 - package: google.golang.org/grpc
-  version: 85497e2c516cd289bce5551b840ee27c2a0d6878
+  version: 20633fa172ac711ac6a77fd573ed13f23ec56dcb
