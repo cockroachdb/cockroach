@@ -723,6 +723,7 @@ func (s *statusServer) handleDebugRange(w http.ResponseWriter, r *http.Request) 
 	data := debugRangeData{
 		RangeID:             rangeID,
 		ReplicaDescPerStore: make(map[roachpb.StoreID]map[roachpb.ReplicaID]roachpb.ReplicaDescriptor),
+		Replicas:            make(map[roachpb.ReplicaID]*debugReplicaData),
 	}
 
 	type nodeResponse struct {
@@ -788,12 +789,13 @@ func (s *statusServer) handleDebugRange(w http.ResponseWriter, r *http.Request) 
 				} else {
 					data.RangeInfos = append(data.RangeInfos, info)
 					data.ReplicaDescPerStore[info.SourceStoreID] = make(map[roachpb.ReplicaID]roachpb.ReplicaDescriptor)
-					for _, rep := range info.State.Desc.Replicas {
-						data.ReplicaDescPerStore[info.SourceStoreID][rep.ReplicaID] = rep
-						if _, exists := existingReplicaIDs[rep.ReplicaID]; !exists {
-							existingReplicaIDs[rep.ReplicaID] = struct{}{}
-							data.ReplicaIDs = append(data.ReplicaIDs, rep.ReplicaID)
+					for _, desc := range info.State.Desc.Replicas {
+						data.ReplicaDescPerStore[info.SourceStoreID][desc.ReplicaID] = desc
+						if _, exists := existingReplicaIDs[desc.ReplicaID]; !exists {
+							existingReplicaIDs[desc.ReplicaID] = struct{}{}
+							data.Replicas[desc.ReplicaID] = &debugReplicaData{}
 						}
+						data.Replicas[desc.ReplicaID].Descs = append(data.Replicas[desc.ReplicaID].Descs, desc)
 					}
 				}
 			}
@@ -803,7 +805,7 @@ func (s *statusServer) handleDebugRange(w http.ResponseWriter, r *http.Request) 
 		}
 	}
 
-	data.sort()
+	data.postprocessing()
 	t, err := template.New("webpage").Parse(debugRangeTemplate)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -872,15 +874,43 @@ func (r rangeInfoSlice) Less(i, j int) bool {
 	return r[i].SourceStoreID < r[j].SourceStoreID
 }
 
+type debugReplicaData struct {
+	Descs []roachpb.ReplicaDescriptor
+
+	// The following are populated in postprocessing.
+	Warning bool
+}
+
 type debugRangeData struct {
 	RangeID             int64
 	RangeInfos          rangeInfoSlice
-	ReplicaIDs          replicaIDSlice
+	Replicas            map[roachpb.ReplicaID]*debugReplicaData
 	ReplicaDescPerStore map[roachpb.StoreID]map[roachpb.ReplicaID]roachpb.ReplicaDescriptor
 	Failures            rangeInfoSlice
+
+	// The following are populated in postprocessing.
+	ReplicaIDs replicaIDSlice
 }
 
-func (d *debugRangeData) sort() {
+func (d *debugRangeData) postprocessing() {
+	// Populate ReplicaIDs
+	d.ReplicaIDs = make(replicaIDSlice, len(d.Replicas))
+	i := 0
+	for repID := range d.Replicas {
+		d.ReplicaIDs[i] = repID
+		i++
+	}
+
+	// Find any replicas with differenting descriptors.
+	for _, repData := range d.Replicas {
+		for i := 1; i < len(repData.Descs); i++ {
+			if !reflect.DeepEqual(repData.Descs[0], repData.Descs[i]) {
+				repData.Warning = true
+				break
+			}
+		}
+	}
+
 	sort.Sort(d.ReplicaIDs)
 	sort.Sort(d.RangeInfos)
 	sort.Sort(d.Failures)
@@ -909,13 +939,52 @@ const debugRangeTemplate = `
       }
       .table {
         margin: 0 0 40px 0;
-        width: 100%;
-        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
-        display: table;
+        display: flex;
+      }
+      .column {
+        display: inline-block;
+        background: #f6f6f6;
+      }
+      .column:nth-of-type(odd) {
+        background: #e9e9e9;
+      }
+      .column.header {
+        font-weight: 900;
+        color: #ffffff;
+        background: #2980b9;
+        width: auto;
+      }
+      .cell {
+        padding: 6px 12px;
+        display: block;
+        height: 20px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        width: 200px;
+        border-width: 1px 1px 0 0;
+        border-color: rgba(0, 0, 0, 0.1);
+        border-style: solid;
+      }
+      .column:last-child .cell {
+        border-right: none;
+      }
+      .column .cell:first-child {
+        border-top: none;
+      }
+      .header .cell {
+        border: none;
+      }
+      .table.failure {
+          display: table;
       }
       .row {
-        display: table-row;
-        background: #f6f6f6;
+          display: table-row;
+          background: #f6f6f6;
+      }
+      .row .cell {
+          display: table-cell;
+          width: auto;
       }
       .row:nth-of-type(odd) {
         background: #e9e9e9;
@@ -923,72 +992,74 @@ const debugRangeTemplate = `
       .row.header {
         font-weight: 900;
         color: #ffffff;
-        background: #000000;
-      }
-      .row.green {
-        background: #27ae60;
-      }
-      .row.blue {
-        background: #2980b9;
-      }
-      .row.red {
         background: #ea6153;
+        width: auto;
       }
-      .cell {
-        padding: 6px 12px;
-        display: table-cell;
+      .row .cell:last-child {
+        border-right: none;
+      }
+      .header .cell.warning {
+        color: yellow;
+      }
+      .cell.warning {
+        color: red;
       }
     </STYLE>
   </HEAD>
   <BODY>
     <DIV CLASS="wrapper">
       <H1>Range r{{$.RangeID}}</H1>
-      <H2>Details</H2>
-      <DIV CLASS="table">
-        <DIV CLASS="row header blue">
-          <DIV CLASS="cell">Node</DIV>
-          <DIV CLASS="cell">Store</DIV>
-          <DIV CLASS="cell">Key Range</DIV>
-          {{range $.ReplicaIDs}}
-            <DIV CLASS="cell">Replica {{.}}</DIV>
-          {{end}}
-        </DIV>
-        {{range $index, $det := $.RangeInfos}}
-          <DIV CLASS="row">
-            <DIV CLASS="cell">n{{$det.SourceNodeID}}</DIV>
-            <DIV CLASS="cell">s{{$det.SourceStoreID}}</DIV>
-            <DIV CLASS="cell">{{$det.Span}}</DIV>
-            {{range $index2, $repID := $.ReplicaIDs}}
-              <DIV CLASS="cell">
-                {{with index (index $.ReplicaDescPerStore $det.SourceStoreID) $repID}}
-                  {{if eq .ReplicaID 0}}
-                    -
-                  {{else}}
-                    n{{.NodeID}} s{{.StoreID}}
-                  {{end}}
-                {{end}}
+      {{if $.Replicas}}
+        <DIV CLASS="table">
+          <DIV CLASS="column header">
+            <DIV CLASS="cell">Node</DIV>
+            <DIV CLASS="cell">Store</DIV>
+            <DIV CLASS="cell key">Key Range</DIV>
+            {{range $repID, $rep := $.Replicas}}
+              <DIV CLASS="cell {{if $rep.Warning}}warning{{end}}">
+                Replica {{$repID}}
               </DIV>
             {{end}}
           </DIV>
-        {{end}}
-      </DIV>
-      {{if not (eq (len $.Failures) 0)}}
+          {{range $_, $det := $.RangeInfos}}
+            <DIV CLASS="column">
+              <DIV CLASS="cell" TITLE="n{{$det.SourceNodeID}}">n{{$det.SourceNodeID}}</DIV>
+              <DIV CLASS="cell" TITLE="n{{$det.SourceStoreID}}">s{{$det.SourceStoreID}}</DIV>
+              <DIV CLASS="cell" TITLE="{{$det.Span}}">{{$det.Span}}</DIV>
+              {{range $repID, $rep := $.Replicas}}
+                {{with index (index $.ReplicaDescPerStore $det.SourceStoreID) $repID}}
+                  {{if eq .ReplicaID 0}}
+                    <DIV CLASS="cell">-</DIV>
+                  {{else}}
+                    <DIV CLASS="cell {{if not (index $.ReplicaDescPerStore .StoreID)}}warning{{end}}" TITLE="n{{.NodeID}} s{{.StoreID}}">
+                      n{{.NodeID}} s{{.StoreID}}
+                    </DIV>
+                  {{end}}
+                {{end}}
+              {{end}}
+            </DIV>
+          {{end}}
+        </DIV>
+      {{else}}
+        <p>No information available for Range r{{$.RangeID}}</p>
+      {{end}}
+      {{if $.Failures}}
         <H2>Failures</H2>
-        <DIV CLASS="table">
-          <DIV CLASS="row header red">
+        <DIV CLASS="table failure">
+          <DIV CLASS="row header">
             <DIV CLASS="cell">Node</DIV>
             <DIV CLASS="cell">Store</DIV>
             <DIV CLASS="cell">Error</DIV>
           </DIV>
-          {{range $index, $det := $.Failures}}
+          {{range $_, $det := $.Failures}}
             <DIV CLASS="row">
               <DIV CLASS="cell">n{{$det.SourceNodeID}}</DIV>
-              <DIV CLASS="cell">
-                {{if not (eq $det.SourceStoreID 0)}}
-                  s{{$det.SourceStoreID}}
-                {{ end }}
-              </DIV>
-              <DIV CLASS="cell">{{$det.ErrorMessage}}</DIV>
+              {{if not (eq $det.SourceStoreID 0)}}
+                <DIV CLASS="cell">n{{$det.SourceStoreID}}</DIV>
+              {{else}}
+                <DIV CLASS="cell">-</DIV>
+              {{end}}
+              <DIV CLASS="cell" TITLE="{{$det.ErrorMessage}}">{{$det.ErrorMessage}}</DIV>
             </DIV>
           {{end}}
         </DIV>
