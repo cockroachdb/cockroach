@@ -693,6 +693,7 @@ func Example_sql() {
 	c.RunWithArgs([]string{"sql", "-e", "select * from t.f"})
 	c.RunWithArgs([]string{"sql", "--execute=show databases"})
 	c.RunWithArgs([]string{"sql", "-e", "select 1; select 2"})
+	c.RunWithArgs([]string{"sql", "-e", "select 1; select 2 where false"})
 
 	// Output:
 	// sql -e create database t; create table t.f (x int, y int); insert into t.f values (42, 69)
@@ -727,6 +728,12 @@ func Example_sql() {
 	// 1
 	// 1 row
 	// 2
+	// 2
+	// sql -e select 1; select 2 where false
+	// 1 row
+	// 1
+	// 1
+	// 0 rows
 	// 2
 }
 
