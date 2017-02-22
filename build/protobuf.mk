@@ -90,8 +90,8 @@ $(GO_SOURCES): $(PROTOC) $(GO_PROTOS) $(GOGOPROTO_PROTO)
 
 $(GW_SOURCES) : $(GW_SERVER_PROTOS) $(GW_TS_PROTOS) $(GO_PROTOS) $(GOGOPROTO_PROTO) $(PROTOC)
 	(cd $(REPO_ROOT) && git ls-files --exclude-standard --cached --others -- '*.pb.gw.go' | xargs rm -f)
-	$(PROTOC) -I.:$(GOGOPROTO_ROOT):$(PROTOBUF_ROOT):$(COREOS_PATH):$(GRPC_GATEWAY_GOOGLEAPIS_PATH) --grpc-gateway_out=logtostderr=true:. $(GW_SERVER_PROTOS)
-	$(PROTOC) -I.:$(GOGOPROTO_ROOT):$(PROTOBUF_ROOT):$(COREOS_PATH):$(GRPC_GATEWAY_GOOGLEAPIS_PATH) --grpc-gateway_out=logtostderr=true:. $(GW_TS_PROTOS)
+	$(PROTOC) -I.:$(GOGOPROTO_ROOT):$(PROTOBUF_ROOT):$(COREOS_PATH):$(GRPC_GATEWAY_GOOGLEAPIS_PATH) --grpc-gateway_out=logtostderr=true,request_context=true:. $(GW_SERVER_PROTOS)
+	$(PROTOC) -I.:$(GOGOPROTO_ROOT):$(PROTOBUF_ROOT):$(COREOS_PATH):$(GRPC_GATEWAY_GOOGLEAPIS_PATH) --grpc-gateway_out=logtostderr=true,request_context=true:. $(GW_TS_PROTOS)
 
 $(REPO_ROOT)/build/yarn.installed: $(REPO_ROOT)/build/package.json
 	cd $(REPO_ROOT)/build && yarn install

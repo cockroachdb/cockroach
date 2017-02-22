@@ -17,53 +17,46 @@
 namespace cockroach {
 namespace util {
 namespace hlc {
+class TimestampDefaultTypeInternal : public ::google::protobuf::internal::ExplicitlyConstructed<Timestamp> {
+} _Timestamp_default_instance_;
 
-void protobuf_ShutdownFile_cockroach_2fpkg_2futil_2fhlc_2ftimestamp_2eproto() {
-  Timestamp_default_instance_.Shutdown();
+namespace protobuf_cockroach_2fpkg_2futil_2fhlc_2ftimestamp_2eproto {
+
+
+void TableStruct::Shutdown() {
+  _Timestamp_default_instance_.Shutdown();
 }
 
-void protobuf_InitDefaults_cockroach_2fpkg_2futil_2fhlc_2ftimestamp_2eproto_impl() {
+void TableStruct::InitDefaultsImpl() {
   GOOGLE_PROTOBUF_VERIFY_VERSION;
 
-  ::google::protobuf::internal::GetEmptyString();
-  Timestamp_default_instance_.DefaultConstruct();
-  Timestamp_default_instance_.get_mutable()->InitAsDefaultInstance();
+  ::google::protobuf::internal::InitProtobufDefaults();
+  _Timestamp_default_instance_.DefaultConstruct();
 }
 
-GOOGLE_PROTOBUF_DECLARE_ONCE(protobuf_InitDefaults_cockroach_2fpkg_2futil_2fhlc_2ftimestamp_2eproto_once_);
-void protobuf_InitDefaults_cockroach_2fpkg_2futil_2fhlc_2ftimestamp_2eproto() {
-  ::google::protobuf::GoogleOnceInit(&protobuf_InitDefaults_cockroach_2fpkg_2futil_2fhlc_2ftimestamp_2eproto_once_,
-                 &protobuf_InitDefaults_cockroach_2fpkg_2futil_2fhlc_2ftimestamp_2eproto_impl);
+void InitDefaults() {
+  static GOOGLE_PROTOBUF_DECLARE_ONCE(once);
+  ::google::protobuf::GoogleOnceInit(&once, &TableStruct::InitDefaultsImpl);
 }
-void protobuf_AddDesc_cockroach_2fpkg_2futil_2fhlc_2ftimestamp_2eproto_impl() {
-  GOOGLE_PROTOBUF_VERIFY_VERSION;
-
-  protobuf_InitDefaults_cockroach_2fpkg_2futil_2fhlc_2ftimestamp_2eproto();
-  ::google::protobuf::internal::OnShutdown(&protobuf_ShutdownFile_cockroach_2fpkg_2futil_2fhlc_2ftimestamp_2eproto);
+void AddDescriptorsImpl() {
+  InitDefaults();
+  ::google::protobuf::internal::OnShutdown(&TableStruct::Shutdown);
 }
 
-GOOGLE_PROTOBUF_DECLARE_ONCE(protobuf_AddDesc_cockroach_2fpkg_2futil_2fhlc_2ftimestamp_2eproto_once_);
-void protobuf_AddDesc_cockroach_2fpkg_2futil_2fhlc_2ftimestamp_2eproto() {
-  ::google::protobuf::GoogleOnceInit(&protobuf_AddDesc_cockroach_2fpkg_2futil_2fhlc_2ftimestamp_2eproto_once_,
-                 &protobuf_AddDesc_cockroach_2fpkg_2futil_2fhlc_2ftimestamp_2eproto_impl);
+void AddDescriptors() {
+  static GOOGLE_PROTOBUF_DECLARE_ONCE(once);
+  ::google::protobuf::GoogleOnceInit(&once, &AddDescriptorsImpl);
 }
 #ifdef GOOGLE_PROTOBUF_NO_STATIC_INITIALIZER
 // Force AddDescriptors() to be called at static initialization time.
-struct StaticDescriptorInitializer_cockroach_2fpkg_2futil_2fhlc_2ftimestamp_2eproto {
-  StaticDescriptorInitializer_cockroach_2fpkg_2futil_2fhlc_2ftimestamp_2eproto() {
-    protobuf_AddDesc_cockroach_2fpkg_2futil_2fhlc_2ftimestamp_2eproto();
+struct StaticDescriptorInitializer {
+  StaticDescriptorInitializer() {
+    AddDescriptors();
   }
-} static_descriptor_initializer_cockroach_2fpkg_2futil_2fhlc_2ftimestamp_2eproto_;
+} static_descriptor_initializer;
 #endif  // GOOGLE_PROTOBUF_NO_STATIC_INITIALIZER
 
-namespace {
-
-static void MergeFromFail(int line) GOOGLE_ATTRIBUTE_COLD GOOGLE_ATTRIBUTE_NORETURN;
-static void MergeFromFail(int line) {
-  ::google::protobuf::internal::MergeFromFail(__FILE__, line);
-}
-
-}  // namespace
+}  // namespace protobuf_cockroach_2fpkg_2futil_2fhlc_2ftimestamp_2eproto
 
 
 // ===================================================================
@@ -79,27 +72,27 @@ const int Timestamp::kLogicalFieldNumber;
 #endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 Timestamp::Timestamp()
-  : ::google::protobuf::MessageLite(), _arena_ptr_(NULL) {
-  if (this != internal_default_instance()) protobuf_InitDefaults_cockroach_2fpkg_2futil_2fhlc_2ftimestamp_2eproto();
+  : ::google::protobuf::MessageLite(), _internal_metadata_(NULL) {
+  if (GOOGLE_PREDICT_TRUE(this != internal_default_instance())) {
+    protobuf_cockroach_2fpkg_2futil_2fhlc_2ftimestamp_2eproto::InitDefaults();
+  }
   SharedCtor();
   // @@protoc_insertion_point(constructor:cockroach.util.hlc.Timestamp)
 }
-
-void Timestamp::InitAsDefaultInstance() {
-}
-
 Timestamp::Timestamp(const Timestamp& from)
   : ::google::protobuf::MessageLite(),
-    _arena_ptr_(NULL) {
-  SharedCtor();
-  UnsafeMergeFrom(from);
+      _internal_metadata_(NULL),
+      _has_bits_(from._has_bits_),
+      _cached_size_(0) {
+  _internal_metadata_.MergeFrom(from._internal_metadata_);
+  ::memcpy(&wall_time_, &from.wall_time_,
+    reinterpret_cast<char*>(&logical_) -
+    reinterpret_cast<char*>(&wall_time_) + sizeof(logical_));
   // @@protoc_insertion_point(copy_constructor:cockroach.util.hlc.Timestamp)
 }
 
 void Timestamp::SharedCtor() {
   _cached_size_ = 0;
-  _unknown_fields_.UnsafeSetDefault(
-      &::google::protobuf::internal::GetEmptyStringAlreadyInited());
   ::memset(&wall_time_, 0, reinterpret_cast<char*>(&logical_) -
     reinterpret_cast<char*>(&wall_time_) + sizeof(logical_));
 }
@@ -110,8 +103,6 @@ Timestamp::~Timestamp() {
 }
 
 void Timestamp::SharedDtor() {
-  _unknown_fields_.DestroyNoArena(
-      &::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
 
 void Timestamp::SetCachedSize(int size) const {
@@ -120,11 +111,9 @@ void Timestamp::SetCachedSize(int size) const {
   GOOGLE_SAFE_CONCURRENT_WRITES_END();
 }
 const Timestamp& Timestamp::default_instance() {
-  protobuf_InitDefaults_cockroach_2fpkg_2futil_2fhlc_2ftimestamp_2eproto();
+  protobuf_cockroach_2fpkg_2futil_2fhlc_2ftimestamp_2eproto::InitDefaults();
   return *internal_default_instance();
 }
-
-::google::protobuf::internal::ExplicitlyConstructed<Timestamp> Timestamp_default_instance_;
 
 Timestamp* Timestamp::New(::google::protobuf::Arena* arena) const {
   Timestamp* n = new Timestamp;
@@ -136,30 +125,12 @@ Timestamp* Timestamp::New(::google::protobuf::Arena* arena) const {
 
 void Timestamp::Clear() {
 // @@protoc_insertion_point(message_clear_start:cockroach.util.hlc.Timestamp)
-#if defined(__clang__)
-#define ZR_HELPER_(f) \
-  _Pragma("clang diagnostic push") \
-  _Pragma("clang diagnostic ignored \"-Winvalid-offsetof\"") \
-  __builtin_offsetof(Timestamp, f) \
-  _Pragma("clang diagnostic pop")
-#else
-#define ZR_HELPER_(f) reinterpret_cast<char*>(\
-  &reinterpret_cast<Timestamp*>(16)->f)
-#endif
-
-#define ZR_(first, last) do {\
-  ::memset(&(first), 0,\
-           ZR_HELPER_(last) - ZR_HELPER_(first) + sizeof(last));\
-} while (0)
-
-  ZR_(wall_time_, logical_);
-
-#undef ZR_HELPER_
-#undef ZR_
-
+  if (_has_bits_[0 / 32] & 3u) {
+    ::memset(&wall_time_, 0, reinterpret_cast<char*>(&logical_) -
+      reinterpret_cast<char*>(&wall_time_) + sizeof(logical_));
+  }
   _has_bits_.Clear();
-  _unknown_fields_.ClearToEmptyNoArena(
-      &::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  _internal_metadata_.Clear();
 }
 
 bool Timestamp::MergePartialFromCodedStream(
@@ -167,19 +138,18 @@ bool Timestamp::MergePartialFromCodedStream(
 #define DO_(EXPRESSION) if (!GOOGLE_PREDICT_TRUE(EXPRESSION)) goto failure
   ::google::protobuf::uint32 tag;
   ::google::protobuf::io::LazyStringOutputStream unknown_fields_string(
-      ::google::protobuf::NewPermanentCallback(
+      NewPermanentCallback(
           &MutableUnknownFieldsForTimestamp, this));
   ::google::protobuf::io::CodedOutputStream unknown_fields_stream(
       &unknown_fields_string, false);
   // @@protoc_insertion_point(parse_start:cockroach.util.hlc.Timestamp)
   for (;;) {
-    ::std::pair< ::google::protobuf::uint32, bool> p = input->ReadTagWithCutoff(127);
+    ::std::pair< ::google::protobuf::uint32, bool> p = input->ReadTagWithCutoffNoLastTag(127u);
     tag = p.first;
     if (!p.second) goto handle_unusual;
     switch (::google::protobuf::internal::WireFormatLite::GetTagFieldNumber(tag)) {
-      // optional int64 wall_time = 1;
       case 1: {
-        if (tag == 8) {
+        if (tag == 8u) {
           set_has_wall_time();
           DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
                    ::google::protobuf::int64, ::google::protobuf::internal::WireFormatLite::TYPE_INT64>(
@@ -187,14 +157,11 @@ bool Timestamp::MergePartialFromCodedStream(
         } else {
           goto handle_unusual;
         }
-        if (input->ExpectTag(16)) goto parse_logical;
         break;
       }
 
-      // optional int32 logical = 2;
       case 2: {
-        if (tag == 16) {
-         parse_logical:
+        if (tag == 16u) {
           set_has_logical();
           DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
                    ::google::protobuf::int32, ::google::protobuf::internal::WireFormatLite::TYPE_INT32>(
@@ -202,7 +169,6 @@ bool Timestamp::MergePartialFromCodedStream(
         } else {
           goto handle_unusual;
         }
-        if (input->ExpectAtEnd()) goto success;
         break;
       }
 
@@ -231,12 +197,10 @@ failure:
 void Timestamp::SerializeWithCachedSizes(
     ::google::protobuf::io::CodedOutputStream* output) const {
   // @@protoc_insertion_point(serialize_start:cockroach.util.hlc.Timestamp)
-  // optional int64 wall_time = 1;
   if (has_wall_time()) {
     ::google::protobuf::internal::WireFormatLite::WriteInt64(1, this->wall_time(), output);
   }
 
-  // optional int32 logical = 2;
   if (has_logical()) {
     ::google::protobuf::internal::WireFormatLite::WriteInt32(2, this->logical(), output);
   }
@@ -250,15 +214,15 @@ size_t Timestamp::ByteSizeLong() const {
 // @@protoc_insertion_point(message_byte_size_start:cockroach.util.hlc.Timestamp)
   size_t total_size = 0;
 
+  total_size += unknown_fields().size();
+
   if (_has_bits_[0 / 32] & 3u) {
-    // optional int64 wall_time = 1;
     if (has_wall_time()) {
       total_size += 1 +
         ::google::protobuf::internal::WireFormatLite::Int64Size(
           this->wall_time());
     }
 
-    // optional int32 logical = 2;
     if (has_logical()) {
       total_size += 1 +
         ::google::protobuf::internal::WireFormatLite::Int32Size(
@@ -266,8 +230,6 @@ size_t Timestamp::ByteSizeLong() const {
     }
 
   }
-  total_size += unknown_fields().size();
-
   int cached_size = ::google::protobuf::internal::ToCachedSize(total_size);
   GOOGLE_SAFE_CONCURRENT_WRITES_BEGIN();
   _cached_size_ = cached_size;
@@ -282,16 +244,9 @@ void Timestamp::CheckTypeAndMergeFrom(
 
 void Timestamp::MergeFrom(const Timestamp& from) {
 // @@protoc_insertion_point(class_specific_merge_from_start:cockroach.util.hlc.Timestamp)
-  if (GOOGLE_PREDICT_TRUE(&from != this)) {
-    UnsafeMergeFrom(from);
-  } else {
-    MergeFromFail(__LINE__);
-  }
-}
-
-void Timestamp::UnsafeMergeFrom(const Timestamp& from) {
-  GOOGLE_DCHECK(&from != this);
-  if (from._has_bits_[0 / 32] & (0xffu << (0 % 32))) {
+  GOOGLE_DCHECK_NE(&from, this);
+  _internal_metadata_.MergeFrom(from._internal_metadata_);
+  if (from._has_bits_[0 / 32] & 3u) {
     if (from.has_wall_time()) {
       set_wall_time(from.wall_time());
     }
@@ -299,20 +254,16 @@ void Timestamp::UnsafeMergeFrom(const Timestamp& from) {
       set_logical(from.logical());
     }
   }
-  if (!from.unknown_fields().empty()) {
-    mutable_unknown_fields()->append(from.unknown_fields());
-  }
 }
 
 void Timestamp::CopyFrom(const Timestamp& from) {
 // @@protoc_insertion_point(class_specific_copy_from_start:cockroach.util.hlc.Timestamp)
   if (&from == this) return;
   Clear();
-  UnsafeMergeFrom(from);
+  MergeFrom(from);
 }
 
 bool Timestamp::IsInitialized() const {
-
   return true;
 }
 
@@ -324,7 +275,7 @@ void Timestamp::InternalSwap(Timestamp* other) {
   std::swap(wall_time_, other->wall_time_);
   std::swap(logical_, other->logical_);
   std::swap(_has_bits_[0], other->_has_bits_[0]);
-  _unknown_fields_.Swap(&other->_unknown_fields_);
+  _internal_metadata_.Swap(&other->_internal_metadata_);
   std::swap(_cached_size_, other->_cached_size_);
 }
 
@@ -335,7 +286,6 @@ void Timestamp::InternalSwap(Timestamp* other) {
 #if PROTOBUF_INLINE_NOT_IN_HEADERS
 // Timestamp
 
-// optional int64 wall_time = 1;
 bool Timestamp::has_wall_time() const {
   return (_has_bits_[0] & 0x00000001u) != 0;
 }
@@ -359,7 +309,6 @@ void Timestamp::set_wall_time(::google::protobuf::int64 value) {
   // @@protoc_insertion_point(field_set:cockroach.util.hlc.Timestamp.wall_time)
 }
 
-// optional int32 logical = 2;
 bool Timestamp::has_logical() const {
   return (_has_bits_[0] & 0x00000002u) != 0;
 }
@@ -383,9 +332,6 @@ void Timestamp::set_logical(::google::protobuf::int32 value) {
   // @@protoc_insertion_point(field_set:cockroach.util.hlc.Timestamp.logical)
 }
 
-inline const Timestamp* Timestamp::internal_default_instance() {
-  return &Timestamp_default_instance_.get();
-}
 #endif  // PROTOBUF_INLINE_NOT_IN_HEADERS
 
 // @@protoc_insertion_point(namespace_scope)

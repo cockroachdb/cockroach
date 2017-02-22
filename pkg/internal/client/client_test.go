@@ -801,11 +801,9 @@ func TestInconsistentReads(t *testing.T) {
 
 	// Mock out DistSender's sender function to check the read consistency for
 	// outgoing BatchRequests and return an empty reply.
-	var senderFn client.SenderFunc
-	senderFn = func(_ context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+	var senderFn client.SenderFunc = func(_ context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 		if ba.ReadConsistency != roachpb.INCONSISTENT {
-			return nil, roachpb.NewErrorf("BatchRequest has unexpected ReadConsistency %s",
-				ba.ReadConsistency)
+			return nil, roachpb.NewErrorf("BatchRequest has unexpected ReadConsistency %s", ba.ReadConsistency)
 		}
 		return ba.CreateReply(), nil
 	}

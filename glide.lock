@@ -1,8 +1,8 @@
-hash: 412957daee4b65f2dd293a1ac39c13ffb1413ba7c2d1f61720d49878e7e84df7
-updated: 2017-02-13T18:11:03.534890953Z
+hash: b20a72348a0c3a7ca135d14be1ff5bb8268b8c3867bcb128a966a0c890355fa7
+updated: 2017-02-22T13:01:13.800134121-05:00
 imports:
 - name: cloud.google.com/go
-  version: 493be1e01d757f0367be406d775bd51a391fc84d
+  version: 1ed2f0abb2869a51b3a5b9daec801bf9791f95d0
   subpackages:
   - compute/metadata
   - internal
@@ -11,7 +11,7 @@ imports:
 - name: github.com/abourget/teamcity
   version: 6dde447fa54bc5b08b1a7bb1b85e39089cf27fb1
 - name: github.com/agtorre/gocolorize
-  version: f42b554bf7f006936130c9bb4f971afd2d87f671
+  version: 99fea4bc9517f07eea8194702cb7076f4845b7de
 - name: github.com/Azure/azure-sdk-for-go
   version: 8e625d1702a32d01cef05a9252198d231c4af113
   subpackages:
@@ -30,7 +30,7 @@ imports:
 - name: github.com/cenk/backoff
   version: b02f2bbce11d7ea6b97f282ef1771b0fe2f65ef3
 - name: github.com/chzyer/readline
-  version: eef24db1d59cac55d773312ab6efe1890187f2de
+  version: f892600c35265c3b2d0c79322107239c1ec9479b
 - name: github.com/client9/misspell
   version: 9a1fc2456ac9e8c9b4cbe9d005b6e7adac0d357f
   subpackages:
@@ -40,7 +40,7 @@ imports:
 - name: github.com/cockroachdb/c-jemalloc
   version: 7eb7980d8a9f68b771568a7eb15196a63a818595
 - name: github.com/cockroachdb/c-protobuf
-  version: e80b13e872f9d2d1f746d7423f598fd0b56a9e7b
+  version: 033462a6a2ba42305bd63922bc76cf7b3f834aff
   subpackages:
   - cmd/protoc
 - name: github.com/cockroachdb/c-rocksdb
@@ -50,7 +50,7 @@ imports:
 - name: github.com/cockroachdb/cmux
   version: 30d10be492927e2dcae0089c374c455d42414fcb
 - name: github.com/cockroachdb/cockroach-go
-  version: ba57380fe1f490388284806affe325d081e62be6
+  version: 6fd53f6d2eea06acb0c7f7aa88e0547acb32441b
   subpackages:
   - crdb
 - name: github.com/cockroachdb/crlfmt
@@ -62,7 +62,7 @@ imports:
 - name: github.com/codahale/hdrhistogram
   version: 3a0bb77429bd3a61596f5e8a3172445844342120
 - name: github.com/coreos/etcd
-  version: 808ee4e57c4c4f264f3c29a403ad9043234d00cb
+  version: c0c4c7cb76bcf8dc3bf89c09cc0bb77575364452
   subpackages:
   - raft
   - raft/raftpb
@@ -71,7 +71,7 @@ imports:
   subpackages:
   - md2man
 - name: github.com/docker/distribution
-  version: b1993c95303df3d0214129d85382c3c573e4df20
+  version: 50133d63723f8fa376e632a853739990a133be16
   subpackages:
   - digestset
   - reference
@@ -102,7 +102,7 @@ imports:
   - pkg/term/windows
   - pkg/tlsconfig
 - name: github.com/docker/go-connections
-  version: 7da10c8c50cad14494ec818dcdfb6506265c0086
+  version: d217f8e36aba4dbc397981e692a65d3f13b9a46d
   subpackages:
   - nat
   - sockets
@@ -124,7 +124,7 @@ imports:
   subpackages:
   - oleutil
 - name: github.com/gogo/protobuf
-  version: f9114dace7bd920b32f943b3c73fafbcbab2bf31
+  version: 3ea128ab69017b2bb9720f38a32e2dcfc22c0546
   subpackages:
   - gogoproto
   - jsonpb
@@ -156,11 +156,11 @@ imports:
 - name: github.com/golang/glog
   version: 23def4e6c14b4da8ac2ed8007337bc5eb5007998
 - name: github.com/golang/lint
-  version: 6d7efc48f3ecdd4fdd4035680f25173dbb22fdba
+  version: b8599f7d71e7fead76b25aeb919c0e2558672f4a
   subpackages:
   - golint
 - name: github.com/golang/protobuf
-  version: 8ee79997227bf9b34611aee7946ae64735e6fd93
+  version: 69b215d01a5606c843240eab4937eab3acee6530
   subpackages:
   - jsonpb
   - proto
@@ -171,7 +171,7 @@ imports:
 - name: github.com/google/btree
   version: 316fb6d3f031ae8f4d457c6c5186b9e3ded70435
 - name: github.com/google/go-github
-  version: 9cb398ca482c8f7e59eecc0f6caf669a6256b01a
+  version: 28065814ab889552aebe99cd41b35bc5e31063fe
   subpackages:
   - github
 - name: github.com/google/go-querystring
@@ -181,7 +181,7 @@ imports:
 - name: github.com/googleapis/gax-go
   version: da06d194a00e19ce00d9011a13931c3f6f6887c7
 - name: github.com/grpc-ecosystem/grpc-gateway
-  version: 6193f51e51b0bfea774a33f535bc10e983832710
+  version: b855144721c1eeda1c8c78215662d14da4cf1700
   subpackages:
   - protoc-gen-grpc-gateway
   - protoc-gen-grpc-gateway/descriptor
@@ -224,7 +224,7 @@ imports:
   - thrift_0_9_2/lib/go/thrift
   - thrift_rpc
 - name: github.com/mattn/go-isatty
-  version: 281032e84ae07510239465db46bf442aa44b953a
+  version: dda3de49cbfcec471bd7a70e6cc01fcc3ff90109
 - name: github.com/mattn/go-runewidth
   version: 14207d285c6c197daabb5c9793d63e7af9ab2d50
 - name: github.com/mattn/goveralls
@@ -265,11 +265,11 @@ imports:
 - name: github.com/pkg/errors
   version: 248dadf4e9068a0b3e79f02ed0a610d935de5302
 - name: github.com/prometheus/client_model
-  version: fa8ad6fec33561be4280a8f0514318c79d7f6cb6
+  version: 6f3806018612930941127f2a7c6c453ba2c527d2
   subpackages:
   - go
 - name: github.com/prometheus/common
-  version: dd2f054febf4a6c00f2343686efb775948a8bff4
+  version: 49fee292b27bfff7f354ee0f64e1bc4850462edf
   subpackages:
   - expfmt
   - internal/bitbucket.org/ww/goautoneg
@@ -293,9 +293,9 @@ imports:
 - name: github.com/shurcooL/sanitized_anchor_name
   version: 1dba4b3954bc059efc3991ec364f9f9a35f597d2
 - name: github.com/Sirupsen/logrus
-  version: 3f603f494d61c73457fb234161d8982b9f0f0b71
+  version: 7f4b1adc791766938c29457bed0703fb9134421a
 - name: github.com/spf13/cobra
-  version: 1dd5ff2e11b6dca62fdcb275eb804b94607d8b06
+  version: ee4055870c2d5f7ce112642377e32c9929c3bbaf
   subpackages:
   - doc
 - name: github.com/spf13/pflag
@@ -311,13 +311,13 @@ imports:
 - name: github.com/wadey/gocovmerge
   version: b5bfa59ec0adc420475f97f89b58045c721d761c
 - name: golang.org/x/crypto
-  version: c3b1d0d6d8690eaebe3064711b026770cc37efa3
+  version: 453249f01cfeb54c3d549ddb75ff152ca243f9d8
   subpackages:
   - bcrypt
   - blowfish
   - ssh/terminal
 - name: golang.org/x/net
-  version: da2b4fa28524a3baf148c1b94df4440267063c88
+  version: 6b27048ae5e6ad1ef927e72e437531493de612fe
   subpackages:
   - context
   - context/ctxhttp
@@ -329,31 +329,29 @@ imports:
   - proxy
   - trace
 - name: golang.org/x/oauth2
-  version: de0725b330ab43c1a3d6c84d961cf01183783f1e
+  version: b9780ec78894ab900c062d58ee3076cd9b2a4501
   subpackages:
   - google
   - internal
   - jws
   - jwt
 - name: golang.org/x/sys
-  version: aaabbdc969c3935a2a7f61efac801e7163c73a2a
+  version: 075e574b89e4c2d22f2286a7e2b919519c6f3547
   subpackages:
   - unix
   - windows
 - name: golang.org/x/text
-  version: 06d6eba81293389cafdff7fca90d75592194b2d9
+  version: 767daa157b4d460bba02409ff856ddeeb8e76ab7
   subpackages:
   - collate
   - internal/colltab
   - internal/tag
   - language
-  - secure/bidirule
   - transform
-  - unicode/bidi
   - unicode/norm
   - width
 - name: golang.org/x/tools
-  version: 13507735c40b4afd2626062b27c40578748f7f95
+  version: 219e654bb7266d3b73c4610ed24c33d12560826a
   subpackages:
   - cmd/goimports
   - cmd/goyacc
@@ -367,7 +365,7 @@ imports:
   - go/types/typeutil
   - imports
 - name: google.golang.org/api
-  version: 2da5589ad30130b51fa58b5acbceaeb647ebe06e
+  version: bc20c61134e1d25265dd60049f5735381e79b631
   subpackages:
   - gensupport
   - googleapi
@@ -393,7 +391,7 @@ imports:
   - socket
   - urlfetch
 - name: google.golang.org/grpc
-  version: 85497e2c516cd289bce5551b840ee27c2a0d6878
+  version: 20633fa172ac711ac6a77fd573ed13f23ec56dcb
   subpackages:
   - codes
   - credentials
@@ -407,9 +405,9 @@ imports:
   - tap
   - transport
 - name: gopkg.in/yaml.v2
-  version: a5b47d31c556af34a302ce5d659e6fea44d90de0
+  version: 53feefa2559fb8dfa8d81baad31be332c97d6c77
 - name: honnef.co/go/tools
-  version: 2a86a384566923fd1db3a0da04afd78a8282e90b
+  version: 0cd9a3997b51c13198691879e13c49da7ba0f8f9
   subpackages:
   - gcsizes
   - lint
