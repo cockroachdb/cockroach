@@ -794,3 +794,65 @@ query B
 SELECT DATE '1999-01-01' = TIMESTAMP '1999-01-01'
 ----
 true
+
+## Test parsing of unitless interval constants with field specifiers
+query TTTTT
+SELECT INTERVAL '5', INTERVAL '5' SECOND, INTERVAL '5' MINUTE TO SECOND, INTERVAL '5' HOUR TO SECOND, INTERVAL '5' DAY TO SECOND;
+----
+5s  5s  5s  5s  5s
+
+query TTT
+SELECT INTERVAL '5' MINUTE, INTERVAL '5' HOUR TO MINUTE, INTERVAL '5' DAY TO MINUTE;
+----
+5m0s  5m0s  5m0s
+
+query TT
+SELECT INTERVAL '5' HOUR, INTERVAL '5' DAY TO HOUR;
+----
+5h0m0s  5h0m0s
+
+query T
+SELECT INTERVAL '5' DAY;
+----
+0m5d0ns
+
+query TT
+SELECT INTERVAL '5' MONTH, INTERVAL '5' YEAR TO MONTH;
+----
+5m0d0ns  5m0d0ns
+
+query T
+SELECT INTERVAL '5' YEAR
+----
+60m0d0ns
+
+## Test truncation via field specifiers
+query TTTT
+SELECT INTERVAL '1-2 3 4:5:6' SECOND, INTERVAL '1-2 3 4:5:6' MINUTE TO SECOND, INTERVAL '1-2 3 4:5:6' HOUR TO SECOND, INTERVAL '1-2 3 4:5:6' DAY TO SECOND;
+----
+14m3d4h5m6s  14m3d4h5m6s  14m3d4h5m6s  14m3d4h5m6s
+
+query TTT
+SELECT INTERVAL '1-2 3 4:5:6' MINUTE, INTERVAL '1-2 3 4:5:6' HOUR TO MINUTE, INTERVAL '1-2 3 4:5:6' DAY TO MINUTE;
+----
+14m3d4h5m0s  14m3d4h5m0s  14m3d4h5m0s
+
+query TT
+SELECT INTERVAL '1-2 3 4:5:6' HOUR, INTERVAL '1-2 3 4:5:6' DAY TO HOUR
+----
+14m3d4h0m0s  14m3d4h0m0s
+
+query T
+SELECT INTERVAL '1-2 3 4:5:6' DAY;
+----
+14m3d0ns
+
+query TT
+SELECT INTERVAL '1-2 3 4:5:6' MONTH, INTERVAL '1-2 3 4:5:6' YEAR TO MONTH;
+----
+14m0d0ns  14m0d0ns
+
+query T
+SELECT INTERVAL '1-2 3 4:5:6' YEAR
+----
+12m0d0ns
