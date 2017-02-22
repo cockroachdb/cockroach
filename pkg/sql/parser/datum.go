@@ -670,8 +670,8 @@ func (d *DString) Size() uintptr {
 type DCollatedString struct {
 	Contents string
 	Locale   string
-	// key is the collation key.
-	key []byte
+	// Key is the collation key.
+	Key []byte
 }
 
 // CollationEnvironment stores the state needed by NewDCollatedString to
@@ -706,7 +706,7 @@ func NewDCollatedString(contents string, locale string, env *CollationEnvironmen
 	entry := env.getCacheEntry(locale)
 	key := entry.collator.KeyFromString(&env.buffer, contents)
 	d := DCollatedString{contents, entry.locale, make([]byte, len(key))}
-	copy(d.key, key)
+	copy(d.Key, key)
 	env.buffer.Reset()
 	return &d
 }
@@ -717,6 +717,8 @@ func (*DCollatedString) AmbiguousFormat() bool { return false }
 // Format implements the NodeFormatter interface.
 func (d *DCollatedString) Format(buf *bytes.Buffer, f FmtFlags) {
 	encodeSQLString(buf, d.Contents)
+	buf.WriteString(" COLLATE ")
+	encodeSQLIdent(buf, d.Locale)
 }
 
 // ResolvedType implements the TypedExpr interface.
@@ -734,7 +736,7 @@ func (d *DCollatedString) Compare(other Datum) int {
 	if !ok || d.Locale != v.Locale {
 		panic(makeUnsupportedComparisonMessage(d, other))
 	}
-	return bytes.Compare(d.key, v.key)
+	return bytes.Compare(d.Key, v.Key)
 }
 
 // Prev implements the Datum interface.
@@ -769,7 +771,7 @@ func (d *DCollatedString) max() (Datum, bool) {
 
 // Size implements the Datum interface.
 func (d *DCollatedString) Size() uintptr {
-	return unsafe.Sizeof(*d) + uintptr(len(d.Contents)) + uintptr(len(d.Locale)) + uintptr(len(d.key))
+	return unsafe.Sizeof(*d) + uintptr(len(d.Contents)) + uintptr(len(d.Locale)) + uintptr(len(d.Key))
 }
 
 // DBytes is the bytes Datum. The underlying type is a string because we want

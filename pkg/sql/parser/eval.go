@@ -916,7 +916,7 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 			LeftType:  TypeCollatedString,
 			RightType: TypeCollatedString,
 			fn: func(_ *EvalContext, left Datum, right Datum) (DBool, error) {
-				return DBool(bytes.Equal(left.(*DCollatedString).key, right.(*DCollatedString).key)), nil
+				return DBool(bytes.Equal(left.(*DCollatedString).Key, right.(*DCollatedString).Key)), nil
 			},
 		},
 		CmpOp{
@@ -1111,7 +1111,7 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 			LeftType:  TypeCollatedString,
 			RightType: TypeCollatedString,
 			fn: func(_ *EvalContext, left Datum, right Datum) (DBool, error) {
-				return DBool(bytes.Compare(left.(*DCollatedString).key, right.(*DCollatedString).key) < 0), nil
+				return DBool(bytes.Compare(left.(*DCollatedString).Key, right.(*DCollatedString).Key) < 0), nil
 			},
 		},
 		CmpOp{
@@ -1305,7 +1305,7 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 			LeftType:  TypeCollatedString,
 			RightType: TypeCollatedString,
 			fn: func(_ *EvalContext, left Datum, right Datum) (DBool, error) {
-				return DBool(bytes.Compare(left.(*DCollatedString).key, right.(*DCollatedString).key) <= 0), nil
+				return DBool(bytes.Compare(left.(*DCollatedString).Key, right.(*DCollatedString).Key) <= 0), nil
 			},
 		},
 		CmpOp{
