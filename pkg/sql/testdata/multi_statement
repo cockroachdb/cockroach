@@ -11,7 +11,7 @@ SELECT * FROM kv
 statement ok
 INSERT INTO kv (k,v) VALUES ('a', 'b'); INSERT INTO kv (k,v) VALUES ('c', 'd')
 
-query TT
+query TT rowsort
 SELECT * FROM kv
 ----
 a b
@@ -22,7 +22,7 @@ c d
 statement error duplicate key value \(k\)=\('a'\) violates unique constraint "primary"
 INSERT INTO kv (k,v) VALUES ('a', 'b'); INSERT INTO kv (k,v) VALUES ('e', 'f')
 
-query TT
+query TT rowsort
 SELECT * FROM kv
 ----
 a b
@@ -32,7 +32,7 @@ c d
 statement error duplicate key value \(k\)=\('a'\) violates unique constraint "primary"
 INSERT INTO kv (k,v) VALUES ('g', 'h'); INSERT INTO kv (k,v) VALUES ('a', 'b')
 
-query TT
+query TT rowsort
 SELECT * FROM kv
 ----
 a b
@@ -43,7 +43,7 @@ g h
 statement error syntax error at or near "k"
 INSERT INTO kv (k,v) VALUES ('i', 'j'); INSERT INTO VALUES ('k', 'l')
 
-query TT
+query TT rowsort
 SELECT * FROM kv
 ----
 a b

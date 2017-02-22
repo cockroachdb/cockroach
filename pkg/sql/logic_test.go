@@ -371,6 +371,34 @@ func partialSort(numCols int, orderedCols []int, values []string) {
 	sortGroup(groupStart, c.numRows)
 }
 
+// Regular expression that matches decimals that have at least a trailing 0
+// after the decimal point.
+var trailingZeroDecimalRE = regexp.MustCompile(`\d*\.\d*0`)
+
+// trimDecimals removes trailing 0s after the decimal point in values that look
+// like decimals. This is a temporary workaround for #13384 (inconsistent
+// decimal precision with DistSQL).
+func trimDecimals(values []string) {
+	for vIdx, s := range values {
+		if trailingZeroDecimalRE.MatchString(s) {
+			i := len(s)
+			for i > 0 && s[i-1] == '0' {
+				i--
+			}
+			if s[i-1] == '.' {
+				// Values like "abc.00" become "abc".
+				i--
+			}
+			if i == 0 {
+				// A value like ".000" becomes "0".
+				values[vIdx] = "0"
+			} else {
+				values[vIdx] = s[:i]
+			}
+		}
+	}
+}
+
 // logicQuery represents a single query test in Test-Script.
 type logicQuery struct {
 	// pos and sql are as in logicStatement.
@@ -382,6 +410,8 @@ type logicQuery struct {
 	colNames bool
 	// some tests require the output to match modulo sorting.
 	sorter logicSorter
+	// if set, we remove trailing 0s from decimal values; see trimDecimals().
+	trimDecimals bool
 	// expectedErr and expectedErrCode are as in logicStatement.
 	expectErr     string
 	expectErrCode string
@@ -701,13 +731,15 @@ func (t *logicTest) processTestFile(path string) error {
 			} else if len(fields) < 2 {
 				return fmt.Errorf("%s: invalid test statement: %s", query.pos, s.Text())
 			} else {
-				// Parse "query <type-string> <sort-mode> <label>"
+				// Parse "query <type-string> <options> <label>"
+				//
 				// The type string specifies the number of columns and their types:
 				//   - T for text
 				//   - I for integer
 				//   - R for floating point or decimal
 				//   - B for boolean
-				// The sort mode is one of:
+				//
+				// Options are a comma separated strings from the following:
 				//   - "nosort" (default)
 				//   - "rowsort": sorts both the returned and the expected rows assuming
 				//         one white-space separated word per column.
@@ -719,9 +751,10 @@ func (t *logicTest) processTestFile(path string) error {
 				//         (1-indexed); for results that are expected to be already
 				//         ordered according to these columns. See partialSort() for
 				//         more information.
-				//
 				//   - "colnames": column names are verified (the expected column names
-				//                 are the first line in the expected results).
+				//         are the first line in the expected results).
+				//   - "trimdecimals": values that look like decimals have trailing 0s
+				//         removed; temporary workaround for #13384.
 				//
 				// The label is optional. If specified, the test runner stores a hash
 				// of the results of the query under the given label. If the label is
@@ -769,6 +802,9 @@ func (t *logicTest) processTestFile(path string) error {
 
 						case "colnames":
 							query.colNames = true
+
+						case "trimdecimals":
+							query.trimDecimals = true
 
 						default:
 							return fmt.Errorf("%s: unknown sort mode: %s", query.pos, opt)
@@ -1156,6 +1192,11 @@ func (t *logicTest) execQuery(query logicQuery) error {
 		query.sorter(len(cols), query.expectedResults)
 	}
 
+	if query.trimDecimals {
+		trimDecimals(results)
+		trimDecimals(query.expectedResults)
+	}
+
 	if query.expectedHash != "" {
 		n := len(results)
 		if query.expectedValues != n {
@@ -1351,7 +1392,7 @@ func TestLogicDistSQL(t *testing.T) {
 	defer sql.SetDefaultDistSQLMode("ON")()
 
 	// TODO(radu): make this run on 3 nodes (#13377)
-	l := makeLogicTest(t, 1 /* numNodes */, true /* useFakeSpanResolver */)
+	l := makeLogicTest(t, 3 /* numNodes */, true /* useFakeSpanResolver */)
 	l.run()
 }
 

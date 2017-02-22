@@ -10,7 +10,7 @@ INSERT INTO kv VALUES (1, 2), (3, 4), (5, 6), (7, 8)
 statement ok
 UPDATE kv SET v = 9 WHERE k IN (1, 3)
 
-query II
+query II rowsort
 SELECT * FROM kv
 ----
 1 9
@@ -21,7 +21,7 @@ SELECT * FROM kv
 statement ok
 UPDATE kv SET v = k + v
 
-query II
+query II rowsort
 SELECT * FROM kv
 ----
 1 10
@@ -44,7 +44,7 @@ UPDATE kv SET k.v = 9
 statement ok
 CREATE VIEW kview as SELECT k,v from kv
 
-query II
+query II rowsort
 SELECT * FROM kview
 ----
 1 10
@@ -55,7 +55,7 @@ SELECT * FROM kview
 statement error cannot run UPDATE on view "kview" - views are not updateable
 UPDATE kview SET v = 99 WHERE k IN (1, 3)
 
-query II
+query II rowsort
 SELECT * FROM kview
 ----
 1 10
@@ -75,7 +75,7 @@ CREATE TABLE kv2 (
 statement ok
 INSERT INTO kv2 VALUES ('a', 'b'), ('c', 'd'), ('e', 'f'), ('f', 'g')
 
-query TT
+query TT rowsort
 SELECT * FROM kv2
 ----
 a   b
@@ -130,7 +130,7 @@ EXPLAIN (DEBUG) SELECT * FROM kv2@a
 statement ok
 UPDATE kv2 SET v = 'i' WHERE k IN ('a')
 
-query TT
+query TT rowsort
 SELECT * FROM kv2
 ----
 a   i
@@ -141,7 +141,7 @@ f   g
 statement ok
 UPDATE kv2 SET v = 'b' WHERE k IN ('a')
 
-query TT
+query TT rowsort
 SELECT * FROM kv2
 ----
 a   b
@@ -255,7 +255,7 @@ UPDATE abc SET a = 2, b = 3 WHERE a = 1 RETURNING *
 ----
 2 3 9
 
-query III
+query III rowsort
 SELECT * FROM abc
 ----
 2 3 9

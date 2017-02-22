@@ -87,7 +87,7 @@ CREATE TABLE b.a (id INT PRIMARY KEY)
 statement ok
 INSERT INTO b.a VALUES (3),(7),(2)
 
-query I
+query I rowsort
 SELECT * FROM b.a
 ----
 2

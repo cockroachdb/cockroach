@@ -16,7 +16,7 @@ CREATE TABLE kvString (
 statement ok
 INSERT INTO kvString VALUES ('like1', 'hell%'), ('like2', 'worl%')
 
-query II
+query II rowsort
 SELECT * FROM kv WHERE k IN (1, 3)
 ----
 1 2
@@ -27,7 +27,7 @@ SELECT * FROM kv WHERE v IN (6)
 ----
 5 6
 
-query II
+query II rowsort
 SELECT * FROM kv WHERE k IN (SELECT k FROM kv)
 ----
 1 2
@@ -35,7 +35,7 @@ SELECT * FROM kv WHERE k IN (SELECT k FROM kv)
 5 6
 7 8
 
-query II
+query II rowsort
 SELECT * FROM kv WHERE (k,v) IN (SELECT * FROM kv)
 ----
 1 2
@@ -47,26 +47,26 @@ query error column name "nonexistent" not found
 SELECT * FROM kv WHERE nonexistent = 1
 
 query B
-SELECT 'hello' LIKE v FROM kvString WHERE k LIKE 'like%'
+SELECT 'hello' LIKE v FROM kvString WHERE k LIKE 'like%' ORDER BY k
 ----
 true
 false
 
 query B
-SELECT 'hello' SIMILAR TO v FROM kvString WHERE k SIMILAR TO 'like[1-2]'
+SELECT 'hello' SIMILAR TO v FROM kvString WHERE k SIMILAR TO 'like[1-2]' ORDER BY k
 ----
 true
 false
 
 query B
-SELECT 'hello' ~ replace(v, '%', '.*') FROM kvString WHERE k ~ 'like[1-2]'
+SELECT 'hello' ~ replace(v, '%', '.*') FROM kvString WHERE k ~ 'like[1-2]' ORDER BY k
 ----
 true
 false
 
 # Test mixed type tuple comparison.
 
-query II
+query II rowsort
 SELECT * FROM kv WHERE k IN (1, 5.0, 9)
 ----
 1 2

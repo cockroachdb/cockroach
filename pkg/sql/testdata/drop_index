@@ -86,7 +86,7 @@ users  primary  true    1    id      ASC        false    false
 
 user root
 
-query ITT
+query ITT rowsort
 SELECT * FROM users
 ----
 1 tom   cat

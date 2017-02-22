@@ -7,7 +7,7 @@ CREATE TABLE kv (
 statement ok
 INSERT INTO kv VALUES (1, 2), (3, 4), (5, 6), (7, 8)
 
-query II
+query II rowsort
 SELECT * FROM kv
 ----
 1 2
@@ -18,7 +18,7 @@ SELECT * FROM kv
 statement ok
 CREATE VIEW kview AS SELECT k,v FROM kv
 
-query II
+query II rowsort
 SELECT * FROM kview
 ----
 1 2
@@ -29,7 +29,7 @@ SELECT * FROM kview
 statement error cannot run TRUNCATE on view "kview" - views are not updateable
 TRUNCATE TABLE kview
 
-query II
+query II rowsort
 SELECT * FROM kview
 ----
 1 2

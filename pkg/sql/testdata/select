@@ -205,7 +205,7 @@ query error negative value for OFFSET
 SELECT * FROM xyzw OFFSET -100
 
 query IIII
-SELECT * FROM xyzw OFFSET 1 + 0.0
+SELECT * FROM xyzw ORDER BY x OFFSET 1 + 0.0
 ----
 4 5 6 7
 
@@ -220,12 +220,12 @@ SELECT * FROM xyzw LIMIT 0
 ----
 
 query IIII
-SELECT * FROM xyzw LIMIT 1
+SELECT * FROM xyzw ORDER BY x LIMIT 1
 ----
 1 2 3 4
 
 query IIII
-SELECT * FROM xyzw LIMIT 1 OFFSET 1
+SELECT * FROM xyzw ORDER BY x LIMIT 1 OFFSET 1
 ----
 4 5 6 7
 
@@ -241,7 +241,7 @@ query IIII
 SELECT * FROM (SELECT * FROM xyzw LIMIT 5) OFFSET 5
 ----
 
-query II
+query II rowsort
 SELECT z, y FROM xyzw@foo
 ----
 3 2
@@ -290,7 +290,7 @@ SELECT CASE WHEN NULL THEN 1 ELSE 2 END
 statement ok
 INSERT INTO abc VALUES (42, NULL, NULL)
 
-query III
+query III rowsort
 SELECT 0 * b, b % 1, 0 % b from abc
 ----
 0 0 0

@@ -75,7 +75,7 @@ users  rar      true    2    name    ASC        false    false
 
 user root
 
-query ITT
+query ITT rowsort
 SELECT * FROM users
 ----
 1 tom   cat

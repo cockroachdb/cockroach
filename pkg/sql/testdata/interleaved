@@ -44,7 +44,7 @@ INSERT INTO p1_1 VALUES (2, '2', '2.11', 2), (3, '3', '3.11', 3)
 statement ok
 INSERT INTO p0 VALUES (2, '2', '2.0', 2), (3, '3', '3.0', 3), (5, '5', '5.0', 5)
 
-query IT
+query IT rowsort
 SELECT * FROM p2
 ----
 2  2
@@ -52,7 +52,7 @@ SELECT * FROM p2
 5  5
 7  7
 
-query ITTT
+query ITTT rowsort
 EXPLAIN (DEBUG) SELECT * FROM p1_0
 ----
 0  /p1_0/primary/2/'2'/s2  /'2.01'  PARTIAL
@@ -61,20 +61,20 @@ EXPLAIN (DEBUG) SELECT * FROM p1_0
 1  /p1_0/primary/3/'3'/d   3        ROW
 2  /p1_0/primary/5/'5'     NULL     ROW
 
-query ITTT
+query ITTT rowsort
 SELECT * FROM p1_0
 ----
 2  2  2.01  2
 3  3  3.01  3
 5  5  NULL  NULL
 
-query ITTT
+query ITTT rowsort
 SELECT * FROM p1_1
 ----
 2  2  2.11  2
 3  3  3.11  3
 
-query ITTT
+query ITTT rowsort
 SELECT * FROM p0
 ----
 2  2  2.0  2
@@ -87,13 +87,13 @@ CREATE INDEX p0i ON p0 (i) INTERLEAVE IN PARENT p1_1 (i)
 statement ok
 CREATE INDEX p1_id ON p1_1 (i, d) INTERLEAVE IN PARENT p1_1 (i)
 
-query ITTT
+query ITTT rowsort
 SELECT * FROM p0@p0i WHERE i BETWEEN 2 AND 4
 ----
 2  2  2.0  2
 3  3  3.0  3
 
-query ITTT
+query ITTT rowsort
 SELECT * FROM p1_1@p1_id WHERE d BETWEEN 1.5 AND 4.0
 ----
 2  2  2.11  2
@@ -108,14 +108,14 @@ INSERT INTO p1_0 (i, s1) VALUES (5, '5') ON CONFLICT (i, s1) DO UPDATE SET i = 7
 statement ok
 DELETE FROM p2 WHERE i = 2 OR i = 7
 
-query IT
+query IT rowsort
 SELECT * FROM p2
 ----
 3  3
 5  5
 
 # Check that we're skipping first/last row of a block of interleaved data correctly
-query ITTT
+query ITTT rowsort
 SELECT * FROM p0
 ----
 2  2  2.0  2
@@ -126,17 +126,17 @@ SELECT * FROM p0
 statement ok
 DELETE FROM p2
 
-query IT
+query IT rowsort
 SELECT * FROM p2
 ----
 
-query ITTT
+query ITTT rowsort
 SELECT * FROM p1_0
 ----
 2  2  2.01  2
 7  5  7.01  7
 
-query ITTT
+query ITTT rowsort
 SELECT * FROM p0
 ----
 2  2  2.0  2
@@ -146,7 +146,7 @@ SELECT * FROM p0
 statement ok
 DROP INDEX p0@p0i
 
-query ITTT
+query ITTT rowsort
 SELECT * FROM p0
 ----
 2  2  2.0  2
@@ -156,7 +156,7 @@ SELECT * FROM p0
 statement ok
 DROP TABLE p0
 
-query ITTT
+query ITTT rowsort
 SELECT * FROM p1_0
 ----
 2  2  2.01  2
@@ -171,7 +171,7 @@ DROP TABLE p2
 statement ok
 CREATE INDEX p1_s2 ON p1_1 (s2)
 
-query ITTT
+query ITTT rowsort
 SELECT * FROM p1_0
 ----
 2  2  2.01  2

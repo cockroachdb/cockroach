@@ -11,7 +11,7 @@ statement ok
 INSERT INTO kv VALUES ("hello", '''world'''), (r"a\n", R"b\t")
 
 query TT
-SELECT * FROM kv
+SELECT * FROM kv ORDER BY k
 ----
 a\n   b\t
 hello world

@@ -10,7 +10,7 @@ CREATE TABLE users (
 statement ok
 INSERT INTO users VALUES (1, 'tom', 'cat'),(2, 'jerry', 'rat')
 
-query ITT colnames
+query ITT colnames,rowsort
 SELECT * FROM users
 ----
 uid name  title
@@ -38,7 +38,7 @@ ALTER TABLE users RENAME COLUMN uid TO id
 statement ok
 ALTER TABLE users RENAME COLUMN title TO species
 
-query ITT colnames
+query ITT colnames,rowsort
 SELECT * FROM users
 ----
 id name  species
@@ -62,7 +62,7 @@ ALTER TABLE users RENAME COLUMN name TO username
 
 user root
 
-query ITT colnames
+query ITT colnames,rowsort
 SELECT * FROM users
 ----
 id username  species

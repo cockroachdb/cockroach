@@ -28,7 +28,7 @@ CREATE VIEW v5 AS select a, b from dne
 statement ok
 CREATE VIEW v6 (x, y) AS select a, b from v1
 
-query II colnames
+query II colnames,rowsort
 SELECT * FROM v1
 ----
 a b
@@ -36,7 +36,7 @@ a b
 2 98
 3 97
 
-query II colnames
+query II colnames,rowsort
 SELECT * FROM v2
 ----
 x y
@@ -44,7 +44,7 @@ x y
 2 98
 3 97
 
-query II colnames
+query II colnames,rowsort
 SELECT * FROM v6
 ----
 x y
@@ -57,21 +57,21 @@ SELECT * FROM v2 ORDER BY x DESC LIMIT 1
 ----
 3 97
 
-query I
+query I rowsort
 SELECT x FROM v2
 ----
 1
 2
 3
 
-query I
+query I rowsort
 SELECT y FROM v2
 ----
 99
 98
 97
 
-query IIII
+query IIII rowsort
 SELECT * FROM v1 AS v1 INNER JOIN v2 AS v2 ON v1.a = v2.x
 ----
 1 99 1 99
@@ -84,7 +84,7 @@ CREATE DATABASE test2
 statement ok
 SET DATABASE = test2
 
-query II colnames
+query II colnames,rowsort
 SELECT * FROM test.v1
 ----
 a b
@@ -92,7 +92,7 @@ a b
 2 98
 3 97
 
-query II colnames
+query II colnames,rowsort
 SELECT * FROM test.v2
 ----
 x y
@@ -100,7 +100,7 @@ x y
 2 98
 3 97
 
-query II colnames
+query II colnames,rowsort
 SELECT * FROM test.v6
 ----
 x y
@@ -114,7 +114,7 @@ CREATE VIEW v1 AS SELECT x, y FROM test.v2
 statement ok
 SET DATABASE = test
 
-query II colnames
+query II colnames,rowsort
 SELECT * FROM test2.v1
 ----
 x y
@@ -147,7 +147,7 @@ GRANT SELECT ON t TO testuser
 
 user testuser
 
-query II
+query II rowsort
 SELECT * FROM t
 ----
 1 99
@@ -176,7 +176,7 @@ user testuser
 query error user testuser does not have SELECT privilege on table t
 SELECT * FROM t
 
-query II
+query II rowsort
 SELECT * FROM v1
 ----
 1 99
@@ -207,7 +207,7 @@ SELECT * FROM t
 query error user testuser does not have SELECT privilege on view v1
 SELECT * FROM v1
 
-query II
+query II rowsort
 SELECT * FROM v6
 ----
 1 99
