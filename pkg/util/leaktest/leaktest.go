@@ -37,9 +37,6 @@ func interestingGoroutines() map[int64]string {
 
 		if stack == "" ||
 			strings.Contains(stack, "github.com/cockroachdb/cockroach/pkg/util/log.init") ||
-			// Go1.7 added a goroutine to network dialing that doesn't shut down
-			// quickly.
-			strings.Contains(stack, "created by net.(*netFD).connect") ||
 			// Below are the stacks ignored by the upstream leaktest code.
 			strings.Contains(stack, "testing.Main(") ||
 			strings.Contains(stack, "testing.tRunner(") ||
