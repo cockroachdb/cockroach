@@ -1209,9 +1209,8 @@ func TestRangeInfo(t *testing.T) {
 
 // TestCampaignOnLazyRaftGroupInitialization verifies expected
 // behavior for which replicas will campaign on lazy initialization.
-func TestCampaignOnLazyRaftGroupInitialization(t *testing.T) {
+func TestCampaignOnLazyRaftGroupInitializationRename(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	t.Skip("this test is flaky on the 5m initial stress due to errant Raft messages initializing the Raft group")
 	splitKey := keys.MakeRowSentinelKey(keys.UserTableDataMin)
 	testState := struct {
 		syncutil.Mutex

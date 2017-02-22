@@ -933,6 +933,7 @@ func (m *multiTestContext) restart() {
 	for i := range m.stores {
 		m.stopStore(i)
 	}
+	m.rpcContext.Reset() // clear all RPC connections
 	for i := range m.stores {
 		m.restartStore(i)
 	}
