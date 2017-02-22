@@ -25,9 +25,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/util/decimal"
-
-	"gopkg.in/inf.v0"
+	"github.com/cockroachdb/apd"
 )
 
 // TestNumericConstantVerifyAndResolveAvailableTypes verifies that test NumVals will
@@ -113,19 +111,19 @@ func TestNumericConstantVerifyAndResolveAvailableTypes(t *testing.T) {
 						resErr(f, resF)
 					}
 				case *DDecimal:
-					d := new(inf.Dec)
+					d := new(apd.Decimal)
 					if !strings.ContainsAny(test.str, "eE") {
-						if _, ok := d.SetString(test.str); !ok {
+						if _, _, err := d.SetString(test.str); err != nil {
 							t.Fatalf("could not set %q on decimal", test.str)
 						}
 					} else {
-						f, err := strconv.ParseFloat(test.str, 64)
+						_, _, err = d.SetString(test.str)
 						if err != nil {
 							t.Fatal(err)
 						}
-						decimal.SetFromFloat(d, f)
 					}
-					if resD := &typ.Dec; d.Cmp(resD) != 0 {
+					resD := &typ.Decimal
+					if d.Cmp(resD) != 0 {
 						resErr(d, resD)
 					}
 				}

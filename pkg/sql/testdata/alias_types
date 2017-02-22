@@ -55,6 +55,6 @@ SELECT to_hex(a), reverse(b) FROM aliases ORDER BY a
 query RI
 SELECT sqrt(a::DECIMAL), length(b::BYTES) FROM aliases ORDER BY a
 ----
-1.4142135623730950   3
-4.0000000000000000   3
-10.0000000000000000  3
+1.414213562373095   3
+4   3
+10  3

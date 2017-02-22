@@ -1,0 +1,58 @@
+# The following tests have results equivalent to Postgres (differences
+# in string representation and number of decimals returned, but otherwise
+# the same). These do not pass using the inf package. The inf package
+# (http://gopkg.in/inf.v0) is what we used to use, but it had various problems
+# (for example, all the test cases below), and was replaced with apd.
+
+# inf returns 0
+query R
+SELECT (1.4238790346995263e-40::DECIMAL / 6.011482313728436e+41::DECIMAL)
+----
+0.0000000000000000000000000000000000000000000000000000000000000000000000000000000002368598891903600
+
+# inf returns -108.4851126682386588
+query R
+SELECT ln(7.682705743584112e-48::DECIMAL)
+----
+-108.4851126682388
+
+# inf returns 0
+query R
+SELECT sqrt(9.789765531128956e-34::DECIMAL)
+----
+0.00000000000000003128860100919975
+
+# inf returns 0.1547300000000000
+query R
+SELECT pow(4.727998800941528e-14::DECIMAL, 0.06081860494226844::DECIMAL)
+----
+0.1547292664070591
+
+# inf returns 0, 0
+query RR
+SELECT pow(sqrt(1e-10::DECIMAL), 2), sqrt(pow(1e-5::DECIMAL, 2))
+----
+0.0000000001000000000000000  0.00001
+
+# inf returns 1e-16, 0, 2e-16
+query RRR
+SELECT 1e-16::DECIMAL / 2, 1e-16::DECIMAL / 3, 1e-16::DECIMAL / 2 * 2
+----
+0.00000000000000005  0.00000000000000003333333333333333  0.00000000000000010
+
+# inf returns 1e-8, 0, 0, 0
+query RRRR
+SELECT pow(1e-4::DECIMAL, 2), pow(1e-5::DECIMAL, 2), pow(1e-8::DECIMAL, 2), pow(1e-9::DECIMAL, 2)
+----
+0.00000001000000000000000  0.0000000001000000000000000  0.0000000000000001000000000000000  0.000000000000000001000000000000000
+
+# inf returns argument too large
+query R
+SELECT pow(1e-10::DECIMAL, 2)
+----
+0.00000000000000000001000000000000000
+
+# inf panics (#13051)
+statement error parse mantissa: NaN
+----
+SELECT 'NaN'::FLOAT::DECIMAL
