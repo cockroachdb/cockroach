@@ -1619,54 +1619,49 @@ func applyConstraintFlat(
 		return t
 	}
 
-	// More special casing: constraint says "a IN (x, y, z...)"
-	if cOp == parser.In {
-		ctuple := cdatum.(*parser.DTuple)
-		switch t.Operator {
-		case parser.Is, parser.EQ:
+	// Additional special casing.
+	switch t.Operator {
+	case parser.LE, parser.LT, parser.GE,
+		parser.GT, parser.NE, parser.IsNot:
+		// The general case below knows about all this. Go forward.
+
+	case parser.Is, parser.EQ:
+		// Expr IS/= ...
+
+		if cOp == parser.In {
+			// constraint says "a IN (x, y, z...)"
 			// Expr asks "= Cst" or IS TRUE / IS FALSE: check whether the
 			// value is in the IN set. If it is not, we're sure it never
 			// matches. Otherwise we don't know.
+			ctuple := cdatum.(*parser.DTuple)
 			i := sort.Search(len(ctuple.D), func(i int) bool {
 				return ctuple.D[i].(parser.Datum).Compare(datum) >= 0
 			})
 			if i >= len(ctuple.D) || ctuple.D[i].Compare(datum) != 0 {
 				return parser.DBoolFalse
 			}
+		}
+		// Continue to the general case below.
 
+	case parser.In:
+		// Expr: "a IN (t, u, v, ...)"
+
+		switch cOp {
 		case parser.In:
-			// Expr: "a IN (t, u, v, ...)"
+			// constraint says "a IN (x, y, z...)"
 			// true if (x, y, z, ...) is a subset of (t, u, v, ...)
 			// unknown otherwise
 			if ttuple, ok := datum.(*parser.DTuple); ok {
 				// Note: A is a subset of B iff A \ B == empty.
+				ctuple := cdatum.(*parser.DTuple)
 				diff := ctuple.SortedDifference(ttuple)
 				if len(diff.D) == 0 {
 					return parser.DBoolTrue
 				}
 			}
 
-		case parser.NotIn:
-			// Expr: "a NOT IN (t, u, v, ...)"
-			// True if none of the values in (x, y, z...) are in (t, u, v, ...)
-			// unknown otherwise
-			if ttuple, ok := datum.(*parser.DTuple); ok {
-				// Note: A inter B is empty iff A \ B == A
-				diff := ctuple.SortedDifference(ttuple)
-				if len(diff.D) < len(ctuple.D) {
-					return parser.DBoolTrue
-				}
-			}
-		}
-
-		return t
-	}
-
-	// More special casing: constraint says [a = value]
-	// and expression is [a != ...], [a IN ...] or [a NOT IN ...].
-	if cOp == parser.EQ {
-		switch t.Operator {
-		case parser.In:
+		case parser.EQ:
+			// constraint says "a = Cst"
 			// true if the known value is in the IN set, false otherwise.
 			if tuple, ok := datum.(*parser.DTuple); ok {
 				i := sort.Search(len(tuple.D), func(i int) bool {
@@ -1677,8 +1672,32 @@ func applyConstraintFlat(
 				}
 			}
 			return parser.DBoolFalse
+		}
 
-		case parser.NotIn:
+		// The general case below doesn't know about
+		// IN expressions. Can't go further.
+		return t
+
+	case parser.NotIn:
+		// Expr NOT IN ...
+
+		switch cOp {
+		case parser.In:
+			// constraint says "a IN (x, y, z...)"
+			// Expr: "a NOT IN (t, u, v, ...)"
+			// True if none of the values in (x, y, z...) are in (t, u, v, ...)
+			// unknown otherwise
+			if ttuple, ok := datum.(*parser.DTuple); ok {
+				// Note: A inter B is empty iff A \ B == A
+				ctuple := cdatum.(*parser.DTuple)
+				diff := ctuple.SortedDifference(ttuple)
+				if len(diff.D) < len(ctuple.D) {
+					return parser.DBoolTrue
+				}
+			}
+
+		case parser.EQ:
+			// constraint says "a = Cst"
 			// false if the known value is in the NOT IN set, true otherwise.
 			if tuple, ok := datum.(*parser.DTuple); ok {
 				i := sort.Search(len(tuple.D), func(i int) bool {
@@ -1690,6 +1709,15 @@ func applyConstraintFlat(
 			}
 			return parser.DBoolTrue
 		}
+
+		// The general case below doesn't know about
+		// NOT IN expressions. Can't go further.
+		return t
+
+	default:
+		// We have a comparison expression with a comparator which
+		// is not handled below. Can't go further.
+		return t
 	}
 
 	// General case: constraint and expression both specify a range.

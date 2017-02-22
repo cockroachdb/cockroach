@@ -688,6 +688,14 @@ func TestApplyConstraints(t *testing.T) {
 		// elided during constraint analysis before constraint
 		// propagation.
 		{`a <= 1 AND COALESCE(a != 2, true)`, `a`, `COALESCE(true, true)`},
+		// Regression tests: #13707
+		// The following tests must achieve a constraint with a small
+		// range and an expression to simplify that contains the range
+		// column in an "exotic" comparison operator. We use OR so that
+		// analyzeExpr doesn't decompose further.
+		{`a < 3 AND (b < 2 OR a IN (0,1,2))`, `a`, `(b < 2) OR (a IN (0, 1, 2))`},
+		{`a < 3 AND (b < 2 OR a NOT IN (0,1,2))`, `a`, `(b < 2) OR (a NOT IN (0, 1, 2))`},
+		{`a < 3 AND (b < 2 OR a = ANY ARRAY[0,1,2])`, `a`, `(b < 2) OR (a = ANY {0,1,2})`},
 	}
 	for _, d := range testData {
 		t.Run(d.expr+"~"+d.expected, func(t *testing.T) {
