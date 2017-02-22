@@ -309,6 +309,7 @@ var (
 	strValAvailAllParsable = []Type{
 		TypeString,
 		TypeBytes,
+		TypeBool,
 		TypeDate,
 		TypeTimestamp,
 		TypeTimestampTZ,
@@ -369,6 +370,8 @@ func (expr *StrVal) ResolveAsType(ctx *SemaContext, typ Type) (Datum, error) {
 	case TypeBytes:
 		expr.resBytes = DBytes(expr.s)
 		return &expr.resBytes, nil
+	case TypeBool:
+		return ParseDBool(expr.s)
 	case TypeDate:
 		return ParseDDate(expr.s, ctx.getLocation())
 	case TypeTimestamp:

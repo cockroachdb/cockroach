@@ -246,7 +246,7 @@ INSERT INTO kv4 (int, bit) VALUES (2, 'a')
 statement ok
 INSERT INTO kv4 (int, bit) VALUES (2, 1)
 
-statement error value type string doesn't match type BOOL of column "bool"
+statement error could not parse 'a' as type bool
 INSERT INTO kv4 (int, bool) VALUES (3, 'a')
 
 statement ok

@@ -135,7 +135,7 @@ func TestTypeCheckError(t *testing.T) {
 		{`a.*`, `cannot use "a.*" in this context`},
 		{`1 AND true`, `incompatible AND argument type: int`},
 		{`1.0 AND true`, `incompatible AND argument type: decimal`},
-		{`'a' OR true`, `incompatible OR argument type: string`},
+		{`'a' OR true`, `could not parse 'a' as type bool`},
 		{`(1, 2) OR true`, `incompatible OR argument type: tuple`},
 		{`NOT 1`, `incompatible NOT argument type: int`},
 		{`lower()`, `unknown signature: lower()`},
