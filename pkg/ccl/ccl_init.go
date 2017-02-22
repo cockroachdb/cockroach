@@ -17,6 +17,5 @@ import (
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/sqlccl"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/storageccl/engineccl"
-	_ "github.com/cockroachdb/cockroach/pkg/ccl/storageccl/engineccl/rocksdbccl"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/utilccl/intervalccl"
 )

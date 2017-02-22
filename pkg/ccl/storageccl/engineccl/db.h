@@ -9,7 +9,7 @@
 #ifndef ROACHLIBCCL_DB_H
 #define ROACHLIBCCL_DB_H
 
-#include "../../../../storage/engine/rocksdb/db.h"
+#include "../../../storage/engine/db.h"
 
 #ifdef __cplusplus
 extern "C" {
