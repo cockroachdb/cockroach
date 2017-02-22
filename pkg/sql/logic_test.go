@@ -1225,7 +1225,7 @@ func (l *logicTest) run() {
 	t := l.t
 	var globs []string
 	if *bigtest {
-		const logicTestPath = "../../sqllogictest"
+		const logicTestPath = "../../../sqllogictest"
 		if _, err := os.Stat(logicTestPath); os.IsNotExist(err) {
 			fullPath, err := filepath.Abs(logicTestPath)
 			if err != nil {
