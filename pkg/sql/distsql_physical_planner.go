@@ -605,7 +605,8 @@ func initBackfillerSpec(
 }
 
 // CreateBackfiller generates a plan consisting of index/column backfiller
-// processors, one for each node that has spans that we are reading.
+// processors, one for each node that has spans that we are reading. The plan is
+// finalized.
 func (dsp *distSQLPlanner) CreateBackfiller(
 	planCtx *planningCtx,
 	backfillType int,
@@ -644,6 +645,7 @@ func (dsp *distSQLPlanner) CreateBackfiller(
 		pIdx := p.AddProcessor(proc)
 		p.ResultRouters = append(p.ResultRouters, pIdx)
 	}
+	dsp.FinalizePlan(planCtx, &p)
 	return p, nil
 }
 
@@ -1283,17 +1285,13 @@ func (dsp *distSQLPlanner) PlanAndRun(
 	if err != nil {
 		return err
 	}
-	return dsp.Run(planCtx, txn, plan, recv)
+	dsp.FinalizePlan(&planCtx, &plan)
+	return dsp.Run(&planCtx, txn, &plan, recv)
 }
 
-// Run executes a physical plan.
-//
-// Note that errors that happen while actually running the flow are reported to
-// recv, not returned by this function.
-func (dsp *distSQLPlanner) Run(
-	planCtx planningCtx, txn *client.Txn, plan physicalPlan, recv *distSQLReceiver,
-) error {
-	ctx := planCtx.ctx
+// FinalizePlan adds a final "result" stage if necessary and populates the
+// endpoints of the plan.
+func (dsp *distSQLPlanner) FinalizePlan(planCtx *planningCtx, plan *physicalPlan) {
 	thisNodeID := dsp.nodeDesc.NodeID
 	// If we don't already have a single result router on this node, add a final
 	// stage.
@@ -1318,8 +1316,17 @@ func (dsp *distSQLPlanner) Run(
 	finalOut.Streams = append(finalOut.Streams, distsqlrun.StreamEndpointSpec{
 		Type: distsqlrun.StreamEndpointSpec_SYNC_RESPONSE,
 	})
+}
 
-	recv.resultToStreamColMap = plan.planToStreamColMap
+// Run executes a physical plan. The plan should have been finalized using
+// FinalizePlan.
+//
+// Note that errors that happen while actually running the flow are reported to
+// recv, not returned by this function.
+func (dsp *distSQLPlanner) Run(
+	planCtx *planningCtx, txn *client.Txn, plan *physicalPlan, recv *distSQLReceiver,
+) error {
+	ctx := planCtx.ctx
 
 	flows := plan.GenerateFlowSpecs()
 
@@ -1335,6 +1342,9 @@ func (dsp *distSQLPlanner) Run(
 	}
 
 	log.VEvent(ctx, 1, "running DistSQL plan")
+
+	recv.resultToStreamColMap = plan.planToStreamColMap
+	thisNodeID := dsp.nodeDesc.NodeID
 
 	// Start the flows on all other nodes.
 	for nodeID, flowSpec := range flows {
