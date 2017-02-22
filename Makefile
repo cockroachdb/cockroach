@@ -86,6 +86,8 @@ else
 $(error unknown build type $(TYPE))
 endif
 
+export MACOSX_DEPLOYMENT_TARGET=10.9
+
 -include customenv.mk
 
 .PHONY: all
