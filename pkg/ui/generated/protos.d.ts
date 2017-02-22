@@ -5091,6 +5091,33 @@ getState?() : storage.storagebase.RangeInfo;
 
 
 
+source_node_id?: number;
+		
+
+getSourceNodeId?() : number;
+		setSourceNodeId?(sourceNodeId : number): void;
+		
+
+
+
+source_store_id?: number;
+		
+
+getSourceStoreId?() : number;
+		setSourceStoreId?(sourceStoreId : number): void;
+		
+
+
+
+error_message?: string;
+		
+
+getErrorMessage?() : string;
+		setErrorMessage?(errorMessage : string): void;
+		
+
+
+
 }
 
 	export interface RangeInfoMessage extends RangeInfo {
