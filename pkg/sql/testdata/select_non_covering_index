@@ -129,7 +129,7 @@ EXPLAIN SELECT * FROM t ORDER BY c LIMIT 5
 2              table  t@primary
 
 query ITTT
-EXPLAIN(EXPRS) SELECT * FROM t ORDER BY c OFFSET 5
+EXPLAIN (EXPRS) SELECT * FROM t ORDER BY c OFFSET 5
 ----
 0  limit
 0         offset    5
@@ -140,7 +140,7 @@ EXPLAIN(EXPRS) SELECT * FROM t ORDER BY c OFFSET 5
 2         spans     ALL
 
 query ITTT
-EXPLAIN(EXPRS) SELECT * FROM t ORDER BY c LIMIT 5 OFFSET 5
+EXPLAIN (EXPRS) SELECT * FROM t ORDER BY c LIMIT 5 OFFSET 5
 ----
 0  limit
 0              count     5
@@ -154,7 +154,7 @@ EXPLAIN(EXPRS) SELECT * FROM t ORDER BY c LIMIT 5 OFFSET 5
 2              table     t@primary
 
 query ITTT
-EXPLAIN(EXPRS) SELECT * FROM t ORDER BY c LIMIT 1000000
+EXPLAIN (EXPRS) SELECT * FROM t ORDER BY c LIMIT 1000000
 ----
 0  limit
 0          count     1000000
