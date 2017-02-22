@@ -286,7 +286,7 @@ func RegisterAdminHandler(ctx context.Context, mux *runtime.ServeMux, conn *grpc
 	client := NewAdminClient(conn)
 
 	mux.Handle("GET", pattern_Admin_Users_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
-		ctx, cancel := context.WithCancel(ctx)
+		ctx, cancel := context.WithCancel(req.Context())
 		defer cancel()
 		if cn, ok := w.(http.CloseNotifier); ok {
 			go func(done <-chan struct{}, closed <-chan bool) {
@@ -314,7 +314,7 @@ func RegisterAdminHandler(ctx context.Context, mux *runtime.ServeMux, conn *grpc
 	})
 
 	mux.Handle("GET", pattern_Admin_Databases_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
-		ctx, cancel := context.WithCancel(ctx)
+		ctx, cancel := context.WithCancel(req.Context())
 		defer cancel()
 		if cn, ok := w.(http.CloseNotifier); ok {
 			go func(done <-chan struct{}, closed <-chan bool) {
@@ -342,7 +342,7 @@ func RegisterAdminHandler(ctx context.Context, mux *runtime.ServeMux, conn *grpc
 	})
 
 	mux.Handle("GET", pattern_Admin_DatabaseDetails_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
-		ctx, cancel := context.WithCancel(ctx)
+		ctx, cancel := context.WithCancel(req.Context())
 		defer cancel()
 		if cn, ok := w.(http.CloseNotifier); ok {
 			go func(done <-chan struct{}, closed <-chan bool) {
@@ -370,7 +370,7 @@ func RegisterAdminHandler(ctx context.Context, mux *runtime.ServeMux, conn *grpc
 	})
 
 	mux.Handle("GET", pattern_Admin_TableDetails_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
-		ctx, cancel := context.WithCancel(ctx)
+		ctx, cancel := context.WithCancel(req.Context())
 		defer cancel()
 		if cn, ok := w.(http.CloseNotifier); ok {
 			go func(done <-chan struct{}, closed <-chan bool) {
@@ -398,7 +398,7 @@ func RegisterAdminHandler(ctx context.Context, mux *runtime.ServeMux, conn *grpc
 	})
 
 	mux.Handle("GET", pattern_Admin_TableStats_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
-		ctx, cancel := context.WithCancel(ctx)
+		ctx, cancel := context.WithCancel(req.Context())
 		defer cancel()
 		if cn, ok := w.(http.CloseNotifier); ok {
 			go func(done <-chan struct{}, closed <-chan bool) {
@@ -426,7 +426,7 @@ func RegisterAdminHandler(ctx context.Context, mux *runtime.ServeMux, conn *grpc
 	})
 
 	mux.Handle("GET", pattern_Admin_Events_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
-		ctx, cancel := context.WithCancel(ctx)
+		ctx, cancel := context.WithCancel(req.Context())
 		defer cancel()
 		if cn, ok := w.(http.CloseNotifier); ok {
 			go func(done <-chan struct{}, closed <-chan bool) {
@@ -454,7 +454,7 @@ func RegisterAdminHandler(ctx context.Context, mux *runtime.ServeMux, conn *grpc
 	})
 
 	mux.Handle("POST", pattern_Admin_SetUIData_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
-		ctx, cancel := context.WithCancel(ctx)
+		ctx, cancel := context.WithCancel(req.Context())
 		defer cancel()
 		if cn, ok := w.(http.CloseNotifier); ok {
 			go func(done <-chan struct{}, closed <-chan bool) {
@@ -482,7 +482,7 @@ func RegisterAdminHandler(ctx context.Context, mux *runtime.ServeMux, conn *grpc
 	})
 
 	mux.Handle("GET", pattern_Admin_GetUIData_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
-		ctx, cancel := context.WithCancel(ctx)
+		ctx, cancel := context.WithCancel(req.Context())
 		defer cancel()
 		if cn, ok := w.(http.CloseNotifier); ok {
 			go func(done <-chan struct{}, closed <-chan bool) {
@@ -510,7 +510,7 @@ func RegisterAdminHandler(ctx context.Context, mux *runtime.ServeMux, conn *grpc
 	})
 
 	mux.Handle("GET", pattern_Admin_Cluster_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
-		ctx, cancel := context.WithCancel(ctx)
+		ctx, cancel := context.WithCancel(req.Context())
 		defer cancel()
 		if cn, ok := w.(http.CloseNotifier); ok {
 			go func(done <-chan struct{}, closed <-chan bool) {
@@ -538,7 +538,7 @@ func RegisterAdminHandler(ctx context.Context, mux *runtime.ServeMux, conn *grpc
 	})
 
 	mux.Handle("GET", pattern_Admin_Health_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
-		ctx, cancel := context.WithCancel(ctx)
+		ctx, cancel := context.WithCancel(req.Context())
 		defer cancel()
 		if cn, ok := w.(http.CloseNotifier); ok {
 			go func(done <-chan struct{}, closed <-chan bool) {
@@ -566,7 +566,7 @@ func RegisterAdminHandler(ctx context.Context, mux *runtime.ServeMux, conn *grpc
 	})
 
 	mux.Handle("POST", pattern_Admin_Drain_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
-		ctx, cancel := context.WithCancel(ctx)
+		ctx, cancel := context.WithCancel(req.Context())
 		defer cancel()
 		if cn, ok := w.(http.CloseNotifier); ok {
 			go func(done <-chan struct{}, closed <-chan bool) {
@@ -594,7 +594,7 @@ func RegisterAdminHandler(ctx context.Context, mux *runtime.ServeMux, conn *grpc
 	})
 
 	mux.Handle("POST", pattern_Admin_ClusterFreeze_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
-		ctx, cancel := context.WithCancel(ctx)
+		ctx, cancel := context.WithCancel(req.Context())
 		defer cancel()
 		if cn, ok := w.(http.CloseNotifier); ok {
 			go func(done <-chan struct{}, closed <-chan bool) {
