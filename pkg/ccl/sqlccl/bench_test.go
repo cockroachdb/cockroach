@@ -14,6 +14,7 @@ import (
 	"io"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
@@ -31,6 +32,9 @@ func bankStatementBuf(numAccounts int) *bytes.Buffer {
 }
 
 func BenchmarkClusterBackup(b *testing.B) {
+	if !storage.ProposerEvaluatedKVEnabled() {
+		b.Skip("command WriteBatch is not allowed without proposer evaluated KV")
+	}
 	defer tracing.Disable()()
 
 	ctx, dir, _, sqlDB, cleanupFn := backupRestoreTestSetup(b, multiNode, 0)
@@ -60,7 +64,11 @@ func BenchmarkClusterBackup(b *testing.B) {
 }
 
 func BenchmarkClusterRestore(b *testing.B) {
+	if !storage.ProposerEvaluatedKVEnabled() {
+		b.Skip("command WriteBatch is not allowed without proposer evaluated KV")
+	}
 	defer tracing.Disable()()
+
 	ctx, dir, _, sqlDB, cleanup := backupRestoreTestSetup(b, multiNode, 0)
 	defer cleanup()
 
@@ -76,7 +84,11 @@ func BenchmarkClusterRestore(b *testing.B) {
 }
 
 func BenchmarkLoadRestore(b *testing.B) {
+	if !storage.ProposerEvaluatedKVEnabled() {
+		b.Skip("command WriteBatch is not allowed without proposer evaluated KV")
+	}
 	defer tracing.Disable()()
+
 	ctx, dir, _, sqlDB, cleanup := backupRestoreTestSetup(b, multiNode, 0)
 	defer cleanup()
 
