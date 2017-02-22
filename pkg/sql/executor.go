@@ -62,7 +62,6 @@ const metricsSampleInterval = 10 * time.Second
 
 // Fully-qualified names for metrics.
 var (
-	MetaLatency            = metric.Metadata{Name: "sql.latency"}
 	MetaTxnBegin           = metric.Metadata{Name: "sql.txn.begin.count"}
 	MetaTxnCommit          = metric.Metadata{Name: "sql.txn.commit.count"}
 	MetaTxnAbort           = metric.Metadata{Name: "sql.txn.abort.count"}
@@ -215,7 +214,6 @@ type Executor struct {
 	virtualSchemas virtualSchemaHolder
 
 	// Transient stats.
-	Latency     *metric.Histogram
 	SelectCount *metric.Counter
 	// The subset of SELECTs that are processed through DistSQL.
 	DistSQLSelectCount *metric.Counter
@@ -315,7 +313,6 @@ func NewExecutor(cfg ExecutorConfig, stopper *stop.Stopper) *Executor {
 		stopper: stopper,
 		reCache: parser.NewRegexpCache(512),
 
-		Latency:            metric.NewLatency(MetaLatency, cfg.HistogramWindowInterval),
 		TxnBeginCount:      metric.NewCounter(MetaTxnBegin),
 		TxnCommitCount:     metric.NewCounter(MetaTxnCommit),
 		TxnAbortCount:      metric.NewCounter(MetaTxnAbort),
