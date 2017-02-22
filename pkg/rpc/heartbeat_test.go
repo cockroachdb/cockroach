@@ -26,6 +26,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 )
 
 func TestRemoteOffsetString(t *testing.T) {
@@ -67,6 +68,35 @@ func TestHeartbeatReply(t *testing.T) {
 	}
 }
 
+// A ManualHeartbeatService allows manual control of when heartbeats occur.
+type ManualHeartbeatService struct {
+	clock              *hlc.Clock
+	remoteClockMonitor *RemoteClockMonitor
+	// Heartbeats are processed when a value is sent here.
+	ready   chan error
+	stopper *stop.Stopper
+}
+
+// Ping waits until the heartbeat service is ready to respond to a Heartbeat.
+func (mhs *ManualHeartbeatService) Ping(
+	ctx context.Context, args *PingRequest,
+) (*PingResponse, error) {
+	select {
+	case err := <-mhs.ready:
+		if err != nil {
+			return nil, err
+		}
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case <-mhs.stopper.ShouldStop():
+	}
+	hs := HeartbeatService{
+		clock:              mhs.clock,
+		remoteClockMonitor: mhs.remoteClockMonitor,
+	}
+	return hs.Ping(ctx, args)
+}
+
 func TestManualHeartbeat(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	manual := hlc.NewManualClock(5)
@@ -74,7 +104,7 @@ func TestManualHeartbeat(t *testing.T) {
 	manualHeartbeat := &ManualHeartbeatService{
 		clock:              clock,
 		remoteClockMonitor: newRemoteClockMonitor(clock, time.Hour, 0),
-		ready:              make(chan struct{}, 1),
+		ready:              make(chan error, 1),
 	}
 	regularHeartbeat := &HeartbeatService{
 		clock:              clock,
@@ -84,7 +114,7 @@ func TestManualHeartbeat(t *testing.T) {
 	request := &PingRequest{
 		Ping: "testManual",
 	}
-	manualHeartbeat.ready <- struct{}{}
+	manualHeartbeat.ready <- nil
 	ctx := context.Background()
 	regularResponse, err := regularHeartbeat.Ping(ctx, request)
 	if err != nil {
@@ -128,7 +158,6 @@ func TestClockOffsetMismatch(t *testing.T) {
 		Addr:           "test",
 		MaxOffsetNanos: (500 * time.Millisecond).Nanoseconds(),
 	}
-	ctx := context.Background()
-	_, _ = hs.Ping(ctx, request)
-	t.Fatal("should not reach")
+	response, err := hs.Ping(context.Background(), request)
+	t.Fatalf("should not have reached but got response=%v err=%v", response, err)
 }

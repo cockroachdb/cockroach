@@ -25,7 +25,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-	"github.com/cockroachdb/cockroach/pkg/util/stop"
 )
 
 var _ security.RequestWithUser = &PingRequest{}
@@ -78,29 +77,4 @@ func (hs *HeartbeatService) Ping(ctx context.Context, args *PingRequest) (*PingR
 		Pong:       args.Ping,
 		ServerTime: hs.clock.PhysicalNow(),
 	}, nil
-}
-
-// A ManualHeartbeatService allows manual control of when heartbeats occur, to
-// facilitate testing.
-type ManualHeartbeatService struct {
-	clock              *hlc.Clock
-	remoteClockMonitor *RemoteClockMonitor
-	// Heartbeats are processed when a value is sent here.
-	ready   chan struct{}
-	stopper *stop.Stopper
-}
-
-// Ping waits until the heartbeat service is ready to respond to a Heartbeat.
-func (mhs *ManualHeartbeatService) Ping(
-	ctx context.Context, args *PingRequest,
-) (*PingResponse, error) {
-	select {
-	case <-mhs.ready:
-	case <-mhs.stopper.ShouldStop():
-	}
-	hs := HeartbeatService{
-		clock:              mhs.clock,
-		remoteClockMonitor: mhs.remoteClockMonitor,
-	}
-	return hs.Ping(ctx, args)
 }

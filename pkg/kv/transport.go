@@ -130,7 +130,7 @@ func grpcTransportFactoryImpl(
 			conn:       conn,
 			client:     roachpb.NewInternalClient(conn),
 			args:       argsCopy,
-			healthy:    rpcContext.IsConnHealthy(remoteAddr),
+			healthy:    rpcContext.ConnHealth(remoteAddr) == nil,
 		})
 	}
 
