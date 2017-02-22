@@ -102,10 +102,9 @@ func TestClusterFlow(t *testing.T) {
 		Spans:    []TableReaderSpan{makeIndexSpan(12, 100)},
 	}
 
-	txn := client.NewTxn(ctx, *kvDB)
 	fid := FlowID{uuid.MakeV4()}
 
-	req1 := &SetupFlowRequest{Txn: txn.Proto}
+	req1 := &SetupFlowRequest{}
 	req1.Flow = FlowSpec{
 		FlowID: fid,
 		Processors: []ProcessorSpec{{
@@ -122,7 +121,7 @@ func TestClusterFlow(t *testing.T) {
 		}},
 	}
 
-	req2 := &SetupFlowRequest{Txn: txn.Proto}
+	req2 := &SetupFlowRequest{}
 	req2.Flow = FlowSpec{
 		FlowID: fid,
 		Processors: []ProcessorSpec{{
@@ -139,7 +138,7 @@ func TestClusterFlow(t *testing.T) {
 		}},
 	}
 
-	req3 := &SetupFlowRequest{Txn: txn.Proto}
+	req3 := &SetupFlowRequest{}
 	req3.Flow = FlowSpec{
 		FlowID: fid,
 		Processors: []ProcessorSpec{
