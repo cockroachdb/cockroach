@@ -689,3 +689,25 @@ EXPLAIN (METADATA) SELECT * FROM (SELECT y, w, x FROM uvwxyz WHERE y = 1 ORDER B
 1  scan                        (u[omitted], v[omitted], w, x, y, z[omitted], rowid[hidden,omitted])  =y,+w,+x
 1          table  uvwxyz@ywxz
 1          spans  /1-/2
+
+
+statement ok
+CREATE TABLE blocks (
+  block_id  INT,
+  writer_id STRING,
+  block_num INT,
+  raw_bytes BYTES,
+  PRIMARY KEY (block_id, writer_id, block_num)
+)
+
+# Test that ordering goes "through" a renderNode that has a duplicate render of
+# an order-by column (#13696).
+query ITTTTT
+EXPLAIN (METADATA) SELECT block_id,writer_id,block_num,block_id FROM blocks ORDER BY block_id, writer_id, block_num LIMIT 1
+----
+0  limit                          (block_id, writer_id, block_num, block_id)            +block_id,+writer_id,+block_num,unique
+1  render                         (block_id, writer_id, block_num, block_id)            +block_id,+writer_id,+block_num,unique
+2  scan                           (block_id, writer_id, block_num, raw_bytes[omitted])  +block_id,+writer_id,+block_num,unique
+2          table  blocks@primary
+2          spans  ALL
+2          limit  1
