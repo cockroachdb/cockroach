@@ -31,7 +31,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
-	"gopkg.in/inf.v0"
 )
 
 // This file contains utility functions for tests (in other packages).
@@ -80,8 +79,8 @@ func RandDatum(rng *rand.Rand, typ ColumnType, null bool) parser.Datum {
 		return parser.NewDFloat(parser.DFloat(rng.NormFloat64()))
 	case ColumnType_DECIMAL:
 		d := &parser.DDecimal{}
-		d.Dec.SetScale(inf.Scale(rng.Intn(40) - 20))
-		d.Dec.SetUnscaled(rng.Int63())
+		d.Decimal.SetExponent(int32(rng.Intn(40) - 20))
+		d.Decimal.SetCoefficient(rng.Int63())
 		return d
 	case ColumnType_DATE:
 		return parser.NewDDate(parser.DDate(rng.Intn(10000)))

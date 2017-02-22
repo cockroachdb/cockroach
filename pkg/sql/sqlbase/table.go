@@ -23,13 +23,12 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"gopkg.in/inf.v0"
+	"github.com/cockroachdb/apd"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
-	"github.com/cockroachdb/cockroach/pkg/util/decimal"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 
@@ -427,9 +426,9 @@ func EncodeTableKey(b []byte, val parser.Datum, dir encoding.Direction) ([]byte,
 		return encoding.EncodeFloatDescending(b, float64(*t)), nil
 	case *parser.DDecimal:
 		if dir == encoding.Ascending {
-			return encoding.EncodeDecimalAscending(b, &t.Dec), nil
+			return encoding.EncodeDecimalAscending(b, &t.Decimal), nil
 		}
-		return encoding.EncodeDecimalDescending(b, &t.Dec), nil
+		return encoding.EncodeDecimalDescending(b, &t.Decimal), nil
 	case *parser.DString:
 		if dir == encoding.Ascending {
 			return encoding.EncodeStringAscending(b, string(*t)), nil
@@ -507,7 +506,7 @@ func EncodeTableValue(appendTo []byte, colID ColumnID, val parser.Datum) ([]byte
 	case *parser.DFloat:
 		return encoding.EncodeFloatValue(appendTo, uint32(colID), float64(*t)), nil
 	case *parser.DDecimal:
-		return encoding.EncodeDecimalValue(appendTo, uint32(colID), &t.Dec), nil
+		return encoding.EncodeDecimalValue(appendTo, uint32(colID), &t.Decimal), nil
 	case *parser.DString:
 		return encoding.EncodeBytesValue(appendTo, uint32(colID), []byte(*t)), nil
 	case *parser.DBytes:
@@ -983,7 +982,7 @@ func DecodeTableKey(
 		}
 		return a.NewDFloat(parser.DFloat(f)), rkey, err
 	case parser.TypeDecimal:
-		var d *inf.Dec
+		var d *apd.Decimal
 		if dir == encoding.Ascending {
 			rkey, d, err = encoding.DecodeDecimalAscending(key, nil)
 		} else {
@@ -1101,7 +1100,7 @@ func DecodeTableValue(a *DatumAlloc, valType parser.Type, b []byte) (parser.Datu
 		b, f, err = encoding.DecodeFloatValue(b)
 		return a.NewDFloat(parser.DFloat(f)), b, err
 	case parser.TypeDecimal:
-		var d *inf.Dec
+		var d *apd.Decimal
 		b, d, err = encoding.DecodeDecimalValue(b)
 		dd := a.NewDDecimal(parser.DDecimal{})
 		dd.Set(d)
@@ -1278,7 +1277,7 @@ func MarshalColumnValue(col ColumnDescriptor, val parser.Datum) (roachpb.Value, 
 		}
 	case ColumnType_DECIMAL:
 		if v, ok := val.(*parser.DDecimal); ok {
-			err := r.SetDecimal(&v.Dec)
+			err := r.SetDecimal(&v.Decimal)
 			return r, err
 		}
 	case ColumnType_STRING, ColumnType_NAME:
@@ -1471,22 +1470,25 @@ func CheckValueWidth(col ColumnDescriptor, val parser.Datum) error {
 				// exceeds the declared precision minus the declared scale, an
 				// error is raised."
 
+				integ, frac := new(apd.Decimal), new(apd.Decimal)
+				v.Decimal.Modf(integ, frac)
+
 				if col.Type.Width > 0 {
 					// Rounding half up, as per round_var() in PostgreSQL 9.5.
-					v.Dec.Round(&v.Dec, inf.Scale(col.Type.Width), inf.RoundHalfUp)
+					_, err := parser.DecimalCtx.WithPrecision(uint32(col.Type.Width)).Round(frac, frac)
+					if err != nil {
+						return errors.Wrap(err, "rounding decimal column")
+					}
 				}
 
 				// Check that the precision is not exceeded.
-				maxDigitsLeft := decimal.PowerOfTenDec(int(col.Type.Precision - col.Type.Width))
-
-				absRounded := &v.Dec
-				if absRounded.Sign() == -1 {
-					// Only force the allocation on negative decimals.
-					absRounded = new(inf.Dec).Neg(&v.Dec)
-				}
-				if absRounded.Cmp(maxDigitsLeft) != -1 {
+				if integ.NumDigits() > int64(col.Type.Precision)-int64(col.Type.Width) {
 					return fmt.Errorf("too many digits for type %s (column %q)",
 						col.Type.SQLString(), col.Name)
+				}
+				_, err := parser.ExactCtx.Add(&v.Decimal, integ, frac)
+				if err != nil {
+					return errors.Wrap(err, "computing decimal column")
 				}
 			}
 		}

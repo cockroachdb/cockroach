@@ -24,7 +24,6 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/testutils"
-	"github.com/cockroachdb/cockroach/pkg/util/decimal"
 )
 
 func TestTypeCheck(t *testing.T) {
@@ -219,7 +218,9 @@ func dint(i DInt) copyableExpr {
 func ddecimal(f float64) copyableExpr {
 	return func() Expr {
 		dd := &DDecimal{}
-		decimal.SetFromFloat(&dd.Dec, f)
+		if _, err := dd.SetFloat64(f); err != nil {
+			panic(err)
+		}
 		return dd
 	}
 }

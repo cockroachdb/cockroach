@@ -28,8 +28,8 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/cockroachdb/apd"
 	"github.com/spf13/pflag"
-	"gopkg.in/inf.v0"
 
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -378,7 +378,7 @@ func TestDumpRandom(t *testing.T) {
 			m := time.Unix(0, rnd.Int63()).Round(time.Microsecond).UTC()
 			n := time.Duration(rnd.Int63()).String()
 			o := rnd.Intn(2) == 1
-			e := strings.TrimRight(inf.NewDec(rnd.Int63(), inf.Scale(rnd.Int31n(20)-10)).String(), ".0")
+			e := strings.TrimRight(apd.New(rnd.Int63(), int32(rnd.Int31n(20)-10)).ToStandard(), ".0")
 			sr := make([]byte, rnd.Intn(500))
 			if _, err := rnd.Read(sr); err != nil {
 				t.Fatal(err)
@@ -439,7 +439,7 @@ func TestDumpRandom(t *testing.T) {
 						fetchedVal = t.UTC()
 					}
 					if !reflect.DeepEqual(fetchedVal, generatedVal) {
-						t.Errorf("NOT EQUAL: table %s, row %d, col %d\ngenerated (%T): %v\nselected (%T): %v\n", table, gi, i, generatedVal, generatedVal, fetchedVal, fetchedVal)
+						t.Errorf("NOT EQUAL: table %s, row %d, col %d\ngenerated (%T): %v (%s)\nselected (%T): %v (%s)\n", table, gi, i, generatedVal, generatedVal, generatedVal, fetchedVal, fetchedVal, fetchedVal)
 					}
 				}
 				if t.Failed() {
