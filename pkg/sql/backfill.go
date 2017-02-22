@@ -637,7 +637,7 @@ func (sc *SchemaChanger) backfillIndexes(
 			if err != nil {
 				return err
 			}
-			if err := sc.distSQLPlanner.Run(planCtx, txn, plan, &recv); err != nil {
+			if err := sc.distSQLPlanner.Run(&planCtx, txn, &plan, &recv); err != nil {
 				return err
 			}
 			return recv.err
