@@ -41,6 +41,8 @@ import (
 
 	"golang.org/x/net/context"
 
+	"go/build"
+
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server"
@@ -1225,7 +1227,7 @@ func (l *logicTest) run() {
 	t := l.t
 	var globs []string
 	if *bigtest {
-		const logicTestPath = "../../sqllogictest"
+		logicTestPath := build.Default.GOPATH + "/src/github.com/cockroachdb/sqllogictest"
 		if _, err := os.Stat(logicTestPath); os.IsNotExist(err) {
 			fullPath, err := filepath.Abs(logicTestPath)
 			if err != nil {
