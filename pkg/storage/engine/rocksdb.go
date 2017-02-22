@@ -33,16 +33,14 @@ import (
 	"time"
 	"unsafe"
 
-	"golang.org/x/net/context"
-
 	"github.com/dustin/go-humanize"
 	"github.com/elastic/gosigar"
 	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
+	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
-	"github.com/cockroachdb/cockroach/pkg/storage/engine/rocksdb"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
@@ -50,13 +48,33 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
-// #cgo !strictld,darwin LDFLAGS: -Wl,-undefined -Wl,dynamic_lookup
-// #cgo !strictld,!darwin LDFLAGS: -Wl,-unresolved-symbols=ignore-all
+// #cgo CPPFLAGS: -I../../../vendor/github.com/cockroachdb/c-protobuf/internal/src
+// #cgo CPPFLAGS: -I../../../vendor/github.com/cockroachdb/c-rocksdb/internal/include
+// #cgo CXXFLAGS: -std=c++11
 // #cgo linux LDFLAGS: -lrt
 //
 // #include <stdlib.h>
-// #include "rocksdb/db.h"
+// #include "db.h"
 import "C"
+
+//export rocksDBLog
+func rocksDBLog(s *C.char, n C.int) {
+	// Note that rocksdb logging is only enabled if log.V(3) is true
+	// when RocksDB.Open() is called.
+	log.Info(context.TODO(), C.GoStringN(s, n))
+}
+
+//export prettyPrintKey
+func prettyPrintKey(cKey C.DBKey) *C.char {
+	mvccKey := MVCCKey{
+		Key: C.GoBytes(unsafe.Pointer(cKey.key.data), cKey.key.len),
+		Timestamp: hlc.Timestamp{
+			WallTime: int64(cKey.wall_time),
+			Logical:  int32(cKey.logical),
+		},
+	}
+	return C.CString(mvccKey.String())
+}
 
 const (
 	defaultBlockSize = 32 << 10 // 32KB (rocksdb default is 4KB)
@@ -75,17 +93,6 @@ const (
 	// https://wpdev.uservoice.com/forums/266908-command-prompt-console-bash-on-ubuntu-on-windo/suggestions/17310124-add-ability-to-change-max-number-of-open-files-for
 	MinimumMaxOpenFiles = 1700
 )
-
-func init() {
-	rocksdb.Logger = func(format string, args ...interface{}) { log.Infof(context.TODO(), format, args...) }
-	rocksdb.DBKeyPrinter = func(k []byte, wall_time int64, logical int32) string {
-		mvccKey := MVCCKey{
-			Key:       k,
-			Timestamp: hlc.Timestamp{WallTime: wall_time, Logical: logical},
-		}
-		return mvccKey.String()
-	}
-}
 
 // SSTableInfo contains metadata about a single RocksDB sstable. This mirrors
 // the C.DBSSTable struct contents.
