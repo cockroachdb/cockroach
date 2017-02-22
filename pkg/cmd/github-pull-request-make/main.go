@@ -147,9 +147,11 @@ func main() {
 		log.Fatal(err)
 	}
 
+	ctx := context.Background()
+
 	var httpClient *http.Client
 	if token, ok := os.LookupEnv(githubAPITokenEnv); ok {
-		httpClient = oauth2.NewClient(context.Background(), oauth2.StaticTokenSource(
+		httpClient = oauth2.NewClient(ctx, oauth2.StaticTokenSource(
 			&oauth2.Token{AccessToken: token},
 		))
 	} else {
@@ -157,7 +159,7 @@ func main() {
 	}
 	client := github.NewClient(httpClient)
 
-	pulls, _, err := client.PullRequests.List(org, repo, nil)
+	pulls, _, err := client.PullRequests.List(ctx, org, repo, nil)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -174,6 +176,7 @@ func main() {
 	}
 
 	diff, _, err := client.PullRequests.GetRaw(
+		ctx,
 		org,
 		repo,
 		*currentPull.Number,
