@@ -32,7 +32,7 @@ if [ "${1-}" = "push" ]; then
   init
   tag="$(date +%Y%m%d-%H%M%S)"
   docker tag "${image}" "${image}:${tag}"
-  docker push "${image}"
+  docker push "${image}:${tag}"
   exit 0
 fi
 
@@ -144,8 +144,6 @@ docker run --privileged -i ${tty-} --rm \
   --env="TMPDIR=/go/src/github.com/cockroachdb/cockroach/artifacts" \
   --env="PAGER=cat" \
   --env="JSPM_GITHUB_AUTH_TOKEN=${JSPM_GITHUB_AUTH_TOKEN-763c42afb2d31eb7bc150da33402a24d0e081aef}" \
-  --env="CIRCLE_NODE_INDEX=${CIRCLE_NODE_INDEX-0}" \
-  --env="CIRCLE_NODE_TOTAL=${CIRCLE_NODE_TOTAL-1}" \
   --env="GOOGLE_PROJECT=${GOOGLE_PROJECT-}" \
   --env="GOOGLE_CREDENTIALS=${GOOGLE_CREDENTIALS-}" \
   --env="GOTRACEBACK=${GOTRACEBACK-all}" \

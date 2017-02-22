@@ -16,7 +16,7 @@ set -eux
 
 cd "$(dirname "${0}")"
 
-SHA="${CIRCLE_SHA1-$(git rev-parse HEAD)}"
+SHA=$(git rev-parse HEAD)
 
 # Linux binaries: cockroach + tests.
 ./push-one-binary.sh ${SHA} cockroach cockroach
