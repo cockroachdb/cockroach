@@ -14,7 +14,7 @@ b
 statement ok
 INSERT INTO a VALUES (3),(7),(2)
 
-query I
+query I rowsort
 SELECT * FROM a
 ----
 2

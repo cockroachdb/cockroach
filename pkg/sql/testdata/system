@@ -32,7 +32,7 @@ EXPLAIN (DEBUG) SELECT * FROM system.namespace
 8 /namespace/primary/1/'users'/id      4    ROW
 9 /namespace/primary/1/'zones'/id      5    ROW
 
-query ITI
+query ITI rowsort
 SELECT * FROM system.namespace
 ----
 0 system     1
@@ -46,7 +46,7 @@ SELECT * FROM system.namespace
 1 users      4
 1 zones      5
 
-query I
+query I rowsort
 SELECT id FROM system.descriptor
 ----
 1

@@ -15,7 +15,7 @@ CREATE TABLE itemColors (color) AS VALUES ('blue'), ('red'), ('green')
 statement ok
 CREATE TABLE itemTypes AS (SELECT item, color FROM stock, itemColors)
 
-query TT
+query TT rowsort
 SELECT * FROM itemTypes
 ----
 cups blue
@@ -67,7 +67,7 @@ statement ok
 CREATE TABLE IF NOT EXISTS smtng.something AS SELECT * FROM stock
 
 query TI
-SELECT * FROM smtng.something LIMIT 1
+SELECT * FROM smtng.something ORDER BY 1 LIMIT 1
 ----
 cups 10
 

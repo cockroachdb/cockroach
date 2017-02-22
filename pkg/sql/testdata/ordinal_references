@@ -14,7 +14,7 @@ SELECT @0 FROM foo
 query error invalid column ordinal
 SELECT @42 FROM foo
 
-query TI
+query TI rowsort
 SELECT @2, @1 FROM foo
 ----
 c 1

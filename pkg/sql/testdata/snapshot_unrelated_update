@@ -17,7 +17,7 @@ user testuser
 statement ok
 BEGIN TRANSACTION ISOLATION LEVEL SNAPSHOT
 
-query IT
+query IT rowsort
 SELECT * FROM t
 ----
 1 A
@@ -28,7 +28,7 @@ user root
 statement ok
 BEGIN TRANSACTION ISOLATION LEVEL SNAPSHOT
 
-query IT
+query IT rowsort
 SELECT * FROM t
 ----
 1 A
@@ -57,7 +57,7 @@ user testuser
 statement ok
 BEGIN TRANSACTION ISOLATION LEVEL SNAPSHOT
 
-query IT
+query IT rowsort
 SELECT * FROM t
 ----
 1 a
@@ -68,7 +68,7 @@ user root
 statement ok
 BEGIN TRANSACTION ISOLATION LEVEL SNAPSHOT
 
-query IT
+query IT rowsort
 SELECT * FROM t
 ----
 1 a

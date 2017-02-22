@@ -63,21 +63,21 @@ SELECT * FROM t WHERE c = 7
 ----
 5 6 7 8
 
+query ITTTTT
+EXPLAIN (METADATA) SELECT * FROM t WHERE c > 0 ORDER BY c DESC
+----
+0  index-join                    (a, b, c, d)                             -c,unique
+1  revscan                       (a, b[omitted], c[omitted], d[omitted])  -c,unique
+1              table  t@c
+1              spans  /1-
+1  scan                          (a, b, c, d)
+1              table  t@primary
+
 query IIII
 SELECT * FROM t WHERE c > 0 ORDER BY c DESC
 ----
 5 6 7 8
 1 2 3 4
-
-query ITTT
-EXPLAIN SELECT * FROM t WHERE c > 0 ORDER BY c DESC
-----
-0  index-join
-1  revscan
-1              table  t@c
-1              spans  /1-
-1  scan
-1              table  t@primary
 
 query ITTT
 EXPLAIN SELECT * FROM t WHERE c > 0 ORDER BY c

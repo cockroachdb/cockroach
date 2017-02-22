@@ -169,7 +169,7 @@ INSERT INTO issue_6710 (a, b) VALUES (1, 'foo'), (2, 'bar')
 statement ok
 UPSERT INTO issue_6710 (a, b) VALUES (1, 'test1'), (2, 'test2')
 
-query IT
+query IT rowsort
 SELECT a, b from issue_6710
 ----
 1 test1

@@ -19,7 +19,7 @@ CREATE TABLE IF NOT EXISTS a (id INT PRIMARY KEY)
 # NOT EXISTS should not result in a log message.
 ##################
 
-query II
+query II rowsort
 SELECT targetID, reportingID FROM system.eventlog
 WHERE eventType = 'create_table'
 ----
@@ -69,7 +69,7 @@ WHERE eventType = 'alter_table'
 statement ok
 ALTER TABLE test.a ADD val INT
 
-query II
+query II rowsort
 SELECT targetID, reportingID FROM system.eventlog
 WHERE eventType = 'alter_table'
 ----
@@ -107,7 +107,7 @@ INSERT INTO test.a VALUES (1, 1), (2, 1)
 statement error pq: duplicate key value \(val\)=\(1\) violates unique constraint \"foo\"
 ALTER TABLE test.a ADD CONSTRAINT foo UNIQUE(val)
 
-query II
+query II rowsort
 SELECT targetID, reportingID FROM system.eventlog
 WHERE eventType = 'alter_table'
 ----
@@ -115,14 +115,14 @@ WHERE eventType = 'alter_table'
 51 1
 51 1
 
-query II
+query II rowsort
 SELECT targetID, reportingID FROM system.eventlog
 WHERE eventType = 'finish_schema_change'
 ----
 51 0
 51 0
 
-query II
+query II rowsort
 SELECT targetID, reportingID FROM system.eventlog
 WHERE eventType = 'reverse_schema_change'
 ----
@@ -141,7 +141,7 @@ WHERE eventType = 'create_index'
 ----
 51 1
 
-query II
+query II rowsort
 SELECT targetID, reportingID FROM system.eventlog
 WHERE eventType = 'finish_schema_change'
 ----
@@ -162,7 +162,7 @@ WHERE eventType = 'drop_index'
 ----
 51 1
 
-query II
+query II rowsort
 SELECT targetID, reportingID FROM system.eventlog
 WHERE eventType = 'finish_schema_change'
 ----
@@ -188,7 +188,7 @@ DROP TABLE IF EXISTS test.b
 # should have failed.
 ##################
 
-query II
+query II rowsort
 SELECT targetID, reportingID
 FROM system.eventlog
 WHERE eventType = 'drop_table'
