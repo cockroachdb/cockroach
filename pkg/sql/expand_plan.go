@@ -498,8 +498,12 @@ func simplifyOrderings(plan planNode, usefulOrdering sqlbase.ColumnOrdering) pla
 		n.ordering.trim(usefulOrdering)
 
 	case *renderNode:
-		n.ordering.trim(usefulOrdering)
 		n.source.plan = simplifyOrderings(n.source.plan, translateOrdering(usefulOrdering, n))
+		// Recompute r.ordering using the source's simplified ordering.
+		// TODO(radu): in some cases there may be multiple possible n.orderings for
+		// a given source plan ordering; we should pass usefulOrdering to help make
+		// that choice (#13709).
+		n.ordering = n.computeOrdering(n.source.plan.Ordering())
 
 	case *delayedNode:
 		n.plan = simplifyOrderings(n.plan, usefulOrdering)

@@ -80,8 +80,6 @@ func (p *planner) orderBy(orderBy parser.OrderBy, n planNode) (*sortNode, error)
 			direction = encoding.Descending
 		}
 
-		index := -1
-
 		// Unwrap parenthesized expressions like "((a))" to "a".
 		expr := parser.StripParens(o.Expr)
 
@@ -120,8 +118,10 @@ func (p *planner) orderBy(orderBy parser.OrderBy, n planNode) (*sortNode, error)
 		//    e.g. SELECT a FROM t ORDER by b
 		//    e.g. SELECT a, b FROM t ORDER by a+b
 
+		index := -1
+
 		// First, deal with render aliases.
-		if vBase, ok := expr.(parser.VarName); index == -1 && ok {
+		if vBase, ok := expr.(parser.VarName); ok {
 			v, err := vBase.NormalizeVarName()
 			if err != nil {
 				return nil, err
@@ -141,10 +141,15 @@ func (p *planner) orderBy(orderBy parser.OrderBy, n planNode) (*sortNode, error)
 							// if the underlying expression is known (we're on a renderNode)
 							// and it is equivalent, then just accept that and ignore the ambiguity.
 							// This plays nice with `SELECT b, * FROM t ORDER BY b`. Otherwise,
-							// reject with an ambituity error.
+							// reject with an ambiguity error.
 							if s == nil || !s.equivalentRenders(j, index) {
 								return nil, errors.Errorf("ORDER BY \"%s\" is ambiguous", target)
 							}
+							// Note that in this case we want to use the index of the first
+							// matching column. This is because renderNode.computeOrdering
+							// also prefers the first column, and we want the orderings to
+							// match as much as possible.
+							continue
 						}
 						index = j
 					}
