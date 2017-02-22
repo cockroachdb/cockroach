@@ -33,7 +33,7 @@ EXPLAIN (TYPES) SELECT * FROM t
 0        spans  ALL
 
 query ITTTTT
-EXPLAIN (TYPES, SYMVARS) SELECT k FROM t
+EXPLAIN (TYPES,SYMVARS) SELECT k FROM t
 ----
 0  render                      (k int)
 0         render 0  (@1)[int]
@@ -42,7 +42,7 @@ EXPLAIN (TYPES, SYMVARS) SELECT k FROM t
 1         spans     ALL
 
 query ITTTTT
-EXPLAIN (TYPES, QUALIFY) SELECT k FROM t
+EXPLAIN (TYPES,QUALIFY) SELECT k FROM t
 ----
 0  render                            (k int)
 0         render 0  (test.t.k)[int]
@@ -284,7 +284,7 @@ EXPLAIN (TYPES) SELECT $1 + 2 AS a
 1  nullrow                                               ()
 
 query ITTTTT
-EXPLAIN (TYPES, NONORMALIZE) SELECT ABS(2-3) AS a
+EXPLAIN (TYPES,NONORMALIZE) SELECT ABS(2-3) AS a
 ----
 0  render                                          (a int)
 0                 render 0  (abs((-1)[int]))[int]

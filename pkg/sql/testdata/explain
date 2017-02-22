@@ -6,14 +6,14 @@ Level  Type    Field Description
 1      nullrow
 
 query ITTTTT colnames
-EXPLAIN (PLAN, METADATA) SELECT 1
+EXPLAIN (PLAN,METADATA) SELECT 1
 ----
 Level  Type    Field Description    Columns Ordering
 0      render                       ("1")
 1      nullrow                      ()
 
 query ITTTTT colnames
-EXPLAIN (METADATA, PLAN) SELECT 1
+EXPLAIN (METADATA,PLAN) SELECT 1
 ----
 Level  Type      Field  Description Columns Ordering
 0      render                       ("1")
@@ -26,7 +26,7 @@ RowIdx  Key  Value  Disposition
 0       NULL NULL   ROW
 
 query ITTT colnames
-EXPLAIN (DEBUG, METADATA) SELECT 1
+EXPLAIN (DEBUG,METADATA) SELECT 1
 ----
 RowIdx  Key  Value  Disposition
 0       NULL NULL   ROW
@@ -47,20 +47,20 @@ Level  Type           Field     Description  Columns    Ordering
 1      nullrow                               ()
 
 statement error cannot set EXPLAIN mode more than once
-EXPLAIN (TRACE, TRACE) SELECT 1
+EXPLAIN (TRACE,TRACE) SELECT 1
 
 statement error cannot set EXPLAIN mode more than once
-EXPLAIN (DEBUG, TRACE) SELECT 1
+EXPLAIN (DEBUG,TRACE) SELECT 1
 
 statement error cannot set EXPLAIN mode more than once
-EXPLAIN (PLAN, DEBUG) SELECT 1
+EXPLAIN (PLAN,DEBUG) SELECT 1
 
 statement error unsupported EXPLAIN option
-EXPLAIN (TRACE, UNKNOWN) SELECT 1
+EXPLAIN (TRACE,UNKNOWN) SELECT 1
 
 # Ensure that tracing results are sorted after gathering
 query ITTTTT
-EXPLAIN(METADATA) EXPLAIN(TRACE) SELECT 1
+EXPLAIN (METADATA) EXPLAIN (TRACE) SELECT 1
 ----
 0  sort                                    ("Cumulative Time", Duration, "Span Pos", Operation, Event, RowIdx, Key, Value, Disposition)
 0                 order  +Timestamp,+"Span Pos"

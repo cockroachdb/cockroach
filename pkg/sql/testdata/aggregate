@@ -490,7 +490,7 @@ SELECT AVG(k) * 2.0 + MAX(v)::DECIMAL FROM kv
 14.00000000000000000
 
 query ITTT
-EXPLAIN(EXPRS) SELECT COUNT(k) FROM kv
+EXPLAIN (EXPRS) SELECT COUNT(k) FROM kv
 ----
 0  group
 0                 aggregate 0  count(k)
@@ -514,7 +514,7 @@ INSERT INTO abc VALUES ('one', 1.5, true, 5::decimal), ('two', 2.0, false, 1.1::
 
 # Verify we don't try to apply the single-key optimization to the primary index.
 query ITTT
-EXPLAIN(EXPRS) SELECT MIN(a) FROM abc
+EXPLAIN (EXPRS) SELECT MIN(a) FROM abc
 ----
 0  group
 0                 aggregate 0  min(a)
@@ -595,7 +595,7 @@ SELECT MIN(x) FROM xyz
 1
 
 query ITTT
-EXPLAIN(EXPRS) SELECT MIN(x) FROM xyz
+EXPLAIN (EXPRS) SELECT MIN(x) FROM xyz
 ----
 0  group
 0                 aggregate 0  min(x)
@@ -613,7 +613,7 @@ SELECT MIN(x) FROM xyz WHERE x in (0, 4, 7)
 4
 
 query ITTT
-EXPLAIN(EXPRS) SELECT MIN(x) FROM xyz WHERE x in (0, 4, 7)
+EXPLAIN (EXPRS) SELECT MIN(x) FROM xyz WHERE x in (0, 4, 7)
 ----
 0  group
 0                 aggregate 0  min(x)
@@ -631,7 +631,7 @@ SELECT MAX(x) FROM xyz
 7
 
 query ITTT
-EXPLAIN(EXPRS) SELECT MAX(x) FROM xyz
+EXPLAIN (EXPRS) SELECT MAX(x) FROM xyz
 ----
 0  group
 0                 aggregate 0  max(x)
@@ -649,7 +649,7 @@ SELECT MIN(y) FROM xyz WHERE x = 1
 2
 
 query ITTT
-EXPLAIN(EXPRS) SELECT MIN(y) FROM xyz WHERE x = 1
+EXPLAIN (EXPRS) SELECT MIN(y) FROM xyz WHERE x = 1
 ----
 0  group
 0                 aggregate 0  min(y)
@@ -667,7 +667,7 @@ SELECT MAX(y) FROM xyz WHERE x = 1
 2
 
 query ITTT
-EXPLAIN(EXPRS) SELECT MAX(y) FROM xyz WHERE x = 1
+EXPLAIN (EXPRS) SELECT MAX(y) FROM xyz WHERE x = 1
 ----
 0  group
 0                 aggregate 0  max(y)
@@ -685,7 +685,7 @@ SELECT MIN(y) FROM xyz WHERE x = 7
 NULL
 
 query ITTT
-EXPLAIN(EXPRS) SELECT MIN(y) FROM xyz WHERE x = 7
+EXPLAIN (EXPRS) SELECT MIN(y) FROM xyz WHERE x = 7
 ----
 0  group
 0                 aggregate 0  min(y)
@@ -703,7 +703,7 @@ SELECT MAX(y) FROM xyz WHERE x = 7
 NULL
 
 query ITTT
-EXPLAIN(EXPRS) SELECT MAX(y) FROM xyz WHERE x = 7
+EXPLAIN (EXPRS) SELECT MAX(y) FROM xyz WHERE x = 7
 ----
 0  group
 0                 aggregate 0  max(y)
@@ -721,7 +721,7 @@ SELECT MIN(x) FROM xyz WHERE (y, z) = (2, 3.0)
 1
 
 query ITTT
-EXPLAIN(EXPRS) SELECT MIN(x) FROM xyz WHERE (y, z) = (2, 3.0)
+EXPLAIN (EXPRS) SELECT MIN(x) FROM xyz WHERE (y, z) = (2, 3.0)
 ----
 0  group
 0                 aggregate 0  min(x)
@@ -734,7 +734,7 @@ EXPLAIN(EXPRS) SELECT MIN(x) FROM xyz WHERE (y, z) = (2, 3.0)
 2                 limit        1
 
 query ITTT
-EXPLAIN(DEBUG) SELECT MIN(x) FROM xyz WHERE (y, z) = (2, 3.0)
+EXPLAIN (DEBUG) SELECT MIN(x) FROM xyz WHERE (y, z) = (2, 3.0)
 ----
 0 /xyz/zyx/3.0/2/1 NULL BUFFERED
 0 0                (1)  ROW
@@ -745,7 +745,7 @@ SELECT MAX(x) FROM xyz WHERE (z, y) = (3.0, 2)
 1
 
 query ITTT
-EXPLAIN(EXPRS) SELECT MAX(x) FROM xyz WHERE (z, y) = (3.0, 2)
+EXPLAIN (EXPRS) SELECT MAX(x) FROM xyz WHERE (z, y) = (3.0, 2)
 ----
 0  group
 0                 aggregate 0  max(x)
@@ -786,7 +786,7 @@ SELECT VARIANCE(x) FROM xyz WHERE x = 1
 NULL
 
 query ITTT
-EXPLAIN(EXPRS) SELECT VARIANCE(x) FROM xyz WHERE x = 1
+EXPLAIN (EXPRS) SELECT VARIANCE(x) FROM xyz WHERE x = 1
 ----
 0  group
 0                 aggregate 0  variance(x)
@@ -900,7 +900,7 @@ INSERT INTO ab VALUES
   (5, 50)
 
 query ITTT
-EXPLAIN(EXPRS) SELECT MIN(a) FROM abc
+EXPLAIN (EXPRS) SELECT MIN(a) FROM abc
 ----
 0  group
 0                 aggregate 0  min(a)
@@ -914,14 +914,14 @@ EXPLAIN(EXPRS) SELECT MIN(a) FROM abc
 
 # Verify we only buffer one row.
 query ITTT
-EXPLAIN(DEBUG) SELECT MIN(a) FROM ab
+EXPLAIN (DEBUG) SELECT MIN(a) FROM ab
 ----
 0 /ab/primary/1   NULL PARTIAL
 0 /ab/primary/1/b 10   BUFFERED
 0 0               (1)  ROW
 
 query ITTT
-EXPLAIN(EXPRS) SELECT MAX(a) FROM abc
+EXPLAIN (EXPRS) SELECT MAX(a) FROM abc
 ----
 0  group
 0                 aggregate 0  max(a)
@@ -942,7 +942,7 @@ EXPLAIN (DEBUG) SELECT MAX(a) FROM ab
 0 0               (5)  ROW
 
 query ITTT
-EXPLAIN(EXPRS) SELECT v, COUNT(k) FROM kv GROUP BY v ORDER BY COUNT(k)
+EXPLAIN (EXPRS) SELECT v, COUNT(k) FROM kv GROUP BY v ORDER BY COUNT(k)
 ----
 0  sort
 0                 order        +"COUNT(k)"
@@ -960,7 +960,7 @@ EXPLAIN(EXPRS) SELECT v, COUNT(k) FROM kv GROUP BY v ORDER BY COUNT(k)
 3                 spans        ALL
 
 query ITTT
-EXPLAIN(EXPRS) SELECT v, COUNT(*) FROM kv GROUP BY v ORDER BY COUNT(*)
+EXPLAIN (EXPRS) SELECT v, COUNT(*) FROM kv GROUP BY v ORDER BY COUNT(*)
 ----
 0  sort
 0                 order        +"COUNT(*)"
@@ -978,7 +978,7 @@ EXPLAIN(EXPRS) SELECT v, COUNT(*) FROM kv GROUP BY v ORDER BY COUNT(*)
 3                 spans        ALL
 
 query ITTT
-EXPLAIN(EXPRS) SELECT v, COUNT(1) FROM kv GROUP BY v ORDER BY COUNT(1)
+EXPLAIN (EXPRS) SELECT v, COUNT(1) FROM kv GROUP BY v ORDER BY COUNT(1)
 ----
 0  sort
 0                 order        +"COUNT(1)"
