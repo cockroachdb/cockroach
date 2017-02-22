@@ -80,6 +80,9 @@ type RowFetcher struct {
 	// If set, GetRangeInfo() can be used to retrieve the accumulated info.
 	returnRangeInfo bool
 
+	// Types for composite columns.
+	compositeColTypes map[ColumnID]ColumnType
+
 	// -- Fields updated during a scan --
 
 	kvFetcher      kvFetcher
@@ -117,7 +120,8 @@ func (rf *RowFetcher) Init(
 	rf.reverse = reverse
 	rf.isSecondaryIndex = isSecondaryIndex
 	rf.cols = cols
-	rf.valNeededForCol = valNeededForCol
+	// rf.valNeededForCol is modified below.
+	rf.valNeededForCol = append([]bool(nil), valNeededForCol...)
 	rf.returnRangeInfo = returnRangeInfo
 	rf.row = make([]EncDatum, len(rf.cols))
 	rf.decodedRow = make([]parser.Datum, len(rf.cols))
@@ -128,6 +132,13 @@ func (rf *RowFetcher) Init(
 	rf.indexColIdx = make([]int, len(indexColumnIDs))
 	for i, id := range indexColumnIDs {
 		rf.indexColIdx[i] = rf.colIdxMap[id]
+	}
+	// Add composite key columns to valNeededForCol so that, like other key
+	// columns, their values are decoded.
+	for _, id := range index.CompositeColumnIDs {
+		if idx, ok := colIdxMap[id]; ok {
+			rf.valNeededForCol[idx] = true
+		}
 	}
 
 	if isSecondaryIndex {
@@ -153,6 +164,13 @@ func (rf *RowFetcher) Init(
 		rf.extraVals, err = MakeEncodedKeyVals(desc, index.ExtraColumnIDs)
 		if err != nil {
 			return err
+		}
+	}
+
+	rf.compositeColTypes = make(map[ColumnID]ColumnType)
+	for _, col := range desc.Columns {
+		if HasCompositeKeyEncoding(col.Type.Kind) {
+			rf.compositeColTypes[col.ID] = col.Type
 		}
 	}
 	return nil
@@ -289,6 +307,17 @@ func (rf *RowFetcher) ProcessKV(
 			return "", "", err
 		}
 
+		if familyID == 0 {
+			// This value contains values for the composite columns. Clear the
+			// undecodable bytes that came from the key so that there is no panic for
+			// a duplicate value.
+			for _, colID := range rf.index.CompositeColumnIDs {
+				if idx, ok := rf.colIdxMap[colID]; ok {
+					rf.row[idx].UnsetDatum()
+				}
+			}
+		}
+
 		family, err := rf.desc.FindFamilyByID(FamilyID(familyID))
 		if err != nil {
 			return "", "", err
@@ -304,10 +333,12 @@ func (rf *RowFetcher) ProcessKV(
 			return "", "", err
 		}
 	} else {
+		rvalue := kv.ValueBytes()
 		if rf.extraVals != nil {
 			// This is a unique index; decode the extra column values from
 			// the value.
-			_, err := DecodeKeyVals(&rf.alloc, rf.extraVals, nil, kv.ValueBytes())
+			var err error
+			rvalue, err = DecodeKeyVals(&rf.alloc, rf.extraVals, nil, rvalue)
 			if err != nil {
 				return "", "", err
 			}
@@ -318,6 +349,29 @@ func (rf *RowFetcher) ProcessKV(
 			}
 			if debugStrings {
 				prettyValue = prettyEncDatums(rf.extraVals)
+			}
+		}
+
+		for _, id := range rf.index.CompositeColumnIDs {
+			d := parser.DNull
+			var isNull bool
+			rvalue, isNull = encoding.DecodeIfNull(rvalue)
+			if !isNull {
+				switch typ := rf.compositeColTypes[id]; typ.Kind {
+				case ColumnType_COLLATEDSTRING:
+					var r string
+					var err error
+					rvalue, r, err = encoding.DecodeUnsafeStringAscending(rvalue, nil)
+					if err != nil {
+						return "", "", err
+					}
+					d = parser.NewDCollatedString(r, *typ.Locale, &rf.alloc.env)
+				default:
+					panic(fmt.Sprintf("unknown composite encoding for kind %d", typ.Kind))
+				}
+			}
+			if idx, ok := rf.colIdxMap[id]; ok && rf.valNeededForCol[idx] {
+				rf.row[idx].Datum = d
 			}
 		}
 

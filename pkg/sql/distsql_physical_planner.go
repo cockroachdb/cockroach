@@ -245,6 +245,13 @@ func (dsp *distSQLPlanner) checkSupportForNode(node planNode) (distRecommendatio
 		return rec, nil
 
 	case *scanNode:
+		// TODO(radu): remove this limitation.
+		for _, id := range n.index.CompositeColumnIDs {
+			idx, ok := n.colIdxMap[id]
+			if ok && n.valNeededForCol[idx] {
+				return 0, errors.Errorf("cannot scan composite column")
+			}
+		}
 		rec := canDistribute
 		if n.hardLimit != 0 || n.softLimit != 0 {
 			// We don't yet recommend distributing plans where limits propagate
