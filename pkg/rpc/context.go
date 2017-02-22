@@ -17,6 +17,7 @@
 package rpc
 
 import (
+	"errors"
 	"math"
 	"sync"
 	"time"
@@ -102,9 +103,9 @@ func NewServer(ctx *Context) *grpc.Server {
 
 type connMeta struct {
 	sync.Once
-	conn    *grpc.ClientConn
-	err     error
-	healthy bool
+	conn         *grpc.ClientConn
+	dialErr      error
+	heartbeatErr error
 }
 
 // Context contains the fields required by the rpc framework.
@@ -165,8 +166,8 @@ func NewContext(
 				// Make sure initialization is not in progress when we're removing the
 				// conn. We need to set the error in case we win the race against the
 				// real initialization code.
-				if meta.err == nil {
-					meta.err = &roachpb.NodeUnavailableError{}
+				if meta.dialErr == nil {
+					meta.dialErr = &roachpb.NodeUnavailableError{}
 				}
 			})
 			ctx.removeConnLocked(key, meta)
@@ -216,7 +217,9 @@ func (ctx *Context) GRPCDial(target string, opts ...grpc.DialOption) (*grpc.Clie
 	ctx.conns.Lock()
 	meta, ok := ctx.conns.cache[target]
 	if !ok {
-		meta = &connMeta{}
+		meta = &connMeta{
+			heartbeatErr: errNotHeartbeated,
+		}
 		ctx.conns.cache[target] = meta
 	}
 	ctx.conns.Unlock()
@@ -228,7 +231,7 @@ func (ctx *Context) GRPCDial(target string, opts ...grpc.DialOption) (*grpc.Clie
 		} else {
 			tlsConfig, err := ctx.GetClientTLSConfig()
 			if err != nil {
-				meta.err = err
+				meta.dialErr = err
 				return
 			}
 			dialOpt = grpc.WithTransportCredentials(credentials.NewTLS(tlsConfig))
@@ -284,18 +287,18 @@ func (ctx *Context) GRPCDial(target string, opts ...grpc.DialOption) (*grpc.Clie
 		if log.V(1) {
 			log.Infof(ctx.masterCtx, "dialing %s", target)
 		}
-		meta.conn, meta.err = grpc.DialContext(ctx.masterCtx, target, dialOpts...)
-		if meta.err == nil {
+		meta.conn, meta.dialErr = grpc.DialContext(ctx.masterCtx, target, dialOpts...)
+		if meta.dialErr == nil {
 			if err := ctx.Stopper.RunTask(func() {
 				ctx.Stopper.RunWorker(func() {
-					err := ctx.runHeartbeat(meta.conn, target)
+					err := ctx.runHeartbeat(meta, target)
 					if err != nil && !grpcutil.IsClosedConnection(err) {
 						log.Error(ctx.masterCtx, err)
 					}
 					ctx.removeConn(target, meta)
 				})
 			}); err != nil {
-				meta.err = err
+				meta.dialErr = err
 				// removeConn and ctx's cleanup worker both lock ctx.conns. However,
 				// to avoid racing with meta's initialization, the cleanup worker
 				// blocks on meta.Do while holding ctx.conns. Invoke removeConn
@@ -305,7 +308,7 @@ func (ctx *Context) GRPCDial(target string, opts ...grpc.DialOption) (*grpc.Clie
 		}
 	})
 
-	return meta.conn, meta.err
+	return meta.conn, meta.dialErr
 }
 
 // NewBreaker creates a new circuit breaker properly configured for RPC
@@ -317,42 +320,34 @@ func (ctx *Context) NewBreaker() *circuit.Breaker {
 	return newBreaker(&ctx.breakerClock)
 }
 
-// setConnHealthy sets the health status of the connection.
-func (ctx *Context) setConnHealthy(remoteAddr string, healthy bool) {
-	ctx.conns.Lock()
-	defer ctx.conns.Unlock()
+var errNotConnected = errors.New("not connected")
+var errNotHeartbeated = errors.New("not yet heartbeated")
 
-	meta, ok := ctx.conns.cache[remoteAddr]
-	if ok {
-		meta.healthy = healthy
-		ctx.conns.cache[remoteAddr] = meta
-	}
-}
-
-// IsConnHealthy returns whether the most recent heartbeat succeeded or not.
+// ConnHealth returns whether the most recent heartbeat succeeded or not.
 // This should not be used as a definite status of a node's health and just used
 // to prioritize healthy nodes over unhealthy ones.
-func (ctx *Context) IsConnHealthy(remoteAddr string) bool {
+func (ctx *Context) ConnHealth(remoteAddr string) error {
 	ctx.conns.Lock()
 	defer ctx.conns.Unlock()
-	meta, ok := ctx.conns.cache[remoteAddr]
-	return ok && meta.healthy
+	if meta, ok := ctx.conns.cache[remoteAddr]; ok {
+		return meta.heartbeatErr
+	}
+	return errNotConnected
 }
 
-func (ctx *Context) runHeartbeat(cc *grpc.ClientConn, remoteAddr string) error {
+func (ctx *Context) runHeartbeat(meta *connMeta, remoteAddr string) error {
 	request := PingRequest{
 		Addr:           ctx.Addr,
 		MaxOffsetNanos: ctx.localClock.MaxOffset().Nanoseconds(),
 	}
-	heartbeatClient := NewHeartbeatClient(cc)
+	heartbeatClient := NewHeartbeatClient(meta.conn)
 
 	var heartbeatTimer timeutil.Timer
 	defer heartbeatTimer.Stop()
 
 	// Give the first iteration a wait-free heartbeat attempt.
-	nextHeartbeat := 0 * time.Nanosecond
+	heartbeatTimer.Reset(0)
 	for {
-		heartbeatTimer.Reset(nextHeartbeat)
 		select {
 		case <-ctx.Stopper.ShouldStop():
 			return nil
@@ -362,7 +357,19 @@ func (ctx *Context) runHeartbeat(cc *grpc.ClientConn, remoteAddr string) error {
 
 		sendTime := ctx.localClock.PhysicalTime()
 		response, err := ctx.heartbeat(heartbeatClient, request)
-		ctx.setConnHealthy(remoteAddr, err == nil)
+		ctx.conns.Lock()
+		meta.heartbeatErr = err
+		ctx.conns.Unlock()
+
+		// If we got a timeout, we might be experiencing a network partition. We
+		// close the connection so that all other pending RPCs (which may not have
+		// timeouts) fail eagerly. Any other error is likely to be noticed by
+		// other RPCs, so it's OK to leave the connection open while grpc
+		// internally reconnects if necessary.
+		if grpc.Code(err) == codes.DeadlineExceeded {
+			return err
+		}
+
 		if err == nil {
 			receiveTime := ctx.localClock.PhysicalTime()
 
@@ -389,13 +396,7 @@ func (ctx *Context) runHeartbeat(cc *grpc.ClientConn, remoteAddr string) error {
 			}
 		}
 
-		// If the heartbeat timed out, run the next one immediately. Otherwise,
-		// wait out the heartbeat interval on the next iteration.
-		if grpc.Code(err) == codes.DeadlineExceeded {
-			nextHeartbeat = 0
-		} else {
-			nextHeartbeat = ctx.HeartbeatInterval
-		}
+		heartbeatTimer.Reset(ctx.HeartbeatInterval)
 	}
 }
 

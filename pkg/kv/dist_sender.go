@@ -1178,13 +1178,22 @@ func (ds *DistSender) sendToReplicas(
 			pending--
 			err := call.Err
 			if err == nil {
-				if log.V(2) {
-					log.Infof(ctx, "RPC reply: %s", call.Reply)
-				}
-
-				if call.Reply.Error == nil {
+				switch tErr := call.Reply.Error.GetDetail().(type) {
+				case nil:
 					return call.Reply, nil
-				} else if !ds.handlePerReplicaError(ctx, transport, rangeID, call.Reply.Error) {
+				case *roachpb.RangeNotFoundError, *roachpb.StoreNotFoundError, *roachpb.NodeUnavailableError:
+					// These errors are likely to be unique to the replica that reported
+					// them, so no action is required before the next retry.
+				case *roachpb.NotLeaseHolderError:
+					ds.metrics.NotLeaseHolderErrCount.Inc(1)
+					if lh := tErr.LeaseHolder; lh != nil {
+						// If the replica we contacted knows the new lease holder, update the cache.
+						ds.updateLeaseHolderCache(ctx, rangeID, *lh)
+
+						// Move the new lease holder to the head of the queue for the next retry.
+						transport.MoveToFront(*lh)
+					}
+				default:
 					// The error received is not specific to this replica, so we
 					// should return it instead of trying other replicas. However,
 					// if we're trying to commit a transaction and there are
@@ -1261,36 +1270,6 @@ func (ds *DistSender) sendToReplicas(
 			}
 		}
 	}
-}
-
-// handlePerReplicaError returns true if the given error is likely to
-// be unique to the replica that reported it, and retrying on other
-// replicas is likely to produce different results. This method should
-// be called only once for each error as it may have side effects such
-// as updating caches.
-func (ds *DistSender) handlePerReplicaError(
-	ctx context.Context, transport Transport, rangeID roachpb.RangeID, pErr *roachpb.Error,
-) bool {
-	switch tErr := pErr.GetDetail().(type) {
-	case *roachpb.RangeNotFoundError:
-		return true
-	case *roachpb.StoreNotFoundError:
-		return true
-	case *roachpb.NodeUnavailableError:
-		return true
-	case *roachpb.NotLeaseHolderError:
-		ds.metrics.NotLeaseHolderErrCount.Inc(1)
-		if tErr.LeaseHolder != nil {
-			// If the replica we contacted knows the new lease holder, update the cache.
-			leaseHolder := *tErr.LeaseHolder
-			ds.updateLeaseHolderCache(ctx, rangeID, leaseHolder)
-
-			// Move the new lease holder to the head of the queue for the next retry.
-			transport.MoveToFront(leaseHolder)
-		}
-		return true
-	}
-	return false
 }
 
 // updateLeaseHolderCache updates the cached lease holder for the given range.
