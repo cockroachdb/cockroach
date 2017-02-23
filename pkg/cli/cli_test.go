@@ -716,8 +716,9 @@ func Example_sql() {
 	// x	y
 	// 42	69
 	// sql --execute=show databases
-	// 4 rows
+	// 5 rows
 	// Database
+	// crdb_internal
 	// information_schema
 	// pg_catalog
 	// system

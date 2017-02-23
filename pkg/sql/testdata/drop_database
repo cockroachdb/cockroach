@@ -4,6 +4,7 @@ CREATE DATABASE "foo-bar"
 query T
 SHOW DATABASES
 ----
+crdb_internal
 foo-bar
 information_schema
 pg_catalog
@@ -16,6 +17,7 @@ DROP DATABASE "foo-bar"
 query T
 SHOW DATABASES
 ----
+crdb_internal
 information_schema
 pg_catalog
 system
@@ -27,6 +29,7 @@ CREATE DATABASE "foo bar"
 query T
 SHOW DATABASES
 ----
+crdb_internal
 foo bar
 information_schema
 pg_catalog
@@ -39,6 +42,7 @@ DROP DATABASE "foo bar"
 query T
 SHOW DATABASES
 ----
+crdb_internal
 information_schema
 pg_catalog
 system
@@ -123,6 +127,7 @@ SELECT * FROM d2.v4
 query T
 SHOW DATABASES
 ----
+crdb_internal
 d1
 d2
 information_schema
@@ -136,6 +141,7 @@ DROP DATABASE d1
 query T
 SHOW DATABASES
 ----
+crdb_internal
 d2
 information_schema
 pg_catalog
@@ -164,6 +170,7 @@ DROP DATABASE d2
 query T
 SHOW DATABASES
 ----
+crdb_internal
 information_schema
 pg_catalog
 system
@@ -197,6 +204,7 @@ DROP DATABASE constraint_db
 query T
 SHOW DATABASES
 ----
+crdb_internal
 information_schema
 pg_catalog
 system

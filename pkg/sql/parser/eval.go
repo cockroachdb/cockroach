@@ -1778,14 +1778,21 @@ func (ctx *EvalContext) GetClusterTimestamp() *DDecimal {
 		}
 	}
 
+	return TimestampToDecimal(ctx.clusterTimestamp)
+}
+
+// TimestampToDecimal converts the logical timestamp into a decimal
+// value with the number of nanoseconds in the integer part and the
+// logical counter in the decimal part.
+func TimestampToDecimal(ts hlc.Timestamp) *DDecimal {
 	// Compute Walltime * 10^10 + Logical.
 	// We need 10 decimals for the Logical field because its maximum
 	// value is 4294967295 (2^32-1), a value with 10 decimal digits.
 	var res DDecimal
 	val := &res.Coeff
-	val.SetInt64(ctx.clusterTimestamp.WallTime)
+	val.SetInt64(ts.WallTime)
 	val.Mul(val, big10E10)
-	val.Add(val, big.NewInt(int64(ctx.clusterTimestamp.Logical)))
+	val.Add(val, big.NewInt(int64(ts.Logical)))
 
 	// Shift 10 decimals to the right, so that the logical
 	// field appears as fractional part.

@@ -565,7 +565,7 @@ func TestPGPreparedQuery(t *testing.T) {
 				Results("hashedPassword", "BYTES", true, gosql.NullBool{}, "{}"),
 		},
 		"SHOW DATABASES": {
-			baseTest.Results("d").Results("information_schema").Results("pg_catalog").Results("system"),
+			baseTest.Results("crdb_internal").Results("d").Results("information_schema").Results("pg_catalog").Results("system"),
 		},
 		"SHOW GRANTS ON system.users": {
 			baseTest.Results("users", security.RootUser, "DELETE").
