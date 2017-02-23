@@ -727,6 +727,10 @@ func TestPGPreparedQuery(t *testing.T) {
 		"SELECT s from (VALUES ('foo'), ('bar')) as t(s) WHERE s = ANY($1)": {
 			baseTest.SetArgs(pq.StringArray([]string{"foo"})).Results("foo"),
 		},
+		// #13725
+		"SELECT * FROM d.empty": {
+			baseTest.SetArgs(),
+		},
 
 		// TODO(jordan) blocked on #13651
 		//"SELECT $1::INT[]": {
@@ -832,7 +836,8 @@ INSERT INTO d.t VALUES (10),(11);
 CREATE TABLE d.ts (a TIMESTAMP, b DATE);
 CREATE TABLE d.two (a INT, b INT);
 CREATE TABLE d.intStr (a INT, s STRING);
-CREATE TABLE d.str (s STRING, b BYTES);`
+CREATE TABLE d.str (s STRING, b BYTES);
+CREATE TABLE d.empty ();`
 	if _, err := db.Exec(initStmt); err != nil {
 		t.Fatal(err)
 	}
