@@ -27,6 +27,7 @@ import (
 	"runtime"
 	"sort"
 	"strconv"
+	"strings"
 	"sync"
 
 	"github.com/coreos/etcd/raft"
@@ -723,7 +724,7 @@ func (s *statusServer) handleDebugRange(w http.ResponseWriter, r *http.Request) 
 	data := debugRangeData{
 		RangeID:             rangeID,
 		ReplicaDescPerStore: make(map[roachpb.StoreID]map[roachpb.ReplicaID]roachpb.ReplicaDescriptor),
-		Replicas:            make(map[roachpb.ReplicaID]*debugReplicaData),
+		Replicas:            make(map[roachpb.ReplicaID][]roachpb.ReplicaDescriptor),
 	}
 
 	type nodeResponse struct {
@@ -790,11 +791,7 @@ func (s *statusServer) handleDebugRange(w http.ResponseWriter, r *http.Request) 
 					data.ReplicaDescPerStore[info.SourceStoreID] = make(map[roachpb.ReplicaID]roachpb.ReplicaDescriptor)
 					for _, desc := range info.State.Desc.Replicas {
 						data.ReplicaDescPerStore[info.SourceStoreID][desc.ReplicaID] = desc
-						repData, ok := data.Replicas[desc.ReplicaID]
-						if !ok {
-							repData = &debugReplicaData{}
-						}
-						repData.Descs = append(repData.Descs, desc)
+						data.Replicas[desc.ReplicaID] = append(data.Replicas[desc.ReplicaID], desc)
 					}
 				}
 			}
@@ -873,22 +870,16 @@ func (r rangeInfoSlice) Less(i, j int) bool {
 	return r[i].SourceStoreID < r[j].SourceStoreID
 }
 
-type debugReplicaData struct {
-	Descs []roachpb.ReplicaDescriptor
-
-	// The following are populated in postprocessing.
-	Warning bool
-}
-
 type debugRangeData struct {
 	RangeID             int64
 	RangeInfos          rangeInfoSlice
-	Replicas            map[roachpb.ReplicaID]*debugReplicaData
+	Replicas            map[roachpb.ReplicaID][]roachpb.ReplicaDescriptor
 	ReplicaDescPerStore map[roachpb.StoreID]map[roachpb.ReplicaID]roachpb.ReplicaDescriptor
 	Failures            rangeInfoSlice
 
-	// The following are populated in postprocessing.
-	ReplicaIDs replicaIDSlice
+	// The following are populated in post-processing.
+	ReplicaIDs    replicaIDSlice
+	HeaderClasses map[string]string
 }
 
 func (d *debugRangeData) postProcessing() {
@@ -898,19 +889,84 @@ func (d *debugRangeData) postProcessing() {
 		d.ReplicaIDs = append(d.ReplicaIDs, repID)
 	}
 
-	// Find any replicas with different descriptors.
-	for _, repData := range d.Replicas {
-		for i := 1; i < len(repData.Descs); i++ {
-			if !reflect.DeepEqual(repData.Descs[0], repData.Descs[i]) {
-				repData.Warning = true
+	// Find any replicas with differenting descriptors.
+	d.HeaderClasses = make(map[string]string)
+	for repID, descs := range d.Replicas {
+		for i := 1; i < len(descs); i++ {
+			if !reflect.DeepEqual(descs[0], descs[i]) {
+				d.HeaderClasses[fmt.Sprintf("%d", repID)] = "warning"
 				break
 			}
+		}
+	}
+
+	// Add custom CSS classes for headers.
+	for i := 1; i < len(d.RangeInfos); i++ {
+		if !reflect.DeepEqual(d.RangeInfos[0].Span, d.RangeInfos[i].Span) {
+			d.HeaderClasses["Key Range"] = "warning"
+		}
+		if d.RangeInfos[0].State.Lease.Replica.ReplicaID != d.RangeInfos[i].State.Lease.Replica.ReplicaID {
+			d.HeaderClasses["Lease"] = "warning"
+		}
+		if d.RangeInfos[0].State.Lease.Epoch != d.RangeInfos[i].State.Lease.Epoch {
+			d.HeaderClasses["Lease Epoch"] = "warning"
+		}
+		if d.RangeInfos[0].State.Lease.Start != d.RangeInfos[i].State.Lease.Start {
+			d.HeaderClasses["Lease Start"] = "warning"
+		}
+		if d.RangeInfos[0].State.Lease.Expiration != d.RangeInfos[i].State.Lease.Expiration {
+			d.HeaderClasses["Lease Expiration"] = "warning"
+		}
+		if !reflect.DeepEqual(d.RangeInfos[0].Span, d.RangeInfos[i].Span) {
+			d.HeaderClasses["Key Range"] = "warning"
+		}
+		if d.RangeInfos[0].RaftState.Lead != d.RangeInfos[i].RaftState.Lead {
+			d.HeaderClasses["Leader"] = "warning"
+		}
+		if d.RangeInfos[0].RaftState.HardState.Term != d.RangeInfos[i].RaftState.HardState.Term {
+			d.HeaderClasses["Term"] = "warning"
+		}
+		if d.RangeInfos[0].RaftState.Applied != d.RangeInfos[i].RaftState.Applied {
+			d.HeaderClasses["Applied"] = "warning"
+		}
+		if d.RangeInfos[0].RaftState.HardState.Commit != d.RangeInfos[i].RaftState.HardState.Commit {
+			d.HeaderClasses["Commit"] = "warning"
+		}
+		if d.RangeInfos[0].State.LastIndex != d.RangeInfos[i].State.LastIndex {
+			d.HeaderClasses["Last Index"] = "warning"
+		}
+		if d.RangeInfos[0].State.RaftLogSize != d.RangeInfos[i].State.RaftLogSize {
+			d.HeaderClasses["Log Size"] = "warning"
 		}
 	}
 
 	sort.Sort(d.ReplicaIDs)
 	sort.Sort(d.RangeInfos)
 	sort.Sort(d.Failures)
+}
+
+// Reference these functions so the unused check is appeased. They are used in
+// debugRangeTemplate.
+var _ = debugRangeData.ConvertRaftState
+var _ = debugRangeData.GetStoreID
+
+// ConvertRaftState take a raft.State string and converts it to a displayable
+// string.
+func (d debugRangeData) ConvertRaftState(state string) string {
+	// Strip the "State" from the state.
+	if len(state) < 5 {
+		return state
+	}
+	return strings.ToLower(state[5:])
+}
+
+// GetStoreID returns the storeID given a uint64 replica ID. Returns 0 if it
+// isn't found.
+func (d debugRangeData) GetStoreID(repID uint64) roachpb.StoreID {
+	for _, desc := range d.Replicas[roachpb.ReplicaID(repID)] {
+		return desc.StoreID
+	}
+	return roachpb.StoreID(0)
 }
 
 const debugRangeTemplate = `
@@ -970,7 +1026,7 @@ const debugRangeTemplate = `
         border-top: none;
       }
       .header .cell {
-        border: none;
+        border-color: #2980b9;
       }
       .table.failure {
           display: table;
@@ -1001,6 +1057,30 @@ const debugRangeTemplate = `
       .cell.warning {
         color: red;
       }
+      .cell.match {
+        color: green;
+      }
+      .cell.raftstate-leader {
+        color: green;
+      }
+      .cell.raftstate-follower {
+        color: blue;
+      }
+      .cell.raftstate-candidate {
+        color: orange;
+      }
+      .cell.raftstate-precandidate {
+        color: darkorange;
+      }
+      .cell.raftstate-dormant {
+        color: gray;
+      }
+      .cell.lease-holder {
+        color: green;
+      }
+      .cell.lease-follower {
+        color: blue;
+      }
     </STYLE>
   </HEAD>
   <BODY>
@@ -1011,31 +1091,93 @@ const debugRangeTemplate = `
           <DIV CLASS="column header">
             <DIV CLASS="cell">Node</DIV>
             <DIV CLASS="cell">Store</DIV>
-            <DIV CLASS="cell key">Key Range</DIV>
-            {{range $repID, $rep := $.Replicas}}
-              <DIV CLASS="cell {{if $rep.Warning}}warning{{end}}">
+            <DIV CLASS="cell {{index $.HeaderClasses "Key Range"}}">Key Range</DIV>
+            <DIV CLASS="cell {{index $.HeaderClasses "Raft State"}}">Raft State</DIV>
+            <DIV CLASS="cell {{index $.HeaderClasses "Lease"}}">Lease</DIV>
+            <DIV CLASS="cell {{index $.HeaderClasses "Lease Epoch"}}">Lease Epoch</DIV>
+            <DIV CLASS="cell {{index $.HeaderClasses "Lease Start"}}">Lease Start</DIV>
+            <DIV CLASS="cell {{index $.HeaderClasses "Lease Expiration"}}">Lease Expiration</DIV>
+            <DIV CLASS="cell {{index $.HeaderClasses "Leader"}}">Leader</DIV>
+            <DIV CLASS="cell {{index $.HeaderClasses "Vote"}}">Vote</DIV>
+            <DIV CLASS="cell {{index $.HeaderClasses "Term"}}">Term</DIV>
+            <DIV CLASS="cell {{index $.HeaderClasses "Applied"}}">Applied</DIV>
+            <DIV CLASS="cell {{index $.HeaderClasses "Commit"}}">Commit</DIV>
+            <DIV CLASS="cell {{index $.HeaderClasses "Last Index"}}">Last Index</DIV>
+            <DIV CLASS="cell {{index $.HeaderClasses "Log Size"}}">Log Size</DIV>
+            <DIV CLASS="cell {{index $.HeaderClasses "Pending Commands"}}">Pending Commands</DIV>
+            {{range $repID, $rep := $.Replicas -}}
+              <DIV CLASS="cell {{index $.HeaderClasses $repID.String}}">
                 Replica {{$repID}}
               </DIV>
-            {{end}}
+            {{- end}}
           </DIV>
-          {{range $_, $det := $.RangeInfos}}
+          {{range $_, $det := $.RangeInfos -}}
             <DIV CLASS="column">
               <DIV CLASS="cell" TITLE="n{{$det.SourceNodeID}}">n{{$det.SourceNodeID}}</DIV>
               <DIV CLASS="cell" TITLE="n{{$det.SourceStoreID}}">s{{$det.SourceStoreID}}</DIV>
-              <DIV CLASS="cell" TITLE="{{$det.Span}}">{{$det.Span}}</DIV>
-              {{range $repID, $rep := $.Replicas}}
-                {{with index (index $.ReplicaDescPerStore $det.SourceStoreID) $repID}}
-                  {{if eq .ReplicaID 0}}
+              <DIV CLASS="cell" TITLE="n{{$det.Span}}">s{{$det.Span}}</DIV>
+              {{- $state := $.ConvertRaftState $det.RaftState.State}}
+              <DIV CLASS="cell raftstate-{{$state}}" TITLE="{{$state}}">{{$state}}</DIV>
+              {{- if not $det.State.Lease}}
+                <DIV CLASS="cell">-</DIV>
+                <DIV CLASS="cell">-</DIV>
+                <DIV CLASS="cell">-</DIV>
+                <DIV CLASS="cell">-</DIV>
+              {{- else}}
+                <DIV CLASS="cell {{if eq $det.State.Lease.Replica.StoreID $det.SourceStoreID}}
+                  lease-holder
+                {{- else}}
+                  lease-follower
+                {{- end -}}
+                  " TITLE="{{$det.State.Lease.Replica.ReplicaID}}">{{$det.State.Lease.Replica.ReplicaID}}</DIV>
+                {{- if not $det.State.Lease.Epoch}}
+                  <DIV CLASS="cell">-</DIV>
+                {{- else}}
+                  <DIV CLASS="cell" TITLE="{{$det.State.Lease.Epoch}}">{{$det.State.Lease.Epoch}}</DIV>
+                {{- end}}
+                <DIV CLASS="cell" TITLE="{{$det.State.Lease.Start}}">{{$det.State.Lease.Start}}</DIV>
+                <DIV CLASS="cell" TITLE="{{$det.State.Lease.Expiration}}">{{$det.State.Lease.Expiration}}</DIV>
+              {{- end}}
+              {{- $leadStoreID := $.GetStoreID $det.RaftState.Lead}}
+              <DIV CLASS="cell {{if eq $det.SourceStoreID $leadStoreID -}}
+                  raftstate-leader
+                {{- else -}}
+                  raftstate-follower
+                {{- end -}}
+                " TITLE="{{$det.RaftState.Lead}}">{{$det.RaftState.Lead}}</DIV>
+              {{- $voteStoreID := $.GetStoreID $det.RaftState.HardState.Vote}}
+              <DIV CLASS="cell {{if eq $det.SourceStoreID $voteStoreID -}}
+                  raftstate-leader
+                {{- else -}}
+                  raftstate-follower
+                {{- end -}}
+              " TITLE="{{$det.RaftState.HardState.Vote}}">{{$det.RaftState.HardState.Vote}}</DIV>
+              <DIV CLASS="cell" TITLE="{{$det.RaftState.HardState.Term}}">{{$det.RaftState.HardState.Term}}</DIV>
+              <DIV CLASS="cell" TITLE="{{$det.RaftState.Applied}}">{{$det.RaftState.Applied}}</DIV>
+              <DIV CLASS="cell" TITLE="{{$det.RaftState.HardState.Commit}}">{{$det.RaftState.HardState.Commit}}</DIV>
+              <DIV CLASS="cell" TITLE="{{$det.State.LastIndex}}">{{$det.State.LastIndex}}</DIV>
+              <DIV CLASS="cell" TITLE="{{$det.State.RaftLogSize}}">{{$det.State.RaftLogSize}}</DIV>
+              <DIV CLASS="cell {{if and (gt $det.State.NumPending 0) (not (eq $det.SourceStoreID $leadStoreID)) -}}
+                warning
+              {{- end -}}
+              " TITLE="{{$det.State.NumPending}}">{{$det.State.NumPending}}</DIV>
+              {{range $repID, $rep := $.Replicas -}}
+                {{- with index (index $.ReplicaDescPerStore $det.SourceStoreID) $repID -}}
+                  {{- if eq .ReplicaID 0 -}}
                     <DIV CLASS="cell">-</DIV>
-                  {{else}}
-                    <DIV CLASS="cell {{if not (index $.ReplicaDescPerStore .StoreID)}}warning{{end}}" TITLE="n{{.NodeID}} s{{.StoreID}}">
+                  {{- else -}}
+                    <DIV CLASS="cell {{if not (index $.ReplicaDescPerStore .StoreID) -}}
+                        warning
+                      {{- else if eq .StoreID $det.SourceStoreID -}}
+                        match
+                      {{- end}}" TITLE="n{{.NodeID}} s{{.StoreID}}">
                       n{{.NodeID}} s{{.StoreID}}
                     </DIV>
-                  {{end}}
-                {{end}}
-              {{end}}
+                  {{- end}}
+                {{- end}}
+              {{- end}}
             </DIV>
-          {{end}}
+          {{- end}}
         </DIV>
       {{else}}
         <p>No information available for Range r{{$.RangeID}}</p>
@@ -1048,19 +1190,19 @@ const debugRangeTemplate = `
             <DIV CLASS="cell">Store</DIV>
             <DIV CLASS="cell">Error</DIV>
           </DIV>
-          {{range $_, $det := $.Failures}}
+          {{- range $_, $det := $.Failures}}
             <DIV CLASS="row">
               <DIV CLASS="cell">n{{$det.SourceNodeID}}</DIV>
-              {{if not (eq $det.SourceStoreID 0)}}
+              {{- if not (eq $det.SourceStoreID 0)}}
                 <DIV CLASS="cell">n{{$det.SourceStoreID}}</DIV>
-              {{else}}
+              {{- else -}}
                 <DIV CLASS="cell">-</DIV>
-              {{end}}
+              {{- end}}
               <DIV CLASS="cell" TITLE="{{$det.ErrorMessage}}">{{$det.ErrorMessage}}</DIV>
             </DIV>
-          {{end}}
+          {{- end}}
         </DIV>
-      {{end}}
+      {{- end}}
     </DIV>
   </BODY>
 </HTML>
