@@ -330,6 +330,7 @@ var postgresUnitMap = map[string]duration.Duration{
 
 // Parses a duration in the "traditional" Postgres format.
 func postgresToDuration(s string) (duration.Duration, error) {
+	s = strings.ToLower(s)
 	var d duration.Duration
 	l := intervalLexer{str: s, offset: 0, err: nil}
 	for l.offset != len(l.str) {

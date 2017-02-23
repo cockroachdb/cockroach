@@ -353,6 +353,8 @@ func TestEval(t *testing.T) {
 		{`'1-2 4:09:55'::interval IS OF (INTERVAL)`, `true`},
 		{`'1-2 3 4:09:55'::interval IS OF (INTERVAL)`, `true`},
 		{`'1 hour 2 minutes'::interval IS OF (INTERVAL)`, `true`},
+		// #13716
+		{`'1 HOUR 2 MINutES'::interval IS OF (INTERVAL)`, `true`},
 		{`1 IS OF (STRING)`, `false`},
 		{`1 IS OF (BOOL, INT)`, `true`},
 		{`1 IS NOT OF (INT)`, `false`},
