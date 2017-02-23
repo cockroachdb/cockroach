@@ -36,6 +36,7 @@ func TestTableRefs(t *testing.T) {
 	stmt := `
 CREATE DATABASE test;
 CREATE TABLE test.t(a INT PRIMARY KEY, xx INT, b INT, c INT);
+CREATE INDEX bc ON test.t(b, c);
 `
 	_, err := db.Exec(stmt)
 	if err != nil {
@@ -56,6 +57,8 @@ CREATE TABLE test.t(a INT PRIMARY KEY, xx INT, b INT, c INT);
 			cID = c.ID
 		}
 	}
+	pkID := tableDesc.PrimaryIndex.ID
+	secID := tableDesc.Indexes[0].ID
 
 	// Make some schema changes meant to shuffle the ID/name mapping.
 	stmt = `
@@ -78,11 +81,25 @@ ALTER TABLE test.t DROP COLUMN xx;
 		{fmt.Sprintf("[%d(%d)] as t", tID, aID), `(p)`, ``},
 		{fmt.Sprintf("[%d(%d)] as t", tID, bID), `(d)`, ``},
 		{fmt.Sprintf("[%d(%d)] as t", tID, cID), `(c)`, ``},
+		{fmt.Sprintf("[%d]@bc as t", tID), `(p, d, c)`, ``},
+		{fmt.Sprintf("[%d(%d)]@bc as t", tID, aID), `(p)`, ``},
+		{fmt.Sprintf("[%d(%d)]@bc as t", tID, bID), `(d)`, ``},
+		{fmt.Sprintf("[%d(%d)]@bc as t", tID, cID), `(c)`, ``},
 		{fmt.Sprintf("[%d(%d, %d, %d)] as t", tID, cID, bID, aID), `(c, d, p)`, ``},
 		{fmt.Sprintf("[%d(%d, %d, %d)] as t(c, b, a)", tID, cID, bID, aID), `(c, b, a)`, ``},
 		{fmt.Sprintf("[%d()] as t", tID), `()`, ``},
 		{`[666()] as t`, ``, `pq: table "<id=666>" does not exist`},
 		{fmt.Sprintf("[%d(666)] as t", tID), ``, `pq: column 666 does not exist`},
+		{fmt.Sprintf("test.t@[%d]", pkID), `(p, d, c)`, ``},
+		{fmt.Sprintf("test.t@[%d]", secID), `(p, d, c)`, ``},
+		{`test.t@[666]`, ``, `pq: index 666 not found`},
+		{fmt.Sprintf("[%d]@[%d] as t", tID, pkID), `(p, d, c)`, ``},
+		{fmt.Sprintf("[%d(%d)]@[%d] as t", tID, aID, pkID), `(p)`, ``},
+		{fmt.Sprintf("[%d(%d)]@[%d] as t", tID, bID, pkID), `(d)`, ``},
+		{fmt.Sprintf("[%d(%d)]@[%d] as t", tID, cID, pkID), `(c)`, ``},
+		{fmt.Sprintf("[%d(%d)]@[%d] as t", tID, aID, secID), `(p)`, ``},
+		{fmt.Sprintf("[%d(%d)]@[%d] as t", tID, bID, secID), `(d)`, ``},
+		{fmt.Sprintf("[%d(%d)]@[%d] as t", tID, cID, secID), `(c)`, ``},
 	}
 
 	for i, d := range testData {

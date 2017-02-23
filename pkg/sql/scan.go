@@ -256,7 +256,18 @@ func (n *scanNode) initTable(
 		}
 	}
 
-	if indexHints != nil && indexHints.Index != "" {
+	if indexHints != nil {
+		if err := n.lookupSpecifiedIndex(indexHints); err != nil {
+			return err
+		}
+	}
+	n.noIndexJoin = (indexHints != nil && indexHints.NoIndexJoin)
+	return n.initDescDefaults(scanVisibility, wantedColumns)
+}
+
+func (n *scanNode) lookupSpecifiedIndex(indexHints *parser.IndexHints) error {
+	if indexHints.Index != "" {
+		// Search index by name.
 		indexName := indexHints.Index.Normalize()
 		if indexName == parser.ReNormalizeName(n.desc.PrimaryIndex.Name) {
 			n.specifiedIndex = &n.desc.PrimaryIndex
@@ -267,13 +278,27 @@ func (n *scanNode) initTable(
 					break
 				}
 			}
-			if n.specifiedIndex == nil {
-				return errors.Errorf("index \"%s\" not found", indexName)
+		}
+		if n.specifiedIndex == nil {
+			return errors.Errorf("index \"%s\" not found", indexName)
+		}
+	} else if indexHints.IndexID != 0 {
+		// Search index by ID.
+		if n.desc.PrimaryIndex.ID == sqlbase.IndexID(indexHints.IndexID) {
+			n.specifiedIndex = &n.desc.PrimaryIndex
+		} else {
+			for i := range n.desc.Indexes {
+				if n.desc.Indexes[i].ID == sqlbase.IndexID(indexHints.IndexID) {
+					n.specifiedIndex = &n.desc.Indexes[i]
+					break
+				}
 			}
 		}
+		if n.specifiedIndex == nil {
+			return errors.Errorf("index %d not found", indexHints.IndexID)
+		}
 	}
-	n.noIndexJoin = (indexHints != nil && indexHints.NoIndexJoin)
-	return n.initDescDefaults(scanVisibility, wantedColumns)
+	return nil
 }
 
 // Either pick all columns or just those selected.
