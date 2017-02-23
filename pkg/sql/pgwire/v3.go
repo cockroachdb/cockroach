@@ -603,7 +603,7 @@ func (c *v3Conn) handleDescribe(ctx context.Context, buf *readBuffer) error {
 			return err
 		}
 
-		return c.sendRowDescription(ctx, stmt.Columns, nil)
+		return c.sendRowDescription(ctx, stmt.Columns, nil, true)
 	case preparePortal:
 		portal, ok := c.session.PreparedPortals.Get(name)
 		if !ok {
@@ -611,7 +611,7 @@ func (c *v3Conn) handleDescribe(ctx context.Context, buf *readBuffer) error {
 		}
 
 		portalMeta := portal.ProtocolMeta.(preparedPortalMeta)
-		return c.sendRowDescription(ctx, portal.Stmt.Columns, portalMeta.outFormats)
+		return c.sendRowDescription(ctx, portal.Stmt.Columns, portalMeta.outFormats, true)
 	default:
 		return errors.Errorf("unknown describe type: %s", typ)
 	}
@@ -936,7 +936,9 @@ func (c *v3Conn) sendResponse(
 
 		case parser.Rows:
 			if sendDescription {
-				if err := c.sendRowDescription(ctx, result.Columns, formatCodes); err != nil {
+				// We're not allowed to send a NoData message here, even if there are
+				// 0 result columns, since we're responding to a "Simple Query".
+				if err := c.sendRowDescription(ctx, result.Columns, formatCodes, false); err != nil {
 					return err
 				}
 			}
@@ -999,10 +1001,17 @@ func (c *v3Conn) sendResponse(
 	return nil
 }
 
+// sendRowDescription sends a row description over the wire for the given
+// slice of columns. canSendNoData indicates that the current state of the
+// connection allows for short circuiting by sending the NoData message if
+// there aren't any columns to send. This must be set to false during a
+// "simple query" and true elsewhere. See the last sentence of the final note
+// in the Extended Query section of the docs here:
+// https://www.postgresql.org/docs/9.6/static/protocol-flow.html#PROTOCOL-FLOW-EXT-QUERY
 func (c *v3Conn) sendRowDescription(
-	ctx context.Context, columns []sql.ResultColumn, formatCodes []formatCode,
+	ctx context.Context, columns []sql.ResultColumn, formatCodes []formatCode, canSendNoData bool,
 ) error {
-	if len(columns) == 0 {
+	if len(columns) == 0 && canSendNoData {
 		c.writeBuf.initMsg(serverMsgNoData)
 		return c.writeBuf.finishMsg(c.wr)
 	}
