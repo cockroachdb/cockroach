@@ -14,7 +14,7 @@
 //
 // Author: Tobias Schottdorf (tobias.schottdorf@gmail.com)
 
-package acceptance
+package sql_test
 
 import (
 	"bytes"
@@ -29,19 +29,10 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach-go/crdb"
-	"github.com/cockroachdb/cockroach/pkg/acceptance/cluster"
+	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
-
-// TestMonotonicInserts replicates the 'monotonic' test from the Jepsen
-// CockroachDB test suite (https://github.com/cockroachdb/jepsen).
-func TestMonotonicInserts(t *testing.T) {
-	t.Skip("#13759")
-	s := log.Scope(t, "")
-	defer s.Close(t)
-
-	runTestOnConfigs(t, testMonotonicInsertsInner)
-}
 
 type mtRow struct {
 	val      int64
@@ -83,12 +74,24 @@ type mtClient struct {
 	ID int
 }
 
-func testMonotonicInsertsInner(
-	ctx context.Context, t *testing.T, c cluster.Cluster, cfg cluster.TestConfig,
-) {
+// TestMonotonicInserts replicates the 'monotonic' test from the Jepsen
+// CockroachDB test suite (https://github.com/cockroachdb/jepsen).
+func TestMonotonicInserts(t *testing.T) {
+	t.Skip("#13759")
+	if testing.Short() {
+		t.Skip("short flag")
+	}
+
+	tc := testcluster.StartTestCluster(t, 3,
+		base.TestClusterArgs{
+			ReplicationMode: base.ReplicationAuto,
+		})
+	defer tc.Stopper().Stop()
+	ctx := context.Background()
+
 	var clients []mtClient
-	for i := 0; i < c.NumNodes(); i++ {
-		clients = append(clients, mtClient{ID: i, DB: makePGClient(t, c.PGUrl(ctx, i))})
+	for i := range tc.Conns {
+		clients = append(clients, mtClient{ID: i, DB: tc.Conns[i]})
 	}
 	// We will insert into this table by selecting MAX(val) and increasing by
 	// one and expect that val and sts (the commit timestamp) are both
@@ -106,9 +109,6 @@ INSERT INTO mono.mono VALUES(-1, '0', -1, -1)`); err != nil {
 		logPrefix := fmt.Sprintf("%03d.%03d: ", atomic.AddUint64(&idGen, 1), client.ID)
 		l := func(msg string, args ...interface{}) {
 			log.Infof(ctx, logPrefix+msg, args...)
-			if log.V(2) {
-				t.Logf(logPrefix+msg, args...)
-			}
 		}
 		l("begin")
 		defer l("done")
@@ -192,16 +192,14 @@ RETURNING val, sts, node, tb`,
 		}
 	}
 
-	concurrency := 2 * c.NumNodes()
-
-	sem := make(chan struct{}, concurrency)
-	timer := time.After(cfg.Duration)
+	sem := make(chan struct{}, 2*len(tc.Conns))
+	timer := time.After(5 * time.Second)
 
 	defer verify()
 	defer func() {
 		// Now that consuming has stopped, fill up the semaphore (i.e. wait for
 		// still-running goroutines to stop)
-		for i := 0; i < concurrency; i++ {
+		for i := 0; i < cap(sem); i++ {
 			sem <- struct{}{}
 		}
 	}()
@@ -209,7 +207,7 @@ RETURNING val, sts, node, tb`,
 	for {
 		select {
 		case sem <- struct{}{}:
-		case <-stopper.ShouldStop():
+		case <-tc.Stopper().ShouldStop():
 			return
 		case <-timer:
 			return
@@ -217,6 +215,6 @@ RETURNING val, sts, node, tb`,
 		go func(client mtClient) {
 			invoke(client)
 			<-sem
-		}(clients[rand.Intn(c.NumNodes())])
+		}(clients[rand.Intn(len(clients))])
 	}
 }
