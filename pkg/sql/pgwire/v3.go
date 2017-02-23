@@ -577,6 +577,17 @@ func (c *v3Conn) handleParse(ctx context.Context, buf *readBuffer) error {
 	return c.writeBuf.finishMsg(c.wr)
 }
 
+// canSendNoData returns true if describing a result of the input statement
+// type should return NoData.
+func canSendNoData(statementType parser.StatementType) bool {
+	switch statementType {
+	case parser.Rows:
+		return false
+	default:
+		return true
+	}
+}
+
 func (c *v3Conn) handleDescribe(ctx context.Context, buf *readBuffer) error {
 	typ, err := buf.getPrepareType()
 	if err != nil {
@@ -603,7 +614,7 @@ func (c *v3Conn) handleDescribe(ctx context.Context, buf *readBuffer) error {
 			return err
 		}
 
-		return c.sendRowDescription(ctx, stmt.Columns, nil, true)
+		return c.sendRowDescription(ctx, stmt.Columns, nil, canSendNoData(stmt.Type))
 	case preparePortal:
 		portal, ok := c.session.PreparedPortals.Get(name)
 		if !ok {
@@ -611,7 +622,7 @@ func (c *v3Conn) handleDescribe(ctx context.Context, buf *readBuffer) error {
 		}
 
 		portalMeta := portal.ProtocolMeta.(preparedPortalMeta)
-		return c.sendRowDescription(ctx, portal.Stmt.Columns, portalMeta.outFormats, true)
+		return c.sendRowDescription(ctx, portal.Stmt.Columns, portalMeta.outFormats, canSendNoData(portal.Stmt.Type))
 	default:
 		return errors.Errorf("unknown describe type: %s", typ)
 	}
@@ -1004,9 +1015,10 @@ func (c *v3Conn) sendResponse(
 // sendRowDescription sends a row description over the wire for the given
 // slice of columns. canSendNoData indicates that the current state of the
 // connection allows for short circuiting by sending the NoData message if
-// there aren't any columns to send. This must be set to false during a
-// "simple query" and true elsewhere. See the last sentence of the final note
-// in the Extended Query section of the docs here:
+// there aren't any columns to send. This must be set to true iff we are
+// responding in the Extended Query protocol and the portal or statement will
+// not return rows. See the notes about the NoData message in the Extended
+// Query section of the docs here:
 // https://www.postgresql.org/docs/9.6/static/protocol-flow.html#PROTOCOL-FLOW-EXT-QUERY
 func (c *v3Conn) sendRowDescription(
 	ctx context.Context, columns []sql.ResultColumn, formatCodes []formatCode, canSendNoData bool,
