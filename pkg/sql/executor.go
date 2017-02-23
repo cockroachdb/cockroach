@@ -396,11 +396,11 @@ func (e *Executor) getSystemConfig() (config.SystemConfig, *databaseCache) {
 
 // Prepare returns the result types of the given statement. pinfo may
 // contain partial type information for placeholders. Prepare will
-// populate the missing types. The column result types are returned (or
+// populate the missing types. The PreparedStatement is returned (or
 // nil if there are no results).
 func (e *Executor) Prepare(
 	query string, session *Session, pinfo parser.PlaceholderTypes,
-) (ResultColumns, error) {
+) (*PreparedStatement, error) {
 	log.VEventf(session.Ctx(), 2, "preparing: %s", query)
 	var p parser.Parser
 	stmts, err := p.Parse(query, parser.Syntax(session.Syntax))
@@ -422,6 +422,13 @@ func (e *Executor) Prepare(
 	protoTS, err := isAsOf(&session.planner, stmt, e.cfg.Clock.Now())
 	if err != nil {
 		return nil, err
+	}
+
+	prepared := &PreparedStatement{
+		Query:       query,
+		Type:        stmt.StatementType(),
+		SQLTypes:    pinfo,
+		portalNames: make(map[string]struct{}),
 	}
 
 	session.planner.resetForBatch(e)
@@ -452,7 +459,7 @@ func (e *Executor) Prepare(
 		return nil, err
 	}
 	if plan == nil {
-		return nil, nil
+		return prepared, nil
 	}
 	defer plan.Close()
 	cols := plan.Columns()
@@ -461,7 +468,8 @@ func (e *Executor) Prepare(
 			return nil, err
 		}
 	}
-	return cols, nil
+	prepared.Columns = cols
+	return prepared, nil
 }
 
 // ExecuteStatements executes the given statement(s) and returns a response.

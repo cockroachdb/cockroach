@@ -123,6 +123,19 @@ public class main {
 		stmt.setObject(3, new java.sql.Date(System.currentTimeMillis()));
 
 		stmt.executeUpdate();
+
+		stmt = conn.prepareStatement("CREATE TABLE empty()");
+		res = stmt.executeUpdate();
+		if (res != 0) {
+		    throw new Exception("unexpected: CREATE TABLE reports " + res + " rows changed, expecting 0");
+		}
+
+		stmt = conn.prepareStatement("SELECT * from empty");
+		rs = stmt.executeQuery();
+		int nCols = rs.getMetaData().getColumnCount();
+		if (nCols != 0) {
+		    throw new Exception("unexpected: SELECT ROW() returns " + nCols + " columns, expected 0");
+		}
 	}
 }
 EOF
