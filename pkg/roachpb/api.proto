@@ -467,8 +467,7 @@ enum PushTxnType {
   // Abort the transaction if it's abandoned, but don't attempt to mutate it
   // otherwise.
   PUSH_TOUCH = 2;
-  // Query and return the latest transaction record if available. If no record
-  // is persisted, returns a zero Pushee.
+  // Deprecated. Use QueryTxn instead.
   PUSH_QUERY = 3;
 }
 
@@ -512,6 +511,16 @@ message PushTxnRequest {
   // this to PUSH_TOUCH to determine whether the pushee can be aborted
   // due to inactivity (based on the now field).
   optional PushTxnType push_type = 6 [(gogoproto.nullable) = false];
+  // Forces the push by overriding the normal checks in PushTxn to
+  // either abort or push the timestamp.
+  optional bool force = 7 [(gogoproto.nullable) = false];
+  // Specifies how to interpret priorities on a push. If false, higher
+  // priorities are allowed to push txns with lower priorities. If
+  // true, txns can only be pushed if the pusher has MaxTxnPriority
+  // or the pushee has MinTxnPriority.
+  // TODO(spencer): this field is necessary to upgrade from the old
+  // priority-based push mechanism. Remove this field at some point.
+  optional bool new_priorities = 8 [(gogoproto.nullable) = false];
 }
 
 // A PushTxnResponse is the return value from the PushTxn() method. It
@@ -526,6 +535,25 @@ message PushTxnResponse {
   // TODO(tschottdorf): Maybe this can be a TxnMeta instead; probably requires
   // factoring out the new Priority.
   optional Transaction pushee_txn = 2 [(gogoproto.nullable) = false];
+}
+
+// A QueryTxnResponse is arguments to the QueryTxn() method. It's sent
+// by transactions which are waiting to push another transaction because
+// of conflicting write intents to fetch updates to either the pusher's
+// or the pushee's transaction records.
+message QueryTxnRequest {
+  optional Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  // Transaction record to query.
+  optional storage.engine.enginepb.TxnMeta txn = 2 [(gogoproto.nullable) = false];
+}
+
+// A QueryTxnResponse is the return value from the QueryTxn() method.
+message QueryTxnResponse {
+  optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  // Contains the current state of the queried transaction.
+  optional Transaction queried_txn = 2 [(gogoproto.nullable) = false];
+  // Specifies a list of transaction IDs which are waiting on the txn.
+  repeated bytes waiting_txns = 3 [(gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID"];
 }
 
 // A ResolveIntentRequest is arguments to the ResolveIntent()
@@ -832,6 +860,7 @@ message RequestUnion {
   optional LeaseInfoRequest lease_info = 30;
   optional WriteBatchRequest write_batch = 31;
   optional ExportRequest export = 32;
+  optional QueryTxnRequest query_txn = 33;
 }
 
 // A ResponseUnion contains exactly one of the optional responses.
@@ -876,6 +905,7 @@ message ResponseUnion {
   optional LeaseInfoResponse lease_info = 30;
   optional WriteBatchResponse write_batch = 31;
   optional ExportResponse export = 32;
+  optional QueryTxnResponse query_txn = 33;
 }
 
 // A Header is attached to a BatchRequest, encapsulating routing and auxiliary
