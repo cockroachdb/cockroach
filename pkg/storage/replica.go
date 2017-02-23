@@ -730,7 +730,7 @@ func (r *Replica) cancelPendingCommandsLocked() {
 			Err:           roachpb.NewError(roachpb.NewAmbiguousResultError("removing replica")),
 			ProposalRetry: proposalRangeNoLongerExists,
 		}
-		p.finishLocked(resp)
+		p.finish(resp)
 	}
 	r.mu.proposals = map[storagebase.CmdIDKey]*ProposalData{}
 }
@@ -3134,7 +3134,7 @@ func (r *Replica) refreshProposalsLocked(refreshAtDelta int, reason refreshRaftR
 			delete(r.mu.proposals, idKey)
 			log.VEventf(p.ctx, 2, "refresh (reason: %s) returning AmbiguousResultError for command "+
 				"without MaxLeaseIndex: %v", reason, p.command)
-			p.finishLocked(proposalResult{Err: roachpb.NewError(
+			p.finish(proposalResult{Err: roachpb.NewError(
 				roachpb.NewAmbiguousResultError(
 					fmt.Sprintf("unknown status for command without MaxLeaseIndex "+
 						"at refreshProposalsLocked time (refresh reason: %s)", reason)))})
@@ -3166,9 +3166,9 @@ func (r *Replica) refreshProposalsLocked(refreshAtDelta int, reason refreshRaftR
 			delete(r.mu.proposals, idKey)
 			log.Eventf(p.ctx, "retry proposal %x: %s", p.idKey, reason)
 			if reason == reasonSnapshotApplied {
-				p.finishLocked(proposalResult{ProposalRetry: proposalAmbiguousShouldBeReevaluated})
+				p.finish(proposalResult{ProposalRetry: proposalAmbiguousShouldBeReevaluated})
 			} else {
-				p.finishLocked(proposalResult{ProposalRetry: proposalIllegalLeaseIndex})
+				p.finish(proposalResult{ProposalRetry: proposalIllegalLeaseIndex})
 			}
 			numShouldRetry++
 		} else if reason == reasonTicks && p.proposedAtTicks > r.mu.ticks-refreshAtDelta {
@@ -3216,7 +3216,7 @@ func (r *Replica) refreshProposalsLocked(refreshAtDelta int, reason refreshRaftR
 		log.Eventf(p.ctx, "re-submitting command %x to Raft: %s", p.idKey, reason)
 		if err := r.submitProposalLocked(p); err != nil {
 			delete(r.mu.proposals, p.idKey)
-			p.finishLocked(proposalResult{Err: roachpb.NewError(err), ProposalRetry: proposalErrorReproposing})
+			p.finish(proposalResult{Err: roachpb.NewError(err), ProposalRetry: proposalErrorReproposing})
 		}
 	}
 }
@@ -3547,9 +3547,7 @@ func (r *Replica) processRaftCommand(
 				// Assert against another defer trying to use the context after
 				// the client has been signaled.
 				ctx = nil
-				r.mu.Lock()
-				copyProposal.finishLocked(proposalResult{ProposalRetry: proposalIllegalLeaseIndex})
-				r.mu.Unlock()
+				copyProposal.finish(proposalResult{ProposalRetry: proposalIllegalLeaseIndex})
 			}()
 		}
 	}
@@ -3687,9 +3685,7 @@ func (r *Replica) processRaftCommand(
 	}
 
 	if proposedLocally {
-		r.mu.Lock()
-		proposal.finishLocked(response)
-		r.mu.Unlock()
+		proposal.finish(response)
 	} else if response.Err != nil {
 		log.VEventf(ctx, 1, "error executing raft command %s: %s", raftCmd.BatchRequest, response.Err)
 	}
