@@ -20,6 +20,10 @@ import (
 	"fmt"
 	"strings"
 
+	"golang.org/x/net/context"
+
+	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 )
 
@@ -30,9 +34,10 @@ const (
 	explainDebug
 	explainPlan
 	explainTrace
+	explainDistSQL
 )
 
-var explainStrings = []string{"", "debug", "plan", "trace", "types"}
+var explainStrings = []string{"", "debug", "plan", "trace", "types", "dist_sql"}
 
 // Explain executes the explain statement, providing debugging and analysis
 // info about the wrapped statement.
@@ -50,6 +55,7 @@ func (p *planner) Explain(n *parser.Explain, autoCommit bool) (planNode, error) 
 		showTypes:    false,
 		doIndent:     false,
 	}
+	omitDistSQLPlan := false
 
 	for _, opt := range n.Options {
 		newMode := explainNone
@@ -89,6 +95,10 @@ func (p *planner) Explain(n *parser.Explain, autoCommit bool) (planNode, error) 
 			normalizeExprs = false
 		case strings.EqualFold(opt, "NOOPTIMIZE"):
 			optimized = false
+		case strings.EqualFold(opt, "DIST_SQL"):
+			mode = explainDistSQL
+		case strings.EqualFold(opt, "NOPLAN"):
+			omitDistSQLPlan = true
 		default:
 			return nil, fmt.Errorf("unsupported EXPLAIN option: %s", opt)
 		}
@@ -112,6 +122,14 @@ func (p *planner) Explain(n *parser.Explain, autoCommit bool) (planNode, error) 
 	switch mode {
 	case explainDebug:
 		return &explainDebugNode{plan}, nil
+
+	case explainDistSQL:
+		return &explainDistSQLNode{
+			plan:           plan,
+			distSQLPlanner: p.distSQLPlanner,
+			txn:            p.txn,
+			omitPlan:       omitDistSQLPlan,
+		}, nil
 
 	case explainPlan:
 		// We may want to show placeholder types, so ensure no values
@@ -235,3 +253,83 @@ func (n *explainDebugNode) Values() parser.Datums {
 
 func (*explainDebugNode) MarkDebug(_ explainMode)  {}
 func (*explainDebugNode) DebugValues() debugValues { return debugValues{} }
+
+// explainDistSQLNode is a planNode that wraps a plan and returns
+// information related to running that plan under DistSQL.
+type explainDistSQLNode struct {
+	plan           planNode
+	distSQLPlanner *distSQLPlanner
+	txn            *client.Txn
+	omitPlan       bool
+
+	rowIdx int
+	rows   []parser.Datums
+}
+
+func (*explainDistSQLNode) Ordering() orderingInfo   { return orderingInfo{} }
+func (*explainDistSQLNode) MarkDebug(_ explainMode)  {}
+func (*explainDistSQLNode) DebugValues() debugValues { return debugValues{} }
+func (n *explainDistSQLNode) Close()                 {}
+
+func (*explainDistSQLNode) Columns() ResultColumns {
+	return ResultColumns{
+		{Name: "Field", Typ: parser.TypeString},
+		{Name: "Value", Typ: parser.TypeString},
+	}
+}
+
+func (n *explainDistSQLNode) Start() error {
+	// Trigger limit propagation.
+	setUnlimited(n.plan)
+
+	auto, err := n.distSQLPlanner.CheckSupport(n.plan)
+	if err != nil {
+		return err
+	}
+	autoStr := "No"
+	if auto {
+		autoStr = "Yes"
+	}
+	n.rows = []parser.Datums{{
+		parser.NewDString("Runs in auto mode"),
+		parser.NewDString(autoStr),
+	}}
+
+	planCtx := n.distSQLPlanner.NewPlanningCtx(context.TODO(), n.txn)
+	plan, err := n.distSQLPlanner.createPlanForNode(&planCtx, n.plan)
+	if err != nil {
+		return err
+	}
+	if n.omitPlan {
+		return nil
+	}
+	n.distSQLPlanner.FinalizePlan(&planCtx, &plan)
+	flows := plan.GenerateFlowSpecs(planCtx.nodeAddresses)
+	planJSON, planURL, err := distsqlrun.GeneratePlanDiagramWithURL(flows)
+	if err != nil {
+		return err
+	}
+	n.rows = append(n.rows,
+		parser.Datums{
+			parser.NewDString("Plan JSON"),
+			parser.NewDString(planJSON),
+		},
+		parser.Datums{
+			parser.NewDString("Plan URL"),
+			parser.NewDString(planURL.String()),
+		},
+	)
+	return nil
+}
+
+func (n *explainDistSQLNode) Next() (bool, error) {
+	if n.rowIdx >= len(n.rows) {
+		return false, nil
+	}
+	n.rowIdx++
+	return true, nil
+}
+
+func (n *explainDistSQLNode) Values() parser.Datums {
+	return n.rows[n.rowIdx-1]
+}
