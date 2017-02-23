@@ -238,7 +238,7 @@ func (dsp *distSQLPlanner) checkSupportForNode(node planNode) (distRecommendatio
 		// If either the left or the right side can benefit from distribution, we
 		// should distribute.
 		rec := recLeft.compose(recRight)
-		// If we can do a hash join, we should distribute.
+		// If we can do a hash join, we distribute if possible.
 		if len(n.pred.leftEqualityIndices) > 0 {
 			rec = rec.compose(shouldDistribute)
 		}
@@ -288,7 +288,12 @@ func (dsp *distSQLPlanner) checkSupportForNode(node planNode) (distRecommendatio
 				}
 			}
 		}
-		return dsp.checkSupportForNode(n.plan)
+		rec, err := dsp.checkSupportForNode(n.plan)
+		if err != nil {
+			return 0, err
+		}
+		// Distribute aggregations if possible.
+		return rec.compose(shouldDistribute), nil
 
 	case *limitNode:
 		if err := dsp.checkExpr(n.countExpr); err != nil {
