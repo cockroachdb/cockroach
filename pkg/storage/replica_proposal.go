@@ -506,7 +506,7 @@ func (r *Replica) handleReplicatedEvalResult(
 	if rResult.State.LeaseAppliedIndex != 0 {
 		r.mu.state.LeaseAppliedIndex = rResult.State.LeaseAppliedIndex
 	}
-	needsSplitBySize := r.needsSplitBySizeLocked()
+	needsSplitBySize := r.needsSplitBySizeRLocked()
 	r.mu.Unlock()
 
 	r.store.metrics.addMVCCStats(rResult.Delta)

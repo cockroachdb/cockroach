@@ -466,9 +466,9 @@ func evalBeginTransaction(
 		}
 	}
 
-	r.mu.Lock()
+	r.mu.RLock()
 	threshold := r.mu.state.TxnSpanGCThreshold
-	r.mu.Unlock()
+	r.mu.RUnlock()
 
 	// Disallow creation of a transaction record if it's at a timestamp before
 	// the TxnSpanGCThreshold, as in that case our transaction may already have
@@ -1206,14 +1206,14 @@ func evalGC(
 		return EvalResult{}, err
 	}
 
-	r.mu.Lock()
+	r.mu.RLock()
 	newThreshold := r.mu.state.GCThreshold
 	newTxnSpanGCThreshold := r.mu.state.TxnSpanGCThreshold
 	// Protect against multiple GC requests arriving out of order; we track
 	// the maximum timestamps.
 	newThreshold.Forward(args.Threshold)
 	newTxnSpanGCThreshold.Forward(args.TxnSpanGCThreshold)
-	r.mu.Unlock()
+	r.mu.RUnlock()
 
 	var pd EvalResult
 	pd.Replicated.State.GCThreshold = newThreshold
@@ -1937,9 +1937,9 @@ func (r *Replica) getChecksum(ctx context.Context, id uuid.UUID) (replicaChecksu
 	if log.V(1) {
 		log.Infof(ctx, "waited for compute checksum for %s", timeutil.Since(now))
 	}
-	r.mu.Lock()
+	r.mu.RLock()
 	c, ok = r.mu.checksums[id]
-	r.mu.Unlock()
+	r.mu.RUnlock()
 	if !ok {
 		return replicaChecksum{}, errors.Errorf("no map entry for checksum (ID = %s)", id)
 	}

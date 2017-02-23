@@ -104,7 +104,7 @@ func TestSkipLargeReplicaSnapshot(t *testing.T) {
 		t.Fatalf(
 			"snapshot of a very large range (%d / %d, needsSplit: %v, exceeds snap limit: %v) should fail but got %v",
 			after, rep.GetMaxBytes(),
-			rep.needsSplitBySize(), rep.exceedsDoubleSplitSizeLocked(), err,
+			rep.needsSplitBySize(), rep.exceedsDoubleSplitSizeRLocked(), err,
 		)
 	}
 }

@@ -19,11 +19,10 @@ import (
 	"fmt"
 	"sync"
 
-	"golang.org/x/net/context"
-
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
 const rangeIDChunkSize = 1000
@@ -129,7 +128,7 @@ type raftScheduler struct {
 	numWorkers int
 
 	mu struct {
-		timedMutex
+		syncutil.Mutex
 		cond    *sync.Cond
 		queue   rangeIDQueue
 		state   map[roachpb.RangeID]raftScheduleState
@@ -146,15 +145,7 @@ func newRaftScheduler(
 		processor:  processor,
 		numWorkers: numWorkers,
 	}
-	muLogger := thresholdLogger(
-		ambient.AnnotateCtx(context.Background()),
-		defaultReplicaMuWarnThreshold,
-		func(ctx context.Context, msg string, args ...interface{}) {
-			log.Warningf(ctx, "raftScheduler.mu: "+msg, args...)
-		},
-	)
-	s.mu.timedMutex = makeTimedMutex(muLogger)
-	s.mu.cond = sync.NewCond(&s.mu.timedMutex)
+	s.mu.cond = sync.NewCond(&s.mu.Mutex)
 	s.mu.state = make(map[roachpb.RangeID]raftScheduleState)
 	return s
 }
