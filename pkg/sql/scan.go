@@ -246,6 +246,7 @@ func (n *scanNode) initTable(
 	desc *sqlbase.TableDescriptor,
 	indexHints *parser.IndexHints,
 	scanVisibility scanVisibility,
+	wantedColumns []parser.ColumnID,
 ) error {
 	n.desc = *desc
 
@@ -267,25 +268,79 @@ func (n *scanNode) initTable(
 				}
 			}
 			if n.specifiedIndex == nil {
-				return fmt.Errorf("index \"%s\" not found", indexName)
+				return errors.Errorf("index \"%s\" not found", indexName)
 			}
 		}
 	}
 	n.noIndexJoin = (indexHints != nil && indexHints.NoIndexJoin)
-	n.initDescDefaults(scanVisibility)
-	return nil
+	return n.initDescDefaults(scanVisibility, wantedColumns)
+}
+
+// Either pick all columns or just those selected.
+func filterColumns(
+	dst []sqlbase.ColumnDescriptor, wantedColumns []parser.ColumnID, src []sqlbase.ColumnDescriptor,
+) ([]sqlbase.ColumnDescriptor, error) {
+	if wantedColumns == nil {
+		dst = append(dst, src...)
+	} else {
+		for _, wc := range wantedColumns {
+			found := false
+			for _, c := range src {
+				if c.ID == sqlbase.ColumnID(wc) {
+					dst = append(dst, c)
+					found = true
+					break
+				}
+			}
+			if !found {
+				return nil, errors.Errorf("column %d does not exist", wc)
+			}
+		}
+		dst = appendUnselectedColumns(dst, wantedColumns, src)
+	}
+	return dst, nil
+}
+
+// appendUnselectedColumns adds into dst all the column descriptors
+// from src that are not already listed in wantedColumns. The added
+// columns, if any, are marked "hidden".
+func appendUnselectedColumns(
+	dst []sqlbase.ColumnDescriptor, wantedColumns []parser.ColumnID, src []sqlbase.ColumnDescriptor,
+) []sqlbase.ColumnDescriptor {
+	for _, c := range src {
+		found := false
+		for _, wc := range wantedColumns {
+			if sqlbase.ColumnID(wc) == c.ID {
+				found = true
+				break
+			}
+		}
+		if !found {
+			col := c
+			col.Hidden = true
+			dst = append(dst, col)
+		}
+	}
+	return dst
 }
 
 // Initializes the column structures.
-func (n *scanNode) initDescDefaults(scanVisibility scanVisibility) {
+// An error may be returned only if wantedColumns is set.
+func (n *scanNode) initDescDefaults(
+	scanVisibility scanVisibility, wantedColumns []parser.ColumnID,
+) error {
 	n.scanVisibility = scanVisibility
 	n.index = &n.desc.PrimaryIndex
 	n.cols = make([]sqlbase.ColumnDescriptor, 0, len(n.desc.Columns)+len(n.desc.Mutations))
+	var err error
+	n.cols, err = filterColumns(n.cols, wantedColumns, n.desc.Columns)
+	if err != nil {
+		return err
+	}
 	switch scanVisibility {
 	case publicColumns:
-		n.cols = append(n.cols, n.desc.Columns...)
+		// Mutations are invisible.
 	case publicAndNonPublicColumns:
-		n.cols = append(n.cols, n.desc.Columns...)
 		for _, mutation := range n.desc.Mutations {
 			if c := mutation.GetColumn(); c != nil {
 				col := *c
@@ -307,6 +362,7 @@ func (n *scanNode) initDescDefaults(scanVisibility scanVisibility) {
 	}
 	n.row = make([]parser.Datum, len(n.cols))
 	n.filterVars = parser.MakeIndexedVarHelper(n, len(n.cols))
+	return nil
 }
 
 // initOrdering initializes the ordering info using the selected index. This
