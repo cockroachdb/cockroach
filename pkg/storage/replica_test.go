@@ -1070,10 +1070,10 @@ func TestReplicaTSCacheLowWaterOnLease(t *testing.T) {
 			t.Fatalf("%d: unexpected error %v", i, err)
 		}
 		// Verify expected low water mark.
-		tc.repl.mu.Lock()
-		rTS, _, _ := tc.repl.mu.tsCache.GetMaxRead(roachpb.Key("a"), nil)
-		wTS, _, _ := tc.repl.mu.tsCache.GetMaxWrite(roachpb.Key("a"), nil)
-		tc.repl.mu.Unlock()
+		tc.repl.tsCacheMu.Lock()
+		rTS, _, _ := tc.repl.tsCacheMu.cache.GetMaxRead(roachpb.Key("a"), nil)
+		wTS, _, _ := tc.repl.tsCacheMu.cache.GetMaxWrite(roachpb.Key("a"), nil)
+		tc.repl.tsCacheMu.Unlock()
 
 		if test.expLowWater == 0 {
 			continue
@@ -1799,7 +1799,7 @@ func TestLeaseConcurrent(t *testing.T) {
 						// otherwise its context (and tracing span) may be used after the
 						// client cleaned up.
 						delete(tc.repl.mu.proposals, proposal.idKey)
-						proposal.finishLocked(proposalResult{Err: roachpb.NewErrorf(origMsg)})
+						proposal.finish(proposalResult{Err: roachpb.NewErrorf(origMsg)})
 						return
 					}
 					if err := defaultSubmitProposalLocked(tc.repl, proposal); err != nil {
@@ -1887,28 +1887,28 @@ func TestReplicaUpdateTSCache(t *testing.T) {
 		t.Error(pErr)
 	}
 	// Verify the timestamp cache has rTS=1s and wTS=0s for "a".
-	tc.repl.mu.Lock()
-	defer tc.repl.mu.Unlock()
-	_, _, rOK := tc.repl.mu.tsCache.GetMaxRead(roachpb.Key("a"), nil)
-	_, _, wOK := tc.repl.mu.tsCache.GetMaxWrite(roachpb.Key("a"), nil)
+	tc.repl.tsCacheMu.Lock()
+	defer tc.repl.tsCacheMu.Unlock()
+	_, _, rOK := tc.repl.tsCacheMu.cache.GetMaxRead(roachpb.Key("a"), nil)
+	_, _, wOK := tc.repl.tsCacheMu.cache.GetMaxWrite(roachpb.Key("a"), nil)
 	if rOK || wOK {
 		t.Errorf("expected rOK=false and wOK=false; rOK=%t, wOK=%t", rOK, wOK)
 	}
-	tc.repl.mu.tsCache.ExpandRequests(hlc.Timestamp{})
-	rTS, _, rOK := tc.repl.mu.tsCache.GetMaxRead(roachpb.Key("a"), nil)
-	wTS, _, wOK := tc.repl.mu.tsCache.GetMaxWrite(roachpb.Key("a"), nil)
+	tc.repl.tsCacheMu.cache.ExpandRequests(hlc.Timestamp{})
+	rTS, _, rOK := tc.repl.tsCacheMu.cache.GetMaxRead(roachpb.Key("a"), nil)
+	wTS, _, wOK := tc.repl.tsCacheMu.cache.GetMaxWrite(roachpb.Key("a"), nil)
 	if rTS.WallTime != t0.Nanoseconds() || wTS.WallTime != startNanos || !rOK || wOK {
 		t.Errorf("expected rTS=1s and wTS=0s, but got %s, %s; rOK=%t, wOK=%t", rTS, wTS, rOK, wOK)
 	}
 	// Verify the timestamp cache has rTS=0s and wTS=2s for "b".
-	rTS, _, rOK = tc.repl.mu.tsCache.GetMaxRead(roachpb.Key("b"), nil)
-	wTS, _, wOK = tc.repl.mu.tsCache.GetMaxWrite(roachpb.Key("b"), nil)
+	rTS, _, rOK = tc.repl.tsCacheMu.cache.GetMaxRead(roachpb.Key("b"), nil)
+	wTS, _, wOK = tc.repl.tsCacheMu.cache.GetMaxWrite(roachpb.Key("b"), nil)
 	if rTS.WallTime != startNanos || wTS.WallTime != t1.Nanoseconds() || rOK || !wOK {
 		t.Errorf("expected rTS=0s and wTS=2s, but got %s, %s; rOK=%t, wOK=%t", rTS, wTS, rOK, wOK)
 	}
 	// Verify another key ("c") has 0sec in timestamp cache.
-	rTS, _, rOK = tc.repl.mu.tsCache.GetMaxRead(roachpb.Key("c"), nil)
-	wTS, _, wOK = tc.repl.mu.tsCache.GetMaxWrite(roachpb.Key("c"), nil)
+	rTS, _, rOK = tc.repl.tsCacheMu.cache.GetMaxRead(roachpb.Key("c"), nil)
+	wTS, _, wOK = tc.repl.tsCacheMu.cache.GetMaxWrite(roachpb.Key("c"), nil)
 	if rTS.WallTime != startNanos || wTS.WallTime != startNanos || rOK || wOK {
 		t.Errorf("expected rTS=0s and wTS=0s, but got %s %s; rOK=%t, wOK=%t", rTS, wTS, rOK, wOK)
 	}
