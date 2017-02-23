@@ -348,7 +348,20 @@ func (p *planner) getDataSource(
 
 	case *parser.AliasedTableExpr:
 		// Alias clause: source AS alias(cols...)
-		src, err := p.getDataSource(t.Expr, t.Hints, scanVisibility)
+
+		var src planDataSource
+		var err error
+
+		if t.Hints != nil {
+			hints = t.Hints
+		}
+
+		if tref, ok := t.Expr.(*parser.TableRef); ok {
+			// Special case: operand is a numeric table reference.
+			src, err = p.getTableScanByRef(tref, hints, scanVisibility)
+		} else {
+			src, err = p.getDataSource(t.Expr, hints, scanVisibility)
+		}
 		if err != nil {
 			return src, err
 		}
@@ -417,6 +430,30 @@ func (p *planner) QualifyWithDatabase(t *parser.NormalizableTableName) (*parser.
 	return tn, nil
 }
 
+func (p *planner) getTableScanByRef(
+	tref *parser.TableRef, hints *parser.IndexHints, scanVisibility scanVisibility,
+) (planDataSource, error) {
+	var desc *sqlbase.TableDescriptor
+	var err error
+
+	tableID := sqlbase.ID(tref.TableID)
+	if p.avoidCachedDescriptors {
+		desc, err = sqlbase.GetTableDescFromID(p.txn, tableID)
+	} else {
+		desc, err = p.getTableLeaseByID(tableID)
+	}
+	if err != nil {
+		return planDataSource{}, err
+	}
+
+	tn := parser.TableName{
+		TableName:               parser.Name(desc.Name),
+		DBNameOriginallyOmitted: true,
+	}
+
+	return p.getPlanForDesc(desc, &tn, hints, scanVisibility, tref.Columns)
+}
+
 // getTableScanOrViewPlan builds a planDataSource from a single data source
 // clause (either a table or a view) in a SelectClause, expanding views out
 // into subqueries.
@@ -436,7 +473,21 @@ func (p *planner) getTableScanOrViewPlan(
 		return planDataSource{}, err
 	}
 
+	return p.getPlanForDesc(desc, tn, hints, scanVisibility, nil)
+}
+
+func (p *planner) getPlanForDesc(
+	desc *sqlbase.TableDescriptor,
+	tn *parser.TableName,
+	hints *parser.IndexHints,
+	scanVisibility scanVisibility,
+	wantedColumns []parser.ColumnID,
+) (planDataSource, error) {
 	if desc.IsView() {
+		if wantedColumns != nil {
+			return planDataSource{},
+				errors.Errorf("cannot specify an explicit column list when accessing a view by reference")
+		}
 		return p.getViewPlan(tn, desc)
 	} else if !desc.IsTable() {
 		return planDataSource{},
@@ -445,7 +496,7 @@ func (p *planner) getTableScanOrViewPlan(
 
 	// This name designates a real table.
 	scan := p.Scan()
-	if err := scan.initTable(p, desc, hints, scanVisibility); err != nil {
+	if err := scan.initTable(p, desc, hints, scanVisibility, wantedColumns); err != nil {
 		return planDataSource{}, err
 	}
 
