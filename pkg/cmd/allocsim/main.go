@@ -221,7 +221,7 @@ func (a *allocSim) rangeInfo() (total int, replicas, leases, leaseTransfers []in
 		go func(i int) {
 			defer wg.Done()
 			resp, err := a.Status[i].Metrics(context.Background(), &serverpb.MetricsRequest{
-				NodeId: fmt.Sprintf("%d", i+1),
+				NodeId: fmt.Sprintf("local"),
 			})
 			if err != nil {
 				log.Fatal(context.Background(), err)
