@@ -7945,6 +7945,7 @@ sqldefault:
 		sqlDollar = sqlS[sqlpt-5 : sqlpt+1]
 		//line sql.y:2895
 		{
+			/* SKIP DOC */
 			id, err := sqlDollar[4].union.numVal().AsInt64()
 			if err != nil {
 				sqllex.Error(err.Error())
@@ -8020,6 +8021,7 @@ sqldefault:
 		sqlDollar = sqlS[sqlpt-7 : sqlpt+1]
 		//line sql.y:2957
 		{
+			/* SKIP DOC */
 			id, err := sqlDollar[2].union.numVal().AsInt64()
 			if err != nil {
 				sqllex.Error(err.Error())
@@ -9391,6 +9393,7 @@ sqldefault:
 		sqlDollar = sqlS[sqlpt-2 : sqlpt+1]
 		//line sql.y:4072
 		{
+			/* SKIP DOC */
 			colNum, err := sqlDollar[2].union.numVal().AsInt64()
 			if err != nil {
 				sqllex.Error(err.Error())
