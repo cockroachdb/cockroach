@@ -366,7 +366,7 @@ func GeneratePlanDiagramWithURL(flows []FlowSpec, nodeNames []string) (string, u
 	if err := encoder.Close(); err != nil {
 		return "", url.URL{}, err
 	}
-	// TODO(radu): using raduberinde.github.io is temporary.
+	// TODO(radu): using raduberinde.github.io is temporary; #13758.
 	url := url.URL{
 		Scheme:   "https",
 		Host:     "raduberinde.github.io",
