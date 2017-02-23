@@ -262,12 +262,13 @@ func (ptq *pushTxnQueue) MaybeWait(
 	// If there's no pending queue for this txn, return not pushed. If
 	// already pushed, return push success.
 	pending, ok := ptq.mu.txns[*req.PusheeTxn.ID]
-	if !ok || (ok && isPushed(req, pending.txn.Load().(*roachpb.Transaction))) {
-		defer ptq.mu.Unlock()
-		if !ok {
-			return nil, nil
-		}
-		return createPushTxnResponse(pending.txn.Load().(*roachpb.Transaction)), nil
+	if !ok {
+		ptq.mu.Unlock()
+		return nil, nil
+	}
+	if txn := pending.txn.Load().(*roachpb.Transaction); isPushed(req, txn) {
+		ptq.mu.Unlock()
+		return createPushTxnResponse(txn), nil
 	}
 
 	push := &waitingPush{
