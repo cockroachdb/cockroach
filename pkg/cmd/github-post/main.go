@@ -44,6 +44,7 @@ const pkgEnv = "PKG"
 const propEvalKVEnv = "COCKROACH_PROPOSER_EVALUATED_KV"
 const tagsEnv = "TAGS"
 const goFlagsEnv = "GOFLAGS"
+const cockroachPkgPrefix = "github.com/cockroachdb/cockroach/pkg/"
 
 var issueLabels = []string{"Robot", "test-failure"}
 
@@ -138,7 +139,8 @@ Parameters:
 Stress build found a failed test: %s`
 
 	newIssueRequest := func(packageName, testName, message string) *github.IssueRequest {
-		title := fmt.Sprintf("%s: %s failed under stress", packageName, testName)
+		title := fmt.Sprintf("%s: %s failed under stress",
+			strings.TrimPrefix(packageName, cockroachPkgPrefix), testName)
 		body := fmt.Sprintf(bodyTemplate, sha, parametersStr, u.String()) + "\n\n```\n%s\n```"
 		// We insert a raw "%s" above so we can figure out the length of the
 		// body so far, without the actual error text. We need this length so we
