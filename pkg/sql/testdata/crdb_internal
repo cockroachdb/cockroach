@@ -1,0 +1,39 @@
+query error user root does not have DROP privilege on database crdb_internal
+ALTER DATABASE crdb_internal RENAME TO not_crdb_internal
+
+statement error user root does not have CREATE privilege on database crdb_internal
+CREATE TABLE crdb_internal.t (x INT)
+
+query error user root does not have DROP privilege on database crdb_internal
+DROP DATABASE crdb_internal
+
+statement ok
+CREATE DATABASE testdb; CREATE TABLE testdb.foo(x INT)
+
+query TIT
+SELECT t.name, t.version, t.state FROM crdb_internal.tables AS t JOIN system.namespace AS n ON (n.id = t.parent_id and n.name = 'testdb');
+----
+foo 1 PUBLIC
+
+# Ensure there is a lease taken on foo.
+query I
+SELECT * FROM testdb.foo
+----
+
+# Check the lease.
+query T
+SELECT l.name FROM crdb_internal.leases AS l JOIN system.namespace AS n ON (n.id = l.table_id and n.name = 'foo');
+----
+foo
+
+# We merely check the column list for schema_changes.
+query IITTITTT colnames
+SELECT * FROM crdb_internal.schema_changes
+----
+TABLE_ID PARENT_ID NAME TYPE TARGET_ID TARGET_NAME STATE DIRECTION
+
+query IITITRTTTT colnames
+SELECT * FROM crdb_internal.tables WHERE NAME = 'namespace'
+----
+TABLE_ID  PARENT_ID  NAME       VERSION  MOD_TIME                         MOD_TIME_LOGICAL  FORMAT_VERSION            STATE   SC_LEASE_NODE_ID  SC_LEASE_EXPIRATION_TIME
+2         1          namespace  1        1970-01-01 00:00:00 +0000 +0000  0.0000000000      InterleavedFormatVersion  PUBLIC  NULL              NULL

@@ -15,6 +15,7 @@ SHOW DATABASES
 ----
 Database
 a
+crdb_internal
 information_schema
 pg_catalog
 system
@@ -76,6 +77,7 @@ b4
 b5
 b6
 c
+crdb_internal
 information_schema
 pg_catalog
 system
@@ -118,6 +120,7 @@ SHOW DATABASES
 Database
 a
 c
+crdb_internal
 information_schema
 pg_catalog
 system
