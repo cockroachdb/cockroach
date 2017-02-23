@@ -2278,9 +2278,12 @@ func (r *Replica) requestToProposal(
 // is to be replicated through Raft. The return value is ready to be inserted
 // into Replica's proposal map and subsequently passed to submitProposalLocked.
 //
-// If an *Error is returned, the proposal should fail fast, i.e. be sent
-// directly back to the client without going through Raft, but while still
-// handling LocalEvalResult.
+// If an *Error is returned, the proposal should fail fast, i.e. be
+// sent directly back to the client without going through Raft, but
+// while still handling LocalEvalResult. Note that even if this method
+// returns a nil error, the command could still return an error to the
+// client, but only after going through raft (e.g. to lay down
+// intents).
 //
 // Replica.mu must not be held.
 func (r *Replica) evaluateProposal(
@@ -2780,9 +2783,9 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 				}
 			}
 
-			// Discard errors from processRaftCommand. The error has been sent
-			// to the client that originated it, where it will be handled.
-			_ = r.processRaftCommand(ctx, commandID, e.Index, command)
+			if changedRepl := r.processRaftCommand(ctx, commandID, e.Index, command); changedRepl {
+				log.Fatalf(ctx, "unexpected replication change from command %s", &command)
+			}
 			r.store.metrics.RaftCommandsApplied.Inc(1)
 			stats.processed++
 
@@ -2799,10 +2802,10 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 			if err := command.Unmarshal(ccCtx.Payload); err != nil {
 				return stats, err
 			}
-			if pErr := r.processRaftCommand(
+			if changedRepl := r.processRaftCommand(
 				ctx, storagebase.CmdIDKey(ccCtx.CommandID), e.Index, command,
-			); pErr != nil {
-				// If processRaftCommand failed, tell raft that the config change was aborted.
+			); !changedRepl {
+				// If we did not apply the config change, tell raft that the config change was aborted.
 				cc = raftpb.ConfChange{}
 			}
 			stats.processed++
@@ -3379,20 +3382,22 @@ func (r *Replica) reportSnapshotStatus(to uint64, snapErr error) {
 	}
 }
 
-// processRaftCommand processes a raft command by unpacking the command
-// struct to get args and reply and then applying the command to the
-// state machine via applyRaftCommand(). The error result is sent on
-// the command's done channel, if available.
-// As a special case, the zero idKey signifies an empty Raft command,
-// which will apply as a no-op (without accessing raftCmd, via an error),
-// updating only the applied index.
+// processRaftCommand processes a raft command by unpacking the
+// command struct to get args and reply and then applying the command
+// to the state machine via applyRaftCommand(). The result is sent on
+// the command's done channel, if available. As a special case, the
+// zero idKey signifies an empty Raft command, which will apply as a
+// no-op (without accessing raftCmd), updating only the applied index.
+//
+// This method returns true if the command successfully applied a
+// replica change.
 //
 // TODO(tschottdorf): once we properly check leases and lease requests etc,
 // make sure that the error returned from this method is always populated in
 // those cases, as one of the callers uses it to abort replica changes.
 func (r *Replica) processRaftCommand(
 	ctx context.Context, idKey storagebase.CmdIDKey, index uint64, raftCmd storagebase.RaftCommand,
-) (pErr *roachpb.Error) {
+) bool {
 	if index == 0 {
 		log.Fatalf(ctx, "processRaftCommand requires a non-zero index")
 	}
@@ -3575,15 +3580,15 @@ func (r *Replica) processRaftCommand(
 		log.Event(ctx, "applying command")
 
 		if splitMergeUnlock := r.maybeAcquireSplitMergeLock(raftCmd); splitMergeUnlock != nil {
-			// Close over pErr to capture its value at execution time.
+			// Close over raftCmd to capture its value at execution time; we clear
+			// ReplicatedEvalResult on certain errors.
 			defer func() {
-				splitMergeUnlock(pErr)
+				splitMergeUnlock(*raftCmd.ReplicatedEvalResult)
 			}()
 		}
 	}
 
 	var response proposalResult
-	var returnPErr *roachpb.Error
 	var writeBatch *storagebase.WriteBatch
 	{
 		if raftCmd.ReplicatedEvalResult == nil && forcedErr == nil {
@@ -3675,9 +3680,6 @@ func (r *Replica) processRaftCommand(
 			}
 			response.Intents = proposal.Local.detachIntents()
 			lResult = proposal.Local
-			returnPErr = response.Err
-		} else {
-			returnPErr = pErr
 		}
 
 		// Handle the EvalResult, executing any side effects of the last
@@ -3696,12 +3698,17 @@ func (r *Replica) processRaftCommand(
 		log.VEventf(ctx, 1, "error executing raft command %s: %s", raftCmd.BatchRequest, response.Err)
 	}
 
-	return returnPErr
+	return raftCmd.ReplicatedEvalResult.ChangeReplicas != nil
 }
 
+// maybeAcquireSplitMergeLock examines the gven raftCmd (which need
+// not be evaluated yet) and acquires the split or merge lock if
+// necessary (in addition to other preparation). It returns a function
+// which will release any lock acquired (or nil), and use the result of
+// applying the command to perform any necessary cleanup.
 func (r *Replica) maybeAcquireSplitMergeLock(
 	raftCmd storagebase.RaftCommand,
-) func(pErr *roachpb.Error) {
+) func(storagebase.ReplicatedEvalResult) {
 	var split *storagebase.Split
 	var merge *storagebase.Merge
 	if raftCmd.ReplicatedEvalResult != nil {
@@ -3732,7 +3739,9 @@ func (r *Replica) maybeAcquireSplitMergeLock(
 	return nil
 }
 
-func (r *Replica) acquireSplitLock(split *roachpb.SplitTrigger) func(pErr *roachpb.Error) {
+func (r *Replica) acquireSplitLock(
+	split *roachpb.SplitTrigger,
+) func(storagebase.ReplicatedEvalResult) {
 	rightRng, created, err := r.store.getOrCreateReplica(split.RightDesc.RangeID, 0, nil)
 	if err != nil {
 		return nil
@@ -3749,8 +3758,8 @@ func (r *Replica) acquireSplitLock(split *roachpb.SplitTrigger) func(pErr *roach
 	// commands that have reproposals interacting with retries (i.e. we don't
 	// treat splits differently).
 
-	return func(pErr *roachpb.Error) {
-		if pErr != nil && created && !rightRng.IsInitialized() {
+	return func(rResult storagebase.ReplicatedEvalResult) {
+		if rResult.Split == nil && created && !rightRng.IsInitialized() {
 			// An error occurred during processing of the split and the RHS is still
 			// uninitialized. Mark the RHS destroyed and remove it from the replica's
 			// map as it is likely detritus. One reason this can occur is when
@@ -3775,7 +3784,9 @@ func (r *Replica) acquireSplitLock(split *roachpb.SplitTrigger) func(pErr *roach
 	}
 }
 
-func (r *Replica) acquireMergeLock(merge *roachpb.MergeTrigger) func(pErr *roachpb.Error) {
+func (r *Replica) acquireMergeLock(
+	merge *roachpb.MergeTrigger,
+) func(storagebase.ReplicatedEvalResult) {
 	rightRng, err := r.store.GetReplica(merge.RightDesc.RangeID)
 	if err != nil {
 		ctx := r.AnnotateCtx(context.TODO())
@@ -3785,7 +3796,7 @@ func (r *Replica) acquireMergeLock(merge *roachpb.MergeTrigger) func(pErr *roach
 	// TODO(peter,tschottdorf): This is necessary but likely not sufficient. The
 	// right hand side of the merge can still race on reads. See #8630.
 	rightRng.raftMu.Lock()
-	return func(_ *roachpb.Error) {
+	return func(_ storagebase.ReplicatedEvalResult) {
 		rightRng.raftMu.Unlock()
 	}
 }
