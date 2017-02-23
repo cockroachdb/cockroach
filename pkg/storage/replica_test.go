@@ -1798,7 +1798,7 @@ func TestLeaseConcurrent(t *testing.T) {
 						// otherwise its context (and tracing span) may be used after the
 						// client cleaned up.
 						delete(tc.repl.mu.proposals, proposal.idKey)
-						proposal.finishLocked(proposalResult{Err: roachpb.NewErrorf(origMsg)})
+						proposal.finish(proposalResult{Err: roachpb.NewErrorf(origMsg)})
 						return
 					}
 					if err := defaultSubmitProposalLocked(tc.repl, proposal); err != nil {
