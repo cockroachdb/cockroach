@@ -49,7 +49,7 @@ func TestRunGH(t *testing.T) {
 		teamcityServerURLEnv: serverURL,
 		teamcityBuildIDEnv:   strconv.Itoa(buildID),
 
-		pkgEnv:        envPkg,
+		pkgEnv:        cockroachPkgPrefix + envPkg,
 		propEvalKVEnv: envPropEvalKV,
 		tagsEnv:       envTags,
 		goFlagsEnv:    envGoFlags,
