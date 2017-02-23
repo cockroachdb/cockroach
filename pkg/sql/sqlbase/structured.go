@@ -44,7 +44,7 @@ type ColumnID parser.ColumnID
 type FamilyID uint32
 
 // IndexID is a custom type for IndexDescriptor IDs.
-type IndexID uint32
+type IndexID parser.IndexID
 
 // DescriptorVersion is a custom type for TableDescriptor Versions.
 type DescriptorVersion uint32
