@@ -408,7 +408,7 @@ x  x  y  b  d  e
 
 # Check EXPLAIN.
 query ITTT
-EXPLAIN(EXPRS) SELECT * FROM onecolumn JOIN twocolumn USING(x)
+EXPLAIN (EXPRS) SELECT * FROM onecolumn JOIN twocolumn USING(x)
 ----
 0  render
 0                 render 0  x
@@ -425,7 +425,7 @@ EXPLAIN(EXPRS) SELECT * FROM onecolumn JOIN twocolumn USING(x)
 
 # Check EXPLAIN.
 query ITTT
-EXPLAIN(EXPRS) SELECT * FROM twocolumn AS a JOIN twocolumn AS b ON a.x = b.y
+EXPLAIN (EXPRS) SELECT * FROM twocolumn AS a JOIN twocolumn AS b ON a.x = b.y
 ----
 0  render
 0                 render 0  x
@@ -444,7 +444,7 @@ EXPLAIN(EXPRS) SELECT * FROM twocolumn AS a JOIN twocolumn AS b ON a.x = b.y
 
 # Check EXPLAIN.
 query ITTT
-EXPLAIN(EXPRS) SELECT * FROM twocolumn AS a JOIN twocolumn AS b ON a.x = 44
+EXPLAIN (EXPRS) SELECT * FROM twocolumn AS a JOIN twocolumn AS b ON a.x = 44
 ----
 0  render
 0                 render 0  x
@@ -463,7 +463,7 @@ EXPLAIN(EXPRS) SELECT * FROM twocolumn AS a JOIN twocolumn AS b ON a.x = 44
 
 # Check EXPLAIN.
 query ITTT
-EXPLAIN(EXPRS) SELECT * FROM onecolumn AS a JOIN twocolumn AS b ON ((a.x)) = ((b.y))
+EXPLAIN (EXPRS) SELECT * FROM onecolumn AS a JOIN twocolumn AS b ON ((a.x)) = ((b.y))
 ----
 0  render
 0                 render 0  x
@@ -481,7 +481,7 @@ EXPLAIN(EXPRS) SELECT * FROM onecolumn AS a JOIN twocolumn AS b ON ((a.x)) = ((b
 
 # Check EXPLAIN.
 query ITTT
-EXPLAIN(EXPRS) SELECT * FROM onecolumn JOIN twocolumn ON onecolumn.x = twocolumn.y
+EXPLAIN (EXPRS) SELECT * FROM onecolumn JOIN twocolumn ON onecolumn.x = twocolumn.y
 ----
 0  render
 0                 render 0  x
@@ -499,7 +499,7 @@ EXPLAIN(EXPRS) SELECT * FROM onecolumn JOIN twocolumn ON onecolumn.x = twocolumn
 
 
 query ITTT
-EXPLAIN(EXPRS) SELECT * FROM (onecolumn CROSS JOIN twocolumn JOIN onecolumn AS a(b) ON a.b=twocolumn.x JOIN twocolumn AS c(d,e) ON a.b=c.d AND c.d=onecolumn.x) LIMIT 1
+EXPLAIN (EXPRS) SELECT * FROM (onecolumn CROSS JOIN twocolumn JOIN onecolumn AS a(b) ON a.b=twocolumn.x JOIN twocolumn AS c(d,e) ON a.b=c.d AND c.d=onecolumn.x) LIMIT 1
 ----
 0  limit
 0                 count     1

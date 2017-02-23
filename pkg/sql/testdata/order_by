@@ -292,7 +292,7 @@ EXPLAIN SELECT * FROM t ORDER BY length('abc')
 
 # Check that the sort key reuses the existing render.
 query ITTTTT
-EXPLAIN(METADATA) SELECT b+2 FROM t ORDER BY b+2
+EXPLAIN (METADATA) SELECT b+2 FROM t ORDER BY b+2
 ----
 0  sort                      ("b + 2")                    +"b + 2"
 0          order  +"b + 2"
@@ -303,7 +303,7 @@ EXPLAIN(METADATA) SELECT b+2 FROM t ORDER BY b+2
 
 # Check that the sort picks up a renamed render properly.
 query ITTTTT
-EXPLAIN(METADATA) SELECT b+2 AS y FROM t ORDER BY y
+EXPLAIN (METADATA) SELECT b+2 AS y FROM t ORDER BY y
 ----
 0  sort                      (y)                          +y
 0          order  +y
@@ -314,7 +314,7 @@ EXPLAIN(METADATA) SELECT b+2 AS y FROM t ORDER BY y
 
 # Check that the sort reuses a render behind a rename properly.
 query ITTTTT
-EXPLAIN(METADATA) SELECT b+2 AS y FROM t ORDER BY b+2
+EXPLAIN (METADATA) SELECT b+2 AS y FROM t ORDER BY b+2
 ----
 0  sort                      (y)                          +y
 0          order  +y
@@ -420,7 +420,7 @@ EXPLAIN SELECT a, b FROM abc ORDER BY b, c
 2          spans  ALL
 
 query ITTTTT
-EXPLAIN(VERBOSE) SELECT a, b FROM abc ORDER BY b, c
+EXPLAIN (VERBOSE) SELECT a, b FROM abc ORDER BY b, c
 ----
 0  nosort                        (a, b)                 +b
 0          order     +b,+c
@@ -606,7 +606,7 @@ NaN
 1
 
 query ITTTTT
-EXPLAIN(METADATA) SELECT * FROM (SELECT * FROM (VALUES ('a'), ('b'), ('c')) AS c(x) ORDER BY x)
+EXPLAIN (METADATA) SELECT * FROM (SELECT * FROM (VALUES ('a'), ('b'), ('c')) AS c(x) ORDER BY x)
 ----
 0  sort                             (x)        +x
 0          order  +x
@@ -631,7 +631,7 @@ EXPLAIN SELECT * FROM (VALUES ('a'), ('b'), ('c')) WITH ORDINALITY ORDER BY ordi
 2              size   1 column, 3 rows
 
 query ITTTTT
-EXPLAIN(METADATA) SELECT * FROM (SELECT * FROM (VALUES ('a'), ('b'), ('c')) AS c(x)) WITH ORDINALITY
+EXPLAIN (METADATA) SELECT * FROM (SELECT * FROM (VALUES ('a'), ('b'), ('c')) AS c(x)) WITH ORDINALITY
 ----
 0  ordinality                          (x, ordinality)  +ordinality,unique
 1  render                              (x)
@@ -639,7 +639,7 @@ EXPLAIN(METADATA) SELECT * FROM (SELECT * FROM (VALUES ('a'), ('b'), ('c')) AS c
 2              size  1 column, 3 rows
 
 query ITTTTT
-EXPLAIN(METADATA) SELECT * FROM (SELECT * FROM (VALUES ('a'), ('b'), ('c')) AS c(x) ORDER BY x) WITH ORDINALITY
+EXPLAIN (METADATA) SELECT * FROM (SELECT * FROM (VALUES ('a'), ('b'), ('c')) AS c(x) ORDER BY x) WITH ORDINALITY
 ----
 0  ordinality                           (x, ordinality)  +x
 1  sort                                 (x)              +x

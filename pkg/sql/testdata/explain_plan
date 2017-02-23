@@ -62,7 +62,7 @@ EXPLAIN VALUES (1)
 0          size  1 column, 1 row
 
 query ITTT
-EXPLAIN(EXPRS) SELECT * FROM t WITH ORDINALITY LIMIT 1 OFFSET 1
+EXPLAIN (EXPRS) SELECT * FROM t WITH ORDINALITY LIMIT 1 OFFSET 1
 ----
 0  limit
 0                 count     1
@@ -83,7 +83,7 @@ EXPLAIN SELECT DISTINCT * FROM t
 1            spans  ALL
 
 query ITTT
-EXPLAIN(EXPRS) SELECT DISTINCT * FROM t LIMIT 1 OFFSET 1
+EXPLAIN (EXPRS) SELECT DISTINCT * FROM t LIMIT 1 OFFSET 1
 ----
 0  limit
 0                 count     1
@@ -98,7 +98,7 @@ statement ok
 CREATE TABLE tc (a INT, b INT, INDEX c(a))
 
 query ITTTTT
-EXPLAIN(METADATA) SELECT * FROM tc WHERE a = 10 ORDER BY b
+EXPLAIN (METADATA) SELECT * FROM tc WHERE a = 10 ORDER BY b
 ----
 0  sort                           (a, b)                                   =a,+b
 0              order  +b

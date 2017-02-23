@@ -340,7 +340,7 @@ true
 
 # check that residual filters are not expanded twice
 query ITTTTT
-EXPLAIN(METADATA) SELECT x FROM xyz WHERE x IN (SELECT x FROM xyz)
+EXPLAIN (METADATA) SELECT x FROM xyz WHERE x IN (SELECT x FROM xyz)
 ----
 0  render                           (x)
 1  scan                             (x, y[omitted], z[omitted])
