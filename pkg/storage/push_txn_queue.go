@@ -294,9 +294,11 @@ func (ptq *pushTxnQueue) MaybeWait(
 
 	for {
 		// Set the timer to check for the pushee txn's expiration.
-		pusheeTxnTimer.Reset(time.Duration(
-			txnExpiration(pending.txn.Load().(*roachpb.Transaction)).WallTime -
-				ptq.store.Clock().Now().WallTime))
+		{
+			expiration := txnExpiration(pending.txn.Load().(*roachpb.Transaction)).GoTime()
+			now := ptq.store.Clock().Now().GoTime()
+			pusheeTxnTimer.Reset(expiration.Sub(now))
+		}
 
 		select {
 		case <-ctx.Done():
