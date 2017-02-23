@@ -540,6 +540,10 @@ func TestParse(t *testing.T) {
 		{`SELECT * FROM [123] AS t`},
 		{`SELECT * FROM [123(1, 2, 3)] AS t`},
 		{`SELECT * FROM [123()] AS t`},
+		{`SELECT * FROM t@[123]`},
+		{`SELECT * FROM t@{FORCE_INDEX=[123],NO_INDEX_JOIN}`},
+		{`SELECT * FROM [123]@[456] AS t`},
+		{`SELECT * FROM [123]@{FORCE_INDEX=[456],NO_INDEX_JOIN} AS t`},
 
 		// TODO(pmattis): Is this a postgres extension?
 		{`TABLE a`}, // Shorthand for: SELECT * FROM a
@@ -668,6 +672,9 @@ func TestParse2(t *testing.T) {
 		{`SELECT 'a' FROM t@{FORCE_INDEX=bar}`, `SELECT 'a' FROM t@bar`},
 		{`SELECT 'a' FROM t@{NO_INDEX_JOIN,FORCE_INDEX=bar}`,
 			`SELECT 'a' FROM t@{FORCE_INDEX=bar,NO_INDEX_JOIN}`},
+
+		{`SELECT 'a' FROM t@{FORCE_INDEX=[123]}`, `SELECT 'a' FROM t@[123]`},
+		{`SELECT 'a' FROM [123]@{FORCE_INDEX=[456]} AS t`, `SELECT 'a' FROM [123]@[456] AS t`},
 
 		{`SELECT a FROM t WHERE a IS UNKNOWN`, `SELECT a FROM t WHERE a IS NULL`},
 		{`SELECT a FROM t WHERE a IS NOT UNKNOWN`, `SELECT a FROM t WHERE a IS NOT NULL`},

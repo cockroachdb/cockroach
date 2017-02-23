@@ -2895,6 +2895,12 @@ index_hints_param:
   {
      $$.val = &IndexHints{Index: Name($3)}
   }
+| FORCE_INDEX '=' '[' ICONST ']'
+  {
+    id, err := $4.numVal().AsInt64()
+    if err != nil { sqllex.Error(err.Error()); return 1 }
+    $$.val = &IndexHints{IndexID: IndexID(id)}
+  }
 |
   NO_INDEX_JOIN
   {
@@ -2911,25 +2917,30 @@ index_hints_param_list:
   {
     a := $1.indexHints()
     b := $3.indexHints()
-    index := a.Index
-    if index == "" {
-       index = b.Index
-    } else if b.Index != "" {
-       sqllex.Error("FORCE_INDEX specified multiple times")
-       return 1
-    }
     if a.NoIndexJoin && b.NoIndexJoin {
        sqllex.Error("NO_INDEX_JOIN specified multiple times")
        return 1
     }
-    noIndexJoin := a.NoIndexJoin || b.NoIndexJoin
-    $$.val = &IndexHints{Index: index, NoIndexJoin: noIndexJoin}
+    if (a.Index != "" || a.IndexID != 0) && (b.Index != "" || b.IndexID != 0) {
+       sqllex.Error("FORCE_INDEX specified multiple times")
+       return 1
+    }
+    a.Index = a.Index + b.Index
+    a.IndexID = a.IndexID + b.IndexID
+    a.NoIndexJoin = a.NoIndexJoin || b.NoIndexJoin
+    $$.val = a
   }
 
 opt_index_hints:
   '@' unrestricted_name
   {
     $$.val = &IndexHints{Index: Name($2)}
+  }
+| '@' '[' ICONST ']'
+  {
+    id, err := $3.numVal().AsInt64()
+    if err != nil { sqllex.Error(err.Error()); return 1 }
+    $$.val = &IndexHints{IndexID: IndexID(id)}
   }
 | '@' '{' index_hints_param_list '}'
   {
@@ -2942,7 +2953,7 @@ opt_index_hints:
 
 // table_ref is where an alias clause can be attached.
 table_ref:
-  '[' ICONST opt_tableref_col_list ']' opt_ordinality alias_clause
+  '[' ICONST opt_tableref_col_list ']' opt_index_hints opt_ordinality alias_clause
   {
     id, err := $2.numVal().AsInt64()
     if err != nil {
@@ -2950,7 +2961,8 @@ table_ref:
       return 1
     }
     $$.val = &AliasedTableExpr{Expr: &TableRef{TableID: id, Columns: $3.tableRefCols()},
-			       Ordinality: $5.bool(), As: $6.aliasClause() }
+			       Hints: $5.indexHints(),
+			       Ordinality: $6.bool(), As: $7.aliasClause() }
   }
 | relation_expr opt_index_hints opt_ordinality opt_alias_clause
   {
