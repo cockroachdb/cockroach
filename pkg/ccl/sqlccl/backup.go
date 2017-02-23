@@ -416,25 +416,32 @@ func assertDatabasesExist(
 	txn *client.Txn,
 	databasesByID map[sqlbase.ID]*sqlbase.DatabaseDescriptor,
 	tables []*sqlbase.TableDescriptor,
-) error {
+) (map[sqlbase.ID]sqlbase.ID, error) {
+	remap := make(map[sqlbase.ID]sqlbase.ID, len(databasesByID))
 	for _, table := range tables {
 		database, ok := databasesByID[table.ParentID]
 		if !ok {
-			return errors.Errorf("no database with ID %d for table %q", table.ParentID, table.Name)
+			return nil, errors.Errorf("no database with ID %d for table %q", table.ParentID, table.Name)
 		}
 
 		// Make sure there's a database with a name that matches the original.
 		existingDatabaseID, err := txn.Get(sqlbase.MakeNameMetadataKey(0, database.Name))
 		if err != nil {
-			return err
+			return nil, err
 		}
 		if existingDatabaseID.Value == nil {
 			// TODO(dan): Add the ability to restore the database from backups.
-			return errors.Errorf("a database named %q needs to exist to restore table %q",
+			return nil, errors.Errorf("a database named %q needs to exist to restore table %q",
 				database.Name, table.Name)
 		}
+		fixed, err := existingDatabaseID.Value.GetInt()
+		if err != nil {
+			return nil, err
+		}
+		remap[table.ParentID] = sqlbase.ID(fixed)
+
 	}
-	return nil
+	return remap, nil
 }
 
 func newTableIDs(
@@ -688,7 +695,8 @@ func restoreTableDescs(
 		// Recheck that the necessary databases exist. This was checked at the
 		// beginning, but check again in case one was deleted or renamed during
 		// the data import.
-		if err := assertDatabasesExist(txn, databasesByID, tables); err != nil {
+		newDBs, err := assertDatabasesExist(txn, databasesByID, tables)
+		if err != nil {
 			return err
 		}
 
@@ -699,6 +707,7 @@ func restoreTableDescs(
 				return errors.Errorf("missing table ID for %d %q", newTables[i].ID, newTables[i].Name)
 			}
 			newTables[i].ID = newTableID
+			newTables[i].ParentID = newDBs[tables[i].ParentID]
 
 			if err := newTables[i].ForeachNonDropIndex(func(index *sqlbase.IndexDescriptor) error {
 				// TODO(dan): We need this sort of logic for FKs, too.
@@ -725,13 +734,9 @@ func restoreTableDescs(
 			}); err != nil {
 				return err
 			}
-			database, ok := databasesByID[newTables[i].ParentID]
-			if !ok {
-				return errors.Errorf("no database with ID %d", newTables[i].ParentID)
-			}
 
 			// Pass the descriptors by value to keep this idempotent.
-			if err := restoreTableDesc(ctx, txn, *database, newTables[i]); err != nil {
+			if err := restoreTableDesc(ctx, txn, newTables[i]); err != nil {
 				return err
 			}
 		}
@@ -748,23 +753,7 @@ func restoreTableDescs(
 	return newTables, nil
 }
 
-func restoreTableDesc(
-	ctx context.Context,
-	txn *client.Txn,
-	database sqlbase.DatabaseDescriptor,
-	table sqlbase.TableDescriptor,
-) error {
-	// Get the database id again to make sure the database hasn't been dropped
-	// while we were importing.
-	existingDatabaseID, err := txn.Get(sqlbase.MakeNameMetadataKey(0, database.Name))
-	if err != nil {
-		return err
-	}
-	if existingDatabaseID.Value == nil {
-		// TODO(dan): Add the ability to restore the database from backups.
-		return errors.Errorf("a database named %q needs to exist to restore table %q",
-			database.Name, table.Name)
-	}
+func restoreTableDesc(ctx context.Context, txn *client.Txn, table sqlbase.TableDescriptor) error {
 	tableIDKey := sqlbase.MakeNameMetadataKey(table.ParentID, table.Name)
 	tableDescKey := sqlbase.MakeDescMetadataKey(table.ID)
 
@@ -858,7 +847,8 @@ func Restore(
 	// Fail fast if the necessary databases don't exist since the below logic
 	// leaks table IDs when Restore fails.
 	if err := db.Txn(ctx, func(txn *client.Txn) error {
-		return assertDatabasesExist(txn, databasesByID, tables)
+		_, err := assertDatabasesExist(txn, databasesByID, tables)
+		return err
 	}); err != nil {
 		return nil, err
 	}
