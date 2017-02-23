@@ -299,7 +299,6 @@ func startBackgroundWrites(
 
 func TestBackupRestoreBank(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	t.Skip("#13189")
 	if !storage.ProposerEvaluatedKVEnabled() {
 		t.Skip("command WriteBatch is not allowed without proposer evaluated KV")
 	}

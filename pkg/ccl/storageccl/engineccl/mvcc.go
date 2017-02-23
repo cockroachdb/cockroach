@@ -119,7 +119,7 @@ func (i *MVCCIncrementalIterator) Next() {
 		}
 
 		if i.meta.Txn != nil {
-			if !i.meta.Timestamp.Less(i.endTime) {
+			if !i.endTime.Less(i.meta.Timestamp) {
 				i.err = &roachpb.WriteIntentError{
 					Intents: []roachpb.Intent{{Span: roachpb.Span{Key: metaKey.Key}, Status: roachpb.PENDING, Txn: *i.meta.Txn}},
 				}
