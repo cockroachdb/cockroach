@@ -2139,12 +2139,76 @@ export interface storageBuilder {
 	decode(buffer: ArrayBuffer) : storageMessage;
 	decode(buffer: ByteBuffer) : storageMessage;
 	decode64(buffer: string) : storageMessage;
+	Liveness: storage.LivenessBuilder;
 	engine: storage.engineBuilder;
 	storagebase: storage.storagebaseBuilder;
 	
 }
 
 }
+
+declare module Proto2TypeScript.cockroach.storage {
+
+	export interface Liveness {
+
+		
+
+node_id?: number;
+		
+
+getNodeId?() : number;
+		setNodeId?(nodeId : number): void;
+		
+
+
+
+epoch?: Long;
+		
+
+getEpoch?() : Long;
+		setEpoch?(epoch : Long): void;
+		
+
+
+
+expiration?: util.hlc.Timestamp;
+		
+
+getExpiration?() : util.hlc.Timestamp;
+		setExpiration?(expiration : util.hlc.Timestamp): void;
+		
+
+
+
+draining?: boolean;
+		
+
+getDraining?() : boolean;
+		setDraining?(draining : boolean): void;
+		
+
+
+
+}
+
+	export interface LivenessMessage extends Liveness {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface LivenessBuilder {
+	new(data?: Liveness): LivenessMessage;
+	decode(buffer: ArrayBuffer) : LivenessMessage;
+	decode(buffer: ByteBuffer) : LivenessMessage;
+	decode64(buffer: string) : LivenessMessage;
+	
+}
+
+}
+
 
 declare module Proto2TypeScript.cockroach.storage {
 
@@ -3131,6 +3195,8 @@ export interface serverpbBuilder {
 	DrainResponse: serverpb.DrainResponseBuilder;
 	HealthRequest: serverpb.HealthRequestBuilder;
 	HealthResponse: serverpb.HealthResponseBuilder;
+	LivenessRequest: serverpb.LivenessRequestBuilder;
+	LivenessResponse: serverpb.LivenessResponseBuilder;
 	ClusterFreezeRequest: serverpb.ClusterFreezeRequestBuilder;
 	ClusterFreezeResponse: serverpb.ClusterFreezeResponseBuilder;
 	DetailsRequest: serverpb.DetailsRequestBuilder;
@@ -4628,6 +4694,69 @@ export interface HealthResponseBuilder {
 	decode(buffer: ArrayBuffer) : HealthResponseMessage;
 	decode(buffer: ByteBuffer) : HealthResponseMessage;
 	decode64(buffer: string) : HealthResponseMessage;
+	
+}
+
+}
+
+
+declare module Proto2TypeScript.cockroach.server.serverpb {
+
+	export interface LivenessRequest {
+
+		
+
+}
+
+	export interface LivenessRequestMessage extends LivenessRequest {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface LivenessRequestBuilder {
+	new(data?: LivenessRequest): LivenessRequestMessage;
+	decode(buffer: ArrayBuffer) : LivenessRequestMessage;
+	decode(buffer: ByteBuffer) : LivenessRequestMessage;
+	decode64(buffer: string) : LivenessRequestMessage;
+	
+}
+
+}
+
+
+declare module Proto2TypeScript.cockroach.server.serverpb {
+
+	export interface LivenessResponse {
+
+		
+
+livenesses?: storage.Liveness[];
+		
+
+getLivenesses?() : storage.Liveness[];
+		setLivenesses?(livenesses : storage.Liveness[]): void;
+		
+
+
+
+}
+
+	export interface LivenessResponseMessage extends LivenessResponse {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface LivenessResponseBuilder {
+	new(data?: LivenessResponse): LivenessResponseMessage;
+	decode(buffer: ArrayBuffer) : LivenessResponseMessage;
+	decode(buffer: ByteBuffer) : LivenessResponseMessage;
+	decode64(buffer: string) : LivenessResponseMessage;
 	
 }
 
