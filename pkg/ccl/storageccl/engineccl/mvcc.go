@@ -16,16 +16,16 @@ import (
 	"github.com/pkg/errors"
 )
 
-// MVCCIncrementalIterator iterates over the diff of the key range [start,end)
-// and time range [start,end). If a key was added or modified between startTime
-// and endTime, the iterator will position at the most recent version (before
-// endTime) of that key. If the key was most recently deleted, this is signalled
-// with an empty value.
+// MVCCIncrementalIterator iterates over the diff of the key range
+// [startKey,endKey) and time range [startTime,endTime). If a key was added or
+// modified between startTime and endTime, the iterator will position at the
+// most recent version (before endTime) of that key. If the key was most
+// recently deleted, this is signalled with an empty value.
 //
 // Expected usage:
 //    iter := NewMVCCIncrementalIterator(e)
 //    defer iter.Close()
-//    for iter.Reset(...); iter.Valid(); iter.Next() {
+//    for iter.Reset(startKey, endKey, ...); iter.Valid(); iter.Next() {
 //        [code using iter.Key() and iter.Value()]
 //    }
 //    if err := iter.Error(); err != nil {
@@ -119,7 +119,7 @@ func (i *MVCCIncrementalIterator) Next() {
 		}
 
 		if i.meta.Txn != nil {
-			if !i.meta.Timestamp.Less(i.endTime) {
+			if !i.endTime.Less(i.meta.Timestamp) {
 				i.err = &roachpb.WriteIntentError{
 					Intents: []roachpb.Intent{{Span: roachpb.Span{Key: metaKey.Key}, Status: roachpb.PENDING, Txn: *i.meta.Txn}},
 				}
