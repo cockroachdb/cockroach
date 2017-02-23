@@ -1279,9 +1279,6 @@ func (dsp *distSQLPlanner) NewPlanningCtx(ctx context.Context, txn *client.Txn) 
 func (dsp *distSQLPlanner) PlanAndRun(
 	ctx context.Context, txn *client.Txn, tree planNode, recv *distSQLReceiver,
 ) error {
-	// Trigger limit propagation.
-	setUnlimited(tree)
-
 	planCtx := dsp.NewPlanningCtx(ctx, txn)
 
 	log.VEvent(ctx, 1, "creating DistSQL plan")
