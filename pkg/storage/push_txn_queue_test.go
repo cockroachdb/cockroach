@@ -593,3 +593,78 @@ func TestPushTxnQueueDependencyCycle(t *testing.T) {
 		<-respCh
 	}
 }
+
+// TestPushTxnQueueDependencyCycleWithPriorityInversion verifies that
+// priority inversions between two dependent transactions are noticed
+// and the dependency is appropriately broken.
+func TestPushTxnQueueDependencyCycleWithPriorityInversion(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	tc := testContext{}
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+	tc.Start(t, stopper)
+
+	// Create txnA with a lower priority so it won't think it could push
+	// txnB without updating its priority.
+	txnA := newTransaction("txn", roachpb.Key("a"), -1, enginepb.SERIALIZABLE, tc.Clock())
+	// However, write an "updated" txnA with higher priority, which it
+	// will need to read via a QueryTxn request in order to realize it
+	// can in fact break the deadlock.
+	updatedTxnA := *txnA
+	updatedTxnA.Priority = 3
+	writeTxnRecord(t, &tc, &updatedTxnA)
+	// Create txnB with priority=2, so txnA won't think it can push, but
+	// when we set up txnB as the pusher, the request will include txnA's
+	// updated priority, making txnB think it can't break a deadlock.
+	txnB := newTransaction("txn", roachpb.Key("a"), -2, enginepb.SERIALIZABLE, tc.Clock())
+	writeTxnRecord(t, &tc, txnB)
+
+	reqA := &roachpb.PushTxnRequest{
+		PushType:  roachpb.PUSH_ABORT,
+		PusherTxn: *txnA,
+		PusheeTxn: txnB.TxnMeta,
+	}
+	reqB := &roachpb.PushTxnRequest{
+		PushType:  roachpb.PUSH_ABORT,
+		PusherTxn: *txnB,
+		PusheeTxn: updatedTxnA.TxnMeta,
+	}
+
+	ptq := tc.repl.pushTxnQueue
+	ptq.Enable()
+	reqCh := make(chan *roachpb.PushTxnRequest, 2)
+	errCh := make(chan *roachpb.Error, 2)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	for _, txn := range []*roachpb.Transaction{txnA, txnB} {
+		ptq.Enqueue(txn)
+	}
+	for _, req := range []*roachpb.PushTxnRequest{reqA, reqB} {
+		go func(req *roachpb.PushTxnRequest) {
+			_, pErr := ptq.MaybeWait(ctx, req)
+			reqCh <- req
+			errCh <- pErr
+		}(req)
+	}
+
+	// Wait for first request to finish, which should break the
+	// dependency cycle by returning an errDeadlock error. The
+	// returned request should be reqA.
+	var errDeadlockFound bool
+	if pErr := <-errCh; pErr != nil {
+		if pErr == errDeadlock {
+			errDeadlockFound = true
+		} else {
+			t.Errorf("expected only errDeadlock; got %s", pErr)
+		}
+	}
+	if !errDeadlockFound {
+		t.Errorf("expected at least one caller to receive errDeadlock")
+	}
+	if req := <-reqCh; !reflect.DeepEqual(reqA, req) {
+		t.Errorf("expected request %+v; got %+v", reqA, req)
+	}
+	cancel()
+	<-errCh
+	<-reqCh
+}

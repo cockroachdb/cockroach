@@ -81,7 +81,7 @@ type mtClient struct {
 func TestMonotonicInserts(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	t.Skip("#13759")
+	//t.Skip("#13759")
 	if testing.Short() {
 		t.Skip("short flag")
 	}
