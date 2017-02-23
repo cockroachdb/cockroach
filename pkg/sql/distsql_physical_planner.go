@@ -288,7 +288,12 @@ func (dsp *distSQLPlanner) checkSupportForNode(node planNode) (distRecommendatio
 				}
 			}
 		}
-		return dsp.checkSupportForNode(n.plan)
+		rec, err := dsp.checkSupportForNode(n.plan)
+		if err != nil {
+			return 0, err
+		}
+		// We should distribute aggregations if possible.
+		return rec.compose(shouldDistribute), nil
 
 	case *limitNode:
 		if err := dsp.checkExpr(n.countExpr); err != nil {
