@@ -2897,6 +2897,7 @@ index_hints_param:
   }
 | FORCE_INDEX '=' '[' ICONST ']'
   {
+    /* SKIP DOC */
     id, err := $4.numVal().AsInt64()
     if err != nil { sqllex.Error(err.Error()); return 1 }
     $$.val = &IndexHints{IndexID: IndexID(id)}
@@ -2959,6 +2960,7 @@ opt_index_hints:
 table_ref:
   '[' ICONST opt_tableref_col_list ']' opt_index_hints opt_ordinality alias_clause
   {
+    /* SKIP DOC */
     id, err := $2.numVal().AsInt64()
     if err != nil {
       sqllex.Error(err.Error())
@@ -4074,6 +4076,7 @@ d_expr:
 | a_expr_const
 | '@' ICONST
   {
+    /* SKIP DOC */
     colNum, err := $2.numVal().AsInt64()
     if err != nil {
       sqllex.Error(err.Error())
