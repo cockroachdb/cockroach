@@ -1476,6 +1476,9 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 
 		// Ensure that sql is using the correct table lease.
 		if len(cols) != len(expectedCols) {
+			if err := rows.Close(); err != nil {
+				t.Fatal(err)
+			}
 			return errors.Errorf("incorrect columns: %v, expected: %v", cols, expectedCols)
 		}
 		if cols[0] != expectedCols[0] || cols[1] != expectedCols[1] {
