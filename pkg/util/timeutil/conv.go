@@ -18,20 +18,46 @@ package timeutil
 
 import (
 	"time"
+	"unsafe"
 
-	"github.com/jeffjen/datefmt"
 	"github.com/leekchan/timeutil"
+	"github.com/pkg/errors"
 )
 
+// This is a modified version of github.com/jeffjen/datefmt inlined here until
+// https://github.com/jeffjen/datefmt/pull/3 is merged.
+
+// #include <stdlib.h>
+// #include <time.h>
+import "C"
+
 // Strftime converts a time to a string using some C-style format.
-func Strftime(time time.Time, fmt string) (string, error) {
-	return timeutil.Strftime(&time, fmt), nil
+func Strftime(t time.Time, layout string) (string, error) {
+	return timeutil.Strftime(&t, layout), nil
 }
 
 // Strptime converts a string to a time using some C-style format.
-func Strptime(time, fmt string) (time.Time, error) {
-	// TODO(knz) The `datefmt` package uses C's `strptime` which doesn't
+func Strptime(layout, value string) (time.Time, error) {
+	// TODO(knz) this uses C's `strptime` which doesn't
 	// know about microseconds. We may want to change to an
 	// implementation that does this better.
-	return datefmt.Strptime(fmt, time)
+	cLayout := C.CString(layout)
+	defer C.free(unsafe.Pointer(cLayout))
+	cValue := C.CString(value)
+	defer C.free(unsafe.Pointer(cValue))
+
+	var cTime C.struct_tm
+	if _, err := C.strptime(cValue, cLayout, &cTime); err != nil {
+		return time.Time{}, errors.Wrapf(err, "could not parse %s as %s", value, layout)
+	}
+	return time.Date(
+		int(cTime.tm_year)+1900,
+		time.Month(cTime.tm_mon+1),
+		int(cTime.tm_mday),
+		int(cTime.tm_hour),
+		int(cTime.tm_min),
+		int(cTime.tm_sec),
+		0,
+		time.FixedZone("", int(cTime.tm_gmtoff)),
+	), nil
 }

@@ -46,9 +46,9 @@ func TestTimeConversion(t *testing.T) {
 	}
 
 	for _, test := range tests {
-		tm, err := Strptime(test.start, test.format)
+		tm, err := Strptime(test.format, test.start)
 		if err != nil {
-			t.Errorf("strptime(%q, %q): %v", test.start, test.format, err)
+			t.Errorf("strptime(%q, %q): %v", test.format, test.start, err)
 			continue
 		}
 		tm = tm.UTC()
