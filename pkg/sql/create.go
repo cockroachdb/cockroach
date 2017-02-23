@@ -1119,8 +1119,8 @@ func makeTableDescIfAs(
 	parentID, id sqlbase.ID,
 	resultColumns []ResultColumn,
 	privileges *sqlbase.PrivilegeDescriptor,
-) (sqlbase.TableDescriptor, error) {
-	desc := sqlbase.TableDescriptor{
+) (desc sqlbase.TableDescriptor, err error) {
+	desc = sqlbase.TableDescriptor{
 		ID:            id,
 		ParentID:      parentID,
 		FormatVersion: sqlbase.InterleavedFormatVersion,
@@ -1133,7 +1133,10 @@ func makeTableDescIfAs(
 	}
 	desc.Name = tableName.Table()
 	for i, colRes := range resultColumns {
-		colType, _ := parser.DatumTypeToColumnType(colRes.Typ)
+		colType, err := parser.DatumTypeToColumnType(colRes.Typ)
+		if err != nil {
+			return desc, err
+		}
 		columnTableDef := parser.ColumnTableDef{Name: parser.Name(colRes.Name), Type: colType}
 		if len(p.AsColumnNames) > i {
 			columnTableDef.Name = p.AsColumnNames[i]
