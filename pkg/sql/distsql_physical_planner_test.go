@@ -124,7 +124,7 @@ func TestDistSQLPlanner(t *testing.T) {
 
 	r := sqlutils.MakeSQLRunner(t, tc.ServerConn(0))
 	r.DB.SetMaxOpenConns(1)
-	r.Exec("SET DIST_SQL = ALWAYS")
+	r.Exec("SET DISTSQL = ALWAYS")
 
 	t.Run("Basic", func(t *testing.T) {
 		r = r.Subtest(t)
@@ -292,11 +292,11 @@ func TestDistSQLPlanner(t *testing.T) {
 	// This test modifies the schema and can affect subsequent tests.
 	t.Run("CreateIndex", func(t *testing.T) {
 		r = r.Subtest(t)
-		r.Exec("SET DIST_SQL = OFF")
+		r.Exec("SET DISTSQL = OFF")
 		if _, err := tc.ServerConn(0).Exec("CREATE INDEX foo ON NumToStr (str)"); err != nil {
 			t.Fatal(err)
 		}
-		r.Exec("SET DIST_SQL = ALWAYS")
+		r.Exec("SET DISTSQL = ALWAYS")
 		res := r.QueryStr("SELECT str FROM NumToStr@foo")
 		if len(res) != n*n {
 			t.Errorf("expected %d entries, got %d", n*n, len(res))
