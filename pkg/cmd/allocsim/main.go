@@ -52,6 +52,7 @@ var configFile = flag.String("f", "", "config file that specifies an allocsim wo
 // Configuration provides a way to configure allocsim via a JSON file.
 // TODO(a-robinson): Consider moving all the above options into the config file.
 type Configuration struct {
+	NumWorkers int        `json:"NumWorkers"`
 	Localities []Locality `json:"Localities"`
 }
 
@@ -95,7 +96,7 @@ func loadConfig(file string) (Configuration, error) {
 	}
 
 	*numNodes = 0
-	*workers = 0
+	*workers = config.NumWorkers
 	for _, locality := range config.Localities {
 		*numNodes += locality.NumNodes
 		*workers += locality.NumWorkers
@@ -135,7 +136,7 @@ func newAllocSim(c *localcluster.Cluster) *allocSim {
 func (a *allocSim) run(workers int) {
 	a.setup()
 	for i := 0; i < workers; i++ {
-		go a.worker(i, i, workers)
+		go a.roundRobinWorker(i, workers)
 	}
 	go a.rangeStats(time.Second)
 	a.monitor(time.Second)
@@ -144,7 +145,7 @@ func (a *allocSim) run(workers int) {
 func (a *allocSim) runWithConfig(config Configuration) {
 	a.setup()
 
-	numWorkers := 0
+	numWorkers := config.NumWorkers
 	for _, locality := range config.Localities {
 		numWorkers += locality.NumWorkers
 	}
@@ -157,6 +158,9 @@ func (a *allocSim) runWithConfig(config Configuration) {
 			go a.worker(node, startNum, numWorkers)
 		}
 		firstNodeInLocality += locality.NumNodes
+	}
+	for i := 0; i < config.NumWorkers; i++ {
+		go a.roundRobinWorker(firstNodeInLocality+i, numWorkers)
 	}
 
 	go a.rangeStats(time.Second)
@@ -190,16 +194,27 @@ func (a *allocSim) maybeLogError(err error) {
 	atomic.AddUint64(&a.stats.errors, 1)
 }
 
-// TODO: Also record average latency!
-func (a *allocSim) worker(dbIdx, startNum, workers int) {
-	const insert = `INSERT INTO allocsim.blocks (id, num, data) VALUES ($1, $2, repeat('a', $3)::bytes)`
+const insertStmt = `INSERT INTO allocsim.blocks (id, num, data) VALUES ($1, $2, repeat('a', $3)::bytes)`
 
+func (a *allocSim) worker(dbIdx, startNum, workers int) {
 	r, _ := randutil.NewPseudoRand()
 	db := a.DB[dbIdx%len(a.DB)]
-
 	for num := startNum; true; num += workers {
 		now := timeutil.Now()
-		if _, err := db.Exec(insert, r.Int63(), num, *blockSize); err != nil {
+		if _, err := db.Exec(insertStmt, r.Int63(), num, *blockSize); err != nil {
+			a.maybeLogError(err)
+		} else {
+			atomic.AddUint64(&a.stats.ops, 1)
+			atomic.AddUint64(&a.stats.totalLatencyNanos, uint64(timeutil.Since(now).Nanoseconds()))
+		}
+	}
+}
+
+func (a *allocSim) roundRobinWorker(startNum, workers int) {
+	r, _ := randutil.NewPseudoRand()
+	for i := 0; ; i++ {
+		now := timeutil.Now()
+		if _, err := a.DB[i%len(a.DB)].Exec(insertStmt, r.Int63(), startNum+i*workers, *blockSize); err != nil {
 			a.maybeLogError(err)
 		} else {
 			atomic.AddUint64(&a.stats.ops, 1)
