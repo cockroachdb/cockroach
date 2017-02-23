@@ -537,6 +537,10 @@ func TestParse(t *testing.T) {
 		{`SELECT * FROM (VALUES (1, 2)) AS foo`},
 		{`SELECT * FROM (VALUES (1, 2)) AS foo (a, b)`},
 
+		{`SELECT * FROM !123 AS t`},
+		{`SELECT * FROM !123(1, 2, 3) AS t`},
+		{`SELECT * FROM !123() AS t`},
+
 		// TODO(pmattis): Is this a postgres extension?
 		{`TABLE a`}, // Shorthand for: SELECT * FROM a
 

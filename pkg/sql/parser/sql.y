@@ -191,6 +191,12 @@ func (u *sqlSymUnion) colType() ColumnType {
     }
     return nil
 }
+func (u *sqlSymUnion) tableRefCols() []ColumnID {
+    if refCols, ok := u.val.([]ColumnID); ok {
+        return refCols
+    }
+    return nil
+}
 func (u *sqlSymUnion) castTargetType() CastTargetType {
     return u.val.(CastTargetType)
 }
@@ -574,6 +580,8 @@ func (u *sqlSymUnion) kvOptions() []KVOption {
 %type <*WindowDef> window_definition over_clause window_specification
 %type <str> opt_existing_window_name
 %type <empty> opt_frame_clause frame_extent frame_bound
+
+%type <[]ColumnID> opt_tableref_col_list tableref_col_list
 
 %type <TargetList>    targets
 %type <*TargetList> on_privilege_target_clause
@@ -2934,7 +2942,17 @@ opt_index_hints:
 
 // table_ref is where an alias clause can be attached.
 table_ref:
-  relation_expr opt_index_hints opt_ordinality opt_alias_clause
+  '!' ICONST opt_tableref_col_list opt_ordinality alias_clause
+  {
+    id, err := $2.numVal().AsInt64()
+    if err != nil {
+      sqllex.Error(err.Error())
+      return 1
+    }
+    $$.val = &AliasedTableExpr{Expr: &TableRef{TableID: id, Columns: $3.tableRefCols()},
+			       Ordinality: $4.bool(), As: $5.aliasClause() }
+  }
+| relation_expr opt_index_hints opt_ordinality opt_alias_clause
   {
     $$.val = &AliasedTableExpr{Expr: $1.newNormalizableTableName(), Hints: $2.indexHints(), Ordinality: $3.bool(), As: $4.aliasClause() }
   }
@@ -2976,6 +2994,25 @@ table_ref:
 | '[' EXPLAIN '(' explain_option_list ')' explainable_stmt ']' opt_ordinality opt_alias_clause
   {
     $$.val = &AliasedTableExpr{Expr: &Explain{ Options: $4.strs(), Statement: $6.stmt(), Enclosed: true }, Ordinality: $8.bool(), As: $9.aliasClause() }
+  }
+
+opt_tableref_col_list:
+  /* EMPTY */               { $$.val = nil }
+| '(' ')'                   { $$.val = []ColumnID{} }
+| '(' tableref_col_list ')' { $$.val = $2.tableRefCols() }
+
+tableref_col_list:
+  ICONST
+  { 
+    id, err := $1.numVal().AsInt64()
+    if err != nil { sqllex.Error(err.Error()); return 1 }
+    $$.val = []ColumnID{ColumnID(id)}
+  }
+| tableref_col_list ',' ICONST
+  {
+    id, err := $3.numVal().AsInt64()
+    if err != nil { sqllex.Error(err.Error()); return 1 }
+    $$.val = append($1.tableRefCols(), ColumnID(id))
   }
 
 opt_ordinality:
