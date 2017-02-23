@@ -66,23 +66,11 @@ func (p *planner) setUserPriority(userPriority parser.UserPriority) error {
 	case parser.UnspecifiedUserPriority:
 		return nil
 	case parser.Low:
-		if p.execCfg.TestingKnobs.FixTxnPriority {
-			p.txn.InternalSetPriority(1)
-			return nil
-		}
-		return p.txn.SetUserPriority(roachpb.LowUserPriority)
+		return p.txn.SetUserPriority(roachpb.MinUserPriority)
 	case parser.Normal:
-		if p.execCfg.TestingKnobs.FixTxnPriority {
-			p.txn.InternalSetPriority(10000)
-			return nil
-		}
 		return p.txn.SetUserPriority(roachpb.NormalUserPriority)
 	case parser.High:
-		if p.execCfg.TestingKnobs.FixTxnPriority {
-			p.txn.InternalSetPriority(1000000000)
-			return nil
-		}
-		return p.txn.SetUserPriority(roachpb.HighUserPriority)
+		return p.txn.SetUserPriority(roachpb.MaxUserPriority)
 	default:
 		return errors.Errorf("unknown user priority: %s", userPriority)
 	}

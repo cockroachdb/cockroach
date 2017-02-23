@@ -27,34 +27,19 @@ import (
 	"strings"
 	"sync"
 	"testing"
-	"time"
 
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/localtestcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/pkg/errors"
 )
-
-// correctnessTestRetryOptions uses aggressive retries with a limit on
-// number of attempts so we don't get stuck behind indefinite
-// backoff/retry loops. If MaxAttempts is reached, transaction will
-// return retry error.
-//
-// Note that these options are used twice, at the stores via
-// setCorrectnessRetryOptions, and when constructing the client.
-var correctnessTestRetryOptions = retry.Options{
-	InitialBackoff: 1 * time.Millisecond,
-	MaxBackoff:     10 * time.Millisecond,
-	Multiplier:     10,
-	MaxRetries:     2,
-}
 
 type retryError struct {
 	txnIdx, cmdIdx int
@@ -391,36 +376,40 @@ func TestEnumerateIsolations(t *testing.T) {
 	}
 }
 
-// enumeratePriorities returns a slice enumerating all combinations of the
-// specified slice of priorities.
-func enumeratePriorities(priorities []int32) [][]int32 {
-	var results [][]int32
-	for i := 0; i < len(priorities); i++ {
-		leftover := enumeratePriorities(append(append([]int32(nil), priorities[:i]...), priorities[i+1:]...))
-		if len(leftover) == 0 {
-			results = [][]int32{{priorities[i]}}
+// enumeratePriorities returns a slice enumerating all combinations of
+// priorities across the transactions. The inner slice describes the
+// priority for each transaction. The outer slice contains each possible
+// combination of such transaction priorities.
+func enumeratePriorities(numTxns int, priorities []int32) [][]int32 {
+	n := len(priorities)
+	result := [][]int32{}
+	for i := 0; i < int(math.Pow(float64(n), float64(numTxns))); i++ {
+		desc := make([]int32, numTxns)
+		val := i
+		for j := 0; j < numTxns; j++ {
+			desc[j] = priorities[val%n]
+			val /= n
 		}
-		for j := 0; j < len(leftover); j++ {
-			results = append(results, append([]int32{priorities[i]}, leftover[j]...))
-		}
+		result = append(result, desc)
 	}
-	return results
+	return result
 }
 
 func TestEnumeratePriorities(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	p1 := int32(1)
 	p2 := int32(2)
-	p3 := int32(3)
 	expPriorities := [][]int32{
-		{p1, p2, p3},
-		{p1, p3, p2},
-		{p2, p1, p3},
-		{p2, p3, p1},
-		{p3, p1, p2},
-		{p3, p2, p1},
+		{p1, p1, p1},
+		{p2, p1, p1},
+		{p1, p2, p1},
+		{p2, p2, p1},
+		{p1, p1, p2},
+		{p2, p1, p2},
+		{p1, p2, p2},
+		{p2, p2, p2},
 	}
-	enum := enumeratePriorities([]int32{p1, p2, p3})
+	enum := enumeratePriorities(3, []int32{p1, p2})
 	if !reflect.DeepEqual(enum, expPriorities) {
 		t.Errorf("expected enumeration to match %v; got %v", expPriorities, enum)
 	}
@@ -656,11 +645,7 @@ func newHistoryVerifier(
 
 func (hv *historyVerifier) run(isolations []enginepb.IsolationType, db *client.DB, t *testing.T) {
 	log.Infof(context.Background(), "verifying all possible histories for the %q anomaly", hv.name)
-	priorities := make([]int32, len(hv.txns))
-	for i := 0; i < len(hv.txns); i++ {
-		priorities[i] = int32(i + 1)
-	}
-	enumPri := enumeratePriorities(priorities)
+	enumPri := enumeratePriorities(len(hv.txns), []int32{1, roachpb.MaxTxnPriority})
 	enumIso := enumerateIsolations(len(hv.txns), isolations)
 	enumHis := enumerateHistories(hv.txns, hv.equal)
 
@@ -733,6 +718,7 @@ func (hv *historyVerifier) runHistory(
 		}
 	}
 	plannedStr := historyString(cmds)
+
 	if log.V(1) {
 		log.Infof(context.Background(), "iso=%d pri=%d history=%s", isolations, priorities, plannedStr)
 	}
@@ -899,11 +885,8 @@ func checkConcurrency(
 	name string, isolations []enginepb.IsolationType, txns []string, verify *verifier, t *testing.T,
 ) {
 	verifier := newHistoryVerifier(name, txns, verify, t)
-	dbCtx := client.DefaultDBContext()
-	dbCtx.TxnRetryOptions = correctnessTestRetryOptions
 	s := &localtestcluster.LocalTestCluster{
-		DBContext:         &dbCtx,
-		RangeRetryOptions: &correctnessTestRetryOptions,
+		DontRetryPushTxnFailures: true,
 	}
 	s.Start(t, testutils.NewNodeTestBaseContext(), InitSenderForLocalTestCluster)
 	defer s.Stop()

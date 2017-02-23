@@ -254,8 +254,9 @@ type Replica struct {
 	// TODO(tschottdorf): Duplicates r.mu.state.desc.RangeID; revisit that.
 	RangeID roachpb.RangeID // Should only be set by the constructor.
 
-	store      *Store
-	abortCache *AbortCache // Avoids anomalous reads after abort
+	store        *Store
+	abortCache   *AbortCache   // Avoids anomalous reads after abort
+	pushTxnQueue *pushTxnQueue // Queues push txn attempts by txn ID
 
 	stats *replicaStats
 
@@ -559,6 +560,7 @@ func newReplica(rangeID roachpb.RangeID, store *Store) *Replica {
 		stateLoader:    makeReplicaStateLoader(rangeID),
 		store:          store,
 		abortCache:     NewAbortCache(rangeID),
+		pushTxnQueue:   newPushTxnQueue(store),
 	}
 	if store.cfg.StorePool != nil {
 		r.stats = newReplicaStats(store.cfg.StorePool.getNodeLocalityString)

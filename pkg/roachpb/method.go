@@ -84,6 +84,8 @@ const (
 	// an error code either indicating the pusher must retry or abort and
 	// restart the transaction.
 	PushTxn
+	// QueryTxn fetches the current state of the designated transaction.
+	QueryTxn
 	// RangeLookup looks up range descriptors, containing the
 	// locations of replicas for the range containing the specified key.
 	RangeLookup

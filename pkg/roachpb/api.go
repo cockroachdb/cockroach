@@ -30,11 +30,11 @@ type UserPriority float64
 
 func (up UserPriority) String() string {
 	switch up {
-	case LowUserPriority:
+	case MinUserPriority:
 		return "LOW"
 	case UnspecifiedUserPriority, NormalUserPriority:
 		return "NORMAL"
-	case HighUserPriority:
+	case MaxUserPriority:
 		return "HIGH"
 	default:
 		return fmt.Sprintf("%g", float64(up))
@@ -44,16 +44,12 @@ func (up UserPriority) String() string {
 const (
 	// MinUserPriority is the minimum allowed user priority.
 	MinUserPriority = 0.001
-	// LowUserPriority is the minimum user priority settable with SQL.
-	LowUserPriority = 0.1
 	// UnspecifiedUserPriority means NormalUserPriority.
 	UnspecifiedUserPriority = 0
 	// NormalUserPriority is set to 1, meaning ops run through the database
 	// are all given equal weight when a random priority is chosen. This can
 	// be set specifically via client.NewDBWithPriority().
 	NormalUserPriority = 1
-	// HighUserPriority is the maximum user priority settable with SQL.
-	HighUserPriority = 10
 	// MaxUserPriority is the maximum allowed user priority.
 	MaxUserPriority = 1000
 )
@@ -450,6 +446,9 @@ func (*GCRequest) Method() Method { return GC }
 func (*PushTxnRequest) Method() Method { return PushTxn }
 
 // Method implements the Request interface.
+func (*QueryTxnRequest) Method() Method { return QueryTxn }
+
+// Method implements the Request interface.
 func (*RangeLookupRequest) Method() Method { return RangeLookup }
 
 // Method implements the Request interface.
@@ -599,6 +598,12 @@ func (gcr *GCRequest) ShallowCopy() Request {
 // ShallowCopy implements the Request interface.
 func (ptr *PushTxnRequest) ShallowCopy() Request {
 	shallowCopy := *ptr
+	return &shallowCopy
+}
+
+// ShallowCopy implements the Request interface.
+func (qtr *QueryTxnRequest) ShallowCopy() Request {
+	shallowCopy := *qtr
 	return &shallowCopy
 }
 
@@ -858,7 +863,8 @@ func (*AdminMergeRequest) flags() int         { return isAdmin | isAlone }
 func (*AdminTransferLeaseRequest) flags() int { return isAdmin | isAlone }
 func (*HeartbeatTxnRequest) flags() int       { return isWrite | isTxn }
 func (*GCRequest) flags() int                 { return isWrite | isRange }
-func (*PushTxnRequest) flags() int            { return isWrite }
+func (*PushTxnRequest) flags() int            { return isWrite | isAlone }
+func (*QueryTxnRequest) flags() int           { return isRead | isAlone }
 func (*RangeLookupRequest) flags() int        { return isRead }
 func (*ResolveIntentRequest) flags() int      { return isWrite }
 func (*ResolveIntentRangeRequest) flags() int { return isWrite | isRange }

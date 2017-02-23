@@ -187,8 +187,6 @@ func checkRestarts(t *testing.T, magicVals *filterVals) {
 //
 // Be sure to set DisableAutoCommit on the ExecutorTestingKnobs, otherwise
 // implicit transactions won't have a chance to be aborted.
-// The TxnAborter should only be used in tests that set
-// server.Context.TestingKnobs.ExecutorTestingKnobs.FixTxnPriority = true.
 //
 // Example usage:
 //
@@ -349,7 +347,6 @@ func (ta *TxnAborter) statementFilter(ctx context.Context, stmt string, res *sql
 // executorKnobs are the bridge between the TxnAborter and the sql.Executor.
 func (ta *TxnAborter) executorKnobs() base.ModuleTestingKnobs {
 	return &sql.ExecutorTestingKnobs{
-		FixTxnPriority: true,
 		// We're going to abort txns using a TxnAborter, and that's incompatible
 		// with AutoCommit.
 		DisableAutoCommit: true,
@@ -652,8 +649,6 @@ func (rs rollbackStrategy) SQLCommand() string {
 // to be retried. The function also takes a rollback strategy, which specifies
 // the statement which the client will use to rollback aborted txns from retryable
 // errors.
-// This function needs to be called from tests that set
-// server.Context.TestingKnobs.ExecutorTestingKnobs.FixTxnPriority = true
 func retryExec(t *testing.T, sqlDB *gosql.DB, rs rollbackStrategy, fn func(*gosql.Tx) bool) {
 	tx, err := sqlDB.Begin()
 	if err != nil {
