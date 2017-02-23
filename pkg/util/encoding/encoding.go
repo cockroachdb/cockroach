@@ -1284,7 +1284,7 @@ func DecodeBoolValue(buf []byte) (remaining []byte, b bool, err error) {
 	case False:
 		return buf, false, nil
 	default:
-		return buf, false, fmt.Errorf("value type is not %s or %s: %s", True, False, typ)
+		return buf, false, fmt.Errorf("value type is not %d or %d: %d", True, False, typ)
 	}
 }
 
@@ -1388,7 +1388,7 @@ func decodeValueTypeAssert(b []byte, expected Type) ([]byte, error) {
 	}
 	b = b[dataOffset:]
 	if typ != expected {
-		return b, errors.Errorf("value type is not %s: %s", expected, typ)
+		return b, errors.Errorf("value type is not %d: %d", expected, typ)
 	}
 	return b, nil
 }
@@ -1434,7 +1434,7 @@ func PeekValueLength(b []byte) (typeOffset int, length int, err error) {
 		n, err := getMultiNonsortingVarintLen(b, 3)
 		return typeOffset, dataOffset + n, err
 	default:
-		return 0, 0, errors.Errorf("unknown type %s", typ)
+		return 0, 0, errors.Errorf("unknown type %d", typ)
 	}
 }
 
@@ -1466,7 +1466,7 @@ func UpperBoundValueEncodingSize(colID uint32, typ Type, size int) (int, bool) {
 	case Duration:
 		return len(encodedTag) + 3*maxVarintSize, true
 	default:
-		panic(fmt.Errorf("unknown type: %s", typ))
+		panic(fmt.Errorf("unknown type: %d", typ))
 	}
 }
 
@@ -1535,6 +1535,6 @@ func PrettyPrintValueEncoded(b []byte) ([]byte, string, error) {
 		}
 		return b, d.String(), nil
 	default:
-		return b, "", errors.Errorf("unknown type %s", typ)
+		return b, "", errors.Errorf("unknown type %d", typ)
 	}
 }

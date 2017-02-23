@@ -62,7 +62,7 @@ func (v *IndexedVar) TypeCheck(_ *SemaContext, desired Type) (TypedExpr, error) 
 		// instead we acknowledge that we only get here if someone has
 		// used a column reference in a place where it's not allowed by
 		// the docs, so just say that instead.
-		return nil, errors.Errorf("column reference %s not allowed in this context", v)
+		return nil, errors.Errorf("column reference %v not allowed in this context", v)
 	}
 	return v, nil
 }

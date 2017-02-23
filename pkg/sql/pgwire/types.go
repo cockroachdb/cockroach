@@ -698,7 +698,7 @@ func decodeOidDatum(id oid.Oid, code formatCode, b []byte) (parser.Datum, error)
 			return decodeBinaryArray(b, code)
 		}
 	default:
-		return nil, errors.Errorf("unsupported format code: %s", code)
+		return nil, errors.Errorf("unsupported format code: %d", code)
 	}
 
 	// Types with identical text/binary handling.
@@ -708,7 +708,7 @@ func decodeOidDatum(id oid.Oid, code formatCode, b []byte) (parser.Datum, error)
 	case oid.T_name:
 		return parser.NewDName(string(b)), nil
 	default:
-		return nil, errors.Errorf("unsupported OID %v with format code %s", id, code)
+		return nil, errors.Errorf("unsupported OID %v with format code %d", id, code)
 	}
 }
 

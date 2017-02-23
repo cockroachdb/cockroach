@@ -231,7 +231,7 @@ func (k *mvccKey) Set(value string) error {
 		}
 		*k = mvccKey(engine.MakeMVCCMetadataKey(keys.MakeRangeIDPrefix(fromID)))
 	default:
-		return fmt.Errorf("unknown key type %s", typ)
+		return fmt.Errorf("unknown key type %d", typ)
 	}
 
 	return nil

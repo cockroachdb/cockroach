@@ -3124,7 +3124,7 @@ const (
 // to apply but didn't).
 func (r *Replica) refreshProposalsLocked(refreshAtDelta int, reason refreshRaftReason) {
 	if refreshAtDelta != 0 && reason != reasonTicks {
-		log.Fatalf(context.TODO(), "refreshAtDelta specified for reason %s != reasonTicks", reason)
+		log.Fatalf(context.TODO(), "refreshAtDelta specified for reason %d != reasonTicks", reason)
 	}
 
 	numShouldRetry := 0
@@ -3140,7 +3140,7 @@ func (r *Replica) refreshProposalsLocked(refreshAtDelta int, reason refreshRaftR
 			p.finish(proposalResult{Err: roachpb.NewError(
 				roachpb.NewAmbiguousResultError(
 					fmt.Sprintf("unknown status for command without MaxLeaseIndex "+
-						"at refreshProposalsLocked time (refresh reason: %s)", reason)))})
+						"at refreshProposalsLocked time (refresh reason: %d)", reason)))})
 		} else if p.command.MaxLeaseIndex <= r.mu.state.LeaseAppliedIndex {
 			// The command's designated lease index slot was filled up. We got to
 			// LeaseAppliedIndex and p is still pending in r.mu.proposals; generally
