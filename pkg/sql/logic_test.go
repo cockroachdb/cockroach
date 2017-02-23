@@ -1248,8 +1248,7 @@ func makeLogicTest(t *testing.T, numNodes int, useFakeSpanResolver bool) *logicT
 // A new cluster is set up for each separate file in the test.
 // This function must be called from within the testing.T associated with the
 // logicTest.
-func (l *logicTest) run() {
-	t := l.t
+func (t *logicTest) run() {
 	var globs []string
 	if *bigtest {
 		logicTestPath := build.Default.GOPATH + "/src/github.com/cockroachdb/sqllogictest"
@@ -1308,16 +1307,16 @@ func (l *logicTest) run() {
 	totalUnsupported := 0
 	lastProgress := timeutil.Now()
 	if *printErrorSummary {
-		defer l.printErrorSummary()
+		defer t.printErrorSummary()
 	}
 	for _, path := range paths {
-		t.Run(path, func(t *testing.T) {
+		t.t.Run(path, func(tst *testing.T) {
 			// the `t` given to this anonymous function may be different
 			// from the t above, so re-bind it to `l` for the duration of
 			// the test.
-			l.t = t
-			defer l.close()
-			l.setup()
+			t.t = tst
+			defer t.close()
+			t.setup()
 
 			defer func() {
 				if r := recover(); r != nil {
@@ -1326,18 +1325,18 @@ func (l *logicTest) run() {
 				}
 			}()
 
-			if err := l.processTestFile(path); err != nil {
+			if err := t.processTestFile(path); err != nil {
 				t.Fatal(err)
 			}
 		})
 
-		total += l.progress
-		totalFail += l.failures
-		totalUnsupported += l.unsupported
+		total += t.progress
+		totalFail += t.failures
+		totalUnsupported += t.unsupported
 		now := timeutil.Now()
 		if now.Sub(lastProgress) >= 2*time.Second {
 			lastProgress = now
-			l.outf("--- total progress: %d statements/queries", total)
+			t.outf("--- total progress: %d statements/queries", total)
 		}
 	}
 
@@ -1346,7 +1345,7 @@ func (l *logicTest) run() {
 		unsupportedMsg = fmt.Sprintf(", ignored %d unsupported queries", totalUnsupported)
 	}
 
-	l.outf("--- total: %d tests, %d failures%s", total, totalFail, unsupportedMsg)
+	t.outf("--- total: %d tests, %d failures%s", total, totalFail, unsupportedMsg)
 }
 
 func TestLogic(t *testing.T) {
