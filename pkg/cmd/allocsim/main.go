@@ -342,7 +342,7 @@ func (a *allocSim) finalStatus() {
 			var percent, fromMean float64
 			if total != 0 {
 				percent = float64(count) / total * 100
-				fromMean = math.Abs((float64(count) - mean) / total * 100)
+				fromMean = (float64(count) - mean) / total * 100
 			}
 			fmt.Fprintf(&buf, " %9.9s", fmt.Sprintf("%.0f/%.0f", percent, fromMean))
 		}
