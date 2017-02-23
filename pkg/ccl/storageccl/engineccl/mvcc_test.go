@@ -85,7 +85,7 @@ func TestMVCCIterateIncremental(t *testing.T) {
 		t.Run("", func(t *testing.T) {
 			iter := NewMVCCIncrementalIterator(e)
 			defer iter.Close()
-			for iter.Reset(keyMin, keyMax, ts0, ts3); iter.Valid(); iter.Next() {
+			for iter.Reset(keyMin, keyMax, startTime, endTime); iter.Valid(); iter.Next() {
 				// pass
 			}
 			if err := iter.Error(); !testutils.IsError(err, errString) {
