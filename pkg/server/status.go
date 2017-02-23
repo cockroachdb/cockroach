@@ -47,6 +47,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -917,8 +918,8 @@ func (d *debugRangeData) postProcessing() {
 		if d.RangeInfos[0].State.Lease.Expiration != d.RangeInfos[i].State.Lease.Expiration {
 			d.HeaderClasses["Lease Expiration"] = "warning"
 		}
-		if !reflect.DeepEqual(d.RangeInfos[0].Span, d.RangeInfos[i].Span) {
-			d.HeaderClasses["Key Range"] = "warning"
+		if d.RangeInfos[0].State.LeaseAppliedIndex != d.RangeInfos[i].State.LeaseAppliedIndex {
+			d.HeaderClasses["Lease Applied Index"] = "warning"
 		}
 		if d.RangeInfos[0].RaftState.Lead != d.RangeInfos[i].RaftState.Lead {
 			d.HeaderClasses["Leader"] = "warning"
@@ -935,8 +936,14 @@ func (d *debugRangeData) postProcessing() {
 		if d.RangeInfos[0].State.LastIndex != d.RangeInfos[i].State.LastIndex {
 			d.HeaderClasses["Last Index"] = "warning"
 		}
-		if d.RangeInfos[0].State.RaftLogSize != d.RangeInfos[i].State.RaftLogSize {
-			d.HeaderClasses["Log Size"] = "warning"
+		if d.RangeInfos[0].State.TruncatedState.Index != d.RangeInfos[i].State.TruncatedState.Index {
+			d.HeaderClasses["Truncated Index"] = "warning"
+		}
+		if d.RangeInfos[0].State.TruncatedState.Term != d.RangeInfos[i].State.TruncatedState.Term {
+			d.HeaderClasses["Truncated Term"] = "warning"
+		}
+		if d.RangeInfos[0].State.IsFrozen() != d.RangeInfos[i].State.IsFrozen() {
+			d.HeaderClasses["Frozen"] = "warning"
 		}
 	}
 
@@ -949,6 +956,7 @@ func (d *debugRangeData) postProcessing() {
 // debugRangeTemplate.
 var _ = debugRangeData.ConvertRaftState
 var _ = debugRangeData.GetStoreID
+var _ = debugRangeData.ConvertTimestamp
 
 // ConvertRaftState take a raft.State string and converts it to a displayable
 // string.
@@ -967,6 +975,11 @@ func (d debugRangeData) GetStoreID(repID uint64) roachpb.StoreID {
 		return desc.StoreID
 	}
 	return roachpb.StoreID(0)
+}
+
+// ConvertTimestamp returns a human readable version of the timestamp.
+func (d debugRangeData) ConvertTimestamp(timestamp hlc.Timestamp) string {
+	return fmt.Sprintf("%s, %d", timestamp.GoTime(), timestamp.Logical)
 }
 
 const debugRangeTemplate = `
@@ -1097,6 +1110,7 @@ const debugRangeTemplate = `
             <DIV CLASS="cell {{index $.HeaderClasses "Lease Epoch"}}">Lease Epoch</DIV>
             <DIV CLASS="cell {{index $.HeaderClasses "Lease Start"}}">Lease Start</DIV>
             <DIV CLASS="cell {{index $.HeaderClasses "Lease Expiration"}}">Lease Expiration</DIV>
+            <DIV CLASS="cell {{index $.HeaderClasses "Lease Applied Index"}}">Lease Applied Index</DIV>
             <DIV CLASS="cell {{index $.HeaderClasses "Leader"}}">Leader</DIV>
             <DIV CLASS="cell {{index $.HeaderClasses "Vote"}}">Vote</DIV>
             <DIV CLASS="cell {{index $.HeaderClasses "Term"}}">Term</DIV>
@@ -1105,6 +1119,10 @@ const debugRangeTemplate = `
             <DIV CLASS="cell {{index $.HeaderClasses "Last Index"}}">Last Index</DIV>
             <DIV CLASS="cell {{index $.HeaderClasses "Log Size"}}">Log Size</DIV>
             <DIV CLASS="cell {{index $.HeaderClasses "Pending Commands"}}">Pending Commands</DIV>
+            <DIV CLASS="cell {{index $.HeaderClasses "Dropped Commands"}}">Dropped Commands</DIV>
+            <DIV CLASS="cell {{index $.HeaderClasses "Truncated Index"}}">Truncated Index</DIV>
+            <DIV CLASS="cell {{index $.HeaderClasses "Truncated Term"}}">Truncated Term</DIV>
+            <DIV CLASS="cell {{index $.HeaderClasses "Frozen"}}">Frozen</DIV>
             {{range $repID, $rep := $.Replicas -}}
               <DIV CLASS="cell {{index $.HeaderClasses $repID.String}}">
                 Replica {{$repID}}
@@ -1135,9 +1153,12 @@ const debugRangeTemplate = `
                 {{- else}}
                   <DIV CLASS="cell" TITLE="{{$det.State.Lease.Epoch}}">{{$det.State.Lease.Epoch}}</DIV>
                 {{- end}}
-                <DIV CLASS="cell" TITLE="{{$det.State.Lease.Start}}">{{$det.State.Lease.Start}}</DIV>
-                <DIV CLASS="cell" TITLE="{{$det.State.Lease.Expiration}}">{{$det.State.Lease.Expiration}}</DIV>
+                {{- $leaseStartTime := $.ConvertTimestamp $det.State.Lease.Start}}
+                <DIV CLASS="cell" TITLE="{{$leaseStartTime}} &#10;{{$det.State.Lease.Start}}">{{$leaseStartTime}}</DIV>
+                {{- $leaseExpirationTime := $.ConvertTimestamp $det.State.Lease.Expiration}}
+                <DIV CLASS="cell" TITLE="{{$leaseExpirationTime}} &#10;{{$det.State.Lease.Expiration}}">{{$leaseExpirationTime}}</DIV>
               {{- end}}
+              <DIV CLASS="cell" TITLE="{{$det.State.LeaseAppliedIndex}}">{{$det.State.LeaseAppliedIndex}}</DIV>
               {{- $leadStoreID := $.GetStoreID $det.RaftState.Lead}}
               <DIV CLASS="cell {{if eq $det.SourceStoreID $leadStoreID -}}
                   raftstate-leader
@@ -1161,6 +1182,13 @@ const debugRangeTemplate = `
                 warning
               {{- end -}}
               " TITLE="{{$det.State.NumPending}}">{{$det.State.NumPending}}</DIV>
+              <DIV CLASS="cell {{if and (gt $det.State.NumDropped 0) (not (eq $det.SourceStoreID $leadStoreID)) -}}
+                warning
+              {{- end -}}
+              " TITLE="{{$det.State.NumDropped}}">{{$det.State.NumDropped}}</DIV>
+              <DIV CLASS="cell" TITLE="{{$det.State.TruncatedState.Index}}">{{$det.State.TruncatedState.Index}}</DIV>
+              <DIV CLASS="cell" TITLE="{{$det.State.TruncatedState.Term}}">{{$det.State.TruncatedState.Term}}</DIV>
+              <DIV CLASS="cell" TITLE="{{$det.State.IsFrozen}}">{{$det.State.IsFrozen}}</DIV>
               {{range $repID, $rep := $.Replicas -}}
                 {{- with index (index $.ReplicaDescPerStore $det.SourceStoreID) $repID -}}
                   {{- if eq .ReplicaID 0 -}}
