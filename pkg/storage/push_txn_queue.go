@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -291,6 +292,9 @@ func (ptq *pushTxnQueue) MaybeWait(
 	var pusheeTxnTimer timeutil.Timer
 	defer pusheeTxnTimer.Stop()
 
+	pusherPriority := req.PusherTxn.Priority
+	pusheePriority := req.PusheeTxn.Priority
+
 	for {
 		// Set the timer to check for the pushee txn's expiration.
 		pusheeTxnTimer.Reset(time.Duration(
@@ -325,6 +329,7 @@ func (ptq *pushTxnQueue) MaybeWait(
 			if pErr != nil {
 				return nil, pErr
 			} else if updatedPushee != nil {
+				pusheePriority = updatedPushee.Priority
 				pending.txn.Store(updatedPushee)
 				if isExpired(ptq.store.Clock().Now(), updatedPushee) {
 					return nil, nil
@@ -337,6 +342,7 @@ func (ptq *pushTxnQueue) MaybeWait(
 			if pErr != nil {
 				return nil, pErr
 			} else if updatedPusher != nil {
+				pusherPriority = updatedPusher.Priority
 				// Check for dependency cycle to find and break deadlocks.
 				push.mu.Lock()
 				if push.mu.dependents == nil {
@@ -351,9 +357,15 @@ func (ptq *pushTxnQueue) MaybeWait(
 
 				if haveDependency {
 					// Break the deadlock if the pusher has higher priority.
-					p1, p2 := req.PusheeTxn.Priority, req.PusherTxn.Priority
+					p1, p2 := pusheePriority, pusherPriority
 					if p1 < p2 || (p1 == p2 && bytes.Compare(req.PusheeTxn.ID.GetBytes(), req.PusherTxn.ID.GetBytes()) < 0) {
 						return nil, errDeadlock
+					}
+					if log.V(2) {
+						log.Infof(ptq.store.AnnotateCtx(context.Background()),
+							"not breaking deadlock pusher=%s(pri=%d) pushee=%s(pri=%d)",
+							req.PusherTxn.ID.Short(), pusherPriority,
+							req.PusheeTxn.ID.Short(), pusheePriority)
 					}
 				}
 			}
