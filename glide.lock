@@ -1,5 +1,5 @@
-hash: b20a72348a0c3a7ca135d14be1ff5bb8268b8c3867bcb128a966a0c890355fa7
-updated: 2017-02-22T13:01:13.800134121-05:00
+hash: f8b280945f169c45789262e00915cfa207bea48686b38404794918e300de3c34
+updated: 2017-02-23T11:42:45.857302326-05:00
 imports:
 - name: cloud.google.com/go
   version: 1ed2f0abb2869a51b3a5b9daec801bf9791f95d0
@@ -40,7 +40,7 @@ imports:
 - name: github.com/cockroachdb/c-jemalloc
   version: 7eb7980d8a9f68b771568a7eb15196a63a818595
 - name: github.com/cockroachdb/c-protobuf
-  version: 033462a6a2ba42305bd63922bc76cf7b3f834aff
+  version: 323984796a7b4794ee62a00e12456743a5b66765
   subpackages:
   - cmd/protoc
 - name: github.com/cockroachdb/c-rocksdb
@@ -194,8 +194,6 @@ imports:
   - utilities
 - name: github.com/inconshreveable/mousetrap
   version: 76626ae9c91c4f2a10f34cad8ce83ea42c93bb75
-- name: github.com/jeffjen/datefmt
-  version: 6688647cfa0439b86e09b097cac96ed328d5fa34
 - name: github.com/jteeuwen/go-bindata
   version: a0ff2567cfb70903282db057e799fd826784d41d
   subpackages:
@@ -405,7 +403,7 @@ imports:
   - tap
   - transport
 - name: gopkg.in/yaml.v2
-  version: 53feefa2559fb8dfa8d81baad31be332c97d6c77
+  version: a3f3340b5840cee44f372bddb5880fcbc419b46a
 - name: honnef.co/go/tools
   version: 0cd9a3997b51c13198691879e13c49da7ba0f8f9
   subpackages:

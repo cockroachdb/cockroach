@@ -862,7 +862,7 @@ var Builtins = map[string][]Builtin{
 			fn: func(_ *EvalContext, args Datums) (Datum, error) {
 				format := string(MustBeDString(args[0]))
 				toParse := string(MustBeDString(args[1]))
-				t, err := timeutil.Strptime(toParse, format)
+				t, err := timeutil.Strptime(format, toParse)
 				if err != nil {
 					return nil, err
 				}
