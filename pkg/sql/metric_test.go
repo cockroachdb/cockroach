@@ -64,9 +64,9 @@ func TestQueryCounts(t *testing.T) {
 			txnBeginCount: 1, updateCount: 1, txnCommitCount: 1,
 		},
 		{query: "SELECT * FROM mt.n; SELECT * FROM mt.n; SELECT * FROM mt.n", selectCount: 3},
-		{query: "SET DIST_SQL = 'on'", miscCount: 1},
+		{query: "SET DISTSQL = 'on'", miscCount: 1},
 		{query: "SELECT * FROM mt.n", selectCount: 1, distSQLSelectCount: 1},
-		{query: "SET DIST_SQL = 'off'", miscCount: 1},
+		{query: "SET DISTSQL = 'off'", miscCount: 1},
 		{query: "DROP TABLE mt.n", ddlCount: 1},
 		{query: "SET database = system", miscCount: 1},
 	}

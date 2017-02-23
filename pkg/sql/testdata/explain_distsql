@@ -5,15 +5,11 @@
 statement ok
 CREATE TABLE kv (k INT PRIMARY KEY, v INT)
 
-statement ok
-EXPLAIN (DISTSQL) SELECT * FROM kv
-
-# Verify that the json and url columns exist.
-statement ok
-SELECT json FROM [EXPLAIN (DISTSQL) SELECT * FROM kv]
-
-statement ok
-SELECT url FROM [EXPLAIN (DISTSQL) SELECT * FROM kv]
+# Verify the EXPLAIN (DISTSQL) schema.
+query BTT colnames
+SELECT * FROM [EXPLAIN (DISTSQL) SELECT * FROM kv] WHERE false
+----
+Automatic URL JSON
 
 # Full table scan - distribute.
 query B

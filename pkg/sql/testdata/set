@@ -139,16 +139,16 @@ statement ok
 SET SEARCH_PATH = 'blah'
 
 statement ok
-SET DIST_SQL = ALWAYS
+SET DISTSQL = ALWAYS
 
 statement ok
-SET DIST_SQL = ON
+SET DISTSQL = ON
 
 statement ok
-SET DIST_SQL = OFF
+SET DISTSQL = OFF
 
 statement error not supported
-SET DIST_SQL = bogus
+SET DISTSQL = bogus
 
 query T colnames
 SHOW SERVER_VERSION
