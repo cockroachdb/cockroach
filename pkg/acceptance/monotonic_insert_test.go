@@ -36,6 +36,7 @@ import (
 // TestMonotonicInserts replicates the 'monotonic' test from the Jepsen
 // CockroachDB test suite (https://github.com/cockroachdb/jepsen).
 func TestMonotonicInserts(t *testing.T) {
+	t.Skip("#13759")
 	s := log.Scope(t, "")
 	defer s.Close(t)
 
