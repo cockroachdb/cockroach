@@ -919,14 +919,14 @@ func newNotLeaseHolderError(
 // existing lease is valid and owned by the current store. This method should
 // not be called directly. Use redirectOnOrAcquireLease instead.
 func (r *Replica) leaseGoodToGo(ctx context.Context) (LeaseStatus, bool) {
-	if r.requiresExpiringLease() {
-		// Slow-path for expiration-based leases.
-		return LeaseStatus{}, false
-	}
-
 	timestamp := r.store.Clock().Now()
 	r.mu.RLock()
 	defer r.mu.RUnlock()
+
+	if r.requiresExpiringLeaseRLocked() {
+		// Slow-path for expiration-based leases.
+		return LeaseStatus{}, false
+	}
 
 	status := r.leaseStatus(r.mu.state.Lease, timestamp, r.mu.minLeaseProposedTS)
 	switch status.state {
@@ -1011,7 +1011,7 @@ func (r *Replica) redirectOnOrAcquireLease(ctx context.Context) (LeaseStatus, *r
 				// leases, the lease is in need of renewal, and there's not
 				// already an extension pending.
 				_, requestPending := r.mu.pendingLeaseRequest.RequestPending()
-				if !requestPending && r.requiresExpiringLease() {
+				if !requestPending && r.requiresExpiringLeaseRLocked() {
 					renewal := status.lease.Expiration.Add(-int64(r.store.cfg.RangeLeaseRenewalDuration), 0)
 					if !timestamp.Less(renewal) {
 						if log.V(2) {
