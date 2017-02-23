@@ -12,7 +12,6 @@ import (
 	"bytes"
 	gosql "database/sql"
 	"fmt"
-	"hash/crc32"
 	"io/ioutil"
 	"math/rand"
 	"os"
@@ -20,7 +19,6 @@ import (
 	"strconv"
 	"testing"
 
-	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -68,7 +66,7 @@ func bankDataInsertStmts(count int) []string {
 				insert.WriteRune(',')
 			}
 			payload := randutil.RandBytes(rng, backupRestoreRowPayloadSize)
-			fmt.Fprintf(&insert, `(%d, %d, '%s')`, j, 0, payload)
+			fmt.Fprintf(&insert, `(%d, %d, 'initial-%s')`, j, 0, payload)
 		}
 		statements = append(statements, insert.String())
 	}
@@ -263,7 +261,9 @@ func TestBackupRestoreInterleaved(t *testing.T) {
 	})
 }
 
-func startBankTransfers(stopper *stop.Stopper, sqlDB *gosql.DB, numAccounts int) error {
+func startBackgroundWrites(
+	stopper *stop.Stopper, sqlDB *gosql.DB, wake chan struct{}, maxID int,
+) error {
 	rng, _ := randutil.NewPseudoRand()
 
 	for {
@@ -274,7 +274,7 @@ func startBankTransfers(stopper *stop.Stopper, sqlDB *gosql.DB, numAccounts int)
 			// Keep going.
 		}
 
-		account := rand.Intn(numAccounts)
+		id := rand.Intn(maxID)
 		payload := randutil.RandBytes(rng, backupRestoreRowPayloadSize)
 
 		updateFn := func() error {
@@ -284,12 +284,15 @@ func startBankTransfers(stopper *stop.Stopper, sqlDB *gosql.DB, numAccounts int)
 			default:
 				// Keep going.
 			}
-			_, err := sqlDB.Exec(`UPDATE bench.bank SET payload = $1 WHERE id = $2`,
-				payload, account)
+			_, err := sqlDB.Exec(`UPDATE bench.bank SET payload = $1 WHERE id = $2`, payload, id)
 			return err
 		}
 		if err := util.RetryForDuration(testutils.DefaultSucceedsSoonDuration, updateFn); err != nil {
 			return err
+		}
+		select {
+		case wake <- struct{}{}:
+		default:
 		}
 	}
 }
@@ -304,82 +307,59 @@ func TestBackupRestoreBank(t *testing.T) {
 	// TODO(dan): Actually invalidate the descriptor cache and delete this line.
 	defer sql.TestDisableTableLeases()()
 
-	const numAccounts = 10
-	const numTransferTasks = multiNode
+	const rows = 10
+	const numBackgroundTasks = multiNode
 	const backupRestoreIterations = 3
 
-	_, baseDir, tc, sqlDB, cleanupFn := backupRestoreTestSetup(t, multiNode, numAccounts)
+	_, baseDir, tc, sqlDB, cleanupFn := backupRestoreTestSetup(t, multiNode, rows)
 	defer cleanupFn()
 
-	for i := 0; i < numTransferTasks; i++ {
+	bgActivity := make(chan struct{})
+
+	for i := 0; i < numBackgroundTasks; i++ {
 		taskNum := i
 		tc.Stopper().RunWorker(func() {
 			// Use different sql gateways to make sure leasing is right.
-			err := startBankTransfers(tc.Stopper(), tc.Conns[taskNum%len(tc.Conns)], numAccounts)
+			err := startBackgroundWrites(tc.Stopper(), tc.Conns[taskNum%len(tc.Conns)], bgActivity, rows)
 			if err != nil {
 				t.Error(err)
 			}
 		})
 	}
 
-	waitForChecksumChange := func(currentChecksum uint32) uint32 {
-		var newChecksum uint32
-		testutils.SucceedsSoon(t, func() error {
-			crc := crc32.New(crc32.MakeTable(crc32.Castagnoli))
-			rows := sqlDB.Query(`SELECT payload FROM bench.bank`)
-			defer rows.Close()
-			var payload []byte
-			for rows.Next() {
-				if err := rows.Scan(&payload); err != nil {
-					t.Fatal(err)
-				}
-				if _, err := crc.Write(payload); err != nil {
-					t.Fatal(err)
-				}
-			}
-			if err := rows.Err(); err != nil {
-				t.Fatal(err)
-			}
-			newChecksum = crc.Sum32()
-			if newChecksum == currentChecksum {
-				return errors.Errorf("waiting for checksum to change %d", newChecksum)
-			}
-			return nil
-		})
-		return newChecksum
-	}
-
 	// Use the bench.bank table as a key (id), value (balance) table with a
-	// payload. Repeatedly run backups and restores while the transfer tasks are
+	// payload. Repeatedly run backups and restores while the background tasks are
 	// mutating the table concurrently. Wait in between each backup and each
 	// restore for the data to change.
-	var checksum uint32
 	for i := 0; i < backupRestoreIterations; i++ {
 		dir := filepath.Join(baseDir, strconv.Itoa(i))
 
+		<-bgActivity
+
 		// Set the id=balance invariant on each row and back up the table.
-		checksum = waitForChecksumChange(checksum)
 		_ = sqlDB.Exec(`UPDATE bench.bank SET balance = id`)
+
 		_ = sqlDB.Exec(fmt.Sprintf(`BACKUP DATABASE bench TO '%s'`, dir))
+
+		<-bgActivity
 
 		// Break the id=balance invariant on every row in the current table.
 		// When we restore, it'll blow away this data, but if restore doesn't
 		// work we can tell by looking for these.
-		checksum = waitForChecksumChange(checksum)
 		_ = sqlDB.Exec(`UPDATE bench.bank SET balance = -1`)
 
-		// Restore and wait for the new descriptor to be gossiped out. We can
-		// tell that this happened when id=balance holds again.
-		checksum = waitForChecksumChange(checksum)
+		<-bgActivity
+
+		// Restore and check id=balance holds again.
 		_ = sqlDB.Exec(fmt.Sprintf(`RESTORE DATABASE bench FROM '%s'`, dir))
-		testutils.SucceedsSoon(t, func() error {
-			var failures int
-			sqlDB.QueryRow(`SELECT COUNT(id) FROM bench.bank WHERE id != balance`).Scan(&failures)
-			if failures > 0 {
-				return errors.Errorf("The bank is not in good order. Total failures: %d", failures)
-			}
-			return nil
-		})
+
+		bad := sqlDB.QueryStr(`SELECT id, balance, writes, payload FROM bench.bank WHERE id != balance`)
+		for _, r := range bad {
+			t.Errorf("bad row ID %s = bal %s (payload (%s): %q)", r[0], r[1], r[2], r[3])
+		}
+		if len(bad) > 0 {
+			break
+		}
 	}
 }
 
