@@ -430,7 +430,7 @@ func DatumTypeToColumnType(t Type) (ColumnType, error) {
 			return &CollatedStringColType{Name: "STRING", Locale: typ.Locale}, nil
 		}
 	}
-	return nil, errors.Errorf("internal error: unknown Datum type %s", t)
+	return nil, errors.Errorf("value type %s cannot be used for table columns", t)
 }
 
 // CastTargetToDatumType produces a Type equivalent to the given
