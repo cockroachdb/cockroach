@@ -1,0 +1,105 @@
+#
+# Tests that verify DistSQL support and auto mode determination.
+#
+
+statement ok
+CREATE TABLE kv (k INT PRIMARY KEY, v INT)
+
+statement ok
+EXPLAIN (DIST_SQL) SELECT * FROM kv
+
+# Full table scan - distribute.
+query TT
+EXPLAIN (DIST_SQL,NOPLAN) SELECT * FROM kv
+----
+Runs in auto mode  Yes
+
+# Partial scan - don't distribute.
+query TT
+EXPLAIN (DIST_SQL,NOPLAN) SELECT * FROM kv WHERE k=1
+----
+Runs in auto mode  No
+
+# Partial scan - don't distribute.
+query TT
+EXPLAIN (DIST_SQL,NOPLAN) SELECT * FROM kv WHERE k>1
+----
+Runs in auto mode  No
+
+# Partial scan with filter - distribute.
+query TT
+EXPLAIN (DIST_SQL,NOPLAN) SELECT * FROM kv WHERE k>1 AND v=1
+----
+Runs in auto mode  Yes
+
+# Sort - distribute.
+query TT
+EXPLAIN (DIST_SQL,NOPLAN) SELECT * FROM kv WHERE k>1 ORDER BY v
+----
+Runs in auto mode  Yes
+
+# Aggregation - distribute.
+query TT
+EXPLAIN (DIST_SQL,NOPLAN) SELECT k, SUM(v) FROM kv WHERE k>1 GROUP BY k
+----
+Runs in auto mode  Yes
+
+# Hard limit in scan - don't distribute.
+query TT
+EXPLAIN (DIST_SQL,NOPLAN) SELECT * FROM kv LIMIT 1
+----
+Runs in auto mode  No
+
+# Soft limit in scan - don't distribute.
+query TT
+EXPLAIN (DIST_SQL,NOPLAN) SELECT * FROM kv WHERE v=1 LIMIT 1
+----
+Runs in auto mode  No
+
+# Limit after sort - distribute.
+query TT
+EXPLAIN (DIST_SQL,NOPLAN) SELECT * FROM kv WHERE k>1 ORDER BY v LIMIT 1
+----
+Runs in auto mode  Yes
+
+# Limit after aggregation - distribute.
+query TT
+EXPLAIN (DIST_SQL,NOPLAN) SELECT k, SUM(v) FROM kv WHERE k>1 GROUP BY k LIMIT 1
+----
+Runs in auto mode  Yes
+
+statement ok
+CREATE TABLE kw (k INT PRIMARY KEY, w INT)
+
+# Join - distribute.
+query TT
+EXPLAIN (DIST_SQL,NOPLAN) SELECT * FROM kv NATURAL JOIN kw
+----
+Runs in auto mode  Yes
+
+# Join with span - distribute.
+query TT
+EXPLAIN (DIST_SQL,NOPLAN) SELECT * FROM kv NATURAL JOIN kw WHERE k=1
+----
+Runs in auto mode  Yes
+
+statement ok
+CREATE TABLE abc (a INT PRIMARY KEY, b INT, c INT, INDEX b (b))
+
+# Index join - don't distribute.
+query TT
+EXPLAIN (DIST_SQL,NOPLAN) SELECT * FROM abc WHERE b=1
+----
+Runs in auto mode  No
+
+# Index join with filter on result - don't distribute.
+query TT
+EXPLAIN (DIST_SQL,NOPLAN) SELECT * FROM abc WHERE b>1 AND c%2=0
+----
+Runs in auto mode  No
+
+# Index join with filter on index scan - distribute.
+query TT
+EXPLAIN (DIST_SQL,NOPLAN) SELECT * FROM abc WHERE b=1 AND a%2=0
+----
+Runs in auto mode  Yes
