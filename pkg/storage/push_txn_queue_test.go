@@ -25,7 +25,6 @@ import (
 
 	"golang.org/x/net/context"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
@@ -394,12 +393,12 @@ func TestPushTxnQueuePusheeExpires(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	var queryTxnCount int32
 
-	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
+	manual := hlc.NewManualClock(123)
+	clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
 	txn := newTransaction("txn", roachpb.Key("a"), 1, enginepb.SERIALIZABLE, clock)
-	// Move the clock back so that when the PushTxn is sent, the txn
-	// appears expired.
-	txn.Timestamp = txn.Timestamp.Add(-2*(base.DefaultHeartbeatInterval-10*time.Millisecond).Nanoseconds(), 0)
-	txn.OrigTimestamp = txn.Timestamp
+	// Move the clock forward so that when the PushTxn is sent, the txn appears
+	// expired.
+	manual.Set(txnExpiration(txn).WallTime)
 
 	tc := testContext{}
 	tsc := TestStoreConfig(clock)
