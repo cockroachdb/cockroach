@@ -429,3 +429,10 @@ query error pq: unimplemented: VECTOR column types are unsupported \(see issue h
 CREATE TABLE IF NOT EXISTS test.int_array_test (
   arr INT2VECTOR
 )
+
+# Regression test for #13725
+statement ok
+CREATE TABLE test.empty ()
+
+statement ok
+SELECT * FROM test.empty
