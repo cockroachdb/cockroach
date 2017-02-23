@@ -396,8 +396,6 @@ func TestReplicaContains(t *testing.T) {
 
 	// This test really only needs a hollow shell of a Replica.
 	r := &Replica{}
-	r.mu.timedMutex = makeTimedMutex(defaultMuLogger)
-	r.cmdQMu.timedMutex = makeTimedMutex(defaultMuLogger)
 	r.mu.state.Desc = desc
 	r.rangeStr.store(0, desc)
 
@@ -569,7 +567,7 @@ func TestBehaviorDuringLeaseTransfer(t *testing.T) {
 	<-transferSem
 	// Check that a transfer is indeed on-going.
 	tc.repl.mu.Lock()
-	repDesc, err := tc.repl.getReplicaDescriptorLocked()
+	repDesc, err := tc.repl.getReplicaDescriptorRLocked()
 	if err != nil {
 		tc.repl.mu.Unlock()
 		t.Fatal(err)
