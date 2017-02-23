@@ -1,5 +1,5 @@
 query ITTTTT
-EXPLAIN (METADATA, NOOPTIMIZE) SELECT 1 FROM (SELECT 2 AS s)
+EXPLAIN (METADATA,NOOPTIMIZE) SELECT 1 FROM (SELECT 2 AS s)
 ----
 0   render                          ("1")
 1   render                          (s)
@@ -106,7 +106,7 @@ statement ok
 CREATE TABLE kv(k INT PRIMARY KEY, v INT)
 
 query ITTTTT
-EXPLAIN(METADATA) SELECT 1 FROM kv
+EXPLAIN (METADATA) SELECT 1 FROM kv
 ----
 0   render                         ("1")
 1   scan                           (k[omitted], v[omitted])
@@ -125,7 +125,7 @@ EXPLAIN (METADATA) SELECT DISTINCT v FROM kv
 
 # Propagation through INSERT.
 query ITTTTT
-EXPLAIN(METADATA) INSERT INTO kv(k, v) SELECT 1, 2 FROM (SELECT 3 AS x, 4 AS y)
+EXPLAIN (METADATA) INSERT INTO kv(k, v) SELECT 1, 2 FROM (SELECT 3 AS x, 4 AS y)
 ----
 0   insert                          ()
 0             into    kv(k, v)

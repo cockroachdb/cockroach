@@ -28,7 +28,7 @@ INSERT INTO t VALUES
   (9, 3, 3, '33')
 
 query ITTT
-EXPLAIN(EXPRS) SELECT * FROM t WHERE b = 2 AND c % 2 = 0
+EXPLAIN (EXPRS) SELECT * FROM t WHERE b = 2 AND c % 2 = 0
 ----
 0  index-join
 1  scan
@@ -51,7 +51,7 @@ EXPLAIN (DEBUG) SELECT * FROM t WHERE b = 2 AND c % 2 = 0
 2 /t/bc/2/3/6    NULL FILTERED
 
 query ITTT
-EXPLAIN(EXPRS) SELECT * FROM t WHERE b = 2 AND c != b
+EXPLAIN (EXPRS) SELECT * FROM t WHERE b = 2 AND c != b
 ----
 0  index-join
 1  scan
@@ -121,7 +121,7 @@ EXPLAIN (DEBUG) SELECT * FROM t WHERE b > 1 AND ((c = b+1 AND s != '23') OR (a >
 # To test this we need an expression containing non-indexed
 # columns that disappears during range simplification.
 query ITTTTT
-EXPLAIN(VERBOSE) SELECT a FROM t WHERE b = 2 OR ((b BETWEEN 2 AND 1) AND ((s != 'a') OR (s = 'a')))
+EXPLAIN (VERBOSE) SELECT a FROM t WHERE b = 2 OR ((b BETWEEN 2 AND 1) AND ((s != 'a') OR (s = 'a')))
 ----
 0  render                           (a)
 0              render 0  test.t.a
