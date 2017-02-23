@@ -1340,6 +1340,8 @@ func (e *Executor) shouldUseDistSQL(planMaker *planner, plan planNode) (bool, er
 	if planMaker.txn.Proto.TxnMeta.Key != nil {
 		err = errors.New("writing txn")
 	} else {
+		// Trigger limit propagation.
+		setUnlimited(plan)
 		distribute, err = e.distSQLPlanner.CheckSupport(plan)
 	}
 
