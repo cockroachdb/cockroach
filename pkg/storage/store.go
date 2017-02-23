@@ -3784,7 +3784,7 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 	timestamp := s.cfg.Clock.Now()
 	var livenessMap map[roachpb.NodeID]bool
 	if s.cfg.NodeLiveness != nil {
-		livenessMap = s.cfg.NodeLiveness.GetLivenessMap()
+		livenessMap = s.cfg.NodeLiveness.GetIsLiveMap()
 	}
 
 	newStoreReplicaVisitor(s).Visit(func(rep *Replica) bool {
