@@ -18,6 +18,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/pkg/errors"
@@ -149,6 +150,17 @@ func backupAndRestore(
 	ctx context.Context, t *testing.T, sqlDB *sqlutils.SQLRunner, dest string, numAccounts int64,
 ) {
 	{
+		sqlDB.Exec(`CREATE INDEX balance_idx ON bench.bank (balance)`)
+		testutils.SucceedsSoon(t, func() error {
+			var unused string
+			var createTable string
+			sqlDB.QueryRow(`SHOW CREATE TABLE bench.bank`).Scan(&unused, &createTable)
+			if !strings.Contains(createTable, "balance_idx") {
+				return errors.New("expected a balance_idx index")
+			}
+			return nil
+		})
+
 		var unused string
 		var dataSize int64
 		sqlDB.QueryRow(fmt.Sprintf(`BACKUP DATABASE bench TO '%s'`, dest)).Scan(
@@ -176,6 +188,11 @@ func backupAndRestore(
 
 		var rowCount int64
 		sqlDBRestore.QueryRow(`SELECT COUNT(*) FROM bench.bank`).Scan(&rowCount)
+		if rowCount != numAccounts {
+			t.Fatalf("expected %d rows but found %d", numAccounts, rowCount)
+		}
+
+		sqlDBRestore.QueryRow(`SELECT COUNT(*) FROM bench.bank@balance_idx`).Scan(&rowCount)
 		if rowCount != numAccounts {
 			t.Fatalf("expected %d rows but found %d", numAccounts, rowCount)
 		}
