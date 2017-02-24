@@ -51,9 +51,8 @@ var configFile = flag.String("f", "", "config file that specifies an allocsim wo
 
 // Configuration provides a way to configure allocsim via a JSON file.
 // TODO(a-robinson): Consider moving all the above options into the config file.
-// TODO(a-robinson): Allow for specifying different distributions of requests
-// from different localities.
 type Configuration struct {
+	NumWorkers int        `json:"NumWorkers"`
 	Localities []Locality `json:"Localities"`
 }
 
@@ -61,6 +60,7 @@ type Configuration struct {
 type Locality struct {
 	Name              string `json:"Name"`
 	NumNodes          int    `json:"NumNodes"`
+	NumWorkers        int    `json:"NumWorkers"`
 	OutgoingLatencies []*struct {
 		Name    string       `json:"Name"`
 		Latency jsonDuration `json:"Latency"`
@@ -96,8 +96,10 @@ func loadConfig(file string) (Configuration, error) {
 	}
 
 	*numNodes = 0
+	*workers = config.NumWorkers
 	for _, locality := range config.Localities {
 		*numNodes += locality.NumNodes
+		*workers += locality.NumWorkers
 	}
 	return config, nil
 }
@@ -111,14 +113,16 @@ func loadConfig(file string) (Configuration, error) {
 type allocSim struct {
 	*localcluster.Cluster
 	stats struct {
-		ops    uint64
-		errors uint64
+		ops               uint64
+		totalLatencyNanos uint64
+		errors            uint64
 	}
 	ranges struct {
 		syncutil.Mutex
-		count    int
-		replicas []int
-		leases   []int
+		count          int
+		replicas       []int
+		leases         []int
+		leaseTransfers []int
 	}
 	localities []Locality
 }
@@ -132,8 +136,33 @@ func newAllocSim(c *localcluster.Cluster) *allocSim {
 func (a *allocSim) run(workers int) {
 	a.setup()
 	for i := 0; i < workers; i++ {
-		go a.worker(i, workers)
+		go a.roundRobinWorker(i, workers)
 	}
+	go a.rangeStats(time.Second)
+	a.monitor(time.Second)
+}
+
+func (a *allocSim) runWithConfig(config Configuration) {
+	a.setup()
+
+	numWorkers := config.NumWorkers
+	for _, locality := range config.Localities {
+		numWorkers += locality.NumWorkers
+	}
+
+	firstNodeInLocality := 0
+	for _, locality := range config.Localities {
+		for i := 0; i < locality.NumWorkers; i++ {
+			node := firstNodeInLocality + (i % locality.NumNodes)
+			startNum := firstNodeInLocality + i
+			go a.worker(node, startNum, numWorkers)
+		}
+		firstNodeInLocality += locality.NumNodes
+	}
+	for i := 0; i < config.NumWorkers; i++ {
+		go a.roundRobinWorker(firstNodeInLocality+i, numWorkers)
+	}
+
 	go a.rangeStats(time.Second)
 	a.monitor(time.Second)
 }
@@ -165,24 +194,39 @@ func (a *allocSim) maybeLogError(err error) {
 	atomic.AddUint64(&a.stats.errors, 1)
 }
 
-func (a *allocSim) worker(i, workers int) {
-	const insert = `INSERT INTO allocsim.blocks (id, num, data) VALUES ($1, $2, repeat('a', $3)::bytes)`
+const insertStmt = `INSERT INTO allocsim.blocks (id, num, data) VALUES ($1, $2, repeat('a', $3)::bytes)`
 
+func (a *allocSim) worker(dbIdx, startNum, workers int) {
 	r, _ := randutil.NewPseudoRand()
-	db := a.DB[i%len(a.DB)]
-
-	for num := i; true; num += workers {
-		if _, err := db.Exec(insert, r.Int63(), num, *blockSize); err != nil {
+	db := a.DB[dbIdx%len(a.DB)]
+	for num := startNum; true; num += workers {
+		now := timeutil.Now()
+		if _, err := db.Exec(insertStmt, r.Int63(), num, *blockSize); err != nil {
 			a.maybeLogError(err)
 		} else {
 			atomic.AddUint64(&a.stats.ops, 1)
+			atomic.AddUint64(&a.stats.totalLatencyNanos, uint64(timeutil.Since(now).Nanoseconds()))
 		}
 	}
 }
 
-func (a *allocSim) rangeInfo() (total int, replicas []int, leases []int) {
+func (a *allocSim) roundRobinWorker(startNum, workers int) {
+	r, _ := randutil.NewPseudoRand()
+	for i := 0; ; i++ {
+		now := timeutil.Now()
+		if _, err := a.DB[i%len(a.DB)].Exec(insertStmt, r.Int63(), startNum+i*workers, *blockSize); err != nil {
+			a.maybeLogError(err)
+		} else {
+			atomic.AddUint64(&a.stats.ops, 1)
+			atomic.AddUint64(&a.stats.totalLatencyNanos, uint64(timeutil.Since(now).Nanoseconds()))
+		}
+	}
+}
+
+func (a *allocSim) rangeInfo() (total int, replicas, leases, leaseTransfers []int) {
 	replicas = make([]int, len(a.Nodes))
 	leases = make([]int, len(a.Nodes))
+	leaseTransfers = make([]int, len(a.Nodes))
 
 	// Retrieve the metrics for each node and extract the replica and leaseholder
 	// counts.
@@ -192,7 +236,7 @@ func (a *allocSim) rangeInfo() (total int, replicas []int, leases []int) {
 		go func(i int) {
 			defer wg.Done()
 			resp, err := a.Status[i].Metrics(context.Background(), &serverpb.MetricsRequest{
-				NodeId: fmt.Sprintf("%d", i+1),
+				NodeId: fmt.Sprintf("local"),
 			})
 			if err != nil {
 				log.Fatal(context.Background(), err)
@@ -210,6 +254,9 @@ func (a *allocSim) rangeInfo() (total int, replicas []int, leases []int) {
 				if v, ok := storeMetrics["replicas.leaseholders"]; ok {
 					leases[i] += int(v.(float64))
 				}
+				if v, ok := storeMetrics["leasestransfers.success"]; ok {
+					leaseTransfers[i] += int(v.(float64))
+				}
 			}
 		}(i)
 	}
@@ -218,23 +265,24 @@ func (a *allocSim) rangeInfo() (total int, replicas []int, leases []int) {
 	for _, v := range replicas {
 		total += v
 	}
-	return total, replicas, leases
+	return total, replicas, leases, leaseTransfers
 }
 
 func (a *allocSim) rangeStats(d time.Duration) {
 	for {
-		count, replicas, leases := a.rangeInfo()
+		count, replicas, leases, leaseTransfers := a.rangeInfo()
 		a.ranges.Lock()
 		a.ranges.count = count
 		a.ranges.replicas = replicas
 		a.ranges.leases = leases
+		a.ranges.leaseTransfers = leaseTransfers
 		a.ranges.Unlock()
 
 		time.Sleep(d)
 	}
 }
 
-const padding = "__________"
+const padding = "__________________"
 
 func formatHeader(header string, numberNodes int, localities []Locality) string {
 	var buf bytes.Buffer
@@ -250,14 +298,14 @@ func formatHeader(header string, numberNodes int, localities []Locality) string 
 }
 
 func (a *allocSim) monitor(d time.Duration) {
-	formatNodes := func(replicas, leases []int) string {
+	formatNodes := func(replicas, leases, leaseTransfers []int) string {
 		var buf bytes.Buffer
 		for i := range replicas {
 			alive := a.Nodes[i].Alive()
 			if !alive {
 				_, _ = buf.WriteString("\033[0;31;49m")
 			}
-			fmt.Fprintf(&buf, "%*s", len(padding), fmt.Sprintf("%d/%d", replicas[i], leases[i]))
+			fmt.Fprintf(&buf, "%*s", len(padding), fmt.Sprintf("%d/%d/%d", replicas[i], leases[i], leaseTransfers[i]))
 			if !alive {
 				_, _ = buf.WriteString("\033[0m")
 			}
@@ -276,22 +324,25 @@ func (a *allocSim) monitor(d time.Duration) {
 		now := timeutil.Now()
 		elapsed := now.Sub(lastTime).Seconds()
 		ops := atomic.LoadUint64(&a.stats.ops)
+		totalLatencyNanos := atomic.LoadUint64(&a.stats.totalLatencyNanos)
 
 		a.ranges.Lock()
 		ranges := a.ranges.count
 		replicas := a.ranges.replicas
 		leases := a.ranges.leases
+		leaseTransfers := a.ranges.leaseTransfers
 		a.ranges.Unlock()
 
 		if ticks%20 == 0 || numReplicas != len(replicas) {
 			numReplicas = len(replicas)
-			fmt.Println(formatHeader("_elapsed__ops/sec___errors_replicas", numReplicas, a.localities))
+			fmt.Println(formatHeader("_elapsed__ops/sec__average__latency___errors_replicas", numReplicas, a.localities))
 		}
 
-		fmt.Printf("%8s %8.1f %8d %8d%s\n",
+		fmt.Printf("%8s %8.1f %8.1f %6.1fms %8d %8d%s\n",
 			time.Duration(now.Sub(start).Seconds()+0.5)*time.Second,
-			float64(ops-lastOps)/elapsed, atomic.LoadUint64(&a.stats.errors),
-			ranges, formatNodes(replicas, leases))
+			float64(ops-lastOps)/elapsed, float64(ops)/now.Sub(start).Seconds(),
+			float64(totalLatencyNanos/ops)/float64(time.Millisecond),
+			atomic.LoadUint64(&a.stats.errors), ranges, formatNodes(replicas, leases, leaseTransfers))
 		lastTime = now
 		lastOps = ops
 	}
@@ -318,7 +369,7 @@ func (a *allocSim) finalStatus() {
 			var percent, fromMean float64
 			if total != 0 {
 				percent = float64(count) / total * 100
-				fromMean = math.Abs((float64(count) - mean) / total * 100)
+				fromMean = (float64(count) - mean) / total * 100
 			}
 			fmt.Fprintf(&buf, " %9.9s", fmt.Sprintf("%.0f/%.0f", percent, fromMean))
 		}
@@ -353,6 +404,9 @@ func handleStart() bool {
 }
 
 func configureArtificialLatencies(latenciesConfig string) error {
+	if latenciesConfig == "" {
+		return nil
+	}
 	for _, latency := range strings.Split(latenciesConfig, ",") {
 		parts := strings.Split(latency, "=")
 		if len(parts) != 2 {
@@ -444,5 +498,9 @@ func main() {
 
 	c.Start("allocsim", *workers, os.Args[0], nil, flag.Args(), perNodeArgs)
 	c.UpdateZoneConfig(1, 1<<20)
-	a.run(*workers)
+	if len(config.Localities) != 0 {
+		a.runWithConfig(config)
+	} else {
+		a.run(*workers)
+	}
 }
