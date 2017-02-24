@@ -29,18 +29,18 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
 var (
 	testKey     = roachpb.Key("a")
 	testTS      = hlc.Timestamp{WallTime: 1, Logical: 1}
 	testPutResp = roachpb.PutResponse{}
-	txnKey      = roachpb.Key("test-txn")
 )
 
 // An example of snowball tracing being used to dump a trace around a
@@ -88,15 +88,9 @@ func newTestSender(
 	pre, post func(roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error),
 ) SenderFunc {
 	return func(_ context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
-		txnID := uuid.MakeV4()
 		if ba.UserPriority == 0 {
 			ba.UserPriority = 1
 		}
-		if ba.Txn != nil && ba.Txn.ID == nil {
-			ba.Txn.Key = txnKey
-			ba.Txn.ID = &txnID
-		}
-
 		var br *roachpb.BatchResponse
 		var pErr *roachpb.Error
 		if pre != nil {
@@ -180,7 +174,7 @@ func TestTxnRequestTxnTimestamp(t *testing.T) {
 	testCases := []struct {
 		expRequestTS, responseTS hlc.Timestamp
 	}{
-		{hlc.Timestamp{WallTime: 0, Logical: 0}, hlc.Timestamp{WallTime: 10, Logical: 0}},
+		{hlc.Timestamp{WallTime: 5, Logical: 0}, hlc.Timestamp{WallTime: 10, Logical: 0}},
 		{hlc.Timestamp{WallTime: 10, Logical: 0}, hlc.Timestamp{WallTime: 10, Logical: 1}},
 		{hlc.Timestamp{WallTime: 10, Logical: 1}, hlc.Timestamp{WallTime: 10, Logical: 0}},
 		{hlc.Timestamp{WallTime: 10, Logical: 1}, hlc.Timestamp{WallTime: 20, Logical: 1}},
@@ -189,8 +183,9 @@ func TestTxnRequestTxnTimestamp(t *testing.T) {
 		{hlc.Timestamp{WallTime: 20, Logical: 1}, hlc.Timestamp{WallTime: 20, Logical: 1}},
 	}
 
+	manual := hlc.NewManualClock(testCases[0].expRequestTS.WallTime)
+	clock := hlc.NewClock(manual.UnixNano, 0)
 	var testIdx int
-	clock := hlc.NewClock(hlc.UnixNano, 0)
 	db := NewDB(newTestSender(nil, func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 		test := testCases[testIdx]
 		if test.expRequestTS != ba.Txn.Timestamp {
@@ -206,7 +201,7 @@ func TestTxnRequestTxnTimestamp(t *testing.T) {
 	txn := NewTxn(context.Background(), *db)
 
 	for testIdx = range testCases {
-		if _, pErr := txn.sendInternal(ba); pErr != nil {
+		if _, pErr := txn.send(ba); pErr != nil {
 			t.Fatal(pErr)
 		}
 	}
@@ -221,12 +216,12 @@ func TestTxnResetTxnOnAbort(t *testing.T) {
 	}, nil), clock)
 
 	txn := NewTxn(context.Background(), *db)
-	_, pErr := txn.sendInternal(testPut())
+	_, pErr := txn.send(testPut())
 	if _, ok := pErr.GetDetail().(*roachpb.TransactionAbortedError); !ok {
 		t.Fatalf("expected TransactionAbortedError, got %v", pErr)
 	}
 
-	if txn.Proto.ID != nil {
+	if txn.Proto().ID != nil {
 		t.Error("expected txn to be cleared")
 	}
 }
@@ -466,7 +461,8 @@ func TestEndWriteRestartReadOnlyTransaction(t *testing.T) {
 				ok = true
 				// Return an immediate txn retry error. We need to go through the pErr
 				// and back to get a RetryableTxnError.
-				return roachpb.NewErrorWithTxn(roachpb.NewTransactionRetryError(), &txn.Proto).GoError()
+				return roachpb.NewErrorWithTxn(
+					roachpb.NewTransactionRetryError(), txn.Proto()).GoError()
 			}
 			if !success {
 				return errors.New("aborting on purpose")
@@ -648,9 +644,9 @@ func TestAbortedRetryRenewsTimestamp(t *testing.T) {
 	// Request a client-defined timestamp.
 	refTimestamp := clock.Now()
 	execOpt := TxnExecOptions{
-		AutoRetry:  true,
-		AutoCommit: true,
-		Clock:      clock,
+		AutoRetry:           true,
+		AutoCommit:          true,
+		AssignOrigTimestamp: true,
 	}
 
 	// Perform the transaction.
@@ -659,7 +655,7 @@ func TestAbortedRetryRenewsTimestamp(t *testing.T) {
 	}
 
 	// Check the timestamp was preserved.
-	if txn.Proto.OrigTimestamp.WallTime == refTimestamp.WallTime {
+	if txn.Proto().OrigTimestamp.WallTime == refTimestamp.WallTime {
 		t.Errorf("expected txn orig ts to be different than %s", refTimestamp)
 	}
 }
@@ -740,14 +736,14 @@ func TestTransactionStatus(t *testing.T) {
 				if pErr := txn.CommitOrCleanup(); pErr != nil {
 					t.Fatal(pErr)
 				}
-				if a, e := txn.Proto.Status, roachpb.COMMITTED; a != e {
+				if a, e := txn.Proto().Status, roachpb.COMMITTED; a != e {
 					t.Errorf("write: %t, commit: %t transaction expected to have status %q but had %q", write, commit, e, a)
 				}
 			} else {
 				if pErr := txn.Rollback(); pErr != nil {
 					t.Fatal(pErr)
 				}
-				if a, e := txn.Proto.Status, roachpb.ABORTED; a != e {
+				if a, e := txn.Proto().Status, roachpb.ABORTED; a != e {
 					t.Errorf("write: %t, commit: %t transaction expected to have status %q but had %q", write, commit, e, a)
 				}
 			}
@@ -782,7 +778,7 @@ func TestTimestampSelectionInOptions(t *testing.T) {
 	txn := NewTxn(context.Background(), *db)
 
 	execOpt := TxnExecOptions{
-		Clock: clock,
+		AssignOrigTimestamp: true,
 	}
 	refTimestamp := clock.Now()
 
@@ -796,8 +792,8 @@ func TestTimestampSelectionInOptions(t *testing.T) {
 	}
 
 	// Check the timestamp was initialized.
-	if txn.Proto.OrigTimestamp.WallTime != refTimestamp.WallTime {
-		t.Errorf("expected txn orig ts to be %s; got %s", refTimestamp, txn.Proto.OrigTimestamp)
+	if txn.Proto().OrigTimestamp.WallTime != refTimestamp.WallTime {
+		t.Errorf("expected txn orig ts to be %s; got %s", refTimestamp, txn.Proto().OrigTimestamp)
 	}
 }
 
@@ -828,7 +824,7 @@ func TestSetPriority(t *testing.T) {
 	if err := txn.SetUserPriority(expected); err != nil {
 		t.Fatal(err)
 	}
-	if _, pErr := txn.sendInternal(roachpb.BatchRequest{}); pErr != nil {
+	if _, pErr := txn.send(roachpb.BatchRequest{}); pErr != nil {
 		t.Fatal(pErr)
 	}
 
@@ -836,7 +832,7 @@ func TestSetPriority(t *testing.T) {
 	expected = roachpb.UserPriority(-13)
 	txn = NewTxn(context.Background(), *db)
 	txn.InternalSetPriority(13)
-	if _, pErr := txn.sendInternal(roachpb.BatchRequest{}); pErr != nil {
+	if _, pErr := txn.send(roachpb.BatchRequest{}); pErr != nil {
 		t.Fatal(pErr)
 	}
 }
@@ -859,13 +855,13 @@ func TestWrongTxnRetry(t *testing.T) {
 		var execOpt TxnExecOptions
 		execOpt.AutoRetry = false
 		innerClosure := func(innerTxn *Txn, opt *TxnExecOptions) error {
-			log.Infof(context.TODO(), "starting inner: %s", innerTxn.Proto)
+			log.Infof(context.TODO(), "starting inner: %s", innerTxn.Proto())
 			// Ensure the KV transaction is created.
 			if err := innerTxn.Put("x", "y"); err != nil {
 				t.Fatal(err)
 			}
 			return roachpb.NewErrorWithTxn(&roachpb.TransactionPushError{
-				PusheeTxn: outerTxn.Proto}, &innerTxn.Proto).GoError()
+				PusheeTxn: *outerTxn.Proto()}, innerTxn.Proto()).GoError()
 		}
 		innerTxn := NewTxn(context.TODO(), *db)
 		err := innerTxn.Exec(execOpt, innerClosure)
@@ -928,5 +924,48 @@ func TestUpdateDeadlineMaybe(t *testing.T) {
 	}
 	if d := *txn.deadline; d != pastDeadline {
 		t.Errorf("unexpected deadline: %s", d)
+	}
+}
+
+// TestConcurrentTxnRequests verifies that multiple requests can be executed on
+// a transaction at the same time from multiple goroutines. It makes sure that
+// exactly one BeginTxnRequest and one EndTxnRequest are sent.
+func TestConcurrentTxnRequests(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	clock := hlc.NewClock(hlc.UnixNano, 0)
+	var callCountsMu syncutil.Mutex
+	callCounts := make(map[roachpb.Method]int)
+	db := NewDB(newTestSender(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+		callCountsMu.Lock()
+		for _, m := range ba.Methods() {
+			callCounts[m]++
+		}
+		callCountsMu.Unlock()
+		return ba.CreateReply(), nil
+	}, nil), clock)
+
+	const keys = "abcdefghijklmnopqrstuvwxyz"
+	const value = "value"
+	if err := db.Txn(context.TODO(), func(txn *Txn) error {
+		var wg util.WaitGroupWithError
+		for _, keyChar := range keys {
+			wg.Add(1)
+			go func(key string) {
+				wg.Done(txn.Put(key, value))
+			}(string(keyChar))
+		}
+		return errors.Cause(wg.Wait())
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	expectedCallCounts := map[roachpb.Method]int{
+		roachpb.BeginTransaction: 1,
+		roachpb.Put:              26,
+		roachpb.EndTransaction:   1,
+	}
+	if !reflect.DeepEqual(expectedCallCounts, callCounts) {
+		t.Errorf("expected %v, got %v", expectedCallCounts, callCounts)
 	}
 }

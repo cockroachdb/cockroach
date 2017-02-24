@@ -3285,7 +3285,7 @@ func (r *Replica) ChangeReplicas(
 
 	if err := r.store.DB().Txn(ctx, func(txn *client.Txn) error {
 		log.Event(ctx, "attempting txn")
-		txn.Proto.Name = replicaChangeTxnName
+		txn.SetDebugName(replicaChangeTxnName)
 		// TODO(tschottdorf): oldDesc is used for sanity checks related to #7224.
 		// Remove when that has been solved. The failure mode is likely based on
 		// prior divergence of the Replica (in which case the check below does not

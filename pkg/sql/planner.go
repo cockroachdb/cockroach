@@ -200,7 +200,7 @@ func (p *planner) hijackCtx(ctx context.Context) func() {
 func (p *planner) setTxn(txn *client.Txn) {
 	p.txn = txn
 	if txn != nil {
-		p.evalCtx.SetClusterTimestamp(txn.Proto.OrigTimestamp)
+		p.evalCtx.SetClusterTimestamp(txn.Proto().OrigTimestamp)
 	} else {
 		p.evalCtx.SetTxnTimestamp(time.Time{})
 		p.evalCtx.SetStmtTimestamp(time.Time{})

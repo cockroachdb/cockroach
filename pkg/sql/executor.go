@@ -441,7 +441,9 @@ func (e *Executor) Prepare(
 	// we check that they're reading descriptors consistent with the txn in which
 	// they'll be used?
 	txn := client.NewTxn(session.Ctx(), *e.cfg.DB)
-	txn.Proto.Isolation = session.DefaultIsolationLevel
+	if err := txn.SetIsolation(session.DefaultIsolationLevel); err != nil {
+		panic(err)
+	}
 	session.planner.setTxn(txn)
 	defer session.planner.setTxn(nil)
 
@@ -582,7 +584,7 @@ func (e *Executor) execRequest(session *Session, sql string, copymsg copyMsg) St
 
 		inTxn := txnState.State != NoTxn
 		execOpt := client.TxnExecOptions{
-			Clock: e.cfg.Clock,
+			AssignOrigTimestamp: true,
 		}
 		// Figure out the statements out of which we're going to try to consume
 		// this iteration. If we need to create an implicit txn, only one statement
@@ -697,7 +699,7 @@ func (e *Executor) execRequest(session *Session, sql string, copymsg copyMsg) St
 				{
 					log.Eventf(session.Ctx(), "executor got AutoCommitError: %s\n"+
 						"txn: %+v\nexecOpt.AutoRetry %t, execOpt.AutoCommit:%t, stmts %+v, remaining %+v",
-						aErr, txnState.txn.Proto, execOpt.AutoRetry, execOpt.AutoCommit, stmts,
+						aErr, txnState.txn.Proto(), execOpt.AutoRetry, execOpt.AutoCommit, stmts,
 						remainingStmts)
 					if txnState.txn == nil {
 						log.Errorf(session.Ctx(), "7881: AutoCommitError on nil txn: %s, "+
@@ -716,7 +718,7 @@ func (e *Executor) execRequest(session *Session, sql string, copymsg copyMsg) St
 			if _, retryable := err.(*roachpb.RetryableTxnError); !retryable {
 				log.Fatalf(session.Ctx(), "got a non-retryable error but the KV "+
 					"transaction is not finalized. TxnState: %s, err: %s\n"+
-					"err:%+v\n\ntxn: %s", txnState.State, err, err, txnState.txn.Proto)
+					"err:%+v\n\ntxn: %s", txnState.State, err, err, txnState.txn.Proto())
 			}
 		}
 
@@ -1121,7 +1123,7 @@ func (e *Executor) execStmtInOpenTxn(
 		// allow SAVEPOINT to be issued at any time during a retry, not just
 		// in the beginning. We should figure out how to track whether we
 		// started using the transaction during a retry.
-		if txnState.txn.Proto.IsInitialized() && !txnState.retrying {
+		if txnState.txn.IsInitialized() && !txnState.retrying {
 			err := fmt.Errorf("SAVEPOINT %s needs to be the first statement in a transaction",
 				parser.RestartSavepointName)
 			txnState.updateStateAndCleanupOnErr(err, e)
@@ -1207,7 +1209,7 @@ func rollbackSQLTransaction(txnState *txnState, p *planner) Result {
 	}
 	if txnState.State != Open && txnState.State != RestartWait {
 		panic(fmt.Sprintf("rollbackSQLTransaction called on txn in wrong state: %s (txn: %s)",
-			txnState.State, txnState.txn.Proto))
+			txnState.State, txnState.txn.Proto()))
 	}
 	err := p.txn.Rollback()
 	result := Result{PGTag: (*parser.RollbackTransaction)(nil).StatementTag()}
@@ -1344,7 +1346,7 @@ func (e *Executor) shouldUseDistSQL(planMaker *planner, plan planNode) (bool, er
 	// Temporary workaround for #13376: if the transaction modified something,
 	// TxnCoordSender will freak out if it sees scans in this txn from other
 	// nodes. We detect this by checking if the transaction's "anchor" key is set.
-	if planMaker.txn.Proto.TxnMeta.Key != nil {
+	if planMaker.txn.Proto().TxnMeta.Key != nil {
 		err = errors.New("writing txn")
 	} else {
 		// Trigger limit propagation.
@@ -1656,9 +1658,9 @@ func isAsOf(planMaker *planner, stmt parser.Statement, max hlc.Timestamp) (*hlc.
 // not strictly needed. However, it doesn't do anything incorrect and it will
 // possibly find problems if things change in the future, so it is left in.
 func SetTxnTimestamps(txn *client.Txn, ts hlc.Timestamp) {
-	txn.Proto.Timestamp = ts
-	txn.Proto.OrigTimestamp = ts
-	txn.Proto.MaxTimestamp = ts
+	txn.Proto().Timestamp = ts
+	txn.Proto().OrigTimestamp = ts
+	txn.Proto().MaxTimestamp = ts
 	txn.UpdateDeadlineMaybe(ts)
 }
 
