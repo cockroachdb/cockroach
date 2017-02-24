@@ -96,7 +96,7 @@ func NewServer(ctx *Context) *grpc.Server {
 	}
 	s := grpc.NewServer(opts...)
 	RegisterHeartbeatServer(s, &HeartbeatService{
-		clock:              ctx.localClock,
+		clock:              ctx.LocalClock,
 		remoteClockMonitor: ctx.RemoteClocks,
 	})
 	return s
@@ -113,7 +113,7 @@ type connMeta struct {
 type Context struct {
 	*base.Config
 
-	localClock   *hlc.Clock
+	LocalClock   *hlc.Clock
 	breakerClock breakerClock
 	Stopper      *stop.Stopper
 	RemoteClocks *RemoteClockMonitor
@@ -143,7 +143,7 @@ func NewContext(
 	}
 	ctx := &Context{
 		Config:     baseCtx,
-		localClock: hlcClock,
+		LocalClock: hlcClock,
 		breakerClock: breakerClock{
 			clock: hlcClock,
 		},
@@ -152,7 +152,7 @@ func NewContext(
 	ctx.masterCtx, cancel = context.WithCancel(ambient.AnnotateCtx(context.Background()))
 	ctx.Stopper = stopper
 	ctx.RemoteClocks = newRemoteClockMonitor(
-		ctx.localClock, 10*defaultHeartbeatInterval, baseCtx.HistogramWindowInterval)
+		ctx.LocalClock, 10*defaultHeartbeatInterval, baseCtx.HistogramWindowInterval)
 	ctx.HeartbeatInterval = defaultHeartbeatInterval
 	ctx.HeartbeatTimeout = 2 * defaultHeartbeatInterval
 	ctx.conns.cache = make(map[string]*connMeta)
@@ -339,7 +339,7 @@ func (ctx *Context) ConnHealth(remoteAddr string) error {
 func (ctx *Context) runHeartbeat(meta *connMeta, remoteAddr string) error {
 	request := PingRequest{
 		Addr:           ctx.Addr,
-		MaxOffsetNanos: ctx.localClock.MaxOffset().Nanoseconds(),
+		MaxOffsetNanos: ctx.LocalClock.MaxOffset().Nanoseconds(),
 	}
 	heartbeatClient := NewHeartbeatClient(meta.conn)
 
@@ -356,7 +356,7 @@ func (ctx *Context) runHeartbeat(meta *connMeta, remoteAddr string) error {
 			heartbeatTimer.Read = true
 		}
 
-		sendTime := ctx.localClock.PhysicalTime()
+		sendTime := ctx.LocalClock.PhysicalTime()
 		response, err := ctx.heartbeat(heartbeatClient, request)
 		ctx.conns.Lock()
 		meta.heartbeatErr = err
@@ -381,12 +381,12 @@ func (ctx *Context) runHeartbeat(meta *connMeta, remoteAddr string) error {
 		}
 
 		if err == nil {
-			receiveTime := ctx.localClock.PhysicalTime()
+			receiveTime := ctx.LocalClock.PhysicalTime()
 
 			// Only update the clock offset measurement if we actually got a
 			// successful response from the server.
 			pingDuration := receiveTime.Sub(sendTime)
-			if pingDuration > maximumPingDurationMult*ctx.localClock.MaxOffset() {
+			if pingDuration > maximumPingDurationMult*ctx.LocalClock.MaxOffset() {
 				request.Offset.Reset()
 			} else {
 				// Offset and error are measured using the remote clock reading

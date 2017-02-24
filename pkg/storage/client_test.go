@@ -145,7 +145,7 @@ func createTestStoreWithEngine(
 		stopper,
 		kv.MakeTxnMetrics(metric.TestSampleInterval),
 	)
-	storeCfg.DB = client.NewDB(sender)
+	storeCfg.DB = client.NewDB(sender, storeCfg.Clock)
 	storeCfg.StorePool = storage.NewStorePool(
 		log.AmbientContext{},
 		storeCfg.Gossip,
@@ -633,7 +633,7 @@ func (m *multiTestContext) populateDB(idx int, stopper *stop.Stopper) {
 		stopper,
 		kv.MakeTxnMetrics(metric.TestSampleInterval),
 	)
-	m.dbs[idx] = client.NewDB(sender)
+	m.dbs[idx] = client.NewDB(sender, m.clock)
 }
 
 func (m *multiTestContext) populateStorePool(idx int, nodeLiveness *storage.NodeLiveness) {
