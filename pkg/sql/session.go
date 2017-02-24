@@ -135,11 +135,12 @@ func NewSession(
 	}
 	cfg, cache := e.getSystemConfig()
 	s.planner = planner{
-		leaseMgr:      e.cfg.LeaseManager,
-		systemConfig:  cfg,
-		databaseCache: cache,
-		session:       s,
-		execCfg:       &e.cfg,
+		leaseMgr:       e.cfg.LeaseManager,
+		systemConfig:   cfg,
+		databaseCache:  cache,
+		session:        s,
+		execCfg:        &e.cfg,
+		distSQLPlanner: e.distSQLPlanner,
 	}
 	s.PreparedStatements = makePreparedStatements(s)
 	s.PreparedPortals = makePreparedPortals(s)

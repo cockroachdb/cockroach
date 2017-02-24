@@ -37,6 +37,9 @@ func setNeededColumns(plan planNode, needed []bool) {
 	case *explainDebugNode:
 		setNeededColumns(n.plan, allColumns(n.plan))
 
+	case *explainDistSQLNode:
+		setNeededColumns(n.plan, allColumns(n.plan))
+
 	case *explainTraceNode:
 		setNeededColumns(n.plan, allColumns(n.plan))
 
