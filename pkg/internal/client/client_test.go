@@ -135,7 +135,7 @@ func createTestClientForUser(
 	if err != nil {
 		t.Fatal(err)
 	}
-	return client.NewDBWithContext(client.NewSender(conn), dbCtx)
+	return client.NewDBWithContext(client.NewSender(conn), s.Clock(), dbCtx)
 }
 
 // createTestNotifyClient creates a new client which connects using an HTTP
@@ -147,7 +147,7 @@ func createTestNotifyClient(
 	sender := &notifyingSender{wrapped: db.GetSender()}
 	dbCtx := client.DefaultDBContext()
 	dbCtx.UserPriority = priority
-	return client.NewDBWithContext(sender, dbCtx), sender
+	return client.NewDBWithContext(sender, s.Clock(), dbCtx), sender
 }
 
 // TestClientRetryNonTxn verifies that non-transactional client will
@@ -802,7 +802,8 @@ func TestInconsistentReads(t *testing.T) {
 		}
 		return ba.CreateReply(), nil
 	}
-	db := client.NewDB(senderFn)
+	clock := hlc.NewClock(hlc.UnixNano, 0)
+	db := client.NewDB(senderFn, clock)
 	ctx := context.TODO()
 
 	prepInconsistent := func() *client.Batch {

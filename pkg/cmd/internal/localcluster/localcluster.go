@@ -188,7 +188,7 @@ func (c *Cluster) makeClient(nodeIdx int) *client.DB {
 	if err != nil {
 		log.Fatalf(context.Background(), "failed to initialize KV client: %s", err)
 	}
-	return client.NewDB(client.NewSender(conn))
+	return client.NewDB(client.NewSender(conn), c.rpcCtx.LocalClock)
 }
 
 func (c *Cluster) makeStatus(nodeIdx int) serverpb.StatusClient {

@@ -65,7 +65,7 @@ func newKVNative(b *testing.B) kvInterface {
 	}
 
 	return &kvNative{
-		db: client.NewDB(client.NewSender(conn)),
+		db: client.NewDB(client.NewSender(conn), rpcContext.LocalClock),
 		doneFn: func() {
 			s.Stopper().Stop()
 			enableTracing()
