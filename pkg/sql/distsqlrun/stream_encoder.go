@@ -48,8 +48,13 @@ type StreamEncoder struct {
 	rowBuf   []byte
 	metadata []RemoteProducerMetadata
 
-	firstMessageDone bool
-	alloc            sqlbase.DatumAlloc
+	// headerSent is set after the first message (which contains the header) has
+	// been sent.
+	headerSent bool
+	// typingSent is set after the first message that contains any rows has been
+	// sent.
+	typingSent bool
+	alloc      sqlbase.DatumAlloc
 
 	// Preallocated structures to avoid allocations.
 	msg    ProducerMessage
@@ -122,13 +127,19 @@ func (se *StreamEncoder) FormMessage(ctx context.Context) *ProducerMessage {
 	msg.Data.Metadata = make([]RemoteProducerMetadata, len(se.metadata))
 	copy(msg.Data.Metadata, se.metadata)
 	se.metadata = se.metadata[:0]
-	if !se.firstMessageDone {
+	if !se.headerSent {
 		msg.Header = &se.msgHdr
-		if se.infos != nil {
-			msg.Header.Info = se.infos
-		}
+		se.headerSent = true
 	}
+	if !se.typingSent {
+		if se.infos != nil {
+			msg.Typing = se.infos
+			se.typingSent = true
+		}
+	} else {
+		msg.Typing = nil
+	}
+
 	se.rowBuf = se.rowBuf[:0]
-	se.firstMessageDone = true
 	return msg
 }

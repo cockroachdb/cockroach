@@ -46,10 +46,13 @@ import (
 // AddMessage can be called multiple times before getting the rows, but this
 // will cause data to accumulate internally.
 type StreamDecoder struct {
-	info     []DatumInfo
+	typing   []DatumInfo
 	data     []byte
 	metadata []ProducerMetadata
 	rowAlloc sqlbase.EncDatumRowAlloc
+
+	headerReceived bool
+	typingReceived bool
 }
 
 // AddMessage adds the data in a ProducerMessage to the decoder.
@@ -59,19 +62,26 @@ type StreamDecoder struct {
 //
 // If an error is returned, no records have been buffered in the StreamDecoder.
 func (sd *StreamDecoder) AddMessage(msg *ProducerMessage) error {
-	headerReceived := (sd.info != nil)
 	if msg.Header != nil {
-		if headerReceived {
+		if sd.headerReceived {
 			return errors.Errorf("received multiple headers")
 		}
-		sd.info = msg.Header.Info
-	} else {
-		if !headerReceived {
-			if len(msg.Data.RawBytes) != 0 {
-				return errors.Errorf("received data before header")
-			}
+		sd.headerReceived = true
+	}
+	if msg.Typing != nil {
+		if sd.typingReceived {
+			return errors.Errorf("typing information received multiple times")
+		}
+		sd.typingReceived = true
+		sd.typing = msg.Typing
+	}
+
+	if len(msg.Data.RawBytes) != 0 {
+		if !sd.headerReceived || !sd.typingReceived {
+			return errors.Errorf("received data before header and/or typing info")
 		}
 	}
+
 	if len(msg.Data.RawBytes) > 0 {
 		if len(sd.data) == 0 {
 			// We limit the capacity of the slice (using "three-index slices") out of
@@ -119,7 +129,7 @@ func (sd *StreamDecoder) GetRow(
 	if len(sd.data) == 0 {
 		return nil, ProducerMetadata{}, nil
 	}
-	rowLen := len(sd.info)
+	rowLen := len(sd.typing)
 	if cap(rowBuf) >= rowLen {
 		rowBuf = rowBuf[:rowLen]
 	} else {
@@ -127,7 +137,7 @@ func (sd *StreamDecoder) GetRow(
 	}
 	for i := range rowBuf {
 		var err error
-		rowBuf[i], sd.data, err = sqlbase.EncDatumFromBuffer(sd.info[i].Type, sd.info[i].Encoding, sd.data)
+		rowBuf[i], sd.data, err = sqlbase.EncDatumFromBuffer(sd.typing[i].Type, sd.typing[i].Encoding, sd.data)
 		if err != nil {
 			// Reset sd because it is no longer usable.
 			*sd = StreamDecoder{}

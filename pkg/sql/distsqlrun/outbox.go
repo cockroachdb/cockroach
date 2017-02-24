@@ -120,7 +120,7 @@ func (m *outbox) addRow(ctx context.Context, row sqlbase.EncDatumRow, meta Produ
 // thus the stream can't be used any more. The stream is also set to nil if
 // an error is returned.
 func (m *outbox) flush(ctx context.Context) error {
-	if m.numRows == 0 {
+	if m.numRows == 0 && m.encoder.headerSent {
 		return nil
 	}
 	msg := m.encoder.FormMessage(ctx)
@@ -205,6 +205,15 @@ func (m *outbox) mainLoop(ctx context.Context) error {
 	defer func() {
 		m.RowChannel.ConsumerClosed()
 	}()
+
+	if m.stream != nil {
+		// Send a first message that will contain the header (i.e. the StreamID), so
+		// that the stream is properly initialized on the consumer. The consumer has
+		// a timeout in which inbound streams must be established.
+		if err := m.flush(ctx); err != nil {
+			return err
+		}
+	}
 
 	for {
 		select {

@@ -67,7 +67,11 @@ func (v *valuesProcessor) Run(ctx context.Context, wg *sync.WaitGroup) {
 	// to manufacture ProducerMessages.
 	var sd StreamDecoder
 
-	m := ProducerMessage{Header: &ProducerHeader{Info: v.columns}}
+	m := ProducerMessage{
+		Typing: v.columns,
+		// Add a bogus header to apease the StreamDecoder, which wants to receive a
+		// header before any data.
+		Header: &ProducerHeader{}}
 	if err := sd.AddMessage(&m); err != nil {
 		v.out.output.Push(nil /* row */, ProducerMetadata{Err: err})
 		v.out.close()
