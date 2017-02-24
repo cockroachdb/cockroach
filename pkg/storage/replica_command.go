@@ -53,6 +53,15 @@ import (
 
 var errTransactionUnsupported = errors.New("not supported within a transaction")
 
+const (
+	// collectChecksumTimeout controls how long we'll wait to collect a checksum
+	// for a CheckConsistency request. We need to bound the time that we wait
+	// because the checksum might never be computed for a replica if that replica
+	// is caught up via a snapshot and never performs the ComputeChecksum
+	// operation.
+	collectChecksumTimeout = 5 * time.Second
+)
+
 // CommandArgs contains all the arguments to a command.
 // TODO(bdarnell): consider merging with storagebase.FilterArgs (which
 // would probably require removing the Repl field due to import order
@@ -1861,6 +1870,8 @@ func (r *Replica) CheckConsistency(
 		wg.Add(1)
 		replica := replica // per-iteration copy
 		if err := r.store.Stopper().RunAsyncTask(ctx, func(ctx context.Context) {
+			ctx, cancel := context.WithTimeout(ctx, collectChecksumTimeout)
+			defer cancel()
 			defer wg.Done()
 			addr, err := r.store.cfg.Transport.resolver(replica.NodeID)
 			if err != nil {
