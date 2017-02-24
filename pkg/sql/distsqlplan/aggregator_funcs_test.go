@@ -39,11 +39,9 @@ import (
 func runTestFlow(
 	t *testing.T, srv serverutils.TestServerInterface, procs ...distsqlrun.ProcessorSpec,
 ) sqlbase.EncDatumRows {
-	kvDB := srv.KVClient().(*client.DB)
 	distSQLSrv := srv.DistSQLServer().(*distsqlrun.ServerImpl)
 
 	req := distsqlrun.SetupFlowRequest{
-		Txn: client.NewTxn(context.TODO(), *kvDB).Proto,
 		Flow: distsqlrun.FlowSpec{
 			FlowID:     distsqlrun.FlowID{UUID: uuid.MakeV4()},
 			Processors: procs,
