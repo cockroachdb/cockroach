@@ -816,7 +816,7 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 			stopper,
 			MakeTxnMetrics(metric.TestSampleInterval),
 		)
-		db := client.NewDB(ts)
+		db := client.NewDB(ts, clock)
 		txn := client.NewTxn(context.Background(), *db)
 		txn.InternalSetPriority(1)
 		txn.Proto.Name = "test txn"
@@ -1099,7 +1099,7 @@ func TestTxnCoordSenderNoDuplicateIntents(t *testing.T) {
 	defer stopper.Stop()
 	defer teardownHeartbeats(ts)
 
-	db := client.NewDB(ts)
+	db := client.NewDB(ts, clock)
 	txn := client.NewTxn(context.Background(), *db)
 
 	// Write to a, b, u-w before the final batch.
@@ -1190,13 +1190,13 @@ func checkTxnMetrics(
 // setupMetricsTest returns a TxnCoordSender and ManualClock pointing to a newly created
 // LocalTestCluster. Also returns a cleanup function to be executed at the end of the
 // test.
-func setupMetricsTest(t *testing.T) (*hlc.ManualClock, *TxnCoordSender, func()) {
+func setupMetricsTest(t *testing.T) (*localtestcluster.LocalTestCluster, *TxnCoordSender, func()) {
 	s, testSender := createTestDB(t)
 	txnMetrics := MakeTxnMetrics(metric.TestSampleInterval)
 	ambient := log.AmbientContext{Tracer: tracing.NewTracer()}
 	sender := NewTxnCoordSender(ambient, testSender.wrapped, s.Clock, false, s.Stopper, txnMetrics)
 
-	return s.Manual, sender, func() {
+	return s, sender, func() {
 		teardownHeartbeats(sender)
 		s.Stop()
 	}
@@ -1207,10 +1207,10 @@ func setupMetricsTest(t *testing.T) (*hlc.ManualClock, *TxnCoordSender, func()) 
 // function as other tests do.
 func TestTxnCommit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	_, sender, cleanupFn := setupMetricsTest(t)
+	s, sender, cleanupFn := setupMetricsTest(t)
 	defer cleanupFn()
 	value := []byte("value")
-	db := client.NewDB(sender)
+	db := client.NewDB(sender, s.Clock)
 
 	// Test normal commit.
 	if err := db.Txn(context.TODO(), func(txn *client.Txn) error {
@@ -1239,10 +1239,10 @@ func TestTxnCommit(t *testing.T) {
 // TestTxnOnePhaseCommit verifies that 1PC metric tracking works.
 func TestTxnOnePhaseCommit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	_, sender, cleanupFn := setupMetricsTest(t)
+	s, sender, cleanupFn := setupMetricsTest(t)
 	defer cleanupFn()
 	value := []byte("value")
-	db := client.NewDB(sender)
+	db := client.NewDB(sender, s.Clock)
 
 	if err := db.Txn(context.TODO(), func(txn *client.Txn) error {
 		key := []byte("key-commit")
@@ -1258,10 +1258,11 @@ func TestTxnOnePhaseCommit(t *testing.T) {
 
 func TestTxnAbandonCount(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	manual, sender, cleanupFn := setupMetricsTest(t)
+	s, sender, cleanupFn := setupMetricsTest(t)
 	defer cleanupFn()
 	value := []byte("value")
-	db := client.NewDB(sender)
+	manual := s.Manual
+	db := client.NewDB(sender, s.Clock)
 
 	// Test abandoned transaction by making the client timeout ridiculously short. We also set
 	// the sender to heartbeat very frequently, because the heartbeat detects and tears down
@@ -1294,10 +1295,12 @@ func TestTxnAbandonCount(t *testing.T) {
 // which should fail.
 func TestTxnReadAfterAbandon(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	manual, sender, cleanupFn := setupMetricsTest(t)
+	s, sender, cleanupFn := setupMetricsTest(t)
+	manual := s.Manual
 	defer cleanupFn()
+
 	value := []byte("value")
-	db := client.NewDB(sender)
+	db := client.NewDB(sender, s.Clock)
 
 	// Test abandoned transaction by making the client timeout ridiculously short. We also set
 	// the sender to heartbeat very frequently, because the heartbeat detects and tears down
@@ -1334,11 +1337,11 @@ func TestTxnReadAfterAbandon(t *testing.T) {
 
 func TestTxnAbortCount(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	_, sender, cleanupFn := setupMetricsTest(t)
+	s, sender, cleanupFn := setupMetricsTest(t)
 	defer cleanupFn()
 
 	value := []byte("value")
-	db := client.NewDB(sender)
+	db := client.NewDB(sender, s.Clock)
 
 	intentionalErrText := "intentional error to cause abort"
 	// Test aborted transaction.
@@ -1363,12 +1366,12 @@ func TestTxnAbortCount(t *testing.T) {
 
 func TestTxnRestartCount(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	_, sender, cleanupFn := setupMetricsTest(t)
+	s, sender, cleanupFn := setupMetricsTest(t)
 	defer cleanupFn()
 
 	key := []byte("key-restart")
 	value := []byte("value")
-	db := client.NewDB(sender)
+	db := client.NewDB(sender, s.Clock)
 
 	// Start a transaction and do a GET. This forces a timestamp to be chosen for the transaction.
 	txn := client.NewTxn(context.Background(), *db)
@@ -1400,10 +1403,11 @@ func TestTxnRestartCount(t *testing.T) {
 
 func TestTxnDurations(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	manual, sender, cleanupFn := setupMetricsTest(t)
+	s, sender, cleanupFn := setupMetricsTest(t)
+	manual := s.Manual
 	defer cleanupFn()
 
-	db := client.NewDB(sender)
+	db := client.NewDB(sender, s.Clock)
 	const puts = 10
 
 	const incr int64 = 1000

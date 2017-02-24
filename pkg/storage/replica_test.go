@@ -164,7 +164,7 @@ func (tc *testContext) StartWithStoreConfig(t testing.TB, stopper *stop.Stopper,
 		// circular dependency between the test sender and the store. The actual
 		// store will be passed to the sender after it is created and bootstrapped.
 		sender := &testSender{}
-		cfg.DB = client.NewDB(sender)
+		cfg.DB = client.NewDB(sender, cfg.Clock)
 		tc.store = NewStore(cfg, tc.engine, &roachpb.NodeDescriptor{NodeID: 1})
 		if err := tc.store.Bootstrap(roachpb.StoreIdent{
 			ClusterID: uuid.MakeV4(),
