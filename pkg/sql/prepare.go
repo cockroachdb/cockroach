@@ -28,6 +28,7 @@ import (
 // of arguments and results have been determined.
 type PreparedStatement struct {
 	Query       string
+	Type        parser.StatementType
 	SQLTypes    parser.PlaceholderTypes
 	Columns     ResultColumns
 	portalNames map[string]struct{}
@@ -69,7 +70,11 @@ func (ps PreparedStatements) Exists(name string) bool {
 func (ps PreparedStatements) New(
 	ctx context.Context, e *Executor, name, query string, placeholderHints parser.PlaceholderTypes,
 ) (*PreparedStatement, error) {
-	stmt := &PreparedStatement{}
+	// Prepare the query. This completes the typing of placeholders.
+	stmt, err := e.Prepare(query, ps.session, placeholderHints)
+	if err != nil {
+		return nil, err
+	}
 
 	// For now we are just counting the size of the query string and
 	// statement name. When we start storing the prepared query plan
@@ -78,17 +83,6 @@ func (ps PreparedStatements) New(
 	if err := stmt.memAcc.Wsession(ps.session).OpenAndInit(sz); err != nil {
 		return nil, err
 	}
-
-	// Prepare the query. This completes the typing of placeholders.
-	cols, err := e.Prepare(query, ps.session, placeholderHints)
-	if err != nil {
-		stmt.memAcc.Wsession(ps.session).Close()
-		return nil, err
-	}
-	stmt.Query = query
-	stmt.SQLTypes = placeholderHints
-	stmt.Columns = cols
-	stmt.portalNames = make(map[string]struct{})
 
 	if prevStmt, ok := ps.Get(name); ok {
 		prevStmt.memAcc.Wsession(ps.session).Close()
