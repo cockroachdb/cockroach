@@ -177,6 +177,10 @@ func backupAndRestore(
 		defer tcRestore.Stopper().Stop()
 		sqlDBRestore := sqlutils.MakeSQLRunner(t, tcRestore.Conns[0])
 
+		// Create some other descriptors to change up IDs
+		sqlDBRestore.Exec(`CREATE DATABASE other`)
+		sqlDBRestore.Exec(`CREATE TABLE other.empty (a INT PRIMARY KEY)`)
+
 		// Restore assumes the database exists.
 		sqlDBRestore.Exec(bankCreateDatabase)
 
