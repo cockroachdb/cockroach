@@ -17,15 +17,15 @@
 package client
 
 import (
+	"bytes"
 	"reflect"
+	"regexp"
 	"testing"
 	"time"
 
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
-
-	"regexp"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -40,7 +40,6 @@ var (
 	testKey     = roachpb.Key("a")
 	testTS      = hlc.Timestamp{WallTime: 1, Logical: 1}
 	testPutResp = roachpb.PutResponse{}
-	txnKey      = roachpb.Key("test-txn")
 )
 
 // An example of snowball tracing being used to dump a trace around a
@@ -92,7 +91,6 @@ func newTestSender(
 			ba.UserPriority = 1
 		}
 		if ba.Txn != nil && ba.Txn.ID == nil {
-			ba.Txn.Key = txnKey
 			ba.Txn.ID = &txnID
 		}
 
@@ -114,6 +112,11 @@ func newTestSender(
 				testPutRespCopy := testPutResp
 				union := &br.Responses[i] // avoid operating on copy
 				union.MustSetInner(&testPutRespCopy)
+			}
+			if bt, ok := args.(*roachpb.BeginTransactionRequest); ok {
+				if ba.Txn.Key == nil {
+					ba.Txn.Key = bt.Key
+				}
 			}
 			if roachpb.IsTransactionWrite(args) {
 				writing = true
@@ -473,48 +476,56 @@ func TestEndWriteRestartReadOnlyTransaction(t *testing.T) {
 // in a restart), the key in the begin transaction request is not changed.
 func TestTransactionKeyNotChangedInRestart(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	tries := 0
+
+	attempt := 0
+	keys := []string{"first", "second"}
 	db := NewDB(newTestSender(nil, func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
-		var bt *roachpb.BeginTransactionRequest
-		if args, ok := ba.GetArg(roachpb.BeginTransaction); ok {
-			bt = args.(*roachpb.BeginTransactionRequest)
-		} else {
-			t.Fatal("failed to find a begin transaction request")
+		// Ignore the final EndTxnRequest.
+		if _, ok := ba.GetArg(roachpb.EndTransaction); ok {
+			return ba.CreateReply(), nil
 		}
 
-		// In the first try, the transaction key is the key of the first write command. Before the
-		// second try, the transaction key is set to txnKey by the test sender. In the second try, the
-		// transaction key is txnKey.
-		var expectedKey roachpb.Key
-		if tries == 1 {
-			expectedKey = testKey
-		} else {
-			expectedKey = txnKey
+		// Attempt 0 should have a BeginTxnRequest, and a PutRequest.
+		// Attempt 1 should have a PutRequest.
+		if attempt == 0 {
+			if _, ok := ba.GetArg(roachpb.BeginTransaction); !ok {
+				t.Fatalf("failed to find a begin transaction request: %v", ba)
+			}
 		}
-		if !bt.Key.Equal(expectedKey) {
-			t.Fatalf("expected transaction key %v, got %v", expectedKey, bt.Key)
+		if _, ok := ba.GetArg(roachpb.Put); !ok {
+			t.Fatalf("failed to find a put request: %v", ba)
 		}
 
-		return ba.CreateReply(), nil
+		// In the first attempt, the transaction key is the key of the first write command.
+		// This key is retained between restarts, so we see the same key in the second attempt.
+		if expectedKey := []byte(keys[0]); !bytes.Equal(expectedKey, ba.Txn.Key) {
+			t.Fatalf("expected transaction key %v, got %v", expectedKey, ba.Txn.Key)
+		}
+
+		if attempt == 0 {
+			// Abort the first attempt so that we need to retry with
+			// a new transaction proto.
+			return nil, roachpb.NewErrorWithTxn(roachpb.NewTransactionRetryError(), ba.Txn)
+		}
+
+		br := ba.CreateReply()
+		txnClone := ba.Txn.Clone()
+		br.Txn = &txnClone
+		br.Txn.Writing = true
+		return br, nil
 	}))
 
 	if err := db.Txn(context.TODO(), func(txn *Txn) error {
-		tries++
+		defer func() { attempt++ }()
 		b := txn.NewBatch()
-		b.Put("a", "b")
-		if err := txn.Run(b); err != nil {
-			t.Fatal(err)
-		}
-		if tries == 1 {
-			return roachpb.NewErrorWithTxn(roachpb.NewTransactionRetryError(), &txn.Proto).GoError()
-		}
-		return nil
+		b.Put(keys[attempt], "b")
+		return txn.Run(b)
 	}); err != nil {
 		t.Errorf("unexpected error on commit: %s", err)
 	}
-	minimumTries := 2
-	if tries < minimumTries {
-		t.Errorf("expected try count >= %d, got %d", minimumTries, tries)
+	minimumAttempts := 2
+	if attempt < minimumAttempts {
+		t.Errorf("expected attempt count >= %d, got %d", minimumAttempts, attempt)
 	}
 }
 
