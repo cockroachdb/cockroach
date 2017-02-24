@@ -153,7 +153,7 @@ func TestUpdateRangeAddressing(t *testing.T) {
 		tcs := kv.NewTxnCoordSender(log.AmbientContext{Tracer: tracing.NewTracer()},
 			store.testSender(), store.cfg.Clock,
 			false, stopper, kv.MakeTxnMetrics(time.Second))
-		db := client.NewDB(tcs)
+		db := client.NewDB(tcs, store.cfg.Clock)
 		txn := client.NewTxn(context.TODO(), *db)
 		if err := txn.Run(b); err != nil {
 			t.Fatal(err)

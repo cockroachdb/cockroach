@@ -93,7 +93,7 @@ func createTestNode(
 		stopper,
 		kv.MakeTxnMetrics(metric.TestSampleInterval),
 	)
-	cfg.DB = client.NewDB(sender)
+	cfg.DB = client.NewDB(sender, cfg.Clock)
 	cfg.Transport = storage.NewDummyRaftTransport()
 	cfg.MetricsSampleInterval = metric.TestSampleInterval
 	cfg.HistogramWindowInterval = metric.TestSampleInterval

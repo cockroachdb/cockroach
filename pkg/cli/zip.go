@@ -107,7 +107,7 @@ func runDebugZip(cmd *cobra.Command, args []string) error {
 		return errors.New("exactly one argument is required")
 	}
 
-	conn, stopper, err := getGRPCConn()
+	conn, _, stopper, err := getGRPCConn()
 	if err != nil {
 		return err
 	}

@@ -24,6 +24,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/gogo/protobuf/proto"
@@ -179,6 +180,7 @@ func DefaultDBContext() DBContext {
 // concurrent use by multiple goroutines.
 type DB struct {
 	sender Sender
+	clock  *hlc.Clock
 	ctx    DBContext
 }
 
@@ -188,14 +190,15 @@ func (db *DB) GetSender() Sender {
 }
 
 // NewDB returns a new DB.
-func NewDB(sender Sender) *DB {
-	return NewDBWithContext(sender, DefaultDBContext())
+func NewDB(sender Sender, clock *hlc.Clock) *DB {
+	return NewDBWithContext(sender, clock, DefaultDBContext())
 }
 
 // NewDBWithContext returns a new DB with the given parameters.
-func NewDBWithContext(sender Sender, ctx DBContext) *DB {
+func NewDBWithContext(sender Sender, clock *hlc.Clock, ctx DBContext) *DB {
 	return &DB{
 		sender: sender,
+		clock:  clock,
 		ctx:    ctx,
 	}
 }
