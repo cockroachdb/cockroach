@@ -396,26 +396,33 @@ func (e *Executor) getSystemConfig() (config.SystemConfig, *databaseCache) {
 
 // Prepare returns the result types of the given statement. pinfo may
 // contain partial type information for placeholders. Prepare will
-// populate the missing types. The column result types are returned (or
+// populate the missing types. The PreparedStatement is returned (or
 // nil if there are no results).
 func (e *Executor) Prepare(
 	query string, session *Session, pinfo parser.PlaceholderTypes,
-) (ResultColumns, error) {
+) (*PreparedStatement, error) {
 	log.VEventf(session.Ctx(), 2, "preparing: %s", query)
 	var p parser.Parser
 	stmts, err := p.Parse(query, parser.Syntax(session.Syntax))
 	if err != nil {
 		return nil, err
 	}
+
+	prepared := &PreparedStatement{
+		Query:       query,
+		SQLTypes:    pinfo,
+		portalNames: make(map[string]struct{}),
+	}
 	switch len(stmts) {
 	case 0:
-		return nil, nil
+		return prepared, nil
 	case 1:
 		// ignore
 	default:
 		return nil, errors.Errorf("expected 1 statement, but found %d", len(stmts))
 	}
 	stmt := stmts[0]
+	prepared.Type = stmt.StatementType()
 	if err = pinfo.ProcessPlaceholderAnnotations(stmt); err != nil {
 		return nil, err
 	}
@@ -452,16 +459,16 @@ func (e *Executor) Prepare(
 		return nil, err
 	}
 	if plan == nil {
-		return nil, nil
+		return prepared, nil
 	}
 	defer plan.Close()
-	cols := plan.Columns()
-	for _, c := range cols {
+	prepared.Columns = plan.Columns()
+	for _, c := range prepared.Columns {
 		if err := checkResultType(c.Typ); err != nil {
 			return nil, err
 		}
 	}
-	return cols, nil
+	return prepared, nil
 }
 
 // ExecuteStatements executes the given statement(s) and returns a response.
