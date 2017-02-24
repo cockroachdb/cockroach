@@ -10,6 +10,7 @@ package storageccl
 
 import (
 	"bytes"
+	"reflect"
 	"testing"
 
 	"golang.org/x/net/context"
@@ -19,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -72,6 +74,46 @@ func TestDBWriteBatch(t *testing.T) {
 	if err := db.WriteBatch(ctx, keys.LocalMax, keys.MaxKey, data); !testutils.IsError(err, "multiple ranges") {
 		t.Fatalf("expected multiple ranges error got: %+v", err)
 	}
+}
 
-	// TODO(dan): Test the MVCCStats behavior of the WriteBatch impl.
+func TestWriteBatch(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	if !storage.ProposerEvaluatedKVEnabled() {
+		t.Skip("command WriteBatch is not allowed without proposer evaluated KV")
+	}
+
+	ctx := context.Background()
+	e := engine.NewInMem(roachpb.Attributes{}, 1<<20)
+	defer e.Close()
+
+	var batch engine.RocksDBBatchBuilder
+	key := engine.MVCCKey{Key: []byte("bb"), Timestamp: hlc.Timestamp{WallTime: 1}}
+	batch.Put(key, roachpb.MakeValueFromString("1").RawBytes)
+	data := batch.Finish()
+	span := roachpb.Span{Key: []byte("b"), EndKey: []byte("c")}
+
+	cArgs := storage.CommandArgs{
+		Args: &roachpb.WriteBatchRequest{
+			Span:     span,
+			DataSpan: span,
+			Data:     data,
+		},
+		Stats: &enginepb.MVCCStats{},
+	}
+	var resp roachpb.Response
+	if _, err := evalWriteBatch(ctx, e, cArgs, resp); err != nil {
+		t.Fatalf("%+v", err)
+	}
+
+	stats := &enginepb.MVCCStats{
+		LiveBytes: 21,
+		LiveCount: 1,
+		KeyBytes:  15,
+		KeyCount:  1,
+		ValBytes:  6,
+		ValCount:  1,
+	}
+	if !reflect.DeepEqual(stats, cArgs.Stats) {
+		t.Errorf("mvcc stats mismatch %+v != %+v", stats, cArgs.Stats)
+	}
 }
