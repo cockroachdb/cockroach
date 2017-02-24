@@ -144,9 +144,6 @@ message ProducerHeader {
   optional int32 stream_id = 2 [(gogoproto.nullable) = false,
                                 (gogoproto.customname) = "StreamID",
                                 (gogoproto.casttype) = "StreamID"];
-
-  // There is one DatumInfo for each element in a row.
-  repeated DatumInfo info = 3 [(gogoproto.nullable) = false];
 }
 
 // ProducerData is a message that can be sent multiple times as part of a stream
@@ -163,7 +160,16 @@ message ProducerData {
 
 message ProducerMessage {
   optional ProducerHeader header = 1;
-  optional ProducerData data = 2 [(gogoproto.nullable) = false];
+
+  // Typing information. There will be one DatumInfo for each element in a row.
+  // This field has to be populated on, or before, a ProducerMessage with data
+  // in it, and can only be populated once.
+  // TODO(andrei): It'd be nice if the typing information for streams would be
+  // configured statically at plan creation time, instead of being discovered
+  // dynamically through the first rows that flow.
+  repeated DatumInfo typing = 2 [(gogoproto.nullable) = false];
+
+  optional ProducerData data = 3 [(gogoproto.nullable) = false];
 }
 
 // RemoteProducerMetadata represents records that a producer wants to pass to

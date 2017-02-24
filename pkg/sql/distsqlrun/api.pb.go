@@ -155,6 +155,9 @@ type DistSQLClient interface {
 	// FlowStream is used to push a stream of messages that is part of a flow. The
 	// first message will have a StreamHeader which identifies the flow and the
 	// stream (mailbox).
+	//
+	// The response is a stream because the consumer can signal the producer at
+	// any point to start draining.
 	FlowStream(ctx context.Context, opts ...grpc.CallOption) (DistSQL_FlowStreamClient, error)
 }
 
@@ -250,6 +253,9 @@ type DistSQLServer interface {
 	// FlowStream is used to push a stream of messages that is part of a flow. The
 	// first message will have a StreamHeader which identifies the flow and the
 	// stream (mailbox).
+	//
+	// The response is a stream because the consumer can signal the producer at
+	// any point to start draining.
 	FlowStream(DistSQL_FlowStreamServer) error
 }
 

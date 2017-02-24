@@ -186,7 +186,7 @@ func (ds *ServerImpl) flowStreamInt(ctx context.Context, stream DistSQL_FlowStre
 	msg, err := stream.Recv()
 	if err != nil {
 		if err == io.EOF {
-			return errors.Errorf("empty stream")
+			return errors.Errorf("missing header message")
 		}
 		return err
 	}
