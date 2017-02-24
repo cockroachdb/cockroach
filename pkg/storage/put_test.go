@@ -25,6 +25,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -84,11 +85,10 @@ func TestPut(t *testing.T) {
 			// running.
 			loadedCount := atomic.LoadInt64(&count)
 			log.Infof(ctx, "%d (%d/s)", loadedCount, loadedCount-baseCount)
-			// TODO(peter): This causes the test to be flaky.
-			// if err := db.CheckConsistency(
-			// 	ctx, keys.LocalMax, keys.MaxKey, false /* withDiff*/); err != nil {
-			// 	t.Fatal(err)
-			// }
+			if err := db.CheckConsistency(
+				ctx, keys.LocalMax, keys.MaxKey, false /* withDiff*/); err != nil {
+				t.Fatal(err)
+			}
 		}
 	}
 
