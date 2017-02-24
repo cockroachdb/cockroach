@@ -57,10 +57,13 @@ func newRaftSnapshotQueue(store *Store, g *gossip.Gossip, clock *hlc.Clock) *raf
 			// reason Raft snapshots cannot be performed by the replicateQueue.
 			needsLease:           false,
 			acceptsUnsplitRanges: true,
-			successes:            store.metrics.RaftSnapshotQueueSuccesses,
-			failures:             store.metrics.RaftSnapshotQueueFailures,
-			pending:              store.metrics.RaftSnapshotQueuePending,
-			processingNanos:      store.metrics.RaftSnapshotQueueProcessingNanos,
+			// Allow plenty of time for sending snapshots (O(64MB)) over potentially
+			// slow links.
+			processTimeout:  5 * time.Minute,
+			successes:       store.metrics.RaftSnapshotQueueSuccesses,
+			failures:        store.metrics.RaftSnapshotQueueFailures,
+			pending:         store.metrics.RaftSnapshotQueuePending,
+			processingNanos: store.metrics.RaftSnapshotQueueProcessingNanos,
 		},
 	)
 	return rq
