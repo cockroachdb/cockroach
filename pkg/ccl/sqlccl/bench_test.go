@@ -32,6 +32,9 @@ func bankStatementBuf(numAccounts int) *bytes.Buffer {
 }
 
 func BenchmarkClusterBackup(b *testing.B) {
+	// NB: This benchmark takes liberties in how b.N is used compared to the go
+	// documentation's description. We're getting useful information out of it,
+	// but this is not a pattern to cargo-cult.
 	if !storage.ProposerEvaluatedKVEnabled() {
 		b.Skip("command WriteBatch is not allowed without proposer evaluated KV")
 	}
@@ -64,6 +67,9 @@ func BenchmarkClusterBackup(b *testing.B) {
 }
 
 func BenchmarkClusterRestore(b *testing.B) {
+	// NB: This benchmark takes liberties in how b.N is used compared to the go
+	// documentation's description. We're getting useful information out of it,
+	// but this is not a pattern to cargo-cult.
 	if !storage.ProposerEvaluatedKVEnabled() {
 		b.Skip("command WriteBatch is not allowed without proposer evaluated KV")
 	}
@@ -84,6 +90,9 @@ func BenchmarkClusterRestore(b *testing.B) {
 }
 
 func BenchmarkLoadRestore(b *testing.B) {
+	// NB: This benchmark takes liberties in how b.N is used compared to the go
+	// documentation's description. We're getting useful information out of it,
+	// but this is not a pattern to cargo-cult.
 	if !storage.ProposerEvaluatedKVEnabled() {
 		b.Skip("command WriteBatch is not allowed without proposer evaluated KV")
 	}
@@ -104,6 +113,9 @@ func BenchmarkLoadRestore(b *testing.B) {
 }
 
 func BenchmarkLoadSQL(b *testing.B) {
+	// NB: This benchmark takes liberties in how b.N is used compared to the go
+	// documentation's description. We're getting useful information out of it,
+	// but this is not a pattern to cargo-cult.
 	_, _, _, sqlDB, cleanup := backupRestoreTestSetup(b, multiNode, 0)
 	defer cleanup()
 
