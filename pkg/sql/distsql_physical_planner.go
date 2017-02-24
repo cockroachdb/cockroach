@@ -35,7 +35,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 )
@@ -239,7 +238,7 @@ func (dsp *distSQLPlanner) checkSupportForNode(node planNode) (distRecommendatio
 		// If either the left or the right side can benefit from distribution, we
 		// should distribute.
 		rec := recLeft.compose(recRight)
-		// If we can do a hash join, we should distribute.
+		// If we can do a hash join, we distribute if possible.
 		if len(n.pred.leftEqualityIndices) > 0 {
 			rec = rec.compose(shouldDistribute)
 		}
@@ -289,7 +288,12 @@ func (dsp *distSQLPlanner) checkSupportForNode(node planNode) (distRecommendatio
 				}
 			}
 		}
-		return dsp.checkSupportForNode(n.plan)
+		rec, err := dsp.checkSupportForNode(n.plan)
+		if err != nil {
+			return 0, err
+		}
+		// Distribute aggregations if possible.
+		return rec.compose(shouldDistribute), nil
 
 	case *limitNode:
 		if err := dsp.checkExpr(n.countExpr); err != nil {
@@ -606,7 +610,8 @@ func initBackfillerSpec(
 }
 
 // CreateBackfiller generates a plan consisting of index/column backfiller
-// processors, one for each node that has spans that we are reading.
+// processors, one for each node that has spans that we are reading. The plan is
+// finalized.
 func (dsp *distSQLPlanner) CreateBackfiller(
 	planCtx *planningCtx,
 	backfillType int,
@@ -645,6 +650,7 @@ func (dsp *distSQLPlanner) CreateBackfiller(
 		pIdx := p.AddProcessor(proc)
 		p.ResultRouters = append(p.ResultRouters, pIdx)
 	}
+	dsp.FinalizePlan(planCtx, &p)
 	return p, nil
 }
 
@@ -1273,9 +1279,6 @@ func (dsp *distSQLPlanner) NewPlanningCtx(ctx context.Context, txn *client.Txn) 
 func (dsp *distSQLPlanner) PlanAndRun(
 	ctx context.Context, txn *client.Txn, tree planNode, recv *distSQLReceiver,
 ) error {
-	// Trigger limit propagation.
-	setUnlimited(tree)
-
 	planCtx := dsp.NewPlanningCtx(ctx, txn)
 
 	log.VEvent(ctx, 1, "creating DistSQL plan")
@@ -1284,17 +1287,13 @@ func (dsp *distSQLPlanner) PlanAndRun(
 	if err != nil {
 		return err
 	}
-	return dsp.Run(planCtx, txn, plan, recv)
+	dsp.FinalizePlan(&planCtx, &plan)
+	return dsp.Run(&planCtx, txn, &plan, recv)
 }
 
-// Run executes a physical plan.
-//
-// Note that errors that happen while actually running the flow are reported to
-// recv, not returned by this function.
-func (dsp *distSQLPlanner) Run(
-	planCtx planningCtx, txn *client.Txn, plan physicalPlan, recv *distSQLReceiver,
-) error {
-	ctx := planCtx.ctx
+// FinalizePlan adds a final "result" stage if necessary and populates the
+// endpoints of the plan.
+func (dsp *distSQLPlanner) FinalizePlan(planCtx *planningCtx, plan *physicalPlan) {
 	thisNodeID := dsp.nodeDesc.NodeID
 	// If we don't already have a single result router on this node, add a final
 	// stage.
@@ -1319,38 +1318,23 @@ func (dsp *distSQLPlanner) Run(
 	finalOut.Streams = append(finalOut.Streams, distsqlrun.StreamEndpointSpec{
 		Type: distsqlrun.StreamEndpointSpec_SYNC_RESPONSE,
 	})
+}
 
-	recv.resultToStreamColMap = plan.planToStreamColMap
+// Run executes a physical plan. The plan should have been finalized using
+// FinalizePlan.
+//
+// Note that errors that happen while actually running the flow are reported to
+// recv, not returned by this function.
+func (dsp *distSQLPlanner) Run(
+	planCtx *planningCtx, txn *client.Txn, plan *physicalPlan, recv *distSQLReceiver,
+) error {
+	ctx := planCtx.ctx
 
-	// Split the processors by nodeID to create the FlowSpecs.
-	flowID := distsqlrun.FlowID{UUID: uuid.MakeV4()}
-	nodeIDMap := make(map[roachpb.NodeID]int)
-	// nodeAddresses contains addresses for the nodes that were referenced during
-	// planning, so we're likely going to have this many nodes (and we have one
-	// flow per node).
-	nodeIDs := make([]roachpb.NodeID, 0, len(planCtx.nodeAddresses))
-	flows := make([]distsqlrun.FlowSpec, 0, len(planCtx.nodeAddresses))
-
-	for _, p := range plan.Processors {
-		idx, ok := nodeIDMap[p.Node]
-		if !ok {
-			flow := distsqlrun.FlowSpec{FlowID: flowID}
-			idx = len(flows)
-			flows = append(flows, flow)
-			nodeIDs = append(nodeIDs, p.Node)
-			nodeIDMap[p.Node] = idx
-		}
-		flows[idx].Processors = append(flows[idx].Processors, p.Spec)
-	}
+	flows := plan.GenerateFlowSpecs()
 
 	if logPlanDiagram {
 		log.VEvent(ctx, 1, "creating plan diagram")
-		nodeNames := make([]string, len(nodeIDs))
-		for i, n := range nodeIDs {
-			nodeNames[i] = n.String()
-		}
-
-		json, url, err := distsqlrun.GeneratePlanDiagramWithURL(flows, nodeNames)
+		json, url, err := distsqlrun.GeneratePlanDiagramWithURL(flows)
 		if err != nil {
 			log.Infof(ctx, "Error generating diagram: %s", err)
 		} else {
@@ -1361,15 +1345,18 @@ func (dsp *distSQLPlanner) Run(
 
 	log.VEvent(ctx, 1, "running DistSQL plan")
 
+	recv.resultToStreamColMap = plan.planToStreamColMap
+	thisNodeID := dsp.nodeDesc.NodeID
+
 	// Start the flows on all other nodes.
-	for i, nodeID := range nodeIDs {
+	for nodeID, flowSpec := range flows {
 		if nodeID == thisNodeID {
 			// Skip this node.
 			continue
 		}
 		req := distsqlrun.SetupFlowRequest{
 			Txn:  txn.Proto,
-			Flow: flows[i],
+			Flow: flowSpec,
 		}
 		if err := distsqlrun.SetFlowRequestTrace(ctx, &req); err != nil {
 			return err
@@ -1390,7 +1377,7 @@ func (dsp *distSQLPlanner) Run(
 	}
 	localReq := distsqlrun.SetupFlowRequest{
 		Txn:  txn.Proto,
-		Flow: flows[nodeIDMap[thisNodeID]],
+		Flow: flows[thisNodeID],
 	}
 	if err := distsqlrun.SetFlowRequestTrace(ctx, &localReq); err != nil {
 		return err

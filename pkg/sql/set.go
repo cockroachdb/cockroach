@@ -99,7 +99,7 @@ func (p *planner) Set(n *parser.Set) (planNode, error) {
 			return nil, fmt.Errorf("%s: unknown isolation level: %q", name, s)
 		}
 
-	case `DIST_SQL`:
+	case `DISTSQL`:
 		s, err := p.getStringVal(name, typedValues)
 		if err != nil {
 			return nil, err

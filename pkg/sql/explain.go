@@ -20,6 +20,10 @@ import (
 	"fmt"
 	"strings"
 
+	"golang.org/x/net/context"
+
+	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 )
 
@@ -30,9 +34,18 @@ const (
 	explainDebug
 	explainPlan
 	explainTrace
+	// explainDistSQL shows the physical distsql plan for a query and whether a
+	// query would be run in "auto" DISTSQL mode. See explainDistSQLNode for
+	// details.
+	explainDistSQL
 )
 
-var explainStrings = []string{"", "debug", "plan", "trace", "types"}
+var explainStrings = map[explainMode]string{
+	explainDebug:   "debug",
+	explainPlan:    "plan",
+	explainTrace:   "trace",
+	explainDistSQL: "distsql",
+}
 
 // Explain executes the explain statement, providing debugging and analysis
 // info about the wrapped statement.
@@ -52,44 +65,59 @@ func (p *planner) Explain(n *parser.Explain, autoCommit bool) (planNode, error) 
 	}
 
 	for _, opt := range n.Options {
+		optLower := strings.ToLower(opt)
 		newMode := explainNone
-		if strings.EqualFold(opt, "DEBUG") {
-			newMode = explainDebug
-		} else if strings.EqualFold(opt, "TRACE") {
-			newMode = explainTrace
-		} else if strings.EqualFold(opt, "PLAN") {
-			newMode = explainPlan
-		} else if strings.EqualFold(opt, "TYPES") {
-			newMode = explainPlan
-			explainer.showExprs = true
-			explainer.showTypes = true
-			// TYPES implies METADATA.
-			explainer.showMetadata = true
-		} else if strings.EqualFold(opt, "INDENT") {
-			explainer.doIndent = true
-		} else if strings.EqualFold(opt, "SYMVARS") {
-			explainer.symbolicVars = true
-		} else if strings.EqualFold(opt, "METADATA") {
-			explainer.showMetadata = true
-		} else if strings.EqualFold(opt, "QUALIFY") {
-			explainer.qualifyNames = true
-		} else if strings.EqualFold(opt, "VERBOSE") {
-			// VERBOSE implies EXPRS.
-			explainer.showExprs = true
-			// VERBOSE implies QUALIFY.
-			explainer.qualifyNames = true
-			// VERBOSE implies METADATA.
-			explainer.showMetadata = true
-		} else if strings.EqualFold(opt, "EXPRS") {
-			explainer.showExprs = true
-		} else if strings.EqualFold(opt, "NOEXPAND") {
-			expanded = false
-		} else if strings.EqualFold(opt, "NONORMALIZE") {
-			normalizeExprs = false
-		} else if strings.EqualFold(opt, "NOOPTIMIZE") {
-			optimized = false
-		} else {
-			return nil, fmt.Errorf("unsupported EXPLAIN option: %s", opt)
+		// Search for the string in `explainStrings`.
+		for mode, modeStr := range explainStrings {
+			if optLower == modeStr {
+				newMode = mode
+				break
+			}
+		}
+		if newMode == explainNone {
+			switch optLower {
+			case "types":
+				newMode = explainPlan
+				explainer.showExprs = true
+				explainer.showTypes = true
+				// TYPES implies METADATA.
+				explainer.showMetadata = true
+
+			case "indent":
+				explainer.doIndent = true
+
+			case "symvars":
+				explainer.symbolicVars = true
+
+			case "metadata":
+				explainer.showMetadata = true
+
+			case "qualify":
+				explainer.qualifyNames = true
+
+			case "verbose":
+				// VERBOSE implies EXPRS.
+				explainer.showExprs = true
+				// VERBOSE implies QUALIFY.
+				explainer.qualifyNames = true
+				// VERBOSE implies METADATA.
+				explainer.showMetadata = true
+
+			case "exprs":
+				explainer.showExprs = true
+
+			case "noexpand":
+				expanded = false
+
+			case "nonormalize":
+				normalizeExprs = false
+
+			case "nooptimize":
+				optimized = false
+
+			default:
+				return nil, fmt.Errorf("unsupported EXPLAIN option: %s", opt)
+			}
 		}
 		if newMode != explainNone {
 			if mode != explainNone {
@@ -111,6 +139,13 @@ func (p *planner) Explain(n *parser.Explain, autoCommit bool) (planNode, error) 
 	switch mode {
 	case explainDebug:
 		return &explainDebugNode{plan}, nil
+
+	case explainDistSQL:
+		return &explainDistSQLNode{
+			plan:           plan,
+			distSQLPlanner: p.distSQLPlanner,
+			txn:            p.txn,
+		}, nil
 
 	case explainPlan:
 		// We may want to show placeholder types, so ensure no values
@@ -234,3 +269,73 @@ func (n *explainDebugNode) Values() parser.Datums {
 
 func (*explainDebugNode) MarkDebug(_ explainMode)  {}
 func (*explainDebugNode) DebugValues() debugValues { return debugValues{} }
+
+// explainDistSQLNode is a planNode that wraps a plan and returns
+// information related to running that plan under DistSQL.
+type explainDistSQLNode struct {
+	plan           planNode
+	distSQLPlanner *distSQLPlanner
+
+	// txn is the current transaction (used for the fake span resolver).
+	txn *client.Txn
+
+	// The single row returned by the node.
+	values parser.Datums
+
+	// done is set if Next() was called.
+	done bool
+}
+
+func (*explainDistSQLNode) Ordering() orderingInfo   { return orderingInfo{} }
+func (*explainDistSQLNode) MarkDebug(_ explainMode)  {}
+func (*explainDistSQLNode) DebugValues() debugValues { return debugValues{} }
+func (n *explainDistSQLNode) Close()                 {}
+
+var explainDistSQLColumns = ResultColumns{
+	{Name: "Automatic", Typ: parser.TypeBool},
+	{Name: "URL", Typ: parser.TypeString},
+	{Name: "JSON", Typ: parser.TypeString},
+}
+
+func (*explainDistSQLNode) Columns() ResultColumns { return explainDistSQLColumns }
+
+func (n *explainDistSQLNode) Start() error {
+	// Trigger limit propagation.
+	setUnlimited(n.plan)
+
+	auto, err := n.distSQLPlanner.CheckSupport(n.plan)
+	if err != nil {
+		return err
+	}
+
+	planCtx := n.distSQLPlanner.NewPlanningCtx(context.TODO(), n.txn)
+	plan, err := n.distSQLPlanner.createPlanForNode(&planCtx, n.plan)
+	if err != nil {
+		return err
+	}
+	n.distSQLPlanner.FinalizePlan(&planCtx, &plan)
+	flows := plan.GenerateFlowSpecs()
+	planJSON, planURL, err := distsqlrun.GeneratePlanDiagramWithURL(flows)
+	if err != nil {
+		return err
+	}
+
+	n.values = parser.Datums{
+		parser.MakeDBool(parser.DBool(auto)),
+		parser.NewDString(planURL.String()),
+		parser.NewDString(planJSON),
+	}
+	return nil
+}
+
+func (n *explainDistSQLNode) Next() (bool, error) {
+	if n.done {
+		return false, nil
+	}
+	n.done = true
+	return true, nil
+}
+
+func (n *explainDistSQLNode) Values() parser.Datums {
+	return n.values
+}

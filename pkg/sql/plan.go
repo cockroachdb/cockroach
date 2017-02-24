@@ -172,6 +172,7 @@ var _ planNode = &dropTableNode{}
 var _ planNode = &dropViewNode{}
 var _ planNode = &emptyNode{}
 var _ planNode = &explainDebugNode{}
+var _ planNode = &explainDistSQLNode{}
 var _ planNode = &explainTraceNode{}
 var _ planNode = &filterNode{}
 var _ planNode = &groupNode{}
