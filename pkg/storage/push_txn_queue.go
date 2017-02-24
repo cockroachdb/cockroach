@@ -291,6 +291,11 @@ func (ptq *pushTxnQueue) MaybeWait(
 	var pusheeTxnTimer timeutil.Timer
 	defer pusheeTxnTimer.Stop()
 
+	// Keep local values for the pusher and pushee priorities to avoid
+	// modifying values in the original request on QueryTxn updates.
+	pusherPriority := req.PusherTxn.Priority
+	pusheePriority := req.PusheeTxn.Priority
+
 	for {
 		// Set the timer to check for the pushee txn's expiration.
 		pusheeTxnTimer.Reset(time.Duration(
@@ -325,6 +330,7 @@ func (ptq *pushTxnQueue) MaybeWait(
 			if pErr != nil {
 				return nil, pErr
 			} else if updatedPushee != nil {
+				pusheePriority = updatedPushee.Priority
 				pending.txn.Store(updatedPushee)
 				if isExpired(ptq.store.Clock().Now(), updatedPushee) {
 					return nil, nil
@@ -337,6 +343,7 @@ func (ptq *pushTxnQueue) MaybeWait(
 			if pErr != nil {
 				return nil, pErr
 			} else if updatedPusher != nil {
+				pusherPriority = updatedPusher.Priority
 				// Check for dependency cycle to find and break deadlocks.
 				push.mu.Lock()
 				if push.mu.dependents == nil {
@@ -351,7 +358,7 @@ func (ptq *pushTxnQueue) MaybeWait(
 
 				if haveDependency {
 					// Break the deadlock if the pusher has higher priority.
-					p1, p2 := req.PusheeTxn.Priority, req.PusherTxn.Priority
+					p1, p2 := pusheePriority, pusherPriority
 					if p1 < p2 || (p1 == p2 && bytes.Compare(req.PusheeTxn.ID.GetBytes(), req.PusherTxn.ID.GetBytes()) < 0) {
 						return nil, errDeadlock
 					}
