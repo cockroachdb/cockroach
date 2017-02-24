@@ -195,6 +195,52 @@ func TestOutbox(t *testing.T) {
 	streamNotification.wg.Done(nil /* err */)
 }
 
+// Test that an outbox connects its stream as soon as possible (i.e. before
+// receiving any rows). This is important, since there's a timeout on waiting on
+// the server-side for the streams to be connected.
+func TestOutboxInitializesStreamBeforeRecevingAnyRows(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+	mockServer, addr, err := startMockDistSQLServer(stopper)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	flowCtx := FlowCtx{
+		evalCtx: parser.EvalContext{},
+		rpcCtx:  newInsecureRPCContext(stopper),
+	}
+	flowID := FlowID{uuid.MakeV4()}
+	streamID := StreamID(42)
+	outbox := newOutbox(&flowCtx, addr.String(), flowID, streamID)
+
+	var outboxWG sync.WaitGroup
+	outboxWG.Add(1)
+	// Start the outbox. This should cause the stream to connect, even though
+	// we're not sending any rows.
+	outbox.start(context.TODO(), &outboxWG)
+
+	streamNotification := <-mockServer.inboundStreams
+	serverStream := streamNotification.stream
+	producerMsg, err := serverStream.Recv()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if producerMsg.Header == nil {
+		t.Fatal("missing header")
+	}
+	if producerMsg.Header.FlowID != flowID || producerMsg.Header.StreamID != streamID {
+		t.Fatalf("wrong header: %v", producerMsg)
+	}
+
+	// Signal the server to shut down the stream. This should also prompt the
+	// outbox (the client) to terminate its loop.
+	streamNotification.wg.Done(nil /* err */)
+	outboxWG.Wait()
+}
+
 // startMockDistSQLServer starts a MockDistSQLServer and returns the address on
 // which it's listening.
 func startMockDistSQLServer(stopper *stop.Stopper) (*MockDistSQLServer, net.Addr, error) {
