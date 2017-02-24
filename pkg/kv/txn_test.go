@@ -170,13 +170,13 @@ func TestSnapshotIsolationIncrement(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		if txn.Proto.Epoch == 0 {
+		if txn.Proto().Epoch == 0 {
 			close(start) // let someone write into our future
 			// When they're done writing, increment.
 			if err := <-done; err != nil {
 				t.Fatal(err)
 			}
-		} else if txn.Proto.Epoch > 1 {
+		} else if txn.Proto().Epoch > 1 {
 			t.Fatal("should experience just one restart")
 		}
 
@@ -190,19 +190,19 @@ func TestSnapshotIsolationIncrement(t *testing.T) {
 		// before anything else happened in the concurrent writer
 		// goroutine). The second iteration of the txn should read the
 		// correct value and commit.
-		if txn.Proto.Epoch == 0 && !txn.Proto.OrigTimestamp.Less(txn.Proto.Timestamp) {
-			t.Fatalf("expected orig timestamp less than timestamp: %s", txn.Proto)
+		if txn.Proto().Epoch == 0 && !txn.Proto().OrigTimestamp.Less(txn.Proto().Timestamp) {
+			t.Fatalf("expected orig timestamp less than timestamp: %s", txn.Proto())
 		}
 		ir, err := txn.Inc(key, 1)
 		if err != nil {
 			t.Fatal(err)
 		}
-		if vi := ir.ValueInt(); vi != int64(txn.Proto.Epoch+1) {
-			t.Errorf("expected %d; got %d", txn.Proto.Epoch+1, vi)
+		if vi := ir.ValueInt(); vi != int64(txn.Proto().Epoch+1) {
+			t.Errorf("expected %d; got %d", txn.Proto().Epoch+1, vi)
 		}
 		// Verify that the WriteTooOld boolean is set on the txn.
-		if (txn.Proto.Epoch == 0) != txn.Proto.WriteTooOld {
-			t.Fatalf("expected write too old=%t; got %t", (txn.Proto.Epoch == 0), txn.Proto.WriteTooOld)
+		if (txn.Proto().Epoch == 0) != txn.Proto().WriteTooOld {
+			t.Fatalf("expected write too old=%t; got %t", (txn.Proto().Epoch == 0), txn.Proto().WriteTooOld)
 		}
 		return nil
 	}); err != nil {
@@ -242,13 +242,13 @@ func TestSnapshotIsolationLostUpdate(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if txn.Proto.Epoch == 0 {
+		if txn.Proto().Epoch == 0 {
 			close(start) // let someone write into our future
 			// When they're done, write based on what we read.
 			if err := <-done; err != nil {
 				t.Fatal(err)
 			}
-		} else if txn.Proto.Epoch > 1 {
+		} else if txn.Proto().Epoch > 1 {
 			t.Fatal("should experience just one restart")
 		}
 
@@ -262,8 +262,8 @@ func TestSnapshotIsolationLostUpdate(t *testing.T) {
 			}
 		}
 		// Verify that the WriteTooOld boolean is set on the txn.
-		if (txn.Proto.Epoch == 0) != txn.Proto.WriteTooOld {
-			t.Fatalf("expected write too old set (%t): got %t", (txn.Proto.Epoch == 0), txn.Proto.WriteTooOld)
+		if (txn.Proto().Epoch == 0) != txn.Proto().WriteTooOld {
+			t.Fatalf("expected write too old set (%t): got %t", (txn.Proto().Epoch == 0), txn.Proto().WriteTooOld)
 		}
 		return nil
 	}); err != nil {
@@ -334,7 +334,7 @@ func TestPriorityRatchetOnAbortOrPush(t *testing.T) {
 				if iteration == 1 {
 					// Verify our priority has ratcheted to one less than the pusher's priority
 					expPri := int32(roachpb.MaxTxnPriority - 1)
-					if pri := txn.Proto.Priority; pri != expPri {
+					if pri := txn.Proto().Priority; pri != expPri {
 						t.Fatalf("%s: expected priority on retry to ratchet to %d; got %d", key, expPri, pri)
 					}
 					return nil
@@ -410,14 +410,14 @@ func TestUncertaintyRestart(t *testing.T) {
 	}()
 
 	if err := s.DB.Txn(context.TODO(), func(txn *client.Txn) error {
-		if txn.Proto.Epoch > 2 {
+		if txn.Proto().Epoch > 2 {
 			t.Fatal("expected only one restart")
 		}
 		// Issue a read to pick a timestamp.
 		if _, err := txn.Get(key.Next()); err != nil {
 			t.Fatal(err)
 		}
-		if txn.Proto.Epoch == 0 {
+		if txn.Proto().Epoch == 0 {
 			close(start) // let someone write into our future
 			// when they're done, try to read
 			if err := <-errChan; err != nil {
@@ -486,7 +486,7 @@ func TestUncertaintyMaxTimestampForwarding(t *testing.T) {
 		// node above, we've made a note of its clock, which allows us to
 		// prevent the restart. But we want to catch the restart, so reset the
 		// observed timestamps.
-		txn.Proto.ResetObservedTimestamps()
+		txn.Proto().ResetObservedTimestamps()
 
 		// The server's clock suddenly jumps ahead of keyFast's timestamp.
 		s.Manual.Increment(2*offsetNS + 1)

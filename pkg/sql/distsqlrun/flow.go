@@ -56,9 +56,7 @@ type FlowCtx struct {
 }
 
 func (flowCtx *FlowCtx) setupTxn(ctx context.Context) *client.Txn {
-	txn := client.NewTxn(ctx, *flowCtx.clientDB)
-	txn.Proto = *flowCtx.txnProto
-	return txn
+	return client.NewTxnWithProto(ctx, *flowCtx.clientDB, *flowCtx.txnProto)
 }
 
 type flowStatus int

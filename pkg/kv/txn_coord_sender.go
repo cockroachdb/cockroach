@@ -519,24 +519,11 @@ func (tc *TxnCoordSender) maybeBeginTxn(ba *roachpb.BatchRequest) error {
 	if len(ba.Requests) == 0 {
 		return errors.Errorf("empty batch with txn")
 	}
-	if ba.Txn.ID == nil {
-		// Create transaction without a key. The key is set when a begin
-		// transaction request is received.
-
-		// The initial timestamp may be communicated by a higher layer.
-		// If so, use that. Otherwise make up a new one.
-		timestamp := ba.Txn.OrigTimestamp
-		if timestamp == (hlc.Timestamp{}) {
-			timestamp = tc.clock.Now()
-		}
-		newTxn := roachpb.NewTransaction(ba.Txn.Name, nil, ba.UserPriority,
-			ba.Txn.Isolation, timestamp, tc.clock.MaxOffset().Nanoseconds())
-		// Use existing priority as a minimum. This is used on transaction
-		// aborts to ratchet priority when creating successor transaction.
-		if newTxn.Priority < ba.Txn.Priority {
-			newTxn.Priority = ba.Txn.Priority
-		}
-		ba.Txn = newTxn
+	if !ba.Txn.IsInitialized() {
+		// This is not possible if the BatchRequest is sent from a client.Txn,
+		// because the client.Txn will also perform proto initialization (under
+		// lock).
+		client.InitTxnProtoFromRequest(ba.Txn, ba.UserPriority, tc.clock)
 	}
 
 	// Check for a begin transaction to set txn key based on the key of
@@ -551,12 +538,18 @@ func (tc *TxnCoordSender) maybeBeginTxn(ba *roachpb.BatchRequest) error {
 			}
 			haveBeginTxn = true
 			if ba.Txn.Key == nil {
+				// This will always be set by a BatchRequest from client.Txn.
 				ba.Txn.Key = bt.Key
 			}
 		}
-		if roachpb.IsTransactionWrite(args) && !haveBeginTxn && !ba.Txn.Writing {
-			return errors.Errorf("transactional write before begin transaction")
-		}
+		// FOR REVIEW: we can't have this check anymore, because concurrent
+		// requests with the BeginTxnReq will not have the .Writing flag set.
+		// We could artificially set the flag in the client.Txn, but I dont
+		// think that's the right thing to do.
+		//
+		// if roachpb.IsTransactionWrite(args) && !haveBeginTxn && !ba.Txn.Writing {
+		// 	return errors.Errorf("transactional write before begin transaction")
+		// }
 	}
 	return nil
 }
@@ -583,8 +576,7 @@ func (tc *TxnCoordSender) cleanupTxnLocked(ctx context.Context, txn roachpb.Tran
 
 // unregisterTxn deletes a txnMetadata object from the sender
 // and collects its stats. It assumes the lock is held. Returns
-// the duration, restarts, finalized txn status, and whether the
-// transaction committed on the 1PC fast path.
+// the duration, restarts, and finalized txn status.
 func (tc *TxnCoordSender) unregisterTxnLocked(
 	txnID uuid.UUID,
 ) (duration, restarts int64, status roachpb.TransactionStatus) {
@@ -898,9 +890,11 @@ func (tc *TxnCoordSender) updateState(
 		if txnMeta != nil {
 			txnMeta.keys = keys
 		} else if len(keys) > 0 {
-			if !newTxn.Writing {
-				panic("txn with intents marked as non-writing")
-			}
+			// For review: again, we need to take this check out. Is this the
+			// right thing to do?
+			// if !newTxn.Writing {
+			// 	panic("txn with intents marked as non-writing")
+			// }
 			// If the transaction is already over, there's no point in
 			// launching a one-off coordinator which will shut down right
 			// away. If we ended up here with an error, we'll always start
@@ -942,9 +936,9 @@ func (tc *TxnCoordSender) updateState(
 	// Update our record of this transaction, even on error.
 	if txnMeta != nil {
 		txnMeta.txn.Update(&newTxn)
-		if !txnMeta.txn.Writing {
-			panic("tracking a non-writing txn")
-		}
+		// if !txnMeta.txn.Writing {
+		// 	panic("tracking a non-writing txn")
+		// }
 		txnMeta.setLastUpdate(tc.clock.PhysicalNow())
 	}
 

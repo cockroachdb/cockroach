@@ -109,12 +109,12 @@ func TestTxnCoordSenderAddRequest(t *testing.T) {
 	if err := txn.Put(roachpb.Key("a"), []byte("value")); err != nil {
 		t.Fatal(err)
 	}
-	txnID := *txn.Proto.ID
+	txnID := *txn.Proto().ID
 	txnMeta, ok := sender.txnMu.txns[txnID]
 	if !ok {
 		t.Fatal("expected a transaction to be created on coordinator")
 	}
-	if !txn.Proto.Writing {
+	if !txn.Proto().Writing {
 		t.Fatal("txn is not marked as writing")
 	}
 	ts := txnMeta.getLastUpdate()
@@ -125,6 +125,65 @@ func TestTxnCoordSenderAddRequest(t *testing.T) {
 	s.Manual.Increment(1)
 	sender.txnMu.Unlock()
 	if err := txn.Put(roachpb.Key("a"), []byte("value")); err != nil {
+		t.Fatal(err)
+	}
+	if len(sender.txnMu.txns) != 1 {
+		t.Errorf("expected length of transactions map to be 1; got %d", len(sender.txnMu.txns))
+	}
+	txnMeta = sender.txnMu.txns[txnID]
+	if lu := txnMeta.getLastUpdate(); ts >= lu {
+		t.Errorf("expected last update time to advance past %d; got %d", ts, lu)
+	} else if un := s.Manual.UnixNano(); lu != un {
+		t.Errorf("expected last update time to equal %d; got %d", un, lu)
+	}
+}
+
+// TestTxnCoordSenderAddRequestConcurrently verifies adding concurrent requests
+// creates a transaction metadata and adding multiple requests with same
+// transaction ID updates the last update timestamp.
+func TestTxnCoordSenderAddRequestConcurrently(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	s, sender := createTestDB(t)
+	defer s.Stop()
+	defer teardownHeartbeats(sender)
+
+	txn := client.NewTxn(context.Background(), *s.DB)
+
+	// Put requests will create a new transaction.
+	sendRequests := func() error {
+		var wg util.WaitGroupWithError
+		const requests = 30
+		for i := 0; i < requests; i++ {
+			wg.Add(1)
+			go func(i int) {
+				if err := txn.Put(roachpb.Key("a"+strconv.Itoa(i)), []byte("value")); err != nil {
+					wg.Done(err)
+					return
+				}
+				wg.Done(nil)
+			}(i)
+		}
+		return wg.Wait()
+	}
+	if err := sendRequests(); err != nil {
+		t.Fatal(err)
+	}
+	txnID := *txn.Proto().ID
+	txnMeta, ok := sender.txnMu.txns[txnID]
+	if !ok {
+		t.Fatal("expected a transaction to be created on coordinator")
+	}
+	if !txn.Proto().Writing {
+		t.Fatal("txn is not marked as writing")
+	}
+	ts := txnMeta.getLastUpdate()
+
+	// Advance time and send more put requests. Lock the coordinator
+	// to prevent a data race.
+	sender.txnMu.Lock()
+	s.Manual.Increment(1)
+	sender.txnMu.Unlock()
+	if err := sendRequests(); err != nil {
 		t.Fatal(err)
 	}
 	if len(sender.txnMu.txns) != 1 {
@@ -151,22 +210,24 @@ func TestTxnCoordSenderBeginTransaction(t *testing.T) {
 	// Put request will create a new transaction.
 	key := roachpb.Key("key")
 	txn.InternalSetPriority(10)
-	txn.Proto.Isolation = enginepb.SNAPSHOT
-	txn.Proto.Name = "test txn"
+	txn.SetDebugName("test txn")
+	if err := txn.SetIsolation(enginepb.SNAPSHOT); err != nil {
+		t.Fatal(err)
+	}
 	if err := txn.Put(key, []byte("value")); err != nil {
 		t.Fatal(err)
 	}
-	if txn.Proto.Name != "test txn" {
-		t.Errorf("expected txn name to be %q; got %q", "test txn", txn.Proto.Name)
+	if txn.Proto().Name != "test txn" {
+		t.Errorf("expected txn name to be %q; got %q", "test txn", txn.Proto().Name)
 	}
-	if txn.Proto.Priority != 10 {
-		t.Errorf("expected txn priority 10; got %d", txn.Proto.Priority)
+	if txn.Proto().Priority != 10 {
+		t.Errorf("expected txn priority 10; got %d", txn.Proto().Priority)
 	}
-	if !bytes.Equal(txn.Proto.Key, key) {
-		t.Errorf("expected txn Key to match %q != %q", key, txn.Proto.Key)
+	if !bytes.Equal(txn.Proto().Key, key) {
+		t.Errorf("expected txn Key to match %q != %q", key, txn.Proto().Key)
 	}
-	if txn.Proto.Isolation != enginepb.SNAPSHOT {
-		t.Errorf("expected txn isolation to be SNAPSHOT; got %s", txn.Proto.Isolation)
+	if txn.Proto().Isolation != enginepb.SNAPSHOT {
+		t.Errorf("expected txn isolation to be SNAPSHOT; got %s", txn.Proto().Isolation)
 	}
 }
 
@@ -182,21 +243,23 @@ func TestTxnInitialTimestamp(t *testing.T) {
 
 	// Request a specific timestamp.
 	refTimestamp := s.Clock.Now().Add(42, 69)
-	txn.Proto.OrigTimestamp = refTimestamp
+	txn.Proto().OrigTimestamp = refTimestamp
 
 	// Put request will create a new transaction.
 	key := roachpb.Key("key")
 	txn.InternalSetPriority(10)
-	txn.Proto.Isolation = enginepb.SNAPSHOT
-	txn.Proto.Name = "test txn"
+	txn.SetDebugName("test txn")
+	if err := txn.SetIsolation(enginepb.SNAPSHOT); err != nil {
+		t.Fatal(err)
+	}
 	if err := txn.Put(key, []byte("value")); err != nil {
 		t.Fatal(err)
 	}
-	if txn.Proto.OrigTimestamp != refTimestamp {
-		t.Errorf("expected txn orig ts to be %s; got %s", refTimestamp, txn.Proto.OrigTimestamp)
+	if txn.Proto().OrigTimestamp != refTimestamp {
+		t.Errorf("expected txn orig ts to be %s; got %s", refTimestamp, txn.Proto().OrigTimestamp)
 	}
-	if txn.Proto.Timestamp != refTimestamp {
-		t.Errorf("expected txn ts to be %s; got %s", refTimestamp, txn.Proto.Timestamp)
+	if txn.Proto().Timestamp != refTimestamp {
+		t.Errorf("expected txn ts to be %s; got %s", refTimestamp, txn.Proto().Timestamp)
 	}
 }
 
@@ -213,12 +276,14 @@ func TestTxnCoordSenderBeginTransactionMinPriority(t *testing.T) {
 	// Put request will create a new transaction.
 	key := roachpb.Key("key")
 	txn.InternalSetPriority(10)
-	txn.Proto.Isolation = enginepb.SNAPSHOT
-	txn.Proto.Priority = 11
+	txn.Proto().Priority = 11
+	if err := txn.SetIsolation(enginepb.SNAPSHOT); err != nil {
+		t.Fatal(err)
+	}
 	if err := txn.Put(key, []byte("value")); err != nil {
 		t.Fatal(err)
 	}
-	if prio := txn.Proto.Priority; prio != 11 {
+	if prio := txn.Proto().Priority; prio != 11 {
 		t.Errorf("expected txn priority 11; got %d", prio)
 	}
 }
@@ -256,7 +321,7 @@ func TestTxnCoordSenderKeyRanges(t *testing.T) {
 		}
 	}
 
-	txnID := *txn.Proto.ID
+	txnID := *txn.Proto().ID
 
 	// Verify that the transaction metadata contains only two entries
 	// in its "keys" range group. "a" and range "aa"-"c".
@@ -313,7 +378,7 @@ func TestTxnCoordSenderHeartbeat(t *testing.T) {
 	var heartbeatTS hlc.Timestamp
 	for i := 0; i < 3; i++ {
 		testutils.SucceedsSoon(t, func() error {
-			txn, pErr := getTxn(sender, &initialTxn.Proto)
+			txn, pErr := getTxn(sender, initialTxn.Proto())
 			if pErr != nil {
 				t.Fatal(pErr)
 			}
@@ -335,9 +400,9 @@ func TestTxnCoordSenderHeartbeat(t *testing.T) {
 		var ba roachpb.BatchRequest
 		ba.Add(&roachpb.EndTransactionRequest{
 			Commit: false,
-			Span:   roachpb.Span{Key: initialTxn.Proto.Key},
+			Span:   roachpb.Span{Key: initialTxn.Proto().Key},
 		})
-		ba.Txn = &initialTxn.Proto
+		ba.Txn = initialTxn.Proto()
 		if _, pErr := sender.wrapped.Send(context.Background(), ba); pErr != nil {
 			t.Fatal(pErr)
 		}
@@ -346,7 +411,7 @@ func TestTxnCoordSenderHeartbeat(t *testing.T) {
 	testutils.SucceedsSoon(t, func() error {
 		sender.txnMu.Lock()
 		defer sender.txnMu.Unlock()
-		if txnMeta, ok := sender.txnMu.txns[*initialTxn.Proto.ID]; !ok {
+		if txnMeta, ok := sender.txnMu.txns[*initialTxn.Proto().ID]; !ok {
 			t.Fatal("transaction unregistered prematurely")
 		} else if txnMeta.txn.Status != roachpb.ABORTED {
 			return fmt.Errorf("transaction is not aborted")
@@ -424,7 +489,7 @@ func TestTxnCoordSenderEndTxn(t *testing.T) {
 		// The transaction was pushed at least to conflictTxn's timestamp (but
 		// it could have been pushed more - the push takes a timestamp off the
 		// HLC).
-		pusheeTxn, pErr := getTxn(sender, &txn.Proto)
+		pusheeTxn, pErr := getTxn(sender, txn.Proto())
 		if pErr != nil {
 			t.Fatal(pErr)
 		}
@@ -505,7 +570,7 @@ func TestTxnCoordSenderAddIntentOnError(t *testing.T) {
 		t.Fatal(err)
 	}
 	sender.txnMu.Lock()
-	txnID := *txn.Proto.ID
+	txnID := *txn.Proto().ID
 	intentSpans, _ := roachpb.MergeSpans(sender.txnMu.txns[txnID].keys)
 	expSpans := []roachpb.Span{{Key: key, EndKey: []byte("")}}
 	equal := !reflect.DeepEqual(intentSpans, expSpans)
@@ -635,7 +700,7 @@ func TestTxnCoordSenderGCTimeout(t *testing.T) {
 	s.Manual.Increment(defaultClientTimeout.Nanoseconds() + 1)
 	sender.txnMu.Unlock()
 
-	txnID := *txn.Proto.ID
+	txnID := *txn.Proto().ID
 
 	testutils.SucceedsSoon(t, func() error {
 		// Locking the TxnCoordSender to prevent a data race.
@@ -674,7 +739,7 @@ func TestTxnCoordSenderGCWithCancel(t *testing.T) {
 	s.Manual.Increment(defaultClientTimeout.Nanoseconds() + 1)
 	sender.txnMu.Unlock()
 
-	txnID := *txn.Proto.ID
+	txnID := *txn.Proto().ID
 
 	// Verify that the transaction is alive despite the timeout having been
 	// exceeded.
@@ -819,7 +884,7 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 		db := client.NewDB(ts, clock)
 		txn := client.NewTxn(context.Background(), *db)
 		txn.InternalSetPriority(1)
-		txn.Proto.Name = "test txn"
+		txn.SetDebugName("test txn")
 		key := roachpb.Key("test-key")
 		_, err := txn.Get(key)
 		teardownHeartbeats(ts)
@@ -828,23 +893,23 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 		if test.pErr != nil && err == nil {
 			t.Fatalf("expected an error")
 		}
-		if txn.Proto.Epoch != test.expEpoch {
+		if txn.Proto().Epoch != test.expEpoch {
 			t.Errorf("%d: expected epoch = %d; got %d",
-				i, test.expEpoch, txn.Proto.Epoch)
+				i, test.expEpoch, txn.Proto().Epoch)
 		}
-		if txn.Proto.Priority != test.expPri {
+		if txn.Proto().Priority != test.expPri {
 			t.Errorf("%d: expected priority = %d; got %d",
-				i, test.expPri, txn.Proto.Priority)
+				i, test.expPri, txn.Proto().Priority)
 		}
-		if txn.Proto.Timestamp != test.expTS {
+		if txn.Proto().Timestamp != test.expTS {
 			t.Errorf("%d: expected timestamp to be %s; got %s",
-				i, test.expTS, txn.Proto.Timestamp)
+				i, test.expTS, txn.Proto().Timestamp)
 		}
-		if txn.Proto.OrigTimestamp != test.expOrigTS {
+		if txn.Proto().OrigTimestamp != test.expOrigTS {
 			t.Errorf("%d: expected orig timestamp to be %s; got %s",
-				i, test.expOrigTS, txn.Proto.OrigTimestamp)
+				i, test.expOrigTS, txn.Proto().OrigTimestamp)
 		}
-		if ns := txn.Proto.ObservedTimestamps; (len(ns) != 0) != test.nodeSeen {
+		if ns := txn.Proto().ObservedTimestamps; (len(ns) != 0) != test.nodeSeen {
 			t.Errorf("%d: expected nodeSeen=%t, but list of hosts is %v",
 				i, test.nodeSeen, ns)
 		}
@@ -867,8 +932,8 @@ func TestTxnCoordIdempotentCleanup(t *testing.T) {
 
 	sender.txnMu.Lock()
 	// Clean up twice successively.
-	sender.cleanupTxnLocked(context.Background(), txn.Proto)
-	sender.cleanupTxnLocked(context.Background(), txn.Proto)
+	sender.cleanupTxnLocked(context.Background(), *txn.Proto())
+	sender.cleanupTxnLocked(context.Background(), *txn.Proto())
 	sender.txnMu.Unlock()
 
 	// For good measure, try to commit (which cleans up once more if it
@@ -882,59 +947,68 @@ func TestTxnCoordIdempotentCleanup(t *testing.T) {
 	}
 }
 
-// TestTxnMultipleCoord checks that a coordinator uses the Writing flag to
-// enforce that only one coordinator can be used for transactional writes.
-func TestTxnMultipleCoord(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	s, sender := createTestDB(t)
-	defer s.Stop()
+// To determine during review:
+//   We used to use the writing flag to enforce that only one coordinator can
+//   be used for transactional writes. Now that the coordinator needs to handle
+//   writes before the .Writing flag is set, this logic might need to change.
+//
+//   I think we may have had to change this to support running transactions from
+//   multiple nodes anyway, so it might be a good time to rethink this...
+//
+//
+// // TestTxnMultipleCoord checks that a coordinator uses the Writing flag to
+// // enforce that only one coordinator can be used for transactional writes.
+// func TestTxnMultipleCoord(t *testing.T) {
+// 	defer leaktest.AfterTest(t)()
+// 	s, sender := createTestDB(t)
+// 	defer s.Stop()
 
-	testCases := []struct {
-		args    roachpb.Request
-		writing bool
-		ok      bool
-	}{
-		{roachpb.NewGet(roachpb.Key("a")), true, false},
-		{roachpb.NewGet(roachpb.Key("a")), false, true},
-		{roachpb.NewPut(roachpb.Key("a"), roachpb.Value{}), false, false}, // transactional write before begin
-		{roachpb.NewPut(roachpb.Key("a"), roachpb.Value{}), true, false},  // must have switched coordinators
-	}
+// 	testCases := []struct {
+// 		args    roachpb.Request
+// 		writing bool
+// 		ok      bool
+// 	}{
+// 		{roachpb.NewGet(roachpb.Key("a")), true, false},
+// 		{roachpb.NewGet(roachpb.Key("a")), false, true},
+// 		{roachpb.NewPut(roachpb.Key("a"), roachpb.Value{}), false, false}, // transactional write before begin
+// 		{roachpb.NewPut(roachpb.Key("a"), roachpb.Value{}), true, false},  // must have switched coordinators
+// 	}
 
-	for i, tc := range testCases {
-		txn := roachpb.NewTransaction("test", roachpb.Key("a"), 1, enginepb.SERIALIZABLE,
-			s.Clock.Now(), s.Clock.MaxOffset().Nanoseconds())
-		txn.Writing = tc.writing
-		reply, pErr := client.SendWrappedWith(context.Background(), sender, roachpb.Header{
-			Txn: txn,
-		}, tc.args)
-		if pErr == nil != tc.ok {
-			t.Errorf("%d: %T (writing=%t): success_expected=%t, but got: %v",
-				i, tc.args, tc.writing, tc.ok, pErr)
-		}
-		if pErr != nil {
-			continue
-		}
+// 	for i, tc := range testCases {
+// 		txn := roachpb.NewTransaction("test", roachpb.Key("a"), 1, enginepb.SERIALIZABLE,
+// 			s.Clock.Now(), s.Clock.MaxOffset().Nanoseconds())
+// 		txn.Writing = tc.writing
+// 		reply, pErr := client.SendWrappedWith(context.Background(), sender, roachpb.Header{
+// 			Txn: txn,
+// 		}, tc.args)
+// 		if pErr == nil != tc.ok {
+// 			t.Errorf("%d: %T (writing=%t): success_expected=%t, but got: %v",
+// 				i, tc.args, tc.writing, tc.ok, pErr)
+// 		}
+// 		if pErr != nil {
+// 			continue
+// 		}
 
-		txn = reply.Header().Txn
-		// The transaction should come back rw if it started rw or if we just
-		// wrote.
-		isWrite := roachpb.IsTransactionWrite(tc.args)
-		if (tc.writing || isWrite) != txn.Writing {
-			t.Errorf("%d: unexpected writing state: %s", i, txn)
-		}
-		if !isWrite {
-			continue
-		}
-		// Abort for clean shutdown.
-		if _, pErr := client.SendWrappedWith(context.Background(), sender, roachpb.Header{
-			Txn: txn,
-		}, &roachpb.EndTransactionRequest{
-			Commit: false,
-		}); pErr != nil {
-			t.Fatal(pErr)
-		}
-	}
-}
+// 		txn = reply.Header().Txn
+// 		// The transaction should come back rw if it started rw or if we just
+// 		// wrote.
+// 		isWrite := roachpb.IsTransactionWrite(tc.args)
+// 		if (tc.writing || isWrite) != txn.Writing {
+// 			t.Errorf("%d: unexpected writing state: %s", i, txn)
+// 		}
+// 		if !isWrite {
+// 			continue
+// 		}
+// 		// Abort for clean shutdown.
+// 		if _, pErr := client.SendWrappedWith(context.Background(), sender, roachpb.Header{
+// 			Txn: txn,
+// 		}, &roachpb.EndTransactionRequest{
+// 			Commit: false,
+// 		}); pErr != nil {
+// 			t.Fatal(pErr)
+// 		}
+// 	}
+// }
 
 // TestTxnCoordSenderSingleRoundtripTxn checks that a batch which completely
 // holds the writing portion of a Txn (including EndTransaction) does not
@@ -1055,7 +1129,7 @@ func TestTxnCoordSenderReleaseTxnMeta(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	txnID := *txn.Proto.ID
+	txnID := *txn.Proto().ID
 
 	if _, ok := sender.txnMu.txns[txnID]; ok {
 		t.Fatal("expected TxnCoordSender has released the txn")
@@ -1389,8 +1463,8 @@ func TestTxnRestartCount(t *testing.T) {
 	if err := txn.Put(key, value); err != nil {
 		t.Fatal(err)
 	}
-	if !txn.Proto.OrigTimestamp.Less(txn.Proto.Timestamp) {
-		t.Errorf("expected timestamp to increase: %s", txn.Proto)
+	if !txn.Proto().OrigTimestamp.Less(txn.Proto().Timestamp) {
+		t.Errorf("expected timestamp to increase: %s", txn.Proto())
 	}
 
 	// Commit (should cause restart metric to increase).

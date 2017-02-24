@@ -28,37 +28,76 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
-// Txn is an in-progress distributed database transaction. A Txn is not safe for
+// Txn is an in-progress distributed database transaction. A Txn is safe for
 // concurrent use by multiple goroutines.
 type Txn struct {
-	db           DB
-	Proto        roachpb.Transaction
-	UserPriority roachpb.UserPriority
-	Context      context.Context // must not be nil
+	db      DB
+	Context context.Context // must not be nil
+
+	// The following fields are not safe for concurrent modification.
+	// They should be set before operating on the transaction.
+
+	// commitTriggers are run upon successful commit.
+	commitTriggers []func()
 	// systemConfigTrigger is set to true when modifying keys from the SystemConfig
 	// span. This sets the SystemConfigTrigger on EndTransactionRequest.
 	systemConfigTrigger bool
-	// txnAnchorKey is the key at which to anchor the transaction record. If
-	// unset, the first key written in the transaction will be used.
-	txnAnchorKey roachpb.Key
-	// commitTriggers are run upon successful commit.
-	commitTriggers []func()
 	// The txn has to be committed by this deadline. A nil value indicates no
 	// deadline.
 	deadline *hlc.Timestamp
-	// see IsFinalized()
-	finalized bool
+
+	// mu holds fields that need to be synchronized for concurrent request execution.
+	mu struct {
+		syncutil.Mutex
+		Proto roachpb.Transaction
+		// UserPriority is the transaction's priority.
+		UserPriority roachpb.UserPriority
+		// txnAnchorKey is the key at which to anchor the transaction record. If
+		// unset, the first key written in the transaction will be used.
+		txnAnchorKey roachpb.Key
+		// writingTxnRecord is set when the Txn is in the middle of writing
+		// its transaction record. It is used to assure that even in the presence
+		// of concurrent requests, only one sends a BeginTxnRequest.
+		writingTxnRecord bool
+		// see IsFinalized()
+		finalized bool
+		// previousIDs holds the set of all previous IDs that the Txn's Proto has had
+		// across transaction aborts. This allows us to determine if a given response
+		// was meant for any incarnation of this transaction.
+		previousIDs map[uuid.UUID]struct{}
+	}
 }
 
 // NewTxn returns a new txn.
 func NewTxn(ctx context.Context, db DB) *Txn {
-	return &Txn{
+	return NewTxnWithProto(ctx, db, roachpb.Transaction{})
+}
+
+// NewTxnWithProto returns a new txn with the provided Transaction proto.
+// This allows a client.Txn to be created with an already initialized proto.
+func NewTxnWithProto(ctx context.Context, db DB, proto roachpb.Transaction) *Txn {
+	txn := &Txn{
 		db:      db,
 		Context: ctx,
 	}
+	txn.mu.Proto = proto
+	return txn
+}
+
+//
+// Thread-Safe Accessors
+//
+
+// IsInitialized returns true if the transaction has been initialized.
+func (txn *Txn) IsInitialized() bool {
+	txn.mu.Lock()
+	defer txn.mu.Unlock()
+	return txn.mu.Proto.IsInitialized()
 }
 
 // IsFinalized returns true if this Txn has been finalized and should therefore
@@ -68,60 +107,108 @@ func NewTxn(ctx context.Context, db DB) *Txn {
 // Note that Commit() always leaves the transaction finalized, since it attempts
 // to rollback on error.
 func (txn *Txn) IsFinalized() bool {
-	return txn.finalized
+	txn.mu.Lock()
+	defer txn.mu.Unlock()
+	return txn.isFinalizedLocked()
 }
 
-// SetDebugName sets the debug name associated with the transaction which will
-// appear in log files and the web UI.
-func (txn *Txn) SetDebugName(name string) {
-	txn.Proto.Name = name
+func (txn *Txn) isFinalizedLocked() bool {
+	return txn.mu.finalized
 }
 
-// DebugName returns the debug name associated with the transaction.
-func (txn *Txn) DebugName() string {
-	if txn.Proto.ID == nil {
-		return txn.Proto.Name
-	}
-	return fmt.Sprintf("%s (id: %s)", txn.Proto.Name, txn.Proto.ID)
-}
-
-// SetIsolation sets the transaction's isolation type. Transactions default to
-// serializable isolation. The isolation must be set before any operations are
-// performed on the transaction.
-func (txn *Txn) SetIsolation(isolation enginepb.IsolationType) error {
-	if txn.Proto.Isolation == isolation {
-		return nil
-	}
-	if txn.Proto.IsInitialized() {
-		return errors.Errorf("cannot change the isolation level of a running transaction")
-	}
-	txn.Proto.Isolation = isolation
-	return nil
+// UserPriority returns the transaction's user priority.
+func (txn *Txn) UserPriority() roachpb.UserPriority {
+	txn.mu.Lock()
+	defer txn.mu.Unlock()
+	return txn.mu.UserPriority
 }
 
 // SetUserPriority sets the transaction's user priority. Transactions default to
 // normal user priority. The user priority must be set before any operations are
 // performed on the transaction.
 func (txn *Txn) SetUserPriority(userPriority roachpb.UserPriority) error {
-	if txn.UserPriority == userPriority {
+	txn.mu.Lock()
+	defer txn.mu.Unlock()
+	if txn.mu.UserPriority == userPriority {
 		return nil
 	}
-	if txn.Proto.IsInitialized() {
+	if txn.mu.Proto.IsInitialized() {
 		return errors.Errorf("cannot change the user priority of a running transaction")
 	}
 	if userPriority < roachpb.MinUserPriority || userPriority > roachpb.MaxUserPriority {
 		return errors.Errorf("the given user priority %f is out of the allowed range [%f, %d]", userPriority, roachpb.MinUserPriority, roachpb.MaxUserPriority)
 	}
-	txn.UserPriority = userPriority
+	txn.mu.UserPriority = userPriority
 	return nil
 }
 
 // InternalSetPriority sets the transaction priority. It is intended for
 // internal (testing) use only.
 func (txn *Txn) InternalSetPriority(priority int32) {
+	txn.mu.Lock()
 	// The negative user priority is translated on the server into a positive,
 	// non-randomized, priority for the transaction.
-	txn.UserPriority = roachpb.UserPriority(-priority)
+	txn.mu.UserPriority = roachpb.UserPriority(-priority)
+	txn.mu.Unlock()
+}
+
+// SetTxnAnchorKey sets the key at which to anchor the transaction record. The
+// transaction anchor key defaults to the first key written in a transaction.
+func (txn *Txn) SetTxnAnchorKey(key roachpb.Key) {
+	txn.mu.Lock()
+	if txn.mu.Proto.Writing || txn.mu.writingTxnRecord {
+		panic("must set txn anchor key before any txn writes")
+	}
+	txn.mu.txnAnchorKey = key
+	txn.mu.Unlock()
+}
+
+//
+// Not Thread-Safe Accessors
+//
+// These methods access data that should not be changed during the execution of
+// a running transaction, and therefore do not need to be synchronized.
+//
+
+// Proto not thread-safe, only use if you know that no requests are executing concurrently.
+//
+// A thread-safe alternative would be to clone the Proto under lock and return this
+// clone, but we currently have no situations where this is needed.
+func (txn *Txn) Proto() *roachpb.Transaction {
+	return &txn.mu.Proto
+}
+
+// SetDebugName sets the debug name associated with the transaction which will
+// appear in log files and the web UI.
+func (txn *Txn) SetDebugName(name string) {
+	txn.mu.Proto.Name = name
+}
+
+// DebugName returns the debug name associated with the transaction.
+func (txn *Txn) DebugName() string {
+	if txn.mu.Proto.ID == nil {
+		return txn.mu.Proto.Name
+	}
+	return fmt.Sprintf("%s (id: %s)", txn.mu.Proto.Name, txn.mu.Proto.ID)
+}
+
+// Isolation returns the transaction's isolation type.
+func (txn *Txn) Isolation() enginepb.IsolationType {
+	return txn.mu.Proto.Isolation
+}
+
+// SetIsolation sets the transaction's isolation type. Transactions default to
+// serializable isolation. The isolation must be set before any operations are
+// performed on the transaction.
+func (txn *Txn) SetIsolation(isolation enginepb.IsolationType) error {
+	if txn.mu.Proto.Isolation == isolation {
+		return nil
+	}
+	if txn.mu.Proto.IsInitialized() {
+		return errors.Errorf("cannot change the isolation level of a running transaction")
+	}
+	txn.mu.Proto.Isolation = isolation
+	return nil
 }
 
 // SetSystemConfigTrigger sets the system db trigger to true on this transaction.
@@ -148,14 +235,9 @@ func (txn *Txn) SystemConfigTrigger() bool {
 	return txn.systemConfigTrigger
 }
 
-// SetTxnAnchorKey sets the key at which to anchor the transaction record. The
-// transaction anchor key defaults to the first key written in a transaction.
-func (txn *Txn) SetTxnAnchorKey(key roachpb.Key) {
-	if txn.Proto.Writing {
-		panic("must set txn anchor key before any txn writes")
-	}
-	txn.txnAnchorKey = key
-}
+//
+// Transactional Operations
+//
 
 // NewBatch creates and returns a new empty batch object for use with the Txn.
 func (txn *Txn) NewBatch() *Batch {
@@ -319,7 +401,6 @@ func (txn *Txn) Run(b *Batch) error {
 func (txn *Txn) commit() error {
 	err := txn.sendEndTxnReq(true /* commit */, txn.deadline)
 	if err == nil {
-		txn.finalized = true
 		for _, t := range txn.commitTriggers {
 			t()
 		}
@@ -332,7 +413,13 @@ func (txn *Txn) CleanupOnError(err error) {
 	if err == nil {
 		panic("no error")
 	}
-	if txn.Proto.Status == roachpb.PENDING {
+	// This may race with a concurrent EndTxnRequests. That's fine though because
+	// we're just trying to clean up and will happily log the failed Rollback error
+	// if someone beat us.
+	txn.mu.Lock()
+	isPending := txn.mu.Proto.Status == roachpb.PENDING
+	txn.mu.Unlock()
+	if isPending {
 		if replyErr := txn.Rollback(); replyErr != nil {
 			log.Errorf(txn.Context, "failure aborting transaction: %s; abort caused by: %s", replyErr, err)
 		}
@@ -359,11 +446,7 @@ func (txn *Txn) CommitInBatch(b *Batch) error {
 		return errors.Errorf("a batch b can only be committed by b.txn")
 	}
 	b.AddRawRequest(endTxnReq(true /* commit */, txn.deadline, txn.SystemConfigTrigger()))
-	err := txn.Run(b)
-	if err == nil {
-		txn.finalized = true
-	}
-	return err
+	return txn.Run(b)
 }
 
 // CommitOrCleanup sends an EndTransactionRequest with Commit=true.
@@ -404,9 +487,7 @@ func (txn *Txn) GetDeadline() *hlc.Timestamp {
 // txn is considered finalized and cannot be used to send any more commands.
 func (txn *Txn) Rollback() error {
 	log.VEventf(txn.Context, 2, "rolling back transaction")
-	err := txn.sendEndTxnReq(false /* commit */, nil)
-	txn.finalized = true
-	return err
+	return txn.sendEndTxnReq(false /* commit */, nil)
 }
 
 // AddCommitTrigger adds a closure to be executed on successful commit
@@ -450,11 +531,12 @@ type TxnExecOptions struct {
 	// encountered. If not set, committing or leaving open the txn is the
 	// responsibility of the client.
 	AutoCommit bool
-	// If not nil, the clock can be used to generate txn timestamps early.
 	// Useful for SQL txns for ensuring that the value returned by
 	// `cluster_logical_timestamp()` is consistent with the commit (serializable)
 	// ordering.
-	Clock *hlc.Clock
+	//
+	// REVIEW: is there a better name for this?
+	AssignOrigTimestamp bool
 }
 
 // AutoCommitError wraps a non-retryable error coming from auto-commit.
@@ -491,47 +573,58 @@ func (txn *Txn) Exec(opt TxnExecOptions, fn func(txn *Txn, opt *TxnExecOptions) 
 
 	for {
 		if txn != nil {
+			txn.mu.Lock()
 			// If we're looking at a brand new transaction, then communicate
-			// what should be used as initial timestamp for the KV txn created
-			// by TxnCoordSender.
-			if opt.Clock != nil && !txn.Proto.IsInitialized() {
+			// what should be used as initial timestamp.
+			if opt.AssignOrigTimestamp && !txn.mu.Proto.IsInitialized() {
 				// Control the KV timestamp, such that the value returned by
 				// `cluster_logical_timestamp()` is consistent with the commit
 				// (serializable) ordering.
-				txn.Proto.OrigTimestamp = opt.Clock.Now()
+				txn.mu.Proto.OrigTimestamp = txn.db.clock.Now()
 			}
+			txn.mu.Unlock()
 		}
 
 		err = fn(txn, &opt)
 
-		// TODO(andrei): Until 7881 is fixed.
-		if err == nil && opt.AutoCommit && txn.Proto.Status == roachpb.ABORTED {
-			log.Errorf(txn.Context, "#7881: no err but aborted txn proto. opt: %+v, txn: %+v",
-				opt, txn)
-		}
+		if err == nil && opt.AutoCommit {
+			// Copy the status out of the Proto under lock. Making decisions on
+			// this later is not thread-safe, but the commutativity property of
+			// transactions assure that reasoning about the situation is straightforward.
+			txn.mu.Lock()
+			status := txn.Proto().Status
+			txn.mu.Unlock()
 
-		if err == nil && opt.AutoCommit && txn.Proto.Status == roachpb.PENDING {
-			// fn succeeded, but didn't commit.
-			err = txn.Commit()
-			log.Eventf(txn.Context, "client.Txn did AutoCommit. err: %v\ntxn: %+v", err, txn.Proto)
-			if err != nil {
-				if _, retryable := err.(*roachpb.RetryableTxnError); !retryable {
-					// We can't retry, so let the caller know we tried to
-					// autocommit.
-					err = &AutoCommitError{cause: err}
+			switch status {
+			case roachpb.ABORTED:
+				// TODO(andrei): Until 7881 is fixed.
+				log.Errorf(txn.Context, "#7881: no err but aborted txn proto. opt: %+v, txn: %+v",
+					opt, txn)
+			case roachpb.PENDING:
+				// fn succeeded, but didn't commit. This may race with another
+				// EndTxnRequest.
+				//
+				// REVIEW: Is that an issue?
+				err = txn.Commit()
+				log.Eventf(txn.Context, "client.Txn did AutoCommit. err: %v\ntxn: %+v", err, txn.Proto())
+				if err != nil {
+					if _, retryable := err.(*roachpb.RetryableTxnError); !retryable {
+						// We can't retry, so let the caller know we tried to
+						// autocommit.
+						err = &AutoCommitError{cause: err}
+					}
 				}
 			}
 		}
 
 		retErr, retryable := err.(*roachpb.RetryableTxnError)
-		if retryable && !IsRetryableErrMeantForTxn(retErr, txn) {
+		if retryable && !txn.IsRetryableErrMeantForTxn(retErr) {
 			// Make sure the txn record that err carries is for this txn.
 			// If it's not, we terminate the "retryable" character of the error. We
 			// might get a RetryableTxnError if the closure ran another transaction
 			// internally and let the error propagate upwards.
 			return errors.Wrap(retErr, "retryable error from another txn")
 		}
-		_, retryable = err.(*roachpb.RetryableTxnError)
 		if !opt.AutoRetry || !retryable {
 			break
 		}
@@ -546,35 +639,170 @@ func (txn *Txn) Exec(opt TxnExecOptions, fn func(txn *Txn, opt *TxnExecOptions) 
 }
 
 // IsRetryableErrMeantForTxn returns true if err is a retryable
-// error meant to restart txn.
-func IsRetryableErrMeantForTxn(err *roachpb.RetryableTxnError, txn *Txn) bool {
-	// Make sure the txn record that err carries is for this txn.
-	// TODO(andrei): this "wrong id" detection doesn't always work after a
-	// transaction's proto has been reset (when txn.Proto.ID == nil at the time of
-	// this check). Figure out a more robust mechanism. We should probably move
-	// the initialization of the txn ID here, in the client, from the
-	// TxnCoordSender.
-	return txn.Proto.ID == nil || roachpb.TxnIDEqual(err.TxnID, txn.Proto.ID)
+// error meant to restart this client transaction.
+func (txn *Txn) IsRetryableErrMeantForTxn(err *roachpb.RetryableTxnError) bool {
+	txn.mu.Lock()
+	defer txn.mu.Unlock()
+	return txn.isRetryableErrMeantForTxnLocked(err)
 }
 
-// sendInternal sends the batch and updates the transaction on error. Depending
-// on the error type, the transaction might be replaced by a new one.
-func (txn *Txn) sendInternal(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
-	// Set transaction-specific BatchRequest fields.
-	ba.Txn = &txn.Proto
-	// For testing purposes, txn.UserPriority can be a negative value (see
-	// MakePriority).
-	if txn.UserPriority != 0 {
-		ba.UserPriority = txn.UserPriority
+func (txn *Txn) isRetryableErrMeantForTxnLocked(err *roachpb.RetryableTxnError) bool {
+	// Make sure the txn record that err carries is for this txn.
+	// First check if the error was meant for a previous incarnation
+	// of the transaction.
+	if err.TxnID != nil {
+		if _, ok := txn.mu.previousIDs[*err.TxnID]; ok {
+			return true
+		}
+	}
+	// If not, make sure it was meant for this transaction.
+	return roachpb.TxnIDEqual(err.TxnID, txn.mu.Proto.ID)
+}
+
+// send runs the specified calls synchronously in a single batch and
+// returns any errors. If the transaction is read-only or has already
+// been successfully committed or aborted, a potential trailing
+// EndTransaction call is silently dropped, allowing the caller to
+// always commit or clean-up explicitly even when that may not be
+// required (or even erroneous). Returns (nil, nil) for an empty batch.
+func (txn *Txn) send(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+	// It doesn't make sense to use inconsistent reads in a transaction. However,
+	// we still need to accept it as a parameter for this to compile.
+	if ba.ReadConsistency != roachpb.CONSISTENT {
+		return nil, roachpb.NewErrorf("cannot use %s ReadConsistency in txn",
+			ba.ReadConsistency)
+	}
+
+	lastIndex := len(ba.Requests) - 1
+	if lastIndex < 0 {
+		return nil, nil
+	}
+
+	firstWriteIdx, pErr := firstWriteIndex(ba)
+	if pErr != nil {
+		return nil, pErr
+	}
+
+	haveTxnWrite := firstWriteIdx != -1
+	endTxnRequest, haveEndTxn := ba.Requests[lastIndex].GetInner().(*roachpb.EndTransactionRequest)
+
+	var needBeginTxn, elideEndTxn bool
+	lockedPrelude := func() *roachpb.Error {
+		txn.mu.Lock()
+		defer txn.mu.Unlock()
+
+		if txn.mu.Proto.Status != roachpb.PENDING || txn.isFinalizedLocked() {
+			return roachpb.NewErrorf(
+				"attempting to use transaction with wrong status or finalized: %s %v",
+				txn.mu.Proto.Status, txn.mu.finalized)
+		}
+
+		// For testing purposes, txn.UserPriority can be a negative value (see
+		// MakePriority).
+		if txn.mu.UserPriority != 0 {
+			ba.UserPriority = txn.mu.UserPriority
+		}
+
+		if !txn.mu.Proto.IsInitialized() {
+			InitTxnProtoFromRequest(&txn.mu.Proto, ba.UserPriority, txn.db.clock)
+		}
+
+		needBeginTxn = !(txn.mu.Proto.Writing || txn.mu.writingTxnRecord) && haveTxnWrite
+		needEndTxn := txn.mu.Proto.Writing || txn.mu.writingTxnRecord || haveTxnWrite
+		elideEndTxn = haveEndTxn && !needEndTxn
+
+		// If we're not yet writing in this txn, but intend to, insert a
+		// begin transaction request before the first write command and update
+		// transaction state accordingly.
+		if needBeginTxn {
+			// Set txn key based on the key of the first transactional write if
+			// not already set. If the transaction already has a key (we're in a
+			// restart), make sure we keep the anchor key the same.
+			if len(txn.mu.Proto.Key) == 0 {
+				txnAnchorKey := txn.mu.txnAnchorKey
+				if len(txnAnchorKey) == 0 {
+					txnAnchorKey = ba.Requests[0].GetInner().Header().Key
+				}
+				txn.mu.Proto.Key = txnAnchorKey
+			}
+			// Set the key in the begin transaction request to the txn's anchor key.
+			bt := &roachpb.BeginTransactionRequest{
+				Span: roachpb.Span{
+					Key: txn.mu.Proto.Key,
+				},
+			}
+			// Inject the new request before position firstWriteIdx, taking
+			// care to avoid unnecessary allocations.
+			oldRequests := ba.Requests
+			ba.Requests = make([]roachpb.RequestUnion, len(ba.Requests)+1)
+			copy(ba.Requests, oldRequests[:firstWriteIdx])
+			ba.Requests[firstWriteIdx].MustSetInner(bt)
+			copy(ba.Requests[firstWriteIdx+1:], oldRequests[firstWriteIdx:])
+			// We're going to be writing the transaction record by sending the
+			// begin transaction request.
+			txn.mu.writingTxnRecord = true
+		}
+
+		if elideEndTxn {
+			ba.Requests = ba.Requests[:lastIndex]
+		}
+
+		// Clone the Txn's Proto so that future modifications can be made without
+		// worrying about synchronization.
+		newTxn := txn.mu.Proto.Clone()
+		ba.Txn = &newTxn
+		return nil
+	}
+	if pErr := lockedPrelude(); pErr != nil {
+		return nil, pErr
 	}
 
 	// Send call through the DB.
 	br, pErr := txn.db.send(txn.Context, ba)
-	if pErr == nil {
-		if br == nil {
-			return nil, nil
+
+	// Lock for the entire response postlude.
+	txn.mu.Lock()
+	defer txn.mu.Unlock()
+
+	// If we inserted a begin transaction request, remove it here. We also
+	// unset the flag writingTxnRecord flag in case another ever needs to
+	// be sent again (for instance, if we're aborted and need to restart).
+	if needBeginTxn {
+		if br != nil && br.Responses != nil {
+			br.Responses = append(br.Responses[:firstWriteIdx], br.Responses[firstWriteIdx+1:]...)
+		}
+		// Handle case where inserted begin txn confused an indexed error.
+		if pErr != nil && pErr.Index != nil {
+			idx := pErr.Index.Index
+			if idx == int32(firstWriteIdx) {
+				// An error was encountered on begin txn; disallow the indexing.
+				pErr.Index = nil
+			} else if idx > int32(firstWriteIdx) {
+				// An error was encountered after begin txn; decrement index.
+				pErr.SetErrorIndex(idx - 1)
+			}
 		}
 
+		txn.mu.writingTxnRecord = false
+	}
+	if haveEndTxn {
+		if pErr == nil || !endTxnRequest.Commit {
+			// Finalize the transaction if either we sent a successful commit
+			// EndTxnRequest, or sent a rollback EndTxnRequest (regardless of
+			// if it succeeded).
+			txn.mu.finalized = true
+		}
+	}
+
+	if pErr != nil {
+		if log.V(1) {
+			log.Infof(txn.Context, "failed batch: %s", pErr)
+		}
+		txn.updateStateOnErrLocked(pErr)
+		return nil, pErr
+	}
+
+	if br != nil {
 		if br.Error != nil {
 			panic(roachpb.ErrorUnexpectedlySet(txn.db.sender, br))
 		}
@@ -589,143 +817,16 @@ func (txn *Txn) sendInternal(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *
 		// well; those update our local state in the same way for the next attempt.
 		// The exception is if our transaction was aborted and needs to restart
 		// from scratch, in which case we do just that.
-		txn.Proto.Update(br.Txn)
-		return br, nil
-	}
-
-	if log.V(1) {
-		log.Infof(txn.Context, "failed batch: %s", pErr)
-	}
-
-	if pErr.TransactionRestart != roachpb.TransactionRestart_NONE {
-		if !IsRetryableErrMeantForTxn(
-			pErr.GoError().(*roachpb.RetryableTxnError), txn) {
-			// If this happens, something is wrong; we've received an error that
-			// wasn't meant for this transaction. This is a sign that we either
-			// somehow ran another txn inside our txn and didn't properly terminate
-			// its error, or our transaction got a TransactionAbortedError (and the
-			// proto was reset), was retried, and then we still somehow managed to get
-			// an error meant for the previous incarnation of the transaction.
-			// Letting this wrong error slip here can cause us to retry the wrong
-			// transaction.
-			// TODO(andrei): this "wrong id" detection doesn't always work after a
-			// transaction's proto has been reset (when txn.Proto.ID == nil at the
-			// time of this check). Figure out a more robust mechanism. We should
-			// probably move the initialization of the txn ID here, in the client,
-			// from the TxnCoordSender.
-			panic(fmt.Sprintf("Got a retryable error meant for a different transaction. "+
-				"txn.Proto.ID: %v, pErr.ID: %v", txn.Proto.ID, pErr.GetTxn().ID))
-		}
-	}
-
-	if _, ok := pErr.GetDetail().(*roachpb.TransactionAbortedError); ok {
-		// On Abort, reset the transaction so we start anew on restart.
-		txn.Proto = roachpb.Transaction{
-			TxnMeta: enginepb.TxnMeta{
-				Isolation: txn.Proto.Isolation,
-			},
-			Name: txn.Proto.Name,
-		}
-		// Acts as a minimum priority on restart.
-		if pErr.GetTxn() != nil {
-			txn.Proto.Priority = pErr.GetTxn().Priority
-		}
-	} else if pErr.TransactionRestart != roachpb.TransactionRestart_NONE {
-		txn.Proto.Update(pErr.GetTxn())
-	}
-	return nil, pErr
-}
-
-// send runs the specified calls synchronously in a single batch and
-// returns any errors. If the transaction is read-only or has already
-// been successfully committed or aborted, a potential trailing
-// EndTransaction call is silently dropped, allowing the caller to
-// always commit or clean-up explicitly even when that may not be
-// required (or even erroneous). Returns (nil, nil) for an empty batch.
-func (txn *Txn) send(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
-
-	if txn.Proto.Status != roachpb.PENDING || txn.IsFinalized() {
-		return nil, roachpb.NewErrorf(
-			"attempting to use transaction with wrong status or finalized: %s", txn.Proto.Status)
-	}
-
-	// It doesn't make sense to use inconsistent reads in a transaction. However,
-	// we still need to accept it as a parameter for this to compile.
-	if ba.ReadConsistency != roachpb.CONSISTENT {
-		return nil, roachpb.NewErrorf("cannot use %s ReadConsistency in txn",
-			ba.ReadConsistency)
-	}
-
-	lastIndex := len(ba.Requests) - 1
-	if lastIndex < 0 {
-		return nil, nil
-	}
-
-	// firstWriteIndex is set to the index of the first command which is
-	// a transactional write. If != -1, this indicates an intention to
-	// write. This is in contrast to txn.Proto.Writing, which is set by
-	// the coordinator when the first intent has been created, and which
-	// lives for the life of the transaction.
-	firstWriteIndex := -1
-	txnAnchorKey := txn.txnAnchorKey
-
-	for i, ru := range ba.Requests {
-		args := ru.GetInner()
-		if i < lastIndex {
-			if _, ok := args.(*roachpb.EndTransactionRequest); ok {
-				return nil, roachpb.NewErrorf("%s sent as non-terminal call", args.Method())
-			}
-		}
-		if roachpb.IsTransactionWrite(args) {
-			if firstWriteIndex == -1 {
-				firstWriteIndex = i
-			}
-			if len(txnAnchorKey) == 0 {
-				txnAnchorKey = args.Header().Key
-			}
-		}
-	}
-
-	haveTxnWrite := firstWriteIndex != -1
-	endTxnRequest, haveEndTxn := ba.Requests[lastIndex].GetInner().(*roachpb.EndTransactionRequest)
-	needBeginTxn := !txn.Proto.Writing && haveTxnWrite
-	needEndTxn := txn.Proto.Writing || haveTxnWrite
-	elideEndTxn := haveEndTxn && !needEndTxn
-
-	// If we're not yet writing in this txn, but intend to, insert a
-	// begin transaction request before the first write command.
-	if needBeginTxn {
-		// If the transaction already has a key (we're in a restart), make
-		// sure we set the key in the begin transaction request to the original.
-		bt := &roachpb.BeginTransactionRequest{
-			Span: roachpb.Span{
-				Key: txnAnchorKey,
-			},
-		}
-		if txn.Proto.Key != nil {
-			bt.Key = txn.Proto.Key
-		}
-		// Inject the new request before position firstWriteIndex, taking
-		// care to avoid unnecessary allocations.
-		oldRequests := ba.Requests
-		ba.Requests = make([]roachpb.RequestUnion, len(ba.Requests)+1)
-		copy(ba.Requests, oldRequests[:firstWriteIndex])
-		ba.Requests[firstWriteIndex].MustSetInner(bt)
-		copy(ba.Requests[firstWriteIndex+1:], oldRequests[firstWriteIndex:])
+		txn.mu.Proto.Update(br.Txn)
 	}
 
 	if elideEndTxn {
-		ba.Requests = ba.Requests[:lastIndex]
-	}
-
-	br, pErr := txn.sendInternal(ba)
-	if elideEndTxn && pErr == nil {
 		// Check that read only transactions do not violate their deadline. This can NOT
 		// happen since the txn deadline is normally updated when it is about to expire
 		// or expired. We will just keep the code for safety (see TestReacquireLeaseOnRestart).
 		if endTxnRequest.Deadline != nil {
-			if endTxnRequest.Deadline.Less(txn.Proto.Timestamp) {
-				return nil, roachpb.NewErrorWithTxn(roachpb.NewTransactionAbortedError(), &txn.Proto)
+			if endTxnRequest.Deadline.Less(txn.mu.Proto.Timestamp) {
+				return nil, roachpb.NewErrorWithTxn(roachpb.NewTransactionAbortedError(), &txn.mu.Proto)
 			}
 		}
 		// This normally happens on the server and sent back in response
@@ -733,29 +834,109 @@ func (txn *Txn) send(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.
 		// still inspect the transaction struct, so we manually update it
 		// here to emulate a true transaction.
 		if endTxnRequest.Commit {
-			txn.Proto.Status = roachpb.COMMITTED
+			txn.mu.Proto.Status = roachpb.COMMITTED
 		} else {
-			txn.Proto.Status = roachpb.ABORTED
+			txn.mu.Proto.Status = roachpb.ABORTED
 		}
-		txn.finalized = true
 	}
+	return br, nil
+}
 
-	// If we inserted a begin transaction request, remove it here.
-	if needBeginTxn {
-		if br != nil && br.Responses != nil {
-			br.Responses = append(br.Responses[:firstWriteIndex], br.Responses[firstWriteIndex+1:]...)
+// firstWriteIndex returns the index of the first transactional write in the
+// BatchRequest. Returns -1 if the batch has not intention to write. It also
+// verifies that if an EndTransactionRequest is included, then it is the last
+// request in the batch.
+func firstWriteIndex(ba roachpb.BatchRequest) (int, *roachpb.Error) {
+	firstWriteIdx := -1
+	for i, ru := range ba.Requests {
+		args := ru.GetInner()
+		if i < len(ba.Requests)-1 /* if not last*/ {
+			if _, ok := args.(*roachpb.EndTransactionRequest); ok {
+				return -1, roachpb.NewErrorf("%s sent as non-terminal call", args.Method())
+			}
 		}
-		// Handle case where inserted begin txn confused an indexed error.
-		if pErr != nil && pErr.Index != nil {
-			idx := pErr.Index.Index
-			if idx == int32(firstWriteIndex) {
-				// An error was encountered on begin txn; disallow the indexing.
-				pErr.Index = nil
-			} else if idx > int32(firstWriteIndex) {
-				// An error was encountered after begin txn; decrement index.
-				pErr.SetErrorIndex(idx - 1)
+		if roachpb.IsTransactionWrite(args) {
+			if firstWriteIdx == -1 {
+				firstWriteIdx = i
 			}
 		}
 	}
-	return br, pErr
+	return firstWriteIdx, nil
+}
+
+// InitTxnProtoFromRequest initializes an uninitialized (ID == nil) Transaction proto
+// using the provided priority and clock.
+func InitTxnProtoFromRequest(
+	proto *roachpb.Transaction, priority roachpb.UserPriority, clock *hlc.Clock,
+) {
+	// The initial timestamp may be communicated by a higher layer.
+	// If so, use that. Otherwise make up a new one.
+	timestamp := proto.OrigTimestamp
+	if timestamp == (hlc.Timestamp{}) {
+		timestamp = clock.Now()
+	}
+	newTxn := roachpb.MakeTransaction(
+		proto.Name,
+		nil, /* baseKey */
+		priority,
+		proto.Isolation,
+		timestamp,
+		clock.MaxOffset().Nanoseconds(),
+	)
+	// Use existing priority as a minimum. This is used on transaction
+	// aborts to ratchet priority when creating successor transaction.
+	if newTxn.Priority < proto.Priority {
+		newTxn.Priority = proto.Priority
+	}
+	*proto = newTxn
+}
+
+func (txn *Txn) updateStateOnErrLocked(pErr *roachpb.Error) {
+	if pErr.TransactionRestart == roachpb.TransactionRestart_NONE {
+		return
+	}
+
+	retryErr := pErr.GoError().(*roachpb.RetryableTxnError)
+	if !txn.isRetryableErrMeantForTxnLocked(retryErr) {
+		// If this happens, something is wrong; we've received an error that
+		// wasn't meant for this transaction. This is a sign that we either
+		// somehow ran another txn inside our txn and didn't properly terminate
+		// its error, or our transaction got a TransactionAbortedError (and the
+		// proto was reset), was retried, and then we still somehow managed to get
+		// an error meant for the previous incarnation of the transaction.
+		// Letting this wrong error slip here can cause us to retry the wrong
+		// transaction.
+		panic(fmt.Sprintf("Got a retryable error meant for a different transaction. "+
+			"txn.mu.Proto.ID: %v, pErr.ID: %v", txn.mu.Proto.ID, pErr.GetTxn().ID))
+	}
+
+	if roachpb.TxnIDEqual(retryErr.TxnID, txn.mu.Proto.ID) {
+		// Only update the proto if the retryable error is meant for the current
+		// incarnation of the transaction. In other words, only update it if
+		// retryErr.TxnID is not in txn.mu.previousIDs.
+		switch retryErr.Cause.(type) {
+		case *roachpb.TransactionAbortedError:
+			// On Abort, save the old transaction ID so that concurrent requests
+			// or delayed responses that that throw errors know that these errors
+			// were sent to the correct transaction, even once the proto is reset.
+			if txn.mu.previousIDs == nil {
+				txn.mu.previousIDs = make(map[uuid.UUID]struct{})
+			}
+			txn.mu.previousIDs[*txn.mu.Proto.ID] = struct{}{}
+
+			// Next, reset the transaction proto so we start anew on restart.
+			txn.mu.Proto = roachpb.Transaction{
+				TxnMeta: enginepb.TxnMeta{
+					Isolation: txn.mu.Proto.Isolation,
+				},
+				Name: txn.mu.Proto.Name,
+			}
+			// Acts as a minimum priority on restart.
+			if pErr.GetTxn() != nil {
+				txn.mu.Proto.Priority = pErr.GetTxn().Priority
+			}
+		default:
+			txn.mu.Proto.Update(pErr.GetTxn())
+		}
+	}
 }

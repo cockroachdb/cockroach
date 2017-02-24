@@ -659,13 +659,8 @@ const (
 	MaxTxnPriority = math.MaxInt32
 )
 
-// NewTransaction creates a new transaction. The transaction key is
-// composed using the specified baseKey (for locality with data
-// affected by the transaction) and a random ID to guarantee
-// uniqueness. The specified user-level priority is combined with a
-// randomly chosen value to yield a final priority, used to settle
-// write conflicts in a way that avoids starvation of long-running
-// transactions (see Replica.PushTxn).
+// NewTransaction behaves like MakeTransaction, but returns the new
+// transaction by reference instead of by value.
 func NewTransaction(
 	name string,
 	baseKey Key,
@@ -674,9 +669,28 @@ func NewTransaction(
 	now hlc.Timestamp,
 	maxOffset int64,
 ) *Transaction {
+	txn := MakeTransaction(name, baseKey, userPriority, isolation, now, maxOffset)
+	return &txn
+}
+
+// MakeTransaction creates a new transaction. The transaction key is
+// composed using the specified baseKey (for locality with data
+// affected by the transaction) and a random ID to guarantee
+// uniqueness. The specified user-level priority is combined with a
+// randomly chosen value to yield a final priority, used to settle
+// write conflicts in a way that avoids starvation of long-running
+// transactions (see Replica.PushTxn).
+func MakeTransaction(
+	name string,
+	baseKey Key,
+	userPriority UserPriority,
+	isolation enginepb.IsolationType,
+	now hlc.Timestamp,
+	maxOffset int64,
+) Transaction {
 	u := uuid.MakeV4()
 
-	return &Transaction{
+	return Transaction{
 		TxnMeta: enginepb.TxnMeta{
 			Key:       baseKey,
 			ID:        &u,
