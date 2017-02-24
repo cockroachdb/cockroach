@@ -205,7 +205,7 @@ func bootstrapCluster(
 	// Create a KV DB with a local sender.
 	stores := storage.NewStores(cfg.AmbientCtx, cfg.Clock)
 	sender := kv.NewTxnCoordSender(cfg.AmbientCtx, stores, cfg.Clock, false, stopper, txnMetrics)
-	cfg.DB = client.NewDB(sender)
+	cfg.DB = client.NewDB(sender, cfg.Clock)
 	cfg.Transport = storage.NewDummyRaftTransport()
 	for i, eng := range engines {
 		sIdent := roachpb.StoreIdent{
