@@ -123,8 +123,8 @@ func formatTags(ctx context.Context, buf *msgBuf) bool {
 	return false
 }
 
-// makeMessage creates a structured log entry.
-func makeMessage(ctx context.Context, format string, args []interface{}) string {
+// MakeMessage creates a structured log entry.
+func MakeMessage(ctx context.Context, format string, args []interface{}) string {
 	var buf msgBuf
 	formatTags(ctx, &buf)
 	if len(format) == 0 {
@@ -139,8 +139,8 @@ func makeMessage(ctx context.Context, format string, args []interface{}) string 
 // specified facility of the logger.
 func addStructured(ctx context.Context, s Severity, depth int, format string, args []interface{}) {
 	file, line, _ := caller.Lookup(depth + 1)
-	msg := makeMessage(ctx, format, args)
-	// makeMessage already added the tags when forming msg, we don't want
+	msg := MakeMessage(ctx, format, args)
+	// MakeMessage already added the tags when forming msg, we don't want
 	// eventInternal to prepend them again.
 	eventInternal(ctx, (s >= Severity_ERROR), false /*withTags*/, "%s:%d %s", file, line, msg)
 	logging.outputLogEntry(s, file, line, msg)
