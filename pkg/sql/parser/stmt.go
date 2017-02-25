@@ -147,7 +147,12 @@ func (n *Deallocate) StatementTag() string {
 }
 
 // StatementType implements the Statement interface.
-func (n *Delete) StatementType() StatementType { return n.Returning.StatementType() }
+func (n *Delete) StatementType() StatementType {
+	if n.Returning != nil {
+		return n.Returning.StatementType()
+	}
+	return RowsAffected
+}
 
 // StatementTag returns a short string identifying the type of statement.
 func (*Delete) StatementTag() string { return "DELETE" }
@@ -195,7 +200,12 @@ func (*Grant) StatementType() StatementType { return DDL }
 func (*Grant) StatementTag() string { return "GRANT" }
 
 // StatementType implements the Statement interface.
-func (n *Insert) StatementType() StatementType { return n.Returning.StatementType() }
+func (n *Insert) StatementType() StatementType {
+	if n.Returning != nil {
+		return n.Returning.StatementType()
+	}
+	return RowsAffected
+}
 
 // StatementTag returns a short string identifying the type of statement.
 func (*Insert) StatementTag() string { return "INSERT" }
@@ -252,6 +262,18 @@ func (*Restore) StatementType() StatementType { return Ack }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*Restore) StatementTag() string { return "RESTORE" }
+
+// StatementType implements the Statement interface.
+func (*ReturningExprs) StatementType() StatementType { return Rows }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*ReturningExprs) StatementTag() string { return "RETURNING" }
+
+// StatementType implements the Statement interface.
+func (ReturningNothing) StatementType() StatementType { return Rows }
+
+// StatementTag returns a short string identifying the type of statement.
+func (ReturningNothing) StatementTag() string { return "RETURNING NOTHING" }
 
 // StatementType implements the Statement interface.
 func (*Revoke) StatementType() StatementType { return DDL }
@@ -398,7 +420,12 @@ func (*Truncate) StatementType() StatementType { return Ack }
 func (*Truncate) StatementTag() string { return "TRUNCATE" }
 
 // StatementType implements the Statement interface.
-func (n *Update) StatementType() StatementType { return n.Returning.StatementType() }
+func (n *Update) StatementType() StatementType {
+	if n.Returning != nil {
+		return n.Returning.StatementType()
+	}
+	return RowsAffected
+}
 
 // StatementTag returns a short string identifying the type of statement.
 func (*Update) StatementTag() string { return "UPDATE" }
@@ -450,6 +477,8 @@ func (n *RenameColumn) String() string             { return AsString(n) }
 func (n *RenameDatabase) String() string           { return AsString(n) }
 func (n *RenameIndex) String() string              { return AsString(n) }
 func (n *RenameTable) String() string              { return AsString(n) }
+func (n *ReturningExprs) String() string           { return AsString(n) }
+func (n ReturningNothing) String() string          { return AsString(n) }
 func (n *Restore) String() string                  { return AsString(n) }
 func (n *Revoke) String() string                   { return AsString(n) }
 func (n *RollbackToSavepoint) String() string      { return AsString(n) }

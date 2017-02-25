@@ -30,7 +30,7 @@ type Insert struct {
 	Columns    UnresolvedNames
 	Rows       *Select
 	OnConflict *OnConflict
-	Returning  ReturningExprs
+	Returning  ReturningClause
 }
 
 // Format implements the NodeFormatter interface.
@@ -70,7 +70,9 @@ func (node *Insert) Format(buf *bytes.Buffer, f FmtFlags) {
 			}
 		}
 	}
-	FormatNode(buf, f, node.Returning)
+	if node.Returning != nil {
+		FormatNode(buf, f, node.Returning)
+	}
 }
 
 // DefaultValues returns true iff only default values are being inserted.

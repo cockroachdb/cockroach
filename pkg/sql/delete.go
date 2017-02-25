@@ -59,7 +59,7 @@ func (p *planner) Delete(
 	}
 
 	var requestedCols []sqlbase.ColumnDescriptor
-	if len(n.Returning) > 0 {
+	if _, retExprs := n.Returning.(*parser.ReturningExprs); retExprs {
 		// TODO(dan): This could be made tighter, just the rows needed for RETURNING
 		// exprs.
 		requestedCols = en.tableDesc.Columns

@@ -165,6 +165,7 @@ func TestParse(t *testing.T) {
 		{`DELETE FROM a WHERE a = b RETURNING a, b`},
 		{`DELETE FROM a WHERE a = b RETURNING 1, 2`},
 		{`DELETE FROM a WHERE a = b RETURNING a + b`},
+		{`DELETE FROM a WHERE a = b RETURNING NOTHING`},
 
 		{`DROP DATABASE a`},
 		{`DROP DATABASE IF EXISTS a`},
@@ -281,6 +282,7 @@ func TestParse(t *testing.T) {
 		{`INSERT INTO a VALUES (1) RETURNING a, b`},
 		{`INSERT INTO a VALUES (1, 2) RETURNING 1, 2`},
 		{`INSERT INTO a VALUES (1, 2) RETURNING a + b, c`},
+		{`INSERT INTO a VALUES (1, 2) RETURNING NOTHING`},
 
 		{`UPSERT INTO a VALUES (1)`},
 		{`UPSERT INTO a.b VALUES (1)`},
@@ -555,6 +557,7 @@ func TestParse(t *testing.T) {
 		{`UPDATE a SET b = 3 WHERE a = b RETURNING a`},
 		{`UPDATE a SET b = 3 WHERE a = b RETURNING 1, 2`},
 		{`UPDATE a SET b = 3 WHERE a = b RETURNING a, a + b`},
+		{`UPDATE a SET b = 3 WHERE a = b RETURNING NOTHING`},
 
 		{`UPDATE T AS "0" SET K = ''`},                 // "0" lost its quotes
 		{`SELECT * FROM "0" JOIN "0" USING (id, "0")`}, // last "0" lost its quotes.

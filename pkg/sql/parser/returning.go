@@ -18,21 +18,28 @@ package parser
 
 import "bytes"
 
+// ReturningClause represents the returning clause on a statement.
+type ReturningClause interface {
+	Statement
+	returningClause()
+}
+
+func (*ReturningExprs) returningClause()  {}
+func (ReturningNothing) returningClause() {}
+
 // ReturningExprs represents RETURNING expressions.
 type ReturningExprs SelectExprs
 
 // Format implements the NodeFormatter interface.
-func (r ReturningExprs) Format(buf *bytes.Buffer, f FmtFlags) {
-	if len(r) != 0 {
-		buf.WriteString(" RETURNING ")
-		FormatNode(buf, f, SelectExprs(r))
-	}
+func (r *ReturningExprs) Format(buf *bytes.Buffer, f FmtFlags) {
+	buf.WriteString(" RETURNING ")
+	FormatNode(buf, f, SelectExprs(*r))
 }
 
-// StatementType implements the Statement interface.
-func (r ReturningExprs) StatementType() StatementType {
-	if r != nil {
-		return Rows
-	}
-	return RowsAffected
+// ReturningNothing represents RETURNING NOTHING.
+type ReturningNothing struct{}
+
+// Format implements the NodeFormatter interface.
+func (r ReturningNothing) Format(buf *bytes.Buffer, f FmtFlags) {
+	buf.WriteString(" RETURNING NOTHING")
 }

@@ -581,14 +581,13 @@ type WalkableStmt interface {
 	WalkStmt(Visitor) Statement
 }
 
-// CopyNode makes a copy of this Expr without recursing in any child Exprs.
+// CopyNode makes a copy of this Statement without recursing in any child Statements.
 func (stmt *Delete) CopyNode() *Delete {
 	stmtCopy := *stmt
 	if stmt.Where != nil {
 		wCopy := *stmt.Where
 		stmtCopy.Where = &wCopy
 	}
-	stmtCopy.Returning = append(ReturningExprs(nil), stmt.Returning...)
 	return &stmtCopy
 }
 
@@ -602,19 +601,17 @@ func (stmt *Delete) WalkStmt(v Visitor) Statement {
 			ret.Where.Expr = e
 		}
 	}
-	for i, expr := range stmt.Returning {
-		e, changed := WalkExpr(v, expr.Expr)
-		if changed {
-			if ret == stmt {
-				ret = stmt.CopyNode()
-			}
-			ret.Returning[i].Expr = e
+	returning, changed := WalkStmt(v, stmt.Returning)
+	if changed {
+		if ret == stmt {
+			ret = stmt.CopyNode()
 		}
+		ret.Returning = returning.(ReturningClause)
 	}
 	return ret
 }
 
-// CopyNode makes a copy of this Expr without recursing in any child Exprs.
+// CopyNode makes a copy of this Statement without recursing in any child Statements.
 func (stmt *Explain) CopyNode() *Explain {
 	stmtCopy := *stmt
 	stmtCopy.Options = append([]string(nil), stmt.Options...)
@@ -631,10 +628,9 @@ func (stmt *Explain) WalkStmt(v Visitor) Statement {
 	return stmt
 }
 
-// CopyNode makes a copy of this Expr without recursing in any child Exprs.
+// CopyNode makes a copy of this Statement without recursing in any child Statements.
 func (stmt *Insert) CopyNode() *Insert {
 	stmtCopy := *stmt
-	stmtCopy.Returning = append(ReturningExprs(nil), stmt.Returning...)
 	return &stmtCopy
 }
 
@@ -648,14 +644,12 @@ func (stmt *Insert) WalkStmt(v Visitor) Statement {
 			ret.Rows = rows.(*Select)
 		}
 	}
-	for i, expr := range stmt.Returning {
-		e, changed := WalkExpr(v, expr.Expr)
-		if changed {
-			if ret == stmt {
-				ret = stmt.CopyNode()
-			}
-			ret.Returning[i].Expr = e
+	returning, changed := WalkStmt(v, stmt.Returning)
+	if changed {
+		if ret == stmt {
+			ret = stmt.CopyNode()
 		}
+		stmt.Returning = returning.(ReturningClause)
 	}
 	// TODO(dan): Walk OnConflict once the ON CONFLICT DO UPDATE form of upsert is
 	// implemented.
@@ -668,6 +662,32 @@ func (stmt *ParenSelect) WalkStmt(v Visitor) Statement {
 	if changed {
 		return &ParenSelect{sel.(*Select)}
 	}
+	return stmt
+}
+
+// CopyNode makes a copy of this Statement without recursing in any child Statements.
+func (stmt *ReturningExprs) CopyNode() *ReturningExprs {
+	stmtCopy := append(ReturningExprs(nil), *stmt...)
+	return &stmtCopy
+}
+
+// WalkStmt is part of the WalkableStmt interface.
+func (stmt *ReturningExprs) WalkStmt(v Visitor) Statement {
+	ret := stmt
+	for i, expr := range *stmt {
+		e, changed := WalkExpr(v, expr.Expr)
+		if changed {
+			if ret == stmt {
+				ret = stmt.CopyNode()
+			}
+			(*stmt)[i].Expr = e
+		}
+	}
+	return ret
+}
+
+// WalkStmt is part of the WalkableStmt interface.
+func (stmt ReturningNothing) WalkStmt(v Visitor) Statement {
 	return stmt
 }
 
@@ -686,7 +706,7 @@ func walkOrderBy(v Visitor, order OrderBy) (OrderBy, bool) {
 	return order, copied
 }
 
-// CopyNode makes a copy of this Expr without recursing in any child Exprs.
+// CopyNode makes a copy of this Statement without recursing in any child Statements.
 func (stmt *Select) CopyNode() *Select {
 	stmtCopy := *stmt
 	if stmt.Limit != nil {
@@ -734,7 +754,7 @@ func (stmt *Select) WalkStmt(v Visitor) Statement {
 	return ret
 }
 
-// CopyNode makes a copy of this Expr without recursing in any child Exprs.
+// CopyNode makes a copy of this Statement without recursing in any child Statements.
 func (stmt *SelectClause) CopyNode() *SelectClause {
 	stmtCopy := *stmt
 	stmtCopy.Exprs = append(SelectExprs(nil), stmt.Exprs...)
@@ -831,7 +851,7 @@ func (stmt *SelectClause) WalkStmt(v Visitor) Statement {
 	return ret
 }
 
-// CopyNode makes a copy of this Expr without recursing in any child Exprs.
+// CopyNode makes a copy of this Statement without recursing in any child Statements.
 func (stmt *Set) CopyNode() *Set {
 	stmtCopy := *stmt
 	stmtCopy.Values = append(Exprs(nil), stmt.Values...)
@@ -853,7 +873,7 @@ func (stmt *Set) WalkStmt(v Visitor) Statement {
 	return ret
 }
 
-// CopyNode makes a copy of this Expr without recursing in any child Exprs.
+// CopyNode makes a copy of this Statement without recursing in any child Statements.
 func (stmt *Update) CopyNode() *Update {
 	stmtCopy := *stmt
 	stmtCopy.Exprs = make(UpdateExprs, len(stmt.Exprs))
@@ -865,7 +885,6 @@ func (stmt *Update) CopyNode() *Update {
 		wCopy := *stmt.Where
 		stmtCopy.Where = &wCopy
 	}
-	stmtCopy.Returning = append(ReturningExprs(nil), stmt.Returning...)
 	return &stmtCopy
 }
 
@@ -892,14 +911,12 @@ func (stmt *Update) WalkStmt(v Visitor) Statement {
 		}
 	}
 
-	for i, expr := range stmt.Returning {
-		e, changed := WalkExpr(v, expr.Expr)
-		if changed {
-			if ret == stmt {
-				ret = stmt.CopyNode()
-			}
-			ret.Returning[i].Expr = e
+	returning, changed := WalkStmt(v, stmt.Returning)
+	if changed {
+		if ret == stmt {
+			ret = stmt.CopyNode()
 		}
+		ret.Returning = returning.(ReturningClause)
 	}
 	return ret
 }
@@ -923,6 +940,8 @@ var _ WalkableStmt = &Delete{}
 var _ WalkableStmt = &Explain{}
 var _ WalkableStmt = &Insert{}
 var _ WalkableStmt = &ParenSelect{}
+var _ WalkableStmt = &ReturningExprs{}
+var _ WalkableStmt = &ReturningNothing{}
 var _ WalkableStmt = &Select{}
 var _ WalkableStmt = &SelectClause{}
 var _ WalkableStmt = &Set{}

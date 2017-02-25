@@ -29,7 +29,7 @@ type Update struct {
 	Table     TableExpr
 	Exprs     UpdateExprs
 	Where     *Where
-	Returning ReturningExprs
+	Returning ReturningClause
 }
 
 // Format implements the NodeFormatter interface.
@@ -39,7 +39,9 @@ func (node *Update) Format(buf *bytes.Buffer, f FmtFlags) {
 	buf.WriteString(" SET ")
 	FormatNode(buf, f, node.Exprs)
 	FormatNode(buf, f, node.Where)
-	FormatNode(buf, f, node.Returning)
+	if node.Returning != nil {
+		FormatNode(buf, f, node.Returning)
+	}
 }
 
 // UpdateExprs represents a list of update expressions.
