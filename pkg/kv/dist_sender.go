@@ -46,8 +46,9 @@ import (
 const (
 	// TODO(bdarnell): make SendNextTimeout configurable.
 	// https://github.com/cockroachdb/cockroach/issues/6719
-	defaultSendNextTimeout = 500 * time.Millisecond
-	defaultClientTimeout   = 10 * time.Second
+	defaultSendNextTimeout   = 500 * time.Millisecond
+	defaultClientTimeout     = 10 * time.Second
+	defaultPendingRPCTimeout = 500 * time.Millisecond
 
 	// The default maximum number of ranges to return from a range
 	// lookup.
@@ -1201,10 +1202,28 @@ func (ds *DistSender) sendToReplicas(
 					// was already received, we must return an ambiguous commit
 					// error instead of returned error.
 					log.ErrEventf(ctx, "application error: %s", call.Reply.Error)
-					if haveCommit && (pending > 0 || ambiguousResult) {
-						log.ErrEventf(ctx, "returning ambiguous result (pending=%d)", pending)
-						return nil, roachpb.NewAmbiguousResultError(
-							fmt.Sprintf("error=%s, pending RPCs=%d", call.Reply.Error, pending))
+					if haveCommit {
+						// If there are still pending RPC(s), try to wait them out.
+						for timedOut := false; pending > 0 && !timedOut; {
+							select {
+							case pendingCall := <-done:
+								pending--
+								if err := pendingCall.Err; err != nil {
+									if grpc.Code(err) != codes.Unavailable {
+										ambiguousResult = true
+									}
+								} else if pendingCall.Reply.Error == nil {
+									return pendingCall.Reply, nil
+								}
+							case <-time.After(defaultPendingRPCTimeout):
+								timedOut = true
+							}
+						}
+						if pending > 0 || ambiguousResult {
+							log.ErrEventf(ctx, "returning ambiguous result (pending=%d)", pending)
+							return nil, roachpb.NewAmbiguousResultError(
+								fmt.Sprintf("error=%s, pending RPCs=%d", call.Reply.Error, pending))
+						}
 					}
 					return call.Reply, nil
 				}
