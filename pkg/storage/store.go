@@ -1986,6 +1986,10 @@ func (s *Store) MergeRange(
 			subsumedDesc.Replicas, subsumingDesc.Replicas)
 	}
 
+	if subsumingRng.stats != nil {
+		subsumingRng.stats.resetRequestCounts()
+	}
+
 	if err := s.maybeMergeTimestampCaches(ctx, subsumingRng, subsumedRng); err != nil {
 		return err
 	}
