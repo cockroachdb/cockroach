@@ -245,7 +245,7 @@ func insertStmtToKVs(
 	if stmt.OnConflict != nil {
 		return errors.Errorf("load insert: ON CONFLICT not supported: %q", stmt)
 	}
-	if len(stmt.Returning) > 0 {
+	if parser.HasReturningClause(stmt.Returning) {
 		return errors.Errorf("load insert: RETURNING not supported: %q", stmt)
 	}
 	if len(stmt.Columns) > 0 {

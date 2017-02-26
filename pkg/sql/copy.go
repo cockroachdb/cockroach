@@ -374,6 +374,7 @@ func (p *planner) CopyData(n CopyDataBlock, autoCommit bool) (planNode, error) {
 		Rows: &parser.Select{
 			Select: vc,
 		},
+		Returning: parser.AbsentReturningClause,
 	}
 	return p.Insert(&in, nil, autoCommit)
 }

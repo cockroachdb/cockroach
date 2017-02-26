@@ -73,7 +73,7 @@ type editNodeRun struct {
 }
 
 func (r *editNodeRun) initEditNode(
-	en *editNodeBase, rows planNode, re parser.ReturningExprs, desiredTypes []parser.Type,
+	en *editNodeBase, rows planNode, re parser.ReturningClause, desiredTypes []parser.Type,
 ) error {
 	r.rows = rows
 
@@ -159,7 +159,7 @@ func (p *planner) Update(
 	}
 
 	var requestedCols []sqlbase.ColumnDescriptor
-	if len(n.Returning) > 0 || len(en.tableDesc.Checks) > 0 {
+	if _, retExprs := n.Returning.(*parser.ReturningExprs); retExprs || len(en.tableDesc.Checks) > 0 {
 		// TODO(dan): This could be made tighter, just the rows needed for RETURNING
 		// exprs.
 		requestedCols = en.tableDesc.Columns

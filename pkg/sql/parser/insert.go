@@ -30,7 +30,7 @@ type Insert struct {
 	Columns    UnresolvedNames
 	Rows       *Select
 	OnConflict *OnConflict
-	Returning  ReturningExprs
+	Returning  ReturningClause
 }
 
 // Format implements the NodeFormatter interface.
