@@ -20,7 +20,6 @@ import (
 	"fmt"
 
 	"golang.org/x/net/context"
-	"golang.org/x/sys/unix"
 
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -30,8 +29,8 @@ func setOpenFileLimitInner(physicalStoreCount int) (int, error) {
 	minimumOpenFileLimit := uint64(physicalStoreCount*engine.MinimumMaxOpenFiles + minimumNetworkFileDescriptors)
 	networkConstrainedFileLimit := uint64(physicalStoreCount*engine.RecommendedMaxOpenFiles + minimumNetworkFileDescriptors)
 	recommendedOpenFileLimit := uint64(physicalStoreCount*engine.RecommendedMaxOpenFiles + recommendedNetworkFileDescriptors)
-	var rLimit unix.Rlimit
-	if err := unix.Getrlimit(unix.RLIMIT_NOFILE, &rLimit); err != nil {
+	var rLimit rlimit
+	if err := getrlimit_nofile(&rLimit); err != nil {
 		if log.V(1) {
 			log.Infof(context.TODO(), "could not get rlimit; setting maxOpenFiles to the default value %d - %s", engine.DefaultMaxOpenFiles, err)
 		}
@@ -66,12 +65,12 @@ func setOpenFileLimitInner(physicalStoreCount int) (int, error) {
 				rLimit.Cur, newCurrent)
 		}
 		rLimit.Cur = newCurrent
-		if err := unix.Setrlimit(unix.RLIMIT_NOFILE, &rLimit); err != nil {
+		if err := setrlimit_nofile(&rLimit); err != nil {
 			return 0, err
 		}
 		// Sadly, the current limit is not always set as expected, (e.g. OSX)
 		// so fetch the limit again to see the new current limit.
-		if err := unix.Getrlimit(unix.RLIMIT_NOFILE, &rLimit); err != nil {
+		if err := getrlimit_nofile(&rLimit); err != nil {
 			return 0, err
 		}
 		if log.V(1) {
