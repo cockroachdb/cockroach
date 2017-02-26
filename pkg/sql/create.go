@@ -664,7 +664,11 @@ func (n *createTableNode) Start() error {
 		n.sourcePlan.Close()
 		n.sourcePlan = nil
 
-		insert := &parser.Insert{Table: &n.n.Table, Rows: n.n.AsSource}
+		insert := &parser.Insert{
+			Table:     &n.n.Table,
+			Rows:      n.n.AsSource,
+			Returning: parser.AbsentReturningClause,
+		}
 		insertPlan, err := n.p.Insert(insert, nil, false)
 		if err != nil {
 			return err

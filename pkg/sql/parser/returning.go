@@ -18,21 +18,61 @@ package parser
 
 import "bytes"
 
+// ReturningClause represents the returning clause on a statement.
+type ReturningClause interface {
+	NodeFormatter
+	// statementType returns the StatementType of statements that include
+	// the implementors variant of a RETURNING clause.
+	statementType() StatementType
+	returningClause()
+}
+
+var _ ReturningClause = &ReturningExprs{}
+var _ ReturningClause = &ReturningNothing{}
+var _ ReturningClause = &NoReturningClause{}
+
 // ReturningExprs represents RETURNING expressions.
 type ReturningExprs SelectExprs
 
 // Format implements the NodeFormatter interface.
-func (r ReturningExprs) Format(buf *bytes.Buffer, f FmtFlags) {
-	if len(r) != 0 {
-		buf.WriteString(" RETURNING ")
-		FormatNode(buf, f, SelectExprs(r))
-	}
+func (r *ReturningExprs) Format(buf *bytes.Buffer, f FmtFlags) {
+	buf.WriteString(" RETURNING ")
+	FormatNode(buf, f, SelectExprs(*r))
 }
 
-// StatementType implements the Statement interface.
-func (r ReturningExprs) StatementType() StatementType {
-	if r != nil {
-		return Rows
-	}
-	return RowsAffected
+// Shared instance to avoid unnecessary allocations.
+var returningNothingClause = &ReturningNothing{}
+
+// ReturningNothing represents RETURNING NOTHING.
+type ReturningNothing struct{}
+
+// Format implements the NodeFormatter interface.
+func (*ReturningNothing) Format(buf *bytes.Buffer, f FmtFlags) {
+	buf.WriteString(" RETURNING NOTHING")
+}
+
+// AbsentReturningClause is a ReturningClause variant representing the absence of
+// a RETURNING clause.
+var AbsentReturningClause = &NoReturningClause{}
+
+// NoReturningClause represents the absence of a RETURNING clause.
+type NoReturningClause struct{}
+
+// Format implements the NodeFormatter interface.
+func (*NoReturningClause) Format(buf *bytes.Buffer, f FmtFlags) {}
+
+// used by parent statements to determine their own StatementType.
+func (*ReturningExprs) statementType() StatementType    { return Rows }
+func (*ReturningNothing) statementType() StatementType  { return Rows }
+func (*NoReturningClause) statementType() StatementType { return RowsAffected }
+
+func (*ReturningExprs) returningClause()    {}
+func (*ReturningNothing) returningClause()  {}
+func (*NoReturningClause) returningClause() {}
+
+// HasReturningClause determines if a ReturningClause is present, given a
+// variant of the ReturningClause interface.
+func HasReturningClause(clause ReturningClause) bool {
+	_, ok := clause.(*NoReturningClause)
+	return !ok
 }

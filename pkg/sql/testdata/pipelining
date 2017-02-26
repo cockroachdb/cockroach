@@ -1,0 +1,14 @@
+statement ok
+CREATE TABLE kv (
+  k INT PRIMARY KEY,
+  v INT
+)
+
+statement error unimplemented: RETURNING NOTHING syntax is not yet supported
+DELETE FROM kv WHERE k = 1 RETURNING NOTHING
+
+statement error unimplemented: RETURNING NOTHING syntax is not yet supported
+INSERT INTO kv VALUES (1, 2) RETURNING NOTHING
+
+statement error unimplemented: RETURNING NOTHING syntax is not yet supported
+UPDATE kv SET k = 3 WHERE k = v RETURNING NOTHING

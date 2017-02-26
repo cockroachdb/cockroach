@@ -29,7 +29,7 @@ type Update struct {
 	Table     TableExpr
 	Exprs     UpdateExprs
 	Where     *Where
-	Returning ReturningExprs
+	Returning ReturningClause
 }
 
 // Format implements the NodeFormatter interface.
