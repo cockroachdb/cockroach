@@ -223,6 +223,9 @@ func (*FuncExpr) tableExpr()         {}
 
 func (*Explain) tableExpr() {}
 
+// IndexID is a custom type for IndexDescriptor IDs.
+type IndexID uint32
+
 // IndexHints represents "@<index_name>" or "@{param[,param]}" where param is
 // one of:
 //  - FORCE_INDEX=<index_name>
@@ -230,6 +233,7 @@ func (*Explain) tableExpr() {}
 // It is used optionally after a table name in SELECT statements.
 type IndexHints struct {
 	Index       Name
+	IndexID     IndexID
 	NoIndexJoin bool
 }
 
@@ -237,13 +241,21 @@ type IndexHints struct {
 func (n *IndexHints) Format(buf *bytes.Buffer, f FmtFlags) {
 	if !n.NoIndexJoin {
 		buf.WriteByte('@')
-		FormatNode(buf, f, n.Index)
+		if n.Index != "" {
+			FormatNode(buf, f, n.Index)
+		} else {
+			fmt.Fprintf(buf, "[%d]", n.IndexID)
+		}
 	} else {
-		if n.Index == "" {
+		if n.Index == "" && n.IndexID == 0 {
 			buf.WriteString("@{NO_INDEX_JOIN}")
 		} else {
 			buf.WriteString("@{FORCE_INDEX=")
-			FormatNode(buf, f, n.Index)
+			if n.Index != "" {
+				FormatNode(buf, f, n.Index)
+			} else {
+				fmt.Fprintf(buf, "[%d]", n.IndexID)
+			}
 			buf.WriteString(",NO_INDEX_JOIN}")
 		}
 	}

@@ -23,7 +23,7 @@ import (
 )
 
 func (tn *TableName) resetRepr() {
-	tn.dbNameOriginallyOmitted = false
+	tn.DBNameOriginallyOmitted = false
 }
 
 func TestNormalizeTableName(t *testing.T) {

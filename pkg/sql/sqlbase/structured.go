@@ -35,16 +35,16 @@ import (
 // another is expected.
 
 // ID is a custom type for {Database,Table}Descriptor IDs.
-type ID uint32
+type ID parser.ID
 
 // ColumnID is a custom type for ColumnDescriptor IDs.
-type ColumnID uint32
+type ColumnID parser.ColumnID
 
 // FamilyID is a custom type for ColumnFamilyDescriptor IDs.
 type FamilyID uint32
 
 // IndexID is a custom type for IndexDescriptor IDs.
-type IndexID uint32
+type IndexID parser.IndexID
 
 // DescriptorVersion is a custom type for TableDescriptor Versions.
 type DescriptorVersion uint32
