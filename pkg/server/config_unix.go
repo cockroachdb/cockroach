@@ -20,18 +20,24 @@ import (
 	"fmt"
 
 	"golang.org/x/net/context"
-	"golang.org/x/sys/unix"
 
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
+// rlimit is a replacement struct for `unix.Rlimit` which abstracts
+// from the possible differences in type definitions between platforms
+// (e.g. GNU/Linux uses uint64, FreeBSD uses signed int64).
+type rlimit struct {
+	Cur, Max uint64
+}
+
 func setOpenFileLimitInner(physicalStoreCount int) (int, error) {
 	minimumOpenFileLimit := uint64(physicalStoreCount*engine.MinimumMaxOpenFiles + minimumNetworkFileDescriptors)
 	networkConstrainedFileLimit := uint64(physicalStoreCount*engine.RecommendedMaxOpenFiles + minimumNetworkFileDescriptors)
 	recommendedOpenFileLimit := uint64(physicalStoreCount*engine.RecommendedMaxOpenFiles + recommendedNetworkFileDescriptors)
-	var rLimit unix.Rlimit
-	if err := unix.Getrlimit(unix.RLIMIT_NOFILE, &rLimit); err != nil {
+	var rLimit rlimit
+	if err := getRlimitNoFile(&rLimit); err != nil {
 		if log.V(1) {
 			log.Infof(context.TODO(), "could not get rlimit; setting maxOpenFiles to the default value %d - %s", engine.DefaultMaxOpenFiles, err)
 		}
@@ -66,12 +72,12 @@ func setOpenFileLimitInner(physicalStoreCount int) (int, error) {
 				rLimit.Cur, newCurrent)
 		}
 		rLimit.Cur = newCurrent
-		if err := unix.Setrlimit(unix.RLIMIT_NOFILE, &rLimit); err != nil {
+		if err := setRlimitNoFile(&rLimit); err != nil {
 			return 0, err
 		}
 		// Sadly, the current limit is not always set as expected, (e.g. OSX)
 		// so fetch the limit again to see the new current limit.
-		if err := unix.Getrlimit(unix.RLIMIT_NOFILE, &rLimit); err != nil {
+		if err := getRlimitNoFile(&rLimit); err != nil {
 			return 0, err
 		}
 		if log.V(1) {
