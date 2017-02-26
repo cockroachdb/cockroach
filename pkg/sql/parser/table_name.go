@@ -106,12 +106,12 @@ type TableName struct {
 	// is set. This is used to ensure that pretty-printing
 	// a TableName normalized from a parser input yields back
 	// the original syntax.
-	dbNameOriginallyOmitted bool
+	DBNameOriginallyOmitted bool
 }
 
 // Format implements the NodeFormatter interface.
 func (t *TableName) Format(buf *bytes.Buffer, f FmtFlags) {
-	if !t.dbNameOriginallyOmitted || f.tableNameNormalizer != nil {
+	if !t.DBNameOriginallyOmitted || f.tableNameNormalizer != nil {
 		FormatNode(buf, f, t.DatabaseName)
 		buf.WriteByte('.')
 	}
@@ -159,7 +159,7 @@ func (n UnresolvedName) normalizeTableNameAsValue() (TableName, error) {
 		return TableName{}, fmt.Errorf("empty table name: %q", n)
 	}
 
-	res := TableName{TableName: name, dbNameOriginallyOmitted: true}
+	res := TableName{TableName: name, DBNameOriginallyOmitted: true}
 
 	if len(n) > 1 {
 		res.DatabaseName, ok = n[0].(Name)
@@ -171,7 +171,7 @@ func (n UnresolvedName) normalizeTableNameAsValue() (TableName, error) {
 			return TableName{}, fmt.Errorf("empty database name: %q", n)
 		}
 
-		res.dbNameOriginallyOmitted = false
+		res.DBNameOriginallyOmitted = false
 	}
 
 	return res, nil
