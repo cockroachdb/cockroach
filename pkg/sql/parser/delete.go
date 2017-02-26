@@ -28,7 +28,7 @@ import "bytes"
 type Delete struct {
 	Table     TableExpr
 	Where     *Where
-	Returning ReturningExprs
+	Returning ReturningClause
 }
 
 // Format implements the NodeFormatter interface.

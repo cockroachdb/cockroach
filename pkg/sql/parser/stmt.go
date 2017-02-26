@@ -147,7 +147,7 @@ func (n *Deallocate) StatementTag() string {
 }
 
 // StatementType implements the Statement interface.
-func (n *Delete) StatementType() StatementType { return n.Returning.StatementType() }
+func (n *Delete) StatementType() StatementType { return n.Returning.statementType() }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*Delete) StatementTag() string { return "DELETE" }
@@ -195,7 +195,7 @@ func (*Grant) StatementType() StatementType { return DDL }
 func (*Grant) StatementTag() string { return "GRANT" }
 
 // StatementType implements the Statement interface.
-func (n *Insert) StatementType() StatementType { return n.Returning.StatementType() }
+func (n *Insert) StatementType() StatementType { return n.Returning.statementType() }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*Insert) StatementTag() string { return "INSERT" }
@@ -398,7 +398,7 @@ func (*Truncate) StatementType() StatementType { return Ack }
 func (*Truncate) StatementTag() string { return "TRUNCATE" }
 
 // StatementType implements the Statement interface.
-func (n *Update) StatementType() StatementType { return n.Returning.StatementType() }
+func (n *Update) StatementType() StatementType { return n.Returning.statementType() }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*Update) StatementTag() string { return "UPDATE" }

@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/pkg/errors"
 )
 
 // returningHelper implements the logic used for statements with RETURNING clauses. It accumulates
@@ -47,7 +48,7 @@ type returningHelper struct {
 // newReturningHelper creates a new returningHelper for use by an
 // insert/update node.
 func (p *planner) newReturningHelper(
-	r parser.ReturningExprs,
+	r parser.ReturningClause,
 	desiredTypes []parser.Type,
 	alias string,
 	tablecols []sqlbase.ColumnDescriptor,
@@ -55,11 +56,23 @@ func (p *planner) newReturningHelper(
 	rh := &returningHelper{
 		p: p,
 	}
-	if len(r) == 0 {
+	var rExprs parser.ReturningExprs
+	switch t := r.(type) {
+	case *parser.ReturningExprs:
+		rExprs = *t
+	case *parser.ReturningNothing:
+		return nil, util.UnimplementedWithIssueErrorf(13160,
+			"RETURNING NOTHING syntax is not yet supported")
+		// TODO(nvanbenschoten) support this syntax.
+		// rh.pipeline = true
+		// return rh, nil
+	case *parser.NoReturningClause:
 		return rh, nil
+	default:
+		panic(errors.Errorf("unexpected ReturningClause type: %T", t))
 	}
 
-	for _, e := range r {
+	for _, e := range rExprs {
 		if err := p.parser.AssertNoAggregationOrWindowing(
 			e.Expr, "RETURNING", p.session.SearchPath,
 		); err != nil {
@@ -67,12 +80,12 @@ func (p *planner) newReturningHelper(
 		}
 	}
 
-	rh.columns = make(ResultColumns, 0, len(r))
+	rh.columns = make(ResultColumns, 0, len(rExprs))
 	aliasTableName := parser.TableName{TableName: parser.Name(alias)}
 	rh.source = newSourceInfoForSingleTable(aliasTableName, makeResultColumns(tablecols))
-	rh.exprs = make([]parser.TypedExpr, 0, len(r))
+	rh.exprs = make([]parser.TypedExpr, 0, len(rExprs))
 	ivarHelper := parser.MakeIndexedVarHelper(rh, len(tablecols))
-	for _, target := range r {
+	for _, target := range rExprs {
 		cols, typedExprs, _, err := p.computeRender(target, parser.TypeAny, rh.source, ivarHelper, true)
 		if err != nil {
 			return nil, err
