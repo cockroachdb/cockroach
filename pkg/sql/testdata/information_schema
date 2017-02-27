@@ -119,7 +119,7 @@ query TT colnames
 SHOW CREATE TABLE information_schema.tables
 ----
 Table                      CreateTable
-information_schema.tables  CREATE TABLE "information_schema.tables" (
+information_schema.tables  CREATE TABLE tables (
                                TABLE_CATALOG STRING NOT NULL DEFAULT '',
                                TABLE_SCHEMA STRING NOT NULL DEFAULT '',
                                TABLE_NAME STRING NOT NULL DEFAULT '',

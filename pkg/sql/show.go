@@ -320,83 +320,15 @@ func (p *planner) ShowCreateTable(n *parser.ShowCreateTable) (planNode, error) {
 		constructor: func(p *planner) (planNode, error) {
 			v := p.newContainerValuesNode(columns, 0)
 
-			var buf bytes.Buffer
-			fmt.Fprintf(&buf, "CREATE TABLE %s (", quoteNames(n.Table.String()))
-			var primary string
-			for i, col := range desc.VisibleColumns() {
-				if i != 0 {
-					buf.WriteString(",")
-				}
-				buf.WriteString("\n\t")
-				fmt.Fprintf(&buf, "%s %s", quoteNames(col.Name), col.Type.SQLString())
-				if col.Nullable {
-					buf.WriteString(" NULL")
-				} else {
-					buf.WriteString(" NOT NULL")
-				}
-				if col.DefaultExpr != nil {
-					fmt.Fprintf(&buf, " DEFAULT %s", *col.DefaultExpr)
-				}
-				if desc.IsPhysicalTable() && desc.PrimaryIndex.ColumnIDs[0] == col.ID {
-					// Only set primary if the primary key is on a visible column (not rowid).
-					primary = fmt.Sprintf(",\n\tCONSTRAINT %s PRIMARY KEY (%s)",
-						quoteNames(desc.PrimaryIndex.Name),
-						quoteNames(desc.PrimaryIndex.ColumnNames...),
-					)
-				}
-			}
-			buf.WriteString(primary)
-			for _, idx := range desc.Indexes {
-				var storing string
-				if len(idx.StoreColumnNames) > 0 {
-					storing = fmt.Sprintf(" STORING (%s)", quoteNames(idx.StoreColumnNames...))
-				}
-				interleave, err := p.showCreateInterleave(&idx)
-				if err != nil {
-					v.rows.Close()
-					return nil, err
-				}
-				fmt.Fprintf(&buf, ",\n\t%sINDEX %s (%s)%s%s",
-					isUnique[idx.Unique],
-					quoteNames(idx.Name),
-					quoteNames(idx.ColumnNames...),
-					storing,
-					interleave,
-				)
-			}
-			for _, fam := range desc.Families {
-				activeColumnNames := make([]string, 0, len(fam.ColumnNames))
-				for i, colID := range fam.ColumnIDs {
-					if _, err := desc.FindActiveColumnByID(colID); err == nil {
-						activeColumnNames = append(activeColumnNames, fam.ColumnNames[i])
-					}
-				}
-				fmt.Fprintf(&buf, ",\n\tFAMILY %s (%s)",
-					quoteNames(fam.Name),
-					quoteNames(activeColumnNames...),
-				)
-			}
-
-			for _, e := range desc.Checks {
-				fmt.Fprintf(&buf, ",\n\t")
-				if len(e.Name) > 0 {
-					fmt.Fprintf(&buf, "CONSTRAINT %s ", quoteNames(e.Name))
-				}
-				fmt.Fprintf(&buf, "CHECK (%s)", e.Expr)
-			}
-
-			buf.WriteString("\n)")
-
-			interleave, err := p.showCreateInterleave(&desc.PrimaryIndex)
+			s, err := p.showCreateTable(tn.TableName, desc)
 			if err != nil {
 				v.rows.Close()
 				return nil, err
 			}
-			buf.WriteString(interleave)
 
 			if _, err := v.rows.AddRow(parser.Datums{
-				parser.NewDString(n.Table.String()),
-				parser.NewDString(buf.String()),
+				parser.NewDString(tn.String()),
+				parser.NewDString(s),
 			}); err != nil {
 				v.rows.Close()
 				return nil, err
@@ -404,6 +336,82 @@ func (p *planner) ShowCreateTable(n *parser.ShowCreateTable) (planNode, error) {
 			return v, nil
 		},
 	}, nil
+}
+
+func (p *planner) showCreateTable(tn parser.Name, desc *sqlbase.TableDescriptor) (string, error) {
+	var buf bytes.Buffer
+	fmt.Fprintf(&buf, "CREATE TABLE %s (", tn)
+	var primary string
+	for i, col := range desc.VisibleColumns() {
+		if i != 0 {
+			buf.WriteString(",")
+		}
+		buf.WriteString("\n\t")
+		fmt.Fprintf(&buf, "%s %s", quoteNames(col.Name), col.Type.SQLString())
+		if col.Nullable {
+			buf.WriteString(" NULL")
+		} else {
+			buf.WriteString(" NOT NULL")
+		}
+		if col.DefaultExpr != nil {
+			fmt.Fprintf(&buf, " DEFAULT %s", *col.DefaultExpr)
+		}
+		if desc.IsPhysicalTable() && desc.PrimaryIndex.ColumnIDs[0] == col.ID {
+			// Only set primary if the primary key is on a visible column (not rowid).
+			primary = fmt.Sprintf(",\n\tCONSTRAINT %s PRIMARY KEY (%s)",
+				quoteNames(desc.PrimaryIndex.Name),
+				quoteNames(desc.PrimaryIndex.ColumnNames...),
+			)
+		}
+	}
+	buf.WriteString(primary)
+	for _, idx := range desc.Indexes {
+		var storing string
+		if len(idx.StoreColumnNames) > 0 {
+			storing = fmt.Sprintf(" STORING (%s)", quoteNames(idx.StoreColumnNames...))
+		}
+		interleave, err := p.showCreateInterleave(&idx)
+		if err != nil {
+			return "", err
+		}
+		fmt.Fprintf(&buf, ",\n\t%sINDEX %s (%s)%s%s",
+			isUnique[idx.Unique],
+			quoteNames(idx.Name),
+			quoteNames(idx.ColumnNames...),
+			storing,
+			interleave,
+		)
+	}
+	for _, fam := range desc.Families {
+		activeColumnNames := make([]string, 0, len(fam.ColumnNames))
+		for i, colID := range fam.ColumnIDs {
+			if _, err := desc.FindActiveColumnByID(colID); err == nil {
+				activeColumnNames = append(activeColumnNames, fam.ColumnNames[i])
+			}
+		}
+		fmt.Fprintf(&buf, ",\n\tFAMILY %s (%s)",
+			quoteNames(fam.Name),
+			quoteNames(activeColumnNames...),
+		)
+	}
+
+	for _, e := range desc.Checks {
+		fmt.Fprintf(&buf, ",\n\t")
+		if len(e.Name) > 0 {
+			fmt.Fprintf(&buf, "CONSTRAINT %s ", quoteNames(e.Name))
+		}
+		fmt.Fprintf(&buf, "CHECK (%s)", e.Expr)
+	}
+
+	buf.WriteString("\n)")
+
+	interleave, err := p.showCreateInterleave(&desc.PrimaryIndex)
+	if err != nil {
+		return "", err
+	}
+	buf.WriteString(interleave)
+
+	return buf.String(), nil
 }
 
 var isUnique = map[bool]string{true: "UNIQUE "}
@@ -445,7 +453,7 @@ func (p *planner) ShowCreateView(n *parser.ShowCreateView) (planNode, error) {
 			v := p.newContainerValuesNode(columns, 0)
 
 			var buf bytes.Buffer
-			fmt.Fprintf(&buf, "CREATE VIEW %s ", quoteNames(n.View.String()))
+			fmt.Fprintf(&buf, "CREATE VIEW %s ", tn.TableName)
 
 			// Determine whether custom column names were specified when the view
 			// was created, and include them if so.

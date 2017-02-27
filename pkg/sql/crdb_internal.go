@@ -44,7 +44,8 @@ CREATE TABLE crdb_internal.tables (
   FORMAT_VERSION           STRING NOT NULL,
   STATE                    STRING NOT NULL,
   SC_LEASE_NODE_ID         INT,
-  SC_LEASE_EXPIRATION_TIME TIMESTAMP
+  SC_LEASE_EXPIRATION_TIME TIMESTAMP,
+  CREATE_TABLE             STRING NOT NULL
 );
 `,
 	populate: func(p *planner, addRow func(...parser.Datum) error) error {
@@ -67,6 +68,10 @@ CREATE TABLE crdb_internal.tables (
 					time.Unix(0, table.Lease.ExpirationTime), time.Nanosecond,
 				)
 			}
+			create, err := p.showCreateTable(parser.Name(table.Name), table)
+			if err != nil {
+				return err
+			}
 			if err := addRow(
 				parser.NewDInt(parser.DInt(int64(table.ID))),
 				parser.NewDInt(parser.DInt(int64(table.ParentID))),
@@ -78,6 +83,7 @@ CREATE TABLE crdb_internal.tables (
 				parser.NewDString(table.State.String()),
 				leaseNodeDatum,
 				leaseExpDatum,
+				parser.NewDString(create),
 			); err != nil {
 				return err
 			}
