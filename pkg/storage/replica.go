@@ -254,9 +254,10 @@ type Replica struct {
 	// TODO(tschottdorf): Duplicates r.mu.state.desc.RangeID; revisit that.
 	RangeID roachpb.RangeID // Should only be set by the constructor.
 
-	store        *Store
-	abortCache   *AbortCache   // Avoids anomalous reads after abort
-	pushTxnQueue *pushTxnQueue // Queues push txn attempts by txn ID
+	store         *Store
+	abortCache    *AbortCache   // Avoids anomalous reads after abort
+	pushTxnQueue  *pushTxnQueue // Queues push txn attempts by txn ID
+	proposalQuota *quotaPool
 
 	stats *replicaStats
 
@@ -420,10 +421,14 @@ type Replica struct {
 		// newly recreated replica will have a complete range descriptor.
 		lastToReplica, lastFromReplica roachpb.ReplicaDescriptor
 
+		lastActivity map[roachpb.ReplicaID]time.Time
+
 		// submitProposalFn can be set to mock out the propose operation.
 		submitProposalFn func(*ProposalData) error
 		// Computed checksum at a snapshot UUID.
 		checksums map[uuid.UUID]replicaChecksum
+
+		proposalQuotaBase uint64
 
 		// Counts calls to Replica.tick()
 		ticks int
@@ -566,6 +571,7 @@ func newReplica(rangeID roachpb.RangeID, store *Store) *Replica {
 		store:          store,
 		abortCache:     NewAbortCache(rangeID),
 		pushTxnQueue:   newPushTxnQueue(store),
+		proposalQuota:  newQuotaPool(followerProposalQuota),
 	}
 	if store.cfg.StorePool != nil {
 		r.stats = newReplicaStats(store.cfg.StorePool.getNodeLocalityString)
@@ -797,6 +803,40 @@ func (r *Replica) setEstimatedCommitIndexLocked(commit uint64) {
 	// arriving out of order.
 	if r.mu.estimatedCommitIndex < commit {
 		r.mu.estimatedCommitIndex = commit
+	}
+}
+
+func (r *Replica) setLastActivityLocked(replicaID roachpb.ReplicaID) {
+	if r.mu.lastActivity == nil {
+		r.mu.lastActivity = make(map[roachpb.ReplicaID]time.Time)
+	}
+	r.mu.lastActivity[replicaID] = timeutil.Now()
+}
+
+func (r *Replica) refreshProposalQuotaLocked() {
+	// TODO(peter): Can we avoid retrieving the Raft status on every invocation?
+	status := r.raftStatusRLocked()
+	// Find the minimum index that active followers have committed.
+	minIndex := status.Commit
+	now := timeutil.Now()
+	for _, rep := range r.mu.state.Desc.Replicas {
+		// Only consider followers that we've received a message from in the last 2
+		// seconds.
+		const activeTime = 2 * time.Second
+		if now.Sub(r.mu.lastActivity[rep.ReplicaID]) > activeTime {
+			continue
+		}
+		if progress, ok := status.Progress[uint64(rep.ReplicaID)]; ok {
+			if progress.Match > 0 && minIndex > progress.Match {
+				minIndex = progress.Match
+			}
+		}
+	}
+
+	if r.mu.proposalQuotaBase < minIndex {
+		delta := int64(minIndex - r.mu.proposalQuotaBase)
+		r.mu.proposalQuotaBase = minIndex
+		r.proposalQuota.add(delta)
 	}
 }
 
@@ -2179,6 +2219,10 @@ func (r *Replica) tryAddWriteCmd(
 
 	log.Event(ctx, "raft")
 
+	if err := r.proposalQuota.acquire(ctx); err != nil {
+		return nil, roachpb.NewError(err), proposalNoRetry
+	}
+
 	ch, tryAbandon, err := r.propose(ctx, lease, ba, endCmds)
 	if err != nil {
 		return nil, roachpb.NewError(err), proposalNoRetry
@@ -2749,7 +2793,17 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	r.store.raftEntryCache.addEntries(r.RangeID, rd.Entries)
 	r.mu.lastIndex = lastIndex
 	r.mu.raftLogSize = raftLogSize
-	r.mu.leaderID = leaderID
+	if r.mu.leaderID != leaderID {
+		r.mu.leaderID = leaderID
+		if r.mu.leaderID == r.mu.replicaID {
+			r.mu.proposalQuotaBase = r.mu.lastIndex
+			r.proposalQuota.reset(leaderProposalQuota)
+		} else {
+			r.proposalQuota.reset(followerProposalQuota)
+		}
+	} else if r.mu.leaderID == r.mu.replicaID {
+		r.refreshProposalQuotaLocked()
+	}
 	r.mu.Unlock()
 
 	for _, msg := range rd.Messages {
