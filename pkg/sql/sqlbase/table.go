@@ -1470,25 +1470,15 @@ func CheckValueWidth(col ColumnDescriptor, val parser.Datum) error {
 				// exceeds the declared precision minus the declared scale, an
 				// error is raised."
 
-				integ, frac := new(apd.Decimal), new(apd.Decimal)
-				v.Decimal.Modf(integ, frac)
-
-				if col.Type.Width > 0 {
-					// Rounding half up, as per round_var() in PostgreSQL 9.5.
-					_, err := parser.DecimalCtx.WithPrecision(uint32(col.Type.Width)).Round(frac, frac)
-					if err != nil {
-						return errors.Wrap(err, "rounding decimal column")
-					}
+				_, err := parser.DecimalCtx.Quantize(&v.Decimal, &v.Decimal, -col.Type.Width)
+				if err != nil {
+					return errors.Wrap(err, "rounding decimal column")
 				}
 
 				// Check that the precision is not exceeded.
-				if integ.NumDigits() > int64(col.Type.Precision)-int64(col.Type.Width) {
+				if v.NumDigits() > int64(col.Type.Precision) {
 					return fmt.Errorf("too many digits for type %s (column %q)",
 						col.Type.SQLString(), col.Name)
-				}
-				_, err := parser.ExactCtx.Add(&v.Decimal, integ, frac)
-				if err != nil {
-					return errors.Wrap(err, "computing decimal column")
 				}
 			}
 		}

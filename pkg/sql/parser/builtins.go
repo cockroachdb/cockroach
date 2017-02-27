@@ -2213,7 +2213,7 @@ func round(x float64, n int64) (Datum, error) {
 
 func roundDecimal(x *apd.Decimal, n int32) (Datum, error) {
 	dd := &DDecimal{}
-	_, err := HighPrecisionCtx.Quantize(&dd.Decimal, x, apd.New(0, -n))
+	_, err := HighPrecisionCtx.Quantize(&dd.Decimal, x, -n)
 	return dd, err
 }
 
