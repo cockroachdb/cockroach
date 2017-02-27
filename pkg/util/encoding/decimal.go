@@ -523,27 +523,19 @@ func decodeLargeNumber(
 //
 func EncodeNonsortingDecimal(b []byte, d *apd.Decimal) []byte {
 	neg := false
-	bi := &d.Coeff
 	switch d.Sign() {
 	case -1:
 		neg = true
-
-		// Make a deep copy of the decimal's big.Int by calling Neg.
-		// We shouldn't be modifying the provided argument's
-		// internal big.Int, so this works like a copy-on-write scheme.
-		bi = new(big.Int)
-		bi.Neg(&d.Coeff)
 	case 0:
 		return append(b, decimalZero)
 	}
 
 	// Determine the exponent of the decimal, with the
 	// exponent defined as .xyz * 10^exp.
-	nDigits := int(apd.NumDigits(bi))
+	nDigits := int(d.NumDigits())
 	e := nDigits + int(d.Exponent)
 
-	bi = normalizeBigInt(bi, bi == &d.Coeff)
-	bNat := bi.Bits()
+	bNat := d.Coeff.Bits()
 
 	var buf []byte
 	if n := UpperBoundNonsortingDecimalSize(d); n <= cap(b)-len(b) {
@@ -599,62 +591,6 @@ func encodeNonsortingDecimalValue(exp uint64, digits []big.Word, buf []byte) []b
 func encodeNonsortingDecimalValueWithoutExp(digits []big.Word, buf []byte) []byte {
 	// Encode the digits into the end of the byte slice.
 	return copyWords(buf, digits)
-}
-
-var bigTen = big.NewInt(10)
-
-// normalizeBigInt divides off all trailing zeros from the provided big.Int.
-// It will only modify the provided big.Int if copyOnWrite is not set, and
-// it will use the formatted representation of the big.Int if it is provided.
-func normalizeBigInt(bi *big.Int, copyOnWrite bool) *big.Int {
-	neg := false
-	switch bi.Sign() {
-	case 0:
-		return bi
-	case -1:
-		neg = true
-	}
-
-	// Use a uint64 for the division if possible.
-	if bi.BitLen() <= 64 {
-		i := bi.Uint64()
-		modified := false
-		// 2^64 is ~2e19 and 4 is around sqrt(19), meaning that we might get around
-		// 4 iterations here and 4 iterations in the next loop (in general if the
-		// maximum value is 10^N we would want 10^sqrt(N) here).
-		for i >= 10000 && i%10000 == 0 {
-			i /= 10000
-			modified = true
-		}
-		for i%10 == 0 {
-			i /= 10
-			modified = true
-		}
-		if modified {
-			if copyOnWrite {
-				bi = new(big.Int)
-			}
-			bi.SetUint64(i)
-			if neg {
-				bi.Neg(bi)
-			}
-		}
-		return bi
-	}
-
-	d := bi
-	var r, z big.Int
-	for {
-		z.QuoRem(d, bigTen, &r)
-		if r.Sign() == 0 {
-			if copyOnWrite && d == bi {
-				d = new(big.Int)
-			}
-			d.Set(&z)
-		} else {
-			return d
-		}
-	}
 }
 
 // DecodeNonsortingDecimal returns the decoded decimal from buf encoded with
