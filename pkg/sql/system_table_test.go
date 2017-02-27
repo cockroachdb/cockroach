@@ -17,7 +17,6 @@
 package sql_test
 
 import (
-	"fmt"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -28,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/gogo/protobuf/proto"
+	"github.com/kr/pretty"
 )
 
 func TestInitialKeys(t *testing.T) {
@@ -124,16 +124,9 @@ func TestSystemTableLiterals(t *testing.T) {
 			t.Fatal(err)
 		}
 		if !proto.Equal(&test.pkg, &gen) {
-			s1 := fmt.Sprintf("%#v", test.pkg)
-			s2 := fmt.Sprintf("%#v", gen)
-			for i := range s1 {
-				if s1[i] != s2[i] {
-					t.Fatalf(
-						"mismatch between %s:\npkg:\n\t%#v\npartial-gen\n\t%#v\ngen\n\t%#v",
-						test.pkg.Name, s1[:i+3], s2[:i+3], gen)
-				}
-			}
-			panic("did not locate mismatch between re-generated version and pkg version")
+			pretty.Ldiff(t, &test.pkg, &gen)
+			t.Fatalf("%s table descriptor generated from CREATE TABLE statement does not match "+
+				"hardcoded table descriptor, see above", test.pkg.Name)
 		}
 	}
 }
