@@ -77,7 +77,7 @@ echo "${username}:x:${uid_gid}::${container_home}:/bin/bash" > "${passwd_file}"
 # created as the invoking user. Docker would otherwise create them when
 # mounting, but that would deny write access to the invoking user since docker
 # runs as root.
-mkdir -p "${HOME}"/.{jspm,yarn-cache} "${gocache}"/pkg/docker_amd64{,_musl,_race} "${gocache}/bin/docker_amd64"
+mkdir -p "${HOME}"/.{jspm,yarn-cache} "${gocache}"/pkg/docker_amd64{,_msan,_musl,_race} "${gocache}/bin/docker_amd64"
 
 # Since we're mounting both /root and its subdirectories in our container,
 # Docker will create the subdirectories on the host side under the directory
@@ -112,9 +112,11 @@ vols="${vols} --volume=${passwd_file}:/etc/passwd"
 vols="${vols} --volume=${host_home}:${container_home}"
 vols="${vols} --volume=${gopath0}/src:/go/src"
 vols="${vols} --volume=${gocache}/pkg/docker_amd64:/go/pkg/linux_amd64"
+vols="${vols} --volume=${gocache}/pkg/docker_amd64_msan:/go/pkg/linux_amd64_msan"
 vols="${vols} --volume=${gocache}/pkg/docker_amd64_musl:/go/pkg/linux_amd64_musl"
 vols="${vols} --volume=${gocache}/pkg/docker_amd64_race:/go/pkg/linux_amd64_race"
 vols="${vols} --volume=${gocache}/pkg/docker_amd64:/usr/local/go/pkg/linux_amd64"
+vols="${vols} --volume=${gocache}/pkg/docker_amd64_msan:/usr/local/go/pkg/linux_amd64_msan"
 vols="${vols} --volume=${gocache}/pkg/docker_amd64_musl:/usr/local/go/pkg/linux_amd64_musl"
 vols="${vols} --volume=${gocache}/pkg/docker_amd64_race:/usr/local/go/pkg/linux_amd64_race"
 vols="${vols} --volume=${gocache}/bin/docker_amd64:/go/bin"
