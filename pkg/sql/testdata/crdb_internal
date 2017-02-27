@@ -32,8 +32,15 @@ SELECT * FROM crdb_internal.schema_changes
 ----
 TABLE_ID PARENT_ID NAME TYPE TARGET_ID TARGET_NAME STATE DIRECTION
 
-query IITITRTTTT colnames
+query IITITRTTTTT colnames
 SELECT * FROM crdb_internal.tables WHERE NAME = 'namespace'
 ----
-TABLE_ID  PARENT_ID  NAME       VERSION  MOD_TIME                         MOD_TIME_LOGICAL  FORMAT_VERSION            STATE   SC_LEASE_NODE_ID  SC_LEASE_EXPIRATION_TIME
-2         1          namespace  1        1970-01-01 00:00:00 +0000 +0000  0.0000000000      InterleavedFormatVersion  PUBLIC  NULL              NULL
+TABLE_ID  PARENT_ID  NAME       VERSION  MOD_TIME                         MOD_TIME_LOGICAL  FORMAT_VERSION            STATE   SC_LEASE_NODE_ID  SC_LEASE_EXPIRATION_TIME  CREATE_TABLE
+2         1          namespace  1        1970-01-01 00:00:00 +0000 +0000  0.0000000000      InterleavedFormatVersion  PUBLIC  NULL              NULL                      CREATE TABLE namespace (
+          parentID INT NOT NULL,
+          name STRING NOT NULL,
+          id INT NULL,
+          CONSTRAINT "primary" PRIMARY KEY (parentID, name),
+          FAMILY "primary" (parentID, name),
+          FAMILY fam_3_id (id)
+)
