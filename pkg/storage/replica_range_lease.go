@@ -20,6 +20,8 @@
 package storage
 
 import (
+	"fmt"
+
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -127,7 +129,11 @@ func (p *pendingLeaseRequest) InitOrJoinRequest(
 		// Get the liveness for the next lease holder and set the epoch in the lease request.
 		liveness, err := repl.store.cfg.NodeLiveness.GetLiveness(nextLeaseHolder.NodeID)
 		if err != nil {
-			llChan <- roachpb.NewErrorf("couldn't request lease for %+v: %v", nextLeaseHolder, err)
+			llChan <- roachpb.NewError(&roachpb.LeaseRejectedError{
+				Existing:  *status.lease,
+				Requested: reqLease,
+				Message:   fmt.Sprintf("couldn't request lease for %+v: %v", nextLeaseHolder, err),
+			})
 			return llChan
 		}
 		reqLease.Epoch = proto.Int64(liveness.Epoch)
