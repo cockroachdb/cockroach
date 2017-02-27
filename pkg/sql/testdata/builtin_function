@@ -1151,7 +1151,7 @@ SELECT CURRENT_SCHEMAS(true)
 query T
 SELECT CURRENT_SCHEMAS(false)
 ----
-{test,pg_catalog}
+{test}
 
 query error pq: unknown signature: current_schemas()
 SELECT CURRENT_SCHEMAS()
