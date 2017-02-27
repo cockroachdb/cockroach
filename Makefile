@@ -16,10 +16,31 @@
 # Author: Shawn Morel (shawnmorel@gmail.com)
 # Author: Spencer Kimball (spencer.kimball@gmail.com)
 
-# Cockroach build rules.
-GO ?= go
-# Allow setting of go build flags from the command line.
-GOFLAGS :=
+# Variables to be overridden in the environment or on the command line, e.g.
+#
+#   GOFLAGS=-msan make build
+GO      ?= go
+GOFLAGS ?=
+
+# Variables to be overridden on the command line only, e.g.
+#
+#   make test PKG=./pkg/storage TESTFLAGS=--vmodule=raft=1
+PKG          := ./pkg/...
+TAGS         :=
+TESTS        := .
+BENCHES      := -
+TESTTIMEOUT  := 3m
+RACETIMEOUT  := 10m
+BENCHTIMEOUT := 5m
+TESTFLAGS    :=
+STRESSFLAGS  :=
+DUPLFLAGS    := -t 100
+COCKROACH    := ./cockroach
+STARTFLAGS   := -s type=mem,size=1GiB --alsologtostderr
+BUILDMODE    := install
+BUILDTARGET  := .
+SUFFIX       :=
+
 # Possible values:
 # <empty>: use the default toolchain
 # release: target Linux 2.6.32, dynamically link to GLIBC 2.12.2
@@ -36,24 +57,6 @@ GOFLAGS :=
 # https://github.com/crosstool-ng/crosstool-ng/issues/540#issuecomment-276508500.
 TYPE :=
 
-COCKROACH := ./cockroach
-
-# Variables to be overridden on the command line, e.g.
-#   make test PKG=./pkg/storage TESTFLAGS=--vmodule=raft=1
-PKG          := ./pkg/...
-TAGS         :=
-TESTS        := .
-BENCHES      := -
-TESTTIMEOUT  := 3m
-RACETIMEOUT  := 10m
-BENCHTIMEOUT := 5m
-TESTFLAGS    :=
-STRESSFLAGS  :=
-DUPLFLAGS    := -t 100
-STARTFLAGS   := -s type=mem,size=1GiB --alsologtostderr
-BUILDMODE    := install
-BUILDTARGET  := .
-SUFFIX       :=
 export GOPATH := $(realpath ../../../..)
 # Prefer tools from $GOPATH/bin over those elsewhere on the path.
 # This ensures that we get the versions pinned in the GLOCKFILE.
