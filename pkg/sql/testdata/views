@@ -140,7 +140,7 @@ v6 CREATE VIEW v6 (x, y) AS SELECT a, b FROM test.v1
 query TT
 SHOW CREATE VIEW test2.v1
 ----
-test2.v1 CREATE VIEW "test2.v1" AS SELECT x, y FROM test.v2
+test2.v1 CREATE VIEW v1 AS SELECT x, y FROM test.v2
 
 statement ok
 GRANT SELECT ON t TO testuser

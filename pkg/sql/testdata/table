@@ -184,7 +184,7 @@ CREATE TABLE test.precision (x DECIMAL(2, 4))
 query TT
 SHOW CREATE TABLE test.users
 ----
-test.users CREATE TABLE "test.users"
+test.users CREATE TABLE users
 (
   id        INT NOT NULL,
   name      STRING NOT NULL,
@@ -242,7 +242,7 @@ CREATE TABLE test.named_constraints (
 query TT
 SHOW CREATE TABLE test.named_constraints
 ----
-test.named_constraints  CREATE TABLE "test.named_constraints" (
+test.named_constraints  CREATE TABLE named_constraints (
                         id INT NOT NULL,
                         name STRING NOT NULL,
                         title STRING NULL DEFAULT 'VP of Something',
