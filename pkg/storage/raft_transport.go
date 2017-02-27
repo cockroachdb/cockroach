@@ -30,6 +30,7 @@ import (
 	"github.com/rubyist/circuitbreaker"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -602,7 +603,7 @@ type snapshotClientWithBreaker struct {
 
 func (c snapshotClientWithBreaker) Send(m *SnapshotRequest) error {
 	err := c.MultiRaft_RaftSnapshotClient.Send(m)
-	if err != nil {
+	if err != nil && grpc.Code(err) != codes.DeadlineExceeded {
 		c.breaker.Fail()
 	}
 	return err
@@ -610,7 +611,7 @@ func (c snapshotClientWithBreaker) Send(m *SnapshotRequest) error {
 
 func (c snapshotClientWithBreaker) Recv() (*SnapshotResponse, error) {
 	m, err := c.MultiRaft_RaftSnapshotClient.Recv()
-	if err != nil && err != io.EOF {
+	if err != nil && err != io.EOF && grpc.Code(err) != codes.DeadlineExceeded {
 		c.breaker.Fail()
 	}
 	return m, err
@@ -645,7 +646,7 @@ func (t *RaftTransport) SendSnapshot(
 		return err
 	}
 	defer func() {
-		if err := stream.CloseSend(); err != nil {
+		if err := stream.CloseSend(); err != nil && grpc.Code(err) != codes.DeadlineExceeded {
 			log.Warningf(ctx, "failed to close snapshot stream: %s", err)
 			breaker.Fail()
 		}
