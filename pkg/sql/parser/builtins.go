@@ -1442,11 +1442,12 @@ var Builtins = map[string][]Builtin{
 	// and the session's database search path.
 	"current_schemas": {
 		Builtin{
-			Types:        ArgTypes{{"unused", TypeBool}},
+			Types:        ArgTypes{{"include_pg_catalog", TypeBool}},
 			ReturnType:   fixedReturnType(TypeStringArray),
 			category:     categorySystemInfo,
 			ctxDependent: true,
 			fn: func(ctx *EvalContext, args Datums) (Datum, error) {
+				includePgCatalog := *(args[0].(*DBool))
 				schemas := NewDArray(TypeString)
 				if len(ctx.Database) != 0 {
 					if err := schemas.Append(NewDString(ctx.Database)); err != nil {
@@ -1454,6 +1455,9 @@ var Builtins = map[string][]Builtin{
 					}
 				}
 				for _, p := range ctx.SearchPath {
+					if !includePgCatalog && p == "pg_catalog" {
+						continue
+					}
 					if err := schemas.Append(NewDString(p)); err != nil {
 						return nil, err
 					}
