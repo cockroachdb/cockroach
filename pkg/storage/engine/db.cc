@@ -1538,7 +1538,7 @@ rocksdb::Options DBMakeOptions(DBOptions db_opts) {
   // Enable subcompactions which will use multiple threads to speed up
   // a single compaction. The value of num_cpu/2 has not been tuned.
   options.max_subcompactions = std::max(db_opts.num_cpu / 2, 1);
-  options.allow_os_buffer = db_opts.allow_os_buffer;
+  options.use_direct_reads = db_opts.use_direct_reads;
   options.WAL_ttl_seconds = db_opts.wal_ttl_seconds;
   options.comparator = &kComparator;
   options.create_if_missing = true;

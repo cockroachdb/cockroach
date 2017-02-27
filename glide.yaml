@@ -10,12 +10,14 @@ import:
 # Pins to prevent unintended version changes to libs we care about when adding/
 # removing/changing other deps. These are grouped separately to make it easier
 # to comment them out in bulk when running an across-the-board dep update.
+- package: github.com/cockroachdb/apd
+  version: 9d4eee129cac486270e6bc42462961a569057f81
 - package: github.com/cockroachdb/c-jemalloc
   version: 7eb7980d8a9f68b771568a7eb15196a63a818595
 - package: github.com/cockroachdb/c-protobuf
   version: 323984796a7b4794ee62a00e12456743a5b66765
 - package: github.com/cockroachdb/c-rocksdb
-  version: b7f2f157e5141db8856a8f8b97c0ccd74baaa4db
+  version: 97c232fc39550ac0f6287a49421615cc633eec42
 - package: github.com/cockroachdb/cmux
   version: 30d10be492927e2dcae0089c374c455d42414fcb
 - package: github.com/cockroachdb/cockroach-go
