@@ -19,6 +19,7 @@ package rpc
 import (
 	"errors"
 	"math"
+	"strings"
 	"sync"
 	"time"
 
@@ -368,6 +369,15 @@ func (ctx *Context) runHeartbeat(meta *connMeta, remoteAddr string) error {
 		// internally reconnects if necessary.
 		if grpc.Code(err) == codes.DeadlineExceeded {
 			return err
+		}
+
+		// HACK: work around https://github.com/grpc/grpc-go/issues/1026
+		// Getting a "connection refused" error from the "write" system call
+		// has confused grpc's error handling and this connection is permanently
+		// broken.
+		// TODO(bdarnell): remove this when the upstream bug is fixed.
+		if err != nil && strings.Contains(err.Error(), "write: connection refused") {
+			return nil
 		}
 
 		if err == nil {
