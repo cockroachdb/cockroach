@@ -285,8 +285,12 @@ func dumpCreateTable(w io.Writer, md tableMetadata) error {
 	return nil
 }
 
-// limit determines how many rows to dump at a time (in each SELECT statement).
-const limit = 100
+const (
+	// limit is the number of rows to dump at a time (in each SELECT statement).
+	limit = 10000
+	// insertRows is the number of rows per INSERT statement.
+	insertRows = 100
+)
 
 // dumpTableData dumps the data of the specified table to w.
 func dumpTableData(w io.Writer, conn *sqlConn, clusterTS string, md tableMetadata) error {
@@ -311,6 +315,7 @@ func dumpTableData(w io.Writer, conn *sqlConn, clusterTS string, md tableMetadat
 	// pk holds the last values of the fetched primary keys
 	var pk []driver.Value
 	q := fmt.Sprintf(bs, "")
+	inserts := make([][]string, 0, insertRows)
 	for {
 		rows, err := conn.Query(q, pk)
 		if err != nil {
@@ -319,9 +324,8 @@ func dumpTableData(w io.Writer, conn *sqlConn, clusterTS string, md tableMetadat
 		cols := rows.Columns()
 		pkcols := cols[:md.numIndexCols]
 		cols = cols[md.numIndexCols:]
-		inserts := make([][]string, 0, limit)
 		i := 0
-		for i < limit {
+		for {
 			vals := make([]driver.Value, len(cols)+len(pkcols))
 			if err := rows.Next(vals); err == io.EOF {
 				break
@@ -384,6 +388,10 @@ func dumpTableData(w io.Writer, conn *sqlConn, clusterTS string, md tableMetadat
 			}
 			inserts = append(inserts, ivals)
 			i++
+			if len(inserts) == cap(inserts) {
+				writeInserts(w, md, inserts)
+				inserts = inserts[:0]
+			}
 		}
 		for si, sv := range pk {
 			b, ok := sv.([]byte)
@@ -396,27 +404,31 @@ func dumpTableData(w io.Writer, conn *sqlConn, clusterTS string, md tableMetadat
 		if err := rows.Close(); err != nil {
 			return err
 		}
-		if i == 0 {
-			break
+		if len(inserts) != 0 {
+			writeInserts(w, md, inserts)
+			inserts = inserts[:0]
 		}
-		fmt.Fprintf(w, "\nINSERT INTO %s (%s) VALUES", md.name.TableName, md.columnNames)
-		for idx, values := range inserts {
-			if idx > 0 {
-				fmt.Fprint(w, ",")
-			}
-			fmt.Fprint(w, "\n\t(")
-			for vi, v := range values {
-				if vi > 0 {
-					fmt.Fprint(w, ", ")
-				}
-				fmt.Fprint(w, v)
-			}
-			fmt.Fprint(w, ")")
-		}
-		fmt.Fprintln(w, ";")
 		if i < limit {
 			break
 		}
 	}
 	return nil
+}
+
+func writeInserts(w io.Writer, md tableMetadata, inserts [][]string) {
+	fmt.Fprintf(w, "\nINSERT INTO %s (%s) VALUES", md.name.TableName, md.columnNames)
+	for idx, values := range inserts {
+		if idx > 0 {
+			fmt.Fprint(w, ",")
+		}
+		fmt.Fprint(w, "\n\t(")
+		for vi, v := range values {
+			if vi > 0 {
+				fmt.Fprint(w, ", ")
+			}
+			fmt.Fprint(w, v)
+		}
+		fmt.Fprint(w, ")")
+	}
+	fmt.Fprintln(w, ";")
 }
