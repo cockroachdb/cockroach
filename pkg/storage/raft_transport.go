@@ -20,7 +20,6 @@ package storage
 import (
 	"bytes"
 	"fmt"
-	"io"
 	"net"
 	"sort"
 	"sync/atomic"
@@ -595,27 +594,6 @@ func (t *RaftTransport) SendAsync(req *RaftMessageRequest) bool {
 	}
 }
 
-type snapshotClientWithBreaker struct {
-	MultiRaft_RaftSnapshotClient
-	breaker *circuit.Breaker
-}
-
-func (c snapshotClientWithBreaker) Send(m *SnapshotRequest) error {
-	err := c.MultiRaft_RaftSnapshotClient.Send(m)
-	if err != nil {
-		c.breaker.Fail()
-	}
-	return err
-}
-
-func (c snapshotClientWithBreaker) Recv() (*SnapshotResponse, error) {
-	m, err := c.MultiRaft_RaftSnapshotClient.Recv()
-	if err != nil && err != io.EOF {
-		c.breaker.Fail()
-	}
-	return m, err
-}
-
 // SendSnapshot streams the given outgoing snapshot. The caller is responsible
 // for closing the OutgoingSnapshot.
 func (t *RaftTransport) SendSnapshot(
@@ -644,15 +622,16 @@ func (t *RaftTransport) SendSnapshot(
 	}, 0); err != nil {
 		return err
 	}
+	// Note that we intentionally do not open the breaker if we encounter an
+	// error while sending the snapshot. Snapshots are much less common than
+	// regular Raft messages so if there is a real problem with the remote we'll
+	// probably notice it really soon. Conversely, snapshots are a bit weird
+	// (much larger than regular messages) so if there is an error here we don't
+	// want to disrupt normal messages.
 	defer func() {
 		if err := stream.CloseSend(); err != nil {
 			log.Warningf(ctx, "failed to close snapshot stream: %s", err)
-			breaker.Fail()
 		}
 	}()
-	return sendSnapshot(ctx,
-		snapshotClientWithBreaker{
-			MultiRaft_RaftSnapshotClient: stream,
-			breaker: breaker,
-		}, storePool, header, snap, newBatch, sent)
+	return sendSnapshot(ctx, stream, storePool, header, snap, newBatch, sent)
 }
