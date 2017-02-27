@@ -12,6 +12,7 @@ build/builder.sh env \
     | go-test-teamcity
 
 build/builder.sh env \
+		 COCKROACH_PROPOSER_EVALUATED_KV="${COCKROACH_PROPOSER_EVALUATED_KV:-false}" \
 		 BUILD_VCS_NUMBER="$BUILD_VCS_NUMBER" \
 		 TARGET=stress \
 		 github-pull-request-make
