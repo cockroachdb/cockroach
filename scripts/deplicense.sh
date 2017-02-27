@@ -7,21 +7,13 @@ set -euo pipefail
 # The output is sorted by package name:
 #   <package-repo-root> <license info>
 
-dirs=()
-function visit() {
-  local dir="$1"
-  for dir in "${dirs[@]}"; do
-    if test "${dir}" = "${toplevel}"; then
-      return 0
-    fi
-    done
-    dirs+=("${toplevel}")
-    return 1
-}
-
 function isApache2() {
-  grep -q '[[:space:]]*Apache License' "$1" && \
-  grep -q '[[:space:]]*Version 2\.0,' "$1"
+  # The first pair of patterns matches the apache license itself; the
+  # last is the header that some projects use in place of the full
+  # license.
+  (grep -q '[[:space:]]*Apache License' "$1" && \
+   grep -q '[[:space:]]*Version 2\.0,' "$1") || \
+  grep -q '^Licensed under the Apache License, Version 2.0 (the "License")' "$1"
 }
 
 function isBSD2Clause() {
@@ -51,12 +43,21 @@ function isMIT() {
   grep -q 'The above copyright notice and this permission notice' "$1"
 }
 
+function isCC0() {
+  grep -q 'This work is subject to the CC0 1.0 Universal (CC0 1.0) Public Domain Dedication' "$1"
+}
+
+function isMPL2() {
+  grep -q '^Mozilla Public License Version 2.0' "$1"
+
+}
+
 function inspect() {
   local dir="$1"
 
-  local files="$(ls ${toplevel}/{LICENSE,COPYING} 2>/dev/null)"
-  files="${files} $(ls ${toplevel}/LICEN[CS]E.{md,txt,code} 2>/dev/null)"
-  files="${files} $(ls ${toplevel}/*/{LICENSE,COPYING} 2>/dev/null)"
+  local files="$(ls ${dir}/{LICENSE,COPYING} 2>/dev/null)"
+  files="${files} $(ls ${dir}/LICEN[CS]E.{md,txt,code} 2>/dev/null)"
+  files="${files} $(ls ${dir}/*/{LICENSE,COPYING} 2>/dev/null)"
 
   for file in $files; do
     if [ -e "${file}" ]; then
@@ -78,6 +79,12 @@ function inspect() {
       elif isMIT "${file}"; then
         echo "MIT License"
         return
+      elif isCC0 "${file}"; then
+        echo "Creative Commons CC0"
+        return
+      elif isMPL2 "${file}"; then
+        echo "Mozilla Public License 2.0"
+        return
       fi
       # TODO(pmattis): This is incomplete. Add other license
       # detectors as necessary.
@@ -88,36 +95,9 @@ function inspect() {
   echo "unable to determine license"
 }
 
-# For each dependency which is not part of the standard library, list the
-# package directory and package root.
-pkginfo=($(go list -f '{{ join .Deps "\n"}}' ./pkg/... | sort -u | \
-  xargs go list -f '{{if not .Standard}}{{.Dir}} {{.Root}}{{end}}'))
+pkgs=$(grep '^- name: ' glide.lock | cut -d' ' -f3)
 
-# Loop over the package info which comes in pairs in the pkginfo
-# array.
-for (( i=0; i < ${#pkginfo[@]}; i+=2 )); do
-  dir=${pkginfo[$i]}
-  if ! test -d "${dir}"; then
-    continue
-  fi
-
-  toplevel=$(git -C "${dir}" rev-parse --show-toplevel 2>/dev/null)
-
-  git=1
-  if test "${toplevel}" = ""; then
-    toplevel=$(hg --cwd "${dir}" root 2>/dev/null)
-    if test "${toplevel}" = ""; then
-      # TODO(pmattis): Handle subversion/bazaar.
-      continue
-    fi
-    git=0
-  fi
-
-  if visit "${toplevel}"; then
-    continue
-  fi
-
-  info=$(inspect "${toplevel}")
-  root=${pkginfo[$i+1]}
-  printf "%-50s %s\n" "${toplevel#$root/src/}" "${info}"
+for pkg in ${pkgs}; do
+  info=$(inspect "vendor/${pkg}")
+  printf "%-50s %s\n" "${pkg}" "${info}"
 done
