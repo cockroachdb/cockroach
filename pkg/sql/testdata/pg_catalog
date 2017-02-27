@@ -660,6 +660,7 @@ oid   typname      typnamespace  typowner  typlen  typbyval  typtype
 19    name         1782195457    NULL      -1      false     b
 20    int8         1782195457    NULL      8       true      b
 21    int2         1782195457    NULL      8       true      b
+22    int2vector   1782195457    NULL      -1      false     b
 23    int4         1782195457    NULL      8       true      b
 25    text         1782195457    NULL      -1      false     b
 26    oid          1782195457    NULL      8       true      b
@@ -689,6 +690,7 @@ oid   typname      typcategory  typispreferred  typisdefined  typdelim  typrelid
 19    name         S            false           true          ,         0         0        0
 20    int8         N            false           true          ,         0         0        0
 21    int2         N            false           true          ,         0         0        0
+22    int2vector   A            false           true          ,         0         20       0
 23    int4         N            false           true          ,         0         0        0
 25    text         S            false           true          ,         0         0        0
 26    oid          N            false           true          ,         0         0        0
@@ -718,6 +720,7 @@ oid   typname      typinput    typoutput  typreceive  typsend  typmodin  typmodo
 19    name         0           0          0           0        0         0          0
 20    int8         0           0          0           0        0         0          0
 21    int2         0           0          0           0        0         0          0
+22    int2vector   4288767817  0          0           0        0         0          0
 23    int4         0           0          0           0        0         0          0
 25    text         0           0          0           0        0         0          0
 26    oid          0           0          0           0        0         0          0
@@ -747,6 +750,7 @@ oid   typname      typalign  typstorage  typnotnull  typbasetype  typtypmod
 19    name         NULL      NULL        false       0            -1
 20    int8         NULL      NULL        false       0            -1
 21    int2         NULL      NULL        false       0            -1
+22    int2vector   NULL      NULL        false       0            -1
 23    int4         NULL      NULL        false       0            -1
 25    text         NULL      NULL        false       0            -1
 26    oid          NULL      NULL        false       0            -1
@@ -776,6 +780,7 @@ oid   typname      typndims  typcollation  typdefaultbin  typdefault  typacl
 19    name         0         1661428263    NULL           NULL        NULL
 20    int8         0         0             NULL           NULL        NULL
 21    int2         0         0             NULL           NULL        NULL
+22    int2vector   0         0             NULL           NULL        NULL
 23    int4         0         0             NULL           NULL        NULL
 25    text         0         1661428263    NULL           NULL        NULL
 26    oid          0         0             NULL           NULL        NULL
