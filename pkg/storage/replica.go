@@ -1405,7 +1405,7 @@ func (r *Replica) Send(
 ) (*roachpb.BatchResponse, *roachpb.Error) {
 	var br *roachpb.BatchResponse
 
-	if r.stats != nil {
+	if r.stats != nil && ba.Header.GatewayNodeID != 0 {
 		r.stats.record(ba.Header.GatewayNodeID)
 	}
 
