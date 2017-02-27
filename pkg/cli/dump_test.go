@@ -117,7 +117,7 @@ CREATE TABLE t (
 );
 
 INSERT INTO t (i, f, s, b, d, t, n, o, e, tz, e1, e2, s1) VALUES
-	(1, 2.3, 'striiing', b'a1b2c3', '2016-03-26', '2016-01-25 10:10:10+00:00', '2h30m30s', true, 1.2345, '2016-01-25 10:10:10+00:00', 3.4, 4.5, 's'),
+	(1, 2.3, 'striiing', b'a1b2c3', '2016-03-26', '2016-01-25 10:10:10+00:00', '2h30m30s', true, 1.2345, '2016-01-25 10:10:10+00:00', 3, 4.5, 's'),
 	(NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
 	(NULL, +Inf, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
 	(NULL, -Inf, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
