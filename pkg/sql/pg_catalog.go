@@ -1442,7 +1442,7 @@ CREATE TABLE pg_catalog.pg_type (
 			typElem := oidZero
 			if cat == typCategoryArray {
 				typInput = arrayInProcOid
-				typElem = parser.NewDOid(parser.DInt(typ.(parser.TArray).Typ.Oid()))
+				typElem = parser.NewDOid(parser.DInt(parser.UnwrapType(typ).(parser.TArray).Typ.Oid()))
 			}
 			typname := typ.String()
 			if n, ok := aliasedOidToName[oid]; ok {
@@ -1496,18 +1496,19 @@ CREATE TABLE pg_catalog.pg_type (
 // for these OIDs will override the type name of the corresponding type when
 // looking up the display name for an OID.
 var aliasedOidToName = map[oid.Oid]string{
-	oid.T_float4:  "float4",
-	oid.T_float8:  "float8",
-	oid.T_int2:    "int2",
-	oid.T_int4:    "int4",
-	oid.T_int8:    "int8",
-	oid.T_text:    "text",
-	oid.T_varchar: "varchar",
-	oid.T_numeric: "numeric",
-	oid.T__int2:   "int2[]",
-	oid.T__int4:   "int4[]",
-	oid.T__int8:   "int8[]",
-	oid.T__text:   "text[]",
+	oid.T_float4:     "float4",
+	oid.T_float8:     "float8",
+	oid.T_int2:       "int2",
+	oid.T_int4:       "int4",
+	oid.T_int8:       "int8",
+	oid.T_int2vector: "int2vector",
+	oid.T_text:       "text",
+	oid.T_varchar:    "varchar",
+	oid.T_numeric:    "numeric",
+	oid.T__int2:      "int2[]",
+	oid.T__int4:      "int4[]",
+	oid.T__int8:      "int8[]",
+	oid.T__text:      "text[]",
 }
 
 // typOid is the only OID generation approach that does not use oidHasher, because

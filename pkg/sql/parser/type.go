@@ -157,6 +157,7 @@ var OidToType = map[oid.Oid]Type{
 	oid.T_int2:        typeInt2,
 	oid.T_int4:        typeInt4,
 	oid.T_int8:        TypeInt,
+	oid.T_int2vector:  TypeIntVector,
 	oid.T_interval:    TypeInterval,
 	oid.T_name:        TypeName,
 	oid.T_numeric:     TypeDecimal,
