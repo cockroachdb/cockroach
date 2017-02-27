@@ -12,6 +12,7 @@ import (
 	"bytes"
 	gosql "database/sql"
 	"fmt"
+	"hash/crc32"
 	"io/ioutil"
 	"math/rand"
 	"os"
@@ -281,6 +282,102 @@ func TestBackupRestoreInterleaved(t *testing.T) {
 			t.Fatalf("expected 'without interleave child' error but got: %+v", err)
 		}
 	})
+}
+
+func checksumBankPayload(t *testing.T, sqlDB *sqlutils.SQLRunner) uint32 {
+	crc := crc32.New(crc32.MakeTable(crc32.Castagnoli))
+	rows := sqlDB.Query(`SELECT id, balance, payload FROM bench.bank`)
+	defer rows.Close()
+	var id, balance int
+	var payload []byte
+	for rows.Next() {
+		if err := rows.Scan(&id, &balance, &payload); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := crc.Write(payload); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
+	}
+	return crc.Sum32()
+}
+
+func TestBackupRestoreIncremental(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	if !storage.ProposerEvaluatedKVEnabled() {
+		t.Skip("command WriteBatch is not allowed without proposer evaluated KV")
+	}
+
+	// TODO(dan): Actually invalidate the descriptor cache and delete this line.
+	defer sql.TestDisableTableLeases()()
+
+	const numAccounts = 10
+	const numBackups = 4
+	windowSize := int(numAccounts / 3)
+
+	_, dir, _, sqlDB, cleanupFn := backupRestoreTestSetup(t, multiNode, 0)
+	defer cleanupFn()
+	rng, _ := randutil.NewPseudoRand()
+
+	var backupDirs []string
+	var checksums []uint32
+	{
+		sqlDB.Exec(bankCreateTable)
+		for backupNum := 0; backupNum < numBackups; backupNum++ {
+			// In the following, windowSize is `w` and offset is `o`. The first
+			// mutation creates accounts with id [w,3w). Every mutation after
+			// that deletes everything less than o, leaves [o, o+w) unchanged,
+			// mutates [o+w,o+2w), and inserts [o+2w,o+3w).
+			offset := windowSize * backupNum
+			var buf bytes.Buffer
+			fmt.Fprintf(&buf, `DELETE FROM bench.bank WHERE id < %d; `, offset)
+			buf.WriteString(`UPSERT INTO bench.bank VALUES `)
+			for j := 0; j < windowSize*2; j++ {
+				if j != 0 {
+					buf.WriteRune(',')
+				}
+				id := offset + windowSize + j
+				payload := randutil.RandBytes(rng, backupRestoreRowPayloadSize)
+				fmt.Fprintf(&buf, `(%d, %d, '%s')`, id, backupNum, payload)
+			}
+			sqlDB.Exec(buf.String())
+
+			checksums = append(checksums, checksumBankPayload(t, sqlDB))
+
+			backupDir := filepath.Join(dir, strconv.Itoa(backupNum))
+			var from string
+			if backupNum > 0 {
+				from = fmt.Sprintf(` INCREMENTAL FROM %s`, strings.Join(backupDirs, `,`))
+			}
+			sqlDB.Exec(fmt.Sprintf(`BACKUP TABLE bench.bank TO '%s' %s`, backupDir, from))
+
+			backupDirs = append(backupDirs, fmt.Sprintf(`'%s'`, backupDir))
+		}
+	}
+
+	// Start a new cluster to restore into.
+	{
+		tc := testcluster.StartTestCluster(t, multiNode, base.TestClusterArgs{})
+		defer tc.Stopper().Stop()
+		sqlDBRestore := sqlutils.MakeSQLRunner(t, tc.Conns[0])
+		sqlDBRestore.Exec(`CREATE DATABASE bench`)
+
+		for i := len(backupDirs); i > 0; i-- {
+			from := strings.Join(backupDirs[:i], `,`)
+			sqlDBRestore.Exec(fmt.Sprintf(`RESTORE bench.bank FROM %s`, from))
+
+			testutils.SucceedsSoon(t, func() error {
+				checksum := checksumBankPayload(t, sqlDBRestore)
+				if checksum != checksums[i-1] {
+					return errors.Errorf("checksum mismatch at index %d: got %d expected %d",
+						i-1, checksum, checksums[i])
+				}
+				return nil
+			})
+		}
+	}
 }
 
 func startBackgroundWrites(
