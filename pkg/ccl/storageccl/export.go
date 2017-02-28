@@ -9,7 +9,10 @@
 package storageccl
 
 import (
+	"crypto/sha512"
 	"fmt"
+	"io"
+	"os"
 
 	"golang.org/x/net/context"
 
@@ -72,18 +75,18 @@ func evalExport(
 	if err != nil {
 		return storage.EvalResult{}, err
 	}
-	path := writer.LocalFile()
+	localPath := writer.LocalFile()
 	defer writer.Cleanup()
 
 	sstWriter := engine.MakeRocksDBSstFileWriter()
 	sst := &sstWriter
-	if err := sst.Open(path); err != nil {
+	if err := sst.Open(localPath); err != nil {
 		return storage.EvalResult{}, err
 	}
 	defer func() {
 		if sst != nil {
 			if closeErr := sst.Close(); closeErr != nil {
-				log.Warningf(ctx, "could not close sst writer %s: %+v", path, closeErr)
+				log.Warningf(ctx, "could not close sst writer %s: %+v", localPath, closeErr)
 			}
 		}
 	}()
@@ -126,8 +129,11 @@ func evalExport(
 	size := sst.DataSize
 	sst = nil
 
-	// TODO(dan): Compute a checksum of the file before upload.
-	// https://github.com/cockroachdb/cockroach/issues/13482.
+	// Compute the checksum before we upload and remove the local file.
+	checksum, err := sha512ChecksumFile(localPath)
+	if err != nil {
+		return storage.EvalResult{}, err
+	}
 
 	if err := writer.Finish(); err != nil {
 		return storage.EvalResult{}, err
@@ -137,7 +143,21 @@ func evalExport(
 		Span:     args.Span,
 		Path:     filename,
 		DataSize: size,
+		Sha512:   checksum,
 	}}
 
 	return storage.EvalResult{}, nil
+}
+
+func sha512ChecksumFile(path string) ([]byte, error) {
+	h := sha512.New()
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	if _, err := io.Copy(h, f); err != nil {
+		return nil, err
+	}
+	return h.Sum(nil), nil
 }
