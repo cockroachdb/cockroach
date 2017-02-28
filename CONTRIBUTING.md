@@ -1,6 +1,6 @@
 # Contributing to Cockroach
 
-### Getting and building
+## Getting and Building
 
 1.  Install the following prerequisites, as necessary:
   - A C++ compiler that supports C++11. Note that GCC prior to 6.0 doesn't
@@ -11,6 +11,8 @@
   - Git 1.8+
   - Bash
 
+  Note that at least 4GB of RAM is required to build from source and run tests.
+
 2.  Get the CockroachDB code:
 
 	```shell
@@ -19,38 +21,44 @@
 	```
 
 3.  Run `make build`, `make test`, or anything else our Makefile offers. Note
-that at least 4GB of RAM is required to build from source and run tests. Also,
-the first time you run `make`, it can take some time to download and install
-various dependencies. After running `make build`, the `cockroach` executable
-will be in your current directory and can be run as shown in the
+that the first time you run `make`, it can take some time to download and
+install various dependencies. After running `make build`, the `cockroach`
+executable will be in your current directory and can be run as shown in the
 [README](README.md).
 
-Note that if you edit a `.proto` or `.ts` file, you will need to manually
-regenerate the associated `.pb.{go,cc,h}` or `.js` files using
-`go generate ./pkg/...`.
+### Other Considerations
 
-We advise to run `go generate` using our embedded Docker setup.
-`build/builder.sh` is a wrapper script designed to make this convenient. You can
-run `build/builder.sh go generate ./pkg/...` from the repository
-root to get the intended result.
+- The default binary contains core open-source functionally covered by the
+  Apache License 2 (APL2) and enterprise functionality covered by the
+  CockroachDB Community License (CCL). To build a pure open-source (APL2)
+  version excluding enterprise functionality, use `make buildoss`. See this
+  [blog post](https://www.cockroachlabs.com/blog/how-were-building-a-business-
+  to-last/) for more details.
 
-If you want to run it outside of Docker, `go generate` requires a collection
-of Node.js modules which will be automatically installed into the project tree
-(not globally).
+- If you edit a `.proto` or `.ts` file, you will need to manually regenerate
+  the associated `.pb.{go,cc,h}` or `.js` files using `go generate ./pkg/...`.
 
-If you plan on working on the UI, check out [the ui readme](pkg/ui).
+- We advise to run `go generate` using our embedded Docker setup.
+  `build/builder.sh` is a wrapper script designed to make this convenient. You
+  can run `build/builder.sh go generate ./pkg/...` from the repository root to
+  get the intended result.
 
-To add or update a go dependency:
+  If you want to run it outside of Docker, `go generate` requires a collection
+  of Node.js modules which will be automatically installed into the project
+  tree (not globally).
 
-- see `build/README.md` for details on adding or updating dependencies
-- run `go generate ./pkg/...` to update generated files.
-- create a PR with all the changes
+- If you plan on working on the UI, check out [the ui readme](pkg/ui).
 
-### Style guide
+- To add or update a go dependency:
+  - See `build/README.md` for details on adding or updating dependencies.
+  - Run `go generate ./pkg/...` to update generated files.
+  - Create a PR with all the changes.
+
+## Style Guide
 
 [Style Guide](STYLE.md)
 
-### Code review workflow
+## Code Review Workflow
 
 + All contributors need to sign the [Contributor License Agreement]
   (https://cla-assistant.io/cockroachdb/cockroach).
@@ -121,7 +129,7 @@ To add or update a go dependency:
   Most new contributors aren't allowed to merge themselves; in that case, we'll
   do it for you.
 
-### Debugging
+## Debugging
 
 Peeking into a running cluster can be done in several ways:
 
