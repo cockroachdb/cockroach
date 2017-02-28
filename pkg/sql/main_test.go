@@ -22,8 +22,6 @@ import (
 	"os"
 	"testing"
 
-	"golang.org/x/net/context"
-
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -201,7 +199,7 @@ func createTestServerParams() (base.TestServerArgs, *CommandFilters) {
 // 'planhook'.
 func init() {
 	testingPlanHook := func(
-		ctx context.Context, stmt parser.Statement, cfg *sql.ExecutorConfig,
+		state sql.PlanHookState, stmt parser.Statement,
 	) (func() ([]parser.Datums, error), sql.ResultColumns, error) {
 		show, ok := stmt.(*parser.Show)
 		if !ok || show.Name != "planhook" {

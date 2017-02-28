@@ -31,10 +31,17 @@ import (
 // return (if any). `fn` will be called during the `Start` phase of plan
 // execution.
 type planHookFn func(
-	context.Context, parser.Statement, *ExecutorConfig,
+	context.Context, parser.Statement, PlanHookState,
 ) (fn func() ([]parser.Datums, error), header ResultColumns, err error)
 
 var planHooks []planHookFn
+
+// PlanHookState exposes the internal planner state needed by plan hooks. This
+// state is passed in this struct, rather than directly to hook functions, to
+// avoid rewiring every hook function when more state needs to be exported.
+type PlanHookState struct {
+	ExecCfg *ExecutorConfig
+}
 
 // AddPlanHook adds a hook used to short-circuit creating a planNode from a
 // parser.Statement. If the func returned by the hook is non-nil, it is used to
