@@ -40,6 +40,7 @@
 		AggregatorSpec
 		BackfillerSpec
 		FlowSpec
+		AlgebraicSetOpSpec
 */
 package distsqlrun
 

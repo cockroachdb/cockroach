@@ -106,6 +106,7 @@ message ProcessorCoreUnion {
   optional HashJoinerSpec hashJoiner = 9;
   optional ValuesCoreSpec values = 10;
   optional BackfillerSpec backfiller = 11;
+  optional AlgebraicSetOpSpec setop = 12;
 }
 
 // NoopCoreSpec indicates a "no-op" processor core. This is used when we just
@@ -362,4 +363,20 @@ message FlowSpec {
                               (gogoproto.customtype) = "FlowID"];
 
   repeated ProcessorSpec processors = 2 [(gogoproto.nullable) = false];
+}
+
+// AlgebraicSetOpSpec is a specification for algebraic set operations currently
+// only the EXCEPT ALL set operation, but extensible to other set operations.
+// INTERSECT ALL is implemented with HashJoinerSpec, and UNION ALL with
+// a no-op processor. EXCEPT/INTERSECT/UNION use a DISTINCT processor at
+// the end. The two input streams should have the same schema. The ordering
+// of the left stream will be preserved in the output stream.
+message AlgebraicSetOpSpec {
+  enum SetOpType {
+    Except_all = 0;
+  }
+  // If the two input streams are both ordered by a common column ordering,
+  // that ordering can be used to optimize resource usage in the processor.
+  optional Ordering ordering = 1 [(gogoproto.nullable) = false];
+  optional SetOpType op_type = 2 [(gogoproto.nullable) = false];
 }
