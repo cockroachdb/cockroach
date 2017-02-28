@@ -150,7 +150,7 @@ func (h *hashJoiner) buildPhase(ctx context.Context) (bool, error) {
 			return true, nil
 		}
 
-		encoded, hasNull, err := h.encode(scratch, rrow, h.rightEqCols)
+		encoded, hasNull, err := encodeColumnsOfRow(&h.datumAlloc, scratch, rrow, h.rightEqCols, false /* encodeNull */)
 		if err != nil {
 			return false, err
 		}
@@ -227,7 +227,7 @@ func (h *hashJoiner) probePhase(ctx context.Context) (bool, error) {
 			break
 		}
 
-		encoded, hasNull, err := h.encode(scratch, lrow, h.leftEqCols)
+		encoded, hasNull, err := encodeColumnsOfRow(&h.datumAlloc, scratch, lrow, h.leftEqCols, false /* encodeNull */)
 		if err != nil {
 			return true, err
 		}
@@ -279,14 +279,15 @@ func (h *hashJoiner) probePhase(ctx context.Context) (bool, error) {
 	return false, nil
 }
 
-// encode returns the encoding for the grouping columns, this is then used as
-// our group key to determine which bucket to add to.
-// If the row contains any NULLs, hasNull is true and no encoding is returned.
-func (h *hashJoiner) encode(
-	appendTo []byte, row sqlbase.EncDatumRow, cols columns,
+// encodeColumnsOfRow returns the encoding for the grouping columns. This is
+// then used as our group key to determine which bucket to add to.
+// If the row contains any NULLs and encodeNull is false, hasNull is true and
+// no encoding is returned. If encodeNull is true, hasNull is never set.
+func encodeColumnsOfRow(
+	da *sqlbase.DatumAlloc, appendTo []byte, row sqlbase.EncDatumRow, cols columns, encodeNull bool,
 ) (encoding []byte, hasNull bool, err error) {
 	for _, colIdx := range cols {
-		if row[colIdx].IsNull() {
+		if row[colIdx].IsNull() && !encodeNull {
 			return nil, true, nil
 		}
 		// Note: we cannot compare VALUE encodings because they contain column IDs
@@ -294,7 +295,7 @@ func (h *hashJoiner) encode(
 		// TODO(radu): we should figure out what encoding is readily available and
 		// use that (though it needs to be consistent across all rows). We could add
 		// functionality to compare VALUE encodings ignoring the column ID.
-		appendTo, err = row[colIdx].Encode(&h.datumAlloc, sqlbase.DatumEncoding_ASCENDING_KEY, appendTo)
+		appendTo, err = row[colIdx].Encode(da, sqlbase.DatumEncoding_ASCENDING_KEY, appendTo)
 		if err != nil {
 			return appendTo, false, err
 		}
