@@ -264,7 +264,7 @@ func (expr *IndirectionExpr) TypeCheck(ctx *SemaContext, desired Type) (TypedExp
 	if err != nil {
 		return nil, err
 	}
-	typ := subExpr.ResolvedType()
+	typ := UnwrapType(subExpr.ResolvedType())
 	arrType, ok := typ.(TArray)
 	if !ok {
 		return nil, errors.Errorf("cannot subscript type %s because it is not an array", typ)
@@ -891,7 +891,7 @@ func typeCheckComparisonOpWithSubOperator(
 			return leftTyped, rightTyped, CmpOp{}, nil
 		}
 
-		rightArr, ok := rightReturn.(TArray)
+		rightArr, ok := UnwrapType(rightReturn).(TArray)
 		if !ok {
 			return nil, nil, CmpOp{},
 				errors.Errorf(unsupportedCompErrFmtWithExprsAndSubOp, left, subOp, op, right,
