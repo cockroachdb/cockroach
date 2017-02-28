@@ -327,5 +327,11 @@ func newProcessor(
 			return newIndexBackfiller(flowCtx, core.Backfiller, post, outputs[0])
 		}
 	}
+	if core.AlgebraicSet != nil {
+		if err := checkNumInOut(inputs, outputs, 2, 1); err != nil {
+			return nil, err
+		}
+		return newAlgebraicSet(flowCtx, core.AlgebraicSet, inputs[0], inputs[1], post, outputs[0])
+	}
 	return nil, errors.Errorf("unsupported processor core %s", core)
 }
