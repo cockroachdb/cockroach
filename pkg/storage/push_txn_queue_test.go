@@ -25,7 +25,6 @@ import (
 
 	"golang.org/x/net/context"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
@@ -133,20 +132,21 @@ func TestIsPushed(t *testing.T) {
 	}
 }
 
-func writeTxnRecord(t *testing.T, tc *testContext, txn *roachpb.Transaction) {
+func writeTxnRecord(ctx context.Context, tc *testContext, txn *roachpb.Transaction) error {
 	key := keys.TransactionKey(txn.Key, *txn.ID)
-	if err := engine.MVCCPutProto(context.Background(), tc.store.Engine(),
-		nil, key, hlc.Timestamp{}, nil, txn); err != nil {
-		t.Fatal(err)
-	}
+	return engine.MVCCPutProto(ctx, tc.store.Engine(), nil, key, hlc.Timestamp{}, nil, txn)
 }
 
 // createTxnForPushQueue creates a txn struct and writes a "fake"
 // transaction record for it to the underlying engine.
-func createTxnForPushQueue(t *testing.T, tc *testContext) *roachpb.Transaction {
+func createTxnForPushQueue(ctx context.Context, tc *testContext) (*roachpb.Transaction, error) {
 	txn := newTransaction("txn", roachpb.Key("a"), 1, enginepb.SERIALIZABLE, tc.Clock())
-	writeTxnRecord(t, tc, txn)
-	return txn
+	return txn, writeTxnRecord(ctx, tc, txn)
+}
+
+type RespWithErr struct {
+	resp *roachpb.PushTxnResponse
+	pErr *roachpb.Error
 }
 
 func TestPushTxnQueueEnableDisable(t *testing.T) {
@@ -156,7 +156,10 @@ func TestPushTxnQueueEnableDisable(t *testing.T) {
 	defer stopper.Stop()
 	tc.Start(t, stopper)
 
-	txn := createTxnForPushQueue(t, &tc)
+	txn, err := createTxnForPushQueue(context.Background(), &tc)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	// Queue starts enabled.
 	ptq := tc.repl.pushTxnQueue
@@ -177,12 +180,11 @@ func TestPushTxnQueueEnableDisable(t *testing.T) {
 		PusherTxn: *pusher,
 		PusheeTxn: txn.TxnMeta,
 	}
-	respCh := make(chan *roachpb.PushTxnResponse, 1)
-	errCh := make(chan *roachpb.Error, 1)
+
+	retCh := make(chan RespWithErr, 1)
 	go func() {
 		resp, pErr := ptq.MaybeWait(context.Background(), &req)
-		respCh <- resp
-		errCh <- pErr
+		retCh <- RespWithErr{resp, pErr}
 	}()
 
 	testutils.SucceedsSoon(t, func() error {
@@ -199,11 +201,12 @@ func TestPushTxnQueueEnableDisable(t *testing.T) {
 		t.Errorf("expected queue to be disabled")
 	}
 
-	if pErr := <-errCh; pErr != nil {
-		t.Errorf("expected nil error; got %s", pErr)
+	respWithErr := <-retCh
+	if respWithErr.resp != nil {
+		t.Errorf("expected nil response; got %+v", respWithErr.resp)
 	}
-	if resp := <-respCh; resp != nil {
-		t.Errorf("expected nil response; got %+v", resp)
+	if respWithErr.pErr != nil {
+		t.Errorf("expected nil err; got %+v", respWithErr.pErr)
 	}
 
 	if deps := ptq.GetDependents(*txn.ID); deps != nil {
@@ -234,7 +237,10 @@ func TestPushTxnQueueCancel(t *testing.T) {
 	defer stopper.Stop()
 	tc.Start(t, stopper)
 
-	txn := createTxnForPushQueue(t, &tc)
+	txn, err := createTxnForPushQueue(context.Background(), &tc)
+	if err != nil {
+		t.Fatal(err)
+	}
 	pusher := newTransaction("pusher", roachpb.Key("a"), 1, enginepb.SERIALIZABLE, tc.Clock())
 	req := roachpb.PushTxnRequest{
 		PushType:  roachpb.PUSH_ABORT,
@@ -247,12 +253,10 @@ func TestPushTxnQueueCancel(t *testing.T) {
 	ptq.Enqueue(txn)
 
 	ctx, cancel := context.WithCancel(context.Background())
-	respCh := make(chan *roachpb.PushTxnResponse, 1)
-	errCh := make(chan *roachpb.Error, 1)
+	retCh := make(chan RespWithErr, 1)
 	go func() {
 		resp, pErr := ptq.MaybeWait(ctx, &req)
-		respCh <- resp
-		errCh <- pErr
+		retCh <- RespWithErr{resp, pErr}
 	}()
 
 	testutils.SucceedsSoon(t, func() error {
@@ -264,11 +268,12 @@ func TestPushTxnQueueCancel(t *testing.T) {
 	})
 	cancel()
 
-	if pErr := <-errCh; !testutils.IsPError(pErr, context.Canceled.Error()) {
-		t.Errorf("expected context canceled error; got %s", pErr)
+	respWithErr := <-retCh
+	if respWithErr.resp != nil {
+		t.Errorf("expected nil response; got %+v", respWithErr.resp)
 	}
-	if resp := <-respCh; resp != nil {
-		t.Errorf("expected nil response; got %+v", resp)
+	if !testutils.IsPError(respWithErr.pErr, context.Canceled.Error()) {
+		t.Errorf("expected context canceled error; got %v", respWithErr.pErr)
 	}
 }
 
@@ -281,7 +286,10 @@ func TestPushTxnQueueUpdateTxn(t *testing.T) {
 	defer stopper.Stop()
 	tc.Start(t, stopper)
 
-	txn := createTxnForPushQueue(t, &tc)
+	txn, err := createTxnForPushQueue(context.Background(), &tc)
+	if err != nil {
+		t.Fatal(err)
+	}
 	pusher1 := newTransaction("pusher1", roachpb.Key("a"), 1, enginepb.SERIALIZABLE, tc.Clock())
 	pusher2 := newTransaction("pusher2", roachpb.Key("a"), 1, enginepb.SERIALIZABLE, tc.Clock())
 	req1 := roachpb.PushTxnRequest{
@@ -296,12 +304,10 @@ func TestPushTxnQueueUpdateTxn(t *testing.T) {
 	ptq.Enable()
 	ptq.Enqueue(txn)
 
-	respCh := make(chan *roachpb.PushTxnResponse, 2)
-	errCh := make(chan *roachpb.Error, 2)
+	retCh := make(chan RespWithErr, 2)
 	go func() {
 		resp, pErr := ptq.MaybeWait(context.Background(), &req1)
-		respCh <- resp
-		errCh <- pErr
+		retCh <- RespWithErr{resp, pErr}
 	}()
 	testutils.SucceedsSoon(t, func() error {
 		expDeps := []uuid.UUID{*pusher1.ID}
@@ -313,8 +319,7 @@ func TestPushTxnQueueUpdateTxn(t *testing.T) {
 
 	go func() {
 		resp, pErr := ptq.MaybeWait(context.Background(), &req2)
-		respCh <- resp
-		errCh <- pErr
+		retCh <- RespWithErr{resp, pErr}
 	}()
 	testutils.SucceedsSoon(t, func() error {
 		expDeps := []uuid.UUID{*pusher1.ID, *pusher2.ID}
@@ -329,11 +334,12 @@ func TestPushTxnQueueUpdateTxn(t *testing.T) {
 	ptq.UpdateTxn(&updatedTxn)
 
 	for i := 0; i < 2; i++ {
-		if pErr := <-errCh; pErr != nil {
-			t.Errorf("expected nil error; got %s", pErr)
+		respWithErr := <-retCh
+		if respWithErr.resp == nil || respWithErr.resp.PusheeTxn.Status != roachpb.COMMITTED {
+			t.Errorf("expected committed txn response; got %+v", respWithErr.resp)
 		}
-		if resp := <-respCh; resp == nil || resp.PusheeTxn.Status != roachpb.COMMITTED {
-			t.Errorf("expected committed txn response; got %+v", resp)
+		if respWithErr.pErr != nil {
+			t.Errorf("expected nil err; got %+v", respWithErr.pErr)
 		}
 	}
 }
@@ -348,7 +354,10 @@ func TestPushTxnQueueUpdateNotPushedTxn(t *testing.T) {
 	defer stopper.Stop()
 	tc.Start(t, stopper)
 
-	txn := createTxnForPushQueue(t, &tc)
+	txn, err := createTxnForPushQueue(context.Background(), &tc)
+	if err != nil {
+		t.Fatal(err)
+	}
 	pusher := newTransaction("pusher", roachpb.Key("a"), 1, enginepb.SERIALIZABLE, tc.Clock())
 	req := roachpb.PushTxnRequest{
 		PushType:  roachpb.PUSH_ABORT,
@@ -360,12 +369,10 @@ func TestPushTxnQueueUpdateNotPushedTxn(t *testing.T) {
 	ptq.Enable()
 	ptq.Enqueue(txn)
 
-	respCh := make(chan *roachpb.PushTxnResponse, 1)
-	errCh := make(chan *roachpb.Error, 1)
+	retCh := make(chan RespWithErr, 1)
 	go func() {
 		resp, pErr := ptq.MaybeWait(context.Background(), &req)
-		respCh <- resp
-		errCh <- pErr
+		retCh <- RespWithErr{resp, pErr}
 	}()
 
 	testutils.SucceedsSoon(t, func() error {
@@ -380,11 +387,12 @@ func TestPushTxnQueueUpdateNotPushedTxn(t *testing.T) {
 	updatedTxn.Timestamp = txn.Timestamp.Add(1, 0)
 	ptq.UpdateTxn(&updatedTxn)
 
-	if pErr := <-errCh; pErr != nil {
-		t.Errorf("expected nil error; got %s", pErr)
+	respWithErr := <-retCh
+	if respWithErr.resp != nil {
+		t.Errorf("on non-committed txn update, expected nil response; got %+v", respWithErr.resp)
 	}
-	if resp := <-respCh; resp != nil {
-		t.Errorf("on non-committed txn update, expected nil response; got %+v", resp)
+	if respWithErr.pErr != nil {
+		t.Errorf("expected nil error; got %s", respWithErr.pErr)
 	}
 }
 
@@ -394,12 +402,12 @@ func TestPushTxnQueuePusheeExpires(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	var queryTxnCount int32
 
-	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
+	manual := hlc.NewManualClock(123)
+	clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
 	txn := newTransaction("txn", roachpb.Key("a"), 1, enginepb.SERIALIZABLE, clock)
-	// Move the clock back so that when the PushTxn is sent, the txn
-	// appears expired.
-	txn.Timestamp = txn.Timestamp.Add(-2*(base.DefaultHeartbeatInterval-10*time.Millisecond).Nanoseconds(), 0)
-	txn.OrigTimestamp = txn.Timestamp
+	// Move the clock forward so that when the PushTxn is sent, the txn appears
+	// expired.
+	manual.Set(txnExpiration(txn).WallTime)
 
 	tc := testContext{}
 	tsc := TestStoreConfig(clock)
@@ -425,18 +433,18 @@ func TestPushTxnQueuePusheeExpires(t *testing.T) {
 	req2.PusherTxn = *pusher2
 
 	// Create a "fake" txn record.
-	writeTxnRecord(t, &tc, txn)
+	if err := writeTxnRecord(context.Background(), &tc, txn); err != nil {
+		t.Fatal(err)
+	}
 
 	ptq := tc.repl.pushTxnQueue
 	ptq.Enable()
 	ptq.Enqueue(txn)
 
-	respCh := make(chan *roachpb.PushTxnResponse, 2)
-	errCh := make(chan *roachpb.Error, 2)
+	retCh := make(chan RespWithErr, 2)
 	go func() {
 		resp, pErr := ptq.MaybeWait(context.Background(), &req1)
-		respCh <- resp
-		errCh <- pErr
+		retCh <- RespWithErr{resp, pErr}
 	}()
 	testutils.SucceedsSoon(t, func() error {
 		expDeps := []uuid.UUID{*pusher1.ID}
@@ -448,8 +456,7 @@ func TestPushTxnQueuePusheeExpires(t *testing.T) {
 
 	go func() {
 		resp, pErr := ptq.MaybeWait(context.Background(), &req2)
-		respCh <- resp
-		errCh <- pErr
+		retCh <- RespWithErr{resp, pErr}
 	}()
 	testutils.SucceedsSoon(t, func() error {
 		expDeps := []uuid.UUID{*pusher1.ID, *pusher2.ID}
@@ -460,11 +467,12 @@ func TestPushTxnQueuePusheeExpires(t *testing.T) {
 	})
 
 	for i := 0; i < 2; i++ {
-		if pErr := <-errCh; pErr != nil {
-			t.Errorf("expected nil error; got %s", pErr)
+		respWithErr := <-retCh
+		if respWithErr.resp != nil {
+			t.Errorf("expected nil txn response; got %+v", respWithErr.resp)
 		}
-		if resp := <-respCh; resp != nil {
-			t.Errorf("expected nil txn response; got %+v", resp)
+		if respWithErr.pErr != nil {
+			t.Errorf("expected nil error; got %s", respWithErr.pErr)
 		}
 	}
 
@@ -482,7 +490,10 @@ func TestPushTxnQueuePusherUpdate(t *testing.T) {
 	defer stopper.Stop()
 	tc.Start(t, stopper)
 
-	txn := createTxnForPushQueue(t, &tc)
+	txn, err := createTxnForPushQueue(context.Background(), &tc)
+	if err != nil {
+		t.Fatal(err)
+	}
 	pusher := newTransaction("pusher", roachpb.Key("a"), 1, enginepb.SERIALIZABLE, tc.Clock())
 	req := roachpb.PushTxnRequest{
 		PushType:  roachpb.PUSH_ABORT,
@@ -494,12 +505,10 @@ func TestPushTxnQueuePusherUpdate(t *testing.T) {
 	ptq.Enable()
 	ptq.Enqueue(txn)
 
-	respCh := make(chan *roachpb.PushTxnResponse, 1)
-	errCh := make(chan *roachpb.Error, 1)
+	retCh := make(chan RespWithErr, 1)
 	go func() {
 		resp, pErr := ptq.MaybeWait(context.Background(), &req)
-		respCh <- resp
-		errCh <- pErr
+		retCh <- RespWithErr{resp, pErr}
 	}()
 
 	testutils.SucceedsSoon(t, func() error {
@@ -513,13 +522,16 @@ func TestPushTxnQueuePusherUpdate(t *testing.T) {
 	// Update txn on disk with status ABORTED.
 	pusherUpdate := *pusher
 	pusherUpdate.Status = roachpb.ABORTED
-	writeTxnRecord(t, &tc, &pusherUpdate)
-
-	if pErr := <-errCh; !testutils.IsPError(pErr, "txn aborted") {
-		t.Errorf("expected transaction aborted error; got %s", pErr)
+	if err := writeTxnRecord(context.Background(), &tc, &pusherUpdate); err != nil {
+		t.Fatal(err)
 	}
-	if resp := <-respCh; resp != nil {
-		t.Errorf("expected nil response; got %+v", resp)
+
+	respWithErr := <-retCh
+	if respWithErr.resp != nil {
+		t.Errorf("expected nil response; got %+v", respWithErr.resp)
+	}
+	if !testutils.IsPError(respWithErr.pErr, "txn aborted") {
+		t.Errorf("expected transaction aborted error; got %v", respWithErr.pErr)
 	}
 }
 
@@ -533,9 +545,18 @@ func TestPushTxnQueueDependencyCycle(t *testing.T) {
 	defer stopper.Stop()
 	tc.Start(t, stopper)
 
-	txnA := createTxnForPushQueue(t, &tc)
-	txnB := createTxnForPushQueue(t, &tc)
-	txnC := createTxnForPushQueue(t, &tc)
+	txnA, err := createTxnForPushQueue(context.Background(), &tc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	txnB, err := createTxnForPushQueue(context.Background(), &tc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	txnC, err := createTxnForPushQueue(context.Background(), &tc)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	reqA := &roachpb.PushTxnRequest{
 		PushType:  roachpb.PUSH_ABORT,
@@ -555,43 +576,38 @@ func TestPushTxnQueueDependencyCycle(t *testing.T) {
 
 	ptq := tc.repl.pushTxnQueue
 	ptq.Enable()
-	respCh := make(chan *roachpb.PushTxnResponse, 3)
-	errCh := make(chan *roachpb.Error, 3)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	for _, txn := range []*roachpb.Transaction{txnA, txnB, txnC} {
 		ptq.Enqueue(txn)
 	}
+
+	retCh := make(chan RespWithErr, 3)
 	for _, req := range []*roachpb.PushTxnRequest{reqA, reqB, reqC} {
 		go func(req *roachpb.PushTxnRequest) {
 			resp, pErr := ptq.MaybeWait(ctx, req)
-			respCh <- resp
-			errCh <- pErr
+			retCh <- RespWithErr{resp, pErr}
 		}(req)
 	}
 
 	// Wait for first request to finish, which should break the
 	// dependency cycle by returning an errDeadlock error.
-	var errDeadlockFound bool
-	if pErr := <-errCh; pErr != nil {
-		if pErr == errDeadlock {
-			errDeadlockFound = true
-		} else {
-			t.Errorf("expected only errDeadlock; got %s", pErr)
-		}
+	respWithErr := <-retCh
+	if respWithErr.pErr != errDeadlock {
+		t.Errorf("expected errDeadlock; got %v", respWithErr.pErr)
 	}
-	if resp := <-respCh; resp != nil {
-		t.Errorf("expected nil response; got %+v", resp)
-	}
-
-	if !errDeadlockFound {
-		t.Errorf("expected at least one caller to receive errDeadlock")
+	if respWithErr.resp != nil {
+		t.Errorf("expected nil response; got %+v", respWithErr.resp)
 	}
 	cancel()
 	for i := 0; i < 2; i++ {
-		<-errCh
-		<-respCh
+		<-retCh
 	}
+}
+
+type ReqWithErr struct {
+	req  *roachpb.PushTxnRequest
+	pErr *roachpb.Error
 }
 
 // TestPushTxnQueueDependencyCycleWithPriorityInversion verifies that
@@ -612,12 +628,16 @@ func TestPushTxnQueueDependencyCycleWithPriorityInversion(t *testing.T) {
 	// can in fact break the deadlock.
 	updatedTxnA := *txnA
 	updatedTxnA.Priority = 3
-	writeTxnRecord(t, &tc, &updatedTxnA)
+	if err := writeTxnRecord(context.Background(), &tc, &updatedTxnA); err != nil {
+		t.Fatal(err)
+	}
 	// Create txnB with priority=2, so txnA won't think it can push, but
 	// when we set up txnB as the pusher, the request will include txnA's
 	// updated priority, making txnB think it can't break a deadlock.
 	txnB := newTransaction("txn", roachpb.Key("a"), -2, enginepb.SERIALIZABLE, tc.Clock())
-	writeTxnRecord(t, &tc, txnB)
+	if err := writeTxnRecord(context.Background(), &tc, txnB); err != nil {
+		t.Fatal(err)
+	}
 
 	reqA := &roachpb.PushTxnRequest{
 		PushType:  roachpb.PUSH_ABORT,
@@ -632,31 +652,30 @@ func TestPushTxnQueueDependencyCycleWithPriorityInversion(t *testing.T) {
 
 	ptq := tc.repl.pushTxnQueue
 	ptq.Enable()
-	reqCh := make(chan *roachpb.PushTxnRequest, 2)
-	errCh := make(chan *roachpb.Error, 2)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	for _, txn := range []*roachpb.Transaction{txnA, txnB} {
 		ptq.Enqueue(txn)
 	}
+
+	retCh := make(chan ReqWithErr, 2)
 	for _, req := range []*roachpb.PushTxnRequest{reqA, reqB} {
 		go func(req *roachpb.PushTxnRequest) {
 			_, pErr := ptq.MaybeWait(ctx, req)
-			reqCh <- req
-			errCh <- pErr
+			retCh <- ReqWithErr{req, pErr}
 		}(req)
 	}
 
 	// Wait for first request to finish, which should break the
 	// dependency cycle by returning an errDeadlock error. The
 	// returned request should be reqA.
-	if pErr := <-errCh; pErr != errDeadlock {
-		t.Errorf("expected errDeadlock; got %v", pErr)
+	reqWithErr := <-retCh
+	if !reflect.DeepEqual(reqA, reqWithErr.req) {
+		t.Errorf("expected request %+v; got %+v", reqA, reqWithErr.req)
 	}
-	if req := <-reqCh; !reflect.DeepEqual(reqA, req) {
-		t.Errorf("expected request %+v; got %+v", reqA, req)
+	if reqWithErr.pErr != errDeadlock {
+		t.Errorf("expected errDeadlock; got %v", reqWithErr.pErr)
 	}
 	cancel()
-	<-errCh
-	<-reqCh
+	<-retCh
 }
