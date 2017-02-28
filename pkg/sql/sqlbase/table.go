@@ -1562,6 +1562,23 @@ func (desc TableDescriptor) collectConstraintInfo(
 			if _, ok := info[index.Name]; ok {
 				return nil, errors.Errorf("duplicate constraint name: %q", index.Name)
 			}
+			colMap := make(map[ColumnID]*ColumnDescriptor, len(desc.Columns))
+			for i, column := range desc.Columns {
+				colMap[column.ID] = &desc.Columns[i]
+			}
+			// Don't include constraints against only hidden columns.
+			// This prevents the auto-created rowid primary key index from showing up
+			// in show constraints.
+			hidden := true
+			for _, id := range index.ColumnIDs {
+				if !colMap[id].Hidden {
+					hidden = false
+					break
+				}
+			}
+			if hidden {
+				continue
+			}
 			detail := ConstraintDetail{Kind: ConstraintTypePK}
 			if tableLookup != nil {
 				detail.Columns = index.ColumnNames

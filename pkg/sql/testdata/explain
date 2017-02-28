@@ -220,7 +220,7 @@ EXPLAIN SHOW CONSTRAINTS FROM foo
 1  sort
 1                 order   +"Table",+Name
 2  values
-2                 size    5 columns, 1 row
+2                 size    5 columns, 0 rows
 
 query ITTT
 EXPLAIN SHOW USERS
