@@ -26,12 +26,13 @@ import (
 )
 
 type distinct struct {
-	input        RowSource
-	lastGroupKey sqlbase.EncDatumRow
-	seen         map[string]struct{}
-	orderedCols  map[uint32]struct{}
-	datumAlloc   sqlbase.DatumAlloc
-	out          procOutputHelper
+	input              RowSource
+	lastGroupKey       sqlbase.EncDatumRow
+	seen               map[string]struct{}
+	ordering           sqlbase.ColumnOrdering
+	datumAlloc         sqlbase.DatumAlloc
+	out                procOutputHelper
+	orderedColsScratch map[int]struct{}
 }
 
 var _ processor = &distinct{}
@@ -40,11 +41,9 @@ func newDistinct(
 	flowCtx *FlowCtx, spec *DistinctSpec, input RowSource, post *PostProcessSpec, output RowReceiver,
 ) (*distinct, error) {
 	d := &distinct{
-		input:       input,
-		orderedCols: make(map[uint32]struct{}),
-	}
-	for _, col := range spec.OrderedColumns {
-		d.orderedCols[col] = struct{}{}
+		input:              input,
+		ordering:           convertToColumnOrdering(spec.Ordering),
+		orderedColsScratch: make(map[int]struct{}),
 	}
 
 	if err := d.out.init(post, input.Types(), flowCtx.evalCtx, output); err != nil {
@@ -118,8 +117,8 @@ func (d *distinct) matchLastGroupKey(row sqlbase.EncDatumRow) (bool, error) {
 	if d.lastGroupKey == nil {
 		return false, nil
 	}
-	for colIdx := range d.orderedCols {
-		res, err := d.lastGroupKey[colIdx].Compare(&d.datumAlloc, &row[colIdx])
+	for _, col := range d.ordering {
+		res, err := d.lastGroupKey[col.ColIdx].Compare(&d.datumAlloc, &row[col.ColIdx])
 		if res != 0 || err != nil {
 			return false, err
 		}
@@ -131,13 +130,21 @@ func (d *distinct) matchLastGroupKey(row sqlbase.EncDatumRow) (bool, error) {
 // our 'seen' set.
 func (d *distinct) encode(appendTo []byte, row sqlbase.EncDatumRow) ([]byte, error) {
 	var err error
+
+	for k := range d.orderedColsScratch {
+		delete(d.orderedColsScratch, k)
+	}
+	var orderedColsScratch = make(map[int]struct{})
+	for _, ordered := range d.ordering {
+		orderedColsScratch[ordered.ColIdx] = struct{}{}
+	}
 	for i, datum := range row {
 		// If we are processing DISTINCT(x, y) and the input stream is ordered
 		// by x, we are using x as our group key (our 'seen' set at any given
 		// time is the set of all rows with the same group key). This alleviates
 		// the need to use x in our encoding when computing the key into our
 		// set.
-		if _, ordered := d.orderedCols[uint32(i)]; ordered {
+		if _, ok := orderedColsScratch[i]; ok {
 			continue
 		}
 
