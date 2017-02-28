@@ -9,6 +9,7 @@
 package storageccl
 
 import (
+	"bytes"
 	"fmt"
 
 	"golang.org/x/net/context"
@@ -119,6 +120,16 @@ func evalImport(ctx context.Context, cArgs storage.CommandArgs) error {
 		localPath, err := dir.FetchFile(ctx, file.Path)
 		if err != nil {
 			return err
+		}
+
+		if len(file.Sha512) > 0 {
+			checksum, err := sha512ChecksumFile(localPath)
+			if err != nil {
+				return err
+			}
+			if !bytes.Equal(checksum, file.Sha512) {
+				return errors.Errorf("checksum mismatch for %s", file.Path)
+			}
 		}
 
 		sst, err := engine.MakeRocksDBSstFileReader()
