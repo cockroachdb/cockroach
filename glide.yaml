@@ -43,4 +43,5 @@ import:
 - package: golang.org/x/net
   version: 6b27048ae5e6ad1ef927e72e437531493de612fe
 - package: google.golang.org/grpc
-  version: 20633fa172ac711ac6a77fd573ed13f23ec56dcb
+  version: d3f1ab4a4dca70781cf6dc850a79ed38632660a6
+  repo: git@github.com:petermattis/grpc-go.git
