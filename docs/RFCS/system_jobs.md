@@ -1,8 +1,8 @@
 - Feature Name: System Jobs
-- Status: draft
+- Status: in-progress
 - Start Date: 2017-02-13
 - Authors: Nikhil Benesch
-- RFC PR: (PR # after acceptance of initial draft)
+- RFC PR: [#13656]
 - Cockroach Issue: [#12555]
 
 # Summary
@@ -462,6 +462,7 @@ specific compelling use case for a full update history.
 [#7037]: https://github.com/cockroachdb/cockroach/pull/7073
 [#11722]: https://github.com/cockroachdb/cockroach/pull/11722
 [#12555]: https://github.com/cockroachdb/cockroach/issues/12555
+[#13656]: https://github.com/cockroachdb/cockroach/pull/13656
 [@a-robinson]: https://github.com/a-robinson
 [@danhhz]: https://github.com/danhhz
 [@vivekmenezes]: https://github.com/vivekmenezes
