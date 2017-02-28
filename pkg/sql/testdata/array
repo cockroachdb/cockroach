@@ -196,3 +196,6 @@ SELECT ROW (1,2,3)[1]
 
 statement ok
 SELECT conkey FROM pg_catalog.pg_constraint GROUP BY conkey
+
+statement ok
+SELECT indkey[0] FROM pg_catalog.pg_index
