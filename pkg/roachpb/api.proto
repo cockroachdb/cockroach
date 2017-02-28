@@ -815,6 +815,31 @@ message ExportResponse {
   repeated File files = 2 [(gogoproto.nullable) = false];
 }
 
+// ImportRequest is the argument to the Import() method, to bulk load key/value
+// entries.
+message ImportRequest {
+  message File {
+    optional ExportStorage dir = 1 [(gogoproto.nullable) = false];
+    optional string path = 2 [(gogoproto.nullable) = false];
+    optional uint32 crc = 3 [(gogoproto.nullable) = false, (gogoproto.customname) = "CRC"];
+  }
+  optional Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  // Files contains an ordered list of files, each containing kv entries to
+  // import. Entries in later files with the same key override earlier ones.
+  repeated File files = 2 [(gogoproto.nullable) = false];
+  // DataSpan is the pre-rewrite keyrange of the data in `Files`.
+  optional Span data_span = 3 [(gogoproto.nullable) = false];
+  // KeyRewrites contains rules to transform keys which will be run on all
+  // imported data. Any kv entry not matching one of these rules will not be
+  // imported.
+  repeated KeyRewrite key_rewrites = 4 [(gogoproto.nullable) = false];
+}
+
+// ImportResponse is the response to a Import() operation.
+message ImportResponse {
+  optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+}
+
 // A RequestUnion contains exactly one of the optional requests.
 // The values added here must match those in ResponseUnion.
 //
@@ -860,6 +885,7 @@ message RequestUnion {
   optional LeaseInfoRequest lease_info = 30;
   optional WriteBatchRequest write_batch = 31;
   optional ExportRequest export = 32;
+  optional ImportRequest import = 34;
   optional QueryTxnRequest query_txn = 33;
 }
 
@@ -905,6 +931,7 @@ message ResponseUnion {
   optional LeaseInfoResponse lease_info = 30;
   optional WriteBatchResponse write_batch = 31;
   optional ExportResponse export = 32;
+  optional ImportResponse import = 34;
   optional QueryTxnResponse query_txn = 33;
 }
 
