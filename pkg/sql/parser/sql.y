@@ -149,6 +149,15 @@ func (u *sqlSymUnion) tableNameReferences() TableNameReferences {
 func (u *sqlSymUnion) indexHints() *IndexHints {
     return u.val.(*IndexHints)
 }
+func (u *sqlSymUnion) arraySubscript() *ArraySubscript {
+    return u.val.(*ArraySubscript)
+}
+func (u *sqlSymUnion) arraySubscripts() ArraySubscripts {
+    if as, ok := u.val.(ArraySubscripts); ok {
+        return as
+    }
+    return nil
+}
 func (u *sqlSymUnion) stmt() Statement {
     if stmt, ok := u.val.(Statement); ok {
         return stmt
@@ -452,7 +461,7 @@ func (u *sqlSymUnion) kvOptions() []KVOption {
 %type <SelectExprs> target_list
 %type <UpdateExprs> set_clause_list
 %type <*UpdateExpr> set_clause multiple_set_clause
-%type <UnresolvedName> indirection opt_indirection
+%type <ArraySubscripts> array_subscripts
 %type <UnresolvedName> qname_indirection
 %type <NamePart> name_indirection_elem
 %type <Exprs> ctext_expr_list ctext_row
@@ -497,7 +506,7 @@ func (u *sqlSymUnion) kvOptions() []KVOption {
 %type <Expr>  where_clause
 %type <NamePart> glob_indirection
 %type <NamePart> name_indirection
-%type <NamePart> indirection_elem
+%type <*ArraySubscript> array_subscript
 %type <Expr> opt_slice_bound
 %type <*IndexHints> opt_index_hints
 %type <*IndexHints> index_hints_param
@@ -4057,11 +4066,11 @@ b_expr:
 // the b_expr syntax.
 c_expr:
   d_expr
-| d_expr indirection
+| d_expr array_subscripts
   {
     $$.val = &IndirectionExpr{
       Expr: $1.expr(),
-      Indirection: $2.unresolvedName(),
+      Indirection: $2.arraySubscripts(),
     }
   }
 | case_expr
@@ -4692,7 +4701,7 @@ case_arg:
     $$.val = Expr(nil)
   }
 
-indirection_elem:
+array_subscript:
   '[' a_expr ']'
   {
     $$.val = &ArraySubscript{Begin: $2.expr()}
@@ -4741,24 +4750,14 @@ qname_indirection:
     $$.val = append($1.unresolvedName(), $2.namePart())
   }
 
-indirection:
-  indirection_elem
+array_subscripts:
+  array_subscript
   {
-    $$.val = UnresolvedName{$1.namePart()}
+    $$.val = ArraySubscripts{$1.arraySubscript()}
   }
-| indirection indirection_elem
+| array_subscripts array_subscript
   {
-    $$.val = append($1.unresolvedName(), $2.namePart())
-  }
-
-opt_indirection:
-  /* EMPTY */
-  {
-    $$.val = UnresolvedName(nil)
-  }
-| opt_indirection indirection_elem
-  {
-    $$.val = append($1.unresolvedName(), $2.namePart())
+    $$.val = append($1.arraySubscripts(), $2.arraySubscript())
   }
 
 opt_asymmetric:

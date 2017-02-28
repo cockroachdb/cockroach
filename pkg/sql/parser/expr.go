@@ -1114,10 +1114,20 @@ func validCastTypes(t Type) []Type {
 	}
 }
 
+// ArraySubscripts represents a sequence of one or more array subscripts.
+type ArraySubscripts []*ArraySubscript
+
+// Format implements the NodeFormatter interface.
+func (a ArraySubscripts) Format(buf *bytes.Buffer, f FmtFlags) {
+	for _, s := range a {
+		FormatNode(buf, f, s)
+	}
+}
+
 // IndirectionExpr represents a subscript expression.
 type IndirectionExpr struct {
 	Expr        Expr
-	Indirection UnresolvedName
+	Indirection ArraySubscripts
 
 	typeAnnotation
 }

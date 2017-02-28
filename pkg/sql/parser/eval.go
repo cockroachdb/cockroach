@@ -2293,27 +2293,22 @@ func (expr *CastExpr) Eval(ctx *EvalContext) (Datum, error) {
 // Eval implements the TypedExpr interface.
 func (expr *IndirectionExpr) Eval(ctx *EvalContext) (Datum, error) {
 	var subscriptIdx int
-	for i, part := range expr.Indirection {
-		switch t := part.(type) {
-		case *ArraySubscript:
-			if t.Slice {
-				return nil, util.UnimplementedWithIssueErrorf(2115, "ARRAY slicing in %s", expr)
-			}
-			if i > 0 {
-				return nil, util.UnimplementedWithIssueErrorf(2115, "multidimensional ARRAY %s", expr)
-			}
-
-			d, err := t.Begin.(TypedExpr).Eval(ctx)
-			if err != nil {
-				return nil, err
-			}
-			if d == DNull {
-				return d, nil
-			}
-			subscriptIdx = int(MustBeDInt(d))
-		default:
-			return nil, errors.Errorf("syntax not yet supported: %s", expr.Indirection)
+	for i, t := range expr.Indirection {
+		if t.Slice {
+			return nil, util.UnimplementedWithIssueErrorf(2115, "ARRAY slicing in %s", expr)
 		}
+		if i > 0 {
+			return nil, util.UnimplementedWithIssueErrorf(2115, "multidimensional ARRAY %s", expr)
+		}
+
+		d, err := t.Begin.(TypedExpr).Eval(ctx)
+		if err != nil {
+			return nil, err
+		}
+		if d == DNull {
+			return d, nil
+		}
+		subscriptIdx = int(MustBeDInt(d))
 	}
 
 	d, err := expr.Expr.(TypedExpr).Eval(ctx)
