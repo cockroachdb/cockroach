@@ -181,7 +181,7 @@ func TestStoreConfig(clock *hlc.Clock) StoreConfig {
 
 var (
 	raftMaxSizePerMsg   = envutil.EnvOrDefaultInt("COCKROACH_RAFT_MAX_SIZE_PER_MSG", 16*1024)
-	raftMaxInflightMsgs = envutil.EnvOrDefaultInt("COCKROACH_RAFT_MAX_INFLIGHT_MSGS", 4)
+	raftMaxInflightMsgs = envutil.EnvOrDefaultInt("COCKROACH_RAFT_MAX_INFLIGHT_MSGS", 64)
 )
 
 func newRaftConfig(
@@ -208,9 +208,9 @@ func newRaftConfig(
 		// MaxInflightMsgs controls how many "inflight" messages Raft will send to
 		// a follower without hearing a response. The total number of Raft log
 		// entries is a combination of this setting and MaxSizePerMsg. The current
-		// settings provide for up to 64 KB of raft log to be sent without
+		// settings provide for up to 1 MB of raft log to be sent without
 		// acknowledgement. With an average entry size of 1 KB that translates to
-		// ~64 commands that might be executed in the handling of a single
+		// ~1024 commands that might be executed in the handling of a single
 		// raft.Ready operation.
 		MaxInflightMsgs: raftMaxInflightMsgs,
 	}
