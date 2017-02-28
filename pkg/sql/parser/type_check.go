@@ -891,7 +891,7 @@ func typeCheckComparisonOpWithSubOperator(
 			return leftTyped, rightTyped, CmpOp{}, nil
 		}
 
-		rightArr, ok := rightReturn.(TArray)
+		rightArr, ok := UnwrapType(rightReturn).(TArray)
 		if !ok {
 			return nil, nil, CmpOp{},
 				errors.Errorf(unsupportedCompErrFmtWithExprsAndSubOp, left, subOp, op, right,
