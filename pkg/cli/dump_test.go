@@ -252,7 +252,7 @@ INSERT INTO g (x, y) VALUES
 }
 
 func dumpSingleTable(w io.Writer, conn *sqlConn, dbName string, tName string) error {
-	mds, ts, err := getDumpMetadata(conn, dbName, []string{tName})
+	mds, ts, err := getDumpMetadata(conn, dbName, []string{tName}, "")
 	if err != nil {
 		return err
 	}
@@ -476,5 +476,80 @@ func TestDumpRandom(t *testing.T) {
 		if dump != dump2 {
 			t.Fatalf("unmatching dumps:\nFIRST:\n%s\n\nSECOND:\n%s", dump, dump2)
 		}
+	}
+}
+
+func TestDumpAsOf(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	c := newCLITest(cliTestParams{t: t})
+	defer c.cleanup()
+
+	const create = `
+	CREATE DATABASE d;
+	CREATE TABLE d.t (i int);
+	INSERT INTO d.t VALUES (1);
+	SELECT NOW();
+`
+
+	out, err := c.RunWithCaptureArgs([]string{"sql", "-e", create})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Last line is the timestamp.
+	fs := strings.Split(strings.TrimSpace(out), "\n")
+	ts := fs[len(fs)-1]
+
+	dump1, err := c.RunWithCaptureArgs([]string{"dump", "d", "t"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	const want1 = `dump d t
+CREATE TABLE t (
+	i INT NULL,
+	FAMILY "primary" (i, rowid)
+);
+
+INSERT INTO t (i) VALUES
+	(1);
+`
+	if dump1 != want1 {
+		t.Fatalf("expected: %s\ngot: %s", want1, dump1)
+	}
+
+	c.RunWithArgs([]string{"sql", "-e", `
+		ALTER TABLE d.t ADD COLUMN j int DEFAULT 2;
+		INSERT INTO d.t VALUES (3, 4);
+	`})
+
+	dump2, err := c.RunWithCaptureArgs([]string{"dump", "d", "t"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	const want2 = `dump d t
+CREATE TABLE t (
+	i INT NULL,
+	j INT NULL DEFAULT 2,
+	FAMILY "primary" (i, rowid, j)
+);
+
+INSERT INTO t (i, j) VALUES
+	(1, 2),
+	(3, 4);
+`
+	if dump2 != want2 {
+		t.Fatalf("expected: %s\ngot: %s", want2, dump2)
+	}
+
+	dumpAsOf, err := c.RunWithCaptureArgs([]string{"dump", "d", "t", "--as-of", ts})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Remove the timestamp from the first line.
+	dumpAsOf = fmt.Sprintf("dump d t\n%s", strings.SplitN(dumpAsOf, "\n", 2)[1])
+	if dumpAsOf != want1 {
+		t.Fatalf("expected: %s\ngot: %s", want1, dumpAsOf)
 	}
 }
