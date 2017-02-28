@@ -23,6 +23,7 @@ import (
 	"github.com/kr/pretty"
 )
 
+// TODO(DONOTMERGE): Add tests for windowing/decay logic.
 func TestReplicaStats(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
