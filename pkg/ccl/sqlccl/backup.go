@@ -948,7 +948,7 @@ func Restore(
 }
 
 func backupPlanHook(
-	baseCtx context.Context, stmt parser.Statement, cfg *sql.ExecutorConfig,
+	state sql.PlanHookState, stmt parser.Statement,
 ) (func() ([]parser.Datums, error), sql.ResultColumns, error) {
 	backup, ok := stmt.(*parser.Backup)
 	if !ok {
@@ -965,7 +965,7 @@ func backupPlanHook(
 	}
 	fn := func() ([]parser.Datums, error) {
 		// TODO(dan): Move this span into sql.
-		ctx, span := tracing.ChildSpan(baseCtx, stmt.StatementTag())
+		ctx, span := tracing.ChildSpan(state.Ctx, stmt.StatementTag())
 		defer tracing.FinishSpan(span)
 
 		var startTime hlc.Timestamp
@@ -976,14 +976,14 @@ func backupPlanHook(
 				return nil, err
 			}
 		}
-		endTime := cfg.Clock.Now()
+		endTime := state.ExecCfg.Clock.Now()
 		if backup.AsOf.Expr != nil {
 			var err error
 			if endTime, err = sql.EvalAsOfTimestamp(nil, backup.AsOf, endTime); err != nil {
 				return nil, err
 			}
 		}
-		desc, err := Backup(ctx, *cfg.DB, backup.To, backup.Targets, startTime, endTime)
+		desc, err := Backup(ctx, *state.ExecCfg.DB, backup.To, backup.Targets, startTime, endTime)
 		if err != nil {
 			return nil, err
 		}
@@ -999,7 +999,7 @@ func backupPlanHook(
 }
 
 func restorePlanHook(
-	baseCtx context.Context, stmt parser.Statement, cfg *sql.ExecutorConfig,
+	state sql.PlanHookState, stmt parser.Statement,
 ) (func() ([]parser.Datums, error), sql.ResultColumns, error) {
 	restore, ok := stmt.(*parser.Restore)
 	if !ok {
@@ -1011,10 +1011,10 @@ func restorePlanHook(
 
 	fn := func() ([]parser.Datums, error) {
 		// TODO(dan): Move this span into sql.
-		ctx, span := tracing.ChildSpan(baseCtx, stmt.StatementTag())
+		ctx, span := tracing.ChildSpan(state.Ctx, stmt.StatementTag())
 		defer tracing.FinishSpan(span)
 
-		_, err := Restore(ctx, *cfg.DB, restore.From, restore.Targets)
+		_, err := Restore(ctx, *state.ExecCfg.DB, restore.From, restore.Targets)
 		return nil, err
 	}
 	return fn, nil, nil
