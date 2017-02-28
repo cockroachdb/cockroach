@@ -563,7 +563,8 @@ func (u *sqlSymUnion) kvOptions() []KVOption {
 %type <str>   non_reserved_word_or_sconst
 %type <Expr>  var_value
 %type <Expr>  zone_value
-%type <[]string> string_list
+%type <Expr> string_or_placeholder
+%type <Expr> string_or_placeholder_list
 
 %type <str>   unreserved_keyword type_func_name_keyword
 %type <str>   col_name_keyword reserved_keyword
@@ -986,35 +987,45 @@ alter_using:
 | /* EMPTY */ {}
 
 backup_stmt:
-  BACKUP targets TO non_reserved_word_or_sconst opt_as_of_clause opt_incremental opt_with_options
+  BACKUP targets TO string_or_placeholder opt_as_of_clause opt_incremental opt_with_options
   {
     /* SKIP DOC */
-    $$.val = &Backup{Targets: $2.targetList(), To: $4, IncrementalFrom: $6.strs(), AsOf: $5.asOfClause(), Options: $7.kvOptions()}
+    $$.val = &Backup{Targets: $2.targetList(), To: $4.expr(), IncrementalFrom: $6.exprs(), AsOf: $5.asOfClause(), Options: $7.kvOptions()}
   }
-| RESTORE targets FROM string_list opt_as_of_clause opt_with_options
+| RESTORE targets FROM string_or_placeholder_list opt_as_of_clause opt_with_options
   {
     /* SKIP DOC */
-    $$.val = &Restore{Targets: $2.targetList(), From: $4.strs(), AsOf: $5.asOfClause(), Options: $6.kvOptions()}
+    $$.val = &Restore{Targets: $2.targetList(), From: $4.exprs(), AsOf: $5.asOfClause(), Options: $6.kvOptions()}
   }
 
-string_list:
+string_or_placeholder:
   non_reserved_word_or_sconst
   {
-    $$.val = []string{$1}
+    $$.val = &StrVal{s: $1}
   }
-| string_list ',' non_reserved_word_or_sconst
+| PLACEHOLDER
   {
-    $$.val = append($1.strs(), $3)
+    $$.val = NewPlaceholder($1)
+  }
+
+string_or_placeholder_list:
+  string_or_placeholder
+  {
+    $$.val = Exprs{$1.expr()}
+  }
+| string_or_placeholder_list ',' string_or_placeholder
+  {
+    $$.val = append($1.exprs(), $3.expr())
   }
 
 opt_incremental:
-  INCREMENTAL FROM string_list
+  INCREMENTAL FROM string_or_placeholder_list
   {
-    $$.val = $3.strs()
+    $$.val = $3.exprs()
   }
 | /* EMPTY */
   {
-    $$.val = []string(nil)
+    $$.val = Exprs(nil)
   }
 
 opt_equal_value:
@@ -3037,7 +3048,7 @@ opt_tableref_col_list:
 
 tableref_col_list:
   ICONST
-  { 
+  {
     id, err := $1.numVal().AsInt64()
     if err != nil { sqllex.Error(err.Error()); return 1 }
     $$.val = []ColumnID{ColumnID(id)}

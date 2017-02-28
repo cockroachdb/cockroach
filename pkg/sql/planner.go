@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/pkg/errors"
 )
 
 // planner is the centerpiece of SQL statement execution combining session
@@ -465,4 +466,46 @@ func (p *planner) isDatabaseVisible(dbName string) bool {
 		return true
 	}
 	return false
+}
+
+// TypeAsString enforces (not hints) that the given expression typechecks as a
+// string and returns a function that can be called to get the string value
+// during (planNode).Start.
+func (p *planner) TypeAsString(e *parser.Expr) (func() string, error) {
+	typedE, err := (*e).TypeCheck(&p.semaCtx, parser.TypeString)
+	if err != nil {
+		return nil, err
+	}
+	if typ := typedE.ResolvedType(); typ != parser.TypeString {
+		return nil, errors.Errorf("expression '%s' did not type as a string: %s", *e, typ)
+	}
+	*e = typedE
+	fn := func() string {
+		return string(*(*e).(*parser.DString))
+	}
+	return fn, nil
+}
+
+// TypeAsString enforces (not hints) that the given expressions all typecheck as
+// a string and returns a function that can be called to get the string values
+// during (planNode).Start.
+func (p *planner) TypeAsStringArray(exprs *parser.Exprs) (func() []string, error) {
+	for i := range *exprs {
+		typedE, err := (*exprs)[i].TypeCheck(&p.semaCtx, parser.TypeString)
+		if err != nil {
+			return nil, err
+		}
+		if typ := typedE.ResolvedType(); typ != parser.TypeString {
+			return nil, errors.Errorf("expression '%s' did not type as a string: %s", (*exprs)[i], typ)
+		}
+		(*exprs)[i] = typedE
+	}
+	fn := func() []string {
+		strs := make([]string, len(*exprs))
+		for i := range *exprs {
+			strs[i] = string(*(*exprs)[i].(*parser.DString))
+		}
+		return strs
+	}
+	return fn, nil
 }
