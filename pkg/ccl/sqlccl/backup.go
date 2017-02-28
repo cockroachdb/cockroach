@@ -26,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/interval"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -207,7 +206,7 @@ func Backup(
 		dataSize int64
 	}{}
 
-	var wg util.WaitGroupWithError
+	var wg syncutil.WaitGroupWithError
 	header := roachpb.Header{Timestamp: endTime}
 	storageConf := exportStore.Conf()
 	for i := range spans {
@@ -299,7 +298,7 @@ func Import(
 	// Arrived at by tuning and watching the effect on BenchmarkRestore.
 	const batchSizeBytes = 1000000
 
-	var wg util.WaitGroupWithError
+	var wg syncutil.WaitGroupWithError
 	b := struct {
 		engine.RocksDBBatchBuilder
 		batchStartKey []byte
@@ -644,7 +643,7 @@ func presplitRanges(baseCtx context.Context, db client.DB, input []roachpb.Key) 
 		return nil
 	}
 
-	var wg util.WaitGroupWithError
+	var wg syncutil.WaitGroupWithError
 	var splitFn func([]roachpb.Key)
 	splitFn = func(splitPoints []roachpb.Key) {
 		// Pick the index such that it's 0 if len(splitPoints) == 1.
@@ -917,7 +916,7 @@ func Restore(
 	// TODO(dan): Wait for the newly created ranges (and leaseholders) to
 	// rebalance.
 
-	var wg util.WaitGroupWithError
+	var wg syncutil.WaitGroupWithError
 	for i := range importRequests {
 		wg.Add(1)
 		go func(i importEntry) {
