@@ -39,7 +39,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -1028,7 +1027,7 @@ func TestRefreshPendingCommands(t *testing.T) {
 			// Start draining stores 0 and 1 to prevent them from grabbing any new
 			// leases.
 			mtc.advanceClock(context.Background())
-			var wg util.WaitGroupWithError
+			var wg syncutil.WaitGroupWithError
 			for i := 0; i < 2; i++ {
 				wg.Add(1)
 				go func(i int) {

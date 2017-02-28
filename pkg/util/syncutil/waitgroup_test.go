@@ -14,25 +14,25 @@
 //
 // Author: Daniel Harrison (dan@cockroachlabs.com)
 
-package util_test
+package syncutil_test
 
 import (
 	"errors"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/testutils"
-	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
 func TestWaitGroupNoError(t *testing.T) {
-	var wg util.WaitGroupWithError
+	var wg syncutil.WaitGroupWithError
 	if err := wg.Wait(); err != nil {
 		t.Fatal(err)
 	}
 }
 
 func TestWaitGroupNilError(t *testing.T) {
-	var wg util.WaitGroupWithError
+	var wg syncutil.WaitGroupWithError
 	wg.Add(1)
 	wg.Done(nil)
 	if err := wg.Wait(); err != nil {
@@ -41,7 +41,7 @@ func TestWaitGroupNilError(t *testing.T) {
 }
 
 func TestWaitGroupOneError(t *testing.T) {
-	var wg util.WaitGroupWithError
+	var wg syncutil.WaitGroupWithError
 	wg.Add(1)
 	wg.Done(errors.New("one"))
 	if err := wg.Wait(); !testutils.IsError(err, "one") {
@@ -50,7 +50,7 @@ func TestWaitGroupOneError(t *testing.T) {
 }
 
 func TestWaitGroupTwoErrors(t *testing.T) {
-	var wg util.WaitGroupWithError
+	var wg syncutil.WaitGroupWithError
 	wg.Add(2)
 	wg.Done(errors.New("one"))
 	wg.Done(errors.New("two"))
