@@ -89,8 +89,8 @@ CREATE TABLE crdb_internal.tables (
 			if err := addRow(
 				parser.NewDInt(parser.DInt(int64(table.ID))),
 				parser.NewDInt(parser.DInt(int64(table.ParentID))),
-				parser.NewDString(parser.Name(table.Name).String()),
-				parser.NewDString(parser.Name(dbName).String()),
+				parser.NewDString(table.Name),
+				parser.NewDString(dbName),
 				parser.NewDInt(parser.DInt(int64(table.Version))),
 				parser.MakeDTimestamp(time.Unix(0, table.ModificationTime.WallTime), time.Microsecond),
 				parser.TimestampToDecimal(table.ModificationTime),
@@ -134,7 +134,7 @@ CREATE TABLE crdb_internal.schema_changes (
 			}
 			tableID := parser.NewDInt(parser.DInt(int64(table.ID)))
 			parentID := parser.NewDInt(parser.DInt(int64(table.ParentID)))
-			tableName := parser.NewDString(parser.Name(table.Name).String())
+			tableName := parser.NewDString(table.Name)
 			for _, mut := range table.Mutations {
 				mutType := "UNKNOWN"
 				targetID := parser.DNull
@@ -203,7 +203,7 @@ CREATE TABLE crdb_internal.leases (
 					if err := addRow(
 						nodeID,
 						tableID,
-						parser.NewDString(parser.Name(state.Name).String()),
+						parser.NewDString(state.Name),
 						parser.NewDInt(parser.DInt(int64(state.ParentID))),
 						&expCopy,
 						parser.MakeDBool(parser.DBool(state.released)),

@@ -44,3 +44,14 @@ TABLE_ID  PARENT_ID  NAME       DATABASE_NAME  VERSION  MOD_TIME                
           FAMILY "primary" (parentID, name),
           FAMILY fam_3_id (id)
 )
+
+# Verify that table names are not double escaped.
+
+statement ok
+CREATE TABLE testdb." ""\'" (i int)
+
+query T
+SELECT NAME from crdb_internal.tables WHERE DATABASE_NAME = 'testdb'
+----
+foo
+"\'
