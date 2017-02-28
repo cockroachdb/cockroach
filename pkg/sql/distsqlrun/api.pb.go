@@ -38,6 +38,7 @@
 		AggregatorSpec
 		BackfillerSpec
 		FlowSpec
+		ExceptAllSpec
 */
 package distsqlrun
 
