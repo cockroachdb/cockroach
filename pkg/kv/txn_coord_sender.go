@@ -875,11 +875,6 @@ func (tc *TxnCoordSender) updateState(
 		if txnMeta != nil {
 			txnMeta.keys = keys
 		} else if len(keys) > 0 {
-			// For review: again, we need to take this check out. Is this the
-			// right thing to do?
-			// if !newTxn.Writing {
-			// 	panic("txn with intents marked as non-writing")
-			// }
 			// If the transaction is already over, there's no point in
 			// launching a one-off coordinator which will shut down right
 			// away. If we ended up here with an error, we'll always start
@@ -921,9 +916,6 @@ func (tc *TxnCoordSender) updateState(
 	// Update our record of this transaction, even on error.
 	if txnMeta != nil {
 		txnMeta.txn.Update(&newTxn)
-		// if !txnMeta.txn.Writing {
-		// 	panic("tracking a non-writing txn")
-		// }
 		txnMeta.setLastUpdate(tc.clock.PhysicalNow())
 	}
 
