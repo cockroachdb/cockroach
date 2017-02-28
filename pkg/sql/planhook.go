@@ -42,6 +42,8 @@ var planHooks []planHookFn
 // the hooks that implement it.
 type PlanHookState interface {
 	ExecCfg() *ExecutorConfig
+	TypeAsString(e *parser.Expr) (func() string, error)
+	TypeAsStringArray(e *parser.Exprs) (func() []string, error)
 	AuthorizationAccessor
 }
 
