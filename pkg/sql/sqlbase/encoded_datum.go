@@ -258,10 +258,15 @@ func (r EncDatumRow) stringToBuf(a *DatumAlloc, b *bytes.Buffer) {
 	b.WriteString("]")
 }
 
-func (r EncDatumRow) String() string {
+// StringWithAlloc is String but allows for passing in a DatumAlloc
+func (r EncDatumRow) StringWithAlloc(d *DatumAlloc) string {
 	var b bytes.Buffer
-	r.stringToBuf(&DatumAlloc{}, &b)
+	r.stringToBuf(d, &b)
 	return b.String()
+}
+
+func (r EncDatumRow) String() string {
+	return r.StringWithAlloc(&DatumAlloc{})
 }
 
 // EncDatumRowToDatums converts a given EncDatumRow to a Datums.
