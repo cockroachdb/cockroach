@@ -30,7 +30,7 @@ func init() {
 
 // evalWriteBatch applies the operations encoded in a BatchRepr.
 func evalWriteBatch(
-	ctx context.Context, batch engine.ReadWriter, cArgs storage.CommandArgs, resp roachpb.Response,
+	ctx context.Context, batch engine.ReadWriter, cArgs storage.CommandArgs, _ roachpb.Response,
 ) (storage.EvalResult, error) {
 	if !storage.ProposerEvaluatedKVEnabled() {
 		// To reduce the footprint of things that have ever been downstream of
