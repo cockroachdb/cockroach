@@ -34,7 +34,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -45,9 +44,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/metric"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/gogo/protobuf/jsonpb"
 	"github.com/pkg/errors"
 )
@@ -235,25 +231,10 @@ func TestAcceptEncoding(t *testing.T) {
 // ranges are carried out properly.
 func TestMultiRangeScanDeleteRange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s, _, db := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop()
 	ts := s.(*TestServer)
-	retryOpts := base.DefaultRetryOptions()
-	retryOpts.Closer = ts.stopper.ShouldQuiesce()
-	ds := kv.NewDistSender(kv.DistSenderConfig{
-		Clock:           s.Clock(),
-		RPCContext:      s.RPCContext(),
-		RPCRetryOptions: &retryOpts,
-	}, ts.Gossip())
-	ambient := log.AmbientContext{Tracer: tracing.NewTracer()}
-	tds := kv.NewTxnCoordSender(
-		ambient,
-		ds,
-		s.Clock(),
-		ts.Cfg.Linearizable,
-		ts.stopper,
-		kv.MakeTxnMetrics(metric.TestSampleInterval),
-	)
+	tds := db.GetSender()
 
 	if err := ts.node.storeCfg.DB.AdminSplit(context.TODO(), "m"); err != nil {
 		t.Fatal(err)
@@ -308,7 +289,7 @@ func TestMultiRangeScanDeleteRange(t *testing.T) {
 	}
 
 	scan := roachpb.NewScan(writes[0], writes[len(writes)-1].Next())
-	txn := &roachpb.Transaction{Name: "MyTxn"}
+	txn := roachpb.NewTransaction("MyTxn", nil, 0, 0, s.Clock().Now(), 0)
 	reply, err = client.SendWrappedWith(context.Background(), tds, roachpb.Header{Txn: txn}, scan)
 	if err != nil {
 		t.Fatal(err)
@@ -338,25 +319,10 @@ func TestMultiRangeScanWithMaxResults(t *testing.T) {
 	}
 
 	for i, tc := range testCases {
-		s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+		s, _, db := serverutils.StartServer(t, base.TestServerArgs{})
 		defer s.Stopper().Stop()
 		ts := s.(*TestServer)
-		retryOpts := base.DefaultRetryOptions()
-		retryOpts.Closer = ts.stopper.ShouldQuiesce()
-		ds := kv.NewDistSender(kv.DistSenderConfig{
-			Clock:           s.Clock(),
-			RPCContext:      s.RPCContext(),
-			RPCRetryOptions: &retryOpts,
-		}, ts.Gossip())
-		ambient := log.AmbientContext{Tracer: tracing.NewTracer()}
-		tds := kv.NewTxnCoordSender(
-			ambient,
-			ds,
-			ts.Clock(),
-			ts.Cfg.Linearizable,
-			ts.stopper,
-			kv.MakeTxnMetrics(metric.TestSampleInterval),
-		)
+		tds := db.GetSender()
 
 		for _, sk := range tc.splitKeys {
 			if err := ts.node.storeCfg.DB.AdminSplit(context.TODO(), sk); err != nil {

@@ -694,13 +694,9 @@ func (txn *Txn) send(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.
 		}
 
 		// For testing purposes, txn.UserPriority can be a negative value (see
-		// MakePriority).
+		// roachpb.MakePriority).
 		if txn.mu.UserPriority != 0 {
 			ba.UserPriority = txn.mu.UserPriority
-		}
-
-		if !txn.mu.Proto.IsInitialized() {
-			InitTxnProtoFromRequest(&txn.mu.Proto, ba.UserPriority, txn.db.clock)
 		}
 
 		needBeginTxn = !(txn.mu.Proto.Writing || txn.mu.writingTxnRecord) && haveTxnWrite
@@ -737,6 +733,30 @@ func (txn *Txn) send(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.
 			// We're going to be writing the transaction record by sending the
 			// begin transaction request.
 			txn.mu.writingTxnRecord = true
+		}
+
+		// Initialize an uninitialized (ID == nil) Transaction proto.
+		if !txn.mu.Proto.IsInitialized() {
+			// The initial timestamp may be communicated by a higher layer.
+			// If so, use that. Otherwise make up a new one.
+			timestamp := txn.mu.Proto.OrigTimestamp
+			if timestamp == (hlc.Timestamp{}) {
+				timestamp = txn.db.clock.Now()
+			}
+			newTxn := roachpb.NewTransaction(
+				txn.mu.Proto.Name,
+				txn.mu.Proto.Key,
+				ba.UserPriority,
+				txn.mu.Proto.Isolation,
+				timestamp,
+				txn.db.clock.MaxOffset().Nanoseconds(),
+			)
+			// Use existing priority as a minimum. This is used on transaction
+			// aborts to ratchet priority when creating successor transaction.
+			if newTxn.Priority < txn.mu.Proto.Priority {
+				newTxn.Priority = txn.mu.Proto.Priority
+			}
+			txn.mu.Proto = *newTxn
 		}
 
 		if elideEndTxn {
@@ -858,33 +878,6 @@ func firstWriteIndex(ba roachpb.BatchRequest) (int, *roachpb.Error) {
 		}
 	}
 	return firstWriteIdx, nil
-}
-
-// InitTxnProtoFromRequest initializes an uninitialized (ID == nil) Transaction proto
-// using the provided priority and clock.
-func InitTxnProtoFromRequest(
-	proto *roachpb.Transaction, priority roachpb.UserPriority, clock *hlc.Clock,
-) {
-	// The initial timestamp may be communicated by a higher layer.
-	// If so, use that. Otherwise make up a new one.
-	timestamp := proto.OrigTimestamp
-	if timestamp == (hlc.Timestamp{}) {
-		timestamp = clock.Now()
-	}
-	newTxn := roachpb.NewTransaction(
-		proto.Name,
-		nil, /* baseKey */
-		priority,
-		proto.Isolation,
-		timestamp,
-		clock.MaxOffset().Nanoseconds(),
-	)
-	// Use existing priority as a minimum. This is used on transaction
-	// aborts to ratchet priority when creating successor transaction.
-	if newTxn.Priority < proto.Priority {
-		newTxn.Priority = proto.Priority
-	}
-	*proto = *newTxn
 }
 
 func (txn *Txn) updateStateOnErrLocked(pErr *roachpb.Error) {
