@@ -1,6 +1,6 @@
 # Contributing to Cockroach
 
-### Getting and Building
+## Getting and Building
 
 1.  Install the following prerequisites, as necessary:
   - A C++ compiler that supports C++11. Note that GCC prior to 6.0 doesn't work due to https://gcc.gnu.org/bugzilla/show_bug.cgi?id=48891
@@ -20,7 +20,7 @@
 3.  Run `make build`, `make test`, or anything else our Makefile offers. Note that the first time you run `make`, it can take some time to download and install various dependencies. After running `make build`, the `cockroach` executable will be in your current directory and can be run as shown in the
 [README](README.md).
 
-**Other Considerations:**
+### Other Considerations
 
 - The `make build` command builds a binary covered by the CockroachDB Community License. To build a pure open-source (APL2) version instead, use `make buildoss`. See this [blog post](https://www.cockroachlabs.com/blog/how-were-building-a-business-to-last/) for more details. 
 
@@ -37,11 +37,11 @@
   - Run `go generate ./pkg/...` to update generated files.
   - Create a PR with all the changes.
 
-### Style guide
+## Style Guide
 
 [Style Guide](STYLE.md)
 
-### Code review workflow
+## Code Review Workflow
 
 + All contributors need to sign the [Contributor License Agreement]
   (https://cla-assistant.io/cockroachdb/cockroach).
@@ -112,7 +112,7 @@
   Most new contributors aren't allowed to merge themselves; in that case, we'll
   do it for you.
 
-### Debugging
+## Debugging
 
 Peeking into a running cluster can be done in several ways:
 
