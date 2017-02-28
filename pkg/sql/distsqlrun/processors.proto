@@ -200,7 +200,7 @@ message DistinctSpec {
   // possible optimizations. The specific ordering (ascending/descending) of
   // the column itself is not important nor is the order in which the columns
   // are specified.
-  repeated uint32 ordered_columns = 1;
+  optional Ordering ordering = 1 [(gogoproto.nullable) = false];
 }
 
 enum JoinType {
