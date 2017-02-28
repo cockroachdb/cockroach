@@ -1041,7 +1041,7 @@ func TestTxnCoordSenderSingleRoundtripTxn(t *testing.T) {
 	ba.Add(&roachpb.BeginTransactionRequest{Span: roachpb.Span{Key: key}})
 	ba.Add(&roachpb.PutRequest{Span: roachpb.Span{Key: key}})
 	ba.Add(&roachpb.EndTransactionRequest{})
-	ba.Txn = &roachpb.Transaction{Name: "test"}
+	ba.Txn = roachpb.NewTransaction("test", key, 0, 0, clock.Now(), 0)
 	_, pErr := ts.Send(context.Background(), ba)
 	if pErr != nil {
 		t.Fatal(pErr)
@@ -1097,7 +1097,7 @@ func TestTxnCoordSenderErrorWithIntent(t *testing.T) {
 			ba.Add(&roachpb.BeginTransactionRequest{Span: roachpb.Span{Key: key}})
 			ba.Add(&roachpb.PutRequest{Span: roachpb.Span{Key: key}})
 			ba.Add(&roachpb.EndTransactionRequest{})
-			ba.Txn = &roachpb.Transaction{Name: "test"}
+			ba.Txn = roachpb.NewTransaction("test", key, 0, 0, clock.Now(), 0)
 			_, pErr := ts.Send(context.Background(), ba)
 			if !testutils.IsPError(pErr, test.errMsg) {
 				t.Errorf("%d: error did not match %s: %v", i, test.errMsg, pErr)
