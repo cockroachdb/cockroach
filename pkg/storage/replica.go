@@ -568,7 +568,7 @@ func newReplica(rangeID roachpb.RangeID, store *Store) *Replica {
 		pushTxnQueue:   newPushTxnQueue(store),
 	}
 	if store.cfg.StorePool != nil {
-		r.stats = newReplicaStats(store.cfg.StorePool.getNodeLocalityString)
+		r.stats = newReplicaStats(store.Clock(), store.cfg.StorePool.getNodeLocalityString)
 	}
 
 	// Init rangeStr with the range ID.
