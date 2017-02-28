@@ -60,7 +60,14 @@ func TestDistinct(t *testing.T) {
 			},
 		}, {
 			spec: DistinctSpec{
-				OrderedColumns: []uint32{1},
+				Ordering: Ordering{
+					Columns: []Ordering_Column{
+						{
+							ColIdx:    1,
+							Direction: Ordering_Column_ASC,
+						},
+					},
+				},
 			},
 			input: sqlbase.EncDatumRows{
 				{v[2], v[3]},
