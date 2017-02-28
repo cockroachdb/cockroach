@@ -294,7 +294,7 @@ func (tc *TxnCoordSender) Send(
 
 	if ba.Txn != nil {
 		// If this request is part of a transaction...
-		if err := tc.maybeBeginTxn(&ba); err != nil {
+		if err := tc.validateTxnForBatch(&ba); err != nil {
 			return nil, roachpb.NewError(err)
 		}
 
@@ -507,23 +507,17 @@ func (tc *TxnCoordSender) maybeRejectClientLocked(
 	}
 }
 
-// maybeBeginTxn begins a new transaction if a txn has been specified
-// in the request but has a nil ID. The new transaction is initialized
-// using the name and isolation in the otherwise uninitialized txn.
-// The Priority, if non-zero is used as a minimum.
-//
-// No transactional writes are allowed unless preceded by a begin
-// transaction request within the same batch. The exception is if the
-// transaction is already in state txn.Writing=true.
-func (tc *TxnCoordSender) maybeBeginTxn(ba *roachpb.BatchRequest) error {
+// validateTxn validates properties of a txn specified on a request.
+// The transaction is expected to be initialized by the time it reaches
+// the TxnCoordSender. Furthermore, no transactional writes are allowed
+// unless preceded by a begin transaction request within the same batch.
+// The exception is if the transaction is already in state txn.Writing=true.
+func (tc *TxnCoordSender) validateTxnForBatch(ba *roachpb.BatchRequest) error {
 	if len(ba.Requests) == 0 {
 		return errors.Errorf("empty batch with txn")
 	}
 	if !ba.Txn.IsInitialized() {
-		// This is not possible if the BatchRequest is sent from a client.Txn,
-		// because the client.Txn will also perform proto initialization (under
-		// lock).
-		client.InitTxnProtoFromRequest(ba.Txn, ba.UserPriority, tc.clock)
+		return errors.Errorf("uninitialized txn found on BatchRequest passed to TxnCoordSender: %v", ba)
 	}
 
 	// Check for a begin transaction to set txn key based on the key of
@@ -532,15 +526,14 @@ func (tc *TxnCoordSender) maybeBeginTxn(ba *roachpb.BatchRequest) error {
 	var haveBeginTxn bool
 	for _, req := range ba.Requests {
 		args := req.GetInner()
-		if bt, ok := args.(*roachpb.BeginTransactionRequest); ok {
+		if _, ok := args.(*roachpb.BeginTransactionRequest); ok {
 			if haveBeginTxn || ba.Txn.Writing {
-				return errors.Errorf("begin transaction requested twice in the same transaction: %s", ba.Txn)
+				return errors.Errorf("begin transaction requested twice in the same txn: %s", ba.Txn)
+			}
+			if ba.Txn.Key == nil {
+				return errors.Errorf("transaction with BeginTxnRequest missing anchor key: %v", ba)
 			}
 			haveBeginTxn = true
-			if ba.Txn.Key == nil {
-				// This will always be set by a BatchRequest from client.Txn.
-				ba.Txn.Key = bt.Key
-			}
 		}
 	}
 	return nil
