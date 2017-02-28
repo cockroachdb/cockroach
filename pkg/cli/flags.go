@@ -364,6 +364,7 @@ func init() {
 
 	varFlag(sqlShellCmd.Flags(), &sqlCtx.execStmts, cliflags.Execute)
 	varFlag(dumpCmd.Flags(), &dumpCtx.dumpMode, cliflags.DumpMode)
+	stringFlag(dumpCmd.Flags(), &dumpCtx.asOf, cliflags.DumpTime, "")
 
 	boolFlag(freezeClusterCmd.PersistentFlags(), &undoFreezeCluster, cliflags.UndoFreezeCluster, false)
 

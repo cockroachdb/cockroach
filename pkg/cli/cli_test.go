@@ -179,6 +179,12 @@ func (c cliTest) RunWithCapture(line string) (out string, err error) {
 	})
 }
 
+func (c cliTest) RunWithCaptureArgs(args []string) (out string, err error) {
+	return captureOutput(func() {
+		c.RunWithArgs(args)
+	})
+}
+
 // captureOutput runs f and returns a string containing the output and any
 // error that may have occurred capturing the output.
 func captureOutput(f func()) (out string, err error) {
