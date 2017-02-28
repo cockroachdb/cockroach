@@ -275,17 +275,10 @@ func (expr *IfExpr) Walk(v Visitor) Expr {
 // CopyNode makes a copy of this Expr without recursing in any child Exprs.
 func (expr *IndirectionExpr) CopyNode() *IndirectionExpr {
 	exprCopy := *expr
-	exprCopy.Indirection = append(UnresolvedName(nil), exprCopy.Indirection...)
-	for i, part := range exprCopy.Indirection {
-		switch t := part.(type) {
-		case Name:
-		case UnqualifiedStar:
-		case *ArraySubscript:
-			subscriptCopy := *t
-			exprCopy.Indirection[i] = &subscriptCopy
-		default:
-			panic(fmt.Sprintf("unexpected NamePart type %T", t))
-		}
+	exprCopy.Indirection = append(ArraySubscripts(nil), exprCopy.Indirection...)
+	for i, t := range exprCopy.Indirection {
+		subscriptCopy := *t
+		exprCopy.Indirection[i] = &subscriptCopy
 	}
 	return &exprCopy
 }
@@ -302,31 +295,24 @@ func (expr *IndirectionExpr) Walk(v Visitor) Expr {
 		ret.Expr = e
 	}
 
-	for i, part := range expr.Indirection {
-		switch t := part.(type) {
-		case Name:
-		case UnqualifiedStar:
-		case *ArraySubscript:
-			if t.Begin != nil {
-				e, changed := WalkExpr(v, t.Begin)
-				if changed {
-					if ret == expr {
-						ret = expr.CopyNode()
-					}
-					ret.Indirection[i].(*ArraySubscript).Begin = e
+	for i, t := range expr.Indirection {
+		if t.Begin != nil {
+			e, changed := WalkExpr(v, t.Begin)
+			if changed {
+				if ret == expr {
+					ret = expr.CopyNode()
 				}
+				ret.Indirection[i].Begin = e
 			}
-			if t.End != nil {
-				e, changed := WalkExpr(v, t.End)
-				if changed {
-					if ret == expr {
-						ret = expr.CopyNode()
-					}
-					ret.Indirection[i].(*ArraySubscript).End = e
+		}
+		if t.End != nil {
+			e, changed := WalkExpr(v, t.End)
+			if changed {
+				if ret == expr {
+					ret = expr.CopyNode()
 				}
+				ret.Indirection[i].End = e
 			}
-		default:
-			panic(fmt.Sprintf("unexpected NamePart type %T", t))
 		}
 	}
 
