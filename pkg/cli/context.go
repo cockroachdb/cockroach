@@ -120,6 +120,8 @@ type dumpContext struct {
 
 	// dumpMode determines which part of the database should be dumped.
 	dumpMode dumpMode
+
+	asOf string
 }
 
 type dumpMode int

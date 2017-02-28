@@ -58,7 +58,7 @@ func runDump(cmd *cobra.Command, args []string) error {
 		tableNames = args[1:]
 	}
 
-	mds, ts, err := getDumpMetadata(conn, dbName, tableNames)
+	mds, ts, err := getDumpMetadata(conn, dbName, tableNames, dumpCtx.asOf)
 	if err != nil {
 		return err
 	}
@@ -67,19 +67,21 @@ func runDump(cmd *cobra.Command, args []string) error {
 	// topological order to ensure key relationships can be verified
 	// during load.
 
+	w := os.Stdout
+
 	if dumpCtx.dumpMode != dumpDataOnly {
 		for i, md := range mds {
 			if i > 0 {
-				fmt.Println()
+				fmt.Fprintln(w)
 			}
-			if err := dumpCreateTable(os.Stdout, md); err != nil {
+			if err := dumpCreateTable(w, md); err != nil {
 				return err
 			}
 		}
 	}
 	if dumpCtx.dumpMode != dumpSchemaOnly {
 		for _, md := range mds {
-			if err := dumpTableData(os.Stdout, conn, ts, md); err != nil {
+			if err := dumpTableData(w, conn, ts, md); err != nil {
 				return err
 			}
 		}
@@ -102,49 +104,52 @@ type tableMetadata struct {
 // It also retrieves the cluster timestamp at which the metadata was
 // retrieved.
 func getDumpMetadata(
-	conn *sqlConn, origDBName string, tableNames []string,
+	conn *sqlConn, dbName string, tableNames []string, asOf string,
 ) (mds []tableMetadata, clusterTS string, err error) {
-	// Fetch all table metadata in a transaction and its time to guarantee it
-	// doesn't change between the various SHOW statements.
-	if err := conn.Exec("BEGIN", nil); err != nil {
-		return nil, "", err
+	if asOf == "" {
+		// Converting to a string here is useful since we only need a string below
+		// for the AS OF SYSTEM TIME insertion and the database is guaranteed to be
+		// able to parse its own output.
+		vals, err := conn.QueryRow("SELECT now()::string", nil)
+		if err != nil {
+			return nil, "", err
+		}
+		clusterTS = vals[0].(string)
+	} else {
+		// Validate the timestamp. This prevents SQL injection.
+		if _, err := parser.ParseDTimestamp(asOf, time.Nanosecond); err != nil {
+			return nil, "", err
+		}
+		clusterTS = asOf
 	}
 
-	vals, err := conn.QueryRow("SELECT cluster_logical_timestamp()", nil)
-	if err != nil {
-		return nil, "", err
-	}
-	clusterTS = string(vals[0].([]byte))
-
-	dbName := parser.Name(origDBName)
 	if tableNames == nil {
-		tableNames, err = getTableNames(conn, dbName)
+		tableNames, err = getTableNames(conn, dbName, clusterTS)
 		if err != nil {
 			return nil, "", err
 		}
 	}
 
 	mds = make([]tableMetadata, len(tableNames))
-	for i, origTableName := range tableNames {
-		tableName := parser.Name(origTableName)
-
-		md, err := getMetadataForTable(conn, dbName, tableName)
+	for i, tableName := range tableNames {
+		md, err := getMetadataForTable(conn, dbName, tableName, clusterTS)
 		if err != nil {
 			return nil, "", err
 		}
 		mds[i] = md
 	}
 
-	if err := conn.Exec("COMMIT", nil); err != nil {
-		return nil, "", err
-	}
-
 	return mds, clusterTS, nil
 }
 
 // getTableNames retrieves all tables names in the given database.
-func getTableNames(conn *sqlConn, dbName parser.Name) (tableNames []string, err error) {
-	rows, err := conn.Query(fmt.Sprintf("SHOW TABLES FROM %s", dbName), nil)
+func getTableNames(conn *sqlConn, dbName string, ts string) (tableNames []string, err error) {
+	rows, err := conn.Query(fmt.Sprintf(`
+		SELECT TABLE_NAME
+		FROM information_schema.tables
+		AS OF SYSTEM TIME '%s'
+		WHERE TABLE_SCHEMA = $1
+		`, ts), []driver.Value{dbName})
 	if err != nil {
 		return nil, err
 	}
@@ -171,18 +176,15 @@ func getTableNames(conn *sqlConn, dbName parser.Name) (tableNames []string, err 
 	return tableNames, nil
 }
 
-func getMetadataForTable(conn *sqlConn, dbName, tableName parser.Name) (tableMetadata, error) {
-	// A previous version of the code did a SELECT on system.descriptor. This
-	// required the SELECT privilege to the descriptor table, which only root
-	// has. Allowing non-root to do this would let users see other users' table
-	// descriptors which is a problem in multi-tenancy.
-
-	if err := conn.Exec(fmt.Sprintf("SET DATABASE = %s", dbName), nil); err != nil {
-		return tableMetadata{}, err
-	}
-
+func getMetadataForTable(conn *sqlConn, dbName, tableName string, ts string) (tableMetadata, error) {
 	// Fetch column types.
-	rows, err := conn.Query(fmt.Sprintf("SHOW COLUMNS FROM %s", tableName), nil)
+	rows, err := conn.Query(fmt.Sprintf(`
+		SELECT COLUMN_NAME, DATA_TYPE
+		FROM information_schema.columns
+		AS OF SYSTEM TIME '%s'
+		WHERE TABLE_SCHEMA = $1
+			AND TABLE_NAME = $2
+		`, ts), []driver.Value{dbName, tableName})
 	if err != nil {
 		return tableMetadata{}, err
 	}
@@ -214,15 +216,35 @@ func getMetadataForTable(conn *sqlConn, dbName, tableName parser.Name) (tableMet
 		return tableMetadata{}, err
 	}
 
-	// Primary index is always the first index returned by SHOW INDEX.
-	rows, err = conn.Query(fmt.Sprintf("SHOW INDEX FROM %s", tableName), nil)
+	// Fetch the primary index name.
+	vals, err = conn.QueryRow(fmt.Sprintf(`
+		SELECT CONSTRAINT_NAME
+		FROM information_schema.table_constraints
+		AS OF SYSTEM TIME '%s'
+		WHERE TABLE_SCHEMA = $1
+			AND TABLE_NAME = $2
+			AND CONSTRAINT_TYPE='PRIMARY KEY'
+		`, ts), []driver.Value{dbName, tableName})
 	if err != nil {
 		return tableMetadata{}, err
 	}
-	vals = make([]driver.Value, 5)
+	primaryIndex := vals[0].(string)
+
+	rows, err = conn.Query(fmt.Sprintf(`
+		SELECT COLUMN_NAME
+		FROM information_schema.key_column_usage
+		AS OF SYSTEM TIME '%s'
+		WHERE TABLE_SCHEMA = $1
+			AND TABLE_NAME = $2
+			AND CONSTRAINT_NAME = $3
+		ORDER BY ORDINAL_POSITION
+		`, ts), []driver.Value{dbName, tableName, primaryIndex})
+	if err != nil {
+		return tableMetadata{}, err
+	}
+	vals = make([]driver.Value, 1)
 
 	var numIndexCols int
-	var primaryIndex string
 	var idxColNames bytes.Buffer
 	// Find the primary index columns.
 	for {
@@ -231,23 +253,11 @@ func getMetadataForTable(conn *sqlConn, dbName, tableName parser.Name) (tableMet
 		} else if err != nil {
 			return tableMetadata{}, err
 		}
-		b, ok := vals[1].(string)
-		if !ok {
-			return tableMetadata{}, fmt.Errorf("unexpected value: %T", vals[1])
-		}
-		if primaryIndex == "" {
-			primaryIndex = b
-		} else if primaryIndex != b {
-			break
-		}
-		b, ok = vals[4].(string)
-		if !ok {
-			return tableMetadata{}, fmt.Errorf("unexpected value: %T", vals[4])
-		}
+		name := vals[0].(string)
 		if idxColNames.Len() > 0 {
 			idxColNames.WriteString(", ")
 		}
-		parser.Name(b).Format(&idxColNames, parser.FmtSimple)
+		parser.Name(name).Format(&idxColNames, parser.FmtSimple)
 		numIndexCols++
 	}
 	if err := rows.Close(); err != nil {
@@ -257,14 +267,22 @@ func getMetadataForTable(conn *sqlConn, dbName, tableName parser.Name) (tableMet
 		return tableMetadata{}, fmt.Errorf("no primary key index found")
 	}
 
-	vals, err = conn.QueryRow(fmt.Sprintf("SHOW CREATE TABLE %s", tableName), nil)
+	name := &parser.TableName{DatabaseName: parser.Name(dbName), TableName: parser.Name(tableName)}
+
+	vals, err = conn.QueryRow(fmt.Sprintf(`
+		SELECT CREATE_TABLE
+		FROM crdb_internal.tables
+		AS OF SYSTEM TIME '%s'
+		WHERE NAME = $1
+			AND DATABASE_NAME = $2
+		`, ts), []driver.Value{tableName, dbName})
 	if err != nil {
 		return tableMetadata{}, err
 	}
-	create := vals[1].(string)
+	create := vals[0].(string)
 
 	return tableMetadata{
-		name:         &parser.TableName{DatabaseName: dbName, TableName: tableName},
+		name:         name,
 		primaryIndex: primaryIndex,
 		numIndexCols: numIndexCols,
 		idxColNames:  idxColNames.String(),
@@ -296,7 +314,7 @@ const (
 func dumpTableData(w io.Writer, conn *sqlConn, clusterTS string, md tableMetadata) error {
 	// Build the SELECT query.
 	var sbuf bytes.Buffer
-	fmt.Fprintf(&sbuf, "SELECT %s, %s FROM %s@%s AS OF SYSTEM TIME %s",
+	fmt.Fprintf(&sbuf, "SELECT %s, %s FROM %s@%s AS OF SYSTEM TIME '%s'",
 		md.idxColNames, md.columnNames, md.name, parser.Name(md.primaryIndex), clusterTS)
 
 	var wbuf bytes.Buffer
