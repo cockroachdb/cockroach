@@ -18,70 +18,8 @@ package distsqlrun
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/pkg/errors"
 )
-
-// streamCacher is a thin wrapper around an ordered RowSource buffering in the most
-// recently received rows.
-type streamCacher struct {
-	src      NoMetadataRowSource
-	ordering sqlbase.ColumnOrdering
-	// rows contains the last set of rows received from the source.
-	rows       []sqlbase.EncDatumRow
-	datumAlloc sqlbase.DatumAlloc
-}
-
-// nextRow() is a wrapper around RowSource.NextRow() which simultaneously saves
-// the retrieved row within the stream's most recently added rows buffer.
-func (s *streamCacher) nextRow() (sqlbase.EncDatumRow, error) {
-	row, err := s.src.NextRow()
-	if err != nil {
-		return nil, err
-	}
-	// We don't make the explicit check for row == nil and therefore add the nil
-	// row to the row buffer. This is because the nil row can be used in
-	// group comparisons (end of stream is effectively another group).
-	s.rows = append(s.rows, row)
-	return row, nil
-}
-
-// currentGroup returns the set of rows belonging to the same group as
-// s.rows[0], i.e. with the same group key (comprised of the set of ordered
-// columns).
-func (s *streamCacher) currentGroup() []sqlbase.EncDatumRow {
-	// we ignore the last row of the row buffer because this is either a nil row
-	// (end of stream) or a row not "equal" to s.rows[0], either case it belongs
-	// to the next group.
-	return s.rows[:len(s.rows)-1]
-}
-
-// advanceGroup moves over the 'current group' window to point to the next group
-// discarding the previous.
-func (s *streamCacher) advanceGroup() sqlbase.EncDatumRow {
-	// for each stream we discard all the rows except the last row (which is
-	// either a nil row or a row not "equal" to s.rows[0], either case it
-	// belongs to the next group.
-	s.rows[0] = s.rows[len(s.rows)-1]
-	s.rows = s.rows[:1]
-	return s.rows[0]
-}
-
-// accumulateGroup collects all the rows that are "equal" to s.rows[0], the
-// first occurrence of a row not "equal" to s.rows[0] is stored at the end of
-// s.rows.
-func (s *streamCacher) accumulateGroup() error {
-	for {
-		next, err := s.nextRow()
-		if err != nil || next == nil {
-			return err
-		}
-		cmp, err := s.rows[0].Compare(&s.datumAlloc, s.ordering, next)
-		if err != nil || cmp != 0 {
-			return err
-		}
-	}
-}
 
 // We define a group to be a set of rows from a given source with the same
 // group key, in this case the set of ordered columns. streamMerger emits
@@ -117,7 +55,7 @@ func (sm *streamMerger) computeBatch() error {
 		return nil
 	}
 
-	cmp, err := sm.compare(lrow, rrow)
+	cmp, err := CompareEncDatumRowForMerge(lrow, rrow, sm.left.ordering, sm.right.ordering, &sm.datumAlloc)
 	if err != nil {
 		return err
 	}
@@ -166,35 +104,6 @@ func (sm *streamMerger) computeBatch() error {
 	}
 
 	return nil
-}
-
-func (sm *streamMerger) compare(lhs, rhs sqlbase.EncDatumRow) (int, error) {
-	if lhs == nil && rhs == nil {
-		panic("comparing two nil rows")
-	}
-
-	if lhs == nil {
-		return 1, nil
-	}
-	if rhs == nil {
-		return -1, nil
-	}
-
-	for i, ord := range sm.left.ordering {
-		lIdx := ord.ColIdx
-		rIdx := sm.right.ordering[i].ColIdx
-		cmp, err := lhs[lIdx].Compare(&sm.datumAlloc, &rhs[rIdx])
-		if err != nil {
-			return 0, err
-		}
-		if cmp != 0 {
-			if sm.left.ordering[i].Direction == encoding.Descending {
-				cmp = -cmp
-			}
-			return cmp, nil
-		}
-	}
-	return 0, nil
 }
 
 func (sm *streamMerger) NextBatch() ([][2]sqlbase.EncDatumRow, error) {
