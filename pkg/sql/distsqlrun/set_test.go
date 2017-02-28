@@ -1,0 +1,284 @@
+// Copyright 2017 The Cockroach Authors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+// implied. See the License for the specific language governing
+// permissions and limitations under the License.
+//
+// Author: Arjun Narayan (arjun@cockroachlabs.com)
+
+package distsqlrun
+
+import (
+	"testing"
+
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/pkg/errors"
+	"golang.org/x/net/context"
+)
+
+type testCase struct {
+	spec       SetOpSpec
+	inputLeft  sqlbase.EncDatumRows
+	inputRight sqlbase.EncDatumRows
+	expected   sqlbase.EncDatumRows
+}
+
+func runProcessors(tc testCase) (sqlbase.EncDatumRows, error) {
+	inL := NewRowBuffer(nil, tc.inputLeft)
+	inR := NewRowBuffer(nil, tc.inputRight)
+	out := &RowBuffer{}
+
+	flowCtx := FlowCtx{}
+
+	s, err := newSet(&flowCtx, &tc.spec, inL, inR, &PostProcessSpec{}, out)
+	if err != nil {
+		return nil, err
+	}
+
+	s.Run(context.Background(), nil)
+	if out.Err != nil {
+		return nil, out.Err
+	}
+	if !out.Closed {
+		return nil, errors.Errorf("output RowReceiver not closed")
+	}
+
+	return out.Rows, nil
+}
+
+func TestUnionAll(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	v := [15]sqlbase.EncDatum{}
+	for i := range v {
+		v[i] = sqlbase.DatumToEncDatum(sqlbase.ColumnType{Kind: sqlbase.ColumnType_INT},
+			parser.NewDInt(parser.DInt(i)))
+	}
+
+	testCases := []testCase{
+		{
+			spec: SetOpSpec{
+				Type: SetOpSpec_UnionAll,
+			},
+			inputLeft: sqlbase.EncDatumRows{
+				{v[2], v[3]},
+				{v[5], v[6]},
+				{v[2], v[3]},
+				{v[5], v[6]},
+				{v[2], v[6]},
+				{v[3], v[5]},
+				{v[2], v[9]},
+			},
+			inputRight: sqlbase.EncDatumRows{
+				{v[2], v[3]},
+				{v[5], v[6]},
+				{v[2], v[3]},
+				{v[5], v[6]},
+				{v[2], v[6]},
+				{v[3], v[5]},
+				{v[2], v[9]},
+			},
+			expected: sqlbase.EncDatumRows{
+				{v[2], v[3]},
+				{v[5], v[6]},
+				{v[2], v[3]},
+				{v[5], v[6]},
+				{v[2], v[6]},
+				{v[3], v[5]},
+				{v[2], v[9]},
+				{v[2], v[3]},
+				{v[5], v[6]},
+				{v[2], v[3]},
+				{v[5], v[6]},
+				{v[2], v[6]},
+				{v[3], v[5]},
+				{v[2], v[9]},
+			},
+		},
+		{
+			spec: SetOpSpec{
+				Ordering: Ordering{
+					Columns: []Ordering_Column{
+						{
+							ColIdx:    0,
+							Direction: Ordering_Column_ASC,
+						},
+					},
+				},
+				Type: SetOpSpec_UnionAll,
+			},
+			inputLeft: sqlbase.EncDatumRows{
+				{v[2], v[3]},
+				{v[3], v[6]},
+				{v[4], v[3]},
+				{v[5], v[6]},
+				{v[6], v[6]},
+				{v[7], v[5]},
+				{v[8], v[9]},
+			},
+			inputRight: sqlbase.EncDatumRows{
+				{v[3], v[3]},
+				{v[5], v[6]},
+				{v[7], v[3]},
+				{v[9], v[6]},
+				{v[11], v[6]},
+				{v[13], v[5]},
+				{v[14], v[9]},
+			},
+			expected: sqlbase.EncDatumRows{
+				{v[2], v[3]},
+				{v[3], v[6]},
+				{v[3], v[3]},
+				{v[4], v[3]},
+				{v[5], v[6]},
+				{v[5], v[6]},
+				{v[6], v[6]},
+				{v[7], v[5]},
+				{v[7], v[3]},
+				{v[8], v[9]},
+				{v[9], v[6]},
+				{v[11], v[6]},
+				{v[13], v[5]},
+				{v[14], v[9]},
+			},
+		},
+	}
+	for i, tc := range testCases {
+		outRows, err := runProcessors(tc)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if result := outRows.String(); result != tc.expected.String() {
+			t.Errorf("invalid result index %d: %s, expected %s'", i, result, tc.expected.String())
+		}
+	}
+}
+
+func TestExceptAll(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	v := [15]sqlbase.EncDatum{}
+	for i := range v {
+		v[i] = sqlbase.DatumToEncDatum(sqlbase.ColumnType{Kind: sqlbase.ColumnType_INT},
+			parser.NewDInt(parser.DInt(i)))
+	}
+
+	testCases := []testCase{
+		{
+			spec: SetOpSpec{
+				Type: SetOpSpec_ExceptAll,
+			},
+			inputLeft: sqlbase.EncDatumRows{
+				{v[2], v[3]},
+				{v[5], v[6]},
+				{v[2], v[3]},
+				{v[5], v[6]},
+				{v[2], v[6]},
+				{v[3], v[5]},
+				{v[2], v[9]},
+			},
+			inputRight: sqlbase.EncDatumRows{
+				{v[2], v[3]},
+				{v[5], v[6]},
+				{v[2], v[3]},
+				{v[5], v[6]},
+			},
+			expected: sqlbase.EncDatumRows{
+				{v[2], v[6]},
+				{v[3], v[5]},
+				{v[2], v[9]},
+			},
+		},
+		{
+			spec: SetOpSpec{
+				Ordering: Ordering{
+					Columns: []Ordering_Column{
+						{
+							ColIdx:    0,
+							Direction: Ordering_Column_ASC,
+						},
+					},
+				},
+				Type: SetOpSpec_ExceptAll,
+			},
+			inputLeft: sqlbase.EncDatumRows{
+				{v[2], v[3]},
+				{v[3], v[6]},
+				{v[4], v[3]},
+				{v[5], v[6]},
+				{v[6], v[6]},
+				{v[7], v[5]},
+				{v[8], v[9]},
+			},
+			inputRight: sqlbase.EncDatumRows{
+				{v[3], v[6]},
+				{v[5], v[6]},
+				{v[7], v[3]},
+				{v[9], v[6]},
+				{v[11], v[6]},
+				{v[13], v[5]},
+				{v[14], v[9]},
+			},
+			expected: sqlbase.EncDatumRows{
+				{v[2], v[3]},
+				{v[4], v[3]},
+				{v[6], v[6]},
+				{v[7], v[5]},
+				{v[8], v[9]},
+			},
+		},
+		{
+			spec: SetOpSpec{
+				Ordering: Ordering{
+					Columns: []Ordering_Column{
+						{
+							ColIdx:    0,
+							Direction: Ordering_Column_ASC,
+						},
+					},
+				},
+				Type: SetOpSpec_ExceptAll,
+			},
+			inputLeft: sqlbase.EncDatumRows{
+				{v[2], v[3]},
+				{v[3], v[6]},
+				{v[4], v[3]},
+				{v[5], v[6]},
+				{v[6], v[6]},
+				{v[7], v[5]},
+				{v[8], v[9]},
+			},
+			inputRight: sqlbase.EncDatumRows{
+				{v[0], v[0]},
+			},
+			expected: sqlbase.EncDatumRows{
+				{v[2], v[3]},
+				{v[3], v[6]},
+				{v[4], v[3]},
+				{v[5], v[6]},
+				{v[6], v[6]},
+				{v[7], v[5]},
+				{v[8], v[9]},
+			},
+		},
+	}
+	for i, tc := range testCases {
+		outRows, err := runProcessors(tc)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if result := outRows.String(); result != tc.expected.String() {
+			t.Errorf("invalid result index %d: %s, expected %s'", i, result, tc.expected.String())
+		}
+	}
+}
