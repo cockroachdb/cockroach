@@ -18,7 +18,7 @@ For multi-user cooperation, please see [Terraform's documentation on remote stat
 4. Set your credentials in environment variables:
 ```
 $ export GOOGLE_CREDENTIALS="contents of json credentials file"
-$ export GOOGLE_PROJECT="my-google-project"
+$ export CLOUDSDK_CORE_PROJECT="my-google-project"
 ```
 5. Create a new pair of ssh keys `ssh-keygen -t rsa -C "your-email"` for GCE and save them in `~/.ssh/google_compute_engine`,
 or use an existing pair and adjust the `key_name` variable described below. Do not use a passphrase while generating the keys
