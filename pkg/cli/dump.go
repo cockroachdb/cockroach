@@ -225,10 +225,18 @@ func getMetadataForTable(conn *sqlConn, dbName, tableName string, ts string) (ta
 			AND TABLE_NAME = $2
 			AND CONSTRAINT_TYPE='PRIMARY KEY'
 		`, ts), []driver.Value{dbName, tableName})
+
+	var primaryIndex string
+
 	if err != nil {
-		return tableMetadata{}, err
+		// If the above query returns no rows, err will be set to io.EOF.
+		// This indicates that there is no visible primary index in the table.
+		if err != io.EOF {
+			return tableMetadata{}, err
+		}
+	} else {
+		primaryIndex = vals[0].(string)
 	}
-	primaryIndex := vals[0].(string)
 
 	rows, err = conn.Query(fmt.Sprintf(`
 		SELECT COLUMN_NAME
@@ -262,9 +270,6 @@ func getMetadataForTable(conn *sqlConn, dbName, tableName string, ts string) (ta
 	}
 	if err := rows.Close(); err != nil {
 		return tableMetadata{}, err
-	}
-	if numIndexCols == 0 {
-		return tableMetadata{}, fmt.Errorf("no primary key index found")
 	}
 
 	name := &parser.TableName{DatabaseName: parser.Name(dbName), TableName: parser.Name(tableName)}
@@ -314,8 +319,17 @@ const (
 func dumpTableData(w io.Writer, conn *sqlConn, clusterTS string, md tableMetadata) error {
 	// Build the SELECT query.
 	var sbuf bytes.Buffer
-	fmt.Fprintf(&sbuf, "SELECT %s, %s FROM %s@%s AS OF SYSTEM TIME '%s'",
-		md.idxColNames, md.columnNames, md.name, parser.Name(md.primaryIndex), clusterTS)
+	if md.idxColNames == "" {
+		// TODO(mjibson): remove hard coded rowid. Maybe create a crdb_internal
+		// table with the information we need instead.
+		md.idxColNames = "rowid"
+		md.numIndexCols = 1
+	}
+	fmt.Fprintf(&sbuf, "SELECT %s, %s FROM %s", md.idxColNames, md.columnNames, md.name)
+	if md.primaryIndex != "" {
+		fmt.Fprintf(&sbuf, "@%s", parser.Name(md.primaryIndex))
+	}
+	fmt.Fprintf(&sbuf, " AS OF SYSTEM TIME '%s'", clusterTS)
 
 	var wbuf bytes.Buffer
 	fmt.Fprintf(&wbuf, " WHERE ROW (%s) > ROW (", md.idxColNames)

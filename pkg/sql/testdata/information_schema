@@ -502,7 +502,6 @@ def                 constraint_db      check_a          constraint_db  t1       
 def                 constraint_db      primary          constraint_db  t1          PRIMARY KEY
 def                 constraint_db      t1_a_key         constraint_db  t1          UNIQUE
 def                 constraint_db      fk               constraint_db  t2          FOREIGN KEY
-def                 constraint_db      primary          constraint_db  t2          PRIMARY KEY
 
 statement ok
 DROP DATABASE constraint_db
@@ -678,7 +677,6 @@ def                 constraint_column  fk               def            constrain
 def                 constraint_column  primary          def            constraint_column  t2          t1_ID        1                 NULL
 def                 constraint_column  fk               def            constraint_column  t3          a            1                 1
 def                 constraint_column  fk               def            constraint_column  t3          b            2                 2
-def                 constraint_column  primary          def            constraint_column  t3          rowid        1                 NULL
 
 statement ok
 DROP DATABASE constraint_column

@@ -184,7 +184,6 @@ SHOW CONSTRAINTS FROM delivery
 ----
 delivery  fk_item_ref_products   FOREIGN KEY (UNVALIDATED)  item             products.[upc]
 delivery  fk_order_ref_orders    FOREIGN KEY                order, shipment  orders.[id shipment]
-delivery  primary                PRIMARY KEY                rowid            NULL
 
 statement error foreign key violation: "delivery" row item='885155001450' has no match in "products"
 ALTER TABLE delivery VALIDATE CONSTRAINT fk_item_ref_products
@@ -194,7 +193,6 @@ SHOW CONSTRAINTS FROM delivery
 ----
 delivery  fk_item_ref_products   FOREIGN KEY (UNVALIDATED)  item             products.[upc]
 delivery  fk_order_ref_orders    FOREIGN KEY                order, shipment  orders.[id shipment]
-delivery  primary                PRIMARY KEY                rowid            NULL
 
 statement ok
 UPDATE products SET upc = '885155001450' WHERE sku = '780'
@@ -211,7 +209,6 @@ SHOW CONSTRAINTS FROM delivery
 ----
 delivery  fk_item_ref_products   FOREIGN KEY        item             products.[upc]
 delivery  fk_order_ref_orders    FOREIGN KEY        order, shipment  orders.[id shipment]
-delivery  primary                PRIMARY KEY        rowid            NULL
 
 statement ok
 ALTER TABLE "user content"."customer reviews"
