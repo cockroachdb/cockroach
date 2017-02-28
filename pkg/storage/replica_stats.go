@@ -15,70 +15,115 @@
 package storage
 
 import (
+	"math"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+)
+
+const (
+	rotateInterval = 5 * time.Minute
+	decayFactor    = 0.8
 )
 
 type localityOracle func(roachpb.NodeID) string
 
 // perLocalityCounts maps from the string representation of a locality to count.
-type perLocalityCounts map[string]int64
+type perLocalityCounts map[string]float64
 
 // replicaStats maintains statistics about the work done by a replica. Its
 // initial use is tracking the number of requests received from each
 // cluster locality in order to inform lease transfer decisions.
 type replicaStats struct {
+	clock           *hlc.Clock
 	getNodeLocality localityOracle
 
+	// We use a set of time windows in order to age out old stats without having
+	// to do hard resets. The `requests` array is a circular buffer of the last
+	// N windows of stats. We rotate through the circular buffer every so often
+	// as determined by `rotateInterval`.
+	//
+	// We could alternatively use a forward decay approach here, but it would
+	// require more memory than this slightly less precise windowing method:
+	//   http://dimacs.rutgers.edu/~graham/pubs/papers/fwddecay.pdf
 	mu struct {
 		syncutil.Mutex
-		// TODO(a-robinson): Use a form of exponential decay on the counts rather
-		// than hard resets back to zero?
-		requests  perLocalityCounts
-		lastReset time.Time
+		idx        int
+		requests   [5]perLocalityCounts
+		lastRotate time.Time
+		lastReset  time.Time
 	}
 }
 
-func newReplicaStats(getNodeLocality localityOracle) *replicaStats {
+func newReplicaStats(clock *hlc.Clock, getNodeLocality localityOracle) *replicaStats {
 	rs := &replicaStats{
+		clock:           clock,
 		getNodeLocality: getNodeLocality,
 	}
-	rs.mu.requests = make(perLocalityCounts)
-	rs.mu.lastReset = timeutil.Now()
+	rs.mu.requests[rs.mu.idx] = make(perLocalityCounts)
+	rs.mu.lastRotate = time.Unix(0, rs.clock.PhysicalNow())
+	rs.mu.lastReset = rs.mu.lastRotate
 	return rs
 }
 
 func (rs *replicaStats) record(nodeID roachpb.NodeID) {
 	locality := rs.getNodeLocality(nodeID)
+	now := time.Unix(0, rs.clock.PhysicalNow())
 
 	rs.mu.Lock()
 	defer rs.mu.Unlock()
-	rs.mu.requests[locality]++
+
+	rs.rotateIfNeededLocked(now)
+	rs.mu.requests[rs.mu.idx][locality]++
+}
+
+func (rs *replicaStats) rotateIfNeededLocked(now time.Time) {
+	if now.Sub(rs.mu.lastRotate) >= rotateInterval {
+		rs.rotateLocked()
+		rs.mu.lastRotate = now
+	}
+}
+
+func (rs *replicaStats) rotateLocked() {
+	rs.mu.idx = (rs.mu.idx + 1) % len(rs.mu.requests)
+	rs.mu.requests[rs.mu.idx] = make(perLocalityCounts)
 }
 
 // getRequestCounts returns the current per-locality request counts and the
 // amount of time over which the counts were accumulated.
 func (rs *replicaStats) getRequestCounts() (perLocalityCounts, time.Duration) {
+	now := time.Unix(0, rs.clock.PhysicalNow())
+
 	rs.mu.Lock()
 	defer rs.mu.Unlock()
 
-	dur := timeutil.Now().Sub(rs.mu.lastReset)
+	rs.rotateIfNeededLocked(now)
 
 	counts := make(perLocalityCounts)
-	for k := range rs.mu.requests {
-		counts[k] = rs.mu.requests[k]
+	for i := range rs.mu.requests {
+		// We have to add len(rs.mu.requests) to the numerator to avoid getting a
+		// negative result from the modulus operation when rs.mu.idx is small.
+		requestsIdx := (rs.mu.idx + len(rs.mu.requests) - i) % len(rs.mu.requests)
+		if cur := rs.mu.requests[requestsIdx]; cur != nil {
+			for k, v := range cur {
+				counts[k] += v * math.Pow(decayFactor, float64(i))
+			}
+		}
 	}
 
-	return counts, dur
+	return counts, now.Sub(rs.mu.lastReset)
 }
 
 func (rs *replicaStats) resetRequestCounts() {
 	rs.mu.Lock()
 	defer rs.mu.Unlock()
 
-	rs.mu.requests = make(perLocalityCounts)
-	rs.mu.lastReset = timeutil.Now()
+	for i := range rs.mu.requests {
+		rs.mu.requests[i] = nil
+	}
+	rs.mu.requests[rs.mu.idx] = make(perLocalityCounts)
+	rs.mu.lastRotate = time.Unix(0, rs.clock.PhysicalNow())
+	rs.mu.lastReset = rs.mu.lastRotate
 }
