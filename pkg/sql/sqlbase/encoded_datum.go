@@ -258,10 +258,15 @@ func (r EncDatumRow) stringToBuf(a *DatumAlloc, b *bytes.Buffer) {
 	b.WriteString("]")
 }
 
-func (r EncDatumRow) String() string {
+// StringWithAlloc is String but allows for passing in a DatumAlloc
+func (r EncDatumRow) StringWithAlloc(d *DatumAlloc) string {
 	var b bytes.Buffer
-	r.stringToBuf(&DatumAlloc{}, &b)
+	r.stringToBuf(d, &b)
 	return b.String()
+}
+
+func (r EncDatumRow) String() string {
+	return r.StringWithAlloc(&DatumAlloc{})
 }
 
 // EncDatumRowToDatums converts a given EncDatumRow to a Datums.
@@ -303,6 +308,46 @@ func (r EncDatumRow) Compare(a *DatumAlloc, ordering ColumnOrdering, rhs EncDatu
 		}
 		if cmp != 0 {
 			if c.Direction == encoding.Descending {
+				cmp = -cmp
+			}
+			return cmp, nil
+		}
+	}
+	return 0, nil
+}
+
+// CompareEncDatumRow EncDatumRow compares two EncDatumRows as with Compare, but
+// allows for the EncDatumRow to be nil. CompareEncDatumRow returns 0 when both
+// are nil, and a nil row is considered greater than any non-nil row.
+// CompareEncDatumRow assumes that the two rows have the same columns in the
+// same orders, but with potentially different ordering directions.
+func CompareEncDatumRow(
+	lhs, rhs EncDatumRow, leftOrdering, rightOrdering ColumnOrdering, da *DatumAlloc,
+) (int, error) {
+	if lhs == nil && rhs == nil {
+		return 0, nil
+	}
+	if lhs == nil {
+		return 1, nil
+	}
+	if rhs == nil {
+		return -1, nil
+	}
+	if len(leftOrdering) != len(rightOrdering) {
+		return 0, errors.Errorf(
+			"cannot compare two EncDatumRow types that have different length ColumnOrderings",
+		)
+	}
+
+	for i, ord := range leftOrdering {
+		lIdx := ord.ColIdx
+		rIdx := rightOrdering[i].ColIdx
+		cmp, err := lhs[lIdx].Compare(da, &rhs[rIdx])
+		if err != nil {
+			return 0, err
+		}
+		if cmp != 0 {
+			if leftOrdering[i].Direction == encoding.Descending {
 				cmp = -cmp
 			}
 			return cmp, nil

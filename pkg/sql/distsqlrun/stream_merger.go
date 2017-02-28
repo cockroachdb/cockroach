@@ -55,7 +55,7 @@ func (sm *streamMerger) computeBatch() error {
 		return nil
 	}
 
-	cmp, err := sm.compare(lrow, rrow)
+	cmp, err := sqlbase.CompareEncDatumRow(lrow, rrow, sm.left.ordering, sm.right.ordering, &sm.datumAlloc)
 	if err != nil {
 		return err
 	}
@@ -104,35 +104,6 @@ func (sm *streamMerger) computeBatch() error {
 	}
 
 	return nil
-}
-
-func (sm *streamMerger) compare(lhs, rhs sqlbase.EncDatumRow) (int, error) {
-	if lhs == nil && rhs == nil {
-		panic("comparing two nil rows")
-	}
-
-	if lhs == nil {
-		return 1, nil
-	}
-	if rhs == nil {
-		return -1, nil
-	}
-
-	for i, ord := range sm.left.ordering {
-		lIdx := ord.ColIdx
-		rIdx := sm.right.ordering[i].ColIdx
-		cmp, err := lhs[lIdx].Compare(&sm.datumAlloc, &rhs[rIdx])
-		if err != nil {
-			return 0, err
-		}
-		if cmp != 0 {
-			if sm.left.ordering[i].Direction == encoding.Descending {
-				cmp = -cmp
-			}
-			return cmp, nil
-		}
-	}
-	return 0, nil
 }
 
 func (sm *streamMerger) NextBatch() ([][2]sqlbase.EncDatumRow, error) {
