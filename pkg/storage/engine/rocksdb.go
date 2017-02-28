@@ -94,6 +94,8 @@ const (
 	MinimumMaxOpenFiles = 1700
 )
 
+var useDirectWrites = envutil.EnvOrDefaultBool("COCKROACH_USE_DIRECT_WRITES", false)
+
 // SSTableInfo contains metadata about a single RocksDB sstable. This mirrors
 // the C.DBSSTable struct contents.
 type SSTableInfo struct {
@@ -367,13 +369,13 @@ func (r *RocksDB) open() error {
 
 	status := C.DBOpen(&r.rdb, goToCSlice([]byte(r.dir)),
 		C.DBOptions{
-			cache:            r.cache.cache,
-			block_size:       C.uint64_t(blockSize),
-			wal_ttl_seconds:  C.uint64_t(walTTL),
-			use_direct_reads: C.bool(false),
-			logging_enabled:  C.bool(log.V(3)),
-			num_cpu:          C.int(runtime.NumCPU()),
-			max_open_files:   C.int(r.maxOpenFiles),
+			cache:             r.cache.cache,
+			block_size:        C.uint64_t(blockSize),
+			wal_ttl_seconds:   C.uint64_t(walTTL),
+			use_direct_writes: C.bool(useDirectWrites),
+			logging_enabled:   C.bool(log.V(3)),
+			num_cpu:           C.int(runtime.NumCPU()),
+			max_open_files:    C.int(r.maxOpenFiles),
 		})
 	if err := statusToError(status); err != nil {
 		return errors.Errorf("could not open rocksdb instance: %s", err)
