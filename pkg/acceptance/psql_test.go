@@ -57,5 +57,18 @@ EOF
 # that the value was inserted explicitly.
 psql -d testdb -c "SELECT * FROM playground"  | grep blue
 
+# Test lack of newlines at EOF with no slash-dot.
+echo 'COPY playground (equip_id, type, color, location, install_date) FROM stdin;' > import.sql
+echo -n -e '3\trope\tgreen\teast\t2015-01-02' >> import.sql
+psql -d testdb < import.sql
+psql -d testdb -c "SELECT * FROM playground"  | grep green
+
+# Test lack of newlines at EOF with slash-dot.
+echo 'COPY playground (equip_id, type, color, location, install_date) FROM stdin;' > import.sql
+echo -e '4\tsand\tbrown\twest\t2016-03-04' >> import.sql
+echo -n '\.' >> import.sql
+psql -d testdb < import.sql
+psql -d testdb -c "SELECT * FROM playground"  | grep brown
+
 exit 0
 `
