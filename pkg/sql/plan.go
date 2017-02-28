@@ -17,8 +17,6 @@
 package sql
 
 import (
-	"golang.org/x/net/context"
-
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -226,16 +224,15 @@ func (p *planner) startPlan(plan planNode) error {
 	return nil
 }
 
-func maybePlanHook(
-	ctx context.Context, stmt parser.Statement, cfg *ExecutorConfig,
-) (planNode, error) {
+func (p *planner) maybePlanHook(stmt parser.Statement) (planNode, error) {
 	// TODO(dan): This iteration makes the plan dispatch no longer constant
 	// time. We could fix that with a map of `reflect.Type` but including
 	// reflection in such a primary codepath is unfortunate. Instead, the
 	// upcoming IR work will provide unique numeric type tags, which will
 	// elegantly solve this.
+	state := PlanHookState{ExecCfg: p.execCfg}
 	for _, planHook := range planHooks {
-		if fn, header, err := planHook(ctx, stmt, cfg); err != nil {
+		if fn, header, err := planHook(p.ctx(), stmt, state); err != nil {
 			return nil, err
 		} else if fn != nil {
 			return &hookFnNode{f: fn, header: header}, nil
@@ -260,7 +257,7 @@ func (p *planner) newPlan(
 		p.txn.SetSystemConfigTrigger()
 	}
 
-	if plan, err := maybePlanHook(p.ctx(), stmt, p.execCfg); plan != nil || err != nil {
+	if plan, err := p.maybePlanHook(stmt); plan != nil || err != nil {
 		return plan, err
 	}
 
@@ -361,7 +358,7 @@ func (p *planner) newPlan(
 }
 
 func (p *planner) prepare(stmt parser.Statement) (planNode, error) {
-	if plan, err := maybePlanHook(p.ctx(), stmt, p.execCfg); plan != nil || err != nil {
+	if plan, err := p.maybePlanHook(stmt); plan != nil || err != nil {
 		return plan, err
 	}
 
