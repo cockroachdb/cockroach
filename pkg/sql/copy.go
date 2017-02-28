@@ -19,6 +19,7 @@ package sql
 import (
 	"bytes"
 	"fmt"
+	"io"
 	"time"
 	"unsafe"
 
@@ -153,21 +154,16 @@ func (p *planner) ProcessCopyData(data string, msg copyMsg) (parser.StatementLis
 
 	buf.WriteString(data)
 	for buf.Len() > 0 {
-		b := buf.Bytes()
-		// Don't blindly use buf.ReadBytes because if lineDelim is not present we
-		// must rewrite the bytes to buf. Instead check if lineDelim is present.
-		if bytes.IndexByte(b, lineDelim) == -1 {
-			continue
-		}
 		line, err := buf.ReadBytes(lineDelim)
-		if err != nil {
+		if err != nil && err != io.EOF {
 			return nil, err
-		}
-		// Remove lineDelim from end.
-		line = line[:len(line)-1]
-		// Remove a single '\r' at EOL, if present.
-		if len(line) > 0 && line[len(line)-1] == '\r' {
+		} else if err == nil {
+			// Remove lineDelim from end.
 			line = line[:len(line)-1]
+			// Remove a single '\r' at EOL, if present.
+			if len(line) > 0 && line[len(line)-1] == '\r' {
+				line = line[:len(line)-1]
+			}
 		}
 		if buf.Len() == 0 && bytes.Equal(line, []byte(`\.`)) {
 			break
