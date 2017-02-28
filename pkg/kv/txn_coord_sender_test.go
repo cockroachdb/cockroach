@@ -948,68 +948,58 @@ func TestTxnCoordIdempotentCleanup(t *testing.T) {
 	}
 }
 
-// To determine during review:
-//   We used to use the writing flag to enforce that only one coordinator can
-//   be used for transactional writes. Now that the coordinator needs to handle
-//   writes before the .Writing flag is set, this logic might need to change.
-//
-//   I think we may have had to change this to support running transactions from
-//   multiple nodes anyway, so it might be a good time to rethink this...
-//
-//
-// // TestTxnMultipleCoord checks that a coordinator uses the Writing flag to
-// // enforce that only one coordinator can be used for transactional writes.
-// func TestTxnMultipleCoord(t *testing.T) {
-// 	defer leaktest.AfterTest(t)()
-// 	s, sender := createTestDB(t)
-// 	defer s.Stop()
+// TestTxnMultipleCoord checks that a coordinator uses the Writing flag to
+// enforce that only one coordinator can be used for transactional writes.
+func TestTxnMultipleCoord(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	s, sender := createTestDB(t)
+	defer s.Stop()
 
-// 	testCases := []struct {
-// 		args    roachpb.Request
-// 		writing bool
-// 		ok      bool
-// 	}{
-// 		{roachpb.NewGet(roachpb.Key("a")), true, false},
-// 		{roachpb.NewGet(roachpb.Key("a")), false, true},
-// 		{roachpb.NewPut(roachpb.Key("a"), roachpb.Value{}), false, false}, // transactional write before begin
-// 		{roachpb.NewPut(roachpb.Key("a"), roachpb.Value{}), true, false},  // must have switched coordinators
-// 	}
+	testCases := []struct {
+		args    roachpb.Request
+		writing bool
+		ok      bool
+	}{
+		{roachpb.NewGet(roachpb.Key("a")), true /* writing */, false /* not ok */},
+		{roachpb.NewGet(roachpb.Key("a")), false /* not writing */, true /* ok */},
+		// transactional write before begin
+		{roachpb.NewPut(roachpb.Key("a"), roachpb.Value{}), false /* not writing */, true /* ok */},
+		// must have switched coordinators
+		{roachpb.NewPut(roachpb.Key("a"), roachpb.Value{}), true /* writing */, false /* not ok */},
+	}
 
-// 	for i, tc := range testCases {
-// 		txn := roachpb.NewTransaction("test", roachpb.Key("a"), 1, enginepb.SERIALIZABLE,
-// 			s.Clock.Now(), s.Clock.MaxOffset().Nanoseconds())
-// 		txn.Writing = tc.writing
-// 		reply, pErr := client.SendWrappedWith(context.Background(), sender, roachpb.Header{
-// 			Txn: txn,
-// 		}, tc.args)
-// 		if pErr == nil != tc.ok {
-// 			t.Errorf("%d: %T (writing=%t): success_expected=%t, but got: %v",
-// 				i, tc.args, tc.writing, tc.ok, pErr)
-// 		}
-// 		if pErr != nil {
-// 			continue
-// 		}
+	for i, tc := range testCases {
+		txn := roachpb.NewTransaction("test", roachpb.Key("a"), 1, enginepb.SERIALIZABLE,
+			s.Clock.Now(), s.Clock.MaxOffset().Nanoseconds())
+		txn.Writing = tc.writing
+		reply, pErr := client.SendWrappedWith(context.Background(), sender, roachpb.Header{
+			Txn: txn,
+		}, tc.args)
+		if pErr == nil != tc.ok {
+			t.Errorf("%d: %T (writing=%t): success_expected=%t, but got: %v",
+				i, tc.args, tc.writing, tc.ok, pErr)
+		}
+		if pErr != nil {
+			continue
+		}
 
-// 		txn = reply.Header().Txn
-// 		// The transaction should come back rw if it started rw or if we just
-// 		// wrote.
-// 		isWrite := roachpb.IsTransactionWrite(tc.args)
-// 		if (tc.writing || isWrite) != txn.Writing {
-// 			t.Errorf("%d: unexpected writing state: %s", i, txn)
-// 		}
-// 		if !isWrite {
-// 			continue
-// 		}
-// 		// Abort for clean shutdown.
-// 		if _, pErr := client.SendWrappedWith(context.Background(), sender, roachpb.Header{
-// 			Txn: txn,
-// 		}, &roachpb.EndTransactionRequest{
-// 			Commit: false,
-// 		}); pErr != nil {
-// 			t.Fatal(pErr)
-// 		}
-// 	}
-// }
+		txn = reply.Header().Txn
+		if tc.writing != txn.Writing {
+			t.Errorf("%d: unexpected writing state: %s", i, txn)
+		}
+		if !tc.writing {
+			continue
+		}
+		// Abort for clean shutdown.
+		if _, pErr := client.SendWrappedWith(context.Background(), sender, roachpb.Header{
+			Txn: txn,
+		}, &roachpb.EndTransactionRequest{
+			Commit: false,
+		}); pErr != nil {
+			t.Fatal(pErr)
+		}
+	}
+}
 
 // TestTxnCoordSenderSingleRoundtripTxn checks that a batch which completely
 // holds the writing portion of a Txn (including EndTransaction) does not
