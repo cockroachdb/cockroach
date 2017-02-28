@@ -240,24 +240,19 @@ func (expr *CastExpr) TypeCheck(ctx *SemaContext, _ Type) (TypedExpr, error) {
 
 // TypeCheck implements the Expr interface.
 func (expr *IndirectionExpr) TypeCheck(ctx *SemaContext, desired Type) (TypedExpr, error) {
-	for i, part := range expr.Indirection {
-		switch t := part.(type) {
-		case *ArraySubscript:
-			if t.Slice {
-				return nil, util.UnimplementedWithIssueErrorf(2115, "ARRAY slicing in %s", expr)
-			}
-			if i > 0 {
-				return nil, util.UnimplementedWithIssueErrorf(2115, "multidimensional ARRAY %s", expr)
-			}
-
-			beginExpr, err := typeCheckAndRequire(ctx, t.Begin, TypeInt, "ARRAY subscript")
-			if err != nil {
-				return nil, err
-			}
-			t.Begin = beginExpr
-		default:
-			return nil, errors.Errorf("syntax not yet supported: %s", expr.Indirection)
+	for i, t := range expr.Indirection {
+		if t.Slice {
+			return nil, util.UnimplementedWithIssueErrorf(2115, "ARRAY slicing in %s", expr)
 		}
+		if i > 0 {
+			return nil, util.UnimplementedWithIssueErrorf(2115, "multidimensional ARRAY %s", expr)
+		}
+
+		beginExpr, err := typeCheckAndRequire(ctx, t.Begin, TypeInt, "ARRAY subscript")
+		if err != nil {
+			return nil, err
+		}
+		t.Begin = beginExpr
 	}
 
 	subExpr, err := expr.Expr.TypeCheck(ctx, TArray{desired})

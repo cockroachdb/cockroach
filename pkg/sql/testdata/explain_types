@@ -296,3 +296,7 @@ EXPLAIN (TYPES) SELECT ABS(2-3) AS a
 0  render                             (a int)
 0                 render 0  (1)[int]
 1  nullrow                            ()
+
+# Check array subscripts (#13811)
+statement ok
+EXPLAIN (TYPES) SELECT x[1] FROM (SELECT ARRAY[1,2,3] AS x)
