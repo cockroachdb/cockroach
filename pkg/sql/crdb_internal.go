@@ -21,6 +21,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/pkg/errors"
 )
 
 var crdbInternal = virtualSchema{
@@ -38,6 +39,7 @@ CREATE TABLE crdb_internal.tables (
   TABLE_ID                 INT NOT NULL,
   PARENT_ID                INT NOT NULL,
   NAME                     STRING NOT NULL,
+  DATABASE_NAME            STRING NOT NULL,
   VERSION                  INT NOT NULL,
   MOD_TIME                 TIMESTAMP NOT NULL,
   MOD_TIME_LOGICAL         DECIMAL NOT NULL,
@@ -53,12 +55,24 @@ CREATE TABLE crdb_internal.tables (
 		if err != nil {
 			return err
 		}
+		dbNames := make(map[sqlbase.ID]string)
+		// Record database descriptors for name lookups.
+		for _, desc := range descs {
+			db, ok := desc.(*sqlbase.DatabaseDescriptor)
+			if ok {
+				dbNames[db.ID] = db.Name
+			}
+		}
 		// Note: we do not use forEachTableDesc() here because we want to
 		// include added and dropped descriptors.
 		for _, desc := range descs {
 			table, ok := desc.(*sqlbase.TableDescriptor)
 			if !ok || !userCanSeeDescriptor(table, p.session.User) {
 				continue
+			}
+			dbName := dbNames[table.ParentID]
+			if dbName == "" {
+				return errors.Errorf("could not find database %d", table.ParentID)
 			}
 			leaseNodeDatum := parser.DNull
 			leaseExpDatum := parser.DNull
@@ -76,6 +90,7 @@ CREATE TABLE crdb_internal.tables (
 				parser.NewDInt(parser.DInt(int64(table.ID))),
 				parser.NewDInt(parser.DInt(int64(table.ParentID))),
 				parser.NewDString(parser.Name(table.Name).String()),
+				parser.NewDString(parser.Name(dbName).String()),
 				parser.NewDInt(parser.DInt(int64(table.Version))),
 				parser.MakeDTimestamp(time.Unix(0, table.ModificationTime.WallTime), time.Microsecond),
 				parser.TimestampToDecimal(table.ModificationTime),
