@@ -225,10 +225,16 @@ func getMetadataForTable(conn *sqlConn, dbName, tableName string, ts string) (ta
 			AND TABLE_NAME = $2
 			AND CONSTRAINT_TYPE='PRIMARY KEY'
 		`, ts), []driver.Value{dbName, tableName})
+
+	var primaryIndex string
+
 	if err != nil {
-		return tableMetadata{}, err
+		if err != io.EOF {
+			return tableMetadata{}, err
+		}
+	} else {
+		primaryIndex = vals[0].(string)
 	}
-	primaryIndex := vals[0].(string)
 
 	rows, err = conn.Query(fmt.Sprintf(`
 		SELECT COLUMN_NAME
@@ -262,9 +268,6 @@ func getMetadataForTable(conn *sqlConn, dbName, tableName string, ts string) (ta
 	}
 	if err := rows.Close(); err != nil {
 		return tableMetadata{}, err
-	}
-	if numIndexCols == 0 {
-		return tableMetadata{}, fmt.Errorf("no primary key index found")
 	}
 
 	name := &parser.TableName{DatabaseName: parser.Name(dbName), TableName: parser.Name(tableName)}
@@ -314,8 +317,15 @@ const (
 func dumpTableData(w io.Writer, conn *sqlConn, clusterTS string, md tableMetadata) error {
 	// Build the SELECT query.
 	var sbuf bytes.Buffer
-	fmt.Fprintf(&sbuf, "SELECT %s, %s FROM %s@%s AS OF SYSTEM TIME '%s'",
-		md.idxColNames, md.columnNames, md.name, parser.Name(md.primaryIndex), clusterTS)
+	sbuf.WriteString("SELECT ")
+	if md.idxColNames != "" {
+		fmt.Fprintf(&sbuf, "%s, ", md.idxColNames)
+	}
+	fmt.Fprintf(&sbuf, "%s FROM %s", md.columnNames, md.name)
+	if md.primaryIndex != "" {
+		fmt.Fprintf(&sbuf, "@%s", parser.Name(md.primaryIndex))
+	}
+	fmt.Fprintf(&sbuf, " AS OF SYSTEM TIME '%s'", clusterTS)
 
 	var wbuf bytes.Buffer
 	fmt.Fprintf(&wbuf, " WHERE ROW (%s) > ROW (", md.idxColNames)
@@ -327,7 +337,12 @@ func dumpTableData(w io.Writer, conn *sqlConn, clusterTS string, md tableMetadat
 	}
 	wbuf.WriteString(")")
 	// No WHERE clause first time, so add a place to inject it.
-	fmt.Fprintf(&sbuf, "%%s ORDER BY %s LIMIT %d", md.idxColNames, limit)
+	if md.idxColNames != "" {
+		fmt.Fprintf(&sbuf, "%%s ORDER BY %s LIMIT %d", md.idxColNames, limit)
+	} else {
+		// If there's no index columns, order by the implicit rowid column.
+		fmt.Fprintf(&sbuf, "%%s ORDER BY rowid LIMIT %d", limit)
+	}
 	bs := sbuf.String()
 
 	// pk holds the last values of the fetched primary keys
