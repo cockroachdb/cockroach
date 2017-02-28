@@ -293,6 +293,15 @@ func backupPlanHook(
 		return nil, nil, err
 	}
 
+	toFn, err := p.TypeAsString(&backup.To)
+	if err != nil {
+		return nil, nil, err
+	}
+	incrementalFromFn, err := p.TypeAsStringArray(&backup.IncrementalFrom)
+	if err != nil {
+		return nil, nil, err
+	}
+
 	header := sql.ResultColumns{
 		{Name: "to", Typ: parser.TypeString},
 		{Name: "startTs", Typ: parser.TypeString},
@@ -307,7 +316,7 @@ func backupPlanHook(
 		var startTime hlc.Timestamp
 		if backup.IncrementalFrom != nil {
 			var err error
-			startTime, err = ValidatePreviousBackups(ctx, backup.IncrementalFrom)
+			startTime, err = ValidatePreviousBackups(ctx, incrementalFromFn())
 			if err != nil {
 				return nil, err
 			}
@@ -319,9 +328,11 @@ func backupPlanHook(
 				return nil, err
 			}
 		}
+
+		to := toFn()
 		desc, err := Backup(ctx,
 			p,
-			backup.To,
+			to,
 			backup.Targets,
 			startTime, endTime,
 			backup.Options,
@@ -330,7 +341,7 @@ func backupPlanHook(
 			return nil, err
 		}
 		ret := []parser.Datums{{
-			parser.NewDString(backup.To),
+			parser.NewDString(to),
 			parser.NewDString(startTime.String()),
 			parser.NewDString(endTime.String()),
 			parser.NewDInt(parser.DInt(desc.DataSize)),
