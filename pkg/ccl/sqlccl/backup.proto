@@ -31,7 +31,8 @@ message BackupDescriptor {
   message File {
     roachpb.Span span = 1 [(gogoproto.nullable) = false];
     string path = 2;
-    uint32 crc = 3 [(gogoproto.customname) = "CRC"];
+    bytes sha512 = 4;
+    reserved 3;
   }
 
   util.hlc.Timestamp start_time = 1 [(gogoproto.nullable) = false];

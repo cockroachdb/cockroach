@@ -808,7 +808,8 @@ message ExportResponse {
     optional Span span = 1 [(gogoproto.nullable) = false];
     optional string path = 2 [(gogoproto.nullable) = false];
     optional int64 data_size = 3 [(gogoproto.nullable) = false];
-    optional uint32 crc = 4 [(gogoproto.nullable) = false, (gogoproto.customname) = "CRC"];
+    optional bytes sha512 = 5;
+    reserved 4;
   }
 
   optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
@@ -821,7 +822,8 @@ message ImportRequest {
   message File {
     optional ExportStorage dir = 1 [(gogoproto.nullable) = false];
     optional string path = 2 [(gogoproto.nullable) = false];
-    optional uint32 crc = 3 [(gogoproto.nullable) = false, (gogoproto.customname) = "CRC"];
+    optional bytes sha512 = 4;
+    reserved 3;
   }
   optional Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   // Files contains an ordered list of files, each containing kv entries to

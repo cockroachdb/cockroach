@@ -226,9 +226,9 @@ func Backup(
 			defer mu.Unlock()
 			for _, file := range res.(*roachpb.ExportResponse).Files {
 				mu.files = append(mu.files, BackupDescriptor_File{
-					Span: file.Span,
-					Path: file.Path,
-					CRC:  file.CRC,
+					Span:   file.Span,
+					Path:   file.Path,
+					Sha512: file.Sha512,
 				})
 				mu.dataSize += file.DataSize
 			}
@@ -501,9 +501,9 @@ func makeImportRequests(
 			case backupFile:
 				if len(ie.file.Path) > 0 {
 					files = append(files, roachpb.ImportRequest_File{
-						Dir:  ie.dir,
-						Path: ie.file.Path,
-						CRC:  ie.file.CRC,
+						Dir:    ie.dir,
+						Path:   ie.file.Path,
+						Sha512: ie.file.Sha512,
 					})
 				}
 			}
