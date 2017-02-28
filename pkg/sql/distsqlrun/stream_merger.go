@@ -50,7 +50,7 @@ func (sm *streamMerger) computeBatch() error {
 		return nil
 	}
 
-	cmp, err := sm.compare(lrow, rrow)
+	cmp, err := CompareEncDatumRowForMerge(lrow, rrow, sm.left.ordering, sm.right.ordering, &sm.datumAlloc)
 	if err != nil {
 		return err
 	}
@@ -97,27 +97,45 @@ func (sm *streamMerger) computeBatch() error {
 	return nil
 }
 
-func (sm *streamMerger) compare(lhs, rhs sqlbase.EncDatumRow) (int, error) {
+// CompareEncDatumRowForMerge EncDatumRow compares two EncDatumRows for merging.
+// When merging two streams and preserving the order (as in a MergeSort or
+// a MergeJoin) compare the head of the streams, emitting the one that sorts
+// first. It allows for the EncDatumRow to be nil if one of the streams is
+// exhausted (and hence nil). CompareEncDatumRowForMerge returns 0 when both
+// rows are nil, and a nil row is considered greater than any non-nil row.
+// CompareEncDatumRowForMerge assumes that the two rows have the same columns
+// in the same orders, but can handle different ordering directions. It takes
+// a DatumAlloc which is used for decoding if any underlying EncDatum is not
+// yet decoded.
+func CompareEncDatumRowForMerge(
+	lhs, rhs sqlbase.EncDatumRow,
+	leftOrdering, rightOrdering sqlbase.ColumnOrdering,
+	da *sqlbase.DatumAlloc,
+) (int, error) {
 	if lhs == nil && rhs == nil {
-		panic("comparing two nil rows")
+		return 0, nil
 	}
-
 	if lhs == nil {
 		return 1, nil
 	}
 	if rhs == nil {
 		return -1, nil
 	}
+	if len(leftOrdering) != len(rightOrdering) {
+		return 0, errors.Errorf(
+			"cannot compare two EncDatumRow types that have different length ColumnOrderings",
+		)
+	}
 
-	for i, ord := range sm.left.ordering {
+	for i, ord := range leftOrdering {
 		lIdx := ord.ColIdx
-		rIdx := sm.right.ordering[i].ColIdx
-		cmp, err := lhs[lIdx].Compare(&sm.datumAlloc, &rhs[rIdx])
+		rIdx := rightOrdering[i].ColIdx
+		cmp, err := lhs[lIdx].Compare(da, &rhs[rIdx])
 		if err != nil {
 			return 0, err
 		}
 		if cmp != 0 {
-			if sm.left.ordering[i].Direction == encoding.Descending {
+			if leftOrdering[i].Direction == encoding.Descending {
 				cmp = -cmp
 			}
 			return cmp, nil
