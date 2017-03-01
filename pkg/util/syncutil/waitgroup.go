@@ -14,12 +14,11 @@
 //
 // Author: Daniel Harrison (dan@cockroachlabs.com)
 
-package util
+package syncutil
 
 import (
 	"sync"
 
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/pkg/errors"
 )
 
@@ -39,7 +38,7 @@ type WaitGroupWithError struct {
 	wg sync.WaitGroup
 
 	mu struct {
-		syncutil.Mutex
+		Mutex
 		firstErr error
 		numErrs  int
 	}
