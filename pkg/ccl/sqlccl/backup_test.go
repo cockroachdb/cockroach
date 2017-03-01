@@ -19,6 +19,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/pkg/errors"
@@ -28,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -137,8 +137,6 @@ func TestBackupRestoreLocal(t *testing.T) {
 		t.Skip("command WriteBatch is not allowed without proposer evaluated KV")
 	}
 
-	// TODO(dan): Actually invalidate the descriptor cache and delete this line.
-	defer sql.TestDisableTableLeases()()
 	const numAccounts = 1000
 
 	ctx, dir, _, sqlDB, cleanupFn := backupRestoreTestSetup(t, multiNode, numAccounts)
@@ -209,8 +207,6 @@ func TestBackupRestoreInterleaved(t *testing.T) {
 		t.Skip("command WriteBatch is not allowed without proposer evaluated KV")
 	}
 
-	// TODO(dan): Actually invalidate the descriptor cache and delete this line.
-	defer sql.TestDisableTableLeases()()
 	const numAccounts = 10
 
 	_, dir, _, sqlDB, cleanupFn := backupRestoreTestSetup(t, multiNode, numAccounts)
@@ -310,9 +306,6 @@ func TestBackupRestoreIncremental(t *testing.T) {
 		t.Skip("command WriteBatch is not allowed without proposer evaluated KV")
 	}
 
-	// TODO(dan): Actually invalidate the descriptor cache and delete this line.
-	defer sql.TestDisableTableLeases()()
-
 	const numAccounts = 10
 	const numBackups = 4
 	windowSize := int(numAccounts / 3)
@@ -365,6 +358,7 @@ func TestBackupRestoreIncremental(t *testing.T) {
 		sqlDBRestore.Exec(`CREATE DATABASE bench`)
 
 		for i := len(backupDirs); i > 0; i-- {
+			sqlDBRestore.Exec(`DROP TABLE IF EXISTS bench.bank`)
 			from := strings.Join(backupDirs[:i], `,`)
 			sqlDBRestore.Exec(fmt.Sprintf(`RESTORE bench.bank FROM %s`, from))
 
@@ -376,17 +370,20 @@ func TestBackupRestoreIncremental(t *testing.T) {
 				}
 				return nil
 			})
+
 		}
 	}
 }
 
 func startBackgroundWrites(
-	stopper *stop.Stopper, sqlDB *gosql.DB, wake chan<- struct{}, maxID int,
+	stopper *stop.Stopper, sqlDB *gosql.DB, maxID int, wake chan<- struct{}, done <-chan struct{},
 ) error {
 	rng, _ := randutil.NewPseudoRand()
 
 	for {
 		select {
+		case <-done:
+			return nil
 		case <-stopper.ShouldQuiesce():
 			return nil // All done.
 		default:
@@ -398,6 +395,8 @@ func startBackgroundWrites(
 
 		updateFn := func() error {
 			select {
+			case <-done:
+				return nil
 			case <-stopper.ShouldQuiesce():
 				return nil // All done.
 			default:
@@ -422,9 +421,6 @@ func TestBackupRestoreBank(t *testing.T) {
 		t.Skip("command WriteBatch is not allowed without proposer evaluated KV")
 	}
 
-	// TODO(dan): Actually invalidate the descriptor cache and delete this line.
-	defer sql.TestDisableTableLeases()()
-
 	const rows = 10
 	const numBackgroundTasks = multiNode
 	const backupRestoreIterations = 3
@@ -434,41 +430,46 @@ func TestBackupRestoreBank(t *testing.T) {
 
 	bgActivity := make(chan struct{})
 
-	for i := 0; i < numBackgroundTasks; i++ {
-		taskNum := i
-		tc.Stopper().RunWorker(func() {
-			// Use different sql gateways to make sure leasing is right.
-			err := startBackgroundWrites(tc.Stopper(), tc.Conns[taskNum%len(tc.Conns)], bgActivity, rows)
-			if err != nil {
-				t.Error(err)
-			}
-		})
-	}
-
 	// Use the bench.bank table as a key (id), value (balance) table with a
 	// payload. Repeatedly run backups and restores while the background tasks are
 	// mutating the table concurrently. Wait in between each backup and each
 	// restore for the data to change.
 	for i := 0; i < backupRestoreIterations; i++ {
+		wg := &sync.WaitGroup{}
+		done := make(chan struct{})
+		for task := 0; task < numBackgroundTasks; task++ {
+			taskNum := task
+			wg.Add(1)
+			tc.Stopper().RunWorker(func() {
+				conn := tc.Conns[taskNum%len(tc.Conns)]
+				// Use different sql gateways to make sure leasing is right.
+				if err := startBackgroundWrites(tc.Stopper(), conn, rows, bgActivity, done); err != nil {
+					t.Error(err)
+				}
+				wg.Done()
+			})
+		}
+
 		dir := filepath.Join(baseDir, strconv.Itoa(i))
 
 		<-bgActivity
 
-		// Set the id=balance invariant on each row and back up the table.
+		// Set, break, then reset the id=balance invariant -- while doing concurrent
+		// writes -- to get multiple MVCC revisions as well as txn conflicts.
 		sqlDB.Exec(`UPDATE bench.bank SET balance = id`)
+		<-bgActivity
+		sqlDB.Exec(`UPDATE bench.bank SET balance = -1`)
+		<-bgActivity
+		sqlDB.Exec(`UPDATE bench.bank SET balance = id`)
+		<-bgActivity
 
+		// Backup DB while concurrent writes continue.
 		sqlDB.Exec(fmt.Sprintf(`BACKUP DATABASE bench TO '%s'`, dir))
 
-		<-bgActivity
-
-		// Break the id=balance invariant on every row in the current table.
-		// When we restore, it'll blow away this data, but if restore doesn't
-		// work we can tell by looking for these.
-		sqlDB.Exec(`UPDATE bench.bank SET balance = -1`)
-
-		<-bgActivity
-
-		// Restore and check id=balance holds again.
+		// Drop the table and restore from backup and check our invariant.
+		close(done)
+		wg.Wait()
+		sqlDB.Exec(`DROP TABLE bench.bank`)
 		sqlDB.Exec(fmt.Sprintf(`RESTORE DATABASE bench FROM '%s'`, dir))
 
 		bad := sqlDB.QueryStr(`SELECT id, balance, payload FROM bench.bank WHERE id != balance`)
@@ -487,24 +488,28 @@ func TestBackupAsOfSystemTime(t *testing.T) {
 		t.Skip("command WriteBatch is not allowed without proposer evaluated KV")
 	}
 
-	// TODO(dan): Actually invalidate the descriptor cache and delete this line.
-	defer sql.TestDisableTableLeases()()
 	const numAccounts = 1000
 
 	_, dir, _, sqlDB, cleanupFn := backupRestoreTestSetup(t, multiNode, numAccounts)
 	defer cleanupFn()
 
 	var ts string
+	var rowCount int64
+
 	sqlDB.QueryRow(`SELECT cluster_logical_timestamp()`).Scan(&ts)
 	sqlDB.Exec(`TRUNCATE bench.bank`)
-	sqlDB.Exec(fmt.Sprintf(`BACKUP DATABASE bench TO '%s' AS OF SYSTEM TIME %s`, dir, ts))
 
-	var rowCount int64
 	sqlDB.QueryRow(`SELECT COUNT(*) FROM bench.bank`).Scan(&rowCount)
 	if rowCount != 0 {
 		t.Fatalf("expected 0 rows but found %d", rowCount)
 	}
+
+	sqlDB.Exec(fmt.Sprintf(`BACKUP DATABASE bench TO '%s' AS OF SYSTEM TIME %s`, dir, ts))
+
+	sqlDB.Exec(`DROP TABLE bench.bank`)
+
 	sqlDB.Exec(fmt.Sprintf(`RESTORE DATABASE bench FROM '%s'`, dir))
+
 	sqlDB.QueryRow(`SELECT COUNT(*) FROM bench.bank`).Scan(&rowCount)
 	if rowCount != numAccounts {
 		t.Fatalf("expected %d rows but found %d", numAccounts, rowCount)
