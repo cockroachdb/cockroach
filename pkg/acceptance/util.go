@@ -179,8 +179,29 @@ func MakeFarmer(t testing.TB, prefix string, stopper *stop.Stopper) *terrafarm.F
 		t.Fatal("-key-name is required") // saves a lot of trouble
 	}
 
-	if e := "GOOGLE_PROJECT"; os.Getenv(e) == "" {
-		t.Fatalf("%s environment variable must be set for Terraform", e)
+	switch {
+	case strings.Contains(*flagCwd, "azure"):
+		for _, e := range []string{"ARM_SUBSCRIPTION_ID", "ARM_CLIENT_ID", "ARM_CLIENT_SECRET", "ARM_TENANT_ID"} {
+			if _, ok := os.LookupEnv(e); !ok {
+				t.Errorf("%s environment variable must be set for Azure", e)
+			}
+		}
+	case strings.Contains(*flagCwd, "gce"):
+		project := []string{"GOOGLE_PROJECT", "GCLOUD_PROJECT", "CLOUDSDK_CORE_PROJECT"}
+
+		found := false
+		for _, e := range project {
+			if _, ok := os.LookupEnv(e); ok {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("one of %+v environment variables must be set for GCE", project)
+		}
+	}
+	if t.Failed() {
+		t.FailNow()
 	}
 
 	logDir := *flagLogDir
