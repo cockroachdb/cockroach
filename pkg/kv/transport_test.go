@@ -54,54 +54,41 @@ func TestTransportMoveToFront(t *testing.T) {
 
 	// Now replica 3.
 	gt.MoveToFront(rd3)
-	verifyOrder([]roachpb.ReplicaDescriptor{rd3, rd1, rd2})
+	verifyOrder([]roachpb.ReplicaDescriptor{rd3, rd2, rd1})
 
 	// Mark replica 2 pending. Shouldn't be able to move it.
-	clients[2].pending = true
+	gt.orderedClients[1].pending = true
 	gt.MoveToFront(rd2)
-	verifyOrder([]roachpb.ReplicaDescriptor{rd3, rd1, rd2})
+	verifyOrder([]roachpb.ReplicaDescriptor{rd3, rd2, rd1})
 
 	// Advance the client index and move replica 3 back to front.
 	gt.clientIndex++
 	gt.MoveToFront(rd3)
-	verifyOrder([]roachpb.ReplicaDescriptor{rd3, rd1, rd2})
+	verifyOrder([]roachpb.ReplicaDescriptor{rd3, rd2, rd1})
 	if gt.clientIndex != 0 {
 		t.Fatalf("expected cient index 0; got %d", gt.clientIndex)
 	}
 
-	// Advance the client index again and verify replica 3 cannot
-	// be moved to front for a second retry.
+	// Advance the client index again and try to move replica
+	// 3, which should fail because it's already been retried.
 	gt.clientIndex++
 	gt.MoveToFront(rd3)
-	verifyOrder([]roachpb.ReplicaDescriptor{rd3, rd1, rd2})
+	verifyOrder([]roachpb.ReplicaDescriptor{rd3, rd2, rd1})
 	if gt.clientIndex != 1 {
 		t.Fatalf("expected cient index 1; got %d", gt.clientIndex)
 	}
 
 	// Mark replica 2 no longer pending. Should be able to move it.
-	clients[2].pending = false
+	gt.clientIndex++
+	gt.orderedClients[1].pending = false
 	gt.MoveToFront(rd2)
 	verifyOrder([]roachpb.ReplicaDescriptor{rd3, rd2, rd1})
-
-	// Advance client index and move rd1 front; should be no change.
-	gt.clientIndex++
-	gt.MoveToFront(rd1)
-	verifyOrder([]roachpb.ReplicaDescriptor{rd3, rd2, rd1})
-
-	// Advance client index to and and move rd1 to front. Should move
-	// client index back for a retry.
-	gt.clientIndex++
-	gt.MoveToFront(rd1)
-	verifyOrder([]roachpb.ReplicaDescriptor{rd3, rd2, rd1})
-	if gt.clientIndex != 2 {
-		t.Fatalf("expected cient index 2; got %d", gt.clientIndex)
+	if gt.clientIndex != 1 {
+		t.Fatalf("expected cient index 1; got %d", gt.clientIndex)
 	}
 
-	// Advance client index once more; verify no second retry.
+	// Advance client index and move rd1 front.
 	gt.clientIndex++
 	gt.MoveToFront(rd1)
 	verifyOrder([]roachpb.ReplicaDescriptor{rd3, rd2, rd1})
-	if gt.clientIndex != 3 {
-		t.Fatalf("expected cient index 3; got %d", gt.clientIndex)
-	}
 }

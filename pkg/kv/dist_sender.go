@@ -46,7 +46,8 @@ import (
 const (
 	// TODO(bdarnell): make SendNextTimeout configurable.
 	// https://github.com/cockroachdb/cockroach/issues/6719
-	defaultSendNextTimeout   = 500 * time.Millisecond
+	defaultSendNextTimeout   = 1 * time.Second
+	defaultSendRPCTimeout    = 10 * time.Second
 	defaultClientTimeout     = 10 * time.Second
 	defaultPendingRPCTimeout = 500 * time.Millisecond
 
@@ -161,6 +162,7 @@ type DistSender struct {
 	rpcContext       *rpc.Context
 	rpcRetryOptions  retry.Options
 	sendNextTimeout  time.Duration
+	sendRPCTimeout   time.Duration
 	asyncSenderSem   chan struct{}
 	asyncSenderCount int32
 }
@@ -189,6 +191,7 @@ type DistSenderConfig struct {
 	RPCContext        *rpc.Context
 	RangeDescriptorDB RangeDescriptorDB
 	SendNextTimeout   time.Duration
+	SendRPCTimeout    time.Duration
 	// SenderConcurrency specifies the parallelization available when
 	// splitting batches into multiple requests when they span ranges.
 	// TODO(spencer): This is per-process. We should add a per-batch limit.
@@ -248,6 +251,11 @@ func NewDistSender(cfg DistSenderConfig, g *gossip.Gossip) *DistSender {
 		ds.sendNextTimeout = cfg.SendNextTimeout
 	} else {
 		ds.sendNextTimeout = defaultSendNextTimeout
+	}
+	if cfg.SendRPCTimeout != 0 {
+		ds.sendRPCTimeout = cfg.SendRPCTimeout
+	} else {
+		ds.sendRPCTimeout = defaultSendRPCTimeout
 	}
 	if cfg.SenderConcurrency != 0 {
 		ds.asyncSenderSem = make(chan struct{}, cfg.SenderConcurrency)
@@ -391,10 +399,9 @@ func (ds *DistSender) sendRPC(
 
 	// A given RPC may generate retries to multiple replicas, but as soon as we
 	// get a response from one we want to cancel those other RPCs.
-	ctx, cancel := context.WithCancel(ctx)
+	ctx, cancel := context.WithTimeout(ctx, ds.sendRPCTimeout)
 	defer cancel()
 
-	// Set RPC opts with stipulation that one of N RPCs must succeed.
 	rpcOpts := SendOptions{
 		SendNextTimeout:  ds.sendNextTimeout,
 		transportFactory: ds.transportFactory,
@@ -1153,12 +1160,23 @@ func (ds *DistSender) sendToReplicas(
 	slowTimer.Reset(base.SlowRequestThreshold)
 	for {
 		if !transport.IsExhausted() {
-			// Only start the send-next timer if we haven't exhausted the transport
-			// (i.e. there is another replica to send to).
+			// Only start the send-next timer if we haven't exhausted the
+			// transport (i.e. there is another replica to send to).
 			sendNextTimer.Reset(opts.SendNextTimeout)
 		}
 
 		select {
+		case <-ctx.Done():
+			msg := fmt.Sprintf(
+				"sending to %d replicas %s (pending=%d); last error: %v", len(replicas), ctx.Err(), pending, err,
+			)
+			log.ErrEvent(ctx, msg)
+			if haveCommit {
+				return nil, roachpb.NewAmbiguousResultError(
+					fmt.Sprintf("error=%s, pending RPCs=%d", msg, pending))
+			}
+			return nil, roachpb.NewSendError(msg)
+
 		case <-sendNextTimer.C:
 			sendNextTimer.Read = true
 			// On successive RPC timeouts, send to additional replicas if available.

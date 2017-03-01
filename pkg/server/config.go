@@ -104,6 +104,16 @@ type Config struct {
 	// used by SQL clients to store row data in server RAM.
 	SQLMemoryPoolSize int64
 
+	// SendNextTimeout is the interval after which a pending RPC is
+	// considered unlikely to return, prompting a send to an alternate
+	// replica, if one is available.
+	SendNextTimeout time.Duration
+
+	// SendRPCTimeout is the timeout for sending an RPC to the KV
+	// API. If this timeout expires, the range descriptor cache is
+	// evicted and the RPC is retried with an exponential backoff.
+	SendRPCTimeout time.Duration
+
 	// Parsed values.
 
 	// NodeAttributes is the parsed representation of Attrs.
