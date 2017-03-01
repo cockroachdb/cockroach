@@ -5,7 +5,7 @@
 # Run with:
 # # google compute SSH key in ~/.ssh/google_compute_engine{,.pub}
 # $ export GOOGLE_CREDENTIALS="contents of json credentials file"
-# $ export GOOGLE_PROJECT="my-google-project"
+# $ export CLOUDSDK_CORE_PROJECT="my-google-project"
 # $ terraform apply
 #
 # Tear down GCE resources using:

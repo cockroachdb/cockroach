@@ -146,7 +146,7 @@ docker run --privileged -i ${tty-} --rm \
   --env="TMPDIR=/go/src/github.com/cockroachdb/cockroach/artifacts" \
   --env="PAGER=cat" \
   --env="JSPM_GITHUB_AUTH_TOKEN=${JSPM_GITHUB_AUTH_TOKEN-763c42afb2d31eb7bc150da33402a24d0e081aef}" \
-  --env="GOOGLE_PROJECT=${GOOGLE_PROJECT-}" \
+  --env="CLOUDSDK_CORE_PROJECT=${CLOUDSDK_CORE_PROJECT-${GOOGLE_PROJECT-}}" \
   --env="GOOGLE_CREDENTIALS=${GOOGLE_CREDENTIALS-}" \
   --env="GOTRACEBACK=${GOTRACEBACK-all}" \
   --env="COVERALLS_TOKEN=${COVERALLS_TOKEN-}" \

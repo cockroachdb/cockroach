@@ -29,7 +29,7 @@ package acceptance
 // make test \
 //	 TESTTIMEOUT=48h \
 //	 PKG=./pkg/acceptance \
-//	 TESTS=Rebalance_3To5Small \
+//	 TESTS='^TestRebalance_3To5Small$$' \
 //	 TESTFLAGS='-v -remote -key-name azure -cwd terraform/azure -tf.keep-cluster=failed'
 //
 // Things to note:
