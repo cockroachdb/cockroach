@@ -75,12 +75,20 @@ func fillUUID(b byte) uuid.UUID {
 var txnIDMin = fillUUID('\x00')
 var txnIDMax = fillUUID('\xff')
 
+func abortCacheMinKey(rangeID roachpb.RangeID) roachpb.Key {
+	return keys.AbortCacheKey(rangeID, txnIDMin)
+}
+
 func (sc *AbortCache) min() roachpb.Key {
-	return keys.AbortCacheKey(sc.rangeID, txnIDMin)
+	return abortCacheMinKey(sc.rangeID)
+}
+
+func abortCacheMaxKey(rangeID roachpb.RangeID) roachpb.Key {
+	return keys.AbortCacheKey(rangeID, txnIDMax)
 }
 
 func (sc *AbortCache) max() roachpb.Key {
-	return keys.AbortCacheKey(sc.rangeID, txnIDMax)
+	return abortCacheMaxKey(sc.rangeID)
 }
 
 // ClearData removes all persisted items stored in the cache.

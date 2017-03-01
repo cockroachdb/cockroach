@@ -131,6 +131,11 @@ func (s *SpanSetIterator) Close() {
 	s.i.Close()
 }
 
+// Iterator returns the underlying engine.Iterator.
+func (s *SpanSetIterator) Iterator() engine.Iterator {
+	return s.i
+}
+
 // Seek implements engine.Iterator.
 func (s *SpanSetIterator) Seek(key engine.MVCCKey) {
 	s.err = s.spans.checkAllowed(SpanReadOnly, roachpb.Span{Key: key.Key})

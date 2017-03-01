@@ -112,22 +112,22 @@ var commands = map[roachpb.Method]Command{
 	roachpb.DeleteRange:        {DeclareKeys: DefaultDeclareKeys, Eval: evalDeleteRange},
 	roachpb.Scan:               {DeclareKeys: DefaultDeclareKeys, Eval: evalScan},
 	roachpb.ReverseScan:        {DeclareKeys: DefaultDeclareKeys, Eval: evalReverseScan},
-	roachpb.BeginTransaction:   {DeclareKeys: DefaultDeclareKeys, Eval: evalBeginTransaction},
-	roachpb.EndTransaction:     {DeclareKeys: DefaultDeclareKeys, Eval: evalEndTransaction},
+	roachpb.BeginTransaction:   {DeclareKeys: declareKeysWriteTransaction, Eval: evalBeginTransaction},
+	roachpb.EndTransaction:     {DeclareKeys: declareKeysEndTransaction, Eval: evalEndTransaction},
 	roachpb.RangeLookup:        {DeclareKeys: DefaultDeclareKeys, Eval: evalRangeLookup},
-	roachpb.HeartbeatTxn:       {DeclareKeys: DefaultDeclareKeys, Eval: evalHeartbeatTxn},
-	roachpb.GC:                 {DeclareKeys: DefaultDeclareKeys, Eval: evalGC},
-	roachpb.PushTxn:            {DeclareKeys: DefaultDeclareKeys, Eval: evalPushTxn},
+	roachpb.HeartbeatTxn:       {DeclareKeys: declareKeysWriteTransaction, Eval: evalHeartbeatTxn},
+	roachpb.GC:                 {DeclareKeys: declareKeysGC, Eval: evalGC},
+	roachpb.PushTxn:            {DeclareKeys: declareKeysPushTransaction, Eval: evalPushTxn},
 	roachpb.QueryTxn:           {DeclareKeys: DefaultDeclareKeys, Eval: evalQueryTxn},
-	roachpb.ResolveIntent:      {DeclareKeys: DefaultDeclareKeys, Eval: evalResolveIntent},
-	roachpb.ResolveIntentRange: {DeclareKeys: DefaultDeclareKeys, Eval: evalResolveIntentRange},
+	roachpb.ResolveIntent:      {DeclareKeys: declareKeysResolveIntent, Eval: evalResolveIntent},
+	roachpb.ResolveIntentRange: {DeclareKeys: declareKeysResolveIntentRange, Eval: evalResolveIntentRange},
 	roachpb.Merge:              {DeclareKeys: DefaultDeclareKeys, Eval: evalMerge},
-	roachpb.TruncateLog:        {DeclareKeys: DefaultDeclareKeys, Eval: evalTruncateLog},
-	roachpb.RequestLease:       {DeclareKeys: DefaultDeclareKeys, Eval: evalRequestLease},
-	roachpb.TransferLease:      {DeclareKeys: DefaultDeclareKeys, Eval: evalTransferLease},
+	roachpb.TruncateLog:        {DeclareKeys: declareKeysTruncateLog, Eval: evalTruncateLog},
+	roachpb.RequestLease:       {DeclareKeys: declareKeysRequestLease, Eval: evalRequestLease},
+	roachpb.TransferLease:      {DeclareKeys: declareKeysRequestLease, Eval: evalTransferLease},
 	roachpb.LeaseInfo:          {DeclareKeys: DefaultDeclareKeys, Eval: evalLeaseInfo},
 	roachpb.ComputeChecksum:    {DeclareKeys: DefaultDeclareKeys, Eval: evalComputeChecksum},
-	roachpb.ChangeFrozen:       {DeclareKeys: DefaultDeclareKeys, Eval: evalChangeFrozen},
+	roachpb.ChangeFrozen:       {DeclareKeys: declareKeysChangeFrozen, Eval: evalChangeFrozen},
 	roachpb.WriteBatch:         writeBatchCmd,
 	roachpb.Export:             exportCmd,
 
@@ -416,6 +416,14 @@ func verifyTransaction(h roachpb.Header, args roachpb.Request) error {
 	return nil
 }
 
+// declareKeysWriteTransaction is the DeclareKeys function for {Begin,Heartbeat}Transaction,
+// and is called by declareKeysEndTransaction
+func declareKeysWriteTransaction(header roachpb.Header, req roachpb.Request, spans *SpanSet) {
+	if header.Txn != nil && header.Txn.ID != nil {
+		spans.Add(SpanReadWrite, roachpb.Span{Key: keys.TransactionKey(req.Header().Key, *header.Txn.ID)})
+	}
+}
+
 // evalBeginTransaction writes the initial transaction record. Fails in
 // the event that a transaction record is already written. This may
 // occur if a transaction is started with a batch containing writes
@@ -493,6 +501,81 @@ func evalBeginTransaction(
 	// Write the txn record.
 	reply.Txn.Writing = true
 	return EvalResult{}, engine.MVCCPutProto(ctx, batch, cArgs.Stats, key, hlc.Timestamp{}, nil, reply.Txn)
+}
+
+func declareKeysEndTransaction(header roachpb.Header, req roachpb.Request, spans *SpanSet) {
+	declareKeysWriteTransaction(header, req, spans)
+	et := req.(*roachpb.EndTransactionRequest)
+	// The spans may extend beyond this Range, but it's ok for the
+	// purpose of the command queue. The parts in our Range will
+	// be resolved eagerly.
+	for _, span := range et.IntentSpans {
+		spans.Add(SpanReadWrite, span)
+	}
+	if header.Txn != nil && header.Txn.ID != nil {
+		spans.Add(SpanReadWrite, roachpb.Span{Key: keys.AbortCacheKey(header.RangeID, *header.Txn.ID)})
+	}
+
+	if et.InternalCommitTrigger != nil {
+		if st := et.InternalCommitTrigger.SplitTrigger; st != nil {
+			// Splits may read from the entire pre-split range and write to
+			// the right side's RangeID spans and abort cache.
+			// TODO(bdarnell): the only time we read from the right-hand
+			// side is when the existing stats contain estimates. We might
+			// be able to be smarter here and avoid declaring reads on RHS
+			// in most cases.
+			spans.Add(SpanReadOnly, roachpb.Span{
+				Key:    st.LeftDesc.StartKey.AsRawKey(),
+				EndKey: st.RightDesc.EndKey.AsRawKey(),
+			})
+			spans.Add(SpanReadOnly, roachpb.Span{
+				Key:    keys.MakeRangeKeyPrefix(st.LeftDesc.StartKey),
+				EndKey: keys.MakeRangeKeyPrefix(st.RightDesc.EndKey).PrefixEnd(),
+			})
+			leftRangeIDPrefix := keys.MakeRangeIDReplicatedPrefix(header.RangeID)
+			spans.Add(SpanReadOnly, roachpb.Span{
+				Key:    leftRangeIDPrefix,
+				EndKey: leftRangeIDPrefix.PrefixEnd(),
+			})
+
+			rightRangeIDPrefix := keys.MakeRangeIDReplicatedPrefix(st.RightDesc.RangeID)
+			spans.Add(SpanReadWrite, roachpb.Span{
+				Key:    rightRangeIDPrefix,
+				EndKey: rightRangeIDPrefix.PrefixEnd(),
+			})
+			rightRangeIDUnreplicatedPrefix := keys.MakeRangeIDUnreplicatedPrefix(st.RightDesc.RangeID)
+			spans.Add(SpanReadWrite, roachpb.Span{
+				Key:    rightRangeIDUnreplicatedPrefix,
+				EndKey: rightRangeIDUnreplicatedPrefix.PrefixEnd(),
+			})
+			rightStateLoader := makeReplicaStateLoader(st.RightDesc.RangeID)
+			spans.Add(SpanReadWrite, roachpb.Span{
+				Key: rightStateLoader.RangeLastReplicaGCTimestampKey(),
+			})
+			spans.Add(SpanReadOnly, roachpb.Span{
+				Key:    abortCacheMinKey(header.RangeID),
+				EndKey: abortCacheMaxKey(header.RangeID)})
+		}
+		if mt := et.InternalCommitTrigger.MergeTrigger; mt != nil {
+			// Merges write to the left side and delete and read from the right.
+			leftRangeIDPrefix := keys.MakeRangeIDReplicatedPrefix(header.RangeID)
+			spans.Add(SpanReadWrite, roachpb.Span{
+				Key:    leftRangeIDPrefix,
+				EndKey: leftRangeIDPrefix.PrefixEnd(),
+			})
+
+			rightRangeIDPrefix := keys.MakeRangeIDPrefix(mt.RightDesc.RangeID)
+			spans.Add(SpanReadWrite, roachpb.Span{
+				Key:    rightRangeIDPrefix,
+				EndKey: rightRangeIDPrefix.PrefixEnd(),
+			})
+			spans.Add(SpanReadOnly, roachpb.Span{
+				Key:    keys.MakeRangeKeyPrefix(mt.RightDesc.StartKey),
+				EndKey: keys.MakeRangeKeyPrefix(mt.RightDesc.EndKey).PrefixEnd(),
+			})
+
+		}
+	}
 }
 
 // evalEndTransaction either commits or aborts (rolls back) an extant
@@ -1189,6 +1272,23 @@ func evalHeartbeatTxn(
 	return EvalResult{}, nil
 }
 
+func declareKeysGC(header roachpb.Header, req roachpb.Request, spans *SpanSet) {
+	gcr := req.(*roachpb.GCRequest)
+	for _, key := range gcr.Keys {
+		spans.Add(SpanReadWrite, roachpb.Span{Key: key.Key})
+	}
+	spans.Add(SpanReadWrite, roachpb.Span{Key: keys.RangeLastGCKey(header.RangeID)})
+	spans.Add(SpanReadWrite, roachpb.Span{
+		// TODO(bdarnell): since this must be checked by all
+		// reads, this should be factored out into a separate
+		// waiter which blocks only those reads far enough in the
+		// past to be affected by the in-flight GCRequest (i.e.
+		// normally none). This means this key would be special
+		// cased and not tracked by the command queue.
+		Key: keys.RangeTxnSpanGCThresholdKey(header.RangeID),
+	})
+}
+
 // evalGC iterates through the list of keys to garbage collect
 // specified in the arguments. MVCCGarbageCollect is invoked on each
 // listed key along with the expiration timestamp. The GC metadata
@@ -1240,6 +1340,12 @@ func evalGC(
 	}
 
 	return pd, nil
+}
+
+func declareKeysPushTransaction(header roachpb.Header, req roachpb.Request, spans *SpanSet) {
+	pr := req.(*roachpb.PushTxnRequest)
+	spans.Add(SpanReadWrite, roachpb.Span{Key: keys.TransactionKey(pr.PusheeTxn.Key, *pr.PusheeTxn.ID)})
+	spans.Add(SpanReadWrite, roachpb.Span{Key: keys.AbortCacheKey(header.RangeID, *pr.PusheeTxn.ID)})
 }
 
 // evalPushTxn resolves conflicts between concurrent txns (or
@@ -1508,6 +1614,12 @@ func (r *Replica) setAbortCache(
 	return r.abortCache.Put(ctx, batch, ms, *txn.ID, &entry)
 }
 
+func declareKeysResolveIntent(header roachpb.Header, req roachpb.Request, spans *SpanSet) {
+	DefaultDeclareKeys(header, req, spans)
+	ri := req.(*roachpb.ResolveIntentRequest)
+	spans.Add(SpanReadWrite, roachpb.Span{Key: keys.AbortCacheKey(header.RangeID, *ri.IntentTxn.ID)})
+}
+
 // evalResolveIntent resolves a write intent from the specified key
 // according to the status of the transaction which created it.
 func evalResolveIntent(
@@ -1534,6 +1646,12 @@ func evalResolveIntent(
 		return EvalResult{}, r.setAbortCache(ctx, batch, ms, args.IntentTxn, args.Poison)
 	}
 	return EvalResult{}, nil
+}
+
+func declareKeysResolveIntentRange(header roachpb.Header, req roachpb.Request, spans *SpanSet) {
+	DefaultDeclareKeys(header, req, spans)
+	ri := req.(*roachpb.ResolveIntentRangeRequest)
+	spans.Add(SpanReadWrite, roachpb.Span{Key: keys.AbortCacheKey(header.RangeID, *ri.IntentTxn.ID)})
 }
 
 // evalResolveIntentRange resolves write intents in the specified
@@ -1578,6 +1696,12 @@ func evalMerge(
 	h := cArgs.Header
 
 	return EvalResult{}, engine.MVCCMerge(ctx, batch, cArgs.Stats, args.Key, h.Timestamp, args.Value)
+}
+
+func declareKeysTruncateLog(header roachpb.Header, req roachpb.Request, spans *SpanSet) {
+	spans.Add(SpanReadWrite, roachpb.Span{Key: keys.RaftTruncatedStateKey(header.RangeID)})
+	prefix := keys.RaftLogPrefix(header.RangeID)
+	spans.Add(SpanReadWrite, roachpb.Span{Key: prefix, EndKey: prefix.PrefixEnd()})
 }
 
 // evalTruncateLog discards a prefix of the raft log. Truncating part of a log that
@@ -1648,6 +1772,11 @@ func newFailedLeaseTrigger(isTransfer bool) EvalResult {
 		*trigger.Local.leaseMetricsResult = leaseRequestError
 	}
 	return trigger
+}
+
+func declareKeysRequestLease(header roachpb.Header, req roachpb.Request, spans *SpanSet) {
+	loader := makeReplicaStateLoader(header.RangeID)
+	spans.Add(SpanReadWrite, roachpb.Span{Key: loader.RangeLeaseKey()})
 }
 
 // evalRequestLease sets the range lease for this range. The command fails
@@ -2086,6 +2215,11 @@ func (r *Replica) sha512(
 	}
 	sha := make([]byte, 0, sha512.Size)
 	return hasher.Sum(sha), nil
+}
+
+func declareKeysChangeFrozen(header roachpb.Header, req roachpb.Request, spans *SpanSet) {
+	loader := makeReplicaStateLoader(header.RangeID)
+	spans.Add(SpanReadWrite, roachpb.Span{Key: loader.RangeFrozenStatusKey()})
 }
 
 // evalChangeFrozen freezes or unfreezes the Replica idempotently.

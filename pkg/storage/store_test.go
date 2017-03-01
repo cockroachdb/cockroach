@@ -2197,7 +2197,7 @@ func TestStoreGCThreshold(t *testing.T) {
 		},
 		Threshold: threshold,
 	}
-	if _, pErr := tc.SendWrapped(&gcr); pErr != nil {
+	if _, pErr := tc.SendWrappedWith(roachpb.Header{RangeID: 1}, &gcr); pErr != nil {
 		t.Fatal(pErr)
 	}
 
