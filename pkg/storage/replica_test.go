@@ -2801,7 +2801,7 @@ func TestEndTransactionTxnSpanGCThreshold(t *testing.T) {
 			},
 			TxnSpanGCThreshold: tc.Clock().Now(),
 		}
-		if _, pErr := tc.SendWrapped(&gcReq); pErr != nil {
+		if _, pErr := tc.SendWrappedWith(roachpb.Header{RangeID: 1}, &gcReq); pErr != nil {
 			t.Fatal(pErr)
 		}
 	}
@@ -4722,7 +4722,7 @@ func TestTruncateLog(t *testing.T) {
 
 	// Discard the first half of the log.
 	truncateArgs := truncateLogArgs(indexes[5], rangeID)
-	if _, pErr := tc.SendWrapped(&truncateArgs); pErr != nil {
+	if _, pErr := tc.SendWrappedWith(roachpb.Header{RangeID: 1}, &truncateArgs); pErr != nil {
 		t.Fatal(pErr)
 	}
 
@@ -5531,7 +5531,12 @@ func TestEntries(t *testing.T) {
 
 	truncateLogs := func(index int) {
 		truncateArgs := truncateLogArgs(indexes[index], rangeID)
-		if _, err := client.SendWrapped(context.Background(), tc.Sender(), &truncateArgs); err != nil {
+		if _, err := client.SendWrappedWith(
+			context.Background(),
+			tc.Sender(),
+			roachpb.Header{RangeID: 1},
+			&truncateArgs,
+		); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -5693,7 +5698,7 @@ func TestTerm(t *testing.T) {
 
 	// Discard the first half of the log.
 	truncateArgs := truncateLogArgs(indexes[5], rangeID)
-	if _, pErr := tc.SendWrapped(&truncateArgs); pErr != nil {
+	if _, pErr := tc.SendWrappedWith(roachpb.Header{RangeID: 1}, &truncateArgs); pErr != nil {
 		t.Fatal(pErr)
 	}
 
@@ -5769,8 +5774,8 @@ func TestGCIncorrectRange(t *testing.T) {
 	now := tc.Clock().Now()
 	ts1 := now.Add(1, 0)
 	ts2 := now.Add(2, 0)
-	ts1Header := roachpb.Header{Timestamp: ts1}
-	ts2Header := roachpb.Header{Timestamp: ts2}
+	ts1Header := roachpb.Header{RangeID: repl2.RangeID, Timestamp: ts1}
+	ts2Header := roachpb.Header{RangeID: repl2.RangeID, Timestamp: ts2}
 	if _, pErr := client.SendWrappedWith(context.Background(), repl2, ts1Header, &putReq); pErr != nil {
 		t.Errorf("unexpected pError on put key request: %s", pErr)
 	}
@@ -5783,7 +5788,12 @@ func TestGCIncorrectRange(t *testing.T) {
 	// the request for the incorrect key will be silently dropped.
 	gKey := gcKey(key, ts1)
 	gcReq := gcArgs(repl1.Desc().StartKey, repl1.Desc().EndKey, gKey)
-	if _, pErr := client.SendWrappedWith(context.Background(), repl1, roachpb.Header{Timestamp: tc.Clock().Now()}, &gcReq); pErr != nil {
+	if _, pErr := client.SendWrappedWith(
+		context.Background(),
+		repl1,
+		roachpb.Header{RangeID: 1, Timestamp: tc.Clock().Now()},
+		&gcReq,
+	); pErr != nil {
 		t.Errorf("unexpected pError on garbage collection request to incorrect range: %s", pErr)
 	}
 
@@ -5797,7 +5807,12 @@ func TestGCIncorrectRange(t *testing.T) {
 
 	// Send GC request to range 2 for the same key.
 	gcReq = gcArgs(repl2.Desc().StartKey, repl2.Desc().EndKey, gKey)
-	if _, pErr := client.SendWrappedWith(context.Background(), repl2, roachpb.Header{Timestamp: tc.Clock().Now()}, &gcReq); pErr != nil {
+	if _, pErr := client.SendWrappedWith(
+		context.Background(),
+		repl2,
+		roachpb.Header{RangeID: repl2.RangeID, Timestamp: tc.Clock().Now()},
+		&gcReq,
+	); pErr != nil {
 		t.Errorf("unexpected pError on garbage collection request to correct range: %s", pErr)
 	}
 
@@ -6632,12 +6647,14 @@ func TestAmbiguousResultErrorOnRetry(t *testing.T) {
 
 	var baPut roachpb.BatchRequest
 	{
+		baPut.RangeID = 1
 		key := roachpb.Key("put1")
 		put1 := putArgs(key, []byte("value"))
 		baPut.Add(&put1)
 	}
 	var ba1PCTxn roachpb.BatchRequest
 	{
+		ba1PCTxn.RangeID = 1
 		key := roachpb.Key("1pc")
 		txn := newTransaction("1pc", key, -1, enginepb.SERIALIZABLE, tc.Clock())
 		bt, _ := beginTxnArgs(key, txn)
@@ -6811,7 +6828,7 @@ func TestCommandTimeThreshold(t *testing.T) {
 	gcr := roachpb.GCRequest{
 		Threshold: ts2,
 	}
-	if _, err := tc.SendWrapped(&gcr); err != nil {
+	if _, err := tc.SendWrappedWith(roachpb.Header{RangeID: 1}, &gcr); err != nil {
 		t.Fatal(err)
 	}
 

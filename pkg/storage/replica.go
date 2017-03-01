@@ -2294,8 +2294,10 @@ func (r *Replica) requestToProposal(
 	var pErr *roachpb.Error
 	if propEvalKV {
 		var result *EvalResult
-		// TODO(bdarnell): pass spans here.
-		result, pErr = r.evaluateProposal(ctx, idKey, ba, nil)
+		// TODO(bdarnell): provide an option to disable spanSet validation
+		// (i.e. pass nil instead of `spans` here) once we're confident our coverage
+		// is good.
+		result, pErr = r.evaluateProposal(ctx, idKey, ba, spans)
 		// Fill out the local results even if pErr != nil; we'll return the error below.
 		proposal.Local = &result.Local
 		proposal.command = storagebase.RaftCommand{
