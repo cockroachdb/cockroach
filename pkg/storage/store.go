@@ -1358,7 +1358,7 @@ func (s *Store) startGossip() {
 				for r := retry.Start(retryOptions); r.Next(); {
 					if repl := s.LookupReplica(roachpb.RKey(gossipFn.key), nil); repl != nil {
 						if err := gossipFn.fn(ctx, repl); err != nil {
-							log.Errorf(ctx, "error gossiping %s: %s", gossipFn.description, err)
+							log.Warningf(ctx, "could not gossip %s: %s", gossipFn.description, err)
 							if err != errPeriodicGossipsDisabled {
 								continue
 							}
