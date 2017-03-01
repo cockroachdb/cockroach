@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -1113,4 +1114,92 @@ func TestPropagateTxnOnError(t *testing.T) {
 	if epoch != 2 {
 		t.Errorf("unexpected epoch; the txn must be retried exactly once, but got %d", epoch)
 	}
+}
+
+// TestDistSenderRequestBlackhole simulates the case of a replica
+// failing to return a request, while other replicas are tried
+// according to SendOptions.SendNextTimeout. We verify that if a new
+// leader is elected _after_ all replicas are tried at least once, the
+// request is still retried and processed by the new leader.
+func TestDistSenderRequestBlackhole(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	// Set up a filter to so that the first Get operation will
+	// not return.
+	params := base.TestServerArgs{}
+	targetKey := roachpb.Key("b")
+	var numGets int32
+	wait := make(chan struct{})
+
+	params.Knobs.Store = &storage.StoreTestingKnobs{
+		TestingEvalFilter: func(fArgs storagebase.FilterArgs) *roachpb.Error {
+			_, ok := fArgs.Req.(*roachpb.GetRequest)
+			if ok && fArgs.Req.Header().Key.Equal(targetKey) {
+				if atomic.AddInt32(&numGets, 1) == 1 {
+					<-wait
+				}
+			}
+			return nil
+		},
+	}
+	params.SendNextTimeout = 10 * time.Millisecond
+	testClusterArgs := base.TestClusterArgs{
+		ReplicationMode: base.ReplicationAuto,
+		ServerArgs:      params,
+	}
+	const numReplicas = 3
+	tc := testcluster.StartTestCluster(t, numReplicas, testClusterArgs)
+	defer tc.Stopper().Stop()
+
+	db := createTestClient(t, tc.Servers[0])
+
+	// Try a conditional put which should stall on first range.
+	errCh := make(chan error, 1)
+	go func() {
+		_, err := db.Get(context.TODO(), targetKey)
+		errCh <- err
+	}()
+
+	// Wait for the first Get to arrive.
+	testutils.SucceedsSoon(t, func() error {
+		if atomic.LoadInt32(&numGets) < 1 {
+			return errors.Errorf("awaiting Get() to key %q", targetKey)
+		}
+		return nil
+	})
+
+	// Wait for initial retries based on SendOptions.SendNextTimeout.
+	time.Sleep(2 * params.SendNextTimeout)
+
+	// Lookup the lease.
+	tableRangeDesc, err := tc.LookupRange(targetKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	leaseHolder, err := tc.FindRangeLeaseHolder(
+		tableRangeDesc,
+		&base.ReplicationTarget{
+			NodeID:  tc.Servers[0].GetNode().Descriptor.NodeID,
+			StoreID: tc.Servers[0].GetFirstStoreID(),
+		})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Find a node other than the current lease holder to transfer the lease to.
+	for i, s := range tc.Servers {
+		if leaseHolder.StoreID != s.GetFirstStoreID() {
+			if err := tc.TransferRangeLease(tableRangeDesc, tc.Target(i)); err != nil {
+				t.Fatal(err)
+			}
+			break
+		}
+	}
+
+	// Verify that Get() succeeds.
+	if err := <-errCh; err != nil {
+		t.Errorf("expected nil error; got %v", err)
+	}
+
+	close(wait)
 }

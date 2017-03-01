@@ -46,7 +46,7 @@ import (
 const (
 	// TODO(bdarnell): make SendNextTimeout configurable.
 	// https://github.com/cockroachdb/cockroach/issues/6719
-	defaultSendNextTimeout   = 500 * time.Millisecond
+	defaultSendNextTimeout   = 1 * time.Second
 	defaultClientTimeout     = 10 * time.Second
 	defaultPendingRPCTimeout = 500 * time.Millisecond
 
@@ -391,10 +391,9 @@ func (ds *DistSender) sendRPC(
 
 	// A given RPC may generate retries to multiple replicas, but as soon as we
 	// get a response from one we want to cancel those other RPCs.
-	ctx, cancel := context.WithCancel(ctx)
+	ctx, cancel := context.WithTimeout(ctx, defaultClientTimeout)
 	defer cancel()
 
-	// Set RPC opts with stipulation that one of N RPCs must succeed.
 	rpcOpts := SendOptions{
 		SendNextTimeout:  ds.sendNextTimeout,
 		transportFactory: ds.transportFactory,
@@ -1143,6 +1142,8 @@ func (ds *DistSender) sendToReplicas(
 	}
 	transport.SendNext(ctx, done)
 
+	notLeaseHolderReplicas := make(chan roachpb.ReplicaDescriptor, len(replicas))
+
 	// Wait for completions. This loop will retry operations that fail
 	// with errors that reflect per-replica state and may succeed on
 	// other replicas.
@@ -1152,13 +1153,30 @@ func (ds *DistSender) sendToReplicas(
 	defer slowTimer.Stop()
 	slowTimer.Reset(base.SlowRequestThreshold)
 	for {
+		// If the transport is exhausted, but there were replicas
+		// that failed with NotLeaseHolderError, move the first of
+		// those replicas to the front of the transport.
+		if transport.IsExhausted() {
+			select {
+			case repl := <-notLeaseHolderReplicas:
+				transport.MoveToFront(repl)
+			default:
+			}
+		}
+		// Only start the send-next timer if we haven't exhausted the
+		// transport (i.e. there is another replica to send to).
 		if !transport.IsExhausted() {
-			// Only start the send-next timer if we haven't exhausted the transport
-			// (i.e. there is another replica to send to).
 			sendNextTimer.Reset(opts.SendNextTimeout)
 		}
 
 		select {
+		case <-ctx.Done():
+			err = roachpb.NewSendError(
+				fmt.Sprintf("sending to %d replicas %s (pending=%d); last error: %v", len(replicas), ctx.Err(), err),
+			)
+			log.ErrEvent(ctx, err.Error())
+			return nil, err
+
 		case <-sendNextTimer.C:
 			sendNextTimer.Read = true
 			// On successive RPC timeouts, send to additional replicas if available.
@@ -1186,6 +1204,7 @@ func (ds *DistSender) sendToReplicas(
 					// These errors are likely to be unique to the replica that reported
 					// them, so no action is required before the next retry.
 				case *roachpb.NotLeaseHolderError:
+					notLeaseHolderReplicas <- tErr.Replica
 					ds.metrics.NotLeaseHolderErrCount.Inc(1)
 					if lh := tErr.LeaseHolder; lh != nil {
 						// If the replica we contacted knows the new lease holder, update the cache.

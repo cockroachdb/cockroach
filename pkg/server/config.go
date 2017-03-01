@@ -104,6 +104,11 @@ type Config struct {
 	// used by SQL clients to store row data in server RAM.
 	SQLMemoryPoolSize int64
 
+	// SendNextTimeout is the interval after which a pending RPC is
+	// considered unlikely to return, prompting a send to an alternate
+	// replica, if one is available.
+	SendNextTimeout time.Duration
+
 	// Parsed values.
 
 	// NodeAttributes is the parsed representation of Attrs.
