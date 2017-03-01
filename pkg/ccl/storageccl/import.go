@@ -17,8 +17,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/pkg/errors"
 )
@@ -76,7 +76,7 @@ func evalImport(ctx context.Context, cArgs storage.CommandArgs) error {
 	// Arrived at by tuning and watching the effect on BenchmarkRestore.
 	const batchSizeBytes = 1000000
 
-	var wg util.WaitGroupWithError
+	var wg syncutil.WaitGroupWithError
 	type batchBuilder struct {
 		batch         engine.RocksDBBatchBuilder
 		batchStartKey []byte
