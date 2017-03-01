@@ -220,14 +220,22 @@ func (gt *grpcTransport) MoveToFront(replica roachpb.ReplicaDescriptor) {
 				return
 			}
 			// If we've already processed the replica, decrement the current
-			// index before we swap.
+			// index and swap.
 			if i < gt.clientIndex {
 				gt.orderedClients[i].retried = true
 				gt.clientIndex--
+				gt.orderedClients[i], gt.orderedClients[gt.clientIndex] =
+					gt.orderedClients[gt.clientIndex], gt.orderedClients[i]
+			} else {
+				// Otherwise, move the replica to the front and translate
+				// successive replicas to the rear.
+				newOrderedClients := make([]batchClient, 0, len(gt.orderedClients))
+				newOrderedClients = append(newOrderedClients, gt.orderedClients[:gt.clientIndex]...)
+				newOrderedClients = append(newOrderedClients, gt.orderedClients[i])
+				newOrderedClients = append(newOrderedClients, gt.orderedClients[gt.clientIndex:i]...)
+				newOrderedClients = append(newOrderedClients, gt.orderedClients[i+1:]...)
+				gt.orderedClients = newOrderedClients
 			}
-			// Swap the client representing this replica to the front.
-			gt.orderedClients[i], gt.orderedClients[gt.clientIndex] =
-				gt.orderedClients[gt.clientIndex], gt.orderedClients[i]
 			return
 		}
 	}
