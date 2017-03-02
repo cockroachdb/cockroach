@@ -326,7 +326,6 @@ func reassignParentIDs(
 				return err
 			}
 			if existingDatabaseID.Value == nil {
-				// TODO(dan): Add the ability to restore the database from backups.
 				return errors.Errorf("a database named %q needs to exist to restore table %q",
 					database.Name, table.Name)
 			}
@@ -335,6 +334,17 @@ func reassignParentIDs(
 				return err
 			}
 			table.ParentID = sqlbase.ID(newParentID)
+
+			parentDB, err := sqlbase.GetDatabaseDescFromID(txn, table.ParentID)
+			if err != nil {
+				return errors.Wrap(err, "failed to lookup parent DB")
+			}
+
+			// Default is to copy privs from (new) parent db, like CREATE TABLE does.
+			// TODO(dt): Make this more configurable.
+			{
+				table.Privileges = parentDB.GetPrivileges()
+			}
 		}
 
 		// Check that the table name is _not_ in use.
@@ -675,6 +685,12 @@ func Restore(
 	ctx context.Context, db client.DB, uris []string, targets parser.TargetList,
 ) ([]sqlbase.TableDescriptor, error) {
 	backupDescs := make([]BackupDescriptor, len(uris))
+
+	if len(targets.Databases) > 0 {
+		return nil, errors.Errorf("RESTORE DATABASE is not yet supported " +
+			"(but you can use 'RESTORE somedb.*' to restore all backed up tables for a given DB).")
+	}
+
 	for i, uri := range uris {
 		dir, err := storageccl.ExportStorageFromURI(ctx, uri)
 		if err != nil {
