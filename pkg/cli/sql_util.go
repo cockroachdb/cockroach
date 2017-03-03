@@ -51,7 +51,7 @@ type sqlConn struct {
 func (c *sqlConn) ensureConn() error {
 	if c.conn == nil {
 		if c.reconnecting && isInteractive {
-			fmt.Fprintf(osStderr, "connection lost; opening new connection and resetting session parameters...\n")
+			fmt.Fprintf(stderr, "connection lost; opening new connection and resetting session parameters...\n")
 		}
 		conn, err := pq.Open(c.url)
 		if err != nil {

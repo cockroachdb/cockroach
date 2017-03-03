@@ -218,15 +218,15 @@ func (c *cliState) addHistory(line string) {
 func (c *cliState) invalidSyntax(
 	nextState cliStateEnum, format string, args ...interface{},
 ) cliStateEnum {
-	fmt.Fprint(osStderr, "invalid syntax: ")
-	fmt.Fprintf(osStderr, format, args...)
-	fmt.Fprintln(osStderr)
+	fmt.Fprint(stderr, "invalid syntax: ")
+	fmt.Fprintf(stderr, format, args...)
+	fmt.Fprintln(stderr)
 	c.exitErr = errInvalidSyntax
 	return nextState
 }
 
 func (c *cliState) invalidOptionChange(nextState cliStateEnum, opt string) cliStateEnum {
-	fmt.Fprintf(osStderr, "cannot change option during multi-line editing: %s\n", opt)
+	fmt.Fprintf(stderr, "cannot change option during multi-line editing: %s\n", opt)
 	return nextState
 }
 
@@ -293,7 +293,7 @@ func (c *cliState) handleSet(args []string, nextState, errState cliStateEnum) cl
 		return c.invalidOptionChange(errState, args[0])
 	}
 	if err := opt.set(c, args[1:]); err != nil {
-		fmt.Fprintf(osStderr, "\\set %s: %v\n", strings.Join(args, " "), err)
+		fmt.Fprintf(stderr, "\\set %s: %v\n", strings.Join(args, " "), err)
 		return errState
 	}
 	return nextState
@@ -312,7 +312,7 @@ func (c *cliState) handleUnset(args []string, nextState, errState cliStateEnum) 
 		return c.invalidOptionChange(errState, args[0])
 	}
 	if err := opt.unset(c); err != nil {
-		fmt.Fprintf(osStderr, "\\unset %s: %v\n", args[0], err)
+		fmt.Fprintf(stderr, "\\unset %s: %v\n", args[0], err)
 		return errState
 	}
 	return nextState
@@ -341,7 +341,7 @@ func execSyscmd(command string) (string, error) {
 
 	var out bytes.Buffer
 	cmd.Stdout = &out
-	cmd.Stderr = os.Stderr
+	cmd.Stderr = stderr
 
 	if err := cmd.Run(); err != nil {
 		return "", fmt.Errorf("error in external command: %s", err)
@@ -356,14 +356,14 @@ var errInvalidSyntax = errors.New("invalid syntax")
 func (c *cliState) runSyscmd(line string, nextState, errState cliStateEnum) cliStateEnum {
 	command := strings.Trim(line[2:], " \r\n\t\f")
 	if command == "" {
-		fmt.Fprintf(osStderr, "Usage:\n  \\! [command]\n")
+		fmt.Fprintf(stderr, "Usage:\n  \\! [command]\n")
 		c.exitErr = errInvalidSyntax
 		return errState
 	}
 
 	cmdOut, err := execSyscmd(command)
 	if err != nil {
-		fmt.Fprintf(osStderr, "command failed: %s\n", err)
+		fmt.Fprintf(stderr, "command failed: %s\n", err)
 		c.exitErr = err
 		return errState
 	}
@@ -376,14 +376,14 @@ func (c *cliState) runSyscmd(line string, nextState, errState cliStateEnum) cliS
 func (c *cliState) pipeSyscmd(line string, nextState, errState cliStateEnum) cliStateEnum {
 	command := strings.Trim(line[2:], " \n\r\t\f")
 	if command == "" {
-		fmt.Fprintf(osStderr, "Usage:\n  \\| [command]\n")
+		fmt.Fprintf(stderr, "Usage:\n  \\| [command]\n")
 		c.exitErr = errInvalidSyntax
 		return errState
 	}
 
 	cmdOut, err := execSyscmd(command)
 	if err != nil {
-		fmt.Fprintf(osStderr, "command failed: %s\n", err)
+		fmt.Fprintf(stderr, "command failed: %s\n", err)
 		c.exitErr = err
 		return errState
 	}
@@ -408,20 +408,20 @@ func (c *cliState) refreshTransactionStatus(nextState cliStateEnum) cliStateEnum
 	query := makeQuery(`SHOW TRANSACTION STATUS`)
 	rows, err := query(c.conn)
 	if err != nil {
-		fmt.Fprintf(osStderr, "error retrieving the transaction status: %v", err)
+		fmt.Fprintf(stderr, "error retrieving the transaction status: %v", err)
 		return c.refreshDatabaseName(" ?", nextState)
 	}
 	defer func() { _ = rows.Close() }()
 
 	if len(rows.Columns()) == 0 {
-		fmt.Fprintf(osStderr, "invalid transaction status\n")
+		fmt.Fprintf(stderr, "invalid transaction status\n")
 		return c.refreshDatabaseName(" ?", nextState)
 	}
 
 	val := make([]driver.Value, len(rows.Columns()))
 	err = rows.Next(val)
 	if err != nil {
-		fmt.Fprintf(osStderr, "invalid transaction status: %v\n", err)
+		fmt.Fprintf(stderr, "invalid transaction status: %v\n", err)
 		return c.refreshDatabaseName(" ?", nextState)
 	}
 
@@ -467,13 +467,13 @@ func (c *cliState) refreshDatabaseName(txnStatus string, nextState cliStateEnum)
 	query := makeQuery(`SHOW DATABASE`)
 	rows, err := query(c.conn)
 	if err != nil {
-		fmt.Fprintf(osStderr, "error retrieving the database name: %v", err)
+		fmt.Fprintf(stderr, "error retrieving the database name: %v", err)
 		return c.refreshPrompts(txnStatus, nextState)
 	}
 	defer func() { _ = rows.Close() }()
 
 	if len(rows.Columns()) == 0 {
-		fmt.Fprintf(osStderr, "cannot get the database name")
+		fmt.Fprintf(stderr, "cannot get the database name")
 		return c.refreshPrompts(txnStatus, nextState)
 	}
 
@@ -602,7 +602,7 @@ func (c *cliState) doQuerySyntax(nextState cliStateEnum) cliStateEnum {
 
 	newSyntax, err := getSyntax(c.conn)
 	if err != nil {
-		fmt.Fprintf(osStderr, "warning: could not get session syntax: %s\n", err)
+		fmt.Fprintf(stderr, "warning: could not get session syntax: %s\n", err)
 		// For now this is just a warning.
 	} else {
 		c.syntax = newSyntax
@@ -706,7 +706,7 @@ func (c *cliState) doReadLine(nextState cliStateEnum) cliStateEnum {
 
 	default:
 		// Other errors terminate the shell.
-		fmt.Fprintf(osStderr, "input error: %s\n", err)
+		fmt.Fprintf(stderr, "input error: %s\n", err)
 		c.exitErr = err
 		return cliStop
 	}
@@ -766,7 +766,7 @@ func (c *cliState) doHandleCliCmd(loopState, nextState cliStateEnum) cliStateEnu
 
 	case `\show`:
 		if len(c.partialLines) == 0 {
-			fmt.Fprintf(osStderr, "No input so far. Did you mean SHOW?\n")
+			fmt.Fprintf(stderr, "No input so far. Did you mean SHOW?\n")
 		} else {
 			for _, s := range c.partialLines {
 				fmt.Println(s)
@@ -779,7 +779,7 @@ func (c *cliState) doHandleCliCmd(loopState, nextState cliStateEnum) cliStateEnu
 	default:
 		if strings.HasPrefix(cmd[0], `\d`) {
 			// Unrecognized command for now, but we want to be helpful.
-			fmt.Fprint(osStderr, "Suggestion: use the SQL SHOW statement to inspect your schema.\n")
+			fmt.Fprint(stderr, "Suggestion: use the SQL SHOW statement to inspect your schema.\n")
 		}
 		return c.invalidSyntax(errState, `%s. Try \? for help.`, c.lastInputLine)
 	}
@@ -817,7 +817,7 @@ func (c *cliState) doPrepareStatementLine(
 	if c.atEOF {
 		// Definitely no more input expected.
 		if !endsWithSemi {
-			fmt.Fprintf(osStderr, "missing semicolon at end of statement: %s\n", c.concatLines)
+			fmt.Fprintf(stderr, "missing semicolon at end of statement: %s\n", c.concatLines)
 			c.exitErr = fmt.Errorf("last statement was not executed: %s", c.concatLines)
 			return cliStop
 		}
@@ -893,7 +893,7 @@ func (c *cliState) doCheckStatement(startState, contState, execState cliStateEnu
 	// the user to enter input over multiple lines.
 	if endsWithIncompleteTxn(parsedStmts) && c.lastInputLine != "" {
 		if c.partialStmtsLen == 0 {
-			fmt.Fprintln(osStderr, "Now adding input for a multi-line SQL transaction client-side.\n"+
+			fmt.Fprintln(stderr, "Now adding input for a multi-line SQL transaction client-side.\n"+
 				"Press Enter two times to send the SQL text collected so far to the server, or Ctrl+C to cancel.")
 		}
 
@@ -909,7 +909,7 @@ func (c *cliState) doRunStatement(nextState cliStateEnum) cliStateEnum {
 	c.exitErr = runQueryAndFormatResults(c.conn, os.Stdout, makeQuery(c.concatLines),
 		cliCtx.tableDisplayFormat)
 	if c.exitErr != nil {
-		fmt.Fprintln(osStderr, c.exitErr)
+		fmt.Fprintln(stderr, c.exitErr)
 		if c.errExit {
 			return cliStop
 		}
