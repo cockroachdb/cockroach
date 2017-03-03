@@ -496,7 +496,8 @@ func main() {
 		os.Exit(exitStatus)
 	}()
 
-	c.Start("allocsim", *workers, os.Args[0], nil, flag.Args(), perNodeArgs)
+	allNodeArgs := append(flag.Args(), "--vmodule=allocator=1")
+	c.Start("allocsim", *workers, os.Args[0], nil, allNodeArgs, perNodeArgs)
 	c.UpdateZoneConfig(1, 1<<20)
 	if len(config.Localities) != 0 {
 		a.runWithConfig(config)
