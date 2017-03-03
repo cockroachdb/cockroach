@@ -20,6 +20,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"io/ioutil"
 	stdLog "log"
 	"math"
 	"os"
@@ -647,6 +648,28 @@ func TestFatalStacktraceStderr(t *testing.T) {
 				t.Fatalf("stack trace contains less than two goroutines: %s", cont)
 			}
 		}
+	}
+}
+
+func TestRedirectStderr(t *testing.T) {
+	s := Scope(t, "")
+	defer s.Close(t)
+
+	setFlags()
+	logging.stderrThreshold = Severity_NONE
+	logging.toStderr = false
+
+	Infof(context.Background(), "test")
+
+	const stderrText = "hello stderr"
+	fmt.Fprintf(os.Stderr, stderrText)
+
+	contents, err := ioutil.ReadFile(logging.file[Severity_INFO].(*syncBuffer).file.Name())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(contents), stderrText) {
+		t.Fatalf("INFO log does not contain stderr text\n%s", contents)
 	}
 }
 
