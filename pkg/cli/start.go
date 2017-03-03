@@ -479,6 +479,7 @@ func runStart(cmd *cobra.Command, args []string) error {
 	case sig := <-signalCh:
 		returnErr = fmt.Errorf("received signal '%s' during shutdown, initiating hard shutdown", sig)
 		log.Errorf(shutdownCtx, "%v", returnErr)
+		fmt.Fprintln(os.Stdout, returnErr)
 		// This new signal is not welcome, as it interferes with the
 		// graceful shutdown process.  On Unix, a signal that was not
 		// handled gracefully by the application should be visible to
@@ -490,6 +491,7 @@ func runStart(cmd *cobra.Command, args []string) error {
 	case <-time.After(time.Minute):
 		returnErr = errors.New("time limit reached, initiating hard shutdown")
 		log.Errorf(shutdownCtx, "%v", returnErr)
+		fmt.Fprintln(os.Stdout, returnErr)
 		// NB: we do not return here to go through log.Flush below.
 	case <-stopper.IsStopped():
 		const msgDone = "server drained and shutdown completed"
@@ -648,7 +650,7 @@ func runQuit(_ *cobra.Command, _ []string) (err error) {
 	if err := doShutdown(ctx, c, onModes); err != nil {
 		if _, ok := err.(*errTryHardShutdown); ok {
 			fmt.Fprintf(
-				os.Stderr, "graceful shutdown failed: %s\nproceeding with hard shutdown\n", err,
+				os.Stdout, "graceful shutdown failed: %s\nproceeding with hard shutdown\n", err,
 			)
 		} else {
 			return err
