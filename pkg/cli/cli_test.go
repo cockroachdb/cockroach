@@ -133,7 +133,7 @@ func newCLITest(params cliTestParams) cliTest {
 
 	// Ensure that CLI error messages are logged to stdout, where they
 	// can be captured.
-	osStderr = os.Stdout
+	stderr = os.Stdout
 
 	return c
 }
@@ -146,7 +146,7 @@ func (c cliTest) cleanup() {
 	}
 
 	// Restore stderr.
-	osStderr = os.Stderr
+	stderr = os.Stderr
 
 	if c.TestServer != nil {
 		select {
