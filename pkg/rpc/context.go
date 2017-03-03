@@ -19,6 +19,7 @@ package rpc
 import (
 	"errors"
 	"math"
+	"net"
 	"strings"
 	"sync"
 	"time"
@@ -31,6 +32,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -55,27 +57,10 @@ const (
 	maximumPingDurationMult = 2
 )
 
-// ArtificialLatencies provides a way to inject fake latency into requests
-// to/from particular nodes. It should only ever be set by testing code, and
-// is not thread safe (so it must be initialized before the server starts).
-var ArtificialLatencies = make(map[string]time.Duration)
-
-type clientStreamWithDelay struct {
-	grpc.ClientStream
-	delay time.Duration
-}
-
-func (c *clientStreamWithDelay) RecvMsg(m interface{}) error {
-	timer := timeutil.NewTimer()
-	defer timer.Stop()
-	timer.Reset(c.delay)
-	select {
-	case <-timer.C:
-	case <-c.Context().Done():
-		return c.Context().Err()
-	}
-	return c.ClientStream.RecvMsg(m)
-}
+// SourceAddr provides a way to specify a source/local address for outgoing
+// connections. It should only ever be set by testing code, and is not thread
+// safe (so it must be initialized before the server starts).
+var SourceAddr = envutil.EnvOrDefaultString("COCKROACH_SOURCE_IP_ADDRESS", "")
 
 // NewServer is a thin wrapper around grpc.NewServer that registers a heartbeat
 // service.
@@ -243,44 +228,22 @@ func (ctx *Context) GRPCDial(target string, opts ...grpc.DialOption) (*grpc.Clie
 		dialOpts = append(dialOpts, grpc.WithBackoffMaxDelay(maxBackoff))
 		dialOpts = append(dialOpts, opts...)
 
-		if delay, ok := ArtificialLatencies[target]; ok {
-			dialOpts = append(dialOpts, grpc.WithUnaryInterceptor(
-				func(
-					ctx context.Context,
-					method string,
-					req, reply interface{},
-					cc *grpc.ClientConn,
-					invoker grpc.UnaryInvoker,
-					opts ...grpc.CallOption,
-				) error {
-					timer := timeutil.NewTimer()
-					defer timer.Stop()
-					timer.Reset(delay)
-					select {
-					case <-timer.C:
-					case <-ctx.Done():
-						return ctx.Err()
+		if SourceAddr != "" {
+			sourceIP := net.ParseIP(SourceAddr)
+			if sourceIP == nil {
+				log.Fatalf(ctx.masterCtx,
+					"unable to parse COCKROACH_SOURCE_IP_ADDRESS %q as IP address", SourceAddr)
+			}
+			tcpAddr := &net.TCPAddr{
+				IP: sourceIP,
+			}
+			dialOpts = append(dialOpts, grpc.WithDialer(
+				func(addr string, timeout time.Duration) (net.Conn, error) {
+					dialer := net.Dialer{
+						Timeout:   timeout,
+						LocalAddr: tcpAddr,
 					}
-					return invoker(ctx, method, req, reply, cc, opts...)
-				},
-			))
-			dialOpts = append(dialOpts, grpc.WithStreamInterceptor(
-				func(
-					ctx context.Context,
-					desc *grpc.StreamDesc,
-					cc *grpc.ClientConn,
-					method string,
-					streamer grpc.Streamer,
-					opts ...grpc.CallOption,
-				) (grpc.ClientStream, error) {
-					s, err := streamer(ctx, desc, cc, method, opts...)
-					if err != nil {
-						return nil, err
-					}
-					return &clientStreamWithDelay{
-						ClientStream: s,
-						delay:        delay,
-					}, nil
+					return dialer.Dial("tcp", addr)
 				},
 			))
 		}
