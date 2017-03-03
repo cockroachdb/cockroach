@@ -436,7 +436,7 @@ func (z *zeroSum) monitor(d time.Duration) {
 func main() {
 	flag.Parse()
 
-	c := localcluster.New(*numNodes)
+	c := localcluster.New(*numNodes, false /* separateAddrs */)
 	defer c.Close()
 
 	log.SetExitFunc(func(code int) {
