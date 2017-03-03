@@ -338,10 +338,13 @@ func (a *allocSim) monitor(d time.Duration) {
 			fmt.Println(formatHeader("_elapsed__ops/sec__average__latency___errors_replicas", numReplicas, a.localities))
 		}
 
+		var avgLatency float64
+		if ops > 0 {
+			avgLatency = float64(totalLatencyNanos/ops) / float64(time.Millisecond)
+		}
 		fmt.Printf("%8s %8.1f %8.1f %6.1fms %8d %8d%s\n",
 			time.Duration(now.Sub(start).Seconds()+0.5)*time.Second,
-			float64(ops-lastOps)/elapsed, float64(ops)/now.Sub(start).Seconds(),
-			float64(totalLatencyNanos/ops)/float64(time.Millisecond),
+			float64(ops-lastOps)/elapsed, float64(ops)/now.Sub(start).Seconds(), avgLatency,
 			atomic.LoadUint64(&a.stats.errors), ranges, formatNodes(replicas, leases, leaseTransfers))
 		lastTime = now
 		lastOps = ops
@@ -496,7 +499,8 @@ func main() {
 		os.Exit(exitStatus)
 	}()
 
-	c.Start("allocsim", *workers, os.Args[0], nil, flag.Args(), perNodeArgs)
+	allNodeArgs := append(flag.Args(), "--vmodule=allocator=1")
+	c.Start("allocsim", *workers, os.Args[0], nil, allNodeArgs, perNodeArgs)
 	c.UpdateZoneConfig(1, 1<<20)
 	if len(config.Localities) != 0 {
 		a.runWithConfig(config)
