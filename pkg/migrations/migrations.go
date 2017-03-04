@@ -63,7 +63,7 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 	},
 	{
 		name:   "enable diagnostics reporting",
-		workFn: optIntToDiagnosticsStatReporting,
+		workFn: optInToDiagnosticsStatReporting,
 	},
 }
 
@@ -76,7 +76,7 @@ type migrationDescriptor struct {
 	// workFn must be idempotent so that we can safely re-run it if a node failed
 	// while running it.
 	workFn func(context.Context, runner) error
-	// newRanges and descriptors are the number of additional ranges/descriptors
+	// newRanges and newDescriptors are the number of additional ranges/descriptors
 	// that would be added by this migration in a fresh cluster. This is needed to
 	// automate certain tests, which check the number of ranges/descriptors
 	// present on server bootup.
@@ -348,7 +348,6 @@ func createSettingsTable(ctx context.Context, r runner) error {
 	return createSystemTable(ctx, r, sqlbase.SettingsTable)
 }
 
-// TODO(a-robinson): Write unit test for this.
 func createSystemTable(ctx context.Context, r runner, desc sqlbase.TableDescriptor) error {
 	// We install the table at the KV layer so that we can choose a known ID in
 	// the reserved ID space. (The SQL layer doesn't allow this.)
@@ -373,7 +372,7 @@ func createSystemTable(ctx context.Context, r runner, desc sqlbase.TableDescript
 
 var reportingOptOut = envutil.EnvOrDefaultBool("COCKROACH_SKIP_ENABLING_DIAGNOSTIC_REPORTING", false)
 
-func optIntToDiagnosticsStatReporting(ctx context.Context, r runner) error {
+func optInToDiagnosticsStatReporting(ctx context.Context, r runner) error {
 	const setStmt = "SET CLUSTER SETTING diagnostics.reporting.enabled = true"
 
 	// We're opting-out of the automatic opt-in. See discussion in updates.go.
