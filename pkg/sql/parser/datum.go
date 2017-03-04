@@ -2006,6 +2006,90 @@ func (*DTable) min() (Datum, bool) { return nil, false }
 // Size implements the Datum interface.
 func (*DTable) Size() uintptr { return unsafe.Sizeof(DTable{}) }
 
+// DOid is the Postgres OID datum. It can represent either an OID type or any
+// of the reg* types, such as regproc or regclass.
+type DOid struct {
+	// A DOid embeds a DInt, the underlying integer OID for this OID datum.
+	DInt
+	// kind indicates the particular variety of OID this datum is, whether raw
+	// oid or a reg* type.
+	kind *OidColType
+	// name is set to the resolved name of this OID, if available.
+	name string
+}
+
+// NewDOid is a helper routine to create a *DOid initialized from a DInt.
+func NewDOid(d DInt) Datum {
+	return &DOid{DInt: d, kind: oidColTypeOid, name: ""}
+}
+
+// AmbiguousFormat implements the Datum interface.
+func (*DOid) AmbiguousFormat() bool { return true }
+
+// Compare implements the Datum interface.
+func (d *DOid) Compare(other Datum) int {
+	if other == DNull {
+		// NULL is less than any non-NULL value.
+		return 1
+	}
+	v, ok := other.(*DOid)
+	if !ok {
+		panic(makeUnsupportedComparisonMessage(d, other))
+	}
+	if d.DInt < v.DInt {
+		return -1
+	}
+	if d.DInt > v.DInt {
+		return 1
+	}
+	return 0
+}
+
+// Format implements the Datum interface.
+func (d *DOid) Format(buf *bytes.Buffer, flags FmtFlags) {
+	if d.kind == oidColTypeOid || d.name == "" {
+		d.DInt.Format(buf, flags)
+	} else {
+		encodeSQLStringWithFlags(buf, d.name, FmtBareStrings)
+	}
+}
+
+// IsMax implements the Datum interface.
+func (d *DOid) IsMax() bool { return d.DInt.IsMax() }
+
+// IsMin implements the Datum interface.
+func (d *DOid) IsMin() bool { return d.DInt.IsMin() }
+
+// Next implements the Datum interface.
+func (d *DOid) Next() (Datum, bool) {
+	next, ok := d.DInt.Next()
+	return &DOid{*next.(*DInt), d.kind, ""}, ok
+}
+
+// Prev implements the Datum interface.
+func (d *DOid) Prev() (Datum, bool) {
+	prev, ok := d.DInt.Prev()
+	return &DOid{*prev.(*DInt), d.kind, ""}, ok
+}
+
+// ResolvedType implements the Datum interface.
+func (DOid) ResolvedType() Type { return TypeOid }
+
+// Size implements the Datum interface.
+func (d *DOid) Size() uintptr { return unsafe.Sizeof(*d) }
+
+// max implements the Datum interface.
+func (d *DOid) max() (Datum, bool) {
+	max, ok := d.DInt.max()
+	return &DOid{*max.(*DInt), d.kind, ""}, ok
+}
+
+// min implements the Datum interface.
+func (d *DOid) min() (Datum, bool) {
+	min, ok := d.DInt.min()
+	return &DOid{*min.(*DInt), d.kind, ""}, ok
+}
+
 // DOidWrapper is a Datum implementation which is a wrapper around a Datum, allowing
 // custom Oid values to be attached to the Datum and its Type (see tOidWrapper).
 // The reason the Datum type was introduced was to permit the introduction of Datum
@@ -2024,7 +2108,6 @@ func (*DTable) Size() uintptr { return unsafe.Sizeof(DTable{}) }
 //   additions to typing rules or type-dependent evaluation behavior.
 //
 // Types that currently benefit from DOidWrapper are:
-// - DOid  => DOidWrapper(*DInt,    oid.T_oid)
 // - DName => DOidWrapper(*DString, oid.T_name)
 //
 type DOidWrapper struct {
@@ -2142,18 +2225,6 @@ func NewDNameFromDString(d *DString) Datum {
 // initialized from a string.
 func NewDName(d string) Datum {
 	return NewDNameFromDString(NewDString(d))
-}
-
-// NewDOidFromDInt is a helper routine to create a *DOid (implemented as
-// a *DOidWrapper) initialized from an existing *DInt.
-func NewDOidFromDInt(d *DInt) Datum {
-	return wrapWithOid(d, oid.T_oid)
-}
-
-// NewDOid is a helper routine to create a *DOid (implemented as a *DOidWrapper)
-// initialized from a DInt.
-func NewDOid(d DInt) Datum {
-	return NewDOidFromDInt(NewDInt(d))
 }
 
 // NewDIntVectorFromDArray is a helper routine to create a *DIntVector
