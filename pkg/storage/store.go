@@ -1485,7 +1485,8 @@ func (s *Store) canCampaignIdleReplica() bool {
 	return !s.Clock().PhysicalTime().Before(s.idleReplicaElectionTime.at)
 }
 
-// GossipDeadReplicas broadcasts the stores dead replicas on the gossip network.
+// GossipDeadReplicas broadcasts the store's dead replicas on the gossip
+// network.
 func (s *Store) GossipDeadReplicas(ctx context.Context) error {
 	deadReplicas := s.deadReplicas()
 	// Don't gossip if there's nothing to gossip.

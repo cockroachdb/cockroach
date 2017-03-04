@@ -834,7 +834,7 @@ func (tc *TxnCoordSender) updateState(
 	} else {
 		if pErr.TransactionRestart != roachpb.TransactionRestart_NONE {
 			if !roachpb.TxnIDEqual(pErr.GetTxn().ID, &txnID) {
-				// KV should not return errors for transactions other that the one in
+				// KV should not return errors for transactions other than the one in
 				// the BatchRequest.
 				log.Fatalf(ctx, "retryable error for the wrong txn. ba.Txn: %s. pErr: %s",
 					ba.Txn, pErr)
