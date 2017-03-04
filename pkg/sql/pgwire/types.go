@@ -200,6 +200,10 @@ func (b *writeBuffer) writeTextDatum(d parser.Datum, sessionLoc *time.Location) 
 			b.variablePutbuf.WriteString("}")
 			b.writeLengthPrefixedVariablePutbuf()
 		}
+	case *parser.DOid:
+		b.writeLengthPrefixedDatum(v)
+	default:
+		b.setError(errors.Errorf("unsupported type %T", d))
 	}
 }
 
@@ -337,6 +341,9 @@ func (b *writeBuffer) writeBinaryDatum(d parser.Datum, sessionLoc *time.Location
 		}
 		b.variablePutbuf = subWriter.wrapped
 		b.writeLengthPrefixedVariablePutbuf()
+	case *parser.DOid:
+		b.putInt32(4)
+		b.putInt32(int32(v.DInt))
 	default:
 		b.setError(errors.Errorf("unsupported type %T", d))
 	}
