@@ -488,6 +488,12 @@ func EncodeTableKey(b []byte, val parser.Datum, dir encoding.Direction) ([]byte,
 			}
 		}
 		return b, nil
+	case *parser.DOid:
+		if dir == encoding.Ascending {
+
+			return encoding.EncodeVarintAscending(b, int64(*t.Oid)), nil
+		}
+		return encoding.EncodeVarintDescending(b, int64(*t.Oid)), nil
 	}
 	return nil, errors.Errorf("unable to encode table key: %T", val)
 }
@@ -521,6 +527,8 @@ func EncodeTableValue(appendTo []byte, colID ColumnID, val parser.Datum) ([]byte
 		return encoding.EncodeDurationValue(appendTo, uint32(colID), t.Duration), nil
 	case *parser.DCollatedString:
 		return encoding.EncodeBytesValue(appendTo, uint32(colID), []byte(t.Contents)), nil
+	case *parser.DOid:
+		return encoding.EncodeIntValue(appendTo, uint32(colID), int64(*t.Oid)), nil
 	}
 	return nil, errors.Errorf("unable to encode table value: %T", val)
 }
@@ -1265,7 +1273,7 @@ func MarshalColumnValue(col ColumnDescriptor, val parser.Datum) (roachpb.Value, 
 			r.SetBool(bool(*v))
 			return r, nil
 		}
-	case ColumnType_INT, ColumnType_OID:
+	case ColumnType_INT:
 		if v, ok := parser.AsDInt(val); ok {
 			r.SetInt(int64(v))
 			return r, nil
@@ -1321,6 +1329,11 @@ func MarshalColumnValue(col ColumnDescriptor, val parser.Datum) (roachpb.Value, 
 			}
 			return r, fmt.Errorf("locale %q doesn't match locale %q of column %q",
 				v.Locale, *col.Type.Locale, col.Name)
+		}
+	case ColumnType_OID:
+		if v, ok := val.(*parser.DOid); ok {
+			r.SetInt(int64(*v.Oid))
+			return r, nil
 		}
 	default:
 		return r, errors.Errorf("unsupported column type: %s", col.Type.Kind)

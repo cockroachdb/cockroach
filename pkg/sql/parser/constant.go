@@ -178,8 +178,8 @@ func (expr *NumVal) asConstantInt() (constant.Value, bool) {
 }
 
 var (
-	numValAvailIntFloatDec = []Type{TypeInt, TypeDecimal, TypeFloat}
-	numValAvailDecFloatInt = []Type{TypeDecimal, TypeFloat, TypeInt}
+	numValAvailIntFloatDec = []Type{TypeInt, TypeDecimal, TypeFloat, TypeOid}
+	numValAvailDecFloatInt = []Type{TypeDecimal, TypeFloat, TypeInt, TypeOid}
 	numValAvailDecFloat    = []Type{TypeDecimal, TypeFloat}
 )
 

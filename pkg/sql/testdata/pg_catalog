@@ -371,7 +371,7 @@ v1            c        false         true        0            NULL    NULL      
 
 
 # Select all columns with collations.
-query TTTIT colnames
+query TTTOT colnames
 SELECT c.relname, attname, t.typname, attcollation, k.collname
 FROM pg_catalog.pg_attribute a
 JOIN pg_catalog.pg_class c ON a.attrelid = c.oid
@@ -662,6 +662,7 @@ oid   typname      typnamespace  typowner  typlen  typbyval  typtype
 21    int2         1782195457    NULL      8       true      b
 22    int2vector   1782195457    NULL      -1      false     b
 23    int4         1782195457    NULL      8       true      b
+24    regproc      1782195457    NULL      8       true      b
 25    text         1782195457    NULL      -1      false     b
 26    oid          1782195457    NULL      8       true      b
 700   float4       1782195457    NULL      8       true      b
@@ -676,6 +677,9 @@ oid   typname      typnamespace  typowner  typlen  typbyval  typtype
 1184  timestamptz  1782195457    NULL      24      true      b
 1186  interval     1782195457    NULL      24      true      b
 1700  numeric      1782195457    NULL      -1      false     b
+2202  regprocedure 1782195457    NULL      8       true      b
+2205  regclass     1782195457    NULL      8       true      b
+2206  regtype      1782195457    NULL      8       true      b
 2249  tuple        1782195457    NULL      0       true      b
 2283  anyelement   1782195457    NULL      -1      false     b
 
@@ -692,6 +696,7 @@ oid   typname      typcategory  typispreferred  typisdefined  typdelim  typrelid
 21    int2         N            false           true          ,         0         0        0
 22    int2vector   A            false           true          ,         0         20       0
 23    int4         N            false           true          ,         0         0        0
+24    regproc      N            false           true          ,         0         0        0
 25    text         S            false           true          ,         0         0        0
 26    oid          N            false           true          ,         0         0        0
 700   float4       N            false           true          ,         0         0        0
@@ -706,6 +711,9 @@ oid   typname      typcategory  typispreferred  typisdefined  typdelim  typrelid
 1184  timestamptz  D            false           true          ,         0         0        0
 1186  interval     T            false           true          ,         0         0        0
 1700  numeric      N            false           true          ,         0         0        0
+2202  regprocedure N            false           true          ,         0         0        0
+2205  regclass     N            false           true          ,         0         0        0
+2206  regtype      N            false           true          ,         0         0        0
 2249  tuple        P            false           true          ,         0         0        0
 2283  anyelement   P            false           true          ,         0         0        0
 
@@ -722,6 +730,7 @@ oid   typname      typinput    typoutput  typreceive  typsend  typmodin  typmodo
 21    int2         0           0          0           0        0         0          0
 22    int2vector   4288767817  0          0           0        0         0          0
 23    int4         0           0          0           0        0         0          0
+24    regproc      0           0          0           0        0         0          0
 25    text         0           0          0           0        0         0          0
 26    oid          0           0          0           0        0         0          0
 700   float4       0           0          0           0        0         0          0
@@ -736,6 +745,9 @@ oid   typname      typinput    typoutput  typreceive  typsend  typmodin  typmodo
 1184  timestamptz  0           0          0           0        0         0          0
 1186  interval     0           0          0           0        0         0          0
 1700  numeric      0           0          0           0        0         0          0
+2202  regprocedure 0           0          0           0        0         0          0
+2205  regclass     0           0          0           0        0         0          0
+2206  regtype      0           0          0           0        0         0          0
 2249  tuple        0           0          0           0        0         0          0
 2283  anyelement   0           0          0           0        0         0          0
 
@@ -752,6 +764,7 @@ oid   typname      typalign  typstorage  typnotnull  typbasetype  typtypmod
 21    int2         NULL      NULL        false       0            -1
 22    int2vector   NULL      NULL        false       0            -1
 23    int4         NULL      NULL        false       0            -1
+24    regproc      NULL      NULL        false       0            -1
 25    text         NULL      NULL        false       0            -1
 26    oid          NULL      NULL        false       0            -1
 700   float4       NULL      NULL        false       0            -1
@@ -766,6 +779,9 @@ oid   typname      typalign  typstorage  typnotnull  typbasetype  typtypmod
 1184  timestamptz  NULL      NULL        false       0            -1
 1186  interval     NULL      NULL        false       0            -1
 1700  numeric      NULL      NULL        false       0            -1
+2202  regprocedure NULL      NULL        false       0            -1
+2205  regclass     NULL      NULL        false       0            -1
+2206  regtype      NULL      NULL        false       0            -1
 2249  tuple        NULL      NULL        false       0            -1
 2283  anyelement   NULL      NULL        false       0            -1
 
@@ -782,6 +798,7 @@ oid   typname      typndims  typcollation  typdefaultbin  typdefault  typacl
 21    int2         0         0             NULL           NULL        NULL
 22    int2vector   0         0             NULL           NULL        NULL
 23    int4         0         0             NULL           NULL        NULL
+24    regproc      0         0             NULL           NULL        NULL
 25    text         0         1661428263    NULL           NULL        NULL
 26    oid          0         0             NULL           NULL        NULL
 700   float4       0         0             NULL           NULL        NULL
@@ -796,6 +813,9 @@ oid   typname      typndims  typcollation  typdefaultbin  typdefault  typacl
 1184  timestamptz  0         0             NULL           NULL        NULL
 1186  interval     0         0             NULL           NULL        NULL
 1700  numeric      0         0             NULL           NULL        NULL
+2202  regprocedure 0         0             NULL           NULL        NULL
+2205  regclass     0         0             NULL           NULL        NULL
+2206  regtype      0         0             NULL           NULL        NULL
 2249  tuple        0         0             NULL           NULL        NULL
 2283  anyelement   0         0             NULL           NULL        NULL
 
@@ -960,10 +980,10 @@ transaction priority           NULL    NULL     NULL     NULL        NULL
 
 # Verify proper functionality of system information functions.
 
-query T
-SELECT pg_catalog.pg_get_expr('1', 0)
+query TT
+SELECT pg_catalog.pg_get_expr('1', 0), pg_catalog.pg_get_expr('1', 0::OID)
 ----
-1
+1  1
 
 query T
 SELECT pg_catalog.pg_get_expr('1', 0, true)

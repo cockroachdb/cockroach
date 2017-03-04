@@ -1534,7 +1534,7 @@ var Builtins = map[string][]Builtin{
 		Builtin{
 			Types: ArgTypes{
 				{"pg_node_tree", TypeString},
-				{"relation_oid", TypeInt},
+				{"relation_oid", TypeOid},
 			},
 			ReturnType: fixedReturnType(TypeString),
 			fn: func(_ *EvalContext, args Datums) (Datum, error) {
@@ -1546,7 +1546,7 @@ var Builtins = map[string][]Builtin{
 		Builtin{
 			Types: ArgTypes{
 				{"pg_node_tree", TypeString},
-				{"relation_oid", TypeInt},
+				{"relation_oid", TypeOid},
 				{"pretty_bool", TypeBool},
 			},
 			ReturnType: fixedReturnType(TypeString),
@@ -1563,13 +1563,12 @@ var Builtins = map[string][]Builtin{
 	"pg_get_indexdef": {
 		Builtin{
 			Types: ArgTypes{
-				{"index_oid", TypeInt},
+				{"index_oid", TypeOid},
 			},
 			ReturnType: fixedReturnType(TypeString),
 			fn: func(ctx *EvalContext, args Datums) (Datum, error) {
-				oid := args[0]
 				r, err := ctx.Planner.QueryRow(
-					"SELECT indexdef FROM pg_catalog.pg_indexes WHERE crdb_oid=$1", oid)
+					"SELECT indexdef FROM pg_catalog.pg_indexes WHERE crdb_oid=$1", args[0])
 				if err != nil {
 					return nil, err
 				}
@@ -1602,7 +1601,7 @@ var Builtins = map[string][]Builtin{
 	"pg_get_userbyid": {
 		Builtin{
 			Types: ArgTypes{
-				{"role_oid", TypeInt},
+				{"role_oid", TypeOid},
 			},
 			ReturnType: fixedReturnType(TypeString),
 			fn: func(ctx *EvalContext, args Datums) (Datum, error) {
@@ -1623,10 +1622,10 @@ var Builtins = map[string][]Builtin{
 	"format_type": {
 		Builtin{
 			// TODO(jordan) typemod should be a Nullable TypeInt when supported.
-			Types:      ArgTypes{{"type_oid", TypeInt}, {"typemod", TypeInt}},
+			Types:      ArgTypes{{"type_oid", TypeOid}, {"typemod", TypeInt}},
 			ReturnType: fixedReturnType(TypeString),
 			fn: func(ctx *EvalContext, args Datums) (Datum, error) {
-				typ, ok := OidToType[oid.Oid(int(MustBeDInt(args[0])))]
+				typ, ok := OidToType[oid.Oid(int(*args[0].(*DOid).Oid))]
 				if !ok {
 					return NewDString(fmt.Sprintf("unknown (OID=%s)", args[0])), nil
 				}
@@ -1640,7 +1639,7 @@ var Builtins = map[string][]Builtin{
 	},
 	"col_description": {
 		Builtin{
-			Types:      ArgTypes{{"table_oid", TypeInt}, {"column_number", TypeInt}},
+			Types:      ArgTypes{{"table_oid", TypeOid}, {"column_number", TypeInt}},
 			ReturnType: fixedReturnType(TypeString),
 			fn: func(_ *EvalContext, _ Datums) (Datum, error) {
 				return DNull, nil

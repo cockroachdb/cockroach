@@ -70,7 +70,6 @@ func (*CollatedStringColType) castTargetType() {}
 func (*ArrayColType) castTargetType()          {}
 func (*VectorColType) castTargetType()         {}
 func (*OidColType) castTargetType()            {}
-func (*OidPseudoType) castTargetType()         {}
 
 // Pre-allocated immutable boolean column types.
 var (
@@ -346,38 +345,29 @@ var int2vectorColType = &VectorColType{
 	ParamType: intColTypeInt,
 }
 
-// Pre-allocated immutable postgres oid column type.
-var oidColTypeOid = &OidColType{}
-
-// OidColType represents an OID type
-type OidColType struct{}
-
-// Format implements the NodeFormatter interface.
-func (node *OidColType) Format(buf *bytes.Buffer, f FmtFlags) {
-	buf.WriteString("OID")
-}
-
-// Pre-allocated immutable postgres oid pseudo-types.
+// Pre-allocated immutable postgres oid column types.
 var (
-	oidPseudoTypeRegProc      = &OidPseudoType{Name: "REGPROC"}
-	oidPseudoTypeRegClass     = &OidPseudoType{Name: "REGCLASS"}
-	oidPseudoTypeRegType      = &OidPseudoType{Name: "REGTYPE"}
-	oidPseudoTypeRegNamespace = &OidPseudoType{Name: "REGNAMESPACE"}
+	oidColTypeOid          = &OidColType{Name: "OID"}
+	oidColTypeRegProc      = &OidColType{Name: "REGPROC"}
+	oidColTypeRegProcedure = &OidColType{Name: "REGPROCEDURE"}
+	oidColTypeRegClass     = &OidColType{Name: "REGCLASS"}
+	oidColTypeRegType      = &OidColType{Name: "REGTYPE"}
+	oidColTypeRegNamespace = &OidColType{Name: "REGNAMESPACE"}
 )
 
-// OidPseudoType represents a postgres oid pseudo-type. It implements CastTargetType,
-// but NOT ColumnType. This is because a cast to one of these types is specialized to
-// accept and display symbolic names for system objects, rather than the raw numeric
-// value that type oid would use. However, they can not actually be used as column types,
-// and a cast to them will produce an OID type.
+// OidColType represents an OID type, which is the type of system object
+// identifiers. There are several different OID types: the raw OID type, which
+// can be any integer, and the reg* types, each of which corresponds to the
+// particular system table that contains the system object identified by the
+// OID itself.
 //
 // See https://www.postgresql.org/docs/9.6/static/datatype-oid.html.
-type OidPseudoType struct {
+type OidColType struct {
 	Name string
 }
 
 // Format implements the NodeFormatter interface.
-func (node *OidPseudoType) Format(buf *bytes.Buffer, f FmtFlags) {
+func (node *OidColType) Format(buf *bytes.Buffer, f FmtFlags) {
 	buf.WriteString(node.Name)
 }
 
@@ -396,7 +386,6 @@ func (node *CollatedStringColType) String() string { return AsString(node) }
 func (node *ArrayColType) String() string          { return AsString(node) }
 func (node *VectorColType) String() string         { return AsString(node) }
 func (node *OidColType) String() string            { return AsString(node) }
-func (node *OidPseudoType) String() string         { return AsString(node) }
 
 // DatumTypeToColumnType produces a SQL column type equivalent to the
 // given Datum type. Used to generate CastExpr nodes during
@@ -466,8 +455,6 @@ func CastTargetToDatumType(t CastTargetType) Type {
 	case *VectorColType:
 		return TypeIntVector
 	case *OidColType:
-		return TypeOid
-	case *OidPseudoType:
 		return TypeOid
 	default:
 		panic(errors.Errorf("unexpected CastTarget %T", t))

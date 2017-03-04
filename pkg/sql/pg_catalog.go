@@ -157,7 +157,7 @@ CREATE TABLE pg_catalog.pg_attribute (
 	attisdropped BOOL,
 	attislocal BOOL,
 	attinhcount INT,
-	attcollation INT,
+	attcollation OID,
 	attacl STRING,
 	attoptions STRING,
 	attfdwoptions STRING
@@ -1561,6 +1561,7 @@ var datumToTypeCategory = map[reflect.Type]*parser.DString{
 	reflect.TypeOf(parser.TypeTimestampTZ): typCategoryDateTime,
 	reflect.TypeOf(parser.TypeTuple):       typCategoryPseudo,
 	reflect.TypeOf(parser.TypeTable):       typCategoryPseudo,
+	reflect.TypeOf(parser.TypeOid):         typCategoryNumeric,
 }
 
 func typCategory(typ parser.Type) parser.Datum {
