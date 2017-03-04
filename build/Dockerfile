@@ -1,4 +1,4 @@
-FROM ubuntu:xenial-20170119
+FROM ubuntu:xenial-20170214
 
 MAINTAINER Tamir Duberstein <tamird@gmail.com>
 
@@ -69,7 +69,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     xz-utils \
     yarn
 
-RUN git clone --depth 1 https://github.com/crosstool-ng/crosstool-ng \
+# TODO(tamird): use the shallow clone when crosstool-ng 1.23 is released.
+# RUN git clone --depth 1 --branch crosstool-ng-1.23.0 https://github.com/crosstool-ng/crosstool-ng \
+RUN git clone https://github.com/crosstool-ng/crosstool-ng && git -C crosstool-ng checkout 1ec5e7aa3400b534264ba1c2fa3949dc6a2cca90 \
  && cd crosstool-ng \
  && ./bootstrap \
  && ./configure --prefix /usr/local/ct-ng \
@@ -78,10 +80,10 @@ RUN git clone --depth 1 https://github.com/crosstool-ng/crosstool-ng \
  && cd .. \
  && rm -rf crosstool-ng
 
-COPY x86-linux-gnu.config x86-linux-musl.config ./
+COPY x86-linux-gnu.defconfig x86-linux-musl.defconfig ./
 RUN mkdir build && cd build \
- && rm -rf * && cp ../x86-linux-gnu.config  .config && CC=gcc CXX=g++ /usr/local/ct-ng/bin/ct-ng build \
- && rm -rf * && cp ../x86-linux-musl.config .config && CC=gcc CXX=g++ /usr/local/ct-ng/bin/ct-ng build \
+ && rm -rf * && cp ../x86-linux-gnu.defconfig  defconfig && /usr/local/ct-ng/bin/ct-ng defconfig && CC=gcc CXX=g++ /usr/local/ct-ng/bin/ct-ng build \
+ && rm -rf * && cp ../x86-linux-musl.defconfig defconfig && /usr/local/ct-ng/bin/ct-ng defconfig && CC=gcc CXX=g++ /usr/local/ct-ng/bin/ct-ng build \
  && cd .. \
  && rm -rf build
 
@@ -89,7 +91,7 @@ USER root
 
 RUN apt-get autoremove -y gcc g++
 
-# Install an msan-enabled build of libc++, following instructions from
+# Build an msan-enabled build of libc++, following instructions from
 # https://github.com/google/sanitizers/wiki/MemorySanitizerLibcxxHowTo
 #
 # Note that this is done before CC and CXX are set below because our cross
@@ -97,6 +99,7 @@ RUN apt-get autoremove -y gcc g++
 RUN mkdir llvm                    && curl -sfSL http://releases.llvm.org/3.9.1/llvm-3.9.1.src.tar.xz      | tar --strip-components=1 -C llvm -xJ \
  && mkdir llvm/projects/libcxx    && curl -sfSL http://releases.llvm.org/3.9.1/libcxx-3.9.1.src.tar.xz    | tar --strip-components=1 -C llvm/projects/libcxx -xJ \
  && mkdir llvm/projects/libcxxabi && curl -sfSL http://releases.llvm.org/3.9.1/libcxxabi-3.9.1.src.tar.xz | tar --strip-components=1 -C llvm/projects/libcxxabi -xJ \
+ && curl -fsSL https://github.com/llvm-mirror/libcxx/commit/b640da0b315ead39690d4d65c76938ab8aeb5449.patch | git -C llvm/projects/libcxx apply \
  && mkdir libcxx_msan && (cd libcxx_msan && cmake ../llvm -DCMAKE_BUILD_TYPE=Release -DLLVM_USE_SANITIZER=Memory && make cxx -j$(nproc))
 
 # We use a custom toolchain to target old Linux and glibc versions. However,
@@ -136,7 +139,7 @@ RUN chmod -R a+w $(go env GOTOOLDIR)
 # Allow Go support files in gdb.
 RUN echo "add-auto-load-safe-path $(go env GOROOT)/src/runtime/runtime-gdb.py" > ~/.gdbinit
 
-RUN curl -fsSL https://releases.hashicorp.com/terraform/0.7.7/terraform_0.7.7_linux_amd64.zip -o terraform.zip \
+RUN curl -fsSL https://releases.hashicorp.com/terraform/0.8.7/terraform_0.8.7_linux_amd64.zip -o terraform.zip \
  && unzip -d /usr/local/bin terraform.zip \
  && rm terraform.zip
 
