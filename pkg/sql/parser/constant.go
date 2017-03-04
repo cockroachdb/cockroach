@@ -178,8 +178,8 @@ func (expr *NumVal) asConstantInt() (constant.Value, bool) {
 }
 
 var (
-	numValAvailIntFloatDec = []Type{TypeInt, TypeDecimal, TypeFloat}
-	numValAvailDecFloatInt = []Type{TypeDecimal, TypeFloat, TypeInt}
+	numValAvailIntFloatDec = []Type{TypeInt, TypeDecimal, TypeFloat, TypeOid}
+	numValAvailDecFloatInt = []Type{TypeDecimal, TypeFloat, TypeInt, TypeOid}
 	numValAvailDecFloat    = []Type{TypeDecimal, TypeFloat}
 )
 
@@ -248,7 +248,7 @@ func (expr *NumVal) ResolveAsType(ctx *SemaContext, typ Type) (Datum, error) {
 		if err != nil {
 			return nil, err
 		}
-		return NewDOidFromDInt(d.(*DInt)), nil
+		return NewDOid(*d.(*DInt)), nil
 	default:
 		return nil, fmt.Errorf("could not resolve %T %v into a %T", expr, expr, typ)
 	}

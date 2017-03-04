@@ -4,29 +4,44 @@ SELECT 3::OID
 3
 
 query O
+SELECT 3::OID::INT::OID
+----
+3
+
+query T
+SELECT pg_typeof(1:::OID)
+----
+oid
+
+query O
 SELECT 'pg_constraint'::REGCLASS
 ----
-402060402
+pg_constraint
 
 query OO
 SELECT '"pg_constraint"'::REGCLASS, '  "pg_constraint" '::REGCLASS
 ----
-402060402  402060402
+pg_constraint  pg_constraint
 
 query OO
 SELECT 'pg_constraint '::REGCLASS, '  pg_constraint '::REGCLASS
 ----
-402060402  402060402
+pg_constraint  pg_constraint
 
 query OO
-SELECT 'upper'::REGPROC, 'upper'::REGPROCEDURE
+SELECT 'pg_constraint '::REGCLASS, '"pg_constraint"'::REGCLASS::OID
 ----
-1736923753  1736923753
+pg_constraint  402060402
 
-query OO
-SELECT 'upper(int)'::REGPROC, 'upper(int)'::REGPROCEDURE
+query OOO
+SELECT 'upper'::REGPROC, 'upper'::REGPROCEDURE, 'upper'::REGPROC::OID
 ----
-1736923753  1736923753
+upper  upper  1736923753
+
+query OOO
+SELECT 'upper(int)'::REGPROC, 'upper(int)'::REGPROCEDURE, 'upper(int)'::REGPROC::OID
+----
+upper  upper  1736923753
 
 query error unknown function: blah\(\)
 SELECT 'blah(ignored, ignored)'::REGPROC, 'blah(ignored, ignored)'::REGPROCEDURE
@@ -49,22 +64,22 @@ SELECT 'sqrt'::REGPROC
 query OOOO
 SELECT 'array_in'::REGPROC, 'array_in(a,b,c)'::REGPROC, 'pg_catalog.array_in'::REGPROC, 'pg_catalog.array_in( a ,b, c )'::REGPROC
 ----
-4288767817  4288767817  4288767817  4288767817
+array_in  array_in  array_in  array_in
 
 query OOOO
 SELECT 'array_in'::REGPROCEDURE, 'array_in(a,b,c)'::REGPROCEDURE, 'pg_catalog.array_in'::REGPROCEDURE, 'pg_catalog.array_in( a ,b, c )'::REGPROCEDURE
 ----
-4288767817  4288767817  4288767817  4288767817
+array_in  array_in  array_in  array_in
 
-query O
-SELECT 'system'::REGNAMESPACE
+query OO
+SELECT 'system'::REGNAMESPACE, 'system'::REGNAMESPACE::OID
 ----
-2939540337
+system  2939540337
 
-query O
-SELECT 'bool'::REGTYPE
+query OO
+SELECT 'bool'::REGTYPE, 'bool'::REGTYPE::OID
 ----
-16
+bool  16
 
 query error relation 'blah' does not exist
 SELECT 'blah'::REGCLASS
@@ -86,13 +101,13 @@ SELECT 'blah'::REGTYPE
 query O
 SELECT CAST ('pg_constraint' AS REGCLASS)
 ----
-402060402
+pg_constraint
 
 # This forces the b_expr form of the cast syntax.
-query O
-SELECT ('pg_constraint')::REGCLASS
+query OO
+SELECT ('pg_constraint')::REGCLASS, ('pg_constraint')::REGCLASS::OID
 ----
-402060402
+pg_constraint  402060402
 
 ## Test visibility of pg_* via oid casts.
 
