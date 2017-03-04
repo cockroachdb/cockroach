@@ -488,6 +488,12 @@ func EncodeTableKey(b []byte, val parser.Datum, dir encoding.Direction) ([]byte,
 			}
 		}
 		return b, nil
+	case *parser.DOid:
+		if dir == encoding.Ascending {
+
+			return encoding.EncodeVarintAscending(b, int64(t.DInt)), nil
+		}
+		return encoding.EncodeVarintDescending(b, int64(t.DInt)), nil
 	}
 	return nil, errors.Errorf("unable to encode table key: %T", val)
 }
@@ -521,6 +527,8 @@ func EncodeTableValue(appendTo []byte, colID ColumnID, val parser.Datum) ([]byte
 		return encoding.EncodeDurationValue(appendTo, uint32(colID), t.Duration), nil
 	case *parser.DCollatedString:
 		return encoding.EncodeBytesValue(appendTo, uint32(colID), []byte(t.Contents)), nil
+	case *parser.DOid:
+		return encoding.EncodeIntValue(appendTo, uint32(colID), int64(t.DInt)), nil
 	}
 	return nil, errors.Errorf("unable to encode table value: %T", val)
 }
@@ -820,6 +828,7 @@ type DatumAlloc struct {
 	dtimestampAlloc   []parser.DTimestamp
 	dtimestampTzAlloc []parser.DTimestampTZ
 	dintervalAlloc    []parser.DInterval
+	doidAlloc         []parser.DOid
 	env               parser.CollationEnvironment
 }
 
@@ -937,8 +946,15 @@ func (a *DatumAlloc) NewDInterval(v parser.DInterval) *parser.DInterval {
 }
 
 // NewDOid allocates a DOid.
-func (a *DatumAlloc) NewDOid(v parser.DInt) parser.Datum {
-	return parser.NewDOidFromDInt(a.NewDInt(v))
+func (a *DatumAlloc) NewDOid(v parser.DOid) parser.Datum {
+	buf := &a.doidAlloc
+	if len(*buf) == 0 {
+		*buf = make([]parser.DOid, datumAllocSize)
+	}
+	r := &(*buf)[0]
+	*r = v
+	*buf = (*buf)[1:]
+	return r
 }
 
 // DecodeTableKey decodes a table key/value.
@@ -1054,7 +1070,7 @@ func DecodeTableKey(
 		} else {
 			rkey, i, err = encoding.DecodeVarintDescending(key)
 		}
-		return a.NewDOid(parser.DInt(i)), rkey, err
+		return a.NewDOid(parser.DOid{DInt: parser.DInt(i)}), rkey, err
 	default:
 		if typ, ok := valType.(parser.TCollatedString); ok {
 			if !stackTraceContainsTesting() {
@@ -1136,7 +1152,7 @@ func DecodeTableValue(a *DatumAlloc, valType parser.Type, b []byte) (parser.Datu
 	case parser.TypeOid:
 		var i int64
 		b, i, err = encoding.DecodeIntValue(b)
-		return a.NewDOid(parser.DInt(i)), b, err
+		return a.NewDOid(parser.DOid{DInt: parser.DInt(i)}), b, err
 	default:
 		if typ, ok := valType.(parser.TCollatedString); ok {
 			var data []byte
@@ -1265,7 +1281,7 @@ func MarshalColumnValue(col ColumnDescriptor, val parser.Datum) (roachpb.Value, 
 			r.SetBool(bool(*v))
 			return r, nil
 		}
-	case ColumnType_INT, ColumnType_OID:
+	case ColumnType_INT:
 		if v, ok := parser.AsDInt(val); ok {
 			r.SetInt(int64(v))
 			return r, nil
@@ -1321,6 +1337,11 @@ func MarshalColumnValue(col ColumnDescriptor, val parser.Datum) (roachpb.Value, 
 			}
 			return r, fmt.Errorf("locale %q doesn't match locale %q of column %q",
 				v.Locale, *col.Type.Locale, col.Name)
+		}
+	case ColumnType_OID:
+		if v, ok := val.(*parser.DOid); ok {
+			r.SetInt(int64(v.DInt))
+			return r, nil
 		}
 	default:
 		return r, errors.Errorf("unsupported column type: %s", col.Type.Kind)
@@ -1419,7 +1440,7 @@ func UnmarshalColumnValue(
 		if err != nil {
 			return nil, err
 		}
-		return a.NewDOid(parser.DInt(v)), nil
+		return a.NewDOid(parser.DOid{DInt: parser.DInt(v)}), nil
 	default:
 		return nil, errors.Errorf("unsupported column type: %s", typ.Kind)
 	}

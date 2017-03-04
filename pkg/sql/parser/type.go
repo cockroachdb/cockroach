@@ -107,10 +107,9 @@ var (
 	TypeAnyArray Type = TArray{TypeAny}
 	// TypeAny can be any type. Can be compared with ==.
 	TypeAny Type = tAny{}
+	// TypeOid is the type of an OID. Can be compared with ==.
+	TypeOid = tOid{oid.T_oid, "oid"}
 
-	// TypeOid is a type-alias for TypeInt with a different OID. Can be
-	// compared with ==.
-	TypeOid = wrapTypeWithOid(TypeInt, oid.T_oid)
 	// TypeName is a type-alias for TypeString with a different OID. Can be
 	// compared with ==.
 	TypeName = wrapTypeWithOid(TypeString, oid.T_name)
@@ -133,44 +132,53 @@ var (
 		TypeTimestamp,
 		TypeTimestampTZ,
 		TypeInterval,
+		TypeOid,
 	}
 )
 
 var (
 	// Unexported wrapper types. These exist for Postgres type compatibility.
-	typeInt2      = wrapTypeWithOid(TypeInt, oid.T_int2)
-	typeInt4      = wrapTypeWithOid(TypeInt, oid.T_int4)
-	typeFloat4    = wrapTypeWithOid(TypeFloat, oid.T_float4)
-	typeVarChar   = wrapTypeWithOid(TypeString, oid.T_varchar)
-	typeInt2Array = TArray{typeInt2}
-	typeInt4Array = TArray{typeInt4}
+	typeInt2         = wrapTypeWithOid(TypeInt, oid.T_int2)
+	typeInt4         = wrapTypeWithOid(TypeInt, oid.T_int4)
+	typeFloat4       = wrapTypeWithOid(TypeFloat, oid.T_float4)
+	typeVarChar      = wrapTypeWithOid(TypeString, oid.T_varchar)
+	typeInt2Array    = TArray{typeInt2}
+	typeInt4Array    = TArray{typeInt4}
+	typeRegClass     = tOid{oid.T_regclass, "regclass"}
+	typeRegProc      = tOid{oid.T_regproc, "regproc"}
+	typeRegProcedure = tOid{oid.T_regprocedure, "regprocedure"}
+	typeRegType      = tOid{oid.T_regtype, "regtype"}
 )
 
 // OidToType maps Postgres object IDs to CockroachDB types.
 var OidToType = map[oid.Oid]Type{
-	oid.T_anyelement:  TypeAny,
-	oid.T_bool:        TypeBool,
-	oid.T_bytea:       TypeBytes,
-	oid.T_date:        TypeDate,
-	oid.T_float4:      typeFloat4,
-	oid.T_float8:      TypeFloat,
-	oid.T_int2:        typeInt2,
-	oid.T_int4:        typeInt4,
-	oid.T_int8:        TypeInt,
-	oid.T_int2vector:  TypeIntVector,
-	oid.T_interval:    TypeInterval,
-	oid.T_name:        TypeName,
-	oid.T_numeric:     TypeDecimal,
-	oid.T_oid:         TypeOid,
-	oid.T_text:        TypeString,
-	oid.T__text:       TypeStringArray,
-	oid.T__int2:       typeInt2Array,
-	oid.T__int4:       typeInt4Array,
-	oid.T__int8:       TypeIntArray,
-	oid.T_record:      TypeTuple,
-	oid.T_timestamp:   TypeTimestamp,
-	oid.T_timestamptz: TypeTimestampTZ,
-	oid.T_varchar:     typeVarChar,
+	oid.T_anyelement:   TypeAny,
+	oid.T_bool:         TypeBool,
+	oid.T_bytea:        TypeBytes,
+	oid.T_date:         TypeDate,
+	oid.T_float4:       typeFloat4,
+	oid.T_float8:       TypeFloat,
+	oid.T_int2:         typeInt2,
+	oid.T_int4:         typeInt4,
+	oid.T_int8:         TypeInt,
+	oid.T_int2vector:   TypeIntVector,
+	oid.T_interval:     TypeInterval,
+	oid.T_name:         TypeName,
+	oid.T_numeric:      TypeDecimal,
+	oid.T_oid:          TypeOid,
+	oid.T_regproc:      typeRegProc,
+	oid.T_regprocedure: typeRegProcedure,
+	oid.T_regclass:     typeRegClass,
+	oid.T_regtype:      typeRegType,
+	oid.T__text:        TypeStringArray,
+	oid.T__int2:        typeInt2Array,
+	oid.T__int4:        typeInt4Array,
+	oid.T__int8:        TypeIntArray,
+	oid.T_record:       TypeTuple,
+	oid.T_text:         TypeString,
+	oid.T_timestamp:    TypeTimestamp,
+	oid.T_timestamptz:  TypeTimestampTZ,
+	oid.T_varchar:      typeVarChar,
 }
 
 // Do not instantiate the tXxx types elsewhere. The variables above are intended
@@ -542,6 +550,22 @@ func (tAny) Oid() oid.Oid                { return oid.T_anyelement }
 func (tAny) SQLName() string             { return "anyelement" }
 func (tAny) IsAmbiguous() bool           { return true }
 
+type tOid struct {
+	oidType  oid.Oid
+	typeName string
+}
+
+func (t tOid) String() string { return t.typeName }
+func (tOid) Equivalent(other Type) bool {
+	return UnwrapType(other) == TypeOid || other == TypeAny
+}
+
+func (tOid) FamilyEqual(other Type) bool { return other == TypeOid }
+func (tOid) Size() (uintptr, bool)       { return unsafe.Sizeof(DInt(0)), fixedSize }
+func (t tOid) Oid() oid.Oid              { return t.oidType }
+func (t tOid) SQLName() string           { return t.typeName }
+func (tOid) IsAmbiguous() bool           { return true }
+
 // tOidWrapper is a Type implementation which is a wrapper around a Type, allowing
 // custom Oid values to be attached to the Type. The Type is used by DOidWrapper
 // to permit type aliasing with custom Oids without needing to create new typing
@@ -552,7 +576,6 @@ type tOidWrapper struct {
 }
 
 var customOidNames = map[oid.Oid]string{
-	oid.T_oid:  "oid",
 	oid.T_name: "name",
 }
 
