@@ -1394,7 +1394,8 @@ var (
 	typDelim = parser.NewDString(",")
 
 	arrayInProcName = "array_in"
-	arrayInProcOid  = makeOidHasher().BuiltinOid(arrayInProcName, &parser.Builtins[arrayInProcName][0])
+	arrayInProcOid  = makeOidHasher().BuiltinOid(
+		arrayInProcName, &parser.Builtins[arrayInProcName][0]).(*parser.DOid).AsRegProc(arrayInProcName)
 )
 
 // See: https://www.postgresql.org/docs/9.6/static/catalog-pg-type.html.

@@ -2023,6 +2023,14 @@ func NewDOid(d DInt) Datum {
 	return &DOid{DInt: d, kind: oidColTypeOid, name: ""}
 }
 
+// AsRegProc changes the input DOid into a regproc with the given name and
+// returns it.
+func (d *DOid) AsRegProc(name string) *DOid {
+	d.name = name
+	d.kind = oidColTypeRegProc
+	return d
+}
+
 // AmbiguousFormat implements the Datum interface.
 func (*DOid) AmbiguousFormat() bool { return true }
 
