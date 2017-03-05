@@ -327,8 +327,10 @@ func (ts *txnState) resetForNewSQLTxn(e *Executor, s *Session) {
 		}
 	}
 	// Put the new span in the context.
-	ts.sp = sp
-	ctx = opentracing.ContextWithSpan(ctx, sp)
+	if sp != nil {
+		ts.sp = sp
+		ctx = opentracing.ContextWithSpan(ctx, sp)
+	}
 	ts.Ctx = ctx
 
 	ts.mon.Start(ctx, &s.mon, mon.BoundAccount{})
@@ -368,12 +370,12 @@ func (ts *txnState) resetStateAndTxn(state TxnStateEnum) {
 // The session context is just used for logging the SQL trace.
 func (ts *txnState) finishSQLTxn(sessionCtx context.Context) {
 	ts.mon.Stop(ts.Ctx)
-	if ts.sp == nil {
-		panic("No span in context? Was resetForNewSQLTxn() called previously?")
+	var sampledFor7881 bool
+	if ts.sp != nil {
+		sampledFor7881 = (ts.sp.BaggageItem(keyFor7881Sample) != "")
+		ts.sp.Finish()
+		ts.sp = nil
 	}
-	sampledFor7881 := (ts.sp.BaggageItem(keyFor7881Sample) != "")
-	ts.sp.Finish()
-	ts.sp = nil
 	if (traceSQL && timeutil.Since(ts.sqlTimestamp) >= traceSQLDuration) ||
 		(traceSQLFor7881 && sampledFor7881) {
 		dump := tracing.FormatRawSpans(ts.trace.GetSpans())
