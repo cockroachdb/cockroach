@@ -383,6 +383,9 @@ func (sc *SchemaChanger) truncateAndBackfillColumnsChunk(
 		p := &planner{
 			txn:      txn,
 			leaseMgr: sc.leaseMgr,
+			session: &Session{
+				context: txn.Context,
+			},
 		}
 		defer p.releaseLeases()
 		tableDesc, err := sc.getTableLease(p, version)
@@ -535,6 +538,9 @@ func (sc *SchemaChanger) truncateIndexes(
 				p := &planner{
 					txn:      txn,
 					leaseMgr: sc.leaseMgr,
+					session: &Session{
+						context: txn.Context,
+					},
 				}
 				defer p.releaseLeases()
 				tableDesc, err := sc.getTableLease(p, version)
@@ -622,6 +628,9 @@ func (sc *SchemaChanger) backfillIndexes(
 			p := &planner{
 				txn:      txn,
 				leaseMgr: sc.leaseMgr,
+				session: &Session{
+					context: txn.Context,
+				},
 			}
 			// Use a leased table descriptor for the backfill.
 			defer p.releaseLeases()
