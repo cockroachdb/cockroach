@@ -301,13 +301,11 @@ func (ts *txnState) resetForNewSQLTxn(e *Executor, s *Session) {
 	// TODO(andrei): figure out how to close these spans on server shutdown? Ties
 	// into a larger discussion about how to drain SQL and rollback open txns.
 	ctx := s.context
-	var sp opentracing.Span
 	if traceSQL {
 		var err error
 		ctx, ts.trace, err = tracing.StartSnowballTrace(ctx, "traceSQL")
 		if err != nil {
-			log.Warningf(ctx, "unable to create snowball tracer: %s", err)
-			return
+			log.Fatalf(ctx, "unable to create snowball tracer: %s", err)
 		}
 	} else if traceSQLFor7881 {
 		var err error
@@ -316,6 +314,7 @@ func (ts *txnState) resetForNewSQLTxn(e *Executor, s *Session) {
 			log.Fatalf(ctx, "couldn't create a tracer for debugging #7881: %s", err)
 		}
 	} else {
+		var sp opentracing.Span
 		if parentSp := opentracing.SpanFromContext(ctx); parentSp != nil {
 			// Create a child span for this SQL txn.
 			tracer := parentSp.Tracer()
@@ -325,10 +324,11 @@ func (ts *txnState) resetForNewSQLTxn(e *Executor, s *Session) {
 			tracer := e.cfg.AmbientCtx.Tracer
 			sp = tracer.StartSpan("sql txn")
 		}
+		// Put the new span in the context.
+		ctx = opentracing.ContextWithSpan(ctx, sp)
 	}
-	// Put the new span in the context.
-	ts.sp = sp
-	ctx = opentracing.ContextWithSpan(ctx, sp)
+
+	ts.sp = opentracing.SpanFromContext(ctx)
 	ts.Ctx = ctx
 
 	ts.mon.Start(ctx, &s.mon, mon.BoundAccount{})
