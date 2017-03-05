@@ -258,6 +258,16 @@ func (sc *SchemaChanger) maybeWriteResumeSpan(
 	return nil
 }
 
+func (sc *SchemaChanger) makePlanner(txn *client.Txn) *planner {
+	return &planner{
+		txn:      txn,
+		leaseMgr: sc.leaseMgr,
+		session: &Session{
+			context: txn.Context,
+		},
+	}
+}
+
 func (sc *SchemaChanger) getTableLease(
 	p *planner, version sqlbase.DescriptorVersion,
 ) (*sqlbase.TableDescriptor, error) {
@@ -380,10 +390,7 @@ func (sc *SchemaChanger) truncateAndBackfillColumnsChunk(
 		// TODO(vivek): See comment in backfillIndexesChunk.
 		txn.SetSystemConfigTrigger()
 
-		p := &planner{
-			txn:      txn,
-			leaseMgr: sc.leaseMgr,
-		}
+		p := sc.makePlanner(txn)
 		defer p.releaseLeases()
 		tableDesc, err := sc.getTableLease(p, version)
 		if err != nil {
@@ -532,10 +539,7 @@ func (sc *SchemaChanger) truncateIndexes(
 				// TODO(vivek): See comment in backfillIndexesChunk.
 				txn.SetSystemConfigTrigger()
 
-				p := &planner{
-					txn:      txn,
-					leaseMgr: sc.leaseMgr,
-				}
+				p := sc.makePlanner(txn)
 				defer p.releaseLeases()
 				tableDesc, err := sc.getTableLease(p, version)
 				if err != nil {
@@ -619,10 +623,7 @@ func (sc *SchemaChanger) backfillIndexes(
 		}
 		log.VEventf(context.TODO(), 2, "index backfill: process %+v spans", spans)
 		if err := sc.db.Txn(context.TODO(), func(txn *client.Txn) error {
-			p := &planner{
-				txn:      txn,
-				leaseMgr: sc.leaseMgr,
-			}
+			p := sc.makePlanner(txn)
 			// Use a leased table descriptor for the backfill.
 			defer p.releaseLeases()
 			tableDesc, err := sc.getTableLease(p, version)
