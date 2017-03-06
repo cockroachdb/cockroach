@@ -1055,7 +1055,7 @@ func (e *Executor) execStmtInOpenTxn(
 	firstInTxn bool,
 	txnState *txnState,
 	automaticRetryCount int,
-) (Result, error) {
+) (result Result, err error) {
 	if txnState.State != Open {
 		panic("execStmtInOpenTxn called outside of an open txn")
 	}
@@ -1074,35 +1074,39 @@ func (e *Executor) execStmtInOpenTxn(
 	if automaticRetryCount == 0 {
 		e.updateStmtCounts(stmt)
 	}
+
+	defer func() {
+		if err != nil && txnState.State == Open {
+			txnState.updateStateAndCleanupOnErr(err, e)
+		}
+	}()
 	switch s := stmt.(type) {
 	case *parser.BeginTransaction:
 		if !firstInTxn {
-			txnState.updateStateAndCleanupOnErr(errTransactionInProgress, e)
 			return Result{}, errTransactionInProgress
 		}
 	case *parser.CommitTransaction:
 		if implicitTxn {
-			return e.noTransactionHelper(txnState)
+			return Result{}, errNoTransactionInProgress
 		}
 		// CommitTransaction is executed fully here; there's no planNode for it
 		// and the planner is not involved at all.
-		res, err := commitSQLTransaction(txnState, planMaker, commit, e)
-		return res, err
+		result, err = commitSQLTransaction(txnState, planMaker, commit, e)
+		return result, err
 	case *parser.ReleaseSavepoint:
 		if implicitTxn {
-			return e.noTransactionHelper(txnState)
+			return Result{}, errNoTransactionInProgress
 		}
 		if err := parser.ValidateRestartCheckpoint(s.Savepoint); err != nil {
-			txnState.updateStateAndCleanupOnErr(err, e)
 			return Result{}, err
 		}
 		// ReleaseSavepoint is executed fully here; there's no planNode for it
 		// and the planner is not involved at all.
-		res, err := commitSQLTransaction(txnState, planMaker, release, e)
-		return res, err
+		result, err = commitSQLTransaction(txnState, planMaker, release, e)
+		return result, err
 	case *parser.RollbackTransaction:
 		if implicitTxn {
-			return e.noTransactionHelper(txnState)
+			return Result{}, errNoTransactionInProgress
 		}
 		// RollbackTransaction is executed fully here; there's no planNode for it
 		// and the planner is not involved at all.
@@ -1110,14 +1114,13 @@ func (e *Executor) execStmtInOpenTxn(
 		return rollbackSQLTransaction(txnState, planMaker), nil
 	case *parser.SetTransaction:
 		if implicitTxn {
-			return e.noTransactionHelper(txnState)
+			return Result{}, errNoTransactionInProgress
 		}
 	case *parser.Savepoint:
 		if implicitTxn {
-			return e.noTransactionHelper(txnState)
+			return Result{}, errNoTransactionInProgress
 		}
 		if err := parser.ValidateRestartCheckpoint(s.Name); err != nil {
-			txnState.updateStateAndCleanupOnErr(err, e)
 			return Result{}, err
 		}
 		// We want to disallow SAVEPOINTs to be issued after a transaction has
@@ -1132,10 +1135,8 @@ func (e *Executor) execStmtInOpenTxn(
 		// in the beginning. We should figure out how to track whether we
 		// started using the transaction during a retry.
 		if txnState.txn.IsInitialized() && !txnState.retrying {
-			err := fmt.Errorf("SAVEPOINT %s needs to be the first statement in a transaction",
-				parser.RestartSavepointName)
-			txnState.updateStateAndCleanupOnErr(err, e)
-			return Result{}, err
+			return Result{}, errors.Errorf("SAVEPOINT %s needs to be the first statement in a "+
+				"transaction", parser.RestartSavepointName)
 		}
 		// Note that Savepoint doesn't have a corresponding plan node.
 		// This here is all the execution there is.
@@ -1148,18 +1149,13 @@ func (e *Executor) execStmtInOpenTxn(
 			// txn in a different state.
 			err = errNotRetriable
 		}
-		txnState.updateStateAndCleanupOnErr(err, e)
 		return Result{}, err
 	case *parser.Prepare:
-		err := util.UnimplementedWithIssueErrorf(7568,
+		return Result{}, util.UnimplementedWithIssueErrorf(7568,
 			"Prepared statements are supported only via the Postgres wire protocol")
-		txnState.updateStateAndCleanupOnErr(err, e)
-		return Result{}, err
 	case *parser.Execute:
-		err := util.UnimplementedWithIssueErrorf(7568,
+		return Result{}, util.UnimplementedWithIssueErrorf(7568,
 			"Executing prepared statements is supported only via the Postgres wire protocol")
-		txnState.updateStateAndCleanupOnErr(err, e)
-		return Result{}, err
 	case *parser.Deallocate:
 		if s.Name == "" {
 			planMaker.session.PreparedStatements.DeleteAll(session.Ctx())
@@ -1167,16 +1163,14 @@ func (e *Executor) execStmtInOpenTxn(
 			if found := planMaker.session.PreparedStatements.Delete(
 				session.Ctx(), string(s.Name),
 			); !found {
-				err := fmt.Errorf("prepared statement %s does not exist", s.Name)
-				txnState.updateStateAndCleanupOnErr(err, e)
-				return Result{}, err
+				return Result{}, errors.Errorf("prepared statement %s does not exist", s.Name)
 			}
 		}
 		return Result{PGTag: s.StatementTag()}, nil
 	}
 
 	autoCommit := implicitTxn && !e.cfg.TestingKnobs.DisableAutoCommit
-	result, err := e.execStmt(stmt, planMaker, autoCommit, automaticRetryCount)
+	result, err = e.execStmt(stmt, planMaker, autoCommit, automaticRetryCount)
 	if err != nil {
 		if result.Rows != nil {
 			result.Rows.Close(session.Ctx())
@@ -1186,7 +1180,6 @@ func (e *Executor) execStmtInOpenTxn(
 			log.ErrEventf(txnState.txn.Context, "ERROR: %v", err)
 		}
 		log.ErrEventf(session.context, "ERROR: %v", err)
-		txnState.updateStateAndCleanupOnErr(err, e)
 		return Result{}, err
 	}
 
@@ -1202,14 +1195,6 @@ func (e *Executor) execStmtInOpenTxn(
 	}
 	log.Eventf(session.context, "%s done", tResult)
 	return result, nil
-}
-
-// Clean up after trying to execute a transactional statement while not in a SQL
-// transaction.
-func (e *Executor) noTransactionHelper(txnState *txnState) (Result, error) {
-	// Clean up the KV txn and set the SQL state to Aborted.
-	txnState.updateStateAndCleanupOnErr(errNoTransactionInProgress, e)
-	return Result{}, errNoTransactionInProgress
 }
 
 // rollbackSQLTransaction rolls back a transaction. All errors are swallowed.
