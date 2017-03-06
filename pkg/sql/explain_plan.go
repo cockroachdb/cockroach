@@ -137,8 +137,8 @@ func planToString(plan planNode) string {
 	var buf bytes.Buffer
 	e := explainer{
 		showMetadata: true,
-		showTypes:    true,
 		showExprs:    true,
+		showTypes:    true,
 		fmtFlags:     parser.FmtExpr(parser.FmtSimple, true, true, true),
 		makeRow: func(level int, name, field, description string, plan planNode) {
 			if field != "" {
