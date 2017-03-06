@@ -511,6 +511,48 @@ func TestBackupAsOfSystemTime(t *testing.T) {
 	}
 }
 
+func TestBackupRestoreChecksum(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	if !storage.ProposerEvaluatedKVEnabled() {
+		t.Skip("command WriteBatch is not allowed without proposer evaluated KV")
+	}
+
+	// TODO(dan): Actually invalidate the descriptor cache and delete this line.
+	defer sql.TestDisableTableLeases()()
+	const numAccounts = 1000
+
+	_, dir, _, sqlDB, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts)
+	defer cleanupFn()
+
+	sqlDB.Exec(fmt.Sprintf(`BACKUP DATABASE bench TO '%s'`, dir))
+
+	var backupDesc BackupDescriptor
+	{
+		backupDescBytes, err := ioutil.ReadFile(filepath.Join(dir, BackupDescriptorName))
+		if err != nil {
+			t.Fatalf("%+v", err)
+		}
+		if err := backupDesc.Unmarshal(backupDescBytes); err != nil {
+			t.Fatalf("%+v", err)
+		}
+	}
+
+	// Corrupt one of the files in the backup.
+	f, err := os.OpenFile(filepath.Join(dir, backupDesc.Files[1].Path), os.O_WRONLY, 0)
+	if err != nil {
+		t.Fatalf("%+v", err)
+	}
+	defer f.Close()
+	if _, err := f.WriteAt([]byte{0x00}, 0); err != nil {
+		t.Fatalf("%+v", err)
+	}
+
+	_, err = sqlDB.DB.Exec(fmt.Sprintf(`RESTORE DATABASE bench FROM '%s'`, dir))
+	if !testutils.IsError(err, "checksum mismatch") {
+		t.Fatalf("expected 'checksum mismatch' error got: %+v", err)
+	}
+}
+
 func TestPresplitRanges(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
