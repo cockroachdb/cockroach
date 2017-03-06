@@ -104,6 +104,16 @@ CREATE TABLE system.ui (
 	value       BYTES,
 	lastUpdated TIMESTAMP NOT NULL
 );`
+
+	JobsTableSchema = `
+CREATE TABLE system.jobs (
+	id                INT       DEFAULT unique_rowid() PRIMARY KEY,
+	status            STRING    NOT NULL,
+	created           TIMESTAMP NOT NULL DEFAULT now(),
+	payload           BYTES     NOT NULL,
+	INDEX (status, created),
+	FAMILY (id, status, created, payload)
+);`
 )
 
 func pk(name string) IndexDescriptor {
@@ -152,6 +162,7 @@ var SystemAllowedPrivileges = map[ID]privilege.Lists{
 	keys.EventLogTableID:   {privilege.ReadWriteData, {privilege.ALL}},
 	keys.RangeEventTableID: {privilege.ReadWriteData, {privilege.ALL}},
 	keys.UITableID:         {privilege.ReadWriteData, {privilege.ALL}},
+	keys.JobsTableID:       {privilege.ReadWriteData},
 }
 
 // SystemDesiredPrivileges returns the desired privilege list (i.e., the
@@ -429,6 +440,48 @@ var (
 		FormatVersion:  InterleavedFormatVersion,
 		NextMutationID: 1,
 	}
+
+	nowString = "now()"
+
+	// JobsTable is the descriptor for the jobs table.
+	JobsTable = TableDescriptor{
+		Name:     "jobs",
+		ID:       keys.JobsTableID,
+		ParentID: 1,
+		Version:  1,
+		Columns: []ColumnDescriptor{
+			{Name: "id", ID: 1, Type: colTypeInt, DefaultExpr: &uniqueRowIDString},
+			{Name: "status", ID: 2, Type: colTypeString},
+			{Name: "created", ID: 3, Type: colTypeTimestamp, DefaultExpr: &nowString},
+			{Name: "payload", ID: 4, Type: colTypeBytes},
+		},
+		NextColumnID: 5,
+		Families: []ColumnFamilyDescriptor{
+			{
+				Name:        "fam_0_id_status_created_payload",
+				ID:          0,
+				ColumnNames: []string{"id", "status", "created", "payload"},
+				ColumnIDs:   []ColumnID{1, 2, 3, 4},
+			},
+		},
+		NextFamilyID: 1,
+		PrimaryIndex: pk("id"),
+		Indexes: []IndexDescriptor{
+			{
+				Name:             "jobs_status_created_idx",
+				ID:               2,
+				Unique:           false,
+				ColumnNames:      []string{"status", "created"},
+				ColumnDirections: []IndexDescriptor_Direction{IndexDescriptor_ASC, IndexDescriptor_ASC},
+				ColumnIDs:        []ColumnID{2, 3},
+				ExtraColumnIDs:   []ColumnID{1},
+			},
+		},
+		NextIndexID:    3,
+		Privileges:     NewPrivilegeDescriptor(security.RootUser, SystemDesiredPrivileges(keys.JobsTableID)),
+		FormatVersion:  InterleavedFormatVersion,
+		NextMutationID: 1,
+	}
 )
 
 // Create the key/value pairs for the default zone config entry.
@@ -465,6 +518,14 @@ func addSystemDatabaseToSchema(target *MetadataSchema) {
 	target.AddDescriptor(keys.SystemDatabaseID, &EventLogTable)
 	target.AddDescriptor(keys.SystemDatabaseID, &RangeEventTable)
 	target.AddDescriptor(keys.SystemDatabaseID, &UITable)
+
+	// NOTE(benesch): Installation of the jobs table is intentionally omitted
+	// here; it's added via a migration in both fresh clusters and existing
+	// clusters. After an upgrade window of a yet-to-be-decided length has passed,
+	// we'll remove the migration and add the code to install the jobs table here
+	// in the same release. This ensures there's only ever one code path
+	// responsible for creating the table. Please follow a similar scheme for any
+	// new system tables you create.
 
 	target.otherKV = append(target.otherKV, createDefaultZoneConfig()...)
 }
