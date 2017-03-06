@@ -72,7 +72,7 @@ func (sc *SchemaChanger) truncateAndDropTable(
 	if err := sc.ExtendLease(lease); err != nil {
 		return err
 	}
-	return truncateAndDropTable(ctx, tableDesc, &sc.db)
+	return truncateAndDropTable(ctx, tableDesc, &sc.db, *sc.testingKnobs)
 }
 
 // NewSchemaChangerForTesting only for tests.
@@ -664,6 +664,11 @@ type SchemaChangerTestingKnobs struct {
 
 	// BackfillChunkSize is to be used for all backfill chunked operations.
 	BackfillChunkSize int64
+
+	// RunAfterTableNameDropped is called when a table is being dropped.
+	// It is called as soon as the table name is released and before the
+	// table is truncated.
+	RunAfterTableNameDropped func() error
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
