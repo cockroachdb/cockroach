@@ -42,6 +42,8 @@ var planHooks []planHookFn
 // the hooks that implement it.
 type PlanHookState interface {
 	ExecCfg() *ExecutorConfig
+	LeaseMgr() *LeaseManager
+	User() string
 	AuthorizationAccessor
 }
 

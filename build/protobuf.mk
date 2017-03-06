@@ -44,9 +44,10 @@ GRPC_GATEWAY_PACKAGE := github.com/grpc-ecosystem/grpc-gateway
 GRPC_GATEWAY_GOOGLEAPIS_PACKAGE := $(GRPC_GATEWAY_PACKAGE)/third_party/googleapis
 GRPC_GATEWAY_GOOGLEAPIS_PATH := $(GITHUB_ROOT)/../$(GRPC_GATEWAY_GOOGLEAPIS_PACKAGE)
 
-# Map protobuf includes of annotations.proto to the Go package containing the
-# generated Go code.
-GRPC_GATEWAY_MAPPING := Mgoogle/api/annotations.proto=$(GRPC_GATEWAY_GOOGLEAPIS_PACKAGE)/google/api
+# Map protobuf includes to the Go packages containing the generated Go code.
+MAPPINGS :=
+MAPPINGS := $(MAPPINGS)Mgoogle/api/annotations.proto=$(GRPC_GATEWAY_GOOGLEAPIS_PACKAGE)/google/api,
+MAPPINGS := $(MAPPINGS)Mgoogle/protobuf/timestamp.proto=$(GOGOPROTO_ROOT)/protobuf/types,
 
 GW_SERVER_PROTOS := $(PKG_ROOT)/server/serverpb/admin.proto $(PKG_ROOT)/server/serverpb/status.proto
 GW_TS_PROTOS := $(PKG_ROOT)/ts/tspb/timeseries.proto
@@ -80,7 +81,7 @@ IMPORT_PREFIX := github.com/$(REPO_NAME)/
 $(GO_SOURCES): $(PROTOC) $(GO_PROTOS) $(GOGOPROTO_PROTO)
 	(cd $(REPO_ROOT) && git ls-files --exclude-standard --cached --others -- '*.pb.go' | xargs rm -f)
 	for dir in $(sort $(dir $(GO_PROTOS))); do \
-	  $(PROTOC) -I.:$(GOGOPROTO_ROOT):$(PROTOBUF_ROOT):$(COREOS_PATH):$(GRPC_GATEWAY_GOOGLEAPIS_PATH) --plugin=$(PROTOC_PLUGIN) --$(PLUGIN_SUFFIX)_out=$(GRPC_GATEWAY_MAPPING),plugins=grpc,import_prefix=$(IMPORT_PREFIX):$(ORG_ROOT) $$dir/*.proto; \
+	  $(PROTOC) -I.:$(GOGOPROTO_ROOT):$(PROTOBUF_ROOT):$(COREOS_PATH):$(GRPC_GATEWAY_GOOGLEAPIS_PATH) --plugin=$(PROTOC_PLUGIN) --$(PLUGIN_SUFFIX)_out=$(MAPPINGS)plugins=grpc,import_prefix=$(IMPORT_PREFIX):$(ORG_ROOT) $$dir/*.proto; \
 	done
 	sed -i~ -E '/gogoproto/d' $(GO_SOURCES)
 	sed -i~ -E 's!import (fmt|math) "$(IMPORT_PREFIX)(fmt|math)"! !g' $(GO_SOURCES)

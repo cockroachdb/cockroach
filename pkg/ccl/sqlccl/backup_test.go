@@ -22,7 +22,10 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
+	"github.com/gogo/protobuf/proto"
+	"github.com/kr/pretty"
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
@@ -30,6 +33,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -39,6 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 const (
@@ -142,11 +149,69 @@ func TestBackupRestoreLocal(t *testing.T) {
 
 	ctx, dir, _, sqlDB, cleanupFn := backupRestoreTestSetup(t, multiNode, numAccounts)
 	defer cleanupFn()
-	backupAndRestore(ctx, t, sqlDB, dir, numAccounts)
+	sanitizedDir := dir
+	backupAndRestore(ctx, t, sqlDB, dir, sanitizedDir, numAccounts)
+}
+
+func verifyJob(
+	t *testing.T,
+	sqlDB *sqlutils.SQLRunner,
+	before time.Time,
+	statusIn sql.JobStatus,
+	payloadIn *sql.JobPayload,
+) {
+	// We assume there's only one job in the system.jobs table for now.
+	var status string
+	var created time.Time
+	var bytes []byte
+	sqlDB.QueryRow(`SELECT status, created, payload FROM system.jobs`).Scan(
+		&status, &created, &bytes,
+	)
+
+	// Verify status.
+	if string(status) != status {
+		t.Errorf("expected %s status in system.jobs table, but got %s", statusIn, status)
+	}
+
+	// Unpack the payload.
+	payload := &sql.JobPayload{}
+	if err := proto.Unmarshal(bytes, payload); err != nil {
+		t.Errorf("unable to unmarshal job payload %v", bytes)
+	}
+
+	// Verify timestamps, then set them to empty to ignore them in future
+	// comparisons.
+	now := timeutil.Now()
+	for _, tc := range []struct {
+		name string
+		time *time.Time
+	}{
+		{"modified", payload.Modified},
+		{"started", payload.Started},
+		{"finished", payload.Finished},
+		{"created", &created},
+	} {
+		if tc.time.Before(before) || tc.time.After(now) {
+			t.Errorf("%s time %v not within expected range (%v, %v)", tc.name, tc.time, before, now)
+		}
+	}
+	payload.Modified = nil
+	payload.Started = nil
+	payload.Finished = nil
+
+	// Verify the rest of the protobuf payload.
+	if !proto.Equal(payloadIn, payload) {
+		diff := strings.Join(pretty.Diff(payloadIn, payload), "\n")
+		t.Errorf("job payloads do not match:\n%s", diff)
+	}
 }
 
 func backupAndRestore(
-	ctx context.Context, t *testing.T, sqlDB *sqlutils.SQLRunner, dest string, numAccounts int64,
+	ctx context.Context,
+	t *testing.T,
+	sqlDB *sqlutils.SQLRunner,
+	dest, sanitizedDest string,
+	numAccounts int64,
 ) {
 	{
 		sqlDB.Exec(`CREATE INDEX balance_idx ON bench.bank (balance)`)
@@ -162,6 +227,7 @@ func backupAndRestore(
 
 		var unused string
 		var dataSize int64
+		before := timeutil.Now()
 		sqlDB.QueryRow(fmt.Sprintf(`BACKUP DATABASE bench TO '%s'`, dest)).Scan(
 			&unused, &unused, &unused, &dataSize,
 		)
@@ -169,6 +235,17 @@ func backupAndRestore(
 		if max := approxDataSize * 2; dataSize < approxDataSize || dataSize > max {
 			t.Errorf("expected data size in [%d,%d] but was %d", approxDataSize, max, dataSize)
 		}
+
+		verifyJob(t, sqlDB, before, sql.JobStatusSucceeded, &sql.JobPayload{
+			User:        security.RootUser,
+			Description: fmt.Sprintf("BACKUP DATABASE bench TO '%s'", sanitizedDest),
+			DescriptorIDs: []sqlbase.ID{
+				keys.DescriptorTableID,
+				keys.UsersTableID,
+				keys.MaxReservedDescID + 1 + 1,
+			},
+			Details: &sql.JobPayload_BackupDetails{BackupDetails: &sql.BackupJobPayload{}},
+		})
 	}
 
 	// Start a new cluster to restore into.
@@ -187,7 +264,15 @@ func backupAndRestore(
 		// Force the ID of the restored bank table to be different.
 		sqlDBRestore.Exec(`CREATE TABLE bench.empty (a INT PRIMARY KEY)`)
 
+		before := timeutil.Now()
 		sqlDBRestore.Exec(fmt.Sprintf(`RESTORE bench.* FROM '%s'`, dest))
+
+		verifyJob(t, sqlDBRestore, before, sql.JobStatusSucceeded, &sql.JobPayload{
+			User:          security.RootUser,
+			Description:   fmt.Sprintf("RESTORE bench.* FROM '%s'", sanitizedDest),
+			DescriptorIDs: []sqlbase.ID{keys.MaxReservedDescID + 1 + 4},
+			Details:       &sql.JobPayload_RestoreDetails{RestoreDetails: &sql.RestoreJobPayload{}},
+		})
 
 		var rowCount int64
 		sqlDBRestore.QueryRow(`SELECT COUNT(*) FROM bench.bank`).Scan(&rowCount)
