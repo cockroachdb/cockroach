@@ -201,7 +201,7 @@ func createTestServerParams() (base.TestServerArgs, *CommandFilters) {
 // 'planhook'.
 func init() {
 	testingPlanHook := func(
-		ctx context.Context, stmt parser.Statement, cfg *sql.ExecutorConfig,
+		ctx context.Context, stmt parser.Statement, state sql.PlanHookState,
 	) (func() ([]parser.Datums, error), sql.ResultColumns, error) {
 		show, ok := stmt.(*parser.Show)
 		if !ok || show.Name != "planhook" {
