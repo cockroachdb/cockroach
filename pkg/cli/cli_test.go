@@ -328,57 +328,57 @@ func Example_basic() {
 	c := newCLITest(cliTestParams{})
 	defer c.cleanup()
 
-	c.Run("debug kv put a 1 b 2 c 3")
+	c.Run("debug kv put basic1 1 basic2 2 basic3 3")
 	c.Run("debug kv scan")
 	c.Run("debug kv revscan")
-	c.Run("debug kv del a c")
-	c.Run("debug kv get a")
-	c.Run("debug kv get b")
-	c.Run("debug kv inc c 1")
-	c.Run("debug kv inc c 10")
-	c.Run("debug kv inc c 100")
-	c.Run("debug kv inc c -- -60")
-	c.Run("debug kv inc c -- -9")
+	c.Run("debug kv del basic1 basic3")
+	c.Run("debug kv get basic1")
+	c.Run("debug kv get basic2")
+	c.Run("debug kv inc basic3 1")
+	c.Run("debug kv inc basic3 10")
+	c.Run("debug kv inc basic3 100")
+	c.Run("debug kv inc basic3 -- -60")
+	c.Run("debug kv inc basic3 -- -9")
 	c.Run("debug kv scan")
 	c.Run("debug kv revscan")
-	c.Run("debug kv inc c b")
+	c.Run("debug kv inc basic3 b")
 
 	// Output:
-	// debug kv put a 1 b 2 c 3
+	// debug kv put basic1 1 basic2 2 basic3 3
 	// debug kv scan
-	// "a"	"1"
-	// "b"	"2"
-	// "c"	"3"
+	// "basic1"	"1"
+	// "basic2"	"2"
+	// "basic3"	"3"
 	// 3 result(s)
 	// debug kv revscan
-	// "c"	"3"
-	// "b"	"2"
-	// "a"	"1"
+	// "basic3"	"3"
+	// "basic2"	"2"
+	// "basic1"	"1"
 	// 3 result(s)
-	// debug kv del a c
-	// debug kv get a
-	// "a" not found
-	// debug kv get b
+	// debug kv del basic1 basic3
+	// debug kv get basic1
+	// "basic1" not found
+	// debug kv get basic2
 	// "2"
-	// debug kv inc c 1
+	// debug kv inc basic3 1
 	// 1
-	// debug kv inc c 10
+	// debug kv inc basic3 10
 	// 11
-	// debug kv inc c 100
+	// debug kv inc basic3 100
 	// 111
-	// debug kv inc c -- -60
+	// debug kv inc basic3 -- -60
 	// 51
-	// debug kv inc c -- -9
+	// debug kv inc basic3 -- -9
 	// 42
 	// debug kv scan
-	// "b"	"2"
-	// "c"	42
+	// "basic2"	"2"
+	// "basic3"	42
 	// 2 result(s)
 	// debug kv revscan
-	// "c"	42
-	// "b"	"2"
+	// "basic3"	42
+	// "basic2"	"2"
 	// 2 result(s)
-	// debug kv inc c b
+	// debug kv inc basic3 b
 	// invalid increment: strconv.ParseInt: parsing "b": invalid syntax
 }
 
@@ -386,33 +386,33 @@ func Example_quoted() {
 	c := newCLITest(cliTestParams{})
 	defer c.cleanup()
 
-	c.Run(`debug kv put a\x00 日本語`)                                  // UTF-8 input text
-	c.Run(`debug kv put a\x01 \u65e5\u672c\u8a9e`)                   // explicit Unicode code points
-	c.Run(`debug kv put a\x02 \U000065e5\U0000672c\U00008a9e`)       // explicit Unicode code points
-	c.Run(`debug kv put a\x03 \xe6\x97\xa5\xe6\x9c\xac\xe8\xaa\x9e`) // explicit UTF-8 bytes
+	c.Run(`debug kv put quoted\x00 日本語`)                                  // UTF-8 input text
+	c.Run(`debug kv put quoted\x01 \u65e5\u672c\u8a9e`)                   // explicit Unicode code points
+	c.Run(`debug kv put quoted\x02 \U000065e5\U0000672c\U00008a9e`)       // explicit Unicode code points
+	c.Run(`debug kv put quoted\x03 \xe6\x97\xa5\xe6\x9c\xac\xe8\xaa\x9e`) // explicit UTF-8 bytes
 	c.Run(`debug kv scan`)
-	c.Run(`debug kv get a\x00`)
-	c.Run(`debug kv del a\x00`)
-	c.Run(`debug kv inc 1\x01`)
-	c.Run(`debug kv get 1\x01`)
+	c.Run(`debug kv get quoted\x00`)
+	c.Run(`debug kv del quoted\x00`)
+	c.Run(`debug kv inc quoted\x04`)
+	c.Run(`debug kv get quoted\x04`)
 
 	// Output:
-	// debug kv put a\x00 日本語
-	// debug kv put a\x01 \u65e5\u672c\u8a9e
-	// debug kv put a\x02 \U000065e5\U0000672c\U00008a9e
-	// debug kv put a\x03 \xe6\x97\xa5\xe6\x9c\xac\xe8\xaa\x9e
+	// debug kv put quoted\x00 日本語
+	// debug kv put quoted\x01 \u65e5\u672c\u8a9e
+	// debug kv put quoted\x02 \U000065e5\U0000672c\U00008a9e
+	// debug kv put quoted\x03 \xe6\x97\xa5\xe6\x9c\xac\xe8\xaa\x9e
 	// debug kv scan
-	// "a\x00"	"日本語"
-	// "a\x01"	"日本語"
-	// "a\x02"	"日本語"
-	// "a\x03"	"日本語"
+	// "quoted\x00"	"日本語"
+	// "quoted\x01"	"日本語"
+	// "quoted\x02"	"日本語"
+	// "quoted\x03"	"日本語"
 	// 4 result(s)
-	// debug kv get a\x00
+	// debug kv get quoted\x00
 	// "日本語"
-	// debug kv del a\x00
-	// debug kv inc 1\x01
+	// debug kv del quoted\x00
+	// debug kv inc quoted\x04
 	// 1
-	// debug kv get 1\x01
+	// debug kv get quoted\x04
 	// 1
 }
 
@@ -420,14 +420,14 @@ func Example_insecure() {
 	c := newCLITest(cliTestParams{insecure: true})
 	defer c.cleanup()
 
-	c.Run("debug kv put a 1 b 2")
+	c.Run("debug kv put insecure1 1 insecure2 2")
 	c.Run("debug kv scan")
 
 	// Output:
-	// debug kv put a 1 b 2
+	// debug kv put insecure1 1 insecure2 2
 	// debug kv scan
-	// "a"	"1"
-	// "b"	"2"
+	// "insecure1"	"1"
+	// "insecure2"	"2"
 	// 2 result(s)
 }
 
@@ -435,35 +435,35 @@ func Example_ranges() {
 	c := newCLITest(cliTestParams{})
 	defer c.cleanup()
 
-	c.Run("debug kv put a 1 b 2 c 3 d 4")
+	c.Run("debug kv put ranges1 1 ranges2 2 ranges3 3 ranges4 4")
 	c.Run("debug kv scan")
 	c.Run("debug kv revscan")
-	c.Run("debug range split c")
+	c.Run("debug range split ranges3")
 	c.Run("debug range ls")
 	c.Run("debug kv scan")
 	c.Run("debug kv revscan")
-	c.Run("debug kv delrange a c")
+	c.Run("debug kv delrange ranges1 ranges3")
 	c.Run("debug kv scan")
 
 	// Output:
-	// debug kv put a 1 b 2 c 3 d 4
+	// debug kv put ranges1 1 ranges2 2 ranges3 3 ranges4 4
 	// debug kv scan
-	// "a"	"1"
-	// "b"	"2"
-	// "c"	"3"
-	// "d"	"4"
+	// "ranges1"	"1"
+	// "ranges2"	"2"
+	// "ranges3"	"3"
+	// "ranges4"	"4"
 	// 4 result(s)
 	// debug kv revscan
-	// "d"	"4"
-	// "c"	"3"
-	// "b"	"2"
-	// "a"	"1"
+	// "ranges4"	"4"
+	// "ranges3"	"3"
+	// "ranges2"	"2"
+	// "ranges1"	"1"
 	// 4 result(s)
-	// debug range split c
+	// debug range split ranges3
 	// debug range ls
-	// /Min-"c" [1]
+	// /Min-"ranges3" [1]
 	// 	0: node-id=1 store-id=1
-	// "c"-/Table/0 [7]
+	// "ranges3"-/Table/0 [7]
 	// 	0: node-id=1 store-id=1
 	// /Table/0-/Table/11 [2]
 	// 	0: node-id=1 store-id=1
@@ -477,21 +477,21 @@ func Example_ranges() {
 	//	0: node-id=1 store-id=1
 	// 7 result(s)
 	// debug kv scan
-	// "a"	"1"
-	// "b"	"2"
-	// "c"	"3"
-	// "d"	"4"
+	// "ranges1"	"1"
+	// "ranges2"	"2"
+	// "ranges3"	"3"
+	// "ranges4"	"4"
 	// 4 result(s)
 	// debug kv revscan
-	// "d"	"4"
-	// "c"	"3"
-	// "b"	"2"
-	// "a"	"1"
+	// "ranges4"	"4"
+	// "ranges3"	"3"
+	// "ranges2"	"2"
+	// "ranges1"	"1"
 	// 4 result(s)
-	// debug kv delrange a c
+	// debug kv delrange ranges1 ranges3
 	// debug kv scan
-	// "c"	"3"
-	// "d"	"4"
+	// "ranges3"	"3"
+	// "ranges4"	"4"
 	// 2 result(s)
 }
 
@@ -537,28 +537,28 @@ func Example_cput() {
 	c := newCLITest(cliTestParams{})
 	defer c.cleanup()
 
-	c.Run("debug kv put a 1 b 2 c 3 d 4")
+	c.Run("debug kv put cput1 1 cput2 2 cput3 3 cput4 4")
 	c.Run("debug kv scan")
-	c.Run("debug kv cput e 5")
-	c.Run("debug kv cput b 3 2")
+	c.Run("debug kv cput cput5 5")
+	c.Run("debug kv cput cput2 3 2")
 	c.Run("debug kv scan")
 
 	// Output:
-	// debug kv put a 1 b 2 c 3 d 4
+	// debug kv put cput1 1 cput2 2 cput3 3 cput4 4
 	// debug kv scan
-	// "a"	"1"
-	// "b"	"2"
-	// "c"	"3"
-	// "d"	"4"
+	// "cput1"	"1"
+	// "cput2"	"2"
+	// "cput3"	"3"
+	// "cput4"	"4"
 	// 4 result(s)
-	// debug kv cput e 5
-	// debug kv cput b 3 2
+	// debug kv cput cput5 5
+	// debug kv cput cput2 3 2
 	// debug kv scan
-	// "a"	"1"
-	// "b"	"3"
-	// "c"	"3"
-	// "d"	"4"
-	// "e"	"5"
+	// "cput1"	"1"
+	// "cput2"	"3"
+	// "cput3"	"3"
+	// "cput4"	"4"
+	// "cput5"	"5"
 	// 5 result(s)
 }
 
@@ -566,30 +566,30 @@ func Example_max_results() {
 	c := newCLITest(cliTestParams{})
 	defer c.cleanup()
 
-	c.Run("debug kv put a 1 b 2 c 3 d 4")
+	c.Run("debug kv put max_results1 1 max_results2 2 max_results3 3 max_results4 4")
 	c.Run("debug kv scan --max-results=3")
 	c.Run("debug kv revscan --max-results=2")
-	c.Run("debug range split c")
-	c.Run("debug range split d")
+	c.Run("debug range split max_results3")
+	c.Run("debug range split max_results4")
 	c.Run("debug range ls --max-results=2")
 
 	// Output:
-	// debug kv put a 1 b 2 c 3 d 4
+	// debug kv put max_results1 1 max_results2 2 max_results3 3 max_results4 4
 	// debug kv scan --max-results=3
-	// "a"	"1"
-	// "b"	"2"
-	// "c"	"3"
+	// "max_results1"	"1"
+	// "max_results2"	"2"
+	// "max_results3"	"3"
 	// 3 result(s)
 	// debug kv revscan --max-results=2
-	// "d"	"4"
-	// "c"	"3"
+	// "max_results4"	"4"
+	// "max_results3"	"3"
 	// 2 result(s)
-	// debug range split c
-	// debug range split d
+	// debug range split max_results3
+	// debug range split max_results4
 	// debug range ls --max-results=2
-	// /Min-"c" [1]
+	// /Min-"max_results3" [1]
 	// 	0: node-id=1 store-id=1
-	// "c"-"d" [7]
+	// "max_results3"-"max_results4" [7]
 	// 	0: node-id=1 store-id=1
 	// 2 result(s)
 }
