@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/pkg/errors"
 )
 
 func TestDropDatabase(t *testing.T) {
@@ -173,30 +174,29 @@ func checkKeyCount(t *testing.T, kvDB *client.DB, prefix roachpb.Key, numKeys in
 	}
 }
 
-func createKVTable(t *testing.T, sqlDB *gosql.DB, numRows int) {
+func createKVTable(sqlDB *gosql.DB, numRows int) error {
 	// Fix the column families so the key counts don't change if the family
 	// heuristics are updated.
 	if _, err := sqlDB.Exec(`
-CREATE DATABASE t;
+CREATE DATABASE IF NOT EXISTS t;
 CREATE TABLE t.kv (k INT PRIMARY KEY, v INT, FAMILY (k), FAMILY (v));
 CREATE INDEX foo on t.kv (v);
 `); err != nil {
-		t.Fatal(err)
+		return err
 	}
 
 	// Bulk insert.
 	var insert bytes.Buffer
 	if _, err := insert.WriteString(fmt.Sprintf(`INSERT INTO t.kv VALUES (%d, %d)`, 0, numRows-1)); err != nil {
-		t.Fatal(err)
+		return err
 	}
 	for i := 1; i < numRows; i++ {
 		if _, err := insert.WriteString(fmt.Sprintf(` ,(%d, %d)`, i, numRows-i)); err != nil {
-			t.Fatal(err)
+			return err
 		}
 	}
-	if _, err := sqlDB.Exec(insert.String()); err != nil {
-		t.Fatal(err)
-	}
+	_, err := sqlDB.Exec(insert.String())
+	return err
 }
 
 func TestDropIndex(t *testing.T) {
@@ -212,8 +212,9 @@ func TestDropIndex(t *testing.T) {
 	defer s.Stopper().Stop()
 
 	numRows := 2*chunkSize + 1
-	createKVTable(t, sqlDB, numRows)
-
+	if err := createKVTable(sqlDB, numRows); err != nil {
+		t.Fatal(err)
+	}
 	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "kv")
 
 	status, i, err := tableDesc.FindIndexByName("foo")
@@ -295,6 +296,7 @@ func TestDropIndexInterleaved(t *testing.T) {
 	tablePrefix := roachpb.Key(keys.MakeTablePrefix(uint32(tableDesc.ID)))
 
 	checkKeyCount(t, kvDB, tablePrefix, 3*numRows)
+
 	if _, err := sqlDB.Exec(`DROP INDEX t.intlv@intlv_idx`); err != nil {
 		t.Fatal(err)
 	}
@@ -310,12 +312,45 @@ func TestDropIndexInterleaved(t *testing.T) {
 func TestDropTable(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	params, _ := createTestServerParams()
+	var runAfterTableNameDropped func() error
+	errChan := make(chan error)
+	params.Knobs = base.TestingKnobs{
+		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
+			RunAfterTableNameDropped: func() error {
+				runFunc := runAfterTableNameDropped
+				runAfterTableNameDropped = nil
+				if runFunc != nil {
+					go func() {
+						errChan <- runFunc()
+					}()
+					// Return an error so that the DROP TABLE is retried.
+					// This tests the idempotency of DROP TABLE.
+					return errors.Errorf("after name is dropped")
+				}
+				return nil
+			},
+		},
+	}
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop()
 	ctx := context.TODO()
 
 	numRows := 2*sql.TableTruncateChunkSize + 1
-	createKVTable(t, sqlDB, numRows)
+	if err := createKVTable(sqlDB, numRows); err != nil {
+		t.Fatal(err)
+	}
+
+	runAfterTableNameDropped = func() error {
+		// Test that deleted table cannot be used. This prevents
+		// regressions where name -> descriptor ID caches might make
+		// this statement erronously work.
+		if _, err := sqlDB.Exec(
+			`SELECT * FROM t.kv`,
+		); !testutils.IsError(err, `table "t.kv" does not exist`) {
+			return errors.Wrap(err, "different error than expected")
+		}
+		return createKVTable(sqlDB, numRows)
+	}
 
 	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "kv")
 	nameKey := sqlbase.MakeNameMetadataKey(keys.MaxReservedDescID+1, "kv")
@@ -355,6 +390,15 @@ func TestDropTable(t *testing.T) {
 		t.Fatal(err)
 	}
 	checkKeyCount(t, kvDB, tablePrefix, 0)
+
+	if err := <-errChan; err != nil {
+		t.Fatal(err)
+	}
+
+	// Drop the newly created table.
+	if _, err := sqlDB.Exec(`DROP TABLE t.kv`); err != nil {
+		t.Fatal(err)
+	}
 
 	// Test that deleted table cannot be used. This prevents regressions where
 	// name -> descriptor ID caches might make this statement erronously work.
