@@ -913,6 +913,10 @@ func (r *rocksDBBatchIterator) Less(key MVCCKey) bool {
 	return r.iter.Less(key)
 }
 
+func (r *rocksDBBatchIterator) getIter() *C.DBIterator {
+	return r.iter.iter
+}
+
 type rocksDBBatch struct {
 	parent             *RocksDB
 	batch              *C.DBEngine

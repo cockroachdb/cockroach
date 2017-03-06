@@ -37,20 +37,25 @@ func TestDBWriteBatch(t *testing.T) {
 	defer s.Stopper().Stop()
 	ctx := context.Background()
 
-	var batch engine.RocksDBBatchBuilder
-	key := engine.MVCCKey{Key: []byte("bb"), Timestamp: hlc.Timestamp{WallTime: 1}}
-	batch.Put(key, roachpb.MakeValueFromString("1").RawBytes)
-	data := batch.Finish()
+	var data []byte
+	{
+		var batch engine.RocksDBBatchBuilder
+		key := engine.MVCCKey{Key: []byte("bb"), Timestamp: hlc.Timestamp{WallTime: 1}}
+		batch.Put(key, roachpb.MakeValueFromString("1").RawBytes)
+		data = batch.Finish()
+	}
 
 	if err := db.WriteBatch(ctx, "b", "c", data); err != nil {
 		t.Fatalf("%+v", err)
 	}
-	result, err := db.Get(ctx, "bb")
-	if err != nil {
-		t.Fatalf("%+v", err)
-	}
-	if result := result.ValueBytes(); !bytes.Equal([]byte("1"), result) {
-		t.Errorf("expected \"%s\", got \"%s\"", []byte("1"), result)
+	{
+		result, err := db.Get(ctx, "bb")
+		if err != nil {
+			t.Fatalf("%+v", err)
+		}
+		if result := result.ValueBytes(); !bytes.Equal([]byte("1"), result) {
+			t.Errorf("expected \"%s\", got \"%s\"", []byte("1"), result)
+		}
 	}
 
 	// Key is before the range in the request span.
@@ -63,11 +68,32 @@ func TestDBWriteBatch(t *testing.T) {
 	}
 
 	// Key range in request span is not empty.
-	if err := db.Put(ctx, "cc", 2); err != nil {
+	{
+		var batch engine.RocksDBBatchBuilder
+		key := engine.MVCCKey{Key: []byte("bb2"), Timestamp: hlc.Timestamp{WallTime: 1}}
+		batch.Put(key, roachpb.MakeValueFromString("2").RawBytes)
+		data = batch.Finish()
+	}
+	if err := db.WriteBatch(ctx, "b", "c", data); err != nil {
 		t.Fatalf("%+v", err)
 	}
-	if err := db.WriteBatch(ctx, "c", "d", nil); !testutils.IsError(err, "empty range") {
-		t.Fatalf("expected empty range error got: %+v", err)
+	{
+		result, err := db.Get(ctx, "bb2")
+		if err != nil {
+			t.Fatalf("%+v", err)
+		}
+		if result := result.ValueBytes(); !bytes.Equal([]byte("2"), result) {
+			t.Errorf("expected \"%s\", got \"%s\"", []byte("2"), result)
+		}
+	}
+	{
+		result, err := db.Get(ctx, "bb")
+		if err != nil {
+			t.Fatalf("%+v", err)
+		}
+		if result := result.ValueBytes(); result != nil {
+			t.Errorf("expected nil, got \"%s\"", result)
+		}
 	}
 
 	// Key range in request spans multiple ranges.
@@ -76,7 +102,7 @@ func TestDBWriteBatch(t *testing.T) {
 	}
 }
 
-func TestWriteBatch(t *testing.T) {
+func TestWriteBatchMVCCStats(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	if !storage.ProposerEvaluatedKVEnabled() {
 		t.Skip("command WriteBatch is not allowed without proposer evaluated KV")
@@ -94,27 +120,54 @@ func TestWriteBatch(t *testing.T) {
 	data := batch.Finish()
 	span := roachpb.Span{Key: []byte("b"), EndKey: []byte("c")}
 
+	// WriteBatch deletes any data that exists in the keyrange before applying
+	// the batch. Put something there to delete. The mvcc stats should be
+	// adjusted accordingly.
+	const numInitialEntries = 100
+	for i := 0; i < numInitialEntries; i++ {
+		if err := e.Put(engine.MVCCKey{Key: append([]byte("b"), byte(i))}, nil); err != nil {
+			t.Fatalf("%+v", err)
+		}
+	}
+
 	cArgs := storage.CommandArgs{
 		Args: &roachpb.WriteBatchRequest{
 			Span:     span,
 			DataSpan: span,
 			Data:     data,
 		},
-		Stats: &enginepb.MVCCStats{},
+		// Start with some stats to represent data throughout the replica's
+		// keyrange.
+		Stats: &enginepb.MVCCStats{
+			LiveBytes: 10000,
+			LiveCount: 10000,
+			KeyBytes:  10000,
+			KeyCount:  10000,
+			ValBytes:  10000,
+			ValCount:  10000,
+		},
 	}
 	if _, err := evalWriteBatch(ctx, e, cArgs, nil); err != nil {
 		t.Fatalf("%+v", err)
 	}
 
-	stats := &enginepb.MVCCStats{
-		LiveBytes: 21,
-		LiveCount: 1,
-		KeyBytes:  15,
-		KeyCount:  1,
-		ValBytes:  6,
-		ValCount:  1,
+	expectedStats := &enginepb.MVCCStats{
+		LiveBytes: 9721,
+		LiveCount: 9901,
+		KeyBytes:  9715,
+		KeyCount:  9901,
+		ValBytes:  10006,
+		ValCount:  10001,
 	}
-	if !reflect.DeepEqual(stats, cArgs.Stats) {
-		t.Errorf("mvcc stats mismatch %+v != %+v", stats, cArgs.Stats)
+	if !reflect.DeepEqual(expectedStats, cArgs.Stats) {
+		t.Errorf("mvcc stats mismatch %+v != %+v", expectedStats, cArgs.Stats)
+	}
+
+	// Run the same WriteBatch command a second time to test the idempotence.
+	if _, err := evalWriteBatch(ctx, e, cArgs, nil); err != nil {
+		t.Fatalf("%+v", err)
+	}
+	if !reflect.DeepEqual(expectedStats, cArgs.Stats) {
+		t.Errorf("mvcc stats mismatch %+v != %+v", expectedStats, cArgs.Stats)
 	}
 }

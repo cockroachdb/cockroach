@@ -82,32 +82,29 @@ func TestImport(t *testing.T) {
 	s, _, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop()
 
-	req := &roachpb.ImportRequest{
-		Span:        roachpb.Span{Key: reqStartKey},
-		DataSpan:    roachpb.Span{Key: dataStartKey, EndKey: dataEndKey},
-		KeyRewrites: kr,
-		Files: []roachpb.ImportRequest_File{
-			{Dir: storage, Path: sstName},
-		},
-	}
-	b := &client.Batch{}
-	b.AddRawRequest(req)
-	if err := kvDB.Run(ctx, b); err != nil {
-		t.Fatalf("%+v", err)
-	}
-	kvs, err := kvDB.Scan(ctx, reqStartKey, reqEndKey, 0)
-	if err != nil {
-		t.Fatalf("%+v", err)
-	}
-	if len(kvs) != 1 {
-		t.Fatalf("expected 1 kv got %d", len(kvs))
-	}
-
-	// The previous request already inserted data, but the request keyrange is
-	// required to be empty, so running it again should fail.
-	b = &client.Batch{}
-	b.AddRawRequest(req)
-	if err := kvDB.Run(ctx, b); !testutils.IsError(err, "empty ranges") {
-		t.Fatalf("expected 'empty ranges' error got %+v", err)
+	// Import may be retried by DistSender if it takes too long to return, so
+	// make sure it's idempotent.
+	const numIterations = 3
+	for i := 0; i < numIterations; i++ {
+		req := &roachpb.ImportRequest{
+			Span:        roachpb.Span{Key: reqStartKey},
+			DataSpan:    roachpb.Span{Key: dataStartKey, EndKey: dataEndKey},
+			KeyRewrites: kr,
+			Files: []roachpb.ImportRequest_File{
+				{Dir: storage, Path: sstName},
+			},
+		}
+		b := &client.Batch{}
+		b.AddRawRequest(req)
+		if err := kvDB.Run(ctx, b); err != nil {
+			t.Fatalf("%+v", err)
+		}
+		kvs, err := kvDB.Scan(ctx, reqStartKey, reqEndKey, 0)
+		if err != nil {
+			t.Fatalf("%+v", err)
+		}
+		if len(kvs) != 1 {
+			t.Fatalf("expected 1 kv got %d", len(kvs))
+		}
 	}
 }
