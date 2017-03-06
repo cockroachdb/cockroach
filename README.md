@@ -197,7 +197,7 @@ visit the [CockroachDB in Comparison](https://www.cockroachlabs.com/docs/cockroa
 
 ## See Also
 
-- [Tech Talks](https://www.cockroachlabs.com/docs/tech-talks.html) by CockroachDB founders and engineers
+- [Tech Talks](https://www.cockroachlabs.com/community/tech-talks/) by CockroachDB founders and engineers
 - [The CockroachDB User documentation](https://cockroachlabs.com/docs/)
 - [The CockroachDB Blog](https://www.cockroachlabs.com/blog/)
 - Key Design documents:
