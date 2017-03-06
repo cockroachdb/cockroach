@@ -133,6 +133,19 @@ func TestShowCreateTable(t *testing.T) {
 	FAMILY "primary" ("te""st")
 )`,
 		},
+		{
+			stmt: `CREATE TABLE %s (
+	a int,
+	b int,
+	index c(a asc, b desc)
+)`,
+			expect: `CREATE TABLE %s (
+	a INT NULL,
+	b INT NULL,
+	INDEX c (a, b DESC),
+	FAMILY "primary" (a, b, rowid)
+)`,
+		},
 	}
 	for i, test := range tests {
 		name := fmt.Sprintf("T%d", i)
