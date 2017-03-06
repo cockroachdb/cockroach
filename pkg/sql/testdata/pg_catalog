@@ -500,8 +500,6 @@ oid         conname    connamespace  contype
 229825095   index_key  1708731312    u
 453404206   check_b    1708731312    c
 1201123742  primary    1708731312    p
-2684964110  primary    1708731312    p
-3368586374  primary    1708731312    p
 4150478613  fk         1708731312    f
 4206367032  fk         1708731312    f
 
@@ -517,8 +515,6 @@ t1_a_key   u        false          false        true          2876473678  0     
 index_key  u        false          false        true          2876473678  0         335779560
 check_b    c        false          false        true          3211628798  0         0
 primary    p        false          false        true          2876473678  0         335779562
-primary    p        false          false        true          3110815990  0         4235777034
-primary    p        false          false        true          3211628798  0         624432002
 fk         f        false          false        true          3211628798  0         335779560
 fk         f        false          false        true          3110815990  0         335779561
 
@@ -541,8 +537,6 @@ conname    confrelid  confupdtype  confdeltype  confmatchtype
 t1_a_key   0          NULL         NULL         NULL
 index_key  0          NULL         NULL         NULL
 check_b    0          NULL         NULL         NULL
-primary    0          NULL         NULL         NULL
-primary    0          NULL         NULL         NULL
 primary    0          NULL         NULL         NULL
 
 query TOTTT colnames
@@ -568,8 +562,6 @@ t1_a_key   true        0            true          {2}
 index_key  true        0            true          {3,4}
 check_b    true        0            true          NULL
 primary    true        0            true          {1}
-primary    true        0            true          {2}
-primary    true        0            true          {4}
 fk         true        0            true          {1,2}
 fk         true        0            true          {1}
 
@@ -584,8 +576,6 @@ conname    confkey  conpfeqop  conppeqop  conffeqop  conexclop  conbin  consrc
 t1_a_key   NULL     NULL       NULL       NULL       NULL       NULL    NULL
 index_key  NULL     NULL       NULL       NULL       NULL       NULL    NULL
 check_b    NULL     NULL       NULL       NULL       NULL       b > 11  b > 11
-primary    NULL     NULL       NULL       NULL       NULL       NULL    NULL
-primary    NULL     NULL       NULL       NULL       NULL       NULL    NULL
 primary    NULL     NULL       NULL       NULL       NULL       NULL    NULL
 
 query TTTTTTTT colnames
@@ -1058,7 +1048,7 @@ SELECT COUNT(*) FROM pg_catalog.pg_constraint con
 JOIN pg_catalog.pg_namespace n ON con.connamespace = n.oid
 WHERE n.nspname = 'constraint_db'
 ----
-8
+6
 
 query I
 SELECT COUNT(*) FROM pg_catalog.pg_depend
