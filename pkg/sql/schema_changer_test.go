@@ -1114,7 +1114,7 @@ func TestSchemaChangeRetryOnVersionChange(t *testing.T) {
 	// This represents the number of backfill chunks that get reevaluated.
 	// A retry results in a reevaluation of a chunk.
 	var numReevaluated uint32
-	var numBackfills uint32
+	var numBackfills, backfillAttempt uint32
 	seenSpan := roachpb.Span{}
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
@@ -1131,7 +1131,8 @@ func TestSchemaChangeRetryOnVersionChange(t *testing.T) {
 				}
 				if seenSpan.Key != nil {
 					// Keep track of the number of reevaluations.
-					if seenSpan.Key.Compare(sp.Key) >= 0 {
+					if b := atomic.LoadUint32(&numBackfills); b != backfillAttempt &&
+						seenSpan.Key.Compare(sp.Key) >= 0 {
 						atomic.AddUint32(&numReevaluated, 1)
 					}
 					if !seenSpan.EndKey.Equal(sp.EndKey) {
@@ -1139,6 +1140,7 @@ func TestSchemaChangeRetryOnVersionChange(t *testing.T) {
 					}
 				}
 				seenSpan = sp
+				backfillAttempt = atomic.LoadUint32(&numBackfills)
 				return nil
 			},
 			// Disable asynchronous schema change execution to allow
@@ -1156,7 +1158,8 @@ func TestSchemaChangeRetryOnVersionChange(t *testing.T) {
 				}
 				if seenSpan.Key != nil {
 					// Keep track of the number of reevaluations.
-					if seenSpan.Key.Compare(sp.Key) >= 0 {
+					if b := atomic.LoadUint32(&numBackfills); b != backfillAttempt &&
+						seenSpan.Key.Compare(sp.Key) >= 0 {
 						atomic.AddUint32(&numReevaluated, 1)
 					}
 					if !seenSpan.EndKey.Equal(sp.EndKey) {
@@ -1164,6 +1167,7 @@ func TestSchemaChangeRetryOnVersionChange(t *testing.T) {
 					}
 				}
 				seenSpan = sp
+				backfillAttempt = atomic.LoadUint32(&numBackfills)
 				return nil
 			},
 		},
@@ -1207,9 +1211,15 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 	}
 
 	addIndexSchemaChange(t, sqlDB, kvDB, maxValue, 2)
+	// distsql implemented schema changes use the version of the table
+	// descriptor passed via rpc and do not locally request a descriptor
+	// lease at a particular version. They use the descriptor leased at
+	// the gateway node and therefore rely on the gateway node eventually
+	// reevaluating the schema change on a version change.
 	if reevaluated := atomic.SwapUint32(&numReevaluated, 0); reevaluated != 0 {
 		t.Fatalf("expected %d reevaluations, but seen %d", 0, reevaluated)
 	}
+	// Gateway node calls reevaluate on a descriptor version change.
 	if num := atomic.SwapUint32(&numBackfills, 0); num != 2 {
 		t.Fatalf("expected %d backfills, but seen %d", 2, num)
 	}
