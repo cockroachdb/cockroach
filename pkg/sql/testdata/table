@@ -219,7 +219,6 @@ dupe_generated  check_bar   CHECK        NULL       bar > 2
 dupe_generated  check_foo   CHECK        NULL       foo > 2
 dupe_generated  check_foo1  CHECK        NULL       foo < 10
 dupe_generated  check_foo2  CHECK        NULL       foo > 1
-dupe_generated  primary     PRIMARY KEY  rowid      NULL
 
 statement ok
 CREATE TABLE test.named_constraints (
