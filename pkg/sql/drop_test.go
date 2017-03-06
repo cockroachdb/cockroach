@@ -24,6 +24,8 @@ import (
 
 	"golang.org/x/net/context"
 
+	"sync"
+
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
@@ -35,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/pkg/errors"
 )
 
 func TestDropDatabase(t *testing.T) {
@@ -177,25 +180,25 @@ func createKVTable(t *testing.T, sqlDB *gosql.DB, numRows int) {
 	// Fix the column families so the key counts don't change if the family
 	// heuristics are updated.
 	if _, err := sqlDB.Exec(`
-CREATE DATABASE t;
+CREATE DATABASE IF NOT EXISTS t;
 CREATE TABLE t.kv (k INT PRIMARY KEY, v INT, FAMILY (k), FAMILY (v));
 CREATE INDEX foo on t.kv (v);
 `); err != nil {
-		t.Fatal(err)
+		t.Error(err)
 	}
 
 	// Bulk insert.
 	var insert bytes.Buffer
 	if _, err := insert.WriteString(fmt.Sprintf(`INSERT INTO t.kv VALUES (%d, %d)`, 0, numRows-1)); err != nil {
-		t.Fatal(err)
+		t.Error(err)
 	}
 	for i := 1; i < numRows; i++ {
 		if _, err := insert.WriteString(fmt.Sprintf(` ,(%d, %d)`, i, numRows-i)); err != nil {
-			t.Fatal(err)
+			t.Error(err)
 		}
 	}
 	if _, err := sqlDB.Exec(insert.String()); err != nil {
-		t.Fatal(err)
+		t.Error(err)
 	}
 }
 
@@ -295,6 +298,7 @@ func TestDropIndexInterleaved(t *testing.T) {
 	tablePrefix := roachpb.Key(keys.MakeTablePrefix(uint32(tableDesc.ID)))
 
 	checkKeyCount(t, kvDB, tablePrefix, 3*numRows)
+
 	if _, err := sqlDB.Exec(`DROP INDEX t.intlv@intlv_idx`); err != nil {
 		t.Fatal(err)
 	}
@@ -310,12 +314,42 @@ func TestDropIndexInterleaved(t *testing.T) {
 func TestDropTable(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	params, _ := createTestServerParams()
+	var runAfterTableNameDropped func()
+	params.Knobs = base.TestingKnobs{
+		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
+			RunAfterTableNameDropped: func() error {
+				runFunc := runAfterTableNameDropped
+				runAfterTableNameDropped = nil
+				if runFunc != nil {
+					go runFunc()
+					// Return an error so that the DROP TABLE is retried.
+					// This tests the idempotency of DROP TABLE.
+					return errors.Errorf("after name is dropped")
+				}
+				return nil
+			},
+		},
+	}
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop()
 	ctx := context.TODO()
 
 	numRows := 2*sql.TableTruncateChunkSize + 1
 	createKVTable(t, sqlDB, numRows)
+	var createWG sync.WaitGroup
+	createWG.Add(1)
+	runAfterTableNameDropped = func() {
+		// Test that deleted table cannot be used. This prevents
+		// regressions where name -> descriptor ID caches might make
+		// this statement erronously work.
+		if _, err := sqlDB.Exec(
+			`SELECT * FROM t.kv`,
+		); !testutils.IsError(err, `table "t.kv" does not exist`) {
+			t.Fatalf("different error than expected: %v", err)
+		}
+		createKVTable(t, sqlDB, numRows)
+		createWG.Done()
+	}
 
 	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "kv")
 	nameKey := sqlbase.MakeNameMetadataKey(keys.MaxReservedDescID+1, "kv")
@@ -351,10 +385,22 @@ func TestDropTable(t *testing.T) {
 	tablePrefix := roachpb.Key(keys.MakeTablePrefix(uint32(tableDesc.ID)))
 
 	checkKeyCount(t, kvDB, tablePrefix, 3*numRows)
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		if _, err := sqlDB.Exec(`DROP TABLE t.kv`); err != nil {
+			t.Error(err)
+		}
+		wg.Done()
+	}()
+	wg.Wait()
+	checkKeyCount(t, kvDB, tablePrefix, 0)
+
+	// Drop the newly created table.
+	createWG.Wait()
 	if _, err := sqlDB.Exec(`DROP TABLE t.kv`); err != nil {
 		t.Fatal(err)
 	}
-	checkKeyCount(t, kvDB, tablePrefix, 0)
 
 	// Test that deleted table cannot be used. This prevents regressions where
 	// name -> descriptor ID caches might make this statement erronously work.

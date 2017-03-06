@@ -965,19 +965,46 @@ func (p *planner) dropViewImpl(
 // can even eliminate the need to use a transaction for each chunk at a later
 // stage if it proves inefficient).
 func truncateAndDropTable(
-	ctx context.Context, tableDesc *sqlbase.TableDescriptor, db *client.DB,
+	ctx context.Context,
+	tableDesc *sqlbase.TableDescriptor,
+	db *client.DB,
+	testingKnobs SchemaChangerTestingKnobs,
 ) error {
+	zoneKey, nameKey, descKey := GetKeysForTableDescriptor(tableDesc)
+	// The table name is no longer in use across the entire cluster.
+	// Delete the namekey so that it can be used by another table.
+	// We do this before truncating the table because the table truncation
+	// takes too much time.
+	if err := db.Txn(ctx, func(txn *client.Txn) error {
+		b := &client.Batch{}
+		// Use CPut because we want this function to be idempotent.
+		b.CPut(nameKey, nil, tableDesc.ID)
+		txn.SetSystemConfigTrigger()
+		if err := txn.Run(b); err != nil {
+			if _, ok := err.(*roachpb.ConditionFailedError); !ok {
+				return err
+			}
+		}
+		return nil
+	}); err != nil {
+		return err
+	}
+
+	if testingKnobs.RunAfterTableNameDropped != nil {
+		if err := testingKnobs.RunAfterTableNameDropped(); err != nil {
+			return err
+		}
+	}
+
 	if err := truncateTableInChunks(ctx, tableDesc, db); err != nil {
 		return err
 	}
 
 	// Finished deleting all the table data, now delete the table meta data.
 	return db.Txn(ctx, func(txn *client.Txn) error {
-		zoneKey, nameKey, descKey := GetKeysForTableDescriptor(tableDesc)
 		// Delete table descriptor
 		b := &client.Batch{}
 		b.Del(descKey)
-		b.Del(nameKey)
 		// Delete the zone config entry for this table.
 		b.Del(zoneKey)
 		txn.SetSystemConfigTrigger()
