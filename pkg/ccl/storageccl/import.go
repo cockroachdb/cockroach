@@ -14,7 +14,6 @@ import (
 
 	"golang.org/x/net/context"
 
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
@@ -28,28 +27,6 @@ func init() {
 	storage.SetImportCmd(evalImport)
 }
 
-func validateImportRangeEmpty(
-	ctx context.Context, db *client.DB, datarange roachpb.Span, kr KeyRewriter,
-) error {
-	startKey, ok := kr.RewriteKey(append([]byte(nil), datarange.Key...))
-	if !ok {
-		return errors.Errorf("could not rewrite key: %s", startKey)
-	}
-	endKey, ok := kr.RewriteKey(append([]byte(nil), datarange.EndKey...))
-	if !ok {
-		return errors.Errorf("could not rewrite key: %s", endKey)
-	}
-
-	kvs, err := db.Scan(ctx, startKey, endKey, 1)
-	if err != nil {
-		return err
-	}
-	if len(kvs) > 0 {
-		return errors.New("import can only be called on empty ranges")
-	}
-	return nil
-}
-
 // evalImport bulk loads key/value entries.
 func evalImport(ctx context.Context, cArgs storage.CommandArgs) error {
 	args := cArgs.Args.(*roachpb.ImportRequest)
@@ -60,14 +37,6 @@ func evalImport(ctx context.Context, cArgs storage.CommandArgs) error {
 	defer tracing.FinishSpan(span)
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
-
-	// The WriteBatch requests this sends will fail if the ranges they affect
-	// are non-empty, so error early (before the request limiting) if that's the
-	// case. This gets rechecked, so it's okay that this doesn't guarantee that
-	// the range will _stay_ empty.
-	if err := validateImportRangeEmpty(ctx, db, args.DataSpan, kr); err != nil {
-		return err
-	}
 
 	if err := beginLimitedRequest(ctx); err != nil {
 		return err
