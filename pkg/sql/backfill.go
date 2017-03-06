@@ -574,7 +574,12 @@ const (
 	indexBackfill
 )
 
-// returns true when the backfill for the indexes is complete.
+// backfillIndexesSpans returns the index spans that still have to be backfilled
+// for the indexes being added as part of the first mutation enqueued on the
+// table descriptor.
+//
+// Returns nil if the backfill for the indexes is complete (mutation no longer
+// exists or there are no "ResumeSpans").
 func (sc *SchemaChanger) backfillIndexesSpans() ([]roachpb.Span, error) {
 	var spans []roachpb.Span
 	err := sc.db.Txn(context.TODO(), func(txn *client.Txn) error {
