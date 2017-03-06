@@ -193,6 +193,7 @@ func (a *Allocator) ComputeAction(
 // relaxed as necessary, from least specific to most specific, in order to
 // allocate a target.
 func (a *Allocator) AllocateTarget(
+	ctx context.Context,
 	constraints config.Constraints,
 	existing []roachpb.ReplicaDescriptor,
 	rangeID roachpb.RangeID,
@@ -208,7 +209,7 @@ func (a *Allocator) AllocateTarget(
 		a.storePool.deterministic,
 	)
 	if log.V(3) {
-		log.Infof(context.TODO(), "allocate candidates: %s", candidates)
+		log.Infof(ctx, "allocate candidates: %s", candidates)
 	}
 	if target := candidates.selectGood(a.randGen); target != nil {
 		return target, nil
@@ -230,6 +231,7 @@ func (a *Allocator) AllocateTarget(
 // falls back to selecting a random target from any of the existing
 // replicas. It also will exclude any replica that lives on leaseStoreID.
 func (a Allocator) RemoveTarget(
+	ctx context.Context,
 	constraints config.Constraints,
 	existing []roachpb.ReplicaDescriptor,
 	leaseStoreID roachpb.StoreID,
@@ -257,7 +259,7 @@ func (a Allocator) RemoveTarget(
 		a.storePool.deterministic,
 	)
 	if log.V(3) {
-		log.Infof(context.TODO(), "remove candidates: %s", candidates)
+		log.Infof(ctx, "remove candidates: %s", candidates)
 	}
 	if bad := candidates.selectBad(a.randGen); bad != nil {
 		for _, exist := range existing {
@@ -291,6 +293,7 @@ func (a Allocator) RemoveTarget(
 // rebalance. This helps prevent a stampeding herd targeting an abnormally
 // under-utilized store.
 func (a Allocator) RebalanceTarget(
+	ctx context.Context,
 	constraints config.Constraints,
 	existing []roachpb.ReplicaDescriptor,
 	leaseStoreID roachpb.StoreID,
@@ -308,7 +311,7 @@ func (a Allocator) RebalanceTarget(
 			continue
 		}
 		storeDesc, ok := a.storePool.getStoreDescriptor(repl.StoreID)
-		if ok && a.shouldRebalance(storeDesc, sl) {
+		if ok && a.shouldRebalance(ctx, storeDesc, sl) {
 			shouldRebalance = true
 			break
 		}
@@ -331,8 +334,8 @@ func (a Allocator) RebalanceTarget(
 	}
 
 	if log.V(3) {
-		log.Infof(context.TODO(), "existing replicas: %s", existingCandidates)
-		log.Infof(context.TODO(), "candidates: %s", candidates)
+		log.Infof(ctx, "existing replicas: %s", existingCandidates)
+		log.Infof(ctx, "candidates: %s", candidates)
 	}
 
 	// Find all candidates that are better than the worst existing replica.
@@ -473,7 +476,9 @@ var rebalanceThreshold = envutil.EnvOrDefaultFloat("COCKROACH_REBALANCE_THRESHOL
 
 // shouldRebalance returns whether the specified store is a candidate for
 // having a replica removed from it given the candidate store list.
-func (a Allocator) shouldRebalance(store roachpb.StoreDescriptor, sl StoreList) bool {
+func (a Allocator) shouldRebalance(
+	ctx context.Context, store roachpb.StoreDescriptor, sl StoreList,
+) bool {
 	// TODO(peter,bram,cuong): The FractionUsed check seems suspicious. When a
 	// node becomes fuller than maxFractionUsedThreshold we will always select it
 	// for rebalancing. This is currently utilized by tests.
@@ -506,7 +511,7 @@ func (a Allocator) shouldRebalance(store roachpb.StoreDescriptor, sl StoreList) 
 	shouldRebalance :=
 		(maxCapacityUsed || rangeCountAboveTarget || rebalanceToUnderfullStore) && rebalanceConvergesOnMean
 	if log.V(2) {
-		log.Infof(context.TODO(),
+		log.Infof(ctx,
 			"%d: should-rebalance=%t: fraction-used=%.2f range-count=%d "+
 				"(mean=%.1f, target=%d, fraction-used=%t, above-target=%t, underfull=%t, converges=%t)",
 			store.StoreID, shouldRebalance, store.Capacity.FractionUsed(), store.Capacity.RangeCount,
