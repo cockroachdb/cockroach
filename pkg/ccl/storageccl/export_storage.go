@@ -59,10 +59,10 @@ func ExportStorageConfFromURI(path string) (roachpb.ExportStorage, error) {
 			Secret:    uri.Query().Get(S3SecretParam),
 		}
 		if conf.S3Config.AccessKey == "" {
-			return conf, errors.Errorf("s3 uri missing %q paramer", S3AccessKeyParam)
+			return conf, errors.Errorf("s3 uri missing %q parameter", S3AccessKeyParam)
 		}
 		if conf.S3Config.Secret == "" {
-			return conf, errors.Errorf("s3 uri missing %q paramer", S3SecretParam)
+			return conf, errors.Errorf("s3 uri missing %q parameter", S3SecretParam)
 		}
 		conf.S3Config.Prefix = strings.TrimLeft(conf.S3Config.Prefix, "/")
 	case "gs":
@@ -81,10 +81,10 @@ func ExportStorageConfFromURI(path string) (roachpb.ExportStorage, error) {
 			AccountKey:  uri.Query().Get(AzureAccountKeyParam),
 		}
 		if conf.AzureConfig.AccountName == "" {
-			return conf, errors.Errorf("azure uri missing %q paramer", AzureAccountNameParam)
+			return conf, errors.Errorf("azure uri missing %q parameter", AzureAccountNameParam)
 		}
 		if conf.AzureConfig.AccountKey == "" {
-			return conf, errors.Errorf("azure uri missing %q paramer", AzureAccountKeyParam)
+			return conf, errors.Errorf("azure uri missing %q parameter", AzureAccountKeyParam)
 		}
 		conf.AzureConfig.Prefix = strings.TrimLeft(conf.AzureConfig.Prefix, "/")
 	case "http", "https":
