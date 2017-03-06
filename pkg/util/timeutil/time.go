@@ -36,6 +36,11 @@ func initFakeTime() {
 	}
 }
 
+// NewTime is a helper that returns a *time.Time.
+func NewTime(t time.Time) *time.Time {
+	return &t
+}
+
 // Now returns the current local time with an optional offset specified by the
 // environment. The offset functionality is guarded by the  "clockoffset" build
 // tag - if built with that tag, the clock offset is parsed from the
