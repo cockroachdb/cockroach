@@ -114,6 +114,7 @@ func TestSystemTableLiterals(t *testing.T) {
 		{keys.EventLogTableID, sqlbase.EventLogTableSchema, sqlbase.EventLogTable},
 		{keys.RangeEventTableID, sqlbase.RangeEventTableSchema, sqlbase.RangeEventTable},
 		{keys.UITableID, sqlbase.UITableSchema, sqlbase.UITable},
+		{keys.JobsTableID, sqlbase.JobsTableSchema, sqlbase.JobsTable},
 	} {
 		gen, err := sql.CreateTestTableDescriptor(
 			keys.SystemDatabaseID,
