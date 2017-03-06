@@ -69,7 +69,7 @@ const (
 
 	debugRangeValueLeaseNone       = "Unknown"
 	debugRangeValueLeaseExpiration = "Expiration"
-	debugRangeValueLeaseEpoch      = "LeaseEpoch"
+	debugRangeValueLeaseEpoch      = "Epoch"
 )
 
 // Returns an HTML page displaying information about all node's view of a
@@ -517,7 +517,8 @@ func (d *debugRangeData) postProcessing() {
 					d.Results[debugRangeHeaderLeaseType][d.HeaderFakeStoreID].Class = debugRangeClassWarning
 					d.Results[debugRangeHeaderLeaseType][info.SourceStoreID].Class = debugRangeClassWarning
 				}
-				if leaderStoreInfo.State.Lease.Epoch != info.State.Lease.Epoch {
+				if d.Results[debugRangeHeaderLeaseEpoch][leaderStoreInfo.SourceStoreID].Value !=
+					d.Results[debugRangeHeaderLeaseEpoch][info.SourceStoreID].Value {
 					d.Results[debugRangeHeaderLeaseEpoch][d.HeaderFakeStoreID].Class = debugRangeClassWarning
 					d.Results[debugRangeHeaderLeaseEpoch][info.SourceStoreID].Class = debugRangeClassWarning
 				}
