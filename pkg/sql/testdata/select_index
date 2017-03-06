@@ -402,3 +402,35 @@ EXPLAIN SELECT i, s FROM ab@baz WHERE (i, s) < (1, 'c')
 1  scan
 1        table  ab@baz
 1        spans  /#-/1/"c"
+
+# Check that primary key definitions can indicate index ordering,
+# and this information is subsequently used during index selection
+# and span generation. #13882
+query TTBITTBB
+CREATE TABLE abz(a INT, b INT, c INT, PRIMARY KEY (a DESC, b ASC), UNIQUE(c DESC, b ASC)); SHOW INDEX FROM abz
+----
+abz    primary      true      1  a       DESC       false    false
+abz    primary      true      2  b       ASC        false    false
+abz    abz_c_b_key  true      1  c       DESC       false    false
+abz    abz_c_b_key  true      2  b       ASC        false    false
+abz    abz_c_b_key  true      3  a       ASC        false    true
+
+query ITTT
+EXPLAIN SELECT a FROM abz ORDER BY a DESC LIMIT 1
+----
+0  limit
+1  render
+2  scan
+2          table  abz@primary
+2          spans  ALL
+2          limit            1
+
+query ITTT
+EXPLAIN SELECT c FROM abz ORDER BY c DESC LIMIT 1
+----
+0  limit
+1  render
+2  scan
+2          table  abz@abz_c_b_key
+2          spans  ALL
+2          limit            1

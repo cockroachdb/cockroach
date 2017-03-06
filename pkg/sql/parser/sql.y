@@ -1904,21 +1904,21 @@ constraint_elem:
       Expr: $3.expr(),
     }
   }
-| UNIQUE '(' name_list ')' opt_storing opt_interleave
+| UNIQUE '(' index_params ')' opt_storing opt_interleave
   {
     $$.val = &UniqueConstraintTableDef{
       IndexTableDef: IndexTableDef{
-        Columns: NameListToIndexElems($3.nameList()),
+        Columns: $3.idxElems(),
         Storing: $5.nameList(),
         Interleave: $6.interleave(),
       },
     }
   }
-| PRIMARY KEY '(' name_list ')'
+| PRIMARY KEY '(' index_params ')'
   {
     $$.val = &UniqueConstraintTableDef{
       IndexTableDef: IndexTableDef{
-        Columns: NameListToIndexElems($4.nameList()),
+        Columns: $4.idxElems(),
       },
       PrimaryKey:    true,
     }
