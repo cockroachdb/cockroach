@@ -128,6 +128,23 @@ func spansForAllTableIndexes(tables []*sqlbase.TableDescriptor) []roachpb.Span {
 	return spans
 }
 
+func backupJobDescription(backup parser.Backup) (string, error) {
+	var err error
+	if backup.To, err = storageccl.SanitizeExportStorageURI(backup.To); err != nil {
+		return "", err
+	}
+
+	for i, incFrom := range backup.IncrementalFrom {
+		if backup.IncrementalFrom[i], err = storageccl.SanitizeExportStorageURI(incFrom); err != nil {
+			return "", err
+		}
+	}
+
+	var buf bytes.Buffer
+	backup.Format(&buf, parser.FmtSimple)
+	return buf.String(), nil
+}
+
 type backupFileDescriptors []BackupDescriptor_File
 
 func (r backupFileDescriptors) Len() int      { return len(r) }
@@ -153,6 +170,8 @@ func Backup(
 	targets parser.TargetList,
 	startTime, endTime hlc.Timestamp,
 	_ parser.KVOptions,
+	jobLogger *sql.JobLogger,
+	description string,
 ) (BackupDescriptor, error) {
 	// TODO(dan): Figure out how permissions should work. #6713 is tracking this
 	// for grpc.
@@ -216,6 +235,17 @@ func Backup(
 		files    []BackupDescriptor_File
 		dataSize int64
 	}{}
+
+	descriptorIDs := []sqlbase.ID{}
+	for _, desc := range tables {
+		descriptorIDs = append(descriptorIDs, desc.GetID())
+	}
+	if err := jobLogger.Created(ctx, description, p.User(), descriptorIDs, sql.BackupJobPayload{}); err != nil {
+		return BackupDescriptor{}, err
+	}
+	if err := jobLogger.Started(ctx, sql.JobLease{}); err != nil {
+		return BackupDescriptor{}, err
+	}
 
 	header := roachpb.Header{Timestamp: endTime}
 	storageConf := exportStore.Conf()
@@ -319,14 +349,26 @@ func backupPlanHook(
 				return nil, err
 			}
 		}
+		jobDescription, err := backupJobDescription(*backup)
+		if err != nil {
+			return nil, err
+		}
+		jobLogger := sql.NewJobLogger(p.ExecCfg().DB, p.LeaseMgr())
 		desc, err := Backup(ctx,
 			p,
 			backup.To,
 			backup.Targets,
 			startTime, endTime,
 			backup.Options,
+			&jobLogger,
+			jobDescription,
 		)
 		if err != nil {
+			// Marking a job as failed is best-effort.
+			_ = jobLogger.Failed(ctx, err)
+			return nil, err
+		}
+		if err = jobLogger.Succeeded(ctx); err != nil {
 			return nil, err
 		}
 		ret := []parser.Datums{{
