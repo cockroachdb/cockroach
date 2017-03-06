@@ -24,7 +24,7 @@ import (
 	"math"
 	"os"
 	"os/signal"
-	"strings"
+	"runtime"
 	"sync"
 	"sync/atomic"
 	"syscall"
@@ -34,7 +34,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cli"
 	"github.com/cockroachdb/cockroach/pkg/cmd/internal/localcluster"
-	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/cmd/internal/tc"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -387,44 +387,8 @@ func handleStart() bool {
 		return false
 	}
 
-	// Do our own hacky flag parsing here to get around the fact that the default
-	// flag package complains about any unknown flags while still allowing the
-	// pflags package used by cli.Start to manage the rest of the flags as usual.
-	var latenciesStr string
-	for i, arg := range os.Args {
-		if strings.HasPrefix(arg, "--latencies=") || strings.HasPrefix(arg, "-latencies=") {
-			latenciesStr = strings.SplitAfterN(arg, "=", 2)[1]
-			os.Args = append(os.Args[:i], os.Args[i+1:]...)
-			break
-		}
-	}
-	if err := configureArtificialLatencies(latenciesStr); err != nil {
-		log.Fatal(context.Background(), err)
-	}
-
 	cli.Main()
 	return true
-}
-
-func configureArtificialLatencies(latenciesConfig string) error {
-	if latenciesConfig == "" {
-		return nil
-	}
-	for _, latency := range strings.Split(latenciesConfig, ",") {
-		parts := strings.Split(latency, "=")
-		if len(parts) != 2 {
-			return errors.Errorf("unexpected latency config format %q", latency)
-		}
-		addr := parts[0]
-		dur := parts[1]
-		delay, err := time.ParseDuration(dur)
-		if err != nil {
-			return errors.Wrapf(err, "unable to parse %q as a duration", parts[1])
-		}
-		rpc.ArtificialLatencies[addr] = delay
-		log.Infof(context.Background(), "adding delay %s to address %q", delay, addr)
-	}
-	return nil
 }
 
 func main() {
@@ -443,7 +407,21 @@ func main() {
 		}
 	}
 
-	c := localcluster.New(*numNodes)
+	// TODO(a-robinson): Automatically run github.com/tylertreat/comcast for
+	// simpler configs that just have a single latency between all nodes.
+	var separateAddrs bool
+	for _, locality := range config.Localities {
+		if len(locality.OutgoingLatencies) != 0 {
+			separateAddrs = true
+			if runtime.GOOS != "linux" {
+				log.Fatal(context.Background(),
+					"configs that set per-locality outgoing latencies are only supported on linux")
+			}
+			break
+		}
+	}
+
+	c := localcluster.New(*numNodes, separateAddrs)
 	defer c.Close()
 
 	log.SetExitFunc(func(code int) {
@@ -456,31 +434,51 @@ func main() {
 	a := newAllocSim(c)
 
 	var perNodeArgs map[int][]string
+	var perNodeEnv map[int][]string
 	if len(config.Localities) != 0 {
 		perNodeArgs = make(map[int][]string)
+		perNodeEnv = make(map[int][]string)
 		a.localities = make([]Locality, len(c.Nodes))
 		nodesPerLocality := make(map[string][]int)
 		var nodeIdx int
 		for _, locality := range config.Localities {
 			for i := 0; i < locality.NumNodes; i++ {
 				perNodeArgs[nodeIdx] = []string{fmt.Sprintf("--locality=l=%s", locality.Name)}
+				if separateAddrs {
+					perNodeEnv[nodeIdx] = []string{fmt.Sprintf("COCKROACH_SOURCE_IP_ADDRESS=%s", c.IPAddr(nodeIdx))}
+				}
 				a.localities[nodeIdx] = locality
 				nodesPerLocality[locality.Name] = append(nodesPerLocality[locality.Name], nodeIdx)
 				nodeIdx++
 			}
 		}
-		for i, locality := range a.localities {
-			var latencies []string
+		var tcController *tc.Controller
+		if separateAddrs {
+			// Since localcluster only uses loopback IPs for the nodes, we only need to
+			// set up tc rules on the loopback device.
+			tcController = tc.NewController("lo")
+			if err := tcController.Init(); err != nil {
+				log.Fatal(context.Background(), err)
+			}
+			defer func() {
+				if err := tcController.CleanUp(); err != nil {
+					log.Error(context.Background(), err)
+				}
+			}()
+		}
+		for _, locality := range a.localities {
 			for _, outgoing := range locality.OutgoingLatencies {
 				if outgoing.Latency > 0 {
-					for _, nodeIdx := range nodesPerLocality[outgoing.Name] {
-						latencies = append(latencies,
-							fmt.Sprintf("%s=%s", localcluster.RPCAddr(nodeIdx), time.Duration(outgoing.Latency)))
+					for _, srcNodeIdx := range nodesPerLocality[locality.Name] {
+						for _, dstNodeIdx := range nodesPerLocality[outgoing.Name] {
+							if err := tcController.AddLatency(
+								c.IPAddr(srcNodeIdx), c.IPAddr(dstNodeIdx), time.Duration(outgoing.Latency/2),
+							); err != nil {
+								log.Fatal(context.Background(), err)
+							}
+						}
 					}
 				}
-			}
-			if len(latencies) != 0 {
-				perNodeArgs[i] = append(perNodeArgs[i], "--latencies="+strings.Join(latencies, ","))
 			}
 		}
 	}
@@ -500,7 +498,7 @@ func main() {
 	}()
 
 	allNodeArgs := append(flag.Args(), "--vmodule=allocator=1")
-	c.Start("allocsim", *workers, os.Args[0], nil, allNodeArgs, perNodeArgs)
+	c.Start("allocsim", *workers, os.Args[0], allNodeArgs, perNodeArgs, perNodeEnv)
 	c.UpdateZoneConfig(1, 1<<20)
 	if len(config.Localities) != 0 {
 		a.runWithConfig(config)

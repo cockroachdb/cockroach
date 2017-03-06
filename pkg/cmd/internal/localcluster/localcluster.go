@@ -74,23 +74,27 @@ func IsUnavailableError(err error) bool {
 // Cluster holds the state for a local cluster, providing methods for common
 // operations, access to the underlying nodes and per-node KV and SQL clients.
 type Cluster struct {
-	rpcCtx  *rpc.Context
-	Nodes   []*Node
-	Clients []*client.DB
-	Status  []serverpb.StatusClient
-	DB      []*gosql.DB
-	stopper *stop.Stopper
-	started time.Time
+	rpcCtx        *rpc.Context
+	Nodes         []*Node
+	Clients       []*client.DB
+	Status        []serverpb.StatusClient
+	DB            []*gosql.DB
+	separateAddrs bool
+	stopper       *stop.Stopper
+	started       time.Time
 }
 
 // New creates a cluster of size nodes.
-func New(size int) *Cluster {
+// separateAddrs controls whether all the nodes use the same localhost IP
+// address (127.0.0.1) or separate addresses (e.g. 127.1.1.1, 127.1.1.2, etc).
+func New(size int, separateAddrs bool) *Cluster {
 	return &Cluster{
-		Nodes:   make([]*Node, size),
-		Clients: make([]*client.DB, size),
-		Status:  make([]serverpb.StatusClient, size),
-		DB:      make([]*gosql.DB, size),
-		stopper: stop.NewStopper(),
+		Nodes:         make([]*Node, size),
+		Clients:       make([]*client.DB, size),
+		Status:        make([]serverpb.StatusClient, size),
+		DB:            make([]*gosql.DB, size),
+		separateAddrs: separateAddrs,
+		stopper:       stop.NewStopper(),
 	}
 }
 
@@ -100,7 +104,11 @@ func New(size int) *Cluster {
 // can be used to pass extra arguments to an individual node. If not nil, its
 // size must equal the number of nodes.
 func (c *Cluster) Start(
-	db string, numWorkers int, binary string, env, allNodeArgs []string, perNodeArgs map[int][]string,
+	db string,
+	numWorkers int,
+	binary string,
+	allNodeArgs []string,
+	perNodeArgs, perNodeEnv map[int][]string,
 ) {
 	c.started = timeutil.Now()
 
@@ -117,7 +125,7 @@ func (c *Cluster) Start(
 	}
 
 	for i := range c.Nodes {
-		c.Nodes[i] = c.makeNode(i, binary, append(append([]string(nil), allNodeArgs...), perNodeArgs[i]...), env)
+		c.Nodes[i] = c.makeNode(i, binary, append(append([]string(nil), allNodeArgs...), perNodeArgs[i]...), perNodeEnv[i])
 		c.Clients[i] = c.makeClient(i)
 		c.Status[i] = c.makeStatus(i)
 		c.DB[i] = c.makeDB(i, numWorkers, db)
@@ -135,14 +143,22 @@ func (c *Cluster) Close() {
 	c.stopper.Stop()
 }
 
-// RPCPort returns the RPC port of the specified node.
-func RPCPort(nodeIdx int) int {
-	return basePort + nodeIdx*2
+// IPAddr returns the IP address of the specified node.
+func (c *Cluster) IPAddr(nodeIdx int) string {
+	if c.separateAddrs {
+		return fmt.Sprintf("127.1.1.%d", nodeIdx+1)
+	}
+	return "127.0.0.1"
 }
 
 // RPCAddr returns the RPC address of the specified node.
-func RPCAddr(nodeIdx int) string {
-	return fmt.Sprintf("localhost:%d", RPCPort(nodeIdx))
+func (c *Cluster) RPCAddr(nodeIdx int) string {
+	return fmt.Sprintf("%s:%d", c.IPAddr(nodeIdx), RPCPort(nodeIdx))
+}
+
+// RPCPort returns the RPC port of the specified node.
+func RPCPort(nodeIdx int) int {
+	return basePort + nodeIdx*2
 }
 
 // HTTPPort returns the HTTP port of the specified node.
@@ -162,7 +178,7 @@ func (c *Cluster) makeNode(nodeIdx int, binary string, extraArgs, extraEnv []str
 		binary,
 		"start",
 		"--insecure",
-		"--host=localhost",
+		fmt.Sprintf("--host=%s", c.IPAddr(nodeIdx)),
 		fmt.Sprintf("--port=%d", RPCPort(nodeIdx)),
 		fmt.Sprintf("--http-port=%d", HTTPPort(nodeIdx)),
 		fmt.Sprintf("--store=%s", dir),
@@ -170,7 +186,7 @@ func (c *Cluster) makeNode(nodeIdx int, binary string, extraArgs, extraEnv []str
 		fmt.Sprintf("--logtostderr"),
 	}
 	if nodeIdx > 0 {
-		args = append(args, fmt.Sprintf("--join=localhost:%d", RPCPort(0)))
+		args = append(args, fmt.Sprintf("--join=%s", c.RPCAddr(0)))
 	}
 	args = append(args, extraArgs...)
 
@@ -184,7 +200,7 @@ func (c *Cluster) makeNode(nodeIdx int, binary string, extraArgs, extraEnv []str
 }
 
 func (c *Cluster) makeClient(nodeIdx int) *client.DB {
-	conn, err := c.rpcCtx.GRPCDial(RPCAddr(nodeIdx))
+	conn, err := c.rpcCtx.GRPCDial(c.RPCAddr(nodeIdx))
 	if err != nil {
 		log.Fatalf(context.Background(), "failed to initialize KV client: %s", err)
 	}
@@ -192,7 +208,7 @@ func (c *Cluster) makeClient(nodeIdx int) *client.DB {
 }
 
 func (c *Cluster) makeStatus(nodeIdx int) serverpb.StatusClient {
-	conn, err := c.rpcCtx.GRPCDial(RPCAddr(nodeIdx))
+	conn, err := c.rpcCtx.GRPCDial(c.RPCAddr(nodeIdx))
 	if err != nil {
 		log.Fatalf(context.Background(), "failed to initialize status client: %s", err)
 	}
@@ -200,8 +216,8 @@ func (c *Cluster) makeStatus(nodeIdx int) serverpb.StatusClient {
 }
 
 func (c *Cluster) makeDB(nodeIdx, numWorkers int, dbName string) *gosql.DB {
-	url := fmt.Sprintf("postgresql://root@localhost:%d/%s?sslmode=disable",
-		RPCPort(nodeIdx), dbName)
+	url := fmt.Sprintf("postgresql://root@%s/%s?sslmode=disable",
+		c.RPCAddr(nodeIdx), dbName)
 	conn, err := gosql.Open("postgres", url)
 	if err != nil {
 		log.Fatal(context.Background(), err)
@@ -328,7 +344,7 @@ func (c *Cluster) lookupRange(nodeIdx int, key roachpb.Key) (*roachpb.RangeDescr
 // Freeze freezes (or thaws) the cluster. The freeze request is sent to the
 // specified node.
 func (c *Cluster) Freeze(nodeIdx int, freeze bool) {
-	addr := RPCAddr(nodeIdx)
+	addr := c.RPCAddr(nodeIdx)
 	conn, err := c.rpcCtx.GRPCDial(addr)
 	if err != nil {
 		log.Fatalf(context.Background(), "unable to dial: %s: %v", addr, err)
