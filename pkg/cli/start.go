@@ -18,6 +18,7 @@
 package cli
 
 import (
+	"bytes"
 	"flag"
 	"fmt"
 	"io"
@@ -351,6 +352,7 @@ func runStart(cmd *cobra.Command, args []string) error {
 	var s *server.Server
 	errChan := make(chan error, 1)
 	go func() {
+		defer sp.Finish()
 		if err := func() error {
 			if err := serverCfg.InitNode(); err != nil {
 				return errors.Wrap(err, "failed to initialize node")
@@ -378,7 +380,6 @@ func runStart(cmd *cobra.Command, args []string) error {
 			if err := s.Start(startCtx); err != nil {
 				return errors.Wrap(err, "cockroach server exited with error")
 			}
-			sp.Finish()
 
 			// We don't do this in (*server.Server).Start() because we don't want it
 			// in tests.
@@ -391,7 +392,8 @@ func runStart(cmd *cobra.Command, args []string) error {
 				return err
 			}
 
-			tw := tabwriter.NewWriter(os.Stdout, 2, 1, 2, ' ', 0)
+			var buf bytes.Buffer
+			tw := tabwriter.NewWriter(&buf, 2, 1, 2, ' ', 0)
 			fmt.Fprintf(tw, "CockroachDB node starting at %s\n", timeutil.Now())
 			fmt.Fprintf(tw, "build:\t%s %s @ %s (%s)\n", info.Distribution, info.Tag, info.Time, info.GoVersion)
 			fmt.Fprintf(tw, "admin:\t%s\n", serverCfg.AdminURL())
@@ -416,7 +418,13 @@ func runStart(cmd *cobra.Command, args []string) error {
 			}
 			fmt.Fprintf(tw, "clusterID:\t%s\n", s.ClusterID())
 			fmt.Fprintf(tw, "nodeID:\t%d\n", nodeID)
-			return tw.Flush()
+			if err := tw.Flush(); err != nil {
+				return err
+			}
+			msg := buf.String()
+			log.Infof(startCtx, "Startup message:\n%s", msg)
+			fmt.Print(msg)
+			return nil
 		}(); err != nil {
 			errChan <- err
 		}
