@@ -420,8 +420,6 @@ type Replica struct {
 		// newly recreated replica will have a complete range descriptor.
 		lastToReplica, lastFromReplica roachpb.ReplicaDescriptor
 
-		lastActivity map[roachpb.ReplicaID]time.Time
-
 		// submitProposalFn can be set to mock out the propose operation.
 		submitProposalFn func(*ProposalData) error
 		// Computed checksum at a snapshot UUID.
@@ -836,12 +834,6 @@ func (r *Replica) setEstimatedCommitIndexLocked(commit uint64) {
 	}
 }
 
-func (r *Replica) setLastActivityLocked(replicaID roachpb.ReplicaID) {
-	if r.mu.lastActivity != nil {
-		r.mu.lastActivity[replicaID] = timeutil.Now()
-	}
-}
-
 func (r *Replica) maybeAcquireProposalQuota(ctx context.Context) error {
 	r.mu.RLock()
 	quota := r.mu.proposalQuota
@@ -858,11 +850,9 @@ func (r *Replica) updateProposalQuotaLocked(newLeaderID roachpb.ReplicaID) {
 			// We're becoming the leader.
 			r.mu.proposalQuotaBaseIndex = r.mu.lastIndex
 			r.mu.proposalQuota = newQuotaPool(defaultProposalQuota)
-			r.mu.lastActivity = make(map[roachpb.ReplicaID]time.Time)
 		} else {
 			// We're becoming a follower.
 			r.mu.proposalQuota = nil
-			r.mu.lastActivity = nil
 		}
 		return
 	} else if r.mu.proposalQuota == nil {
@@ -878,15 +868,19 @@ func (r *Replica) updateProposalQuotaLocked(newLeaderID roachpb.ReplicaID) {
 	status := r.raftStatusRLocked()
 	// Find the minimum index that active followers have acknowledged.
 	minIndex := status.Commit
-	now := timeutil.Now()
+	// now := timeutil.Now()
 	for _, rep := range r.mu.state.Desc.Replicas {
-		// Only consider followers that we've received a message from in the last 2
-		// seconds.
-		//
-		// TODO(peter): Put this in StoreConfig.
-		const activeTime = 2 * time.Second
-		if now.Sub(r.mu.lastActivity[rep.ReplicaID]) > activeTime {
-			continue
+		// Only consider followers that have "healthy" RPC connections. We don't
+		// use node liveness here as doing so could lead to deadlock unless we
+		// avoided enforcing proposal quota for node liveness ranges.
+		if r.store.cfg.Transport.resolver != nil {
+			addr, err := r.store.cfg.Transport.resolver(rep.NodeID)
+			if err != nil {
+				continue
+			}
+			if err := r.store.cfg.Transport.rpcContext.ConnHealth(addr.String()); err != nil {
+				continue
+			}
 		}
 		if progress, ok := status.Progress[uint64(rep.ReplicaID)]; ok {
 			// Only consider followers who are in advance of the quota base
