@@ -98,6 +98,7 @@ func contains(s Severity, str string, t *testing.T) bool {
 // them.
 func setFlags() {
 	SetExitFunc(os.Exit)
+	logging.noStderrRedirect = false
 	logging.stderrThreshold = Severity_ERROR
 	logging.toStderr = false
 }
@@ -536,6 +537,9 @@ func TestGC(t *testing.T) {
 
 	setFlags()
 	logging.stderrThreshold.set(Severity_NONE)
+	// Prevent writes to stderr from being sent to log files which would screw up
+	// the expected number of log file calculation below.
+	logging.noStderrRedirect = true
 	defer func(previous uint64) { MaxSize = previous }(MaxSize)
 	MaxSize = 1 // ensure rotation on every log write
 	defer func(previous uint64) {
