@@ -125,6 +125,10 @@ func (f *fakeDB) Put(ctx context.Context, key, value interface{}) error {
 	return nil
 }
 
+func (f *fakeDB) Txn(context.Context, func(txn *client.Txn) error) error {
+	return errors.New("unimplemented")
+}
+
 func TestEnsureMigrations(t *testing.T) {
 	db := &fakeDB{}
 	mgr := Manager{
