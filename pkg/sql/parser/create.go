@@ -420,16 +420,6 @@ type ColumnFamilyConstraint struct {
 	IfNotExists bool
 }
 
-// NameListToIndexElems converts a NameList to an IndexElemList with all
-// members using the `DefaultDirection`.
-func NameListToIndexElems(lst NameList) IndexElemList {
-	elems := make(IndexElemList, 0, len(lst))
-	for _, n := range lst {
-		elems = append(elems, IndexElem{Column: n, Direction: DefaultDirection})
-	}
-	return elems
-}
-
 // IndexTableDef represents an index definition within a CREATE TABLE
 // statement.
 type IndexTableDef struct {
