@@ -34,6 +34,7 @@ import (
 	"strconv"
 	"strings"
 	"sync/atomic"
+	"syscall"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
@@ -595,6 +596,8 @@ type loggingT struct {
 	hasColorProfile bool          // True if the color profile has been determined
 	colorProfile    *colorProfile // Set via call to getTermColorProfile
 
+	noStderrRedirect bool
+
 	// Level flag. Handled atomically.
 	stderrThreshold Severity // The -alsologtostderr flag.
 
@@ -928,6 +931,21 @@ func (sb *syncBuffer) rotateFile(now time.Time) error {
 	sb.nbytes = 0
 	if err != nil {
 		return err
+	}
+
+	// Redirect stderr to the current INFO log file in order to capture panic
+	// stack traces that are written by the Go runtime to stderr. Note that if
+	// --logtostderr is true we'll never enter this code path and panic stack
+	// traces will go to the original stderr as you would expect.
+	if sb.sev == Severity_INFO &&
+		logging.stderrThreshold > Severity_INFO &&
+		!logging.noStderrRedirect {
+		// NB: any concurrent output to stderr may straddle the old and new
+		// files. This doesn't apply to log messages as we won't reach this code
+		// unless we're not logging to stderr.
+		if err := syscall.Dup2(int(sb.file.Fd()), syscall.Stderr); err != nil {
+			return err
+		}
 	}
 
 	sb.Writer = bufio.NewWriterSize(sb.file, bufferSize)
