@@ -780,6 +780,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v TEXT);
 			if err != nil {
 				t.Fatal(err)
 			}
+			defer rows.Close()
 			for rows.Next() {
 				var k int
 				var v string
@@ -802,7 +803,6 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v TEXT);
 			if err != nil {
 				t.Fatal(err)
 			}
-			rows.Close()
 			cleanupFilter()
 		}
 	}
@@ -911,13 +911,13 @@ CREATE DATABASE t; CREATE TABLE t.test (k INT PRIMARY KEY, v TEXT);
 		if err != nil {
 			t.Fatal(err)
 		}
+		defer rows.Close()
 		if rows.Next() {
 			var k int
 			var v string
 			err := rows.Scan(&k, &v)
 			t.Fatalf("found unexpected row: %d %s, %v", k, v, err)
 		}
-		rows.Close()
 		if _, err := sqlDB.Exec("END"); err != nil {
 			t.Fatal(err)
 		}

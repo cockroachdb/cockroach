@@ -663,6 +663,7 @@ CREATE UNIQUE INDEX vidx ON t.test (v);
 	if err != nil {
 		t.Fatal(err)
 	}
+	defer rows.Close()
 
 	count := 0
 	for ; rows.Next(); count++ {
@@ -941,6 +942,7 @@ func addIndexSchemaChange(
 	if err != nil {
 		t.Fatal(err)
 	}
+	defer rows.Close()
 
 	count := 0
 	for ; rows.Next(); count++ {
@@ -980,6 +982,7 @@ func addColumnSchemaChange(
 	if err != nil {
 		t.Fatal(err)
 	}
+	defer rows.Close()
 	count := 0
 	for ; rows.Next(); count++ {
 		var val float64
@@ -1476,9 +1479,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 
 		// Ensure that sql is using the correct table lease.
 		if len(cols) != len(expectedCols) {
-			if err := rows.Close(); err != nil {
-				t.Fatal(err)
-			}
+			defer rows.Close()
 			return errors.Errorf("incorrect columns: %v, expected: %v", cols, expectedCols)
 		}
 		if cols[0] != expectedCols[0] || cols[1] != expectedCols[1] {
@@ -1487,6 +1488,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 		return nil
 	})
 
+	defer rows.Close()
 	// rows contains the data; verify that it's the right data.
 	vals := make([]interface{}, len(expectedCols))
 	for i := range vals {
@@ -1533,6 +1535,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 	if err != nil {
 		t.Fatal(err)
 	}
+	defer rows.Close()
 	count = 0
 	for ; rows.Next(); count++ {
 	}
@@ -1638,6 +1641,7 @@ CREATE TABLE t.test (
 	if err != nil {
 		t.Fatal(err)
 	}
+	defer rows.Close()
 	const eCount = maxValue + 1
 	count := 0
 	for ; rows.Next(); count++ {

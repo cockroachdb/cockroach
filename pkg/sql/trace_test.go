@@ -93,6 +93,7 @@ func TestExplainTrace(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	defer rows.Close()
 	expParts := []string{"explain trace", "grpcTransport SendNext", "node.Batch"}
 	var parts []string
 
