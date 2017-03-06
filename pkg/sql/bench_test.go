@@ -81,13 +81,13 @@ func benchmarkPostgres(b *testing.B, f func(b *testing.B, db *gosql.DB)) {
 	//
 	// Now open this file and set the following values:
 	// ```
-	// $ cat /usr/local/var/postgres/postgresql.conf | grep ssl
-	// ssl = on                            # (change requires restart)
-	// ssl_cert_file = '$GOATH/src/github.com/cockroachdb/cockroach/pkg/security/securitytest/test_certs/node.server.crt' # (change requires restart)
-	// ssl_key_file = '$GOATH/src/github.com/cockroachdb/cockroach/pkg/security/securitytest/test_certs/node.server.key'  # (change requires restart)
-	// ssl_ca_file = '$GOATH/src/github.com/cockroachdb/cockroach/pkg/security/securitytest/test_certs/ca.crt'            # (change requires restart)
+	// $ grep ^ssl /usr/local/var/postgres/postgresql.conf
+	// ssl = on # (change requires restart)
+	// ssl_cert_file = '$GOPATH/src/github.com/cockroachdb/cockroach/pkg/security/securitytest/test_certs/node.crt' # (change requires restart)
+	// ssl_key_file = '$GOPATH/src/github.com/cockroachdb/cockroach/pkg/security/securitytest/test_certs/node.key' # (change requires restart)
+	// ssl_ca_file = '$GOPATH/src/github.com/cockroachdb/cockroach/pkg/security/securitytest/test_certs/ca.crt' # (change requires restart)
 	// ```
-	// Where `$GOATH/src/github.com/cockroachdb/cockroach`
+	// Where `$GOPATH/src/github.com/cockroachdb/cockroach`
 	// is replaced with your local Cockroach source directory.
 	// Be sure to restart Postgres for this to take effect.
 
