@@ -1955,6 +1955,25 @@ func (expr *CaseExpr) Eval(ctx *EvalContext) (Datum, error) {
 // e.g. function(a, b, c) or function( a )
 var regprocedureRegexp = regexp.MustCompile(`^\s*([\w\.]+)\s*\((?:(?:\s*\w+\s*,)*\s*\w+)?\s*\)\s*$`)
 
+// regTypeInfo contains details on a pg_catalog table that has a reg* type.
+type regTypeInfo struct {
+	tableName string
+	// nameCol is the name of the column that contains the table's entity name.
+	nameCol string
+	// objName is a human-readable name describing the objects in the table.
+	objName string
+}
+
+// regTypeInfos maps an OidColType to a regTypeInfo that describes the
+// pg_catalog table that contains the entities of the type of the key.
+var regTypeInfos = map[*OidColType]regTypeInfo{
+	oidColTypeRegClass:     {"pg_class", "relname", "relation"},
+	oidColTypeRegType:      {"pg_type", "typname", "type"},
+	oidColTypeRegProc:      {"pg_proc", "proname", "function"},
+	oidColTypeRegProcedure: {"pg_proc", "proname", "function"},
+	oidColTypeRegNamespace: {"pg_namespace", "nspname", "namespace"},
+}
+
 // Eval implements the TypedExpr interface.
 func (expr *CastExpr) Eval(ctx *EvalContext) (Datum, error) {
 	d, err := expr.Expr.(TypedExpr).Eval(ctx)
@@ -2241,29 +2260,51 @@ func (expr *CastExpr) Eval(ctx *EvalContext) (Datum, error) {
 		}
 	case *OidColType:
 		ret := &DOid{kind: typ}
+		queryOid := func(typ *OidColType, d Datum) (Datum, error) {
+			info := regTypeInfos[typ]
+			var queryCol string
+			switch d.(type) {
+			case *DOid:
+				queryCol = "oid"
+			case *DString:
+				queryCol = info.nameCol
+			default:
+				panic(fmt.Sprintf("invalid argument to OID cast: %s", d))
+			}
+			results, err := ctx.Planner.QueryRow(
+				fmt.Sprintf("SELECT oid, %s FROM pg_catalog.%s WHERE %s = $1", info.nameCol, info.tableName, queryCol), d)
+			if err != nil {
+				if _, ok := err.(*MultipleResultsError); ok {
+					return nil, errors.Errorf("more than one %s named %s", info.objName, d)
+				}
+				return nil, err
+			}
+			if results.Len() == 0 {
+				return nil, errors.Errorf("%s %s does not exist", info.objName, d)
+			}
+			ret.DInt = results[0].(*DOid).DInt
+			ret.name = AsStringWithFlags(results[1], FmtBareStrings)
+			return ret, nil
+		}
 		switch v := d.(type) {
 		case *DOid:
-			ret.DInt = v.DInt
-			return ret, nil
-		case *DInt:
-			ret.DInt = *v
-			return ret, nil
-		case *DString:
-			queryOid := func(s string, table_name string, col_name string, obj_name string) (Datum, error) {
-				results, err := ctx.Planner.QueryRow(
-					fmt.Sprintf("SELECT oid FROM pg_catalog.%s WHERE %s = $1", table_name, col_name), s)
-				if err != nil {
-					if _, ok := err.(*MultipleResultsError); ok {
-						return nil, errors.Errorf("more than one %s named '%s'", obj_name, s)
-					}
-					return nil, err
-				}
-				if results.Len() == 0 {
-					return nil, errors.Errorf("%s '%s' does not exist", obj_name, s)
-				}
-				ret.DInt = results[0].(*DOid).DInt
+			switch typ {
+			case oidColTypeOid:
+				ret.DInt = v.DInt
 				return ret, nil
+			default:
+				return queryOid(typ, v)
 			}
+		case *DInt:
+			oid := NewDOid(*v)
+			switch typ {
+			case oidColTypeOid:
+				ret.DInt = *v
+				return ret, nil
+			default:
+				return queryOid(typ, oid)
+			}
+		case *DString:
 			s := string(*v)
 			// Trim whitespace and unwrap outer quotes if necessary.
 			// This is required to mimic postgres.
@@ -2271,11 +2312,8 @@ func (expr *CastExpr) Eval(ctx *EvalContext) (Datum, error) {
 			if len(s) > 1 && s[0] == '"' && s[len(s)-1] == '"' {
 				s = s[1 : len(s)-1]
 			}
-			ret.name = s
 
 			switch typ {
-			case oidColTypeRegClass:
-				return queryOid(s, "pg_class", "relname", "relation")
 			case oidColTypeRegProc, oidColTypeRegProcedure:
 				// Trim procedure type parameters. Postgres only does this when the
 				// cast is ::regprocedure, but we're going to always do it.
@@ -2293,11 +2331,9 @@ func (expr *CastExpr) Eval(ctx *EvalContext) (Datum, error) {
 					return nil, err
 				}
 				ret.name = funcDef.Name
-				return queryOid(funcDef.Name, "pg_proc", "proname", "function")
-			case oidColTypeRegNamespace:
-				return queryOid(s, "pg_namespace", "nspname", "namespace")
-			case oidColTypeRegType:
-				return queryOid(s, "pg_type", "typname", "type")
+				return queryOid(typ, NewDString(funcDef.Name))
+			default:
+				return queryOid(typ, NewDString(s))
 			}
 		}
 	}
