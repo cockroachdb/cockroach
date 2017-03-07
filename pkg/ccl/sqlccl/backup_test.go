@@ -738,3 +738,52 @@ func TestRestoredPrivileges(t *testing.T) {
 		sqlDBRestore.CheckQueryResults(`SHOW GRANTS ON bench.bank`, withGrants)
 	})
 }
+
+func TestRestoreInto(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	if !storage.ProposerEvaluatedKVEnabled() {
+		t.Skip("command WriteBatch is not allowed without proposer evaluated KV")
+	}
+
+	const numAccounts = 1
+	_, dir, _, sqlDB, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts)
+	defer cleanupFn()
+
+	sqlDB.Exec(fmt.Sprintf(`BACKUP DATABASE bench TO '%s'`, dir))
+
+	restoreStmt := fmt.Sprintf(`RESTORE bench.bank FROM '%s' WITH OPTIONS ('into_db'='bench2')`, dir)
+
+	_, err := sqlDB.DB.Exec(restoreStmt)
+	if !testutils.IsError(err, "a database named \"bench2\" needs to exist") {
+		t.Fatal(err)
+	}
+
+	sqlDB.Exec(`CREATE DATABASE bench2`)
+	sqlDB.Exec(restoreStmt)
+
+	expected := sqlDB.QueryStr(`SELECT * FROM bench.bank`)
+	sqlDB.CheckQueryResults(`SELECT * FROM bench2.bank`, expected)
+}
+
+func TestUnusedOptions(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	if !storage.ProposerEvaluatedKVEnabled() {
+		t.Skip("command WriteBatch is not allowed without proposer evaluated KV")
+	}
+
+	const numAccounts = 1
+	_, dir, _, sqlDB, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts)
+	defer cleanupFn()
+
+	_, err := sqlDB.DB.Exec(fmt.Sprintf(`BACKUP DATABASE bench TO '%s' WITH OPTIONS('unknown'='')`, dir))
+	if !testutils.IsError(err, "option \"unknown\" unused") {
+		t.Fatal(err)
+	}
+
+	sqlDB.Exec(`CREATE DATABASE bench2`)
+
+	_, err = sqlDB.DB.Exec(fmt.Sprintf(`RESTORE bench.* FROM '%s' WITH OPTIONS('into_db'='bench2', 'unknown'='')`, dir))
+	if !testutils.IsError(err, "option \"unknown\" unused") {
+		t.Fatal(err)
+	}
+}

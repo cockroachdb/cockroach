@@ -16,7 +16,11 @@
 
 package parser
 
-import "bytes"
+import (
+	"bytes"
+
+	"github.com/pkg/errors"
+)
 
 // Backup represents a BACKUP statement.
 type Backup struct {
@@ -88,17 +92,46 @@ func (node *Restore) Format(buf *bytes.Buffer, f FmtFlags) {
 }
 
 // KVOption is a key-value option.
+// It has a `read` state that should be marked when accessed.
 type KVOption struct {
 	Key   string
 	Value string
+	read  bool
 }
 
 // KVOptions is a list of KVOptions.
 type KVOptions []KVOption
 
+// Get returns value for requested key and if it was found or not.
+// Returns an error if more than one value for key is found.
+func (o KVOptions) Get(key string) (string, bool, error) {
+	found := false
+	var val string
+	for i := range o {
+		if key == o[i].Key {
+			if found {
+				return "", false, errors.Errorf("duplicate value for parameter %q", key)
+			}
+			found = true
+			val = o[i].Value
+			o[i].read = true
+		}
+	}
+	return val, found, nil
+}
+
+func (o KVOptions) CheckAllRead() error {
+	for _, k := range o {
+		if !k.read {
+			return errors.Errorf("option %q unused", k.Key)
+		}
+	}
+	return nil
+}
+
 // Format implements the NodeFormatter interface.
-func (l KVOptions) Format(buf *bytes.Buffer, f FmtFlags) {
-	for i, n := range l {
+func (o KVOptions) Format(buf *bytes.Buffer, f FmtFlags) {
+	for i, n := range o {
 		if i > 0 {
 			buf.WriteString(", ")
 		}
