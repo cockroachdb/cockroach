@@ -184,6 +184,7 @@ func (rq *replicateQueue) shouldQueue(
 	// the range doesn't currently have a lease which will allow the current
 	// replica to be considered a rebalancing source.
 	target, err := rq.allocator.RebalanceTarget(
+		ctx,
 		zone.Constraints,
 		desc.Replicas,
 		leaseStoreID,
@@ -267,6 +268,7 @@ func (rq *replicateQueue) processOneChange(
 			log.Infof(ctx, "adding a new replica")
 		}
 		newStore, err := rq.allocator.AllocateTarget(
+			ctx,
 			zone.Constraints,
 			desc.Replicas,
 			desc.RangeID,
@@ -299,6 +301,7 @@ func (rq *replicateQueue) processOneChange(
 			leaseHolderStoreID = 0
 		}
 		removeReplica, err := rq.allocator.RemoveTarget(
+			ctx,
 			zone.Constraints,
 			desc.Replicas,
 			leaseHolderStoreID,
@@ -372,6 +375,7 @@ func (rq *replicateQueue) processOneChange(
 		}
 
 		rebalanceStore, err := rq.allocator.RebalanceTarget(
+			ctx,
 			zone.Constraints,
 			desc.Replicas,
 			repl.store.StoreID(),
