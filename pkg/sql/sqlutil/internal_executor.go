@@ -19,6 +19,7 @@ package sqlutil
 import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 )
 
 // InternalExecutor is meant to be used by layers below SQL in the system that
@@ -31,6 +32,13 @@ type InternalExecutor interface {
 	// are currently executed as the root user.
 	ExecuteStatementInTransaction(
 		opName string, txn *client.Txn, statement string, params ...interface{}) (int, error)
+
+	// QueryRowInTransaction executes the supplied SQL statement as part of the
+	// supplied transaction and returns the result. Statements are currently
+	// executed as the root user.
+	QueryRowInTransaction(
+		opName string, txn *client.Txn, statement string, qargs ...interface{},
+	) (parser.Datums, error)
 
 	// GetTableSpan gets the key span for a SQL table, including any indices.
 	GetTableSpan(user string, txn *client.Txn, dbName, tableName string) (roachpb.Span, error)
