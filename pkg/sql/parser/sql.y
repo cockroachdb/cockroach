@@ -3447,23 +3447,23 @@ numeric:
 postgres_oid:
   REGPROC
   {
-    $$.val = oidPseudoTypeRegProc
+    $$.val = oidColTypeRegProc
   }
 | REGPROCEDURE
   {
-    $$.val = oidPseudoTypeRegProc
+    $$.val = oidColTypeRegProcedure
   }
 | REGCLASS
   {
-    $$.val = oidPseudoTypeRegClass
+    $$.val = oidColTypeRegClass
   }
 | REGTYPE
   {
-    $$.val = oidPseudoTypeRegType
+    $$.val = oidColTypeRegType
   }
 | REGNAMESPACE
   {
-    $$.val = oidPseudoTypeRegNamespace
+    $$.val = oidColTypeRegNamespace
   }
 
 opt_float:

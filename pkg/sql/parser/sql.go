@@ -8613,31 +8613,31 @@ sqldefault:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
 		//line sql.y:3443
 		{
-			sqlVAL.union.val = oidPseudoTypeRegProc
+			sqlVAL.union.val = oidColTypeRegProc
 		}
 	case 550:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
 		//line sql.y:3447
 		{
-			sqlVAL.union.val = oidPseudoTypeRegProc
+			sqlVAL.union.val = oidColTypeRegProcedure
 		}
 	case 551:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
 		//line sql.y:3451
 		{
-			sqlVAL.union.val = oidPseudoTypeRegClass
+			sqlVAL.union.val = oidColTypeRegClass
 		}
 	case 552:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
 		//line sql.y:3455
 		{
-			sqlVAL.union.val = oidPseudoTypeRegType
+			sqlVAL.union.val = oidColTypeRegType
 		}
 	case 553:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
 		//line sql.y:3459
 		{
-			sqlVAL.union.val = oidPseudoTypeRegNamespace
+			sqlVAL.union.val = oidColTypeRegNamespace
 		}
 	case 554:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]

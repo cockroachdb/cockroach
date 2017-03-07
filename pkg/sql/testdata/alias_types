@@ -21,7 +21,7 @@ statement ok
 INSERT INTO aliases VALUES (100, 'abc')
 
 statement ok
-INSERT INTO aliases VALUES (2::OID, 'def')
+INSERT INTO aliases VALUES (2, 'def')
 
 statement ok
 INSERT INTO aliases VALUES ('bool'::REGTYPE, ('ghi':::STRING)::NAME)
@@ -38,23 +38,23 @@ SELECT pg_typeof(a), pg_typeof(b) FROM aliases LIMIT 1
 ----
 oid  name
 
-query IT
-SELECT a+1, b || 'cat' FROM aliases ORDER BY a
+query T
+SELECT b || 'cat' FROM aliases ORDER BY a
 ----
-3    defcat
-17   ghicat
-101  abccat
+defcat
+ghicat
+abccat
 
-query TT
-SELECT to_hex(a), reverse(b) FROM aliases ORDER BY a
+query T
+SELECT reverse(b) FROM aliases ORDER BY a
 ----
-2   fed
-10  ihg
-64  cba
+fed
+ihg
+cba
 
-query RI
-SELECT sqrt(a::DECIMAL), length(b::BYTES) FROM aliases ORDER BY a
+query I
+SELECT length(b::BYTES) FROM aliases ORDER BY a
 ----
-1.414213562373095   3
-4   3
-10  3
+3
+3
+3

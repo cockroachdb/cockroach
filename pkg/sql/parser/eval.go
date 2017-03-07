@@ -1097,6 +1097,13 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 				return DBool(c == 0), err
 			},
 		},
+		CmpOp{
+			LeftType:  TypeOid,
+			RightType: TypeOid,
+			fn: func(_ *EvalContext, left Datum, right Datum) (DBool, error) {
+				return DBool(left.(*DOid).DInt == right.(*DOid).DInt), nil
+			},
+		},
 	},
 
 	LT: {
@@ -1978,7 +1985,7 @@ func (expr *CastExpr) Eval(ctx *EvalContext) (Datum, error) {
 			return ParseDBool(v.Contents)
 		}
 
-	case *IntColType, *OidColType:
+	case *IntColType:
 		var res *DInt
 		switch v := d.(type) {
 		case *DBool:
@@ -2024,10 +2031,8 @@ func (expr *CastExpr) Eval(ctx *EvalContext) (Datum, error) {
 			res = NewDInt(DInt(int64(*v)))
 		case *DInterval:
 			res = NewDInt(DInt(v.Nanos / 1000000000))
-		}
-
-		if _, ok := expr.Type.(*OidColType); ok {
-			return NewDOidFromDInt(res), nil
+		case *DOid:
+			res = &v.DInt
 		}
 		return res, nil
 
@@ -2138,6 +2143,8 @@ func (expr *CastExpr) Eval(ctx *EvalContext) (Datum, error) {
 				return nil, fmt.Errorf("invalid utf8: %q", string(*t))
 			}
 			s = string(*t)
+		case *DOid:
+			s = t.name
 		}
 		switch c := expr.Type.(type) {
 		case *StringColType:
@@ -2232,10 +2239,15 @@ func (expr *CastExpr) Eval(ctx *EvalContext) (Datum, error) {
 		case *DInterval:
 			return d, nil
 		}
-	case *OidPseudoType:
+	case *OidColType:
+		ret := &DOid{kind: typ}
 		switch v := d.(type) {
+		case *DOid:
+			ret.DInt = v.DInt
+			return ret, nil
 		case *DInt:
-			return NewDOidFromDInt(v), nil
+			ret.DInt = *v
+			return ret, nil
 		case *DString:
 			queryOid := func(s string, table_name string, col_name string, obj_name string) (Datum, error) {
 				results, err := ctx.Planner.QueryRow(
@@ -2249,7 +2261,8 @@ func (expr *CastExpr) Eval(ctx *EvalContext) (Datum, error) {
 				if results.Len() == 0 {
 					return nil, errors.Errorf("%s '%s' does not exist", obj_name, s)
 				}
-				return results[0], nil
+				ret.DInt = results[0].(*DOid).DInt
+				return ret, nil
 			}
 			s := string(*v)
 			// Trim whitespace and unwrap outer quotes if necessary.
@@ -2258,11 +2271,12 @@ func (expr *CastExpr) Eval(ctx *EvalContext) (Datum, error) {
 			if len(s) > 1 && s[0] == '"' && s[len(s)-1] == '"' {
 				s = s[1 : len(s)-1]
 			}
+			ret.name = s
 
 			switch typ {
-			case oidPseudoTypeRegClass:
+			case oidColTypeRegClass:
 				return queryOid(s, "pg_class", "relname", "relation")
-			case oidPseudoTypeRegProc:
+			case oidColTypeRegProc, oidColTypeRegProcedure:
 				// Trim procedure type parameters. Postgres only does this when the
 				// cast is ::regprocedure, but we're going to always do it.
 				// We additionally do not yet implement disambiguation based on type
@@ -2278,10 +2292,11 @@ func (expr *CastExpr) Eval(ctx *EvalContext) (Datum, error) {
 				if err != nil {
 					return nil, err
 				}
+				ret.name = funcDef.Name
 				return queryOid(funcDef.Name, "pg_proc", "proname", "function")
-			case oidPseudoTypeRegNamespace:
+			case oidColTypeRegNamespace:
 				return queryOid(s, "pg_namespace", "nspname", "namespace")
-			case oidPseudoTypeRegType:
+			case oidColTypeRegType:
 				return queryOid(s, "pg_type", "typname", "type")
 			}
 		}
@@ -2721,6 +2736,11 @@ func (t *DArray) Eval(_ *EvalContext) (Datum, error) {
 
 // Eval implements the TypedExpr interface.
 func (t *DTable) Eval(_ *EvalContext) (Datum, error) {
+	return t, nil
+}
+
+// Eval implements the TypedExpr interface.
+func (t *DOid) Eval(_ *EvalContext) (Datum, error) {
 	return t, nil
 }
 
