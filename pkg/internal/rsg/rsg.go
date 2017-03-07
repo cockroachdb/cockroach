@@ -206,6 +206,7 @@ func (r *RSG) GenerateRandomArg(typ parser.Type) string {
 		v = fmt.Sprintf(`'%s'`, &parser.DInterval{Duration: d})
 	case parser.TypeIntArray,
 		parser.TypeStringArray,
+		parser.TypeOid,
 		parser.TypeAnyArray,
 		parser.TypeAny:
 		v = "NULL"
