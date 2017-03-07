@@ -53,6 +53,21 @@ func TestInternalExecutor(t *testing.T) {
 		}
 	})
 
+	t.Run("QueryRow with constants", func(t *testing.T) {
+		row, err := iex.QueryRowInTransaction("select-one", txn, "SELECT 1, 2, 3")
+		if err != nil {
+			t.Fatal(err)
+		}
+		expectedRow := make(parser.Datums, 3)
+		for i := 0; i < 3; i++ {
+			v := parser.DInt(i + 1)
+			expectedRow[i] = &v
+		}
+		if !reflect.DeepEqual(row, expectedRow) {
+			t.Fatalf("expected %v but got %v", expectedRow, row)
+		}
+	})
+
 	t.Run("QueryRow with now()", func(t *testing.T) {
 		now := timeutil.Now()
 		row, err := iex.QueryRowInTransaction("select-now", txn, "SELECT now()")

@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 // planner is the centerpiece of SQL statement execution combining session
@@ -279,6 +280,8 @@ func makeInternalPlanner(
 		memMetrics.TxnMaxBytesHist,
 		-1, noteworthyInternalMemoryUsageBytes/5)
 	p.session.TxnState.mon.Start(p.session.context, &p.session.mon, mon.BoundAccount{})
+
+	p.evalCtx.SetTxnTimestamp(timeutil.Now())
 
 	return p
 }
