@@ -15,10 +15,13 @@
 package storage
 
 import (
+	"math"
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/kr/pretty"
 )
@@ -26,28 +29,24 @@ import (
 func TestReplicaStats(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	makeLocality := func(localitySpec string) roachpb.Locality {
-		var locality roachpb.Locality
-		_ = locality.Set(localitySpec)
-		return locality
-	}
+	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 
-	gceLocalities := map[roachpb.NodeID]roachpb.Locality{
-		1: makeLocality("region=us-east1,zone=us-east1-a"),
-		2: makeLocality("region=us-east1,zone=us-east1-b"),
-		3: makeLocality("region=us-west1,zone=us-west1-a"),
-		4: {},
+	gceLocalities := map[roachpb.NodeID]string{
+		1: "region=us-east1,zone=us-east1-a",
+		2: "region=us-east1,zone=us-east1-b",
+		3: "region=us-west1,zone=us-west1-a",
+		4: "",
 	}
-	mismatchedLocalities := map[roachpb.NodeID]roachpb.Locality{
-		1: makeLocality("region=us-east1,zone=a"),
-		2: makeLocality("region=us-east1,zone=b"),
-		3: makeLocality("region=us-west1,zone=a"),
-		4: makeLocality("zone=us-central1-a"),
+	mismatchedLocalities := map[roachpb.NodeID]string{
+		1: "region=us-east1,zone=a",
+		2: "region=us-east1,zone=b",
+		3: "region=us-west1,zone=a",
+		4: "zone=us-central1-a",
 	}
-	missingLocalities := map[roachpb.NodeID]roachpb.Locality{}
+	missingLocalities := map[roachpb.NodeID]string{}
 
 	testCases := []struct {
-		localities map[roachpb.NodeID]roachpb.Locality
+		localities map[roachpb.NodeID]string
 		reqs       []roachpb.NodeID
 		expected   perLocalityCounts
 	}{
@@ -151,8 +150,8 @@ func TestReplicaStats(t *testing.T) {
 		},
 	}
 	for i, tc := range testCases {
-		rs := newReplicaStats(func(nodeID roachpb.NodeID) string {
-			return tc.localities[nodeID].String()
+		rs := newReplicaStats(clock, func(nodeID roachpb.NodeID) string {
+			return tc.localities[nodeID]
 		})
 		for _, req := range tc.reqs {
 			rs.record(req)
@@ -167,6 +166,113 @@ func TestReplicaStats(t *testing.T) {
 		rs.resetRequestCounts()
 		if actual, _ := rs.getRequestCounts(); len(actual) != 0 {
 			t.Errorf("%d: unexpected non-zero request counts after resetting: %+v", i, actual)
+		}
+	}
+}
+
+func TestReplicaStatsDecay(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	manual := hlc.NewManualClock(123)
+	clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
+
+	floatMapsEqual := func(expected, actual map[string]float64) bool {
+		if len(expected) != len(actual) {
+			return false
+		}
+		for k, v1 := range expected {
+			v2, ok := actual[k]
+			if !ok {
+				return false
+			}
+			if diff := math.Abs(v2 - v1); diff > 0.00000001 {
+				return false
+			}
+		}
+		return true
+	}
+
+	awsLocalities := map[roachpb.NodeID]string{
+		1: "region=us-east-1,zone=us-east-1a",
+		2: "region=us-east-1,zone=us-east-1b",
+		3: "region=us-west-1,zone=us-west-1a",
+	}
+
+	rs := newReplicaStats(clock, func(nodeID roachpb.NodeID) string {
+		return awsLocalities[nodeID]
+	})
+
+	{
+		counts, dur := rs.getRequestCounts()
+		if len(counts) != 0 {
+			t.Errorf("expected empty request counts, got %+v", counts)
+		}
+		if dur != 0 {
+			t.Errorf("expected duration = 0, got %v", dur)
+		}
+		manual.Increment(1)
+		if _, dur := rs.getRequestCounts(); dur != 1 {
+			t.Errorf("expected duration = 1, got %v", dur)
+		}
+		rs.resetRequestCounts()
+	}
+
+	{
+		for _, req := range []roachpb.NodeID{1, 1, 2, 2, 3} {
+			rs.record(req)
+		}
+		expected := perLocalityCounts{
+			awsLocalities[1]: 2,
+			awsLocalities[2]: 2,
+			awsLocalities[3]: 1,
+		}
+		actual, dur := rs.getRequestCounts()
+		if dur != 0 {
+			t.Errorf("expected duration = 0, got %v", dur)
+		}
+		if !reflect.DeepEqual(expected, actual) {
+			t.Errorf("incorrect per-locality request counts: %s", pretty.Diff(expected, actual))
+		}
+
+		for i := 0; i < len(rs.mu.requests)-1; i++ {
+			manual.Increment(int64(rotateInterval))
+			for k, v := range expected {
+				expected[k] = v * decayFactor
+			}
+			actual, dur = rs.getRequestCounts()
+			if expectedDur := rotateInterval * time.Duration(i+1); dur != expectedDur {
+				t.Errorf("expected duration = %v, got %v", expectedDur, dur)
+			}
+			// We can't just use DeepEqual to compare these due to the float
+			// multiplication inaccuracies.
+			if !floatMapsEqual(expected, actual) {
+				t.Errorf("incorrect per-locality request counts: %s", pretty.Diff(expected, actual))
+			}
+		}
+
+		manual.Increment(int64(rotateInterval))
+		expected = make(perLocalityCounts)
+		if actual, _ := rs.getRequestCounts(); !reflect.DeepEqual(expected, actual) {
+			t.Errorf("incorrect per-locality request counts: %s", pretty.Diff(expected, actual))
+		}
+		rs.resetRequestCounts()
+	}
+
+	{
+		for _, req := range []roachpb.NodeID{1, 1, 2, 2, 3} {
+			rs.record(req)
+		}
+		manual.Increment(int64(rotateInterval))
+		for _, req := range []roachpb.NodeID{2, 2, 3, 3, 3} {
+			rs.record(req)
+		}
+		expected := perLocalityCounts{
+			awsLocalities[1]: 2 * decayFactor,
+			awsLocalities[2]: 2*decayFactor + 2,
+			awsLocalities[3]: 1*decayFactor + 3,
+		}
+		if actual, _ := rs.getRequestCounts(); !reflect.DeepEqual(expected, actual) {
+			t.Errorf("incorrect per-locality request counts: %s", pretty.Diff(expected, actual))
 		}
 	}
 }
