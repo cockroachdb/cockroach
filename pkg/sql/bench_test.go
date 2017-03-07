@@ -1298,7 +1298,7 @@ func runBenchmarkWideTable(b *testing.B, db *gosql.DB, count int, bigColumnBytes
 	for i := 0; i < b.N; i++ {
 		buf.Reset()
 
-		fmt.Fprintf(&buf, `INSERT INTO bench.widetable VALUES`)
+		buf.WriteString(`INSERT INTO bench.widetable VALUES `)
 		for j := 0; j < count; j++ {
 			if j != 0 {
 				if j%3 == 0 {
@@ -1307,7 +1307,7 @@ func runBenchmarkWideTable(b *testing.B, db *gosql.DB, count int, bigColumnBytes
 						b.Fatal(err)
 					}
 					buf.Reset()
-					fmt.Fprintf(&buf, `INSERT INTO bench.widetable VALUES `)
+					buf.WriteString(`INSERT INTO bench.widetable VALUES `)
 				} else {
 					buf.WriteString(`,`)
 				}
@@ -1330,7 +1330,7 @@ func runBenchmarkWideTable(b *testing.B, db *gosql.DB, count int, bigColumnBytes
 		buf.WriteString(`;`)
 
 		// These UPSERTS are all updates, but it's done with UPSERT for convenience.
-		fmt.Fprintf(&buf, `UPSERT INTO bench.widetable (f1, f2, f3, f4, f5, f6, f7, f8, f9, f10) VALUES`)
+		buf.WriteString(`UPSERT INTO bench.widetable (f1, f2, f3, f4, f5, f6, f7, f8, f9, f10) VALUES `)
 		for j := 0; j < count; j++ {
 			if j != 0 {
 				buf.WriteString(`,`)
@@ -1346,7 +1346,7 @@ func runBenchmarkWideTable(b *testing.B, db *gosql.DB, count int, bigColumnBytes
 		}
 		buf.WriteString(`;`)
 
-		fmt.Fprintf(&buf, `DELETE FROM bench.widetable WHERE f1 in (`)
+		buf.WriteString(`DELETE FROM bench.widetable WHERE f1 in (`)
 		for j := 0; j < count; j++ {
 			if j != 0 {
 				buf.WriteString(`,`)
