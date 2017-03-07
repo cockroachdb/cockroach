@@ -25,16 +25,15 @@ import (
 // GetSmallTrace produces a ":"-separated single line containing the
 // topmost 5 callers from a given skip level.
 func GetSmallTrace(skip int) string {
-	pc := make([]uintptr, 5)
-	nCallers := runtime.Callers(skip, pc[:])
-	callers := make([]string, nCallers)
-	frames := runtime.CallersFrames(pc)
+	var pcs [5]uintptr
+	nCallers := runtime.Callers(skip, pcs[:])
+	callers := make([]string, 0, nCallers)
+	frames := runtime.CallersFrames(pcs[:])
 
-	for i := range callers {
+	for {
 		f, more := frames.Next()
-		callers[i] = fmt.Sprintf("%s:%d",
-			strings.TrimPrefix(f.Function, "github.com/cockroachdb/cockroach/pkg/"), f.Line)
-
+		function := strings.TrimPrefix(f.Function, "github.com/cockroachdb/cockroach/pkg/")
+		callers = append(callers, fmt.Sprintf("%s:%d", function, f.Line))
 		if !more {
 			break
 		}
