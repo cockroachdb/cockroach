@@ -18,6 +18,8 @@
 package storage
 
 import (
+	"fmt"
+
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -29,7 +31,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
-	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 )
 
@@ -140,13 +141,12 @@ func (ir *intentResolver) maybePushTransactions(
 		}
 	}
 
-	log.Event(ctx, "pushing transaction")
-
 	// Split intents into those we need to push and those which are good to
 	// resolve.
 	ir.mu.Lock()
 	// TODO(tschottdorf): can optimize this and use same underlying slice.
 	var pushIntents, nonPendingIntents []roachpb.Intent
+	pushTxns := map[uuid.UUID]enginepb.TxnMeta{}
 	for _, intent := range intents {
 		if intent.Status != roachpb.PENDING {
 			// The current intent does not need conflict resolution
@@ -162,25 +162,29 @@ func (ir *intentResolver) maybePushTransactions(
 			}
 			continue
 		} else {
+			pushTxns[*intent.Txn.ID] = intent.Txn
 			pushIntents = append(pushIntents, intent)
 			ir.mu.inFlight[*intent.Txn.ID]++
 		}
 	}
 	ir.mu.Unlock()
 	if len(nonPendingIntents) > 0 {
-		return nil, roachpb.NewError(errors.Errorf("unexpected aborted/resolved intents: %+v",
-			nonPendingIntents))
+		return nil, roachpb.NewErrorf("unexpected aborted/resolved intents: %+v", nonPendingIntents)
+	} else if len(pushIntents) == 0 {
+		return []roachpb.Intent(nil), nil
 	}
+
+	log.Eventf(ctx, "pushing %d transaction(s)", len(pushTxns))
 
 	// Attempt to push the transaction(s) which created the conflicting intent(s).
 	var pushReqs []roachpb.Request
-	for _, intent := range pushIntents {
+	for _, pushTxn := range pushTxns {
 		pushReqs = append(pushReqs, &roachpb.PushTxnRequest{
 			Span: roachpb.Span{
-				Key: intent.Txn.Key,
+				Key: pushTxn.Key,
 			},
 			PusherTxn: *partialPusherTxn,
-			PusheeTxn: intent.Txn,
+			PusheeTxn: pushTxn,
 			PushTo:    h.Timestamp,
 			// The timestamp is used by PushTxn for figuring out whether the
 			// transaction is abandoned. If we used the argument's timestamp
@@ -209,11 +213,23 @@ func (ir *intentResolver) maybePushTransactions(
 	if pErr != nil {
 		return nil, pErr
 	}
+
 	br := b.RawResponse()
+	pushedTxns := map[uuid.UUID]roachpb.Transaction{}
+	for _, resp := range br.Responses {
+		txn := resp.GetInner().(*roachpb.PushTxnResponse).PusheeTxn
+		if _, ok := pushedTxns[*txn.ID]; ok {
+			panic(fmt.Sprintf("have two PushTxn responses for %s", txn.ID))
+		}
+		pushedTxns[*txn.ID] = txn
+	}
 
 	var resolveIntents []roachpb.Intent
-	for i, intent := range pushIntents {
-		pushee := br.Responses[i].GetInner().(*roachpb.PushTxnResponse).PusheeTxn
+	for _, intent := range pushIntents {
+		pushee, ok := pushedTxns[*intent.Txn.ID]
+		if !ok {
+			panic(fmt.Sprintf("no PushTxn response for intent %+v", intent))
+		}
 		intent.Txn = pushee.TxnMeta
 		intent.Status = pushee.Status
 		resolveIntents = append(resolveIntents, intent)
