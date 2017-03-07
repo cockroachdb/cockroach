@@ -787,6 +787,10 @@ func (d *DTable) TypeCheck(_ *SemaContext, _ Type) (TypedExpr, error) { return d
 
 // TypeCheck implements the Expr interface. It is implemented as an idempotent
 // identity function for Datum.
+func (d *DOid) TypeCheck(_ *SemaContext, _ Type) (TypedExpr, error) { return d, nil }
+
+// TypeCheck implements the Expr interface. It is implemented as an idempotent
+// identity function for Datum.
 func (d *DOidWrapper) TypeCheck(_ *SemaContext, _ Type) (TypedExpr, error) { return d, nil }
 
 // TypeCheck implements the Expr interface. It is implemented as an idempotent
