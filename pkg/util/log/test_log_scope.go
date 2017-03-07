@@ -110,11 +110,11 @@ func (l TestLogScope) Close(t tShim) {
 
 // calledDuringPanic returns true if panic() is one of its callers.
 func calledDuringPanic() bool {
-	pc := make([]uintptr, 40)
-	nCallers := runtime.Callers(2, pc[:])
-	frames := runtime.CallersFrames(pc)
+	var pcs [40]uintptr
+	runtime.Callers(2, pcs[:])
+	frames := runtime.CallersFrames(pcs[:])
 
-	for i := 0; i < nCallers; i++ {
+	for {
 		f, more := frames.Next()
 		if f.Function == "runtime.gopanic" {
 			return true
