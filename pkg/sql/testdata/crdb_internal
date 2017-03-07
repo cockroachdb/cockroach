@@ -40,7 +40,7 @@ TABLE_ID  PARENT_ID  NAME       DATABASE_NAME  VERSION  MOD_TIME                
           parentID INT NOT NULL,
           name STRING NOT NULL,
           id INT NULL,
-          CONSTRAINT "primary" PRIMARY KEY (parentID, name),
+          CONSTRAINT "primary" PRIMARY KEY (parentID ASC, name ASC),
           FAMILY "primary" (parentID, name),
           FAMILY fam_3_id (id)
 )
