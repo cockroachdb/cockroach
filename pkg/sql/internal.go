@@ -44,3 +44,15 @@ func (ie InternalExecutor) ExecuteStatementInTransaction(
 	p.session.leaseMgr = ie.LeaseManager
 	return p.exec(ctx, statement, qargs...)
 }
+
+// QueryRowInTransaction executes the supplied SQL statement as part of the
+// supplied transaction and returns the result. Statements are currently
+// executed as the root user.
+func (ie InternalExecutor) QueryRowInTransaction(
+	ctx context.Context, opName string, txn *client.Txn, statement string, qargs ...interface{},
+) (parser.Datums, error) {
+	p := makeInternalPlanner(opName, txn, security.RootUser, ie.LeaseManager.memMetrics)
+	defer finishInternalPlanner(p)
+	p.session.leaseMgr = ie.LeaseManager
+	return p.QueryRow(ctx, statement, qargs...)
+}
