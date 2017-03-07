@@ -53,6 +53,18 @@ func TestInternalExecutor(t *testing.T) {
 		}
 	})
 
+	t.Run("QueryRow with now()", func(t *testing.T) {
+		now := timeutil.Now()
+		row, err := iex.QueryRowInTransaction("select-now", txn, "SELECT now()")
+		if err != nil {
+			t.Fatal(err)
+		}
+		ts := row[0].(*parser.DTimestampTZ).Time
+		if ts.After(now.Add(1 * time.Millisecond)) {
+			t.Fatalf("expected timestamp %v ± 1ms but got %v", now, ts)
+		}
+	})
+
 	t.Run("GetTableSpan", func(t *testing.T) {
 		span, err := iex.GetTableSpan(security.RootUser, txn, "system", "namespace")
 		if err != nil {
