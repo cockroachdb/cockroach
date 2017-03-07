@@ -167,12 +167,10 @@ func (rq *replicateQueue) shouldQueue(
 	}
 
 	// If the lease is valid, check to see if we should transfer it.
-	var leaseStoreID roachpb.StoreID
 	if lease, _ := repl.getLease(); lease != nil && repl.IsLeaseValid(lease, now) {
-		leaseStoreID = lease.Replica.StoreID
 		if rq.canTransferLease() &&
 			rq.allocator.ShouldTransferLease(
-				ctx, zone.Constraints, desc.Replicas, leaseStoreID, desc.RangeID, repl.stats) {
+				ctx, zone.Constraints, desc.Replicas, lease.Replica.StoreID, desc.RangeID, repl.stats) {
 			if log.V(2) {
 				log.Infof(ctx, "lease transfer needed, enqueuing")
 			}
@@ -187,7 +185,6 @@ func (rq *replicateQueue) shouldQueue(
 		ctx,
 		zone.Constraints,
 		desc.Replicas,
-		leaseStoreID,
 		desc.RangeID,
 	)
 	if err != nil {
@@ -293,18 +290,10 @@ func (rq *replicateQueue) processOneChange(
 		if log.V(1) {
 			log.Infof(ctx, "removing a replica")
 		}
-		// If the lease holder (our local store) is an overfull store (in terms of
-		// leases) allow transferring the lease away.
-		leaseHolderStoreID := repl.store.StoreID()
-		if rq.allocator.ShouldTransferLease(
-			ctx, zone.Constraints, desc.Replicas, leaseHolderStoreID, desc.RangeID, repl.stats) {
-			leaseHolderStoreID = 0
-		}
 		removeReplica, err := rq.allocator.RemoveTarget(
 			ctx,
 			zone.Constraints,
 			desc.Replicas,
-			leaseHolderStoreID,
 		)
 		if err != nil {
 			return false, err
@@ -318,14 +307,15 @@ func (rq *replicateQueue) processOneChange(
 			// (rebalancing) which is where lease transfer would otherwise occur. We
 			// need to be able to transfer leases in AllocatorRemove in order to get
 			// out of situations where this store is overfull and yet holds all the
-			// leases.
+			// leases. The fullness checks need to be ignored for cases where
+			// a replica needs to be removed for constraint violations.
 			transferred, err := rq.transferLease(
 				ctx,
 				repl,
 				desc,
 				zone,
 				false, /* checkTransferLeaseSource */
-				true,  /* checkCandidateFullness */
+				false, /* checkCandidateFullness */
 			)
 			if err != nil {
 				return false, err
@@ -392,7 +382,6 @@ func (rq *replicateQueue) processOneChange(
 			ctx,
 			zone.Constraints,
 			desc.Replicas,
-			repl.store.StoreID(),
 			desc.RangeID,
 		)
 		if err != nil {
