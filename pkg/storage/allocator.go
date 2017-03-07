@@ -171,7 +171,7 @@ func MakeAllocator(
 // required action that should be taken and a replica on which the action should
 // be performed.
 func (a *Allocator) ComputeAction(
-	zone config.ZoneConfig, desc *roachpb.RangeDescriptor,
+	ctx context.Context, zone config.ZoneConfig, desc *roachpb.RangeDescriptor,
 ) (AllocatorAction, float64) {
 	if a.storePool == nil {
 		// Do nothing if storePool is nil for some unittests.
@@ -186,7 +186,11 @@ func (a *Allocator) ComputeAction(
 		// Priority is adjusted by the difference between the current replica
 		// count and the quorum of the desired replica count.
 		neededQuorum := computeQuorum(need)
-		return AllocatorAdd, addMissingReplicaPriority + float64(neededQuorum-have)
+		priority := addMissingReplicaPriority + float64(neededQuorum-have)
+		if log.V(3) {
+			log.Infof(ctx, "AllocatorAdd - need=%d, have=%d, priority=%.2f", need, have, priority)
+		}
+		return AllocatorAdd, priority
 	}
 	deadReplicas := a.storePool.deadReplicas(desc.RangeID, desc.Replicas)
 	if len(deadReplicas) > 0 {
@@ -194,13 +198,22 @@ func (a *Allocator) ComputeAction(
 		// Adjust the priority by the number of dead replicas the range has.
 		quorum := computeQuorum(len(desc.Replicas))
 		liveReplicas := len(desc.Replicas) - len(deadReplicas)
-		return AllocatorRemoveDead, removeDeadReplicaPriority + float64(quorum-liveReplicas)
+		priority := removeDeadReplicaPriority + float64(quorum-liveReplicas)
+		if log.V(3) {
+			log.Infof(ctx, "AllocatorRemoveDead - dead=%d, live=%d, quorum=%d, priority=%.2f",
+				len(deadReplicas), liveReplicas, quorum, priority)
+		}
+		return AllocatorRemoveDead, priority
 	}
 	if have > need {
 		// Range is over-replicated, and should remove a replica.
 		// Ranges with an even number of replicas get extra priority because
 		// they have a more fragile quorum.
-		return AllocatorRemove, removeExtraReplicaPriority - float64(have%2)
+		priority := removeExtraReplicaPriority - float64(have%2)
+		if log.V(3) {
+			log.Infof(ctx, "AllocatorRemove - need=%d, have=%d, priority=%.2f", need, have, priority)
+		}
+		return AllocatorRemove, priority
 	}
 
 	// Nothing to do.
@@ -234,6 +247,9 @@ func (a *Allocator) AllocateTarget(
 		log.Infof(ctx, "allocate candidates: %s", candidates)
 	}
 	if target := candidates.selectGood(a.randGen); target != nil {
+		if log.V(3) {
+			log.Infof(ctx, "add target: %s", target)
+		}
 		return target, nil
 	}
 
@@ -286,6 +302,9 @@ func (a Allocator) RemoveTarget(
 	if bad := candidates.selectBad(a.randGen); bad != nil {
 		for _, exist := range existing {
 			if exist.StoreID == bad.StoreID {
+				if log.V(3) {
+					log.Infof(ctx, "remove target: %s", bad)
+				}
 				return exist, nil
 			}
 		}
@@ -355,14 +374,14 @@ func (a Allocator) RebalanceTarget(
 			"all existing replicas' stores are not present in the store pool: %v\n%s", existing, sl)
 	}
 
-	if log.V(3) {
-		log.Infof(ctx, "existing replicas: %s", existingCandidates)
-		log.Infof(ctx, "candidates: %s", candidates)
-	}
-
 	// Find all candidates that are better than the worst existing replica.
 	targets := candidates.betterThan(existingCandidates[len(existingCandidates)-1])
-	return targets.selectGood(a.randGen), nil
+	target := targets.selectGood(a.randGen)
+	if log.V(3) {
+		log.Infof(ctx, "rebalance candidates: %s\nexisting replicas: %s\ntarget: %s",
+			candidates, existingCandidates, target)
+	}
+	return target, nil
 }
 
 // TransferLeaseTarget returns a suitable replica to transfer the range lease

@@ -49,11 +49,12 @@ type candidate struct {
 	valid           bool
 	constraintScore float64
 	rangeCount      int
+	details         string
 }
 
 func (c candidate) String() string {
-	return fmt.Sprintf("s%d, valid:%t, con:%.2f, ranges:%d",
-		c.store.StoreID, c.valid, c.constraintScore, c.rangeCount)
+	return fmt.Sprintf("s%d, valid:%t, con:%.2f, ranges:%d, details:(%s)",
+		c.store.StoreID, c.valid, c.constraintScore, c.rangeCount, c.details)
 }
 
 // less first compares valid, then constraint scores, then range counts.
@@ -73,12 +74,13 @@ func (c candidate) less(o candidate) bool {
 type candidateList []candidate
 
 func (cl candidateList) String() string {
+	if len(cl) == 0 {
+		return "[]"
+	}
 	var buffer bytes.Buffer
 	buffer.WriteRune('[')
-	for i, c := range cl {
-		if i != 0 {
-			buffer.WriteString("; ")
-		}
+	for _, c := range cl {
+		buffer.WriteRune('\n')
 		buffer.WriteString(c.String())
 	}
 	buffer.WriteRune(']')
@@ -236,13 +238,14 @@ func allocateCandidates(
 		if !maxCapacityCheck(s) {
 			continue
 		}
-
-		constraintScore := diversityScore(s, existingNodeLocalities) + float64(preferredMatched)
+		diversityScore := diversityScore(s, existingNodeLocalities)
 		candidates = append(candidates, candidate{
 			store:           s,
 			valid:           true,
-			constraintScore: constraintScore,
+			constraintScore: diversityScore + float64(preferredMatched),
 			rangeCount:      int(s.Capacity.RangeCount),
+			details: fmt.Sprintf("diversity=%.2f, preferred=%d",
+				diversityScore, preferredMatched),
 		})
 	}
 	if deterministic {
@@ -266,28 +269,38 @@ func removeCandidates(
 	for _, s := range sl.stores {
 		constraintsOk, preferredMatched := constraintCheck(s, constraints)
 		if !constraintsOk {
-			candidates = append(candidates, candidate{store: s, valid: false})
+			candidates = append(candidates, candidate{
+				store:   s,
+				valid:   false,
+				details: "constraint check fail",
+			})
 			continue
 		}
 		if !maxCapacityCheck(s) {
-			candidates = append(candidates, candidate{store: s, valid: false})
+			candidates = append(candidates, candidate{
+				store:   s,
+				valid:   false,
+				details: "max capacity check fail",
+			})
 			continue
 		}
-		constraintScore := diversityRemovalScore(s.Node.NodeID, existingNodeLocalities) + float64(preferredMatched)
+		diversityScore := diversityRemovalScore(s.Node.NodeID, existingNodeLocalities)
+		var convergesScore float64
 		if !rebalanceFromConvergesOnMean(sl, s) {
 			// If removing this candidate replica does not converge the range
 			// counts to the mean, we make it less attractive for removal by
 			// adding 1 to the constraint score. Note that when selecting a
 			// candidate for removal the candidates with the lowest scores are
 			// more likely to be removed.
-			constraintScore++
+			convergesScore = 1
 		}
-
 		candidates = append(candidates, candidate{
 			store:           s,
 			valid:           true,
-			constraintScore: constraintScore,
+			constraintScore: diversityScore + float64(preferredMatched) + convergesScore,
 			rangeCount:      int(s.Capacity.RangeCount),
+			details: fmt.Sprintf("diversity=%.2f, preferred=%d, converge=%.2f",
+				diversityScore, preferredMatched, convergesScore),
 		})
 	}
 	if deterministic {
@@ -323,26 +336,37 @@ func rebalanceCandidates(
 		maxCapacityOK := maxCapacityCheck(s)
 		if _, ok := existingStoreIDs[s.StoreID]; ok {
 			if !constraintsOk {
-				existingCandidates = append(existingCandidates, candidate{store: s, valid: false})
+				existingCandidates = append(existingCandidates, candidate{
+					store:   s,
+					valid:   false,
+					details: "constraint check fail",
+				})
 				continue
 			}
 			if !maxCapacityOK {
-				existingCandidates = append(existingCandidates, candidate{store: s, valid: false})
+				existingCandidates = append(existingCandidates, candidate{
+					store:   s,
+					valid:   false,
+					details: "max capacity check fail",
+				})
 				continue
 			}
-			constraintScore := diversityRemovalScore(s.Node.NodeID, existingNodeLocalities) + float64(preferredMatched)
+			diversityScore := diversityRemovalScore(s.Node.NodeID, existingNodeLocalities)
+			var convergesScore float64
 			if !rebalanceFromConvergesOnMean(sl, s) {
 				// Similarly to in removeCandidates, any replica whose removal
 				// would not converge the range counts to the mean is given a
 				// constraint score boost of 1 to make it less attractive for
 				// removal.
-				constraintScore++
+				convergesScore = 1
 			}
 			existingCandidates = append(existingCandidates, candidate{
 				store:           s,
 				valid:           true,
-				constraintScore: constraintScore,
+				constraintScore: diversityScore + float64(preferredMatched) + convergesScore,
 				rangeCount:      int(s.Capacity.RangeCount),
+				details: fmt.Sprintf("diversity=%.2f, preferred=%d, converge=%.2f",
+					diversityScore, preferredMatched, convergesScore),
 			})
 		} else {
 			if !constraintsOk || !maxCapacityOK || !rebalanceToConvergesOnMean(sl, s) {
@@ -355,12 +379,15 @@ func rebalanceCandidates(
 			// against the worst existing candidate, any existing candidate
 			// that does rebalanceFromConvergesOnMean will always have a lower
 			// score.
-			constraintScore := 1.0 + diversityScore(s, existingNodeLocalities) + float64(preferredMatched)
+			convergesScore := 1.0
+			diversityScore := diversityScore(s, existingNodeLocalities)
 			candidates = append(candidates, candidate{
 				store:           s,
 				valid:           true,
-				constraintScore: constraintScore,
+				constraintScore: diversityScore + float64(preferredMatched) + convergesScore,
 				rangeCount:      int(s.Capacity.RangeCount),
+				details: fmt.Sprintf("diversity=%.2f, preferred=%d, converge=%.2f",
+					diversityScore, preferredMatched, convergesScore),
 			})
 		}
 	}
