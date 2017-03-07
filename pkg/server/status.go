@@ -298,8 +298,21 @@ func parseInt64WithDefault(s string, defaultValue int64) (int64, error) {
 // * "level" query parameter filters the log entries to be those of the
 //   corresponding severity level or worse. Defaults to "info".
 func (s *statusServer) Logs(
-	_ context.Context, req *serverpb.LogsRequest,
+	ctx context.Context, req *serverpb.LogsRequest,
 ) (*serverpb.LogEntriesResponse, error) {
+	ctx = s.AnnotateCtx(ctx)
+	nodeID, local, err := s.parseNodeID(req.NodeId)
+	if err != nil {
+		return nil, grpc.Errorf(codes.InvalidArgument, err.Error())
+	}
+	if !local {
+		status, err := s.dialNode(nodeID)
+		if err != nil {
+			return nil, err
+		}
+		return status.Logs(ctx, req)
+	}
+
 	log.Flush()
 
 	var sev log.Severity
