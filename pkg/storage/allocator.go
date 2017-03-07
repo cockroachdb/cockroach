@@ -55,7 +55,33 @@ var (
 	// making decisions based on them.
 	// Made configurable for the sake of testing.
 	MinLeaseTransferStatsDuration = time.Minute
+
+	// EnableLeaseRebalancing controls whether lease rebalancing is enabled or
+	// not. Exported for testing.
+	EnableLeaseRebalancing = envutil.EnvOrDefaultBool("COCKROACH_ENABLE_LEASE_REBALANCING", true)
+
+	// EnableLoadBasedLeaseRebalancing controls whether lease rebalancing is done
+	// via the new heuristic based on request load and latency or via the simpler
+	// approach that purely seeks to balance the number of leases per node evenly.
+	EnableLoadBasedLeaseRebalancing = envutil.EnvOrDefaultBool("COCKROACH_ENABLE_LOAD_BASED_LEASE_REBALANCING", false)
+
+	// LeaseRebalancingAggressiveness enables users to tweak how aggressive their
+	// cluster is at moving leases towards the localities where the most requests
+	// are coming from. Settings lower than 1.0 will make the system less
+	// aggressive about moving leases toward requests than the default, while
+	// settings greater than 1.0 will cause more aggressive placement.
+	//
+	// Setting this to 0 effectively disables load-based lease rebalancing, and
+	// settings less than 0 are disallowed.
+	LeaseRebalancingAggressiveness = envutil.EnvOrDefaultFloat("COCKROACH_LEASE_REBALANCING_AGGRESSIVENESS", 1.0)
 )
+
+func init() {
+	if LeaseRebalancingAggressiveness < 0 {
+		panic(fmt.Sprintf("COCKROACH_LEASE_REBALANCING_AGGRESSIVENESS must not be negative, got %f",
+			LeaseRebalancingAggressiveness))
+	}
+}
 
 // AllocatorAction enumerates the various replication adjustments that may be
 // recommended by the allocator.
@@ -454,15 +480,6 @@ func (a *Allocator) TransferLeaseTarget(
 	return candidates[a.randGen.Intn(len(candidates))]
 }
 
-// EnableLeaseRebalancing controls whether lease rebalancing is enabled or
-// not. Exported for testing.
-var EnableLeaseRebalancing = envutil.EnvOrDefaultBool("COCKROACH_ENABLE_LEASE_REBALANCING", true)
-
-// EnableLoadBasedLeaseRebalancing controls whether lease rebalancing is done
-// via the new heuristic based on request load and latency or via the simpler
-// approach that purely seeks to balance the number of leases per node evenly.
-var EnableLoadBasedLeaseRebalancing = envutil.EnvOrDefaultBool("COCKROACH_ENABLE_LOAD_BASED_LEASE_REBALANCING", false)
-
 // ShouldTransferLease returns true if the specified store is overfull in terms
 // of leases with respect to the other stores matching the specified
 // attributes.
@@ -606,8 +623,9 @@ func loadBasedLeaseRebalanceScore(
 	meanLeases float64,
 ) int32 {
 	remoteLatencyMillis := float64(remoteLatency) / float64(time.Millisecond)
-	rebalanceThreshold :=
-		baseRebalanceThreshold - 0.1*math.Log10(remoteWeight/sourceWeight)*math.Log1p(remoteLatencyMillis)
+	rebalanceAdjustment :=
+		LeaseRebalancingAggressiveness * 0.1 * math.Log10(remoteWeight/sourceWeight) * math.Log1p(remoteLatencyMillis)
+	rebalanceThreshold := baseRebalanceThreshold - rebalanceAdjustment
 
 	overfullLeaseThreshold := int32(math.Ceil(meanLeases * (1 + rebalanceThreshold)))
 	overfullScore := source.Capacity.LeaseCount - overfullLeaseThreshold
