@@ -7,7 +7,7 @@
       "OutgoingLatencies": [
         {
           "Name": "2",
-          "Latency": "13"
+          "Latency": "13ms"
         },
         {
           "Name": "3",
@@ -22,7 +22,7 @@
       "OutgoingLatencies": [
         {
           "Name": "1",
-          "Latency": "13"
+          "Latency": "13ms"
         },
         {
           "Name": "3",
