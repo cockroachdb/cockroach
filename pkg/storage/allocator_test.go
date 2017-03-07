@@ -1569,7 +1569,7 @@ func TestFilterBehindReplicas(t *testing.T) {
 		progress []uint64
 		expected []uint64
 	}{
-		{0, []uint64{0}, nil},
+		{0, []uint64{0}, []uint64{0}},
 		{1, []uint64{1}, []uint64{1}},
 		{2, []uint64{2}, []uint64{2}},
 		{1, []uint64{0, 1}, []uint64{1}},
