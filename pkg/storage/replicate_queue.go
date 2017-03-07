@@ -187,7 +187,6 @@ func (rq *replicateQueue) shouldQueue(
 		ctx,
 		zone.Constraints,
 		desc.Replicas,
-		leaseStoreID,
 		desc.RangeID,
 	)
 	if err != nil {
@@ -304,7 +303,6 @@ func (rq *replicateQueue) processOneChange(
 			ctx,
 			zone.Constraints,
 			desc.Replicas,
-			leaseHolderStoreID,
 		)
 		if err != nil {
 			return false, err
@@ -318,14 +316,15 @@ func (rq *replicateQueue) processOneChange(
 			// (rebalancing) which is where lease transfer would otherwise occur. We
 			// need to be able to transfer leases in AllocatorRemove in order to get
 			// out of situations where this store is overfull and yet holds all the
-			// leases.
+			// leases. The fullness checks need to be ignored for cases where
+			// a replica needs to be removed for constraint violations.
 			transferred, err := rq.transferLease(
 				ctx,
 				repl,
 				desc,
 				zone,
 				false, /* checkTransferLeaseSource */
-				true,  /* checkCandidateFullness */
+				false, /* checkCandidateFullness */
 			)
 			if err != nil {
 				return false, err
@@ -392,7 +391,6 @@ func (rq *replicateQueue) processOneChange(
 			ctx,
 			zone.Constraints,
 			desc.Replicas,
-			repl.store.StoreID(),
 			desc.RangeID,
 		)
 		if err != nil {

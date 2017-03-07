@@ -51,7 +51,6 @@ import (
 )
 
 const firstRange = roachpb.RangeID(1)
-const noStore = roachpb.StoreID(-1)
 
 var simpleZoneConfig = config.ZoneConfig{
 	NumReplicas: 1,
@@ -629,7 +628,6 @@ func TestAllocatorRebalance(t *testing.T) {
 			ctx,
 			config.Constraints{},
 			[]roachpb.ReplicaDescriptor{{StoreID: 3}},
-			noStore,
 			firstRange,
 		)
 		if err != nil {
@@ -824,7 +822,6 @@ func TestAllocatorRebalanceByCount(t *testing.T) {
 			ctx,
 			config.Constraints{},
 			[]roachpb.ReplicaDescriptor{{StoreID: stores[0].StoreID}},
-			stores[0].StoreID,
 			firstRange,
 		)
 		if err != nil {
@@ -1328,6 +1325,11 @@ func TestAllocatorRemoveTarget(t *testing.T) {
 			NodeID:    4,
 			ReplicaID: 4,
 		},
+		{
+			StoreID:   5,
+			NodeID:    5,
+			ReplicaID: 5,
+		},
 	}
 
 	// Setup the stores so that store 3 is the worst candidate and store 2 is
@@ -1353,6 +1355,11 @@ func TestAllocatorRemoveTarget(t *testing.T) {
 			Node:     roachpb.NodeDescriptor{NodeID: 4},
 			Capacity: roachpb.StoreCapacity{Capacity: 100, Available: 65, RangeCount: 10},
 		},
+		{
+			StoreID:  5,
+			Node:     roachpb.NodeDescriptor{NodeID: 5},
+			Capacity: roachpb.StoreCapacity{Capacity: 100, Available: 65, RangeCount: 13},
+		},
 	}
 
 	stopper, g, _, a, _ := createTestAllocator( /* deterministic */ false)
@@ -1361,22 +1368,16 @@ func TestAllocatorRemoveTarget(t *testing.T) {
 	sg.GossipStores(stores, t)
 	ctx := context.Background()
 
-	// Exclude store 2 as a removal target so that only store 3 is a candidate.
-	targetRepl, err := a.RemoveTarget(ctx, config.Constraints{}, replicas, stores[1].StoreID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if a, e := targetRepl, replicas[2]; a != e {
-		t.Fatalf("RemoveTarget did not select expected replica; expected %v, got %v", e, a)
-	}
-
-	// Now exclude store 3 so that only store 2 is a candidate.
-	targetRepl, err = a.RemoveTarget(ctx, config.Constraints{}, replicas, stores[2].StoreID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if a, e := targetRepl, replicas[1]; a != e {
-		t.Fatalf("RemoveTarget did not select expected replica; expected %v, got %v", e, a)
+	// Repeat this test 10 times, it should always be either store 2 or 3.
+	for i := 0; i < 10; i++ {
+		targetRepl, err := a.RemoveTarget(ctx, config.Constraints{}, replicas)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if a, e1, e2 := targetRepl, replicas[1], replicas[2]; a != e1 && a != e2 {
+			t.Fatalf("RemoveTarget did not select either expected replica; expected %v or %v, got %v",
+				e1, e2, a)
+		}
 	}
 }
 
@@ -2049,7 +2050,6 @@ func Example_rebalancing() {
 				context.Background(),
 				config.Constraints{},
 				[]roachpb.ReplicaDescriptor{{NodeID: ts.Node.NodeID, StoreID: ts.StoreID}},
-				noStore,
 				firstRange,
 			)
 			if err != nil {
