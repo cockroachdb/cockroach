@@ -374,13 +374,30 @@ func (p *planner) showCreateTable(tn parser.Name, desc *sqlbase.TableDescriptor)
 		if err != nil {
 			return "", err
 		}
-		fmt.Fprintf(&buf, ",\n\t%sINDEX %s (%s)%s%s",
-			isUnique[idx.Unique],
-			quoteNames(idx.Name),
-			makeIndexColNames(idx),
-			storing,
-			interleave,
-		)
+		if fk := idx.ForeignKey; fk.IsSet() {
+			fkTable, err := p.getTableLeaseByID(fk.Table)
+			if err != nil {
+				return "", err
+			}
+			fkIdx, err := fkTable.FindIndexByID(fk.Index)
+			if err != nil {
+				return "", err
+			}
+			fmt.Fprintf(&buf, ",\n\tCONSTRAINT %s FOREIGN KEY (%s) REFERENCES %s (%s)",
+				parser.Name(fk.Name),
+				quoteNames(idx.ColumnNames...),
+				parser.Name(fkTable.Name),
+				quoteNames(fkIdx.ColumnNames...),
+			)
+		} else {
+			fmt.Fprintf(&buf, ",\n\t%sINDEX %s (%s)%s%s",
+				isUnique[idx.Unique],
+				quoteNames(idx.Name),
+				makeIndexColNames(idx),
+				storing,
+				interleave,
+			)
+		}
 	}
 	for _, fam := range desc.Families {
 		activeColumnNames := make([]string, 0, len(fam.ColumnNames))
