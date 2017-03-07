@@ -526,3 +526,38 @@ CREATE TABLE domain_modules (
   CONSTRAINT domain_modules_module_id_fk FOREIGN KEY (module_id) REFERENCES modules (id),
   CONSTRAINT domain_modules_uq UNIQUE (domain_id, module_id)
 )
+
+statement ok
+CREATE TABLE tx (
+  id INT NOT NULL PRIMARY KEY
+)
+
+statement ok
+CREATE TABLE tx_leg (
+  leg_id SERIAL NOT NULL PRIMARY KEY,
+  tx_id INT NOT NULL REFERENCES tx
+)
+
+statement ok
+BEGIN TRANSACTION
+
+statement ok
+INSERT INTO tx VALUES (2)
+
+statement ok
+INSERT INTO tx_leg VALUES (201, 2);
+
+statement ok
+INSERT INTO tx_leg VALUES (202, 2);
+
+statement ok
+COMMIT
+
+statement ok
+BEGIN TRANSACTION
+
+statement error foreign key violation: value \[3\] not found in tx@primary \[id\]
+INSERT INTO tx_leg VALUES (302, 3);
+
+statement ok
+COMMIT
