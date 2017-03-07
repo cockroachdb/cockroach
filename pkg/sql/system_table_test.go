@@ -17,37 +17,39 @@
 package sql_test
 
 import (
-	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/gogo/protobuf/proto"
+	"github.com/kr/pretty"
 )
 
 func TestInitialKeys(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	const nonSystemDesc = 4
 	const keysPerDesc = 2
 	const nonDescKeys = 2
 
 	ms := sqlbase.MakeMetadataSchema()
 	kv := ms.GetInitialValues()
-	expected := nonDescKeys + keysPerDesc*(nonSystemDesc+ms.SystemConfigDescriptorCount())
+	expected := nonDescKeys + keysPerDesc*ms.SystemDescriptorCount()
 	if actual := len(kv); actual != expected {
 		t.Fatalf("Wrong number of initial sql kv pairs: %d, wanted %d", actual, expected)
 	}
 
 	// Add an additional table.
+	sqlbase.SystemAllowedPrivileges[keys.MaxReservedDescID] = privilege.Lists{{privilege.ALL}}
 	desc, err := sql.CreateTestTableDescriptor(
 		keys.SystemDatabaseID,
-		keys.MaxSystemConfigDescID+1,
-		"CREATE TABLE testdb.x (val INTEGER PRIMARY KEY)",
+		keys.MaxReservedDescID,
+		"CREATE TABLE system.x (val INTEGER PRIMARY KEY)",
 		sqlbase.NewDefaultPrivilegeDescriptor(),
 	)
 	if err != nil {
@@ -103,52 +105,29 @@ func TestSystemTableLiterals(t *testing.T) {
 		pkg    sqlbase.TableDescriptor
 	}
 
-	// test the tables with specific permissions
 	for _, test := range []testcase{
 		{keys.NamespaceTableID, sqlbase.NamespaceTableSchema, sqlbase.NamespaceTable},
 		{keys.DescriptorTableID, sqlbase.DescriptorTableSchema, sqlbase.DescriptorTable},
 		{keys.UsersTableID, sqlbase.UsersTableSchema, sqlbase.UsersTable},
 		{keys.ZonesTableID, sqlbase.ZonesTableSchema, sqlbase.ZonesTable},
-	} {
-		gen, err := sql.CreateTestTableDescriptor(
-			keys.SystemDatabaseID,
-			test.id,
-			test.schema,
-			sqlbase.NewPrivilegeDescriptor(security.RootUser, sqlbase.SystemConfigAllowedPrivileges[test.id]),
-		)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if !proto.Equal(&test.pkg, &gen) {
-			t.Fatalf(
-				"mismatch between re-generated version and pkg version of %s:\npkg:\n\t%#v\ngenerated\n\t%#v",
-				test.pkg.Name, test.pkg, gen)
-		}
-	}
-	// test the tables with non-specific NewDefaultPrivilegeDescriptor
-	for _, test := range []testcase{
 		{keys.LeaseTableID, sqlbase.LeaseTableSchema, sqlbase.LeaseTable},
 		{keys.EventLogTableID, sqlbase.EventLogTableSchema, sqlbase.EventLogTable},
 		{keys.RangeEventTableID, sqlbase.RangeEventTableSchema, sqlbase.RangeEventTable},
 		{keys.UITableID, sqlbase.UITableSchema, sqlbase.UITable},
 	} {
 		gen, err := sql.CreateTestTableDescriptor(
-			keys.SystemDatabaseID, test.id, test.schema, sqlbase.NewDefaultPrivilegeDescriptor(),
+			keys.SystemDatabaseID,
+			test.id,
+			test.schema,
+			sqlbase.NewPrivilegeDescriptor(security.RootUser, sqlbase.SystemDesiredPrivileges(test.id)),
 		)
 		if err != nil {
 			t.Fatal(err)
 		}
 		if !proto.Equal(&test.pkg, &gen) {
-			s1 := fmt.Sprintf("%#v", test.pkg)
-			s2 := fmt.Sprintf("%#v", gen)
-			for i := range s1 {
-				if s1[i] != s2[i] {
-					t.Fatalf(
-						"mismatch between %s:\npkg:\n\t%#v\npartial-gen\n\t%#v\ngen\n\t%#v",
-						test.pkg.Name, s1[:i+3], s2[:i+3], gen)
-				}
-			}
-			panic("did not locate mismatch between re-generated version and pkg version")
+			diff := strings.Join(pretty.Diff(&test.pkg, &gen), "\n")
+			t.Fatalf("%s table descriptor generated from CREATE TABLE statement does not match "+
+				"hardcoded table descriptor:\n%s", test.pkg.Name, diff)
 		}
 	}
 }
