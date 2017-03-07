@@ -625,6 +625,7 @@ func (s *azureStorageWriter) Finish() error {
 		default:
 		}
 		id := base64.URLEncoding.EncodeToString([]byte(strconv.Itoa(i)))
+		i++
 		blocks = append(blocks, azr.Block{ID: id, Status: azr.BlockStatusUncommitted})
 		return s.client.PutBlock(s.container, s.name, id, b)
 	}); err != nil {
