@@ -553,6 +553,90 @@ func TestBackupRestoreChecksum(t *testing.T) {
 	}
 }
 
+func TestTimestampMismatch(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	const numAccounts = 1
+
+	_, dir, _, sqlDB, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts)
+	defer cleanupFn()
+	sqlDB.Exec(`CREATE TABLE bench.t2 (a INT PRIMARY KEY)`)
+	sqlDB.Exec(`INSERT INTO bench.t2 VALUES (1)`)
+
+	fullBackup := filepath.Join(dir, "0")
+	incrementalT1FromFull := filepath.Join(dir, "1")
+	incrementalT2FromT1 := filepath.Join(dir, "2")
+	incrementalT3FromT1OneTable := filepath.Join(dir, "3")
+
+	sqlDB.Exec(fmt.Sprintf(`BACKUP DATABASE bench TO '%s'`,
+		fullBackup))
+	sqlDB.Exec(fmt.Sprintf(`BACKUP DATABASE bench TO '%s' INCREMENTAL FROM '%s'`,
+		incrementalT1FromFull, fullBackup))
+	sqlDB.Exec(fmt.Sprintf(`BACKUP TABLE bench.bank TO '%s' INCREMENTAL FROM '%s'`,
+		incrementalT3FromT1OneTable, fullBackup))
+	sqlDB.Exec(fmt.Sprintf(`BACKUP DATABASE bench TO '%s' INCREMENTAL FROM '%s', '%s'`,
+		incrementalT2FromT1, fullBackup, incrementalT1FromFull))
+
+	t.Run("Backup", func(t *testing.T) {
+		// Missing the initial full backup.
+		_, err := sqlDB.DB.Exec(fmt.Sprintf(`BACKUP DATABASE bench TO '%s' INCREMENTAL FROM '%s'`,
+			dir, incrementalT1FromFull))
+		if !testutils.IsError(err, "no backup covers time") {
+			t.Errorf("expected 'no backup covers time' error got: %+v", err)
+		}
+
+		// Missing an intermediate incremental backup.
+		_, err = sqlDB.DB.Exec(fmt.Sprintf(`BACKUP DATABASE bench TO '%s' INCREMENTAL FROM '%s', '%s'`,
+			dir, fullBackup, incrementalT2FromT1))
+		if !testutils.IsError(err, "no backup covers time") {
+			t.Errorf("expected 'no backup covers time' error got: %+v", err)
+		}
+
+		// Backups specified out of order.
+		_, err = sqlDB.DB.Exec(fmt.Sprintf(`BACKUP DATABASE bench TO '%s' INCREMENTAL FROM '%s', '%s'`,
+			dir, incrementalT1FromFull, fullBackup))
+		if !testutils.IsError(err, "out of order") {
+			t.Errorf("expected 'out of order' error got: %+v", err)
+		}
+
+		// Missing data for one table in the most recent backup.
+		_, err = sqlDB.DB.Exec(fmt.Sprintf(`BACKUP DATABASE bench TO '%s' INCREMENTAL FROM '%s', '%s'`,
+			dir, fullBackup, incrementalT3FromT1OneTable))
+		if !testutils.IsError(err, "no backup covers time") {
+			t.Errorf("expected 'no backup covers time' error got: %+v", err)
+		}
+	})
+
+	t.Run("Restore", func(t *testing.T) {
+		// Missing the initial full backup.
+		_, err := sqlDB.DB.Exec(fmt.Sprintf(`RESTORE DATABASE bench FROM '%s'`,
+			incrementalT1FromFull))
+		if !testutils.IsError(err, "no backup covers time") {
+			t.Errorf("expected 'no backup covers time' error got: %+v", err)
+		}
+
+		// Missing an intermediate incremental backup.
+		_, err = sqlDB.DB.Exec(fmt.Sprintf(`RESTORE DATABASE bench FROM '%s', '%s'`,
+			fullBackup, incrementalT2FromT1))
+		if !testutils.IsError(err, "no backup covers time") {
+			t.Errorf("expected 'no backup covers time' error got: %+v", err)
+		}
+
+		// Backups specified out of order.
+		_, err = sqlDB.DB.Exec(fmt.Sprintf(`RESTORE DATABASE bench FROM '%s', '%s'`,
+			incrementalT1FromFull, fullBackup))
+		if !testutils.IsError(err, "out of order") {
+			t.Errorf("expected 'out of order' error got: %+v", err)
+		}
+
+		// Missing data for one table in the most recent backup.
+		_, err = sqlDB.DB.Exec(fmt.Sprintf(`RESTORE DATABASE bench FROM '%s', '%s'`,
+			fullBackup, incrementalT3FromT1OneTable))
+		if !testutils.IsError(err, "no backup covers time") {
+			t.Errorf("expected 'no backup covers time' error got: %+v", err)
+		}
+	})
+}
+
 func TestPresplitRanges(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
