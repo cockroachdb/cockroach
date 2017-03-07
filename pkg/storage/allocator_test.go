@@ -1566,33 +1566,39 @@ func TestFilterBehindReplicas(t *testing.T) {
 
 	testCases := []struct {
 		commit   uint64
+		leader   uint64
 		progress []uint64
 		expected []uint64
 	}{
-		{0, []uint64{0}, nil},
-		{1, []uint64{1}, []uint64{1}},
-		{2, []uint64{2}, []uint64{2}},
-		{1, []uint64{0, 1}, []uint64{1}},
-		{1, []uint64{1, 2}, []uint64{1, 2}},
-		{2, []uint64{3, 2}, []uint64{3, 2}},
-		{1, []uint64{0, 0, 1}, []uint64{1}},
-		{1, []uint64{0, 1, 2}, []uint64{1, 2}},
-		{2, []uint64{1, 2, 3}, []uint64{2, 3}},
-		{3, []uint64{4, 3, 2}, []uint64{4, 3}},
-		{1, []uint64{1, 1, 1}, []uint64{1, 1, 1}},
-		{1, []uint64{1, 1, 2}, []uint64{1, 1, 2}},
-		{2, []uint64{1, 2, 2}, []uint64{2, 2}},
-		{2, []uint64{0, 1, 2, 3}, []uint64{2, 3}},
-		{2, []uint64{1, 2, 3, 4}, []uint64{2, 3, 4}},
-		{3, []uint64{5, 4, 3, 2}, []uint64{5, 4, 3}},
-		{3, []uint64{1, 2, 3, 4, 5}, []uint64{3, 4, 5}},
-		{4, []uint64{6, 5, 4, 3, 2}, []uint64{6, 5, 4}},
+		{0, 99, []uint64{0}, nil},
+		{1, 99, []uint64{1}, []uint64{1}},
+		{2, 99, []uint64{2}, []uint64{2}},
+		{1, 99, []uint64{0, 1}, []uint64{1}},
+		{1, 99, []uint64{1, 2}, []uint64{1, 2}},
+		{2, 99, []uint64{3, 2}, []uint64{3, 2}},
+		{1, 99, []uint64{0, 0, 1}, []uint64{1}},
+		{1, 99, []uint64{0, 1, 2}, []uint64{1, 2}},
+		{2, 99, []uint64{1, 2, 3}, []uint64{2, 3}},
+		{3, 99, []uint64{4, 3, 2}, []uint64{4, 3}},
+		{1, 99, []uint64{1, 1, 1}, []uint64{1, 1, 1}},
+		{1, 99, []uint64{1, 1, 2}, []uint64{1, 1, 2}},
+		{2, 99, []uint64{1, 2, 2}, []uint64{2, 2}},
+		{2, 99, []uint64{0, 1, 2, 3}, []uint64{2, 3}},
+		{2, 99, []uint64{1, 2, 3, 4}, []uint64{2, 3, 4}},
+		{3, 99, []uint64{5, 4, 3, 2}, []uint64{5, 4, 3}},
+		{3, 99, []uint64{1, 2, 3, 4, 5}, []uint64{3, 4, 5}},
+		{4, 99, []uint64{6, 5, 4, 3, 2}, []uint64{6, 5, 4}},
+		{0, 0, []uint64{0}, []uint64{0}},
+		{0, 0, []uint64{0, 0, 0}, []uint64{0}},
+		{1, 0, []uint64{2, 0, 1}, []uint64{2, 1}},
+		{1, 1, []uint64{0, 2, 1}, []uint64{2, 1}},
 	}
 	for _, c := range testCases {
 		t.Run("", func(t *testing.T) {
 			status := &raft.Status{
 				Progress: make(map[uint64]raft.Progress),
 			}
+			status.Lead = c.leader
 			status.Commit = c.commit
 			var replicas []roachpb.ReplicaDescriptor
 			for j, v := range c.progress {

@@ -541,8 +541,9 @@ func filterBehindReplicas(
 	candidates := make([]roachpb.ReplicaDescriptor, 0, len(replicas))
 	for _, r := range replicas {
 		if progress, ok := raftStatus.Progress[uint64(r.ReplicaID)]; ok {
-			if progress.State == raft.ProgressStateReplicate &&
-				progress.Match >= raftStatus.Commit {
+			if uint64(r.ReplicaID) == raftStatus.Lead ||
+				(progress.State == raft.ProgressStateReplicate &&
+					progress.Match >= raftStatus.Commit) {
 				candidates = append(candidates, r)
 			}
 		}
