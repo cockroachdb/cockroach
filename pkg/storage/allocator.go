@@ -56,10 +56,6 @@ var (
 	// Made configurable for the sake of testing.
 	MinLeaseTransferStatsDuration = time.Minute
 
-	// EnableLeaseRebalancing controls whether lease rebalancing is enabled or
-	// not. Exported for testing.
-	EnableLeaseRebalancing = envutil.EnvOrDefaultBool("COCKROACH_ENABLE_LEASE_REBALANCING", true)
-
 	// EnableLoadBasedLeaseRebalancing controls whether lease rebalancing is done
 	// via the new heuristic based on request load and latency or via the simpler
 	// approach that purely seeks to balance the number of leases per node evenly.
@@ -491,10 +487,6 @@ func (a *Allocator) ShouldTransferLease(
 	rangeID roachpb.RangeID,
 	stats *replicaStats,
 ) bool {
-	if !EnableLeaseRebalancing {
-		return false
-	}
-
 	source, ok := a.storePool.getStoreDescriptor(leaseStoreID)
 	if !ok {
 		return false
