@@ -17,10 +17,10 @@
 package sql
 
 import (
-	"context"
 	"reflect"
 	"testing"
-	"time"
+
+	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
@@ -50,6 +50,37 @@ func TestInternalExecutor(t *testing.T) {
 		}
 		if n != 3 {
 			t.Fatalf("expected 3 rows but got %d", n)
+		}
+	})
+
+	t.Run("QueryRow with constants", func(t *testing.T) {
+		row, err := iex.QueryRowInTransaction("select-one", txn, "SELECT 1, 2, 3")
+		if err != nil {
+			t.Fatal(err)
+		}
+		expectedRow := make(parser.Datums, 3)
+		for i := 0; i < 3; i++ {
+			v := parser.DInt(i + 1)
+			expectedRow[i] = &v
+		}
+		if !reflect.DeepEqual(row, expectedRow) {
+			t.Fatalf("expected %v but got %v", expectedRow, row)
+		}
+	})
+
+	t.Run("QueryRow with now()", func(t *testing.T) {
+		before := timeutil.Now()
+		row, err := iex.QueryRowInTransaction("select-now", txn, "SELECT now()")
+		after := timeutil.Now()
+		if err != nil {
+			t.Fatal(err)
+		}
+		ts := row[0].(*parser.DTimestampTZ).Time
+		if ts.Before(before) {
+			t.Fatalf("expected transaction timestamp %v to be after %v", ts, before)
+		}
+		if ts.After(after) {
+			t.Fatalf("expected transaction timestamp %v to be before %v", ts, after)
 		}
 	})
 

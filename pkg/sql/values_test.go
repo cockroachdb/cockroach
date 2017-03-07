@@ -30,12 +30,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 func makeTestPlanner() *planner {
-	return makeInternalPlanner("test", nil, security.RootUser, &MemoryMetrics{})
+	return makeInternalPlanner("test", nil, security.RootUser, &MemoryMetrics{},
+		hlc.NewClock(hlc.UnixNano, time.Nanosecond))
 }
 
 func TestValues(t *testing.T) {
