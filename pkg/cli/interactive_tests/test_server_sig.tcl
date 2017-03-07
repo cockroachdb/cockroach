@@ -37,11 +37,15 @@ eexpect ":/# "
 # Check that the server shuts down fast upon receiving Ctrl+C twice.
 send "$argv start & echo $! >server_pid; fg\r"
 eexpect "restarted"
-
 interrupt
 eexpect "initiating graceful shutdown"
 interrupt
-eexpect "hard shutdown"
+# The server could finish draining before the second interrupt is sent.
+expect {
+    "hard shutdown" {}
+    "shutdown completed" {}
+    timeout {exit 1}
+}
 eexpect ":/# "
 
 # Ctrl+C twice finishes with exit code 130. (#9051)

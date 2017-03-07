@@ -1027,15 +1027,12 @@ func TestRefreshPendingCommands(t *testing.T) {
 			// Start draining stores 0 and 1 to prevent them from grabbing any new
 			// leases.
 			mtc.advanceClock(context.Background())
-			var wg syncutil.WaitGroupWithError
+			var wg sync.WaitGroup
 			for i := 0; i < 2; i++ {
 				wg.Add(1)
 				go func(i int) {
-					if err := mtc.stores[i].SetDraining(true); err != nil {
-						wg.Done(errors.Wrapf(err, "store %d", i))
-						return
-					}
-					wg.Done(nil)
+					mtc.stores[i].SetDraining(true)
+					wg.Done()
 				}(i)
 			}
 
@@ -1052,9 +1049,7 @@ func TestRefreshPendingCommands(t *testing.T) {
 			}
 			mtc.advanceClock(context.Background())
 
-			if err := wg.Wait(); err != nil {
-				t.Fatal(err)
-			}
+			wg.Wait()
 
 			// Restart node 2 and wait for the snapshot to be applied. Note that
 			// waitForValues reads directly from the engine and thus isn't executing
