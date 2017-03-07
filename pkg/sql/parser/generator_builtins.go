@@ -98,7 +98,7 @@ func initGeneratorBuiltins() {
 }
 
 var generators = map[string][]Builtin{
-	"pg_catalog.generate_series": {
+	"generate_series": {
 		makeGeneratorBuiltin(
 			ArgTypes{{"start", TypeInt}, {"end", TypeInt}},
 			TTuple{TypeInt},
