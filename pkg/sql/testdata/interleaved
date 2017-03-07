@@ -208,11 +208,11 @@ all_interleaves   CREATE TABLE all_interleaves (
                     b INT NOT NULL,
                     c INT NULL,
                     d INT NULL,
-                    CONSTRAINT "primary" PRIMARY KEY (b),
-                    INDEX all_interleaves_c_idx (c),
-                    UNIQUE INDEX all_interleaves_d_key (d),
-                    INDEX all_interleaves_c_d_idx (c, d) INTERLEAVE IN PARENT p1_1 (c),
-                    UNIQUE INDEX all_interleaves_d_c_key (d, c) INTERLEAVE IN PARENT p1_1 (d),
+                    CONSTRAINT "primary" PRIMARY KEY (b ASC),
+                    INDEX all_interleaves_c_idx (c ASC),
+                    UNIQUE INDEX all_interleaves_d_key (d ASC),
+                    INDEX all_interleaves_c_d_idx (c ASC, d ASC) INTERLEAVE IN PARENT p1_1 (c),
+                    UNIQUE INDEX all_interleaves_d_c_key (d ASC, c ASC) INTERLEAVE IN PARENT p1_1 (d),
                     FAMILY "primary" (b, c, d)
                   ) INTERLEAVE IN PARENT p1_1 (b)
 
