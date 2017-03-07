@@ -21,22 +21,25 @@ import (
 	gosql "database/sql"
 	"fmt"
 	"math/rand"
+	"reflect"
+	"runtime"
+	"strings"
 	"testing"
 
+	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	"github.com/pkg/errors"
 )
 
 type kvInterface interface {
-	insert(rows, run int) error
-	update(rows, run int) error
-	del(rows, run int) error
-	scan(rows, run int) error
+	Insert(rows, run int) error
+	Update(rows, run int) error
+	Delete(rows, run int) error
+	Scan(rows, run int) error
 
 	prep(rows int, initData bool) error
 	done()
@@ -73,7 +76,7 @@ func newKVNative(b *testing.B) kvInterface {
 	}
 }
 
-func (kv *kvNative) insert(rows, run int) error {
+func (kv *kvNative) Insert(rows, run int) error {
 	firstRow := rows * run
 	lastRow := rows * (run + 1)
 	err := kv.db.Txn(context.TODO(), func(txn *client.Txn) error {
@@ -86,7 +89,7 @@ func (kv *kvNative) insert(rows, run int) error {
 	return err
 }
 
-func (kv *kvNative) update(rows, run int) error {
+func (kv *kvNative) Update(rows, run int) error {
 	perm := rand.Perm(rows)
 	err := kv.db.Txn(context.TODO(), func(txn *client.Txn) error {
 		// Read all values in a batch.
@@ -108,7 +111,7 @@ func (kv *kvNative) update(rows, run int) error {
 	return err
 }
 
-func (kv *kvNative) del(rows, run int) error {
+func (kv *kvNative) Delete(rows, run int) error {
 	firstRow := rows * run
 	lastRow := rows * (run + 1)
 	err := kv.db.Txn(context.TODO(), func(txn *client.Txn) error {
@@ -121,7 +124,7 @@ func (kv *kvNative) del(rows, run int) error {
 	return err
 }
 
-func (kv *kvNative) scan(rows, run int) error {
+func (kv *kvNative) Scan(rows, run int) error {
 	var kvs []client.KeyValue
 	err := kv.db.Txn(context.TODO(), func(txn *client.Txn) error {
 		var err error
@@ -178,7 +181,7 @@ func newKVSQL(b *testing.B) kvInterface {
 	return kv
 }
 
-func (kv *kvSQL) insert(rows, run int) error {
+func (kv *kvSQL) Insert(rows, run int) error {
 	firstRow := rows * run
 	var buf bytes.Buffer
 	buf.WriteString(`INSERT INTO bench.kv VALUES `)
@@ -192,7 +195,7 @@ func (kv *kvSQL) insert(rows, run int) error {
 	return err
 }
 
-func (kv *kvSQL) update(rows, run int) error {
+func (kv *kvSQL) Update(rows, run int) error {
 	perm := rand.Perm(rows)
 	var buf bytes.Buffer
 	buf.WriteString(`UPDATE bench.kv SET v = v + 1 WHERE k IN (`)
@@ -207,7 +210,7 @@ func (kv *kvSQL) update(rows, run int) error {
 	return err
 }
 
-func (kv *kvSQL) del(rows, run int) error {
+func (kv *kvSQL) Delete(rows, run int) error {
 	firstRow := rows * run
 	var buf bytes.Buffer
 	buf.WriteString(`DELETE FROM bench.kv WHERE k IN (`)
@@ -222,7 +225,7 @@ func (kv *kvSQL) del(rows, run int) error {
 	return err
 }
 
-func (kv *kvSQL) scan(count, run int) error {
+func (kv *kvSQL) Scan(count, run int) error {
 	rows, err := kv.db.Query(fmt.Sprintf("SELECT * FROM bench.kv LIMIT %d", count))
 	if err != nil {
 		return err
@@ -274,198 +277,38 @@ func (kv *kvSQL) done() {
 	kv.doneFn()
 }
 
-func runKVBenchmark(b *testing.B, typ, op string, rows int) {
-	var kv kvInterface
-	switch typ {
-	case "Native":
-		kv = newKVNative(b)
-	case "SQL":
-		kv = newKVSQL(b)
-	default:
-		b.Fatalf("unknown implementation: %s", typ)
-	}
-	defer kv.done()
+func BenchmarkKV(b *testing.B) {
+	for i, opFn := range []func(kvInterface, int, int) error{
+		kvInterface.Insert,
+		kvInterface.Update,
+		kvInterface.Delete,
+		kvInterface.Scan,
+	} {
+		opName := runtime.FuncForPC(reflect.ValueOf(opFn).Pointer()).Name()
+		opName = strings.TrimPrefix(opName, "github.com/cockroachdb/cockroach/pkg/sql_test.kvInterface.")
+		for _, rows := range []int{1, 10, 100, 1000, 10000} {
+			for _, kvFn := range []func(*testing.B) kvInterface{
+				newKVNative,
+				newKVSQL,
+			} {
+				kvTyp := runtime.FuncForPC(reflect.ValueOf(kvFn).Pointer()).Name()
+				kvTyp = strings.TrimPrefix(kvTyp, "github.com/cockroachdb/cockroach/pkg/sql_test.newKV")
+				b.Run(fmt.Sprintf("%s%d_%s", opName, rows, kvTyp), func(b *testing.B) {
+					kv := kvFn(b)
+					defer kv.done()
 
-	var opFn func(int, int) error
-	switch op {
-	case "insert":
-		opFn = kv.insert
-	case "update":
-		opFn = kv.update
-	case "delete":
-		opFn = kv.del
-	case "scan":
-		opFn = kv.scan
-	}
-
-	if err := kv.prep(rows, op != "insert" && op != "delete"); err != nil {
-		b.Fatal(err)
-	}
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		if err := opFn(rows, i); err != nil {
-			b.Fatal(err)
+					if err := kv.prep(rows, i != 0 /* Insert */ && i != 2 /* Delete */); err != nil {
+						b.Fatal(err)
+					}
+					b.ResetTimer()
+					for i := 0; i < b.N; i++ {
+						if err := opFn(kv, rows, i); err != nil {
+							b.Fatal(err)
+						}
+					}
+					b.StopTimer()
+				})
+			}
 		}
 	}
-	b.StopTimer()
-}
-
-func BenchmarkKVInsert1_Native(b *testing.B) {
-	runKVBenchmark(b, "Native", "insert", 1)
-}
-
-func BenchmarkKVInsert1_SQL(b *testing.B) {
-	runKVBenchmark(b, "SQL", "insert", 1)
-}
-
-func BenchmarkKVInsert10_Native(b *testing.B) {
-	runKVBenchmark(b, "Native", "insert", 10)
-}
-
-func BenchmarkKVInsert10_SQL(b *testing.B) {
-	runKVBenchmark(b, "SQL", "insert", 10)
-}
-
-func BenchmarkKVInsert100_Native(b *testing.B) {
-	runKVBenchmark(b, "Native", "insert", 100)
-}
-
-func BenchmarkKVInsert100_SQL(b *testing.B) {
-	runKVBenchmark(b, "SQL", "insert", 100)
-}
-
-func BenchmarkKVInsert1000_Native(b *testing.B) {
-	runKVBenchmark(b, "Native", "insert", 1000)
-}
-
-func BenchmarkKVInsert1000_SQL(b *testing.B) {
-	runKVBenchmark(b, "SQL", "insert", 1000)
-}
-
-func BenchmarkKVInsert10000_Native(b *testing.B) {
-	runKVBenchmark(b, "Native", "insert", 10000)
-}
-
-func BenchmarkKVInsert10000_SQL(b *testing.B) {
-	runKVBenchmark(b, "SQL", "insert", 10000)
-}
-
-func BenchmarkKVUpdate1_Native(b *testing.B) {
-	runKVBenchmark(b, "Native", "update", 1)
-}
-
-func BenchmarkKVUpdate1_SQL(b *testing.B) {
-	runKVBenchmark(b, "SQL", "update", 1)
-}
-
-func BenchmarkKVUpdate10_Native(b *testing.B) {
-	runKVBenchmark(b, "Native", "update", 10)
-}
-
-func BenchmarkKVUpdate10_SQL(b *testing.B) {
-	runKVBenchmark(b, "SQL", "update", 10)
-}
-
-func BenchmarkKVUpdate100_Native(b *testing.B) {
-	runKVBenchmark(b, "Native", "update", 100)
-}
-
-func BenchmarkKVUpdate100_SQL(b *testing.B) {
-	runKVBenchmark(b, "SQL", "update", 100)
-}
-
-func BenchmarkKVUpdate1000_Native(b *testing.B) {
-	runKVBenchmark(b, "Native", "update", 1000)
-}
-
-func BenchmarkKVUpdate1000_SQL(b *testing.B) {
-	runKVBenchmark(b, "SQL", "update", 1000)
-}
-
-func BenchmarkKVUpdate10000_Native(b *testing.B) {
-	runKVBenchmark(b, "Native", "update", 10000)
-}
-
-func BenchmarkKVUpdate10000_SQL(b *testing.B) {
-	runKVBenchmark(b, "SQL", "update", 10000)
-}
-
-func BenchmarkKVDelete1_Native(b *testing.B) {
-	runKVBenchmark(b, "Native", "delete", 1)
-}
-
-func BenchmarkKVDelete1_SQL(b *testing.B) {
-	runKVBenchmark(b, "SQL", "delete", 1)
-}
-
-func BenchmarkKVDelete10_Native(b *testing.B) {
-	runKVBenchmark(b, "Native", "delete", 10)
-}
-
-func BenchmarkKVDelete10_SQL(b *testing.B) {
-	runKVBenchmark(b, "SQL", "delete", 10)
-}
-
-func BenchmarkKVDelete100_Native(b *testing.B) {
-	runKVBenchmark(b, "Native", "delete", 100)
-}
-
-func BenchmarkKVDelete100_SQL(b *testing.B) {
-	runKVBenchmark(b, "SQL", "delete", 100)
-}
-
-func BenchmarkKVDelete1000_Native(b *testing.B) {
-	runKVBenchmark(b, "Native", "delete", 1000)
-}
-
-func BenchmarkKVDelete1000_SQL(b *testing.B) {
-	runKVBenchmark(b, "SQL", "delete", 1000)
-}
-
-func BenchmarkKVDelete10000_Native(b *testing.B) {
-	runKVBenchmark(b, "Native", "delete", 10000)
-}
-
-func BenchmarkKVDelete10000_SQL(b *testing.B) {
-	runKVBenchmark(b, "SQL", "delete", 10000)
-}
-
-func BenchmarkKVScan1_Native(b *testing.B) {
-	runKVBenchmark(b, "Native", "scan", 1)
-}
-
-func BenchmarkKVScan1_SQL(b *testing.B) {
-	runKVBenchmark(b, "SQL", "scan", 1)
-}
-
-func BenchmarkKVScan10_Native(b *testing.B) {
-	runKVBenchmark(b, "Native", "scan", 10)
-}
-
-func BenchmarkKVScan10_SQL(b *testing.B) {
-	runKVBenchmark(b, "SQL", "scan", 10)
-}
-
-func BenchmarkKVScan100_Native(b *testing.B) {
-	runKVBenchmark(b, "Native", "scan", 100)
-}
-
-func BenchmarkKVScan100_SQL(b *testing.B) {
-	runKVBenchmark(b, "SQL", "scan", 100)
-}
-
-func BenchmarkKVScan1000_Native(b *testing.B) {
-	runKVBenchmark(b, "Native", "scan", 1000)
-}
-
-func BenchmarkKVScan1000_SQL(b *testing.B) {
-	runKVBenchmark(b, "SQL", "scan", 1000)
-}
-
-func BenchmarkKVScan10000_Native(b *testing.B) {
-	runKVBenchmark(b, "Native", "scan", 10000)
-}
-
-func BenchmarkKVScan10000_SQL(b *testing.B) {
-	runKVBenchmark(b, "SQL", "scan", 10000)
 }
