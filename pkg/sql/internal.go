@@ -37,7 +37,8 @@ type InternalExecutor struct {
 var _ sqlutil.InternalExecutor = InternalExecutor{}
 
 // ExecuteStatementInTransaction executes the supplied SQL statement as part of
-// the supplied transaction. Statements are currently executed as the root user.
+// the supplied transaction and returns the number of rows affected. Statements
+// are currently executed as the root user.
 func (ie InternalExecutor) ExecuteStatementInTransaction(
 	opName string, txn *client.Txn, statement string, qargs ...interface{},
 ) (int, error) {
