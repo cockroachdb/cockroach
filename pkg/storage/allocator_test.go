@@ -1759,8 +1759,9 @@ func TestAllocatorComputeAction(t *testing.T) {
 		}})
 
 	lastPriority := float64(999999999)
+	ctx := context.Background()
 	for i, tcase := range testCases {
-		action, priority := a.ComputeAction(tcase.zone, &tcase.desc)
+		action, priority := a.ComputeAction(ctx, tcase.zone, &tcase.desc)
 		if tcase.expectedAction != action {
 			t.Errorf("Test case %d expected action %d, got action %d", i, tcase.expectedAction, action)
 			continue
@@ -1778,7 +1779,7 @@ func TestAllocatorComputeActionNoStorePool(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	a := MakeAllocator(nil /* storePool */, nil /* rpcContext */)
-	action, priority := a.ComputeAction(config.ZoneConfig{}, nil)
+	action, priority := a.ComputeAction(context.Background(), config.ZoneConfig{}, nil)
 	if action != AllocatorNoop {
 		t.Errorf("expected AllocatorNoop, but got %v", action)
 	}
