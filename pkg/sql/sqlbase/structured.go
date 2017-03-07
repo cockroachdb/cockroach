@@ -720,6 +720,17 @@ func (desc *TableDescriptor) Validate(txn *client.Txn) error {
 // validateCrossReferences validates that each reference to another table is
 // resolvable and that the necessary back references exist.
 func (desc *TableDescriptor) validateCrossReferences(txn *client.Txn) error {
+	// Check that parent DB exists.
+	{
+		res, err := txn.Get(MakeDescMetadataKey(desc.ParentID))
+		if err != nil {
+			return err
+		}
+		if !res.Exists() {
+			return errors.Errorf("parentID %d does not exist", desc.ParentID)
+		}
+	}
+
 	tablesByID := map[ID]*TableDescriptor{desc.ID: desc}
 	getTable := func(id ID) (*TableDescriptor, error) {
 		if table, ok := tablesByID[id]; ok {
@@ -1810,4 +1821,14 @@ func (desc *TableDescriptor) PrimaryIndexSpan() roachpb.Span {
 func (desc *TableDescriptor) IndexSpan(indexID IndexID) roachpb.Span {
 	prefix := roachpb.Key(MakeIndexKeyPrefix(desc, indexID))
 	return roachpb.Span{Key: prefix, EndKey: prefix.PrefixEnd()}
+}
+
+// GetDescMetadataKey returns the descriptor key for the table.
+func (desc TableDescriptor) GetDescMetadataKey() roachpb.Key {
+	return MakeDescMetadataKey(desc.ID)
+}
+
+// GetNameMetadataKey returns the namespace key for the table.
+func (desc TableDescriptor) GetNameMetadataKey() roachpb.Key {
+	return MakeNameMetadataKey(desc.ParentID, desc.Name)
 }

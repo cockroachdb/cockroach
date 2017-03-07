@@ -797,6 +797,17 @@ func TestValidateCrossTableReferences(t *testing.T) {
 		},
 	}
 
+	{
+		var v roachpb.Value
+		desc := &Descriptor{Union: &Descriptor_Database{}}
+		if err := v.SetProto(desc); err != nil {
+			t.Fatal(err)
+		}
+		if err := kvDB.Put(context.TODO(), MakeDescMetadataKey(0), &v); err != nil {
+			t.Fatal(err)
+		}
+	}
+
 	for i, test := range tests {
 		for _, referencedDesc := range test.referenced {
 			var v roachpb.Value

@@ -302,36 +302,61 @@ func Import(
 	return db.Run(ctx, b)
 }
 
-func assertDatabasesExist(
+func reassignParentIDs(
 	txn *client.Txn,
 	databasesByID map[sqlbase.ID]*sqlbase.DatabaseDescriptor,
 	tables []*sqlbase.TableDescriptor,
-) (map[sqlbase.ID]sqlbase.ID, error) {
-	remap := make(map[sqlbase.ID]sqlbase.ID, len(databasesByID))
+) error {
 	for _, table := range tables {
-		database, ok := databasesByID[table.ParentID]
-		if !ok {
-			return nil, errors.Errorf("no database with ID %d for table %q", table.ParentID, table.Name)
+		// Update the parentID to point to the named DB in the new cluster.
+		{
+			database, ok := databasesByID[table.ParentID]
+			if !ok {
+				return errors.Errorf("no database with ID %d in backup for table %q", table.ParentID, table.Name)
+			}
+
+			// Make sure there's a database with a name that matches the original.
+			existingDatabaseID, err := txn.Get(sqlbase.MakeNameMetadataKey(0, database.Name))
+			if err != nil {
+				return err
+			}
+			if existingDatabaseID.Value == nil {
+				return errors.Errorf("a database named %q needs to exist to restore table %q",
+					database.Name, table.Name)
+			}
+			newParentID, err := existingDatabaseID.Value.GetInt()
+			if err != nil {
+				return err
+			}
+			table.ParentID = sqlbase.ID(newParentID)
+
+			parentDB, err := sqlbase.GetDatabaseDescFromID(txn, table.ParentID)
+			if err != nil {
+				return errors.Wrapf(err, "failed to lookup parent DB %d", table.ParentID)
+			}
+
+			// Default is to copy privs from restoring parent db, like CREATE TABLE.
+			// TODO(dt): Make this more configurable.
+			{
+				table.Privileges = parentDB.GetPrivileges()
+			}
 		}
 
-		// Make sure there's a database with a name that matches the original.
-		existingDatabaseID, err := txn.Get(sqlbase.MakeNameMetadataKey(0, database.Name))
-		if err != nil {
-			return nil, err
+		// Check that the table name is _not_ in use.
+		// This would fail the CPut later anyway, but this yields a prettier error.
+		{
+			nameKey := table.GetNameMetadataKey()
+			res, err := txn.Get(nameKey)
+			if err != nil {
+				return err
+			}
+			if res.Exists() {
+				return sqlbase.NewRelationAlreadyExistsError(table.Name)
+			}
 		}
-		if existingDatabaseID.Value == nil {
-			// TODO(dan): Add the ability to restore the database from backups.
-			return nil, errors.Errorf("a database named %q needs to exist to restore table %q",
-				database.Name, table.Name)
-		}
-		newParentID, err := existingDatabaseID.Value.GetInt()
-		if err != nil {
-			return nil, err
-		}
-		remap[table.ParentID] = sqlbase.ID(newParentID)
 
 	}
-	return remap, nil
+	return nil
 }
 
 func newTableIDs(
@@ -598,13 +623,6 @@ func restoreTableDescs(
 
 	newTables := make([]sqlbase.TableDescriptor, len(tables))
 	restoreTableDescsFunc := func(txn *client.Txn) error {
-		// Recheck that the necessary databases exist. This was checked at the
-		// beginning, but check again in case one was deleted or renamed during
-		// the data import.
-		newDBs, err := assertDatabasesExist(txn, databasesByID, tables)
-		if err != nil {
-			return err
-		}
 
 		for i := range tables {
 			newTables[i] = *tables[i]
@@ -613,7 +631,6 @@ func restoreTableDescs(
 				return errors.Errorf("missing table ID for %d %q", newTables[i].ID, newTables[i].Name)
 			}
 			newTables[i].ID = newTableID
-			newTables[i].ParentID = newDBs[tables[i].ParentID]
 
 			if err := newTables[i].ForeachNonDropIndex(func(index *sqlbase.IndexDescriptor) error {
 				// TODO(dan): We need this sort of logic for FKs, too.
@@ -660,46 +677,13 @@ func restoreTableDescs(
 }
 
 func restoreTableDesc(ctx context.Context, txn *client.Txn, table sqlbase.TableDescriptor) error {
-	tableIDKey := sqlbase.MakeNameMetadataKey(table.ParentID, table.Name)
-	tableDescKey := sqlbase.MakeDescMetadataKey(table.ID)
-
-	// Check for an existing table.
-	var existingDesc sqlbase.Descriptor
-	existingIDKV, err := txn.Get(tableIDKey)
-	if err != nil {
-		return err
-	}
-	if existingIDKV.Value != nil {
-		existingID, err := existingIDKV.Value.GetInt()
-		if err != nil {
-			return err
-		}
-		existingDescKV, err := txn.Get(sqlbase.MakeDescMetadataKey(sqlbase.ID(existingID)))
-		if err != nil {
-			return err
-		}
-		if err := existingDescKV.Value.GetProto(&existingDesc); err != nil {
-			return err
-		}
-	}
-
 	// Write the new descriptors. First the ID -> TableDescriptor for the new
 	// table, then flip (or initialize) the name -> ID entry so any new queries
 	// will use the new one. If there was an existing table, it can now be
 	// cleaned up.
 	b := txn.NewBatch()
-	b.CPut(tableDescKey, sqlbase.WrapDescriptor(&table), nil)
-	if existingTable := existingDesc.GetTable(); existingTable == nil {
-		b.CPut(tableIDKey, table.ID, nil)
-	} else {
-		existingIDKV.Value.ClearChecksum()
-		b.CPut(tableIDKey, table.ID, existingIDKV.Value)
-		zoneKey, _, descKey := sql.GetKeysForTableDescriptor(existingTable)
-		// Delete the desc and zone entries. Leave the name because the new
-		// table is using it.
-		b.Del(descKey)
-		b.Del(zoneKey)
-	}
+	b.CPut(table.GetDescMetadataKey(), sqlbase.WrapDescriptor(&table), nil)
+	b.CPut(table.GetNameMetadataKey(), table.ID, nil)
 	return txn.Run(b)
 }
 
@@ -709,6 +693,12 @@ func Restore(
 	ctx context.Context, db client.DB, uris []string, targets parser.TargetList,
 ) ([]sqlbase.TableDescriptor, error) {
 	backupDescs := make([]BackupDescriptor, len(uris))
+
+	if len(targets.Databases) > 0 {
+		return nil, errors.Errorf("RESTORE DATABASE is not yet supported " +
+			"(but you can use 'RESTORE somedb.*' to restore all backed up tables for a given DB).")
+	}
+
 	for i, uri := range uris {
 		dir, err := storageccl.ExportStorageFromURI(ctx, uri)
 		if err != nil {
@@ -753,8 +743,7 @@ func Restore(
 	// Fail fast if the necessary databases don't exist since the below logic
 	// leaks table IDs when Restore fails.
 	if err := db.Txn(ctx, func(txn *client.Txn) error {
-		_, err := assertDatabasesExist(txn, databasesByID, tables)
-		return err
+		return reassignParentIDs(txn, databasesByID, tables)
 	}); err != nil {
 		return nil, err
 	}
