@@ -56,21 +56,23 @@ func TrackRaftProtos() func() []reflect.Type {
 			return
 		}
 
-		pcs := make([]uintptr, 100)
-		numCallers := runtime.Callers(0, pcs)
-		if numCallers == len(pcs) {
+		var pcs [100]uintptr
+		if numCallers := runtime.Callers(0, pcs[:]); numCallers == len(pcs) {
 			panic(fmt.Sprintf("number of callers %d might have exceeded slice size %d", numCallers, len(pcs)))
 		}
-		for _, pc := range pcs[:numCallers] {
-			funcName := runtime.FuncForPC(pc).Name()
-			if strings.Contains(funcName, addInfoFunc) {
+		frames := runtime.CallersFrames(pcs[:])
+		for {
+			f, more := frames.Next()
+			if strings.Contains(f.Function, addInfoFunc) {
 				break
 			}
-			if strings.Contains(funcName, applyRaftFunc) {
+			if strings.Contains(f.Function, applyRaftFunc) {
 				belowRaftProtos.Lock()
 				belowRaftProtos.inner[t] = struct{}{}
 				belowRaftProtos.Unlock()
-
+				break
+			}
+			if !more {
 				break
 			}
 		}
