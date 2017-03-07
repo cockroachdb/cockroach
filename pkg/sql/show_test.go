@@ -34,6 +34,12 @@ func TestShowCreateTable(t *testing.T) {
 	if _, err := sqlDB.Exec(`
 		CREATE DATABASE d;
 		SET DATABASE = d;
+		CREATE TABLE items (
+			a int,
+			b int,
+			c int unique,
+			primary key (a, b)
+		);
 	`); err != nil {
 		t.Fatal(err)
 	}
@@ -144,6 +150,22 @@ func TestShowCreateTable(t *testing.T) {
 	b INT NULL,
 	INDEX c (a ASC, b DESC),
 	FAMILY "primary" (a, b, rowid)
+)`,
+		},
+		{
+			stmt: `CREATE TABLE %s (
+	i int,
+	j int,
+	FOREIGN KEY (i, j) REFERENCES items (a, b),
+	k int REFERENCES items (c)
+)`,
+			expect: `CREATE TABLE %s (
+	i INT NULL,
+	j INT NULL,
+	k INT NULL,
+	CONSTRAINT fk_i_ref_items FOREIGN KEY (i, j) REFERENCES items (a, b),
+	CONSTRAINT fk_k_ref_items FOREIGN KEY (k) REFERENCES items (c),
+	FAMILY "primary" (i, j, k, rowid)
 )`,
 		},
 	}
