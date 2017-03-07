@@ -515,10 +515,7 @@ func TestBackupRestoreChecksum(t *testing.T) {
 		t.Skip("command WriteBatch is not allowed without proposer evaluated KV")
 	}
 
-	// TODO(dan): Actually invalidate the descriptor cache and delete this line.
-	defer sql.TestDisableTableLeases()()
 	const numAccounts = 1000
-
 	_, dir, _, sqlDB, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts)
 	defer cleanupFn()
 
@@ -545,7 +542,8 @@ func TestBackupRestoreChecksum(t *testing.T) {
 		t.Fatalf("%+v", err)
 	}
 
-	_, err = sqlDB.DB.Exec(fmt.Sprintf(`RESTORE DATABASE bench FROM '%s'`, dir))
+	sqlDB.Exec(`DROP TABLE bench.bank`)
+	_, err = sqlDB.DB.Exec(fmt.Sprintf(`RESTORE bench.* FROM '%s'`, dir))
 	if !testutils.IsError(err, "checksum mismatch") {
 		t.Fatalf("expected 'checksum mismatch' error got: %+v", err)
 	}
@@ -604,30 +602,32 @@ func TestTimestampMismatch(t *testing.T) {
 		}
 	})
 
+	sqlDB.Exec(`DROP TABLE bench.bank`)
+	sqlDB.Exec(`DROP TABLE bench.t2`)
 	t.Run("Restore", func(t *testing.T) {
 		// Missing the initial full backup.
-		_, err := sqlDB.DB.Exec(fmt.Sprintf(`RESTORE DATABASE bench FROM '%s'`,
+		_, err := sqlDB.DB.Exec(fmt.Sprintf(`RESTORE bench.* FROM '%s'`,
 			incrementalT1FromFull))
 		if !testutils.IsError(err, "no backup covers time") {
 			t.Errorf("expected 'no backup covers time' error got: %+v", err)
 		}
 
 		// Missing an intermediate incremental backup.
-		_, err = sqlDB.DB.Exec(fmt.Sprintf(`RESTORE DATABASE bench FROM '%s', '%s'`,
+		_, err = sqlDB.DB.Exec(fmt.Sprintf(`RESTORE bench.* FROM '%s', '%s'`,
 			fullBackup, incrementalT2FromT1))
 		if !testutils.IsError(err, "no backup covers time") {
 			t.Errorf("expected 'no backup covers time' error got: %+v", err)
 		}
 
 		// Backups specified out of order.
-		_, err = sqlDB.DB.Exec(fmt.Sprintf(`RESTORE DATABASE bench FROM '%s', '%s'`,
+		_, err = sqlDB.DB.Exec(fmt.Sprintf(`RESTORE bench.* FROM '%s', '%s'`,
 			incrementalT1FromFull, fullBackup))
 		if !testutils.IsError(err, "out of order") {
 			t.Errorf("expected 'out of order' error got: %+v", err)
 		}
 
 		// Missing data for one table in the most recent backup.
-		_, err = sqlDB.DB.Exec(fmt.Sprintf(`RESTORE DATABASE bench FROM '%s', '%s'`,
+		_, err = sqlDB.DB.Exec(fmt.Sprintf(`RESTORE bench.* FROM '%s', '%s'`,
 			fullBackup, incrementalT3FromT1OneTable))
 		if !testutils.IsError(err, "no backup covers time") {
 			t.Errorf("expected 'no backup covers time' error got: %+v", err)
