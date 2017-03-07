@@ -50,12 +50,6 @@ func TestReplicateQueueRebalance(t *testing.T) {
 	}(gossip.GossipStoresInterval)
 	gossip.GossipStoresInterval = 100 * time.Millisecond
 
-	// TODO(peter): Remove when lease rebalancing is the default.
-	defer func(v bool) {
-		storage.EnableLeaseRebalancing = v
-	}(storage.EnableLeaseRebalancing)
-	storage.EnableLeaseRebalancing = true
-
 	const numNodes = 5
 	tc := testcluster.StartTestCluster(t, numNodes,
 		base.TestClusterArgs{ReplicationMode: base.ReplicationAuto},
