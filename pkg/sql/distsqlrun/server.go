@@ -86,7 +86,7 @@ func (ds *ServerImpl) setupFlow(
 		// TODO(andrei): in the following call we're ignoring the returned
 		// recordedTrace. Figure out how to return the recording to the remote
 		// caller after the flow is done.
-		ctx, _, err = tracing.JoinRemoteTrace(ctx, ds.Tracer, *req.TraceContext, opName)
+		ctx, _, err = tracing.JoinRemoteTrace(ctx, ds.Tracer, req.TraceContext, opName)
 		if err != nil {
 			sp = ds.Tracer.StartSpan(opName)
 			ctx = opentracing.ContextWithSpan(ctx, sp)

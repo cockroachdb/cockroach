@@ -413,6 +413,10 @@ func (tc *TxnCoordSender) Send(
 	if err := tracer.Inject(sp.Context(), basictracer.Delegator, ba.TraceContext); err != nil {
 		return nil, roachpb.NewError(err)
 	}
+	// Clear the trace context if it wasn't initialized.
+	if ba.TraceContext.TraceID == 0 {
+		ba.TraceContext = nil
+	}
 
 	// Send the command through wrapped sender, taking appropriate measures
 	// on error.
