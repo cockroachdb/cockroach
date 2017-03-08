@@ -355,6 +355,8 @@ func TestParse(t *testing.T) {
 		{`SELECT 'a' FROM t@bar`},
 		{`SELECT 'a' FROM t@{NO_INDEX_JOIN}`},
 		{`SELECT 'a' FROM t@{FORCE_INDEX=bar,NO_INDEX_JOIN}`},
+		{`SELECT 'a' FROM t@{NO_SCAN}`},
+		{`SELECT 'a' FROM t@{FORCE_INDEX=bar,NO_INDEX_JOIN,NO_SCAN}`},
 
 		{`SELECT '1':::INT`},
 
@@ -1094,30 +1096,16 @@ SELECT a FROM foo@{FORCE_INDEX=}
 		},
 		{
 			`SELECT a FROM foo@{FORCE_INDEX=bar,FORCE_INDEX=baz}`,
-			`FORCE_INDEX specified multiple times at or near "baz"
+			`conflicting FORCE_INDEX hints at or near "baz"
 SELECT a FROM foo@{FORCE_INDEX=bar,FORCE_INDEX=baz}
                                                ^
 `,
 		},
 		{
 			`SELECT a FROM foo@{FORCE_INDEX=bar,NO_INDEX_JOIN,FORCE_INDEX=baz}`,
-			`FORCE_INDEX specified multiple times at or near "baz"
+			`conflicting FORCE_INDEX hints at or near "baz"
 SELECT a FROM foo@{FORCE_INDEX=bar,NO_INDEX_JOIN,FORCE_INDEX=baz}
                                                              ^
-`,
-		},
-		{
-			`SELECT a FROM foo@{NO_INDEX_JOIN,NO_INDEX_JOIN}`,
-			`NO_INDEX_JOIN specified multiple times at or near "NO_INDEX_JOIN"
-SELECT a FROM foo@{NO_INDEX_JOIN,NO_INDEX_JOIN}
-                                 ^
-`,
-		},
-		{
-			`SELECT a FROM foo@{NO_INDEX_JOIN,FORCE_INDEX=baz,NO_INDEX_JOIN}`,
-			`NO_INDEX_JOIN specified multiple times at or near "NO_INDEX_JOIN"
-SELECT a FROM foo@{NO_INDEX_JOIN,FORCE_INDEX=baz,NO_INDEX_JOIN}
-                                                 ^
 `,
 		},
 		{

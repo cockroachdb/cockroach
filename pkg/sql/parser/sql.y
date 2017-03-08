@@ -664,7 +664,7 @@ func (u *sqlSymUnion) kvOptions() []KVOption {
 
 %token <str>   MATCH MINUTE MONTH
 
-%token <str>   NAME NAMES NATURAL NEXT NO NO_INDEX_JOIN NORMAL
+%token <str>   NAME NAMES NATURAL NEXT NO NO_INDEX_JOIN NO_SCAN NORMAL
 %token <str>   NOT NOTHING NULL NULLIF
 %token <str>   NULLS NUMERIC
 
@@ -2918,10 +2918,13 @@ index_hints_param:
     if err != nil { sqllex.Error(err.Error()); return 1 }
     $$.val = &IndexHints{IndexID: IndexID(id)}
   }
-|
-  NO_INDEX_JOIN
+| NO_INDEX_JOIN
   {
      $$.val = &IndexHints{NoIndexJoin: true}
+  }
+| NO_SCAN
+  {
+     $$.val = &IndexHints{NoScan: true}
   }
 
 index_hints_param_list:
@@ -2929,17 +2932,13 @@ index_hints_param_list:
   {
     $$.val = $1.indexHints()
   }
-|
-  index_hints_param_list ',' index_hints_param
+| index_hints_param_list ',' index_hints_param
   {
     a := $1.indexHints()
     b := $3.indexHints()
-    if a.NoIndexJoin && b.NoIndexJoin {
-       sqllex.Error("NO_INDEX_JOIN specified multiple times")
-       return 1
-    }
-    if (a.Index != "" || a.IndexID != 0) && (b.Index != "" || b.IndexID != 0) {
-       sqllex.Error("FORCE_INDEX specified multiple times")
+    if (a.Index != "" || a.IndexID != 0) && (b.Index != "" || b.IndexID != 0) &&
+       (a.Index != b.Index || a.IndexID != b.IndexID) {
+       sqllex.Error("conflicting FORCE_INDEX hints")
        return 1
     }
     // At this point either a or b contains "no information"
@@ -2949,6 +2948,7 @@ index_hints_param_list:
     a.Index = a.Index + b.Index
     a.IndexID = a.IndexID + b.IndexID
     a.NoIndexJoin = a.NoIndexJoin || b.NoIndexJoin
+    a.NoScan = a.NoScan || b.NoScan
     $$.val = a
   }
 
@@ -5140,6 +5140,7 @@ unreserved_keyword:
 | NO
 | NORMAL
 | NO_INDEX_JOIN
+| NO_SCAN
 | NULLS
 | OF
 | OFF
