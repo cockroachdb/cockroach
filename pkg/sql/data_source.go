@@ -537,7 +537,7 @@ func (p *planner) getViewPlan(
 	// SELECT privileges on the view, which is intended to allow for exposing
 	// some subset of a restricted table's data to less privileged users.
 	if !p.skipSelectPrivilegeChecks {
-		if err := p.checkPrivilege(desc, privilege.SELECT); err != nil {
+		if err := p.CheckPrivilege(desc, privilege.SELECT); err != nil {
 			return planDataSource{}, err
 		}
 		p.skipSelectPrivilegeChecks = true

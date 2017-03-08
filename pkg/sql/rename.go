@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -45,8 +44,8 @@ func (p *planner) RenameDatabase(n *parser.RenameDatabase) (planNode, error) {
 		return nil, errEmptyDatabaseName
 	}
 
-	if p.session.User != security.RootUser {
-		return nil, fmt.Errorf("only %s is allowed to rename databases", security.RootUser)
+	if err := p.RequireSuperUser("RENAME"); err != nil {
+		return nil, err
 	}
 
 	dbDesc, err := p.mustGetDatabaseDesc(string(n.Name))
@@ -54,7 +53,7 @@ func (p *planner) RenameDatabase(n *parser.RenameDatabase) (planNode, error) {
 		return nil, err
 	}
 
-	if err := p.checkPrivilege(dbDesc, privilege.DROP); err != nil {
+	if err := p.CheckPrivilege(dbDesc, privilege.DROP); err != nil {
 		return nil, err
 	}
 
@@ -167,7 +166,7 @@ func (p *planner) RenameTable(n *parser.RenameTable) (planNode, error) {
 		}
 	}
 
-	if err := p.checkPrivilege(tableDesc, privilege.DROP); err != nil {
+	if err := p.CheckPrivilege(tableDesc, privilege.DROP); err != nil {
 		return nil, err
 	}
 
@@ -186,7 +185,7 @@ func (p *planner) RenameTable(n *parser.RenameTable) (planNode, error) {
 		return nil, err
 	}
 
-	if err := p.checkPrivilege(targetDbDesc, privilege.CREATE); err != nil {
+	if err := p.CheckPrivilege(targetDbDesc, privilege.CREATE); err != nil {
 		return nil, err
 	}
 
@@ -274,7 +273,7 @@ func (p *planner) RenameIndex(n *parser.RenameIndex) (planNode, error) {
 		return nil, err
 	}
 
-	if err := p.checkPrivilege(tableDesc, privilege.CREATE); err != nil {
+	if err := p.CheckPrivilege(tableDesc, privilege.CREATE); err != nil {
 		return nil, err
 	}
 
@@ -343,7 +342,7 @@ func (p *planner) RenameColumn(n *parser.RenameColumn) (planNode, error) {
 		return nil, fmt.Errorf("table %q does not exist", tn.Table())
 	}
 
-	if err := p.checkPrivilege(tableDesc, privilege.CREATE); err != nil {
+	if err := p.CheckPrivilege(tableDesc, privilege.CREATE); err != nil {
 		return nil, err
 	}
 
