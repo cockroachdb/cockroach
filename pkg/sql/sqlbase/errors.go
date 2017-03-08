@@ -133,6 +133,11 @@ func NewUndefinedDatabaseError(name string) error {
 	return pgerror.WithSourceContext(err, 1)
 }
 
+// IsUndefinedDatabaseError returns true if the error is for an undefined database.
+func IsUndefinedDatabaseError(err error) bool {
+	return errHasCode(err, pgerror.CodeInvalidCatalogNameError)
+}
+
 // NewUndefinedTableError creates an error that represents a missing database table.
 func NewUndefinedTableError(name string) error {
 	err := errors.Errorf("table %q does not exist", name)
