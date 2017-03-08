@@ -2,8 +2,7 @@
 
 source [file join [file dirname $argv0] common.tcl]
 
-system "$argv start --verbosity 3 & echo \$! > server_pid"
-sleep 1
+system "mkfifo pid_fifo || true; $argv start --verbosity 3 --pid-file=pid_fifo & cat pid_fifo > server_pid"
 
 spawn /bin/bash
 send "PS1=':''/# '\r"

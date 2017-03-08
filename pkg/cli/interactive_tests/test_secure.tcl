@@ -9,8 +9,7 @@ set root_crt "/certs/root.crt"
 set root_key "/certs/root.key"
 
 proc start_secure_server {argv ca_crt node_crt node_key} {
-    system "$argv start --ca-cert=$ca_crt --cert=$node_crt --key=$node_key & echo \$! > server_pid"
-    sleep 1
+    system "mkfifo pid_fifo || true; $argv start --ca-cert=$ca_crt --cert=$node_crt --key=$node_key --pid-file=pid_fifo & cat pid_fifo > server_pid"
 }
 
 start_secure_server $argv $ca_crt $node_crt $node_key

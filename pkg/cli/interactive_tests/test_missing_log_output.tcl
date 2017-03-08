@@ -62,7 +62,8 @@ interrupt
 eexpect ":/# "
 
 # Start a regular server
-send "$argv start >/dev/null 2>&1 & sleep 1\r"
+send "mkfifo pid_fifo || true\r"
+send "$argv start --pid-file=pid_fifo >/dev/null 2>&1 & cat pid_fifo\r"
 
 # Now test `quit` as non-start command, and test that `quit` does not
 # emit logging output between the point the command starts until it

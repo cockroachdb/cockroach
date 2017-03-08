@@ -305,6 +305,8 @@ func init() {
 		stringFlag(f, &serverCfg.SocketFile, cliflags.Socket, "")
 		_ = f.MarkHidden(cliflags.Socket.Name)
 
+		stringFlag(f, &serverCfg.PIDFile, cliflags.PIDFile, "")
+
 		varFlag(f, insecure, cliflags.Insecure)
 		// Allow '--insecure'
 		f.Lookup(cliflags.Insecure.Name).NoOptDefVal = "true"
