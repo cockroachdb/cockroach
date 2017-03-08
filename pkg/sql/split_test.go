@@ -78,7 +78,7 @@ func TestSplitOnTableBoundaries(t *testing.T) {
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop()
 
-	expectedInitialRanges := server.ExpectedInitialRangeCount()
+	expectedInitialRanges := server.ExpectedInitialRangeCount(kvDB)
 
 	if _, err := sqlDB.Exec(`CREATE DATABASE test`); err != nil {
 		t.Fatal(err)
