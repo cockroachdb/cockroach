@@ -22,6 +22,7 @@ import (
 	"crypto/tls"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"net"
 	"net/http"
 	"os"
@@ -781,6 +782,11 @@ func (s *Server) Start(ctx context.Context) error {
 	close(serveSQL)
 	log.Info(ctx, "serving sql connections")
 
+	if s.cfg.PIDFile != "" {
+		if err := ioutil.WriteFile(s.cfg.PIDFile, []byte(fmt.Sprintf("%d\n", os.Getpid())), 0644); err != nil {
+			log.Error(ctx, err)
+		}
+	}
 	if err := sdnotify.Ready(); err != nil {
 		log.Errorf(ctx, "failed to signal readiness using systemd protocol: %s", err)
 	}
