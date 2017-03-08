@@ -120,7 +120,7 @@ func TestPGCode(t *testing.T) {
 		{WithHint(WithSourceContext(initErr, 0), hint), false},
 		{WithSourceContext(WithHint(WithDetail(WithPGCode(initErr, code), detail), hint), 0), true},
 		{WithPGCode(WithDetail(WithHint(WithSourceContext(initErr, 0), hint), detail), code), true},
-		{WithSourceContext(WithHint(errors.Wrap(WithDetail(WithPGCode(initErr, code), detail), wrap), hint), 0), true},
+		{WithSourceContext(WithPGCode(errors.Wrap(WithDetail(WithHint(initErr, hint), detail), wrap), code), 0), true},
 		{errors.Wrap(WithPGCode(WithDetail(WithHint(WithSourceContext(initErr, 0), hint), detail), code), wrap), true},
 	}
 	for i, tc := range tests {
@@ -158,7 +158,7 @@ func TestDetail(t *testing.T) {
 		{WithHint(WithSourceContext(initErr, 0), hint), false},
 		{WithSourceContext(WithHint(WithDetail(WithPGCode(initErr, code), detail), hint), 0), true},
 		{WithPGCode(WithDetail(WithHint(WithSourceContext(initErr, 0), hint), detail), code), true},
-		{WithSourceContext(WithHint(errors.Wrap(WithDetail(WithPGCode(initErr, code), detail), wrap), hint), 0), true},
+		{WithSourceContext(WithDetail(errors.Wrap(WithHint(WithPGCode(initErr, code), hint), wrap), detail), 0), true},
 		{errors.Wrap(WithPGCode(WithDetail(WithHint(WithSourceContext(initErr, 0), hint), detail), code), wrap), true},
 	}
 	for i, tc := range tests {
@@ -290,8 +290,8 @@ detail: def`},
 		{WithPGCode(WithDetail(initErr, detail), code),
 			`err
 .*sql/pgwire/pgerror.*
-detail: def
-code: abc`},
+code: abc
+detail: def`},
 		{WithSourceContext(WithHint(initErr, hint), 0),
 			`err
 .*sql/pgwire/pgerror.*
@@ -300,8 +300,8 @@ location: TestFormatPgError, .*/pgerror/errors_test.go:\d*`},
 		{WithHint(WithSourceContext(initErr, 0), hint),
 			`err
 .*sql/pgwire/pgerror.*
-location: TestFormatPgError, .*/pgerror/errors_test.go:\d*
-hint: ghi`},
+hint: ghi
+location: TestFormatPgError, .*/pgerror/errors_test.go:\d*`},
 		{WithSourceContext(WithHint(WithDetail(WithPGCode(initErr, code), detail), hint), 0),
 			`err
 .*sql/pgwire/pgerror.*
@@ -312,10 +312,10 @@ location: TestFormatPgError, .*/pgerror/errors_test.go:\d*`},
 		{WithPGCode(WithDetail(WithHint(WithSourceContext(initErr, 0), hint), detail), code),
 			`err
 .*sql/pgwire/pgerror.*
-location: TestFormatPgError, .*/pgerror/errors_test.go:\d*
-hint: ghi
+code: abc
 detail: def
-code: abc`},
+hint: ghi
+location: TestFormatPgError, .*/pgerror/errors_test.go:\d*`},
 		{WithSourceContext(WithHint(errors.Wrap(WithDetail(WithPGCode(initErr, code), detail), wrap), hint), 0),
 			`err
 .*sql/pgwire/pgerror.*
@@ -328,12 +328,10 @@ location: TestFormatPgError, .*/pgerror/errors_test.go:\d*`},
 		{errors.Wrap(WithPGCode(WithDetail(WithHint(WithSourceContext(initErr, 0), hint), detail), code), wrap),
 			`err
 .*sql/pgwire/pgerror.*
-location: TestFormatPgError, .*/pgerror/errors_test.go:\d*
-hint: ghi
-detail: def
 code: abc
-jkl
-.*sql/pgwire/pgerror.*`},
+detail: def
+hint: ghi
+location: TestFormatPgError, .*/pgerror/errors_test.go:\d*`},
 	}
 	for i, tc := range tests {
 		got := fmt.Sprintf("%+v", tc.err)
