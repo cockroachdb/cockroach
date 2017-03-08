@@ -92,6 +92,7 @@ func TestHeartbeatCB(t *testing.T) {
 // heartbeats succeed or fail.
 func TestHeartbeatHealth(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	t.Skip("#13939")
 
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
@@ -187,6 +188,7 @@ func (ln *interceptingListener) Accept() (net.Conn, error) {
 // heartbeats succeed or fail due to transport failures.
 func TestHeartbeatHealthTransport(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	t.Skip("#13734")
 
 	if testing.Short() {
 		t.Skip("short flag")

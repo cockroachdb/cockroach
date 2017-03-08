@@ -331,12 +331,13 @@ func TestReadAmplification(t *testing.T) {
 
 func TestConcurrentBatch(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	t.Skip("#12871")
 
 	if testutils.Stress() {
 		t.Skip()
 	}
 
-	dir, err := ioutil.TempDir("", "TestConcurrentBatch")
+	dir, err := ioutil.TempDir("", t.Name())
 	if err != nil {
 		t.Fatal(err)
 	}
