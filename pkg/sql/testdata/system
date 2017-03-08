@@ -82,32 +82,6 @@ id         INT   false NULL {primary}
 descriptor BYTES true  NULL {}
 
 query TTBTT
-SHOW COLUMNS FROM system.lease
-----
-descID     INT       false NULL {primary}
-version    INT       false NULL {primary}
-nodeID     INT       false NULL {primary}
-expiration TIMESTAMP false NULL {primary}
-
-query TTBTT
-SHOW COLUMNS FROM system.ui
-----
-key          STRING     false  NULL {primary}
-value        BYTES      true   NULL {}
-lastUpdated  TIMESTAMP  false  NULL {}
-
-query TTBTT
-SHOW COLUMNS FROM system.rangelog
-----
-timestamp     TIMESTAMP  false  NULL           {primary}
-rangeID       INT        false  NULL           {}
-storeID       INT        false  NULL		   {}
-eventType     STRING     false  NULL		   {}
-otherRangeID  INT        true   NULL		   {}
-info          STRING     true   NULL           {}
-uniqueID      INT        false  unique_rowid() {primary}
-
-query TTBTT
 SHOW COLUMNS FROM system.users
 ----
 username       STRING false NULL {primary}
@@ -118,6 +92,42 @@ SHOW COLUMNS FROM system.zones
 ----
 id     INT   false NULL {primary}
 config BYTES true  NULL {}
+
+query TTBTT
+SHOW COLUMNS FROM system.lease
+----
+descID     INT       false NULL {primary}
+version    INT       false NULL {primary}
+nodeID     INT       false NULL {primary}
+expiration TIMESTAMP false NULL {primary}
+
+query TTBTT
+SHOW COLUMNS FROM system.eventlog
+----
+timestamp    TIMESTAMP  false  NULL      {primary}
+eventType    STRING     false  NULL      {}
+targetID     INT        false  NULL      {}
+reportingID  INT        false  NULL      {}
+info         STRING     true   NULL      {}
+uniqueID     BYTES      false  uuid_v4() {primary}
+
+query TTBTT
+SHOW COLUMNS FROM system.rangelog
+----
+timestamp     TIMESTAMP  false  NULL           {primary}
+rangeID       INT        false  NULL           {}
+storeID       INT        false  NULL		       {}
+eventType     STRING     false  NULL		       {}
+otherRangeID  INT        true   NULL		       {}
+info          STRING     true   NULL           {}
+uniqueID      INT        false  unique_rowid() {primary}
+
+query TTBTT
+SHOW COLUMNS FROM system.ui
+----
+key          STRING     false  NULL {primary}
+value        BYTES      true   NULL {}
+lastUpdated  TIMESTAMP  false  NULL {}
 
 # Verify default privileges on system tables.
 query TTT
@@ -166,13 +176,13 @@ lease  root  SELECT
 lease  root  UPDATE
 
 query TTT
-SHOW GRANTS ON system.ui
+SHOW GRANTS ON system.eventlog
 ----
-ui  root  DELETE
-ui  root  GRANT
-ui  root  INSERT
-ui  root  SELECT
-ui  root  UPDATE
+eventlog  root  DELETE
+eventlog  root  GRANT
+eventlog  root  INSERT
+eventlog  root  SELECT
+eventlog  root  UPDATE
 
 query TTT
 SHOW GRANTS ON system.rangelog
@@ -182,6 +192,15 @@ rangelog  root  GRANT
 rangelog  root  INSERT
 rangelog  root  SELECT
 rangelog  root  UPDATE
+
+query TTT
+SHOW GRANTS ON system.ui
+----
+ui  root  DELETE
+ui  root  GRANT
+ui  root  INSERT
+ui  root  SELECT
+ui  root  UPDATE
 
 statement error user root does not have DROP privilege on database system
 ALTER DATABASE system RENAME TO not_system
