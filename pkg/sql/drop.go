@@ -26,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -1076,7 +1075,7 @@ func (p *planner) getViewDescForCascade(
 		msg := fmt.Sprintf("cannot drop %s %q because view %q depends on it",
 			typeName, objName, viewName)
 		hint := fmt.Sprintf("you can drop %s instead.", viewName)
-		return nil, pgerror.WithHint(sqlbase.NewDependentObjectError(msg), hint)
+		return nil, sqlbase.NewDependentObjectErrorWithHint(msg, hint)
 	}
 	return viewDesc, nil
 }

@@ -415,7 +415,7 @@ func (s *Server) ServeConn(ctx context.Context, conn net.Conn) error {
 		err := v3conn.serve(ctx, s.IsDraining, acc)
 		// If the error that closed the connection is related to an
 		// administrative shutdown, relay that information to the client.
-		if code, ok := pgerror.PGCode(err); ok && code == pgerror.CodeAdminShutdownError {
+		if pgErr, ok := pgerror.GetPGCause(err); ok && pgErr.Code == pgerror.CodeAdminShutdownError {
 			return v3conn.sendError(err)
 		}
 		return err
