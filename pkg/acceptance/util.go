@@ -525,7 +525,7 @@ const (
 	postgresTestTag = "20160913-0941"
 	// Iterating against a locally built version of the docker image can be done
 	// by changing postgresTestImage to the hash of the container.
-	postgresTestImage = "cockroachdb/postgres-test:" + postgresTestTag
+	postgresTestImage = "docker.io/cockroachdb/postgres-test:" + postgresTestTag
 )
 
 func testDocker(
