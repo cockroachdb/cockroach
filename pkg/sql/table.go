@@ -534,11 +534,11 @@ func (p *planner) searchAndQualifyDatabase(tn *parser.TableName) error {
 	if p.session.Database != "" {
 		t.DatabaseName = parser.Name(p.session.Database)
 		desc, err := descFunc(&t)
-		if err != nil && !sqlbase.IsUndefinedTableError(err) {
+		if err != nil && !sqlbase.IsUndefinedTableError(err) && !sqlbase.IsUndefinedDatabaseError(err) {
 			return err
 		}
 		if desc != nil {
-			// Database was found, use this name.
+			// Table was found, use this name.
 			*tn = t
 			return nil
 		}
@@ -549,7 +549,7 @@ func (p *planner) searchAndQualifyDatabase(tn *parser.TableName) error {
 	for _, database := range p.session.SearchPath {
 		t.DatabaseName = parser.Name(database)
 		desc, err := descFunc(&t)
-		if err != nil && !sqlbase.IsUndefinedTableError(err) {
+		if err != nil && !sqlbase.IsUndefinedTableError(err) && !sqlbase.IsUndefinedDatabaseError(err) {
 			return err
 		}
 		if desc != nil {
