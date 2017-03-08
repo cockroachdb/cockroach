@@ -63,6 +63,10 @@ eexpect ":/# "
 
 # Start a regular server
 send "$argv start >/dev/null 2>&1 & sleep 1\r"
+eexpect "\[1\]"
+eexpect ":/# "
+# Give the server some time to start.
+sleep 0.5
 
 # Now test `quit` as non-start command, and test that `quit` does not
 # emit logging output between the point the command starts until it
