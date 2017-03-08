@@ -53,7 +53,7 @@ func (p *planner) AlterTable(n *parser.AlterTable) (planNode, error) {
 		return nil, sqlbase.NewUndefinedTableError(tn.String())
 	}
 
-	if err := p.checkPrivilege(tableDesc, privilege.CREATE); err != nil {
+	if err := p.CheckPrivilege(tableDesc, privilege.CREATE); err != nil {
 		return nil, err
 	}
 	return &alterTableNode{n: n, p: p, tableDesc: tableDesc}, nil

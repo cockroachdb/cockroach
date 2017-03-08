@@ -51,7 +51,7 @@ func (p *planner) makeEditNode(
 			errors.Errorf("cannot run %s on view %q - views are not updateable", priv, tn)
 	}
 
-	if err := p.checkPrivilege(tableDesc, priv); err != nil {
+	if err := p.CheckPrivilege(tableDesc, priv); err != nil {
 		return editNodeBase{}, err
 	}
 

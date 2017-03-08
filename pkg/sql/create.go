@@ -141,7 +141,7 @@ func (p *planner) CreateIndex(n *parser.CreateIndex) (planNode, error) {
 		return nil, err
 	}
 
-	if err := p.checkPrivilege(tableDesc, privilege.CREATE); err != nil {
+	if err := p.CheckPrivilege(tableDesc, privilege.CREATE); err != nil {
 		return nil, err
 	}
 
@@ -250,7 +250,7 @@ func (p *planner) CreateUser(n *parser.CreateUser) (planNode, error) {
 		return nil, err
 	}
 
-	if err := p.checkPrivilege(tDesc, privilege.INSERT); err != nil {
+	if err := p.CheckPrivilege(tDesc, privilege.INSERT); err != nil {
 		return nil, err
 	}
 
@@ -331,7 +331,7 @@ func (p *planner) CreateView(n *parser.CreateView) (planNode, error) {
 		return nil, err
 	}
 
-	if err := p.checkPrivilege(dbDesc, privilege.CREATE); err != nil {
+	if err := p.CheckPrivilege(dbDesc, privilege.CREATE); err != nil {
 		return nil, err
 	}
 
@@ -501,7 +501,7 @@ func (p *planner) CreateTable(n *parser.CreateTable) (planNode, error) {
 		return nil, err
 	}
 
-	if err := p.checkPrivilege(dbDesc, privilege.CREATE); err != nil {
+	if err := p.CheckPrivilege(dbDesc, privilege.CREATE); err != nil {
 		return nil, err
 	}
 
