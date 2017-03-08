@@ -882,7 +882,7 @@ func (c *v3Conn) sendError(err error) error {
 
 		if errCtx.Line > 0 {
 			c.writeBuf.putErrFieldMsg(serverErrFieldSrcLine)
-			c.writeBuf.writeTerminatedString(strconv.Itoa(errCtx.Line))
+			c.writeBuf.writeTerminatedString(strconv.Itoa(int(errCtx.Line)))
 		}
 
 		if errCtx.Function != "" {
