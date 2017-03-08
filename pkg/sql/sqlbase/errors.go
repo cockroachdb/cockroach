@@ -52,41 +52,28 @@ const (
 // should be issued.
 func NewRetryError(cause error) error {
 	err := errors.WithMessage(cause, txnRetryMsgPrefix)
-	err = pgerror.WithPGCode(err, pgerror.CodeSerializationFailureError)
-	return pgerror.WithSourceContext(err, 1)
+	return pgerror.NewError(pgerror.CodeSerializationFailureError, err.Error())
 }
-
-var txnAbortedErrTemplate = pgerror.WithPGCode(
-	errors.Errorf(txnAbortedMsg),
-	pgerror.CodeInFailedSQLTransactionError,
-)
 
 // NewTransactionAbortedError creates an error for trying to run a command in
 // the context of transaction that's already aborted.
 func NewTransactionAbortedError(customMsg string) error {
-	err := txnAbortedErrTemplate
+	err := errors.Errorf(txnAbortedMsg)
 	if customMsg != "" {
 		err = errors.WithMessage(err, customMsg)
 	}
-	return pgerror.WithSourceContext(err, 1)
+	return pgerror.NewError(pgerror.CodeInFailedSQLTransactionError, err.Error())
 }
-
-var txnCommittedErrTemplate = pgerror.WithPGCode(
-	errors.Errorf(txnCommittedMsg),
-	pgerror.CodeInvalidTransactionStateError,
-)
 
 // NewTransactionCommittedError creates an error that signals that the SQL txn
 // is in the COMMIT_WAIT state and that only a COMMIT statement will be accepted.
 func NewTransactionCommittedError() error {
-	return pgerror.WithSourceContext(txnCommittedErrTemplate, 1)
+	return pgerror.NewError(pgerror.CodeInvalidTransactionStateError, txnCommittedMsg)
 }
 
 // NewNonNullViolationError creates an error for a violation of a non-NULL constraint.
 func NewNonNullViolationError(columnName string) error {
-	err := errors.Errorf("null value in column %q violates not-null constraint", columnName)
-	err = pgerror.WithPGCode(err, pgerror.CodeNotNullViolationError)
-	return pgerror.WithSourceContext(err, 1)
+	return pgerror.NewErrorf(pgerror.CodeNotNullViolationError, "null value in column %q violates not-null constraint", columnName)
 }
 
 // NewUniquenessConstraintViolationError creates an error that represents a
@@ -97,13 +84,11 @@ func NewUniquenessConstraintViolationError(index *IndexDescriptor, vals []parser
 		valStrs = append(valStrs, val.String())
 	}
 
-	err := errors.Errorf("duplicate key value (%s)=(%s) violates unique constraint %q",
+	return pgerror.NewErrorf(pgerror.CodeUniqueViolationError,
+		"duplicate key value (%s)=(%s) violates unique constraint %q",
 		strings.Join(index.ColumnNames, ","),
 		strings.Join(valStrs, ","),
 		index.Name)
-
-	err = pgerror.WithPGCode(err, pgerror.CodeUniqueViolationError)
-	return pgerror.WithSourceContext(err, 1)
 }
 
 // IsUniquenessConstraintViolationError returns true if the error is for a
@@ -121,16 +106,13 @@ func IsIntegrityConstraintError(err error) bool {
 
 // NewUndefinedDatabaseError creates an error that represents a missing database.
 func NewUndefinedDatabaseError(name string) error {
-	err := errors.Errorf("database %q does not exist", name)
-
 	// Postgres will return an UndefinedTable error on queries that go to a "relation"
 	// that does not exist (a query to a non-existent table or database), but will
 	// return an InvalidCatalogName error when connecting to a database that does
 	// not exist. We've chosen to return this code for all cases where the error cause
 	// is a missing database.
-	err = pgerror.WithPGCode(err, pgerror.CodeInvalidCatalogNameError)
-
-	return pgerror.WithSourceContext(err, 1)
+	return pgerror.NewErrorf(
+		pgerror.CodeInvalidCatalogNameError, "database %q does not exist", name)
 }
 
 // IsUndefinedDatabaseError returns true if the error is for an undefined database.
@@ -140,16 +122,12 @@ func IsUndefinedDatabaseError(err error) bool {
 
 // NewUndefinedTableError creates an error that represents a missing database table.
 func NewUndefinedTableError(name string) error {
-	err := errors.Errorf("table %q does not exist", name)
-	err = pgerror.WithPGCode(err, pgerror.CodeUndefinedTableError)
-	return pgerror.WithSourceContext(err, 1)
+	return pgerror.NewErrorf(pgerror.CodeUndefinedTableError, "table %q does not exist", name)
 }
 
 // NewUndefinedViewError creates an error that represents a missing database view.
 func NewUndefinedViewError(name string) error {
-	err := errors.Errorf("view %q does not exist", name)
-	err = pgerror.WithPGCode(err, pgerror.CodeUndefinedTableError)
-	return pgerror.WithSourceContext(err, 1)
+	return pgerror.NewErrorf(pgerror.CodeUndefinedTableError, "view %q does not exist", name)
 }
 
 // IsUndefinedTableError returns true if the error is for an undefined table.
@@ -159,52 +137,40 @@ func IsUndefinedTableError(err error) bool {
 
 // NewDatabaseAlreadyExistsError creates an error for a preexisting database.
 func NewDatabaseAlreadyExistsError(name string) error {
-	err := errors.Errorf("database %q already exists", name)
-	err = pgerror.WithPGCode(err, pgerror.CodeDuplicateDatabaseError)
-	return pgerror.WithSourceContext(err, 1)
+	return pgerror.NewErrorf(pgerror.CodeDuplicateDatabaseError, "database %q already exists", name)
 }
 
 // NewRelationAlreadyExistsError creates an error for a preexisting relation.
 func NewRelationAlreadyExistsError(name string) error {
-	err := errors.Errorf("relation %q already exists", name)
-	err = pgerror.WithPGCode(err, pgerror.CodeDuplicateRelationError)
-	return pgerror.WithSourceContext(err, 1)
+	return pgerror.NewErrorf(pgerror.CodeDuplicateRelationError, "relation %q already exists", name)
 }
 
 // NewWrongObjectTypeError creates a wrong object type error.
 func NewWrongObjectTypeError(name, desiredObjType string) error {
-	err := errors.Errorf("%q is not a %s", name, desiredObjType)
-	err = pgerror.WithPGCode(err, pgerror.CodeWrongObjectTypeError)
-	return pgerror.WithSourceContext(err, 1)
+	return pgerror.NewErrorf(pgerror.CodeWrongObjectTypeError, "%q is not a %s", name, desiredObjType)
 }
 
 // NewSyntaxError creates a syntax error.
 func NewSyntaxError(msg string) error {
-	err := errors.Errorf(msg)
-	err = pgerror.WithPGCode(err, pgerror.CodeSyntaxError)
-	return pgerror.WithSourceContext(err, 1)
+	return pgerror.NewError(pgerror.CodeSyntaxError, msg)
 }
 
 // NewDependentObjectError creates a dependent object error.
 func NewDependentObjectError(msg string) error {
-	err := errors.Errorf(msg)
-	err = pgerror.WithPGCode(err, pgerror.CodeDependentObjectsStillExistError)
-	return pgerror.WithSourceContext(err, 1)
+	return pgerror.NewError(pgerror.CodeDependentObjectsStillExistError, msg)
 }
 
 // NewRangeUnavailableError creates an unavailable range error.
 func NewRangeUnavailableError(
 	rangeID roachpb.RangeID, origErr error, nodeIDs ...roachpb.NodeID,
 ) error {
-	err := errors.Errorf("key range id:%d is unavailable; missing nodes: %s. Original error: %v",
+	return pgerror.NewErrorf(CodeRangeUnavailable, "key range id:%d is unavailable; missing nodes: %s. Original error: %v",
 		rangeID, nodeIDs, origErr)
-	err = pgerror.WithPGCode(err, CodeRangeUnavailable)
-	return pgerror.WithSourceContext(err, 1)
 }
 
 func errHasCode(err error, code string) bool {
-	if c, ok := pgerror.PGCode(err); ok {
-		return c == code
+	if pgErr, ok := pgerror.PGError(err); ok {
+		return pgErr.Code == code
 	}
 	return false
 }

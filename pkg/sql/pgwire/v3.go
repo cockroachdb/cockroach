@@ -851,10 +851,7 @@ func (c *v3Conn) sendCommandComplete(tag []byte) error {
 // TODO(andrei): Figure out the correct codes to send for all the errors
 // in this file and remove this function.
 func (c *v3Conn) sendInternalError(errToSend string) error {
-	err := errors.Errorf(errToSend)
-	err = pgerror.WithPGCode(err, pgerror.CodeInternalError)
-	err = pgerror.WithSourceContext(err, 1)
-	return c.sendError(err)
+	return c.sendError(pgerror.NewError(pgerror.CodeInternalError, errToSend))
 }
 
 func (c *v3Conn) sendError(err error) error {
@@ -867,24 +864,29 @@ func (c *v3Conn) sendError(err error) error {
 	c.writeBuf.putErrFieldMsg(serverErrFieldSeverity)
 	c.writeBuf.writeTerminatedString("ERROR")
 
-	code, ok := pgerror.PGCode(err)
-	if !ok {
+	pgErr, ok := pgerror.PGError(err)
+	var code string
+	if ok {
+		code = pgErr.Code
+	} else {
 		code = pgerror.CodeInternalError
 	}
+
 	c.writeBuf.putErrFieldMsg(serverErrFieldSQLState)
 	c.writeBuf.writeTerminatedString(code)
 
-	if detail, ok := pgerror.Detail(err); ok {
+	if ok && pgErr.Detail != "" {
 		c.writeBuf.putErrFieldMsg(serverErrFileldDetail)
-		c.writeBuf.writeTerminatedString(detail)
+		c.writeBuf.writeTerminatedString(pgErr.Detail)
 	}
 
-	if hint, ok := pgerror.Hint(err); ok {
+	if ok && pgErr.Hint != "" {
 		c.writeBuf.putErrFieldMsg(serverErrFileldHint)
-		c.writeBuf.writeTerminatedString(hint)
+		c.writeBuf.writeTerminatedString(pgErr.Hint)
 	}
 
-	if errCtx, ok := pgerror.SourceContext(err); ok {
+	if ok && pgErr.Source != nil {
+		errCtx := pgErr.Source
 		if errCtx.File != "" {
 			c.writeBuf.putErrFieldMsg(serverErrFieldSrcFile)
 			c.writeBuf.writeTerminatedString(errCtx.File)
@@ -892,7 +894,7 @@ func (c *v3Conn) sendError(err error) error {
 
 		if errCtx.Line > 0 {
 			c.writeBuf.putErrFieldMsg(serverErrFieldSrcLine)
-			c.writeBuf.writeTerminatedString(strconv.Itoa(errCtx.Line))
+			c.writeBuf.writeTerminatedString(strconv.Itoa(int(errCtx.Line)))
 		}
 
 		if errCtx.Function != "" {
@@ -1120,12 +1122,10 @@ func (c *v3Conn) copyIn(ctx context.Context, columns []sql.ResultColumn) (int64,
 }
 
 func newUnrecognizedMsgTypeErr(typ clientMessageType) error {
-	err := errors.Errorf("unrecognized client message type %v", typ)
-	err = pgerror.WithPGCode(err, pgerror.CodeProtocolViolationError)
-	return pgerror.WithSourceContext(err, 1)
+	return pgerror.NewErrorf(
+		pgerror.CodeProtocolViolationError, "unrecognized client message type %v", typ)
 }
 
 func newAdminShutdownErr(err error) error {
-	err = pgerror.WithPGCode(err, pgerror.CodeAdminShutdownError)
-	return pgerror.WithSourceContext(err, 1)
+	return pgerror.NewErrorf(pgerror.CodeAdminShutdownError, err.Error())
 }
