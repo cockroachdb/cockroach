@@ -910,7 +910,7 @@ func (n *Node) setupSpanForIncomingRPC(
 		} else {
 			// Child span of remote parent.
 			var err error
-			ctx, recordedTrace, err = tracing.JoinRemoteTrace(ctx, tr, *remoteTraceContext, opName)
+			ctx, recordedTrace, err = tracing.JoinRemoteTrace(ctx, tr, remoteTraceContext, opName)
 			if err != nil {
 				// Fallback to root span.
 				log.Warningf(ctx, "failed to join remote trace: %s", err)

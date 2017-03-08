@@ -490,14 +490,14 @@ func StartSnowballTrace(
 // closed, the caller should serialize the RecordedTrace and send it over the
 // wire to the remote party.
 func JoinRemoteTrace(
-	ctx context.Context, tr opentracing.Tracer, carrier SpanContextCarrier, opName string,
+	ctx context.Context, tr opentracing.Tracer, carrier *SpanContextCarrier, opName string,
 ) (context.Context, *RecordedTrace, error) {
 	if tr == nil {
 		return ctx, nil, errors.Errorf("JoinRemoteTrace called with nil Tracer")
 	}
 
 	var sp opentracing.Span
-	wireContext, err := tr.Extract(basictracer.Delegator, &carrier)
+	wireContext, err := tr.Extract(basictracer.Delegator, carrier)
 	switch err {
 	case nil:
 		sp = tr.StartSpan(opName, opentracing.FollowsFrom(wireContext))
