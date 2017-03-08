@@ -61,13 +61,15 @@ for test in "${tests[@]}"; do
         testcmd="${testcmd_base} --test ${test} ${nemesis} > /dev/null"
         echo "##teamcity[testStarted name='${test} ${nemesis}']"
         echo "Testing with args --test ${test} ${nemesis}"
-        # Run each test over an ssh connection.
-        # If this begins to time out frequently, let's do this via nohup and poll.
-        ssh -o "ServerAliveInterval=60" -o "StrictHostKeyChecking no" -i "$HOME/.ssh/${KEY_NAME}" "ubuntu@${controller}" "${testcmd}"
+
         # Remove spaces from test name to get the artifacts subdirectory
         testname=$(echo "${test}${nemesis}" | sed 's/ //g')
         artifacts_dir="${LOG_DIR}/${testname}"
         mkdir -p "${artifacts_dir}"
+
+        # Run each test over an ssh connection.
+        # If this begins to time out frequently, let's do this via nohup and poll.
+        ssh -o "ServerAliveInterval=60" -o "StrictHostKeyChecking no" -i "$HOME/.ssh/${KEY_NAME}" "ubuntu@${controller}" "${testcmd}"
         if [ $? -ne 0 ]; then
             # Test failed: grab everything.
             echo "Test failed. Grabbing logs..."
