@@ -21,6 +21,7 @@ import (
 	"database/sql/driver"
 	"fmt"
 	"io"
+	"net"
 	"net/url"
 	"strings"
 	"text/tabwriter"
@@ -48,12 +49,26 @@ type sqlConn struct {
 	reconnecting bool
 }
 
+// TODO(tamird): remove this when lib/pq takes a net.Dialer instead of a
+// pq.Dialer.
+type dialer struct {
+	net.Dialer
+}
+
+var _ pq.Dialer = (*dialer)(nil)
+
+func (d *dialer) DialTimeout(network, address string, timeout time.Duration) (net.Conn, error) {
+	dt := *d
+	dt.Timeout = timeout
+	return dt.Dial(network, address)
+}
+
 func (c *sqlConn) ensureConn() error {
 	if c.conn == nil {
 		if c.reconnecting && isInteractive {
 			fmt.Fprintf(stderr, "connection lost; opening new connection and resetting session parameters...\n")
 		}
-		conn, err := pq.Open(c.url)
+		conn, err := pq.DialOpen(&dialer{Dialer: net.Dialer{KeepAlive: 30 * time.Second}}, c.url)
 		if err != nil {
 			return err
 		}
