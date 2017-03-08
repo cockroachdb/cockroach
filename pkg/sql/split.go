@@ -49,7 +49,7 @@ func (p *planner) Split(n *parser.Split) (planNode, error) {
 	if tableDesc == nil {
 		return nil, sqlbase.NewUndefinedTableError(tn.String())
 	}
-	if err := p.checkPrivilege(tableDesc, privilege.INSERT); err != nil {
+	if err := p.CheckPrivilege(tableDesc, privilege.INSERT); err != nil {
 		return nil, err
 	}
 
