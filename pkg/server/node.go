@@ -904,13 +904,13 @@ func (n *Node) setupSpanForIncomingRPC(
 		// Child span of local parent.
 		ctx, _ = tracing.ChildSpan(ctx, opName)
 	} else {
-		if remoteTraceContext == nil {
+		if remoteTraceContext == nil || remoteTraceContext.TraceID == 0 {
 			// Root span.
 			ctx = opentracing.ContextWithSpan(ctx, tr.StartSpan(opName))
 		} else {
 			// Child span of remote parent.
 			var err error
-			ctx, recordedTrace, err = tracing.JoinRemoteTrace(ctx, tr, *remoteTraceContext, opName)
+			ctx, recordedTrace, err = tracing.JoinRemoteTrace(ctx, tr, remoteTraceContext, opName)
 			if err != nil {
 				// Fallback to root span.
 				log.Warningf(ctx, "failed to join remote trace: %s", err)
