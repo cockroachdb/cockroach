@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/migrations"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -308,15 +309,38 @@ func (ts *TestServer) Start(params base.TestServerArgs) error {
 	return nil
 }
 
-// ExpectedInitialRangeCount returns the expected number of ranges that should
-// be on the server after initial (asynchronous) splits have been completed,
-// assuming no additional information is added outside of the normal bootstrap
-// process.
-func ExpectedInitialRangeCount() int {
+// ExpectedInitialRangeCountWithoutMigrations is like ExpectedInitialRangeCount,
+// but does not take into account any ranges that may have been added by
+// migrations. This function should be used when only a lower bound, and not
+// an exact count, is needed.
+func ExpectedInitialRangeCountWithoutMigrations() int {
 	bootstrap := GetBootstrapSchema()
 	return bootstrap.SystemDescriptorCount() -
 		bootstrap.SystemConfigDescriptorCount() +
 		2 /* first-range + system-config-range */
+}
+
+// ExpectedInitialRangeCount returns the expected number of ranges that should
+// be on the server after initial (asynchronous) splits have been completed,
+// assuming no additional information is added outside of the normal bootstrap
+// process.
+func (ts *TestServer) ExpectedInitialRangeCount() (int, error) {
+	return ExpectedInitialRangeCount(ts.DB())
+}
+
+// ExpectedInitialRangeCount returns the expected number of ranges that should
+// be on the server after initial (asynchronous) splits have been completed,
+// assuming no additional information is added outside of the normal bootstrap
+// process.
+func ExpectedInitialRangeCount(db *client.DB) (int, error) {
+	// XXX: This assumes that the number of descriptors added by migrations is equal
+	// to the number of ranges added, which may not be true in the future.
+	migrationRangeCount, err := migrations.AdditionalInitialDescriptors(
+		context.Background(), db)
+	if err != nil {
+		return 0, errors.Wrap(err, "counting initial migration ranges")
+	}
+	return ExpectedInitialRangeCountWithoutMigrations() + migrationRangeCount, nil
 }
 
 // WaitForInitialSplits waits for the server to complete its expected initial
@@ -330,7 +354,10 @@ func (ts *TestServer) WaitForInitialSplits() error {
 // populated in the meta2 table. If the expected range count is not reached
 // within a configured timeout, an error is returned.
 func WaitForInitialSplits(db *client.DB) error {
-	expectedRanges := ExpectedInitialRangeCount()
+	expectedRanges, err := ExpectedInitialRangeCount(db)
+	if err != nil {
+		return err
+	}
 	return util.RetryForDuration(initialSplitsTimeout, func() error {
 		// Scan all keys in the Meta2Prefix; we only need a count.
 		rows, err := db.Scan(context.TODO(), keys.Meta2Prefix, keys.MetaMax, 0)

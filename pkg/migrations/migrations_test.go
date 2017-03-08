@@ -41,6 +41,16 @@ var (
 		name:   "noop 2",
 		workFn: func(_ context.Context, _ runner) error { return nil },
 	}
+	addOneDescriptorMigration = migrationDescriptor{
+		name:           "add one descriptor",
+		workFn:         func(_ context.Context, _ runner) error { return nil },
+		newDescriptors: 1,
+	}
+	addTwoDescriptorsMigration = migrationDescriptor{
+		name:           "add two descriptors",
+		workFn:         func(_ context.Context, _ runner) error { return nil },
+		newDescriptors: 2,
+	}
 	errorMigration = migrationDescriptor{
 		name:   "error",
 		workFn: func(_ context.Context, _ runner) error { return errors.New("errorMigration") },
@@ -133,49 +143,77 @@ func TestEnsureMigrations(t *testing.T) {
 		},
 	}
 	testCases := []struct {
-		preCompleted []migrationDescriptor
-		migrations   []migrationDescriptor
-		expectedErr  string
+		preCompleted            []migrationDescriptor
+		migrations              []migrationDescriptor
+		expectedErr             string
+		expectedPreDescriptors  int
+		expectedPostDescriptors int
 	}{
 		{
 			nil,
 			nil,
 			"",
+			0, 0,
 		},
 		{
 			nil,
 			[]migrationDescriptor{noopMigration1},
 			"",
+			0, 0,
 		},
 		{
 			[]migrationDescriptor{noopMigration1},
 			[]migrationDescriptor{noopMigration1},
 			"",
+			0, 0,
 		},
 		{
 			[]migrationDescriptor{},
 			[]migrationDescriptor{noopMigration1, noopMigration2},
 			"",
+			0, 0,
 		},
 		{
 			[]migrationDescriptor{noopMigration1},
 			[]migrationDescriptor{noopMigration1, noopMigration2},
 			"",
+			0, 0,
 		},
 		{
 			[]migrationDescriptor{noopMigration1, noopMigration2, panicMigration},
 			[]migrationDescriptor{noopMigration1, noopMigration2, panicMigration},
 			"",
+			0, 0,
 		},
 		{
 			[]migrationDescriptor{noopMigration1, noopMigration2},
 			[]migrationDescriptor{noopMigration1, noopMigration2, fnGotCalledDescriptor},
 			"",
+			0, 0,
 		},
 		{
 			[]migrationDescriptor{noopMigration1, noopMigration2},
 			[]migrationDescriptor{noopMigration1, noopMigration2, errorMigration},
 			fmt.Sprintf("failed to run migration %q", errorMigration.name),
+			0, 0,
+		},
+		{
+			[]migrationDescriptor{noopMigration1},
+			[]migrationDescriptor{noopMigration1, addOneDescriptorMigration},
+			"",
+			0, 1,
+		},
+		{
+			[]migrationDescriptor{addOneDescriptorMigration},
+			[]migrationDescriptor{addOneDescriptorMigration, addTwoDescriptorsMigration},
+			"",
+			1, 3,
+		},
+		{
+			[]migrationDescriptor{},
+			[]migrationDescriptor{noopMigration1, addOneDescriptorMigration, noopMigration2, addTwoDescriptorsMigration},
+			"",
+			0, 3,
 		},
 	}
 	for _, tc := range testCases {
@@ -185,13 +223,33 @@ func TestEnsureMigrations(t *testing.T) {
 				db.kvs[string(migrationKey(name))] = []byte{}
 			}
 			backwardCompatibleMigrations = tc.migrations
-			err := mgr.EnsureMigrations(context.Background())
+
+			preDescriptors, err := AdditionalInitialDescriptors(context.Background(), mgr.db)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if preDescriptors != tc.expectedPreDescriptors {
+				t.Errorf("expected %d additional initial ranges before migration, got %d",
+					tc.expectedPreDescriptors, preDescriptors)
+			}
+
+			err = mgr.EnsureMigrations(context.Background())
 			if !testutils.IsError(err, tc.expectedErr) {
 				t.Errorf("expected error %q, got error %v", tc.expectedErr, err)
 			}
 			if err != nil {
 				return
 			}
+
+			postDescriptors, err := AdditionalInitialDescriptors(context.Background(), mgr.db)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if postDescriptors != tc.expectedPostDescriptors {
+				t.Errorf("expected %d additional initial ranges after migration, got %d",
+					tc.expectedPostDescriptors, postDescriptors)
+			}
+
 			for _, migration := range tc.migrations {
 				if _, ok := db.kvs[string(migrationKey(migration))]; !ok {
 					t.Errorf("expected key %s to be written, but it wasn't", migrationKey(migration))
