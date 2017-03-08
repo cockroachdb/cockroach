@@ -184,6 +184,10 @@ type Config struct {
 	// actions.
 	EventLogEnabled bool
 
+	// PIDFile indicates the file to which the server writes its PID when
+	// it is ready.
+	PIDFile string
+
 	enginesCreated bool
 }
 

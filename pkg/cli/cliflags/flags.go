@@ -220,6 +220,13 @@ communication; it must resolve from other nodes in the cluster.`,
 		Description: `The port to bind to for HTTP requests.`,
 	}
 
+	PIDFile = FlagInfo{
+		Name: "pid-file",
+		Description: `
+After the CockroachDB node has started up successfully, it will
+write its process ID to the specified file.`,
+	}
+
 	Socket = FlagInfo{
 		Name:   "socket",
 		EnvVar: "COCKROACH_SOCKET",

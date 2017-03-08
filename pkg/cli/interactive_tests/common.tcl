@@ -36,8 +36,7 @@ proc interrupt {} {
 # Preserves the invariant that the server's PID is saved
 # in `server_pid`.
 proc start_server {argv} {
-    system "$argv start & echo \$! > server_pid"
-    sleep 1
+    system "mkfifo pid_fifo || true; $argv start --pid-file=pid_fifo --background & cat pid_fifo > server_pid"
 }
 proc stop_server {argv} {
     system "set -e; if kill -CONT `cat server_pid`; then $argv quit || true & sleep 1; kill -9 `cat server_pid` || true; else $argv quit || true; fi"
