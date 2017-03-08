@@ -35,35 +35,33 @@ func TestDockerNodeJS(t *testing.T) {
 }
 
 const nodeJS = `
-var pg     = require('pg');
-var fs     = require('fs');
-var assert = require('assert');
+const fs     = require('fs');
+const pg     = require('pg');
+const assert = require('assert');
 
-var config = {
+const config = {
   user: 'root',
   ssl: {
     cert: fs.readFileSync(process.env.PGSSLCERT),
-    key:  fs.readFileSync(process.env.PGSSLKEY)
+    key:  fs.readFileSync(process.env.PGSSLKEY),
   }
 };
 
-pg.connect(config, function (err, client, done) {
-  var errQuit = function (err) {
-    console.error(err);
-    done();
-    process.exit(1);
-  }
-  if (err) errQuit(err);
+const client = new pg.Client(config);
+
+client.connect(function (err) {
+  if (err) throw err;
 
   client.query("SELECT 1 as first, 2+$1 as second", [%v], function (err, results) {
-    if (err) errQuit(err);
+    if (err) throw err;
 
     assert.deepEqual(results.rows, [{
       first: 1,
       second: 5
     }]);
-    done();
-    process.exit();
+    client.end(function (err) {
+      if (err) throw err;
+    });
   });
 });
 `
