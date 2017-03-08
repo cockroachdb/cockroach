@@ -322,8 +322,9 @@ func TestDropTable(t *testing.T) {
 				runFunc := runAfterTableNameDropped
 				runAfterTableNameDropped = nil
 				if runFunc != nil {
+					err := runFunc()
 					go func() {
-						errChan <- runFunc()
+						errChan <- err
 					}()
 					// Return an error so that the DROP TABLE is retried.
 					// This tests the idempotency of DROP TABLE.
@@ -382,7 +383,7 @@ func TestDropTable(t *testing.T) {
 		if _, err := sqlDB.Exec(
 			`SELECT * FROM t.kv`,
 		); !testutils.IsError(err, `table "t.kv" does not exist`) {
-			return errors.Wrap(err, "different error than expected")
+			return errors.Errorf("different error than expected: %+v", err)
 		}
 
 		if gr, err := kvDB.Get(ctx, nameKey); err != nil {
