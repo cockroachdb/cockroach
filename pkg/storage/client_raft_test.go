@@ -1131,6 +1131,8 @@ func TestStoreRangeCorruptionChangeReplicas(t *testing.T) {
 	const numReplicas = 3
 	const extraStores = 3
 
+	ctx := context.Background()
+
 	sc := storage.TestStoreConfig(nil)
 	var corrupt struct {
 		syncutil.Mutex
@@ -1198,7 +1200,7 @@ func TestStoreRangeCorruptionChangeReplicas(t *testing.T) {
 		})
 
 		args := putArgs(roachpb.Key("any write"), []byte("should mark as corrupted"))
-		if _, err := client.SendWrapped(context.Background(), rg1(store0), args); err != nil {
+		if _, err := client.SendWrapped(ctx, rg1(store0), args); err != nil {
 			t.Fatal(err)
 		}
 
@@ -1215,7 +1217,7 @@ func TestStoreRangeCorruptionChangeReplicas(t *testing.T) {
 		})
 
 		corrupt.Lock()
-		err := corrupt.store.GossipDeadReplicas(context.Background())
+		err := corrupt.store.GossipDeadReplicas(ctx)
 		corrupt.Unlock()
 		if err != nil {
 			t.Fatal(err)
@@ -1223,7 +1225,6 @@ func TestStoreRangeCorruptionChangeReplicas(t *testing.T) {
 
 		testutils.SucceedsSoon(t, func() error {
 			store0.ForceReplicationScanAndProcess()
-
 			// Should be removed from the corrupt store.
 			replicas := store0.LookupReplica(roachpb.RKey("a"), roachpb.RKey("b")).Desc().Replicas
 			for _, rep := range replicas {
@@ -2844,7 +2845,7 @@ func TestRemoveRangeWithoutGC(t *testing.T) {
 		t.Fatal("expected range descriptor to be present")
 	}
 
-	// Stop and restart the store. The primary motiviation for this test
+	// Stop and restart the store. The primary motivation for this test
 	// is to ensure that the store does not panic on restart (as was
 	// previously the case).
 	mtc.stopStore(0)

@@ -437,7 +437,8 @@ storeLoop:
 
 // getStoreList returns a storeList that contains all active stores that
 // contain the required attributes and their associated stats. It also returns
-// the total number of alive and throttled stores.
+// the total number of alive and throttled stores. The passed in rangeID is used
+// to check for corrupted replicas.
 func (sp *StorePool) getStoreList(rangeID roachpb.RangeID) (StoreList, int, int) {
 	sp.detailsMu.RLock()
 	defer sp.detailsMu.RUnlock()
@@ -446,7 +447,24 @@ func (sp *StorePool) getStoreList(rangeID roachpb.RangeID) (StoreList, int, int)
 	for storeID := range sp.detailsMu.storeDetails {
 		storeIDs = append(storeIDs, storeID)
 	}
+	return sp.getStoreListFromIDsRLocked(storeIDs, rangeID)
+}
 
+// getStoreListFromIDs is the same function as getStoreList but only returns stores
+// from the subset of passed in store IDs.
+func (sp *StorePool) getStoreListFromIDs(
+	storeIDs roachpb.StoreIDSlice, rangeID roachpb.RangeID,
+) (StoreList, int, int) {
+	sp.detailsMu.RLock()
+	defer sp.detailsMu.RUnlock()
+	return sp.getStoreListFromIDsRLocked(storeIDs, rangeID)
+}
+
+// getStoreListFromIDsRLocked is the same function as getStoreList but requires
+// that the detailsMU read lock is held.
+func (sp *StorePool) getStoreListFromIDsRLocked(
+	storeIDs roachpb.StoreIDSlice, rangeID roachpb.RangeID,
+) (StoreList, int, int) {
 	if sp.deterministic {
 		sort.Sort(storeIDs)
 	} else {
@@ -475,7 +493,6 @@ func (sp *StorePool) getStoreList(rangeID roachpb.RangeID) (StoreList, int, int)
 			panic(fmt.Sprintf("unknown store status: %d", s))
 		}
 	}
-
 	return makeStoreList(storeDescriptors), aliveStoreCount, throttledStoreCount
 }
 
