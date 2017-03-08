@@ -83,7 +83,11 @@ func TestReplicateQueueRebalance(t *testing.T) {
 		return counts
 	}
 
-	numRanges := newRanges + server.ExpectedInitialRangeCount()
+	initialRanges, err := server.ExpectedInitialRangeCount(tc.Servers[0].DB())
+	if err != nil {
+		t.Fatal(err)
+	}
+	numRanges := newRanges + initialRanges
 	numReplicas := numRanges * 3
 	const minThreshold = 0.9
 	minReplicas := int(math.Floor(minThreshold * (float64(numReplicas) / numNodes)))
