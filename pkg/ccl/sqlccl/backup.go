@@ -37,6 +37,8 @@ const (
 	// BackupDescriptorName is the file name used for serialized
 	// BackupDescriptor protos.
 	BackupDescriptorName = "BACKUP"
+
+	backupOptIntoDB = "into_db"
 )
 
 // ReadBackupDescriptor reads and unmarshals a BackupDescriptor from given base.
@@ -153,6 +155,7 @@ func Backup(
 	uri string,
 	targets parser.TargetList,
 	startTime, endTime hlc.Timestamp,
+	_ parser.KVOptions,
 ) (BackupDescriptor, error) {
 	// TODO(dan): Figure out how permissions should work. #6713 is tracking this
 	// for grpc.
@@ -306,42 +309,37 @@ func reassignParentIDs(
 	txn *client.Txn,
 	databasesByID map[sqlbase.ID]*sqlbase.DatabaseDescriptor,
 	tables []*sqlbase.TableDescriptor,
+	opt parser.KVOptions,
 ) error {
 	for _, table := range tables {
 		// Update the parentID to point to the named DB in the new cluster.
 		{
-			database, ok := databasesByID[table.ParentID]
-			if !ok {
-				return errors.Errorf("no database with ID %d in backup for table %q", table.ParentID, table.Name)
+			var targetDB string
+			if override, ok := opt.Get(backupOptIntoDB); ok {
+				targetDB = override
+			} else {
+				database, ok := databasesByID[table.ParentID]
+				if !ok {
+					return errors.Errorf("no database with ID %d in backup for table %q", table.ParentID, table.Name)
+				}
+				targetDB = database.Name
 			}
 
-			// Make sure there's a database with a name that matches the original.
-			existingDatabaseID, err := txn.Get(sqlbase.MakeNameMetadataKey(0, database.Name))
+			// Make sure the target DB exists.
+			existingDatabaseID, err := txn.Get(sqlbase.MakeNameMetadataKey(0, targetDB))
 			if err != nil {
 				return err
 			}
 			if existingDatabaseID.Value == nil {
 				return errors.Errorf("a database named %q needs to exist to restore table %q",
-					database.Name, table.Name)
+					targetDB, table.Name)
 			}
 			newParentID, err := existingDatabaseID.Value.GetInt()
 			if err != nil {
 				return err
 			}
 			table.ParentID = sqlbase.ID(newParentID)
-
-			parentDB, err := sqlbase.GetDatabaseDescFromID(txn, table.ParentID)
-			if err != nil {
-				return errors.Wrapf(err, "failed to lookup parent DB %d", table.ParentID)
-			}
-
-			// Default is to copy privs from restoring parent db, like CREATE TABLE.
-			// TODO(dt): Make this more configurable.
-			{
-				table.Privileges = parentDB.GetPrivileges()
-			}
 		}
-
 		// Check that the table name is _not_ in use.
 		// This would fail the CPut later anyway, but this yields a prettier error.
 		{
@@ -355,6 +353,19 @@ func reassignParentIDs(
 			}
 		}
 
+		// set privileges
+		{
+			parentDB, err := sqlbase.GetDatabaseDescFromID(txn, table.ParentID)
+			if err != nil {
+				return errors.Wrapf(err, "failed to lookup parent DB %d", table.ParentID)
+			}
+
+			// Default is to copy privs from restoring parent db, like CREATE TABLE.
+			// TODO(dt): Make this more configurable.
+			{
+				table.Privileges = parentDB.GetPrivileges()
+			}
+		}
 	}
 	return nil
 }
@@ -690,7 +701,7 @@ func restoreTableDesc(ctx context.Context, txn *client.Txn, table sqlbase.TableD
 // Restore imports a SQL table (or tables) from sets of non-overlapping sstable
 // files.
 func Restore(
-	ctx context.Context, db client.DB, uris []string, targets parser.TargetList,
+	ctx context.Context, db client.DB, uris []string, targets parser.TargetList, opt parser.KVOptions,
 ) ([]sqlbase.TableDescriptor, error) {
 	backupDescs := make([]BackupDescriptor, len(uris))
 
@@ -743,7 +754,7 @@ func Restore(
 	// Fail fast if the necessary databases don't exist since the below logic
 	// leaks table IDs when Restore fails.
 	if err := db.Txn(ctx, func(txn *client.Txn) error {
-		return reassignParentIDs(txn, databasesByID, tables)
+		return reassignParentIDs(txn, databasesByID, tables, opt)
 	}); err != nil {
 		return nil, err
 	}
@@ -878,7 +889,12 @@ func backupPlanHook(
 				return nil, err
 			}
 		}
-		desc, err := Backup(ctx, *state.ExecCfg.DB, backup.To, backup.Targets, startTime, endTime)
+		desc, err := Backup(ctx, *state.ExecCfg.DB,
+			backup.To,
+			backup.Targets,
+			startTime, endTime,
+			backup.Options,
+		)
 		if err != nil {
 			return nil, err
 		}
@@ -909,7 +925,7 @@ func restorePlanHook(
 		ctx, span := tracing.ChildSpan(baseCtx, stmt.StatementTag())
 		defer tracing.FinishSpan(span)
 
-		_, err := Restore(ctx, *state.ExecCfg.DB, restore.From, restore.Targets)
+		_, err := Restore(ctx, *state.ExecCfg.DB, restore.From, restore.Targets, restore.Options)
 		return nil, err
 	}
 	return fn, nil, nil

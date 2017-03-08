@@ -96,9 +96,19 @@ type KVOption struct {
 // KVOptions is a list of KVOptions.
 type KVOptions []KVOption
 
+// Get returns first value for requested key and if it was found or not.
+func (o KVOptions) Get(key string) (string, bool) {
+	for _, k := range o {
+		if key == k.Key {
+			return k.Value, true
+		}
+	}
+	return "", false
+}
+
 // Format implements the NodeFormatter interface.
-func (l KVOptions) Format(buf *bytes.Buffer, f FmtFlags) {
-	for i, n := range l {
+func (o KVOptions) Format(buf *bytes.Buffer, f FmtFlags) {
+	for i, n := range o {
 		if i > 0 {
 			buf.WriteString(", ")
 		}
