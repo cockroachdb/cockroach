@@ -10,6 +10,7 @@ package storageccl
 
 import (
 	"bytes"
+	"crypto/rand"
 	"io"
 	"io/ioutil"
 	"net/http"
@@ -31,7 +32,11 @@ var _, _ = S3AccessKeyParam, S3SecretParam
 var _, _ = ExportStorageFromURI, ExportStorageConfFromURI
 
 func testExportToTarget(t *testing.T, args roachpb.ExportStorage) {
-	testingContent := []byte("hello world")
+	const size = 1024 * 1024 * 8 // 8MiB
+	testingContent := make([]byte, size)
+	if _, err := rand.Read(testingContent); err != nil {
+		t.Fatal(err)
+	}
 	testingFilename := "testing-123"
 	ctx := context.TODO()
 	// Setup a sink for the given args.
@@ -52,7 +57,7 @@ func testExportToTarget(t *testing.T, args roachpb.ExportStorage) {
 	defer w.Cleanup()
 
 	// Write something to the local file specified by our sink.
-	t.Logf("writing %q to %s", string(testingContent), w.LocalFile())
+	t.Logf("writing %d bytes to %s", len(testingContent), w.LocalFile())
 	tmp, err := os.Create(w.LocalFile())
 	if err != nil {
 		t.Fatal(err)
@@ -67,7 +72,7 @@ func testExportToTarget(t *testing.T, args roachpb.ExportStorage) {
 		t.Fatal(err)
 	}
 
-	t.Logf("verifying content of %s is %q", testingFilename, string(testingContent))
+	t.Logf("verifying content of %s", testingFilename)
 	// Attempt to read (or fetch) the result.
 	res, err := s.ReadFile(ctx, testingFilename)
 	if err != nil {
@@ -80,7 +85,7 @@ func testExportToTarget(t *testing.T, args roachpb.ExportStorage) {
 	}
 	// Verify the result contains what we wrote.
 	if !bytes.Equal(content, testingContent) {
-		t.Fatalf("Wrong content. Expected %v, got %v", testingContent, content)
+		t.Fatalf("wrong content")
 	}
 	if err := s.Delete(ctx, testingFilename); err != nil {
 		t.Fatal(err)
@@ -186,7 +191,6 @@ func TestPutGoogleCloud(t *testing.T) {
 	})
 }
 
-// TODO(mjibson,dt): test with >4MB to exercise chunk uploads.
 func TestPutAzure(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
