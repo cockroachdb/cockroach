@@ -223,3 +223,9 @@ EXPLAIN SELECT b, c, d FROM abcd@{FORCE_INDEX=primary,NO_INDEX_JOIN} WHERE c = 1
 
 query error index \"cd\" is not covering and NO_INDEX_JOIN was specified
 EXPLAIN SELECT b, c, d FROM abcd@{FORCE_INDEX=cd,NO_INDEX_JOIN} WHERE c = 10
+
+query error query plan requested full scan of abcd@b with NO_SCAN specified
+SELECT * FROM abcd@{FORCE_INDEX=b,NO_SCAN} WHERE a >= 20 AND a <= 30
+
+statement ok
+SELECT b, c, d FROM abcd@{NO_SCAN} WHERE c = 10
