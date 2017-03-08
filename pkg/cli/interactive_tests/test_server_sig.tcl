@@ -7,7 +7,7 @@ send "PS1='\\h:''/# '\r"
 eexpect ":/# "
 
 # Check that the server shuts down upon receiving SIGTERM.
-send "$argv start & echo $! >server_pid; fg\r"
+send "$argv start --pid-file=server_pid\r"
 eexpect "initialized"
 
 system "kill `cat server_pid`"
@@ -21,7 +21,7 @@ eexpect "0\r\n"
 eexpect ":/# "
 
 # Check that the server shuts down upon receiving Ctrl+C.
-send "$argv start & echo $! >server_pid; fg\r"
+send "$argv start --pid-file=server_pid\r"
 eexpect "restarted"
 
 interrupt
@@ -35,7 +35,7 @@ eexpect "1\r\n"
 eexpect ":/# "
 
 # Check that the server shuts down fast upon receiving Ctrl+C twice.
-send "$argv start & echo $! >server_pid; fg\r"
+send "$argv start --pid-file=server_pid\r"
 eexpect "restarted"
 interrupt
 eexpect "initiating graceful shutdown"
