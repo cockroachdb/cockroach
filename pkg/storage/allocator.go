@@ -289,12 +289,9 @@ func (a *Allocator) AllocateTarget(
 // set. It first attempts to randomly select a target from the set of stores
 // that have greater than the average number of replicas. Failing that, it
 // falls back to selecting a random target from any of the existing
-// replicas. It also will exclude any replica that lives on leaseStoreID.
+// replicas.
 func (a Allocator) RemoveTarget(
-	ctx context.Context,
-	constraints config.Constraints,
-	existing []roachpb.ReplicaDescriptor,
-	leaseStoreID roachpb.StoreID,
+	ctx context.Context, constraints config.Constraints, existing []roachpb.ReplicaDescriptor,
 ) (roachpb.ReplicaDescriptor, error) {
 	if len(existing) == 0 {
 		return roachpb.ReplicaDescriptor{}, errors.Errorf("must supply at least one replica to allocator.RemoveTarget()")
@@ -304,9 +301,6 @@ func (a Allocator) RemoveTarget(
 	descriptors := make([]roachpb.StoreDescriptor, 0, len(existing))
 	for _, exist := range existing {
 		if desc, ok := a.storePool.getStoreDescriptor(exist.StoreID); ok {
-			if exist.StoreID == leaseStoreID {
-				continue
-			}
 			descriptors = append(descriptors, desc)
 		}
 	}
@@ -342,13 +336,12 @@ func (a Allocator) RemoveTarget(
 // cluster.
 //
 // The supplied parameters are the required attributes for the range, a list of
-// the existing replicas of the range, the store ID of the lease-holder
-// replica and the range ID of the replica being allocated.
+// the existing replicas of the range, and the range ID of the replica being
+// allocated.
 //
-// The existing replicas modulo the lease-holder replica and any store with
-// dead replicas are candidates for rebalancing. Note that rebalancing is
-// accomplished by first adding a new replica to the range, then removing the
-// most undesirable replica.
+// The existing replicas modulo any store with dead replicas are candidates for
+// rebalancing. Note that rebalancing is accomplished by first adding a new
+// replica to the range, then removing the most undesirable replica.
 //
 // Simply ignoring a rebalance opportunity in the event that the target chosen
 // by AllocateTarget() doesn't fit balancing criteria is perfectly fine, as
@@ -359,7 +352,6 @@ func (a Allocator) RebalanceTarget(
 	ctx context.Context,
 	constraints config.Constraints,
 	existing []roachpb.ReplicaDescriptor,
-	leaseStoreID roachpb.StoreID,
 	rangeID roachpb.RangeID,
 ) (*roachpb.StoreDescriptor, error) {
 	sl, _, _ := a.storePool.getStoreList(rangeID)
@@ -370,9 +362,6 @@ func (a Allocator) RebalanceTarget(
 	// missing functionality can be added.
 	var shouldRebalance bool
 	for _, repl := range existing {
-		if leaseStoreID == repl.StoreID {
-			continue
-		}
 		storeDesc, ok := a.storePool.getStoreDescriptor(repl.StoreID)
 		if ok && a.shouldRebalance(ctx, storeDesc, sl) {
 			shouldRebalance = true
