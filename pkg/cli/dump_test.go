@@ -552,4 +552,10 @@ INSERT INTO t (i, j) VALUES
 	if dumpAsOf != want1 {
 		t.Fatalf("expected: %s\ngot: %s", want1, dumpAsOf)
 	}
+
+	if out, err := c.RunWithCaptureArgs([]string{"dump", "d", "t", "--as-of", "2000-01-01 00:00:00"}); err != nil {
+		t.Fatal(err)
+	} else if !strings.Contains(string(out), "table d.t does not exist") {
+		t.Fatalf("unexpected output: %", out)
+	}
 }

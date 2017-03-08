@@ -282,6 +282,9 @@ func getMetadataForTable(conn *sqlConn, dbName, tableName string, ts string) (ta
 			AND DATABASE_NAME = $2
 		`, ts), []driver.Value{tableName, dbName})
 	if err != nil {
+		if err == io.EOF {
+			return tableMetadata{}, errors.Errorf("table %s.%s does not exist", dbName, tableName)
+		}
 		return tableMetadata{}, err
 	}
 	create := vals[0].(string)
