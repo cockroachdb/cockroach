@@ -17,6 +17,7 @@
 package storage
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
@@ -261,7 +262,7 @@ func TestCommandQueueCoveringOptimization(t *testing.T) {
 	{
 		// Test adding a covering entry and then not expanding it.
 		wk := cq.add(false, []roachpb.Span{a, b})
-		if n := cq.tree.Len(); n != 1 {
+		if n := cq.treeSize(); n != 1 {
 			t.Fatalf("expected a single covering span, but got %d", n)
 		}
 		waitCmdDone(cq.getWait(false, []roachpb.Span{c}))
@@ -293,7 +294,7 @@ func TestCommandQueueWithoutCoveringOptimization(t *testing.T) {
 		if exp, act := 2, len(cmd.children); exp != act {
 			t.Errorf("expected %d children in command, got %d: %+v", exp, act, cmd)
 		}
-		if exp, act := 2, cq.tree.Len(); act != exp {
+		if exp, act := 2, cq.treeSize(); act != exp {
 			t.Errorf("expected %d spans in tree, got %d", exp, act)
 		}
 		cq.remove(cmd)
@@ -307,7 +308,7 @@ func TestCommandQueueWithoutCoveringOptimization(t *testing.T) {
 		if len(cmd.children) != 0 {
 			t.Errorf("expected no children in command %+v", cmd)
 		}
-		if act, exp := cq.tree.Len(), 1; act != exp {
+		if act, exp := cq.treeSize(), 1; act != exp {
 			t.Errorf("expected %d spans in tree, got %d", exp, act)
 		}
 		cq.remove(cmd)
@@ -354,4 +355,28 @@ func TestCommandQueueIssue6495(t *testing.T) {
 
 	cq.remove(cmd1998)
 	cq.remove(cmd1999)
+}
+
+func BenchmarkCommandQueueGetWait(b *testing.B) {
+	// Test read-only getWait performance for various number of command queue
+	// entries. See #13627 where a previous implementation of
+	// CommandQueue.getOverlaps had O(n) performance in this setup. Since reads
+	// do not wait on other reads, expected performance is O(1).
+	for _, size := range []int{1, 4, 16, 64, 128, 256} {
+		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
+			cq := NewCommandQueue(true)
+			spans := []roachpb.Span{{
+				Key:    roachpb.Key("aaaaaaaaaa"),
+				EndKey: roachpb.Key("aaaaaaaaab"),
+			}}
+			for i := 0; i < size; i++ {
+				cq.add(true, spans)
+			}
+
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				_ = cq.getWait(true, spans)
+			}
+		})
+	}
 }

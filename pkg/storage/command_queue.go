@@ -52,7 +52,8 @@ import (
 //
 // CommandQueue is not thread safe.
 type CommandQueue struct {
-	tree      interval.Tree
+	reads     interval.Tree
+	writes    interval.Tree
 	idAlloc   int64
 	wRg, rwRg interval.RangeGroup // avoids allocating in GetWait
 	oHeap     overlapHeap         // avoids allocating in GetWait
@@ -136,7 +137,8 @@ func (c *cmd) String() string {
 // typically contain many spans, but are spatially disjoint.
 func NewCommandQueue(coveringOptimization bool) *CommandQueue {
 	cq := &CommandQueue{
-		tree:                 interval.Tree{Overlapper: interval.Range.OverlapExclusive},
+		reads:                interval.Tree{Overlapper: interval.Range.OverlapExclusive},
+		writes:               interval.Tree{Overlapper: interval.Range.OverlapExclusive},
 		wRg:                  interval.NewRangeTree(),
 		rwRg:                 interval.NewRangeTree(),
 		coveringOptimization: coveringOptimization,
@@ -147,10 +149,12 @@ func NewCommandQueue(coveringOptimization bool) *CommandQueue {
 // String dumps the contents of the command queue for testing.
 func (cq *CommandQueue) String() string {
 	var buf bytes.Buffer
-	cq.tree.Do(func(i interval.Interface) bool {
+	f := func(i interval.Interface) bool {
 		fmt.Fprintf(&buf, "  %s\n", i)
 		return false
-	})
+	}
+	cq.reads.Do(f)
+	cq.writes.Do(f)
 	return buf.String()
 }
 
@@ -175,14 +179,16 @@ func (cq *CommandQueue) expand(c *cmd, isInserted bool) bool {
 		return false
 	}
 	c.expanded = true
+
+	tree := cq.tree(c)
 	if isInserted {
-		if err := cq.tree.Delete(c, false /* !fast */); err != nil {
+		if err := tree.Delete(c, false /* !fast */); err != nil {
 			panic(err)
 		}
 	}
 	for i := range c.children {
 		child := &c.children[i]
-		if err := cq.tree.Insert(child, false /* !fast */); err != nil {
+		if err := tree.Insert(child, false /* !fast */); err != nil {
 			panic(err)
 		}
 	}
@@ -208,12 +214,7 @@ func (cq *CommandQueue) getWait(readOnly bool, spans []roachpb.Span) (chans []<-
 			Start: interval.Comparable(start),
 			End:   interval.Comparable(end),
 		}
-		overlaps := cq.getOverlaps(newCmdRange.Start, newCmdRange.End)
-		if readOnly {
-			// If both commands are read-only, there are no dependencies between them,
-			// so these can be filtered out of the overlapping commands.
-			overlaps = filterReadWrite(overlaps)
-		}
+		overlaps := cq.getOverlaps(readOnly, newCmdRange.Start, newCmdRange.End)
 
 		// Check to see if any of the overlapping entries are "covering"
 		// entries. If we encounter a covering entry, we remove it from the
@@ -366,12 +367,15 @@ func (cq *CommandQueue) getWait(readOnly bool, spans []roachpb.Span) (chans []<-
 
 // getOverlaps returns a slice of values which overlap the specified
 // interval. The slice is only valid until the next call to GetOverlaps.
-func (cq *CommandQueue) getOverlaps(start, end []byte) []*cmd {
+func (cq *CommandQueue) getOverlaps(readOnly bool, start, end []byte) []*cmd {
 	rng := interval.Range{
 		Start: interval.Comparable(start),
 		End:   interval.Comparable(end),
 	}
-	cq.tree.DoMatching(cq.doOverlaps, rng)
+	if !readOnly {
+		cq.reads.DoMatching(cq.doOverlaps, rng)
+	}
+	cq.writes.DoMatching(cq.doOverlaps, rng)
 	overlaps := cq.overlaps
 	cq.overlaps = cq.overlaps[:0]
 	return overlaps
@@ -381,21 +385,6 @@ func (cq *CommandQueue) doOverlaps(i interval.Interface) bool {
 	c := i.(*cmd)
 	cq.overlaps = append(cq.overlaps, c)
 	return false
-}
-
-// filterReadWrite filters out the read-only commands from the provided slice.
-func filterReadWrite(cmds []*cmd) []*cmd {
-	rwIdx := len(cmds)
-	for i := 0; i < rwIdx; {
-		c := cmds[i]
-		if !c.readOnly {
-			i++
-		} else {
-			cmds[i], cmds[rwIdx-1] = cmds[rwIdx-1], cmds[i]
-			rwIdx--
-		}
-	}
-	return cmds[:rwIdx]
 }
 
 // overlapHeap is a max-heap of cache.Overlaps, sorting the elements
@@ -509,7 +498,8 @@ func (cq *CommandQueue) add(readOnly bool, spans []roachpb.Span) *cmd {
 	}
 
 	if cq.coveringOptimization || len(spans) == 1 {
-		if err := cq.tree.Insert(cmd, false /* !fast */); err != nil {
+		tree := cq.tree(cmd)
+		if err := tree.Insert(cmd, false /* !fast */); err != nil {
 			panic(err)
 		}
 	} else {
@@ -535,12 +525,13 @@ func (cq *CommandQueue) remove(cmd *cmd) {
 		cq.localMetrics.writeCommands -= int64(cmd.cmdCount())
 	}
 
+	tree := cq.tree(cmd)
 	if !cmd.expanded {
-		n := cq.tree.Len()
-		if err := cq.tree.Delete(cmd, false /* !fast */); err != nil {
+		n := tree.Len()
+		if err := tree.Delete(cmd, false /* !fast */); err != nil {
 			panic(err)
 		}
-		if d := n - cq.tree.Len(); d != 1 {
+		if d := n - tree.Len(); d != 1 {
 			panic(fmt.Sprintf("%d: expected 1 deletion, found %d", cmd.id, d))
 		}
 		if ch := cmd.pending; ch != nil {
@@ -549,11 +540,11 @@ func (cq *CommandQueue) remove(cmd *cmd) {
 	} else {
 		for i := range cmd.children {
 			child := &cmd.children[i]
-			n := cq.tree.Len()
-			if err := cq.tree.Delete(child, false /* !fast */); err != nil {
+			n := tree.Len()
+			if err := tree.Delete(child, false /* !fast */); err != nil {
 				panic(err)
 			}
-			if d := n - cq.tree.Len(); d != 1 {
+			if d := n - tree.Len(); d != 1 {
 				panic(fmt.Sprintf("%d: expected 1 deletion, found %d", child.id, d))
 			}
 			if ch := child.pending; ch != nil {
@@ -563,11 +554,18 @@ func (cq *CommandQueue) remove(cmd *cmd) {
 	}
 }
 
+func (cq *CommandQueue) tree(c *cmd) *interval.Tree {
+	if c.readOnly {
+		return &cq.reads
+	}
+	return &cq.writes
+}
+
 func (cq *CommandQueue) nextID() int64 {
 	cq.idAlloc++
 	return cq.idAlloc
 }
 
 func (cq *CommandQueue) treeSize() int {
-	return cq.tree.Len()
+	return cq.reads.Len() + cq.writes.Len()
 }
