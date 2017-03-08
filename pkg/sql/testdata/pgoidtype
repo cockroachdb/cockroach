@@ -33,6 +33,18 @@ SELECT 'pg_constraint '::REGCLASS, '"pg_constraint"'::REGCLASS::OID
 ----
 pg_constraint  402060402
 
+query O
+SELECT 402060402::REGCLASS
+----
+pg_constraint
+
+query OOIOT
+SELECT oid, oid::regclass, oid::regclass::int, oid::regclass::int::regclass, oid::regclass::text
+FROM pg_class
+WHERE relname = 'pg_constraint'
+----
+402060402  pg_constraint  402060402  pg_constraint  pg_constraint
+
 query OOO
 SELECT 'upper'::REGPROC, 'upper'::REGPROCEDURE, 'upper'::REGPROC::OID
 ----
