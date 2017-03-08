@@ -49,8 +49,9 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 		workFn: eventlogUniqueIDDefault,
 	},
 	{
-		name:   "create system.jobs table to track progress of long-running jobs",
-		workFn: createJobsTable,
+		name:           "create system.jobs table",
+		workFn:         createJobsTable,
+		newDescriptors: 1,
 	},
 }
 
@@ -63,6 +64,10 @@ type migrationDescriptor struct {
 	// workFn must be idempotent so that we can safely re-run it if a node failed
 	// while running it.
 	workFn func(context.Context, runner) error
+	// newDescriptors counts the number of additional descriptors that would be
+	// added by this migration in a fresh cluster. This is needed to automate
+	// certain tests, which check the number of ranges present on server bootup.
+	newDescriptors int
 }
 
 type runner struct {
@@ -112,12 +117,34 @@ func NewManager(
 	}
 }
 
+// AdditionalInitialDescriptors returns the number of system descriptors that
+// have been added by migrations. This is needed for certain tests, which check
+// the number of ranges at node startup.
+//
+// NOTE: This value may be out-of-date if another node is actively running
+// migrations, and so should only be used in test code where the migration
+// lifecycle is tightly controlled.
+func AdditionalInitialDescriptors(ctx context.Context, db db) (int, error) {
+	completedMigrations, err := getCompletedMigrations(ctx, db)
+	if err != nil {
+		return 0, err
+	}
+	n := 0
+	for _, migration := range backwardCompatibleMigrations {
+		key := migrationKey(migration)
+		if _, ok := completedMigrations[string(key)]; ok {
+			n += migration.newDescriptors
+		}
+	}
+	return n, nil
+}
+
 // EnsureMigrations should be run during node startup to ensure that all
 // required migrations have been run (and running all those that are definitely
 // safe to run).
 func (m *Manager) EnsureMigrations(ctx context.Context) error {
 	// First, check whether there are any migrations that need to be run.
-	completedMigrations, err := m.getCompletedMigrations(ctx)
+	completedMigrations, err := getCompletedMigrations(ctx, m.db)
 	if err != nil {
 		return err
 	}
@@ -185,7 +212,7 @@ func (m *Manager) EnsureMigrations(ctx context.Context) error {
 
 	// Re-get the list of migrations in case any of them were completed between
 	// our initial check and our grabbing of the lease.
-	completedMigrations, err = m.getCompletedMigrations(ctx)
+	completedMigrations, err = getCompletedMigrations(ctx, m.db)
 	if err != nil {
 		return err
 	}
@@ -220,11 +247,11 @@ func (m *Manager) EnsureMigrations(ctx context.Context) error {
 	return nil
 }
 
-func (m *Manager) getCompletedMigrations(ctx context.Context) (map[string]struct{}, error) {
+func getCompletedMigrations(ctx context.Context, db db) (map[string]struct{}, error) {
 	if log.V(1) {
 		log.Info(ctx, "trying to get the list of completed migrations")
 	}
-	keyvals, err := m.db.Scan(ctx, keys.MigrationPrefix, keys.MigrationKeyMax, 0 /* maxRows */)
+	keyvals, err := db.Scan(ctx, keys.MigrationPrefix, keys.MigrationKeyMax, 0 /* maxRows */)
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed to get list of completed migrations")
 	}

@@ -527,7 +527,7 @@ func TestStatusSummaries(t *testing.T) {
 	}
 
 	// Wait for full replication of initial ranges.
-	initialRanges := ExpectedInitialRangeCount()
+	initialRanges := ExpectedInitialRangeCount(kvDB)
 	testutils.SucceedsSoon(t, func() error {
 		for i := 1; i <= int(initialRanges); i++ {
 			if s.RaftStatus(roachpb.RangeID(i)) == nil {
