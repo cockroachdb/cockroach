@@ -23,10 +23,7 @@ import (
 
 	"golang.org/x/net/context"
 
-	"errors"
-
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -102,9 +99,7 @@ func (p *planner) groupBy(
 	var typedHaving parser.TypedExpr
 	if n.Having != nil {
 		if p.parser.WindowFuncInExpr(n.Having.Expr) {
-			return nil, pgerror.WithPGCode(
-				errors.New("window functions are not allowed in HAVING"),
-				pgerror.CodeWindowingError)
+			return nil, sqlbase.NewWindowingError("HAVING")
 		}
 		var err error
 		typedHaving, err = p.analyzeExpr(ctx, n.Having.Expr, s.sourceInfo, s.ivarHelper,
