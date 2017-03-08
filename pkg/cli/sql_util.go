@@ -309,7 +309,7 @@ func sqlRowsToStrings(rows *sqlRows, showMoreChars bool) ([]string, [][]string, 
 	switch tag {
 	case "":
 		tag = "OK"
-	case "DELETE", "INSERT", "UPDATE":
+	case "SELECT", "DELETE", "INSERT", "UPDATE":
 		if n, err := result.RowsAffected(); err == nil {
 			tag = fmt.Sprintf("%s %d", tag, n)
 		}
