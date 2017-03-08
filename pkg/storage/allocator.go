@@ -298,13 +298,11 @@ func (a Allocator) RemoveTarget(
 	}
 
 	// Retrieve store descriptors for the provided replicas from the StorePool.
-	descriptors := make([]roachpb.StoreDescriptor, 0, len(existing))
-	for _, exist := range existing {
-		if desc, ok := a.storePool.getStoreDescriptor(exist.StoreID); ok {
-			descriptors = append(descriptors, desc)
-		}
+	existingStoreIDs := make(roachpb.StoreIDSlice, len(existing))
+	for i, exist := range existing {
+		existingStoreIDs[i] = exist.StoreID
 	}
-	sl := makeStoreList(descriptors)
+	sl, _, _ := a.storePool.getStoreListFromIDs(existingStoreIDs, roachpb.RangeID(0))
 
 	candidates := removeCandidates(
 		sl,
@@ -356,23 +354,8 @@ func (a Allocator) RebalanceTarget(
 ) (*roachpb.StoreDescriptor, error) {
 	sl, _, _ := a.storePool.getStoreList(rangeID)
 
-	// TODO(bram): ShouldRebalance should be part of rebalanceCandidates
-	// and decision made afterward, not it's own function. It is
-	// performing the same operations as rebalanceCandidates and any
-	// missing functionality can be added.
-	var shouldRebalance bool
-	for _, repl := range existing {
-		storeDesc, ok := a.storePool.getStoreDescriptor(repl.StoreID)
-		if ok && a.shouldRebalance(ctx, storeDesc, sl) {
-			shouldRebalance = true
-			break
-		}
-	}
-	if !shouldRebalance {
-		return nil, nil
-	}
-
 	existingCandidates, candidates := rebalanceCandidates(
+		ctx,
 		sl,
 		constraints,
 		existing,
@@ -380,9 +363,9 @@ func (a Allocator) RebalanceTarget(
 		a.storePool.deterministic,
 	)
 
+	// No need to rebalance.
 	if len(existingCandidates) == 0 {
-		return nil, errors.Errorf(
-			"all existing replicas' stores are not present in the store pool: %v\n%s", existing, sl)
+		return nil, nil
 	}
 
 	// Find all candidates that are better than the worst existing replica.
@@ -718,53 +701,6 @@ func (a Allocator) shouldTransferLeaseWithoutStats(
 // the mean range/lease count that permits rebalances/lease-transfers away from
 // that store.
 var baseRebalanceThreshold = envutil.EnvOrDefaultFloat("COCKROACH_REBALANCE_THRESHOLD", 0.05)
-
-// shouldRebalance returns whether the specified store is a candidate for
-// having a replica removed from it given the candidate store list.
-func (a Allocator) shouldRebalance(
-	ctx context.Context, store roachpb.StoreDescriptor, sl StoreList,
-) bool {
-	// TODO(peter,bram,cuong): The FractionUsed check seems suspicious. When a
-	// node becomes fuller than maxFractionUsedThreshold we will always select it
-	// for rebalancing. This is currently utilized by tests.
-	maxCapacityUsed := store.Capacity.FractionUsed() >= maxFractionUsedThreshold
-
-	// Rebalance if we're above the rebalance target, which is
-	// mean*(1+baseRebalanceThreshold).
-	target := int32(math.Ceil(sl.candidateCount.mean * (1 + baseRebalanceThreshold)))
-	rangeCountAboveTarget := store.Capacity.RangeCount > target
-
-	// Rebalance if the candidate store has a range count above the mean, and
-	// there exists another store that is underfull: its range count is smaller
-	// than mean*(1-baseRebalanceThreshold).
-	var rebalanceToUnderfullStore bool
-	if float64(store.Capacity.RangeCount) > sl.candidateCount.mean {
-		underfullThreshold := int32(math.Floor(sl.candidateCount.mean * (1 - baseRebalanceThreshold)))
-		for _, desc := range sl.stores {
-			if desc.Capacity.RangeCount < underfullThreshold {
-				rebalanceToUnderfullStore = true
-				break
-			}
-		}
-	}
-
-	// Require that moving a replica from the given store makes its range count
-	// converge on the mean range count. This only affects clusters with a
-	// small number of ranges.
-	rebalanceConvergesOnMean := rebalanceFromConvergesOnMean(sl, store)
-
-	shouldRebalance :=
-		(maxCapacityUsed || rangeCountAboveTarget || rebalanceToUnderfullStore) && rebalanceConvergesOnMean
-	if log.V(2) {
-		log.Infof(ctx,
-			"%d: should-rebalance=%t: fraction-used=%.2f range-count=%d "+
-				"(mean=%.1f, target=%d, fraction-used=%t, above-target=%t, underfull=%t, converges=%t)",
-			store.StoreID, shouldRebalance, store.Capacity.FractionUsed(), store.Capacity.RangeCount,
-			sl.candidateCount.mean, target, maxCapacityUsed, rangeCountAboveTarget,
-			rebalanceToUnderfullStore, rebalanceConvergesOnMean)
-	}
-	return shouldRebalance
-}
 
 // computeQuorum computes the quorum value for the given number of nodes.
 func computeQuorum(nodes int) int {
