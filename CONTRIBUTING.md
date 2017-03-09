@@ -32,8 +32,9 @@ executable will be in your current directory and can be run as shown in the
   Apache License 2 (APL2) and enterprise functionality covered by the
   CockroachDB Community License (CCL). To build a pure open-source (APL2)
   version excluding enterprise functionality, use `make buildoss`. See this
-  [blog post](https://www.cockroachlabs.com/blog/how-were-building-a-business-
-  to-last/) for more details.
+  [blog post] for more details.
+
+  [blog post]: https://www.cockroachlabs.com/blog/how-were-building-a-business-to-last/
 
 - If you edit a `.proto` or `.ts` file, you will need to manually regenerate
   the associated `.pb.{go,cc,h}` or `.js` files using `go generate ./pkg/...`.
@@ -43,10 +44,11 @@ executable will be in your current directory and can be run as shown in the
   can run `build/builder.sh go generate ./pkg/...` from the repository root to
   get the intended result.
 
-- If you plan on working on the UI, check out [the ui readme](pkg/ui).
+- If you plan on working on the UI, check out [the UI README](pkg/ui).
 
-- To add or update a go dependency:
-  - See `build/README.md` for details on adding or updating dependencies.
+- To add or update a Go dependency:
+  - See [`build/README.md`](build/README.md) for details on adding or updating
+    dependencies.
   - Run `go generate ./pkg/...` to update generated files.
   - Create a PR with all the changes.
 
