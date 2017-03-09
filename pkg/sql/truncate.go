@@ -61,7 +61,7 @@ func (p *planner) Truncate(n *parser.Truncate) (planNode, error) {
 			return nil, errors.Errorf("cannot run TRUNCATE on view %q - views are not updateable", tn)
 		}
 
-		if err := p.checkPrivilege(tableDesc, privilege.DROP); err != nil {
+		if err := p.CheckPrivilege(tableDesc, privilege.DROP); err != nil {
 			return nil, err
 		}
 		toTruncate[tableDesc.ID] = tableDesc
@@ -85,7 +85,7 @@ func (p *planner) Truncate(n *parser.Truncate) (planNode, error) {
 				if n.DropBehavior != parser.DropCascade {
 					return nil, errors.Errorf("%q is referenced by foreign key from table %q", tableDesc.Name, other.Name)
 				}
-				if err := p.checkPrivilege(other, privilege.DROP); err != nil {
+				if err := p.CheckPrivilege(other, privilege.DROP); err != nil {
 					return nil, err
 				}
 				toTruncate[other.ID] = other
