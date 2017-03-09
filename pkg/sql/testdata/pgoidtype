@@ -88,10 +88,18 @@ SELECT 'system'::REGNAMESPACE, 'system'::REGNAMESPACE::OID
 ----
 system  2939540337
 
-query OO
-SELECT 'bool'::REGTYPE, 'bool'::REGTYPE::OID
+query OOO
+SELECT 'bool'::REGTYPE, 'pg_catalog.bool'::REGTYPE, 'bool'::REGTYPE::OID
 ----
-bool  16
+bool  bool  16
+
+query OO
+SELECT 'numeric(10,3)'::REGTYPE, 'pg_catalog.numeric(10, 3)'::REGTYPE
+----
+numeric  numeric
+
+query error type 'foo.' does not exist
+SELECT 'foo.'::REGTYPE
 
 query error relation 'blah' does not exist
 SELECT 'blah'::REGCLASS
