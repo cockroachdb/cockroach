@@ -1566,6 +1566,10 @@ type EvalPlanner interface {
 	// QueryRow executes a SQL query string where exactly 1 result row is
 	// expected and returns that row.
 	QueryRow(ctx context.Context, sql string, args ...interface{}) (Datums, error)
+
+	// QualifyWithDatabase resolves a possibly unqualified table name into a
+	// table name that is qualified by database.
+	QualifyWithDatabase(ctx context.Context, t *NormalizableTableName) (*TableName, error)
 }
 
 // contextHolder is a wrapper that returns a Context.
@@ -1838,7 +1842,9 @@ var regTypeInfos = map[*OidColType]regTypeInfo{
 // The return value is a fresh DOid of the input OidColType with name and OID
 // set to the result of the query. If there was not exactly one result to the
 // query, an error will be returned.
-func queryOid(ctx *EvalContext, typ *OidColType, d Datum) (Datum, error) {
+func queryOidWithJoin(
+	ctx *EvalContext, typ *OidColType, d Datum, joinClause string, additionalWhere string,
+) (Datum, error) {
 	ret := &DOid{kind: typ}
 	info := regTypeInfos[typ]
 	var queryCol string
@@ -1853,8 +1859,8 @@ func queryOid(ctx *EvalContext, typ *OidColType, d Datum) (Datum, error) {
 	results, err := ctx.Planner.QueryRow(
 		ctx.Ctx(),
 		fmt.Sprintf(
-			"SELECT oid, %s FROM pg_catalog.%s WHERE %s = $1",
-			info.nameCol, info.tableName, queryCol),
+			"SELECT %s.oid, %s FROM pg_catalog.%s %s WHERE %s = $1 %s",
+			info.tableName, info.nameCol, info.tableName, joinClause, queryCol, additionalWhere),
 		d)
 	if err != nil {
 		if _, ok := err.(*MultipleResultsError); ok {
@@ -1868,6 +1874,10 @@ func queryOid(ctx *EvalContext, typ *OidColType, d Datum) (Datum, error) {
 	ret.DInt = results[0].(*DOid).DInt
 	ret.name = AsStringWithFlags(results[1], FmtBareStrings)
 	return ret, nil
+}
+
+func queryOid(ctx *EvalContext, typ *OidColType, d Datum) (Datum, error) {
+	return queryOidWithJoin(ctx, typ, d, "", "")
 }
 
 // Eval implements the TypedExpr interface.
@@ -2203,6 +2213,24 @@ func (expr *CastExpr) Eval(ctx *EvalContext) (Datum, error) {
 				// Trim type modifiers, e.g. `numeric(10,3)` becomes `numeric`.
 				s = pgSignatureRegexp.ReplaceAllString(s, "$1")
 				return queryOid(ctx, typ, NewDString(s))
+			case oidColTypeRegClass:
+				// Resolving a table name requires looking at the search path to
+				// determine the database that owns it.
+				t := &NormalizableTableName{
+					TableNameReference: UnresolvedName{
+						Name(s),
+					}}
+				tn, err := ctx.Planner.QualifyWithDatabase(ctx.Ctx(), t)
+				if err != nil {
+					return nil, err
+				}
+				// Determining the table's OID requires joining against the databases
+				// table because we only have the database name, not its OID, which is
+				// what is stored in pg_class. This extra join means we can't use
+				// queryOid like everyone else.
+				return queryOidWithJoin(ctx, typ, NewDString(s),
+					"JOIN pg_catalog.pg_namespace ON relnamespace = pg_namespace.oid",
+					fmt.Sprintf("AND nspname = '%s'", tn.Database()))
 			default:
 				return queryOid(ctx, typ, NewDString(s))
 			}
