@@ -174,3 +174,17 @@ SELECT a, b from issue_6710
 ----
 1 test1
 2 test2
+
+statement ok
+CREATE TABLE issue_13962 (a INT PRIMARY KEY, b INT, c INT)
+
+statement ok
+INSERT INTO issue_13962 VALUES (1, 1, 1)
+
+statement ok
+INSERT INTO issue_13962 VALUES (1, 2, 2) ON CONFLICT (a) DO UPDATE SET b = excluded.b
+
+query III
+SELECT * FROM issue_13962
+----
+1 2 1
