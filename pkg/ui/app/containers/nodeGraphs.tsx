@@ -160,7 +160,7 @@ class NodeGraphs extends React.Component<NodeGraphsProps, {}> {
             </Axis>
           </LineGraph>
           <LineGraph title="Capacity" sources={storeSources} tooltip={`Summary of total and available capacity ${specifier}.`}>
-            <Axis>
+            <Axis units={AxisUnits.Bytes}>
               <Metric name="cr.store.capacity" title="Capacity" />
               {
                 // TODO(mrtracy): We really want to display a used capacity
