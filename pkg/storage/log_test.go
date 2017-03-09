@@ -55,7 +55,11 @@ func TestLogSplits(t *testing.T) {
 	}
 
 	// Count the number of split events.
-	initialSplits := server.ExpectedInitialRangeCount() - 1
+	initialRanges, err := server.ExpectedInitialRangeCount(kvDB)
+	if err != nil {
+		t.Fatal(err)
+	}
+	initialSplits := initialRanges - 1
 	if a, e := countSplits(), initialSplits; a != e {
 		t.Fatalf("expected %d initial splits, found %d", e, a)
 	}
@@ -66,7 +70,7 @@ func TestLogSplits(t *testing.T) {
 	}
 
 	// verify that every the count has increased by one.
-	if a, e := countSplits(), initialSplits+1; a != e {
+	if a, e := countSplits(), initialRanges; a != e {
 		t.Fatalf("expected %d splits, found %d", e, a)
 	}
 
