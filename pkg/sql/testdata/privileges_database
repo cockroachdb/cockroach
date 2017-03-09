@@ -33,7 +33,7 @@ REVOKE ALL ON DATABASE a FROM bar
 # Switch to a user without any privileges.
 user testuser
 
-statement error only root is allowed to create databases
+statement error only root is allowed to CREATE DATABASE
 CREATE DATABASE b
 
 statement error user testuser does not have DROP privilege on database a
@@ -68,7 +68,7 @@ GRANT SELECT ON DATABASE a TO testuser
 
 user testuser
 
-statement error only root is allowed to create databases
+statement error only root is allowed to CREATE DATABASE
 CREATE DATABASE b
 
 statement error user testuser does not have DROP privilege on database a
@@ -103,7 +103,7 @@ GRANT ALL ON DATABASE a TO testuser
 
 user testuser
 
-statement error only root is allowed to create databases
+statement error only root is allowed to CREATE DATABASE
 CREATE DATABASE b
 
 statement ok
