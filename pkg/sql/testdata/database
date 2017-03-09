@@ -141,7 +141,7 @@ SELECT * FROM b.a
 
 user testuser
 
-statement error only root is allowed to create databases
+statement error only root is allowed to CREATE DATABASE
 CREATE DATABASE privs
 
 user root

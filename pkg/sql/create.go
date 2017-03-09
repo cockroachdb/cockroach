@@ -79,8 +79,8 @@ func (p *planner) CreateDatabase(n *parser.CreateDatabase) (planNode, error) {
 		}
 	}
 
-	if p.session.User != security.RootUser {
-		return nil, fmt.Errorf("only %s is allowed to create databases", security.RootUser)
+	if err := p.RequireSuperUser("CREATE DATABASE"); err != nil {
+		return nil, err
 	}
 
 	return &createDatabaseNode{p: p, n: n}, nil
