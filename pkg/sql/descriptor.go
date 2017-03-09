@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
-	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/pkg/errors"
@@ -39,12 +38,6 @@ var (
 // DescriptorAccessor provides helper methods for using descriptors
 // to SQL objects.
 type DescriptorAccessor interface {
-	// checkPrivilege verifies that p.session.User has `privilege` on `descriptor`.
-	checkPrivilege(descriptor sqlbase.DescriptorProto, privilege privilege.Kind) error
-
-	// anyPrivilege verifies that p.session.User has any privilege on `descriptor`.
-	anyPrivilege(descriptor sqlbase.DescriptorProto) error
-
 	// createDescriptor takes a Table or Database descriptor and creates it if
 	// needed, incrementing the descriptor counter. Returns true if the descriptor
 	// is actually created, false if it already existed, or an error if one was encountered.
@@ -68,30 +61,6 @@ type DescriptorAccessor interface {
 }
 
 var _ DescriptorAccessor = &planner{}
-
-// checkPrivilege implements the DescriptorAccessor interface.
-func (p *planner) checkPrivilege(
-	descriptor sqlbase.DescriptorProto, privilege privilege.Kind,
-) error {
-	if descriptor.GetPrivileges().CheckPrivilege(p.session.User, privilege) {
-		return nil
-	}
-	return fmt.Errorf("user %s does not have %s privilege on %s %s",
-		p.session.User, privilege, descriptor.TypeName(), descriptor.GetName())
-}
-
-// anyPrivilege implements the DescriptorAccessor interface.
-func (p *planner) anyPrivilege(descriptor sqlbase.DescriptorProto) error {
-	if userCanSeeDescriptor(descriptor, p.session.User) {
-		return nil
-	}
-	return fmt.Errorf("user %s has no privileges on %s %s",
-		p.session.User, descriptor.TypeName(), descriptor.GetName())
-}
-
-func userCanSeeDescriptor(descriptor sqlbase.DescriptorProto, user string) bool {
-	return descriptor.GetPrivileges().AnyPrivilege(user) || isVirtualDescriptor(descriptor)
-}
 
 type descriptorAlreadyExistsErr struct {
 	desc sqlbase.DescriptorProto

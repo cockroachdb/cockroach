@@ -63,7 +63,7 @@ func (p *planner) Insert(
 	}
 	if n.OnConflict != nil {
 		if !n.OnConflict.DoNothing {
-			if err := p.checkPrivilege(en.tableDesc, privilege.UPDATE); err != nil {
+			if err := p.CheckPrivilege(en.tableDesc, privilege.UPDATE); err != nil {
 				return nil, err
 			}
 		}

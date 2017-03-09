@@ -251,7 +251,7 @@ func (n *scanNode) initTable(
 	n.desc = *desc
 
 	if !p.skipSelectPrivilegeChecks {
-		if err := p.checkPrivilege(&n.desc, privilege.SELECT); err != nil {
+		if err := p.CheckPrivilege(&n.desc, privilege.SELECT); err != nil {
 			return err
 		}
 	}

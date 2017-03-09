@@ -66,7 +66,7 @@ func (p *planner) DropDatabase(n *parser.DropDatabase) (planNode, error) {
 		return nil, sqlbase.NewUndefinedDatabaseError(string(n.Name))
 	}
 
-	if err := p.checkPrivilege(dbDesc, privilege.DROP); err != nil {
+	if err := p.CheckPrivilege(dbDesc, privilege.DROP); err != nil {
 		return nil, err
 	}
 
@@ -243,7 +243,7 @@ func (p *planner) DropIndex(n *parser.DropIndex) (planNode, error) {
 			return nil, err
 		}
 
-		if err := p.checkPrivilege(tableDesc, privilege.CREATE); err != nil {
+		if err := p.CheckPrivilege(tableDesc, privilege.CREATE); err != nil {
 			return nil, err
 		}
 
@@ -594,7 +594,7 @@ func (p *planner) canRemoveFK(
 	if behavior != parser.DropCascade {
 		return nil, fmt.Errorf("%q is referenced by foreign key from table %q", from, table.Name)
 	}
-	if err := p.checkPrivilege(table, privilege.CREATE); err != nil {
+	if err := p.CheckPrivilege(table, privilege.CREATE); err != nil {
 		return nil, err
 	}
 	return table, nil
@@ -617,7 +617,7 @@ func (p *planner) canRemoveInterleave(
 		return util.UnimplementedWithIssueErrorf(
 			8036, "%q is interleaved by table %q", from, table.Name)
 	}
-	if err := p.checkPrivilege(table, privilege.CREATE); err != nil {
+	if err := p.CheckPrivilege(table, privilege.CREATE); err != nil {
 		return err
 	}
 	return nil
@@ -642,7 +642,7 @@ func (p *planner) canRemoveDependentViewGeneric(
 	if err != nil {
 		return err
 	}
-	if err := p.checkPrivilege(viewDesc, privilege.DROP); err != nil {
+	if err := p.CheckPrivilege(viewDesc, privilege.DROP); err != nil {
 		return err
 	}
 	// If this view is depended on by other views, we have to check them as well.
@@ -762,7 +762,7 @@ func (p *planner) dropTableOrViewPrepare(name *parser.TableName) (*sqlbase.Table
 		return nil, err
 	}
 
-	if err := p.checkPrivilege(tableDesc, privilege.DROP); err != nil {
+	if err := p.CheckPrivilege(tableDesc, privilege.DROP); err != nil {
 		return nil, err
 	}
 	return tableDesc, nil
