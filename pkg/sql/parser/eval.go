@@ -1568,6 +1568,10 @@ type EvalPlanner interface {
 	// QueryRow executes a SQL query string where exactly 1 result row is
 	// expected and returns that row.
 	QueryRow(ctx context.Context, sql string, args ...interface{}) (Datums, error)
+
+	// QualifyWithDatabase resolves a possibly unqualified table name into a
+	// table name that is qualified by database.
+	QualifyWithDatabase(ctx context.Context, t *NormalizableTableName) (*TableName, error)
 }
 
 // contextHolder is a wrapper that returns a Context.
@@ -2205,6 +2209,44 @@ func (expr *CastExpr) Eval(ctx *EvalContext) (Datum, error) {
 				// Trim type modifiers, e.g. `numeric(10,3)` becomes `numeric`.
 				s = pgSignatureRegexp.ReplaceAllString(s, "$1")
 				return queryOid(ctx, typ, NewDString(s))
+			case oidColTypeRegClass:
+				// Resolving a table name requires looking at the search path to
+				// determine the database that owns it.
+				t := &NormalizableTableName{
+					TableNameReference: UnresolvedName{
+						Name(s),
+					}}
+				tn, err := ctx.Planner.QualifyWithDatabase(ctx.Ctx(), t)
+				if err != nil {
+					return nil, err
+				}
+				info := regTypeInfos[typ]
+				// Determining the table's OID requires joining against the databases
+				// table because we only have the database name, not its OID, which is
+				// what is stored in pg_class. This extra join means we can't use
+				// queryOid like everyone else.
+				results, err := ctx.Planner.QueryRow(
+					ctx.Ctx(),
+					`SELECT pg_class.oid FROM pg_catalog.pg_class
+	JOIN pg_catalog.pg_namespace
+	ON relnamespace = pg_namespace.oid
+	WHERE relname = $1 AND nspname = $2`,
+					tn.TableName, tn.DatabaseName)
+				if err != nil {
+					if _, ok := err.(*MultipleResultsError); ok {
+						return nil, errors.Errorf("more than one %s named %s.%s",
+							info.objName, tn.DatabaseName, tn.TableName)
+					}
+					return nil, err
+				}
+				if results.Len() == 0 {
+					return nil, errors.Errorf("%s %s does not exist", info.objName, d)
+				}
+				return &DOid{
+					kind: typ,
+					DInt: results[0].(*DOid).DInt,
+					name: AsStringWithFlags(tn.TableName, FmtBareStrings),
+				}, nil
 			default:
 				return queryOid(ctx, typ, NewDString(s))
 			}
