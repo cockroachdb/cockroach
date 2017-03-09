@@ -71,8 +71,8 @@ func (ds *ServerImpl) Start() {
 	ds.flowScheduler.Start()
 }
 
-// Note: the returned context contains a span that must be finished through
-// Flow.Cleanup.
+// Note: unless an error is returned, the returned context contains a span that
+// must be finished through Flow.Cleanup.
 func (ds *ServerImpl) setupFlow(
 	ctx context.Context, req *SetupFlowRequest, syncFlowConsumer RowReceiver,
 ) (context.Context, *Flow, error) {
@@ -112,7 +112,8 @@ func (ds *ServerImpl) setupFlow(
 	if err := f.setupFlow(ctx, &req.Flow); err != nil {
 		log.Error(ctx, err)
 		sp.Finish()
-		return nil, nil, err
+		ctx = opentracing.ContextWithSpan(ctx, nil)
+		return ctx, nil, err
 	}
 	return ctx, f, nil
 }
@@ -132,11 +133,9 @@ func (ds *ServerImpl) SetupSyncFlow(
 func (ds *ServerImpl) RunSyncFlow(req *SetupFlowRequest, stream DistSQL_RunSyncFlowServer) error {
 	// Set up the outgoing mailbox for the stream.
 	mbox := newOutboxSyncFlowStream(stream)
-	ctx := ds.AnnotateCtx(stream.Context())
 
-	ctx, f, err := ds.SetupSyncFlow(ctx, req, mbox)
+	ctx, f, err := ds.SetupSyncFlow(stream.Context(), req, mbox)
 	if err != nil {
-		log.Error(ctx, err)
 		return err
 	}
 	mbox.setFlowCtx(&f.FlowCtx)
