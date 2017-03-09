@@ -15,6 +15,7 @@ import (
 	"hash/crc32"
 	"io/ioutil"
 	"math/rand"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -763,4 +764,49 @@ func TestRestoreInto(t *testing.T) {
 
 	expected := sqlDB.QueryStr(`SELECT * FROM bench.bank`)
 	sqlDB.CheckQueryResults(`SELECT * FROM bench2.bank`, expected)
+}
+
+func TestBackupRestorePermissions(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	if !storage.ProposerEvaluatedKVEnabled() {
+		t.Skip("command WriteBatch is not allowed without proposer evaluated KV")
+	}
+
+	const numAccounts = 1
+	_, dir, tc, sqlDB, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts)
+	defer cleanupFn()
+
+	sqlDB.Exec(`CREATE USER testuser`)
+	pgURL, cleanupFunc := sqlutils.PGUrl(
+		t, tc.Server(0).ServingAddr(), "TestBackupRestorePermissions-testuser", url.User("testuser"),
+	)
+	defer cleanupFunc()
+	testuser, err := gosql.Open("postgres", pgURL.String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer testuser.Close()
+
+	backupStmt := fmt.Sprintf(`BACKUP DATABASE bench TO '%s'`, dir)
+
+	t.Run("root-only", func(t *testing.T) {
+		_, err = testuser.Exec(backupStmt)
+		if !testutils.IsError(err, "only root is allowed to BACKUP") {
+			t.Fatal(err)
+		}
+		_, err = testuser.Exec(`RESTORE blah FROM 'blah'`)
+		if !testutils.IsError(err, "only root is allowed to RESTORE") {
+			t.Fatal(err)
+		}
+	})
+
+	t.Run("privs-required", func(t *testing.T) {
+		sqlDB.Exec(backupStmt)
+		_, err = sqlDB.DB.Exec(
+			fmt.Sprintf(`RESTORE bench.bank FROM '%s' WITH OPTIONS ('into_db'='system')`, dir),
+		)
+		if !testutils.IsError(err, "user root does not have CREATE privilege") {
+			t.Fatal(err)
+		}
+	})
 }
