@@ -36,9 +36,10 @@ type planHookFn func(
 
 var planHooks []planHookFn
 
-// PlanHookState exposes the internal planner state needed by plan hooks. This
-// state is passed in this struct, rather than directly to hook functions, to
-// avoid rewiring every hook function when more state needs to be exported.
+// PlanHookState exposes the subset of planner needed by plan hooks.
+// We pass this as one interface, rather than individually passing each field or
+// interface as we find we need them, to avoid churn in the planHookFn sig and
+// the hooks that implement it.
 type PlanHookState interface {
 	ExecCfg() *ExecutorConfig
 	AuthorizationAccessor
