@@ -541,47 +541,47 @@ export class TextGraph extends React.Component<MetricsDataComponentProps, {}> {
   }
 }
 
-/**
- * mouseEnter, mouseMove, and mouseLeave are helper functions used by LineChart
- * and StackedAreaChart to show/hide lines on all the graphs when hovering over
- * a specific graph.
- */
+// graphMouseMove updates the linked guidelines on all other graphs to match
+// the position of the nvd3 interactive guideline on the provided graph.
+export function graphMouseMove(graph: SVGElement) {
+  // Select the interactive guideline for the current graph.
+  let currentGuideline = d3.select(graph).select("line.nv-guideline");
 
-// GraphLineState is a shared state that indicates whether the current graph is
-// receiving the mousemove events. This is used to hide the guideline for the
-// current graph.
-export class GraphLineState {
-  mouseIn: boolean = false;
+  // Select all other graphs on the page.
+  let otherGraphs = d3.selectAll(".linked-guideline").filter(function () {
+    return this !== graph;
+  });
+
+  otherGraphs.each(function () {
+    // Linked guideline is inserted into the "nv-wrap" element of the nvd3
+    // graph. This element has the correct translations applied to it, necessary
+    // to display the linked guideline at the correct position.
+    let wrapper = d3.select(this).select(".nv-wrap");
+    if (wrapper.empty()) {
+      return;
+    }
+
+    let data = !currentGuideline.empty() ? [currentGuideline] : [];
+    let container = wrapper.selectAll("g.linked-guideline__container")
+      .data(data);
+
+    // Remove linked guideline if the current graph is not displaying an nvd3
+    // guideline.
+    container.exit().remove();
+
+    // If not already present, add the linked guideline to this graph.
+    container.enter()
+      .append("g")
+        .attr("class", "linked-guideline__container")
+        .append("line")
+          .attr("class", "linked-guideline__line");
+
+    // Update linked guideline to match the attributes of the current guideline.
+    let graphLines = container.select(".linked-guideline__line");
+    graphLines
+      .attr("x1", (d) => d.attr("x1"))
+      .attr("x2", (d) => d.attr("x2"))
+      .attr("y1", (d) => d.attr("y1"))
+      .attr("y2", (d) => d.attr("y2"));
+  });
 }
-
-// mouseEnter sets the graph-lines--show class on the element with the
-// .graph-lines class, which should be a parent element of all graphs which need
-// graph lines. This will cause all the graph lines to appear. It also sets the
-// mouseIn state to true which is used to hide the guideline on the current
-// graph in favor of the nvd3 line.
-export function mouseEnter(node: React.Component<any, GraphLineState>) {
-  node.setState({
-    mouseIn: true,
-  });
-  d3.select(".graph-lines").classed("graph-lines--show", true);
-};
-
-// mouseMove changes the graph line positions based on the mouse position.
-export function mouseMove() {
-  let currentGuideline = d3.select("line.nv-guideline");
-  // HACK: Gets x value of the currently visible guideline.
-  // TODO: set this based on the chart axis, not based on the guideline.
-  let x = currentGuideline && currentGuideline.data()[0] || 0;
-  d3.selectAll(".graph-lines__line").style("left", (x + CHART_MARGINS.left) + "px");
-};
-
-// mouseLeave removes the graph-line--show class on the element with the
-// .graph-lines class which will cause all the graph lines to be hidden. It also
-// sets the mouseIn state to false so that the current graph's guideline will
-// appear when hovering over a different graph.
-export function mouseLeave(node: React.Component<any, GraphLineState>) {
-  node.setState({
-    mouseIn: false,
-  });
-  d3.select(".graph-lines").classed("graph-lines--show", false);
-};
