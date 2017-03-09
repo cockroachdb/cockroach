@@ -230,9 +230,8 @@ func (p *planner) maybePlanHook(stmt parser.Statement) (planNode, error) {
 	// reflection in such a primary codepath is unfortunate. Instead, the
 	// upcoming IR work will provide unique numeric type tags, which will
 	// elegantly solve this.
-	state := PlanHookState{ExecCfg: p.execCfg}
 	for _, planHook := range planHooks {
-		if fn, header, err := planHook(p.ctx(), stmt, state); err != nil {
+		if fn, header, err := planHook(p.ctx(), stmt, p); err != nil {
 			return nil, err
 		} else if fn != nil {
 			return &hookFnNode{f: fn, header: header}, nil

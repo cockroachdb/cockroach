@@ -180,6 +180,10 @@ func (p *planner) ctx() context.Context {
 	return p.session.Ctx()
 }
 
+func (p *planner) ExecCfg() *ExecutorConfig {
+	return p.execCfg
+}
+
 // hijackCtx changes the current transaction's context to the provided one and
 // returns a cleanup function to be used to restore the original context when
 // the hijack is no longer needed.
