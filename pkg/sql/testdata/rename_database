@@ -85,7 +85,7 @@ GRANT ALL ON DATABASE t TO testuser
 
 user testuser
 
-statement error only root is allowed to RENAME
+statement error only root is allowed to ALTER DATABASE ... RENAME
 ALTER DATABASE t RENAME TO v
 
 query T

@@ -372,7 +372,7 @@ func reassignParentIDs(
 			}
 		}
 
-		// set privileges
+		// Check and set privileges.
 		{
 			parentDB, err := sqlbase.GetDatabaseDescFromID(txn, table.ParentID)
 			if err != nil {

@@ -44,7 +44,7 @@ func (p *planner) RenameDatabase(n *parser.RenameDatabase) (planNode, error) {
 		return nil, errEmptyDatabaseName
 	}
 
-	if err := p.RequireSuperUser("RENAME"); err != nil {
+	if err := p.RequireSuperUser("ALTER DATABASE ... RENAME"); err != nil {
 		return nil, err
 	}
 
