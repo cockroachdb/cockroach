@@ -13,9 +13,9 @@ import { COCKROACHLABS_ADDR } from "../util/cockroachlabsAPI";
 import fetchMock from "../util/fetch-mock";
 
 const CLUSTER_ID = "10101";
-const uiDataPostFetchURL = "/_admin/v1/uidata";
-const uiDataFetchURL = "/_admin/v1/uidata?keys=registration_synchronized&keys=helpus";
-const clusterFetchURL = "/_admin/v1/cluster";
+const uiDataPostFetchURL = "_admin/v1/uidata";
+const uiDataFetchURL = "_admin/v1/uidata?keys=registration_synchronized&keys=helpus";
+const clusterFetchURL = "_admin/v1/cluster";
 const registrationFetchURLPrefix = `^${COCKROACHLABS_ADDR}`;
 const unregistrationFetchURL = `${COCKROACHLABS_ADDR}/api/clusters/unregister?uuid=${CLUSTER_ID}`;
 const registrationFetchURL = `${COCKROACHLABS_ADDR}/api/clusters/register?uuid=${CLUSTER_ID}`;
