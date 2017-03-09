@@ -633,7 +633,7 @@ func (p *planner) addJoinFilter(
 	// Extract possibly new equality columns from the combined predicate, and
 	// use the rest as new ON condition.
 	var newCombinedExpr parser.TypedExpr = parser.DBoolTrue
-	for _, e := range splitAndExpr(combinedExpr, nil) {
+	for _, e := range splitAndExpr(&p.evalCtx, combinedExpr, nil) {
 		if e == parser.DBoolTrue {
 			continue
 		}

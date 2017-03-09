@@ -63,6 +63,7 @@ func GetAggregateInfo(
 // aggregator's output schema is comprised of what is specified by the
 // accompanying SELECT expressions.
 type aggregator struct {
+	flowCtx     *FlowCtx
 	input       RowSource
 	funcs       []*aggregateFuncHolder
 	outputTypes []sqlbase.ColumnType
@@ -85,6 +86,7 @@ func newAggregator(
 	output RowReceiver,
 ) (*aggregator, error) {
 	ag := &aggregator{
+		flowCtx:     flowCtx,
 		input:       input,
 		buckets:     make(map[string]struct{}),
 		inputCols:   make(columns, len(spec.Aggregations)),
@@ -236,7 +238,7 @@ func (a *aggregateFuncHolder) add(bucket []byte, d parser.Datum) error {
 		a.buckets[string(bucket)] = impl
 	}
 
-	impl.Add(d)
+	impl.Add(a.group.flowCtx.evalCtx, d)
 	return nil
 }
 

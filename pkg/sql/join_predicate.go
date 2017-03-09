@@ -34,7 +34,7 @@ type joinPredicate struct {
 	// The comparison function to use for each column. We need
 	// different functions because each USING column may have a different
 	// type (and they may be heterogeneous between left and right).
-	cmpFunctions []func(*parser.EvalContext, parser.Datum, parser.Datum) (parser.DBool, error)
+	cmpFunctions []func(*parser.EvalContext, parser.Datum, parser.Datum) (parser.Datum, error)
 
 	// left/rightEqualityIndices give the position of USING columns
 	// on the left and right input row arrays, respectively.
@@ -196,7 +196,7 @@ func makeEqualityPredicate(
 	}
 
 	// Prepare the arrays populated below.
-	cmpOps := make([]func(*parser.EvalContext, parser.Datum, parser.Datum) (parser.DBool, error), len(leftColNames))
+	cmpOps := make([]func(*parser.EvalContext, parser.Datum, parser.Datum) (parser.Datum, error), len(leftColNames))
 	leftEqualityIndices := make([]int, len(leftColNames))
 	rightEqualityIndices := make([]int, len(rightColNames))
 

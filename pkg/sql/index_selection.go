@@ -122,7 +122,7 @@ func (p *planner) selectIndex(
 	if s.filter != nil {
 		// Analyze the filter expression, simplifying it and splitting it up into
 		// possibly overlapping ranges.
-		exprs, equivalent := analyzeExpr(s.filter)
+		exprs, equivalent := analyzeExpr(&p.evalCtx, s.filter)
 		if log.V(2) {
 			log.Infof(s.p.ctx(), "analyzeExpr: %s -> %s [equivalent=%v]", s.filter, exprs, equivalent)
 		}
@@ -211,7 +211,7 @@ func (p *planner) selectIndex(
 		return &emptyNode{}, nil
 	}
 
-	s.filter = applyIndexConstraints(s.filter, c.constraints)
+	s.filter = applyIndexConstraints(&p.evalCtx, s.filter, c.constraints)
 	if s.filter != nil {
 		// Constraint propagation may have produced new constant sub-expressions.
 		// Propagate them and check if s.filter can be applied prematurely.
@@ -399,7 +399,7 @@ func (v *indexInfo) analyzeOrdering(
 ) {
 	// Compute the prefix of the index for which we have exact constraints. This
 	// prefix is inconsequential for ordering because the values are identical.
-	v.exactPrefix = v.constraints.exactPrefix()
+	v.exactPrefix = v.constraints.exactPrefix(&scan.p.evalCtx)
 
 	// Analyze the ordering provided by the index (either forward or reverse).
 	fwdIndexOrdering := scan.computeOrdering(v.index, v.exactPrefix, false)
@@ -1339,7 +1339,7 @@ func (ic indexConstraints) exactPrefixDatums(num int) []parser.Datum {
 //    |  (a, b) = (1, 2) OR a = 1                  |      1      |
 //    |  (a, b) = (1, 2) OR a = 2                  |      0      |
 //    |----------------------------------------------------------|
-func (oic orIndexConstraints) exactPrefix() int {
+func (oic orIndexConstraints) exactPrefix(evalCtx *parser.EvalContext) int {
 	if len(oic) == 0 {
 		return 0
 	}
@@ -1369,7 +1369,7 @@ func (oic orIndexConstraints) exactPrefix() int {
 		// prefix.
 		for i, d := range datums {
 			if !(d.ResolvedType().Equivalent(iDatums[i].ResolvedType()) &&
-				d.Compare(iDatums[i]) == 0) {
+				d.Compare(evalCtx, iDatums[i]) == 0) {
 				datums = datums[:i]
 				break
 			}
@@ -1386,14 +1386,14 @@ func (oic orIndexConstraints) exactPrefix() int {
 //
 // Note that applyConstraints currently only handles simple cases.
 func applyIndexConstraints(
-	typedExpr parser.TypedExpr, constraints orIndexConstraints,
+	evalCtx *parser.EvalContext, typedExpr parser.TypedExpr, constraints orIndexConstraints,
 ) parser.TypedExpr {
 	if len(constraints) != 1 {
 		// We only support simplifying the expressions if there aren't multiple
 		// disjunctions (top-level OR branches).
 		return typedExpr
 	}
-	v := &applyConstraintsVisitor{}
+	v := &applyConstraintsVisitor{evalCtx: evalCtx}
 	expr := typedExpr.(parser.Expr)
 	for _, c := range constraints[0] {
 		// Apply the start constraint.
@@ -1495,6 +1495,7 @@ func expandConstraint(
 }
 
 type applyConstraintsVisitor struct {
+	evalCtx     *parser.EvalContext
 	constraints []*parser.ComparisonExpr
 }
 
@@ -1516,7 +1517,7 @@ func (v *applyConstraintsVisitor) VisitPre(expr parser.Expr) (recurse bool, newE
 		}
 
 		for _, c := range v.constraints {
-			expr = applyConstraint(t, c)
+			expr = applyConstraint(v.evalCtx, t, c)
 			t, ok = expr.(*parser.ComparisonExpr)
 			if !ok {
 				break
@@ -1543,7 +1544,9 @@ func (v *applyConstraintsVisitor) VisitPost(expr parser.Expr) parser.Expr {
 // applyConstraint tries to simplify the expression t on the left
 // assuming that the expression c on the right (the constraint) is
 // true.
-func applyConstraint(t *parser.ComparisonExpr, c *parser.ComparisonExpr) parser.Expr {
+func applyConstraint(
+	evalCtx *parser.EvalContext, t *parser.ComparisonExpr, c *parser.ComparisonExpr,
+) parser.Expr {
 	// Check that both expressions have the same variable on the left.
 	// It is always true for the constraint, and
 	// simplifyExpr() has ensured this is true in most sub-expressions of t.
@@ -1570,7 +1573,7 @@ func applyConstraint(t *parser.ComparisonExpr, c *parser.ComparisonExpr) parser.
 				return parser.MakeDBool(datum == parser.DNull)
 			}
 		} else {
-			return applyConstraintFlat(t, datum, parser.NE, cdatum)
+			return applyConstraintFlat(evalCtx, t, datum, parser.NE, cdatum)
 		}
 	case parser.Is:
 		if cdatum == parser.DNull {
@@ -1584,10 +1587,10 @@ func applyConstraint(t *parser.ComparisonExpr, c *parser.ComparisonExpr) parser.
 				return parser.DBoolFalse
 			}
 		} else {
-			return applyConstraintFlat(t, datum, parser.EQ, cdatum)
+			return applyConstraintFlat(evalCtx, t, datum, parser.EQ, cdatum)
 		}
 	default:
-		return applyConstraintFlat(t, datum, c.Operator, cdatum)
+		return applyConstraintFlat(evalCtx, t, datum, c.Operator, cdatum)
 	}
 	return t
 }
@@ -1597,7 +1600,11 @@ func applyConstraint(t *parser.ComparisonExpr, c *parser.ComparisonExpr) parser.
 // [x OP datum] assuming that the expression [x cOp cdatum] (the
 // constraint) is true.
 func applyConstraintFlat(
-	t *parser.ComparisonExpr, datum parser.Datum, cOp parser.ComparisonOperator, cdatum parser.Datum,
+	evalCtx *parser.EvalContext,
+	t *parser.ComparisonExpr,
+	datum parser.Datum,
+	cOp parser.ComparisonOperator,
+	cdatum parser.Datum,
 ) parser.Expr {
 	// Special casing: expression queries IS NULL or IS NOT NULL.
 	if (t.Operator == parser.Is || t.Operator == parser.IsNot) && datum == parser.DNull {
@@ -1645,9 +1652,9 @@ func applyConstraintFlat(
 			// matches. Otherwise we don't know.
 			ctuple := cdatum.(*parser.DTuple)
 			i := sort.Search(len(ctuple.D), func(i int) bool {
-				return ctuple.D[i].(parser.Datum).Compare(datum) >= 0
+				return ctuple.D[i].(parser.Datum).Compare(evalCtx, datum) >= 0
 			})
-			if i == len(ctuple.D) || ctuple.D[i].Compare(datum) != 0 {
+			if i == len(ctuple.D) || ctuple.D[i].Compare(evalCtx, datum) != 0 {
 				return parser.DBoolFalse
 			}
 			return t
@@ -1665,7 +1672,7 @@ func applyConstraintFlat(
 			if ttuple, ok := datum.(*parser.DTuple); ok {
 				// Note: A is a subset of B iff A \ B == empty.
 				ctuple := cdatum.(*parser.DTuple)
-				diff := ctuple.SortedDifference(ttuple)
+				diff := ctuple.SortedDifference(evalCtx, ttuple)
 				if len(diff.D) == 0 {
 					return parser.DBoolTrue
 				}
@@ -1676,9 +1683,9 @@ func applyConstraintFlat(
 			// true if the known value is in the IN set, false otherwise.
 			if tuple, ok := datum.(*parser.DTuple); ok {
 				i := sort.Search(len(tuple.D), func(i int) bool {
-					return tuple.D[i].(parser.Datum).Compare(cdatum) >= 0
+					return tuple.D[i].(parser.Datum).Compare(evalCtx, cdatum) >= 0
 				})
-				if i < len(tuple.D) && tuple.D[i].Compare(cdatum) == 0 {
+				if i < len(tuple.D) && tuple.D[i].Compare(evalCtx, cdatum) == 0 {
 					return parser.DBoolTrue
 				}
 			}
@@ -1700,7 +1707,7 @@ func applyConstraintFlat(
 			if ttuple, ok := datum.(*parser.DTuple); ok {
 				// Note: A inter B is empty iff A \ B == A
 				ctuple := cdatum.(*parser.DTuple)
-				diff := ctuple.SortedDifference(ttuple)
+				diff := ctuple.SortedDifference(evalCtx, ttuple)
 				if len(diff.D) < len(ctuple.D) {
 					return parser.DBoolTrue
 				}
@@ -1711,9 +1718,9 @@ func applyConstraintFlat(
 			// false if the known value is in the NOT IN set, true otherwise.
 			if tuple, ok := datum.(*parser.DTuple); ok {
 				i := sort.Search(len(tuple.D), func(i int) bool {
-					return tuple.D[i].(parser.Datum).Compare(cdatum) >= 0
+					return tuple.D[i].(parser.Datum).Compare(evalCtx, cdatum) >= 0
 				})
-				if i < len(tuple.D) && tuple.D[i].Compare(cdatum) == 0 {
+				if i < len(tuple.D) && tuple.D[i].Compare(evalCtx, cdatum) == 0 {
 					return parser.DBoolFalse
 				}
 			}
@@ -1758,7 +1765,7 @@ func applyConstraintFlat(
 	// equivalent to checking for overlap between the closed intervals
 	// (which is easy).
 
-	cmp := datum.Compare(cdatum)
+	cmp := datum.Compare(evalCtx, cdatum)
 	tStart, tEnd, tOk := makeComparisonInterval(t.Operator, cmp > 0)
 	cStart, cEnd, cOk := makeComparisonInterval(cOp, cmp < 0)
 

@@ -45,12 +45,14 @@ import (
 // Returns false for equivalent if the resulting expressions are not equivalent
 // to the originals. This occurs for expressions which are currently not
 // handled by simplification (they are replaced by "true").
-func analyzeExpr(e parser.TypedExpr) (exprs []parser.TypedExprs, equivalent bool) {
-	e, equivalent = simplifyExpr(e)
-	orExprs := splitOrExpr(e, nil)
+func analyzeExpr(
+	evalCtx *parser.EvalContext, e parser.TypedExpr,
+) (exprs []parser.TypedExprs, equivalent bool) {
+	e, equivalent = simplifyExpr(evalCtx, e)
+	orExprs := splitOrExpr(evalCtx, e, nil)
 	results := make([]parser.TypedExprs, len(orExprs))
 	for i := range orExprs {
-		results[i] = splitAndExpr(orExprs[i], nil)
+		results[i] = splitAndExpr(evalCtx, orExprs[i], nil)
 	}
 	return results, equivalent
 }
@@ -60,10 +62,12 @@ func analyzeExpr(e parser.TypedExpr) (exprs []parser.TypedExprs, equivalent bool
 // in the list.
 //
 //   a OR b OR c OR d -> [a, b, c, d]
-func splitOrExpr(e parser.TypedExpr, exprs parser.TypedExprs) parser.TypedExprs {
+func splitOrExpr(
+	evalCtx *parser.EvalContext, e parser.TypedExpr, exprs parser.TypedExprs,
+) parser.TypedExprs {
 	switch t := e.(type) {
 	case *parser.OrExpr:
-		return splitOrExpr(t.TypedRight(), splitOrExpr(t.TypedLeft(), exprs))
+		return splitOrExpr(evalCtx, t.TypedRight(), splitOrExpr(evalCtx, t.TypedLeft(), exprs))
 	}
 	return append(exprs, e)
 }
@@ -73,10 +77,12 @@ func splitOrExpr(e parser.TypedExpr, exprs parser.TypedExprs) parser.TypedExprs 
 // element in the list.
 //
 //   a AND b AND c AND d -> [a, b, c, d]
-func splitAndExpr(e parser.TypedExpr, exprs parser.TypedExprs) parser.TypedExprs {
+func splitAndExpr(
+	evalCtx *parser.EvalContext, e parser.TypedExpr, exprs parser.TypedExprs,
+) parser.TypedExprs {
 	switch t := e.(type) {
 	case *parser.AndExpr:
-		return splitAndExpr(t.TypedRight(), splitAndExpr(t.TypedLeft(), exprs))
+		return splitAndExpr(evalCtx, t.TypedRight(), splitAndExpr(evalCtx, t.TypedLeft(), exprs))
 	}
 	return append(exprs, e)
 }
@@ -134,19 +140,21 @@ func joinExprs(
 // Returns false for equivalent if the resulting expression is not equivalent
 // to the original. This occurs for expressions which are currently not handled
 // by simplification.
-func simplifyExpr(e parser.TypedExpr) (simplified parser.TypedExpr, equivalent bool) {
+func simplifyExpr(
+	evalCtx *parser.EvalContext, e parser.TypedExpr,
+) (simplified parser.TypedExpr, equivalent bool) {
 	if e == parser.DNull {
 		return e, true
 	}
 	switch t := e.(type) {
 	case *parser.NotExpr:
-		return simplifyNotExpr(t)
+		return simplifyNotExpr(evalCtx, t)
 	case *parser.AndExpr:
-		return simplifyAndExpr(t)
+		return simplifyAndExpr(evalCtx, t)
 	case *parser.OrExpr:
-		return simplifyOrExpr(t)
+		return simplifyOrExpr(evalCtx, t)
 	case *parser.ComparisonExpr:
-		return simplifyComparisonExpr(t)
+		return simplifyComparisonExpr(evalCtx, t)
 	case *parser.IndexedVar, *parser.DBool:
 		return e, true
 	}
@@ -155,7 +163,7 @@ func simplifyExpr(e parser.TypedExpr) (simplified parser.TypedExpr, equivalent b
 	return parser.MakeDBool(true), false
 }
 
-func simplifyNotExpr(n *parser.NotExpr) (parser.TypedExpr, bool) {
+func simplifyNotExpr(evalCtx *parser.EvalContext, n *parser.NotExpr) (parser.TypedExpr, bool) {
 	if n.Expr == parser.DNull {
 		return parser.DNull, true
 	}
@@ -198,7 +206,7 @@ func simplifyNotExpr(n *parser.NotExpr) (parser.TypedExpr, bool) {
 		default:
 			return parser.MakeDBool(true), false
 		}
-		return simplifyExpr(parser.NewTypedComparisonExpr(
+		return simplifyExpr(evalCtx, parser.NewTypedComparisonExpr(
 			op,
 			t.TypedLeft(),
 			t.TypedRight(),
@@ -206,14 +214,14 @@ func simplifyNotExpr(n *parser.NotExpr) (parser.TypedExpr, bool) {
 
 	case *parser.AndExpr:
 		// De Morgan's Law: NOT (a AND b) -> (NOT a) OR (NOT b)
-		return simplifyExpr(parser.NewTypedOrExpr(
+		return simplifyExpr(evalCtx, parser.NewTypedOrExpr(
 			parser.NewTypedNotExpr(t.TypedLeft()),
 			parser.NewTypedNotExpr(t.TypedRight()),
 		))
 
 	case *parser.OrExpr:
 		// De Morgan's Law: NOT (a OR b) -> (NOT a) AND (NOT b)
-		return simplifyExpr(parser.NewTypedAndExpr(
+		return simplifyExpr(evalCtx, parser.NewTypedAndExpr(
 			parser.NewTypedNotExpr(t.TypedLeft()),
 			parser.NewTypedNotExpr(t.TypedRight()),
 		))
@@ -241,13 +249,13 @@ func isKnownFalseOrNull(e parser.TypedExpr) bool {
 	return false
 }
 
-func simplifyAndExpr(n *parser.AndExpr) (parser.TypedExpr, bool) {
+func simplifyAndExpr(evalCtx *parser.EvalContext, n *parser.AndExpr) (parser.TypedExpr, bool) {
 	// a AND b AND c AND d -> [a, b, c, d]
 	equivalent := true
-	exprs := splitAndExpr(n, nil)
+	exprs := splitAndExpr(evalCtx, n, nil)
 	for i := range exprs {
 		var equiv bool
-		exprs[i], equiv = simplifyExpr(exprs[i])
+		exprs[i], equiv = simplifyExpr(evalCtx, exprs[i])
 		if !equiv {
 			equivalent = false
 		}
@@ -259,7 +267,7 @@ func simplifyAndExpr(n *parser.AndExpr) (parser.TypedExpr, bool) {
 	// expression.
 	texprs, exprs := exprs, nil
 	for _, e := range texprs {
-		exprs = splitAndExpr(e, exprs)
+		exprs = splitAndExpr(evalCtx, e, exprs)
 	}
 
 	// Loop over the expressions looking for simplifications.
@@ -270,7 +278,7 @@ outer:
 	for i := len(exprs) - 1; i >= 0; i-- {
 		for j := i - 1; j >= 0; j-- {
 			var equiv bool
-			exprs[j], exprs[i], equiv = simplifyOneAndExpr(exprs[j], exprs[i])
+			exprs[j], exprs[i], equiv = simplifyOneAndExpr(evalCtx, exprs[j], exprs[i])
 			if !equiv {
 				equivalent = false
 			}
@@ -295,7 +303,9 @@ outer:
 	return joinAndExprs(exprs), equivalent
 }
 
-func simplifyOneAndExpr(left, right parser.TypedExpr) (parser.TypedExpr, parser.TypedExpr, bool) {
+func simplifyOneAndExpr(
+	evalCtx *parser.EvalContext, left, right parser.TypedExpr,
+) (parser.TypedExpr, parser.TypedExpr, bool) {
 	lcmp, ok := left.(*parser.ComparisonExpr)
 	if !ok {
 		return left, right, true
@@ -348,7 +358,7 @@ func simplifyOneAndExpr(left, right parser.TypedExpr) (parser.TypedExpr, parser.
 	}
 
 	if lcmp.Operator == parser.In || rcmp.Operator == parser.In {
-		left, right = simplifyOneAndInExpr(lcmp, rcmp)
+		left, right = simplifyOneAndInExpr(evalCtx, lcmp, rcmp)
 		return left, right, true
 	}
 
@@ -379,7 +389,7 @@ func simplifyOneAndExpr(left, right parser.TypedExpr) (parser.TypedExpr, parser.
 
 	ldatum := lcmpRight.(parser.Datum)
 	rdatum := rcmpRight.(parser.Datum)
-	cmp := ldatum.Compare(rdatum)
+	cmp := ldatum.Compare(evalCtx, rdatum)
 
 	// Determine which expression to use when either expression (left or right)
 	// is valid as a return value but their types are different. The reason
@@ -661,7 +671,9 @@ func simplifyOneAndExpr(left, right parser.TypedExpr) (parser.TypedExpr, parser.
 	return parser.MakeDBool(true), nil, false
 }
 
-func simplifyOneAndInExpr(left, right *parser.ComparisonExpr) (parser.TypedExpr, parser.TypedExpr) {
+func simplifyOneAndInExpr(
+	evalCtx *parser.EvalContext, left, right *parser.ComparisonExpr,
+) (parser.TypedExpr, parser.TypedExpr) {
 	if left.Operator != parser.In && right.Operator != parser.In {
 		panic(fmt.Sprintf("IN expression required: %s vs %s", left, right))
 	}
@@ -690,7 +702,7 @@ func simplifyOneAndInExpr(left, right *parser.ComparisonExpr) (parser.TypedExpr,
 			// Our tuple will be sorted (see simplifyComparisonExpr). Binary search
 			// for the right datum.
 			datum := right.Right.(parser.Datum)
-			i, found := ltuple.SearchSorted(datum)
+			i, found := ltuple.SearchSorted(evalCtx, datum)
 
 			switch right.Operator {
 			case parser.EQ:
@@ -777,7 +789,7 @@ func simplifyOneAndInExpr(left, right *parser.ComparisonExpr) (parser.TypedExpr,
 		case parser.In:
 			// Both of our tuples are sorted. Intersect the lists.
 			rtuple := right.Right.(*parser.DTuple)
-			intersection := intersectSorted(ltuple.D, rtuple.D)
+			intersection := intersectSorted(evalCtx, ltuple.D, rtuple.D)
 			if len(intersection) == 0 {
 				return parser.MakeDBool(false), nil
 			}
@@ -792,13 +804,13 @@ func simplifyOneAndInExpr(left, right *parser.ComparisonExpr) (parser.TypedExpr,
 	return origLeft, origRight
 }
 
-func simplifyOrExpr(n *parser.OrExpr) (parser.TypedExpr, bool) {
+func simplifyOrExpr(evalCtx *parser.EvalContext, n *parser.OrExpr) (parser.TypedExpr, bool) {
 	// a OR b OR c OR d -> [a, b, c, d]
 	equivalent := true
-	exprs := splitOrExpr(n, nil)
+	exprs := splitOrExpr(evalCtx, n, nil)
 	for i := range exprs {
 		var equiv bool
-		exprs[i], equiv = simplifyExpr(exprs[i])
+		exprs[i], equiv = simplifyExpr(evalCtx, exprs[i])
 		if !equiv {
 			equivalent = false
 		}
@@ -810,7 +822,7 @@ func simplifyOrExpr(n *parser.OrExpr) (parser.TypedExpr, bool) {
 	// expression.
 	texprs, exprs := exprs, nil
 	for _, e := range texprs {
-		exprs = splitOrExpr(e, exprs)
+		exprs = splitOrExpr(evalCtx, e, exprs)
 	}
 
 	// Loop over the expressions looking for simplifications.
@@ -821,7 +833,7 @@ outer:
 	for i := len(exprs) - 1; i >= 0; i-- {
 		for j := i - 1; j >= 0; j-- {
 			var equiv bool
-			exprs[j], exprs[i], equiv = simplifyOneOrExpr(exprs[j], exprs[i])
+			exprs[j], exprs[i], equiv = simplifyOneOrExpr(evalCtx, exprs[j], exprs[i])
 			if !equiv {
 				equivalent = false
 			}
@@ -846,7 +858,9 @@ outer:
 	return joinOrExprs(exprs), equivalent
 }
 
-func simplifyOneOrExpr(left, right parser.TypedExpr) (parser.TypedExpr, parser.TypedExpr, bool) {
+func simplifyOneOrExpr(
+	evalCtx *parser.EvalContext, left, right parser.TypedExpr,
+) (parser.TypedExpr, parser.TypedExpr, bool) {
 	lcmp, ok := left.(*parser.ComparisonExpr)
 	if !ok {
 		return left, right, true
@@ -891,7 +905,7 @@ func simplifyOneOrExpr(left, right parser.TypedExpr) (parser.TypedExpr, parser.T
 	}
 
 	if lcmp.Operator == parser.In || rcmp.Operator == parser.In {
-		left, right = simplifyOneOrInExpr(lcmp, rcmp)
+		left, right = simplifyOneOrInExpr(evalCtx, lcmp, rcmp)
 		return left, right, true
 	}
 
@@ -914,7 +928,7 @@ func simplifyOneOrExpr(left, right parser.TypedExpr) (parser.TypedExpr, parser.T
 
 	ldatum := lcmpRight.(parser.Datum)
 	rdatum := rcmpRight.(parser.Datum)
-	cmp := ldatum.Compare(rdatum)
+	cmp := ldatum.Compare(evalCtx, rdatum)
 
 	// Determine which expression to use when either expression (left or right)
 	// is valid as a return value but their types are different. The reason
@@ -1251,7 +1265,9 @@ func simplifyOneOrExpr(left, right parser.TypedExpr) (parser.TypedExpr, parser.T
 	return parser.MakeDBool(true), nil, false
 }
 
-func simplifyOneOrInExpr(left, right *parser.ComparisonExpr) (parser.TypedExpr, parser.TypedExpr) {
+func simplifyOneOrInExpr(
+	evalCtx *parser.EvalContext, left, right *parser.ComparisonExpr,
+) (parser.TypedExpr, parser.TypedExpr) {
 	if left.Operator != parser.In && right.Operator != parser.In {
 		panic(fmt.Sprintf("IN expression required: %s vs %s", left, right))
 	}
@@ -1275,7 +1291,7 @@ func simplifyOneOrInExpr(left, right *parser.ComparisonExpr) (parser.TypedExpr, 
 			datum := right.Right.(parser.Datum)
 			// We keep the tuples for an IN expression in sorted order. So now we just
 			// merge the two sorted lists.
-			merged := mergeSorted(ltuple.D, parser.Datums{datum})
+			merged := mergeSorted(evalCtx, ltuple.D, parser.Datums{datum})
 			return parser.NewTypedComparisonExpr(
 				parser.In,
 				left.TypedLeft(),
@@ -1284,7 +1300,7 @@ func simplifyOneOrInExpr(left, right *parser.ComparisonExpr) (parser.TypedExpr, 
 
 		case parser.NE, parser.GT, parser.GE, parser.LT, parser.LE:
 			datum := right.Right.(parser.Datum)
-			i, found := ltuple.SearchSorted(datum)
+			i, found := ltuple.SearchSorted(evalCtx, datum)
 
 			switch right.Operator {
 			case parser.NE:
@@ -1328,7 +1344,7 @@ func simplifyOneOrInExpr(left, right *parser.ComparisonExpr) (parser.TypedExpr, 
 				}
 			case parser.LE:
 				if i == len(ltuple.D) ||
-					(i == len(ltuple.D)-1 && ltuple.D[i].Compare(datum) == 0) {
+					(i == len(ltuple.D)-1 && ltuple.D[i].Compare(evalCtx, datum) == 0) {
 					// datum >= ltuple.D[len(ltuple.D)-1]
 					return right, nil
 				}
@@ -1337,7 +1353,7 @@ func simplifyOneOrInExpr(left, right *parser.ComparisonExpr) (parser.TypedExpr, 
 		case parser.In:
 			// We keep the tuples for an IN expression in sorted order. So now we
 			// just merge the two sorted lists.
-			merged := mergeSorted(ltuple.D, right.Right.(*parser.DTuple).D)
+			merged := mergeSorted(evalCtx, ltuple.D, right.Right.(*parser.DTuple).D)
 			return parser.NewTypedComparisonExpr(
 				parser.In,
 				left.TypedLeft(),
@@ -1349,7 +1365,9 @@ func simplifyOneOrInExpr(left, right *parser.ComparisonExpr) (parser.TypedExpr, 
 	return origLeft, origRight
 }
 
-func simplifyComparisonExpr(n *parser.ComparisonExpr) (parser.TypedExpr, bool) {
+func simplifyComparisonExpr(
+	evalCtx *parser.EvalContext, n *parser.ComparisonExpr,
+) (parser.TypedExpr, bool) {
 	// NormalizeExpr will have left comparisons in the form "<var> <op>
 	// <datum>" unless they could not be simplified further in which case
 	// simplifyExpr cannot handle them. For example, "lower(a) = 'foo'"
@@ -1479,7 +1497,7 @@ func makePrefixRange(prefix parser.DString, datum parser.TypedExpr, complete boo
 	)
 }
 
-func mergeSorted(a, b parser.Datums) parser.Datums {
+func mergeSorted(evalCtx *parser.EvalContext, a, b parser.Datums) parser.Datums {
 	r := make(parser.Datums, 0, len(a)+len(b))
 	for len(a) > 0 || len(b) > 0 {
 		if len(a) == 0 {
@@ -1490,7 +1508,7 @@ func mergeSorted(a, b parser.Datums) parser.Datums {
 			r = append(r, a...)
 			break
 		}
-		switch a[0].Compare(b[0]) {
+		switch a[0].Compare(evalCtx, b[0]) {
 		case -1:
 			r = append(r, a[0])
 			a = a[1:]
@@ -1506,14 +1524,14 @@ func mergeSorted(a, b parser.Datums) parser.Datums {
 	return r
 }
 
-func intersectSorted(a, b parser.Datums) parser.Datums {
+func intersectSorted(evalCtx *parser.EvalContext, a, b parser.Datums) parser.Datums {
 	n := len(a)
 	if n > len(b) {
 		n = len(b)
 	}
 	r := make(parser.Datums, 0, n)
 	for len(a) > 0 && len(b) > 0 {
-		switch a[0].Compare(b[0]) {
+		switch a[0].Compare(evalCtx, b[0]) {
 		case -1:
 			a = a[1:]
 		case 0:

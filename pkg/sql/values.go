@@ -50,6 +50,7 @@ type valuesNode struct {
 
 func (p *planner) newContainerValuesNode(columns ResultColumns, capacity int) *valuesNode {
 	return &valuesNode{
+		p:       p,
 		columns: columns,
 		rows:    NewRowContainer(p.session.TxnState.makeBoundAccount(), columns, capacity),
 	}
@@ -215,7 +216,7 @@ func (n *valuesNode) ValuesLess(ra, rb parser.Datums) bool {
 		// not sure this always holds as `CASE` expressions can return different
 		// types for a column for different rows. Investigate how other RDBMs
 		// handle this.
-		if c := da.Compare(db); c < 0 {
+		if c := da.Compare(&n.p.evalCtx, db); c < 0 {
 			return true
 		} else if c > 0 {
 			return false

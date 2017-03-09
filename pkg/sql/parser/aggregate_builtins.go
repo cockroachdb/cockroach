@@ -59,7 +59,7 @@ func initAggregateBuiltins() {
 // AggregateFunc accumulates the result of a function of a Datum.
 type AggregateFunc interface {
 	// Add accumulates the passed datum into the AggregateFunc.
-	Add(Datum)
+	Add(*EvalContext, Datum)
 
 	// Result returns the current value of the accumulation. This value
 	// will be a deep copy of any AggregateFunc internal state, so that
@@ -229,7 +229,7 @@ func NewIdentAggregate() AggregateFunc {
 }
 
 // Add sets the value to the passed datum.
-func (a *identAggregate) Add(datum Datum) {
+func (a *identAggregate) Add(_ *EvalContext, datum Datum) {
 	a.val = datum
 }
 
@@ -252,7 +252,7 @@ func newArrayAggregate(params []Type) AggregateFunc {
 }
 
 // Add accumulates the passed datum into the array.
-func (a *arrayAggregate) Add(datum Datum) {
+func (a *arrayAggregate) Add(_ *EvalContext, datum Datum) {
 	if err := a.arr.Append(datum); err != nil {
 		panic(fmt.Sprintf("error appending to array: %s", err))
 	}
@@ -282,11 +282,11 @@ func newDecimalAvgAggregate(params []Type) AggregateFunc {
 }
 
 // Add accumulates the passed datum into the average.
-func (a *avgAggregate) Add(datum Datum) {
+func (a *avgAggregate) Add(ctx *EvalContext, datum Datum) {
 	if datum == DNull {
 		return
 	}
-	a.agg.Add(datum)
+	a.agg.Add(ctx, datum)
 	a.count++
 }
 
@@ -325,7 +325,7 @@ func newStringConcatAggregate(_ []Type) AggregateFunc {
 	return &concatAggregate{}
 }
 
-func (a *concatAggregate) Add(datum Datum) {
+func (a *concatAggregate) Add(_ *EvalContext, datum Datum) {
 	if datum == DNull {
 		return
 	}
@@ -360,7 +360,7 @@ func newBoolAndAggregate(_ []Type) AggregateFunc {
 	return &boolAndAggregate{}
 }
 
-func (a *boolAndAggregate) Add(datum Datum) {
+func (a *boolAndAggregate) Add(_ *EvalContext, datum Datum) {
 	if datum == DNull {
 		return
 	}
@@ -387,7 +387,7 @@ func newBoolOrAggregate(_ []Type) AggregateFunc {
 	return &boolOrAggregate{}
 }
 
-func (a *boolOrAggregate) Add(datum Datum) {
+func (a *boolOrAggregate) Add(_ *EvalContext, datum Datum) {
 	if datum == DNull {
 		return
 	}
@@ -410,7 +410,7 @@ func newCountAggregate(_ []Type) AggregateFunc {
 	return &countAggregate{}
 }
 
-func (a *countAggregate) Add(datum Datum) {
+func (a *countAggregate) Add(_ *EvalContext, datum Datum) {
 	if datum == DNull {
 		return
 	}
@@ -432,7 +432,7 @@ func newMaxAggregate(_ []Type) AggregateFunc {
 }
 
 // Add sets the max to the larger of the current max or the passed datum.
-func (a *MaxAggregate) Add(datum Datum) {
+func (a *MaxAggregate) Add(ctx *EvalContext, datum Datum) {
 	if datum == DNull {
 		return
 	}
@@ -440,7 +440,7 @@ func (a *MaxAggregate) Add(datum Datum) {
 		a.max = datum
 		return
 	}
-	c := a.max.Compare(datum)
+	c := a.max.Compare(ctx, datum)
 	if c < 0 {
 		a.max = datum
 	}
@@ -464,7 +464,7 @@ func newMinAggregate(_ []Type) AggregateFunc {
 }
 
 // Add sets the min to the smaller of the current min or the passed datum.
-func (a *MinAggregate) Add(datum Datum) {
+func (a *MinAggregate) Add(ctx *EvalContext, datum Datum) {
 	if datum == DNull {
 		return
 	}
@@ -472,7 +472,7 @@ func (a *MinAggregate) Add(datum Datum) {
 		a.min = datum
 		return
 	}
-	c := a.min.Compare(datum)
+	c := a.min.Compare(ctx, datum)
 	if c > 0 {
 		a.min = datum
 	}
@@ -496,7 +496,7 @@ func newSmallIntSumAggregate(_ []Type) AggregateFunc {
 }
 
 // Add adds the value of the passed datum to the sum.
-func (a *smallIntSumAggregate) Add(datum Datum) {
+func (a *smallIntSumAggregate) Add(_ *EvalContext, datum Datum) {
 	if datum == DNull {
 		return
 	}
@@ -529,7 +529,7 @@ func newIntSumAggregate(_ []Type) AggregateFunc {
 }
 
 // Add adds the value of the passed datum to the sum.
-func (a *intSumAggregate) Add(datum Datum) {
+func (a *intSumAggregate) Add(_ *EvalContext, datum Datum) {
 	if datum == DNull {
 		return
 	}
@@ -587,7 +587,7 @@ func newDecimalSumAggregate(_ []Type) AggregateFunc {
 }
 
 // Add adds the value of the passed datum to the sum.
-func (a *decimalSumAggregate) Add(datum Datum) {
+func (a *decimalSumAggregate) Add(_ *EvalContext, datum Datum) {
 	if datum == DNull {
 		return
 	}
@@ -620,7 +620,7 @@ func newFloatSumAggregate(_ []Type) AggregateFunc {
 }
 
 // Add adds the value of the passed datum to the sum.
-func (a *floatSumAggregate) Add(datum Datum) {
+func (a *floatSumAggregate) Add(_ *EvalContext, datum Datum) {
 	if datum == DNull {
 		return
 	}
@@ -647,7 +647,7 @@ func newIntervalSumAggregate(_ []Type) AggregateFunc {
 }
 
 // Add adds the value of the passed datum to the sum.
-func (a *intervalSumAggregate) Add(datum Datum) {
+func (a *intervalSumAggregate) Add(_ *EvalContext, datum Datum) {
 	if datum == DNull {
 		return
 	}
@@ -674,13 +674,13 @@ func newIntVarianceAggregate(_ []Type) AggregateFunc {
 	return &intVarianceAggregate{}
 }
 
-func (a *intVarianceAggregate) Add(datum Datum) {
+func (a *intVarianceAggregate) Add(ctx *EvalContext, datum Datum) {
 	if datum == DNull {
 		return
 	}
 
 	a.tmpDec.SetCoefficient(int64(MustBeDInt(datum)))
-	a.agg.Add(&a.tmpDec)
+	a.agg.Add(ctx, &a.tmpDec)
 }
 
 func (a *intVarianceAggregate) Result() Datum {
@@ -697,7 +697,7 @@ func newFloatVarianceAggregate(_ []Type) AggregateFunc {
 	return &floatVarianceAggregate{}
 }
 
-func (a *floatVarianceAggregate) Add(datum Datum) {
+func (a *floatVarianceAggregate) Add(_ *EvalContext, datum Datum) {
 	if datum == DNull {
 		return
 	}
@@ -740,7 +740,7 @@ var (
 	decimalTwo = apd.New(2, 0)
 )
 
-func (a *decimalVarianceAggregate) Add(datum Datum) {
+func (a *decimalVarianceAggregate) Add(_ *EvalContext, datum Datum) {
 	if datum == DNull {
 		return
 	}
@@ -792,8 +792,8 @@ func newDecimalStdDevAggregate(params []Type) AggregateFunc {
 }
 
 // Add implements the AggregateFunc interface.
-func (a *stdDevAggregate) Add(datum Datum) {
-	a.agg.Add(datum)
+func (a *stdDevAggregate) Add(ctx *EvalContext, datum Datum) {
+	a.agg.Add(ctx, datum)
 }
 
 // Result computes the square root of the variance.

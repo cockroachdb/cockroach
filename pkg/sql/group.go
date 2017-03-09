@@ -718,7 +718,7 @@ func (a *aggregateFuncHolder) add(s *Session, bucket []byte, d parser.Datum) err
 		a.buckets[string(bucket)] = impl
 	}
 
-	impl.Add(d)
+	impl.Add(&a.group.planner.evalCtx, d)
 	return nil
 }
 
