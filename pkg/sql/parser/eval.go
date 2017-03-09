@@ -1950,10 +1950,10 @@ func (expr *CaseExpr) Eval(ctx *EvalContext) (Datum, error) {
 	return DNull, nil
 }
 
-// regprocedureRegexp matches a Postgres function type signature, capturing the
+// pgSignatureRegexp matches a Postgres function type signature, capturing the
 // name of the function into group 1.
 // e.g. function(a, b, c) or function( a )
-var regprocedureRegexp = regexp.MustCompile(`^\s*([\w\.]+)\s*\((?:(?:\s*\w+\s*,)*\s*\w+)?\s*\)\s*$`)
+var pgSignatureRegexp = regexp.MustCompile(`^\s*([\w\.]+)\s*\((?:(?:\s*\w+\s*,)*\s*\w+)?\s*\)\s*$`)
 
 // regTypeInfo contains details on a pg_catalog table that has a reg* type.
 type regTypeInfo struct {
@@ -2322,11 +2322,12 @@ func (expr *CastExpr) Eval(ctx *EvalContext) (Datum, error) {
 
 			switch typ {
 			case oidColTypeRegProc, oidColTypeRegProcedure:
-				// Trim procedure type parameters. Postgres only does this when the
-				// cast is ::regprocedure, but we're going to always do it.
+				// Trim procedure type parameters, e.g. `max(int)` becomes `max`.
+				// Postgres only does this when the cast is ::regprocedure, but we're
+				// going to always do it.
 				// We additionally do not yet implement disambiguation based on type
 				// parameters: we return the match iff there is exactly one.
-				s = regprocedureRegexp.ReplaceAllString(s, "$1")
+				s = pgSignatureRegexp.ReplaceAllString(s, "$1")
 				// Resolve function name.
 				substrs := strings.Split(s, ".")
 				name := UnresolvedName{}
@@ -2338,6 +2339,10 @@ func (expr *CastExpr) Eval(ctx *EvalContext) (Datum, error) {
 					return nil, err
 				}
 				return queryOid(ctx, typ, NewDString(funcDef.Name))
+			case oidColTypeRegType:
+				// Trim type modifiers, e.g. `numeric(10,3)` becomes `numeric`.
+				s = pgSignatureRegexp.ReplaceAllString(s, "$1")
+				return queryOid(ctx, typ, NewDString(s))
 			default:
 				return queryOid(ctx, typ, NewDString(s))
 			}
