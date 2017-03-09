@@ -1458,3 +1458,8 @@ query I
 SELECT pg_catalog.length('hello')
 ----
 5
+
+query OOO
+SELECT oid(3), oid(0), oid(12023948723)
+----
+3  0  12023948723

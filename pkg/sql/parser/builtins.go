@@ -1668,6 +1668,17 @@ var Builtins = map[string][]Builtin{
 			Info:     "Not usable; exposed only for ORM compatibility.",
 		},
 	},
+	"oid": {
+		Builtin{
+			Types:      ArgTypes{{"int", TypeInt}},
+			ReturnType: fixedReturnType(TypeOid),
+			fn: func(_ *EvalContext, args Datums) (Datum, error) {
+				return NewDOid(*args[0].(*DInt)), nil
+			},
+			category: categoryCompatibility,
+			Info:     "Converts an integer to an OID.",
+		},
+	},
 	"shobj_description": {
 		Builtin{
 			Types:      ArgTypes{{"object_oid", TypeOid}, {"catalog_name", TypeString}},
