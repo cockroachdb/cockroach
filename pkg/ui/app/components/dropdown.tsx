@@ -45,7 +45,7 @@ export default class Dropdown extends React.Component<DropdownOwnProps, {}> {
         onClick={() => this.props.onArrowClick(ArrowDirection.LEFT)}>
       </span>
       <span className="dropdown__title">{this.props.title}{this.props.title ? ":" : ""}</span>
-      <Select className="dropdown__select" clearable={false} options={options} value={selected} onChange={onChange} />
+      <Select className="dropdown__select" clearable={false} searchable={false} options={options} value={selected} onChange={onChange} />
       <span
         className="dropdown__side-arrow"
         disabled={_.includes(disabledArrows, ArrowDirection.RIGHT)}
