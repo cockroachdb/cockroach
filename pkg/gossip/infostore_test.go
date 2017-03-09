@@ -113,8 +113,8 @@ func TestInfoStoreGetInfoTTL(t *testing.T) {
 		t.Error(err)
 	}
 	time.Sleep(time.Nanosecond)
-	if is.getInfo("a") != nil {
-		t.Error("shouldn't be able to get info with short TTL")
+	if info := is.getInfo("a"); info != nil {
+		t.Errorf("shouldn't be able to get info with short TTL, got %+v", info)
 	}
 }
 
