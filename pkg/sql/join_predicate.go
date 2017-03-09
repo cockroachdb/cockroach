@@ -20,6 +20,8 @@ import (
 	"bytes"
 	"fmt"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -143,7 +145,7 @@ func (p *joinPredicate) tryAddEqualityFilter(filter parser.Expr, left, right *da
 
 // makeOnPredicate constructs a joinPredicate object for joins with a ON clause.
 func (p *planner) makeOnPredicate(
-	left, right *dataSourceInfo, expr parser.Expr,
+	ctx context.Context, left, right *dataSourceInfo, expr parser.Expr,
 ) (*joinPredicate, *dataSourceInfo, error) {
 	pred, info, err := makeEqualityPredicate(left, right, nil, nil, 0, nil)
 	if err != nil {
@@ -151,7 +153,7 @@ func (p *planner) makeOnPredicate(
 	}
 
 	// Determine the on condition expression.
-	onCond, err := p.analyzeExpr(expr, multiSourceInfo{info}, pred.iVarHelper, parser.TypeBool, true, "ON")
+	onCond, err := p.analyzeExpr(ctx, expr, multiSourceInfo{info}, pred.iVarHelper, parser.TypeBool, true, "ON")
 	if err != nil {
 		return nil, nil, err
 	}

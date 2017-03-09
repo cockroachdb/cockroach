@@ -61,10 +61,10 @@ func (jb *joinerBase) init(
 	types = append(types, leftTypes...)
 	types = append(types, rightTypes...)
 
-	if err := jb.onCond.init(onExpr, types, flowCtx.evalCtx); err != nil {
+	if err := jb.onCond.init(onExpr, types, &flowCtx.evalCtx); err != nil {
 		return err
 	}
-	return jb.out.init(post, types, flowCtx.evalCtx, output)
+	return jb.out.init(post, types, &flowCtx.evalCtx, output)
 }
 
 // render evaluates the provided on-condition and constructs a row with columns

@@ -333,6 +333,9 @@ func (c *v3Conn) serve(ctx context.Context, draining func() bool, reserved mon.B
 	if err := c.setupSession(ctx, reserved); err != nil {
 		return err
 	}
+	// Now that a Session has been set up, further operations done on behalf of
+	// this session use Session.Ctx() (which may diverge from this method's ctx).
+
 	defer func() {
 		// If we're panicking, don't bother trying to close the session; it would
 		// pollute the logs.
@@ -380,7 +383,7 @@ func (c *v3Conn) serve(ctx context.Context, draining func() bool, reserved mon.B
 			}
 
 			if log.V(2) {
-				log.Infof(ctx, "pgwire: %s: %q", serverMsgReady, txnStatus)
+				log.Infof(c.session.Ctx(), "pgwire: %s: %q", serverMsgReady, txnStatus)
 			}
 			c.writeBuf.writeByte(txnStatus)
 			if err := c.writeBuf.finishMsg(c.wr); err != nil {
@@ -402,12 +405,12 @@ func (c *v3Conn) serve(ctx context.Context, draining func() bool, reserved mon.B
 		// any messages until we get a sync.
 		if c.ignoreTillSync && typ != clientMsgSync {
 			if log.V(2) {
-				log.Infof(ctx, "pgwire: ignoring %s till sync", typ)
+				log.Infof(c.session.Ctx(), "pgwire: ignoring %s till sync", typ)
 			}
 			continue
 		}
 		if log.V(2) {
-			log.Infof(ctx, "pgwire: processing %s", typ)
+			log.Infof(c.session.Ctx(), "pgwire: processing %s", typ)
 		}
 		switch typ {
 		case clientMsgSync:
@@ -416,30 +419,30 @@ func (c *v3Conn) serve(ctx context.Context, draining func() bool, reserved mon.B
 
 		case clientMsgSimpleQuery:
 			c.doingExtendedQueryMessage = false
-			err = c.handleSimpleQuery(ctx, &c.readBuf)
+			err = c.handleSimpleQuery(&c.readBuf)
 
 		case clientMsgTerminate:
 			return nil
 
 		case clientMsgParse:
 			c.doingExtendedQueryMessage = true
-			err = c.handleParse(ctx, &c.readBuf)
+			err = c.handleParse(&c.readBuf)
 
 		case clientMsgDescribe:
 			c.doingExtendedQueryMessage = true
-			err = c.handleDescribe(ctx, &c.readBuf)
+			err = c.handleDescribe(c.session.Ctx(), &c.readBuf)
 
 		case clientMsgClose:
 			c.doingExtendedQueryMessage = true
-			err = c.handleClose(&c.readBuf)
+			err = c.handleClose(c.session.Ctx(), &c.readBuf)
 
 		case clientMsgBind:
 			c.doingExtendedQueryMessage = true
-			err = c.handleBind(&c.readBuf)
+			err = c.handleBind(c.session.Ctx(), &c.readBuf)
 
 		case clientMsgExecute:
 			c.doingExtendedQueryMessage = true
-			err = c.handleExecute(ctx, &c.readBuf)
+			err = c.handleExecute(&c.readBuf)
 
 		case clientMsgFlush:
 			c.doingExtendedQueryMessage = true
@@ -482,16 +485,16 @@ func (c *v3Conn) sendAuthPasswordRequest() (string, error) {
 	return c.readBuf.getString()
 }
 
-func (c *v3Conn) handleSimpleQuery(ctx context.Context, buf *readBuffer) error {
+func (c *v3Conn) handleSimpleQuery(buf *readBuffer) error {
 	query, err := buf.getString()
 	if err != nil {
 		return err
 	}
 
-	return c.executeStatements(ctx, query, nil, nil, true, 0)
+	return c.executeStatements(query, nil, nil, true, 0)
 }
 
-func (c *v3Conn) handleParse(ctx context.Context, buf *readBuffer) error {
+func (c *v3Conn) handleParse(buf *readBuffer) error {
 	name, err := buf.getString()
 	if err != nil {
 		return err
@@ -535,7 +538,7 @@ func (c *v3Conn) handleParse(ctx context.Context, buf *readBuffer) error {
 		sqlTypeHints[strconv.Itoa(i+1)] = v
 	}
 	// Create the new PreparedStatement in the connection's Session.
-	stmt, err := c.session.PreparedStatements.New(ctx, c.executor, name, query, sqlTypeHints)
+	stmt, err := c.session.PreparedStatements.New(c.executor, name, query, sqlTypeHints)
 	if err != nil {
 		return c.sendError(err)
 	}
@@ -623,7 +626,7 @@ func (c *v3Conn) handleDescribe(ctx context.Context, buf *readBuffer) error {
 	}
 }
 
-func (c *v3Conn) handleClose(buf *readBuffer) error {
+func (c *v3Conn) handleClose(ctx context.Context, buf *readBuffer) error {
 	typ, err := buf.getPrepareType()
 	if err != nil {
 		return c.sendError(err)
@@ -634,9 +637,9 @@ func (c *v3Conn) handleClose(buf *readBuffer) error {
 	}
 	switch typ {
 	case prepareStatement:
-		c.session.PreparedStatements.Delete(name)
+		c.session.PreparedStatements.Delete(ctx, name)
 	case preparePortal:
-		c.session.PreparedPortals.Delete(name)
+		c.session.PreparedPortals.Delete(ctx, name)
 	default:
 		return errors.Errorf("unknown close type: %s", typ)
 	}
@@ -644,7 +647,7 @@ func (c *v3Conn) handleClose(buf *readBuffer) error {
 	return c.writeBuf.finishMsg(c.wr)
 }
 
-func (c *v3Conn) handleBind(buf *readBuffer) error {
+func (c *v3Conn) handleBind(ctx context.Context, buf *readBuffer) error {
 	portalName, err := buf.getString()
 	if err != nil {
 		return err
@@ -771,7 +774,7 @@ func (c *v3Conn) handleBind(buf *readBuffer) error {
 		return c.sendInternalError(fmt.Sprintf("expected 0, 1, or %d for number of format codes, got %d", numColumns, numColumnFormatCodes))
 	}
 	// Create the new PreparedPortal in the connection's Session.
-	portal, err := c.session.PreparedPortals.New(portalName, stmt, qargs)
+	portal, err := c.session.PreparedPortals.New(ctx, portalName, stmt, qargs)
 	if err != nil {
 		return err
 	}
@@ -781,7 +784,7 @@ func (c *v3Conn) handleBind(buf *readBuffer) error {
 	return c.writeBuf.finishMsg(c.wr)
 }
 
-func (c *v3Conn) handleExecute(ctx context.Context, buf *readBuffer) error {
+func (c *v3Conn) handleExecute(buf *readBuffer) error {
 	portalName, err := buf.getString()
 	if err != nil {
 		return err
@@ -802,11 +805,10 @@ func (c *v3Conn) handleExecute(ctx context.Context, buf *readBuffer) error {
 		Values: portal.Qargs,
 	}
 
-	return c.executeStatements(ctx, stmt.Query, &pinfo, portalMeta.outFormats, false, int(limit))
+	return c.executeStatements(stmt.Query, &pinfo, portalMeta.outFormats, false, int(limit))
 }
 
 func (c *v3Conn) executeStatements(
-	ctx context.Context,
 	stmts string,
 	pinfo *parser.PlaceholderInfo,
 	formatCodes []formatCode,
@@ -817,7 +819,8 @@ func (c *v3Conn) executeStatements(
 	// Note: sql.Executor gets its Context from c.session.context, which
 	// has been bound by v3Conn.setupSession().
 	results := c.executor.ExecuteStatements(c.session, stmts, pinfo)
-	defer results.Close()
+	// Delay evaluation of c.session.Ctx().
+	defer func() { results.Close(c.session.Ctx()) }()
 
 	tracing.AnnotateTrace()
 	if results.Empty {
@@ -825,7 +828,7 @@ func (c *v3Conn) executeStatements(
 		c.writeBuf.initMsg(serverMsgEmptyQuery)
 		return c.writeBuf.finishMsg(c.wr)
 	}
-	return c.sendResponse(ctx, results.ResultList, formatCodes, sendDescription, limit)
+	return c.sendResponse(c.session.Ctx(), results.ResultList, formatCodes, sendDescription, limit)
 }
 
 func (c *v3Conn) sendCommandComplete(tag []byte) error {
@@ -987,7 +990,7 @@ func (c *v3Conn) sendResponse(
 			}
 
 		case parser.CopyIn:
-			rows, err := c.copyIn(result.Columns)
+			rows, err := c.copyIn(ctx, result.Columns)
 			if err != nil {
 				return err
 			}
@@ -1027,7 +1030,7 @@ func (c *v3Conn) sendRowDescription(
 	c.writeBuf.putInt16(int16(len(columns)))
 	for i, column := range columns {
 		if log.V(2) {
-			log.Infof(ctx, "pgwire: writing column %s of type: %T", column.Name, column.Typ)
+			log.Infof(c.session.Ctx(), "pgwire: writing column %s of type: %T", column.Name, column.Typ)
 		}
 		c.writeBuf.writeTerminatedString(column.Name)
 
@@ -1048,9 +1051,9 @@ func (c *v3Conn) sendRowDescription(
 
 // copyIn processes COPY IN data and returns the number of rows inserted.
 // See: https://www.postgresql.org/docs/current/static/protocol-flow.html#PROTOCOL-COPY
-func (c *v3Conn) copyIn(columns []sql.ResultColumn) (int64, error) {
+func (c *v3Conn) copyIn(ctx context.Context, columns []sql.ResultColumn) (int64, error) {
 	var rows int64
-	defer c.session.CopyEnd()
+	defer c.session.CopyEnd(ctx)
 
 	c.writeBuf.initMsg(serverMsgCopyInResponse)
 	c.writeBuf.writeByte(byte(formatText))

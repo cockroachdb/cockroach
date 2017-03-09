@@ -94,7 +94,7 @@ func (ti *tableInserter) row(ctx context.Context, values parser.Datums) (parser.
 	return nil, ti.ri.InsertRow(ctx, ti.b, values, false)
 }
 
-func (ti *tableInserter) finalize(_ context.Context) error {
+func (ti *tableInserter) finalize(context.Context) error {
 	var err error
 	if ti.autoCommit {
 		// An auto-txn can commit the transaction with the batch. This is an
@@ -498,7 +498,7 @@ func (td *tableDeleter) row(ctx context.Context, values parser.Datums) (parser.D
 	return nil, td.rd.deleteRow(ctx, td.b, values)
 }
 
-func (td *tableDeleter) finalize(_ context.Context) error {
+func (td *tableDeleter) finalize(context.Context) error {
 	if td.autoCommit {
 		// An auto-txn can commit the transaction with the batch. This is an
 		// optimization to avoid an extra round-trip to the transaction

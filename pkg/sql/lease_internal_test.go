@@ -159,7 +159,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	var leases []*LeaseState
 	err := kvDB.Txn(context.TODO(), func(txn *client.Txn) error {
 		for i := 0; i < 3; i++ {
-			lease, err := leaseManager.acquireFreshestFromStore(txn, tableDesc.ID)
+			lease, err := leaseManager.acquireFreshestFromStore(txn.Context, txn, tableDesc.ID)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -179,7 +179,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	}
 
 	if err := ts.purgeOldLeases(
-		kvDB, false, 1 /* minVersion */, leaseManager); err != nil {
+		context.TODO(), kvDB, false, 1 /* minVersion */, leaseManager); err != nil {
 		t.Fatal(err)
 	}
 
@@ -370,7 +370,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	var lease *LeaseState
 	if err := kvDB.Txn(context.TODO(), func(txn *client.Txn) error {
 		var err error
-		lease, err = leaseManager.AcquireByName(txn, tableDesc.ParentID, "test")
+		lease, err = leaseManager.AcquireByName(txn.Context, txn, tableDesc.ParentID, "test")
 		return err
 	}); err != nil {
 		t.Fatal(err)
@@ -401,7 +401,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 		var leaseByName *LeaseState
 		if err := kvDB.Txn(context.TODO(), func(txn *client.Txn) error {
 			var err error
-			lease, err := leaseManager.AcquireByName(txn, tableDesc.ParentID, "test")
+			lease, err := leaseManager.AcquireByName(txn.Context, txn, tableDesc.ParentID, "test")
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -416,7 +416,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 			// Start the race: signal the other guy to release, and we do another
 			// acquire at the same time.
 			leaseChan <- lease
-			leaseByName, err = leaseManager.AcquireByName(txn, tableDesc.ParentID, "test")
+			leaseByName, err = leaseManager.AcquireByName(txn.Context, txn, tableDesc.ParentID, "test")
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -483,7 +483,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 		go func() {
 			defer wg.Done()
 			err := kvDB.Txn(context.TODO(), func(txn *client.Txn) error {
-				lease, err := leaseManager.acquireFreshestFromStore(txn, tableDesc.ID)
+				lease, err := leaseManager.acquireFreshestFromStore(txn.Context, txn, tableDesc.ID)
 				if err != nil {
 					return err
 				}

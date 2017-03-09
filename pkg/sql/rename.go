@@ -19,6 +19,8 @@ package sql
 import (
 	"fmt"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -39,7 +41,7 @@ var (
 // Privileges: security.RootUser user, DROP on source database.
 //   Notes: postgres requires superuser, db owner, or "CREATEDB".
 //          mysql >= 5.1.23 does not allow database renames.
-func (p *planner) RenameDatabase(n *parser.RenameDatabase) (planNode, error) {
+func (p *planner) RenameDatabase(ctx context.Context, n *parser.RenameDatabase) (planNode, error) {
 	if n.Name == "" || n.NewName == "" {
 		return nil, errEmptyDatabaseName
 	}
@@ -71,7 +73,7 @@ func (p *planner) RenameDatabase(n *parser.RenameDatabase) (planNode, error) {
 		return nil, err
 	}
 	for i := range tbNames {
-		tbDesc, err := p.getTableOrViewDesc(&tbNames[i])
+		tbDesc, err := p.getTableOrViewDesc(ctx, &tbNames[i])
 		if err != nil {
 			return nil, err
 		}
@@ -88,7 +90,7 @@ func (p *planner) RenameDatabase(n *parser.RenameDatabase) (planNode, error) {
 				var err error
 				viewName, err = p.getQualifiedTableName(viewDesc)
 				if err != nil {
-					log.Warningf(p.ctx(), "Unable to retrieve fully-qualified name of view %d: %v",
+					log.Warningf(ctx, "Unable to retrieve fully-qualified name of view %d: %v",
 						viewDesc.ID, err)
 					msg := fmt.Sprintf("cannot rename database because a view depends on table %q", tbDesc.Name)
 					return nil, sqlbase.NewDependentObjectError(msg)
@@ -111,7 +113,7 @@ func (p *planner) RenameDatabase(n *parser.RenameDatabase) (planNode, error) {
 //   Notes: postgres requires the table owner.
 //          mysql requires ALTER, DROP on the original table, and CREATE, INSERT
 //          on the new table (and does not copy privileges over).
-func (p *planner) RenameTable(n *parser.RenameTable) (planNode, error) {
+func (p *planner) RenameTable(ctx context.Context, n *parser.RenameTable) (planNode, error) {
 	oldTn, err := n.Name.NormalizeWithDatabaseName(p.session.Database)
 	if err != nil {
 		return nil, err
@@ -133,7 +135,7 @@ func (p *planner) RenameTable(n *parser.RenameTable) (planNode, error) {
 	// made more lenient down the road if needed.
 	var tableDesc *sqlbase.TableDescriptor
 	if n.IsView {
-		tableDesc, err = p.getViewDesc(oldTn)
+		tableDesc, err = p.getViewDesc(ctx, oldTn)
 		if err != nil {
 			return nil, err
 		}
@@ -176,7 +178,7 @@ func (p *planner) RenameTable(n *parser.RenameTable) (planNode, error) {
 	// query with the new name, we simply disallow such renames for now.
 	if len(tableDesc.DependedOnBy) > 0 {
 		return nil, p.dependentViewRenameError(
-			tableDesc.TypeName(), oldTn.String(), tableDesc.ParentID, tableDesc.DependedOnBy[0].ID)
+			ctx, tableDesc.TypeName(), oldTn.String(), tableDesc.ParentID, tableDesc.DependedOnBy[0].ID)
 	}
 
 	// Check if target database exists.
@@ -251,7 +253,7 @@ func (p *planner) RenameTable(n *parser.RenameTable) (planNode, error) {
 // Privileges: CREATE on table.
 //   notes: postgres requires CREATE on the table.
 //          mysql requires ALTER, CREATE, INSERT on the table.
-func (p *planner) RenameIndex(n *parser.RenameIndex) (planNode, error) {
+func (p *planner) RenameIndex(ctx context.Context, n *parser.RenameIndex) (planNode, error) {
 	tn, err := p.expandIndexName(n.Index)
 	if err != nil {
 		return nil, err
@@ -282,7 +284,7 @@ func (p *planner) RenameIndex(n *parser.RenameIndex) (planNode, error) {
 			continue
 		}
 		return nil, p.dependentViewRenameError(
-			"index", n.Index.Index.String(), tableDesc.ParentID, tableRef.ID)
+			ctx, "index", n.Index.Index.String(), tableDesc.ParentID, tableRef.ID)
 	}
 
 	if n.NewName == "" {
@@ -323,7 +325,7 @@ func (p *planner) RenameIndex(n *parser.RenameIndex) (planNode, error) {
 // Privileges: CREATE on table.
 //   notes: postgres requires CREATE on the table.
 //          mysql requires ALTER, CREATE, INSERT on the table.
-func (p *planner) RenameColumn(n *parser.RenameColumn) (planNode, error) {
+func (p *planner) RenameColumn(ctx context.Context, n *parser.RenameColumn) (planNode, error) {
 	// Check if table exists.
 	tn, err := n.Table.NormalizeWithDatabaseName(p.session.Database)
 	if err != nil {
@@ -373,7 +375,7 @@ func (p *planner) RenameColumn(n *parser.RenameColumn) (planNode, error) {
 		}
 		if found {
 			return nil, p.dependentViewRenameError(
-				"column", n.Name.String(), tableDesc.ParentID, tableRef.ID)
+				ctx, "column", n.Name.String(), tableDesc.ParentID, tableRef.ID)
 		}
 	}
 
@@ -441,7 +443,7 @@ func (p *planner) RenameColumn(n *parser.RenameColumn) (planNode, error) {
 // TODO(a-robinson): Support renaming objects depended on by views once we have
 // a better encoding for view queries (#10083).
 func (p *planner) dependentViewRenameError(
-	typeName, objName string, parentID, viewID sqlbase.ID,
+	ctx context.Context, typeName, objName string, parentID, viewID sqlbase.ID,
 ) error {
 	viewDesc, err := sqlbase.GetTableDescFromID(p.txn, viewID)
 	if err != nil {
@@ -452,7 +454,7 @@ func (p *planner) dependentViewRenameError(
 		var err error
 		viewName, err = p.getQualifiedTableName(viewDesc)
 		if err != nil {
-			log.Warningf(p.ctx(), "unable to retrieve name of view %d: %v", viewID, err)
+			log.Warningf(ctx, "unable to retrieve name of view %d: %v", viewID, err)
 			msg := fmt.Sprintf("cannot rename %s %q because a view depends on it",
 				typeName, objName)
 			return sqlbase.NewDependentObjectError(msg)

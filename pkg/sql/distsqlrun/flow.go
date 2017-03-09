@@ -47,10 +47,17 @@ type FlowID struct {
 type FlowCtx struct {
 	log.AmbientContext
 
-	id           FlowID
-	evalCtx      *parser.EvalContext
-	rpcCtx       *rpc.Context
-	txnProto     *roachpb.Transaction
+	// id is a unique identifier for a flow.
+	id FlowID
+	// evalCtx is used by all the processors in the flow to evaluate expressions.
+	evalCtx parser.EvalContext
+	// rpcCtx is used by the Outboxes that may be present in the flow for
+	// connecting to other nodes.
+	rpcCtx *rpc.Context
+	// txnProto is the transaction in which kv operations performed by processors
+	// in the flow must be performed.
+	txnProto *roachpb.Transaction
+	// clientDB is a handle to the cluster. Used to run transactions.
 	clientDB     *client.DB
 	testingKnobs TestingKnobs
 }
