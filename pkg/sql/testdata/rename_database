@@ -32,7 +32,7 @@ SELECT * FROM kv
 statement ok
 ALTER DATABASE test RENAME TO u
 
-statement error database "test" does not exist
+statement error table "kv" does not exist
 SELECT * FROM kv
 ----
 
