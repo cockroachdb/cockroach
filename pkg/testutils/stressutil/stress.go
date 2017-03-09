@@ -12,17 +12,8 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package testutils
+package stressutil
 
-import (
-	"github.com/cockroachdb/cockroach/pkg/testutils/stressutil"
-	"github.com/cockroachdb/cockroach/pkg/util/envutil"
-)
-
-var isStress = envutil.EnvOrDefaultBool(stressutil.Env, false)
-
-// Stress returns true iff the process is running as part of CockroachDB's
-// nightly stress tests.
-func Stress() bool {
-	return isStress
-}
+// Env is the environment variable used to signal that the process is running
+// as part of CockroachDB's nightly stress tests.
+const Env = "COCKROACH_NIGHTLY_STRESS"
