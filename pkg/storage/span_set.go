@@ -1,4 +1,4 @@
-// Copyright 2016 The Cockroach Authors.
+// Copyright 2017 The Cockroach Authors.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -101,90 +101,86 @@ type spanSetIterator struct {
 	err   error
 }
 
-var _ engine.Iterator = spanSetIterator{}
+var _ engine.Iterator = &spanSetIterator{}
 
-func (s spanSetIterator) Close() {
+func (s *spanSetIterator) Close() {
 	s.i.Close()
 }
 
-func (s spanSetIterator) Seek(key engine.MVCCKey) {
-	if s.err == nil {
-		s.err = s.spans.checkAllowed(SpanReadOnly, roachpb.Span{Key: key.Key})
-	}
+func (s *spanSetIterator) Seek(key engine.MVCCKey) {
+	s.err = s.spans.checkAllowed(SpanReadOnly, roachpb.Span{Key: key.Key})
 	s.i.Seek(key)
 }
 
-func (s spanSetIterator) SeekReverse(key engine.MVCCKey) {
-	if s.err == nil {
-		s.err = s.spans.checkAllowed(SpanReadOnly, roachpb.Span{Key: key.Key})
-	}
+func (s *spanSetIterator) SeekReverse(key engine.MVCCKey) {
+	s.err = s.spans.checkAllowed(SpanReadOnly, roachpb.Span{Key: key.Key})
 	s.i.SeekReverse(key)
 }
 
-func (s spanSetIterator) Valid() bool {
+func (s *spanSetIterator) Valid() bool {
 	return s.err == nil && s.i.Valid()
 }
 
-func (s spanSetIterator) Next() {
+func (s *spanSetIterator) Next() {
 	s.i.Next()
 	if s.err == nil {
 		s.err = s.spans.checkAllowed(SpanReadOnly, roachpb.Span{Key: s.UnsafeKey().Key})
 	}
 }
 
-func (s spanSetIterator) Prev() {
+func (s *spanSetIterator) Prev() {
 	s.i.Prev()
 	if s.err == nil {
 		s.err = s.spans.checkAllowed(SpanReadOnly, roachpb.Span{Key: s.UnsafeKey().Key})
 	}
 }
 
-func (s spanSetIterator) NextKey() {
+func (s *spanSetIterator) NextKey() {
 	s.i.NextKey()
 	if s.err == nil {
 		s.err = s.spans.checkAllowed(SpanReadOnly, roachpb.Span{Key: s.UnsafeKey().Key})
 	}
 }
 
-func (s spanSetIterator) PrevKey() {
+func (s *spanSetIterator) PrevKey() {
 	s.i.PrevKey()
 	if s.err == nil {
 		s.err = s.spans.checkAllowed(SpanReadOnly, roachpb.Span{Key: s.UnsafeKey().Key})
 	}
 }
 
-func (s spanSetIterator) Key() engine.MVCCKey {
+func (s *spanSetIterator) Key() engine.MVCCKey {
 	return s.i.Key()
 }
 
-func (s spanSetIterator) Value() []byte {
+func (s *spanSetIterator) Value() []byte {
 	return s.i.Value()
 }
 
-func (s spanSetIterator) ValueProto(msg proto.Message) error {
+func (s *spanSetIterator) ValueProto(msg proto.Message) error {
 	return s.i.ValueProto(msg)
 }
 
-func (s spanSetIterator) UnsafeKey() engine.MVCCKey {
+func (s *spanSetIterator) UnsafeKey() engine.MVCCKey {
 	return s.i.UnsafeKey()
 }
 
-func (s spanSetIterator) UnsafeValue() []byte {
+func (s *spanSetIterator) UnsafeValue() []byte {
 	return s.i.UnsafeValue()
 }
 
-func (s spanSetIterator) Less(key engine.MVCCKey) bool {
+func (s *spanSetIterator) Less(key engine.MVCCKey) bool {
 	return s.i.Less(key)
 }
 
-func (s spanSetIterator) Error() error {
+func (s *spanSetIterator) Error() error {
 	if s.err != nil {
 		return s.err
 	}
 	return s.i.Error()
 }
 
-func (s spanSetIterator) ComputeStats(start, end engine.MVCCKey, nowNanos int64) (enginepb.MVCCStats, error) {
+func (s *spanSetIterator) ComputeStats(start, end engine.MVCCKey, nowNanos int64) (enginepb.MVCCStats, error) {
 	if err := s.spans.checkAllowed(SpanReadOnly, roachpb.Span{Key: start.Key, EndKey: end.Key}); err != nil {
 		return enginepb.MVCCStats{}, err
 	}
@@ -228,7 +224,7 @@ func (s spanSetReader) Iterate(start, end engine.MVCCKey, f func(engine.MVCCKeyV
 }
 
 func (s spanSetReader) NewIterator(prefix bool) engine.Iterator {
-	return spanSetIterator{s.r.NewIterator(prefix), s.spans, nil}
+	return &spanSetIterator{s.r.NewIterator(prefix), s.spans, nil}
 }
 
 type spanSetWriter struct {
