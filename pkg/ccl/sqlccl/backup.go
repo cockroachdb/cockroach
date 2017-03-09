@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/interval"
@@ -151,7 +152,7 @@ func (r backupFileDescriptors) Less(i, j int) bool {
 //   file.
 func Backup(
 	ctx context.Context,
-	db client.DB,
+	p sql.PlanHookState,
 	uri string,
 	targets parser.TargetList,
 	startTime, endTime hlc.Timestamp,
@@ -169,7 +170,7 @@ func Backup(
 	defer exportStore.Close()
 
 	{
-		txn := client.NewTxn(ctx, db)
+		txn := client.NewTxn(ctx, *p.ExecCfg().DB)
 		opt := client.TxnExecOptions{AutoRetry: true, AutoCommit: true}
 		err := txn.Exec(opt, func(txn *client.Txn, opt *client.TxnExecOptions) error {
 			var err error
@@ -188,6 +189,14 @@ func Backup(
 		return BackupDescriptor{}, err
 	}
 
+	for _, desc := range sqlDescs {
+		if db := desc.GetDatabase(); db != nil {
+			if err := p.CheckPrivilege(db, privilege.SELECT); err != nil {
+				return BackupDescriptor{}, err
+			}
+		}
+	}
+
 	// Backup users, descriptors, and the entire keyspace for user data.
 	tables := []*sqlbase.TableDescriptor{&sqlbase.DescriptorTable, &sqlbase.UsersTable}
 	for _, desc := range sqlDescs {
@@ -195,6 +204,13 @@ func Backup(
 			tables = append(tables, tableDesc)
 		}
 	}
+
+	for _, desc := range tables {
+		if err := p.CheckPrivilege(desc, privilege.SELECT); err != nil {
+			return BackupDescriptor{}, err
+		}
+	}
+
 	spans := spansForAllTableIndexes(tables)
 
 	mu := struct {
@@ -214,7 +230,7 @@ func Backup(
 				Storage:   storageConf,
 				StartTime: startTime,
 			}
-			res, pErr := client.SendWrappedWith(ctx, db.GetSender(), header, req)
+			res, pErr := client.SendWrappedWith(ctx, p.ExecCfg().DB.GetSender(), header, req)
 			if pErr != nil {
 				wg.Done(pErr.GoError())
 				return
@@ -307,6 +323,7 @@ func Import(
 
 func reassignParentIDs(
 	txn *client.Txn,
+	p sql.PlanHookState,
 	databasesByID map[sqlbase.ID]*sqlbase.DatabaseDescriptor,
 	tables []*sqlbase.TableDescriptor,
 	opt parser.KVOptions,
@@ -358,6 +375,10 @@ func reassignParentIDs(
 			parentDB, err := sqlbase.GetDatabaseDescFromID(txn, table.ParentID)
 			if err != nil {
 				return errors.Wrapf(err, "failed to lookup parent DB %d", table.ParentID)
+			}
+
+			if err := p.CheckPrivilege(parentDB, privilege.CREATE); err != nil {
+				return err
 			}
 
 			// Default is to copy privs from restoring parent db, like CREATE TABLE.
@@ -701,7 +722,11 @@ func restoreTableDesc(ctx context.Context, txn *client.Txn, table sqlbase.TableD
 // Restore imports a SQL table (or tables) from sets of non-overlapping sstable
 // files.
 func Restore(
-	ctx context.Context, db client.DB, uris []string, targets parser.TargetList, opt parser.KVOptions,
+	ctx context.Context,
+	p sql.PlanHookState,
+	uris []string,
+	targets parser.TargetList,
+	opt parser.KVOptions,
 ) ([]sqlbase.TableDescriptor, error) {
 	backupDescs := make([]BackupDescriptor, len(uris))
 
@@ -753,8 +778,8 @@ func Restore(
 
 	// Fail fast if the necessary databases don't exist since the below logic
 	// leaks table IDs when Restore fails.
-	if err := db.Txn(ctx, func(txn *client.Txn) error {
-		return reassignParentIDs(txn, databasesByID, tables, opt)
+	if err := p.ExecCfg().DB.Txn(ctx, func(txn *client.Txn) error {
+		return reassignParentIDs(txn, p, databasesByID, tables, opt)
 	}); err != nil {
 		return nil, err
 	}
@@ -766,7 +791,7 @@ func Restore(
 	// TODO(dan): For now, we're always generating a new ID, but varints get
 	// longer as they get bigger and so our keys will, too. We should someday
 	// figure out how to reclaim ids.
-	newTableIDs, err := newTableIDs(ctx, db, databasesByID, tables)
+	newTableIDs, err := newTableIDs(ctx, *p.ExecCfg().DB, databasesByID, tables)
 	if err != nil {
 		return nil, errors.Wrapf(err, "reserving %d new table IDs for restore", len(tables))
 	}
@@ -817,7 +842,7 @@ func Restore(
 			return nil, errors.Errorf("failed to rewrite key: %s", r.Key)
 		}
 	}
-	if err := presplitRanges(ctx, db, splitKeys); err != nil {
+	if err := presplitRanges(ctx, *p.ExecCfg().DB, splitKeys); err != nil {
 		return nil, errors.Wrapf(err, "presplitting %d ranges", len(importRequests))
 	}
 	// TODO(dan): Wait for the newly created ranges (and leaseholders) to
@@ -827,7 +852,7 @@ func Restore(
 	for i := range importRequests {
 		wg.Add(1)
 		go func(i importEntry) {
-			wg.Done(Import(ctx, db, i.Key, i.EndKey, i.files, kr))
+			wg.Done(Import(ctx, *p.ExecCfg().DB, i.Key, i.EndKey, i.files, kr))
 		}(importRequests[i])
 	}
 	if err := wg.Wait(); err != nil {
@@ -841,7 +866,7 @@ func Restore(
 	// them. After this call, any queries on a table will be served by the newly
 	// restored data.
 	// TODO(dan): Gossip this out and wait for any outstanding leases to expire.
-	newTables, err := restoreTableDescs(ctx, db, databasesByID, tables, newTableIDs)
+	newTables, err := restoreTableDescs(ctx, *p.ExecCfg().DB, databasesByID, tables, newTableIDs)
 	if err != nil {
 		return nil, errors.Wrapf(err, "restoring %d TableDescriptors", len(tables))
 	}
@@ -854,7 +879,7 @@ func Restore(
 }
 
 func backupPlanHook(
-	baseCtx context.Context, stmt parser.Statement, state sql.PlanHookState,
+	baseCtx context.Context, stmt parser.Statement, p sql.PlanHookState,
 ) (func() ([]parser.Datums, error), sql.ResultColumns, error) {
 	backup, ok := stmt.(*parser.Backup)
 	if !ok {
@@ -863,6 +888,10 @@ func backupPlanHook(
 	if err := utilccl.CheckEnterpriseEnabled("BACKUP"); err != nil {
 		return nil, nil, err
 	}
+	if err := p.RequireSuperUser("BACKUP"); err != nil {
+		return nil, nil, err
+	}
+
 	header := sql.ResultColumns{
 		{Name: "to", Typ: parser.TypeString},
 		{Name: "startTs", Typ: parser.TypeString},
@@ -882,14 +911,15 @@ func backupPlanHook(
 				return nil, err
 			}
 		}
-		endTime := state.ExecCfg.Clock.Now()
+		endTime := p.ExecCfg().Clock.Now()
 		if backup.AsOf.Expr != nil {
 			var err error
 			if endTime, err = sql.EvalAsOfTimestamp(nil, backup.AsOf, endTime); err != nil {
 				return nil, err
 			}
 		}
-		desc, err := Backup(ctx, *state.ExecCfg.DB,
+		desc, err := Backup(ctx,
+			p,
 			backup.To,
 			backup.Targets,
 			startTime, endTime,
@@ -910,7 +940,7 @@ func backupPlanHook(
 }
 
 func restorePlanHook(
-	baseCtx context.Context, stmt parser.Statement, state sql.PlanHookState,
+	baseCtx context.Context, stmt parser.Statement, p sql.PlanHookState,
 ) (func() ([]parser.Datums, error), sql.ResultColumns, error) {
 	restore, ok := stmt.(*parser.Restore)
 	if !ok {
@@ -920,12 +950,16 @@ func restorePlanHook(
 		return nil, nil, err
 	}
 
+	if err := p.RequireSuperUser("RESTORE"); err != nil {
+		return nil, nil, err
+	}
+
 	fn := func() ([]parser.Datums, error) {
 		// TODO(dan): Move this span into sql.
 		ctx, span := tracing.ChildSpan(baseCtx, stmt.StatementTag())
 		defer tracing.FinishSpan(span)
 
-		_, err := Restore(ctx, *state.ExecCfg.DB, restore.From, restore.Targets, restore.Options)
+		_, err := Restore(ctx, p, restore.From, restore.Targets, restore.Options)
 		return nil, err
 	}
 	return fn, nil, nil

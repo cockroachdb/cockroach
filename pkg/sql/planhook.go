@@ -39,8 +39,9 @@ var planHooks []planHookFn
 // PlanHookState exposes the internal planner state needed by plan hooks. This
 // state is passed in this struct, rather than directly to hook functions, to
 // avoid rewiring every hook function when more state needs to be exported.
-type PlanHookState struct {
-	ExecCfg *ExecutorConfig
+type PlanHookState interface {
+	ExecCfg() *ExecutorConfig
+	AuthorizationAccessor
 }
 
 // AddPlanHook adds a hook used to short-circuit creating a planNode from a
