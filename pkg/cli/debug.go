@@ -784,6 +784,7 @@ var debugCmds = []*cobra.Command{
 	kvCmd,
 	rangeCmd,
 	debugEnvCmd,
+	debugZipCmd,
 }
 
 var debugCmd = &cobra.Command{
