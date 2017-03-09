@@ -62,7 +62,7 @@ func (nt *NormalizableTableName) Normalize() (*TableName, error) {
 		nt.TableNameReference = tn
 		return tn, nil
 	default:
-		panic(fmt.Sprintf("unsupported function name: %+v (%T)",
+		panic(fmt.Sprintf("unsupported table name reference: %+v (%T)",
 			nt.TableNameReference, nt.TableNameReference))
 	}
 }
@@ -101,7 +101,7 @@ type TableName struct {
 	DatabaseName Name
 	TableName    Name
 
-	// dbNameOriginallyOmitted, when set to true, causes the
+	// DBNameOriginallyOmitted, when set to true, causes the
 	// String()/Format() methods to omit the database name even if one
 	// is set. This is used to ensure that pretty-printing
 	// a TableName normalized from a parser input yields back
