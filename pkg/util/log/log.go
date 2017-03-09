@@ -18,6 +18,7 @@ package log
 
 import (
 	"fmt"
+	"io"
 	"net/http"
 
 	"golang.org/x/net/context"
@@ -173,4 +174,12 @@ func FatalfDepth(ctx context.Context, depth int, format string, args ...interfac
 // higher.
 func V(level level) bool {
 	return VDepth(level, 1)
+}
+
+// Format writes the log entry to the specified writer.
+func (e Entry) Format(w io.Writer) error {
+	buf := formatLogEntry(e, nil, nil)
+	defer logging.putBuffer(buf)
+	_, err := w.Write(buf.Bytes())
+	return err
 }
