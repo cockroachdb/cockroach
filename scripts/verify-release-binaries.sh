@@ -38,7 +38,7 @@ function check_linux() {
   echo -n "linux binary"
 
   curl -s https://binaries.cockroachdb.com/cockroach-${BETA_TAG}${linux}.tgz | tar xz
-  local tag=$($(dirname $0)/builder.sh ./cockroach-${BETA_TAG}${linux}/cockroach version |
+  local tag=$($(dirname $0)/../build/builder.sh ./cockroach-${BETA_TAG}${linux}/cockroach version |
               grep 'Build Tag:' | awk '{print $NF}' | tr -d '\r')
   rm -fr ./cockroach-${BETA_TAG}${linux}
   verify_tag "${tag}"
