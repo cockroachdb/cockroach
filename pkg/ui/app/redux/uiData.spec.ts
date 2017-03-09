@@ -330,7 +330,7 @@ describe("UIData reducer", function() {
 
     it("correctly saves UIData", function() {
       fetchMock.mock({
-        matcher: "/_admin/v1/uidata",
+        matcher: "_admin/v1/uidata",
         method: "POST",
         response: (_url: string, requestObj: RequestInit) => {
           assert.equal(state[uiKey1].state, uidata.UIDataState.SAVING);
@@ -365,7 +365,7 @@ describe("UIData reducer", function() {
       );
 
       return Promise.all([p, p2]).then(() => {
-        assert.lengthOf(fetchMock.calls("/_admin/v1/uidata"), 1);
+        assert.lengthOf(fetchMock.calls("_admin/v1/uidata"), 1);
         assert.lengthOf(_.keys(state), 2);
         assert.equal(state[uiKey1].data, uiObj1);
         assert.equal(state[uiKey2].data, uiObj2);
@@ -379,7 +379,7 @@ describe("UIData reducer", function() {
     it("correctly reacts to error during save", function (done) {
       this.timeout(2000);
       fetchMock.mock({
-        matcher: "/_admin/v1/uidata",
+        matcher: "_admin/v1/uidata",
         method: "POST",
         response: () => {
           return { throws: new Error(), status: 500};
@@ -392,7 +392,7 @@ describe("UIData reducer", function() {
       );
 
       p.then(() => {
-        assert.lengthOf(fetchMock.calls("/_admin/v1/uidata"), 1);
+        assert.lengthOf(fetchMock.calls("_admin/v1/uidata"), 1);
         assert.lengthOf(_.keys(state), 2);
         assert.equal(state[uiKey1].state, uidata.UIDataState.SAVING);
         assert.equal(state[uiKey2].state, uidata.UIDataState.SAVING);
@@ -416,7 +416,7 @@ describe("UIData reducer", function() {
     });
 
     it("correctly loads UIData", function() {
-      let expectedURL = `/_admin/v1/uidata?keys=${uiKey1}&keys=${uiKey2}`;
+      let expectedURL = `_admin/v1/uidata?keys=${uiKey1}&keys=${uiKey2}`;
 
       fetchMock.mock({
         matcher: expectedURL,
@@ -460,7 +460,7 @@ describe("UIData reducer", function() {
     it("correctly reacts to error during load", function (done) {
       this.timeout(2000);
       fetchMock.mock({
-        matcher: "^/_admin/v1/uidata" /* "^" allows prefix match */,
+        matcher: "^_admin/v1/uidata" /* "^" allows prefix match */,
         response: () => {
           return { throws: new Error() };
         },
@@ -469,7 +469,7 @@ describe("UIData reducer", function() {
       let p = loadUIData(uiKey1, uiKey2);
 
       p.then(() => {
-        assert.lengthOf(fetchMock.calls("^/_admin/v1/uidata"), 1);
+        assert.lengthOf(fetchMock.calls("^_admin/v1/uidata"), 1);
         assert.lengthOf(_.keys(state), 2);
         assert.equal(state[uiKey1].state, uidata.UIDataState.LOADING);
         assert.equal(state[uiKey2].state, uidata.UIDataState.LOADING);
@@ -495,7 +495,7 @@ describe("UIData reducer", function() {
     it("handles missing keys", function () {
       let missingKey = "missingKey";
 
-      let expectedURL = `/_admin/v1/uidata?keys=${missingKey}`;
+      let expectedURL = `_admin/v1/uidata?keys=${missingKey}`;
 
       fetchMock.mock({
         matcher: expectedURL,
