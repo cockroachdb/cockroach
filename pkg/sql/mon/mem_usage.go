@@ -551,9 +551,8 @@ func (mm *MemoryMonitor) increaseBudget(ctx context.Context, minExtra int64) err
 			mm.name, minExtra, mm.reserved.curAllocated)
 	}
 	minExtra = mm.roundSize(minExtra)
-	if log.V(2) || log.HasSpanOrEvent(ctx) {
-		log.VEventf(ctx, 2, "%s: requesting %d bytes from the pool",
-			mm.name, minExtra)
+	if log.V(2) {
+		log.Infof(ctx, "%s: requesting %d bytes from the pool", mm.name, minExtra)
 	}
 
 	return mm.pool.GrowAccount(ctx, &mm.mu.curBudget, minExtra)
@@ -570,9 +569,8 @@ func (mm *MemoryMonitor) roundSize(sz int64) int64 {
 // pool.
 func (mm *MemoryMonitor) releaseBudget(ctx context.Context) {
 	// NB: mm.mu need not be locked here, as this is only called from StopMonitor().
-	if log.V(2) || log.HasSpanOrEvent(ctx) {
-		log.VEventf(ctx, 2, "%s: releasing %d bytes to the pool",
-			mm.name, mm.mu.curBudget.curAllocated)
+	if log.V(2) {
+		log.Infof(ctx, "%s: releasing %d bytes to the pool", mm.name, mm.mu.curBudget.curAllocated)
 	}
 	mm.pool.ClearAccount(ctx, &mm.mu.curBudget)
 }
