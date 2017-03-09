@@ -790,22 +790,23 @@ func TestBackupRestorePermissions(t *testing.T) {
 	backupStmt := fmt.Sprintf(`BACKUP DATABASE bench TO '%s'`, dir)
 
 	t.Run("root-only", func(t *testing.T) {
-		_, err = testuser.Exec(backupStmt)
-		if !testutils.IsError(err, "only root is allowed to BACKUP") {
+		if _, err := testuser.Exec(backupStmt); !testutils.IsError(
+			err, "only root is allowed to BACKUP",
+		) {
 			t.Fatal(err)
 		}
-		_, err = testuser.Exec(`RESTORE blah FROM 'blah'`)
-		if !testutils.IsError(err, "only root is allowed to RESTORE") {
+		if _, err := testuser.Exec(`RESTORE blah FROM 'blah'`); !testutils.IsError(
+			err, "only root is allowed to RESTORE",
+		) {
 			t.Fatal(err)
 		}
 	})
 
 	t.Run("privs-required", func(t *testing.T) {
 		sqlDB.Exec(backupStmt)
-		_, err = sqlDB.DB.Exec(
+		if _, err := sqlDB.DB.Exec(
 			fmt.Sprintf(`RESTORE bench.bank FROM '%s' WITH OPTIONS ('into_db'='system')`, dir),
-		)
-		if !testutils.IsError(err, "user root does not have CREATE privilege") {
+		); !testutils.IsError(err, "user root does not have CREATE privilege") {
 			t.Fatal(err)
 		}
 	})
