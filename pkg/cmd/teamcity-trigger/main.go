@@ -74,7 +74,7 @@ func runTC(queueBuildFn func(map[string]string)) {
 		{"env.GOFLAGS": "-race"},
 		{"env.TAGS": "deadlock"},
 	} {
-		properties[testutils.StressEnv] = strconv.FormatBool(true)
+		properties["env."+testutils.StressEnv] = strconv.FormatBool(true)
 		for _, propEvalKV := range []bool{true, false} {
 			properties["env.COCKROACH_PROPOSER_EVALUATED_KV"] = strconv.FormatBool(propEvalKV)
 

@@ -22,6 +22,8 @@ import (
 )
 
 func TestRunTC(t *testing.T) {
+	unexpectedParameters := make(map[string]struct{})
+
 	count := 0
 	runTC(func(parameters map[string]string) {
 		count++
@@ -32,8 +34,18 @@ func TestRunTC(t *testing.T) {
 		} else {
 			t.Errorf("parameters did not include package: %+v", parameters)
 		}
+
+		for parameter := range parameters {
+			if !strings.HasPrefix(parameter, "env.") {
+				unexpectedParameters[parameter] = struct{}{}
+			}
+		}
 	})
 	if count == 0 {
 		t.Fatal("no builds were created")
+	}
+
+	for parameter := range unexpectedParameters {
+		t.Errorf("unexpected non-env parameter %s included", parameter)
 	}
 }
