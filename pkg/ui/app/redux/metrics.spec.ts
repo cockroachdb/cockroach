@@ -184,7 +184,7 @@ describe("metrics reducer", function() {
       // Mock out fetch server; we are only expecting requests to /ts/query,
       // which we simply reflect with an empty set of datapoints.
       fetchMock.mock({
-        matcher: "/ts/query",
+        matcher: "ts/query",
         method: "POST",
         response: (_url: string, requestObj: RequestInit) => {
           // Assert that metric store's "inFlight" is 1 or 2.
@@ -234,7 +234,7 @@ describe("metrics reducer", function() {
 
       return Promise.all([p1, p2]).then(() => {
         // Assert that the server got the correct number of requests (2).
-        assert.lengthOf(fetchMock.calls("/ts/query"), 3);
+        assert.lengthOf(fetchMock.calls("ts/query"), 3);
         // Assert that the mock metrics state has 5 queries.
         assert.lengthOf(_.keys(mockMetricsState.queries), 6);
         _.each(mockMetricsState.queries, (q) => {
@@ -254,7 +254,7 @@ describe("metrics reducer", function() {
       // an error to the second request.
       let successSent = false;
       fetchMock.mock({
-        matcher: "/ts/query",
+        matcher: "ts/query",
         method: "POST",
         response: (_url: string, requestObj: RequestInit) => {
           // Assert that metric store's "inFlight" is 1.
@@ -296,7 +296,7 @@ describe("metrics reducer", function() {
 
       return p.then(() => {
         // Assert that the server got the correct number of requests (2).
-        assert.lengthOf(fetchMock.calls("/ts/query"), 2);
+        assert.lengthOf(fetchMock.calls("ts/query"), 2);
         // Assert that the mock metrics state has 2 queries.
         assert.lengthOf(_.keys(mockMetricsState.queries), 2);
         // Assert query with id.1 has results.
