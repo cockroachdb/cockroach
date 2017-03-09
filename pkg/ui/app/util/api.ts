@@ -54,8 +54,8 @@ export type LogEntriesResponseMessage = Proto2TypeScript.cockroach.server.server
 
 // API constants
 
-export const API_PREFIX = "/_admin/v1";
-export const STATUS_PREFIX = "/_status";
+export const API_PREFIX = "_admin/v1";
+export const STATUS_PREFIX = "_status";
 
 // HELPER FUNCTIONS
 
@@ -102,6 +102,7 @@ function timeoutFetch<TResponse, TResponseMessage, TResponseMessageBuilder exten
         "Grpc-Timeout": timeout ? timeout.asMilliseconds() + "m" : undefined,
       },
       body: req ? req.toArrayBuffer() : undefined,
+      credentials: "same-origin",
     }),
     timeout,
    ).then((res) => {
@@ -159,17 +160,17 @@ export function getEvents(req: EventsRequestMessage, timeout?: moment.Duration):
 
 // getNodes gets node data
 export function getNodes(_req: NodesRequestMessage, timeout?: moment.Duration): Promise<NodesResponseMessage> {
-  return timeoutFetch(serverpb.NodesResponse, `/_status/nodes`, null, timeout);
+  return timeoutFetch(serverpb.NodesResponse, `${STATUS_PREFIX}/nodes`, null, timeout);
 }
 
 export function raftDebug(_req: RaftDebugRequestMessage): Promise<RaftDebugResponseMessage> {
   // NB: raftDebug intentionally does not pass a timeout through.
-  return timeoutFetch(serverpb.RaftDebugResponse, `/_status/raft`);
+  return timeoutFetch(serverpb.RaftDebugResponse, `${STATUS_PREFIX}/raft`);
 }
 
 // queryTimeSeries queries for time series data
 export function queryTimeSeries(req: TimeSeriesQueryRequestMessage, timeout?: moment.Duration): Promise<TimeSeriesQueryResponseMessage> {
-  return timeoutFetch(ts.TimeSeriesQueryResponse, `/ts/query`, req, timeout);
+  return timeoutFetch(ts.TimeSeriesQueryResponse, `ts/query`, req, timeout);
 }
 
 // getHealth gets health data
