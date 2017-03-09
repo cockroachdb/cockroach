@@ -93,6 +93,14 @@ SELECT 'bool'::REGTYPE, 'bool'::REGTYPE::OID
 ----
 bool  16
 
+query OO
+SELECT 'numeric(10,3)'::REGTYPE, 'numeric( 10, 3 )'::REGTYPE
+----
+numeric  numeric
+
+query error type 'foo.' does not exist
+SELECT 'foo.'::REGTYPE
+
 query error relation 'blah' does not exist
 SELECT 'blah'::REGCLASS
 
