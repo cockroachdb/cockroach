@@ -446,6 +446,54 @@ func createDefaultZoneConfig() []roachpb.KeyValue {
 	return ret
 }
 
+// CreateMetaZoneConfig creates the key/value pairs for the default meta zone
+// config entry.
+func CreateMetaZoneConfig() []roachpb.KeyValue {
+	var ret []roachpb.KeyValue
+	value := roachpb.Value{}
+	desc := config.MetaZoneConfig()
+	if err := value.SetProto(&desc); err != nil {
+		log.Fatalf(context.TODO(), "could not marshal %v", desc)
+	}
+	ret = append(ret, roachpb.KeyValue{
+		Key:   MakeZoneKey(keys.MetaSystemID),
+		Value: value,
+	})
+	return ret
+}
+
+// CreateIdentifierZoneConfig creates the key/value pairs for the default
+// identifier zone config entry.
+func CreateIdentifierZoneConfig() []roachpb.KeyValue {
+	var ret []roachpb.KeyValue
+	value := roachpb.Value{}
+	desc := config.IdentifierZoneConfig()
+	if err := value.SetProto(&desc); err != nil {
+		log.Fatalf(context.TODO(), "could not marshal %v", desc)
+	}
+	ret = append(ret, roachpb.KeyValue{
+		Key:   MakeZoneKey(keys.IdentifierSystemID),
+		Value: value,
+	})
+	return ret
+}
+
+// CreateSystemZoneConfig creates the key/value pairs for the default system
+// zone config entry.
+func CreateSystemZoneConfig() []roachpb.KeyValue {
+	var ret []roachpb.KeyValue
+	value := roachpb.Value{}
+	desc := config.SystemZoneConfig()
+	if err := value.SetProto(&desc); err != nil {
+		log.Fatalf(context.TODO(), "could not marshal %v", desc)
+	}
+	ret = append(ret, roachpb.KeyValue{
+		Key:   MakeZoneKey(keys.NormalSystemID),
+		Value: value,
+	})
+	return ret
+}
+
 // addSystemDatabaseToSchema populates the supplied MetadataSchema with the
 // System database and its tables. The descriptors for these objects exist
 // statically in this file, but a MetadataSchema can be used to persist these
@@ -467,6 +515,9 @@ func addSystemDatabaseToSchema(target *MetadataSchema) {
 	target.AddDescriptor(keys.SystemDatabaseID, &UITable)
 
 	target.otherKV = append(target.otherKV, createDefaultZoneConfig()...)
+	target.otherKV = append(target.otherKV, CreateMetaZoneConfig()...)
+	target.otherKV = append(target.otherKV, CreateIdentifierZoneConfig()...)
+	target.otherKV = append(target.otherKV, CreateSystemZoneConfig()...)
 }
 
 // IsSystemConfigID returns whether this ID is for a system config object.
