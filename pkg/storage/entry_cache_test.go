@@ -60,7 +60,7 @@ func verifyGet(
 
 func TestEntryCache(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	rec := newRaftEntryCache(100)
+	rec := newRaftEntryCache(400, 4)
 	rangeID := roachpb.RangeID(2)
 	// Add entries for range 1, indexes (1-10).
 	ents := addEntries(rec, rangeID, 1, 11)
@@ -97,7 +97,7 @@ func TestEntryCache(t *testing.T) {
 func TestEntryCacheClearTo(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	rangeID := roachpb.RangeID(1)
-	rec := newRaftEntryCache(100)
+	rec := newRaftEntryCache(100, 4)
 	rec.addEntries(rangeID, []raftpb.Entry{newEntry(2, 1)})
 	rec.addEntries(rangeID, []raftpb.Entry{newEntry(20, 1), newEntry(21, 1)})
 	rec.clearTo(rangeID, 21)
@@ -112,7 +112,7 @@ func TestEntryCacheClearTo(t *testing.T) {
 func TestEntryCacheEviction(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	rangeID := roachpb.RangeID(1)
-	rec := newRaftEntryCache(100)
+	rec := newRaftEntryCache(100, 1)
 	rec.addEntries(rangeID, []raftpb.Entry{newEntry(1, 40), newEntry(2, 40)})
 	ents, _, hi := rec.getEntries(nil, rangeID, 1, 3, 0)
 	if len(ents) != 2 || hi != 3 {
