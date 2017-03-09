@@ -19,6 +19,8 @@ package sql
 import (
 	"time"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/pkg/errors"
@@ -50,7 +52,7 @@ CREATE TABLE crdb_internal.tables (
   CREATE_TABLE             STRING NOT NULL
 );
 `,
-	populate: func(p *planner, addRow func(...parser.Datum) error) error {
+	populate: func(ctx context.Context, p *planner, addRow func(...parser.Datum) error) error {
 		descs, err := p.getAllDescriptors()
 		if err != nil {
 			return err
@@ -82,7 +84,7 @@ CREATE TABLE crdb_internal.tables (
 					time.Unix(0, table.Lease.ExpirationTime), time.Nanosecond,
 				)
 			}
-			create, err := p.showCreateTable(parser.Name(table.Name), table)
+			create, err := p.showCreateTable(ctx, parser.Name(table.Name), table)
 			if err != nil {
 				return err
 			}
@@ -120,7 +122,7 @@ CREATE TABLE crdb_internal.schema_changes (
   DIRECTION     STRING NOT NULL
 );
 `,
-	populate: func(p *planner, addRow func(...parser.Datum) error) error {
+	populate: func(_ context.Context, p *planner, addRow func(...parser.Datum) error) error {
 		descs, err := p.getAllDescriptors()
 		if err != nil {
 			return err
@@ -179,7 +181,7 @@ CREATE TABLE crdb_internal.leases (
   DELETED     BOOL NOT NULL
 );
 `,
-	populate: func(p *planner, addRow func(...parser.Datum) error) error {
+	populate: func(_ context.Context, p *planner, addRow func(...parser.Datum) error) error {
 		leaseMgr := p.leaseMgr
 		nodeID := parser.NewDInt(parser.DInt(int64(leaseMgr.nodeID.Get())))
 

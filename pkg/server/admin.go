@@ -170,13 +170,16 @@ func (s *adminServer) firstNotFoundError(results []sql.Result) error {
 	return nil
 }
 
-// NewSessionForRPC creates a SQL session on behalf of an RPC request.
-// It copies the Server's tracer into the Session's context.
-func (s *adminServer) NewSessionForRPC(ctx context.Context, args sql.SessionArgs) *sql.Session {
+// NewContextAndSessionForRPC creates a context and SQL session to be used for
+// serving an RPC request.
+// The session will be initialized with a context derived from the returned one.
+func (s *adminServer) NewContextAndSessionForRPC(
+	ctx context.Context, args sql.SessionArgs,
+) (context.Context, *sql.Session) {
 	ctx = s.server.AnnotateCtx(ctx)
 	session := sql.NewSession(ctx, args, s.server.sqlExecutor, nil, s.memMetrics)
 	session.StartMonitor(&s.memMonitor, mon.BoundAccount{})
-	return session
+	return ctx, session
 }
 
 // Databases is an endpoint that returns a list of databases.
@@ -184,10 +187,10 @@ func (s *adminServer) Databases(
 	ctx context.Context, req *serverpb.DatabasesRequest,
 ) (*serverpb.DatabasesResponse, error) {
 	args := sql.SessionArgs{User: s.getUser(req)}
-	session := s.NewSessionForRPC(ctx, args)
+	ctx, session := s.NewContextAndSessionForRPC(ctx, args)
 	defer session.Finish(s.server.sqlExecutor)
 	r := s.server.sqlExecutor.ExecuteStatements(session, "SHOW DATABASES;", nil)
-	defer r.Close()
+	defer r.Close(ctx)
 	if err := s.checkQueryResults(r.ResultList, 1); err != nil {
 		return nil, s.serverError(err)
 	}
@@ -214,7 +217,7 @@ func (s *adminServer) DatabaseDetails(
 	ctx context.Context, req *serverpb.DatabaseDetailsRequest,
 ) (*serverpb.DatabaseDetailsResponse, error) {
 	args := sql.SessionArgs{User: s.getUser(req)}
-	session := s.NewSessionForRPC(ctx, args)
+	ctx, session := s.NewContextAndSessionForRPC(ctx, args)
 	defer session.Finish(s.server.sqlExecutor)
 
 	escDBName := parser.Name(req.Database).String()
@@ -228,7 +231,7 @@ func (s *adminServer) DatabaseDetails(
 	// TODO(cdo): Use placeholders when they're supported by SHOW.
 	query := fmt.Sprintf("SHOW GRANTS ON DATABASE %s; SHOW TABLES FROM %s;", escDBName, escDBName)
 	r := s.server.sqlExecutor.ExecuteStatements(session, query, nil)
-	defer r.Close()
+	defer r.Close(ctx)
 	if err := s.firstNotFoundError(r.ResultList); err != nil {
 		return nil, grpc.Errorf(codes.NotFound, "%s", err)
 	}
@@ -280,13 +283,13 @@ func (s *adminServer) DatabaseDetails(
 
 	// Query the descriptor ID and zone configuration for this database.
 	{
-		path, err := s.queryDescriptorIDPath(session, []string{req.Database})
+		path, err := s.queryDescriptorIDPath(ctx, session, []string{req.Database})
 		if err != nil {
 			return nil, s.serverError(err)
 		}
 		resp.DescriptorID = int64(path[1])
 
-		id, zone, zoneExists, err := s.queryZonePath(session, path)
+		id, zone, zoneExists, err := s.queryZonePath(ctx, session, path)
 		if err != nil {
 			return nil, s.serverError(err)
 		}
@@ -313,7 +316,7 @@ func (s *adminServer) TableDetails(
 	ctx context.Context, req *serverpb.TableDetailsRequest,
 ) (*serverpb.TableDetailsResponse, error) {
 	args := sql.SessionArgs{User: s.getUser(req)}
-	session := s.NewSessionForRPC(ctx, args)
+	ctx, session := s.NewContextAndSessionForRPC(ctx, args)
 	defer session.Finish(s.server.sqlExecutor)
 
 	escDBName := parser.Name(req.Database).String()
@@ -328,7 +331,7 @@ func (s *adminServer) TableDetails(
 	query := fmt.Sprintf("SHOW COLUMNS FROM %s; SHOW INDEX FROM %s; SHOW GRANTS ON TABLE %s; SHOW CREATE TABLE %s;",
 		escQualTable, escQualTable, escQualTable, escQualTable)
 	r := s.server.sqlExecutor.ExecuteStatements(session, query, nil)
-	defer r.Close()
+	defer r.Close(ctx)
 	if err := s.firstNotFoundError(r.ResultList); err != nil {
 		return nil, grpc.Errorf(codes.NotFound, "%s", err)
 	}
@@ -466,7 +469,7 @@ func (s *adminServer) TableDetails(
 		if err := s.server.db.Txn(ctx, func(txn *client.Txn) error {
 			var err error
 			tableSpan, err = iexecutor.GetTableSpan(
-				s.getUser(req), txn, req.Database, req.Table,
+				ctx, s.getUser(req), txn, req.Database, req.Table,
 			)
 			return err
 		}); err != nil {
@@ -491,13 +494,13 @@ func (s *adminServer) TableDetails(
 
 	// Query the descriptor ID and zone configuration for this table.
 	{
-		path, err := s.queryDescriptorIDPath(session, []string{req.Database, req.Table})
+		path, err := s.queryDescriptorIDPath(ctx, session, []string{req.Database, req.Table})
 		if err != nil {
 			return nil, s.serverError(err)
 		}
 		resp.DescriptorID = int64(path[2])
 
-		id, zone, zoneExists, err := s.queryZonePath(session, path)
+		id, zone, zoneExists, err := s.queryZonePath(ctx, session, path)
 		if err != nil {
 			return nil, s.serverError(err)
 		}
@@ -535,7 +538,7 @@ func (s *adminServer) TableStats(
 	iexecutor := sql.InternalExecutor{LeaseManager: s.server.leaseMgr}
 	if err := s.server.db.Txn(ctx, func(txn *client.Txn) error {
 		var err error
-		tableSpan, err = iexecutor.GetTableSpan(s.getUser(req), txn, req.Database, req.Table)
+		tableSpan, err = iexecutor.GetTableSpan(ctx, s.getUser(req), txn, req.Database, req.Table)
 		return err
 	}); err != nil {
 		return nil, s.serverError(err)
@@ -658,11 +661,11 @@ func (s *adminServer) Users(
 	ctx context.Context, req *serverpb.UsersRequest,
 ) (*serverpb.UsersResponse, error) {
 	args := sql.SessionArgs{User: s.getUser(req)}
-	session := s.NewSessionForRPC(ctx, args)
+	ctx, session := s.NewContextAndSessionForRPC(ctx, args)
 	defer session.Finish(s.server.sqlExecutor)
 	query := "SELECT username FROM system.users"
 	r := s.server.sqlExecutor.ExecuteStatements(session, query, nil)
-	defer r.Close()
+	defer r.Close(ctx)
 	if err := s.checkQueryResults(r.ResultList, 1); err != nil {
 		return nil, s.serverError(err)
 	}
@@ -684,7 +687,7 @@ func (s *adminServer) Events(
 	ctx context.Context, req *serverpb.EventsRequest,
 ) (*serverpb.EventsResponse, error) {
 	args := sql.SessionArgs{User: s.getUser(req)}
-	session := s.NewSessionForRPC(ctx, args)
+	ctx, session := s.NewContextAndSessionForRPC(ctx, args)
 	defer session.Finish(s.server.sqlExecutor)
 
 	// Execute the query.
@@ -704,7 +707,7 @@ func (s *adminServer) Events(
 		return nil, s.serverErrors(q.Errors())
 	}
 	r := s.server.sqlExecutor.ExecuteStatements(session, q.String(), q.QueryArguments())
-	defer r.Close()
+	defer r.Close(ctx)
 	if err := s.checkQueryResults(r.ResultList, 1); err != nil {
 		return nil, s.serverError(err)
 	}
@@ -744,7 +747,7 @@ func (s *adminServer) Events(
 // getUIData returns the values and timestamps for the given UI keys. Keys
 // that are not found will not be returned.
 func (s *adminServer) getUIData(
-	session *sql.Session, user string, keys []string,
+	ctx context.Context, session *sql.Session, user string, keys []string,
 ) (*serverpb.GetUIDataResponse, error) {
 	if len(keys) == 0 {
 		return &serverpb.GetUIDataResponse{}, nil
@@ -764,7 +767,7 @@ func (s *adminServer) getUIData(
 		return nil, s.serverErrorf("error constructing query: %v", err)
 	}
 	r := s.server.sqlExecutor.ExecuteStatements(session, query.String(), query.QueryArguments())
-	defer r.Close()
+	defer r.Close(ctx)
 	if err := s.checkQueryResults(r.ResultList, 1); err != nil {
 		return nil, s.serverError(err)
 	}
@@ -804,7 +807,7 @@ func (s *adminServer) SetUIData(
 	}
 
 	args := sql.SessionArgs{User: s.getUser(req)}
-	session := s.NewSessionForRPC(ctx, args)
+	ctx, session := s.NewContextAndSessionForRPC(ctx, args)
 	defer session.Finish(s.server.sqlExecutor)
 
 	for key, val := range req.KeyValues {
@@ -815,7 +818,7 @@ func (s *adminServer) SetUIData(
 		qargs.SetValue(`1`, parser.NewDString(key))
 		qargs.SetValue(`2`, parser.NewDBytes(parser.DBytes(val)))
 		r := s.server.sqlExecutor.ExecuteStatements(session, query, qargs)
-		defer r.Close()
+		defer r.Close(ctx)
 		if err := s.checkQueryResults(r.ResultList, 1); err != nil {
 			return nil, s.serverError(err)
 		}
@@ -837,14 +840,14 @@ func (s *adminServer) GetUIData(
 	ctx context.Context, req *serverpb.GetUIDataRequest,
 ) (*serverpb.GetUIDataResponse, error) {
 	args := sql.SessionArgs{User: s.getUser(req)}
-	session := s.NewSessionForRPC(ctx, args)
+	ctx, session := s.NewContextAndSessionForRPC(ctx, args)
 	defer session.Finish(s.server.sqlExecutor)
 
 	if len(req.Keys) == 0 {
 		return nil, grpc.Errorf(codes.InvalidArgument, "keys cannot be empty")
 	}
 
-	resp, err := s.getUIData(session, s.getUser(req), req.Keys)
+	resp, err := s.getUIData(ctx, session, s.getUser(req), req.Keys)
 	if err != nil {
 		return nil, s.serverError(err)
 	}
@@ -1333,13 +1336,13 @@ func (rs resultScanner) Scan(row parser.Datums, colName string, dst interface{})
 // queryZone retrieves the specific ZoneConfig associated with the supplied ID,
 // if it exists.
 func (s *adminServer) queryZone(
-	session *sql.Session, id sqlbase.ID,
+	ctx context.Context, session *sql.Session, id sqlbase.ID,
 ) (config.ZoneConfig, bool, error) {
 	const query = `SELECT config FROM system.zones WHERE id = $1`
 	params := parser.NewPlaceholderInfo()
 	params.SetValue(`1`, parser.NewDInt(parser.DInt(id)))
 	r := s.server.sqlExecutor.ExecuteStatements(session, query, params)
-	defer r.Close()
+	defer r.Close(ctx)
 	if err := s.checkQueryResults(r.ResultList, 1); err != nil {
 		return config.ZoneConfig{}, false, err
 	}
@@ -1367,10 +1370,10 @@ func (s *adminServer) queryZone(
 // queryDescriptorIDPath(), for a ZoneConfig. It returns the most specific
 // ZoneConfig specified for the object IDs in the path.
 func (s *adminServer) queryZonePath(
-	session *sql.Session, path []sqlbase.ID,
+	ctx context.Context, session *sql.Session, path []sqlbase.ID,
 ) (sqlbase.ID, config.ZoneConfig, bool, error) {
 	for i := len(path) - 1; i >= 0; i-- {
-		zone, zoneExists, err := s.queryZone(session, path[i])
+		zone, zoneExists, err := s.queryZone(ctx, session, path[i])
 		if err != nil || zoneExists {
 			return path[i], zone, true, err
 		}
@@ -1381,14 +1384,14 @@ func (s *adminServer) queryZonePath(
 // queryNamespaceID queries for the ID of the namespace with the given name and
 // parent ID.
 func (s *adminServer) queryNamespaceID(
-	session *sql.Session, parentID sqlbase.ID, name string,
+	ctx context.Context, session *sql.Session, parentID sqlbase.ID, name string,
 ) (sqlbase.ID, error) {
 	const query = `SELECT id FROM system.namespace WHERE parentID = $1 AND name = $2`
 	params := parser.NewPlaceholderInfo()
 	params.SetValue(`1`, parser.NewDInt(parser.DInt(parentID)))
 	params.SetValue(`2`, parser.NewDString(name))
 	r := s.server.sqlExecutor.ExecuteStatements(session, query, params)
-	defer r.Close()
+	defer r.Close(ctx)
 	if err := s.checkQueryResults(r.ResultList, 1); err != nil {
 		return 0, err
 	}
@@ -1413,11 +1416,11 @@ func (s *adminServer) queryNamespaceID(
 // it will return a list of IDs consisting of the root namespace ID, the
 // databases ID, and the table ID (in that order).
 func (s *adminServer) queryDescriptorIDPath(
-	session *sql.Session, names []string,
+	ctx context.Context, session *sql.Session, names []string,
 ) ([]sqlbase.ID, error) {
 	path := []sqlbase.ID{keys.RootNamespaceID}
 	for _, name := range names {
-		id, err := s.queryNamespaceID(session, path[len(path)-1], name)
+		id, err := s.queryNamespaceID(ctx, session, path[len(path)-1], name)
 		if err != nil {
 			return nil, err
 		}

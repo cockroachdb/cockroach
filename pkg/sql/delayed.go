@@ -16,7 +16,11 @@
 
 package sql
 
-import "github.com/cockroachdb/cockroach/pkg/sql/parser"
+import (
+	"golang.org/x/net/context"
+
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+)
 
 // delayedNode wraps a planNode in cases where the planNode
 // constructor must be delayed during query execution (as opposed to
@@ -28,19 +32,23 @@ type delayedNode struct {
 	plan        planNode
 }
 
-type nodeConstructor func(p *planner) (planNode, error)
+type nodeConstructor func(context.Context, *planner) (planNode, error)
 
-func (d *delayedNode) Close() {
+func (d *delayedNode) Close(ctx context.Context) {
 	if d.plan != nil {
-		d.plan.Close()
+		d.plan.Close(ctx)
 		d.plan = nil
 	}
 }
 
-func (d *delayedNode) Columns() ResultColumns   { return d.columns }
-func (d *delayedNode) Ordering() orderingInfo   { return orderingInfo{} }
-func (d *delayedNode) MarkDebug(_ explainMode)  {}
-func (d *delayedNode) Start() error             { return d.plan.Start() }
-func (d *delayedNode) Next() (bool, error)      { return d.plan.Next() }
+func (d *delayedNode) Columns() ResultColumns  { return d.columns }
+func (d *delayedNode) Ordering() orderingInfo  { return orderingInfo{} }
+func (d *delayedNode) MarkDebug(_ explainMode) {}
+func (d *delayedNode) Start(ctx context.Context) error {
+	return d.plan.Start(ctx)
+}
+func (d *delayedNode) Next(ctx context.Context) (bool, error) {
+	return d.plan.Next(ctx)
+}
 func (d *delayedNode) Values() parser.Datums    { return d.plan.Values() }
 func (d *delayedNode) DebugValues() debugValues { return d.plan.DebugValues() }

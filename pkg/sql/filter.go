@@ -20,6 +20,8 @@ import (
 	"bytes"
 	"fmt"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
@@ -53,12 +55,14 @@ func (f *filterNode) IndexedVarFormat(buf *bytes.Buffer, fl parser.FmtFlags, idx
 }
 
 // Start implements the planNode interface.
-func (f *filterNode) Start() error { return f.source.plan.Start() }
+func (f *filterNode) Start(ctx context.Context) error {
+	return f.source.plan.Start(ctx)
+}
 
 // Next implements the planNode interface.
-func (f *filterNode) Next() (bool, error) {
+func (f *filterNode) Next(ctx context.Context) (bool, error) {
 	for {
-		if next, err := f.source.plan.Next(); !next {
+		if next, err := f.source.plan.Next(ctx); !next {
 			return false, err
 		}
 
@@ -102,7 +106,9 @@ func (f *filterNode) DebugValues() debugValues {
 	return f.debugVals
 }
 
-func (f *filterNode) Close()                 { f.source.plan.Close() }
+func (f *filterNode) Close(ctx context.Context) {
+	f.source.plan.Close(ctx)
+}
 func (f *filterNode) Values() parser.Datums  { return f.source.plan.Values() }
 func (f *filterNode) Columns() ResultColumns { return f.source.plan.Columns() }
 func (f *filterNode) Ordering() orderingInfo { return f.source.plan.Ordering() }

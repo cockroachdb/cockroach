@@ -47,7 +47,7 @@ func newDistinct(
 		d.orderedCols[col] = struct{}{}
 	}
 
-	if err := d.out.init(post, input.Types(), flowCtx.evalCtx, output); err != nil {
+	if err := d.out.init(post, input.Types(), &flowCtx.evalCtx, output); err != nil {
 		return nil, err
 	}
 

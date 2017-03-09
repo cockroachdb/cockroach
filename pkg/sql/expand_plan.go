@@ -20,6 +20,8 @@ import (
 	"fmt"
 	"math"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -29,9 +31,9 @@ import (
 // the query plan to its final form, including index selection and
 // expansion of sub-queries. Returns an error if the initialization
 // fails.
-func (p *planner) expandPlan(plan planNode) (planNode, error) {
+func (p *planner) expandPlan(ctx context.Context, plan planNode) (planNode, error) {
 	var err error
-	plan, err = doExpandPlan(p, noParams, plan)
+	plan, err = doExpandPlan(ctx, p, noParams, plan)
 	if err != nil {
 		return plan, err
 	}
@@ -49,39 +51,41 @@ type expandParameters struct {
 var noParams = expandParameters{numRowsHint: math.MaxInt64, desiredOrdering: nil}
 
 // doExpandPlan is the algorithm that supports expandPlan().
-func doExpandPlan(p *planner, params expandParameters, plan planNode) (planNode, error) {
+func doExpandPlan(
+	ctx context.Context, p *planner, params expandParameters, plan planNode,
+) (planNode, error) {
 	var err error
 	switch n := plan.(type) {
 	case *createTableNode:
-		n.sourcePlan, err = doExpandPlan(p, noParams, n.sourcePlan)
+		n.sourcePlan, err = doExpandPlan(ctx, p, noParams, n.sourcePlan)
 
 	case *updateNode:
-		n.run.rows, err = doExpandPlan(p, noParams, n.run.rows)
+		n.run.rows, err = doExpandPlan(ctx, p, noParams, n.run.rows)
 
 	case *insertNode:
-		n.run.rows, err = doExpandPlan(p, noParams, n.run.rows)
+		n.run.rows, err = doExpandPlan(ctx, p, noParams, n.run.rows)
 
 	case *deleteNode:
-		n.run.rows, err = doExpandPlan(p, noParams, n.run.rows)
+		n.run.rows, err = doExpandPlan(ctx, p, noParams, n.run.rows)
 
 	case *createViewNode:
-		n.sourcePlan, err = doExpandPlan(p, noParams, n.sourcePlan)
+		n.sourcePlan, err = doExpandPlan(ctx, p, noParams, n.sourcePlan)
 
 	case *explainDebugNode:
-		n.plan, err = doExpandPlan(p, noParams, n.plan)
+		n.plan, err = doExpandPlan(ctx, p, noParams, n.plan)
 		if err != nil {
 			return plan, err
 		}
 		n.plan.MarkDebug(explainDebug)
 
 	case *explainDistSQLNode:
-		n.plan, err = doExpandPlan(p, noParams, n.plan)
+		n.plan, err = doExpandPlan(ctx, p, noParams, n.plan)
 		if err != nil {
 			return plan, err
 		}
 
 	case *explainTraceNode:
-		n.plan, err = doExpandPlan(p, noParams, n.plan)
+		n.plan, err = doExpandPlan(ctx, p, noParams, n.plan)
 		if err != nil {
 			return plan, err
 		}
@@ -89,7 +93,7 @@ func doExpandPlan(p *planner, params expandParameters, plan planNode) (planNode,
 
 	case *explainPlanNode:
 		if n.expanded {
-			n.plan, err = doExpandPlan(p, noParams, n.plan)
+			n.plan, err = doExpandPlan(ctx, p, noParams, n.plan)
 			if err != nil {
 				return plan, err
 			}
@@ -102,31 +106,31 @@ func doExpandPlan(p *planner, params expandParameters, plan planNode) (planNode,
 
 	case *indexJoinNode:
 		// We ignore the return value because we know the scanNode is preserved.
-		_, err = doExpandPlan(p, params, n.index)
+		_, err = doExpandPlan(ctx, p, params, n.index)
 		if err != nil {
 			return plan, err
 		}
 
 		// The row limit and desired ordering, if any, only propagates on
 		// the index side.
-		_, err = doExpandPlan(p, noParams, n.table)
+		_, err = doExpandPlan(ctx, p, noParams, n.table)
 
 	case *unionNode:
-		n.right, err = doExpandPlan(p, params, n.right)
+		n.right, err = doExpandPlan(ctx, p, params, n.right)
 		if err != nil {
 			return plan, err
 		}
-		n.left, err = doExpandPlan(p, params, n.left)
+		n.left, err = doExpandPlan(ctx, p, params, n.left)
 
 	case *filterNode:
-		n.source.plan, err = doExpandPlan(p, params, n.source.plan)
+		n.source.plan, err = doExpandPlan(ctx, p, params, n.source.plan)
 
 	case *joinNode:
-		n.left.plan, err = doExpandPlan(p, noParams, n.left.plan)
+		n.left.plan, err = doExpandPlan(ctx, p, noParams, n.left.plan)
 		if err != nil {
 			return plan, err
 		}
-		n.right.plan, err = doExpandPlan(p, noParams, n.right.plan)
+		n.right.plan, err = doExpandPlan(ctx, p, noParams, n.right.plan)
 
 	case *ordinalityNode:
 		// If there's a desired ordering on the ordinality column, drop it.
@@ -140,7 +144,7 @@ func doExpandPlan(p *planner, params expandParameters, plan planNode) (planNode,
 			}
 			params.desiredOrdering = newDesired
 		}
-		n.source, err = doExpandPlan(p, params, n.source)
+		n.source, err = doExpandPlan(ctx, p, params, n.source)
 		if err != nil {
 			return plan, err
 		}
@@ -177,14 +181,14 @@ func doExpandPlan(p *planner, params expandParameters, plan planNode) (planNode,
 		// cannot occur during expand.
 		n.estimateLimit()
 		params.numRowsHint = getLimit(n.count, n.offset)
-		n.plan, err = doExpandPlan(p, params, n.plan)
+		n.plan, err = doExpandPlan(ctx, p, params, n.plan)
 
 	case *groupNode:
 		params.desiredOrdering = n.desiredOrdering
 		// Under a group node, there may be arbitrarily more rows
 		// than those required by the context.
 		params.numRowsHint = math.MaxInt64
-		n.plan, err = doExpandPlan(p, params, n.plan)
+		n.plan, err = doExpandPlan(ctx, p, params, n.plan)
 
 		if len(n.desiredOrdering) > 0 {
 			match := n.plan.Ordering().computeMatch(n.desiredOrdering)
@@ -197,13 +201,13 @@ func doExpandPlan(p *planner, params expandParameters, plan planNode) (planNode,
 		}
 
 	case *windowNode:
-		n.plan, err = doExpandPlan(p, noParams, n.plan)
+		n.plan, err = doExpandPlan(ctx, p, noParams, n.plan)
 
 	case *sortNode:
 		if !n.ordering.IsPrefixOf(params.desiredOrdering) {
 			params.desiredOrdering = n.ordering
 		}
-		n.plan, err = doExpandPlan(p, params, n.plan)
+		n.plan, err = doExpandPlan(ctx, p, params, n.plan)
 		if err != nil {
 			return plan, err
 		}
@@ -216,7 +220,7 @@ func doExpandPlan(p *planner, params expandParameters, plan planNode) (planNode,
 	case *distinctNode:
 		// TODO(radu/knz) perhaps we can propagate the DISTINCT
 		// clause as desired ordering/exact match for the source node.
-		n.plan, err = doExpandPlan(p, params, n.plan)
+		n.plan, err = doExpandPlan(ctx, p, params, n.plan)
 		if err != nil {
 			return plan, err
 		}
@@ -233,15 +237,15 @@ func doExpandPlan(p *planner, params expandParameters, plan planNode) (planNode,
 		}
 
 	case *scanNode:
-		plan, err = expandScanNode(p, params, n)
+		plan, err = expandScanNode(ctx, p, params, n)
 
 	case *renderNode:
-		plan, err = expandRenderNode(p, params, n)
+		plan, err = expandRenderNode(ctx, p, params, n)
 
 	case *delayedNode:
-		n.plan, err = n.constructor(p)
+		n.plan, err = n.constructor(ctx, p)
 		if err == nil {
-			n.plan, err = doExpandPlan(p, params, n.plan)
+			n.plan, err = doExpandPlan(ctx, p, params, n.plan)
 		}
 
 	case *valuesNode:
@@ -266,7 +270,9 @@ func doExpandPlan(p *planner, params expandParameters, plan planNode) (planNode,
 	return plan, err
 }
 
-func expandScanNode(p *planner, params expandParameters, s *scanNode) (planNode, error) {
+func expandScanNode(
+	ctx context.Context, p *planner, params expandParameters, s *scanNode,
+) (planNode, error) {
 	var analyzeOrdering analyzeOrderingFn
 	if len(params.desiredOrdering) > 0 {
 		analyzeOrdering = func(indexOrdering orderingInfo) (matchingCols, totalCols int) {
@@ -282,18 +288,20 @@ func expandScanNode(p *planner, params expandParameters, s *scanNode) (planNode,
 		preferOrderMatchingIndex = true
 	}
 
-	plan, err := p.selectIndex(s, analyzeOrdering, preferOrderMatchingIndex)
+	plan, err := p.selectIndex(ctx, s, analyzeOrdering, preferOrderMatchingIndex)
 	if err != nil {
 		return s, err
 	}
 	return plan, nil
 }
 
-func expandRenderNode(p *planner, params expandParameters, r *renderNode) (planNode, error) {
+func expandRenderNode(
+	ctx context.Context, p *planner, params expandParameters, r *renderNode,
+) (planNode, error) {
 	params.desiredOrdering = translateOrdering(params.desiredOrdering, r)
 
 	var err error
-	r.source.plan, err = doExpandPlan(p, params, r.source.plan)
+	r.source.plan, err = doExpandPlan(ctx, p, params, r.source.plan)
 	if err != nil {
 		return r, err
 	}

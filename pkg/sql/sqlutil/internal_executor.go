@@ -16,7 +16,11 @@
 
 package sqlutil
 
-import "github.com/cockroachdb/cockroach/pkg/internal/client"
+import (
+	"golang.org/x/net/context"
+
+	"github.com/cockroachdb/cockroach/pkg/internal/client"
+)
 
 // InternalExecutor is meant to be used by layers below SQL in the system that
 // nevertheless want to execute SQL queries (presumably against system tables).
@@ -26,5 +30,6 @@ type InternalExecutor interface {
 	// ExecuteStatementInTransaction executes the supplied SQL statement as part of
 	// the supplied transaction. Statements are currently executed as the root user.
 	ExecuteStatementInTransaction(
-		opName string, txn *client.Txn, statement string, params ...interface{}) (int, error)
+		ctx context.Context, opName string, txn *client.Txn, statement string, params ...interface{},
+	) (int, error)
 }

@@ -20,6 +20,8 @@ import (
 	"bytes"
 	"fmt"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
@@ -55,9 +57,9 @@ func (p *planner) Distinct(n *parser.SelectClause) *distinctNode {
 	return d
 }
 
-func (n *distinctNode) Start() error {
+func (n *distinctNode) Start(ctx context.Context) error {
 	n.suffixSeen = make(map[string]struct{})
-	return n.plan.Start()
+	return n.plan.Start(ctx)
 }
 
 func (n *distinctNode) Columns() ResultColumns { return n.plan.Columns() }
@@ -79,22 +81,24 @@ func (n *distinctNode) DebugValues() debugValues {
 	return n.debugVals
 }
 
-func (n *distinctNode) addSuffixSeen(acc WrappedMemoryAccount, sKey string) error {
+func (n *distinctNode) addSuffixSeen(
+	ctx context.Context, acc WrappedMemoryAccount, sKey string,
+) error {
 	sz := int64(len(sKey))
-	if err := acc.Grow(sz); err != nil {
+	if err := acc.Grow(ctx, sz); err != nil {
 		return err
 	}
 	n.suffixSeen[sKey] = struct{}{}
 	return nil
 }
 
-func (n *distinctNode) Next() (bool, error) {
+func (n *distinctNode) Next(ctx context.Context) (bool, error) {
 
 	prefixMemAcc := n.prefixMemAcc.Wtxn(n.p.session)
 	suffixMemAcc := n.suffixMemAcc.Wtxn(n.p.session)
 
 	for {
-		next, err := n.plan.Next()
+		next, err := n.plan.Next(ctx)
 		if !next {
 			return false, err
 		}
@@ -115,15 +119,15 @@ func (n *distinctNode) Next() (bool, error) {
 			// The prefix of the row which is ordered differs from the last row;
 			// reset our seen set.
 			if len(n.suffixSeen) > 0 {
-				suffixMemAcc.Clear()
+				suffixMemAcc.Clear(ctx)
 				n.suffixSeen = make(map[string]struct{})
 			}
-			if err := prefixMemAcc.ResizeItem(int64(len(n.prefixSeen)), int64(len(prefix))); err != nil {
+			if err := prefixMemAcc.ResizeItem(ctx, int64(len(n.prefixSeen)), int64(len(prefix))); err != nil {
 				return false, err
 			}
 			n.prefixSeen = prefix
 			if suffix != nil {
-				if err := n.addSuffixSeen(suffixMemAcc, string(suffix)); err != nil {
+				if err := n.addSuffixSeen(ctx, suffixMemAcc, string(suffix)); err != nil {
 					return false, err
 				}
 			}
@@ -135,7 +139,7 @@ func (n *distinctNode) Next() (bool, error) {
 		if suffix != nil {
 			sKey := string(suffix)
 			if _, ok := n.suffixSeen[sKey]; !ok {
-				if err := n.addSuffixSeen(suffixMemAcc, sKey); err != nil {
+				if err := n.addSuffixSeen(ctx, suffixMemAcc, sKey); err != nil {
 					return false, err
 				}
 				return true, nil
@@ -175,10 +179,10 @@ func (n *distinctNode) encodeValues(values parser.Datums) ([]byte, []byte, error
 	return prefix, suffix, err
 }
 
-func (n *distinctNode) Close() {
-	n.plan.Close()
+func (n *distinctNode) Close(ctx context.Context) {
+	n.plan.Close(ctx)
 	n.prefixSeen = nil
-	n.prefixMemAcc.Wtxn(n.p.session).Close()
+	n.prefixMemAcc.Wtxn(n.p.session).Close(ctx)
 	n.suffixSeen = nil
-	n.suffixMemAcc.Wtxn(n.p.session).Close()
+	n.suffixMemAcc.Wtxn(n.p.session).Close(ctx)
 }

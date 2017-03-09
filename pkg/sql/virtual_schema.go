@@ -20,6 +20,8 @@ import (
 	"fmt"
 	"sort"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -44,7 +46,7 @@ type virtualSchema struct {
 // virtualSchemaTable represents a table within a virtualSchema.
 type virtualSchemaTable struct {
 	schema   string
-	populate func(p *planner, addRow func(...parser.Datum) error) error
+	populate func(ctx context.Context, p *planner, addRow func(...parser.Datum) error) error
 }
 
 // virtualSchemas holds a slice of statically registered virtualSchema objects.
@@ -99,7 +101,7 @@ type virtualTableEntry struct {
 // valuesNode for the virtual table. We use deferred construction here
 // so as to avoid populating a RowContainer during query preparation,
 // where we can't guarantee it will be Close()d in case of error.
-func (e virtualTableEntry) getPlanInfo() (ResultColumns, nodeConstructor) {
+func (e virtualTableEntry) getPlanInfo(ctx context.Context) (ResultColumns, nodeConstructor) {
 	var columns ResultColumns
 	for _, col := range e.desc.Columns {
 		columns = append(columns, ResultColumn{
@@ -108,10 +110,10 @@ func (e virtualTableEntry) getPlanInfo() (ResultColumns, nodeConstructor) {
 		})
 	}
 
-	constructor := func(p *planner) (planNode, error) {
+	constructor := func(ctx context.Context, p *planner) (planNode, error) {
 		v := p.newContainerValuesNode(columns, 0)
 
-		err := e.tableDef.populate(p, func(datums ...parser.Datum) error {
+		err := e.tableDef.populate(ctx, p, func(datums ...parser.Datum) error {
 			if r, c := len(datums), len(v.columns); r != c {
 				panic(fmt.Sprintf("datum row count and column count differ: %d vs %d", r, c))
 			}
@@ -122,11 +124,11 @@ func (e virtualTableEntry) getPlanInfo() (ResultColumns, nodeConstructor) {
 						col.Name, col.Typ, datum.ResolvedType()))
 				}
 			}
-			_, err := v.rows.AddRow(datums)
+			_, err := v.rows.AddRow(ctx, datums)
 			return err
 		})
 		if err != nil {
-			v.Close()
+			v.Close(ctx)
 			return nil, err
 		}
 		return v, nil

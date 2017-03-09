@@ -238,7 +238,7 @@ func TestAdminAPIDatabases(t *testing.T) {
 	defer session.Finish(ts.sqlExecutor)
 	query := "CREATE DATABASE " + testdb
 	createRes := ts.sqlExecutor.ExecuteStatements(session, query, nil)
-	defer createRes.Close()
+	defer createRes.Close(ctx)
 
 	if createRes.ResultList[0].Err != nil {
 		t.Fatal(createRes.ResultList[0].Err)
@@ -266,7 +266,7 @@ func TestAdminAPIDatabases(t *testing.T) {
 	testuser := "testuser"
 	grantQuery := "GRANT " + strings.Join(privileges, ", ") + " ON DATABASE " + testdb + " TO " + testuser
 	grantRes := s.(*TestServer).sqlExecutor.ExecuteStatements(session, grantQuery, nil)
-	defer grantRes.Close()
+	defer grantRes.Close(ctx)
 	if grantRes.ResultList[0].Err != nil {
 		t.Fatal(grantRes.ResultList[0].Err)
 	}
@@ -306,7 +306,7 @@ func TestAdminAPIDatabases(t *testing.T) {
 	}
 
 	// Verify Descriptor ID.
-	path, err := ts.admin.queryDescriptorIDPath(session, []string{testdb})
+	path, err := ts.admin.queryDescriptorIDPath(ctx, session, []string{testdb})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -436,7 +436,7 @@ func testAdminAPITableDetailsInner(t *testing.T, dbName, tblName string) {
 
 	for _, q := range setupQueries {
 		res := ts.sqlExecutor.ExecuteStatements(session, q, nil)
-		defer res.Close()
+		defer res.Close(ctx)
 		if res.ResultList[0].Err != nil {
 			t.Fatalf("error executing '%s': %s", q, res.ResultList[0].Err)
 		}
@@ -517,7 +517,7 @@ func testAdminAPITableDetailsInner(t *testing.T, dbName, tblName string) {
 		showCreateTableQuery := fmt.Sprintf("SHOW CREATE TABLE %s.%s", escDBName, escTblName)
 
 		resSet := ts.sqlExecutor.ExecuteStatements(session, showCreateTableQuery, nil)
-		defer resSet.Close()
+		defer resSet.Close(ctx)
 		res := resSet.ResultList[0]
 		if res.Err != nil {
 			t.Fatalf("error executing '%s': %s", showCreateTableQuery, res.Err)
@@ -535,7 +535,7 @@ func testAdminAPITableDetailsInner(t *testing.T, dbName, tblName string) {
 	}
 
 	// Verify Descriptor ID.
-	path, err := ts.admin.queryDescriptorIDPath(session, []string{dbName, tblName})
+	path, err := ts.admin.queryDescriptorIDPath(ctx, session, []string{dbName, tblName})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -565,7 +565,7 @@ func TestAdminAPIZoneDetails(t *testing.T) {
 	}
 	for _, q := range setupQueries {
 		res := ts.sqlExecutor.ExecuteStatements(session, q, nil)
-		defer res.Close()
+		defer res.Close(ctx)
 		if res.ResultList[0].Err != nil {
 			t.Fatalf("error executing '%s': %s", q, res.ResultList[0].Err)
 		}
@@ -622,7 +622,7 @@ func TestAdminAPIZoneDetails(t *testing.T) {
 		params.SetValue(`1`, parser.NewDInt(parser.DInt(id)))
 		params.SetValue(`2`, parser.NewDBytes(parser.DBytes(zoneBytes)))
 		res := ts.sqlExecutor.ExecuteStatements(session, query, params)
-		defer res.Close()
+		defer res.Close(ctx)
 		if res.ResultList[0].Err != nil {
 			t.Fatalf("error executing '%s': %s", query, res.ResultList[0].Err)
 		}
@@ -634,7 +634,7 @@ func TestAdminAPIZoneDetails(t *testing.T) {
 
 	// Get ID path for table. This will be an array of three IDs, containing the ID of the root namespace,
 	// the database, and the table (in that order).
-	idPath, err := ts.admin.queryDescriptorIDPath(session, []string{"test", "tbl"})
+	idPath, err := ts.admin.queryDescriptorIDPath(ctx, session, []string{"test", "tbl"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -674,7 +674,7 @@ func TestAdminAPIUsers(t *testing.T) {
 INSERT INTO system.users (username, hashedPassword)
 VALUES ('admin', 'abc'), ('bob', 'xyz')`
 	res := ts.sqlExecutor.ExecuteStatements(session, query, nil)
-	defer res.Close()
+	defer res.Close(ctx)
 	if a, e := len(res.ResultList), 1; a != e {
 		t.Fatalf("len(results) %d != %d", a, e)
 	} else if res.ResultList[0].Err != nil {
@@ -725,7 +725,7 @@ func TestAdminAPIEvents(t *testing.T) {
 	}
 	for _, q := range setupQueries {
 		res := ts.sqlExecutor.ExecuteStatements(session, q, nil)
-		defer res.Close()
+		defer res.Close(ctx)
 		if res.ResultList[0].Err != nil {
 			t.Fatalf("error executing '%s': %s", q, res.ResultList[0].Err)
 		}

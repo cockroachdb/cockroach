@@ -2491,7 +2491,7 @@ func (r *Replica) adminSplitWithDescriptor(
 		// instead of a transaction; there's no reason this logging
 		// shouldn't be done in parallel via the batch with the updated
 		// range addressing.
-		if err := r.store.logSplit(txn, leftDesc, *rightDesc); err != nil {
+		if err := r.store.logSplit(ctx, txn, leftDesc, *rightDesc); err != nil {
 			return err
 		}
 
@@ -3327,7 +3327,7 @@ func (r *Replica) ChangeReplicas(
 		}
 
 		// Log replica change into range event log.
-		if err := r.store.logChange(txn, changeType, repDesc, updatedDesc); err != nil {
+		if err := r.store.logChange(ctx, txn, changeType, repDesc, updatedDesc); err != nil {
 			return err
 		}
 

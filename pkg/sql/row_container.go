@@ -21,6 +21,8 @@ import (
 	"fmt"
 	"unsafe"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/mon"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 )
@@ -129,16 +131,16 @@ func NewRowContainer(acc mon.BoundAccount, h ResultColumns, rowCapacity int) *Ro
 }
 
 // Close releases the memory associated with the RowContainer.
-func (c *RowContainer) Close() {
+func (c *RowContainer) Close(ctx context.Context) {
 	c.chunks = nil
 	c.varSizedColumns = nil
-	c.memAcc.Close()
+	c.memAcc.Close(ctx)
 }
 
-func (c *RowContainer) allocChunks(numChunks int) error {
+func (c *RowContainer) allocChunks(ctx context.Context, numChunks int) error {
 	datumsPerChunk := c.rowsPerChunk * c.numCols
 
-	if err := c.memAcc.Grow(c.chunkMemSize * int64(numChunks)); err != nil {
+	if err := c.memAcc.Grow(ctx, c.chunkMemSize*int64(numChunks)); err != nil {
 		return err
 	}
 
@@ -175,7 +177,7 @@ func (c *RowContainer) getChunkAndPos(rowIdx int) (chunk int, pos int) {
 // AddRow attempts to insert a new row in the RowContainer. The row slice is not
 // used directly: the Datum values inside the Datums are copied to internal storage.
 // Returns an error if the allocation was denied by the MemoryMonitor.
-func (c *RowContainer) AddRow(row parser.Datums) (parser.Datums, error) {
+func (c *RowContainer) AddRow(ctx context.Context, row parser.Datums) (parser.Datums, error) {
 	if len(row) != c.numCols {
 		panic(fmt.Sprintf("invalid row length %d, expected %d", len(row), c.numCols))
 	}
@@ -183,7 +185,7 @@ func (c *RowContainer) AddRow(row parser.Datums) (parser.Datums, error) {
 		c.numRows++
 		return nil, nil
 	}
-	if err := c.memAcc.Grow(c.rowSize(row)); err != nil {
+	if err := c.memAcc.Grow(ctx, c.rowSize(row)); err != nil {
 		return nil, err
 	}
 	chunk, pos := c.getChunkAndPos(c.numRows)
@@ -193,7 +195,7 @@ func (c *RowContainer) AddRow(row parser.Datums) (parser.Datums, error) {
 			// Grow the number of chunks by a fraction.
 			numChunks = 1 + len(c.chunks)/8
 		}
-		if err := c.allocChunks(numChunks); err != nil {
+		if err := c.allocChunks(ctx, numChunks); err != nil {
 			return nil, err
 		}
 	}
@@ -249,12 +251,12 @@ func (c *RowContainer) PopFirst() {
 // Replace substitutes one row for another. This does query the
 // MemoryMonitor to determine whether the new row fits the
 // allowance.
-func (c *RowContainer) Replace(i int, newRow parser.Datums) error {
+func (c *RowContainer) Replace(ctx context.Context, i int, newRow parser.Datums) error {
 	newSz := c.rowSize(newRow)
 	row := c.At(i)
 	oldSz := c.rowSize(row)
 	if newSz != oldSz {
-		if err := c.memAcc.ResizeItem(oldSz, newSz); err != nil {
+		if err := c.memAcc.ResizeItem(ctx, oldSz, newSz); err != nil {
 			return err
 		}
 	}

@@ -22,9 +22,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/apd"
 	"github.com/pkg/errors"
+	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -112,31 +113,32 @@ func TestValues(t *testing.T) {
 	}
 
 	for i, tc := range testCases {
+		ctx := context.TODO()
 		plan, err := func() (_ planNode, err error) {
 			defer func() {
 				if r := recover(); r != nil {
 					err = errors.Errorf("%v", r)
 				}
 			}()
-			return p.ValuesClause(tc.stmt, nil)
+			return p.ValuesClause(context.TODO(), tc.stmt, nil)
 		}()
 		if err == nil != tc.ok {
 			t.Errorf("%d: error_expected=%t, but got error %v", i, tc.ok, err)
 		}
 		if plan != nil {
-			defer plan.Close()
-			plan, err = p.optimizePlan(plan, allColumns(plan))
+			defer plan.Close(ctx)
+			plan, err = p.optimizePlan(ctx, plan, allColumns(plan))
 			if err != nil {
 				t.Errorf("%d: unexpected error in optimizePlan: %v", i, err)
 				continue
 			}
-			if err := p.startPlan(plan); err != nil {
+			if err := p.startPlan(ctx, plan); err != nil {
 				t.Errorf("%d: unexpected error in Start: %v", i, err)
 				continue
 			}
 			var rows []parser.Datums
-			next, err := plan.Next()
-			for ; next; next, err = plan.Next() {
+			next, err := plan.Next(ctx)
+			for ; next; next, err = plan.Next(ctx) {
 				rows = append(rows, plan.Values())
 			}
 			if err != nil {
