@@ -28,7 +28,9 @@ func init() {
 	})
 }
 
-// evalWriteBatch applies the operations encoded in a BatchRepr.
+// evalWriteBatch applies the operations encoded in a BatchRepr. Any existing
+// data in the affected keyrange is first cleared (not tombstoned), which makes
+// this command idempotent.
 func evalWriteBatch(
 	ctx context.Context, batch engine.ReadWriter, cArgs storage.CommandArgs, _ roachpb.Response,
 ) (storage.EvalResult, error) {
@@ -64,12 +66,22 @@ func evalWriteBatch(
 	}
 	ms.Add(msBatch)
 
-	// Verify that the key range specified in the request span is empty.
+	// Check if there was data in the affected keyrange. If so, delete it (and
+	// adjust the MVCCStats) before applying the WriteBatch data.
 	iter := batch.NewIterator(false)
 	defer iter.Close()
 	iter.Seek(mvccStartKey)
 	if iter.Valid() && iter.Key().Less(mvccEndKey) {
-		return storage.EvalResult{}, errors.New("WriteBatch can only be called on empty ranges")
+		existingStats, err := iter.ComputeStats(mvccStartKey, mvccEndKey, h.Timestamp.WallTime)
+		if err != nil {
+			return storage.EvalResult{}, err
+		}
+		// TODO(dan): Ideally, this would use `batch.ClearRange` but it doesn't
+		// yet work with read-write batches.
+		if err := batch.ClearIterRange(iter, mvccStartKey, mvccEndKey); err != nil {
+			return storage.EvalResult{}, err
+		}
+		ms.Subtract(existingStats)
 	}
 
 	if err := batch.ApplyBatchRepr(args.Data, false /* !sync */); err != nil {
