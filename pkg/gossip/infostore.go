@@ -168,7 +168,7 @@ func (is *infoStore) newInfo(val []byte, ttl time.Duration) *Info {
 func (is *infoStore) getInfo(key string) *Info {
 	if info, ok := is.Infos[key]; ok {
 		// Check TTL and discard if too old.
-		if info.expired(timeutil.Now().UnixNano()) {
+		if info.expired(monotonicUnixNano()) {
 			delete(is.Infos, key)
 		} else {
 			return info
@@ -308,7 +308,7 @@ func (is *infoStore) runCallbacks(key string, content roachpb.Value, callbacks .
 // function against each info in turn. Be sure to skip over any expired
 // infos.
 func (is *infoStore) visitInfos(visitInfo func(string, *Info) error) error {
-	now := timeutil.Now().UnixNano()
+	now := monotonicUnixNano()
 
 	if visitInfo != nil {
 		for k, i := range is.Infos {
