@@ -18,6 +18,7 @@ import (
 	"bytes"
 	"fmt"
 	"math"
+	"math/big"
 
 	"github.com/cockroachdb/apd"
 
@@ -665,13 +666,15 @@ func (a *intervalSumAggregate) Result() Datum {
 }
 
 type intVarianceAggregate struct {
-	agg decimalVarianceAggregate
+	agg *decimalVarianceAggregate
 	// Used for passing int64s as *apd.Decimal values.
 	tmpDec DDecimal
 }
 
 func newIntVarianceAggregate(_ []Type) AggregateFunc {
-	return &intVarianceAggregate{}
+	return &intVarianceAggregate{
+		agg: newDecimalVariance(),
+	}
 }
 
 func (a *intVarianceAggregate) Add(datum Datum) {
@@ -688,39 +691,57 @@ func (a *intVarianceAggregate) Result() Datum {
 }
 
 type floatVarianceAggregate struct {
-	count   int
-	mean    float64
-	sqrDiff float64
+	count   uint64
+	mean    *big.Float
+	sqrDiff *big.Float
+	delta   *big.Float
+	tmp     *big.Float
 }
 
 func newFloatVarianceAggregate(_ []Type) AggregateFunc {
-	return &floatVarianceAggregate{}
+	return &floatVarianceAggregate{
+		// NewFloat's precision is 53. Set to 10 (2**10 ~= 1000), which is similar
+		// to the 3 digits added in the decimal case.
+		mean:    big.NewFloat(0).SetPrec(63),
+		sqrDiff: big.NewFloat(0).SetPrec(63),
+		delta:   big.NewFloat(0).SetPrec(63),
+		tmp:     big.NewFloat(0).SetPrec(63),
+	}
 }
 
 func (a *floatVarianceAggregate) Add(datum Datum) {
 	if datum == DNull {
 		return
 	}
-	f := float64(*datum.(*DFloat))
+	f := big.NewFloat(float64(*datum.(*DFloat)))
 
 	// Uses the Knuth/Welford method for accurately computing variance online in a
 	// single pass. See http://www.johndcook.com/blog/standard_deviation/ and
 	// https://en.wikipedia.org/wiki/Algorithms_for_calculating_variance#Online_algorithm.
 	a.count++
-	delta := f - a.mean
-	a.mean += delta / float64(a.count)
-	a.sqrDiff += delta * (f - a.mean)
+
+	a.delta.Sub(f, a.mean)
+	a.tmp.SetUint64(a.count)
+	a.tmp.Quo(a.delta, a.tmp)
+	a.mean.Add(a.mean, a.tmp)
+	a.tmp.Sub(f, a.mean)
+	a.delta.Mul(a.delta, a.tmp)
+	a.sqrDiff.Add(a.sqrDiff, a.delta)
 }
 
 func (a *floatVarianceAggregate) Result() Datum {
 	if a.count < 2 {
 		return DNull
 	}
-	return NewDFloat(DFloat(a.sqrDiff / (float64(a.count) - 1)))
+	a.tmp.SetUint64(a.count - 1)
+	a.tmp.Quo(a.sqrDiff, a.tmp)
+	f, _ := a.tmp.Float64()
+	return NewDFloat(DFloat(f))
 }
 
 type decimalVarianceAggregate struct {
 	// Variables used across iterations.
+	ed      *apd.ErrDecimal
 	count   apd.Decimal
 	mean    apd.Decimal
 	sqrDiff apd.Decimal
@@ -730,8 +751,17 @@ type decimalVarianceAggregate struct {
 	tmp   apd.Decimal
 }
 
+func newDecimalVariance() *decimalVarianceAggregate {
+	c := DecimalCtx.WithPrecision(DecimalCtx.Precision + 3)
+	ed := apd.MakeErrDecimal(c)
+	return &decimalVarianceAggregate{
+		ed: &ed,
+	}
+
+}
+
 func newDecimalVarianceAggregate(_ []Type) AggregateFunc {
-	return &decimalVarianceAggregate{}
+	return newDecimalVariance()
 }
 
 // Read-only constants used for compuation.
@@ -749,15 +779,14 @@ func (a *decimalVarianceAggregate) Add(datum Datum) {
 	// Uses the Knuth/Welford method for accurately computing variance online in a
 	// single pass. See http://www.johndcook.com/blog/standard_deviation/ and
 	// https://en.wikipedia.org/wiki/Algorithms_for_calculating_variance#Online_algorithm.
-	ed := apd.MakeErrDecimal(DecimalCtx)
-	ed.Add(&a.count, &a.count, decimalOne)
-	ed.Sub(&a.delta, d, &a.mean)
-	ed.Quo(&a.tmp, &a.delta, &a.count)
-	ed.Add(&a.mean, &a.mean, &a.tmp)
-	ed.Sub(&a.tmp, d, &a.mean)
-	ed.Add(&a.sqrDiff, &a.sqrDiff, ed.Mul(&a.delta, &a.delta, &a.tmp))
+	a.ed.Add(&a.count, &a.count, decimalOne)
+	a.ed.Sub(&a.delta, d, &a.mean)
+	a.ed.Quo(&a.tmp, &a.delta, &a.count)
+	a.ed.Add(&a.mean, &a.mean, &a.tmp)
+	a.ed.Sub(&a.tmp, d, &a.mean)
+	a.ed.Add(&a.sqrDiff, &a.sqrDiff, a.ed.Mul(&a.delta, &a.delta, &a.tmp))
 	// TODO(mjibson): see #13640
-	if err := ed.Err(); err != nil {
+	if err := a.ed.Err(); err != nil {
 		panic(err)
 	}
 }
@@ -766,12 +795,12 @@ func (a *decimalVarianceAggregate) Result() Datum {
 	if a.count.Cmp(decimalTwo) < 0 {
 		return DNull
 	}
-	ed := apd.MakeErrDecimal(DecimalCtx)
-	ed.Sub(&a.tmp, &a.count, decimalOne)
+	a.ed.Sub(&a.tmp, &a.count, decimalOne)
 	dd := &DDecimal{}
-	ed.Quo(&dd.Decimal, &a.sqrDiff, &a.tmp)
+	a.ed.Ctx = DecimalCtx
+	a.ed.Quo(&dd.Decimal, &a.sqrDiff, &a.tmp)
 	// TODO(mjibson): see #13640
-	if err := ed.Err(); err != nil {
+	if err := a.ed.Err(); err != nil {
 		panic(err)
 	}
 	return dd

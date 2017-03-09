@@ -757,11 +757,10 @@ EXPLAIN (EXPRS) SELECT MAX(x) FROM xyz WHERE (z, y) = (3.0, 2)
 2                 spans        /3/2/#-/3/3
 2                 limit        1
 
-# Temporarily disabled due to #13689.
-# query RRR trimdecimals
-# SELECT VARIANCE(x), VARIANCE(y::decimal), VARIANCE(z) FROM xyz
-# ----
-# 9.00 4.5 6.333333333333333
+query RRR trimdecimals
+SELECT VARIANCE(x), VARIANCE(y::decimal), VARIANCE(z) FROM xyz
+----
+9.00 4.5 6.333333333333333
 
 query ITTT
 EXPLAIN (DEBUG) SELECT VARIANCE(x), VARIANCE(y::decimal), VARIANCE(z) FROM xyz
@@ -798,11 +797,10 @@ EXPLAIN (EXPRS) SELECT VARIANCE(x) FROM xyz WHERE x = 1
 2                 table        xyz@xy
 2                 spans        /1-/2
 
-# Temporarily disabled due to #13689.
-# query RRR
-# SELECT STDDEV(x), STDDEV(y::decimal), STDDEV(z) FROM xyz
-# ----
-# 3  2.121320343559643  2.516611478423583
+query RRR
+SELECT STDDEV(x), STDDEV(y::decimal), STDDEV(z) FROM xyz
+----
+3  2.121320343559643  2.516611478423583
 
 query R
 SELECT STDDEV(x) FROM xyz WHERE x = 1
