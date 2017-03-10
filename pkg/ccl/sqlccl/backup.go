@@ -323,6 +323,26 @@ func Import(
 	return db.Run(ctx, b)
 }
 
+func loadBackupDescs(ctx context.Context, uris []string) ([]BackupDescriptor, error) {
+	backupDescs := make([]BackupDescriptor, len(uris))
+
+	for i, uri := range uris {
+		dir, err := storageccl.ExportStorageFromURI(ctx, uri)
+		if err != nil {
+			return nil, errors.Wrapf(err, "failed to create export storage handler from %q", uri)
+		}
+		backupDescs[i], err = ReadBackupDescriptor(ctx, dir)
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to read backup descriptor")
+		}
+		backupDescs[i].Dir = dir.Conf()
+	}
+	if len(backupDescs) == 0 {
+		return nil, errors.Errorf("no backups found")
+	}
+	return backupDescs, nil
+}
+
 func reassignParentIDs(
 	txn *client.Txn,
 	p sql.PlanHookState,
@@ -393,13 +413,16 @@ func reassignParentIDs(
 	return nil
 }
 
-func newTableIDs(
-	ctx context.Context,
-	db client.DB,
-	databasesByID map[sqlbase.ID]*sqlbase.DatabaseDescriptor,
-	tables []*sqlbase.TableDescriptor,
-) (map[sqlbase.ID]sqlbase.ID, error) {
+// reassignTableIDs updates the tables being restored with new TableIDs reserved
+// in the restoring cluster, as well as fixing cross-table references to use the
+// new IDs. It returns a KeyRewriter that can be used to transform KV data to
+// reflect the ID remapping it has done in the descriptors.
+func reassignTableIDs(
+	ctx context.Context, db client.DB, tables []*sqlbase.TableDescriptor,
+) (storageccl.KeyRewriter, error) {
 	var newTableIDs map[sqlbase.ID]sqlbase.ID
+	var kr storageccl.KeyRewriter
+
 	newTableIDsFunc := func(txn *client.Txn) error {
 		newTableIDs = make(map[sqlbase.ID]sqlbase.ID, len(tables))
 		for _, table := range tables {
@@ -407,14 +430,58 @@ func newTableIDs(
 			if err != nil {
 				return err
 			}
+			kr = append(kr, MakeKeyRewriterForNewTableID(table, newTableID)...)
 			newTableIDs[table.ID] = newTableID
+			table.ID = newTableID
 		}
 		return nil
 	}
+
 	if err := db.Txn(ctx, newTableIDsFunc); err != nil {
 		return nil, err
 	}
-	return newTableIDs, nil
+
+	if err := reassignReferencedTables(tables, newTableIDs); err != nil {
+		return nil, err
+	}
+
+	return kr, nil
+}
+
+func reassignReferencedTables(
+	tables []*sqlbase.TableDescriptor, newTableIDs map[sqlbase.ID]sqlbase.ID,
+) error {
+	for _, table := range tables {
+		if err := table.ForeachNonDropIndex(func(index *sqlbase.IndexDescriptor) error {
+			// Verify that for any interleaved index being restored, the interleave
+			// parent is also being restored. Otherwise, the interleave entries in the
+			// restored IndexDescriptors won't have anything to point to.
+			// TODO(dan): It seems like this restriction could be lifted by restoring
+			// stub TableDescriptors for the missing interleave parents.
+			for j, a := range index.Interleave.Ancestors {
+				ancestorID, ok := newTableIDs[a.TableID]
+				if !ok {
+					return errors.Errorf(
+						"cannot restore table %q without interleave parent %d", table.Name, a.TableID,
+					)
+				}
+				index.Interleave.Ancestors[j].TableID = ancestorID
+			}
+			for j, c := range index.InterleavedBy {
+				childID, ok := newTableIDs[c.Table]
+				if !ok {
+					return errors.Errorf(
+						"cannot restore table %q without interleave child table %d", table.Name, c.Table,
+					)
+				}
+				index.InterleavedBy[j].Table = childID
+			}
+			return nil
+		}); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 type intervalSpan roachpb.Span
@@ -480,12 +547,12 @@ type importEntry struct {
 // NB: All grouping operates in the pre-rewrite keyspace, meaning the keyranges
 // as they were backed up, not as they're being restored.
 func makeImportRequests(
-	tables []*sqlbase.TableDescriptor, backups []BackupDescriptor,
+	tableSpans []roachpb.Span, backups []BackupDescriptor,
 ) ([]importEntry, hlc.Timestamp, error) {
 	// Put the merged table data covering first into the OverlapCoveringMerge
 	// input.
 	var tableSpanCovering intervalccl.Covering
-	for _, span := range spansForAllTableIndexes(tables) {
+	for _, span := range tableSpans {
 		tableSpanCovering = append(tableSpanCovering, intervalccl.Range{
 			Start: span.Key,
 			End:   span.EndKey,
@@ -645,80 +712,30 @@ func presplitRanges(baseCtx context.Context, db client.DB, input []roachpb.Key) 
 	return wg.Wait()
 }
 
-func restoreTableDescs(
-	ctx context.Context,
-	db client.DB,
-	databasesByID map[sqlbase.ID]*sqlbase.DatabaseDescriptor,
-	tables []*sqlbase.TableDescriptor,
-	newTableIDs map[sqlbase.ID]sqlbase.ID,
-) ([]sqlbase.TableDescriptor, error) {
+// Write the new descriptors. First the ID -> TableDescriptor for the new table,
+// then flip (or initialize) the name -> ID entry so any new queries will use
+// the new one.
+func restoreTableDescs(ctx context.Context, db client.DB, tables []*sqlbase.TableDescriptor) error {
 	ctx, span := tracing.ChildSpan(ctx, "restoreTableDescs")
 	defer tracing.FinishSpan(span)
-
-	newTables := make([]sqlbase.TableDescriptor, len(tables))
 	restoreTableDescsFunc := func(txn *client.Txn) error {
-
-		for i := range tables {
-			newTables[i] = *tables[i]
-			newTableID, ok := newTableIDs[newTables[i].ID]
-			if !ok {
-				return errors.Errorf("missing table ID for %d %q", newTables[i].ID, newTables[i].Name)
-			}
-			newTables[i].ID = newTableID
-
-			if err := newTables[i].ForeachNonDropIndex(func(index *sqlbase.IndexDescriptor) error {
-				// TODO(dan): We need this sort of logic for FKs, too.
-
-				for j := range index.Interleave.Ancestors {
-					newTableID, ok = newTableIDs[index.Interleave.Ancestors[j].TableID]
-					if !ok {
-						return errors.Errorf("not restoring %d", index.Interleave.Ancestors[j].TableID)
-					}
-					index.Interleave.Ancestors[j].TableID = newTableID
-				}
-
-				oldInterleavedBy := index.InterleavedBy
-				index.InterleavedBy = nil
-				for _, ib := range oldInterleavedBy {
-					if newTableID, ok = newTableIDs[ib.Table]; ok {
-						newIB := ib
-						newIB.Table = newTableID
-						index.InterleavedBy = append(index.InterleavedBy, newIB)
-					}
-				}
-
-				return nil
-			}); err != nil {
-				return err
-			}
-
-			// Pass the descriptors by value to keep this idempotent.
-			if err := restoreTableDesc(ctx, txn, newTables[i]); err != nil {
-				return err
-			}
+		b := txn.NewBatch()
+		for _, table := range tables {
+			b.CPut(table.GetDescMetadataKey(), sqlbase.WrapDescriptor(table), nil)
+			b.CPut(table.GetNameMetadataKey(), table.ID, nil)
 		}
-		for _, newTable := range newTables {
-			if err := newTable.Validate(txn); err != nil {
-				return err
+		if err := txn.Run(b); err != nil {
+			return errors.Wrap(err, "restoring table desc and namespace entries")
+		}
+
+		for _, table := range tables {
+			if err := table.Validate(txn); err != nil {
+				return errors.Wrapf(err, "validating table %q (%d)", table.Name, table.ID)
 			}
 		}
 		return nil
 	}
-	if err := db.Txn(ctx, restoreTableDescsFunc); err != nil {
-		return nil, err
-	}
-	return newTables, nil
-}
-
-func restoreTableDesc(ctx context.Context, txn *client.Txn, table sqlbase.TableDescriptor) error {
-	// Write the new descriptors. First the ID -> TableDescriptor for the new
-	// table, then flip (or initialize) the name -> ID entry so any new queries
-	// will use the new one. If there was an existing table, it can now be
-	// cleaned up.
-	b := txn.NewBatch()
-	b.CPut(table.GetDescMetadataKey(), sqlbase.WrapDescriptor(&table), nil)
-	b.CPut(table.GetNameMetadataKey(), table.ID, nil)
-	return txn.Run(b)
+	return db.Txn(ctx, restoreTableDescsFunc)
 }
 
 // Restore imports a SQL table (or tables) from sets of non-overlapping sstable
@@ -729,29 +746,18 @@ func Restore(
 	uris []string,
 	targets parser.TargetList,
 	opt parser.KVOptions,
-) ([]sqlbase.TableDescriptor, error) {
-	backupDescs := make([]BackupDescriptor, len(uris))
+) error {
 
 	db := *p.ExecCfg().DB
 
 	if len(targets.Databases) > 0 {
-		return nil, errors.Errorf("RESTORE DATABASE is not yet supported " +
+		return errors.Errorf("RESTORE DATABASE is not yet supported " +
 			"(but you can use 'RESTORE somedb.*' to restore all backed up tables for a given DB).")
 	}
 
-	for i, uri := range uris {
-		dir, err := storageccl.ExportStorageFromURI(ctx, uri)
-		if err != nil {
-			return nil, errors.Wrapf(err, "failed to create export storage handler from %q", uri)
-		}
-		backupDescs[i], err = ReadBackupDescriptor(ctx, dir)
-		if err != nil {
-			return nil, errors.Wrap(err, "failed to read backup descriptor")
-		}
-		backupDescs[i].Dir = dir.Conf()
-	}
-	if len(backupDescs) == 0 {
-		return nil, errors.Errorf("no backups found")
+	backupDescs, err := loadBackupDescs(ctx, uris)
+	if err != nil {
+		return err
 	}
 	lastBackupDesc := backupDescs[len(backupDescs)-1]
 
@@ -763,20 +769,17 @@ func Restore(
 		sqlDescs := lastBackupDesc.Descriptors
 		var err error
 		if sqlDescs, err = descriptorsMatchingTargets(sessionDatabase, sqlDescs, targets); err != nil {
-			return nil, err
+			return err
 		}
 		for _, desc := range sqlDescs {
 			if dbDesc := desc.GetDatabase(); dbDesc != nil {
 				databasesByID[dbDesc.ID] = dbDesc
 			} else if tableDesc := desc.GetTable(); tableDesc != nil {
-				if tableDesc.ParentID == keys.SystemDatabaseID {
-					return nil, errors.Errorf("cannot restore system table: %s", tableDesc.Name)
-				}
 				tables = append(tables, tableDesc)
 			}
 		}
 		if len(tables) == 0 {
-			return nil, errors.Errorf("no tables found: %s", parser.AsString(targets))
+			return errors.Errorf("no tables found: %s", parser.AsString(targets))
 		}
 	}
 
@@ -785,54 +788,32 @@ func Restore(
 	if err := db.Txn(ctx, func(txn *client.Txn) error {
 		return reassignParentIDs(txn, p, databasesByID, tables, opt)
 	}); err != nil {
-		return nil, err
+		return err
 	}
 
-	// Assign a new ID for each table. This will leak if Restore later returns
-	// an error, but we can't use a KV transaction as restarts would be terrible
-	// (and our bulk import primitives are non-transactional).
+	spans := spansForAllTableIndexes(tables)
+
+	// Assign new IDs to the tables and update all references to use the new IDs,
+	// and get a KeyRewriter to use when importing their raw data.
+	//
+	// NB: we do this in a standalone transaction, not one that covers the entire
+	// restore since restarts would be terrible (and our bulk import primitive
+	// are non-transactional), but this does mean if something fails during Import,
+	// we've "leaked"" the IDs, in that the generate will have been incremented.
 	//
 	// TODO(dan): For now, we're always generating a new ID, but varints get
 	// longer as they get bigger and so our keys will, too. We should someday
 	// figure out how to reclaim ids.
-	newTableIDs, err := newTableIDs(ctx, db, databasesByID, tables)
+	kr, err := reassignTableIDs(ctx, db, tables)
 	if err != nil {
-		return nil, errors.Wrapf(err, "reserving %d new table IDs for restore", len(tables))
-	}
-	kr, err := MakeKeyRewriterForNewTableIDs(tables, newTableIDs)
-	if err != nil {
-		return nil, errors.Wrapf(err, "creating key rewriter for %d tables", len(tables))
-	}
-
-	// Verify that for any interleaved index being restored, the interleave
-	// parent is also being restored. Otherwise, the interleave entries in the
-	// restored IndexDescriptors won't have anything to point to.
-	// TODO(dan): It seems like this restriction could be lifted by restoring
-	// stub TableDescriptors for the missing interleave parents.
-	for _, table := range tables {
-		for _, index := range table.AllNonDropIndexes() {
-			for _, a := range index.Interleave.Ancestors {
-				if _, ok := newTableIDs[a.TableID]; !ok {
-					return nil, errors.Errorf(
-						"cannot restore table %q without interleave parent table %d",
-						table.Name, a.TableID)
-				}
-			}
-			for _, d := range index.InterleavedBy {
-				if _, ok := newTableIDs[d.Table]; !ok {
-					return nil, errors.Errorf(
-						"cannot restore table %q without interleave child table %d",
-						table.Name, d.Table)
-				}
-			}
-		}
+		return errors.Wrapf(err, "reserving %d new table IDs for restore", len(tables))
 	}
 
 	// Pivot the backups, which are grouped by time, into requests for import,
 	// which are grouped by keyrange.
-	importRequests, _, err := makeImportRequests(tables, backupDescs)
+	importRequests, _, err := makeImportRequests(spans, backupDescs)
 	if err != nil {
-		return nil, errors.Wrapf(err, "making import requests for %d backups", len(backupDescs))
+		return errors.Wrapf(err, "making import requests for %d backups", len(backupDescs))
 	}
 
 	// The Import (and resulting WriteBatch) requests made below run on
@@ -843,11 +824,11 @@ func Restore(
 		var ok bool
 		splitKeys[i], ok = kr.RewriteKey(append([]byte(nil), r.Key...))
 		if !ok {
-			return nil, errors.Errorf("failed to rewrite key: %s", r.Key)
+			return errors.Errorf("failed to rewrite key: %s", r.Key)
 		}
 	}
 	if err := presplitRanges(ctx, db, splitKeys); err != nil {
-		return nil, errors.Wrapf(err, "presplitting %d ranges", len(importRequests))
+		return errors.Wrapf(err, "presplitting %d ranges", len(importRequests))
 	}
 	// TODO(dan): Wait for the newly created ranges (and leaseholders) to
 	// rebalance.
@@ -863,23 +844,21 @@ func Restore(
 		// This leaves the data that did get imported in case the user wants to
 		// retry.
 		// TODO(dan): Build tooling to allow a user to restart a failed restore.
-		return nil, errors.Wrapf(err, "importing %d ranges", len(importRequests))
+		return errors.Wrapf(err, "importing %d ranges", len(importRequests))
 	}
 
 	// Write the new TableDescriptors and flip the namespace entries over to
 	// them. After this call, any queries on a table will be served by the newly
 	// restored data.
-	// TODO(dan): Gossip this out and wait for any outstanding leases to expire.
-	newTables, err := restoreTableDescs(ctx, db, databasesByID, tables, newTableIDs)
-	if err != nil {
-		return nil, errors.Wrapf(err, "restoring %d TableDescriptors", len(tables))
+	if err := restoreTableDescs(ctx, db, tables); err != nil {
+		return errors.Wrapf(err, "restoring %d TableDescriptors", len(tables))
 	}
 
 	// TODO(dan): Delete any old table data here. The first version of restore
 	// assumes that it's operating on a new cluster. If it's not empty,
 	// everything works but the table data is left abandoned.
 
-	return newTables, nil
+	return nil
 }
 
 func backupPlanHook(
@@ -963,7 +942,7 @@ func restorePlanHook(
 		ctx, span := tracing.ChildSpan(baseCtx, stmt.StatementTag())
 		defer tracing.FinishSpan(span)
 
-		_, err := Restore(ctx, p, restore.From, restore.Targets, restore.Options)
+		err := Restore(ctx, p, restore.From, restore.Targets, restore.Options)
 		return nil, err
 	}
 	return fn, nil, nil
