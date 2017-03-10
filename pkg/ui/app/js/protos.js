@@ -3519,6 +3519,24 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                                             "options": {
                                                 "(gogoproto.nullable)": false
                                             }
+                                        },
+                                        {
+                                            "rule": "repeated",
+                                            "type": "string",
+                                            "name": "args",
+                                            "id": 7,
+                                            "options": {
+                                                "(gogoproto.nullable)": false
+                                            }
+                                        },
+                                        {
+                                            "rule": "repeated",
+                                            "type": "string",
+                                            "name": "env",
+                                            "id": 8,
+                                            "options": {
+                                                "(gogoproto.nullable)": false
+                                            }
                                         }
                                     ]
                                 }

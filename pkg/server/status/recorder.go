@@ -20,6 +20,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"os"
 	"strconv"
 
 	"golang.org/x/net/context"
@@ -30,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -261,6 +263,8 @@ func (mr *MetricsRecorder) GetStatusSummary() *NodeStatus {
 		StartedAt:     mr.mu.startedAt,
 		StoreStatuses: make([]StoreStatus, 0, mr.mu.lastSummaryCount),
 		Metrics:       make(map[string]float64, mr.mu.lastNodeMetricCount),
+		Args:          os.Args,
+		Env:           envutil.GetEnvVarsUsed(),
 	}
 
 	eachRecordableValue(mr.mu.nodeRegistry, func(name string, val float64) {

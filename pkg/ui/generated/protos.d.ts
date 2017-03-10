@@ -6239,6 +6239,24 @@ getStoreStatuses?() : StoreStatus[];
 
 
 
+args?: string[];
+		
+
+getArgs?() : string[];
+		setArgs?(args : string[]): void;
+		
+
+
+
+env?: string[];
+		
+
+getEnv?() : string[];
+		setEnv?(env : string[]): void;
+		
+
+
+
 }
 
 	export interface NodeStatusMessage extends NodeStatus {
