@@ -180,8 +180,8 @@ func (ctx *Context) SetLocalInternalServer(internalServer roachpb.InternalServer
 
 func (ctx *Context) removeConn(key string, meta *connMeta) {
 	ctx.conns.Lock()
-	defer ctx.conns.Unlock()
 	ctx.removeConnLocked(key, meta)
+	ctx.conns.Unlock()
 }
 
 func (ctx *Context) removeConnLocked(key string, meta *connMeta) {
@@ -292,8 +292,9 @@ var errNotHeartbeated = errors.New("not yet heartbeated")
 // to prioritize healthy nodes over unhealthy ones.
 func (ctx *Context) ConnHealth(remoteAddr string) error {
 	ctx.conns.Lock()
-	defer ctx.conns.Unlock()
-	if meta, ok := ctx.conns.cache[remoteAddr]; ok {
+	meta, ok := ctx.conns.cache[remoteAddr]
+	ctx.conns.Unlock()
+	if ok {
 		return meta.heartbeatErr
 	}
 	return errNotConnected
