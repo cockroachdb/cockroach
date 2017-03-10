@@ -36,6 +36,7 @@ const (
 )
 
 var varGen = map[string]func(p *planner) string{
+	`application_name`:              func(p *planner) string { return p.session.ApplicationName },
 	`database`:                      func(p *planner) string { return p.session.Database },
 	`default_transaction_isolation`: func(p *planner) string { return p.session.DefaultIsolationLevel.String() },
 	`syntax`:                        func(p *planner) string { return p.session.Syntax.String() },
