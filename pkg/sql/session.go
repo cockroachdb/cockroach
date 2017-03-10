@@ -110,6 +110,10 @@ type Session struct {
 	mon        mon.MemoryMonitor
 	sessionMon mon.MemoryMonitor
 
+	// statistics to measure the time spent in each
+	// phase of SQL execution.
+	phaseTimes [sessionNumPhases]time.Time
+
 	noCopy util.NoCopy
 }
 
@@ -133,6 +137,7 @@ func NewSession(
 		virtualSchemas: e.virtualSchemas,
 		memMetrics:     memMetrics,
 	}
+	s.phaseTimes[sessionInit] = timeutil.Now()
 	cfg, cache := e.getSystemConfig()
 	s.planner = planner{
 		leaseMgr:       e.cfg.LeaseManager,
