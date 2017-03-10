@@ -196,10 +196,11 @@ type Gossip struct {
 
 	// resolvers is a list of resolvers used to determine
 	// bootstrap hosts for connecting to the gossip network.
-	resolverIdx    int
-	resolvers      []resolver.Resolver
-	resolversTried map[int]struct{} // Set of attempted resolver indexes
-	nodeDescs      map[roachpb.NodeID]*roachpb.NodeDescriptor
+	resolverIdx           int
+	resolvers             []resolver.Resolver
+	resolversTried        map[int]struct{} // Set of attempted resolver indexes
+	resolversWereFiltered bool
+	nodeDescs             map[roachpb.NodeID]*roachpb.NodeDescriptor
 
 	// Membership sets for resolvers and bootstrap addresses.
 	// bootstrapAddrs also tracks which address is associated with which
@@ -217,7 +218,6 @@ func New(
 	nodeID *base.NodeIDContainer,
 	rpcContext *rpc.Context,
 	grpcServer *grpc.Server,
-	resolvers []resolver.Resolver,
 	stopper *stop.Stopper,
 	registry *metric.Registry,
 ) *Gossip {
@@ -233,6 +233,7 @@ func New(
 		stallInterval:     defaultStallInterval,
 		bootstrapInterval: defaultBootstrapInterval,
 		cullInterval:      defaultCullInterval,
+		resolversTried:    map[int]struct{}{},
 		nodeDescs:         map[roachpb.NodeID]*roachpb.NodeDescriptor{},
 		resolverAddrs:     map[util.UnresolvedAddr]resolver.Resolver{},
 		bootstrapAddrs:    map[util.UnresolvedAddr]roachpb.NodeID{},
@@ -241,15 +242,6 @@ func New(
 
 	registry.AddMetric(g.outgoing.gauge)
 	g.clientsMu.breakers = map[string]*circuit.Breaker{}
-	resolverAddrs := make([]string, len(resolvers))
-	for i, resolver := range resolvers {
-		resolverAddrs[i] = resolver.Addr()
-	}
-	ctx := g.AnnotateCtx(context.Background())
-	if log.V(1) {
-		log.Infof(ctx, "initial resolvers: %v", resolverAddrs)
-	}
-	g.SetResolvers(resolvers)
 
 	g.mu.Lock()
 	// Add ourselves as a SystemConfig watcher.
@@ -268,14 +260,13 @@ func NewTest(
 	nodeID roachpb.NodeID,
 	rpcContext *rpc.Context,
 	grpcServer *grpc.Server,
-	resolvers []resolver.Resolver,
 	stopper *stop.Stopper,
 	registry *metric.Registry,
 ) *Gossip {
 	n := &base.NodeIDContainer{}
 	var ac log.AmbientContext
 	ac.AddLogTag("n", n)
-	gossip := New(ac, n, rpcContext, grpcServer, resolvers, stopper, registry)
+	gossip := New(ac, n, rpcContext, grpcServer, stopper, registry)
 	if nodeID != 0 {
 		n.Set(context.TODO(), nodeID)
 	}
@@ -386,15 +377,39 @@ func (g *Gossip) SetStorage(storage Storage) error {
 	return nil
 }
 
-// SetResolvers initializes the set of gossip resolvers used to
-// find nodes to bootstrap the gossip network.
-func (g *Gossip) SetResolvers(resolvers []resolver.Resolver) {
+// setResolvers initializes the set of gossip resolvers used to find
+// nodes to bootstrap the gossip network. Resolvers which match
+// advertAddr or listenAddr are skipped with a warning.
+func (g *Gossip) setResolvers(advertAddr, listenAddr net.Addr, resolvers []resolver.Resolver) {
+	if len(resolvers) == 0 {
+		return
+	}
+
 	g.mu.Lock()
 	defer g.mu.Unlock()
+
+	ctx := g.AnnotateCtx(context.Background())
+	filtered := make([]resolver.Resolver, 0, len(resolvers))
+	addrs := make([]string, 0, len(resolvers))
+	g.resolversWereFiltered = false
+	for _, r := range resolvers {
+		if r.Addr() == advertAddr.String() || r.Addr() == listenAddr.String() {
+			log.Warningf(ctx, "skipping -join address %q, because a node cannot join itself", r.Addr())
+			g.resolversWereFiltered = true
+		} else {
+			filtered = append(filtered, r)
+			addrs = append(addrs, r.Addr())
+		}
+	}
+	if log.V(1) {
+		log.Infof(ctx, "initial resolvers: %v", addrs)
+	}
+
 	// Start index at end because get next address loop logic increments as first step.
-	g.resolverIdx = len(resolvers) - 1
-	g.resolvers = resolvers
+	g.resolverIdx = len(filtered) - 1
+	g.resolvers = filtered
 	g.resolversTried = map[int]struct{}{}
+
 	// Start new bootstrapping immediately instead of waiting for next bootstrap interval.
 	g.maybeSignalStatusChangeLocked()
 }
@@ -404,6 +419,14 @@ func (g *Gossip) GetResolvers() []resolver.Resolver {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	return append([]resolver.Resolver(nil), g.resolvers...)
+}
+
+// ResolversWereFiltered returns whether any resolvers were filtered
+// for being self-referential.
+func (g *Gossip) ResolversWereFiltered() bool {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	return g.resolversWereFiltered
 }
 
 // GetNodeIDAddress looks up the address of the node by ID.
@@ -921,18 +944,19 @@ func (g *Gossip) MaxHops() uint32 {
 // Start launches the gossip instance, which commences joining the
 // gossip network using the supplied rpc server and previously known
 // peer addresses in addition to any bootstrap addresses specified via
-// --join.
+// --join and passed to this method via the resolvers parameter.
 //
-// The supplied address is used to identify the gossip instance in the
-// gossip network; it will be used by other instances to connect to
-// this instance.
+// The supplied advertise address is used to identify the gossip
+// instance in the gossip network; it will be used by other instances
+// to connect to this instance.
 //
 // This method starts bootstrap loop, gossip server, and client
 // management in separate goroutines and returns.
-func (g *Gossip) Start(addr net.Addr) {
-	g.server.start(addr) // serve gossip protocol
-	g.bootstrap()        // bootstrap gossip client
-	g.manage()           // manage gossip clients
+func (g *Gossip) Start(advertAddr, listenAddr net.Addr, resolvers []resolver.Resolver) {
+	g.setResolvers(advertAddr, listenAddr, resolvers)
+	g.server.start(advertAddr) // serve gossip protocol
+	g.bootstrap()              // bootstrap gossip client
+	g.manage()                 // manage gossip clients
 }
 
 // hasIncomingLocked returns whether the server has an incoming gossip

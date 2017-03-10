@@ -462,13 +462,11 @@ func (n *Node) initStores(
 	if n.stores.GetStoreCount() == 0 {
 		resolvers := n.storeCfg.Gossip.GetResolvers()
 		// Check for the case of uninitialized node having only itself specified as join host.
-		switch len(resolvers) {
-		case 0:
-			return errNeedsBootstrap
-		case 1:
-			if resolvers[0].Addr() == n.Descriptor.Address.String() {
+		if len(resolvers) == 0 {
+			if n.storeCfg.Gossip.ResolversWereFiltered() {
 				return errCannotJoinSelf
 			}
+			return errNeedsBootstrap
 		}
 	}
 

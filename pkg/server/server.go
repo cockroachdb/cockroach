@@ -170,7 +170,6 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		&s.nodeIDContainer,
 		s.rpcContext,
 		s.grpc,
-		s.cfg.GossipBootstrapResolvers,
 		s.stopper,
 		s.registry,
 	)
@@ -557,7 +556,7 @@ func (s *Server) Start(ctx context.Context) error {
 	// apply it for all web endpoints.
 	s.mux.HandleFunc(debugEndpoint, http.HandlerFunc(handleDebug))
 
-	s.gossip.Start(unresolvedAdvertAddr)
+	s.gossip.Start(unresolvedAdvertAddr, unresolvedListenAddr, s.cfg.GossipBootstrapResolvers)
 	log.Event(ctx, "started gossip")
 
 	s.engines, err = s.cfg.CreateEngines()

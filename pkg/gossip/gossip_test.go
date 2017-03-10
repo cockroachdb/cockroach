@@ -44,7 +44,7 @@ func TestGossipInfoStore(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 	rpcContext := newInsecureRPCContext(stopper)
-	g := NewTest(1, rpcContext, rpc.NewServer(rpcContext), nil, stopper, metric.NewRegistry())
+	g := NewTest(1, rpcContext, rpc.NewServer(rpcContext), stopper, metric.NewRegistry())
 	slice := []byte("b")
 	if err := g.AddInfo("s", slice, time.Hour); err != nil {
 		t.Fatal(err)
@@ -64,7 +64,7 @@ func TestGossipOverwriteNode(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 	rpcContext := newInsecureRPCContext(stopper)
-	g := NewTest(1, rpcContext, rpc.NewServer(rpcContext), nil, stopper, metric.NewRegistry())
+	g := NewTest(1, rpcContext, rpc.NewServer(rpcContext), stopper, metric.NewRegistry())
 	node1 := &roachpb.NodeDescriptor{NodeID: 1, Address: util.MakeUnresolvedAddr("tcp", "1.1.1.1:1")}
 	node2 := &roachpb.NodeDescriptor{NodeID: 2, Address: util.MakeUnresolvedAddr("tcp", "2.2.2.2:2")}
 	if err := g.SetNodeDescriptor(node1); err != nil {
@@ -128,7 +128,9 @@ func TestGossipGetNextBootstrapAddress(t *testing.T) {
 		t.Errorf("expected 3 resolvers; got %d", len(resolvers))
 	}
 	server := rpc.NewServer(newInsecureRPCContext(stopper))
-	g := NewTest(0, nil, server, resolvers, stop.NewStopper(), metric.NewRegistry())
+	g := NewTest(0, nil, server, stop.NewStopper(), metric.NewRegistry())
+	addr := util.MakeUnresolvedAddr("tcp", "mbp:26257")
+	g.setResolvers(&addr, &addr, resolvers)
 
 	// Using specified resolvers, fetch bootstrap addresses 3 times
 	// and verify the results match expected addresses.
@@ -146,6 +148,41 @@ func TestGossipGetNextBootstrapAddress(t *testing.T) {
 		}
 		g.mu.Unlock()
 	}
+}
+
+func TestGossipFilterResolvers(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+
+	resolverSpecs := []string{
+		"127.0.0.1:9000",
+		"127.0.0.1:9001",
+		"localhost:9004",
+	}
+
+	resolvers := []resolver.Resolver{}
+	for _, rs := range resolverSpecs {
+		resolver, err := resolver.NewResolver(rs)
+		if err == nil {
+			resolvers = append(resolvers, resolver)
+		}
+	}
+	server := rpc.NewServer(newInsecureRPCContext(stopper))
+	g := NewTest(0, nil, server, stop.NewStopper(), metric.NewRegistry())
+	listenAddr := util.MakeUnresolvedAddr("tcp", resolverSpecs[0])
+	advertAddr := util.MakeUnresolvedAddr("tcp", resolverSpecs[2])
+	g.setResolvers(&advertAddr, &listenAddr, resolvers)
+	if !g.ResolversWereFiltered() {
+		t.Fatalf("expected resolvers to be filtered")
+	}
+	g.mu.Lock()
+	if len(g.resolvers) != 1 {
+		t.Fatalf("expected one resolver; got %+v", g.resolvers)
+	} else if g.resolvers[0].Addr() != resolverSpecs[1] {
+		t.Fatalf("expected resolver to be %q; got %q", resolverSpecs[1], g.resolvers[0].Addr())
+	}
+	g.mu.Unlock()
 }
 
 func TestGossipRaceLogStatus(t *testing.T) {
