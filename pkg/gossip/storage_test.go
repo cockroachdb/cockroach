@@ -170,7 +170,7 @@ func TestGossipStorage(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	node.Gossip.SetResolvers([]resolver.Resolver{r})
+	node.Resolvers = []resolver.Resolver{r}
 	if err := network.StartNode(node); err != nil {
 		t.Fatal(err)
 	}

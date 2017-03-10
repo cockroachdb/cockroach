@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"math"
+	"net"
 	"runtime"
 	"strconv"
 	"strings"
@@ -431,6 +432,29 @@ func (cfg *Config) InitNode() error {
 	}
 
 	return nil
+}
+
+// FilterGossipBootstrapResolvers removes any gossip bootstrap resolvers which
+// match either this node's listen address or its advertised host address.
+func (cfg *Config) FilterGossipBootstrapResolvers(
+	ctx context.Context, listen, advert net.Addr,
+) []resolver.Resolver {
+	filtered := make([]resolver.Resolver, 0, len(cfg.GossipBootstrapResolvers))
+	addrs := make([]string, 0, len(cfg.GossipBootstrapResolvers))
+	for _, r := range cfg.GossipBootstrapResolvers {
+		if r.Addr() == advert.String() || r.Addr() == listen.String() {
+			if log.V(1) {
+				log.Infof(ctx, "skipping -join address %q, because a node cannot join itself", r.Addr())
+			}
+		} else {
+			filtered = append(filtered, r)
+			addrs = append(addrs, r.Addr())
+		}
+	}
+	if log.V(1) {
+		log.Infof(ctx, "initial resolvers: %v", addrs)
+	}
+	return filtered
 }
 
 // readEnvironmentVariables populates all context values that are environment
