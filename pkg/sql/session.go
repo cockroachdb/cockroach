@@ -69,9 +69,12 @@ type Session struct {
 	// SearchPath is a list of databases that will be searched for a table name
 	// before the database. Currently, this is used only for SELECTs.
 	// Names in the search path must have been normalized already.
-	SearchPath  parser.SearchPath
-	User        string
-	Syntax      int32
+	SearchPath parser.SearchPath
+	// User is the name of the user logged into the session.
+	User string
+	// Syntax determine which lexical structure to use for parsing.
+	Syntax parser.Syntax
+
 	DistSQLMode distSQLExecMode
 
 	virtualSchemas virtualSchemaHolder
