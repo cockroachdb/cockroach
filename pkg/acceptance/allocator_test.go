@@ -72,8 +72,6 @@ import (
 	"github.com/montanaflynn/stats"
 	"github.com/pkg/errors"
 
-	"sync"
-
 	"github.com/cockroachdb/cockroach/pkg/acceptance/terrafarm"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
@@ -227,24 +225,28 @@ func (at *allocatorTest) runSchemaChanges(ctx context.Context, t *testing.T) err
 		"ALTER TABLE %s ADD COLUMN newcol DECIMAL DEFAULT (DECIMAL '1.4')",
 		"CREATE INDEX foo ON %s (block_id)",
 	}
-	var wg sync.WaitGroup
-	wg.Add(len(schemaChanges))
+
+	errChan := make(chan error)
 	for i := range schemaChanges {
 		go func(i int) {
 			start := timeutil.Now()
 			cmd := fmt.Sprintf(schemaChanges[i], tableName)
 			log.Infof(ctx, "starting schema change: %s", cmd)
 			if _, err := db.Exec(cmd); err != nil {
-				log.Infof(ctx, "hit schema change error: %s, for %s, in %s", err, cmd, timeutil.Since(start))
-				t.Error(err)
+				errChan <- errors.Errorf("hit schema change error: %s, for %s, in %s", err, cmd, timeutil.Since(start))
 				return
 			}
 			log.Infof(ctx, "completed schema change: %s, in %s", cmd, timeutil.Since(start))
-			wg.Done()
+			errChan <- nil
 			// TODO(vivek): Monitor progress of schema changes and log progress.
 		}(i)
 	}
-	wg.Wait()
+
+	for range schemaChanges {
+		if err := <-errChan; err != nil {
+			t.Fatal(err)
+		}
+	}
 
 	log.Info(ctx, "validate applied schema changes")
 	if err := at.ValidateSchemaChanges(ctx, t); err != nil {
