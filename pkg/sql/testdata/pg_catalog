@@ -929,6 +929,7 @@ query TTTTTT colnames
 SELECT name, setting, category, short_desc, extra_desc, vartype FROM pg_catalog.pg_settings
 ----
 name                           setting       category  short_desc  extra_desc  vartype
+application_name                             NULL      NULL        NULL        string
 database                       test          NULL      NULL        NULL        string
 default_transaction_isolation  SERIALIZABLE  NULL      NULL        NULL        string
 max_index_keys                 32            NULL      NULL        NULL        string
@@ -944,6 +945,7 @@ query TTTTTTT colnames
 SELECT name, setting, unit, context, enumvals, boot_val, reset_val FROM pg_catalog.pg_settings
 ----
 name                           setting       unit  context  enumvals  boot_val      reset_val
+application_name                             NULL  user     NULL
 database                       test          NULL  user     NULL      test          test
 default_transaction_isolation  SERIALIZABLE  NULL  user     NULL      SERIALIZABLE  SERIALIZABLE
 max_index_keys                 32            NULL  user     NULL      32            32
@@ -959,6 +961,7 @@ query TTTTTT colnames
 SELECT name, source, min_val, max_val, sourcefile, sourceline FROM pg_catalog.pg_settings
 ----
 name                           source  min_val  max_val  sourcefile  sourceline
+application_name               NULL    NULL     NULL     NULL        NULL
 database                       NULL    NULL     NULL     NULL        NULL
 default_transaction_isolation  NULL    NULL     NULL     NULL        NULL
 max_index_keys                 NULL    NULL     NULL     NULL        NULL

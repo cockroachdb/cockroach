@@ -98,9 +98,19 @@ Modern
 statement error invalid statement
 SET ROW (1, TRUE, NULL)
 
+statement ok
+SET APPLICATION_NAME = helloworld
+
+query T colnames
+SHOW APPLICATION_NAME
+----
+application_name
+helloworld
+
 query TT
 SHOW ALL
 ----
+application_name               helloworld
 database                       foo
 default_transaction_isolation  SERIALIZABLE
 max_index_keys                 32
