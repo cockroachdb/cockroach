@@ -17,7 +17,6 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 
 	gcs "cloud.google.com/go/storage"
@@ -616,23 +615,40 @@ func (s *azureStorageWriter) Finish() error {
 		return err
 	}
 	const fourMiB = 1024 * 1024 * 4
+
+	// NB: Azure wants Block IDs to all be the same length.
+	// http://gauravmantri.com/2013/05/18/windows-azure-blob-storage-dealing-with-the-specified-blob-or-block-content-is-invalid-error/
+	// 9999 * 4mb = 40gb max upload size, well over our max range size.
+	const maxBlockID = 9999
+	const blockIDFmt = "%04d"
+
 	var blocks []azr.Block
 	i := 1
-	if err := chunkReader(f, fourMiB, func(b []byte) error {
+	uploadBlockFunc := func(b []byte) error {
 		select {
 		case <-s.ctx.Done():
 			return s.ctx.Err()
 		default:
 		}
-		id := base64.URLEncoding.EncodeToString([]byte(strconv.Itoa(i)))
+
+		if len(b) < 1 {
+			return errors.New("cannot upload an empty block")
+		}
+
+		if i > maxBlockID {
+			return errors.Errorf("too many blocks for azure blob block writer")
+		}
+		id := base64.URLEncoding.EncodeToString([]byte(fmt.Sprintf(blockIDFmt, i)))
 		i++
 		blocks = append(blocks, azr.Block{ID: id, Status: azr.BlockStatusUncommitted})
 		return s.client.PutBlock(s.container, s.name, id, b)
-	}); err != nil {
-		return err
+	}
+
+	if err := chunkReader(f, fourMiB, uploadBlockFunc); err != nil {
+		return errors.Wrap(err, "putting blocks")
 	}
 	if err := s.client.PutBlockList(s.container, s.name, blocks); err != nil {
-		return err
+		return errors.Wrap(err, "putting block list")
 	}
 	return nil
 }
@@ -644,15 +660,22 @@ func chunkReader(r io.Reader, size int, f func([]byte) error) error {
 	b := make([]byte, size)
 	for {
 		n, err := r.Read(b)
+
+		if err != nil && err != io.EOF {
+			return errors.Wrap(err, "reading chunk")
+		}
+
 		if n > 0 {
-			err = f(b[:n])
-			if err != nil {
-				return err
+			funcErr := f(b[:n])
+			if funcErr != nil {
+				return funcErr
 			}
 		}
+
 		if err == io.EOF {
 			break
-		} else if err != nil {
+		}
+		if err != nil {
 			return err
 		}
 	}
