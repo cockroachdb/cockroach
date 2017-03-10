@@ -65,7 +65,6 @@ type Datum interface {
 
 	// Compare returns -1 if the receiver is less than other, 0 if receiver is
 	// equal to other and +1 if receiver is greater than other.
-	// TODO(nvanbenschoten) Should we look into merging this with cmpOps?
 	Compare(ctx *EvalContext, other Datum) int
 
 	// Prev returns the previous datum and true, if one exists, or nil
@@ -303,13 +302,14 @@ func (d *DInt) Compare(ctx *EvalContext, other Datum) int {
 		// NULL is less than any non-NULL value.
 		return 1
 	}
-	v, ok := AsDInt(other)
-	if !ok {
-		cmp, ok := mixedTypeCompare(d, other)
-		if !ok {
-			panic(makeUnsupportedComparisonMessage(d, other))
-		}
-		return cmp
+	var v DInt
+	switch t := UnwrapDatum(other).(type) {
+	case *DInt:
+		v = *t
+	case *DFloat, *DDecimal:
+		return -t.Compare(ctx, d)
+	default:
+		panic(makeUnsupportedComparisonMessage(d, other))
 	}
 	if *d < v {
 		return -1
@@ -396,26 +396,29 @@ func (d *DFloat) Compare(ctx *EvalContext, other Datum) int {
 		// NULL is less than any non-NULL value.
 		return 1
 	}
-	v, ok := other.(*DFloat)
-	if !ok {
-		cmp, ok := mixedTypeCompare(d, other)
-		if !ok {
-			panic(makeUnsupportedComparisonMessage(d, other))
-		}
-		return cmp
+	var v DFloat
+	switch t := UnwrapDatum(other).(type) {
+	case *DFloat:
+		v = *t
+	case *DInt:
+		v = DFloat(MustBeDInt(t))
+	case *DDecimal:
+		return -t.Compare(ctx, d)
+	default:
+		panic(makeUnsupportedComparisonMessage(d, other))
 	}
-	if *d < *v {
+	if *d < v {
 		return -1
 	}
-	if *d > *v {
+	if *d > v {
 		return 1
 	}
 	// NaN sorts before non-NaN (#10109).
-	if *d == *v {
+	if *d == v {
 		return 0
 	}
 	if math.IsNaN(float64(*d)) {
-		if math.IsNaN(float64(*v)) {
+		if math.IsNaN(float64(v)) {
 			return 0
 		}
 		return -1
@@ -505,15 +508,20 @@ func (d *DDecimal) Compare(ctx *EvalContext, other Datum) int {
 		// NULL is less than any non-NULL value.
 		return 1
 	}
-	v, ok := other.(*DDecimal)
-	if !ok {
-		cmp, ok := mixedTypeCompare(d, other)
-		if !ok {
-			panic(makeUnsupportedComparisonMessage(d, other))
+	v := ctx.getTmpDec()
+	switch t := UnwrapDatum(other).(type) {
+	case *DDecimal:
+		v = &t.Decimal
+	case *DInt:
+		v.SetCoefficient(int64(*t)).SetExponent(0)
+	case *DFloat:
+		if _, err := v.SetFloat64(float64(*t)); err != nil {
+			panic(err)
 		}
-		return cmp
+	default:
+		panic(makeUnsupportedComparisonMessage(d, other))
 	}
-	return d.Cmp(&v.Decimal)
+	return d.Cmp(v)
 }
 
 // Prev implements the Datum interface.
@@ -911,14 +919,19 @@ func (d *DDate) Compare(ctx *EvalContext, other Datum) int {
 		// NULL is less than any non-NULL value.
 		return 1
 	}
-	v, ok := other.(*DDate)
-	if !ok {
+	var v DDate
+	switch t := other.(type) {
+	case *DDate:
+		v = *t
+	case *DTimestamp, *DTimestampTZ:
+		return compareTimestamps(ctx, d, other)
+	default:
 		panic(makeUnsupportedComparisonMessage(d, other))
 	}
-	if *d < *v {
+	if *d < v {
 		return -1
 	}
-	if *v < *d {
+	if v < *d {
 		return 1
 	}
 	return 0
@@ -1061,23 +1074,41 @@ func (*DTimestamp) ResolvedType() Type {
 	return TypeTimestamp
 }
 
+func timeFromDatum(ctx *EvalContext, d Datum) (time.Time, bool) {
+	switch t := d.(type) {
+	case *DDate:
+		return MakeDTimestampTZFromDate(ctx.GetLocation(), t).Time, true
+	case *DTimestampTZ:
+		return t.Time, true
+	case *DTimestamp:
+		return t.Time, true
+	default:
+		return time.Time{}, false
+	}
+}
+
+func compareTimestamps(ctx *EvalContext, l Datum, r Datum) int {
+	lTime, lOk := timeFromDatum(ctx, l)
+	rTime, rOk := timeFromDatum(ctx, r)
+	if !lOk || !rOk {
+		panic(makeUnsupportedComparisonMessage(l, r))
+	}
+	if lTime.Before(rTime) {
+		return -1
+	}
+	if rTime.Before(lTime) {
+		return 1
+	}
+	return 0
+}
+
 // Compare implements the Datum interface.
 func (d *DTimestamp) Compare(ctx *EvalContext, other Datum) int {
 	if other == DNull {
 		// NULL is less than any non-NULL value.
 		return 1
 	}
-	v, ok := other.(*DTimestamp)
-	if !ok {
-		panic(makeUnsupportedComparisonMessage(d, other))
-	}
-	if d.Before(v.Time) {
-		return -1
-	}
-	if v.Before(d.Time) {
-		return 1
-	}
-	return 0
+	return compareTimestamps(ctx, d, other)
 }
 
 // Prev implements the Datum interface.
@@ -1174,17 +1205,7 @@ func (d *DTimestampTZ) Compare(ctx *EvalContext, other Datum) int {
 		// NULL is less than any non-NULL value.
 		return 1
 	}
-	v, ok := other.(*DTimestampTZ)
-	if !ok {
-		panic(makeUnsupportedComparisonMessage(d, other))
-	}
-	if d.Before(v.Time) {
-		return -1
-	}
-	if v.Before(d.Time) {
-		return 1
-	}
-	return 0
+	return compareTimestamps(ctx, d, other)
 }
 
 // Prev implements the Datum interface.
@@ -2232,39 +2253,4 @@ func NewDName(d string) Datum {
 // (implemented as a *DOidWrapper) initialized from an existing *DArray.
 func NewDIntVectorFromDArray(d *DArray) Datum {
 	return wrapWithOid(d, oid.T_int2vector)
-}
-
-// Temporary workaround for #3633, allowing comparisons between
-// heterogeneous types.
-// TODO(nvanbenschoten) Now that typing is improved, can we get rid of this?
-func mixedTypeCompare(l, r Datum) (int, bool) {
-	ltype := l.ResolvedType()
-	rtype := r.ResolvedType()
-	// Check equality.
-	eqOp, ok := CmpOps[EQ].lookupImpl(ltype, rtype)
-	if !ok {
-		return 0, false
-	}
-	ctx := &EvalContext{}
-	eq, err := eqOp.fn(ctx, l, r)
-	if err != nil {
-		panic(err)
-	}
-	if eq {
-		return 0, true
-	}
-
-	// Check less than.
-	ltOp, ok := CmpOps[LT].lookupImpl(ltype, rtype)
-	if !ok {
-		return 0, false
-	}
-	lt, err := ltOp.fn(ctx, l, r)
-	if err != nil {
-		panic(err)
-	}
-	if lt {
-		return -1, true
-	}
-	return 1, true
 }
