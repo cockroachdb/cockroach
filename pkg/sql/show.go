@@ -38,7 +38,7 @@ const (
 var varGen = map[string]func(p *planner) string{
 	`database`:                      func(p *planner) string { return p.session.Database },
 	`default_transaction_isolation`: func(p *planner) string { return p.session.DefaultIsolationLevel.String() },
-	`syntax`:                        func(p *planner) string { return parser.Syntax(p.session.Syntax).String() },
+	`syntax`:                        func(p *planner) string { return p.session.Syntax.String() },
 	`time zone`:                     func(p *planner) string { return p.session.Location.String() },
 	`transaction isolation level`:   func(p *planner) string { return p.txn.Proto.Isolation.String() },
 	`transaction priority`:          func(p *planner) string { return p.txn.UserPriority.String() },

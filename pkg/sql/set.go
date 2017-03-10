@@ -72,9 +72,9 @@ func (p *planner) Set(n *parser.Set) (planNode, error) {
 		}
 		switch parser.Name(s).Normalize() {
 		case parser.ReNormalizeName(parser.Modern.String()):
-			p.session.Syntax = int32(parser.Modern)
+			p.session.Syntax = parser.Modern
 		case parser.ReNormalizeName(parser.Traditional.String()):
-			p.session.Syntax = int32(parser.Traditional)
+			p.session.Syntax = parser.Traditional
 		default:
 			return nil, fmt.Errorf("%s: \"%s\" is not in (%q, %q)", name, s, parser.Modern, parser.Traditional)
 		}
