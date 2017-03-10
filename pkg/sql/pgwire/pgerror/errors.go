@@ -244,3 +244,7 @@ func formatPGError(pgErr *pgError, s fmt.State, verb rune) {
 		}
 	}
 }
+
+func (pg *PGWireError) message() string {
+	return pg.Message
+}

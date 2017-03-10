@@ -319,3 +319,53 @@ func SetFlowRequestTrace(ctx context.Context, req *SetupFlowRequest) error {
 	tracer := sp.Tracer()
 	return tracer.Inject(sp.Context(), basictracer.Delegator, req.TraceContext)
 }
+
+// String implements fmt.Stringer.
+func (e *Error) String() string {
+	if e == nil {
+		return "<nil>"
+	}
+	return e.Message
+}
+
+// GoError returns a Go error converted from Error.
+func (e *Error) GoError() error {
+	if e == nil {
+		return nil
+	}
+	return e.GetDetail()
+}
+
+// GetDetail returns an error detail associated with the error.
+func (e *Error) GetDetail() ErrorDetailInterface {
+	if e == nil {
+		return nil
+	}
+	if e.Detail == nil {
+		// Unknown error detail; return the generic error.
+		return (*internalError)(e)
+	}
+
+	if err, ok := e.Detail.GetValue().(ErrorDetailInterface); ok {
+		return err
+	}
+	// Unknown error detail; return the generic error.
+	return (*internalError)(e)
+}
+
+// ErrorDetailInterface is an interface for each error detail.
+type ErrorDetailInterface interface {
+	error
+	// message returns an error message.
+	message() string
+}
+
+type internalError Error
+
+func (e *internalError) Error() string {
+	return (*Error)(e).String()
+}
+
+func (e *internalError) message() string {
+	return (*Error)(e).String()
+}

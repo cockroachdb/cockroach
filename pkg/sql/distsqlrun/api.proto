@@ -21,9 +21,9 @@ package cockroach.sql.distsqlrun;
 option go_package = "distsqlrun";
 
 import "cockroach/pkg/roachpb/data.proto";
-import "cockroach/pkg/roachpb/errors.proto";
 import "cockroach/pkg/sql/distsqlrun/data.proto";
 import "cockroach/pkg/sql/distsqlrun/processors.proto";
+import "cockroach/pkg/sql/pgwire/pgerror/errors.proto";
 import "cockroach/pkg/util/tracing/span_context_carrier.proto";
 import "gogoproto/gogo.proto";
 
@@ -34,15 +34,39 @@ message SetupFlowRequest {
   optional FlowSpec flow = 3 [(gogoproto.nullable) = false];
 }
 
+// ErrorDetail is a union type containing all available errors.
+message ErrorDetail {
+  option (gogoproto.onlyone) = true;
+
+  optional pgerror.PGWireError pg_wire_error = 1 [(gogoproto.customname) = "PGWireError"];
+}
+
+// Error is a generic representation including a string message
+// and information about retryability.
+message Error {
+  option (gogoproto.goproto_stringer) = false;
+
+  // message is a human-readable error message.
+  optional string message = 1 [(gogoproto.nullable) = false];
+
+  // Node at which the error was generated (zero if does not apply).
+  optional int32 origin_node = 5 [(gogoproto.nullable) = false,
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID" ];
+
+  // If an ErrorDetail is present, it contains additional structured data
+  // about the error.
+  optional ErrorDetail detail = 6;
+}
+
 message SimpleResponse {
-  // TODO(radu): we should be using our own error instead of roachpb.Error.
+  reserved 1;
   // One important error field for distsql is whether the error is
   // "authoritative": if a query is distributed on multiple nodes and one node
   // hits an error, the other nodes may hit errors as well as a consequence
   // (e.g. streams can't connect to the failed flow). The node that started the
   // flow needs to distinguish which errors are caused by non-availability of
   // other nodes so they don't obscure the real error.
-  optional roachpb.Error error = 1;
+  optional Error error = 2;
 }
 
 service DistSQL {
