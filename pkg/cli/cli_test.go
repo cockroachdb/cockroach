@@ -1495,3 +1495,34 @@ func TestJunkPositionalArguments(t *testing.T) {
 		}
 	}
 }
+
+func Example_zip() {
+	c := newCLITest(cliTestParams{})
+	defer c.cleanup()
+
+	c.Run("debug zip /dev/null")
+
+	// Output:
+	// debug zip /dev/null
+	// writing /dev/null
+	//   debug/events
+	//   debug/liveness
+	//   debug/nodes/1/status
+	//   debug/nodes/1/gossip
+	//   debug/nodes/1/stacks
+	//   debug/nodes/1/ranges/1
+	//   debug/nodes/1/ranges/2
+	//   debug/nodes/1/ranges/3
+	//   debug/nodes/1/ranges/4
+	//   debug/nodes/1/ranges/5
+	//   debug/nodes/1/ranges/6
+	//   debug/schema/system@details
+	//   debug/schema/system/descriptor
+	//   debug/schema/system/eventlog
+	//   debug/schema/system/lease
+	//   debug/schema/system/namespace
+	//   debug/schema/system/rangelog
+	//   debug/schema/system/ui
+	//   debug/schema/system/users
+	//   debug/schema/system/zones
+}
