@@ -311,6 +311,8 @@ func (ctx *Context) runHeartbeat(meta *connMeta, remoteAddr string) error {
 
 	// Give the first iteration a wait-free heartbeat attempt.
 	heartbeatTimer.Reset(0)
+
+	firstHeartbeat := true
 	for {
 		select {
 		case <-ctx.Stopper.ShouldStop():
@@ -319,8 +321,21 @@ func (ctx *Context) runHeartbeat(meta *connMeta, remoteAddr string) error {
 			heartbeatTimer.Read = true
 		}
 
+		// Give the first heartbeat extra time to complete successfully, in case
+		// the remote side is starting up.
+		timeout := ctx.HeartbeatTimeout
+		if firstHeartbeat {
+			timeout *= 100
+
+			firstHeartbeat = false
+		}
+
+		goCtx, cancel := context.WithTimeout(ctx.masterCtx, timeout)
 		sendTime := ctx.localClock.PhysicalTime()
-		response, err := ctx.heartbeat(heartbeatClient, request)
+		// NB: We want the request to fail-fast (the default), otherwise we won't
+		// be notified of transport failures.
+		response, err := heartbeatClient.Ping(goCtx, &request)
+		cancel()
 		ctx.conns.Lock()
 		meta.heartbeatErr = err
 		ctx.conns.Unlock()
@@ -371,14 +386,4 @@ func (ctx *Context) runHeartbeat(meta *connMeta, remoteAddr string) error {
 
 		heartbeatTimer.Reset(ctx.HeartbeatInterval)
 	}
-}
-
-func (ctx *Context) heartbeat(
-	heartbeatClient HeartbeatClient, request PingRequest,
-) (*PingResponse, error) {
-	goCtx, cancel := context.WithTimeout(context.TODO(), ctx.HeartbeatTimeout)
-	defer cancel()
-	// NB: We want the request to fail-fast (the default), otherwise we won't be
-	// notified of transport failures.
-	return heartbeatClient.Ping(goCtx, &request)
 }
