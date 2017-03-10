@@ -65,40 +65,69 @@ const keyFor7881Sample = "found#7881"
 // Session contains the state of a SQL client connection.
 // Create instances using NewSession().
 type Session struct {
+	//
+	// Session parameters, user-configurable.
+	//
+
+	// Database indicates the "current" database for the purpose
+	// of resolving names.
 	Database string
+	// DefaultIsolationLevel indicates the default isolation level of
+	// newly created transactions.
+	DefaultIsolationLevel enginepb.IsolationType
+	// DistSQLMode indicates whether to run queries using the distributed
+	// execution engine.
+	DistSQLMode distSQLExecMode
+	// Location indicates the current time zone.
+	Location *time.Location
 	// SearchPath is a list of databases that will be searched for a table name
 	// before the database. Currently, this is used only for SELECTs.
 	// Names in the search path must have been normalized already.
 	SearchPath parser.SearchPath
-	// User is the name of the user logged into the session.
-	User string
 	// Syntax determine which lexical structure to use for parsing.
 	Syntax parser.Syntax
+	// User is the name of the user logged into the session.
+	User string
 
-	DistSQLMode distSQLExecMode
+	//
+	// State structures for the logical SQL session.
+	//
 
-	virtualSchemas virtualSchemaHolder
-
-	// Info about the open transaction (if any).
+	// TxnState carries information about the open transaction (if any),
+	// including the retry status and the KV client Txn object.
 	TxnState txnState
-
-	planner            planner
-	memMetrics         *MemoryMetrics
+	// PreparedStatement and PreparedPortals store the statements/portals
+	// that have been configured via pgwire.
 	PreparedStatements PreparedStatements
 	PreparedPortals    PreparedPortals
+	// virtualSchemas aliases Executor.virtualSchemas.
+	// It is duplicated in Session to provide easier access to
+	// the various methods that need this reference.
+	// TODO(knz): place this in an executionContext parameter-passing
+	// structure.
+	virtualSchemas virtualSchemaHolder
 
-	Location              *time.Location
-	DefaultIsolationLevel enginepb.IsolationType
-	// context is the Session's base context. See Ctx().
-	context        context.Context
+	//
+	// Run-time state.
+	//
+
+	// planner is the planner in charge of this session.
+	planner planner
+	// context is the Session's base context, to be used for all
+	// SQL-related logging. See Ctx().
+	context context.Context
+	// finishEventLog indicates whether an event log was started for
+	// this session.
 	finishEventLog bool
-	// TODO(andrei): We need to either get rid of this cancel field, or it needs
-	// to move to the TxnState and become a per-txn cancel. Right now, we're
-	// cancelling all the txns that have ever run on this session when the session
-	// is closed, as opposed to cancelling the individual transactions as soon as
-	// they COMMIT/ROLLBACK.
+	// cancel is a method to call when the session terminates, to
+	// release resources associated with the context above.
+	// TODO(andrei): We need to either get rid of this cancel field, or
+	// it needs to move to the TxnState and become a per-txn
+	// cancel. Right now, we're cancelling all the txns that have ever
+	// run on this session when the session is closed, as opposed to
+	// cancelling the individual transactions as soon as they
+	// COMMIT/ROLLBACK.
 	cancel context.CancelFunc
-
 	// mon tracks memory usage for SQL activity within this session. It
 	// is not directly used, but rather indirectly used via sessionMon
 	// and TxnState.mon. sessionMon tracks session-bound objects like prepared
@@ -113,6 +142,15 @@ type Session struct {
 	mon        mon.MemoryMonitor
 	sessionMon mon.MemoryMonitor
 
+	//
+	// Per-session statistics.
+	//
+
+	// memMetrics track memory usage by SQL execution.
+	memMetrics *MemoryMetrics
+
+	// noCopy is placed here to guarantee that Session objects are not
+	// copied.
 	noCopy util.NoCopy
 }
 
