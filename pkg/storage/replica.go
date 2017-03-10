@@ -3733,14 +3733,6 @@ func (r *Replica) sendRaftMessage(ctx context.Context, msg raftpb.Message) {
 		return
 	}
 
-	r.store.cfg.Transport.mu.Lock()
-	var queuedMsgs int64
-	for _, queue := range r.store.cfg.Transport.mu.queues {
-		queuedMsgs += int64(len(queue))
-	}
-	r.store.cfg.Transport.mu.Unlock()
-	r.store.metrics.RaftEnqueuedPending.Update(queuedMsgs)
-
 	if r.maybeCoalesceHeartbeat(ctx, msg, toReplica, fromReplica, false) {
 		return
 	}
@@ -3776,19 +3768,15 @@ func (r *Replica) addUnreachableRemoteReplica(remoteReplica roachpb.ReplicaID) {
 // was dropped. It is the caller's responsibility to call ReportUnreachable on
 // the Raft group.
 func (r *Replica) sendRaftMessageRequest(ctx context.Context, req *RaftMessageRequest) bool {
-	r.store.cfg.Transport.mu.Lock()
-	var queuedMsgs int64
-	for _, queue := range r.store.cfg.Transport.mu.queues {
-		queuedMsgs += int64(len(queue))
-	}
-	r.store.cfg.Transport.mu.Unlock()
-	r.store.metrics.RaftEnqueuedPending.Update(queuedMsgs)
-
 	if log.V(4) {
 		log.Infof(ctx, "sending raft request %+v", req)
 	}
 
-	return r.store.cfg.Transport.SendAsync(req)
+	ok := r.store.cfg.Transport.SendAsync(req)
+	// TODO(peter): Looping over all of the outgoing Raft message queues to
+	// update this stat on every send is a bit expensive.
+	r.store.metrics.RaftEnqueuedPending.Update(r.store.cfg.Transport.queuedMessageCount())
+	return ok
 }
 
 func (r *Replica) reportSnapshotStatus(to uint64, snapErr error) {
