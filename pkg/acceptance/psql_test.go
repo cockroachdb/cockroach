@@ -70,5 +70,9 @@ echo -n '\.' >> import.sql
 psql -d testdb < import.sql
 psql -d testdb -c "SELECT * FROM playground"  | grep brown
 
+# Test that the app name set in the pgwire init exchange is propagated
+# down the session.
+psql -d testdb -c "show application_name" | grep psql
+
 exit 0
 `

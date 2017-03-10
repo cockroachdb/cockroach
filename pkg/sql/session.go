@@ -160,8 +160,9 @@ type Session struct {
 
 // SessionArgs contains arguments for creating a new Session with NewSession().
 type SessionArgs struct {
-	Database string
-	User     string
+	Database        string
+	User            string
+	ApplicationName string
 }
 
 // NewSession creates and initializes a new Session object.
@@ -171,12 +172,13 @@ func NewSession(
 ) *Session {
 	ctx = e.AnnotateCtx(ctx)
 	s := &Session{
-		Database:       args.Database,
-		SearchPath:     parser.SearchPath{"pg_catalog"},
-		User:           args.User,
-		Location:       time.UTC,
-		virtualSchemas: e.virtualSchemas,
-		memMetrics:     memMetrics,
+		ApplicationName: args.ApplicationName,
+		Database:        args.Database,
+		SearchPath:      parser.SearchPath{"pg_catalog"},
+		User:            args.User,
+		Location:        time.UTC,
+		virtualSchemas:  e.virtualSchemas,
+		memMetrics:      memMetrics,
 	}
 	cfg, cache := e.getSystemConfig()
 	s.planner = planner{
