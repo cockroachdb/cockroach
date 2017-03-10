@@ -14,7 +14,6 @@ eexpect "starting cockroach node"
 
 # Stop it.
 interrupt
-interrupt
 eexpect ":/# "
 
 # Disable replication so as to avoid spurious purgatory errors.
@@ -32,7 +31,6 @@ eexpect "starting cockroach node"
 
 # Stop it.
 interrupt
-interrupt
 eexpect ":/# "
 
 # Check that --alsologtostderr can override the threshold
@@ -42,14 +40,12 @@ eexpect "marker\r\nCockroachDB node starting"
 
 # Stop it.
 interrupt
-interrupt
 eexpect ":/# "
 
 send "echo marker; $argv start --alsologtostderr=ERROR --logtostderr\r"
 eexpect "marker\r\nCockroachDB node starting"
 
 # Stop it.
-interrupt
 interrupt
 eexpect ":/# "
 
@@ -58,12 +54,13 @@ eexpect "marker\r\nCockroachDB node starting"
 
 # Stop it.
 interrupt
-interrupt
 eexpect ":/# "
 
 # Start a regular server
 send "mkfifo pid_fifo || true\r"
-send "$argv start --pid-file=pid_fifo >/dev/null 2>&1 & cat pid_fifo\r"
+send "$argv start --pid-file=pid_fifo >/dev/null 2>&1 & cat pid_fifo; echo started\r"
+eexpect "\r\nstarted"
+eexpect ":/# "
 
 # Now test `quit` as non-start command, and test that `quit` does not
 # emit logging output between the point the command starts until it
