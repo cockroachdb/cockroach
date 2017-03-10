@@ -229,7 +229,7 @@ func (n *Network) Start() {
 func (n *Network) RunUntilFullyConnected() int {
 	var connectedAtCycle int
 	n.SimulateNetwork(func(cycle int, network *Network) bool {
-		if network.isNetworkConnected() {
+		if network.IsNetworkConnected() {
 			connectedAtCycle = cycle
 			return false
 		}
@@ -238,10 +238,10 @@ func (n *Network) RunUntilFullyConnected() int {
 	return connectedAtCycle
 }
 
-// isNetworkConnected returns true if the network is fully connected
+// IsNetworkConnected returns true if the network is fully connected
 // with no partitions (i.e. every node knows every other node's
 // network address).
-func (n *Network) isNetworkConnected() bool {
+func (n *Network) IsNetworkConnected() bool {
 	for _, leftNode := range n.Nodes {
 		for _, rightNode := range n.Nodes {
 			if _, err := leftNode.Gossip.GetInfo(gossip.MakeNodeIDKey(rightNode.Gossip.NodeID.Get())); err != nil {
