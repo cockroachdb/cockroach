@@ -257,7 +257,7 @@ func (ctx *Context) GRPCDial(target string, opts ...grpc.DialOption) (*grpc.Clie
 				ctx.Stopper.RunWorker(func() {
 					err := ctx.runHeartbeat(meta, target)
 					if err != nil && !grpcutil.IsClosedConnection(err) {
-						log.Error(ctx.masterCtx, err)
+						log.Errorf(ctx.masterCtx, "removing connection to %s due to error: %s", target, err)
 					}
 					ctx.removeConn(target, meta)
 				})
