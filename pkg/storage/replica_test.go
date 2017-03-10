@@ -147,7 +147,7 @@ func (tc *testContext) StartWithStoreConfig(t testing.TB, stopper *stop.Stopper,
 	if tc.gossip == nil {
 		rpcContext := rpc.NewContext(cfg.AmbientCtx, &base.Config{Insecure: true}, cfg.Clock, stopper)
 		server := rpc.NewServer(rpcContext) // never started
-		tc.gossip = gossip.NewTest(1, rpcContext, server, nil, stopper, metric.NewRegistry())
+		tc.gossip = gossip.NewTest(1, rpcContext, server, stopper, metric.NewRegistry())
 	}
 	if tc.engine == nil {
 		tc.engine = engine.NewInMem(roachpb.Attributes{Attrs: []string{"dc1", "mem"}}, 1<<20)

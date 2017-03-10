@@ -66,7 +66,7 @@ func startGossipAtAddr(
 ) *Gossip {
 	rpcContext := newInsecureRPCContext(stopper)
 	server := rpc.NewServer(rpcContext)
-	g := NewTest(nodeID, rpcContext, server, nil, stopper, registry)
+	g := NewTest(nodeID, rpcContext, server, stopper, registry)
 	ln, err := netutil.ListenAndServeGRPC(stopper, server, addr)
 	if err != nil {
 		t.Fatal(err)
@@ -126,7 +126,7 @@ func startFakeServerGossips(
 	lRPCContext := newInsecureRPCContext(stopper)
 
 	lserver := rpc.NewServer(lRPCContext)
-	local := NewTest(localNodeID, lRPCContext, lserver, nil, stopper, metric.NewRegistry())
+	local := NewTest(localNodeID, lRPCContext, lserver, stopper, metric.NewRegistry())
 	lln, err := netutil.ListenAndServeGRPC(stopper, lserver, util.IsolatedTestAddr)
 	if err != nil {
 		t.Fatal(err)
@@ -444,10 +444,10 @@ func TestClientRegisterWithInitNodeID(t *testing.T) {
 		resolvers = append(resolvers, resolver)
 		// node ID must be non-zero
 		gnode := NewTest(
-			roachpb.NodeID(i+1), RPCContext, server, resolvers, stopper, metric.NewRegistry(),
+			roachpb.NodeID(i+1), RPCContext, server, stopper, metric.NewRegistry(),
 		)
 		g = append(g, gnode)
-		gnode.Start(ln.Addr())
+		gnode.Start(ln.Addr(), resolvers)
 	}
 
 	testutils.SucceedsSoon(t, func() error {
@@ -497,9 +497,10 @@ func TestClientRetryBootstrap(t *testing.T) {
 	}
 
 	local.SetBootstrapInterval(10 * time.Millisecond)
-	local.SetResolvers([]resolver.Resolver{
+	resolvers := []resolver.Resolver{
 		&testResolver{addr: remote.GetNodeAddr().String(), numFails: 3, numSuccesses: 1},
-	})
+	}
+	local.setResolvers(resolvers)
 	local.bootstrap()
 	local.manage()
 

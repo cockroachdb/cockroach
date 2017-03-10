@@ -119,7 +119,7 @@ func newRaftTransportTestContext(t testing.TB) *raftTransportTestContext {
 	)
 	server := rpc.NewServer(rttc.nodeRPCContext) // never started
 	rttc.gossip = gossip.NewTest(
-		1, rttc.nodeRPCContext, server, nil, rttc.stopper, metric.NewRegistry(),
+		1, rttc.nodeRPCContext, server, rttc.stopper, metric.NewRegistry(),
 	)
 	return rttc
 }

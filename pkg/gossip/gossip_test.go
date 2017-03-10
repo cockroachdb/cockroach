@@ -44,7 +44,7 @@ func TestGossipInfoStore(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 	rpcContext := newInsecureRPCContext(stopper)
-	g := NewTest(1, rpcContext, rpc.NewServer(rpcContext), nil, stopper, metric.NewRegistry())
+	g := NewTest(1, rpcContext, rpc.NewServer(rpcContext), stopper, metric.NewRegistry())
 	slice := []byte("b")
 	if err := g.AddInfo("s", slice, time.Hour); err != nil {
 		t.Fatal(err)
@@ -64,7 +64,7 @@ func TestGossipOverwriteNode(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 	rpcContext := newInsecureRPCContext(stopper)
-	g := NewTest(1, rpcContext, rpc.NewServer(rpcContext), nil, stopper, metric.NewRegistry())
+	g := NewTest(1, rpcContext, rpc.NewServer(rpcContext), stopper, metric.NewRegistry())
 	node1 := &roachpb.NodeDescriptor{NodeID: 1, Address: util.MakeUnresolvedAddr("tcp", "1.1.1.1:1")}
 	node2 := &roachpb.NodeDescriptor{NodeID: 2, Address: util.MakeUnresolvedAddr("tcp", "2.2.2.2:2")}
 	if err := g.SetNodeDescriptor(node1); err != nil {
@@ -128,7 +128,8 @@ func TestGossipGetNextBootstrapAddress(t *testing.T) {
 		t.Errorf("expected 3 resolvers; got %d", len(resolvers))
 	}
 	server := rpc.NewServer(newInsecureRPCContext(stopper))
-	g := NewTest(0, nil, server, resolvers, stop.NewStopper(), metric.NewRegistry())
+	g := NewTest(0, nil, server, stop.NewStopper(), metric.NewRegistry())
+	g.setResolvers(resolvers)
 
 	// Using specified resolvers, fetch bootstrap addresses 3 times
 	// and verify the results match expected addresses.

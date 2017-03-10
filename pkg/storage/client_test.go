@@ -120,7 +120,7 @@ func createTestStoreWithEngine(
 	nodeDesc := &roachpb.NodeDescriptor{NodeID: 1}
 	server := rpc.NewServer(rpcContext) // never started
 	storeCfg.Gossip = gossip.NewTest(
-		nodeDesc.NodeID, rpcContext, server, nil, stopper, metric.NewRegistry(),
+		nodeDesc.NodeID, rpcContext, server, stopper, metric.NewRegistry(),
 	)
 	storeCfg.ScanMaxIdleTime = 1 * time.Second
 	stores := storage.NewStores(ac, storeCfg.Clock)
@@ -689,7 +689,6 @@ func (m *multiTestContext) addStore(idx int) {
 		roachpb.NodeID(idx+1),
 		m.rpcContext,
 		grpcServer,
-		resolvers,
 		m.transportStopper,
 		metric.NewRegistry(),
 	)
@@ -771,7 +770,7 @@ func (m *multiTestContext) addStore(idx int) {
 		m.t.Fatal(err)
 	}
 
-	m.gossips[idx].Start(ln.Addr())
+	m.gossips[idx].Start(ln.Addr(), resolvers)
 
 	if err := store.Start(context.Background(), stopper); err != nil {
 		m.t.Fatal(err)

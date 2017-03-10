@@ -94,7 +94,7 @@ func createTestStorePool(
 	clock := hlc.NewClock(mc.UnixNano, time.Nanosecond)
 	rpcContext := rpc.NewContext(log.AmbientContext{}, &base.Config{Insecure: true}, clock, stopper)
 	server := rpc.NewServer(rpcContext) // never started
-	g := gossip.NewTest(1, rpcContext, server, nil, stopper, metric.NewRegistry())
+	g := gossip.NewTest(1, rpcContext, server, stopper, metric.NewRegistry())
 	mnl := newMockNodeLiveness(defaultNodeStatus)
 	storePool := NewStorePool(
 		log.AmbientContext{},

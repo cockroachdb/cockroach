@@ -22,8 +22,11 @@ import (
 	"testing"
 	"time"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/gossip/resolver"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
@@ -205,5 +208,34 @@ func TestReadEnvironmentVariables(t *testing.T) {
 
 			cfg.readEnvironmentVariables()
 		})
+	}
+}
+
+func TestFilterGossipBootstrapResolvers(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	resolverSpecs := []string{
+		"127.0.0.1:9000",
+		"127.0.0.1:9001",
+		"localhost:9004",
+	}
+
+	resolvers := []resolver.Resolver{}
+	for _, rs := range resolverSpecs {
+		resolver, err := resolver.NewResolver(rs)
+		if err == nil {
+			resolvers = append(resolvers, resolver)
+		}
+	}
+	cfg := MakeConfig()
+	cfg.GossipBootstrapResolvers = resolvers
+
+	listenAddr := util.MakeUnresolvedAddr("tcp", resolverSpecs[0])
+	advertAddr := util.MakeUnresolvedAddr("tcp", resolverSpecs[2])
+	filtered := cfg.FilterGossipBootstrapResolvers(context.Background(), &listenAddr, &advertAddr)
+	if len(filtered) != 1 {
+		t.Fatalf("expected one resolver; got %+v", filtered)
+	} else if filtered[0].Addr() != resolverSpecs[1] {
+		t.Fatalf("expected resolver to be %q; got %q", resolverSpecs[1], filtered[0].Addr())
 	}
 }

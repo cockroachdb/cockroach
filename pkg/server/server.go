@@ -172,7 +172,6 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		&s.nodeIDContainer,
 		s.rpcContext,
 		s.grpc,
-		s.cfg.GossipBootstrapResolvers,
 		s.stopper,
 		s.registry,
 	)
@@ -600,7 +599,10 @@ func (s *Server) Start(ctx context.Context) error {
 	// apply it for all web endpoints.
 	s.mux.HandleFunc(debugEndpoint, http.HandlerFunc(handleDebug))
 
-	s.gossip.Start(unresolvedAdvertAddr)
+	// Filter the gossip bootstrap resolvers based on the listen and
+	// advertise addresses.
+	filtered := s.cfg.FilterGossipBootstrapResolvers(ctx, unresolvedListenAddr, unresolvedAdvertAddr)
+	s.gossip.Start(unresolvedAdvertAddr, filtered)
 	log.Event(ctx, "started gossip")
 
 	s.engines, err = s.cfg.CreateEngines()
@@ -652,6 +654,11 @@ func (s *Server) Start(ctx context.Context) error {
 		s.engines,
 		s.cfg.NodeAttributes,
 		s.cfg.Locality,
+		// If the _unfiltered_ list of hosts from the --join flag is
+		// empty, then this node can bootstrap a new cluster. We disallow
+		// this if this node is being started with itself specified as a
+		// --join host, because that's too likely to be operator error.
+		len(s.cfg.GossipBootstrapResolvers) == 0, /* canBootstrap */
 	)
 	if err != nil {
 		return err

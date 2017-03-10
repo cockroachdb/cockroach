@@ -350,18 +350,25 @@ func (n *Node) initNodeID(id roachpb.NodeID) {
 // start starts the node by registering the storage instance for the
 // RPC service "Node" and initializing stores for each specified
 // engine. Launches periodic store gossiping in a goroutine.
+//
+// The canBootstrap parameter indicates whether this node is eligible
+// to bootstrap a new cluster. The -join flag must be empty.
 func (n *Node) start(
 	ctx context.Context,
 	addr net.Addr,
 	engines []engine.Engine,
 	attrs roachpb.Attributes,
 	locality roachpb.Locality,
+	canBootstrap bool,
 ) error {
 	n.initDescriptor(addr, attrs, locality)
 
 	// Initialize stores, including bootstrapping new ones.
 	if err := n.initStores(ctx, engines, n.stopper, false); err != nil {
 		if err == errNeedsBootstrap {
+			if !canBootstrap {
+				return errCannotJoinSelf
+			}
 			n.initialBoot = true
 			// This node has no initialized stores and no way to connect to
 			// an existing cluster, so we bootstrap it.
@@ -453,17 +460,8 @@ func (n *Node) initStores(
 
 	// If there are no initialized stores and no gossip resolvers,
 	// bootstrap this node as the seed of a new cluster.
-	if n.stores.GetStoreCount() == 0 {
-		resolvers := n.storeCfg.Gossip.GetResolvers()
-		// Check for the case of uninitialized node having only itself specified as join host.
-		switch len(resolvers) {
-		case 0:
-			return errNeedsBootstrap
-		case 1:
-			if resolvers[0].Addr() == n.Descriptor.Address.String() {
-				return errCannotJoinSelf
-			}
-		}
+	if n.stores.GetStoreCount() == 0 && len(n.storeCfg.Gossip.GetResolvers()) == 0 {
+		return errNeedsBootstrap
 	}
 
 	// Verify all initialized stores agree on cluster and node IDs.
