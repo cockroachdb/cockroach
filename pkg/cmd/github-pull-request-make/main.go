@@ -43,6 +43,7 @@ import (
 
 	"golang.org/x/oauth2"
 
+	"github.com/cockroachdb/cockroach/pkg/testutils/stressutil"
 	"github.com/google/go-github/github"
 )
 
@@ -204,6 +205,7 @@ func main() {
 				target,
 				fmt.Sprintf("PKG=./%s", name),
 				fmt.Sprintf("TESTS=%s", tests),
+				fmt.Sprintf("%s=%t", stressutil.Env, false),
 				fmt.Sprintf("STRESSFLAGS=-stderr -maxfails 1 -maxtime %s", duration),
 			)
 			cmd.Dir = crdb.Dir
