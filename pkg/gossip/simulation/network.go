@@ -43,10 +43,11 @@ import (
 // about the node's gossip instance, network address, and underlying
 // server.
 type Node struct {
-	Gossip   *gossip.Gossip
-	Server   *grpc.Server
-	Listener net.Listener
-	Registry *metric.Registry
+	Gossip    *gossip.Gossip
+	Server    *grpc.Server
+	Listener  net.Listener
+	Registry  *metric.Registry
+	Resolvers []resolver.Resolver
 }
 
 // Addr returns the address of the connected listener.
@@ -95,7 +96,7 @@ func NewNetwork(stopper *stop.Stopper, nodeCount int, createResolvers bool) *Net
 			if err != nil {
 				log.Fatalf(context.TODO(), "bad gossip address %s: %s", n.Nodes[0].Addr(), err)
 			}
-			node.Gossip.SetResolvers([]resolver.Resolver{r})
+			node.Resolvers = []resolver.Resolver{r}
 		}
 	}
 	return n
@@ -109,7 +110,7 @@ func (n *Network) CreateNode() (*Node, error) {
 		return nil, err
 	}
 	node := &Node{Server: server, Listener: ln, Registry: metric.NewRegistry()}
-	node.Gossip = gossip.NewTest(0, n.rpcContext, server, nil, n.Stopper, node.Registry)
+	node.Gossip = gossip.NewTest(0, n.rpcContext, server, n.Stopper, node.Registry)
 	n.Stopper.RunWorker(func() {
 		<-n.Stopper.ShouldQuiesce()
 		netutil.FatalIfUnexpected(ln.Close())
@@ -124,7 +125,7 @@ func (n *Network) CreateNode() (*Node, error) {
 // StartNode initializes a gossip instance for the simulation node and
 // starts it.
 func (n *Network) StartNode(node *Node) error {
-	node.Gossip.Start(node.Addr())
+	node.Gossip.Start(node.Addr(), node.Resolvers)
 	node.Gossip.EnableSimulationCycler(true)
 	n.nodeIDAllocator++
 	node.Gossip.NodeID.Set(context.TODO(), n.nodeIDAllocator)

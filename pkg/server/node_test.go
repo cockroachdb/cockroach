@@ -73,7 +73,6 @@ func createTestNode(
 		0,
 		nodeRPCContext,
 		grpcServer,
-		nil,
 		stopper,
 		metric.NewRegistry(),
 	)
@@ -131,8 +130,12 @@ func createTestNode(
 		if err != nil {
 			t.Fatal(err)
 		}
-		cfg.Gossip.SetResolvers([]resolver.Resolver{r})
-		cfg.Gossip.Start(ln.Addr())
+		serverCfg := MakeConfig()
+		serverCfg.GossipBootstrapResolvers = []resolver.Resolver{r}
+		filtered := serverCfg.FilterGossipBootstrapResolvers(
+			context.Background(), ln.Addr(), ln.Addr(),
+		)
+		cfg.Gossip.Start(ln.Addr(), filtered)
 	}
 	return grpcServer, ln.Addr(), cfg.Clock, node, stopper
 }
@@ -145,8 +148,9 @@ func createAndStartTestNode(
 	locality roachpb.Locality,
 	t *testing.T,
 ) (*grpc.Server, net.Addr, *Node, *stop.Stopper) {
+	canBootstrap := gossipBS == nil
 	grpcServer, addr, _, node, stopper := createTestNode(addr, engines, gossipBS, t)
-	if err := node.start(context.Background(), addr, engines, roachpb.Attributes{}, locality); err != nil {
+	if err := node.start(context.Background(), addr, engines, roachpb.Attributes{}, locality, canBootstrap); err != nil {
 		t.Fatal(err)
 	}
 	if err := WaitForInitialSplits(node.storeCfg.DB); err != nil {
@@ -341,7 +345,7 @@ func TestNodeJoinSelf(t *testing.T) {
 	engines := []engine.Engine{e}
 	_, addr, _, node, stopper := createTestNode(util.TestAddr, engines, util.TestAddr, t)
 	defer stopper.Stop()
-	err := node.start(context.Background(), addr, engines, roachpb.Attributes{}, roachpb.Locality{})
+	err := node.start(context.Background(), addr, engines, roachpb.Attributes{}, roachpb.Locality{}, false)
 	if err != errCannotJoinSelf {
 		t.Fatalf("expected err %s; got %s", errCannotJoinSelf, err)
 	}
@@ -373,7 +377,9 @@ func TestCorruptedClusterID(t *testing.T) {
 	engines := []engine.Engine{e}
 	_, serverAddr, _, node, stopper := createTestNode(util.TestAddr, engines, nil, t)
 	stopper.Stop()
-	if err := node.start(context.Background(), serverAddr, engines, roachpb.Attributes{}, roachpb.Locality{}); !testutils.IsError(err, "unidentified store") {
+	if err := node.start(
+		context.Background(), serverAddr, engines, roachpb.Attributes{}, roachpb.Locality{}, true,
+	); !testutils.IsError(err, "unidentified store") {
 		t.Errorf("unexpected error %v", err)
 	}
 }
