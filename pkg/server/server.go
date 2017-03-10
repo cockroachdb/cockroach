@@ -533,6 +533,8 @@ func (s *Server) Start(ctx context.Context) error {
 	// traffic until the migrations are done, as indicated by this channel.
 	serveSQL := make(chan bool)
 
+	tcpKeepAlive := envutil.EnvOrDefaultDuration("COCKROACH_SQL_TCP_KEEP_ALIVE", 0)
+
 	s.stopper.RunWorker(func() {
 		select {
 		case <-serveSQL:
@@ -542,6 +544,21 @@ func (s *Server) Start(ctx context.Context) error {
 		pgCtx := s.pgServer.AmbientCtx.AnnotateCtx(context.Background())
 		netutil.FatalIfUnexpected(httpServer.ServeWith(s.stopper, pgL, func(conn net.Conn) {
 			connCtx := log.WithLogTagStr(pgCtx, "client", conn.RemoteAddr().String())
+
+			if tcpKeepAlive != 0 {
+				if muxConn, ok := conn.(*cmux.MuxConn); ok {
+					if tcpConn, ok := muxConn.Conn.(*net.TCPConn); ok {
+						if err := tcpConn.SetKeepAlive(true); err != nil {
+							log.VEventf(connCtx, 1, "TCPConn.SetKeepAlive failed: %v", err)
+						} else if err := tcpConn.SetKeepAlivePeriod(tcpKeepAlive); err != nil {
+							log.VEventf(connCtx, 1, "TCPConn.SetKeepAlivePreiod failed: %v", err)
+						} else {
+							log.VEventf(connCtx, 2, "tcp keep-alive: %s", tcpKeepAlive)
+						}
+					}
+				}
+			}
+
 			if err := s.pgServer.ServeConn(connCtx, conn); err != nil && !netutil.IsClosedConnection(err) {
 				// Report the error on this connection's context, so that we
 				// know which remote client caused the error when looking at
