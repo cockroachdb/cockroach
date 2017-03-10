@@ -173,9 +173,6 @@ func makeLocalStorage(base string) (ExportStorage, error) {
 	if base == "" {
 		return nil, errors.Errorf("Local storage requested but path not provided")
 	}
-	if err := os.MkdirAll(base, 0777); err != nil {
-		return nil, errors.Wrapf(err, "failed to create %q", base)
-	}
 	return &localFileStorage{base: base}, nil
 }
 
@@ -189,6 +186,9 @@ func (l *localFileStorage) Conf() roachpb.ExportStorage {
 }
 
 func (l *localFileStorage) PutFile(_ context.Context, basename string) (ExportFileWriter, error) {
+	if err := os.MkdirAll(l.base, 0777); err != nil {
+		return nil, errors.Wrapf(err, "failed to create %q", l.base)
+	}
 	return localFileStorageWriter{path: filepath.Join(l.base, basename)}, nil
 }
 
