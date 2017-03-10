@@ -102,7 +102,7 @@ class NodeGraphs extends React.Component<NodeGraphsProps, {}> {
     let capacityUsed = capacityTotal - capacityAvailable;
     let capacityPercent = capacityTotal !== 0 ? (capacityUsed / capacityTotal * 100) : 100;
 
-    return <div className="section l-columns graph-lines">
+    return <div className="section l-columns">
       <div className="chart-group l-columns__left">
         <GraphGroup groupId="node.overview" hide={dashboard !== "overview"}>
           <LineGraph title="SQL Queries" sources={nodeSources} tooltip={`The average number of SELECT, INSERT, UPDATE, and DELETE statements per second across ${specifier}.`}>

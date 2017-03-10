@@ -5,7 +5,7 @@ import { createSelector } from "reselect";
 import { findChildrenOfType } from "../util/find";
 import {
   MetricsDataComponentProps, Axis, AxisProps, ConfigureLineChart, InitLineChart,
-  GraphLineState, mouseEnter, mouseMove, mouseLeave,
+  updateLinkedGuidelines,
 } from "./graphs";
 import { Metric, MetricProps } from "./metric";
 import Visualization from "./visualization";
@@ -23,11 +23,9 @@ interface LineGraphProps extends MetricsDataComponentProps {
  * supports a single Y-axis, but multiple metrics can be graphed on the same
  * axis.
  */
-export class LineGraph extends React.Component<LineGraphProps, GraphLineState> {
+export class LineGraph extends React.Component<LineGraphProps, {}> {
   // The SVG Element in the DOM used to render the graph.
-  svgEl: SVGElement;
-
-  state = new GraphLineState();
+  graphEl: SVGElement;
 
   // A configured NVD3 chart used to render the chart.
   chart: nvd3.LineChart;
@@ -67,6 +65,10 @@ export class LineGraph extends React.Component<LineGraphProps, GraphLineState> {
     }
   }
 
+  mouseMove = () => {
+    updateLinkedGuidelines(this.graphEl);
+  }
+
   drawChart = () => {
     // If the document is not visible (e.g. if the window is minimized) we don't
     // attempt to redraw the chart. Redrawing the chart uses
@@ -84,7 +86,7 @@ export class LineGraph extends React.Component<LineGraphProps, GraphLineState> {
         return;
       }
 
-      ConfigureLineChart(this.chart, this.svgEl, metrics, axis, this.props.data, this.props.timeInfo, false);
+      ConfigureLineChart(this.chart, this.graphEl, metrics, axis, this.props.data, this.props.timeInfo, false);
     }
   }
 
@@ -107,18 +109,10 @@ export class LineGraph extends React.Component<LineGraphProps, GraphLineState> {
 
   render() {
     let { title, subtitle, tooltip, data } = this.props;
-    let graphLineClass = "graph-lines__line";
-    if (this.state.mouseIn) {
-      graphLineClass += " graph-lines__line--hidden";
-    }
-
-    let mouseEnterBound = () => mouseEnter(this);
-    let mouseLeaveBound = () => mouseLeave(this);
 
     return <Visualization title={title} subtitle={subtitle} tooltip={tooltip} loading={!data} >
       <div className="linegraph">
-        <div className={graphLineClass}></div>
-        <svg className="graph" ref={(svg) => this.svgEl = svg} onMouseMove={mouseMove} onMouseEnter={mouseEnterBound} onMouseLeave={mouseLeaveBound} />
+        <svg className="graph linked-guideline" ref={(svg) => this.graphEl = svg} onMouseMove={this.mouseMove} onMouseLeave={this.mouseMove} />
       </div>
     </Visualization>;
   }
