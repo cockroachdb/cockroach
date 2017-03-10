@@ -73,7 +73,6 @@ func createTestNode(
 		0,
 		nodeRPCContext,
 		grpcServer,
-		nil,
 		stopper,
 		metric.NewRegistry(),
 	)
@@ -131,8 +130,7 @@ func createTestNode(
 		if err != nil {
 			t.Fatal(err)
 		}
-		cfg.Gossip.SetResolvers([]resolver.Resolver{r})
-		cfg.Gossip.Start(ln.Addr())
+		cfg.Gossip.Start(ln.Addr(), ln.Addr(), []resolver.Resolver{r})
 	}
 	return grpcServer, ln.Addr(), cfg.Clock, node, stopper
 }
