@@ -665,13 +665,15 @@ func (a *intervalSumAggregate) Result() Datum {
 }
 
 type intVarianceAggregate struct {
-	agg decimalVarianceAggregate
+	agg *decimalVarianceAggregate
 	// Used for passing int64s as *apd.Decimal values.
 	tmpDec DDecimal
 }
 
 func newIntVarianceAggregate(_ []Type) AggregateFunc {
-	return &intVarianceAggregate{}
+	return &intVarianceAggregate{
+		agg: newDecimalVariance(),
+	}
 }
 
 func (a *intVarianceAggregate) Add(datum Datum) {
@@ -721,6 +723,7 @@ func (a *floatVarianceAggregate) Result() Datum {
 
 type decimalVarianceAggregate struct {
 	// Variables used across iterations.
+	ed      *apd.ErrDecimal
 	count   apd.Decimal
 	mean    apd.Decimal
 	sqrDiff apd.Decimal
@@ -730,8 +733,20 @@ type decimalVarianceAggregate struct {
 	tmp   apd.Decimal
 }
 
+func newDecimalVariance() *decimalVarianceAggregate {
+	// Use extra internal precision during variance and stddev to protect against
+	// order changes that can happen in dist SQL. The additional 3 here should
+	// allow for correctness up to 1000 more worst case inputs than non-worst
+	// case inputs. See #13689 for more analysis and other algorithms.
+	c := DecimalCtx.WithPrecision(DecimalCtx.Precision + 3)
+	ed := apd.MakeErrDecimal(c)
+	return &decimalVarianceAggregate{
+		ed: &ed,
+	}
+}
+
 func newDecimalVarianceAggregate(_ []Type) AggregateFunc {
-	return &decimalVarianceAggregate{}
+	return newDecimalVariance()
 }
 
 // Read-only constants used for compuation.
@@ -749,15 +764,14 @@ func (a *decimalVarianceAggregate) Add(datum Datum) {
 	// Uses the Knuth/Welford method for accurately computing variance online in a
 	// single pass. See http://www.johndcook.com/blog/standard_deviation/ and
 	// https://en.wikipedia.org/wiki/Algorithms_for_calculating_variance#Online_algorithm.
-	ed := apd.MakeErrDecimal(DecimalCtx)
-	ed.Add(&a.count, &a.count, decimalOne)
-	ed.Sub(&a.delta, d, &a.mean)
-	ed.Quo(&a.tmp, &a.delta, &a.count)
-	ed.Add(&a.mean, &a.mean, &a.tmp)
-	ed.Sub(&a.tmp, d, &a.mean)
-	ed.Add(&a.sqrDiff, &a.sqrDiff, ed.Mul(&a.delta, &a.delta, &a.tmp))
+	a.ed.Add(&a.count, &a.count, decimalOne)
+	a.ed.Sub(&a.delta, d, &a.mean)
+	a.ed.Quo(&a.tmp, &a.delta, &a.count)
+	a.ed.Add(&a.mean, &a.mean, &a.tmp)
+	a.ed.Sub(&a.tmp, d, &a.mean)
+	a.ed.Add(&a.sqrDiff, &a.sqrDiff, a.ed.Mul(&a.delta, &a.delta, &a.tmp))
 	// TODO(mjibson): see #13640
-	if err := ed.Err(); err != nil {
+	if err := a.ed.Err(); err != nil {
 		panic(err)
 	}
 }
@@ -766,12 +780,12 @@ func (a *decimalVarianceAggregate) Result() Datum {
 	if a.count.Cmp(decimalTwo) < 0 {
 		return DNull
 	}
-	ed := apd.MakeErrDecimal(DecimalCtx)
-	ed.Sub(&a.tmp, &a.count, decimalOne)
+	a.ed.Sub(&a.tmp, &a.count, decimalOne)
 	dd := &DDecimal{}
-	ed.Quo(&dd.Decimal, &a.sqrDiff, &a.tmp)
+	a.ed.Ctx = DecimalCtx
+	a.ed.Quo(&dd.Decimal, &a.sqrDiff, &a.tmp)
 	// TODO(mjibson): see #13640
-	if err := ed.Err(); err != nil {
+	if err := a.ed.Err(); err != nil {
 		panic(err)
 	}
 	return dd
