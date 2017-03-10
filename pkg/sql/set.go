@@ -72,9 +72,9 @@ func (p *planner) Set(n *parser.Set) (planNode, error) {
 		}
 		switch parser.Name(s).Normalize() {
 		case parser.ReNormalizeName(parser.Modern.String()):
-			p.session.Syntax = int32(parser.Modern)
+			p.session.Syntax = parser.Modern
 		case parser.ReNormalizeName(parser.Traditional.String()):
-			p.session.Syntax = int32(parser.Traditional)
+			p.session.Syntax = parser.Traditional
 		default:
 			return nil, fmt.Errorf("%s: \"%s\" is not in (%q, %q)", name, s, parser.Modern, parser.Traditional)
 		}
@@ -121,8 +121,14 @@ func (p *planner) Set(n *parser.Set) (planNode, error) {
 	case `EXTRA_FLOAT_DIGITS`:
 	// See https://www.postgresql.org/docs/9.6/static/runtime-config-client.html
 	case `APPLICATION_NAME`:
-	// Set by clients to improve query logging.
-	// See https://www.postgresql.org/docs/9.6/static/runtime-config-logging.html#GUC-APPLICATION-NAME
+		// Set by clients to improve query logging.
+		// See https://www.postgresql.org/docs/9.6/static/runtime-config-logging.html#GUC-APPLICATION-NAME
+		s, err := p.getStringVal(name, typedValues)
+		if err != nil {
+			return nil, err
+		}
+		p.session.ApplicationName = s
+
 	case `CLIENT_ENCODING`:
 		// See https://www.postgresql.org/docs/9.6/static/multibyte.html
 		s, err := p.getStringVal(name, typedValues)

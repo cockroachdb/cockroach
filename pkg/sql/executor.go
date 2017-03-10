@@ -403,7 +403,7 @@ func (e *Executor) Prepare(
 ) (*PreparedStatement, error) {
 	log.VEventf(session.Ctx(), 2, "preparing: %s", query)
 	var p parser.Parser
-	stmts, err := p.Parse(query, parser.Syntax(session.Syntax))
+	stmts, err := p.Parse(query, session.Syntax)
 	if err != nil {
 		return nil, err
 	}
@@ -554,7 +554,7 @@ func (e *Executor) execRequest(session *Session, sql string, copymsg copyMsg) St
 	} else if copymsg != copyMsgNone {
 		err = fmt.Errorf("unexpected copy command")
 	} else {
-		stmts, err = planMaker.parser.Parse(sql, parser.Syntax(session.Syntax))
+		stmts, err = planMaker.parser.Parse(sql, session.Syntax)
 	}
 	if err != nil {
 		if log.V(2) {
