@@ -297,7 +297,7 @@ func (ri *RowInserter) InsertRow(
 			}
 			col := ri.insertCols[idx]
 
-			if values[idx].Compare(parser.DNull) == 0 {
+			if values[idx] == parser.DNull {
 				continue
 			}
 
@@ -658,7 +658,7 @@ func (ru *rowUpdater) updateRow(
 			}
 			col := ru.fetchCols[idx]
 
-			if ru.newValues[idx].Compare(parser.DNull) == 0 {
+			if ru.newValues[idx] == parser.DNull {
 				continue
 			}
 

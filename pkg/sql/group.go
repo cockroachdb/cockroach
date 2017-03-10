@@ -726,7 +726,7 @@ func (a *aggregateFuncHolder) add(
 		a.buckets[string(bucket)] = impl
 	}
 
-	impl.Add(d)
+	impl.Add(&a.group.planner.evalCtx, d)
 	return nil
 }
 
