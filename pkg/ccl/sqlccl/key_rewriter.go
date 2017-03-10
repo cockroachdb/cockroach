@@ -12,26 +12,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/pkg/errors"
 )
-
-// MakeKeyRewriterForNewTableIDs creates a KeyRewriter that rewrites all keys
-// from a set of tables to have a new tableID. For dependency reasons, the
-// implementation of the matching is in storageccl, but the interesting
-// constructor is here.
-func MakeKeyRewriterForNewTableIDs(
-	tables []*sqlbase.TableDescriptor, newTableIDs map[sqlbase.ID]sqlbase.ID,
-) (storageccl.KeyRewriter, error) {
-	var kr storageccl.KeyRewriter
-	for _, table := range tables {
-		newTableID, ok := newTableIDs[table.ID]
-		if !ok {
-			return nil, errors.Errorf("missing new table ID for [%d] %q", table.ID, table.Name)
-		}
-		kr = append(kr, MakeKeyRewriterForNewTableID(table, newTableID)...)
-	}
-	return kr, nil
-}
 
 // MakeKeyRewriterForNewTableID creates a KeyRewriter that rewrites all keys
 // from a table to have a new tableID. For dependency reasons, the

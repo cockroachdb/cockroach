@@ -52,16 +52,10 @@ func TestKeyRewriter(t *testing.T) {
 	})
 
 	t.Run("multi", func(t *testing.T) {
-		kr, err := MakeKeyRewriterForNewTableIDs(
-			[]*sqlbase.TableDescriptor{&desc, &sqlbase.DescriptorTable},
-			map[sqlbase.ID]sqlbase.ID{
-				desc.ID:                    desc.ID + 10,
-				sqlbase.DescriptorTable.ID: sqlbase.DescriptorTable.ID + 10,
-			},
+		kr := append(
+			MakeKeyRewriterForNewTableID(&desc, desc.ID+10),
+			MakeKeyRewriterForNewTableID(&sqlbase.DescriptorTable, sqlbase.DescriptorTable.ID+10)...,
 		)
-		if err != nil {
-			t.Fatalf("%+v", err)
-		}
 		key := keys.MakeRowSentinelKey(sqlbase.MakeIndexKeyPrefix(&desc, desc.PrimaryIndex.ID))
 		newKey, ok := kr.RewriteKey(key)
 		if !ok {
