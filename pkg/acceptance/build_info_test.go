@@ -30,8 +30,10 @@ import (
 )
 
 func TestBuildInfo(t *testing.T) {
-	s := log.Scope(t, "")
-	defer s.Close(t)
+	if !*flagShowLogs {
+		s := log.Scope(t, "")
+		defer s.Close(t)
+	}
 
 	runTestOnConfigs(t, testBuildInfoInner)
 }

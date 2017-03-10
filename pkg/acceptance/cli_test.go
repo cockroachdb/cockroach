@@ -37,8 +37,10 @@ var cmdBase = []string{
 }
 
 func TestDockerCLI(t *testing.T) {
-	s := log.Scope(t, "")
-	defer s.Close(t)
+	if !*flagShowLogs {
+		s := log.Scope(t, "")
+		defer s.Close(t)
+	}
 
 	containerConfig := container.Config{
 		Image: postgresTestImage,

@@ -104,8 +104,10 @@ bin=/%s/cockroach
 }
 
 func TestDockerReadWriteBidirectionalReferenceVersion(t *testing.T) {
-	s := log.Scope(t, "")
-	defer s.Close(t)
+	if !*flagShowLogs {
+		s := log.Scope(t, "")
+		defer s.Close(t)
+	}
 
 	ctx := context.Background()
 	backwardReferenceTest := `

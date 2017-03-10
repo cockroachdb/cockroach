@@ -31,8 +31,10 @@ import (
 func TestRepair(t *testing.T) {
 	t.Skip("TODO(bram): skip this test until failures are investigated - #6798, #6700, #6277, #6209, #5672")
 
-	s := log.Scope(t, "")
-	defer s.Close(t)
+	if !*flagShowLogs {
+		s := log.Scope(t, "")
+		defer s.Close(t)
+	}
 
 	runTestOnConfigs(t, testRepairInner)
 }
