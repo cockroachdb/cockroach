@@ -112,11 +112,19 @@ func IsUniquenessConstraintViolationError(err error) bool {
 	return errHasCode(err, pgerror.CodeUniqueViolationError)
 }
 
-// IsIntegrityConstraintError returns true if the error is some kind of SQL
-// constraint violation.
-func IsIntegrityConstraintError(err error) bool {
+// NewInvalidSchemaDefinitionError creates an error for an invalid schema
+// definition such as a schema definition that doesn't parse.
+func NewInvalidSchemaDefinitionError(err error) error {
+	err = pgerror.WithPGCode(err, pgerror.CodeInvalidSchemaDefinitionError)
+	return pgerror.WithSourceContext(err, 1)
+}
+
+// IsPermanentSchemaChangeError returns true if the error results in
+// a permanent failure of a schema change.
+func IsPermanentSchemaChangeError(err error) bool {
 	return errHasCode(err, pgerror.CodeNotNullViolationError) ||
-		errHasCode(err, pgerror.CodeUniqueViolationError)
+		errHasCode(err, pgerror.CodeUniqueViolationError) ||
+		errHasCode(err, pgerror.CodeInvalidSchemaDefinitionError)
 }
 
 // NewUndefinedDatabaseError creates an error that represents a missing database.
