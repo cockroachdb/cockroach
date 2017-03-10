@@ -610,9 +610,40 @@ func (a Allocator) shouldTransferLeaseUsingStats(
 	return shouldNotTransfer, bestRepl
 }
 
-// This is a bit of magic that was determined to work well via a bunch of
-// testing. See #13232 for context.
-// TODO(a-robinson): Document the thinking behind this logic.
+// loadBasedLeaseRebalanceScore attempts to give a score to how desirable it
+// would be to transfer a range lease from the local store to a remote store.
+// It does so using a formula based on the latency between the stores and
+// a number that we call the "weight" of each replica, which represents how
+// many requests for the range have been coming from localities near the
+// replica.
+//
+// The overarching goal is to move leases towards where requests are coming
+// from when the latency between localities is high, because the leaseholder
+// being near the request gateway makes for lower request latencies.
+// This must be balanced against hurting throughput by putting too many leases
+// one just a few nodes, though, which is why we get progressively more
+// aggressive about moving the leases toward requests when latencies are high.
+//
+// The calculations below were determined via a bunch of manual testing (see
+// #13232 or the leaseholder_locality.md RFC for more details), but the general
+// logic behind each part of the formula is as follows:
+//
+// * LeaseRebalancingAggressiveness: Allow the aggressiveness to be tuned via
+//   an environment variable.
+// * 0.1: Constant factor to reduce aggressiveness by default
+// * math.Log10(remoteWeight/sourceWeight): Comparison of the remote replica's
+//   weight to the local replica's weight. Taking the log of the ratio instead
+//   of using the ratio directly makes things symmetric -- i.e. r1 comparing
+//   itself to r2 will come to the same conclusion as r2 comparing itself to r1.
+// * math.Log1p(remoteLatencyMillis): This will be 0 if there's no latency,
+//   removing the weight/latency factor from consideration. Otherwise, it grows
+//   the aggressiveness for stores that are farther apart. Note that Log1p grows
+//   faster than Log10 as its argument gets larger, which is intentional to
+//   increase the importance of latency.
+// * overfullScore and underfullScore: rebalanceThreshold helps us get an idea
+//   of the ideal number of leases on each store. We then calculate these to
+//   compare how close each node is to its ideal state and use the differences
+//   from the ideal state on each node to compute a final score.
 func loadBasedLeaseRebalanceScore(
 	ctx context.Context,
 	remoteWeight float64,
