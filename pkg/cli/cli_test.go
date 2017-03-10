@@ -1516,9 +1516,11 @@ func Example_zip() {
 	//   debug/nodes/1/ranges/4
 	//   debug/nodes/1/ranges/5
 	//   debug/nodes/1/ranges/6
+	//   debug/nodes/1/ranges/7
 	//   debug/schema/system@details
 	//   debug/schema/system/descriptor
 	//   debug/schema/system/eventlog
+	//   debug/schema/system/jobs
 	//   debug/schema/system/lease
 	//   debug/schema/system/namespace
 	//   debug/schema/system/rangelog
