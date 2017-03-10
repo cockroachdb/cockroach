@@ -1483,7 +1483,8 @@ var Builtins = map[string][]Builtin{
 				}
 				return NewDInt(0), nil
 			},
-			Info: "This function is used only by CockroachDB's developers for testing purposes.",
+			category: categorySystemInfo,
+			Info:     "This function is used only by CockroachDB's developers for testing purposes.",
 		},
 		Builtin{
 			Types: ArgTypes{
@@ -1506,7 +1507,8 @@ var Builtins = map[string][]Builtin{
 				}
 				return NewDInt(0), nil
 			},
-			Info: "This function is used only by CockroachDB's developers for testing purposes.",
+			category: categorySystemInfo,
+			Info:     "This function is used only by CockroachDB's developers for testing purposes.",
 		},
 	},
 
