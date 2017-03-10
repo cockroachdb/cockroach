@@ -241,7 +241,7 @@ func (ed *EncDatum) Compare(a *DatumAlloc, rhs *EncDatum) (int, error) {
 	if err := rhs.EnsureDecoded(a); err != nil {
 		return 0, err
 	}
-	return ed.Datum.Compare(rhs.Datum), nil
+	return ed.Datum.Compare(&parser.EvalContext{}, rhs.Datum), nil
 }
 
 // EncDatumRow is a row of EncDatums.

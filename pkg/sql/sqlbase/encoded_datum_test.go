@@ -29,6 +29,7 @@ func TestEncDatum(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	a := &DatumAlloc{}
+	evalCtx := &parser.EvalContext{}
 	v := EncDatum{}
 	if !v.IsUnset() {
 		t.Errorf("empty EncDatum should be unset")
@@ -68,7 +69,7 @@ func TestEncDatum(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cmp := y.Datum.Compare(x.Datum); cmp != 0 {
+	if cmp := y.Datum.Compare(evalCtx, x.Datum); cmp != 0 {
 		t.Errorf("Datums should be equal, cmp = %d", cmp)
 	}
 
@@ -95,7 +96,7 @@ func TestEncDatum(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cmp := y.Datum.Compare(z.Datum); cmp != 0 {
+	if cmp := y.Datum.Compare(evalCtx, z.Datum); cmp != 0 {
 		t.Errorf("Datums should be equal, cmp = %d", cmp)
 	}
 	y.UnsetDatum()
@@ -181,6 +182,7 @@ func TestEncDatumCompare(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	a := &DatumAlloc{}
+	evalCtx := &parser.EvalContext{}
 	rng, _ := randutil.NewPseudoRand()
 
 	for kind := range ColumnType_Kind_name {
@@ -199,7 +201,7 @@ func TestEncDatumCompare(t *testing.T) {
 		for {
 			d1 = RandDatum(rng, typ, false)
 			d2 = RandDatum(rng, typ, false)
-			if cmp := d1.Compare(d2); cmp < 0 {
+			if cmp := d1.Compare(evalCtx, d2); cmp < 0 {
 				break
 			}
 		}
@@ -237,6 +239,7 @@ func TestEncDatumFromBuffer(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	var alloc DatumAlloc
+	evalCtx := &parser.EvalContext{}
 	rng, _ := randutil.NewPseudoRand()
 	for test := 0; test < 20; test++ {
 		var err error
@@ -270,7 +273,7 @@ func TestEncDatumFromBuffer(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if decoded.Datum.Compare(ed[i].Datum) != 0 {
+			if decoded.Datum.Compare(evalCtx, ed[i].Datum) != 0 {
 				t.Errorf("decoded datum %s doesn't equal original %s", decoded.Datum, ed[i].Datum)
 			}
 		}
@@ -391,6 +394,7 @@ func TestEncDatumRowCompare(t *testing.T) {
 func TestEncDatumRowAlloc(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	evalCtx := &parser.EvalContext{}
 	rng, _ := randutil.NewPseudoRand()
 	for _, cols := range []int{1, 2, 4, 10, 40, 100} {
 		for _, rows := range []int{1, 2, 3, 5, 10, 20} {
@@ -419,7 +423,7 @@ func TestEncDatumRowAlloc(t *testing.T) {
 			}
 			for i := 0; i < rows; i++ {
 				for j := 0; j < cols; j++ {
-					if a, b := in[i][j].Datum, out[i][j].Datum; a.Compare(b) != 0 {
+					if a, b := in[i][j].Datum, out[i][j].Datum; a.Compare(evalCtx, b) != 0 {
 						t.Errorf("copied datum %s doesn't equal original %s", b, a)
 					}
 				}

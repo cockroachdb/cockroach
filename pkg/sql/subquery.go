@@ -32,6 +32,7 @@ import (
 // in the expression tree from the point type checking occurs to
 // the point the query starts execution / evaluation.
 type subquery struct {
+	planner  *planner
 	typ      parser.Type
 	subquery *parser.Subquery
 	execMode subqueryExecMode
@@ -158,7 +159,7 @@ func (s *subquery) doEval(ctx context.Context) (result parser.Datum, err error) 
 			rows.SetSorted()
 		}
 		if s.execMode == execModeAllRowsNormalized {
-			rows.Normalize()
+			rows.Normalize(&s.planner.evalCtx)
 		}
 		result = &rows
 
@@ -324,7 +325,7 @@ func (v *subqueryVisitor) VisitPre(expr parser.Expr) (recurse bool, newExpr pars
 		return false, expr
 	}
 
-	result := &subquery{subquery: sq, plan: plan}
+	result := &subquery{planner: v.planner, subquery: sq, plan: plan}
 
 	if exists != nil {
 		result.execMode = execModeExists

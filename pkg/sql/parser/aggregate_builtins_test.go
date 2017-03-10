@@ -29,11 +29,12 @@ import (
 // slices are not equal, it means that the result Datums were modified during later
 // accumulation, which violates the "deep copy of any internal state" condition.
 func testAggregateResultDeepCopy(t *testing.T, aggFunc func([]Type) AggregateFunc, vals []Datum) {
+	evalCtx := &EvalContext{}
 	aggImpl := aggFunc([]Type{vals[0].ResolvedType()})
 	runningDatums := make([]Datum, len(vals))
 	runningStrings := make([]string, len(vals))
 	for i := range vals {
-		aggImpl.Add(vals[i])
+		aggImpl.Add(evalCtx, vals[i])
 		res := aggImpl.Result()
 		runningDatums[i] = res
 		runningStrings[i] = res.String()
@@ -225,12 +226,13 @@ func makeIntervalTestDatum(count int) []Datum {
 }
 
 func runBenchmarkAggregate(b *testing.B, aggFunc func([]Type) AggregateFunc, vals []Datum) {
+	evalCtx := &EvalContext{}
 	params := []Type{vals[0].ResolvedType()}
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		aggImpl := aggFunc(params)
 		for i := range vals {
-			aggImpl.Add(vals[i])
+			aggImpl.Add(evalCtx, vals[i])
 		}
 		if aggImpl.Result() == nil {
 			b.Errorf("taking result of aggregate implementation %T failed", aggImpl)

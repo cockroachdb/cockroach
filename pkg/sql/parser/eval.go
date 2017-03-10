@@ -1092,8 +1092,8 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 		CmpOp{
 			LeftType:  TypeTuple,
 			RightType: TypeTuple,
-			fn: func(_ *EvalContext, left Datum, right Datum) (DBool, error) {
-				c, err := cmpTuple(left, right)
+			fn: func(ctx *EvalContext, left Datum, right Datum) (DBool, error) {
+				c, err := cmpTuple(ctx, left, right)
 				return DBool(c == 0), err
 			},
 		},
@@ -1293,8 +1293,8 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 		CmpOp{
 			LeftType:  TypeTuple,
 			RightType: TypeTuple,
-			fn: func(_ *EvalContext, left Datum, right Datum) (DBool, error) {
-				c, err := cmpTuple(left, right)
+			fn: func(ctx *EvalContext, left Datum, right Datum) (DBool, error) {
+				c, err := cmpTuple(ctx, left, right)
 				return DBool(c < 0), err
 			},
 		},
@@ -1485,8 +1485,8 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 		CmpOp{
 			LeftType:  TypeTuple,
 			RightType: TypeTuple,
-			fn: func(_ *EvalContext, left Datum, right Datum) (DBool, error) {
-				c, err := cmpTuple(left, right)
+			fn: func(ctx *EvalContext, left Datum, right Datum) (DBool, error) {
+				c, err := cmpTuple(ctx, left, right)
 				return DBool(c <= 0), err
 			},
 		},
@@ -1563,7 +1563,7 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 
 var errCmpNull = errors.New("NULL comparison")
 
-func cmpTuple(ldatum, rdatum Datum) (int, error) {
+func cmpTuple(ctx *EvalContext, ldatum, rdatum Datum) (int, error) {
 	left := *ldatum.(*DTuple)
 	right := *rdatum.(*DTuple)
 	for i, l := range left.D {
@@ -1571,7 +1571,7 @@ func cmpTuple(ldatum, rdatum Datum) (int, error) {
 		if l == DNull || r == DNull {
 			return 0, errCmpNull
 		}
-		c := l.Compare(r)
+		c := l.Compare(ctx, r)
 		if c != 0 {
 			return c, nil
 		}
@@ -1583,7 +1583,7 @@ func makeEvalTupleIn(typ Type) CmpOp {
 	return CmpOp{
 		LeftType:  typ,
 		RightType: TypeTuple,
-		fn: func(_ *EvalContext, arg, values Datum) (DBool, error) {
+		fn: func(ctx *EvalContext, arg, values Datum) (DBool, error) {
 			if arg == DNull {
 				return DBool(false), nil
 			}
@@ -1592,7 +1592,7 @@ func makeEvalTupleIn(typ Type) CmpOp {
 			// an efficient binary search to find if the arg is in the tuple.
 			vtuple := values.(*DTuple)
 			if vtuple.Sorted {
-				_, found := vtuple.SearchSorted(arg)
+				_, found := vtuple.SearchSorted(ctx, arg)
 				if !found && len(vtuple.D) > 0 && vtuple.D[0] == DNull {
 					// If the tuple contained any null elements and no matches are found,
 					// the result of IN will be null. The null element will at the front
@@ -1609,7 +1609,7 @@ func makeEvalTupleIn(typ Type) CmpOp {
 			for _, val := range vtuple.D {
 				if val == DNull {
 					sawNull = true
-				} else if val.Compare(arg) == 0 {
+				} else if val.Compare(ctx, arg) == 0 {
 					return DBool(true), nil
 				}
 			}

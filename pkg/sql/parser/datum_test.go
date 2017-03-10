@@ -275,7 +275,7 @@ func TestDFloatCompare(t *testing.T) {
 			} else if i > j {
 				expected = 1
 			}
-			got := x.Compare(y)
+			got := x.Compare(&EvalContext{}, y)
 			if got != expected {
 				t.Errorf("comparing DFloats %s and %s: expected %d, got %d", x, y, expected, got)
 			}
@@ -323,7 +323,7 @@ func TestParseDIntervalWithField(t *testing.T) {
 			t.Errorf("unexpected error while parsing expected value INTERVAL %s: %s", td.expected, err)
 			continue
 		}
-		if expected.Compare(actual) != 0 {
+		if expected.Compare(&EvalContext{}, actual) != 0 {
 			t.Errorf("INTERVAL %s %v: got %s, expected %s", td.str, td.field, actual, expected)
 		}
 	}

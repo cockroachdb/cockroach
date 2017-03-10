@@ -333,7 +333,7 @@ func (sc *SchemaChanger) truncateAndBackfillColumns(
 					return err
 				}
 			}
-			if !col.Nullable && updateValues[j].Compare(parser.DNull) == 0 {
+			if !col.Nullable && updateValues[j].Compare(&sc.evalCtx, parser.DNull) == 0 {
 				nonNullViolationColumnName = col.Name
 			}
 		}
