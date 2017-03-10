@@ -180,8 +180,8 @@ func (ctx *Context) SetLocalInternalServer(internalServer roachpb.InternalServer
 
 func (ctx *Context) removeConn(key string, meta *connMeta) {
 	ctx.conns.Lock()
-	defer ctx.conns.Unlock()
 	ctx.removeConnLocked(key, meta)
+	ctx.conns.Unlock()
 }
 
 func (ctx *Context) removeConnLocked(key string, meta *connMeta) {
