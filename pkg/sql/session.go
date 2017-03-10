@@ -69,6 +69,10 @@ type Session struct {
 	// Session parameters, user-configurable.
 	//
 
+	// ApplicationName is the name of the application running the
+	// current session. This can be used for logging and per-application
+	// statistics.
+	ApplicationName string
 	// Database indicates the "current" database for the purpose of
 	// resolving names. See searchAndQualifyDatabase() for details.
 	Database string

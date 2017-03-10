@@ -121,8 +121,14 @@ func (p *planner) Set(n *parser.Set) (planNode, error) {
 	case `EXTRA_FLOAT_DIGITS`:
 	// See https://www.postgresql.org/docs/9.6/static/runtime-config-client.html
 	case `APPLICATION_NAME`:
-	// Set by clients to improve query logging.
-	// See https://www.postgresql.org/docs/9.6/static/runtime-config-logging.html#GUC-APPLICATION-NAME
+		// Set by clients to improve query logging.
+		// See https://www.postgresql.org/docs/9.6/static/runtime-config-logging.html#GUC-APPLICATION-NAME
+		s, err := p.getStringVal(name, typedValues)
+		if err != nil {
+			return nil, err
+		}
+		p.session.ApplicationName = s
+
 	case `CLIENT_ENCODING`:
 		// See https://www.postgresql.org/docs/9.6/static/multibyte.html
 		s, err := p.getStringVal(name, typedValues)
