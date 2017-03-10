@@ -44,7 +44,7 @@ data "template_file" "supervisor" {
     # The value of the --join flag must be empty for the first node,
     # and a running node for all others. We built a list of addresses
     # shifted by one (first element is empty), then take the value at index "instance.index".
-    join_address = "${element(concat(split(",", ""), google_compute_instance.cockroach.*.network_interface.0.access_config.0.assigned_nat_ip), count.index)}"
+    join_address = "${element(concat(split(",", ""), google_compute_instance.cockroach.*.network_interface.0.access_config.0.assigned_nat_ip), count.index == 0 ? 0 : 1)}"
     # We need to provide one node address for the block writer.
     node_address = "${google_compute_instance.cockroach.0.network_interface.0.access_config.0.assigned_nat_ip}"
   }
