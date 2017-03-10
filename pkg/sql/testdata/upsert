@@ -188,3 +188,12 @@ query III
 SELECT * FROM issue_13962
 ----
 1 2 1
+
+statement ok
+CREATE TABLE issue_14052 (a INT PRIMARY KEY, b INT, c INT)
+
+statement ok
+INSERT INTO issue_14052 (a, b) VALUES (1, 1), (2, 2)
+
+statement ok
+UPSERT INTO issue_14052 (a, c) (SELECT a, b from issue_14052)
