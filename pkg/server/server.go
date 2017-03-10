@@ -28,6 +28,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"golang.org/x/net/context"
@@ -533,6 +534,50 @@ func (s *Server) Start(ctx context.Context) error {
 	// traffic until the migrations are done, as indicated by this channel.
 	serveSQL := make(chan bool)
 
+	tcpKeepAlive := envutil.EnvOrDefaultDuration("COCKROACH_SQL_TCP_KEEP_ALIVE", time.Minute)
+	var loggedKeepAliveStatus atomic.Value
+	loggedKeepAliveStatus.Store(false)
+
+	// Attempt to set TCP keep-alive on connection. Don't fail on errors.
+	setTCPKeepAlive := func(ctx context.Context, conn net.Conn) {
+		if tcpKeepAlive == 0 {
+			return
+		}
+
+		muxConn, ok := conn.(*cmux.MuxConn)
+		if !ok {
+			return
+		}
+		tcpConn, ok := muxConn.Conn.(*net.TCPConn)
+		if !ok {
+			return
+		}
+
+		// Only log success/failure once.
+		doLog := !loggedKeepAliveStatus.Load().(bool)
+		if doLog {
+			defer func() { loggedKeepAliveStatus.Store(true) }()
+		}
+
+		if err := tcpConn.SetKeepAlive(true); err != nil {
+			if doLog {
+				log.Warningf(ctx, "failed to enable TCP keep-alive for pgwire: %v", err)
+			}
+			return
+
+		}
+		if err := tcpConn.SetKeepAlivePeriod(tcpKeepAlive); err != nil {
+			if doLog {
+				log.Warningf(ctx, "failed to set TCP keep-alive duration for pgwire: %v", err)
+			}
+			return
+		}
+
+		if doLog {
+			log.VEventf(ctx, 2, "setting TCP keep-alive to %s for pgwire", tcpKeepAlive)
+		}
+	}
+
 	s.stopper.RunWorker(func() {
 		select {
 		case <-serveSQL:
@@ -542,6 +587,8 @@ func (s *Server) Start(ctx context.Context) error {
 		pgCtx := s.pgServer.AmbientCtx.AnnotateCtx(context.Background())
 		netutil.FatalIfUnexpected(httpServer.ServeWith(s.stopper, pgL, func(conn net.Conn) {
 			connCtx := log.WithLogTagStr(pgCtx, "client", conn.RemoteAddr().String())
+			setTCPKeepAlive(pgCtx, conn)
+
 			if err := s.pgServer.ServeConn(connCtx, conn); err != nil && !netutil.IsClosedConnection(err) {
 				// Report the error on this connection's context, so that we
 				// know which remote client caused the error when looking at
