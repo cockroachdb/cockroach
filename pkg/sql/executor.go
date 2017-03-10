@@ -477,6 +477,7 @@ func (e *Executor) ExecuteStatements(
 ) StatementResults {
 	session.planner.resetForBatch(e)
 	session.planner.semaCtx.Placeholders.Assign(pinfo)
+	session.phaseTimes[sessionStartBatch] = timeutil.Now()
 
 	defer func() {
 		if r := recover(); r != nil {
@@ -549,6 +550,7 @@ func (e *Executor) execRequest(session *Session, sql string, copymsg copyMsg) St
 		log.Infof(session.Ctx(), "execRequest: %s", sql)
 	}
 
+	session.phaseTimes[sessionStartParse] = timeutil.Now()
 	if session.planner.copyFrom != nil {
 		stmts, err = session.planner.ProcessCopyData(session.Ctx(), sql, copymsg)
 	} else if copymsg != copyMsgNone {
@@ -556,6 +558,8 @@ func (e *Executor) execRequest(session *Session, sql string, copymsg copyMsg) St
 	} else {
 		stmts, err = planMaker.parser.Parse(sql, parser.Syntax(session.Syntax))
 	}
+	session.phaseTimes[sessionEndParse] = timeutil.Now()
+
 	if err != nil {
 		if log.V(2) {
 			log.Infof(session.Ctx(), "execRequest: error: %v", err)
@@ -634,9 +638,9 @@ func (e *Executor) execRequest(session *Session, sql string, copymsg copyMsg) St
 		origState := txnState.State
 
 		// Track if we are retrying this query, so that we do not double count.
-		isAutomaticRetry := false
+		retryCount := 0
 		txnClosure := func(txn *client.Txn, opt *client.TxnExecOptions) error {
-			defer func() { isAutomaticRetry = true }()
+			defer func() { retryCount++ }()
 			if txnState.State == Open && txnState.txn != txn {
 				panic(fmt.Sprintf("closure wasn't called in the txn we set up for it."+
 					"\ntxnState.txn:%+v\ntxn:%+v\ntxnState:%+v", txnState.txn, txn, txnState))
@@ -653,7 +657,7 @@ func (e *Executor) execRequest(session *Session, sql string, copymsg copyMsg) St
 				ResultList(results).Close(session.Ctx())
 			}
 			results, remainingStmts, err = runTxnAttempt(
-				e, planMaker, origState, txnState, opt, stmtsToExec, isAutomaticRetry)
+				e, planMaker, origState, txnState, opt, stmtsToExec, retryCount)
 
 			// TODO(andrei): Until #7881 fixed.
 			if err == nil && txnState.State == Aborted {
@@ -803,7 +807,7 @@ func runTxnAttempt(
 	txnState *txnState,
 	opt *client.TxnExecOptions,
 	stmts parser.StatementList,
-	isAutomaticRetry bool,
+	retryCount int,
 ) ([]Result, parser.StatementList, error) {
 
 	// Ignore the state that might have been set by a previous try
@@ -814,7 +818,7 @@ func runTxnAttempt(
 	planMaker.setTxn(txnState.txn)
 	results, remainingStmts, err := e.execStmtsInCurrentTxn(
 		stmts, planMaker, txnState,
-		opt.AutoCommit /* implicitTxn */, opt.AutoRetry /* txnBeginning */, isAutomaticRetry)
+		opt.AutoCommit /* implicitTxn */, opt.AutoRetry /* txnBeginning */, retryCount)
 	if opt.AutoCommit {
 		if len(remainingStmts) > 0 {
 			panic("implicit txn failed to execute all stmts")
@@ -861,7 +865,7 @@ func (e *Executor) execStmtsInCurrentTxn(
 	txnState *txnState,
 	implicitTxn bool,
 	txnBeginning bool,
-	isAutomaticRetry bool,
+	retryCount int,
 ) ([]Result, parser.StatementList, error) {
 	var results []Result
 	if txnState.State == NoTxn {
@@ -899,7 +903,7 @@ func (e *Executor) execStmtsInCurrentTxn(
 			case Open:
 				res, err = e.execStmtInOpenTxn(
 					stmt, planMaker, implicitTxn, txnBeginning && (i == 0), /* firstInTxn */
-					txnState, isAutomaticRetry)
+					txnState, retryCount)
 			case Aborted, RestartWait:
 				res, err = e.execStmtInAbortedTxn(stmt, txnState, planMaker)
 			case CommitWait:
@@ -1032,7 +1036,7 @@ func (e *Executor) execStmtInCommitWaitTxn(
 // firstInTxn: set for the first statement in a transaction. Used
 //  so that nested BEGIN statements are caught.
 // stmtTimestamp: Used as the statement_timestamp().
-// isAutomaticRetry: A boolean that is set for retries so that we don't double
+// retryCount: increases with each retry; 0 for the first attempt
 // count in metrics.
 //
 // Returns:
@@ -1044,9 +1048,8 @@ func (e *Executor) execStmtInOpenTxn(
 	implicitTxn bool,
 	firstInTxn bool,
 	txnState *txnState,
-	isAutomaticRetry bool,
+	retryCount int,
 ) (Result, error) {
-	tStart := timeutil.Now()
 	if txnState.State != Open {
 		panic("execStmtInOpenTxn called outside of an open txn")
 	}
@@ -1054,14 +1057,15 @@ func (e *Executor) execStmtInOpenTxn(
 		panic("execStmtInOpenTxn called with a txn not set on the planner")
 	}
 
-	planMaker.evalCtx.SetTxnTimestamp(txnState.sqlTimestamp)
-	planMaker.evalCtx.SetStmtTimestamp(e.cfg.Clock.PhysicalTime())
-
 	session := planMaker.session
 	log.Eventf(session.context, "%s", stmt)
 
+	session.phaseTimes[sessionStartExecStmt] = timeutil.Now()
+	planMaker.evalCtx.SetTxnTimestamp(txnState.sqlTimestamp)
+	planMaker.evalCtx.SetStmtTimestamp(e.cfg.Clock.PhysicalTime())
+
 	// Do not double count automatically retried transactions.
-	if !isAutomaticRetry {
+	if retryCount == 0 {
 		e.updateStmtCounts(stmt)
 	}
 	switch s := stmt.(type) {
@@ -1166,7 +1170,7 @@ func (e *Executor) execStmtInOpenTxn(
 	}
 
 	autoCommit := implicitTxn && !e.cfg.TestingKnobs.DisableAutoCommit
-	result, err := e.execStmt(stmt, planMaker, autoCommit, isAutomaticRetry, tStart)
+	result, err := e.execStmt(stmt, planMaker, autoCommit, retryCount)
 	if err != nil {
 		if result.Rows != nil {
 			result.Rows.Close(session.Ctx())
@@ -1379,10 +1383,14 @@ func (e *Executor) execStmt(
 	stmt parser.Statement,
 	planMaker *planner,
 	autoCommit bool,
-	isAutomaticRetry bool,
-	tStart time.Time,
+	retryCount int,
 ) (Result, error) {
-	plan, err := planMaker.makePlan(planMaker.session.Ctx(), stmt, autoCommit)
+	session := planMaker.session
+
+	session.phaseTimes[sessionStartLogicalPlan] = timeutil.Now()
+	plan, err := planMaker.makePlan(session.Ctx(), stmt, autoCommit)
+	session.phaseTimes[sessionEndLogicalPlan] = timeutil.Now()
+
 	if err != nil {
 		return Result{}, err
 	}
@@ -1407,19 +1415,20 @@ func (e *Executor) execStmt(
 	if err != nil {
 		return result, err
 	}
-	if useDistSQL && !isAutomaticRetry {
-		switch stmt.(type) {
-		case *parser.Select:
-			e.DistSQLSelectCount.Inc(1)
-		}
+
+	distributeQuery := useDistSQL && retryCount == 0
+
+	session.phaseTimes[sessionStartExecStmt] = timeutil.Now()
+	if distributeQuery {
 		err = e.execDistSQL(planMaker, plan, &result)
-		execDuration := timeutil.Since(tStart).Nanoseconds()
-		e.DistSQLExecLatency.RecordValue(execDuration)
 	} else {
 		err = e.execClassic(planMaker, plan, &result)
-		execDuration := timeutil.Since(tStart).Nanoseconds()
-		e.SQLExecLatency.RecordValue(execDuration)
 	}
+	session.phaseTimes[sessionEndExecStmt] = timeutil.Now()
+	e.recordStatementMetrics(
+		session.Ctx(), stmt, session.phaseTimes[:], distributeQuery, retryCount,
+		result, err)
+
 	return result, err
 }
 
