@@ -121,7 +121,13 @@ func GetEnvVarsUsed() []string {
 	var vars []string
 	for k, v := range envVarRegistry.cache {
 		if v.present {
-			vars = append(vars, k)
+			vars = append(vars, k+"="+os.Getenv(k))
+		}
+	}
+
+	for _, name := range []string{"GOGC", "GODEBUG", "GOMAXPROCS", "GOTRACEBACK"} {
+		if val, ok := os.LookupEnv(name); ok {
+			vars = append(vars, name+"="+val)
 		}
 	}
 	return vars

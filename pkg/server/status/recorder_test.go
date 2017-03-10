@@ -17,6 +17,7 @@
 package status
 
 import (
+	"os"
 	"reflect"
 	"sort"
 	"strconv"
@@ -331,13 +332,27 @@ func TestMetricsRecorder(t *testing.T) {
 		},
 	}
 
+	// Make sure there is at least one environment variable that will be
+	// reported.
+	if err := os.Setenv("GOGC", "100"); err != nil {
+		t.Fatal(err)
+	}
+
 	nodeSummary := recorder.GetStatusSummary()
 	if nodeSummary == nil {
 		t.Fatalf("recorder did not return nodeSummary")
 	}
+	if len(nodeSummary.Args) == 0 {
+		t.Fatalf("expected args to be present")
+	}
+	if len(nodeSummary.Env) == 0 {
+		t.Fatalf("expected env to be present")
+	}
+	nodeSummary.Args = nil
+	nodeSummary.Env = nil
 
 	sort.Sort(byStoreDescID(nodeSummary.StoreStatuses))
 	if a, e := nodeSummary, expectedNodeSummary; !reflect.DeepEqual(a, e) {
-		t.Errorf("recorder did not produce expected NodeSummary; diff:\n %v", pretty.Diff(e, a))
+		t.Errorf("recorder did not produce expected NodeSummary; diff:\n %s", pretty.Diff(e, a))
 	}
 }
