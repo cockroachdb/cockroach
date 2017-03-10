@@ -44,6 +44,9 @@ func testTableDesc() *sqlbase.TableDescriptor {
 			{Name: "k", Type: sqlbase.ColumnType{Kind: sqlbase.ColumnType_BYTES}},
 			{Name: "l", Type: sqlbase.ColumnType{Kind: sqlbase.ColumnType_DECIMAL}},
 			{Name: "m", Type: sqlbase.ColumnType{Kind: sqlbase.ColumnType_DECIMAL}},
+			{Name: "n", Type: sqlbase.ColumnType{Kind: sqlbase.ColumnType_DATE}},
+			{Name: "o", Type: sqlbase.ColumnType{Kind: sqlbase.ColumnType_TIMESTAMP}},
+			{Name: "p", Type: sqlbase.ColumnType{Kind: sqlbase.ColumnType_TIMESTAMPTZ}},
 		},
 		PrimaryIndex: sqlbase.IndexDescriptor{
 			Name: "primary", Unique: true, ColumnNames: []string{"a"},
@@ -270,6 +273,14 @@ func TestSimplifyExpr(t *testing.T) {
 			`(a < 0) AND (b > 0)`, true},
 		{`((a < 0) OR (a < 0 OR b > 0)) AND (a > 0 OR a < 1)`,
 			`((a < 0) OR (b > 0)) AND (a IS NOT NULL)`, true},
+
+		// Contains mixed date-type comparisons.
+		{`n >= DATE '1997-01-01' AND n < (DATE '1997-01-01' + INTERVAL '1' year)`,
+			`(n >= '1997-01-01') AND (n < '1998-01-01 00:00:00+00:00')`, true},
+		{`o >= DATE '1997-01-01' AND o < (DATE '1997-01-01' + INTERVAL '1' year)`,
+			`(o >= '1997-01-01') AND (o < '1998-01-01 00:00:00+00:00')`, true},
+		{`p >= DATE '1997-01-01' AND p < (DATE '1997-01-01' + INTERVAL '1' year)`,
+			`(p >= '1997-01-01') AND (p < '1998-01-01 00:00:00+00:00')`, true},
 	}
 	for _, d := range testData {
 		t.Run(d.expr+"~"+d.expected, func(t *testing.T) {

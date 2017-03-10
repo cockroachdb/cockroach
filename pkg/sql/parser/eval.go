@@ -17,7 +17,6 @@
 package parser
 
 import (
-	"bytes"
 	"fmt"
 	"math"
 	"math/big"
@@ -858,7 +857,9 @@ func init() {
 type CmpOp struct {
 	LeftType  Type
 	RightType Type
-	fn        func(*EvalContext, Datum, Datum) (DBool, error)
+
+	// Datum return type is a union between *DBool and dNull.
+	fn func(*EvalContext, Datum, Datum) (Datum, error)
 
 	types typeList
 }
@@ -908,200 +909,128 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 		CmpOp{
 			LeftType:  TypeString,
 			RightType: TypeString,
-			fn: func(_ *EvalContext, left Datum, right Datum) (DBool, error) {
-				return DBool(MustBeDString(left) == MustBeDString(right)), nil
-			},
+			fn:        cmpOpScalarEQFn,
 		},
 		CmpOp{
 			LeftType:  TypeCollatedString,
 			RightType: TypeCollatedString,
-			fn: func(_ *EvalContext, left Datum, right Datum) (DBool, error) {
-				return DBool(bytes.Equal(left.(*DCollatedString).key, right.(*DCollatedString).key)), nil
-			},
+			fn:        cmpOpScalarEQFn,
 		},
 		CmpOp{
 			LeftType:  TypeBytes,
 			RightType: TypeBytes,
-
-			fn: func(_ *EvalContext, left Datum, right Datum) (DBool, error) {
-				return DBool(*left.(*DBytes) == *right.(*DBytes)), nil
-			},
+			fn:        cmpOpScalarEQFn,
 		},
 		CmpOp{
 			LeftType:  TypeBool,
 			RightType: TypeBool,
-			fn: func(_ *EvalContext, left Datum, right Datum) (DBool, error) {
-				return DBool(*left.(*DBool) == *right.(*DBool)), nil
-			},
+			fn:        cmpOpScalarEQFn,
 		},
 		CmpOp{
 			LeftType:  TypeInt,
 			RightType: TypeInt,
-			fn: func(_ *EvalContext, left Datum, right Datum) (DBool, error) {
-				return DBool(MustBeDInt(left) == MustBeDInt(right)), nil
-			},
+			fn:        cmpOpScalarEQFn,
 		},
 		CmpOp{
 			LeftType:  TypeFloat,
 			RightType: TypeFloat,
-			fn: func(_ *EvalContext, left Datum, right Datum) (DBool, error) {
-				return DBool(*left.(*DFloat) == *right.(*DFloat)), nil
-			},
+			fn:        cmpOpScalarEQFn,
 		},
 		CmpOp{
 			LeftType:  TypeDecimal,
 			RightType: TypeDecimal,
-			fn: func(_ *EvalContext, left Datum, right Datum) (DBool, error) {
-				l := &left.(*DDecimal).Decimal
-				r := &right.(*DDecimal).Decimal
-				return DBool(l.Cmp(r) == 0), nil
-			},
+			fn:        cmpOpScalarEQFn,
 		},
 		CmpOp{
 			LeftType:  TypeFloat,
 			RightType: TypeInt,
-			fn: func(_ *EvalContext, left Datum, right Datum) (DBool, error) {
-				return DBool(*left.(*DFloat) == DFloat(MustBeDInt(right))), nil
-			},
+			fn:        cmpOpScalarEQFn,
 		},
 		CmpOp{
 			LeftType:  TypeInt,
 			RightType: TypeFloat,
-			fn: func(_ *EvalContext, left Datum, right Datum) (DBool, error) {
-				return DBool(DFloat(MustBeDInt(left)) == *right.(*DFloat)), nil
-			},
+			fn:        cmpOpScalarEQFn,
 		},
 		CmpOp{
 			LeftType:  TypeDecimal,
 			RightType: TypeInt,
-			fn: func(ctx *EvalContext, left Datum, right Datum) (DBool, error) {
-				l := &left.(*DDecimal).Decimal
-				r := ctx.getTmpDec().SetCoefficient(int64(MustBeDInt(right))).SetExponent(0)
-				return DBool(l.Cmp(r) == 0), nil
-			},
+			fn:        cmpOpScalarEQFn,
 		},
 		CmpOp{
 			LeftType:  TypeInt,
 			RightType: TypeDecimal,
-			fn: func(ctx *EvalContext, left Datum, right Datum) (DBool, error) {
-				l := ctx.getTmpDec().SetCoefficient(int64(MustBeDInt(left))).SetExponent(0)
-				r := &right.(*DDecimal).Decimal
-				return DBool(l.Cmp(r) == 0), nil
-			},
+			fn:        cmpOpScalarEQFn,
 		},
 		CmpOp{
 			LeftType:  TypeDecimal,
 			RightType: TypeFloat,
-			fn: func(ctx *EvalContext, left Datum, right Datum) (DBool, error) {
-				l := &left.(*DDecimal).Decimal
-				r, err := ctx.getTmpDec().SetFloat64(float64(*right.(*DFloat)))
-				if err != nil {
-					return DBool(false), err
-				}
-				return DBool(l.Cmp(r) == 0), nil
-			},
+			fn:        cmpOpScalarEQFn,
 		},
 		CmpOp{
 			LeftType:  TypeFloat,
 			RightType: TypeDecimal,
-			fn: func(ctx *EvalContext, left Datum, right Datum) (DBool, error) {
-				l, err := ctx.getTmpDec().SetFloat64(float64(*left.(*DFloat)))
-				if err != nil {
-					return DBool(false), err
-				}
-				r := &right.(*DDecimal).Decimal
-				return DBool(l.Cmp(r) == 0), nil
-			},
+			fn:        cmpOpScalarEQFn,
 		},
 		CmpOp{
 			LeftType:  TypeDate,
 			RightType: TypeDate,
-			fn: func(_ *EvalContext, left Datum, right Datum) (DBool, error) {
-				return DBool(*left.(*DDate) == *right.(*DDate)), nil
-			},
+			fn:        cmpOpScalarEQFn,
 		},
 		CmpOp{
 			LeftType:  TypeTimestamp,
 			RightType: TypeTimestamp,
-			fn: func(_ *EvalContext, left Datum, right Datum) (DBool, error) {
-				return DBool(left.(*DTimestamp).Equal(right.(*DTimestamp).Time)), nil
-			},
+			fn:        cmpOpScalarEQFn,
 		},
 		CmpOp{
 			LeftType:  TypeTimestampTZ,
 			RightType: TypeTimestampTZ,
-			fn: func(_ *EvalContext, left Datum, right Datum) (DBool, error) {
-				return DBool(left.(*DTimestampTZ).Equal(right.(*DTimestampTZ).Time)), nil
-			},
+			fn:        cmpOpScalarEQFn,
 		},
 		CmpOp{
 			LeftType:  TypeTimestamp,
 			RightType: TypeTimestampTZ,
-			fn: func(_ *EvalContext, left Datum, right Datum) (DBool, error) {
-				return DBool(left.(*DTimestamp).Equal(right.(*DTimestampTZ).Time)), nil
-			},
+			fn:        cmpOpScalarEQFn,
 		},
 		CmpOp{
 			LeftType:  TypeTimestampTZ,
 			RightType: TypeTimestamp,
-			fn: func(_ *EvalContext, left Datum, right Datum) (DBool, error) {
-				return DBool(left.(*DTimestampTZ).Equal(right.(*DTimestamp).Time)), nil
-			},
+			fn:        cmpOpScalarEQFn,
 		},
 		CmpOp{
 			LeftType:  TypeDate,
 			RightType: TypeTimestampTZ,
-			fn: func(ctx *EvalContext, left Datum, right Datum) (DBool, error) {
-				leftTZ := MakeDTimestampTZFromDate(ctx.GetLocation(), left.(*DDate))
-				rightTZ := right.(*DTimestampTZ)
-				return DBool(leftTZ.Equal(rightTZ.Time)), nil
-			},
+			fn:        cmpOpScalarEQFn,
 		},
 		CmpOp{
 			LeftType:  TypeDate,
 			RightType: TypeTimestamp,
-			fn: func(ctx *EvalContext, left Datum, right Datum) (DBool, error) {
-				leftTZ := MakeDTimestampTZFromDate(ctx.GetLocation(), left.(*DDate))
-				rightTS := right.(*DTimestamp)
-				return DBool(leftTZ.Equal(rightTS.Time)), nil
-			},
+			fn:        cmpOpScalarEQFn,
 		},
 		CmpOp{
 			LeftType:  TypeTimestampTZ,
 			RightType: TypeDate,
-			fn: func(ctx *EvalContext, left Datum, right Datum) (DBool, error) {
-				rightTZ := MakeDTimestampTZFromDate(ctx.GetLocation(), right.(*DDate))
-				return DBool(left.(*DTimestampTZ).Equal(rightTZ.Time)), nil
-			},
+			fn:        cmpOpScalarEQFn,
 		},
 		CmpOp{
 			LeftType:  TypeTimestamp,
 			RightType: TypeDate,
-			fn: func(ctx *EvalContext, left Datum, right Datum) (DBool, error) {
-				rightTZ := MakeDTimestampTZFromDate(ctx.GetLocation(), right.(*DDate))
-				return DBool(left.(*DTimestamp).Equal(rightTZ.Time)), nil
-			},
+			fn:        cmpOpScalarEQFn,
 		},
 		CmpOp{
 			LeftType:  TypeInterval,
 			RightType: TypeInterval,
-			fn: func(_ *EvalContext, left Datum, right Datum) (DBool, error) {
-				return DBool(*left.(*DInterval) == *right.(*DInterval)), nil
-			},
-		},
-		CmpOp{
-			LeftType:  TypeTuple,
-			RightType: TypeTuple,
-			fn: func(ctx *EvalContext, left Datum, right Datum) (DBool, error) {
-				c, err := cmpTuple(ctx, left, right)
-				return DBool(c == 0), err
-			},
+			fn:        cmpOpScalarEQFn,
 		},
 		CmpOp{
 			LeftType:  TypeOid,
 			RightType: TypeOid,
-			fn: func(_ *EvalContext, left Datum, right Datum) (DBool, error) {
-				return DBool(left.(*DOid).DInt == right.(*DOid).DInt), nil
+			fn:        cmpOpScalarEQFn,
+		},
+		CmpOp{
+			LeftType:  TypeTuple,
+			RightType: TypeTuple,
+			fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
+				return cmpOpTupleFn(ctx, *left.(*DTuple), *right.(*DTuple), EQ), nil
 			},
 		},
 	},
@@ -1110,192 +1039,123 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 		CmpOp{
 			LeftType:  TypeString,
 			RightType: TypeString,
-			fn: func(_ *EvalContext, left Datum, right Datum) (DBool, error) {
-				return DBool(MustBeDString(left) < MustBeDString(right)), nil
-			},
+			fn:        cmpOpScalarLTFn,
 		},
 		CmpOp{
 			LeftType:  TypeCollatedString,
 			RightType: TypeCollatedString,
-			fn: func(_ *EvalContext, left Datum, right Datum) (DBool, error) {
-				return DBool(bytes.Compare(left.(*DCollatedString).key, right.(*DCollatedString).key) < 0), nil
-			},
+			fn:        cmpOpScalarLTFn,
 		},
 		CmpOp{
 			LeftType:  TypeBytes,
 			RightType: TypeBytes,
-			fn: func(_ *EvalContext, left Datum, right Datum) (DBool, error) {
-				return DBool(*left.(*DBytes) < *right.(*DBytes)), nil
-			},
+			fn:        cmpOpScalarLTFn,
 		},
 		CmpOp{
 			LeftType:  TypeBool,
 			RightType: TypeBool,
-			fn: func(_ *EvalContext, left Datum, right Datum) (DBool, error) {
-				return !*left.(*DBool) && *right.(*DBool), nil
-			},
+			fn:        cmpOpScalarLTFn,
 		},
 		CmpOp{
 			LeftType:  TypeInt,
 			RightType: TypeInt,
-			fn: func(_ *EvalContext, left Datum, right Datum) (DBool, error) {
-				return DBool(MustBeDInt(left) < MustBeDInt(right)), nil
-			},
+			fn:        cmpOpScalarLTFn,
 		},
 		CmpOp{
 			LeftType:  TypeFloat,
 			RightType: TypeFloat,
-			fn: func(_ *EvalContext, left Datum, right Datum) (DBool, error) {
-				return DBool(*left.(*DFloat) < *right.(*DFloat)), nil
-			},
+			fn:        cmpOpScalarLTFn,
 		},
 		CmpOp{
 			LeftType:  TypeDecimal,
 			RightType: TypeDecimal,
-			fn: func(_ *EvalContext, left Datum, right Datum) (DBool, error) {
-				l := &left.(*DDecimal).Decimal
-				r := &right.(*DDecimal).Decimal
-				return DBool(l.Cmp(r) < 0), nil
-			},
+			fn:        cmpOpScalarLTFn,
 		},
 		CmpOp{
 			LeftType:  TypeFloat,
 			RightType: TypeInt,
-			fn: func(_ *EvalContext, left Datum, right Datum) (DBool, error) {
-				return DBool(*left.(*DFloat) < DFloat(MustBeDInt(right))), nil
-			},
+			fn:        cmpOpScalarLTFn,
 		},
 		CmpOp{
 			LeftType:  TypeInt,
 			RightType: TypeFloat,
-			fn: func(_ *EvalContext, left Datum, right Datum) (DBool, error) {
-				return DBool(DFloat(MustBeDInt(left)) < *right.(*DFloat)), nil
-			},
+			fn:        cmpOpScalarLTFn,
 		},
 		CmpOp{
 			LeftType:  TypeDecimal,
 			RightType: TypeInt,
-			fn: func(ctx *EvalContext, left Datum, right Datum) (DBool, error) {
-				l := &left.(*DDecimal).Decimal
-				r := ctx.getTmpDec().SetCoefficient(int64(MustBeDInt(right))).SetExponent(0)
-				return DBool(l.Cmp(r) < 0), nil
-			},
+			fn:        cmpOpScalarLTFn,
 		},
 		CmpOp{
 			LeftType:  TypeInt,
 			RightType: TypeDecimal,
-			fn: func(ctx *EvalContext, left Datum, right Datum) (DBool, error) {
-				l := ctx.getTmpDec().SetCoefficient(int64(MustBeDInt(left))).SetExponent(0)
-				r := &right.(*DDecimal).Decimal
-				return DBool(l.Cmp(r) < 0), nil
-			},
+			fn:        cmpOpScalarLTFn,
 		},
 		CmpOp{
 			LeftType:  TypeDecimal,
 			RightType: TypeFloat,
-			fn: func(ctx *EvalContext, left Datum, right Datum) (DBool, error) {
-				l := &left.(*DDecimal).Decimal
-				r, err := ctx.getTmpDec().SetFloat64(float64(*right.(*DFloat)))
-				if err != nil {
-					return DBool(false), err
-				}
-				return DBool(l.Cmp(r) < 0), nil
-			},
+			fn:        cmpOpScalarLTFn,
 		},
 		CmpOp{
 			LeftType:  TypeFloat,
 			RightType: TypeDecimal,
-			fn: func(ctx *EvalContext, left Datum, right Datum) (DBool, error) {
-				l, err := ctx.getTmpDec().SetFloat64(float64(*left.(*DFloat)))
-				if err != nil {
-					return DBool(false), err
-				}
-				r := &right.(*DDecimal).Decimal
-				return DBool(l.Cmp(r) < 0), nil
-			},
+			fn:        cmpOpScalarLTFn,
 		},
 		CmpOp{
 			LeftType:  TypeDate,
 			RightType: TypeDate,
-			fn: func(_ *EvalContext, left Datum, right Datum) (DBool, error) {
-				return DBool(*left.(*DDate) < *right.(*DDate)), nil
-			},
+			fn:        cmpOpScalarLTFn,
 		},
 		CmpOp{
 			LeftType:  TypeTimestamp,
 			RightType: TypeTimestamp,
-			fn: func(_ *EvalContext, left Datum, right Datum) (DBool, error) {
-				return DBool(left.(*DTimestamp).Before(right.(*DTimestamp).Time)), nil
-			},
+			fn:        cmpOpScalarLTFn,
 		},
 		CmpOp{
 			LeftType:  TypeTimestampTZ,
 			RightType: TypeTimestampTZ,
-			fn: func(_ *EvalContext, left Datum, right Datum) (DBool, error) {
-				return DBool(left.(*DTimestampTZ).Before(right.(*DTimestampTZ).Time)), nil
-			},
+			fn:        cmpOpScalarLTFn,
 		},
 		CmpOp{
 			LeftType:  TypeTimestamp,
 			RightType: TypeTimestampTZ,
-			fn: func(_ *EvalContext, left Datum, right Datum) (DBool, error) {
-				return DBool(left.(*DTimestamp).Before(right.(*DTimestampTZ).Time)), nil
-			},
+			fn:        cmpOpScalarLTFn,
 		},
 		CmpOp{
 			LeftType:  TypeTimestampTZ,
 			RightType: TypeTimestamp,
-			fn: func(_ *EvalContext, left Datum, right Datum) (DBool, error) {
-				return DBool(left.(*DTimestampTZ).Before(right.(*DTimestamp).Time)), nil
-			},
+			fn:        cmpOpScalarLTFn,
 		},
 		CmpOp{
 			LeftType:  TypeDate,
 			RightType: TypeTimestampTZ,
-			fn: func(ctx *EvalContext, left Datum, right Datum) (DBool, error) {
-				leftTZ := MakeDTimestampTZFromDate(ctx.GetLocation(), left.(*DDate))
-				rightTZ := right.(*DTimestampTZ)
-				return DBool(leftTZ.Before(rightTZ.Time)), nil
-			},
+			fn:        cmpOpScalarLTFn,
 		},
 		CmpOp{
 			LeftType:  TypeDate,
 			RightType: TypeTimestamp,
-			fn: func(ctx *EvalContext, left Datum, right Datum) (DBool, error) {
-				leftTZ := MakeDTimestampTZFromDate(ctx.GetLocation(), left.(*DDate))
-				rightTS := right.(*DTimestamp)
-				return DBool(leftTZ.Before(rightTS.Time)), nil
-			},
+			fn:        cmpOpScalarLTFn,
 		},
 		CmpOp{
 			LeftType:  TypeTimestampTZ,
 			RightType: TypeDate,
-			fn: func(ctx *EvalContext, left Datum, right Datum) (DBool, error) {
-				rightTZ := MakeDTimestampTZFromDate(ctx.GetLocation(), right.(*DDate))
-				return DBool(left.(*DTimestampTZ).Before(rightTZ.Time)), nil
-			},
+			fn:        cmpOpScalarLTFn,
 		},
 		CmpOp{
 			LeftType:  TypeTimestamp,
 			RightType: TypeDate,
-			fn: func(ctx *EvalContext, left Datum, right Datum) (DBool, error) {
-				rightTZ := MakeDTimestampTZFromDate(ctx.GetLocation(), right.(*DDate))
-				return DBool(left.(*DTimestamp).Before(rightTZ.Time)), nil
-			},
+			fn:        cmpOpScalarLTFn,
 		},
 		CmpOp{
 			LeftType:  TypeInterval,
 			RightType: TypeInterval,
-			fn: func(_ *EvalContext, left Datum, right Datum) (DBool, error) {
-				return DBool(left.(*DInterval).Duration.Compare(right.(*DInterval).Duration) < 0), nil
-			},
+			fn:        cmpOpScalarLTFn,
 		},
 		CmpOp{
 			LeftType:  TypeTuple,
 			RightType: TypeTuple,
-			fn: func(ctx *EvalContext, left Datum, right Datum) (DBool, error) {
-				c, err := cmpTuple(ctx, left, right)
-				return DBool(c < 0), err
+			fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
+				return cmpOpTupleFn(ctx, *left.(*DTuple), *right.(*DTuple), LT), nil
 			},
 		},
 	},
@@ -1304,190 +1164,123 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 		CmpOp{
 			LeftType:  TypeString,
 			RightType: TypeString,
-			fn: func(_ *EvalContext, left Datum, right Datum) (DBool, error) {
-				return DBool(MustBeDString(left) <= MustBeDString(right)), nil
-			},
+			fn:        cmpOpScalarLEFn,
 		},
 		CmpOp{
 			LeftType:  TypeCollatedString,
 			RightType: TypeCollatedString,
-			fn: func(_ *EvalContext, left Datum, right Datum) (DBool, error) {
-				return DBool(bytes.Compare(left.(*DCollatedString).key, right.(*DCollatedString).key) <= 0), nil
-			},
+			fn:        cmpOpScalarLEFn,
 		},
 		CmpOp{
 			LeftType:  TypeBytes,
 			RightType: TypeBytes,
-			fn: func(_ *EvalContext, left Datum, right Datum) (DBool, error) {
-				return DBool(*left.(*DBytes) <= *right.(*DBytes)), nil
-			},
+			fn:        cmpOpScalarLEFn,
 		},
 		CmpOp{
 			LeftType:  TypeBool,
 			RightType: TypeBool,
-			fn: func(_ *EvalContext, left Datum, right Datum) (DBool, error) {
-				return !*left.(*DBool) || *right.(*DBool), nil
-			},
+			fn:        cmpOpScalarLEFn,
 		},
 		CmpOp{
 			LeftType:  TypeInt,
 			RightType: TypeInt,
-			fn: func(_ *EvalContext, left Datum, right Datum) (DBool, error) {
-				return DBool(MustBeDInt(left) <= MustBeDInt(right)), nil
-			},
+			fn:        cmpOpScalarLEFn,
 		},
 		CmpOp{
 			LeftType:  TypeFloat,
 			RightType: TypeFloat,
-			fn: func(_ *EvalContext, left Datum, right Datum) (DBool, error) {
-				return DBool(*left.(*DFloat) <= *right.(*DFloat)), nil
-			},
+			fn:        cmpOpScalarLEFn,
 		},
 		CmpOp{
 			LeftType:  TypeDecimal,
 			RightType: TypeDecimal,
-			fn: func(_ *EvalContext, left Datum, right Datum) (DBool, error) {
-				l := &left.(*DDecimal).Decimal
-				r := &right.(*DDecimal).Decimal
-				return DBool(l.Cmp(r) <= 0), nil
-			},
+			fn:        cmpOpScalarLEFn,
 		},
 		CmpOp{
 			LeftType:  TypeFloat,
 			RightType: TypeInt,
-			fn: func(_ *EvalContext, left Datum, right Datum) (DBool, error) {
-				return DBool(*left.(*DFloat) <= DFloat(MustBeDInt(right))), nil
-			},
+			fn:        cmpOpScalarLEFn,
 		},
 		CmpOp{
 			LeftType:  TypeInt,
 			RightType: TypeFloat,
-			fn: func(_ *EvalContext, left Datum, right Datum) (DBool, error) {
-				return DBool(DFloat(MustBeDInt(left)) <= *right.(*DFloat)), nil
-			},
+			fn:        cmpOpScalarLEFn,
 		},
 		CmpOp{
 			LeftType:  TypeDecimal,
 			RightType: TypeInt,
-			fn: func(ctx *EvalContext, left Datum, right Datum) (DBool, error) {
-				l := &left.(*DDecimal).Decimal
-				r := ctx.getTmpDec().SetCoefficient(int64(MustBeDInt(right))).SetExponent(0)
-				return DBool(l.Cmp(r) <= 0), nil
-			},
+			fn:        cmpOpScalarLEFn,
 		},
 		CmpOp{
 			LeftType:  TypeInt,
 			RightType: TypeDecimal,
-			fn: func(ctx *EvalContext, left Datum, right Datum) (DBool, error) {
-				l := ctx.getTmpDec().SetCoefficient(int64(MustBeDInt(left))).SetExponent(0)
-				r := &right.(*DDecimal).Decimal
-				return DBool(l.Cmp(r) <= 0), nil
-			},
+			fn:        cmpOpScalarLEFn,
 		},
 		CmpOp{
 			LeftType:  TypeDecimal,
 			RightType: TypeFloat,
-			fn: func(ctx *EvalContext, left Datum, right Datum) (DBool, error) {
-				l := &left.(*DDecimal).Decimal
-				r, err := ctx.getTmpDec().SetFloat64(float64(*right.(*DFloat)))
-				if err != nil {
-					return DBool(false), err
-				}
-				return DBool(l.Cmp(r) <= 0), nil
-			},
+			fn:        cmpOpScalarLEFn,
 		},
 		CmpOp{
 			LeftType:  TypeFloat,
 			RightType: TypeDecimal,
-			fn: func(ctx *EvalContext, left Datum, right Datum) (DBool, error) {
-				l, err := ctx.getTmpDec().SetFloat64(float64(*left.(*DFloat)))
-				if err != nil {
-					return DBool(false), err
-				}
-				r := &right.(*DDecimal).Decimal
-				return DBool(l.Cmp(r) <= 0), nil
-			},
+			fn:        cmpOpScalarLEFn,
 		},
 		CmpOp{
 			LeftType:  TypeDate,
 			RightType: TypeDate,
-			fn: func(_ *EvalContext, left Datum, right Datum) (DBool, error) {
-				return DBool(*left.(*DDate) <= *right.(*DDate)), nil
-			},
+			fn:        cmpOpScalarLEFn,
 		},
 		CmpOp{
 			LeftType:  TypeTimestamp,
 			RightType: TypeTimestamp,
-			fn: func(_ *EvalContext, left Datum, right Datum) (DBool, error) {
-				return !DBool(right.(*DTimestamp).Before(left.(*DTimestamp).Time)), nil
-			},
+			fn:        cmpOpScalarLEFn,
 		},
 		CmpOp{
 			LeftType:  TypeTimestampTZ,
 			RightType: TypeTimestampTZ,
-			fn: func(_ *EvalContext, left Datum, right Datum) (DBool, error) {
-				return !DBool(right.(*DTimestampTZ).Before(left.(*DTimestampTZ).Time)), nil
-			},
+			fn:        cmpOpScalarLEFn,
 		},
 		CmpOp{
 			LeftType:  TypeTimestampTZ,
 			RightType: TypeTimestamp,
-			fn: func(_ *EvalContext, left Datum, right Datum) (DBool, error) {
-				return !DBool(right.(*DTimestamp).Before(left.(*DTimestampTZ).Time)), nil
-			},
+			fn:        cmpOpScalarLEFn,
 		},
 		CmpOp{
 			LeftType:  TypeTimestamp,
 			RightType: TypeTimestampTZ,
-			fn: func(_ *EvalContext, left Datum, right Datum) (DBool, error) {
-				return !DBool(right.(*DTimestampTZ).Before(left.(*DTimestamp).Time)), nil
-			},
+			fn:        cmpOpScalarLEFn,
 		},
 		CmpOp{
 			LeftType:  TypeDate,
 			RightType: TypeTimestampTZ,
-			fn: func(ctx *EvalContext, left Datum, right Datum) (DBool, error) {
-				leftTZ := MakeDTimestampTZFromDate(ctx.GetLocation(), left.(*DDate))
-				return !DBool(right.(*DTimestampTZ).Before(leftTZ.Time)), nil
-			},
+			fn:        cmpOpScalarLEFn,
 		},
 		CmpOp{
 			LeftType:  TypeDate,
 			RightType: TypeTimestamp,
-			fn: func(ctx *EvalContext, left Datum, right Datum) (DBool, error) {
-				leftTZ := MakeDTimestampTZFromDate(ctx.GetLocation(), left.(*DDate))
-				return !DBool(right.(*DTimestamp).Before(leftTZ.Time)), nil
-			},
+			fn:        cmpOpScalarLEFn,
 		},
 		CmpOp{
 			LeftType:  TypeTimestampTZ,
 			RightType: TypeDate,
-			fn: func(ctx *EvalContext, left Datum, right Datum) (DBool, error) {
-				rightTZ := MakeDTimestampTZFromDate(ctx.GetLocation(), right.(*DDate))
-				return !DBool(rightTZ.Before(left.(*DTimestampTZ).Time)), nil
-			},
+			fn:        cmpOpScalarLEFn,
 		},
 		CmpOp{
 			LeftType:  TypeTimestamp,
 			RightType: TypeDate,
-			fn: func(ctx *EvalContext, left Datum, right Datum) (DBool, error) {
-				rightTZ := MakeDTimestampTZFromDate(ctx.GetLocation(), right.(*DDate))
-				return !DBool(rightTZ.Before(left.(*DTimestamp).Time)), nil
-			},
+			fn:        cmpOpScalarLEFn,
 		},
 		CmpOp{
 			LeftType:  TypeInterval,
 			RightType: TypeInterval,
-			fn: func(_ *EvalContext, left Datum, right Datum) (DBool, error) {
-				return DBool(left.(*DInterval).Duration.Compare(right.(*DInterval).Duration) <= 0), nil
-			},
+			fn:        cmpOpScalarLEFn,
 		},
 		CmpOp{
 			LeftType:  TypeTuple,
 			RightType: TypeTuple,
-			fn: func(ctx *EvalContext, left Datum, right Datum) (DBool, error) {
-				c, err := cmpTuple(ctx, left, right)
-				return DBool(c <= 0), err
+			fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
+				return cmpOpTupleFn(ctx, *left.(*DTuple), *right.(*DTuple), LE), nil
 			},
 		},
 	},
@@ -1511,7 +1304,7 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 		CmpOp{
 			LeftType:  TypeString,
 			RightType: TypeString,
-			fn: func(ctx *EvalContext, left Datum, right Datum) (DBool, error) {
+			fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
 				return matchLike(ctx, left, right, false)
 			},
 		},
@@ -1521,7 +1314,7 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 		CmpOp{
 			LeftType:  TypeString,
 			RightType: TypeString,
-			fn: func(ctx *EvalContext, left Datum, right Datum) (DBool, error) {
+			fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
 				return matchLike(ctx, left, right, true)
 			},
 		},
@@ -1531,7 +1324,7 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 		CmpOp{
 			LeftType:  TypeString,
 			RightType: TypeString,
-			fn: func(ctx *EvalContext, left Datum, right Datum) (DBool, error) {
+			fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
 				key := similarToKey(MustBeDString(right))
 				return matchRegexpWithKey(ctx, left, key)
 			},
@@ -1542,7 +1335,7 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 		CmpOp{
 			LeftType:  TypeString,
 			RightType: TypeString,
-			fn: func(ctx *EvalContext, left Datum, right Datum) (DBool, error) {
+			fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
 				key := regexpKey{s: string(MustBeDString(right)), caseInsensitive: false}
 				return matchRegexpWithKey(ctx, left, key)
 			},
@@ -1553,7 +1346,7 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 		CmpOp{
 			LeftType:  TypeString,
 			RightType: TypeString,
-			fn: func(ctx *EvalContext, left Datum, right Datum) (DBool, error) {
+			fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
 				key := regexpKey{s: string(MustBeDString(right)), caseInsensitive: true}
 				return matchRegexpWithKey(ctx, left, key)
 			},
@@ -1561,31 +1354,85 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 	},
 }
 
-var errCmpNull = errors.New("NULL comparison")
+func isNaN(d Datum) bool {
+	switch t := d.(type) {
+	case *DFloat:
+		return math.IsNaN(float64(*t))
+	// case *DDecimal:
+	// TODO(mjibson) add case when decimals learn about NaN.
+	default:
+		return false
+	}
+}
 
-func cmpTuple(ctx *EvalContext, ldatum, rdatum Datum) (int, error) {
-	left := *ldatum.(*DTuple)
-	right := *rdatum.(*DTuple)
-	for i, l := range left.D {
-		r := right.D[i]
-		if l == DNull || r == DNull {
-			return 0, errCmpNull
+func boolFromCmp(cmp int, op ComparisonOperator) *DBool {
+	switch op {
+	case EQ:
+		return MakeDBool(cmp == 0)
+	case LT:
+		return MakeDBool(cmp < 0)
+	case LE:
+		return MakeDBool(cmp <= 0)
+	default:
+		panic(fmt.Sprintf("unexpected ComparisonOperator in boolFromCmp: %v", op))
+	}
+}
+
+func cmpOpScalarFn(ctx *EvalContext, left, right Datum, op ComparisonOperator) Datum {
+	// Before deferring to the Datum.Compare method, check for values that should
+	// be handled differently during SQL comparison evaluation than they should when
+	// ordering Datum values.
+	if left == DNull || right == DNull {
+		// If either Datum is NULL, the result of the comparison is NULL.
+		return DNull
+	}
+	if isNaN(left) || isNaN(right) {
+		// If either Datum is NaN, the result of the comparison is False.
+		return DBoolFalse
+	}
+	cmp := left.Compare(ctx, right)
+	return boolFromCmp(cmp, op)
+}
+
+func cmpOpScalarEQFn(ctx *EvalContext, left, right Datum) (Datum, error) {
+	return cmpOpScalarFn(ctx, left, right, EQ), nil
+}
+func cmpOpScalarLTFn(ctx *EvalContext, left, right Datum) (Datum, error) {
+	return cmpOpScalarFn(ctx, left, right, LT), nil
+}
+func cmpOpScalarLEFn(ctx *EvalContext, left, right Datum) (Datum, error) {
+	return cmpOpScalarFn(ctx, left, right, LE), nil
+}
+
+func cmpOpTupleFn(ctx *EvalContext, left, right DTuple, op ComparisonOperator) Datum {
+	cmp := 0
+	for i, leftElem := range left.D {
+		rightElem := right.D[i]
+		// Like with cmpOpScalarFn, check for values that need to be handled
+		// differently than when ordering Datums.
+		if leftElem == DNull || rightElem == DNull {
+			// If either Datum is NULL, the result of the comparison is NULL.
+			return DNull
 		}
-		c := l.Compare(ctx, r)
-		if c != 0 {
-			return c, nil
+		if isNaN(leftElem) || isNaN(rightElem) {
+			// If either Datum is NaN, the result of the comparison is False.
+			return DBoolFalse
+		}
+		cmp = leftElem.Compare(ctx, rightElem)
+		if cmp != 0 {
+			break
 		}
 	}
-	return 0, nil
+	return boolFromCmp(cmp, op)
 }
 
 func makeEvalTupleIn(typ Type) CmpOp {
 	return CmpOp{
 		LeftType:  typ,
 		RightType: TypeTuple,
-		fn: func(ctx *EvalContext, arg, values Datum) (DBool, error) {
+		fn: func(ctx *EvalContext, arg, values Datum) (Datum, error) {
 			if arg == DNull {
-				return DBool(false), nil
+				return DBoolFalse, nil
 			}
 
 			// If the tuple was sorted during normalization, we can perform
@@ -1597,9 +1444,9 @@ func makeEvalTupleIn(typ Type) CmpOp {
 					// If the tuple contained any null elements and no matches are found,
 					// the result of IN will be null. The null element will at the front
 					// if the tuple is sorted because null is less than any non-null value.
-					return DBool(false), errCmpNull
+					return DNull, nil
 				}
-				return DBool(found), nil
+				return MakeDBool(DBool(found)), nil
 			}
 
 			// If the tuple was not sorted, which happens in cases where it
@@ -1610,15 +1457,15 @@ func makeEvalTupleIn(typ Type) CmpOp {
 				if val == DNull {
 					sawNull = true
 				} else if val.Compare(ctx, arg) == 0 {
-					return DBool(true), nil
+					return DBoolTrue, nil
 				}
 			}
 			if sawNull {
 				// If the tuple contains any null elements and no matches are found, the
 				// result of IN will be null.
-				return DBool(false), errCmpNull
+				return DNull, nil
 			}
-			return DBool(false), nil
+			return DBoolFalse, nil
 		},
 	}
 }
@@ -1643,14 +1490,14 @@ func evalArrayCmp(
 		_, newLeft, newRight, _, not := foldComparisonExpr(subOp, left, elem)
 		d, err := fn.fn(ctx, newLeft.(Datum), newRight.(Datum))
 		if err != nil {
-			if err == errCmpNull {
-				sawNull = true
-				continue
-			}
 			return nil, err
 		}
-
-		res := d != DBool(not)
+		if d == DNull {
+			sawNull = true
+			continue
+		}
+		b := d.(*DBool)
+		res := *b != DBool(not)
 		if res {
 			anyTrue = true
 		} else {
@@ -1684,26 +1531,26 @@ func evalArrayCmp(
 	return DBoolFalse, nil
 }
 
-func matchLike(ctx *EvalContext, left, right Datum, caseInsensitive bool) (DBool, error) {
+func matchLike(ctx *EvalContext, left, right Datum, caseInsensitive bool) (Datum, error) {
 	pattern := string(MustBeDString(right))
 	like := optimizedLikeFunc(pattern, caseInsensitive)
 	if like == nil {
 		key := likeKey{s: pattern, caseInsensitive: caseInsensitive}
 		re, err := ctx.ReCache.GetRegexp(key)
 		if err != nil {
-			return DBool(false), fmt.Errorf("LIKE regexp compilation failed: %v", err)
+			return DBoolFalse, fmt.Errorf("LIKE regexp compilation failed: %v", err)
 		}
 		like = re.MatchString
 	}
-	return DBool(like(string(MustBeDString(left)))), nil
+	return MakeDBool(DBool(like(string(MustBeDString(left))))), nil
 }
 
-func matchRegexpWithKey(ctx *EvalContext, str Datum, key regexpCacheKey) (DBool, error) {
+func matchRegexpWithKey(ctx *EvalContext, str Datum, key regexpCacheKey) (Datum, error) {
 	re, err := ctx.ReCache.GetRegexp(key)
 	if err != nil {
-		return DBool(false), err
+		return DBoolFalse, err
 	}
-	return DBool(re.MatchString(string(MustBeDString(str)))), nil
+	return MakeDBool(DBool(re.MatchString(string(MustBeDString(str))))), nil
 }
 
 // MultipleResultsError is returned by QueryRow when more than one result is
@@ -2469,12 +2316,12 @@ func (expr *ComparisonExpr) Eval(ctx *EvalContext) (Datum, error) {
 	_, newLeft, newRight, _, not := foldComparisonExpr(op, left, right)
 	d, err := expr.fn.fn(ctx, newLeft.(Datum), newRight.(Datum))
 	if err != nil {
-		if err == errCmpNull {
-			return DNull, nil
-		}
 		return nil, err
 	}
-	return MakeDBool(d != DBool(not)), nil
+	if b, ok := d.(*DBool); ok {
+		return MakeDBool(*b != DBool(not)), nil
+	}
+	return d, nil
 }
 
 // Eval implements the TypedExpr interface.
@@ -2823,8 +2670,7 @@ func evalComparison(ctx *EvalContext, op ComparisonOperator, left, right Datum) 
 	ltype := left.ResolvedType()
 	rtype := right.ResolvedType()
 	if fn, ok := CmpOps[op].lookupImpl(ltype, rtype); ok {
-		v, err := fn.fn(ctx, left, right)
-		return MakeDBool(v), err
+		return fn.fn(ctx, left, right)
 	}
 	return nil, fmt.Errorf("unsupported comparison operator: <%s> %s <%s>", ltype, op, rtype)
 }
@@ -3072,7 +2918,7 @@ func anchorPattern(pattern string, caseInsensitive bool) string {
 // for a given pair of input operand types.
 func FindEqualComparisonFunction(
 	leftType, rightType Type,
-) (func(*EvalContext, Datum, Datum) (DBool, error), bool) {
+) (func(*EvalContext, Datum, Datum) (Datum, error), bool) {
 	fn, found := CmpOps[EQ].lookupImpl(leftType, rightType)
 	if found {
 		return fn.fn, true
