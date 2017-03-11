@@ -280,4 +280,5 @@ GLOCK := ../../../../bin/glock
 	@unset GIT_WORK_TREE; $(GLOCK) sync -n < GLOCKFILE
 	touch $@
 
-include .bootstrap
+# Force Make to run the .bootstrap recipe before building any other targets.
+-include .bootstrap
