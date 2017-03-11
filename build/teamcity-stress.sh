@@ -5,7 +5,6 @@ mkdir -p artifacts
 
 exit_status=0
 build/builder.sh env \
-		 COCKROACH_NIGHTLY_STRESS="${COCKROACH_NIGHTLY_STRESS:-false}" \
 		 COCKROACH_PROPOSER_EVALUATED_KV="${COCKROACH_PROPOSER_EVALUATED_KV:-false}" \
 		 make stress \
 		 PKG="$PKG" GOFLAGS="${GOFLAGS:-}" TAGS="${TAGS:-}" \
