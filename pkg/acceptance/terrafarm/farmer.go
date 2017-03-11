@@ -214,7 +214,7 @@ func (f *Farmer) NewClient(ctx context.Context, i int) (*client.DB, error) {
 	if err != nil {
 		return nil, err
 	}
-	return client.NewDB(client.NewSender(conn)), nil
+	return client.NewDB(client.NewSender(conn), f.RPCContext.LocalClock), nil
 }
 
 // PGUrl returns a URL string for the given node postgres server.

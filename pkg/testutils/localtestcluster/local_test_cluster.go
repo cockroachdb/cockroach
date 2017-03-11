@@ -109,7 +109,7 @@ func (ltc *LocalTestCluster) Start(t testing.TB, baseCtx *base.Config, initSende
 		dbCtx := client.DefaultDBContext()
 		ltc.DBContext = &dbCtx
 	}
-	ltc.DB = client.NewDBWithContext(ltc.Sender, *ltc.DBContext)
+	ltc.DB = client.NewDBWithContext(ltc.Sender, ltc.Clock, *ltc.DBContext)
 	transport := storage.NewDummyRaftTransport()
 	cfg := storage.TestStoreConfig(ltc.Clock)
 	// Disable the replica scanner and split queue, which confuse tests using

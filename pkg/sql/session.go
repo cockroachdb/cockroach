@@ -379,7 +379,9 @@ func (ts *txnState) resetForNewSQLTxn(e *Executor, s *Session) {
 	ts.mon.Start(ctx, &s.mon, mon.BoundAccount{})
 
 	ts.txn = client.NewTxn(ts.Ctx, *e.cfg.DB)
-	ts.txn.Proto.Isolation = s.DefaultIsolationLevel
+	if err := ts.txn.SetIsolation(s.DefaultIsolationLevel); err != nil {
+		panic(err)
+	}
 	ts.State = Open
 
 	// Discard the old schemaChangers, if any.
@@ -401,7 +403,7 @@ func (ts *txnState) resetStateAndTxn(state TxnStateEnum) {
 	if ts.txn != nil && !ts.txn.IsFinalized() {
 		panic(fmt.Sprintf(
 			"attempting to move SQL txn to state %s inconsistent with KV txn state: %s "+
-				"(finalized: %t)", state, ts.txn.Proto.Status, ts.txn.IsFinalized()))
+				"(finalized: false)", state, ts.txn.Proto().Status))
 	}
 	ts.State = state
 	ts.txn = nil
@@ -436,7 +438,10 @@ func (ts *txnState) updateStateAndCleanupOnErr(err error, e *Executor) {
 	if err == nil {
 		panic("updateStateAndCleanupOnErr called with no error")
 	}
-	if retErr, ok := err.(*roachpb.RetryableTxnError); !ok || !ts.willBeRetried() || !client.IsRetryableErrMeantForTxn(retErr, ts.txn) {
+	if retErr, ok := err.(*roachpb.RetryableTxnError); !ok ||
+		!ts.willBeRetried() ||
+		!ts.txn.IsRetryableErrMeantForTxn(retErr) {
+
 		// We can't or don't want to retry this txn, so the txn is over.
 		e.TxnAbortCount.Inc(1)
 		// This call rolls back a PENDING transaction and cleans up all its

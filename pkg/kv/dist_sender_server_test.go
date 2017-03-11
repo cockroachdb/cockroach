@@ -1078,12 +1078,12 @@ func TestPropagateTxnOnError(t *testing.T) {
 		epoch++
 		if epoch >= 2 {
 			// Writing must be true since we ran the BeginTransaction command.
-			if !txn.Proto.Writing {
+			if !txn.Proto().Writing {
 				t.Errorf("unexpected non-writing txn")
 			}
 		} else {
 			// Writing must be false since we haven't run any write command.
-			if txn.Proto.Writing {
+			if txn.Proto().Writing {
 				t.Errorf("unexpected writing txn")
 			}
 		}

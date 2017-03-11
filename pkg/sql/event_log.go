@@ -110,7 +110,7 @@ VALUES(
 )
 `
 	args := []interface{}{
-		ev.selectEventTimestamp(txn.Proto.Timestamp),
+		ev.selectEventTimestamp(txn.Proto().Timestamp),
 		eventType,
 		targetID,
 		reportingID,
