@@ -16,12 +16,10 @@ package testutils
 
 import "github.com/cockroachdb/cockroach/pkg/util/envutil"
 
-// StressEnv is the environment variable used to signal that the process is
-// running as part of CockroachDB's nightly stress tests.
-const StressEnv = "COCKROACH_NIGHTLY_STRESS"
+var stress = envutil.EnvOrDefaultBool("COCKROACH_STRESS", false)
 
 // Stress returns true iff the process is running as part of CockroachDB's
 // nightly stress tests.
 func Stress() bool {
-	return envutil.EnvOrDefaultBool(StressEnv, false)
+	return stress
 }
