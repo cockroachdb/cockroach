@@ -71,7 +71,7 @@ type Session struct {
 
 	// ApplicationName is the name of the application running the
 	// current session. This can be used for logging and per-application
-	// statistics.
+	// statistics. Change via resetApplicationName().
 	ApplicationName string
 	// Database indicates the "current" database for the purpose of
 	// resolving names. See searchAndQualifyDatabase() for details.
@@ -152,6 +152,8 @@ type Session struct {
 
 	// memMetrics track memory usage by SQL execution.
 	memMetrics *MemoryMetrics
+	// appStats track per-application SQL usage statistics.
+	appStats *appStats
 
 	// noCopy is placed here to guarantee that Session objects are not
 	// copied.
@@ -172,23 +174,24 @@ func NewSession(
 ) *Session {
 	ctx = e.AnnotateCtx(ctx)
 	s := &Session{
-		ApplicationName: args.ApplicationName,
-		Database:        args.Database,
-		SearchPath:      parser.SearchPath{"pg_catalog"},
-		User:            args.User,
-		Location:        time.UTC,
-		virtualSchemas:  e.virtualSchemas,
-		memMetrics:      memMetrics,
+		Database:       args.Database,
+		SearchPath:     parser.SearchPath{"pg_catalog"},
+		User:           args.User,
+		Location:       time.UTC,
+		virtualSchemas: e.virtualSchemas,
+		memMetrics:     memMetrics,
 	}
 	cfg, cache := e.getSystemConfig()
 	s.planner = planner{
 		leaseMgr:       e.cfg.LeaseManager,
+		sqlStats:       &e.sqlStats,
 		systemConfig:   cfg,
 		databaseCache:  cache,
 		session:        s,
 		execCfg:        &e.cfg,
 		distSQLPlanner: e.distSQLPlanner,
 	}
+	s.resetApplicationName(args.ApplicationName)
 	s.PreparedStatements = makePreparedStatements(s)
 	s.PreparedPortals = makePreparedPortals(s)
 

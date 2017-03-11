@@ -243,6 +243,9 @@ type Executor struct {
 	systemConfigCond *sync.Cond
 
 	distSQLPlanner *distSQLPlanner
+
+	// Application-level SQL statistics
+	sqlStats sqlStats
 }
 
 // An ExecutorConfig encompasses the auxiliary objects and configuration
@@ -326,6 +329,7 @@ func NewExecutor(cfg ExecutorConfig, stopper *stop.Stopper) *Executor {
 		DdlCount:    metric.NewCounter(MetaDdl),
 		MiscCount:   metric.NewCounter(MetaMisc),
 		QueryCount:  metric.NewCounter(MetaQuery),
+		sqlStats:    sqlStats{apps: make(map[string]*appStats)},
 	}
 }
 
@@ -1420,6 +1424,7 @@ func (e *Executor) execStmt(
 		execDuration := timeutil.Since(tStart).Nanoseconds()
 		e.SQLExecLatency.RecordValue(execDuration)
 	}
+	planMaker.session.appStats.registerQuery()
 	return result, err
 }
 
