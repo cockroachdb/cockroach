@@ -537,30 +537,31 @@ func rerunBackground() error {
 	return sdnotify.Exec(cmd)
 }
 
-func getGRPCConn() (*grpc.ClientConn, *stop.Stopper, error) {
+func getGRPCConn() (*grpc.ClientConn, *hlc.Clock, *stop.Stopper, error) {
+	// 0 to disable max offset checks; this RPC context is not a member of the
+	// cluster, so there's no need to enforce that its max offset is the same
+	// as that of nodes in the cluster.
+	clock := hlc.NewClock(hlc.UnixNano, 0)
 	stopper := stop.NewStopper()
 	rpcContext := rpc.NewContext(
 		log.AmbientContext{},
 		serverCfg.Config,
-		// 0 to disable max offset checks; this RPC context is not a member of the
-		// cluster, so there's no need to enforce that its max offset is the same
-		// as that of nodes in the cluster.
-		hlc.NewClock(hlc.UnixNano, 0),
+		clock,
 		stopper,
 	)
 	addr, err := addrWithDefaultHost(serverCfg.AdvertiseAddr)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	conn, err := rpcContext.GRPCDial(addr)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
-	return conn, stopper, nil
+	return conn, clock, stopper, nil
 }
 
 func getAdminClient() (serverpb.AdminClient, *stop.Stopper, error) {
-	conn, stopper, err := getGRPCConn()
+	conn, _, stopper, err := getGRPCConn()
 	if err != nil {
 		return nil, nil, err
 	}

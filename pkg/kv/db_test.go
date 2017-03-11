@@ -57,7 +57,7 @@ func createTestClientForUser(
 	if err != nil {
 		t.Fatal(err)
 	}
-	return client.NewDB(client.NewSender(conn))
+	return client.NewDB(client.NewSender(conn), s.Clock())
 }
 
 // TestKVDBCoverage verifies that all methods may be invoked on the

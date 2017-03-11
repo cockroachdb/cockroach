@@ -47,11 +47,11 @@ func addrWithDefaultHost(addr string) (string, error) {
 
 // MakeDBClient creates a kv client for use in cli tools.
 func MakeDBClient() (*client.DB, *stop.Stopper, error) {
-	conn, stopper, err := getGRPCConn()
+	conn, clock, stopper, err := getGRPCConn()
 	if err != nil {
 		return nil, nil, err
 	}
-	return client.NewDB(client.NewSender(conn)), stopper, nil
+	return client.NewDB(client.NewSender(conn), clock), stopper, nil
 }
 
 // unquoteArg unquotes the provided argument using Go double-quoted

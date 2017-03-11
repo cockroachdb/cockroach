@@ -211,7 +211,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		s.stopper,
 		txnMetrics,
 	)
-	s.db = client.NewDB(s.txnCoordSender)
+	s.db = client.NewDB(s.txnCoordSender, s.clock)
 
 	active, renewal := storage.NodeLivenessDurations(
 		storage.RaftElectionTimeout(s.cfg.RaftTickInterval, s.cfg.RaftElectionTimeoutTicks))

@@ -135,7 +135,7 @@ func createTestClientForUser(
 	if err != nil {
 		t.Fatal(err)
 	}
-	return client.NewDBWithContext(client.NewSender(conn), dbCtx)
+	return client.NewDBWithContext(client.NewSender(conn), s.Clock(), dbCtx)
 }
 
 // createTestNotifyClient creates a new client which connects using an HTTP
@@ -147,7 +147,7 @@ func createTestNotifyClient(
 	sender := &notifyingSender{wrapped: db.GetSender()}
 	dbCtx := client.DefaultDBContext()
 	dbCtx.UserPriority = priority
-	return client.NewDBWithContext(sender, dbCtx), sender
+	return client.NewDBWithContext(sender, s.Clock(), dbCtx), sender
 }
 
 // TestClientRetryNonTxn verifies that non-transactional client will
@@ -343,7 +343,7 @@ func TestClientRunTransaction(t *testing.T) {
 		})
 
 		if commit != (err == nil) {
-			t.Errorf("expected success? %t; got %s", commit, err)
+			t.Errorf("expected success? %t; got %v", commit, err)
 		} else if !commit && !testutils.IsError(err, "purposefully failing transaction") {
 			t.Errorf("unexpected failure with !commit: %v", err)
 		}
@@ -352,11 +352,109 @@ func TestClientRunTransaction(t *testing.T) {
 		gr, err := db.Get(context.TODO(), key)
 		if commit {
 			if err != nil || gr.Value == nil || !bytes.Equal(gr.ValueBytes(), value) {
-				t.Errorf("expected success reading value: %+v, %s", gr.Value, err)
+				t.Errorf("expected success reading value: %+v, %v", gr.Value, err)
 			}
 		} else {
 			if err != nil || gr.Value != nil {
-				t.Errorf("expected success and nil value: %+v, %s", gr.Value, err)
+				t.Errorf("expected success and nil value: %+v, %v", gr.Value, err)
+			}
+		}
+	}
+}
+
+// TestClientRunConcurrentTransaction verifies some simple transaction isolation
+// semantics while accessing the Txn object from multiple goroutines concurrently.
+func TestClientRunConcurrentTransaction(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop()
+	dbCtx := client.DefaultDBContext()
+	db := createTestClientForUser(t, s, security.NodeUser, dbCtx)
+
+	for _, commit := range []bool{true, false} {
+		value := []byte("value")
+		keySuffixes := "abc"
+		keys := make([][]byte, len(keySuffixes))
+		for j, s := range keySuffixes {
+			keys[j] = []byte(fmt.Sprintf("%s/key-%t/%s", testUser, commit, string(s)))
+		}
+
+		// Use snapshot isolation so non-transactional read can always push.
+		err := db.Txn(context.TODO(), func(txn *client.Txn) error {
+			if err := txn.SetIsolation(enginepb.SNAPSHOT); err != nil {
+				return err
+			}
+
+			// We can't use syncutil.WaitGroupWithError here, because we need
+			// to return any TxnAborted errors if we see them.
+			var wg sync.WaitGroup
+			concErrs := make([]error, len(keys))
+			for i, key := range keys {
+				wg.Add(1)
+				go func(i int, key []byte) {
+					defer wg.Done()
+					// Put transactional value.
+					if err := txn.Put(key, value); err != nil {
+						concErrs[i] = err
+						return
+					}
+					// Attempt to read outside of txn. We need to guarantee that the
+					// BeginTxnRequest has finished or we risk aborting the transaction.
+					if gr, err := db.Get(context.TODO(), key); err != nil {
+						concErrs[i] = err
+						return
+					} else if gr.Value != nil {
+						concErrs[i] = errors.Errorf("expected nil value; got %+v", gr.Value)
+						return
+					}
+					// Read within the transaction.
+					if gr, err := txn.Get(key); err != nil {
+						concErrs[i] = err
+						return
+					} else if gr.Value == nil || !bytes.Equal(gr.ValueBytes(), value) {
+						concErrs[i] = errors.Errorf("expected value %q; got %q", value, gr.ValueBytes())
+						return
+					}
+				}(i, key)
+			}
+			wg.Wait()
+
+			// Check for any TxnAborted errors before deferring to any other errors.
+			var anyError error
+			for _, err := range concErrs {
+				if err != nil {
+					anyError = err
+					if _, ok := err.(*roachpb.RetryableTxnError); ok {
+						return err
+					}
+				}
+			}
+			if anyError != nil {
+				return anyError
+			}
+			if !commit {
+				return errors.Errorf("purposefully failing transaction")
+			}
+			return nil
+		})
+
+		if commit != (err == nil) {
+			t.Errorf("expected success? %t; got %v", commit, err)
+		} else if !commit && !testutils.IsError(err, "purposefully failing transaction") {
+			t.Errorf("unexpected failure with !commit: %v", err)
+		}
+
+		// Verify the values are now visible on commit == true, and not visible otherwise.
+		for _, key := range keys {
+			gr, err := db.Get(context.TODO(), key)
+			if commit {
+				if err != nil || gr.Value == nil || !bytes.Equal(gr.ValueBytes(), value) {
+					t.Errorf("expected success reading value: %+v, %v", gr.Value, err)
+				}
+			} else {
+				if err != nil || gr.Value != nil {
+					t.Errorf("expected success and nil value: %+v, %v", gr.Value, err)
+				}
 			}
 		}
 	}
@@ -802,7 +900,8 @@ func TestInconsistentReads(t *testing.T) {
 		}
 		return ba.CreateReply(), nil
 	}
-	db := client.NewDB(senderFn)
+	clock := hlc.NewClock(hlc.UnixNano, 0)
+	db := client.NewDB(senderFn, clock)
 	ctx := context.TODO()
 
 	prepInconsistent := func() *client.Batch {

@@ -140,7 +140,7 @@ func (s *Store) logSplit(
 	}
 	infoStr := string(infoBytes)
 	return s.insertRangeLogEvent(ctx, txn, rangeLogEvent{
-		timestamp:    selectEventTimestamp(s, txn.Proto.Timestamp),
+		timestamp:    selectEventTimestamp(s, txn.Proto().Timestamp),
 		rangeID:      updatedDesc.RangeID,
 		eventType:    RangeEventLogSplit,
 		storeID:      s.StoreID(),
@@ -189,7 +189,7 @@ func (s *Store) logChange(
 	}
 	infoStr := string(infoBytes)
 	return s.insertRangeLogEvent(ctx, txn, rangeLogEvent{
-		timestamp: selectEventTimestamp(s, txn.Proto.Timestamp),
+		timestamp: selectEventTimestamp(s, txn.Proto().Timestamp),
 		rangeID:   desc.RangeID,
 		eventType: logType,
 		storeID:   s.StoreID(),
