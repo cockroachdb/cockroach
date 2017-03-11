@@ -65,8 +65,7 @@ type Datum interface {
 
 	// Compare returns -1 if the receiver is less than other, 0 if receiver is
 	// equal to other and +1 if receiver is greater than other.
-	// TODO(nvanbenschoten) Should we look into merging this with cmpOps?
-	Compare(other Datum) int
+	Compare(ctx *EvalContext, other Datum) int
 
 	// Prev returns the previous datum and true, if one exists, or nil
 	// and false.  The previous datum satisfied the following
@@ -111,15 +110,13 @@ type Datum interface {
 // Datums is a slice of Datum values.
 type Datums []Datum
 
-// Datums implements sort.Interface.
-func (d *Datums) Len() int           { return len(*d) }
-func (d *Datums) Less(i, j int) bool { return (*d)[i].Compare((*d)[j]) < 0 }
-func (d *Datums) Swap(i, j int)      { (*d)[i], (*d)[j] = (*d)[j], (*d)[i] }
+// Len returns the number of Datum values.
+func (d *Datums) Len() int { return len(*d) }
 
 // Reverse reverses the order of the Datum values.
 func (d *Datums) Reverse() {
 	for i, j := 0, d.Len()-1; i < j; i, j = i+1, j-1 {
-		d.Swap(i, j)
+		(*d)[i], (*d)[j] = (*d)[j], (*d)[i]
 	}
 }
 
@@ -191,7 +188,7 @@ func (*DBool) ResolvedType() Type {
 }
 
 // Compare implements the Datum interface.
-func (d *DBool) Compare(other Datum) int {
+func (d *DBool) Compare(ctx *EvalContext, other Datum) int {
 	if other == DNull {
 		// NULL is less than any non-NULL value.
 		return 1
@@ -300,18 +297,19 @@ func (*DInt) ResolvedType() Type {
 }
 
 // Compare implements the Datum interface.
-func (d *DInt) Compare(other Datum) int {
+func (d *DInt) Compare(ctx *EvalContext, other Datum) int {
 	if other == DNull {
 		// NULL is less than any non-NULL value.
 		return 1
 	}
-	v, ok := AsDInt(other)
-	if !ok {
-		cmp, ok := mixedTypeCompare(d, other)
-		if !ok {
-			panic(makeUnsupportedComparisonMessage(d, other))
-		}
-		return cmp
+	var v DInt
+	switch t := UnwrapDatum(other).(type) {
+	case *DInt:
+		v = *t
+	case *DFloat, *DDecimal:
+		return -t.Compare(ctx, d)
+	default:
+		panic(makeUnsupportedComparisonMessage(d, other))
 	}
 	if *d < v {
 		return -1
@@ -393,31 +391,34 @@ func (*DFloat) ResolvedType() Type {
 }
 
 // Compare implements the Datum interface.
-func (d *DFloat) Compare(other Datum) int {
+func (d *DFloat) Compare(ctx *EvalContext, other Datum) int {
 	if other == DNull {
 		// NULL is less than any non-NULL value.
 		return 1
 	}
-	v, ok := other.(*DFloat)
-	if !ok {
-		cmp, ok := mixedTypeCompare(d, other)
-		if !ok {
-			panic(makeUnsupportedComparisonMessage(d, other))
-		}
-		return cmp
+	var v DFloat
+	switch t := UnwrapDatum(other).(type) {
+	case *DFloat:
+		v = *t
+	case *DInt:
+		v = DFloat(MustBeDInt(t))
+	case *DDecimal:
+		return -t.Compare(ctx, d)
+	default:
+		panic(makeUnsupportedComparisonMessage(d, other))
 	}
-	if *d < *v {
+	if *d < v {
 		return -1
 	}
-	if *d > *v {
+	if *d > v {
 		return 1
 	}
 	// NaN sorts before non-NaN (#10109).
-	if *d == *v {
+	if *d == v {
 		return 0
 	}
 	if math.IsNaN(float64(*d)) {
-		if math.IsNaN(float64(*v)) {
+		if math.IsNaN(float64(v)) {
 			return 0
 		}
 		return -1
@@ -502,20 +503,25 @@ func (*DDecimal) ResolvedType() Type {
 }
 
 // Compare implements the Datum interface.
-func (d *DDecimal) Compare(other Datum) int {
+func (d *DDecimal) Compare(ctx *EvalContext, other Datum) int {
 	if other == DNull {
 		// NULL is less than any non-NULL value.
 		return 1
 	}
-	v, ok := other.(*DDecimal)
-	if !ok {
-		cmp, ok := mixedTypeCompare(d, other)
-		if !ok {
-			panic(makeUnsupportedComparisonMessage(d, other))
+	v := ctx.getTmpDec()
+	switch t := UnwrapDatum(other).(type) {
+	case *DDecimal:
+		v = &t.Decimal
+	case *DInt:
+		v.SetCoefficient(int64(*t)).SetExponent(0)
+	case *DFloat:
+		if _, err := v.SetFloat64(float64(*t)); err != nil {
+			panic(err)
 		}
-		return cmp
+	default:
+		panic(makeUnsupportedComparisonMessage(d, other))
 	}
-	return d.Cmp(&v.Decimal)
+	return d.Cmp(v)
 }
 
 // Prev implements the Datum interface.
@@ -602,7 +608,7 @@ func (*DString) ResolvedType() Type {
 }
 
 // Compare implements the Datum interface.
-func (d *DString) Compare(other Datum) int {
+func (d *DString) Compare(ctx *EvalContext, other Datum) int {
 	if other == DNull {
 		// NULL is less than any non-NULL value.
 		return 1
@@ -725,7 +731,7 @@ func (d *DCollatedString) ResolvedType() Type {
 }
 
 // Compare implements the Datum interface.
-func (d *DCollatedString) Compare(other Datum) int {
+func (d *DCollatedString) Compare(ctx *EvalContext, other Datum) int {
 	if other == DNull {
 		// NULL is less than any non-NULL value.
 		return 1
@@ -788,7 +794,7 @@ func (*DBytes) ResolvedType() Type {
 }
 
 // Compare implements the Datum interface.
-func (d *DBytes) Compare(other Datum) int {
+func (d *DBytes) Compare(ctx *EvalContext, other Datum) int {
 	if other == DNull {
 		// NULL is less than any non-NULL value.
 		return 1
@@ -908,19 +914,24 @@ func (*DDate) ResolvedType() Type {
 }
 
 // Compare implements the Datum interface.
-func (d *DDate) Compare(other Datum) int {
+func (d *DDate) Compare(ctx *EvalContext, other Datum) int {
 	if other == DNull {
 		// NULL is less than any non-NULL value.
 		return 1
 	}
-	v, ok := other.(*DDate)
-	if !ok {
+	var v DDate
+	switch t := other.(type) {
+	case *DDate:
+		v = *t
+	case *DTimestamp, *DTimestampTZ:
+		return compareTimestamps(ctx, d, other)
+	default:
 		panic(makeUnsupportedComparisonMessage(d, other))
 	}
-	if *d < *v {
+	if *d < v {
 		return -1
 	}
-	if *v < *d {
+	if v < *d {
 		return 1
 	}
 	return 0
@@ -1063,23 +1074,41 @@ func (*DTimestamp) ResolvedType() Type {
 	return TypeTimestamp
 }
 
+func timeFromDatum(ctx *EvalContext, d Datum) (time.Time, bool) {
+	switch t := d.(type) {
+	case *DDate:
+		return MakeDTimestampTZFromDate(ctx.GetLocation(), t).Time, true
+	case *DTimestampTZ:
+		return t.Time, true
+	case *DTimestamp:
+		return t.Time, true
+	default:
+		return time.Time{}, false
+	}
+}
+
+func compareTimestamps(ctx *EvalContext, l Datum, r Datum) int {
+	lTime, lOk := timeFromDatum(ctx, l)
+	rTime, rOk := timeFromDatum(ctx, r)
+	if !lOk || !rOk {
+		panic(makeUnsupportedComparisonMessage(l, r))
+	}
+	if lTime.Before(rTime) {
+		return -1
+	}
+	if rTime.Before(lTime) {
+		return 1
+	}
+	return 0
+}
+
 // Compare implements the Datum interface.
-func (d *DTimestamp) Compare(other Datum) int {
+func (d *DTimestamp) Compare(ctx *EvalContext, other Datum) int {
 	if other == DNull {
 		// NULL is less than any non-NULL value.
 		return 1
 	}
-	v, ok := other.(*DTimestamp)
-	if !ok {
-		panic(makeUnsupportedComparisonMessage(d, other))
-	}
-	if d.Before(v.Time) {
-		return -1
-	}
-	if v.Before(d.Time) {
-		return 1
-	}
-	return 0
+	return compareTimestamps(ctx, d, other)
 }
 
 // Prev implements the Datum interface.
@@ -1171,22 +1200,12 @@ func (*DTimestampTZ) ResolvedType() Type {
 }
 
 // Compare implements the Datum interface.
-func (d *DTimestampTZ) Compare(other Datum) int {
+func (d *DTimestampTZ) Compare(ctx *EvalContext, other Datum) int {
 	if other == DNull {
 		// NULL is less than any non-NULL value.
 		return 1
 	}
-	v, ok := other.(*DTimestampTZ)
-	if !ok {
-		panic(makeUnsupportedComparisonMessage(d, other))
-	}
-	if d.Before(v.Time) {
-		return -1
-	}
-	if v.Before(d.Time) {
-		return 1
-	}
-	return 0
+	return compareTimestamps(ctx, d, other)
 }
 
 // Prev implements the Datum interface.
@@ -1378,7 +1397,7 @@ func (*DInterval) ResolvedType() Type {
 }
 
 // Compare implements the Datum interface.
-func (d *DInterval) Compare(other Datum) int {
+func (d *DInterval) Compare(ctx *EvalContext, other Datum) int {
 	if other == DNull {
 		// NULL is less than any non-NULL value.
 		return 1
@@ -1495,7 +1514,7 @@ func (d *DTuple) ResolvedType() Type {
 }
 
 // Compare implements the Datum interface.
-func (d *DTuple) Compare(other Datum) int {
+func (d *DTuple) Compare(ctx *EvalContext, other Datum) int {
 	if other == DNull {
 		// NULL is less than any non-NULL value.
 		return 1
@@ -1509,7 +1528,7 @@ func (d *DTuple) Compare(other Datum) int {
 		n = len(v.D)
 	}
 	for i := 0; i < n; i++ {
-		c := d.D[i].Compare(v.D[i])
+		c := d.D[i].Compare(ctx, v.D[i])
 		if c != 0 {
 			return c
 		}
@@ -1656,32 +1675,34 @@ func (d *DTuple) AssertSorted() {
 // SearchSorted searches the tuple for the target Datum, returning an int with
 // the same contract as sort.Search and a boolean flag signifying whether the datum
 // was found. It assumes that the DTuple is sorted and panics if it is not.
-func (d *DTuple) SearchSorted(target Datum) (int, bool) {
+func (d *DTuple) SearchSorted(ctx *EvalContext, target Datum) (int, bool) {
 	d.AssertSorted()
 	i := sort.Search(len(d.D), func(i int) bool {
-		return d.D[i].Compare(target) >= 0
+		return d.D[i].Compare(ctx, target) >= 0
 	})
-	found := i < len(d.D) && d.D[i].Compare(target) == 0
+	found := i < len(d.D) && d.D[i].Compare(ctx, target) == 0
 	return i, found
 }
 
 // Normalize sorts and uniques the datum tuple.
-func (d *DTuple) Normalize() {
-	d.sort()
-	d.makeUnique()
+func (d *DTuple) Normalize(ctx *EvalContext) {
+	d.sort(ctx)
+	d.makeUnique(ctx)
 }
 
-func (d *DTuple) sort() {
+func (d *DTuple) sort(ctx *EvalContext) {
 	if !d.Sorted {
-		sort.Sort(&d.D)
+		sort.Slice(d.D, func(i, j int) bool {
+			return d.D[i].Compare(ctx, d.D[j]) < 0
+		})
 		d.Sorted = true
 	}
 }
 
-func (d *DTuple) makeUnique() {
+func (d *DTuple) makeUnique(ctx *EvalContext) {
 	n := 0
 	for i := 0; i < len(d.D); i++ {
-		if n == 0 || d.D[n-1].Compare(d.D[i]) < 0 {
+		if n == 0 || d.D[n-1].Compare(ctx, d.D[i]) < 0 {
 			d.D[n] = d.D[i]
 			n++
 		}
@@ -1701,7 +1722,7 @@ func (d *DTuple) Size() uintptr {
 
 // SortedDifference finds the elements of d which are not in other,
 // assuming that d and other are already sorted.
-func (d *DTuple) SortedDifference(other *DTuple) *DTuple {
+func (d *DTuple) SortedDifference(ctx *EvalContext, other *DTuple) *DTuple {
 	d.AssertSorted()
 	other.AssertSorted()
 
@@ -1709,7 +1730,7 @@ func (d *DTuple) SortedDifference(other *DTuple) *DTuple {
 	a := d.D
 	b := other.D
 	for len(a) > 0 && len(b) > 0 {
-		switch a[0].Compare(b[0]) {
+		switch a[0].Compare(ctx, b[0]) {
 		case -1:
 			res.D = append(res.D, a[0])
 			a = a[1:]
@@ -1731,7 +1752,7 @@ func (dNull) ResolvedType() Type {
 }
 
 // Compare implements the Datum interface.
-func (d dNull) Compare(other Datum) int {
+func (d dNull) Compare(ctx *EvalContext, other Datum) int {
 	if other == DNull {
 		return 0
 	}
@@ -1826,7 +1847,7 @@ func (d *DArray) ResolvedType() Type {
 }
 
 // Compare implements the Datum interface.
-func (d *DArray) Compare(other Datum) int {
+func (d *DArray) Compare(ctx *EvalContext, other Datum) int {
 	if other == DNull {
 		// NULL is less than any non-NULL value.
 		return 1
@@ -1840,7 +1861,7 @@ func (d *DArray) Compare(other Datum) int {
 		n = v.Len()
 	}
 	for i := 0; i < n; i++ {
-		c := d.Array[i].Compare(v.Array[i])
+		c := d.Array[i].Compare(ctx, v.Array[i])
 		if c != 0 {
 			return c
 		}
@@ -1902,16 +1923,9 @@ func (d *DArray) Format(buf *bytes.Buffer, f FmtFlags) {
 	buf.WriteByte('}')
 }
 
+// Len returns the length of the Datum array.
 func (d *DArray) Len() int {
 	return len(d.Array)
-}
-
-func (d *DArray) Less(i, j int) bool {
-	return d.Array[i].Compare(d.Array[j]) < 0
-}
-
-func (d *DArray) Swap(i, j int) {
-	d.Array[i], d.Array[j] = d.Array[j], d.Array[i]
 }
 
 // Size implements the Datum interface.
@@ -1976,7 +1990,7 @@ func (t *DTable) ResolvedType() Type {
 }
 
 // Compare implements the Datum interface.
-func (t *DTable) Compare(other Datum) int {
+func (t *DTable) Compare(ctx *EvalContext, other Datum) int {
 	if o, ok := other.(*DTable); ok {
 		if o.ValueGenerator == t.ValueGenerator {
 			return 0
@@ -2035,7 +2049,7 @@ func (d *DOid) AsRegProc(name string) *DOid {
 func (*DOid) AmbiguousFormat() bool { return true }
 
 // Compare implements the Datum interface.
-func (d *DOid) Compare(other Datum) int {
+func (d *DOid) Compare(ctx *EvalContext, other Datum) int {
 	if other == DNull {
 		// NULL is less than any non-NULL value.
 		return 1
@@ -2162,15 +2176,15 @@ func (d *DOidWrapper) ResolvedType() Type {
 }
 
 // Compare implements the Datum interface.
-func (d *DOidWrapper) Compare(other Datum) int {
+func (d *DOidWrapper) Compare(ctx *EvalContext, other Datum) int {
 	if other == DNull {
 		// NULL is less than any non-NULL value.
 		return 1
 	}
 	if v, ok := other.(*DOidWrapper); ok {
-		return d.Wrapped.Compare(v.Wrapped)
+		return d.Wrapped.Compare(ctx, v.Wrapped)
 	}
-	return d.Wrapped.Compare(other)
+	return d.Wrapped.Compare(ctx, other)
 }
 
 // Prev implements the Datum interface.
@@ -2239,39 +2253,4 @@ func NewDName(d string) Datum {
 // (implemented as a *DOidWrapper) initialized from an existing *DArray.
 func NewDIntVectorFromDArray(d *DArray) Datum {
 	return wrapWithOid(d, oid.T_int2vector)
-}
-
-// Temporary workaround for #3633, allowing comparisons between
-// heterogeneous types.
-// TODO(nvanbenschoten) Now that typing is improved, can we get rid of this?
-func mixedTypeCompare(l, r Datum) (int, bool) {
-	ltype := l.ResolvedType()
-	rtype := r.ResolvedType()
-	// Check equality.
-	eqOp, ok := CmpOps[EQ].lookupImpl(ltype, rtype)
-	if !ok {
-		return 0, false
-	}
-	ctx := &EvalContext{}
-	eq, err := eqOp.fn(ctx, l, r)
-	if err != nil {
-		panic(err)
-	}
-	if eq {
-		return 0, true
-	}
-
-	// Check less than.
-	ltOp, ok := CmpOps[LT].lookupImpl(ltype, rtype)
-	if !ok {
-		return 0, false
-	}
-	lt, err := ltOp.fn(ctx, l, r)
-	if err != nil {
-		panic(err)
-	}
-	if lt {
-		return -1, true
-	}
-	return 1, true
 }

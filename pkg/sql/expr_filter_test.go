@@ -119,6 +119,7 @@ func TestSplitFilter(t *testing.T) {
 
 	for _, d := range testData {
 		t.Run(fmt.Sprintf("%s~(%s, %s)", d.expr, d.expectedRes, d.expectedRem), func(t *testing.T) {
+			evalCtx := &parser.EvalContext{}
 			sel := makeSelectNode(t)
 			// A function that "converts" only vars in the list.
 			conv := func(expr parser.VariableExpr) (bool, parser.Expr) {
@@ -133,7 +134,7 @@ func TestSplitFilter(t *testing.T) {
 				}
 				return false, nil
 			}
-			expr := parseAndNormalizeExpr(t, d.expr, sel)
+			expr := parseAndNormalizeExpr(t, evalCtx, d.expr, sel)
 			exprStr := expr.String()
 			res, rem := splitFilter(expr, conv)
 			// We use Sprint to handle the 'nil' case correctly.

@@ -20,6 +20,7 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -48,8 +49,9 @@ func TestDesiredAggregateOrder(t *testing.T) {
 	}
 	p := makeTestPlanner()
 	for _, d := range testData {
+		evalCtx := &parser.EvalContext{}
 		sel := makeSelectNode(t)
-		expr := parseAndNormalizeExpr(t, d.expr, sel)
+		expr := parseAndNormalizeExpr(t, evalCtx, d.expr, sel)
 		group := &groupNode{planner: p}
 		(extractAggregatesVisitor{n: group}).extract(expr)
 		ordering := desiredAggregateOrdering(group.funcs)

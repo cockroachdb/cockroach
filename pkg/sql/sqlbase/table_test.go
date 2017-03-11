@@ -184,6 +184,7 @@ func TestIndexKey(t *testing.T) {
 	}
 
 	for i, test := range tests {
+		evalCtx := &parser.EvalContext{}
 		tableDesc, colMap := makeTableDescForTest(test)
 		testValues := append(test.primaryValues, test.secondaryValues...)
 
@@ -214,7 +215,7 @@ func TestIndexKey(t *testing.T) {
 
 			for j, value := range values {
 				testValue := testValues[colMap[index.ColumnIDs[j]]]
-				if value.Compare(testValue) != 0 {
+				if value.Compare(evalCtx, testValue) != 0 {
 					t.Fatalf("%d: value %d got %q but expected %q", i, j, value, testValue)
 				}
 			}
