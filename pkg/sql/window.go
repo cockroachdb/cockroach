@@ -464,6 +464,7 @@ func (n *windowNode) Next(ctx context.Context) (bool, error) {
 }
 
 type partitionSorter struct {
+	evalCtx       *parser.EvalContext
 	rows          []parser.IndexedRow
 	windowDefVals *RowContainer
 	ordering      sqlbase.ColumnOrdering
@@ -483,7 +484,7 @@ func (n *partitionSorter) Compare(i, j int) int {
 	for _, o := range n.ordering {
 		da := defa[o.ColIdx]
 		db := defb[o.ColIdx]
-		if c := da.Compare(db); c != 0 {
+		if c := da.Compare(n.evalCtx, db); c != 0 {
 			if o.Direction != encoding.Ascending {
 				return -c
 			}
@@ -614,6 +615,7 @@ func (n *windowNode) computeWindows(ctx context.Context) error {
 				// If an ORDER BY clause is provided, order the partition and use the
 				// sorter as our peerGroupChecker.
 				sorter := &partitionSorter{
+					evalCtx:       &n.planner.evalCtx,
 					rows:          partition,
 					windowDefVals: n.wrappedWindowDefVals,
 					ordering:      windowFn.columnOrdering,
@@ -651,7 +653,7 @@ func (n *windowNode) computeWindows(ctx context.Context) error {
 
 				// Perform calculations on each row in the current peer group.
 				for ; frame.RowIdx < frame.FirstPeerIdx+frame.PeerRowCount; frame.RowIdx++ {
-					res, err := builtin.Compute(frame)
+					res, err := builtin.Compute(&n.planner.evalCtx, frame)
 					if err != nil {
 						return err
 					}

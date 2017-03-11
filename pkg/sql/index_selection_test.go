@@ -165,13 +165,14 @@ func makeTestIndexFromStr(
 
 func makeConstraints(
 	t *testing.T,
+	evalCtx *parser.EvalContext,
 	sql string,
 	desc *sqlbase.TableDescriptor,
 	index *sqlbase.IndexDescriptor,
 	sel *renderNode,
 ) (orIndexConstraints, parser.TypedExpr) {
-	expr := parseAndNormalizeExpr(t, sql, sel)
-	exprs, equiv := analyzeExpr(expr)
+	expr := parseAndNormalizeExpr(t, evalCtx, sql, sel)
+	exprs, equiv := analyzeExpr(evalCtx, expr)
 
 	c := &indexInfo{
 		desc:     desc,
@@ -312,9 +313,10 @@ func TestMakeConstraints(t *testing.T) {
 	}
 	for _, d := range testData {
 		t.Run(d.expr+"~"+d.expected, func(t *testing.T) {
+			evalCtx := &parser.EvalContext{}
 			sel := makeSelectNode(t)
 			desc, index := makeTestIndexFromStr(t, d.columns)
-			constraints, _ := makeConstraints(t, d.expr, desc, index, sel)
+			constraints, _ := makeConstraints(t, evalCtx, d.expr, desc, index, sel)
 			if s := constraints.String(); d.expected != s {
 				t.Errorf("%s, columns: %s: expected %s, but found %s", d.expr, d.columns, d.expected, s)
 			}
@@ -507,6 +509,7 @@ func TestMakeSpans(t *testing.T) {
 				expected = d.expectedDesc
 			}
 			t.Run(d.expr+"~"+expected, func(t *testing.T) {
+				evalCtx := &parser.EvalContext{}
 				sel := makeSelectNode(t)
 				columns := strings.Split(d.columns, ",")
 				dirs := make([]encoding.Direction, 0, len(columns))
@@ -514,7 +517,7 @@ func TestMakeSpans(t *testing.T) {
 					dirs = append(dirs, dir)
 				}
 				desc, index := makeTestIndex(t, columns, dirs)
-				constraints, _ := makeConstraints(t, d.expr, desc, index, sel)
+				constraints, _ := makeConstraints(t, evalCtx, d.expr, desc, index, sel)
 				spans := makeSpans(constraints, desc, index)
 				s := sqlbase.PrettySpans(spans, 2)
 				s = keys.MassagePrettyPrintedSpanForTest(s, indexToDirs(index))
@@ -551,9 +554,10 @@ func TestMakeSpans(t *testing.T) {
 	}
 	for _, d := range testData2 {
 		t.Run(d.expr+"~"+d.expected, func(t *testing.T) {
+			evalCtx := &parser.EvalContext{}
 			sel := makeSelectNode(t)
 			desc, index := makeTestIndexFromStr(t, d.columns)
-			constraints, _ := makeConstraints(t, d.expr, desc, index, sel)
+			constraints, _ := makeConstraints(t, evalCtx, d.expr, desc, index, sel)
 			spans := makeSpans(constraints, desc, index)
 			var got string
 			raw := false
@@ -626,10 +630,11 @@ func TestExactPrefix(t *testing.T) {
 	}
 	for _, d := range testData {
 		t.Run(fmt.Sprintf("%s~%d", d.expr, d.expected), func(t *testing.T) {
+			evalCtx := &parser.EvalContext{}
 			sel := makeSelectNode(t)
 			desc, index := makeTestIndexFromStr(t, d.columns)
-			constraints, _ := makeConstraints(t, d.expr, desc, index, sel)
-			prefix := constraints.exactPrefix()
+			constraints, _ := makeConstraints(t, evalCtx, d.expr, desc, index, sel)
+			prefix := constraints.exactPrefix(evalCtx)
 			if d.expected != prefix {
 				t.Errorf("%s: expected %d, but found %d", d.expr, d.expected, prefix)
 			}
@@ -701,10 +706,11 @@ func TestApplyConstraints(t *testing.T) {
 	}
 	for _, d := range testData {
 		t.Run(d.expr+"~"+d.expected, func(t *testing.T) {
+			evalCtx := &parser.EvalContext{}
 			sel := makeSelectNode(t)
 			desc, index := makeTestIndexFromStr(t, d.columns)
-			constraints, expr := makeConstraints(t, d.expr, desc, index, sel)
-			expr2 := applyIndexConstraints(expr, constraints)
+			constraints, expr := makeConstraints(t, evalCtx, d.expr, desc, index, sel)
+			expr2 := applyIndexConstraints(evalCtx, expr, constraints)
 			if s := fmt.Sprint(expr2); d.expected != s {
 				t.Errorf("%s: expected %s, but found %s (constraints %s)", d.expr, d.expected, s, constraints)
 			}

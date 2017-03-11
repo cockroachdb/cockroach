@@ -406,7 +406,7 @@ func (expr *ComparisonExpr) normalize(v *normalizeVisitor) TypedExpr {
 		tuple, ok := expr.Right.(*DTuple)
 		if ok {
 			tupleCopy := *tuple
-			tupleCopy.Normalize()
+			tupleCopy.Normalize(v.ctx)
 
 			// If the tuple only contains NULL values, Normalize will have reduced
 			// it to a single NULL value.
