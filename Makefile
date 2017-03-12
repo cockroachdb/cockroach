@@ -36,6 +36,7 @@ TESTFLAGS    :=
 STRESSFLAGS  :=
 DUPLFLAGS    := -t 100
 COCKROACH    := ./cockroach
+ARCHIVE      := cockroach.src.tgz
 STARTFLAGS   := -s type=mem,size=1GiB --alsologtostderr
 BUILDMODE    := install
 BUILDTARGET  := .
@@ -91,6 +92,17 @@ endif
 
 export MACOSX_DEPLOYMENT_TARGET=10.9
 
+BUILDINFO_TAG := $(shell build/buildinfo.sh tag)
+BUILDINFO_REV := $(shell build/buildinfo.sh rev)
+ifeq ($(or $(BUILDINFO_TAG),$(BUILDINFO_REV)),)
+define msg
+Unable to determine the build tag and revision.
+If you are compiling without a Git checkout, you need to provide
+a .buildinfo directory with this information. See build/buildinfo.sh
+endef
+$(error $(msg))
+endif
+
 -include customenv.mk
 
 .PHONY: all
@@ -112,12 +124,16 @@ start: build
 start:
 	$(COCKROACH) start $(STARTFLAGS)
 
+.PHONY: install
+# The build.utcTime format must remain in sync with TimeFormat in pkg/build/info.go.
+install: override LDFLAGS += \
+	-X "github.com/cockroachdb/cockroach/pkg/build.tag=$(BUILDINFO_TAG)" \
+	-X "github.com/cockroachdb/cockroach/pkg/build.utcTime=$(shell date -u '+%Y/%m/%d %H:%M:%S')" \
+	-X "github.com/cockroachdb/cockroach/pkg/build.rev=$(BUILDINFO_REV)"
 # Note: We pass `-v` to `go build` and `go test -i` so that warnings
 # from the linker aren't suppressed. The usage of `-v` also shows when
 # dependencies are rebuilt which is useful when switching between
 # normal and race test builds.
-.PHONY: install
-install: override LDFLAGS += $(shell GOPATH=${GOPATH} build/ldflags.sh)
 install:
 	@echo "GOPATH set to $$GOPATH"
 	@echo "$$GOPATH/bin added to PATH"
@@ -239,11 +255,26 @@ checkshort:
 clean:
 	$(GO) clean $(GOFLAGS) -i github.com/cockroachdb/...
 	find . -name '*.test*' -type f -exec rm -f {} \;
-	rm -f .bootstrap
+	rm -f .bootstrap $(ARCHIVE)
 
 .PHONY: protobuf
 protobuf:
 	$(MAKE) -C .. -f cockroach/build/protobuf.mk
+
+# NOTE(benesch): git archive doesn't support `--recurse-submodules`, so we
+# manually construct a tree object that includes the vendor submodule at the
+# right path. A future version of Git will likely support this flag.
+$(ARCHIVE): export GIT_ALTERNATE_OBJECT_DIRECTORIES = $(shell git -C vendor rev-parse --git-path objects)
+$(ARCHIVE): export GIT_INDEX_FILE = .git/index_archive
+$(ARCHIVE):
+	rm -f $(GIT_INDEX_FILE)
+	git read-tree HEAD
+	build/buildinfo.sh inject-archive
+	git read-tree -i --prefix=vendor $$(git rev-parse :vendor)
+	git archive --output=$(ARCHIVE) --prefix=src/github.com/cockroachdb/cockroach/ $$(git write-tree)
+
+.PHONY: archive
+archive: $(ARCHIVE)
 
 # The .go-version target is phony so that it is rebuilt every time.
 .PHONY: .go-version
@@ -254,17 +285,20 @@ protobuf:
 
 include .go-version
 
+GIT_DIR := $(shell git rev-parse --git-dir 2> /dev/null)
+ifdef GIT_DIR
 # If we're in a git worktree, the git hooks directory may not be in our root,
 # so we ask git for the location.
 #
 # Note that `git rev-parse --git-path hooks` requires git 2.5+.
-GITHOOKSDIR := $(shell test -d .git && echo '.git/hooks' || git rev-parse --git-path hooks)
+GITHOOKSDIR := $(shell git rev-parse --git-path hooks || echo "$(GIT_DIR)/hooks")
 GITHOOKS := $(subst githooks/,$(GITHOOKSDIR)/,$(wildcard githooks/*))
 $(GITHOOKSDIR)/%: githooks/%
 	@echo installing $<
 	@rm -f $@
 	@mkdir -p $(dir $@)
 	@ln -s ../../$(basename $<) $(dir $@)
+endif
 
 GLOCK := ../../../../bin/glock
 #        ^  ^  ^  ^~ GOPATH
@@ -275,7 +309,9 @@ GLOCK := ../../../../bin/glock
 # Update the git hooks and run the bootstrap script whenever any
 # of them (or their dependencies) change.
 .bootstrap: $(GITHOOKS) GLOCKFILE glide.lock
+ifdef GIT_DIR
 	git submodule update --init
+endif
 	$(GO) install ./vendor/github.com/robfig/glock
 	@unset GIT_WORK_TREE; $(GLOCK) sync -n < GLOCKFILE
 	touch $@
