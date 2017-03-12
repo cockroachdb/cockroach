@@ -19,7 +19,6 @@ package sql
 import (
 	"bytes"
 	"fmt"
-	"sort"
 	"strings"
 
 	"golang.org/x/net/context"
@@ -29,33 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/pkg/errors"
 )
-
-const (
-	// PgServerVersion is the latest version of postgres that we claim to support.
-	PgServerVersion = "9.5.0"
-)
-
-var varGen = map[string]func(p *planner) string{
-	`application_name`:              func(p *planner) string { return p.session.ApplicationName },
-	`database`:                      func(p *planner) string { return p.session.Database },
-	`default_transaction_isolation`: func(p *planner) string { return p.session.DefaultIsolationLevel.String() },
-	`syntax`:                        func(p *planner) string { return p.session.Syntax.String() },
-	`time zone`:                     func(p *planner) string { return p.session.Location.String() },
-	`transaction isolation level`:   func(p *planner) string { return p.txn.Isolation().String() },
-	`transaction priority`:          func(p *planner) string { return p.txn.UserPriority().String() },
-	`max_index_keys`:                func(_ *planner) string { return "32" },
-	`search_path`:                   func(p *planner) string { return strings.Join(p.session.SearchPath, ", ") },
-	`server_version`:                func(_ *planner) string { return PgServerVersion },
-	`session_user`:                  func(p *planner) string { return p.session.User },
-}
-var varNames = func() []string {
-	res := make([]string, 0, len(varGen))
-	for vName := range varGen {
-		res = append(res, vName)
-	}
-	sort.Strings(res)
-	return res
-}()
 
 const (
 	checkSchemaQuery = `
@@ -168,12 +140,12 @@ func queryInfoSchema(
 // Show a session-local variable name.
 func (p *planner) Show(n *parser.Show) (planNode, error) {
 	origName := n.Name
-	name := strings.ToLower(n.Name)
+	name := strings.ToUpper(n.Name)
 
 	var columns ResultColumns
 
 	switch name {
-	case `all`:
+	case `ALL`:
 		columns = ResultColumns{
 			{Name: "Variable", Typ: parser.TypeString},
 			{Name: "Value", Typ: parser.TypeString},
@@ -182,7 +154,7 @@ func (p *planner) Show(n *parser.Show) (planNode, error) {
 		if _, ok := varGen[name]; !ok {
 			return nil, fmt.Errorf("unknown variable: %q", origName)
 		}
-		columns = ResultColumns{{Name: name, Typ: parser.TypeString}}
+		columns = ResultColumns{{Name: strings.ToLower(name), Typ: parser.TypeString}}
 	}
 
 	return &delayedNode{
@@ -192,12 +164,12 @@ func (p *planner) Show(n *parser.Show) (planNode, error) {
 			v := p.newContainerValuesNode(columns, 0)
 
 			switch name {
-			case `all`:
+			case `ALL`:
 				for _, vName := range varNames {
 					gen := varGen[vName]
-					value := gen(p)
+					value := gen.Get(p)
 					if _, err := v.rows.AddRow(
-						ctx, parser.Datums{parser.NewDString(vName), parser.NewDString(value)},
+						ctx, parser.Datums{parser.NewDString(strings.ToLower(vName)), parser.NewDString(value)},
 					); err != nil {
 						v.rows.Close(ctx)
 						return nil, err
@@ -207,7 +179,7 @@ func (p *planner) Show(n *parser.Show) (planNode, error) {
 				// The key in varGen is guaranteed to exist thanks to the
 				// check above.
 				gen := varGen[name]
-				value := gen(p)
+				value := gen.Get(p)
 				if _, err := v.rows.AddRow(ctx, parser.Datums{parser.NewDString(value)}); err != nil {
 					v.rows.Close(ctx)
 					return nil, err
