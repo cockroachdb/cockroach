@@ -33,8 +33,8 @@ import (
 // }
 import "C"
 
-// TimeFormat is the reference format for build.Time.
-// Make sure it stays in sync with the string passed by the linker in ldflags.sh.
+// TimeFormat is the reference format for build.Time. Make sure it stays in sync
+// with the string passed to the linker in the root Makefile.
 const TimeFormat = "2006/01/02 15:04:05"
 
 var (
