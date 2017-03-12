@@ -113,10 +113,12 @@ SHOW ALL
 application_name               helloworld
 database                       foo
 default_transaction_isolation  SERIALIZABLE
-max_index_keys                 32
+distsql                        off
+map_index_keys                 32
 search_path                    pg_catalog
 server_version                 9.5.0
 session_user                   root
+standard_conforming_strings    on
 syntax                         Modern
 time zone                      UTC
 transaction isolation level    SERIALIZABLE
