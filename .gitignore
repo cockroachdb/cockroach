@@ -13,6 +13,7 @@
 
 artifacts
 .bootstrap
+.buildinfo
 /cockroach
 /cockroach-data
 /cockroach-darwin*
