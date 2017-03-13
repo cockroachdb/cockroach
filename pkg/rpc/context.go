@@ -300,9 +300,11 @@ func (ctx *Context) ConnHealth(remoteAddr string) error {
 }
 
 func (ctx *Context) runHeartbeat(meta *connMeta, remoteAddr string) error {
+	maxOffset := ctx.LocalClock.MaxOffset()
+
 	request := PingRequest{
 		Addr:           ctx.Addr,
-		MaxOffsetNanos: ctx.LocalClock.MaxOffset().Nanoseconds(),
+		MaxOffsetNanos: maxOffset.Nanoseconds(),
 	}
 	heartbeatClient := NewHeartbeatClient(meta.conn)
 
@@ -311,8 +313,6 @@ func (ctx *Context) runHeartbeat(meta *connMeta, remoteAddr string) error {
 
 	// Give the first iteration a wait-free heartbeat attempt.
 	heartbeatTimer.Reset(0)
-
-	firstHeartbeat := true
 	for {
 		select {
 		case <-ctx.Stopper.ShouldStop():
@@ -321,16 +321,7 @@ func (ctx *Context) runHeartbeat(meta *connMeta, remoteAddr string) error {
 			heartbeatTimer.Read = true
 		}
 
-		// Give the first heartbeat extra time to complete successfully, in case
-		// the remote side is starting up.
-		timeout := ctx.HeartbeatTimeout
-		if firstHeartbeat {
-			timeout *= 100
-
-			firstHeartbeat = false
-		}
-
-		goCtx, cancel := context.WithTimeout(ctx.masterCtx, timeout)
+		goCtx, cancel := context.WithTimeout(ctx.masterCtx, ctx.HeartbeatTimeout)
 		sendTime := ctx.LocalClock.PhysicalTime()
 		// NB: We want the request to fail-fast (the default), otherwise we won't
 		// be notified of transport failures.
@@ -344,8 +335,14 @@ func (ctx *Context) runHeartbeat(meta *connMeta, remoteAddr string) error {
 		// close the connection so that all other pending RPCs (which may not have
 		// timeouts) fail eagerly. Any other error is likely to be noticed by
 		// other RPCs, so it's OK to leave the connection open while grpc
-		// internally reconnects if necessary.
-		if grpc.Code(err) == codes.DeadlineExceeded {
+		// internally reconnects if necessary.go
+		//
+		// NB: This check is skipped when the connection is initiated from a CLI
+		// client (indicated by the zero maxOffset) since those clients aren't
+		// sensitive to partitionsm, are likely to be invoked while the server is
+		// starting (particularly in tests), and are not equipped with the retry
+		// logic necessary to deal with this connection termination.
+		if maxOffset != 0 && grpc.Code(err) == codes.DeadlineExceeded {
 			return err
 		}
 
