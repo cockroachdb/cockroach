@@ -29,8 +29,9 @@ const (
 )
 
 type sessionVar struct {
-	Set func(*planner, []parser.TypedExpr) error
-	Get func(*planner) string
+	Set   func(*planner, []parser.TypedExpr) error
+	Get   func(*planner) string
+	Reset func(*planner) error
 }
 
 var varGen = map[string]sessionVar{
@@ -55,6 +56,10 @@ var varGen = map[string]sessionVar{
 		Get: func(p *planner) string {
 			return p.session.Database
 		},
+		Reset: func(p *planner) error {
+			p.session.Database = p.session.defaults.database
+			return nil
+		},
 	},
 	`SYNTAX`: {
 		Set: func(p *planner, values []parser.TypedExpr) error {
@@ -75,6 +80,10 @@ var varGen = map[string]sessionVar{
 		},
 		Get: func(p *planner) string {
 			return p.session.Syntax.String()
+		},
+		Reset: func(p *planner) error {
+			p.session.Syntax = p.session.defaults.syntax
+			return nil
 		},
 	},
 	`DEFAULT_TRANSACTION_ISOLATION`: {
@@ -102,6 +111,10 @@ var varGen = map[string]sessionVar{
 		},
 		Get: func(p *planner) string {
 			return p.session.DefaultIsolationLevel.String()
+		},
+		Reset: func(p *planner) error {
+			p.session.DefaultIsolationLevel = p.session.defaults.defaultIsolationLevel
+			return nil
 		},
 	},
 	`DISTSQL`: {
@@ -134,6 +147,10 @@ var varGen = map[string]sessionVar{
 			}
 
 			return "auto"
+		},
+		Reset: func(p *planner) error {
+			p.session.DistSQLMode = p.session.defaults.distSQLMode
+			return nil
 		},
 	},
 	`SEARCH_PATH`: {
@@ -170,6 +187,10 @@ var varGen = map[string]sessionVar{
 		Get: func(p *planner) string {
 			return strings.Join(p.session.SearchPath, ", ")
 		},
+		Reset: func(p *planner) error {
+			p.session.SearchPath = p.session.defaults.searchPath
+			return nil
+		},
 	},
 	`STANDARD_CONFORMING_STRINGS`: {
 		Set: func(p *planner, values []parser.TypedExpr) error {
@@ -189,6 +210,9 @@ var varGen = map[string]sessionVar{
 		Get: func(_ *planner) string {
 			return "on"
 		},
+		Reset: func(_ *planner) error {
+			return nil
+		},
 	},
 	`APPLICATION_NAME`: {
 		Set: func(p *planner, values []parser.TypedExpr) error {
@@ -204,6 +228,10 @@ var varGen = map[string]sessionVar{
 		},
 		Get: func(p *planner) string {
 			return p.session.ApplicationName
+		},
+		Reset: func(p *planner) error {
+			p.session.ApplicationName = p.session.defaults.applicationName
+			return nil
 		},
 	},
 	`TIME ZONE`: {

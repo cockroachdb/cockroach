@@ -52,12 +52,22 @@ func (p *planner) Set(n *parser.Set) (planNode, error) {
 	}
 
 	if v, ok := varGen[name]; ok {
-		if v.Set == nil {
-			return nil, fmt.Errorf("variable \"%s\" cannot be changed", name)
-		}
+		errReadOnly := fmt.Errorf("variable \"%s\" cannot be changed", name)
 
-		if err := v.Set(p, typedValues); err != nil {
-			return nil, err
+		if len(n.Values) == 0 {
+			// SET ... TO DEFAULT
+			if v.Reset == nil {
+				return nil, errReadOnly
+			} else if err := v.Reset(p); err != nil {
+				return nil, err
+			}
+		} else {
+			// SET ... TO ...
+			if v.Set == nil {
+				return nil, errReadOnly
+			} else if err := v.Set(p, typedValues); err != nil {
+				return nil, err
+			}
 		}
 	} else {
 		switch name {

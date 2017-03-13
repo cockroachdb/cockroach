@@ -93,6 +93,10 @@ type Session struct {
 	// User is the name of the user logged into the session.
 	User string
 
+	// defaults is used to restore default configuration values in
+	// SET ... TO DEFAULT statements.
+	defaults sessionDefaults
+
 	//
 	// State structures for the logical SQL session.
 	//
@@ -158,6 +162,17 @@ type Session struct {
 	noCopy util.NoCopy
 }
 
+// sessionDefaults mirrors fields in Session, for restoring default
+// configuration values in SET ... TO DEFAULT statements.
+type sessionDefaults struct {
+	applicationName       string
+	database              string
+	syntax                parser.Syntax
+	defaultIsolationLevel enginepb.IsolationType
+	distSQLMode           distSQLExecMode
+	searchPath            parser.SearchPath
+}
+
 // SessionArgs contains arguments for creating a new Session with NewSession().
 type SessionArgs struct {
 	Database string
@@ -178,6 +193,15 @@ func NewSession(
 		virtualSchemas: e.virtualSchemas,
 		memMetrics:     memMetrics,
 	}
+	s.defaults = sessionDefaults{
+		applicationName:       s.ApplicationName,
+		database:              s.Database,
+		syntax:                s.Syntax,
+		defaultIsolationLevel: s.DefaultIsolationLevel,
+		distSQLMode:           s.DistSQLMode,
+		searchPath:            s.SearchPath,
+	}
+
 	cfg, cache := e.getSystemConfig()
 	s.planner = planner{
 		leaseMgr:       e.cfg.LeaseManager,
