@@ -537,6 +537,8 @@ func TestStyle(t *testing.T) {
 		pkgScope = "./..."
 	}
 
+	// TODO(tamird): replace this with errcheck.NewChecker() when
+	// https://github.com/dominikh/go-tools/issues/57 is fixed.
 	t.Run("TestErrCheck", func(t *testing.T) {
 		// errcheck uses 1GB of ram (as of 2017-02-18), so don't parallelize it.
 		cmd, stderr, filter, err := dirCmd(
@@ -673,8 +675,21 @@ func TestStyle(t *testing.T) {
 				// investigating, but it's cumbersome because the reported file
 				// differs from the source.
 				//
-				// Reported as pkg/sql/parser/yaccpar, but the real file is sql.y.
-				"github.com/cockroachdb/cockroach/pkg/sql/parser/sql.y:SA4006",
+				// Reported as pkg/sql/parser/yaccpar, but the real file is sql.go.
+				"github.com/cockroachdb/cockroach/pkg/sql/parser/sql.go:SA4006",
+				// TODO(tamird): remove these from golang.org/x/tools/cmd/goyacc.
+				//
+				// sql/parser/yaccpar:14:6: type sqlParser is unused (U1000)
+				// sql/parser/yaccpar:15:2: func sqlParser.Parse is unused (U1000)
+				// sql/parser/yaccpar:16:2: func sqlParser.Lookahead is unused (U1000)
+				// sql/parser/yaccpar:29:6: func sqlNewParser is unused (U1000)
+				// sql/parser/yaccpar:152:6: func sqlParse is unused (U1000)
+				// sql/parser/yacctab:461:7: const sqlNprod is unused (U1000)
+				// sql/parser/yacctab:464:5: var sqlTokenNames is unused (U1000)
+				// sql/parser/yacctab:465:5: var sqlStates is unused (U1000)
+				//
+				// Reported as pkg/sql/parser/yaccpar, but the real file is sql.go.
+				"github.com/cockroachdb/cockroach/pkg/sql/parser/sql.go:U1000",
 				// Generated file containing many unused postgres error codes.
 				"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror/codes.go:U1000",
 				// Deprecated database/sql/driver interfaces not compatible with 1.7.
