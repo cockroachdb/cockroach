@@ -232,7 +232,7 @@ func TestTransactionConfig(t *testing.T) {
 	dbCtx := DefaultDBContext()
 	dbCtx.UserPriority = 101
 	db := NewDBWithContext(newTestSender(nil), clock, dbCtx)
-	if err := db.Txn(context.TODO(), func(txn *Txn) error {
+	if err := db.Txn(context.Background(), func(txn *Txn) error {
 		if txn.db.ctx.UserPriority != db.ctx.UserPriority {
 			t.Errorf("expected txn user priority %f; got %f",
 				db.ctx.UserPriority, txn.db.ctx.UserPriority)
@@ -254,7 +254,7 @@ func TestCommitReadOnlyTransaction(t *testing.T) {
 		calls = append(calls, ba.Methods()...)
 		return ba.CreateReply(), nil
 	}), clock)
-	if err := db.Txn(context.TODO(), func(txn *Txn) error {
+	if err := db.Txn(context.Background(), func(txn *Txn) error {
 		_, err := txn.Get("a")
 		return err
 	}); err != nil {
@@ -278,7 +278,7 @@ func TestCommitReadOnlyTransactionExplicit(t *testing.T) {
 			calls = append(calls, ba.Methods()...)
 			return ba.CreateReply(), nil
 		}), clock)
-		if err := db.Txn(context.TODO(), func(txn *Txn) error {
+		if err := db.Txn(context.Background(), func(txn *Txn) error {
 			b := txn.NewBatch()
 			if withGet {
 				b.Get("foo")
@@ -330,7 +330,7 @@ func TestCommitMutatingTransaction(t *testing.T) {
 	}
 	for i, test := range testArgs {
 		calls = []roachpb.Method{}
-		if err := db.Txn(context.TODO(), func(txn *Txn) error {
+		if err := db.Txn(context.Background(), func(txn *Txn) error {
 			return test.f(txn)
 		}); err != nil {
 			t.Errorf("%d: unexpected error on commit: %s", i, err)
@@ -352,7 +352,7 @@ func TestTxnInsertBeginTransaction(t *testing.T) {
 		calls = append(calls, ba.Methods()...)
 		return ba.CreateReply(), nil
 	}), clock)
-	if err := db.Txn(context.TODO(), func(txn *Txn) error {
+	if err := db.Txn(context.Background(), func(txn *Txn) error {
 		if _, err := txn.Get("foo"); err != nil {
 			return err
 		}
@@ -376,7 +376,7 @@ func TestBeginTransactionErrorIndex(t *testing.T) {
 		pErr.SetErrorIndex(0)
 		return nil, pErr
 	}), clock)
-	_ = db.Txn(context.TODO(), func(txn *Txn) error {
+	_ = db.Txn(context.Background(), func(txn *Txn) error {
 		b := txn.NewBatch()
 		b.Put("a", "b")
 		err := getOneErr(txn.Run(b), b)
@@ -403,7 +403,7 @@ func TestCommitTransactionOnce(t *testing.T) {
 		count++
 		return ba.CreateReply(), nil
 	}), clock)
-	if err := db.Txn(context.TODO(), func(txn *Txn) error {
+	if err := db.Txn(context.Background(), func(txn *Txn) error {
 		b := txn.NewBatch()
 		b.Put("z", "adding a write exposed a bug in #1882")
 		return txn.CommitInBatch(b)
@@ -426,7 +426,7 @@ func TestAbortReadOnlyTransaction(t *testing.T) {
 		}
 		return ba.CreateReply(), nil
 	}), clock)
-	if err := db.Txn(context.TODO(), func(txn *Txn) error {
+	if err := db.Txn(context.Background(), func(txn *Txn) error {
 		return errors.New("foo")
 	}); err == nil {
 		t.Error("expected error on abort")
@@ -449,7 +449,7 @@ func TestEndWriteRestartReadOnlyTransaction(t *testing.T) {
 			return ba.CreateReply(), nil
 		}), clock)
 		ok := false
-		if err := db.Txn(context.TODO(), func(txn *Txn) error {
+		if err := db.Txn(context.Background(), func(txn *Txn) error {
 			if !ok {
 				if err := txn.Put("consider", "phlebas"); err != nil {
 					t.Fatal(err)
@@ -512,7 +512,7 @@ func TestTransactionKeyNotChangedInRestart(t *testing.T) {
 		return ba.CreateReply(), nil
 	}), clock)
 
-	if err := db.Txn(context.TODO(), func(txn *Txn) error {
+	if err := db.Txn(context.Background(), func(txn *Txn) error {
 		defer func() { attempt++ }()
 		b := txn.NewBatch()
 		b.Put(keys[attempt], "b")
@@ -540,7 +540,7 @@ func TestAbortMutatingTransaction(t *testing.T) {
 		return ba.CreateReply(), nil
 	}), clock)
 
-	if err := db.Txn(context.TODO(), func(txn *Txn) error {
+	if err := db.Txn(context.Background(), func(txn *Txn) error {
 		if err := txn.Put("a", "b"); err != nil {
 			return err
 		}
@@ -586,7 +586,7 @@ func TestRunTransactionRetryOnErrors(t *testing.T) {
 				}
 				return ba.CreateReply(), nil
 			}), clock)
-		err := db.Txn(context.TODO(), func(txn *Txn) error {
+		err := db.Txn(context.Background(), func(txn *Txn) error {
 			return txn.Put("a", "b")
 		})
 		if test.retry {
@@ -835,10 +835,11 @@ func TestWrongTxnRetry(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	clock := hlc.NewClock(hlc.UnixNano, 0)
 	db := NewDB(newTestSender(nil), clock)
+	ctx := context.Background()
 
 	var retries int
 	txnClosure := func(outerTxn *Txn) error {
-		log.Infof(context.Background(), "outer retry")
+		log.Infof(ctx, "outer retry")
 		retries++
 		// Ensure the KV transaction is created.
 		if err := outerTxn.Put("a", "b"); err != nil {
@@ -847,7 +848,7 @@ func TestWrongTxnRetry(t *testing.T) {
 		var execOpt TxnExecOptions
 		execOpt.AutoRetry = false
 		innerClosure := func(innerTxn *Txn, opt *TxnExecOptions) error {
-			log.Infof(context.TODO(), "starting inner: %s", innerTxn.Proto())
+			log.Infof(ctx, "starting inner: %s", innerTxn.Proto())
 			// Ensure the KV transaction is created.
 			if err := innerTxn.Put("x", "y"); err != nil {
 				t.Fatal(err)
@@ -855,7 +856,7 @@ func TestWrongTxnRetry(t *testing.T) {
 			return roachpb.NewErrorWithTxn(&roachpb.TransactionPushError{
 				PusheeTxn: *outerTxn.Proto()}, innerTxn.Proto()).GoError()
 		}
-		innerTxn := NewTxn(context.TODO(), *db)
+		innerTxn := NewTxn(ctx, *db)
 		err := innerTxn.Exec(execOpt, innerClosure)
 		if !testutils.IsError(err, "failed to push") {
 			t.Fatalf("unexpected inner failure: %v", err)
@@ -863,7 +864,7 @@ func TestWrongTxnRetry(t *testing.T) {
 		return err
 	}
 
-	if err := db.Txn(context.TODO(), txnClosure); !testutils.IsError(err, "failed to push") {
+	if err := db.Txn(ctx, txnClosure); !testutils.IsError(err, "failed to push") {
 		t.Fatal(err)
 	}
 	if retries != 1 {
@@ -879,7 +880,7 @@ func TestBatchMixRawRequest(t *testing.T) {
 	b := &Batch{}
 	b.AddRawRequest(&roachpb.EndTransactionRequest{})
 	b.Put("x", "y")
-	if err := db.Run(context.TODO(), b); !testutils.IsError(err, "non-raw operations") {
+	if err := db.Run(context.Background(), b); !testutils.IsError(err, "non-raw operations") {
 		t.Fatal(err)
 	}
 }
@@ -939,7 +940,7 @@ func TestConcurrentTxnRequests(t *testing.T) {
 
 	const keys = "abcdefghijklmnopqrstuvwxyz"
 	const value = "value"
-	if err := db.Txn(context.TODO(), func(txn *Txn) error {
+	if err := db.Txn(context.Background(), func(txn *Txn) error {
 		var wg syncutil.WaitGroupWithError
 		for _, keyChar := range keys {
 			wg.Add(1)

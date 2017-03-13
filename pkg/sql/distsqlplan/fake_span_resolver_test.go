@@ -56,7 +56,7 @@ func TestFakeSpanResolver(t *testing.T) {
 
 	db := tc.Server(0).KVClient().(*client.DB)
 
-	txn := client.NewTxn(context.TODO(), *db)
+	txn := client.NewTxn(context.Background(), *db)
 	it := resolver.NewSpanResolverIterator(txn)
 
 	desc := sqlbase.GetTableDescriptor(db, "test", "t")
@@ -68,14 +68,14 @@ func TestFakeSpanResolver(t *testing.T) {
 	// randomness) but it should happen most of the time.
 	for attempt := 0; attempt < 10; attempt++ {
 		nodesSeen := make(map[roachpb.NodeID]struct{})
-		it.Seek(context.TODO(), span, kv.Ascending)
+		it.Seek(context.Background(), span, kv.Ascending)
 		lastKey := span.Key
 		for {
 			if !it.Valid() {
 				t.Fatal(it.Error())
 			}
 			desc := it.Desc()
-			rinfo, err := it.ReplicaInfo(context.TODO())
+			rinfo, err := it.ReplicaInfo(context.Background())
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -96,7 +96,7 @@ func TestFakeSpanResolver(t *testing.T) {
 			if !it.NeedAnother() {
 				break
 			}
-			it.Next(context.TODO())
+			it.Next(context.Background())
 		}
 
 		if !lastKey.Equal(span.EndKey) {

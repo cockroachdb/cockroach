@@ -425,12 +425,12 @@ func TestReplicaContains(t *testing.T) {
 	}
 }
 
-func sendLeaseRequest(r *Replica, l *roachpb.Lease) error {
+func sendLeaseRequest(ctx context.Context, r *Replica, l *roachpb.Lease) error {
 	ba := roachpb.BatchRequest{}
 	ba.Timestamp = r.store.Clock().Now()
 	ba.Add(&roachpb.RequestLeaseRequest{Lease: *l})
 	exLease, _ := r.getLease()
-	ch, _, err := r.propose(context.TODO(), exLease, ba, nil)
+	ch, _, err := r.propose(ctx, exLease, ba, nil)
 	if err == nil {
 		// Next if the command was committed, wait for the range to apply it.
 		// TODO(bdarnell): refactor this to a more conventional error-handling pattern.
@@ -444,11 +444,12 @@ func sendLeaseRequest(r *Replica, l *roachpb.Lease) error {
 // fast and loose with granting range leases.
 func TestReplicaReadConsistency(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
 	tc := testContext{}
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 	tc.Start(t, stopper)
-	secondReplica, err := tc.addBogusReplicaToRangeDesc(context.TODO())
+	secondReplica, err := tc.addBogusReplicaToRangeDesc(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -483,7 +484,7 @@ func TestReplicaReadConsistency(t *testing.T) {
 	// and INCONSISTENT reads work as expected.
 	tc.manualClock.Set(leaseExpiry(tc.repl))
 	start := tc.Clock().Now()
-	if err := sendLeaseRequest(tc.repl, &roachpb.Lease{
+	if err := sendLeaseRequest(ctx, tc.repl, &roachpb.Lease{
 		Start:      start,
 		Expiration: start.Add(10, 0),
 		Replica:    secondReplica,
@@ -547,7 +548,7 @@ func TestBehaviorDuringLeaseTransfer(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 	tc.StartWithStoreConfig(t, stopper, tsc)
-	secondReplica, err := tc.addBogusReplicaToRangeDesc(context.TODO())
+	secondReplica, err := tc.addBogusReplicaToRangeDesc(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -658,7 +659,7 @@ func TestApplyCmdLeaseError(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 	tc.Start(t, stopper)
-	secondReplica, err := tc.addBogusReplicaToRangeDesc(context.TODO())
+	secondReplica, err := tc.addBogusReplicaToRangeDesc(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -668,7 +669,7 @@ func TestApplyCmdLeaseError(t *testing.T) {
 	// Lose the lease.
 	tc.manualClock.Set(leaseExpiry(tc.repl))
 	start := tc.Clock().Now()
-	if err := sendLeaseRequest(tc.repl, &roachpb.Lease{
+	if err := sendLeaseRequest(context.Background(), tc.repl, &roachpb.Lease{
 		Start:      start,
 		Expiration: start.Add(10, 0),
 		Replica:    secondReplica,
@@ -728,7 +729,7 @@ func TestReplicaLease(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 	tc.Start(t, stopper)
-	secondReplica, err := tc.addBogusReplicaToRangeDesc(context.TODO())
+	secondReplica, err := tc.addBogusReplicaToRangeDesc(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -755,7 +756,7 @@ func TestReplicaLease(t *testing.T) {
 	}
 	tc.manualClock.Set(leaseExpiry(tc.repl))
 	now := tc.Clock().Now()
-	if err := sendLeaseRequest(tc.repl, &roachpb.Lease{
+	if err := sendLeaseRequest(context.Background(), tc.repl, &roachpb.Lease{
 		Start:      now.Add(10, 0),
 		Expiration: now.Add(20, 0),
 		Replica:    secondReplica,
@@ -808,14 +809,14 @@ func TestReplicaNotLeaseHolderError(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 	tc.Start(t, stopper)
-	secondReplica, err := tc.addBogusReplicaToRangeDesc(context.TODO())
+	secondReplica, err := tc.addBogusReplicaToRangeDesc(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	tc.manualClock.Set(leaseExpiry(tc.repl))
 	now := tc.Clock().Now()
-	if err := sendLeaseRequest(tc.repl, &roachpb.Lease{
+	if err := sendLeaseRequest(context.Background(), tc.repl, &roachpb.Lease{
 		Start:      now,
 		Expiration: now.Add(10, 0),
 		Replica:    secondReplica,
@@ -885,7 +886,7 @@ func TestReplicaLeaseCounters(t *testing.T) {
 	}
 
 	now := tc.Clock().Now()
-	if err := sendLeaseRequest(tc.repl, &roachpb.Lease{
+	if err := sendLeaseRequest(context.Background(), tc.repl, &roachpb.Lease{
 		Start:      now,
 		Expiration: now.Add(10, 0),
 		Replica: roachpb.ReplicaDescriptor{
@@ -911,7 +912,7 @@ func TestReplicaLeaseCounters(t *testing.T) {
 	}
 
 	// Make lease request fail by requesting overlapping lease from bogus Replica.
-	if err := sendLeaseRequest(tc.repl, &roachpb.Lease{
+	if err := sendLeaseRequest(context.Background(), tc.repl, &roachpb.Lease{
 		Start:      now,
 		Expiration: now.Add(10, 0),
 		Replica: roachpb.ReplicaDescriptor{
@@ -939,7 +940,7 @@ func TestReplicaGossipConfigsOnLease(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 	tc.Start(t, stopper)
-	secondReplica, err := tc.addBogusReplicaToRangeDesc(context.TODO())
+	secondReplica, err := tc.addBogusReplicaToRangeDesc(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -966,7 +967,7 @@ func TestReplicaGossipConfigsOnLease(t *testing.T) {
 	now := tc.Clock().Now()
 
 	// Give lease to someone else.
-	if err := sendLeaseRequest(tc.repl, &roachpb.Lease{
+	if err := sendLeaseRequest(context.Background(), tc.repl, &roachpb.Lease{
 		Start:      now,
 		Expiration: now.Add(10, 0),
 		Replica:    secondReplica,
@@ -979,7 +980,7 @@ func TestReplicaGossipConfigsOnLease(t *testing.T) {
 	now = tc.Clock().Now()
 
 	// Give lease to this range.
-	if err := sendLeaseRequest(tc.repl, &roachpb.Lease{
+	if err := sendLeaseRequest(context.Background(), tc.repl, &roachpb.Lease{
 		Start:      now.Add(11, 0),
 		Expiration: now.Add(20, 0),
 		Replica: roachpb.ReplicaDescriptor{
@@ -1022,7 +1023,7 @@ func TestReplicaTSCacheLowWaterOnLease(t *testing.T) {
 	tc.Start(t, stopper)
 	// Disable raft log truncation which confuses this test.
 	tc.store.SetRaftLogQueueActive(false)
-	secondReplica, err := tc.addBogusReplicaToRangeDesc(context.TODO())
+	secondReplica, err := tc.addBogusReplicaToRangeDesc(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1066,7 +1067,7 @@ func TestReplicaTSCacheLowWaterOnLease(t *testing.T) {
 	}
 
 	for i, test := range testCases {
-		if err := sendLeaseRequest(tc.repl, &roachpb.Lease{
+		if err := sendLeaseRequest(context.Background(), tc.repl, &roachpb.Lease{
 			Start:      test.start,
 			Expiration: test.expiration,
 			Replica: roachpb.ReplicaDescriptor{
@@ -2303,7 +2304,7 @@ func TestReplicaCommandQueueSelfOverlap(t *testing.T) {
 				ba.Add(readOrWriteArgs(roachpb.Key(name), cmd2Read))
 
 				// Set a deadline for nicer error behavior on deadlock.
-				ctx, cancel := context.WithTimeout(context.TODO(), 5*time.Second)
+				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 				defer cancel()
 				_, pErr := tc.Sender().Send(ctx, ba)
 				if pErr != nil {
@@ -3716,7 +3717,7 @@ func TestEndTransactionDirectGCFailure(t *testing.T) {
 	testutils.SucceedsSoon(t, func() error {
 		if atomic.LoadInt64(&count) == 0 {
 			return errors.Errorf("intent resolution not attempted yet")
-		} else if err := tc.store.DB().Put(context.TODO(), "panama", "banana"); err != nil {
+		} else if err := tc.store.DB().Put(context.Background(), "panama", "banana"); err != nil {
 			return err
 		}
 		return nil
@@ -5945,7 +5946,7 @@ func TestComputeChecksumVersioning(t *testing.T) {
 	defer stopper.Stop()
 	tc.Start(t, stopper)
 
-	if pct, _ := evalComputeChecksum(context.TODO(), nil,
+	if pct, _ := evalComputeChecksum(context.Background(), nil,
 		CommandArgs{Args: &roachpb.ComputeChecksumRequest{
 			ChecksumID: uuid.MakeV4(),
 			Version:    replicaChecksumVersion,
@@ -5954,7 +5955,7 @@ func TestComputeChecksumVersioning(t *testing.T) {
 		t.Error("right checksum version: expected post-commit trigger")
 	}
 
-	if pct, _ := evalComputeChecksum(context.TODO(), nil,
+	if pct, _ := evalComputeChecksum(context.Background(), nil,
 		CommandArgs{Args: &roachpb.ComputeChecksumRequest{
 			ChecksumID: uuid.MakeV4(),
 			Version:    replicaChecksumVersion + 1,
@@ -6222,7 +6223,7 @@ func TestSetReplicaID(t *testing.T) {
 func TestReplicaRetryRaftProposal(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	ctx := context.TODO()
+	ctx := context.Background()
 	var tc testContext
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
@@ -6860,7 +6861,7 @@ func TestReplicaTimestampCacheBumpNotLost(t *testing.T) {
 	defer stopper.Stop()
 	tc.Start(t, stopper)
 
-	ctx := tc.store.AnnotateCtx(context.TODO())
+	ctx := tc.store.AnnotateCtx(context.Background())
 	key := keys.LocalMax
 
 	txn := newTransaction("test", key, 1, enginepb.SERIALIZABLE, tc.Clock())
@@ -6915,7 +6916,7 @@ func TestReplicaEvaluationNotTxnMutation(t *testing.T) {
 	defer stopper.Stop()
 	tc.Start(t, stopper)
 
-	ctx := tc.repl.AnnotateCtx(context.TODO())
+	ctx := tc.repl.AnnotateCtx(context.Background())
 	key := keys.LocalMax
 
 	txn := newTransaction("test", key, 1, enginepb.SERIALIZABLE, tc.Clock())

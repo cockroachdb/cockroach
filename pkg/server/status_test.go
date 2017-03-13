@@ -164,14 +164,14 @@ func startServer(t *testing.T) *TestServer {
 
 	// Make sure the range is spun up with an arbitrary read command. We do not
 	// expect a specific response.
-	if _, err := kvDB.Get(context.TODO(), "a"); err != nil {
+	if _, err := kvDB.Get(context.Background(), "a"); err != nil {
 		t.Fatal(err)
 	}
 
 	// Make sure the node status is available. This is done by forcing stores to
 	// publish their status, synchronizing to the event feed with a canary
 	// event, and then forcing the server to write summaries immediately.
-	if err := ts.node.computePeriodicMetrics(context.TODO(), 0); err != nil {
+	if err := ts.node.computePeriodicMetrics(context.Background(), 0); err != nil {
 		t.Fatalf("error publishing store statuses: %s", err)
 	}
 
@@ -416,7 +416,7 @@ func TestRangesResponse(t *testing.T) {
 	defer ts.Stopper().Stop()
 
 	// Perform a scan to ensure that all the raft groups are initialized.
-	if _, err := ts.db.Scan(context.TODO(), keys.LocalMax, roachpb.KeyMax, 0); err != nil {
+	if _, err := ts.db.Scan(context.Background(), keys.LocalMax, roachpb.KeyMax, 0); err != nil {
 		t.Fatal(err)
 	}
 

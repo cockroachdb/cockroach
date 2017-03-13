@@ -69,7 +69,7 @@ CREATE UNIQUE INDEX vidx ON t.test (v);
 		{Key: roachpb.Key("q"), EndKey: roachpb.Key("r")},
 	}
 	if err := kvDB.Put(
-		context.TODO(),
+		context.Background(),
 		sqlbase.MakeDescMetadataKey(tableDesc.ID),
 		sqlbase.WrapDescriptor(tableDesc),
 	); err != nil {
@@ -107,7 +107,7 @@ CREATE UNIQUE INDEX vidx ON t.test (v);
 	}
 	for _, test := range testData {
 		if err := distsqlrun.WriteResumeSpan(
-			context.TODO(), kvDB, tableDesc.ID, test.orig, test.resume, 0,
+			context.Background(), kvDB, tableDesc.ID, test.orig, test.resume, 0,
 		); err != nil {
 			t.Error(err)
 		}

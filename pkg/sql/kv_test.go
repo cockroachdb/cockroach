@@ -76,7 +76,7 @@ func newKVNative(b *testing.B) kvInterface {
 func (kv *kvNative) insert(rows, run int) error {
 	firstRow := rows * run
 	lastRow := rows * (run + 1)
-	err := kv.db.Txn(context.TODO(), func(txn *client.Txn) error {
+	err := kv.db.Txn(context.Background(), func(txn *client.Txn) error {
 		b := txn.NewBatch()
 		for i := firstRow; i < lastRow; i++ {
 			b.Put(fmt.Sprintf("%s%08d", kv.prefix, i), i)
@@ -88,7 +88,7 @@ func (kv *kvNative) insert(rows, run int) error {
 
 func (kv *kvNative) update(rows, run int) error {
 	perm := rand.Perm(rows)
-	err := kv.db.Txn(context.TODO(), func(txn *client.Txn) error {
+	err := kv.db.Txn(context.Background(), func(txn *client.Txn) error {
 		// Read all values in a batch.
 		b := txn.NewBatch()
 		for i := 0; i < rows; i++ {
@@ -111,7 +111,7 @@ func (kv *kvNative) update(rows, run int) error {
 func (kv *kvNative) del(rows, run int) error {
 	firstRow := rows * run
 	lastRow := rows * (run + 1)
-	err := kv.db.Txn(context.TODO(), func(txn *client.Txn) error {
+	err := kv.db.Txn(context.Background(), func(txn *client.Txn) error {
 		b := txn.NewBatch()
 		for i := firstRow; i < lastRow; i++ {
 			b.Del(fmt.Sprintf("%s%08d", kv.prefix, i))
@@ -123,7 +123,7 @@ func (kv *kvNative) del(rows, run int) error {
 
 func (kv *kvNative) scan(rows, run int) error {
 	var kvs []client.KeyValue
-	err := kv.db.Txn(context.TODO(), func(txn *client.Txn) error {
+	err := kv.db.Txn(context.Background(), func(txn *client.Txn) error {
 		var err error
 		kvs, err = txn.Scan(fmt.Sprintf("%s%08d", kv.prefix, 0), fmt.Sprintf("%s%08d", kv.prefix, rows), int64(rows))
 		return err
@@ -140,7 +140,7 @@ func (kv *kvNative) prep(rows int, initData bool) error {
 	if !initData {
 		return nil
 	}
-	err := kv.db.Txn(context.TODO(), func(txn *client.Txn) error {
+	err := kv.db.Txn(context.Background(), func(txn *client.Txn) error {
 		b := txn.NewBatch()
 		for i := 0; i < rows; i++ {
 			b.Put(fmt.Sprintf("%s%08d", kv.prefix, i), i)

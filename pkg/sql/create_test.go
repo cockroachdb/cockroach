@@ -42,7 +42,7 @@ func TestDatabaseDescriptor(t *testing.T) {
 	params, _ := createTestServerParams()
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop()
-	ctx := context.TODO()
+	ctx := context.Background()
 
 	expectedCounter := int64(keys.MaxReservedDescID + 1)
 

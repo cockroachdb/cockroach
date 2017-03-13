@@ -652,7 +652,7 @@ func TestProcessRangeDescriptorUpdate(t *testing.T) {
 	}
 
 	expectedResult := "attempted to process uninitialized range.*"
-	ctx := r.AnnotateCtx(context.TODO())
+	ctx := r.AnnotateCtx(context.Background())
 	if err := store.processRangeDescriptorUpdate(ctx, r); !testutils.IsError(err, expectedResult) {
 		t.Errorf("expected processRangeDescriptorUpdate with uninitialized replica to fail, got %v", err)
 	}
@@ -1021,7 +1021,7 @@ func splitTestRange(store *Store, key, splitKey roachpb.RKey, t *testing.T) *Rep
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err = store.SplitRange(repl.AnnotateCtx(context.TODO()), repl, newRng); err != nil {
+	if err = store.SplitRange(repl.AnnotateCtx(context.Background()), repl, newRng); err != nil {
 		t.Fatal(err)
 	}
 	return newRng

@@ -112,7 +112,7 @@ func TestSpanResolverUsesCaches(t *testing.T) {
 
 	// Resolve the spans. Since the LeaseHolderCache is empty, all the ranges
 	// should be grouped and "assigned" to replica 0.
-	replicas, err := resolveSpans(context.TODO(), lr.NewSpanResolverIterator(nil), spans...)
+	replicas, err := resolveSpans(context.Background(), lr.NewSpanResolverIterator(nil), spans...)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -140,7 +140,7 @@ func TestSpanResolverUsesCaches(t *testing.T) {
 	if err := populateCache(tc.Conns[3], 3 /* expectedNumRows */); err != nil {
 		t.Fatal(err)
 	}
-	replicas, err = resolveSpans(context.TODO(), lr.NewSpanResolverIterator(nil), spans...)
+	replicas, err = resolveSpans(context.Background(), lr.NewSpanResolverIterator(nil), spans...)
 	if err != nil {
 		t.Fatal(err)
 	}

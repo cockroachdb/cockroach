@@ -45,6 +45,7 @@ import (
 // read from inside the txn.
 func TestTxnDBBasics(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
 	s, _ := createTestDB(t)
 	defer s.Stop()
 	value := []byte("value")
@@ -52,7 +53,7 @@ func TestTxnDBBasics(t *testing.T) {
 	for _, commit := range []bool{true, false} {
 		key := []byte(fmt.Sprintf("key-%t", commit))
 
-		err := s.DB.Txn(context.TODO(), func(txn *client.Txn) error {
+		err := s.DB.Txn(ctx, func(txn *client.Txn) error {
 			// Use snapshot isolation so non-transactional read can always push.
 			if err := txn.SetIsolation(enginepb.SNAPSHOT); err != nil {
 				return err
@@ -64,7 +65,7 @@ func TestTxnDBBasics(t *testing.T) {
 			}
 
 			// Attempt to read outside of txn.
-			if gr, err := s.DB.Get(context.TODO(), key); err != nil {
+			if gr, err := s.DB.Get(ctx, key); err != nil {
 				return err
 			} else if gr.Exists() {
 				return errors.Errorf("expected nil value; got %v", gr.Value)
@@ -90,7 +91,7 @@ func TestTxnDBBasics(t *testing.T) {
 		}
 
 		// Verify the value is now visible on commit == true, and not visible otherwise.
-		gr, err := s.DB.Get(context.TODO(), key)
+		gr, err := s.DB.Get(ctx, key)
 		if commit {
 			if err != nil || !gr.Exists() || !bytes.Equal(gr.ValueBytes(), value) {
 				t.Errorf("expected success reading value: %+v, %s", gr.ValueBytes(), err)
@@ -115,7 +116,7 @@ func benchmarkSingleRoundtripWithLatency(b *testing.B, latency time.Duration) {
 	key := roachpb.Key("key")
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		if tErr := s.DB.Txn(context.TODO(), func(txn *client.Txn) error {
+		if tErr := s.DB.Txn(context.Background(), func(txn *client.Txn) error {
 			b := txn.NewBatch()
 			b.Put(key, fmt.Sprintf("value-%d", i))
 			return txn.CommitInBatch(b)
@@ -140,6 +141,7 @@ func TestSnapshotIsolationIncrement(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, _ := createTestDB(t)
 	defer s.Stop()
+	ctx := context.Background()
 
 	var key = roachpb.Key("a")
 	var key2 = roachpb.Key("b")
@@ -149,7 +151,7 @@ func TestSnapshotIsolationIncrement(t *testing.T) {
 
 	go func() {
 		<-start
-		done <- s.DB.Txn(context.TODO(), func(txn *client.Txn) error {
+		done <- s.DB.Txn(ctx, func(txn *client.Txn) error {
 			if _, err := txn.Inc(key, 1); err != nil {
 				return err
 			}
@@ -160,7 +162,7 @@ func TestSnapshotIsolationIncrement(t *testing.T) {
 		})
 	}()
 
-	if err := s.DB.Txn(context.TODO(), func(txn *client.Txn) error {
+	if err := s.DB.Txn(ctx, func(txn *client.Txn) error {
 		if err := txn.SetIsolation(enginepb.SNAPSHOT); err != nil {
 			t.Fatal(err)
 		}
@@ -219,6 +221,7 @@ func TestSnapshotIsolationIncrement(t *testing.T) {
 //   R1(A) W2(A,"hi") W1(A,"oops!") C1 [serializable restart] R1(A) W1(A,"correct") C1
 func TestSnapshotIsolationLostUpdate(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
 	s, _ := createTestDB(t)
 	defer s.Stop()
 	var key = roachpb.Key("a")
@@ -227,12 +230,12 @@ func TestSnapshotIsolationLostUpdate(t *testing.T) {
 	start := make(chan struct{})
 	go func() {
 		<-start
-		done <- s.DB.Txn(context.TODO(), func(txn *client.Txn) error {
+		done <- s.DB.Txn(ctx, func(txn *client.Txn) error {
 			return txn.Put(key, "hi")
 		})
 	}()
 
-	if err := s.DB.Txn(context.TODO(), func(txn *client.Txn) error {
+	if err := s.DB.Txn(ctx, func(txn *client.Txn) error {
 		if err := txn.SetIsolation(enginepb.SNAPSHOT); err != nil {
 			t.Fatal(err)
 		}
@@ -271,7 +274,7 @@ func TestSnapshotIsolationLostUpdate(t *testing.T) {
 	}
 
 	// Verify final value.
-	gr, err := s.DB.Get(context.TODO(), key)
+	gr, err := s.DB.Get(ctx, key)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -288,11 +291,12 @@ func TestSnapshotIsolationLostUpdate(t *testing.T) {
 // concurrent reader pushes an intent.
 func TestPriorityRatchetOnAbortOrPush(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
 	s, _ := createTestDB(t)
 	defer s.Stop()
 
 	pushByReading := func(key roachpb.Key) {
-		if err := s.DB.Txn(context.TODO(), func(txn *client.Txn) error {
+		if err := s.DB.Txn(ctx, func(txn *client.Txn) error {
 			if err := txn.SetUserPriority(roachpb.MaxUserPriority); err != nil {
 				t.Fatal(err)
 			}
@@ -303,7 +307,7 @@ func TestPriorityRatchetOnAbortOrPush(t *testing.T) {
 		}
 	}
 	abortByWriting := func(key roachpb.Key) {
-		if err := s.DB.Txn(context.TODO(), func(txn *client.Txn) error {
+		if err := s.DB.Txn(ctx, func(txn *client.Txn) error {
 			if err := txn.SetUserPriority(roachpb.MaxUserPriority); err != nil {
 				t.Fatal(err)
 			}
@@ -317,7 +321,7 @@ func TestPriorityRatchetOnAbortOrPush(t *testing.T) {
 	for _, read := range []bool{true, false} {
 		for _, iso := range []enginepb.IsolationType{enginepb.SNAPSHOT, enginepb.SERIALIZABLE} {
 			var iteration int
-			if err := s.DB.Txn(context.TODO(), func(txn *client.Txn) error {
+			if err := s.DB.Txn(ctx, func(txn *client.Txn) error {
 				defer func() { iteration++ }()
 				key := roachpb.Key(fmt.Sprintf("read=%t, iso=%s", read, iso))
 
@@ -384,6 +388,7 @@ func disableOwnNodeCertain(tc *localtestcluster.LocalTestCluster) error {
 // that node's clock for its new timestamp.
 func TestUncertaintyRestart(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
 
 	const maxOffset = 250 * time.Millisecond
 	dbCtx := client.DefaultDBContext()
@@ -404,12 +409,12 @@ func TestUncertaintyRestart(t *testing.T) {
 	start := make(chan struct{})
 	go func() {
 		<-start
-		errChan <- s.DB.Txn(context.TODO(), func(txn *client.Txn) error {
+		errChan <- s.DB.Txn(ctx, func(txn *client.Txn) error {
 			return txn.Put(key, "hi")
 		})
 	}()
 
-	if err := s.DB.Txn(context.TODO(), func(txn *client.Txn) error {
+	if err := s.DB.Txn(ctx, func(txn *client.Txn) error {
 		if txn.Proto().Epoch > 2 {
 			t.Fatal("expected only one restart")
 		}
@@ -440,6 +445,7 @@ func TestUncertaintyRestart(t *testing.T) {
 // timestamp) is free from uncertainty. See roachpb.Transaction for details.
 func TestUncertaintyMaxTimestampForwarding(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
 
 	dbCtx := client.DefaultDBContext()
 	s := &localtestcluster.LocalTestCluster{
@@ -465,17 +471,17 @@ func TestUncertaintyMaxTimestampForwarding(t *testing.T) {
 	futureTS := s.Clock.Now()
 	futureTS.WallTime += offsetNS
 	val := roachpb.MakeValueFromBytes(valSlow)
-	if err := engine.MVCCPut(context.Background(), s.Eng, nil, keySlow, futureTS, val, nil); err != nil {
+	if err := engine.MVCCPut(ctx, s.Eng, nil, keySlow, futureTS, val, nil); err != nil {
 		t.Fatal(err)
 	}
 	futureTS.WallTime += offsetNS
 	val.SetBytes(valFast)
-	if err := engine.MVCCPut(context.Background(), s.Eng, nil, keyFast, futureTS, val, nil); err != nil {
+	if err := engine.MVCCPut(ctx, s.Eng, nil, keyFast, futureTS, val, nil); err != nil {
 		t.Fatal(err)
 	}
 
 	i := 0
-	if tErr := s.DB.Txn(context.TODO(), func(txn *client.Txn) error {
+	if tErr := s.DB.Txn(ctx, func(txn *client.Txn) error {
 		i++
 		// The first command serves to start a Txn, fixing the timestamps.
 		// There will be a restart, but this is idempotent.
@@ -524,12 +530,13 @@ func TestUncertaintyMaxTimestampForwarding(t *testing.T) {
 // the transaction's current timestamp instead of original timestamp.
 func TestTxnTimestampRegression(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
 	s, _ := createTestDB(t)
 	defer s.Stop()
 
 	keyA := "a"
 	keyB := "b"
-	err := s.DB.Txn(context.TODO(), func(txn *client.Txn) error {
+	err := s.DB.Txn(ctx, func(txn *client.Txn) error {
 		// Use snapshot isolation so non-transactional read can always push.
 		if err := txn.SetIsolation(enginepb.SNAPSHOT); err != nil {
 			return err
@@ -540,12 +547,12 @@ func TestTxnTimestampRegression(t *testing.T) {
 		}
 
 		// Attempt to read outside of txn (this will push timestamp of transaction).
-		if _, err := s.DB.Get(context.TODO(), keyA); err != nil {
+		if _, err := s.DB.Get(ctx, keyA); err != nil {
 			return err
 		}
 
 		// Now, read again outside of txn to warmup timestamp cache with higher timestamp.
-		if _, err := s.DB.Get(context.TODO(), keyB); err != nil {
+		if _, err := s.DB.Get(ctx, keyB); err != nil {
 			return err
 		}
 
@@ -566,6 +573,7 @@ func TestTxnTimestampRegression(t *testing.T) {
 // See issue #676 for full details about original bug.
 func TestTxnLongDelayBetweenWritesWithConcurrentRead(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
 	s, _ := createTestDB(t)
 	defer s.Stop()
 
@@ -574,7 +582,7 @@ func TestTxnLongDelayBetweenWritesWithConcurrentRead(t *testing.T) {
 	ch := make(chan struct{})
 	errChan := make(chan error)
 	go func() {
-		errChan <- s.DB.Txn(context.TODO(), func(txn *client.Txn) error {
+		errChan <- s.DB.Txn(ctx, func(txn *client.Txn) error {
 			// Use snapshot isolation.
 			if err := txn.SetIsolation(enginepb.SNAPSHOT); err != nil {
 				return err
@@ -596,7 +604,7 @@ func TestTxnLongDelayBetweenWritesWithConcurrentRead(t *testing.T) {
 	<-ch
 	// Delay for longer than the cache window.
 	s.Manual.Increment((storage.MinTSCacheWindow + time.Second).Nanoseconds())
-	if err := s.DB.Txn(context.TODO(), func(txn *client.Txn) error {
+	if err := s.DB.Txn(ctx, func(txn *client.Txn) error {
 		// Use snapshot isolation.
 		if err := txn.SetIsolation(enginepb.SNAPSHOT); err != nil {
 			return err
@@ -635,6 +643,7 @@ func TestTxnLongDelayBetweenWritesWithConcurrentRead(t *testing.T) {
 // See issue #676 for full details about original bug.
 func TestTxnRepeatGetWithRangeSplit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
 	s, _ := createTestDB(t)
 	defer s.Stop()
 
@@ -644,7 +653,7 @@ func TestTxnRepeatGetWithRangeSplit(t *testing.T) {
 	ch := make(chan struct{})
 	errChan := make(chan error)
 	go func() {
-		errChan <- s.DB.Txn(context.TODO(), func(txn *client.Txn) error {
+		errChan <- s.DB.Txn(ctx, func(txn *client.Txn) error {
 			// Use snapshot isolation.
 			if err := txn.SetIsolation(enginepb.SNAPSHOT); err != nil {
 				return err
@@ -665,7 +674,7 @@ func TestTxnRepeatGetWithRangeSplit(t *testing.T) {
 	// Wait till txnA finish put(a).
 	<-ch
 
-	if err := s.DB.Txn(context.TODO(), func(txn *client.Txn) error {
+	if err := s.DB.Txn(ctx, func(txn *client.Txn) error {
 		// Use snapshot isolation.
 		if err := txn.SetIsolation(enginepb.SNAPSHOT); err != nil {
 			return err
@@ -678,14 +687,14 @@ func TestTxnRepeatGetWithRangeSplit(t *testing.T) {
 		}
 		s.Manual.Increment(time.Second.Nanoseconds())
 		// Split range by keyB.
-		if err := s.DB.AdminSplit(context.TODO(), splitKey); err != nil {
+		if err := s.DB.AdminSplit(ctx, splitKey); err != nil {
 			t.Fatal(err)
 		}
 		// Wait till split complete.
 		// Check that we split 1 times in allotted time.
 		testutils.SucceedsSoon(t, func() error {
 			// Scan the meta records.
-			rows, serr := s.DB.Scan(context.TODO(), keys.Meta2Prefix, keys.MetaMax, 0)
+			rows, serr := s.DB.Scan(ctx, keys.Meta2Prefix, keys.MetaMax, 0)
 			if serr != nil {
 				t.Fatalf("failed to scan meta2 keys: %s", serr)
 			}
@@ -720,6 +729,7 @@ func TestTxnRepeatGetWithRangeSplit(t *testing.T) {
 // with the original timestamp of a restarted transaction.
 func TestTxnRestartedSerializableTimestampRegression(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
 	s, _ := createTestDB(t)
 	defer s.Stop()
 
@@ -729,7 +739,7 @@ func TestTxnRestartedSerializableTimestampRegression(t *testing.T) {
 	errChan := make(chan error)
 	var count int
 	go func() {
-		errChan <- s.DB.Txn(context.TODO(), func(txn *client.Txn) error {
+		errChan <- s.DB.Txn(ctx, func(txn *client.Txn) error {
 			count++
 			// Use a low priority for the transaction so that it can be pushed.
 			if err := txn.SetUserPriority(roachpb.MinUserPriority); err != nil {
@@ -754,11 +764,11 @@ func TestTxnRestartedSerializableTimestampRegression(t *testing.T) {
 	// Wait until txnA finishes put(a).
 	<-ch
 	// Attempt to get keyA, which will push txnA.
-	if _, err := s.DB.Get(context.TODO(), keyA); err != nil {
+	if _, err := s.DB.Get(ctx, keyA); err != nil {
 		t.Fatal(err)
 	}
 	// Do a read at keyB to cause txnA to forward timestamp.
-	if _, err := s.DB.Get(context.TODO(), keyB); err != nil {
+	if _, err := s.DB.Get(ctx, keyB); err != nil {
 		t.Fatal(err)
 	}
 	// Notify txnA to commit.

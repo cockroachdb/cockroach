@@ -43,7 +43,7 @@ var emptyAddr = util.MakeUnresolvedAddr("test", "<test-addr>")
 func newTestInfoStore() (*infoStore, *stop.Stopper) {
 	stopper := stop.NewStopper()
 	nc := &base.NodeIDContainer{}
-	nc.Set(context.TODO(), 1)
+	nc.Set(context.Background(), 1)
 	is := newInfoStore(log.AmbientContext{}, nc, emptyAddr, stopper)
 	return is, stopper
 }

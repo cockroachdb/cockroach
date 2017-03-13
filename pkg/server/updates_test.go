@@ -112,7 +112,7 @@ func TestReportUsage(t *testing.T) {
 	}
 
 	node := ts.node.recorder.GetStatusSummary()
-	ts.reportUsage(context.TODO())
+	ts.reportUsage(context.Background())
 
 	ts.Stopper().Stop() // stopper will wait for the update/report loop to finish too.
 	recorder.Close()

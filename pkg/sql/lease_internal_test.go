@@ -157,7 +157,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
 
 	var leases []*LeaseState
-	err := kvDB.Txn(context.TODO(), func(txn *client.Txn) error {
+	err := kvDB.Txn(context.Background(), func(txn *client.Txn) error {
 		for i := 0; i < 3; i++ {
 			lease, err := leaseManager.acquireFreshestFromStore(txn.Context, txn, tableDesc.ID)
 			if err != nil {
@@ -179,7 +179,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	}
 
 	if err := ts.purgeOldLeases(
-		context.TODO(), kvDB, false, 1 /* minVersion */, leaseManager); err != nil {
+		context.Background(), kvDB, false, 1 /* minVersion */, leaseManager); err != nil {
 		t.Fatal(err)
 	}
 
@@ -368,7 +368,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 
 	// Populate the name cache.
 	var lease *LeaseState
-	if err := kvDB.Txn(context.TODO(), func(txn *client.Txn) error {
+	if err := kvDB.Txn(context.Background(), func(txn *client.Txn) error {
 		var err error
 		lease, err = leaseManager.AcquireByName(txn.Context, txn, tableDesc.ParentID, "test")
 		return err
@@ -399,7 +399,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 
 	for i := 0; i < 50; i++ {
 		var leaseByName *LeaseState
-		if err := kvDB.Txn(context.TODO(), func(txn *client.Txn) error {
+		if err := kvDB.Txn(context.Background(), func(txn *client.Txn) error {
 			var err error
 			lease, err := leaseManager.AcquireByName(txn.Context, txn, tableDesc.ParentID, "test")
 			if err != nil {
@@ -482,7 +482,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	for i := 0; i < numRoutines; i++ {
 		go func() {
 			defer wg.Done()
-			err := kvDB.Txn(context.TODO(), func(txn *client.Txn) error {
+			err := kvDB.Txn(context.Background(), func(txn *client.Txn) error {
 				lease, err := leaseManager.acquireFreshestFromStore(txn.Context, txn, tableDesc.ID)
 				if err != nil {
 					return err

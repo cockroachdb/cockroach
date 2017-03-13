@@ -150,7 +150,7 @@ func TestGCQueueShouldQueue(t *testing.T) {
 			}
 			tc.repl.mu.state.Stats = ms
 		}()
-		shouldQ, priority := gcQ.shouldQueue(context.TODO(), now, tc.repl, cfg)
+		shouldQ, priority := gcQ.shouldQueue(context.Background(), now, tc.repl, cfg)
 		if shouldQ != test.shouldQ {
 			t.Errorf("%d: should queue expected %t; got %t", i, test.shouldQ, shouldQ)
 		}

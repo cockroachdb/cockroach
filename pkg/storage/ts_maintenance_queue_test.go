@@ -175,7 +175,7 @@ func TestTimeSeriesMaintenanceQueue(t *testing.T) {
 		}
 		for _, key := range keys {
 			repl := store.LookupReplica(key, nil)
-			ts, err := repl.GetQueueLastProcessed(context.TODO(), "timeSeriesMaintenance")
+			ts, err := repl.GetQueueLastProcessed(context.Background(), "timeSeriesMaintenance")
 			if err != nil {
 				return err
 			}
@@ -254,7 +254,7 @@ func TestTimeSeriesMaintenanceQueueServer(t *testing.T) {
 			Value:          300.0,
 		},
 	}
-	if err := tsdb.StoreData(context.TODO(), ts.Resolution10s, []tspb.TimeSeriesData{
+	if err := tsdb.StoreData(context.Background(), ts.Resolution10s, []tspb.TimeSeriesData{
 		{
 			Name:       seriesName,
 			Source:     sourceName,
@@ -271,7 +271,7 @@ func TestTimeSeriesMaintenanceQueueServer(t *testing.T) {
 
 	// Force a range split in between near past and far past. This guarantees
 	// that the pruning operation will issue a DeleteRange which spans ranges.
-	if err := db.AdminSplit(context.TODO(), splitKey); err != nil {
+	if err := db.AdminSplit(context.Background(), splitKey); err != nil {
 		t.Fatal(err)
 	}
 
@@ -279,7 +279,7 @@ func TestTimeSeriesMaintenanceQueueServer(t *testing.T) {
 	// of time to a point in the near future.
 	getDatapoints := func() ([]tspb.TimeSeriesDatapoint, error) {
 		dps, _, err := tsdb.Query(
-			context.TODO(),
+			context.Background(),
 			tspb.Query{Name: seriesName},
 			ts.Resolution10s,
 			ts.Resolution10s.SampleDuration(),

@@ -65,7 +65,7 @@ func TestLogSplits(t *testing.T) {
 	}
 
 	// Generate an explicit split event.
-	if err := kvDB.AdminSplit(context.TODO(), "splitkey"); err != nil {
+	if err := kvDB.AdminSplit(context.Background(), "splitkey"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -143,7 +143,7 @@ func TestLogRebalances(t *testing.T) {
 	// Use a client to get the RangeDescriptor for the first range. We will use
 	// this range's information to log fake rebalance events.
 	desc := &roachpb.RangeDescriptor{}
-	if err := db.GetProto(context.TODO(), keys.RangeDescriptorKey(roachpb.RKeyMin), desc); err != nil {
+	if err := db.GetProto(context.Background(), keys.RangeDescriptorKey(roachpb.RKeyMin), desc); err != nil {
 		t.Fatal(err)
 	}
 
@@ -158,7 +158,7 @@ func TestLogRebalances(t *testing.T) {
 
 	// Log several fake events using the store.
 	logEvent := func(changeType roachpb.ReplicaChangeType) {
-		if err := db.Txn(context.TODO(), func(txn *client.Txn) error {
+		if err := db.Txn(context.Background(), func(txn *client.Txn) error {
 			return store.LogReplicaChangeTest(txn.Context, txn, changeType, desc.Replicas[0], *desc)
 		}); err != nil {
 			t.Fatal(err)

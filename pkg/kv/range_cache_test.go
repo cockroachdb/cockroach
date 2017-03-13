@@ -298,6 +298,7 @@ func TestRangeCacheAssumptions(t *testing.T) {
 func TestRangeCache(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	db := initTestDescriptorDB(t)
+	ctx := context.Background()
 
 	doLookup(t, db.cache, "aa")
 	db.assertLookupCountEq(t, 2, "aa")
@@ -331,7 +332,7 @@ func TestRangeCache(t *testing.T) {
 	db.assertLookupCountEq(t, 0, "xx")
 
 	// Evict clears one level 1 and one level 2 cache
-	if err := db.cache.EvictCachedRangeDescriptor(context.TODO(), roachpb.RKey("da"), nil, false); err != nil {
+	if err := db.cache.EvictCachedRangeDescriptor(ctx, roachpb.RKey("da"), nil, false); err != nil {
 		t.Fatal(err)
 	}
 	doLookup(t, db.cache, "fa")
@@ -346,7 +347,7 @@ func TestRangeCache(t *testing.T) {
 
 	// Attempt to compare-and-evict with a descriptor that is not equal to the
 	// cached one; it should not alter the cache.
-	if err := db.cache.EvictCachedRangeDescriptor(context.TODO(), roachpb.RKey("cz"), &roachpb.RangeDescriptor{}, false); err != nil {
+	if err := db.cache.EvictCachedRangeDescriptor(ctx, roachpb.RKey("cz"), &roachpb.RangeDescriptor{}, false); err != nil {
 		t.Fatal(err)
 	}
 	_, evictToken := doLookup(t, db.cache, "cz")
@@ -648,6 +649,7 @@ func TestRangeCacheUseIntents(t *testing.T) {
 // cached entries are cleared when adding a new entry.
 func TestRangeCacheClearOverlapping(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
 
 	defDesc := &roachpb.RangeDescriptor{
 		StartKey: roachpb.RKeyMin,
@@ -666,7 +668,7 @@ func TestRangeCacheClearOverlapping(t *testing.T) {
 		StartKey: roachpb.RKey("b"),
 		EndKey:   roachpb.RKeyMax,
 	}
-	if err := cache.clearOverlappingCachedRangeDescriptors(context.TODO(), minToBDesc); err != nil {
+	if err := cache.clearOverlappingCachedRangeDescriptors(ctx, minToBDesc); err != nil {
 		t.Fatal(err)
 	}
 	cache.rangeCache.cache.Add(rangeCacheKey(mustMeta(roachpb.RKey("b"))), minToBDesc)
@@ -675,7 +677,7 @@ func TestRangeCacheClearOverlapping(t *testing.T) {
 	} else if desc != nil {
 		t.Errorf("descriptor unexpectedly non-nil: %s", desc)
 	}
-	if err := cache.clearOverlappingCachedRangeDescriptors(context.TODO(), bToMaxDesc); err != nil {
+	if err := cache.clearOverlappingCachedRangeDescriptors(ctx, bToMaxDesc); err != nil {
 		t.Fatal(err)
 	}
 	cache.rangeCache.cache.Add(rangeCacheKey(mustMeta(roachpb.RKeyMax)), bToMaxDesc)
@@ -686,7 +688,7 @@ func TestRangeCacheClearOverlapping(t *testing.T) {
 	}
 
 	// Add default descriptor back which should remove two split descriptors.
-	if err := cache.clearOverlappingCachedRangeDescriptors(context.TODO(), defDesc); err != nil {
+	if err := cache.clearOverlappingCachedRangeDescriptors(ctx, defDesc); err != nil {
 		t.Fatal(err)
 	}
 	cache.rangeCache.cache.Add(rangeCacheKey(keys.RangeMetaKey(roachpb.RKeyMax)), defDesc)
@@ -703,7 +705,7 @@ func TestRangeCacheClearOverlapping(t *testing.T) {
 		StartKey: roachpb.RKey("b"),
 		EndKey:   roachpb.RKey("c"),
 	}
-	if err := cache.clearOverlappingCachedRangeDescriptors(context.TODO(), bToCDesc); err != nil {
+	if err := cache.clearOverlappingCachedRangeDescriptors(ctx, bToCDesc); err != nil {
 		t.Fatal(err)
 	}
 	cache.rangeCache.cache.Add(rangeCacheKey(mustMeta(roachpb.RKey("c"))), bToCDesc)
@@ -717,7 +719,7 @@ func TestRangeCacheClearOverlapping(t *testing.T) {
 		StartKey: roachpb.RKey("a"),
 		EndKey:   roachpb.RKey("b"),
 	}
-	if err := cache.clearOverlappingCachedRangeDescriptors(context.TODO(), aToBDesc); err != nil {
+	if err := cache.clearOverlappingCachedRangeDescriptors(ctx, aToBDesc); err != nil {
 		t.Fatal(err)
 	}
 	cache.rangeCache.cache.Add(rangeCacheKey(mustMeta(roachpb.RKey("b"))), aToBDesc)
@@ -739,6 +741,7 @@ func TestRangeCacheClearOverlapping(t *testing.T) {
 // simply to increment the meta key for StartKey, not StartKey itself.
 func TestRangeCacheClearOverlappingMeta(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
 
 	firstDesc := &roachpb.RangeDescriptor{
 		StartKey: roachpb.RKeyMin,
@@ -766,7 +769,7 @@ func TestRangeCacheClearOverlappingMeta(t *testing.T) {
 				t.Fatalf("invocation of clearOverlappingCachedRangeDescriptors panicked: %v", r)
 			}
 		}()
-		if err := cache.clearOverlappingCachedRangeDescriptors(context.TODO(), metaSplitDesc); err != nil {
+		if err := cache.clearOverlappingCachedRangeDescriptors(ctx, metaSplitDesc); err != nil {
 			t.Fatal(err)
 		}
 	}()

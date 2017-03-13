@@ -73,6 +73,7 @@ func TestIntentResolution(t *testing.T) {
 
 	splitKey := []byte("s")
 	for i, tc := range testCases {
+		ctx := context.Background()
 		// Use deterministic randomness to randomly put the writes in separate
 		// batches or commit them with EndTransaction.
 		rnd, seed := randutil.NewPseudoRand()
@@ -119,11 +120,11 @@ func TestIntentResolution(t *testing.T) {
 				Knobs: base.TestingKnobs{Store: &storeKnobs}})
 			defer s.Stopper().Stop()
 			// Split the Range. This should not have any asynchronous intents.
-			if err := kvDB.AdminSplit(context.TODO(), splitKey); err != nil {
+			if err := kvDB.AdminSplit(ctx, splitKey); err != nil {
 				t.Fatal(err)
 			}
 
-			if err := kvDB.Txn(context.TODO(), func(txn *client.Txn) error {
+			if err := kvDB.Txn(ctx, func(txn *client.Txn) error {
 				b := txn.NewBatch()
 				if tc.keys[0] >= string(splitKey) {
 					t.Fatalf("first key %s must be < split key %s", tc.keys[0], splitKey)
@@ -158,7 +159,7 @@ func TestIntentResolution(t *testing.T) {
 			// Use Raft to make it likely that any straddling intent
 			// resolutions have come in. Don't touch existing data; that could
 			// generate unexpected intent resolutions.
-			if _, err := kvDB.Scan(context.TODO(), "z\x00", "z\x00\x00", 0); err != nil {
+			if _, err := kvDB.Scan(ctx, "z\x00", "z\x00\x00", 0); err != nil {
 				t.Fatal(err)
 			}
 		}()

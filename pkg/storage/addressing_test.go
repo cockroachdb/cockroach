@@ -130,6 +130,7 @@ func TestUpdateRangeAddressing(t *testing.T) {
 	expMetas := metaSlice{}
 
 	for i, test := range testCases {
+		ctx := context.Background()
 		left := &roachpb.RangeDescriptor{RangeID: roachpb.RangeID(i * 2), StartKey: test.leftStart, EndKey: test.leftEnd}
 		right := &roachpb.RangeDescriptor{RangeID: roachpb.RangeID(i*2 + 1), StartKey: test.rightStart, EndKey: test.rightEnd}
 		b := &client.Batch{}
@@ -154,7 +155,7 @@ func TestUpdateRangeAddressing(t *testing.T) {
 			store.testSender(), store.cfg.Clock,
 			false, stopper, kv.MakeTxnMetrics(time.Second))
 		db := client.NewDB(tcs, store.cfg.Clock)
-		txn := client.NewTxn(context.TODO(), *db)
+		txn := client.NewTxn(ctx, *db)
 		if err := txn.Run(b); err != nil {
 			t.Fatal(err)
 		}
@@ -162,7 +163,7 @@ func TestUpdateRangeAddressing(t *testing.T) {
 			t.Fatal(err)
 		}
 		// Scan meta keys directly from engine.
-		kvs, _, _, err := engine.MVCCScan(context.Background(), store.Engine(), keys.MetaMin, keys.MetaMax, math.MaxInt64, hlc.MaxTimestamp, true, nil)
+		kvs, _, _, err := engine.MVCCScan(ctx, store.Engine(), keys.MetaMin, keys.MetaMax, math.MaxInt64, hlc.MaxTimestamp, true, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -200,16 +201,16 @@ func TestUpdateRangeAddressing(t *testing.T) {
 
 		if test.split {
 			if log.V(1) {
-				log.Infof(context.Background(), "test case %d: split %q-%q at %q", i, left.StartKey, right.EndKey, left.EndKey)
+				log.Infof(ctx, "test case %d: split %q-%q at %q", i, left.StartKey, right.EndKey, left.EndKey)
 			}
 		} else {
 			if log.V(1) {
-				log.Infof(context.Background(), "test case %d: merge %q-%q + %q-%q", i, left.StartKey, left.EndKey, left.EndKey, right.EndKey)
+				log.Infof(ctx, "test case %d: merge %q-%q + %q-%q", i, left.StartKey, left.EndKey, left.EndKey, right.EndKey)
 			}
 		}
 		for _, meta := range metas {
 			if log.V(1) {
-				log.Infof(context.Background(), "%q", meta.key)
+				log.Infof(ctx, "%q", meta.key)
 			}
 		}
 

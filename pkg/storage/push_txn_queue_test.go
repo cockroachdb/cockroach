@@ -225,7 +225,7 @@ func TestPushTxnQueueEnableDisable(t *testing.T) {
 	}
 	ptq.mu.Unlock()
 
-	if resp, pErr := ptq.MaybeWait(context.TODO(), &req); resp != nil || pErr != nil {
+	if resp, pErr := ptq.MaybeWait(context.Background(), &req); resp != nil || pErr != nil {
 		t.Errorf("expected nil resp and err as queue is disabled; got %+v, %s", resp, pErr)
 	}
 }

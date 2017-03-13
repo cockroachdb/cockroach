@@ -111,7 +111,7 @@ func (t *leaseTest) acquire(
 	nodeID uint32, descID sqlbase.ID, version sqlbase.DescriptorVersion,
 ) (*sql.LeaseState, error) {
 	var lease *sql.LeaseState
-	err := t.kvDB.Txn(context.TODO(), func(txn *client.Txn) error {
+	err := t.kvDB.Txn(context.Background(), func(txn *client.Txn) error {
 		var err error
 		lease, err = t.node(nodeID).Acquire(txn.Context, txn, descID, version)
 		return err
@@ -171,7 +171,7 @@ func (t *leaseTest) node(nodeID uint32) *sql.LeaseManager {
 	mgr := t.nodes[nodeID]
 	if mgr == nil {
 		nc := &base.NodeIDContainer{}
-		nc.Set(context.TODO(), roachpb.NodeID(nodeID))
+		nc.Set(context.Background(), roachpb.NodeID(nodeID))
 		mgr = sql.NewLeaseManager(
 			nc, *t.kvDB,
 			t.server.Clock(),
@@ -199,7 +199,7 @@ func TestLeaseManager(testingT *testing.T) {
 	defer t.cleanup()
 
 	const descID = keys.LeaseTableID
-	ctx := context.TODO()
+	ctx := context.Background()
 
 	// We can't acquire a lease on a non-existent table.
 	expected := "descriptor not found"
@@ -369,7 +369,7 @@ func TestLeaseManagerPublishVersionChanged(testingT *testing.T) {
 	wg.Add(2)
 
 	go func(n1update, n2start chan struct{}) {
-		_, err := n1.Publish(context.TODO(), descID, func(*sqlbase.TableDescriptor) error {
+		_, err := n1.Publish(context.Background(), descID, func(*sqlbase.TableDescriptor) error {
 			if n2start != nil {
 				// Signal node 2 to start.
 				close(n2start)
@@ -390,7 +390,7 @@ func TestLeaseManagerPublishVersionChanged(testingT *testing.T) {
 		// Wait for node 1 signal indicating that node 1 is in its update()
 		// function.
 		<-n2start
-		_, err := n2.Publish(context.TODO(), descID, func(*sqlbase.TableDescriptor) error {
+		_, err := n2.Publish(context.Background(), descID, func(*sqlbase.TableDescriptor) error {
 			return nil
 		}, nil)
 		if err != nil {
@@ -536,7 +536,7 @@ func acquire(
 	ctx context.Context, s *server.TestServer, descID sqlbase.ID, version sqlbase.DescriptorVersion,
 ) (*sql.LeaseState, error) {
 	var lease *sql.LeaseState
-	err := s.DB().Txn(context.TODO(), func(txn *client.Txn) error {
+	err := s.DB().Txn(context.Background(), func(txn *client.Txn) error {
 		var err error
 		lease, err = s.LeaseManager().(*sql.LeaseManager).Acquire(ctx, txn, descID, version)
 		return err
@@ -594,7 +594,7 @@ CREATE TABLE test.t(a INT PRIMARY KEY);
 	}
 
 	tableDesc := sqlbase.GetTableDescriptor(kvDB, "test", "t")
-	ctx := context.TODO()
+	ctx := context.Background()
 
 	lease1, err := acquire(ctx, s.(*server.TestServer), tableDesc.ID, 0)
 	if err != nil {

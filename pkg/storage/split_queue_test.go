@@ -102,7 +102,7 @@ func TestSplitQueueShouldQueue(t *testing.T) {
 		if err := tc.repl.setDesc(&copy); err != nil {
 			t.Fatal(err)
 		}
-		shouldQ, priority := splitQ.shouldQueue(context.TODO(), hlc.Timestamp{}, tc.repl, cfg)
+		shouldQ, priority := splitQ.shouldQueue(context.Background(), hlc.Timestamp{}, tc.repl, cfg)
 		if shouldQ != test.shouldQ {
 			t.Errorf("%d: should queue expected %t; got %t", i, test.shouldQ, shouldQ)
 		}

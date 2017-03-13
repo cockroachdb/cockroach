@@ -113,14 +113,14 @@ func TestValues(t *testing.T) {
 	}
 
 	for i, tc := range testCases {
-		ctx := context.TODO()
+		ctx := context.Background()
 		plan, err := func() (_ planNode, err error) {
 			defer func() {
 				if r := recover(); r != nil {
 					err = errors.Errorf("%v", r)
 				}
 			}()
-			return p.ValuesClause(context.TODO(), tc.stmt, nil)
+			return p.ValuesClause(ctx, tc.stmt, nil)
 		}()
 		if err == nil != tc.ok {
 			t.Errorf("%d: error_expected=%t, but got error %v", i, tc.ok, err)

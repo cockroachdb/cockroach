@@ -27,7 +27,7 @@ import (
 
 func TestLeaseHolderCache(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	ctx := context.TODO()
+	ctx := context.Background()
 	lc := newLeaseHolderCache(3)
 	if repDesc, ok := lc.Lookup(ctx, 12); ok {
 		t.Errorf("lookup of missing key returned: %+v", repDesc)

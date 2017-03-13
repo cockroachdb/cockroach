@@ -415,6 +415,7 @@ func TestStopperShouldQuiesce(t *testing.T) {
 
 func TestStopperRunLimitedAsyncTask(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
 	s := stop.NewStopper()
 	defer s.Stop()
 
@@ -459,9 +460,7 @@ func TestStopperRunLimitedAsyncTask(t *testing.T) {
 
 	for i := 0; i < numTasks; i++ {
 		wg.Add(1)
-		if err := s.RunLimitedAsyncTask(
-			context.TODO(), sem, true /* wait */, f,
-		); err != nil {
+		if err := s.RunLimitedAsyncTask(ctx, sem, true /* wait */, f); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -476,9 +475,8 @@ func TestStopperRunLimitedAsyncTask(t *testing.T) {
 
 	sem = make(chan struct{}, 1)
 	sem <- struct{}{}
-	err := s.RunLimitedAsyncTask(
-		context.TODO(), sem, false /* wait */, func(_ context.Context) {
-		},
+	err := s.RunLimitedAsyncTask(ctx, sem, false /* wait */, func(_ context.Context) {
+	},
 	)
 	if err != stop.ErrThrottled {
 		t.Fatalf("expected %v; got %v", stop.ErrThrottled, err)
@@ -500,7 +498,7 @@ func TestStopperRunLimitedAsyncTaskCancelContext(t *testing.T) {
 	var workersRun int32
 	var workersCancelled int32
 
-	ctx, cancel := context.WithCancel(context.TODO())
+	ctx, cancel := context.WithCancel(context.Background())
 	f := func(ctx context.Context) {
 		atomic.AddInt32(&workersRun, 1)
 		workerStarted <- struct{}{}

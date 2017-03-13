@@ -535,7 +535,7 @@ func TestClientForwardUnresolved(t *testing.T) {
 	local.outgoing.addPlaceholder() // so that the resolvePlaceholder in handleResponse doesn't fail
 	local.mu.Unlock()
 	if err := client.handleResponse(
-		context.TODO(), local, reply,
+		context.Background(), local, reply,
 	); !testutils.IsError(err, "received forward") {
 		t.Fatal(err)
 	}

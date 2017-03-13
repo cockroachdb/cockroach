@@ -43,7 +43,7 @@ func TestDropDatabase(t *testing.T) {
 	params, _ := createTestServerParams()
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop()
-	ctx := context.TODO()
+	ctx := context.Background()
 
 	// Fix the column families so the key counts below don't change if the
 	// family heuristics are updated.
@@ -166,8 +166,10 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 	}
 }
 
-func checkKeyCount(t *testing.T, kvDB *client.DB, prefix roachpb.Key, numKeys int) {
-	if kvs, err := kvDB.Scan(context.TODO(), prefix, prefix.PrefixEnd(), 0); err != nil {
+func checkKeyCount(
+	t *testing.T, kvDB *client.DB, ctx context.Context, prefix roachpb.Key, numKeys int,
+) {
+	if kvs, err := kvDB.Scan(ctx, prefix, prefix.PrefixEnd(), 0); err != nil {
 		t.Fatal(err)
 	} else if l := numKeys; len(kvs) != l {
 		t.Fatalf("expected %d key value pairs, but got %d", l, len(kvs))
@@ -226,11 +228,11 @@ func TestDropIndex(t *testing.T) {
 	}
 	indexPrefix := roachpb.Key(sqlbase.MakeIndexKeyPrefix(tableDesc, tableDesc.Indexes[i].ID))
 
-	checkKeyCount(t, kvDB, indexPrefix, numRows)
+	checkKeyCount(t, kvDB, context.Background(), indexPrefix, numRows)
 	if _, err := sqlDB.Exec(`DROP INDEX t.kv@foo`); err != nil {
 		t.Fatal(err)
 	}
-	checkKeyCount(t, kvDB, indexPrefix, 0)
+	checkKeyCount(t, kvDB, context.Background(), indexPrefix, 0)
 
 	tableDesc = sqlbase.GetTableDescriptor(kvDB, "t", "kv")
 	if _, _, err := tableDesc.FindIndexByName("foo"); err == nil {
@@ -295,12 +297,12 @@ func TestDropIndexInterleaved(t *testing.T) {
 	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "kv")
 	tablePrefix := roachpb.Key(keys.MakeTablePrefix(uint32(tableDesc.ID)))
 
-	checkKeyCount(t, kvDB, tablePrefix, 3*numRows)
+	checkKeyCount(t, kvDB, context.Background(), tablePrefix, 3*numRows)
 
 	if _, err := sqlDB.Exec(`DROP INDEX t.intlv@intlv_idx`); err != nil {
 		t.Fatal(err)
 	}
-	checkKeyCount(t, kvDB, tablePrefix, 2*numRows)
+	checkKeyCount(t, kvDB, context.Background(), tablePrefix, 2*numRows)
 
 	// Ensure that index is not active.
 	tableDesc = sqlbase.GetTableDescriptor(kvDB, "t", "intlv")
@@ -336,7 +338,7 @@ func TestDropTable(t *testing.T) {
 	}
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop()
-	ctx := context.TODO()
+	ctx := context.Background()
 
 	numRows := 2*sql.TableTruncateChunkSize + 1
 	if err := createKVTable(sqlDB, numRows); err != nil {
@@ -395,11 +397,11 @@ func TestDropTable(t *testing.T) {
 		return createKVTable(sqlDB, numRows)
 	}
 
-	checkKeyCount(t, kvDB, tablePrefix, 3*numRows)
+	checkKeyCount(t, kvDB, context.Background(), tablePrefix, 3*numRows)
 	if _, err := sqlDB.Exec(`DROP TABLE t.kv`); err != nil {
 		t.Fatal(err)
 	}
-	checkKeyCount(t, kvDB, tablePrefix, 0)
+	checkKeyCount(t, kvDB, context.Background(), tablePrefix, 0)
 
 	if numDropTable != 2 {
 		t.Fatalf("numDropTable=%d, expected=2", numDropTable)
@@ -436,11 +438,11 @@ func TestDropTableInterleaved(t *testing.T) {
 	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "kv")
 	tablePrefix := roachpb.Key(keys.MakeTablePrefix(uint32(tableDesc.ID)))
 
-	checkKeyCount(t, kvDB, tablePrefix, 3*numRows)
+	checkKeyCount(t, kvDB, context.Background(), tablePrefix, 3*numRows)
 	if _, err := sqlDB.Exec(`DROP TABLE t.intlv`); err != nil {
 		t.Fatal(err)
 	}
-	checkKeyCount(t, kvDB, tablePrefix, numRows)
+	checkKeyCount(t, kvDB, context.Background(), tablePrefix, numRows)
 
 	// Test that deleted table cannot be used. This prevents regressions where
 	// name -> descriptor ID caches might make this statement erronously work.

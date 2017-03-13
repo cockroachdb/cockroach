@@ -31,6 +31,7 @@ import (
 // process ranges whose replicas are not all live.
 func TestConsistencyQueueRequiresLive(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
 	sc := storage.TestStoreConfig(nil)
 	mtc := &multiTestContext{storeConfig: &sc}
 	defer mtc.Stop()
@@ -43,16 +44,16 @@ func TestConsistencyQueueRequiresLive(t *testing.T) {
 
 	// Verify that queueing is immediately possible.
 	if shouldQ, priority := mtc.stores[0].ConsistencyQueueShouldQueue(
-		context.TODO(), mtc.clock.Now(), repl, config.SystemConfig{}); !shouldQ {
+		ctx, mtc.clock.Now(), repl, config.SystemConfig{}); !shouldQ {
 		t.Fatalf("expected shouldQ true; got %t, %f", shouldQ, priority)
 	}
 
 	// Stop a node and expire leases.
 	mtc.stopStore(2)
-	mtc.advanceClock(context.TODO())
+	mtc.advanceClock(ctx)
 
 	if shouldQ, priority := mtc.stores[0].ConsistencyQueueShouldQueue(
-		context.TODO(), mtc.clock.Now(), repl, config.SystemConfig{}); shouldQ {
+		ctx, mtc.clock.Now(), repl, config.SystemConfig{}); shouldQ {
 		t.Fatalf("expected shouldQ false; got %t, %f", shouldQ, priority)
 	}
 }

@@ -1278,7 +1278,7 @@ func TestTxnCommit(t *testing.T) {
 	db := client.NewDB(sender, s.Clock)
 
 	// Test normal commit.
-	if err := db.Txn(context.TODO(), func(txn *client.Txn) error {
+	if err := db.Txn(context.Background(), func(txn *client.Txn) error {
 		key := []byte("key-commit")
 
 		if err := txn.SetIsolation(enginepb.SNAPSHOT); err != nil {
@@ -1309,7 +1309,7 @@ func TestTxnOnePhaseCommit(t *testing.T) {
 	value := []byte("value")
 	db := client.NewDB(sender, s.Clock)
 
-	if err := db.Txn(context.TODO(), func(txn *client.Txn) error {
+	if err := db.Txn(context.Background(), func(txn *client.Txn) error {
 		key := []byte("key-commit")
 		b := txn.NewBatch()
 		b.Put(key, value)
@@ -1334,7 +1334,7 @@ func TestTxnAbandonCount(t *testing.T) {
 	// abandoned transactions.
 	sender.heartbeatInterval = 2 * time.Millisecond
 	sender.clientTimeout = 1 * time.Millisecond
-	if err := db.Txn(context.TODO(), func(txn *client.Txn) error {
+	if err := db.Txn(context.Background(), func(txn *client.Txn) error {
 		key := []byte("key-abandon")
 
 		if err := txn.SetIsolation(enginepb.SNAPSHOT); err != nil {
@@ -1373,7 +1373,7 @@ func TestTxnReadAfterAbandon(t *testing.T) {
 	sender.heartbeatInterval = 2 * time.Millisecond
 	sender.clientTimeout = 1 * time.Millisecond
 
-	err := db.Txn(context.TODO(), func(txn *client.Txn) error {
+	err := db.Txn(context.Background(), func(txn *client.Txn) error {
 		key := []byte("key-abandon")
 
 		if err := txn.SetIsolation(enginepb.SNAPSHOT); err != nil {
@@ -1410,7 +1410,7 @@ func TestTxnAbortCount(t *testing.T) {
 
 	intentionalErrText := "intentional error to cause abort"
 	// Test aborted transaction.
-	if err := db.Txn(context.TODO(), func(txn *client.Txn) error {
+	if err := db.Txn(context.Background(), func(txn *client.Txn) error {
 		key := []byte("key-abort")
 
 		if err := txn.SetIsolation(enginepb.SNAPSHOT); err != nil {
@@ -1437,16 +1437,17 @@ func TestTxnRestartCount(t *testing.T) {
 	key := []byte("key-restart")
 	value := []byte("value")
 	db := client.NewDB(sender, s.Clock)
+	ctx := context.Background()
 
 	// Start a transaction and do a GET. This forces a timestamp to be chosen for the transaction.
-	txn := client.NewTxn(context.Background(), *db)
+	txn := client.NewTxn(ctx, *db)
 	if _, err := txn.Get(key); err != nil {
 		t.Fatal(err)
 	}
 
 	// Outside of the transaction, read the same key as was read within the transaction. This
 	// means that future attempts to write will increase the timestamp.
-	if _, err := db.Get(context.TODO(), key); err != nil {
+	if _, err := db.Get(ctx, key); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1478,7 +1479,7 @@ func TestTxnDurations(t *testing.T) {
 	const incr int64 = 1000
 	for i := 0; i < puts; i++ {
 		key := roachpb.Key(fmt.Sprintf("key-txn-durations-%d", i))
-		if err := db.Txn(context.TODO(), func(txn *client.Txn) error {
+		if err := db.Txn(context.Background(), func(txn *client.Txn) error {
 			if err := txn.SetIsolation(enginepb.SNAPSHOT); err != nil {
 				return err
 			}

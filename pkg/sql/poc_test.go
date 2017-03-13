@@ -34,11 +34,11 @@ func TestPOC(t *testing.T) {
 	s, _, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop()
 
-	err := kvDB.Put(context.TODO(), "testkey", "testval")
+	err := kvDB.Put(context.Background(), "testkey", "testval")
 	if err != nil {
 		t.Fatal(err)
 	}
-	kv, err := kvDB.Get(context.TODO(), "testkey")
+	kv, err := kvDB.Get(context.Background(), "testkey")
 	if err != nil {
 		t.Fatal(err)
 	}

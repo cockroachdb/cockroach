@@ -240,7 +240,7 @@ func TestGossipOutgoingLimitEnforced(t *testing.T) {
 		t.Fatal(err)
 	}
 	for range peers {
-		local.tightenNetwork(context.TODO())
+		local.tightenNetwork(context.Background())
 	}
 
 	if outgoing := local.outgoing.gauge.Value(); outgoing > int64(maxPeers) {

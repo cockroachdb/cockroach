@@ -79,7 +79,7 @@ func TestDB_Get(t *testing.T) {
 	s, db := setup(t)
 	defer s.Stopper().Stop()
 
-	result, err := db.Get(context.TODO(), "aa")
+	result, err := db.Get(context.Background(), "aa")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -90,9 +90,9 @@ func TestDB_Put(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, db := setup(t)
 	defer s.Stopper().Stop()
-	ctx := context.TODO()
+	ctx := context.Background()
 
-	if err := db.Put(context.TODO(), "aa", "1"); err != nil {
+	if err := db.Put(ctx, "aa", "1"); err != nil {
 		t.Fatal(err)
 	}
 	result, err := db.Get(ctx, "aa")
@@ -106,7 +106,7 @@ func TestDB_CPut(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, db := setup(t)
 	defer s.Stopper().Stop()
-	ctx := context.TODO()
+	ctx := context.Background()
 
 	if err := db.Put(ctx, "aa", "1"); err != nil {
 		t.Fatal(err)
@@ -152,7 +152,7 @@ func TestDB_InitPut(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, db := setup(t)
 	defer s.Stopper().Stop()
-	ctx := context.TODO()
+	ctx := context.Background()
 
 	if err := db.InitPut(ctx, "aa", "1"); err != nil {
 		t.Fatal(err)
@@ -174,7 +174,7 @@ func TestDB_Inc(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, db := setup(t)
 	defer s.Stopper().Stop()
-	ctx := context.TODO()
+	ctx := context.Background()
 
 	if _, err := db.Inc(ctx, "aa", 100); err != nil {
 		t.Fatal(err)
@@ -194,7 +194,7 @@ func TestBatch(t *testing.T) {
 	b := &client.Batch{}
 	b.Get("aa")
 	b.Put("bb", "2")
-	if err := db.Run(context.TODO(), b); err != nil {
+	if err := db.Run(context.Background(), b); err != nil {
 		t.Fatal(err)
 	}
 
@@ -209,15 +209,16 @@ func TestDB_Scan(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, db := setup(t)
 	defer s.Stopper().Stop()
+	ctx := context.Background()
 
 	b := &client.Batch{}
 	b.Put("aa", "1")
 	b.Put("ab", "2")
 	b.Put("bb", "3")
-	if err := db.Run(context.TODO(), b); err != nil {
+	if err := db.Run(ctx, b); err != nil {
 		t.Fatal(err)
 	}
-	rows, err := db.Scan(context.TODO(), "a", "b", 100)
+	rows, err := db.Scan(ctx, "a", "b", 100)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -234,15 +235,16 @@ func TestDB_ReverseScan(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, db := setup(t)
 	defer s.Stopper().Stop()
+	ctx := context.Background()
 
 	b := &client.Batch{}
 	b.Put("aa", "1")
 	b.Put("ab", "2")
 	b.Put("bb", "3")
-	if err := db.Run(context.TODO(), b); err != nil {
+	if err := db.Run(ctx, b); err != nil {
 		t.Fatal(err)
 	}
-	rows, err := db.ReverseScan(context.TODO(), "ab", "c", 100)
+	rows, err := db.ReverseScan(ctx, "ab", "c", 100)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -259,18 +261,19 @@ func TestDB_Del(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, db := setup(t)
 	defer s.Stopper().Stop()
+	ctx := context.Background()
 
 	b := &client.Batch{}
 	b.Put("aa", "1")
 	b.Put("ab", "2")
 	b.Put("ac", "3")
-	if err := db.Run(context.TODO(), b); err != nil {
+	if err := db.Run(ctx, b); err != nil {
 		t.Fatal(err)
 	}
-	if err := db.Del(context.TODO(), "ab"); err != nil {
+	if err := db.Del(ctx, "ab"); err != nil {
 		t.Fatal(err)
 	}
-	rows, err := db.Scan(context.TODO(), "a", "b", 100)
+	rows, err := db.Scan(ctx, "a", "b", 100)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -286,8 +289,9 @@ func TestTxn_Commit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, db := setup(t)
 	defer s.Stopper().Stop()
+	ctx := context.Background()
 
-	err := db.Txn(context.TODO(), func(txn *client.Txn) error {
+	err := db.Txn(ctx, func(txn *client.Txn) error {
 		b := txn.NewBatch()
 		b.Put("aa", "1")
 		b.Put("ab", "2")
@@ -300,7 +304,7 @@ func TestTxn_Commit(t *testing.T) {
 	b := &client.Batch{}
 	b.Get("aa")
 	b.Get("ab")
-	if err := db.Run(context.TODO(), b); err != nil {
+	if err := db.Run(ctx, b); err != nil {
 		t.Fatal(err)
 	}
 	expected := map[string][]byte{
@@ -314,9 +318,9 @@ func TestDB_Put_insecure(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, _, db := serverutils.StartServer(t, base.TestServerArgs{Insecure: true})
 	defer s.Stopper().Stop()
-	ctx := context.TODO()
+	ctx := context.Background()
 
-	if err := db.Put(context.TODO(), "aa", "1"); err != nil {
+	if err := db.Put(ctx, "aa", "1"); err != nil {
 		t.Fatal(err)
 	}
 	result, err := db.Get(ctx, "aa")
@@ -331,7 +335,7 @@ func TestDebugName(t *testing.T) {
 	s, db := setup(t)
 	defer s.Stopper().Stop()
 
-	if err := db.Txn(context.TODO(), func(txn *client.Txn) error {
+	if err := db.Txn(context.Background(), func(txn *client.Txn) error {
 		const expected = "unnamed"
 		if txn.DebugName() != expected {
 			t.Fatalf("expected \"%s\", but found \"%s\"", expected, txn.DebugName())

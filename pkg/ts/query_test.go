@@ -972,12 +972,13 @@ func TestQuery(t *testing.T) {
 // the test model.
 func TestQueryDownsampling(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
 	tm := newTestModel(t)
 	tm.Start()
 	defer tm.Stop()
 
 	// Query with sampleDuration that is too small, expect error.
-	_, _, err := tm.DB.Query(context.TODO(), tspb.Query{}, Resolution10s, 1, 0, 10000)
+	_, _, err := tm.DB.Query(ctx, tspb.Query{}, Resolution10s, 1, 0, 10000)
 	if err == nil {
 		t.Fatal("expected query to fail with sampleDuration less than resolution allows.")
 	}
@@ -988,7 +989,7 @@ func TestQueryDownsampling(t *testing.T) {
 
 	// Query with sampleDuration which is not an even multiple of the resolution.
 	_, _, err = tm.DB.Query(
-		context.TODO(), tspb.Query{}, Resolution10s, Resolution10s.SampleDuration()+1, 0, 10000,
+		ctx, tspb.Query{}, Resolution10s, Resolution10s.SampleDuration()+1, 0, 10000,
 	)
 	if err == nil {
 		t.Fatal("expected query to fail with sampleDuration not an even multiple of the query resolution.")

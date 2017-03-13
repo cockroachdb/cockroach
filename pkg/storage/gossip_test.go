@@ -75,7 +75,7 @@ func TestGossipFirstRange(t *testing.T) {
 				if reflect.DeepEqual(&desc, gossiped) {
 					return
 				}
-				log.Infof(context.TODO(), "expected\n%+v\nbut found\n%+v", desc, gossiped)
+				log.Infof(context.Background(), "expected\n%+v\nbut found\n%+v", desc, gossiped)
 			}
 		}
 	}

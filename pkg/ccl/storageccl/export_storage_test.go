@@ -38,7 +38,7 @@ func testExportToTarget(t *testing.T, args roachpb.ExportStorage) {
 		t.Fatal(err)
 	}
 	testingFilename := "testing-123"
-	ctx := context.TODO()
+	ctx := context.Background()
 	// Setup a sink for the given args.
 	s, err := MakeExportStorage(ctx, args)
 	if err != nil {

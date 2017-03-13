@@ -42,6 +42,7 @@ func TestStoreRangeLease(t *testing.T) {
 
 	for _, enableEpoch := range []bool{true, false} {
 		t.Run(fmt.Sprintf("epoch-based leases? %t", enableEpoch), func(t *testing.T) {
+			ctx := context.Background()
 			sc := storage.TestStoreConfig(nil)
 			sc.EnableEpochRangeLeases = enableEpoch
 			mtc := &multiTestContext{storeConfig: &sc}
@@ -51,7 +52,7 @@ func TestStoreRangeLease(t *testing.T) {
 			splitKeys := []roachpb.Key{roachpb.Key("a"), roachpb.Key("b"), roachpb.Key("c")}
 			for _, splitKey := range splitKeys {
 				splitArgs := adminSplitArgs(splitKey, splitKey)
-				if _, pErr := client.SendWrapped(context.Background(), mtc.distSenders[0], splitArgs); pErr != nil {
+				if _, pErr := client.SendWrapped(ctx, mtc.distSenders[0], splitArgs); pErr != nil {
 					t.Fatal(pErr)
 				}
 			}
@@ -73,9 +74,9 @@ func TestStoreRangeLease(t *testing.T) {
 
 			// Allow leases to expire and send commands to ensure we
 			// re-acquire, then check types again.
-			mtc.advanceClock(context.TODO())
+			mtc.advanceClock(ctx)
 			for _, key := range splitKeys {
-				if _, err := mtc.dbs[0].Inc(context.TODO(), key, 1); err != nil {
+				if _, err := mtc.dbs[0].Inc(ctx, key, 1); err != nil {
 					t.Fatalf("%s failed to increment: %s", key, err)
 				}
 			}
@@ -103,6 +104,7 @@ func TestStoreRangeLease(t *testing.T) {
 // between expiration and epoch and back.
 func TestStoreRangeLeaseSwitcheroo(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
 	sc := storage.TestStoreConfig(nil)
 	sc.EnableEpochRangeLeases = true
 	mtc := &multiTestContext{storeConfig: &sc}
@@ -111,14 +113,14 @@ func TestStoreRangeLeaseSwitcheroo(t *testing.T) {
 
 	splitKey := roachpb.Key("a")
 	splitArgs := adminSplitArgs(splitKey, splitKey)
-	if _, pErr := client.SendWrapped(context.Background(), mtc.distSenders[0], splitArgs); pErr != nil {
+	if _, pErr := client.SendWrapped(ctx, mtc.distSenders[0], splitArgs); pErr != nil {
 		t.Fatal(pErr)
 	}
 
 	// Allow leases to expire and send commands to ensure we
 	// re-acquire, then check types again.
-	mtc.advanceClock(context.TODO())
-	if _, err := mtc.dbs[0].Inc(context.TODO(), splitKey, 1); err != nil {
+	mtc.advanceClock(ctx)
+	if _, err := mtc.dbs[0].Inc(ctx, splitKey, 1); err != nil {
 		t.Fatalf("failed to increment: %s", err)
 	}
 
@@ -134,8 +136,8 @@ func TestStoreRangeLeaseSwitcheroo(t *testing.T) {
 	sc.EnableEpochRangeLeases = false
 	mtc.restartStore(0)
 
-	mtc.advanceClock(context.TODO())
-	if _, err := mtc.dbs[0].Inc(context.TODO(), splitKey, 1); err != nil {
+	mtc.advanceClock(ctx)
+	if _, err := mtc.dbs[0].Inc(ctx, splitKey, 1); err != nil {
 		t.Fatalf("failed to increment: %s", err)
 	}
 
@@ -151,8 +153,8 @@ func TestStoreRangeLeaseSwitcheroo(t *testing.T) {
 	sc.EnableEpochRangeLeases = true
 	mtc.restartStore(0)
 
-	mtc.advanceClock(context.TODO())
-	if _, err := mtc.dbs[0].Inc(context.TODO(), splitKey, 1); err != nil {
+	mtc.advanceClock(ctx)
+	if _, err := mtc.dbs[0].Inc(ctx, splitKey, 1); err != nil {
 		t.Fatalf("failed to increment: %s", err)
 	}
 
@@ -168,6 +170,7 @@ func TestStoreRangeLeaseSwitcheroo(t *testing.T) {
 // data is gossiped at startup.
 func TestStoreGossipSystemData(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
 	sc := storage.TestStoreConfig(nil)
 	sc.EnableEpochRangeLeases = true
 	mtc := &multiTestContext{storeConfig: &sc}
@@ -176,10 +179,10 @@ func TestStoreGossipSystemData(t *testing.T) {
 
 	splitKey := keys.SystemConfigSplitKey
 	splitArgs := adminSplitArgs(splitKey, splitKey)
-	if _, pErr := client.SendWrapped(context.Background(), mtc.distSenders[0], splitArgs); pErr != nil {
+	if _, pErr := client.SendWrapped(ctx, mtc.distSenders[0], splitArgs); pErr != nil {
 		t.Fatal(pErr)
 	}
-	if _, err := mtc.dbs[0].Inc(context.TODO(), splitKey, 1); err != nil {
+	if _, err := mtc.dbs[0].Inc(ctx, splitKey, 1); err != nil {
 		t.Fatalf("failed to increment: %s", err)
 	}
 

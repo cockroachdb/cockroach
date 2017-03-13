@@ -1002,7 +1002,7 @@ func TestAddingFKs(t *testing.T) {
 	ordersDesc.State = sqlbase.TableDescriptor_ADD
 	ordersDesc.Version++
 	if err := kvDB.Put(
-		context.TODO(),
+		context.Background(),
 		sqlbase.MakeDescMetadataKey(ordersDesc.ID),
 		sqlbase.WrapDescriptor(ordersDesc),
 	); err != nil {

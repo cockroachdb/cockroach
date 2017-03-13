@@ -134,8 +134,8 @@ func verifyStats(t *testing.T, mtc *multiTestContext, storeIdxSlice ...int) {
 	}
 }
 
-func verifyRocksDBStats(t *testing.T, s *storage.Store) {
-	if err := s.ComputeMetrics(context.TODO(), 0); err != nil {
+func verifyRocksDBStats(t *testing.T, ctx context.Context, s *storage.Store) {
+	if err := s.ComputeMetrics(ctx, 0); err != nil {
 		t.Fatal(err)
 	}
 
@@ -168,6 +168,7 @@ func TestStoreMetrics(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	t.Skip("TODO(mrtracy): #9204")
 
+	ctx := context.Background()
 	mtc := &multiTestContext{}
 	defer mtc.Stop()
 	mtc.Start(t, 3)
@@ -208,7 +209,7 @@ func TestStoreMetrics(t *testing.T) {
 
 	// Add some data to the "right" range.
 	dataKey := []byte("z")
-	if _, err := mtc.dbs[0].Inc(context.TODO(), dataKey, 5); err != nil {
+	if _, err := mtc.dbs[0].Inc(ctx, dataKey, 5); err != nil {
 		t.Fatal(err)
 	}
 	mtc.waitForValues(roachpb.Key("z"), []int64{5, 5, 5})
@@ -218,7 +219,7 @@ func TestStoreMetrics(t *testing.T) {
 
 	// Create a transaction statement that fails, but will add an entry to the
 	// sequence cache. Regression test for #4969.
-	if err := mtc.dbs[0].Txn(context.TODO(), func(txn *client.Txn) error {
+	if err := mtc.dbs[0].Txn(ctx, func(txn *client.Txn) error {
 		b := txn.NewBatch()
 		b.CPut(dataKey, 7, 6)
 		return txn.Run(b)
@@ -244,6 +245,6 @@ func TestStoreMetrics(t *testing.T) {
 	// Verify all stats on store0 and store1 after range is removed.
 	verifyStats(t, mtc, 0, 1)
 
-	verifyRocksDBStats(t, mtc.stores[0])
-	verifyRocksDBStats(t, mtc.stores[1])
+	verifyRocksDBStats(t, ctx, mtc.stores[0])
+	verifyRocksDBStats(t, ctx, mtc.stores[1])
 }

@@ -184,6 +184,7 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 	// Set up a filter to so that the get operation at Step 3 will return an error.
 	var numGets int32
 
+	ctx := context.Background()
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 	manual := hlc.NewManualClock(123)
@@ -214,7 +215,7 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 
 	// Put an initial value.
 	initVal := []byte("initVal")
-	err := store.DB().Put(context.TODO(), key, initVal)
+	err := store.DB().Put(ctx, key, initVal)
 	if err != nil {
 		t.Fatalf("failed to put: %s", err)
 	}
@@ -231,7 +232,7 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 		// Start a txn that does read-after-write.
 		// The txn will be restarted twice, and the out-of-order put
 		// will happen in the second epoch.
-		errChan <- store.DB().Txn(context.TODO(), func(txn *client.Txn) error {
+		errChan <- store.DB().Txn(ctx, func(txn *client.Txn) error {
 			epoch++
 
 			if epoch == 1 {
@@ -283,7 +284,7 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 	requestHeader := roachpb.Span{
 		Key: roachpb.Key(key),
 	}
-	if _, err := client.SendWrappedWith(context.Background(), rg1(store), roachpb.Header{
+	if _, err := client.SendWrappedWith(ctx, rg1(store), roachpb.Header{
 		Timestamp:    cfg.Clock.Now(),
 		UserPriority: priority,
 	}, &roachpb.GetRequest{Span: requestHeader}); err != nil {
@@ -300,7 +301,7 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 	// timestamp cache from being updated).
 	manual.Increment(100)
 
-	if _, err := client.SendWrappedWith(context.Background(), rg1(store), roachpb.Header{
+	if _, err := client.SendWrappedWith(ctx, rg1(store), roachpb.Header{
 		Timestamp:    cfg.Clock.Now(),
 		UserPriority: priority,
 	}, &roachpb.GetRequest{Span: requestHeader}); err == nil {
@@ -778,6 +779,7 @@ func TestLeaseMetricsOnSplitAndTransfer(t *testing.T) {
 			}
 			return nil
 		}
+	ctx := context.Background()
 	mtc := &multiTestContext{storeConfig: &sc}
 	defer mtc.Stop()
 	mtc.Start(t, 2)
@@ -790,7 +792,7 @@ func TestLeaseMetricsOnSplitAndTransfer(t *testing.T) {
 	splitKey := roachpb.RKey("a")
 	splitArgs := adminSplitArgs(splitKey.AsRawKey(), splitKey.AsRawKey())
 	if _, pErr := client.SendWrapped(
-		context.Background(), rg1(mtc.stores[0]), splitArgs,
+		ctx, rg1(mtc.stores[0]), splitArgs,
 	); pErr != nil {
 		t.Fatal(pErr)
 	}
@@ -798,7 +800,7 @@ func TestLeaseMetricsOnSplitAndTransfer(t *testing.T) {
 	// Now, a successful transfer from LHS replica 0 to replica 1.
 	injectLeaseTransferError.Store(false)
 	if err := mtc.dbs[0].AdminTransferLease(
-		context.TODO(), keyMinReplica0.Desc().StartKey.AsRawKey(), mtc.stores[1].StoreID(),
+		ctx, keyMinReplica0.Desc().StartKey.AsRawKey(), mtc.stores[1].StoreID(),
 	); err != nil {
 		t.Fatalf("unable to transfer lease to replica 1: %s", err)
 	}
@@ -817,7 +819,7 @@ func TestLeaseMetricsOnSplitAndTransfer(t *testing.T) {
 	injectLeaseTransferError.Store(true)
 	keyAReplica0 := mtc.stores[0].LookupReplica(splitKey, nil)
 	if err := mtc.dbs[0].AdminTransferLease(
-		context.TODO(), keyAReplica0.Desc().StartKey.AsRawKey(), mtc.stores[1].StoreID(),
+		ctx, keyAReplica0.Desc().StartKey.AsRawKey(), mtc.stores[1].StoreID(),
 	); err == nil {
 		t.Fatal("expected an error transferring to an unknown store ID")
 	}
@@ -833,8 +835,8 @@ func TestLeaseMetricsOnSplitAndTransfer(t *testing.T) {
 	// Expire current leases and put a key to RHS of split to request
 	// an epoch-based lease.
 	testutils.SucceedsSoon(t, func() error {
-		mtc.advanceClock(context.TODO())
-		if err := mtc.stores[0].DB().Put(context.TODO(), "a", "foo"); err != nil {
+		mtc.advanceClock(ctx)
+		if err := mtc.stores[0].DB().Put(ctx, "a", "foo"); err != nil {
 			return err
 		}
 
@@ -842,7 +844,7 @@ func TestLeaseMetricsOnSplitAndTransfer(t *testing.T) {
 		// expiration and epoch leases. These values are counted from store 1
 		// because it will have the higher replica IDs. Expire leases to make
 		// sure that epoch-based leases are used for the split range.
-		if err := mtc.stores[1].ComputeMetrics(context.Background(), 0); err != nil {
+		if err := mtc.stores[1].ComputeMetrics(ctx, 0); err != nil {
 			return err
 		}
 		metrics = mtc.stores[1].Metrics()
@@ -1143,6 +1145,7 @@ func TestErrorHandlingForNonKVCommand(t *testing.T) {
 
 func TestRangeInfo(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
 	mtc := &multiTestContext{}
 	defer mtc.Stop()
 	mtc.Start(t, 2)
@@ -1153,9 +1156,7 @@ func TestRangeInfo(t *testing.T) {
 	// Split the key space at key "a".
 	splitKey := roachpb.RKey("a")
 	splitArgs := adminSplitArgs(splitKey.AsRawKey(), splitKey.AsRawKey())
-	if _, pErr := client.SendWrapped(
-		context.Background(), rg1(mtc.stores[0]), splitArgs,
-	); pErr != nil {
+	if _, pErr := client.SendWrapped(ctx, rg1(mtc.stores[0]), splitArgs); pErr != nil {
 		t.Fatal(pErr)
 	}
 
@@ -1178,7 +1179,7 @@ func TestRangeInfo(t *testing.T) {
 
 	// Verify range info is not set if unrequested.
 	getArgs := getArgs(splitKey.AsRawKey())
-	reply, pErr := client.SendWrapped(context.Background(), mtc.distSenders[0], getArgs)
+	reply, pErr := client.SendWrapped(ctx, mtc.distSenders[0], getArgs)
 	if pErr != nil {
 		t.Fatal(pErr)
 	}
@@ -1190,7 +1191,7 @@ func TestRangeInfo(t *testing.T) {
 	h := roachpb.Header{
 		ReturnRangeInfo: true,
 	}
-	reply, pErr = client.SendWrappedWith(context.Background(), mtc.distSenders[0], h, getArgs)
+	reply, pErr = client.SendWrappedWith(ctx, mtc.distSenders[0], h, getArgs)
 	if pErr != nil {
 		t.Fatal(pErr)
 	}
@@ -1206,7 +1207,7 @@ func TestRangeInfo(t *testing.T) {
 
 	// Verify range info on a put request.
 	putArgs := putArgs(splitKey.AsRawKey(), []byte("foo"))
-	reply, pErr = client.SendWrappedWith(context.Background(), mtc.distSenders[0], h, putArgs)
+	reply, pErr = client.SendWrappedWith(ctx, mtc.distSenders[0], h, putArgs)
 	if pErr != nil {
 		t.Fatal(pErr)
 	}
@@ -1222,7 +1223,7 @@ func TestRangeInfo(t *testing.T) {
 		},
 	}
 	h.Txn = roachpb.NewTransaction("test", roachpb.KeyMin, 1, enginepb.SERIALIZABLE, mtc.clock.Now(), 0)
-	reply, pErr = client.SendWrappedWith(context.Background(), mtc.distSenders[0], h, &scanArgs)
+	reply, pErr = client.SendWrappedWith(ctx, mtc.distSenders[0], h, &scanArgs)
 	if pErr != nil {
 		t.Fatal(pErr)
 	}
@@ -1247,7 +1248,7 @@ func TestRangeInfo(t *testing.T) {
 			EndKey: roachpb.KeyMax,
 		},
 	}
-	reply, pErr = client.SendWrappedWith(context.Background(), mtc.distSenders[0], h, &revScanArgs)
+	reply, pErr = client.SendWrappedWith(ctx, mtc.distSenders[0], h, &revScanArgs)
 	if pErr != nil {
 		t.Fatal(pErr)
 	}
@@ -1271,12 +1272,12 @@ func TestRangeInfo(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if err = mtc.dbs[0].AdminTransferLease(context.TODO(),
-			r.Desc().StartKey.AsRawKey(), replDesc.StoreID); err != nil {
+		if err = mtc.dbs[0].AdminTransferLease(
+			ctx, r.Desc().StartKey.AsRawKey(), replDesc.StoreID); err != nil {
 			t.Fatalf("unable to transfer lease to replica %s: %s", r, err)
 		}
 	}
-	reply, pErr = client.SendWrappedWith(context.Background(), mtc.distSenders[0], h, &scanArgs)
+	reply, pErr = client.SendWrappedWith(ctx, mtc.distSenders[0], h, &scanArgs)
 	if pErr != nil {
 		t.Fatal(pErr)
 	}
@@ -1325,6 +1326,7 @@ func TestCampaignOnLazyRaftGroupInitialization(t *testing.T) {
 		testState.Unlock()
 		<-blocking
 	}
+	ctx := context.Background()
 	mtc := &multiTestContext{storeConfig: &sc}
 	defer mtc.Stop()
 	mtc.Start(t, 3)
@@ -1333,7 +1335,7 @@ func TestCampaignOnLazyRaftGroupInitialization(t *testing.T) {
 	// We use UserTableDataMin to avoid having the range activated to
 	// gossip system table data.
 	splitArgs := adminSplitArgs(roachpb.KeyMin, splitKey)
-	if _, err := client.SendWrapped(context.Background(), rg1(mtc.stores[0]), splitArgs); err != nil {
+	if _, err := client.SendWrapped(ctx, rg1(mtc.stores[0]), splitArgs); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1358,7 +1360,7 @@ func TestCampaignOnLazyRaftGroupInitialization(t *testing.T) {
 			desc: "past idle replica campaign timeout",
 			prepFn: func(t *testing.T) {
 				for _, s := range mtc.stores {
-					if err := s.GossipStore(context.TODO()); err != nil {
+					if err := s.GossipStore(ctx); err != nil {
 						t.Fatal(err)
 					}
 				}
@@ -1373,7 +1375,7 @@ func TestCampaignOnLazyRaftGroupInitialization(t *testing.T) {
 			desc: "lease expired all replicas should campaign",
 			prepFn: func(t *testing.T) {
 				for _, s := range mtc.stores {
-					if err := s.GossipStore(context.TODO()); err != nil {
+					if err := s.GossipStore(ctx); err != nil {
 						t.Fatal(err)
 					}
 				}
@@ -1405,7 +1407,7 @@ func TestCampaignOnLazyRaftGroupInitialization(t *testing.T) {
 				go func(s *storage.Store) {
 					incArgs := incrementArgs(splitKey, 1)
 					_, pErr := client.SendWrappedWith(
-						context.Background(), s, roachpb.Header{RangeID: repl.RangeID}, incArgs,
+						ctx, s, roachpb.Header{RangeID: repl.RangeID}, incArgs,
 					)
 					errCh <- pErr.GoError()
 				}(s)

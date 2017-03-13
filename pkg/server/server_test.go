@@ -235,8 +235,9 @@ func TestMultiRangeScanDeleteRange(t *testing.T) {
 	defer s.Stopper().Stop()
 	ts := s.(*TestServer)
 	tds := db.GetSender()
+	ctx := context.Background()
 
-	if err := ts.node.storeCfg.DB.AdminSplit(context.TODO(), "m"); err != nil {
+	if err := ts.node.storeCfg.DB.AdminSplit(ctx, "m"); err != nil {
 		t.Fatal(err)
 	}
 	writes := []roachpb.Key{roachpb.Key("a"), roachpb.Key("z")}
@@ -244,17 +245,17 @@ func TestMultiRangeScanDeleteRange(t *testing.T) {
 		Span: roachpb.Span{Key: writes[0]},
 	}
 	get.EndKey = writes[len(writes)-1]
-	if _, err := client.SendWrapped(context.Background(), tds, get); err == nil {
+	if _, err := client.SendWrapped(ctx, tds, get); err == nil {
 		t.Errorf("able to call Get with a key range: %v", get)
 	}
 	var delTS hlc.Timestamp
 	for i, k := range writes {
 		put := roachpb.NewPut(k, roachpb.MakeValueFromBytes(k))
-		if _, err := client.SendWrapped(context.Background(), tds, put); err != nil {
+		if _, err := client.SendWrapped(ctx, tds, put); err != nil {
 			t.Fatal(err)
 		}
 		scan := roachpb.NewScan(writes[0], writes[len(writes)-1].Next())
-		reply, err := client.SendWrapped(context.Background(), tds, scan)
+		reply, err := client.SendWrapped(ctx, tds, scan)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -276,7 +277,7 @@ func TestMultiRangeScanDeleteRange(t *testing.T) {
 		},
 		ReturnKeys: true,
 	}
-	reply, err := client.SendWrappedWith(context.Background(), tds, roachpb.Header{Timestamp: delTS}, del)
+	reply, err := client.SendWrappedWith(ctx, tds, roachpb.Header{Timestamp: delTS}, del)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -290,7 +291,7 @@ func TestMultiRangeScanDeleteRange(t *testing.T) {
 
 	scan := roachpb.NewScan(writes[0], writes[len(writes)-1].Next())
 	txn := roachpb.NewTransaction("MyTxn", nil, 0, 0, s.Clock().Now(), 0)
-	reply, err = client.SendWrappedWith(context.Background(), tds, roachpb.Header{Txn: txn}, scan)
+	reply, err = client.SendWrappedWith(ctx, tds, roachpb.Header{Txn: txn}, scan)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -323,16 +324,17 @@ func TestMultiRangeScanWithMaxResults(t *testing.T) {
 		defer s.Stopper().Stop()
 		ts := s.(*TestServer)
 		tds := db.GetSender()
+		ctx := context.Background()
 
 		for _, sk := range tc.splitKeys {
-			if err := ts.node.storeCfg.DB.AdminSplit(context.TODO(), sk); err != nil {
+			if err := ts.node.storeCfg.DB.AdminSplit(ctx, sk); err != nil {
 				t.Fatal(err)
 			}
 		}
 
 		for _, k := range tc.keys {
 			put := roachpb.NewPut(k, roachpb.MakeValueFromBytes(k))
-			if _, err := client.SendWrapped(context.Background(), tds, put); err != nil {
+			if _, err := client.SendWrapped(ctx, tds, put); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -343,7 +345,7 @@ func TestMultiRangeScanWithMaxResults(t *testing.T) {
 			for maxResults := 1; maxResults <= len(tc.keys)-start+1; maxResults++ {
 				scan := roachpb.NewScan(tc.keys[start], tc.keys[len(tc.keys)-1].Next())
 				reply, err := client.SendWrappedWith(
-					context.Background(), tds, roachpb.Header{MaxSpanRequestKeys: int64(maxResults)}, scan,
+					ctx, tds, roachpb.Header{MaxSpanRequestKeys: int64(maxResults)}, scan,
 				)
 				if err != nil {
 					t.Fatal(err)
@@ -366,7 +368,7 @@ func TestSystemConfigGossip(t *testing.T) {
 	s, _, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop()
 	ts := s.(*TestServer)
-	ctx := context.TODO()
+	ctx := context.Background()
 
 	key := sqlbase.MakeDescMetadataKey(keys.MaxReservedDescID)
 	valAt := func(i int) *sqlbase.DatabaseDescriptor {

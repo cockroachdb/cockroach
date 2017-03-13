@@ -254,7 +254,7 @@ func TestPostProcess(t *testing.T) {
 			}
 			// Run the rows through the helper.
 			for i := range input {
-				if !out.emitRow(context.TODO(), input[i]) {
+				if !out.emitRow(context.Background(), input[i]) {
 					break
 				}
 			}

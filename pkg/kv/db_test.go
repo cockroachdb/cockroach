@@ -66,7 +66,7 @@ func TestKVDBCoverage(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop()
-	ctx := context.TODO()
+	ctx := context.Background()
 
 	db := createTestClient(t, s)
 	key := roachpb.Key("a")
@@ -75,7 +75,7 @@ func TestKVDBCoverage(t *testing.T) {
 	value3 := []byte("value3")
 
 	// Put first value at key.
-	if pErr := db.Put(context.TODO(), key, value1); pErr != nil {
+	if pErr := db.Put(ctx, key, value1); pErr != nil {
 		t.Fatal(pErr)
 	}
 
@@ -87,7 +87,7 @@ func TestKVDBCoverage(t *testing.T) {
 	}
 
 	// Conditional put should succeed, changing value1 to value2.
-	if pErr := db.CPut(context.TODO(), key, value2, value1); pErr != nil {
+	if pErr := db.CPut(ctx, key, value2, value1); pErr != nil {
 		t.Fatal(pErr)
 	}
 
@@ -126,11 +126,11 @@ func TestKVDBCoverage(t *testing.T) {
 		if pErr != nil {
 			t.Fatal(pErr)
 		}
-		if pErr := db.Put(context.TODO(), kv.Key, valueBytes); pErr != nil {
+		if pErr := db.Put(ctx, kv.Key, valueBytes); pErr != nil {
 			t.Fatal(pErr)
 		}
 	}
-	if rows, pErr := db.Scan(context.TODO(), "a", "d", 0); pErr != nil {
+	if rows, pErr := db.Scan(ctx, "a", "d", 0); pErr != nil {
 		t.Fatal(pErr)
 	} else if len(rows) != len(keyValues) {
 		t.Fatalf("expected %d rows in scan; got %d", len(keyValues), len(rows))
@@ -147,7 +147,7 @@ func TestKVDBCoverage(t *testing.T) {
 	}
 
 	// Test reverse scan.
-	if rows, pErr := db.ReverseScan(context.TODO(), "a", "d", 0); pErr != nil {
+	if rows, pErr := db.ReverseScan(ctx, "a", "d", 0); pErr != nil {
 		t.Fatal(pErr)
 	} else if len(rows) != len(keyValues) {
 		t.Fatalf("expected %d rows in scan; got %d", len(keyValues), len(rows))
@@ -163,7 +163,7 @@ func TestKVDBCoverage(t *testing.T) {
 		}
 	}
 
-	if pErr := db.DelRange(context.TODO(), "a", "c"); pErr != nil {
+	if pErr := db.DelRange(ctx, "a", "c"); pErr != nil {
 		t.Fatal(pErr)
 	}
 }
@@ -172,6 +172,7 @@ func TestKVDBInternalMethods(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop()
+	ctx := context.Background()
 
 	testCases := []roachpb.Request{
 		&roachpb.HeartbeatTxnRequest{},
@@ -203,7 +204,7 @@ func TestKVDBInternalMethods(t *testing.T) {
 		}
 		b := &client.Batch{}
 		b.AddRawRequest(args)
-		err := db.Run(context.TODO(), b)
+		err := db.Run(ctx, b)
 		if !testutils.IsError(err, "contains an internal request|contains commit trigger") {
 			t.Errorf("%d: unexpected error for %s: %v", i, args.Method(), err)
 		}
@@ -216,12 +217,13 @@ func TestKVDBTransaction(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop()
+	ctx := context.Background()
 
 	db := createTestClient(t, s)
 
 	key := roachpb.Key("db-txn-test")
 	value := []byte("value")
-	err := db.Txn(context.TODO(), func(txn *client.Txn) error {
+	err := db.Txn(ctx, func(txn *client.Txn) error {
 		// Use snapshot isolation so non-transactional read can always push.
 		if err := txn.SetIsolation(enginepb.SNAPSHOT); err != nil {
 			return err
@@ -232,7 +234,7 @@ func TestKVDBTransaction(t *testing.T) {
 		}
 
 		// Attempt to read outside of txn.
-		if gr, err := db.Get(context.TODO(), key); err != nil {
+		if gr, err := db.Get(ctx, key); err != nil {
 			t.Fatal(err)
 		} else if gr.Exists() {
 			t.Errorf("expected nil value; got %+v", gr.Value)
@@ -251,7 +253,7 @@ func TestKVDBTransaction(t *testing.T) {
 	}
 
 	// Verify the value is now visible after commit.
-	if gr, err := db.Get(context.TODO(), key); err != nil {
+	if gr, err := db.Get(ctx, key); err != nil {
 		t.Errorf("expected success reading value; got %s", err)
 	} else if !gr.Exists() || !bytes.Equal(gr.ValueBytes(), value) {
 		t.Errorf("expected value %q; got %q", value, gr.ValueBytes())
@@ -263,6 +265,7 @@ func TestAuthentication(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop()
+	ctx := context.Background()
 
 	b1 := &client.Batch{}
 	b1.Put("a", "b")
@@ -270,7 +273,7 @@ func TestAuthentication(t *testing.T) {
 	// Create a node user client and call Run() on it which lets us build our own
 	// request, specifying the user.
 	db1 := createTestClientForUser(t, s, security.NodeUser)
-	if err := db1.Run(context.TODO(), b1); err != nil {
+	if err := db1.Run(ctx, b1); err != nil {
 		t.Fatal(err)
 	}
 
@@ -280,7 +283,7 @@ func TestAuthentication(t *testing.T) {
 	// Try again, but this time with certs for a non-node user (even the root
 	// user has no KV permissions).
 	db2 := createTestClientForUser(t, s, security.RootUser)
-	if err := db2.Run(context.TODO(), b2); !testutils.IsError(err, "is not allowed") {
+	if err := db2.Run(ctx, b2); !testutils.IsError(err, "is not allowed") {
 		t.Fatal(err)
 	}
 }
@@ -312,13 +315,14 @@ func TestTxnDelRangeIntentResolutionCounts(t *testing.T) {
 	}
 	s, _, db := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop()
+	ctx := context.Background()
 
 	for _, abortTxn := range []bool{false, true} {
 		spanSize := int64(10)
 		prefixes := []string{"a", "b", "c"}
 		for i := int64(0); i < spanSize; i++ {
 			for _, prefix := range prefixes {
-				if err := db.Put(context.TODO(), fmt.Sprintf("%s%d", prefix, i), "v"); err != nil {
+				if err := db.Put(ctx, fmt.Sprintf("%s%d", prefix, i), "v"); err != nil {
 					t.Fatal(err)
 				}
 			}
@@ -327,7 +331,7 @@ func TestTxnDelRangeIntentResolutionCounts(t *testing.T) {
 
 		atomic.StoreInt64(&intentResolutionCount, 0)
 		limit := totalNumKeys / 2
-		if err := db.Txn(context.TODO(), func(txn *client.Txn) error {
+		if err := db.Txn(ctx, func(txn *client.Txn) error {
 			var b client.Batch
 			// Fully deleted.
 			b.DelRange("a", "b", false)
@@ -355,7 +359,7 @@ func TestTxnDelRangeIntentResolutionCounts(t *testing.T) {
 		// Ensure no intents are left behind. Scan the entire span to resolve
 		// any intents that were left behind; intents are resolved internally
 		// through ResolveIntentRequest(s).
-		kvs, err := db.Scan(context.TODO(), "a", "d", totalNumKeys)
+		kvs, err := db.Scan(ctx, "a", "d", totalNumKeys)
 		if err != nil {
 			t.Fatal(err)
 		}
