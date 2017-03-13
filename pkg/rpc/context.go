@@ -18,6 +18,7 @@ package rpc
 
 import (
 	"errors"
+	"fmt"
 	"math"
 	"net"
 	"strings"
@@ -60,7 +61,19 @@ const (
 // SourceAddr provides a way to specify a source/local address for outgoing
 // connections. It should only ever be set by testing code, and is not thread
 // safe (so it must be initialized before the server starts).
-var SourceAddr = envutil.EnvOrDefaultString("COCKROACH_SOURCE_IP_ADDRESS", "")
+var SourceAddr = func() net.Addr {
+	const envKey = "COCKROACH_SOURCE_IP_ADDRESS"
+	if sourceAddr, ok := envutil.EnvString(envKey, 0); ok {
+		sourceIP := net.ParseIP(sourceAddr)
+		if sourceIP == nil {
+			panic(fmt.Sprintf("unable to parse %s '%s' as IP address", envKey, sourceAddr))
+		}
+		return &net.TCPAddr{
+			IP: sourceIP,
+		}
+	}
+	return nil
+}()
 
 // NewServer is a thin wrapper around grpc.NewServer that registers a heartbeat
 // service.
@@ -180,8 +193,8 @@ func (ctx *Context) SetLocalInternalServer(internalServer roachpb.InternalServer
 
 func (ctx *Context) removeConn(key string, meta *connMeta) {
 	ctx.conns.Lock()
-	defer ctx.conns.Unlock()
 	ctx.removeConnLocked(key, meta)
+	ctx.conns.Unlock()
 }
 
 func (ctx *Context) removeConnLocked(key string, meta *connMeta) {
@@ -228,20 +241,12 @@ func (ctx *Context) GRPCDial(target string, opts ...grpc.DialOption) (*grpc.Clie
 		dialOpts = append(dialOpts, grpc.WithBackoffMaxDelay(maxBackoff))
 		dialOpts = append(dialOpts, opts...)
 
-		if SourceAddr != "" {
-			sourceIP := net.ParseIP(SourceAddr)
-			if sourceIP == nil {
-				log.Fatalf(ctx.masterCtx,
-					"unable to parse COCKROACH_SOURCE_IP_ADDRESS %q as IP address", SourceAddr)
-			}
-			tcpAddr := &net.TCPAddr{
-				IP: sourceIP,
-			}
+		if SourceAddr != nil {
 			dialOpts = append(dialOpts, grpc.WithDialer(
 				func(addr string, timeout time.Duration) (net.Conn, error) {
 					dialer := net.Dialer{
 						Timeout:   timeout,
-						LocalAddr: tcpAddr,
+						LocalAddr: SourceAddr,
 					}
 					return dialer.Dial("tcp", addr)
 				},
