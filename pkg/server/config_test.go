@@ -179,45 +179,31 @@ func TestReadEnvironmentVariables(t *testing.T) {
 		t.Fatalf("actual context does not match expected:\nactual:%+v\nexpected:%+v", cfg, cfgExpected)
 	}
 
-	// Set all the environment variables to invalid values and test that the
-	// defaults are still set.
-	cfg = MakeConfig()
-	cfgExpected = MakeConfig()
+	for _, envVar := range []string{
+		"COCKROACH_LINEARIZABLE",
+		"COCKROACH_MAX_OFFSET",
+		"COCKROACH_METRICS_SAMPLE_INTERVAL",
+		"COCKROACH_SCAN_INTERVAL",
+		"COCKROACH_SCAN_MAX_IDLE_TIME",
+		"COCKROACH_CONSISTENCY_CHECK_INTERVAL",
+		"COCKROACH_CONSISTENCY_CHECK_PANIC_ON_FAILURE",
+		"COCKROACH_TIME_UNTIL_STORE_DEAD",
+		"COCKROACH_CONSISTENCY_CHECK_INTERVAL",
+		"COCKROACH_RESERVATIONS_ENABLED",
+	} {
+		t.Run("invalid", func(t *testing.T) {
+			if err := os.Setenv(envVar, "abcd"); err != nil {
+				t.Fatal(err)
+			}
+			envutil.ClearEnvCache()
 
-	if err := os.Setenv("COCKROACH_LINEARIZABLE", "abcd"); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Setenv("COCKROACH_MAX_OFFSET", "abcd"); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Setenv("COCKROACH_METRICS_SAMPLE_INTERVAL", "abcd"); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Setenv("COCKROACH_SCAN_INTERVAL", "abcd"); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Setenv("COCKROACH_SCAN_MAX_IDLE_TIME", "abcd"); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Setenv("COCKROACH_CONSISTENCY_CHECK_INTERVAL", "abcd"); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Setenv("COCKROACH_CONSISTENCY_CHECK_PANIC_ON_FAILURE", "abcd"); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Setenv("COCKROACH_TIME_UNTIL_STORE_DEAD", "abcd"); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Setenv("COCKROACH_CONSISTENCY_CHECK_INTERVAL", "abcd"); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Setenv("COCKROACH_RESERVATIONS_ENABLED", "abcd"); err != nil {
-		t.Fatal(err)
-	}
+			defer func() {
+				if recover() == nil {
+					t.Fatal("expected panic")
+				}
+			}()
 
-	envutil.ClearEnvCache()
-	cfg.readEnvironmentVariables()
-	if !reflect.DeepEqual(cfg, cfgExpected) {
-		t.Fatalf("actual context does not match expected:\nactual:%+v\nexpected:%+v", cfg, cfgExpected)
+			cfg.readEnvironmentVariables()
+		})
 	}
 }
