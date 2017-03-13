@@ -17,6 +17,7 @@
 package retry
 
 import (
+	"errors"
 	"testing"
 	"time"
 )
@@ -121,5 +122,30 @@ func TestRetryNextCh(t *testing.T) {
 				t.Errorf("expected nil NextCh() on second attempt")
 			}
 		}
+	}
+}
+
+func TestRetryWithMaxAttempts(t *testing.T) {
+	opts := Options{
+		InitialBackoff: time.Microsecond * 10,
+		MaxBackoff:     time.Second,
+		Multiplier:     2,
+		MaxRetries:     1,
+	}
+
+	attempts := 0
+	const maxAttempts = 3
+	expectedErr := errors.New("placeholder")
+	errFn := func() error {
+		attempts++
+		return expectedErr
+	}
+
+	actualErr := WithMaxAttempts(nil, opts, maxAttempts, errFn)
+	if actualErr != expectedErr {
+		t.Fatalf("expected err %v, got %v", expectedErr, actualErr)
+	}
+	if attempts != maxAttempts {
+		t.Errorf("expected %d attempts, got %d attempts", maxAttempts, attempts)
 	}
 }
