@@ -1409,10 +1409,12 @@ func (e *Executor) execStmt(
 	if err != nil {
 		return result, err
 	}
-	if useDistSQL && !isAutomaticRetry {
-		switch stmt.(type) {
-		case *parser.Select:
-			e.DistSQLSelectCount.Inc(1)
+	if useDistSQL {
+		if !isAutomaticRetry {
+			switch stmt.(type) {
+			case *parser.Select:
+				e.DistSQLSelectCount.Inc(1)
+			}
 		}
 		err = e.execDistSQL(planMaker, plan, &result)
 		execDuration := timeutil.Since(tStart).Nanoseconds()
