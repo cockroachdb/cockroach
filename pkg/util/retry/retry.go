@@ -142,3 +142,16 @@ func (r *Retry) NextCh() <-chan time.Time {
 	}
 	return time.After(r.retryIn())
 }
+
+// WithMaxAttempts is a helper that runs fn N times and collects the last err.
+func WithMaxAttempts(ctx context.Context, opts Options, n int, fn func() error) error {
+	opts.MaxRetries = n - 1
+	var err error
+	for r := StartWithCtx(ctx, opts); r.Next(); {
+		err = fn()
+		if err == nil {
+			return nil
+		}
+	}
+	return err
+}
