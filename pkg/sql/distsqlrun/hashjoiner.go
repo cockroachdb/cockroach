@@ -142,7 +142,7 @@ func (h *hashJoiner) buildPhase(ctx context.Context) error {
 			continue
 		}
 
-		b, _ := h.buckets[string(encoded)]
+		b := h.buckets[string(encoded)]
 		b.rows = append(b.rows, rrow)
 		h.buckets[string(encoded)] = b
 	}
