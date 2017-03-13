@@ -825,6 +825,14 @@ func (hv *historyVerifier) runTxn(
 	txnName := fmt.Sprintf("txn %d", txnIdx+1)
 	cmdIdx := -1
 
+	// db.Txn will set the transaction's original timestamp, so if this txn's
+	// first command has a prev command, wait for it before calling db.Txn so
+	// that we're guaranteed to have a later timestamp.
+	if prev := cmds[0].prev; prev != nil {
+		err := <-prev.ch
+		prev.ch <- err
+	}
+
 	err := db.Txn(context.TODO(), func(txn *client.Txn) error {
 		// If this is 2nd attempt, and a retry wasn't expected, return a
 		// retry error which results in further histories being enumerated.
