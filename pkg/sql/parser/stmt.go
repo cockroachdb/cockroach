@@ -248,6 +248,12 @@ func (n *RenameTable) StatementTag() string {
 }
 
 // StatementType implements the Statement interface.
+func (*Reset) StatementType() StatementType { return Ack }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*Reset) StatementTag() string { return "RESET" }
+
+// StatementType implements the Statement interface.
 func (*Restore) StatementType() StatementType { return Ack }
 
 // StatementTag returns a short string identifying the type of statement.
@@ -450,6 +456,7 @@ func (n *RenameColumn) String() string             { return AsString(n) }
 func (n *RenameDatabase) String() string           { return AsString(n) }
 func (n *RenameIndex) String() string              { return AsString(n) }
 func (n *RenameTable) String() string              { return AsString(n) }
+func (n *Reset) String() string                    { return AsString(n) }
 func (n *Restore) String() string                  { return AsString(n) }
 func (n *Revoke) String() string                   { return AsString(n) }
 func (n *RollbackToSavepoint) String() string      { return AsString(n) }

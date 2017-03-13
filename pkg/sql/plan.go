@@ -316,6 +316,8 @@ func (p *planner) newPlan(
 		return p.RenameIndex(ctx, n)
 	case *parser.RenameTable:
 		return p.RenameTable(ctx, n)
+	case *parser.Reset:
+		return p.Reset(ctx, n)
 	case *parser.Revoke:
 		return p.Revoke(ctx, n)
 	case *parser.Select:

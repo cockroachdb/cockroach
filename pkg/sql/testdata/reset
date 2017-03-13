@@ -1,0 +1,18 @@
+statement error unknown variable: "FOO"
+RESET FOO
+
+statement ok
+SET SEARCH_PATH = foo
+
+query T
+SHOW SEARCH_PATH
+----
+pg_catalog, foo
+
+statement ok
+RESET SEARCH_PATH
+
+query T
+SHOW SEARCH_PATH
+----
+pg_catalog
