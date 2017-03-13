@@ -52,24 +52,30 @@ func (p *planner) Set(ctx context.Context, n *parser.Set) (planNode, error) {
 		typedValues[i] = typedValue
 	}
 
-	if v, ok := varGen[name]; ok {
-		if len(n.Values) == 0 {
-			// SET ... TO DEFAULT
-			if v.Reset == nil {
-				return nil, fmt.Errorf("variable \"%s\" cannot be changed", name)
-			} else if err := v.Reset(p); err != nil {
-				return nil, err
-			}
-		} else {
-			// SET ... TO ...
-			if v.Set == nil {
-				return nil, fmt.Errorf("variable \"%s\" cannot be changed", name)
-			} else if err := v.Set(p, ctx, typedValues); err != nil {
-				return nil, err
-			}
-		}
-	} else {
+	v, ok := varGen[name]
+	if !ok {
 		return nil, fmt.Errorf("unknown variable: %q", name)
+	}
+
+	if len(n.Values) == 0 {
+		n.SetMode = parser.SetModeReset
+	}
+
+	switch n.SetMode {
+	case parser.SetModeAssign:
+		if v.Set == nil {
+			return nil, fmt.Errorf("variable \"%s\" cannot be changed", name)
+		}
+		if err := v.Set(p, ctx, typedValues); err != nil {
+			return nil, err
+		}
+	case parser.SetModeReset:
+		if v.Reset == nil {
+			return nil, fmt.Errorf("variable \"%s\" cannot be reset", name)
+		}
+		if err := v.Reset(p); err != nil {
+			return nil, err
+		}
 	}
 
 	return &emptyNode{}, nil
