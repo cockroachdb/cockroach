@@ -25,10 +25,7 @@ import (
 	"strings"
 	"time"
 
-	"golang.org/x/net/context"
-
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
@@ -172,8 +169,7 @@ func EnvOrDefaultBool(name string, value bool) bool {
 	if str, present := getEnv(name, 1); present {
 		v, err := strconv.ParseBool(str)
 		if err != nil {
-			log.Errorf(context.Background(), "error parsing %s: %s", name, err)
-			return value
+			panic(fmt.Sprintf("error parsing %s: %s", name, err))
 		}
 		return v
 	}
@@ -186,8 +182,7 @@ func EnvOrDefaultInt(name string, value int) int {
 	if str, present := getEnv(name, 1); present {
 		v, err := strconv.ParseInt(str, 0, 0)
 		if err != nil {
-			log.Errorf(context.Background(), "error parsing %s: %s", name, err)
-			return value
+			panic(fmt.Sprintf("error parsing %s: %s", name, err))
 		}
 		return int(v)
 	}
@@ -200,8 +195,7 @@ func EnvOrDefaultInt64(name string, value int64) int64 {
 	if str, present := getEnv(name, 1); present {
 		v, err := strconv.ParseInt(str, 0, 64)
 		if err != nil {
-			log.Errorf(context.Background(), "error parsing %s: %s", name, err)
-			return value
+			panic(fmt.Sprintf("error parsing %s: %s", name, err))
 		}
 		return v
 	}
@@ -214,8 +208,7 @@ func EnvOrDefaultFloat(name string, value float64) float64 {
 	if str, present := getEnv(name, 1); present {
 		v, err := strconv.ParseFloat(str, 64)
 		if err != nil {
-			log.Errorf(context.Background(), "error parsing %s: %s", name, err)
-			return value
+			panic(fmt.Sprintf("error parsing %s: %s", name, err))
 		}
 		return v
 	}
@@ -228,8 +221,7 @@ func EnvOrDefaultBytes(name string, value int64) int64 {
 	if str, present := getEnv(name, 1); present {
 		v, err := humanizeutil.ParseBytes(str)
 		if err != nil {
-			log.Errorf(context.Background(), "error parsing %s: %s", name, err)
-			return value
+			panic(fmt.Sprintf("error parsing %s: %s", name, err))
 		}
 		return v
 	}
@@ -242,8 +234,7 @@ func EnvOrDefaultDuration(name string, value time.Duration) time.Duration {
 	if str, present := getEnv(name, 1); present {
 		v, err := time.ParseDuration(str)
 		if err != nil {
-			log.Errorf(context.Background(), "error parsing %s: %s", name, err)
-			return value
+			panic(fmt.Sprintf("error parsing %s: %s", name, err))
 		}
 		return v
 	}
