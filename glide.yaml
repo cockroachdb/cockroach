@@ -17,6 +17,9 @@ import:
 - package: google.golang.org/grpc
   version: d3f1ab4a4dca70781cf6dc850a79ed38632660a6
   repo: https://github.com/petermattis/grpc-go
+# https://github.com/dominikh/go-tools/issues/58
+- package: honnef.co/go/tools
+  version: 063a687828ad7d9e5a0366e1c3b3bfe11b31109b
 # Pins to prevent unintended version changes to libs we care about when adding/
 # removing/changing other deps. These are grouped separately to make it easier
 # to comment them out in bulk when running an across-the-board dep update.
@@ -33,22 +36,22 @@ import:
 - package: github.com/cockroachdb/cockroach-go
   version: 6fd53f6d2eea06acb0c7f7aa88e0547acb32441b
 - package: github.com/coreos/etcd
-  version: c0c4c7cb76bcf8dc3bf89c09cc0bb77575364452
+  version: 7b541f90039c625d8242f90816066ecd5cf78744
 - package: github.com/gogo/protobuf
-  version: 3ea128ab69017b2bb9720f38a32e2dcfc22c0546
+  version: 100ba4e885062801d56799d78530b73b178a78f3
 - package: github.com/golang/protobuf
-  version: 69b215d01a5606c843240eab4937eab3acee6530
+  version: c9c7427a2a70d2eb3bafa0ab2dc163e45f143317
 - package: github.com/google/btree
   version: 316fb6d3f031ae8f4d457c6c5186b9e3ded70435
 - package: github.com/grpc-ecosystem/grpc-gateway
-  version: b855144721c1eeda1c8c78215662d14da4cf1700
+  version: fdcb7eab2d6ed4919e83ddcef4f199c161611e1f
 - package: github.com/lib/pq
-  version: ba5d4f7a35561e22fbdf7a39aa0070f4d460cfc0
+  version: 472a0745531a17dbac346e828b4c60e73ddff30c
 - package: github.com/spf13/cobra
-  version: ee4055870c2d5f7ce112642377e32c9929c3bbaf
+  version: 16c014f1a19d865b765b420e74508f80eb831ada
 - package: gopkg.in/yaml.v2
   version: a3f3340b5840cee44f372bddb5880fcbc419b46a
 - package: golang.org/x/crypto
-  version: 453249f01cfeb54c3d549ddb75ff152ca243f9d8
+  version: 728b753d0135da6801d45a38e6f43ff55779c5c2
 - package: golang.org/x/net
-  version: 6b27048ae5e6ad1ef927e72e437531493de612fe
+  version: a6577fac2d73be281a500b310739095313165611

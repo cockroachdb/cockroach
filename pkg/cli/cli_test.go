@@ -1171,6 +1171,7 @@ Available Commands:
   gen            generate auxiliary files
   version        output version information
   debug          debugging commands
+  help           Help about any command
 
 Flags:
       --alsologtostderr Severity[=INFO]   logs at or above this threshold go to stderr (default INFO)

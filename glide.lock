@@ -1,8 +1,8 @@
-hash: 8716f0ca3bdba79e70a04e2a011ef791dcd92455e020d46ee7d9d3f5549be6b2
-updated: 2017-02-27T17:27:41.965887823-05:00
+hash: 13d42f9a9ef22268418ef43f19a2e42e4597e413eefc4fab88a460bf0a5f6487
+updated: 2017-03-13T20:28:14.197133517-04:00
 imports:
 - name: cloud.google.com/go
-  version: 1ed2f0abb2869a51b3a5b9daec801bf9791f95d0
+  version: 0bee953ffbf6fda3be3f56f1e9578f16a1e978a4
   subpackages:
   - compute/metadata
   - internal
@@ -13,7 +13,7 @@ imports:
 - name: github.com/agtorre/gocolorize
   version: 99fea4bc9517f07eea8194702cb7076f4845b7de
 - name: github.com/Azure/azure-sdk-for-go
-  version: 8e625d1702a32d01cef05a9252198d231c4af113
+  version: 4897648e310020dae650a89c31ff633284c13a24
   subpackages:
   - storage
 - name: github.com/Azure/go-ansiterm
@@ -28,9 +28,9 @@ imports:
   - interval
   - llrb
 - name: github.com/cenk/backoff
-  version: b02f2bbce11d7ea6b97f282ef1771b0fe2f65ef3
+  version: 3db60c813733fce657c114634171689bbf1f8dee
 - name: github.com/chzyer/readline
-  version: f892600c35265c3b2d0c79322107239c1ec9479b
+  version: 41eea22f717c616615e1e59aa06cf831f9901f35
 - name: github.com/client9/misspell
   version: 9a1fc2456ac9e8c9b4cbe9d005b6e7adac0d357f
   subpackages:
@@ -54,15 +54,15 @@ imports:
   subpackages:
   - crdb
 - name: github.com/cockroachdb/crlfmt
-  version: f4be2332630e8f33c3262c0d5f0d13d733c8bedf
+  version: 447aefefe66ca7de6679b30e30793e277280e611
 - name: github.com/cockroachdb/returncheck
-  version: f3a399c4b3744afe51001fb5f969bfcb78dc599a
+  version: e91bb28baf9de4a530d3ae7f041953b23dcce9be
 - name: github.com/cockroachdb/stress
   version: ce09c414594390d1d6432280c7cac55e62c6b0af
 - name: github.com/codahale/hdrhistogram
   version: 3a0bb77429bd3a61596f5e8a3172445844342120
 - name: github.com/coreos/etcd
-  version: c0c4c7cb76bcf8dc3bf89c09cc0bb77575364452
+  version: 7b541f90039c625d8242f90816066ecd5cf78744
   subpackages:
   - raft
   - raft/raftpb
@@ -71,7 +71,7 @@ imports:
   subpackages:
   - md2man
 - name: github.com/docker/distribution
-  version: 50133d63723f8fa376e632a853739990a133be16
+  version: 08b06dc023674763e7b36d404cf0c7664cee1f5e
   subpackages:
   - digestset
   - reference
@@ -102,7 +102,7 @@ imports:
   - pkg/term/windows
   - pkg/tlsconfig
 - name: github.com/docker/go-connections
-  version: d217f8e36aba4dbc397981e692a65d3f13b9a46d
+  version: a2afab9802043837035592f1c24827fb70766de9
   subpackages:
   - nat
   - sockets
@@ -110,13 +110,13 @@ imports:
 - name: github.com/docker/go-units
   version: 0dadbb0345b35ec7ef35e228dabb8de89a65bf52
 - name: github.com/dustin/go-humanize
-  version: 7a41df006ff9af79a29f0ffa9c5f21fbe6314a2d
+  version: 259d2a102b871d17f30e3cd9881a642961a1e486
 - name: github.com/elastic/gosigar
-  version: b49e01eb1e5c68c469392a63feaccae9352ceb12
+  version: 4c790f73760ca6dccd61882b263e03a5f23fbb77
   subpackages:
   - sys/windows
 - name: github.com/elazarl/go-bindata-assetfs
-  version: 9a6736ed45b44bf3835afeebb3034b57ed329f3e
+  version: 30f82fa23fd844bd5bb1e5f216db87fd77b5eb43
 - name: github.com/facebookgo/clock
   version: 600d898af40aa09a7a93ecb9265d87b0504b6f03
 - name: github.com/go-ole/go-ole
@@ -124,7 +124,7 @@ imports:
   subpackages:
   - oleutil
 - name: github.com/gogo/protobuf
-  version: 3ea128ab69017b2bb9720f38a32e2dcfc22c0546
+  version: 100ba4e885062801d56799d78530b73b178a78f3
   subpackages:
   - gogoproto
   - jsonpb
@@ -156,11 +156,11 @@ imports:
 - name: github.com/golang/glog
   version: 23def4e6c14b4da8ac2ed8007337bc5eb5007998
 - name: github.com/golang/lint
-  version: b8599f7d71e7fead76b25aeb919c0e2558672f4a
+  version: cb00e5669539f047b2f4c53a421a01b0c8e172c6
   subpackages:
   - golint
 - name: github.com/golang/protobuf
-  version: 69b215d01a5606c843240eab4937eab3acee6530
+  version: c9c7427a2a70d2eb3bafa0ab2dc163e45f143317
   subpackages:
   - jsonpb
   - proto
@@ -171,17 +171,32 @@ imports:
 - name: github.com/google/btree
   version: 316fb6d3f031ae8f4d457c6c5186b9e3ded70435
 - name: github.com/google/go-github
-  version: 28065814ab889552aebe99cd41b35bc5e31063fe
+  version: 69fd0adc8ab606780549a072f2e3b3f795d75832
   subpackages:
   - github
 - name: github.com/google/go-querystring
   version: 53e6ce116135b80d037921a7fdd5138cf32d7a8a
   subpackages:
   - query
+- name: github.com/google/pprof
+  version: 8262242cb1e2c9d2a2df3c331c213c2284736ba0
+  subpackages:
+  - driver
+  - internal/binutils
+  - internal/driver
+  - internal/elfexec
+  - internal/graph
+  - internal/measurement
+  - internal/plugin
+  - internal/report
+  - internal/symbolizer
+  - internal/symbolz
+  - profile
+  - third_party/svg
 - name: github.com/googleapis/gax-go
-  version: da06d194a00e19ce00d9011a13931c3f6f6887c7
+  version: 8c5154c0fe5bf18cf649634d4c6df50897a32751
 - name: github.com/grpc-ecosystem/grpc-gateway
-  version: b855144721c1eeda1c8c78215662d14da4cf1700
+  version: fdcb7eab2d6ed4919e83ddcef4f199c161611e1f
   subpackages:
   - protoc-gen-grpc-gateway
   - protoc-gen-grpc-gateway/descriptor
@@ -192,6 +207,10 @@ imports:
   - runtime/internal
   - third_party/googleapis/google/api
   - utilities
+- name: github.com/ianlancetaylor/cgosymbolizer
+  version: b4ad58b5f686244b454e2e305f14cb598a5910a5
+- name: github.com/ianlancetaylor/demangle
+  version: 4883227f66371e02c4948937d3e2be1664d9be38
 - name: github.com/inconshreveable/mousetrap
   version: 76626ae9c91c4f2a10f34cad8ce83ea42c93bb75
 - name: github.com/jteeuwen/go-bindata
@@ -211,7 +230,7 @@ imports:
 - name: github.com/leekchan/timeutil
   version: 28917288c48df3d2c1cfe468c273e0b2adda0aa5
 - name: github.com/lib/pq
-  version: ba5d4f7a35561e22fbdf7a39aa0070f4d460cfc0
+  version: 472a0745531a17dbac346e828b4c60e73ddff30c
   subpackages:
   - oid
 - name: github.com/lightstep/lightstep-tracer-go
@@ -222,11 +241,13 @@ imports:
   - thrift_0_9_2/lib/go/thrift
   - thrift_rpc
 - name: github.com/mattn/go-isatty
-  version: dda3de49cbfcec471bd7a70e6cc01fcc3ff90109
+  version: 57fdcb988a5c543893cc61bce354a6e24ab70022
 - name: github.com/mattn/go-runewidth
-  version: 14207d285c6c197daabb5c9793d63e7af9ab2d50
+  version: 9e777a8366cce605130a531d2cd6363d07ad7317
+  subpackages:
+  - runewidth.go
 - name: github.com/mattn/goveralls
-  version: 8482d0ebd2a64f95ce02d2b9b7065b0d6fe9151b
+  version: a99c5ee06aeeca2a2befc7e90b99061b1180850c
 - name: github.com/matttproud/golang_protobuf_extensions
   version: c12348ce28de40eed0136aa2b644d0ee0650e56c
   subpackages:
@@ -234,7 +255,7 @@ imports:
 - name: github.com/mdempsky/unconvert
   version: beb68d938016d2dec1d1b078054f4d3db25f97be
 - name: github.com/mibk/dupl
-  version: f008fcf5e62793d38bda510ee37aab8b0c68e76c
+  version: 3447d9b0cb5a3e7dccb1a9f1c975f35683f304e6
   subpackages:
   - job
   - output
@@ -261,7 +282,7 @@ imports:
 - name: github.com/petermattis/goid
   version: caab6446a35a918488a0f52d4b0bd088a60f3511
 - name: github.com/pkg/errors
-  version: 248dadf4e9068a0b3e79f02ed0a610d935de5302
+  version: bfd5150e4e41705ded2129ec33379de1cb90b513
 - name: github.com/prometheus/client_model
   version: 6f3806018612930941127f2a7c6c453ba2c527d2
   subpackages:
@@ -279,7 +300,7 @@ imports:
 - name: github.com/rlmcpherson/s3gof3r
   version: 864ae0bf7cf2e20c0002b7ea17f4d84fec1abc14
 - name: github.com/robfig/glock
-  version: 4222fa46a09f9ac1e2fc20bd1053e1e866d0a01f
+  version: 39b969c322811a58be9ec8be9d65198d43d8ba82
 - name: github.com/rubyist/circuitbreaker
   version: af9583088c3453556f6e4f580693ba8606ca459a
 - name: github.com/russross/blackfriday
@@ -291,15 +312,15 @@ imports:
 - name: github.com/shurcooL/sanitized_anchor_name
   version: 1dba4b3954bc059efc3991ec364f9f9a35f597d2
 - name: github.com/Sirupsen/logrus
-  version: 7f4b1adc791766938c29457bed0703fb9134421a
+  version: 1deb2db2a6fff8a35532079061b903c3a25eed52
 - name: github.com/spf13/cobra
-  version: ee4055870c2d5f7ce112642377e32c9929c3bbaf
+  version: 16c014f1a19d865b765b420e74508f80eb831ada
   subpackages:
   - doc
 - name: github.com/spf13/pflag
   version: 9ff6c6923cfffbcd502984b8e0c80539a94968b7
 - name: github.com/StackExchange/wmi
-  version: e542ed97d15e640bdc14b5c12162d59e8fc67324
+  version: 9f32b5905fd6ce7384093f9d048437e79f7b4d85
 - name: github.com/tebeka/go2xunit
   version: 5856a592616c62734bf27dac02b6b5f076f96ba6
   subpackages:
@@ -309,13 +330,13 @@ imports:
 - name: github.com/wadey/gocovmerge
   version: b5bfa59ec0adc420475f97f89b58045c721d761c
 - name: golang.org/x/crypto
-  version: 453249f01cfeb54c3d549ddb75ff152ca243f9d8
+  version: 728b753d0135da6801d45a38e6f43ff55779c5c2
   subpackages:
   - bcrypt
   - blowfish
   - ssh/terminal
 - name: golang.org/x/net
-  version: 6b27048ae5e6ad1ef927e72e437531493de612fe
+  version: a6577fac2d73be281a500b310739095313165611
   subpackages:
   - context
   - context/ctxhttp
@@ -327,19 +348,19 @@ imports:
   - proxy
   - trace
 - name: golang.org/x/oauth2
-  version: b9780ec78894ab900c062d58ee3076cd9b2a4501
+  version: 1611bb46e67abc64a71ecc5c3ae67f1cbbc2b921
   subpackages:
   - google
   - internal
   - jws
   - jwt
 - name: golang.org/x/sys
-  version: 075e574b89e4c2d22f2286a7e2b919519c6f3547
+  version: e48874b42435b4347fc52bdee0424a52abc974d7
   subpackages:
   - unix
   - windows
 - name: golang.org/x/text
-  version: 767daa157b4d460bba02409ff856ddeeb8e76ab7
+  version: f28f36722d5ef2f9655ad3de1f248e3e52ad5ebd
   subpackages:
   - collate
   - internal/colltab
@@ -349,7 +370,7 @@ imports:
   - unicode/norm
   - width
 - name: golang.org/x/tools
-  version: 219e654bb7266d3b73c4610ed24c33d12560826a
+  version: 381149a2d6e5d8f319ccf04bfefc71e03a78b868
   subpackages:
   - cmd/goimports
   - cmd/goyacc
@@ -363,7 +384,7 @@ imports:
   - go/types/typeutil
   - imports
 - name: google.golang.org/api
-  version: bc20c61134e1d25265dd60049f5735381e79b631
+  version: 1202890e803f07684581b575fda809bf335a533f
   subpackages:
   - gensupport
   - googleapi
@@ -375,7 +396,7 @@ imports:
   - storage/v1
   - transport
 - name: google.golang.org/appengine
-  version: 2e4a801b39fc199db615bfca7d0b9f8cd9580599
+  version: b79c28f0197795b4050bfcd7c4c2209136c594b1
   subpackages:
   - internal
   - internal/app_identity
@@ -406,8 +427,11 @@ imports:
 - name: gopkg.in/yaml.v2
   version: a3f3340b5840cee44f372bddb5880fcbc419b46a
 - name: honnef.co/go/tools
-  version: 0cd9a3997b51c13198691879e13c49da7ba0f8f9
+  version: 063a687828ad7d9e5a0366e1c3b3bfe11b31109b
   subpackages:
+  - callgraph
+  - callgraph/static
+  - functions
   - gcsizes
   - lint
   - lint/lintutil
@@ -415,7 +439,6 @@ imports:
   - ssa
   - ssa/ssautil
   - staticcheck
-  - staticcheck/pure
   - staticcheck/vrp
   - unused
 testImports:

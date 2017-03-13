@@ -235,8 +235,7 @@ func initBlockProfile() {
 	// 1 captures 100% of block events. For other values, the profiler
 	// will sample one event per X nanoseconds spent blocking.
 	//
-	// The block profile can be viewed with `go tool pprof
-	// http://HOST:PORT/debug/pprof/block`
+	// The block profile can be viewed with `pprof http://HOST:PORT/debug/pprof/block`
 	d := envutil.EnvOrDefaultInt64("COCKROACH_BLOCK_PROFILE_RATE",
 		10000000 /* 1 sample per 10 milliseconds spent blocking */)
 	runtime.SetBlockProfileRate(int(d))
