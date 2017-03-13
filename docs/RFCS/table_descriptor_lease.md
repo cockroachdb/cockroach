@@ -62,7 +62,7 @@ following steps:
 * Wait for the table descriptor change to propagate to all nodes in
   the cluster and all uses of the previous version to finish.
 
-This RFC is focused on how to wait for the table descriptor change
+This RFC is focused on how to wait for the table descriptor change to
 propagate to all nodes in the cluster. More accurately, it is focused
 on how to determine when the previous version of the descriptor is no
 longer in use. Additionally, we need mechanisms to ensure that
