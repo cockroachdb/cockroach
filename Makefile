@@ -296,7 +296,7 @@ $(ARCHIVE).tmp: .buildinfo/tag .buildinfo/rev
 	@mkdir -p $@
 
 .buildinfo/tag: | .buildinfo
-	@git describe --tags --exact-match 2> /dev/null || git rev-parse --short HEAD | tr -d '\n' > $@
+	@{ git describe --tags --exact-match 2> /dev/null || git rev-parse --short HEAD; } | tr -d \\n > $@
 	@git diff-index --quiet HEAD || echo -dirty >> $@
 
 .buildinfo/rev: | .buildinfo
