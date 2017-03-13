@@ -25,8 +25,10 @@ import (
 	"github.com/rlmcpherson/s3gof3r"
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 )
 
 const (
@@ -621,6 +623,7 @@ func (s *azureStorageWriter) Finish() error {
 	// 9999 * 4mb = 40gb max upload size, well over our max range size.
 	const maxBlockID = 9999
 	const blockIDFmt = "%04d"
+	const maxAttempts = 3
 
 	var blocks []azr.Block
 	i := 1
@@ -641,15 +644,21 @@ func (s *azureStorageWriter) Finish() error {
 		id := base64.URLEncoding.EncodeToString([]byte(fmt.Sprintf(blockIDFmt, i)))
 		i++
 		blocks = append(blocks, azr.Block{ID: id, Status: azr.BlockStatusUncommitted})
-		return s.client.PutBlock(s.container, s.name, id, b)
+		return retry.WithMaxAttempts(s.ctx, base.DefaultRetryOptions(), maxAttempts, func() error {
+			return s.client.PutBlock(s.container, s.name, id, b)
+		})
 	}
 
 	if err := chunkReader(f, fourMiB, uploadBlockFunc); err != nil {
 		return errors.Wrap(err, "putting blocks")
 	}
-	if err := s.client.PutBlockList(s.container, s.name, blocks); err != nil {
+
+	if err := retry.WithMaxAttempts(s.ctx, base.DefaultRetryOptions(), maxAttempts, func() error {
+		return s.client.PutBlockList(s.container, s.name, blocks)
+	}); err != nil {
 		return errors.Wrap(err, "putting block list")
 	}
+
 	return nil
 }
 
