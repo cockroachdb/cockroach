@@ -28,8 +28,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/pkg/errors"
 )
 
 func stubURL(target **url.URL, stubURL *url.URL) func() {
@@ -111,58 +113,63 @@ func TestReportUsage(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	node := ts.node.recorder.GetStatusSummary()
-	ts.reportUsage(context.TODO())
+	var expectedUsageReports int32
+	testutils.SucceedsSoon(t, func() error {
+		expectedUsageReports++
+
+		node := ts.node.recorder.GetStatusSummary()
+		ts.reportUsage(context.TODO())
+
+		keyCounts := make(map[roachpb.StoreID]int)
+		rangeCounts := make(map[roachpb.StoreID]int)
+		totalKeys := 0
+		totalRanges := 0
+
+		for _, store := range node.StoreStatuses {
+			if keys, ok := store.Metrics["keycount"]; ok {
+				totalKeys += int(keys)
+				keyCounts[store.Desc.StoreID] = int(keys)
+			} else {
+				t.Fatal("keycount not in metrics")
+			}
+			if replicas, ok := store.Metrics["replicas"]; ok {
+				totalRanges += int(replicas)
+				rangeCounts[store.Desc.StoreID] = int(replicas)
+			} else {
+				t.Fatal("replicas not in metrics")
+			}
+		}
+
+		if expected, actual := expectedUsageReports, atomic.LoadInt32(&usageReports); expected != actual {
+			t.Fatalf("expected %v reports, got %v", expected, actual)
+		}
+		if expected, actual := ts.node.ClusterID.String(), uuid; expected != actual {
+			return errors.Errorf("expected cluster id %v got %v", expected, actual)
+		}
+		if expected, actual := ts.node.Descriptor.NodeID, reported.Node.NodeID; expected != actual {
+			return errors.Errorf("expected node id %v got %v", expected, actual)
+		}
+		if minExpected, actual := totalKeys, reported.Node.KeyCount; minExpected > actual {
+			return errors.Errorf("expected node keys at least %v got %v", minExpected, actual)
+		}
+		if minExpected, actual := totalRanges, reported.Node.RangeCount; minExpected > actual {
+			return errors.Errorf("expected node ranges at least %v got %v", minExpected, actual)
+		}
+		if minExpected, actual := len(params.StoreSpecs), len(reported.Stores); minExpected > actual {
+			return errors.Errorf("expected at least %v stores got %v", minExpected, actual)
+		}
+
+		for _, store := range reported.Stores {
+			if minExpected, actual := keyCounts[store.StoreID], store.KeyCount; minExpected > actual {
+				return errors.Errorf("expected at least %v keys in store %v got %v", minExpected, store.StoreID, actual)
+			}
+			if minExpected, actual := rangeCounts[store.StoreID], store.RangeCount; minExpected > actual {
+				return errors.Errorf("expected at least %v ranges in store %v got %v", minExpected, store.StoreID, actual)
+			}
+		}
+		return nil
+	})
 
 	ts.Stopper().Stop() // stopper will wait for the update/report loop to finish too.
 	recorder.Close()
-
-	keyCounts := make(map[roachpb.StoreID]int)
-	rangeCounts := make(map[roachpb.StoreID]int)
-	totalKeys := 0
-	totalRanges := 0
-
-	for _, store := range node.StoreStatuses {
-		if keys, ok := store.Metrics["keycount"]; ok {
-			totalKeys += int(keys)
-			keyCounts[store.Desc.StoreID] = int(keys)
-		} else {
-			t.Fatal("keycount not in metrics")
-		}
-		if replicas, ok := store.Metrics["replicas"]; ok {
-			totalRanges += int(replicas)
-			rangeCounts[store.Desc.StoreID] = int(replicas)
-		} else {
-			t.Fatal("replicas not in metrics")
-		}
-	}
-
-	if expected, actual := int32(1), atomic.LoadInt32(&usageReports); expected != actual {
-		t.Fatalf("expected %v reports, got %v", expected, actual)
-	}
-	if expected, actual := ts.node.ClusterID.String(), uuid; expected != actual {
-		t.Errorf("expected cluster id %v got %v", expected, actual)
-	}
-	if expected, actual := ts.node.Descriptor.NodeID, reported.Node.NodeID; expected != actual {
-		t.Errorf("expected node id %v got %v", expected, actual)
-	}
-	if minExpected, actual := totalKeys, reported.Node.KeyCount; minExpected > actual {
-		t.Errorf("expected node keys at least %v got %v", minExpected, actual)
-	}
-	if minExpected, actual := totalRanges, reported.Node.RangeCount; minExpected > actual {
-		t.Errorf("expected node ranges at least %v got %v", minExpected, actual)
-	}
-	if minExpected, actual := len(params.StoreSpecs), len(reported.Stores); minExpected > actual {
-		t.Errorf("expected at least %v stores got %v", minExpected, actual)
-	}
-
-	for _, store := range reported.Stores {
-		if minExpected, actual := keyCounts[store.StoreID], store.KeyCount; minExpected > actual {
-			t.Errorf("expected at least %v keys in store %v got %v", minExpected, store.StoreID, actual)
-		}
-		if minExpected, actual := rangeCounts[store.StoreID], store.RangeCount; minExpected > actual {
-			t.Errorf("expected at least %v ranges in store %v got %v", minExpected, store.StoreID, actual)
-		}
-	}
-
 }
