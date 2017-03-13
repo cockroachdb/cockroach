@@ -533,10 +533,11 @@ func (s *Server) Start(ctx context.Context) error {
 	// traffic until the migrations are done, as indicated by this channel.
 	serveSQL := make(chan bool)
 
-	tcpKeepAlive := envutil.EnvOrDefaultDuration("COCKROACH_SQL_TCP_KEEP_ALIVE", 0)
+	tcpKeepAlive := envutil.EnvOrDefaultDuration("COCKROACH_SQL_TCP_KEEP_ALIVE", time.Minute)
+	loggedKeepAliveStatus := false
 
 	// Attempt to set TCP keep-alive on connection. Don't fail on errors.
-	setTCPKeepAlive := func(connCtx context.Context, conn net.Conn) {
+	setTCPKeepAlive := func(ctx context.Context, conn net.Conn) {
 		if tcpKeepAlive == 0 {
 			return
 		}
@@ -550,16 +551,25 @@ func (s *Server) Start(ctx context.Context) error {
 			return
 		}
 
+		// Only log success/failure once.
+		defer func() { loggedKeepAliveStatus = true }()
 		if err := tcpConn.SetKeepAlive(true); err != nil {
-			log.VEventf(connCtx, 1, "TCPConn.SetKeepAlive failed: %v", err)
+			if !loggedKeepAliveStatus {
+				log.Warningf(ctx, "failed to enable TCP keep-alive for pgwire: %v", err)
+			}
 			return
+
 		}
 		if err := tcpConn.SetKeepAlivePeriod(tcpKeepAlive); err != nil {
-			log.VEventf(connCtx, 1, "TCPConn.SetKeepAlivePeriod failed: %v", err)
+			if !loggedKeepAliveStatus {
+				log.Warningf(ctx, "failed to set TCP keep-alive duration for pgwire: %v", err)
+			}
 			return
 		}
 
-		log.VEventf(connCtx, 2, "tcp keep-alive: %s", tcpKeepAlive)
+		if !loggedKeepAliveStatus {
+			log.Infof(ctx, "setting TCP keep-alive to %s for pgwire", tcpKeepAlive)
+		}
 	}
 
 	s.stopper.RunWorker(func() {
@@ -571,7 +581,7 @@ func (s *Server) Start(ctx context.Context) error {
 		pgCtx := s.pgServer.AmbientCtx.AnnotateCtx(context.Background())
 		netutil.FatalIfUnexpected(httpServer.ServeWith(s.stopper, pgL, func(conn net.Conn) {
 			connCtx := log.WithLogTagStr(pgCtx, "client", conn.RemoteAddr().String())
-			setTCPKeepAlive(connCtx, conn)
+			setTCPKeepAlive(pgCtx, conn)
 
 			if err := s.pgServer.ServeConn(connCtx, conn); err != nil && !netutil.IsClosedConnection(err) {
 				// Report the error on this connection's context, so that we
