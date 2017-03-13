@@ -1170,8 +1170,8 @@ func (ds *DistSender) sendToReplicas(
 			}
 
 		case <-slowTimer.C:
-			log.Warningf(ctx, "have been waiting %s sending RPC for batch: %s",
-				base.SlowRequestThreshold, args.Summary())
+			log.Warningf(ctx, "have been waiting %s sending RPC to range %d for batch: %s",
+				base.SlowRequestThreshold, rangeID, args)
 			ds.metrics.SlowRequestsCount.Inc(1)
 			defer ds.metrics.SlowRequestsCount.Dec(1)
 
