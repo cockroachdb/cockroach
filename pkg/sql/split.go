@@ -103,7 +103,7 @@ type splitNode struct {
 	key       []byte
 }
 
-func (n *splitNode) Start(context.Context) error {
+func (n *splitNode) Start(ctx context.Context) error {
 	values := make([]parser.Datum, len(n.exprs))
 	colMap := make(map[sqlbase.ColumnID]int)
 	for i, e := range n.exprs {
@@ -125,7 +125,7 @@ func (n *splitNode) Start(context.Context) error {
 	}
 	n.key = keys.MakeRowSentinelKey(key)
 
-	return n.p.session.execCfg.DB.AdminSplit(context.TODO(), n.key)
+	return n.p.session.execCfg.DB.AdminSplit(ctx, n.key)
 }
 
 func (n *splitNode) Next(context.Context) (bool, error) {

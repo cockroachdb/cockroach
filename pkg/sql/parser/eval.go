@@ -33,7 +33,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 var (
@@ -2464,8 +2463,7 @@ func (expr *ParenExpr) Eval(ctx *EvalContext) (Datum, error) {
 }
 
 // Eval implements the TypedExpr interface.
-func (expr *RangeCond) Eval(_ *EvalContext) (Datum, error) {
-	log.Errorf(context.TODO(), "unhandled type %T passed to Eval", expr)
+func (expr *RangeCond) Eval(ctx *EvalContext) (Datum, error) {
 	return nil, errors.Errorf("unhandled type %T", expr)
 }
 
@@ -2482,32 +2480,27 @@ func (expr *UnaryExpr) Eval(ctx *EvalContext) (Datum, error) {
 }
 
 // Eval implements the TypedExpr interface.
-func (expr DefaultVal) Eval(_ *EvalContext) (Datum, error) {
-	log.Errorf(context.TODO(), "unhandled type %T passed to Eval", expr)
+func (expr DefaultVal) Eval(ctx *EvalContext) (Datum, error) {
 	return nil, errors.Errorf("unhandled type %T", expr)
 }
 
 // Eval implements the TypedExpr interface.
 func (expr UnqualifiedStar) Eval(ctx *EvalContext) (Datum, error) {
-	log.Errorf(context.TODO(), "unhandled type %T passed to Eval", expr)
 	return nil, errors.Errorf("unhandled type %T", expr)
 }
 
 // Eval implements the TypedExpr interface.
 func (expr UnresolvedName) Eval(ctx *EvalContext) (Datum, error) {
-	log.Errorf(context.TODO(), "unhandled type %T passed to Eval", expr)
 	return nil, errors.Errorf("unhandled type %T", expr)
 }
 
 // Eval implements the TypedExpr interface.
 func (expr *AllColumnsSelector) Eval(ctx *EvalContext) (Datum, error) {
-	log.Errorf(context.TODO(), "unhandled type %T passed to Eval", expr)
 	return nil, errors.Errorf("unhandled type %T", expr)
 }
 
 // Eval implements the TypedExpr interface.
 func (expr *ColumnItem) Eval(ctx *EvalContext) (Datum, error) {
-	log.Errorf(context.TODO(), "unhandled type %T passed to Eval", expr)
 	return nil, errors.Errorf("unhandled type %T", expr)
 }
 

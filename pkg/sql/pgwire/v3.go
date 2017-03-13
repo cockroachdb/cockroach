@@ -206,7 +206,7 @@ func (c *v3Conn) finish(ctx context.Context) {
 	_ = c.conn.Close()
 }
 
-func parseOptions(data []byte) (sql.SessionArgs, error) {
+func parseOptions(ctx context.Context, data []byte) (sql.SessionArgs, error) {
 	args := sql.SessionArgs{}
 	buf := readBuffer{msg: data}
 	for {
@@ -230,7 +230,7 @@ func parseOptions(data []byte) (sql.SessionArgs, error) {
 			args.ApplicationName = value
 		default:
 			if log.V(1) {
-				log.Warningf(context.TODO(), "unrecognized configuration parameter %q", key)
+				log.Warningf(ctx, "unrecognized configuration parameter %q", key)
 			}
 		}
 	}
