@@ -289,14 +289,14 @@ $(ARCHIVE): $(ARCHIVE).tmp
 .INTERMEDIATE: $(ARCHIVE).tmp
 $(ARCHIVE).tmp: ARCHIVE_BASE = cockroach-$(shell cat .buildinfo/tag)
 $(ARCHIVE).tmp: .buildinfo/tag .buildinfo/rev
-	scripts/ls-files-recursive.sh | $(TAR) -cf $@ -T - $(TAR_XFORM_FLAG),^,$(ARCHIVE_BASE)/src/github.com/cockroachdb/cockroach/, $^
-	(cd build/archive && $(TAR) -rf ../../$@ --exclude README.md *)
+	scripts/ls-files.sh | $(TAR) -cf $@ -T - $(TAR_XFORM_FLAG),^,$(ARCHIVE_BASE)/src/github.com/cockroachdb/cockroach/, $^
+	(cd build/archive && $(TAR) -rf ../../$@ $(TAR_XFORM_FLAG),^,$(ARCHIVE_BASE)/, --exclude README.md *)
 
 .buildinfo:
 	@mkdir -p $@
 
 .buildinfo/tag: | .buildinfo
-	@git describe --tags --exact-match 2> /dev/null || git rev-parse --short HEAD | tr -d '\n' > $@
+	@{ git describe --tags --exact-match 2> /dev/null || git rev-parse --short HEAD; } | tr -d \\n > $@
 	@git diff-index --quiet HEAD || echo -dirty >> $@
 
 .buildinfo/rev: | .buildinfo
