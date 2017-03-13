@@ -153,6 +153,10 @@ type Session struct {
 	// memMetrics track memory usage by SQL execution.
 	memMetrics *MemoryMetrics
 
+	// phaseTimes contains helps measure the time spent in each phase of
+	// SQL execution. See executor_statement_metrics.go for details.
+	phaseTimes phaseTimes
+
 	// noCopy is placed here to guarantee that Session objects are not
 	// copied.
 	noCopy util.NoCopy
@@ -180,6 +184,7 @@ func NewSession(
 		virtualSchemas:  e.virtualSchemas,
 		memMetrics:      memMetrics,
 	}
+	s.phaseTimes[sessionInit] = timeutil.Now()
 	cfg, cache := e.getSystemConfig()
 	s.planner = planner{
 		leaseMgr:       e.cfg.LeaseManager,
