@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -234,7 +235,7 @@ func (sc *SchemaChanger) maybeAddDropRename(
 				tbl.State = sqlbase.TableDescriptor_PUBLIC
 				return nil
 			},
-			func(txn *client.Txn) error { return nil },
+			func(sqlutil.QueryRunner) error { return nil },
 		); err != nil {
 			return false, err
 		}
@@ -470,13 +471,13 @@ func (sc *SchemaChanger) done(ctx context.Context) (*sqlbase.Descriptor, error) 
 		// Trim the executed mutations from the descriptor.
 		desc.Mutations = desc.Mutations[i:]
 		return nil
-	}, func(txn *client.Txn) error {
+	}, func(runner sqlutil.QueryRunner) error {
 		// Log "Finish Schema Change" event. Only the table ID and mutation ID
 		// are logged; this can be correlated with the DDL statement that
 		// initiated the change using the mutation id.
-		return MakeEventLogger(sc.leaseMgr).InsertEventRecord(
+		return InsertEventRecord(
 			ctx,
-			txn,
+			runner,
 			EventLogFinishSchemaChange,
 			int32(sc.tableID),
 			int32(sc.evalCtx.NodeID),
@@ -546,13 +547,13 @@ func (sc *SchemaChanger) reverseMutations(ctx context.Context, causingError erro
 
 		// Publish() will increment the version.
 		return nil
-	}, func(txn *client.Txn) error {
+	}, func(runner sqlutil.QueryRunner) error {
 		// Log "Reverse Schema Change" event. Only the causing error and the
 		// mutation ID are logged; this can be correlated with the DDL statement
 		// that initiated the change using the mutation id.
-		return MakeEventLogger(sc.leaseMgr).InsertEventRecord(
+		return InsertEventRecord(
 			ctx,
-			txn,
+			runner,
 			EventLogReverseSchemaChange,
 			int32(sc.tableID),
 			int32(sc.evalCtx.NodeID),

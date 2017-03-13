@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/mon"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -101,80 +102,7 @@ func makePlanner(opName string) *planner {
 	return p
 }
 
-// queryRunner abstracts the services provided by a planner object
-// to the other SQL front-end components.
-type queryRunner interface {
-	// The following methods control the state of the planner during its
-	// lifecycle.
-
-	// setTxn  resets the current transaction in the planner and
-	// initializes the timestamps used by SQL built-in functions from
-	// the new txn object, if any.
-	setTxn(*client.Txn)
-
-	// resetTxn clears the planner's current transaction.
-	resetTxn()
-
-	// resetForBatch prepares the planner for executing a new batch of
-	// statements.
-	resetForBatch(e *Executor)
-
-	// The following methods run SQL queries.
-
-	// parser.EvalPlanner gives us the QueryRow method.
-	parser.EvalPlanner
-
-	// queryRows executes a SQL query string where multiple result rows are returned.
-	queryRows(ctx context.Context, sql string, args ...interface{}) ([]parser.Datums, error)
-
-	// queryRowsAsRoot executes a SQL query string using security.RootUser
-	// and multiple result rows are returned.
-	queryRowsAsRoot(ctx context.Context, sql string, args ...interface{}) ([]parser.Datums, error)
-
-	// exec executes a SQL query string and returns the number of rows
-	// affected.
-	exec(ctx context.Context, sql string, args ...interface{}) (int, error)
-
-	// The following methods can be used during testing.
-
-	// setTestingVerifyMetadata sets a callback to be called after the planner
-	// is done executing the current SQL statement. It can be used to verify
-	// assumptions about how metadata will be asynchronously updated.
-	// Note that this can overwrite a previous callback that was waiting to be
-	// verified, which is not ideal.
-	setTestingVerifyMetadata(fn func(config.SystemConfig) error)
-
-	// blockConfigUpdatesMaybe will ask the Executor to block config updates,
-	// so that checkTestingVerifyMetadataInitialOrDie() can later be run.
-	// The point is to lock the system config so that no gossip updates sneak in
-	// under us, so that we're able to assert that the verify callback only succeeds
-	// after a gossip update.
-	//
-	// It returns an unblock function which can be called after
-	// checkTestingVerifyMetadata{Initial}OrDie() has been called.
-	//
-	// This lock does not change semantics. Even outside of tests, the planner uses
-	// static systemConfig for a user request, so locking the Executor's
-	// systemConfig cannot change the semantics of the SQL operation being performed
-	// under lock.
-	blockConfigUpdatesMaybe(e *Executor) func()
-
-	// checkTestingVerifyMetadataInitialOrDie verifies that the metadata callback,
-	// if one was set, fails. This validates that we need a gossip update for it to
-	// eventually succeed.
-	// No-op if we've already done an initial check for the set callback.
-	// Gossip updates for the system config are assumed to be blocked when this is
-	// called.
-	checkTestingVerifyMetadataInitialOrDie(e *Executor, stmts parser.StatementList)
-
-	// checkTestingVerifyMetadataOrDie verifies the metadata callback, if one was
-	// set.
-	// Gossip updates for the system config are assumed to be blocked when this is
-	// called.
-	checkTestingVerifyMetadataOrDie(e *Executor, stmts parser.StatementList)
-}
-
-var _ queryRunner = &planner{}
+var _ sqlutil.QueryRunner = &planner{}
 
 func (p *planner) ExecCfg() *ExecutorConfig {
 	return p.execCfg
@@ -196,7 +124,8 @@ func (p *planner) hijackCtx(ctx context.Context) func() {
 	return p.session.TxnState.hijackCtx(ctx)
 }
 
-// setTxn implements the queryRunner interface.
+// setTxn resets the current transaction in the planner and initializes the
+// timestamps used by SQL built-in functions from the new txn object, if any.
 func (p *planner) setTxn(txn *client.Txn) {
 	p.txn = txn
 	if txn != nil {
@@ -208,7 +137,7 @@ func (p *planner) setTxn(txn *client.Txn) {
 	}
 }
 
-// resetTxn implements the queryRunner interface.
+// resetTxn clears the planner's current transaction.
 func (p *planner) resetTxn() {
 	p.setTxn(nil)
 }
@@ -285,6 +214,13 @@ func makeInternalPlanner(
 		-1, noteworthyInternalMemoryUsageBytes/5)
 	p.session.TxnState.mon.Start(p.session.context, &p.session.mon, mon.BoundAccount{})
 
+	if txn.Proto().OrigTimestamp == (hlc.Timestamp{}) {
+		panic("makeInternalPlanner called with a transaction without timestamps")
+	}
+	ts := txn.Proto().OrigTimestamp.GoTime()
+	p.evalCtx.SetTxnTimestamp(ts)
+	p.evalCtx.SetStmtTimestamp(ts)
+
 	return p
 }
 
@@ -294,7 +230,7 @@ func finishInternalPlanner(p *planner) {
 	p.session.mon.Stop(p.session.context)
 }
 
-// resetForBatch implements the queryRunner interface.
+// resetForBatch prepares the planner for executing a new batch of statements.
 func (p *planner) resetForBatch(e *Executor) {
 	// Update the systemConfig to a more recent copy, so that we can use tables
 	// that we created in previus batches of the same transaction.
@@ -324,11 +260,36 @@ func (p *planner) query(ctx context.Context, sql string, args ...interface{}) (p
 	return p.makePlan(ctx, stmt, false)
 }
 
-// QueryRow implements the parser.EvalPlanner interface.
+type queryRunner struct {
+	*planner
+}
+
+// MakeQueryRunner creates a new query runner.
+func MakeQueryRunner(
+	opName string, txn *client.Txn, user string, memMetrics *MemoryMetrics,
+) sqlutil.QueryRunner {
+	return queryRunner{planner: makeInternalPlanner(opName, txn, user, memMetrics)}
+}
+
+// Close implements the sqlutil.QueryRunner interface.
+func (qr queryRunner) Close() {
+	finishInternalPlanner(qr.planner)
+}
+
+// Close implements the sqlutil.QueryRunner interface.
+func (p *planner) Close() {
+}
+
+// Txn implements the sqlutil.QueryRunner interface.
+func (p *planner) Txn() *client.Txn {
+	return p.txn
+}
+
+// QueryRow implements the sqlutil.QueryRunner interface.
 func (p *planner) QueryRow(
 	ctx context.Context, sql string, args ...interface{},
 ) (parser.Datums, error) {
-	rows, err := p.queryRows(ctx, sql, args...)
+	rows, err := p.QueryRows(ctx, sql, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -342,8 +303,18 @@ func (p *planner) QueryRow(
 	}
 }
 
-// queryRows implements the queryRunner interface.
-func (p *planner) queryRows(
+// QueryRowAsRoot implements the sqlutil.QueryRunner interface.
+func (p *planner) QueryRowAsRoot(
+	ctx context.Context, sql string, args ...interface{},
+) (parser.Datums, error) {
+	currentUser := p.session.User
+	defer func() { p.session.User = currentUser }()
+	p.session.User = security.RootUser
+	return p.QueryRow(ctx, sql, args...)
+}
+
+// QueryRows implements the sqlutil.QueryRunner interface.
+func (p *planner) QueryRows(
 	ctx context.Context, sql string, args ...interface{},
 ) ([]parser.Datums, error) {
 	plan, err := p.query(ctx, sql, args...)
@@ -376,18 +347,18 @@ func (p *planner) queryRows(
 	return rows, nil
 }
 
-// queryRowsAsRoot implements the queryRunner interface.
-func (p *planner) queryRowsAsRoot(
+// QueryRowsAsRoot implements the sqlutil.QueryRunner interface.
+func (p *planner) QueryRowsAsRoot(
 	ctx context.Context, sql string, args ...interface{},
 ) ([]parser.Datums, error) {
 	currentUser := p.session.User
 	defer func() { p.session.User = currentUser }()
 	p.session.User = security.RootUser
-	return p.queryRows(ctx, sql, args...)
+	return p.QueryRows(ctx, sql, args...)
 }
 
-// exec implements the queryRunner interface.
-func (p *planner) exec(ctx context.Context, sql string, args ...interface{}) (int, error) {
+// Exec implements the sqlutil.QueryRunner interface.
+func (p *planner) Exec(ctx context.Context, sql string, args ...interface{}) (int, error) {
 	plan, err := p.query(ctx, sql, args...)
 	if err != nil {
 		return 0, err
@@ -399,13 +370,37 @@ func (p *planner) exec(ctx context.Context, sql string, args ...interface{}) (in
 	return countRowsAffected(ctx, plan)
 }
 
-// setTestingVerifyMetadata implements the queryRunner interface.
+// ExecAsRoot implements the sqlutil.QueryRunner interface.
+func (p *planner) ExecAsRoot(ctx context.Context, sql string, args ...interface{}) (int, error) {
+	currentUser := p.session.User
+	defer func() { p.session.User = currentUser }()
+	p.session.User = security.RootUser
+	return p.Exec(ctx, sql, args...)
+}
+
+// setTestingVerifyMetadata sets a callback to be called after the planner is
+// done executing the current SQL statement. It can be used to verify
+// assumptions about how metadata will be asynchronously updated. Note that this
+// can overwrite a previous callback that was waiting to be verified, which is
+// not ideal.
 func (p *planner) setTestingVerifyMetadata(fn func(config.SystemConfig) error) {
 	p.testingVerifyMetadataFn = fn
 	p.verifyFnCheckedOnce = false
 }
 
-// blockConfigUpdatesMaybe implements the queryRunner interface.
+// blockConfigUpdatesMaybe will ask the Executor to block config updates,
+// so that checkTestingVerifyMetadataInitialOrDie() can later be run.
+// The point is to lock the system config so that no gossip updates sneak in
+// under us, so that we're able to assert that the verify callback only succeeds
+// after a gossip update.
+//
+// It returns an unblock function which can be called after
+// checkTestingVerifyMetadata{Initial}OrDie() has been called.
+//
+// This lock does not change semantics. Even outside of tests, the planner uses
+// static systemConfig for a user request, so locking the Executor's
+// systemConfig cannot change the semantics of the SQL operation being performed
+// under lock.
 func (p *planner) blockConfigUpdatesMaybe(e *Executor) func() {
 	if !e.cfg.TestingKnobs.WaitForGossipUpdate {
 		return func() {}
@@ -413,7 +408,12 @@ func (p *planner) blockConfigUpdatesMaybe(e *Executor) func() {
 	return e.blockConfigUpdates()
 }
 
-// checkTestingVerifyMetadataInitialOrDie implements the queryRunner interface.
+// checkTestingVerifyMetadataInitialOrDie verifies that the metadata callback,
+// if one was set, fails. This validates that we need a gossip update for it to
+// eventually succeed.
+// No-op if we've already done an initial check for the set callback.
+// Gossip updates for the system config are assumed to be blocked when this is
+// called.
 func (p *planner) checkTestingVerifyMetadataInitialOrDie(e *Executor, stmts parser.StatementList) {
 	if !p.execCfg.TestingKnobs.WaitForGossipUpdate {
 		return
@@ -431,7 +431,10 @@ func (p *planner) checkTestingVerifyMetadataInitialOrDie(e *Executor, stmts pars
 	p.verifyFnCheckedOnce = true
 }
 
-// checkTestingVerifyMetadataOrDie implements the queryRunner interface.
+// checkTestingVerifyMetadataOrDie verifies the metadata callback, if one was
+// set.
+// Gossip updates for the system config are assumed to be blocked when this is
+// called.
 func (p *planner) checkTestingVerifyMetadataOrDie(e *Executor, stmts parser.StatementList) {
 	if !p.execCfg.TestingKnobs.WaitForGossipUpdate ||
 		p.testingVerifyMetadataFn == nil {
@@ -474,4 +477,18 @@ func (p *planner) isDatabaseVisible(dbName string) bool {
 		return true
 	}
 	return false
+}
+
+// QueryRunnerFactory implements the sqlutil.QueryRunnerFactory interface.
+type QueryRunnerFactory struct {
+	MemMetrics *MemoryMetrics
+}
+
+var _ sqlutil.QueryRunnerFactory = QueryRunnerFactory{}
+
+// MakeQueryRunner implements the sqlutil.QueryRunnerFactory interface.
+func (qrf QueryRunnerFactory) MakeQueryRunner(
+	opName string, txn *client.Txn, user string,
+) sqlutil.QueryRunner {
+	return MakeQueryRunner(opName, txn, user, qrf.MemMetrics)
 }

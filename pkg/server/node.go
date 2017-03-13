@@ -120,14 +120,14 @@ type Node struct {
 	ClusterID   uuid.UUID              // UUID for Cockroach cluster
 	Descriptor  roachpb.NodeDescriptor // Node ID, network/physical topology
 	storeCfg    storage.StoreConfig    // Config to use and pass to stores
-	eventLogger sql.EventLogger
-	stores      *storage.Stores // Access to node-local stores
+	stores      *storage.Stores        // Access to node-local stores
 	metrics     nodeMetrics
 	recorder    *status.MetricsRecorder
 	startedAt   int64
 	lastUp      int64
 	initialBoot bool // True if this is the first time this node has started.
 	txnMetrics  kv.TxnMetrics
+	memMetrics  *sql.MemoryMetrics
 
 	storesServer storage.Server
 }
@@ -265,16 +265,16 @@ func NewNode(
 	reg *metric.Registry,
 	stopper *stop.Stopper,
 	txnMetrics kv.TxnMetrics,
-	eventLogger sql.EventLogger,
+	memMetrics *sql.MemoryMetrics,
 ) *Node {
 	n := &Node{
-		storeCfg:    cfg,
-		stopper:     stopper,
-		recorder:    recorder,
-		metrics:     makeNodeMetrics(reg, cfg.HistogramWindowInterval),
-		stores:      storage.NewStores(cfg.AmbientCtx, cfg.Clock),
-		txnMetrics:  txnMetrics,
-		eventLogger: eventLogger,
+		storeCfg:   cfg,
+		stopper:    stopper,
+		recorder:   recorder,
+		metrics:    makeNodeMetrics(reg, cfg.HistogramWindowInterval),
+		stores:     storage.NewStores(cfg.AmbientCtx, cfg.Clock),
+		txnMetrics: txnMetrics,
+		memMetrics: memMetrics,
 	}
 	n.storesServer = storage.MakeServer(&n.Descriptor, n.stores)
 	return n
@@ -774,10 +774,10 @@ func (n *Node) recordJoinEvent() {
 		retryOpts := base.DefaultRetryOptions()
 		retryOpts.Closer = n.stopper.ShouldStop()
 		for r := retry.Start(retryOpts); r.Next(); {
-			if err := n.storeCfg.DB.Txn(ctx, func(txn *client.Txn) error {
-				return n.eventLogger.InsertEventRecord(
+			if err := n.storeCfg.DB.TxnWithTimestamp(ctx, func(txn *client.Txn) error {
+				return sql.InsertEventRecord(
 					ctx,
-					txn,
+					sql.MakeQueryRunner("record-join-event", txn, security.RootUser, n.memMetrics),
 					logEventType,
 					int32(n.Descriptor.NodeID),
 					int32(n.Descriptor.NodeID),

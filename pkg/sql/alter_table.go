@@ -448,9 +448,9 @@ func (n *alterTableNode) Start(ctx context.Context) error {
 	// Record this table alteration in the event log. This is an auditable log
 	// event and is recorded in the same transaction as the table descriptor
 	// update.
-	if err := MakeEventLogger(n.p.leaseMgr).InsertEventRecord(
+	if err := InsertEventRecord(
 		ctx,
-		n.p.txn,
+		n.p,
 		EventLogAlterTable,
 		int32(n.tableDesc.ID),
 		int32(n.p.evalCtx.NodeID),
