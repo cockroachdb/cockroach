@@ -166,9 +166,6 @@ import (
 //                "FAIL" to indicate an unexpected/undesired test
 //                failure.
 //
-// -show-logs     shows logs (by default, logs go to temporary files which are
-//                kept only for tests that fail)
-//
 // -error-summary produces a report organized by error message
 //                of all queries that have caused that error.  Useful
 //                with -allow-prepare-fail and/or -flex-types.
@@ -202,8 +199,6 @@ var (
 	// Output parameters
 	showSQL = flag.Bool("show-sql", false,
 		"print the individual SQL statement/queries before processing")
-	showLogs = flag.Bool("show-logs", false,
-		"print logs instead of saving them in files")
 	printErrorSummary = flag.Bool("error-summary", false,
 		"print a per-error summary of failing queries at the end of testing, when -allow-prepare-fail is set")
 	fullMessages = flag.Bool("full-messages", false,
@@ -573,9 +568,7 @@ func (t *logicTest) setUser(user string) func() {
 }
 
 func (t *logicTest) setup() {
-	if !*showLogs {
-		t.logScope = log.Scope(t.t, "TestLogic")
-	}
+	t.logScope = log.Scope(t.t, "TestLogic")
 
 	// TODO(pmattis): Add a flag to make it easy to run the tests against a local
 	// MySQL or Postgres instance.

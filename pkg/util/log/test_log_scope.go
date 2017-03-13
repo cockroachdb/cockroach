@@ -43,11 +43,16 @@ type tShim interface {
 	Errorf(fmt string, args ...interface{})
 }
 
+var showLogs bool
+
 // Scope creates a TestLogScope which corresponds to the lifetime of a
 // logging directory. If testName is empty, the logging directory is
 // named after the caller of Scope, up `skip` caller levels. It also
 // disables logging to stderr for severity levels below ERROR.
 func Scope(t tShim, testName string) TestLogScope {
+	if showLogs {
+		return TestLogScope("")
+	}
 	if testName == "" {
 		testName = "logUnknown"
 		if _, _, f := caller.Lookup(1); f != "" {

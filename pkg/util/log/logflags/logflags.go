@@ -66,6 +66,7 @@ const (
 	VModuleName         = "vmodule"
 	LogBacktraceAtName  = "log-backtrace-at"
 	LogDirName          = "log-dir"
+	ShowLogs            = "show-logs"
 )
 
 // InitFlags creates logging flags which update the given variables. The passed mutex is
@@ -74,6 +75,7 @@ func InitFlags(
 	mu sync.Locker,
 	toStderr *bool,
 	logDir flag.Value,
+	showLogs *bool,
 	nocolor *bool,
 	verbosity, vmodule, traceLocation flag.Value,
 ) {
@@ -84,4 +86,5 @@ func InitFlags(
 	flag.Var(vmodule, VModuleName, "comma-separated list of pattern=N settings for file-filtered logging")
 	flag.Var(traceLocation, LogBacktraceAtName, "when logging hits line file:N, emit a stack trace")
 	flag.Var(logDir, LogDirName, "if non-empty, write log files in this directory")
+	flag.BoolVar(showLogs, ShowLogs, *showLogs, "print logs instead of saving them in files")
 }

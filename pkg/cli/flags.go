@@ -268,6 +268,8 @@ func init() {
 			flag.Hidden = true
 		} else if flag.Name == "no-redirect-stderr" {
 			flag.Hidden = true
+		} else if flag.Name == "show-logs" {
+			flag.Hidden = true
 		}
 		pf.AddFlag(flag)
 	})
