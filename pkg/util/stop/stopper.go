@@ -312,7 +312,7 @@ func (s *Stopper) RunLimitedAsyncTask(
 		if !wait {
 			return ErrThrottled
 		}
-		log.Infof(context.TODO(), "stopper throttling task from %s due to semaphore", key)
+		log.Infof(ctx, "stopper throttling task from %s due to semaphore", key)
 		// Retry the select without the default.
 		select {
 		case sem <- struct{}{}:
