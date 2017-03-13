@@ -225,7 +225,7 @@ func runInc(cmd *cobra.Command, args []string) error {
 		return err
 	}
 	key := roachpb.Key(unquoted)
-	r, err := kvDB.Inc(context.TODO(), key, amount)
+	r, err := kvDB.Inc(context.Background(), key, amount)
 	if err != nil {
 		return errors.Wrap(err, "increment failed")
 	}
@@ -302,7 +302,7 @@ func runDelRange(cmd *cobra.Command, args []string) error {
 	}
 
 	return kvDB.DelRange(
-		context.TODO(), roachpb.Key(uqFrom), roachpb.Key(uqTo),
+		context.Background(), roachpb.Key(uqFrom), roachpb.Key(uqTo),
 	)
 }
 
@@ -371,7 +371,7 @@ func runReverseScan(cmd *cobra.Command, args []string) error {
 	}
 	defer stopper.Stop()
 
-	rows, err := kvDB.ReverseScan(context.TODO(), startKey, endKey, maxResults)
+	rows, err := kvDB.ReverseScan(context.Background(), startKey, endKey, maxResults)
 	if err != nil {
 		return err
 	}
