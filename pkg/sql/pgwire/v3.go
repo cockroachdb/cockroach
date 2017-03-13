@@ -225,6 +225,8 @@ func parseOptions(data []byte) (sql.SessionArgs, error) {
 			args.Database = value
 		case "user":
 			args.User = value
+		case "application_name":
+			args.ApplicationName = value
 		default:
 			if log.V(1) {
 				log.Warningf(context.TODO(), "unrecognized configuration parameter %q", key)
