@@ -59,7 +59,8 @@ type tableWriter interface {
 
 	// row performs a sql row modification (tableInserter performs an insert,
 	// etc). It batches up writes to the init'd txn and periodically sends them.
-	// The returned Datums is suitable for use with returningHelper.
+	// The passed Datums is not used after `row` returns. The returned Datums is
+	// suitable for use with returningHelper.
 	row(context.Context, parser.Datums) (parser.Datums, error)
 
 	// finalize flushes out any remaining writes. It is called after all calls to
@@ -295,7 +296,9 @@ func (tu *tableUpserter) row(ctx context.Context, row parser.Datums) (parser.Dat
 		return nil, err
 	}
 
-	tu.insertRows = append(tu.insertRows, row)
+	// Copy the row because the `tableWriter` interface guarantees that it's not
+	// used after this returns.
+	tu.insertRows = append(tu.insertRows, append([]parser.Datum(nil), row...))
 	// TODO(dan): If len(tu.insertRows) > some threshold, call flush().
 	return nil, nil
 }
