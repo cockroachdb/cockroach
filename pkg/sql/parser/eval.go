@@ -2465,8 +2465,8 @@ func (expr *ParenExpr) Eval(ctx *EvalContext) (Datum, error) {
 }
 
 // Eval implements the TypedExpr interface.
-func (expr *RangeCond) Eval(_ *EvalContext) (Datum, error) {
-	log.Errorf(context.TODO(), "unhandled type %T passed to Eval", expr)
+func (expr *RangeCond) Eval(ctx *EvalContext) (Datum, error) {
+	log.Errorf(ctx.Ctx(), "unhandled type %T passed to Eval", expr)
 	return nil, errors.Errorf("unhandled type %T", expr)
 }
 
@@ -2483,32 +2483,32 @@ func (expr *UnaryExpr) Eval(ctx *EvalContext) (Datum, error) {
 }
 
 // Eval implements the TypedExpr interface.
-func (expr DefaultVal) Eval(_ *EvalContext) (Datum, error) {
-	log.Errorf(context.TODO(), "unhandled type %T passed to Eval", expr)
+func (expr DefaultVal) Eval(ctx *EvalContext) (Datum, error) {
+	log.Errorf(ctx.Ctx(), "unhandled type %T passed to Eval", expr)
 	return nil, errors.Errorf("unhandled type %T", expr)
 }
 
 // Eval implements the TypedExpr interface.
 func (expr UnqualifiedStar) Eval(ctx *EvalContext) (Datum, error) {
-	log.Errorf(context.TODO(), "unhandled type %T passed to Eval", expr)
+	log.Errorf(ctx.Ctx(), "unhandled type %T passed to Eval", expr)
 	return nil, errors.Errorf("unhandled type %T", expr)
 }
 
 // Eval implements the TypedExpr interface.
 func (expr UnresolvedName) Eval(ctx *EvalContext) (Datum, error) {
-	log.Errorf(context.TODO(), "unhandled type %T passed to Eval", expr)
+	log.Errorf(ctx.Ctx(), "unhandled type %T passed to Eval", expr)
 	return nil, errors.Errorf("unhandled type %T", expr)
 }
 
 // Eval implements the TypedExpr interface.
 func (expr *AllColumnsSelector) Eval(ctx *EvalContext) (Datum, error) {
-	log.Errorf(context.TODO(), "unhandled type %T passed to Eval", expr)
+	log.Errorf(ctx.Ctx(), "unhandled type %T passed to Eval", expr)
 	return nil, errors.Errorf("unhandled type %T", expr)
 }
 
 // Eval implements the TypedExpr interface.
 func (expr *ColumnItem) Eval(ctx *EvalContext) (Datum, error) {
-	log.Errorf(context.TODO(), "unhandled type %T passed to Eval", expr)
+	log.Errorf(ctx.Ctx(), "unhandled type %T passed to Eval", expr)
 	return nil, errors.Errorf("unhandled type %T", expr)
 }
 

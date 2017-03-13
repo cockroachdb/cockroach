@@ -381,7 +381,7 @@ func (s *Server) ServeConn(ctx context.Context, conn net.Conn) error {
 		v3conn := makeV3Conn(conn, &s.metrics, &s.sqlMemoryPool, s.executor)
 		defer v3conn.finish(ctx)
 
-		if v3conn.sessionArgs, err = parseOptions(buf.msg); err != nil {
+		if v3conn.sessionArgs, err = parseOptions(ctx, buf.msg); err != nil {
 			return v3conn.sendInternalError(err.Error())
 		}
 

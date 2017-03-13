@@ -119,7 +119,7 @@ func (sc *SchemaChanger) runBackfill(
 	var columnMutationIdx, addedIndexMutationIdx, droppedIndexMutationIdx int
 
 	var tableDesc *sqlbase.TableDescriptor
-	if err := sc.db.Txn(context.TODO(), func(txn *client.Txn) error {
+	if err := sc.db.Txn(ctx, func(txn *client.Txn) error {
 		var err error
 		tableDesc, err = sqlbase.GetTableDescFromID(txn, sc.tableID)
 		return err
@@ -347,7 +347,7 @@ func (sc *SchemaChanger) truncateAndBackfillColumns(
 				return err
 			}
 			if log.V(2) {
-				log.Infof(context.TODO(), "column schema change (%d, %d) at row: %d, span: %s",
+				log.Infof(ctx, "column schema change (%d, %d) at row: %d, span: %s",
 					sc.tableID, sc.mutationID, row, sp)
 			}
 
@@ -381,7 +381,7 @@ func (sc *SchemaChanger) truncateAndBackfillColumnsChunk(
 ) (roachpb.Key, bool, error) {
 	done := false
 	var nextKey roachpb.Key
-	err := sc.db.Txn(context.TODO(), func(txn *client.Txn) error {
+	err := sc.db.Txn(ctx, func(txn *client.Txn) error {
 		if sc.testingKnobs.RunBeforeBackfillChunk != nil {
 			if err := sc.testingKnobs.RunBeforeBackfillChunk(sp); err != nil {
 				return err
@@ -528,10 +528,10 @@ func (sc *SchemaChanger) truncateIndexes(
 
 			resumeAt := resume
 			if log.V(2) {
-				log.Infof(context.TODO(), "drop index (%d, %d) at row: %d, span: %s",
+				log.Infof(ctx, "drop index (%d, %d) at row: %d, span: %s",
 					sc.tableID, sc.mutationID, row, resume)
 			}
-			if err := sc.db.Txn(context.TODO(), func(txn *client.Txn) error {
+			if err := sc.db.Txn(ctx, func(txn *client.Txn) error {
 				if sc.testingKnobs.RunBeforeBackfillChunk != nil {
 					if err := sc.testingKnobs.RunBeforeBackfillChunk(resume); err != nil {
 						return err
@@ -633,8 +633,8 @@ func (sc *SchemaChanger) backfillIndexes(
 		if err := sc.ExtendLease(lease); err != nil {
 			return err
 		}
-		log.VEventf(context.TODO(), 2, "index backfill: process %+v spans", spans)
-		if err := sc.db.Txn(context.TODO(), func(txn *client.Txn) error {
+		log.VEventf(ctx, 2, "index backfill: process %+v spans", spans)
+		if err := sc.db.Txn(ctx, func(txn *client.Txn) error {
 			p := sc.makePlanner(txn)
 			// Use a leased table descriptor for the backfill.
 			defer p.releaseLeases(ctx)

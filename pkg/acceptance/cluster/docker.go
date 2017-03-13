@@ -81,7 +81,7 @@ func hasImage(ctx context.Context, l *LocalCluster, ref string) bool {
 	name := strings.Split(ref, ":")[0]
 	images, err := l.client.ImageList(ctx, types.ImageListOptions{MatchName: name})
 	if err != nil {
-		log.Fatal(context.TODO(), err)
+		log.Fatal(ctx, err)
 	}
 	for _, image := range images {
 		for _, repoTag := range image.RepoTags {
@@ -93,7 +93,7 @@ func hasImage(ctx context.Context, l *LocalCluster, ref string) bool {
 	}
 	for _, image := range images {
 		for _, tag := range image.RepoTags {
-			log.Infof(context.TODO(), "ImageList %s %s", tag, image.ID)
+			log.Infof(ctx, "ImageList %s %s", tag, image.ID)
 		}
 	}
 	return false
@@ -282,7 +282,7 @@ func (c *Container) Inspect(ctx context.Context) (types.ContainerJSON, error) {
 func (c *Container) Addr(ctx context.Context, port nat.Port) *net.TCPAddr {
 	containerInfo, err := c.Inspect(ctx)
 	if err != nil {
-		log.Error(context.TODO(), err)
+		log.Error(ctx, err)
 		return nil
 	}
 	bindings, ok := containerInfo.NetworkSettings.Ports[port]
@@ -291,7 +291,7 @@ func (c *Container) Addr(ctx context.Context, port nat.Port) *net.TCPAddr {
 	}
 	portNum, err := strconv.Atoi(bindings[0].HostPort)
 	if err != nil {
-		log.Error(context.TODO(), err)
+		log.Error(ctx, err)
 		return nil
 	}
 	return &net.TCPAddr{
