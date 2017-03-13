@@ -54,8 +54,13 @@ func (p *planner) Set(ctx context.Context, n *parser.Set) (planNode, error) {
 
 	if v, ok := varGen[name]; ok {
 		if len(n.Values) == 0 {
-			// SET ... TO DEFAULT
 			if v.Reset == nil {
+				if n.Reset {
+					// RESET ...
+					return nil, fmt.Errorf("variable \"%s\" cannot be reset", name)
+				}
+
+				// SET ... TO DEFAULT
 				return nil, fmt.Errorf("variable \"%s\" cannot be changed", name)
 			} else if err := v.Reset(p); err != nil {
 				return nil, err

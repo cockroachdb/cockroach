@@ -28,10 +28,17 @@ import "bytes"
 type Set struct {
 	Name   VarName
 	Values Exprs
+	Reset  bool
 }
 
 // Format implements the NodeFormatter interface.
 func (node *Set) Format(buf *bytes.Buffer, f FmtFlags) {
+	if node.Reset {
+		buf.WriteString("RESET ")
+		FormatNode(buf, f, node.Name)
+		return
+	}
+
 	buf.WriteString("SET ")
 	if node.Name != nil {
 		FormatNode(buf, f, node.Name)
