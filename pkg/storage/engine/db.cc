@@ -1080,7 +1080,7 @@ class BaseDeltaIterator : public rocksdb::Iterator {
   }
 
   bool Valid() const override {
-    return current_at_base_ ? BaseValid() : DeltaValid();
+    return status_.ok() && (current_at_base_ ? BaseValid() : DeltaValid());
   }
 
   void SeekToFirst() override {
