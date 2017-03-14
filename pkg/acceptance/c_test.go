@@ -479,3 +479,43 @@ EOF
 gcc -std=c99 -I/usr/include/postgresql -lpq -lpqtypes main.c
 ./a.out
 `
+
+func TestDockerPGWireVersion(t *testing.T) {
+	s := log.Scope(t, "")
+	defer s.Close(t)
+
+	ctx := context.Background()
+	testDockerSuccess(ctx, t, "c", []string{"/bin/sh", "-c", cVersion})
+}
+
+const cVersion = `
+set -e
+cat > main.c << 'EOF'
+#include <libpq-fe.h>
+#include <libpqtypes.h>
+#include <string.h>
+#include <stdio.h>
+
+int main(int argc, char const *argv[]) {
+	PGconn *conn = PQconnectdb("");
+	if (PQstatus(conn) != CONNECTION_OK) {
+		fprintf(stderr, "Connection to database failed: %s", PQerrorMessage(conn));
+		return 1;
+	}
+
+	const char *version = PQparameterStatus(conn, "crdb_version");
+	if (version == NULL) {
+		fprintf(stderr, "ERROR PQparameterStatus: crdb_version not reported: %s\n", PQgeterror());
+		return 1;
+	}
+	if (strncmp(version, "CockroachDB ", 12) != 0) {
+		fprintf(stderr, "crdb_version mismatch: '%s' doesn't start with 'CockroachDB '\n", version);
+		return 1;
+	}
+
+	return 0;
+}
+EOF
+gcc -std=c99 -I/usr/include/postgresql -lpq -lpqtypes main.c
+./a.out
+`
