@@ -18,8 +18,6 @@ package sql
 import (
 	"time"
 
-	"golang.org/x/net/context"
-
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
@@ -66,22 +64,22 @@ type phaseTimes [sessionNumPhases]time.Time
 // recordStatementSummery gathers various details pertaining to the
 // last executed statement/query and performs the associated
 // accounting.
-// - phaseTimes are the timestamps at various stages of processing,
-//   see the comment above for details.
 // - distSQLUsed reports whether the query was distributed.
 // - automaticRetryCount is the count of implicit txn retries
 //   so far.
 // - result is the result set computed by the query/statement.
 // - err is the error encountered, if any.
 func (e *Executor) recordStatementSummary(
-	ctx context.Context,
+	session *Session,
 	stmt parser.Statement,
-	phaseTimes *phaseTimes,
 	distSQLUsed bool,
 	automaticRetryCount int,
 	result Result,
 	err error,
 ) {
+	session.appStats.recordStatement()
+
+	phaseTimes := &session.phaseTimes
 
 	// Compute the run latency. This is always recorded in the
 	// server metrics.
@@ -127,12 +125,13 @@ func (e *Executor) recordStatementSummary(
 			numRows = result.Rows.Len()
 		}
 
-		log.Infof(ctx, "query stats: %d rows, %d retries, "+
-			"parse %.2fµs (%.1f%%), "+
-			"plan %.2fµs (%.1f%%), "+
-			"run %.2fµs (%.1f%%), "+
-			"overhead %.2fµs (%.1f%%), "+
-			"batch age %.3fms, session age %.4fs",
+		log.Infof(session.Ctx(),
+			"query stats: %d rows, %d retries, "+
+				"parse %.2fµs (%.1f%%), "+
+				"plan %.2fµs (%.1f%%), "+
+				"run %.2fµs (%.1f%%), "+
+				"overhead %.2fµs (%.1f%%), "+
+				"batch age %.3fms, session age %.4fs",
 			numRows, automaticRetryCount,
 			parseLat*1e6, 100*parseLat/execLat,
 			planLat*1e6, 100*planLat/execLat,
