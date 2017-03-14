@@ -34,13 +34,27 @@ func evalImport(ctx context.Context, cArgs storage.CommandArgs) error {
 	db := cArgs.Repl.DB()
 	kr := KeyRewriter(args.KeyRewrites)
 
-	ctx, span := tracing.ChildSpan(ctx, fmt.Sprintf("import [%s,%s)", args.DataSpan.Key, args.DataSpan.EndKey))
+	var importStart, importEnd roachpb.Key
+	{
+		var ok bool
+		importStart, ok = kr.RewriteKey(append([]byte(nil), args.DataSpan.Key...))
+		if !ok {
+			return errors.Errorf("could not rewrite key: %s", importStart)
+		}
+		importEnd, ok = kr.RewriteKey(append([]byte(nil), args.DataSpan.EndKey...))
+		if !ok {
+			return errors.Errorf("could not rewrite key: %s", importEnd)
+		}
+	}
+
+	ctx, span := tracing.ChildSpan(ctx, fmt.Sprintf("Import [%s,%s)", importStart, importEnd))
 	defer tracing.FinishSpan(span)
 
 	if err := beginLimitedRequest(ctx); err != nil {
 		return err
 	}
 	defer endLimitedRequest()
+	log.Infof(ctx, "import [%s,%s)", importStart, importEnd)
 
 	// Arrived at by tuning and watching the effect on BenchmarkRestore.
 	const batchSizeBytes = 1000000
@@ -71,8 +85,8 @@ func evalImport(ctx context.Context, cArgs storage.CommandArgs) error {
 
 	var iters []engine.Iterator
 	for _, file := range args.Files {
-		if log.V(1) {
-			log.Infof(ctx, "import file [%s,%s) %s", args.DataSpan.Key, args.DataSpan.EndKey, file.Path)
+		if log.V(2) {
+			log.Infof(ctx, "import file [%s,%s) %s", importStart, importEnd, file.Path)
 		}
 
 		dir, err := MakeExportStorage(ctx, file.Dir)
