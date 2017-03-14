@@ -51,6 +51,7 @@ case ${1-} in
     "$(dirname "${0}")/travis_retry.sh" ssh -o StrictHostKeyChecking=no "${FQDN}" true
 
     rsync -az "$(dirname "${0}")/../build/bootstrap/" "${FQDN}:bootstrap/"
+    rsync -az "$(dirname "${0}")/../build/parallelbuilds-"* "${FQDN}:bootstrap/"
     ssh -A "${FQDN}" ./bootstrap/bootstrap-debian.sh
 
     # TODO(bdarnell): autoshutdown.cron.sh does not work on azure. It
