@@ -1188,23 +1188,26 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 
 	upTableVersion = func() {
 		leaseMgr := s.LeaseManager().(*sql.LeaseManager)
-		if _, err := leaseMgr.Publish(
-			ctx,
-			id,
-			func(table *sqlbase.TableDescriptor) error {
-				table.Version++
-				return nil
-			},
+		if _, err := leaseMgr.Publish(ctx, id, func(table *sqlbase.TableDescriptor) error {
+			// Publish nothing; only update the version.
+			return nil
+		},
 			func(txn *client.Txn) error { return nil }); err != nil {
 			t.Error(err)
 		}
-		retryOpts := retry.Options{
-			InitialBackoff: time.Millisecond,
-			MaxBackoff:     time.Millisecond,
-		}
-		if _, err := leaseMgr.WaitForOneVersion(ctx, id, retryOpts); err != nil {
-			t.Error(err)
-		}
+		// Grab a lease at the latest version so that we are confident
+		// that all future leases will be taken at the latest version.
+		tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
+		testutils.SucceedsSoon(t, func() error {
+			err := kvDB.Txn(ctx, func(txn *client.Txn) error {
+				lease, err := leaseMgr.Acquire(ctx, txn, tableDesc.ID, tableDesc.Version)
+				if err != nil {
+					return err
+				}
+				return leaseMgr.Release(lease)
+			})
+			return err
+		})
 	}
 
 	// Bulk insert.
