@@ -47,6 +47,7 @@ type planner struct {
 	evalCtx  parser.EvalContext
 	leases   []*LeaseState
 	leaseMgr *LeaseManager
+	sqlStats *sqlStats
 
 	distSQLPlanner *distSQLPlanner
 

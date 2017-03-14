@@ -127,7 +127,7 @@ func (p *planner) Set(n *parser.Set) (planNode, error) {
 		if err != nil {
 			return nil, err
 		}
-		p.session.ApplicationName = s
+		p.session.resetApplicationName(s)
 
 	case `CLIENT_ENCODING`:
 		// See https://www.postgresql.org/docs/9.6/static/multibyte.html

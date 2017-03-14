@@ -17,10 +17,12 @@
 package sql
 
 import (
+	"sort"
 	"time"
 
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/pkg/errors"
@@ -32,6 +34,7 @@ var crdbInternal = virtualSchema{
 		crdbInternalTablesTable,
 		crdbInternalLeasesTable,
 		crdbInternalSchemaChangesTable,
+		crdbInternalAppStatsTable,
 	},
 }
 
@@ -218,6 +221,51 @@ CREATE TABLE crdb_internal.leases (
 			}
 
 			if err := adder(); err != nil {
+				return err
+			}
+		}
+		return nil
+	},
+}
+
+var crdbInternalAppStatsTable = virtualSchemaTable{
+	schema: `
+CREATE TABLE crdb_internal.app_stats (
+  APPLICATION_NAME STRING,
+  STATEMENT_COUNT  INT
+);
+`,
+	populate: func(_ context.Context, p *planner, addRow func(...parser.Datum) error) error {
+		if p.session.User != security.RootUser {
+			return errors.New("only root can access application statistics")
+		}
+
+		sqlStats := p.sqlStats
+		if sqlStats == nil {
+			return errors.New("cannot access sql statistics from this context")
+		}
+
+		// Retrieve the application names and sort them to ensure the
+		// output is deterministic.
+		var appNames []string
+		sqlStats.Lock()
+		for n := range sqlStats.apps {
+			appNames = append(appNames, n)
+		}
+		sqlStats.Unlock()
+		sort.Strings(appNames)
+
+		// Now retrieve the application stats proper.
+		for _, appName := range appNames {
+			appStats := sqlStats.getStatsForApplication(appName)
+
+			appStats.Lock()
+			err := addRow(
+				parser.NewDString(appName),
+				parser.NewDInt(parser.DInt(int64(appStats.stmtCount))),
+			)
+			appStats.Unlock()
+			if err != nil {
 				return err
 			}
 		}

@@ -55,3 +55,21 @@ SELECT NAME from crdb_internal.tables WHERE DATABASE_NAME = 'testdb'
 ----
 foo
 "\'
+
+# Check that app_stats report per application
+
+statement ok
+SET APPLICATION_NAME = hello; SELECT 1
+
+statement ok
+SET APPLICATION_NAME = world; SELECT 2
+
+query B
+SELECT statement_count > 0 FROM crdb_internal.app_stats WHERE APPLICATION_NAME IN ('hello', 'world')
+----
+true
+true
+
+# reset for other tests.
+statement ok
+SET APPLICATION_NAME = ''
