@@ -28,14 +28,17 @@ import (
 	"github.com/pkg/errors"
 )
 
-// flowStreamTimeout is the amount of time incoming streams wait for a flow to
+// flowStreamDefaultTimeout is the amount of time incoming streams wait for a flow to
 // be set up before erroring out.
-const flowStreamTimeout time.Duration = 10 * time.Second
+const flowStreamDefaultTimeout time.Duration = 10 * time.Second
 
 // inboundStreamInfo represents the endpoint where a data stream from another
 // node connects to a flow. The external node initiates this process through a
 // FlowStream RPC, which uses (*Flow).connectInboundStream() to associate the
 // stream to a receiver to push rows to.
+//
+// All fields are protected by the flowRegistry mutex (except the receiver,
+// whose methods can be called freely).
 type inboundStreamInfo struct {
 	// receiver is the entity that will receive rows from another host, which is
 	// part of a processor (normally an input synchronizer).
@@ -55,7 +58,8 @@ type inboundStreamInfo struct {
 }
 
 // flowEntry is a structure associated with a (potential) flow.
-// All fields are protected by the flowRegistry mutex.
+// All fields are protected by the flowRegistry mutex, except flow, whose
+// methods can be called freely.
 type flowEntry struct {
 	// waitCh is set if one or more clients are waiting for the flow; the
 	// channel gets closed when the flow is registered.
@@ -125,10 +129,13 @@ func (fr *flowRegistry) releaseEntryLocked(id FlowID) {
 // flow from the registry.
 //
 // inboundStreams are all the remote streams that will be connected into this
-// flow. If any of them is not connected within a timeout, errors are
-// propagated.
+// flow. If any of them is not connected within timeout, errors are propagated.
 func (fr *flowRegistry) RegisterFlow(
-	ctx context.Context, id FlowID, f *Flow, inboundStreams map[StreamID]*inboundStreamInfo,
+	ctx context.Context,
+	id FlowID,
+	f *Flow,
+	inboundStreams map[StreamID]*inboundStreamInfo,
+	timeout time.Duration,
 ) {
 	fr.Lock()
 	defer fr.Unlock()
@@ -147,11 +154,11 @@ func (fr *flowRegistry) RegisterFlow(
 
 	if len(inboundStreams) > 0 {
 		// Set up a function to time out inbound streams after a while.
-		entry.streamTimer = time.AfterFunc(flowStreamTimeout, func() {
+		entry.streamTimer = time.AfterFunc(timeout, func() {
 			fr.Lock()
 			defer fr.Unlock()
 			numTimedOut := 0
-			for _, is := range entry.inboundStreams {
+			for streamID, is := range entry.inboundStreams {
 				if is.timedOut {
 					panic("stream already marked as timed out")
 				}
@@ -162,7 +169,7 @@ func (fr *flowRegistry) RegisterFlow(
 					// its consumer; the error will propagate and eventually drain all the
 					// processors.
 					is.receiver.Close(errors.Errorf("inbound stream timed out waiting for connection"))
-					fr.finishInboundStreamLocked(is)
+					fr.finishInboundStreamLocked(id, streamID)
 				}
 			}
 			if numTimedOut != 0 {
@@ -171,7 +178,7 @@ func (fr *flowRegistry) RegisterFlow(
 					"flow id:%s : %d inbound streams timed out after %s; propagated error throughout flow",
 					id,
 					numTimedOut,
-					flowStreamTimeout,
+					timeout,
 				)
 			}
 		})
@@ -179,7 +186,7 @@ func (fr *flowRegistry) RegisterFlow(
 }
 
 // UnregisterFlow removes a flow from the registry. Any subsequent
-// ConnectInboundStream calls will wait for the flow in vain.
+// ConnectInboundStream calls for the flow will fail to find it and timeout.
 func (fr *flowRegistry) UnregisterFlow(id FlowID) {
 	fr.Lock()
 	entry := fr.flows[id]
@@ -232,48 +239,55 @@ func (fr *flowRegistry) waitForFlowLocked(id FlowID, timeout time.Duration) *flo
 }
 
 // ConnectInboundStream finds the inboundStreamInfo for the given ID and marks it
-// as connected. FinishInboundStream must be called after the rows are
-// transferred.
+// as connected. It waits up to timeout for the stream to be registered with the
+// registry. Non-test callers should pass flowStreamDefaultTimeout.
+//
+// It returns the Flow that the stream is connecting to, the receiver that the
+// stream mush push data to, a cleanup function that must be called to
+// de-register the flow from the registry after all the data has been pushed.
+//
+// The cleanup function will decrement the flow's WaitGroup, so that Flow.Wait()
+// is not blocked on this stream any more.
 func (fr *flowRegistry) ConnectInboundStream(
-	flowID FlowID, streamID StreamID,
-) (*Flow, *inboundStreamInfo, error) {
+	flowID FlowID, streamID StreamID, timeout time.Duration,
+) (*Flow, RowReceiver, func(), error) {
 	fr.Lock()
 	defer fr.Unlock()
-	entry := fr.waitForFlowLocked(flowID, flowStreamTimeout)
+	entry := fr.waitForFlowLocked(flowID, timeout)
 	if entry == nil {
-		return nil, nil, errors.Errorf("flow %s not found", flowID)
+		return nil, nil, nil, errors.Errorf("flow %s not found", flowID)
 	}
 
 	s, ok := entry.inboundStreams[streamID]
 	if !ok {
-		return nil, nil, errors.Errorf("flow %s: no inbound stream %d", flowID, streamID)
+		return nil, nil, nil, errors.Errorf("flow %s: no inbound stream %d", flowID, streamID)
 	}
 	if s.connected {
-		return nil, nil, errors.Errorf("flow %s: inbound stream %d already connected", flowID, streamID)
+		return nil, nil, nil, errors.Errorf("flow %s: inbound stream %d already connected", flowID, streamID)
 	}
 	if s.timedOut {
-		return nil, nil, errors.Errorf("flow %s: inbound stream %d came too late", flowID, streamID)
+		return nil, nil, nil, errors.Errorf("flow %s: inbound stream %d came too late", flowID, streamID)
 	}
 	s.connected = true
-	return entry.flow, s, nil
+	cleanup := func() {
+		fr.Lock()
+		defer fr.Unlock()
+		fr.finishInboundStreamLocked(flowID, streamID)
+	}
+	return entry.flow, s.receiver, cleanup, nil
 }
 
-func (fr *flowRegistry) finishInboundStreamLocked(is *inboundStreamInfo) {
-	if !is.connected && !is.timedOut {
-		panic("finishing inbound stream that didn't connect or time out")
+func (fr *flowRegistry) finishInboundStreamLocked(fid FlowID, sid StreamID) {
+	flowEntry := fr.getEntryLocked(fid)
+	streamEntry := flowEntry.inboundStreams[sid]
+
+	if !streamEntry.connected && !streamEntry.timedOut {
+		panic("finising inbound stream that didn't connect or time out")
 	}
-	if is.finished {
+	if streamEntry.finished {
 		panic("double finish")
 	}
 
-	is.finished = true
-	is.waitGroup.Done()
-}
-
-// FinishInboundStream is to be called when we are done transferring rows for a
-// stream previously connected via ConnectInboundStream.
-func (fr *flowRegistry) FinishInboundStream(is *inboundStreamInfo) {
-	fr.Lock()
-	defer fr.Unlock()
-	fr.finishInboundStreamLocked(is)
+	streamEntry.finished = true
+	streamEntry.waitGroup.Done()
 }
