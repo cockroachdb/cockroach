@@ -118,10 +118,15 @@ func (fr *flowRegistry) releaseEntryLocked(id FlowID) {
 	}
 }
 
-// RegisterFlow makes a flow accessible to LookupFlow. Any concurrent LookupFlow
-// calls that are waiting for this flow are woken up.
+// RegisterFlow makes a flow accessible to ConnectInboundStream. Any concurrent
+// ConnectInboundStream calls that are waiting for this flow are woken up.
+//
 // It is expected that UnregisterFlow will be called at some point to remove the
 // flow from the registry.
+//
+// inboundStreams are all the remote streams that will be connected into this
+// flow. If any of them is not connected within a timeout, errors are
+// propagated.
 func (fr *flowRegistry) RegisterFlow(
 	ctx context.Context, id FlowID, f *Flow, inboundStreams map[StreamID]*inboundStreamInfo,
 ) {
@@ -148,19 +153,23 @@ func (fr *flowRegistry) RegisterFlow(
 			numTimedOut := 0
 			for _, is := range entry.inboundStreams {
 				if is.timedOut {
-					panic("stream already timed out")
+					panic("stream already marked as timed out")
 				}
 				if !is.connected {
 					is.timedOut = true
 					numTimedOut++
-					is.receiver.Close(errors.Errorf("no inbound stream connection"))
+					// We're giving up waiting for this inbound stream. Send an error to
+					// its consumer; the error will propagate and eventually drain all the
+					// processors.
+					is.receiver.Close(errors.Errorf("inbound stream timed out waiting for connection"))
 					fr.finishInboundStreamLocked(is)
 				}
 			}
 			if numTimedOut != 0 {
 				log.Errorf(
 					ctx,
-					"%d inbound streams timed out after %s; stopping flow",
+					"flow id:%s : %d inbound streams timed out after %s; propagated error throughout flow",
+					id,
 					numTimedOut,
 					flowStreamTimeout,
 				)
@@ -169,8 +178,8 @@ func (fr *flowRegistry) RegisterFlow(
 	}
 }
 
-// UnregisterFlow removes a flow from the registry. Any subsequent LookupFlow
-// calls will time out.
+// UnregisterFlow removes a flow from the registry. Any subsequent
+// ConnectInboundStream calls will wait for the flow in vain.
 func (fr *flowRegistry) UnregisterFlow(id FlowID) {
 	fr.Lock()
 	entry := fr.flows[id]
@@ -220,19 +229,6 @@ func (fr *flowRegistry) waitForFlowLocked(id FlowID, timeout time.Duration) *flo
 	}
 
 	return entry
-}
-
-// LookupFlow returns the registered flow with the given ID. If no such flow is
-// registered, waits until it gets registered - up to the given timeout. If the
-// timeout elapses, returns nil.
-func (fr *flowRegistry) LookupFlow(id FlowID, timeout time.Duration) *Flow {
-	fr.Lock()
-	defer fr.Unlock()
-	entry := fr.waitForFlowLocked(id, timeout)
-	if entry == nil {
-		return nil
-	}
-	return entry.flow
 }
 
 // ConnectInboundStream finds the inboundStreamInfo for the given ID and marks it
