@@ -279,6 +279,9 @@ func (rb *RowBuffer) PushRow(row sqlbase.EncDatumRow) bool {
 
 // Close is part of the RowReceiver interface.
 func (rb *RowBuffer) Close(err error) {
+	if rb.Closed {
+		panic("RowBuffer already closed")
+	}
 	rb.Err = err
 	rb.Closed = true
 }

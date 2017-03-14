@@ -190,13 +190,14 @@ func (ds *ServerImpl) flowStreamInt(ctx context.Context, stream DistSQL_FlowStre
 	if log.V(1) {
 		log.Infof(ctx, "connecting inbound stream %s/%d", flowID.Short(), streamID)
 	}
-	f, streamInfo, err := ds.flowRegistry.ConnectInboundStream(flowID, streamID)
+	f, receiver, cleanup, err := ds.flowRegistry.ConnectInboundStream(
+		flowID, streamID, flowStreamDefaultTimeout)
 	if err != nil {
 		return err
 	}
+	defer cleanup()
 	log.VEventf(ctx, 1, "connected inbound stream %s/%d", flowID.Short(), streamID)
-	defer ds.flowRegistry.FinishInboundStream(streamInfo)
-	return ProcessInboundStream(f.AnnotateCtx(ctx), stream, msg, streamInfo.receiver)
+	return ProcessInboundStream(f.AnnotateCtx(ctx), stream, msg, receiver)
 }
 
 // FlowStream is part of the DistSQLServer interface.
