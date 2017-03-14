@@ -10,6 +10,9 @@ package sqlccl
 
 import (
 	"fmt"
+	"reflect"
+	"runtime"
+	"strings"
 	"testing"
 
 	"golang.org/x/net/context"
@@ -25,7 +28,7 @@ import (
 )
 
 type kvInterface interface {
-	insert(rows, run int) error
+	Insert(rows, run int) error
 
 	prep(rows int, initData bool) error
 	done()
@@ -39,6 +42,10 @@ type kvWriteBatch struct {
 }
 
 func newKVWriteBatch(b *testing.B) kvInterface {
+	if !storage.ProposerEvaluatedKVEnabled() {
+		b.Skip("command WriteBatch is not allowed without proposer evaluated KV")
+	}
+
 	enableTracing := tracing.Disable()
 	s, _, _ := serverutils.StartServer(b, base.TestServerArgs{})
 
@@ -61,7 +68,7 @@ func newKVWriteBatch(b *testing.B) kvInterface {
 	}
 }
 
-func (kv *kvWriteBatch) insert(rows, run int) error {
+func (kv *kvWriteBatch) Insert(rows, run int) error {
 	var batch engine.RocksDBBatchBuilder
 
 	firstRow := rows * run
@@ -78,11 +85,7 @@ func (kv *kvWriteBatch) insert(rows, run int) error {
 	startKey := fmt.Sprintf("%s%08d", kv.prefix, firstRow)
 	endKey := fmt.Sprintf("%s%08d", kv.prefix, lastRow)
 
-	err := kv.db.WriteBatch(context.TODO(), startKey, endKey, data)
-	if err != nil {
-		panic(err)
-	}
-	return err
+	return kv.db.WriteBatch(context.TODO(), startKey, endKey, data)
 }
 
 func (kv *kvWriteBatch) prep(rows int, initData bool) error {
@@ -91,53 +94,49 @@ func (kv *kvWriteBatch) prep(rows int, initData bool) error {
 	if !initData {
 		return nil
 	}
-	err := kv.db.Txn(context.TODO(), func(txn *client.Txn) error {
+	return kv.db.Txn(context.TODO(), func(txn *client.Txn) error {
 		b := txn.NewBatch()
 		for i := 0; i < rows; i++ {
 			b.Put(fmt.Sprintf("%s%08d", kv.prefix, i), i)
 		}
 		return txn.CommitInBatch(b)
 	})
-	return err
 }
 
 func (kv *kvWriteBatch) done() {
 	kv.doneFn()
 }
 
-func runKVBenchmark(b *testing.B, typ, op string, rows int) {
-	var kv kvInterface
-	switch typ {
-	case "WriteBatch":
-		kv = newKVWriteBatch(b)
-	default:
-		b.Fatalf("unknown implementation: %s", typ)
-	}
-	defer kv.done()
+func BenchmarkKV(b *testing.B) {
+	for _, opFn := range []func(kvInterface, int, int) error{
+		kvInterface.Insert,
+	} {
+		opName := runtime.FuncForPC(reflect.ValueOf(opFn).Pointer()).Name()
+		opName = strings.TrimPrefix(opName, "github.com/cockroachdb/cockroach/pkg/ccl/sqlccl.kvInterface.")
+		for _, rows := range []int{10000} {
+			for _, kvFn := range []func(*testing.B) kvInterface{
+				newKVWriteBatch,
+			} {
+				kvTyp := runtime.FuncForPC(reflect.ValueOf(kvFn).Pointer()).Name()
+				kvTyp = strings.TrimPrefix(kvTyp, "github.com/cockroachdb/cockroach/pkg/ccl/sqlccl.newKV")
+				for _, initData := range []bool{false} { // TODO(dan): add true
+					b.Run(fmt.Sprintf("%s%d_%s initData=%t", opName, rows, kvTyp, initData), func(b *testing.B) {
+						kv := kvFn(b)
+						defer kv.done()
 
-	var opFn func(int, int) error
-	switch op {
-	case "insert":
-		opFn = kv.insert
-	}
-
-	if err := kv.prep(rows, op != "insert" && op != "delete"); err != nil {
-		b.Fatal(err)
-	}
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		if err := opFn(rows, i); err != nil {
-			b.Fatal(err)
+						if err := kv.prep(rows, initData); err != nil {
+							b.Fatal(err)
+						}
+						b.ResetTimer()
+						for i := 0; i < b.N; i++ {
+							if err := opFn(kv, rows, i); err != nil {
+								b.Fatal(err)
+							}
+						}
+						b.StopTimer()
+					})
+				}
+			}
 		}
 	}
-	b.StopTimer()
-}
-
-// This benchmark mirrors the ones in sql_test, but can't live beside them
-// because of ccl.
-func BenchmarkKVInsert10000_WriteBatch(b *testing.B) {
-	if !storage.ProposerEvaluatedKVEnabled() {
-		b.Skip("command WriteBatch is not allowed without proposer evaluated KV")
-	}
-	runKVBenchmark(b, "WriteBatch", "insert", 10000)
 }
