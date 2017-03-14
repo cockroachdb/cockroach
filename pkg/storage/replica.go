@@ -3299,12 +3299,12 @@ func (r *Replica) sendRaftMessage(ctx context.Context, msg raftpb.Message) {
 	r.mu.Unlock()
 
 	if fromErr != nil {
-		log.Warningf(ctx, "failed to look up sender replica %d in range %d while sending %s: %s",
+		log.Warningf(ctx, "failed to look up sender replica %d in r%d while sending %s: %s",
 			msg.From, r.RangeID, msg.Type, fromErr)
 		return
 	}
 	if toErr != nil {
-		log.Warningf(ctx, "failed to look up recipient replica %d in range %d while sending %s: %s",
+		log.Warningf(ctx, "failed to look up recipient replica %d in r%d while sending %s: %s",
 			msg.To, r.RangeID, msg.Type, toErr)
 		return
 	}
@@ -4402,7 +4402,7 @@ func (r *Replica) maybeGossipFirstRange(ctx context.Context) *roachpb.Error {
 	// Gossip the cluster ID from all replicas of the first range; there
 	// is no expiration on the cluster ID.
 	if log.V(1) {
-		log.Infof(ctx, "gossiping cluster id %q from store %d, range %d", r.store.ClusterID(),
+		log.Infof(ctx, "gossiping cluster id %q from store %d, r%d", r.store.ClusterID(),
 			r.store.StoreID(), r.RangeID)
 	}
 	if err := r.store.Gossip().AddInfo(
@@ -4434,13 +4434,13 @@ func (r *Replica) gossipFirstRange(ctx context.Context) {
 	}
 	log.Event(ctx, "gossiping sentinel and first range")
 	if log.V(1) {
-		log.Infof(ctx, "gossiping sentinel from store %d, range %d", r.store.StoreID(), r.RangeID)
+		log.Infof(ctx, "gossiping sentinel from store %d, r%d", r.store.StoreID(), r.RangeID)
 	}
 	if err := r.store.Gossip().AddInfo(gossip.KeySentinel, r.store.ClusterID().GetBytes(), sentinelGossipTTL); err != nil {
 		log.Errorf(ctx, "failed to gossip sentinel: %s", err)
 	}
 	if log.V(1) {
-		log.Infof(ctx, "gossiping first range from store %d, range %d: %s",
+		log.Infof(ctx, "gossiping first range from store %d, r%d: %s",
 			r.store.StoreID(), r.RangeID, r.mu.state.Desc.Replicas)
 	}
 	if err := r.store.Gossip().AddInfoProto(

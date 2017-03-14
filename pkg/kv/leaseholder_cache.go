@@ -53,12 +53,12 @@ func (lc *leaseHolderCache) Lookup(
 	defer lc.mu.Unlock()
 	if v, ok := lc.cache.Get(rangeID); ok {
 		if log.V(2) {
-			log.Infof(ctx, "lookup lease holder for range %d: %s", rangeID, v)
+			log.Infof(ctx, "lookup lease holder for r%d: %s", rangeID, v)
 		}
 		return v.(roachpb.ReplicaDescriptor), true
 	}
 	if log.V(2) {
-		log.Infof(ctx, "lookup lease holder for range %d: not found", rangeID)
+		log.Infof(ctx, "lookup lease holder for r%d: not found", rangeID)
 	}
 	return roachpb.ReplicaDescriptor{}, false
 }
@@ -73,12 +73,12 @@ func (lc *leaseHolderCache) Update(
 	defer lc.mu.Unlock()
 	if (repDesc == roachpb.ReplicaDescriptor{}) {
 		if log.V(2) {
-			log.Infof(ctx, "evicting lease holder for range %d", rangeID)
+			log.Infof(ctx, "evicting lease holder for r%d", rangeID)
 		}
 		lc.cache.Del(rangeID)
 	} else {
 		if log.V(2) {
-			log.Infof(ctx, "updating lease holder for range %d: %s", rangeID, repDesc)
+			log.Infof(ctx, "updating lease holder for r%d: %s", rangeID, repDesc)
 		}
 		lc.cache.Add(rangeID, repDesc)
 	}
