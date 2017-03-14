@@ -406,6 +406,28 @@ func TestLeaseManagerPublishVersionChanged(testingT *testing.T) {
 	t.expectLeases(descID, "/3/1")
 }
 
+func TestLeaseManagerPublishIllegalVersionChange(testingT *testing.T) {
+	defer leaktest.AfterTest(testingT)()
+	params, _ := createTestServerParams()
+	t := newLeaseTest(testingT, params)
+	defer t.cleanup()
+
+	if _, err := t.node(1).Publish(
+		context.TODO(), keys.LeaseTableID, func(table *sqlbase.TableDescriptor) error {
+			table.Version++
+			return nil
+		}, nil); !testutils.IsError(err, "updated version") {
+		t.Fatalf("unexpected error: %+v", err)
+	}
+	if _, err := t.node(1).Publish(
+		context.TODO(), keys.LeaseTableID, func(table *sqlbase.TableDescriptor) error {
+			table.Version--
+			return nil
+		}, nil); !testutils.IsError(err, "updated version") {
+		t.Fatalf("unexpected error: %+v", err)
+	}
+}
+
 func TestLeaseManagerDrain(testingT *testing.T) {
 	defer leaktest.AfterTest(testingT)()
 	params, _ := createTestServerParams()
