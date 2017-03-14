@@ -1313,7 +1313,7 @@ func TestSQLNetworkMetrics(t *testing.T) {
 	defer cleanupFn()
 
 	const minbytes = 20
-	const maxbytes = 350
+	const maxbytes = 450
 
 	// Make sure we're starting at 0.
 	if _, _, err := checkSQLNetworkMetrics(s, 0, 0, 0, 0); err != nil {

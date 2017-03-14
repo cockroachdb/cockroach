@@ -29,6 +29,7 @@ import (
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/mon"
@@ -252,6 +253,11 @@ var statusReportParams = map[string]string{
 	// code paths which various client tools fall back to if they can't
 	// determine that the server is new enough.
 	"server_version": sql.PgServerVersion,
+	// The current CockroachDB version string.
+	"crdb_version": func() string {
+		info := build.GetInfo()
+		return fmt.Sprintf("CockroachDB %s %s", info.Distribution, info.Tag)
+	}(),
 }
 
 // handleAuthentication should discuss with the client to arrange
