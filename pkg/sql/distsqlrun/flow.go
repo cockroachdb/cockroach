@@ -298,7 +298,7 @@ func (f *Flow) Start(ctx context.Context, doneFn func()) {
 	// set up the WaitGroup counter before.
 	f.waitGroup.Add(len(f.inboundStreams) + len(f.outboxes) + len(f.processors))
 
-	f.flowRegistry.RegisterFlow(ctx, f.id, f, f.inboundStreams)
+	f.flowRegistry.RegisterFlow(ctx, f.id, f, f.inboundStreams, flowStreamDefaultTimeout)
 	if log.V(1) {
 		log.Infof(ctx, "registered flow %s", f.id.Short())
 	}

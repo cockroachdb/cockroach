@@ -23,21 +23,43 @@ import (
 
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/pkg/errors"
 )
 
 // lookupFlow returns the registered flow with the given ID. If no such flow is
 // registered, waits until it gets registered - up to the given timeout. If the
-// timeout elapses, returns nil.
-func lookupFlow(fr *flowRegistry, id FlowID, timeout time.Duration) *Flow {
+// timeout elapses and the flow is not registered, the bool return value will be
+// false.
+func lookupFlow(fr *flowRegistry, fid FlowID, timeout time.Duration) *Flow {
 	fr.Lock()
 	defer fr.Unlock()
-	entry := fr.waitForFlowLocked(id, timeout)
+	entry := fr.waitForFlowLocked(fid, timeout)
 	if entry == nil {
 		return nil
 	}
 	return entry.flow
+}
+
+// lookupStreamInfo returns a stream entry from a flowRegistry. If either the
+// flow or the streams are missing, an error is returned.
+//
+// A copy of the registry's inboundStreamInfo is returned so it can be accessed
+// without locking.
+func lookupStreamInfo(fr *flowRegistry, fid FlowID, sid StreamID) (inboundStreamInfo, error) {
+	fr.Lock()
+	defer fr.Unlock()
+	entry := fr.getEntryLocked(fid)
+	if entry.flow == nil {
+		return inboundStreamInfo{}, errors.Errorf("missing flow entry: %s", fid)
+	}
+	si, ok := entry.inboundStreams[sid]
+	if !ok {
+		return inboundStreamInfo{}, errors.Errorf("missing stream entry: %d", sid)
+	}
+	return *si, nil
 }
 
 func TestFlowRegistry(t *testing.T) {
@@ -67,7 +89,7 @@ func TestFlowRegistry(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	reg.RegisterFlow(ctx, id1, f1, nil /* inboundStreams */)
+	reg.RegisterFlow(ctx, id1, f1, nil /* inboundStreams */, flowStreamDefaultTimeout)
 
 	if f := lookupFlow(reg, id1, 0); f != f1 {
 		t.Error("couldn't lookup previously registered flow")
@@ -83,7 +105,7 @@ func TestFlowRegistry(t *testing.T) {
 
 	go func() {
 		time.Sleep(jiffy)
-		reg.RegisterFlow(ctx, id1, f1, nil /* inboundStreams */)
+		reg.RegisterFlow(ctx, id1, f1, nil /* inboundStreams */, flowStreamDefaultTimeout)
 	}()
 
 	if f := lookupFlow(reg, id1, 10*jiffy); f != f1 {
@@ -114,7 +136,7 @@ func TestFlowRegistry(t *testing.T) {
 	}()
 
 	time.Sleep(jiffy)
-	reg.RegisterFlow(ctx, id2, f2, nil /* inboundStreams */)
+	reg.RegisterFlow(ctx, id2, f2, nil /* inboundStreams */, flowStreamDefaultTimeout)
 	wg.Wait()
 
 	// -- Multiple lookups, with the first one failing. --
@@ -139,18 +161,68 @@ func TestFlowRegistry(t *testing.T) {
 	}()
 
 	wg1.Wait()
-	reg.RegisterFlow(ctx, id3, f3, nil /* inboundStreams */)
+	reg.RegisterFlow(ctx, id3, f3, nil /* inboundStreams */, flowStreamDefaultTimeout)
 	wg2.Wait()
 
 	// -- Lookup with huge timeout, register in the meantime. --
 
 	go func() {
 		time.Sleep(jiffy)
-		reg.RegisterFlow(ctx, id4, f4, nil /* inboundStreams */)
+		reg.RegisterFlow(ctx, id4, f4, nil /* inboundStreams */, flowStreamDefaultTimeout)
 	}()
 
 	// This should return in a jiffy.
 	if f := lookupFlow(reg, id4, time.Hour); f != f4 {
 		t.Error("couldn't lookup registered flow (with wait)")
+	}
+}
+
+// Test that, if inbound streams are not connected within the timeout, errors
+// are propagated to their consumers and future attempts to connect them fail.
+func TestStreamConnectionTimeout(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	reg := makeFlowRegistry()
+
+	jiffy := time.Nanosecond
+
+	// Register a flow with a very low timeout. After it times out, we'll attempt
+	// to connect a stream, but it'll be too late.
+	id1 := FlowID{uuid.MakeV4()}
+	f1 := &Flow{}
+	streamID1 := StreamID(1)
+	consumer := &RowBuffer{}
+	wg := &sync.WaitGroup{}
+	wg.Add(1)
+	inboundStreams := map[StreamID]*inboundStreamInfo{
+		streamID1: {receiver: consumer, waitGroup: wg},
+	}
+	reg.RegisterFlow(context.TODO(), id1, f1, inboundStreams, jiffy)
+
+	testutils.SucceedsSoon(t, func() error {
+		si, err := lookupStreamInfo(reg, id1, streamID1)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !si.timedOut {
+			return errors.Errorf("not timed out yet")
+		}
+		return nil
+	})
+
+	if !consumer.Closed {
+		t.Fatalf("expected consumer to have been closed when the flow timed out")
+	}
+
+	if _, _, _, err := reg.ConnectInboundStream(id1, streamID1, jiffy); !testutils.IsError(
+		err, "came too late") {
+		t.Fatalf("expected %q, got: %v", "came too late", err)
+	}
+
+	// Unregister the flow. Subsequent attempts to connect a stream should result
+	// in a different error than before.
+	reg.UnregisterFlow(id1)
+	_, _, _, err := reg.ConnectInboundStream(id1, streamID1, jiffy)
+	if !testutils.IsError(err, "not found") {
+		t.Fatalf("expected %q, got: %v", "not found", err)
 	}
 }
