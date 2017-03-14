@@ -73,3 +73,22 @@ true
 # reset for other tests.
 statement ok
 SET APPLICATION_NAME = ''
+
+query TT colnames
+SELECT * FROM crdb_internal.local_version WHERE field ILIKE 'name'
+----
+FIELD VALUE
+Name CockroachDB
+
+query T
+SELECT field FROM crdb_internal.local_version
+----
+Name
+GoVersion
+Tag
+Time
+Revision
+CgoCompiler
+Platform
+Distribution
+Type

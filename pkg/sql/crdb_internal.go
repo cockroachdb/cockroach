@@ -17,11 +17,13 @@
 package sql
 
 import (
+	"reflect"
 	"sort"
 	"time"
 
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -31,10 +33,39 @@ import (
 var crdbInternal = virtualSchema{
 	name: "crdb_internal",
 	tables: []virtualSchemaTable{
+		crdbInternalVersionTable,
 		crdbInternalTablesTable,
 		crdbInternalLeasesTable,
 		crdbInternalSchemaChangesTable,
 		crdbInternalAppStatsTable,
+	},
+}
+
+var crdbInternalVersionTable = virtualSchemaTable{
+	schema: `
+CREATE TABLE crdb_internal.local_version (
+  FIELD STRING NOT NULL,
+  VALUE STRING NOT NULL
+);
+`,
+	populate: func(_ context.Context, _ *planner, addRow func(...parser.Datum) error) error {
+		if err := addRow(parser.NewDString("Name"), parser.NewDString("CockroachDB")); err != nil {
+			return err
+		}
+
+		info := build.GetInfo()
+		s := reflect.ValueOf(&info).Elem()
+		t := s.Type()
+		for i := 0; i < s.NumField(); i++ {
+			f := s.Field(i)
+			if sv, ok := f.Interface().(string); ok {
+				fname := t.Field(i).Name
+				if err := addRow(parser.NewDString(fname), parser.NewDString(sv)); err != nil {
+					return err
+				}
+			}
+		}
+		return nil
 	},
 }
 
