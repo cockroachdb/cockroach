@@ -356,18 +356,20 @@ func (s LeaseStore) Publish(
 			}
 
 			// Run the update closure.
+			version := tableDesc.Version
 			if err := update(tableDesc); err != nil {
 				return err
 			}
+			if version != tableDesc.Version {
+				return errors.Errorf("updated version to: %d, expected: %d",
+					tableDesc.Version, version)
+			}
 
-			// Bump the version and modification time.
 			tableDesc.Version++
 			now := s.clock.Now()
 			tableDesc.ModificationTime = now
-			if log.V(3) {
-				log.Infof(txn.Context, "publish: descID=%d (%s) version=%d mtime=%s",
-					tableDesc.ID, tableDesc.Name, tableDesc.Version, now.GoTime())
-			}
+			log.Infof(txn.Context, "publish: descID=%d (%s) version=%d mtime=%s",
+				tableDesc.ID, tableDesc.Name, tableDesc.Version, now.GoTime())
 			if err := tableDesc.ValidateTable(); err != nil {
 				return err
 			}
