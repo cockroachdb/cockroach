@@ -22,7 +22,6 @@ import (
 
 	basictracer "github.com/opentracing/basictracer-go"
 	opentracing "github.com/opentracing/opentracing-go"
-	otlog "github.com/opentracing/opentracing-go/log"
 
 	"golang.org/x/net/context"
 
@@ -151,10 +150,10 @@ func (n *explainTraceNode) Next(ctx context.Context) (bool, error) {
 			n.exhausted = true
 			// Finish the tracing span that we began in Start().
 			if err != nil {
-				sp.LogFields(otlog.String("event", err.Error()))
+				sp.LogKV("event", err)
 				return false, err
 			}
-			sp.LogFields(otlog.String("event", "tracing completed"))
+			sp.LogKV("event", "tracing completed")
 			n.unhijackCtx()
 			sp.Finish()
 		} else {
