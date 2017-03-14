@@ -506,7 +506,7 @@ func JoinRemoteTrace(
 			sp.SetTag(k, v)
 			return true
 		})
-		sp.LogFields(otlog.String("event", opName))
+		sp.LogKV("event", opName)
 	case opentracing.ErrSpanContextNotFound:
 		fallthrough
 	default:

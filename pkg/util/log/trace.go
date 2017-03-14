@@ -21,7 +21,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	opentracing "github.com/opentracing/opentracing-go"
-	otlog "github.com/opentracing/opentracing-go/log"
 	"golang.org/x/net/context"
 	"golang.org/x/net/trace"
 )
@@ -127,9 +126,7 @@ func eventInternal(ctx context.Context, isErr, withTags bool, format string, arg
 		}
 
 		if sp != nil {
-			// TODO(radu): pass tags directly to sp.LogKV when LightStep supports
-			// that.
-			sp.LogFields(otlog.String("event", msg))
+			sp.LogKV("event", msg)
 			if isErr {
 				// TODO(radu): figure out a way to signal that this is an error. We
 				// could use a different "error" key (provided it shows up in
