@@ -1343,7 +1343,7 @@ func TestChangeReplicasDescriptorInvariant(t *testing.T) {
 	before := mtc.stores[2].Metrics().RangeSnapshotsPreemptiveApplied.Count()
 	// Attempt to add replica to the third store with the original descriptor.
 	// This should fail because the descriptor is stale.
-	if err := addReplica(2, origDesc); !testutils.IsError(err, `change replicas of range \d+ failed`) {
+	if err := addReplica(2, origDesc); !testutils.IsError(err, `change replicas of r\d+ failed`) {
 		t.Fatalf("got unexpected error: %v", err)
 	}
 

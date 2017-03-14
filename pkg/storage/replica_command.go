@@ -1593,7 +1593,7 @@ func evalTruncateLog(
 	// range based on the start key. This will cancel the request if this is not
 	// the range specified in the request body.
 	if r.RangeID != args.RangeID {
-		log.Infof(ctx, "attempting to truncate raft logs for another range %d. Normally this is due to a merge and can be ignored.",
+		log.Infof(ctx, "attempting to truncate raft logs for another range: r%d. Normally this is due to a merge and can be ignored.",
 			args.RangeID)
 		return EvalResult{}, nil
 	}
@@ -3365,7 +3365,7 @@ func (r *Replica) ChangeReplicas(
 		return nil
 	}); err != nil {
 		log.Event(ctx, err.Error())
-		return errors.Wrapf(err, "change replicas of range %d failed", rangeID)
+		return errors.Wrapf(err, "change replicas of r%d failed", rangeID)
 	}
 	log.Event(ctx, "txn complete")
 	return nil
