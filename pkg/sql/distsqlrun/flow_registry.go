@@ -28,9 +28,9 @@ import (
 	"github.com/pkg/errors"
 )
 
-// flowStreamTimeout is the amount of time incoming streams wait for a flow to
+// flowStreamDefaultTimeout is the amount of time incoming streams wait for a flow to
 // be set up before erroring out.
-const flowStreamTimeout time.Duration = 10 * time.Second
+const flowStreamDefaultTimeout time.Duration = 10 * time.Second
 
 // inboundStreamInfo represents the endpoint where a data stream from another
 // node connects to a flow. The external node initiates this process through a
@@ -125,10 +125,13 @@ func (fr *flowRegistry) releaseEntryLocked(id FlowID) {
 // flow from the registry.
 //
 // inboundStreams are all the remote streams that will be connected into this
-// flow. If any of them is not connected within a timeout, errors are
-// propagated.
+// flow. If any of them is not connected within timeout, errors are propagated.
 func (fr *flowRegistry) RegisterFlow(
-	ctx context.Context, id FlowID, f *Flow, inboundStreams map[StreamID]*inboundStreamInfo,
+	ctx context.Context,
+	id FlowID,
+	f *Flow,
+	inboundStreams map[StreamID]*inboundStreamInfo,
+	timeout time.Duration,
 ) {
 	fr.Lock()
 	defer fr.Unlock()
@@ -147,7 +150,7 @@ func (fr *flowRegistry) RegisterFlow(
 
 	if len(inboundStreams) > 0 {
 		// Set up a function to time out inbound streams after a while.
-		entry.streamTimer = time.AfterFunc(flowStreamTimeout, func() {
+		entry.streamTimer = time.AfterFunc(timeout, func() {
 			fr.Lock()
 			defer fr.Unlock()
 			numTimedOut := 0
@@ -171,7 +174,7 @@ func (fr *flowRegistry) RegisterFlow(
 					"flow id:%s : %d inbound streams timed out after %s; propagated error throughout flow",
 					id,
 					numTimedOut,
-					flowStreamTimeout,
+					timeout,
 				)
 			}
 		})
@@ -239,7 +242,7 @@ func (fr *flowRegistry) ConnectInboundStream(
 ) (*Flow, *inboundStreamInfo, error) {
 	fr.Lock()
 	defer fr.Unlock()
-	entry := fr.waitForFlowLocked(flowID, flowStreamTimeout)
+	entry := fr.waitForFlowLocked(flowID, flowStreamDefaultTimeout)
 	if entry == nil {
 		return nil, nil, errors.Errorf("flow %s not found", flowID)
 	}
