@@ -479,3 +479,50 @@ EOF
 gcc -std=c99 -I/usr/include/postgresql -lpq -lpqtypes main.c
 ./a.out
 `
+
+func TestDockerPGWireVersion(t *testing.T) {
+	s := log.Scope(t, "")
+	defer s.Close(t)
+
+	ctx := context.Background()
+	t.Run("Success", func(t *testing.T) {
+		testDockerSuccess(ctx, t, "c", []string{"/bin/sh", "-c",
+			strings.Replace(cVersion, "EXPECTED_VERSION", "CockroachDB ", -1)})
+	})
+	t.Run("Fail", func(t *testing.T) {
+		testDockerFail(ctx, t, "c", []string{"/bin/sh", "-c",
+			strings.Replace(cVersion, "EXPECTED_VERSION", "--NotValid--", -1)})
+	})
+}
+
+const cVersion = `
+set -e
+cat > main.c << 'EOF'
+#include <libpq-fe.h>
+#include <libpqtypes.h>
+#include <string.h>
+#include <stdio.h>
+
+int main(int argc, char const *argv[]) {
+	PGconn *conn = PQconnectdb("");
+	if (PQstatus(conn) != CONNECTION_OK) {
+		fprintf(stderr, "Connection to database failed: %s", PQerrorMessage(conn));
+		return 1;
+	}
+
+	const char *version = PQparameterStatus(conn, "crdb_version");
+	if (version == NULL) {
+		fprintf(stderr, "ERROR PQparameterStatus: crdb_version not reported: %s\n", PQgeterror());
+		return 1;
+	}
+	if (strncmp(version, "EXPECTED_VERSION", strlen("EXPECTED_VERSION")) != 0) {
+		fprintf(stderr, "crdb_version mismatch: '%s' doesn't start with 'EXPECTED_VERSION'\n", version);
+		return 1;
+	}
+
+	return 0;
+}
+EOF
+gcc -std=c99 -I/usr/include/postgresql -lpq -lpqtypes main.c
+./a.out
+`
