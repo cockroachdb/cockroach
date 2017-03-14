@@ -59,8 +59,6 @@ const (
 	checkpointInterval = 10 * time.Second
 )
 
-var errVersionMismatch = errors.New("table version mismatch")
-
 var _ sort.Interface = columnsByID{}
 var _ sort.Interface = indexesByID{}
 
@@ -131,6 +129,10 @@ func (sc *SchemaChanger) runBackfill(
 		return nil
 	}
 	version := tableDesc.Version
+
+	log.VEventf(ctx, 0, "Running backfill for %q, v=%d, m=%d",
+		tableDesc.Name, tableDesc.Version, sc.mutationID)
+
 	for i, m := range tableDesc.Mutations {
 		if m.MutationID != sc.mutationID {
 			break
@@ -244,7 +246,7 @@ func (sc *SchemaChanger) maybeWriteResumeSpan(
 		return err
 	}
 	if tableDesc.Version != version {
-		return errVersionMismatch
+		return errors.Errorf("table version mismatch: %d, expected: %d", tableDesc.Version, version)
 	}
 	if len(tableDesc.Mutations[mutationIdx].ResumeSpans) > 0 {
 		tableDesc.Mutations[mutationIdx].ResumeSpans[0] = resume
@@ -278,7 +280,7 @@ func (sc *SchemaChanger) getTableLease(
 		return nil, err
 	}
 	if version != tableDesc.Version {
-		return nil, errVersionMismatch
+		return nil, errors.Errorf("table version mismatch: %d, expected=%d", tableDesc.Version, version)
 	}
 	return tableDesc, nil
 }
