@@ -33,7 +33,7 @@ import (
 
 // TestBackupRestoreS3 hits the real S3 and so could occasionally be flaky. It's
 // only run if the AWS_S3_BUCKET environment var is set.
-func TestBackupRestoreS3(t *testing.T) {
+func TestCloudBackupRestoreS3(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	if !storage.ProposerEvaluatedKVEnabled() {
 		t.Skip("command WriteBatch is not allowed without proposer evaluated KV")
@@ -65,7 +65,7 @@ func TestBackupRestoreS3(t *testing.T) {
 
 // TestBackupRestoreGoogleCloudStorage hits the real GCS and so could
 // occasionally be flaky. It's only run if the GS_BUCKET environment var is set.
-func TestBackupRestoreGoogleCloudStorage(t *testing.T) {
+func TestCloudBackupRestoreGoogleCloudStorage(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	if !storage.ProposerEvaluatedKVEnabled() {
 		t.Skip("command WriteBatch is not allowed without proposer evaluated KV")
@@ -97,7 +97,7 @@ func TestBackupRestoreGoogleCloudStorage(t *testing.T) {
 // TestBackupRestoreAzure hits the real Azure Blob Storage and so could
 // occasionally be flaky. It's only run if the AZURE_ACCOUNT_NAME and
 // AZURE_ACCOUNT_KEY environment vars are set.
-func TestBackupRestoreAzure(t *testing.T) {
+func TestCloudBackupRestoreAzure(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	if !storage.ProposerEvaluatedKVEnabled() {
 		t.Skip("command WriteBatch is not allowed without proposer evaluated KV")
