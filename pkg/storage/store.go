@@ -3129,7 +3129,7 @@ func (s *Store) processRaftRequest(
 			log.Infof(ctx, "refusing incoming Raft message %s from %+v to %+v",
 				req.Message.Type, req.FromReplica, req.ToReplica)
 		}
-		return roachpb.NewErrorf("cannot recreate replica that is not a member of its range (StoreID %s not found in range %d)",
+		return roachpb.NewErrorf("cannot recreate replica that is not a member of its range (StoreID %s not found in r%d)",
 			r.store.StoreID(), req.RangeID)
 	}
 
@@ -3195,7 +3195,7 @@ func (s *Store) HandleRaftResponse(ctx context.Context, resp *RaftMessageRespons
 				resp.FromReplica.NodeID, resp.FromReplica.StoreID, resp.FromReplica, val)
 			return val.GetDetail()
 		default:
-			log.Warningf(ctx, "got error from range %d, replica %s: %s",
+			log.Warningf(ctx, "got error from r%d, replica %s: %s",
 				resp.RangeID, resp.FromReplica, val)
 		}
 

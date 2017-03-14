@@ -82,7 +82,7 @@ func getTruncatableIndexes(ctx context.Context, r *Replica) (uint64, uint64, err
 	raftStatus := r.RaftStatus()
 	if raftStatus == nil {
 		if log.V(6) {
-			log.Infof(ctx, "the raft group doesn't exist for range %d", rangeID)
+			log.Infof(ctx, "the raft group doesn't exist for r%d", rangeID)
 		}
 		return 0, 0, nil
 	}
@@ -113,7 +113,7 @@ func getTruncatableIndexes(ctx context.Context, r *Replica) (uint64, uint64, err
 	pendingSnapshotIndex := r.mu.pendingSnapshotIndex
 	r.mu.Unlock()
 	if err != nil {
-		return 0, 0, errors.Errorf("error retrieving first index for range %d: %s", rangeID, err)
+		return 0, 0, errors.Errorf("error retrieving first index for r%d: %s", rangeID, err)
 	}
 
 	truncatableIndex := computeTruncatableIndex(
