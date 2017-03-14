@@ -381,7 +381,7 @@ func (ds *DistSender) sendRPC(
 ) (*roachpb.BatchResponse, error) {
 	if len(replicas) == 0 {
 		return nil, roachpb.NewSendError(
-			fmt.Sprintf("no replica node addresses available via gossip for range %d", rangeID))
+			fmt.Sprintf("no replica node addresses available via gossip for r%d", rangeID))
 	}
 
 	// TODO(pmattis): This needs to be tested. If it isn't set we'll
@@ -1139,7 +1139,7 @@ func (ds *DistSender) sendToReplicas(
 	// Send the first request.
 	pending := 1
 	if log.V(2) || log.HasSpanOrEvent(ctx) {
-		log.VEventf(ctx, 2, "sending batch %s to range %d", args.Summary(), rangeID)
+		log.VEventf(ctx, 2, "sending batch %s to r%d", args.Summary(), rangeID)
 	}
 	transport.SendNext(ctx, done)
 
@@ -1170,7 +1170,7 @@ func (ds *DistSender) sendToReplicas(
 			}
 
 		case <-slowTimer.C:
-			log.Warningf(ctx, "have been waiting %s sending RPC to range %d for batch: %s",
+			log.Warningf(ctx, "have been waiting %s sending RPC to r%d for batch: %s",
 				base.SlowRequestThreshold, rangeID, args)
 			ds.metrics.SlowRequestsCount.Inc(1)
 			defer ds.metrics.SlowRequestsCount.Dec(1)
@@ -1300,15 +1300,15 @@ func (ds *DistSender) updateLeaseHolderCache(
 	if log.V(1) {
 		if oldLeaseHolder, ok := ds.leaseHolderCache.Lookup(ctx, rangeID); ok {
 			if (newLeaseHolder == roachpb.ReplicaDescriptor{}) {
-				log.Infof(ctx, "range %d: evicting cached lease holder %+v", rangeID, oldLeaseHolder)
+				log.Infof(ctx, "r%d: evicting cached lease holder %+v", rangeID, oldLeaseHolder)
 			} else if newLeaseHolder != oldLeaseHolder {
 				log.Infof(
-					ctx, "range %d: replacing cached lease holder %+v with %+v",
+					ctx, "r%d: replacing cached lease holder %+v with %+v",
 					rangeID, oldLeaseHolder, newLeaseHolder,
 				)
 			}
 		} else {
-			log.Infof(ctx, "range %d: caching new lease holder %+v", rangeID, newLeaseHolder)
+			log.Infof(ctx, "r%d: caching new lease holder %+v", rangeID, newLeaseHolder)
 		}
 	}
 	ds.leaseHolderCache.Update(ctx, rangeID, newLeaseHolder)
