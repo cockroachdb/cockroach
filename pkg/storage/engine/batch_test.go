@@ -27,6 +27,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -929,5 +930,77 @@ func TestBatchDistinctPanics(t *testing.T) {
 			}()
 			f()
 		}()
+	}
+}
+
+func TestBatchIteration(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+	e := NewInMem(roachpb.Attributes{}, 1<<20)
+	defer e.Close()
+
+	b := e.NewBatch()
+	defer b.Close()
+
+	k1 := MakeMVCCMetadataKey(roachpb.Key("c"))
+	k2 := MakeMVCCMetadataKey(roachpb.Key("d"))
+	v1 := []byte("value1")
+	v2 := []byte("value2")
+
+	if err := b.Put(k1, v1); err != nil {
+		t.Fatal(err)
+	}
+	if err := b.Put(k2, v2); err != nil {
+		t.Fatal(err)
+	}
+
+	iter := b.NewIterator(false)
+	defer iter.Close()
+
+	// Forward iteration
+	iter.Seek(k1)
+	if !iter.Valid() {
+		t.Fatal(iter.Error())
+	}
+	if !reflect.DeepEqual(iter.Key(), k1) {
+		t.Fatalf("expected %s, got %s", k1, iter.Key())
+	}
+	if !reflect.DeepEqual(iter.Value(), v1) {
+		t.Fatalf("expected %s, got %s", v1, iter.Value())
+	}
+	iter.Next()
+	if !iter.Valid() {
+		t.Fatal(iter.Error())
+	}
+	if !reflect.DeepEqual(iter.Key(), k2) {
+		t.Fatalf("expected %s, got %s", k2, iter.Key())
+	}
+	if !reflect.DeepEqual(iter.Value(), v2) {
+		t.Fatalf("expected %s, got %s", v2, iter.Value())
+	}
+	iter.Next()
+	if iter.Valid() {
+		t.Fatalf("expected invalid, got valid at key %s", iter.Key())
+	}
+
+	// SeekReverse works, but reverse iteration is not supported.
+	iter.SeekReverse(k2)
+	if !iter.Valid() {
+		t.Fatal(iter.Error())
+	}
+	if !reflect.DeepEqual(iter.Key(), k2) {
+		t.Fatalf("expected %s, got %s", k2, iter.Key())
+	}
+	if !reflect.DeepEqual(iter.Value(), v2) {
+		t.Fatalf("expected %s, got %s", v2, iter.Value())
+	}
+	iter.Prev()
+	if iter.Valid() {
+		t.Fatalf("expected invalid, got valid at key %s", iter.Key())
+	}
+	if !testutils.IsError(iter.Error(), "Prev\\(\\) not supported") {
+		t.Fatalf("expected 'Prev() not supported', got %s", iter.Error())
 	}
 }
