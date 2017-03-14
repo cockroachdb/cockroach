@@ -36,59 +36,63 @@ import (
 
 // Tests a batch of queries very similar to those that that PGBench runs
 // in its TPC-B(ish) mode.
-func runPgbenchQuery(b *testing.B, db *gosql.DB) {
-	if err := pgbench.SetupBenchDB(db, 20000, true /*quiet*/); err != nil {
-		b.Fatal(err)
-	}
-	src := rand.New(rand.NewSource(5432))
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		if err := pgbench.RunOne(db, src, 20000); err != nil {
+func BenchmarkPgbenchQuery(b *testing.B) {
+	forEachDB(b, func(b *testing.B, db *gosql.DB) {
+		if err := pgbench.SetupBenchDB(db, 20000, true /*quiet*/); err != nil {
 			b.Fatal(err)
 		}
-	}
-	b.StopTimer()
+		src := rand.New(rand.NewSource(5432))
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			if err := pgbench.RunOne(db, src, 20000); err != nil {
+				b.Fatal(err)
+			}
+		}
+		b.StopTimer()
+	})
 }
 
 // Tests a batch of queries very similar to those that that PGBench runs
 // in its TPC-B(ish) mode.
-func runPgbenchQueryParallel(b *testing.B, db *gosql.DB) {
-	if err := pgbench.SetupBenchDB(db, 20000, true /*quiet*/); err != nil {
-		b.Fatal(err)
-	}
+func BenchmarkPgbenchQueryParallel(b *testing.B) {
+	forEachDB(b, func(b *testing.B, db *gosql.DB) {
+		if err := pgbench.SetupBenchDB(db, 20000, true /*quiet*/); err != nil {
+			b.Fatal(err)
+		}
 
-	retryOpts := retry.Options{
-		InitialBackoff: 1 * time.Millisecond,
-		MaxBackoff:     200 * time.Millisecond,
-		Multiplier:     2,
-	}
+		retryOpts := retry.Options{
+			InitialBackoff: 1 * time.Millisecond,
+			MaxBackoff:     200 * time.Millisecond,
+			Multiplier:     2,
+		}
 
-	b.ResetTimer()
-	b.RunParallel(func(pb *testing.PB) {
-		src := rand.New(rand.NewSource(5432))
-		r := retry.Start(retryOpts)
-		var err error
-		for pb.Next() {
-			r.Reset()
-			for r.Next() {
-				err = pgbench.RunOne(db, src, 20000)
-				if err == nil {
-					break
+		b.ResetTimer()
+		b.RunParallel(func(pb *testing.PB) {
+			src := rand.New(rand.NewSource(5432))
+			r := retry.Start(retryOpts)
+			var err error
+			for pb.Next() {
+				r.Reset()
+				for r.Next() {
+					err = pgbench.RunOne(db, src, 20000)
+					if err == nil {
+						break
+					}
+				}
+				if err != nil {
+					b.Fatal(err)
 				}
 			}
-			if err != nil {
-				b.Fatal(err)
-			}
-		}
+		})
+		b.StopTimer()
 	})
-	b.StopTimer()
 }
 
-func execPgbench(b *testing.B, pgUrl url.URL) {
+func execPgbench(b *testing.B, pgURL url.URL) {
 	if _, err := exec.LookPath("pgbench"); err != nil {
 		b.Skip("pgbench is not available on PATH")
 	}
-	c, err := pgbench.SetupExec(pgUrl, "bench", 20000, b.N)
+	c, err := pgbench.SetupExec(pgURL, "bench", 20000, b.N)
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -110,34 +114,18 @@ func BenchmarkPgbenchExec_Cockroach(b *testing.B) {
 	s, _, _ := serverutils.StartServer(b, base.TestServerArgs{Insecure: true})
 	defer s.Stopper().Stop()
 
-	pgUrl, cleanupFn := sqlutils.PGUrl(
+	pgURL, cleanupFn := sqlutils.PGUrl(
 		b, s.ServingAddr(), "benchmarkCockroach", url.User(security.RootUser))
-	pgUrl.RawQuery = "sslmode=disable"
+	pgURL.RawQuery = "sslmode=disable"
 	defer cleanupFn()
 
-	execPgbench(b, pgUrl)
+	execPgbench(b, pgURL)
 }
 
 func BenchmarkPgbenchExec_Postgres(b *testing.B) {
-	pgUrl, err := url.Parse("postgres://localhost:5432?sslmode=disable")
+	pgURL, err := url.Parse("postgres://localhost:5432?sslmode=disable")
 	if err != nil {
 		b.Fatal(err)
 	}
-	execPgbench(b, *pgUrl)
-}
-
-func BenchmarkPgbenchQuery_Cockroach(b *testing.B) {
-	benchmarkCockroach(b, runPgbenchQuery)
-}
-
-func BenchmarkPgbenchQuery_Postgres(b *testing.B) {
-	benchmarkPostgres(b, runPgbenchQuery)
-}
-
-func BenchmarkParallelPgbenchQuery_Cockroach(b *testing.B) {
-	benchmarkCockroach(b, runPgbenchQueryParallel)
-}
-
-func BenchmarkParallelPgbenchQuery_Postgres(b *testing.B) {
-	benchmarkPostgres(b, runPgbenchQueryParallel)
+	execPgbench(b, *pgURL)
 }

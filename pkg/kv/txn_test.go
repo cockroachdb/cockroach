@@ -106,31 +106,27 @@ func TestTxnDBBasics(t *testing.T) {
 // benchmarkSingleRoundtripWithLatency runs a number of transactions writing to
 // the same key back to back in a single round-trip. Latency is simulated
 // by pausing before each RPC sent.
-func benchmarkSingleRoundtripWithLatency(b *testing.B, latency time.Duration) {
-	s := &localtestcluster.LocalTestCluster{}
-	s.Latency = latency
-	s.Start(b, testutils.NewNodeTestBaseContext(), InitSenderForLocalTestCluster)
-	defer s.Stop()
-	defer b.StopTimer()
-	key := roachpb.Key("key")
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		if tErr := s.DB.Txn(context.TODO(), func(txn *client.Txn) error {
-			b := txn.NewBatch()
-			b.Put(key, fmt.Sprintf("value-%d", i))
-			return txn.CommitInBatch(b)
-		}); tErr != nil {
-			b.Fatal(tErr)
-		}
+func BenchmarkSingleRoundtripWithLatency(b *testing.B) {
+	for _, latency := range []time.Duration{0, 10 * time.Millisecond} {
+		b.Run(latency.String(), func(b *testing.B) {
+			var s localtestcluster.LocalTestCluster
+			s.Latency = latency
+			s.Start(b, testutils.NewNodeTestBaseContext(), InitSenderForLocalTestCluster)
+			defer s.Stop()
+			defer b.StopTimer()
+			key := roachpb.Key("key")
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				if tErr := s.DB.Txn(context.TODO(), func(txn *client.Txn) error {
+					b := txn.NewBatch()
+					b.Put(key, fmt.Sprintf("value-%d", i))
+					return txn.CommitInBatch(b)
+				}); tErr != nil {
+					b.Fatal(tErr)
+				}
+			}
+		})
 	}
-}
-
-func BenchmarkSingleRoundtripTxnWithLatency_0(b *testing.B) {
-	benchmarkSingleRoundtripWithLatency(b, 0)
-}
-
-func BenchmarkSingleRoundtripTxnWithLatency_10(b *testing.B) {
-	benchmarkSingleRoundtripWithLatency(b, 10*time.Millisecond)
 }
 
 // TestSnapshotIsolationIncrement verifies that Increment with snapshot

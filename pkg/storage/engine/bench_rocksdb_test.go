@@ -17,6 +17,7 @@
 package engine
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -44,229 +45,123 @@ func setupMVCCInMemRocksDB(_ testing.TB, loc string) Engine {
 
 // Read benchmarks. All of them run with on-disk data.
 
-func BenchmarkMVCCScan10Versions1Row64Bytes_RocksDB(b *testing.B) {
-	runMVCCScan(setupMVCCRocksDB, 1, 10, 64, b)
+func BenchmarkMVCCScan_RocksDB(b *testing.B) {
+	for _, numRows := range []int{1, 10, 100, 1000} {
+		for _, numVersions := range []int{10, 100} {
+			for _, valueSize := range []int{8, 64, 512} {
+				b.Run(fmt.Sprintf("%dVersions%dRows%dBytes", numVersions, numRows, valueSize), func(b *testing.B) {
+					runMVCCScan(setupMVCCRocksDB, numRows, numVersions, valueSize, b)
+				})
+			}
+		}
+	}
 }
 
-func BenchmarkMVCCScan10Versions1Row512Bytes_RocksDB(b *testing.B) {
-	runMVCCScan(setupMVCCRocksDB, 1, 10, 512, b)
+func BenchmarkMVCCGet_RocksDB(b *testing.B) {
+	for _, numVersions := range []int{1, 10, 100} {
+		for _, valueSize := range []int{8} {
+			b.Run(fmt.Sprintf("%dVersions%dBytes", numVersions, valueSize), func(b *testing.B) {
+				runMVCCGet(setupMVCCRocksDB, numVersions, valueSize, b)
+			})
+		}
+	}
 }
 
-func BenchmarkMVCCScan10Versions10Rows8Bytes_RocksDB(b *testing.B) {
-	runMVCCScan(setupMVCCRocksDB, 10, 10, 8, b)
+func BenchmarkMVCCComputeStats_RocksDB(b *testing.B) {
+	for _, valueSize := range []int{8, 32, 256} {
+		b.Run(fmt.Sprintf("1Version%dBytes", valueSize), func(b *testing.B) {
+			runMVCCComputeStats(setupMVCCRocksDB, valueSize, b)
+		})
+	}
 }
 
-func BenchmarkMVCCScan10Versions10Rows64Bytes_RocksDB(b *testing.B) {
-	runMVCCScan(setupMVCCRocksDB, 10, 10, 64, b)
-}
-
-func BenchmarkMVCCScan10Versions10Rows512Bytes_RocksDB(b *testing.B) {
-	runMVCCScan(setupMVCCRocksDB, 10, 10, 512, b)
-}
-
-func BenchmarkMVCCScan10Versions100Rows8Bytes_RocksDB(b *testing.B) {
-	runMVCCScan(setupMVCCRocksDB, 100, 10, 8, b)
-}
-
-func BenchmarkMVCCScan10Versions100Rows64Bytes_RocksDB(b *testing.B) {
-	runMVCCScan(setupMVCCRocksDB, 100, 10, 64, b)
-}
-
-func BenchmarkMVCCScan10Versions100Rows512Bytes_RocksDB(b *testing.B) {
-	runMVCCScan(setupMVCCRocksDB, 100, 10, 512, b)
-}
-
-func BenchmarkMVCCScan10Versions1000Rows8Bytes_RocksDB(b *testing.B) {
-	runMVCCScan(setupMVCCRocksDB, 1000, 10, 8, b)
-}
-
-func BenchmarkMVCCScan10Versions1000Rows64Bytes_RocksDB(b *testing.B) {
-	runMVCCScan(setupMVCCRocksDB, 1000, 10, 64, b)
-}
-
-func BenchmarkMVCCScan10Versions1000Rows512Bytes_RocksDB(b *testing.B) {
-	runMVCCScan(setupMVCCRocksDB, 1000, 10, 512, b)
-}
-
-func BenchmarkMVCCScan100Versions1Row512Bytes_RocksDB(b *testing.B) {
-	runMVCCScan(setupMVCCRocksDB, 1, 100, 512, b)
-}
-
-func BenchmarkMVCCScan100Versions10Rows512Bytes_RocksDB(b *testing.B) {
-	runMVCCScan(setupMVCCRocksDB, 10, 100, 512, b)
-}
-
-func BenchmarkMVCCScan100Versions100Rows512Bytes_RocksDB(b *testing.B) {
-	runMVCCScan(setupMVCCRocksDB, 100, 100, 512, b)
-}
-
-func BenchmarkMVCCScan100Versions1000Rows512Bytes_RocksDB(b *testing.B) {
-	runMVCCScan(setupMVCCRocksDB, 1000, 100, 512, b)
-}
-
-func BenchmarkMVCCGet1Version8Bytes_RocksDB(b *testing.B) {
-	runMVCCGet(setupMVCCRocksDB, 1, 8, b)
-}
-
-func BenchmarkMVCCGet10Versions8Bytes_RocksDB(b *testing.B) {
-	runMVCCGet(setupMVCCRocksDB, 10, 8, b)
-}
-
-func BenchmarkMVCCGet100Versions8Bytes_RocksDB(b *testing.B) {
-	runMVCCGet(setupMVCCRocksDB, 100, 8, b)
-}
-
-func BenchmarkMVCCComputeStats1Version8Bytes_RocksDB(b *testing.B) {
-	runMVCCComputeStats(setupMVCCRocksDB, 8, b)
-}
-
-func BenchmarkMVCCComputeStats1Version32Bytes_RocksDB(b *testing.B) {
-	runMVCCComputeStats(setupMVCCRocksDB, 32, b)
-}
-
-func BenchmarkMVCCComputeStats1Version256Bytes_RocksDB(b *testing.B) {
-	runMVCCComputeStats(setupMVCCRocksDB, 256, b)
-}
-
-func BenchmarkIterOnBatch10_RocksDB(b *testing.B) {
-	benchmarkIterOnBatch(b, 10)
-}
-
-func BenchmarkIterOnBatch100_RocksDB(b *testing.B) {
-	benchmarkIterOnBatch(b, 100)
-}
-
-func BenchmarkIterOnBatch1000_RocksDB(b *testing.B) {
-	benchmarkIterOnBatch(b, 1000)
-}
-
-func BenchmarkIterOnBatch10000_RocksDB(b *testing.B) {
-	benchmarkIterOnBatch(b, 10000)
+func BenchmarkIterOnBatch_RocksDB(b *testing.B) {
+	for _, writes := range []int{10, 100, 1000, 10000} {
+		b.Run(fmt.Sprintf("%d", writes), func(b *testing.B) {
+			benchmarkIterOnBatch(b, writes)
+		})
+	}
 }
 
 // Write benchmarks. Most of them run in-memory except for DeleteRange benchs,
 // which make more sense when data is present.
 
-func BenchmarkMVCCPut10_RocksDB(b *testing.B) {
-	runMVCCPut(setupMVCCInMemRocksDB, 10, b)
+func BenchmarkMVCCPut_RocksDB(b *testing.B) {
+	for _, valueSize := range []int{10, 100, 1000, 10000} {
+		b.Run(fmt.Sprintf("%dBytes", valueSize), func(b *testing.B) {
+			runMVCCPut(setupMVCCInMemRocksDB, valueSize, b)
+		})
+	}
 }
 
-func BenchmarkMVCCPut100_RocksDB(b *testing.B) {
-	runMVCCPut(setupMVCCInMemRocksDB, 100, b)
+func BenchmarkMVCCBlindPut_RocksDB(b *testing.B) {
+	for _, valueSize := range []int{10, 100, 1000, 10000} {
+		b.Run(fmt.Sprintf("%dBytes", valueSize), func(b *testing.B) {
+			runMVCCBlindPut(setupMVCCInMemRocksDB, valueSize, b)
+		})
+	}
 }
 
-func BenchmarkMVCCPut1000_RocksDB(b *testing.B) {
-	runMVCCPut(setupMVCCInMemRocksDB, 1000, b)
+func BenchmarkMVCCConditionalPut_RocksDB(b *testing.B) {
+	for _, createFirst := range []bool{false, true} {
+		for _, valueSize := range []int{10, 100, 1000, 10000} {
+			prefix := "Create"
+			if createFirst {
+				prefix = "Replace"
+			}
+			b.Run(fmt.Sprintf("%s%dBytes", prefix, valueSize), func(b *testing.B) {
+				runMVCCConditionalPut(setupMVCCInMemRocksDB, valueSize, createFirst, b)
+			})
+		}
+	}
 }
 
-func BenchmarkMVCCPut10000_RocksDB(b *testing.B) {
-	runMVCCPut(setupMVCCInMemRocksDB, 10000, b)
+func BenchmarkMVCCBlindConditionalPut_RocksDB(b *testing.B) {
+	for _, valueSize := range []int{10, 100, 1000, 10000} {
+		b.Run(fmt.Sprintf("%dBytes", valueSize), func(b *testing.B) {
+			runMVCCBlindConditionalPut(setupMVCCInMemRocksDB, valueSize, b)
+		})
+	}
 }
 
-func BenchmarkMVCCBlindPut10_RocksDB(b *testing.B) {
-	runMVCCBlindPut(setupMVCCInMemRocksDB, 10, b)
+func BenchmarkMVCCBatchPut_RocksDB(b *testing.B) {
+	for _, valueSize := range []int{10} {
+		for _, batchSize := range []int{1, 100, 10000, 100000} {
+			b.Run(fmt.Sprintf("%dx%dBytes", batchSize, valueSize), func(b *testing.B) {
+				runMVCCBatchPut(setupMVCCInMemRocksDB, valueSize, batchSize, b)
+			})
+		}
+	}
 }
 
-func BenchmarkMVCCBlindPut100_RocksDB(b *testing.B) {
-	runMVCCBlindPut(setupMVCCInMemRocksDB, 100, b)
-}
-
-func BenchmarkMVCCBlindPut1000_RocksDB(b *testing.B) {
-	runMVCCBlindPut(setupMVCCInMemRocksDB, 1000, b)
-}
-
-func BenchmarkMVCCBlindPut10000_RocksDB(b *testing.B) {
-	runMVCCBlindPut(setupMVCCInMemRocksDB, 10000, b)
-}
-
-func BenchmarkMVCCConditionalPutCreate10_RocksDB(b *testing.B) {
-	runMVCCConditionalPut(setupMVCCInMemRocksDB, 10, false, b)
-}
-
-func BenchmarkMVCCConditionalPutCreate100_RocksDB(b *testing.B) {
-	runMVCCConditionalPut(setupMVCCInMemRocksDB, 100, false, b)
-}
-
-func BenchmarkMVCCConditionalPutCreate1000_RocksDB(b *testing.B) {
-	runMVCCConditionalPut(setupMVCCInMemRocksDB, 1000, false, b)
-}
-
-func BenchmarkMVCCConditionalPutCreate10000_RocksDB(b *testing.B) {
-	runMVCCConditionalPut(setupMVCCInMemRocksDB, 10000, false, b)
-}
-
-func BenchmarkMVCCConditionalPutReplace10_RocksDB(b *testing.B) {
-	runMVCCConditionalPut(setupMVCCInMemRocksDB, 10, true, b)
-}
-
-func BenchmarkMVCCConditionalPutReplace100_RocksDB(b *testing.B) {
-	runMVCCConditionalPut(setupMVCCInMemRocksDB, 100, true, b)
-}
-
-func BenchmarkMVCCConditionalPutReplace1000_RocksDB(b *testing.B) {
-	runMVCCConditionalPut(setupMVCCInMemRocksDB, 1000, true, b)
-}
-
-func BenchmarkMVCCConditionalPutReplace10000_RocksDB(b *testing.B) {
-	runMVCCConditionalPut(setupMVCCInMemRocksDB, 10000, true, b)
-}
-
-func BenchmarkMVCCBlindConditionalPut10_RocksDB(b *testing.B) {
-	runMVCCBlindConditionalPut(setupMVCCInMemRocksDB, 10, b)
-}
-
-func BenchmarkMVCCBlindConditionalPut100_RocksDB(b *testing.B) {
-	runMVCCBlindConditionalPut(setupMVCCInMemRocksDB, 100, b)
-}
-
-func BenchmarkMVCCBlindConditionalPut1000_RocksDB(b *testing.B) {
-	runMVCCBlindConditionalPut(setupMVCCInMemRocksDB, 1000, b)
-}
-
-func BenchmarkMVCCBlindConditionalPut10000_RocksDB(b *testing.B) {
-	runMVCCBlindConditionalPut(setupMVCCInMemRocksDB, 10000, b)
-}
-
-func BenchmarkMVCCBatch1Put10_RocksDB(b *testing.B) {
-	runMVCCBatchPut(setupMVCCInMemRocksDB, 10, 1, b)
-}
-
-func BenchmarkMVCCBatch100Put10_RocksDB(b *testing.B) {
-	runMVCCBatchPut(setupMVCCInMemRocksDB, 10, 100, b)
-}
-
-func BenchmarkMVCCBatch10000Put10_RocksDB(b *testing.B) {
-	runMVCCBatchPut(setupMVCCInMemRocksDB, 10, 10000, b)
-}
-
-func BenchmarkMVCCBatch100000Put10_RocksDB(b *testing.B) {
-	runMVCCBatchPut(setupMVCCInMemRocksDB, 10, 100000, b)
-}
-
-func BenchmarkMVCCBatchTimeSeries282_RocksDB(b *testing.B) {
-	runMVCCBatchTimeSeries(setupMVCCInMemRocksDB, 282, b)
+func BenchmarkMVCCBatchTimeSeries_RocksDB(b *testing.B) {
+	for _, batchSize := range []int{282} {
+		b.Run(fmt.Sprintf("%d", batchSize), func(b *testing.B) {
+			runMVCCBatchTimeSeries(setupMVCCInMemRocksDB, batchSize, b)
+		})
+	}
 }
 
 // DeleteRange benchmarks below (using on-disk data).
 
-func BenchmarkMVCCDeleteRange1Version8Bytes_RocksDB(b *testing.B) {
-	runMVCCDeleteRange(setupMVCCRocksDB, 8, b)
-}
-
-func BenchmarkMVCCDeleteRange1Version32Bytes_RocksDB(b *testing.B) {
-	runMVCCDeleteRange(setupMVCCRocksDB, 32, b)
-}
-
-func BenchmarkMVCCDeleteRange1Version256Bytes_RocksDB(b *testing.B) {
-	runMVCCDeleteRange(setupMVCCRocksDB, 256, b)
+func BenchmarkMVCCDeleteRange_RocksDB(b *testing.B) {
+	for _, valueSize := range []int{8, 32, 256} {
+		b.Run(fmt.Sprintf("%dBytes", valueSize), func(b *testing.B) {
+			runMVCCDeleteRange(setupMVCCRocksDB, valueSize, b)
+		})
+	}
 }
 
 func BenchmarkBatchApplyBatchRepr(b *testing.B) {
-	runBatchApplyBatchRepr(setupMVCCInMemRocksDB, false /* writeOnly */, 10, 1000000, b)
-}
-
-func BenchmarkWriteOnlyBatchApplyBatchRepr(b *testing.B) {
-	runBatchApplyBatchRepr(setupMVCCInMemRocksDB, true /* writeOnly */, 10, 1000000, b)
+	for _, writeOnly := range []bool{false, true} {
+		for _, valueSize := range []int{10} {
+			for _, batchSize := range []int{1000000} {
+				b.Run(fmt.Sprintf("writeOnly=%t valueSize=%d batchSize=%d", writeOnly, valueSize, batchSize), func(b *testing.B) {
+					runBatchApplyBatchRepr(setupMVCCInMemRocksDB, writeOnly, valueSize, batchSize, b)
+				})
+			}
+		}
+	}
 }
 
 func BenchmarkBatchBuilderPut(b *testing.B) {

@@ -21,6 +21,7 @@ import (
 	gosql "database/sql"
 	"fmt"
 	"math/rand"
+	"strconv"
 	"testing"
 )
 
@@ -83,56 +84,12 @@ UPDATE bench.bank
 	b.StopTimer()
 }
 
-func bankRunner(numAccounts int) func(*testing.B, *gosql.DB) {
-	return func(b *testing.B, db *gosql.DB) {
-		runBenchmarkBank(b, db, numAccounts)
+func BenchmarkBank(b *testing.B) {
+	for _, numAccounts := range []int{2, 4, 8, 32, 64} {
+		b.Run(strconv.Itoa(numAccounts), func(b *testing.B) {
+			forEachDB(b, func(b *testing.B, db *gosql.DB) {
+				runBenchmarkBank(b, db, numAccounts)
+			})
+		})
 	}
-}
-
-func BenchmarkBank2_Cockroach(b *testing.B) {
-	benchmarkCockroach(b, bankRunner(2))
-}
-
-func BenchmarkBank2_Postgres(b *testing.B) {
-	benchmarkPostgres(b, bankRunner(2))
-}
-
-func BenchmarkBank4_Cockroach(b *testing.B) {
-	benchmarkCockroach(b, bankRunner(4))
-}
-
-func BenchmarkBank4_Postgres(b *testing.B) {
-	benchmarkPostgres(b, bankRunner(4))
-}
-
-func BenchmarkBank8_Cockroach(b *testing.B) {
-	benchmarkCockroach(b, bankRunner(8))
-}
-
-func BenchmarkBank8_Postgres(b *testing.B) {
-	benchmarkPostgres(b, bankRunner(8))
-}
-
-func BenchmarkBank16_Cockroach(b *testing.B) {
-	benchmarkCockroach(b, bankRunner(16))
-}
-
-func BenchmarkBank16_Postgres(b *testing.B) {
-	benchmarkPostgres(b, bankRunner(16))
-}
-
-func BenchmarkBank32_Cockroach(b *testing.B) {
-	benchmarkCockroach(b, bankRunner(32))
-}
-
-func BenchmarkBank32_Postgres(b *testing.B) {
-	benchmarkPostgres(b, bankRunner(32))
-}
-
-func BenchmarkBank64_Cockroach(b *testing.B) {
-	benchmarkCockroach(b, bankRunner(64))
-}
-
-func BenchmarkBank64_Postgres(b *testing.B) {
-	benchmarkPostgres(b, bankRunner(64))
 }

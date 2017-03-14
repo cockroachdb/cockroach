@@ -22,18 +22,21 @@ import (
 	"fmt"
 	"math/rand"
 	"net"
+	"reflect"
+	"runtime"
 	"strconv"
+	"strings"
 	"sync/atomic"
 	"testing"
 
 	_ "github.com/go-sql-driver/mysql"
+	_ "github.com/lib/pq"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	_ "github.com/lib/pq"
 )
 
 func benchmarkCockroach(b *testing.B, f func(b *testing.B, db *gosql.DB)) {
@@ -132,6 +135,21 @@ func benchmarkMySQL(b *testing.B, f func(b *testing.B, db *gosql.DB)) {
 	f(b, db)
 }
 
+func forEachDB(b *testing.B, fn func(*testing.B, *gosql.DB)) {
+	for _, dbFn := range []func(*testing.B, func(*testing.B, *gosql.DB)){
+		benchmarkCockroach,
+		benchmarkMultinodeCockroach,
+		benchmarkPostgres,
+		benchmarkMySQL,
+	} {
+		dbName := runtime.FuncForPC(reflect.ValueOf(dbFn).Pointer()).Name()
+		dbName = strings.TrimPrefix(dbName, "github.com/cockroachdb/cockroach/pkg/sql_test.benchmark")
+		b.Run(dbName, func(b *testing.B) {
+			dbFn(b, fn)
+		})
+	}
+}
+
 func runBenchmarkSelect1(b *testing.B, db *gosql.DB) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -144,20 +162,8 @@ func runBenchmarkSelect1(b *testing.B, db *gosql.DB) {
 	b.StopTimer()
 }
 
-func BenchmarkSelect1_Cockroach(b *testing.B) {
-	benchmarkCockroach(b, runBenchmarkSelect1)
-}
-
-func BenchmarkSelect1Multinode_Cockroach(b *testing.B) {
-	benchmarkMultinodeCockroach(b, runBenchmarkSelect1)
-}
-
-func BenchmarkSelect1_Postgres(b *testing.B) {
-	benchmarkPostgres(b, runBenchmarkSelect1)
-}
-
-func BenchmarkSelect1_MySQL(b *testing.B) {
-	benchmarkMySQL(b, runBenchmarkSelect1)
+func BenchmarkSelect1(b *testing.B) {
+	forEachDB(b, runBenchmarkSelect1)
 }
 
 func runBenchmarkSelectWithTargetsAndFilter(
@@ -218,20 +224,8 @@ func runBenchmarkSelect2(b *testing.B, db *gosql.DB) {
 	runBenchmarkSelectWithTargetsAndFilter(b, db, targets, filter)
 }
 
-func BenchmarkSelect2_Cockroach(b *testing.B) {
-	benchmarkCockroach(b, runBenchmarkSelect2)
-}
-
-func BenchmarkSelect2Multinode_Cockroach(b *testing.B) {
-	benchmarkMultinodeCockroach(b, runBenchmarkSelect2)
-}
-
-func BenchmarkSelect2_Postgres(b *testing.B) {
-	benchmarkPostgres(b, runBenchmarkSelect2)
-}
-
-func BenchmarkSelect2_MySQL(b *testing.B) {
-	benchmarkMySQL(b, runBenchmarkSelect2)
+func BenchmarkSelect2(b *testing.B) {
+	forEachDB(b, runBenchmarkSelect2)
 }
 
 // runBenchmarkSelect3 runs a SELECT query with non-trivial expressions. The main purpose is to
@@ -243,20 +237,8 @@ func runBenchmarkSelect3(b *testing.B, db *gosql.DB) {
 	runBenchmarkSelectWithTargetsAndFilter(b, db, targets, filter, args...)
 }
 
-func BenchmarkSelect3_Cockroach(b *testing.B) {
-	benchmarkCockroach(b, runBenchmarkSelect3)
-}
-
-func BenchmarkSelect3Multinode_Cockroach(b *testing.B) {
-	benchmarkMultinodeCockroach(b, runBenchmarkSelect3)
-}
-
-func BenchmarkSelect3_Postgres(b *testing.B) {
-	benchmarkPostgres(b, runBenchmarkSelect3)
-}
-
-func BenchmarkSelect3_MySQL(b *testing.B) {
-	benchmarkMySQL(b, runBenchmarkSelect3)
+func BenchmarkSelect3(b *testing.B) {
+	forEachDB(b, runBenchmarkSelect3)
 }
 
 // runBenchmarkInsert benchmarks inserting count rows into a table.
@@ -294,68 +276,27 @@ func runBenchmarkInsert(b *testing.B, db *gosql.DB, count int) {
 
 }
 
-func runBenchmarkInsert1(b *testing.B, db *gosql.DB) {
-	runBenchmarkInsert(b, db, 1)
-}
-
-func runBenchmarkInsert10(b *testing.B, db *gosql.DB) {
-	runBenchmarkInsert(b, db, 10)
-}
-
-func runBenchmarkInsert100(b *testing.B, db *gosql.DB) {
-	runBenchmarkInsert(b, db, 100)
-}
-
-func runBenchmarkInsert1000(b *testing.B, db *gosql.DB) {
-	runBenchmarkInsert(b, db, 1000)
-}
-
-func BenchmarkInsert1_Cockroach(b *testing.B) {
-	benchmarkCockroach(b, runBenchmarkInsert1)
-}
-
-func BenchmarkInsert1Multinode_Cockroach(b *testing.B) {
-	benchmarkMultinodeCockroach(b, runBenchmarkInsert1)
-}
-
-func BenchmarkInsert1_Postgres(b *testing.B) {
-	benchmarkPostgres(b, runBenchmarkInsert1)
-}
-
-func BenchmarkInsert10_Cockroach(b *testing.B) {
-	benchmarkCockroach(b, runBenchmarkInsert10)
-}
-
-func BenchmarkInsert10Multinode_Cockroach(b *testing.B) {
-	benchmarkMultinodeCockroach(b, runBenchmarkInsert10)
-}
-
-func BenchmarkInsert10_Postgres(b *testing.B) {
-	benchmarkPostgres(b, runBenchmarkInsert10)
-}
-
-func BenchmarkInsert100_Cockroach(b *testing.B) {
-	benchmarkCockroach(b, runBenchmarkInsert100)
-}
-
-func BenchmarkInsert100Multinode_Cockroach(b *testing.B) {
-	benchmarkMultinodeCockroach(b, runBenchmarkInsert100)
-}
-
-func BenchmarkInsert100_Postgres(b *testing.B) {
-	benchmarkPostgres(b, runBenchmarkInsert100)
-}
-
-func BenchmarkInsert1000_Cockroach(b *testing.B) {
-	benchmarkCockroach(b, runBenchmarkInsert1000)
-}
-
-func BenchmarkInsert1000Multinode_Cockroach(b *testing.B) {
-	benchmarkMultinodeCockroach(b, runBenchmarkInsert1000)
-}
-
-func BenchmarkInsert1000_Postgres(b *testing.B) {
-	benchmarkPostgres(b, runBenchmarkInsert1000)
+func BenchmarkSQL(b *testing.B) {
+	for _, runFn := range []func(*testing.B, *gosql.DB, int){
+		runBenchmarkDelete,
+		runBenchmarkInsert,
+		runBenchmarkInsertDistinct,
+		runBenchmarkInterleavedSelect,
+		runBenchmarkTrackChoices,
+		runBenchmarkTrackChoices,
+		runBenchmarkUpdate,
+		runBenchmarkUpsert,
+	} {
+		fnName := runtime.FuncForPC(reflect.ValueOf(runFn).Pointer()).Name()
+		fnName = strings.TrimPrefix(fnName, "github.com/cockroachdb/cockroach/pkg/sql_test.runBenchmark")
+		for _, count := range []int{1, 10, 100, 1000} {
+			b.Run(fmt.Sprintf("%s%d", fnName, count), func(b *testing.B) {
+				forEachDB(b, func(b *testing.B, db *gosql.DB) {
+					runFn(b, db, count)
+				})
+			})
+		}
+	}
 }
 
 // runBenchmarkUpdate benchmarks updating count random rows in a table.
@@ -404,70 +345,6 @@ func runBenchmarkUpdate(b *testing.B, db *gosql.DB, count int) {
 		}
 	}
 	b.StopTimer()
-}
-
-func runBenchmarkUpdate1(b *testing.B, db *gosql.DB) {
-	runBenchmarkUpdate(b, db, 1)
-}
-
-func runBenchmarkUpdate10(b *testing.B, db *gosql.DB) {
-	runBenchmarkUpdate(b, db, 10)
-}
-
-func runBenchmarkUpdate100(b *testing.B, db *gosql.DB) {
-	runBenchmarkUpdate(b, db, 100)
-}
-
-func runBenchmarkUpdate1000(b *testing.B, db *gosql.DB) {
-	runBenchmarkUpdate(b, db, 1000)
-}
-
-func BenchmarkUpdate1_Cockroach(b *testing.B) {
-	benchmarkCockroach(b, runBenchmarkUpdate1)
-}
-
-func BenchmarkUpdate1Multinode_Cockroach(b *testing.B) {
-	benchmarkMultinodeCockroach(b, runBenchmarkUpdate1)
-}
-
-func BenchmarkUpdate1_Postgres(b *testing.B) {
-	benchmarkPostgres(b, runBenchmarkUpdate1)
-}
-
-func BenchmarkUpdate10_Cockroach(b *testing.B) {
-	benchmarkCockroach(b, runBenchmarkUpdate10)
-}
-
-func BenchmarkUpdate10Multinode_Cockroach(b *testing.B) {
-	benchmarkMultinodeCockroach(b, runBenchmarkUpdate10)
-}
-
-func BenchmarkUpdate10_Postgres(b *testing.B) {
-	benchmarkPostgres(b, runBenchmarkUpdate10)
-}
-
-func BenchmarkUpdate100_Cockroach(b *testing.B) {
-	benchmarkCockroach(b, runBenchmarkUpdate100)
-}
-
-func BenchmarkUpdate100Multinode_Cockroach(b *testing.B) {
-	benchmarkMultinodeCockroach(b, runBenchmarkUpdate100)
-}
-
-func BenchmarkUpdate100_Postgres(b *testing.B) {
-	benchmarkPostgres(b, runBenchmarkUpdate100)
-}
-
-func BenchmarkUpdate1000_Cockroach(b *testing.B) {
-	benchmarkCockroach(b, runBenchmarkUpdate1000)
-}
-
-func BenchmarkUpdate1000Multinode_Cockroach(b *testing.B) {
-	benchmarkMultinodeCockroach(b, runBenchmarkUpdate1000)
-}
-
-func BenchmarkUpdate1000_Postgres(b *testing.B) {
-	benchmarkPostgres(b, runBenchmarkUpdate1000)
 }
 
 // runBenchmarkUpsert benchmarks upserting count rows in a table.
@@ -523,54 +400,6 @@ func runBenchmarkUpsert(b *testing.B, db *gosql.DB, count int) {
 	b.StopTimer()
 }
 
-func runBenchmarkUpsert1(b *testing.B, db *gosql.DB) {
-	runBenchmarkUpsert(b, db, 1)
-}
-
-func runBenchmarkUpsert10(b *testing.B, db *gosql.DB) {
-	runBenchmarkUpsert(b, db, 10)
-}
-
-func runBenchmarkUpsert100(b *testing.B, db *gosql.DB) {
-	runBenchmarkUpsert(b, db, 100)
-}
-
-func runBenchmarkUpsert1000(b *testing.B, db *gosql.DB) {
-	runBenchmarkUpsert(b, db, 1000)
-}
-
-func BenchmarkUpsert1_Cockroach(b *testing.B) {
-	benchmarkCockroach(b, runBenchmarkUpsert1)
-}
-
-func BenchmarkUpsert10_Cockroach(b *testing.B) {
-	benchmarkCockroach(b, runBenchmarkUpsert10)
-}
-
-func BenchmarkUpsert100_Cockroach(b *testing.B) {
-	benchmarkCockroach(b, runBenchmarkUpsert100)
-}
-
-func BenchmarkUpsert1000_Cockroach(b *testing.B) {
-	benchmarkCockroach(b, runBenchmarkUpsert1000)
-}
-
-func BenchmarkUpsert1Multinode_Cockroach(b *testing.B) {
-	benchmarkMultinodeCockroach(b, runBenchmarkUpsert1)
-}
-
-func BenchmarkUpsert10Multinode_Cockroach(b *testing.B) {
-	benchmarkMultinodeCockroach(b, runBenchmarkUpsert10)
-}
-
-func BenchmarkUpsert100Multinode_Cockroach(b *testing.B) {
-	benchmarkMultinodeCockroach(b, runBenchmarkUpsert100)
-}
-
-func BenchmarkUpsert1000Multinode_Cockroach(b *testing.B) {
-	benchmarkMultinodeCockroach(b, runBenchmarkUpsert1000)
-}
-
 // runBenchmarkDelete benchmarks deleting count rows from a table.
 func runBenchmarkDelete(b *testing.B, db *gosql.DB, rows int) {
 	if _, err := db.Exec(`DROP TABLE IF EXISTS bench.delete`); err != nil {
@@ -618,70 +447,6 @@ func runBenchmarkDelete(b *testing.B, db *gosql.DB, rows int) {
 	b.StopTimer()
 }
 
-func runBenchmarkDelete1(b *testing.B, db *gosql.DB) {
-	runBenchmarkDelete(b, db, 1)
-}
-
-func runBenchmarkDelete10(b *testing.B, db *gosql.DB) {
-	runBenchmarkDelete(b, db, 10)
-}
-
-func runBenchmarkDelete100(b *testing.B, db *gosql.DB) {
-	runBenchmarkDelete(b, db, 100)
-}
-
-func runBenchmarkDelete1000(b *testing.B, db *gosql.DB) {
-	runBenchmarkDelete(b, db, 1000)
-}
-
-func BenchmarkDelete1_Cockroach(b *testing.B) {
-	benchmarkCockroach(b, runBenchmarkDelete1)
-}
-
-func BenchmarkDelete1Multinode_Cockroach(b *testing.B) {
-	benchmarkMultinodeCockroach(b, runBenchmarkDelete1)
-}
-
-func BenchmarkDelete1_Postgres(b *testing.B) {
-	benchmarkPostgres(b, runBenchmarkDelete1)
-}
-
-func BenchmarkDelete10_Cockroach(b *testing.B) {
-	benchmarkCockroach(b, runBenchmarkDelete10)
-}
-
-func BenchmarkDelete10Multinode_Cockroach(b *testing.B) {
-	benchmarkMultinodeCockroach(b, runBenchmarkDelete10)
-}
-
-func BenchmarkDelete10_Postgres(b *testing.B) {
-	benchmarkPostgres(b, runBenchmarkDelete10)
-}
-
-func BenchmarkDelete100_Cockroach(b *testing.B) {
-	benchmarkCockroach(b, runBenchmarkDelete100)
-}
-
-func BenchmarkDelete100Multinode_Cockroach(b *testing.B) {
-	benchmarkMultinodeCockroach(b, runBenchmarkDelete100)
-}
-
-func BenchmarkDelete100_Postgres(b *testing.B) {
-	benchmarkPostgres(b, runBenchmarkDelete100)
-}
-
-func BenchmarkDelete1000_Cockroach(b *testing.B) {
-	benchmarkCockroach(b, runBenchmarkDelete1000)
-}
-
-func BenchmarkDelete1000Multinode_Cockroach(b *testing.B) {
-	benchmarkMultinodeCockroach(b, runBenchmarkDelete1000)
-}
-
-func BenchmarkDelete1000_Postgres(b *testing.B) {
-	benchmarkPostgres(b, runBenchmarkDelete1000)
-}
-
 // runBenchmarkScan benchmarks scanning a table containing count rows.
 func runBenchmarkScan(b *testing.B, db *gosql.DB, count int, limit int) {
 	if _, err := db.Exec(`DROP TABLE IF EXISTS bench.scan`); err != nil {
@@ -723,7 +488,7 @@ func runBenchmarkScan(b *testing.B, db *gosql.DB, count int, limit int) {
 			b.Fatal(err)
 		}
 		expected := count
-		if limit != 0 {
+		if limit != 0 && limit < expected {
 			expected = limit
 		}
 		if n != expected {
@@ -737,100 +502,17 @@ func runBenchmarkScan(b *testing.B, db *gosql.DB, count int, limit int) {
 	}
 }
 
-func BenchmarkScan1_Cockroach(b *testing.B) {
-	benchmarkCockroach(b, func(b *testing.B, db *gosql.DB) { runBenchmarkScan(b, db, 1, 0) })
-}
-
-func BenchmarkScan1Multinode_Cockroach(b *testing.B) {
-	benchmarkMultinodeCockroach(b, func(b *testing.B, db *gosql.DB) { runBenchmarkScan(b, db, 1, 0) })
-}
-
-func BenchmarkScan1_Postgres(b *testing.B) {
-	benchmarkPostgres(b, func(b *testing.B, db *gosql.DB) { runBenchmarkScan(b, db, 1, 0) })
-}
-
-func BenchmarkScan10_Cockroach(b *testing.B) {
-	benchmarkCockroach(b, func(b *testing.B, db *gosql.DB) { runBenchmarkScan(b, db, 10, 0) })
-}
-
-func BenchmarkScan10Multinode_Cockroach(b *testing.B) {
-	benchmarkMultinodeCockroach(b, func(b *testing.B, db *gosql.DB) { runBenchmarkScan(b, db, 10, 0) })
-}
-
-func BenchmarkScan10_Postgres(b *testing.B) {
-	benchmarkPostgres(b, func(b *testing.B, db *gosql.DB) { runBenchmarkScan(b, db, 10, 0) })
-}
-
-func BenchmarkScan100_Cockroach(b *testing.B) {
-	benchmarkCockroach(b, func(b *testing.B, db *gosql.DB) { runBenchmarkScan(b, db, 100, 0) })
-}
-
-func BenchmarkScan100Multinode_Cockroach(b *testing.B) {
-	benchmarkMultinodeCockroach(b, func(b *testing.B, db *gosql.DB) { runBenchmarkScan(b, db, 100, 0) })
-}
-
-func BenchmarkScan100_Postgres(b *testing.B) {
-	benchmarkPostgres(b, func(b *testing.B, db *gosql.DB) { runBenchmarkScan(b, db, 100, 0) })
-}
-
-func BenchmarkScan1000_Cockroach(b *testing.B) {
-	benchmarkCockroach(b, func(b *testing.B, db *gosql.DB) { runBenchmarkScan(b, db, 1000, 0) })
-}
-
-func BenchmarkScan1000Multinode_Cockroach(b *testing.B) {
-	benchmarkMultinodeCockroach(b, func(b *testing.B, db *gosql.DB) { runBenchmarkScan(b, db, 1000, 0) })
-}
-
-func BenchmarkScan1000_Postgres(b *testing.B) {
-	benchmarkPostgres(b, func(b *testing.B, db *gosql.DB) { runBenchmarkScan(b, db, 1000, 0) })
-}
-
-func BenchmarkScan10000_Cockroach(b *testing.B) {
-	benchmarkCockroach(b, func(b *testing.B, db *gosql.DB) { runBenchmarkScan(b, db, 10000, 0) })
-}
-
-func BenchmarkScan10000Multinode_Cockroach(b *testing.B) {
-	benchmarkMultinodeCockroach(b, func(b *testing.B, db *gosql.DB) { runBenchmarkScan(b, db, 10000, 0) })
-}
-
-func BenchmarkScan10000_Postgres(b *testing.B) {
-	benchmarkPostgres(b, func(b *testing.B, db *gosql.DB) { runBenchmarkScan(b, db, 10000, 0) })
-}
-
-func BenchmarkScan1000Limit1_Cockroach(b *testing.B) {
-	benchmarkCockroach(b, func(b *testing.B, db *gosql.DB) { runBenchmarkScan(b, db, 1000, 1) })
-}
-
-func BenchmarkScan1000Limit1Multinode_Cockroach(b *testing.B) {
-	benchmarkMultinodeCockroach(b, func(b *testing.B, db *gosql.DB) { runBenchmarkScan(b, db, 1000, 1) })
-}
-
-func BenchmarkScan1000Limit1_Postgres(b *testing.B) {
-	benchmarkPostgres(b, func(b *testing.B, db *gosql.DB) { runBenchmarkScan(b, db, 1000, 1) })
-}
-
-func BenchmarkScan1000Limit10_Cockroach(b *testing.B) {
-	benchmarkCockroach(b, func(b *testing.B, db *gosql.DB) { runBenchmarkScan(b, db, 1000, 10) })
-}
-
-func BenchmarkScan1000Limit10Multinode_Cockroach(b *testing.B) {
-	benchmarkMultinodeCockroach(b, func(b *testing.B, db *gosql.DB) { runBenchmarkScan(b, db, 1000, 10) })
-}
-
-func BenchmarkScan1000Limit10_Postgres(b *testing.B) {
-	benchmarkPostgres(b, func(b *testing.B, db *gosql.DB) { runBenchmarkScan(b, db, 1000, 10) })
-}
-
-func BenchmarkScan1000Limit100_Cockroach(b *testing.B) {
-	benchmarkCockroach(b, func(b *testing.B, db *gosql.DB) { runBenchmarkScan(b, db, 1000, 100) })
-}
-
-func BenchmarkScan1000Limit100Multinode_Cockroach(b *testing.B) {
-	benchmarkMultinodeCockroach(b, func(b *testing.B, db *gosql.DB) { runBenchmarkScan(b, db, 1000, 100) })
-}
-
-func BenchmarkScan1000Limit100_Postgres(b *testing.B) {
-	benchmarkPostgres(b, func(b *testing.B, db *gosql.DB) { runBenchmarkScan(b, db, 1000, 100) })
+func BenchmarkScan(b *testing.B) {
+	for _, count := range []int{1, 10, 100, 1000, 10000} {
+		for _, limit := range []int{0, 1, 10, 100} {
+			name := fmt.Sprintf("%dLimit%d", count, limit)
+			b.Run(name, func(b *testing.B) {
+				forEachDB(b, func(b *testing.B, db *gosql.DB) {
+					runBenchmarkScan(b, db, count, limit)
+				})
+			})
+		}
+	}
 }
 
 // runBenchmarkScanFilter benchmarks scanning (w/filter) from a table containing count1 * count2 rows.
@@ -885,47 +567,20 @@ func runBenchmarkScanFilter(
 	}
 }
 
-func filterLimitBenchFn(limit int) func(*testing.B, *gosql.DB) {
-	return func(b *testing.B, db *gosql.DB) {
-		runBenchmarkScanFilter(b, db, 25, 400, limit,
-			`a IN (1, 3, 5, 7, 9, 11, 13, 15, 17, 19, 20, 21, 23) AND b < 10*a`)
+func BenchmarkScanFilter(b *testing.B) {
+	const count1 = 25
+	const count2 = 400
+	for _, limit := range []int{1, 10, 50} {
+		name := fmt.Sprintf("%dLimit%d", count1*count2, limit)
+		b.Run(name, func(b *testing.B) {
+			forEachDB(b, func(b *testing.B, db *gosql.DB) {
+				runBenchmarkScanFilter(
+					b, db, 25, 400, limit,
+					`a IN (1, 3, 5, 7, 9, 11, 13, 15, 17, 19, 20, 21, 23) AND b < 10*a`,
+				)
+			})
+		})
 	}
-}
-
-func BenchmarkScan10000FilterLimit1_Cockroach(b *testing.B) {
-	benchmarkCockroach(b, filterLimitBenchFn(1))
-}
-
-func BenchmarkScan10000FilterLimit1Multinode_Cockroach(b *testing.B) {
-	benchmarkMultinodeCockroach(b, filterLimitBenchFn(1))
-}
-
-func BenchmarkScan10000FilterLimit1_Postgres(b *testing.B) {
-	benchmarkPostgres(b, filterLimitBenchFn(1))
-}
-
-func BenchmarkScan10000FilterLimit10_Cockroach(b *testing.B) {
-	benchmarkCockroach(b, filterLimitBenchFn(10))
-}
-
-func BenchmarkScan10000FilterLimit10Multinode_Cockroach(b *testing.B) {
-	benchmarkMultinodeCockroach(b, filterLimitBenchFn(10))
-}
-
-func BenchmarkScan10000FilterLimit10_Postgres(b *testing.B) {
-	benchmarkPostgres(b, filterLimitBenchFn(10))
-}
-
-func BenchmarkScan10000FilterLimit50_Cockroach(b *testing.B) {
-	benchmarkCockroach(b, filterLimitBenchFn(50))
-}
-
-func BenchmarkScan10000FilterLimit50Multinode_Cockroach(b *testing.B) {
-	benchmarkMultinodeCockroach(b, filterLimitBenchFn(50))
-}
-
-func BenchmarkScan10000FilterLimit50_Postgres(b *testing.B) {
-	benchmarkPostgres(b, filterLimitBenchFn(50))
 }
 
 func runBenchmarkInterleavedSelect(b *testing.B, db *gosql.DB, count int) {
@@ -942,6 +597,8 @@ func runBenchmarkInterleavedSelect(b *testing.B, db *gosql.DB, count int) {
 		b.Fatal(err)
 	}
 
+	const interleaveFreq = 4
+
 	var buf1 bytes.Buffer
 	var buf2 bytes.Buffer
 	buf1.WriteString(`INSERT INTO bench.interleaved_select1 VALUES `)
@@ -951,7 +608,7 @@ func runBenchmarkInterleavedSelect(b *testing.B, db *gosql.DB, count int) {
 			buf1.WriteString(", ")
 		}
 		fmt.Fprintf(&buf1, "(%d, %d)", i, i)
-		if i%4 == 0 {
+		if i%interleaveFreq == 0 {
 			if i > 0 {
 				buf2.WriteString(", ")
 			}
@@ -981,16 +638,12 @@ func runBenchmarkInterleavedSelect(b *testing.B, db *gosql.DB, count int) {
 		if err := rows.Err(); err != nil {
 			b.Fatal(err)
 		}
-		expected := count / 4
+		expected := (count + interleaveFreq - 1) / interleaveFreq
 		if n != expected {
 			b.Fatalf("unexpected result count: %d (expected %d)", n, expected)
 		}
 	}
 	b.StopTimer()
-}
-
-func BenchmarkInterleavedSelect1000_Cockroach(b *testing.B) {
-	benchmarkCockroach(b, func(b *testing.B, db *gosql.DB) { runBenchmarkInterleavedSelect(b, db, 1000) })
 }
 
 // runBenchmarkOrderBy benchmarks scanning a table and sorting the results.
@@ -1052,28 +705,20 @@ func runBenchmarkOrderBy(b *testing.B, db *gosql.DB, count int, limit int, disti
 	}
 }
 
-func BenchmarkSort100000Limit10_Cockroach(b *testing.B) {
-	benchmarkCockroach(b, func(b *testing.B, db *gosql.DB) { runBenchmarkOrderBy(b, db, 100000, 10, false) })
-}
-
-func BenchmarkSort100000Limit10Multinode_Cockroach(b *testing.B) {
-	benchmarkMultinodeCockroach(b, func(b *testing.B, db *gosql.DB) { runBenchmarkOrderBy(b, db, 100000, 10, false) })
-}
-
-func BenchmarkSort100000Limit10_Postgres(b *testing.B) {
-	benchmarkPostgres(b, func(b *testing.B, db *gosql.DB) { runBenchmarkOrderBy(b, db, 100000, 10, false) })
-}
-
-func BenchmarkSort100000Limit10Distinct_Cockroach(b *testing.B) {
-	benchmarkCockroach(b, func(b *testing.B, db *gosql.DB) { runBenchmarkOrderBy(b, db, 100000, 10, true) })
-}
-
-func BenchmarkSort100000Limit10DistinctMultinode_Cockroach(b *testing.B) {
-	benchmarkMultinodeCockroach(b, func(b *testing.B, db *gosql.DB) { runBenchmarkOrderBy(b, db, 100000, 10, true) })
-}
-
-func BenchmarkSort100000Limit10Distinct_Postgres(b *testing.B) {
-	benchmarkPostgres(b, func(b *testing.B, db *gosql.DB) { runBenchmarkOrderBy(b, db, 100000, 10, true) })
+func BenchmarkOrderBy(b *testing.B) {
+	const count = 100000
+	const limit = 10
+	for _, distinct := range []bool{false, true} {
+		name := fmt.Sprintf("%dLimit%d", count, limit)
+		if distinct {
+			name += "Distinct"
+		}
+		b.Run(name, func(b *testing.B) {
+			forEachDB(b, func(b *testing.B, db *gosql.DB) {
+				runBenchmarkOrderBy(b, db, count, limit, distinct)
+			})
+		})
+	}
 }
 
 func runBenchmarkTrackChoices(b *testing.B, db *gosql.DB, batchSize int) {
@@ -1118,54 +763,6 @@ CREATE INDEX track_created_at ON bench.track_choices (track_id, created_at);
 		}
 	}
 	b.StopTimer()
-}
-
-func BenchmarkTrackChoices1_Cockroach(b *testing.B) {
-	benchmarkCockroach(b, func(b *testing.B, db *gosql.DB) { runBenchmarkTrackChoices(b, db, 1) })
-}
-
-func BenchmarkTrackChoices10_Cockroach(b *testing.B) {
-	benchmarkCockroach(b, func(b *testing.B, db *gosql.DB) { runBenchmarkTrackChoices(b, db, 10) })
-}
-
-func BenchmarkTrackChoices100_Cockroach(b *testing.B) {
-	benchmarkCockroach(b, func(b *testing.B, db *gosql.DB) { runBenchmarkTrackChoices(b, db, 100) })
-}
-
-func BenchmarkTrackChoices1000_Cockroach(b *testing.B) {
-	benchmarkCockroach(b, func(b *testing.B, db *gosql.DB) { runBenchmarkTrackChoices(b, db, 1000) })
-}
-
-func BenchmarkTrackChoices1Multinode_Cockroach(b *testing.B) {
-	benchmarkMultinodeCockroach(b, func(b *testing.B, db *gosql.DB) { runBenchmarkTrackChoices(b, db, 1) })
-}
-
-func BenchmarkTrackChoices10Multinode_Cockroach(b *testing.B) {
-	benchmarkMultinodeCockroach(b, func(b *testing.B, db *gosql.DB) { runBenchmarkTrackChoices(b, db, 10) })
-}
-
-func BenchmarkTrackChoices100Multinode_Cockroach(b *testing.B) {
-	benchmarkMultinodeCockroach(b, func(b *testing.B, db *gosql.DB) { runBenchmarkTrackChoices(b, db, 100) })
-}
-
-func BenchmarkTrackChoices1000Multinode_Cockroach(b *testing.B) {
-	benchmarkMultinodeCockroach(b, func(b *testing.B, db *gosql.DB) { runBenchmarkTrackChoices(b, db, 1000) })
-}
-
-func BenchmarkTrackChoices1_Postgres(b *testing.B) {
-	benchmarkPostgres(b, func(b *testing.B, db *gosql.DB) { runBenchmarkTrackChoices(b, db, 1) })
-}
-
-func BenchmarkTrackChoices10_Postgres(b *testing.B) {
-	benchmarkPostgres(b, func(b *testing.B, db *gosql.DB) { runBenchmarkTrackChoices(b, db, 10) })
-}
-
-func BenchmarkTrackChoices100_Postgres(b *testing.B) {
-	benchmarkPostgres(b, func(b *testing.B, db *gosql.DB) { runBenchmarkTrackChoices(b, db, 100) })
-}
-
-func BenchmarkTrackChoices1000_Postgres(b *testing.B) {
-	benchmarkPostgres(b, func(b *testing.B, db *gosql.DB) { runBenchmarkTrackChoices(b, db, 1000) })
 }
 
 // Benchmark inserting distinct rows in batches where the min and max rows in
@@ -1236,30 +833,6 @@ CREATE TABLE bench.insert_distinct (
 	b.StopTimer()
 }
 
-func BenchmarkInsertDistinct1_Cockroach(b *testing.B) {
-	benchmarkCockroach(b, func(b *testing.B, db *gosql.DB) { runBenchmarkInsertDistinct(b, db, 1) })
-}
-
-func BenchmarkInsertDistinct10_Cockroach(b *testing.B) {
-	benchmarkCockroach(b, func(b *testing.B, db *gosql.DB) { runBenchmarkInsertDistinct(b, db, 10) })
-}
-
-func BenchmarkInsertDistinct100_Cockroach(b *testing.B) {
-	benchmarkCockroach(b, func(b *testing.B, db *gosql.DB) { runBenchmarkInsertDistinct(b, db, 100) })
-}
-
-func BenchmarkInsertDistinct1Multinode_Cockroach(b *testing.B) {
-	benchmarkMultinodeCockroach(b, func(b *testing.B, db *gosql.DB) { runBenchmarkInsertDistinct(b, db, 1) })
-}
-
-func BenchmarkInsertDistinct10Multinode_Cockroach(b *testing.B) {
-	benchmarkMultinodeCockroach(b, func(b *testing.B, db *gosql.DB) { runBenchmarkInsertDistinct(b, db, 10) })
-}
-
-func BenchmarkInsertDistinct100Multinode_Cockroach(b *testing.B) {
-	benchmarkMultinodeCockroach(b, func(b *testing.B, db *gosql.DB) { runBenchmarkInsertDistinct(b, db, 100) })
-}
-
 // runBenchmarkWideTable measures performance on a table with a large number of
 // columns (20), half of which are fixed size, half of which are variable sized
 // and presumed small. 1 of the presumed small columns is actually large.
@@ -1298,7 +871,7 @@ func runBenchmarkWideTable(b *testing.B, db *gosql.DB, count int, bigColumnBytes
 	for i := 0; i < b.N; i++ {
 		buf.Reset()
 
-		fmt.Fprintf(&buf, `INSERT INTO bench.widetable VALUES`)
+		buf.WriteString(`INSERT INTO bench.widetable VALUES `)
 		for j := 0; j < count; j++ {
 			if j != 0 {
 				if j%3 == 0 {
@@ -1307,7 +880,7 @@ func runBenchmarkWideTable(b *testing.B, db *gosql.DB, count int, bigColumnBytes
 						b.Fatal(err)
 					}
 					buf.Reset()
-					fmt.Fprintf(&buf, `INSERT INTO bench.widetable VALUES `)
+					buf.WriteString(`INSERT INTO bench.widetable VALUES `)
 				} else {
 					buf.WriteString(`,`)
 				}
@@ -1329,8 +902,9 @@ func runBenchmarkWideTable(b *testing.B, db *gosql.DB, count int, bigColumnBytes
 		}
 		buf.WriteString(`;`)
 
-		// These UPSERTS are all updates, but it's done with UPSERT for convenience.
-		fmt.Fprintf(&buf, `UPSERT INTO bench.widetable (f1, f2, f3, f4, f5, f6, f7, f8, f9, f10) VALUES`)
+		// These are all updates, but ON CONFLICT DO UPDATE is (much!) faster
+		// because it can do blind writes.
+		buf.WriteString(`INSERT INTO bench.widetable (f1, f2, f3, f4, f5, f6, f7, f8, f9, f10) VALUES `)
 		for j := 0; j < count; j++ {
 			if j != 0 {
 				buf.WriteString(`,`)
@@ -1344,9 +918,9 @@ func runBenchmarkWideTable(b *testing.B, db *gosql.DB, count int, bigColumnBytes
 			}
 			buf.WriteString(`)`)
 		}
-		buf.WriteString(`;`)
+		buf.WriteString(`ON CONFLICT (f1,f2,f3) DO UPDATE SET f4=excluded.f4,f5=excluded.f5,f6=excluded.f6,f7=excluded.f7,f8=excluded.f8,f9=excluded.f9,f10=excluded.f10;`)
 
-		fmt.Fprintf(&buf, `DELETE FROM bench.widetable WHERE f1 in (`)
+		buf.WriteString(`DELETE FROM bench.widetable WHERE f1 in (`)
 		for j := 0; j < count; j++ {
 			if j != 0 {
 				buf.WriteString(`,`)
@@ -1362,22 +936,11 @@ func runBenchmarkWideTable(b *testing.B, db *gosql.DB, count int, bigColumnBytes
 	b.StopTimer()
 }
 
-func BenchmarkWideTable_Cockroach(b *testing.B) {
+func BenchmarkWideTable(b *testing.B) {
 	const count = 10
 	for _, bigColumnBytes := range []int{10, 100, 1000, 10000, 100000, 1000000} {
 		b.Run(strconv.Itoa(bigColumnBytes), func(b *testing.B) {
-			benchmarkCockroach(b, func(b *testing.B, db *gosql.DB) {
-				runBenchmarkWideTable(b, db, count, bigColumnBytes)
-			})
-		})
-	}
-}
-
-func BenchmarkWideTableMultinode_Cockroach(b *testing.B) {
-	const count = 10
-	for _, bigColumnBytes := range []int{10, 100, 1000, 10000, 100000, 1000000} {
-		b.Run(strconv.Itoa(bigColumnBytes), func(b *testing.B) {
-			benchmarkMultinodeCockroach(b, func(b *testing.B, db *gosql.DB) {
+			forEachDB(b, func(b *testing.B, db *gosql.DB) {
 				runBenchmarkWideTable(b, db, count, bigColumnBytes)
 			})
 		})
