@@ -235,8 +235,9 @@ func (m *outbox) mainLoop(ctx context.Context) error {
 				return err
 			}
 		case drainSignal := <-drainCh:
-			if drainSignal.err != nil {
-			}
+			// TODO(andreimatei): This was breaking TestMetacheck with an empty branch error.
+			// if drainSignal.err != nil {
+			// }
 			drainCh = nil
 			m.err = drainSignal.err
 			if drainSignal.drainRequested {
