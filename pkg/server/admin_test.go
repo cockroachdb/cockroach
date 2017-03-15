@@ -733,11 +733,12 @@ func TestAdminAPIEvents(t *testing.T) {
 
 	var zeroTimestamp serverpb.EventsResponse_Event_Timestamp
 
-	testcases := []struct {
+	const allEvents = ""
+	type testcase struct {
 		eventType sql.EventLogType
 		expCount  int
-	}{
-		{"", 8},
+	}
+	testcases := []testcase{
 		{sql.EventLogNodeJoin, 1},
 		{sql.EventLogNodeRestart, 0},
 		{sql.EventLogDropDatabase, 0},
@@ -745,18 +746,32 @@ func TestAdminAPIEvents(t *testing.T) {
 		{sql.EventLogDropTable, 2},
 		{sql.EventLogCreateTable, 3},
 	}
+	minTotalEvents := 0
+	for _, tc := range testcases {
+		minTotalEvents += tc.expCount
+	}
+	testcases = append(testcases, testcase{allEvents, minTotalEvents})
+
 	for i, tc := range testcases {
 		url := "events"
-		if len(tc.eventType) > 0 {
+		if tc.eventType != allEvents {
 			url += "?type=" + string(tc.eventType)
 		}
 		var resp serverpb.EventsResponse
 		if err := getAdminJSONProto(s, url, &resp); err != nil {
 			t.Fatal(err)
 		}
-
-		if a, e := len(resp.Events), tc.expCount; a != e {
-			t.Errorf("%d: # of events %d != expected %d", i, a, e)
+		if tc.eventType == allEvents {
+			// When retrieving all events, we expect that there will be some system
+			// database migrations, unrelated to this test, that add to the log entry
+			// count. So, we do a looser check here.
+			if a, min := len(resp.Events), tc.expCount; a < tc.expCount {
+				t.Fatalf("%d: total # of events %d < min %d", i, a, min)
+			}
+		} else {
+			if a, e := len(resp.Events), tc.expCount; a != e {
+				t.Fatalf("%d: # of %s events %d != expected %d", i, tc.eventType, a, e)
+			}
 		}
 
 		// Ensure we don't have blank / nonsensical fields.

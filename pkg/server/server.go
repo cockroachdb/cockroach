@@ -824,6 +824,8 @@ func (s *Server) Start(ctx context.Context) error {
 	close(serveSQL)
 	log.Info(ctx, "serving sql connections")
 
+	s.node.recordJoinEvent()
+
 	if s.cfg.PIDFile != "" {
 		if err := ioutil.WriteFile(s.cfg.PIDFile, []byte(fmt.Sprintf("%d\n", os.Getpid())), 0644); err != nil {
 			log.Error(ctx, err)
