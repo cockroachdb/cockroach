@@ -210,7 +210,7 @@ func TestBackupRestoreInterleaved(t *testing.T) {
 
 	const numAccounts = 10
 
-	_, dir, _, sqlDB, cleanupFn := backupRestoreTestSetup(t, multiNode, numAccounts)
+	_, dir, _, sqlDB, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts)
 	defer cleanupFn()
 
 	// TODO(dan): The INTERLEAVE IN PARENT clause currently doesn't allow the
@@ -230,7 +230,7 @@ func TestBackupRestoreInterleaved(t *testing.T) {
 	_ = sqlDB.Exec(fmt.Sprintf(`BACKUP DATABASE bench TO '%s'`, dir))
 
 	t.Run("all tables in interleave hierarchy", func(t *testing.T) {
-		tcRestore := testcluster.StartTestCluster(t, multiNode, base.TestClusterArgs{})
+		tcRestore := testcluster.StartTestCluster(t, singleNode, base.TestClusterArgs{})
 		defer tcRestore.Stopper().Stop()
 		sqlDBRestore := sqlutils.MakeSQLRunner(t, tcRestore.Conns[0])
 		sqlDBRestore.Exec(bankCreateDatabase)
@@ -257,7 +257,7 @@ func TestBackupRestoreInterleaved(t *testing.T) {
 	})
 
 	t.Run("interleaved table without parent", func(t *testing.T) {
-		tcRestore := testcluster.StartTestCluster(t, multiNode, base.TestClusterArgs{})
+		tcRestore := testcluster.StartTestCluster(t, singleNode, base.TestClusterArgs{})
 		defer tcRestore.Stopper().Stop()
 		sqlDBRestore := sqlutils.MakeSQLRunner(t, tcRestore.Conns[0])
 		sqlDBRestore.Exec(bankCreateDatabase)
@@ -269,7 +269,7 @@ func TestBackupRestoreInterleaved(t *testing.T) {
 	})
 
 	t.Run("interleaved table without child", func(t *testing.T) {
-		tcRestore := testcluster.StartTestCluster(t, multiNode, base.TestClusterArgs{})
+		tcRestore := testcluster.StartTestCluster(t, singleNode, base.TestClusterArgs{})
 		defer tcRestore.Stopper().Stop()
 		sqlDBRestore := sqlutils.MakeSQLRunner(t, tcRestore.Conns[0])
 		sqlDBRestore.Exec(bankCreateDatabase)
@@ -311,7 +311,7 @@ func TestBackupRestoreIncremental(t *testing.T) {
 	const numBackups = 4
 	windowSize := int(numAccounts / 3)
 
-	_, dir, _, sqlDB, cleanupFn := backupRestoreTestSetup(t, multiNode, 0)
+	_, dir, _, sqlDB, cleanupFn := backupRestoreTestSetup(t, singleNode, 0)
 	defer cleanupFn()
 	rng, _ := randutil.NewPseudoRand()
 
@@ -364,7 +364,7 @@ func TestBackupRestoreIncremental(t *testing.T) {
 
 	// Start a new cluster to restore into.
 	{
-		tc := testcluster.StartTestCluster(t, multiNode, base.TestClusterArgs{})
+		tc := testcluster.StartTestCluster(t, singleNode, base.TestClusterArgs{})
 		defer tc.Stopper().Stop()
 		sqlDBRestore := sqlutils.MakeSQLRunner(t, tc.Conns[0])
 		sqlDBRestore.Exec(`CREATE DATABASE bench`)
