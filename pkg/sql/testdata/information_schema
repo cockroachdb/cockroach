@@ -208,10 +208,10 @@ CREATE VIEW other_db.abc AS SELECT i from other_db.xyz
 query T
 SELECT table_name FROM information_schema.tables
 ----
-app_stats
 build_info
 leases
 schema_changes
+stmt_stats
 tables
 columns
 key_column_usage
@@ -270,6 +270,7 @@ tables
 tables
 table_privileges
 table_constraints
+stmt_stats
 statistics
 schemata
 schema_privileges
@@ -305,10 +306,10 @@ query TTTTI colnames
 SELECT * FROM information_schema.tables
 ----
 TABLE_CATALOG  TABLE_SCHEMA        TABLE_NAME         TABLE_TYPE   VERSION
-def            crdb_internal       app_stats          SYSTEM VIEW  1
 def            crdb_internal       build_info         SYSTEM VIEW  1
 def            crdb_internal       leases             SYSTEM VIEW  1
 def            crdb_internal       schema_changes     SYSTEM VIEW  1
+def            crdb_internal       stmt_stats         SYSTEM VIEW  1
 def            crdb_internal       tables             SYSTEM VIEW  1
 def            information_schema  columns            SYSTEM VIEW  1
 def            information_schema  key_column_usage   SYSTEM VIEW  1
