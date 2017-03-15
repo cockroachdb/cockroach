@@ -178,7 +178,7 @@ func createTestAllocator(
 	deterministic bool,
 ) (*stop.Stopper, *gossip.Gossip, *StorePool, Allocator, *hlc.ManualClock) {
 	stopper, g, manual, storePool, _ := createTestStorePool(
-		TestTimeUntilStoreDeadOff, deterministic, true /* defaultNodeLiveness */)
+		TestTimeUntilStoreDeadOff, deterministic, nodeStatusLive)
 	a := MakeAllocator(storePool, func(string) (time.Duration, bool) {
 		return 0, true
 	})
@@ -196,10 +196,10 @@ func mockStorePool(
 	storePool.detailsMu.Lock()
 	defer storePool.detailsMu.Unlock()
 
-	liveNodeSet := map[roachpb.NodeID]struct{}{}
+	liveNodeSet := map[roachpb.NodeID]nodeStatus{}
 	storePool.detailsMu.storeDetails = map[roachpb.StoreID]*storeDetail{}
 	for _, storeID := range aliveStoreIDs {
-		liveNodeSet[roachpb.NodeID(storeID)] = struct{}{}
+		liveNodeSet[roachpb.NodeID(storeID)] = nodeStatusLive
 		detail := storePool.getStoreDetailLocked(storeID)
 		detail.desc = &roachpb.StoreDescriptor{
 			StoreID: storeID,
@@ -207,6 +207,7 @@ func mockStorePool(
 		}
 	}
 	for _, storeID := range deadStoreIDs {
+		liveNodeSet[roachpb.NodeID(storeID)] = nodeStatusDead
 		detail := storePool.getStoreDetailLocked(storeID)
 		detail.desc = &roachpb.StoreDescriptor{
 			StoreID: storeID,
@@ -224,9 +225,11 @@ func mockStorePool(
 
 	// Set the node liveness function using the set we constructed.
 	storePool.nodeLivenessFn =
-		func(nodeID roachpb.NodeID, now time.Time, threshold time.Duration) bool {
-			_, ok := liveNodeSet[nodeID]
-			return ok
+		func(nodeID roachpb.NodeID, now time.Time, threshold time.Duration) nodeStatus {
+			if status, ok := liveNodeSet[nodeID]; ok {
+				return status
+			}
+			return nodeStatusUnavailable
 		}
 }
 
@@ -1033,7 +1036,7 @@ func TestAllocatorTransferLeaseTargetLoadBased(t *testing.T) {
 	EnableLoadBasedLeaseRebalancing = true
 
 	stopper, g, _, storePool, _ := createTestStorePool(
-		TestTimeUntilStoreDeadOff, true /* deterministic */, true /* defaultNodeLiveness */)
+		TestTimeUntilStoreDeadOff, true /* deterministic */, nodeStatusLive)
 	defer stopper.Stop()
 
 	// 3 stores where the lease count for each store is equal to 10x the store ID.
@@ -1483,35 +1486,6 @@ func TestAllocatorComputeAction(t *testing.T) {
 			},
 			expectedAction: AllocatorAdd,
 		},
-		// Needs three replicas, two are on dead stores.
-		{
-			zone: config.ZoneConfig{
-				NumReplicas:   3,
-				Constraints:   config.Constraints{Constraints: []config.Constraint{{Value: "us-east"}}},
-				RangeMinBytes: 0,
-				RangeMaxBytes: 64000,
-			},
-			desc: roachpb.RangeDescriptor{
-				Replicas: []roachpb.ReplicaDescriptor{
-					{
-						StoreID:   1,
-						NodeID:    1,
-						ReplicaID: 1,
-					},
-					{
-						StoreID:   7,
-						NodeID:    7,
-						ReplicaID: 7,
-					},
-					{
-						StoreID:   6,
-						NodeID:    6,
-						ReplicaID: 6,
-					},
-				},
-			},
-			expectedAction: AllocatorRemoveDead,
-		},
 		// Needs three replicas, one is on a dead store.
 		{
 			zone: config.ZoneConfig{
@@ -1681,6 +1655,37 @@ func TestAllocatorComputeAction(t *testing.T) {
 				},
 			},
 			expectedAction: AllocatorRemove,
+		},
+		// Needs three replicas, two are on dead stores. Should
+		// be a noop because there aren't enough live replicas for
+		// a quorum.
+		{
+			zone: config.ZoneConfig{
+				NumReplicas:   3,
+				Constraints:   config.Constraints{Constraints: []config.Constraint{{Value: "us-east"}}},
+				RangeMinBytes: 0,
+				RangeMaxBytes: 64000,
+			},
+			desc: roachpb.RangeDescriptor{
+				Replicas: []roachpb.ReplicaDescriptor{
+					{
+						StoreID:   1,
+						NodeID:    1,
+						ReplicaID: 1,
+					},
+					{
+						StoreID:   7,
+						NodeID:    7,
+						ReplicaID: 7,
+					},
+					{
+						StoreID:   6,
+						NodeID:    6,
+						ReplicaID: 6,
+					},
+				},
+			},
+			expectedAction: AllocatorNoop,
 		},
 		// Three replicas have three, none of the replicas in the store pool.
 		{
@@ -2126,7 +2131,7 @@ func Example_rebalancing() {
 		log.AmbientContext{},
 		g,
 		clock,
-		newMockNodeLiveness(true /* defaultNodeLiveness */).nodeLivenessFunc,
+		newMockNodeLiveness(nodeStatusLive).nodeLivenessFunc,
 		TestTimeUntilStoreDeadOff,
 		/* deterministic */ true,
 	)

@@ -164,7 +164,7 @@ func (tc *testContext) StartWithStoreConfig(t testing.TB, stopper *stop.Stopper,
 			cfg.AmbientCtx,
 			cfg.Gossip,
 			cfg.Clock,
-			StorePoolNodeLivenessTrue,
+			storePoolNodeLivenessLive,
 			TestTimeUntilStoreDeadOff,
 			false, /* deterministic */
 		)

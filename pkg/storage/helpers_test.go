@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 // AddReplica adds the replica to the store's replica map and to the sorted
@@ -203,6 +204,17 @@ func (s *Store) ReservationCount() int {
 	return len(s.snapshotApplySem)
 }
 
+func NewTestStorePool(cfg StoreConfig) *StorePool {
+	return NewStorePool(
+		log.AmbientContext{},
+		cfg.Gossip,
+		cfg.Clock,
+		storePoolNodeLivenessLive,
+		TestTimeUntilStoreDeadOff,
+		/* deterministic */ false,
+	)
+}
+
 func (r *Replica) ReplicaIDLocked() roachpb.ReplicaID {
 	return r.mu.replicaID
 }
@@ -252,11 +264,6 @@ func (r *Replica) IsRaftGroupInitialized() bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return r.mu.internalRaftGroup != nil
-}
-
-// StorePoolNodeLivenessTrue is a NodeLivenessFunc which always returns true.
-func StorePoolNodeLivenessTrue(_ roachpb.NodeID, _ time.Time, _ time.Duration) bool {
-	return true
 }
 
 // GetStoreList is the same function as GetStoreList exposed for tests only.
