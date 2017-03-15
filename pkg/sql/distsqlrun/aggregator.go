@@ -141,8 +141,8 @@ func (ag *aggregator) Run(ctx context.Context, wg *sync.WaitGroup) {
 		defer log.Infof(ctx, "exiting aggregator")
 	}
 
-	if err := ag.accumulateRows(); err != nil {
-		ag.out.close(err)
+	if err := ag.accumulateRows(ctx); err != nil {
+		// We swallow the error here, it has already been forwarded to the output.
 		return
 	}
 
@@ -155,27 +155,56 @@ func (ag *aggregator) Run(ctx context.Context, wg *sync.WaitGroup) {
 	}
 
 	// Render the results.
+	var consumerDone bool
 	row := make(sqlbase.EncDatumRow, len(ag.funcs))
 	for bucket := range ag.buckets {
 		for i, f := range ag.funcs {
 			row[i] = sqlbase.DatumToEncDatum(ag.outputTypes[i], f.get(bucket))
 		}
 
-		if !ag.out.emitRow(ctx, row) {
+		consumerDone = !emitHelper(ctx, &ag.out, row, ProducerMetadata{})
+		if consumerDone {
 			break
 		}
 	}
-
-	ag.out.close(nil)
-	ag.input.ConsumerDone()
+	// If the consumer has been found to be done, emitHelper() already closed the
+	// output.
+	if !consumerDone {
+		ag.out.close()
+	}
 }
 
-func (ag *aggregator) accumulateRows() error {
+// accumulateRows reads and accumulates all input rows.
+// If no error is return, it means that all the rows from the input have been
+// consumed.
+// If an error is returned, both the input and the output have been properly
+// closed, and the error has also been forwarded to the output.
+func (ag *aggregator) accumulateRows(ctx context.Context) (err error) {
+	cleanupRequired := true
+	defer func() {
+		if err != nil && cleanupRequired {
+			DrainAndClose(ctx, ag.out.output, err, ag.input)
+		}
+	}()
+
 	var scratch []byte
 	for {
-		row, err := ag.input.NextRow()
-		if err != nil {
-			return err
+		row, meta := ag.input.Next()
+		if !meta.Empty() {
+			if meta.Err != nil {
+				return meta.Err
+			}
+			if !emitHelper(ctx, &ag.out, nil /* row */, meta, ag.input) {
+				// TODO(andrei): here, because we're passing metadata through, we have
+				// an opportunity to find out that the consumer doesn't need the data
+				// any more. If the producer doesn't push any metadata, then there's no
+				// opportunity to find this out until the accumulation phase is done. We
+				// should have a way to periodically peek at the state of the
+				// RowReceiver that's hiding behind the procOutputHelper.
+				cleanupRequired = false
+				return errors.Errorf("consumer stopped before it received rows")
+			}
+			continue
 		}
 		if row == nil {
 			return nil

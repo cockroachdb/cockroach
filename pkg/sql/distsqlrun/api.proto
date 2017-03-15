@@ -45,18 +45,46 @@ message SimpleResponse {
   optional roachpb.Error error = 1;
 }
 
+message ConsumerSignal {
+  option (gogoproto.onlyone) = true;
+
+  // TODO(radu): we should be using our own error instead of roachpb.Error.
+  // One important error field for distsql is whether the error is
+  // "authoritative": if a query is distributed on multiple nodes and one node
+  // hits an error, the other nodes may hit errors as well as a consequence
+  // (e.g. streams can't connect to the failed flow). The node that started the
+  // flow needs to distinguish which errors are caused by non-availability of
+  // other nodes so they don't obscure the real error.
+  optional roachpb.Error error = 1;
+
+  // The consumer is done (doesn't need to consume any more rows) and is asking
+  // the producer to push whatever trailing metadata it has and close its
+  // stream.
+  optional DrainRequest drain_request = 2;
+
+  // Used in the RunSyncFlow case; the first message on the client stream must
+  // contain this message.
+  optional SetupFlowRequest setup_flow_request = 3;
+}
+
+message DrainRequest {
+}
+
 service DistSQL {
   // RunSyncFlow instantiates a flow and streams back results of that flow.
   // The request must contain one flow, and that flow must have a single mailbox
   // of the special sync response type.
-  rpc RunSyncFlow(SetupFlowRequest) returns (stream StreamMessage) {}
+  rpc RunSyncFlow(stream ConsumerSignal) returns (stream ProducerMessage) {}
 
-  // SetupFlow instantiates a flow (subgraps of a distributed SQL
+  // SetupFlow instantiates a flow (subgraphs of a distributed SQL
   // computation) on the receiving node.
   rpc SetupFlow(SetupFlowRequest) returns (SimpleResponse) {}
 
   // FlowStream is used to push a stream of messages that is part of a flow. The
   // first message will have a StreamHeader which identifies the flow and the
   // stream (mailbox).
-  rpc FlowStream(stream StreamMessage) returns (SimpleResponse) {}
+  //
+  // The response is a stream because the consumer can signal the producer at
+  // any point to start draining.
+  rpc FlowStream(stream ProducerMessage) returns (stream ConsumerSignal) {}
 }

@@ -196,34 +196,33 @@ func TestClusterFlow(t *testing.T) {
 		clients = append(clients, NewDistSQLClient(conn))
 	}
 
-	if log.V(1) {
-		log.Infof(ctx, "Setting up flow on 0")
-	}
+	log.Infof(ctx, "Setting up flow on 0")
 	if resp, err := clients[0].SetupFlow(ctx, req1); err != nil {
 		t.Fatal(err)
 	} else if resp.Error != nil {
 		t.Fatal(resp.Error)
 	}
 
-	if log.V(1) {
-		log.Infof(ctx, "Setting up flow on 1")
-	}
+	log.Infof(ctx, "Setting up flow on 1")
 	if resp, err := clients[1].SetupFlow(ctx, req2); err != nil {
 		t.Fatal(err)
 	} else if resp.Error != nil {
 		t.Fatal(resp.Error)
 	}
 
-	if log.V(1) {
-		log.Infof(ctx, "Running flow on 2")
+	log.Infof(ctx, "Running flow on 2")
+	stream, err := clients[2].RunSyncFlow(ctx)
+	if err != nil {
+		t.Fatal(err)
 	}
-	stream, err := clients[2].RunSyncFlow(ctx, req3)
+	err = stream.Send(&ConsumerSignal{SetupFlowRequest: req3})
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	var decoder StreamDecoder
 	var rows sqlbase.EncDatumRows
+	var metas []ProducerMetadata
 	for {
 		msg, err := stream.Recv()
 		if err != nil {
@@ -236,12 +235,10 @@ func TestClusterFlow(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		rows = testGetDecodedRows(t, &decoder, rows)
+		rows, metas = testGetDecodedRows(t, &decoder, rows, metas)
 	}
-	if done, trailerErr := decoder.IsDone(); !done {
-		t.Fatal("stream not done")
-	} else if trailerErr != nil {
-		t.Fatal("error in the stream trailer:", trailerErr)
+	if len(metas) != 0 {
+		t.Fatalf("unexpected metadata (%d): %v", len(metas), metas)
 	}
 	// The result should be all the numbers in string form, ordered by the
 	// digit sum (and then by number).

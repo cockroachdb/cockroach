@@ -64,40 +64,47 @@ func (v *valuesProcessor) Run(ctx context.Context, wg *sync.WaitGroup) {
 	defer tracing.FinishSpan(span)
 
 	// We reuse the code in StreamDecoder for decoding the raw data. We just need
-	// to manufacture StreamMessages.
+	// to manufacture ProducerMessages.
 	var sd StreamDecoder
 
-	m := StreamMessage{Header: &StreamHeader{Info: v.columns}}
+	m := ProducerMessage{
+		Typing: v.columns,
+		// Add a bogus header to apease the StreamDecoder, which wants to receive a
+		// header before any data.
+		Header: &ProducerHeader{}}
 	if err := sd.AddMessage(&m); err != nil {
-		v.out.close(err)
+		v.out.output.Push(nil /* row */, ProducerMetadata{Err: err})
+		v.out.close()
 		return
 	}
 
-	m = StreamMessage{}
+	m = ProducerMessage{}
 	rowBuf := make(sqlbase.EncDatumRow, len(v.columns))
 	for len(v.data) > 0 {
 		// Push a chunk of data.
 		m.Data.RawBytes = v.data[0]
 		if err := sd.AddMessage(&m); err != nil {
-			v.out.close(err)
+			v.out.output.Push(nil /* row */, ProducerMetadata{Err: err})
+			v.out.close()
 			return
 		}
 		v.data = v.data[1:]
 
 		for {
-			row, err := sd.GetRow(rowBuf)
+			row, meta, err := sd.GetRow(rowBuf)
 			if err != nil {
-				v.out.close(err)
-				return
+				// If we got a decoding error, pass it along.
+				meta.Err = err
 			}
-			if row == nil {
+
+			if row == nil && meta.Empty() {
 				break
 			}
 
-			if !v.out.emitRow(ctx, row) {
+			if !emitHelper(ctx, &v.out, row, meta, nil /* inputs */) {
 				return
 			}
 		}
 	}
-	v.out.close(nil)
+	v.out.close()
 }
