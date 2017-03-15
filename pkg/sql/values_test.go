@@ -27,7 +27,6 @@ import (
 
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -35,7 +34,9 @@ import (
 )
 
 func makeTestPlanner() *planner {
-	return makeInternalPlanner("test", nil, security.RootUser, &MemoryMetrics{})
+	p := makePlanner("test")
+	p.resetContexts()
+	return p
 }
 
 func TestValues(t *testing.T) {
