@@ -156,8 +156,17 @@ func (n *scanNode) initScan() error {
 		n.spans = append(n.spans, roachpb.Span{Key: start, EndKey: start.PrefixEnd()})
 	}
 
+	limitHint := n.limitHint()
+	if err := n.fetcher.StartScan(n.p.txn, n.spans, !n.disableBatchLimits, limitHint); err != nil {
+		return err
+	}
+	n.scanInitialized = true
+	return nil
+}
+
+func (n *scanNode) limitHint() int64 {
 	var limitHint int64
-	if n.hardLimit == 0 {
+	if n.hardLimit != 0 {
 		limitHint = n.hardLimit
 		if !isFilterTrue(n.filter) {
 			// The limit is hard, but it applies after the filter; read a multiple of
@@ -170,12 +179,7 @@ func (n *scanNode) initScan() error {
 		// Like above, read a multiple of the limit when the limit is "soft".
 		limitHint = n.softLimit * 2
 	}
-
-	if err := n.fetcher.StartScan(n.p.txn, n.spans, !n.disableBatchLimits, limitHint); err != nil {
-		return err
-	}
-	n.scanInitialized = true
-	return nil
+	return limitHint
 }
 
 // debugNext is a helper function used by Next() when in explainDebug mode.
