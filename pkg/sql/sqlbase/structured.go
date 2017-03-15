@@ -516,6 +516,12 @@ func (desc *TableDescriptor) ensurePrimaryKey() error {
 	return nil
 }
 
+// HasCompositeKeyEncoding returns true if key columns of the given kind have a
+// composite encoding.
+func HasCompositeKeyEncoding(kind ColumnType_Kind) bool {
+	return kind == ColumnType_COLLATEDSTRING
+}
+
 func (desc *TableDescriptor) allocateIndexIDs(columnNames map[string]ColumnID) error {
 	if desc.NextIndexID == 0 {
 		desc.NextIndexID = 1
@@ -546,6 +552,13 @@ func (desc *TableDescriptor) allocateIndexIDs(columnNames map[string]ColumnID) e
 		index.allocateName(desc)
 	}
 
+	isCompositeColumn := make(map[ColumnID]struct{})
+	for _, col := range desc.Columns {
+		if HasCompositeKeyEncoding(col.Type.Kind) {
+			isCompositeColumn[col.ID] = struct{}{}
+		}
+	}
+
 	// Populate IDs.
 	for _, index := range indexes {
 		if index.ID == 0 {
@@ -560,6 +573,7 @@ func (desc *TableDescriptor) allocateIndexIDs(columnNames map[string]ColumnID) e
 				index.ColumnIDs[j] = columnNames[parser.ReNormalizeName(colName)]
 			}
 		}
+
 		if index != &desc.PrimaryIndex {
 			// Need to clear ExtraColumnIDs because it is used by
 			// ContainsColumnID.
@@ -590,6 +604,18 @@ func (desc *TableDescriptor) allocateIndexIDs(columnNames map[string]ColumnID) e
 					return fmt.Errorf("index \"%s\" already contains column \"%s\"", index.Name, col.Name)
 				}
 				index.ExtraColumnIDs = append(index.ExtraColumnIDs, col.ID)
+			}
+		}
+
+		index.CompositeColumnIDs = nil
+		for _, colID := range index.ColumnIDs {
+			if _, ok := isCompositeColumn[colID]; ok {
+				index.CompositeColumnIDs = append(index.CompositeColumnIDs, colID)
+			}
+		}
+		for _, colID := range index.ExtraColumnIDs {
+			if _, ok := isCompositeColumn[colID]; ok {
+				index.CompositeColumnIDs = append(index.CompositeColumnIDs, colID)
 			}
 		}
 	}

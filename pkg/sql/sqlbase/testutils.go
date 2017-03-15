@@ -150,11 +150,16 @@ func init() {
 	}
 }
 
+// RandCollationLocale returns a random element of collationLocales.
+func RandCollationLocale(rng *rand.Rand) *string {
+	return &collationLocales[rng.Intn(len(collationLocales))]
+}
+
 // RandColumnType returns a random ColumnType_Kind value.
 func RandColumnType(rng *rand.Rand) ColumnType {
 	typ := ColumnType{Kind: columnKinds[rng.Intn(len(columnKinds))]}
 	if typ.Kind == ColumnType_COLLATEDSTRING {
-		typ.Locale = &collationLocales[rng.Intn(len(collationLocales))]
+		typ.Locale = RandCollationLocale(rng)
 	}
 	return typ
 }
