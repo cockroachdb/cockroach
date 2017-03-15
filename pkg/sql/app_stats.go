@@ -91,7 +91,7 @@ func (a *appStats) recordStatement(
 	if distSQLUsed {
 		buf.WriteByte('+')
 	}
-	parser.FormatNode(&buf, parser.FmtSimple, stmt)
+	parser.FormatNode(&buf, parser.FmtHideConstants, stmt)
 	stmtKey := buf.String()
 
 	// Get the statistics object.
