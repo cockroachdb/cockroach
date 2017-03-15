@@ -28,15 +28,14 @@ import (
 	"unicode"
 	"unsafe"
 
+	"github.com/lib/pq/oid"
+	"github.com/pkg/errors"
 	"golang.org/x/text/collate"
 	"golang.org/x/text/language"
 
 	"github.com/cockroachdb/apd"
-
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
-	"github.com/lib/pq/oid"
-	"github.com/pkg/errors"
 )
 
 var (

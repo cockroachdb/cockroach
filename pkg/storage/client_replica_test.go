@@ -231,7 +231,7 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 		// Start a txn that does read-after-write.
 		// The txn will be restarted twice, and the out-of-order put
 		// will happen in the second epoch.
-		errChan <- store.DB().Txn(context.TODO(), func(txn *client.Txn) error {
+		errChan <- store.DB().Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
 			epoch++
 
 			if epoch == 1 {
@@ -241,12 +241,12 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 			}
 
 			updatedVal := []byte("updatedVal")
-			if err := txn.Put(key, updatedVal); err != nil {
+			if err := txn.Put(ctx, key, updatedVal); err != nil {
 				return err
 			}
 
 			// Make sure a get will return the value that was just written.
-			actual, err := txn.Get(key)
+			actual, err := txn.Get(ctx, key)
 			if err != nil {
 				return err
 			}
@@ -261,7 +261,7 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 			}
 
 			b := txn.NewBatch()
-			return txn.CommitInBatch(b)
+			return txn.CommitInBatch(ctx, b)
 		})
 
 		if epoch != 2 {

@@ -17,11 +17,13 @@ package sql
 import (
 	"fmt"
 
+	"github.com/pkg/errors"
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/pkg/errors"
 )
 
 // tableLookupsByID maps table IDs to looked up descriptors or, for tables that
@@ -103,16 +105,18 @@ func makeFKInsertHelper(
 	return fks, nil
 }
 
-func (fks fkInsertHelper) checkAll(row parser.Datums) error {
+func (fks fkInsertHelper) checkAll(ctx context.Context, row parser.Datums) error {
 	for idx := range fks {
-		if err := fks.checkIdx(idx, row); err != nil {
+		if err := fks.checkIdx(ctx, idx, row); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (fks fkInsertHelper) checkIdx(idx sqlbase.IndexID, row parser.Datums) error {
+func (fks fkInsertHelper) checkIdx(
+	ctx context.Context, idx sqlbase.IndexID, row parser.Datums,
+) error {
 	for _, fk := range fks[idx] {
 		nulls := true
 		for _, colID := range fk.searchIdx.ColumnIDs[:fk.prefixLen] {
@@ -126,7 +130,7 @@ func (fks fkInsertHelper) checkIdx(idx sqlbase.IndexID, row parser.Datums) error
 			continue
 		}
 
-		found, err := fk.check(row)
+		found, err := fk.check(ctx, row)
 		if err != nil {
 			return err
 		}
@@ -173,18 +177,20 @@ func makeFKDeleteHelper(
 	return fks, nil
 }
 
-func (fks fkDeleteHelper) checkAll(row parser.Datums) error {
+func (fks fkDeleteHelper) checkAll(ctx context.Context, row parser.Datums) error {
 	for idx := range fks {
-		if err := fks.checkIdx(idx, row); err != nil {
+		if err := fks.checkIdx(ctx, idx, row); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (fks fkDeleteHelper) checkIdx(idx sqlbase.IndexID, row parser.Datums) error {
+func (fks fkDeleteHelper) checkIdx(
+	ctx context.Context, idx sqlbase.IndexID, row parser.Datums,
+) error {
 	for _, fk := range fks[idx] {
-		found, err := fk.check(row)
+		found, err := fk.check(ctx, row)
 		if err != nil {
 			return err
 		}
@@ -225,11 +231,13 @@ func makeFKUpdateHelper(
 	return ret, err
 }
 
-func (fks fkUpdateHelper) checkIdx(idx sqlbase.IndexID, oldValues, newValues parser.Datums) error {
-	if err := fks.inbound.checkIdx(idx, oldValues); err != nil {
+func (fks fkUpdateHelper) checkIdx(
+	ctx context.Context, idx sqlbase.IndexID, oldValues, newValues parser.Datums,
+) error {
+	if err := fks.inbound.checkIdx(ctx, idx, oldValues); err != nil {
 		return err
 	}
-	return fks.outbound.checkIdx(idx, newValues)
+	return fks.outbound.checkIdx(ctx, idx, newValues)
 }
 
 type baseFKHelper struct {
@@ -294,7 +302,7 @@ func makeBaseFKHelper(
 }
 
 // TODO(dt): Batch checks of many rows.
-func (f baseFKHelper) check(values parser.Datums) (parser.Datums, error) {
+func (f baseFKHelper) check(ctx context.Context, values parser.Datums) (parser.Datums, error) {
 	var key roachpb.Key
 	if values != nil {
 		keyBytes, _, err := sqlbase.EncodeIndexKey(
@@ -307,8 +315,8 @@ func (f baseFKHelper) check(values parser.Datums) (parser.Datums, error) {
 		key = roachpb.Key(f.searchPrefix)
 	}
 	spans := roachpb.Spans{roachpb.Span{Key: key, EndKey: key.PrefixEnd()}}
-	if err := f.rf.StartScan(f.txn, spans, true /* limit batches */, 1); err != nil {
+	if err := f.rf.StartScan(ctx, f.txn, spans, true /* limit batches */, 1); err != nil {
 		return nil, err
 	}
-	return f.rf.NextRowDecoded()
+	return f.rf.NextRowDecoded(ctx)
 }

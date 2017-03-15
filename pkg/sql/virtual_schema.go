@@ -137,7 +137,7 @@ func (e virtualTableEntry) getPlanInfo(ctx context.Context) (ResultColumns, node
 	return columns, constructor
 }
 
-func (vs *virtualSchemaHolder) init(p *planner) error {
+func (vs *virtualSchemaHolder) init(ctx context.Context, p *planner) error {
 	*vs = virtualSchemaHolder{
 		entries:      make(map[string]virtualSchemaEntry, len(virtualSchemas)),
 		orderedNames: make([]string, len(virtualSchemas)),
@@ -148,7 +148,7 @@ func (vs *virtualSchemaHolder) init(p *planner) error {
 		tables := make(map[string]virtualTableEntry, len(schema.tables))
 		orderedTableNames := make([]string, 0, len(schema.tables))
 		for _, table := range schema.tables {
-			tableDesc, err := initVirtualTableDesc(p, table)
+			tableDesc, err := initVirtualTableDesc(ctx, p, table)
 			if err != nil {
 				return err
 			}
@@ -185,13 +185,15 @@ func initVirtualDatabaseDesc(name string) *sqlbase.DatabaseDescriptor {
 	}
 }
 
-func initVirtualTableDesc(p *planner, t virtualSchemaTable) (sqlbase.TableDescriptor, error) {
+func initVirtualTableDesc(
+	ctx context.Context, p *planner, t virtualSchemaTable,
+) (sqlbase.TableDescriptor, error) {
 	stmt, err := parser.ParseOneTraditional(t.schema)
 	if err != nil {
 		return sqlbase.TableDescriptor{}, err
 	}
 	create := stmt.(*parser.CreateTable)
-	return p.makeTableDesc(create, 0, keys.VirtualDescriptorID, emptyPrivileges, nil)
+	return p.makeTableDesc(ctx, create, 0, keys.VirtualDescriptorID, emptyPrivileges, nil)
 }
 
 // getVirtualSchemaEntry retrieves a virtual schema entry given a database name.

@@ -19,13 +19,13 @@ package distsqlrun
 import (
 	"sync"
 
+	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	"github.com/pkg/errors"
 )
 
 // TODO(radu): we currently create one batch at a time and run the KV operations
@@ -110,7 +110,7 @@ func (jr *joinReader) mainLoop(ctx context.Context) error {
 	var alloc sqlbase.DatumAlloc
 	spans := make(roachpb.Spans, 0, joinReaderBatchSize)
 
-	txn := jr.flowCtx.setupTxn(ctx)
+	txn := jr.flowCtx.setupTxn()
 
 	log.VEventf(ctx, 1, "starting")
 	if log.V(1) {
@@ -150,7 +150,7 @@ func (jr *joinReader) mainLoop(ctx context.Context) error {
 			})
 		}
 
-		err := jr.fetcher.StartScan(txn, spans, false /* no batch limits */, 0)
+		err := jr.fetcher.StartScan(ctx, txn, spans, false /* no batch limits */, 0)
 		if err != nil {
 			log.Errorf(ctx, "scan error: %s", err)
 			return err
@@ -160,7 +160,7 @@ func (jr *joinReader) mainLoop(ctx context.Context) error {
 		// the next batch. We could start the next batch early while we are
 		// outputting rows.
 		for {
-			fetcherRow, err := jr.fetcher.NextRow()
+			fetcherRow, err := jr.fetcher.NextRow(ctx)
 			if err != nil {
 				return err
 			}

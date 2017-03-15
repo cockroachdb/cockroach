@@ -80,7 +80,7 @@ func (fit *fakeSpanResolverIterator) Seek(
 	}
 
 	// Scan the range and keep a list of all potential split keys.
-	kvs, err := fit.txn.Scan(span.Key, span.EndKey, 0)
+	kvs, err := fit.txn.Scan(ctx, span.Key, span.EndKey, 0)
 	if err != nil {
 		log.Errorf(ctx, "Error in fake span resolver scan: %s", err)
 		fit.err = err

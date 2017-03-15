@@ -22,12 +22,14 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/pkg/errors"
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
-	"github.com/pkg/errors"
 )
 
 // ID, ColumnID, FamilyID, and IndexID are all uint32, but are each given a
@@ -126,11 +128,13 @@ var ErrDescriptorNotFound = errors.New("descriptor not found")
 // GetDatabaseDescFromID retrieves the database descriptor for the database
 // ID passed in using an existing txn. Returns an error if the descriptor
 // doesn't exist or if it exists and is not a database.
-func GetDatabaseDescFromID(txn *client.Txn, id ID) (*DatabaseDescriptor, error) {
+func GetDatabaseDescFromID(
+	ctx context.Context, txn *client.Txn, id ID,
+) (*DatabaseDescriptor, error) {
 	desc := &Descriptor{}
 	descKey := MakeDescMetadataKey(id)
 
-	if err := txn.GetProto(descKey, desc); err != nil {
+	if err := txn.GetProto(ctx, descKey, desc); err != nil {
 		return nil, err
 	}
 	db := desc.GetDatabase()
@@ -143,11 +147,11 @@ func GetDatabaseDescFromID(txn *client.Txn, id ID) (*DatabaseDescriptor, error) 
 // GetTableDescFromID retrieves the table descriptor for the table
 // ID passed in using an existing txn. Returns an error if the
 // descriptor doesn't exist or if it exists and is not a table.
-func GetTableDescFromID(txn *client.Txn, id ID) (*TableDescriptor, error) {
+func GetTableDescFromID(ctx context.Context, txn *client.Txn, id ID) (*TableDescriptor, error) {
 	desc := &Descriptor{}
 	descKey := MakeDescMetadataKey(id)
 
-	if err := txn.GetProto(descKey, desc); err != nil {
+	if err := txn.GetProto(ctx, descKey, desc); err != nil {
 		return nil, err
 	}
 	table := desc.GetTable()
@@ -732,7 +736,7 @@ func (desc *TableDescriptor) allocateColumnFamilyIDs(columnNames map[string]Colu
 
 // Validate validates that the table descriptor is well formed. Checks include
 // both single table and cross table invariants.
-func (desc *TableDescriptor) Validate(txn *client.Txn) error {
+func (desc *TableDescriptor) Validate(ctx context.Context, txn *client.Txn) error {
 	err := desc.ValidateTable()
 	if err != nil {
 		return err
@@ -740,15 +744,15 @@ func (desc *TableDescriptor) Validate(txn *client.Txn) error {
 	if desc.Dropped() {
 		return nil
 	}
-	return desc.validateCrossReferences(txn)
+	return desc.validateCrossReferences(ctx, txn)
 }
 
 // validateCrossReferences validates that each reference to another table is
 // resolvable and that the necessary back references exist.
-func (desc *TableDescriptor) validateCrossReferences(txn *client.Txn) error {
+func (desc *TableDescriptor) validateCrossReferences(ctx context.Context, txn *client.Txn) error {
 	// Check that parent DB exists.
 	{
-		res, err := txn.Get(MakeDescMetadataKey(desc.ParentID))
+		res, err := txn.Get(ctx, MakeDescMetadataKey(desc.ParentID))
 		if err != nil {
 			return err
 		}
@@ -762,7 +766,7 @@ func (desc *TableDescriptor) validateCrossReferences(txn *client.Txn) error {
 		if table, ok := tablesByID[id]; ok {
 			return table, nil
 		}
-		table, err := GetTableDescFromID(txn, id)
+		table, err := GetTableDescFromID(ctx, txn, id)
 		if err != nil {
 			return nil, err
 		}

@@ -20,13 +20,13 @@ import (
 	"bytes"
 	"fmt"
 
+	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
-	"github.com/pkg/errors"
 )
 
 // To understand dataSourceInfo below it is crucial to understand the
@@ -450,7 +450,7 @@ func (p *planner) getTableScanByRef(
 
 	tableID := sqlbase.ID(tref.TableID)
 	if p.avoidCachedDescriptors {
-		desc, err = sqlbase.GetTableDescFromID(p.txn, tableID)
+		desc, err = sqlbase.GetTableDescFromID(ctx, p.txn, tableID)
 	} else {
 		desc, err = p.getTableLeaseByID(ctx, tableID)
 	}

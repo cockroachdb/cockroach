@@ -28,10 +28,10 @@ import (
 	"unicode"
 	"unsafe"
 
-	"github.com/cockroachdb/apd"
-
-	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/pkg/errors"
+
+	"github.com/cockroachdb/apd"
+	"github.com/cockroachdb/cockroach/pkg/util/duration"
 )
 
 const (

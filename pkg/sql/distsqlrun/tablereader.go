@@ -19,13 +19,13 @@ package distsqlrun
 import (
 	"sync"
 
+	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	"github.com/pkg/errors"
 )
 
 // tableReader is the start of a computation flow; it performs KV operations to
@@ -154,7 +154,7 @@ func (tr *tableReader) Run(ctx context.Context, wg *sync.WaitGroup) {
 	ctx, span := tracing.ChildSpan(ctx, "table reader")
 	defer tracing.FinishSpan(span)
 
-	txn := tr.flowCtx.setupTxn(ctx)
+	txn := tr.flowCtx.setupTxn()
 
 	log.VEventf(ctx, 1, "starting")
 	if log.V(1) {
@@ -162,7 +162,7 @@ func (tr *tableReader) Run(ctx context.Context, wg *sync.WaitGroup) {
 	}
 
 	if err := tr.fetcher.StartScan(
-		txn, tr.spans, true /* limit batches */, tr.limitHint,
+		ctx, txn, tr.spans, true /* limit batches */, tr.limitHint,
 	); err != nil {
 		log.Errorf(ctx, "scan error: %s", err)
 		tr.out.output.Push(nil /* row */, ProducerMetadata{Err: err})
@@ -171,7 +171,7 @@ func (tr *tableReader) Run(ctx context.Context, wg *sync.WaitGroup) {
 	}
 
 	for {
-		fetcherRow, err := tr.fetcher.NextRow()
+		fetcherRow, err := tr.fetcher.NextRow(ctx)
 		if err != nil || fetcherRow == nil {
 			if err != nil {
 				tr.out.output.Push(nil /* row */, ProducerMetadata{Err: err})

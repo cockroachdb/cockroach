@@ -77,8 +77,10 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	var node = roachpb.NodeID(2)
 	changer := sql.NewSchemaChangerForTesting(id, 0, node, *kvDB, nil)
 
+	ctx := context.TODO()
+
 	// Acquire a lease.
-	lease, err := changer.AcquireLease()
+	lease, err := changer.AcquireLease(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -88,7 +90,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	}
 
 	// Acquiring another lease will fail.
-	if _, err := changer.AcquireLease(); !testutils.IsError(
+	if _, err := changer.AcquireLease(ctx); !testutils.IsError(
 		err, "an outstanding schema change lease exists",
 	) {
 		t.Fatal(err)
@@ -96,7 +98,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 
 	// Extend the lease.
 	oldLease := lease
-	if err := changer.ExtendLease(&lease); err != nil {
+	if err := changer.ExtendLease(ctx, &lease); err != nil {
 		t.Fatal(err)
 	}
 
@@ -110,27 +112,27 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	}
 
 	// Extending an old lease fails.
-	if err := changer.ExtendLease(&oldLease); !testutils.IsError(err, "table: .* has lease") {
+	if err := changer.ExtendLease(ctx, &oldLease); !testutils.IsError(err, "table: .* has lease") {
 		t.Fatal(err)
 	}
 
 	// Releasing an old lease fails.
-	if err := changer.ReleaseLease(oldLease); err == nil {
+	if err := changer.ReleaseLease(ctx, oldLease); err == nil {
 		t.Fatal("releasing a old lease succeeded")
 	}
 
 	// Release lease.
-	if err := changer.ReleaseLease(lease); err != nil {
+	if err := changer.ReleaseLease(ctx, lease); err != nil {
 		t.Fatal(err)
 	}
 
 	// Extending the lease fails.
-	if err := changer.ExtendLease(&lease); err == nil {
+	if err := changer.ExtendLease(ctx, &lease); err == nil {
 		t.Fatalf("was able to extend an already released lease: %d, %v", id, lease)
 	}
 
 	// acquiring the lease succeeds
-	lease, err = changer.AcquireLease()
+	lease, err = changer.AcquireLease(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -138,7 +140,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	// Set MinSchemaChangeLeaseDuration to not expire the lease.
 	sql.MinSchemaChangeLeaseDuration = minLeaseDuration
 	oldLease = lease
-	if err := changer.ExtendLease(&lease); err != nil {
+	if err := changer.ExtendLease(ctx, &lease); err != nil {
 		t.Fatal(err)
 	}
 	// The old lease is renewed.
@@ -209,7 +211,7 @@ INSERT INTO t.test VALUES ('a', 'b'), ('c', 'd');
 	expectedVersion++
 	tableDesc.UpVersion = true
 	if err := kvDB.Put(
-		context.TODO(),
+		ctx,
 		sqlbase.MakeDescMetadataKey(tableDesc.ID),
 		sqlbase.WrapDescriptor(tableDesc),
 	); err != nil {
@@ -264,7 +266,7 @@ INSERT INTO t.test VALUES ('a', 'b'), ('c', 'd');
 		tableDesc.Mutations[0].Direction = direction
 		expectedVersion++
 		if err := kvDB.Put(
-			context.TODO(),
+			ctx,
 			sqlbase.MakeDescMetadataKey(tableDesc.ID),
 			sqlbase.WrapDescriptor(tableDesc),
 		); err != nil {
@@ -433,11 +435,12 @@ func runSchemaChangeWithOperations(
 	<-backfillNotification
 
 	// Run a variety of operations during the backfill.
+	ctx := context.TODO()
 
 	// Grabbing a schema change lease on the table will fail, disallowing
 	// another schema change from being simultaneously executed.
 	sc := sql.NewSchemaChangerForTesting(tableDesc.ID, 0, 0, *kvDB, nil)
-	if l, err := sc.AcquireLease(); err == nil {
+	if l, err := sc.AcquireLease(ctx); err == nil {
 		t.Fatalf("schema change lease acquisition on table %d succeeded: %v", tableDesc.ID, l)
 	}
 
@@ -489,7 +492,7 @@ func runSchemaChangeWithOperations(
 	// change operations.
 	tablePrefix := roachpb.Key(keys.MakeTablePrefix(uint32(tableDesc.ID)))
 	tableEnd := tablePrefix.PrefixEnd()
-	if kvs, err := kvDB.Scan(context.TODO(), tablePrefix, tableEnd, 0); err != nil {
+	if kvs, err := kvDB.Scan(ctx, tablePrefix, tableEnd, 0); err != nil {
 		t.Fatal(err)
 	} else if e := keyMultiple * (maxValue + numInserts + 1); len(kvs) != e {
 		for _, kv := range kvs {
@@ -605,12 +608,14 @@ CREATE UNIQUE INDEX vidx ON t.test (v);
 		sql.SplitTable(t, tc, tableDesc, i, maxValue/numNodes*i)
 	}
 
+	ctx := context.TODO()
+
 	// Read table descriptor for version.
 	tablePrefix := roachpb.Key(keys.MakeTablePrefix(uint32(tableDesc.ID)))
 	tableEnd := tablePrefix.PrefixEnd()
 	// number of keys == 2 * number of rows; 1 column family and 1 index entry
 	// for each row.
-	if kvs, err := kvDB.Scan(context.TODO(), tablePrefix, tableEnd, 0); err != nil {
+	if kvs, err := kvDB.Scan(ctx, tablePrefix, tableEnd, 0); err != nil {
 		t.Fatal(err)
 	} else if e := 2 * (maxValue + 1); len(kvs) != e {
 		t.Fatalf("expected %d key value pairs, but got %d", e, len(kvs))
@@ -720,7 +725,7 @@ CREATE UNIQUE INDEX vidx ON t.test (v);
 	wg.Wait()
 
 	// Ensure that the table data has been deleted.
-	if kvs, err := kvDB.Scan(context.TODO(), tablePrefix, tableEnd, 0); err != nil {
+	if kvs, err := kvDB.Scan(ctx, tablePrefix, tableEnd, 0); err != nil {
 		t.Fatal(err)
 	} else if len(kvs) != 0 {
 		t.Fatalf("expected %d key value pairs, but got %d", 0, len(kvs))
@@ -915,12 +920,14 @@ COMMIT;
 				t.Fatalf("expected = %d, found = %d", expectNumBackfills, count)
 			}
 
+			ctx := context.TODO()
+
 			// Verify the number of keys left behind in the table to validate
 			// schema change operations.
 			tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
 			tablePrefix := roachpb.Key(keys.MakeTablePrefix(uint32(tableDesc.ID)))
 			tableEnd := tablePrefix.PrefixEnd()
-			if kvs, err := kvDB.Scan(context.TODO(), tablePrefix, tableEnd, 0); err != nil {
+			if kvs, err := kvDB.Scan(ctx, tablePrefix, tableEnd, 0); err != nil {
 				t.Fatal(err)
 			} else if e := testCase.expectedNumKeysPerRow * (maxValue + 1); len(kvs) != e {
 				t.Fatalf("expected %d key value pairs, but got %d", e, len(kvs))
@@ -963,9 +970,11 @@ func addIndexSchemaChange(
 		t.Fatalf("read the wrong number of rows: e = %d, v = %d", eCount, count)
 	}
 
+	ctx := context.TODO()
+
 	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
 	tablePrefix := roachpb.Key(keys.MakeTablePrefix(uint32(tableDesc.ID)))
-	if kvs, err := kvDB.Scan(context.TODO(), tablePrefix, tablePrefix.PrefixEnd(), 0); err != nil {
+	if kvs, err := kvDB.Scan(ctx, tablePrefix, tablePrefix.PrefixEnd(), 0); err != nil {
 		t.Fatal(err)
 	} else if e := numKeysPerRow * (maxValue + 1); len(kvs) != e {
 		t.Fatalf("expected %d key value pairs, but got %d", e, len(kvs))
@@ -1001,9 +1010,12 @@ func addColumnSchemaChange(
 	if eCount := maxValue + 1; eCount != count {
 		t.Fatalf("read the wrong number of rows: e = %d, v = %d", eCount, count)
 	}
+
+	ctx := context.TODO()
+
 	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
 	tablePrefix := roachpb.Key(keys.MakeTablePrefix(uint32(tableDesc.ID)))
-	if kvs, err := kvDB.Scan(context.TODO(), tablePrefix, tablePrefix.PrefixEnd(), 0); err != nil {
+	if kvs, err := kvDB.Scan(ctx, tablePrefix, tablePrefix.PrefixEnd(), 0); err != nil {
 		t.Fatal(err)
 	} else if e := numKeysPerRow * (maxValue + 1); len(kvs) != e {
 		t.Fatalf("expected %d key value pairs, but got %d", e, len(kvs))
@@ -1017,9 +1029,12 @@ func dropColumnSchemaChange(
 	if _, err := sqlDB.Exec("ALTER TABLE t.test DROP x"); err != nil {
 		t.Fatal(err)
 	}
+
+	ctx := context.TODO()
+
 	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
 	tablePrefix := roachpb.Key(keys.MakeTablePrefix(uint32(tableDesc.ID)))
-	if kvs, err := kvDB.Scan(context.TODO(), tablePrefix, tablePrefix.PrefixEnd(), 0); err != nil {
+	if kvs, err := kvDB.Scan(ctx, tablePrefix, tablePrefix.PrefixEnd(), 0); err != nil {
 		t.Fatal(err)
 	} else if e := numKeysPerRow * (maxValue + 1); len(kvs) != e {
 		t.Fatalf("expected %d key value pairs, but got %d", e, len(kvs))
@@ -1198,7 +1213,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 		}
 		// Grab a lease at the latest version so that we are confident
 		// that all future leases will be taken at the latest version.
-		if err := kvDB.Txn(ctx, func(txn *client.Txn) error {
+		if err := kvDB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 			lease, err := leaseMgr.Acquire(ctx, txn, id, version+1)
 			if err != nil {
 				return err
@@ -1349,9 +1364,12 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 	// rows from k = 0 to k = maxValue have index values. The k = maxValue + 1
 	// row with the conflict doesn't contain an index value.
 	numGarbageValues := chunkSize
+
+	ctx := context.TODO()
+
 	tablePrefix := roachpb.Key(keys.MakeTablePrefix(uint32(tableDesc.ID)))
 	tableEnd := tablePrefix.PrefixEnd()
-	if kvs, err := kvDB.Scan(context.TODO(), tablePrefix, tableEnd, 0); err != nil {
+	if kvs, err := kvDB.Scan(ctx, tablePrefix, tableEnd, 0); err != nil {
 		t.Fatal(err)
 	} else if e := 1*(maxValue+2) + numGarbageValues; len(kvs) != e {
 		t.Fatalf("expected %d key value pairs, but got %d", e, len(kvs))
@@ -1371,7 +1389,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 
 	// No garbage left behind.
 	numGarbageValues = 0
-	if kvs, err := kvDB.Scan(context.TODO(), tablePrefix, tableEnd, 0); err != nil {
+	if kvs, err := kvDB.Scan(ctx, tablePrefix, tableEnd, 0); err != nil {
 		t.Fatal(err)
 	} else if e := 1*(maxValue+2) + numGarbageValues; len(kvs) != e {
 		t.Fatalf("expected %d key value pairs, but got %d", e, len(kvs))
@@ -1557,10 +1575,12 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 		t.Fatal("SELECT over index 'foo' works")
 	}
 
+	ctx := context.TODO()
+
 	// Check that the number of k-v pairs is accurate.
 	tablePrefix := roachpb.Key(keys.MakeTablePrefix(uint32(tableDesc.ID)))
 	tableEnd := tablePrefix.PrefixEnd()
-	if kvs, err := kvDB.Scan(context.TODO(), tablePrefix, tableEnd, 0); err != nil {
+	if kvs, err := kvDB.Scan(ctx, tablePrefix, tableEnd, 0); err != nil {
 		t.Fatal(err)
 	} else if e := 2 * (maxValue + 1); len(kvs) != e {
 		t.Fatalf("expected %d key value pairs, but got %d", e, len(kvs))
@@ -1605,13 +1625,15 @@ CREATE TABLE t.test (
 		t.Fatal(err)
 	}
 
+	ctx := context.TODO()
+
 	// Convert table data created by the above INSERT into sentinel
 	// values. This is done to make the table appear like it were
 	// written in the past when cockroachdb used to write sentinel
 	// values for each table row.
 	startKey := roachpb.Key(keys.MakeTablePrefix(uint32(tableDesc.ID)))
 	kvs, err := kvDB.Scan(
-		context.TODO(),
+		ctx,
 		startKey,
 		startKey.PrefixEnd(),
 		maxValue+1)
@@ -1620,7 +1642,7 @@ CREATE TABLE t.test (
 	}
 	for _, kv := range kvs {
 		value := roachpb.MakeValueFromBytes(nil)
-		if err := kvDB.Put(context.TODO(), kv.Key, &value); err != nil {
+		if err := kvDB.Put(ctx, kv.Key, &value); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -1815,11 +1837,13 @@ func TestBackfillCompletesOnChunkBoundary(t *testing.T) {
 				t.Error(err)
 			}
 
+			ctx := context.TODO()
+
 			// Verify the number of keys left behind in the table to
 			// validate schema change operations.
 			tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
 			tablePrefix := roachpb.Key(keys.MakeTablePrefix(uint32(tableDesc.ID)))
-			if kvs, err := kvDB.Scan(context.TODO(), tablePrefix, tablePrefix.PrefixEnd(), 0); err != nil {
+			if kvs, err := kvDB.Scan(ctx, tablePrefix, tablePrefix.PrefixEnd(), 0); err != nil {
 				t.Fatal(err)
 			} else if e := tc.numKeysPerRow * (maxValue + 1); len(kvs) != e {
 				t.Fatalf("expected %d key value pairs, but got %d", e, len(kvs))

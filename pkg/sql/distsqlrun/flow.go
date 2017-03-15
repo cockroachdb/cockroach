@@ -20,6 +20,8 @@ package distsqlrun
 import (
 	"sync"
 
+	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
@@ -28,8 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
-	opentracing "github.com/opentracing/opentracing-go"
-	"github.com/pkg/errors"
 )
 
 // StreamID identifies a stream; it may be local to a flow or it may cross
@@ -62,8 +62,8 @@ type FlowCtx struct {
 	testingKnobs TestingKnobs
 }
 
-func (flowCtx *FlowCtx) setupTxn(ctx context.Context) *client.Txn {
-	return client.NewTxnWithProto(ctx, *flowCtx.clientDB, *flowCtx.txnProto)
+func (flowCtx *FlowCtx) setupTxn() *client.Txn {
+	return client.NewTxnWithProto(flowCtx.clientDB, *flowCtx.txnProto)
 }
 
 type flowStatus int

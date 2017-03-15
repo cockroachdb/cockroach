@@ -22,6 +22,7 @@ import (
 	"math"
 	"time"
 
+	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/gossip"
@@ -37,7 +38,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/pkg/errors"
 )
 
 var (
@@ -69,7 +69,7 @@ func (sc *SchemaChanger) truncateAndDropTable(
 	lease *sqlbase.TableDescriptor_SchemaChangeLease,
 	tableDesc *sqlbase.TableDescriptor,
 ) error {
-	if err := sc.ExtendLease(lease); err != nil {
+	if err := sc.ExtendLease(ctx, lease); err != nil {
 		return err
 	}
 	return truncateAndDropTable(ctx, tableDesc, &sc.db, *sc.testingKnobs)
@@ -102,11 +102,13 @@ var errExistingSchemaChangeLease = errors.New(
 
 // AcquireLease acquires a schema change lease on the table if
 // an unexpired lease doesn't exist. It returns the lease.
-func (sc *SchemaChanger) AcquireLease() (sqlbase.TableDescriptor_SchemaChangeLease, error) {
+func (sc *SchemaChanger) AcquireLease(
+	ctx context.Context,
+) (sqlbase.TableDescriptor_SchemaChangeLease, error) {
 	var lease sqlbase.TableDescriptor_SchemaChangeLease
-	err := sc.db.Txn(context.TODO(), func(txn *client.Txn) error {
+	err := sc.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		txn.SetSystemConfigTrigger()
-		tableDesc, err := sqlbase.GetTableDescFromID(txn, sc.tableID)
+		tableDesc, err := sqlbase.GetTableDescFromID(ctx, txn, sc.tableID)
 		if err != nil {
 			return err
 		}
@@ -122,19 +124,19 @@ func (sc *SchemaChanger) AcquireLease() (sqlbase.TableDescriptor_SchemaChangeLea
 			if time.Unix(0, tableDesc.Lease.ExpirationTime).Add(expirationTimeUncertainty).After(timeutil.Now()) {
 				return errExistingSchemaChangeLease
 			}
-			log.Infof(txn.Context, "Overriding existing expired lease %v", tableDesc.Lease)
+			log.Infof(ctx, "Overriding existing expired lease %v", tableDesc.Lease)
 		}
 		lease = sc.createSchemaChangeLease()
 		tableDesc.Lease = &lease
-		return txn.Put(sqlbase.MakeDescMetadataKey(tableDesc.ID), sqlbase.WrapDescriptor(tableDesc))
+		return txn.Put(ctx, sqlbase.MakeDescMetadataKey(tableDesc.ID), sqlbase.WrapDescriptor(tableDesc))
 	})
 	return lease, err
 }
 
 func (sc *SchemaChanger) findTableWithLease(
-	txn *client.Txn, lease sqlbase.TableDescriptor_SchemaChangeLease,
+	ctx context.Context, txn *client.Txn, lease sqlbase.TableDescriptor_SchemaChangeLease,
 ) (*sqlbase.TableDescriptor, error) {
-	tableDesc, err := sqlbase.GetTableDescFromID(txn, sc.tableID)
+	tableDesc, err := sqlbase.GetTableDescFromID(ctx, txn, sc.tableID)
 	if err != nil {
 		return nil, err
 	}
@@ -149,17 +151,18 @@ func (sc *SchemaChanger) findTableWithLease(
 
 // ReleaseLease releases the table lease if it is the one registered with
 // the table descriptor.
-func (sc *SchemaChanger) ReleaseLease(lease sqlbase.TableDescriptor_SchemaChangeLease) error {
-	err := sc.db.Txn(context.TODO(), func(txn *client.Txn) error {
-		tableDesc, err := sc.findTableWithLease(txn, lease)
+func (sc *SchemaChanger) ReleaseLease(
+	ctx context.Context, lease sqlbase.TableDescriptor_SchemaChangeLease,
+) error {
+	return sc.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+		tableDesc, err := sc.findTableWithLease(ctx, txn, lease)
 		if err != nil {
 			return err
 		}
 		tableDesc.Lease = nil
 		txn.SetSystemConfigTrigger()
-		return txn.Put(sqlbase.MakeDescMetadataKey(tableDesc.ID), sqlbase.WrapDescriptor(tableDesc))
+		return txn.Put(ctx, sqlbase.MakeDescMetadataKey(tableDesc.ID), sqlbase.WrapDescriptor(tableDesc))
 	})
-	return err
 }
 
 // ExtendLease for the current leaser. This needs to be called often while
@@ -167,7 +170,7 @@ func (sc *SchemaChanger) ReleaseLease(lease sqlbase.TableDescriptor_SchemaChange
 // schema change (which is still safe, but unwise). It updates existingLease
 // with the new lease.
 func (sc *SchemaChanger) ExtendLease(
-	existingLease *sqlbase.TableDescriptor_SchemaChangeLease,
+	ctx context.Context, existingLease *sqlbase.TableDescriptor_SchemaChangeLease,
 ) error {
 	// Check if there is still time on this lease.
 	minDesiredExpiration := timeutil.Now().Add(MinSchemaChangeLeaseDuration)
@@ -176,8 +179,8 @@ func (sc *SchemaChanger) ExtendLease(
 	}
 	// Update lease.
 	var lease sqlbase.TableDescriptor_SchemaChangeLease
-	if err := sc.db.Txn(context.TODO(), func(txn *client.Txn) error {
-		tableDesc, err := sc.findTableWithLease(txn, *existingLease)
+	if err := sc.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+		tableDesc, err := sc.findTableWithLease(ctx, txn, *existingLease)
 		if err != nil {
 			return err
 		}
@@ -185,7 +188,7 @@ func (sc *SchemaChanger) ExtendLease(
 		lease = sc.createSchemaChangeLease()
 		tableDesc.Lease = &lease
 		txn.SetSystemConfigTrigger()
-		return txn.Put(sqlbase.MakeDescMetadataKey(tableDesc.ID), sqlbase.WrapDescriptor(tableDesc))
+		return txn.Put(ctx, sqlbase.MakeDescMetadataKey(tableDesc.ID), sqlbase.WrapDescriptor(tableDesc))
 	}); err != nil {
 		return err
 	}
@@ -201,7 +204,7 @@ func (sc *SchemaChanger) maybeAddDropRename(
 	table *sqlbase.TableDescriptor,
 ) (bool, error) {
 	if table.Dropped() {
-		if err := sc.ExtendLease(lease); err != nil {
+		if err := sc.ExtendLease(ctx, lease); err != nil {
 			return false, err
 		}
 		// Wait for everybody to see the version with the deleted bit set. When
@@ -241,7 +244,7 @@ func (sc *SchemaChanger) maybeAddDropRename(
 	}
 
 	if table.Renamed() {
-		if err := sc.ExtendLease(lease); err != nil {
+		if err := sc.ExtendLease(ctx, lease); err != nil {
 			return false, err
 		}
 		// Wait for everyone to see the version with the new name. When this
@@ -255,13 +258,13 @@ func (sc *SchemaChanger) maybeAddDropRename(
 			sc.testingKnobs.RenameOldNameNotInUseNotification()
 		}
 		// Free up the old name(s).
-		if err := sc.db.Txn(ctx, func(txn *client.Txn) error {
+		if err := sc.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 			b := txn.NewBatch()
 			for _, renameDetails := range table.Renames {
 				tbKey := tableKey{renameDetails.OldParentID, renameDetails.OldName}.Key()
 				b.Del(tbKey)
 			}
-			return txn.Run(b)
+			return txn.Run(ctx, b)
 		}); err != nil {
 			return false, err
 		}
@@ -280,7 +283,7 @@ func (sc *SchemaChanger) maybeAddDropRename(
 // Execute the entire schema change in steps.
 func (sc *SchemaChanger) exec(ctx context.Context) error {
 	// Acquire lease.
-	lease, err := sc.AcquireLease()
+	lease, err := sc.AcquireLease(ctx)
 	if err != nil {
 		return err
 	}
@@ -292,7 +295,7 @@ func (sc *SchemaChanger) exec(ctx context.Context) error {
 		if !needRelease {
 			return
 		}
-		if err := sc.ReleaseLease(lease); err != nil {
+		if err := sc.ReleaseLease(ctx, lease); err != nil {
 			log.Warning(ctx, err)
 		}
 	}()

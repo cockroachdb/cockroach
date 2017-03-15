@@ -56,7 +56,7 @@ func TestFakeSpanResolver(t *testing.T) {
 
 	db := tc.Server(0).KVClient().(*client.DB)
 
-	txn := client.NewTxn(context.TODO(), *db)
+	txn := client.NewTxn(db)
 	it := resolver.NewSpanResolverIterator(txn)
 
 	desc := sqlbase.GetTableDescriptor(db, "test", "t")
