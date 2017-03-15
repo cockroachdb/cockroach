@@ -588,13 +588,18 @@ const (
 	indexBackfill
 )
 
-// backfillIndexesSpans returns the index spans that still have to be backfilled
-// for the indexes being added as part of the first mutation enqueued on the
-// table descriptor.
+type mutationFilter func(sqlbase.DescriptorMutation) bool
+
+// getSpansToBackfill returns the spans that still have to be backfilled
+// for the first mutation enqueued on the table descriptor that passes the
+// input mutationFilter.
 //
-// Returns nil if the backfill for the indexes is complete (mutation no longer
-// exists or there are no "ResumeSpans").
-func (sc *SchemaChanger) backfillIndexesSpans(ctx context.Context) ([]roachpb.Span, error) {
+// Returns nil if the backfill is complete (mutation no longer exists or there
+// are no "ResumeSpans").
+func (sc *SchemaChanger) getSpansToBackfill(
+	ctx context.Context,
+	filter mutationFilter,
+) ([]roachpb.Span, error) {
 	var spans []roachpb.Span
 	err := sc.db.Txn(ctx, func(txn *client.Txn) error {
 		spans = nil
@@ -608,7 +613,7 @@ func (sc *SchemaChanger) backfillIndexesSpans(ctx context.Context) ([]roachpb.Sp
 				if m.MutationID != mutationID {
 					break
 				}
-				if m.GetIndex() != nil && m.Direction == sqlbase.DescriptorMutation_ADD {
+				if filter(m) {
 					spans = m.ResumeSpans
 					break
 				}
@@ -619,22 +624,34 @@ func (sc *SchemaChanger) backfillIndexesSpans(ctx context.Context) ([]roachpb.Sp
 	return spans, err
 }
 
-func (sc *SchemaChanger) backfillIndexes(
+// distBackfill runs (or continues) a backfill for the first mutation
+// enqueued on the SchemaChanger's table descriptor that passes the input
+// mutationFilter.
+func (sc *SchemaChanger) distBackfill(
 	ctx context.Context,
 	lease *sqlbase.TableDescriptor_SchemaChangeLease,
 	version sqlbase.DescriptorVersion,
+	backfillType backfillType,
+	backfillChunkSize int64,
+	filter mutationFilter,
 ) error {
 	duration := checkpointInterval
 	if sc.testingKnobs.WriteCheckpointInterval > 0 {
 		duration = sc.testingKnobs.WriteCheckpointInterval
 	}
-	chunkSize := sc.getChunkSize(indexBackfillChunkSize)
-	spans, err := sc.backfillIndexesSpans(ctx)
-	if err != nil {
-		return err
-	}
+	chunkSize := sc.getChunkSize(backfillChunkSize)
 
-	for len(spans) > 0 {
+	for {
+		// Repeat until getSpansToBackfill returns no spans, indicating that the
+		// backfill is complete.
+		spans, err := sc.getSpansToBackfill(ctx, filter)
+		if err != nil {
+			return err
+		}
+		if len(spans) <= 0 {
+			break
+		}
+
 		if err := sc.ExtendLease(lease); err != nil {
 			return err
 		}
@@ -650,7 +667,7 @@ func (sc *SchemaChanger) backfillIndexes(
 			recv := distSQLReceiver{}
 			planCtx := sc.distSQLPlanner.NewPlanningCtx(ctx, txn)
 			plan, err := sc.distSQLPlanner.CreateBackfiller(
-				&planCtx, indexBackfill, *tableDesc, duration, chunkSize, spans,
+				&planCtx, backfillType, *tableDesc, duration, chunkSize, spans,
 			)
 			if err != nil {
 				return err
@@ -662,10 +679,17 @@ func (sc *SchemaChanger) backfillIndexes(
 		}); err != nil {
 			return err
 		}
-		spans, err = sc.backfillIndexesSpans(ctx)
-		if err != nil {
-			return err
-		}
 	}
 	return nil
+}
+
+func (sc *SchemaChanger) backfillIndexes(
+	ctx context.Context,
+	lease *sqlbase.TableDescriptor_SchemaChangeLease,
+	version sqlbase.DescriptorVersion,
+) error {
+	indexFilter := func(m sqlbase.DescriptorMutation) bool {
+		return m.GetIndex() != nil && m.Direction == sqlbase.DescriptorMutation_ADD
+	}
+	return sc.distBackfill(ctx, lease, version, indexBackfill, indexBackfillChunkSize, indexFilter)
 }
