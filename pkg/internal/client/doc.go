@@ -99,7 +99,7 @@ necessary. An example of using transactions with parallel writes:
 		log.Fatal(err)
 	}
 
-	err := db.Txn(func(txn *client.Txn) error {
+	err := db.Txn(func(ctx context.Context, txn *client.Txn) error {
 		b := txn.NewBatch()
 		for i := 0; i < 100; i++ {
 			key := fmt.Sprintf("testkey-%02d", i)
@@ -109,7 +109,7 @@ necessary. An example of using transactions with parallel writes:
 		// Note that the Txn client is flushed automatically when this function
 		// returns success (i.e. nil). Calling CommitInBatch explicitly can
 		// sometimes reduce the number of RPCs.
-		return txn.CommitInBatch(b)
+		return txn.CommitInBatch(ctx, b)
 	})
 	if err != nil {
 		log.Fatal(err)

@@ -22,17 +22,16 @@ import (
 	"fmt"
 	"sort"
 
+	"github.com/pkg/errors"
 	"golang.org/x/net/context"
-
-	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/pkg/errors"
 )
 
 const (
@@ -241,7 +240,7 @@ func (ri *RowInserter) InsertRow(
 		}
 	}
 
-	if err := ri.fks.checkAll(values); err != nil {
+	if err := ri.fks.checkAll(ctx, values); err != nil {
 		return err
 	}
 
@@ -588,12 +587,12 @@ func (ru *rowUpdater) updateRow(
 	}
 
 	if rowPrimaryKeyChanged {
-		if err := ru.fks.checkIdx(ru.helper.tableDesc.PrimaryIndex.ID, oldValues, ru.newValues); err != nil {
+		if err := ru.fks.checkIdx(ctx, ru.helper.tableDesc.PrimaryIndex.ID, oldValues, ru.newValues); err != nil {
 			return nil, err
 		}
 		for i := range newSecondaryIndexEntries {
 			if !bytes.Equal(newSecondaryIndexEntries[i].Key, secondaryIndexEntries[i].Key) {
-				if err := ru.fks.checkIdx(ru.helper.indexes[i].ID, oldValues, ru.newValues); err != nil {
+				if err := ru.fks.checkIdx(ctx, ru.helper.indexes[i].ID, oldValues, ru.newValues); err != nil {
 					return nil, err
 				}
 			}
@@ -717,7 +716,7 @@ func (ru *rowUpdater) updateRow(
 		secondaryIndexEntry := secondaryIndexEntries[i]
 		secondaryKeyChanged := !bytes.Equal(newSecondaryIndexEntry.Key, secondaryIndexEntry.Key)
 		if secondaryKeyChanged {
-			if err := ru.fks.checkIdx(ru.helper.indexes[i].ID, oldValues, ru.newValues); err != nil {
+			if err := ru.fks.checkIdx(ctx, ru.helper.indexes[i].ID, oldValues, ru.newValues); err != nil {
 				return nil, err
 			}
 
@@ -825,7 +824,7 @@ func makeRowDeleter(
 // deleteRow adds to the batch the kv operations necessary to delete a table row
 // with the given values.
 func (rd *rowDeleter) deleteRow(ctx context.Context, b *client.Batch, values []parser.Datum) error {
-	if err := rd.fks.checkAll(values); err != nil {
+	if err := rd.fks.checkAll(ctx, values); err != nil {
 		return err
 	}
 
@@ -858,7 +857,7 @@ func (rd *rowDeleter) deleteRow(ctx context.Context, b *client.Batch, values []p
 func (rd *rowDeleter) deleteIndexRow(
 	ctx context.Context, b *client.Batch, idx *sqlbase.IndexDescriptor, values []parser.Datum,
 ) error {
-	if err := rd.fks.checkAll(values); err != nil {
+	if err := rd.fks.checkAll(ctx, values); err != nil {
 		return err
 	}
 	secondaryIndexEntry, err := sqlbase.EncodeSecondaryIndex(

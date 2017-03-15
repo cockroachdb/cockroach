@@ -20,6 +20,7 @@ import (
 	"bytes"
 	"fmt"
 
+	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -28,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	"github.com/pkg/errors"
 )
 
 // A scanNode handles scanning over the key/value pairs for a table and
@@ -147,7 +147,7 @@ func (n *scanNode) Start(context.Context) error {
 func (n *scanNode) Close(context.Context) {}
 
 // initScan sets up the rowFetcher and starts a scan.
-func (n *scanNode) initScan() error {
+func (n *scanNode) initScan(ctx context.Context) error {
 	if len(n.spans) == 0 {
 		// If no spans were specified retrieve all of the keys that start with our
 		// index key prefix. This isn't needed for the fetcher, but it is for
@@ -157,7 +157,7 @@ func (n *scanNode) initScan() error {
 	}
 
 	limitHint := n.limitHint()
-	if err := n.fetcher.StartScan(n.p.txn, n.spans, !n.disableBatchLimits, limitHint); err != nil {
+	if err := n.fetcher.StartScan(ctx, n.p.txn, n.spans, !n.disableBatchLimits, limitHint); err != nil {
 		return err
 	}
 	n.scanInitialized = true
@@ -183,12 +183,12 @@ func (n *scanNode) limitHint() int64 {
 }
 
 // debugNext is a helper function used by Next() when in explainDebug mode.
-func (n *scanNode) debugNext(context.Context) (bool, error) {
+func (n *scanNode) debugNext(ctx context.Context) (bool, error) {
 	// In debug mode, we output a set of debug values for each key.
 	n.debugVals.rowIdx = n.rowIndex
 	var err error
 	var encRow sqlbase.EncDatumRow
-	n.debugVals.key, n.debugVals.value, encRow, err = n.fetcher.NextKeyDebug()
+	n.debugVals.key, n.debugVals.value, encRow, err = n.fetcher.NextKeyDebug(ctx)
 	if err != nil || n.debugVals.key == "" {
 		return false, err
 	}
@@ -220,7 +220,7 @@ func (n *scanNode) debugNext(context.Context) (bool, error) {
 func (n *scanNode) Next(ctx context.Context) (bool, error) {
 	tracing.AnnotateTrace()
 	if !n.scanInitialized {
-		if err := n.initScan(); err != nil {
+		if err := n.initScan(ctx); err != nil {
 			return false, err
 		}
 	}
@@ -232,7 +232,7 @@ func (n *scanNode) Next(ctx context.Context) (bool, error) {
 	// We fetch one row at a time until we find one that passes the filter.
 	for {
 		var err error
-		n.row, err = n.fetcher.NextRowDecoded()
+		n.row, err = n.fetcher.NextRowDecoded(ctx)
 		if err != nil || n.row == nil {
 			return false, err
 		}

@@ -25,10 +25,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/apd"
 	"github.com/gogo/protobuf/proto"
 	"github.com/kr/pretty"
 
+	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/zerofields"
 	"github.com/cockroachdb/cockroach/pkg/util"

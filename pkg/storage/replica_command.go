@@ -2455,7 +2455,7 @@ func (r *Replica) adminSplitWithDescriptor(
 	log.Infof(ctx, "initiating a split of this range at key %s [r%d]",
 		splitKey, rightDesc.RangeID)
 
-	if err := r.store.DB().Txn(ctx, func(txn *client.Txn) error {
+	if err := r.store.DB().Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		log.Event(ctx, "split closure begins")
 		defer log.Event(ctx, "split closure ends")
 		// Update existing range descriptor for left hand side of
@@ -2481,7 +2481,7 @@ func (r *Replica) adminSplitWithDescriptor(
 			// where splits are aborted early due to conflicts with meta
 			// intents (see #9265).
 			log.Event(ctx, "updating LHS descriptor")
-			if err := txn.Run(b); err != nil {
+			if err := txn.Run(ctx, b); err != nil {
 				return err
 			}
 		}
@@ -2522,7 +2522,7 @@ func (r *Replica) adminSplitWithDescriptor(
 
 		// Commit txn with final batch (RHS descriptor and meta).
 		log.Event(ctx, "commit txn with batch containing RHS descriptor and meta records")
-		return txn.Run(b)
+		return txn.Run(ctx, b)
 	}); err != nil {
 		// The ConditionFailedError can occur because the descriptors acting
 		// as expected values in the CPuts used to update the left or right
@@ -2934,7 +2934,7 @@ func (r *Replica) AdminMerge(
 		log.Infof(ctx, "initiating a merge of %s into this range", rightRng)
 	}
 
-	if err := r.store.DB().Txn(ctx, func(txn *client.Txn) error {
+	if err := r.store.DB().Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		log.Event(ctx, "merge closure begins")
 		// Update the range descriptor for the receiving range.
 		{
@@ -2946,7 +2946,7 @@ func (r *Replica) AdminMerge(
 			// Commit this batch on its own to ensure that the transaction record
 			// is created in the right place (our triggers rely on this).
 			log.Event(ctx, "updating LHS descriptor")
-			if err := txn.Run(b); err != nil {
+			if err := txn.Run(ctx, b); err != nil {
 				return err
 			}
 		}
@@ -2954,7 +2954,7 @@ func (r *Replica) AdminMerge(
 		// Do a consistent read of the right hand side's range descriptor.
 		rightDescKey := keys.RangeDescriptorKey(origLeftDesc.EndKey)
 		var rightDesc roachpb.RangeDescriptor
-		if err := txn.GetProto(rightDescKey, &rightDesc); err != nil {
+		if err := txn.GetProto(ctx, rightDescKey, &rightDesc); err != nil {
 			return err
 		}
 
@@ -2992,7 +2992,7 @@ func (r *Replica) AdminMerge(
 			},
 		})
 		log.Event(ctx, "attempting commit")
-		return txn.Run(b)
+		return txn.Run(ctx, b)
 	}); err != nil {
 		return reply, roachpb.NewErrorf("merge of range into %d failed: %s", origLeftDesc.RangeID, err)
 	}
@@ -3297,7 +3297,7 @@ func (r *Replica) ChangeReplicas(
 
 	descKey := keys.RangeDescriptorKey(desc.StartKey)
 
-	if err := r.store.DB().Txn(ctx, func(txn *client.Txn) error {
+	if err := r.store.DB().Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		log.Event(ctx, "attempting txn")
 		txn.SetDebugName(replicaChangeTxnName)
 		// TODO(tschottdorf): oldDesc is used for sanity checks related to #7224.
@@ -3306,7 +3306,7 @@ func (r *Replica) ChangeReplicas(
 		// fire because everything reads from the local, diverged, set of data),
 		// so we don't expect to see this fail in practice ever.
 		oldDesc := new(roachpb.RangeDescriptor)
-		if err := txn.GetProto(descKey, oldDesc); err != nil {
+		if err := txn.GetProto(ctx, descKey, oldDesc); err != nil {
 			return err
 		}
 		log.Infof(ctx, "change replicas (remove %s): read existing descriptor %+v", repDesc, oldDesc)
@@ -3321,7 +3321,7 @@ func (r *Replica) ChangeReplicas(
 			}
 
 			// Run transaction up to this point to create txn record early (see #9265).
-			if err := txn.Run(b); err != nil {
+			if err := txn.Run(ctx, b); err != nil {
 				return err
 			}
 		}
@@ -3351,7 +3351,7 @@ func (r *Replica) ChangeReplicas(
 				},
 			},
 		})
-		if err := txn.Run(b); err != nil {
+		if err := txn.Run(ctx, b); err != nil {
 			log.Event(ctx, err.Error())
 			return err
 		}

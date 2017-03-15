@@ -97,7 +97,7 @@ type leaseManager interface {
 type db interface {
 	Scan(ctx context.Context, begin, end interface{}, maxRows int64) ([]client.KeyValue, error)
 	Put(ctx context.Context, key, value interface{}) error
-	Txn(ctx context.Context, retryable func(txn *client.Txn) error) error
+	Txn(ctx context.Context, retryable func(ctx context.Context, txn *client.Txn) error) error
 }
 
 // Manager encapsulates the necessary functionality for handling migrations
@@ -319,12 +319,12 @@ func eventlogUniqueIDDefault(ctx context.Context, r runner) error {
 func createJobsTable(ctx context.Context, r runner) error {
 	// We install the table at the KV layer so that we can choose a known ID in
 	// the reserved ID space. (The SQL layer doesn't allow this.)
-	return r.db.Txn(ctx, func(txn *client.Txn) error {
+	return r.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		b := txn.NewBatch()
 		desc := sqlbase.JobsTable
 		b.CPut(sqlbase.MakeNameMetadataKey(desc.GetParentID(), desc.GetName()), desc.GetID(), nil)
 		b.CPut(sqlbase.MakeDescMetadataKey(desc.GetID()), sqlbase.WrapDescriptor(&desc), nil)
 		txn.SetSystemConfigTrigger()
-		return txn.Run(b)
+		return txn.Run(ctx, b)
 	})
 }

@@ -34,9 +34,9 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"github.com/cockroachdb/apd"
 	"github.com/lib/pq/oid"
 
+	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"

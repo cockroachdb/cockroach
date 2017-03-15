@@ -20,7 +20,6 @@ import (
 	"math"
 
 	"github.com/cockroachdb/apd"
-
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 )
 

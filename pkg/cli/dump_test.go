@@ -28,9 +28,9 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/cockroachdb/apd"
 	"github.com/spf13/pflag"
 
+	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"

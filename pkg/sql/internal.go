@@ -92,7 +92,7 @@ func getTableID(ctx context.Context, p *planner, tn *parser.TableName) (sqlbase.
 
 	nameKey := tableKey{dbID, tn.Table()}
 	key := nameKey.Key()
-	gr, err := p.txn.Get(key)
+	gr, err := p.txn.Get(ctx, key)
 	if err != nil {
 		return 0, err
 	}
