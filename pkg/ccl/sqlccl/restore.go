@@ -227,6 +227,27 @@ func reassignReferencedTables(
 				}
 				index.InterleavedBy[j].Table = childID
 			}
+
+			if index.ForeignKey.IsSet() {
+				to := index.ForeignKey.Table
+				if newID, ok := newTableIDs[to]; ok {
+					index.ForeignKey.Table = newID
+				} else {
+					// TODO(dt): if there is an existing (i.e. non-restoring) table with
+					// a db and name matching the one the FK pointed to at backup, should
+					// we update the FK to point to it?
+					index.ForeignKey = sqlbase.ForeignKeyReference{}
+				}
+			}
+
+			origRefs := index.ReferencedBy
+			index.ReferencedBy = nil
+			for _, ref := range origRefs {
+				if newID, ok := newTableIDs[ref.Table]; ok {
+					ref.Table = newID
+					index.ReferencedBy = append(index.ReferencedBy, ref)
+				}
+			}
 			return nil
 		}); err != nil {
 			return err
