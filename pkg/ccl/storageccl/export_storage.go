@@ -614,7 +614,7 @@ func (s *azureStorageWriter) Finish() error {
 	// up the input file into small enough chunks the API can handle.
 
 	if err := s.client.CreateBlockBlob(s.container, s.name); err != nil {
-		return err
+		return errors.Wrap(err, "creating block blob")
 	}
 	const fourMiB = 1024 * 1024 * 4
 
@@ -708,7 +708,10 @@ func (s *azureStorage) FetchFile(ctx context.Context, basename string) (string, 
 }
 
 func (s *azureStorage) Delete(_ context.Context, basename string) error {
-	return s.client.DeleteBlob(s.conf.Container, filepath.Join(s.prefix, basename), nil)
+	return errors.Wrap(
+		s.client.DeleteBlob(s.conf.Container, filepath.Join(s.prefix, basename), nil),
+		"deleting blob",
+	)
 }
 
 func (s *azureStorage) Close() error {
