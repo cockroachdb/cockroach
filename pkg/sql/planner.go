@@ -62,6 +62,10 @@ type planner struct {
 	// initializing plans to read from a table. This should be used with care.
 	skipSelectPrivilegeChecks bool
 
+	// phaseTimes helps measure the time spent in each phase of SQL execution.
+	// See executor_statement_metrics.go for details.
+	phaseTimes phaseTimes
+
 	// Avoid allocations by embedding commonly used objects and visitors.
 	parser                parser.Parser
 	subqueryVisitor       subqueryVisitor
