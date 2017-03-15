@@ -285,43 +285,45 @@ func TestMergeJoiner(t *testing.T) {
 	}
 
 	for _, c := range testCases {
-		ms := c.spec
-		leftInput := NewRowBuffer(nil /* types */, c.inputs[0], RowBufferArgs{})
-		rightInput := NewRowBuffer(nil /* types */, c.inputs[1], RowBufferArgs{})
-		out := &RowBuffer{}
-		flowCtx := FlowCtx{evalCtx: parser.EvalContext{}}
+		t.Run("", func(t *testing.T) {
+			ms := c.spec
+			leftInput := NewRowBuffer(nil /* types */, c.inputs[0], RowBufferArgs{})
+			rightInput := NewRowBuffer(nil /* types */, c.inputs[1], RowBufferArgs{})
+			out := &RowBuffer{}
+			flowCtx := FlowCtx{evalCtx: parser.EvalContext{}}
 
-		post := PostProcessSpec{OutputColumns: c.outCols}
-		m, err := newMergeJoiner(&flowCtx, &ms, leftInput, rightInput, &post, out)
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		m.Run(context.Background(), nil)
-
-		if !out.ProducerClosed {
-			t.Fatalf("output RowReceiver not closed")
-		}
-
-		var retRows sqlbase.EncDatumRows
-		for {
-			row, meta := out.Next()
+			post := PostProcessSpec{OutputColumns: c.outCols}
+			m, err := newMergeJoiner(&flowCtx, &ms, leftInput, rightInput, &post, out)
 			if err != nil {
 				t.Fatal(err)
 			}
-			if !meta.Empty() {
-				t.Fatalf("unexpected metadata: %v", meta)
+
+			m.Run(context.Background(), nil)
+
+			if !out.ProducerClosed {
+				t.Fatalf("output RowReceiver not closed")
 			}
-			if row == nil {
-				break
+
+			var retRows sqlbase.EncDatumRows
+			for {
+				row, meta := out.Next()
+				if err != nil {
+					t.Fatal(err)
+				}
+				if !meta.Empty() {
+					t.Fatalf("unexpected metadata: %v", meta)
+				}
+				if row == nil {
+					break
+				}
+				retRows = append(retRows, row)
 			}
-			retRows = append(retRows, row)
-		}
-		expStr := c.expected.String()
-		retStr := retRows.String()
-		if expStr != retStr {
-			t.Errorf("invalid results; expected:\n   %s\ngot:\n   %s",
-				expStr, retStr)
-		}
+			expStr := c.expected.String()
+			retStr := retRows.String()
+			if expStr != retStr {
+				t.Errorf("invalid results; expected:\n   %s\ngot:\n   %s",
+					expStr, retStr)
+			}
+		})
 	}
 }

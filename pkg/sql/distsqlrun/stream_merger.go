@@ -22,87 +22,15 @@ import (
 	"github.com/pkg/errors"
 )
 
-// streamCacher is a thin wrapper around an ordered RowSource buffering in the most
-// recently received rows.
-type streamCacher struct {
-	src      NoMetadataRowSource
-	ordering sqlbase.ColumnOrdering
-	// rows contains the last set of rows received from the source.
-	rows       []sqlbase.EncDatumRow
-	datumAlloc sqlbase.DatumAlloc
-}
-
-// nextRow() is a wrapper around RowSource.NextRow() which simultaneously saves
-// the retrieved row within the stream's most recently added rows buffer.
-func (s *streamCacher) nextRow() (sqlbase.EncDatumRow, error) {
-	row, err := s.src.NextRow()
-	if err != nil {
-		return nil, err
-	}
-	// We don't make the explicit check for row == nil and therefore add the nil
-	// row to the row buffer. This is because the nil row can be used in
-	// group comparisons (end of stream is effectively another group).
-	s.rows = append(s.rows, row)
-	return row, nil
-}
-
-// currentGroup returns the set of rows belonging to the same group as
-// s.rows[0], i.e. with the same group key (comprised of the set of ordered
-// columns).
-func (s *streamCacher) currentGroup() []sqlbase.EncDatumRow {
-	// we ignore the last row of the row buffer because this is either a nil row
-	// (end of stream) or a row not "equal" to s.rows[0], either case it belongs
-	// to the next group.
-	return s.rows[:len(s.rows)-1]
-}
-
-// advanceGroup moves over the 'current group' window to point to the next group
-// discarding the previous.
-func (s *streamCacher) advanceGroup() sqlbase.EncDatumRow {
-	// for each stream we discard all the rows except the last row (which is
-	// either a nil row or a row not "equal" to s.rows[0], either case it
-	// belongs to the next group.
-	s.rows[0] = s.rows[len(s.rows)-1]
-	s.rows = s.rows[:1]
-	return s.rows[0]
-}
-
-// accumulateGroup collects all the rows that are "equal" to s.rows[0], the
-// first occurrence of a row not "equal" to s.rows[0] is stored at the end of
-// s.rows.
-func (s *streamCacher) accumulateGroup() error {
-	for {
-		next, err := s.nextRow()
-		if err != nil || next == nil {
-			return err
-		}
-		cmp, err := s.rows[0].Compare(&s.datumAlloc, s.ordering, next)
-		if err != nil || cmp != 0 {
-			return err
-		}
-	}
-}
-
 // We define a group to be a set of rows from a given source with the same
 // group key, in this case the set of ordered columns. streamMerger emits
 // batches of rows that are the cross-product of matching groups from each
 // stream.
 type streamMerger struct {
-	left         streamCacher
-	right        streamCacher
+	left         streamGroupAccumulator
+	right        streamGroupAccumulator
 	datumAlloc   sqlbase.DatumAlloc
 	outputBuffer [][2]sqlbase.EncDatumRow
-	initialized  bool
-}
-
-// initialize loads up each stream with the first row received from it's
-// corresponding source.
-func (sm *streamMerger) initialize() error {
-	if _, err := sm.left.nextRow(); err != nil {
-		return err
-	}
-	_, err := sm.right.nextRow()
-	return err
 }
 
 // computeBatch adds the cross-product of the next matching set of groups
@@ -110,9 +38,14 @@ func (sm *streamMerger) initialize() error {
 func (sm *streamMerger) computeBatch() error {
 	sm.outputBuffer = sm.outputBuffer[:0]
 
-	lrow := sm.left.advanceGroup()
-	rrow := sm.right.advanceGroup()
-
+	lrow, err := sm.left.peekAtCurrentGroup()
+	if err != nil {
+		return err
+	}
+	rrow, err := sm.right.peekAtCurrentGroup()
+	if err != nil {
+		return err
+	}
 	if lrow == nil && rrow == nil {
 		return nil
 	}
@@ -121,50 +54,46 @@ func (sm *streamMerger) computeBatch() error {
 	if err != nil {
 		return err
 	}
-
-	if cmp < 0 {
+	if cmp != 0 {
 		// lrow < rrow or rrow == nil, accumulate set of rows "equal" to lrow
 		// and emit (lrow, nil) tuples.
-		if err := sm.left.accumulateGroup(); err != nil {
+		src := &sm.left
+		if cmp > 0 {
+			src = &sm.right
+		}
+		group, err := src.advanceGroup()
+		if err != nil {
 			return err
 		}
-
-		for _, l := range sm.left.currentGroup() {
-			sm.outputBuffer = append(sm.outputBuffer, [2]sqlbase.EncDatumRow{l, nil})
+		for _, r := range group {
+			var outputRow [2]sqlbase.EncDatumRow
+			if cmp < 0 {
+				outputRow[0] = r
+				outputRow[1] = nil
+			} else {
+				outputRow[0] = nil
+				outputRow[1] = r
+			}
+			sm.outputBuffer = append(sm.outputBuffer, outputRow)
 		}
 		return nil
 	}
-
-	if cmp > 0 {
-		// rrow < lrow or lrow == nil, accumulate set of rows "equal" to rrow
-		// and emit (nil, rrow) tuples.
-		if err := sm.right.accumulateGroup(); err != nil {
-			return err
-		}
-
-		for _, r := range sm.right.currentGroup() {
-			sm.outputBuffer = append(sm.outputBuffer, [2]sqlbase.EncDatumRow{nil, r})
-		}
-		return nil
-	}
-
-	// lrow == rrow, accumulate set of rows "equal" to lrow and set of rows
-	// "equal" to rrow then emit cross product of the two sets ((lrow, rrow)
-	// tuples).
-	if err := sm.right.accumulateGroup(); err != nil {
+	// We found matching groups; we'll output the cross-product.
+	leftGroup, err := sm.left.advanceGroup()
+	if err != nil {
 		return err
 	}
-	if err := sm.left.accumulateGroup(); err != nil {
+	rightGroup, err := sm.right.advanceGroup()
+	if err != nil {
 		return err
 	}
-
-	// Output cross-product.
-	for _, l := range sm.left.currentGroup() {
-		for _, r := range sm.right.currentGroup() {
+	// TODO(andrei): if groups are large and we have a limit, we might want to
+	// stream through the leftGroup instead of accumulating it all.
+	for _, l := range leftGroup {
+		for _, r := range rightGroup {
 			sm.outputBuffer = append(sm.outputBuffer, [2]sqlbase.EncDatumRow{l, r})
 		}
 	}
-
 	return nil
 }
 
@@ -198,12 +127,6 @@ func (sm *streamMerger) compare(lhs, rhs sqlbase.EncDatumRow) (int, error) {
 }
 
 func (sm *streamMerger) NextBatch() ([][2]sqlbase.EncDatumRow, error) {
-	if !sm.initialized {
-		if err := sm.initialize(); err != nil {
-			return nil, err
-		}
-		sm.initialized = true
-	}
 	if err := sm.computeBatch(); err != nil {
 		return nil, err
 	}
@@ -232,13 +155,11 @@ func makeStreamMerger(
 	}
 
 	return streamMerger{
-		left: streamCacher{
-			src:      MakeNoMetadataRowSource(leftSource, metadataSink),
-			ordering: leftOrdering,
-		},
-		right: streamCacher{
-			src:      MakeNoMetadataRowSource(rightSource, metadataSink),
-			ordering: rightOrdering,
-		},
+		left: makeStreamGroupAccumulator(
+			MakeNoMetadataRowSource(leftSource, metadataSink),
+			leftOrdering),
+		right: makeStreamGroupAccumulator(
+			MakeNoMetadataRowSource(rightSource, metadataSink),
+			rightOrdering),
 	}, nil
 }
