@@ -518,11 +518,19 @@ func declareKeysEndTransaction(header roachpb.Header, req roachpb.Request, spans
 
 	if et.InternalCommitTrigger != nil {
 		if st := et.InternalCommitTrigger.SplitTrigger; st != nil {
-			// Splits read from the left side and write to the right side's
-			// RangeID spans and abort cache.
+			// Splits may read from the entire pre-split range and write to
+			// the right side's RangeID spans and abort cache.
+			// TODO(bdarnell): the only time we read from the right-hand
+			// side is when the existing stats contain estimates. We might
+			// be able to be smarter here and avoid declaring reads on RHS
+			// in most cases.
 			spans.Add(SpanReadOnly, roachpb.Span{
 				Key:    st.LeftDesc.StartKey.AsRawKey(),
-				EndKey: st.LeftDesc.EndKey.AsRawKey(),
+				EndKey: st.RightDesc.EndKey.AsRawKey(),
+			})
+			spans.Add(SpanReadOnly, roachpb.Span{
+				Key:    keys.MakeRangeKeyPrefix(st.LeftDesc.StartKey),
+				EndKey: keys.MakeRangeKeyPrefix(st.RightDesc.EndKey).PrefixEnd(),
 			})
 			leftRangeIDPrefix := keys.MakeRangeIDReplicatedPrefix(header.RangeID)
 			spans.Add(SpanReadOnly, roachpb.Span{
