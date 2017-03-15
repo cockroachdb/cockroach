@@ -243,14 +243,12 @@ func (rq *replicateQueue) processOneChange(
 
 	// Avoid taking action if the range has too many dead replicas to make
 	// quorum.
-	deadReplicas := rq.allocator.storePool.deadReplicas(desc.RangeID, desc.Replicas)
+	liveReplicas, deadReplicas := rq.allocator.storePool.liveAndDeadReplicas(desc.RangeID, desc.Replicas)
 	{
 		quorum := computeQuorum(len(desc.Replicas))
-		liveReplicaCount := len(desc.Replicas) - len(deadReplicas)
-		if liveReplicaCount < quorum {
+		if lr := len(liveReplicas); lr < quorum {
 			return false, errors.Errorf(
-				"range requires a replication change, but lacks a quorum of live replicas (%d/%d)",
-				liveReplicaCount, quorum)
+				"range requires a replication change, but lacks a quorum of live replicas (%d/%d)", lr, quorum)
 		}
 	}
 

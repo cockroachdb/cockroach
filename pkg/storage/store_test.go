@@ -128,7 +128,7 @@ func createTestStoreWithoutStart(t testing.TB, stopper *stop.Stopper, cfg *Store
 		log.AmbientContext{},
 		cfg.Gossip,
 		cfg.Clock,
-		StorePoolNodeLivenessTrue,
+		storePoolNodeLivenessLive,
 		TestTimeUntilStoreDeadOff,
 		/* deterministic */ false,
 	)

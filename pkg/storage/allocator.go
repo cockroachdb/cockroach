@@ -188,10 +188,9 @@ func MakeAllocator(
 	}
 }
 
-// ComputeAction determines the exact operation needed to repair the supplied
-// range, as governed by the supplied zone configuration. It returns the
-// required action that should be taken and a replica on which the action should
-// be performed.
+// ComputeAction determines the exact operation needed to repair the
+// supplied range, as governed by the supplied zone configuration. It
+// returns the required action that should be taken and a priority.
 func (a *Allocator) ComputeAction(
 	ctx context.Context, zone config.ZoneConfig, desc *roachpb.RangeDescriptor,
 ) (AllocatorAction, float64) {
@@ -214,18 +213,19 @@ func (a *Allocator) ComputeAction(
 		}
 		return AllocatorAdd, priority
 	}
-	deadReplicas := a.storePool.deadReplicas(desc.RangeID, desc.Replicas)
+	liveReplicas, deadReplicas := a.storePool.liveAndDeadReplicas(desc.RangeID, desc.Replicas)
 	if len(deadReplicas) > 0 {
 		// The range has dead replicas, which should be removed immediately.
 		// Adjust the priority by the number of dead replicas the range has.
 		quorum := computeQuorum(len(desc.Replicas))
-		liveReplicas := len(desc.Replicas) - len(deadReplicas)
-		priority := removeDeadReplicaPriority + float64(quorum-liveReplicas)
-		if log.V(3) {
-			log.Infof(ctx, "AllocatorRemoveDead - dead=%d, live=%d, quorum=%d, priority=%.2f",
-				len(deadReplicas), liveReplicas, quorum, priority)
+		if lr := len(liveReplicas); lr >= quorum {
+			priority := removeDeadReplicaPriority + float64(quorum-lr)
+			if log.V(3) {
+				log.Infof(ctx, "AllocatorRemoveDead - dead=%d, live=%d, quorum=%d, priority=%.2f",
+					len(deadReplicas), liveReplicas, quorum, priority)
+			}
+			return AllocatorRemoveDead, priority
 		}
-		return AllocatorRemoveDead, priority
 	}
 	if have > need {
 		// Range is over-replicated, and should remove a replica.
