@@ -14,7 +14,7 @@
 //
 // Author: Radu Berinde (radu@cockroachlabs.com)
 
-package sql_test
+package sql
 
 import (
 	"bytes"
@@ -25,6 +25,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -184,5 +185,32 @@ func TestScanBatches(t *testing.T) {
 
 	if _, err := db.Exec(`DROP TABLE test.scan`); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestKVLimitHint(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	testCases := []struct {
+		hardLimit int64
+		softLimit int64
+		filter    parser.TypedExpr
+		expected  int64
+	}{
+		{hardLimit: 0, softLimit: 0, filter: nil, expected: 0},
+		{hardLimit: 0, softLimit: 1, filter: nil, expected: 2},
+		{hardLimit: 0, softLimit: 23, filter: nil, expected: 46},
+		{hardLimit: 0, softLimit: 1, filter: parser.DBoolFalse, expected: 2},
+		{hardLimit: 1, softLimit: 0, filter: nil, expected: 1},
+		{hardLimit: 1, softLimit: 23, filter: nil, expected: 1},
+		{hardLimit: 5, softLimit: 23, filter: nil, expected: 5},
+		{hardLimit: 1, softLimit: 23, filter: parser.DBoolTrue, expected: 1},
+		{hardLimit: 1, softLimit: 23, filter: parser.DBoolFalse, expected: 2},
+	}
+	for _, tc := range testCases {
+		sn := scanNode{hardLimit: tc.hardLimit, softLimit: tc.softLimit, filter: tc.filter}
+		if limitHint := sn.limitHint(); limitHint != tc.expected {
+			t.Errorf("%+v: got %d", tc, limitHint)
+		}
 	}
 }
