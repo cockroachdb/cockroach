@@ -216,6 +216,14 @@ func NewSession(
 
 // Finish releases resources held by the Session.
 func (s *Session) Finish(e *Executor) {
+	if s.mon == (mon.MemoryMonitor{}) {
+		// This check won't catch the cases where Finish is never called, but it's
+		// proven to be easier to remember to call Finish than it is to call
+		// StartMonitor.
+		panic("session.Finish: session monitors were never initialized. Missing call " +
+			"to session.StartMonitor?")
+	}
+
 	// If we're inside a txn, roll it back.
 	if s.TxnState.State.kvTxnIsOpen() {
 		s.TxnState.updateStateAndCleanupOnErr(

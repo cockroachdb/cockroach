@@ -73,6 +73,14 @@ type migrationDescriptor struct {
 type runner struct {
 	db          db
 	sqlExecutor *sql.Executor
+	memMetrics  *sql.MemoryMetrics
+}
+
+func (r *runner) newRootSession(ctx context.Context) *sql.Session {
+	args := sql.SessionArgs{User: security.NodeUser}
+	s := sql.NewSession(ctx, args, r.sqlExecutor, nil, r.memMetrics)
+	s.StartUnlimitedMonitor()
+	return s
 }
 
 // leaseManager is defined just to allow us to use a fake client.LeaseManager
@@ -99,11 +107,17 @@ type Manager struct {
 	leaseManager leaseManager
 	db           db
 	sqlExecutor  *sql.Executor
+	memMetrics   *sql.MemoryMetrics
 }
 
 // NewManager initializes and returns a new Manager object.
 func NewManager(
-	stopper *stop.Stopper, db *client.DB, executor *sql.Executor, clock *hlc.Clock, clientID string,
+	stopper *stop.Stopper,
+	db *client.DB,
+	executor *sql.Executor,
+	clock *hlc.Clock,
+	memMetrics *sql.MemoryMetrics,
+	clientID string,
 ) *Manager {
 	opts := client.LeaseManagerOptions{
 		ClientID:      clientID,
@@ -114,6 +128,7 @@ func NewManager(
 		leaseManager: client.NewLeaseManager(db, clock, opts),
 		db:           db,
 		sqlExecutor:  executor,
+		memMetrics:   memMetrics,
 	}
 }
 
@@ -221,6 +236,7 @@ func (m *Manager) EnsureMigrations(ctx context.Context) error {
 	r := runner{
 		db:          m.db,
 		sqlExecutor: m.sqlExecutor,
+		memMetrics:  m.memMetrics,
 	}
 	for _, migration := range backwardCompatibleMigrations {
 		key := migrationKey(migration)
@@ -282,7 +298,7 @@ func eventlogUniqueIDDefault(ctx context.Context, r runner) error {
 	const alterStmt = "ALTER TABLE system.eventlog ALTER COLUMN uniqueID SET DEFAULT uuid_v4();"
 
 	// System tables can only be modified by a privileged internal user.
-	session := sql.NewSession(ctx, sql.SessionArgs{User: security.NodeUser}, r.sqlExecutor, nil, nil)
+	session := r.newRootSession(ctx)
 	defer session.Finish(r.sqlExecutor)
 
 	// Retry a limited number of times because returning an error and letting

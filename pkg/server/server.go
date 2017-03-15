@@ -816,7 +816,7 @@ func (s *Server) Start(ctx context.Context) error {
 	// We have to do this after actually starting up the server to be able to
 	// seamlessly use the kv client against other nodes in the cluster.
 	migMgr := migrations.NewManager(
-		s.stopper, s.db, s.sqlExecutor, s.clock, s.NodeID().String())
+		s.stopper, s.db, s.sqlExecutor, s.clock, &s.internalMemMetrics, s.NodeID().String())
 	if err := migMgr.EnsureMigrations(ctx); err != nil {
 		log.Fatal(ctx, err)
 	}
