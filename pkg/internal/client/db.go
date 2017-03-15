@@ -471,10 +471,14 @@ func (db *DB) Txn(ctx context.Context, retryable func(txn *Txn) error) error {
 	// method. Add a defered cancel.
 	txn := NewTxn(ctx, *db)
 	txn.SetDebugName("unnamed")
-	err := txn.Exec(TxnExecOptions{AutoRetry: true, AutoCommit: true},
-		func(txn *Txn, _ *TxnExecOptions) error {
-			return retryable(txn)
-		})
+	opts := TxnExecOptions{
+		AutoCommit:                 true,
+		AutoRetry:                  true,
+		AssignTimestampImmediately: true,
+	}
+	err := txn.Exec(opts, func(txn *Txn, _ *TxnExecOptions) error {
+		return retryable(txn)
+	})
 	if err != nil {
 		txn.CleanupOnError(err)
 	}
