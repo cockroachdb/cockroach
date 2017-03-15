@@ -17,6 +17,7 @@ package sql
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -40,7 +41,7 @@ type appStats struct {
 type stmtStats struct {
 	syncutil.Mutex
 
-	count int
+	data StatementStatistics
 }
 
 // StmtStatsEnable determines whether to collect per-statement
@@ -52,23 +53,69 @@ var StmtStatsEnable = envutil.EnvOrDefaultBool(
 	"COCKROACH_SQL_STMT_STATS_ENABLE", false,
 )
 
-func (a *appStats) recordStatement(stmt parser.Statement) {
+func (a *appStats) recordStatement(
+	stmt parser.Statement,
+	distSQLUsed bool,
+	automaticRetryCount int,
+	numRows int,
+	err error,
+	parseLat, planLat, runLat, execLat, ovhLat float64,
+) {
 	if a == nil || !StmtStatsEnable {
 		return
 	}
 
+	// Some statements like SET, SHOW etc are not useful to collect
+	// stats about. Ignore them.
 	if _, ok := stmt.(parser.HiddenFromStats); ok {
 		return
 	}
 
-	stmtKey := stmt.String()
+	// Extend the statement key with a character that indicated whether
+	// there was an error and/or whether the query was distributed, so
+	// that we use separate buckets for the different situations.
+	var buf bytes.Buffer
+	if err != nil {
+		buf.WriteByte('!')
+	}
+	if distSQLUsed {
+		buf.WriteByte('+')
+	}
+	parser.FormatNode(&buf, parser.FmtSimple, stmt)
+	stmtKey := buf.String()
 
+	// Get the statistics object.
 	s := a.getStatsForStmt(stmtKey)
 
 	// Collect the per-statement statistics.
 	s.Lock()
-	s.count++
+	s.data.Count++
+	if err != nil {
+		s.data.LastErr = err.Error()
+	}
+	if automaticRetryCount == 0 {
+		s.data.FirstAttemptCount++
+	} else if int64(automaticRetryCount) > s.data.MaxRetries {
+		s.data.MaxRetries = int64(automaticRetryCount)
+	}
+	s.data.NumRows.record(s.data.Count, float64(numRows))
+	s.data.ParseLat.record(s.data.Count, parseLat)
+	s.data.PlanLat.record(s.data.Count, planLat)
+	s.data.RunLat.record(s.data.Count, runLat)
+	s.data.ExecuteLat.record(s.data.Count, execLat)
+	s.data.OverheadLat.record(s.data.Count, ovhLat)
 	s.Unlock()
+}
+
+// Retrieve the variance of the values.
+func (l *NumericStat) getVariance(count int64) float64 {
+	return l.SquaredDiffs / (float64(count) - 1)
+}
+
+func (l *NumericStat) record(count int64, val float64) {
+	delta := val - l.Mean
+	l.Mean += delta / float64(count)
+	l.SquaredDiffs += delta * (val - l.Mean)
 }
 
 // getStatsForStmt retrieves the per-stmt stat object.
@@ -162,8 +209,13 @@ func dumpStmtStats(ctx context.Context, appName string, stats map[string]*stmtSt
 	fmt.Fprintf(&buf, "Statistics for %q:\n", appName)
 	for key, s := range stats {
 		s.Lock()
-		fmt.Fprintf(&buf, "%q: %d\n", key, s.count)
+		json, err := json.Marshal(s.data)
 		s.Unlock()
+		if err != nil {
+			log.Errorf(ctx, "error while marshaling stats for %q // %q: %v", appName, key, err)
+			continue
+		}
+		fmt.Fprintf(&buf, "%q: %s\n", key, json)
 	}
 	log.Info(ctx, buf.String())
 }

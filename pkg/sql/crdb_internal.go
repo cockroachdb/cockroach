@@ -262,9 +262,24 @@ CREATE TABLE crdb_internal.leases (
 var crdbInternalStmtStatsTable = virtualSchemaTable{
 	schema: `
 CREATE TABLE crdb_internal.statement_statistics (
-  APPLICATION_NAME STRING,
-  KEY              STRING,
-  COUNT            INT
+  APPLICATION_NAME    STRING NOT NULL,
+  KEY                 STRING NOT NULL,
+  COUNT               INT NOT NULL,
+  FIRST_ATTEMPT_COUNT INT NOT NULL,
+  MAX_RETRIES         INT NOT NULL,
+  LAST_ERROR          STRING,
+  ROWS_AVG            FLOAT NOT NULL,
+  ROWS_VAR            FLOAT NOT NULL,
+  PARSE_LAT_AVG       FLOAT NOT NULL,
+  PARSE_LAT_VAR       FLOAT NOT NULL,
+  PLAN_LAT_AVG        FLOAT NOT NULL,
+  PLAN_LAT_VAR        FLOAT NOT NULL,
+  RUN_LAT_AVG         FLOAT NOT NULL,
+  RUN_LAT_VAR         FLOAT NOT NULL,
+  EXEC_LAT_AVG        FLOAT NOT NULL,
+  EXEC_LAT_VAR        FLOAT NOT NULL,
+  OVERHEAD_LAT_AVG    FLOAT NOT NULL,
+  OVERHEAD_LAT_VAR    FLOAT NOT NULL
 );
 `,
 	populate: func(_ context.Context, p *planner, addRow func(...parser.Datum) error) error {
@@ -306,10 +321,29 @@ CREATE TABLE crdb_internal.statement_statistics (
 				s := appStats.getStatsForStmt(stmtKey)
 
 				s.Lock()
+				errString := parser.DNull
+				if s.data.LastErr != "" {
+					errString = parser.NewDString(s.data.LastErr)
+				}
 				err := addRow(
 					parser.NewDString(appName),
 					parser.NewDString(stmtKey),
-					parser.NewDInt(parser.DInt(int64(s.count))),
+					parser.NewDInt(parser.DInt(s.data.Count)),
+					parser.NewDInt(parser.DInt(s.data.FirstAttemptCount)),
+					parser.NewDInt(parser.DInt(s.data.MaxRetries)),
+					errString,
+					parser.NewDFloat(parser.DFloat(s.data.NumRows.Mean)),
+					parser.NewDFloat(parser.DFloat(s.data.NumRows.getVariance(s.data.Count))),
+					parser.NewDFloat(parser.DFloat(s.data.ParseLat.Mean)),
+					parser.NewDFloat(parser.DFloat(s.data.ParseLat.getVariance(s.data.Count))),
+					parser.NewDFloat(parser.DFloat(s.data.PlanLat.Mean)),
+					parser.NewDFloat(parser.DFloat(s.data.PlanLat.getVariance(s.data.Count))),
+					parser.NewDFloat(parser.DFloat(s.data.RunLat.Mean)),
+					parser.NewDFloat(parser.DFloat(s.data.RunLat.getVariance(s.data.Count))),
+					parser.NewDFloat(parser.DFloat(s.data.ExecuteLat.Mean)),
+					parser.NewDFloat(parser.DFloat(s.data.ExecuteLat.getVariance(s.data.Count))),
+					parser.NewDFloat(parser.DFloat(s.data.OverheadLat.Mean)),
+					parser.NewDFloat(parser.DFloat(s.data.OverheadLat.getVariance(s.data.Count))),
 				)
 				s.Unlock()
 				if err != nil {

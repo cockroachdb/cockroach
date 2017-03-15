@@ -1,0 +1,59 @@
+// Copyright 2017 The Cockroach Authors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+// implied. See the License for the specific language governing
+// permissions and limitations under the License.
+//
+
+syntax = "proto2";
+package cockroach.sql;
+option go_package = "sql";
+
+import "gogoproto/gogo.proto";
+
+// StatementStatistics holds the payload of sql.stmtStats.
+message StatementStatistics {
+  // Count is the total number of times this statement was executed
+  // since the begin of the reporting period.
+  optional int64 Count = 1  [(gogoproto.nullable) = false];
+
+  // FirstAttemptCount collects the total number of times a first
+  // attempt was executed (either the one time in explicitly committed
+  // statements, or the first time in implicitly committed statements
+  // with implicit retries).
+  // The proportion of statements that could be executed without retry
+  // can be computed as firstAttemptCount / count.
+  // The cumulative number of retries can be computed with
+  // count - firstAttemptCount.
+  optional int64 FirstAttemptCount = 2  [(gogoproto.nullable) = false];
+
+  // MaxRetries collects the maximum observed number of automatic
+  // retries in the reporting period.
+  optional int64 MaxRetries = 3  [(gogoproto.nullable) = false];
+
+  // LastError collects the last error encountered.
+  optional string LastErr = 4 [(gogoproto.nullable) = false];
+
+  // NumRows collects the number of rows returned or observed.
+  optional NumericStat NumRows = 5 [(gogoproto.nullable) = false];
+
+  // phase latencies.
+  optional NumericStat ParseLat = 6  [(gogoproto.nullable) = false];
+  optional NumericStat PlanLat	= 7  [(gogoproto.nullable) = false];
+  optional NumericStat RunLat	= 8  [(gogoproto.nullable) = false];
+  optional NumericStat ExecuteLat    = 9  [(gogoproto.nullable) = false];
+  optional NumericStat OverheadLat   = 10  [(gogoproto.nullable) = false];
+}
+
+message NumericStat {
+  optional double Mean = 1 [(gogoproto.nullable) = false];
+  optional double SquaredDiffs = 2 [(gogoproto.nullable) = false];
+}
