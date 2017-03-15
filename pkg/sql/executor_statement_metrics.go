@@ -77,8 +77,6 @@ func (e *Executor) recordStatementSummary(
 	result Result,
 	err error,
 ) {
-	planner.session.appStats.recordStatement(stmt)
-
 	phaseTimes := &planner.phaseTimes
 
 	// Compute the run latency. This is always recorded in the
@@ -96,34 +94,39 @@ func (e *Executor) recordStatementSummary(
 		}
 	}
 
-	// Conditionally report the other metrics.
-	// TODO(knz) #13968.
+	// Collect the statistics.
+	numRows := result.RowsAffected
+	if result.Type == parser.Rows {
+		numRows = result.Rows.Len()
+	}
+
+	runLat := runLatRaw.Seconds()
+
+	parseLat := phaseTimes[sessionEndParse].
+		Sub(phaseTimes[sessionStartParse]).Seconds()
+	planLat := phaseTimes[sessionEndLogicalPlan].
+		Sub(phaseTimes[sessionStartLogicalPlan]).Seconds()
+	// service latency: start to parse to end of run
+	svcLat := phaseTimes[sessionEndExecStmt].
+		Sub(phaseTimes[sessionStartParse]).Seconds()
+
+	// processing latency: contributing towards SQL results.
+	processingLat := parseLat + planLat + runLat
+
+	// overhead latency: txn/retry management, error checking, etc
+	execOverhead := svcLat - processingLat
+
+	planner.session.appStats.recordStatement(
+		stmt, distSQLUsed, automaticRetryCount, numRows, err,
+		parseLat, planLat, runLat, svcLat, execOverhead,
+	)
+
 	if log.V(2) {
-		runLat := runLatRaw.Seconds()
-
-		parseLat := phaseTimes[sessionEndParse].
-			Sub(phaseTimes[sessionStartParse]).Seconds()
-		planLat := phaseTimes[sessionEndLogicalPlan].
-			Sub(phaseTimes[sessionStartLogicalPlan]).Seconds()
-		// execution latency: start to parse to end of run
-		execLat := phaseTimes[sessionEndExecStmt].
-			Sub(phaseTimes[sessionStartParse]).Seconds()
-
-		// processing latency: the computing work towards SQL results
-		processingLat := parseLat + planLat + runLat
-		// overhead latency: txn/retry management, error checking, etc
-		execOverhead := execLat - processingLat
-
 		// ages since significant epochs
 		batchAge := phaseTimes[sessionEndExecStmt].
 			Sub(phaseTimes[sessionStartBatch]).Seconds()
 		sessionAge := phaseTimes[sessionEndExecStmt].
 			Sub(phaseTimes[sessionInit]).Seconds()
-
-		numRows := result.RowsAffected
-		if result.Type == parser.Rows {
-			numRows = result.Rows.Len()
-		}
 
 		log.Infof(planner.session.Ctx(),
 			"query stats: %d rows, %d retries, "+
@@ -133,10 +136,10 @@ func (e *Executor) recordStatementSummary(
 				"overhead %.2fµs (%.1f%%), "+
 				"batch age %.3fms, session age %.4fs",
 			numRows, automaticRetryCount,
-			parseLat*1e6, 100*parseLat/execLat,
-			planLat*1e6, 100*planLat/execLat,
-			runLat*1e6, 100*runLat/execLat,
-			execOverhead*1e6, 100*execOverhead/execLat,
+			parseLat*1e6, 100*parseLat/svcLat,
+			planLat*1e6, 100*planLat/svcLat,
+			runLat*1e6, 100*runLat/svcLat,
+			execOverhead*1e6, 100*execOverhead/svcLat,
 			batchAge*1000, sessionAge,
 		)
 	}
