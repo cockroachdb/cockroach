@@ -147,10 +147,12 @@ func evalImport(ctx context.Context, cArgs storage.CommandArgs) error {
 
 			// Update the range currently represented in this batch, as
 			// necessary.
-			if len(b.batchStartKey) == 0 {
-				b.batchStartKey = append(b.batchStartKey, key.Key...)
+			if len(b.batchStartKey) == 0 || bytes.Compare(key.Key, b.batchStartKey) < 0 {
+				b.batchStartKey = append(b.batchStartKey[:0], key.Key...)
 			}
-			b.batchEndKey = append(b.batchEndKey[:0], key.Key...)
+			if len(b.batchEndKey) == 0 || bytes.Compare(key.Key, b.batchEndKey) > 0 {
+				b.batchEndKey = append(b.batchEndKey[:0], key.Key...)
+			}
 
 			if b.batch.Len() > batchSizeBytes {
 				sendWriteBatch()
