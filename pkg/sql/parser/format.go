@@ -25,6 +25,7 @@ type fmtFlags struct {
 	showTypes        bool
 	ShowTableAliases bool
 	symbolicVars     bool
+	hideConstants    bool
 	// tableNameNormalizer will be called on all NormalizableTableNames if it is
 	// non-nil. Its results will be used if they are non-nil, or ignored if they
 	// are nil.
@@ -68,6 +69,13 @@ var FmtBareStrings FmtFlags = &fmtFlags{bareStrings: true}
 // can be parsed into an equivalent expression (useful for serialization of
 // expressions).
 var FmtParsable FmtFlags = &fmtFlags{disambiguateDatumTypes: true}
+
+// FmtHideConstants instructs the pretty-printer to produce a
+// representation that does not disclose query-specific data.
+var FmtHideConstants FmtFlags = &fmtFlags{
+	hideConstants:          true,
+	disambiguateDatumTypes: true,
+}
 
 // FmtNormalizeTableNames returns FmtFlags that instructs the pretty-printer
 // to normalize all table names using the provided function.
@@ -118,7 +126,7 @@ func FormatNode(buf *bytes.Buffer, f FmtFlags, n NodeFormatter) {
 	if f.showTypes {
 		if te, ok := n.(TypedExpr); ok {
 			buf.WriteByte('(')
-			n.Format(buf, f)
+			formatNodeOrHideConstants(buf, f, n)
 			buf.WriteString(")[")
 			if rt := te.ResolvedType(); rt == nil {
 				// An attempt is made to pretty-print an expression that was
@@ -133,7 +141,7 @@ func FormatNode(buf *bytes.Buffer, f FmtFlags, n NodeFormatter) {
 			return
 		}
 	}
-	n.Format(buf, f)
+	formatNodeOrHideConstants(buf, f, n)
 	if f.disambiguateDatumTypes {
 		var typ Type
 		if d, isDatum := n.(Datum); isDatum {
