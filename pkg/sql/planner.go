@@ -85,20 +85,69 @@ type planner struct {
 	noCopy util.NoCopy
 }
 
-// makePlanner creates a new planner instances, referencing a dummy Session.
-// Only use this internally where a Session cannot be created.
-func makePlanner(opName string) *planner {
+// noteworthyInternalMemoryUsageBytes is the minimum size tracked by each
+// internal SQL pool before the pool starts explicitly logging overall usage
+// growth in the log.
+var noteworthyInternalMemoryUsageBytes = envutil.EnvOrDefaultInt64("COCKROACH_NOTEWORTHY_INTERNAL_MEMORY_USAGE", 100*1024)
+
+// makePlanner creates a new planner instance, referencing a dummy session.
+// Do not use this function except in tests. If you need a planner without a
+// session, you should use makeInternalPlanner below.
+func makePlanner(opName string, user string, memMetrics *MemoryMetrics) *planner {
 	// init with an empty session. We can't leave this nil because too much code
 	// looks in the session for the current database.
 	ctx := log.WithLogTagStr(context.Background(), opName, "")
+
 	p := &planner{
 		session: &Session{
 			Location: time.UTC,
+			User:     user,
+			TxnState: txnState{Ctx: ctx},
 			context:  ctx,
 		},
 	}
-	p.session.TxnState.Ctx = ctx
+
+	p.session.mon = mon.MakeUnlimitedMonitor(ctx,
+		"internal-root",
+		memMetrics.CurBytesCount, memMetrics.MaxBytesHist,
+		noteworthyInternalMemoryUsageBytes)
+
+	p.session.sessionMon = mon.MakeMonitor("internal-session",
+		memMetrics.SessionCurBytesCount,
+		memMetrics.SessionMaxBytesHist,
+		-1, noteworthyInternalMemoryUsageBytes/5)
+	p.session.sessionMon.Start(ctx, &p.session.mon, mon.BoundAccount{})
+
+	p.session.TxnState.mon = mon.MakeMonitor("internal-txn",
+		memMetrics.TxnCurBytesCount,
+		memMetrics.TxnMaxBytesHist,
+		-1, noteworthyInternalMemoryUsageBytes/5)
+	p.session.TxnState.mon.Start(ctx, &p.session.mon, mon.BoundAccount{})
+
+	p.resetContexts()
 	return p
+}
+
+func makeInternalPlanner(
+	opName string, txn *client.Txn, user string, memMetrics *MemoryMetrics,
+) *planner {
+	p := makePlanner(opName, user, memMetrics)
+	p.setTxn(txn)
+
+	if txn.Proto().OrigTimestamp == (hlc.Timestamp{}) {
+		panic("makeInternalPlanner called with a transaction without timestamps")
+	}
+	ts := txn.Proto().OrigTimestamp.GoTime()
+	p.evalCtx.SetTxnTimestamp(ts)
+	p.evalCtx.SetStmtTimestamp(ts)
+
+	return p
+}
+
+func finishInternalPlanner(p *planner) {
+	p.session.TxnState.mon.Stop(p.session.context)
+	p.session.sessionMon.Stop(p.session.context)
+	p.session.mon.Stop(p.session.context)
 }
 
 // queryRunner abstracts the services provided by a planner object
@@ -253,45 +302,6 @@ func (p *planner) runShowTransactionState(
 		return result, err
 	}
 	return result, nil
-}
-
-// noteworthyInternalMemoryUsageBytes is the minimum size tracked by
-// each internal SQL pool before the pool start explicitly logging
-// overall usage growth in the log.
-var noteworthyInternalMemoryUsageBytes = envutil.EnvOrDefaultInt64("COCKROACH_NOTEWORTHY_INTERNAL_MEMORY_USAGE", 100*1024)
-
-func makeInternalPlanner(
-	opName string, txn *client.Txn, user string, memMetrics *MemoryMetrics,
-) *planner {
-	p := makePlanner(opName)
-	p.setTxn(txn)
-	p.resetContexts()
-	p.session.User = user
-
-	p.session.mon = mon.MakeUnlimitedMonitor(p.session.context,
-		"internal-root",
-		memMetrics.CurBytesCount, memMetrics.MaxBytesHist,
-		noteworthyInternalMemoryUsageBytes)
-
-	p.session.sessionMon = mon.MakeMonitor("internal-session",
-		memMetrics.SessionCurBytesCount,
-		memMetrics.SessionMaxBytesHist,
-		-1, noteworthyInternalMemoryUsageBytes/5)
-	p.session.sessionMon.Start(p.session.context, &p.session.mon, mon.BoundAccount{})
-
-	p.session.TxnState.mon = mon.MakeMonitor("internal-txn",
-		memMetrics.TxnCurBytesCount,
-		memMetrics.TxnMaxBytesHist,
-		-1, noteworthyInternalMemoryUsageBytes/5)
-	p.session.TxnState.mon.Start(p.session.context, &p.session.mon, mon.BoundAccount{})
-
-	return p
-}
-
-func finishInternalPlanner(p *planner) {
-	p.session.TxnState.mon.Stop(p.session.context)
-	p.session.sessionMon.Stop(p.session.context)
-	p.session.mon.Stop(p.session.context)
 }
 
 // resetForBatch implements the queryRunner interface.
