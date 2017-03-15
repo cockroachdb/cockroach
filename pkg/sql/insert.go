@@ -70,9 +70,9 @@ func (p *planner) Insert(
 			}
 		}
 		// TODO(dan): Support RETURNING in UPSERTs.
-		// TODO(nvanbenschoten): We will need to at least support RETURNING NOTHING.
-		if parser.HasReturningClause(n.Returning) {
-			return nil, fmt.Errorf("RETURNING is not supported with UPSERT")
+		if _, ok := n.Returning.(*parser.ReturningExprs); ok {
+			return nil, util.UnimplementedWithIssueErrorf(6637,
+				"RETURNING is not supported with UPSERT")
 		}
 	}
 
