@@ -457,24 +457,16 @@ func (db *DB) Run(ctx context.Context, b *Batch) error {
 	return sendAndFill(sendFn, b)
 }
 
-// Txn executes retryable in the context of a distributed transaction. The
-// transaction is automatically aborted if retryable returns any error aside
-// from recoverable internal errors, and is automatically committed
-// otherwise. The retryable function should have no side effects which could
-// cause problems in the event it must be run more than once.
-//
-// If you need more control over how the txn is executed, check out txn.Exec().
-func (db *DB) Txn(ctx context.Context, retryable func(txn *Txn) error) error {
+func (db *DB) txn(ctx context.Context, retryable func(txn *Txn) error, opts TxnExecOptions) error {
 	// TODO(radu): we should open a tracing Span here (we need to figure out how
 	// to use the correct tracer).
 	// TODO(dan): This context should, at longest, live for the lifetime of this
 	// method. Add a defered cancel.
 	txn := NewTxn(ctx, *db)
 	txn.SetDebugName("unnamed")
-	err := txn.Exec(TxnExecOptions{AutoRetry: true, AutoCommit: true},
-		func(txn *Txn, _ *TxnExecOptions) error {
-			return retryable(txn)
-		})
+	err := txn.Exec(opts, func(txn *Txn, _ *TxnExecOptions) error {
+		return retryable(txn)
+	})
 	if err != nil {
 		txn.CleanupOnError(err)
 	}
@@ -485,6 +477,27 @@ func (db *DB) Txn(ctx context.Context, retryable func(txn *Txn) error) error {
 		return errors.New(err.Error())
 	}
 	return err
+}
+
+// Txn executes retryable in the context of a distributed transaction. The
+// transaction is automatically aborted if retryable returns any error aside
+// from recoverable internal errors, and is automatically committed
+// otherwise. The retryable function should have no side effects which could
+// cause problems in the event it must be run more than once.
+//
+// If you need more control over how the txn is executed, check out txn.Exec().
+func (db *DB) Txn(ctx context.Context, retryable func(txn *Txn) error) error {
+	return db.txn(ctx, retryable, TxnExecOptions{AutoCommit: true, AutoRetry: true})
+}
+
+// TxnWithTimestamp is like Txn, but sets the `AssignTimestampImmediately` flag
+// on the transaction.
+func (db *DB) TxnWithTimestamp(ctx context.Context, retryable func(txn *Txn) error) error {
+	return db.txn(ctx, retryable, TxnExecOptions{
+		AutoCommit:                 true,
+		AutoRetry:                  true,
+		AssignTimestampImmediately: true,
+	})
 }
 
 // send runs the specified calls synchronously in a single batch and returns

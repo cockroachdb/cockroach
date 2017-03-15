@@ -25,6 +25,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/pkg/errors"
@@ -109,7 +110,8 @@ VALUES(
 		s.metrics.RangeRemoves.Inc(1)
 	}
 
-	rows, err := s.cfg.SQLExecutor.ExecuteStatementInTransaction(ctx, "log-range-event", txn, insertEventTableStmt, args...)
+	rows, err := s.cfg.QueryRunnerFactory.MakeQueryRunner("log-range-event", txn, security.RootUser).Exec(
+		ctx, insertEventTableStmt, args...)
 	if err != nil {
 		return err
 	}

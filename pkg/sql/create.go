@@ -96,9 +96,9 @@ func (n *createDatabaseNode) Start(ctx context.Context) error {
 	if created {
 		// Log Create Database event. This is an auditable log event and is
 		// recorded in the same transaction as the table descriptor update.
-		if err := MakeEventLogger(n.p.leaseMgr).InsertEventRecord(
+		if err := InsertEventRecord(
 			ctx,
-			n.p.txn,
+			n.p,
 			EventLogCreateDatabase,
 			int32(desc.ID),
 			int32(n.p.evalCtx.NodeID),
@@ -205,9 +205,9 @@ func (n *createIndexNode) Start(ctx context.Context) error {
 	// Record index creation in the event log. This is an auditable log
 	// event and is recorded in the same transaction as the table descriptor
 	// update.
-	if err := MakeEventLogger(n.p.leaseMgr).InsertEventRecord(
+	if err := InsertEventRecord(
 		ctx,
-		n.p.txn,
+		n.p,
 		EventLogCreateIndex,
 		int32(n.tableDesc.ID),
 		int32(n.p.evalCtx.NodeID),
@@ -281,11 +281,8 @@ func (n *createUserNode) Start(ctx context.Context) error {
 
 	normalizedUsername := n.n.Name.Normalize()
 
-	internalExecutor := InternalExecutor{LeaseManager: n.p.leaseMgr}
-	rowsAffected, err := internalExecutor.ExecuteStatementInTransaction(
+	rowsAffected, err := n.p.Exec(
 		ctx,
-		"create-user",
-		n.p.txn,
 		"INSERT INTO system.users VALUES ($1, $2);",
 		normalizedUsername,
 		hashedPassword,
@@ -457,9 +454,9 @@ func (n *createViewNode) Start(ctx context.Context) error {
 
 	// Log Create View event. This is an auditable log event and is
 	// recorded in the same transaction as the table descriptor update.
-	if err := MakeEventLogger(n.p.leaseMgr).InsertEventRecord(
+	if err := InsertEventRecord(
 		ctx,
-		n.p.txn,
+		n.p,
 		EventLogCreateView,
 		int32(desc.ID),
 		int32(n.p.evalCtx.NodeID),
@@ -647,9 +644,9 @@ func (n *createTableNode) Start(ctx context.Context) error {
 
 	// Log Create Table event. This is an auditable log event and is
 	// recorded in the same transaction as the table descriptor update.
-	if err := MakeEventLogger(n.p.leaseMgr).InsertEventRecord(
+	if err := InsertEventRecord(
 		ctx,
-		n.p.txn,
+		n.p,
 		EventLogCreateTable,
 		int32(desc.ID),
 		int32(n.p.evalCtx.NodeID),

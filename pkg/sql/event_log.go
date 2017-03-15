@@ -19,12 +19,10 @@ package sql
 
 import (
 	"encoding/json"
-	"time"
 
 	"golang.org/x/net/context"
 
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/pkg/errors"
 )
@@ -71,31 +69,18 @@ const (
 	EventLogNodeRestart EventLogType = "node_restart"
 )
 
-// An EventLogger exposes methods used to record events to the event table.
-type EventLogger struct {
-	InternalExecutor
-}
-
-// MakeEventLogger constructs a new EventLogger. A LeaseManager is required in
-// order to correctly execute SQL statements.
-func MakeEventLogger(leaseMgr *LeaseManager) EventLogger {
-	return EventLogger{InternalExecutor{
-		LeaseManager: leaseMgr,
-	}}
-}
-
 // InsertEventRecord inserts a single event into the event log as part of the
 // provided transaction.
-func (ev EventLogger) InsertEventRecord(
+func InsertEventRecord(
 	ctx context.Context,
-	txn *client.Txn,
+	runner sqlutil.QueryRunner,
 	eventType EventLogType,
 	targetID, reportingID int32,
 	info interface{},
 ) error {
 	// Record event record insertion in local log output.
-	txn.AddCommitTrigger(func() {
-		log.Infof(txn.Context, "Event: %q, target: %d, info: %+v",
+	runner.Txn().AddCommitTrigger(func() {
+		log.Infof(runner.Txn().Context, "Event: %q, target: %d, info: %+v",
 			eventType,
 			targetID,
 			info)
@@ -106,11 +91,10 @@ INSERT INTO system.eventlog (
   timestamp, eventType, targetID, reportingID, info
 )
 VALUES(
-  $1, $2, $3, $4, $5
+  now(), $1, $2, $3, $4
 )
 `
 	args := []interface{}{
-		ev.selectEventTimestamp(txn.Proto().Timestamp),
 		eventType,
 		targetID,
 		reportingID,
@@ -121,11 +105,10 @@ VALUES(
 		if err != nil {
 			return err
 		}
-		args[4] = string(infoBytes)
+		args[3] = string(infoBytes)
 	}
 
-	rows, err := ev.ExecuteStatementInTransaction(
-		ctx, "log-event", txn, insertEventTableStmt, args...)
+	rows, err := runner.ExecAsRoot(ctx, insertEventTableStmt, args...)
 	if err != nil {
 		return err
 	}
@@ -133,19 +116,4 @@ VALUES(
 		return errors.Errorf("%d rows affected by log insertion; expected exactly one row affected.", rows)
 	}
 	return nil
-}
-
-// selectEventTimestamp selects a timestamp for this log message. If the
-// transaction this event is being written in has a non-zero timestamp, then that
-// timestamp should be used; otherwise, the store's physical clock is used.
-// This helps with testing; in normal usage, the logging of an event will never
-// be the first action in the transaction, and thus the transaction will have an
-// assigned database timestamp. However, in the case of our tests log events
-// *are* the first action in a transaction, and we must elect to use the store's
-// physical time instead.
-func (ev EventLogger) selectEventTimestamp(input hlc.Timestamp) time.Time {
-	if input == (hlc.Timestamp{}) {
-		return ev.LeaseManager.clock.PhysicalTime()
-	}
-	return input.GoTime()
 }

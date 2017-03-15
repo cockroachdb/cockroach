@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -212,7 +213,7 @@ func (s LeaseStore) Acquire(
 		defer finishInternalPlanner(p)
 		const insertLease = `INSERT INTO system.lease (descID, version, nodeID, expiration) ` +
 			`VALUES ($1, $2, $3, $4)`
-		count, err := p.exec(ctx, insertLease, lease.ID, int(lease.Version), nodeID, &lease.expiration)
+		count, err := p.Exec(ctx, insertLease, lease.ID, int(lease.Version), nodeID, &lease.expiration)
 		if err != nil {
 			return err
 		}
@@ -241,7 +242,7 @@ func (s LeaseStore) Release(ctx context.Context, stopper *stop.Stopper, lease *L
 			defer finishInternalPlanner(p)
 			const deleteLease = `DELETE FROM system.lease ` +
 				`WHERE (descID, version, nodeID, expiration) = ($1, $2, $3, $4)`
-			count, err := p.exec(
+			count, err := p.Exec(
 				ctx, deleteLease, lease.ID, int(lease.Version), nodeID, &lease.expiration)
 			if err != nil {
 				return err
@@ -319,7 +320,7 @@ func (s LeaseStore) Publish(
 	ctx context.Context,
 	tableID sqlbase.ID,
 	update func(*sqlbase.TableDescriptor) error,
-	logEvent func(*client.Txn) error,
+	logEvent func(sqlutil.QueryRunner) error,
 ) (*sqlbase.Descriptor, error) {
 	errLeaseVersionChanged := errors.New("lease version changed")
 	// Retry while getting errLeaseVersionChanged.
@@ -387,7 +388,9 @@ func (s LeaseStore) Publish(
 				if err := txn.Run(b); err != nil {
 					return err
 				}
-				if err := logEvent(txn); err != nil {
+				runner := MakeQueryRunner("lease-log-event", txn, security.RootUser, s.memMetrics)
+				defer runner.Close()
+				if err := logEvent(runner); err != nil {
 					return err
 				}
 				return txn.Commit()

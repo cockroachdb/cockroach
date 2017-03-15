@@ -82,7 +82,7 @@ const (
 
 // checkDBExists checks if the database exists by using the security.RootUser.
 func checkDBExists(ctx context.Context, p *planner, db string) error {
-	values, err := p.queryRowsAsRoot(ctx, checkSchemaQuery, db)
+	values, err := p.QueryRowsAsRoot(ctx, checkSchemaQuery, db)
 	if err != nil {
 		return err
 	}
@@ -94,7 +94,7 @@ func checkDBExists(ctx context.Context, p *planner, db string) error {
 
 // checkTableExists checks if the table exists by using the security.RootUser.
 func checkTableExists(ctx context.Context, p *planner, tn *parser.TableName) error {
-	values, err := p.queryRowsAsRoot(ctx, checkTableQuery, tn.Database(), tn.Table())
+	values, err := p.QueryRowsAsRoot(ctx, checkTableQuery, tn.Database(), tn.Table())
 	if err != nil {
 		return err
 	}
@@ -114,7 +114,7 @@ func checkTablePrivileges(ctx context.Context, p *planner, tn *parser.TableName)
 		return nil
 	}
 
-	values, err := p.queryRowsAsRoot(
+	values, err := p.QueryRowsAsRoot(
 		ctx, checkTablePrivilegesQuery, tn.Database(), tn.Table(), p.session.User)
 	if err != nil {
 		return err
@@ -148,7 +148,7 @@ func queryInfoSchema(
 ) (*valuesNode, error) {
 	v := p.newContainerValuesNode(columns, 0)
 	if err := runInDB(p, db, func() error {
-		rows, err := p.queryRows(ctx, sql, args...)
+		rows, err := p.QueryRows(ctx, sql, args...)
 		if err != nil {
 			return err
 		}
@@ -584,7 +584,7 @@ func (p *planner) ShowGrants(ctx context.Context, n *parser.ShowGrants) (planNod
 			v := p.newContainerValuesNode(columns, 0)
 
 			queryFn := func(sql string, args ...interface{}) error {
-				rows, err := p.queryRows(ctx, sql, args...)
+				rows, err := p.QueryRows(ctx, sql, args...)
 				if err != nil {
 					return err
 				}

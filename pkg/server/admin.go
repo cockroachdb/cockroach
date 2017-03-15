@@ -464,12 +464,11 @@ func (s *adminServer) TableDetails(
 	// Get the number of ranges in the table. We get the key span for the table
 	// data. Then, we count the number of ranges that make up that key span.
 	{
-		iexecutor := sql.InternalExecutor{LeaseManager: s.server.leaseMgr}
 		var tableSpan roachpb.Span
 		if err := s.server.db.Txn(ctx, func(txn *client.Txn) error {
 			var err error
-			tableSpan, err = iexecutor.GetTableSpan(
-				ctx, s.getUser(req), txn, req.Database, req.Table,
+			tableSpan, err = sql.GetTableSpan(
+				ctx, s.getUser(req), txn, req.Database, req.Table, &s.server.internalMemMetrics,
 			)
 			return err
 		}); err != nil {
@@ -535,10 +534,11 @@ func (s *adminServer) TableStats(
 
 	// Get table span.
 	var tableSpan roachpb.Span
-	iexecutor := sql.InternalExecutor{LeaseManager: s.server.leaseMgr}
 	if err := s.server.db.Txn(ctx, func(txn *client.Txn) error {
 		var err error
-		tableSpan, err = iexecutor.GetTableSpan(ctx, s.getUser(req), txn, req.Database, req.Table)
+		tableSpan, err = sql.GetTableSpan(
+			ctx, s.getUser(req), txn, req.Database, req.Table, &s.server.internalMemMetrics,
+		)
 		return err
 	}); err != nil {
 		return nil, s.serverError(err)

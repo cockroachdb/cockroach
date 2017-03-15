@@ -325,8 +325,8 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		MetricsSampleInterval:          s.cfg.MetricsSampleInterval,
 		HistogramWindowInterval:        s.cfg.HistogramWindowInterval(),
 		StorePool:                      s.storePool,
-		SQLExecutor: sql.InternalExecutor{
-			LeaseManager: s.leaseMgr,
+		QueryRunnerFactory: sql.QueryRunnerFactory{
+			MemMetrics: &s.internalMemMetrics,
 		},
 		LogRangeEvents:            s.cfg.EventLogEnabled,
 		RangeLeaseActiveDuration:  active,
@@ -346,7 +346,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	s.runtime = status.MakeRuntimeStatSampler(s.clock)
 	s.registry.AddMetricStruct(s.runtime)
 
-	s.node = NewNode(storeCfg, s.recorder, s.registry, s.stopper, txnMetrics, sql.MakeEventLogger(s.leaseMgr))
+	s.node = NewNode(storeCfg, s.recorder, s.registry, s.stopper, txnMetrics, &s.internalMemMetrics)
 	roachpb.RegisterInternalServer(s.grpc, s.node)
 	storage.RegisterConsistencyServer(s.grpc, s.node.storesServer)
 	storage.RegisterFreezeServer(s.grpc, s.node.storesServer)
@@ -816,7 +816,7 @@ func (s *Server) Start(ctx context.Context) error {
 	// We have to do this after actually starting up the server to be able to
 	// seamlessly use the kv client against other nodes in the cluster.
 	migMgr := migrations.NewManager(
-		s.stopper, s.db, s.sqlExecutor, s.clock, s.NodeID().String())
+		s.stopper, s.db, s.sqlExecutor, s.clock, s.NodeID().String(), &s.internalMemMetrics)
 	if err := migMgr.EnsureMigrations(ctx); err != nil {
 		log.Fatal(ctx, err)
 	}
