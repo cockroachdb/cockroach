@@ -538,7 +538,7 @@ func (l *LocalCluster) startNode(ctx context.Context, node *testNode) {
   ui:        %[2]s
   trace:     %[2]s/debug/requests
   logs:      %[3]s/cockroach.INFO
-  pprof:     docker exec -it %[4]s /bin/bash -c 'go tool pprof /cockroach <(wget --no-check-certificate -qO- https://$(hostname):%[5]s/debug/pprof/heap)'
+  pprof:     docker exec -it %[4]s pprof https+insecure://$(hostname):%[5]s/debug/pprof/heap
   cockroach: %[6]s
 
   cli-env:   COCKROACH_INSECURE=false COCKROACH_CA_CERT=%[7]s/ca.crt COCKROACH_CERT=%[7]s/node.crt COCKROACH_KEY=%[7]s/node.key COCKROACH_HOST=%s COCKROACH_PORT=%d`,
