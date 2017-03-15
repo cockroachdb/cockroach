@@ -1,0 +1,70 @@
+// Copyright 2017 The Cockroach Authors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+// implied. See the License for the specific language governing
+// permissions and limitations under the License.
+//
+
+syntax = "proto2";
+package cockroach.sql;
+option go_package = "sql";
+
+import "gogoproto/gogo.proto";
+
+message StatementStatistics {
+  // Count is the total number of times this statement was executed
+  // since the begin of the reporting period.
+  optional int64 count = 1 [(gogoproto.nullable) = false];
+
+  // FirstAttemptCount collects the total number of times a first
+  // attempt was executed (either the one time in explicitly committed
+  // statements, or the first time in implicitly committed statements
+  // with implicit retries).
+  // The proportion of statements that could be executed without retry
+  // can be computed as FirstAttemptCount / Count.
+  // The cumulative number of retries can be computed with
+  // Count - FirstAttemptCount.
+  optional int64 first_attempt_count = 2 [(gogoproto.nullable) = false];
+
+  // MaxRetries collects the maximum observed number of automatic
+  // retries in the reporting period.
+  optional int64 max_retries = 3 [(gogoproto.nullable) = false];
+
+  // LastErr collects the last error encountered.
+  optional string last_err = 4 [(gogoproto.nullable) = false];
+
+  // NumRows collects the number of rows returned or observed.
+  optional NumericStat num_rows = 5 [(gogoproto.nullable) = false];
+
+  // Phase latencies:
+
+  // ParseLat is the time to transform the SQL string into an AST.
+  optional NumericStat parse_lat = 6 [(gogoproto.nullable) = false];
+
+  // PlanLat is the time to transform the AST into a logical query plan.
+  optional NumericStat plan_lat = 7 [(gogoproto.nullable) = false];
+
+  // RunLat is the time to run the query and fetch/compute the result rows.
+  optional NumericStat run_lat = 8 [(gogoproto.nullable) = false];
+
+  // ServiceLat is the time to service the query, from start of parse to end of execute.
+  optional NumericStat service_lat = 9 [(gogoproto.nullable) = false];
+
+  // OverheadLat is the difference between ServiceLat and the sum of parse+plan+run latencies.
+  // We store it separately (as opposed to computing it post-hoc) because the combined
+  // variance for the overhead cannot be derived from the variance of the separate latencies.
+  optional NumericStat overhead_lat = 10 [(gogoproto.nullable) = false];
+}
+
+message NumericStat {
+  optional double mean = 1 [(gogoproto.nullable) = false];
+  optional double squared_diffs = 2 [(gogoproto.nullable) = false];
+}
