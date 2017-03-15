@@ -177,9 +177,6 @@ type Session struct {
 	sqlStats *sqlStats
 	// appStats track per-application SQL usage statistics.
 	appStats *appStats
-	// phaseTimes contains helps measure the time spent in each phase of
-	// SQL execution. See executor_statement_metrics.go for details.
-	phaseTimes phaseTimes
 
 	// noCopy is placed here to guarantee that Session objects are not
 	// copied.
@@ -214,10 +211,10 @@ func NewSession(
 		memMetrics:     memMetrics,
 		sqlStats:       &e.sqlStats,
 	}
-	s.phaseTimes[sessionInit] = timeutil.Now()
 	s.planner = planner{
 		session: s,
 	}
+	s.planner.phaseTimes[sessionInit] = timeutil.Now()
 	s.resetApplicationName(args.ApplicationName)
 	s.PreparedStatements = makePreparedStatements(s)
 	s.PreparedPortals = makePreparedPortals(s)

@@ -70,16 +70,16 @@ type phaseTimes [sessionNumPhases]time.Time
 // - result is the result set computed by the query/statement.
 // - err is the error encountered, if any.
 func (e *Executor) recordStatementSummary(
-	session *Session,
+	planner *planner,
 	stmt parser.Statement,
 	distSQLUsed bool,
 	automaticRetryCount int,
 	result Result,
 	err error,
 ) {
-	session.appStats.recordStatement()
+	planner.session.appStats.recordStatement()
 
-	phaseTimes := &session.phaseTimes
+	phaseTimes := &planner.phaseTimes
 
 	// Compute the run latency. This is always recorded in the
 	// server metrics.
@@ -125,7 +125,7 @@ func (e *Executor) recordStatementSummary(
 			numRows = result.Rows.Len()
 		}
 
-		log.Infof(session.Ctx(),
+		log.Infof(planner.session.Ctx(),
 			"query stats: %d rows, %d retries, "+
 				"parse %.2fµs (%.1f%%), "+
 				"plan %.2fµs (%.1f%%), "+

@@ -484,7 +484,7 @@ func (e *Executor) ExecuteStatements(
 ) StatementResults {
 	session.planner.resetForBatch(e)
 	session.planner.semaCtx.Placeholders.Assign(pinfo)
-	session.phaseTimes[sessionStartBatch] = timeutil.Now()
+	session.planner.phaseTimes[sessionStartBatch] = timeutil.Now()
 
 	defer func() {
 		if r := recover(); r != nil {
@@ -557,7 +557,7 @@ func (e *Executor) execRequest(session *Session, sql string, copymsg copyMsg) St
 		log.Infof(session.Ctx(), "execRequest: %s", sql)
 	}
 
-	session.phaseTimes[sessionStartParse] = timeutil.Now()
+	planMaker.phaseTimes[sessionStartParse] = timeutil.Now()
 	if session.copyFrom != nil {
 		stmts, err = session.planner.ProcessCopyData(session.Ctx(), sql, copymsg)
 	} else if copymsg != copyMsgNone {
@@ -565,7 +565,7 @@ func (e *Executor) execRequest(session *Session, sql string, copymsg copyMsg) St
 	} else {
 		stmts, err = planMaker.parser.Parse(sql, session.Syntax)
 	}
-	session.phaseTimes[sessionEndParse] = timeutil.Now()
+	planMaker.phaseTimes[sessionEndParse] = timeutil.Now()
 
 	if err != nil {
 		if log.V(2) {
@@ -1066,7 +1066,7 @@ func (e *Executor) execStmtInOpenTxn(
 	session := planMaker.session
 	log.Eventf(session.context, "%s", stmt)
 
-	session.phaseTimes[sessionStartExecStmt] = timeutil.Now()
+	planMaker.phaseTimes[sessionStartExecStmt] = timeutil.Now()
 	planMaker.evalCtx.SetTxnTimestamp(txnState.sqlTimestamp)
 	planMaker.evalCtx.SetStmtTimestamp(e.cfg.Clock.PhysicalTime())
 
@@ -1390,10 +1390,7 @@ func (e *Executor) execStmt(
 ) (Result, error) {
 	session := planMaker.session
 
-	session.phaseTimes[sessionStartLogicalPlan] = timeutil.Now()
 	plan, err := planMaker.makePlan(session.Ctx(), stmt, autoCommit)
-	session.phaseTimes[sessionEndLogicalPlan] = timeutil.Now()
-
 	if err != nil {
 		return Result{}, err
 	}
@@ -1419,15 +1416,15 @@ func (e *Executor) execStmt(
 		return result, err
 	}
 
-	session.phaseTimes[sessionStartExecStmt] = timeutil.Now()
+	planMaker.phaseTimes[sessionStartExecStmt] = timeutil.Now()
 	if useDistSQL {
 		err = e.execDistSQL(planMaker, plan, &result)
 	} else {
 		err = e.execClassic(planMaker, plan, &result)
 	}
-	session.phaseTimes[sessionEndExecStmt] = timeutil.Now()
+	planMaker.phaseTimes[sessionEndExecStmt] = timeutil.Now()
 	e.recordStatementSummary(
-		session, stmt, useDistSQL, automaticRetryCount, result, err,
+		planMaker, stmt, useDistSQL, automaticRetryCount, result, err,
 	)
 	return result, err
 }

@@ -21,6 +21,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/pkg/errors"
 )
@@ -200,6 +201,9 @@ var _ planNode = &windowNode{}
 func (p *planner) makePlan(
 	ctx context.Context, stmt parser.Statement, autoCommit bool,
 ) (planNode, error) {
+	p.phaseTimes[sessionStartLogicalPlan] = timeutil.Now()
+	defer func() { p.phaseTimes[sessionEndLogicalPlan] = timeutil.Now() }()
+
 	plan, err := p.newPlan(ctx, stmt, nil, autoCommit)
 	if err != nil {
 		return nil, err
