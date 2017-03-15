@@ -26,14 +26,14 @@ import (
 	"strings"
 	"unicode"
 
+	"github.com/lib/pq/oid"
+	"github.com/pkg/errors"
 	"golang.org/x/net/context"
+	"golang.org/x/text/collate"
 
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/lib/pq/oid"
-	"github.com/pkg/errors"
-	"golang.org/x/text/collate"
 )
 
 var (
@@ -113,28 +113,26 @@ CREATE TABLE pg_catalog.pg_attrdef (
 	adsrc STRING
 );
 `,
-	populate: func(_ context.Context, p *planner, addRow func(...parser.Datum) error) error {
+	populate: func(ctx context.Context, p *planner, addRow func(...parser.Datum) error) error {
 		h := makeOidHasher()
-		return forEachTableDesc(p,
-			func(db *sqlbase.DatabaseDescriptor, table *sqlbase.TableDescriptor) error {
-				colNum := 0
-				return forEachColumnInTable(table, func(column *sqlbase.ColumnDescriptor) error {
-					colNum++
-					if column.DefaultExpr == nil {
-						// pg_attrdef only expects rows for columns with default values.
-						return nil
-					}
-					defSrc := parser.NewDString(*column.DefaultExpr)
-					return addRow(
-						h.ColumnOid(db, table, column),      // oid
-						h.TableOid(db, table),               // adrelid
-						parser.NewDInt(parser.DInt(colNum)), // adnum
-						defSrc, // adbin
-						defSrc, // adsrc
-					)
-				})
-			},
-		)
+		return forEachTableDesc(ctx, p, func(db *sqlbase.DatabaseDescriptor, table *sqlbase.TableDescriptor) error {
+			colNum := 0
+			return forEachColumnInTable(table, func(column *sqlbase.ColumnDescriptor) error {
+				colNum++
+				if column.DefaultExpr == nil {
+					// pg_attrdef only expects rows for columns with default values.
+					return nil
+				}
+				defSrc := parser.NewDString(*column.DefaultExpr)
+				return addRow(
+					h.ColumnOid(db, table, column),      // oid
+					h.TableOid(db, table),               // adrelid
+					parser.NewDInt(parser.DInt(colNum)), // adnum
+					defSrc, // adbin
+					defSrc, // adsrc
+				)
+			})
+		})
 	},
 }
 
@@ -165,61 +163,59 @@ CREATE TABLE pg_catalog.pg_attribute (
 	attfdwoptions STRING
 );
 `,
-	populate: func(_ context.Context, p *planner, addRow func(...parser.Datum) error) error {
+	populate: func(ctx context.Context, p *planner, addRow func(...parser.Datum) error) error {
 		h := makeOidHasher()
-		return forEachTableDesc(p,
-			func(db *sqlbase.DatabaseDescriptor, table *sqlbase.TableDescriptor) error {
-				// addColumn adds adds either a table or a index column to the pg_attribute table.
-				addColumn := func(column *sqlbase.ColumnDescriptor, attRelID parser.Datum, colNum int) error {
-					colTyp := column.Type.ToDatumType()
-					return addRow(
-						attRelID,                            // attrelid
-						parser.NewDName(column.Name),        // attname
-						typOid(colTyp),                      // atttypid
-						zeroVal,                             // attstattarget
-						typLen(colTyp),                      // attlen
-						parser.NewDInt(parser.DInt(colNum)), // attnum
-						zeroVal,      // attndims
-						negOneVal,    // attcacheoff
-						negOneVal,    // atttypmod
-						parser.DNull, // attbyval (see pg_type.typbyval)
-						parser.DNull, // attstorage
-						parser.DNull, // attalign
-						parser.MakeDBool(parser.DBool(!column.Nullable)),          // attnotnull
-						parser.MakeDBool(parser.DBool(column.DefaultExpr != nil)), // atthasdef
-						parser.MakeDBool(false),                                   // attisdropped
-						parser.MakeDBool(true),                                    // attislocal
-						zeroVal,                                                   // attinhcount
-						typColl(colTyp, h),                                        // attcollation
-						parser.DNull,                                              // attacl
-						parser.DNull,                                              // attoptions
-						parser.DNull,                                              // attfdwoptions
-					)
-				}
+		return forEachTableDesc(ctx, p, func(db *sqlbase.DatabaseDescriptor, table *sqlbase.TableDescriptor) error {
+			// addColumn adds adds either a table or a index column to the pg_attribute table.
+			addColumn := func(column *sqlbase.ColumnDescriptor, attRelID parser.Datum, colNum int) error {
+				colTyp := column.Type.ToDatumType()
+				return addRow(
+					attRelID,                            // attrelid
+					parser.NewDName(column.Name),        // attname
+					typOid(colTyp),                      // atttypid
+					zeroVal,                             // attstattarget
+					typLen(colTyp),                      // attlen
+					parser.NewDInt(parser.DInt(colNum)), // attnum
+					zeroVal,      // attndims
+					negOneVal,    // attcacheoff
+					negOneVal,    // atttypmod
+					parser.DNull, // attbyval (see pg_type.typbyval)
+					parser.DNull, // attstorage
+					parser.DNull, // attalign
+					parser.MakeDBool(parser.DBool(!column.Nullable)),          // attnotnull
+					parser.MakeDBool(parser.DBool(column.DefaultExpr != nil)), // atthasdef
+					parser.MakeDBool(false),                                   // attisdropped
+					parser.MakeDBool(true),                                    // attislocal
+					zeroVal,                                                   // attinhcount
+					typColl(colTyp, h),                                        // attcollation
+					parser.DNull,                                              // attacl
+					parser.DNull,                                              // attoptions
+					parser.DNull,                                              // attfdwoptions
+				)
+			}
 
-				// Columns for table.
+			// Columns for table.
+			colNum := 0
+			if err := forEachColumnInTable(table, func(column *sqlbase.ColumnDescriptor) error {
+				colNum++
+				tableID := h.TableOid(db, table)
+				return addColumn(column, tableID, colNum)
+			}); err != nil {
+				return err
+			}
+
+			// Columns for each index.
+			return forEachIndexInTable(table, func(index *sqlbase.IndexDescriptor) error {
 				colNum := 0
-				if err := forEachColumnInTable(table, func(column *sqlbase.ColumnDescriptor) error {
-					colNum++
-					tableID := h.TableOid(db, table)
-					return addColumn(column, tableID, colNum)
-				}); err != nil {
-					return err
-				}
-
-				// Columns for each index.
-				return forEachIndexInTable(table, func(index *sqlbase.IndexDescriptor) error {
-					colNum := 0
-					return forEachColumnInIndex(table, index,
-						func(column *sqlbase.ColumnDescriptor) error {
-							colNum++
-							idxID := h.IndexOid(db, table, index)
-							return addColumn(column, idxID, colNum)
-						},
-					)
-				})
-			},
-		)
+				return forEachColumnInIndex(table, index,
+					func(column *sqlbase.ColumnDescriptor) error {
+						colNum++
+						idxID := h.IndexOid(db, table, index)
+						return addColumn(column, idxID, colNum)
+					},
+				)
+			})
+		})
 	},
 }
 
@@ -261,80 +257,78 @@ CREATE TABLE pg_catalog.pg_class (
 	reloptions STRING
 );
 `,
-	populate: func(_ context.Context, p *planner, addRow func(...parser.Datum) error) error {
+	populate: func(ctx context.Context, p *planner, addRow func(...parser.Datum) error) error {
 		h := makeOidHasher()
-		return forEachTableDesc(p,
-			func(db *sqlbase.DatabaseDescriptor, table *sqlbase.TableDescriptor) error {
-				// Table.
-				relKind := relKindTable
-				if table.IsView() {
-					// The only difference between tables and views is the relkind column.
-					relKind = relKindView
-				}
-				if err := addRow(
-					h.TableOid(db, table),       // oid
-					parser.NewDName(table.Name), // relname
-					pgNamespaceForDB(db, h).Oid, // relnamespace
-					oidZero,                     // reltype (PG creates a composite type in pg_type for each table)
-					parser.DNull,                // relowner
-					parser.DNull,                // relam
-					oidZero,                     // relfilenode
-					oidZero,                     // reltablespace
-					parser.DNull,                // relpages
-					parser.DNull,                // reltuples
-					zeroVal,                     // relallvisible
-					oidZero,                     // reltoastrelid
-					parser.MakeDBool(parser.DBool(table.IsPhysicalTable())), // relhasindex
-					parser.MakeDBool(false),                                 // relisshared
-					parser.MakeDBool(false),                                 // relistemp
-					relKind,                                                 // relkind
-					parser.NewDInt(parser.DInt(len(table.Columns))),         // relnatts
-					parser.NewDInt(parser.DInt(len(table.Checks))),          // relchecks
-					parser.MakeDBool(false),                                 // relhasoids
-					parser.MakeDBool(parser.DBool(table.IsPhysicalTable())), // relhaspkey
-					parser.MakeDBool(false),                                 // relhasrules
-					parser.MakeDBool(false),                                 // relhastriggers
-					parser.MakeDBool(false),                                 // relhassubclass
-					zeroVal,                                                 // relfrozenxid
-					parser.DNull,                                            // relacl
-					parser.DNull,                                            // reloptions
-				); err != nil {
-					return err
-				}
+		return forEachTableDesc(ctx, p, func(db *sqlbase.DatabaseDescriptor, table *sqlbase.TableDescriptor) error {
+			// Table.
+			relKind := relKindTable
+			if table.IsView() {
+				// The only difference between tables and views is the relkind column.
+				relKind = relKindView
+			}
+			if err := addRow(
+				h.TableOid(db, table),       // oid
+				parser.NewDName(table.Name), // relname
+				pgNamespaceForDB(db, h).Oid, // relnamespace
+				oidZero,                     // reltype (PG creates a composite type in pg_type for each table)
+				parser.DNull,                // relowner
+				parser.DNull,                // relam
+				oidZero,                     // relfilenode
+				oidZero,                     // reltablespace
+				parser.DNull,                // relpages
+				parser.DNull,                // reltuples
+				zeroVal,                     // relallvisible
+				oidZero,                     // reltoastrelid
+				parser.MakeDBool(parser.DBool(table.IsPhysicalTable())), // relhasindex
+				parser.MakeDBool(false),                                 // relisshared
+				parser.MakeDBool(false),                                 // relistemp
+				relKind,                                                 // relkind
+				parser.NewDInt(parser.DInt(len(table.Columns))),         // relnatts
+				parser.NewDInt(parser.DInt(len(table.Checks))),          // relchecks
+				parser.MakeDBool(false),                                 // relhasoids
+				parser.MakeDBool(parser.DBool(table.IsPhysicalTable())), // relhaspkey
+				parser.MakeDBool(false),                                 // relhasrules
+				parser.MakeDBool(false),                                 // relhastriggers
+				parser.MakeDBool(false),                                 // relhassubclass
+				zeroVal,                                                 // relfrozenxid
+				parser.DNull,                                            // relacl
+				parser.DNull,                                            // reloptions
+			); err != nil {
+				return err
+			}
 
-				// Indexes.
-				return forEachIndexInTable(table, func(index *sqlbase.IndexDescriptor) error {
-					return addRow(
-						h.IndexOid(db, table, index), // oid
-						parser.NewDName(index.Name),  // relname
-						pgNamespaceForDB(db, h).Oid,  // relnamespace
-						oidZero,                      // reltype
-						parser.DNull,                 // relowner
-						parser.DNull,                 // relam
-						oidZero,                      // relfilenode
-						oidZero,                      // reltablespace
-						parser.DNull,                 // relpages
-						parser.DNull,                 // reltuples
-						zeroVal,                      // relallvisible
-						oidZero,                      // reltoastrelid
-						parser.MakeDBool(false),      // relhasindex
-						parser.MakeDBool(false),      // relisshared
-						parser.MakeDBool(false),      // relistemp
-						relKindIndex,                 // relkind
-						parser.NewDInt(parser.DInt(len(index.ColumnNames))), // relnatts
-						zeroVal,                 // relchecks
-						parser.MakeDBool(false), // relhasoids
-						parser.MakeDBool(false), // relhaspkey
-						parser.MakeDBool(false), // relhasrules
-						parser.MakeDBool(false), // relhastriggers
-						parser.MakeDBool(false), // relhassubclass
-						zeroVal,                 // relfrozenxid
-						parser.DNull,            // relacl
-						parser.DNull,            // reloptions
-					)
-				})
-			},
-		)
+			// Indexes.
+			return forEachIndexInTable(table, func(index *sqlbase.IndexDescriptor) error {
+				return addRow(
+					h.IndexOid(db, table, index), // oid
+					parser.NewDName(index.Name),  // relname
+					pgNamespaceForDB(db, h).Oid,  // relnamespace
+					oidZero,                      // reltype
+					parser.DNull,                 // relowner
+					parser.DNull,                 // relam
+					oidZero,                      // relfilenode
+					oidZero,                      // reltablespace
+					parser.DNull,                 // relpages
+					parser.DNull,                 // reltuples
+					zeroVal,                      // relallvisible
+					oidZero,                      // reltoastrelid
+					parser.MakeDBool(false),      // relhasindex
+					parser.MakeDBool(false),      // relisshared
+					parser.MakeDBool(false),      // relistemp
+					relKindIndex,                 // relkind
+					parser.NewDInt(parser.DInt(len(index.ColumnNames))), // relnatts
+					zeroVal,                 // relchecks
+					parser.MakeDBool(false), // relhasoids
+					parser.MakeDBool(false), // relhaspkey
+					parser.MakeDBool(false), // relhasrules
+					parser.MakeDBool(false), // relhastriggers
+					parser.MakeDBool(false), // relhassubclass
+					zeroVal,                 // relfrozenxid
+					parser.DNull,            // relacl
+					parser.DNull,            // reloptions
+				)
+			})
+		})
 	},
 }
 
@@ -437,119 +431,117 @@ CREATE TABLE pg_catalog.pg_constraint (
 	consrc STRING
 );
 `,
-	populate: func(_ context.Context, p *planner, addRow func(...parser.Datum) error) error {
+	populate: func(ctx context.Context, p *planner, addRow func(...parser.Datum) error) error {
 		h := makeOidHasher()
-		return forEachTableDescWithTableLookup(p,
-			func(
-				db *sqlbase.DatabaseDescriptor,
-				table *sqlbase.TableDescriptor,
-				tableLookup tableLookupFn,
-			) error {
-				info, err := table.GetConstraintInfoWithLookup(tableLookup.tableOrErr)
-				if err != nil {
-					return err
-				}
+		return forEachTableDescWithTableLookup(ctx, p, func(
+			db *sqlbase.DatabaseDescriptor,
+			table *sqlbase.TableDescriptor,
+			tableLookup tableLookupFn,
+		) error {
+			info, err := table.GetConstraintInfoWithLookup(tableLookup.tableOrErr)
+			if err != nil {
+				return err
+			}
 
-				for name, c := range info {
-					oid := parser.DNull
-					contype := parser.DNull
-					conindid := oidZero
-					confrelid := oidZero
-					confupdtype := parser.DNull
-					confdeltype := parser.DNull
-					confmatchtype := parser.DNull
-					conkey := parser.DNull
-					confkey := parser.DNull
-					consrc := parser.DNull
+			for name, c := range info {
+				oid := parser.DNull
+				contype := parser.DNull
+				conindid := oidZero
+				confrelid := oidZero
+				confupdtype := parser.DNull
+				confdeltype := parser.DNull
+				confmatchtype := parser.DNull
+				conkey := parser.DNull
+				confkey := parser.DNull
+				consrc := parser.DNull
 
-					// Determine constraint kind-specific fields.
-					switch c.Kind {
-					case sqlbase.ConstraintTypePK:
-						oid = h.PrimaryKeyConstraintOid(db, table, c.Index)
-						contype = conTypePKey
-						conindid = h.IndexOid(db, table, c.Index)
+				// Determine constraint kind-specific fields.
+				switch c.Kind {
+				case sqlbase.ConstraintTypePK:
+					oid = h.PrimaryKeyConstraintOid(db, table, c.Index)
+					contype = conTypePKey
+					conindid = h.IndexOid(db, table, c.Index)
 
-						var err error
-						conkey, err = colIDArrayToDatum(c.Index.ColumnIDs)
-						if err != nil {
-							return err
-						}
-
-					case sqlbase.ConstraintTypeFK:
-						referencedDB, _ := tableLookup(c.ReferencedTable.ID)
-						if referencedDB == nil {
-							panic(fmt.Sprintf("could not find database of %+v", c.ReferencedTable))
-						}
-
-						oid = h.ForeignKeyConstraintOid(db, table, c.FK)
-						contype = conTypeFK
-						conindid = h.IndexOid(referencedDB, c.ReferencedTable, c.ReferencedIndex)
-						confrelid = h.TableOid(referencedDB, c.ReferencedTable)
-						confupdtype = fkActionNone
-						confdeltype = fkActionNone
-						confmatchtype = fkMatchTypeSimple
-						var err error
-						conkey, err = colIDArrayToDatum(c.Index.ColumnIDs)
-						if err != nil {
-							return err
-						}
-						confkey, err = colIDArrayToDatum(c.ReferencedIndex.ColumnIDs)
-						if err != nil {
-							return err
-						}
-
-					case sqlbase.ConstraintTypeUnique:
-						oid = h.UniqueConstraintOid(db, table, c.Index)
-						contype = conTypeUnique
-						conindid = h.IndexOid(db, table, c.Index)
-						var err error
-						conkey, err = colIDArrayToDatum(c.Index.ColumnIDs)
-						if err != nil {
-							return err
-						}
-
-					case sqlbase.ConstraintTypeCheck:
-						oid = h.CheckConstraintOid(db, table, c.CheckConstraint)
-						contype = conTypeCheck
-						// TODO(nvanbenschoten) We currently do not store the referenced columns for a check
-						// constraint. We should add an array of column indexes to
-						// sqlbase.TableDescriptor_CheckConstraint and use that here.
-						consrc = parser.NewDString(c.Details)
-					}
-
-					if err := addRow(
-						oid,                                            // oid
-						dNameOrNull(name),                              // conname
-						pgNamespaceForDB(db, h).Oid,                    // connamespace
-						contype,                                        // contype
-						parser.MakeDBool(false),                        // condeferrable
-						parser.MakeDBool(false),                        // condeferred
-						parser.MakeDBool(parser.DBool(!c.Unvalidated)), // convalidated
-						h.TableOid(db, table),                          // conrelid
-						oidZero,                                        // contypid
-						conindid,                                       // conindid
-						confrelid,                                      // confrelid
-						confupdtype,                                    // confupdtype
-						confdeltype,                                    // confdeltype
-						confmatchtype,                                  // confmatchtype
-						parser.MakeDBool(true),                         // conislocal
-						zeroVal,                                        // coninhcount
-						parser.MakeDBool(true),                         // connoinherit
-						conkey,                                         // conkey
-						confkey,                                        // confkey
-						parser.DNull,                                   // conpfeqop
-						parser.DNull,                                   // conppeqop
-						parser.DNull,                                   // conffeqop
-						parser.DNull,                                   // conexclop
-						consrc,                                         // conbin
-						consrc,                                         // consrc
-					); err != nil {
+					var err error
+					conkey, err = colIDArrayToDatum(c.Index.ColumnIDs)
+					if err != nil {
 						return err
 					}
+
+				case sqlbase.ConstraintTypeFK:
+					referencedDB, _ := tableLookup(c.ReferencedTable.ID)
+					if referencedDB == nil {
+						panic(fmt.Sprintf("could not find database of %+v", c.ReferencedTable))
+					}
+
+					oid = h.ForeignKeyConstraintOid(db, table, c.FK)
+					contype = conTypeFK
+					conindid = h.IndexOid(referencedDB, c.ReferencedTable, c.ReferencedIndex)
+					confrelid = h.TableOid(referencedDB, c.ReferencedTable)
+					confupdtype = fkActionNone
+					confdeltype = fkActionNone
+					confmatchtype = fkMatchTypeSimple
+					var err error
+					conkey, err = colIDArrayToDatum(c.Index.ColumnIDs)
+					if err != nil {
+						return err
+					}
+					confkey, err = colIDArrayToDatum(c.ReferencedIndex.ColumnIDs)
+					if err != nil {
+						return err
+					}
+
+				case sqlbase.ConstraintTypeUnique:
+					oid = h.UniqueConstraintOid(db, table, c.Index)
+					contype = conTypeUnique
+					conindid = h.IndexOid(db, table, c.Index)
+					var err error
+					conkey, err = colIDArrayToDatum(c.Index.ColumnIDs)
+					if err != nil {
+						return err
+					}
+
+				case sqlbase.ConstraintTypeCheck:
+					oid = h.CheckConstraintOid(db, table, c.CheckConstraint)
+					contype = conTypeCheck
+					// TODO(nvanbenschoten) We currently do not store the referenced columns for a check
+					// constraint. We should add an array of column indexes to
+					// sqlbase.TableDescriptor_CheckConstraint and use that here.
+					consrc = parser.NewDString(c.Details)
 				}
-				return nil
-			},
-		)
+
+				if err := addRow(
+					oid,                                            // oid
+					dNameOrNull(name),                              // conname
+					pgNamespaceForDB(db, h).Oid,                    // connamespace
+					contype,                                        // contype
+					parser.MakeDBool(false),                        // condeferrable
+					parser.MakeDBool(false),                        // condeferred
+					parser.MakeDBool(parser.DBool(!c.Unvalidated)), // convalidated
+					h.TableOid(db, table),                          // conrelid
+					oidZero,                                        // contypid
+					conindid,                                       // conindid
+					confrelid,                                      // confrelid
+					confupdtype,                                    // confupdtype
+					confdeltype,                                    // confdeltype
+					confmatchtype,                                  // confmatchtype
+					parser.MakeDBool(true),                         // conislocal
+					zeroVal,                                        // coninhcount
+					parser.MakeDBool(true),                         // connoinherit
+					conkey,                                         // conkey
+					confkey,                                        // confkey
+					parser.DNull,                                   // conpfeqop
+					parser.DNull,                                   // conppeqop
+					parser.DNull,                                   // conffeqop
+					parser.DNull,                                   // conexclop
+					consrc,                                         // conbin
+					consrc,                                         // consrc
+				); err != nil {
+					return err
+				}
+			}
+			return nil
+		})
 	},
 }
 
@@ -607,9 +599,9 @@ CREATE TABLE pg_catalog.pg_database (
 	datacl STRING
 );
 `,
-	populate: func(_ context.Context, p *planner, addRow func(...parser.Datum) error) error {
+	populate: func(ctx context.Context, p *planner, addRow func(...parser.Datum) error) error {
 		h := makeOidHasher()
-		return forEachDatabaseDesc(p, func(db *sqlbase.DatabaseDescriptor) error {
+		return forEachDatabaseDesc(ctx, p, func(db *sqlbase.DatabaseDescriptor) error {
 			return addRow(
 				h.DBOid(db),              // oid
 				parser.NewDName(db.Name), // datname
@@ -667,66 +659,69 @@ CREATE TABLE pg_catalog.pg_depend (
   deptype CHAR
 );
 `,
-	populate: func(_ context.Context, p *planner, addRow func(...parser.Datum) error) error {
+	populate: func(ctx context.Context, p *planner, addRow func(...parser.Datum) error) error {
 		h := makeOidHasher()
-		db, err := p.getDatabaseDesc(pgCatalogName)
+		db, err := p.getDatabaseDesc(ctx, pgCatalogName)
 		if err != nil {
 			return errors.New("could not find pg_catalog")
 		}
 		pgConstraintDesc, err := p.getTableDesc(
+			ctx,
 			&parser.TableName{
 				DatabaseName: pgCatalogName,
-				TableName:    "pg_constraint"})
+				TableName:    "pg_constraint"},
+		)
 		if err != nil {
 			return errors.New("could not find pg_catalog.pg_constraint")
 		}
 		pgConstraintTableOid := h.TableOid(db, pgConstraintDesc)
 
 		pgClassDesc, err := p.getTableDesc(
+			ctx,
 			&parser.TableName{
 				DatabaseName: pgCatalogName,
-				TableName:    "pg_class"})
+				TableName:    "pg_class"},
+		)
 		if err != nil {
 			return errors.New("could not find pg_catalog.pg_class")
 		}
 		pgClassTableOid := h.TableOid(db, pgClassDesc)
 
-		return forEachTableDescWithTableLookup(p,
-			func(
-				db *sqlbase.DatabaseDescriptor,
-				table *sqlbase.TableDescriptor,
-				tableLookup tableLookupFn,
-			) error {
-				info, err := table.GetConstraintInfoWithLookup(tableLookup.tableOrErr)
-				if err != nil {
+		return forEachTableDescWithTableLookup(ctx, p, func(
+			db *sqlbase.DatabaseDescriptor,
+			table *sqlbase.TableDescriptor,
+			tableLookup tableLookupFn,
+		) error {
+			info, err := table.GetConstraintInfoWithLookup(tableLookup.tableOrErr)
+			if err != nil {
+				return err
+			}
+			for _, c := range info {
+				if c.Kind != sqlbase.ConstraintTypeFK {
+					continue
+				}
+				referencedDB, _ := tableLookup(c.ReferencedTable.ID)
+				if referencedDB == nil {
+					panic(fmt.Sprintf("could not find database of %+v", c.ReferencedTable))
+				}
+
+				constraintOid := h.ForeignKeyConstraintOid(db, table, c.FK)
+				refObjID := h.IndexOid(referencedDB, c.ReferencedTable, c.ReferencedIndex)
+
+				if err := addRow(
+					pgConstraintTableOid, // classid
+					constraintOid,        // objid
+					zeroVal,              // objsubid
+					pgClassTableOid,      // refclassid
+					refObjID,             // refobjid
+					zeroVal,              // refobjsubid
+					depTypeNormal,        // deptype
+				); err != nil {
 					return err
 				}
-				for _, c := range info {
-					if c.Kind != sqlbase.ConstraintTypeFK {
-						continue
-					}
-					referencedDB, _ := tableLookup(c.ReferencedTable.ID)
-					if referencedDB == nil {
-						panic(fmt.Sprintf("could not find database of %+v", c.ReferencedTable))
-					}
-
-					constraintOid := h.ForeignKeyConstraintOid(db, table, c.FK)
-					refObjID := h.IndexOid(referencedDB, c.ReferencedTable, c.ReferencedIndex)
-
-					if err := addRow(
-						pgConstraintTableOid, // classid
-						constraintOid,        // objid
-						zeroVal,              // objsubid
-						pgClassTableOid,      // refclassid
-						refObjID,             // refobjid
-						zeroVal,              // refobjsubid
-						depTypeNormal,        // deptype
-					); err != nil {
-						return err
-					}
-				}
-				return nil
-			})
+			}
+			return nil
+		})
 	},
 }
 
@@ -841,53 +836,51 @@ CREATE TABLE pg_catalog.pg_index (
     indpred STRING
 );
 `,
-	populate: func(_ context.Context, p *planner, addRow func(...parser.Datum) error) error {
+	populate: func(ctx context.Context, p *planner, addRow func(...parser.Datum) error) error {
 		h := makeOidHasher()
-		return forEachTableDesc(p,
-			func(db *sqlbase.DatabaseDescriptor, table *sqlbase.TableDescriptor) error {
-				tableOid := h.TableOid(db, table)
-				return forEachIndexInTable(table, func(index *sqlbase.IndexDescriptor) error {
-					isValid := true
-					isReady := false
-					for _, mutation := range table.Mutations {
-						if mutationIndex := mutation.GetIndex(); mutationIndex != nil {
-							if mutationIndex.ID == index.ID {
-								isValid = false
-								if mutation.State == sqlbase.DescriptorMutation_WRITE_ONLY {
-									isReady = true
-								}
-								break
+		return forEachTableDesc(ctx, p, func(db *sqlbase.DatabaseDescriptor, table *sqlbase.TableDescriptor) error {
+			tableOid := h.TableOid(db, table)
+			return forEachIndexInTable(table, func(index *sqlbase.IndexDescriptor) error {
+				isValid := true
+				isReady := false
+				for _, mutation := range table.Mutations {
+					if mutationIndex := mutation.GetIndex(); mutationIndex != nil {
+						if mutationIndex.ID == index.ID {
+							isValid = false
+							if mutation.State == sqlbase.DescriptorMutation_WRITE_ONLY {
+								isReady = true
 							}
+							break
 						}
 					}
-					indkey, err := colIDArrayToVector(index.ColumnIDs)
-					if err != nil {
-						return err
-					}
-					return addRow(
-						h.IndexOid(db, table, index), // indexrelid
-						tableOid,                     // indrelid
-						parser.NewDInt(parser.DInt(len(index.ColumnNames))),                                          // indnatts
-						parser.MakeDBool(parser.DBool(index.Unique)),                                                 // indisunique
-						parser.MakeDBool(parser.DBool(table.IsPhysicalTable() && index.ID == table.PrimaryIndex.ID)), // indisprimary
-						parser.MakeDBool(false),                      // indisexclusion
-						parser.MakeDBool(parser.DBool(index.Unique)), // indimmediate
-						parser.MakeDBool(false),                      // indisclustered
-						parser.MakeDBool(parser.DBool(isValid)),      // indisvalid
-						parser.MakeDBool(false),                      // indcheckxmin
-						parser.MakeDBool(parser.DBool(isReady)),      // indisready
-						parser.MakeDBool(true),                       // indislive
-						parser.MakeDBool(false),                      // indisreplident
-						indkey,                                       // indkey
-						zeroVal,                                      // indcollation
-						zeroVal,                                      // indclass
-						zeroVal,                                      // indoption
-						parser.DNull,                                 // indexprs
-						parser.DNull,                                 // indpred
-					)
-				})
-			},
-		)
+				}
+				indkey, err := colIDArrayToVector(index.ColumnIDs)
+				if err != nil {
+					return err
+				}
+				return addRow(
+					h.IndexOid(db, table, index), // indexrelid
+					tableOid,                     // indrelid
+					parser.NewDInt(parser.DInt(len(index.ColumnNames))),                                          // indnatts
+					parser.MakeDBool(parser.DBool(index.Unique)),                                                 // indisunique
+					parser.MakeDBool(parser.DBool(table.IsPhysicalTable() && index.ID == table.PrimaryIndex.ID)), // indisprimary
+					parser.MakeDBool(false),                      // indisexclusion
+					parser.MakeDBool(parser.DBool(index.Unique)), // indimmediate
+					parser.MakeDBool(false),                      // indisclustered
+					parser.MakeDBool(parser.DBool(isValid)),      // indisvalid
+					parser.MakeDBool(false),                      // indcheckxmin
+					parser.MakeDBool(parser.DBool(isReady)),      // indisready
+					parser.MakeDBool(true),                       // indislive
+					parser.MakeDBool(false),                      // indisreplident
+					indkey,                                       // indkey
+					zeroVal,                                      // indcollation
+					zeroVal,                                      // indclass
+					zeroVal,                                      // indoption
+					parser.DNull,                                 // indexprs
+					parser.DNull,                                 // indpred
+				)
+			})
+		})
 	},
 }
 
@@ -906,26 +899,24 @@ CREATE TABLE pg_catalog.pg_indexes (
 	indexdef STRING
 );
 `,
-	populate: func(_ context.Context, p *planner, addRow func(...parser.Datum) error) error {
+	populate: func(ctx context.Context, p *planner, addRow func(...parser.Datum) error) error {
 		h := makeOidHasher()
-		return forEachTableDesc(p,
-			func(db *sqlbase.DatabaseDescriptor, table *sqlbase.TableDescriptor) error {
-				return forEachIndexInTable(table, func(index *sqlbase.IndexDescriptor) error {
-					def, err := indexDefFromDescriptor(p, db, table, index)
-					if err != nil {
-						return err
-					}
-					return addRow(
-						h.IndexOid(db, table, index),    // oid
-						pgNamespaceForDB(db, h).NameStr, // schemaname
-						parser.NewDName(table.Name),     // tablename
-						parser.NewDName(index.Name),     // indexname
-						parser.DNull,                    // tablespace
-						parser.NewDString(def),          // indexdef
-					)
-				})
-			},
-		)
+		return forEachTableDesc(ctx, p, func(db *sqlbase.DatabaseDescriptor, table *sqlbase.TableDescriptor) error {
+			return forEachIndexInTable(table, func(index *sqlbase.IndexDescriptor) error {
+				def, err := indexDefFromDescriptor(ctx, p, db, table, index)
+				if err != nil {
+					return err
+				}
+				return addRow(
+					h.IndexOid(db, table, index),    // oid
+					pgNamespaceForDB(db, h).NameStr, // schemaname
+					parser.NewDName(table.Name),     // tablename
+					parser.NewDName(index.Name),     // indexname
+					parser.DNull,                    // tablespace
+					parser.NewDString(def),          // indexdef
+				)
+			})
+		})
 	},
 }
 
@@ -933,6 +924,7 @@ CREATE TABLE pg_catalog.pg_indexes (
 // and index descriptor by reconstructing a CreateIndex parser node and calling its
 // String method.
 func indexDefFromDescriptor(
+	ctx context.Context,
 	p *planner,
 	db *sqlbase.DatabaseDescriptor,
 	table *sqlbase.TableDescriptor,
@@ -965,7 +957,7 @@ func indexDefFromDescriptor(
 	}
 	if len(index.Interleave.Ancestors) > 0 {
 		intl := index.Interleave
-		parentTable, err := sqlbase.GetTableDescFromID(p.txn, intl.Ancestors[len(intl.Ancestors)-1].TableID)
+		parentTable, err := sqlbase.GetTableDescFromID(ctx, p.txn, intl.Ancestors[len(intl.Ancestors)-1].TableID)
 		if err != nil {
 			return "", err
 		}
@@ -1015,9 +1007,9 @@ CREATE TABLE pg_catalog.pg_namespace (
 	aclitem STRING
 );
 `,
-	populate: func(_ context.Context, p *planner, addRow func(...parser.Datum) error) error {
+	populate: func(ctx context.Context, p *planner, addRow func(...parser.Datum) error) error {
 		h := makeOidHasher()
-		return forEachDatabaseDesc(p, func(db *sqlbase.DatabaseDescriptor) error {
+		return forEachDatabaseDesc(ctx, p, func(db *sqlbase.DatabaseDescriptor) error {
 			return addRow(
 				h.NamespaceOid(db.Name),    // oid
 				parser.NewDString(db.Name), // nspname
@@ -1078,9 +1070,9 @@ CREATE TABLE pg_catalog.pg_proc (
 	proacl STRING
 );
 `,
-	populate: func(_ context.Context, p *planner, addRow func(...parser.Datum) error) error {
+	populate: func(ctx context.Context, p *planner, addRow func(...parser.Datum) error) error {
 		h := makeOidHasher()
-		dbDesc, err := p.getDatabaseDesc(pgCatalogName)
+		dbDesc, err := p.getDatabaseDesc(ctx, pgCatalogName)
 		if err != nil {
 			return err
 		}
@@ -1251,8 +1243,7 @@ CREATE TABLE pg_catalog.pg_roles (
 					parser.DNull,                  // rolvaliduntil
 					parser.NewDString("{}"),       // rolconfig
 				)
-			},
-		)
+			})
 	},
 }
 
@@ -1329,24 +1320,22 @@ CREATE TABLE pg_catalog.pg_tables (
 	rowsecurity BOOL
 );
 `,
-	populate: func(_ context.Context, p *planner, addRow func(...parser.Datum) error) error {
-		return forEachTableDesc(p,
-			func(db *sqlbase.DatabaseDescriptor, table *sqlbase.TableDescriptor) error {
-				if table.IsView() {
-					return nil
-				}
-				return addRow(
-					parser.NewDName(db.Name),    // schemaname
-					parser.NewDName(table.Name), // tablename
-					parser.DNull,                // tableowner
-					parser.DNull,                // tablespace
-					parser.MakeDBool(parser.DBool(table.IsPhysicalTable())), // hasindexes
-					parser.MakeDBool(false),                                 // hasrules
-					parser.MakeDBool(false),                                 // hastriggers
-					parser.MakeDBool(false),                                 // rowsecurity
-				)
-			},
-		)
+	populate: func(ctx context.Context, p *planner, addRow func(...parser.Datum) error) error {
+		return forEachTableDesc(ctx, p, func(db *sqlbase.DatabaseDescriptor, table *sqlbase.TableDescriptor) error {
+			if table.IsView() {
+				return nil
+			}
+			return addRow(
+				parser.NewDName(db.Name),    // schemaname
+				parser.NewDName(table.Name), // tablename
+				parser.DNull,                // tableowner
+				parser.DNull,                // tablespace
+				parser.MakeDBool(parser.DBool(table.IsPhysicalTable())), // hasindexes
+				parser.MakeDBool(false),                                 // hasrules
+				parser.MakeDBool(false),                                 // hastriggers
+				parser.MakeDBool(false),                                 // rowsecurity
+			)
+		})
 	},
 }
 
@@ -1581,28 +1570,26 @@ CREATE TABLE pg_catalog.pg_views (
 	definition STRING
 );
 `,
-	populate: func(_ context.Context, p *planner, addRow func(...parser.Datum) error) error {
-		return forEachTableDesc(p,
-			func(db *sqlbase.DatabaseDescriptor, desc *sqlbase.TableDescriptor) error {
-				if !desc.IsView() {
-					return nil
-				}
-				// Note that the view query printed will not include any column aliases
-				// specified outside the initial view query into the definition
-				// returned, unlike postgres. For example, for the view created via
-				//  `CREATE VIEW (a) AS SELECT b FROM foo`
-				// we'll only print `SELECT b FROM foo` as the view definition here,
-				// while postgres would more accurately print `SELECT b AS a FROM foo`.
-				// TODO(a-robinson): Insert column aliases into view query once we
-				// have a semantic query representation to work with (#10083).
-				return addRow(
-					parser.NewDName(db.Name),          // schemaname
-					parser.NewDName(desc.Name),        // viewname
-					parser.DNull,                      // viewowner
-					parser.NewDString(desc.ViewQuery), // definition
-				)
-			},
-		)
+	populate: func(ctx context.Context, p *planner, addRow func(...parser.Datum) error) error {
+		return forEachTableDesc(ctx, p, func(db *sqlbase.DatabaseDescriptor, desc *sqlbase.TableDescriptor) error {
+			if !desc.IsView() {
+				return nil
+			}
+			// Note that the view query printed will not include any column aliases
+			// specified outside the initial view query into the definition
+			// returned, unlike postgres. For example, for the view created via
+			//  `CREATE VIEW (a) AS SELECT b FROM foo`
+			// we'll only print `SELECT b FROM foo` as the view definition here,
+			// while postgres would more accurately print `SELECT b AS a FROM foo`.
+			// TODO(a-robinson): Insert column aliases into view query once we
+			// have a semantic query representation to work with (#10083).
+			return addRow(
+				parser.NewDName(db.Name),          // schemaname
+				parser.NewDName(desc.Name),        // viewname
+				parser.DNull,                      // viewowner
+				parser.NewDString(desc.ViewQuery), // definition
+			)
+		})
 	},
 }
 

@@ -22,6 +22,8 @@ import (
 	"net"
 	"time"
 
+	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -37,8 +39,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	opentracing "github.com/opentracing/opentracing-go"
-	"github.com/pkg/errors"
 )
 
 // COCKROACH_TRACE_SQL=duration can be used to log SQL transactions that take
@@ -396,7 +396,7 @@ func (ts *txnState) resetForNewSQLTxn(e *Executor, s *Session) {
 
 	ts.mon.Start(ctx, &s.mon, mon.BoundAccount{})
 
-	ts.txn = client.NewTxn(ts.Ctx, *e.cfg.DB)
+	ts.txn = client.NewTxn(e.cfg.DB)
 	if err := ts.txn.SetIsolation(s.DefaultIsolationLevel); err != nil {
 		panic(err)
 	}
@@ -464,7 +464,7 @@ func (ts *txnState) updateStateAndCleanupOnErr(err error, e *Executor) {
 		e.TxnAbortCount.Inc(1)
 		// This call rolls back a PENDING transaction and cleans up all its
 		// intents.
-		ts.txn.CleanupOnError(err)
+		ts.txn.CleanupOnError(ts.Ctx, err)
 		ts.resetStateAndTxn(Aborted)
 	} else {
 		// If we got a retriable error, move the SQL txn to the RestartWait state.
@@ -481,16 +481,8 @@ func (ts *txnState) updateStateAndCleanupOnErr(err error, e *Executor) {
 func (ts *txnState) hijackCtx(ctx context.Context) func() {
 	origCtx := ts.Ctx
 	ts.Ctx = ctx
-	if ts.txn != nil {
-		// TODO(andrei): We shouldn't need to hijack the txn's Context like this
-		// because the txn shouldn't have a member Context to begin with.
-		ts.txn.Context = ctx
-	}
 	return func() {
 		ts.Ctx = origCtx
-		if ts.txn != nil {
-			ts.txn.Context = origCtx
-		}
 	}
 }
 

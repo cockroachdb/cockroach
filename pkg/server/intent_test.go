@@ -123,7 +123,7 @@ func TestIntentResolution(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			if err := kvDB.Txn(context.TODO(), func(txn *client.Txn) error {
+			if err := kvDB.Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
 				b := txn.NewBatch()
 				if tc.keys[0] >= string(splitKey) {
 					t.Fatalf("first key %s must be < split key %s", tc.keys[0], splitKey)
@@ -135,7 +135,7 @@ func TestIntentResolution(t *testing.T) {
 					log.Infof(context.Background(), "%d: %s: local: %t", i, key, local)
 					if local {
 						b.Put(key, "test")
-					} else if err := txn.Put(key, "test"); err != nil {
+					} else if err := txn.Put(ctx, key, "test"); err != nil {
 						return err
 					}
 				}
@@ -145,12 +145,12 @@ func TestIntentResolution(t *testing.T) {
 					log.Infof(context.Background(), "%d: [%s,%s): local: %t", i, kr[0], kr[1], local)
 					if local {
 						b.DelRange(kr[0], kr[1], false)
-					} else if err := txn.DelRange(kr[0], kr[1]); err != nil {
+					} else if err := txn.DelRange(ctx, kr[0], kr[1]); err != nil {
 						return err
 					}
 				}
 
-				return txn.CommitInBatch(b)
+				return txn.CommitInBatch(ctx, b)
 			}); err != nil {
 				t.Fatalf("%d: %s", i, err)
 			}

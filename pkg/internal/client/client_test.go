@@ -212,7 +212,7 @@ func TestClientRetryNonTxn(t *testing.T) {
 		// doneCall signals when the non-txn read or write has completed.
 		doneCall := make(chan error)
 		count := 0 // keeps track of retries
-		err := db.Txn(context.TODO(), func(txn *client.Txn) error {
+		err := db.Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
 			if test.canPush {
 				if err := txn.SetUserPriority(roachpb.MinUserPriority); err != nil {
 					t.Fatal(err)
@@ -226,11 +226,13 @@ func TestClientRetryNonTxn(t *testing.T) {
 
 			count++
 			// Lay down the intent.
-			if err := txn.Put(key, "txn-value"); err != nil {
+			if err := txn.Put(ctx, key, "txn-value"); err != nil {
 				return err
 			}
 			// On the first iteration, send the non-txn put or get.
 			if count == 1 {
+				ctx := context.TODO()
+
 				// We use a "notifying" sender here, which allows us to know exactly when the
 				// call has been processed; otherwise, we'd be dependent on timing.
 				// The channel lets us pause txn until after the non-txn method has run once.
@@ -244,9 +246,9 @@ func TestClientRetryNonTxn(t *testing.T) {
 				go func() {
 					var err error
 					if _, ok := test.args.(*roachpb.GetRequest); ok {
-						_, err = db.Get(context.TODO(), key)
+						_, err = db.Get(ctx, key)
 					} else {
-						err = db.Put(context.TODO(), key, "value")
+						err = db.Put(ctx, key, "value")
 					}
 					doneCall <- errors.Wrapf(
 						err, "%d: expected success on non-txn call to %s",
@@ -315,23 +317,23 @@ func TestClientRunTransaction(t *testing.T) {
 		key := []byte(fmt.Sprintf("%s/key-%t", testUser, commit))
 
 		// Use snapshot isolation so non-transactional read can always push.
-		err := db.Txn(context.TODO(), func(txn *client.Txn) error {
+		err := db.Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
 			if err := txn.SetIsolation(enginepb.SNAPSHOT); err != nil {
 				return err
 			}
 
 			// Put transactional value.
-			if err := txn.Put(key, value); err != nil {
+			if err := txn.Put(ctx, key, value); err != nil {
 				return err
 			}
 			// Attempt to read outside of txn.
-			if gr, err := db.Get(context.TODO(), key); err != nil {
+			if gr, err := db.Get(ctx, key); err != nil {
 				return err
 			} else if gr.Value != nil {
 				return errors.Errorf("expected nil value; got %+v", gr.Value)
 			}
 			// Read within the transaction.
-			if gr, err := txn.Get(key); err != nil {
+			if gr, err := txn.Get(ctx, key); err != nil {
 				return err
 			} else if gr.Value == nil || !bytes.Equal(gr.ValueBytes(), value) {
 				return errors.Errorf("expected value %q; got %q", value, gr.ValueBytes())
@@ -380,7 +382,7 @@ func TestClientRunConcurrentTransaction(t *testing.T) {
 		}
 
 		// Use snapshot isolation so non-transactional read can always push.
-		err := db.Txn(context.TODO(), func(txn *client.Txn) error {
+		err := db.Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
 			if err := txn.SetIsolation(enginepb.SNAPSHOT); err != nil {
 				return err
 			}
@@ -394,13 +396,13 @@ func TestClientRunConcurrentTransaction(t *testing.T) {
 				go func(i int, key []byte) {
 					defer wg.Done()
 					// Put transactional value.
-					if err := txn.Put(key, value); err != nil {
+					if err := txn.Put(ctx, key, value); err != nil {
 						concErrs[i] = err
 						return
 					}
 					// Attempt to read outside of txn. We need to guarantee that the
 					// BeginTxnRequest has finished or we risk aborting the transaction.
-					if gr, err := db.Get(context.TODO(), key); err != nil {
+					if gr, err := db.Get(ctx, key); err != nil {
 						concErrs[i] = err
 						return
 					} else if gr.Value != nil {
@@ -408,7 +410,7 @@ func TestClientRunConcurrentTransaction(t *testing.T) {
 						return
 					}
 					// Read within the transaction.
-					if gr, err := txn.Get(key); err != nil {
+					if gr, err := txn.Get(ctx, key); err != nil {
 						concErrs[i] = err
 						return
 					} else if gr.Value == nil || !bytes.Equal(gr.ValueBytes(), value) {
@@ -732,8 +734,8 @@ func TestClientBatch(t *testing.T) {
 
 		b := &client.Batch{}
 		b.CPut(key, "goodbyte", nil) // should fail
-		if err := db.Txn(ctx, func(txn *client.Txn) error {
-			return txn.Run(b)
+		if err := db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+			return txn.Run(ctx, b)
 		}); err == nil {
 			t.Error("unexpected success")
 		} else {
@@ -772,11 +774,11 @@ func concurrentIncrements(db *client.DB, t *testing.T) {
 			// Wait until the other goroutines are running.
 			wgStart.Wait()
 
-			if err := db.Txn(context.TODO(), func(txn *client.Txn) error {
+			if err := db.Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
 				txn.SetDebugName(fmt.Sprintf("test-%d", i))
 
 				// Retrieve the other key.
-				gr, err := txn.Get(readKey)
+				gr, err := txn.Get(ctx, readKey)
 				if err != nil {
 					return err
 				}
@@ -786,7 +788,7 @@ func concurrentIncrements(db *client.DB, t *testing.T) {
 					otherValue = gr.ValueInt()
 				}
 
-				_, err = txn.Inc(writeKey, 1+otherValue)
+				_, err = txn.Inc(ctx, writeKey, 1+otherValue)
 				return err
 			}); err != nil {
 				t.Error(err)
@@ -953,12 +955,15 @@ func TestReadOnlyTxnObeysDeadline(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Use txn.Exec instead of db.Txn to disable auto retry.
-	txn := client.NewTxn(context.TODO(), *db)
-	if err := txn.Exec(client.TxnExecOptions{AutoRetry: false, AutoCommit: true}, func(txn *client.Txn, _ *client.TxnExecOptions) error {
+	txn := client.NewTxn(db)
+	opts := client.TxnExecOptions{
+		AutoRetry:  false,
+		AutoCommit: true,
+	}
+	if err := txn.Exec(context.TODO(), opts, func(ctx context.Context, txn *client.Txn, _ *client.TxnExecOptions) error {
 		// Set deadline to sometime in the past.
 		txn.UpdateDeadlineMaybe(hlc.Timestamp{WallTime: timeutil.Now().Add(-time.Second).UnixNano()})
-		_, err := txn.Get("k")
+		_, err := txn.Get(ctx, "k")
 		return err
 	}); !testutils.IsError(err, "txn aborted") {
 		t.Fatal(err)
@@ -983,10 +988,10 @@ func TestTxn_ReverseScan(t *testing.T) {
 		t.Error(err)
 	}
 
-	err := db.Txn(context.TODO(), func(txn *client.Txn) error {
+	err := db.Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
 		// Try reverse scans for all keys.
 		{
-			rows, err := txn.ReverseScan(testUser+"/key/00", testUser+"/key/10", 100)
+			rows, err := txn.ReverseScan(ctx, testUser+"/key/00", testUser+"/key/10", 100)
 			if err != nil {
 				return err
 			}
@@ -997,7 +1002,7 @@ func TestTxn_ReverseScan(t *testing.T) {
 
 		// Try reverse scans for half of the keys.
 		{
-			rows, err := txn.ReverseScan(testUser+"/key/00", testUser+"/key/05", 100)
+			rows, err := txn.ReverseScan(ctx, testUser+"/key/00", testUser+"/key/05", 100)
 			if err != nil {
 				return err
 			}
@@ -1006,7 +1011,7 @@ func TestTxn_ReverseScan(t *testing.T) {
 
 		// Try limit maximum rows.
 		{
-			rows, err := txn.ReverseScan(testUser+"/key/00", testUser+"/key/05", 3)
+			rows, err := txn.ReverseScan(ctx, testUser+"/key/00", testUser+"/key/05", 3)
 			if err != nil {
 				return err
 			}
@@ -1015,7 +1020,7 @@ func TestTxn_ReverseScan(t *testing.T) {
 
 		// Try reverse scan with the same start and end key.
 		{
-			rows, err := txn.ReverseScan(testUser+"/key/00", testUser+"/key/00", 100)
+			rows, err := txn.ReverseScan(ctx, testUser+"/key/00", testUser+"/key/00", 100)
 			if len(rows) > 0 {
 				t.Errorf("expected empty, got %v", rows)
 			}
@@ -1026,7 +1031,7 @@ func TestTxn_ReverseScan(t *testing.T) {
 
 		// Try reverse scan with non-existent key.
 		{
-			rows, err := txn.ReverseScan(testUser+"/key/aa", testUser+"/key/bb", 100)
+			rows, err := txn.ReverseScan(ctx, testUser+"/key/aa", testUser+"/key/bb", 100)
 			if err != nil {
 				return err
 			}

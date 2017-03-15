@@ -34,7 +34,7 @@ import (
 //
 // The action of calling this method triggers limit-based query plan
 // optimizations, e.g. in expandSelectNode(). The primary user is
-// limitNode.Start() after it has fully evaluated the limit and
+// limitNode.Start(ctx) after it has fully evaluated the limit and
 // offset expressions. EXPLAIN also does this, see expandPlan() for
 // explainPlanNode.
 //

@@ -140,9 +140,9 @@ func testGossipRestartInner(
 				}
 			}
 			var kv client.KeyValue
-			if err := db.Txn(ctx, func(txn *client.Txn) error {
+			if err := db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 				var err error
-				kv, err = txn.Inc("count", 1)
+				kv, err = txn.Inc(ctx, "count", 1)
 				return err
 			}); err != nil {
 				t.Fatal(err)

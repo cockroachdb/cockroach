@@ -17,12 +17,12 @@
 package sql
 
 import (
+	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	"github.com/pkg/errors"
 )
 
 type planMaker interface {
@@ -271,7 +271,7 @@ func (p *planner) newPlan(
 
 	switch n := stmt.(type) {
 	case *parser.AlterTable:
-		return p.AlterTable(n)
+		return p.AlterTable(ctx, n)
 	case *parser.BeginTransaction:
 		return p.BeginTransaction(n)
 	case CopyDataBlock:
@@ -281,11 +281,11 @@ func (p *planner) newPlan(
 	case *parser.CreateDatabase:
 		return p.CreateDatabase(n)
 	case *parser.CreateIndex:
-		return p.CreateIndex(n)
+		return p.CreateIndex(ctx, n)
 	case *parser.CreateTable:
 		return p.CreateTable(ctx, n)
 	case *parser.CreateUser:
-		return p.CreateUser(n)
+		return p.CreateUser(ctx, n)
 	case *parser.CreateView:
 		return p.CreateView(ctx, n)
 	case *parser.Delete:
@@ -293,7 +293,7 @@ func (p *planner) newPlan(
 	case *parser.DropDatabase:
 		return p.DropDatabase(ctx, n)
 	case *parser.DropIndex:
-		return p.DropIndex(n)
+		return p.DropIndex(ctx, n)
 	case *parser.DropTable:
 		return p.DropTable(ctx, n)
 	case *parser.DropView:
@@ -323,7 +323,7 @@ func (p *planner) newPlan(
 	case *parser.SelectClause:
 		return p.SelectClause(ctx, n, nil, nil, desiredTypes, publicColumns)
 	case *parser.Set:
-		return p.Set(n)
+		return p.Set(ctx, n)
 	case *parser.SetTimeZone:
 		return p.SetTimeZone(n)
 	case *parser.SetTransaction:

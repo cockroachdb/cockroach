@@ -189,8 +189,7 @@ func NewTxnCoordSender(
 	tc.txnMu.txns = map[uuid.UUID]*txnMetadata{}
 
 	tc.stopper.RunWorker(func() {
-		ctx := tc.AnnotateCtx(context.Background())
-		tc.printStatsLoop(ctx)
+		tc.printStatsLoop(tc.AnnotateCtx(context.Background()))
 	})
 	return tc
 }
@@ -277,6 +276,8 @@ func (tc *TxnCoordSender) printStatsLoop(ctx context.Context) {
 func (tc *TxnCoordSender) Send(
 	ctx context.Context, ba roachpb.BatchRequest,
 ) (*roachpb.BatchResponse, *roachpb.Error) {
+	ctx = tc.AnnotateCtx(ctx)
+
 	// Start new or pick up active trace. From here on, there's always an active
 	// Trace, though its overhead is small unless it's sampled.
 	sp := opentracing.SpanFromContext(ctx)
@@ -426,8 +427,7 @@ func (tc *TxnCoordSender) Send(
 		br, pErr = tc.wrapped.Send(ctx, ba)
 
 		if _, ok := pErr.GetDetail().(*roachpb.OpRequiresTxnError); ok {
-			// TODO(tschottdorf): needs to keep the trace.
-			br, pErr = tc.resendWithTxn(ba)
+			br, pErr = tc.resendWithTxn(ctx, ba)
 		}
 
 		if pErr = tc.updateState(ctx, startNS, ba, br, pErr); pErr != nil {
@@ -681,7 +681,9 @@ func (tc *TxnCoordSender) tryAsyncAbort(txnID uuid.UUID) {
 		IntentSpans: intentSpans,
 	}
 	ba.Add(et)
-	ctx := tc.AnnotateCtx(context.TODO())
+	// NB: use context.Background() here because we may be called when the
+	// caller's context has been cancelled.
+	ctx := tc.AnnotateCtx(context.Background())
 	if err := tc.stopper.RunAsyncTask(ctx, func(ctx context.Context) {
 		// Use the wrapped sender since the normal Sender does not allow
 		// clients to specify intents.
@@ -949,9 +951,8 @@ func (tc *TxnCoordSender) updateState(
 // run the whole thing for them, or any restart will still end up at the client
 // which will not be prepared to be handed a Txn.
 func (tc *TxnCoordSender) resendWithTxn(
-	ba roachpb.BatchRequest,
+	ctx context.Context, ba roachpb.BatchRequest,
 ) (*roachpb.BatchResponse, *roachpb.Error) {
-	ctx := tc.AnnotateCtx(context.TODO())
 	// Run a one-off transaction with that single command.
 	if log.V(1) {
 		log.Infof(ctx, "%s: auto-wrapping in txn and re-executing: ", ba)
@@ -962,7 +963,7 @@ func (tc *TxnCoordSender) resendWithTxn(
 	dbCtx.UserPriority = ba.UserPriority
 	tmpDB := client.NewDBWithContext(tc, tc.clock, dbCtx)
 	var br *roachpb.BatchResponse
-	err := tmpDB.Txn(ctx, func(txn *client.Txn) error {
+	err := tmpDB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		txn.SetDebugName("auto-wrap")
 		b := txn.NewBatch()
 		b.Header = ba.Header
@@ -970,7 +971,7 @@ func (tc *TxnCoordSender) resendWithTxn(
 			req := arg.GetInner()
 			b.AddRawRequest(req)
 		}
-		err := txn.CommitInBatch(b)
+		err := txn.CommitInBatch(ctx, b)
 		br = b.RawResponse()
 		return err
 	})

@@ -190,7 +190,7 @@ func (p *planner) hijackCtx(ctx context.Context) func() {
 		// done when the TxnState is in an expected state. In particular, if the
 		// state would be NoTxn, then we'd need to hijack session.Ctx instead of the
 		// txnState's context.
-		log.Fatalf(p.session.Ctx(), "can only hijack while a SQL txn is Open. txnState: %+v",
+		log.Fatalf(ctx, "can only hijack while a SQL txn is Open. txnState: %+v",
 			&p.session.TxnState)
 	}
 	return p.session.TxnState.hijackCtx(ctx)

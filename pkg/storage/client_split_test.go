@@ -116,11 +116,11 @@ func TestStoreRangeSplitAtTablePrefix(t *testing.T) {
 	}
 
 	// Update SystemConfig to trigger gossip.
-	if err := store.DB().Txn(context.TODO(), func(txn *client.Txn) error {
+	if err := store.DB().Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
 		txn.SetSystemConfigTrigger()
 		// We don't care about the values, just the keys.
 		k := sqlbase.MakeDescMetadataKey(sqlbase.ID(keys.MaxReservedDescID + 1))
-		return txn.Put(k, &desc)
+		return txn.Put(ctx, k, &desc)
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -818,7 +818,7 @@ func TestStoreRangeSystemSplits(t *testing.T) {
 	// - descriptor IDs are used to determine split keys
 	// - the write triggers a SystemConfig update and gossip.
 	// We should end up with splits at each user table prefix.
-	if err := store.DB().Txn(context.TODO(), func(txn *client.Txn) error {
+	if err := store.DB().Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
 		prefix := keys.MakeTablePrefix(keys.DescriptorTableID)
 		txn.SetSystemConfigTrigger()
 		for i, kv := range initialSystemValues {
@@ -827,10 +827,10 @@ func TestStoreRangeSystemSplits(t *testing.T) {
 			}
 			bytes, err := kv.Value.GetBytes()
 			if err != nil {
-				log.Info(context.TODO(), err)
+				log.Info(ctx, err)
 				continue
 			}
-			if err := txn.Put(kv.Key, bytes); err != nil {
+			if err := txn.Put(ctx, kv.Key, bytes); err != nil {
 				return err
 			}
 
@@ -839,7 +839,7 @@ func TestStoreRangeSystemSplits(t *testing.T) {
 
 			// We don't care about the values, just the keys.
 			k := sqlbase.MakeDescMetadataKey(sqlbase.ID(descID))
-			if err := txn.Put(k, bytes); err != nil {
+			if err := txn.Put(ctx, k, bytes); err != nil {
 				return err
 			}
 		}
@@ -888,13 +888,13 @@ func TestStoreRangeSystemSplits(t *testing.T) {
 
 	// Write another, disjoint (+3) descriptor for a user table.
 	numTotalValues := userTableMax + 3
-	if err := store.DB().Txn(context.TODO(), func(txn *client.Txn) error {
+	if err := store.DB().Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
 		txn.SetSystemConfigTrigger()
 		// This time, only write the last table descriptor. Splits
 		// still occur for every intervening ID.
 		// We don't care about the values, just the keys.
 		k := sqlbase.MakeDescMetadataKey(sqlbase.ID(keys.MaxReservedDescID + numTotalValues))
-		return txn.Put(k, &sqlbase.TableDescriptor{})
+		return txn.Put(ctx, k, &sqlbase.TableDescriptor{})
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -1269,10 +1269,10 @@ func TestStoreSplitTimestampCacheDifferentLeaseHolder(t *testing.T) {
 	ctx = tc.Server(0).Stopper().WithCancel(ctx)
 
 	// This transaction will try to write "under" a served read.
-	txnOld := client.NewTxn(ctx, *db)
+	txnOld := client.NewTxn(db)
 
 	// Do something with txnOld so that its timestamp gets set.
-	if _, err := txnOld.Scan("a", "b", 0); err != nil {
+	if _, err := txnOld.Scan(ctx, "a", "b", 0); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1340,11 +1340,11 @@ func TestStoreSplitTimestampCacheDifferentLeaseHolder(t *testing.T) {
 	// timestamp cache and flag the txn for a restart when we try to commit it
 	// below. With the bug in #7899, the RHS of the split had an empty
 	// timestamp cache and would simply let us write behind the previous read.
-	if err := txnOld.Put("bb", "bump"); err != nil {
+	if err := txnOld.Put(ctx, "bb", "bump"); err != nil {
 		t.Fatal(err)
 	}
 
-	if err := txnOld.Commit(); !testutils.IsError(err, "retry txn") {
+	if err := txnOld.Commit(ctx); !testutils.IsError(err, "retry txn") {
 		t.Fatalf("expected txn retry, got %v", err)
 	}
 
