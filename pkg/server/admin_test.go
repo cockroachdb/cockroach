@@ -618,10 +618,10 @@ func TestAdminAPIZoneDetails(t *testing.T) {
 			t.Fatal(err)
 		}
 		const query = `INSERT INTO system.zones VALUES($1, $2)`
-		params := parser.NewPlaceholderInfo()
+		params := parser.MakePlaceholderInfo()
 		params.SetValue(`1`, parser.NewDInt(parser.DInt(id)))
 		params.SetValue(`2`, parser.NewDBytes(parser.DBytes(zoneBytes)))
-		res := ts.sqlExecutor.ExecuteStatements(session, query, params)
+		res := ts.sqlExecutor.ExecuteStatements(session, query, &params)
 		defer res.Close(ctx)
 		if res.ResultList[0].Err != nil {
 			t.Fatalf("error executing '%s': %s", query, res.ResultList[0].Err)
