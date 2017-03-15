@@ -268,6 +268,13 @@ func makeInternalPlanner(
 	p.resetContexts()
 	p.session.User = user
 
+	if txn.Proto().OrigTimestamp == (hlc.Timestamp{}) {
+		panic("makeInternalPlanner called with a transaction without timestamps")
+	}
+	ts := txn.Proto().OrigTimestamp.GoTime()
+	p.evalCtx.SetTxnTimestamp(ts)
+	p.evalCtx.SetStmtTimestamp(ts)
+
 	p.session.mon = mon.MakeUnlimitedMonitor(p.session.context,
 		"internal-root",
 		memMetrics.CurBytesCount, memMetrics.MaxBytesHist,
