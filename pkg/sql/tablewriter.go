@@ -20,6 +20,7 @@ import (
 	"bytes"
 	"fmt"
 
+	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
@@ -28,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/pkg/errors"
 )
 
 // expressionCarrier handles visiting sub-expressions.
@@ -95,15 +95,15 @@ func (ti *tableInserter) row(ctx context.Context, values parser.Datums) (parser.
 	return nil, ti.ri.InsertRow(ctx, ti.b, values, false)
 }
 
-func (ti *tableInserter) finalize(context.Context) error {
+func (ti *tableInserter) finalize(ctx context.Context) error {
 	var err error
 	if ti.autoCommit {
 		// An auto-txn can commit the transaction with the batch. This is an
 		// optimization to avoid an extra round-trip to the transaction
 		// coordinator.
-		err = ti.txn.CommitInBatch(ti.b)
+		err = ti.txn.CommitInBatch(ctx, ti.b)
 	} else {
-		err = ti.txn.Run(ti.b)
+		err = ti.txn.Run(ctx, ti.b)
 	}
 
 	if err != nil {
@@ -142,9 +142,9 @@ func (tu *tableUpdater) finalize(ctx context.Context) error {
 		// An auto-txn can commit the transaction with the batch. This is an
 		// optimization to avoid an extra round-trip to the transaction
 		// coordinator.
-		err = tu.txn.CommitInBatch(tu.b)
+		err = tu.txn.CommitInBatch(ctx, tu.b)
 	} else {
-		err = tu.txn.Run(tu.b)
+		err = tu.txn.Run(ctx, tu.b)
 	}
 
 	if err != nil {
@@ -343,9 +343,9 @@ func (tu *tableUpserter) flush(ctx context.Context, finalize bool) error {
 		// An auto-txn can commit the transaction with the batch. This is an
 		// optimization to avoid an extra round-trip to the transaction
 		// coordinator.
-		err = tu.txn.CommitInBatch(b)
+		err = tu.txn.CommitInBatch(ctx, b)
 	} else {
-		err = tu.txn.Run(b)
+		err = tu.txn.Run(ctx, b)
 	}
 	if err != nil {
 		return sqlbase.ConvertBatchError(tu.tableDesc, b)
@@ -390,7 +390,7 @@ func (tu *tableUpserter) upsertRowPKs(ctx context.Context) ([]roachpb.Key, error
 		b.Get(entry.Key)
 	}
 
-	if err := tu.txn.Run(b); err != nil {
+	if err := tu.txn.Run(ctx, b); err != nil {
 		return nil, err
 	}
 	for i, result := range b.Results {
@@ -441,13 +441,13 @@ func (tu *tableUpserter) fetchExisting(ctx context.Context) ([]parser.Datums, er
 	}
 
 	// We don't limit batches here because the spans are unordered.
-	if err := tu.fetcher.StartScan(tu.txn, pkSpans, false /* no batch limits */, 0); err != nil {
+	if err := tu.fetcher.StartScan(ctx, tu.txn, pkSpans, false /* no batch limits */, 0); err != nil {
 		return nil, err
 	}
 
 	rows := make([]parser.Datums, len(primaryKeys))
 	for {
-		row, err := tu.fetcher.NextRowDecoded()
+		row, err := tu.fetcher.NextRowDecoded(ctx)
 		if err != nil {
 			return nil, err
 		}
@@ -476,9 +476,9 @@ func (tu *tableUpserter) finalize(ctx context.Context) error {
 			// An auto-txn can commit the transaction with the batch. This is an
 			// optimization to avoid an extra round-trip to the transaction
 			// coordinator.
-			return tu.txn.CommitInBatch(tu.fastPathBatch)
+			return tu.txn.CommitInBatch(ctx, tu.fastPathBatch)
 		}
-		return tu.txn.Run(tu.fastPathBatch)
+		return tu.txn.Run(ctx, tu.fastPathBatch)
 	}
 	return tu.flush(ctx, true /* finalize */)
 }
@@ -505,14 +505,14 @@ func (td *tableDeleter) row(ctx context.Context, values parser.Datums) (parser.D
 	return nil, td.rd.deleteRow(ctx, td.b, values)
 }
 
-func (td *tableDeleter) finalize(context.Context) error {
+func (td *tableDeleter) finalize(ctx context.Context) error {
 	if td.autoCommit {
 		// An auto-txn can commit the transaction with the batch. This is an
 		// optimization to avoid an extra round-trip to the transaction
 		// coordinator.
-		return td.txn.CommitInBatch(td.b)
+		return td.txn.CommitInBatch(ctx, td.b)
 	}
-	return td.txn.Run(td.b)
+	return td.txn.Run(ctx, td.b)
 }
 
 // fastPathAvailable returns true if the fastDelete optimization can be used.
@@ -650,12 +650,12 @@ func (td *tableDeleter) deleteAllRowsScan(
 	if err != nil {
 		return resume, err
 	}
-	if err := rf.StartScan(td.txn, roachpb.Spans{resume}, true /* limit batches */, 0); err != nil {
+	if err := rf.StartScan(ctx, td.txn, roachpb.Spans{resume}, true /* limit batches */, 0); err != nil {
 		return resume, err
 	}
 
 	for i := int64(0); i < limit; i++ {
-		row, err := rf.NextRowDecoded()
+		row, err := rf.NextRowDecoded(ctx)
 		if err != nil {
 			return resume, err
 		}
@@ -743,12 +743,12 @@ func (td *tableDeleter) deleteIndexScan(
 	if err != nil {
 		return resume, err
 	}
-	if err := rf.StartScan(td.txn, roachpb.Spans{resume}, true /* limit batches */, 0); err != nil {
+	if err := rf.StartScan(ctx, td.txn, roachpb.Spans{resume}, true /* limit batches */, 0); err != nil {
 		return resume, err
 	}
 
 	for i := int64(0); i < limit; i++ {
-		row, err := rf.NextRowDecoded()
+		row, err := rf.NextRowDecoded(ctx)
 		if err != nil {
 			return resume, err
 		}

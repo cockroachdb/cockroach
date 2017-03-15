@@ -20,12 +20,12 @@ import (
 	"bytes"
 	"fmt"
 
+	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/pkg/errors"
 )
 
 type alterTableNode struct {
@@ -38,13 +38,13 @@ type alterTableNode struct {
 // Privileges: CREATE on table.
 //   notes: postgres requires CREATE on the table.
 //          mysql requires ALTER, CREATE, INSERT on the table.
-func (p *planner) AlterTable(n *parser.AlterTable) (planNode, error) {
+func (p *planner) AlterTable(ctx context.Context, n *parser.AlterTable) (planNode, error) {
 	tn, err := n.Table.NormalizeWithDatabaseName(p.session.Database)
 	if err != nil {
 		return nil, err
 	}
 
-	tableDesc, err := p.getTableDesc(tn)
+	tableDesc, err := p.getTableDesc(ctx, tn)
 	if err != nil {
 		return nil, err
 	}
@@ -109,7 +109,7 @@ func (n *alterTableNode) Start(ctx context.Context) error {
 			}
 
 		case *parser.AlterTableAddConstraint:
-			info, err := n.tableDesc.GetConstraintInfo(nil)
+			info, err := n.tableDesc.GetConstraintInfo(ctx, nil)
 			if err != nil {
 				return err
 			}
@@ -153,13 +153,13 @@ func (n *alterTableNode) Start(ctx context.Context) error {
 					return err
 				}
 				affected := make(map[sqlbase.ID]*sqlbase.TableDescriptor)
-				err := n.p.resolveFK(n.tableDesc, d, affected, sqlbase.ConstraintValidity_Unvalidated)
+				err := n.p.resolveFK(ctx, n.tableDesc, d, affected, sqlbase.ConstraintValidity_Unvalidated)
 				if err != nil {
 					return err
 				}
 				descriptorChanged = true
 				for _, updated := range affected {
-					if err := n.p.saveNonmutationAndNotify(updated); err != nil {
+					if err := n.p.saveNonmutationAndNotify(ctx, updated); err != nil {
 						return err
 					}
 				}
@@ -191,12 +191,14 @@ func (n *alterTableNode) Start(ctx context.Context) error {
 					continue
 				}
 				err := n.p.canRemoveDependentViewGeneric(
-					ctx, "column", string(t.Column), n.tableDesc.ParentID, ref, t.DropBehavior)
+					ctx, "column", string(t.Column), n.tableDesc.ParentID, ref, t.DropBehavior,
+				)
 				if err != nil {
 					return err
 				}
 				viewDesc, err := n.p.getViewDescForCascade(
-					ctx, "column", string(t.Column), n.tableDesc.ParentID, ref.ID, t.DropBehavior)
+					ctx, "column", string(t.Column), n.tableDesc.ParentID, ref.ID, t.DropBehavior,
+				)
 				if err != nil {
 					return err
 				}
@@ -283,7 +285,7 @@ func (n *alterTableNode) Start(ctx context.Context) error {
 			}
 
 		case *parser.AlterTableDropConstraint:
-			info, err := n.tableDesc.GetConstraintInfo(nil)
+			info, err := n.tableDesc.GetConstraintInfo(ctx, nil)
 			if err != nil {
 				return err
 			}
@@ -311,7 +313,7 @@ func (n *alterTableNode) Start(ctx context.Context) error {
 			case sqlbase.ConstraintTypeFK:
 				for i, idx := range n.tableDesc.Indexes {
 					if idx.ForeignKey.Name == name {
-						if err := n.p.removeFKBackReference(n.tableDesc, idx); err != nil {
+						if err := n.p.removeFKBackReference(ctx, n.tableDesc, idx); err != nil {
 							return err
 						}
 						n.tableDesc.Indexes[i].ForeignKey = sqlbase.ForeignKeyReference{}
@@ -324,7 +326,7 @@ func (n *alterTableNode) Start(ctx context.Context) error {
 			}
 
 		case *parser.AlterTableValidateConstraint:
-			info, err := n.tableDesc.GetConstraintInfo(nil)
+			info, err := n.tableDesc.GetConstraintInfo(ctx, nil)
 			if err != nil {
 				return err
 			}
@@ -441,7 +443,7 @@ func (n *alterTableNode) Start(ctx context.Context) error {
 		return err
 	}
 
-	if err := n.p.writeTableDesc(n.tableDesc); err != nil {
+	if err := n.p.writeTableDesc(ctx, n.tableDesc); err != nil {
 		return err
 	}
 

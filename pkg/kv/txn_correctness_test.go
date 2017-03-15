@@ -28,6 +28,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
@@ -38,7 +39,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"github.com/pkg/errors"
 )
 
 type retryError struct {
@@ -61,17 +61,16 @@ func (re *retryError) Error() string {
 // enforce an ordering. If a previous wait channel is set, the
 // command waits on it before execution.
 type cmd struct {
-	name        string // name of the cmd for debug output
-	key, endKey string // key and optional endKey
-	debug       string // optional debug string
-	txnIdx      int    // transaction index in the history
-	historyIdx  int    // this suffixes key so tests get unique keys
-	expRetry    bool   // true if we expect a retry
-	fn          func(
-		c *cmd, txn *client.Txn, t *testing.T) error // execution function
-	ch   chan error       // channel for other commands to wait
-	prev *cmd             // this command must wait on previous command before executing
-	env  map[string]int64 // contains all previously read values
+	name        string                                                   // name of the cmd for debug output
+	key, endKey string                                                   // key and optional endKey
+	debug       string                                                   // optional debug string
+	txnIdx      int                                                      // transaction index in the history
+	historyIdx  int                                                      // this suffixes key so tests get unique keys
+	expRetry    bool                                                     // true if we expect a retry
+	fn          func(ctx context.Context, c *cmd, txn *client.Txn) error // execution function
+	ch          chan error                                               // channel for other commands to wait
+	prev        *cmd                                                     // this command must wait on previous command before executing
+	env         map[string]int64                                         // contains all previously read values
 }
 
 func (c *cmd) init(prev *cmd) {
@@ -103,7 +102,7 @@ func (c *cmd) execute(txn *client.Txn, t *testing.T) (string, error) {
 	if log.V(2) {
 		log.Infof(context.Background(), "executing %s", c)
 	}
-	err := c.fn(c, txn, t)
+	err := c.fn(context.Background(), c, txn)
 	if err == nil {
 		c.ch <- nil
 	}
@@ -150,8 +149,8 @@ func (c *cmd) String() string {
 }
 
 // readCmd reads a value from the db and stores it in the env.
-func readCmd(c *cmd, txn *client.Txn, t *testing.T) error {
-	r, err := txn.Get(c.getKey())
+func readCmd(ctx context.Context, c *cmd, txn *client.Txn) error {
+	r, err := txn.Get(ctx, c.getKey())
 	if err != nil {
 		return err
 	}
@@ -165,18 +164,18 @@ func readCmd(c *cmd, txn *client.Txn, t *testing.T) error {
 }
 
 // deleteCmd deletes the value at the given key from the db.
-func deleteCmd(c *cmd, txn *client.Txn, t *testing.T) error {
-	return txn.Del(c.getKey())
+func deleteCmd(ctx context.Context, c *cmd, txn *client.Txn) error {
+	return txn.Del(ctx, c.getKey())
 }
 
 // deleteRngCmd deletes the range of values from the db from [key, endKey).
-func deleteRngCmd(c *cmd, txn *client.Txn, t *testing.T) error {
-	return txn.DelRange(c.getKey(), c.getEndKey())
+func deleteRngCmd(ctx context.Context, c *cmd, txn *client.Txn) error {
+	return txn.DelRange(ctx, c.getKey(), c.getEndKey())
 }
 
 // scanCmd reads the values from the db from [key, endKey).
-func scanCmd(c *cmd, txn *client.Txn, t *testing.T) error {
-	rows, err := txn.Scan(c.getKey(), c.getEndKey(), 0)
+func scanCmd(ctx context.Context, c *cmd, txn *client.Txn) error {
+	rows, err := txn.Scan(ctx, c.getKey(), c.getEndKey(), 0)
 	if err != nil {
 		return err
 	}
@@ -194,13 +193,13 @@ func scanCmd(c *cmd, txn *client.Txn, t *testing.T) error {
 // incCmd adds one to the value of c.key in the env (as determined by
 // a previous read or write, or else assumed to be zero) and writes it
 // to the db.
-func incCmd(c *cmd, txn *client.Txn, t *testing.T) error {
+func incCmd(ctx context.Context, c *cmd, txn *client.Txn) error {
 	val, ok := c.env[c.key]
 	if !ok {
 		panic(fmt.Sprintf("can't increment key %q; not yet read", c.key))
 	}
 	r := val + 1
-	if err := txn.Put(c.getKey(), r); err != nil {
+	if err := txn.Put(ctx, c.getKey(), r); err != nil {
 		return err
 	}
 	c.env[c.key] = r
@@ -212,7 +211,7 @@ func incCmd(c *cmd, txn *client.Txn, t *testing.T) error {
 // and writes the value to the db. "c.endKey" here needs to be parsed
 // in the context of this command, which is a "+"-separated list of
 // keys from the env or numeric constants to sum.
-func writeCmd(c *cmd, txn *client.Txn, t *testing.T) error {
+func writeCmd(ctx context.Context, c *cmd, txn *client.Txn) error {
 	sum := int64(0)
 	for _, sp := range strings.Split(c.endKey, "+") {
 		if constant, err := strconv.Atoi(sp); err != nil {
@@ -221,18 +220,18 @@ func writeCmd(c *cmd, txn *client.Txn, t *testing.T) error {
 			sum += int64(constant)
 		}
 	}
-	err := txn.Put(c.getKey(), sum)
+	err := txn.Put(ctx, c.getKey(), sum)
 	c.debug = fmt.Sprintf("[%d]", sum)
 	return err
 }
 
 // commitCmd commits the transaction.
-func commitCmd(c *cmd, txn *client.Txn, t *testing.T) error {
-	return txn.Commit()
+func commitCmd(ctx context.Context, c *cmd, txn *client.Txn) error {
+	return txn.Commit(ctx)
 }
 
 type cmdSpec struct {
-	fn func(c *cmd, txn *client.Txn, t *testing.T) error
+	fn func(ctx context.Context, c *cmd, txn *client.Txn) error
 	re *regexp.Regexp
 }
 
@@ -797,7 +796,7 @@ func (hv *historyVerifier) runCmds(
 ) (string, map[string]int64, error) {
 	var strs []string
 	env := map[string]int64{}
-	err := db.Txn(context.TODO(), func(txn *client.Txn) error {
+	err := db.Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
 		for _, c := range cmds {
 			c.historyIdx = hv.idx
 			c.env = env
@@ -833,7 +832,7 @@ func (hv *historyVerifier) runTxn(
 		prev.ch <- err
 	}
 
-	err := db.Txn(context.TODO(), func(txn *client.Txn) error {
+	err := db.Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
 		// If this is 2nd attempt, and a retry wasn't expected, return a
 		// retry error which results in further histories being enumerated.
 		if retry++; retry > 1 {

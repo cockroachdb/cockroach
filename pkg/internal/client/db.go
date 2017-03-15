@@ -21,13 +21,13 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/gogo/protobuf/proto"
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	"github.com/gogo/protobuf/proto"
 )
 
 // KeyValue represents a single key/value pair. This is similar to
@@ -412,9 +412,7 @@ func (db *DB) WriteBatch(ctx context.Context, begin, end interface{}, data []byt
 // sendAndFill is a helper which sends the given batch and fills its results,
 // returning the appropriate error which is either from the first failing call,
 // or an "internal" error.
-func sendAndFill(
-	send func(roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error), b *Batch,
-) error {
+func sendAndFill(ctx context.Context, send SenderFunc, b *Batch) error {
 	// Errors here will be attached to the results, so we will get them from
 	// the call to fillResults in the regular case in which an individual call
 	// fails. But send() also returns its own errors, so there's some dancing
@@ -423,7 +421,7 @@ func sendAndFill(
 	var ba roachpb.BatchRequest
 	ba.Requests = b.reqs
 	ba.Header = b.Header
-	b.response, b.pErr = send(ba)
+	b.response, b.pErr = send(ctx, ba)
 	if b.pErr != nil {
 		// Discard errors from fillResults.
 		_ = b.fillResults()
@@ -451,10 +449,7 @@ func (db *DB) Run(ctx context.Context, b *Batch) error {
 	if err := b.prepare(); err != nil {
 		return err
 	}
-	sendFn := func(br roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
-		return db.send(ctx, br)
-	}
-	return sendAndFill(sendFn, b)
+	return sendAndFill(ctx, db.send, b)
 }
 
 // Txn executes retryable in the context of a distributed transaction. The
@@ -464,23 +459,26 @@ func (db *DB) Run(ctx context.Context, b *Batch) error {
 // cause problems in the event it must be run more than once.
 //
 // If you need more control over how the txn is executed, check out txn.Exec().
-func (db *DB) Txn(ctx context.Context, retryable func(txn *Txn) error) error {
+func (db *DB) Txn(ctx context.Context, retryable func(context.Context, *Txn) error) error {
 	// TODO(radu): we should open a tracing Span here (we need to figure out how
 	// to use the correct tracer).
-	// TODO(dan): This context should, at longest, live for the lifetime of this
-	// method. Add a defered cancel.
-	txn := NewTxn(ctx, *db)
+
+	// TODO(andrei): revisit this when TxnCoordSender is moved to the client
+	// (https://github.com/cockroachdb/cockroach/issues/10511).
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	txn := NewTxn(db)
 	txn.SetDebugName("unnamed")
 	opts := TxnExecOptions{
 		AutoCommit:                 true,
 		AutoRetry:                  true,
 		AssignTimestampImmediately: true,
 	}
-	err := txn.Exec(opts, func(txn *Txn, _ *TxnExecOptions) error {
-		return retryable(txn)
+	err := txn.Exec(ctx, opts, func(ctx context.Context, txn *Txn, _ *TxnExecOptions) error {
+		return retryable(ctx, txn)
 	})
 	if err != nil {
-		txn.CleanupOnError(err)
+		txn.CleanupOnError(ctx, err)
 	}
 	// Terminate RetryableTxnError here, so it doesn't cause a higher-level txn to
 	// be retried. We don't do this in any of the other functions in DB; I guess
