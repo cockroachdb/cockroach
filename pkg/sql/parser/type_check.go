@@ -31,7 +31,7 @@ import (
 // expression syntax tree.
 type SemaContext struct {
 	// Placeholders relates placeholder names to their type and, later, value.
-	Placeholders *PlaceholderInfo
+	Placeholders PlaceholderInfo
 
 	// Location references the *Location on the current Session.
 	Location **time.Location
@@ -46,7 +46,7 @@ type SemaContext struct {
 // for "lightweight" type checking such as the one performed for default
 // expressions.
 func MakeSemaContext() SemaContext {
-	return SemaContext{Placeholders: NewPlaceholderInfo()}
+	return SemaContext{Placeholders: MakePlaceholderInfo()}
 }
 
 // isUnresolvedPlaceholder provides a nil-safe method to determine whether expr is an

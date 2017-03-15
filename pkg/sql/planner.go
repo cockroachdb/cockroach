@@ -330,7 +330,7 @@ func (p *planner) query(ctx context.Context, sql string, args ...interface{}) (p
 	if err != nil {
 		return nil, err
 	}
-	golangFillQueryArguments(p.semaCtx.Placeholders, args)
+	golangFillQueryArguments(&p.semaCtx.Placeholders, args)
 	return p.makePlan(ctx, stmt, false)
 }
 

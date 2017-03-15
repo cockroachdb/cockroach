@@ -36,9 +36,9 @@ type PlaceholderInfo struct {
 	Types  PlaceholderTypes
 }
 
-// NewPlaceholderInfo constructs an empty PlaceholderInfo.
-func NewPlaceholderInfo() *PlaceholderInfo {
-	res := &PlaceholderInfo{}
+// MakePlaceholderInfo constructs an empty PlaceholderInfo.
+func MakePlaceholderInfo() PlaceholderInfo {
+	res := PlaceholderInfo{}
 	res.Clear()
 	return res
 }
