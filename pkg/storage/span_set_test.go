@@ -254,7 +254,8 @@ func TestSpanSetBatch(t *testing.T) {
 		if iter.Valid() {
 			t.Fatalf("expected invalid iterator; found valid at key %s", iter.Key())
 		}
-		if !isReadSpanErr(iter.Error()) {
+		// Scanning out of bounds sets Valid() to false but is not an error.
+		if iter.Error() != nil {
 			t.Errorf("unexpected error on iterator: %s", iter.Error())
 		}
 	}()
@@ -265,7 +266,7 @@ func TestSpanSetBatch(t *testing.T) {
 	if err := batch.Commit(true); err != nil {
 		t.Fatal(err)
 	}
-	iter := &spanSetIterator{eng.NewIterator(false), &ss, nil}
+	iter := &spanSetIterator{eng.NewIterator(false), &ss, nil, false}
 	defer iter.Close()
 	iter.SeekReverse(outsideKey)
 	if iter.Valid() {
@@ -291,7 +292,7 @@ func TestSpanSetBatch(t *testing.T) {
 	if iter.Valid() {
 		t.Fatalf("expected invalid iterator; found valid at key %s", iter.Key())
 	}
-	if !isReadSpanErr(iter.Error()) {
+	if iter.Error() != nil {
 		t.Errorf("unexpected error on iterator: %s", iter.Error())
 	}
 	// Seeking back in bounds restores validity.

@@ -92,13 +92,19 @@ func (ss *SpanSet) checkAllowed(access SpanAccess, span roachpb.Span) error {
 	if access == SpanReadWrite {
 		action = "write"
 	}
+
 	return errors.Errorf("cannot %s undeclared span %s", action, span)
 }
 
 type spanSetIterator struct {
 	i     engine.Iterator
 	spans *SpanSet
-	err   error
+
+	// Seeking to an invalid key puts the iterator in an error state.
+	err error
+	// Reaching an out-of-bounds key with Next/Prev invalidates the
+	// iterator but does not set err.
+	invalid bool
 }
 
 var _ engine.Iterator = &spanSetIterator{}
@@ -109,43 +115,49 @@ func (s *spanSetIterator) Close() {
 
 func (s *spanSetIterator) Seek(key engine.MVCCKey) {
 	s.err = s.spans.checkAllowed(SpanReadOnly, roachpb.Span{Key: key.Key})
+	if s.err == nil {
+		s.invalid = false
+	}
 	s.i.Seek(key)
 }
 
 func (s *spanSetIterator) SeekReverse(key engine.MVCCKey) {
 	s.err = s.spans.checkAllowed(SpanReadOnly, roachpb.Span{Key: key.Key})
+	if s.err == nil {
+		s.invalid = false
+	}
 	s.i.SeekReverse(key)
 }
 
 func (s *spanSetIterator) Valid() bool {
-	return s.err == nil && s.i.Valid()
+	return !s.invalid && s.err == nil && s.i.Valid()
 }
 
 func (s *spanSetIterator) Next() {
 	s.i.Next()
-	if s.err == nil {
-		s.err = s.spans.checkAllowed(SpanReadOnly, roachpb.Span{Key: s.UnsafeKey().Key})
+	if s.spans.checkAllowed(SpanReadOnly, roachpb.Span{Key: s.UnsafeKey().Key}) != nil {
+		s.invalid = true
 	}
 }
 
 func (s *spanSetIterator) Prev() {
 	s.i.Prev()
-	if s.err == nil {
-		s.err = s.spans.checkAllowed(SpanReadOnly, roachpb.Span{Key: s.UnsafeKey().Key})
+	if s.spans.checkAllowed(SpanReadOnly, roachpb.Span{Key: s.UnsafeKey().Key}) != nil {
+		s.invalid = true
 	}
 }
 
 func (s *spanSetIterator) NextKey() {
 	s.i.NextKey()
-	if s.err == nil {
-		s.err = s.spans.checkAllowed(SpanReadOnly, roachpb.Span{Key: s.UnsafeKey().Key})
+	if s.spans.checkAllowed(SpanReadOnly, roachpb.Span{Key: s.UnsafeKey().Key}) != nil {
+		s.invalid = true
 	}
 }
 
 func (s *spanSetIterator) PrevKey() {
 	s.i.PrevKey()
-	if s.err == nil {
-		s.err = s.spans.checkAllowed(SpanReadOnly, roachpb.Span{Key: s.UnsafeKey().Key})
+	if s.spans.checkAllowed(SpanReadOnly, roachpb.Span{Key: s.UnsafeKey().Key}) != nil {
+		s.invalid = true
 	}
 }
 
@@ -228,7 +240,7 @@ func (s spanSetReader) Iterate(
 }
 
 func (s spanSetReader) NewIterator(prefix bool) engine.Iterator {
-	return &spanSetIterator{s.r.NewIterator(prefix), s.spans, nil}
+	return &spanSetIterator{s.r.NewIterator(prefix), s.spans, nil, false}
 }
 
 type spanSetWriter struct {
