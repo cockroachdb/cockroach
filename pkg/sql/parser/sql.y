@@ -2343,10 +2343,6 @@ opt_equal:
   '=' {}
 | /* EMPTY */ {}
 
-// TODO(dan): While RETURNING is not supported with UPSERT and ON CONFLICT
-// (#6637), we do some gymnastics with the grammar to make the diagrams in the
-// docs only show the supported combinations. This simplifies once #6637 is
-// resolved.
 insert_stmt:
   opt_with_clause INSERT INTO insert_target insert_rest returning_clause
   {
@@ -2354,22 +2350,20 @@ insert_stmt:
     $$.val.(*Insert).Table = $4.tblExpr()
     $$.val.(*Insert).Returning = $6.retClause()
   }
-| opt_with_clause INSERT INTO insert_target insert_rest on_conflict
+| opt_with_clause INSERT INTO insert_target insert_rest on_conflict returning_clause
   {
     $$.val = $5.stmt()
     $$.val.(*Insert).Table = $4.tblExpr()
     $$.val.(*Insert).OnConflict = $6.onConflict()
-    $$.val.(*Insert).Returning = AbsentReturningClause
+    $$.val.(*Insert).Returning = $7.retClause()
   }
-| opt_with_clause INSERT INTO insert_target insert_rest on_conflict RETURNING target_list { return unimplementedWithIssue(sqllex, 6637) }
-| opt_with_clause UPSERT INTO insert_target insert_rest
+| opt_with_clause UPSERT INTO insert_target insert_rest returning_clause
   {
     $$.val = $5.stmt()
     $$.val.(*Insert).Table = $4.tblExpr()
     $$.val.(*Insert).OnConflict = &OnConflict{}
-    $$.val.(*Insert).Returning = AbsentReturningClause
+    $$.val.(*Insert).Returning = $6.retClause()
   }
-| opt_with_clause UPSERT INTO insert_target insert_rest RETURNING target_list { return unimplementedWithIssue(sqllex, 6637) }
 
 // Can't easily make AS optional here, because VALUES in insert_rest would have
 // a shift/reduce conflict with VALUES as an optional alias. We could easily
