@@ -1295,6 +1295,10 @@ func (t *logicTest) run() {
 		t.Fatalf("No testfiles found (globs: %v)", globs)
 	}
 
+	// We want to collect SQL perstatement statistics in tests,
+	// regardless of what the environment / config says.
+	sql.StmtStatsEnable = true
+
 	total := 0
 	totalFail := 0
 	totalUnsupported := 0

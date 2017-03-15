@@ -77,7 +77,7 @@ func (e *Executor) recordStatementSummary(
 	result Result,
 	err error,
 ) {
-	session.appStats.recordStatement()
+	session.appStats.recordStatement(stmt)
 
 	phaseTimes := &session.phaseTimes
 

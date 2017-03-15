@@ -15,22 +15,74 @@
 
 package sql
 
-import "github.com/cockroachdb/cockroach/pkg/util/syncutil"
+import (
+	"bytes"
+	"fmt"
+	"time"
+
+	"golang.org/x/net/context"
+
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+)
 
 // appStats holds per-application statistics.
 type appStats struct {
 	syncutil.Mutex
 
-	stmtCount int
+	stmts map[string]*stmtStats
 }
 
-func (a *appStats) recordStatement() {
-	if a == nil {
+// stmtStats holds per-statement statistics.
+type stmtStats struct {
+	syncutil.Mutex
+
+	count int
+}
+
+// StmtStatsEnable determines whether to collect per-statement
+// statistics.
+// Note: in the future we will want to have this collection enabled at
+// all times. We hide it behind an environment variable until further
+// testing confirms it works and is stable.
+var StmtStatsEnable = envutil.EnvOrDefaultBool(
+	"COCKROACH_SQL_STMT_STATS_ENABLE", false,
+)
+
+func (a *appStats) recordStatement(stmt parser.Statement) {
+	if a == nil || !StmtStatsEnable {
 		return
 	}
+
+	if _, ok := stmt.(parser.HiddenFromStats); ok {
+		return
+	}
+
+	stmtKey := stmt.String()
+
+	s := a.getStatsForStmt(stmtKey)
+
+	// Collect the per-statement statistics.
+	s.Lock()
+	s.count++
+	s.Unlock()
+}
+
+// getStatsForStmt retrieves the per-stmt stat object.
+func (a *appStats) getStatsForStmt(stmtKey string) *stmtStats {
 	a.Lock()
-	a.stmtCount++
+	// Retrieve the per-statement statistic object, and create it if it
+	// doesn't exist yet.
+	s, ok := a.stmts[stmtKey]
+	if !ok {
+		s = &stmtStats{}
+		a.stmts[stmtKey] = s
+	}
 	a.Unlock()
+	return s
 }
 
 // sqlStats carries per-application statistics for all applications on
@@ -59,7 +111,84 @@ func (s *sqlStats) getStatsForApplication(appName string) *appStats {
 	if a, ok := s.apps[appName]; ok {
 		return a
 	}
-	a := &appStats{}
+	a := &appStats{stmts: make(map[string]*stmtStats)}
 	s.apps[appName] = a
 	return a
+}
+
+// resetStats clears all the stored per-app and per-statement
+// statistics.
+func (s *sqlStats) resetStats(ctx context.Context) {
+	// Note: we do not clear the entire s.apps map here. We would need
+	// to do so to prevent problems with a runaway client running `SET
+	// APPLICATION_NAME=...` with a different name every time.  However,
+	// any ongoing open client session at the time of the reset has
+	// cached a pointer to its appStats struct and would thus continue
+	// to report its stats in an object now invisible to the other tools
+	// (virtual table, marshalling, etc.). It's a judgement call, but
+	// for now we prefer to see more data and thus not clear the map, at
+	// the risk of seeing the map grow unboundedly with the number of
+	// different application_names seen so far.
+
+	s.Lock()
+	// Clear the per-apps maps manually,
+	// because any SQL session currently open has cached the
+	// pointer to its appStats object and will continue to
+	// accumulate data using that until it closes (or changes its
+	// application_name).
+	for appName, a := range s.apps {
+		a.Lock()
+
+		// Save the existing data to logs.
+		// TODO(knz/dt): instead of dumping the stats to the log, save
+		// them in a SQL table so they can be inspected by the DBA and/or
+		// the UI.
+		dumpStmtStats(ctx, appName, a.stmts)
+
+		// Clear the map, to release the memory; make the new map somewhat
+		// already large for the likely future workload.
+		a.stmts = make(map[string]*stmtStats, len(a.stmts)/2)
+		a.Unlock()
+	}
+	s.Unlock()
+}
+
+// Save the existing data for an application to the info log.
+func dumpStmtStats(ctx context.Context, appName string, stats map[string]*stmtStats) {
+	if len(stats) == 0 {
+		return
+	}
+	var buf bytes.Buffer
+	fmt.Fprintf(&buf, "Statistics for %q:\n", appName)
+	for key, s := range stats {
+		s.Lock()
+		fmt.Fprintf(&buf, "%q: %d\n", key, s.count)
+		s.Unlock()
+	}
+	log.Info(ctx, buf.String())
+}
+
+// StmtStatsResetFrequency is the frequency at which per-app and
+// per-statement statistics are cleared from memory, to avoid
+// unlimited memory growth.
+var StmtStatsResetFrequency = envutil.EnvOrDefaultDuration(
+	"COCKROACH_SQL_STMT_STATS_RESET_INTERVAL", 1*time.Hour,
+)
+
+// startResetWorker ensures that the data is removed from memory
+// periodically, so as to avoid memory blow-ups.
+func (s *sqlStats) startResetWorker(stopper *stop.Stopper) {
+	ctx := log.WithLogTag(context.Background(), "sql-stats", nil)
+	stopper.RunWorker(func() {
+		ticker := time.NewTicker(StmtStatsResetFrequency)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				s.resetStats(ctx)
+			case <-stopper.ShouldStop():
+				return
+			}
+		}
+	})
 }

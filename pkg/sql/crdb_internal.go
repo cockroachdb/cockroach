@@ -37,7 +37,7 @@ var crdbInternal = virtualSchema{
 		crdbInternalTablesTable,
 		crdbInternalLeasesTable,
 		crdbInternalSchemaChangesTable,
-		crdbInternalAppStatsTable,
+		crdbInternalStmtStatsTable,
 	},
 }
 
@@ -259,11 +259,12 @@ CREATE TABLE crdb_internal.leases (
 	},
 }
 
-var crdbInternalAppStatsTable = virtualSchemaTable{
+var crdbInternalStmtStatsTable = virtualSchemaTable{
 	schema: `
-CREATE TABLE crdb_internal.app_stats (
+CREATE TABLE crdb_internal.statement_statistics (
   APPLICATION_NAME STRING,
-  STATEMENT_COUNT  INT
+  KEY              STRING,
+  COUNT            INT
 );
 `,
 	populate: func(_ context.Context, p *planner, addRow func(...parser.Datum) error) error {
@@ -290,14 +291,30 @@ CREATE TABLE crdb_internal.app_stats (
 		for _, appName := range appNames {
 			appStats := sqlStats.getStatsForApplication(appName)
 
+			// Retrieve the statement keys and sort them to ensure the
+			// output is deterministic.
+			var stmtKeys []string
 			appStats.Lock()
-			err := addRow(
-				parser.NewDString(appName),
-				parser.NewDInt(parser.DInt(int64(appStats.stmtCount))),
-			)
+			for k := range appStats.stmts {
+				stmtKeys = append(stmtKeys, k)
+			}
 			appStats.Unlock()
-			if err != nil {
-				return err
+			sort.Strings(stmtKeys)
+
+			// Now retrieve the per-stmt stats proper.
+			for _, stmtKey := range stmtKeys {
+				s := appStats.getStatsForStmt(stmtKey)
+
+				s.Lock()
+				err := addRow(
+					parser.NewDString(appName),
+					parser.NewDString(stmtKey),
+					parser.NewDInt(parser.DInt(int64(s.count))),
+				)
+				s.Unlock()
+				if err != nil {
+					return err
+				}
 			}
 		}
 		return nil
