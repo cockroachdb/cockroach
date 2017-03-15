@@ -21,6 +21,7 @@ import (
 	"bytes"
 	"fmt"
 
+	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
@@ -29,7 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/pkg/errors"
 )
 
 // RowFetcher handles fetching kvs and forming table rows.
@@ -179,7 +179,7 @@ func (rf *RowFetcher) Init(
 // StartScan initializes and starts the key-value scan. Can be used multiple
 // times.
 func (rf *RowFetcher) StartScan(
-	txn *client.Txn, spans roachpb.Spans, limitBatches bool, limitHint int64,
+	ctx context.Context, txn *client.Txn, spans roachpb.Spans, limitBatches bool, limitHint int64,
 ) error {
 	if len(spans) == 0 {
 		panic("no spans")
@@ -206,18 +206,18 @@ func (rf *RowFetcher) StartScan(
 	}
 
 	// Retrieve the first key.
-	_, err = rf.NextKey()
+	_, err = rf.NextKey(ctx)
 	return err
 }
 
 // NextKey retrieves the next key/value and sets kv/kvEnd. Returns whether a row
 // has been completed.
 // TODO(andrei): change to return error
-func (rf *RowFetcher) NextKey() (rowDone bool, err error) {
+func (rf *RowFetcher) NextKey(ctx context.Context) (rowDone bool, err error) {
 	var ok bool
 
 	for {
-		ok, rf.kv, err = rf.kvFetcher.nextKV()
+		ok, rf.kv, err = rf.kvFetcher.nextKV(ctx)
 		if err != nil {
 			return false, err
 		}
@@ -520,7 +520,7 @@ func (rf *RowFetcher) processValueTuple(
 // index used; values that are not needed (as per valNeededForCol) are nil. The
 // EncDatumRow should not be modified and is only valid until the next call.
 // When there are no more rows, the EncDatumRow is nil.
-func (rf *RowFetcher) NextRow() (EncDatumRow, error) {
+func (rf *RowFetcher) NextRow(ctx context.Context) (EncDatumRow, error) {
 	if rf.kvEnd {
 		return nil, nil
 	}
@@ -536,7 +536,7 @@ func (rf *RowFetcher) NextRow() (EncDatumRow, error) {
 		if err != nil {
 			return nil, err
 		}
-		rowDone, err := rf.NextKey()
+		rowDone, err := rf.NextKey(ctx)
 		if err != nil {
 			return nil, err
 		}
@@ -550,8 +550,8 @@ func (rf *RowFetcher) NextRow() (EncDatumRow, error) {
 // NextRowDecoded calls NextRow and decodes the EncDatumRow into a Datums.
 // The Datums should not be modified and is only valid until the next call.
 // When there are no more rows, the Datums is nil.
-func (rf *RowFetcher) NextRowDecoded() (parser.Datums, error) {
-	encRow, err := rf.NextRow()
+func (rf *RowFetcher) NextRowDecoded(ctx context.Context) (parser.Datums, error) {
+	encRow, err := rf.NextRow(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -568,7 +568,9 @@ func (rf *RowFetcher) NextRowDecoded() (parser.Datums, error) {
 // NextKeyDebug processes one key at a time and returns a pretty printed key and
 // value. If we completed a row, the row is returned as well (see nextRow). If
 // there are no more keys, prettyKey is "".
-func (rf *RowFetcher) NextKeyDebug() (prettyKey string, prettyValue string, row EncDatumRow, err error) {
+func (rf *RowFetcher) NextKeyDebug(
+	ctx context.Context,
+) (prettyKey string, prettyValue string, row EncDatumRow, err error) {
 	if rf.kvEnd {
 		return "", "", nil, nil
 	}
@@ -576,7 +578,7 @@ func (rf *RowFetcher) NextKeyDebug() (prettyKey string, prettyValue string, row 
 	if err != nil {
 		return "", "", nil, err
 	}
-	rowDone, err := rf.NextKey()
+	rowDone, err := rf.NextKey(ctx)
 	if err != nil {
 		return "", "", nil, err
 	}

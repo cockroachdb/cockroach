@@ -17,12 +17,12 @@
 package sql
 
 import (
+	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
-	"github.com/pkg/errors"
 )
 
 // GetUserHashedPassword returns the hashedPassword for the given username if
@@ -37,7 +37,7 @@ func GetUserHashedPassword(
 	}
 
 	var hashedPassword []byte
-	if err := executor.cfg.DB.Txn(ctx, func(txn *client.Txn) error {
+	if err := executor.cfg.DB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		p := makeInternalPlanner("get-pwd", txn, security.RootUser, metrics)
 		defer finishInternalPlanner(p)
 		const getHashedPassword = `SELECT hashedPassword FROM system.users ` +

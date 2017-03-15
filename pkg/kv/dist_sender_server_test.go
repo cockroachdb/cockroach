@@ -636,11 +636,11 @@ func TestMultiRangeEmptyAfterTruncate(t *testing.T) {
 
 	// Delete the keys within a transaction. The range [c,d) doesn't have
 	// any active requests.
-	if err := db.Txn(context.TODO(), func(txn *client.Txn) error {
+	if err := db.Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
 		b := txn.NewBatch()
 		b.DelRange("a", "b", false)
 		b.DelRange("e", "f", false)
-		return txn.CommitInBatch(b)
+		return txn.CommitInBatch(ctx, b)
 	}); err != nil {
 		t.Fatalf("unexpected error on transactional DeleteRange: %s", err)
 	}
@@ -693,10 +693,10 @@ func TestMultiRangeScanReverseScanDeleteResolve(t *testing.T) {
 
 	// Delete the keys within a transaction. Implicitly, the intents are
 	// resolved via ResolveIntentRange upon completion.
-	if err := db.Txn(context.TODO(), func(txn *client.Txn) error {
+	if err := db.Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
 		b := txn.NewBatch()
 		b.DelRange("a", "d", false)
-		return txn.CommitInBatch(b)
+		return txn.CommitInBatch(ctx, b)
 	}); err != nil {
 		t.Fatalf("unexpected error on transactional DeleteRange: %s", err)
 	}
@@ -815,12 +815,12 @@ func TestParallelSender(t *testing.T) {
 	psCount := s.DistSender().GetParallelSendCount()
 
 	// Batch writes to each range.
-	if err := db.Txn(ctx, func(txn *client.Txn) error {
+	if err := db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		b := txn.NewBatch()
 		for _, key := range splitKeys {
 			b.Put(key, "val")
 		}
-		return txn.CommitInBatch(b)
+		return txn.CommitInBatch(ctx, b)
 	}); err != nil {
 		t.Errorf("unexpected error on batch put: %s", err)
 	}
@@ -1019,13 +1019,13 @@ func TestNoSequenceCachePutOnRangeMismatchError(t *testing.T) {
 	//    same replica.
 	// 5) The command succeeds since the sequence cache has not yet been updated.
 	epoch := 0
-	if err := db.Txn(context.TODO(), func(txn *client.Txn) error {
+	if err := db.Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
 		epoch++
 		b := txn.NewBatch()
 		b.Put("a", "val")
 		b.Put("b", "val")
 		b.Put("c", "val")
-		return txn.CommitInBatch(b)
+		return txn.CommitInBatch(ctx, b)
 	}); err != nil {
 		t.Errorf("unexpected error on transactional Puts: %s", err)
 	}
@@ -1074,7 +1074,7 @@ func TestPropagateTxnOnError(t *testing.T) {
 	// get a ReadWithinUncertaintyIntervalError and the txn will be
 	// retried.
 	epoch := 0
-	if err := db.Txn(context.TODO(), func(txn *client.Txn) error {
+	if err := db.Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
 		epoch++
 		if epoch >= 2 {
 			// Writing must be true since we ran the BeginTransaction command.
@@ -1091,7 +1091,7 @@ func TestPropagateTxnOnError(t *testing.T) {
 		b := txn.NewBatch()
 		b.Put("a", "val")
 		b.CPut(targetKey, "new_val", origVal)
-		err := txn.CommitInBatch(b)
+		err := txn.CommitInBatch(ctx, b)
 		if epoch == 1 {
 			if retErr, ok := err.(*roachpb.RetryableTxnError); ok {
 				if _, ok := retErr.Cause.(*roachpb.ReadWithinUncertaintyIntervalError); ok {
