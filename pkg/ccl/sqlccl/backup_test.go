@@ -349,6 +349,17 @@ func TestBackupRestoreIncremental(t *testing.T) {
 
 			backupDirs = append(backupDirs, fmt.Sprintf(`'%s'`, backupDir))
 		}
+
+		// Test a regression in RESTORE where the WriteBatch end key was not
+		// being set correctly in Import: make an incremental backup such that
+		// the greatest key in the diff is less than the previous backups.
+		sqlDB.Exec(`INSERT INTO bench.bank VALUES (0, -1, 'final')`)
+		checksums = append(checksums, checksumBankPayload(t, sqlDB))
+		finalBackupDir := filepath.Join(dir, "final")
+		sqlDB.Exec(fmt.Sprintf(`BACKUP TABLE bench.bank TO '%s' %s`,
+			finalBackupDir, fmt.Sprintf(` INCREMENTAL FROM %s`, strings.Join(backupDirs, `,`)),
+		))
+		backupDirs = append(backupDirs, fmt.Sprintf(`'%s'`, finalBackupDir))
 	}
 
 	// Start a new cluster to restore into.
