@@ -385,9 +385,6 @@ func (n *Node) start(
 	n.startComputePeriodicMetrics(n.stopper, n.storeCfg.MetricsSampleInterval)
 	n.startGossip(n.stopper)
 
-	// Record node started event.
-	n.recordJoinEvent()
-
 	log.Infof(ctx, "%s: started with %v engine(s) and attributes %v", n, engines, attrs.Attrs)
 	return nil
 }
