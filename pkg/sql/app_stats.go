@@ -16,6 +16,7 @@
 package sql
 
 import (
+	"bytes"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -35,7 +36,32 @@ type appStats struct {
 type stmtStats struct {
 	syncutil.Mutex
 
+	// count is the total number of times this statement was executed
+	// since the begin of the reporting period.
 	count int
+
+	// firstAttemptCount collects the total number of times a first
+	// attempt was executed (either the one time in explicitly committed
+	// statements, or the first time in implicitly committed statements
+	// with implicit retries).
+	// The proportion of statements that could be executed without retry
+	// can be computed as firstAttemptCount / count.
+	// The cumulative number of retries can be computed with
+	// count - firstAttemptCount.
+	firstAttemptCount int
+
+	// maxRetries collects the maximum observed number of automatic
+	// retries in the reporting period.
+	maxRetries int
+
+	// lastErr collects the last error encountered.
+	lastErr error
+
+	// numRows collects the number of rows returned or observed.
+	numRows numericStat
+
+	// phase latencies.
+	parseLat, planLat, runLat, execLat, ovhLat numericStat
 }
 
 // StmtStatsEnable determines whether to collect per-statement
@@ -44,23 +70,86 @@ var StmtStatsEnable = envutil.EnvOrDefaultBool(
 	"COCKROACH_SQL_STMT_STATS_ENABLE", false,
 )
 
-func (a *appStats) recordStatement(stmt parser.Statement) {
+func (a *appStats) recordStatement(
+	stmt parser.Statement,
+	distSQLUsed bool,
+	automaticRetryCount int,
+	numRows int,
+	err error,
+	parseLat, planLat, runLat, execLat, ovhLat float64,
+) {
 	if a == nil || !StmtStatsEnable {
 		return
 	}
 
+	// Some statements like SET, SHOW etc are not useful to collect
+	// stats about. Ignore them.
 	if _, ok := stmt.(parser.HiddenFromStats); ok {
 		return
 	}
 
-	stmtKey := stmt.String()
+	// Extend the statement key with a character that indicated whether
+	// there was an error and/or whether the query was distributed, so
+	// that we use separate buckets for the different situations.
+	var buf bytes.Buffer
+	if err != nil {
+		buf.WriteByte('!')
+	}
+	if distSQLUsed {
+		buf.WriteByte('+')
+	}
+	parser.FormatNode(&buf, parser.FmtSimple, stmt)
+	stmtKey := buf.String()
 
+	// Get the statistics object.
 	s := a.getStatsForStmt(stmtKey)
 
 	// Collect the per-statement statistics.
 	s.Lock()
 	s.count++
+	if err != nil {
+		s.lastErr = err
+	}
+	if automaticRetryCount == 0 {
+		s.firstAttemptCount++
+	} else if automaticRetryCount > s.maxRetries {
+		s.maxRetries = automaticRetryCount
+	}
+	s.numRows.record(s.count, float64(numRows))
+	s.parseLat.record(s.count, parseLat)
+	s.planLat.record(s.count, planLat)
+	s.runLat.record(s.count, runLat)
+	s.execLat.record(s.count, execLat)
+	s.ovhLat.record(s.count, ovhLat)
 	s.Unlock()
+}
+
+// numericStat collect the running values until the mean and variance
+// are required.
+type numericStat struct {
+	// running sum, to compute the average.
+	sum float64
+	// partial mean and square of differences, to compute the variance.
+	// See https://en.wikipedia.org/wiki/Algorithms_for_calculating_variance#Online_algorithm.
+	mean    float64
+	sqrDiff float64
+}
+
+// Retrieve the mean value.
+func (l *numericStat) getMean(count int) float64 {
+	return l.sum / float64(count)
+}
+
+// Retrieve the variance of the values.
+func (l *numericStat) getVariance(count int) float64 {
+	return l.sqrDiff / (float64(count) - 1)
+}
+
+func (l *numericStat) record(count int, val float64) {
+	l.sum += val
+	delta := val - l.mean
+	l.mean += delta / float64(count)
+	l.sqrDiff += delta * (val - l.mean)
 }
 
 // getStatsForStmt retrieves the per-stmt stat object.
