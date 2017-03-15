@@ -145,7 +145,7 @@ func (p *planner) Explain(
 	case explainDistSQL:
 		return &explainDistSQLNode{
 			plan:           plan,
-			distSQLPlanner: p.distSQLPlanner,
+			distSQLPlanner: p.session.distSQLPlanner,
 			txn:            p.txn,
 		}, nil
 

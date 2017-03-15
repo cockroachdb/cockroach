@@ -510,8 +510,8 @@ func (e *Executor) CopyDone(session *Session) StatementResults {
 
 // CopyEnd ends the COPY mode. Any buffered data is discarded.
 func (session *Session) CopyEnd(ctx context.Context) {
-	session.planner.copyFrom.Close(ctx)
-	session.planner.copyFrom = nil
+	session.copyFrom.Close(ctx)
+	session.copyFrom = nil
 }
 
 // blockConfigUpdates blocks any gossip updates to the system config
@@ -558,7 +558,7 @@ func (e *Executor) execRequest(session *Session, sql string, copymsg copyMsg) St
 	}
 
 	session.phaseTimes[sessionStartParse] = timeutil.Now()
-	if session.planner.copyFrom != nil {
+	if session.copyFrom != nil {
 		stmts, err = session.planner.ProcessCopyData(session.Ctx(), sql, copymsg)
 	} else if copymsg != copyMsgNone {
 		err = fmt.Errorf("unexpected copy command")

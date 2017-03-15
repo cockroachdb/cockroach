@@ -27,6 +27,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/mon"
@@ -115,8 +116,18 @@ type Session struct {
 	// Run-time state.
 	//
 
-	// planner is the planner in charge of this session.
+	// execCfg is the configuration of the Executor that is executing this
+	// session.
+	execCfg *ExecutorConfig
+	// planner is the planner in charge of executing statements within this
+	// session. While the planner type is logically scoped to the execution
+	// of a single statement, this field will be reset and reused between
+	// statements. When necessary, it can be cloned so that future modifications
+	// to the field do not affect a separate stream of statement execution.
 	planner planner
+	// distSQLPlanner is in charge of distSQL physical planning and running
+	// logic.
+	distSQLPlanner *distSQLPlanner
 	// context is the Session's base context, to be used for all
 	// SQL-related logging. See Ctx().
 	context context.Context
@@ -145,6 +156,19 @@ type Session struct {
 	// statistics for result sets (which escape transactions).
 	mon        mon.MemoryMonitor
 	sessionMon mon.MemoryMonitor
+	// leases holds the state of per-table leases acquired by the leaseMgr.
+	leases []*LeaseState
+	// leaseMgr manages acquiring and releasing per-table leases.
+	leaseMgr *LeaseManager
+	// systemConfig holds a copy of the latest system config since the last
+	// call to resetForBatch.
+	systemConfig config.SystemConfig
+	// databaseCache is used as a cache for database names.
+	// TODO(andrei): get rid of it and replace it with a leasing system for
+	// database descriptors.
+	databaseCache *databaseCache
+	// If set, contains the in progress COPY FROM columns.
+	copyFrom *copyNode
 
 	//
 	// Per-session statistics.
@@ -152,9 +176,11 @@ type Session struct {
 
 	// memMetrics track memory usage by SQL execution.
 	memMetrics *MemoryMetrics
+	// sqlStats tracks per-application statistics for all
+	// applications on each node.
+	sqlStats *sqlStats
 	// appStats track per-application SQL usage statistics.
 	appStats *appStats
-
 	// phaseTimes contains helps measure the time spent in each phase of
 	// SQL execution. See executor_statement_metrics.go for details.
 	phaseTimes phaseTimes
@@ -177,24 +203,24 @@ func NewSession(
 	ctx context.Context, args SessionArgs, e *Executor, remote net.Addr, memMetrics *MemoryMetrics,
 ) *Session {
 	ctx = e.AnnotateCtx(ctx)
+	cfg, cache := e.getSystemConfig()
 	s := &Session{
 		Database:       args.Database,
 		SearchPath:     parser.SearchPath{"pg_catalog"},
-		User:           args.User,
 		Location:       time.UTC,
+		User:           args.User,
 		virtualSchemas: e.virtualSchemas,
-		memMetrics:     memMetrics,
-	}
-	s.phaseTimes[sessionInit] = timeutil.Now()
-	cfg, cache := e.getSystemConfig()
-	s.planner = planner{
-		leaseMgr:       e.cfg.LeaseManager,
-		sqlStats:       &e.sqlStats,
-		systemConfig:   cfg,
-		databaseCache:  cache,
-		session:        s,
 		execCfg:        &e.cfg,
 		distSQLPlanner: e.distSQLPlanner,
+		leaseMgr:       e.cfg.LeaseManager,
+		systemConfig:   cfg,
+		databaseCache:  cache,
+		memMetrics:     memMetrics,
+		sqlStats:       &e.sqlStats,
+	}
+	s.phaseTimes[sessionInit] = timeutil.Now()
+	s.planner = planner{
+		session: s,
 	}
 	s.resetApplicationName(args.ApplicationName)
 	s.PreparedStatements = makePreparedStatements(s)
@@ -265,6 +291,22 @@ func (s *Session) Ctx() context.Context {
 		return s.TxnState.Ctx
 	}
 	return s.context
+}
+
+// hijackCtx changes the current transaction's context to the provided one and
+// returns a cleanup function to be used to restore the original context when
+// the hijack is no longer needed.
+// TODO(andrei): delete this when EXPLAIN(TRACE) goes away
+func (s *Session) hijackCtx(ctx context.Context) func() {
+	if s.TxnState.State != Open {
+		// This hijacking is dubious to begin with. Let's at least assert it's being
+		// done when the TxnState is in an expected state. In particular, if the
+		// state would be NoTxn, then we'd need to hijack session.Ctx instead of the
+		// txnState's context.
+		log.Fatalf(ctx, "can only hijack while a SQL txn is Open. txnState: %+v",
+			&s.TxnState)
+	}
+	return s.TxnState.hijackCtx(ctx)
 }
 
 // TxnStateEnum represents the state of a SQL txn.
