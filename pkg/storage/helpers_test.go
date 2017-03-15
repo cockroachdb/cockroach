@@ -203,6 +203,19 @@ func (s *Store) ReservationCount() int {
 	return len(s.snapshotApplySem)
 }
 
+func NewTestStorePool(cfg StoreConfig) *StorePool {
+	return NewStorePool(
+		cfg.AmbientCtx,
+		cfg.Gossip,
+		cfg.Clock,
+		func(roachpb.NodeID, time.Time, time.Duration) nodeStatus {
+			return nodeStatusLive
+		},
+		TestTimeUntilStoreDeadOff,
+		/* deterministic */ false,
+	)
+}
+
 func (r *Replica) ReplicaIDLocked() roachpb.ReplicaID {
 	return r.mu.replicaID
 }
@@ -252,11 +265,6 @@ func (r *Replica) IsRaftGroupInitialized() bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return r.mu.internalRaftGroup != nil
-}
-
-// StorePoolNodeLivenessTrue is a NodeLivenessFunc which always returns true.
-func StorePoolNodeLivenessTrue(_ roachpb.NodeID, _ time.Time, _ time.Duration) bool {
-	return true
 }
 
 // GetStoreList is the same function as GetStoreList exposed for tests only.
