@@ -25,6 +25,7 @@ type fmtFlags struct {
 	showTypes        bool
 	ShowTableAliases bool
 	symbolicVars     bool
+	scrubDatums      bool
 	// tableNameNormalizer will be called on all NormalizableTableNames if it is
 	// non-nil. Its results will be used if they are non-nil, or ignored if they
 	// are nil.
@@ -69,6 +70,13 @@ var FmtBareStrings FmtFlags = &fmtFlags{bareStrings: true}
 // expressions).
 var FmtParsable FmtFlags = &fmtFlags{disambiguateDatumTypes: true}
 
+// FmtScrubbed instructs the pretty-printer to produce a
+// representation that does not disclose query-specific data.
+var FmtScrubbed FmtFlags = &fmtFlags{
+	scrubDatums:            true,
+	disambiguateDatumTypes: true,
+}
+
 // FmtNormalizeTableNames returns FmtFlags that instructs the pretty-printer
 // to normalize all table names using the provided function.
 func FmtNormalizeTableNames(base FmtFlags, fn func(*NormalizableTableName) *TableName) FmtFlags {
@@ -112,13 +120,27 @@ type NodeFormatter interface {
 	Format(buf *bytes.Buffer, flags FmtFlags)
 }
 
+// formatOrScrubNode recurses into a node for pretty-printing, unless
+// scrubDatums is set in the flags and the node is a datum or a
+// literal.
+func formatOrScrubNode(buf *bytes.Buffer, f FmtFlags, n NodeFormatter) {
+	if f.scrubDatums {
+		switch n.(type) {
+		case Datum, *NumVal, *StrVal:
+			buf.WriteByte('_')
+			return
+		}
+	}
+	n.Format(buf, f)
+}
+
 // FormatNode recurses into a node for pretty-printing.
 // Flag-driven special cases can hook into this.
 func FormatNode(buf *bytes.Buffer, f FmtFlags, n NodeFormatter) {
 	if f.showTypes {
 		if te, ok := n.(TypedExpr); ok {
 			buf.WriteByte('(')
-			n.Format(buf, f)
+			formatOrScrubNode(buf, f, n)
 			buf.WriteString(")[")
 			if rt := te.ResolvedType(); rt == nil {
 				// An attempt is made to pretty-print an expression that was
@@ -133,7 +155,7 @@ func FormatNode(buf *bytes.Buffer, f FmtFlags, n NodeFormatter) {
 			return
 		}
 	}
-	n.Format(buf, f)
+	formatOrScrubNode(buf, f, n)
 	if f.disambiguateDatumTypes {
 		var typ Type
 		if d, isDatum := n.(Datum); isDatum {
