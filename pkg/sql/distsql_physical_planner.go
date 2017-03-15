@@ -597,7 +597,7 @@ func (dsp *distSQLPlanner) createTableReaders(
 }
 
 func initBackfillerSpec(
-	backfillType int, desc sqlbase.TableDescriptor, duration time.Duration, chunkSize int64,
+	backfillType backfillType, desc sqlbase.TableDescriptor, duration time.Duration, chunkSize int64,
 ) (distsqlrun.BackfillerSpec, error) {
 	switch backfillType {
 	case indexBackfill:
@@ -621,7 +621,7 @@ func initBackfillerSpec(
 // finalized.
 func (dsp *distSQLPlanner) CreateBackfiller(
 	planCtx *planningCtx,
-	backfillType int,
+	backfillType backfillType,
 	desc sqlbase.TableDescriptor,
 	duration time.Duration,
 	chunkSize int64,
