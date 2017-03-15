@@ -15,7 +15,7 @@ set -eux
 
 cd "$(dirname "${0}")"/..
 
-BUCKET_NAME=binaries.cockroachdb.com
+BUCKET_NAME=binaries-test.cockroachdb.com
 
 deploy_file() {
   time aws s3 cp "$1" "s3://${BUCKET_NAME}/$1"

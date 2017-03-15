@@ -5,7 +5,7 @@ set -euxo pipefail
 "$(dirname "${0}")"/build-docker-deploy.sh
 
 cd "$(dirname "${0}")"/../pkg/acceptance
-time ./acceptance.test -i cockroachdb/cockroach -b /cockroach/cockroach -nodes 3 -test.v -test.timeout -5m
+#time ./acceptance.test -i cockroachdb/cockroach -b /cockroach/cockroach -nodes 3 -test.v -test.timeout -5m
 
 docker tag cockroachdb/cockroach cockroachdb/cockroach:"${VERSION}"
 

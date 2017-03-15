@@ -1,16 +1,16 @@
 #!/usr/bin/env bash
 set -euxo pipefail
 
-sed "s/<EMAIL>/$DOCKER_EMAIL/;s/<AUTH>/$DOCKER_AUTH/" < build/.dockercfg.in > ~/.dockercfg
+#sed "s/<EMAIL>/$DOCKER_EMAIL/;s/<AUTH>/$DOCKER_AUTH/" < build/.dockercfg.in > ~/.dockercfg
 
-case "$TC_BUILD_BRANCH" in
+case "beta-19940829" in
   master)
     VERSION=$(git describe || git rev-parse --short HEAD)
     push=build/push-aws.sh
     ;;
 
   beta-*)
-    VERSION="$TC_BUILD_BRANCH"
+    VERSION="beta-19940829"
     push=build/push-tagged-aws.sh
     ;;
 

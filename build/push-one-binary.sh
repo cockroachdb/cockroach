@@ -5,7 +5,7 @@ set -euxo pipefail
 # This file uses `bash` and not `sh` due to the `time` builtin (the external
 # `time` is not available on CircleCI).
 
-BUCKET_NAME="cockroach"
+BUCKET_NAME="cocsksadfkroach"
 LATEST_SUFFIX=".LATEST"
 REPO_NAME="cockroach"
 
