@@ -77,14 +77,15 @@ true
 statement ok
 SET application_name = hello; SELECT 1; SELECT 1,2; SELECT 1
 
-query B
-SELECT count >= 2 FROM crdb_internal.node_statement_statistics WHERE application_name = 'hello' AND key = 'SELECT 1'
-----
-true
-
 # reset for other tests.
 statement ok
 SET application_name = ''
+
+query TB
+SELECT key, count >= 1 FROM crdb_internal.node_statement_statistics WHERE application_name = 'hello' AND key LIKE 'SELECT%'
+----
+SELECT _    true
+SELECT _, _ true
 
 query TT colnames
 SELECT field, value FROM crdb_internal.node_build_info WHERE field ILIKE 'name'
