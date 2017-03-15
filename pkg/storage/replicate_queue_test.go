@@ -38,6 +38,7 @@ import (
 
 func TestReplicateQueueRebalance(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	t.Skip("#12943")
 
 	if testing.Short() {
 		t.Skip("short flag")
@@ -109,6 +110,7 @@ func TestReplicateQueueRebalance(t *testing.T) {
 // over-replicated ranges and remove replicas from them.
 func TestReplicateQueueDownReplicate(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	t.Skip("#12943")
 
 	const replicaCount = 3
 
