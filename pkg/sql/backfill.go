@@ -119,7 +119,7 @@ func (sc *SchemaChanger) runBackfill(
 	var columnMutationIdx, addedIndexMutationIdx, droppedIndexMutationIdx int
 
 	var tableDesc *sqlbase.TableDescriptor
-	if err := sc.db.Txn(context.TODO(), func(txn *client.Txn) error {
+	if err := sc.db.Txn(ctx, func(txn *client.Txn) error {
 		var err error
 		tableDesc, err = sqlbase.GetTableDescFromID(txn, sc.tableID)
 		return err
@@ -198,9 +198,9 @@ func (sc *SchemaChanger) runBackfill(
 
 // getTableSpan returns a span stored at a checkpoint idx, or in the absence
 // of a checkpoint, the span over all keys within a table.
-func (sc *SchemaChanger) getTableSpan(mutationIdx int) (roachpb.Span, error) {
+func (sc *SchemaChanger) getTableSpan(ctx context.Context, mutationIdx int) (roachpb.Span, error) {
 	var tableDesc *sqlbase.TableDescriptor
-	if err := sc.db.Txn(context.TODO(), func(txn *client.Txn) error {
+	if err := sc.db.Txn(ctx, func(txn *client.Txn) error {
 		var err error
 		tableDesc, err = sqlbase.GetTableDescFromID(txn, sc.tableID)
 		return err
@@ -313,7 +313,7 @@ func (sc *SchemaChanger) truncateAndBackfillColumns(
 	// Add or Drop a column.
 	if len(dropped) > 0 || addingNonNullableColumn || len(defaultExprs) > 0 {
 		// Initialize a span of keys.
-		sp, err := sc.getTableSpan(mutationIdx)
+		sp, err := sc.getTableSpan(ctx, mutationIdx)
 		if err != nil {
 			return err
 		}
@@ -347,7 +347,7 @@ func (sc *SchemaChanger) truncateAndBackfillColumns(
 				return err
 			}
 			if log.V(2) {
-				log.Infof(context.TODO(), "column schema change (%d, %d) at row: %d, span: %s",
+				log.Infof(ctx, "column schema change (%d, %d) at row: %d, span: %s",
 					sc.tableID, sc.mutationID, row, sp)
 			}
 
@@ -381,7 +381,7 @@ func (sc *SchemaChanger) truncateAndBackfillColumnsChunk(
 ) (roachpb.Key, bool, error) {
 	done := false
 	var nextKey roachpb.Key
-	err := sc.db.Txn(context.TODO(), func(txn *client.Txn) error {
+	err := sc.db.Txn(ctx, func(txn *client.Txn) error {
 		if sc.testingKnobs.RunBeforeBackfillChunk != nil {
 			if err := sc.testingKnobs.RunBeforeBackfillChunk(sp); err != nil {
 				return err
@@ -528,10 +528,10 @@ func (sc *SchemaChanger) truncateIndexes(
 
 			resumeAt := resume
 			if log.V(2) {
-				log.Infof(context.TODO(), "drop index (%d, %d) at row: %d, span: %s",
+				log.Infof(ctx, "drop index (%d, %d) at row: %d, span: %s",
 					sc.tableID, sc.mutationID, row, resume)
 			}
-			if err := sc.db.Txn(context.TODO(), func(txn *client.Txn) error {
+			if err := sc.db.Txn(ctx, func(txn *client.Txn) error {
 				if sc.testingKnobs.RunBeforeBackfillChunk != nil {
 					if err := sc.testingKnobs.RunBeforeBackfillChunk(resume); err != nil {
 						return err
@@ -589,9 +589,9 @@ const (
 //
 // Returns nil if the backfill for the indexes is complete (mutation no longer
 // exists or there are no "ResumeSpans").
-func (sc *SchemaChanger) backfillIndexesSpans() ([]roachpb.Span, error) {
+func (sc *SchemaChanger) backfillIndexesSpans(ctx context.Context) ([]roachpb.Span, error) {
 	var spans []roachpb.Span
-	err := sc.db.Txn(context.TODO(), func(txn *client.Txn) error {
+	err := sc.db.Txn(ctx, func(txn *client.Txn) error {
 		spans = nil
 		tableDesc, err := sqlbase.GetTableDescFromID(txn, sc.tableID)
 		if err != nil {
@@ -624,7 +624,7 @@ func (sc *SchemaChanger) backfillIndexes(
 		duration = sc.testingKnobs.WriteCheckpointInterval
 	}
 	chunkSize := sc.getChunkSize(indexBackfillChunkSize)
-	spans, err := sc.backfillIndexesSpans()
+	spans, err := sc.backfillIndexesSpans(ctx)
 	if err != nil {
 		return err
 	}
@@ -633,8 +633,8 @@ func (sc *SchemaChanger) backfillIndexes(
 		if err := sc.ExtendLease(lease); err != nil {
 			return err
 		}
-		log.VEventf(context.TODO(), 2, "index backfill: process %+v spans", spans)
-		if err := sc.db.Txn(context.TODO(), func(txn *client.Txn) error {
+		log.VEventf(ctx, 2, "index backfill: process %+v spans", spans)
+		if err := sc.db.Txn(ctx, func(txn *client.Txn) error {
 			p := sc.makePlanner(txn)
 			// Use a leased table descriptor for the backfill.
 			defer p.releaseLeases(ctx)
@@ -643,7 +643,7 @@ func (sc *SchemaChanger) backfillIndexes(
 				return err
 			}
 			recv := distSQLReceiver{}
-			planCtx := sc.distSQLPlanner.NewPlanningCtx(txn.Context, txn)
+			planCtx := sc.distSQLPlanner.NewPlanningCtx(ctx, txn)
 			plan, err := sc.distSQLPlanner.CreateBackfiller(
 				&planCtx, indexBackfill, *tableDesc, duration, chunkSize, spans,
 			)
@@ -657,7 +657,7 @@ func (sc *SchemaChanger) backfillIndexes(
 		}); err != nil {
 			return err
 		}
-		spans, err = sc.backfillIndexesSpans()
+		spans, err = sc.backfillIndexesSpans(ctx)
 		if err != nil {
 			return err
 		}
