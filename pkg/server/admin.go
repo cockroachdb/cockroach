@@ -814,10 +814,10 @@ func (s *adminServer) SetUIData(
 		// Do an upsert of the key. We update each key in a separate transaction to
 		// avoid long-running transactions and possible deadlocks.
 		query := "UPSERT INTO system.ui (key, value, lastUpdated) VALUES ($1, $2, NOW())"
-		qargs := parser.NewPlaceholderInfo()
+		qargs := parser.MakePlaceholderInfo()
 		qargs.SetValue(`1`, parser.NewDString(key))
 		qargs.SetValue(`2`, parser.NewDBytes(parser.DBytes(val)))
-		r := s.server.sqlExecutor.ExecuteStatements(session, query, qargs)
+		r := s.server.sqlExecutor.ExecuteStatements(session, query, &qargs)
 		defer r.Close(ctx)
 		if err := s.checkQueryResults(r.ResultList, 1); err != nil {
 			return nil, s.serverError(err)
@@ -1339,9 +1339,9 @@ func (s *adminServer) queryZone(
 	ctx context.Context, session *sql.Session, id sqlbase.ID,
 ) (config.ZoneConfig, bool, error) {
 	const query = `SELECT config FROM system.zones WHERE id = $1`
-	params := parser.NewPlaceholderInfo()
+	params := parser.MakePlaceholderInfo()
 	params.SetValue(`1`, parser.NewDInt(parser.DInt(id)))
-	r := s.server.sqlExecutor.ExecuteStatements(session, query, params)
+	r := s.server.sqlExecutor.ExecuteStatements(session, query, &params)
 	defer r.Close(ctx)
 	if err := s.checkQueryResults(r.ResultList, 1); err != nil {
 		return config.ZoneConfig{}, false, err
@@ -1387,10 +1387,10 @@ func (s *adminServer) queryNamespaceID(
 	ctx context.Context, session *sql.Session, parentID sqlbase.ID, name string,
 ) (sqlbase.ID, error) {
 	const query = `SELECT id FROM system.namespace WHERE parentID = $1 AND name = $2`
-	params := parser.NewPlaceholderInfo()
+	params := parser.MakePlaceholderInfo()
 	params.SetValue(`1`, parser.NewDInt(parser.DInt(parentID)))
 	params.SetValue(`2`, parser.NewDString(name))
-	r := s.server.sqlExecutor.ExecuteStatements(session, query, params)
+	r := s.server.sqlExecutor.ExecuteStatements(session, query, &params)
 	defer r.Close(ctx)
 	if err := s.checkQueryResults(r.ResultList, 1); err != nil {
 		return 0, err
