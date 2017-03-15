@@ -106,10 +106,10 @@ func (p *planner) CopyFrom(
 func (n *copyNode) Start(context.Context) error {
 	// Should never happen because the executor prevents non-COPY messages during
 	// a COPY.
-	if n.p.copyFrom != nil {
+	if n.p.session.copyFrom != nil {
 		return fmt.Errorf("COPY already in progress")
 	}
-	n.p.copyFrom = n
+	n.p.session.copyFrom = n
 	return nil
 }
 
@@ -141,7 +141,7 @@ var (
 func (p *planner) ProcessCopyData(
 	ctx context.Context, data string, msg copyMsg,
 ) (parser.StatementList, error) {
-	cf := p.copyFrom
+	cf := p.session.copyFrom
 	buf := cf.buf
 
 	switch msg {
@@ -360,7 +360,7 @@ func (p *planner) CopyData(ctx context.Context, n CopyDataBlock, autoCommit bool
 	// When this many rows are in the copy buffer, they are inserted.
 	const copyRowSize = 100
 
-	cf := p.copyFrom
+	cf := p.session.copyFrom
 
 	// Only do work if we have lots of rows or this is the end.
 	if ln := len(cf.rows); ln == 0 || (ln < copyRowSize && !n.Done) {

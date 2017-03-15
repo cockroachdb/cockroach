@@ -216,7 +216,7 @@ CREATE TABLE crdb_internal.leases (
 );
 `,
 	populate: func(_ context.Context, p *planner, addRow func(...parser.Datum) error) error {
-		leaseMgr := p.leaseMgr
+		leaseMgr := p.session.leaseMgr
 		nodeID := parser.NewDInt(parser.DInt(int64(leaseMgr.nodeID.Get())))
 
 		leaseMgr.mu.Lock()
@@ -271,7 +271,7 @@ CREATE TABLE crdb_internal.app_stats (
 			return errors.New("only root can access application statistics")
 		}
 
-		sqlStats := p.sqlStats
+		sqlStats := p.session.sqlStats
 		if sqlStats == nil {
 			return errors.New("cannot access sql statistics from this context")
 		}

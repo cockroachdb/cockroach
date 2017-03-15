@@ -306,7 +306,7 @@ func (p *planner) getTableLease(
 	// continue to use N to refer to X even if N is renamed during the
 	// transaction.
 	var lease *LeaseState
-	for _, l := range p.leases {
+	for _, l := range p.session.leases {
 		if parser.ReNormalizeName(l.Name) == tn.TableName.Normalize() &&
 			l.ParentID == dbID {
 			lease = l
@@ -320,7 +320,7 @@ func (p *planner) getTableLease(
 	// If we didn't find a lease or the lease is about to expire, acquire one.
 	if lease == nil || p.removeLeaseIfExpiring(ctx, lease) {
 		var err error
-		lease, err = p.leaseMgr.AcquireByName(ctx, p.txn, dbID, tn.Table())
+		lease, err = p.session.leaseMgr.AcquireByName(ctx, p.txn, dbID, tn.Table())
 		if err != nil {
 			if err == sqlbase.ErrDescriptorNotFound {
 				// Transform the descriptor error into an error that references the
@@ -329,7 +329,7 @@ func (p *planner) getTableLease(
 			}
 			return nil, err
 		}
-		p.leases = append(p.leases, lease)
+		p.session.leases = append(p.session.leases, lease)
 		if log.V(2) {
 			log.Infof(ctx, "added lease on table '%s' to planner cache", tn)
 		}
@@ -362,7 +362,7 @@ func (p *planner) getTableLeaseByID(
 	// First, look to see if we already have a lease for this table -- including
 	// leases acquired via `getTableLease`.
 	var lease *LeaseState
-	for _, l := range p.leases {
+	for _, l := range p.session.leases {
 		if l.ID == tableID {
 			lease = l
 			if log.V(2) {
@@ -375,7 +375,7 @@ func (p *planner) getTableLeaseByID(
 	// If we didn't find a lease or the lease is about to expire, acquire one.
 	if lease == nil || p.removeLeaseIfExpiring(ctx, lease) {
 		var err error
-		lease, err = p.leaseMgr.Acquire(ctx, p.txn, tableID, 0)
+		lease, err = p.session.leaseMgr.Acquire(ctx, p.txn, tableID, 0)
 		if err != nil {
 			if err == sqlbase.ErrDescriptorNotFound {
 				// Transform the descriptor error into an error that references the
@@ -384,7 +384,7 @@ func (p *planner) getTableLeaseByID(
 			}
 			return nil, err
 		}
-		p.leases = append(p.leases, lease)
+		p.session.leases = append(p.session.leases, lease)
 		// If the lease we just acquired expires before the txn's deadline, reduce
 		// the deadline.
 		p.txn.UpdateDeadlineMaybe(hlc.Timestamp{WallTime: lease.Expiration().UnixNano()})
@@ -395,13 +395,14 @@ func (p *planner) getTableLeaseByID(
 // removeLeaseIfExpiring removes a lease and returns true if it is about to expire.
 // The method also resets the transaction deadline.
 func (p *planner) removeLeaseIfExpiring(ctx context.Context, lease *LeaseState) bool {
-	if lease == nil || lease.hasSomeLifeLeft(p.leaseMgr.clock) {
+	session := p.session
+	if lease == nil || lease.hasSomeLifeLeft(session.leaseMgr.clock) {
 		return false
 	}
 
-	// Remove the lease from p.leases.
+	// Remove the lease from session.leases.
 	idx := -1
-	for i, l := range p.leases {
+	for i, l := range session.leases {
 		if l == lease {
 			idx = i
 			break
@@ -411,17 +412,17 @@ func (p *planner) removeLeaseIfExpiring(ctx context.Context, lease *LeaseState) 
 		log.Warningf(ctx, "lease (%s) not found", lease)
 		return false
 	}
-	p.leases[idx] = p.leases[len(p.leases)-1]
-	p.leases[len(p.leases)-1] = nil
-	p.leases = p.leases[:len(p.leases)-1]
+	session.leases[idx] = session.leases[len(session.leases)-1]
+	session.leases[len(session.leases)-1] = nil
+	session.leases = session.leases[:len(session.leases)-1]
 
-	if err := p.leaseMgr.Release(lease); err != nil {
+	if err := session.leaseMgr.Release(lease); err != nil {
 		log.Warning(ctx, err)
 	}
 
 	// Reset the deadline so that a new deadline will be set after the lease is acquired.
 	p.txn.ResetDeadline()
-	for _, l := range p.leases {
+	for _, l := range session.leases {
 		p.txn.UpdateDeadlineMaybe(hlc.Timestamp{WallTime: l.Expiration().UnixNano()})
 	}
 	return true
@@ -472,23 +473,24 @@ func (p *planner) notifySchemaChange(id sqlbase.ID, mutationID sqlbase.MutationI
 		tableID:    id,
 		mutationID: mutationID,
 		nodeID:     p.evalCtx.NodeID,
-		leaseMgr:   p.leaseMgr,
+		leaseMgr:   p.session.leaseMgr,
 	}
 	p.session.TxnState.schemaChangers.queueSchemaChanger(sc)
 }
 
 // releaseLeases implements the SchemaAccessor interface.
 func (p *planner) releaseLeases(ctx context.Context) {
-	if p.leases != nil {
+	session := p.session
+	if session.leases != nil {
 		if log.V(2) {
-			log.Infof(ctx, "planner releasing %d leases", len(p.leases))
+			log.Infof(ctx, "planner releasing %d leases", len(session.leases))
 		}
-		for _, lease := range p.leases {
-			if err := p.leaseMgr.Release(lease); err != nil {
+		for _, lease := range session.leases {
+			if err := session.leaseMgr.Release(lease); err != nil {
 				log.Warning(ctx, err)
 			}
 		}
-		p.leases = nil
+		session.leases = nil
 	}
 }
 
