@@ -272,10 +272,14 @@ func TestPrimaryKeyUnspecified(t *testing.T) {
 func TestRemoveLeaseIfExpiring(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	p := planner{session: &Session{context: context.Background()}}
 	mc := hlc.NewManualClock(123)
-	p.leaseMgr = &LeaseManager{LeaseStore: LeaseStore{clock: hlc.NewClock(mc.UnixNano, time.Nanosecond)}}
-	p.leases = make([]*LeaseState, 0)
+	s := &Session{
+		context: context.Background(),
+		leaseMgr: &LeaseManager{
+			LeaseStore: LeaseStore{clock: hlc.NewClock(mc.UnixNano, time.Nanosecond)},
+		},
+	}
+	p := planner{session: s}
 	var txn client.Txn
 	p.setTxn(&txn)
 
@@ -286,7 +290,7 @@ func TestRemoveLeaseIfExpiring(t *testing.T) {
 	// Add a lease to the planner.
 	d := int64(LeaseDuration)
 	l1 := &LeaseState{expiration: parser.DTimestamp{Time: time.Unix(0, mc.UnixNano()+d+1)}}
-	p.leases = append(p.leases, l1)
+	s.leases = append(s.leases, l1)
 	et := hlc.Timestamp{WallTime: l1.Expiration().UnixNano()}
 	txn.UpdateDeadlineMaybe(et)
 
@@ -302,15 +306,15 @@ func TestRemoveLeaseIfExpiring(t *testing.T) {
 
 	// Add another lease.
 	l2 := &LeaseState{expiration: parser.DTimestamp{Time: time.Unix(0, mc.UnixNano()+d+1)}}
-	p.leases = append(p.leases, l2)
+	s.leases = append(s.leases, l2)
 	if !p.removeLeaseIfExpiring(context.TODO(), l1) {
 		t.Error("expected true with an expiring lease")
 	}
 	et = hlc.Timestamp{WallTime: l2.Expiration().UnixNano()}
 	txn.UpdateDeadlineMaybe(et)
 
-	if !(len(p.leases) == 1 && p.leases[0] == l2) {
-		t.Errorf("expected leases to contain %s but has %s", l2, p.leases)
+	if !(len(s.leases) == 1 && s.leases[0] == l2) {
+		t.Errorf("expected leases to contain %s but has %s", l2, s.leases)
 	}
 
 	if d := *p.txn.GetDeadline(); d != et {

@@ -48,8 +48,8 @@ type sqlStats struct {
 // used upon session initialization and upon SET APPLICATION_NAME.
 func (s *Session) resetApplicationName(appName string) {
 	s.ApplicationName = appName
-	if s.planner.sqlStats != nil {
-		s.appStats = s.planner.sqlStats.getStatsForApplication(appName)
+	if s.sqlStats != nil {
+		s.appStats = s.sqlStats.getStatsForApplication(appName)
 	}
 }
 

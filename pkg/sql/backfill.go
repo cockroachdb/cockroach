@@ -268,9 +268,10 @@ func (sc *SchemaChanger) maybeWriteResumeSpan(
 
 func (sc *SchemaChanger) makePlanner(txn *client.Txn) *planner {
 	return &planner{
-		txn:      txn,
-		leaseMgr: sc.leaseMgr,
-		session:  new(Session),
+		txn: txn,
+		session: &Session{
+			leaseMgr: sc.leaseMgr,
+		},
 	}
 }
 
