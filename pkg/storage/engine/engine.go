@@ -67,12 +67,12 @@ type Iterator interface {
 	// ValueProto unmarshals the value the iterator is currently
 	// pointing to using a protobuf decoder.
 	ValueProto(msg proto.Message) error
-	// unsafeKey returns the same value as Key, but the memory is invalidated on
+	// UnsafeKey returns the same value as Key, but the memory is invalidated on
 	// the next call to {Next,Prev,Seek,SeekReverse,Close}.
-	unsafeKey() MVCCKey
-	// unsafeKey returns the same value as Value, but the memory is invalidated
+	UnsafeKey() MVCCKey
+	// UnsafeValue returns the same value as Value, but the memory is invalidated
 	// on the next call to {Next,Prev,Seek,SeekReverse,Close}.
-	unsafeValue() []byte
+	UnsafeValue() []byte
 	// Less returns true if the key the iterator is currently positioned at is
 	// less than the specified key.
 	Less(key MVCCKey) bool

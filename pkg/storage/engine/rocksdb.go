@@ -910,12 +910,12 @@ func (r *rocksDBBatchIterator) ValueProto(msg proto.Message) error {
 	return r.iter.ValueProto(msg)
 }
 
-func (r *rocksDBBatchIterator) unsafeKey() MVCCKey {
-	return r.iter.unsafeKey()
+func (r *rocksDBBatchIterator) UnsafeKey() MVCCKey {
+	return r.iter.UnsafeKey()
 }
 
-func (r *rocksDBBatchIterator) unsafeValue() []byte {
-	return r.iter.unsafeValue()
+func (r *rocksDBBatchIterator) UnsafeValue() []byte {
+	return r.iter.UnsafeValue()
 }
 
 func (r *rocksDBBatchIterator) Error() error {
@@ -1311,7 +1311,7 @@ func (r *rocksDBIterator) Seek(key MVCCKey) {
 		r.setState(C.DBIterSeekToFirst(r.iter))
 	} else {
 		// We can avoid seeking if we're already at the key we seek.
-		if r.valid && !r.reseek && key.Equal(r.unsafeKey()) {
+		if r.valid && !r.reseek && key.Equal(r.UnsafeKey()) {
 			return
 		}
 		r.setState(C.DBIterSeek(r.iter, goToCKey(key)))
@@ -1324,7 +1324,7 @@ func (r *rocksDBIterator) SeekReverse(key MVCCKey) {
 		r.setState(C.DBIterSeekToLast(r.iter))
 	} else {
 		// We can avoid seeking if we're already at the key we seek.
-		if r.valid && !r.reseek && key.Equal(r.unsafeKey()) {
+		if r.valid && !r.reseek && key.Equal(r.UnsafeKey()) {
 			return
 		}
 		r.setState(C.DBIterSeek(r.iter, goToCKey(key)))
@@ -1336,7 +1336,7 @@ func (r *rocksDBIterator) SeekReverse(key MVCCKey) {
 			return
 		}
 		// Make sure the current key is <= the provided key.
-		if key.Less(r.unsafeKey()) {
+		if key.Less(r.UnsafeKey()) {
 			r.Prev()
 		}
 	}
@@ -1381,14 +1381,14 @@ func (r *rocksDBIterator) ValueProto(msg proto.Message) error {
 	if r.value.len <= 0 {
 		return nil
 	}
-	return proto.Unmarshal(r.unsafeValue(), msg)
+	return proto.Unmarshal(r.UnsafeValue(), msg)
 }
 
-func (r *rocksDBIterator) unsafeKey() MVCCKey {
+func (r *rocksDBIterator) UnsafeKey() MVCCKey {
 	return cToUnsafeGoKey(r.key)
 }
 
-func (r *rocksDBIterator) unsafeValue() []byte {
+func (r *rocksDBIterator) UnsafeValue() []byte {
 	return cSliceToUnsafeGoBytes(r.value)
 }
 
@@ -1397,7 +1397,7 @@ func (r *rocksDBIterator) Error() error {
 }
 
 func (r *rocksDBIterator) Less(key MVCCKey) bool {
-	return r.unsafeKey().Less(key)
+	return r.UnsafeKey().Less(key)
 }
 
 func (r *rocksDBIterator) setState(state C.DBIterState) {
