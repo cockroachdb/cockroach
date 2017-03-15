@@ -642,17 +642,16 @@ func (r *Replica) applySnapshot(
 	}
 	stats.entries = timeutil.Now()
 
+	// Note that we don't require that Raft supply us with a nonempty HardState
+	// on a snapshot. We don't want to make that assumption because it's not
+	// guaranteed by the contract. Raft *must* send us a HardState when it
+	// increases the committed index as a result of the snapshot, but who is to
+	// say it isn't going to accept a snapshot which is identical to the current
+	// state?
 	if !raft.IsEmptyHardState(hs) {
 		if err := r.stateLoader.setHardState(ctx, distinctBatch, hs); err != nil {
 			return errors.Wrapf(err, "unable to persist HardState %+v", &hs)
 		}
-	} else {
-		// Note that we don't require that Raft supply us with a nonempty
-		// HardState on a snapshot. We don't want to make that assumption
-		// because it's not guaranteed by the contract. Raft *must* send us
-		// a HardState when it increases the committed index as a result of the
-		// snapshot, but who is to say it isn't going to accept a snapshot
-		// which is identical to the current state?
 	}
 
 	// We need to close the distinct batch and start using the normal batch for

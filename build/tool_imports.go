@@ -33,6 +33,7 @@ import (
 	_ "github.com/cockroachdb/crlfmt"
 	_ "github.com/cockroachdb/stress"
 	_ "github.com/golang/lint/golint"
+	_ "github.com/google/pprof"
 	_ "github.com/grpc-ecosystem/grpc-gateway/protoc-gen-grpc-gateway"
 	_ "github.com/jteeuwen/go-bindata/go-bindata"
 	_ "github.com/kisielk/errcheck"

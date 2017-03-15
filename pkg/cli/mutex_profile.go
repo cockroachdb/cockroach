@@ -31,7 +31,6 @@ func init() {
 	// mutex contention events. For other values, the profiler will sample on
 	// average 1/X events.
 	//
-	// The mutex profile can be viewed with `go tool pprof
-	// http://HOST:PORT/debug/pprof/mutex`
+	// The mutex profile can be viewed with `pprof http://HOST:PORT/debug/pprof/mutex`
 	runtime.SetMutexProfileFraction(envutil.EnvOrDefaultInt("COCKROACH_MUTEX_PROFILE_RATE", 0))
 }

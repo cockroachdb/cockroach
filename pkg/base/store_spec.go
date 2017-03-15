@@ -19,10 +19,10 @@ package base
 import (
 	"bytes"
 	"fmt"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
-	"unicode"
 
 	"github.com/dustin/go-humanize"
 	"github.com/spf13/pflag"
@@ -82,6 +82,8 @@ func (ss StoreSpec) String() string {
 	return buffer.String()
 }
 
+var fractionRegex = regexp.MustCompile(`^0?\.[0-9]+$`)
+
 // newStoreSpec parses the string passed into a --store flag and returns a
 // StoreSpec if it is correctly parsed.
 // There are four possible fields that can be passed in, comma separated:
@@ -133,17 +135,9 @@ func newStoreSpec(value string) (StoreSpec, error) {
 
 		switch field {
 		case "path":
-			if len(value) == 0 {
-
-			}
 			ss.Path = value
 		case "size":
-			if len(value) == 0 {
-				return StoreSpec{}, fmt.Errorf("no size specified")
-			}
-
-			if unicode.IsDigit(rune(value[len(value)-1])) &&
-				(strings.HasPrefix(value, "0.") || strings.HasPrefix(value, ".")) {
+			if fractionRegex.MatchString(value) {
 				// Value is a percentage without % sign.
 				var err error
 				ss.SizePercent, err = strconv.ParseFloat(value, 64)
@@ -154,10 +148,10 @@ func newStoreSpec(value string) (StoreSpec, error) {
 				if ss.SizePercent > 100 || ss.SizePercent < 1 {
 					return StoreSpec{}, fmt.Errorf("store size (%s) must be between 1%% and 100%%", value)
 				}
-			} else if strings.HasSuffix(value, "%") {
+			} else if percentValue := strings.TrimSuffix(value, "%"); percentValue != value {
 				// Value is a percentage.
 				var err error
-				ss.SizePercent, err = strconv.ParseFloat(value[:len(value)-1], 64)
+				ss.SizePercent, err = strconv.ParseFloat(percentValue, 64)
 				if err != nil {
 					return StoreSpec{}, fmt.Errorf("could not parse store size (%s) %s", value, err)
 				}
@@ -176,9 +170,6 @@ func newStoreSpec(value string) (StoreSpec, error) {
 				}
 			}
 		case "attrs":
-			if len(value) == 0 {
-				return StoreSpec{}, fmt.Errorf("no attributes specified")
-			}
 			// Check to make sure there are no duplicate attributes.
 			attrMap := make(map[string]struct{})
 			for _, attribute := range strings.Split(value, ":") {

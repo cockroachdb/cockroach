@@ -773,9 +773,9 @@ func (r *Replica) setReplicaIDLocked(replicaID roachpb.ReplicaID) error {
 	if r.mu.replicaID > replicaID {
 		return errors.Errorf("replicaID cannot move backwards from %d to %d", r.mu.replicaID, replicaID)
 	}
-	if r.mu.replicaID != 0 {
-		// TODO(bdarnell): clean up previous raftGroup (update peers)
-	}
+	// if r.mu.replicaID != 0 {
+	// 	// TODO(bdarnell): clean up previous raftGroup (update peers)
+	// }
 
 	previousReplicaID := r.mu.replicaID
 	r.mu.replicaID = replicaID

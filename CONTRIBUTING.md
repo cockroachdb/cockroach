@@ -142,17 +142,7 @@ Peeking into a running cluster can be done in several ways:
   (http://blog.golang.org/profiling-go-programs) explains it extremely well and
   [this one by Dmitry Vuykov]
   (https://software.intel.com/en-us/blogs/2014/05/10/debugging-performance-issues-in-go-programs)
-  goes into even more detail. Two caveats: the `cockroach` binary passed to
-  `pprof` must be the same as the one creating the profile (not true on OSX in
-  acceptance tests!), and the HTTP client used by `pprof` doesn't simply
-  swallow self-signed certs (relevant when using SSL). For the latter, a
-  workaround of the form
-
-  ```
-  go tool pprof cockroach <(curl -k https://$(hostname):26257/debug/pprof/profile)
-  ```
-
-  will do the trick.
+  goes into even more detail.
 
 An easy way to locally run a workload against a cluster are the acceptance
 tests. For example,
