@@ -150,7 +150,7 @@ func createTestStoreWithEngine(
 		log.AmbientContext{},
 		storeCfg.Gossip,
 		storeCfg.Clock,
-		storage.StorePoolNodeLivenessTrue,
+		storage.StorePoolNodeLivenessLive,
 		storage.TestTimeUntilStoreDeadOff,
 		/* deterministic */ false,
 	)

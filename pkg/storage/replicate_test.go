@@ -17,6 +17,7 @@
 package storage_test
 
 import (
+	"context"
 	"testing"
 
 	"github.com/pkg/errors"
@@ -37,15 +38,15 @@ func TestEagerReplication(t *testing.T) {
 	// path that occurs after splits.
 	store.SetReplicaScannerActive(false)
 
-	if err := server.WaitForInitialSplits(store.DB()); err != nil {
-		t.Fatal(err)
+	<-store.Gossip().Connected
+	if err := store.GossipStore(context.Background()); err != nil {
+		t.Fatalf("error doing initial store gossiping: %s", err)
 	}
 
-	// WaitForInitialSplits will return as soon as the meta2 span contains the
-	// expected number of descriptors. But the addition of replicas to the
-	// replicateQueue after a split occurs happens after the update of the
-	// descriptors in meta2 leaving a tiny window of time in which the newly
-	// split replica will not have been added to purgatory. Thus we loop.
+	// The addition of replicas to the replicateQueue after a split
+	// occurs happens after the update of the descriptors in meta2
+	// leaving a tiny window of time in which the newly split replica
+	// will not have been added to purgatory. Thus we loop.
 	testutils.SucceedsSoon(t, func() error {
 		// After the initial splits have been performed, all of the resulting ranges
 		// should be present in replicate queue purgatory (because we only have a

@@ -254,9 +254,9 @@ func (r *Replica) IsRaftGroupInitialized() bool {
 	return r.mu.internalRaftGroup != nil
 }
 
-// StorePoolNodeLivenessTrue is a NodeLivenessFunc which always returns true.
-func StorePoolNodeLivenessTrue(_ roachpb.NodeID, _ time.Time, _ time.Duration) bool {
-	return true
+// StorePoolNodeLivenessLive is a NodeLivenessFunc which always returns live.
+func StorePoolNodeLivenessLive(_ roachpb.NodeID, _ time.Time, _ time.Duration) nodeStatus {
+	return nodeStatusLive
 }
 
 // GetStoreList is the same function as GetStoreList exposed for tests only.
