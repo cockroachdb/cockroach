@@ -824,6 +824,10 @@ func (s *Server) Start(ctx context.Context) error {
 	close(serveSQL)
 	log.Info(ctx, "serving sql connections")
 
+	// Record that this node joined the cluster in the event log. Since this
+	// executes a SQL query, this must be done after the SQL layer is ready.
+	s.node.recordJoinEvent()
+
 	if s.cfg.PIDFile != "" {
 		if err := ioutil.WriteFile(s.cfg.PIDFile, []byte(fmt.Sprintf("%d\n", os.Getpid())), 0644); err != nil {
 			log.Error(ctx, err)
