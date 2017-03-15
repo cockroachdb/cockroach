@@ -29,7 +29,7 @@ func TestAnnotateCtxTags(t *testing.T) {
 	ac.AddLogTag("b", 2)
 
 	ctx := ac.AnnotateCtx(context.Background())
-	if exp, val := "[a1,b2] test", makeMessage(ctx, "test", nil); val != exp {
+	if exp, val := "[a1,b2] test", MakeMessage(ctx, "test", nil); val != exp {
 		t.Errorf("expected '%s', got '%s'", exp, val)
 	}
 
@@ -38,7 +38,7 @@ func TestAnnotateCtxTags(t *testing.T) {
 	ctx = WithLogTag(ctx, "aa", nil)
 	ctx = ac.AnnotateCtx(ctx)
 
-	if exp, val := "[aa,a1,b2] test", makeMessage(ctx, "test", nil); val != exp {
+	if exp, val := "[aa,a1,b2] test", MakeMessage(ctx, "test", nil); val != exp {
 		t.Errorf("expected '%s', got '%s'", exp, val)
 	}
 }
@@ -98,7 +98,7 @@ func TestAnnotateCtxNodeStoreReplica(t *testing.T) {
 	ctx := n.AnnotateCtx(context.Background())
 	ctx = s.AnnotateCtx(ctx)
 	ctx = r.AnnotateCtx(ctx)
-	if exp, val := "[n1,s2,r3] test", makeMessage(ctx, "test", nil); val != exp {
+	if exp, val := "[n1,s2,r3] test", MakeMessage(ctx, "test", nil); val != exp {
 		t.Errorf("expected '%s', got '%s'", exp, val)
 	}
 	if bottom := contextBottomTag(ctx); bottom != r.tags {
@@ -113,7 +113,7 @@ func TestResetAndAnnotateCtx(t *testing.T) {
 	ctx := context.Background()
 	ctx = WithLogTag(ctx, "b", 2)
 	ctx = ac.ResetAndAnnotateCtx(ctx)
-	if exp, val := "[a1] test", makeMessage(ctx, "test", nil); val != exp {
+	if exp, val := "[a1] test", MakeMessage(ctx, "test", nil); val != exp {
 		t.Errorf("expected '%s', got '%s'", exp, val)
 	}
 }

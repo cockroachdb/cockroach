@@ -286,8 +286,8 @@ func TestMergeJoiner(t *testing.T) {
 
 	for _, c := range testCases {
 		ms := c.spec
-		leftInput := NewRowBuffer(nil, c.inputs[0])
-		rightInput := NewRowBuffer(nil, c.inputs[1])
+		leftInput := NewRowBuffer(nil /* types */, c.inputs[0], RowBufferArgs{})
+		rightInput := NewRowBuffer(nil /* types */, c.inputs[1], RowBufferArgs{})
 		out := &RowBuffer{}
 		flowCtx := FlowCtx{evalCtx: parser.EvalContext{}}
 
@@ -299,18 +299,18 @@ func TestMergeJoiner(t *testing.T) {
 
 		m.Run(context.Background(), nil)
 
-		if out.Err != nil {
-			t.Fatal(out.Err)
-		}
-		if !out.Closed {
+		if !out.ProducerClosed {
 			t.Fatalf("output RowReceiver not closed")
 		}
 
 		var retRows sqlbase.EncDatumRows
 		for {
-			row, err := out.NextRow()
+			row, meta := out.Next()
 			if err != nil {
 				t.Fatal(err)
+			}
+			if !meta.Empty() {
+				t.Fatalf("unexpected metadata: %v", meta)
 			}
 			if row == nil {
 				break

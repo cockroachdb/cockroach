@@ -21,67 +21,80 @@ import (
 	"math/rand"
 	"testing"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
 
+// The encoder/decoder don't maintain the ordering between rows and metadata
+// records.
 func testGetDecodedRows(
-	t *testing.T, sd *StreamDecoder, decodedRows sqlbase.EncDatumRows,
-) sqlbase.EncDatumRows {
+	t *testing.T, sd *StreamDecoder, decodedRows sqlbase.EncDatumRows, metas []ProducerMetadata,
+) (sqlbase.EncDatumRows, []ProducerMetadata) {
 	for {
-		decoded, err := sd.GetRow(nil)
+		row, meta, err := sd.GetRow(nil /* rowBuf */)
 		if err != nil {
 			t.Fatal(err)
 		}
-		if decoded == nil {
+		if row == nil && meta.Empty() {
 			break
 		}
-		decodedRows = append(decodedRows, decoded)
+		if row != nil {
+			decodedRows = append(decodedRows, row)
+		} else {
+			metas = append(metas, meta)
+		}
 	}
-	return decodedRows
+	return decodedRows, metas
 }
 
-func testRowStream(t *testing.T, rng *rand.Rand, rows sqlbase.EncDatumRows, trailerErr error) {
+func testRowStream(t *testing.T, rng *rand.Rand, records []rowOrMeta) {
 	var se StreamEncoder
 	var sd StreamDecoder
 
 	var decodedRows sqlbase.EncDatumRows
+	var metas []ProducerMetadata
+	numRows := 0
+	numMeta := 0
 
-	for rowIdx := 0; rowIdx <= len(rows); rowIdx++ {
-		if done, _ := sd.IsDone(); done {
-			t.Fatal("StreamDecoder is done early")
-		}
-		if rowIdx < len(rows) {
-			if err := se.AddRow(rows[rowIdx]); err != nil {
-				t.Fatal(err)
+	for rowIdx := 0; rowIdx <= len(records); rowIdx++ {
+		if rowIdx < len(records) {
+			if records[rowIdx].row != nil {
+				if err := se.AddRow(records[rowIdx].row); err != nil {
+					t.Fatal(err)
+				}
+				numRows++
+			} else {
+				se.AddMetadata(records[rowIdx].meta)
+				numMeta++
 			}
 		}
 		// "Send" a message every now and then and once at the end.
-		final := (rowIdx == len(rows))
+		final := (rowIdx == len(records))
 		if final || (rowIdx > 0 && rng.Intn(10) == 0) {
-			var msgErr error
-			if final {
-				msgErr = trailerErr
-			}
-			msg := se.FormMessage(final, msgErr)
+			msg := se.FormMessage(context.TODO())
 			// Make a copy of the data buffer.
 			msg.Data.RawBytes = append([]byte(nil), msg.Data.RawBytes...)
 			err := sd.AddMessage(msg)
 			if err != nil {
 				t.Fatal(err)
 			}
-			decodedRows = testGetDecodedRows(t, &sd, decodedRows)
+			decodedRows, metas = testGetDecodedRows(t, &sd, decodedRows, metas)
 		}
 	}
-	done, endErr := sd.IsDone()
-	if !done {
-		t.Fatalf("StramDecoder not done")
+	if len(metas) != numMeta {
+		t.Errorf("expected %d metadata records, got: %d", numMeta, len(metas))
 	}
-	if (endErr == nil) != (trailerErr == nil) ||
-		(endErr != nil && trailerErr != nil && endErr.Error() != trailerErr.Error()) {
-		t.Fatalf("invalid trailer error: '%s', expected '%s'", endErr, trailerErr)
+	if len(decodedRows) != numRows {
+		t.Errorf("expected %d rows, got: %d", numRows, len(decodedRows))
 	}
+}
+
+type rowOrMeta struct {
+	row  sqlbase.EncDatumRow
+	meta ProducerMetadata
 }
 
 // TestStreamEncodeDecode generates random streams of EncDatums and passes them
@@ -97,19 +110,19 @@ func TestStreamEncodeDecode(t *testing.T) {
 			info[i].Encoding = sqlbase.RandDatumEncoding(rng)
 		}
 		numRows := rng.Intn(100)
-		rows := make(sqlbase.EncDatumRows, numRows)
+		rows := make([]rowOrMeta, numRows)
 		for i := range rows {
-			rows[i] = make(sqlbase.EncDatumRow, rowLen)
-			for j := range rows[i] {
-				rows[i][j] = sqlbase.DatumToEncDatum(info[j].Type,
-					sqlbase.RandDatum(rng, info[j].Type, true))
+			if rng.Intn(10) != 0 {
+				rows[i].row = make(sqlbase.EncDatumRow, rowLen)
+				for j := range rows[i].row {
+					rows[i].row[j] = sqlbase.DatumToEncDatum(info[j].Type,
+						sqlbase.RandDatum(rng, info[j].Type, true))
+				}
+			} else {
+				rows[i].meta.Err = fmt.Errorf("test error %d", i)
 			}
 		}
-		var trailerErr error
-		if rng.Intn(10) == 0 {
-			trailerErr = fmt.Errorf("test error %d", rng.Intn(100))
-		}
-		testRowStream(t, rng, rows, trailerErr)
+		testRowStream(t, rng, rows)
 	}
 }
 
@@ -117,16 +130,16 @@ func TestEmptyStreamEncodeDecode(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	var se StreamEncoder
 	var sd StreamDecoder
-	msg := se.FormMessage(true /*final*/, nil /*error*/)
+	msg := se.FormMessage(context.TODO())
 	if err := sd.AddMessage(msg); err != nil {
 		t.Fatal(err)
 	}
 	if msg.Header == nil {
 		t.Errorf("no header in first message")
 	}
-	if row, err := sd.GetRow(nil); err != nil {
+	if row, meta, err := sd.GetRow(nil /* rowBuf */); err != nil {
 		t.Fatal(err)
-	} else if row != nil {
-		t.Errorf("received bogus row %s", row)
+	} else if !meta.Empty() || row != nil {
+		t.Errorf("received bogus row %v %v", row, meta)
 	}
 }

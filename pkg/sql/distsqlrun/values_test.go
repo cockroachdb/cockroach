@@ -75,21 +75,31 @@ func TestValues(t *testing.T) {
 						t.Fatal(err)
 					}
 					v.Run(context.Background(), nil)
-					if out.Err != nil {
-						t.Fatal(out.Err)
-					}
-					if !out.Closed {
+					if !out.ProducerClosed {
 						t.Fatalf("output RowReceiver not closed")
 					}
-					if len(out.Rows) != numRows {
-						t.Fatalf("incorrect number of rows %d, expected %d", len(out.Rows), numRows)
+
+					var res sqlbase.EncDatumRows
+					for {
+						row, meta := out.Next()
+						if !meta.Empty() {
+							t.Fatalf("unexpected metadata: %v", meta)
+						}
+						if row == nil {
+							break
+						}
+						res = append(res, row)
+					}
+
+					if len(res) != numRows {
+						t.Fatalf("incorrect number of rows %d, expected %d", len(res), numRows)
 					}
 
 					for i := 0; i < numRows; i++ {
-						if len(out.Rows[i]) != numCols {
-							t.Fatalf("row %d incorrect length %d, expected %d", i, len(out.Rows[i]), numCols)
+						if len(res[i]) != numCols {
+							t.Fatalf("row %d incorrect length %d, expected %d", i, len(res[i]), numCols)
 						}
-						for j, res := range out.Rows[i] {
+						for j, res := range res[i] {
 							cmp, err := res.Compare(&a, &inRows[i][j])
 							if err != nil {
 								t.Fatal(err)

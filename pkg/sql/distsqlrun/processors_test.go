@@ -230,7 +230,7 @@ func TestPostProcess(t *testing.T) {
 
 	for tcIdx, tc := range testCases {
 		t.Run(strconv.Itoa(tcIdx), func(t *testing.T) {
-			inBuf := NewRowBuffer(nil, input)
+			inBuf := NewRowBuffer(nil /* types */, input, RowBufferArgs{})
 			outBuf := &RowBuffer{}
 
 			var out procOutputHelper
@@ -254,14 +254,28 @@ func TestPostProcess(t *testing.T) {
 			}
 			// Run the rows through the helper.
 			for i := range input {
-				if !out.emitRow(context.TODO(), input[i]) {
+				status, err := out.emitRow(context.TODO(), input[i])
+				if err != nil {
+					t.Fatal(err)
+				}
+				if status != NeedMoreRows {
+					out.close()
 					break
 				}
 			}
-			if outBuf.Err != nil {
-				t.Fatal(outBuf.Err)
+			var res sqlbase.EncDatumRows
+			for {
+				row, meta := outBuf.Next()
+				if !meta.Empty() {
+					t.Fatalf("unexpected metadata: %v", meta)
+				}
+				if row == nil {
+					break
+				}
+				res = append(res, row)
 			}
-			if str := outBuf.Rows.String(); str != tc.expected {
+
+			if str := res.String(); str != tc.expected {
 				t.Errorf("expected output:\n    %s\ngot:\n    %s\n", tc.expected, str)
 			}
 		})

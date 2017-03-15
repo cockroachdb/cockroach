@@ -32,6 +32,10 @@ type sorterStrategy interface {
 	// Execute performs a sorter processor's sorting work. Rows are read from the
 	// sorter's input and, after being sorted, passed to the sorter's
 	// post-processing stage.
+	//
+	// It returns once either all the input has been exhausted or the consumer
+	// indicated that no more rows are needed. In any case, the caller is
+	// responsible for draining and closing the producer and the consumer.
 	Execute(context.Context, *sorter) error
 
 	/////////////////////////////////////////////////////////////////////////////
@@ -131,16 +135,15 @@ func (ss *sortAllStrategy) Execute(ctx context.Context, s *sorter) error {
 	for {
 		row := ss.next()
 		if row == nil {
-			break
+			return nil
 		}
 
 		// Push the row to the output; stop if they don't need more rows.
-		if !s.out.emitRow(ctx, row) {
-			break
+		consumerStatus, err := s.out.emitRow(ctx, row)
+		if err != nil || consumerStatus != NeedMoreRows {
+			return err
 		}
 	}
-
-	return nil
 }
 
 // sortTopKStrategy creates a max-heap in its wrapped sValues and keeps
@@ -202,15 +205,14 @@ func (ss *sortTopKStrategy) Execute(ctx context.Context, s *sorter) error {
 	for {
 		row := ss.next()
 		if row == nil {
-			break
+			return nil
 		}
 		// Push the row to the output; stop if they don't need more rows.
-		if !s.out.emitRow(ctx, row) {
-			break
+		consumerStatus, err := s.out.emitRow(ctx, row)
+		if err != nil || consumerStatus != NeedMoreRows {
+			return err
 		}
 	}
-
-	return nil
 }
 
 func (ss *sortTopKStrategy) add(row sqlbase.EncDatumRow) {
@@ -311,10 +313,12 @@ func (ss *sortChunksStrategy) Execute(ctx context.Context, s *sorter) error {
 				break
 			}
 
-			if !s.out.emitRow(ctx, res) {
-				// We don't need any more rows; clear out ss so to not hold on to that memory.
+			consumerStatus, err := s.out.emitRow(ctx, res)
+			if err != nil || consumerStatus != NeedMoreRows {
+				// We don't need any more rows; clear out ss so to not hold on to that
+				// memory.
 				ss = &sortChunksStrategy{}
-				return nil
+				return err
 			}
 		}
 

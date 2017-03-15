@@ -17,11 +17,13 @@
 package distsqlrun
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/pkg/errors"
 )
 
-// StreamDecoder converts a sequence of StreamMessage to EncDatumRows.
+// StreamDecoder converts a sequence of ProducerMessage to rows and metadata
+// records.
 //
 // Sample usage:
 //   sd := StreamDecoder{}
@@ -30,9 +32,9 @@ import (
 //       err := sd.AddMessage(msg)
 //       if err != nil { ... }
 //       for {
-//           row, err := sd.GetRow(row)
+//           row, meta, err := sd.GetRow(row)
 //           if err != nil { ... }
-//           if row == nil {
+//           if row == nil && meta.Empty() {
 //               // No more rows in this message.
 //               break
 //           }
@@ -44,66 +46,90 @@ import (
 // AddMessage can be called multiple times before getting the rows, but this
 // will cause data to accumulate internally.
 type StreamDecoder struct {
-	info            []DatumInfo
-	data            []byte
-	trailerReceived bool
-	// trailerErr stores the StreamTrailer.error received in the trailer.
-	trailerErr error
-	rowAlloc   sqlbase.EncDatumRowAlloc
+	typing   []DatumInfo
+	data     []byte
+	metadata []ProducerMetadata
+	rowAlloc sqlbase.EncDatumRowAlloc
+
+	headerReceived bool
+	typingReceived bool
 }
 
-// AddMessage adds the data in a StreamMessage to the decoder.
+// AddMessage adds the data in a ProducerMessage to the decoder.
 //
-// The StreamDecoder may keep a reference to msg.Data.RawBytes until
-// all the rows in the message are retrieved with GetRow.
-func (sd *StreamDecoder) AddMessage(msg *StreamMessage) error {
-	if sd.trailerReceived {
-		return errors.Errorf("message after trailer was received")
-	}
-	headerReceived := (sd.info != nil)
+// The StreamDecoder may keep a reference to msg.Data.RawBytes and
+// msg.Data.Metadata until all the rows in the message are retrieved with GetRow.
+//
+// If an error is returned, no records have been buffered in the StreamDecoder.
+func (sd *StreamDecoder) AddMessage(msg *ProducerMessage) error {
 	if msg.Header != nil {
-		if headerReceived {
+		if sd.headerReceived {
 			return errors.Errorf("received multiple headers")
 		}
-		sd.info = msg.Header.Info
-	} else {
-		if !headerReceived {
-			if msg.Trailer == nil {
-				return errors.Errorf("first message doesn't have header or trailer")
-			}
-			if len(msg.Data.RawBytes) != 0 {
-				return errors.Errorf("first and final message doesn't have header but has data")
-			}
+		sd.headerReceived = true
+	}
+	if msg.Typing != nil {
+		if sd.typingReceived {
+			return errors.Errorf("typing information received multiple times")
+		}
+		sd.typingReceived = true
+		sd.typing = msg.Typing
+	}
+
+	if len(msg.Data.RawBytes) != 0 {
+		if !sd.headerReceived || !sd.typingReceived {
+			return errors.Errorf("received data before header and/or typing info")
 		}
 	}
+
 	if len(msg.Data.RawBytes) > 0 {
 		if len(sd.data) == 0 {
-			sd.data = msg.Data.RawBytes
+			// We limit the capacity of the slice (using "three-index slices") out of
+			// paranoia: if the slice is going to need to grow later, we don't want to
+			// clobber any memory outside what the protobuf allocated for us
+			// initially (in case this memory might be coming from some buffer).
+			sd.data = msg.Data.RawBytes[:len(msg.Data.RawBytes):len(msg.Data.RawBytes)]
 		} else {
-			// We make a copy of sd.data to avoid appending to the slice given
-			// to us in msg.Data.RawBytes.
 			// This can only happen if we don't retrieve all the rows before
 			// adding another message, which shouldn't be the normal case.
 			// TODO(radu): maybe don't support this case at all?
-			sd.data = append([]byte(nil), sd.data...)
 			sd.data = append(sd.data, msg.Data.RawBytes...)
 		}
 	}
-	if msg.Trailer != nil {
-		sd.trailerReceived = true
-		sd.trailerErr = msg.Trailer.Error.GoError()
+	if len(msg.Data.Metadata) > 0 {
+		for _, md := range msg.Data.Metadata {
+			var meta ProducerMetadata
+			if rangeInfo := md.GetRangeInfo(); rangeInfo != nil {
+				meta.Ranges = rangeInfo.RangeInfo
+			} else if pErr := md.GetError(); pErr != nil {
+				meta.Err = roachpb.WrapRemoteProducerError(*pErr)
+			}
+			sd.metadata = append(sd.metadata, meta)
+		}
 	}
 	return nil
 }
 
-// GetRow returns a row of EncDatums received in the stream. A row buffer can be
-// provided optionally.
-// Returns nil if there are no more rows received so far.
-func (sd *StreamDecoder) GetRow(rowBuf sqlbase.EncDatumRow) (sqlbase.EncDatumRow, error) {
-	if len(sd.data) == 0 {
-		return nil, nil
+// GetRow returns a row received in the stream. A row buffer can be provided
+// optionally.
+//
+// Returns an empty row if there are no more rows received so far.
+//
+// A decoding error may be returned. Note that these are separate from error
+// coming from the upstream (through ProducerMetadata.Err).
+func (sd *StreamDecoder) GetRow(
+	rowBuf sqlbase.EncDatumRow,
+) (sqlbase.EncDatumRow, ProducerMetadata, error) {
+	if len(sd.metadata) != 0 {
+		r := sd.metadata[0]
+		sd.metadata = sd.metadata[1:]
+		return nil, r, nil
 	}
-	rowLen := len(sd.info)
+
+	if len(sd.data) == 0 {
+		return nil, ProducerMetadata{}, nil
+	}
+	rowLen := len(sd.typing)
 	if cap(rowBuf) >= rowLen {
 		rowBuf = rowBuf[:rowLen]
 	} else {
@@ -111,21 +137,12 @@ func (sd *StreamDecoder) GetRow(rowBuf sqlbase.EncDatumRow) (sqlbase.EncDatumRow
 	}
 	for i := range rowBuf {
 		var err error
-		rowBuf[i], sd.data, err = sqlbase.EncDatumFromBuffer(sd.info[i].Type, sd.info[i].Encoding, sd.data)
+		rowBuf[i], sd.data, err = sqlbase.EncDatumFromBuffer(sd.typing[i].Type, sd.typing[i].Encoding, sd.data)
 		if err != nil {
 			// Reset sd because it is no longer usable.
 			*sd = StreamDecoder{}
-			return nil, err
+			return nil, ProducerMetadata{}, err
 		}
 	}
-	return rowBuf, nil
-}
-
-// IsDone returns true if all the rows were returned and the stream trailer was
-// received (in which case any error in the trailer is returned as well).
-func (sd *StreamDecoder) IsDone() (bool, error) {
-	if len(sd.data) > 0 || !sd.trailerReceived {
-		return false, nil
-	}
-	return true, sd.trailerErr
+	return rowBuf, ProducerMetadata{}, nil
 }

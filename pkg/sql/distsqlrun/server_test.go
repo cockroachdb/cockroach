@@ -71,12 +71,17 @@ func TestServer(t *testing.T) {
 	}
 
 	distSQLClient := NewDistSQLClient(conn)
-	stream, err := distSQLClient.RunSyncFlow(context.Background(), req)
+	stream, err := distSQLClient.RunSyncFlow(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
+	if err := stream.Send(&ConsumerSignal{SetupFlowRequest: req}); err != nil {
+		t.Fatal(err)
+	}
+
 	var decoder StreamDecoder
 	var rows sqlbase.EncDatumRows
+	var metas []ProducerMetadata
 	for {
 		msg, err := stream.Recv()
 		if err != nil {
@@ -89,12 +94,10 @@ func TestServer(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		rows = testGetDecodedRows(t, &decoder, rows)
+		rows, metas = testGetDecodedRows(t, &decoder, rows, metas)
 	}
-	if done, trailerErr := decoder.IsDone(); !done {
-		t.Fatal("stream not done")
-	} else if trailerErr != nil {
-		t.Fatal("error in the stream trailer:", trailerErr)
+	if len(metas) != 0 {
+		t.Errorf("unexpected metadata: %v", metas)
 	}
 	str := rows.String()
 	expected := "[[1 10] [3 30]]"

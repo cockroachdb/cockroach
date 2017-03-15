@@ -126,13 +126,23 @@ func TestTableReader(t *testing.T) {
 			t.Fatal(err)
 		}
 		tr.Run(context.Background(), nil)
-		if out.Err != nil {
-			t.Fatal(out.Err)
-		}
-		if !out.Closed {
+		if !out.ProducerClosed {
 			t.Fatalf("output RowReceiver not closed")
 		}
-		if result := out.Rows.String(); result != c.expected {
+
+		var res sqlbase.EncDatumRows
+		for {
+			row, meta := out.Next()
+			if !meta.Empty() {
+				t.Fatalf("unexpected metadata: %v", meta)
+			}
+			if row == nil {
+				break
+			}
+			res = append(res, row)
+		}
+
+		if result := res.String(); result != c.expected {
 			t.Errorf("invalid results: %s, expected %s'", result, c.expected)
 		}
 	}

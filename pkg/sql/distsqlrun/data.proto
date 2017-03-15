@@ -22,6 +22,7 @@ syntax = "proto2";
 package cockroach.sql.distsqlrun;
 option go_package = "distsqlrun";
 
+import "cockroach/pkg/roachpb/api.proto";
 import "cockroach/pkg/roachpb/data.proto";
 import "cockroach/pkg/roachpb/errors.proto";
 import "cockroach/pkg/sql/sqlbase/structured.proto";
@@ -73,7 +74,7 @@ message StreamEndpointSpec {
   // For LOCAL streams, both ends of the stream are part of the flow on this
   // machine (and there must be a corresponding endpoint with the same ID).
   //
-  // For REMOTE streams, this ID is used in the StreamHeader when connecting to
+  // For REMOTE streams, this ID is used in the ProducerHeader when connecting to
   // the other host.
   //
   // For SYNC_RESPONSE streams, the ID is unused.
@@ -134,8 +135,8 @@ message DatumInfo {
   optional sqlbase.ColumnType type = 2 [(gogoproto.nullable) = false];
 }
 
-// StreamHeader is a message that is sent once at the beginning of a stream.
-message StreamHeader {
+// ProducerHeader is a message that is sent once at the beginning of a stream.
+message ProducerHeader {
   optional bytes flow_id = 1 [(gogoproto.nullable) = false,
                               (gogoproto.customname) = "FlowID",
                               (gogoproto.customtype) = "FlowID"];
@@ -143,28 +144,51 @@ message StreamHeader {
   optional int32 stream_id = 2 [(gogoproto.nullable) = false,
                                 (gogoproto.customname) = "StreamID",
                                 (gogoproto.casttype) = "StreamID"];
-
-  // There is one DatumInfo for each element in a row.
-  repeated DatumInfo info = 3 [(gogoproto.nullable) = false];
 }
 
-// StreamData is a message that can be sent multiple times as part of a stream.
-message StreamData {
-  // Encodes one or more data rows. Each datum is encoded according to the
+// ProducerData is a message that can be sent multiple times as part of a stream
+// from a producer to a consumer.
+message ProducerData {
+  // ProducerData contains 0 or more rows and/or 0 or more metadata messages.
+  
+  // A bunch of rows, encoded. Each datum is encoded according to the
   // corresponding DatumInfo.
   optional bytes raw_bytes = 1;
+  // A bunch of metadata messages.
+  repeated RemoteProducerMetadata metadata = 2 [(gogoproto.nullable) = false];
 }
 
-// StreamTrailer is a message that is sent once at the end of a stream.
-message StreamTrailer {
-  optional roachpb.Error error = 1;
+message ProducerMessage {
+  optional ProducerHeader header = 1;
+
+  // Typing information. There will be one DatumInfo for each element in a row.
+  // This field has to be populated on, or before, a ProducerMessage with data
+  // in it, and can only be populated once.
+  // TODO(andrei): It'd be nice if the typing information for streams would be
+  // configured statically at plan creation time, instead of being discovered
+  // dynamically through the first rows that flow.
+  repeated DatumInfo typing = 2 [(gogoproto.nullable) = false];
+
+  optional ProducerData data = 3 [(gogoproto.nullable) = false];
 }
 
-message StreamMessage {
-  // Header is present in the first message.
-  optional StreamHeader header = 1;
-  // Data is present in all messages except possibly the first and last.
-  optional StreamData data = 2 [(gogoproto.nullable) = false];
-  // Trailer is present in the last message.
-  optional StreamTrailer trailer = 3;
+// RemoteProducerMetadata represents records that a producer wants to pass to
+// a consumer, other than data rows. It's named RemoteProducerMetadata to not
+// clash with ProducerMetadata, which is used internally within a node and has
+// a different go error instead of a proto error inside.
+message RemoteProducerMetadata {
+  message RangeInfos {
+    repeated roachpb.RangeInfo range_info = 1 [(gogoproto.nullable) = false];
+  }
+  oneof value {
+    RangeInfos range_info = 1;
+    // TODO(radu): we should be using our own error instead of roachpb.Error.
+    // One important error field for distsql is whether the error is
+    // "authoritative": if a query is distributed on multiple nodes and one node
+    // hits an error, the other nodes may hit errors as well as a consequence
+    // (e.g. streams can't connect to the failed flow). The node that started the
+    // flow needs to distinguish which errors are caused by non-availability of
+    // other nodes so they don't obscure the real error.
+    roachpb.Error error = 2;
+  }
 }
