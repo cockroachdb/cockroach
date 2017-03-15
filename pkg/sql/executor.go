@@ -360,6 +360,7 @@ func (e *Executor) Start(
 
 	ctx = log.WithLogTag(ctx, "startup", nil)
 	startupSession := NewSession(ctx, SessionArgs{}, e, nil, startupMemMetrics)
+	startupSession.StartUnlimitedMonitor()
 	if err := e.virtualSchemas.init(&startupSession.planner); err != nil {
 		log.Fatal(ctx, err)
 	}
