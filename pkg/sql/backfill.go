@@ -580,8 +580,11 @@ func (sc *SchemaChanger) truncateIndexes(
 	return nil
 }
 
+type backfillType int
+
 const (
-	columnBackfill = iota
+	_ backfillType = iota
+	columnBackfill
 	indexBackfill
 )
 
