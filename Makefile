@@ -21,6 +21,8 @@
 #   GOFLAGS=-msan make build
 GO      ?= go
 GOFLAGS ?=
+XGO     ?= xgo
+TAR     ?= tar
 
 # Variables to be overridden on the command line only, e.g.
 #
@@ -36,6 +38,7 @@ TESTFLAGS    :=
 STRESSFLAGS  :=
 DUPLFLAGS    := -t 100
 COCKROACH    := ./cockroach
+ARCHIVE      := cockroach.src.tgz
 STARTFLAGS   := -s type=mem,size=1GiB --alsologtostderr
 BUILDMODE    := install
 BUILDTARGET  := .
@@ -74,6 +77,12 @@ $(error bash is required)
 endif
 export GIT_PAGER :=
 
+# GNU tar and BSD tar both support transforming filenames according to a regular
+# expression, but have different flags to do so.
+TAR_XFORM_FLAG = $(shell $(TAR) --version | grep -q GNU && echo "--xform=s" || echo "-s")
+
+GIT_DIR := $(shell git rev-parse --git-dir 2> /dev/null)
+
 ifeq ($(TYPE),)
 override LDFLAGS += -X github.com/cockroachdb/cockroach/pkg/build.typ=development
 else ifeq ($(TYPE),release)
@@ -93,6 +102,19 @@ export MACOSX_DEPLOYMENT_TARGET=10.9
 
 -include customenv.mk
 
+# Tell Make to delete the target if its recipe fails. Otherwise, if a recipe
+# modifies its target before failing, the target's timestamp will make it appear
+# up-to-date on the next invocation of Make, even though it is likely corrupt.
+# See: https://www.gnu.org/software/make/manual/html_node/Errors.html#Errors
+.DELETE_ON_ERROR:
+
+# Targets that name a real file that must be rebuilt on every Make invocation
+# should depend on .ALWAYS_REBUILD. (.PHONY should only be used on targets that
+# don't name a real file because .DELETE_ON_ERROR does not apply to .PHONY
+# targets.)
+.ALWAYS_REBUILD:
+.PHONY: .ALWAYS_REBUILD
+
 .PHONY: all
 all: build test check
 
@@ -107,18 +129,27 @@ buildoss: build
 build: BUILDMODE = build -i -o cockroach$(SUFFIX)
 build: install
 
+.PHONY: xgo-build
+xgo-build: GO = $(XGO)
+xgo-build: BUILDMODE =
+xgo-build: install
+
 .PHONY: start
 start: build
 start:
 	$(COCKROACH) start $(STARTFLAGS)
 
+.PHONY: install
+# The build.utcTime format must remain in sync with TimeFormat in pkg/build/info.go.
+install: override LDFLAGS += \
+	-X "github.com/cockroachdb/cockroach/pkg/build.tag=$(shell cat .buildinfo/tag)" \
+	-X "github.com/cockroachdb/cockroach/pkg/build.utcTime=$(shell date -u '+%Y/%m/%d %H:%M:%S')" \
+	-X "github.com/cockroachdb/cockroach/pkg/build.rev=$(shell cat .buildinfo/rev)"
 # Note: We pass `-v` to `go build` and `go test -i` so that warnings
 # from the linker aren't suppressed. The usage of `-v` also shows when
 # dependencies are rebuilt which is useful when switching between
 # normal and race test builds.
-.PHONY: install
-install: override LDFLAGS += $(shell GOPATH=${GOPATH} build/ldflags.sh)
-install:
+install: .buildinfo/tag .buildinfo/rev
 	@echo "GOPATH set to $$GOPATH"
 	@echo "$$GOPATH/bin added to PATH"
 	$(GO) $(BUILDMODE) -v $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LDFLAGS)' $(BUILDTARGET)
@@ -239,11 +270,46 @@ checkshort:
 clean:
 	$(GO) clean $(GOFLAGS) -i github.com/cockroachdb/...
 	find . -name '*.test*' -type f -exec rm -f {} \;
-	rm -f .bootstrap
+	rm -f .bootstrap $(ARCHIVE)
 
 .PHONY: protobuf
 protobuf:
 	$(MAKE) -C .. -f cockroach/build/protobuf.mk
+
+# archive builds a source tarball out of this repository. All files in the
+# archive are prefixed with $(ARCHIVE_BASE)/src/github.com/cockroachdb/cockroach,
+# with the exception of files in build/archive, which are instead installed
+# directly into $(ARCHIVE_BASE).
+.PHONY: archive
+archive: $(ARCHIVE)
+
+$(ARCHIVE): $(ARCHIVE).tmp
+	gzip -c $< > $@
+
+# TODO(benesch): Make this recipe use `git ls-files --recurse-submodules`
+# instead of scripts/ls-files.sh once Git v2.11 is widely deployed.
+.INTERMEDIATE: $(ARCHIVE).tmp
+$(ARCHIVE).tmp: ARCHIVE_BASE = cockroach-$(shell cat .buildinfo/tag)
+$(ARCHIVE).tmp: .buildinfo/tag .buildinfo/rev
+	scripts/ls-files.sh | $(TAR) -cf $@ -T - $(TAR_XFORM_FLAG),^,$(ARCHIVE_BASE)/src/github.com/cockroachdb/cockroach/, $^
+	(cd build/archive && $(TAR) -rf ../../$@ $(TAR_XFORM_FLAG),^,$(ARCHIVE_BASE)/, --exclude README.md *)
+
+.buildinfo:
+	@mkdir -p $@
+
+.buildinfo/tag: | .buildinfo
+	@{ git describe --tags --exact-match 2> /dev/null || git rev-parse --short HEAD; } | tr -d \\n > $@
+	@git diff-index --quiet HEAD || echo -dirty >> $@
+
+.buildinfo/rev: | .buildinfo
+	@git rev-parse HEAD > $@
+
+ifneq ($(GIT_DIR),)
+# If we're in a Git checkout, we update the buildinfo information on every build
+# to keep it up-to-date.
+.buildinfo/tag: .ALWAYS_REBUILD
+.buildinfo/rev: .ALWAYS_REBUILD
+endif
 
 # The .go-version target is phony so that it is rebuilt every time.
 .PHONY: .go-version
@@ -254,17 +320,19 @@ protobuf:
 
 include .go-version
 
+ifneq ($(GIT_DIR),)
 # If we're in a git worktree, the git hooks directory may not be in our root,
 # so we ask git for the location.
 #
 # Note that `git rev-parse --git-path hooks` requires git 2.5+.
-GITHOOKSDIR := $(shell test -d .git && echo '.git/hooks' || git rev-parse --git-path hooks)
+GITHOOKSDIR := $(shell git rev-parse --git-path hooks 2> /dev/null || echo "$(GIT_DIR)/hooks")
 GITHOOKS := $(subst githooks/,$(GITHOOKSDIR)/,$(wildcard githooks/*))
 $(GITHOOKSDIR)/%: githooks/%
 	@echo installing $<
 	@rm -f $@
 	@mkdir -p $(dir $@)
 	@ln -s ../../$(basename $<) $(dir $@)
+endif
 
 GLOCK := ../../../../bin/glock
 #        ^  ^  ^  ^~ GOPATH
@@ -275,9 +343,12 @@ GLOCK := ../../../../bin/glock
 # Update the git hooks and run the bootstrap script whenever any
 # of them (or their dependencies) change.
 .bootstrap: $(GITHOOKS) GLOCKFILE glide.lock
+ifneq ($(GIT_DIR),)
 	git submodule update --init
+endif
 	$(GO) install ./vendor/github.com/robfig/glock
 	@unset GIT_WORK_TREE; $(GLOCK) sync -n < GLOCKFILE
 	touch $@
 
-include .bootstrap
+# Force Make to run the .bootstrap recipe before building any other targets.
+-include .bootstrap
