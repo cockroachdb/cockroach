@@ -261,7 +261,7 @@ func (p *planner) runShowTransactionState(
 var noteworthyInternalMemoryUsageBytes = envutil.EnvOrDefaultInt64("COCKROACH_NOTEWORTHY_INTERNAL_MEMORY_USAGE", 100*1024)
 
 func makeInternalPlanner(
-	opName string, txn *client.Txn, user string, memMetrics *MemoryMetrics,
+	opName string, txn *client.Txn, user string, memMetrics *MemoryMetrics, clock *hlc.Clock,
 ) *planner {
 	p := makePlanner(opName)
 	p.setTxn(txn)
@@ -284,6 +284,12 @@ func makeInternalPlanner(
 		memMetrics.TxnMaxBytesHist,
 		-1, noteworthyInternalMemoryUsageBytes/5)
 	p.session.TxnState.mon.Start(p.session.context, &p.session.mon, mon.BoundAccount{})
+
+	if txn.Proto.OrigTimestamp == (hlc.Timestamp{}) {
+		now := clock.PhysicalTime()
+		p.evalCtx.SetTxnTimestamp(now)
+		p.evalCtx.SetStmtTimestamp(now)
+	}
 
 	return p
 }

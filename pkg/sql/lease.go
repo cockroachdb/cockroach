@@ -154,7 +154,7 @@ func (s LeaseStore) Acquire(
 
 	// Use the supplied (user) transaction to look up the descriptor because the
 	// descriptor might have been created within the transaction.
-	p := makeInternalPlanner("lease-acquire", txn, security.RootUser, s.memMetrics)
+	p := makeInternalPlanner("lease-acquire", txn, security.RootUser, s.memMetrics, s.clock)
 	defer finishInternalPlanner(p)
 
 	const getDescriptor = `SELECT descriptor FROM system.descriptor WHERE id = $1`
@@ -208,7 +208,7 @@ func (s LeaseStore) Acquire(
 		if nodeID == 0 {
 			panic("zero nodeID")
 		}
-		p := makeInternalPlanner("lease-insert", txn, security.RootUser, s.memMetrics)
+		p := makeInternalPlanner("lease-insert", txn, security.RootUser, s.memMetrics, s.clock)
 		defer finishInternalPlanner(p)
 		const insertLease = `INSERT INTO system.lease (descID, version, nodeID, expiration) ` +
 			`VALUES ($1, $2, $3, $4)`
@@ -237,7 +237,7 @@ func (s LeaseStore) Release(ctx context.Context, stopper *stop.Stopper, lease *L
 			if nodeID == 0 {
 				panic("zero nodeID")
 			}
-			p := makeInternalPlanner("lease-release", txn, security.RootUser, s.memMetrics)
+			p := makeInternalPlanner("lease-release", txn, security.RootUser, s.memMetrics, s.clock)
 			defer finishInternalPlanner(p)
 			const deleteLease = `DELETE FROM system.lease ` +
 				`WHERE (descID, version, nodeID, expiration) = ($1, $2, $3, $4)`
@@ -417,7 +417,7 @@ func (s LeaseStore) countLeases(
 ) (int, error) {
 	var count int
 	err := s.db.Txn(context.TODO(), func(txn *client.Txn) error {
-		p := makeInternalPlanner("leases-count", txn, security.RootUser, s.memMetrics)
+		p := makeInternalPlanner("leases-count", txn, security.RootUser, s.memMetrics, s.clock)
 		defer finishInternalPlanner(p)
 		const countLeases = `SELECT COUNT(version) FROM system.lease ` +
 			`WHERE descID = $1 AND version = $2 AND expiration > $3`

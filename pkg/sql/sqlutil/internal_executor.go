@@ -28,7 +28,8 @@ import (
 // is implemented by sql.InternalExecutor.
 type InternalExecutor interface {
 	// ExecuteStatementInTransaction executes the supplied SQL statement as part of
-	// the supplied transaction. Statements are currently executed as the root user.
+	// the supplied transaction and returns the number of rows affected. Statements
+	// are currently executed as the root user.
 	ExecuteStatementInTransaction(
 		ctx context.Context, opName string, txn *client.Txn, statement string, params ...interface{},
 	) (int, error)
