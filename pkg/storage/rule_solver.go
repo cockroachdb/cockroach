@@ -462,10 +462,10 @@ func shouldRebalance(ctx context.Context, store roachpb.StoreDescriptor, sl Stor
 	// for rebalancing. This is currently utilized by tests.
 	maxCapacityUsed := store.Capacity.FractionUsed() >= maxFractionUsedThreshold
 
-	// Rebalance if we're above the rebalance target, which is
+	// Rebalance if we're above the overfull threshold, which is
 	// mean*(1+rebalanceThreshold).
-	target := int32(math.Ceil(sl.candidateCount.mean * (1 + baseRebalanceThreshold)))
-	rangeCountAboveTarget := store.Capacity.RangeCount > target
+	overfullThreshold := int32(math.Ceil(sl.candidateCount.mean * (1 + baseRebalanceThreshold)))
+	rangeCountAboveOverfullThreshold := store.Capacity.RangeCount > overfullThreshold
 
 	// Rebalance if the candidate store has a range count above the mean, and
 	// there exists another store that is underfull: its range count is smaller
@@ -481,14 +481,15 @@ func shouldRebalance(ctx context.Context, store roachpb.StoreDescriptor, sl Stor
 		}
 	}
 
-	shouldRebalance := maxCapacityUsed || rangeCountAboveTarget || rebalanceToUnderfullStore
+	shouldRebalance := maxCapacityUsed || rangeCountAboveOverfullThreshold || rebalanceToUnderfullStore
 	if log.V(2) && shouldRebalance {
 		log.Infof(ctx,
 			"s%d: should-rebalance: fraction-used=%.2f range-count=%d "+
-				"(mean=%.1f, target=%d, fraction-used=%t, above-target=%t, underfull=%t)",
+				"(mean=%.1f, overfull-threshold=%d, fraction-used=%t, "+
+				"above-overfull-threshold=%t, rebalance-to-underfull=%t)",
 			store.StoreID, store.Capacity.FractionUsed(), store.Capacity.RangeCount,
-			sl.candidateCount.mean, target, maxCapacityUsed, rangeCountAboveTarget,
-			rebalanceToUnderfullStore)
+			sl.candidateCount.mean, overfullThreshold, maxCapacityUsed,
+			rangeCountAboveOverfullThreshold, rebalanceToUnderfullStore)
 	}
 	return shouldRebalance
 }
