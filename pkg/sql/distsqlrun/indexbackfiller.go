@@ -17,8 +17,6 @@
 package distsqlrun
 
 import (
-	"sync"
-
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
@@ -26,21 +24,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	"github.com/pkg/errors"
 )
 
-// indexBackfiller is a processor for backfilling indexes.
+// indexBackfiller is a processor that backfills new indexes.
 type indexBackfiller struct {
-	spec    BackfillerSpec
-	output  RowReceiver
-	flowCtx *FlowCtx
-	fetcher sqlbase.RowFetcher
+	*abstractBackfiller
 
 	// colIdxMap maps ColumnIDs to indices into desc.Columns and desc.Mutations.
 	colIdxMap map[sqlbase.ColumnID]int
-	numCols   int
 
 	rowVals parser.Datums
 	da      sqlbase.DatumAlloc
@@ -52,10 +43,13 @@ func newIndexBackfiller(
 	flowCtx *FlowCtx, spec *BackfillerSpec, post *PostProcessSpec, output RowReceiver,
 ) (*indexBackfiller, error) {
 	ib := &indexBackfiller{
-		flowCtx: flowCtx,
-		output:  output,
-		spec:    *spec,
+		abstractBackfiller: &abstractBackfiller{
+			flowCtx: flowCtx,
+			output:  output,
+			spec:    *spec,
+		},
 	}
+	ib.abstractBackfiller.backfiller = ib
 
 	if err := ib.init(); err != nil {
 		return nil, err
@@ -78,7 +72,6 @@ func (ib *indexBackfiller) init() error {
 			}
 		}
 	}
-	ib.numCols = len(cols)
 	// We need all the columns.
 	valNeededForCol := make([]bool, len(cols))
 	for i := range valNeededForCol {
@@ -94,25 +87,15 @@ func (ib *indexBackfiller) init() error {
 	)
 }
 
-// nextRow processes table rows.
-func (ib *indexBackfiller) nextRow() (sqlbase.EncDatumRow, error) {
-	fetcherRow, err := ib.fetcher.NextRow()
-	if err != nil || fetcherRow == nil {
-		return nil, err
-	}
-	return fetcherRow, nil
-}
-
-// runChunk returns the next-key and an error. next-key is nil
-// once the backfill is complete.
+// runChunk implements the backfiller interface.
 func (ib *indexBackfiller) runChunk(
-	ctx context.Context,
-	table sqlbase.TableDescriptor,
-	added []sqlbase.IndexDescriptor,
-	sp roachpb.Span,
-	chunkSize int64,
+	ctx context.Context, mutations []sqlbase.DescriptorMutation, sp roachpb.Span, chunkSize int64,
 ) (roachpb.Key, error) {
-	secondaryIndexEntries := make([]sqlbase.IndexEntry, len(added))
+	added := make([]sqlbase.IndexDescriptor, len(mutations))
+	for i, m := range mutations {
+		added[i] = *m.GetIndex()
+	}
+	secondaryIndexEntries := make([]sqlbase.IndexEntry, len(mutations))
 	err := ib.flowCtx.clientDB.Txn(ctx, func(txn *client.Txn) error {
 		if ib.flowCtx.testingKnobs.RunBeforeBackfillChunk != nil {
 			if err := ib.flowCtx.testingKnobs.RunBeforeBackfillChunk(sp); err != nil {
@@ -177,80 +160,12 @@ func (ib *indexBackfiller) runChunk(
 	return ib.fetcher.Key(), err
 }
 
-// mainLoop scans chunks of rows and constructs indexes.
-// It does not close the output.
-func (ib *indexBackfiller) mainLoop(ctx context.Context) error {
-	var addedIndexDescs []sqlbase.IndexDescriptor
-	const noNewIndex = -1
-	addedIndexMutationIdx := noNewIndex
-	desc := ib.spec.Table
-	if len(desc.Mutations) == 0 {
-		return errors.Errorf("no schema changes for table ID=%d", desc.ID)
-	}
-	mutationID := desc.Mutations[0].MutationID
-	for i, m := range desc.Mutations {
-		if m.MutationID != mutationID {
-			break
-		}
-		if index := m.GetIndex(); index != nil && m.Direction == sqlbase.DescriptorMutation_ADD {
-			addedIndexDescs = append(addedIndexDescs, *index)
-			if addedIndexMutationIdx == noNewIndex {
-				addedIndexMutationIdx = i
-			}
-		}
-	}
-
-	if addedIndexMutationIdx == noNewIndex ||
-		len(ib.spec.Spans) == 0 {
-		return errors.Errorf("completed processing all spans for index add (%d, %d)", desc.ID, mutationID)
-	}
-	work := ib.spec.Spans[0].Span
-
-	// Backfill the index entries for all the rows.
-	chunkSize := ib.spec.ChunkSize
-	start := timeutil.Now()
-	var resume roachpb.Span
-	sp := work
-	for row := int64(0); sp.Key != nil; row += chunkSize {
-		if log.V(2) {
-			log.Infof(ctx, "index add (%d, %d) at row: %d, span: %s",
-				desc.ID, mutationID, row, sp)
-		}
-		var err error
-		sp.Key, err = ib.runChunk(ctx, desc, addedIndexDescs, sp, chunkSize)
-		if err != nil {
-			return err
-		}
-		if timeutil.Since(start) > ib.spec.Duration && sp.Key != nil {
-			resume = sp
-			break
-		}
-	}
-	return WriteResumeSpan(ctx,
-		ib.flowCtx.clientDB,
-		ib.spec.Table.ID,
-		work,
-		resume,
-		addedIndexMutationIdx)
+// name implements the backfiller interface.
+func (ib *indexBackfiller) name() string {
+	return "Index"
 }
 
-// Run is part of the processor interface.
-func (ib *indexBackfiller) Run(ctx context.Context, wg *sync.WaitGroup) {
-	if wg != nil {
-		defer wg.Done()
-	}
-
-	ctx = log.WithLogTagInt(ctx, "IndexBackfiller", int(ib.spec.Table.ID))
-	ctx, span := tracing.ChildSpan(ctx, "index backfiller")
-	defer tracing.FinishSpan(span)
-
-	log.VEventf(ctx, 1, "starting")
-	if log.V(1) {
-		defer log.Infof(ctx, "exiting")
-	}
-
-	if err := ib.mainLoop(ctx); err != nil {
-		ib.output.Push(nil /* row */, ProducerMetadata{Err: err})
-	}
-	ib.output.ProducerDone()
+// mutationFilter implements the backfiller interface.
+func (ib *indexBackfiller) mutationFilter(m sqlbase.DescriptorMutation) bool {
+	return m.GetIndex() != nil && m.Direction == sqlbase.DescriptorMutation_ADD
 }
