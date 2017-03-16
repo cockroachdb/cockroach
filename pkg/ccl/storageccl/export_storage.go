@@ -613,7 +613,11 @@ func (s *azureStorageWriter) Finish() error {
 	// yet assigned to the blob), or latest. chunkReader takes care of splitting
 	// up the input file into small enough chunks the API can handle.
 
-	if err := s.client.CreateBlockBlob(s.container, s.name); err != nil {
+	const maxAttempts = 3
+
+	if err := retry.WithMaxAttempts(s.ctx, base.DefaultRetryOptions(), maxAttempts, func() error {
+		return s.client.CreateBlockBlob(s.container, s.name)
+	}); err != nil {
 		return errors.Wrap(err, "creating block blob")
 	}
 	const fourMiB = 1024 * 1024 * 4
@@ -623,7 +627,6 @@ func (s *azureStorageWriter) Finish() error {
 	// 9999 * 4mb = 40gb max upload size, well over our max range size.
 	const maxBlockID = 9999
 	const blockIDFmt = "%04d"
-	const maxAttempts = 3
 
 	var blocks []azr.Block
 	i := 1
