@@ -389,8 +389,11 @@ func newProcessor(
 		if err := checkNumInOut(inputs, outputs, 0, 1); err != nil {
 			return nil, err
 		}
-		if core.Backfiller.Type == BackfillerSpec_Index {
+		switch core.Backfiller.Type {
+		case BackfillerSpec_Index:
 			return newIndexBackfiller(flowCtx, core.Backfiller, post, outputs[0])
+		case BackfillerSpec_Column:
+			return newColumnBackfiller(flowCtx, core.Backfiller, post, outputs[0])
 		}
 	}
 	if core.SetOp != nil {
