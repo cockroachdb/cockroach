@@ -57,7 +57,9 @@ func (wg *WaitGroupWithError) Add(delta int) {
 func (wg *WaitGroupWithError) Wait() error {
 	wg.wg.Wait()
 	// Locking no longer required at this point; no more concurrent Done() calls.
-	if wg.mu.numErrs > 0 {
+	if wg.mu.numErrs == 1 {
+		return wg.mu.firstErr
+	} else if wg.mu.numErrs > 0 {
 		return errors.Wrapf(wg.mu.firstErr, "first of %d errors", wg.mu.numErrs)
 	}
 	return nil

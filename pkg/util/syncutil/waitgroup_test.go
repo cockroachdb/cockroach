@@ -43,9 +43,10 @@ func TestWaitGroupNilError(t *testing.T) {
 func TestWaitGroupOneError(t *testing.T) {
 	var wg syncutil.WaitGroupWithError
 	wg.Add(1)
-	wg.Done(errors.New("one"))
-	if err := wg.Wait(); !testutils.IsError(err, "one") {
-		t.Fatalf("expected 'one' error got: %+v", err)
+	origErr := errors.New("one")
+	wg.Done(origErr)
+	if err := wg.Wait(); err != origErr {
+		t.Fatalf("expected the original error got: %+v", err)
 	}
 }
 
