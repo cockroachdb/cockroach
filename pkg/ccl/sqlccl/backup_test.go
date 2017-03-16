@@ -210,7 +210,7 @@ func TestBackupRestoreInterleaved(t *testing.T) {
 
 	const numAccounts = 10
 
-	_, dir, _, sqlDB, cleanupFn := backupRestoreTestSetup(t, multiNode, numAccounts)
+	_, dir, _, sqlDB, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts)
 	defer cleanupFn()
 
 	// TODO(dan): The INTERLEAVE IN PARENT clause currently doesn't allow the
@@ -230,7 +230,7 @@ func TestBackupRestoreInterleaved(t *testing.T) {
 	_ = sqlDB.Exec(fmt.Sprintf(`BACKUP DATABASE bench TO '%s'`, dir))
 
 	t.Run("all tables in interleave hierarchy", func(t *testing.T) {
-		tcRestore := testcluster.StartTestCluster(t, multiNode, base.TestClusterArgs{})
+		tcRestore := testcluster.StartTestCluster(t, singleNode, base.TestClusterArgs{})
 		defer tcRestore.Stopper().Stop()
 		sqlDBRestore := sqlutils.MakeSQLRunner(t, tcRestore.Conns[0])
 		sqlDBRestore.Exec(bankCreateDatabase)
@@ -257,7 +257,7 @@ func TestBackupRestoreInterleaved(t *testing.T) {
 	})
 
 	t.Run("interleaved table without parent", func(t *testing.T) {
-		tcRestore := testcluster.StartTestCluster(t, multiNode, base.TestClusterArgs{})
+		tcRestore := testcluster.StartTestCluster(t, singleNode, base.TestClusterArgs{})
 		defer tcRestore.Stopper().Stop()
 		sqlDBRestore := sqlutils.MakeSQLRunner(t, tcRestore.Conns[0])
 		sqlDBRestore.Exec(bankCreateDatabase)
@@ -269,7 +269,7 @@ func TestBackupRestoreInterleaved(t *testing.T) {
 	})
 
 	t.Run("interleaved table without child", func(t *testing.T) {
-		tcRestore := testcluster.StartTestCluster(t, multiNode, base.TestClusterArgs{})
+		tcRestore := testcluster.StartTestCluster(t, singleNode, base.TestClusterArgs{})
 		defer tcRestore.Stopper().Stop()
 		sqlDBRestore := sqlutils.MakeSQLRunner(t, tcRestore.Conns[0])
 		sqlDBRestore.Exec(bankCreateDatabase)
@@ -277,6 +277,210 @@ func TestBackupRestoreInterleaved(t *testing.T) {
 		_, err := sqlDBRestore.DB.Exec(fmt.Sprintf(`RESTORE TABLE bench.bank FROM '%s'`, dir))
 		if !testutils.IsError(err, "without interleave child") {
 			t.Fatalf("expected 'without interleave child' error but got: %+v", err)
+		}
+	})
+}
+
+func TestBackupRestoreFKs(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	if !storage.ProposerEvaluatedKVEnabled() {
+		t.Skip("command WriteBatch is not allowed without proposer evaluated KV")
+	}
+
+	const numAccounts = 30
+	const createStore = "CREATE DATABASE store"
+
+	_, dir, _, origDB, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts)
+	defer cleanupFn()
+
+	// Generate some testdata and back it up.
+	{
+		origDB.Exec(createStore)
+
+		// customers has multiple inbound FKs, to different indexes.
+		origDB.Exec(`CREATE TABLE store.customers (
+			id INT PRIMARY KEY,
+			email STRING UNIQUE
+		)`)
+
+		// orders has both in and outbound FKs (receipts and customers).
+		// the index on placed makes indexIDs non-contiguous.
+		origDB.Exec(`CREATE TABLE store.orders (
+			id INT PRIMARY KEY,
+			placed TIMESTAMP,
+			INDEX (placed DESC),
+			customerid INT REFERENCES store.customers
+		)`)
+
+		// unused makes our table IDs non-contiguous.
+		origDB.Exec(`CREATE TABLE bench.unused (id INT PRIMARY KEY)`)
+
+		// receipts is has a self-referential FK.
+		origDB.Exec(`CREATE TABLE store.receipts (
+			id INT PRIMARY KEY,
+			reissue INT REFERENCES store.receipts(id),
+			dest STRING REFERENCES store.customers(email),
+			orderid INT REFERENCES store.orders
+		)`)
+
+		for i := 0; i < numAccounts; i++ {
+			origDB.Exec(fmt.Sprintf(`INSERT INTO store.customers VALUES (%d, '%d')`, i, i))
+		}
+		// Each even customerID gets 3 orders, with predictable order and receipt IDs.
+		for cID := 0; cID < numAccounts; cID += 2 {
+			for i := 0; i < 3; i++ {
+				oID := cID*100 + i
+				rID := oID * 10
+				origDB.Exec(`INSERT INTO store.orders VALUES ($1, NOW(), $2)`, oID, cID)
+				origDB.Exec(`INSERT INTO store.receipts VALUES ($1, NULL, $2, $3)`, rID, cID, oID)
+				if i > 1 {
+					origDB.Exec(`INSERT INTO store.receipts VALUES ($1, $2, $3, $4)`, rID+1, rID, cID, oID)
+				}
+			}
+		}
+		_ = origDB.Exec(fmt.Sprintf(`BACKUP DATABASE store TO '%s'`, dir))
+	}
+
+	origCustomers := origDB.QueryStr(`SHOW CONSTRAINTS FROM store.customers`)
+	origOrders := origDB.QueryStr(`SHOW CONSTRAINTS FROM store.orders`)
+	origReceipts := origDB.QueryStr(`SHOW CONSTRAINTS FROM store.receipts`)
+
+	t.Run("restore everything to new cluster", func(t *testing.T) {
+		tc := testcluster.StartTestCluster(t, singleNode, base.TestClusterArgs{})
+		defer tc.Stopper().Stop()
+		db := sqlutils.MakeSQLRunner(t, tc.Conns[0])
+		db.Exec(createStore)
+		db.Exec(fmt.Sprintf(`RESTORE store.* FROM '%s'`, dir))
+		// Restore's Validate checks all the tables point to each other correctly.
+
+		db.CheckQueryResults(`SHOW CONSTRAINTS FROM store.customers`, origCustomers)
+		db.CheckQueryResults(`SHOW CONSTRAINTS FROM store.orders`, origOrders)
+		db.CheckQueryResults(`SHOW CONSTRAINTS FROM store.receipts`, origReceipts)
+
+		// FK validation on customers from receipts is preserved.
+		if _, err := db.DB.Exec(
+			`UPDATE store.customers SET email = CONCAT(id::string, 'nope')`,
+		); !testutils.IsError(err, "foreign key violation.* referenced in table \"receipts\"") {
+			t.Fatal(err)
+		}
+
+		// FK validation on customers from orders is preserved.
+		if _, err := db.DB.Exec(
+			`UPDATE store.customers SET id = id * 1000`,
+		); !testutils.IsError(err, "foreign key violation.* referenced in table \"orders\"") {
+			t.Fatal(err)
+		}
+
+		// FK validation of customer id is preserved.
+		if _, err := db.DB.Exec(
+			`INSERT INTO store.orders VALUES (999, NULL, 999)`,
+		); !testutils.IsError(err, "foreign key violation.* in customers@primary") {
+			t.Fatal(err)
+		}
+
+		// FK validation of self-FK is preserved.
+		if _, err := db.DB.Exec(
+			`INSERT INTO store.receipts VALUES (1, 999, NULL, NULL)`,
+		); !testutils.IsError(err, "foreign key violation: value .999. not found in receipts@primary") {
+			t.Fatal(err)
+		}
+
+	})
+
+	t.Run("restore customers to new cluster", func(t *testing.T) {
+		tc := testcluster.StartTestCluster(t, singleNode, base.TestClusterArgs{})
+		defer tc.Stopper().Stop()
+		db := sqlutils.MakeSQLRunner(t, tc.Conns[0])
+		db.Exec(createStore)
+		db.Exec(fmt.Sprintf(`RESTORE store.customers, store.orders FROM '%s'`, dir))
+		// Restore's Validate checks all the tables point to each other correctly.
+
+		// FK validation on customers from orders is preserved.
+		if _, err := db.DB.Exec(
+			`UPDATE store.customers SET id = id*100`,
+		); !testutils.IsError(err, "foreign key violation.* referenced in table \"orders\"") {
+			t.Fatal(err)
+		}
+
+		// FK validation on customers from receipts is gone.
+		db.Exec(`UPDATE store.customers SET email = id::string`)
+	})
+
+	t.Run("restore orders to new cluster", func(t *testing.T) {
+		tc := testcluster.StartTestCluster(t, singleNode, base.TestClusterArgs{})
+		defer tc.Stopper().Stop()
+		db := sqlutils.MakeSQLRunner(t, tc.Conns[0])
+		db.Exec(createStore)
+
+		// FK validation of self-FK is preserved.
+		if _, err := db.DB.Exec(
+			fmt.Sprintf(`RESTORE store.orders FROM '%s'`, dir),
+		); !testutils.IsError(
+			err, "cannot restore table \"orders\" without referenced table 53 \\(or \"skip_missing_foreign_keys\" option\\)",
+		) {
+			t.Fatal(err)
+		}
+
+		db.Exec(
+			fmt.Sprintf(`RESTORE store.orders FROM '%s' WITH OPTIONS ('skip_missing_foreign_keys')`, dir))
+		// Restore's Validate checks all the tables point to each other correctly.
+
+		// FK validation is gone.
+		db.Exec(`INSERT INTO store.orders VALUES (999, NULL, 999)`)
+		db.Exec(`DELETE FROM store.orders`)
+	})
+
+	t.Run("restore receipts to new cluster", func(t *testing.T) {
+		tc := testcluster.StartTestCluster(t, singleNode, base.TestClusterArgs{})
+		defer tc.Stopper().Stop()
+		db := sqlutils.MakeSQLRunner(t, tc.Conns[0])
+		db.Exec(createStore)
+		db.Exec(fmt.Sprintf(
+			`RESTORE store.receipts FROM '%s' WITH OPTIONS ('skip_missing_foreign_keys')`, dir))
+		// Restore's Validate checks all the tables point to each other correctly.
+
+		// FK validation of orders and customer is gone.
+		db.Exec(`INSERT INTO store.receipts VALUES (1, NULL, '987', 999)`)
+
+		// FK validation of self-FK is preserved.
+		if _, err := db.DB.Exec(
+			`INSERT INTO store.receipts VALUES (1, 999, NULL, NULL)`,
+		); !testutils.IsError(err, "foreign key violation: value .999. not found in receipts@primary") {
+			t.Fatal(err)
+		}
+	})
+
+	t.Run("restore receipts and customers to new cluster", func(t *testing.T) {
+		tc := testcluster.StartTestCluster(t, singleNode, base.TestClusterArgs{})
+		defer tc.Stopper().Stop()
+		db := sqlutils.MakeSQLRunner(t, tc.Conns[0])
+		db.Exec(createStore)
+		db.Exec(fmt.Sprintf(
+			`RESTORE store.receipts, store.customers FROM '%s' WITH OPTIONS ('skip_missing_foreign_keys')`, dir))
+		// Restore's Validate checks all the tables point to each other correctly.
+
+		// FK validation of orders is gone.
+		db.Exec(`INSERT INTO store.receipts VALUES (1, NULL, '0', 999)`)
+
+		// FK validation of customer email is preserved.
+		if _, err := db.DB.Exec(
+			`INSERT INTO store.receipts VALUES (1, NULL, '999', 999)`,
+		); !testutils.IsError(err, "foreign key violation.* in customers@customers_email_key") {
+			t.Fatal(err)
+		}
+
+		// FK validation on customers from receipts is preserved.
+		if _, err := db.DB.Exec(
+			`DELETE FROM store.customers`,
+		); !testutils.IsError(err, "foreign key violation.* referenced in table \"receipts\"") {
+			t.Fatal(err)
+		}
+
+		// FK validation of self-FK is preserved.
+		if _, err := db.DB.Exec(
+			`INSERT INTO store.receipts VALUES (1, 999, NULL, NULL)`,
+		); !testutils.IsError(err, "foreign key violation: value .999. not found in receipts@primary") {
+			t.Fatal(err)
 		}
 	})
 }
@@ -311,7 +515,7 @@ func TestBackupRestoreIncremental(t *testing.T) {
 	const numBackups = 4
 	windowSize := int(numAccounts / 3)
 
-	_, dir, _, sqlDB, cleanupFn := backupRestoreTestSetup(t, multiNode, 0)
+	_, dir, _, sqlDB, cleanupFn := backupRestoreTestSetup(t, singleNode, 0)
 	defer cleanupFn()
 	rng, _ := randutil.NewPseudoRand()
 
@@ -364,7 +568,7 @@ func TestBackupRestoreIncremental(t *testing.T) {
 
 	// Start a new cluster to restore into.
 	{
-		tc := testcluster.StartTestCluster(t, multiNode, base.TestClusterArgs{})
+		tc := testcluster.StartTestCluster(t, singleNode, base.TestClusterArgs{})
 		defer tc.Stopper().Stop()
 		sqlDBRestore := sqlutils.MakeSQLRunner(t, tc.Conns[0])
 		sqlDBRestore.Exec(`CREATE DATABASE bench`)
