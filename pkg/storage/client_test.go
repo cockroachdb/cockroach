@@ -146,14 +146,7 @@ func createTestStoreWithEngine(
 		kv.MakeTxnMetrics(metric.TestSampleInterval),
 	)
 	storeCfg.DB = client.NewDB(sender, storeCfg.Clock)
-	storeCfg.StorePool = storage.NewStorePool(
-		log.AmbientContext{},
-		storeCfg.Gossip,
-		storeCfg.Clock,
-		storage.StorePoolNodeLivenessTrue,
-		storage.TestTimeUntilStoreDeadOff,
-		/* deterministic */ false,
-	)
+	storeCfg.StorePool = storage.NewTestStorePool(storeCfg)
 	storeCfg.Transport = storage.NewDummyRaftTransport()
 	// TODO(bdarnell): arrange to have the transport closed.
 	store := storage.NewStore(storeCfg, eng, nodeDesc)
