@@ -10,6 +10,7 @@ CockroachDB is a scalable, survivable, strongly-consistent SQL database.
 
 - [What is CockroachDB?](#what-is-cockroachdb)
 - [Docs](#docs)
+- [Installation](#installation)
 - [Quickstart](#quickstart)
 - [Client Drivers](#client-drivers)
 - [Deployment](#deployment)
@@ -41,63 +42,35 @@ CockroachDB is currently in beta. See our
 
 For guidance on installation, development, deployment, and administration, see our [User Documentation](https://cockroachlabs.com/docs/).
 
+## Installation
+
+For various installation methods on OS X, Linux, and Windows, see [Install CockroachDB](https://www.cockroachlabs.com/docs/install-cockroachdb.html).
+
 ## Quickstart
 
-1.  [Install Cockroach DB](https://www.cockroachlabs.com/docs/install-cockroachdb.html).
+To test out a CockroachDB cluster locally and talk to it via the built-in SQL client, see [Start a Local Cluster](https://www.cockroachlabs.com/docs/start-a-local-cluster.html). You might also want to check out:
 
-2.  [Start a local cluster](https://www.cockroachlabs.com/docs/start-a-local-cluster.html) with three nodes listening on different ports:
+- [Learn CockroachDB SQL](https://www.cockroachlabs.com/docs/learn-cockroachdb-sql.html)
 
-    ```shell
-    $ ./cockroach start --background
-    $ ./cockroach start --store=cockroach-data2 --port=26258 --http-port=8081 --join=localhost:26257 --background
-    $ ./cockroach start --store=cockroach-data3 --port=26259 --http-port=8082 --join=localhost:26257 --background
-    ```
+- [Secure a Local Cluster](https://www.cockroachlabs.com/docs/secure-a-cluster.html)
 
-3.  [Start the built-in SQL client](https://www.cockroachlabs.com/docs/use-the-built-in-sql-client.html) as an interactive shell:
-
-    ```shell
-    $ ./cockroach sql
-    # Welcome to the cockroach SQL interface.
-    # All statements must be terminated by a semicolon.
-    # To exit: CTRL + D.
-    ```
-
-4. Run some [CockroachDB SQL statements](https://www.cockroachlabs.com/docs/learn-cockroachdb-sql.html):
-
-    ```shell
-    root@:26257> CREATE DATABASE bank;
-    CREATE DATABASE
-
-    root@:26257> SET DATABASE = bank;
-    SET
-
-    root@:26257> CREATE TABLE accounts (id INT PRIMARY KEY, balance DECIMAL);
-    CREATE TABLE
-
-    root@26257> INSERT INTO accounts VALUES (1234, 10000.50);
-    INSERT 1
-
-    root@26257> SELECT * FROM accounts;
-    +------+----------+
-    |  id  | balance  |
-    +------+----------+
-    | 1234 | 10000.50 |
-    +------+----------+
-    ```
-
-4. Checkout the admin UI by pointing your browser to `http://<localhost>:8080`.
-
-5. CockroachDB makes it easy to [secure a cluster](https://www.cockroachlabs.com/docs/secure-a-cluster.html).
+- [Explore Core Features](https://www.cockroachlabs.com/docs/demo-data-replication.html), such as data replication and fault tolerance and recovery.
 
 ## Client Drivers
 
-CockroachDB supports the PostgreSQL wire protocol, so you can use any available PostgreSQL client drivers to connect from various languages. For recommended drivers that we've tested, see [Install Client Drivers](https://www.cockroachlabs.com/docs/install-client-drivers.html).
+CockroachDB supports the PostgreSQL wire protocol, so you can use any available PostgreSQL client drivers to connect from various languages.
+
+- For recommended drivers that we've tested, see [Install Client Drivers](https://www.cockroachlabs.com/docs/install-client-drivers.html).
+
+- For tutorials using these drivers, as well as supported ORMs, see [Build an App with CockroachDB](https://www.cockroachlabs.com/docs/build-an-app-with-cockroachdb.html).
 
 ## Deployment
 
--   [Manual](https://www.cockroachlabs.com/docs/manual-deployment.html) - Steps to deploy a CockroachDB cluster manually on multiple machines.
+- [Manual Deployment](https://www.cockroachlabs.com/docs/manual-deployment.html) - Steps to deploy a CockroachDB cluster manually on multiple machines.
 
--   [Cloud](https://github.com/cockroachdb/cockroach/tree/master/cloud/aws) - Configuration files and instructions for deploying an insecure development or test cluster on GCE or AWS using [Terraform](https://terraform.io/).
+- [Cloud Deployment](https://www.cockroachlabs.com/docs/cloud-deployment.html) - Guides for deploying CockroachDB on various cloud platforms.
+
+- [Orchestration](https://www.cockroachlabs.com/docs/orchestration.html) - Guides for running CockroachDB with popular open-source orchestration systems.
 
 ## Need Help?
 
@@ -125,7 +98,7 @@ We're an open source project and welcome contributions.
 
 ## Design
 
-This is an overview. For an in-depth discussion of the design and architecture, see the full [design doc](https://github.com/cockroachdb/cockroach/blob/master/docs/design.md). 
+This is an overview. For an in-depth discussion of the design and architecture, see the full [design doc](https://github.com/cockroachdb/cockroach/blob/master/docs/design.md).
 
 For another quick design overview, see the [CockroachDB tech talk slides](https://docs.google.com/presentation/d/1tPPhnpJ3UwyYMe4MT8jhqCrE9ZNrUMqsvXAbd97DZ2E/edit#slide=id.p).
 
@@ -134,16 +107,16 @@ For another quick design overview, see the [CockroachDB tech talk slides](https:
 CockroachDB is a distributed SQL database built on top of a
 transactional and consistent key:value store.
 
-The primary design goals are support for ACID transactions, horizontal scalability and survivability, hence the name. 
+The primary design goals are support for ACID transactions, horizontal scalability and survivability, hence the name.
 
-It aims to tolerate disk, machine, rack, and even datacenter failures with minimal latency disruption and no manual intervention. 
+It aims to tolerate disk, machine, rack, and even datacenter failures with minimal latency disruption and no manual intervention.
 
 CockroachDB nodes (RoachNodes) are symmetric; a design goal is homogeneous deployment (one binary) with minimal configuration.
 
 ### How it Works in a Nutshell
 
 CockroachDB implements a single, monolithic sorted map from key to value
-where both keys and values are byte strings (not unicode). 
+where both keys and values are byte strings (not unicode).
 
 The map is composed of one or more ranges and each range is backed by
 data stored in [RocksDB][0] (a variant of [LevelDB][1]), and is
@@ -192,8 +165,8 @@ groups.
 
 ## Comparison with Other Databases
 
-To see how key features of CockroachDB stack up against other databases, 
-visit the [CockroachDB in Comparison](https://www.cockroachlabs.com/docs/cockroachdb-in-comparison.html) page hosted on our docs site. 
+To see how key features of CockroachDB stack up against other databases,
+visit the [CockroachDB in Comparison](https://www.cockroachlabs.com/docs/cockroachdb-in-comparison.html) page on our website.
 
 ## See Also
 
