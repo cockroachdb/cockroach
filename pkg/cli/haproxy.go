@@ -33,6 +33,10 @@ var genHAProxyCmd = &cobra.Command{
 	Long: `This command generates a minimal haproxy configuration file for the cluster
 reached through the client flags.
 The file is written to --out. Use "--out -" for stdout.
+
+The addresses used are those advertized by the nodes themselves. Make sure haproxy
+can resolve the hostnames in the configuration file, either by using full-qualified names, or
+running haproxy in the same network.
 `,
 	RunE: MaybeDecorateGRPCError(runGenHAProxyCmd),
 }
@@ -68,7 +72,12 @@ func runGenHAProxyCmd(cmd *cobra.Command, args []string) error {
 		w = f
 	}
 
-	configTemplate.Execute(w, nodeStatuses.Nodes)
+	err = configTemplate.Execute(w, nodeStatuses.Nodes)
+	if err != nil {
+		// Return earliest error, but still close the file.
+		_ = f.Close()
+		return err
+	}
 
 	if f != nil {
 		return f.Close()
