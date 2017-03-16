@@ -63,7 +63,7 @@ func (*NoReturningClause) Format(buf *bytes.Buffer, f FmtFlags) {}
 
 // used by parent statements to determine their own StatementType.
 func (*ReturningExprs) statementType() StatementType    { return Rows }
-func (*ReturningNothing) statementType() StatementType  { return Rows }
+func (*ReturningNothing) statementType() StatementType  { return RowsAffected }
 func (*NoReturningClause) statementType() StatementType { return RowsAffected }
 
 func (*ReturningExprs) returningClause()    {}

@@ -63,13 +63,7 @@ func (p *planner) newReturningHelper(
 	switch t := r.(type) {
 	case *parser.ReturningExprs:
 		rExprs = *t
-	case *parser.ReturningNothing:
-		return nil, util.UnimplementedWithIssueErrorf(13160,
-			"RETURNING NOTHING syntax is not yet supported")
-		// TODO(nvanbenschoten) support this syntax.
-		// rh.pipeline = true
-		// return rh, nil
-	case *parser.NoReturningClause:
+	case *parser.ReturningNothing, *parser.NoReturningClause:
 		return rh, nil
 	default:
 		panic(errors.Errorf("unexpected ReturningClause type: %T", t))

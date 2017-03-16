@@ -1,14 +1,329 @@
 statement ok
 CREATE TABLE kv (
   k INT PRIMARY KEY,
-  v INT
+  v INT CHECK (v < 100)
 )
 
-statement error unimplemented: RETURNING NOTHING syntax is not yet supported
-DELETE FROM kv WHERE k = 1 RETURNING NOTHING
+# Pipelining cannot be used outside of a transaction
 
-statement error unimplemented: RETURNING NOTHING syntax is not yet supported
+statement error statement pipelining is only allowed in a transaction
 INSERT INTO kv VALUES (1, 2) RETURNING NOTHING
 
-statement error unimplemented: RETURNING NOTHING syntax is not yet supported
-UPDATE kv SET k = 3 WHERE k = v RETURNING NOTHING
+statement error statement pipelining is only allowed in a transaction
+UPSERT INTO kv VALUES (1, 2) RETURNING NOTHING
+
+statement error statement pipelining is only allowed in a transaction
+UPDATE kv SET v = k WHERE k =3 RETURNING NOTHING
+
+statement error statement pipelining is only allowed in a transaction
+DELETE FROM kv WHERE k = 1 RETURNING NOTHING
+
+
+# Successfully perform pipelined inserts
+
+statement ok
+BEGIN
+
+statement ok
+INSERT INTO kv VALUES (1, 2) RETURNING NOTHING
+
+statement ok
+INSERT INTO kv VALUES (2, 3) RETURNING NOTHING
+
+statement ok
+INSERT INTO kv VALUES (3, 4) RETURNING NOTHING
+
+statement ok
+COMMIT
+
+query II
+SELECT k, v FROM kv ORDER BY k
+----
+1  2
+2  3
+3  4
+
+# Unsuccessfully perform pipelined inserts
+
+statement ok
+BEGIN
+
+statement ok
+INSERT INTO kv VALUES (4, 5) RETURNING NOTHING
+
+statement ok
+INSERT INTO kv VALUES (2, 3) RETURNING NOTHING
+
+statement ok
+INSERT INTO kv VALUES (5, 6) RETURNING NOTHING
+
+statement error duplicate key value \(k\)=\(2\) violates unique constraint "primary"
+COMMIT
+
+statement ok
+ROLLBACK
+
+query II
+SELECT k, v FROM kv ORDER BY k
+----
+1  2
+2  3
+3  4
+
+
+# Successfully perform pipelined upserts
+
+statement ok
+BEGIN
+
+statement ok
+UPSERT INTO kv VALUES (1, 7) RETURNING NOTHING
+
+statement ok
+UPSERT INTO kv VALUES (4, 8) RETURNING NOTHING
+
+statement ok
+UPSERT INTO kv VALUES (3, 9) RETURNING NOTHING
+
+statement ok
+COMMIT
+
+query II
+SELECT k, v FROM kv ORDER BY k
+----
+1  7
+2  3
+3  9
+4  8
+
+# Unsuccessfully perform pipelined upserts
+
+statement ok
+BEGIN
+
+statement ok
+UPSERT INTO kv VALUES (1, 8) RETURNING NOTHING
+
+statement ok
+UPSERT INTO kv VALUES (4, 500) RETURNING NOTHING
+
+statement ok
+UPSERT INTO kv VALUES (3, 10) RETURNING NOTHING
+
+statement error failed to satisfy CHECK constraint \(v < 100\)
+COMMIT
+
+statement ok
+ROLLBACK
+
+query II
+SELECT k, v FROM kv ORDER BY k
+----
+1  7
+2  3
+3  9
+4  8
+
+
+# Successfully perform pipelined updates
+
+statement ok
+BEGIN
+
+statement ok
+UPDATE kv SET v = k WHERE k = 1 RETURNING NOTHING
+
+statement ok
+UPDATE kv SET v = k WHERE k = 3 RETURNING NOTHING
+
+statement ok
+UPDATE kv SET v = k WHERE k = 9 RETURNING NOTHING
+
+statement ok
+COMMIT
+
+query II
+SELECT k, v FROM kv ORDER BY k
+----
+1  1
+2  3
+3  3
+4  8
+
+# Unsuccessfully perform pipelined updates
+
+statement ok
+BEGIN
+
+statement ok
+UPDATE kv SET k = 9 WHERE k = 1 RETURNING NOTHING
+
+statement ok
+UPDATE kv SET k = 3 WHERE k = 2 RETURNING NOTHING
+
+statement ok
+UPDATE kv SET k = 10 WHERE k = 4 RETURNING NOTHING
+
+statement error duplicate key value \(k\)=\(3\) violates unique constraint "primary"
+COMMIT
+
+statement ok
+ROLLBACK
+
+query II
+SELECT k, v FROM kv ORDER BY k
+----
+1  1
+2  3
+3  3
+4  8
+
+
+
+
+# Successfully perform pipelined deletes
+
+statement ok
+BEGIN
+
+statement ok
+DELETE FROM kv WHERE k = 1 RETURNING NOTHING
+
+statement ok
+DELETE FROM kv WHERE k = 5 RETURNING NOTHING
+
+statement ok
+COMMIT
+
+query II
+SELECT k, v FROM kv ORDER BY k
+----
+2  3
+3  3
+4  8
+
+# Unsuccessfully perform pipelined deletes
+
+# Temporary table with FK to reference kv
+statement ok
+CREATE TABLE fk (
+  f INT REFERENCES kv
+)
+
+statement ok
+INSERT INTO fk VALUES (2)
+
+statement ok
+BEGIN
+
+statement ok
+DELETE FROM kv WHERE k = 1 RETURNING NOTHING
+
+statement ok
+DELETE FROM kv WHERE k = 2 RETURNING NOTHING
+
+statement ok
+DELETE FROM kv WHERE k = 3 RETURNING NOTHING
+
+statement error foreign key violation: values \[2\] in columns \[k\] referenced in table \"fk\"
+COMMIT
+
+statement ok
+ROLLBACK
+
+query II
+SELECT k, v FROM kv ORDER BY k
+----
+2  3
+3  3
+4  8
+
+statement ok
+DROP TABLE fk
+
+
+# Successfully perform mixed mutations
+
+statement ok
+BEGIN
+
+statement ok
+INSERT INTO kv VALUES (1, 2) RETURNING NOTHING
+
+statement ok
+INSERT INTO kv VALUES (5, 9)
+
+query II
+SELECT k, v FROM kv ORDER BY k
+----
+1  2
+2  3
+3  3
+4  8
+5  9
+
+statement ok
+UPSERT INTO kv VALUES (6, 10) RETURNING NOTHING
+
+statement ok
+UPDATE kv SET v = k+1 WHERE k = 3 RETURNING NOTHING
+
+query II
+SELECT k, v FROM kv ORDER BY k
+----
+1  2
+2  3
+3  4
+4  8
+5  9
+6  10
+
+statement ok
+DELETE FROM kv WHERE k = 2 RETURNING NOTHING
+
+statement ok
+COMMIT
+
+query II
+SELECT k, v FROM kv ORDER BY k
+----
+1  2
+3  4
+4  8
+5  9
+6  10
+
+# Unsuccessfully perform mixed mutations
+
+statement ok
+BEGIN
+
+statement ok
+INSERT INTO kv VALUES (1, 2) RETURNING NOTHING
+
+statement error duplicate key value \(k\)=\(1\) violates unique constraint "primary"
+INSERT INTO kv VALUES (7, 7)
+
+statement ok
+ROLLBACK
+
+query II
+SELECT k, v FROM kv ORDER BY k
+----
+1  2
+3  4
+4  8
+5  9
+6  10
+
+
+# Throw statement planning error
+
+statement ok
+BEGIN
+
+statement error column "z" does not exist
+UPDATE kv SET z = 10 WHERE k = 3 RETURNING NOTHING
+
+statement ok
+ROLLBACK
