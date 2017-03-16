@@ -188,6 +188,13 @@ func (txn *Txn) Isolation() enginepb.IsolationType {
 	return txn.mu.Proto.Isolation
 }
 
+// OrigTimestamp returns the transaction's starting timestamp.
+func (txn *Txn) OrigTimestamp() hlc.Timestamp {
+	txn.mu.Lock()
+	defer txn.mu.Unlock()
+	return txn.mu.Proto.OrigTimestamp
+}
+
 // SetTxnAnchorKey sets the key at which to anchor the transaction record. The
 // transaction anchor key defaults to the first key written in a transaction.
 func (txn *Txn) SetTxnAnchorKey(key roachpb.Key) {
