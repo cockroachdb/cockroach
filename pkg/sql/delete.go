@@ -122,7 +122,7 @@ func (d *deleteNode) Start(ctx context.Context) error {
 		}
 		if scan, ok := maybeScanNode.(*scanNode); ok && canDeleteWithoutScan(d.n, scan, &d.tw) {
 			d.run.fastPath = true
-			err := d.fastDelete(scan)
+			err := d.fastDelete(ctx, scan)
 			return err
 		}
 	}
@@ -197,8 +197,8 @@ func canDeleteWithoutScan(n *parser.Delete, scan *scanNode, td *tableDeleter) bo
 // `fastDelete` skips the scan of rows and just deletes the ranges that
 // `rows` would scan. Should only be used if `canDeleteWithoutScan` indicates
 // that it is safe to do so.
-func (d *deleteNode) fastDelete(scan *scanNode) error {
-	if err := scan.initScan(); err != nil {
+func (d *deleteNode) fastDelete(ctx context.Context, scan *scanNode) error {
+	if err := scan.initScan(ctx); err != nil {
 		return err
 	}
 

@@ -385,9 +385,9 @@ func TestSystemConfigGossip(t *testing.T) {
 	}
 
 	// Write a system key with the transaction marked as having a Gossip trigger.
-	if err := kvDB.Txn(ctx, func(txn *client.Txn) error {
+	if err := kvDB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		txn.SetSystemConfigTrigger()
-		return txn.Put(key, valAt(2))
+		return txn.Put(ctx, key, valAt(2))
 	}); err != nil {
 		t.Fatal(err)
 	}

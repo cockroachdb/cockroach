@@ -19,6 +19,7 @@ package sql
 import (
 	"fmt"
 
+	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/config"
@@ -30,7 +31,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/pkg/errors"
 )
 
 type dropDatabaseNode struct {
@@ -54,7 +54,7 @@ func (p *planner) DropDatabase(ctx context.Context, n *parser.DropDatabase) (pla
 	}
 
 	// Check that the database exists.
-	dbDesc, err := p.getDatabaseDesc(string(n.Name))
+	dbDesc, err := p.getDatabaseDesc(ctx, string(n.Name))
 	if err != nil {
 		return nil, err
 	}
@@ -70,7 +70,7 @@ func (p *planner) DropDatabase(ctx context.Context, n *parser.DropDatabase) (pla
 		return nil, err
 	}
 
-	tbNames, err := p.getTableNames(dbDesc)
+	tbNames, err := p.getTableNames(ctx, dbDesc)
 	if err != nil {
 		return nil, err
 	}
@@ -96,7 +96,7 @@ func (p *planner) DropDatabase(ctx context.Context, n *parser.DropDatabase) (pla
 		td[i] = tbDesc
 	}
 
-	td, err = p.filterCascadedTables(td)
+	td, err = p.filterCascadedTables(ctx, td)
 	if err != nil {
 		return nil, err
 	}
@@ -109,13 +109,13 @@ func (p *planner) DropDatabase(ctx context.Context, n *parser.DropDatabase) (pla
 // list (e.g. if view v1 depends on table t1, then v1 will be filtered from
 // the list).
 func (p *planner) filterCascadedTables(
-	tables []*sqlbase.TableDescriptor,
+	ctx context.Context, tables []*sqlbase.TableDescriptor,
 ) ([]*sqlbase.TableDescriptor, error) {
 	// Accumulate the set of all tables/views that will be deleted by cascade
 	// behavior so that we can filter them out of the list.
 	cascadedTables := make(map[sqlbase.ID]bool)
 	for _, desc := range tables {
-		if err := p.accumulateDependentTables(cascadedTables, desc); err != nil {
+		if err := p.accumulateDependentTables(ctx, cascadedTables, desc); err != nil {
 			return nil, err
 		}
 	}
@@ -129,15 +129,15 @@ func (p *planner) filterCascadedTables(
 }
 
 func (p *planner) accumulateDependentTables(
-	dependentTables map[sqlbase.ID]bool, desc *sqlbase.TableDescriptor,
+	ctx context.Context, dependentTables map[sqlbase.ID]bool, desc *sqlbase.TableDescriptor,
 ) error {
 	for _, ref := range desc.DependedOnBy {
 		dependentTables[ref.ID] = true
-		dependentDesc, err := sqlbase.GetTableDescFromID(p.txn, ref.ID)
+		dependentDesc, err := sqlbase.GetTableDescFromID(ctx, p.txn, ref.ID)
 		if err != nil {
 			return err
 		}
-		if err := p.accumulateDependentTables(dependentTables, dependentDesc); err != nil {
+		if err := p.accumulateDependentTables(ctx, dependentTables, dependentDesc); err != nil {
 			return err
 		}
 	}
@@ -185,7 +185,7 @@ func (n *dropDatabaseNode) Start(ctx context.Context) error {
 		return nil
 	})
 
-	if err := n.p.txn.Run(b); err != nil {
+	if err := n.p.txn.Run(ctx, b); err != nil {
 		return err
 	}
 
@@ -232,15 +232,15 @@ type fullIndexName struct {
 // Privileges: CREATE on table.
 //   Notes: postgres allows only the index owner to DROP an index.
 //          mysql requires the INDEX privilege on the table.
-func (p *planner) DropIndex(n *parser.DropIndex) (planNode, error) {
+func (p *planner) DropIndex(ctx context.Context, n *parser.DropIndex) (planNode, error) {
 	idxNames := make([]fullIndexName, len(n.IndexList))
 	for i, index := range n.IndexList {
-		tn, err := p.expandIndexName(index)
+		tn, err := p.expandIndexName(ctx, index)
 		if err != nil {
 			return nil, err
 		}
 
-		tableDesc, err := p.mustGetTableDesc(tn)
+		tableDesc, err := p.mustGetTableDesc(ctx, tn)
 		if err != nil {
 			return nil, err
 		}
@@ -261,7 +261,7 @@ func (n *dropIndexNode) Start(ctx context.Context) error {
 		// the list: when two or more index names refer to the same table,
 		// the mutation list and new version number created by the first
 		// drop need to be visible to the second drop.
-		tableDesc, err := n.p.getTableDesc(index.tn)
+		tableDesc, err := n.p.getTableDesc(ctx, index.tn)
 		if err != nil || tableDesc == nil {
 			// newPlan() and Start() ultimately run within the same
 			// transaction. If we got a descriptor during newPlan(), we
@@ -270,7 +270,8 @@ func (n *dropIndexNode) Start(ctx context.Context) error {
 		}
 
 		if err := n.p.dropIndexByName(
-			ctx, index.idxName, tableDesc, n.n.IfExists, n.n.DropBehavior, n.n.String()); err != nil {
+			ctx, index.idxName, tableDesc, n.n.IfExists, n.n.DropBehavior, n.n.String(),
+		); err != nil {
 			return err
 		}
 	}
@@ -304,27 +305,27 @@ func (p *planner) dropIndexByName(
 			if behavior != parser.DropCascade {
 				return fmt.Errorf("index %q is in use as a foreign key constraint", idx.Name)
 			}
-			if err := p.removeFKBackReference(tableDesc, idx); err != nil {
+			if err := p.removeFKBackReference(ctx, tableDesc, idx); err != nil {
 				return err
 			}
 		}
 		if len(idx.Interleave.Ancestors) > 0 {
-			if err := p.removeInterleaveBackReference(tableDesc, idx); err != nil {
+			if err := p.removeInterleaveBackReference(ctx, tableDesc, idx); err != nil {
 				return err
 			}
 		}
 
 		for _, ref := range idx.ReferencedBy {
-			fetched, err := p.canRemoveFK(idx.Name, ref, behavior)
+			fetched, err := p.canRemoveFK(ctx, idx.Name, ref, behavior)
 			if err != nil {
 				return err
 			}
-			if err := p.removeFK(ref, fetched); err != nil {
+			if err := p.removeFK(ctx, ref, fetched); err != nil {
 				return err
 			}
 		}
 		for _, ref := range idx.InterleavedBy {
-			if err := p.removeInterleave(ref); err != nil {
+			if err := p.removeInterleave(ctx, ref); err != nil {
 				return err
 			}
 		}
@@ -338,7 +339,8 @@ func (p *planner) dropIndexByName(
 					return err
 				}
 				viewDesc, err := p.getViewDescForCascade(
-					ctx, "index", idx.Name, tableDesc.ParentID, tableRef.ID, behavior)
+					ctx, "index", idx.Name, tableDesc.ParentID, tableRef.ID, behavior,
+				)
 				if err != nil {
 					return err
 				}
@@ -367,10 +369,10 @@ func (p *planner) dropIndexByName(
 	if err != nil {
 		return err
 	}
-	if err := tableDesc.Validate(p.txn); err != nil {
+	if err := tableDesc.Validate(ctx, p.txn); err != nil {
 		return err
 	}
-	if err := p.writeTableDesc(tableDesc); err != nil {
+	if err := p.writeTableDesc(ctx, tableDesc); err != nil {
 		return err
 	}
 	// Record index drop in the event log. This is an auditable log event
@@ -563,14 +565,14 @@ func (p *planner) DropTable(ctx context.Context, n *parser.DropTable) (planNode,
 		for _, idx := range droppedDesc.AllNonDropIndexes() {
 			for _, ref := range idx.ReferencedBy {
 				if !dropping[ref.Table] {
-					if _, err := p.canRemoveFK(droppedDesc.Name, ref, n.DropBehavior); err != nil {
+					if _, err := p.canRemoveFK(ctx, droppedDesc.Name, ref, n.DropBehavior); err != nil {
 						return nil, err
 					}
 				}
 			}
 			for _, ref := range idx.InterleavedBy {
 				if !dropping[ref.Table] {
-					if err := p.canRemoveInterleave(droppedDesc.Name, ref, n.DropBehavior); err != nil {
+					if err := p.canRemoveInterleave(ctx, droppedDesc.Name, ref, n.DropBehavior); err != nil {
 						return nil, err
 					}
 				}
@@ -592,9 +594,9 @@ func (p *planner) DropTable(ctx context.Context, n *parser.DropTable) (planNode,
 }
 
 func (p *planner) canRemoveFK(
-	from string, ref sqlbase.ForeignKeyReference, behavior parser.DropBehavior,
+	ctx context.Context, from string, ref sqlbase.ForeignKeyReference, behavior parser.DropBehavior,
 ) (*sqlbase.TableDescriptor, error) {
-	table, err := sqlbase.GetTableDescFromID(p.txn, ref.Table)
+	table, err := sqlbase.GetTableDescFromID(ctx, p.txn, ref.Table)
 	if err != nil {
 		return nil, err
 	}
@@ -608,9 +610,9 @@ func (p *planner) canRemoveFK(
 }
 
 func (p *planner) canRemoveInterleave(
-	from string, ref sqlbase.ForeignKeyReference, behavior parser.DropBehavior,
+	ctx context.Context, from string, ref sqlbase.ForeignKeyReference, behavior parser.DropBehavior,
 ) error {
-	table, err := sqlbase.GetTableDescFromID(p.txn, ref.Table)
+	table, err := sqlbase.GetTableDescFromID(ctx, p.txn, ref.Table)
 	if err != nil {
 		return err
 	}
@@ -663,10 +665,12 @@ func (p *planner) canRemoveDependentViewGeneric(
 	return nil
 }
 
-func (p *planner) removeFK(ref sqlbase.ForeignKeyReference, table *sqlbase.TableDescriptor) error {
+func (p *planner) removeFK(
+	ctx context.Context, ref sqlbase.ForeignKeyReference, table *sqlbase.TableDescriptor,
+) error {
 	if table == nil {
 		var err error
-		table, err = sqlbase.GetTableDescFromID(p.txn, ref.Table)
+		table, err = sqlbase.GetTableDescFromID(ctx, p.txn, ref.Table)
 		if err != nil {
 			return err
 		}
@@ -680,11 +684,11 @@ func (p *planner) removeFK(ref sqlbase.ForeignKeyReference, table *sqlbase.Table
 		return err
 	}
 	idx.ForeignKey = sqlbase.ForeignKeyReference{}
-	return p.saveNonmutationAndNotify(table)
+	return p.saveNonmutationAndNotify(ctx, table)
 }
 
-func (p *planner) removeInterleave(ref sqlbase.ForeignKeyReference) error {
-	table, err := sqlbase.GetTableDescFromID(p.txn, ref.Table)
+func (p *planner) removeInterleave(ctx context.Context, ref sqlbase.ForeignKeyReference) error {
+	table, err := sqlbase.GetTableDescFromID(ctx, p.txn, ref.Table)
 	if err != nil {
 		return err
 	}
@@ -697,7 +701,7 @@ func (p *planner) removeInterleave(ref sqlbase.ForeignKeyReference) error {
 		return err
 	}
 	idx.Interleave.Ancestors = nil
-	return p.saveNonmutationAndNotify(table)
+	return p.saveNonmutationAndNotify(ctx, table)
 }
 
 // Drops the view and any additional views that depend on it.
@@ -792,23 +796,23 @@ func (p *planner) dropTableImpl(
 	// Remove FK and interleave relationships.
 	for _, idx := range tableDesc.AllNonDropIndexes() {
 		if idx.ForeignKey.IsSet() {
-			if err := p.removeFKBackReference(tableDesc, idx); err != nil {
+			if err := p.removeFKBackReference(ctx, tableDesc, idx); err != nil {
 				return droppedViews, err
 			}
 		}
 		if len(idx.Interleave.Ancestors) > 0 {
-			if err := p.removeInterleaveBackReference(tableDesc, idx); err != nil {
+			if err := p.removeInterleaveBackReference(ctx, tableDesc, idx); err != nil {
 				return droppedViews, err
 			}
 		}
 		for _, ref := range idx.ReferencedBy {
 			// Nil forces re-fetching tables, since they may have been modified.
-			if err := p.removeFK(ref, nil); err != nil {
+			if err := p.removeFK(ctx, ref, nil); err != nil {
 				return droppedViews, err
 			}
 		}
 		for _, ref := range idx.InterleavedBy {
-			if err := p.removeInterleave(ref); err != nil {
+			if err := p.removeInterleave(ctx, ref); err != nil {
 				return droppedViews, err
 			}
 		}
@@ -818,7 +822,8 @@ func (p *planner) dropTableImpl(
 	// made it to this point if `cascade` wasn't enabled.
 	for _, ref := range tableDesc.DependedOnBy {
 		viewDesc, err := p.getViewDescForCascade(
-			ctx, tableDesc.TypeName(), tableDesc.Name, tableDesc.ParentID, ref.ID, parser.DropCascade)
+			ctx, tableDesc.TypeName(), tableDesc.Name, tableDesc.ParentID, ref.ID, parser.DropCascade,
+		)
 		if err != nil {
 			return droppedViews, err
 		}
@@ -830,7 +835,7 @@ func (p *planner) dropTableImpl(
 		droppedViews = append(droppedViews, viewDesc.Name)
 	}
 
-	if err := p.initiateDropTable(tableDesc); err != nil {
+	if err := p.initiateDropTable(ctx, tableDesc); err != nil {
 		return droppedViews, err
 	}
 
@@ -840,12 +845,12 @@ func (p *planner) dropTableImpl(
 	return droppedViews, nil
 }
 
-func (p *planner) initiateDropTable(tableDesc *sqlbase.TableDescriptor) error {
+func (p *planner) initiateDropTable(ctx context.Context, tableDesc *sqlbase.TableDescriptor) error {
 	if err := tableDesc.SetUpVersion(); err != nil {
 		return err
 	}
 	tableDesc.State = sqlbase.TableDescriptor_DROP
-	if err := p.writeTableDesc(tableDesc); err != nil {
+	if err := p.writeTableDesc(ctx, tableDesc); err != nil {
 		return err
 	}
 	p.notifySchemaChange(tableDesc.ID, sqlbase.InvalidMutationID)
@@ -853,9 +858,9 @@ func (p *planner) initiateDropTable(tableDesc *sqlbase.TableDescriptor) error {
 }
 
 func (p *planner) removeFKBackReference(
-	tableDesc *sqlbase.TableDescriptor, idx sqlbase.IndexDescriptor,
+	ctx context.Context, tableDesc *sqlbase.TableDescriptor, idx sqlbase.IndexDescriptor,
 ) error {
-	t, err := sqlbase.GetTableDescFromID(p.txn, idx.ForeignKey.Table)
+	t, err := sqlbase.GetTableDescFromID(ctx, p.txn, idx.ForeignKey.Table)
 	if err != nil {
 		return errors.Errorf("error resolving referenced table ID %d: %v", idx.ForeignKey.Table, err)
 	}
@@ -872,17 +877,17 @@ func (p *planner) removeFKBackReference(
 			targetIdx.ReferencedBy = append(targetIdx.ReferencedBy[:k], targetIdx.ReferencedBy[k+1:]...)
 		}
 	}
-	return p.saveNonmutationAndNotify(t)
+	return p.saveNonmutationAndNotify(ctx, t)
 }
 
 func (p *planner) removeInterleaveBackReference(
-	tableDesc *sqlbase.TableDescriptor, idx sqlbase.IndexDescriptor,
+	ctx context.Context, tableDesc *sqlbase.TableDescriptor, idx sqlbase.IndexDescriptor,
 ) error {
 	if len(idx.Interleave.Ancestors) == 0 {
 		return nil
 	}
 	ancestor := idx.Interleave.Ancestors[len(idx.Interleave.Ancestors)-1]
-	t, err := sqlbase.GetTableDescFromID(p.txn, ancestor.TableID)
+	t, err := sqlbase.GetTableDescFromID(ctx, p.txn, ancestor.TableID)
 	if err != nil {
 		return errors.Errorf("error resolving referenced table ID %d: %v", ancestor.TableID, err)
 	}
@@ -899,7 +904,7 @@ func (p *planner) removeInterleaveBackReference(
 			targetIdx.InterleavedBy = append(targetIdx.InterleavedBy[:k], targetIdx.InterleavedBy[k+1:]...)
 		}
 	}
-	return p.saveNonmutationAndNotify(t)
+	return p.saveNonmutationAndNotify(ctx, t)
 }
 
 func verifyDropTableMetadata(
@@ -928,7 +933,7 @@ func (p *planner) dropViewImpl(
 
 	// Remove back-references from the tables/views this view depends on.
 	for _, depID := range viewDesc.DependsOn {
-		dependencyDesc, err := sqlbase.GetTableDescFromID(p.txn, depID)
+		dependencyDesc, err := sqlbase.GetTableDescFromID(ctx, p.txn, depID)
 		if err != nil {
 			return cascadeDroppedViews,
 				errors.Errorf("error resolving dependency relation ID %d: %v", depID, err)
@@ -939,7 +944,7 @@ func (p *planner) dropViewImpl(
 			continue
 		}
 		dependencyDesc.DependedOnBy = removeMatchingReferences(dependencyDesc.DependedOnBy, viewDesc.ID)
-		if err := p.saveNonmutationAndNotify(dependencyDesc); err != nil {
+		if err := p.saveNonmutationAndNotify(ctx, dependencyDesc); err != nil {
 			return cascadeDroppedViews, err
 		}
 	}
@@ -948,7 +953,8 @@ func (p *planner) dropViewImpl(
 	if behavior == parser.DropCascade {
 		for _, ref := range viewDesc.DependedOnBy {
 			dependentDesc, err := p.getViewDescForCascade(
-				ctx, viewDesc.TypeName(), viewDesc.Name, viewDesc.ParentID, ref.ID, behavior)
+				ctx, viewDesc.TypeName(), viewDesc.Name, viewDesc.ParentID, ref.ID, behavior,
+			)
 			if err != nil {
 				return cascadeDroppedViews, err
 			}
@@ -961,7 +967,7 @@ func (p *planner) dropViewImpl(
 		}
 	}
 
-	if err := p.initiateDropTable(viewDesc); err != nil {
+	if err := p.initiateDropTable(ctx, viewDesc); err != nil {
 		return cascadeDroppedViews, err
 	}
 
@@ -990,12 +996,12 @@ func truncateAndDropTable(
 	// Delete the namekey so that it can be used by another table.
 	// We do this before truncating the table because the table truncation
 	// takes too much time.
-	if err := db.Txn(ctx, func(txn *client.Txn) error {
+	if err := db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		b := &client.Batch{}
 		// Use CPut because we want to remove a specific name -> id map.
 		b.CPut(nameKey, nil, tableDesc.ID)
 		txn.SetSystemConfigTrigger()
-		err := txn.Run(b)
+		err := txn.Run(ctx, b)
 		if _, ok := err.(*roachpb.ConditionFailedError); ok {
 			return nil
 		}
@@ -1015,14 +1021,14 @@ func truncateAndDropTable(
 	}
 
 	// Finished deleting all the table data, now delete the table meta data.
-	return db.Txn(ctx, func(txn *client.Txn) error {
+	return db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		// Delete table descriptor
 		b := &client.Batch{}
 		b.Del(descKey)
 		// Delete the zone config entry for this table.
 		b.Del(zoneKey)
 		txn.SetSystemConfigTrigger()
-		return txn.Run(b)
+		return txn.Run(ctx, b)
 	})
 }
 
@@ -1047,7 +1053,7 @@ func (p *planner) getViewDescForCascade(
 	parentID, viewID sqlbase.ID,
 	behavior parser.DropBehavior,
 ) (*sqlbase.TableDescriptor, error) {
-	viewDesc, err := sqlbase.GetTableDescFromID(p.txn, viewID)
+	viewDesc, err := sqlbase.GetTableDescFromID(ctx, p.txn, viewID)
 	if err != nil {
 		log.Warningf(ctx, "unable to retrieve descriptor for view %d: %v", viewID, err)
 		return nil, errors.Wrapf(err, "error resolving dependent view ID %d", viewID)
@@ -1056,7 +1062,7 @@ func (p *planner) getViewDescForCascade(
 		viewName := viewDesc.Name
 		if viewDesc.ParentID != parentID {
 			var err error
-			viewName, err = p.getQualifiedTableName(viewDesc)
+			viewName, err = p.getQualifiedTableName(ctx, viewDesc)
 			if err != nil {
 				log.Warningf(ctx, "unable to retrieve qualified name of view %d: %v", viewID, err)
 				msg := fmt.Sprintf("cannot drop %s %q because a view depends on it", typeName, objName)

@@ -95,6 +95,7 @@ func loadBackupDescs(ctx context.Context, uris []string) ([]BackupDescriptor, er
 }
 
 func reassignParentIDs(
+	ctx context.Context,
 	txn *client.Txn,
 	p sql.PlanHookState,
 	databasesByID map[sqlbase.ID]*sqlbase.DatabaseDescriptor,
@@ -116,7 +117,7 @@ func reassignParentIDs(
 			}
 
 			// Make sure the target DB exists.
-			existingDatabaseID, err := txn.Get(sqlbase.MakeNameMetadataKey(0, targetDB))
+			existingDatabaseID, err := txn.Get(ctx, sqlbase.MakeNameMetadataKey(0, targetDB))
 			if err != nil {
 				return err
 			}
@@ -134,7 +135,7 @@ func reassignParentIDs(
 		// This would fail the CPut later anyway, but this yields a prettier error.
 		{
 			nameKey := table.GetNameMetadataKey()
-			res, err := txn.Get(nameKey)
+			res, err := txn.Get(ctx, nameKey)
 			if err != nil {
 				return err
 			}
@@ -145,7 +146,7 @@ func reassignParentIDs(
 
 		// Check and set privileges.
 		{
-			parentDB, err := sqlbase.GetDatabaseDescFromID(txn, table.ParentID)
+			parentDB, err := sqlbase.GetDatabaseDescFromID(ctx, txn, table.ParentID)
 			if err != nil {
 				return errors.Wrapf(err, "failed to lookup parent DB %d", table.ParentID)
 			}
@@ -174,10 +175,10 @@ func reassignTableIDs(
 	var newTableIDs map[sqlbase.ID]sqlbase.ID
 	var kr storageccl.KeyRewriter
 
-	newTableIDsFunc := func(txn *client.Txn) error {
+	if err := db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		newTableIDs = make(map[sqlbase.ID]sqlbase.ID, len(tables))
 		for _, table := range tables {
-			newTableID, err := sql.GenerateUniqueDescID(txn)
+			newTableID, err := sql.GenerateUniqueDescID(ctx, txn)
 			if err != nil {
 				return err
 			}
@@ -186,9 +187,7 @@ func reassignTableIDs(
 			table.ID = newTableID
 		}
 		return nil
-	}
-
-	if err := db.Txn(ctx, newTableIDsFunc); err != nil {
+	}); err != nil {
 		return nil, err
 	}
 
@@ -468,24 +467,23 @@ func presplitRanges(baseCtx context.Context, db client.DB, input []roachpb.Key) 
 func restoreTableDescs(ctx context.Context, db client.DB, tables []*sqlbase.TableDescriptor) error {
 	ctx, span := tracing.ChildSpan(ctx, "restoreTableDescs")
 	defer tracing.FinishSpan(span)
-	restoreTableDescsFunc := func(txn *client.Txn) error {
+	err := db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		b := txn.NewBatch()
 		for _, table := range tables {
 			b.CPut(table.GetDescMetadataKey(), sqlbase.WrapDescriptor(table), nil)
 			b.CPut(table.GetNameMetadataKey(), table.ID, nil)
 		}
-		if err := txn.Run(b); err != nil {
+		if err := txn.Run(ctx, b); err != nil {
 			return err
 		}
 
 		for _, table := range tables {
-			if err := table.Validate(txn); err != nil {
+			if err := table.Validate(ctx, txn); err != nil {
 				return err
 			}
 		}
 		return nil
-	}
-	err := db.Txn(ctx, restoreTableDescsFunc)
+	})
 	return errors.Wrap(err, "restoring table desc and namespace entries")
 }
 
@@ -536,8 +534,8 @@ func Restore(
 
 	// Fail fast if the necessary databases don't exist since the below logic
 	// leaks table IDs when Restore fails.
-	if err := db.Txn(ctx, func(txn *client.Txn) error {
-		return reassignParentIDs(txn, p, databasesByID, tables, opt)
+	if err := db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+		return reassignParentIDs(ctx, txn, p, databasesByID, tables, opt)
 	}); err != nil {
 		return err
 	}

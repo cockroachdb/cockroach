@@ -819,8 +819,8 @@ func TestValidateCrossTableReferences(t *testing.T) {
 				t.Fatal(err)
 			}
 		}
-		txn := client.NewTxn(context.Background(), *kvDB)
-		if err := test.desc.validateCrossReferences(txn); err == nil {
+		txn := client.NewTxn(kvDB)
+		if err := test.desc.validateCrossReferences(context.TODO(), txn); err == nil {
 			t.Errorf("%d: expected \"%s\", but found success: %+v", i, test.err, test.desc)
 		} else if test.err != err.Error() {
 			t.Errorf("%d: expected \"%s\", but found \"%s\"", i, test.err, err.Error())

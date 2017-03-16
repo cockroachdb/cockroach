@@ -20,6 +20,7 @@ import (
 	"sort"
 	"time"
 
+	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
@@ -29,7 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/pkg/errors"
 )
 
 const (
@@ -102,7 +102,7 @@ func (sc *SchemaChanger) runBackfill(
 			return err
 		}
 	}
-	if err := sc.ExtendLease(lease); err != nil {
+	if err := sc.ExtendLease(ctx, lease); err != nil {
 		return err
 	}
 
@@ -117,9 +117,9 @@ func (sc *SchemaChanger) runBackfill(
 	var columnMutationIdx, addedIndexMutationIdx, droppedIndexMutationIdx int
 
 	var tableDesc *sqlbase.TableDescriptor
-	if err := sc.db.Txn(ctx, func(txn *client.Txn) error {
+	if err := sc.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		var err error
-		tableDesc, err = sqlbase.GetTableDescFromID(txn, sc.tableID)
+		tableDesc, err = sqlbase.GetTableDescFromID(ctx, txn, sc.tableID)
 		return err
 	}); err != nil {
 		return err
@@ -202,9 +202,9 @@ func (sc *SchemaChanger) runBackfill(
 // of a checkpoint, the span over all keys within a table.
 func (sc *SchemaChanger) getTableSpan(ctx context.Context, mutationIdx int) (roachpb.Span, error) {
 	var tableDesc *sqlbase.TableDescriptor
-	if err := sc.db.Txn(ctx, func(txn *client.Txn) error {
+	if err := sc.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		var err error
-		tableDesc, err = sqlbase.GetTableDescFromID(txn, sc.tableID)
+		tableDesc, err = sqlbase.GetTableDescFromID(ctx, txn, sc.tableID)
 		return err
 	}); err != nil {
 		return roachpb.Span{}, err
@@ -228,6 +228,7 @@ func (sc *SchemaChanger) getTableSpan(ctx context.Context, mutationIdx int) (roa
 }
 
 func (sc *SchemaChanger) maybeWriteResumeSpan(
+	ctx context.Context,
 	txn *client.Txn,
 	version sqlbase.DescriptorVersion,
 	resume roachpb.Span,
@@ -241,7 +242,7 @@ func (sc *SchemaChanger) maybeWriteResumeSpan(
 	if timeutil.Since(*lastCheckpoint) < checkpointInterval {
 		return nil
 	}
-	tableDesc, err := sqlbase.GetTableDescFromID(txn, sc.tableID)
+	tableDesc, err := sqlbase.GetTableDescFromID(ctx, txn, sc.tableID)
 	if err != nil {
 		return err
 	}
@@ -254,8 +255,11 @@ func (sc *SchemaChanger) maybeWriteResumeSpan(
 		tableDesc.Mutations[mutationIdx].ResumeSpans = append(tableDesc.Mutations[mutationIdx].ResumeSpans, resume)
 	}
 	txn.SetSystemConfigTrigger()
-	if err := txn.Put(sqlbase.MakeDescMetadataKey(tableDesc.GetID()),
-		sqlbase.WrapDescriptor(tableDesc)); err != nil {
+	if err := txn.Put(
+		ctx,
+		sqlbase.MakeDescMetadataKey(tableDesc.GetID()),
+		sqlbase.WrapDescriptor(tableDesc),
+	); err != nil {
 		return err
 	}
 	*lastCheckpoint = timeutil.Now()
@@ -266,9 +270,7 @@ func (sc *SchemaChanger) makePlanner(txn *client.Txn) *planner {
 	return &planner{
 		txn:      txn,
 		leaseMgr: sc.leaseMgr,
-		session: &Session{
-			context: txn.Context,
-		},
+		session:  new(Session),
 	}
 }
 
@@ -345,7 +347,7 @@ func (sc *SchemaChanger) truncateAndBackfillColumns(
 		lastCheckpoint := timeutil.Now()
 		for row, done := int64(0), false; !done; row += chunkSize {
 			// First extend the schema change lease.
-			if err := sc.ExtendLease(lease); err != nil {
+			if err := sc.ExtendLease(ctx, lease); err != nil {
 				return err
 			}
 			if log.V(2) {
@@ -383,7 +385,7 @@ func (sc *SchemaChanger) truncateAndBackfillColumnsChunk(
 ) (roachpb.Key, bool, error) {
 	done := false
 	var nextKey roachpb.Key
-	err := sc.db.Txn(ctx, func(txn *client.Txn) error {
+	err := sc.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		if sc.testingKnobs.RunBeforeBackfillChunk != nil {
 			if err := sc.testingKnobs.RunBeforeBackfillChunk(sp); err != nil {
 				return err
@@ -450,7 +452,7 @@ func (sc *SchemaChanger) truncateAndBackfillColumnsChunk(
 			return err
 		}
 		if err := rf.StartScan(
-			txn, roachpb.Spans{sp}, true /* limit batches */, chunkSize,
+			ctx, txn, roachpb.Spans{sp}, true /* limit batches */, chunkSize,
 		); err != nil {
 			return err
 		}
@@ -461,7 +463,7 @@ func (sc *SchemaChanger) truncateAndBackfillColumnsChunk(
 		var lastRowSeen parser.Datums
 		i := int64(0)
 		for ; i < chunkSize; i++ {
-			row, err := rf.NextRowDecoded()
+			row, err := rf.NextRowDecoded(ctx)
 			if err != nil {
 				return err
 			}
@@ -482,11 +484,11 @@ func (sc *SchemaChanger) truncateAndBackfillColumnsChunk(
 					oldValues[j] = parser.DNull
 				}
 			}
-			if _, err := ru.updateRow(txn.Context, writeBatch, oldValues, updateValues); err != nil {
+			if _, err := ru.updateRow(ctx, writeBatch, oldValues, updateValues); err != nil {
 				return err
 			}
 		}
-		if err := txn.Run(writeBatch); err != nil {
+		if err := txn.Run(ctx, writeBatch); err != nil {
 			return distsqlrun.ConvertBackfillError(tableDesc, writeBatch)
 		}
 		if done = i < chunkSize; done {
@@ -499,7 +501,7 @@ func (sc *SchemaChanger) truncateAndBackfillColumnsChunk(
 			return err
 		}
 		resume := roachpb.Span{Key: roachpb.Key(curIndexKey).PrefixEnd(), EndKey: sp.EndKey}
-		if err := sc.maybeWriteResumeSpan(txn, version, resume, mutationIdx, lastCheckpoint); err != nil {
+		if err := sc.maybeWriteResumeSpan(ctx, txn, version, resume, mutationIdx, lastCheckpoint); err != nil {
 			return err
 		}
 		nextKey = resume.Key
@@ -524,7 +526,7 @@ func (sc *SchemaChanger) truncateIndexes(
 		lastCheckpoint := timeutil.Now()
 		for row, done := int64(0), false; !done; row += chunkSize {
 			// First extend the schema change lease.
-			if err := sc.ExtendLease(lease); err != nil {
+			if err := sc.ExtendLease(ctx, lease); err != nil {
 				return err
 			}
 
@@ -533,7 +535,7 @@ func (sc *SchemaChanger) truncateIndexes(
 				log.Infof(ctx, "drop index (%d, %d) at row: %d, span: %s",
 					sc.tableID, sc.mutationID, row, resume)
 			}
-			if err := sc.db.Txn(ctx, func(txn *client.Txn) error {
+			if err := sc.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 				if sc.testingKnobs.RunBeforeBackfillChunk != nil {
 					if err := sc.testingKnobs.RunBeforeBackfillChunk(resume); err != nil {
 						return err
@@ -562,12 +564,12 @@ func (sc *SchemaChanger) truncateIndexes(
 					return err
 				}
 				resume, err = td.deleteIndex(
-					txn.Context, &desc, resumeAt, chunkSize,
+					ctx, &desc, resumeAt, chunkSize,
 				)
 				if err != nil {
 					return err
 				}
-				if err := sc.maybeWriteResumeSpan(txn, version, resume, mutationIdx, &lastCheckpoint); err != nil {
+				if err := sc.maybeWriteResumeSpan(ctx, txn, version, resume, mutationIdx, &lastCheckpoint); err != nil {
 					return err
 				}
 				done = resume.Key == nil
@@ -600,9 +602,9 @@ func (sc *SchemaChanger) getSpansToBackfill(
 	ctx context.Context, filter mutationFilter,
 ) ([]roachpb.Span, error) {
 	var spans []roachpb.Span
-	err := sc.db.Txn(ctx, func(txn *client.Txn) error {
+	err := sc.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		spans = nil
-		tableDesc, err := sqlbase.GetTableDescFromID(txn, sc.tableID)
+		tableDesc, err := sqlbase.GetTableDescFromID(ctx, txn, sc.tableID)
 		if err != nil {
 			return err
 		}
@@ -651,11 +653,11 @@ func (sc *SchemaChanger) distBackfill(
 			break
 		}
 
-		if err := sc.ExtendLease(lease); err != nil {
+		if err := sc.ExtendLease(ctx, lease); err != nil {
 			return err
 		}
 		log.VEventf(ctx, 2, "index backfill: process %+v spans", spans)
-		if err := sc.db.Txn(ctx, func(txn *client.Txn) error {
+		if err := sc.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 			p := sc.makePlanner(txn)
 			// Use a leased table descriptor for the backfill.
 			defer p.releaseLeases(ctx)

@@ -50,7 +50,7 @@ func (p *planner) changePrivileges(
 				return nil, err
 			}
 		case *sqlbase.TableDescriptor:
-			if err := d.Validate(p.txn); err != nil {
+			if err := d.Validate(ctx, p.txn); err != nil {
 				return nil, err
 			}
 			if err := d.SetUpVersion(); err != nil {
@@ -66,7 +66,7 @@ func (p *planner) changePrivileges(
 		descKey := sqlbase.MakeDescMetadataKey(descriptor.GetID())
 		b.Put(descKey, sqlbase.WrapDescriptor(descriptor))
 	}
-	if err := p.txn.Run(b); err != nil {
+	if err := p.txn.Run(ctx, b); err != nil {
 		return nil, err
 	}
 	return &emptyNode{}, nil
@@ -97,9 +97,7 @@ func (p *planner) Grant(ctx context.Context, n *parser.Grant) (planNode, error) 
 //   Notes: postgres requires the object owner.
 //          mysql requires the "grant option" and the same privileges, and sometimes superuser.
 func (p *planner) Revoke(ctx context.Context, n *parser.Revoke) (planNode, error) {
-	return p.changePrivileges(
-		ctx, n.Targets, n.Grantees,
-		func(privDesc *sqlbase.PrivilegeDescriptor, grantee string) {
-			privDesc.Revoke(grantee, n.Privileges)
-		})
+	return p.changePrivileges(ctx, n.Targets, n.Grantees, func(privDesc *sqlbase.PrivilegeDescriptor, grantee string) {
+		privDesc.Revoke(grantee, n.Privileges)
+	})
 }

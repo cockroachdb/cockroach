@@ -17,13 +17,13 @@
 package sql
 
 import (
+	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/pkg/errors"
 )
 
 // Split executes a KV split.
@@ -36,13 +36,13 @@ func (p *planner) Split(ctx context.Context, n *parser.Split) (planNode, error) 
 		tn, err = n.Table.NormalizeWithDatabaseName(p.session.Database)
 	} else {
 		// Variant: ALTER INDEX ... SPLIT AT ...
-		tn, err = p.expandIndexName(n.Index)
+		tn, err = p.expandIndexName(ctx, n.Index)
 	}
 	if err != nil {
 		return nil, err
 	}
 
-	tableDesc, err := p.getTableDesc(tn)
+	tableDesc, err := p.getTableDesc(ctx, tn)
 	if err != nil {
 		return nil, err
 	}

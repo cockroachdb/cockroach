@@ -18,12 +18,12 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
-	"github.com/pkg/errors"
 )
 
 // DefaultLeaseDuration is the duration a lease will be acquired for if no
@@ -91,9 +91,9 @@ func (m *LeaseManager) AcquireLease(ctx context.Context, key roachpb.Key) (*Leas
 	lease := &Lease{
 		key: key,
 	}
-	if err := m.db.Txn(ctx, func(txn *Txn) error {
+	if err := m.db.Txn(ctx, func(ctx context.Context, txn *Txn) error {
 		var val LeaseVal
-		err := txn.GetProto(key, &val)
+		err := txn.GetProto(ctx, key, &val)
 		if err != nil {
 			return err
 		}
@@ -104,7 +104,7 @@ func (m *LeaseManager) AcquireLease(ctx context.Context, key roachpb.Key) (*Leas
 			Owner:      m.clientID,
 			Expiration: m.clock.Now().Add(m.leaseDuration.Nanoseconds(), 0),
 		}
-		return txn.Put(key, lease.val)
+		return txn.Put(ctx, key, lease.val)
 	}); err != nil {
 		return nil, err
 	}

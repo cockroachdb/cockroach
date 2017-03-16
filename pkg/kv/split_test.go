@@ -66,7 +66,7 @@ func startTestWriter(
 			return
 		default:
 			first := true
-			err := db.Txn(context.TODO(), func(txn *client.Txn) error {
+			err := db.Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
 				if first && txnChannel != nil {
 					select {
 					case txnChannel <- struct{}{}:
@@ -79,8 +79,8 @@ func startTestWriter(
 				for j := 0; j <= int(src.Int31n(10)); j++ {
 					key := randutil.RandBytes(src, 10)
 					val := randutil.RandBytes(src, int(src.Int31n(valBytes)))
-					if err := txn.Put(key, val); err != nil {
-						log.Infof(context.Background(), "experienced an error in routine %d: %s", i, err)
+					if err := txn.Put(ctx, key, val); err != nil {
+						log.Infof(ctx, "experienced an error in routine %d: %s", i, err)
 						return err
 					}
 				}

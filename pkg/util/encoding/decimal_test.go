@@ -24,7 +24,6 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/apd"
-
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
 

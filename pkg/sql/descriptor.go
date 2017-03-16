@@ -19,6 +19,7 @@ package sql
 import (
 	"fmt"
 
+	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/config"
@@ -28,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/pkg/errors"
 )
 
 var (
@@ -57,10 +57,10 @@ type DescriptorAccessor interface {
 	// If `plainKey` doesn't exist, returns false and nil error.
 	// In most cases you'll want to use wrappers: `getDatabaseDesc` or
 	// `getTableDesc`.
-	getDescriptor(plainKey sqlbase.DescriptorKey, descriptor sqlbase.DescriptorProto) (bool, error)
+	getDescriptor(ctx context.Context, plainKey sqlbase.DescriptorKey, descriptor sqlbase.DescriptorProto) (bool, error)
 
 	// getAllDescriptors looks up and returns all available descriptors.
-	getAllDescriptors() ([]sqlbase.DescriptorProto, error)
+	getAllDescriptors(ctx context.Context) ([]sqlbase.DescriptorProto, error)
 
 	// getDescriptorsFromTargetList examines a TargetList and fetches the
 	// appropriate descriptors.
@@ -82,9 +82,9 @@ func (d descriptorAlreadyExistsErr) Error() string {
 
 // GenerateUniqueDescID returns the next available Descriptor ID and increments
 // the counter.
-func GenerateUniqueDescID(txn *client.Txn) (sqlbase.ID, error) {
+func GenerateUniqueDescID(ctx context.Context, txn *client.Txn) (sqlbase.ID, error) {
 	// Increment unique descriptor counter.
-	ir, err := txn.Inc(keys.DescIDGenerator, 1)
+	ir, err := txn.Inc(ctx, keys.DescIDGenerator, 1)
 	if err != nil {
 		return 0, err
 	}
@@ -100,7 +100,7 @@ func (p *planner) createDescriptor(
 ) (bool, error) {
 	idKey := plainKey.Key()
 
-	if exists, err := p.descExists(idKey); err == nil && exists {
+	if exists, err := p.descExists(ctx, idKey); err == nil && exists {
 		if ifNotExists {
 			// Noop.
 			return false, nil
@@ -118,7 +118,7 @@ func (p *planner) createDescriptor(
 		return false, err
 	}
 
-	id, err := GenerateUniqueDescID(p.txn)
+	id, err := GenerateUniqueDescID(ctx, p.txn)
 	if err != nil {
 		return false, err
 	}
@@ -126,9 +126,9 @@ func (p *planner) createDescriptor(
 	return true, p.createDescriptorWithID(ctx, idKey, id, descriptor)
 }
 
-func (p *planner) descExists(idKey roachpb.Key) (bool, error) {
+func (p *planner) descExists(ctx context.Context, idKey roachpb.Key) (bool, error) {
 	// Check whether idKey exists.
-	gr, err := p.txn.Get(idKey)
+	gr, err := p.txn.Get(ctx, idKey)
 	if err != nil {
 		return false, err
 	}
@@ -167,20 +167,23 @@ func (p *planner) createDescriptorWithID(
 		return expectDescriptor(systemConfig, descKey, descDesc)
 	})
 
-	return p.txn.Run(b)
+	return p.txn.Run(ctx, b)
 }
 
 // getDescriptor implements the DescriptorAccessor interface.
 func (p *planner) getDescriptor(
-	plainKey sqlbase.DescriptorKey, descriptor sqlbase.DescriptorProto,
+	ctx context.Context, plainKey sqlbase.DescriptorKey, descriptor sqlbase.DescriptorProto,
 ) (bool, error) {
-	return getDescriptor(p.txn, plainKey, descriptor)
+	return getDescriptor(ctx, p.txn, plainKey, descriptor)
 }
 
 func getDescriptor(
-	txn *client.Txn, plainKey sqlbase.DescriptorKey, descriptor sqlbase.DescriptorProto,
+	ctx context.Context,
+	txn *client.Txn,
+	plainKey sqlbase.DescriptorKey,
+	descriptor sqlbase.DescriptorProto,
 ) (bool, error) {
-	gr, err := txn.Get(plainKey.Key())
+	gr, err := txn.Get(ctx, plainKey.Key())
 	if err != nil {
 		return false, err
 	}
@@ -190,7 +193,7 @@ func getDescriptor(
 
 	descKey := sqlbase.MakeDescMetadataKey(sqlbase.ID(gr.ValueInt()))
 	desc := &sqlbase.Descriptor{}
-	if err := txn.GetProto(descKey, desc); err != nil {
+	if err := txn.GetProto(ctx, descKey, desc); err != nil {
 		return false, err
 	}
 
@@ -206,7 +209,7 @@ func getDescriptor(
 		// but it's worth it to avoid having to do the upgrade every time the
 		// descriptor is fetched. Our current test for this enforces compatibility
 		// backward and forward, so that'll have to be extended before this is done.
-		if err := table.Validate(txn); err != nil {
+		if err := table.Validate(ctx, txn); err != nil {
 			return false, err
 		}
 		*t = *table
@@ -224,9 +227,9 @@ func getDescriptor(
 }
 
 // getAllDescriptors implements the DescriptorAccessor interface.
-func (p *planner) getAllDescriptors() ([]sqlbase.DescriptorProto, error) {
+func (p *planner) getAllDescriptors(ctx context.Context) ([]sqlbase.DescriptorProto, error) {
 	descsKey := sqlbase.MakeAllDescsMetadataKey()
-	kvs, err := p.txn.Scan(descsKey, descsKey.PrefixEnd(), 0)
+	kvs, err := p.txn.Scan(ctx, descsKey, descsKey.PrefixEnd(), 0)
 	if err != nil {
 		return nil, err
 	}
@@ -259,7 +262,7 @@ func (p *planner) getDescriptorsFromTargetList(
 		}
 		descs := make([]sqlbase.DescriptorProto, 0, len(targets.Databases))
 		for _, database := range targets.Databases {
-			descriptor, err := p.mustGetDatabaseDesc(string(database))
+			descriptor, err := p.mustGetDatabaseDesc(ctx, string(database))
 			if err != nil {
 				return nil, err
 			}
@@ -277,7 +280,7 @@ func (p *planner) getDescriptorsFromTargetList(
 		if err != nil {
 			return nil, err
 		}
-		tables, err := p.expandTableGlob(tableGlob)
+		tables, err := p.expandTableGlob(ctx, tableGlob)
 		if err != nil {
 			return nil, err
 		}

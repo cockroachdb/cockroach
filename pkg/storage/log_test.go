@@ -23,6 +23,7 @@ import (
 	"net/url"
 	"testing"
 
+	_ "github.com/lib/pq"
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -35,7 +36,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
-	_ "github.com/lib/pq"
 )
 
 func TestLogSplits(t *testing.T) {
@@ -158,8 +158,8 @@ func TestLogRebalances(t *testing.T) {
 
 	// Log several fake events using the store.
 	logEvent := func(changeType roachpb.ReplicaChangeType) {
-		if err := db.Txn(context.TODO(), func(txn *client.Txn) error {
-			return store.LogReplicaChangeTest(txn.Context, txn, changeType, desc.Replicas[0], *desc)
+		if err := db.Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
+			return store.LogReplicaChangeTest(ctx, txn, changeType, desc.Replicas[0], *desc)
 		}); err != nil {
 			t.Fatal(err)
 		}

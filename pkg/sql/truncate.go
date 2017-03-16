@@ -130,7 +130,7 @@ func truncateTableInChunks(
 		if log.V(2) {
 			log.Infof(ctx, "table %s truncate at row: %d, span: %s", tableDesc.Name, row, resume)
 		}
-		if err := db.Txn(ctx, func(txn *client.Txn) error {
+		if err := db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 			rd, err := makeRowDeleter(txn, tableDesc, nil, nil, false)
 			if err != nil {
 				return err
@@ -139,7 +139,7 @@ func truncateTableInChunks(
 			if err := td.init(txn); err != nil {
 				return err
 			}
-			resume, err = td.deleteAllRows(txn.Context, resumeAt, chunkSize)
+			resume, err = td.deleteAllRows(ctx, resumeAt, chunkSize)
 			return err
 		}); err != nil {
 			return err

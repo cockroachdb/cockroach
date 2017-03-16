@@ -19,6 +19,8 @@ package distsqlrun
 import (
 	"io"
 
+	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
@@ -28,8 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	opentracing "github.com/opentracing/opentracing-go"
-	"github.com/pkg/errors"
 )
 
 // ServerConfig encompasses the configuration required to create a

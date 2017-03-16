@@ -97,7 +97,7 @@ transactions that process a fraction of the table at a time:
   endKey := startKey.PrefixEnd()
   for startKey != endKey {
     var lastKey roachpb.Key
-    err := db.Txn(func(txn *Txn) error {
+    err := db.Txn(func(ctx context.Context, txn *Txn) error {
       txn.SetPriority(VeryLowPriority)
       scan, err := txn.Scan(startKey, endKey, 1000)
       if err != nil {
@@ -105,7 +105,7 @@ transactions that process a fraction of the table at a time:
       }
       lastKey = getLastKeyOfFullRowInScan(scan)
       b := makeIndexKeysBatch(scan)
-      return txn.CommitInBatch(b)
+      return txn.CommitInBatch(ctx, b)
     })
     if err != nil {
       // Abort!

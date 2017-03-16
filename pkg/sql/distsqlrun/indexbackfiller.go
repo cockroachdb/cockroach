@@ -19,6 +19,7 @@ package distsqlrun
 import (
 	"sync"
 
+	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
@@ -29,7 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	"github.com/pkg/errors"
 )
 
 // indexBackfiller is a processor for backfilling indexes.
@@ -96,8 +96,8 @@ func (ib *indexBackfiller) init() error {
 }
 
 // nextRow processes table rows.
-func (ib *indexBackfiller) nextRow() (sqlbase.EncDatumRow, error) {
-	fetcherRow, err := ib.fetcher.NextRow()
+func (ib *indexBackfiller) nextRow(ctx context.Context) (sqlbase.EncDatumRow, error) {
+	fetcherRow, err := ib.fetcher.NextRow(ctx)
 	if err != nil || fetcherRow == nil {
 		return nil, err
 	}
@@ -133,7 +133,7 @@ func (ib *indexBackfiller) runChunk(
 	chunkSize int64,
 ) (roachpb.Key, error) {
 	secondaryIndexEntries := make([]sqlbase.IndexEntry, len(added))
-	err := ib.flowCtx.clientDB.Txn(ctx, func(txn *client.Txn) error {
+	err := ib.flowCtx.clientDB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		if ib.flowCtx.testingKnobs.RunBeforeBackfillChunk != nil {
 			if err := ib.flowCtx.testingKnobs.RunBeforeBackfillChunk(sp); err != nil {
 				return err
@@ -152,15 +152,15 @@ func (ib *indexBackfiller) runChunk(
 		// populated and deleted by the OLTP commands but not otherwise
 		// read or used
 		if err := ib.fetcher.StartScan(
-			txn, []roachpb.Span{sp}, true /* limitBatches */, chunkSize,
+			ctx, txn, []roachpb.Span{sp}, true /* limitBatches */, chunkSize,
 		); err != nil {
-			log.Errorf(txn.Context, "scan error: %s", err)
+			log.Errorf(ctx, "scan error: %s", err)
 			return err
 		}
 
 		b := &client.Batch{}
 		for i := int64(0); i < chunkSize; i++ {
-			encRow, err := ib.nextRow()
+			encRow, err := ib.nextRow(ctx)
 			if err != nil {
 				return err
 			}
@@ -183,13 +183,13 @@ func (ib *indexBackfiller) runChunk(
 				return err
 			}
 			for _, secondaryIndexEntry := range secondaryIndexEntries {
-				log.VEventf(txn.Context, 3, "InitPut %s -> %v", secondaryIndexEntry.Key,
+				log.VEventf(ctx, 3, "InitPut %s -> %v", secondaryIndexEntry.Key,
 					secondaryIndexEntry.Value)
 				b.InitPut(secondaryIndexEntry.Key, &secondaryIndexEntry.Value)
 			}
 		}
 		// Write the new index values.
-		if err := txn.Run(b); err != nil {
+		if err := txn.Run(ctx, b); err != nil {
 			return ConvertBackfillError(&ib.spec.Table, b)
 		}
 		return nil
@@ -292,9 +292,9 @@ func WriteResumeSpan(
 		panic("resume must end on the same key as origSpan")
 	}
 	cnt := 0
-	return db.Txn(ctx, func(txn *client.Txn) error {
+	return db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		cnt++
-		tableDesc, err := sqlbase.GetTableDescFromID(txn, id)
+		tableDesc, err := sqlbase.GetTableDescFromID(ctx, txn, id)
 		if err != nil {
 			return err
 		}
@@ -333,14 +333,14 @@ func WriteResumeSpan(
 				if resume.Key != nil {
 					addSpan(resume.Key, resume.EndKey)
 				} else {
-					log.VEventf(txn.Context, 2, "completed processing of span: %+v", origSpan)
+					log.VEventf(ctx, 2, "completed processing of span: %+v", origSpan)
 				}
 				addSpan(origSpan.EndKey, sp.EndKey)
 				mutation.ResumeSpans = append(before, after...)
 
-				log.VEventf(txn.Context, 2, "ckpt %+v", mutation.ResumeSpans)
+				log.VEventf(ctx, 2, "ckpt %+v", mutation.ResumeSpans)
 				txn.SetSystemConfigTrigger()
-				return txn.Put(sqlbase.MakeDescMetadataKey(tableDesc.GetID()), sqlbase.WrapDescriptor(tableDesc))
+				return txn.Put(ctx, sqlbase.MakeDescMetadataKey(tableDesc.GetID()), sqlbase.WrapDescriptor(tableDesc))
 			}
 		}
 		// Unable to find a span containing origSpan?
