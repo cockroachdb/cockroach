@@ -358,11 +358,13 @@ func (rdc *rangeDescriptorCache) lookupRangeDescriptorInternal(
 			// These need to be separate because we need to preserve the pointer to rs[0]
 			// so that the seenDesc logic works correctly in EvictCachedRangeDescriptor. An
 			// append could cause a copy, which would change the address of rs[0]. We insert
-			// the prefetched descriptors first to avoid any unintended overwriting.
+			// the prefetched descriptors first to avoid any unintended overwriting. We then
+			// only insert the first desired descriptor, since any other descriptor in rs would
+			// overwrite rs[0]. Instead, these are handled with the evictToken.
 			if err := rdc.insertRangeDescriptorsLocked(ctx, preRs...); err != nil {
 				log.Warningf(ctx, "range cache inserting prefetched descriptors failed: %v", err)
 			}
-			if err := rdc.insertRangeDescriptorsLocked(ctx, rs...); err != nil {
+			if err := rdc.insertRangeDescriptorsLocked(ctx, rs[:1]...); err != nil {
 				res = lookupResult{err: err}
 			}
 		}
