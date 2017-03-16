@@ -629,6 +629,15 @@ func TestRangeCacheUseIntents(t *testing.T) {
 	abDesc, evictToken := doLookupConsideringIntents(t, db.cache, "aa")
 	db.assertLookupCountEq(t, 2, "aa")
 
+	// Perform a lookup now that the cache is populated.
+	abDescLookup, _ := doLookup(t, db.cache, "aa")
+	db.assertLookupCountEq(t, 0, "aa")
+
+	// The descriptors should be the same.
+	if !reflect.DeepEqual(abDesc, abDescLookup) {
+		t.Errorf("expected initial range descriptor to be returned from lookup, found %v", abDescLookup)
+	}
+
 	// The current descriptor is found to be stale, so it is evicted. The next cache
 	// lookup should return the descriptor from the intents, without performing another
 	// db lookup.
