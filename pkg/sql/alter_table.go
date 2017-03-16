@@ -113,6 +113,13 @@ func (n *alterTableNode) Start(ctx context.Context) error {
 			if err != nil {
 				return err
 			}
+			if t.ValidationBehavior == parser.ValidationSkip {
+				switch t.ConstraintDef.(type) {
+				case *parser.ForeignKeyConstraintTableDef:
+				default:
+					return errors.New("constraint cannot be marked NOT VALID")
+				}
+			}
 			inuseNames := make(map[string]struct{}, len(info))
 			for k := range info {
 				inuseNames[k] = struct{}{}
@@ -153,9 +160,21 @@ func (n *alterTableNode) Start(ctx context.Context) error {
 					return err
 				}
 				affected := make(map[sqlbase.ID]*sqlbase.TableDescriptor)
-				err := n.p.resolveFK(n.tableDesc, d, affected, sqlbase.ConstraintValidity_Unvalidated)
+				var validity sqlbase.ConstraintValidity
+				switch t.ValidationBehavior {
+				case parser.ValidationDefault:
+					validity = sqlbase.ConstraintValidity_Validated
+				case parser.ValidationSkip:
+					validity = sqlbase.ConstraintValidity_Unvalidated
+				}
+				srcIdx, err := n.p.resolveFK(n.tableDesc, d, affected, validity)
 				if err != nil {
 					return err
+				}
+				if t.ValidationBehavior == parser.ValidationDefault {
+					if err := n.p.validateForeignKey(n.p.ctx(), n.tableDesc, srcIdx); err != nil {
+						return err
+					}
 				}
 				descriptorChanged = true
 				for _, updated := range affected {
