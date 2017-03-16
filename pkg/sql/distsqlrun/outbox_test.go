@@ -24,6 +24,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -37,9 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
-	"github.com/pkg/errors"
 )
 
 func TestOutbox(t *testing.T) {
@@ -68,51 +67,52 @@ func TestOutbox(t *testing.T) {
 
 	// Start a producer. It will send one row 0, then send rows -1 until a drain
 	// request is observed, then send row 2 and some metadata.
-	var producerErr error
+	producerC := make(chan error)
 	go func() {
-		row := sqlbase.EncDatumRow{
-			sqlbase.DatumToEncDatum(
-				sqlbase.ColumnType{Kind: sqlbase.ColumnType_INT},
-				parser.NewDInt(parser.DInt(0))),
-		}
-		if consumerStatus := outbox.Push(row, ProducerMetadata{}); consumerStatus != NeedMoreRows {
-			producerErr = errors.Errorf("expected status: %d, got: %d", NeedMoreRows, consumerStatus)
-			return
-		}
+		producerC <- func() error {
+			row := sqlbase.EncDatumRow{
+				sqlbase.DatumToEncDatum(
+					sqlbase.ColumnType{Kind: sqlbase.ColumnType_INT},
+					parser.NewDInt(parser.DInt(0))),
+			}
+			if consumerStatus := outbox.Push(row, ProducerMetadata{}); consumerStatus != NeedMoreRows {
+				return errors.Errorf("expected status: %d, got: %d", NeedMoreRows, consumerStatus)
+			}
 
-		// Send rows until the drain request is observed.
-		for {
+			// Send rows until the drain request is observed.
+			for {
+				row = sqlbase.EncDatumRow{
+					sqlbase.DatumToEncDatum(
+						sqlbase.ColumnType{Kind: sqlbase.ColumnType_INT},
+						parser.NewDInt(parser.DInt(-1))),
+				}
+				consumerStatus := outbox.Push(row, ProducerMetadata{})
+				if consumerStatus == DrainRequested {
+					break
+				}
+				if consumerStatus == ConsumerClosed {
+					return errors.Errorf("consumer closed prematurely")
+				}
+			}
+
+			// Now send another row that the outbox will discard.
 			row = sqlbase.EncDatumRow{
 				sqlbase.DatumToEncDatum(
 					sqlbase.ColumnType{Kind: sqlbase.ColumnType_INT},
-					parser.NewDInt(parser.DInt(-1))),
+					parser.NewDInt(parser.DInt(2))),
 			}
-			consumerStatus := outbox.Push(row, ProducerMetadata{})
-			if consumerStatus == DrainRequested {
-				break
+			if consumerStatus := outbox.Push(row, ProducerMetadata{}); consumerStatus != DrainRequested {
+				return errors.Errorf("expected status: %d, got: %d", NeedMoreRows, consumerStatus)
 			}
-			if consumerStatus == ConsumerClosed {
-				producerErr = errors.Errorf("consumer closed prematurely")
-				return
-			}
-		}
 
-		// Now send another row that the outbox will discard.
-		row = sqlbase.EncDatumRow{
-			sqlbase.DatumToEncDatum(
-				sqlbase.ColumnType{Kind: sqlbase.ColumnType_INT},
-				parser.NewDInt(parser.DInt(2))),
-		}
-		if consumerStatus := outbox.Push(row, ProducerMetadata{}); consumerStatus != DrainRequested {
-			producerErr = errors.Errorf("expected status: %d, got: %d", NeedMoreRows, consumerStatus)
-			return
-		}
+			// Send some metadata.
+			outbox.Push(nil /* row */, ProducerMetadata{Err: errors.Errorf("meta 0")})
+			outbox.Push(nil /* row */, ProducerMetadata{Err: errors.Errorf("meta 1")})
+			// Send the termination signal.
+			outbox.ProducerDone()
 
-		// Send some metadata.
-		outbox.Push(nil /* row */, ProducerMetadata{Err: errors.Errorf("meta 0")})
-		outbox.Push(nil /* row */, ProducerMetadata{Err: errors.Errorf("meta 1")})
-		// Send the termination signal.
-		outbox.ProducerDone()
+			return nil
+		}()
 	}()
 
 	// Wait for the outbox to connect the stream.
@@ -166,8 +166,8 @@ func TestOutbox(t *testing.T) {
 			drainSignalSent = true
 		}
 	}
-	if producerErr != nil {
-		t.Fatalf("%+v", producerErr)
+	if err := <-producerC; err != nil {
+		t.Fatalf("%+v", err)
 	}
 
 	if len(metas) != 2 {
@@ -192,7 +192,7 @@ func TestOutbox(t *testing.T) {
 	// The outbox should shut down since the producer closed.
 	outboxWG.Wait()
 	// Signal the server to shut down the stream.
-	streamNotification.wg.Done(nil /* err */)
+	streamNotification.donec <- nil
 }
 
 // Test that an outbox connects its stream as soon as possible (i.e. before
@@ -237,7 +237,7 @@ func TestOutboxInitializesStreamBeforeRecevingAnyRows(t *testing.T) {
 
 	// Signal the server to shut down the stream. This should also prompt the
 	// outbox (the client) to terminate its loop.
-	streamNotification.wg.Done(nil /* err */)
+	streamNotification.donec <- nil
 	outboxWG.Wait()
 }
 
@@ -272,10 +272,10 @@ type MockDistSQLServer struct {
 
 // InboundStreamNotification is the MockDistSQLServer's way to tell its clients
 // that a new gRPC call has arrived and thus a stream has arrived. The rpc
-// handler is blocked until wg is signaled.
+// handler is blocked until donec is signaled.
 type InboundStreamNotification struct {
 	stream DistSQL_FlowStreamServer
-	wg     *syncutil.WaitGroupWithError
+	donec  chan<- error
 }
 
 // MockDistSQLServer implements the DistSQLServer interface.
@@ -299,8 +299,7 @@ func (ds *MockDistSQLServer) SetupFlow(
 
 // FlowStream is part of the DistSQLServer interface.
 func (ds *MockDistSQLServer) FlowStream(stream DistSQL_FlowStreamServer) error {
-	var wg syncutil.WaitGroupWithError
-	wg.Add(1)
-	ds.inboundStreams <- InboundStreamNotification{stream: stream, wg: &wg}
-	return wg.Wait()
+	donec := make(chan error)
+	ds.inboundStreams <- InboundStreamNotification{stream: stream, donec: donec}
+	return <-donec
 }

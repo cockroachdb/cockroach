@@ -1,8 +1,8 @@
 hash: b028d8e753461eb6f9ec9a6038477ac4fedfcd510810d4ca482bd2d9e70dfd52
-updated: 2017-03-14T18:16:03.287869629-04:00
+updated: 2017-03-16T13:55:47.251284287-04:00
 imports:
 - name: cloud.google.com/go
-  version: a262d3f5f604650574f279d4985e3785b50134ac
+  version: 081f6b13d0132656829110e5f8344a13dfe039dc
   subpackages:
   - compute/metadata
   - internal
@@ -54,7 +54,7 @@ imports:
   subpackages:
   - crdb
 - name: github.com/cockroachdb/crlfmt
-  version: 447aefefe66ca7de6679b30e30793e277280e611
+  version: 64263ede71a7661a334216da51471d0f21ce80d1
 - name: github.com/cockroachdb/returncheck
   version: e91bb28baf9de4a530d3ae7f041953b23dcce9be
 - name: github.com/cockroachdb/stress
@@ -171,7 +171,7 @@ imports:
 - name: github.com/google/btree
   version: 316fb6d3f031ae8f4d457c6c5186b9e3ded70435
 - name: github.com/google/go-github
-  version: 69fd0adc8ab606780549a072f2e3b3f795d75832
+  version: 839082db564f53df5b8b386f217c7c217b5a624f
   subpackages:
   - github
 - name: github.com/google/go-querystring
@@ -179,7 +179,7 @@ imports:
   subpackages:
   - query
 - name: github.com/google/pprof
-  version: bdcc332f697d8564a28cc0b4b3aa8e48e911fd18
+  version: a613757740614d4865db70ca9c80bc55cab3ab8f
   subpackages:
   - driver
   - internal/binutils
@@ -234,7 +234,7 @@ imports:
   subpackages:
   - oid
 - name: github.com/lightstep/lightstep-tracer-go
-  version: 70a2e8ae52bb7cc978ffd05d64d50b82b06bdfe9
+  version: 94d5dd5639a3ce7f9f09ccccf7b1b468d0262a7d
   subpackages:
   - collectorpb
   - lightstep_thrift
@@ -312,7 +312,7 @@ imports:
 - name: github.com/shurcooL/sanitized_anchor_name
   version: 1dba4b3954bc059efc3991ec364f9f9a35f597d2
 - name: github.com/Sirupsen/logrus
-  version: ba1b36c82c5e05c4f912a88eab0dcd91a171688f
+  version: 547e984ad93a90192134fc0fdb57a468edb514fe
 - name: github.com/spf13/cobra
   version: 7be4beda01ec05d0b93d80b3facd2b6f44080d94
   subpackages:
@@ -348,12 +348,16 @@ imports:
   - proxy
   - trace
 - name: golang.org/x/oauth2
-  version: 1611bb46e67abc64a71ecc5c3ae67f1cbbc2b921
+  version: 30fcca6531eb4bb278493c9fb299295b3b145934
   subpackages:
   - google
   - internal
   - jws
   - jwt
+- name: golang.org/x/sync
+  version: a60ad46e0ed33d02e09bda439efaf9c9727dbc6c
+  subpackages:
+  - errgroup
 - name: golang.org/x/sys
   version: e48874b42435b4347fc52bdee0424a52abc974d7
   subpackages:
@@ -370,7 +374,7 @@ imports:
   - unicode/norm
   - width
 - name: golang.org/x/tools
-  version: 2f69a5922b0b358fb9dd08ed224b748348ad821a
+  version: 2946dd1f77e693e136d9ed202ba093bb4a3ea761
   subpackages:
   - cmd/goimports
   - cmd/goyacc
@@ -384,7 +388,7 @@ imports:
   - go/types/typeutil
   - imports
 - name: google.golang.org/api
-  version: 1202890e803f07684581b575fda809bf335a533f
+  version: 650535c7d6201e8304c92f38c922a9a3a36c6877
   subpackages:
   - gensupport
   - googleapi

@@ -11,7 +11,9 @@ package sqlccl
 import (
 	"strings"
 
+	"github.com/pkg/errors"
 	"golang.org/x/net/context"
+	"golang.org/x/sync/errgroup"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
@@ -26,9 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/interval"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	"github.com/pkg/errors"
 )
 
 const (
@@ -424,9 +424,9 @@ func presplitRanges(baseCtx context.Context, db client.DB, input []roachpb.Key) 
 		return nil
 	}
 
-	var wg syncutil.WaitGroupWithError
-	var splitFn func([]roachpb.Key)
-	splitFn = func(splitPoints []roachpb.Key) {
+	g, ctx := errgroup.WithContext(ctx)
+	var splitFn func([]roachpb.Key) error
+	splitFn = func(splitPoints []roachpb.Key) error {
 		// Pick the index such that it's 0 if len(splitPoints) == 1.
 		splitIdx := len(splitPoints) / 2
 		// AdminSplit requires that the key be a valid table key, which means
@@ -438,29 +438,28 @@ func presplitRanges(baseCtx context.Context, db client.DB, input []roachpb.Key) 
 		splitKey := append([]byte(nil), splitPoints[splitIdx]...)
 		splitKey = keys.MakeRowSentinelKey(splitKey)
 		if err := db.AdminSplit(ctx, splitKey); err != nil {
-			if !strings.Contains(err.Error(), "already split at") {
-				log.Errorf(ctx, "presplitRanges: %+v", err)
-				wg.Done(err)
-				return
+			if !strings.Contains(err.Error(), "range is already split at key") {
+				return err
 			}
 		}
 
 		splitPointsLeft, splitPointsRight := splitPoints[:splitIdx], splitPoints[splitIdx+1:]
 		if len(splitPointsLeft) > 0 {
-			wg.Add(1)
-			go splitFn(splitPointsLeft)
+			g.Go(func() error {
+				return splitFn(splitPointsLeft)
+			})
 		}
 		if len(splitPointsRight) > 0 {
-			wg.Add(1)
 			// Save a few goroutines by reusing this one.
-			splitFn(splitPointsRight)
+			return splitFn(splitPointsRight)
 		}
-		wg.Done(nil)
+		return nil
 	}
 
-	wg.Add(1)
-	splitFn(input)
-	return wg.Wait()
+	g.Go(func() error {
+		return splitFn(input)
+	})
+	return g.Wait()
 }
 
 // Write the new descriptors. First the ID -> TableDescriptor for the new table,
@@ -582,15 +581,15 @@ func Restore(
 	}
 	// TODO(dan): Wait for the newly created ranges (and leaseholders) to
 	// rebalance.
-
-	var wg syncutil.WaitGroupWithError
+	g, gCtx := errgroup.WithContext(ctx)
 	for i := range importRequests {
-		wg.Add(1)
-		go func(i importEntry) {
-			wg.Done(Import(ctx, db, i.Key, i.EndKey, i.files, kr))
-		}(importRequests[i])
+		ir := importRequests[i]
+		g.Go(func() error {
+			return Import(gCtx, db, ir.Key, ir.EndKey, ir.files, kr)
+		})
 	}
-	if err := wg.Wait(); err != nil {
+
+	if err := g.Wait(); err != nil {
 		// This leaves the data that did get imported in case the user wants to
 		// retry.
 		// TODO(dan): Build tooling to allow a user to restart a failed restore.

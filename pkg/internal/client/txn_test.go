@@ -26,6 +26,7 @@ import (
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
+	"golang.org/x/sync/errgroup"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -939,15 +940,16 @@ func TestConcurrentTxnRequests(t *testing.T) {
 
 	const keys = "abcdefghijklmnopqrstuvwxyz"
 	const value = "value"
-	if err := db.Txn(context.TODO(), func(txn *Txn) error {
-		var wg syncutil.WaitGroupWithError
+	ctx := context.TODO()
+	if err := db.Txn(ctx, func(txn *Txn) error {
+		g, _ := errgroup.WithContext(ctx)
 		for _, keyChar := range keys {
-			wg.Add(1)
-			go func(key string) {
-				wg.Done(txn.Put(key, value))
-			}(string(keyChar))
+			key := string(keyChar)
+			g.Go(func() error {
+				return txn.Put(key, value)
+			})
 		}
-		return errors.Cause(wg.Wait())
+		return g.Wait()
 	}); err != nil {
 		t.Fatal(err)
 	}
