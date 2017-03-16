@@ -3309,7 +3309,8 @@ func (r *Replica) ChangeReplicas(
 		if err := txn.GetProto(descKey, oldDesc); err != nil {
 			return err
 		}
-		log.Infof(ctx, "change replicas (remove %s): read existing descriptor %+v", repDesc, oldDesc)
+		log.Infof(ctx, "change replicas (%v %s): read existing descriptor %+v",
+			changeType, repDesc, oldDesc)
 
 		{
 			b := txn.NewBatch()
