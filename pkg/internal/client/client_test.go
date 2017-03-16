@@ -385,8 +385,8 @@ func TestClientRunConcurrentTransaction(t *testing.T) {
 				return err
 			}
 
-			// We can't use syncutil.WaitGroupWithError here, because we need
-			// to return any TxnAborted errors if we see them.
+			// We can't use errgroup here because we need to return any TxnAborted
+			// errors if we see them.
 			var wg sync.WaitGroup
 			concErrs := make([]error, len(keys))
 			for i, key := range keys {
