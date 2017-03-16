@@ -1640,6 +1640,12 @@ func collectSpans(ba *roachpb.BatchRequest) (*SpanSet, error) {
 			EndKey: keys.MaxKey,
 		})
 	}
+
+	// If any command gave us spans that are invalid, bail out early
+	// (before passing them to the command queue, which may panic).
+	if err := spans.validate(); err != nil {
+		return nil, err
+	}
 	return spans, nil
 }
 

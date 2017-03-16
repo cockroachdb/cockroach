@@ -2890,7 +2890,14 @@ func TestEndTransactionWithMalformedSplitTrigger(t *testing.T) {
 	// split of the default range; start key must be "" in this case.
 	args.InternalCommitTrigger = &roachpb.InternalCommitTrigger{
 		SplitTrigger: &roachpb.SplitTrigger{
-			LeftDesc: roachpb.RangeDescriptor{StartKey: roachpb.RKey("bar")},
+			LeftDesc: roachpb.RangeDescriptor{
+				StartKey: roachpb.RKey("bar"),
+				EndKey:   roachpb.RKey("foo"),
+			},
+			RightDesc: roachpb.RangeDescriptor{
+				StartKey: roachpb.RKey("foo"),
+				EndKey:   roachpb.RKeyMax,
+			},
 		},
 	}
 

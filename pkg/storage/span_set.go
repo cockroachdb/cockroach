@@ -96,6 +96,21 @@ func (ss *SpanSet) checkAllowed(access SpanAccess, span roachpb.Span) error {
 	return errors.Errorf("cannot %s undeclared span %s", action, span)
 }
 
+// validate returns an error if any spans that have been added to the set
+// are invalid.
+func (ss *SpanSet) validate() error {
+	for _, accessSpans := range ss.spans {
+		for _, spans := range accessSpans {
+			for _, span := range spans {
+				if len(span.EndKey) > 0 && span.Key.Compare(span.EndKey) >= 0 {
+					return errors.Errorf("inverted span %s %s", span.Key, span.EndKey)
+				}
+			}
+		}
+	}
+	return nil
+}
+
 type spanSetIterator struct {
 	i     engine.Iterator
 	spans *SpanSet
