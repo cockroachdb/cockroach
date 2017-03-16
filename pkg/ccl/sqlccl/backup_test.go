@@ -387,12 +387,42 @@ func TestBackupRestoreFKs(t *testing.T) {
 
 	})
 
+	t.Run("restore customers to new cluster", func(t *testing.T) {
+		tc := testcluster.StartTestCluster(t, singleNode, base.TestClusterArgs{})
+		defer tc.Stopper().Stop()
+		db := sqlutils.MakeSQLRunner(t, tc.Conns[0])
+		db.Exec(createStore)
+		db.Exec(fmt.Sprintf(`RESTORE store.customers, store.orders FROM '%s'`, dir))
+		// Restore's Validate checks all the tables point to each other correctly.
+
+		// FK validation on customers from orders is preserved.
+		if _, err := db.DB.Exec(
+			`UPDATE store.customers SET id = id*100`,
+		); !testutils.IsError(err, "foreign key violation.* referenced in table \"orders\"") {
+			t.Fatal(err)
+		}
+
+		// FK validation on customers from receipts is gone.
+		db.Exec(`UPDATE store.customers SET email = id::string`)
+	})
+
 	t.Run("restore orders to new cluster", func(t *testing.T) {
 		tc := testcluster.StartTestCluster(t, singleNode, base.TestClusterArgs{})
 		defer tc.Stopper().Stop()
 		db := sqlutils.MakeSQLRunner(t, tc.Conns[0])
 		db.Exec(createStore)
-		db.Exec(fmt.Sprintf(`RESTORE store.orders FROM '%s'`, dir))
+
+		// FK validation of self-FK is preserved.
+		if _, err := db.DB.Exec(
+			fmt.Sprintf(`RESTORE store.orders FROM '%s'`, dir),
+		); !testutils.IsError(
+			err, "cannot restore table \"orders\" without referenced table 53 \\(or \"skip_missing_foreign_keys\" option\\)",
+		) {
+			t.Fatal(err)
+		}
+
+		db.Exec(
+			fmt.Sprintf(`RESTORE store.orders FROM '%s' WITH OPTIONS ('skip_missing_foreign_keys')`, dir))
 		// Restore's Validate checks all the tables point to each other correctly.
 
 		// FK validation is gone.
@@ -405,7 +435,8 @@ func TestBackupRestoreFKs(t *testing.T) {
 		defer tc.Stopper().Stop()
 		db := sqlutils.MakeSQLRunner(t, tc.Conns[0])
 		db.Exec(createStore)
-		db.Exec(fmt.Sprintf(`RESTORE store.receipts FROM '%s'`, dir))
+		db.Exec(fmt.Sprintf(
+			`RESTORE store.receipts FROM '%s' WITH OPTIONS ('skip_missing_foreign_keys')`, dir))
 		// Restore's Validate checks all the tables point to each other correctly.
 
 		// FK validation of orders and customer is gone.
@@ -424,7 +455,8 @@ func TestBackupRestoreFKs(t *testing.T) {
 		defer tc.Stopper().Stop()
 		db := sqlutils.MakeSQLRunner(t, tc.Conns[0])
 		db.Exec(createStore)
-		db.Exec(fmt.Sprintf(`RESTORE store.receipts, store.customers FROM '%s'`, dir))
+		db.Exec(fmt.Sprintf(
+			`RESTORE store.receipts, store.customers FROM '%s' WITH OPTIONS ('skip_missing_foreign_keys')`, dir))
 		// Restore's Validate checks all the tables point to each other correctly.
 
 		// FK validation of orders is gone.
