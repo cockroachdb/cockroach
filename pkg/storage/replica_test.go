@@ -160,14 +160,7 @@ func (tc *testContext) StartWithStoreConfig(t testing.TB, stopper *stop.Stopper,
 	if tc.store == nil {
 		cfg.Gossip = tc.gossip
 		cfg.Transport = tc.transport
-		cfg.StorePool = NewStorePool(
-			cfg.AmbientCtx,
-			cfg.Gossip,
-			cfg.Clock,
-			StorePoolNodeLivenessTrue,
-			TestTimeUntilStoreDeadOff,
-			false, /* deterministic */
-		)
+		cfg.StorePool = NewTestStorePool(cfg)
 		// Create a test sender without setting a store. This is to deal with the
 		// circular dependency between the test sender and the store. The actual
 		// store will be passed to the sender after it is created and bootstrapped.

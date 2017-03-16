@@ -124,14 +124,7 @@ func createTestStoreWithoutStart(t testing.TB, stopper *stop.Stopper, cfg *Store
 	rpcContext := rpc.NewContext(log.AmbientContext{}, &base.Config{Insecure: true}, cfg.Clock, stopper)
 	server := rpc.NewServer(rpcContext) // never started
 	cfg.Gossip = gossip.NewTest(1, rpcContext, server, nil, stopper, metric.NewRegistry())
-	cfg.StorePool = NewStorePool(
-		log.AmbientContext{},
-		cfg.Gossip,
-		cfg.Clock,
-		StorePoolNodeLivenessTrue,
-		TestTimeUntilStoreDeadOff,
-		/* deterministic */ false,
-	)
+	cfg.StorePool = NewTestStorePool(*cfg)
 	// Many tests using this test harness (as opposed to higher-level
 	// ones like multiTestContext or TestServer) want to micro-manage
 	// replicas and the background queues just get in the way. The
