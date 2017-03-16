@@ -69,10 +69,10 @@ type Iterator interface {
 	ValueProto(msg proto.Message) error
 	// unsafeKey returns the same value as Key, but the memory is invalidated on
 	// the next call to {Next,Prev,Seek,SeekReverse,Close}.
-	unsafeKey() MVCCKey
+	UnsafeKey() MVCCKey
 	// unsafeKey returns the same value as Value, but the memory is invalidated
 	// on the next call to {Next,Prev,Seek,SeekReverse,Close}.
-	unsafeValue() []byte
+	UnsafeValue() []byte
 	// Less returns true if the key the iterator is currently positioned at is
 	// less than the specified key.
 	Less(key MVCCKey) bool
@@ -95,10 +95,11 @@ type Reader interface {
 	// Distinct() batches release their parent batch for future use while
 	// Engines, Snapshots and Batches free the associated C++ resources.
 	Close()
-	// closed returns true if the reader has been closed or is not usable.
+	// Closed returns true if the reader has been closed or is not usable.
 	// Objects backed by this reader (e.g. Iterators) can check this to ensure
-	// that they are not using a closed engine.
-	closed() bool
+	// that they are not using a closed engine. Intended for use within package
+	// engine; exported to enable wrappers to exist in other packages.
+	Closed() bool
 	// Get returns the value for the given key, nil otherwise.
 	Get(key MVCCKey) ([]byte, error)
 	// GetProto fetches the value at the specified key and unmarshals it

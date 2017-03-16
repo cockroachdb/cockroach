@@ -154,7 +154,7 @@ func TestEngineBatchStaleCachedIterator(t *testing.T) {
 
 			if iter.Valid() {
 				t.Fatalf("iterator unexpectedly valid: %v -> %v",
-					iter.unsafeKey(), iter.unsafeValue())
+					iter.UnsafeKey(), iter.UnsafeValue())
 			}
 		}
 

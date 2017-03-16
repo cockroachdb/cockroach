@@ -76,8 +76,14 @@ func evalWriteBatch(
 		if err != nil {
 			return storage.EvalResult{}, err
 		}
+		// If this is a SpanSetIterator, we have to unwrap it because
+		// ClearIterRange needs a plain rocksdb iterator (and can't unwrap
+		// it itself because of import cycles).
 		// TODO(dan): Ideally, this would use `batch.ClearRange` but it doesn't
 		// yet work with read-write batches.
+		if ssi, ok := iter.(*storage.SpanSetIterator); ok {
+			iter = ssi.Iterator()
+		}
 		if err := batch.ClearIterRange(iter, mvccStartKey, mvccEndKey); err != nil {
 			return storage.EvalResult{}, err
 		}
