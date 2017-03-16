@@ -597,23 +597,27 @@ func (dsp *distSQLPlanner) createTableReaders(
 }
 
 func initBackfillerSpec(
-	backfillType backfillType, desc sqlbase.TableDescriptor, duration time.Duration, chunkSize int64,
+	backfillType backfillType,
+	desc sqlbase.TableDescriptor,
+	duration time.Duration,
+	chunkSize int64,
+	otherTables []sqlbase.TableDescriptor,
 ) (distsqlrun.BackfillerSpec, error) {
+	ret := distsqlrun.BackfillerSpec{
+		Table:       desc,
+		Duration:    duration,
+		ChunkSize:   chunkSize,
+		OtherTables: otherTables,
+	}
 	switch backfillType {
 	case indexBackfill:
-		return distsqlrun.BackfillerSpec{
-			Type:      distsqlrun.BackfillerSpec_Index,
-			Table:     desc,
-			Duration:  duration,
-			ChunkSize: chunkSize,
-		}, nil
-
+		ret.Type = distsqlrun.BackfillerSpec_Index
 	case columnBackfill:
-		return distsqlrun.BackfillerSpec{}, errors.Errorf("column backfillNode not implemented")
-
+		ret.Type = distsqlrun.BackfillerSpec_Column
 	default:
 		return distsqlrun.BackfillerSpec{}, errors.Errorf("bad backfill type %d", backfillType)
 	}
+	return ret, nil
 }
 
 // CreateBackfiller generates a plan consisting of index/column backfiller
@@ -626,8 +630,9 @@ func (dsp *distSQLPlanner) CreateBackfiller(
 	duration time.Duration,
 	chunkSize int64,
 	spans []roachpb.Span,
+	otherTables []sqlbase.TableDescriptor,
 ) (physicalPlan, error) {
-	spec, err := initBackfillerSpec(backfillType, desc, duration, chunkSize)
+	spec, err := initBackfillerSpec(backfillType, desc, duration, chunkSize, otherTables)
 	if err != nil {
 		return physicalPlan{}, err
 	}
