@@ -32,7 +32,8 @@ import (
 )
 
 const (
-	restoreOptIntoDB = "into_db"
+	restoreOptIntoDB         = "into_db"
+	restoreOptSkipMissingFKs = "skip_missing_foreign_keys"
 )
 
 // Import loads some data in sstables into an empty range. Only the keys between
@@ -170,7 +171,7 @@ func reassignParentIDs(
 // new IDs. It returns a KeyRewriter that can be used to transform KV data to
 // reflect the ID remapping it has done in the descriptors.
 func reassignTableIDs(
-	ctx context.Context, db client.DB, tables []*sqlbase.TableDescriptor,
+	ctx context.Context, db client.DB, tables []*sqlbase.TableDescriptor, opt parser.KVOptions,
 ) (storageccl.KeyRewriter, error) {
 	var newTableIDs map[sqlbase.ID]sqlbase.ID
 	var kr storageccl.KeyRewriter
@@ -191,7 +192,7 @@ func reassignTableIDs(
 		return nil, err
 	}
 
-	if err := reassignReferencedTables(tables, newTableIDs); err != nil {
+	if err := reassignReferencedTables(tables, newTableIDs, opt); err != nil {
 		return nil, err
 	}
 
@@ -199,7 +200,7 @@ func reassignTableIDs(
 }
 
 func reassignReferencedTables(
-	tables []*sqlbase.TableDescriptor, newTableIDs map[sqlbase.ID]sqlbase.ID,
+	tables []*sqlbase.TableDescriptor, newTableIDs map[sqlbase.ID]sqlbase.ID, opt parser.KVOptions,
 ) error {
 	for _, table := range tables {
 		if err := table.ForeachNonDropIndex(func(index *sqlbase.IndexDescriptor) error {
@@ -225,6 +226,38 @@ func reassignReferencedTables(
 					)
 				}
 				index.InterleavedBy[j].Table = childID
+			}
+
+			if index.ForeignKey.IsSet() {
+				to := index.ForeignKey.Table
+				if newID, ok := newTableIDs[to]; ok {
+					index.ForeignKey.Table = newID
+				} else {
+					if empty, ok := opt.Get(restoreOptSkipMissingFKs); ok {
+						if empty != "" {
+							return errors.Errorf("option %q does not take a value", restoreOptSkipMissingFKs)
+						}
+						index.ForeignKey = sqlbase.ForeignKeyReference{}
+					} else {
+						return errors.Errorf(
+							"cannot restore table %q without referenced table %d (or %q option)",
+							table.Name, to, restoreOptSkipMissingFKs,
+						)
+					}
+
+					// TODO(dt): if there is an existing (i.e. non-restoring) table with
+					// a db and name matching the one the FK pointed to at backup, should
+					// we update the FK to point to it?
+				}
+			}
+
+			origRefs := index.ReferencedBy
+			index.ReferencedBy = nil
+			for _, ref := range origRefs {
+				if newID, ok := newTableIDs[ref.Table]; ok {
+					ref.Table = newID
+					index.ReferencedBy = append(index.ReferencedBy, ref)
+				}
 			}
 			return nil
 		}); err != nil {
@@ -551,9 +584,10 @@ func Restore(
 	// restore since restarts would be terrible (and our bulk import primitive
 	// are non-transactional), but this does mean if something fails during Import,
 	// we've "leaked" the IDs, in that the generator will have been incremented.
-	kr, err := reassignTableIDs(ctx, db, tables)
+	kr, err := reassignTableIDs(ctx, db, tables, opt)
 	if err != nil {
-		return errors.Wrapf(err, "reserving %d new table IDs for restore", len(tables))
+		// We expect user-facing usage errors here, so don't wrapf.
+		return err
 	}
 
 	// Pivot the backups, which are grouped by time, into requests for import,
