@@ -671,24 +671,72 @@ func TestStyle(t *testing.T) {
 				//
 				// TODO(bdarnell): remove when/if #8360 is fixed.
 				"github.com/cockroachdb/cockroach/pkg/storage/intent_resolver.go:SA4009",
-				// A value assigned to a variable is never read; this might be worth
-				// investigating, but it's cumbersome because the reported file
-				// differs from the source.
+				// The generated parser is full of `case` arms such as:
 				//
-				// Reported as pkg/sql/parser/yaccpar, but the real file is sql.go.
+				// case 1:
+				// 	sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
+				// 	//line sql.y:781
+				// 	{
+				// 		sqllex.(*Scanner).stmts = sqlDollar[1].union.stmts()
+				// 	}
+				//
+				// where the code in braces is generated from the grammar action; if
+				// the action does not make use of the matched expression, sqlDollar
+				// will be assigned but not used. This is expected and intentional.
+				//
+				// Concretely, the grammar:
+				//
+				// stmt:
+				//   alter_table_stmt
+				// | backup_stmt
+				// | copy_from_stmt
+				// | create_stmt
+				// | delete_stmt
+				// | drop_stmt
+				// | explain_stmt
+				// | help_stmt
+				// | prepare_stmt
+				// | execute_stmt
+				// | deallocate_stmt
+				// | grant_stmt
+				// | insert_stmt
+				// | rename_stmt
+				// | revoke_stmt
+				// | savepoint_stmt
+				// | select_stmt
+				//   {
+				//     $$.val = $1.slct()
+				//   }
+				// | set_stmt
+				// | show_stmt
+				// | split_stmt
+				// | transaction_stmt
+				// | release_stmt
+				// | truncate_stmt
+				// | update_stmt
+				// | /* EMPTY */
+				//   {
+				//     $$.val = Statement(nil)
+				//   }
+				//
+				// is compiled into the `case` arm:
+				//
+				// case 28:
+				// 	sqlDollar = sqlS[sqlpt-0 : sqlpt+1]
+				// 	//line sql.y:830
+				// 	{
+				// 		sqlVAL.union.val = Statement(nil)
+				// 	}
+				//
+				// which results in the unused warning:
+				//
+				// sql/parser/yaccpar:362:3: this value of sqlDollar is never used (SA4006)
 				"github.com/cockroachdb/cockroach/pkg/sql/parser/sql.go:SA4006",
-				// TODO(tamird): remove these from golang.org/x/tools/cmd/goyacc.
-				//
 				// sql/parser/yaccpar:14:6: type sqlParser is unused (U1000)
 				// sql/parser/yaccpar:15:2: func sqlParser.Parse is unused (U1000)
 				// sql/parser/yaccpar:16:2: func sqlParser.Lookahead is unused (U1000)
 				// sql/parser/yaccpar:29:6: func sqlNewParser is unused (U1000)
 				// sql/parser/yaccpar:152:6: func sqlParse is unused (U1000)
-				// sql/parser/yacctab:461:7: const sqlNprod is unused (U1000)
-				// sql/parser/yacctab:464:5: var sqlTokenNames is unused (U1000)
-				// sql/parser/yacctab:465:5: var sqlStates is unused (U1000)
-				//
-				// Reported as pkg/sql/parser/yaccpar, but the real file is sql.go.
 				"github.com/cockroachdb/cockroach/pkg/sql/parser/sql.go:U1000",
 				// Generated file containing many unused postgres error codes.
 				"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror/codes.go:U1000",

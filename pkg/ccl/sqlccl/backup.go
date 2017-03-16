@@ -14,6 +14,7 @@ import (
 	"sort"
 
 	"golang.org/x/net/context"
+	"golang.org/x/sync/errgroup"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
@@ -216,12 +217,13 @@ func Backup(
 		dataSize int64
 	}{}
 
-	var wg syncutil.WaitGroupWithError
 	header := roachpb.Header{Timestamp: endTime}
 	storageConf := exportStore.Conf()
+
+	g, ctx := errgroup.WithContext(ctx)
 	for i := range spans {
-		wg.Add(1)
-		go func(span roachpb.Span) {
+		span := spans[i]
+		g.Go(func() error {
 			req := &roachpb.ExportRequest{
 				Span:      span,
 				Storage:   storageConf,
@@ -229,8 +231,7 @@ func Backup(
 			}
 			res, pErr := client.SendWrappedWith(ctx, db.GetSender(), header, req)
 			if pErr != nil {
-				wg.Done(pErr.GoError())
-				return
+				return pErr.GoError()
 			}
 			mu.Lock()
 			defer mu.Unlock()
@@ -242,10 +243,10 @@ func Backup(
 				})
 				mu.dataSize += file.DataSize
 			}
-			wg.Done(nil)
-		}(spans[i])
+			return nil
+		})
 	}
-	if err := wg.Wait(); err != nil {
+	if err := g.Wait(); err != nil {
 		return BackupDescriptor{}, errors.Wrapf(err, "exporting %d ranges", len(spans))
 	}
 	files, dataSize := mu.files, mu.dataSize // No more concurrency, so this is safe.

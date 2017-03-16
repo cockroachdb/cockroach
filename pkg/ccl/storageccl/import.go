@@ -13,12 +13,12 @@ import (
 	"fmt"
 
 	"golang.org/x/net/context"
+	"golang.org/x/sync/errgroup"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/pkg/errors"
 )
@@ -35,8 +35,6 @@ func evalImport(ctx context.Context, cArgs storage.CommandArgs) error {
 
 	ctx, span := tracing.ChildSpan(ctx, fmt.Sprintf("import [%s,%s)", args.DataSpan.Key, args.DataSpan.EndKey))
 	defer tracing.FinishSpan(span)
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
 
 	if err := beginLimitedRequest(ctx); err != nil {
 		return err
@@ -46,13 +44,13 @@ func evalImport(ctx context.Context, cArgs storage.CommandArgs) error {
 	// Arrived at by tuning and watching the effect on BenchmarkRestore.
 	const batchSizeBytes = 1000000
 
-	var wg syncutil.WaitGroupWithError
 	type batchBuilder struct {
 		batch         engine.RocksDBBatchBuilder
 		batchStartKey []byte
 		batchEndKey   []byte
 	}
 	b := batchBuilder{}
+	g, ctx := errgroup.WithContext(ctx)
 	sendWriteBatch := func() {
 		batchStartKey := roachpb.Key(b.batchStartKey)
 		// The end key of the WriteBatch request is exclusive, but batchEndKey
@@ -62,16 +60,10 @@ func evalImport(ctx context.Context, cArgs storage.CommandArgs) error {
 			log.Infof(ctx, "writebatch [%s,%s)", batchStartKey, batchEndKey)
 		}
 
-		wg.Add(1)
-		go func(start, end roachpb.Key, repr []byte) {
-			if err := db.WriteBatch(ctx, start, end, repr); err != nil {
-				log.Errorf(ctx, "writebatch [%s,%s): %+v", start, end, err)
-				wg.Done(err)
-				cancel()
-				return
-			}
-			wg.Done(nil)
-		}(batchStartKey, batchEndKey, b.batch.Finish())
+		repr := b.batch.Finish()
+		g.Go(func() error {
+			return db.WriteBatch(ctx, batchStartKey, batchEndKey, repr)
+		})
 		b = batchBuilder{}
 	}
 
@@ -167,6 +159,6 @@ func evalImport(ctx context.Context, cArgs storage.CommandArgs) error {
 		sendWriteBatch()
 	}
 
-	err := wg.Wait()
+	err := g.Wait()
 	return err
 }
