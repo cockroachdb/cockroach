@@ -52,6 +52,7 @@ import (
 )
 
 var errNoTransactionInProgress = errors.New("there is no transaction in progress")
+var errNoTransactionToPipeline = errors.New("statement pipelining is only allowed in a transaction")
 var errStaleMetadata = errors.New("metadata is still stale")
 var errTransactionInProgress = errors.New("there is already a transaction in progress")
 var errNotRetriable = errors.New("the transaction is not in a retriable state")
@@ -822,10 +823,15 @@ func runTxnAttempt(
 	automaticRetryCount int,
 ) ([]Result, parser.StatementList, error) {
 
-	// Ignore the state that might have been set by a previous try
-	// of this closure.
-	txnState.State = origState
-	txnState.commitSeen = false
+	// Ignore the state that might have been set by a previous try of this
+	// closure. By putting these modifications to txnState behind the
+	// automaticRetryCount condition, we guarantee that no asynchronous
+	// statements are still executing and reading from the state. This
+	// means that no synchronization is necessary to prevent data races.
+	if automaticRetryCount > 0 {
+		txnState.State = origState
+		txnState.commitSeen = false
+	}
 
 	planMaker.setTxn(txnState.txn)
 	results, remainingStmts, err := e.execStmtsInCurrentTxn(
@@ -1089,6 +1095,20 @@ func (e *Executor) execStmtInOpenTxn(
 		}
 	}()
 
+	pipelined := IsStmtPipelined(stmt)
+	if pipelined && implicitTxn {
+		return Result{}, errNoTransactionToPipeline
+	}
+	// Don't wait on Show, because the cockroach --sql CLI currently sends
+	// these after every request.
+	// TODO(nvanbenschoten) This should be generalized/reconsidered/improved.
+	_, isShow := stmt.(*parser.Show)
+	if !(isShow || pipelined) {
+		if err := planMaker.session.pipelineQueue.Wait(); err != nil {
+			return Result{}, err
+		}
+	}
+
 	if implicitTxn && !stmtAllowedInImplicitTxn(stmt) {
 		return Result{}, errNoTransactionInProgress
 	}
@@ -1164,13 +1184,14 @@ func (e *Executor) execStmtInOpenTxn(
 		return Result{PGTag: s.StatementTag()}, nil
 	}
 
-	autoCommit := implicitTxn && !e.cfg.TestingKnobs.DisableAutoCommit
-	result, err := e.execStmt(stmt, planMaker, autoCommit, automaticRetryCount)
+	var result Result
+	if pipelined {
+		result, err = e.execStmtPipelined(stmt, planMaker)
+	} else {
+		autoCommit := implicitTxn && !e.cfg.TestingKnobs.DisableAutoCommit
+		result, err = e.execStmt(stmt, planMaker, autoCommit, automaticRetryCount)
+	}
 	if err != nil {
-		if result.Rows != nil {
-			result.Rows.Close(session.Ctx())
-			result.Rows = nil
-		}
 		log.ErrEventf(session.Ctx(), "ERROR: %v", err)
 		return Result{}, err
 	}
@@ -1372,8 +1393,26 @@ func (e *Executor) shouldUseDistSQL(planMaker *planner, plan planNode) (bool, er
 	return true, nil
 }
 
+// makeRes creates an empty result set for the given statement and plan.
+func makeRes(stmt parser.Statement, planMaker *planner, plan planNode) (Result, error) {
+	result := Result{
+		PGTag: stmt.StatementTag(),
+		Type:  stmt.StatementType(),
+	}
+	if result.Type == parser.Rows {
+		result.Columns = plan.Columns()
+		for _, c := range result.Columns {
+			if err := checkResultType(c.Typ); err != nil {
+				return Result{}, err
+			}
+		}
+		result.Rows = NewRowContainer(planMaker.session.makeBoundAccount(), result.Columns, 0)
+	}
+	return result, nil
+}
+
+// execStmt executes the statement synchronously and returns the statement's result.
 // The current transaction might have been committed/rolled back when this returns.
-// The caller closes result.Rows (even in error cases).
 func (e *Executor) execStmt(
 	stmt parser.Statement, planMaker *planner, autoCommit bool, automaticRetryCount int,
 ) (Result, error) {
@@ -1388,23 +1427,15 @@ func (e *Executor) execStmt(
 
 	defer plan.Close(planMaker.session.Ctx())
 
-	result := Result{
-		PGTag: stmt.StatementTag(),
-		Type:  stmt.StatementType(),
-	}
-	if result.Type == parser.Rows {
-		result.Columns = plan.Columns()
-		for _, c := range result.Columns {
-			if err := checkResultType(c.Typ); err != nil {
-				return result, err
-			}
-		}
-		result.Rows = NewRowContainer(planMaker.session.makeBoundAccount(), result.Columns, 0)
+	result, err := makeRes(stmt, planMaker, plan)
+	if err != nil {
+		return Result{}, err
 	}
 
 	useDistSQL, err := e.shouldUseDistSQL(planMaker, plan)
 	if err != nil {
-		return result, err
+		result.Close(session.Ctx())
+		return Result{}, err
 	}
 
 	planMaker.phaseTimes[sessionStartExecStmt] = timeutil.Now()
@@ -1417,7 +1448,49 @@ func (e *Executor) execStmt(
 	e.recordStatementSummary(
 		planMaker, stmt, useDistSQL, automaticRetryCount, result, err,
 	)
-	return result, err
+
+	if err != nil {
+		result.Close(session.Ctx())
+		return Result{}, err
+	}
+	return result, nil
+}
+
+// execStmtPipelined executes the statement asynchronously and returns mocked out
+// results. The current transaction might have been committed/rolled back when this
+// returns.
+func (e *Executor) execStmtPipelined(stmt parser.Statement, planMaker *planner) (Result, error) {
+	// Make a clone of the planMaker so that future modifications elsewhere
+	// don't affect us here.
+	planMaker = planMaker.Clone()
+	session := planMaker.session
+
+	plan, err := planMaker.makePlan(session.Ctx(), stmt, false)
+	if err != nil {
+		return Result{}, err
+	}
+
+	mockResult, err := makeRes(stmt, planMaker, plan)
+	if err != nil {
+		return Result{}, err
+	}
+
+	session.pipelineQueue.Add(&plan, func() error {
+		defer plan.Close(session.Ctx())
+
+		result, err := makeRes(stmt, planMaker, plan)
+		if err != nil {
+			return err
+		}
+		defer result.Close(session.Ctx())
+
+		planMaker.phaseTimes[sessionStartExecStmt] = timeutil.Now()
+		err = e.execClassic(planMaker, plan, &result)
+		planMaker.phaseTimes[sessionEndExecStmt] = timeutil.Now()
+		e.recordStatementSummary(planMaker, stmt, false, 0, result, err)
+		return err
+	})
+	return mockResult, nil
 }
 
 // updateStmtCounts updates metrics for the number of times the different types of SQL
