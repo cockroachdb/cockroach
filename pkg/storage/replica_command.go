@@ -557,23 +557,23 @@ func declareKeysEndTransaction(header roachpb.Header, req roachpb.Request, spans
 				EndKey: abortCacheMaxKey(header.RangeID)})
 		}
 		if mt := et.InternalCommitTrigger.MergeTrigger; mt != nil {
-			// Merges write to the left side and delete from the right.
+			// Merges write to the left side and delete and read from the right.
 			leftRangeIDPrefix := keys.MakeRangeIDReplicatedPrefix(header.RangeID)
 			spans.Add(SpanReadWrite, roachpb.Span{
 				Key:    leftRangeIDPrefix,
 				EndKey: leftRangeIDPrefix.PrefixEnd(),
 			})
 
-			rightRangeIDPrefix := keys.MakeRangeIDReplicatedPrefix(mt.RightDesc.RangeID)
+			rightRangeIDPrefix := keys.MakeRangeIDPrefix(mt.RightDesc.RangeID)
 			spans.Add(SpanReadWrite, roachpb.Span{
 				Key:    rightRangeIDPrefix,
 				EndKey: rightRangeIDPrefix.PrefixEnd(),
 			})
-			rightRangeIDUnreplicatedPrefix := keys.MakeRangeIDUnreplicatedPrefix(mt.RightDesc.RangeID)
-			spans.Add(SpanReadWrite, roachpb.Span{
-				Key:    rightRangeIDUnreplicatedPrefix,
-				EndKey: rightRangeIDUnreplicatedPrefix.PrefixEnd(),
+			spans.Add(SpanReadOnly, roachpb.Span{
+				Key:    keys.MakeRangeKeyPrefix(mt.RightDesc.StartKey),
+				EndKey: keys.MakeRangeKeyPrefix(mt.RightDesc.EndKey).PrefixEnd(),
 			})
+
 		}
 	}
 }
