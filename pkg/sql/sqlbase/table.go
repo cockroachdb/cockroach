@@ -1212,6 +1212,8 @@ func EncodeSecondaryIndex(
 		switch d := val.(type) {
 		case *parser.DCollatedString:
 			entryValue = encoding.EncodeStringAscending(entryValue, d.Contents)
+		case *parser.DDecimal:
+			entryValue = encoding.EncodeNonsortingDecimal(entryValue, &d.Decimal)
 		default:
 			panic(fmt.Sprintf("unknown composite encoding for datum %s", d))
 		}
