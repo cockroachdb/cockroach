@@ -27,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/mon"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -79,8 +78,6 @@ type planner struct {
 	// verified, which is not ideal.
 	testingVerifyMetadataFn func(config.SystemConfig) error
 	verifyFnCheckedOnce     bool
-
-	noCopy util.NoCopy
 }
 
 // noteworthyInternalMemoryUsageBytes is the minimum size tracked by each
@@ -146,6 +143,18 @@ func finishInternalPlanner(p *planner) {
 	p.session.TxnState.mon.Stop(p.session.context)
 	p.session.sessionMon.Stop(p.session.context)
 	p.session.mon.Stop(p.session.context)
+}
+
+// Clone creates a copy of the planner. Because planners are not safe to use from multiple
+// goroutines, the method resets the contexts and transaction on the receiver planner so
+// that it can no longer modify these fields and disrupt the new planner. This is useful
+// when passing planning responsibility off to a new goroutine when it is desirable to reuse
+// the old planner.
+func (p *planner) Clone() *planner {
+	pCopy := *p
+	p.resetContexts()
+	p.resetTxn()
+	return &pCopy
 }
 
 // queryRunner abstracts the services provided by a planner object
@@ -231,7 +240,7 @@ func (p *planner) ExecCfg() *ExecutorConfig {
 func (p *planner) setTxn(txn *client.Txn) {
 	p.txn = txn
 	if txn != nil {
-		p.evalCtx.SetClusterTimestamp(txn.Proto().OrigTimestamp)
+		p.evalCtx.SetClusterTimestamp(txn.OrigTimestamp())
 	} else {
 		p.evalCtx.SetTxnTimestamp(time.Time{})
 		p.evalCtx.SetStmtTimestamp(time.Time{})

@@ -19,6 +19,7 @@ package sql
 import (
 	"sync"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
@@ -209,3 +210,22 @@ var NoDependenciesAnalyzer DependencyAnalyzer = dependencyAnalyzerFunc(func(
 ) bool {
 	return true
 })
+
+// IsStmtPipelined determines if a given statement's execution should be pipelined.
+// This means that its results should be mocked out, and that it should be run
+// asynchronously.
+func IsStmtPipelined(stmt parser.Statement) bool {
+	pipelinedRetClause := func(ret parser.ReturningClause) bool {
+		_, ok := ret.(*parser.ReturningNothing)
+		return ok
+	}
+	switch s := stmt.(type) {
+	case *parser.Delete:
+		return pipelinedRetClause(s.Returning)
+	case *parser.Insert:
+		return pipelinedRetClause(s.Returning)
+	case *parser.Update:
+		return pipelinedRetClause(s.Returning)
+	}
+	return false
+}
