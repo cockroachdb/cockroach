@@ -1595,6 +1595,60 @@ func makeCacheRequest(ba *roachpb.BatchRequest, br *roachpb.BatchResponse) cache
 	return cr
 }
 
+func collectSpans(ba *roachpb.BatchRequest) (*SpanSet, error) {
+	spans := &SpanSet{}
+	// TODO(bdarnell): need to make this less global when the local
+	// command queue is used more heavily. For example, a split will
+	// have a large read-only span but also a write (see #10084).
+	// Currently local spans are the exception, so preallocate for the
+	// common case in which all are global. We rarely mix read and
+	// write commands, so preallocate for writes if there are any
+	// writes present in the batch.
+	//
+	// TODO(bdarnell): revisit as the local portion gets its appropriate
+	// use.
+	if ba.IsReadOnly() {
+		spans.reserve(SpanReadOnly, spanGlobal, len(ba.Requests))
+	} else {
+		spans.reserve(SpanReadWrite, spanGlobal, len(ba.Requests))
+	}
+
+	for _, union := range ba.Requests {
+		inner := union.GetInner()
+		if _, ok := inner.(*roachpb.NoopRequest); ok {
+			continue
+		}
+		if cmd, ok := commands[inner.Method()]; ok {
+			cmd.DeclareKeys(ba.Header, inner, spans)
+		} else {
+			return nil, errors.Errorf("unrecognized command %s", inner.Method())
+		}
+	}
+
+	// When running with experimental proposer-evaluated KV, insert a
+	// span that effectively linearizes evaluation and application of
+	// all commands. This is horrible from a performance perspective
+	// but is required for passing tests until correctness work in
+	// #6290 is addressed.
+	if propEvalKV {
+		access := SpanReadWrite
+		if ba.IsReadOnly() {
+			access = SpanReadOnly
+		}
+		spans.Add(access, roachpb.Span{
+			Key:    keys.LocalMax,
+			EndKey: keys.MaxKey,
+		})
+	}
+
+	// If any command gave us spans that are invalid, bail out early
+	// (before passing them to the command queue, which may panic).
+	if err := spans.validate(); err != nil {
+		return nil, err
+	}
+	return spans, nil
+}
+
 // beginCmds waits for any overlapping, already-executing commands via
 // the command queue and adds itself to queues based on keys affected by the
 // batched commands. This gates subsequent commands with overlapping keys or
@@ -1602,56 +1656,14 @@ func makeCacheRequest(ba *roachpb.BatchRequest, br *roachpb.BatchResponse) cache
 // already in the queue. Returns a cleanup function to be called when the
 // commands are done and can be removed from the queue, and whose returned
 // error is to be used in place of the supplied error.
-func (r *Replica) beginCmds(ctx context.Context, ba *roachpb.BatchRequest) (*endCmds, error) {
+func (r *Replica) beginCmds(
+	ctx context.Context, ba *roachpb.BatchRequest, spans *SpanSet,
+) (*endCmds, error) {
 	var cmds [numSpanAccess]struct {
 		global, local *cmd
 	}
 	// Don't use the command queue for inconsistent reads.
 	if ba.ReadConsistency != roachpb.INCONSISTENT {
-		var spans SpanSet
-		// TODO(bdarnell): need to make this less global when the local
-		// command queue is used more heavily. For example, a split will
-		// have a large read-only span but also a write (see #10084).
-		// Currently local spans are the exception, so preallocate for the
-		// common case in which all are global. We rarely mix read and
-		// write commands, so preallocate for writes if there are any
-		// writes present in the batch.
-		//
-		// TODO(bdarnell): revisit as the local portion gets its appropriate
-		// use.
-		if ba.IsReadOnly() {
-			spans.reserve(SpanReadOnly, spanGlobal, len(ba.Requests))
-		} else {
-			spans.reserve(SpanReadWrite, spanGlobal, len(ba.Requests))
-		}
-
-		for _, union := range ba.Requests {
-			inner := union.GetInner()
-			if _, ok := inner.(*roachpb.NoopRequest); ok {
-				continue
-			}
-			if cmd, ok := commands[inner.Method()]; ok {
-				cmd.DeclareKeys(ba.Header, inner, &spans)
-			} else {
-				return nil, errors.Errorf("unrecognized command %s", inner.Method())
-			}
-		}
-
-		// When running with experimental proposer-evaluated KV, insert a
-		// span that effectively linearizes evaluation and application of
-		// all commands. This is horrible from a performance perspective
-		// but is required for passing tests until correctness work in
-		// #6290 is addressed.
-		if propEvalKV {
-			access := SpanReadWrite
-			if ba.IsReadOnly() {
-				access = SpanReadOnly
-			}
-			spans.Add(access, roachpb.Span{
-				Key:    keys.LocalMax,
-				EndKey: keys.MaxKey,
-			})
-		}
 
 		// Check for context cancellation before inserting into the
 		// command queue (and check again afterward). Once we're in the
@@ -1943,6 +1955,11 @@ func (r *Replica) addReadOnlyCmd(
 		}
 	}
 
+	spans, err := collectSpans(&ba)
+	if err != nil {
+		return nil, roachpb.NewError(err)
+	}
+
 	var endCmds *endCmds
 
 	if !ba.IsNonKV() {
@@ -1950,7 +1967,7 @@ func (r *Replica) addReadOnlyCmd(
 		// overlapping commands until this command completes.
 		log.Event(ctx, "command queue")
 		var err error
-		endCmds, err = r.beginCmds(ctx, &ba)
+		endCmds, err = r.beginCmds(ctx, &ba, spans)
 		if err != nil {
 			return nil, roachpb.NewError(err)
 		}
@@ -2096,6 +2113,12 @@ func (r *Replica) tryAddWriteCmd(
 	ctx context.Context, ba roachpb.BatchRequest,
 ) (br *roachpb.BatchResponse, pErr *roachpb.Error, retry proposalRetryReason) {
 	startTime := timeutil.Now()
+
+	spans, err := collectSpans(&ba)
+	if err != nil {
+		return nil, roachpb.NewError(err), proposalNoRetry
+	}
+
 	isNonKV := ba.IsNonKV()
 	var endCmds *endCmds
 	if !isNonKV {
@@ -2106,7 +2129,7 @@ func (r *Replica) tryAddWriteCmd(
 		// been run to successful completion.
 		log.Event(ctx, "command queue")
 		var err error
-		endCmds, err = r.beginCmds(ctx, &ba)
+		endCmds, err = r.beginCmds(ctx, &ba, spans)
 		if err != nil {
 			return nil, roachpb.NewError(err), proposalNoRetry
 		}
@@ -2183,7 +2206,7 @@ func (r *Replica) tryAddWriteCmd(
 
 	log.Event(ctx, "raft")
 
-	ch, tryAbandon, err := r.propose(ctx, lease, ba, endCmds)
+	ch, tryAbandon, err := r.propose(ctx, lease, ba, endCmds, spans)
 	if err != nil {
 		return nil, roachpb.NewError(err), proposalNoRetry
 	}
@@ -2255,7 +2278,11 @@ func (r *Replica) tryAddWriteCmd(
 // returned ProposalData is partially valid even on a non-nil
 // *roachpb.Error.
 func (r *Replica) requestToProposal(
-	ctx context.Context, idKey storagebase.CmdIDKey, ba roachpb.BatchRequest, endCmds *endCmds,
+	ctx context.Context,
+	idKey storagebase.CmdIDKey,
+	ba roachpb.BatchRequest,
+	endCmds *endCmds,
+	spans *SpanSet,
 ) (*ProposalData, *roachpb.Error) {
 	proposal := &ProposalData{
 		ctx:     ctx,
@@ -2267,7 +2294,10 @@ func (r *Replica) requestToProposal(
 	var pErr *roachpb.Error
 	if propEvalKV {
 		var result *EvalResult
-		result, pErr = r.evaluateProposal(ctx, idKey, ba)
+		// TODO(bdarnell): provide an option to disable spanSet validation
+		// (i.e. pass nil instead of `spans` here) once we're confident our coverage
+		// is good.
+		result, pErr = r.evaluateProposal(ctx, idKey, ba, spans)
 		// Fill out the local results even if pErr != nil; we'll return the error below.
 		proposal.Local = &result.Local
 		proposal.command = storagebase.RaftCommand{
@@ -2298,7 +2328,7 @@ func (r *Replica) requestToProposal(
 //
 // Replica.mu must not be held.
 func (r *Replica) evaluateProposal(
-	ctx context.Context, idKey storagebase.CmdIDKey, ba roachpb.BatchRequest,
+	ctx context.Context, idKey storagebase.CmdIDKey, ba roachpb.BatchRequest, spans *SpanSet,
 ) (*EvalResult, *roachpb.Error) {
 	// Note that we don't hold any locks at this point. This is important
 	// since evaluating a proposal is expensive (at least under proposer-
@@ -2309,7 +2339,7 @@ func (r *Replica) evaluateProposal(
 		return nil, roachpb.NewErrorf("can't propose Raft command with zero timestamp")
 	}
 
-	result = r.applyRaftCommandInBatch(ctx, idKey, ba)
+	result = r.applyRaftCommandInBatch(ctx, idKey, ba, spans)
 
 	if result.Local.Err != nil {
 		// Failed proposals (whether they're failfast or not) can't have any
@@ -2390,7 +2420,11 @@ func makeIDKey() storagebase.CmdIDKey {
 // - any error obtained during the creation or proposal of the command, in
 //   which case the other returned values are zero.
 func (r *Replica) propose(
-	ctx context.Context, lease *roachpb.Lease, ba roachpb.BatchRequest, endCmds *endCmds,
+	ctx context.Context,
+	lease *roachpb.Lease,
+	ba roachpb.BatchRequest,
+	endCmds *endCmds,
+	spans *SpanSet,
 ) (chan proposalResult, func() bool, error) {
 	if err := r.IsDestroyed(); err != nil {
 		return nil, nil, err
@@ -2413,7 +2447,7 @@ func (r *Replica) propose(
 	defer r.raftMu.Unlock()
 
 	idKey := makeIDKey()
-	proposal, pErr := r.requestToProposal(ctx, idKey, ba, endCmds)
+	proposal, pErr := r.requestToProposal(ctx, idKey, ba, endCmds, spans)
 	// An error here corresponds to a failfast-proposal: The command resulted
 	// in an error and did not need to commit a batch (the common error case).
 	if pErr != nil {
@@ -3607,6 +3641,7 @@ func (r *Replica) processRaftCommand(
 				ctx,
 				idKey,
 				*raftCmd.BatchRequest,
+				nil,
 			)
 			// Then, change the raftCmd to reflect the result of the
 			// evaluation, filling in the EvalResult (which is now properly
@@ -3902,7 +3937,7 @@ func (r *Replica) applyRaftCommand(
 // TODO(tschottdorf): rename to evaluateRaftCommandInBatch (or something like
 // that).
 func (r *Replica) applyRaftCommandInBatch(
-	ctx context.Context, idKey storagebase.CmdIDKey, ba roachpb.BatchRequest,
+	ctx context.Context, idKey storagebase.CmdIDKey, ba roachpb.BatchRequest, spans *SpanSet,
 ) EvalResult {
 	// Keep track of original txn Writing state to sanitize txn
 	// reported with any error except TransactionRetryError.
@@ -3918,7 +3953,7 @@ func (r *Replica) applyRaftCommandInBatch(
 		var pErr *roachpb.Error
 		var ms enginepb.MVCCStats
 		var br *roachpb.BatchResponse
-		batch, ms, br, result, pErr = r.executeWriteBatch(ctx, idKey, ba)
+		batch, ms, br, result, pErr = r.executeWriteBatch(ctx, idKey, ba, spans)
 		result.Replicated.Delta = ms
 		result.Local.Reply = br
 		result.Local.Err = pErr
@@ -4017,7 +4052,7 @@ type intentsWithArg struct {
 // cannot all be completed at the intended timestamp, the batch's
 // txn is restored and it's re-executed as transactional.
 func (r *Replica) executeWriteBatch(
-	ctx context.Context, idKey storagebase.CmdIDKey, ba roachpb.BatchRequest,
+	ctx context.Context, idKey storagebase.CmdIDKey, ba roachpb.BatchRequest, spans *SpanSet,
 ) (engine.Batch, enginepb.MVCCStats, *roachpb.BatchResponse, EvalResult, *roachpb.Error) {
 	ms := enginepb.MVCCStats{}
 	// If not transactional or there are indications that the batch's txn will
@@ -4030,6 +4065,9 @@ func (r *Replica) executeWriteBatch(
 
 		// If all writes occurred at the intended timestamp, we've succeeded on the fast path.
 		batch := r.store.Engine().NewBatch()
+		if spans != nil {
+			batch = makeSpanSetBatch(batch, spans)
+		}
 		br, result, pErr := r.executeBatch(ctx, idKey, batch, &ms, strippedBa)
 		if pErr == nil && ba.Timestamp == br.Timestamp {
 			clonedTxn := ba.Txn.Clone()
@@ -4082,6 +4120,9 @@ func (r *Replica) executeWriteBatch(
 	}
 
 	batch := r.store.Engine().NewBatch()
+	if spans != nil {
+		batch = makeSpanSetBatch(batch, spans)
+	}
 	br, result, pErr := r.executeBatch(ctx, idKey, batch, &ms, ba)
 	return batch, ms, br, result, pErr
 }

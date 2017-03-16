@@ -477,7 +477,7 @@ func TestStoreRemoveReplicaDestroy(t *testing.T) {
 	}
 
 	if _, _, err := repl1.propose(
-		context.Background(), lease, roachpb.BatchRequest{}, nil,
+		context.Background(), lease, roachpb.BatchRequest{}, nil, nil,
 	); err != expErr {
 		t.Fatalf("expected error %s, but got %v", expErr, err)
 	}
@@ -2190,7 +2190,7 @@ func TestStoreGCThreshold(t *testing.T) {
 		},
 		Threshold: threshold,
 	}
-	if _, pErr := tc.SendWrapped(&gcr); pErr != nil {
+	if _, pErr := tc.SendWrappedWith(roachpb.Header{RangeID: 1}, &gcr); pErr != nil {
 		t.Fatal(pErr)
 	}
 
