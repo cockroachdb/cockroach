@@ -351,6 +351,7 @@ func init() {
 	clientCmds = append(clientCmds, zoneCmds...)
 	clientCmds = append(clientCmds, nodeCmds...)
 	clientCmds = append(clientCmds, debugZipCmd)
+	clientCmds = append(clientCmds, genHAProxyCmd)
 	for _, cmd := range clientCmds {
 		f := cmd.PersistentFlags()
 		stringFlag(f, &connHost, cliflags.ClientHost, "")
