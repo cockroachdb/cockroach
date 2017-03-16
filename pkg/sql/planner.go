@@ -27,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/mon"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -78,8 +77,6 @@ type planner struct {
 	// verified, which is not ideal.
 	testingVerifyMetadataFn func(config.SystemConfig) error
 	verifyFnCheckedOnce     bool
-
-	noCopy util.NoCopy
 }
 
 // makePlanner creates a new planner instances, referencing a dummy Session.
@@ -96,6 +93,18 @@ func makePlanner(opName string) *planner {
 	}
 	p.session.TxnState.Ctx = ctx
 	return p
+}
+
+// Clone creates a copy of the planner. Because planners are not safe to use from multiple
+// goroutines, the method resets the contexts and transaction on the receiver planner so
+// that it can no longer modify these fields and disrupt the new planner. This is useful
+// when passing planning responsibility off to a new goroutine when it is desirable to reuse
+// the old planner.
+func (p *planner) Clone() *planner {
+	pCopy := *p
+	p.resetContexts()
+	p.resetTxn()
+	return &pCopy
 }
 
 // queryRunner abstracts the services provided by a planner object
