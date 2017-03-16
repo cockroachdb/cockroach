@@ -21,16 +21,16 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/cockroachdb/apd"
+	"github.com/pkg/errors"
+	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
-
-	"github.com/pkg/errors"
 )
 
 func exprContainsVarsError(context string, Expr parser.Expr) error {
@@ -1544,11 +1544,13 @@ type ConstraintDetail struct {
 type tableLookupFn func(ID) (*TableDescriptor, error)
 
 // GetConstraintInfo returns a summary of all constraints on the table.
-func (desc TableDescriptor) GetConstraintInfo(txn *client.Txn) (map[string]ConstraintDetail, error) {
+func (desc TableDescriptor) GetConstraintInfo(
+	ctx context.Context, txn *client.Txn,
+) (map[string]ConstraintDetail, error) {
 	var tableLookup tableLookupFn
 	if txn != nil {
 		tableLookup = func(id ID) (*TableDescriptor, error) {
-			return GetTableDescFromID(txn, id)
+			return GetTableDescFromID(ctx, txn, id)
 		}
 	}
 	return desc.collectConstraintInfo(tableLookup)

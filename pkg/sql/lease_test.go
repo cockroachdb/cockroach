@@ -111,9 +111,9 @@ func (t *leaseTest) acquire(
 	nodeID uint32, descID sqlbase.ID, version sqlbase.DescriptorVersion,
 ) (*sql.LeaseState, error) {
 	var lease *sql.LeaseState
-	err := t.kvDB.Txn(context.TODO(), func(txn *client.Txn) error {
+	err := t.kvDB.Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
 		var err error
-		lease, err = t.node(nodeID).Acquire(txn.Context, txn, descID, version)
+		lease, err = t.node(nodeID).Acquire(ctx, txn, descID, version)
 		return err
 	})
 	return lease, err
@@ -558,7 +558,7 @@ func acquire(
 	ctx context.Context, s *server.TestServer, descID sqlbase.ID, version sqlbase.DescriptorVersion,
 ) (*sql.LeaseState, error) {
 	var lease *sql.LeaseState
-	err := s.DB().Txn(context.TODO(), func(txn *client.Txn) error {
+	err := s.DB().Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
 		var err error
 		lease, err = s.LeaseManager().(*sql.LeaseManager).Acquire(ctx, txn, descID, version)
 		return err

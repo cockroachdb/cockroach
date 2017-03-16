@@ -36,8 +36,7 @@ import (
 // Txn is an in-progress distributed database transaction. A Txn is safe for
 // concurrent use by multiple goroutines.
 type Txn struct {
-	db      DB
-	Context context.Context // must not be nil
+	db *DB
 
 	// The following fields are not safe for concurrent modification.
 	// They should be set before operating on the transaction.
@@ -74,17 +73,14 @@ type Txn struct {
 }
 
 // NewTxn returns a new txn.
-func NewTxn(ctx context.Context, db DB) *Txn {
-	return NewTxnWithProto(ctx, db, roachpb.Transaction{})
+func NewTxn(db *DB) *Txn {
+	return NewTxnWithProto(db, roachpb.Transaction{})
 }
 
 // NewTxnWithProto returns a new txn with the provided Transaction proto.
 // This allows a client.Txn to be created with an already initialized proto.
-func NewTxnWithProto(ctx context.Context, db DB, proto roachpb.Transaction) *Txn {
-	txn := &Txn{
-		db:      db,
-		Context: ctx,
-	}
+func NewTxnWithProto(db *DB, proto roachpb.Transaction) *Txn {
+	txn := &Txn{db: db}
 	txn.mu.Proto = proto
 	return txn
 }
@@ -243,18 +239,18 @@ func (txn *Txn) NewBatch() *Batch {
 //   // string(r.Key) == "a"
 //
 // key can be either a byte slice or a string.
-func (txn *Txn) Get(key interface{}) (KeyValue, error) {
+func (txn *Txn) Get(ctx context.Context, key interface{}) (KeyValue, error) {
 	b := txn.NewBatch()
 	b.Get(key)
-	return getOneRow(txn.Run(b), b)
+	return getOneRow(txn.Run(ctx, b), b)
 }
 
 // GetProto retrieves the value for a key and decodes the result as a proto
 // message. If the key doesn't exist, the proto will simply be reset.
 //
 // key can be either a byte slice or a string.
-func (txn *Txn) GetProto(key interface{}, msg proto.Message) error {
-	r, err := txn.Get(key)
+func (txn *Txn) GetProto(ctx context.Context, key interface{}, msg proto.Message) error {
+	r, err := txn.Get(ctx, key)
 	if err != nil {
 		return err
 	}
@@ -265,10 +261,10 @@ func (txn *Txn) GetProto(key interface{}, msg proto.Message) error {
 //
 // key can be either a byte slice or a string. value can be any key type, a
 // proto.Message or any Go primitive type (bool, int, etc).
-func (txn *Txn) Put(key, value interface{}) error {
+func (txn *Txn) Put(ctx context.Context, key, value interface{}) error {
 	b := txn.NewBatch()
 	b.Put(key, value)
-	return getOneErr(txn.Run(b), b)
+	return getOneErr(txn.Run(ctx, b), b)
 }
 
 // CPut conditionally sets the value for a key if the existing value is equal
@@ -280,10 +276,10 @@ func (txn *Txn) Put(key, value interface{}) error {
 //
 // key can be either a byte slice or a string. value can be any key type, a
 // proto.Message or any Go primitive type (bool, int, etc).
-func (txn *Txn) CPut(key, value, expValue interface{}) error {
+func (txn *Txn) CPut(ctx context.Context, key, value, expValue interface{}) error {
 	b := txn.NewBatch()
 	b.CPut(key, value, expValue)
-	return getOneErr(txn.Run(b), b)
+	return getOneErr(txn.Run(ctx, b), b)
 }
 
 // InitPut sets the first value for a key to value. An error is reported if a
@@ -292,10 +288,10 @@ func (txn *Txn) CPut(key, value, expValue interface{}) error {
 // key can be either a byte slice or a string. value can be any key type, a
 // proto.Message or any Go primitive type (bool, int, etc). It is illegal to
 // set value to nil.
-func (txn *Txn) InitPut(key, value interface{}) error {
+func (txn *Txn) InitPut(ctx context.Context, key, value interface{}) error {
 	b := txn.NewBatch()
 	b.InitPut(key, value)
-	return getOneErr(txn.Run(b), b)
+	return getOneErr(txn.Run(ctx, b), b)
 }
 
 // Inc increments the integer value at key. If the key does not exist it will
@@ -306,13 +302,15 @@ func (txn *Txn) InitPut(key, value interface{}) error {
 // success or failure.
 //
 // key can be either a byte slice or a string.
-func (txn *Txn) Inc(key interface{}, value int64) (KeyValue, error) {
+func (txn *Txn) Inc(ctx context.Context, key interface{}, value int64) (KeyValue, error) {
 	b := txn.NewBatch()
 	b.Inc(key, value)
-	return getOneRow(txn.Run(b), b)
+	return getOneRow(txn.Run(ctx, b), b)
 }
 
-func (txn *Txn) scan(begin, end interface{}, maxRows int64, isReverse bool) ([]KeyValue, error) {
+func (txn *Txn) scan(
+	ctx context.Context, begin, end interface{}, maxRows int64, isReverse bool,
+) ([]KeyValue, error) {
 	b := txn.NewBatch()
 	if maxRows > 0 {
 		b.Header.MaxSpanRequestKeys = maxRows
@@ -322,7 +320,7 @@ func (txn *Txn) scan(begin, end interface{}, maxRows int64, isReverse bool) ([]K
 	} else {
 		b.ReverseScan(begin, end)
 	}
-	r, err := getOneResult(txn.Run(b), b)
+	r, err := getOneResult(txn.Run(ctx, b), b)
 	return r.Rows, err
 }
 
@@ -333,8 +331,10 @@ func (txn *Txn) scan(begin, end interface{}, maxRows int64, isReverse bool) ([]K
 // when zero is supplied).
 //
 // key can be either a byte slice or a string.
-func (txn *Txn) Scan(begin, end interface{}, maxRows int64) ([]KeyValue, error) {
-	return txn.scan(begin, end, maxRows, false)
+func (txn *Txn) Scan(
+	ctx context.Context, begin, end interface{}, maxRows int64,
+) ([]KeyValue, error) {
+	return txn.scan(ctx, begin, end, maxRows, false)
 }
 
 // ReverseScan retrieves the rows between begin (inclusive) and end (exclusive)
@@ -344,17 +344,19 @@ func (txn *Txn) Scan(begin, end interface{}, maxRows int64) ([]KeyValue, error) 
 // when zero is supplied).
 //
 // key can be either a byte slice or a string.
-func (txn *Txn) ReverseScan(begin, end interface{}, maxRows int64) ([]KeyValue, error) {
-	return txn.scan(begin, end, maxRows, true)
+func (txn *Txn) ReverseScan(
+	ctx context.Context, begin, end interface{}, maxRows int64,
+) ([]KeyValue, error) {
+	return txn.scan(ctx, begin, end, maxRows, true)
 }
 
 // Del deletes one or more keys.
 //
 // key can be either a byte slice or a string.
-func (txn *Txn) Del(keys ...interface{}) error {
+func (txn *Txn) Del(ctx context.Context, keys ...interface{}) error {
 	b := txn.NewBatch()
 	b.Del(keys...)
-	return getOneErr(txn.Run(b), b)
+	return getOneErr(txn.Run(ctx, b), b)
 }
 
 // DelRange deletes the rows between begin (inclusive) and end (exclusive).
@@ -363,10 +365,10 @@ func (txn *Txn) Del(keys ...interface{}) error {
 // or failure.
 //
 // key can be either a byte slice or a string.
-func (txn *Txn) DelRange(begin, end interface{}) error {
+func (txn *Txn) DelRange(ctx context.Context, begin, end interface{}) error {
 	b := txn.NewBatch()
 	b.DelRange(begin, end, false)
-	return getOneErr(txn.Run(b), b)
+	return getOneErr(txn.Run(ctx, b), b)
 }
 
 // Run executes the operations queued up within a batch. Before executing any
@@ -380,18 +382,18 @@ func (txn *Txn) DelRange(begin, end interface{}) error {
 // Upon completion, Batch.Results will contain the results for each
 // operation. The order of the results matches the order the operations were
 // added to the batch.
-func (txn *Txn) Run(b *Batch) error {
+func (txn *Txn) Run(ctx context.Context, b *Batch) error {
 	tracing.AnnotateTrace()
 	defer tracing.AnnotateTrace()
 
 	if err := b.prepare(); err != nil {
 		return err
 	}
-	return sendAndFill(txn.send, b)
+	return sendAndFill(ctx, txn.send, b)
 }
 
-func (txn *Txn) commit() error {
-	err := txn.sendEndTxnReq(true /* commit */, txn.deadline)
+func (txn *Txn) commit(ctx context.Context) error {
+	err := txn.sendEndTxnReq(ctx, true /* commit */, txn.deadline)
 	if err == nil {
 		for _, t := range txn.commitTriggers {
 			t()
@@ -401,9 +403,9 @@ func (txn *Txn) commit() error {
 }
 
 // CleanupOnError cleans up the transaction as a result of an error.
-func (txn *Txn) CleanupOnError(err error) {
+func (txn *Txn) CleanupOnError(ctx context.Context, err error) {
 	if err == nil {
-		panic("no error")
+		log.Fatal(ctx, "CleanupOnError called with nil error")
 	}
 	// This may race with a concurrent EndTxnRequests. That's fine though because
 	// we're just trying to clean up and will happily log the failed Rollback error
@@ -412,8 +414,8 @@ func (txn *Txn) CleanupOnError(err error) {
 	isPending := txn.mu.Proto.Status == roachpb.PENDING
 	txn.mu.Unlock()
 	if isPending {
-		if replyErr := txn.Rollback(); replyErr != nil {
-			log.Errorf(txn.Context, "failure aborting transaction: %s; abort caused by: %s", replyErr, err)
+		if replyErr := txn.Rollback(ctx); replyErr != nil {
+			log.Errorf(ctx, "failure aborting transaction: %s; abort caused by: %s", replyErr, err)
 		}
 	}
 }
@@ -421,8 +423,8 @@ func (txn *Txn) CleanupOnError(err error) {
 // Commit is the same as CommitOrCleanup but will not attempt to clean
 // up on failure. This can be used when the caller is prepared to do proper
 // cleanup.
-func (txn *Txn) Commit() error {
-	return txn.commit()
+func (txn *Txn) Commit(ctx context.Context) error {
+	return txn.commit(ctx)
 }
 
 // CommitInBatch executes the operations queued up within a batch and
@@ -433,24 +435,24 @@ func (txn *Txn) Commit() error {
 // If the command completes successfully, the txn is considered finalized. On
 // error, no attempt is made to clean up the (possibly still pending)
 // transaction.
-func (txn *Txn) CommitInBatch(b *Batch) error {
+func (txn *Txn) CommitInBatch(ctx context.Context, b *Batch) error {
 	if txn != b.txn {
 		return errors.Errorf("a batch b can only be committed by b.txn")
 	}
 	b.AddRawRequest(endTxnReq(true /* commit */, txn.deadline, txn.systemConfigTrigger))
-	return txn.Run(b)
+	return txn.Run(ctx, b)
 }
 
 // CommitOrCleanup sends an EndTransactionRequest with Commit=true.
 // If that fails, an attempt to rollback is made.
 // txn should not be used to send any more commands after this call.
-func (txn *Txn) CommitOrCleanup() error {
-	err := txn.commit()
+func (txn *Txn) CommitOrCleanup(ctx context.Context) error {
+	err := txn.commit(ctx)
 	if err != nil {
-		txn.CleanupOnError(err)
+		txn.CleanupOnError(ctx, err)
 	}
 	if !txn.IsFinalized() {
-		panic("Commit() failed to move txn to a final state")
+		log.Fatal(ctx, "Commit() failed to move txn to a final state")
 	}
 	return err
 }
@@ -477,9 +479,9 @@ func (txn *Txn) GetDeadline() *hlc.Timestamp {
 
 // Rollback sends an EndTransactionRequest with Commit=false.
 // txn is considered finalized and cannot be used to send any more commands.
-func (txn *Txn) Rollback() error {
-	log.VEventf(txn.Context, 2, "rolling back transaction")
-	return txn.sendEndTxnReq(false /* commit */, nil)
+func (txn *Txn) Rollback(ctx context.Context) error {
+	log.VEventf(ctx, 2, "rolling back transaction")
+	return txn.sendEndTxnReq(ctx, false /* commit */, nil)
 }
 
 // AddCommitTrigger adds a closure to be executed on successful commit
@@ -488,10 +490,10 @@ func (txn *Txn) AddCommitTrigger(trigger func()) {
 	txn.commitTriggers = append(txn.commitTriggers, trigger)
 }
 
-func (txn *Txn) sendEndTxnReq(commit bool, deadline *hlc.Timestamp) error {
+func (txn *Txn) sendEndTxnReq(ctx context.Context, commit bool, deadline *hlc.Timestamp) error {
 	var ba roachpb.BatchRequest
 	ba.Add(endTxnReq(commit, deadline, txn.systemConfigTrigger))
-	_, err := txn.send(ba)
+	_, err := txn.send(ctx, ba)
 	return err.GoError()
 }
 
@@ -563,11 +565,13 @@ func (e *AutoCommitError) Error() string {
 // to clean up the transaction before returning an error. In case of
 // TransactionAbortedError, txn is reset to a fresh transaction, ready to be
 // used.
-func (txn *Txn) Exec(opt TxnExecOptions, fn func(txn *Txn, opt *TxnExecOptions) error) (err error) {
+func (txn *Txn) Exec(
+	ctx context.Context, opt TxnExecOptions, fn func(context.Context, *Txn, *TxnExecOptions) error,
+) (err error) {
 	// Run fn in a retry loop until we encounter a success or
 	// error condition this loop isn't capable of handling.
 	if txn == nil && (opt.AutoRetry || opt.AutoCommit) {
-		panic("asked to retry or commit a txn that is already aborted")
+		log.Fatal(ctx, "asked to retry or commit a txn that is already aborted")
 	}
 
 	for {
@@ -584,7 +588,7 @@ func (txn *Txn) Exec(opt TxnExecOptions, fn func(txn *Txn, opt *TxnExecOptions) 
 			txn.mu.Unlock()
 		}
 
-		err = fn(txn, &opt)
+		err = fn(ctx, txn, &opt)
 
 		if err == nil && opt.AutoCommit {
 			// Copy the status out of the Proto under lock. Making decisions on
@@ -597,12 +601,12 @@ func (txn *Txn) Exec(opt TxnExecOptions, fn func(txn *Txn, opt *TxnExecOptions) 
 			switch status {
 			case roachpb.ABORTED:
 				// TODO(andrei): Until 7881 is fixed.
-				log.Errorf(txn.Context, "#7881: no err but aborted txn proto. opt: %+v, txn: %+v",
+				log.Errorf(ctx, "#7881: no err but aborted txn proto. opt: %+v, txn: %+v",
 					opt, txn)
 			case roachpb.PENDING:
 				// fn succeeded, but didn't commit.
-				err = txn.Commit()
-				log.Eventf(txn.Context, "client.Txn did AutoCommit. err: %v\ntxn: %+v", err, txn.Proto())
+				err = txn.Commit(ctx)
+				log.Eventf(ctx, "client.Txn did AutoCommit. err: %v\ntxn: %+v", err, txn.Proto())
 				if err != nil {
 					if _, retryable := err.(*roachpb.RetryableTxnError); !retryable {
 						// We can't retry, so let the caller know we tried to
@@ -627,7 +631,7 @@ func (txn *Txn) Exec(opt TxnExecOptions, fn func(txn *Txn, opt *TxnExecOptions) 
 
 		txn.commitTriggers = nil
 
-		log.VEventf(txn.Context, 2, "automatically retrying transaction: %s because of error: %s",
+		log.VEventf(ctx, 2, "automatically retrying transaction: %s because of error: %s",
 			txn.DebugName(), err)
 	}
 
@@ -661,7 +665,9 @@ func (txn *Txn) isRetryableErrMeantForTxnLocked(err *roachpb.RetryableTxnError) 
 // EndTransaction call is silently dropped, allowing the caller to
 // always commit or clean-up explicitly even when that may not be
 // required (or even erroneous). Returns (nil, nil) for an empty batch.
-func (txn *Txn) send(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+func (txn *Txn) send(
+	ctx context.Context, ba roachpb.BatchRequest,
+) (*roachpb.BatchResponse, *roachpb.Error) {
 	// It doesn't make sense to use inconsistent reads in a transaction. However,
 	// we still need to accept it as a parameter for this to compile.
 	if ba.ReadConsistency != roachpb.CONSISTENT {
@@ -774,7 +780,7 @@ func (txn *Txn) send(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.
 	}
 
 	// Send call through the DB.
-	br, pErr := txn.db.send(txn.Context, ba)
+	br, pErr := txn.db.send(ctx, ba)
 
 	// Lock for the entire response postlude.
 	txn.mu.Lock()
@@ -812,7 +818,7 @@ func (txn *Txn) send(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.
 
 	if pErr != nil {
 		if log.V(1) {
-			log.Infof(txn.Context, "failed batch: %s", pErr)
+			log.Infof(ctx, "failed batch: %s", pErr)
 		}
 		txn.updateStateOnErrLocked(pErr)
 		return nil, pErr
@@ -823,7 +829,7 @@ func (txn *Txn) send(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.
 			panic(roachpb.ErrorUnexpectedlySet(txn.db.sender, br))
 		}
 		if len(br.CollectedSpans) != 0 {
-			if err := tracing.IngestRemoteSpans(txn.Context, br.CollectedSpans); err != nil {
+			if err := tracing.IngestRemoteSpans(ctx, br.CollectedSpans); err != nil {
 				return nil, roachpb.NewErrorf("error ingesting remote spans: %s", err)
 			}
 		}

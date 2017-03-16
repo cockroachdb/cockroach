@@ -22,12 +22,12 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
-	"github.com/pkg/errors"
 )
 
 const (
@@ -283,12 +283,14 @@ func (p *planner) ShowColumns(ctx context.Context, n *parser.ShowColumns) (planN
 
 // showCreateInterleave returns an INTERLEAVE IN PARENT clause for the specified
 // index, if applicable.
-func (p *planner) showCreateInterleave(idx *sqlbase.IndexDescriptor) (string, error) {
+func (p *planner) showCreateInterleave(
+	ctx context.Context, idx *sqlbase.IndexDescriptor,
+) (string, error) {
 	if len(idx.Interleave.Ancestors) == 0 {
 		return "", nil
 	}
 	intl := idx.Interleave
-	parentTable, err := sqlbase.GetTableDescFromID(p.txn, intl.Ancestors[len(intl.Ancestors)-1].TableID)
+	parentTable, err := sqlbase.GetTableDescFromID(ctx, p.txn, intl.Ancestors[len(intl.Ancestors)-1].TableID)
 	if err != nil {
 		return "", err
 	}
@@ -310,7 +312,7 @@ func (p *planner) ShowCreateTable(ctx context.Context, n *parser.ShowCreateTable
 		return nil, err
 	}
 
-	desc, err := p.mustGetTableDesc(tn)
+	desc, err := p.mustGetTableDesc(ctx, tn)
 	if err != nil {
 		return nil, err
 	}
@@ -381,7 +383,7 @@ func (p *planner) showCreateTable(
 		if len(idx.StoreColumnNames) > 0 {
 			storing = fmt.Sprintf(" STORING (%s)", quoteNames(idx.StoreColumnNames...))
 		}
-		interleave, err := p.showCreateInterleave(&idx)
+		interleave, err := p.showCreateInterleave(ctx, &idx)
 		if err != nil {
 			return "", err
 		}
@@ -433,7 +435,7 @@ func (p *planner) showCreateTable(
 
 	buf.WriteString("\n)")
 
-	interleave, err := p.showCreateInterleave(&desc.PrimaryIndex)
+	interleave, err := p.showCreateInterleave(ctx, &desc.PrimaryIndex)
 	if err != nil {
 		return "", err
 	}
@@ -644,7 +646,7 @@ func (p *planner) ShowGrants(ctx context.Context, n *parser.ShowGrants) (planNod
 						v.rows.Close(ctx)
 						return nil, err
 					}
-					tables, err := p.expandTableGlob(tableGlob)
+					tables, err := p.expandTableGlob(ctx, tableGlob)
 					if err != nil {
 						v.rows.Close(ctx)
 						return nil, err
@@ -761,7 +763,7 @@ func (p *planner) ShowConstraints(ctx context.Context, n *parser.ShowConstraints
 		return nil, err
 	}
 
-	desc, err := p.mustGetTableDesc(tn)
+	desc, err := p.mustGetTableDesc(ctx, tn)
 	if err != nil {
 		return nil, err
 	}
@@ -783,7 +785,7 @@ func (p *planner) ShowConstraints(ctx context.Context, n *parser.ShowConstraints
 		constructor: func(ctx context.Context, p *planner) (planNode, error) {
 			v := p.newContainerValuesNode(columns, 0)
 
-			info, err := desc.GetConstraintInfo(p.txn)
+			info, err := desc.GetConstraintInfo(ctx, p.txn)
 			if err != nil {
 				return nil, err
 			}

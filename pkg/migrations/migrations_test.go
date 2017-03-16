@@ -125,7 +125,7 @@ func (f *fakeDB) Put(ctx context.Context, key, value interface{}) error {
 	return nil
 }
 
-func (f *fakeDB) Txn(context.Context, func(txn *client.Txn) error) error {
+func (f *fakeDB) Txn(context.Context, func(context.Context, *client.Txn) error) error {
 	return errors.New("unimplemented")
 }
 

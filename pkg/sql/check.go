@@ -19,12 +19,12 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/pkg/errors"
 )
 
 type checkHelper struct {
@@ -164,7 +164,7 @@ func (p *planner) validateCheckExpr(
 func (p *planner) validateForeignKey(
 	ctx context.Context, srcTable *sqlbase.TableDescriptor, srcIdx *sqlbase.IndexDescriptor,
 ) error {
-	targetTable, err := sqlbase.GetTableDescFromID(p.txn, srcIdx.ForeignKey.Table)
+	targetTable, err := sqlbase.GetTableDescFromID(ctx, p.txn, srcIdx.ForeignKey.Table)
 	if err != nil {
 		return err
 	}
@@ -173,12 +173,12 @@ func (p *planner) validateForeignKey(
 		return err
 	}
 
-	srcName, err := p.getQualifiedTableName(srcTable)
+	srcName, err := p.getQualifiedTableName(ctx, srcTable)
 	if err != nil {
 		return err
 	}
 
-	targetName, err := p.getQualifiedTableName(targetTable)
+	targetName, err := p.getQualifiedTableName(ctx, targetTable)
 	if err != nil {
 		return err
 	}

@@ -25,8 +25,9 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/cockroachdb/apd"
 	"github.com/pkg/errors"
+
+	"github.com/cockroachdb/apd"
 )
 
 // Constant is an constant literal expression which may be resolved to more than one type.

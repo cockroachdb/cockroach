@@ -96,12 +96,10 @@ func (o *ordinalityNode) Next(ctx context.Context) (bool, error) {
 	return true, nil
 }
 
-func (o *ordinalityNode) Ordering() orderingInfo     { return o.ordering }
-func (o *ordinalityNode) Values() parser.Datums      { return o.row }
-func (o *ordinalityNode) DebugValues() debugValues   { return o.source.DebugValues() }
-func (o *ordinalityNode) MarkDebug(mode explainMode) { o.source.MarkDebug(mode) }
-func (o *ordinalityNode) Columns() ResultColumns     { return o.columns }
-func (o *ordinalityNode) Start(ctx context.Context) error {
-	return o.source.Start(ctx)
-}
-func (o *ordinalityNode) Close(ctx context.Context) { o.source.Close(ctx) }
+func (o *ordinalityNode) Ordering() orderingInfo          { return o.ordering }
+func (o *ordinalityNode) Values() parser.Datums           { return o.row }
+func (o *ordinalityNode) DebugValues() debugValues        { return o.source.DebugValues() }
+func (o *ordinalityNode) MarkDebug(mode explainMode)      { o.source.MarkDebug(mode) }
+func (o *ordinalityNode) Columns() ResultColumns          { return o.columns }
+func (o *ordinalityNode) Start(ctx context.Context) error { return o.source.Start(ctx) }
+func (o *ordinalityNode) Close(ctx context.Context)       { o.source.Close(ctx) }

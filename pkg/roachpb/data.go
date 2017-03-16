@@ -32,10 +32,10 @@ import (
 	"unicode"
 
 	"github.com/biogo/store/interval"
-	"github.com/cockroachdb/apd"
 	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
 
+	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"

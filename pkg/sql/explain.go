@@ -247,17 +247,11 @@ var debugColumns = ResultColumns{
 	{Name: "Disposition", Typ: parser.TypeString},
 }
 
-func (*explainDebugNode) Columns() ResultColumns { return debugColumns }
-func (*explainDebugNode) Ordering() orderingInfo { return orderingInfo{} }
-func (n *explainDebugNode) Start(ctx context.Context) error {
-	return n.plan.Start(ctx)
-}
-func (n *explainDebugNode) Next(ctx context.Context) (bool, error) {
-	return n.plan.Next(ctx)
-}
-func (n *explainDebugNode) Close(ctx context.Context) {
-	n.plan.Close(ctx)
-}
+func (*explainDebugNode) Columns() ResultColumns                   { return debugColumns }
+func (*explainDebugNode) Ordering() orderingInfo                   { return orderingInfo{} }
+func (n *explainDebugNode) Start(ctx context.Context) error        { return n.plan.Start(ctx) }
+func (n *explainDebugNode) Next(ctx context.Context) (bool, error) { return n.plan.Next(ctx) }
+func (n *explainDebugNode) Close(ctx context.Context)              { n.plan.Close(ctx) }
 
 func (n *explainDebugNode) Values() parser.Datums {
 	vals := n.plan.DebugValues()

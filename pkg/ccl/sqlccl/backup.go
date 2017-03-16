@@ -86,10 +86,10 @@ func ValidatePreviousBackups(ctx context.Context, uris []string) (hlc.Timestamp,
 	return endTime, err
 }
 
-func allSQLDescriptors(txn *client.Txn) ([]sqlbase.Descriptor, error) {
+func allSQLDescriptors(ctx context.Context, txn *client.Txn) ([]sqlbase.Descriptor, error) {
 	startKey := roachpb.Key(keys.MakeTablePrefix(keys.DescriptorTableID))
 	endKey := startKey.PrefixEnd()
-	rows, err := txn.Scan(startKey, endKey, 0)
+	rows, err := txn.Scan(ctx, startKey, endKey, 0)
 	if err != nil {
 		return nil, err
 	}
@@ -165,15 +165,15 @@ func Backup(
 	}
 	defer exportStore.Close()
 
-	db := *p.ExecCfg().DB
+	db := p.ExecCfg().DB
 
 	{
-		txn := client.NewTxn(ctx, db)
+		txn := client.NewTxn(db)
 		opt := client.TxnExecOptions{AutoRetry: true, AutoCommit: true}
-		err := txn.Exec(opt, func(txn *client.Txn, opt *client.TxnExecOptions) error {
+		err := txn.Exec(ctx, opt, func(ctx context.Context, txn *client.Txn, opt *client.TxnExecOptions) error {
 			var err error
 			sql.SetTxnTimestamps(txn, endTime)
-			sqlDescs, err = allSQLDescriptors(txn)
+			sqlDescs, err = allSQLDescriptors(ctx, txn)
 			return err
 		})
 		if err != nil {
