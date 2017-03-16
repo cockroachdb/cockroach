@@ -235,11 +235,12 @@ type IndexHints struct {
 	Index       Name
 	IndexID     IndexID
 	NoIndexJoin bool
+	NoScan      bool
 }
 
 // Format implements the NodeFormatter interface.
 func (n *IndexHints) Format(buf *bytes.Buffer, f FmtFlags) {
-	if !n.NoIndexJoin {
+	if !n.NoIndexJoin && !n.NoScan && (n.Index != "" || n.IndexID != 0) {
 		buf.WriteByte('@')
 		if n.Index != "" {
 			FormatNode(buf, f, n.Index)
@@ -247,17 +248,29 @@ func (n *IndexHints) Format(buf *bytes.Buffer, f FmtFlags) {
 			fmt.Fprintf(buf, "[%d]", n.IndexID)
 		}
 	} else {
-		if n.Index == "" && n.IndexID == 0 {
-			buf.WriteString("@{NO_INDEX_JOIN}")
-		} else {
-			buf.WriteString("@{FORCE_INDEX=")
+		buf.WriteString("@{")
+		comma := ""
+		if n.Index != "" || n.IndexID != 0 {
+			buf.WriteString(comma)
+			buf.WriteString("FORCE_INDEX=")
 			if n.Index != "" {
 				FormatNode(buf, f, n.Index)
 			} else {
 				fmt.Fprintf(buf, "[%d]", n.IndexID)
 			}
-			buf.WriteString(",NO_INDEX_JOIN}")
+			comma = ","
 		}
+		if n.NoIndexJoin {
+			buf.WriteString(comma)
+			buf.WriteString("NO_INDEX_JOIN")
+			comma = ","
+		}
+		if n.NoScan {
+			buf.WriteString(comma)
+			buf.WriteString("NO_SCAN")
+			comma = ","
+		}
+		buf.WriteByte('}')
 	}
 }
 

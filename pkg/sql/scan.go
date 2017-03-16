@@ -93,6 +93,11 @@ type scanNode struct {
 	disableBatchLimits bool
 
 	scanVisibility scanVisibility
+
+	// assertNoScan indicates that the user wishes to reject a query
+	// using a full table scan on this node.
+	assertNoScan bool
+
 	// This struct must be allocated on the heap and its location stay
 	// stable after construction because it implements
 	// IndexedVarContainer and the IndexedVar objects in sub-expressions
@@ -148,12 +153,18 @@ func (n *scanNode) Close(context.Context) {}
 
 // initScan sets up the rowFetcher and starts a scan.
 func (n *scanNode) initScan() error {
+	if n.assertNoScan {
+		if len(n.spans) == 0 || (len(n.spans) == 1 && n.spans[0].Equal(n.desc.IndexSpan(n.index.ID))) {
+			return errors.Errorf("query plan requested full scan of %s@%s with NO_SCAN specified",
+				n.desc.Name, n.index.Name)
+		}
+	}
+
 	if len(n.spans) == 0 {
 		// If no spans were specified retrieve all of the keys that start with our
 		// index key prefix. This isn't needed for the fetcher, but it is for
 		// other external users of n.spans.
-		start := roachpb.Key(sqlbase.MakeIndexKeyPrefix(&n.desc, n.index.ID))
-		n.spans = append(n.spans, roachpb.Span{Key: start, EndKey: start.PrefixEnd()})
+		n.spans = append(n.spans, n.desc.IndexSpan(n.index.ID))
 	}
 
 	limitHint := n.limitHint()
@@ -266,8 +277,9 @@ func (n *scanNode) initTable(
 		if err := n.lookupSpecifiedIndex(indexHints); err != nil {
 			return err
 		}
+		n.noIndexJoin = indexHints.NoIndexJoin
+		n.assertNoScan = indexHints.NoScan
 	}
-	n.noIndexJoin = (indexHints != nil && indexHints.NoIndexJoin)
 	return n.initDescDefaults(scanVisibility, wantedColumns)
 }
 

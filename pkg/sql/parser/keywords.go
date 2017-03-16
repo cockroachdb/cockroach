@@ -155,6 +155,7 @@ var keywords = map[string]int{
 	"NOT":               NOT,
 	"NOTHING":           NOTHING,
 	"NO_INDEX_JOIN":     NO_INDEX_JOIN,
+	"NO_SCAN":           NO_SCAN,
 	"NULL":              NULL,
 	"NULLIF":            NULLIF,
 	"NULLS":             NULLS,

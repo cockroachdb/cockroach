@@ -269,6 +269,10 @@ func (dsp *distSQLPlanner) checkSupportForNode(node planNode) (distRecommendatio
 		}
 		// Check if we are doing a full scan.
 		if len(n.spans) == 1 && n.spans[0].Equal(n.desc.IndexSpan(n.index.ID)) {
+			if n.assertNoScan {
+				return 0, errors.Errorf("query plan requested full scan of %s@%s with NO_SCAN specified",
+					n.desc.Name, n.index.Name)
+			}
 			rec = rec.compose(shouldDistribute)
 		}
 		return rec, nil
