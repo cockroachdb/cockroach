@@ -16,6 +16,7 @@ import (
 	"golang.org/x/net/context"
 	"golang.org/x/sync/errgroup"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl/engineccl"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
@@ -68,7 +69,7 @@ func evalImport(ctx context.Context, cArgs storage.CommandArgs) error {
 		b = batchBuilder{}
 	}
 
-	startKeyMVCC, endKeyMVCC := engine.MVCCKey{Key: args.DataSpan.Key}, engine.MVCCKey{Key: args.DataSpan.EndKey}
+	var iters []engine.Iterator
 	for _, file := range args.Files {
 		if log.V(1) {
 			log.Infof(ctx, "import file [%s,%s) %s", args.DataSpan.Key, args.DataSpan.EndKey, file.Path)
@@ -110,50 +111,58 @@ func evalImport(ctx context.Context, cArgs storage.CommandArgs) error {
 
 		iter := sst.NewIterator(false)
 		defer iter.Close()
-		iter.Seek(startKeyMVCC)
-		for ; iter.Valid(); iter.Next() {
-			key := iter.Key()
-			if endKeyMVCC.Less(key) {
-				break
-			}
-			value := roachpb.Value{RawBytes: iter.Value()}
+		iters = append(iters, iter)
+	}
 
-			var ok bool
-			key.Key, ok = kr.RewriteKey(key.Key)
-			if !ok {
-				// If the key rewriter didn't match this key, it's not data for the
-				// table(s) we're interested in.
-				if log.V(3) {
-					log.Infof(ctx, "skipping %s %s", key.Key, value.PrettyPrint())
-				}
-				continue
-			}
+	startKeyMVCC, endKeyMVCC := engine.MVCCKey{Key: args.DataSpan.Key}, engine.MVCCKey{Key: args.DataSpan.EndKey}
+	iter := engineccl.MakeMultiIterator(iters)
+	var keyScratch, valueScratch []byte
+	for iter.Seek(startKeyMVCC); iter.Valid() && iter.UnsafeKey().Less(endKeyMVCC); iter.NextKey() {
+		if len(iter.UnsafeValue()) == 0 {
+			// Value is deleted.
+			continue
+		}
 
-			// Rewriting the key means the checksum needs to be updated.
-			value.ClearChecksum()
-			value.InitChecksum(key.Key)
+		keyScratch = append(keyScratch[:0], iter.UnsafeKey().Key...)
+		valueScratch = append(valueScratch[:0], iter.UnsafeValue()...)
+		key := engine.MVCCKey{Key: keyScratch, Timestamp: iter.UnsafeKey().Timestamp}
+		value := roachpb.Value{RawBytes: valueScratch}
 
+		var ok bool
+		key.Key, ok = kr.RewriteKey(key.Key)
+		if !ok {
+			// If the key rewriter didn't match this key, it's not data for the
+			// table(s) we're interested in.
 			if log.V(3) {
-				log.Infof(ctx, "Put %s -> %s", key.Key, value.PrettyPrint())
+				log.Infof(ctx, "skipping %s %s", key.Key, value.PrettyPrint())
 			}
-			b.batch.Put(key, value.RawBytes)
-
-			// Update the range currently represented in this batch, as
-			// necessary.
-			if len(b.batchStartKey) == 0 || bytes.Compare(key.Key, b.batchStartKey) < 0 {
-				b.batchStartKey = append(b.batchStartKey[:0], key.Key...)
-			}
-			if len(b.batchEndKey) == 0 || bytes.Compare(key.Key, b.batchEndKey) > 0 {
-				b.batchEndKey = append(b.batchEndKey[:0], key.Key...)
-			}
-
-			if b.batch.Len() > batchSizeBytes {
-				sendWriteBatch()
-			}
+			continue
 		}
-		if err := iter.Error(); err != nil {
-			return err
+
+		// Rewriting the key means the checksum needs to be updated.
+		value.ClearChecksum()
+		value.InitChecksum(key.Key)
+
+		if log.V(3) {
+			log.Infof(ctx, "Put %s -> %s", key.Key, value.PrettyPrint())
 		}
+		b.batch.Put(key, value.RawBytes)
+
+		// Update the range currently represented in this batch, as
+		// necessary.
+		if len(b.batchStartKey) == 0 || bytes.Compare(key.Key, b.batchStartKey) < 0 {
+			b.batchStartKey = append(b.batchStartKey[:0], key.Key...)
+		}
+		if len(b.batchEndKey) == 0 || bytes.Compare(key.Key, b.batchEndKey) > 0 {
+			b.batchEndKey = append(b.batchEndKey[:0], key.Key...)
+		}
+
+		if b.batch.Len() > batchSizeBytes {
+			sendWriteBatch()
+		}
+	}
+	if err := iter.Error(); err != nil {
+		return err
 	}
 	// Flush out the last batch.
 	if b.batch.Len() > 0 {
