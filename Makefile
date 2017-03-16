@@ -316,7 +316,7 @@ endif
 .go-version:
 	@actual=$$($(GO) version); \
 	echo "$${actual}" | grep -q -E '\b$(GOVERS)\b' || \
-	  (echo "$(GOVERS) required (see CONTRIBUTING.md): $${actual}" && false)
+	  (echo "$(GOVERS) required (see CONTRIBUTING.md): $${actual}" >&2 && false)
 
 include .go-version
 
