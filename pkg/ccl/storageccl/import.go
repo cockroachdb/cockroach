@@ -12,15 +12,15 @@ import (
 	"bytes"
 	"fmt"
 
+	"github.com/pkg/errors"
 	"golang.org/x/net/context"
+	"golang.org/x/sync/errgroup"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	"github.com/pkg/errors"
 )
 
 func init() {
@@ -35,8 +35,6 @@ func evalImport(ctx context.Context, cArgs storage.CommandArgs) error {
 
 	ctx, span := tracing.ChildSpan(ctx, fmt.Sprintf("import [%s,%s)", args.DataSpan.Key, args.DataSpan.EndKey))
 	defer tracing.FinishSpan(span)
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
 
 	if err := beginLimitedRequest(ctx); err != nil {
 		return err
@@ -46,32 +44,27 @@ func evalImport(ctx context.Context, cArgs storage.CommandArgs) error {
 	// Arrived at by tuning and watching the effect on BenchmarkRestore.
 	const batchSizeBytes = 1000000
 
-	var wg syncutil.WaitGroupWithError
 	type batchBuilder struct {
 		batch         engine.RocksDBBatchBuilder
 		batchStartKey []byte
 		batchEndKey   []byte
 	}
 	b := batchBuilder{}
+	g, gCtx := errgroup.WithContext(ctx)
 	sendWriteBatch := func() {
-		batchStartKey := roachpb.Key(b.batchStartKey)
-		// The end key of the WriteBatch request is exclusive, but batchEndKey
-		// is currently the largest key in the batch. Increment it.
-		batchEndKey := roachpb.Key(b.batchEndKey).Next()
-		if log.V(1) {
-			log.Infof(ctx, "writebatch [%s,%s)", batchStartKey, batchEndKey)
-		}
+		start := roachpb.Key(b.batchStartKey)
+		// The end key of the WriteBatch request is exclusive, but batchEndKey is
+		// currently the largest key in the batch. Increment it.
+		end := roachpb.Key(b.batchEndKey).Next()
 
-		wg.Add(1)
-		go func(start, end roachpb.Key, repr []byte) {
-			if err := db.WriteBatch(ctx, start, end, repr); err != nil {
-				log.Errorf(ctx, "writebatch [%s,%s): %+v", start, end, err)
-				wg.Done(err)
-				cancel()
-				return
+		repr := b.batch.Finish()
+		g.Go(func() error {
+			if log.V(1) {
+				log.Infof(gCtx, "writebatch [%s,%s)", start, end)
 			}
-			wg.Done(nil)
-		}(batchStartKey, batchEndKey, b.batch.Finish())
+
+			return errors.Wrapf(db.WriteBatch(gCtx, start, end, repr), "writebatch [%s,%s)", start, end)
+		})
 		b = batchBuilder{}
 	}
 
@@ -166,7 +159,5 @@ func evalImport(ctx context.Context, cArgs storage.CommandArgs) error {
 	if b.batch.Len() > 0 {
 		sendWriteBatch()
 	}
-
-	err := wg.Wait()
-	return err
+	return g.Wait()
 }
