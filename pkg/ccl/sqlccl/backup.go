@@ -13,7 +13,9 @@ import (
 	"io/ioutil"
 	"sort"
 
+	"github.com/pkg/errors"
 	"golang.org/x/net/context"
+	"golang.org/x/sync/errgroup"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
@@ -28,7 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/interval"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	"github.com/pkg/errors"
 )
 
 const (
@@ -216,21 +217,20 @@ func Backup(
 		dataSize int64
 	}{}
 
-	var wg syncutil.WaitGroupWithError
 	header := roachpb.Header{Timestamp: endTime}
 	storageConf := exportStore.Conf()
+	g, gCtx := errgroup.WithContext(ctx)
 	for i := range spans {
-		wg.Add(1)
-		go func(span roachpb.Span) {
+		span := spans[i]
+		g.Go(func() error {
 			req := &roachpb.ExportRequest{
 				Span:      span,
 				Storage:   storageConf,
 				StartTime: startTime,
 			}
-			res, pErr := client.SendWrappedWith(ctx, db.GetSender(), header, req)
+			res, pErr := client.SendWrappedWith(gCtx, db.GetSender(), header, req)
 			if pErr != nil {
-				wg.Done(pErr.GoError())
-				return
+				return pErr.GoError()
 			}
 			mu.Lock()
 			defer mu.Unlock()
@@ -242,10 +242,10 @@ func Backup(
 				})
 				mu.dataSize += file.DataSize
 			}
-			wg.Done(nil)
-		}(spans[i])
+			return nil
+		})
 	}
-	if err := wg.Wait(); err != nil {
+	if err := g.Wait(); err != nil {
 		return BackupDescriptor{}, errors.Wrapf(err, "exporting %d ranges", len(spans))
 	}
 	files, dataSize := mu.files, mu.dataSize // No more concurrency, so this is safe.

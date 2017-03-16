@@ -26,6 +26,7 @@ import (
 
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
+	"golang.org/x/sync/errgroup"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -39,9 +40,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	uuid "github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
 // senderFn is a function that implements a Sender.
@@ -148,23 +148,21 @@ func TestTxnCoordSenderAddRequestConcurrently(t *testing.T) {
 	defer s.Stop()
 	defer teardownHeartbeats(sender)
 
-	txn := client.NewTxn(context.Background(), *s.DB)
+	ctx := context.Background()
+
+	txn := client.NewTxn(ctx, *s.DB)
 
 	// Put requests will create a new transaction.
 	sendRequests := func() error {
-		var wg syncutil.WaitGroupWithError
+		g, _ := errgroup.WithContext(ctx)
 		const requests = 30
 		for i := 0; i < requests; i++ {
-			wg.Add(1)
-			go func(i int) {
-				if err := txn.Put(roachpb.Key("a"+strconv.Itoa(i)), []byte("value")); err != nil {
-					wg.Done(err)
-					return
-				}
-				wg.Done(nil)
-			}(i)
+			key := roachpb.Key("a" + strconv.Itoa(i))
+			g.Go(func() error {
+				return txn.Put(key, []byte("value"))
+			})
 		}
-		return wg.Wait()
+		return g.Wait()
 	}
 	if err := sendRequests(); err != nil {
 		t.Fatal(err)
