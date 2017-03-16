@@ -139,6 +139,9 @@ type Session struct {
 	// cancelling the individual transactions as soon as they
 	// COMMIT/ROLLBACK.
 	cancel context.CancelFunc
+	// pipelineQueue is a queue managing all pipelined SQL statements
+	// running in this session.
+	pipelineQueue PipelineQueue
 	// mon tracks memory usage for SQL activity within this session. It
 	// is not directly used, but rather indirectly used via sessionMon
 	// and TxnState.mon. sessionMon tracks session-bound objects like prepared
@@ -205,6 +208,7 @@ func NewSession(
 		virtualSchemas: e.virtualSchemas,
 		execCfg:        &e.cfg,
 		distSQLPlanner: e.distSQLPlanner,
+		pipelineQueue:  MakePipelineQueue(NoDependenciesAnalyzer),
 		leaseMgr:       e.cfg.LeaseManager,
 		systemConfig:   cfg,
 		databaseCache:  cache,

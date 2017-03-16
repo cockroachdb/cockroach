@@ -398,6 +398,7 @@ func TestCommonMethods(t *testing.T) {
 		{txnType, "IsInitialized"}:             {},
 		{txnType, "IsRetryableErrMeantForTxn"}: {},
 		{txnType, "Isolation"}:                 {},
+		{txnType, "OrigTimestamp"}:             {},
 		{txnType, "Proto"}:                     {},
 		{txnType, "UserPriority"}:              {},
 	}

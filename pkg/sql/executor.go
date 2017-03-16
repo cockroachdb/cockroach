@@ -52,6 +52,7 @@ import (
 )
 
 var errNoTransactionInProgress = errors.New("there is no transaction in progress")
+var errNoTransactionToPipeline = errors.New("statement pipelining is only allowed in a transaction")
 var errStaleMetadata = errors.New("metadata is still stale")
 var errTransactionInProgress = errors.New("there is already a transaction in progress")
 var errNotRetriable = errors.New("the transaction is not in a retriable state")
@@ -817,10 +818,15 @@ func runTxnAttempt(
 	automaticRetryCount int,
 ) ([]Result, parser.StatementList, error) {
 
-	// Ignore the state that might have been set by a previous try
-	// of this closure.
-	txnState.State = origState
-	txnState.commitSeen = false
+	// Ignore the state that might have been set by a previous try of this
+	// closure. By putting these modifications to txnState behind the
+	// automaticRetryCount condition, we guarantee that no asynchronous
+	// statements are still executing and reading from the state. This
+	// means that no synchronization is necessary to prevent data races.
+	if automaticRetryCount > 0 {
+		txnState.State = origState
+		txnState.commitSeen = false
+	}
 
 	planMaker.setTxn(txnState.txn)
 	results, remainingStmts, err := e.execStmtsInCurrentTxn(
@@ -1080,6 +1086,20 @@ func (e *Executor) execStmtInOpenTxn(
 			txnState.updateStateAndCleanupOnErr(err, e)
 		}
 	}()
+
+	pipelined := IsStmtPipelined(stmt)
+	if pipelined && implicitTxn {
+		return Result{}, errNoTransactionToPipeline
+	}
+	// Don't wait on Show, because the client currently sends these after every
+	// request.
+	// TODO(nvanbenschoten) This should be generalized/reconsidered/improved.
+	if _, ok := stmt.(*parser.Show); !ok && !pipelined {
+		if err := planMaker.session.pipelineQueue.Wait(); err != nil {
+			return Result{}, err
+		}
+	}
+
 	switch s := stmt.(type) {
 	case *parser.BeginTransaction:
 		if !firstInTxn {
@@ -1170,7 +1190,11 @@ func (e *Executor) execStmtInOpenTxn(
 	}
 
 	autoCommit := implicitTxn && !e.cfg.TestingKnobs.DisableAutoCommit
-	result, err = e.execStmt(stmt, planMaker, autoCommit, automaticRetryCount)
+	if pipelined {
+		result, err = e.execStmtPipelined(stmt, planMaker)
+	} else {
+		result, err = e.execStmt(stmt, planMaker, autoCommit, automaticRetryCount)
+	}
 	if err != nil {
 		if result.Rows != nil {
 			result.Rows.Close(session.Ctx())
@@ -1368,20 +1392,8 @@ func (e *Executor) shouldUseDistSQL(planMaker *planner, plan planNode) (bool, er
 	return true, nil
 }
 
-// The current transaction might have been committed/rolled back when this returns.
-// The caller closes result.Rows (even in error cases).
-func (e *Executor) execStmt(
-	stmt parser.Statement, planMaker *planner, autoCommit bool, automaticRetryCount int,
-) (Result, error) {
-	session := planMaker.session
-
-	plan, err := planMaker.makePlan(session.Ctx(), stmt, autoCommit)
-	if err != nil {
-		return Result{}, err
-	}
-
-	defer plan.Close(planMaker.session.Ctx())
-
+// makeRes creates an empty result set for the given statement and plan.
+func makeRes(stmt parser.Statement, planMaker *planner, plan planNode) (Result, error) {
 	result := Result{
 		PGTag: stmt.StatementTag(),
 		Type:  stmt.StatementType(),
@@ -1394,6 +1406,27 @@ func (e *Executor) execStmt(
 			}
 		}
 		result.Rows = NewRowContainer(planMaker.session.makeBoundAccount(), result.Columns, 0)
+	}
+	return result, nil
+}
+
+// execStmt executes the statement synchronously and returns the statement's result.
+// The current transaction might have been committed/rolled back when this returns.
+// The caller closes result.Rows (even in error cases).
+func (e *Executor) execStmt(
+	stmt parser.Statement, planMaker *planner, autoCommit bool, automaticRetryCount int,
+) (Result, error) {
+	session := planMaker.session
+
+	plan, err := planMaker.makePlan(session.Ctx(), stmt, autoCommit)
+	if err != nil {
+		return Result{}, err
+	}
+	defer plan.Close(session.Ctx())
+
+	result, err := makeRes(stmt, planMaker, plan)
+	if err != nil {
+		return Result{}, err
 	}
 
 	useDistSQL, err := e.shouldUseDistSQL(planMaker, plan)
@@ -1412,6 +1445,43 @@ func (e *Executor) execStmt(
 		planMaker, stmt, useDistSQL, automaticRetryCount, result, err,
 	)
 	return result, err
+}
+
+// execStmtPipelined executes the statement asynchronously and returns mocked out
+// results. The current transaction might have been committed/rolled back when this
+// returns. The caller closes result.Rows (even in error cases).
+func (e *Executor) execStmtPipelined(stmt parser.Statement, planMaker *planner) (Result, error) {
+	// Make a clone of the planMaker so that future modifications elsewhere
+	// don't affect us here.
+	planMaker = planMaker.Clone()
+	session := planMaker.session
+
+	plan, err := planMaker.makePlan(session.Ctx(), stmt, false)
+	if err != nil {
+		return Result{}, err
+	}
+
+	mockResult, err := makeRes(stmt, planMaker, plan)
+	if err != nil {
+		return Result{}, err
+	}
+
+	session.pipelineQueue.Add(&plan, func() error {
+		defer plan.Close(session.Ctx())
+
+		result, err := makeRes(stmt, planMaker, plan)
+		if err != nil {
+			return err
+		}
+		defer result.Close(session.Ctx())
+
+		planMaker.phaseTimes[sessionStartExecStmt] = timeutil.Now()
+		err = e.execClassic(planMaker, plan, &result)
+		planMaker.phaseTimes[sessionEndExecStmt] = timeutil.Now()
+		e.recordStatementSummary(planMaker, stmt, false, 0, result, err)
+		return err
+	})
+	return mockResult, nil
 }
 
 // updateStmtCounts updates metrics for the number of times the different types of SQL
