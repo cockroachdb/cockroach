@@ -1442,11 +1442,7 @@ var sqlExca = [...]int{
 	-2, 1049,
 }
 
-const sqlNprod = 1194
 const sqlPrivate = 57344
-
-var sqlTokenNames []string
-var sqlStates []string
 
 const sqlLast = 27517
 
