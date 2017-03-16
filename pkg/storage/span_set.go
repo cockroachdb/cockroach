@@ -128,6 +128,10 @@ func (s *spanSetIterator) Close() {
 	s.i.Close()
 }
 
+func (s *spanSetIterator) Iterator() engine.Iterator {
+	return s.i
+}
+
 func (s *spanSetIterator) Seek(key engine.MVCCKey) {
 	s.err = s.spans.checkAllowed(SpanReadOnly, roachpb.Span{Key: key.Key})
 	if s.err == nil {
