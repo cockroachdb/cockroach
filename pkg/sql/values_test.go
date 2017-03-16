@@ -35,7 +35,7 @@ import (
 )
 
 func makeTestPlanner() *planner {
-	return makeInternalPlanner("test", nil, security.RootUser, &MemoryMetrics{})
+	return makePlanner("test", security.RootUser, &MemoryMetrics{})
 }
 
 func TestValues(t *testing.T) {
