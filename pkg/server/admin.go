@@ -464,19 +464,12 @@ func (s *adminServer) TableDetails(
 	// Get the number of ranges in the table. We get the key span for the table
 	// data. Then, we count the number of ranges that make up that key span.
 	{
-		iexecutor := sql.InternalExecutor{LeaseManager: s.server.leaseMgr}
-		var tableSpan roachpb.Span
-		if err := s.server.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
-			var err error
-			tableSpan, err = iexecutor.GetTableSpan(
-				ctx, s.getUser(req), txn, req.Database, req.Table,
-			)
-			return err
-		}); err != nil {
+		tableSpan, err := s.queryTableSpan(ctx, session, req.Database, req.Table)
+		if err != nil {
 			return nil, s.serverError(err)
 		}
+
 		tableRSpan := roachpb.RSpan{}
-		var err error
 		tableRSpan.Key, err = keys.Addr(tableSpan.Key)
 		if err != nil {
 			return nil, s.serverError(err)
@@ -528,19 +521,18 @@ func (s *adminServer) TableDetails(
 func (s *adminServer) TableStats(
 	ctx context.Context, req *serverpb.TableStatsRequest,
 ) (*serverpb.TableStatsResponse, error) {
+	args := sql.SessionArgs{User: s.getUser(req)}
+	ctx, session := s.NewContextAndSessionForRPC(ctx, args)
+	defer session.Finish(s.server.sqlExecutor)
+
 	escDBName := parser.Name(req.Database).String()
 	if err := s.assertNotVirtualSchema(escDBName); err != nil {
 		return nil, err
 	}
 
 	// Get table span.
-	var tableSpan roachpb.Span
-	iexecutor := sql.InternalExecutor{LeaseManager: s.server.leaseMgr}
-	if err := s.server.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
-		var err error
-		tableSpan, err = iexecutor.GetTableSpan(ctx, s.getUser(req), txn, req.Database, req.Table)
-		return err
-	}); err != nil {
+	tableSpan, err := s.queryTableSpan(ctx, session, req.Database, req.Table)
+	if err != nil {
 		return nil, s.serverError(err)
 	}
 
@@ -1427,6 +1419,40 @@ func (s *adminServer) queryDescriptorIDPath(
 		path = append(path, id)
 	}
 	return path, nil
+}
+
+func (s *adminServer) queryTableSpan(
+	ctx context.Context, session *sql.Session, database, table string,
+) (roachpb.Span, error) {
+	const query = `SELECT start_key, end_key FROM crdb_internal.tables
+		WHERE database_name = $1 AND name = $2`
+	params := parser.NewPlaceholderInfo()
+	params.SetValue(`1`, parser.NewDString(database))
+	params.SetValue(`2`, parser.NewDString(table))
+	r := s.server.sqlExecutor.ExecuteStatements(session, query, params)
+	defer r.Close(ctx)
+	if err := s.checkQueryResults(r.ResultList, 1); err != nil {
+		return roachpb.Span{}, err
+	}
+
+	results := r.ResultList[0]
+	if results.Rows.Len() != 1 {
+		return roachpb.Span{}, errors.Errorf(
+			"table %s.%s not found in crdb_internal.tables", database, table,
+		)
+	}
+
+	var startKey []byte
+	var endKey []byte
+	scanner := resultScanner{}
+	if err := scanner.ScanIndex(results.Rows.At(0), 0, &startKey); err != nil {
+		return roachpb.Span{}, err
+	}
+	if err := scanner.ScanIndex(results.Rows.At(0), 1, &endKey); err != nil {
+		return roachpb.Span{}, err
+	}
+
+	return roachpb.Span{Key: startKey, EndKey: endKey}, nil
 }
 
 // assertNotVirtualSchema checks if the provided database name corresponds to a
