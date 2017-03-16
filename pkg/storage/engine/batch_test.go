@@ -21,9 +21,11 @@ import (
 	"encoding/binary"
 	"fmt"
 	"reflect"
+	"sync/atomic"
 	"testing"
 
 	"github.com/gogo/protobuf/proto"
+	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
@@ -1002,5 +1004,58 @@ func TestBatchIteration(t *testing.T) {
 	}
 	if !testutils.IsError(iter.Error(), "Prev\\(\\) not supported") {
 		t.Fatalf("expected 'Prev() not supported', got %s", iter.Error())
+	}
+}
+
+// Test combining of concurrent commits of write-only batches, verifying that
+// all of the keys written by the individual batches are subsequently readable.
+func TestBatchCombine(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+	e := NewInMem(roachpb.Attributes{}, 1<<20)
+	stopper.AddCloser(e)
+
+	var n uint32
+	const count = 10000
+
+	errs := make(chan error, 10)
+	for i := 0; i < cap(errs); i++ {
+		go func() {
+			for {
+				v := atomic.AddUint32(&n, 1) - 1
+				if v >= count {
+					break
+				}
+				k := fmt.Sprint(v)
+
+				b := e.NewWriteOnlyBatch()
+				if err := b.Put(mvccKey(k), []byte(k)); err != nil {
+					errs <- errors.Wrap(err, "put failed")
+					return
+				}
+				if err := b.Commit(false); err != nil {
+					errs <- errors.Wrap(err, "commit failed")
+					return
+				}
+
+				// Verify we can read the key we just wrote immediately.
+				if v, err := e.Get(mvccKey(k)); err != nil {
+					errs <- errors.Wrap(err, "get failed")
+					return
+				} else if string(v) != k {
+					errs <- errors.Errorf("read %q from engine, expected %q", v, k)
+					return
+				}
+			}
+			errs <- nil
+		}()
+	}
+
+	for i := 0; i < cap(errs); i++ {
+		if err := <-errs; err != nil {
+			t.Error(err)
+		}
 	}
 }
