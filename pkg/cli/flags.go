@@ -343,18 +343,23 @@ func init() {
 	boolFlag(setUserCmd.Flags(), &password, cliflags.Password, false)
 
 	clientCmds := []*cobra.Command{
-		sqlShellCmd, quitCmd, freezeClusterCmd, dumpCmd, /* startCmd is covered above */
+		debugZipCmd,
+		dumpCmd,
+		freezeClusterCmd,
+		genHAProxyCmd,
+		quitCmd,
+		sqlShellCmd,
+		/* startCmd is covered above */
 	}
 	clientCmds = append(clientCmds, kvCmds...)
 	clientCmds = append(clientCmds, rangeCmds...)
 	clientCmds = append(clientCmds, userCmds...)
 	clientCmds = append(clientCmds, zoneCmds...)
 	clientCmds = append(clientCmds, nodeCmds...)
-	clientCmds = append(clientCmds, debugZipCmd)
-	clientCmds = append(clientCmds, genHAProxyCmd)
 	for _, cmd := range clientCmds {
 		f := cmd.PersistentFlags()
 		stringFlag(f, &connHost, cliflags.ClientHost, "")
+		stringFlag(f, &connPort, cliflags.ClientPort, base.DefaultPort)
 
 		varFlag(f, insecure, cliflags.Insecure)
 		// Allow '--insecure'
@@ -376,18 +381,6 @@ func init() {
 
 	boolFlag(freezeClusterCmd.PersistentFlags(), &undoFreezeCluster, cliflags.UndoFreezeCluster, false)
 
-	// Commands that need the cockroach port.
-	simpleCmds := []*cobra.Command{quitCmd, freezeClusterCmd}
-	simpleCmds = append(simpleCmds, kvCmds...)
-	simpleCmds = append(simpleCmds, rangeCmds...)
-	simpleCmds = append(simpleCmds, nodeCmds...)
-	simpleCmds = append(simpleCmds, debugZipCmd)
-	simpleCmds = append(simpleCmds, genHAProxyCmd)
-	for _, cmd := range simpleCmds {
-		f := cmd.PersistentFlags()
-		stringFlag(f, &connPort, cliflags.ClientPort, base.DefaultPort)
-	}
-
 	// Commands that establish a SQL connection.
 	sqlCmds := []*cobra.Command{sqlShellCmd, dumpCmd}
 	sqlCmds = append(sqlCmds, zoneCmds...)
@@ -397,7 +390,6 @@ func init() {
 		stringFlag(f, &connURL, cliflags.URL, "")
 
 		stringFlag(f, &connUser, cliflags.User, security.RootUser)
-		stringFlag(f, &connPort, cliflags.ClientPort, base.DefaultPort)
 		stringFlag(f, &connDBName, cliflags.Database, "")
 	}
 
