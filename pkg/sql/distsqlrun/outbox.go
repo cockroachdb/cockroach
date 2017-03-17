@@ -205,13 +205,11 @@ func (m *outbox) mainLoop(ctx context.Context) error {
 		m.RowChannel.ConsumerClosed()
 	}()
 
-	if m.stream != nil {
-		// Send a first message that will contain the header (i.e. the StreamID), so
-		// that the stream is properly initialized on the consumer. The consumer has
-		// a timeout in which inbound streams must be established.
-		if err := m.flush(ctx); err != nil {
-			return err
-		}
+	// Send a first message that will contain the header (i.e. the StreamID), so
+	// that the stream is properly initialized on the consumer. The consumer has
+	// a timeout in which inbound streams must be established.
+	if err := m.flush(ctx); err != nil {
+		return err
 	}
 
 	for {
