@@ -17,7 +17,6 @@ if [ "${1-}" = "docker" ]; then
     time make TYPE=release build
 
     check_static cockroach
-    strip -S cockroach
 
     mv cockroach build/deploy/cockroach
 

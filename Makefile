@@ -82,6 +82,7 @@ export GIT_PAGER :=
 TAR_XFORM_FLAG = $(shell $(TAR) --version | grep -q GNU && echo "--xform=s" || echo "-s")
 
 GIT_DIR := $(shell git rev-parse --git-dir 2> /dev/null)
+LDFLAGS += -s -w
 
 ifeq ($(TYPE),)
 override LDFLAGS += -X github.com/cockroachdb/cockroach/pkg/build.typ=development
