@@ -19,8 +19,5 @@ check_static "cli/cli.test${SUFFIX-}"
 # Try running the cockroach binary.
 MALLOC_CONF=prof:true ./cockroach${SUFFIX-} version
 
-strip -S "cockroach${SUFFIX-}"
-find . -type f -name '*.test*' -exec strip -S {} ';'
-
 rm -f "$archive"
 time tar cfz "$archive" -C .. $(git ls-files | sed -r 's,^,cockroach/,') $(find . -type f -name '*.test*' -and -not -name 'acceptance.test*' | sed 's,^\./,cockroach/,')
