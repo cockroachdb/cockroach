@@ -121,7 +121,7 @@ func TestJoinReader(t *testing.T) {
 		jr.Run(context.Background(), nil)
 
 		if !in.Done {
-			t.Fatal("joinReader didn't consumer all the rows")
+			t.Fatal("joinReader didn't consume all the rows")
 		}
 		if !out.ProducerClosed {
 			t.Fatalf("output RowReceiver not closed")
@@ -142,5 +142,52 @@ func TestJoinReader(t *testing.T) {
 		if result := res.String(); result != c.expected {
 			t.Errorf("invalid results: %s, expected %s'", result, c.expected)
 		}
+	}
+}
+
+// TestJoinReaderClosedOutput verifies that when a joinReader's consumer is
+// closed, the joinReader finishes gracefully.
+func TestJoinReaderClosedOutput(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop()
+
+	numRows := 1
+	sqlutils.CreateTable(
+		t,
+		sqlDB,
+		"t",
+		"a INT, PRIMARY KEY (a)",
+		numRows,
+		sqlutils.ToRowFn(sqlutils.RowIdxFn),
+	)
+	td := sqlbase.GetTableDescriptor(kvDB, "test", "t")
+
+	flowCtx := FlowCtx{
+		evalCtx:  parser.EvalContext{},
+		txnProto: &roachpb.Transaction{},
+		clientDB: kvDB,
+	}
+
+	in := &RowBuffer{}
+	encRow := make(sqlbase.EncDatumRow, numRows)
+	encRow[0] = sqlbase.DatumToEncDatum(
+		sqlbase.ColumnType{Kind: sqlbase.ColumnType_INT},
+		parser.NewDInt(1),
+	)
+	if status := in.Push(encRow, ProducerMetadata{}); status != NeedMoreRows {
+		t.Fatalf("unexpected response: %d", status)
+	}
+
+	out := &RowBuffer{}
+	out.ConsumerClosed()
+	jr, err := newJoinReader(&flowCtx, &JoinReaderSpec{Table: *td}, in, &PostProcessSpec{}, out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	jr.Run(context.Background(), nil)
+	if !in.Done {
+		t.Fatal("producer did not drain")
 	}
 }
