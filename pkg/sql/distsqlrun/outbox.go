@@ -26,7 +26,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/pkg/errors"
 )
 
 const outboxBufRows = 16
@@ -235,11 +234,19 @@ func (m *outbox) mainLoop(ctx context.Context) error {
 				return err
 			}
 		case drainSignal := <-drainCh:
-			// TODO(andreimatei): This was breaking TestMetacheck with an empty branch error.
-			// if drainSignal.err != nil {
-			// }
+			if drainSignal.err != nil {
+				// The consumer either doesn't care any more (it returned from the
+				// FlowStream RPC with an error if the outbox established the stream or
+				// it cancelled the client context if the consumer established the
+				// stream through a RunSyncFlow RPC), or there was a communication error
+				// and the stream is dead. In any case, the stream has been closed and
+				// the consumer will not consume more rows from this outbox. Make sure
+				// the stream is not used any more.
+				m.stream = nil
+				m.syncFlowStream = nil
+				return drainSignal.err
+			}
 			drainCh = nil
-			m.err = drainSignal.err
 			if drainSignal.drainRequested {
 				// Enter draining mode.
 				draining = true
@@ -260,8 +267,8 @@ type drainSignal struct {
 	// trailing metadata that the producer might have. If not set, the producer
 	// should close immediately (the consumer is probably gone by now).
 	drainRequested bool
-	// err, if set, is the error that the consumer returned when closing the
-	// FlowStream RPC.
+	// err, if set, is either the error that the consumer returned when closing
+	// the FlowStream RPC or a communication error.
 	err error
 }
 
@@ -287,13 +294,6 @@ func (m *outbox) waitForDrainSignalFromConsumer() <-chan drainSignal {
 		}
 		if err != nil {
 			ch <- drainSignal{drainRequested: false, err: err}
-			return
-		}
-		if signal.Error != nil {
-			ch <- drainSignal{
-				drainRequested: false,
-				err:            errors.Wrap(signal.Error.GoError(), "consumer signaled error"),
-			}
 			return
 		}
 		ch <- drainSignal{drainRequested: signal.DrainRequest != nil, err: nil}
