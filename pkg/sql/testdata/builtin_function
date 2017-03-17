@@ -503,6 +503,11 @@ SELECT floor(-1.5::float), floor(1.5::float), floor(9.123456789::decimal)
 ----
 -2 1 9
 
+query BBBBBB
+SELECT 1 IS NAN, 1 IS NOT NAN, isnan(1), 'NaN'::FLOAT IS NAN, 'NaN'::FLOAT IS NOT NAN, isnan('NaN'::FLOAT)
+----
+false true false true false true
+
 query RRR
 SELECT ln(-2.0::float), ln(2.0::float), ln(2.5::decimal)
 ----
