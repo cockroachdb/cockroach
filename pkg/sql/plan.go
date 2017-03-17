@@ -365,6 +365,10 @@ func (p *planner) newPlan(
 	}
 }
 
+// prepare constructs the logical plan for the statement.  This is
+// needed both to type placeholders and inform pgwire of the types of
+// the result columns. All statements that support either placeholders
+// of have result columns must be handled here.
 func (p *planner) prepare(ctx context.Context, stmt parser.Statement) (planNode, error) {
 	if plan, err := p.maybePlanHook(ctx, stmt); plan != nil || err != nil {
 		return plan, err
@@ -373,6 +377,8 @@ func (p *planner) prepare(ctx context.Context, stmt parser.Statement) (planNode,
 	switch n := stmt.(type) {
 	case *parser.Delete:
 		return p.Delete(ctx, n, nil, false)
+	case *parser.Explain:
+		return p.Explain(ctx, n, false)
 	case *parser.Help:
 		return p.Help(ctx, n)
 	case *parser.Insert:
@@ -406,8 +412,8 @@ func (p *planner) prepare(ctx context.Context, stmt parser.Statement) (planNode,
 	case *parser.Update:
 		return p.Update(ctx, n, nil, false)
 	default:
-		// Other statement types do not support placeholders so there is no need
-		// for any special handling here.
+		// Other statement types do not have result columns so there is no
+		// need for any special handling here.
 		return nil, nil
 	}
 }

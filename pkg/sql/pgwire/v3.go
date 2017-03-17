@@ -786,6 +786,11 @@ func (c *v3Conn) handleBind(ctx context.Context, buf *readBuffer) error {
 	if err != nil {
 		return err
 	}
+
+	if log.V(2) {
+		log.Infof(ctx, "portal: %q for %q, args %q, formats %q", portalName, stmt, qargs, columnFormatCodes)
+	}
+
 	// Attach pgwire-specific metadata to the PreparedPortal.
 	portal.ProtocolMeta = preparedPortalMeta{outFormats: columnFormatCodes}
 	c.writeBuf.initMsg(serverMsgBindComplete)
