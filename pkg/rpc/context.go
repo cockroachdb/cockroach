@@ -84,6 +84,7 @@ func NewServer(ctx *Context) *grpc.Server {
 		// Our maximum kv size is unlimited, so we need this to be very large.
 		// TODO(peter,tamird): need tests before lowering
 		grpc.MaxMsgSize(math.MaxInt32),
+		grpc.CustomCodec(snappyCodec{}),
 	}
 	if !ctx.Insecure {
 		tlsConfig, err := ctx.GetServerTLSConfig()
@@ -239,6 +240,7 @@ func (ctx *Context) GRPCDial(target string, opts ...grpc.DialOption) (*grpc.Clie
 		dialOpts := make([]grpc.DialOption, 0, 2+len(opts))
 		dialOpts = append(dialOpts, dialOpt)
 		dialOpts = append(dialOpts, grpc.WithBackoffMaxDelay(maxBackoff))
+		dialOpts = append(dialOpts, grpc.WithCodec(snappyCodec{}))
 		dialOpts = append(dialOpts, opts...)
 
 		if SourceAddr != nil {
