@@ -18,7 +18,7 @@ To install CockroachDB to ./bin/cockroach:
 To install CockroachDB onto your PATH:
 
      $ make install
-     $ sudo mv ./bin/cockroach /usr/local/bin/cockroach
+     $ sudo cp -i ./bin/cockroach /usr/local/bin/cockroach
 
 To interact with a one-node SQL cluster:
 
