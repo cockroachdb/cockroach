@@ -75,7 +75,7 @@ dependency unless it has a direct or transitive pin, which means even when attem
 unless they are pinned.
 
 Thus for libraries where we care about what version we resolve -- e.g. if they affect stability, if we
-want to vet upstream chanages, if we rely on features or fixes in specific upstream versions, etc --
+want to vet upstream changes, if we rely on features or fixes in specific upstream versions, etc --
 we pin revisions to make them stable between `update` runs, and only unpin them when we actually want
 them to change. While not a hard rule, if we directly import something in our code, there's a decent
 chance we care about it enough that we want its version to remain stable unless intentionally changed,
