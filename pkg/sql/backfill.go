@@ -591,8 +591,6 @@ const (
 	indexBackfill
 )
 
-type mutationFilter func(sqlbase.DescriptorMutation) bool
-
 // getSpansToBackfill returns the spans that still have to be backfilled
 // for the first mutation enqueued on the table descriptor that passes the
 // input mutationFilter.
@@ -600,7 +598,7 @@ type mutationFilter func(sqlbase.DescriptorMutation) bool
 // Returns nil if the backfill is complete (mutation no longer exists or there
 // are no "ResumeSpans").
 func (sc *SchemaChanger) getSpansToBackfill(
-	ctx context.Context, filter mutationFilter,
+	ctx context.Context, filter distsqlrun.MutationFilter,
 ) ([]roachpb.Span, error) {
 	var spans []roachpb.Span
 	err := sc.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
@@ -628,14 +626,14 @@ func (sc *SchemaChanger) getSpansToBackfill(
 
 // distBackfill runs (or continues) a backfill for the first mutation
 // enqueued on the SchemaChanger's table descriptor that passes the input
-// mutationFilter.
+// MutationFilter.
 func (sc *SchemaChanger) distBackfill(
 	ctx context.Context,
 	lease *sqlbase.TableDescriptor_SchemaChangeLease,
 	version sqlbase.DescriptorVersion,
 	backfillType backfillType,
 	backfillChunkSize int64,
-	filter mutationFilter,
+	filter distsqlrun.MutationFilter,
 ) error {
 	duration := checkpointInterval
 	if sc.testingKnobs.WriteCheckpointInterval > 0 {
@@ -690,8 +688,5 @@ func (sc *SchemaChanger) backfillIndexes(
 	lease *sqlbase.TableDescriptor_SchemaChangeLease,
 	version sqlbase.DescriptorVersion,
 ) error {
-	indexFilter := func(m sqlbase.DescriptorMutation) bool {
-		return m.GetIndex() != nil && m.Direction == sqlbase.DescriptorMutation_ADD
-	}
-	return sc.distBackfill(ctx, lease, version, indexBackfill, indexBackfillChunkSize, indexFilter)
+	return sc.distBackfill(ctx, lease, version, indexBackfill, indexBackfillChunkSize, distsqlrun.IndexMutationFilter)
 }
