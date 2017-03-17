@@ -72,8 +72,10 @@ for test in "${tests[@]}"; do
         ssh -o "ServerAliveInterval=60" -o "StrictHostKeyChecking no" -i "$HOME/.ssh/${KEY_NAME}" "ubuntu@${controller}" "${testcmd}"
         if [ $? -ne 0 ]; then
             # Test failed: grab everything.
-            echo "Test failed. Grabbing logs..."
-            scp -o "StrictHostKeyChecking no" -ri "$HOME/.ssh/${KEY_NAME}" "ubuntu@${controller}:jepsen/cockroachdb/store/latest" "${artifacts_dir}"
+            echo "Test failed. Grabbing all logs..."
+            archive_path="jepsen/cockroachdb/store/failure-logs.tgz"
+            ssh -o "StrictHostKeyChecking no" -i "$HOME/.ssh/${KEY_NAME}" "ubuntu@${controller}" "tar -czf ${archive_path} jepsen/cockroachdb/store/latest"
+            scp -o "StrictHostKeyChecking no" -ri "$HOME/.ssh/${KEY_NAME}" "ubuntu@${controller}:${archive_path}" "${artifacts_dir}"
             echo "##teamcity[testFailed name='${test} ${nemesis}']"
         else
             # Test passed. grab just the results file.
