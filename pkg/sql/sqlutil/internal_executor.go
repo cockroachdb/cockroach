@@ -19,7 +19,7 @@ package sqlutil
 import (
 	"golang.org/x/net/context"
 
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/kv/client"
 )
 
 // InternalExecutor is meant to be used by layers below SQL in the system that
