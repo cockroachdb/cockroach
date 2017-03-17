@@ -37,12 +37,19 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
-func newTestServer(t *testing.T, ctx *Context, manual bool) (*grpc.Server, net.Listener) {
+func newTestServer(t *testing.T, ctx *Context, compression bool) (*grpc.Server, net.Listener) {
 	tlsConfig, err := ctx.GetServerTLSConfig()
 	if err != nil {
 		t.Fatal(err)
 	}
-	s := grpc.NewServer(grpc.Creds(credentials.NewTLS(tlsConfig)))
+	opts := []grpc.ServerOption{
+		grpc.Creds(credentials.NewTLS(tlsConfig)),
+		grpc.RPCDecompressor(snappyDecompressor{}),
+	}
+	if compression {
+		opts = append(opts, grpc.RPCCompressor(snappyCompressor{}))
+	}
+	s := grpc.NewServer(opts...)
 
 	ln, err := netutil.ListenAndServeGRPC(ctx.Stopper, s, util.TestAddr)
 	if err != nil {
@@ -55,37 +62,42 @@ func newTestServer(t *testing.T, ctx *Context, manual bool) (*grpc.Server, net.L
 func TestHeartbeatCB(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	stopper := stop.NewStopper()
-	defer stopper.Stop()
+	for _, compression := range []bool{false, true} {
+		t.Run("", func(t *testing.T) {
+			stopper := stop.NewStopper()
+			defer stopper.Stop()
 
-	clock := hlc.NewClock(time.Unix(0, 20).UnixNano, time.Nanosecond)
-	serverCtx := newNodeTestContext(clock, stopper)
-	s, ln := newTestServer(t, serverCtx, true)
-	remoteAddr := ln.Addr().String()
+			clock := hlc.NewClock(time.Unix(0, 20).UnixNano, time.Nanosecond)
+			serverCtx := newNodeTestContext(clock, stopper)
+			s, ln := newTestServer(t, serverCtx, compression)
+			remoteAddr := ln.Addr().String()
 
-	RegisterHeartbeatServer(s, &HeartbeatService{
-		clock:              clock,
-		remoteClockMonitor: serverCtx.RemoteClocks,
-	})
+			RegisterHeartbeatServer(s, &HeartbeatService{
+				clock:              clock,
+				remoteClockMonitor: serverCtx.RemoteClocks,
+			})
 
-	// Clocks don't matter in this test.
-	clientCtx := newNodeTestContext(clock, stopper)
+			// Clocks don't matter in this test.
+			clientCtx := newNodeTestContext(clock, stopper)
+			clientCtx.rpcCompression = compression
 
-	var once sync.Once
-	ch := make(chan struct{})
+			var once sync.Once
+			ch := make(chan struct{})
 
-	clientCtx.HeartbeatCB = func() {
-		once.Do(func() {
-			close(ch)
+			clientCtx.HeartbeatCB = func() {
+				once.Do(func() {
+					close(ch)
+				})
+			}
+
+			_, err := clientCtx.GRPCDial(remoteAddr)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			<-ch
 		})
 	}
-
-	_, err := clientCtx.GRPCDial(remoteAddr)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	<-ch
 }
 
 // TestHeartbeatHealth verifies that the health status changes after

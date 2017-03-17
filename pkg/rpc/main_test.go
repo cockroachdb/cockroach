@@ -39,5 +39,6 @@ func newNodeTestContext(clock *hlc.Clock, stopper *stop.Stopper) *Context {
 	ctx := NewContext(log.AmbientContext{}, testutils.NewNodeTestBaseContext(), clock, stopper)
 	ctx.HeartbeatInterval = 10 * time.Millisecond
 	ctx.HeartbeatTimeout = 2 * defaultHeartbeatInterval
+	ctx.rpcCompression = true
 	return ctx
 }
