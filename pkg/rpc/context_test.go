@@ -42,7 +42,10 @@ func newTestServer(t *testing.T, ctx *Context, manual bool) (*grpc.Server, net.L
 	if err != nil {
 		t.Fatal(err)
 	}
-	s := grpc.NewServer(grpc.Creds(credentials.NewTLS(tlsConfig)))
+	s := grpc.NewServer(
+		grpc.Creds(credentials.NewTLS(tlsConfig)),
+		grpc.CustomCodec(snappyCodec{}),
+	)
 
 	ln, err := netutil.ListenAndServeGRPC(ctx.Stopper, s, util.TestAddr)
 	if err != nil {
