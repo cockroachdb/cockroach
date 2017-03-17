@@ -74,7 +74,8 @@ for test in "${tests[@]}"; do
             # Test failed: grab everything.
             echo "Test failed. Grabbing all logs..."
             archive_path="jepsen/cockroachdb/store/failure-logs.tgz"
-            ssh -o "StrictHostKeyChecking no" -i "$HOME/.ssh/${KEY_NAME}" "ubuntu@${controller}" "tar -czf ${archive_path} jepsen/cockroachdb/store/latest"
+            # -h causes tar to follow symlinks; needed by the `latest` symlink.
+            ssh -o "StrictHostKeyChecking no" -hi "$HOME/.ssh/${KEY_NAME}" "ubuntu@${controller}" "tar -czf ${archive_path} jepsen/cockroachdb/store/latest"
             scp -o "StrictHostKeyChecking no" -ri "$HOME/.ssh/${KEY_NAME}" "ubuntu@${controller}:${archive_path}" "${artifacts_dir}"
             echo "##teamcity[testFailed name='${test} ${nemesis}']"
         else
