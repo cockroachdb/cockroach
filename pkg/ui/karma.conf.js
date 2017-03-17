@@ -17,7 +17,7 @@ module.exports = function (config) {
       ],
     },
 
-    browsers: ['PhantomJS'],
+    browsers: ['jsdom'],
 
     singleRun: true,
 
