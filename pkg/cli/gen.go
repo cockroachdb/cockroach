@@ -119,6 +119,7 @@ var genCmds = []*cobra.Command{
 	genManCmd,
 	genAutocompleteCmd,
 	genExamplesCmd,
+	genHAProxyCmd,
 }
 
 func init() {
@@ -126,6 +127,8 @@ func init() {
 		"path where man pages will be outputted")
 	genAutocompleteCmd.PersistentFlags().StringVar(&autoCompletePath, "out", "cockroach.bash",
 		"path to generated autocomplete file")
+	genHAProxyCmd.PersistentFlags().StringVar(&haProxyPath, "out", "haproxy.cfg",
+		"path to generated haproxy configuration file")
 
 	genCmd.AddCommand(genCmds...)
 }

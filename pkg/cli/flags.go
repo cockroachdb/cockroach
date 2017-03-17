@@ -351,6 +351,7 @@ func init() {
 	clientCmds = append(clientCmds, zoneCmds...)
 	clientCmds = append(clientCmds, nodeCmds...)
 	clientCmds = append(clientCmds, debugZipCmd)
+	clientCmds = append(clientCmds, genHAProxyCmd)
 	for _, cmd := range clientCmds {
 		f := cmd.PersistentFlags()
 		stringFlag(f, &connHost, cliflags.ClientHost, "")
@@ -381,6 +382,7 @@ func init() {
 	simpleCmds = append(simpleCmds, rangeCmds...)
 	simpleCmds = append(simpleCmds, nodeCmds...)
 	simpleCmds = append(simpleCmds, debugZipCmd)
+	simpleCmds = append(simpleCmds, genHAProxyCmd)
 	for _, cmd := range simpleCmds {
 		f := cmd.PersistentFlags()
 		stringFlag(f, &connPort, cliflags.ClientPort, base.DefaultPort)
