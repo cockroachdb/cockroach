@@ -731,6 +731,10 @@ func TestPGPreparedQuery(t *testing.T) {
 		"SELECT * FROM d.empty": {
 			baseTest.SetArgs(),
 		},
+		// #14238
+		"EXPLAIN SELECT 1": {
+			baseTest.SetArgs().Results(0, "render", "", "").Results(1, "nullrow", "", ""),
+		},
 
 		// TODO(jordan) blocked on #13651
 		//"SELECT $1::INT[]": {
