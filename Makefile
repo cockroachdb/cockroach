@@ -86,7 +86,7 @@ GIT_DIR := $(shell git rev-parse --git-dir 2> /dev/null)
 ifeq ($(TYPE),)
 override LDFLAGS += -X github.com/cockroachdb/cockroach/pkg/build.typ=development
 else ifeq ($(TYPE),release)
-override LDFLAGS += -X github.com/cockroachdb/cockroach/pkg/build.typ=release
+override LDFLAGS += -s -w -X github.com/cockroachdb/cockroach/pkg/build.typ=release
 else ifeq ($(TYPE),musl)
 # This tag disables jemalloc profiling. See https://github.com/jemalloc/jemalloc/issues/585.
 override TAGS += musl
