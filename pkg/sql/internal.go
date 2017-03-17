@@ -45,7 +45,7 @@ func (ie InternalExecutor) ExecuteStatementInTransaction(
 ) (int, error) {
 	p := makeInternalPlanner(opName, txn, security.RootUser, ie.LeaseManager.memMetrics)
 	defer finishInternalPlanner(p)
-	p.leaseMgr = ie.LeaseManager
+	p.session.leaseMgr = ie.LeaseManager
 	return p.exec(ctx, statement, qargs...)
 }
 
@@ -56,7 +56,7 @@ func (ie InternalExecutor) GetTableSpan(
 	// Lookup the table ID.
 	p := makeInternalPlanner("get-table-span", txn, user, ie.LeaseManager.memMetrics)
 	defer finishInternalPlanner(p)
-	p.leaseMgr = ie.LeaseManager
+	p.session.leaseMgr = ie.LeaseManager
 
 	tn := parser.TableName{DatabaseName: parser.Name(dbName), TableName: parser.Name(tableName)}
 	tableID, err := getTableID(ctx, p, &tn)

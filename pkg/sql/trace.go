@@ -114,7 +114,7 @@ func (n *explainTraceNode) hijackTxnContext(ctx context.Context) error {
 	// Everything running on the planner/session until Close() will be done with
 	// the tracingCtx. More exactly, the inner n.plan will run with this hijacked
 	// context.
-	n.restorePlannerCtx = n.p.hijackCtx(tracingCtx)
+	n.restorePlannerCtx = n.p.session.hijackCtx(tracingCtx)
 	return nil
 }
 

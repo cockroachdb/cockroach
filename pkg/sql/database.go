@@ -177,7 +177,7 @@ func (p *planner) getCachedDatabaseDesc(name string) (*sqlbase.DatabaseDescripto
 	}
 
 	nameKey := databaseKey{name}
-	nameVal := p.systemConfig.GetValue(nameKey.Key())
+	nameVal := p.session.systemConfig.GetValue(nameKey.Key())
 	if nameVal == nil {
 		return nil, fmt.Errorf("database %q does not exist in system cache", name)
 	}
@@ -188,7 +188,7 @@ func (p *planner) getCachedDatabaseDesc(name string) (*sqlbase.DatabaseDescripto
 	}
 
 	descKey := sqlbase.MakeDescMetadataKey(sqlbase.ID(id))
-	descVal := p.systemConfig.GetValue(descKey)
+	descVal := p.session.systemConfig.GetValue(descKey)
 	if descVal == nil {
 		return nil, fmt.Errorf("database %q has name entry, but no descriptor in system cache", name)
 	}
@@ -228,7 +228,7 @@ func (p *planner) getDatabaseID(ctx context.Context, name string) (sqlbase.ID, e
 		return virtual.GetID(), nil
 	}
 
-	if id := p.databaseCache.getID(name); id != 0 {
+	if id := p.session.databaseCache.getID(name); id != 0 {
 		return id, nil
 	}
 
@@ -247,7 +247,7 @@ func (p *planner) getDatabaseID(ctx context.Context, name string) (sqlbase.ID, e
 		}
 	}
 
-	p.databaseCache.setID(name, desc.ID)
+	p.session.databaseCache.setID(name, desc.ID)
 	return desc.ID, nil
 }
 

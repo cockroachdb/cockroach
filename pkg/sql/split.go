@@ -125,7 +125,7 @@ func (n *splitNode) Start(context.Context) error {
 	}
 	n.key = keys.MakeRowSentinelKey(key)
 
-	return n.p.execCfg.DB.AdminSplit(context.TODO(), n.key)
+	return n.p.session.execCfg.DB.AdminSplit(context.TODO(), n.key)
 }
 
 func (n *splitNode) Next(context.Context) (bool, error) {

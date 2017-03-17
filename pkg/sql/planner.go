@@ -35,32 +35,22 @@ import (
 
 // planner is the centerpiece of SQL statement execution combining session
 // state and database state with the logic for SQL execution.
-// A planner is generally part of a Session object. If one needs to be created
-// outside of a Session, use makePlanner().
+//
+// A planner is generally part of a Session object. It is logically scoped
+// to the execution of a single statement, but can be reused after a statement's
+// execution completes. It is not safe to use the same planner from multiple
+// goroutines concurrently.
+//
+// If one needs to be created outside of a Session, use makePlanner().
 type planner struct {
 	txn *client.Txn
+
 	// As the planner executes statements, it may change the current user session.
-	// TODO(andrei): see if the circular dependency between planner and Session
-	// can be broken if we move the User and Database here from the Session.
-	session  *Session
-	semaCtx  parser.SemaContext
-	evalCtx  parser.EvalContext
-	leases   []*LeaseState
-	leaseMgr *LeaseManager
-	sqlStats *sqlStats
+	session *Session
 
-	distSQLPlanner *distSQLPlanner
-
-	// This is used as a cache for database names.
-	// TODO(andrei): get rid of it and replace it with a leasing system for
-	// database descriptors.
-	systemConfig  config.SystemConfig
-	databaseCache *databaseCache
-
-	testingVerifyMetadataFn func(config.SystemConfig) error
-	verifyFnCheckedOnce     bool
-
-	parser parser.Parser
+	// Contexts for different stages of planning and execution.
+	semaCtx parser.SemaContext
+	evalCtx parser.EvalContext
 
 	// If set, table descriptors will only be fetched at the time of the
 	// transaction, not leased. This is used for things like AS OF SYSTEM TIME
@@ -72,15 +62,22 @@ type planner struct {
 	// initializing plans to read from a table. This should be used with care.
 	skipSelectPrivilegeChecks bool
 
-	// If set, contains the in progress COPY FROM columns.
-	copyFrom *copyNode
+	// phaseTimes helps measure the time spent in each phase of SQL execution.
+	// See executor_statement_metrics.go for details.
+	phaseTimes phaseTimes
 
-	// Avoid allocations by embedding commonly used visitors.
+	// Avoid allocations by embedding commonly used objects and visitors.
+	parser                parser.Parser
 	subqueryVisitor       subqueryVisitor
 	subqueryPlanVisitor   subqueryPlanVisitor
 	nameResolutionVisitor nameResolutionVisitor
 
-	execCfg *ExecutorConfig
+	// If set, called after the planner is done executing the current SQL statement.
+	// It can be used to verify assumptions about how metadata will be asynchronously
+	// updated. Note that this can overwrite a previous callback that was waiting to be
+	// verified, which is not ideal.
+	testingVerifyMetadataFn func(config.SystemConfig) error
+	verifyFnCheckedOnce     bool
 
 	noCopy util.NoCopy
 }
@@ -226,23 +223,7 @@ type queryRunner interface {
 var _ queryRunner = &planner{}
 
 func (p *planner) ExecCfg() *ExecutorConfig {
-	return p.execCfg
-}
-
-// hijackCtx changes the current transaction's context to the provided one and
-// returns a cleanup function to be used to restore the original context when
-// the hijack is no longer needed.
-// TODO(andrei): delete this when EXPLAIN(TRACE) goes away
-func (p *planner) hijackCtx(ctx context.Context) func() {
-	if p.session.TxnState.State != Open {
-		// This hijacking is dubious to begin with. Let's at least assert it's being
-		// done when the TxnState is in an expected state. In particular, if the
-		// state would be NoTxn, then we'd need to hijack session.Ctx instead of the
-		// txnState's context.
-		log.Fatalf(ctx, "can only hijack while a SQL txn is Open. txnState: %+v",
-			&p.session.TxnState)
-	}
-	return p.session.TxnState.hijackCtx(ctx)
+	return p.session.execCfg
 }
 
 // setTxn implements the queryRunner interface.
@@ -309,8 +290,8 @@ func (p *planner) resetForBatch(e *Executor) {
 	// Update the systemConfig to a more recent copy, so that we can use tables
 	// that we created in previus batches of the same transaction.
 	cfg, cache := e.getSystemConfig()
-	p.systemConfig = cfg
-	p.databaseCache = cache
+	p.session.systemConfig = cfg
+	p.session.databaseCache = cache
 	p.session.TxnState.schemaChangers.curGroupNum++
 	p.resetContexts()
 	p.evalCtx.NodeID = e.cfg.NodeID.Get()
@@ -330,7 +311,7 @@ func (p *planner) query(ctx context.Context, sql string, args ...interface{}) (p
 	if err != nil {
 		return nil, err
 	}
-	golangFillQueryArguments(p.semaCtx.Placeholders, args)
+	golangFillQueryArguments(&p.semaCtx.Placeholders, args)
 	return p.makePlan(ctx, stmt, false)
 }
 
@@ -425,7 +406,7 @@ func (p *planner) blockConfigUpdatesMaybe(e *Executor) func() {
 
 // checkTestingVerifyMetadataInitialOrDie implements the queryRunner interface.
 func (p *planner) checkTestingVerifyMetadataInitialOrDie(e *Executor, stmts parser.StatementList) {
-	if !p.execCfg.TestingKnobs.WaitForGossipUpdate {
+	if !p.session.execCfg.TestingKnobs.WaitForGossipUpdate {
 		return
 	}
 	// If there's nothinging to verify, or we've already verified the initial
@@ -443,7 +424,7 @@ func (p *planner) checkTestingVerifyMetadataInitialOrDie(e *Executor, stmts pars
 
 // checkTestingVerifyMetadataOrDie implements the queryRunner interface.
 func (p *planner) checkTestingVerifyMetadataOrDie(e *Executor, stmts parser.StatementList) {
-	if !p.execCfg.TestingKnobs.WaitForGossipUpdate ||
+	if !p.session.execCfg.TestingKnobs.WaitForGossipUpdate ||
 		p.testingVerifyMetadataFn == nil {
 		return
 	}
