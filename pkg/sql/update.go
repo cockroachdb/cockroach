@@ -245,7 +245,7 @@ func (p *planner) Update(
 		if err != nil {
 			return nil, err
 		}
-		err = sqlbase.CheckColumnType(updateCols[i], typedTarget.ResolvedType(), p.semaCtx.Placeholders)
+		err = sqlbase.CheckColumnType(updateCols[i], typedTarget.ResolvedType(), &p.semaCtx.Placeholders)
 		if err != nil {
 			return nil, err
 		}
