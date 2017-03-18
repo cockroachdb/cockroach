@@ -148,6 +148,7 @@ var keywords = map[string]int{
 	"MONTH":             MONTH,
 	"NAME":              NAME,
 	"NAMES":             NAMES,
+	"NAN":               NAN,
 	"NATURAL":           NATURAL,
 	"NEXT":              NEXT,
 	"NO":                NO,
