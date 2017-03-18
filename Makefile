@@ -102,6 +102,15 @@ export MACOSX_DEPLOYMENT_TARGET=10.9
 
 -include customenv.mk
 
+# We used to check the Go version in a .PHONY .go-version target, but the error
+# message, if any, would get mixed in with noise from other targets if Make was
+# executed in parallel job mode. This check, by contrast, is guaranteed to print
+# its error message before any noisy output.
+include .go-version
+ifeq ($(shell $(GO) version | grep -q -E '\b$(GOVERS)\b' && echo y),)
+$(error "$(GOVERS) required (see CONTRIBUTING.md): $(shell $(GO) version)")
+endif
+
 # Tell Make to delete the target if its recipe fails. Otherwise, if a recipe
 # modifies its target before failing, the target's timestamp will make it appear
 # up-to-date on the next invocation of Make, even though it is likely corrupt.
@@ -310,15 +319,6 @@ ifneq ($(GIT_DIR),)
 .buildinfo/tag: .ALWAYS_REBUILD
 .buildinfo/rev: .ALWAYS_REBUILD
 endif
-
-# The .go-version target is phony so that it is rebuilt every time.
-.PHONY: .go-version
-.go-version:
-	@actual=$$($(GO) version); \
-	echo "$${actual}" | grep -q -E '\b$(GOVERS)\b' || \
-	  (echo "$(GOVERS) required (see CONTRIBUTING.md): $${actual}" >&2 && false)
-
-include .go-version
 
 ifneq ($(GIT_DIR),)
 # If we're in a git worktree, the git hooks directory may not be in our root,
