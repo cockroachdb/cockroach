@@ -837,6 +837,8 @@ func TestParse2(t *testing.T) {
 			`SELECT rtrim('xyxtrimyyx')`},
 		{`SELECT TRIM(trailing 'xyxtrimyyx')`,
 			`SELECT rtrim('xyxtrimyyx')`},
+		{`SELECT a IS NAN`, `SELECT isnan(a)`},
+		{`SELECT a IS NOT NAN`, `SELECT NOT isnan(a)`},
 		{`SHOW INDEX FROM t`,
 			`SHOW INDEXES FROM t`},
 		{`SHOW CONSTRAINT FROM t`,

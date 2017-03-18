@@ -1171,6 +1171,19 @@ var Builtins = map[string][]Builtin{
 		}, "Calculates the largest integer not greater than `val`."),
 	},
 
+	"isnan": {
+		Builtin{
+			// Can't use floatBuiltin1 here because this one returns
+			// a boolean.
+			Types:      ArgTypes{{"val", TypeFloat}},
+			ReturnType: fixedReturnType(TypeBool),
+			fn: func(_ *EvalContext, args Datums) (Datum, error) {
+				return MakeDBool(DBool(math.IsNaN(float64(*args[0].(*DFloat))))), nil
+			},
+			Info: "Returns true if `val` is NaN, false otherwise.",
+		},
+	},
+
 	"ln": {
 		floatBuiltin1(func(x float64) (Datum, error) {
 			return NewDFloat(DFloat(math.Log(x))), nil

@@ -664,7 +664,7 @@ func (u *sqlSymUnion) kvOptions() []KVOption {
 
 %token <str>   MATCH MINUTE MONTH
 
-%token <str>   NAME NAMES NATURAL NEXT NO NO_INDEX_JOIN NORMAL
+%token <str>   NAN NAME NAMES NATURAL NEXT NO NO_INDEX_JOIN NORMAL
 %token <str>   NOT NOTHING NULL NULLIF
 %token <str>   NULLS NUMERIC
 
@@ -3844,6 +3844,14 @@ a_expr:
   {
     $$.val = &ComparisonExpr{Operator: NotRegIMatch, Left: $1.expr(), Right: $3.expr()}
   }
+| a_expr IS NAN %prec IS
+  {
+    $$.val = &FuncExpr{Func: wrapFunction("ISNAN"), Exprs: Exprs{$1.expr()}}
+  }
+| a_expr IS NOT NAN %prec IS
+  {
+    $$.val = &NotExpr{Expr: &FuncExpr{Func: wrapFunction("ISNAN"), Exprs: Exprs{$1.expr()}}}
+  }
 | a_expr IS NULL %prec IS
   {
     $$.val = &ComparisonExpr{Operator: Is, Left: $1.expr(), Right: DNull}
@@ -5136,6 +5144,7 @@ unreserved_keyword:
 | MINUTE
 | MONTH
 | NAMES
+| NAN
 | NEXT
 | NO
 | NORMAL
