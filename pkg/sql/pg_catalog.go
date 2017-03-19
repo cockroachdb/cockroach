@@ -1386,7 +1386,7 @@ var (
 
 	arrayInProcName = "array_in"
 	arrayInProcOid  = makeOidHasher().BuiltinOid(
-		arrayInProcName, &parser.Builtins[arrayInProcName][0]).(*parser.DOid).AsRegProc(arrayInProcName)
+		arrayInProcName, &parser.Builtins[arrayInProcName][0]).AsRegProc(arrayInProcName)
 )
 
 // See: https://www.postgresql.org/docs/9.6/static/catalog-pg-type.html.
@@ -1662,7 +1662,7 @@ func (h oidHasher) writeTypeTag(tag oidTypeTag) {
 	h.writeUInt8(uint8(tag))
 }
 
-func (h oidHasher) getOid() parser.Datum {
+func (h oidHasher) getOid() *parser.DOid {
 	i := h.h.Sum32()
 	h.h.Reset()
 	return parser.NewDOid(parser.DInt(i))
@@ -1698,13 +1698,13 @@ func (h oidHasher) writeForeignKeyReference(fk *sqlbase.ForeignKeyReference) {
 	h.writeStr(fk.Name)
 }
 
-func (h oidHasher) NamespaceOid(namespace string) parser.Datum {
+func (h oidHasher) NamespaceOid(namespace string) *parser.DOid {
 	h.writeTypeTag(namespaceTypeTag)
 	h.writeStr(namespace)
 	return h.getOid()
 }
 
-func (h oidHasher) DBOid(db *sqlbase.DatabaseDescriptor) parser.Datum {
+func (h oidHasher) DBOid(db *sqlbase.DatabaseDescriptor) *parser.DOid {
 	h.writeTypeTag(databaseTypeTag)
 	h.writeDB(db)
 	return h.getOid()
@@ -1712,7 +1712,7 @@ func (h oidHasher) DBOid(db *sqlbase.DatabaseDescriptor) parser.Datum {
 
 func (h oidHasher) TableOid(
 	db *sqlbase.DatabaseDescriptor, table *sqlbase.TableDescriptor,
-) parser.Datum {
+) *parser.DOid {
 	h.writeTypeTag(tableTypeTag)
 	h.writeDB(db)
 	h.writeTable(table)
@@ -1721,7 +1721,7 @@ func (h oidHasher) TableOid(
 
 func (h oidHasher) IndexOid(
 	db *sqlbase.DatabaseDescriptor, table *sqlbase.TableDescriptor, index *sqlbase.IndexDescriptor,
-) parser.Datum {
+) *parser.DOid {
 	h.writeTypeTag(indexTypeTag)
 	h.writeDB(db)
 	h.writeTable(table)
@@ -1731,7 +1731,7 @@ func (h oidHasher) IndexOid(
 
 func (h oidHasher) ColumnOid(
 	db *sqlbase.DatabaseDescriptor, table *sqlbase.TableDescriptor, column *sqlbase.ColumnDescriptor,
-) parser.Datum {
+) *parser.DOid {
 	h.writeTypeTag(columnTypeTag)
 	h.writeDB(db)
 	h.writeTable(table)
@@ -1743,7 +1743,7 @@ func (h oidHasher) CheckConstraintOid(
 	db *sqlbase.DatabaseDescriptor,
 	table *sqlbase.TableDescriptor,
 	check *sqlbase.TableDescriptor_CheckConstraint,
-) parser.Datum {
+) *parser.DOid {
 	h.writeTypeTag(checkConstraintTypeTag)
 	h.writeDB(db)
 	h.writeTable(table)
@@ -1753,7 +1753,7 @@ func (h oidHasher) CheckConstraintOid(
 
 func (h oidHasher) PrimaryKeyConstraintOid(
 	db *sqlbase.DatabaseDescriptor, table *sqlbase.TableDescriptor, pkey *sqlbase.IndexDescriptor,
-) parser.Datum {
+) *parser.DOid {
 	h.writeTypeTag(pKeyConstraintTypeTag)
 	h.writeDB(db)
 	h.writeTable(table)
@@ -1763,7 +1763,7 @@ func (h oidHasher) PrimaryKeyConstraintOid(
 
 func (h oidHasher) ForeignKeyConstraintOid(
 	db *sqlbase.DatabaseDescriptor, table *sqlbase.TableDescriptor, fk *sqlbase.ForeignKeyReference,
-) parser.Datum {
+) *parser.DOid {
 	h.writeTypeTag(fkConstraintTypeTag)
 	h.writeDB(db)
 	h.writeTable(table)
@@ -1773,7 +1773,7 @@ func (h oidHasher) ForeignKeyConstraintOid(
 
 func (h oidHasher) UniqueConstraintOid(
 	db *sqlbase.DatabaseDescriptor, table *sqlbase.TableDescriptor, index *sqlbase.IndexDescriptor,
-) parser.Datum {
+) *parser.DOid {
 	h.writeTypeTag(uniqueConstraintTypeTag)
 	h.writeDB(db)
 	h.writeTable(table)
@@ -1781,20 +1781,20 @@ func (h oidHasher) UniqueConstraintOid(
 	return h.getOid()
 }
 
-func (h oidHasher) BuiltinOid(name string, builtin *parser.Builtin) parser.Datum {
+func (h oidHasher) BuiltinOid(name string, builtin *parser.Builtin) *parser.DOid {
 	h.writeTypeTag(functionTypeTag)
 	h.writeStr(name)
 	h.writeStr(builtin.Types.String())
 	return h.getOid()
 }
 
-func (h oidHasher) UserOid(username string) parser.Datum {
+func (h oidHasher) UserOid(username string) *parser.DOid {
 	h.writeTypeTag(userTypeTag)
 	h.writeStr(username)
 	return h.getOid()
 }
 
-func (h oidHasher) CollationOid(collation string) parser.Datum {
+func (h oidHasher) CollationOid(collation string) *parser.DOid {
 	h.writeTypeTag(collationTypeTag)
 	h.writeStr(collation)
 	return h.getOid()
