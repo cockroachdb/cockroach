@@ -109,7 +109,7 @@ func TestExport(t *testing.T) {
 		t.Fatalf("expected a deletion tombstone got %s", v.PrettyPrint())
 	}
 
-	sqlDB.Exec(`ALTER TABLE export.export SPLIT AT (2)`)
+	sqlDB.Exec(`ALTER TABLE export.export SPLIT AT VALUES (2)`)
 	_, paths5, kvs5 := exportAndSlurp(hlc.Timestamp{})
 	if expected := 2; len(paths5) != expected {
 		t.Fatalf("expected %d files in export got %d", expected, len(paths5))

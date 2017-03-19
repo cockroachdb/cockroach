@@ -279,11 +279,7 @@ func (v *planVisitor) visit(plan planNode) {
 		v.visit(n.right)
 
 	case *splitNode:
-		var subplans []planNode
-		for i, e := range n.exprs {
-			subplans = v.expr(name, "expr", i, e, subplans)
-		}
-		v.subqueries(name, subplans)
+		v.visit(n.rows)
 
 	case *insertNode:
 		if v.observer.attr != nil {

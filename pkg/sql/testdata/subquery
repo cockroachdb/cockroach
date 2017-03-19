@@ -41,16 +41,18 @@ statement ok
 INSERT INTO abc VALUES (1, 2, 3), (4, 5, 6)
 
 query ITTT
-EXPLAIN ALTER TABLE abc SPLIT AT ((SELECT 42))
+EXPLAIN ALTER TABLE abc SPLIT AT VALUES ((SELECT 42))
 ----
 0  split
-0           subqueries  1
-1  limit
-2  render
-3  nullrow
+1  values
+1           size        1 column, 1 row
+1           subqueries  1
+2  limit
+3  render
+4  nullrow
 
 statement ok
-ALTER TABLE abc SPLIT AT ((SELECT 1))
+ALTER TABLE abc SPLIT AT VALUES ((SELECT 1))
 
 query error subquery must return 2 columns
 SELECT (1, 2) IN (SELECT * FROM abc)
