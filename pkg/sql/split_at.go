@@ -69,76 +69,104 @@ func (p *planner) Split(ctx context.Context, n *parser.Split) (planNode, error) 
 		index = tableDesc.Indexes[i]
 	}
 
-	// Determine how to use the remaining argument expressions.
-	if len(index.ColumnIDs) != len(n.Exprs) {
-		return nil, errors.Errorf("expected %d expressions, got %d", len(index.ColumnIDs), len(n.Exprs))
+	// Calculate the desired types for the select statement. It is OK if the
+	// select statement returns fewer columns (the relevant prefix is used).
+	desiredTypes := make([]parser.Type, len(index.ColumnIDs))
+	for i, colID := range index.ColumnIDs {
+		c, err := tableDesc.FindColumnByID(colID)
+		if err != nil {
+			return nil, err
+		}
+		desiredTypes[i] = c.Type.ToDatumType()
 	}
-	typedExprs := make([]parser.TypedExpr, len(n.Exprs))
-	for i, expr := range n.Exprs {
-		c, err := tableDesc.FindColumnByID(index.ColumnIDs[i])
-		if err != nil {
-			return nil, err
+
+	// Create the plan for the split rows source.
+	rows, err := p.newPlan(ctx, n.Rows, desiredTypes, false /* auto commit */)
+	if err != nil {
+		return nil, err
+	}
+
+	cols := rows.Columns()
+	if len(cols) == 0 {
+		return nil, errors.Errorf("no columns in SPLIT AT data")
+	}
+	if len(cols) > len(index.ColumnIDs) {
+		return nil, errors.Errorf("too many columns in SPLIT AT data")
+	}
+	for i := range cols {
+		if !cols[i].Typ.Equivalent(desiredTypes[i]) {
+			return nil, errors.Errorf(
+				"SPLIT AT data column %d must be of type %s, not type %s",
+				i+1, desiredTypes[i], cols[i].Typ,
+			)
 		}
-		desired := c.Type.ToDatumType()
-		typedExpr, err := p.analyzeExpr(ctx, expr, nil, parser.IndexedVarHelper{}, desired, true, "SPLIT AT")
-		if err != nil {
-			return nil, err
-		}
-		typedExprs[i] = typedExpr
 	}
 
 	return &splitNode{
 		p:         p,
 		tableDesc: tableDesc,
 		index:     index,
-		exprs:     typedExprs,
+		rows:      rows,
 	}, nil
 }
 
 type splitNode struct {
-	p         *planner
-	tableDesc *sqlbase.TableDescriptor
-	index     sqlbase.IndexDescriptor
-	exprs     []parser.TypedExpr
-	key       []byte
+	p            *planner
+	tableDesc    *sqlbase.TableDescriptor
+	index        sqlbase.IndexDescriptor
+	rows         planNode
+	lastSplitKey []byte
 }
 
 func (n *splitNode) Start(ctx context.Context) error {
-	values := make([]parser.Datum, len(n.exprs))
+	return n.rows.Start(ctx)
+}
+
+func (n *splitNode) Next(ctx context.Context) (bool, error) {
+	// TODO(radu): instead of performing the splits sequentially, accumulate all
+	// the split keys and then perform the splits in parallel (e.g. split at the
+	// middle key and recursively to the left and right).
+
+	if ok, err := n.rows.Next(ctx); err != nil || !ok {
+		return ok, err
+	}
+
+	values := make([]parser.Datum, 0, len(n.index.ColumnIDs))
+	values = append(values, n.rows.Values()...)
+	for len(values) < len(n.index.ColumnIDs) {
+		// It is acceptable if only a prefix of the columns are given values. We
+		// could generate a partial key, but it's easier to just encode NULLs for
+		// the rest of the columns.
+		values = append(values, parser.DNull)
+	}
+
 	colMap := make(map[sqlbase.ColumnID]int)
-	for i, e := range n.exprs {
-		val, err := e.Eval(&n.p.evalCtx)
-		if err != nil {
-			return err
-		}
-		values[i] = val
-		c, err := n.tableDesc.FindColumnByID(n.index.ColumnIDs[i])
-		if err != nil {
-			return err
-		}
-		colMap[c.ID] = i
+	for i, colID := range n.index.ColumnIDs {
+		colMap[colID] = i
 	}
 	prefix := sqlbase.MakeIndexKeyPrefix(n.tableDesc, n.index.ID)
 	key, _, err := sqlbase.EncodeIndexKey(n.tableDesc, &n.index, colMap, values, prefix)
 	if err != nil {
-		return err
+		return false, err
 	}
-	n.key = keys.MakeRowSentinelKey(key)
+	n.lastSplitKey = keys.MakeRowSentinelKey(key)
 
-	return n.p.session.execCfg.DB.AdminSplit(ctx, n.key)
-}
+	if err := n.p.session.execCfg.DB.AdminSplit(ctx, n.lastSplitKey); err != nil {
+		return false, err
+	}
 
-func (n *splitNode) Next(context.Context) (bool, error) {
-	return n.key != nil, nil
+	return true, nil
 }
 
 func (n *splitNode) Values() parser.Datums {
-	k := n.key
-	n.key = nil
 	return parser.Datums{
-		parser.NewDBytes(parser.DBytes(k)),
-		parser.NewDString(keys.PrettyPrint(k)),
+		parser.NewDBytes(parser.DBytes(n.lastSplitKey)),
+		parser.NewDString(keys.PrettyPrint(n.lastSplitKey)),
 	}
+}
+
+func (n *splitNode) Close(ctx context.Context) {
+	n.rows.Close(ctx)
 }
 
 func (*splitNode) Columns() ResultColumns {
@@ -154,7 +182,6 @@ func (*splitNode) Columns() ResultColumns {
 	}
 }
 
-func (*splitNode) Close(context.Context)   {}
 func (*splitNode) Ordering() orderingInfo  { return orderingInfo{} }
 func (*splitNode) MarkDebug(_ explainMode) {}
 

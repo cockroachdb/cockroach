@@ -22,7 +22,9 @@ import "bytes"
 type Split struct {
 	Table NormalizableTableName
 	Index *TableNameWithIndex
-	Exprs Exprs
+	// Each row contains values for the columns in the PK or index (or a prefix
+	// of the columns).
+	Rows *Select
 }
 
 // Format implements the NodeFormatter interface.
@@ -35,7 +37,6 @@ func (node *Split) Format(buf *bytes.Buffer, f FmtFlags) {
 		buf.WriteString("TABLE ")
 		FormatNode(buf, f, node.Table)
 	}
-	buf.WriteString(" SPLIT AT (")
-	FormatNode(buf, f, node.Exprs)
-	buf.WriteString(")")
+	buf.WriteString(" SPLIT AT ")
+	FormatNode(buf, f, node.Rows)
 }

@@ -1670,13 +1670,13 @@ for_grantee_clause:
   }
 
 split_stmt:
-  ALTER TABLE qualified_name SPLIT AT '(' expr_list ')'
+  ALTER TABLE qualified_name SPLIT AT select_stmt
   {
-    $$.val = &Split{Table: $3.normalizableTableName(), Exprs: $7.exprs()}
+    $$.val = &Split{Table: $3.normalizableTableName(), Rows: $6.slct()}
   }
-| ALTER INDEX table_name_with_index SPLIT AT '(' expr_list ')'
+| ALTER INDEX table_name_with_index SPLIT AT select_stmt
   {
-    $$.val = &Split{Index: $3.tableWithIdx(), Exprs: $7.exprs()}
+    $$.val = &Split{Index: $3.tableWithIdx(), Rows: $6.slct()}
   }
 
 // CREATE TABLE relname
