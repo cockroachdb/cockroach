@@ -735,6 +735,16 @@ func TestPGPreparedQuery(t *testing.T) {
 		"EXPLAIN SELECT 1": {
 			baseTest.SetArgs().Results(0, "render", "", "").Results(1, "nullrow", "", ""),
 		},
+		// #14245
+		"SELECT 1::oid = $1": {
+			baseTest.SetArgs(1).Results(true),
+			baseTest.SetArgs(2).Results(false),
+			baseTest.SetArgs("1").Results(true),
+			baseTest.SetArgs("2").Results(false),
+		},
+		"SELECT * FROM pg_catalog.pg_class WHERE relnamespace = $1": {
+			baseTest.SetArgs(1),
+		},
 
 		// TODO(jordan) blocked on #13651
 		//"SELECT $1::INT[]": {
