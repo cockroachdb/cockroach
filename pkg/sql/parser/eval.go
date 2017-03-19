@@ -2201,6 +2201,12 @@ func (expr *CastExpr) Eval(ctx *EvalContext) (Datum, error) {
 			}
 
 			switch typ {
+			case oidColTypeOid:
+				i, err := ParseDInt(s)
+				if err != nil {
+					return nil, err
+				}
+				return &DOid{kind: typ, DInt: *i}, nil
 			case oidColTypeRegProc, oidColTypeRegProcedure:
 				// Trim procedure type parameters, e.g. `max(int)` becomes `max`.
 				// Postgres only does this when the cast is ::regprocedure, but we're
