@@ -21,6 +21,11 @@ esac
 
 export VERSION
 echo "Deploying $VERSION..."
+
+cat .buildinfo/tag || true
+cat .buildinfo/rev || true
+git status
+
 build/builder.sh build/build-static-binaries.sh static-tests.tar.gz
 for archive in cockroach-latest "cockroach-${VERSION}"
 do
