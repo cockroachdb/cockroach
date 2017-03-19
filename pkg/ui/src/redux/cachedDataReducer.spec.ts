@@ -1,7 +1,7 @@
 import { assert } from "chai";
 import _ from "lodash";
 import { Action } from "redux";
-
+import moment from "moment";
 import { CachedDataReducer, CachedDataReducerState, KeyedCachedDataReducer, KeyedCachedDataReducerState } from "./cachedDataReducer";
 
 describe("basic cachedDataReducer", function () {
@@ -40,6 +40,8 @@ describe("basic cachedDataReducer", function () {
     });
 
     let reducer = testReducerObj.reducer;
+    let testMoment = moment();
+    testReducerObj.setTimeSource(() => testMoment);
 
     describe("reducer", function () {
       let state: CachedDataReducerState<Response>;
@@ -65,6 +67,7 @@ describe("basic cachedDataReducer", function () {
         expected = new CachedDataReducerState<Response>();
         expected.valid = true;
         expected.data = expectedResponse;
+        expected.setAt = testMoment;
         expected.lastError = null;
         assert.deepEqual(state, expected);
       });
@@ -110,6 +113,7 @@ describe("basic cachedDataReducer", function () {
           expected = new CachedDataReducerState<Response>();
           expected.valid = true;
           expected.data = new Response(testString);
+          expected.setAt = testMoment;
           expected.lastError = null;
           assert.deepEqual(state.cachedData.test, expected);
         });
@@ -183,6 +187,8 @@ describe("keyed cachedDataReducer", function () {
     });
 
     let reducer = testReducerObj.reducer;
+    let testMoment = moment();
+    testReducerObj.setTimeSource(() => testMoment);
 
     describe("keyed reducer", function () {
       let state: KeyedCachedDataReducerState<Response>;
@@ -216,6 +222,7 @@ describe("keyed cachedDataReducer", function () {
         expected[id].valid = true;
         expected[id].data = expectedResponse;
         expected[id].lastError = null;
+        expected[id].setAt = testMoment;
         assert.deepEqual(state, expected);
       });
 
