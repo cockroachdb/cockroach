@@ -1,7 +1,7 @@
-query O
-SELECT 3::OID
+query OO
+SELECT 3::OID, '3'::OID
 ----
-3
+3  3
 
 query O
 SELECT 3::OID::INT::OID
