@@ -1534,6 +1534,11 @@ func checkResultType(typ parser.Type) error {
 	case parser.TypeNameArray:
 	case parser.TypeIntArray:
 	case parser.TypeOid:
+	case parser.TypeRegClass:
+	case parser.TypeRegNamespace:
+	case parser.TypeRegProc:
+	case parser.TypeRegProcedure:
+	case parser.TypeRegType:
 	default:
 		// Compare all types that cannot rely on == equality.
 		istype := typ.FamilyEqual

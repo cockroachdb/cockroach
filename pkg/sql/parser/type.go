@@ -107,8 +107,19 @@ var (
 	TypeAnyArray Type = TArray{TypeAny}
 	// TypeAny can be any type. Can be compared with ==.
 	TypeAny Type = tAny{}
+
 	// TypeOid is the type of an OID. Can be compared with ==.
 	TypeOid = tOid{oid.T_oid}
+	// TypeRegClass is the type of an regclass OID variant. Can be compared with ==.
+	TypeRegClass = tOid{oid.T_regclass}
+	// TypeRegNamespace is the type of an regnamespace OID variant. Can be compared with ==.
+	TypeRegNamespace = tOid{oid.T_regnamespace}
+	// TypeRegProc is the type of an regproc OID variant. Can be compared with ==.
+	TypeRegProc = tOid{oid.T_regproc}
+	// TypeRegProcedure is the type of an regprocedure OID variant. Can be compared with ==.
+	TypeRegProcedure = tOid{oid.T_regprocedure}
+	// TypeRegType is the type of an regtype OID variant. Can be compared with ==.
+	TypeRegType = tOid{oid.T_regtype}
 
 	// TypeName is a type-alias for TypeString with a different OID. Can be
 	// compared with ==.
@@ -138,16 +149,12 @@ var (
 
 var (
 	// Unexported wrapper types. These exist for Postgres type compatibility.
-	typeInt2         = wrapTypeWithOid(TypeInt, oid.T_int2)
-	typeInt4         = wrapTypeWithOid(TypeInt, oid.T_int4)
-	typeFloat4       = wrapTypeWithOid(TypeFloat, oid.T_float4)
-	typeVarChar      = wrapTypeWithOid(TypeString, oid.T_varchar)
-	typeInt2Array    = TArray{typeInt2}
-	typeInt4Array    = TArray{typeInt4}
-	typeRegClass     = tOid{oid.T_regclass}
-	typeRegProc      = tOid{oid.T_regproc}
-	typeRegProcedure = tOid{oid.T_regprocedure}
-	typeRegType      = tOid{oid.T_regtype}
+	typeInt2      = wrapTypeWithOid(TypeInt, oid.T_int2)
+	typeInt4      = wrapTypeWithOid(TypeInt, oid.T_int4)
+	typeFloat4    = wrapTypeWithOid(TypeFloat, oid.T_float4)
+	typeVarChar   = wrapTypeWithOid(TypeString, oid.T_varchar)
+	typeInt2Array = TArray{typeInt2}
+	typeInt4Array = TArray{typeInt4}
 )
 
 // OidToType maps Postgres object IDs to CockroachDB types.
@@ -166,10 +173,10 @@ var OidToType = map[oid.Oid]Type{
 	oid.T_name:         TypeName,
 	oid.T_numeric:      TypeDecimal,
 	oid.T_oid:          TypeOid,
-	oid.T_regproc:      typeRegProc,
-	oid.T_regprocedure: typeRegProcedure,
-	oid.T_regclass:     typeRegClass,
-	oid.T_regtype:      typeRegType,
+	oid.T_regclass:     TypeRegClass,
+	oid.T_regproc:      TypeRegProc,
+	oid.T_regprocedure: TypeRegProcedure,
+	oid.T_regtype:      TypeRegType,
 	oid.T__text:        TypeStringArray,
 	oid.T__int2:        typeInt2Array,
 	oid.T__int4:        typeInt4Array,
@@ -565,6 +572,8 @@ func (t tOid) SQLName() string {
 		return "oid"
 	case oid.T_regclass:
 		return "regclass"
+	case oid.T_regnamespace:
+		return "regnamespace"
 	case oid.T_regproc:
 		return "regproc"
 	case oid.T_regprocedure:
