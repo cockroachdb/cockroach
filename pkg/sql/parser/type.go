@@ -174,6 +174,7 @@ var OidToType = map[oid.Oid]Type{
 	oid.T_numeric:      TypeDecimal,
 	oid.T_oid:          TypeOid,
 	oid.T_regclass:     TypeRegClass,
+	oid.T_regnamespace: TypeRegNamespace,
 	oid.T_regproc:      TypeRegProc,
 	oid.T_regprocedure: TypeRegProcedure,
 	oid.T_regtype:      TypeRegType,
