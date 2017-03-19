@@ -647,170 +647,175 @@ SELECT oid, typname, typnamespace, typowner, typlen, typbyval, typtype
 FROM pg_catalog.pg_type
 ORDER BY oid
 ----
-oid   typname      typnamespace  typowner  typlen  typbyval  typtype
-16    bool         1782195457    NULL      1       true      b
-17    bytes        1782195457    NULL      -1      false     b
-19    name         1782195457    NULL      -1      false     b
-20    int8         1782195457    NULL      8       true      b
-21    int2         1782195457    NULL      8       true      b
-22    int2vector   1782195457    NULL      -1      false     b
-23    int4         1782195457    NULL      8       true      b
-24    regproc      1782195457    NULL      8       true      b
-25    text         1782195457    NULL      -1      false     b
-26    oid          1782195457    NULL      8       true      b
-700   float4       1782195457    NULL      8       true      b
-701   float8       1782195457    NULL      8       true      b
-1005  int2[]       1782195457    NULL      -1      false     b
-1007  int4[]       1782195457    NULL      -1      false     b
-1009  text[]       1782195457    NULL      -1      false     b
-1016  int8[]       1782195457    NULL      -1      false     b
-1043  varchar      1782195457    NULL      -1      false     b
-1082  date         1782195457    NULL      8       true      b
-1114  timestamp    1782195457    NULL      24      true      b
-1184  timestamptz  1782195457    NULL      24      true      b
-1186  interval     1782195457    NULL      24      true      b
-1700  numeric      1782195457    NULL      -1      false     b
-2202  regprocedure 1782195457    NULL      8       true      b
-2205  regclass     1782195457    NULL      8       true      b
-2206  regtype      1782195457    NULL      8       true      b
-2249  tuple        1782195457    NULL      0       true      b
-2283  anyelement   1782195457    NULL      -1      false     b
+oid   typname       typnamespace  typowner  typlen  typbyval  typtype
+16    bool          1782195457    NULL      1       true      b
+17    bytes         1782195457    NULL      -1      false     b
+19    name          1782195457    NULL      -1      false     b
+20    int8          1782195457    NULL      8       true      b
+21    int2          1782195457    NULL      8       true      b
+22    int2vector    1782195457    NULL      -1      false     b
+23    int4          1782195457    NULL      8       true      b
+24    regproc       1782195457    NULL      8       true      b
+25    text          1782195457    NULL      -1      false     b
+26    oid           1782195457    NULL      8       true      b
+700   float4        1782195457    NULL      8       true      b
+701   float8        1782195457    NULL      8       true      b
+1005  int2[]        1782195457    NULL      -1      false     b
+1007  int4[]        1782195457    NULL      -1      false     b
+1009  text[]        1782195457    NULL      -1      false     b
+1016  int8[]        1782195457    NULL      -1      false     b
+1043  varchar       1782195457    NULL      -1      false     b
+1082  date          1782195457    NULL      8       true      b
+1114  timestamp     1782195457    NULL      24      true      b
+1184  timestamptz   1782195457    NULL      24      true      b
+1186  interval      1782195457    NULL      24      true      b
+1700  numeric       1782195457    NULL      -1      false     b
+2202  regprocedure  1782195457    NULL      8       true      b
+2205  regclass      1782195457    NULL      8       true      b
+2206  regtype       1782195457    NULL      8       true      b
+2249  tuple         1782195457    NULL      0       true      b
+2283  anyelement    1782195457    NULL      -1      false     b
+4089  regnamespace  1782195457    NULL      8       true      b
 
 query OTTBBTOOO colnames
 SELECT oid, typname, typcategory, typispreferred, typisdefined, typdelim, typrelid, typelem, typarray
 FROM pg_catalog.pg_type
 ORDER BY oid
 ----
-oid   typname      typcategory  typispreferred  typisdefined  typdelim  typrelid  typelem  typarray
-16    bool         B            false           true          ,         0         0        0
-17    bytes        U            false           true          ,         0         0        0
-19    name         S            false           true          ,         0         0        0
-20    int8         N            false           true          ,         0         0        0
-21    int2         N            false           true          ,         0         0        0
-22    int2vector   A            false           true          ,         0         20       0
-23    int4         N            false           true          ,         0         0        0
-24    regproc      N            false           true          ,         0         0        0
-25    text         S            false           true          ,         0         0        0
-26    oid          N            false           true          ,         0         0        0
-700   float4       N            false           true          ,         0         0        0
-701   float8       N            false           true          ,         0         0        0
-1005  int2[]       A            false           true          ,         0         21       0
-1007  int4[]       A            false           true          ,         0         23       0
-1009  text[]       A            false           true          ,         0         25       0
-1016  int8[]       A            false           true          ,         0         20       0
-1043  varchar      S            false           true          ,         0         0        0
-1082  date         D            false           true          ,         0         0        0
-1114  timestamp    D            false           true          ,         0         0        0
-1184  timestamptz  D            false           true          ,         0         0        0
-1186  interval     T            false           true          ,         0         0        0
-1700  numeric      N            false           true          ,         0         0        0
-2202  regprocedure N            false           true          ,         0         0        0
-2205  regclass     N            false           true          ,         0         0        0
-2206  regtype      N            false           true          ,         0         0        0
-2249  tuple        P            false           true          ,         0         0        0
-2283  anyelement   P            false           true          ,         0         0        0
+oid   typname       typcategory  typispreferred  typisdefined  typdelim  typrelid  typelem  typarray
+16    bool          B            false           true          ,         0         0        0
+17    bytes         U            false           true          ,         0         0        0
+19    name          S            false           true          ,         0         0        0
+20    int8          N            false           true          ,         0         0        0
+21    int2          N            false           true          ,         0         0        0
+22    int2vector    A            false           true          ,         0         20       0
+23    int4          N            false           true          ,         0         0        0
+24    regproc       N            false           true          ,         0         0        0
+25    text          S            false           true          ,         0         0        0
+26    oid           N            false           true          ,         0         0        0
+700   float4        N            false           true          ,         0         0        0
+701   float8        N            false           true          ,         0         0        0
+1005  int2[]        A            false           true          ,         0         21       0
+1007  int4[]        A            false           true          ,         0         23       0
+1009  text[]        A            false           true          ,         0         25       0
+1016  int8[]        A            false           true          ,         0         20       0
+1043  varchar       S            false           true          ,         0         0        0
+1082  date          D            false           true          ,         0         0        0
+1114  timestamp     D            false           true          ,         0         0        0
+1184  timestamptz   D            false           true          ,         0         0        0
+1186  interval      T            false           true          ,         0         0        0
+1700  numeric       N            false           true          ,         0         0        0
+2202  regprocedure  N            false           true          ,         0         0        0
+2205  regclass      N            false           true          ,         0         0        0
+2206  regtype       N            false           true          ,         0         0        0
+2249  tuple         P            false           true          ,         0         0        0
+2283  anyelement    P            false           true          ,         0         0        0
+4089  regnamespace  N            false           true          ,         0         0        0
 
 query OTOOOOOOO colnames
 SELECT oid, typname, typinput, typoutput, typreceive, typsend, typmodin, typmodout, typanalyze
 FROM pg_catalog.pg_type
 ORDER BY oid
 ----
-oid   typname      typinput    typoutput  typreceive  typsend  typmodin  typmodout  typanalyze
-16    bool         0           0          0           0        0         0          0
-17    bytes        0           0          0           0        0         0          0
-19    name         0           0          0           0        0         0          0
-20    int8         0           0          0           0        0         0          0
-21    int2         0           0          0           0        0         0          0
-22    int2vector   array_in    0          0           0        0         0          0
-23    int4         0           0          0           0        0         0          0
-24    regproc      0           0          0           0        0         0          0
-25    text         0           0          0           0        0         0          0
-26    oid          0           0          0           0        0         0          0
-700   float4       0           0          0           0        0         0          0
-701   float8       0           0          0           0        0         0          0
-1005  int2[]       array_in    0          0           0        0         0          0
-1007  int4[]       array_in    0          0           0        0         0          0
-1009  text[]       array_in    0          0           0        0         0          0
-1016  int8[]       array_in    0          0           0        0         0          0
-1043  varchar      0           0          0           0        0         0          0
-1082  date         0           0          0           0        0         0          0
-1114  timestamp    0           0          0           0        0         0          0
-1184  timestamptz  0           0          0           0        0         0          0
-1186  interval     0           0          0           0        0         0          0
-1700  numeric      0           0          0           0        0         0          0
-2202  regprocedure 0           0          0           0        0         0          0
-2205  regclass     0           0          0           0        0         0          0
-2206  regtype      0           0          0           0        0         0          0
-2249  tuple        0           0          0           0        0         0          0
-2283  anyelement   0           0          0           0        0         0          0
+oid   typname       typinput  typoutput  typreceive  typsend  typmodin  typmodout  typanalyze
+16    bool          0         0          0           0        0         0          0
+17    bytes         0         0          0           0        0         0          0
+19    name          0         0          0           0        0         0          0
+20    int8          0         0          0           0        0         0          0
+21    int2          0         0          0           0        0         0          0
+22    int2vector    array_in  0          0           0        0         0          0
+23    int4          0         0          0           0        0         0          0
+24    regproc       0         0          0           0        0         0          0
+25    text          0         0          0           0        0         0          0
+26    oid           0         0          0           0        0         0          0
+700   float4        0         0          0           0        0         0          0
+701   float8        0         0          0           0        0         0          0
+1005  int2[]        array_in  0          0           0        0         0          0
+1007  int4[]        array_in  0          0           0        0         0          0
+1009  text[]        array_in  0          0           0        0         0          0
+1016  int8[]        array_in  0          0           0        0         0          0
+1043  varchar       0         0          0           0        0         0          0
+1082  date          0         0          0           0        0         0          0
+1114  timestamp     0         0          0           0        0         0          0
+1184  timestamptz   0         0          0           0        0         0          0
+1186  interval      0         0          0           0        0         0          0
+1700  numeric       0         0          0           0        0         0          0
+2202  regprocedure  0         0          0           0        0         0          0
+2205  regclass      0         0          0           0        0         0          0
+2206  regtype       0         0          0           0        0         0          0
+2249  tuple         0         0          0           0        0         0          0
+2283  anyelement    0         0          0           0        0         0          0
+4089  regnamespace  0         0          0           0        0         0          0
 
 query OTTTBOI colnames
 SELECT oid, typname, typalign, typstorage, typnotnull, typbasetype, typtypmod
 FROM pg_catalog.pg_type
 ORDER BY oid
 ----
-oid   typname      typalign  typstorage  typnotnull  typbasetype  typtypmod
-16    bool         NULL      NULL        false       0            -1
-17    bytes        NULL      NULL        false       0            -1
-19    name         NULL      NULL        false       0            -1
-20    int8         NULL      NULL        false       0            -1
-21    int2         NULL      NULL        false       0            -1
-22    int2vector   NULL      NULL        false       0            -1
-23    int4         NULL      NULL        false       0            -1
-24    regproc      NULL      NULL        false       0            -1
-25    text         NULL      NULL        false       0            -1
-26    oid          NULL      NULL        false       0            -1
-700   float4       NULL      NULL        false       0            -1
-701   float8       NULL      NULL        false       0            -1
-1005  int2[]       NULL      NULL        false       0            -1
-1007  int4[]       NULL      NULL        false       0            -1
-1009  text[]       NULL      NULL        false       0            -1
-1016  int8[]       NULL      NULL        false       0            -1
-1043  varchar      NULL      NULL        false       0            -1
-1082  date         NULL      NULL        false       0            -1
-1114  timestamp    NULL      NULL        false       0            -1
-1184  timestamptz  NULL      NULL        false       0            -1
-1186  interval     NULL      NULL        false       0            -1
-1700  numeric      NULL      NULL        false       0            -1
-2202  regprocedure NULL      NULL        false       0            -1
-2205  regclass     NULL      NULL        false       0            -1
-2206  regtype      NULL      NULL        false       0            -1
-2249  tuple        NULL      NULL        false       0            -1
-2283  anyelement   NULL      NULL        false       0            -1
+oid   typname       typalign  typstorage  typnotnull  typbasetype  typtypmod
+16    bool          NULL      NULL        false       0            -1
+17    bytes         NULL      NULL        false       0            -1
+19    name          NULL      NULL        false       0            -1
+20    int8          NULL      NULL        false       0            -1
+21    int2          NULL      NULL        false       0            -1
+22    int2vector    NULL      NULL        false       0            -1
+23    int4          NULL      NULL        false       0            -1
+24    regproc       NULL      NULL        false       0            -1
+25    text          NULL      NULL        false       0            -1
+26    oid           NULL      NULL        false       0            -1
+700   float4        NULL      NULL        false       0            -1
+701   float8        NULL      NULL        false       0            -1
+1005  int2[]        NULL      NULL        false       0            -1
+1007  int4[]        NULL      NULL        false       0            -1
+1009  text[]        NULL      NULL        false       0            -1
+1016  int8[]        NULL      NULL        false       0            -1
+1043  varchar       NULL      NULL        false       0            -1
+1082  date          NULL      NULL        false       0            -1
+1114  timestamp     NULL      NULL        false       0            -1
+1184  timestamptz   NULL      NULL        false       0            -1
+1186  interval      NULL      NULL        false       0            -1
+1700  numeric       NULL      NULL        false       0            -1
+2202  regprocedure  NULL      NULL        false       0            -1
+2205  regclass      NULL      NULL        false       0            -1
+2206  regtype       NULL      NULL        false       0            -1
+2249  tuple         NULL      NULL        false       0            -1
+2283  anyelement    NULL      NULL        false       0            -1
+4089  regnamespace  NULL      NULL        false       0            -1
 
 query OTIOTTT colnames
 SELECT oid, typname, typndims, typcollation, typdefaultbin, typdefault, typacl
 FROM pg_catalog.pg_type
 ORDER BY oid
 ----
-oid   typname      typndims  typcollation  typdefaultbin  typdefault  typacl
-16    bool         0         0             NULL           NULL        NULL
-17    bytes        0         0             NULL           NULL        NULL
-19    name         0         1661428263    NULL           NULL        NULL
-20    int8         0         0             NULL           NULL        NULL
-21    int2         0         0             NULL           NULL        NULL
-22    int2vector   0         0             NULL           NULL        NULL
-23    int4         0         0             NULL           NULL        NULL
-24    regproc      0         0             NULL           NULL        NULL
-25    text         0         1661428263    NULL           NULL        NULL
-26    oid          0         0             NULL           NULL        NULL
-700   float4       0         0             NULL           NULL        NULL
-701   float8       0         0             NULL           NULL        NULL
-1005  int2[]       0         0             NULL           NULL        NULL
-1007  int4[]       0         0             NULL           NULL        NULL
-1009  text[]       0         1661428263    NULL           NULL        NULL
-1016  int8[]       0         0             NULL           NULL        NULL
-1043  varchar      0         1661428263    NULL           NULL        NULL
-1082  date         0         0             NULL           NULL        NULL
-1114  timestamp    0         0             NULL           NULL        NULL
-1184  timestamptz  0         0             NULL           NULL        NULL
-1186  interval     0         0             NULL           NULL        NULL
-1700  numeric      0         0             NULL           NULL        NULL
-2202  regprocedure 0         0             NULL           NULL        NULL
-2205  regclass     0         0             NULL           NULL        NULL
-2206  regtype      0         0             NULL           NULL        NULL
-2249  tuple        0         0             NULL           NULL        NULL
-2283  anyelement   0         0             NULL           NULL        NULL
+oid   typname       typndims  typcollation  typdefaultbin  typdefault  typacl
+16    bool          0         0             NULL           NULL        NULL
+17    bytes         0         0             NULL           NULL        NULL
+19    name          0         1661428263    NULL           NULL        NULL
+20    int8          0         0             NULL           NULL        NULL
+21    int2          0         0             NULL           NULL        NULL
+22    int2vector    0         0             NULL           NULL        NULL
+23    int4          0         0             NULL           NULL        NULL
+24    regproc       0         0             NULL           NULL        NULL
+25    text          0         1661428263    NULL           NULL        NULL
+26    oid           0         0             NULL           NULL        NULL
+700   float4        0         0             NULL           NULL        NULL
+701   float8        0         0             NULL           NULL        NULL
+1005  int2[]        0         0             NULL           NULL        NULL
+1007  int4[]        0         0             NULL           NULL        NULL
+1009  text[]        0         1661428263    NULL           NULL        NULL
+1016  int8[]        0         0             NULL           NULL        NULL
+1043  varchar       0         1661428263    NULL           NULL        NULL
+1082  date          0         0             NULL           NULL        NULL
+1114  timestamp     0         0             NULL           NULL        NULL
+1184  timestamptz   0         0             NULL           NULL        NULL
+1186  interval      0         0             NULL           NULL        NULL
+1700  numeric       0         0             NULL           NULL        NULL
+2202  regprocedure  0         0             NULL           NULL        NULL
+2205  regclass      0         0             NULL           NULL        NULL
+2206  regtype       0         0             NULL           NULL        NULL
+2249  tuple         0         0             NULL           NULL        NULL
+2283  anyelement    0         0             NULL           NULL        NULL
+4089  regnamespace  0         0             NULL           NULL        NULL
 
 ## pg_catalog.pg_proc
 
