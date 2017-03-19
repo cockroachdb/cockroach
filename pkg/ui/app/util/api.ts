@@ -52,6 +52,9 @@ export type TableStatsResponseMessage = Proto2TypeScript.cockroach.server.server
 export type LogsRequestMessage = Proto2TypeScript.cockroach.server.serverpb.LogsRequestMessage;
 export type LogEntriesResponseMessage = Proto2TypeScript.cockroach.server.serverpb.LogEntriesResponseMessage;
 
+export type LivenessRequestMessage = Proto2TypeScript.cockroach.server.serverpb.LivenessRequestMessage;
+export type LivenessResponseMessage = Proto2TypeScript.cockroach.server.serverpb.LivenessResponseMessage;
+
 // API constants
 
 export const API_PREFIX = "_admin/v1";
@@ -192,4 +195,9 @@ export function getTableStats(req: TableStatsRequestMessage, timeout?: moment.Du
 // getLogs gets the logs for a specific node
 export function getLogs(req: LogsRequestMessage, timeout?: moment.Duration): Promise<LogEntriesResponseMessage> {
   return timeoutFetch(serverpb.LogEntriesResponse, `${STATUS_PREFIX}/logs/${req.node_id}`, null, timeout);
+}
+
+// getLiveness gets cluster liveness information from the current node.
+export function getLiveness(_: LivenessRequestMessage, timeout?: moment.Duration): Promise<LivenessResponseMessage> {
+  return timeoutFetch(serverpb.LivenessResponse, `${API_PREFIX}/liveness`, null, timeout);
 }

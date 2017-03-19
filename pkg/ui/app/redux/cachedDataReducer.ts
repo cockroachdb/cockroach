@@ -7,9 +7,9 @@
 import * as _ from "lodash";
 import { Dispatch } from "redux";
 import { assert } from "chai";
-import moment = require("moment");
+import moment from "moment";
 
-import { APIRequestFn } from "../util/api.ts";
+import { APIRequestFn } from "../util/api";
 
 import { Action, PayloadAction, WithRequest } from "../interfaces/action";
 
@@ -18,6 +18,7 @@ export class CachedDataReducerState<TResponseMessage> {
   data: TResponseMessage; // the latest data received
   inFlight = false; // true if a request is in flight
   valid = false; // true if data has been received and has not been invalidated
+  setAt: moment.Moment; // Timestamp when this data was last updated.
   lastError: Error; // populated with the most recent error, if the last request failed
 }
 
@@ -51,7 +52,11 @@ export class CachedDataReducer<TRequest, TResponseMessage> {
    * invalidationPeriod (optional) - The duration after
    *   data is received after which it will be invalidated.
    */
-  constructor(protected apiEndpoint: APIRequestFn<TRequest, TResponseMessage>, public actionNamespace: string, protected invalidationPeriod?: moment.Duration) {
+  constructor(
+    protected apiEndpoint: APIRequestFn<TRequest, TResponseMessage>,
+    public actionNamespace: string,
+    protected invalidationPeriod?: moment.Duration,
+  ) {
     // check actionNamespace
     assert.notProperty(CachedDataReducer.namespaces, actionNamespace, "Expected actionNamespace to be unique.");
     CachedDataReducer.namespaces[actionNamespace] = true;
@@ -60,6 +65,14 @@ export class CachedDataReducer<TRequest, TResponseMessage> {
     this.RECEIVE = `cockroachui/CachedDataReducer/${actionNamespace}/RECEIVE`;
     this.ERROR = `cockroachui/CachedDataReducer/${actionNamespace}/ERROR`;
     this.INVALIDATE = `cockroachui/CachedDataReducer/${actionNamespace}/INVALIDATE`;
+  }
+
+  /**
+   * setTimeSource overrides the source of timestamps used by this component.
+   * Intended for use in tests only.
+   */
+  setTimeSource(timeSource: {(): moment.Moment}) {
+    this.timeSource = timeSource;
   }
 
   /**
@@ -78,6 +91,7 @@ export class CachedDataReducer<TRequest, TResponseMessage> {
         state = _.clone(state);
         state.inFlight = false;
         state.data = payload.data;
+        state.setAt = this.timeSource();
         state.valid = true;
         state.lastError = null;
         return state;
@@ -172,6 +186,8 @@ export class CachedDataReducer<TRequest, TResponseMessage> {
       });
     };
   }
+
+  private timeSource: {(): moment.Moment} = () => moment();
 }
 
 /**
@@ -200,6 +216,14 @@ export class KeyedCachedDataReducer<TRequest, TResponseMessage> {
    */
   constructor(protected apiEndpoint: (req: TRequest) => Promise<TResponseMessage>, public actionNamespace: string, private requestToID: (req: TRequest) => string, protected invalidationPeriod?: moment.Duration) {
     this.cachedDataReducer = new CachedDataReducer<TRequest, TResponseMessage>(apiEndpoint, actionNamespace, invalidationPeriod);
+  }
+
+  /**
+   * setTimeSource overrides the source of timestamps used by this component.
+   * Intended for use in tests only.
+   */
+  setTimeSource(timeSource: {(): moment.Moment}) {
+    this.cachedDataReducer.setTimeSource(timeSource);
   }
 
   /**

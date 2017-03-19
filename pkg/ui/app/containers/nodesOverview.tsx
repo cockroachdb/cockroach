@@ -2,11 +2,15 @@ import * as React from "react";
 import { Link } from "react-router";
 import { connect } from "react-redux";
 import moment from "moment";
+import { createSelector } from "reselect";
+import _ from "lodash";
 
-import { nodeSums } from "./nodeGraphs";
+import {
+  NodesSummary, nodesSummary, LivenessStatus, deadTimeout, suspectTimeout,
+} from "../redux/nodes";
 import { SummaryBar, SummaryHeadlineStat } from "../components/summaryBar";
 import { AdminUIState } from "../redux/state";
-import { refreshNodes } from "../redux/apiReducers";
+import { refreshNodes, refreshLiveness } from "../redux/apiReducers";
 import { setUISetting } from "../redux/ui";
 import { SortSetting } from "../components/sortabletable";
 import { SortedTable } from "../components/sortedtable";
@@ -15,7 +19,9 @@ import { Bytes } from "../util/format";
 import { NodeStatus, MetricConstants, BytesUsed } from  "../util/proto";
 
 // Constant used to store sort settings in the redux UI store.
-const UI_NODES_SORT_SETTING_KEY = "nodes/sort_setting";
+const UI_NODES_LIVE_SORT_SETTING_KEY = "nodes/live_sort_setting";
+// Constant used to store sort settings in the redux UI store.
+const UI_NODES_DEAD_SORT_SETTING_KEY = "nodes/dead_sort_setting";
 
 // Specialization of generic SortedTable component:
 //   https://github.com/Microsoft/TypeScript/issues/3960
@@ -26,102 +32,57 @@ const UI_NODES_SORT_SETTING_KEY = "nodes/sort_setting";
 const NodeSortedTable = SortedTable as new () => SortedTable<Proto2TypeScript.cockroach.server.status.NodeStatus>;
 
 /**
- * NodesMainData are the data properties which should be passed to the NodesMain
- * container.
+ * NodeCategoryListProps are the properties shared by both LiveNodeList and
+ * DeadNodeList.
  */
-interface NodesMainData {
-  // Current sort setting for the table, which is passed on to the sorted table
-  // component.
+interface NodeCategoryListProps {
   sortSetting: SortSetting;
-  // A list of store statuses to display.
-  statuses: NodeStatus[];
-  // Count of replicas across all nodes.
-  replicaCount: number;
-  // Total used bytes across all nodes.
-  usedBytes: number;
-  // Total used memory across all nodes.
-  usedMem: number;
-  // True if current status results are still valid. Needed so that this
-  // component refreshes status query when it becomes invalid.
-  statusesValid: boolean;
-}
-
-/**
- * NodesMainActions are the action dispatchers which should be passed to the
- * NodesMain container.
- */
-interface NodesMainActions {
-  // Call if the nodes statuses are stale and need to be refreshed.
-  refreshNodes: typeof refreshNodes;
-  // Call if the user indicates they wish to change the sort of the table data.
   setUISetting: typeof setUISetting;
+  statuses: NodeStatus[];
+  nodesSummary: NodesSummary;
 }
 
 /**
- * NodesMainProps is the type of the props object that must be passed to
- * NodesMain component.
+ * LiveNodeList displays a sortable table of all "live" nodes, which includes
+ * both healthy and suspect nodes. Included is a side-bar with summary
+ * statistics for these nodes.
  */
-type NodesMainProps = NodesMainData & NodesMainActions;
-
-/**
- * Renders the main content of the nodes page, which is primarily a data table
- * of all nodes.
- */
-class NodesMain extends React.Component<NodesMainProps, {}> {
+class LiveNodeList extends React.Component<NodeCategoryListProps, {}> {
   // Callback when the user elects to change the sort setting.
   changeSortSetting(setting: SortSetting) {
-    this.props.setUISetting(UI_NODES_SORT_SETTING_KEY, setting);
-  }
-
-  componentWillMount() {
-    // Refresh nodes status query when mounting.
-    this.props.refreshNodes();
-  }
-
-  componentWillReceiveProps(props: NodesMainProps) {
-    // Refresh nodes status query when props are received; this will immediately
-    // trigger a new request if previous results are invalidated.
-    props.refreshNodes();
-  }
-
-  totalNodes() {
-    if (!this.props.statuses) {
-      return 0;
-    }
-    return this.props.statuses.length;
+    this.props.setUISetting(UI_NODES_LIVE_SORT_SETTING_KEY, setting);
   }
 
   render() {
-    let { statuses, sortSetting } = this.props;
+    let { statuses, nodesSummary, sortSetting } = this.props;
+    if (!statuses || statuses.length === 0) {
+      return null;
+    }
 
     return <div>
-      {
-        // TODO(mrtracy): This currently always links back to the main cluster
-        // page, when it should link back to the dashboard previously visible.
-      }
-      <section className="section parent-link">
-        <Link to="/cluster">&lt; Back to Cluster</Link>
-      </section>
       <section className="header header--subsection">
-        Nodes Overview
+        Live Nodes
       </section>
       <section className="section l-columns">
         <div className="l-columns__left">
           <NodeSortedTable
             data={statuses}
             sortSetting={sortSetting}
-            onChangeSortSetting={(setting) => this.changeSortSetting(setting) }
+            onChangeSortSetting={(setting) => this.changeSortSetting(setting)}
             columns={[
               // Node column - displays the node ID, links to the node-specific page for
               // this node.
               {
                 title: "Node",
                 cell: (ns) => {
-                  let lastUpdate = moment(NanoToMilli(ns.updated_at.toNumber()));
-                  let s = staleStatus(lastUpdate);
+                  let status = nodesSummary.livenessStatusByNodeID[ns.getDesc().getNodeId()] || 0;
+                  let s = LivenessStatus[status].toLowerCase();
+                  let tooltip = (status === LivenessStatus.HEALTHY) ?
+                    "This node is currently healthy." :
+                    `This node has not reported as being live for over ${suspectTimeout.humanize()}`;
                   return <div>
                     <Link to={"/nodes/" + ns.desc.node_id}>{ns.desc.address.address_field}</Link>
-                    <div className={"icon-circle-filled node-status-icon node-status-icon--" + s}/>
+                    <div className={"icon-circle-filled node-status-icon node-status-icon--" + s} title={tooltip} />
                   </div>;
                 },
                 sort: (ns) => ns.desc.node_id,
@@ -164,28 +125,28 @@ class NodesMain extends React.Component<NodesMainProps, {}> {
                 cell: (ns) => <Link to={"/nodes/" + ns.desc.node_id + "/logs"}>Logs</Link>,
                 className: "expand-link",
               },
-            ]}/>
+            ]} />
         </div>
         <div className="l-columns__right">
           <SummaryBar>
             <SummaryHeadlineStat
-              title="Total Nodes"
-              tooltip="Total number of nodes in the cluster."
-              value={ this.totalNodes() }/>
+              title="Total Live Nodes"
+              tooltip="Total number of live nodes in the cluster."
+              value={statuses.length} />
             <SummaryHeadlineStat
-              title={ "Total Bytes" }
-              tooltip="The total number of bytes stored across all nodes."
-              value={ this.props.usedBytes }
-              format={ Bytes } />
+              title={"Total Bytes"}
+              tooltip="The total number of bytes stored across all live nodes."
+              value={nodesSummary.nodeSums.usedBytes}
+              format={Bytes} />
             <SummaryHeadlineStat
               title="Total Replicas"
-              tooltip="The total number of replicas stored across all nodes."
-              value={ this.props.replicaCount }/>
+              tooltip="The total number of replicas stored across all live nodes."
+              value={nodesSummary.nodeSums.replicas} />
             <SummaryHeadlineStat
-              title={ "Total Memory Usage" }
-              tooltip="The total amount of memory used across all nodes."
-              value={ this.props.usedMem }
-              format={ Bytes } />
+              title={"Total Memory Usage"}
+              tooltip="The total amount of memory used across all live nodes."
+              value={nodesSummary.nodeSums.usedMem}
+              format={Bytes} />
           </SummaryBar>
         </div>
       </section>
@@ -193,54 +154,191 @@ class NodesMain extends React.Component<NodesMainProps, {}> {
   }
 }
 
-/******************************
- *         SELECTORS
+/**
+ * DeadNodeList renders a sortable table of all "dead" nodes on the cluster.
  */
+class DeadNodeList extends React.Component<NodeCategoryListProps, {}> {
+  // Callback when the user elects to change the sort setting.
+  changeSortSetting(setting: SortSetting) {
+    this.props.setUISetting(UI_NODES_DEAD_SORT_SETTING_KEY, setting);
+  }
+
+  render() {
+    let { statuses, nodesSummary, sortSetting } = this.props;
+    if (!statuses || statuses.length === 0) {
+      return null;
+    }
+
+    return <div>
+      <section className="header header--subsection">
+        Dead Nodes
+      </section>
+      <section className="section l-columns">
+        <div className="l-columns__left">
+          <NodeSortedTable
+            data={statuses}
+            sortSetting={sortSetting}
+            onChangeSortSetting={(setting) => this.changeSortSetting(setting)}
+            columns={[
+              // Node column - displays the node ID, links to the node-specific page for
+              // this node.
+              {
+                title: "Node",
+                cell: (ns) => {
+                  return <div>
+                    <Link to={"/nodes/" + ns.desc.node_id}>{ns.desc.address.address_field}</Link>
+                    <div className={"icon-circle-filled node-status-icon node-status-icon--dead"}
+                         title={`This node has not reported as being live for over ${deadTimeout.humanize()} and is considered dead.`}
+                         />
+                  </div>;
+                },
+                sort: (ns) => ns.desc.node_id,
+                // TODO(mrtracy): Consider if there is a better way to use BEM
+                // style CSS in cases like this; it is a bit awkward to write out
+                // the entire modifier class here, but it might not be better to
+                // construct the full BEM class in the table component itself.
+                className: "sort-table__cell--link",
+              },
+              // Down since - displays the time that the node started.
+              {
+                title: "Downtime",
+                cell: (ns) => {
+                  let liveness = nodesSummary.livenessByNodeID[ns.getDesc().getNodeId()];
+                  let deadTime = liveness.expiration.getWallTime().toNumber();
+                  let deadMoment = moment(NanoToMilli(deadTime));
+                  return moment.duration(deadMoment.diff(moment())).humanize();
+                },
+                sort: (ns) => ns.started_at,
+              },
+            ]} />
+        </div>
+        <div className="l-columns__right">
+          <SummaryBar>
+            <SummaryHeadlineStat
+              title="Total Dead Nodes"
+              tooltip="Total number of dead nodes in the cluster."
+              value={statuses.length} />
+          </SummaryBar>
+        </div>
+      </section>
+    </div>;
+  }
+}
 
 // Base selectors to extract data from redux state.
-let nodeQueryValid = (state: AdminUIState): boolean => state.cachedData.nodes.valid;
-let nodeStatuses = (state: AdminUIState): NodeStatus[] => state.cachedData.nodes.data;
-let sortSetting = (state: AdminUIState): SortSetting => state.ui[UI_NODES_SORT_SETTING_KEY] || {};
+let nodeQueryValid = (state: AdminUIState): boolean => state.cachedData.nodes.valid && state.cachedData.liveness.valid;
+let liveSortSetting = (state: AdminUIState): SortSetting => state.ui[UI_NODES_LIVE_SORT_SETTING_KEY] || {};
+let deadSortSetting = (state: AdminUIState): SortSetting => state.ui[UI_NODES_DEAD_SORT_SETTING_KEY] || {};
 
-// Connect the NodesMain class with our redux store.
-let nodesMainConnected = connect(
-  (state: AdminUIState) => {
-    let sums = nodeSums(state);
+/**
+ * partitionedStatuses divides the list of node statuses into "live" and "dead".
+ */
+let partitonedStatuses = createSelector(
+  nodesSummary,
+  (summary) => {
+    let liveOrDead = _.partition(
+      summary.nodeStatuses,
+      (ns) => summary.livenessStatusByNodeID[ns.getDesc().node_id] !== LivenessStatus.DEAD,
+    );
     return {
-      statuses: nodeStatuses(state),
-      sortSetting: sortSetting(state),
-      statusesValid: nodeQueryValid(state),
-      replicaCount: sums.replicas,
-      usedBytes: sums.usedBytes,
-      usedMem: sums.usedMem,
+      live: liveOrDead[0],
+      dead: liveOrDead[1],
+    };
+  },
+);
+
+/**
+ * LiveNodesConnected is a redux-connected HOC of LiveNodes.
+ */
+// tslint:disable-next-line:variable-name
+let LiveNodesConnected = connect(
+  (state: AdminUIState) => {
+    let statuses = partitonedStatuses(state);
+    return {
+      sortSetting: liveSortSetting(state),
+      statuses: statuses.live,
+      nodesSummary: nodesSummary(state),
     };
   },
   {
-    refreshNodes: refreshNodes,
-    setUISetting: setUISetting,
+    setUISetting,
+  },
+)(LiveNodeList);
+
+/**
+ * DeadNodesConnected is a redux-connected HOC of DeadNodes.
+ */
+// tslint:disable-next-line:variable-name
+let DeadNodesConnected = connect(
+  (state: AdminUIState) => {
+    let statuses = partitonedStatuses(state);
+    return {
+      sortSetting: deadSortSetting(state),
+      statuses: statuses.dead,
+      nodesSummary: nodesSummary(state),
+    };
+  },
+  {
+    setUISetting,
+  },
+)(DeadNodeList);
+
+/**
+ * NodesMainProps is the type of the props object that must be passed to
+ * NodesMain component.
+ */
+interface NodesMainProps {
+  // Call if the nodes statuses are stale and need to be refreshed.
+  refreshNodes: typeof refreshNodes;
+  // Call if the liveness statuses are stale and need to be refreshed.
+  refreshLiveness: typeof refreshLiveness;
+  // True if current status results are still valid. Needed so that this
+  // component refreshes status query when it becomes invalid.
+  statusesValid: boolean;
+}
+
+/**
+ * Renders the main content of the nodes page, which is primarily a data table
+ * of all nodes.
+ */
+class NodesMain extends React.Component<NodesMainProps, {}> {
+  componentWillMount() {
+    // Refresh nodes status query when mounting.
+    this.props.refreshNodes();
+    this.props.refreshLiveness();
+  }
+
+  componentWillReceiveProps(props: NodesMainProps) {
+    // Refresh nodes status query when props are received; this will immediately
+    // trigger a new request if previous results are invalidated.
+    props.refreshNodes();
+    props.refreshLiveness();
+  }
+
+  render() {
+    return <div>
+      <section className="section parent-link">
+        <Link to="/cluster">&lt; Back to Cluster</Link>
+      </section>
+      <LiveNodesConnected/>
+      <DeadNodesConnected/>
+    </div>;
+  }
+}
+
+/**
+ * nodesMainConnected is a redux-connected HOC of NodesMain.
+ */
+let nodesMainConnected = connect(
+  (state: AdminUIState) => {
+    return {
+      statusesValid: nodeQueryValid(state),
+    };
+  },
+  {
+    refreshNodes,
+    refreshLiveness,
   },
 )(NodesMain);
 
 export { nodesMainConnected as default };
-
-/******************************
- *    Formatting Functions
- */
-
-/**
- * staleStatus returns the "status" of the node depending on how long ago
- * the last status update was received.
- *
- *   healthy <=1min
- *   stale   <1min & <=10min
- *   missing >10min
- */
-function staleStatus(lastUpdate: moment.Moment): string {
-  if (lastUpdate.isBefore(moment().subtract(10, "minutes"))) {
-    return "missing";
-  }
-  if (lastUpdate.isBefore(moment().subtract(1, "minute"))) {
-    return "stale";
-  }
-  return "healthy";
-}
