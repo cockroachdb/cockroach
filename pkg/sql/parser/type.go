@@ -108,7 +108,7 @@ var (
 	// TypeAny can be any type. Can be compared with ==.
 	TypeAny Type = tAny{}
 	// TypeOid is the type of an OID. Can be compared with ==.
-	TypeOid = tOid{oid.T_oid, "oid"}
+	TypeOid = tOid{oid.T_oid}
 
 	// TypeName is a type-alias for TypeString with a different OID. Can be
 	// compared with ==.
@@ -144,10 +144,10 @@ var (
 	typeVarChar      = wrapTypeWithOid(TypeString, oid.T_varchar)
 	typeInt2Array    = TArray{typeInt2}
 	typeInt4Array    = TArray{typeInt4}
-	typeRegClass     = tOid{oid.T_regclass, "regclass"}
-	typeRegProc      = tOid{oid.T_regproc, "regproc"}
-	typeRegProcedure = tOid{oid.T_regprocedure, "regprocedure"}
-	typeRegType      = tOid{oid.T_regtype, "regtype"}
+	typeRegClass     = tOid{oid.T_regclass}
+	typeRegProc      = tOid{oid.T_regproc}
+	typeRegProcedure = tOid{oid.T_regprocedure}
+	typeRegType      = tOid{oid.T_regtype}
 )
 
 // OidToType maps Postgres object IDs to CockroachDB types.
@@ -551,17 +551,31 @@ func (tAny) SQLName() string             { return "anyelement" }
 func (tAny) IsAmbiguous() bool           { return true }
 
 type tOid struct {
-	oidType  oid.Oid
-	typeName string
+	oidType oid.Oid
 }
 
-func (t tOid) String() string            { return t.typeName }
-func (tOid) Equivalent(other Type) bool  { return UnwrapType(other) == TypeOid || other == TypeAny }
-func (tOid) FamilyEqual(other Type) bool { return other == TypeOid }
-func (tOid) Size() (uintptr, bool)       { return unsafe.Sizeof(DInt(0)), fixedSize }
-func (t tOid) Oid() oid.Oid              { return t.oidType }
-func (t tOid) SQLName() string           { return t.typeName }
-func (tOid) IsAmbiguous() bool           { return true }
+func (t tOid) String() string             { return t.SQLName() }
+func (t tOid) Equivalent(other Type) bool { return t.FamilyEqual(other) || other == TypeAny }
+func (tOid) FamilyEqual(other Type) bool  { _, ok := UnwrapType(other).(tOid); return ok }
+func (tOid) Size() (uintptr, bool)        { return unsafe.Sizeof(DInt(0)), fixedSize }
+func (t tOid) Oid() oid.Oid               { return t.oidType }
+func (t tOid) SQLName() string {
+	switch t.oidType {
+	case oid.T_oid:
+		return "oid"
+	case oid.T_regclass:
+		return "regclass"
+	case oid.T_regproc:
+		return "regproc"
+	case oid.T_regprocedure:
+		return "regprocedure"
+	case oid.T_regtype:
+		return "regtype"
+	default:
+		panic(fmt.Sprintf("unexpected oidType: %v", t.oidType))
+	}
+}
+func (tOid) IsAmbiguous() bool { return false }
 
 // tOidWrapper is a Type implementation which is a wrapper around a Type, allowing
 // custom Oid values to be attached to the Type. The Type is used by DOidWrapper
