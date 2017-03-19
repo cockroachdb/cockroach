@@ -2034,7 +2034,7 @@ type DOid struct {
 }
 
 // NewDOid is a helper routine to create a *DOid initialized from a DInt.
-func NewDOid(d DInt) Datum {
+func NewDOid(d DInt) *DOid {
 	return &DOid{DInt: d, kind: oidColTypeOid, name: ""}
 }
 
