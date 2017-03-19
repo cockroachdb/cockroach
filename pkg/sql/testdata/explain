@@ -109,10 +109,12 @@ EXPLAIN ALTER TABLE foo ADD COLUMN y INT
 0 alter table
 
 query ITTT
-EXPLAIN (EXPRS) ALTER TABLE foo SPLIT AT (42)
+EXPLAIN (EXPRS) ALTER TABLE foo SPLIT AT VALUES (42)
 ----
-0 split
-0        expr 0   42
+0  split
+1  values
+1          size           1 column, 1 row
+1          row 0, expr 0  42
 
 query ITTT
 EXPLAIN DROP TABLE foo
