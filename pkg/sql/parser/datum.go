@@ -2033,9 +2033,15 @@ type DOid struct {
 	name string
 }
 
+// MakeDOid is a helper routine to create a DOid initialized from a DInt.
+func MakeDOid(d DInt) DOid {
+	return DOid{DInt: d, kind: oidColTypeOid, name: ""}
+}
+
 // NewDOid is a helper routine to create a *DOid initialized from a DInt.
 func NewDOid(d DInt) *DOid {
-	return &DOid{DInt: d, kind: oidColTypeOid, name: ""}
+	oid := MakeDOid(d)
+	return &oid
 }
 
 // AsRegProc changes the input DOid into a regproc with the given name and
@@ -2096,7 +2102,9 @@ func (d *DOid) Prev() (Datum, bool) {
 }
 
 // ResolvedType implements the Datum interface.
-func (DOid) ResolvedType() Type { return TypeOid }
+func (d *DOid) ResolvedType() Type {
+	return oidColTypeToType(d.kind)
+}
 
 // Size implements the Datum interface.
 func (d *DOid) Size() uintptr { return unsafe.Sizeof(*d) }

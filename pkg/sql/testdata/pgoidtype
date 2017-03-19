@@ -18,15 +18,27 @@ SELECT 1::OID::REGCLASS, 1::OID::REGNAMESPACE, 1::OID::REGPROC, 1::OID::REGPROCE
 ----
 1  1  1  1  1
 
-query T
-SELECT pg_typeof(1:::OID)
+query TTT
+SELECT pg_typeof(1::OID), pg_typeof(1::REGCLASS), pg_typeof(1::REGNAMESPACE)
 ----
-oid
+oid  regclass  regnamespace
+
+query TTT
+SELECT pg_typeof(1::REGPROC), pg_typeof(1::REGPROCEDURE), pg_typeof(1::REGTYPE)
+----
+regproc  regprocedure  regtype
 
 query O
 SELECT 'pg_constraint'::REGCLASS
 ----
 pg_constraint
+
+query ITTTTT
+EXPLAIN (TYPES) SELECT 'pg_constraint'::REGCLASS
+----
+0  render                                        ("'pg_constraint'::REGCLASS" regclass)
+0           render 0  (pg_constraint)[regclass]
+1  nullrow                                       ()
 
 query OO
 SELECT '"pg_constraint"'::REGCLASS, '  "pg_constraint" '::REGCLASS

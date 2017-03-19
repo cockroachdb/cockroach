@@ -1062,7 +1062,7 @@ func DecodeTableKey(
 		} else {
 			rkey, i, err = encoding.DecodeVarintDescending(key)
 		}
-		return a.NewDOid(parser.DOid{DInt: parser.DInt(i)}), rkey, err
+		return a.NewDOid(parser.MakeDOid(parser.DInt(i))), rkey, err
 	default:
 		if _, ok := valType.(parser.TCollatedString); ok {
 			var r string
@@ -1137,7 +1137,7 @@ func DecodeTableValue(a *DatumAlloc, valType parser.Type, b []byte) (parser.Datu
 	case parser.TypeOid:
 		var i int64
 		b, i, err = encoding.DecodeIntValue(b)
-		return a.NewDOid(parser.DOid{DInt: parser.DInt(i)}), b, err
+		return a.NewDOid(parser.MakeDOid(parser.DInt(i))), b, err
 	default:
 		if typ, ok := valType.(parser.TCollatedString); ok {
 			var data []byte
@@ -1443,7 +1443,7 @@ func UnmarshalColumnValue(
 		if err != nil {
 			return nil, err
 		}
-		return a.NewDOid(parser.DOid{DInt: parser.DInt(v)}), nil
+		return a.NewDOid(parser.MakeDOid(parser.DInt(v))), nil
 	default:
 		return nil, errors.Errorf("unsupported column type: %s", typ.Kind)
 	}

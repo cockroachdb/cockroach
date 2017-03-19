@@ -1105,7 +1105,7 @@ func validCastTypes(t Type) []Type {
 		return timestampCastTypes
 	case TypeInterval:
 		return intervalCastTypes
-	case TypeOid:
+	case TypeOid, TypeRegClass, TypeRegNamespace, TypeRegProc, TypeRegProcedure, TypeRegType:
 		return oidCastTypes
 	default:
 		// TODO(eisen): currently dead -- there is no syntax yet for casting
