@@ -62,10 +62,6 @@ func TestReplicateQueueRebalance(t *testing.T) {
 		tableID := keys.MaxReservedDescID + i + 1
 		splitKey := keys.MakeRowSentinelKey(keys.MakeTablePrefix(uint32(tableID)))
 		if _, _, err := tc.SplitRange(splitKey); err != nil {
-			// TODO(peter): Remove when #11592 is fixed.
-			if testutils.IsError(err, "range is already split at key") {
-				continue
-			}
 			t.Fatal(err)
 		}
 	}

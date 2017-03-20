@@ -226,9 +226,6 @@ func (z *zeroSum) monkey(tableID uint32, d time.Duration) {
 		switch r.Intn(2) {
 		case 0:
 			if err := z.Split(z.RandNode(r.Intn), key); err != nil {
-				if strings.Contains(err.Error(), "range is already split at key") {
-					continue
-				}
 				z.maybeLogError(err)
 			} else {
 				atomic.AddUint64(&z.stats.splits, 1)

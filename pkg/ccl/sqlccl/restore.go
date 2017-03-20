@@ -9,8 +9,6 @@
 package sqlccl
 
 import (
-	"strings"
-
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 	"golang.org/x/sync/errgroup"
@@ -470,9 +468,7 @@ func presplitRanges(baseCtx context.Context, db client.DB, input []roachpb.Key) 
 		splitKey := append([]byte(nil), splitPoints[splitIdx]...)
 		splitKey = keys.MakeRowSentinelKey(splitKey)
 		if err := db.AdminSplit(ctx, splitKey); err != nil {
-			if !strings.Contains(err.Error(), "range is already split at key") {
-				return err
-			}
+			return err
 		}
 
 		splitPointsLeft, splitPointsRight := splitPoints[:splitIdx], splitPoints[splitIdx+1:]

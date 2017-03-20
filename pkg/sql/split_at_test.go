@@ -55,8 +55,8 @@ func TestSplitAt(t *testing.T) {
 			in: "ALTER TABLE d.t SPLIT AT (2, 'b')",
 		},
 		{
-			in:    "ALTER TABLE d.t SPLIT AT (2, 'b')",
-			error: "range is already split",
+			// Splitting at an existing split is a silent no-op.
+			in: "ALTER TABLE d.t SPLIT AT (2, 'b')",
 		},
 		{
 			in:    "ALTER TABLE d.t SPLIT AT ('c', 3)",
