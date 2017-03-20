@@ -65,11 +65,11 @@ func (p *planner) Delete(
 		requestedCols = en.tableDesc.Columns
 	}
 
-	fkTables := tablesNeededForFKs(*en.tableDesc, CheckDeletes)
+	fkTables := sqlbase.TablesNeededForFKs(*en.tableDesc, sqlbase.CheckDeletes)
 	if err := p.fillFKTableMap(ctx, fkTables); err != nil {
 		return nil, err
 	}
-	rd, err := makeRowDeleter(p.txn, en.tableDesc, fkTables, requestedCols, checkFKs)
+	rd, err := sqlbase.MakeRowDeleter(p.txn, en.tableDesc, fkTables, requestedCols, sqlbase.CheckFKs)
 	if err != nil {
 		return nil, err
 	}
@@ -81,7 +81,7 @@ func (p *planner) Delete(
 	// performs index selection. We cannot perform index selection
 	// properly until the placeholder values are known.
 	rows, err := p.SelectClause(ctx, &parser.SelectClause{
-		Exprs: sqlbase.ColumnsSelectors(rd.fetchCols),
+		Exprs: sqlbase.ColumnsSelectors(rd.FetchCols),
 		From:  &parser.From{Tables: []parser.TableExpr{n.Table}},
 		Where: n.Where,
 	}, nil, nil, nil, publicAndNonPublicColumns)
