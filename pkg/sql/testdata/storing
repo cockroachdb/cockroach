@@ -45,6 +45,8 @@ SELECT a, b, c, d FROM t@c_idx
 ----
 1 2 3 4
 
+# Test index backfill for UNIQUE and non-UNIQUE indexes with STORING columns.
+
 statement ok
 CREATE INDEX d_idx ON t (d) STORING (a, b)
 
@@ -60,3 +62,11 @@ SELECT a, b, d FROM t@d_idx
 
 statement error index "error" already contains column "d"
 CREATE INDEX error ON t (d) STORING (d)
+
+statement ok
+CREATE UNIQUE INDEX a_idx ON t (a) STORING (b)
+
+query ITTT
+EXPLAIN (DEBUG) SELECT a, b FROM t@a_idx
+----
+0  /t/a_idx/1  /2  ROW
