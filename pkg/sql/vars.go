@@ -40,14 +40,19 @@ type sessionVar struct {
 	// Get returns a string representation of a given variable to be used
 	// either by SHOW or in the pg_catalog table.
 	Get func(p *planner) string
+
+	// Reset performs mutations (usually on p.session) to effect the change
+	// desired by RESET commands.
+	Reset func(*planner) error
 }
 
 // nopVar is a placeholder for a number of settings sent by various client
 // drivers which we do not support, but should simply ignore rather than
 // throwing an error when trying to SET or SHOW them.
 var nopVar = sessionVar{
-	Set: func(context.Context, *planner, []parser.TypedExpr) error { return nil },
-	Get: func(*planner) string { return "" },
+	Set:   func(context.Context, *planner, []parser.TypedExpr) error { return nil },
+	Get:   func(*planner) string { return "" },
+	Reset: func(*planner) error { return nil },
 }
 
 var varGen = map[string]sessionVar{
@@ -70,6 +75,10 @@ var varGen = map[string]sessionVar{
 			return nil
 		},
 		Get: func(p *planner) string { return p.session.Database },
+		Reset: func(p *planner) error {
+			p.session.Database = p.session.defaults.database
+			return nil
+		},
 	},
 	`syntax`: {
 		Set: func(_ context.Context, p *planner, values []parser.TypedExpr) error {
@@ -89,6 +98,10 @@ var varGen = map[string]sessionVar{
 			return nil
 		},
 		Get: func(p *planner) string { return p.session.Syntax.String() },
+		Reset: func(p *planner) error {
+			p.session.Syntax = parser.Syntax(0)
+			return nil
+		},
 	},
 	`default_transaction_isolation`: {
 		Set: func(_ context.Context, p *planner, values []parser.TypedExpr) error {
@@ -114,6 +127,10 @@ var varGen = map[string]sessionVar{
 			return nil
 		},
 		Get: func(p *planner) string { return p.session.DefaultIsolationLevel.String() },
+		Reset: func(p *planner) error {
+			p.session.DefaultIsolationLevel = enginepb.IsolationType(0)
+			return nil
+		},
 	},
 	`distsql`: {
 		Set: func(_ context.Context, p *planner, values []parser.TypedExpr) error {
@@ -145,6 +162,10 @@ var varGen = map[string]sessionVar{
 			}
 
 			return "auto"
+		},
+		Reset: func(p *planner) error {
+			p.session.DistSQLMode = distSQLExecMode(0)
+			return nil
 		},
 	},
 	`search_path`: {
@@ -179,6 +200,10 @@ var varGen = map[string]sessionVar{
 			return nil
 		},
 		Get: func(p *planner) string { return strings.Join(p.session.SearchPath, ", ") },
+		Reset: func(p *planner) error {
+			p.session.SearchPath = parser.SearchPath{"pg_catalog"}
+			return nil
+		},
 	},
 	`standard_conforming_strings`: {
 		Set: func(_ context.Context, p *planner, values []parser.TypedExpr) error {
@@ -195,7 +220,8 @@ var varGen = map[string]sessionVar{
 
 			return nil
 		},
-		Get: func(*planner) string { return "on" },
+		Get:   func(*planner) string { return "on" },
+		Reset: func(*planner) error { return nil },
 	},
 	`application_name`: {
 		Set: func(_ context.Context, p *planner, values []parser.TypedExpr) error {
@@ -210,6 +236,10 @@ var varGen = map[string]sessionVar{
 			return nil
 		},
 		Get: func(p *planner) string { return p.session.ApplicationName },
+		Reset: func(p *planner) error {
+			p.session.resetApplicationName(p.session.defaults.applicationName)
+			return nil
+		},
 	},
 	`time zone`: {
 		Get: func(p *planner) string { return p.session.Location.String() },
