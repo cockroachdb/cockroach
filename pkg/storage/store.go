@@ -2904,6 +2904,7 @@ func (s *Store) processRaftRequest(
 	ctx context.Context, req *RaftMessageRequest, inSnap IncomingSnapshot,
 ) (pErr *roachpb.Error) {
 	// Lazily create the replica.
+	// TODO(DONOTMERGE): Should we not create the replica if the incoming request isn't a snapshot?
 	r, _, err := s.getOrCreateReplica(
 		req.RangeID, req.ToReplica.ReplicaID, &req.FromReplica)
 	if err != nil {
