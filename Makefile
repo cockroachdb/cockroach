@@ -285,10 +285,11 @@ clean:
 protobuf:
 	$(MAKE) -C .. -f cockroach/build/protobuf.mk
 
-# archive builds a source tarball out of this repository. All files in the
-# archive are prefixed with $(ARCHIVE_BASE)/src/github.com/cockroachdb/cockroach,
-# with the exception of files in build/archive, which are instead installed
-# directly into $(ARCHIVE_BASE).
+# archive builds a source tarball out of this repository. Files in the special
+# directory build/archive/contents are inserted directly into $(ARCHIVE_BASE).
+# All other files in the repository are inserted into the archive with prefix
+# $(ARCHIVE_BASE)/src/github.com/cockroachdb/cockroach to allow the extracted
+# archive to serve directly as a GOPATH root.
 .PHONY: archive
 archive: $(ARCHIVE)
 
@@ -301,7 +302,7 @@ $(ARCHIVE): $(ARCHIVE).tmp
 $(ARCHIVE).tmp: ARCHIVE_BASE = cockroach-$(shell cat .buildinfo/tag)
 $(ARCHIVE).tmp: .buildinfo/tag .buildinfo/rev
 	scripts/ls-files.sh | $(TAR) -cf $@ -T - $(TAR_XFORM_FLAG),^,$(ARCHIVE_BASE)/src/github.com/cockroachdb/cockroach/, $^
-	(cd build/archive && $(TAR) -rf ../../$@ $(TAR_XFORM_FLAG),^,$(ARCHIVE_BASE)/, --exclude README.md *)
+	(cd build/archive/contents && $(TAR) -rf ../../../$@ $(TAR_XFORM_FLAG),^,$(ARCHIVE_BASE)/, *)
 
 .buildinfo:
 	@mkdir -p $@
