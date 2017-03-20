@@ -78,6 +78,9 @@ CREATE TABLE t (
 )
 
 statement ok
+INSERT INTO t VALUES (1,1,1), (2,2,2)
+
+statement ok
 CREATE INDEX b_desc ON t (b DESC)
 
 statement ok
@@ -94,8 +97,14 @@ t      b_asc    false   1    b       ASC        false    false
 t      b_asc    false   2    c       DESC       false    false
 t      b_asc    false   3    a       ASC        false    true
 
-statement ok
-INSERT INTO t VALUES (1,1,1)
+# index b_desc is well formed and column c is scanned using the primary index.
+query ITTT
+EXPLAIN (DEBUG) SELECT * FROM t@b_desc
+----
+0  /t/b_desc/2/2     NULL  PARTIAL
+0  /t/primary/2/b/c  /2/2  ROW
+1  /t/b_desc/1/1     NULL  PARTIAL
+1  /t/primary/1/b/c  /1/1  ROW
 
 statement error pgcode 42P01 table "foo" does not exist
 CREATE INDEX fail ON foo (b DESC)
