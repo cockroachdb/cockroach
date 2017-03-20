@@ -60,6 +60,11 @@ SUFFIX       :=
 # https://github.com/crosstool-ng/crosstool-ng/issues/540#issuecomment-276508500.
 TYPE :=
 
+# We intentionally use LINKFLAGS instead of the more traditional LDFLAGS
+# because LDFLAGS has built-in semantics that don't make sense with the Go
+# toolchain.
+LINKFLAGS =
+
 export GOPATH := $(realpath ../../../..)
 # Prefer tools from $GOPATH/bin over those elsewhere on the path.
 # This ensures that we get the versions pinned in the GLOCKFILE.
@@ -84,15 +89,15 @@ TAR_XFORM_FLAG = $(shell $(TAR) --version | grep -q GNU && echo "--xform=s" || e
 GIT_DIR := $(shell git rev-parse --git-dir 2> /dev/null)
 
 ifeq ($(TYPE),)
-override LDFLAGS += -X github.com/cockroachdb/cockroach/pkg/build.typ=development
+override LINKFLAGS += -X github.com/cockroachdb/cockroach/pkg/build.typ=development
 else ifeq ($(TYPE),release)
-override LDFLAGS += -X github.com/cockroachdb/cockroach/pkg/build.typ=release
+override LINKFLAGS += -X github.com/cockroachdb/cockroach/pkg/build.typ=release
 else ifeq ($(TYPE),musl)
 # This tag disables jemalloc profiling. See https://github.com/jemalloc/jemalloc/issues/585.
 override TAGS += musl
 export CC  = /x-tools/x86_64-unknown-linux-musl/bin/x86_64-unknown-linux-musl-gcc
 export CXX = /x-tools/x86_64-unknown-linux-musl/bin/x86_64-unknown-linux-musl-g++
-override LDFLAGS += -extldflags -static -X github.com/cockroachdb/cockroach/pkg/build.typ=release-musl
+override LINKFLAGS += -extldflags -static -X github.com/cockroachdb/cockroach/pkg/build.typ=release-musl
 override GOFLAGS += -installsuffix musl
 else
 $(error unknown build type $(TYPE))
@@ -150,10 +155,11 @@ start:
 
 .PHONY: install
 # The build.utcTime format must remain in sync with TimeFormat in pkg/build/info.go.
-install: override LDFLAGS += \
+install: override LINKFLAGS += \
 	-X "github.com/cockroachdb/cockroach/pkg/build.tag=$(shell cat .buildinfo/tag)" \
 	-X "github.com/cockroachdb/cockroach/pkg/build.utcTime=$(shell date -u '+%Y/%m/%d %H:%M:%S')" \
 	-X "github.com/cockroachdb/cockroach/pkg/build.rev=$(shell cat .buildinfo/rev)"
+
 # Note: We pass `-v` to `go build` and `go test -i` so that warnings
 # from the linker aren't suppressed. The usage of `-v` also shows when
 # dependencies are rebuilt which is useful when switching between
@@ -161,14 +167,14 @@ install: override LDFLAGS += \
 install: .buildinfo/tag .buildinfo/rev
 	@echo "GOPATH set to $$GOPATH"
 	@echo "$$GOPATH/bin added to PATH"
-	$(GO) $(BUILDMODE) -v $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LDFLAGS)' $(BUILDTARGET)
+	$(GO) $(BUILDMODE) -v $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' $(BUILDTARGET)
 
 # Build, but do not run the tests.
 # PKG is expanded and all packages are built and moved to their directory.
 .PHONY: testbuild
 testbuild:
 	$(GO) list -tags '$(TAGS)' -f \
-	'$(GO) test -v $(GOFLAGS) -tags '\''$(TAGS)'\'' -ldflags '\''$(LDFLAGS)'\'' -i -c {{.ImportPath}} -o {{.Dir}}/{{.Name}}.test$(SUFFIX)' $(PKG) | \
+	'$(GO) test -v $(GOFLAGS) -tags '\''$(TAGS)'\'' -ldflags '\''$(LINKFLAGS)'\'' -i -c {{.ImportPath}} -o {{.Dir}}/{{.Name}}.test$(SUFFIX)' $(PKG) | \
 	$(SHELL)
 
 .PHONY: gotestdashi
@@ -217,9 +223,9 @@ testraceslow: testslow
 .PHONY: stress
 stress:
 ifeq ($(BENCHES),-)
-	$(GO) list -tags '$(TAGS)' -f '$(GO) test -v $(GOFLAGS) -tags '\''$(TAGS)'\'' -ldflags '\''$(LDFLAGS)'\'' -i -c {{.ImportPath}} -o {{.Dir}}/stress.test && (cd {{.Dir}} && if [ -f stress.test ]; then COCKROACH_STRESS=true stress $(STRESSFLAGS) ./stress.test -test.run '\''$(TESTS)'\'' -test.timeout $(TESTTIMEOUT) $(TESTFLAGS); fi)' $(PKG) | $(SHELL)
+	$(GO) list -tags '$(TAGS)' -f '$(GO) test -v $(GOFLAGS) -tags '\''$(TAGS)'\'' -ldflags '\''$(LINKFLAGS)'\'' -i -c {{.ImportPath}} -o {{.Dir}}/stress.test && (cd {{.Dir}} && if [ -f stress.test ]; then COCKROACH_STRESS=true stress $(STRESSFLAGS) ./stress.test -test.run '\''$(TESTS)'\'' -test.timeout $(TESTTIMEOUT) $(TESTFLAGS); fi)' $(PKG) | $(SHELL)
 else
-	$(GO) list -tags '$(TAGS)' -f '$(GO) test -v $(GOFLAGS) -tags '\''$(TAGS)'\'' -ldflags '\''$(LDFLAGS)'\'' -i -c {{.ImportPath}} -o {{.Dir}}/stress.test && (cd {{.Dir}} && if [ -f stress.test ]; then COCKROACH_STRESS=true stress $(STRESSFLAGS) ./stress.test -test.run '\''$(TESTS)'\'' -test.bench '\''$(BENCHES)'\'' -test.timeout $(TESTTIMEOUT) $(TESTFLAGS); fi)' $(PKG) | $(SHELL)
+	$(GO) list -tags '$(TAGS)' -f '$(GO) test -v $(GOFLAGS) -tags '\''$(TAGS)'\'' -ldflags '\''$(LINKFLAGS)'\'' -i -c {{.ImportPath}} -o {{.Dir}}/stress.test && (cd {{.Dir}} && if [ -f stress.test ]; then COCKROACH_STRESS=true stress $(STRESSFLAGS) ./stress.test -test.run '\''$(TESTS)'\'' -test.bench '\''$(BENCHES)'\'' -test.timeout $(TESTTIMEOUT) $(TESTFLAGS); fi)' $(PKG) | $(SHELL)
 endif
 
 .PHONY: stressrace
