@@ -26,11 +26,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pkg/errors"
-
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/pkg/errors"
 )
 
 // Base config defaults.
@@ -56,6 +55,9 @@ const (
 
 	// DefaultRaftTickInterval is the default resolution of the Raft timer.
 	DefaultRaftTickInterval = 200 * time.Millisecond
+
+	// DefaultCertsDirectory is the default value for the cert directory flag.
+	DefaultCertsDirectory = "cockroach-certs"
 )
 
 type lazyTLSConfig struct {
@@ -70,6 +72,12 @@ type lazyHTTPClient struct {
 	err        error
 }
 
+type lazyCertificateManager struct {
+	once sync.Once
+	cm   *security.CertificateManager
+	err  error
+}
+
 // Config is embedded by server.Config. A base config is not meant to be used
 // directly, but embedding configs should call cfg.InitDefaults().
 type Config struct {
@@ -78,10 +86,11 @@ type Config struct {
 	Insecure bool
 
 	// SSLCA and others contain the paths to the ssl certificates and keys.
-	SSLCA      string // CA certificate
-	SSLCAKey   string // CA key (to sign only)
-	SSLCert    string // Client/server certificate
-	SSLCertKey string // Client/server key
+	SSLCA       string // CA certificate
+	SSLCAKey    string // CA key (to sign only)
+	SSLCert     string // Client/server certificate
+	SSLCertKey  string // Client/server key
+	SSLCertsDir string // Directory containing certs/keys.
 
 	// User running this process. It could be the user under which
 	// the server is running or the user passed in client calls.
@@ -108,6 +117,9 @@ type Config struct {
 
 	// serverTLSConfig is the loaded server TLS config. It is initialized lazily.
 	serverTLSConfig lazyTLSConfig
+
+	// The certificate manager. Must be accessed through GetCertificateManager.
+	certificateManager lazyCertificateManager
 
 	// httpClient uses the client TLS config. It is initialized lazily.
 	httpClient lazyHTTPClient
@@ -203,6 +215,15 @@ func (cfg *Config) PGURL(user *url.Userinfo) (*url.URL, error) {
 	}, nil
 }
 
+// GetCertificateManager returns the certificate manager, initializing it
+// on the first call.
+func (cfg *Config) GetCertificateManager() (*security.CertificateManager, error) {
+	cfg.certificateManager.once.Do(func() {
+		cfg.certificateManager.cm, cfg.certificateManager.err = security.NewCertificateManager(cfg.SSLCertsDir)
+	})
+	return cfg.certificateManager.cm, cfg.certificateManager.err
+}
+
 // GetClientTLSConfig returns the client TLS config, initializing it if needed.
 // If Insecure is true, return a nil config, otherwise load a config based
 // on the SSLCert file. If SSLCert is empty, use a very permissive config.
@@ -213,6 +234,12 @@ func (cfg *Config) GetClientTLSConfig() (*tls.Config, error) {
 		return nil, nil
 	}
 
+	// TODO(marc): un-comment when switching over to the certificate_manager.
+	//	cm, err := cfg.GetCertificateManager()
+	//	if err != nil {
+	//		return nil, err
+	//	}
+	//	return cm.GetClientTLSConfig(cfg.User)
 	cfg.clientTLSConfig.once.Do(func() {
 		cfg.clientTLSConfig.tlsConfig, cfg.clientTLSConfig.err = security.LoadClientTLSConfig(
 			cfg.SSLCA, cfg.SSLCert, cfg.SSLCertKey)
@@ -222,6 +249,7 @@ func (cfg *Config) GetClientTLSConfig() (*tls.Config, error) {
 	})
 
 	return cfg.clientTLSConfig.tlsConfig, cfg.clientTLSConfig.err
+
 }
 
 // GetServerTLSConfig returns the server TLS config, initializing it if needed.
@@ -232,6 +260,14 @@ func (cfg *Config) GetServerTLSConfig() (*tls.Config, error) {
 	if cfg.Insecure {
 		return nil, nil
 	}
+
+	// TODO(marc): un-comment when switching over to the certificate_manager.
+	//	cm, err := cfg.GetCertificateManager()
+	//	if err != nil {
+	//		return nil, err
+	//	}
+	//
+	// return cm.GetServerTLSConfig()
 
 	cfg.serverTLSConfig.once.Do(func() {
 		if cfg.SSLCert != "" {
