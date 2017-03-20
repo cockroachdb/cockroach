@@ -21,7 +21,6 @@ import (
 	"fmt"
 	"math/rand"
 	"reflect"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -313,15 +312,10 @@ func TestStoreRangeSplitConcurrent(t *testing.T) {
 	for i := 0; i < concurrentCount; i++ {
 		pErr := <-errCh
 		if pErr != nil {
-			// There are only three expected errors from concurrent splits:
-			// conflicting range descriptors if the splits are initiated
-			// concurrently, the range is already split at the specified key or the
-			// split key is outside of the bounds for the range.
-			expected := strings.Join([]string{
-				"range is already split at key",
-				"key range .* outside of bounds of range",
-			}, "|")
-			if !testutils.IsError(pErr.GoError(), expected) {
+			// The only expected error from concurrent splits is the split key being
+			// outside the bounds for the range. Note that conflicting range
+			// descriptor errors are retried internally.
+			if !testutils.IsError(pErr.GoError(), "key range .* outside of bounds of range") {
 				t.Fatalf("unexpected error: %v", pErr)
 			}
 			failureCount++
