@@ -90,7 +90,7 @@ func Load(
 
 	var currentCmd bytes.Buffer
 	scanner := bufio.NewReader(r)
-	var ri sql.RowInserter
+	var ri sqlbase.RowInserter
 	var defaultExprs []parser.TypedExpr
 	var cols []sqlbase.ColumnDescriptor
 	var tableDesc *sqlbase.TableDescriptor
@@ -157,7 +157,7 @@ func Load(
 				Union: &sqlbase.Descriptor_Table{Table: tableDesc},
 			})
 
-			ri, err = sql.MakeRowInserter(nil, tableDesc, nil, tableDesc.Columns, true)
+			ri, err = sqlbase.MakeRowInserter(nil, tableDesc, nil, tableDesc.Columns, true)
 			if err != nil {
 				return BackupDescriptor{}, errors.Wrap(err, "make row inserter")
 			}
@@ -230,7 +230,7 @@ func insertStmtToKVs(
 	defaultExprs []parser.TypedExpr,
 	cols []sqlbase.ColumnDescriptor,
 	evalCtx parser.EvalContext,
-	ri sql.RowInserter,
+	ri sqlbase.RowInserter,
 	stmt *parser.Insert,
 	f func(roachpb.KeyValue),
 ) error {

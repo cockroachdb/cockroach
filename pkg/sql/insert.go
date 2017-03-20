@@ -130,11 +130,11 @@ func (p *planner) Insert(
 		return nil, fmt.Errorf("INSERT error: table %s has %d columns but %d values were supplied", n.Table, numInputColumns, expressions)
 	}
 
-	fkTables := tablesNeededForFKs(*en.tableDesc, CheckInserts)
+	fkTables := sqlbase.TablesNeededForFKs(*en.tableDesc, sqlbase.CheckInserts)
 	if err := p.fillFKTableMap(ctx, fkTables); err != nil {
 		return nil, err
 	}
-	ri, err := MakeRowInserter(p.txn, en.tableDesc, fkTables, cols, checkFKs)
+	ri, err := sqlbase.MakeRowInserter(p.txn, en.tableDesc, fkTables, cols, sqlbase.CheckFKs)
 	if err != nil {
 		return nil, err
 	}
@@ -143,7 +143,7 @@ func (p *planner) Insert(
 	if n.OnConflict == nil {
 		tw = &tableInserter{ri: ri, autoCommit: autoCommit}
 	} else {
-		updateExprs, conflictIndex, err := upsertExprsAndIndex(en.tableDesc, *n.OnConflict, ri.insertCols)
+		updateExprs, conflictIndex, err := upsertExprsAndIndex(en.tableDesc, *n.OnConflict, ri.InsertCols)
 		if err != nil {
 			return nil, err
 		}
@@ -183,12 +183,12 @@ func (p *planner) Insert(
 			}
 
 			helper, err := p.makeUpsertHelper(
-				ctx, tn, en.tableDesc, ri.insertCols, updateCols, updateExprs, conflictIndex)
+				ctx, tn, en.tableDesc, ri.InsertCols, updateCols, updateExprs, conflictIndex)
 			if err != nil {
 				return nil, err
 			}
 
-			fkTables := tablesNeededForFKs(*en.tableDesc, CheckUpdates)
+			fkTables := sqlbase.TablesNeededForFKs(*en.tableDesc, sqlbase.CheckUpdates)
 			if err := p.fillFKTableMap(ctx, fkTables); err != nil {
 				return nil, err
 			}
@@ -207,7 +207,7 @@ func (p *planner) Insert(
 		n:                     n,
 		editNodeBase:          en,
 		defaultExprs:          defaultExprs,
-		insertCols:            ri.insertCols,
+		insertCols:            ri.InsertCols,
 		insertColIDtoRowIndex: ri.InsertColIDtoRowIndex,
 		tw: tw,
 	}

@@ -106,7 +106,7 @@ func (p *planner) Truncate(ctx context.Context, n *parser.Truncate) (planNode, e
 // deletes a range of data for the table, which includes the PK and all
 // indexes.
 func truncateTable(tableDesc *sqlbase.TableDescriptor, txn *client.Txn) error {
-	rd, err := makeRowDeleter(txn, tableDesc, nil, nil, false)
+	rd, err := sqlbase.MakeRowDeleter(txn, tableDesc, nil, nil, false)
 	if err != nil {
 		return err
 	}
@@ -131,7 +131,7 @@ func truncateTableInChunks(
 			log.Infof(ctx, "table %s truncate at row: %d, span: %s", tableDesc.Name, row, resume)
 		}
 		if err := db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
-			rd, err := makeRowDeleter(txn, tableDesc, nil, nil, false)
+			rd, err := sqlbase.MakeRowDeleter(txn, tableDesc, nil, nil, false)
 			if err != nil {
 				return err
 			}
