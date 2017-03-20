@@ -94,6 +94,10 @@ type Session struct {
 	// User is the name of the user logged into the session.
 	User string
 
+	// defaults is used to restore default configuration values into
+	// SET ... TO DEFAULT statements.
+	defaults sessionDefaults
+
 	//
 	// State structures for the logical SQL session.
 	//
@@ -187,6 +191,13 @@ type Session struct {
 	noCopy util.NoCopy
 }
 
+// sessionDefaults mirrors fields in Session, for restoring default
+// configuration values in SET ... TO DEFAULT statements.
+type sessionDefaults struct {
+	applicationName string
+	database        string
+}
+
 // SessionArgs contains arguments for creating a new Session with NewSession().
 type SessionArgs struct {
 	Database        string
@@ -217,6 +228,10 @@ func NewSession(
 	}
 	s.planner = planner{
 		session: s,
+	}
+	s.defaults = sessionDefaults{
+		applicationName: s.ApplicationName,
+		database:        s.Database,
 	}
 	s.planner.phaseTimes[sessionInit] = timeutil.Now()
 	s.resetApplicationName(args.ApplicationName)
