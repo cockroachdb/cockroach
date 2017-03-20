@@ -1282,7 +1282,7 @@ CREATE TABLE pg_catalog.pg_settings (
 	populate: func(_ context.Context, p *planner, addRow func(...parser.Datum) error) error {
 		for _, vName := range varNames {
 			gen := varGen[vName]
-			value := gen.genFn(p)
+			value := gen.Get(p)
 			valueDatum := parser.NewDString(value)
 			if err := addRow(
 				parser.NewDString(strings.ToLower(vName)), // name

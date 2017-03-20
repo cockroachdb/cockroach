@@ -19,7 +19,6 @@ package sql
 import (
 	"bytes"
 	"fmt"
-	"sort"
 	"strings"
 
 	"github.com/pkg/errors"
@@ -29,60 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 )
-
-const (
-	// PgServerVersion is the latest version of postgres that we claim to support.
-	PgServerVersion = "9.5.0"
-)
-
-var varGen = map[string]struct {
-	genFn              func(p *planner) string
-	requireExplicitTxn bool
-}{
-	`application_name`: {
-		genFn: func(p *planner) string { return p.session.ApplicationName },
-	},
-	`database`: {
-		genFn: func(p *planner) string { return p.session.Database },
-	},
-	`default_transaction_isolation`: {
-		genFn: func(p *planner) string { return p.session.DefaultIsolationLevel.String() },
-	},
-	`syntax`: {
-		genFn: func(p *planner) string { return p.session.Syntax.String() },
-	},
-	`time zone`: {
-		genFn: func(p *planner) string { return p.session.Location.String() },
-	},
-	`transaction isolation level`: {
-		genFn:              func(p *planner) string { return p.txn.Isolation().String() },
-		requireExplicitTxn: true,
-	},
-	`transaction priority`: {
-		genFn:              func(p *planner) string { return p.txn.UserPriority().String() },
-		requireExplicitTxn: true,
-	},
-	`max_index_keys`: {
-		genFn: func(_ *planner) string { return "32" },
-	},
-	`search_path`: {
-		genFn: func(p *planner) string { return strings.Join(p.session.SearchPath, ", ") },
-	},
-	`server_version`: {
-		genFn: func(_ *planner) string { return PgServerVersion },
-	},
-	`session_user`: {
-		genFn: func(p *planner) string { return p.session.User },
-	},
-}
-var varNames = func() []string {
-	res := make([]string, 0, len(varGen))
-	for vName := range varGen {
-		res = append(res, vName)
-	}
-	sort.Strings(res)
-	return res
-}()
 
 const (
 	checkSchemaQuery = `
@@ -227,7 +172,7 @@ func (p *planner) Show(n *parser.Show, autoCommit bool) (planNode, error) {
 					if gen.requireExplicitTxn && autoCommit {
 						continue
 					}
-					value := gen.genFn(p)
+					value := gen.Get(p)
 					if _, err := v.rows.AddRow(
 						ctx, parser.Datums{parser.NewDString(vName), parser.NewDString(value)},
 					); err != nil {
@@ -239,7 +184,7 @@ func (p *planner) Show(n *parser.Show, autoCommit bool) (planNode, error) {
 				// The key in varGen is guaranteed to exist thanks to the
 				// check above.
 				gen := varGen[name]
-				value := gen.genFn(p)
+				value := gen.Get(p)
 				if _, err := v.rows.AddRow(ctx, parser.Datums{parser.NewDString(value)}); err != nil {
 					v.rows.Close(ctx)
 					return nil, err
