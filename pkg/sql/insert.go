@@ -262,7 +262,7 @@ func ProcessDefaultColumns(
 		}
 	}
 
-	defaultExprs, err := makeDefaultExprs(cols, parse, evalCtx)
+	defaultExprs, err := sqlbase.MakeDefaultExprs(cols, parse, evalCtx)
 	return cols, defaultExprs, err
 }
 
@@ -509,56 +509,6 @@ func fillDefaults(
 		}
 	}
 	return ret
-}
-
-func makeDefaultExprs(
-	cols []sqlbase.ColumnDescriptor, parse *parser.Parser, evalCtx *parser.EvalContext,
-) ([]parser.TypedExpr, error) {
-	// Check to see if any of the columns have DEFAULT expressions. If there
-	// are no DEFAULT expressions, we don't bother with constructing the
-	// defaults map as the defaults are all NULL.
-	haveDefaults := false
-	for _, col := range cols {
-		if col.DefaultExpr != nil {
-			haveDefaults = true
-			break
-		}
-	}
-	if !haveDefaults {
-		return nil, nil
-	}
-
-	// Build the default expressions map from the parsed SELECT statement.
-	defaultExprs := make([]parser.TypedExpr, 0, len(cols))
-	exprStrings := make([]string, 0, len(cols))
-	for _, col := range cols {
-		if col.DefaultExpr != nil {
-			exprStrings = append(exprStrings, *col.DefaultExpr)
-		}
-	}
-	exprs, err := parser.ParseExprsTraditional(exprStrings)
-	if err != nil {
-		return nil, err
-	}
-
-	defExprIdx := 0
-	for _, col := range cols {
-		if col.DefaultExpr == nil {
-			defaultExprs = append(defaultExprs, parser.DNull)
-			continue
-		}
-		expr := exprs[defExprIdx]
-		typedExpr, err := parser.TypeCheck(expr, nil, col.Type.ToDatumType())
-		if err != nil {
-			return nil, err
-		}
-		if typedExpr, err = parse.NormalizeExpr(evalCtx, typedExpr); err != nil {
-			return nil, err
-		}
-		defaultExprs = append(defaultExprs, typedExpr)
-		defExprIdx++
-	}
-	return defaultExprs, nil
 }
 
 func (n *insertNode) Columns() ResultColumns {
