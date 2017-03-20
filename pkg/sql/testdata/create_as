@@ -89,3 +89,10 @@ CREATE TABLE foo2 (x) AS (VALUES(generate_series(1,3)))
 
 statement error pq: value type NULL cannot be used for table columns
 CREATE TABLE foo2 (x) AS (VALUES(NULL))
+
+# Check nulls are handled properly (#13921)
+query I
+CREATE TABLE foo3 (x) AS VALUES (1), (NULL); SELECT * FROM foo3 ORDER BY x
+----
+NULL
+1

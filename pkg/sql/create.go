@@ -696,9 +696,13 @@ func (n *createTableNode) Start(ctx context.Context) error {
 		// This loop is done here instead of in the Next method
 		// since CREATE TABLE is a DDL statement and Executor only
 		// runs Next() for statements with type "Rows".
-		for done := true; done; done, err = insertPlan.Next(ctx) {
+		for {
+			hasNext, err := insertPlan.Next(ctx)
 			if err != nil {
 				return err
+			}
+			if !hasNext {
+				break
 			}
 		}
 	}
@@ -1161,6 +1165,7 @@ func makeTableDescIfAs(
 			return desc, err
 		}
 		columnTableDef := parser.ColumnTableDef{Name: parser.Name(colRes.Name), Type: colType}
+		columnTableDef.Nullable.Nullability = parser.SilentNull
 		if len(p.AsColumnNames) > i {
 			columnTableDef.Name = p.AsColumnNames[i]
 		}
