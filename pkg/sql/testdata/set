@@ -1,7 +1,7 @@
-statement error unknown variable: "FOO"
+statement error unknown variable: "foo"
 SET FOO = bar
 
-statement error unknown variable: "FOO"
+statement error unknown variable: "foo"
 SHOW FOO
 
 statement error database "foo" does not exist
@@ -77,7 +77,7 @@ SHOW SYNTAX
 syntax
 Modern
 
-statement error SYNTAX: "a" is not in \("Modern", "Traditional"\)
+statement error set syntax: "a" is not in \("Modern", "Traditional"\)
 SET SYNTAX = a
 
 query T colnames
@@ -86,7 +86,7 @@ SHOW SYNTAX
 syntax
 Modern
 
-statement error SYNTAX: requires a single string value
+statement error set syntax: requires a single string value
 SET SYNTAX = a, b
 
 query T colnames
@@ -111,12 +111,17 @@ query TT
 SHOW ALL
 ----
 application_name               helloworld
+client_encoding                UTF8
+client_min_messages
 database                       foo
 default_transaction_isolation  SERIALIZABLE
-max_index_keys                 32
+distsql                        off
+extra_float_digits
+map_index_keys                 32
 search_path                    pg_catalog
 server_version                 9.5.0
 session_user                   root
+standard_conforming_strings    on
 syntax                         Modern
 time zone                      UTC
 transaction isolation level    SERIALIZABLE
@@ -136,7 +141,7 @@ SET CLIENT_MIN_MESSAGES = 'debug'
 statement ok
 SET STANDARD_CONFORMING_STRINGS = 'on'
 
-statement error STANDARD_CONFORMING_STRINGS: "off" not supported
+statement error set standard_conforming_strings: "off" not supported
 SET STANDARD_CONFORMING_STRINGS = 'off'
 
 statement ok
@@ -165,3 +170,7 @@ SHOW SERVER_VERSION
 ----
 server_version
 9.5.0
+
+# Test read-only variables
+statement error variable "map_index_keys" cannot be changed
+SET map_index_keys = 32
