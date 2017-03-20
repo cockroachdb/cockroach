@@ -17,7 +17,6 @@
 package roachpb_test
 
 import (
-	"fmt"
 	"strings"
 	"testing"
 
@@ -66,7 +65,7 @@ func TestTransactionString(t *testing.T) {
 		BatchRequest: &roachpb.BatchRequest{},
 	}
 	cmd.BatchRequest.Txn = &txn
-	if actStr, idStr := fmt.Sprintf("%s", &cmd), txnID.String(); !strings.Contains(actStr, idStr) {
+	if actStr, idStr := cmd.String(), txnID.String(); !strings.Contains(actStr, idStr) {
 		t.Fatalf("expected to find '%s' in '%s'", idStr, actStr)
 	}
 }

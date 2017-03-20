@@ -416,7 +416,7 @@ func dumpTableData(w io.Writer, conn *sqlConn, clusterTS string, md tableMetadat
 					default:
 						panic(errors.Errorf("unknown timestamp type: %s, %v: %s", t, cols[si], md.columnTypes[cols[si]]))
 					}
-					ivals[si] = fmt.Sprintf("%s", d)
+					ivals[si] = d.String()
 				default:
 					panic(errors.Errorf("unknown field type: %T (%s)", t, cols[si]))
 				}

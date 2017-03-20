@@ -22,6 +22,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lib/pq"
+
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -29,7 +31,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/lib/pq"
 )
 
 // Test that a connection closed abruptly while a SQL txn is in progress results
