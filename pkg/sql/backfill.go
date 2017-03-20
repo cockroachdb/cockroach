@@ -305,7 +305,7 @@ func (sc *SchemaChanger) truncateAndBackfillColumns(
 	sc.evalCtx = parser.EvalContext{}
 	sc.evalCtx.SetTxnTimestamp(pTime)
 	sc.evalCtx.SetStmtTimestamp(pTime)
-	defaultExprs, err := makeDefaultExprs(added, &parser.Parser{}, &sc.evalCtx)
+	defaultExprs, err := sqlbase.MakeDefaultExprs(added, &parser.Parser{}, &sc.evalCtx)
 	if err != nil {
 		return err
 	}
