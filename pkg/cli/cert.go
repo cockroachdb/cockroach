@@ -17,7 +17,11 @@
 package cli
 
 import (
+	"fmt"
+	"os"
+
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/olekukonko/tablewriter"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 )
@@ -98,14 +102,64 @@ func runCreateClientCert(cmd *cobra.Command, args []string) error {
 
 	return errors.Wrap(security.RunCreateClientCert(baseCfg.SSLCA, baseCfg.SSLCAKey,
 		baseCfg.SSLCert, baseCfg.SSLCertKey, keySize, args[0]),
-		"failed to generate clent certificate",
+		"failed to generate client certificate",
 	)
+}
+
+// A listCerts command generates a client certificate and stores it
+// in the cert directory under <username>.crt and key under <username>.key.
+// TODO(marc): rename once certificate_manager is being used.
+var listCertsCmd = &cobra.Command{
+	Use:   "debug-list",
+	Short: "DEBUG ONLY: list certs in --certs-dir",
+	Long: `
+DEBUG ONLY: the certificates listed here are not yet effective.
+List certificates and keys found in the certificate directory.
+`,
+	RunE: MaybeDecorateGRPCError(runListCerts),
+}
+
+// runListCerts loads and lists all certs.
+func runListCerts(cmd *cobra.Command, args []string) error {
+	if len(args) != 0 {
+		return usageAndError(cmd)
+	}
+
+	cm, err := baseCfg.GetCertificateManager()
+	if err != nil {
+		return errors.Wrap(err, "could not get certificate manager")
+	}
+
+	fmt.Fprintf(os.Stdout, "Certificate directory: %s\n", baseCfg.SSLCertsDir)
+
+	table := tablewriter.NewWriter(os.Stdout)
+	table.SetAutoFormatHeaders(false)
+	table.SetAutoWrapText(false)
+	table.SetHeader([]string{"Usage", "Certificate File", "Key File", "Notes"})
+
+	if ca := cm.CACert(); ca != nil {
+		table.Append([]string{ca.FileUsage.String(), ca.Filename, ca.KeyFilename})
+	}
+
+	if node := cm.NodeCert(); node != nil {
+		table.Append([]string{node.FileUsage.String(), node.Filename, node.KeyFilename})
+	}
+
+	for name, cert := range cm.ClientCerts() {
+		table.Append([]string{cert.FileUsage.String(), cert.Filename, cert.KeyFilename,
+			fmt.Sprintf("user=%s", name)})
+	}
+
+	table.Render()
+
+	return nil
 }
 
 var certCmds = []*cobra.Command{
 	createCACertCmd,
 	createNodeCertCmd,
 	createClientCertCmd,
+	listCertsCmd,
 }
 
 var certCmd = &cobra.Command{

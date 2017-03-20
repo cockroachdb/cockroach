@@ -109,7 +109,7 @@ func newCLITest(params cliTestParams) cliTest {
 			// run from a standalone binary.
 			// Disable embedded certs, or the security library will try to load
 			// our real files as embedded assets.
-			security.ResetReadFileFn()
+			security.ResetAssetLoader()
 
 			assets := []string{
 				filepath.Join(security.EmbeddedCertsDir, security.EmbeddedCACert),
@@ -125,7 +125,7 @@ func newCLITest(params cliTestParams) cliTest {
 			}
 
 			c.cleanupFunc = func() error {
-				security.SetReadFileFn(securitytest.Asset)
+				security.SetAssetLoader(securitytest.EmbeddedAssets)
 				return os.RemoveAll(certsDir)
 			}
 		}
