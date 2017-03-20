@@ -27,7 +27,7 @@ either due to security concerns or standard expiration.
 This RFC is concerned with rotation due to expiration, meaning we do not
 consider certificate revocation.
 
-Our current certificate use allows for a single CA certificate  and a single
+Our current certificate use allows for a single CA certificate and a single
 server certificate/private key pair, with node restarts being required to
 update any of them.
 
@@ -66,22 +66,29 @@ Initial CA creation involves creating the certificate and private key.
 * `ca.cert`: the CA certificate, valid 5 years. Provided to all nodes and clients.
 * `ca.key`: the CA private key. Must be kept safe and **not** distributed to nodes and clients.
 
-CA renewal involves creating a new certificate using the same private key.
-We have two options:
-* add the new certificate to `ca.cert` and provide the expanded file to all nodes and clients.
-* create a new certificate (eg: `ca.new.cert`) and provide it to all nodes and clients.
+CA renewal involves creating a new certificate using either the same, or a new private key.
+Since CA certificates may overlap in validity, we want to keep the old certificate. However, we no
+longer wish to sign new certificates using the old key, so we can simply:
+* append the new certificate to the existing `ca.cert` (optionally removing expired certificates along the way).
+* overwrite the old key with the new key.
 
-The key **should not** be regenerated on certificate renewal. If it is (human error or lost key),
-all client and node certificates will need to be regenerated and signed with the new key.
+The updated `ca.cert` file must be communicated to all nodes and clients.
+The `ca.key` must still be kept safe and **not** distributed to nodes and clients.
 
-## Node certificate
+When signing node/client certificate, if multiple CA certificates are found inside `ca.cert`, the
+certificate matching the private key will be used. If multiple such certificates exist, the one with
+the latest expiration date will be used.
+
+## Node/client certificate
 
 The trusted machine holding the CA private key generates node certificates and private keys, then
 pushes them to the appropriate nodes.
 Keys are not kept by the trusted machine once deployed on the nodes.
 
-Upon renewal, filenames should differ allowing multiple sets of certificate/private key files
-to exist simultaneously.
+Generated node/client certificates have a shorter default lifetime than CA certificates (see "Certificate Expiration" section). Furthermore, their expiration date cannot exceed the CA certificate expiration.
+
+Upon renewal, certificates and keys are fully re-generated, with no attempt to re-use the private node/client key.
+Filenames for node/client certificates and keys can remain the same as before, or be new files.
 
 # Reloading certificate/key files
 
@@ -90,8 +97,12 @@ using flags or environment variables:
 * `--ca-cert`, `--ca-key` for CA certificate and key
 * `--cert`, `--key` for node or client certificate and key
 
-We can use a single file for CA certificates (see CA certificate renewal above) but we require
-multiple files for node and client certificates due to changing keys.
+We can use a single file for CA certificates (see CA certificate renewal above), and client/node
+certificates can be overwritten.
+
+However, we may have multiple sets of certificates:
+* server certificate for the node itself
+* root client certificate for ease of debugging from the node host
 
 We thus need to be able to specify a storage location containing an arbitrary number of
 certificates and keys.
@@ -107,6 +118,10 @@ The directory can be specified by command-line flag `--certs-dir` or environment
 The permissions on the directory cannot be more permissive than `drwx------`.
 Directory ownership will not be checked (too much incompatibility across filesystems and
 architectures), relying instead on permissions to list the directory contents.
+
+We need to provide admins with a way to disable permissions checks, due both to incompatible
+certificate deployment methods, and incompatible filesystems/architectures. An environment variable
+`COCKROACH_SKIP_CERTS_PERMISSION_CHECKS` with a stern warning should be sufficient.
 
 ## Files
 
@@ -154,6 +169,11 @@ Running nodes can be told to re-read the certificate directory by issuing a `SIG
 
 Since we cannot control when nodes may be restarted, it is important to keep the reload process
 identical to the initial load.
+
+Some additional methods to trigger a reload can later be introduced:
+* a timer based on certificate expiration
+* regular timer
+* admin UI endpoint
 
 # Online certificate rotation
 
@@ -283,11 +303,3 @@ clients not yet aware of a new CA certificate.
 
 We could examine client certificates and report soon-to-expire ones. This will not help
 with CA knowledge, but would provide better visibility into user authentication issues.
-
-## Filesystem permissions/ownership
-
-The directory and file structure assumes that the permission checks are sufficient to ensure
-that the files cannot be modified by another user. This may not be the case if the certificate
-directory is on a filesystem or architecture where user permission semantics differ.
-Should this be the case, the explicit file-listing method is similarly compromised (worse because
-we do not currently check file permissions).
