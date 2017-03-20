@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/mon"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -248,17 +249,17 @@ func (p *planner) exec(ctx context.Context, sql string, args ...interface{}) (in
 	return countRowsAffected(ctx, plan)
 }
 
-func (p *planner) fillFKTableMap(ctx context.Context, m tableLookupsByID) error {
+func (p *planner) fillFKTableMap(ctx context.Context, m sqlbase.TableLookupsByID) error {
 	for tableID := range m {
 		table, err := p.getTableLeaseByID(ctx, tableID)
 		if err == errTableAdding {
-			m[tableID] = tableLookup{isAdding: true}
+			m[tableID] = sqlbase.TableLookup{IsAdding: true}
 			continue
 		}
 		if err != nil {
 			return err
 		}
-		m[tableID] = tableLookup{table: table}
+		m[tableID] = sqlbase.TableLookup{Table: table}
 	}
 	return nil
 }
