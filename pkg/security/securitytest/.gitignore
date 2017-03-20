@@ -1,0 +1,2 @@
+# Override root gitignore rule on *.test*
+!client.testuser.*

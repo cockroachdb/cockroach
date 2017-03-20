@@ -17,8 +17,6 @@
 package base_test
 
 import (
-	"fmt"
-	"path/filepath"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -26,13 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
-
-func fillCertPaths(cfg *base.Config, user string) {
-	cfg.SSLCA = filepath.Join(security.EmbeddedCertsDir, security.EmbeddedCACert)
-	cfg.SSLCAKey = filepath.Join(security.EmbeddedCertsDir, security.EmbeddedCAKey)
-	cfg.SSLCert = filepath.Join(security.EmbeddedCertsDir, fmt.Sprintf("%s.crt", user))
-	cfg.SSLCertKey = filepath.Join(security.EmbeddedCertsDir, fmt.Sprintf("%s.key", user))
-}
 
 func TestClientSSLSettings(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -61,7 +52,7 @@ func TestClientSSLSettings(t *testing.T) {
 	for tcNum, tc := range testCases {
 		cfg := &base.Config{Insecure: tc.insecure, User: tc.user}
 		if tc.hasCerts {
-			fillCertPaths(cfg, tc.user)
+			testutils.FillCerts(cfg)
 		}
 		if cfg.HTTPRequestScheme() != tc.requestScheme {
 			t.Fatalf("#%d: expected HTTPRequestScheme=%s, got: %s", tcNum, tc.requestScheme, cfg.HTTPRequestScheme())
@@ -106,7 +97,7 @@ func TestServerSSLSettings(t *testing.T) {
 	for tcNum, tc := range testCases {
 		cfg := &base.Config{Insecure: tc.insecure, User: security.NodeUser}
 		if tc.hasCerts {
-			fillCertPaths(cfg, security.NodeUser)
+			testutils.FillCerts(cfg)
 		}
 		if cfg.HTTPRequestScheme() != tc.requestScheme {
 			t.Fatalf("#%d: expected HTTPRequestScheme=%s, got: %s", tcNum, tc.requestScheme, cfg.HTTPRequestScheme())
