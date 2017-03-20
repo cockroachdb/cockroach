@@ -59,7 +59,7 @@ var (
 	// EnableLoadBasedLeaseRebalancing controls whether lease rebalancing is done
 	// via the new heuristic based on request load and latency or via the simpler
 	// approach that purely seeks to balance the number of leases per node evenly.
-	EnableLoadBasedLeaseRebalancing = envutil.EnvOrDefaultBool("COCKROACH_ENABLE_LOAD_BASED_LEASE_REBALANCING", false)
+	EnableLoadBasedLeaseRebalancing = envutil.EnvOrDefaultBool("COCKROACH_ENABLE_LOAD_BASED_LEASE_REBALANCING", true)
 
 	// LeaseRebalancingAggressiveness enables users to tweak how aggressive their
 	// cluster is at moving leases towards the localities where the most requests
