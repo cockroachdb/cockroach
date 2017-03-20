@@ -79,16 +79,27 @@ func (ib *indexBackfiller) init() error {
 			}
 		}
 	}
-	// We need all the columns.
-	valNeededForCol := make([]bool, len(cols))
-	for i := range valNeededForCol {
-		valNeededForCol[i] = true
-	}
 
 	ib.colIdxMap = make(map[sqlbase.ColumnID]int, len(cols))
 	for i, c := range cols {
 		ib.colIdxMap[c.ID] = i
 	}
+
+	valNeededForCol := make([]bool, len(cols))
+	mutationID := desc.Mutations[0].MutationID
+	for _, m := range desc.Mutations {
+		if m.MutationID != mutationID {
+			break
+		}
+		if IndexMutationFilter(m) {
+			idx := m.GetIndex()
+			columnIDs, _ := idx.FullColumnIDs()
+			for _, id := range columnIDs {
+				valNeededForCol[ib.colIdxMap[id]] = true
+			}
+		}
+	}
+
 	return ib.fetcher.Init(
 		&desc, ib.colIdxMap, &desc.PrimaryIndex, false, false, cols, valNeededForCol, false,
 	)
@@ -142,10 +153,6 @@ func (ib *indexBackfiller) runChunk(
 			if err := sqlbase.EncDatumRowToDatums(ib.rowVals, encRow, &ib.da); err != nil {
 				return err
 			}
-			// TODO(vivek): Ideally we should make a version of this that takes EncDatums.
-			// It would not only avoid allocations, but also decode-encode cycles in some
-			// cases (e.g. anything that is part of the PK). Similar to how the joinreader
-			// uses MakeKeyFromEncDatums.
 			if err := sqlbase.EncodeSecondaryIndexes(
 				&ib.spec.Table, added, ib.colIdxMap,
 				ib.rowVals, secondaryIndexEntries); err != nil {
