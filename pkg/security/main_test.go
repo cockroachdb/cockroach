@@ -30,7 +30,7 @@ import (
 // ResetTest sets up the test environment. In particular, it embeds the
 // EmbeddedCertsDir folder and makes the tls package load from there.
 func ResetTest() {
-	security.SetReadFileFn(securitytest.Asset)
+	security.SetAssetLoader(securitytest.EmbeddedAssets)
 }
 
 func TestMain(m *testing.M) {

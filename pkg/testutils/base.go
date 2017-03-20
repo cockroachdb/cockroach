@@ -33,11 +33,25 @@ func NewNodeTestBaseContext() *base.Config {
 
 // NewTestBaseContext creates a secure base context for user.
 func NewTestBaseContext(user string) *base.Config {
-	return &base.Config{
-		Insecure:   false,
-		SSLCA:      filepath.Join(security.EmbeddedCertsDir, security.EmbeddedCACert),
-		SSLCert:    filepath.Join(security.EmbeddedCertsDir, fmt.Sprintf("%s.crt", user)),
-		SSLCertKey: filepath.Join(security.EmbeddedCertsDir, fmt.Sprintf("%s.key", user)),
-		User:       user,
+	cfg := &base.Config{
+		Insecure: false,
+		User:     user,
+	}
+	FillCerts(cfg)
+	return cfg
+}
+
+// FillCerts sets the certs on a base.Config.
+func FillCerts(cfg *base.Config) {
+	cfg.SSLCA = filepath.Join(security.EmbeddedCertsDir, security.EmbeddedCACert)
+
+	// The NodeUser has a combined server/client certificate/key pair, all other users
+	// need client certs.
+	if cfg.User == security.NodeUser {
+		cfg.SSLCert = filepath.Join(security.EmbeddedCertsDir, security.EmbeddedNodeCert)
+		cfg.SSLCertKey = filepath.Join(security.EmbeddedCertsDir, security.EmbeddedNodeKey)
+	} else {
+		cfg.SSLCert = filepath.Join(security.EmbeddedCertsDir, fmt.Sprintf("client.%s.crt", cfg.User))
+		cfg.SSLCertKey = filepath.Join(security.EmbeddedCertsDir, fmt.Sprintf("client.%s.key", cfg.User))
 	}
 }

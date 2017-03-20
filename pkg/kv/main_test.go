@@ -31,7 +31,7 @@ import (
 //go:generate ../util/leaktest/add-leaktest.sh *_test.go
 
 func init() {
-	security.SetReadFileFn(securitytest.Asset)
+	security.SetAssetLoader(securitytest.EmbeddedAssets)
 }
 
 func TestForbiddenDeps(t *testing.T) {

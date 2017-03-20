@@ -22,7 +22,6 @@ package client_test
 import (
 	"bytes"
 	"fmt"
-	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -125,12 +124,12 @@ func createTestClient(t *testing.T, s serverutils.TestServerInterface) *client.D
 func createTestClientForUser(
 	t *testing.T, s serverutils.TestServerInterface, user string, dbCtx client.DBContext,
 ) *client.DB {
-	rpcContext := rpc.NewContext(log.AmbientContext{}, &base.Config{
-		User:       user,
-		SSLCA:      filepath.Join(security.EmbeddedCertsDir, security.EmbeddedCACert),
-		SSLCert:    filepath.Join(security.EmbeddedCertsDir, fmt.Sprintf("%s.crt", user)),
-		SSLCertKey: filepath.Join(security.EmbeddedCertsDir, fmt.Sprintf("%s.key", user)),
-	}, s.Clock(), s.Stopper())
+	cfg := &base.Config{
+		User: user,
+	}
+	testutils.FillCerts(cfg)
+
+	rpcContext := rpc.NewContext(log.AmbientContext{}, cfg, s.Clock(), s.Stopper())
 	conn, err := rpcContext.GRPCDial(s.ServingAddr())
 	if err != nil {
 		t.Fatal(err)
