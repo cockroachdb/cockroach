@@ -53,11 +53,20 @@ func (p *planner) Set(ctx context.Context, n *parser.Set) (planNode, error) {
 	}
 
 	if v, ok := varGen[name]; ok {
-		// SET ... TO ...
-		if v.Set == nil {
-			return nil, fmt.Errorf("variable \"%s\" cannot be changed", name)
-		} else if err := v.Set(p, ctx, typedValues); err != nil {
-			return nil, err
+		if len(n.Values) == 0 {
+			// SET ... TO DEFAULT
+			if v.Reset == nil {
+				return nil, fmt.Errorf("variable \"%s\" cannot be changed", name)
+			} else if err := v.Reset(p); err != nil {
+				return nil, err
+			}
+		} else {
+			// SET ... TO ...
+			if v.Set == nil {
+				return nil, fmt.Errorf("variable \"%s\" cannot be changed", name)
+			} else if err := v.Set(p, ctx, typedValues); err != nil {
+				return nil, err
+			}
 		}
 	} else {
 		return nil, fmt.Errorf("unknown variable: %q", name)

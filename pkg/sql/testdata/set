@@ -127,6 +127,16 @@ time zone                      UTC
 transaction isolation level    SERIALIZABLE
 transaction priority           NORMAL
 
+## Test SET ... TO DEFAULT works
+
+statement ok
+SET APPLICATION_NAME TO DEFAULT
+
+query T colnames
+SHOW APPLICATION_NAME
+----
+application_name
+
 ## Test that our no-op compatibility vars work
 
 statement ok
