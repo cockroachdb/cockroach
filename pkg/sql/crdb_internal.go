@@ -25,8 +25,6 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
-	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -85,8 +83,6 @@ CREATE TABLE crdb_internal.tables (
   STATE                    STRING NOT NULL,
   SC_LEASE_NODE_ID         INT,
   SC_LEASE_EXPIRATION_TIME TIMESTAMP,
-  START_KEY                BYTES,
-  END_KEY                  BYTES,
   CREATE_TABLE             STRING NOT NULL
 );
 `,
@@ -126,7 +122,6 @@ CREATE TABLE crdb_internal.tables (
 			if err != nil {
 				return err
 			}
-			tablePrefix := roachpb.Key(keys.MakeTablePrefix(uint32(table.ID)))
 			if err := addRow(
 				parser.NewDInt(parser.DInt(int64(table.ID))),
 				parser.NewDInt(parser.DInt(int64(table.ParentID))),
@@ -139,8 +134,6 @@ CREATE TABLE crdb_internal.tables (
 				parser.NewDString(table.State.String()),
 				leaseNodeDatum,
 				leaseExpDatum,
-				parser.NewDBytes(parser.DBytes(tablePrefix)),
-				parser.NewDBytes(parser.DBytes(tablePrefix.PrefixEnd())),
 				parser.NewDString(create),
 			); err != nil {
 				return err
