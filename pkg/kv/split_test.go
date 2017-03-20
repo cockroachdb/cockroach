@@ -221,7 +221,7 @@ func TestRangeSplitsWithWritePressure(t *testing.T) {
 }
 
 // TestRangeSplitsWithSameKeyTwice check that second range split
-// on the same splitKey should not cause infinite retry loop.
+// on the same splitKey succeeds.
 func TestRangeSplitsWithSameKeyTwice(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, _ := createTestDB(t)
@@ -233,13 +233,7 @@ func TestRangeSplitsWithSameKeyTwice(t *testing.T) {
 		t.Fatal(err)
 	}
 	log.Infof(context.Background(), "split at key %q first time complete", splitKey)
-	ch := make(chan error)
-	go func() {
-		// should return error other than infinite loop
-		ch <- s.DB.AdminSplit(context.TODO(), splitKey)
-	}()
-
-	if err := <-ch; err == nil {
-		t.Error("range split on same splitKey should fail")
+	if err := s.DB.AdminSplit(context.TODO(), splitKey); err != nil {
+		t.Fatal(err)
 	}
 }

@@ -870,12 +870,39 @@ func TestPresplitRanges(t *testing.T) {
 			if err := presplitRanges(ctx, *kvDB, splitPoints); err != nil {
 				t.Error(err)
 			}
-			for _, splitPoint := range splitPoints {
-				// presplitRanges makes the keys into row sentinels, so we have
-				// to match that behavior.
-				splitKey := keys.MakeRowSentinelKey(splitPoint)
-				if err := kvDB.AdminSplit(ctx, splitKey); !testutils.IsError(err, "already split") {
-					t.Errorf("missing split %s: %+v", splitKey, err)
+
+			// Verify that the splits exist.
+			// Note that presplitRanges adds the row sentinel to make a valid table
+			// key, but AdminSplit internally removes it (via EnsureSafeSplitKey). So
+			// we expect splits that match the splitPoints exactly.
+			for _, splitKey := range splitPoints {
+				// Scan the meta range for splitKey.
+				rk, err := keys.Addr(splitKey)
+				if err != nil {
+					t.Fatal(err)
+				}
+
+				startKey := keys.RangeMetaKey(rk)
+				endKey := keys.Meta2Prefix.PrefixEnd()
+
+				kvs, err := kvDB.Scan(context.Background(), startKey, endKey, 1)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if len(kvs) != 1 {
+					t.Fatalf("expected 1 KV, got %v", kvs)
+				}
+				desc := &roachpb.RangeDescriptor{}
+				if err := kvs[0].ValueProto(desc); err != nil {
+					t.Fatal(err)
+				}
+				if !desc.EndKey.Equal(rk) {
+					t.Errorf(
+						"missing split %s: range %s to %s",
+						keys.PrettyPrint(splitKey),
+						keys.PrettyPrint(desc.StartKey.AsRawKey()),
+						keys.PrettyPrint(desc.EndKey.AsRawKey()),
+					)
 				}
 			}
 		})

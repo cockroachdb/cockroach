@@ -313,12 +313,11 @@ func TestStoreRangeSplitConcurrent(t *testing.T) {
 	for i := 0; i < concurrentCount; i++ {
 		pErr := <-errCh
 		if pErr != nil {
-			// There are only three expected errors from concurrent splits:
+			// There are only two expected errors from concurrent splits:
 			// conflicting range descriptors if the splits are initiated
-			// concurrently, the range is already split at the specified key or the
+			// concurrently, or the
 			// split key is outside of the bounds for the range.
 			expected := strings.Join([]string{
-				"range is already split at key",
 				"key range .* outside of bounds of range",
 			}, "|")
 			if !testutils.IsError(pErr.GoError(), expected) {
