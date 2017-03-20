@@ -549,6 +549,7 @@ func TestParse(t *testing.T) {
 		{`SET TIME ZONE -7.3`},
 		{`SET TIME ZONE DEFAULT`},
 		{`SET TIME ZONE LOCAL`},
+		{`RESET a`},
 
 		{`SELECT * FROM (VALUES (1, 2)) AS foo`},
 		{`SELECT * FROM (VALUES (1, 2)) AS foo (a, b)`},

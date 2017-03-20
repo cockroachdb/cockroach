@@ -42,8 +42,6 @@ func (p *planner) Set(ctx context.Context, n *parser.Set) (planNode, error) {
 
 	// By using VarName.String() here any variables that are keywords will
 	// be double quoted.
-	origName := n.Name.String()
-	name := strings.ToLower(origName)
 	typedValues := make([]parser.TypedExpr, len(n.Values))
 	for i, expr := range n.Values {
 		typedValue, err := parser.TypeCheck(expr, nil, parser.TypeString)
@@ -53,15 +51,33 @@ func (p *planner) Set(ctx context.Context, n *parser.Set) (planNode, error) {
 		typedValues[i] = typedValue
 	}
 
-	if v, ok := varGen[name]; ok {
-		// SET ... TO ...
+	name := n.Name.String()
+
+	v, ok := varGen[strings.ToLower(name)]
+	if !ok {
+		return nil, fmt.Errorf("unknown variable: %q", name)
+	}
+
+	setMode := n.SetMode
+	if len(n.Values) == 0 {
+		setMode = parser.SetModeReset
+	}
+
+	switch setMode {
+	case parser.SetModeAssign:
 		if v.Set == nil {
 			return nil, fmt.Errorf("variable \"%s\" cannot be changed", name)
-		} else if err := v.Set(ctx, p, typedValues); err != nil {
+		}
+		if err := v.Set(ctx, p, typedValues); err != nil {
 			return nil, err
 		}
-	} else {
-		return nil, fmt.Errorf("unknown variable: %q", origName)
+	case parser.SetModeReset:
+		if v.Reset == nil {
+			return nil, fmt.Errorf("variable \"%s\" cannot be reset", name)
+		}
+		if err := v.Reset(p); err != nil {
+			return nil, err
+		}
 	}
 
 	return &emptyNode{}, nil
