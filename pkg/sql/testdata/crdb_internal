@@ -32,21 +32,11 @@ SELECT * FROM crdb_internal.schema_changes
 ----
 TABLE_ID PARENT_ID NAME TYPE TARGET_ID TARGET_NAME STATE DIRECTION
 
-query IITTITRTTTTTTT colnames
-SELECT * FROM crdb_internal.tables LIMIT 0
-----
-TABLE_ID  PARENT_ID  NAME  DATABASE_NAME  VERSION  MOD_TIME  MOD_TIME_LOGICAL  FORMAT_VERSION  STATE  SC_LEASE_NODE_ID  SC_LEASE_EXPIRATION_TIME  START_KEY  END_KEY CREATE_TABLE
-
-# Columns that are tied to our key encoding are tested in crdb_internal_test.go.
 query IITTITRTTTTT colnames
-SELECT
-  TABLE_ID, PARENT_ID, NAME, DATABASE_NAME, VERSION, MOD_TIME, MOD_TIME_LOGICAL,
-  FORMAT_VERSION, STATE, SC_LEASE_NODE_ID, SC_LEASE_EXPIRATION_TIME, CREATE_TABLE
-FROM crdb_internal.tables
-WHERE NAME = 'namespace'
+SELECT * FROM crdb_internal.tables WHERE NAME = 'namespace'
 ----
-TABLE_ID  PARENT_ID  NAME       DATABASE_NAME  VERSION  MOD_TIME                         MOD_TIME_LOGICAL  FORMAT_VERSION            STATE   SC_LEASE_NODE_ID  SC_LEASE_EXPIRATION_TIME CREATE_TABLE
-2         1          namespace  system         1        1970-01-01 00:00:00 +0000 +0000  0.0000000000      InterleavedFormatVersion  PUBLIC  NULL              NULL                     CREATE TABLE namespace (
+TABLE_ID  PARENT_ID  NAME       DATABASE_NAME  VERSION  MOD_TIME                         MOD_TIME_LOGICAL  FORMAT_VERSION            STATE   SC_LEASE_NODE_ID  SC_LEASE_EXPIRATION_TIME  CREATE_TABLE
+2         1          namespace  system         1        1970-01-01 00:00:00 +0000 +0000  0.0000000000      InterleavedFormatVersion  PUBLIC  NULL              NULL                      CREATE TABLE namespace (
           parentID INT NOT NULL,
           name STRING NOT NULL,
           id INT NULL,
