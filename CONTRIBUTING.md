@@ -58,12 +58,10 @@ executable will be in your current directory and can be run as shown in the
 
 ## Code Review Workflow
 
-+ All contributors need to sign the [Contributor License Agreement]
-  (https://cla-assistant.io/cockroachdb/cockroach).
++ All contributors need to sign the [Contributor License Agreement](https://cla-assistant.io/cockroachdb/cockroach).
 
 + Create a local feature branch to do work on, ideally on one thing at a time.
-  If you are working on your own fork, see [this tip]
-  (http://blog.campoy.cat/2014/03/github-and-go-forking-pull-requests-and.html)
+  If you are working on your own fork, see [this tip](http://blog.campoy.cat/2014/03/github-and-go-forking-pull-requests-and.html)
   on forking in Go, which ensures that Go import paths will be correct.
 
   `git checkout -b update-readme`
@@ -106,12 +104,11 @@ executable will be in your current directory and can be run as shown in the
 
   `git push -u <yourfork> update-readme`
 
-+ Then [create a pull request using GitHub’s UI]
-  (https://help.github.com/articles/creating-a-pull-request). If you know of
++ Then [create a pull request using GitHub’s UI](https://help.github.com/articles/creating-a-pull-request). If you know of
   another GitHub user particularly suited to reviewing your pull request, be
   sure to mention them in the pull request body. If you possess the necessary
   GitHub privileges, please also [assign them to the pull request using
-  GitHub's UI] (https://help.github.com/articles/assigning-issues-and-pull-requests-to-other-github-users/).
+  GitHub's UI](https://help.github.com/articles/assigning-issues-and-pull-requests-to-other-github-users/).
   This will help focus and expedite the code review process.
 
 + If you get a test failure in CircleCI, check the Test Failure tab to see why
@@ -138,10 +135,8 @@ Peeking into a running cluster can be done in several ways:
   `Node`/`Store`/`Replica` and the other inside of the coordinator
   (`TxnCoordSender`).
 * [pprof](https://golang.org/pkg/net/http/pprof/) gives us (among other things)
-  heap and cpu profiles; [this golang blog post]
-  (http://blog.golang.org/profiling-go-programs) explains it extremely well and
-  [this one by Dmitry Vuykov]
-  (https://software.intel.com/en-us/blogs/2014/05/10/debugging-performance-issues-in-go-programs)
+  heap and cpu profiles; [this golang blog post](http://blog.golang.org/profiling-go-programs) explains it extremely well and
+  [this one by Dmitry Vuykov](https://software.intel.com/en-us/blogs/2014/05/10/debugging-performance-issues-in-go-programs)
   goes into even more detail.
 
 An easy way to locally run a workload against a cluster are the acceptance
