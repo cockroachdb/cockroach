@@ -166,6 +166,52 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 	}
 }
 
+// Tests that SHOW TABLES works correctly when a database is recreated
+// during the time the underlying tables are still being GC-ed.
+func TestShowTablesAfterRecreateDatabase(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	params, _ := createTestServerParams()
+	// Turn off the application of schema changes so that tables do not
+	// get completely dropped.
+	params.Knobs = base.TestingKnobs{
+		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
+			SyncFilter: func(tscc sql.TestingSchemaChangerCollection) {
+				tscc.ClearSchemaChangers()
+			},
+			AsyncExecNotification: asyncSchemaChangerDisabled,
+		},
+	}
+	s, sqlDB, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop()
+
+	if _, err := sqlDB.Exec(`
+CREATE DATABASE t;
+CREATE TABLE t.kv (k CHAR PRIMARY KEY, v CHAR);
+INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
+`); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := sqlDB.Exec(`
+DROP DATABASE t;
+CREATE DATABASE t;
+`); err != nil {
+		t.Fatal(err)
+	}
+
+	rows, err := sqlDB.Query(`
+SET DATABASE=t;
+SHOW TABLES;
+`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	if rows.Next() {
+		t.Fatal("table should be invisible through SHOW TABLES")
+	}
+}
+
 func checkKeyCount(t *testing.T, kvDB *client.DB, prefix roachpb.Key, numKeys int) {
 	if kvs, err := kvDB.Scan(context.TODO(), prefix, prefix.PrefixEnd(), 0); err != nil {
 		t.Fatal(err)

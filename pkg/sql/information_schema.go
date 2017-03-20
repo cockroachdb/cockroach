@@ -636,7 +636,7 @@ func forEachTableDescWithTableLookup(
 	// Next, iterate through all table descriptors, using the mapping from sqlbase.ID
 	// to database name to add descriptors to a dbDescTables' tables map.
 	for _, desc := range descs {
-		if table, ok := desc.(*sqlbase.TableDescriptor); ok {
+		if table, ok := desc.(*sqlbase.TableDescriptor); ok && !table.Dropped() {
 			dbName, ok := dbIDsToName[table.GetParentID()]
 			if !ok {
 				return errors.Errorf("no database with ID %d found", table.GetParentID())
