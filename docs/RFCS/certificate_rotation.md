@@ -249,6 +249,15 @@ new chain contains only a CA certificate, no node certificate.
 If we record/export chain information by CA cert serial number (or public key), we can ensure
 that all nodes have certificate chains rooted at the same CA.
 
+## Multiple viable CA certs when generating node/client certs
+
+When generating new node or clients certs, we may automatically detect multiple
+valid CA certs in the certificate directory.
+If two certs have the same key pair, we can pick the one expiring the latest.
+If the keys differ, we want to throw an error and either ask the user to remove one, or
+add an additional flag to force the cert (this partially defeats the point of automatic
+file detection).
+
 ## Delegated users
 
 Dropping specific cert flags means that the postgres URL will be built automatically from the
