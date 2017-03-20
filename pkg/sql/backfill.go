@@ -407,21 +407,21 @@ func (sc *SchemaChanger) truncateAndBackfillColumnsChunk(
 		}
 
 		updateCols := append(added, dropped...)
-		fkTables := tablesNeededForFKs(*tableDesc, CheckUpdates)
+		fkTables := sqlbase.TablesNeededForFKs(*tableDesc, sqlbase.CheckUpdates)
 		for k := range fkTables {
 			table, err := p.getTableLeaseByID(ctx, k)
 			if err != nil {
 				return err
 			}
-			fkTables[k] = tableLookup{table: table}
+			fkTables[k] = sqlbase.TableLookup{Table: table}
 		}
 		// TODO(dan): Tighten up the bound on the requestedCols parameter to
 		// makeRowUpdater.
 		requestedCols := make([]sqlbase.ColumnDescriptor, 0, len(tableDesc.Columns)+len(added))
 		requestedCols = append(requestedCols, tableDesc.Columns...)
 		requestedCols = append(requestedCols, added...)
-		ru, err := makeRowUpdater(
-			txn, tableDesc, fkTables, updateCols, requestedCols, rowUpdaterOnlyColumns,
+		ru, err := sqlbase.MakeRowUpdater(
+			txn, tableDesc, fkTables, updateCols, requestedCols, sqlbase.RowUpdaterOnlyColumns,
 		)
 		if err != nil {
 			return err
@@ -430,7 +430,7 @@ func (sc *SchemaChanger) truncateAndBackfillColumnsChunk(
 		// TODO(dan): This check is an unfortunate bleeding of the internals of
 		// rowUpdater. Extract the sql row to k/v mapping logic out into something
 		// usable here.
-		if !ru.isColumnOnlyUpdate() {
+		if !ru.IsColumnOnlyUpdate() {
 			panic("only column data should be modified, but the rowUpdater is configured otherwise")
 		}
 
@@ -440,10 +440,10 @@ func (sc *SchemaChanger) truncateAndBackfillColumnsChunk(
 		// handle intermediate OLTP commands which delete and add
 		// values during the scan.
 		var rf sqlbase.RowFetcher
-		colIDtoRowIndex := colIDtoRowIndexFromCols(tableDesc.Columns)
+		colIDtoRowIndex := sqlbase.ColIDtoRowIndexFromCols(tableDesc.Columns)
 		valNeededForCol := make([]bool, len(tableDesc.Columns))
 		for i := range valNeededForCol {
-			_, valNeededForCol[i] = ru.fetchColIDtoRowIndex[tableDesc.Columns[i].ID]
+			_, valNeededForCol[i] = ru.FetchColIDtoRowIndex[tableDesc.Columns[i].ID]
 		}
 		if err := rf.Init(
 			tableDesc, colIDtoRowIndex, &tableDesc.PrimaryIndex,
@@ -458,7 +458,7 @@ func (sc *SchemaChanger) truncateAndBackfillColumnsChunk(
 			return err
 		}
 
-		oldValues := make(parser.Datums, len(ru.fetchCols))
+		oldValues := make(parser.Datums, len(ru.FetchCols))
 		writeBatch := txn.NewBatch()
 		rowLength := 0
 		var lastRowSeen parser.Datums
@@ -485,7 +485,7 @@ func (sc *SchemaChanger) truncateAndBackfillColumnsChunk(
 					oldValues[j] = parser.DNull
 				}
 			}
-			if _, err := ru.updateRow(ctx, writeBatch, oldValues, updateValues); err != nil {
+			if _, err := ru.UpdateRow(ctx, writeBatch, oldValues, updateValues); err != nil {
 				return err
 			}
 		}
@@ -556,7 +556,7 @@ func (sc *SchemaChanger) truncateIndexes(
 					return err
 				}
 
-				rd, err := makeRowDeleter(txn, tableDesc, nil, nil, false)
+				rd, err := sqlbase.MakeRowDeleter(txn, tableDesc, nil, nil, false)
 				if err != nil {
 					return err
 				}
