@@ -575,11 +575,11 @@ func (ts *txnState) willBeRetried() bool {
 // the client.Txn being done.
 func (ts *txnState) resetStateAndTxn(state TxnStateEnum) {
 	if state != NoTxn && state != Aborted && state != CommitWait {
-		panic(fmt.Sprintf("resetStateAndTxn called with unsupported state: %s", state))
+		panic(fmt.Sprintf("resetStateAndTxn called with unsupported state: %v", state))
 	}
 	if ts.txn != nil && !ts.txn.IsFinalized() {
 		panic(fmt.Sprintf(
-			"attempting to move SQL txn to state %s inconsistent with KV txn state: %s "+
+			"attempting to move SQL txn to state %v inconsistent with KV txn state: %s "+
 				"(finalized: false)", state, ts.txn.Proto().Status))
 	}
 	ts.State = state
