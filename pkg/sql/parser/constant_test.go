@@ -32,9 +32,9 @@ import (
 // all return expected available type sets, and that attempting to resolve the NumVals
 // as each of these types will all succeed with an expected Datum result.
 func TestNumericConstantVerifyAndResolveAvailableTypes(t *testing.T) {
-	wantInt := numValAvailIntFloatDec
-	wantDecButCanBeInt := numValAvailDecFloatInt
-	wantDec := numValAvailDecFloat
+	wantInt := numValAvailInteger
+	wantDecButCanBeInt := numValAvailDecimalNoFraction
+	wantDec := numValAvailDecimalWithFraction
 
 	testCases := []struct {
 		str   string

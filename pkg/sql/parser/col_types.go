@@ -348,11 +348,11 @@ var int2vectorColType = &VectorColType{
 // Pre-allocated immutable postgres oid column types.
 var (
 	oidColTypeOid          = &OidColType{Name: "OID"}
+	oidColTypeRegClass     = &OidColType{Name: "REGCLASS"}
+	oidColTypeRegNamespace = &OidColType{Name: "REGNAMESPACE"}
 	oidColTypeRegProc      = &OidColType{Name: "REGPROC"}
 	oidColTypeRegProcedure = &OidColType{Name: "REGPROCEDURE"}
-	oidColTypeRegClass     = &OidColType{Name: "REGCLASS"}
 	oidColTypeRegType      = &OidColType{Name: "REGTYPE"}
-	oidColTypeRegNamespace = &OidColType{Name: "REGNAMESPACE"}
 )
 
 // OidColType represents an OID type, which is the type of system object
@@ -369,6 +369,44 @@ type OidColType struct {
 // Format implements the NodeFormatter interface.
 func (node *OidColType) Format(buf *bytes.Buffer, f FmtFlags) {
 	buf.WriteString(node.Name)
+}
+
+func oidColTypeToType(ct *OidColType) Type {
+	switch ct {
+	case oidColTypeOid:
+		return TypeOid
+	case oidColTypeRegClass:
+		return TypeRegClass
+	case oidColTypeRegNamespace:
+		return TypeRegNamespace
+	case oidColTypeRegProc:
+		return TypeRegProc
+	case oidColTypeRegProcedure:
+		return TypeRegProcedure
+	case oidColTypeRegType:
+		return TypeRegType
+	default:
+		panic(fmt.Sprintf("unexpected *OidColType: %v", ct))
+	}
+}
+
+func oidTypeToColType(t Type) *OidColType {
+	switch t {
+	case TypeOid:
+		return oidColTypeOid
+	case TypeRegClass:
+		return oidColTypeRegClass
+	case TypeRegNamespace:
+		return oidColTypeRegNamespace
+	case TypeRegProc:
+		return oidColTypeRegProc
+	case TypeRegProcedure:
+		return oidColTypeRegProcedure
+	case TypeRegType:
+		return oidColTypeRegType
+	default:
+		panic(fmt.Sprintf("unexpected type: %v", t))
+	}
 }
 
 func (node *BoolColType) String() string           { return AsString(node) }
@@ -412,8 +450,13 @@ func DatumTypeToColumnType(t Type) (ColumnType, error) {
 		return nameColTypeName, nil
 	case TypeBytes:
 		return bytesColTypeBytes, nil
-	case TypeOid:
-		return oidColTypeOid, nil
+	case TypeOid,
+		TypeRegClass,
+		TypeRegNamespace,
+		TypeRegProc,
+		TypeRegProcedure,
+		TypeRegType:
+		return oidTypeToColType(t), nil
 	default:
 		if typ, ok := t.(TCollatedString); ok {
 			return &CollatedStringColType{Name: "STRING", Locale: typ.Locale}, nil
@@ -455,7 +498,7 @@ func CastTargetToDatumType(t CastTargetType) Type {
 	case *VectorColType:
 		return TypeIntVector
 	case *OidColType:
-		return TypeOid
+		return oidColTypeToType(ct)
 	default:
 		panic(errors.Errorf("unexpected CastTarget %T", t))
 	}

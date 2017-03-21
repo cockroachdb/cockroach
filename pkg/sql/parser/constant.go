@@ -179,9 +179,12 @@ func (expr *NumVal) asConstantInt() (constant.Value, bool) {
 }
 
 var (
-	numValAvailIntFloatDec = []Type{TypeInt, TypeDecimal, TypeFloat, TypeOid}
-	numValAvailDecFloatInt = []Type{TypeDecimal, TypeFloat, TypeInt, TypeOid}
-	numValAvailDecFloat    = []Type{TypeDecimal, TypeFloat}
+	intLikeTypes     = []Type{TypeInt, TypeOid}
+	decimalLikeTypes = []Type{TypeDecimal, TypeFloat}
+
+	numValAvailInteger             = append(intLikeTypes, decimalLikeTypes...)
+	numValAvailDecimalNoFraction   = append(decimalLikeTypes, intLikeTypes...)
+	numValAvailDecimalWithFraction = decimalLikeTypes
 )
 
 // AvailableTypes implements the Constant interface.
@@ -189,11 +192,11 @@ func (expr *NumVal) AvailableTypes() []Type {
 	switch {
 	case expr.canBeInt64():
 		if expr.Kind() == constant.Int {
-			return numValAvailIntFloatDec
+			return numValAvailInteger
 		}
-		return numValAvailDecFloatInt
+		return numValAvailDecimalNoFraction
 	default:
-		return numValAvailDecFloat
+		return numValAvailDecimalWithFraction
 	}
 }
 
@@ -244,12 +247,20 @@ func (expr *NumVal) ResolveAsType(ctx *SemaContext, typ Type) (Datum, error) {
 			}
 		}
 		return dd, nil
-	case TypeOid:
+	case TypeOid,
+		TypeRegClass,
+		TypeRegNamespace,
+		TypeRegProc,
+		TypeRegProcedure,
+		TypeRegType:
+
 		d, err := expr.ResolveAsType(ctx, TypeInt)
 		if err != nil {
 			return nil, err
 		}
-		return NewDOid(*d.(*DInt)), nil
+		oid := NewDOid(*d.(*DInt))
+		oid.kind = oidTypeToColType(typ)
+		return oid, nil
 	default:
 		return nil, fmt.Errorf("could not resolve %T %v into a %T", expr, expr, typ)
 	}
