@@ -176,7 +176,7 @@ func (n *dropDatabaseNode) Start(ctx context.Context) error {
 	// Delete the zone config entry for this database.
 	b.Del(zoneKey)
 
-	n.p.setTestingVerifyMetadata(func(systemConfig config.SystemConfig) error {
+	n.p.session.setTestingVerifyMetadata(func(systemConfig config.SystemConfig) error {
 		for _, key := range [...]roachpb.Key{descKey, nameKey, zoneKey} {
 			if err := expectDeleted(systemConfig, key); err != nil {
 				return err
@@ -839,7 +839,7 @@ func (p *planner) dropTableImpl(
 		return droppedViews, err
 	}
 
-	p.setTestingVerifyMetadata(func(systemConfig config.SystemConfig) error {
+	p.session.setTestingVerifyMetadata(func(systemConfig config.SystemConfig) error {
 		return verifyDropTableMetadata(systemConfig, tableDesc.ID, "table")
 	})
 	return droppedViews, nil
@@ -971,7 +971,7 @@ func (p *planner) dropViewImpl(
 		return cascadeDroppedViews, err
 	}
 
-	p.setTestingVerifyMetadata(func(systemConfig config.SystemConfig) error {
+	p.session.setTestingVerifyMetadata(func(systemConfig config.SystemConfig) error {
 		return verifyDropTableMetadata(systemConfig, viewDesc.ID, "view")
 	})
 	return cascadeDroppedViews, nil
