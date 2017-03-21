@@ -44,7 +44,7 @@ func slurpSSTablesLatestKey(
 	defer batch.Close()
 
 	for _, path := range paths {
-		sst, err := engine.MakeRocksDBSstFileReader("")
+		sst, err := engine.MakeRocksDBSstFileReader(dir)
 		if err != nil {
 			return nil, err
 		}

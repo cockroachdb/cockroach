@@ -100,15 +100,6 @@ func ExportStorageConfFromURI(path string) (roachpb.ExportStorage, error) {
 	return conf, nil
 }
 
-// ExportStorageFromURI returns an ExportStorage for the given URI.
-func ExportStorageFromURI(ctx context.Context, uri string) (ExportStorage, error) {
-	conf, err := ExportStorageConfFromURI(uri)
-	if err != nil {
-		return nil, err
-	}
-	return MakeExportStorage(ctx, conf)
-}
-
 // MakeExportStorage creates an ExportStorage from the given config.
 func MakeExportStorage(ctx context.Context, dest roachpb.ExportStorage) (ExportStorage, error) {
 	switch dest.Provider {
@@ -126,42 +117,23 @@ func MakeExportStorage(ctx context.Context, dest roachpb.ExportStorage) (ExportS
 	return nil, errors.Errorf("unsupported export destination type: %s", dest.Provider.String())
 }
 
-// ExportStorage handles reading and writing files in an export.
+// ExportStorage provides functions to read and write files in some storage,
+// namely various cloud storage providers, for example to store backups.
 type ExportStorage interface {
 	io.Closer
+
 	// Conf should return the serializable configuration required to reconstruct
 	// this ExportStorage implementation.
 	Conf() roachpb.ExportStorage
-	// PutFile is used to prepare to write a file to the storage.
-	// See ExportFileWriter.
-	PutFile(ctx context.Context, basename string) (ExportFileWriter, error)
+
 	// ReadFile should return a Reader for requested name.
 	ReadFile(ctx context.Context, basename string) (io.ReadCloser, error)
-	// FetchFile returns the path to a local file containing the content of
-	// the requested filename. Implementations may wish to use the `fetchFile`
-	// helper for copying the content of ReadFile to a temporary file.
-	FetchFile(ctx context.Context, basename string) (string, error)
+
+	// WriteFile should write the content to requested name.
+	WriteFile(ctx context.Context, basename string, content io.Reader) error
+
 	// Delete removes the named file from the store.
 	Delete(ctx context.Context, basename string) error
-}
-
-// ExportFileWriter provides a local file or pipe that can be written to before
-// calling Finish() to store the content of said file. As some writers may be
-// non-Go (e.g. the RocksDB SSTable Writer), this is intentionally the path to a
-// file, not an io.Writer, and the required call to `Finish` gives
-// implementations the opportunity to move/copy/upload/etc as needed.
-type ExportFileWriter interface {
-	// LocalFile returns the path to a local path to which a caller should write.
-	LocalFile() string
-	// Finish indicates that no further writes to the local file are expected and
-	// that the implementation should store the content (copy it, upload, etc) if
-	// that has not already been done in a streaming fashion (e.g. via a pipe).
-	Finish() error
-	// Cleanup removes any temporary files or resources that were made on behalf
-	// of this writer. If `Finish` has not been called, any writes to
-	// `LocalFile` will be lost. Implementations of `Cleanup` are required to be
-	// idempotent and should log any errors.
-	Cleanup()
 }
 
 type localFileStorage struct {
@@ -186,19 +158,22 @@ func (l *localFileStorage) Conf() roachpb.ExportStorage {
 	}
 }
 
-func (l *localFileStorage) PutFile(_ context.Context, basename string) (ExportFileWriter, error) {
-	if err := os.MkdirAll(l.base, 0777); err != nil {
-		return nil, errors.Wrapf(err, "failed to create %q", l.base)
+func (l *localFileStorage) WriteFile(_ context.Context, basename string, content io.Reader) error {
+	if err := os.MkdirAll(l.base, 0755); err != nil {
+		return errors.Wrap(err, "creating local export storage path")
 	}
-	return localFileStorageWriter{path: filepath.Join(l.base, basename)}, nil
+	path := filepath.Join(l.base, basename)
+	f, err := os.Create(path)
+	if err != nil {
+		return errors.Wrapf(err, "creating local export file %q", path)
+	}
+	defer f.Close()
+	_, err = io.Copy(f, content)
+	return errors.Wrapf(err, "writing to local export file %q", path)
 }
 
 func (l *localFileStorage) ReadFile(_ context.Context, basename string) (io.ReadCloser, error) {
 	return os.Open(filepath.Join(l.base, basename))
-}
-
-func (l *localFileStorage) FetchFile(_ context.Context, basename string) (string, error) {
-	return filepath.Join(l.base, basename), nil
 }
 
 func (l *localFileStorage) Delete(_ context.Context, basename string) error {
@@ -209,30 +184,9 @@ func (*localFileStorage) Close() error {
 	return nil
 }
 
-type localFileStorageWriter struct {
-	path string
-}
-
-var _ ExportFileWriter = localFileStorageWriter{}
-
-func (l localFileStorageWriter) LocalFile() string {
-	return fmt.Sprintf("%s.tmp", l.path)
-}
-
-func (l localFileStorageWriter) Finish() error {
-	return os.Rename(l.LocalFile(), l.path)
-}
-
-func (l localFileStorageWriter) Cleanup() {
-	if err := os.RemoveAll(l.LocalFile()); err != nil {
-		log.Warningf(context.TODO(), "could not remove %q: %+v", l.LocalFile(), err)
-	}
-}
-
 type httpStorage struct {
 	client *http.Client
 	base   string
-	tmp    tmpHelper
 }
 
 var _ ExportStorage = &httpStorage{}
@@ -257,58 +211,28 @@ func (h *httpStorage) Conf() roachpb.ExportStorage {
 	}
 }
 
-func (h *httpStorage) PutFile(_ context.Context, basename string) (ExportFileWriter, error) {
-	local, err := h.tmp.tmpFile(basename)
-	if err != nil {
-		return nil, err
-	}
-	url := h.base + basename
-	return httpStorageWriter{client: h.client, local: local, url: url}, nil
-}
-
 func (h *httpStorage) ReadFile(_ context.Context, basename string) (io.ReadCloser, error) {
-	return runHTTPRequest(h.client, "GET", h.base+basename, nil)
+	return runHTTPRequest(h.client, "GET", h.base, basename, nil)
 }
 
-func (h *httpStorage) FetchFile(ctx context.Context, basename string) (string, error) {
-	body, err := h.ReadFile(ctx, basename)
-	if err != nil {
-		return "", err
-	}
-	return fetchFile(body, &h.tmp, basename)
+func (h *httpStorage) WriteFile(_ context.Context, basename string, content io.Reader) error {
+	_, err := runHTTPRequest(h.client, "PUT", h.base, basename, content)
+	return err
 }
 
 func (h *httpStorage) Delete(_ context.Context, basename string) error {
-	_, err := runHTTPRequest(h.client, "DELETE", h.base+basename, nil)
+	_, err := runHTTPRequest(h.client, "DELETE", h.base, basename, nil)
 	return err
 }
 
 func (h *httpStorage) Close() error {
-	return h.tmp.Close()
+	return nil
 }
 
-type httpStorageWriter struct {
-	client *http.Client
-	local  string
-	url    string
-}
-
-var _ ExportFileWriter = httpStorageWriter{}
-
-func (l httpStorageWriter) LocalFile() string {
-	return l.local
-}
-
-func (l httpStorageWriter) Finish() error {
-	f, err := os.Open(l.local)
-	if err != nil {
-		return err
-	}
-	_, err = runHTTPRequest(l.client, "PUT", l.url, f)
-	return err
-}
-
-func runHTTPRequest(c *http.Client, method, url string, body io.Reader) (io.ReadCloser, error) {
+func runHTTPRequest(
+	c *http.Client, method, base, file string, body io.Reader,
+) (io.ReadCloser, error) {
+	url := base + file
 	req, err := http.NewRequest(method, url, body)
 	if err != nil {
 		return nil, errors.Wrapf(err, "error constructing request %s %q", method, url)
@@ -325,25 +249,13 @@ func runHTTPRequest(c *http.Client, method, url string, body io.Reader) (io.Read
 	return resp.Body, nil
 }
 
-func (l httpStorageWriter) Cleanup() {
-	return // No-op.
-}
-
 type s3Storage struct {
 	conf   *roachpb.ExportStorage_S3
 	bucket *s3gof3r.Bucket
 	prefix string
-	tmp    tmpHelper
 }
 
 var _ ExportStorage = &s3Storage{}
-
-type s3StorageWriter struct {
-	w     io.WriteCloser
-	local string
-}
-
-var _ ExportFileWriter = &s3StorageWriter{}
 
 func makeS3Storage(conf *roachpb.ExportStorage_S3) (ExportStorage, error) {
 	if conf == nil {
@@ -365,41 +277,14 @@ func (s *s3Storage) Conf() roachpb.ExportStorage {
 	}
 }
 
-func (s *s3Storage) PutFile(_ context.Context, basename string) (ExportFileWriter, error) {
-	local, err := s.tmp.tmpFile(basename)
-	if err != nil {
-		return nil, err
-	}
+func (s *s3Storage) WriteFile(_ context.Context, basename string, content io.Reader) error {
 	w, err := s.bucket.PutWriter(filepath.Join(s.prefix, basename), nil, nil)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to create s3 writer")
+		return errors.Wrap(err, "creating s3 writer")
 	}
-	return &s3StorageWriter{
-		local: local,
-		w:     w,
-	}, nil
-}
-
-func (s *s3StorageWriter) LocalFile() string {
-	return s.local
-}
-
-func (s *s3StorageWriter) Finish() error {
-	f, err := os.Open(s.local)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-	if _, err := io.Copy(s.w, f); err != nil {
-		return errors.Wrap(err, "failed to copy to s3")
-	}
-	return s.w.Close()
-}
-
-func (s *s3StorageWriter) Cleanup() {
-	if err := s.w.Close(); err != nil {
-		log.Warningf(context.TODO(), "couldn't cleanup s3StorageWriter: %+v", err)
-	}
+	defer w.Close()
+	_, err = io.Copy(w, content)
+	return errors.Wrap(err, "failed to copy to s3")
 }
 
 func (s *s3Storage) ReadFile(_ context.Context, basename string) (io.ReadCloser, error) {
@@ -407,54 +292,22 @@ func (s *s3Storage) ReadFile(_ context.Context, basename string) (io.ReadCloser,
 	return r, errors.Wrap(err, "failed to create s3 reader")
 }
 
-func fetchFile(r io.ReadCloser, t *tmpHelper, basename string) (string, error) {
-	defer r.Close()
-	if err := t.init(); err != nil {
-		return "", err
-	}
-	f, err := ioutil.TempFile(t.path, basename)
-	if err != nil {
-		return "", err
-	}
-	defer f.Close()
-	if _, err := io.Copy(f, r); err != nil {
-		return "", err
-	}
-	return f.Name(), nil
-}
-
-func (s *s3Storage) FetchFile(ctx context.Context, basename string) (string, error) {
-	r, err := s.ReadFile(ctx, basename)
-	if err != nil {
-		return "", errors.Wrap(err, "failed to create s3 reader for fetch")
-	}
-	return fetchFile(r, &s.tmp, basename)
-}
-
 func (s *s3Storage) Delete(_ context.Context, basename string) error {
 	return s.bucket.Delete(filepath.Join(s.prefix, basename))
 }
 
 func (s *s3Storage) Close() error {
-	return s.tmp.Close()
+	return nil
 }
 
 type gcsStorage struct {
 	conf   *roachpb.ExportStorage_GCS
-	tmp    tmpHelper
 	client *gcs.Client
 	bucket *gcs.BucketHandle
 	prefix string
 }
 
 var _ ExportStorage = &gcsStorage{}
-
-type gcsStorageWriter struct {
-	w     *gcs.Writer
-	local string
-}
-
-var _ ExportFileWriter = &gcsStorageWriter{}
 
 func (g *gcsStorage) Conf() roachpb.ExportStorage {
 	return roachpb.ExportStorage{
@@ -479,82 +332,33 @@ func makeGCSStorage(ctx context.Context, conf *roachpb.ExportStorage_GCS) (Expor
 	}, nil
 }
 
-func (g *gcsStorage) PutFile(ctx context.Context, basename string) (ExportFileWriter, error) {
-	local, err := g.tmp.tmpFile(basename)
-	if err != nil {
-		return nil, err
-	}
+func (g *gcsStorage) WriteFile(ctx context.Context, basename string, content io.Reader) error {
 	w := g.bucket.Object(filepath.Join(g.prefix, basename)).NewWriter(ctx)
-	return &gcsStorageWriter{w: w, local: local}, nil
-}
-
-func (g *gcsStorageWriter) LocalFile() string {
-	return g.local
-}
-
-func (g *gcsStorageWriter) Finish() error {
-	f, err := os.Open(g.local)
-	if err != nil {
-		return errors.Wrap(err, "failed to open local file")
-	}
-	defer f.Close()
-	if _, err := io.Copy(g.w, f); err != nil {
+	if _, err := io.Copy(w, content); err != nil {
 		return errors.Wrap(err, "failed to write to google cloud")
 	}
-	return g.w.Close()
-}
-
-func (g *gcsStorageWriter) Cleanup() {
-	if err := g.w.Close(); err != nil {
-		log.Warningf(context.TODO(), "couldn't cleanup gcsStorageWriter: %+v", err)
-	}
+	return w.Close()
 }
 
 func (g *gcsStorage) ReadFile(ctx context.Context, basename string) (io.ReadCloser, error) {
-	obj := g.bucket.Object(filepath.Join(g.prefix, basename))
-	return obj.NewReader(ctx)
-}
-
-func (g *gcsStorage) FetchFile(ctx context.Context, basename string) (string, error) {
-	r, err := g.ReadFile(ctx, basename)
-	if err != nil {
-		return "", err
-	}
-	return fetchFile(r, &g.tmp, basename)
+	return g.bucket.Object(filepath.Join(g.prefix, basename)).NewReader(ctx)
 }
 
 func (g *gcsStorage) Delete(ctx context.Context, basename string) error {
-	obj := g.bucket.Object(filepath.Join(g.prefix, basename))
-	return obj.Delete(ctx)
+	return g.bucket.Object(filepath.Join(g.prefix, basename)).Delete(ctx)
 }
 
 func (g *gcsStorage) Close() error {
-	gErr := g.client.Close()
-	err := g.tmp.Close()
-	if err != nil {
-		return err
-	}
-	return gErr
+	return g.client.Close()
 }
 
 type azureStorage struct {
 	conf   *roachpb.ExportStorage_Azure
 	client azr.BlobStorageClient
 	prefix string
-	tmp    tmpHelper
 }
 
 var _ ExportStorage = &azureStorage{}
-
-type azureStorageWriter struct {
-	ctx       context.Context
-	client    azr.BlobStorageClient
-	local     string
-	container string
-	name      string
-}
-
-var _ ExportFileWriter = &azureStorageWriter{}
 
 func makeAzureStorage(conf *roachpb.ExportStorage_Azure) (ExportStorage, error) {
 	if conf == nil {
@@ -578,31 +382,8 @@ func (s *azureStorage) Conf() roachpb.ExportStorage {
 	}
 }
 
-func (s *azureStorage) PutFile(ctx context.Context, basename string) (ExportFileWriter, error) {
-	local, err := s.tmp.tmpFile(basename)
-	if err != nil {
-		return nil, err
-	}
-	return &azureStorageWriter{
-		ctx:       ctx,
-		local:     local,
-		client:    s.client,
-		container: s.conf.Container,
-		name:      filepath.Join(s.prefix, basename),
-	}, nil
-}
-
-func (s *azureStorageWriter) LocalFile() string {
-	return s.local
-}
-
-func (s *azureStorageWriter) Finish() error {
-	f, err := os.Open(s.local)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-
+func (s *azureStorage) WriteFile(ctx context.Context, basename string, content io.Reader) error {
+	name := filepath.Join(s.prefix, basename)
 	// A blob in Azure is composed of an ordered list of blocks. To create a
 	// blob, we must first create an empty block blob (i.e., a blob backed
 	// by blocks). Then we upload the blocks. Blocks can only by 4 MiB (in
@@ -615,8 +396,8 @@ func (s *azureStorageWriter) Finish() error {
 
 	const maxAttempts = 3
 
-	if err := retry.WithMaxAttempts(s.ctx, base.DefaultRetryOptions(), maxAttempts, func() error {
-		return s.client.CreateBlockBlob(s.container, s.name)
+	if err := retry.WithMaxAttempts(ctx, base.DefaultRetryOptions(), maxAttempts, func() error {
+		return s.client.CreateBlockBlob(s.conf.Container, name)
 	}); err != nil {
 		return errors.Wrap(err, "creating block blob")
 	}
@@ -632,8 +413,8 @@ func (s *azureStorageWriter) Finish() error {
 	i := 1
 	uploadBlockFunc := func(b []byte) error {
 		select {
-		case <-s.ctx.Done():
-			return s.ctx.Err()
+		case <-ctx.Done():
+			return ctx.Err()
 		default:
 		}
 
@@ -647,22 +428,19 @@ func (s *azureStorageWriter) Finish() error {
 		id := base64.URLEncoding.EncodeToString([]byte(fmt.Sprintf(blockIDFmt, i)))
 		i++
 		blocks = append(blocks, azr.Block{ID: id, Status: azr.BlockStatusUncommitted})
-		return retry.WithMaxAttempts(s.ctx, base.DefaultRetryOptions(), maxAttempts, func() error {
-			return s.client.PutBlock(s.container, s.name, id, b)
+		return retry.WithMaxAttempts(ctx, base.DefaultRetryOptions(), maxAttempts, func() error {
+			return s.client.PutBlock(s.conf.Container, name, id, b)
 		})
 	}
 
-	if err := chunkReader(f, fourMiB, uploadBlockFunc); err != nil {
+	if err := chunkReader(content, fourMiB, uploadBlockFunc); err != nil {
 		return errors.Wrap(err, "putting blocks")
 	}
 
-	if err := retry.WithMaxAttempts(s.ctx, base.DefaultRetryOptions(), maxAttempts, func() error {
-		return s.client.PutBlockList(s.container, s.name, blocks)
-	}); err != nil {
-		return errors.Wrap(err, "putting block list")
-	}
-
-	return nil
+	err := retry.WithMaxAttempts(ctx, base.DefaultRetryOptions(), maxAttempts, func() error {
+		return s.client.PutBlockList(s.conf.Container, name, blocks)
+	})
+	return errors.Wrap(err, "putting block list")
 }
 
 // chunkReader calls f with chunks of size from r. The same underlying byte
@@ -694,20 +472,9 @@ func chunkReader(r io.Reader, size int, f func([]byte) error) error {
 	return nil
 }
 
-func (s *azureStorageWriter) Cleanup() {
-}
-
 func (s *azureStorage) ReadFile(_ context.Context, basename string) (io.ReadCloser, error) {
 	r, err := s.client.GetBlob(s.conf.Container, filepath.Join(s.prefix, basename))
 	return r, errors.Wrap(err, "failed to create azure reader")
-}
-
-func (s *azureStorage) FetchFile(ctx context.Context, basename string) (string, error) {
-	r, err := s.ReadFile(ctx, basename)
-	if err != nil {
-		return "", errors.Wrap(err, "failed to create azure reader for fetch")
-	}
-	return fetchFile(r, &s.tmp, basename)
 }
 
 func (s *azureStorage) Delete(_ context.Context, basename string) error {
@@ -718,37 +485,100 @@ func (s *azureStorage) Delete(_ context.Context, basename string) error {
 }
 
 func (s *azureStorage) Close() error {
-	return s.tmp.Close()
-}
-
-type tmpHelper struct {
-	path string
-}
-
-func (t *tmpHelper) init() error {
-	if t.path == "" {
-		base, err := ioutil.TempDir("", "cockroach-export")
-		if err != nil {
-			return err
-		}
-		t.path = base
-	}
 	return nil
 }
 
-func (t *tmpHelper) tmpFile(basename string) (string, error) {
-	if err := t.init(); err != nil {
-		return "", err
+// FetchFile returns the path to a local file containing the content of
+// the requested filename, and a cleanup func to be called when done reading it.
+func FetchFile(
+	ctx context.Context, e ExportStorage, basename, tmpdir string,
+) (string, func(), error) {
+	cleanup := func() {}
+	r, err := e.ReadFile(ctx, basename)
+	if err != nil {
+		return "", cleanup, err
 	}
-	return filepath.Join(t.path, basename), nil
+	defer r.Close()
+	f, err := ioutil.TempFile(tmpdir, basename)
+	if err != nil {
+		return "", cleanup, err
+	}
+	defer f.Close()
+	cleanup = func() {
+		if err := os.Remove(f.Name()); err != nil {
+			log.Warning(ctx, err)
+		}
+	}
+	if _, err := io.Copy(f, r); err != nil {
+		return "", cleanup, err
+	}
+	return f.Name(), cleanup, nil
 }
 
-func (t *tmpHelper) Close() error {
-	if t.path != "" {
-		if err := os.RemoveAll(t.path); err != nil {
-			return errors.Wrapf(err, "failed to clean up tmpdir %q for remote export storage", t.path)
+// ExportFileWriter provides a local path, to a file or pipe, that can be
+// written to before calling Finish() to store the written content to an
+// ExportStorage. This caters to non-Go clients (like RocksDB) that want to open
+// and write to a file, rather than just use an Go io.Reader/io.Writer
+// interface.
+type ExportFileWriter interface {
+	// LocalFile returns the path to a local path to which a caller should write.
+	LocalFile() string
+
+	// Finish indicates that no further writes to the local file are expected and
+	// that the implementation should store the content (copy it, upload, etc) if
+	// that has not already been done in a streaming fashion (e.g. via a pipe).
+	Finish(ctx context.Context) error
+
+	// Close removes any temporary files or resources that were made on behalf
+	// of this writer. If `Finish` has not been called, any writes to
+	// `LocalFile` will be lost. Implementations of `Close` are required to be
+	// idempotent and should log any errors.
+	Close(ctx context.Context)
+}
+
+// tmpWriter uses local temp files to implement an ExportFileWriter.
+type tmpWriter struct {
+	store   ExportStorage
+	tmpfile *os.File
+	name    string
+}
+
+var _ ExportFileWriter = &tmpWriter{}
+
+// MakeExportFileTmpWriter returns an ExportFileWriter backed by a tempfile.
+func MakeExportFileTmpWriter(
+	ctx context.Context, store ExportStorage, name, tmpdir string,
+) (ExportFileWriter, error) {
+	if tmpdir != "" {
+		if err := os.MkdirAll(tmpdir, 0755); err != nil {
+			return nil, err
 		}
-		t.path = ""
 	}
-	return nil
+	f, err := ioutil.TempFile(tmpdir, name)
+	if err != nil {
+		return nil, err
+	}
+	return &tmpWriter{store: store, tmpfile: f, name: name}, nil
+}
+
+// LocalFile returns the local temp file.
+func (e *tmpWriter) LocalFile() string {
+	return e.tmpfile.Name()
+}
+
+// Finish uploads the content of the tmpfile using the store's WriteFile.
+func (e *tmpWriter) Finish(ctx context.Context) error {
+	return e.store.WriteFile(ctx, e.name, e.tmpfile)
+}
+
+func (e *tmpWriter) Close(ctx context.Context) {
+	if e.tmpfile != nil {
+		if err := e.tmpfile.Close(); err != nil {
+			log.Warning(ctx, err)
+		}
+		if err := os.Remove(e.tmpfile.Name()); err != nil {
+			log.Warning(ctx, err)
+		}
+		e.tmpfile = nil
+	}
 }

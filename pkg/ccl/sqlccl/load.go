@@ -14,8 +14,8 @@ import (
 	gosql "database/sql"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"math/rand"
+	"os"
 
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
@@ -56,15 +56,15 @@ func Load(
 	parse := parser.Parser{}
 	evalCtx := parser.EvalContext{}
 
-	dir, err := storageccl.ExportStorageFromURI(ctx, uri)
+	conf, err := storageccl.ExportStorageConfFromURI(uri)
+	if err != nil {
+		return BackupDescriptor{}, err
+	}
+	dir, err := storageccl.MakeExportStorage(ctx, conf)
 	if err != nil {
 		return BackupDescriptor{}, errors.Wrap(err, "export storage from URI")
 	}
-	defer func() {
-		if err := dir.Close(); err != nil {
-			log.Errorf(ctx, "close storage: %s", err)
-		}
-	}()
+	defer dir.Close()
 
 	var dbDescBytes []byte
 	if err := db.QueryRow(`
@@ -217,15 +217,7 @@ func Load(
 	if err != nil {
 		return BackupDescriptor{}, errors.Wrap(err, "marshal backup descriptor")
 	}
-	descFile, err := dir.PutFile(ctx, BackupDescriptorName)
-	if err != nil {
-		return BackupDescriptor{}, errors.Wrap(err, "creating backup descriptor file")
-	}
-	defer descFile.Cleanup()
-	if err = ioutil.WriteFile(descFile.LocalFile(), descBuf, 0600); err != nil {
-		return BackupDescriptor{}, errors.Wrap(err, "write backup descriptor")
-	}
-	if err := descFile.Finish(); err != nil {
+	if err := dir.WriteFile(ctx, BackupDescriptorName, bytes.NewReader(descBuf)); err != nil {
 		return BackupDescriptor{}, errors.Wrap(err, "uploading backup descriptor")
 	}
 
@@ -330,11 +322,12 @@ func writeSST(
 ) error {
 	filename := fmt.Sprintf("load-%d.sst", rand.Int63())
 	log.Info(ctx, "writesst ", filename)
-	sstFile, err := base.PutFile(ctx, filename)
+	// TODO(dt): os.TempDir isn't ideal, but we don't have Store path here.
+	sstFile, err := storageccl.MakeExportFileTmpWriter(ctx, base, filename, os.TempDir())
 	if err != nil {
 		return err
 	}
-	defer sstFile.Cleanup()
+	defer sstFile.Close(ctx)
 
 	sst := engine.MakeRocksDBSstFileWriter()
 	if err := sst.Open(sstFile.LocalFile()); err != nil {
@@ -350,7 +343,7 @@ func writeSST(
 		return err
 	}
 
-	if err := sstFile.Finish(); err != nil {
+	if err := sstFile.Finish(ctx); err != nil {
 		return err
 	}
 
