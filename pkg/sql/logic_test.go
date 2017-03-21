@@ -186,7 +186,7 @@ var (
 	errorRE   = regexp.MustCompile(`^(?:statement|query)\s+error\s+(?:pgcode\s+([[:alnum:]]+)\s+)?(.*)$`)
 
 	// Input selection
-	logictestdata = flag.String("d", "testdata/[^.]*", "test data glob")
+	logictestdata = flag.String("d", "testdata/logic_test/[^.]*", "test data glob")
 	bigtest       = flag.Bool("bigtest", false, "use the big set of logic test files (overrides testdata)")
 
 	// Testing mode

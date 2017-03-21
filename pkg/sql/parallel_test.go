@@ -52,7 +52,7 @@ import (
 )
 
 var (
-	paralleltestdata = flag.String("partestdata", "partestdata/[^.]*", "test data glob")
+	paralleltestdata = flag.String("partestdata", "testdata/parallel_test/[^.]*", "test data glob")
 )
 
 type parallelTest struct {
