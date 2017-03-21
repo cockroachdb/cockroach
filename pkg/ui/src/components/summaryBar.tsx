@@ -1,14 +1,30 @@
 import _ from "lodash";
 import * as React from "react";
+import classNames from "classnames";
 
 import { MetricsDataProvider } from "../containers/metricsDataProvider";
 import { MetricsDataComponentProps } from "../components/graphs";
 
 interface SummaryStatProps {
   title: React.ReactNode;
+  value?: number;
+  format?: (i: number) => string;
+}
+
+interface SummaryHeadlineStatProps extends SummaryStatProps {
+  tooltip?: string;
+}
+
+interface SummaryStatMessageProps {
+  message: string;
+}
+
+interface SummaryStatBreakdownProps {
+  title: React.ReactNode;
   tooltip?: string;
   value?: number;
   format?: (i: number) => string;
+  modifier?: "dead" | "suspect" | "healthy";
 }
 
 function numberToString(n: number) {
@@ -22,52 +38,95 @@ function computeValue(value: number, format: (n: number) => string = numberToStr
   return format(value);
 }
 
-// SummaryBar is a simple component backing a common motif in our UI: a
-// collection of summarized statistics.
-// TODO(mrtracy): Add tooltip support.
+/**
+ * SummaryBar is a simple component backing a common motif in our UI - a
+ * collection of summarized statistics.
+ */
 export function SummaryBar(props: { children?: any }) {
   return <div className="summary-section">
     { props.children }
   </div>;
 }
 
+/**
+ * SummaryStat places a single labeled statistic onto a summary bar; this
+ * consists of a label and a formatted value. Summary stats are visually
+ * separated from other summary stats. A summary stat can contain children, such
+ * as messages and breakdowns.
+ */
+export function SummaryStat(props: SummaryStatProps & {children?: any}) {
+  return <div className="summary-stat">
+    <div className="summary-stat__body">
+      <span className="summary-stat__title">
+        { props.title }
+      </span>
+      <span className="summary-stat__value">
+        { computeValue(props.value, props.format) }
+      </span>
+    </div>
+    { props.children }
+  </div>;
+}
+
+/**
+ * SummaryLabel places a label onto a SummaryBar without a corresponding
+ * statistic. This can be used to label a section of the bar.
+ */
 export function SummaryLabel(props: {children?: any}) {
   return <div className="summary-label">
     { props.children }
   </div>;
 }
 
-export function SummaryStat(props: SummaryStatProps & {children?: any}) {
-  return <div className="summary-stat">
-    <span className="summary-stat__title">
-      { props.title }
-    </span>
-    <span className="summary-stat__value">
-      { computeValue(props.value, props.format) }
-    </span>
-    {
-      !!props.tooltip ?
-        <span className="summary-stat__tooltip">{ props.tooltip }</span>
-        : null
-    }
+/**
+ * SummaryStatMessage can be placed inside of a SummaryStat to provide visible
+ * descriptive information about that statistic.
+ */
+export function SummaryStatMessage(props: SummaryStatMessageProps & {children?: any}) {
+  return <span className="summary-stat__tooltip">{ props.message }</span>;
+}
+
+/**
+ * SummaryStatBreakdown can be placed inside of a SummaryStat to provide
+ * a detailed breakdown of the main statistic. Each breakdown contains a label
+ * and numeric statistic.
+ */
+export function SummaryStatBreakdown(props: SummaryStatBreakdownProps & {children?: any}) {
+  const modifierClass = props.modifier ? `summary-stat-breakdown--${props.modifier}` : null;
+  return <div className={classNames("summary-stat-breakdown", modifierClass)}>
+    <div className="summary-stat-breakdown__body">
+      <span className="summary-stat-breakdown__title">
+        { props.title }
+      </span>
+      <span className="summary-stat-breakdown__value">
+        { computeValue(props.value, props.format) }
+      </span>
+    </div>
   </div>;
 }
 
-function SummaryMetricStatHelper(props: MetricsDataComponentProps & SummaryStatProps & { children?: any }) {
-  let datapoints = props.data && props.data.results && props.data.results[0] && props.data.results[0].datapoints;
-  let value = datapoints && datapoints[0] && _.last(datapoints).value;
-  return <SummaryStat {...props} value={_.isNumber(value) ? value : props.value} />;
-}
-
+/**
+ * SummaryMetricStat is a helpful component that creates a SummaryStat where
+ * metric data is automatically derived from a metric component.
+ */
 export function SummaryMetricStat(props: SummaryStatProps & { id: string } & { children?: any }) {
   return <MetricsDataProvider current id={props.id} >
     <SummaryMetricStatHelper {...props} />
   </MetricsDataProvider>;
 }
 
-// SummaryHeadlineStat displays a single item in a summary bar as a "Headline
-// Stat", which is formatted to place attention on the number.
-export class SummaryHeadlineStat extends React.Component<SummaryStatProps, {}> {
+function SummaryMetricStatHelper(props: MetricsDataComponentProps & SummaryStatProps & { children?: any }) {
+  let datapoints = props.data && props.data.results && props.data.results[0] && props.data.results[0].datapoints;
+  let value = datapoints && datapoints[0] && _.last(datapoints).value;
+  let {title, format} = props;
+  return <SummaryStat title={title} format={format} value={_.isNumber(value) ? value : props.value} />;
+}
+
+/**
+ * SummaryHeadlineStat is similar to a normal SummaryStat, but is visually laid
+ * out to draw attention to the numerical statistic.
+ */
+export class SummaryHeadlineStat extends React.Component<SummaryHeadlineStatProps, {}> {
   render() {
     return <div className="summary-headline">
       <div className="summary-headline__value">{computeValue(this.props.value, this.props.format)}</div>

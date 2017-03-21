@@ -6,7 +6,7 @@ import { createSelector } from "reselect";
 import _ from "lodash";
 
 import {
-  NodesSummary, nodesSummarySelector, LivenessStatus, deadTimeout, suspectTimeout,
+  NodesSummary, nodesSummarySelector, LivenessStatus, deadTimeout,
 } from "../redux/nodes";
 import { SummaryBar, SummaryHeadlineStat } from "../components/summaryBar";
 import { AdminUIState } from "../redux/state";
@@ -70,16 +70,23 @@ class LiveNodeList extends React.Component<NodeCategoryListProps, {}> {
             sortSetting={sortSetting}
             onChangeSortSetting={(setting) => this.changeSortSetting(setting)}
             columns={[
-              // Node column - displays the node ID, links to the node-specific page for
-              // this node.
+              // Node ID column.
               {
-                title: "Node",
+                title: "ID",
+                cell: (ns) => ns.getDesc().getNodeId(),
+                sort: (ns) => ns.getDesc().getNodeId(),
+              },
+              // Node address column - displays the node address, links to the
+              // node-specific page for this node.
+              {
+                title: "Address",
                 cell: (ns) => {
                   const status = nodesSummary.livenessStatusByNodeID[ns.getDesc().getNodeId()] || 0;
                   const s = LivenessStatus[status].toLowerCase();
                   const tooltip = (status === LivenessStatus.HEALTHY) ?
                     "This node is currently healthy." :
-                    `This node has not reported as being live for over ${suspectTimeout.humanize()}.`;
+                    "This node has not recently reported as being live. " +
+                    "It may not be functioning correctly, but no automatic action has yet been taken.";
                   return <div>
                     <Link to={"/nodes/" + ns.desc.node_id}>{ns.desc.address.address_field}</Link>
                     <div className={"icon-circle-filled node-status-icon node-status-icon--" + s} title={tooltip} />
@@ -180,15 +187,21 @@ class DeadNodeList extends React.Component<NodeCategoryListProps, {}> {
             sortSetting={sortSetting}
             onChangeSortSetting={(setting) => this.changeSortSetting(setting)}
             columns={[
-              // Node column - displays the node ID, links to the node-specific page for
-              // this node.
+              // Node ID column.
               {
-                title: "Node",
+                title: "ID",
+                cell: (ns) => ns.getDesc().getNodeId(),
+                sort: (ns) => ns.getDesc().getNodeId(),
+              },
+              // Node address column - displays the node address, links to the
+              // node-specific page for this node.
+              {
+                title: "Address",
                 cell: (ns) => {
                   return <div>
                     <Link to={"/nodes/" + ns.desc.node_id}>{ns.desc.address.address_field}</Link>
                     <div className="icon-circle-filled node-status-icon node-status-icon--dead"
-                         title={`This node has not reported as being live for over ${deadTimeout.humanize()} and is considered dead.`}
+                         title={`This node has not reported as live for over ${deadTimeout.humanize()} and is considered dead.`}
                          />
                   </div>;
                 },

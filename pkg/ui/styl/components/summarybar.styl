@@ -35,6 +35,9 @@
   padding 10px 0
   line-height 18px
 
+  &__body
+    clearfix()
+
   &__title
     color $light-blue
     float left
@@ -58,3 +61,25 @@
 
   & + .summary-stat
     border-top 1px solid rgb(242, 242, 242)
+
+.summary-stat-breakdown
+  padding 2px 0
+
+  &--dead
+    color $secondary-red
+
+  &--suspect
+    color $secondary-gold
+
+  &--healthy
+    color $main-green
+
+  &__body
+    clearfix()
+
+  &__title
+    float left
+    margin-right 2em
+
+  &__value
+    float right
