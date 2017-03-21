@@ -367,7 +367,7 @@ func (e *Executor) Start(
 	ctx = log.WithLogTag(ctx, "startup", nil)
 	startupSession := NewSession(ctx, SessionArgs{}, e, nil, startupMemMetrics)
 	startupSession.StartUnlimitedMonitor()
-	if err := e.virtualSchemas.init(ctx, &startupSession.planner); err != nil {
+	if err := e.virtualSchemas.init(ctx, startupSession.newPlanner(e, nil)); err != nil {
 		log.Fatal(ctx, err)
 	}
 	startupSession.Finish(e)
@@ -412,9 +412,11 @@ func (e *Executor) getSystemConfig() (config.SystemConfig, *databaseCache) {
 func (e *Executor) Prepare(
 	query string, session *Session, pinfo parser.PlaceholderTypes,
 ) (*PreparedStatement, error) {
+	session.resetForBatch(e)
 	log.VEventf(session.Ctx(), 2, "preparing: %s", query)
-	var p parser.Parser
-	stmts, err := p.Parse(query, session.Syntax)
+
+	var parser parser.Parser
+	stmts, err := parser.Parse(query, session.Syntax)
 	if err != nil {
 		return nil, err
 	}
@@ -437,14 +439,10 @@ func (e *Executor) Prepare(
 	if err = pinfo.ProcessPlaceholderAnnotations(stmt); err != nil {
 		return nil, err
 	}
-	protoTS, err := isAsOf(&session.planner, stmt, e.cfg.Clock.Now())
+	protoTS, err := isAsOf(session, stmt, e.cfg.Clock.Now())
 	if err != nil {
 		return nil, err
 	}
-
-	session.planner.resetForBatch(e)
-	session.planner.semaCtx.Placeholders.SetTypes(pinfo)
-	session.planner.evalCtx.PrepareOnly = true
 
 	// Prepare needs a transaction because it needs to retrieve db/table
 	// descriptors for type checking.
@@ -455,19 +453,17 @@ func (e *Executor) Prepare(
 	if err := txn.SetIsolation(session.DefaultIsolationLevel); err != nil {
 		panic(err)
 	}
-	session.planner.setTxn(txn)
-	defer session.planner.setTxn(nil)
+
+	planner := session.newPlanner(e, txn)
+	planner.semaCtx.Placeholders.SetTypes(pinfo)
+	planner.evalCtx.PrepareOnly = true
 
 	if protoTS != nil {
-		session.planner.avoidCachedDescriptors = true
-		defer func() {
-			session.planner.avoidCachedDescriptors = false
-		}()
-
+		planner.avoidCachedDescriptors = true
 		SetTxnTimestamps(txn, *protoTS)
 	}
 
-	plan, err := session.planner.prepare(session.Ctx(), stmt)
+	plan, err := planner.prepare(session.Ctx(), stmt)
 	if err != nil {
 		return nil, err
 	}
@@ -488,9 +484,8 @@ func (e *Executor) Prepare(
 func (e *Executor) ExecuteStatements(
 	session *Session, stmts string, pinfo *parser.PlaceholderInfo,
 ) StatementResults {
-	session.planner.resetForBatch(e)
-	session.planner.semaCtx.Placeholders.Assign(pinfo)
-	session.planner.phaseTimes[sessionStartBatch] = timeutil.Now()
+	session.resetForBatch(e)
+	session.phaseTimes[sessionStartBatch] = timeutil.Now()
 
 	defer func() {
 		if r := recover(); r != nil {
@@ -501,17 +496,17 @@ func (e *Executor) ExecuteStatements(
 
 	// Send the Request for SQL execution and set the application-level error
 	// for each result in the reply.
-	return e.execRequest(session, stmts, copyMsgNone)
+	return e.execRequest(session, stmts, pinfo, copyMsgNone)
 }
 
 // CopyData adds data to the COPY buffer and executes if there are enough rows.
 func (e *Executor) CopyData(session *Session, data string) StatementResults {
-	return e.execRequest(session, data, copyMsgData)
+	return e.execRequest(session, data, nil, copyMsgData)
 }
 
 // CopyDone executes the buffered COPY data.
 func (e *Executor) CopyDone(session *Session) StatementResults {
-	return e.execRequest(session, "", copyMsgDone)
+	return e.execRequest(session, "", nil, copyMsgDone)
 }
 
 // CopyEnd ends the COPY mode. Any buffered data is discarded.
@@ -529,13 +524,33 @@ func (e *Executor) blockConfigUpdates() func() {
 	}
 }
 
+// blockConfigUpdatesMaybe will ask the Executor to block config updates,
+// so that checkTestingVerifyMetadataInitialOrDie() can later be run.
+// The point is to lock the system config so that no gossip updates sneak in
+// under us, so that we're able to assert that the verify callback only succeeds
+// after a gossip update.
+//
+// It returns an unblock function which can be called after
+// checkTestingVerifyMetadata{Initial}OrDie() has been called.
+//
+// This lock does not change semantics. Even outside of tests, the Executor uses
+// static systemConfig for a user request, so locking the Executor's
+// systemConfig cannot change the semantics of the SQL operation being performed
+// under lock.
+func (e *Executor) blockConfigUpdatesMaybe() func() {
+	if !e.cfg.TestingKnobs.WaitForGossipUpdate {
+		return func() {}
+	}
+	return e.blockConfigUpdates()
+}
+
 // waitForConfigUpdate blocks the caller until a new SystemConfig is received
 // via gossip. This can only be called after blockConfigUpdates().
 func (e *Executor) waitForConfigUpdate() {
 	e.systemConfigCond.Wait()
 }
 
-// execRequest executes the request using the provided planner.
+// execRequest executes the request in the provided Session.
 // It parses the sql into statements, iterates through the statements, creates
 // KV transactions and automatically retries them when possible, and executes
 // the (synchronous attempt of) schema changes.
@@ -548,30 +563,29 @@ func (e *Executor) waitForConfigUpdate() {
 // callbacks passed to be executed in the context of a transaction. Actual
 // execution of statements in the context of a KV txn is delegated to
 // runTxnAttempt().
-//
-// Args:
-//  txnState: State about about ongoing transaction (if any). The state will be
-//   updated.
-func (e *Executor) execRequest(session *Session, sql string, copymsg copyMsg) StatementResults {
+func (e *Executor) execRequest(
+	session *Session, sql string, pinfo *parser.PlaceholderInfo, copymsg copyMsg,
+) StatementResults {
 	var res StatementResults
-	txnState := &session.TxnState
-	planMaker := &session.planner
 	var stmts parser.StatementList
+	var avoidCachedDescriptors bool
 	var err error
+	txnState := &session.TxnState
 
 	if log.V(2) {
 		log.Infof(session.Ctx(), "execRequest: %s", sql)
 	}
 
-	planMaker.phaseTimes[sessionStartParse] = timeutil.Now()
+	session.phaseTimes[sessionStartParse] = timeutil.Now()
 	if session.copyFrom != nil {
-		stmts, err = session.planner.ProcessCopyData(session.Ctx(), sql, copymsg)
+		stmts, err = session.ProcessCopyData(session.Ctx(), sql, copymsg)
 	} else if copymsg != copyMsgNone {
 		err = fmt.Errorf("unexpected copy command")
 	} else {
-		stmts, err = planMaker.parser.Parse(sql, session.Syntax)
+		var parser parser.Parser
+		stmts, err = parser.Parse(sql, session.Syntax)
 	}
-	planMaker.phaseTimes[sessionEndParse] = timeutil.Now()
+	session.phaseTimes[sessionEndParse] = timeutil.Now()
 
 	if err != nil {
 		if log.V(2) {
@@ -591,8 +605,8 @@ func (e *Executor) execRequest(session *Session, sql string, copymsg copyMsg) St
 		return res
 	}
 
-	// If the planMaker wants config updates to be blocked, then block them.
-	defer planMaker.blockConfigUpdatesMaybe(e)()
+	// If the Executor wants config updates to be blocked, then block them.
+	defer e.blockConfigUpdatesMaybe()()
 
 	for len(stmts) > 0 {
 		// Each iteration consumes a transaction's worth of statements.
@@ -618,16 +632,17 @@ func (e *Executor) execRequest(session *Session, sql string, copymsg copyMsg) St
 				stmtsToExec = stmtsToExec[:1]
 				// Check for AS OF SYSTEM TIME. If it is present but not detected here,
 				// it will raise an error later on.
-				protoTS, err = isAsOf(planMaker, stmtsToExec[0], e.cfg.Clock.Now())
+				protoTS, err = isAsOf(session, stmtsToExec[0], e.cfg.Clock.Now())
 				if err != nil {
 					res.ResultList = append(res.ResultList, Result{Err: err})
 					return res
 				}
 				if protoTS != nil {
-					planMaker.avoidCachedDescriptors = true
-					defer func() {
-						planMaker.avoidCachedDescriptors = false
-					}()
+					// When running AS OF SYSTEM TIME queries, we want to use the
+					// table descriptors from the specified time, and never lease
+					// anything. To do this, we pass down the avoidCachedDescriptors
+					// flag and set the transaction's timestamp to the specified time.
+					avoidCachedDescriptors = true
 				}
 			}
 			txnState.resetForNewSQLTxn(e, session)
@@ -670,7 +685,8 @@ func (e *Executor) execRequest(session *Session, sql string, copymsg copyMsg) St
 				ResultList(results).Close(ctx)
 			}
 			results, remainingStmts, err = runTxnAttempt(
-				e, planMaker, origState, txnState, opt, stmtsToExec, automaticRetryCount)
+				e, session, stmtsToExec, pinfo, origState, opt,
+				avoidCachedDescriptors, automaticRetryCount)
 
 			// TODO(andrei): Until #7881 fixed.
 			if err == nil && txnState.State == Aborted {
@@ -765,18 +781,19 @@ func (e *Executor) execRequest(session *Session, sql string, copymsg copyMsg) St
 		// rolled back from the table descriptor.
 		stmtsExecuted := stmts[:len(stmtsToExec)-len(remainingStmts)]
 		if txnState.State != Open {
-			planMaker.checkTestingVerifyMetadataInitialOrDie(e, stmts)
-			planMaker.checkTestingVerifyMetadataOrDie(e, stmtsExecuted)
+			session.checkTestingVerifyMetadataInitialOrDie(e, stmts)
+			session.checkTestingVerifyMetadataOrDie(e, stmtsExecuted)
+
 			// Exec the schema changers (if the txn rolled back, the schema changers
 			// will short-circuit because the corresponding descriptor mutation is not
 			// found).
-			planMaker.releaseLeases(session.Ctx())
-			txnState.schemaChangers.execSchemaChanges(session.Ctx(), e, planMaker, res.ResultList)
+			session.releaseLeases(session.Ctx())
+			txnState.schemaChangers.execSchemaChanges(session.Ctx(), e, session, res.ResultList)
 		} else {
 			// We're still in a txn, so we only check that the verifyMetadata callback
 			// fails the first time it's run. The gossip update that will make the
 			// callback succeed only happens when the txn is done.
-			planMaker.checkTestingVerifyMetadataInitialOrDie(e, stmtsExecuted)
+			session.checkTestingVerifyMetadataInitialOrDie(e, stmtsExecuted)
 		}
 
 		// Figure out what statements to run on the next iteration.
@@ -811,15 +828,14 @@ func countRowsAffected(ctx context.Context, p planNode) (int, error) {
 
 // runTxnAttempt is used in the closure we pass to txn.Exec(). It
 // will be called possibly multiple times (if opt.AutoRetry is set).
-// It sets up a planner and delegates execution of statements to
-// execStmtsInCurrentTxn().
 func runTxnAttempt(
 	e *Executor,
-	planMaker *planner,
-	origState TxnStateEnum,
-	txnState *txnState,
-	opt *client.TxnExecOptions,
+	session *Session,
 	stmts parser.StatementList,
+	pinfo *parser.PlaceholderInfo,
+	origState TxnStateEnum,
+	opt *client.TxnExecOptions,
+	avoidCachedDescriptors bool,
 	automaticRetryCount int,
 ) ([]Result, parser.StatementList, error) {
 
@@ -829,26 +845,23 @@ func runTxnAttempt(
 	// statements are still executing and reading from the state. This
 	// means that no synchronization is necessary to prevent data races.
 	if automaticRetryCount > 0 {
-		txnState.State = origState
-		txnState.commitSeen = false
+		session.TxnState.State = origState
+		session.TxnState.commitSeen = false
 	}
 
-	planMaker.setTxn(txnState.txn)
 	results, remainingStmts, err := e.execStmtsInCurrentTxn(
-		stmts, planMaker, txnState,
-		opt.AutoCommit /* implicitTxn */, opt.AutoRetry /* txnBeginning */, automaticRetryCount)
-	if opt.AutoCommit {
-		if len(remainingStmts) > 0 {
-			panic("implicit txn failed to execute all stmts")
-		}
+		session, stmts, pinfo, opt.AutoCommit, /* implicitTxn */
+		opt.AutoRetry /* txnBeginning */, avoidCachedDescriptors, automaticRetryCount)
+
+	if opt.AutoCommit && len(remainingStmts) > 0 {
+		panic("implicit txn failed to execute all stmts")
 	}
-	planMaker.resetTxn()
 	return results, remainingStmts, err
 }
 
 // execStmtsInCurrentTxn consumes a prefix of stmts, namely the
 // statements belonging to a single SQL transaction. It executes in
-// the planner's transaction, which is assumed to exist.
+// the session's current transaction, which is assumed to exist.
 //
 // COMMIT/ROLLBACK statements can end the current transaction. If that happens,
 // this method returns, and the remaining statements are returned.
@@ -863,11 +876,18 @@ func runTxnAttempt(
 // first one in stmts.
 //
 // Args:
-//  txnState: Specifies whether we're executing inside a txn, or inside an aborted txn.
-//    The state is updated.
-//  implicitTxn: set if the current transaction was implicitly
-//    created by the system (i.e. the client sent the statement outside of
-//    a transaction).
+// session: the session to execute the statement in.
+// stmts: the semicolon-separated list of statements to execute.
+// pinfo: the placeholders to use in the statements.
+// implicitTxn: set if the current transaction was implicitly
+//  created by the system (i.e. the client sent the statement outside of
+//  a transaction).
+//  COMMIT/ROLLBACK statements are rejected if set. Also, the transaction
+//  might be auto-committed in this function.
+// avoidCachedDescriptors: set if the statement execution should avoid
+//  using cached descriptors.
+// automaticRetryCount: increases with each retry; 0 for the first attempt.
+//
 // Returns:
 //  - the list of results (one per executed statement).
 //  - the statements that haven't been executed because the transaction has
@@ -878,24 +898,24 @@ func runTxnAttempt(
 //    this last result; the caller is responsible copying it into the result
 //    after converting it adequately.
 func (e *Executor) execStmtsInCurrentTxn(
+	session *Session,
 	stmts parser.StatementList,
-	planMaker *planner,
-	txnState *txnState,
+	pinfo *parser.PlaceholderInfo,
 	implicitTxn bool,
 	txnBeginning bool,
+	avoidCachedDescriptors bool,
 	automaticRetryCount int,
 ) ([]Result, parser.StatementList, error) {
 	var results []Result
+
+	txnState := &session.TxnState
 	if txnState.State == NoTxn {
 		panic("execStmtsInCurrentTransaction called outside of a txn")
 	}
-	if txnState.State == Open && planMaker.txn == nil {
-		panic(fmt.Sprintf("inconsistent planMaker txn state. txnState: %+v", txnState))
-	}
 
 	for i, stmt := range stmts {
-		if log.V(2) || log.HasSpanOrEvent(planMaker.session.Ctx()) {
-			log.VEventf(planMaker.session.Ctx(), 2, "executing %d/%d: %s", i+1, len(stmts), stmt)
+		if log.V(2) || log.HasSpanOrEvent(session.Ctx()) {
+			log.VEventf(session.Ctx(), 2, "executing %d/%d: %s", i+1, len(stmts), stmt)
 		}
 		txnState.schemaChangers.curStatementIdx = i
 
@@ -915,17 +935,17 @@ func (e *Executor) execStmtsInCurrentTxn(
 		// Run SHOW TRANSACTION STATUS in a separate code path so it is
 		// always guaranteed to execute regardless of the current transaction state.
 		if _, ok := stmt.(*parser.ShowTransactionStatus); ok {
-			res, err = planMaker.runShowTransactionState(planMaker.session.Ctx(), txnState, implicitTxn)
+			res, err = runShowTransactionState(session, implicitTxn)
 		} else {
 			switch txnState.State {
 			case Open:
 				res, err = e.execStmtInOpenTxn(
-					stmt, planMaker, implicitTxn, txnBeginning && (i == 0), /* firstInTxn */
-					txnState, automaticRetryCount)
+					session, stmt, pinfo, implicitTxn, txnBeginning && (i == 0), /* firstInTxn */
+					avoidCachedDescriptors, automaticRetryCount)
 			case Aborted, RestartWait:
-				res, err = e.execStmtInAbortedTxn(stmt, txnState, planMaker)
+				res, err = e.execStmtInAbortedTxn(session, stmt)
 			case CommitWait:
-				res, err = e.execStmtInCommitWaitTxn(stmt, txnState)
+				res, err = e.execStmtInCommitWaitTxn(session, stmt)
 			default:
 				panic(fmt.Sprintf("unexpected txn state: %s", txnState.State))
 			}
@@ -938,7 +958,7 @@ func (e *Executor) execStmtsInCurrentTxn(
 			}
 		}
 		if filter := e.cfg.TestingKnobs.StatementFilter; filter != nil {
-			filter(planMaker.session.Ctx(), stmt.String(), &res)
+			filter(session.Ctx(), stmt.String(), &res)
 		}
 		results = append(results, res)
 		if err != nil {
@@ -957,15 +977,33 @@ func (e *Executor) execStmtsInCurrentTxn(
 	return results, nil, nil
 }
 
+// runShowTransactionState returns the state of current transaction.
+func runShowTransactionState(session *Session, implicitTxn bool) (Result, error) {
+	var result Result
+	result.PGTag = (*parser.Show)(nil).StatementTag()
+	result.Type = (*parser.Show)(nil).StatementType()
+	result.Columns = ResultColumns{{Name: "TRANSACTION STATUS", Typ: parser.TypeString}}
+	result.Rows = NewRowContainer(session.makeBoundAccount(), result.Columns, 0)
+	state := session.TxnState.State
+	if implicitTxn {
+		state = NoTxn
+	}
+	if _, err := result.Rows.AddRow(
+		session.Ctx(), parser.Datums{parser.NewDString(state.String())},
+	); err != nil {
+		result.Rows.Close(session.Ctx())
+		return result, err
+	}
+	return result, nil
+}
+
 // execStmtInAbortedTxn executes a statement in a txn that's in state
 // Aborted or RestartWait. All statements cause errors except:
 // - COMMIT / ROLLBACK: aborts the current transaction.
 // - ROLLBACK TO SAVEPOINT / SAVEPOINT: reopens the current transaction,
 //   allowing it to be retried.
-func (e *Executor) execStmtInAbortedTxn(
-	stmt parser.Statement, txnState *txnState, planMaker *planner,
-) (Result, error) {
-
+func (e *Executor) execStmtInAbortedTxn(session *Session, stmt parser.Statement) (Result, error) {
+	txnState := &session.TxnState
 	if txnState.State != Aborted && txnState.State != RestartWait {
 		panic("execStmtInAbortedTxn called outside of an aborted txn")
 	}
@@ -973,7 +1011,7 @@ func (e *Executor) execStmtInAbortedTxn(
 	switch s := stmt.(type) {
 	case *parser.CommitTransaction, *parser.RollbackTransaction:
 		if txnState.State == RestartWait {
-			return rollbackSQLTransaction(txnState, planMaker), nil
+			return rollbackSQLTransaction(txnState), nil
 		}
 		// Reset the state to allow new transactions to start.
 		// The KV txn has already been rolled back when we entered the Aborted state.
@@ -1017,9 +1055,8 @@ func (e *Executor) execStmtInAbortedTxn(
 // execStmtInCommitWaitTxn executes a statement in a txn that's in state
 // CommitWait.
 // Everything but COMMIT/ROLLBACK causes errors. ROLLBACK is treated like COMMIT.
-func (e *Executor) execStmtInCommitWaitTxn(
-	stmt parser.Statement, txnState *txnState,
-) (Result, error) {
+func (e *Executor) execStmtInCommitWaitTxn(session *Session, stmt parser.Statement) (Result, error) {
+	txnState := &session.TxnState
 	if txnState.State != CommitWait {
 		panic("execStmtInCommitWaitTxn called outside of an aborted txn")
 	}
@@ -1037,7 +1074,7 @@ func (e *Executor) execStmtInCommitWaitTxn(
 }
 
 // execStmtInOpenTxn executes one statement in the context
-// of the planner's transaction (which is assumed to exist).
+// of the session's current transaction (which is assumed to exist).
 // It handles statements that affect the transaction state (BEGIN, COMMIT)
 // and delegates everything else to `execStmt`.
 // It binds placeholders.
@@ -1046,6 +1083,9 @@ func (e *Executor) execStmtInCommitWaitTxn(
 // It might also have transitioned to the aborted or RestartWait state.
 //
 // Args:
+// session: the session to execute the statement in.
+// stmt: the statement to execute.
+// pinfo: the placeholders to use in the statement.
 // implicitTxn: set if the current transaction was implicitly
 //  created by the system (i.e. the client sent the statement outside of
 //  a transaction).
@@ -1053,33 +1093,28 @@ func (e *Executor) execStmtInCommitWaitTxn(
 //  might be auto-committed in this function.
 // firstInTxn: set for the first statement in a transaction. Used
 //  so that nested BEGIN statements are caught.
-// stmtTimestamp: Used as the statement_timestamp().
+// avoidCachedDescriptors: set if the statement execution should avoid
+//  using cached descriptors.
 // automaticRetryCount: increases with each retry; 0 for the first attempt.
 //
 // Returns:
 // - a Result
 // - an error, if any. In case of error, the result returned also reflects this error.
 func (e *Executor) execStmtInOpenTxn(
+	session *Session,
 	stmt parser.Statement,
-	planMaker *planner,
+	pinfo *parser.PlaceholderInfo,
 	implicitTxn bool,
 	firstInTxn bool,
-	txnState *txnState,
+	avoidCachedDescriptors bool,
 	automaticRetryCount int,
 ) (_ Result, err error) {
+	txnState := &session.TxnState
 	if txnState.State != Open {
 		panic("execStmtInOpenTxn called outside of an open txn")
 	}
-	if planMaker.txn == nil {
-		panic("execStmtInOpenTxn called with a txn not set on the planner")
-	}
 
-	session := planMaker.session
-	log.Eventf(session.context, "%s", stmt)
-
-	planMaker.phaseTimes[sessionStartExecStmt] = timeutil.Now()
-	planMaker.evalCtx.SetTxnTimestamp(txnState.sqlTimestamp)
-	planMaker.evalCtx.SetStmtTimestamp(e.cfg.Clock.PhysicalTime())
+	log.Eventf(session.Ctx(), "%s", stmt)
 
 	// Do not double count automatically retried transactions.
 	if automaticRetryCount == 0 {
@@ -1104,7 +1139,7 @@ func (e *Executor) execStmtInOpenTxn(
 	// TODO(nvanbenschoten) This should be generalized/reconsidered/improved.
 	_, isShow := stmt.(*parser.Show)
 	if !(isShow || pipelined) {
-		if err := planMaker.session.pipelineQueue.Wait(); err != nil {
+		if err := session.pipelineQueue.Wait(); err != nil {
 			return Result{}, err
 		}
 	}
@@ -1120,20 +1155,20 @@ func (e *Executor) execStmtInOpenTxn(
 		}
 	case *parser.CommitTransaction:
 		// CommitTransaction is executed fully here; there's no planNode for it
-		// and the planner is not involved at all.
-		return commitSQLTransaction(txnState, planMaker, commit, e)
+		// and a planner is not involved at all.
+		return commitSQLTransaction(txnState, commit, e)
 	case *parser.ReleaseSavepoint:
 		if err := parser.ValidateRestartCheckpoint(s.Savepoint); err != nil {
 			return Result{}, err
 		}
 		// ReleaseSavepoint is executed fully here; there's no planNode for it
-		// and the planner is not involved at all.
-		return commitSQLTransaction(txnState, planMaker, release, e)
+		// and a planner is not involved at all.
+		return commitSQLTransaction(txnState, release, e)
 	case *parser.RollbackTransaction:
 		// RollbackTransaction is executed fully here; there's no planNode for it
-		// and the planner is not involved at all.
+		// and a planner is not involved at all.
 		// Notice that we don't return any errors on rollback.
-		return rollbackSQLTransaction(txnState, planMaker), nil
+		return rollbackSQLTransaction(txnState), nil
 	case *parser.Savepoint:
 		if err := parser.ValidateRestartCheckpoint(s.Name); err != nil {
 			return Result{}, err
@@ -1173,9 +1208,9 @@ func (e *Executor) execStmtInOpenTxn(
 			"Executing prepared statements is supported only via the Postgres wire protocol")
 	case *parser.Deallocate:
 		if s.Name == "" {
-			planMaker.session.PreparedStatements.DeleteAll(session.Ctx())
+			session.PreparedStatements.DeleteAll(session.Ctx())
 		} else {
-			if found := planMaker.session.PreparedStatements.Delete(
+			if found := session.PreparedStatements.Delete(
 				session.Ctx(), string(s.Name),
 			); !found {
 				return Result{}, errors.Errorf("prepared statement %s does not exist", s.Name)
@@ -1184,12 +1219,20 @@ func (e *Executor) execStmtInOpenTxn(
 		return Result{PGTag: s.StatementTag()}, nil
 	}
 
+	// Create a new planner from the Session to execute the statement.
+	planner := session.newPlanner(e, txnState.txn)
+	planner.evalCtx.SetTxnTimestamp(txnState.sqlTimestamp)
+	planner.evalCtx.SetStmtTimestamp(e.cfg.Clock.PhysicalTime())
+	planner.semaCtx.Placeholders.Assign(pinfo)
+	planner.avoidCachedDescriptors = avoidCachedDescriptors
+	planner.phaseTimes[plannerStartExecStmt] = timeutil.Now()
+
 	var result Result
 	if pipelined {
-		result, err = e.execStmtPipelined(stmt, planMaker)
+		result, err = e.execStmtPipelined(stmt, planner)
 	} else {
 		autoCommit := implicitTxn && !e.cfg.TestingKnobs.DisableAutoCommit
-		result, err = e.execStmt(stmt, planMaker, autoCommit, automaticRetryCount)
+		result, err = e.execStmt(stmt, planner, autoCommit, automaticRetryCount)
 	}
 	if err != nil {
 		log.ErrEventf(session.Ctx(), "ERROR: %v", err)
@@ -1223,15 +1266,12 @@ func stmtAllowedInImplicitTxn(stmt parser.Statement) bool {
 }
 
 // rollbackSQLTransaction rolls back a transaction. All errors are swallowed.
-func rollbackSQLTransaction(txnState *txnState, p *planner) Result {
-	if p.txn != txnState.txn {
-		panic("rollbackSQLTransaction called on a different txn than the planner's")
-	}
+func rollbackSQLTransaction(txnState *txnState) Result {
 	if txnState.State != Open && txnState.State != RestartWait {
 		panic(fmt.Sprintf("rollbackSQLTransaction called on txn in wrong state: %s (txn: %s)",
 			txnState.State, txnState.txn.Proto()))
 	}
-	err := p.txn.Rollback(txnState.Ctx)
+	err := txnState.txn.Rollback(txnState.Ctx)
 	result := Result{PGTag: (*parser.RollbackTransaction)(nil).StatementTag()}
 	if err != nil {
 		log.Warningf(txnState.Ctx, "txn rollback failed. The error was swallowed: %s", err)
@@ -1239,8 +1279,6 @@ func rollbackSQLTransaction(txnState *txnState, p *planner) Result {
 	}
 	// We're done with this txn.
 	txnState.resetStateAndTxn(NoTxn)
-	// Reset transaction to prevent running further commands on this planner.
-	p.resetTxn()
 	return result
 }
 
@@ -1252,13 +1290,7 @@ const (
 )
 
 // commitSqlTransaction commits a transaction.
-func commitSQLTransaction(
-	txnState *txnState, p *planner, commitType commitType, e *Executor,
-) (Result, error) {
-
-	if p.txn != txnState.txn {
-		panic("commitSQLTransaction called on a different txn than the planner's")
-	}
+func commitSQLTransaction(txnState *txnState, commitType commitType, e *Executor) (Result, error) {
 	if txnState.State != Open {
 		panic(fmt.Sprintf("commitSqlTransaction called on non-open txn: %+v", txnState.txn))
 	}
@@ -1284,17 +1316,16 @@ func commitSQLTransaction(
 			txnState.resetStateAndTxn(NoTxn)
 		}
 	}
-	// Reset transaction to prevent running further commands on this planner.
-	p.resetTxn()
 	return result, err
 }
 
 // exectDistSQL converts a classic plan to a distributed SQL physical plan and
 // runs it.
-func (e *Executor) execDistSQL(planMaker *planner, tree planNode, result *Result) error {
+func (e *Executor) execDistSQL(planner *planner, tree planNode, result *Result) error {
 	// Note: if we just want the row count, result.Rows is nil here.
-	recv := makeDistSQLReceiver(planMaker.session.Ctx(), result.Rows)
-	err := e.distSQLPlanner.PlanAndRun(planMaker.session.Ctx(), planMaker.txn, tree, &recv)
+	ctx := planner.session.Ctx()
+	recv := makeDistSQLReceiver(ctx, result.Rows)
+	err := e.distSQLPlanner.PlanAndRun(ctx, planner.txn, tree, &recv)
 	if err != nil {
 		return err
 	}
@@ -1309,22 +1340,23 @@ func (e *Executor) execDistSQL(planMaker *planner, tree planNode, result *Result
 
 // execClassic runs a plan using the classic (non-distributed) SQL
 // implementation.
-func (e *Executor) execClassic(planMaker *planner, plan planNode, result *Result) error {
-	if err := planMaker.startPlan(planMaker.session.Ctx(), plan); err != nil {
+func (e *Executor) execClassic(planner *planner, plan planNode, result *Result) error {
+	ctx := planner.session.Ctx()
+	if err := planner.startPlan(ctx, plan); err != nil {
 		return err
 	}
 
 	switch result.Type {
 	case parser.RowsAffected:
-		count, err := countRowsAffected(planMaker.session.Ctx(), plan)
+		count, err := countRowsAffected(ctx, plan)
 		if err != nil {
 			return err
 		}
 		result.RowsAffected += count
 
 	case parser.Rows:
-		next, err := plan.Next(planMaker.session.Ctx())
-		for ; next; next, err = plan.Next(planMaker.session.Ctx()) {
+		next, err := plan.Next(ctx)
+		for ; next; next, err = plan.Next(ctx) {
 			// The plan.Values Datums needs to be copied on each iteration.
 			values := plan.Values()
 
@@ -1333,7 +1365,7 @@ func (e *Executor) execClassic(planMaker *planner, plan planNode, result *Result
 					return err
 				}
 			}
-			if _, err := result.Rows.AddRow(planMaker.session.Ctx(), values); err != nil {
+			if _, err := result.Rows.AddRow(ctx, values); err != nil {
 				return err
 			}
 		}
@@ -1346,10 +1378,10 @@ func (e *Executor) execClassic(planMaker *planner, plan planNode, result *Result
 
 // shouldUseDistSQL determines whether we should use DistSQL for a plan, based
 // on the session settings.
-func (e *Executor) shouldUseDistSQL(planMaker *planner, plan planNode) (bool, error) {
+func (e *Executor) shouldUseDistSQL(planner *planner, plan planNode) (bool, error) {
 	distSQLMode := defaultDistSQLMode
-	if planMaker.session.DistSQLMode != distSQLOff {
-		distSQLMode = planMaker.session.DistSQLMode
+	if planner.session.DistSQLMode != distSQLOff {
+		distSQLMode = planner.session.DistSQLMode
 	}
 
 	if distSQLMode == distSQLOff {
@@ -1366,7 +1398,7 @@ func (e *Executor) shouldUseDistSQL(planMaker *planner, plan planNode) (bool, er
 	// Temporary workaround for #13376: if the transaction modified something,
 	// TxnCoordSender will freak out if it sees scans in this txn from other
 	// nodes. We detect this by checking if the transaction's "anchor" key is set.
-	if planMaker.txn.Proto().TxnMeta.Key != nil {
+	if planner.txn.Proto().TxnMeta.Key != nil {
 		err = errors.New("writing txn")
 	} else {
 		// Trigger limit propagation.
@@ -1380,12 +1412,12 @@ func (e *Executor) shouldUseDistSQL(planMaker *planner, plan planNode) (bool, er
 			return false, err
 		}
 		// Don't use distSQL for this request.
-		log.VEventf(planMaker.session.Ctx(), 1, "query not supported for distSQL: %s", err)
+		log.VEventf(planner.session.Ctx(), 1, "query not supported for distSQL: %s", err)
 		return false, nil
 	}
 
 	if distSQLMode == distSQLAuto && !distribute {
-		log.VEventf(planMaker.session.Ctx(), 1, "not distributing query")
+		log.VEventf(planner.session.Ctx(), 1, "not distributing query")
 		return false, nil
 	}
 
@@ -1394,7 +1426,7 @@ func (e *Executor) shouldUseDistSQL(planMaker *planner, plan planNode) (bool, er
 }
 
 // makeRes creates an empty result set for the given statement and plan.
-func makeRes(stmt parser.Statement, planMaker *planner, plan planNode) (Result, error) {
+func makeRes(stmt parser.Statement, planner *planner, plan planNode) (Result, error) {
 	result := Result{
 		PGTag: stmt.StatementTag(),
 		Type:  stmt.StatementType(),
@@ -1406,47 +1438,46 @@ func makeRes(stmt parser.Statement, planMaker *planner, plan planNode) (Result, 
 				return Result{}, err
 			}
 		}
-		result.Rows = NewRowContainer(planMaker.session.makeBoundAccount(), result.Columns, 0)
+		result.Rows = NewRowContainer(planner.session.makeBoundAccount(), result.Columns, 0)
 	}
 	return result, nil
 }
 
 // execStmt executes the statement synchronously and returns the statement's result.
-// The current transaction might have been committed/rolled back when this returns.
 func (e *Executor) execStmt(
-	stmt parser.Statement, planMaker *planner, autoCommit bool, automaticRetryCount int,
+	stmt parser.Statement, planner *planner, autoCommit bool, automaticRetryCount int,
 ) (Result, error) {
-	session := planMaker.session
+	session := planner.session
 
-	planMaker.phaseTimes[sessionStartLogicalPlan] = timeutil.Now()
-	plan, err := planMaker.makePlan(session.Ctx(), stmt, autoCommit)
-	planMaker.phaseTimes[sessionEndLogicalPlan] = timeutil.Now()
+	planner.phaseTimes[plannerStartLogicalPlan] = timeutil.Now()
+	plan, err := planner.makePlan(session.Ctx(), stmt, autoCommit)
+	planner.phaseTimes[plannerEndLogicalPlan] = timeutil.Now()
 	if err != nil {
 		return Result{}, err
 	}
 
-	defer plan.Close(planMaker.session.Ctx())
+	defer plan.Close(session.Ctx())
 
-	result, err := makeRes(stmt, planMaker, plan)
+	result, err := makeRes(stmt, planner, plan)
 	if err != nil {
 		return Result{}, err
 	}
 
-	useDistSQL, err := e.shouldUseDistSQL(planMaker, plan)
+	useDistSQL, err := e.shouldUseDistSQL(planner, plan)
 	if err != nil {
 		result.Close(session.Ctx())
 		return Result{}, err
 	}
 
-	planMaker.phaseTimes[sessionStartExecStmt] = timeutil.Now()
+	planner.phaseTimes[plannerStartExecStmt] = timeutil.Now()
 	if useDistSQL {
-		err = e.execDistSQL(planMaker, plan, &result)
+		err = e.execDistSQL(planner, plan, &result)
 	} else {
-		err = e.execClassic(planMaker, plan, &result)
+		err = e.execClassic(planner, plan, &result)
 	}
-	planMaker.phaseTimes[sessionEndExecStmt] = timeutil.Now()
+	planner.phaseTimes[plannerEndExecStmt] = timeutil.Now()
 	e.recordStatementSummary(
-		planMaker, stmt, useDistSQL, automaticRetryCount, result, err,
+		planner, stmt, useDistSQL, automaticRetryCount, result, err,
 	)
 
 	if err != nil {
@@ -1457,37 +1488,40 @@ func (e *Executor) execStmt(
 }
 
 // execStmtPipelined executes the statement asynchronously and returns mocked out
-// results. The current transaction might have been committed/rolled back when this
-// returns.
-func (e *Executor) execStmtPipelined(stmt parser.Statement, planMaker *planner) (Result, error) {
-	// Make a clone of the planMaker so that future modifications elsewhere
-	// don't affect us here.
-	planMaker = planMaker.Clone()
-	session := planMaker.session
+// results. These mocked out results will be the "zero value" of the statement's
+// result type:
+// - parser.Rows -> an empty set of rows
+// - parser.RowsAffected -> zero rows affected
+//
+// TODO(andreimatei): We do not currently support pipelining distributed SQL queries,
+// so this method can only be used with classical SQL.
+func (e *Executor) execStmtPipelined(stmt parser.Statement, planner *planner) (Result, error) {
+	session := planner.session
+	ctx := session.Ctx()
 
-	plan, err := planMaker.makePlan(session.Ctx(), stmt, false)
+	plan, err := planner.makePlan(ctx, stmt, false)
 	if err != nil {
 		return Result{}, err
 	}
 
-	mockResult, err := makeRes(stmt, planMaker, plan)
+	mockResult, err := makeRes(stmt, planner, plan)
 	if err != nil {
 		return Result{}, err
 	}
 
 	session.pipelineQueue.Add(&plan, func() error {
-		defer plan.Close(session.Ctx())
+		defer plan.Close(ctx)
 
-		result, err := makeRes(stmt, planMaker, plan)
+		result, err := makeRes(stmt, planner, plan)
 		if err != nil {
 			return err
 		}
-		defer result.Close(session.Ctx())
+		defer result.Close(ctx)
 
-		planMaker.phaseTimes[sessionStartExecStmt] = timeutil.Now()
-		err = e.execClassic(planMaker, plan, &result)
-		planMaker.phaseTimes[sessionEndExecStmt] = timeutil.Now()
-		e.recordStatementSummary(planMaker, stmt, false, 0, result, err)
+		planner.phaseTimes[plannerStartExecStmt] = timeutil.Now()
+		err = e.execClassic(planner, plan, &result)
+		planner.phaseTimes[plannerEndExecStmt] = timeutil.Now()
+		e.recordStatementSummary(planner, stmt, false, 0, result, err)
 		return err
 	})
 	return mockResult, nil
@@ -1708,7 +1742,7 @@ func EvalAsOfTimestamp(
 //
 // max is a lower bound on what the transaction's timestamp will be. Used to
 // check that the user didn't specify a timestamp in the future.
-func isAsOf(planMaker *planner, stmt parser.Statement, max hlc.Timestamp) (*hlc.Timestamp, error) {
+func isAsOf(session *Session, stmt parser.Statement, max hlc.Timestamp) (*hlc.Timestamp, error) {
 	s, ok := stmt.(*parser.Select)
 	if !ok {
 		return nil, nil
@@ -1721,7 +1755,8 @@ func isAsOf(planMaker *planner, stmt parser.Statement, max hlc.Timestamp) (*hlc.
 		return nil, nil
 	}
 
-	ts, err := EvalAsOfTimestamp(&planMaker.evalCtx, sc.From.AsOf, max)
+	evalCtx := session.evalCtx()
+	ts, err := EvalAsOfTimestamp(&evalCtx, sc.From.AsOf, max)
 	return &ts, err
 }
 

@@ -236,7 +236,7 @@ func (p *planner) RenameTable(ctx context.Context, n *parser.RenameTable) (planN
 	}
 	p.notifySchemaChange(tableDesc.ID, sqlbase.InvalidMutationID)
 
-	p.setTestingVerifyMetadata(func(systemConfig config.SystemConfig) error {
+	p.session.setTestingVerifyMetadata(func(systemConfig config.SystemConfig) error {
 		if err := expectDescriptorID(systemConfig, newTbKey, descID); err != nil {
 			return err
 		}

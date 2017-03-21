@@ -266,6 +266,8 @@ func (sc *SchemaChanger) maybeWriteResumeSpan(
 	return nil
 }
 
+// TODO(vivek): we shouldn't need to use a planner here. Use the sc.leaseMgr
+// directly instead.
 func (sc *SchemaChanger) makePlanner(txn *client.Txn) *planner {
 	return &planner{
 		txn: txn,
@@ -400,7 +402,7 @@ func (sc *SchemaChanger) truncateAndBackfillColumnsChunk(
 		txn.SetSystemConfigTrigger()
 
 		p := sc.makePlanner(txn)
-		defer p.releaseLeases(ctx)
+		defer p.session.releaseLeases(ctx)
 		tableDesc, err := sc.getTableLease(ctx, p, version)
 		if err != nil {
 			return err
@@ -550,7 +552,7 @@ func (sc *SchemaChanger) truncateIndexes(
 				txn.SetSystemConfigTrigger()
 
 				p := sc.makePlanner(txn)
-				defer p.releaseLeases(ctx)
+				defer p.session.releaseLeases(ctx)
 				tableDesc, err := sc.getTableLease(ctx, p, version)
 				if err != nil {
 					return err
@@ -659,7 +661,7 @@ func (sc *SchemaChanger) distBackfill(
 		if err := sc.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 			p := sc.makePlanner(txn)
 			// Use a leased table descriptor for the backfill.
-			defer p.releaseLeases(ctx)
+			defer p.session.releaseLeases(ctx)
 			tableDesc, err := sc.getTableLease(ctx, p, version)
 			if err != nil {
 				return err

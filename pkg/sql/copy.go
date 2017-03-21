@@ -138,10 +138,10 @@ var (
 // sent in a message, there's no guarantee that data contains a complete row
 // (or even a complete datum). It is thus valid to have no new rows added
 // to the internal state after this call.
-func (p *planner) ProcessCopyData(
+func (s *Session) ProcessCopyData(
 	ctx context.Context, data string, msg copyMsg,
 ) (parser.StatementList, error) {
-	cf := p.session.copyFrom
+	cf := s.copyFrom
 	buf := cf.buf
 
 	switch msg {
