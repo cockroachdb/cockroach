@@ -1099,10 +1099,10 @@ func (e *Executor) execStmtInOpenTxn(
 	}
 
 	defer func() {
-		// txnState.State might have been changed by inner functions that
-		// also have performed cleanup, so cleanup only if we see an error
-		// and the txnState is still open.
-		if err != nil && txnState.State == Open {
+		if err != nil {
+			if txnState.State != Open {
+				panic(fmt.Sprintf("unexpected txnState when cleaning up: %v", txnState.State))
+			}
 			txnState.updateStateAndCleanupOnErr(err, e)
 		}
 	}()
@@ -1133,14 +1133,14 @@ func (e *Executor) execStmtInOpenTxn(
 	case *parser.CommitTransaction:
 		// CommitTransaction is executed fully here; there's no planNode for it
 		// and a planner is not involved at all.
-		return commitSQLTransaction(txnState, commit, e)
+		return commitSQLTransaction(txnState, commit)
 	case *parser.ReleaseSavepoint:
 		if err := parser.ValidateRestartCheckpoint(s.Savepoint); err != nil {
 			return Result{}, err
 		}
 		// ReleaseSavepoint is executed fully here; there's no planNode for it
 		// and a planner is not involved at all.
-		return commitSQLTransaction(txnState, release, e)
+		return commitSQLTransaction(txnState, release)
 	case *parser.RollbackTransaction:
 		// RollbackTransaction is executed fully here; there's no planNode for it
 		// and a planner is not involved at all.
@@ -1267,33 +1267,32 @@ const (
 )
 
 // commitSqlTransaction commits a transaction.
-func commitSQLTransaction(txnState *txnState, commitType commitType, e *Executor) (Result, error) {
+func commitSQLTransaction(txnState *txnState, commitType commitType) (Result, error) {
 	if txnState.State != Open {
 		panic(fmt.Sprintf("commitSqlTransaction called on non-open txn: %+v", txnState.txn))
 	}
 	if commitType == commit {
 		txnState.commitSeen = true
 	}
-	err := txnState.txn.Commit(txnState.Ctx)
-	result := Result{PGTag: (*parser.CommitTransaction)(nil).StatementTag()}
-	if err != nil {
+	if err := txnState.txn.Commit(txnState.Ctx); err != nil {
 		// Errors on COMMIT need special handling, as COMMIT needs to finalize the
 		// transaction (it can't leave it in Aborted or RestartWait). Except if it's
 		// an auto-retry txn, in which case we do want to leave it in RestartWait
-		// here. We ignore all of this here and do regular cleanup. A higher layer
-		// handles closing the txn if the auto-retry doesn't get rid of the error.
-		txnState.updateStateAndCleanupOnErr(err, e)
-	} else {
-		switch commitType {
-		case release:
-			// We'll now be waiting for a COMMIT.
-			txnState.resetStateAndTxn(CommitWait)
-		case commit:
-			// We're done with this txn.
-			txnState.resetStateAndTxn(NoTxn)
-		}
+		// here. We ignore all of this here and simply return an error. A higher layer
+		// handles cleaning up and closing the txn if the auto-retry doesn't get rid
+		// of the error.
+		return Result{}, err
 	}
-	return result, err
+
+	switch commitType {
+	case release:
+		// We'll now be waiting for a COMMIT.
+		txnState.resetStateAndTxn(CommitWait)
+	case commit:
+		// We're done with this txn.
+		txnState.resetStateAndTxn(NoTxn)
+	}
+	return Result{PGTag: (*parser.CommitTransaction)(nil).StatementTag()}, nil
 }
 
 // exectDistSQL converts a classic plan to a distributed SQL physical plan and
