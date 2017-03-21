@@ -208,11 +208,12 @@ func chaosMonkey(
 			}
 		}
 		log.Infof(ctx, "round %d: restarting nodes %v", curRound, nodes)
+	outer:
 		for _, i := range nodes {
 			// Two early exit conditions.
 			select {
 			case <-stopper.ShouldStop():
-				break
+				break outer
 			default:
 			}
 			if state.done() {

@@ -75,7 +75,7 @@ func (kv *KeyValue) PrettyValue() string {
 		if err != nil {
 			return fmt.Sprintf("%v", err)
 		}
-		return fmt.Sprintf("%s", v)
+		return v.String()
 	}
 	return fmt.Sprintf("%x", kv.Value.RawBytes)
 }

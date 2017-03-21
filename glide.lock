@@ -1,8 +1,8 @@
-hash: b028d8e753461eb6f9ec9a6038477ac4fedfcd510810d4ca482bd2d9e70dfd52
-updated: 2017-03-16T13:55:47.251284287-04:00
+hash: 98d500758be99c4fffd5674e022ebfd24e552178abf6eeb8fb0c702ba04c9781
+updated: 2017-03-21T10:47:14.140857661-04:00
 imports:
 - name: cloud.google.com/go
-  version: 081f6b13d0132656829110e5f8344a13dfe039dc
+  version: daf945bb8684eb8df711af0c3e3a07930a2a01b0
   subpackages:
   - compute/metadata
   - internal
@@ -38,13 +38,13 @@ imports:
 - name: github.com/cockroachdb/apd
   version: 9d4eee129cac486270e6bc42462961a569057f81
 - name: github.com/cockroachdb/c-jemalloc
-  version: 7eb7980d8a9f68b771568a7eb15196a63a818595
+  version: 5fc986390622939c1f0e6df236040deca8c821b0
 - name: github.com/cockroachdb/c-protobuf
   version: 323984796a7b4794ee62a00e12456743a5b66765
   subpackages:
   - cmd/protoc
 - name: github.com/cockroachdb/c-rocksdb
-  version: 97c232fc39550ac0f6287a49421615cc633eec42
+  version: 7def73c53db126b0e62552e97629784d5317e932
 - name: github.com/cockroachdb/c-snappy
   version: c0cd3c9ce92f195001595e1fbbe66f045daad34f
 - name: github.com/cockroachdb/cmux
@@ -71,7 +71,7 @@ imports:
   subpackages:
   - md2man
 - name: github.com/docker/distribution
-  version: 08b06dc023674763e7b36d404cf0c7664cee1f5e
+  version: 11c74e07e0fc49a5bbe7e22c315551d11cf648dc
   subpackages:
   - digestset
   - reference
@@ -171,7 +171,7 @@ imports:
 - name: github.com/google/btree
   version: 316fb6d3f031ae8f4d457c6c5186b9e3ded70435
 - name: github.com/google/go-github
-  version: 839082db564f53df5b8b386f217c7c217b5a624f
+  version: 67f700645e97e82b8cf282ece3508805438be24f
   subpackages:
   - github
 - name: github.com/google/go-querystring
@@ -179,7 +179,7 @@ imports:
   subpackages:
   - query
 - name: github.com/google/pprof
-  version: a613757740614d4865db70ca9c80bc55cab3ab8f
+  version: 402739d38bd5f4bd5c0e14131347ce6b9481d1b5
   subpackages:
   - driver
   - internal/binutils
@@ -194,7 +194,7 @@ imports:
   - profile
   - third_party/svg
 - name: github.com/googleapis/gax-go
-  version: 8c5154c0fe5bf18cf649634d4c6df50897a32751
+  version: 9af46dd5a1713e8b5cd71106287eba3cefdde50b
 - name: github.com/grpc-ecosystem/grpc-gateway
   version: fdcb7eab2d6ed4919e83ddcef4f199c161611e1f
   subpackages:
@@ -218,7 +218,7 @@ imports:
   subpackages:
   - go-bindata
 - name: github.com/kisielk/errcheck
-  version: db0ca22445717d1b2c51ac1034440e0a2a2de645
+  version: 23699b7e2cbfdb89481023524954ba2aeff6be90
   subpackages:
   - internal/errcheck
 - name: github.com/kisielk/gotool
@@ -282,7 +282,7 @@ imports:
 - name: github.com/petermattis/goid
   version: caab6446a35a918488a0f52d4b0bd088a60f3511
 - name: github.com/pkg/errors
-  version: bfd5150e4e41705ded2129ec33379de1cb90b513
+  version: ff09b135c25aae272398c51a07235b90a75aa4f0
 - name: github.com/prometheus/client_model
   version: 6f3806018612930941127f2a7c6c453ba2c527d2
   subpackages:
@@ -312,7 +312,7 @@ imports:
 - name: github.com/shurcooL/sanitized_anchor_name
   version: 1dba4b3954bc059efc3991ec364f9f9a35f597d2
 - name: github.com/Sirupsen/logrus
-  version: 547e984ad93a90192134fc0fdb57a468edb514fe
+  version: 10f801ebc38b33738c9d17d50860f484a0988ff5
 - name: github.com/spf13/cobra
   version: 7be4beda01ec05d0b93d80b3facd2b6f44080d94
   subpackages:
@@ -348,16 +348,17 @@ imports:
   - proxy
   - trace
 - name: golang.org/x/oauth2
-  version: 30fcca6531eb4bb278493c9fb299295b3b145934
+  version: 7fdf09982454086d5570c7db3e11f360194830ca
   subpackages:
   - google
   - internal
   - jws
   - jwt
 - name: golang.org/x/sync
-  version: a60ad46e0ed33d02e09bda439efaf9c9727dbc6c
+  version: 5a06fca2c336a4b2b2fcb45702e8c47621b2aa2c
   subpackages:
   - errgroup
+  - singleflight
 - name: golang.org/x/sys
   version: e48874b42435b4347fc52bdee0424a52abc974d7
   subpackages:
@@ -374,7 +375,7 @@ imports:
   - unicode/norm
   - width
 - name: golang.org/x/tools
-  version: 2946dd1f77e693e136d9ed202ba093bb4a3ea761
+  version: 23ca8a2633c38bca2a2fd4d0c0f8523a2f266d65
   subpackages:
   - cmd/goimports
   - cmd/goyacc
@@ -388,7 +389,7 @@ imports:
   - go/types/typeutil
   - imports
 - name: google.golang.org/api
-  version: 650535c7d6201e8304c92f38c922a9a3a36c6877
+  version: 16ab375f94503bfa0d19db78e96bffbe1a34354f
   subpackages:
   - gensupport
   - googleapi
@@ -431,7 +432,7 @@ imports:
 - name: gopkg.in/yaml.v2
   version: a3f3340b5840cee44f372bddb5880fcbc419b46a
 - name: honnef.co/go/tools
-  version: 89a8bf9d32d7bf42e8a6e83c21177a2a029a2f0c
+  version: 6c3814a19596cc3f3de23f0442023a5adbb28eb6
   subpackages:
   - callgraph
   - callgraph/static

@@ -18,6 +18,7 @@
 
 package cli
 
+// #cgo CPPFLAGS: -DJEMALLOC_NO_DEMANGLE
 // #cgo darwin CPPFLAGS: -I../../vendor/github.com/cockroachdb/c-jemalloc/darwin_includes/internal/include
 // #cgo freebsd CPPFLAGS: -I../../vendor/github.com/cockroachdb/c-jemalloc/freebsd_includes/internal/include
 // #cgo linux CPPFLAGS: -I../../vendor/github.com/cockroachdb/c-jemalloc/linux_includes/internal/include
@@ -35,7 +36,7 @@ package cli
 //   size_t enabledSize = sizeof(enabled);
 //
 //   // Check profiling flag.
-//   if (mallctl("opt.prof", &enabled, &enabledSize, NULL, 0) != 0) {
+//   if (je_mallctl("opt.prof", &enabled, &enabledSize, NULL, 0) != 0) {
 //     return false;
 //   }
 //   if (!enabled) {
@@ -43,7 +44,7 @@ package cli
 //   }
 //
 //   // Check prof_active flag.
-//   if (mallctl("opt.prof_active", &enabled, &enabledSize, NULL, 0) != 0) {
+//   if (je_mallctl("opt.prof_active", &enabled, &enabledSize, NULL, 0) != 0) {
 //     return false;
 //   }
 //   return enabled;
@@ -51,16 +52,16 @@ package cli
 //
 // // Write a heap profile to "filename". Returns true on success, false on error.
 // int dump_heap_profile(const char *filename) {
-//   return mallctl("prof.dump", NULL, NULL, &filename, sizeof(const char *));
+//   return je_mallctl("prof.dump", NULL, NULL, &filename, sizeof(const char *));
 // }
 import "C"
 
 import (
-	// This is explicit because this Go library does not export any Go symbols.
-	_ "github.com/cockroachdb/c-jemalloc"
-
 	"fmt"
 	"unsafe"
+
+	// This is explicit because this Go library does not export any Go symbols.
+	_ "github.com/cockroachdb/c-jemalloc"
 )
 
 func init() {

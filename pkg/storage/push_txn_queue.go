@@ -294,7 +294,6 @@ func (ptq *pushTxnQueue) MaybeWait(
 
 	// Keep local values for the pusher and pushee priorities to avoid
 	// modifying values in the original request on QueryTxn updates.
-	pusherPriority := req.PusherTxn.Priority
 	pusheePriority := req.PusheeTxn.Priority
 
 	for {
@@ -346,7 +345,7 @@ func (ptq *pushTxnQueue) MaybeWait(
 			if pErr != nil {
 				return nil, pErr
 			} else if updatedPusher != nil {
-				pusherPriority = updatedPusher.Priority
+				pusherPriority := updatedPusher.Priority
 				// Check for dependency cycle to find and break deadlocks.
 				push.mu.Lock()
 				if push.mu.dependents == nil {

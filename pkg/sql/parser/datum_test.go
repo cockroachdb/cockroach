@@ -17,7 +17,6 @@
 package parser
 
 import (
-	"fmt"
 	"math"
 	"testing"
 )
@@ -206,7 +205,7 @@ func TestDatumOrdering(t *testing.T) {
 				continue
 			}
 			if !isMin {
-				dPrev := fmt.Sprintf("%s", prevVal)
+				dPrev := prevVal.String()
 				if dPrev != td.prev {
 					t.Errorf("%s: Prev(): got %s, expected %s", td.datumExpr, dPrev, td.prev)
 				}
@@ -229,7 +228,7 @@ func TestDatumOrdering(t *testing.T) {
 				continue
 			}
 			if !isMax {
-				dNext := fmt.Sprintf("%s", nextVal)
+				dNext := nextVal.String()
 				if dNext != td.next {
 					t.Errorf("%s: Next(): got %s, expected %s", td.datumExpr, dNext, td.next)
 				}
@@ -244,7 +243,7 @@ func TestDatumOrdering(t *testing.T) {
 				t.Errorf("%s: hasMin true, expected false", td.datumExpr)
 			}
 		} else {
-			dMin := fmt.Sprintf("%s", minVal)
+			dMin := minVal.String()
 			if dMin != td.min {
 				t.Errorf("%s: min(): got %s, expected %s", td.datumExpr, dMin, td.min)
 			}
@@ -254,7 +253,7 @@ func TestDatumOrdering(t *testing.T) {
 				t.Errorf("%s: hasMax true, expected false", td.datumExpr)
 			}
 		} else {
-			dMax := fmt.Sprintf("%s", maxVal)
+			dMax := maxVal.String()
 			if dMax != td.max {
 				t.Errorf("%s: max(): got %s, expected %s", td.datumExpr, dMax, td.max)
 			}
