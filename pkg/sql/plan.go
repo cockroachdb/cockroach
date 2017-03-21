@@ -263,7 +263,8 @@ func (p *planner) newPlan(
 	// refreshes, but that's expected to be quite rare in practice.
 	if stmt.StatementType() == parser.DDL {
 		if err := p.txn.SetSystemConfigTrigger(); err != nil {
-			return nil, err
+			return nil, errors.Wrap(err,
+				"schema change statement cannot follow a statement that has written in the same transaction")
 		}
 	}
 

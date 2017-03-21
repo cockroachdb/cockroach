@@ -55,6 +55,7 @@ var errNoTransactionInProgress = errors.New("there is no transaction in progress
 var errStaleMetadata = errors.New("metadata is still stale")
 var errTransactionInProgress = errors.New("there is already a transaction in progress")
 var errNotRetriable = errors.New("the transaction is not in a retriable state")
+var errStmtFollowsSchemaChange = errors.New("statement cannot follow a schema change in a transaction")
 
 const sqlTxnName string = "sql txn"
 const sqlImplicitTxnName string = "sql txn implicit"
@@ -651,6 +652,7 @@ func (e *Executor) execRequest(session *Session, sql string, copymsg copyMsg) St
 
 		// Track if we are retrying this query, so that we do not double count.
 		automaticRetryCount := 0
+		schemaChangerCount := len(txnState.schemaChangers.schemaChangers)
 		txnClosure := func(ctx context.Context, txn *client.Txn, opt *client.TxnExecOptions) error {
 			defer func() { automaticRetryCount++ }()
 			if txnState.State == Open && txnState.txn != txn {
@@ -658,6 +660,12 @@ func (e *Executor) execRequest(session *Session, sql string, copymsg copyMsg) St
 					"\ntxnState.txn:%+v\ntxn:%+v\ntxnState:%+v", txnState.txn, txn, txnState))
 			}
 			txnState.txn = txn
+
+			// Remove all schema changers added by the closure.
+			if automaticRetryCount > 0 && len(txnState.schemaChangers.schemaChangers) > 0 {
+				txnState.schemaChangers.schemaChangers =
+					txnState.schemaChangers.schemaChangers[:schemaChangerCount]
+			}
 
 			if protoTS != nil {
 				SetTxnTimestamps(txnState.txn, *protoTS)
@@ -891,6 +899,7 @@ func (e *Executor) execStmtsInCurrentTxn(
 		if log.V(2) || log.HasSpanOrEvent(planMaker.session.Ctx()) {
 			log.VEventf(planMaker.session.Ctx(), 2, "executing %d/%d: %s", i+1, len(stmts), stmt)
 		}
+
 		txnState.schemaChangers.curStatementIdx = i
 
 		var stmtStrBefore string
@@ -1162,6 +1171,10 @@ func (e *Executor) execStmtInOpenTxn(
 			}
 		}
 		return Result{PGTag: s.StatementTag()}, nil
+	}
+
+	if len(txnState.schemaChangers.schemaChangers) > 0 {
+		return Result{}, errStmtFollowsSchemaChange
 	}
 
 	autoCommit := implicitTxn && !e.cfg.TestingKnobs.DisableAutoCommit
