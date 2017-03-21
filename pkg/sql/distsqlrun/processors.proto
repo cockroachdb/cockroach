@@ -353,6 +353,11 @@ message BackfillerSpec {
   // along with a backfill for the rows. This is the maximum number
   // of entries backfilled per chunk.
   optional int64 chunk_size = 5 [(gogoproto.nullable) = false];
+
+  // otherTables contains any other (leased) table descriptors necessary for the
+  // backfiller to do its job, such as the descriptors for tables with fk
+  // relationships to the table being modified.
+  repeated sqlbase.TableDescriptor otherTables = 6 [(gogoproto.nullable) = false];
 }
 
 // FlowSpec describes a "flow" which is a subgraph of a distributed SQL
