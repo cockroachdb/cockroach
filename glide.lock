@@ -1,5 +1,5 @@
-hash: 98d500758be99c4fffd5674e022ebfd24e552178abf6eeb8fb0c702ba04c9781
-updated: 2017-03-21T10:47:14.140857661-04:00
+hash: be0e2ed33e131c2a36537e2decea3b91f5851bae7b53f79508061b563b762657
+updated: 2017-03-21T16:13:13.141174248-04:00
 imports:
 - name: cloud.google.com/go
   version: daf945bb8684eb8df711af0c3e3a07930a2a01b0
@@ -71,7 +71,7 @@ imports:
   subpackages:
   - md2man
 - name: github.com/docker/distribution
-  version: 11c74e07e0fc49a5bbe7e22c315551d11cf648dc
+  version: 0700fa570d7bcc1b3e46ee127c4489fd25f4daa3
   subpackages:
   - digestset
   - reference
@@ -171,7 +171,7 @@ imports:
 - name: github.com/google/btree
   version: 316fb6d3f031ae8f4d457c6c5186b9e3ded70435
 - name: github.com/google/go-github
-  version: 67f700645e97e82b8cf282ece3508805438be24f
+  version: d683a1c6198d75c6be7a7ab5e2f9834cb6408834
   subpackages:
   - github
 - name: github.com/google/go-querystring
@@ -234,7 +234,7 @@ imports:
   subpackages:
   - oid
 - name: github.com/lightstep/lightstep-tracer-go
-  version: 94d5dd5639a3ce7f9f09ccccf7b1b468d0262a7d
+  version: 0a22c00b113343382aaf6d35c84574fc7357a100
   subpackages:
   - collectorpb
   - lightstep_thrift
@@ -322,7 +322,7 @@ imports:
 - name: github.com/StackExchange/wmi
   version: 9f32b5905fd6ce7384093f9d048437e79f7b4d85
 - name: github.com/tebeka/go2xunit
-  version: 5856a592616c62734bf27dac02b6b5f076f96ba6
+  version: 13c29c7515e660c2d5ccc1a2122b9ca38826a949
   subpackages:
   - lib
 - name: github.com/VividCortex/ewma
@@ -401,7 +401,7 @@ imports:
   - storage/v1
   - transport
 - name: google.golang.org/appengine
-  version: b79c28f0197795b4050bfcd7c4c2209136c594b1
+  version: b5c7c247998fb18ace83308f41199d04c78d58f1
   subpackages:
   - internal
   - internal/app_identity
@@ -415,14 +415,15 @@ imports:
   - socket
   - urlfetch
 - name: google.golang.org/grpc
-  version: d3f1ab4a4dca70781cf6dc850a79ed38632660a6
-  repo: https://github.com/petermattis/grpc-go
+  version: 9d55a95b90eb10d08a07e0213d23797dbd7b7552
+  repo: https://github.com/andreimatei/grpc-go
   subpackages:
   - codes
   - credentials
   - credentials/oauth
   - grpclog
   - internal
+  - keepalive
   - metadata
   - naming
   - peer

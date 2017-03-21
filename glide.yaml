@@ -15,8 +15,8 @@ import:
 # https://github.com/grpc/grpc-go/issues/760
 # https://github.com/grpc/grpc-go/issues/1043
 - package: google.golang.org/grpc
-  version: d3f1ab4a4dca70781cf6dc850a79ed38632660a6
-  repo: https://github.com/petermattis/grpc-go
+  version: 9d55a95b90eb10d08a07e0213d23797dbd7b7552
+  repo: https://github.com/andreimatei/grpc-go
 # Pins to prevent unintended version changes to libs we care about when adding/
 # removing/changing other deps. These are grouped separately to make it easier
 # to comment them out in bulk when running an across-the-board dep update.
