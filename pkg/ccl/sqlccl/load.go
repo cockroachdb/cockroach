@@ -56,7 +56,7 @@ func Load(
 	parse := parser.Parser{}
 	evalCtx := parser.EvalContext{}
 
-	dir, err := storageccl.ExportStorageFromURI(ctx, uri)
+	dir, err := exportStorageFromURI(ctx, uri)
 	if err != nil {
 		return BackupDescriptor{}, errors.Wrap(err, "export storage from URI")
 	}

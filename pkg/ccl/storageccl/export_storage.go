@@ -100,28 +100,21 @@ func ExportStorageConfFromURI(path string) (roachpb.ExportStorage, error) {
 	return conf, nil
 }
 
-// ExportStorageFromURI returns an ExportStorage for the given URI.
-func ExportStorageFromURI(ctx context.Context, uri string) (ExportStorage, error) {
-	conf, err := ExportStorageConfFromURI(uri)
-	if err != nil {
-		return nil, err
-	}
-	return MakeExportStorage(ctx, conf)
-}
-
 // MakeExportStorage creates an ExportStorage from the given config.
-func MakeExportStorage(ctx context.Context, dest roachpb.ExportStorage) (ExportStorage, error) {
+func MakeExportStorage(
+	ctx context.Context, dest roachpb.ExportStorage, tmpPrefix string,
+) (ExportStorage, error) {
 	switch dest.Provider {
 	case roachpb.ExportStorageProvider_LocalFile:
 		return makeLocalStorage(dest.LocalFile.Path)
 	case roachpb.ExportStorageProvider_Http:
-		return makeHTTPStorage(dest.HttpPath.BaseUri)
+		return makeHTTPStorage(dest.HttpPath.BaseUri, tmpPrefix)
 	case roachpb.ExportStorageProvider_S3:
-		return makeS3Storage(dest.S3Config)
+		return makeS3Storage(dest.S3Config, tmpPrefix)
 	case roachpb.ExportStorageProvider_GoogleCloud:
-		return makeGCSStorage(ctx, dest.GoogleCloudConfig)
+		return makeGCSStorage(ctx, dest.GoogleCloudConfig, tmpPrefix)
 	case roachpb.ExportStorageProvider_Azure:
-		return makeAzureStorage(dest.AzureConfig)
+		return makeAzureStorage(dest.AzureConfig, tmpPrefix)
 	}
 	return nil, errors.Errorf("unsupported export destination type: %s", dest.Provider.String())
 }
@@ -237,7 +230,7 @@ type httpStorage struct {
 
 var _ ExportStorage = &httpStorage{}
 
-func makeHTTPStorage(base string) (ExportStorage, error) {
+func makeHTTPStorage(base, tmpPrefix string) (ExportStorage, error) {
 	if base == "" {
 		return nil, errors.Errorf("HTTP storage requested but base path not provided")
 	}
@@ -245,7 +238,7 @@ func makeHTTPStorage(base string) (ExportStorage, error) {
 		return nil, errors.Errorf("HTTP storage path must end in '/'")
 	}
 	client := &http.Client{Transport: &http.Transport{}}
-	return &httpStorage{client: client, base: base}, nil
+	return &httpStorage{client: client, base: base, tmp: tmpHelper{prefix: tmpPrefix}}, nil
 }
 
 func (h *httpStorage) Conf() roachpb.ExportStorage {
@@ -345,7 +338,7 @@ type s3StorageWriter struct {
 
 var _ ExportFileWriter = &s3StorageWriter{}
 
-func makeS3Storage(conf *roachpb.ExportStorage_S3) (ExportStorage, error) {
+func makeS3Storage(conf *roachpb.ExportStorage_S3, tmpPrefix string) (ExportStorage, error) {
 	if conf == nil {
 		return nil, errors.Errorf("s3 upload requested but info missing")
 	}
@@ -355,6 +348,7 @@ func makeS3Storage(conf *roachpb.ExportStorage_S3) (ExportStorage, error) {
 		conf:   conf,
 		bucket: b,
 		prefix: conf.Prefix,
+		tmp:    tmpHelper{prefix: tmpPrefix},
 	}, nil
 }
 
@@ -463,7 +457,9 @@ func (g *gcsStorage) Conf() roachpb.ExportStorage {
 	}
 }
 
-func makeGCSStorage(ctx context.Context, conf *roachpb.ExportStorage_GCS) (ExportStorage, error) {
+func makeGCSStorage(
+	ctx context.Context, conf *roachpb.ExportStorage_GCS, tmpPrefix string,
+) (ExportStorage, error) {
 	if conf == nil {
 		return nil, errors.Errorf("google cloud storage upload requested but info missing")
 	}
@@ -476,6 +472,7 @@ func makeGCSStorage(ctx context.Context, conf *roachpb.ExportStorage_GCS) (Expor
 		client: g,
 		bucket: g.Bucket(conf.Bucket),
 		prefix: conf.Prefix,
+		tmp:    tmpHelper{prefix: tmpPrefix},
 	}, nil
 }
 
@@ -556,7 +553,7 @@ type azureStorageWriter struct {
 
 var _ ExportFileWriter = &azureStorageWriter{}
 
-func makeAzureStorage(conf *roachpb.ExportStorage_Azure) (ExportStorage, error) {
+func makeAzureStorage(conf *roachpb.ExportStorage_Azure, tmpPrefix string) (ExportStorage, error) {
 	if conf == nil {
 		return nil, errors.Errorf("azure upload requested but info missing")
 	}
@@ -568,6 +565,7 @@ func makeAzureStorage(conf *roachpb.ExportStorage_Azure) (ExportStorage, error) 
 		conf:   conf,
 		client: client.GetBlobService(),
 		prefix: conf.Prefix,
+		tmp:    tmpHelper{prefix: tmpPrefix},
 	}, err
 }
 
@@ -722,12 +720,18 @@ func (s *azureStorage) Close() error {
 }
 
 type tmpHelper struct {
-	path string
+	prefix string
+	path   string
 }
 
 func (t *tmpHelper) init() error {
 	if t.path == "" {
-		base, err := ioutil.TempDir("", "cockroach-export")
+		if t.prefix != "" {
+			if err := os.MkdirAll(t.prefix, 0755); err != nil {
+				return err
+			}
+		}
+		base, err := ioutil.TempDir(t.prefix, "cockroach-export")
 		if err != nil {
 			return err
 		}

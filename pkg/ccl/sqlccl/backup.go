@@ -38,6 +38,22 @@ const (
 	BackupDescriptorName = "BACKUP"
 )
 
+// exportStorageFromURI returns an ExportStorage for the given URI.
+// The returned ExportStorage
+func exportStorageFromURI(ctx context.Context, uri string) (storageccl.ExportStorage, error) {
+	conf, err := storageccl.ExportStorageConfFromURI(uri)
+	if err != nil {
+		return nil, err
+	}
+	// TODO(dt): Use a tempdir in cockroach-data if at all possible.
+	// In storage code , we get a cockroach-specific tempdir from the Store, but
+	// here in sql, we don't have a Store -- indeed, the gateway node might not be
+	// configured with any stores at all. "" falls back to sys default (eg. /tmp).
+	// Consider hacking/plumbing a default tempdir or something.
+	tmpDir := ""
+	return storageccl.MakeExportStorage(ctx, conf, tmpDir)
+}
+
 // ReadBackupDescriptor reads and unmarshals a BackupDescriptor from given base.
 func ReadBackupDescriptor(
 	ctx context.Context, dir storageccl.ExportStorage,
@@ -69,7 +85,7 @@ func ValidatePreviousBackups(ctx context.Context, uris []string) (hlc.Timestamp,
 	}
 	backups := make([]BackupDescriptor, len(uris))
 	for i, uri := range uris {
-		dir, err := storageccl.ExportStorageFromURI(ctx, uri)
+		dir, err := exportStorageFromURI(ctx, uri)
 		if err != nil {
 			return hlc.Timestamp{}, err
 		}
@@ -159,7 +175,7 @@ func Backup(
 
 	var sqlDescs []sqlbase.Descriptor
 
-	exportStore, err := storageccl.ExportStorageFromURI(ctx, uri)
+	exportStore, err := exportStorageFromURI(ctx, uri)
 	if err != nil {
 		return BackupDescriptor{}, err
 	}

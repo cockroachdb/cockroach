@@ -27,10 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
-// TODO(dt): remove when calling code lands and these have real users.
-var _, _ = S3AccessKeyParam, S3SecretParam
-var _, _ = ExportStorageFromURI, ExportStorageConfFromURI
-
 func testExportToTarget(t *testing.T, args roachpb.ExportStorage) {
 	const size = 1024 * 1024 * 8 // 8MiB
 	testingContent := make([]byte, size)
@@ -40,7 +36,7 @@ func testExportToTarget(t *testing.T, args roachpb.ExportStorage) {
 	testingFilename := "testing-123"
 	ctx := context.TODO()
 	// Setup a sink for the given args.
-	s, err := MakeExportStorage(ctx, args)
+	s, err := MakeExportStorage(ctx, args, "")
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -42,6 +42,8 @@ func evalImport(ctx context.Context, cArgs storage.CommandArgs) error {
 	}
 	defer endLimitedRequest()
 
+	tmp := cArgs.Repl.GetTempDir()
+
 	// Arrived at by tuning and watching the effect on BenchmarkRestore.
 	const batchSizeBytes = 1000000
 
@@ -75,7 +77,7 @@ func evalImport(ctx context.Context, cArgs storage.CommandArgs) error {
 			log.Infof(ctx, "import file [%s,%s) %s", args.DataSpan.Key, args.DataSpan.EndKey, file.Path)
 		}
 
-		dir, err := MakeExportStorage(ctx, file.Dir)
+		dir, err := MakeExportStorage(ctx, file.Dir, tmp)
 		if err != nil {
 			return err
 		}
@@ -100,7 +102,7 @@ func evalImport(ctx context.Context, cArgs storage.CommandArgs) error {
 			}
 		}
 
-		sst, err := engine.MakeRocksDBSstFileReader()
+		sst, err := engine.MakeRocksDBSstFileReader(tmp)
 		if err != nil {
 			return err
 		}
