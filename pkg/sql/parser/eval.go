@@ -1834,7 +1834,7 @@ var regTypeInfos = map[*OidColType]regTypeInfo{
 	oidColTypeRegNamespace: {"pg_namespace", "nspname", "namespace"},
 }
 
-// queryOid looks up the name or OID of an input OID or string in the
+// queryOidWithJoin looks up the name or OID of an input OID or string in the
 // pg_catalog table that the input OidColType belongs to. If the input Datum
 // is a DOid, the relevant table will be queried by OID; if the input is a
 // DString, the table will be queried by its name column.
@@ -1844,7 +1844,7 @@ var regTypeInfos = map[*OidColType]regTypeInfo{
 // query, an error will be returned.
 func queryOidWithJoin(
 	ctx *EvalContext, typ *OidColType, d Datum, joinClause string, additionalWhere string,
-) (Datum, error) {
+) (*DOid, error) {
 	ret := &DOid{kind: typ}
 	info := regTypeInfos[typ]
 	var queryCol string
@@ -1876,7 +1876,7 @@ func queryOidWithJoin(
 	return ret, nil
 }
 
-func queryOid(ctx *EvalContext, typ *OidColType, d Datum) (Datum, error) {
+func queryOid(ctx *EvalContext, typ *OidColType, d Datum) (*DOid, error) {
 	return queryOidWithJoin(ctx, typ, d, "", "")
 }
 
@@ -2171,15 +2171,25 @@ func (expr *CastExpr) Eval(ctx *EvalContext) (Datum, error) {
 			case oidColTypeOid:
 				return &DOid{kind: typ, DInt: v.DInt}, nil
 			default:
-				return queryOid(ctx, typ, v)
+				oid, err := queryOid(ctx, typ, v)
+				if err != nil {
+					oid = NewDOid(v.DInt)
+					oid.kind = typ
+				}
+				return oid, nil
 			}
 		case *DInt:
-			oid := NewDOid(*v)
 			switch typ {
 			case oidColTypeOid:
 				return &DOid{kind: typ, DInt: *v}, nil
 			default:
-				return queryOid(ctx, typ, oid)
+				tmpOid := NewDOid(*v)
+				oid, err := queryOid(ctx, typ, tmpOid)
+				if err != nil {
+					oid = tmpOid
+					oid.kind = typ
+				}
+				return oid, nil
 			}
 		case *DString:
 			s := string(*v)
@@ -2191,6 +2201,12 @@ func (expr *CastExpr) Eval(ctx *EvalContext) (Datum, error) {
 			}
 
 			switch typ {
+			case oidColTypeOid:
+				i, err := ParseDInt(s)
+				if err != nil {
+					return nil, err
+				}
+				return &DOid{kind: typ, DInt: *i}, nil
 			case oidColTypeRegProc, oidColTypeRegProcedure:
 				// Trim procedure type parameters, e.g. `max(int)` becomes `max`.
 				// Postgres only does this when the cast is ::regprocedure, but we're

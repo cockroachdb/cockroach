@@ -1,22 +1,54 @@
-query O
-SELECT 3::OID
+query OO
+SELECT 3::OID, '3'::OID
 ----
-3
+3  3
 
 query O
 SELECT 3::OID::INT::OID
 ----
 3
 
-query T
-SELECT pg_typeof(1:::OID)
+query OOOOOO
+SELECT 1::OID, 1::REGCLASS, 1::REGNAMESPACE, 1::REGPROC, 1::REGPROCEDURE, 1::REGTYPE
 ----
-oid
+1  1  1  1  1  1
+
+query OOOOO
+SELECT 1::OID::REGCLASS, 1::OID::REGNAMESPACE, 1::OID::REGPROC, 1::OID::REGPROCEDURE, 1::OID::REGTYPE
+----
+1  1  1  1  1
+
+query TTT
+SELECT pg_typeof(1::OID), pg_typeof(1::REGCLASS), pg_typeof(1::REGNAMESPACE)
+----
+oid  regclass  regnamespace
+
+query TTT
+SELECT pg_typeof(1::REGPROC), pg_typeof(1::REGPROCEDURE), pg_typeof(1::REGTYPE)
+----
+regproc  regprocedure  regtype
+
+query TTT
+SELECT pg_typeof('1'::OID), pg_typeof('pg_constraint'::REGCLASS), pg_typeof('system'::REGNAMESPACE)
+----
+oid  regclass  regnamespace
+
+query TTT
+SELECT pg_typeof('upper'::REGPROC), pg_typeof('upper'::REGPROCEDURE), pg_typeof('bool'::REGTYPE)
+----
+regproc  regprocedure  regtype
 
 query O
 SELECT 'pg_constraint'::REGCLASS
 ----
 pg_constraint
+
+query ITTTTT
+EXPLAIN (TYPES) SELECT 'pg_constraint'::REGCLASS
+----
+0  render                                        ("'pg_constraint'::REGCLASS" regclass)
+0           render 0  (pg_constraint)[regclass]
+1  nullrow                                       ()
 
 query OO
 SELECT '"pg_constraint"'::REGCLASS, '  "pg_constraint" '::REGCLASS
