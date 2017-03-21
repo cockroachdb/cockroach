@@ -78,18 +78,23 @@ func bankDataInsertStmts(count int) []string {
 	return statements
 }
 
-func bankSplitStmts(numAccounts int, numRanges int) []string {
+func bankSplitStmt(numAccounts int, numRanges int) string {
 	// Asking for more splits than ranges doesn't make any sense. Because of the
 	// way go benchmarks work, split each row into a range instead of erroring.
 	if numRanges > numAccounts {
 		numRanges = numAccounts
 	}
-	var statements []string
+
+	var stmt bytes.Buffer
+	stmt.WriteString("ALTER TABLE bench.bank SPLIT AT VALUES ")
+
 	for i, incr := 1, numAccounts/numRanges; i < numRanges; i++ {
-		s := fmt.Sprintf(`ALTER TABLE bench.bank SPLIT AT (%d)`, i*incr)
-		statements = append(statements, s)
+		if i > 1 {
+			stmt.WriteString(", ")
+		}
+		fmt.Fprintf(&stmt, "(%d)", i*incr)
 	}
-	return statements
+	return stmt.String()
 }
 
 func backupRestoreTestSetup(
@@ -115,10 +120,9 @@ func backupRestoreTestSetup(
 		for _, insert := range bankDataInsertStmts(numAccounts) {
 			sqlDB.Exec(insert)
 		}
-		for _, split := range bankSplitStmts(numAccounts, backupRestoreDefaultRanges) {
-			// This occasionally flakes, so ignore errors.
-			_, _ = sqlDB.DB.Exec(split)
-		}
+		split := bankSplitStmt(numAccounts, backupRestoreDefaultRanges)
+		// This occasionally flakes, so ignore errors.
+		_, _ = sqlDB.DB.Exec(split)
 	}
 
 	if err := tc.WaitForFullReplication(); err != nil {

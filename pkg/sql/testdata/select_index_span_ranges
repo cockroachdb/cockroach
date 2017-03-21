@@ -35,22 +35,22 @@ INSERT INTO t VALUES
 
 # Split the table across multiple ranges.
 statement ok
-ALTER TABLE t SPLIT AT (2)
+ALTER TABLE t SPLIT AT VALUES (2)
 
 statement ok
-ALTER TABLE t SPLIT AT (3)
+ALTER TABLE t SPLIT AT VALUES (3)
 
 statement ok
-ALTER TABLE t SPLIT AT (5)
+ALTER TABLE t SPLIT AT VALUES (5)
 
 statement ok
-ALTER TABLE t SPLIT AT (8)
+ALTER TABLE t SPLIT AT VALUES (8)
 
 statement ok
-ALTER INDEX t@c SPLIT AT (90)
+ALTER INDEX t@c SPLIT AT VALUES (90)
 
 statement ok
-ALTER INDEX c SPLIT AT (10)
+ALTER INDEX c SPLIT AT VALUES (10)
 
 query ITTT
 EXPLAIN SELECT * FROM t WHERE (c >= 80) ORDER BY c
