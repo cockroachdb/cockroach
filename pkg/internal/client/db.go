@@ -391,6 +391,18 @@ func (db *DB) AdminTransferLease(
 	return getOneErr(db.Run(ctx, b), b)
 }
 
+// AdminChangeReplicas adds or removes a set of replicas for a range.
+func (db *DB) AdminChangeReplicas(
+	ctx context.Context,
+	key interface{},
+	changeType roachpb.ReplicaChangeType,
+	targets []roachpb.ReplicationTarget,
+) error {
+	b := &Batch{}
+	b.adminChangeReplicas(key, changeType, targets)
+	return getOneErr(db.Run(ctx, b), b)
+}
+
 // CheckConsistency runs a consistency check on all the ranges containing
 // the key span. It logs a diff of all the keys that are inconsistent
 // when withDiff is set to true.

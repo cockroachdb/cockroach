@@ -437,6 +437,9 @@ func (*AdminMergeRequest) Method() Method { return AdminMerge }
 func (*AdminTransferLeaseRequest) Method() Method { return AdminTransferLease }
 
 // Method implements the Request interface.
+func (*AdminChangeReplicasRequest) Method() Method { return AdminChangeReplicas }
+
+// Method implements the Request interface.
 func (*HeartbeatTxnRequest) Method() Method { return HeartbeatTxn }
 
 // Method implements the Request interface.
@@ -583,6 +586,12 @@ func (amr *AdminMergeRequest) ShallowCopy() Request {
 // ShallowCopy implements the Request interface.
 func (atlr *AdminTransferLeaseRequest) ShallowCopy() Request {
 	shallowCopy := *atlr
+	return &shallowCopy
+}
+
+// ShallowCopy implements the Request interface.
+func (acrr *AdminChangeReplicasRequest) ShallowCopy() Request {
+	shallowCopy := *acrr
 	return &shallowCopy
 }
 
@@ -863,22 +872,23 @@ func (drr *DeleteRangeRequest) flags() int {
 	}
 	return isWrite | isTxn | isTxnWrite | isRange
 }
-func (*ScanRequest) flags() int               { return isRead | isRange | isTxn }
-func (*ReverseScanRequest) flags() int        { return isRead | isRange | isReverse | isTxn }
-func (*BeginTransactionRequest) flags() int   { return isWrite | isTxn }
-func (*EndTransactionRequest) flags() int     { return isWrite | isTxn | isAlone }
-func (*AdminSplitRequest) flags() int         { return isAdmin | isAlone }
-func (*AdminMergeRequest) flags() int         { return isAdmin | isAlone }
-func (*AdminTransferLeaseRequest) flags() int { return isAdmin | isAlone }
-func (*HeartbeatTxnRequest) flags() int       { return isWrite | isTxn }
-func (*GCRequest) flags() int                 { return isWrite | isRange }
-func (*PushTxnRequest) flags() int            { return isWrite | isAlone }
-func (*QueryTxnRequest) flags() int           { return isRead | isAlone }
-func (*RangeLookupRequest) flags() int        { return isRead }
-func (*ResolveIntentRequest) flags() int      { return isWrite }
-func (*ResolveIntentRangeRequest) flags() int { return isWrite | isRange }
-func (*NoopRequest) flags() int               { return isRead } // slightly special
-func (*TruncateLogRequest) flags() int        { return isWrite | isNonKV }
+func (*ScanRequest) flags() int                { return isRead | isRange | isTxn }
+func (*ReverseScanRequest) flags() int         { return isRead | isRange | isReverse | isTxn }
+func (*BeginTransactionRequest) flags() int    { return isWrite | isTxn }
+func (*EndTransactionRequest) flags() int      { return isWrite | isTxn | isAlone }
+func (*AdminSplitRequest) flags() int          { return isAdmin | isAlone }
+func (*AdminMergeRequest) flags() int          { return isAdmin | isAlone }
+func (*AdminTransferLeaseRequest) flags() int  { return isAdmin | isAlone }
+func (*AdminChangeReplicasRequest) flags() int { return isAdmin | isAlone }
+func (*HeartbeatTxnRequest) flags() int        { return isWrite | isTxn }
+func (*GCRequest) flags() int                  { return isWrite | isRange }
+func (*PushTxnRequest) flags() int             { return isWrite | isAlone }
+func (*QueryTxnRequest) flags() int            { return isRead | isAlone }
+func (*RangeLookupRequest) flags() int         { return isRead }
+func (*ResolveIntentRequest) flags() int       { return isWrite }
+func (*ResolveIntentRangeRequest) flags() int  { return isWrite | isRange }
+func (*NoopRequest) flags() int                { return isRead } // slightly special
+func (*TruncateLogRequest) flags() int         { return isWrite | isNonKV }
 
 // MergeRequests are considered "non KV" because they do not need to be gated
 // by the command queue (reordering is ok) and they operate on non-MVCC data so
