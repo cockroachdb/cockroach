@@ -56,7 +56,7 @@ SELECT NAME from crdb_internal.tables WHERE DATABASE_NAME = 'testdb'
 foo
 "\'
 
-# Check that app_stats report per application
+# Check that node_app_stats report per application
 
 statement ok
 SET APPLICATION_NAME = hello; SELECT 1
@@ -65,7 +65,7 @@ statement ok
 SET APPLICATION_NAME = world; SELECT 2
 
 query B
-SELECT statement_count > 0 FROM crdb_internal.app_stats WHERE APPLICATION_NAME IN ('hello', 'world')
+SELECT statement_count > 0 FROM crdb_internal.node_app_stats WHERE APPLICATION_NAME IN ('hello', 'world')
 ----
 true
 true
@@ -75,13 +75,13 @@ statement ok
 SET APPLICATION_NAME = ''
 
 query TT colnames
-SELECT * FROM crdb_internal.build_info WHERE field ILIKE 'name'
+SELECT field, value FROM crdb_internal.node_build_info WHERE field ILIKE 'name'
 ----
-FIELD VALUE
-Name CockroachDB
+field value
+Name  CockroachDB
 
 query T
-SELECT field FROM crdb_internal.build_info
+SELECT field FROM crdb_internal.node_build_info
 ----
 Name
 GoVersion
