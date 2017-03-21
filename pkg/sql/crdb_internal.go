@@ -43,13 +43,21 @@ var crdbInternal = virtualSchema{
 
 var crdbInternalBuildInfoTable = virtualSchemaTable{
 	schema: `
-CREATE TABLE crdb_internal.build_info (
-  FIELD STRING NOT NULL,
-  VALUE STRING NOT NULL
+CREATE TABLE crdb_internal.node_build_info (
+  NODE_ID INT NOT NULL,
+  FIELD   STRING NOT NULL,
+  VALUE   STRING NOT NULL
 );
 `,
-	populate: func(_ context.Context, _ *planner, addRow func(...parser.Datum) error) error {
-		if err := addRow(parser.NewDString("Name"), parser.NewDString("CockroachDB")); err != nil {
+	populate: func(_ context.Context, p *planner, addRow func(...parser.Datum) error) error {
+		leaseMgr := p.session.leaseMgr
+		nodeID := parser.NewDInt(parser.DInt(int64(leaseMgr.nodeID.Get())))
+
+		if err := addRow(
+			nodeID,
+			parser.NewDString("Name"),
+			parser.NewDString("CockroachDB"),
+		); err != nil {
 			return err
 		}
 
@@ -60,7 +68,7 @@ CREATE TABLE crdb_internal.build_info (
 			f := s.Field(i)
 			if sv, ok := f.Interface().(string); ok {
 				fname := t.Field(i).Name
-				if err := addRow(parser.NewDString(fname), parser.NewDString(sv)); err != nil {
+				if err := addRow(nodeID, parser.NewDString(fname), parser.NewDString(sv)); err != nil {
 					return err
 				}
 			}
@@ -261,9 +269,10 @@ CREATE TABLE crdb_internal.leases (
 
 var crdbInternalAppStatsTable = virtualSchemaTable{
 	schema: `
-CREATE TABLE crdb_internal.app_stats (
-  APPLICATION_NAME STRING,
-  STATEMENT_COUNT  INT
+CREATE TABLE crdb_internal.node_app_stats (
+  NODE_ID          INT NOT NULL,
+  APPLICATION_NAME STRING NOT NULL,
+  STATEMENT_COUNT  INT NOT NULL
 );
 `,
 	populate: func(_ context.Context, p *planner, addRow func(...parser.Datum) error) error {
@@ -275,6 +284,9 @@ CREATE TABLE crdb_internal.app_stats (
 		if sqlStats == nil {
 			return errors.New("cannot access sql statistics from this context")
 		}
+
+		leaseMgr := p.session.leaseMgr
+		nodeID := parser.NewDInt(parser.DInt(int64(leaseMgr.nodeID.Get())))
 
 		// Retrieve the application names and sort them to ensure the
 		// output is deterministic.
@@ -292,6 +304,7 @@ CREATE TABLE crdb_internal.app_stats (
 
 			appStats.Lock()
 			err := addRow(
+				nodeID,
 				parser.NewDString(appName),
 				parser.NewDInt(parser.DInt(int64(appStats.stmtCount))),
 			)
