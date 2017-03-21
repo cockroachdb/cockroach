@@ -1133,12 +1133,15 @@ func TestSchemaChangeRetryOnVersionChange(t *testing.T) {
 	// This represents the number of backfill chunks that get reevaluated.
 	// A retry results in a reevaluation of a chunk.
 	var numReevaluated uint32
-	var numBackfills uint32
-	seenSpan := roachpb.Span{}
+	// keep track of the number of backfill starts; each retry is a new start.
+	var numStartBackfills uint32
+	// Keep track of the backfill attempt responsible for lastSpan.
+	var lastSpanBackfillAttempt uint32
+	lastSpan := roachpb.Span{}
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
 			RunBeforeBackfill: func() error {
-				atomic.AddUint32(&numBackfills, 1)
+				atomic.AddUint32(&numStartBackfills, 1)
 				return nil
 			},
 			RunBeforeBackfillChunk: func(sp roachpb.Span) error {
@@ -1148,16 +1151,21 @@ func TestSchemaChangeRetryOnVersionChange(t *testing.T) {
 					// Publish a new version of the table.
 					upTableVersion()
 				}
-				if seenSpan.Key != nil {
+				if lastSpan.Key != nil {
 					// Keep track of the number of reevaluations.
-					if seenSpan.Key.Compare(sp.Key) >= 0 {
+					// A reevaluation within the same backfill attempt
+					// is ignored because it's only an aborted transaction
+					// that is being retried.
+					if b := atomic.LoadUint32(&numStartBackfills); b != lastSpanBackfillAttempt &&
+						lastSpan.Key.Compare(sp.Key) >= 0 {
 						atomic.AddUint32(&numReevaluated, 1)
 					}
-					if !seenSpan.EndKey.Equal(sp.EndKey) {
-						t.Errorf("different EndKey: span %s, already seen span %s", sp, seenSpan)
+					if !lastSpan.EndKey.Equal(sp.EndKey) {
+						t.Errorf("different EndKey: span %s, already seen span %s", sp, lastSpan)
 					}
 				}
-				seenSpan = sp
+				lastSpan = sp
+				lastSpanBackfillAttempt = atomic.LoadUint32(&numStartBackfills)
 				return nil
 			},
 			// Disable asynchronous schema change execution to allow
@@ -1173,16 +1181,21 @@ func TestSchemaChangeRetryOnVersionChange(t *testing.T) {
 					// Publish a new version of the table.
 					upTableVersion()
 				}
-				if seenSpan.Key != nil {
+				if lastSpan.Key != nil {
 					// Keep track of the number of reevaluations.
-					if seenSpan.Key.Compare(sp.Key) >= 0 {
+					// A reevaluation within the same backfill attempt
+					// is ignored because it's only an aborted transaction
+					// that is being retried.
+					if b := atomic.LoadUint32(&numStartBackfills); b != lastSpanBackfillAttempt &&
+						lastSpan.Key.Compare(sp.Key) >= 0 {
 						atomic.AddUint32(&numReevaluated, 1)
 					}
-					if !seenSpan.EndKey.Equal(sp.EndKey) {
-						t.Errorf("different EndKey: span %s, already seen span %s", sp, seenSpan)
+					if !lastSpan.EndKey.Equal(sp.EndKey) {
+						t.Errorf("different EndKey: span %s, already seen span %s", sp, lastSpan)
 					}
 				}
-				seenSpan = sp
+				lastSpan = sp
+				lastSpanBackfillAttempt = atomic.LoadUint32(&numStartBackfills)
 				return nil
 			},
 		},
@@ -1231,30 +1244,36 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 	}
 
 	addIndexSchemaChange(t, sqlDB, kvDB, maxValue, 2)
+	// distsql implemented schema changes use the version of the table
+	// descriptor passed via rpc and do not locally request a descriptor
+	// lease at a particular version. They use the descriptor leased at
+	// the gateway node and therefore rely on the gateway node eventually
+	// reevaluating the schema change on a version change.
 	if reevaluated := atomic.SwapUint32(&numReevaluated, 0); reevaluated != 0 {
 		t.Fatalf("expected %d reevaluations, but seen %d", 0, reevaluated)
 	}
-	if num := atomic.SwapUint32(&numBackfills, 0); num != 2 {
+	// Gateway node calls reevaluate on a descriptor version change.
+	if num := atomic.SwapUint32(&numStartBackfills, 0); num != 2 {
 		t.Fatalf("expected %d backfills, but seen %d", 2, num)
 	}
 
 	attempts = 0
-	seenSpan = roachpb.Span{}
+	lastSpan = roachpb.Span{}
 	addColumnSchemaChange(t, sqlDB, kvDB, maxValue, 2)
 	if reevaluated := atomic.SwapUint32(&numReevaluated, 0); reevaluated != 1 {
 		t.Fatalf("expected %d reevaluations, but seen %d", 1, reevaluated)
 	}
-	if num := atomic.SwapUint32(&numBackfills, 0); num != 2 {
+	if num := atomic.SwapUint32(&numStartBackfills, 0); num != 2 {
 		t.Fatalf("expected %d backfills, but seen %d", 2, num)
 	}
 
 	attempts = 0
-	seenSpan = roachpb.Span{}
+	lastSpan = roachpb.Span{}
 	dropColumnSchemaChange(t, sqlDB, kvDB, maxValue, 2)
 	if reevaluated := atomic.SwapUint32(&numReevaluated, 0); reevaluated != 1 {
 		t.Fatalf("expected %d reevaluations, but seen %d", 1, reevaluated)
 	}
-	if num := atomic.SwapUint32(&numBackfills, 0); num != 2 {
+	if num := atomic.SwapUint32(&numStartBackfills, 0); num != 2 {
 		t.Fatalf("expected %d backfills, but seen %d", 2, num)
 	}
 }
