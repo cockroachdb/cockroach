@@ -119,12 +119,6 @@ type Session struct {
 	// execCfg is the configuration of the Executor that is executing this
 	// session.
 	execCfg *ExecutorConfig
-	// planner is the planner in charge of executing statements within this
-	// session. While the planner type is logically scoped to the execution
-	// of a single statement, this field will be reset and reused between
-	// statements. When necessary, it can be cloned so that future modifications
-	// to the field do not affect a separate stream of statement execution.
-	planner planner
 	// distSQLPlanner is in charge of distSQL physical planning and running
 	// logic.
 	distSQLPlanner *distSQLPlanner
@@ -174,6 +168,17 @@ type Session struct {
 	copyFrom *copyNode
 
 	//
+	// Testing state.
+	//
+
+	// If set, called after the Session is done executing the current SQL statement.
+	// It can be used to verify assumptions about how metadata will be asynchronously
+	// updated. Note that this can overwrite a previous callback that was waiting to be
+	// verified, which is not ideal.
+	testingVerifyMetadataFn func(config.SystemConfig) error
+	verifyFnCheckedOnce     bool
+
+	//
 	// Per-session statistics.
 	//
 
@@ -184,6 +189,15 @@ type Session struct {
 	sqlStats *sqlStats
 	// appStats track per-application SQL usage statistics.
 	appStats *appStats
+	// phaseTimes tracks session-level phase times. It is copied-by-value
+	// to each planner in session.newPlanner.
+	phaseTimes phaseTimes
+
+	//
+	// Structures embedded to avoid allocations.
+	//
+
+	parser parser.Parser
 
 	// noCopy is placed here to guarantee that Session objects are not
 	// copied.
@@ -219,10 +233,7 @@ func NewSession(
 		memMetrics:     memMetrics,
 		sqlStats:       &e.sqlStats,
 	}
-	s.planner = planner{
-		session: s,
-	}
-	s.planner.phaseTimes[sessionInit] = timeutil.Now()
+	s.phaseTimes[sessionInit] = timeutil.Now()
 	s.resetApplicationName(args.ApplicationName)
 	s.PreparedStatements = makePreparedStatements(s)
 	s.PreparedPortals = makePreparedPortals(s)
@@ -263,7 +274,7 @@ func (s *Session) Finish(e *Executor) {
 	// Cleanup leases. We might have unreleased leases if we're finishing the
 	// session abruptly in the middle of a transaction, or, until #7648 is
 	// addressed, there might be leases accumulated by preparing statements.
-	s.planner.releaseLeases(s.context)
+	s.releaseLeases(s.context)
 
 	s.ClearStatementsAndPortals(s.context)
 	s.sessionMon.Stop(s.context)
@@ -308,6 +319,119 @@ func (s *Session) hijackCtx(ctx context.Context) func() {
 			&s.TxnState)
 	}
 	return s.TxnState.hijackCtx(ctx)
+}
+
+// newPlanner creates a planner inside the scope of the given Session with the
+// provided client.Txn. The planner should only be used to execute one statement.
+func (s *Session) newPlanner(e *Executor, txn *client.Txn) *planner {
+	p := &planner{
+		session: s,
+		// phaseTimes is an array, not a slice, so this performs a copy-by-value.
+		phaseTimes: s.phaseTimes,
+	}
+
+	p.semaCtx = parser.MakeSemaContext()
+	p.semaCtx.Location = &s.Location
+	p.semaCtx.SearchPath = s.SearchPath
+
+	p.evalCtx = s.evalCtx()
+	p.evalCtx.Planner = p
+	if e != nil {
+		p.evalCtx.NodeID = e.cfg.NodeID.Get()
+		p.evalCtx.ReCache = e.reCache
+	}
+
+	p.setTxn(txn)
+
+	return p
+}
+
+// evalCtx creates a parser.EvalContext from the Session's current configuration.
+func (s *Session) evalCtx() parser.EvalContext {
+	return parser.EvalContext{
+		Location:   &s.Location,
+		Database:   s.Database,
+		SearchPath: s.SearchPath,
+		Ctx:        s.Ctx,
+	}
+}
+
+// resetForBatch prepares the Session for executing a new batch of statements.
+func (s *Session) resetForBatch(e *Executor) {
+	// Update the systemConfig to a more recent copy, so that we can use tables
+	// that we created in previous batches of the same transaction.
+	cfg, cache := e.getSystemConfig()
+	s.systemConfig = cfg
+	s.databaseCache = cache
+	s.TxnState.schemaChangers.curGroupNum++
+
+	// Need to reset the parser because it cannot be reused between batches.
+	s.parser = parser.Parser{}
+}
+
+// releaseLeases releases all leases currently held by the Session.
+func (s *Session) releaseLeases(ctx context.Context) {
+	if s.leases != nil {
+		if log.V(2) {
+			log.Infof(ctx, "Session releasing %d leases", len(s.leases))
+		}
+		for _, lease := range s.leases {
+			if err := s.leaseMgr.Release(lease); err != nil {
+				log.Warning(ctx, err)
+			}
+		}
+		s.leases = nil
+	}
+}
+
+// setTestingVerifyMetadata sets a callback to be called after the Session
+// is done executing the current SQL statement. It can be used to verify
+// assumptions about how metadata will be asynchronously updated.
+// Note that this can overwrite a previous callback that was waiting to be
+// verified, which is not ideal.
+func (s *Session) setTestingVerifyMetadata(fn func(config.SystemConfig) error) {
+	s.testingVerifyMetadataFn = fn
+	s.verifyFnCheckedOnce = false
+}
+
+// checkTestingVerifyMetadataInitialOrDie verifies that the metadata callback,
+// if one was set, fails. This validates that we need a gossip update for it to
+// eventually succeed.
+// No-op if we've already done an initial check for the set callback.
+// Gossip updates for the system config are assumed to be blocked when this is
+// called.
+func (s *Session) checkTestingVerifyMetadataInitialOrDie(e *Executor, stmts parser.StatementList) {
+	if !s.execCfg.TestingKnobs.WaitForGossipUpdate {
+		return
+	}
+	// If there's nothinging to verify, or we've already verified the initial
+	// condition, there's nothing to do.
+	if s.testingVerifyMetadataFn == nil || s.verifyFnCheckedOnce {
+		return
+	}
+	if s.testingVerifyMetadataFn(e.systemConfig) == nil {
+		panic(fmt.Sprintf(
+			"expected %q (or the statements before them) to require a "+
+				"gossip update, but they did not", stmts))
+	}
+	s.verifyFnCheckedOnce = true
+}
+
+// checkTestingVerifyMetadataOrDie verifies the metadata callback, if one was set.
+// Gossip updates for the system config are assumed to be blocked when this is called.
+func (s *Session) checkTestingVerifyMetadataOrDie(e *Executor, stmts parser.StatementList) {
+	if !s.execCfg.TestingKnobs.WaitForGossipUpdate ||
+		s.testingVerifyMetadataFn == nil {
+		return
+	}
+	if !s.verifyFnCheckedOnce {
+		panic("initial state of the condition to verify was not checked")
+	}
+
+	for s.testingVerifyMetadataFn(e.systemConfig) != nil {
+		e.waitForConfigUpdate()
+	}
+	s.testingVerifyMetadataFn = nil
 }
 
 // TxnStateEnum represents the state of a SQL txn.
@@ -570,13 +694,10 @@ func (scc *schemaChangerCollection) queueSchemaChanger(schemaChanger SchemaChang
 //    schema changes we're about to execute. Results corresponding to the
 //    schema change statements will be changed in case an error occurs.
 func (scc *schemaChangerCollection) execSchemaChanges(
-	ctx context.Context, e *Executor, planMaker *planner, results ResultList,
+	ctx context.Context, e *Executor, session *Session, results ResultList,
 ) {
-	if planMaker.txn != nil {
-		panic("trying to execute schema changes while still in a transaction")
-	}
 	// Release the leases once a transaction is complete.
-	planMaker.releaseLeases(ctx)
+	session.releaseLeases(ctx)
 	if e.cfg.SchemaChangerTestingKnobs.SyncFilter != nil {
 		e.cfg.SchemaChangerTestingKnobs.SyncFilter(TestingSchemaChangerCollection{scc})
 	}

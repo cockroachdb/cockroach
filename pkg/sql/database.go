@@ -301,7 +301,7 @@ func (p *planner) renameDatabase(
 		return err
 	}
 
-	p.setTestingVerifyMetadata(func(systemConfig config.SystemConfig) error {
+	p.session.setTestingVerifyMetadata(func(systemConfig config.SystemConfig) error {
 		if err := expectDescriptorID(systemConfig, newKey, descID); err != nil {
 			return err
 		}
