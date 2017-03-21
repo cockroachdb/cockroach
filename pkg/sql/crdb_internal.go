@@ -37,19 +37,27 @@ var crdbInternal = virtualSchema{
 		crdbInternalTablesTable,
 		crdbInternalLeasesTable,
 		crdbInternalSchemaChangesTable,
-		crdbInternalAppStatsTable,
+		crdbInternalStmtStatsTable,
 	},
 }
 
 var crdbInternalBuildInfoTable = virtualSchemaTable{
 	schema: `
-CREATE TABLE crdb_internal.build_info (
-  FIELD STRING NOT NULL,
-  VALUE STRING NOT NULL
+CREATE TABLE crdb_internal.node_build_info (
+  NODE_ID INT NOT NULL,
+  FIELD   STRING NOT NULL,
+  VALUE   STRING NOT NULL
 );
 `,
-	populate: func(_ context.Context, _ *planner, addRow func(...parser.Datum) error) error {
-		if err := addRow(parser.NewDString("Name"), parser.NewDString("CockroachDB")); err != nil {
+	populate: func(_ context.Context, p *planner, addRow func(...parser.Datum) error) error {
+		leaseMgr := p.session.leaseMgr
+		nodeID := parser.NewDInt(parser.DInt(int64(leaseMgr.nodeID.Get())))
+
+		if err := addRow(
+			nodeID,
+			parser.NewDString("Name"),
+			parser.NewDString("CockroachDB"),
+		); err != nil {
 			return err
 		}
 
@@ -60,7 +68,7 @@ CREATE TABLE crdb_internal.build_info (
 			f := s.Field(i)
 			if sv, ok := f.Interface().(string); ok {
 				fname := t.Field(i).Name
-				if err := addRow(parser.NewDString(fname), parser.NewDString(sv)); err != nil {
+				if err := addRow(nodeID, parser.NewDString(fname), parser.NewDString(sv)); err != nil {
 					return err
 				}
 			}
@@ -259,11 +267,28 @@ CREATE TABLE crdb_internal.leases (
 	},
 }
 
-var crdbInternalAppStatsTable = virtualSchemaTable{
+var crdbInternalStmtStatsTable = virtualSchemaTable{
 	schema: `
-CREATE TABLE crdb_internal.app_stats (
-  APPLICATION_NAME STRING,
-  STATEMENT_COUNT  INT
+CREATE TABLE crdb_internal.node_statement_statistics (
+  NODE_ID             INT NOT NULL,
+  APPLICATION_NAME    STRING NOT NULL,
+  KEY                 STRING NOT NULL,
+  COUNT               INT NOT NULL,
+  FIRST_ATTEMPT_COUNT INT NOT NULL,
+  MAX_RETRIES         INT NOT NULL,
+  LAST_ERROR          STRING,
+  ROWS_AVG            FLOAT NOT NULL,
+  ROWS_VAR            FLOAT NOT NULL,
+  PARSE_LAT_AVG       FLOAT NOT NULL,
+  PARSE_LAT_VAR       FLOAT NOT NULL,
+  PLAN_LAT_AVG        FLOAT NOT NULL,
+  PLAN_LAT_VAR        FLOAT NOT NULL,
+  RUN_LAT_AVG         FLOAT NOT NULL,
+  RUN_LAT_VAR         FLOAT NOT NULL,
+  SERVICE_LAT_AVG     FLOAT NOT NULL,
+  SERVICE_LAT_VAR     FLOAT NOT NULL,
+  OVERHEAD_LAT_AVG    FLOAT NOT NULL,
+  OVERHEAD_LAT_VAR    FLOAT NOT NULL
 );
 `,
 	populate: func(_ context.Context, p *planner, addRow func(...parser.Datum) error) error {
@@ -275,6 +300,9 @@ CREATE TABLE crdb_internal.app_stats (
 		if sqlStats == nil {
 			return errors.New("cannot access sql statistics from this context")
 		}
+
+		leaseMgr := p.session.leaseMgr
+		nodeID := parser.NewDInt(parser.DInt(int64(leaseMgr.nodeID.Get())))
 
 		// Retrieve the application names and sort them to ensure the
 		// output is deterministic.
@@ -290,14 +318,50 @@ CREATE TABLE crdb_internal.app_stats (
 		for _, appName := range appNames {
 			appStats := sqlStats.getStatsForApplication(appName)
 
+			// Retrieve the statement keys and sort them to ensure the
+			// output is deterministic.
+			var stmtKeys []string
 			appStats.Lock()
-			err := addRow(
-				parser.NewDString(appName),
-				parser.NewDInt(parser.DInt(int64(appStats.stmtCount))),
-			)
+			for k := range appStats.stmts {
+				stmtKeys = append(stmtKeys, k)
+			}
 			appStats.Unlock()
-			if err != nil {
-				return err
+			sort.Strings(stmtKeys)
+
+			// Now retrieve the per-stmt stats proper.
+			for _, stmtKey := range stmtKeys {
+				s := appStats.getStatsForStmt(stmtKey)
+
+				s.Lock()
+				errString := parser.DNull
+				if s.data.LastErr != "" {
+					errString = parser.NewDString(s.data.LastErr)
+				}
+				err := addRow(
+					nodeID,
+					parser.NewDString(appName),
+					parser.NewDString(stmtKey),
+					parser.NewDInt(parser.DInt(s.data.Count)),
+					parser.NewDInt(parser.DInt(s.data.FirstAttemptCount)),
+					parser.NewDInt(parser.DInt(s.data.MaxRetries)),
+					errString,
+					parser.NewDFloat(parser.DFloat(s.data.NumRows.Mean)),
+					parser.NewDFloat(parser.DFloat(s.data.NumRows.getVariance(s.data.Count))),
+					parser.NewDFloat(parser.DFloat(s.data.ParseLat.Mean)),
+					parser.NewDFloat(parser.DFloat(s.data.ParseLat.getVariance(s.data.Count))),
+					parser.NewDFloat(parser.DFloat(s.data.PlanLat.Mean)),
+					parser.NewDFloat(parser.DFloat(s.data.PlanLat.getVariance(s.data.Count))),
+					parser.NewDFloat(parser.DFloat(s.data.RunLat.Mean)),
+					parser.NewDFloat(parser.DFloat(s.data.RunLat.getVariance(s.data.Count))),
+					parser.NewDFloat(parser.DFloat(s.data.ServiceLat.Mean)),
+					parser.NewDFloat(parser.DFloat(s.data.ServiceLat.getVariance(s.data.Count))),
+					parser.NewDFloat(parser.DFloat(s.data.OverheadLat.Mean)),
+					parser.NewDFloat(parser.DFloat(s.data.OverheadLat.getVariance(s.data.Count))),
+				)
+				s.Unlock()
+				if err != nil {
+					return err
+				}
 			}
 		}
 		return nil
