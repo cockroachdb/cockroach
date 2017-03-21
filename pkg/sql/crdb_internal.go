@@ -72,18 +72,18 @@ CREATE TABLE crdb_internal.build_info (
 var crdbInternalTablesTable = virtualSchemaTable{
 	schema: `
 CREATE TABLE crdb_internal.tables (
-  TABLE_ID                 INT NOT NULL,
-  PARENT_ID                INT NOT NULL,
-  NAME                     STRING NOT NULL,
-  DATABASE_NAME            STRING NOT NULL,
-  VERSION                  INT NOT NULL,
-  MOD_TIME                 TIMESTAMP NOT NULL,
-  MOD_TIME_LOGICAL         DECIMAL NOT NULL,
-  FORMAT_VERSION           STRING NOT NULL,
-  STATE                    STRING NOT NULL,
-  SC_LEASE_NODE_ID         INT,
-  SC_LEASE_EXPIRATION_TIME TIMESTAMP,
-  CREATE_TABLE             STRING NOT NULL
+  table_id                 INT NOT NULL,
+  parent_id                INT NOT NULL,
+  name                     STRING NOT NULL,
+  database_name            STRING NOT NULL,
+  version                  INT NOT NULL,
+  mod_time                 TIMESTAMP NOT NULL,
+  mod_time_logical         DECIMAL NOT NULL,
+  format_version           STRING NOT NULL,
+  state                    STRING NOT NULL,
+  sc_lease_node_id         INT,
+  sc_lease_expiration_time TIMESTAMP,
+  create_table             STRING NOT NULL
 );
 `,
 	populate: func(ctx context.Context, p *planner, addRow func(...parser.Datum) error) error {
@@ -146,14 +146,14 @@ CREATE TABLE crdb_internal.tables (
 var crdbInternalSchemaChangesTable = virtualSchemaTable{
 	schema: `
 CREATE TABLE crdb_internal.schema_changes (
-  TABLE_ID      INT NOT NULL,
-  PARENT_ID     INT NOT NULL,
-  NAME          STRING NOT NULL,
-  TYPE          STRING NOT NULL,
-  TARGET_ID     INT,
-  TARGET_NAME   STRING,
-  STATE         STRING NOT NULL,
-  DIRECTION     STRING NOT NULL
+  table_id      INT NOT NULL,
+  parent_id     INT NOT NULL,
+  name          STRING NOT NULL,
+  type          STRING NOT NULL,
+  target_id     INT,
+  target_name   STRING,
+  state         STRING NOT NULL,
+  direction     STRING NOT NULL
 );
 `,
 	populate: func(ctx context.Context, p *planner, addRow func(...parser.Datum) error) error {
@@ -206,13 +206,13 @@ CREATE TABLE crdb_internal.schema_changes (
 var crdbInternalLeasesTable = virtualSchemaTable{
 	schema: `
 CREATE TABLE crdb_internal.leases (
-  NODE_ID     INT NOT NULL,
-  TABLE_ID    INT NOT NULL,
-  NAME        STRING NOT NULL,
-  PARENT_ID   INT NOT NULL,
-  EXPIRATION  TIMESTAMP NOT NULL,
-  RELEASED    BOOL NOT NULL,
-  DELETED     BOOL NOT NULL
+  node_id     INT NOT NULL,
+  table_id    INT NOT NULL,
+  name        STRING NOT NULL,
+  parent_id   INT NOT NULL,
+  expiration  TIMESTAMP NOT NULL,
+  released    BOOL NOT NULL,
+  deleted     BOOL NOT NULL
 );
 `,
 	populate: func(_ context.Context, p *planner, addRow func(...parser.Datum) error) error {
@@ -262,8 +262,8 @@ CREATE TABLE crdb_internal.leases (
 var crdbInternalAppStatsTable = virtualSchemaTable{
 	schema: `
 CREATE TABLE crdb_internal.app_stats (
-  APPLICATION_NAME STRING,
-  STATEMENT_COUNT  INT
+  application_name STRING,
+  statement_count  INT
 );
 `,
 	populate: func(_ context.Context, p *planner, addRow func(...parser.Datum) error) error {

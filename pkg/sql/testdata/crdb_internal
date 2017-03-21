@@ -30,12 +30,12 @@ foo
 query IITTITTT colnames
 SELECT * FROM crdb_internal.schema_changes
 ----
-TABLE_ID PARENT_ID NAME TYPE TARGET_ID TARGET_NAME STATE DIRECTION
+table_id parent_id name type target_id target_name state direction
 
 query IITTITRTTTTT colnames
 SELECT * FROM crdb_internal.tables WHERE NAME = 'namespace'
 ----
-TABLE_ID  PARENT_ID  NAME       DATABASE_NAME  VERSION  MOD_TIME                         MOD_TIME_LOGICAL  FORMAT_VERSION            STATE   SC_LEASE_NODE_ID  SC_LEASE_EXPIRATION_TIME  CREATE_TABLE
+table_id  parent_id  name       database_name  version  mod_time                         mod_time_logical  format_version            state   sc_lease_node_id  sc_lease_expiration_time  create_table
 2         1          namespace  system         1        1970-01-01 00:00:00 +0000 +0000  0.0000000000      InterleavedFormatVersion  PUBLIC  NULL              NULL                      CREATE TABLE namespace (
           parentID INT NOT NULL,
           name STRING NOT NULL,
@@ -59,20 +59,20 @@ foo
 # Check that app_stats report per application
 
 statement ok
-SET APPLICATION_NAME = hello; SELECT 1
+SET application_name = hello; SELECT 1
 
 statement ok
-SET APPLICATION_NAME = world; SELECT 2
+SET application_name = world; SELECT 2
 
 query B
-SELECT statement_count > 0 FROM crdb_internal.app_stats WHERE APPLICATION_NAME IN ('hello', 'world')
+SELECT statement_count > 0 FROM crdb_internal.app_stats WHERE application_name IN ('hello', 'world')
 ----
 true
 true
 
 # reset for other tests.
 statement ok
-SET APPLICATION_NAME = ''
+SET application_name = ''
 
 query TT colnames
 SELECT * FROM crdb_internal.build_info WHERE field ILIKE 'name'
