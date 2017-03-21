@@ -38,10 +38,23 @@ const (
 	BackupDescriptorName = "BACKUP"
 )
 
-// ReadBackupDescriptor reads and unmarshals a BackupDescriptor from given base.
-func ReadBackupDescriptor(
-	ctx context.Context, dir storageccl.ExportStorage,
-) (BackupDescriptor, error) {
+// exportStorageFromURI returns an ExportStorage for the given URI.
+func exportStorageFromURI(ctx context.Context, uri string) (storageccl.ExportStorage, error) {
+	conf, err := storageccl.ExportStorageConfFromURI(uri)
+	if err != nil {
+		return nil, err
+	}
+	return storageccl.MakeExportStorage(ctx, conf)
+}
+
+// readBackupDescriptor reads and unmarshals a BackupDescriptor from given base.
+func readBackupDescriptor(ctx context.Context, uri string) (BackupDescriptor, error) {
+	dir, err := exportStorageFromURI(ctx, uri)
+	if err != nil {
+		return BackupDescriptor{}, err
+	}
+	defer dir.Close()
+	conf := dir.Conf()
 	r, err := dir.ReadFile(ctx, BackupDescriptorName)
 	if err != nil {
 		return BackupDescriptor{}, err
@@ -55,6 +68,7 @@ func ReadBackupDescriptor(
 	if err := backupDesc.Unmarshal(descBytes); err != nil {
 		return BackupDescriptor{}, err
 	}
+	backupDesc.Dir = conf
 	// TODO(dan): Sanity check this BackupDescriptor: non-empty EndTime,
 	// non-empty Paths, and non-overlapping Spans and keyranges in Files.
 	return backupDesc, nil
@@ -69,14 +83,11 @@ func ValidatePreviousBackups(ctx context.Context, uris []string) (hlc.Timestamp,
 	}
 	backups := make([]BackupDescriptor, len(uris))
 	for i, uri := range uris {
-		dir, err := storageccl.ExportStorageFromURI(ctx, uri)
+		desc, err := readBackupDescriptor(ctx, uri)
 		if err != nil {
 			return hlc.Timestamp{}, err
 		}
-		backups[i], err = ReadBackupDescriptor(ctx, dir)
-		if err != nil {
-			return hlc.Timestamp{}, err
-		}
+		backups[i] = desc
 	}
 
 	// This reuses Restore's logic for lining up all the start and end
@@ -159,12 +170,10 @@ func Backup(
 
 	var sqlDescs []sqlbase.Descriptor
 
-	exportStore, err := storageccl.ExportStorageFromURI(ctx, uri)
+	storageConf, err := storageccl.ExportStorageConfFromURI(uri)
 	if err != nil {
 		return BackupDescriptor{}, err
 	}
-	defer exportStore.Close()
-
 	db := p.ExecCfg().DB
 
 	{
@@ -218,7 +227,6 @@ func Backup(
 	}{}
 
 	header := roachpb.Header{Timestamp: endTime}
-	storageConf := exportStore.Conf()
 	g, gCtx := errgroup.WithContext(ctx)
 	for i := range spans {
 		span := spans[i]
@@ -264,18 +272,15 @@ func Backup(
 	if err != nil {
 		return BackupDescriptor{}, err
 	}
-	writer, err := exportStore.PutFile(ctx, BackupDescriptorName)
+
+	exportStore, err := storageccl.MakeExportStorage(ctx, storageConf)
 	if err != nil {
 		return BackupDescriptor{}, err
 	}
-	defer writer.Cleanup()
-	if err = ioutil.WriteFile(writer.LocalFile(), descBuf, 0600); err != nil {
+	defer exportStore.Close()
+	if err := exportStore.WriteFile(ctx, BackupDescriptorName, bytes.NewReader(descBuf)); err != nil {
 		return BackupDescriptor{}, err
 	}
-	if err := writer.Finish(); err != nil {
-		return BackupDescriptor{}, err
-	}
-
 	return desc, nil
 }
 
