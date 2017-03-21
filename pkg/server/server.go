@@ -901,12 +901,14 @@ func (s *Server) Undrain(off []serverpb.DrainMode) []serverpb.DrainMode {
 func (s *Server) startSampleEnvironment(frequency time.Duration) {
 	// Immediately record summaries once on server startup.
 	s.stopper.RunWorker(func() {
+		ctx := s.AnnotateCtx(context.Background())
+
 		ticker := time.NewTicker(frequency)
 		defer ticker.Stop()
 		for {
 			select {
 			case <-ticker.C:
-				s.runtime.SampleEnvironment()
+				s.runtime.SampleEnvironment(ctx)
 			case <-s.stopper.ShouldStop():
 				return
 			}

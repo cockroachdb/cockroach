@@ -1270,8 +1270,7 @@ func TestStoreResolveWriteIntent(t *testing.T) {
 		}()
 
 		if resolvable {
-			pErr := <-resultCh
-			if pErr != nil {
+			if pErr := <-resultCh; pErr != nil {
 				t.Fatalf("expected intent resolved; got unexpected error: %s", pErr)
 			}
 			txnKey := keys.TransactionKey(pushee.Key, *pushee.ID)
@@ -1284,22 +1283,19 @@ func TestStoreResolveWriteIntent(t *testing.T) {
 				t.Fatalf("expected pushee to be aborted; got %s", txn.Status)
 			}
 		} else {
-			var pErr *roachpb.Error
 			select {
-			case pErr = <-resultCh:
+			case pErr := <-resultCh:
 				t.Fatalf("did not expect put to complete with lower priority: %s", pErr)
 			case <-time.After(10 * time.Millisecond):
 				// Send an end transaction to allow the original push to complete.
 				etArgs, h := endTxnArgs(pushee, true)
 				pushee.Sequence++
-				_, pErr := client.SendWrappedWith(context.Background(), store.testSender(), h, &etArgs)
-				if pErr != nil {
+				if _, pErr := client.SendWrappedWith(context.Background(), store.testSender(), h, &etArgs); pErr != nil {
 					t.Fatal(pErr)
 				}
-				pErr = <-resultCh
-			}
-			if pErr != nil {
-				t.Fatalf("expected successful put after pushee txn ended; got %s", pErr)
+				if pErr := <-resultCh; pErr != nil {
+					t.Fatalf("expected successful put after pushee txn ended; got %s", pErr)
+				}
 			}
 		}
 	}

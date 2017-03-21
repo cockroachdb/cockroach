@@ -1831,7 +1831,7 @@ func TestBackfillCompletesOnChunkBoundary(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		t.Run(fmt.Sprintf("%s", tc.sql), func(t *testing.T) {
+		t.Run(tc.sql, func(t *testing.T) {
 			// Start schema change that eventually runs a backfill.
 			if _, err := sqlDB.Exec(tc.sql); err != nil {
 				t.Error(err)
