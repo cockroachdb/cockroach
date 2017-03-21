@@ -79,6 +79,11 @@ func evalImport(ctx context.Context, cArgs storage.CommandArgs) error {
 		if err != nil {
 			return err
 		}
+		defer func() {
+			if err := dir.Close(); err != nil {
+				log.Warningf(ctx, "close export storage failed %v", err)
+			}
+		}()
 
 		localPath, err := dir.FetchFile(ctx, file.Path)
 		if err != nil {
