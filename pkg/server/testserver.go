@@ -25,6 +25,8 @@ import (
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
+	"strings"
+
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
@@ -41,7 +43,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/ts"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/caller"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 )
@@ -261,6 +265,14 @@ func (ts *TestServer) PGServer() *pgwire.Server {
 func (ts *TestServer) Start(params base.TestServerArgs) error {
 	if ts.Cfg == nil {
 		panic("Cfg not set")
+	}
+
+	fun := "dummy"
+	for i := 3; fun != "???"; i++ {
+		if _, _, fun = caller.Lookup(i); strings.HasPrefix(fun, "Test") {
+			log.Infof(context.Background(), "start TestServer in %s", fun)
+			break
+		}
 	}
 
 	if params.Stopper == nil {
