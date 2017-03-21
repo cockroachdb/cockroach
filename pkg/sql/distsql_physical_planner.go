@@ -60,6 +60,7 @@ import (
 //    and add processing stages (connected to the result routers of the children
 //    node).
 type distSQLPlanner struct {
+	// The node descriptor for the gateway node that initiated this query.
 	nodeDesc     roachpb.NodeDescriptor
 	rpcContext   *rpc.Context
 	distSQLSrv   *distsqlrun.ServerImpl
@@ -309,6 +310,9 @@ func (dsp *distSQLPlanner) checkSupportForNode(node planNode) (distRecommendatio
 		if err := dsp.checkExpr(n.offsetExpr); err != nil {
 			return 0, err
 		}
+		return dsp.checkSupportForNode(n.plan)
+
+	case *distinctNode:
 		return dsp.checkSupportForNode(n.plan)
 
 	default:
@@ -1259,6 +1263,16 @@ func (dsp *distSQLPlanner) createPlanForNode(
 			return physicalPlan{}, err
 		}
 		if err := plan.AddLimit(n.count, n.offset, dsp.nodeDesc.NodeID); err != nil {
+			return physicalPlan{}, err
+		}
+		return plan, nil
+
+	case *distinctNode:
+		plan, err := dsp.createPlanForNode(planCtx, n.plan)
+		if err != nil {
+			return physicalPlan{}, err
+		}
+		if err := plan.AddDistinct(n.columnsInOrder, dsp.nodeDesc.NodeID); err != nil {
 			return physicalPlan{}, err
 		}
 		return plan, nil

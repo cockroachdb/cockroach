@@ -628,6 +628,30 @@ func (p *PhysicalPlan) AddLimit(count int64, offset int64, node roachpb.NodeID) 
 	return nil
 }
 
+// AddDistinct adds distinct nodes to the results of the current plan.
+func (p *PhysicalPlan) AddDistinct(sortedColumns []bool, node roachpb.NodeID) error {
+	currentResultRouters := p.ResultRouters
+	var orderedColumns []uint32
+	for i := 0; i < len(sortedColumns); i++ {
+		if sortedColumns[i] {
+			orderedColumns = append(orderedColumns, uint32(i))
+		}
+	}
+	distinctSpec := distsqlrun.ProcessorCoreUnion{
+		Distinct: &distsqlrun.DistinctSpec{
+			OrderedColumns: orderedColumns,
+		},
+	}
+	// TODO(arjun): This is potentially inefficient, especially if we don't have any sorted columns.
+	if len(currentResultRouters) > 1 {
+		// Add distinct processors local to each existing current result processor.
+		p.AddNoGroupingStage(distinctSpec, distsqlrun.PostProcessSpec{}, p.ResultTypes, p.MergeOrdering)
+	}
+
+	p.AddSingleGroupStage(node, distinctSpec, distsqlrun.PostProcessSpec{}, p.ResultTypes)
+	return nil
+}
+
 // PopulateEndpoints processes p.Streams and adds the corresponding
 // StreamEndpointSpecs to the processors' input and output specs. This should be
 // used when the plan is completed and ready to be executed.
