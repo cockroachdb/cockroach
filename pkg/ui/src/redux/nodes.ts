@@ -20,16 +20,6 @@ import { nullOfReturnType } from "../util/types";
 export const deadTimeout = moment.duration(5, "m");
 
 /**
- * suspectTimeout is similar to deadTimeout, but is a shorter duration and only
- * marks a node as "suspect"; this indicates a node that has an expired
- * liveness, but is not yet being actively repaired.
- *
- * There is no clear server-side analogy to this state, this is simply an
- * indication to the user that something may be wrong with the server.
- */
-export const suspectTimeout = moment.duration(1, "m");
-
-/**
  * LivenessStatus is a convenience enumeration used to bucket node liveness
  * records into basic states.
  */
@@ -79,12 +69,11 @@ const livenessStatusByNodeIDSelector = createSelector(
   (livenessByNodeID, livenessCheckedAt) => {
     if (livenessCheckedAt) {
       const deadCutoff = livenessCheckedAt.clone().subtract(deadTimeout);
-      const suspectCutoff = livenessCheckedAt.clone().subtract(suspectTimeout);
       return _.mapValues(livenessByNodeID, (l) => {
         const expiration = moment(NanoToMilli(l.expiration.wall_time.toNumber()));
         if (expiration.isBefore(deadCutoff)) {
           return LivenessStatus.DEAD;
-        } else if (expiration.isBefore(suspectCutoff)) {
+        } else if (expiration.isBefore(livenessCheckedAt)) {
           return LivenessStatus.SUSPECT;
         }
         return LivenessStatus.HEALTHY;
