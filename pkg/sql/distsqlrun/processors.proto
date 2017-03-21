@@ -202,6 +202,7 @@ message DistinctSpec {
   // the column itself is not important nor is the order in which the columns
   // are specified.
   repeated uint32 ordered_columns = 1;
+  repeated uint32 distinct_columns = 2;
 }
 
 enum JoinType {

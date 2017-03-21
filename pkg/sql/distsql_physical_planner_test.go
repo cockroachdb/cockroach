@@ -289,6 +289,22 @@ func TestDistSQLPlanner(t *testing.T) {
 		)
 	})
 
+	t.Run("Distinct", func(t *testing.T) {
+		r.Subtest(t)
+
+		// Check that DISTINCT doesn't alter results that are already distinct.
+		r.CheckQueryResults(
+			"SELECT DISTINCT y FROM NumToStr LIMIT 5",
+			[][]string{{"1"}, {"2"}, {"3"}, {"4"}, {"5"}},
+		)
+
+		// Check that DISTINCT deduplicates.
+		r.CheckQueryResults(
+			"SELECT DISTINCT 5, 5 FROM NumToStr",
+			[][]string{{"5", "5"}},
+		)
+	})
+
 	// This test modifies the schema and can affect subsequent tests.
 	t.Run("CreateIndex", func(t *testing.T) {
 		r = r.Subtest(t)

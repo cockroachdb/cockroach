@@ -41,7 +41,9 @@ func TestDistinct(t *testing.T) {
 		expected sqlbase.EncDatumRows
 	}{
 		{
-			spec: DistinctSpec{},
+			spec: DistinctSpec{
+				DistinctColumns: []uint32{0, 1},
+			},
 			input: sqlbase.EncDatumRows{
 				{v[2], v[3]},
 				{v[5], v[6]},
@@ -60,7 +62,8 @@ func TestDistinct(t *testing.T) {
 			},
 		}, {
 			spec: DistinctSpec{
-				OrderedColumns: []uint32{1},
+				OrderedColumns:  []uint32{1},
+				DistinctColumns: []uint32{0, 1},
 			},
 			input: sqlbase.EncDatumRows{
 				{v[2], v[3]},
