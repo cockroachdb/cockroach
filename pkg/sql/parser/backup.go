@@ -21,8 +21,8 @@ import "bytes"
 // Backup represents a BACKUP statement.
 type Backup struct {
 	Targets         TargetList
-	To              string
-	IncrementalFrom []string
+	To              Expr
+	IncrementalFrom Exprs
 	AsOf            AsOfClause
 	Options         KVOptions
 }
@@ -34,19 +34,14 @@ func (node *Backup) Format(buf *bytes.Buffer, f FmtFlags) {
 	buf.WriteString("BACKUP ")
 	FormatNode(buf, f, node.Targets)
 	buf.WriteString(" TO ")
-	encodeSQLStringWithFlags(buf, node.To, f)
+	FormatNode(buf, f, node.To)
 	if node.AsOf.Expr != nil {
 		buf.WriteString(" ")
 		FormatNode(buf, f, node.AsOf)
 	}
 	if node.IncrementalFrom != nil {
 		buf.WriteString(" INCREMENTAL FROM ")
-		for i, from := range node.IncrementalFrom {
-			if i > 0 {
-				buf.WriteString(", ")
-			}
-			encodeSQLStringWithFlags(buf, from, f)
-		}
+		FormatNode(buf, f, node.IncrementalFrom)
 	}
 	if node.Options != nil {
 		buf.WriteString(" WITH OPTIONS (")
@@ -58,7 +53,7 @@ func (node *Backup) Format(buf *bytes.Buffer, f FmtFlags) {
 // Restore represents a RESTORE statement.
 type Restore struct {
 	Targets TargetList
-	From    []string
+	From    Exprs
 	AsOf    AsOfClause
 	Options KVOptions
 }
@@ -70,12 +65,7 @@ func (node *Restore) Format(buf *bytes.Buffer, f FmtFlags) {
 	buf.WriteString("RESTORE ")
 	FormatNode(buf, f, node.Targets)
 	buf.WriteString(" FROM ")
-	for i, from := range node.From {
-		if i > 0 {
-			buf.WriteString(", ")
-		}
-		encodeSQLStringWithFlags(buf, from, f)
-	}
+	FormatNode(buf, f, node.From)
 	if node.AsOf.Expr != nil {
 		buf.WriteString(" ")
 		FormatNode(buf, f, node.AsOf)

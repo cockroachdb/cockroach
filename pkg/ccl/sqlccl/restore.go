@@ -653,12 +653,17 @@ func restorePlanHook(
 		return nil, nil, err
 	}
 
+	fromFn, err := p.TypeAsStringArray(&restore.From)
+	if err != nil {
+		return nil, nil, err
+	}
+
 	fn := func() ([]parser.Datums, error) {
 		// TODO(dan): Move this span into sql.
 		ctx, span := tracing.ChildSpan(baseCtx, stmt.StatementTag())
 		defer tracing.FinishSpan(span)
 
-		err := Restore(ctx, p, restore.From, restore.Targets, restore.Options)
+		err := Restore(ctx, p, fromFn(), restore.Targets, restore.Options)
 		return nil, err
 	}
 	return fn, nil, nil
