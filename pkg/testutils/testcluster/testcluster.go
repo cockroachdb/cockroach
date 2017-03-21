@@ -263,50 +263,20 @@ func (tc *TestCluster) Target(serverIdx int) roachpb.ReplicationTarget {
 }
 
 func (tc *TestCluster) changeReplicas(
-	action roachpb.ReplicaChangeType, startKey roachpb.RKey, targets ...roachpb.ReplicationTarget,
+	changeType roachpb.ReplicaChangeType, startKey roachpb.RKey, targets ...roachpb.ReplicationTarget,
 ) (roachpb.RangeDescriptor, error) {
-	var rangeDesc roachpb.RangeDescriptor
-
-	// TODO(andrei): the following code has been adapted from
-	// multiTestContext.replicateRange(). Find a way to share.
-	for _, target := range targets {
-		// Perform a consistent read to get the updated range descriptor (as opposed
-		// to just going to one of the stores), to make sure we have the effects of
-		// the previous ChangeReplicas call. By the time ChangeReplicas returns the
-		// raft leader is guaranteed to have the updated version, but followers are
-		// not.
-		if err := tc.Servers[0].DB().GetProto(context.TODO(),
-			keys.RangeDescriptorKey(startKey), &rangeDesc); err != nil {
-			return roachpb.RangeDescriptor{}, err
-		}
-
-		// Ask an arbitrary replica of the range to perform the change. Note that
-		// the target for addition/removal is specified, this is about the choice
-		// of which replica receives the ChangeReplicas operation.
-		store, err := tc.findMemberStore(rangeDesc.Replicas[0].StoreID)
-		if err != nil {
-			return roachpb.RangeDescriptor{}, err
-		}
-		replica, err := store.GetReplica(rangeDesc.RangeID)
-		if err != nil {
-			return roachpb.RangeDescriptor{}, err
-		}
-		ctx := replica.AnnotateCtx(context.Background())
-		err = replica.ChangeReplicas(
-			ctx,
-			action,
-			roachpb.ReplicationTarget{
-				NodeID:  target.NodeID,
-				StoreID: target.StoreID,
-			},
-			&rangeDesc,
-		)
-		if err != nil {
-			return roachpb.RangeDescriptor{}, err
-		}
+	ctx := context.TODO()
+	if err := tc.Servers[0].DB().AdminChangeReplicas(
+		ctx, startKey.AsRawKey(), changeType, targets,
+	); err != nil {
+		log.Errorf(ctx, "AdminChangeReplicas error: %s", err)
+		return roachpb.RangeDescriptor{}, err
 	}
-	if err := tc.Servers[0].DB().GetProto(context.TODO(),
-		keys.RangeDescriptorKey(startKey), &rangeDesc); err != nil {
+	var rangeDesc roachpb.RangeDescriptor
+	if err := tc.Servers[0].DB().GetProto(
+		ctx, keys.RangeDescriptorKey(startKey), &rangeDesc,
+	); err != nil {
+		log.Errorf(ctx, "range descriptor lookup error: %s", err)
 		return roachpb.RangeDescriptor{}, err
 	}
 	return rangeDesc, nil
