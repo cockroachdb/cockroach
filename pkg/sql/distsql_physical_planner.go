@@ -60,6 +60,7 @@ import (
 //    and add processing stages (connected to the result routers of the children
 //    node).
 type distSQLPlanner struct {
+	// The node descriptor for the gateway node that initiated this query.
 	nodeDesc     roachpb.NodeDescriptor
 	rpcContext   *rpc.Context
 	distSQLSrv   *distsqlrun.ServerImpl
@@ -309,6 +310,9 @@ func (dsp *distSQLPlanner) checkSupportForNode(node planNode) (distRecommendatio
 		if err := dsp.checkExpr(n.offsetExpr); err != nil {
 			return 0, err
 		}
+		return dsp.checkSupportForNode(n.plan)
+
+	case *distinctNode:
 		return dsp.checkSupportForNode(n.plan)
 
 	default:
@@ -774,7 +778,12 @@ func (dsp *distSQLPlanner) addAggregators(
 	//  - all aggregation functions support it. TODO(radu): we could relax this by
 	//    splitting the aggregation into two different paths and joining on the
 	//    results.
+	//  - we have a mix of aggregations that use distinct and aggregations that
+	//    don't use distinct. TODO(arjun): This would require doing the same as
+	//    the todo as above.
 	multiStage := false
+	allDistinct := true
+	//
 
 	// Check if the previous stage is all on one node.
 	prevStageNode := p.Processors[p.ResultRouters[0]].Node
@@ -790,11 +799,14 @@ func (dsp *distSQLPlanner) addAggregators(
 		multiStage = true
 		for _, e := range aggregations {
 			if e.Distinct {
-				// We can't do local aggregation for functions with distinct (at least not
-				// in general).
+				// We can't do local aggregation for functions with distinct.
 				multiStage = false
-				break
+			} else {
+				// We can't do local distinct if we have a mix of distinct and
+				// non-distinct aggregations.
+				allDistinct = false
 			}
+
 			if _, ok := distsqlplan.DistAggregationTable[e.Func]; !ok {
 				multiStage = false
 				break
@@ -803,6 +815,57 @@ func (dsp *distSQLPlanner) addAggregators(
 	}
 
 	var finalAggSpec distsqlrun.AggregatorSpec
+
+	// TODO(radu): we could distribute the final stage by hash.
+
+	// If the previous stage was all on a single node, put the final stage there.
+	// Otherwise, bring the results back on this node.
+	node := dsp.nodeDesc.NodeID
+	if prevStageNode != 0 {
+		node = prevStageNode
+	}
+
+	finalOutTypes := make([]sqlbase.ColumnType, len(finalAggSpec.Aggregations))
+	for i, agg := range finalAggSpec.Aggregations {
+		var err error
+		_, finalOutTypes[i], err = distsqlrun.GetAggregateInfo(agg.Func, p.ResultTypes[agg.ColIdx])
+		if err != nil {
+			return err
+		}
+	}
+
+	if !multiStage && allDistinct {
+		// We can't do local aggregation, but we can do local distinct processing
+		// to reduce streaming duplicates, and aggregate on the final node.
+
+		orderings := dsp.convertOrdering(n.plan.Ordering().ordering, p.planToStreamColMap).Columns
+		orderedColumns := make([]uint32, len(orderings))
+		for _, ord := range orderings {
+			orderedColumns = append(orderedColumns, ord.ColIdx)
+		}
+
+		distinctColumns := make([]uint32, len(aggregations))
+		for _, agg := range aggregations {
+			distinctColumns = append(distinctColumns, agg.ColIdx)
+		}
+
+		distinctSpec := distsqlrun.ProcessorCoreUnion{
+			Distinct: &distsqlrun.DistinctSpec{
+				OrderedColumns:  orderedColumns,
+				DistinctColumns: distinctColumns,
+			},
+		}
+
+		if len(p.ResultRouters) > 1 {
+			// Add distinct processors local to each existing current result processor.
+			p.AddNoGroupingStage(distinctSpec, distsqlrun.PostProcessSpec{}, finalOutTypes, p.MergeOrdering)
+
+			// TODO(arjun): We could distribute this final stage by hash.
+			p.AddSingleGroupStage(node, distinctSpec, distsqlrun.PostProcessSpec{}, finalOutTypes)
+		} else {
+			p.AddNoGroupingStage(distinctSpec, distsqlrun.PostProcessSpec{}, finalOutTypes, p.MergeOrdering)
+		}
+	}
 
 	if !multiStage {
 		finalAggSpec = distsqlrun.AggregatorSpec{
@@ -864,23 +927,6 @@ func (dsp *distSQLPlanner) addAggregators(
 		}
 	}
 
-	// TODO(radu): we could distribute the final stage by hash.
-
-	// If the previous stage was all on a single node, put the final stage there.
-	// Otherwise, bring the results back on this node.
-	node := dsp.nodeDesc.NodeID
-	if prevStageNode != 0 {
-		node = prevStageNode
-	}
-
-	finalOutTypes := make([]sqlbase.ColumnType, len(finalAggSpec.Aggregations))
-	for i, agg := range finalAggSpec.Aggregations {
-		var err error
-		_, finalOutTypes[i], err = distsqlrun.GetAggregateInfo(agg.Func, p.ResultTypes[agg.ColIdx])
-		if err != nil {
-			return err
-		}
-	}
 	p.AddSingleGroupStage(
 		node,
 		distsqlrun.ProcessorCoreUnion{Aggregator: &finalAggSpec},
@@ -1268,9 +1314,55 @@ func (dsp *distSQLPlanner) createPlanForNode(
 		}
 		return plan, nil
 
+	case *distinctNode:
+		return dsp.createPlanForDistinct(planCtx, n)
+
 	default:
 		panic(fmt.Sprintf("unsupported node type %T", n))
 	}
+}
+
+func (dsp *distSQLPlanner) createPlanForDistinct(
+	planCtx *planningCtx, n *distinctNode,
+) (physicalPlan, error) {
+	plan, err := dsp.createPlanForNode(planCtx, n.plan)
+	if err != nil {
+		return physicalPlan{}, err
+	}
+	currentResultRouters := plan.ResultRouters
+	var orderedColumns []uint32
+	for i := 0; i < len(n.columnsInOrder); i++ {
+		if n.columnsInOrder[i] {
+			orderedColumns = append(orderedColumns, uint32(i))
+		}
+	}
+	var distinctColumns []uint32
+	for i := range n.Columns() {
+		if plan.planToStreamColMap[i] != -1 {
+			distinctColumns = append(distinctColumns, uint32(i))
+		}
+	}
+
+	distinctSpec := distsqlrun.ProcessorCoreUnion{
+		Distinct: &distsqlrun.DistinctSpec{
+			OrderedColumns:  orderedColumns,
+			DistinctColumns: distinctColumns,
+		},
+	}
+
+	if len(currentResultRouters) == 1 {
+		plan.AddNoGroupingStage(distinctSpec, distsqlrun.PostProcessSpec{}, plan.ResultTypes, plan.MergeOrdering)
+		return plan, nil
+	}
+
+	// TODO(arjun): This is potentially memory inefficient if we don't have any sorted columns.
+
+	// Add distinct processors local to each existing current result processor.
+	plan.AddNoGroupingStage(distinctSpec, distsqlrun.PostProcessSpec{}, plan.ResultTypes, plan.MergeOrdering)
+
+	// TODO(arjun): We could distribute this final stage by hash.
+	plan.AddSingleGroupStage(dsp.nodeDesc.NodeID, distinctSpec, distsqlrun.PostProcessSpec{}, plan.ResultTypes)
+	return plan, nil
 }
 
 func (dsp *distSQLPlanner) NewPlanningCtx(ctx context.Context, txn *client.Txn) planningCtx {
