@@ -303,3 +303,51 @@ clients not yet aware of a new CA certificate.
 
 We could examine client certificates and report soon-to-expire ones. This will not help
 with CA knowledge, but would provide better visibility into user authentication issues.
+
+# Alternative solutions
+
+## Certificate/key file discovery
+
+We have three major options to specify certificate and key files:
+
+### Full file specification
+
+This is the current method, all files are specified by their own flags.
+
+Drawbacks:
+* tedious. this can be alleviated by having default file names
+* does not support multiple files. If renewal is done using new file pairs, these flags would need to be changed.
+* using multiple CA certificates inside a single `ca.cert` file requires finding the certificate matching the key. This can be partially avoided by always putting the newest certificate first.
+
+Advantages:
+* simple code: we use the files as specified, relying on the standard library for mismatches.
+* allows separate storage locations for certs (eg: CA in `/etc/...`, node certs in user directory).
+
+### Globs or naming schemes
+
+Command-line flags for filename globs (either per pair, or per file). Optionally, allow specification
+or a certs directory, with globs matching files within the directory.
+
+Drawbacks:
+* how do we deal with multiple matching certificates? (eg: `node.old.cert` and `node.new.cert`)?
+* if a glob matches multiple types of certs (eg: `*.cert` glob matches CA/node/client certs), do we just fail?
+* same problem with multi-cert `ca.cert` files.
+* if using a shared directory, does not allow separate storage locations.
+
+Advantages:
+* reasonably easy to code, especially if requiring single matches.
+* if specifying per file-type globs, can handle separate storage locations.
+
+### Automatically-determine files
+
+This is the proposed solution in this RFC.
+
+Drawbacks:
+* does not allow for separate storage location. We could allow specification of multiple certs directories.
+* complex code: parses/analyses all certificates and keys. Need to make sure we mimic the standard library behavior to avoid surprises. Also need to evolve with the standard library (eg: key type support).
+* unusual specification of certs/keys. Everyone else specifies files directly.
+* "too much magic"
+
+Advantages:
+* full validation can provide user-friendly error messages on improper files (still obscure without decent knowledge of certficates).
+* support for multiple ways of generating/deploying certificates and keys.
