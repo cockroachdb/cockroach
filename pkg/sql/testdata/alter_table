@@ -545,10 +545,10 @@ b     INT  true  NULL    {foo}
 c     INT  true  NULL    {}
 
 statement error table "nonexistent" does not exist
-ALTER TABLE nonexistent SPLIT AT (42)
+ALTER TABLE nonexistent SPLIT AT VALUES (42)
 
 statement error table "nonexistent" does not exist
-ALTER INDEX nonexistent@noindex SPLIT AT (42)
+ALTER INDEX nonexistent@noindex SPLIT AT VALUES (42)
 
 user root
 
@@ -559,4 +559,4 @@ statement error pgcode 42809 "privsview" is not a table
 ALTER TABLE privsview ADD d INT
 
 statement error pgcode 42809 "privsview" is not a table
-ALTER TABLE privsview SPLIT AT (42)
+ALTER TABLE privsview SPLIT AT VALUES (42)
