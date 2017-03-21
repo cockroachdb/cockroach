@@ -4,9 +4,9 @@ package roachpb
 
 import "fmt"
 
-const _Method_name = "GetPutConditionalPutIncrementDeleteDeleteRangeScanReverseScanBeginTransactionEndTransactionAdminSplitAdminMergeAdminTransferLeaseHeartbeatTxnGCPushTxnQueryTxnRangeLookupResolveIntentResolveIntentRangeNoopMergeTruncateLogRequestLeaseTransferLeaseLeaseInfoComputeChecksumDeprecatedVerifyChecksumCheckConsistencyInitPutChangeFrozenWriteBatchExportImport"
+const _Method_name = "GetPutConditionalPutIncrementDeleteDeleteRangeScanReverseScanBeginTransactionEndTransactionAdminSplitAdminMergeAdminTransferLeaseAdminChangeReplicasHeartbeatTxnGCPushTxnQueryTxnRangeLookupResolveIntentResolveIntentRangeNoopMergeTruncateLogRequestLeaseTransferLeaseLeaseInfoComputeChecksumDeprecatedVerifyChecksumCheckConsistencyInitPutChangeFrozenWriteBatchExportImport"
 
-var _Method_index = [...]uint16{0, 3, 6, 20, 29, 35, 46, 50, 61, 77, 91, 101, 111, 129, 141, 143, 150, 158, 169, 182, 200, 204, 209, 220, 232, 245, 254, 269, 293, 309, 316, 328, 338, 344, 350}
+var _Method_index = [...]uint16{0, 3, 6, 20, 29, 35, 46, 50, 61, 77, 91, 101, 111, 129, 148, 160, 162, 169, 177, 188, 201, 219, 223, 228, 239, 251, 264, 273, 288, 312, 328, 335, 347, 357, 363, 369}
 
 func (i Method) String() string {
 	if i < 0 || i >= Method(len(_Method_index)-1) {

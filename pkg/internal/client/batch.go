@@ -245,6 +245,7 @@ func (b *Batch) fillResults() error {
 			case *roachpb.AdminMergeRequest:
 			case *roachpb.AdminSplitRequest:
 			case *roachpb.AdminTransferLeaseRequest:
+			case *roachpb.AdminChangeReplicasRequest:
 			case *roachpb.HeartbeatTxnRequest:
 			case *roachpb.GCRequest:
 			case *roachpb.PushTxnRequest:
@@ -603,6 +604,27 @@ func (b *Batch) adminTransferLease(key interface{}, target roachpb.StoreID) {
 			Key: k,
 		},
 		Target: target,
+	}
+	b.appendReqs(req)
+	b.initResult(1, 0, notRaw, nil)
+}
+
+// adminChangeReplicas is only exported on DB. It is here for symmetry with the
+// other operations.
+func (b *Batch) adminChangeReplicas(
+	key interface{}, changeType roachpb.ReplicaChangeType, targets []roachpb.ReplicationTarget,
+) {
+	k, err := marshalKey(key)
+	if err != nil {
+		b.initResult(0, 0, notRaw, err)
+		return
+	}
+	req := &roachpb.AdminChangeReplicasRequest{
+		Span: roachpb.Span{
+			Key: k,
+		},
+		ChangeType: changeType,
+		Targets:    targets,
 	}
 	b.appendReqs(req)
 	b.initResult(1, 0, notRaw, nil)
