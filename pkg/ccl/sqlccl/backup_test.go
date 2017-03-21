@@ -13,6 +13,7 @@ import (
 	gosql "database/sql"
 	"fmt"
 	"hash/crc32"
+	"io"
 	"io/ioutil"
 	"math/rand"
 	"net/url"
@@ -754,7 +755,15 @@ func TestBackupRestoreChecksum(t *testing.T) {
 		t.Fatalf("%+v", err)
 	}
 	defer f.Close()
-	if _, err := f.WriteAt([]byte{0x00}, 0); err != nil {
+	// The last eight bytes of an SST file store a nonzero magic number. We can
+	// blindly null out those bytes and guarantee that the checksum will change.
+	if _, err := f.Seek(-8, io.SeekEnd); err != nil {
+		t.Fatalf("%+v", err)
+	}
+	if _, err := f.Write(make([]byte, 8)); err != nil {
+		t.Fatalf("%+v", err)
+	}
+	if err := f.Sync(); err != nil {
 		t.Fatalf("%+v", err)
 	}
 
