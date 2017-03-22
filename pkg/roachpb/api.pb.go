@@ -135,6 +135,7 @@
 		RaftTombstone
 		RaftSnapshotData
 		Attributes
+		ReplicationTarget
 		ReplicaDescriptor
 		ReplicaIdent
 		RangeDescriptor

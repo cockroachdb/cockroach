@@ -267,6 +267,33 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                             ]
                         },
                         {
+                            "name": "ReplicationTarget",
+                            "fields": [
+                                {
+                                    "rule": "optional",
+                                    "type": "int32",
+                                    "name": "node_id",
+                                    "id": 1,
+                                    "options": {
+                                        "(gogoproto.nullable)": false,
+                                        "(gogoproto.customname)": "NodeID",
+                                        "(gogoproto.casttype)": "NodeID"
+                                    }
+                                },
+                                {
+                                    "rule": "optional",
+                                    "type": "int32",
+                                    "name": "store_id",
+                                    "id": 2,
+                                    "options": {
+                                        "(gogoproto.nullable)": false,
+                                        "(gogoproto.customname)": "StoreID",
+                                        "(gogoproto.casttype)": "StoreID"
+                                    }
+                                }
+                            ]
+                        },
+                        {
                             "name": "ReplicaDescriptor",
                             "options": {
                                 "(gogoproto.populate)": true
