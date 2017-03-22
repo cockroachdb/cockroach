@@ -617,9 +617,6 @@ SET DATABASE = test;
 	t.unsupported = 0
 }
 
-// TODO(tschottdorf): some logic tests currently take a long time to run.
-// Probably a case of heartbeats timing out or many restarts in some tests.
-// Need to investigate when all moving parts are in place.
 func (t *logicTest) processTestFile(path string) error {
 	file, err := os.Open(path)
 	if err != nil {
