@@ -761,18 +761,25 @@ func (r *Replica) setReplicaIDLocked(replicaID roachpb.ReplicaID) error {
 		// The common case: the replica ID is unchanged.
 		return nil
 	}
+	// TODO(DONOTMERGE): Would we be better off just checking in
+	// processRaftRequest that the preemptive snapshot isn't to an initialized
+	// replica?
+	if r.mu.replicaID > replicaID {
+		return errors.Errorf("replicaID cannot move backwards from %d to %d", r.mu.replicaID, replicaID)
+	}
 	if replicaID == 0 {
 		// If the incoming message does not have a new replica ID it is a
 		// preemptive snapshot. We'll set a tombstone for the old replica ID if the
 		// snapshot is accepted.
+		// TODO(DONOTMERGE): This logic is a bit questionable. At the very least the
+		// comment should be changed to reflect that all we immediately set in that
+		// case is minReplicaID, not the tombstone itself.
 		return nil
 	}
 	if replicaID < r.mu.minReplicaID {
 		return &roachpb.RaftGroupDeletedError{}
 	}
-	if r.mu.replicaID > replicaID {
-		return errors.Errorf("replicaID cannot move backwards from %d to %d", r.mu.replicaID, replicaID)
-	}
+	// TODO(DONOTMERGE): Does this need to be resolved to ensure correctness?
 	// if r.mu.replicaID != 0 {
 	// 	// TODO(bdarnell): clean up previous raftGroup (update peers)
 	// }
@@ -785,6 +792,10 @@ func (r *Replica) setReplicaIDLocked(replicaID roachpb.ReplicaID) error {
 	// If there was a previous replica, repropose its pending commands under
 	// this new incarnation.
 	if previousReplicaID != 0 {
+		if log.V(1) {
+			log.Infof(r.AnnotateCtx(context.TODO()), "changed replica ID from %d to %d",
+				previousReplicaID, replicaID)
+		}
 		// repropose all pending commands under new replicaID.
 		r.refreshProposalsLocked(0, reasonReplicaIDChanged)
 	}

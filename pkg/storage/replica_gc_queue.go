@@ -231,7 +231,7 @@ func (rgcq *replicaGCQueue) process(
 		// Replica (see #8111) when inactive ones can be starved by
 		// event-driven additions.
 		if log.V(1) {
-			log.Infof(ctx, "not gc'able")
+			log.Infof(ctx, "not gc'able") // TODO(DONOTMERGE): Why is rejecting snapshots sometimes getting us stuck here?
 		}
 		if err := repl.setLastReplicaGCTimestamp(ctx, repl.store.Clock().Now()); err != nil {
 			return err
