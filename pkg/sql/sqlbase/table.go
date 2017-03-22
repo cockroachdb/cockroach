@@ -1494,14 +1494,12 @@ func CheckValueWidth(col ColumnDescriptor, val parser.Datum) error {
 				// exceeds the declared precision minus the declared scale, an
 				// error is raised."
 
-				_, err := parser.DecimalCtx.Quantize(&v.Decimal, &v.Decimal, -col.Type.Width)
-				if err != nil {
-					return errors.Wrap(err, "rounding decimal column")
-				}
+				c := parser.DecimalCtx.WithPrecision(uint32(col.Type.Precision))
+				c.Traps = apd.InvalidOperation
 
-				// Check that the precision is not exceeded.
-				if v.NumDigits() > int64(col.Type.Precision) {
-					return fmt.Errorf("too many digits for type %s (column %q)",
+				_, err := c.Quantize(&v.Decimal, &v.Decimal, -col.Type.Width)
+				if err != nil {
+					return errors.Errorf("too many digits for type %s (column %q), ",
 						col.Type.SQLString(), col.Name)
 				}
 			}
