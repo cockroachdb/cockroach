@@ -102,7 +102,7 @@ func TestAmbiguousCommitDueToLeadershipChange(t *testing.T) {
 	}
 	leaseHolder, err := tc.FindRangeLeaseHolder(
 		tableRangeDesc,
-		&base.ReplicationTarget{
+		&roachpb.ReplicationTarget{
 			NodeID:  tc.Servers[0].GetNode().Descriptor.NodeID,
 			StoreID: tc.Servers[0].GetFirstStoreID(),
 		})

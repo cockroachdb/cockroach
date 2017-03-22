@@ -56,12 +56,12 @@ type TestClusterInterface interface {
 	// The method blocks until a snapshot of the range has been copied to all the
 	// new replicas and the new replicas become part of the Raft group.
 	AddReplicas(
-		startKey roachpb.Key, targets ...base.ReplicationTarget,
+		startKey roachpb.Key, targets ...roachpb.ReplicationTarget,
 	) (roachpb.RangeDescriptor, error)
 
 	// RemoveReplicas removes one or more replicas from a range.
 	RemoveReplicas(
-		startKey roachpb.Key, targets ...base.ReplicationTarget,
+		startKey roachpb.Key, targets ...roachpb.ReplicationTarget,
 	) (roachpb.RangeDescriptor, error)
 
 	// FindRangeLeaseHolder returns the current lease holder for the given range.
@@ -75,8 +75,8 @@ type TestClusterInterface interface {
 	// to have applied the transfer is the previous lease holder.
 	FindRangeLeaseHolder(
 		rangeDesc roachpb.RangeDescriptor,
-		hint *base.ReplicationTarget,
-	) (base.ReplicationTarget, error)
+		hint *roachpb.ReplicationTarget,
+	) (roachpb.ReplicationTarget, error)
 
 	// TransferRangeLease transfers the lease for a range from whoever has it to
 	// a particular store. That store must already have a replica of the range. If
@@ -87,14 +87,14 @@ type TestClusterInterface interface {
 	// lease holder has applied it (so it might not know immediately that it is the
 	// new lease holder).
 	TransferRangeLease(
-		rangeDesc roachpb.RangeDescriptor, dest base.ReplicationTarget,
+		rangeDesc roachpb.RangeDescriptor, dest roachpb.ReplicationTarget,
 	) error
 
 	// LookupRange returns the descriptor of the range containing key.
 	LookupRange(key roachpb.Key) (roachpb.RangeDescriptor, error)
 
-	// Target returns a base.ReplicationTarget for the specified server.
-	Target(serverIdx int) base.ReplicationTarget
+	// Target returns a roachpb.ReplicationTarget for the specified server.
+	Target(serverIdx int) roachpb.ReplicationTarget
 }
 
 // TestClusterFactory encompasses the actual implementation of the shim

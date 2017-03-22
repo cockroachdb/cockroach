@@ -79,6 +79,9 @@ extern ReplicaDescriptorDefaultTypeInternal _ReplicaDescriptor_default_instance_
 class ReplicaIdent;
 class ReplicaIdentDefaultTypeInternal;
 extern ReplicaIdentDefaultTypeInternal _ReplicaIdent_default_instance_;
+class ReplicationTarget;
+class ReplicationTargetDefaultTypeInternal;
+extern ReplicationTargetDefaultTypeInternal _ReplicationTarget_default_instance_;
 class Span;
 class SpanDefaultTypeInternal;
 extern SpanDefaultTypeInternal _Span_default_instance_;
