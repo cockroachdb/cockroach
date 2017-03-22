@@ -366,12 +366,6 @@ func (rf *RowFetcher) ProcessKV(
 						return "", "", err
 					}
 					d = parser.NewDCollatedString(r, *typ.Locale, &rf.alloc.env)
-				case ColumnType_DECIMAL:
-					dec, err := encoding.DecodeNonsortingDecimal(rvalue, nil)
-					if err != nil {
-						return "", "", err
-					}
-					d = &parser.DDecimal{Decimal: *dec}
 				default:
 					panic(fmt.Sprintf("unknown composite encoding for kind %d", typ.Kind))
 				}
