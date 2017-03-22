@@ -2,7 +2,7 @@
 - Status: draft
 - Start Date: 2017-03-18
 - Authors: @mberhault
-- RFC PR: (PR # after acceptance of initial draft)
+- RFC PR: [14254](https://github.com/cockroachdb/cockroach/pull/14254)
 - Cockroach Issue: [1674](https://github.com/cockroachdb/cockroach/issues/1674)
 
 # Summary
@@ -18,6 +18,7 @@ Out of scope for this RFC:
 * certificate revocation
 * certificate/key deployment
 * automatic certificate renewal
+* use of CSRs (certificate signing requests)
 
 # Motivation
 
@@ -170,11 +171,6 @@ Running nodes can be told to re-read the certificate directory by issuing a `SIG
 Since we cannot control when nodes may be restarted, it is important to keep the reload process
 identical to the initial load.
 
-Some additional methods to trigger a reload can later be introduced:
-* a timer based on certificate expiration
-* regular timer
-* admin UI endpoint
-
 # Online certificate rotation
 
 A good description of online key rotation in Go can be found in
@@ -218,6 +214,32 @@ dates, certificate chain (corresponding CA for a node cert), and valid hosts.
 
 Soon-to-expire certificates (or chains) must be reported prominently on the admin UI and
 available through external metrics.
+
+# Future work
+
+## Packaging certificates for other languages/libraries
+
+Separate `.cert` and `.key` files are expected by libpq, but other libraries/languages may have different ways of specifying/packaging them.
+
+We need to:
+* augment our per-language examples to include secure mode. see [docs/631](https://github.com/cockroachdb/docs/issues/631)
+* document how to use public tools (ie: openssl) to convert certificates.
+* provide multiple cert/key output modes for the `cockroach cert` commands.
+
+## Alternate reload methods
+
+Some additional methods to trigger a reload can later be introduced:
+* a timer based on certificate expiration
+* regular timer
+* admin UI endpoint
+
+## Client certificate monitoring
+
+We have no way of knowing which certificate authority a client has, so we cannot monitor for
+clients not yet aware of a new CA certificate.
+
+We could examine client certificates and report soon-to-expire ones. This will not help
+with CA knowledge, but would provide better visibility into user authentication issues.
 
 # Unresolved questions
 
@@ -295,14 +317,6 @@ Delegation remains doable, but with an extra hoop to jump through.
 
 With default values for certificate and key locations, secure mode is now less explicit, relying
 on the detection of certificates in the default directory. This could be misleading to users.
-
-## Client knowledge of certificate authority
-
-We have no way of knowing which certificate authority a client has, so we cannot monitor for
-clients not yet aware of a new CA certificate.
-
-We could examine client certificates and report soon-to-expire ones. This will not help
-with CA knowledge, but would provide better visibility into user authentication issues.
 
 # Alternative solutions
 
