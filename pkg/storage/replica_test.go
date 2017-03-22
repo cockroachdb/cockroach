@@ -1897,15 +1897,17 @@ func TestReplicaCommandQueue(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	// Test all four combinations of reads & writes waiting.
 	testCases := []struct {
-		cmd1Read, cmd2Read bool
-		expWait            bool
+		cmd1Read, cmd2Read    bool
+		expWait, expLocalWait bool
 	}{
 		// Read/read doesn't wait.
-		{true, true, false},
-		// All other combinations must wait.
-		{true, false, true},
-		{false, true, true},
-		{false, false, true},
+		{true, true, false, false},
+		// A write doesn't wait for an earlier read (except for local keys).
+		{true, false, false, true},
+		// A read must wait for an earlier write.
+		{false, true, true, true},
+		// Writes always wait for other writes.
+		{false, false, true, true},
 	}
 
 	tooLong := 5 * time.Second
@@ -1913,16 +1915,27 @@ func TestReplicaCommandQueue(t *testing.T) {
 	uniqueKeyCounter := int32(0)
 
 	for _, test := range testCases {
-		for _, addReq := range []string{"", "noop", "read", "write"} {
+		var addReqs []string
+		if test.cmd1Read {
+			addReqs = []string{"", "noop", "read"}
+		} else {
+			addReqs = []string{"", "noop", "write"}
+		}
+		for _, addReq := range addReqs {
 			if addReq == "write" && propEvalKV {
 				// adding a write changes behavior in propEvalKV until the command
 				// queue changes are all done.
 				continue
 			}
 			for _, localKey := range []bool{false, true} {
+				expWait := test.expWait
+				if localKey {
+					expWait = test.expLocalWait
+				}
 				readWriteLabels := map[bool]string{true: "read", false: "write"}
-				testName := fmt.Sprintf("%s-%s", readWriteLabels[test.cmd1Read],
-					readWriteLabels[test.cmd2Read])
+				testName := fmt.Sprintf(
+					"%s-%s", readWriteLabels[test.cmd1Read], readWriteLabels[test.cmd2Read],
+				)
 				switch addReq {
 				case "noop":
 					testName += "-noop"
@@ -1999,12 +2012,9 @@ func TestReplicaCommandQueue(t *testing.T) {
 						cmd1Done := make(chan *roachpb.Error, 1)
 						if err := stopper.RunAsyncTask(context.Background(), func(_ context.Context) {
 							args := readOrWriteArgs(key1, test.cmd1Read)
-
-							pErr := sendWithHeader(roachpb.Header{
+							cmd1Done <- sendWithHeader(roachpb.Header{
 								UserPriority: blockingPriority,
 							}, args)
-
-							cmd1Done <- pErr
 						}); err != nil {
 							t.Fatal(err)
 						}
@@ -2019,10 +2029,7 @@ func TestReplicaCommandQueue(t *testing.T) {
 						cmd2Done := make(chan *roachpb.Error, 1)
 						if err := stopper.RunAsyncTask(context.Background(), func(_ context.Context) {
 							args := readOrWriteArgs(key1, test.cmd2Read)
-
-							pErr := sendWithHeader(roachpb.Header{}, args)
-
-							cmd2Done <- pErr
+							cmd2Done <- sendWithHeader(roachpb.Header{}, args)
 						}); err != nil {
 							t.Fatal(err)
 						}
@@ -2032,10 +2039,7 @@ func TestReplicaCommandQueue(t *testing.T) {
 						if !propEvalKV {
 							if err := stopper.RunAsyncTask(context.Background(), func(_ context.Context) {
 								args := readOrWriteArgs(key2, true)
-
-								pErr := sendWithHeader(roachpb.Header{}, args)
-
-								cmd3Done <- pErr
+								cmd3Done <- sendWithHeader(roachpb.Header{}, args)
 							}); err != nil {
 								t.Fatal(err)
 							}
@@ -2056,13 +2060,13 @@ func TestReplicaCommandQueue(t *testing.T) {
 							t.Fatalf("waited %s for cmd3 of key2", tooLong)
 						}
 
-						if test.expWait {
+						if expWait {
 							// Ensure that cmd2 didn't finish while cmd1 is still blocked.
 							select {
 							case pErr := <-cmd2Done:
 								t.Fatalf("should not have been able to execute cmd2 (pErr: %v)", pErr)
 							case pErr := <-cmd1Done:
-								t.Fatalf("should not have been able execute cmd1 while blocked (pErr: %v)", pErr)
+								t.Fatalf("should not have been able to execute cmd1 while blocked (pErr: %v)", pErr)
 							default:
 								// success
 							}
@@ -2254,7 +2258,7 @@ func TestReplicaCommandQueueCancellation(t *testing.T) {
 	// Wait until both commands are in the command queue.
 	testutils.SucceedsSoon(t, func() error {
 		tc.repl.cmdQMu.Lock()
-		chans := tc.repl.cmdQMu.global.getWait(false, []roachpb.Span{{Key: key1}, {Key: key2}})
+		chans := tc.repl.cmdQMu.global.getWait(false, hlc.Timestamp{}, []roachpb.Span{{Key: key1}, {Key: key2}})
 		tc.repl.cmdQMu.Unlock()
 		if a, e := len(chans), 2; a < e {
 			return errors.Errorf("%d of %d commands in the command queue", a, e)
@@ -2309,6 +2313,118 @@ func TestReplicaCommandQueueSelfOverlap(t *testing.T) {
 				}
 			})
 		}
+	}
+}
+
+// TestReplicaCommandQueueTimestampNonInterference verifies that
+// reads with earlier timestamps do not interfere with writes.
+func TestReplicaCommandQueueTimestampNonInterference(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	var blockKey, blockReader, blockWriter atomic.Value
+	blockKey.Store(roachpb.Key("a"))
+	blockReader.Store(false)
+	blockWriter.Store(false)
+	blockCh := make(chan struct{}, 1)
+	blockedCh := make(chan struct{}, 1)
+
+	tc := testContext{}
+	tsc := TestStoreConfig(nil)
+	tsc.TestingKnobs.TestingEvalFilter =
+		func(filterArgs storagebase.FilterArgs) *roachpb.Error {
+			// Make sure the direct GC path doesn't interfere with this test.
+			if !filterArgs.Req.Header().Key.Equal(blockKey.Load().(roachpb.Key)) {
+				return nil
+			}
+			if filterArgs.Req.Method() == roachpb.Get && blockReader.Load().(bool) {
+				blockedCh <- struct{}{}
+				<-blockCh
+			} else if filterArgs.Req.Method() == roachpb.Put && blockWriter.Load().(bool) {
+				blockedCh <- struct{}{}
+				<-blockCh
+			}
+			return nil
+		}
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+	tc.StartWithStoreConfig(t, stopper, tsc)
+
+	testCases := []struct {
+		readerTS    hlc.Timestamp
+		writerTS    hlc.Timestamp
+		key         roachpb.Key
+		readerFirst bool
+		interferes  bool
+	}{
+		// Reader & writer have same timestamps.
+		{makeTS(1, 0), makeTS(1, 0), roachpb.Key("a"), true, true},
+		{makeTS(1, 0), makeTS(1, 0), roachpb.Key("b"), false, true},
+		// Reader has earlier timestamp.
+		{makeTS(1, 0), makeTS(1, 1), roachpb.Key("c"), true, false},
+		{makeTS(1, 0), makeTS(1, 1), roachpb.Key("d"), false, false},
+		// Writer has earlier timestamp.
+		{makeTS(1, 1), makeTS(1, 0), roachpb.Key("e"), true, true},
+		{makeTS(1, 1), makeTS(1, 0), roachpb.Key("f"), false, true},
+		// Local keys always interfere.
+		{makeTS(1, 0), makeTS(1, 1), keys.RangeDescriptorKey(roachpb.RKey("a")), true, true},
+		{makeTS(1, 0), makeTS(1, 1), keys.RangeDescriptorKey(roachpb.RKey("b")), false, true},
+	}
+	for _, test := range testCases {
+		t.Run(fmt.Sprintf("%+v", test), func(t *testing.T) {
+			blockReader.Store(false)
+			blockWriter.Store(false)
+			blockKey.Store(test.key)
+			errCh := make(chan *roachpb.Error, 2)
+
+			baR := roachpb.BatchRequest{}
+			baR.Timestamp = test.readerTS
+			gArgs := getArgs(test.key)
+			baR.Add(&gArgs)
+			baW := roachpb.BatchRequest{}
+			baW.Timestamp = test.writerTS
+			pArgs := putArgs(test.key, []byte("value"))
+			baW.Add(&pArgs)
+
+			if test.readerFirst {
+				blockReader.Store(true)
+				go func() {
+					_, pErr := tc.Sender().Send(context.Background(), baR)
+					errCh <- pErr
+				}()
+				<-blockedCh
+				go func() {
+					_, pErr := tc.Sender().Send(context.Background(), baW)
+					errCh <- pErr
+				}()
+			} else {
+				blockWriter.Store(true)
+				go func() {
+					_, pErr := tc.Sender().Send(context.Background(), baW)
+					errCh <- pErr
+				}()
+				<-blockedCh
+				go func() {
+					_, pErr := tc.Sender().Send(context.Background(), baR)
+					errCh <- pErr
+				}()
+			}
+
+			if test.interferes {
+				select {
+				case <-time.After(10 * time.Millisecond):
+					// Expected.
+				case pErr := <-errCh:
+					t.Fatalf("expected interference: got error %s", pErr)
+				}
+			}
+			// Verify no errors on waiting read and write.
+			blockCh <- struct{}{}
+			for j := 0; j < 2; j++ {
+				if pErr := <-errCh; pErr != nil {
+					t.Errorf("error %d: unexpected error: %s", j, pErr)
+				}
+			}
+		})
 	}
 }
 
