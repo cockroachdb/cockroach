@@ -81,9 +81,10 @@ CREATE TABLE t2 (d decimal, v decimal(3, 1), primary key (d, v))
 statement ok
 INSERT INTO t2 VALUES (1.00::decimal, 1.00::decimal), (2.0::decimal, 2.0::decimal), (3::decimal, 3::decimal)
 
-query RR
-SELECT * FROM t2 ORDER BY d
-----
-1.00 1.0
-2.0  2.0
-3    3.0
+# TODO(mjibson): enable once #13609 is merged with support for different values in index.
+#query RR
+#SELECT * FROM t2 ORDER BY d
+#----
+#1.00 1.0
+#2.0  2.0
+#3    3.0
