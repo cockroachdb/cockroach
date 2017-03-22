@@ -74,8 +74,12 @@ executable will be in your current directory and can be run as shown in the
   make test
   # Run all tests in ./pkg/storage
   make test PKG=./pkg/storage
-  # Run all kv tests matching `^TestFoo` with a timeout of 10s
+  # Run all kv tests matching '^TestFoo' with a timeout of 10s
   make test PKG=./pkg/kv TESTS='^TestFoo' TESTTIMEOUT=10s
+  # Run the sql logic tests
+  make test PKG=./pkg/sql TESTS='TestLogic$$'
+  # Run a specific sql logic subtest
+  make test PKG=./pkg/sql TESTS='TestLogic$$/select$$'
   ```
 
   When you're ready to commit, be sure to write a Good Commit Message™. Consult
