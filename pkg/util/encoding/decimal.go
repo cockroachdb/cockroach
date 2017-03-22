@@ -59,15 +59,11 @@ func EncodeDecimalDescending(appendTo []byte, d *apd.Decimal) []byte {
 }
 
 func encodeDecimal(appendTo []byte, d *apd.Decimal, invert bool) []byte {
-	neg := false
-	switch d.Coeff.Sign() {
-	case -1:
-		neg = true
-	case 0:
+	if d.IsZero() {
 		return append(appendTo, decimalZero)
 	}
 	e, m := decimalEandM(d, appendTo[len(appendTo):])
-	return encodeEandM(appendTo, neg != invert, e, m)
+	return encodeEandM(appendTo, d.Negative != invert, e, m)
 }
 
 // decimalEandM computes and returns the exponent E and mantissa M for d.
@@ -93,19 +89,10 @@ func decimalEandM(d *apd.Decimal, tmp []byte) (int, []byte) {
 		addedZero = true
 	}
 	tmp = d.Coeff.Append(tmp, 10)
-	if addedZero {
-		if tmp[1] == '-' {
-			tmp[1] = '0'
-			tmp = tmp[1:]
-		}
-	} else {
-		if tmp[0] == '-' {
-			tmp[0] = '0'
-		} else {
-			tmp = append(tmp, '0')
-			copy(tmp[1:], tmp[:len(tmp)-1])
-			tmp[0] = '0'
-		}
+	if !addedZero {
+		tmp = append(tmp, '0')
+		copy(tmp[1:], tmp[:len(tmp)-1])
+		tmp[0] = '0'
 	}
 
 	// The exponent will be the combination of the decimal's exponent, and the
@@ -349,9 +336,6 @@ func makeDecimalFromMandE(negative bool, e int, m []byte, tmp []byte) *apd.Decim
 	if n := len(m)*2 + 1; cap(b) < n {
 		b = make([]byte, 0, n)
 	}
-	if negative {
-		b = append(b, '-')
-	}
 	for i, v := range m {
 		t := int(v)
 		if i == len(m) {
@@ -365,9 +349,6 @@ func makeDecimalFromMandE(negative bool, e int, m []byte, tmp []byte) *apd.Decim
 	}
 
 	exp := 2*e - len(b)
-	if negative {
-		exp++
-	}
 	dec := &apd.Decimal{
 		Exponent: int32(exp),
 	}
@@ -379,6 +360,7 @@ func makeDecimalFromMandE(negative bool, e int, m []byte, tmp []byte) *apd.Decim
 	if !ok {
 		panic(fmt.Sprintf("could not set big.Int's string value: %q", s))
 	}
+	dec.Negative = negative
 
 	return dec
 }
@@ -616,17 +598,17 @@ func DecodeNonsortingDecimal(buf []byte, tmp []byte) (*apd.Decimal, error) {
 		if err := decodeNonsortingDecimalValue(dec, false, buf[1:], tmp); err != nil {
 			return nil, err
 		}
-		dec.Coeff.Neg(&dec.Coeff)
+		dec.Negative = true
 		return dec, nil
 	case buf[0] == decimalNegMedium:
 		decodeNonsortingDecimalValueWithoutExp(dec, buf[1:], tmp)
-		dec.Coeff.Neg(&dec.Coeff)
+		dec.Negative = true
 		return dec, nil
 	case buf[0] == decimalNegSmall:
 		if err := decodeNonsortingDecimalValue(dec, true, buf[1:], tmp); err != nil {
 			return nil, err
 		}
-		dec.Coeff.Neg(&dec.Coeff)
+		dec.Negative = true
 		return dec, nil
 	case buf[0] == decimalPosSmall:
 		if err := decodeNonsortingDecimalValue(dec, true, buf[1:], tmp); err != nil {

@@ -26,7 +26,9 @@ var (
 		Rounding:    apd.RoundHalfUp,
 		MaxExponent: 2000,
 		MinExponent: -2000,
-		Traps:       apd.DefaultTraps,
+		// Don't use any traps. We prefer instead to have NaN or Infinity to match
+		// behavior of floats.
+		Traps: 0,
 	}
 	// ExactCtx is a decimal context with exact precision.
 	ExactCtx = DecimalCtx.WithPrecision(0)
