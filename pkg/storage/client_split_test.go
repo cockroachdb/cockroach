@@ -1844,3 +1844,25 @@ func TestStoreRangeGossipOnSplits(t *testing.T) {
 	default:
 	}
 }
+
+// TestStorePushTxnQueueEnabledOnSplit verifies that the PushTxnQueue for
+// the right hand side of the split range is enabled after a split.
+func TestStorePushTxnQueueEnabledOnSplit(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	storeCfg := storage.TestStoreConfig(nil)
+	storeCfg.TestingKnobs.DisableSplitQueue = true
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+	store := createTestStoreWithConfig(t, stopper, storeCfg)
+
+	key := keys.MakeRowSentinelKey(append([]byte(nil), keys.UserTableDataMin...))
+	args := adminSplitArgs(key, key)
+	if _, pErr := client.SendWrapped(context.Background(), rg1(store), args); pErr != nil {
+		t.Fatalf("%q: split unexpected error: %s", key, pErr)
+	}
+
+	rhsRepl := store.LookupReplica(roachpb.RKey(keys.UserTableDataMin), nil)
+	if !rhsRepl.IsPushTxnQueueEnabled() {
+		t.Errorf("expected RHS replica's push txn queue to be enabled post-split")
+	}
+}
