@@ -734,7 +734,7 @@ func TestReplicaLease(t *testing.T) {
 	} {
 		if _, err := evalRequestLease(context.Background(), tc.store.Engine(),
 			CommandArgs{
-				Repl: tc.repl,
+				EvalCtx: ReplicaEvalContext{tc.repl, nil},
 				Args: &roachpb.RequestLeaseRequest{
 					Lease: lease,
 				},
