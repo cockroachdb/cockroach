@@ -297,11 +297,11 @@ communicate with a secure cluster\).
 		// Error returned from GRPC to internal/client (which has to pass it
 		// up the stack as a roachpb.NewError(roachpb.NewSendError(.)).
 		{`debug kv inc a`, styled(
-			`increment failed: failed to send RPC: rpc error: code = 14 desc = grpc: the connection is unavailable`),
+			`increment failed: failed to send RPC: rpc error: code = Unavailable desc = grpc: the connection is unavailable`),
 		},
 		// Error returned directly from GRPC.
 		{`quit`, styled(
-			`rpc error: code = 14 desc = grpc: the connection is unavailable`),
+			`rpc error: code = Unavailable desc = grpc: the connection is unavailable`),
 		},
 		// Going through the SQL client libraries gives a *net.OpError which
 		// we also handle.
