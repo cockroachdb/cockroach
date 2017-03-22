@@ -462,7 +462,7 @@ SELECT cbrt(-1.0::float), cbrt(27.0::float), cbrt(19.3::decimal)
 query RRRRR
 SELECT ceil(-0.5::float), ceil(0.5::float), ceiling(0.5::float), ceil(0.1::decimal), ceiling(-0.9::decimal)
 ----
--0 1 1 1 0
+-0  1  1  1  -0
 
 query RR
 SELECT cos(-0.5), cos(0.5)
@@ -624,15 +624,17 @@ SELECT pow(0::int, 3::int), pow(0::int, -3::int), pow(3::int, 0::int), pow(-3::i
 query RRR
 SELECT pow(-3.0::float, 2.0), power(3.0::float, 2.0), pow(5.0::decimal, 2.0)
 ----
-9 9 25.00000000000000
+9 9 25.00
 
 query R
 SELECT pow(CAST (pi() AS DECIMAL), DECIMAL '2.0')
 ----
 9.869604401089357
 
-statement error invalid operation
+query R
 SELECT power(0::decimal, -1)
+----
+Infinity
 
 statement error invalid operation
 SELECT power(-1, -.1)
