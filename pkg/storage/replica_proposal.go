@@ -377,6 +377,8 @@ func (r *Replica) computeChecksumPostApply(
 	}
 }
 
+// leasePostApply is called when a RequestLease or TransferLease
+// request is executed for a range.
 func (r *Replica) leasePostApply(
 	ctx context.Context,
 	newLease *roachpb.Lease,
