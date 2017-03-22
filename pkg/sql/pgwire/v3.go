@@ -254,10 +254,7 @@ var statusReportParams = map[string]string{
 	// determine that the server is new enough.
 	"server_version": sql.PgServerVersion,
 	// The current CockroachDB version string.
-	"crdb_version": func() string {
-		info := build.GetInfo()
-		return fmt.Sprintf("CockroachDB %s %s", info.Distribution, info.Tag)
-	}(),
+	"crdb_version": build.GetInfo().Short(),
 }
 
 // handleAuthentication should discuss with the client to arrange
