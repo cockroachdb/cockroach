@@ -38,6 +38,7 @@ var crdbInternal = virtualSchema{
 		crdbInternalLeasesTable,
 		crdbInternalSchemaChangesTable,
 		crdbInternalStmtStatsTable,
+		crdbInternalJobsTable,
 	},
 }
 
@@ -263,6 +264,69 @@ CREATE TABLE crdb_internal.leases (
 				return err
 			}
 		}
+		return nil
+	},
+}
+
+var crdbInternalJobsTable = virtualSchemaTable{
+	schema: `
+CREATE TABLE crdb_internal.jobs (
+	id                 INT,
+	type               STRING,
+	description        STRING,
+	username           STRING,
+	descriptor_ids     INT[],
+	status             STRING,
+	created            TIMESTAMP,
+	started            TIMESTAMP,
+	finished           TIMESTAMP,
+	modified           TIMESTAMP,
+	fraction_completed FLOAT,
+	error              STRING
+);
+`,
+	populate: func(ctx context.Context, p *planner, addRow func(...parser.Datum) error) error {
+		rows, err := p.queryRows(ctx, `SELECT id, status, created, payload FROM system.jobs`)
+		if err != nil {
+			return err
+		}
+
+		for _, r := range rows {
+			id, status, created, bytes := r[0], r[1], r[2], r[3]
+			payload, err := unmarshalJobPayload(bytes)
+			if err != nil {
+				return err
+			}
+			tsOrNull := func(ts *time.Time) parser.Datum {
+				if ts == nil {
+					return parser.DNull
+				}
+				return parser.MakeDTimestamp(*ts, time.Nanosecond)
+			}
+			descriptorIDs := parser.NewDArray(parser.TypeInt)
+			for _, descID := range payload.DescriptorIDs {
+				if err := descriptorIDs.Append(parser.NewDInt(parser.DInt(int(descID)))); err != nil {
+					return err
+				}
+			}
+			if err := addRow(
+				id,
+				parser.NewDString(payload.typ()),
+				parser.NewDString(payload.Description),
+				parser.NewDString(payload.Username),
+				descriptorIDs,
+				status,
+				created,
+				tsOrNull(payload.Started),
+				tsOrNull(payload.Finished),
+				tsOrNull(payload.Modified),
+				parser.NewDFloat(parser.DFloat(payload.FractionCompleted)),
+				parser.NewDString(payload.Error),
+			); err != nil {
+				return err
+			}
+		}
+
 		return nil
 	},
 }
