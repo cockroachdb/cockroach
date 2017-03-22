@@ -7,10 +7,14 @@
 
 	It is generated from these files:
 		cockroach/pkg/sql/app_stats.proto
+		cockroach/pkg/sql/jobs.proto
 
 	It has these top-level messages:
 		StatementStatistics
 		NumericStat
+		BackupJobDetails
+		RestoreJobDetails
+		JobPayload
 */
 package sql
 
