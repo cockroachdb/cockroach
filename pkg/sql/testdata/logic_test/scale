@@ -101,3 +101,20 @@ query RR
 select x, y FROM td2
 ----
 123 123.1415
+
+
+# Ensure decimal columns greater than 16 precision are supported.
+
+statement ok
+CREATE TABLE td3 (a decimal, b decimal(3, 1), c decimal(20, 10))
+
+statement ok
+INSERT INTO td3 VALUES (123456789012.123456789012, 12.3, 1234567890.1234567890)
+
+query RRR
+select * from td3
+----
+123456789012.123456789012 12.3 1234567890.1234567890
+
+statement error too many digits
+INSERT INTO td3 (c) VALUES (12345678901)
