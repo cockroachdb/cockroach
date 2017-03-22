@@ -1,8 +1,0 @@
-{
-  "main": "proxy.js",
-  "dependencies": {
-    "express": "^4.14.0",
-    "http-proxy": "^1.15.1",
-    "yargs": "^6.2.0"
-  }
-}
