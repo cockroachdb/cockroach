@@ -763,8 +763,8 @@ func (r *Replica) setReplicaIDLocked(replicaID roachpb.ReplicaID) error {
 	}
 	if replicaID == 0 {
 		// If the incoming message does not have a new replica ID it is a
-		// preemptive snapshot. We'll set a tombstone for the old replica ID if the
-		// snapshot is accepted.
+		// preemptive snapshot. We'll update minReplicaID if the snapshot is
+		// accepted.
 		return nil
 	}
 	if replicaID < r.mu.minReplicaID {
@@ -785,6 +785,10 @@ func (r *Replica) setReplicaIDLocked(replicaID roachpb.ReplicaID) error {
 	// If there was a previous replica, repropose its pending commands under
 	// this new incarnation.
 	if previousReplicaID != 0 {
+		if log.V(1) {
+			log.Infof(r.AnnotateCtx(context.TODO()), "changed replica ID from %d to %d",
+				previousReplicaID, replicaID)
+		}
 		// repropose all pending commands under new replicaID.
 		r.refreshProposalsLocked(0, reasonReplicaIDChanged)
 	}
