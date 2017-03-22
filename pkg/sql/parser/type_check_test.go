@@ -102,6 +102,11 @@ func TestTypeCheck(t *testing.T) {
 		{`1 + $1`, `1:::INT + $1:::INT`},
 		{`1:::DECIMAL + $1`, `1:::DECIMAL + $1:::DECIMAL`},
 		{`$1:::INT`, `$1:::INT`},
+
+		{`'NaN'::decimal`, `'NaN':::STRING::DECIMAL`},
+		{`'-NaN'::decimal`, `'-NaN':::STRING::DECIMAL`},
+		{`'Inf'::decimal`, `'Inf':::STRING::DECIMAL`},
+		{`'-Inf'::decimal`, `'-Inf':::STRING::DECIMAL`},
 	}
 	for _, d := range testData {
 		expr, err := ParseExprTraditional(d.expr)

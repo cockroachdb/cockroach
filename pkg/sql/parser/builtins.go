@@ -1178,7 +1178,15 @@ var Builtins = map[string][]Builtin{
 			Types:      ArgTypes{{"val", TypeFloat}},
 			ReturnType: fixedReturnType(TypeBool),
 			fn: func(_ *EvalContext, args Datums) (Datum, error) {
-				return MakeDBool(DBool(math.IsNaN(float64(*args[0].(*DFloat))))), nil
+				return MakeDBool(DBool(isNaN(args[0]))), nil
+			},
+			Info: "Returns true if `val` is NaN, false otherwise.",
+		},
+		Builtin{
+			Types:      ArgTypes{{"val", TypeDecimal}},
+			ReturnType: fixedReturnType(TypeBool),
+			fn: func(_ *EvalContext, args Datums) (Datum, error) {
+				return MakeDBool(DBool(isNaN(args[0]))), nil
 			},
 			Info: "Returns true if `val` is NaN, false otherwise.",
 		},
