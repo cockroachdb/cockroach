@@ -57,7 +57,7 @@ GW_SOURCES := $(GW_PROTOS:%.proto=%.pb.gw.go)
 GO_PROTOS := $(addprefix $(REPO_ROOT)/, $(sort $(shell git -C $(REPO_ROOT) ls-files --exclude-standard --cached --others -- '*.proto')))
 GO_SOURCES := $(GO_PROTOS:%.proto=%.pb.go)
 
-UI_SOURCES := $(PKG_ROOT)/ui/app/js/protos.js $(PKG_ROOT)/ui/generated/protos.json $(PKG_ROOT)/ui/generated/protos.d.ts
+UI_SOURCES := $(PKG_ROOT)/ui/src/js/protos.js $(PKG_ROOT)/ui/generated/protos.json $(PKG_ROOT)/ui/generated/protos.d.ts
 
 CPP_PROTOS := $(filter %/roachpb/metadata.proto %/roachpb/data.proto %/roachpb/internal.proto %/engine/enginepb/mvcc.proto %/engine/enginepb/rocksdb.proto %/hlc/timestamp.proto %/unresolved_addr.proto,$(GO_PROTOS))
 CPP_HEADERS := $(subst ./,$(NATIVE_ROOT)/,$(CPP_PROTOS:%.proto=%.pb.h))
@@ -99,7 +99,7 @@ $(REPO_ROOT)/build/yarn.installed: $(REPO_ROOT)/build/package.json
 
 PBJS_ARGS = --path $(ORG_ROOT) --path $(GOGOPROTO_ROOT) --path $(COREOS_PATH) --path $(GRPC_GATEWAY_GOOGLEAPIS_PATH) $(GW_PROTOS)
 
-$(PKG_ROOT)/ui/app/js/protos.js: $(REPO_ROOT)/build/yarn.installed $(GO_PROTOS) $(COREOS_RAFT_PROTOS)
+$(PKG_ROOT)/ui/src/js/protos.js: $(REPO_ROOT)/build/yarn.installed $(GO_PROTOS) $(COREOS_RAFT_PROTOS)
 	# Add comment recognized by reviewable.
 	echo '// GENERATED FILE DO NOT EDIT' > $@
 	$(REPO_ROOT)/build/node_modules/.bin/pbjs -t commonjs $(PBJS_ARGS) >> $@
