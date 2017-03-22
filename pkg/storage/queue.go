@@ -573,6 +573,12 @@ func (bq *baseQueue) processReplica(
 		log.Infof(ctx, "processing replica")
 	}
 
+	if !repl.IsInitialized() {
+		// We checked this when adding the replica, but we need to check it again
+		// in case this is a different replica with the same range ID (see #14193).
+		return errors.New("cannot process uninitialized replica")
+	}
+
 	if err := repl.IsDestroyed(); err != nil {
 		if log.V(3) {
 			log.Infof(queueCtx, "replica destroyed (%s); skipping", err)
