@@ -2070,7 +2070,8 @@ func TestStoreChangeFrozen(t *testing.T) {
 		b := tc.store.Engine().NewBatch()
 		defer b.Close()
 		var h roachpb.Header
-		if _, err := evalChangeFrozen(context.Background(), b, CommandArgs{Repl: tc.repl, Header: h, Args: fReqVersMismatch}, &roachpb.ChangeFrozenResponse{}); err != nil {
+		cArgs := CommandArgs{EvalCtx: ReplicaEvalContext{tc.repl, nil}, Header: h, Args: fReqVersMismatch}
+		if _, err := evalChangeFrozen(context.Background(), b, cArgs, &roachpb.ChangeFrozenResponse{}); err != nil {
 			t.Fatal(err)
 		}
 		assertFrozen(no) // since we do not commit the above batch
