@@ -1902,9 +1902,16 @@ func splitPostApply(
 	rightRng.mu.Lock()
 	// Copy the minLeaseProposedTS from the LHS.
 	rightRng.mu.minLeaseProposedTS = r.mu.minLeaseProposedTS
+	rightLease := rightRng.mu.state.Lease
+	rightReplicaID := rightRng.mu.replicaID
 	rightRng.mu.Unlock()
 	r.mu.Unlock()
 	log.Event(ctx, "copied timestamp cache")
+
+	// Invoke the leasePostApply method to ensure we properly initialize
+	// the replica according to whether it holds the lease. This enables
+	// the PushTxnQueue. Note that we pass in an empty lease for prevLease.
+	rightRng.leasePostApply(ctx, rightLease, rightReplicaID, &roachpb.Lease{})
 
 	// Add the RHS replica to the store. This step atomically updates
 	// the EndKey of the LHS replica and also adds the RHS replica
