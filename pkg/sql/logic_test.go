@@ -1305,7 +1305,7 @@ func (t *logicTest) run() {
 	}
 	topLevelTest := t.t
 	for _, path := range paths {
-		topLevelTest.Run(path, func(tst *testing.T) {
+		topLevelTest.Run(filepath.Base(path), func(tst *testing.T) {
 			// Rebind t.t for the duration of this test, since the framework will
 			// pass us a different testing.T than what we started with.
 			t.t = tst
