@@ -1,27 +1,21 @@
 {
   "compilerOptions": {
-    "allowJs": true,
     "allowSyntheticDefaultImports": true,
-    "allowUnreachableCode": false,
-    "allowUnusedLabels": false,
+    "alwaysStrict": true,
     "forceConsistentCasingInFileNames": true,
-    "isolatedModules": true,
-    "jsx": "react",
-    // This is necessary to get Promise work with typechecking and autocomplete
-    "lib": [ "es5", "es6", "dom" ],
-    "noEmit": true,
-    "noErrorTruncation": true,
+    "isolatedModules": false,
+    "jsx": "preserve",
+    "moduleResolution": "node",
     "noFallthroughCasesInSwitch": true,
     "noImplicitAny": true,
+    "noImplicitAny": true,
+    "noImplicitReturns": false,
+    "noImplicitThis": false,
     "noUnusedLocals": true,
-    "target": "ES5"
+    "noUnusedParameters": true,
+    "outDir": "./dist/",
+    "sourceMap": true,
+    "strictNullChecks": false,
+    "target": "es6"
   }
-  /**
-   * NOTE: "files" is omitted here so that vscode and other editors will use
-   * these options for test files that aren't accessed through app/app.tsx .
-   * tsconfig.build.json is used by systemJS instead of this file to build for
-   * tests, build on the fly in the browser, and for packaging, and includes a
-   * reference to typings/index.d.ts so that the correct typings files can be
-   * pulled in for compilation.
-   */
 }

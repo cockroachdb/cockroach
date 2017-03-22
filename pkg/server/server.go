@@ -777,28 +777,10 @@ func (s *Server) Start(ctx context.Context) error {
 		}
 	}
 
-	var uiFileSystem http.FileSystem
-	uiDebug := envutil.EnvOrDefaultBool("COCKROACH_DEBUG_UI", false)
-	if uiDebug {
-		uiFileSystem = http.Dir("pkg/ui")
-	} else {
-		uiFileSystem = &assetfs.AssetFS{
-			Asset:     ui.Asset,
-			AssetDir:  ui.AssetDir,
-			AssetInfo: ui.AssetInfo,
-		}
-	}
-	uiFileServer := http.FileServer(uiFileSystem)
-
-	s.mux.HandleFunc("/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/" {
-			if uiDebug {
-				r.URL.Path = "debug.html"
-			} else {
-				r.URL.Path = "release.html"
-			}
-		}
-		uiFileServer.ServeHTTP(w, r)
+	s.mux.Handle("/", http.FileServer(&assetfs.AssetFS{
+		Asset:     ui.Asset,
+		AssetDir:  ui.AssetDir,
+		AssetInfo: ui.AssetInfo,
 	}))
 
 	// TODO(marc): when cookie-based authentication exists,

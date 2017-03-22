@@ -14,12 +14,6 @@ To bootstrap local development, you'll need to run `make` in this directory;
 this will download the dependencies, run the tests, and build the web console
 assets.
 
-Next, confirm that you can load the UI in debug mode by running the server
-with the environment variable `COCKROACH_DEBUG_UI` set to a truthy value, e.g.
-`COCKROACH_DEBUG_UI=1` (though any value accepted by
-[strconv.ParseBool](https://godoc.org/strconv#ParseBool) will work) and
-navigating to the web console.
-
 ### Visual Studio Code
 
 To get autocomplete and type-checking working in Visual Studio Code, you may
@@ -48,12 +42,6 @@ do this will result in wasted time waiting for the build.
 We commit the generated file so that CockroachDB can be compiled with minimal
 [non-go dependencies](#dependencies).
 
-## Live Reload
-
-The UI also supports live reload in debug mode. To take advantage of this, run
-`make livereload` from this directory - the UI will automatically reload files
-as you modify them, taking advantage of TypeScript's incremental compilation.
-
 ## Running tests
 
 If you'd like to run the tests directly you can run `make test`. If you're
@@ -79,8 +67,6 @@ dependencies using `yarn` or `npm`, then run `./proxy.js <existing- instance-
 ui-url> --local <development-instance-ui-url>` and navigate to
 `http://localhost:3000` to access the UI.
 
-Run `./proxy.js --help` for detailed information.
-
 ## Dependencies
 
 Our web console is compiled using a collection of tools that depends on
@@ -89,15 +75,5 @@ Our web console is compiled using a collection of tools that depends on
 We use [yarn](https://yarnpkg.com) to manage various dependencies. It is also
 possible to use `npm`, though you may run into problems as `npm` does not
 respect yarn's yarn.lock.
-
-We use [JSPM](http://jspm.io/) to manage frontend dependencies and
-[Typings](https://github.com/typings/typings) to manage typescript definition
-files. Our Makefile automatically installs these tools locally, so for the
-most part, you can be blissfully ignorant of their use. However, if you wish
-to add JSPM/Typings dependencies (and do not have your own opinions on
-binstubs), you'll want to run them from the local install using one of:
-
-- `$(yarn bin)/jspm install --save <myAwesomeDep>`
-- `$(yarn bin)/typings install --save <myAwesomeDep>`
 
 Be sure to commit any changes resulting from your dependency changes.
