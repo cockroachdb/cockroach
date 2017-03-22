@@ -31,7 +31,7 @@ func init() {
 // evalImport bulk loads key/value entries.
 func evalImport(ctx context.Context, cArgs storage.CommandArgs) error {
 	args := cArgs.Args.(*roachpb.ImportRequest)
-	db := cArgs.Repl.DB()
+	db := cArgs.EvalCtx.DB()
 	kr := KeyRewriter(args.KeyRewrites)
 
 	ctx, span := tracing.ChildSpan(ctx, fmt.Sprintf("import [%s,%s)", args.DataSpan.Key, args.DataSpan.EndKey))

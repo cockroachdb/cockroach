@@ -17,6 +17,7 @@
 package storage
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
@@ -26,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/coreos/etcd/raft/raftpb"
+	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 )
@@ -579,4 +581,144 @@ func writeInitialState(
 	}
 
 	return newMS, nil
+}
+
+// ReplicaEvalContext is the interface through which command
+// evaluation accesses the in-memory state of a Replica. Any state
+// that corresponds to (mutable) on-disk data must be registered in
+// the SpanSet if one is given.
+type ReplicaEvalContext struct {
+	repl *Replica
+	ss   *SpanSet
+}
+
+// In-memory state, immutable fields, and debugging methods are accessed directly.
+
+// NodeID returns the Replica's NodeID.
+func (rec ReplicaEvalContext) NodeID() roachpb.NodeID {
+	return rec.repl.NodeID()
+}
+
+// StoreID returns the Replica's StoreID.
+func (rec ReplicaEvalContext) StoreID() roachpb.StoreID {
+	return rec.repl.store.StoreID()
+}
+
+// RangeID returns the Replica's RangeID.
+func (rec ReplicaEvalContext) RangeID() roachpb.RangeID {
+	return rec.repl.RangeID
+}
+
+// IsFirstRange returns true if this replica is the first range in the
+// system.
+func (rec ReplicaEvalContext) IsFirstRange() bool {
+	return rec.repl.IsFirstRange()
+}
+
+// String returns a string representation of the Replica.
+func (rec ReplicaEvalContext) String() string {
+	return rec.repl.String()
+}
+
+// StoreTestingKnobs returns the Replica's StoreTestingKnobs.
+func (rec ReplicaEvalContext) StoreTestingKnobs() StoreTestingKnobs {
+	return rec.repl.store.cfg.TestingKnobs
+}
+
+// Tracer returns the Replica's Tracer.
+func (rec ReplicaEvalContext) Tracer() opentracing.Tracer {
+	return rec.repl.store.Tracer()
+}
+
+// DB returns the Replica's client DB.
+func (rec ReplicaEvalContext) DB() *client.DB {
+	return rec.repl.store.DB()
+}
+
+// Store returns the Replica's Store.
+func (rec ReplicaEvalContext) Store() *Store {
+	return rec.repl.store
+}
+
+// Engine returns the Replica's underlying Engine. In most cases the
+// evaluation Batch should be used instead.
+func (rec ReplicaEvalContext) Engine() engine.Engine {
+	return rec.repl.store.Engine()
+}
+
+// AbortCache returns the Replica's AbortCache.
+func (rec ReplicaEvalContext) AbortCache() *AbortCache {
+	// Despite its name, the abort cache doesn't hold on-disk data in
+	// memory. It just provides methods that take a Batch, so SpanSet
+	// declarations are enforced there.
+	return rec.repl.abortCache
+}
+
+// stateLoader returns the Replica's replicaStateLoader.
+func (rec ReplicaEvalContext) stateLoader() replicaStateLoader {
+	// replicaStateLoader's methods take a Batch argument; SpanSet
+	// declarations are enforced there.
+	return rec.repl.stateLoader
+}
+
+// pushTxnQueue returns the Replica's pushTxnQueue.
+func (rec ReplicaEvalContext) pushTxnQueue() *pushTxnQueue {
+	return rec.repl.pushTxnQueue
+}
+
+// FirstIndex returns the oldest index in the raft log.
+func (rec ReplicaEvalContext) FirstIndex() (uint64, error) {
+	return rec.repl.FirstIndex()
+}
+
+// Term returns the term of the given entry in the raft log.
+func (rec ReplicaEvalContext) Term(i uint64) (uint64, error) {
+	return rec.repl.Term(i)
+}
+
+// Fields backed by on-disk data must be registered in the SpanSet.
+// TODO(bdarnell): Add calls to SpanSet.checkAllowed to all of the following.
+
+// Desc returns the Replica's RangeDescriptor.
+func (rec ReplicaEvalContext) Desc() (*roachpb.RangeDescriptor, error) {
+	rec.repl.mu.RLock()
+	defer rec.repl.mu.RUnlock()
+	return rec.repl.mu.state.Desc, nil
+}
+
+// ContainsKey returns true if the given key is within the Replica's range.
+func (rec ReplicaEvalContext) ContainsKey(key roachpb.Key) (bool, error) {
+	return rec.repl.ContainsKey(key), nil
+}
+
+// GetMVCCStats returns the Replica's MVCCStats.
+func (rec ReplicaEvalContext) GetMVCCStats() (enginepb.MVCCStats, error) {
+	return rec.repl.GetMVCCStats(), nil
+}
+
+// GCThreshold returns the time of the Replica's last GC.
+func (rec ReplicaEvalContext) GCThreshold() (hlc.Timestamp, error) {
+	rec.repl.mu.RLock()
+	defer rec.repl.mu.RUnlock()
+	return rec.repl.mu.state.GCThreshold, nil
+}
+
+// TxnSpanGCThreshold returns the time of the Replica's last
+// transaction span GC.
+func (rec ReplicaEvalContext) TxnSpanGCThreshold() (hlc.Timestamp, error) {
+	rec.repl.mu.RLock()
+	defer rec.repl.mu.RUnlock()
+	return rec.repl.mu.state.TxnSpanGCThreshold, nil
+}
+
+// GetLastReplicaGCTimestamp returns the last time the Replica was
+// considered for GC.
+func (rec ReplicaEvalContext) GetLastReplicaGCTimestamp(ctx context.Context) (hlc.Timestamp, error) {
+	return rec.repl.getLastReplicaGCTimestamp(ctx)
+}
+
+// GetLease returns the Replica's current and next lease (if any).
+func (rec ReplicaEvalContext) GetLease() (*roachpb.Lease, *roachpb.Lease, error) {
+	lease, nextLease := rec.repl.getLease()
+	return lease, nextLease, nil
 }
