@@ -198,7 +198,7 @@ func (rgcq *replicaGCQueue) process(
 	}
 
 	replyDesc := reply.Ranges[0]
-	if _, currentMember := replyDesc.GetReplicaDescriptor(repl.store.StoreID()); !currentMember {
+	if currentDesc, currentMember := replyDesc.GetReplicaDescriptor(repl.store.StoreID()); !currentMember {
 		// We are no longer a member of this range; clean up our local data.
 		rgcq.metrics.RemoveReplicaCount.Inc(1)
 		if log.V(1) {
@@ -231,7 +231,7 @@ func (rgcq *replicaGCQueue) process(
 		// Replica (see #8111) when inactive ones can be starved by
 		// event-driven additions.
 		if log.V(1) {
-			log.Infof(ctx, "not gc'able")
+			log.Infof(ctx, "not gc'able, replica is still in range descriptor: %v", currentDesc)
 		}
 		if err := repl.setLastReplicaGCTimestamp(ctx, repl.store.Clock().Now()); err != nil {
 			return err
