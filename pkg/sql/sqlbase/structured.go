@@ -523,11 +523,7 @@ func (desc *TableDescriptor) ensurePrimaryKey() error {
 // HasCompositeKeyEncoding returns true if key columns of the given kind have a
 // composite encoding.
 func HasCompositeKeyEncoding(kind ColumnType_Kind) bool {
-	switch kind {
-	case ColumnType_COLLATEDSTRING, ColumnType_DECIMAL:
-		return true
-	}
-	return false
+	return kind == ColumnType_COLLATEDSTRING
 }
 
 func (desc *TableDescriptor) allocateIndexIDs(columnNames map[string]ColumnID) error {
