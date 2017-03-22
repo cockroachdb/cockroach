@@ -103,7 +103,7 @@ else
 $(error unknown build type $(TYPE))
 endif
 
-export MACOSX_DEPLOYMENT_TARGET=10.9
+# export MACOSX_DEPLOYMENT_TARGET=10.9
 
 -include customenv.mk
 
@@ -138,6 +138,12 @@ short: build testshort checkshort
 .PHONY: buildoss
 buildoss: BUILDTARGET = ./pkg/cmd/cockroach-oss
 buildoss: build
+
+.PHONY: buildwindows
+buildwindows:
+	pkg/storage/engine/flatten.sh setup
+	$(MAKE) TAGS="flatten stdmalloc strictld" buildoss
+	pkg/storage/engine/flatten.sh clean
 
 .PHONY: build
 build: BUILDMODE = build -i -o cockroach$(SUFFIX)
