@@ -31,8 +31,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -40,6 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 const (
@@ -204,6 +209,64 @@ func backupAndRestore(
 		if rowCount != numAccounts {
 			t.Fatalf("expected %d rows but found %d", numAccounts, rowCount)
 		}
+	}
+}
+
+func TestBackupRestoreLocalJobRecord(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	if !storage.ProposerEvaluatedKVEnabled() {
+		t.Skip("command WriteBatch is not allowed without proposer evaluated KV")
+	}
+
+	dir, dirCleanupFn := testutils.TempDir(t, 1)
+	defer dirCleanupFn()
+
+	verifyBackupAndRestoreJobRecord(t, dir, dir)
+}
+
+func verifyBackupAndRestoreJobRecord(t *testing.T, dest, sanitizedDest string) {
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop()
+	sqlDB := sqlutils.MakeSQLRunner(t, db)
+
+	sqlDB.Exec(bankCreateDatabase)
+	sqlDB.Exec(bankCreateTable)
+	{
+		tableID := sqlutils.QueryTableID(t, db, "bench", "bank")
+		job := sql.JobExpectation{
+			Before: timeutil.Now(),
+			Type:   sql.JobTypeBackup,
+			Job: sql.JobRecord{
+				Username:    security.RootUser,
+				Description: fmt.Sprintf(`BACKUP DATABASE bench TO '%s'`, sanitizedDest),
+				DescriptorIDs: []sqlbase.ID{
+					keys.DescriptorTableID,
+					keys.UsersTableID,
+					sqlbase.ID(tableID),
+				},
+			},
+		}
+		sqlDB.Exec(`BACKUP DATABASE bench TO $1`, dest)
+		sql.VerifyJobRecord(t, sqlDB, sql.JobStatusSucceeded, job)
+	}
+	sqlDB.Exec(`CREATE DATABASE bench2`)
+	{
+		tableID := sqlutils.QueryDatabaseID(t, db, "bench2") + 1
+		job := sql.JobExpectation{
+			Offset: 1,
+			Before: timeutil.Now(),
+			Type:   sql.JobTypeRestore,
+			Job: sql.JobRecord{
+				Username: security.RootUser,
+				Description: fmt.Sprintf(
+					`RESTORE bench.* FROM '%s' WITH OPTIONS ('into_db'='bench2')`,
+					sanitizedDest,
+				),
+				DescriptorIDs: []sqlbase.ID{sqlbase.ID(tableID)},
+			},
+		}
+		sqlDB.Exec(`RESTORE bench.* FROM $1 WITH OPTIONS ('into_db'='bench2')`, dest)
+		sql.VerifyJobRecord(t, sqlDB, sql.JobStatusSucceeded, job)
 	}
 }
 

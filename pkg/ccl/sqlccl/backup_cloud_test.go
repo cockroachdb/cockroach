@@ -34,7 +34,6 @@ import (
 // TestBackupRestoreS3 hits the real S3 and so could occasionally be flaky. It's
 // only run if the AWS_S3_BUCKET environment var is set.
 func TestCloudBackupRestoreS3(t *testing.T) {
-	defer leaktest.AfterTest(t)()
 	if !storage.ProposerEvaluatedKVEnabled() {
 		t.Skip("command WriteBatch is not allowed without proposer evaluated KV")
 	}
@@ -47,26 +46,37 @@ func TestCloudBackupRestoreS3(t *testing.T) {
 		t.Skip("AWS_S3_BUCKET env var must be set")
 	}
 
-	// TODO(dan): Actually invalidate the descriptor cache and delete this line.
-	defer sql.TestDisableTableLeases()()
-	const numAccounts = 1000
+	query := url.Values{}
+	query.Add(storageccl.S3AccessKeyParam, s3Keys.AccessKey)
+	query.Add(storageccl.S3SecretParam, s3Keys.SecretKey)
 
-	ctx, _, _, sqlDB, cleanupFn := backupRestoreTestSetup(t, 1, numAccounts)
-	defer cleanupFn()
-	prefix := fmt.Sprintf("TestBackupRestoreS3-%d", timeutil.Now().UnixNano())
-	uri := url.URL{Scheme: "s3", Host: bucket, Path: prefix}
-	values := uri.Query()
-	values.Add(storageccl.S3AccessKeyParam, s3Keys.AccessKey)
-	values.Add(storageccl.S3SecretParam, s3Keys.SecretKey)
-	uri.RawQuery = values.Encode()
+	t.Run("backupAndRestore", func(t *testing.T) {
+		defer leaktest.AfterTest(t)()
+		// TODO(dan): Actually invalidate the descriptor cache and delete this line.
+		defer sql.TestDisableTableLeases()()
+		const numAccounts = 1000
 
-	backupAndRestore(ctx, t, sqlDB, uri.String(), numAccounts)
+		ctx, _, _, sqlDB, cleanupFn := backupRestoreTestSetup(t, 1, numAccounts)
+		defer cleanupFn()
+		prefix := fmt.Sprintf("TestBackupRestoreS3-%d", timeutil.Now().UnixNano())
+		uri := url.URL{Scheme: "s3", Host: bucket, Path: prefix, RawQuery: query.Encode()}
+
+		backupAndRestore(ctx, t, sqlDB, uri.String(), numAccounts)
+	})
+
+	t.Run("verifyBackupAndRestoreJobRecord", func(t *testing.T) {
+		defer leaktest.AfterTest(t)()
+		prefix := fmt.Sprintf("TestBackupRestoreS3JobRecord-%d", timeutil.Now().UnixNano())
+		sanitizedURI := url.URL{Scheme: "s3", Host: bucket, Path: prefix}
+		uri := sanitizedURI
+		uri.RawQuery = query.Encode()
+		verifyBackupAndRestoreJobRecord(t, uri.String(), sanitizedURI.String())
+	})
 }
 
 // TestBackupRestoreGoogleCloudStorage hits the real GCS and so could
 // occasionally be flaky. It's only run if the GS_BUCKET environment var is set.
 func TestCloudBackupRestoreGoogleCloudStorage(t *testing.T) {
-	defer leaktest.AfterTest(t)()
 	if !storage.ProposerEvaluatedKVEnabled() {
 		t.Skip("command WriteBatch is not allowed without proposer evaluated KV")
 	}
@@ -87,18 +97,27 @@ func TestCloudBackupRestoreGoogleCloudStorage(t *testing.T) {
 	}(http.DefaultTransport.(*http.Transport).DisableKeepAlives)
 	http.DefaultTransport.(*http.Transport).DisableKeepAlives = true
 
-	ctx, _, _, sqlDB, cleanupFn := backupRestoreTestSetup(t, 1, numAccounts)
-	defer cleanupFn()
-	prefix := fmt.Sprintf("TestBackupRestoreGoogleCloudStorage-%d", timeutil.Now().UnixNano())
-	uri := url.URL{Scheme: "gs", Host: bucket, Path: prefix}
-	backupAndRestore(ctx, t, sqlDB, uri.String(), numAccounts)
+	t.Run("backupAndRestore", func(t *testing.T) {
+		defer leaktest.AfterTest(t)()
+		ctx, _, _, sqlDB, cleanupFn := backupRestoreTestSetup(t, 1, numAccounts)
+		defer cleanupFn()
+		prefix := fmt.Sprintf("TestBackupRestoreGoogleCloudStorage-%d", timeutil.Now().UnixNano())
+		uri := url.URL{Scheme: "gs", Host: bucket, Path: prefix}
+		backupAndRestore(ctx, t, sqlDB, uri.String(), numAccounts)
+	})
+
+	t.Run("verifyBackupAndRestoreJobRecord", func(t *testing.T) {
+		defer leaktest.AfterTest(t)()
+		prefix := fmt.Sprintf("TestBackupRestoreGoogleCloudStorageJobRecord-%d", timeutil.Now().UnixNano())
+		uri := url.URL{Scheme: "gs", Host: bucket, Path: prefix}
+		verifyBackupAndRestoreJobRecord(t, uri.String(), uri.String())
+	})
 }
 
 // TestBackupRestoreAzure hits the real Azure Blob Storage and so could
 // occasionally be flaky. It's only run if the AZURE_ACCOUNT_NAME and
 // AZURE_ACCOUNT_KEY environment vars are set.
 func TestCloudBackupRestoreAzure(t *testing.T) {
-	defer leaktest.AfterTest(t)()
 	if !storage.ProposerEvaluatedKVEnabled() {
 		t.Skip("command WriteBatch is not allowed without proposer evaluated KV")
 	}
@@ -122,14 +141,25 @@ func TestCloudBackupRestoreAzure(t *testing.T) {
 	}(http.DefaultTransport.(*http.Transport).DisableKeepAlives)
 	http.DefaultTransport.(*http.Transport).DisableKeepAlives = true
 
-	ctx, _, _, sqlDB, cleanupFn := backupRestoreTestSetup(t, 1, numAccounts)
-	defer cleanupFn()
-	prefix := fmt.Sprintf("TestBackupRestoreAzure-%d", timeutil.Now().UnixNano())
-	uri := url.URL{Scheme: "azure", Host: bucket, Path: prefix}
-	values := uri.Query()
-	values.Add(storageccl.AzureAccountNameParam, accountName)
-	values.Add(storageccl.AzureAccountKeyParam, accountKey)
-	uri.RawQuery = values.Encode()
+	query := url.Values{}
+	query.Add(storageccl.AzureAccountNameParam, accountName)
+	query.Add(storageccl.AzureAccountKeyParam, accountKey)
 
-	backupAndRestore(ctx, t, sqlDB, uri.String(), numAccounts)
+	t.Run("backupAndRestore", func(t *testing.T) {
+		defer leaktest.AfterTest(t)()
+		ctx, _, _, sqlDB, cleanupFn := backupRestoreTestSetup(t, 1, numAccounts)
+		defer cleanupFn()
+		prefix := fmt.Sprintf("TestBackupRestoreAzure-%d", timeutil.Now().UnixNano())
+		uri := url.URL{Scheme: "azure", Host: bucket, Path: prefix, RawQuery: query.Encode()}
+		backupAndRestore(ctx, t, sqlDB, uri.String(), numAccounts)
+	})
+
+	t.Run("verifyBackupAndRestoreJobRecord", func(t *testing.T) {
+		defer leaktest.AfterTest(t)()
+		prefix := fmt.Sprintf("TestBackupRestoreAzure-%d", timeutil.Now().UnixNano())
+		sanitizedURI := url.URL{Scheme: "azure", Host: bucket, Path: prefix}
+		uri := sanitizedURI
+		uri.RawQuery = query.Encode()
+		verifyBackupAndRestoreJobRecord(t, uri.String(), sanitizedURI.String())
+	})
 }
