@@ -1,5 +1,5 @@
 - Feature Name: SQL Statement Pipelining
-- Status: draft
+- Status: in-progress
 - Start Date: 2017-01-18
 - Authors: Nathan VanBenschoten
 - RFC PR: [#13160](https://github.com/cockroachdb/cockroach/issues/13160)

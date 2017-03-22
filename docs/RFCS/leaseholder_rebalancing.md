@@ -1,5 +1,5 @@
 - Feature Name: Leaseholder Rebalancing
-- Status: draft
+- Status: completed
 - Start Date: 2016-10-26
 - Authors: Peter Mattis
 - RFC PR: [#10262](https://github.com/cockroachdb/cockroach/pull/10262)

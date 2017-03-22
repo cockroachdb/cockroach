@@ -1,5 +1,5 @@
 - Feature name: Rebalancing V2
-- Status: done
+- Status: completed
 - Start date: 2016-04-20
 - Last revised: 2016-05-03
 - Authors: Bram Gruneir & Cuong Do
