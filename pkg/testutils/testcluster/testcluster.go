@@ -295,10 +295,12 @@ func (tc *TestCluster) changeReplicas(
 		err = replica.ChangeReplicas(
 			ctx,
 			action,
-			roachpb.ReplicaDescriptor{
+			roachpb.ReplicationTarget{
 				NodeID:  target.NodeID,
 				StoreID: target.StoreID,
-			}, &rangeDesc)
+			},
+			&rangeDesc,
+		)
 		if err != nil {
 			return roachpb.RangeDescriptor{}, err
 		}

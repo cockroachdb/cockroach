@@ -3350,9 +3350,13 @@ func IsSnapshotError(err error) bool {
 func (r *Replica) ChangeReplicas(
 	ctx context.Context,
 	changeType roachpb.ReplicaChangeType,
-	repDesc roachpb.ReplicaDescriptor,
+	target roachpb.ReplicationTarget,
 	desc *roachpb.RangeDescriptor,
 ) error {
+	repDesc := roachpb.ReplicaDescriptor{
+		NodeID:  target.NodeID,
+		StoreID: target.StoreID,
+	}
 	repDescIdx := -1  // tracks NodeID && StoreID
 	nodeUsed := false // tracks NodeID only
 	for i, existingRep := range desc.Replicas {
@@ -3375,11 +3379,10 @@ func (r *Replica) ChangeReplicas(
 		// If the replica exists on the remote node, no matter in which store,
 		// abort the replica add.
 		if nodeUsed {
-			return errors.Errorf("%s: unable to add replica %v which is already present", r, repDesc)
-		}
-
-		if repDesc.ReplicaID != 0 {
-			return errors.Errorf("must not specify a ReplicaID (%d) for new Replica", repDesc.ReplicaID)
+			if repDescIdx != -1 {
+				return errors.Errorf("%s: unable to add replica %v which is already present", r, repDesc)
+			}
+			return errors.Errorf("%s: unable to add replica %v; node already has a replica", r, repDesc)
 		}
 
 		// Prohibit premature raft log truncation. We set the pending index to 1
@@ -3420,6 +3423,7 @@ func (r *Replica) ChangeReplicas(
 		repDesc.ReplicaID = updatedDesc.NextReplicaID
 		updatedDesc.NextReplicaID++
 		updatedDesc.Replicas = append(updatedDesc.Replicas, repDesc)
+
 	case roachpb.REMOVE_REPLICA:
 		// If that exact node-store combination does not have the replica,
 		// abort the removal.
