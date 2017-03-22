@@ -1471,7 +1471,7 @@ func TestDrainRangeRejection(t *testing.T) {
 	if err := repl.ChangeReplicas(
 		context.Background(),
 		roachpb.ADD_REPLICA,
-		roachpb.ReplicaDescriptor{
+		roachpb.ReplicationTarget{
 			NodeID:  mtc.idents[drainingIdx].NodeID,
 			StoreID: mtc.idents[drainingIdx].StoreID,
 		},
