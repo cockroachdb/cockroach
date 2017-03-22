@@ -2254,7 +2254,7 @@ func TestReplicaCommandQueueCancellation(t *testing.T) {
 	// Wait until both commands are in the command queue.
 	testutils.SucceedsSoon(t, func() error {
 		tc.repl.cmdQMu.Lock()
-		chans := tc.repl.cmdQMu.global.getWait(false, []roachpb.Span{{Key: key1}, {Key: key2}})
+		chans := tc.repl.cmdQMu.global.getWait(false, hlc.Timestamp{}, []roachpb.Span{{Key: key1}, {Key: key2}})
 		tc.repl.cmdQMu.Unlock()
 		if a, e := len(chans), 2; a < e {
 			return errors.Errorf("%d of %d commands in the command queue", a, e)
@@ -2309,6 +2309,118 @@ func TestReplicaCommandQueueSelfOverlap(t *testing.T) {
 				}
 			})
 		}
+	}
+}
+
+// TestReplicaCommandQueueTimestampNonInterference verifies that
+// reads with earlier timestamps do not interfere with writes.
+func TestReplicaCommandQueueTimestampNonInterference(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	var blockKey, blockReader, blockWriter atomic.Value
+	blockKey.Store(roachpb.Key("a"))
+	blockReader.Store(false)
+	blockWriter.Store(false)
+	blockCh := make(chan struct{}, 1)
+	blockedCh := make(chan struct{}, 1)
+
+	tc := testContext{}
+	tsc := TestStoreConfig(nil)
+	tsc.TestingKnobs.TestingEvalFilter =
+		func(filterArgs storagebase.FilterArgs) *roachpb.Error {
+			// Make sure the direct GC path doesn't interfere with this test.
+			if !filterArgs.Req.Header().Key.Equal(blockKey.Load().(roachpb.Key)) {
+				return nil
+			}
+			if filterArgs.Req.Method() == roachpb.Get && blockReader.Load().(bool) {
+				blockedCh <- struct{}{}
+				<-blockCh
+			} else if filterArgs.Req.Method() == roachpb.Put && blockWriter.Load().(bool) {
+				blockedCh <- struct{}{}
+				<-blockCh
+			}
+			return nil
+		}
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+	tc.StartWithStoreConfig(t, stopper, tsc)
+
+	testCases := []struct {
+		readerTS    hlc.Timestamp
+		writerTS    hlc.Timestamp
+		key         roachpb.Key
+		readerFirst bool
+		interferes  bool
+	}{
+		// Reader & writer have same timestamps.
+		{makeTS(1, 0), makeTS(1, 0), roachpb.Key("a"), true, true},
+		{makeTS(1, 0), makeTS(1, 0), roachpb.Key("b"), false, true},
+		// Reader has earlier timestamp.
+		{makeTS(1, 0), makeTS(1, 1), roachpb.Key("c"), true, false},
+		{makeTS(1, 0), makeTS(1, 1), roachpb.Key("d"), false, false},
+		// Writer has earlier timestamp.
+		{makeTS(1, 1), makeTS(1, 0), roachpb.Key("e"), true, true},
+		{makeTS(1, 1), makeTS(1, 0), roachpb.Key("f"), false, true},
+		// Local keys always interfere.
+		{makeTS(1, 0), makeTS(1, 1), keys.RangeDescriptorKey(roachpb.RKey("a")), true, true},
+		{makeTS(1, 0), makeTS(1, 1), keys.RangeDescriptorKey(roachpb.RKey("b")), false, true},
+	}
+	for _, test := range testCases {
+		t.Run(fmt.Sprintf("%+v", test), func(t *testing.T) {
+			blockReader.Store(false)
+			blockWriter.Store(false)
+			blockKey.Store(test.key)
+			errCh := make(chan *roachpb.Error, 2)
+
+			baR := roachpb.BatchRequest{}
+			baR.Timestamp = test.readerTS
+			gArgs := getArgs(test.key)
+			baR.Add(&gArgs)
+			baW := roachpb.BatchRequest{}
+			baW.Timestamp = test.writerTS
+			pArgs := putArgs(test.key, []byte("value"))
+			baW.Add(&pArgs)
+
+			if test.readerFirst {
+				blockReader.Store(true)
+				go func() {
+					_, pErr := tc.Sender().Send(context.Background(), baR)
+					errCh <- pErr
+				}()
+				<-blockedCh
+				go func() {
+					_, pErr := tc.Sender().Send(context.Background(), baW)
+					errCh <- pErr
+				}()
+			} else {
+				blockWriter.Store(true)
+				go func() {
+					_, pErr := tc.Sender().Send(context.Background(), baW)
+					errCh <- pErr
+				}()
+				<-blockedCh
+				go func() {
+					_, pErr := tc.Sender().Send(context.Background(), baR)
+					errCh <- pErr
+				}()
+			}
+
+			if test.interferes {
+				select {
+				case <-time.After(10 * time.Millisecond):
+					// Expected.
+				case pErr := <-errCh:
+					t.Fatalf("expected interference: got error %s", pErr)
+				}
+			}
+			// Verify no errors on waiting read and write.
+			blockCh <- struct{}{}
+			for j := 0; j < 2; j++ {
+				if pErr := <-errCh; pErr != nil {
+					t.Errorf("error %d: unexpected error: %s", j, pErr)
+				}
+			}
+		})
 	}
 }
 
