@@ -336,7 +336,7 @@ func (sc *SchemaChanger) exec(ctx context.Context) error {
 	// Purge the mutations if the application of the mutations failed due to
 	// an integrity constraint violation. All other errors are transient
 	// errors that are resolved by retrying the backfill.
-	if sqlbase.IsIntegrityConstraintError(err) {
+	if sqlbase.IsPermanentSchemaChangeError(err) {
 		log.Warningf(ctx, "reversing schema change due to irrecoverable error: %s", err)
 		if errReverse := sc.reverseMutations(ctx, err); errReverse != nil {
 			// Although the backfill did hit an integrity constraint violation

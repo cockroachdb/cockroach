@@ -212,6 +212,9 @@ ALTER TABLE t ADD COLUMN x DECIMAL
 statement ok
 ALTER TABLE t ADD COLUMN y DECIMAL NOT NULL DEFAULT (DECIMAL '1.3')
 
+statement error could not parse '1-3' as type decimal
+ALTER TABLE t ADD COLUMN p DECIMAL NOT NULL DEFAULT (DECIMAL '1-3')
+
 # Add a non NULL column with no default value
 statement error pgcode 23502 null value in column \"q\" violates not-null constraint
 ALTER TABLE t ADD COLUMN q DECIMAL NOT NULL
