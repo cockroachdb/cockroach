@@ -638,6 +638,11 @@ func TestParse(t *testing.T) {
 		{`ALTER INDEX i SPLIT AT VALUES (1)`},
 		{`ALTER INDEX d.i SPLIT AT VALUES (2)`},
 
+		{`ALTER TABLE a TESTING_RELOCATE VALUES (ARRAY[1], 1)`},
+		{`ALTER TABLE a TESTING_RELOCATE SELECT * FROM t`},
+		{`ALTER TABLE d.a TESTING_RELOCATE VALUES (ARRAY[1, 2, 3], 'b', 2)`},
+		{`ALTER INDEX d.i TESTING_RELOCATE VALUES (ARRAY[1], 2)`},
+
 		{`BACKUP foo TO 'bar'`},
 		{`BACKUP foo.foo, baz.baz TO 'bar'`},
 		{`BACKUP foo TO 'bar' AS OF SYSTEM TIME '1' INCREMENTAL FROM 'baz'`},
