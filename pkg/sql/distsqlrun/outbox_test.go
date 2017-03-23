@@ -28,7 +28,6 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -175,13 +174,9 @@ func TestOutbox(t *testing.T) {
 		t.Fatalf("expected 2 metadata records, got: %v", metas[0].Err)
 	}
 	for i, m := range metas {
-		if we, ok := m.Err.(*roachpb.RemoteDistSQLProducerError); !ok {
-			t.Fatalf("expected RemoteDistSQLProducerError, got: %s", m.Err)
-		} else {
-			expectedStr := fmt.Sprintf("RemoteDistSQLProducerError: meta %d", i)
-			if we.Error() != expectedStr {
-				t.Fatalf("expected: %q, got: %q", expectedStr, we.Error())
-			}
+		expectedStr := fmt.Sprintf("meta %d", i)
+		if m.Err.Error() != expectedStr {
+			t.Fatalf("expected: %q, got: %q", expectedStr, m.Err.Error())
 		}
 	}
 	str := rows.String()
