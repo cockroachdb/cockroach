@@ -21,6 +21,7 @@ import (
 	"compress/gzip"
 	"crypto/tls"
 	"fmt"
+	"go/build"
 	"io"
 	"io/ioutil"
 	"net"
@@ -780,7 +781,11 @@ func (s *Server) Start(ctx context.Context) error {
 	var uiFileSystem http.FileSystem
 	uiDebug := envutil.EnvOrDefaultBool("COCKROACH_DEBUG_UI", false)
 	if uiDebug {
-		uiFileSystem = http.Dir("pkg/ui")
+		uiPkg, err := build.Import("github.com/cockroachdb/cockroach/pkg/ui", "", build.FindOnly)
+		if err != nil {
+			return err
+		}
+		uiFileSystem = http.Dir(uiPkg.Dir)
 	} else {
 		uiFileSystem = &assetfs.AssetFS{
 			Asset:     ui.Asset,
