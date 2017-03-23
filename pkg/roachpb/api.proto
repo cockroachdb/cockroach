@@ -302,6 +302,10 @@ message EndTransactionRequest {
   optional InternalCommitTrigger internal_commit_trigger = 4;
   // List of intents written by the transaction.
   repeated Span intent_spans = 5 [(gogoproto.nullable) = false];
+  // Requires that the transaction completes as a 1 phase commit. This
+  // guarantees that all writes are to the same range and that no
+  // intents are left in the event of an error.
+  optional bool require_1pc = 6 [(gogoproto.nullable) = false, (gogoproto.customname) = "Require1PC"];
 }
 
 // An EndTransactionResponse is the return value from the

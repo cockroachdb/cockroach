@@ -3763,6 +3763,107 @@ func TestEndTransactionDirectGC_1PC(t *testing.T) {
 	}
 }
 
+// TestReplicaTransactionRequires1PC verifies that a transaction which
+// sets Requires1PC on EndTransaction request will never leave intents
+// in the event that it experiences an error or the timestamp is
+// advanced.
+func TestReplicaTransactionRequires1PC(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	tsc := TestStoreConfig(nil)
+	var injectErrorOnKey atomic.Value
+	injectErrorOnKey.Store(roachpb.Key(""))
+
+	tsc.TestingKnobs.TestingEvalFilter =
+		func(filterArgs storagebase.FilterArgs) *roachpb.Error {
+			if filterArgs.Req.Method() == roachpb.Put &&
+				injectErrorOnKey.Load().(roachpb.Key).Equal(filterArgs.Req.Header().Key) {
+				return roachpb.NewErrorf("injected error")
+			}
+			return nil
+		}
+	tc := testContext{}
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+	tc.StartWithStoreConfig(t, stopper, tsc)
+
+	testCases := []func(roachpb.Key){
+		// Case 1: verify error if we augment the timestamp cache in order
+		// to cause the response timestamp to move forward.
+		func(key roachpb.Key) {
+			gArgs := getArgs(key)
+			if _, pErr := tc.SendWrapped(&gArgs); pErr != nil {
+				t.Fatal(pErr)
+			}
+		},
+		// Case 2: inject an error on the put.
+		func(key roachpb.Key) {
+			injectErrorOnKey.Store(key)
+		},
+	}
+
+	for i, setupFn := range testCases {
+		t.Run("", func(t *testing.T) {
+			key := roachpb.Key(fmt.Sprintf("%d", i))
+
+			// Create the 1PC batch.
+			var ba roachpb.BatchRequest
+			txn := newTransaction("test", key, 1, enginepb.SERIALIZABLE, tc.Clock())
+			bt, _ := beginTxnArgs(key, txn)
+			put := putArgs(key, []byte("value"))
+			et, etH := endTxnArgs(txn, true)
+			et.Require1PC = true
+			ba.Header = etH
+			ba.Add(&bt, &put, &et)
+
+			// Run the setup method.
+			setupFn(key)
+
+			// Send the batch command.
+			if _, pErr := tc.Sender().Send(context.Background(), ba); pErr == nil {
+				t.Errorf("expected error running required 1PC txn")
+			}
+
+			// Do a consistent scan to verify no intents were created.
+			sArgs := scanArgs(key, key.Next())
+			_, pErr := tc.SendWrapped(&sArgs)
+			if pErr != nil {
+				t.Fatalf("error scanning to verify no intent present: %s", pErr)
+			}
+		})
+	}
+}
+
+// TestReplicaEndTransactionWithRequire1PC verifies an error if an EndTransaction
+// request is received with the Requires1PC flag set to true.
+func TestReplicaEndTransactionWithRequire1PC(t *testing.T) {
+	tc := testContext{}
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+	tc.Start(t, stopper)
+
+	key := roachpb.Key("a")
+	txn := newTransaction("test", key, 1, enginepb.SERIALIZABLE, tc.Clock())
+	bt, btH := beginTxnArgs(key, txn)
+	put := putArgs(key, []byte("value"))
+	var ba roachpb.BatchRequest
+	ba.Header = btH
+	ba.Add(&bt, &put)
+	if _, pErr := tc.Sender().Send(context.Background(), ba); pErr != nil {
+		t.Fatalf("unexpected error beginning txn: %s", pErr)
+	}
+
+	et, etH := endTxnArgs(txn, true)
+	et.Require1PC = true
+	ba = roachpb.BatchRequest{}
+	ba.Header = etH
+	ba.Add(&et)
+	_, pErr := tc.Sender().Send(context.Background(), ba)
+	if !testutils.IsPError(pErr, "could not require one phase commit") {
+		t.Fatalf("expected requires 1PC error; got %v", pErr)
+	}
+}
+
 func TestReplicaResolveIntentNoWait(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	var seen int32

@@ -4062,6 +4062,9 @@ func (r *Replica) executeWriteBatch(
 	// If not transactional or there are indications that the batch's txn will
 	// require restart or retry, execute as normal.
 	if !r.store.TestingKnobs().DisableOnePhaseCommits && isOnePhaseCommit(ba) {
+		arg, _ := ba.GetArg(roachpb.EndTransaction)
+		etArg := arg.(*roachpb.EndTransactionRequest)
+
 		// Try executing with transaction stripped.
 		strippedBa := ba
 		strippedBa.Txn = nil
@@ -4079,8 +4082,6 @@ func (r *Replica) executeWriteBatch(
 			clonedTxn.Status = roachpb.COMMITTED
 
 			// If the end transaction is not committed, clear the batch and mark the status aborted.
-			arg, _ := ba.GetArg(roachpb.EndTransaction)
-			etArg := arg.(*roachpb.EndTransactionRequest)
 			if !etArg.Commit {
 				clonedTxn.Status = roachpb.ABORTED
 				batch.Close()
@@ -4108,6 +4109,18 @@ func (r *Replica) executeWriteBatch(
 
 		batch.Close()
 		ms = enginepb.MVCCStats{}
+
+		// Handle the case of a required one phase commit transaction.
+		if etArg.Require1PC {
+			if pErr != nil {
+				return nil, ms, nil, EvalResult{}, pErr
+			} else if ba.Timestamp != br.Timestamp {
+				return nil, ms, nil, EvalResult{}, roachpb.NewErrorf(
+					"could not require one phase commit: timestamp advanced from %s to %s", ba.Timestamp, br.Timestamp,
+				)
+			}
+			panic("unreachable")
+		}
 	}
 
 	// Check whether this txn has been aborted. Only applies to transactional
