@@ -2764,6 +2764,9 @@ func (s *Store) HandleSnapshot(header *SnapshotRequest_Header, stream SnapshotRe
 	if err := stream.Send(&SnapshotResponse{Status: SnapshotResponse_ACCEPTED}); err != nil {
 		return err
 	}
+	if log.V(2) {
+		log.Infof(ctx, "accepted snapshot reservation for r%d", header.State.Desc.RangeID)
+	}
 
 	var batches [][]byte
 	var logEntries [][]byte
@@ -2988,14 +2991,14 @@ func (s *Store) processRaftRequest(
 	}
 
 	// Snapshots addressed to replica ID 0 are permitted; this is the
-	// mechanism by which preemptive snapshots work.
+	// mechanism by which preemptive snapshots work. No other requests to
+	// replica ID 0 are allowed.
 	//
-	// No other requests to replica ID 0 are allowed.
+	// Note that just because the ToReplica's ID is 0 it does not necessarily
+	// mean that the replica's current ID is 0. We allow for preemptive snaphots
+	// to be applied to initialized replicas as of #8613.
 	if req.ToReplica.ReplicaID == 0 {
 		if req.Message.Type != raftpb.MsgSnap {
-			// We disallow non-snapshot messages to replica ID 0. Note that
-			// getOrCreateReplica disallows moving the replica ID backward, so the
-			// only way we can get here is if the replica did not previously exist.
 			log.VEventf(ctx, 1, "refusing incoming Raft message %s from %+v to %+v",
 				req.Message.Type, req.FromReplica, req.ToReplica)
 			return roachpb.NewErrorf(

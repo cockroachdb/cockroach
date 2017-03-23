@@ -485,21 +485,26 @@ func (a *Allocator) ShouldTransferLease(
 	sl, _, _ := a.storePool.getStoreList(rangeID)
 	sl = sl.filter(constraints)
 	if log.V(3) {
-		log.Infof(ctx, "ShouldTransferLease source (lease-holder=%d):\n%s", leaseStoreID, sl)
+		log.Infof(ctx, "ShouldTransferLease (lease-holder=%d):\n%s", leaseStoreID, sl)
 	}
 
 	transferDec, _ := a.shouldTransferLeaseUsingStats(ctx, sl, source, existing, stats)
+	var result bool
 	switch transferDec {
 	case shouldNotTransfer:
-		return false
+		result = false
 	case shouldTransfer:
-		return true
+		result = true
 	case decideWithoutStats:
+		result = a.shouldTransferLeaseWithoutStats(ctx, sl, source, existing)
 	default:
 		log.Fatalf(ctx, "unexpected transfer decision %d", transferDec)
 	}
 
-	return a.shouldTransferLeaseWithoutStats(ctx, sl, source, existing)
+	if log.V(3) {
+		log.Infof(ctx, "ShouldTransferLease decision (lease-holder=%d): %t", leaseStoreID, result)
+	}
+	return result
 }
 
 func (a Allocator) shouldTransferLeaseUsingStats(
