@@ -188,11 +188,13 @@ type LogsRequest struct {
 	// node_id is a string so that "local" can be used to specify that no
 	// forwarding is necessary.
 	NodeId    string `protobuf:"bytes,1,opt,name=node_id,json=nodeId,proto3" json:"node_id,omitempty"`
-	Level     string `protobuf:"bytes,2,opt,name=level,proto3" json:"level,omitempty"`
 	StartTime string `protobuf:"bytes,3,opt,name=start_time,json=startTime,proto3" json:"start_time,omitempty"`
 	EndTime   string `protobuf:"bytes,4,opt,name=end_time,json=endTime,proto3" json:"end_time,omitempty"`
 	Max       string `protobuf:"bytes,5,opt,name=max,proto3" json:"max,omitempty"`
 	Pattern   string `protobuf:"bytes,6,opt,name=pattern,proto3" json:"pattern,omitempty"`
+	// level is not used any more, but we must keep it because it was not
+	// marked "optional".
+	Level string `protobuf:"bytes,2,opt,name=level,proto3" json:"level,omitempty"`
 }
 
 func (m *LogsRequest) Reset()                    { *m = LogsRequest{} }

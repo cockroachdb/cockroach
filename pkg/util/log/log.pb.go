@@ -86,12 +86,14 @@ func (*Entry) Descriptor() ([]byte, []int) { return fileDescriptorLog, []int{0} 
 // A FileDetails holds all of the particulars that can be parsed by the name of
 // a log file.
 type FileDetails struct {
-	Program  string   `protobuf:"bytes,1,opt,name=program,proto3" json:"program,omitempty"`
-	Host     string   `protobuf:"bytes,2,opt,name=host,proto3" json:"host,omitempty"`
-	UserName string   `protobuf:"bytes,3,opt,name=user_name,json=userName,proto3" json:"user_name,omitempty"`
+	Program  string `protobuf:"bytes,1,opt,name=program,proto3" json:"program,omitempty"`
+	Host     string `protobuf:"bytes,2,opt,name=host,proto3" json:"host,omitempty"`
+	UserName string `protobuf:"bytes,3,opt,name=user_name,json=userName,proto3" json:"user_name,omitempty"`
+	Time     int64  `protobuf:"varint,5,opt,name=time,proto3" json:"time,omitempty"`
+	PID      int64  `protobuf:"varint,6,opt,name=pid,proto3" json:"pid,omitempty"`
+	// severity is not used any more but we have to keep it because
+	// it wasn't marked "optional".
 	Severity Severity `protobuf:"varint,4,opt,name=severity,proto3,enum=cockroach.util.log.Severity" json:"severity,omitempty"`
-	Time     int64    `protobuf:"varint,5,opt,name=time,proto3" json:"time,omitempty"`
-	PID      int64    `protobuf:"varint,6,opt,name=pid,proto3" json:"pid,omitempty"`
 }
 
 func (m *FileDetails) Reset()                    { *m = FileDetails{} }

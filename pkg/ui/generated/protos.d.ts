@@ -379,15 +379,6 @@ getUserName?() : string;
 
 
 
-severity?: Severity;
-		
-
-getSeverity?() : Severity;
-		setSeverity?(severity : Severity): void;
-		
-
-
-
 time?: Long;
 		
 
@@ -402,6 +393,15 @@ pid?: Long;
 
 getPid?() : Long;
 		setPid?(pid : Long): void;
+		
+
+
+
+severity?: Severity;
+		
+
+getSeverity?() : Severity;
+		setSeverity?(severity : Severity): void;
 		
 
 
@@ -5482,15 +5482,6 @@ getNodeId?() : string;
 
 
 
-level?: string;
-		
-
-getLevel?() : string;
-		setLevel?(level : string): void;
-		
-
-
-
 start_time?: string;
 		
 
@@ -5523,6 +5514,15 @@ pattern?: string;
 
 getPattern?() : string;
 		setPattern?(pattern : string): void;
+		
+
+
+
+level?: string;
+		
+
+getLevel?() : string;
+		setLevel?(level : string): void;
 		
 
 

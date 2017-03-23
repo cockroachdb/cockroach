@@ -153,12 +153,6 @@
                                         },
                                         {
                                             "rule": "optional",
-                                            "type": "Severity",
-                                            "name": "severity",
-                                            "id": 4
-                                        },
-                                        {
-                                            "rule": "optional",
                                             "type": "int64",
                                             "name": "time",
                                             "id": 5
@@ -171,6 +165,12 @@
                                             "options": {
                                                 "(gogoproto.customname)": "PID"
                                             }
+                                        },
+                                        {
+                                            "rule": "optional",
+                                            "type": "Severity",
+                                            "name": "severity",
+                                            "id": 4
                                         }
                                     ]
                                 },
@@ -2947,12 +2947,6 @@
                                         {
                                             "rule": "optional",
                                             "type": "string",
-                                            "name": "level",
-                                            "id": 2
-                                        },
-                                        {
-                                            "rule": "optional",
-                                            "type": "string",
                                             "name": "start_time",
                                             "id": 3
                                         },
@@ -2973,6 +2967,12 @@
                                             "type": "string",
                                             "name": "pattern",
                                             "id": 6
+                                        },
+                                        {
+                                            "rule": "optional",
+                                            "type": "string",
+                                            "name": "level",
+                                            "id": 2
                                         }
                                     ]
                                 },
