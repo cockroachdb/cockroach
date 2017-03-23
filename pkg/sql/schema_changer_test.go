@@ -405,6 +405,18 @@ CREATE INDEX foo ON t.test (v)
 	}
 }
 
+func checkTableKeyCount(ctx context.Context, kvDB *client.DB, multiple int, maxValue int) error {
+	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
+	tablePrefix := roachpb.Key(keys.MakeTablePrefix(uint32(tableDesc.ID)))
+	tableEnd := tablePrefix.PrefixEnd()
+	if kvs, err := kvDB.Scan(ctx, tablePrefix, tableEnd, 0); err != nil {
+		return err
+	} else if e := multiple * (maxValue + 1); len(kvs) != e {
+		return errors.Errorf("expected %d key value pairs, but got %d", e, len(kvs))
+	}
+	return nil
+}
+
 // Run a particular schema change and run some OLTP operations in parallel, as
 // soon as the schema change starts executing its backfill.
 func runSchemaChangeWithOperations(
@@ -490,15 +502,8 @@ func runSchemaChangeWithOperations(
 
 	// Verify the number of keys left behind in the table to validate schema
 	// change operations.
-	tablePrefix := roachpb.Key(keys.MakeTablePrefix(uint32(tableDesc.ID)))
-	tableEnd := tablePrefix.PrefixEnd()
-	if kvs, err := kvDB.Scan(ctx, tablePrefix, tableEnd, 0); err != nil {
+	if err := checkTableKeyCount(ctx, kvDB, keyMultiple, maxValue+numInserts); err != nil {
 		t.Fatal(err)
-	} else if e := keyMultiple * (maxValue + numInserts + 1); len(kvs) != e {
-		for _, kv := range kvs {
-			t.Errorf("key %s, value %s", kv.Key, kv.Value)
-		}
-		t.Fatalf("expected %d key value pairs, but got %d", e, len(kvs))
 	}
 
 	// Delete the rows inserted.
@@ -610,15 +615,10 @@ CREATE UNIQUE INDEX vidx ON t.test (v);
 
 	ctx := context.TODO()
 
-	// Read table descriptor for version.
-	tablePrefix := roachpb.Key(keys.MakeTablePrefix(uint32(tableDesc.ID)))
-	tableEnd := tablePrefix.PrefixEnd()
 	// number of keys == 2 * number of rows; 1 column family and 1 index entry
 	// for each row.
-	if kvs, err := kvDB.Scan(ctx, tablePrefix, tableEnd, 0); err != nil {
+	if err := checkTableKeyCount(ctx, kvDB, 2, maxValue); err != nil {
 		t.Fatal(err)
-	} else if e := 2 * (maxValue + 1); len(kvs) != e {
-		t.Fatalf("expected %d key value pairs, but got %d", e, len(kvs))
 	}
 
 	// Run some schema changes with operations.
@@ -725,10 +725,110 @@ CREATE UNIQUE INDEX vidx ON t.test (v);
 	wg.Wait()
 
 	// Ensure that the table data has been deleted.
+	tablePrefix := roachpb.Key(keys.MakeTablePrefix(uint32(tableDesc.ID)))
+	tableEnd := tablePrefix.PrefixEnd()
 	if kvs, err := kvDB.Scan(ctx, tablePrefix, tableEnd, 0); err != nil {
 		t.Fatal(err)
-	} else if len(kvs) != 0 {
-		t.Fatalf("expected %d key value pairs, but got %d", 0, len(kvs))
+	} else if e := 0; len(kvs) != e {
+		t.Fatalf("expected %d key value pairs, but got %d", e, len(kvs))
+	}
+}
+
+// Test that a schema change on encountering a permanent backfill error
+// on a remote node terminates properly and returns the database to a
+// proper state.
+func TestBackfillErrors(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	const numNodes, chunkSize, maxValue = 5, 100, 4000
+	params, _ := createTestServerParams()
+
+	// Disable asynchronous schema change execution.
+	params.Knobs = base.TestingKnobs{
+		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
+			AsyncExecNotification: asyncSchemaChangerDisabled,
+			BackfillChunkSize:     chunkSize,
+		},
+	}
+
+	tc := serverutils.StartTestCluster(t, numNodes,
+		base.TestClusterArgs{
+			ReplicationMode: base.ReplicationManual,
+			ServerArgs:      params,
+		})
+	defer tc.Stopper().Stop()
+	kvDB := tc.Server(0).KVClient().(*client.DB)
+	sqlDB := tc.ServerConn(0)
+
+	if _, err := sqlDB.Exec(`
+CREATE DATABASE t;
+CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
+`); err != nil {
+		t.Fatal(err)
+	}
+
+	// Bulk insert.
+	if err := bulkInsertIntoTable(sqlDB, maxValue); err != nil {
+		t.Fatal(err)
+	}
+
+	// Update v column on some rows to be the same so that the future
+	// UNIQUE index we create on it fails.
+	//
+	// Pick a set of random rows because if we pick a deterministic set
+	// we can't be sure they will end up on a remote node. We want this
+	// test to fail if an error is not reported correctly on a local or
+	// remote node and the randomness allows us to test both.
+	const numUpdatedRows = 10
+	for i := 0; i < numUpdatedRows; i++ {
+		k := rand.Intn(maxValue - numUpdatedRows)
+		if _, err := sqlDB.Exec(`UPDATE t.test SET v = $1 WHERE k = $2`, 1, k); err != nil {
+			t.Error(err)
+		}
+	}
+
+	// Split the table into multiple ranges.
+	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
+	// SplitTable moves the right range, so we split things back to front
+	// in order to move less data.
+	for i := numNodes - 1; i > 0; i-- {
+		sql.SplitTable(t, tc, tableDesc, i, maxValue/numNodes*i)
+	}
+
+	ctx := context.TODO()
+
+	if err := checkTableKeyCount(ctx, kvDB, 1, maxValue); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := sqlDB.Exec(`
+CREATE UNIQUE INDEX vidx ON t.test (v);
+`); !testutils.IsError(err, `duplicate key value \(v\)=\(1\) violates unique constraint "vidx"`) {
+		t.Fatalf("got err=%s", err)
+	}
+
+	if err := checkTableKeyCount(ctx, kvDB, 1, maxValue); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := sqlDB.Exec(`
+	   ALTER TABLE t.test ADD COLUMN p DECIMAL NOT NULL DEFAULT (DECIMAL '1-3');
+	   `); !testutils.IsError(err, `could not parse '1-3' as type decimal`) {
+		t.Fatalf("got err=%s", err)
+	}
+
+	if err := checkTableKeyCount(ctx, kvDB, 1, maxValue); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := sqlDB.Exec(`
+	ALTER TABLE t.test ADD COLUMN p DECIMAL NOT NULL;
+	`); !testutils.IsError(err, `null value in column \"p\" violates not-null constraint`) {
+		t.Fatalf("got err=%s", err)
+	}
+
+	if err := checkTableKeyCount(ctx, kvDB, 1, maxValue); err != nil {
+		t.Fatal(err)
 	}
 }
 
@@ -924,13 +1024,10 @@ COMMIT;
 
 			// Verify the number of keys left behind in the table to validate
 			// schema change operations.
-			tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
-			tablePrefix := roachpb.Key(keys.MakeTablePrefix(uint32(tableDesc.ID)))
-			tableEnd := tablePrefix.PrefixEnd()
-			if kvs, err := kvDB.Scan(ctx, tablePrefix, tableEnd, 0); err != nil {
+			if err := checkTableKeyCount(
+				ctx, kvDB, testCase.expectedNumKeysPerRow, maxValue,
+			); err != nil {
 				t.Fatal(err)
-			} else if e := testCase.expectedNumKeysPerRow * (maxValue + 1); len(kvs) != e {
-				t.Fatalf("expected %d key value pairs, but got %d", e, len(kvs))
 			}
 		})
 	}
@@ -972,12 +1069,8 @@ func addIndexSchemaChange(
 
 	ctx := context.TODO()
 
-	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
-	tablePrefix := roachpb.Key(keys.MakeTablePrefix(uint32(tableDesc.ID)))
-	if kvs, err := kvDB.Scan(ctx, tablePrefix, tablePrefix.PrefixEnd(), 0); err != nil {
+	if err := checkTableKeyCount(ctx, kvDB, numKeysPerRow, maxValue); err != nil {
 		t.Fatal(err)
-	} else if e := numKeysPerRow * (maxValue + 1); len(kvs) != e {
-		t.Fatalf("expected %d key value pairs, but got %d", e, len(kvs))
 	}
 }
 
@@ -1013,12 +1106,8 @@ func addColumnSchemaChange(
 
 	ctx := context.TODO()
 
-	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
-	tablePrefix := roachpb.Key(keys.MakeTablePrefix(uint32(tableDesc.ID)))
-	if kvs, err := kvDB.Scan(ctx, tablePrefix, tablePrefix.PrefixEnd(), 0); err != nil {
+	if err := checkTableKeyCount(ctx, kvDB, numKeysPerRow, maxValue); err != nil {
 		t.Fatal(err)
-	} else if e := numKeysPerRow * (maxValue + 1); len(kvs) != e {
-		t.Fatalf("expected %d key value pairs, but got %d", e, len(kvs))
 	}
 }
 
@@ -1032,13 +1121,10 @@ func dropColumnSchemaChange(
 
 	ctx := context.TODO()
 
-	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
-	tablePrefix := roachpb.Key(keys.MakeTablePrefix(uint32(tableDesc.ID)))
-	if kvs, err := kvDB.Scan(ctx, tablePrefix, tablePrefix.PrefixEnd(), 0); err != nil {
+	if err := checkTableKeyCount(ctx, kvDB, numKeysPerRow, maxValue); err != nil {
 		t.Fatal(err)
-	} else if e := numKeysPerRow * (maxValue + 1); len(kvs) != e {
-		t.Fatalf("expected %d key value pairs, but got %d", e, len(kvs))
 	}
+
 }
 
 // Test schema changes are retried and complete properly. This also checks
@@ -1347,12 +1433,8 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 
 	ctx := context.TODO()
 
-	tablePrefix := roachpb.Key(keys.MakeTablePrefix(uint32(tableDesc.ID)))
-	tableEnd := tablePrefix.PrefixEnd()
-	if kvs, err := kvDB.Scan(ctx, tablePrefix, tableEnd, 0); err != nil {
+	if err := checkTableKeyCount(ctx, kvDB, 1, maxValue+1+numGarbageValues); err != nil {
 		t.Fatal(err)
-	} else if e := 1*(maxValue+2) + numGarbageValues; len(kvs) != e {
-		t.Fatalf("expected %d key value pairs, but got %d", e, len(kvs))
 	}
 
 	// Enable async schema change processing to ensure that it cleans up the
@@ -1369,10 +1451,8 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 
 	// No garbage left behind.
 	numGarbageValues = 0
-	if kvs, err := kvDB.Scan(ctx, tablePrefix, tableEnd, 0); err != nil {
+	if err := checkTableKeyCount(ctx, kvDB, 1, maxValue+1+numGarbageValues); err != nil {
 		t.Fatal(err)
-	} else if e := 1*(maxValue+2) + numGarbageValues; len(kvs) != e {
-		t.Fatalf("expected %d key value pairs, but got %d", e, len(kvs))
 	}
 
 	// A new attempt cleans up a chunk of data.
@@ -1558,12 +1638,8 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 	ctx := context.TODO()
 
 	// Check that the number of k-v pairs is accurate.
-	tablePrefix := roachpb.Key(keys.MakeTablePrefix(uint32(tableDesc.ID)))
-	tableEnd := tablePrefix.PrefixEnd()
-	if kvs, err := kvDB.Scan(ctx, tablePrefix, tableEnd, 0); err != nil {
+	if err := checkTableKeyCount(ctx, kvDB, 2, maxValue); err != nil {
 		t.Fatal(err)
-	} else if e := 2 * (maxValue + 1); len(kvs) != e {
-		t.Fatalf("expected %d key value pairs, but got %d", e, len(kvs))
 	}
 }
 
@@ -1820,12 +1896,8 @@ func TestBackfillCompletesOnChunkBoundary(t *testing.T) {
 
 			// Verify the number of keys left behind in the table to
 			// validate schema change operations.
-			tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
-			tablePrefix := roachpb.Key(keys.MakeTablePrefix(uint32(tableDesc.ID)))
-			if kvs, err := kvDB.Scan(ctx, tablePrefix, tablePrefix.PrefixEnd(), 0); err != nil {
+			if err := checkTableKeyCount(ctx, kvDB, tc.numKeysPerRow, maxValue); err != nil {
 				t.Fatal(err)
-			} else if e := tc.numKeysPerRow * (maxValue + 1); len(kvs) != e {
-				t.Fatalf("expected %d key value pairs, but got %d", e, len(kvs))
 			}
 		})
 	}
