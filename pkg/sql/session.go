@@ -721,7 +721,7 @@ func (scc *schemaChangerCollection) execSchemaChanges(
 					log.Warningf(ctx, "Error executing schema change: %s", err)
 				}
 				if err == sqlbase.ErrDescriptorNotFound {
-				} else if sqlbase.IsIntegrityConstraintError(err) {
+				} else if sqlbase.IsPermanentSchemaChangeError(err) {
 					// All constraint violations can be reported; we report it as the result
 					// corresponding to the statement that enqueued this changer.
 					// There's some sketchiness here: we assume there's a single result
