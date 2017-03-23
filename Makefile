@@ -84,7 +84,7 @@ export GIT_PAGER :=
 
 # GNU tar and BSD tar both support transforming filenames according to a regular
 # expression, but have different flags to do so.
-TAR_XFORM_FLAG = $(shell $(TAR) --version | grep -q GNU && echo "--xform=s" || echo "-s")
+TAR_XFORM_FLAG = $(shell $(TAR) --version | grep -q GNU && echo "--xform='flags=r;s'" || echo "-s")
 
 GIT_DIR := $(shell git rev-parse --git-dir 2> /dev/null)
 
