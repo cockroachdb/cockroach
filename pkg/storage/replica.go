@@ -703,8 +703,7 @@ func (r *Replica) destroyDataRaftMuLocked(
 	}
 	clearTime := timeutil.Now()
 
-	// Save a tombstone. The range cannot be re-replicated onto this node
-	// without having a replica ID of at least consistentDesc.NextReplicaID.
+	// Save a tombstone to ensure that replica IDs never get reused.
 	if err := r.setTombstoneKey(ctx, batch, &consistentDesc); err != nil {
 		return err
 	}
@@ -735,18 +734,43 @@ func (r *Replica) cancelPendingCommandsLocked() {
 	r.mu.proposals = map[storagebase.CmdIDKey]*ProposalData{}
 }
 
+// setTombstoneKey writes a tombstone to disk to ensure that replica IDs never
+// get reused. It determines what the minimum next replica ID can be using
+// the provided RangeDescriptor and the Replica's own ID.
+//
+// We have to be careful to set the right key, since a replica can be using an
+// ID that it hasn't yet received a RangeDescriptor for if it receives raft
+// requests for that replica ID (as seen in #14231).
 func (r *Replica) setTombstoneKey(
 	ctx context.Context, eng engine.ReadWriter, desc *roachpb.RangeDescriptor,
 ) error {
 	r.mu.Lock()
-	r.mu.minReplicaID = desc.NextReplicaID
+	nextReplicaID := r.nextReplicaIDLocked(desc)
+	r.mu.minReplicaID = nextReplicaID
 	r.mu.Unlock()
 	tombstoneKey := keys.RaftTombstoneKey(desc.RangeID)
 	tombstone := &roachpb.RaftTombstone{
-		NextReplicaID: desc.NextReplicaID,
+		NextReplicaID: nextReplicaID,
 	}
 	return engine.MVCCPutProto(ctx, eng, nil, tombstoneKey,
 		hlc.Timestamp{}, nil, tombstone)
+}
+
+// nextReplicaIDLocked returns the minimum ID that a new replica can be created
+// with for this replica's range. We have to be very careful to ensure that
+// replica IDs never get re-used because that can cause panics.
+//
+// The externalDesc parameter is an optional way to provide an additional
+// descriptor for the range that was looked up outside the replica code.
+func (r *Replica) nextReplicaIDLocked(externalDesc *roachpb.RangeDescriptor) roachpb.ReplicaID {
+	result := r.mu.state.Desc.NextReplicaID
+	if externalDesc != nil && externalDesc.NextReplicaID > result {
+		result = externalDesc.NextReplicaID
+	}
+	if r.mu.minReplicaID > result {
+		result = r.mu.minReplicaID
+	}
+	return result
 }
 
 func (r *Replica) setReplicaID(replicaID roachpb.ReplicaID) error {
@@ -778,7 +802,10 @@ func (r *Replica) setReplicaIDLocked(replicaID roachpb.ReplicaID) error {
 	// }
 
 	previousReplicaID := r.mu.replicaID
-	r.mu.replicaID = replicaID
+	r.mu.replicaID = replicaID // TODO(DONOTMERGE): Should we update the log string here? Or keep the log string consistent with the descriptor?
+	if replicaID >= r.mu.minReplicaID {
+		r.mu.minReplicaID = replicaID + 1
+	}
 	// Reset the raft group to force its recreation on next usage.
 	r.mu.internalRaftGroup = nil
 
