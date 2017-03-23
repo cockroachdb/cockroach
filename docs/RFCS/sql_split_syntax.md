@@ -1,9 +1,9 @@
 - Feature Name: SQL Syntax for splitting tables
-- Status: draft/in-progress/completed/rejected/obsolete
+- Status: in-progress
 - Start Date: 2017-03-14
 - Authors: Radu Berinde
-- RFC PR: (PR # after acceptance of initial draft)
-- Cockroach Issue: #13665
+- RFC PR: [#14146](https://github.com/cockroachdb/cockroach/pull/14146)
+- Cockroach Issue: [#13665](https://github.com/cockroachdb/cockroach/issues/13665)
 
 # Summary
 

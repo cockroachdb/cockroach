@@ -1,5 +1,5 @@
 - Feature Name: Cluster Upgrade Tool
-- Status: in-progress
+- Status: completed
 - Start Date: 2016-09-15
 - Authors: Daniel Harrison, Alex Robinson
 - RFC PR: [#9404](https://github.com/cockroachdb/cockroach/pull/9404)

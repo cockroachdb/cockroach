@@ -1,5 +1,5 @@
 - Feature Name: Leaseholder Locality ("Leases follow the sun")
-- Status: draft
+- Status: completed
 - Start Date: 2017-01-25
 - Authors: Alex Robinson
 - RFC PR: [#13233](https://github.com/cockroachdb/cockroach/pull/13233)
