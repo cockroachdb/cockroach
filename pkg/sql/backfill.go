@@ -335,7 +335,7 @@ func (sc *SchemaChanger) truncateAndBackfillColumns(
 			} else {
 				updateValues[j], err = defaultExprs[j].Eval(&sc.evalCtx)
 				if err != nil {
-					return err
+					return sqlbase.NewInvalidSchemaDefinitionError(err)
 				}
 			}
 			if !col.Nullable && updateValues[j].Compare(&sc.evalCtx, parser.DNull) == 0 {
