@@ -17,7 +17,6 @@
 package distsqlrun
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/pkg/errors"
 )
@@ -102,7 +101,7 @@ func (sd *StreamDecoder) AddMessage(msg *ProducerMessage) error {
 			if rangeInfo := md.GetRangeInfo(); rangeInfo != nil {
 				meta.Ranges = rangeInfo.RangeInfo
 			} else if pErr := md.GetError(); pErr != nil {
-				meta.Err = roachpb.WrapRemoteProducerError(*pErr)
+				meta.Err = pErr.ErrorDetail()
 			}
 			sd.metadata = append(sd.metadata, meta)
 		}
