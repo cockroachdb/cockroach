@@ -60,10 +60,11 @@ start_server $argv
 
 # Now test `quit` as non-start command, and test that `quit` does not
 # emit logging output between the point the command starts until it
-# prints the final ok message.
-send "echo marker; $argv quit\r"
+# either prints the final ok message or fails with some error
+# (e.g. due to no definite answer from the server).
+send "echo marker; $argv quit 2>&1 | grep '^\\(\[IWEF\]\[0-9\]\\)' \r"
 set timeout 20
-eexpect "marker\r\nok\r\n:/# "
+eexpect "marker\r\n:/# "
 set timeout 5
 
 # Test quit as non-start command, this time with --logtostderr. Test
