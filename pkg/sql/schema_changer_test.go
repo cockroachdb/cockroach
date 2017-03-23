@@ -732,6 +732,84 @@ CREATE UNIQUE INDEX vidx ON t.test (v);
 	}
 }
 
+// Test schema change backfill fails when it hits an error on a remote node.
+func TestBackfillErrors(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	const numNodes, chunkSize, maxValue = 5, 100, 4000
+	params, _ := createTestServerParams()
+
+	// Disable asynchronous schema change execution.
+	params.Knobs = base.TestingKnobs{
+		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
+			AsyncExecNotification: asyncSchemaChangerDisabled,
+			BackfillChunkSize:     chunkSize,
+		},
+	}
+
+	tc := serverutils.StartTestCluster(t, numNodes,
+		base.TestClusterArgs{
+			ReplicationMode: base.ReplicationManual,
+			ServerArgs:      params,
+		})
+	defer tc.Stopper().Stop()
+	kvDB := tc.Server(0).KVClient().(*client.DB)
+	sqlDB := tc.ServerConn(0)
+
+	if _, err := sqlDB.Exec(`
+CREATE DATABASE t;
+CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
+`); err != nil {
+		t.Fatal(err)
+	}
+
+	// Bulk insert.
+	if err := bulkInsertIntoTable(sqlDB, maxValue); err != nil {
+		t.Fatal(err)
+	}
+
+	// Update v column on some rows to be the same so that the future
+	// UNIQUE index we create on it fails.
+	const numUpdatedRows = 10
+	for i := 0; i < numUpdatedRows; i++ {
+		k := rand.Intn(maxValue - numUpdatedRows)
+		if _, err := sqlDB.Exec(`UPDATE t.test SET v = $1 WHERE k = $2`, 1, k); err != nil {
+			t.Error(err)
+		}
+	}
+
+	// Split the table into multiple ranges.
+	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
+	// SplitTable moves the right range, so we split things back to front
+	// in order to move less data.
+	for i := numNodes - 1; i > 0; i-- {
+		sql.SplitTable(t, tc, tableDesc, i, maxValue/numNodes*i)
+	}
+
+	ctx := context.TODO()
+
+	// Read table descriptor for version.
+	tablePrefix := roachpb.Key(keys.MakeTablePrefix(uint32(tableDesc.ID)))
+	tableEnd := tablePrefix.PrefixEnd()
+	if kvs, err := kvDB.Scan(ctx, tablePrefix, tableEnd, 0); err != nil {
+		t.Fatal(err)
+	} else if e := maxValue + 1; len(kvs) != e {
+		t.Fatalf("expected %d key value pairs, but got %d", e, len(kvs))
+	}
+
+	if _, err := sqlDB.Exec(`
+CREATE UNIQUE INDEX vidx ON t.test (v);
+`); !testutils.IsError(err, "duplicate key value (v)=(1) violates unique constraint") {
+		t.Fatalf("got err=%s", err)
+	}
+
+	if kvs, err := kvDB.Scan(ctx, tablePrefix, tableEnd, 0); err != nil {
+		t.Fatal(err)
+	} else if e := maxValue + 1; len(kvs) != e {
+		t.Fatalf("expected %d key value pairs, but got %d", e, len(kvs))
+	}
+}
+
 // Test aborting a schema change backfill transaction and check that the
 // backfill is completed correctly. The backfill transaction is aborted at a
 // time when it thinks it has processed all the rows of the table. Later,
