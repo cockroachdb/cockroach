@@ -517,8 +517,12 @@ func (nl *NodeLiveness) updateLiveness(
 		} else {
 			b.CPut(key, newLiveness, oldLiveness)
 		}
+		// Use a trigger on EndTransaction to indicate that node liveness should
+		// be re-gossiped. Further, require that this transaction complete as a
+		// one phase commit to eliminate the possibility of leaving write intents.
 		b.AddRawRequest(&roachpb.EndTransactionRequest{
-			Commit: true,
+			Commit:     true,
+			Require1PC: true,
 			InternalCommitTrigger: &roachpb.InternalCommitTrigger{
 				ModifiedSpanTrigger: &roachpb.ModifiedSpanTrigger{
 					NodeLivenessSpan: &roachpb.Span{
