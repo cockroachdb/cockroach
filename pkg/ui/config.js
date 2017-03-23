@@ -56,9 +56,9 @@ System.config({
       }
     },
     "app/services": {
-      "defaultExtension": "ts",
+      "defaultExtension": "tsx",
       "meta": {
-        "*.ts": {
+        "*.tsx": {
           "loader": "ts"
         }
       }

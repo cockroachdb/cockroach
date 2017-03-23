@@ -36,7 +36,6 @@ export default class extends React.Component<IInjectedProps, {}> {
 
     return <div>
       <TimeWindowManager/>
-      <Banner/>
       <NavigationBar/>
       <StickyContainer className="page">
         {
@@ -46,6 +45,7 @@ export default class extends React.Component<IInjectedProps, {}> {
           !!title ? <section className="header">{ title }</section>
                   : null
         }
+        <Banner/>
         { children }
       </StickyContainer>
     </div>;

@@ -88,6 +88,7 @@ import Raft from "./containers/raft";
 import RaftRanges from "./containers/raftRanges";
 import ClusterViz from "./containers/clusterViz";
 import registrationSyncListener from "./services/registrationService";
+import alertSyncListener from "./services/alertService";
 
 // tslint:disable-next-line:variable-name
 const DOMNode = document.getElementById("react-layout");
@@ -142,3 +143,4 @@ ReactDOM.render(
 
 // Subscribe store listeners.
 store.subscribe(registrationSyncListener(store));
+store.subscribe(alertSyncListener(store));

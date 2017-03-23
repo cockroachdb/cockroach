@@ -244,3 +244,24 @@ export let rightArrow: string = `<svg width="7px" height="10px" viewBox="0 0 7 1
         </g>
     </g>
 </svg>`;
+
+export let warningIcon: string = `<svg width="20px" height="20px" viewBox="0 0 20 20" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+    <!-- Generator: Sketch 42 (36781) - http://www.bohemiancoding.com/sketch -->
+    <title>Group 3</title>
+    <desc>Created with Sketch.</desc>
+    <defs></defs>
+    <g id="Symbols" stroke="none" stroke-width="1" fill="none" fill-rule="evenodd">
+        <g id="Warning---Connection-Lost" transform="translate(-25.000000, -19.000000)">
+            <g id="Group-3">
+                <g transform="translate(25.000000, 19.000000)">
+                    <path d="M8.75139389,1.26729609 C9.24631171,0.277343549 10.0519669,0.283622947 10.5438615,1.26729609 L19.1995435,18.5766161 C19.4476073,19.0726851 19.1933971,19.4748284 18.6568996,19.4748284 L0.640505826,19.4748284 C0.092748094,19.4748284 -0.15156708,19.0753209 0.0977558747,18.5766161 L8.75139389,1.26729609 Z" id="Rectangle-4" fill="#F26969"></path>
+                    <g id="Group-2" transform="translate(8.000000, 3.000000)" font-size="14" font-family="Lato-Bold, Lato" fill="#FFFFFF" font-weight="bold">
+                        <text id="!">
+                            <tspan x="0" y="14">!</tspan>
+                        </text>
+                    </g>
+                </g>
+            </g>
+        </g>
+    </g>
+</svg>`;
