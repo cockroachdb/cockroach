@@ -187,8 +187,9 @@ var _ planNode = &insertNode{}
 var _ planNode = &joinNode{}
 var _ planNode = &limitNode{}
 var _ planNode = &ordinalityNode{}
-var _ planNode = &scanNode{}
+var _ planNode = &relocateNode{}
 var _ planNode = &renderNode{}
+var _ planNode = &scanNode{}
 var _ planNode = &showRangesNode{}
 var _ planNode = &sortNode{}
 var _ planNode = &splitNode{}
@@ -314,6 +315,8 @@ func (p *planner) newPlan(
 		return p.Insert(ctx, n, desiredTypes, autoCommit)
 	case *parser.ParenSelect:
 		return p.newPlan(ctx, n.Select, desiredTypes, autoCommit)
+	case *parser.Relocate:
+		return p.Relocate(ctx, n)
 	case *parser.RenameColumn:
 		return p.RenameColumn(ctx, n)
 	case *parser.RenameDatabase:
@@ -419,6 +422,8 @@ func (p *planner) prepare(ctx context.Context, stmt parser.Statement) (planNode,
 		return p.ShowRanges(ctx, n)
 	case *parser.Split:
 		return p.Split(ctx, n)
+	case *parser.Relocate:
+		return p.Relocate(ctx, n)
 	case *parser.Update:
 		return p.Update(ctx, n, nil, false)
 	default:
