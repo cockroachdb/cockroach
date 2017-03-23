@@ -48,9 +48,11 @@ message FileDetails {
   string program = 1;
   string host = 2;
   string user_name = 3;
-  Severity severity = 4;
   int64 time = 5;
   int64 pid = 6 [(gogoproto.customname) = "PID"];
+  // severity is not used any more but we have to keep it because
+  // it wasn't marked "optional".
+  Severity severity = 4;
 }
 
 message FileInfo {

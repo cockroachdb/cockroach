@@ -139,11 +139,13 @@ message LogsRequest {
   // node_id is a string so that "local" can be used to specify that no
   // forwarding is necessary.
   string node_id = 1;
-  string level = 2;
   string start_time = 3;
   string end_time = 4;
   string max = 5;
   string pattern = 6;
+  // level is not used any more, but we must keep it because it was not
+  // marked "optional".
+  string level = 2;
 }
 
 message LogEntriesResponse {

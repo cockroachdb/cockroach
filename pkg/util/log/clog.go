@@ -615,8 +615,8 @@ type loggingT struct {
 	toStderr bool // The -logtostderr flag.
 
 	mu syncutil.Mutex
-	// file holds writer for each of the log types.
-	file [Severity_NONE]flushSyncWriter
+	// file holds the log file writer.
+	file flushSyncWriter
 	// pcs is used in V to avoid an allocation when computing the caller's PC.
 	pcs [1]uintptr
 	// vmap is a cache of the V Level for each V() call site, identified by PC.
@@ -731,8 +731,8 @@ func (l *loggingT) outputLogEntry(s Severity, file string, line int, msg string)
 		l.outputToStderr(entry, stacks)
 	}
 	if logDir.isSet() {
-		if l.file[s] == nil {
-			if err := l.createFiles(s); err != nil {
+		if l.file == nil {
+			if err := l.createFile(); err != nil {
 				// Make sure the message appears somewhere.
 				l.outputToStderr(entry, stacks)
 				l.mu.Unlock()
@@ -744,26 +744,8 @@ func (l *loggingT) outputLogEntry(s Severity, file string, line int, msg string)
 		buf := l.processForFile(entry, stacks)
 		data := buf.Bytes()
 
-		switch s {
-		case Severity_FATAL:
-			if _, err := l.file[Severity_FATAL].Write(data); err != nil {
-				panic(err)
-			}
-			fallthrough
-		case Severity_ERROR:
-			if _, err := l.file[Severity_ERROR].Write(data); err != nil {
-				panic(err)
-			}
-			fallthrough
-		case Severity_WARNING:
-			if _, err := l.file[Severity_WARNING].Write(data); err != nil {
-				panic(err)
-			}
-			fallthrough
-		case Severity_INFO:
-			if _, err := l.file[Severity_INFO].Write(data); err != nil {
-				panic(err)
-			}
+		if _, err := l.file.Write(data); err != nil {
+			panic(err)
 		}
 
 		l.putBuffer(buf)
@@ -927,7 +909,7 @@ func (sb *syncBuffer) rotateFile(now time.Time) error {
 		}
 	}
 	var err error
-	sb.file, sb.lastRotation, _, err = create(sb.sev, now, sb.lastRotation)
+	sb.file, sb.lastRotation, _, err = create(now, sb.lastRotation)
 	sb.nbytes = 0
 	if err != nil {
 		return err
@@ -990,34 +972,30 @@ func (sb *syncBuffer) rotateFile(now time.Time) error {
 const bufferSize = 256 * 1024
 
 func (l *loggingT) closeFilesLocked() error {
-	for s := Severity_FATAL; s >= Severity_INFO; s-- {
-		if l.file[s] != nil {
-			if sb, ok := l.file[s].(*syncBuffer); ok {
-				if err := sb.file.Close(); err != nil {
-					return err
-				}
+	if l.file != nil {
+		if sb, ok := l.file.(*syncBuffer); ok {
+			if err := sb.file.Close(); err != nil {
+				return err
 			}
-			l.file[s] = nil
 		}
+		l.file = nil
 	}
 	return nil
 }
 
-// createFiles creates all the log files for severity from sev down to Severity_INFO.
+// createFile creates the log file.
 // l.mu is held.
-func (l *loggingT) createFiles(sev Severity) error {
+func (l *loggingT) createFile() error {
 	now := time.Now()
-	// Files are created in decreasing severity order, so as soon as we find one
-	// has already been created, we can stop.
-	for s := sev; s >= Severity_INFO && l.file[s] == nil; s-- {
+	if l.file == nil {
 		sb := &syncBuffer{
 			logger: l,
-			sev:    s,
+			sev:    Severity_INFO,
 		}
 		if err := sb.rotateFile(now); err != nil {
 			return err
 		}
-		l.file[s] = sb
+		l.file = sb
 	}
 	return nil
 }
@@ -1042,13 +1020,9 @@ func (l *loggingT) lockAndFlushAll() {
 // flushAll flushes all the logs and attempts to "sync" their data to disk.
 // l.mu is held.
 func (l *loggingT) flushAll() {
-	// Flush from fatal down, in case there's trouble flushing.
-	for s := Severity_FATAL; s >= Severity_INFO; s-- {
-		file := l.file[s]
-		if file != nil {
-			_ = file.Flush() // ignore error
-			_ = file.Sync()  // ignore error
-		}
+	if l.file != nil {
+		_ = l.file.Flush() // ignore error
+		_ = l.file.Sync()  // ignore error
 	}
 }
 
@@ -1073,39 +1047,36 @@ func (l *loggingT) gcOldFiles() {
 	}
 
 	maxSizePerSeverity := atomic.LoadUint64(&MaxSizePerSeverity)
-	for s := Severity_INFO; s <= Severity_FATAL; s++ {
-		severityFiles := selectFiles(allFiles, s, math.MaxInt64)
-		if len(severityFiles) == 0 {
+	files := selectFiles(allFiles, math.MaxInt64)
+	if len(files) == 0 {
+		return
+	}
+	// files is sorted with the newest log files first (which we want
+	// to keep). Note that we always keep the most recent log file.
+	sum := files[0].SizeBytes
+	for _, f := range files[1:] {
+		sum += f.SizeBytes
+		if uint64(sum) < maxSizePerSeverity {
 			continue
 		}
-		// severityFiles is sorted with the newest log files first (which we want
-		// to keep). Note that we always keep the most recent log file per
-		// severity.
-		sum := severityFiles[0].SizeBytes
-		for _, f := range severityFiles[1:] {
-			sum += f.SizeBytes
-			if uint64(sum) < maxSizePerSeverity {
-				continue
-			}
-			path := filepath.Join(dir, f.Name)
-			if err := os.Remove(path); err != nil {
-				fmt.Fprintf(os.Stderr, "%s\n", err)
-			}
+		path := filepath.Join(dir, f.Name)
+		if err := os.Remove(path); err != nil {
+			fmt.Fprintf(os.Stderr, "%s\n", err)
 		}
 	}
 }
 
-// copyStandardLogTo arranges for messages written to the Go "log" package's
-// default logs to also appear in the Google logs for the named and lower
-// severities.  Subsequent changes to the standard log's default output location
-// or format may break this behavior.
+// copyStandardLogTo arranges for messages written to the Go "log"
+// package's default logs to also appear in the CockroachDB logs with
+// the specified severity.  Subsequent changes to the standard log's
+// default output location or format may break this behavior.
 //
 // Valid names are "INFO", "WARNING", "ERROR", and "FATAL".  If the name is not
 // recognized, copyStandardLogTo panics.
-func copyStandardLogTo(name string) {
-	sev, ok := SeverityByName(name)
+func copyStandardLogTo(severityName string) {
+	sev, ok := SeverityByName(severityName)
 	if !ok {
-		panic(fmt.Sprintf("copyStandardLogTo(%q): unrecognized Severity name", name))
+		panic(fmt.Sprintf("copyStandardLogTo(%q): unrecognized Severity name", severityName))
 	}
 	// Set a log format that captures the user's file and line:
 	//   d.go:23: message
@@ -1141,8 +1112,8 @@ func (lb logBridge) Write(b []byte) (n int, err error) {
 	return len(b), nil
 }
 
-// NewStdLogger creates a *stdLog.Logger that forwards messages to the Google
-// logs for the specified severity.
+// NewStdLogger creates a *stdLog.Logger that forwards messages to the
+// CockroachDB logs with the specified severity.
 func NewStdLogger(severity Severity) *stdLog.Logger {
 	return stdLog.New(logBridge(severity), "", stdLog.Lshortfile)
 }

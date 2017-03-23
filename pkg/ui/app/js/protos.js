@@ -154,12 +154,6 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                                         },
                                         {
                                             "rule": "optional",
-                                            "type": "Severity",
-                                            "name": "severity",
-                                            "id": 4
-                                        },
-                                        {
-                                            "rule": "optional",
                                             "type": "int64",
                                             "name": "time",
                                             "id": 5
@@ -172,6 +166,12 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                                             "options": {
                                                 "(gogoproto.customname)": "PID"
                                             }
+                                        },
+                                        {
+                                            "rule": "optional",
+                                            "type": "Severity",
+                                            "name": "severity",
+                                            "id": 4
                                         }
                                     ]
                                 },
@@ -2948,12 +2948,6 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                                         {
                                             "rule": "optional",
                                             "type": "string",
-                                            "name": "level",
-                                            "id": 2
-                                        },
-                                        {
-                                            "rule": "optional",
-                                            "type": "string",
                                             "name": "start_time",
                                             "id": 3
                                         },
@@ -2974,6 +2968,12 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                                             "type": "string",
                                             "name": "pattern",
                                             "id": 6
+                                        },
+                                        {
+                                            "rule": "optional",
+                                            "type": "string",
+                                            "name": "level",
+                                            "id": 2
                                         }
                                     ]
                                 },

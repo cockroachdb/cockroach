@@ -65,32 +65,28 @@ func (f *flushBuffer) Sync() error {
 	return nil
 }
 
-// swap sets the log writers and returns the old array.
-func (l *loggingT) swap(
-	writers [Severity_NONE]flushSyncWriter,
-) (old [Severity_NONE]flushSyncWriter) {
+// swap sets the log writer and returns the old writer.
+func (l *loggingT) swap(writer flushSyncWriter) (old flushSyncWriter) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	old = l.file
-	for i, w := range writers {
-		logging.file[i] = w
-	}
-	return
+	l.file = writer
+	return old
 }
 
 // newBuffers sets the log writers to all new byte buffers and returns the old array.
-func (l *loggingT) newBuffers() [Severity_NONE]flushSyncWriter {
-	return l.swap([Severity_NONE]flushSyncWriter{new(flushBuffer), new(flushBuffer), new(flushBuffer), new(flushBuffer), new(flushBuffer)})
+func (l *loggingT) newBuffers() flushSyncWriter {
+	return l.swap(new(flushBuffer))
 }
 
 // contents returns the specified log value as a string.
-func contents(s Severity) string {
-	return logging.file[s].(*flushBuffer).Buffer.String()
+func contents() string {
+	return logging.file.(*flushBuffer).Buffer.String()
 }
 
 // contains reports whether the string is contained in the log.
-func contains(s Severity, str string, t *testing.T) bool {
-	c := contents(s)
+func contains(str string, t *testing.T) bool {
+	c := contents()
 	return strings.Contains(c, str)
 }
 
@@ -108,10 +104,10 @@ func TestInfo(t *testing.T) {
 	setFlags()
 	defer logging.swap(logging.newBuffers())
 	Info(context.Background(), "test")
-	if !contains(Severity_INFO, "I", t) {
-		t.Errorf("Info has wrong character: %q", contents(Severity_INFO))
+	if !contains("I", t) {
+		t.Errorf("Info has wrong character: %q", contents())
 	}
-	if !contains(Severity_INFO, "test", t) {
+	if !contains("test", t) {
 		t.Error("Info failed")
 	}
 }
@@ -132,10 +128,10 @@ func TestStandardLog(t *testing.T) {
 	setFlags()
 	defer logging.swap(logging.newBuffers())
 	stdLog.Print("test")
-	if !contains(Severity_INFO, "I", t) {
-		t.Errorf("Info has wrong character: %q", contents(Severity_INFO))
+	if !contains("I", t) {
+		t.Errorf("Info has wrong character: %q", contents())
 	}
-	if !contains(Severity_INFO, "test", t) {
+	if !contains("test", t) {
 		t.Error("Info failed")
 	}
 }
@@ -228,18 +224,11 @@ func TestError(t *testing.T) {
 	setFlags()
 	defer logging.swap(logging.newBuffers())
 	Error(context.Background(), "test")
-	if !contains(Severity_ERROR, "E", t) {
-		t.Errorf("Error has wrong character: %q", contents(Severity_ERROR))
+	if !contains("E", t) {
+		t.Errorf("Error has wrong character: %q", contents())
 	}
-	if !contains(Severity_ERROR, "test", t) {
+	if !contains("test", t) {
 		t.Error("Error failed")
-	}
-	str := contents(Severity_ERROR)
-	if !contains(Severity_WARNING, str, t) {
-		t.Error("Warning failed")
-	}
-	if !contains(Severity_INFO, str, t) {
-		t.Error("Info failed")
 	}
 }
 
@@ -250,15 +239,11 @@ func TestWarning(t *testing.T) {
 	setFlags()
 	defer logging.swap(logging.newBuffers())
 	Warning(context.Background(), "test")
-	if !contains(Severity_WARNING, "W", t) {
-		t.Errorf("Warning has wrong character: %q", contents(Severity_WARNING))
+	if !contains("W", t) {
+		t.Errorf("Warning has wrong character: %q", contents())
 	}
-	if !contains(Severity_WARNING, "test", t) {
+	if !contains("test", t) {
 		t.Error("Warning failed")
-	}
-	str := contents(Severity_WARNING)
-	if !contains(Severity_INFO, str, t) {
-		t.Error("Info failed")
 	}
 }
 
@@ -271,10 +256,10 @@ func TestV(t *testing.T) {
 	if v(2) {
 		addStructured(context.Background(), Severity_INFO, 1, "", []interface{}{"test"})
 	}
-	if !contains(Severity_INFO, "I", t) {
-		t.Errorf("Info has wrong character: %q", contents(Severity_INFO))
+	if !contains("I", t) {
+		t.Errorf("Info has wrong character: %q", contents())
 	}
-	if !contains(Severity_INFO, "test", t) {
+	if !contains("test", t) {
 		t.Error("Info failed")
 	}
 }
@@ -297,10 +282,10 @@ func TestVmoduleOn(t *testing.T) {
 	if v(2) {
 		addStructured(context.Background(), Severity_INFO, 1, "", []interface{}{"test"})
 	}
-	if !contains(Severity_INFO, "I", t) {
-		t.Errorf("Info has wrong character: %q", contents(Severity_INFO))
+	if !contains("I", t) {
+		t.Errorf("Info has wrong character: %q", contents())
 	}
-	if !contains(Severity_INFO, "test", t) {
+	if !contains("test", t) {
 		t.Error("Info failed")
 	}
 }
@@ -319,7 +304,7 @@ func TestVmoduleOff(t *testing.T) {
 	if v(2) {
 		addStructured(context.Background(), Severity_INFO, 1, "", []interface{}{"test"})
 	}
-	if contents(Severity_INFO) != "" {
+	if contents() != "" {
 		t.Error("V logged incorrectly")
 	}
 }
@@ -365,42 +350,22 @@ func TestListLogFiles(t *testing.T) {
 	defer s.Close(t)
 	setFlags()
 
-	methods := map[Severity]func(context.Context, ...interface{}){
-		Severity_INFO:    Info,
-		Severity_WARNING: Warning,
-	}
-	expectedNames := make(map[string]struct{}, len(methods))
-	for severity, method := range methods {
-		method(context.Background(), "x")
+	Info(context.Background(), "x")
 
-		sb, ok := logging.file[severity].(*syncBuffer)
-		if !ok {
-			t.Fatalf("%s buffer wasn't created", severity)
-		}
-
-		expectedNames[filepath.Base(sb.file.Name())] = struct{}{}
+	sb, ok := logging.file.(*syncBuffer)
+	if !ok {
+		t.Fatalf("buffer wasn't created")
 	}
+
+	expectedName := filepath.Base(sb.file.Name())
 
 	results, err := ListLogFiles()
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("error in ListLogFiles: ", err)
 	}
 
-	for _, result := range results {
-		delete(expectedNames, result.Name)
-	}
-
-	if len(expectedNames) > 0 {
-		names := make([]string, len(results))
-		for i, result := range results {
-			names[i] = result.Name
-		}
-
-		t.Logf("found log files:\n%s", strings.Join(names, "\n"))
-
-		for expectedName := range expectedNames {
-			t.Errorf("did not find expected log file %s", expectedName)
-		}
+	if len(results) != 1 || results[0].Name != expectedName {
+		t.Fatalf("unexpected results: %q", results)
 	}
 }
 
@@ -409,18 +374,18 @@ func TestGetLogReader(t *testing.T) {
 	defer s.Close(t)
 
 	setFlags()
-	Warning(context.Background(), "x")
-	warn, ok := logging.file[Severity_WARNING].(*syncBuffer)
+	Info(context.Background(), "x")
+	info, ok := logging.file.(*syncBuffer)
 	if !ok {
-		t.Fatalf("%s buffer wasn't created", Severity_WARNING)
+		t.Fatalf("buffer wasn't created")
 	}
-	warnName := filepath.Base(warn.file.Name())
+	infoName := filepath.Base(info.file.Name())
 
 	curDir, err := os.Getwd()
 	if err != nil {
 		t.Fatal(err)
 	}
-	relPath, err := filepath.Rel(curDir, warn.file.Name())
+	relPath, err := filepath.Rel(curDir, info.file.Name())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -443,17 +408,17 @@ func TestGetLogReader(t *testing.T) {
 		// File is not specified (trying to open a directory instead).
 		{dir, "pathnames must be basenames", "not a regular file"},
 		// Absolute filename is specified.
-		{warn.file.Name(), "pathnames must be basenames", ""},
+		{info.file.Name(), "pathnames must be basenames", ""},
 		// Symlink to a log file.
-		{filepath.Join(dir, removePeriods(program)+".WARNING"), "pathnames must be basenames", ""},
+		{filepath.Join(dir, removePeriods(program)+".log"), "pathnames must be basenames", ""},
 		// Symlink relative to logDir.
-		{removePeriods(program) + ".WARNING", "malformed log filename", ""},
+		{removePeriods(program) + ".log", "malformed log filename", ""},
 		// Non-log file.
 		{"other.txt", "malformed log filename", "malformed log filename"},
 		// Non-existent file matching RE.
-		{"cockroach.roach0.root.2015-09-25T19_24_19Z.00000.ERROR.log", "no such file", "no such file"},
+		{"cockroach.roach0.root.2015-09-25T19_24_19Z.00000.log", "no such file", "no such file"},
 		// Base filename is specified.
-		{warnName, "", ""},
+		{infoName, "", ""},
 		// Relative path with directory components.
 		{relPath, "pathnames must be basenames", ""},
 	}
@@ -502,7 +467,7 @@ func TestRollover(t *testing.T) {
 	MaxSize = 2048
 
 	Info(context.Background(), "x") // Be sure we have a file.
-	info, ok := logging.file[Severity_INFO].(*syncBuffer)
+	info, ok := logging.file.(*syncBuffer)
 	if !ok {
 		t.Fatal("info wasn't created")
 	}
@@ -552,8 +517,6 @@ func TestGC(t *testing.T) {
 	// level. GC should trim this down to 2.
 	for i := 0; i < expectedFiles*10; i++ {
 		Info(context.Background(), "x")
-		Error(context.Background(), "x")
-		Warning(context.Background(), "x")
 	}
 
 	// Ensure the GC has seen the most recent files.
@@ -563,11 +526,9 @@ func TestGC(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for s := Severity_INFO; s <= Severity_ERROR; s++ {
-		severityFiles := selectFiles(allFiles, s, math.MaxInt64)
-		if expectedFiles != len(severityFiles) {
-			t.Fatalf("%s: expected %d, but found %d", s, expectedFiles, len(severityFiles))
-		}
+	files := selectFiles(allFiles, math.MaxInt64)
+	if expectedFiles != len(files) {
+		t.Fatalf("%s: expected %d, but found %d", s, expectedFiles, len(files))
 	}
 }
 
@@ -597,7 +558,7 @@ func TestLogBacktraceAt(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	numAppearances := strings.Count(contents(Severity_INFO), infoLine)
+	numAppearances := strings.Count(contents(), infoLine)
 	if numAppearances < 2 {
 		// Need 2 appearances, one in the log header and one in the trace:
 		//   log_test.go:281: I0511 16:36:06.952398 02238 log_test.go:280] we want a stack trace here
@@ -606,7 +567,7 @@ func TestLogBacktraceAt(t *testing.T) {
 		//   ...
 		// We could be more precise but that would require knowing the details
 		// of the traceback format, which may not be dependable.
-		t.Fatal("got no trace back; log is ", contents(Severity_INFO))
+		t.Fatal("got no trace back; log is ", contents())
 	}
 }
 
@@ -631,7 +592,7 @@ func TestFatalStacktraceStderr(t *testing.T) {
 	for _, level := range []int{tracebackNone, tracebackSingle, tracebackAll} {
 		traceback = level
 		Fatalf(context.Background(), "cinap")
-		cont := contents(Severity_FATAL)
+		cont := contents()
 		if !strings.Contains(cont, " cinap") {
 			t.Fatalf("panic output does not contain cinap:\n%s", cont)
 		}
@@ -668,7 +629,7 @@ func TestRedirectStderr(t *testing.T) {
 	const stderrText = "hello stderr"
 	fmt.Fprintf(os.Stderr, stderrText)
 
-	contents, err := ioutil.ReadFile(logging.file[Severity_INFO].(*syncBuffer).file.Name())
+	contents, err := ioutil.ReadFile(logging.file.(*syncBuffer).file.Name())
 	if err != nil {
 		t.Fatal(err)
 	}

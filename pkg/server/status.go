@@ -295,8 +295,11 @@ func parseInt64WithDefault(s string, defaultValue int64) (int64, error) {
 //   pattern if it exists. Defaults to nil.
 // * "max" query parameter is the hard limit of the number of returned log
 //   entries. Defaults to defaultMaxLogEntries.
-// * "level" query parameter filters the log entries to be those of the
-//   corresponding severity level or worse. Defaults to "info".
+// To filter the log messages to only retrieve messages from a given level,
+// use a pattern that excludes all messages at the undesired levels.
+// (e.g. "^[^IW]" to only get errors, fatals and panics). An exclusive
+// pattern is better because panics and some other errors do not use
+// a prefix character.
 func (s *statusServer) Logs(
 	ctx context.Context, req *serverpb.LogsRequest,
 ) (*serverpb.LogEntriesResponse, error) {
@@ -314,17 +317,6 @@ func (s *statusServer) Logs(
 	}
 
 	log.Flush()
-
-	var sev log.Severity
-	if len(req.Level) == 0 {
-		sev = log.Severity_INFO
-	} else {
-		var sevFound bool
-		sev, sevFound = log.SeverityByName(req.Level)
-		if !sevFound {
-			return nil, fmt.Errorf("level could not be determined: %s", req.Level)
-		}
-	}
 
 	startTimestamp, err := parseInt64WithDefault(
 		req.StartTime,
@@ -357,7 +349,7 @@ func (s *statusServer) Logs(
 		}
 	}
 
-	entries, err := log.FetchEntriesFromFiles(sev, startTimestamp, endTimestamp, int(maxEntries), regex)
+	entries, err := log.FetchEntriesFromFiles(startTimestamp, endTimestamp, int(maxEntries), regex)
 	if err != nil {
 		return nil, err
 	}
