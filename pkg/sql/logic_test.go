@@ -234,6 +234,7 @@ type testClusterConfig struct {
 var logicTestConfigs = []testClusterConfig{
 	{name: "default", numNodes: 1},
 	{name: "distsql", numNodes: 3, useFakeSpanResolver: true, defaultDistSQLMode: "ON"},
+	{name: "5node", numNodes: 5},
 }
 
 // An index in the above slice.

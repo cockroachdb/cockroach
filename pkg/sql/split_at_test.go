@@ -72,7 +72,7 @@ func TestSplitAt(t *testing.T) {
 		},
 		{
 			in:    "ALTER TABLE d.t SPLIT AT VALUES ('c', 3)",
-			error: "SPLIT AT data column 1 must be of type int, not type string",
+			error: "SPLIT AT data column 1 (i) must be of type int, not type string",
 		},
 		{
 			in:    "ALTER TABLE d.t SPLIT AT VALUES (i, s)",
@@ -105,7 +105,7 @@ func TestSplitAt(t *testing.T) {
 		{
 			in:    "ALTER TABLE d.i SPLIT AT VALUES ($1::string)",
 			args:  []interface{}{"1"},
-			error: "SPLIT AT data column 1 must be of type int, not type string",
+			error: "SPLIT AT data column 1 (k) must be of type int, not type string",
 		},
 		{
 			in: "ALTER TABLE d.i SPLIT AT VALUES ((SELECT 1))",
