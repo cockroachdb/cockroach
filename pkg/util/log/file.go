@@ -101,13 +101,13 @@ func DirSet() bool { return logDir.isSet() }
 
 // logFileRE matches log files to avoid exposing non-log files accidentally
 // and it splits the details of the filename into groups for easy parsing.
-// The log file format is {process}.{host}.{username}.{timestamp}.{pid}.{severity}.log
-// cockroach.Brams-MacBook-Pro.bram.2015-06-09T16-10-48Z.30209.WARNING.log
+// The log file format is {process}.{host}.{username}.{timestamp}.{pid}.log
+// cockroach.Brams-MacBook-Pro.bram.2015-06-09T16-10-48Z.30209.log
 // All underscore in process, host and username are escaped to double
 // underscores and all periods are escaped to an underscore.
 // For compatibility with Windows filenames, all colons from the timestamp
 // (RFC3339) are converted from underscores.
-var logFileRE = regexp.MustCompile(`^(?:.*/)?([^/.]+)\.([^/\.]+)\.([^/\.]+)\.([^/\.]+)\.(\d+)\.(ERROR|WARNING|INFO)\.log$`)
+var logFileRE = regexp.MustCompile(`^(?:.*/)?([^/.]+)\.([^/\.]+)\.([^/\.]+)\.([^/\.]+)\.(\d+)\.log$`)
 
 var (
 	pid      = os.Getpid()
@@ -147,29 +147,27 @@ func removePeriods(s string) string {
 	return strings.Replace(s, ".", "", -1)
 }
 
-// logName returns a new log file name containing the severity, with start time
-// t, and the name for the symlink for the severity.
-func logName(severity Severity, t time.Time) (name, link string) {
+// logName returns a new log file name with start time t, and the name
+// for the symlink.
+func logName(t time.Time) (name, link string) {
 	// Replace the ':'s in the time format with '_'s to allow for log files in
 	// Windows.
 	tFormatted := strings.Replace(t.Format(time.RFC3339), ":", "_", -1)
 
-	name = fmt.Sprintf("%s.%s.%s.%s.%06d.%s.log",
+	name = fmt.Sprintf("%s.%s.%s.%s.%06d.log",
 		removePeriods(program),
 		removePeriods(host),
 		removePeriods(userName),
 		tFormatted,
-		pid,
-		severity.Name())
-	return name, removePeriods(program) + "." + severity.Name()
+		pid)
+	return name, removePeriods(program) + ".log"
 }
 
 var errMalformedName = errors.New("malformed log filename")
-var errMalformedSev = errors.New("malformed severity")
 
 func parseLogFilename(filename string) (FileDetails, error) {
 	matches := logFileRE.FindStringSubmatch(filename)
-	if matches == nil || len(matches) != 7 {
+	if matches == nil || len(matches) != 6 {
 		return FileDetails{}, errMalformedName
 	}
 
@@ -185,16 +183,11 @@ func parseLogFilename(filename string) (FileDetails, error) {
 		return FileDetails{}, err
 	}
 
-	sev, sevFound := SeverityByName(matches[6])
-	if !sevFound {
-		return FileDetails{}, errMalformedSev
-	}
-
 	return FileDetails{
 		Program:  matches[1],
 		Host:     matches[2],
 		UserName: matches[3],
-		Severity: sev,
+		Severity: Severity_INFO,
 		Time:     time.UnixNano(),
 		PID:      pid,
 	}, nil
@@ -202,12 +195,11 @@ func parseLogFilename(filename string) (FileDetails, error) {
 
 var errDirectoryNotSet = errors.New("log: log directory not set")
 
-// create creates a new log file and returns the file and its filename, which
-// contains severity ("INFO", "FATAL", etc.) and t. If the file is created
-// successfully, create also attempts to update the symlink for that tag, ignoring
-// errors.
+// create creates a new log file and returns the file and its
+// filename. If the file is created successfully, create also attempts
+// to update the symlink for that tag, ignoring errors.
 func create(
-	severity Severity, t time.Time, lastRotation int64,
+	t time.Time, lastRotation int64,
 ) (f *os.File, updatedRotation int64, filename string, err error) {
 	dir, err := logDir.get()
 	if err != nil {
@@ -224,7 +216,7 @@ func create(
 	t = time.Unix(unix, 0)
 
 	// Generate the file name.
-	name, link := logName(severity, t)
+	name, link := logName(t)
 	fname := filepath.Join(dir, name)
 	// Open the file os.O_APPEND|os.O_CREATE rather than use os.Create.
 	// Append is almost always more efficient than O_RDRW on most modern file systems.
@@ -371,13 +363,13 @@ func (a sortableFileInfoSlice) Less(i, j int) bool {
 	return a[i].Details.Time < a[j].Details.Time
 }
 
-// selectFiles selects all log files that have an timestamp before the endTime and
-// the correct severity. It then sorts them in decreasing order, with the most
+// selectFiles selects all log files that have an timestamp before the
+// endTime. It then sorts them in decreasing order, with the most
 // recent as the first one.
-func selectFiles(logFiles []FileInfo, severity Severity, endTimestamp int64) []FileInfo {
+func selectFiles(logFiles []FileInfo, endTimestamp int64) []FileInfo {
 	files := sortableFileInfoSlice{}
 	for _, logFile := range logFiles {
-		if logFile.Details.Severity == severity && logFile.Details.Time <= endTimestamp {
+		if logFile.Details.Time <= endTimestamp {
 			files = append(files, logFile)
 		}
 	}
@@ -387,21 +379,21 @@ func selectFiles(logFiles []FileInfo, severity Severity, endTimestamp int64) []F
 	return files
 }
 
-// FetchEntriesFromFiles fetches all available log entries on disk that match
-// the log 'severity' (or worse) and are between the 'startTimestamp' and
-// 'endTimestamp'. It will stop reading new files if the number of entries
-// exceeds 'maxEntries'. Log entries are further filtered by the regexp
-// 'pattern' if provided. The logs entries are returned in reverse chronological
-// order.
+// FetchEntriesFromFiles fetches all available log entries on disk
+// that are between the 'startTimestamp' and 'endTimestamp'. It will
+// stop reading new files if the number of entries exceeds
+// 'maxEntries'. Log entries are further filtered by the regexp
+// 'pattern' if provided. The logs entries are returned in reverse
+// chronological order.
 func FetchEntriesFromFiles(
-	severity Severity, startTimestamp, endTimestamp int64, maxEntries int, pattern *regexp.Regexp,
+	startTimestamp, endTimestamp int64, maxEntries int, pattern *regexp.Regexp,
 ) ([]Entry, error) {
 	logFiles, err := ListLogFiles()
 	if err != nil {
 		return nil, err
 	}
 
-	selectedFiles := selectFiles(logFiles, severity, endTimestamp)
+	selectedFiles := selectFiles(logFiles, endTimestamp)
 
 	entries := []Entry{}
 	for _, file := range selectedFiles {

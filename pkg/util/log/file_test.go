@@ -26,25 +26,19 @@ import (
 // TestLogFilenameParsing ensures that logName and parseLogFilename work as
 // advertised.
 func TestLogFilenameParsing(t *testing.T) {
-	testCases := []struct {
-		Severity Severity
-		Time     time.Time
-	}{
-		{Severity_INFO, time.Now()},
-		{Severity_WARNING, time.Now().AddDate(-10, 0, 0)},
-		{Severity_ERROR, time.Now().AddDate(0, 0, -1)},
+	testCases := []time.Time{
+		time.Now(),
+		time.Now().AddDate(-10, 0, 0),
+		time.Now().AddDate(0, 0, -1),
 	}
 
 	for i, testCase := range testCases {
-		filename, _ := logName(testCase.Severity, testCase.Time)
+		filename, _ := logName(testCase)
 		details, err := parseLogFilename(filename)
 		if err != nil {
 			t.Fatal(err)
 		}
-		if details.Severity != testCase.Severity {
-			t.Errorf("%d: Severities do not match, expected:%s - actual:%s", i, testCase.Severity.Name(), details.Severity.Name())
-		}
-		if a, e := time.Unix(0, details.Time).Format(time.RFC3339), testCase.Time.Format(time.RFC3339); a != e {
+		if a, e := time.Unix(0, details.Time).Format(time.RFC3339), testCase.Format(time.RFC3339); a != e {
 			t.Errorf("%d: Times do not match, expected:%s - actual:%s", i, e, a)
 		}
 	}
@@ -58,13 +52,12 @@ func TestSelectFiles(t *testing.T) {
 	year2050 := time.Date(2050, time.January, 1, 1, 0, 0, 0, time.UTC)
 	year2200 := time.Date(2200, time.January, 1, 1, 0, 0, 0, time.UTC)
 	for i := 0; i < 100; i++ {
-		sev := Severity_INFO + Severity(i)%(Severity_FATAL-Severity_INFO)
 		fileTime := year2000.AddDate(i, 0, 0)
-		name, _ := logName(sev, fileTime)
+		name, _ := logName(fileTime)
 		testfile := FileInfo{
 			Name: name,
 			Details: FileDetails{
-				Severity: sev,
+				Severity: Severity_INFO,
 				Time:     fileTime.UnixNano(),
 			},
 		}
@@ -72,23 +65,16 @@ func TestSelectFiles(t *testing.T) {
 	}
 
 	testCases := []struct {
-		Severity      Severity
 		EndTimestamp  int64
 		ExpectedCount int
 	}{
-		{Severity_INFO, year2200.UnixNano(), 34},
-		{Severity_WARNING, year2200.UnixNano(), 33},
-		{Severity_ERROR, year2200.UnixNano(), 33},
-		{Severity_INFO, year2050.UnixNano(), 17},
-		{Severity_WARNING, year2050.UnixNano(), 17},
-		{Severity_ERROR, year2050.UnixNano(), 17},
-		{Severity_INFO, year2000.UnixNano(), 1},
-		{Severity_WARNING, year2000.UnixNano(), 0},
-		{Severity_ERROR, year2000.UnixNano(), 0},
+		{year2200.UnixNano(), 100},
+		{year2050.UnixNano(), 51},
+		{year2000.UnixNano(), 1},
 	}
 
 	for i, testCase := range testCases {
-		actualFiles := selectFiles(testFiles, testCase.Severity, testCase.EndTimestamp)
+		actualFiles := selectFiles(testFiles, testCase.EndTimestamp)
 		previousTimestamp := year2200.UnixNano()
 		if len(actualFiles) != testCase.ExpectedCount {
 			t.Errorf("%d: expected %d files, actual %d", i, testCase.ExpectedCount, len(actualFiles))
@@ -96,9 +82,6 @@ func TestSelectFiles(t *testing.T) {
 		for _, file := range actualFiles {
 			if file.Details.Time > previousTimestamp {
 				t.Errorf("%d: returned files are not in the correct order", i)
-			}
-			if file.Details.Severity != testCase.Severity {
-				t.Errorf("%d: did not filter by severity", i)
 			}
 			if file.Details.Time > testCase.EndTimestamp {
 				t.Errorf("%d: did not filter by endTime", i)

@@ -145,7 +145,7 @@ func dirTestOverride(dir string) error {
 	// output, so that a rotation to the new directory is forced on
 	// the next logging event.
 	logging.mu.Lock()
-	err := logging.closeFilesLocked()
+	err := logging.closeFileLocked()
 	logging.mu.Unlock()
 
 	return err
