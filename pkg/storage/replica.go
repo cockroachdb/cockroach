@@ -4847,3 +4847,8 @@ func calcGoodReplicas(
 	}
 	return goodReplicas, behindCount
 }
+
+// GetTempDir proxies to Store.GetTempDir.
+func (r *Replica) GetTempDir() string {
+	return r.store.GetTempDir()
+}

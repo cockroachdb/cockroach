@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"os"
 	"runtime"
 	"sync"
 	"sync/atomic"
@@ -4042,6 +4043,15 @@ func (s *Store) FrozenStatus(collectFrozen bool) (repDescs []roachpb.ReplicaDesc
 		return true // want more
 	})
 	return
+}
+
+// GetTempDir returns path to a store-specific tempdir. In-mem and non-RocksDB
+// stores return os.TempDir (e.g. $TMPDIR or /tmp).
+func (s *Store) GetTempDir() string {
+	if rocksdb, ok := s.engine.(*engine.RocksDB); ok {
+		return rocksdb.GetTempDir()
+	}
+	return os.TempDir()
 }
 
 // The methods below can be used to control a store's queues. Stopping a queue

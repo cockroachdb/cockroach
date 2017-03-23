@@ -502,7 +502,7 @@ func BenchmarkRocksDBSstFileReader(b *testing.B) {
 	}
 
 	b.ResetTimer()
-	sst, err := MakeRocksDBSstFileReader()
+	sst, err := MakeRocksDBSstFileReader("")
 	if err != nil {
 		b.Fatal(err)
 	}

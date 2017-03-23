@@ -100,7 +100,7 @@ func evalImport(ctx context.Context, cArgs storage.CommandArgs) error {
 			}
 		}
 
-		sst, err := engine.MakeRocksDBSstFileReader()
+		sst, err := engine.MakeRocksDBSstFileReader(cArgs.Repl.GetTempDir())
 		if err != nil {
 			return err
 		}
