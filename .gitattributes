@@ -1,6 +1,7 @@
 *.pb.* -diff
+embedded.go -diff
 pkg/sql/parser/sql.go -diff
-pkg/ui/app/js/protos.js -diff
-pkg/ui/embedded.go -diff
+pkg/ui/src/js/protos.js -diff
 pkg/ui/generated/* -diff
+pkg/ui/yarn.lock -merge
 glide.lock -merge
