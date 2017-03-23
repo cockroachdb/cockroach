@@ -77,7 +77,7 @@ echo "${username}:x:${uid_gid}::${container_home}:/bin/bash" > "${passwd_file}"
 # created as the invoking user. Docker would otherwise create them when
 # mounting, but that would deny write access to the invoking user since docker
 # runs as root.
-mkdir -p "${HOME}"/.{jspm,yarn-cache} "${gocache}"/pkg/docker_amd64{,_msan,_musl,_race} "${gocache}/bin/docker_amd64"
+mkdir -p "${HOME}"/.yarn-cache "${gocache}"/pkg/docker_amd64{,_msan,_musl,_race} "${gocache}/bin/docker_amd64"
 
 # Since we're mounting both /root and its subdirectories in our container,
 # Docker will create the subdirectories on the host side under the directory
@@ -88,7 +88,7 @@ mkdir -p "${HOME}"/.{jspm,yarn-cache} "${gocache}"/pkg/docker_amd64{,_msan,_musl
 # Note: this only happens on Linux. On Docker for Mac, the directories are
 # still created, but they're owned by the invoking user already. See
 # https://github.com/docker/docker/issues/26051.
-mkdir -p "${host_home}"/.{jspm,yarn-cache}
+mkdir -p "${host_home}"/.yarn-cache
 
 # Run our build container with a set of volumes mounted that will
 # allow the container to store persistent build data on the host
@@ -120,7 +120,6 @@ vols="${vols} --volume=${gocache}/pkg/docker_amd64_msan:/usr/local/go/pkg/linux_
 vols="${vols} --volume=${gocache}/pkg/docker_amd64_musl:/usr/local/go/pkg/linux_amd64_musl"
 vols="${vols} --volume=${gocache}/pkg/docker_amd64_race:/usr/local/go/pkg/linux_amd64_race"
 vols="${vols} --volume=${gocache}/bin/docker_amd64:/go/bin"
-vols="${vols} --volume=${HOME}/.jspm:${container_home}/.jspm"
 vols="${vols} --volume=${HOME}/.yarn-cache:${container_home}/.yarn-cache"
 vols="${vols} --volume=${cockroach_toplevel}:/go/src/github.com/cockroachdb/cockroach"
 
@@ -145,7 +144,6 @@ docker run --privileged -i ${tty-} --rm \
   --workdir="/go/src/github.com/cockroachdb/cockroach" \
   --env="TMPDIR=/go/src/github.com/cockroachdb/cockroach/artifacts" \
   --env="PAGER=cat" \
-  --env="JSPM_GITHUB_AUTH_TOKEN=${JSPM_GITHUB_AUTH_TOKEN-763c42afb2d31eb7bc150da33402a24d0e081aef}" \
   --env="CLOUDSDK_CORE_PROJECT=${CLOUDSDK_CORE_PROJECT-${GOOGLE_PROJECT-}}" \
   --env="GOOGLE_CREDENTIALS=${GOOGLE_CREDENTIALS-}" \
   --env="GOTRACEBACK=${GOTRACEBACK-all}" \

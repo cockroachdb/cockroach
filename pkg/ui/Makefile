@@ -41,16 +41,6 @@ GOPATH = $(GITHUB_ROOT)/../..
 GOPATH_BIN = $(GOPATH)/bin
 GO_BINDATA = $(GOPATH_BIN)/go-bindata
 
-NODE_MODULES  = node_modules
-JSPM_PACKAGES = jspm_packages
-TYPINGS       = typings
-TS_ROOT       = app
-STYL_ROOT     = styl
-
-GOBINDATA_FONTS  = fonts
-GOBINDATA_ASSETS = assets
-CSS_TARGET       = build/app.css
-JSPM_TARGET      = build/app.js
 GOBINDATA_TARGET = embedded.go
 
 .PHONY: all
@@ -66,52 +56,29 @@ app/js/protos.js generated/protos.json generated/protos.d.ts: $(addprefix $(REPO
 	$(MAKE) -C $(ORG_ROOT) -f cockroach/build/protobuf.mk
 
 .PHONY: lint
-lint: yarn.installed typings.installed
-	stylint -c .stylintrc $(STYL_ROOT)
-	tslint -c tslint.json $(shell find $(TS_ROOT) -name '*.tsx' -or -name '*.ts')
+lint: yarn.installed
+	stylint -c .stylintrc styl
+	tslint -c tslint.json $(shell find src -name '*.tsx' -or -name '*.ts')
 
 .PHONY: test
-test: yarn.installed typings.installed jspm.installed
+test: yarn.installed
 	karma start
 
-test-debug: yarn.installed typings.installed jspm.installed
+test-debug: yarn.installed
 	karma start --browsers Chrome --no-single-run --reporters mocha
 
-GOBINDATA_SOURCES = $(JSPM_TARGET) assets fonts favicon.ico apple-touch-icon.png release.html
+.ALWAYS_REBUILD:
+.PHONY: .ALWAYS_REBUILD
 
-$(GOBINDATA_TARGET): $(GO_BINDATA) $(GOBINDATA_SOURCES)
-	$(GO_BINDATA) -nometadata -pkg ui -o $@ $(GOBINDATA_SOURCES)
+$(GOBINDATA_TARGET): yarn.installed $(GO_BINDATA) .ALWAYS_REBUILD
+	rm -rf dist
+	webpack -p
+	$(GO_BINDATA) -nometadata -pkg ui -o $@ -prefix dist dist
 	# Add comment recognized by reviewable.
 	echo '// GENERATED FILE DO NOT EDIT' >> $@
 	gofmt -s -w $@
 	goimports -w $@
 
-$(JSPM_TARGET): jspm.installed typings.installed $(CSS_TARGET) $(shell find $(TS_ROOT) -name '*.tsx' -or -name '*.ts' -or -name '*.js')
-	jspm bundle-sfx app/app build/app.js
-
-.PHONY: livereload
-livereload:
-	chokidar-socket-emitter
-
-# TODO(tamird/matt/max): write a systemjs stylus plugin.
-.PHONY: watch
-watch: STYLFLAGS += --watch
-watch: $(CSS_TARGET)
-
-$(CSS_TARGET): STYLFLAGS += --include-css
-$(CSS_TARGET): STYLFLAGS += --use nib
-$(CSS_TARGET): $(shell find $(STYL_ROOT)) yarn.installed
-	stylus $(STYL_ROOT)/app.styl $(STYLFLAGS) --out $@
-
 yarn.installed: package.json yarn.lock
 	yarn install
-	touch $@
-
-typings.installed: generated/protos.d.ts typings.json yarn.installed jspm.installed
-	typings install
-	typings prune
-	touch $@
-
-jspm.installed: yarn.installed
-	jspm install
 	touch $@
