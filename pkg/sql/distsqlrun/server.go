@@ -172,11 +172,11 @@ func (ds *ServerImpl) SetupFlow(_ context.Context, req *SetupFlowRequest) (*Simp
 	// can't associate it with the flow.
 	ctx := ds.AnnotateCtx(context.TODO())
 	ctx, f, err := ds.setupFlow(ctx, req, nil)
-	if err != nil {
-		return nil, err
+	if err == nil {
+		err = ds.flowScheduler.ScheduleFlow(ctx, f)
 	}
-	if err := ds.flowScheduler.ScheduleFlow(ctx, f); err != nil {
-		return nil, err
+	if err != nil {
+		return &SimpleResponse{Error: NewError(err)}, nil
 	}
 	return &SimpleResponse{}, nil
 }
