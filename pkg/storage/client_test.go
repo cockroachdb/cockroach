@@ -938,6 +938,7 @@ func (m *multiTestContext) restart() {
 func (m *multiTestContext) changeReplicasLocked(
 	rangeID roachpb.RangeID, dest int, changeType roachpb.ReplicaChangeType,
 ) (roachpb.ReplicaID, error) {
+	ctx := context.TODO()
 	startKey := m.findStartKeyLocked(rangeID)
 
 	// Perform a consistent read to get the updated range descriptor (as
@@ -946,16 +947,9 @@ func (m *multiTestContext) changeReplicasLocked(
 	// ChangeReplicas returns the raft leader is guaranteed to have the
 	// updated version, but followers are not.
 	var desc roachpb.RangeDescriptor
-	if err := m.dbs[0].GetProto(context.Background(), keys.RangeDescriptorKey(startKey), &desc); err != nil {
+	if err := m.dbs[0].GetProto(ctx, keys.RangeDescriptorKey(startKey), &desc); err != nil {
 		return 0, err
 	}
-
-	repl, err := m.findMemberStoreLocked(desc).GetReplica(desc.RangeID)
-	if err != nil {
-		return 0, err
-	}
-
-	ctx := repl.AnnotateCtx(context.Background())
 
 	var alreadyDoneErr string
 	switch changeType {
@@ -966,36 +960,34 @@ func (m *multiTestContext) changeReplicasLocked(
 	}
 
 	for {
-		if err := repl.ChangeReplicas(
-			ctx,
-			changeType,
-			roachpb.ReplicationTarget{
+		err := m.dbs[0].AdminChangeReplicas(
+			ctx, startKey.AsRawKey(), changeType,
+			[]roachpb.ReplicationTarget{{
 				NodeID:  m.idents[dest].NodeID,
 				StoreID: m.idents[dest].StoreID,
-			},
-			&desc,
-		); err == nil || testutils.IsError(err, alreadyDoneErr) {
+			}},
+		)
+
+		if err == nil || testutils.IsError(err, alreadyDoneErr) {
 			break
-		} else if _, ok := errors.Cause(err).(*roachpb.AmbiguousResultError); ok {
+		}
+
+		if _, ok := errors.Cause(err).(*roachpb.AmbiguousResultError); ok {
 			// Try again after an AmbigousResultError. If the operation
 			// succeeded, then the next attempt will return alreadyDoneErr;
 			// if it failed then the next attempt should succeed.
 			continue
-		} else if _, ok := errors.Cause(err).(*roachpb.ConditionFailedError); ok {
-			// Try again after a ConditionFailedError. This could be
-			// because the replica we used here is out of date, and the
-			// operation will succeed after it has caught up.
-			//
-			// TODO(bdarnell): it would be nicer to find the lease holder
-			// and call ChangeReplicas on that replica, instead of calling
-			// it on an arbitrary replica and catching this failure.
-			continue
-		} else if storage.IsSnapshotError(err) {
-			continue
-		} else {
-			return 0, err
 		}
+
+		// We can't use storage.IsSnapshotError() because the original error object
+		// is lost. We could make a this into a roachpb.Error but it seems overkill
+		// for this one usage.
+		if testutils.IsError(err, "snapshot failed: .*") {
+			continue
+		}
+		return 0, err
 	}
+
 	return desc.NextReplicaID, nil
 }
 
