@@ -493,11 +493,10 @@ SELECT a,b,f FROM add_default
 3 10   NULL
 5 NULL NULL
 
-# Temporarily disabled due to #13646.
-# # Adding a unique column to an existing table with data with a default value
-# # is illegal
-# statement error duplicate key value .* violates unique constraint \"add_default_f_key\"
-# ALTER TABLE add_default ADD f TIMESTAMP UNIQUE DEFAULT current_timestamp()
+# Adding a unique column to an existing table with data with a default value
+# is illegal
+statement error duplicate key value .* violates unique constraint \"add_default_g_key\"
+ALTER TABLE add_default ADD g TIMESTAMP UNIQUE DEFAULT current_timestamp()
 
 # Multiple columns can be added at once with heterogeneous DEFAULT usage
 statement ok

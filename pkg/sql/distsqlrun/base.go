@@ -18,12 +18,14 @@
 package distsqlrun
 
 import (
+	"fmt"
 	"sync"
 	"sync/atomic"
 
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -258,7 +260,8 @@ type ProducerMetadata struct {
 	// there's consumers out there that extract the error and, if there is one,
 	// forward it in isolation and drop the rest of the record.
 	Ranges []roachpb.RangeInfo
-	Err    error
+	// TODO(vivek): change to type Error
+	Err error
 }
 
 // Empty returns true if none of the fields in metadata are populated.
@@ -604,4 +607,35 @@ func SetFlowRequestTrace(ctx context.Context, req *SetupFlowRequest) error {
 	req.TraceContext = &tracing.SpanContextCarrier{}
 	tracer := sp.Tracer()
 	return tracer.Inject(sp.Context(), basictracer.Delegator, req.TraceContext)
+}
+
+// String implements fmt.Stringer.
+func (e *Error) String() string {
+	if err := e.ErrorDetail(); err != nil {
+		return err.Error()
+	}
+	return "<nil>"
+}
+
+// NewError creates an Error from an error.
+func NewError(err error) *Error {
+	pgErr, ok := pgerror.GetPGCause(err)
+	if !ok {
+		pgErr = pgerror.NewError(pgerror.CodeInternalError, err.Error()).(*pgerror.Error)
+	}
+	return &Error{Detail: &Error_PGError{PGError: pgErr}}
+}
+
+// ErrorDetail returns the payload as a Go error.
+func (e *Error) ErrorDetail() error {
+	if e == nil {
+		return nil
+	}
+	switch t := e.Detail.(type) {
+	case *Error_PGError:
+		return t.PGError
+
+	default:
+		panic(fmt.Sprintf("bad error detail: %+v", t))
+	}
 }

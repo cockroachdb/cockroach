@@ -24,30 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
-// RemoteDistSQLProducerError is an error flowing through a node that came from
-// a producer running on another node.
-// The point of this error struct is to allow such errors to be marshalled back
-// and forth through a roachpb.Error without loss.
-type RemoteDistSQLProducerError struct {
-	// TODO(andrei, radu): This (and RemoteProducerMetadata.error) should be a
-	// distsql-specific proto instead of roachpb.Error. And then
-	// RemoteDistSQLProducerError should move out of this file.
-	wrapped Error
-}
-
-// RemoteDistSQLProducerError implements error.
-var _ error = &RemoteDistSQLProducerError{}
-
-func (err *RemoteDistSQLProducerError) Error() string {
-	return fmt.Sprintf("RemoteDistSQLProducerError: %s", err.wrapped.GoError())
-}
-
-// WrapRemoteProducerError wraps an pErr that DistSQL got over the wire into a
-// RemoteDistSQLProcuderError.
-func WrapRemoteProducerError(err Error) error {
-	return &RemoteDistSQLProducerError{wrapped: err}
-}
-
 // RetryableTxnError represents a retryable transaction error - the transaction
 // that caused it should be re-run.
 type RetryableTxnError struct {
@@ -122,9 +98,7 @@ func NewError(err error) *Error {
 		return nil
 	}
 	e := &Error{}
-	if remoteErr, ok := err.(*RemoteDistSQLProducerError); ok {
-		*e = remoteErr.wrapped
-	} else if intErr, ok := err.(*internalError); ok {
+	if intErr, ok := err.(*internalError); ok {
 		*e = *(*Error)(intErr)
 	} else if _, ok := err.(*RetryableTxnError); ok {
 		// This shouldn't happen; RetryableTxnError should never be converted back
