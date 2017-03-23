@@ -24,6 +24,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -604,4 +605,33 @@ func SetFlowRequestTrace(ctx context.Context, req *SetupFlowRequest) error {
 	req.TraceContext = &tracing.SpanContextCarrier{}
 	tracer := sp.Tracer()
 	return tracer.Inject(sp.Context(), basictracer.Delegator, req.TraceContext)
+}
+
+// String implements fmt.Stringer.
+func (e *Error) String() string {
+	if err := e.GoError(); err != nil {
+		return err.Error()
+	}
+	return "<nil>"
+}
+
+// NewError creates an Error from an error.
+func NewError(err error) *Error {
+	pgErr, ok := pgerror.GetPGCause(err)
+	if !ok {
+		pgErr = pgerror.NewError(pgerror.CodeInternalError, err.Error()).(*pgerror.Error)
+	}
+	return &Error{Detail: &Error_PGError{PGError: pgErr}}
+}
+
+// GoError returns a Go error converted from Error.
+func (e *Error) GoError() error {
+	if e == nil {
+		return nil
+	}
+	switch t := e.Detail.(type) {
+	case *Error_PGError:
+		return t.PGError
+	}
+	return nil
 }

@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -172,10 +173,13 @@ func (ds *ServerImpl) SetupFlow(_ context.Context, req *SetupFlowRequest) (*Simp
 	// can't associate it with the flow.
 	ctx := ds.AnnotateCtx(context.TODO())
 	ctx, f, err := ds.setupFlow(ctx, req, nil)
-	if err != nil {
-		return nil, err
+	if err == nil {
+		err = ds.flowScheduler.ScheduleFlow(ctx, f)
 	}
-	if err := ds.flowScheduler.ScheduleFlow(ctx, f); err != nil {
+	if err != nil {
+		if pgErr, ok := pgerror.GetPGCause(err); ok {
+			return &SimpleResponse{Error: &Error{Detail: &Error_PGError{PGError: pgErr}}}, nil
+		}
 		return nil, err
 	}
 	return &SimpleResponse{}, nil
