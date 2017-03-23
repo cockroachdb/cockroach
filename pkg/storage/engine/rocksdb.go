@@ -688,6 +688,15 @@ func (r *RocksDB) GetStats() (*Stats, error) {
 	}, nil
 }
 
+// GetTempDir wraps ioutil.TempDir to have it alloc in store dir/tmp. In-memory
+// stores will return "".
+func (r *RocksDB) GetTempDir() string {
+	if r.dir != "" {
+		return filepath.Join(r.dir, "tmp")
+	}
+	return ""
+}
+
 type rocksDBSnapshot struct {
 	parent *RocksDB
 	handle *C.DBEngine
@@ -1674,8 +1683,13 @@ type RocksDBSstFileReader struct {
 
 // MakeRocksDBSstFileReader creates a RocksDBSstFileReader that uses a scratch
 // directory which is cleaned up by `Close`.
-func MakeRocksDBSstFileReader() (RocksDBSstFileReader, error) {
-	dir, err := ioutil.TempDir("", "RocksDBSstFileReader")
+func MakeRocksDBSstFileReader(tmpPrefix string) (RocksDBSstFileReader, error) {
+	if tmpPrefix != "" {
+		if err := os.MkdirAll(tmpPrefix, 0755); err != nil {
+			return RocksDBSstFileReader{}, err
+		}
+	}
+	dir, err := ioutil.TempDir(tmpPrefix, "RocksDBSstFileReader")
 	if err != nil {
 		return RocksDBSstFileReader{}, err
 	}
