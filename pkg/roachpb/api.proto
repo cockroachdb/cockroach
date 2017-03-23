@@ -384,6 +384,19 @@ message AdminTransferLeaseResponse {
   optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }
 
+// An AdminChangeReplicasRequest is the argument to the AdminChangeReplicas()
+// method. A change replicas operation allows adding or removing a set of
+// replicas for a range.
+message AdminChangeReplicasRequest {
+  optional Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  optional ReplicaChangeType change_type = 2 [(gogoproto.nullable) = false];
+  repeated ReplicationTarget targets = 3 [(gogoproto.nullable) = false];
+}
+
+message AdminChangeReplicasResponse {
+  optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+}
+
 // A RangeLookupRequest is arguments to the RangeLookup() method. A
 // forward lookup request returns a range containing the requested
 // key. A reverse lookup request returns a range containing the
@@ -867,6 +880,7 @@ message RequestUnion {
   optional AdminSplitRequest admin_split = 10;
   optional AdminMergeRequest admin_merge = 11;
   optional AdminTransferLeaseRequest admin_transfer_lease = 29;
+  optional AdminChangeReplicasRequest admin_change_replicas = 35;
   optional HeartbeatTxnRequest heartbeat_txn = 12;
   optional GCRequest gc = 13;
   optional PushTxnRequest push_txn = 14;
@@ -913,6 +927,7 @@ message ResponseUnion {
   optional AdminSplitResponse admin_split = 10;
   optional AdminMergeResponse admin_merge = 11;
   optional AdminTransferLeaseResponse admin_transfer_lease = 29;
+  optional AdminChangeReplicasResponse admin_change_replicas = 35;
   optional HeartbeatTxnResponse heartbeat_txn = 12;
   optional GCResponse gc = 13;
   optional PushTxnResponse push_txn = 14;

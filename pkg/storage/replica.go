@@ -1913,17 +1913,32 @@ func (r *Replica) addAdminCmd(
 		var reply roachpb.AdminSplitResponse
 		reply, pErr = r.AdminSplit(ctx, *tArgs)
 		resp = &reply
+
 	case *roachpb.AdminMergeRequest:
 		var reply roachpb.AdminMergeResponse
 		reply, pErr = r.AdminMerge(ctx, *tArgs)
 		resp = &reply
+
 	case *roachpb.AdminTransferLeaseRequest:
 		pErr = roachpb.NewError(r.AdminTransferLease(ctx, tArgs.Target))
 		resp = &roachpb.AdminTransferLeaseResponse{}
+
+	case *roachpb.AdminChangeReplicasRequest:
+		var err error
+		for _, target := range tArgs.Targets {
+			err = r.ChangeReplicas(ctx, tArgs.ChangeType, target, r.Desc())
+			if err != nil {
+				break
+			}
+		}
+		pErr = roachpb.NewError(err)
+		resp = &roachpb.AdminChangeReplicasResponse{}
+
 	case *roachpb.CheckConsistencyRequest:
 		var reply roachpb.CheckConsistencyResponse
 		reply, pErr = r.CheckConsistency(ctx, *tArgs)
 		resp = &reply
+
 	case *roachpb.ImportRequest:
 		cArgs := CommandArgs{
 			Repl:   r,
@@ -1933,6 +1948,7 @@ func (r *Replica) addAdminCmd(
 		resp = &roachpb.ImportResponse{}
 		err := importCmdFn(ctx, cArgs)
 		pErr = roachpb.NewError(err)
+
 	default:
 		return nil, roachpb.NewErrorf("unrecognized admin command: %T", args)
 	}

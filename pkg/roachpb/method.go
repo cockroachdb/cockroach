@@ -65,6 +65,8 @@ const (
 	AdminMerge
 	// AdminTransferLease is called to initiate a range lease transfer.
 	AdminTransferLease
+	// AdminChangeReplicas is called to add or remove replicas for a range.
+	AdminChangeReplicas
 	// HeartbeatTxn sends a periodic heartbeat to extant
 	// transaction rows to indicate the client is still alive and
 	// the transaction should not be considered abandoned.

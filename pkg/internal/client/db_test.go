@@ -369,6 +369,7 @@ func TestCommonMethods(t *testing.T) {
 		{dbType, "AdminMerge"}:                 {},
 		{dbType, "AdminSplit"}:                 {},
 		{dbType, "AdminTransferLease"}:         {},
+		{dbType, "AdminChangeReplicas"}:        {},
 		{dbType, "CheckConsistency"}:           {},
 		{dbType, "Run"}:                        {},
 		{dbType, "Txn"}:                        {},
