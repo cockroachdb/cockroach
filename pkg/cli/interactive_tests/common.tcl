@@ -22,7 +22,10 @@ set stty_init "cols 80 rows 25"
 proc eexpect {text} {
     expect {
 	$text {}
-	timeout {exit 1}
+	timeout {
+	    system "echo SERVER STDOUT; cat stdout.log; echo SERVER STDERR; cat stderr.log"
+	    exit 1
+	}
     }
 }
 
@@ -36,7 +39,7 @@ proc interrupt {} {
 # Preserves the invariant that the server's PID is saved
 # in `server_pid`.
 proc start_server {argv} {
-    system "mkfifo pid_fifo || true; $argv start --pid-file=pid_fifo --background & cat pid_fifo > server_pid"
+    system "mkfifo pid_fifo || true; $argv start --pid-file=pid_fifo --background >>stdout.log 2>>stderr.log & cat pid_fifo > server_pid"
 }
 proc stop_server {argv} {
     system "set -e; if kill -CONT `cat server_pid`; then $argv quit || true & sleep 1; kill -9 `cat server_pid` || true; else $argv quit || true; fi"
