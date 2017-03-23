@@ -18,7 +18,8 @@ package parser
 
 import "bytes"
 
-// Split represents a SPLIT statement. Only one of Table and Index can be set.
+// Split represents an `ALTER TABLE/INDEX .. SPLIT AT ..` statement.
+// Only one of Table and Index can be set.
 type Split struct {
 	Table *NormalizableTableName
 	Index *TableNameWithIndex
@@ -38,5 +39,30 @@ func (node *Split) Format(buf *bytes.Buffer, f FmtFlags) {
 		FormatNode(buf, f, node.Table)
 	}
 	buf.WriteString(" SPLIT AT ")
+	FormatNode(buf, f, node.Rows)
+}
+
+// Relocate represents an `ALTER TABLE/INDEX .. TESTING_RELOCATE ..`
+// statement.
+type Relocate struct {
+	Table *NormalizableTableName
+	Index *TableNameWithIndex
+	// Each row contains an array with store ids and values for the columns in the
+	// PK or index (or a prefix of the columns).
+	// See docs/RFCS/sql_split_syntax.md.
+	Rows *Select
+}
+
+// Format implements the NodeFormatter interface.
+func (node *Relocate) Format(buf *bytes.Buffer, f FmtFlags) {
+	buf.WriteString("ALTER ")
+	if node.Index != nil {
+		buf.WriteString("INDEX ")
+		FormatNode(buf, f, node.Index)
+	} else {
+		buf.WriteString("TABLE ")
+		FormatNode(buf, f, node.Table)
+	}
+	buf.WriteString(" TESTING_RELOCATE ")
 	FormatNode(buf, f, node.Rows)
 }

@@ -388,6 +388,7 @@ func (u *sqlSymUnion) kvOptions() []KVOption {
 %type <Statement> set_stmt
 %type <Statement> show_stmt
 %type <Statement> split_stmt
+%type <Statement> testing_relocate_stmt
 %type <Statement> transaction_stmt
 %type <Statement> truncate_stmt
 %type <Statement> update_stmt
@@ -687,7 +688,7 @@ func (u *sqlSymUnion) kvOptions() []KVOption {
 %token <str>   START STDIN STRICT STRING STORING SUBSTRING
 %token <str>   SYMMETRIC SYSTEM
 
-%token <str>   TABLE TABLES TEMPLATE TESTING_RANGES TEXT THEN
+%token <str>   TABLE TABLES TEMPLATE TESTING_RANGES TESTING_RELOCATE TEXT THEN
 %token <str>   TIME TIMESTAMP TIMESTAMPTZ TO TRAILING TRANSACTION TREAT TRIM TRUE
 %token <str>   TRUNCATE TYPE
 
@@ -823,6 +824,7 @@ stmt:
 | set_stmt
 | show_stmt
 | split_stmt
+| testing_relocate_stmt
 | transaction_stmt
 | release_stmt
 | truncate_stmt
@@ -1189,6 +1191,7 @@ explainable_stmt:
 | show_stmt
 | help_stmt
 | split_stmt
+| testing_relocate_stmt
 | explain_stmt { /* SKIP DOC */ }
 
 explain_option_list:
@@ -1698,6 +1701,18 @@ split_stmt:
 | ALTER INDEX table_name_with_index SPLIT AT select_stmt
   {
     $$.val = &Split{Index: $3.tableWithIdx(), Rows: $6.slct()}
+  }
+
+testing_relocate_stmt:
+  ALTER TABLE qualified_name TESTING_RELOCATE select_stmt
+  {
+    /* SKIP DOC */
+    $$.val = &Relocate{Table: $3.newNormalizableTableName(), Rows: $5.slct()}
+  }
+| ALTER INDEX table_name_with_index TESTING_RELOCATE select_stmt
+  {
+    /* SKIP DOC */
+    $$.val = &Relocate{Index: $3.tableWithIdx(), Rows: $5.slct()}
   }
 
 // CREATE TABLE relname
@@ -5219,6 +5234,7 @@ unreserved_keyword:
 | TABLES
 | TEMPLATE
 | TESTING_RANGES
+| TESTING_RELOCATE
 | TEXT
 | TRANSACTION
 | TRUNCATE
