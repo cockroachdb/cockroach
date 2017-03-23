@@ -68,8 +68,8 @@ var (
 	// Lease request metrics.
 	metaLeaseRequestSuccessCount  = metric.Metadata{Name: "leases.success"}
 	metaLeaseRequestErrorCount    = metric.Metadata{Name: "leases.error"}
-	metaLeaseTransferSuccessCount = metric.Metadata{Name: "leasestransfers.success"}
-	metaLeaseTransferErrorCount   = metric.Metadata{Name: "leasestransfers.error"}
+	metaLeaseTransferSuccessCount = metric.Metadata{Name: "leases.transfers.success"}
+	metaLeaseTransferErrorCount   = metric.Metadata{Name: "leases.transfers.error"}
 	metaLeaseExpirationCount      = metric.Metadata{Name: "leases.expiration"}
 	metaLeaseEpochCount           = metric.Metadata{Name: "leases.epoch"}
 
