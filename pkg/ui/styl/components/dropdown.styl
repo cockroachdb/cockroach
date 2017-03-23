@@ -59,8 +59,11 @@
 
     .dropdown__side-arrow
       display inline
+      transition background-color 0.5s ease-in-out
+      background-color transparent
 
-      &:hover
+      &:hover, &.dropdown__side-arrow--highlight
         background-color $hover-gray
+        transition background-color 0s ease-in-out
 
 // NOTE: react-select styles can be found in shame.styl

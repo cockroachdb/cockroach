@@ -66,9 +66,16 @@ interface TimeScaleDropdownProps {
   defaultTimescaleSet: boolean;
 }
 
+class TimeScaleDropdownState {
+  keyJustPressed: ArrowDirection;
+}
+
 // TimeScaleDropdown is the dropdown that allows users to select the time range
 // for graphs.
-class TimeScaleDropdown extends React.Component<TimeScaleDropdownProps, {}> {
+class TimeScaleDropdown extends React.Component<TimeScaleDropdownProps, TimeScaleDropdownState> {
+
+  state = new TimeScaleDropdownState();
+
   changeSettings = (newTimescaleKey: DropdownOption) => {
     let newSettings = timewindow.availableTimeScales[newTimescaleKey.value];
     if (newSettings) {
@@ -139,9 +146,27 @@ class TimeScaleDropdown extends React.Component<TimeScaleDropdownProps, {}> {
     }
   }
 
+  keypress = (event: KeyboardEvent) => {
+    let arrowDirection;
+    if (event.which === 37) {
+      arrowDirection = ArrowDirection.LEFT;
+    } else if (event.which === 39) {
+      arrowDirection = ArrowDirection.RIGHT;
+    }
+
+    if (!_.isUndefined(arrowDirection)) {
+      this.arrowClick(arrowDirection);
+      this.setState({
+        keyJustPressed: arrowDirection,
+      });
+      setTimeout(() => this.setState({ keyJustPressed: null }));
+    }
+  }
+
   componentWillMount() {
     this.props.refreshNodes();
     this.setDefaultTime();
+    document.addEventListener("keydown", this.keypress);
   }
 
   componentWillReceiveProps(props: TimeScaleDropdownProps) {
@@ -150,6 +175,10 @@ class TimeScaleDropdown extends React.Component<TimeScaleDropdownProps, {}> {
     } else {
       this.setDefaultTime(props);
     }
+  }
+
+  componentWillUnmount() {
+    document.removeEventListener("keydown", this.keypress);
   }
 
   render() {
@@ -174,6 +203,7 @@ class TimeScaleDropdown extends React.Component<TimeScaleDropdownProps, {}> {
         onChange={this.changeSettings}
         onArrowClick={this.arrowClick}
         disabledArrows={disabledArrows}
+        highlightedArrow={this.state.keyJustPressed}
         />
       <span>{timeRange}</span>
     </div>;
