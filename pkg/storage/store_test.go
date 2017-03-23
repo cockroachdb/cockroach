@@ -435,8 +435,9 @@ func TestStoreRemoveReplicaOldDescriptor(t *testing.T) {
 	if err := rep.setDesc(newDesc); err != nil {
 		t.Fatal(err)
 	}
-	if err := store.RemoveReplica(context.Background(), rep, *origDesc, true); !testutils.IsError(err, "replica ID has changed") {
-		t.Fatalf("expected error 'replica ID has changed' but got %v", err)
+	expectedErr := "replica descriptor's ID has changed"
+	if err := store.RemoveReplica(context.Background(), rep, *origDesc, true); !testutils.IsError(err, expectedErr) {
+		t.Fatalf("expected error %q but got %v", expectedErr, err)
 	}
 
 	// Now try a fresh descriptor and succeed.
@@ -2492,8 +2493,6 @@ func TestRemovedReplicaTombstone(t *testing.T) {
 			tc.Start(t, stopper)
 			s := tc.store
 
-			// Bump up the existing replica's ID as specified then remove it to get a
-			// tombstone written.
 			repl1, err := s.GetReplica(rangeID)
 			if err != nil {
 				t.Fatal(err)
@@ -2504,14 +2503,30 @@ func TestRemovedReplicaTombstone(t *testing.T) {
 				t.Fatalf("test precondition not met; expected ReplicaID=1, got %d", repl1.mu.replicaID)
 			}
 			repl1.mu.Unlock()
+
+			// Try to trigger a race where the replica ID gets increased during the GC
+			// process by taking the store lock and inserting a short sleep to cause
+			// the goroutine to start running the setReplicaID call.
+			errChan := make(chan error)
+			s.mu.Lock()
+			go func() {
+				desc := roachpb.RangeDescriptor{
+					RangeID:       rangeID,
+					NextReplicaID: c.descNextReplicaID,
+				}
+				errChan <- s.RemoveReplica(context.Background(), repl1, desc, true)
+			}()
+
+			time.Sleep(1 * time.Millisecond)
 			if err := repl1.setReplicaID(c.setReplicaID); err != nil {
 				t.Fatal(err)
 			}
-			desc := roachpb.RangeDescriptor{
-				RangeID:       rangeID,
-				NextReplicaID: c.descNextReplicaID,
-			}
-			if err := s.RemoveReplica(context.Background(), repl1, desc, true); err != nil {
+			s.mu.Unlock()
+
+			if err := <-errChan; testutils.IsError(err, "replica ID has changed") {
+				// We didn't trigger the race, so just return success.
+				return
+			} else if err != nil {
 				t.Fatal(err)
 			}
 

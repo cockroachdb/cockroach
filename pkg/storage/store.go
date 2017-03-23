@@ -2211,11 +2211,22 @@ func (s *Store) removeReplicaImpl(
 ) error {
 	log.Infof(ctx, "removing replica")
 
-	desc := rep.Desc()
-	if repDesc, ok := desc.GetReplicaDescriptor(s.StoreID()); ok && repDesc.ReplicaID >= consistentDesc.NextReplicaID {
+	// We check both rep.mu.ReplicaID and rep.mu.state.Desc's replica ID because
+	// they can differ in cases when a replica's ID is increased due to an
+	// incoming raft message.
+	rep.mu.Lock()
+	if rep.mu.replicaID >= consistentDesc.NextReplicaID {
+		rep.mu.Unlock()
 		return errors.Errorf("cannot remove replica %s; replica ID has changed (%s >= %s)",
+			rep, rep.mu.replicaID, consistentDesc.NextReplicaID)
+	}
+	desc := rep.mu.state.Desc
+	if repDesc, ok := desc.GetReplicaDescriptor(s.StoreID()); ok && repDesc.ReplicaID >= consistentDesc.NextReplicaID {
+		rep.mu.Unlock()
+		return errors.Errorf("cannot remove replica %s; replica descriptor's ID has changed (%s >= %s)",
 			rep, repDesc.ReplicaID, consistentDesc.NextReplicaID)
 	}
+	rep.mu.Unlock()
 
 	// TODO(peter): Could use s.mu.RLock here?
 	s.mu.Lock()
