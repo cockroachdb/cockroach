@@ -49,6 +49,9 @@ extern ReplicaDescriptorDefaultTypeInternal _ReplicaDescriptor_default_instance_
 class ReplicaIdent;
 class ReplicaIdentDefaultTypeInternal;
 extern ReplicaIdentDefaultTypeInternal _ReplicaIdent_default_instance_;
+class ReplicationTarget;
+class ReplicationTargetDefaultTypeInternal;
+extern ReplicationTargetDefaultTypeInternal _ReplicationTarget_default_instance_;
 class StoreCapacity;
 class StoreCapacityDefaultTypeInternal;
 extern StoreCapacityDefaultTypeInternal _StoreCapacity_default_instance_;
@@ -175,6 +178,102 @@ class Attributes : public ::google::protobuf::MessageLite /* @@protoc_insertion_
   ::google::protobuf::internal::HasBits<1> _has_bits_;
   mutable int _cached_size_;
   ::google::protobuf::RepeatedPtrField< ::std::string> attrs_;
+  friend struct  protobuf_cockroach_2fpkg_2froachpb_2fmetadata_2eproto::TableStruct;
+};
+// -------------------------------------------------------------------
+
+class ReplicationTarget : public ::google::protobuf::MessageLite /* @@protoc_insertion_point(class_definition:cockroach.roachpb.ReplicationTarget) */ {
+ public:
+  ReplicationTarget();
+  virtual ~ReplicationTarget();
+
+  ReplicationTarget(const ReplicationTarget& from);
+
+  inline ReplicationTarget& operator=(const ReplicationTarget& from) {
+    CopyFrom(from);
+    return *this;
+  }
+
+  inline const ::std::string& unknown_fields() const {
+    return _internal_metadata_.unknown_fields();
+  }
+
+  inline ::std::string* mutable_unknown_fields() {
+    return _internal_metadata_.mutable_unknown_fields();
+  }
+
+  static const ReplicationTarget& default_instance();
+
+  static inline const ReplicationTarget* internal_default_instance() {
+    return reinterpret_cast<const ReplicationTarget*>(
+               &_ReplicationTarget_default_instance_);
+  }
+
+  void Swap(ReplicationTarget* other);
+
+  // implements Message ----------------------------------------------
+
+  inline ReplicationTarget* New() const PROTOBUF_FINAL { return New(NULL); }
+
+  ReplicationTarget* New(::google::protobuf::Arena* arena) const PROTOBUF_FINAL;
+  void CheckTypeAndMergeFrom(const ::google::protobuf::MessageLite& from)
+    PROTOBUF_FINAL;
+  void CopyFrom(const ReplicationTarget& from);
+  void MergeFrom(const ReplicationTarget& from);
+  void Clear() PROTOBUF_FINAL;
+  bool IsInitialized() const PROTOBUF_FINAL;
+
+  size_t ByteSizeLong() const PROTOBUF_FINAL;
+  bool MergePartialFromCodedStream(
+      ::google::protobuf::io::CodedInputStream* input) PROTOBUF_FINAL;
+  void SerializeWithCachedSizes(
+      ::google::protobuf::io::CodedOutputStream* output) const PROTOBUF_FINAL;
+  void DiscardUnknownFields();
+  int GetCachedSize() const PROTOBUF_FINAL { return _cached_size_; }
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const;
+  void InternalSwap(ReplicationTarget* other);
+  private:
+  inline ::google::protobuf::Arena* GetArenaNoVirtual() const {
+    return NULL;
+  }
+  inline void* MaybeArenaPtr() const {
+    return NULL;
+  }
+  public:
+
+  ::std::string GetTypeName() const PROTOBUF_FINAL;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  bool has_node_id() const;
+  void clear_node_id();
+  static const int kNodeIdFieldNumber = 1;
+  ::google::protobuf::int32 node_id() const;
+  void set_node_id(::google::protobuf::int32 value);
+
+  bool has_store_id() const;
+  void clear_store_id();
+  static const int kStoreIdFieldNumber = 2;
+  ::google::protobuf::int32 store_id() const;
+  void set_store_id(::google::protobuf::int32 value);
+
+  // @@protoc_insertion_point(class_scope:cockroach.roachpb.ReplicationTarget)
+ private:
+  void set_has_node_id();
+  void clear_has_node_id();
+  void set_has_store_id();
+  void clear_has_store_id();
+
+  ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
+  ::google::protobuf::internal::HasBits<1> _has_bits_;
+  mutable int _cached_size_;
+  ::google::protobuf::int32 node_id_;
+  ::google::protobuf::int32 store_id_;
   friend struct  protobuf_cockroach_2fpkg_2froachpb_2fmetadata_2eproto::TableStruct;
 };
 // -------------------------------------------------------------------
@@ -1241,6 +1340,56 @@ Attributes::mutable_attrs() {
 
 // -------------------------------------------------------------------
 
+// ReplicationTarget
+
+inline bool ReplicationTarget::has_node_id() const {
+  return (_has_bits_[0] & 0x00000001u) != 0;
+}
+inline void ReplicationTarget::set_has_node_id() {
+  _has_bits_[0] |= 0x00000001u;
+}
+inline void ReplicationTarget::clear_has_node_id() {
+  _has_bits_[0] &= ~0x00000001u;
+}
+inline void ReplicationTarget::clear_node_id() {
+  node_id_ = 0;
+  clear_has_node_id();
+}
+inline ::google::protobuf::int32 ReplicationTarget::node_id() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.ReplicationTarget.node_id)
+  return node_id_;
+}
+inline void ReplicationTarget::set_node_id(::google::protobuf::int32 value) {
+  set_has_node_id();
+  node_id_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.ReplicationTarget.node_id)
+}
+
+inline bool ReplicationTarget::has_store_id() const {
+  return (_has_bits_[0] & 0x00000002u) != 0;
+}
+inline void ReplicationTarget::set_has_store_id() {
+  _has_bits_[0] |= 0x00000002u;
+}
+inline void ReplicationTarget::clear_has_store_id() {
+  _has_bits_[0] &= ~0x00000002u;
+}
+inline void ReplicationTarget::clear_store_id() {
+  store_id_ = 0;
+  clear_has_store_id();
+}
+inline ::google::protobuf::int32 ReplicationTarget::store_id() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.ReplicationTarget.store_id)
+  return store_id_;
+}
+inline void ReplicationTarget::set_store_id(::google::protobuf::int32 value) {
+  set_has_store_id();
+  store_id_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.ReplicationTarget.store_id)
+}
+
+// -------------------------------------------------------------------
+
 // ReplicaDescriptor
 
 inline bool ReplicaDescriptor::has_node_id() const {
@@ -2214,6 +2363,8 @@ inline void Tier::set_allocated_value(::std::string* value) {
 }
 
 #endif  // !PROTOBUF_INLINE_NOT_IN_HEADERS
+// -------------------------------------------------------------------
+
 // -------------------------------------------------------------------
 
 // -------------------------------------------------------------------

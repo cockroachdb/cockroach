@@ -526,6 +526,7 @@ export interface roachpbBuilder {
 	decode(buffer: ByteBuffer) : roachpbMessage;
 	decode64(buffer: string) : roachpbMessage;
 	Attributes: roachpb.AttributesBuilder;
+	ReplicationTarget: roachpb.ReplicationTargetBuilder;
 	ReplicaDescriptor: roachpb.ReplicaDescriptorBuilder;
 	ReplicaIdent: roachpb.ReplicaIdentBuilder;
 	RangeDescriptor: roachpb.RangeDescriptorBuilder;
@@ -590,6 +591,51 @@ export interface AttributesBuilder {
 	decode(buffer: ArrayBuffer) : AttributesMessage;
 	decode(buffer: ByteBuffer) : AttributesMessage;
 	decode64(buffer: string) : AttributesMessage;
+	
+}
+
+}
+
+
+declare module Proto2TypeScript.cockroach.roachpb {
+
+	export interface ReplicationTarget {
+
+		
+
+node_id?: number;
+		
+
+getNodeId?() : number;
+		setNodeId?(nodeId : number): void;
+		
+
+
+
+store_id?: number;
+		
+
+getStoreId?() : number;
+		setStoreId?(storeId : number): void;
+		
+
+
+
+}
+
+	export interface ReplicationTargetMessage extends ReplicationTarget {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface ReplicationTargetBuilder {
+	new(data?: ReplicationTarget): ReplicationTargetMessage;
+	decode(buffer: ArrayBuffer) : ReplicationTargetMessage;
+	decode(buffer: ByteBuffer) : ReplicationTargetMessage;
+	decode64(buffer: string) : ReplicationTargetMessage;
 	
 }
 

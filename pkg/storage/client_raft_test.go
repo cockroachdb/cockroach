@@ -239,7 +239,7 @@ func TestReplicateRange(t *testing.T) {
 	if err := repl.ChangeReplicas(
 		context.Background(),
 		roachpb.ADD_REPLICA,
-		roachpb.ReplicaDescriptor{
+		roachpb.ReplicationTarget{
 			NodeID:  mtc.stores[1].Ident.NodeID,
 			StoreID: mtc.stores[1].Ident.StoreID,
 		},
@@ -325,7 +325,7 @@ func TestRestoreReplicas(t *testing.T) {
 	if err := firstRng.ChangeReplicas(
 		context.Background(),
 		roachpb.ADD_REPLICA,
-		roachpb.ReplicaDescriptor{
+		roachpb.ReplicationTarget{
 			NodeID:  mtc.stores[1].Ident.NodeID,
 			StoreID: mtc.stores[1].Ident.StoreID,
 		},
@@ -427,7 +427,7 @@ func TestFailedReplicaChange(t *testing.T) {
 	if err := repl.ChangeReplicas(
 		context.Background(),
 		roachpb.ADD_REPLICA,
-		roachpb.ReplicaDescriptor{
+		roachpb.ReplicationTarget{
 			NodeID:  mtc.stores[1].Ident.NodeID,
 			StoreID: mtc.stores[1].Ident.StoreID,
 		},
@@ -453,7 +453,7 @@ func TestFailedReplicaChange(t *testing.T) {
 	if err := repl.ChangeReplicas(
 		context.Background(),
 		roachpb.ADD_REPLICA,
-		roachpb.ReplicaDescriptor{
+		roachpb.ReplicationTarget{
 			NodeID:  mtc.stores[1].Ident.NodeID,
 			StoreID: mtc.stores[1].Ident.StoreID,
 		},
@@ -519,7 +519,7 @@ func TestReplicateAfterTruncation(t *testing.T) {
 	if err := repl.ChangeReplicas(
 		context.Background(),
 		roachpb.ADD_REPLICA,
-		roachpb.ReplicaDescriptor{
+		roachpb.ReplicationTarget{
 			NodeID:  mtc.stores[1].Ident.NodeID,
 			StoreID: mtc.stores[1].Ident.StoreID,
 		},
@@ -920,7 +920,7 @@ func TestReplicateAfterRemoveAndSplit(t *testing.T) {
 		return rep2.ChangeReplicas(
 			context.Background(),
 			roachpb.ADD_REPLICA,
-			roachpb.ReplicaDescriptor{
+			roachpb.ReplicationTarget{
 				NodeID:  mtc.stores[2].Ident.NodeID,
 				StoreID: mtc.stores[2].Ident.StoreID,
 			},
@@ -1318,7 +1318,7 @@ func TestChangeReplicasDescriptorInvariant(t *testing.T) {
 		return repl.ChangeReplicas(
 			context.Background(),
 			roachpb.ADD_REPLICA,
-			roachpb.ReplicaDescriptor{
+			roachpb.ReplicationTarget{
 				NodeID:  mtc.stores[storeNum].Ident.NodeID,
 				StoreID: mtc.stores[storeNum].Ident.StoreID,
 			},
@@ -2030,7 +2030,7 @@ func TestRemovePlaceholderRace(t *testing.T) {
 				if err := repl.ChangeReplicas(
 					ctx,
 					action,
-					roachpb.ReplicaDescriptor{
+					roachpb.ReplicationTarget{
 						NodeID:  mtc.stores[1].Ident.NodeID,
 						StoreID: mtc.stores[1].Ident.StoreID,
 					},
@@ -2135,7 +2135,7 @@ func TestReplicaGCRace(t *testing.T) {
 	if err := repl.ChangeReplicas(
 		ctx,
 		roachpb.ADD_REPLICA,
-		roachpb.ReplicaDescriptor{
+		roachpb.ReplicationTarget{
 			NodeID:  toStore.Ident.NodeID,
 			StoreID: toStore.Ident.StoreID,
 		},
@@ -2192,7 +2192,7 @@ func TestReplicaGCRace(t *testing.T) {
 	if err := repl.ChangeReplicas(
 		ctx,
 		roachpb.REMOVE_REPLICA,
-		roachpb.ReplicaDescriptor{
+		roachpb.ReplicationTarget{
 			NodeID:  toStore.Ident.NodeID,
 			StoreID: toStore.Ident.StoreID,
 		},
@@ -3138,9 +3138,12 @@ func TestFailedPreemptiveSnapshot(t *testing.T) {
 		t.Fatal(err)
 	}
 	const expErr = "snapshot failed: unknown peer 3"
-	if err := rep.ChangeReplicas(context.Background(), roachpb.ADD_REPLICA,
-		roachpb.ReplicaDescriptor{NodeID: 3, StoreID: 3},
-		rep.Desc()); !testutils.IsError(err, expErr) {
+	if err := rep.ChangeReplicas(
+		context.Background(),
+		roachpb.ADD_REPLICA,
+		roachpb.ReplicationTarget{NodeID: 3, StoreID: 3},
+		rep.Desc(),
+	); !testutils.IsError(err, expErr) {
 		t.Fatalf("expected %s; got %v", expErr, err)
 	} else if !storage.IsSnapshotError(err) {
 		t.Fatalf("expected preemptive snapshot failed error; got %T: %v", err, err)
