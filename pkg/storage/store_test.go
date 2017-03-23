@@ -2450,6 +2450,84 @@ func TestStoreRemovePlaceholderOnRaftIgnored(t *testing.T) {
 	})
 }
 
+// Test that we set proper tombstones for removed replicas and use the
+// tombstone to reject attempts to create a replica with a lesser ID.
+func TestRemovedReplicaTombstone(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	const rangeID = 1
+	creatingReplica := roachpb.ReplicaDescriptor{
+		NodeID:    2,
+		StoreID:   2,
+		ReplicaID: 2,
+	}
+
+	// All test cases assume that the starting replica ID is 1. This assumption
+	// is enforced by a check within the test logic.
+	testCases := []struct {
+		setReplicaID      roachpb.ReplicaID // set the existing replica to this before removing it
+		descNextReplicaID roachpb.ReplicaID // the descriptor's NextReplicaID during replica removal
+		createReplicaID   roachpb.ReplicaID // try creating a replica at this ID
+		expectCreated     bool
+	}{
+		{1, 2, 2, true},
+		{1, 2, 1, false},
+		{1, 2, 1, false},
+		{1, 3, 1, false},
+		{1, 3, 2, false},
+		{1, 3, 3, true},
+		{1, 99, 98, false},
+		{1, 99, 99, true},
+		{2, 2, 2, false},
+		{2, 2, 3, true},
+		{2, 2, 99, true},
+		{98, 2, 98, false},
+		{98, 2, 99, true},
+	}
+	for _, c := range testCases {
+		t.Run("", func(t *testing.T) {
+			tc := testContext{}
+			stopper := stop.NewStopper()
+			defer stopper.Stop()
+			tc.Start(t, stopper)
+			s := tc.store
+
+			// Bump up the existing replica's ID as specified then remove it to get a
+			// tombstone written.
+			repl1, err := s.GetReplica(rangeID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			repl1.mu.Lock()
+			if repl1.mu.replicaID != 1 {
+				repl1.mu.Unlock()
+				t.Fatalf("test precondition not met; expected ReplicaID=1, got %d", repl1.mu.replicaID)
+			}
+			repl1.mu.Unlock()
+			if err := repl1.setReplicaID(c.setReplicaID); err != nil {
+				t.Fatal(err)
+			}
+			desc := roachpb.RangeDescriptor{
+				RangeID:       rangeID,
+				NextReplicaID: c.descNextReplicaID,
+			}
+			if err := s.RemoveReplica(context.Background(), repl1, desc, true); err != nil {
+				t.Fatal(err)
+			}
+
+			_, created, err := s.getOrCreateReplica(rangeID, c.createReplicaID, &creatingReplica)
+			if created != c.expectCreated {
+				t.Errorf("expected s.getOrCreateReplica(%d, %d, %v).created=%v, got %v",
+					rangeID, c.createReplicaID, creatingReplica, c.expectCreated, created)
+			}
+			if !c.expectCreated && !testutils.IsError(err, "raft group deleted") {
+				t.Errorf("expected s.getOrCreateReplica(%d, %d, %v).err='raft group deleted', got %v",
+					rangeID, c.createReplicaID, creatingReplica, err)
+			}
+		})
+	}
+}
+
 func TestCanCampaignIdleReplica(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	tc := testContext{}

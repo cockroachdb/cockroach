@@ -6208,16 +6208,17 @@ func TestSetReplicaID(t *testing.T) {
 	repl := tc.repl
 
 	testCases := []struct {
-		replicaID    roachpb.ReplicaID
-		minReplicaID roachpb.ReplicaID
-		newReplicaID roachpb.ReplicaID
-		expected     string
+		replicaID            roachpb.ReplicaID
+		minReplicaID         roachpb.ReplicaID
+		newReplicaID         roachpb.ReplicaID
+		expectedMinReplicaID roachpb.ReplicaID
+		expectedErr          string
 	}{
-		{0, 0, 1, ""},
-		{0, 1, 1, ""},
-		{0, 2, 1, "raft group deleted"},
-		{1, 2, 1, ""}, // not an error; replicaID == newReplicaID is checked first
-		{2, 0, 1, "replicaID cannot move backwards"},
+		{0, 0, 1, 2, ""},
+		{0, 1, 1, 2, ""},
+		{0, 2, 1, 2, "raft group deleted"},
+		{1, 2, 1, 2, ""}, // not an error; replicaID == newReplicaID is checked first
+		{2, 0, 1, 0, "replicaID cannot move backwards"},
 	}
 	for _, c := range testCases {
 		t.Run("", func(t *testing.T) {
@@ -6227,8 +6228,13 @@ func TestSetReplicaID(t *testing.T) {
 			repl.mu.Unlock()
 
 			err := repl.setReplicaID(c.newReplicaID)
-			if !testutils.IsError(err, c.expected) {
-				t.Fatalf("expected %q, but found %v", c.expected, err)
+			repl.mu.Lock()
+			if repl.mu.minReplicaID != c.expectedMinReplicaID {
+				t.Errorf("expected minReplicaID=%d, but found %d", c.expectedMinReplicaID, repl.mu.minReplicaID)
+			}
+			repl.mu.Unlock()
+			if !testutils.IsError(err, c.expectedErr) {
+				t.Fatalf("expected %q, but found %v", c.expectedErr, err)
 			}
 		})
 	}
