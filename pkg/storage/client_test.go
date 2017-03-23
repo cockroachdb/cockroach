@@ -969,7 +969,7 @@ func (m *multiTestContext) changeReplicasLocked(
 		if err := repl.ChangeReplicas(
 			ctx,
 			changeType,
-			roachpb.ReplicaDescriptor{
+			roachpb.ReplicationTarget{
 				NodeID:  m.idents[dest].NodeID,
 				StoreID: m.idents[dest].StoreID,
 			},

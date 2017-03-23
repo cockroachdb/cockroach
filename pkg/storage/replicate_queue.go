@@ -272,7 +272,7 @@ func (rq *replicateQueue) processOneChange(
 		if err != nil {
 			return false, err
 		}
-		newReplica := roachpb.ReplicaDescriptor{
+		newReplica := roachpb.ReplicationTarget{
 			NodeID:  newStore.Node.NodeID,
 			StoreID: newStore.StoreID,
 		}
@@ -327,7 +327,11 @@ func (rq *replicateQueue) processOneChange(
 			if log.V(1) {
 				log.Infof(ctx, "removing replica %+v due to over-replication", removeReplica)
 			}
-			if err := rq.removeReplica(ctx, repl, removeReplica, desc); err != nil {
+			target := roachpb.ReplicationTarget{
+				NodeID:  removeReplica.NodeID,
+				StoreID: removeReplica.StoreID,
+			}
+			if err := rq.removeReplica(ctx, repl, target, desc); err != nil {
 				return false, err
 			}
 		}
@@ -346,7 +350,11 @@ func (rq *replicateQueue) processOneChange(
 		if log.V(1) {
 			log.Infof(ctx, "removing dead replica %+v from store", deadReplica)
 		}
-		if err := rq.removeReplica(ctx, repl, deadReplica, desc); err != nil {
+		target := roachpb.ReplicationTarget{
+			NodeID:  deadReplica.NodeID,
+			StoreID: deadReplica.StoreID,
+		}
+		if err := rq.removeReplica(ctx, repl, target, desc); err != nil {
 			return false, err
 		}
 	case AllocatorNoop:
@@ -394,7 +402,7 @@ func (rq *replicateQueue) processOneChange(
 			// without re-queuing this replica.
 			return false, nil
 		}
-		rebalanceReplica := roachpb.ReplicaDescriptor{
+		rebalanceReplica := roachpb.ReplicationTarget{
 			NodeID:  rebalanceStore.Node.NodeID,
 			StoreID: rebalanceStore.StoreID,
 		}
@@ -445,19 +453,19 @@ func (rq *replicateQueue) transferLease(
 func (rq *replicateQueue) addReplica(
 	ctx context.Context,
 	repl *Replica,
-	repDesc roachpb.ReplicaDescriptor,
+	target roachpb.ReplicationTarget,
 	desc *roachpb.RangeDescriptor,
 ) error {
-	return repl.ChangeReplicas(ctx, roachpb.ADD_REPLICA, repDesc, desc)
+	return repl.ChangeReplicas(ctx, roachpb.ADD_REPLICA, target, desc)
 }
 
 func (rq *replicateQueue) removeReplica(
 	ctx context.Context,
 	repl *Replica,
-	repDesc roachpb.ReplicaDescriptor,
+	target roachpb.ReplicationTarget,
 	desc *roachpb.RangeDescriptor,
 ) error {
-	return repl.ChangeReplicas(ctx, roachpb.REMOVE_REPLICA, repDesc, desc)
+	return repl.ChangeReplicas(ctx, roachpb.REMOVE_REPLICA, target, desc)
 }
 
 func (rq *replicateQueue) canTransferLease() bool {

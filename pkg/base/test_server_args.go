@@ -19,7 +19,6 @@ package base
 import (
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 )
@@ -120,9 +119,3 @@ const (
 	// replication through the TestServer.
 	ReplicationManual
 )
-
-// ReplicationTarget identifies a node/store pair.
-type ReplicationTarget struct {
-	NodeID  roachpb.NodeID
-	StoreID roachpb.StoreID
-}
