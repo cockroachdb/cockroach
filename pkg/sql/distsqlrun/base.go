@@ -24,6 +24,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -604,4 +605,44 @@ func SetFlowRequestTrace(ctx context.Context, req *SetupFlowRequest) error {
 	req.TraceContext = &tracing.SpanContextCarrier{}
 	tracer := sp.Tracer()
 	return tracer.Inject(sp.Context(), basictracer.Delegator, req.TraceContext)
+}
+
+// String implements fmt.Stringer.
+func (e *Error) String() string {
+	if e == nil {
+		return "<nil>"
+	}
+
+	return e.Msg
+}
+
+// NewError creates an Error from an error.
+func NewError(err error) *Error {
+	e := &Error{}
+	if pgErr, ok := pgerror.PGError(err); ok {
+		e.Detail = &ErrorDetail{PGError: pgErr}
+	} else {
+		e.Msg = err.Error()
+	}
+	return e
+}
+
+// GoError returns a Go error converted from Error.
+func (e *Error) GoError() error {
+	if e == nil {
+		return nil
+	}
+	if e.Detail != nil {
+		if err, ok := e.Detail.GetValue().(error); ok {
+			return err
+		}
+	}
+	// Unknown error detail; return the generic error.
+	return (*internalError)(e)
+}
+
+type internalError Error
+
+func (e *internalError) Error() string {
+	return (*Error)(e).String()
 }
