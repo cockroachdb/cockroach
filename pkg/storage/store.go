@@ -3126,7 +3126,7 @@ func (s *Store) processRaftRequest(
 			// Raft has decided the snapshot shouldn't be applied we would be
 			// writing the tombstone key incorrectly.
 			r.mu.Lock()
-			r.mu.minReplicaID = r.mu.state.Desc.NextReplicaID
+			r.mu.minReplicaID = r.nextReplicaIDLocked(r.mu.state.Desc)
 			r.mu.Unlock()
 		}
 
