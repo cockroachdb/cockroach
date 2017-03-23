@@ -594,6 +594,11 @@ func evalEndTransaction(
 		return EvalResult{}, err
 	}
 
+	// If a 1PC txn was required and we're in EndTransaction, something went wrong.
+	if args.Require1PC {
+		return EvalResult{}, roachpb.NewTransactionStatusError("could not commit in one phase as requested")
+	}
+
 	key := keys.TransactionKey(h.Txn.Key, *h.Txn.ID)
 
 	// Fetch existing transaction.
