@@ -23,7 +23,6 @@ import (
 	"reflect"
 	"regexp"
 	"strconv"
-	"strings"
 	"testing"
 	"time"
 
@@ -183,7 +182,7 @@ func startServer(t *testing.T) *TestServer {
 }
 
 // TestStatusLocalLogs checks to ensure that local/logfiles,
-// local/logfiles/{filename}, local/log and local/log/{level} function
+// local/logfiles/{filename} and local/log function
 // correctly.
 func TestStatusLocalLogs(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -210,21 +209,8 @@ func TestStatusLocalLogs(t *testing.T) {
 	if err := getStatusJSONProto(ts, "logfiles/local", &wrapper); err != nil {
 		t.Fatal(err)
 	}
-	if a, e := len(wrapper.Files), 3; a != e {
+	if a, e := len(wrapper.Files), 1; a != e {
 		t.Fatalf("expected %d log files; got %d", e, a)
-	}
-	for _, fileInfo := range wrapper.Files {
-		fName := fileInfo.Name
-		found := false
-		for _, name := range []string{"ERROR.log", "INFO.log", "WARNING.log"} {
-			if strings.Contains(fName, name) {
-				found = true
-				break
-			}
-		}
-		if !found {
-			t.Errorf("expected log file name %s to contain ERROR, INFO or WARNING.", fName)
-		}
 	}
 
 	// Check each individual log can be fetched and is non-empty.
@@ -255,7 +241,6 @@ func TestStatusLocalLogs(t *testing.T) {
 	}
 
 	testCases := []struct {
-		Level          log.Severity
 		MaxEntities    int
 		StartTimestamp int64
 		EndTimestamp   int64
@@ -263,32 +248,29 @@ func TestStatusLocalLogs(t *testing.T) {
 		levelPresence
 	}{
 		// Test filtering by log severity.
-		{log.Severity_INFO, 0, 0, 0, "", levelPresence{true, true, true}},
-		{log.Severity_WARNING, 0, 0, 0, "", levelPresence{true, true, false}},
-		{log.Severity_ERROR, 0, 0, 0, "", levelPresence{true, false, false}},
 		// // Test entry limit. Ignore Info/Warning/Error filters.
-		{log.Severity_INFO, 1, timestamp, timestampEWI, "", levelPresence{false, false, false}},
-		{log.Severity_INFO, 2, timestamp, timestampEWI, "", levelPresence{false, false, false}},
-		{log.Severity_INFO, 3, timestamp, timestampEWI, "", levelPresence{false, false, false}},
+		{1, timestamp, timestampEWI, "", levelPresence{false, false, false}},
+		{2, timestamp, timestampEWI, "", levelPresence{false, false, false}},
+		{3, timestamp, timestampEWI, "", levelPresence{false, false, false}},
 		// Test filtering in different timestamp windows.
-		{log.Severity_INFO, 0, timestamp, timestamp, "", levelPresence{false, false, false}},
-		{log.Severity_INFO, 0, timestamp, timestampE, "", levelPresence{true, false, false}},
-		{log.Severity_INFO, 0, timestampE, timestampEW, "", levelPresence{false, true, false}},
-		{log.Severity_INFO, 0, timestampEW, timestampEWI, "", levelPresence{false, false, true}},
-		{log.Severity_INFO, 0, timestamp, timestampEW, "", levelPresence{true, true, false}},
-		{log.Severity_INFO, 0, timestampE, timestampEWI, "", levelPresence{false, true, true}},
-		{log.Severity_INFO, 0, timestamp, timestampEWI, "", levelPresence{true, true, true}},
+		{0, timestamp, timestamp, "", levelPresence{false, false, false}},
+		{0, timestamp, timestampE, "", levelPresence{true, false, false}},
+		{0, timestampE, timestampEW, "", levelPresence{false, true, false}},
+		{0, timestampEW, timestampEWI, "", levelPresence{false, false, true}},
+		{0, timestamp, timestampEW, "", levelPresence{true, true, false}},
+		{0, timestampE, timestampEWI, "", levelPresence{false, true, true}},
+		{0, timestamp, timestampEWI, "", levelPresence{true, true, true}},
 		// Test filtering by regexp pattern.
-		{log.Severity_INFO, 0, 0, 0, "Info", levelPresence{false, false, true}},
-		{log.Severity_INFO, 0, 0, 0, "Warning", levelPresence{false, true, false}},
-		{log.Severity_INFO, 0, 0, 0, "Error", levelPresence{true, false, false}},
-		{log.Severity_INFO, 0, 0, 0, "Info|Error|Warning", levelPresence{true, true, true}},
-		{log.Severity_INFO, 0, 0, 0, "Nothing", levelPresence{false, false, false}},
+		{0, 0, 0, "Info", levelPresence{false, false, true}},
+		{0, 0, 0, "Warning", levelPresence{false, true, false}},
+		{0, 0, 0, "Error", levelPresence{true, false, false}},
+		{0, 0, 0, "Info|Error|Warning", levelPresence{true, true, true}},
+		{0, 0, 0, "Nothing", levelPresence{false, false, false}},
 	}
 
 	for i, testCase := range testCases {
 		var url bytes.Buffer
-		fmt.Fprintf(&url, "logs/local?level=%s", testCase.Level.Name())
+		fmt.Fprintf(&url, "logs/local?level=")
 		if testCase.MaxEntities > 0 {
 			fmt.Fprintf(&url, "&max=%d", testCase.MaxEntities)
 		}
