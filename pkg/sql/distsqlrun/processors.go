@@ -390,7 +390,7 @@ func newProcessor(
 			return nil, err
 		}
 		if core.Backfiller.Type == BackfillerSpec_Index {
-			return newIndexBackfiller(flowCtx, core.Backfiller, post, outputs[0])
+			return newIndexBackfiller(flowCtx, *core.Backfiller, post, outputs[0])
 		}
 	}
 	if core.SetOp != nil {
