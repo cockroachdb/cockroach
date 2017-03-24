@@ -125,12 +125,19 @@ func createTestClient(t *testing.T, s serverutils.TestServerInterface) *client.D
 func createTestClientForUser(
 	t *testing.T, s serverutils.TestServerInterface, user string, dbCtx client.DBContext,
 ) *client.DB {
-	rpcContext := rpc.NewContext(log.AmbientContext{}, &base.Config{
-		User:       user,
-		SSLCA:      filepath.Join(security.EmbeddedCertsDir, security.EmbeddedCACert),
-		SSLCert:    filepath.Join(security.EmbeddedCertsDir, fmt.Sprintf("%s.crt", user)),
-		SSLCertKey: filepath.Join(security.EmbeddedCertsDir, fmt.Sprintf("%s.key", user)),
-	}, s.Clock(), s.Stopper())
+	rpcCfg := rpc.ContextConfig{
+		Config: &base.Config{
+			User:       user,
+			SSLCA:      filepath.Join(security.EmbeddedCertsDir, security.EmbeddedCACert),
+			SSLCert:    filepath.Join(security.EmbeddedCertsDir, fmt.Sprintf("%s.crt", user)),
+			SSLCertKey: filepath.Join(security.EmbeddedCertsDir, fmt.Sprintf("%s.key", user)),
+		},
+		HLCClock:              s.Clock(),
+		HeartbeatInterval:     time.Second,
+		HeartbeatTimeout:      time.Second,
+		EnableClockSkewChecks: true,
+	}
+	rpcContext := rpc.NewContext(log.AmbientContext{}, rpcCfg, s.Stopper())
 	conn, err := rpcContext.GRPCDial(s.ServingAddr())
 	if err != nil {
 		t.Fatal(err)

@@ -121,7 +121,14 @@ func createTestStoreWithoutStart(t testing.TB, stopper *stop.Stopper, cfg *Store
 	// Setup fake zone config handler.
 	config.TestingSetupZoneConfigHook(stopper)
 
-	rpcContext := rpc.NewContext(log.AmbientContext{}, &base.Config{Insecure: true}, cfg.Clock, stopper)
+	rpcCfg := rpc.ContextConfig{
+		Config:                &base.Config{Insecure: true},
+		HLCClock:              cfg.Clock,
+		HeartbeatInterval:     time.Second,
+		HeartbeatTimeout:      time.Second,
+		EnableClockSkewChecks: true,
+	}
+	rpcContext := rpc.NewContext(log.AmbientContext{}, rpcCfg, stopper)
 	server := rpc.NewServer(rpcContext) // never started
 	cfg.Gossip = gossip.NewTest(1, rpcContext, server, nil, stopper, metric.NewRegistry())
 	cfg.StorePool = NewTestStorePool(*cfg)

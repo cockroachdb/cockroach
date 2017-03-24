@@ -42,9 +42,14 @@ import (
 // newNodeTestContext returns a rpc.Context for testing.
 // It is meant to be used by nodes.
 func newNodeTestContext(clock *hlc.Clock, stopper *stop.Stopper) *rpc.Context {
-	ctx := rpc.NewContext(log.AmbientContext{}, testutils.NewNodeTestBaseContext(), clock, stopper)
-	ctx.HeartbeatInterval = 10 * time.Millisecond
-	ctx.HeartbeatTimeout = 5 * time.Second
+	cfg := rpc.ContextConfig{
+		Config:                testutils.NewNodeTestBaseConfig(),
+		HLCClock:              clock,
+		HeartbeatInterval:     10 * time.Millisecond,
+		HeartbeatTimeout:      5 * time.Second,
+		EnableClockSkewChecks: true,
+	}
+	ctx := rpc.NewContext(log.AmbientContext{}, cfg, stopper)
 	return ctx
 }
 

@@ -116,7 +116,14 @@ func createTestStoreWithEngine(
 	ac := log.AmbientContext{Tracer: tracer}
 	storeCfg.AmbientCtx = ac
 
-	rpcContext := rpc.NewContext(ac, &base.Config{Insecure: true}, storeCfg.Clock, stopper)
+	rpcCfg := rpc.ContextConfig{
+		Config:   &base.Config{Insecure: true},
+		HLCClock: storeCfg.Clock,
+		// Disable heartbeats. Not needed for these tests.
+		HeartbeatInterval:     0,
+		EnableClockSkewChecks: false,
+	}
+	rpcContext := rpc.NewContext(ac, rpcCfg, stopper)
 	nodeDesc := &roachpb.NodeDescriptor{NodeID: 1}
 	server := rpc.NewServer(rpcContext) // never started
 	storeCfg.Gossip = gossip.NewTest(
@@ -255,15 +262,23 @@ func (m *multiTestContext) Start(t *testing.T, numStores int) {
 		m.transportStopper = stop.NewStopper()
 	}
 	if m.rpcContext == nil {
-		m.rpcContext = rpc.NewContext(log.AmbientContext{}, &base.Config{Insecure: true}, m.clock,
-			m.transportStopper)
-		// Create a breaker which never trips and never backs off to avoid
-		// introducing timing-based flakes.
-		m.rpcContext.BreakerFactory = func() *circuit.Breaker {
-			return circuit.NewBreakerWithOptions(&circuit.Options{
-				BackOff: &backoff.ZeroBackOff{},
-			})
+		rpcCfg := rpc.ContextConfig{
+			Config:   &base.Config{Insecure: true},
+			HLCClock: m.clock,
+			// Disable heartbeats. Not needed for these tests.
+			HeartbeatInterval:     0,
+			EnableClockSkewChecks: false,
+			TestingKnobs: rpc.ContextTestingKnobs{
+				// Create a breaker which never trips and never backs off to avoid
+				// introducing timing-based flakes.
+				BreakerFactory: func() *circuit.Breaker {
+					return circuit.NewBreakerWithOptions(&circuit.Options{
+						BackOff: &backoff.ZeroBackOff{},
+					})
+				},
+			},
 		}
+		m.rpcContext = rpc.NewContext(log.AmbientContext{}, rpcCfg, m.transportStopper)
 	}
 	m.transport = storage.NewRaftTransport(
 		log.AmbientContext{}, m.getNodeIDAddress, nil, m.rpcContext,

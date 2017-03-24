@@ -17,14 +17,8 @@
 package rpc
 
 import (
-	"time"
-
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
-	"github.com/cockroachdb/cockroach/pkg/testutils"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/stop"
 )
 
 func init() {
@@ -32,12 +26,3 @@ func init() {
 }
 
 //go:generate ../util/leaktest/add-leaktest.sh *_test.go
-
-// newNodeTestContext returns a rpc.Context for testing.
-// It is meant to be used by nodes.
-func newNodeTestContext(clock *hlc.Clock, stopper *stop.Stopper) *Context {
-	ctx := NewContext(log.AmbientContext{}, testutils.NewNodeTestBaseContext(), clock, stopper)
-	ctx.HeartbeatInterval = 10 * time.Millisecond
-	ctx.HeartbeatTimeout = 2 * defaultHeartbeatInterval
-	return ctx
-}

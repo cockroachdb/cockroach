@@ -267,10 +267,17 @@ func MakeFarmer(t testing.TB, prefix string, stopper *stop.Stopper) *terrafarm.F
 		t.Fatalf("generated cluster name '%s' must match regex %s", name, prefixRE)
 	}
 
-	rpcContext := rpc.NewContext(log.AmbientContext{}, &base.Config{
-		Insecure: true,
-		User:     security.NodeUser,
-	}, hlc.NewClock(hlc.UnixNano, 0), stopper)
+	rpcCfg := rpc.ContextConfig{
+		Config: &base.Config{
+			Insecure: true,
+			User:     security.NodeUser,
+		},
+		HLCClock:              hlc.NewClock(hlc.UnixNano, 0),
+		HeartbeatInterval:     time.Second,
+		HeartbeatTimeout:      time.Second,
+		EnableClockSkewChecks: true,
+	}
+	rpcContext := rpc.NewContext(log.AmbientContext{}, rpcCfg, stopper)
 
 	f := &terrafarm.Farmer{
 		Output:      os.Stderr,
