@@ -1047,14 +1047,14 @@ func dropColumnSchemaChange(
 func TestSchemaChangeRetry(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	params, _ := createTestServerParams()
-	attempts := 0
+	currChunk := 0
 	seenSpan := roachpb.Span{}
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
 			RunBeforeBackfillChunk: func(sp roachpb.Span) error {
-				attempts++
+				currChunk++
 				// Fail somewhere in the middle.
-				if attempts == 3 {
+				if currChunk == 3 {
 					return context.DeadlineExceeded
 				}
 				if seenSpan.Key != nil {
@@ -1076,9 +1076,9 @@ func TestSchemaChangeRetry(t *testing.T) {
 		},
 		DistSQL: &distsqlrun.TestingKnobs{
 			RunBeforeBackfillChunk: func(sp roachpb.Span) error {
-				attempts++
+				currChunk++
 				// Fail somewhere in the middle.
-				if attempts == 3 {
+				if currChunk == 3 {
 					return context.DeadlineExceeded
 				}
 				if seenSpan.Key != nil {
@@ -1113,11 +1113,11 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 
 	addIndexSchemaChange(t, sqlDB, kvDB, maxValue, 2)
 
-	attempts = 0
+	currChunk = 0
 	seenSpan = roachpb.Span{}
 	addColumnSchemaChange(t, sqlDB, kvDB, maxValue, 2)
 
-	attempts = 0
+	currChunk = 0
 	seenSpan = roachpb.Span{}
 	dropColumnSchemaChange(t, sqlDB, kvDB, maxValue, 2)
 }
@@ -1129,7 +1129,7 @@ func TestSchemaChangeRetryOnVersionChange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	params, _ := createTestServerParams()
 	var upTableVersion func()
-	attempts := 0
+	currChunk := 0
 	// This represents the number of backfill chunks that get reevaluated.
 	// A retry results in a reevaluation of a chunk.
 	var numReevaluated uint32
@@ -1142,9 +1142,9 @@ func TestSchemaChangeRetryOnVersionChange(t *testing.T) {
 				return nil
 			},
 			RunBeforeBackfillChunk: func(sp roachpb.Span) error {
-				attempts++
+				currChunk++
 				// Fail somewhere in the middle.
-				if attempts == 3 {
+				if currChunk == 3 {
 					// Publish a new version of the table.
 					upTableVersion()
 				}
@@ -1167,9 +1167,9 @@ func TestSchemaChangeRetryOnVersionChange(t *testing.T) {
 		},
 		DistSQL: &distsqlrun.TestingKnobs{
 			RunBeforeBackfillChunk: func(sp roachpb.Span) error {
-				attempts++
+				currChunk++
 				// Fail somewhere in the middle.
-				if attempts == 3 {
+				if currChunk == 3 {
 					// Publish a new version of the table.
 					upTableVersion()
 				}
@@ -1238,7 +1238,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 		t.Fatalf("expected %d backfills, but seen %d", 2, num)
 	}
 
-	attempts = 0
+	currChunk = 0
 	seenSpan = roachpb.Span{}
 	addColumnSchemaChange(t, sqlDB, kvDB, maxValue, 2)
 	if reevaluated := atomic.SwapUint32(&numReevaluated, 0); reevaluated != 1 {
@@ -1248,7 +1248,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 		t.Fatalf("expected %d backfills, but seen %d", 2, num)
 	}
 
-	attempts = 0
+	currChunk = 0
 	seenSpan = roachpb.Span{}
 	dropColumnSchemaChange(t, sqlDB, kvDB, maxValue, 2)
 	if reevaluated := atomic.SwapUint32(&numReevaluated, 0); reevaluated != 1 {
