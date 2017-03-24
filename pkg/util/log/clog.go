@@ -34,7 +34,6 @@ import (
 	"strconv"
 	"strings"
 	"sync/atomic"
-	"syscall"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
@@ -771,7 +770,7 @@ func (l *loggingT) outputLogEntry(s Severity, file string, line int, msg string)
 
 func (l *loggingT) outputToStderr(entry Entry, stacks []byte) {
 	buf := l.processForStderr(entry, stacks)
-	if _, err := os.Stderr.Write(buf.Bytes()); err != nil {
+	if _, err := OrigStderr.Write(buf.Bytes()); err != nil {
 		panic(err)
 	}
 	l.putBuffer(buf)
@@ -793,7 +792,7 @@ func (l *loggingT) getTermColorProfile() *colorProfile {
 	if !l.hasColorProfile {
 		l.hasColorProfile = true
 		if !l.nocolor {
-			fi, _ := os.Stderr.Stat() // get the FileInfo struct describing the standard input.
+			fi, _ := OrigStderr.Stat() // get the FileInfo struct describing the standard input.
 			if (fi.Mode() & os.ModeCharDevice) != 0 {
 				term := os.Getenv("TERM")
 				switch term {
@@ -821,7 +820,7 @@ func timeoutFlush(timeout time.Duration) {
 	select {
 	case <-done:
 	case <-time.After(timeout):
-		fmt.Fprintln(os.Stderr, "clog: Flush took longer than", timeout)
+		fmt.Fprintln(OrigStderr, "clog: Flush took longer than", timeout)
 	}
 }
 
@@ -854,7 +853,7 @@ var logExitFunc func(error)
 // It flushes the logs and exits the program; there's no point in hanging around.
 // l.mu is held.
 func (l *loggingT) exit(err error) {
-	fmt.Fprintf(os.Stderr, "log: exiting because of error: %s\n", err)
+	fmt.Fprintf(OrigStderr, "log: exiting because of error: %s\n", err)
 	// If logExitFunc is set, we do that instead of exiting.
 	if logExitFunc != nil {
 		logExitFunc(err)
@@ -923,7 +922,7 @@ func (sb *syncBuffer) rotateFile(now time.Time) error {
 		// NB: any concurrent output to stderr may straddle the old and new
 		// files. This doesn't apply to log messages as we won't reach this code
 		// unless we're not logging to stderr.
-		if err := syscall.Dup2(int(sb.file.Fd()), syscall.Stderr); err != nil {
+		if err := hijackStderr(int(sb.file.Fd())); err != nil {
 			return err
 		}
 	}
@@ -1039,7 +1038,7 @@ func (l *loggingT) gcOldFiles() {
 
 	allFiles, err := ListLogFiles()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "unable to GC log files: %s\n", err)
+		fmt.Fprintf(OrigStderr, "unable to GC log files: %s\n", err)
 		return
 	}
 
@@ -1058,7 +1057,7 @@ func (l *loggingT) gcOldFiles() {
 		}
 		path := filepath.Join(dir, f.Name)
 		if err := os.Remove(path); err != nil {
-			fmt.Fprintf(os.Stderr, "%s\n", err)
+			fmt.Fprintln(OrigStderr, err)
 		}
 	}
 }
