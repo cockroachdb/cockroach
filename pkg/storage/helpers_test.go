@@ -88,6 +88,12 @@ func (s *Store) ForceReplicaGCScanAndProcess() {
 	forceScanAndProcess(s, s.replicaGCQueue.baseQueue)
 }
 
+// ForceSplitScanAndProcess iterates over all ranges and enqueues any that
+// may need to be split.
+func (s *Store) ForceSplitScanAndProcess() {
+	forceScanAndProcess(s, s.splitQueue.baseQueue)
+}
+
 // ForceRaftLogScanAndProcess iterates over all ranges and enqueues any that
 // need their raft logs truncated and then process each of them.
 func (s *Store) ForceRaftLogScanAndProcess() {
@@ -265,6 +271,15 @@ func (r *Replica) IsRaftGroupInitialized() bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return r.mu.internalRaftGroup != nil
+}
+
+// HasQuorum returns true once the range that this replica is part of
+// can achieve quorum.
+func (r *Replica) HasQuorum() bool {
+	desc := r.Desc()
+	liveReplicas, _ := r.store.allocator.storePool.liveAndDeadReplicas(desc.RangeID, desc.Replicas)
+	quorum := computeQuorum(len(desc.Replicas))
+	return len(liveReplicas) >= quorum
 }
 
 // GetStoreList is the same function as GetStoreList exposed for tests only.
