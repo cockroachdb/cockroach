@@ -39,6 +39,9 @@ func Main() {
 	if len(os.Args) == 1 {
 		os.Args = append(os.Args, "help")
 	}
+
+	defer log.RecoverAndReportPanic()
+
 	if err := Run(os.Args[1:]); err != nil {
 		fmt.Fprintf(stderr, "Failed running %q\n", os.Args[1])
 		os.Exit(ErrorCode)
