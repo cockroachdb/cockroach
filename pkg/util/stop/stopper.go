@@ -204,6 +204,7 @@ func (s *Stopper) Recover() {
 func (s *Stopper) RunWorker(f func()) {
 	s.stop.Add(1)
 	go func() {
+		defer log.RecoverAndReportPanic()
 		defer s.Recover()
 		defer s.stop.Done()
 		f()
@@ -277,6 +278,7 @@ func (s *Stopper) RunAsyncTask(ctx context.Context, f func(context.Context)) err
 
 	// Call f.
 	go func() {
+		defer log.RecoverAndReportPanic()
 		defer s.Recover()
 		defer s.runPostlude(key)
 		defer tracing.FinishSpan(span)
@@ -340,6 +342,7 @@ func (s *Stopper) RunLimitedAsyncTask(
 	ctx, span := tracing.ForkCtxSpan(ctx, key.String())
 
 	go func() {
+		defer log.RecoverAndReportPanic()
 		defer s.Recover()
 		defer s.runPostlude(key)
 		defer func() { <-sem }()

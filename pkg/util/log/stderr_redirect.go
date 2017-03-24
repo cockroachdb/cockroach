@@ -16,6 +16,7 @@
 package log
 
 import (
+	"fmt"
 	"os"
 	"syscall"
 )
@@ -52,4 +53,19 @@ func hijackStderr(fd int) error {
 // restoreStderr cancels the effect of hijackStderr()
 func restoreStderr() error {
 	return syscall.Dup2(OrigStderrFd, syscall.Stderr)
+}
+
+// RecoverAndReportPanic can be invoked on goroutines that run with
+// stderr redirected to logs to ensure the user gets informed on the
+// real stderr a panic has occurred.
+func RecoverAndReportPanic() {
+	if r := recover(); r != nil {
+		// Ensure that the logs are flushed before letting a panic
+		// terminate the server.
+		Flush()
+
+		fmt.Fprintln(OrigStderr, "\nERROR: a panic has occurred!\n"+
+			"If no details are printed below, check the log file for details.")
+		panic(r)
+	}
 }
