@@ -1712,19 +1712,31 @@ func (r *Replica) beginCmds(
 		default:
 		}
 
+		// Get the requested timestamp. This is used for non-interference
+		// of earlier reads with later writes, but only for the global
+		// command queue. Reads and writes to local keys are specified as
+		// having a zero timestamp which will cause them to always
+		// interfere. This is done to avoid confusion with local keys
+		// declared as part of proposer evaluated KV.
+		reqGlobalTS := ba.Timestamp
+		if txn := ba.Txn; txn != nil {
+			reqGlobalTS = txn.OrigTimestamp
+		}
+		var reqLocalTS hlc.Timestamp
+
 		r.cmdQMu.Lock()
 		var chans []<-chan struct{}
 		// Collect all the channels to wait on before adding this batch to the
 		// command queue.
 		for i := SpanAccess(0); i < numSpanAccess; i++ {
 			readOnly := i == SpanReadOnly
-			chans = append(chans, r.cmdQMu.global.getWait(readOnly, spans.getSpans(i, spanGlobal))...)
-			chans = append(chans, r.cmdQMu.local.getWait(readOnly, spans.getSpans(i, spanLocal))...)
+			chans = append(chans, r.cmdQMu.global.getWait(readOnly, reqGlobalTS, spans.getSpans(i, spanGlobal))...)
+			chans = append(chans, r.cmdQMu.local.getWait(readOnly, reqLocalTS, spans.getSpans(i, spanLocal))...)
 		}
 		for i := SpanAccess(0); i < numSpanAccess; i++ {
 			readOnly := i == SpanReadOnly
-			cmds[i].global = r.cmdQMu.global.add(readOnly, spans.getSpans(i, spanGlobal))
-			cmds[i].local = r.cmdQMu.local.add(readOnly, spans.getSpans(i, spanLocal))
+			cmds[i].global = r.cmdQMu.global.add(readOnly, reqGlobalTS, spans.getSpans(i, spanGlobal))
+			cmds[i].local = r.cmdQMu.local.add(readOnly, reqLocalTS, spans.getSpans(i, spanLocal))
 		}
 		r.cmdQMu.Unlock()
 
