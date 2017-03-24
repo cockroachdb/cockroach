@@ -335,7 +335,7 @@ func (ts *TestServer) ExpectedInitialRangeCount() (int, error) {
 func ExpectedInitialRangeCount(db *client.DB) (int, error) {
 	// XXX: This assumes that the number of descriptors added by migrations is equal
 	// to the number of ranges added, which may not be true in the future.
-	migrationRangeCount, err := migrations.AdditionalInitialDescriptors(
+	_, migrationRangeCount, err := migrations.AdditionalInitialDescriptors(
 		context.Background(), db)
 	if err != nil {
 		return 0, errors.Wrap(err, "counting initial migration ranges")
