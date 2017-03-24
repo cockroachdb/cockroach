@@ -83,7 +83,7 @@ var _ ValueGenerator = &arrayValueGenerator{}
 
 func initGeneratorBuiltins() {
 	// Add all windows to the Builtins map after a few sanity checks.
-	for k, v := range generators {
+	for k, v := range Generators {
 		for _, g := range v {
 			if !g.impure {
 				panic(fmt.Sprintf("generator functions should all be impure, found %v", g))
@@ -97,7 +97,9 @@ func initGeneratorBuiltins() {
 	}
 }
 
-var generators = map[string][]Builtin{
+// Generators is a map from name to slice of Builtins for all built-in
+// generators.
+var Generators = map[string][]Builtin{
 	"generate_series": {
 		makeGeneratorBuiltin(
 			ArgTypes{{"start", TypeInt}, {"end", TypeInt}},

@@ -18,6 +18,7 @@ package sql
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 
 	"golang.org/x/net/context"
@@ -341,20 +342,26 @@ func (s *renderNode) initTargets(
 		if len(desiredTypes) > i {
 			desiredType = desiredTypes[i]
 		}
-		cols, exprs, hasStar, err := s.planner.computeRenderAllowingStars(ctx, target, desiredType,
-			s.sourceInfo, s.ivarHelper)
+
+		// Output column names should exactly match the original expression, so we
+		// have to determine the output column name before we rewrite SRFs below.
+		outputName, err := getRenderColName(s.planner.session.SearchPath, target)
 		if err != nil {
 			return err
 		}
 
-		// If the current expression is a set-returning function, we need to move
-		// it up to the sources list as a cross join and add a render for the
+		// If the current expression contains a set-returning function, we need to
+		// move it up to the sources list as a cross join and add a render for the
 		// function's column in the join.
-		if e := extractSetReturningFunction(exprs); e != nil {
-			cols, exprs, hasStar, err = s.transformToCrossJoin(ctx, e, desiredType)
-			if err != nil {
-				return err
-			}
+		newTarget, err := s.rewriteSRFs(ctx, target)
+		if err != nil {
+			return err
+		}
+
+		cols, exprs, hasStar, err := s.planner.computeRenderAllowingStars(ctx, newTarget, desiredType,
+			s.sourceInfo, s.ivarHelper, outputName)
+		if err != nil {
+			return err
 		}
 
 		s.isStar = s.isStar || hasStar
@@ -370,43 +377,91 @@ func (s *renderNode) initTargets(
 	return nil
 }
 
-// extractSetReturningFunction checks if the first expression in the list is a
-// FuncExpr that returns a TypeTable, returning it if so.
-func extractSetReturningFunction(exprs []parser.TypedExpr) *parser.FuncExpr {
-	if len(exprs) == 1 && exprs[0].ResolvedType().FamilyEqual(parser.TypeTable) {
-		switch e := exprs[0].(type) {
-		case *parser.FuncExpr:
-			return e
-		}
-	}
-	return nil
+// srfExtractionVisitor replaces the innermost set-returning function in an
+// expression with an IndexedVar that points at a new index at the end of the
+// ivarHelper. The extracted SRF is retained in the srf field.
+//
+// This visitor is intentionally limited to extracting only one SRF, because we
+// don't support lateral correlated subqueries.
+type srfExtractionVisitor struct {
+	err        error
+	srf        *parser.FuncExpr
+	ivarHelper *parser.IndexedVarHelper
+	searchPath parser.SearchPath
 }
 
-// transformToCrossJoin moves a would-be render expression into a data source
-// cross-joined with the renderNode's existing data sources, returning a
-// render expression that points at the new data source.
-func (s *renderNode) transformToCrossJoin(
-	ctx context.Context, e *parser.FuncExpr, desiredType parser.Type,
-) (columns sqlbase.ResultColumns, exprs []parser.TypedExpr, hasStar bool, err error) {
-	src, err := s.planner.getDataSource(ctx, e, nil, publicColumns)
+var _ parser.Visitor = &srfExtractionVisitor{}
+
+func (v *srfExtractionVisitor) VisitPre(expr parser.Expr) (recurse bool, newNode parser.Expr) {
+	_, isSubquery := expr.(*parser.Subquery)
+	return !isSubquery, expr
+}
+
+func (v *srfExtractionVisitor) VisitPost(expr parser.Expr) parser.Expr {
+	switch t := expr.(type) {
+	case *parser.FuncExpr:
+		fd, err := t.Func.Resolve(v.searchPath)
+		if err != nil {
+			v.err = err
+			return expr
+		}
+		if _, ok := parser.Generators[fd.Name]; ok {
+			if v.srf != nil {
+				v.err = errors.New("cannot specify two set-returning functions in the same SELECT expression")
+				return expr
+			}
+			v.srf = t
+			return v.ivarHelper.IndexedVar(v.ivarHelper.AppendSlot())
+		}
+	}
+	return expr
+}
+
+// rewriteSRFs creates data sources for any set-returning functions in the
+// provided render expression, cross-joins these data sources with the
+// renderNode's existing data sources, and returns a new render expression with
+// the set-returning function replaced by an IndexedVar that points at the new
+// data source.
+//
+// Expressions with more than one SRF require lateral correlated subqueries,
+// which are not yet supported. For now, this function returns an error if more
+// than one SRF is present in the render expression.
+func (s *renderNode) rewriteSRFs(
+	ctx context.Context, target parser.SelectExpr,
+) (parser.SelectExpr, error) {
+	// Walk the render expression looking for SRFs.
+	v := &s.planner.srfExtractionVisitor
+	*v = srfExtractionVisitor{
+		err:        nil,
+		srf:        nil,
+		ivarHelper: &s.ivarHelper,
+		searchPath: s.planner.session.SearchPath,
+	}
+	expr, _ := parser.WalkExpr(v, target.Expr)
+	if v.err != nil {
+		return target, v.err
+	}
+
+	// Return the original render expression unchanged if the srfExtractionVisitor
+	// didn't find any SRFs.
+	if v.srf == nil {
+		return target, nil
+	}
+
+	// We rewrote exactly one SRF; cross-join it with our sources and return the
+	// new render expression.
+	src, err := s.planner.getDataSource(ctx, v.srf, nil, publicColumns)
 	if err != nil {
-		return nil, nil, false, err
+		return target, err
 	}
 	src, err = s.planner.makeJoin(ctx, "CROSS JOIN", s.source, src, nil)
 	if err != nil {
-		return nil, nil, false, err
+		return target, err
 	}
 	s.source = src
 	s.sourceInfo = multiSourceInfo{s.source.info}
-	// We must regenerate the var helper at this point since we changed
-	// the source list.
-	s.ivarHelper = parser.MakeIndexedVarHelper(s, len(s.sourceInfo[0].sourceColumns))
 
-	newTarget := parser.SelectExpr{
-		Expr: s.ivarHelper.IndexedVar(s.ivarHelper.NumVars() - 1),
-	}
-	return s.planner.computeRenderAllowingStars(ctx, newTarget, desiredType,
-		s.sourceInfo, s.ivarHelper)
+	return parser.SelectExpr{Expr: expr}, nil
 }
 
 func (s *renderNode) initWhere(ctx context.Context, where *parser.Where) (*filterNode, error) {
@@ -441,22 +496,46 @@ func (s *renderNode) initWhere(ctx context.Context, where *parser.Where) (*filte
 }
 
 // getRenderColName returns the output column name for a render expression.
-func getRenderColName(target parser.SelectExpr) string {
+func getRenderColName(searchPath parser.SearchPath, target parser.SelectExpr) (string, error) {
 	if target.As != "" {
-		return string(target.As)
+		return string(target.As), nil
 	}
 
 	// If the expression designates a column, try to reuse that column's name
 	// as render name.
-	if c, ok := target.Expr.(*parser.ColumnItem); ok {
+	if err := target.NormalizeTopLevelVarName(); err != nil {
+		return "", err
+	}
+
+	// If target.Expr is a funcExpr, resolving the function within will normalize
+	// target.Expr's string representation. We want the output column name to be
+	// unnormalized, so we compute target.Expr's string representation now, even
+	// though we may choose to return something other than exprStr in the switch
+	// below.
+	exprStr := target.Expr.String()
+
+	switch t := target.Expr.(type) {
+	case *parser.ColumnItem:
 		// We only shorten the name of the result column to become the
 		// unqualified column part of this expr name if there is
 		// no additional subscript on the column.
-		if len(c.Selector) == 0 {
-			return c.Column()
+		if len(t.Selector) == 0 {
+			return t.Column(), nil
+		}
+
+	// For compatibility with Postgres, a render expression rooted by a
+	// set-returning function is named after that SRF.
+	case *parser.FuncExpr:
+		fd, err := t.Func.Resolve(searchPath)
+		if err != nil {
+			return "", err
+		}
+		if _, ok := parser.Generators[fd.Name]; ok {
+			return fd.Name, nil
 		}
 	}
-	return target.Expr.String()
+
+	return exprStr, nil
 }
 
 // appendRenderColumn adds a new render expression at the end of the current list.
