@@ -116,8 +116,14 @@ func (c *Cluster) Start(
 		User:     security.NodeUser,
 		Insecure: true,
 	}
-	c.rpcCtx = rpc.NewContext(log.AmbientContext{}, baseCtx,
-		hlc.NewClock(hlc.UnixNano, 0), c.stopper)
+	rpcCfg := rpc.ContextConfig{
+		Config:                baseCtx,
+		HLCClock:              hlc.NewClock(hlc.UnixNano, 0),
+		HeartbeatInterval:     time.Second,
+		HeartbeatTimeout:      time.Second,
+		EnableClockSkewChecks: true,
+	}
+	c.rpcCtx = rpc.NewContext(log.AmbientContext{}, rpcCfg, c.stopper)
 
 	if perNodeArgs != nil && len(perNodeArgs) != len(c.Nodes) {
 		panic(fmt.Sprintf("there are %d nodes, but perNodeArgs' length is %d",

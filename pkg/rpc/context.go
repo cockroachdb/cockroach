@@ -28,8 +28,8 @@ import (
 	"github.com/rubyist/circuitbreaker"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/keepalive"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -52,7 +52,8 @@ func init() {
 }
 
 const (
-	defaultHeartbeatInterval = 3 * time.Second
+	defaultKeepaliveInterval = 3 * time.Second
+
 	// The coefficient by which the maximum offset is multiplied to determine the
 	// maximum acceptable measurement latency.
 	maximumPingDurationMult = 2
@@ -85,8 +86,8 @@ func NewServer(ctx *Context) *grpc.Server {
 		// TODO(peter,tamird): need tests before lowering
 		grpc.MaxMsgSize(math.MaxInt32),
 	}
-	if !ctx.Insecure {
-		tlsConfig, err := ctx.GetServerTLSConfig()
+	if !ctx.cfg.Insecure {
+		tlsConfig, err := ctx.cfg.GetServerTLSConfig()
 		if err != nil {
 			panic(err)
 		}
@@ -107,19 +108,76 @@ type connMeta struct {
 	heartbeatErr error
 }
 
-// Context contains the fields required by the rpc framework.
-type Context struct {
+// ContextTestingKnobs are the testing knobs for a Context.
+type ContextTestingKnobs struct {
+	BreakerFactory func() *circuit.Breaker
+	// PeriodicClockCheckHook is used to override the default clock offset check
+	// on connections. If an error is returned, the node will crash itself.
+	PeriodicClockCheckHook func() error
+}
+
+// ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
+func (*ContextTestingKnobs) ModuleTestingKnobs() {
+}
+
+var _ base.ModuleTestingKnobs = &ContextTestingKnobs{}
+
+// ContextConfig contains parameters for creating a Context.
+type ContextConfig struct {
+	// The base.Config used to open gRPC connections.
 	*base.Config
+
+	// KeepaliveInterval is the interval at which gRPC is going to perform HTTP2
+	// pings to check that the connection is still alive.
+	KeepaliveInterval time.Duration
+	// KeepaliveTimeout is the timeout for receiving a response to a ping. If no
+	// response is received within timeout, the connection is closed and in-flight
+	// RPCs will receive an error. gRPC will attempt to reconnect.
+	KeepaliveTimeout time.Duration
+
+	// HeartbeatInterval is the period on which the health status of a connection
+	// is tested. A Heartbeat RPC is sent periodically and, if it fails or times
+	// out, the remote host is considered to be unhealthy (see
+	// ConnHealth(remoteAddr)).
+	// Set to 0 to disable.
+	//
+	// Heartbeats are different from the gRPC pings configured through
+	// KeepaliveInterval. Those fail in-flight RPCs and cause gRPC to reconnect,
+	// but otherwise their failure is not exposed to the application.
+	//
+	// Heartbeats can also be piggy-backed by clock skew checks; see
+	// EnableClockSkewCheck.
+	HeartbeatInterval time.Duration
+	// HeartbeatTimeout specifies the timeout of the Heartbeat RPCs. If a
+	// heartbeat times out, the remote node is considered to be unhealthy.
+	HeartbeatTimeout time.Duration
+
+	// EnableClockSkewChecks, if set, makes the Heartbeat RPCs also perform clock
+	// skew checks. If an unacceptable clock skew is detected, the node kills
+	// itself.
+	// If set, HeartbeatInterval must also be set.
+	EnableClockSkewChecks bool
+
+	// HLCClock is the clock used for reporting the the node's clock with
+	// heartbeats, and also for the circuit breaker.
+	HLCClock *hlc.Clock
+
+	TestingKnobs ContextTestingKnobs
+}
+
+// Context allows clients to open gRPC connections to remote hosts. It also
+// optionally performs health checks on those connections and checks for clock
+// skew between nodes.
+type Context struct {
+	cfg ContextConfig
 
 	LocalClock   *hlc.Clock
 	breakerClock breakerClock
 	Stopper      *stop.Stopper
+	// RemoteClocks is used to perform periodic clock offset checks on all
+	// connections.
 	RemoteClocks *RemoteClockMonitor
 	masterCtx    context.Context
-
-	HeartbeatInterval time.Duration
-	HeartbeatTimeout  time.Duration
-	HeartbeatCB       func()
 
 	localInternalServer roachpb.InternalServer
 
@@ -127,32 +185,41 @@ type Context struct {
 		syncutil.Mutex
 		cache map[string]*connMeta
 	}
-
-	// For unittesting.
-	BreakerFactory func() *circuit.Breaker
 }
 
 // NewContext creates an rpc Context with the supplied values.
-func NewContext(
-	ambient log.AmbientContext, baseCtx *base.Config, hlcClock *hlc.Clock, stopper *stop.Stopper,
-) *Context {
-	if hlcClock == nil {
+func NewContext(ambient log.AmbientContext, cfg ContextConfig, stopper *stop.Stopper) *Context {
+	if cfg.HLCClock == nil {
 		panic("nil clock is forbidden")
 	}
 	ctx := &Context{
-		Config:     baseCtx,
-		LocalClock: hlcClock,
+		cfg:        cfg,
+		LocalClock: cfg.HLCClock,
 		breakerClock: breakerClock{
-			clock: hlcClock,
+			clock: cfg.HLCClock,
 		},
 	}
 	var cancel context.CancelFunc
 	ctx.masterCtx, cancel = context.WithCancel(ambient.AnnotateCtx(context.Background()))
 	ctx.Stopper = stopper
-	ctx.RemoteClocks = newRemoteClockMonitor(
-		ctx.LocalClock, 10*defaultHeartbeatInterval, baseCtx.HistogramWindowInterval)
-	ctx.HeartbeatInterval = defaultHeartbeatInterval
-	ctx.HeartbeatTimeout = 2 * defaultHeartbeatInterval
+	if ctx.cfg.EnableClockSkewChecks {
+		if ctx.cfg.HeartbeatInterval == 0 {
+			log.Fatal(ctx.masterCtx, "specified EnableClockSkewChecks but not HeartbeatInterval")
+		}
+		ctx.RemoteClocks = newRemoteClockMonitor(
+			ctx.LocalClock, 10*ctx.cfg.HeartbeatInterval /* offsetTTL */, ctx.cfg.HistogramWindowInterval)
+	}
+	if ctx.cfg.KeepaliveInterval == 0 {
+		ctx.cfg.KeepaliveInterval = defaultKeepaliveInterval
+	}
+	if ctx.cfg.KeepaliveTimeout == 0 {
+		ctx.cfg.KeepaliveTimeout = 2 * defaultKeepaliveInterval
+	}
+	if ctx.cfg.HeartbeatInterval != 0 {
+		if ctx.cfg.HeartbeatTimeout == 0 {
+			log.Fatal(ctx.masterCtx, "invalid HeartbeatTimeout: 0")
+		}
+	}
 	ctx.conns.cache = make(map[string]*connMeta)
 
 	stopper.RunWorker(func() {
@@ -180,7 +247,7 @@ func NewContext(
 // GetLocalInternalServerForAddr returns the context's internal batch server
 // for addr, if it exists.
 func (ctx *Context) GetLocalInternalServerForAddr(addr string) roachpb.InternalServer {
-	if addr == ctx.Addr {
+	if addr == ctx.cfg.Addr {
 		return ctx.localInternalServer
 	}
 	return nil
@@ -225,10 +292,10 @@ func (ctx *Context) GRPCDial(target string, opts ...grpc.DialOption) (*grpc.Clie
 
 	meta.Do(func() {
 		var dialOpt grpc.DialOption
-		if ctx.Insecure {
+		if ctx.cfg.Insecure {
 			dialOpt = grpc.WithInsecure()
 		} else {
-			tlsConfig, err := ctx.GetClientTLSConfig()
+			tlsConfig, err := ctx.cfg.GetClientTLSConfig()
 			if err != nil {
 				meta.dialErr = err
 				return
@@ -239,6 +306,18 @@ func (ctx *Context) GRPCDial(target string, opts ...grpc.DialOption) (*grpc.Clie
 		dialOpts := make([]grpc.DialOption, 0, 2+len(opts))
 		dialOpts = append(dialOpts, dialOpt)
 		dialOpts = append(dialOpts, grpc.WithBackoffMaxDelay(maxBackoff))
+		dialOpts = append(dialOpts, grpc.WithKeepaliveParams(
+			keepalive.ClientParameters{
+				// Send periodic pings on the connection.
+				Time: ctx.cfg.KeepaliveInterval,
+				// If the pings don't get a response within the timeout, the connection
+				// will be closed: if we got a timeout, we might be experiencing a
+				// network partition. All the pending RPCs (which may not have timeouts)
+				// will fail eagerly.
+				Timeout: ctx.cfg.KeepaliveTimeout,
+				// Do the pings even when there are no ongoing RPCs.
+				PermitWithoutStream: true,
+			}))
 		dialOpts = append(dialOpts, opts...)
 
 		if SourceAddr != nil {
@@ -257,14 +336,10 @@ func (ctx *Context) GRPCDial(target string, opts ...grpc.DialOption) (*grpc.Clie
 			log.Infof(ctx.masterCtx, "dialing %s", target)
 		}
 		meta.conn, meta.dialErr = grpc.DialContext(ctx.masterCtx, target, dialOpts...)
-		if meta.dialErr == nil {
+		if meta.dialErr == nil && ctx.cfg.HeartbeatInterval != 0 {
 			if err := ctx.Stopper.RunTask(func() {
 				ctx.Stopper.RunWorker(func() {
-					err := ctx.runHeartbeat(meta, target)
-					if err != nil && !grpcutil.IsClosedConnection(err) {
-						log.Errorf(ctx.masterCtx, "removing connection to %s due to error: %s", target, err)
-					}
-					ctx.removeConn(target, meta)
+					ctx.runPeriodicHeartbeats(meta, target)
 				})
 			}); err != nil {
 				meta.dialErr = err
@@ -283,8 +358,8 @@ func (ctx *Context) GRPCDial(target string, opts ...grpc.DialOption) (*grpc.Clie
 // NewBreaker creates a new circuit breaker properly configured for RPC
 // connections.
 func (ctx *Context) NewBreaker() *circuit.Breaker {
-	if ctx.BreakerFactory != nil {
-		return ctx.BreakerFactory()
+	if ctx.cfg.TestingKnobs.BreakerFactory != nil {
+		return ctx.cfg.TestingKnobs.BreakerFactory()
 	}
 	return newBreaker(&ctx.breakerClock)
 }
@@ -304,55 +379,38 @@ func (ctx *Context) ConnHealth(remoteAddr string) error {
 	return errNotConnected
 }
 
-func (ctx *Context) runHeartbeat(meta *connMeta, remoteAddr string) error {
+func (ctx *Context) runPeriodicHeartbeats(meta *connMeta, remoteAddr string) {
+	if ctx.cfg.HeartbeatInterval == 0 {
+		log.Fatal(ctx.masterCtx, "invalid HeartbeatInterval: 0")
+	}
 	maxOffset := ctx.LocalClock.MaxOffset()
 
 	request := PingRequest{
-		Addr:           ctx.Addr,
+		Addr:           ctx.cfg.Addr,
 		MaxOffsetNanos: maxOffset.Nanoseconds(),
 	}
 	heartbeatClient := NewHeartbeatClient(meta.conn)
 
-	var heartbeatTimer timeutil.Timer
-	defer heartbeatTimer.Stop()
+	var clockCheckTimer timeutil.Timer
+	defer clockCheckTimer.Stop()
 
 	// Give the first iteration a wait-free heartbeat attempt.
-	heartbeatTimer.Reset(0)
+	clockCheckTimer.Reset(0)
 	for {
 		select {
 		case <-ctx.Stopper.ShouldStop():
-			return nil
-		case <-heartbeatTimer.C:
-			heartbeatTimer.Read = true
+			return
+		case <-clockCheckTimer.C:
+			clockCheckTimer.Read = true
 		}
 
-		goCtx, cancel := context.WithTimeout(ctx.masterCtx, ctx.HeartbeatTimeout)
+		goCtx, _ := context.WithTimeout(ctx.masterCtx, ctx.cfg.HeartbeatTimeout)
 		sendTime := ctx.LocalClock.PhysicalTime()
-		// NB: We want the request to fail-fast (the default), otherwise we won't
-		// be notified of transport failures.
 		response, err := heartbeatClient.Ping(goCtx, &request)
-		cancel()
 		ctx.conns.Lock()
+		// Consider the remote node unhealthy in case of an error.
 		meta.heartbeatErr = err
 		ctx.conns.Unlock()
-
-		// If we got a timeout, we might be experiencing a network partition. We
-		// close the connection so that all other pending RPCs (which may not have
-		// timeouts) fail eagerly. Any other error is likely to be noticed by
-		// other RPCs, so it's OK to leave the connection open while grpc
-		// internally reconnects if necessary.
-		//
-		// NB: This check is skipped when the connection is initiated from a CLI
-		// client since those clients aren't sensitive to partitions, are likely
-		// to be invoked while the server is starting (particularly in tests), and
-		// are not equipped with the retry logic necessary to deal with this
-		// connection termination.
-		//
-		// TODO(tamird): That we rely on the zero maxOffset to indicate a CLI
-		// client is a hack; we should do something more explicit.
-		if maxOffset != 0 && grpc.Code(err) == codes.DeadlineExceeded {
-			return err
-		}
 
 		// HACK: work around https://github.com/grpc/grpc-go/issues/1026
 		// Getting a "connection refused" error from the "write" system call
@@ -360,23 +418,23 @@ func (ctx *Context) runHeartbeat(meta *connMeta, remoteAddr string) error {
 		// broken.
 		// TODO(bdarnell): remove this when the upstream bug is fixed.
 		if err != nil && strings.Contains(err.Error(), "write: connection refused") {
-			return nil
+			return
 		}
 
-		if err == nil {
+		if err == nil && ctx.cfg.EnableClockSkewChecks {
 			receiveTime := ctx.LocalClock.PhysicalTime()
 
 			// Only update the clock offset measurement if we actually got a
-			// successful response from the server.
+			// successful response from the server and the measurement didn't take too
+			// long.
 			pingDuration := receiveTime.Sub(sendTime)
 			if pingDuration > maximumPingDurationMult*ctx.LocalClock.MaxOffset() {
+				// The empty offset will not be recorded.
 				request.Offset.Reset()
 			} else {
-				// Offset and error are measured using the remote clock reading
-				// technique described in
-				// http://se.inf.tu-dresden.de/pubs/papers/SRDS1994.pdf, page 6.
-				// However, we assume that drift and min message delay are 0, for
-				// now.
+				// Offset and error are measured using the remote clock reading technique
+				// described in http://se.inf.tu-dresden.de/pubs/papers/SRDS1994.pdf, page
+				// 6. However, we assume that drift and min message delay are 0, for now.
 				request.Offset.MeasuredAt = receiveTime.UnixNano()
 				request.Offset.Uncertainty = (pingDuration / 2).Nanoseconds()
 				remoteTimeNow := time.Unix(0, response.ServerTime).Add(pingDuration / 2)
@@ -384,11 +442,16 @@ func (ctx *Context) runHeartbeat(meta *connMeta, remoteAddr string) error {
 			}
 			ctx.RemoteClocks.UpdateOffset(ctx.masterCtx, remoteAddr, request.Offset, pingDuration)
 
-			if cb := ctx.HeartbeatCB; cb != nil {
-				cb()
+			if cb := ctx.cfg.TestingKnobs.PeriodicClockCheckHook; cb != nil {
+				if err := cb(); err != nil {
+					log.Fatal(ctx.masterCtx, err)
+				}
+			} else {
+				if err := ctx.RemoteClocks.VerifyClockOffset(ctx.masterCtx); err != nil {
+					log.Fatal(ctx.masterCtx, err)
+				}
 			}
 		}
-
-		heartbeatTimer.Reset(ctx.HeartbeatInterval)
+		clockCheckTimer.Reset(ctx.cfg.HeartbeatInterval)
 	}
 }

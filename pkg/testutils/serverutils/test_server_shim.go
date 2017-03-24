@@ -102,6 +102,10 @@ type TestServerInterface interface {
 	// context client TLS config.
 	GetHTTPClient() (http.Client, error)
 
+	// BaseConfig returns a copy of the server's test config. Useful for tests to
+	// establish connections with the same authentication config.
+	BaseConfig() *base.Config
+
 	// MustGetSQLCounter returns the value of a counter metric from the server's
 	// SQL Executor. Runs in O(# of metrics) time, which is fine for test code.
 	MustGetSQLCounter(name string) int64

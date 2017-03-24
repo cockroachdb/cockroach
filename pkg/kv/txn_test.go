@@ -111,7 +111,7 @@ func BenchmarkSingleRoundtripWithLatency(b *testing.B) {
 		b.Run(latency.String(), func(b *testing.B) {
 			var s localtestcluster.LocalTestCluster
 			s.Latency = latency
-			s.Start(b, testutils.NewNodeTestBaseContext(), InitSenderForLocalTestCluster)
+			s.Start(b, testutils.NewNodeTestBaseConfig(), InitSenderForLocalTestCluster)
 			defer s.Stop()
 			defer b.StopTimer()
 			key := roachpb.Key("key")
@@ -387,7 +387,7 @@ func TestUncertaintyRestart(t *testing.T) {
 		Clock:     hlc.NewClock(hlc.UnixNano, maxOffset),
 		DBContext: &dbCtx,
 	}
-	s.Start(t, testutils.NewNodeTestBaseContext(), InitSenderForLocalTestCluster)
+	s.Start(t, testutils.NewNodeTestBaseConfig(), InitSenderForLocalTestCluster)
 	defer s.Stop()
 	if err := disableOwnNodeCertain(s); err != nil {
 		t.Fatal(err)
@@ -445,7 +445,7 @@ func TestUncertaintyMaxTimestampForwarding(t *testing.T) {
 		Clock:     hlc.NewClock(hlc.UnixNano, 50*time.Second),
 		DBContext: &dbCtx,
 	}
-	s.Start(t, testutils.NewNodeTestBaseContext(), InitSenderForLocalTestCluster)
+	s.Start(t, testutils.NewNodeTestBaseConfig(), InitSenderForLocalTestCluster)
 	defer s.Stop()
 	if err := disableOwnNodeCertain(s); err != nil {
 		t.Fatal(err)

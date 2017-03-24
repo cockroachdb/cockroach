@@ -23,6 +23,7 @@ import (
 	"path/filepath"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"golang.org/x/net/context"
 
@@ -53,7 +54,14 @@ func createTestClientForUser(
 	ctx.SSLCA = filepath.Join(security.EmbeddedCertsDir, security.EmbeddedCACert)
 	ctx.SSLCert = filepath.Join(security.EmbeddedCertsDir, fmt.Sprintf("%s.crt", user))
 	ctx.SSLCertKey = filepath.Join(security.EmbeddedCertsDir, fmt.Sprintf("%s.key", user))
-	conn, err := rpc.NewContext(log.AmbientContext{}, &ctx, s.Clock(), s.Stopper()).GRPCDial(s.ServingAddr())
+	cfg := rpc.ContextConfig{
+		Config:                &ctx,
+		HLCClock:              s.Clock(),
+		HeartbeatInterval:     time.Second,
+		HeartbeatTimeout:      time.Second,
+		EnableClockSkewChecks: true,
+	}
+	conn, err := rpc.NewContext(log.AmbientContext{}, cfg, s.Stopper()).GRPCDial(s.ServingAddr())
 	if err != nil {
 		t.Fatal(err)
 	}
