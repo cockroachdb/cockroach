@@ -327,3 +327,54 @@ UPDATE kv SET z = 10 WHERE k = 3 RETURNING NOTHING
 
 statement ok
 ROLLBACK
+
+# Statements that are IndependentFromPipelinedPriors should not force a
+# pipeline synchronization.
+
+statement ok
+BEGIN
+
+statement ok
+INSERT INTO kv VALUES (4, 5) RETURNING NOTHING
+
+query T
+SHOW TIME ZONE
+----
+UTC
+
+query TT
+SHOW CREATE TABLE kv
+----
+kv  CREATE TABLE kv (
+            k INT NOT NULL,
+            v INT NULL,
+            CONSTRAINT "primary" PRIMARY KEY (k ASC),
+            FAMILY "primary" (k, v),
+            CONSTRAINT check_v CHECK (v < 100)
+    )
+
+query T
+SHOW TRANSACTION STATUS
+----
+Open
+
+query TTTT colnames
+HELP LEAST
+----
+Function    Signature                           Category            Details
+least       (anyelement...) -> anyelement       Comparison			Returns the element with the lowest value.
+
+statement error duplicate key value \(k\)=\(4\) violates unique constraint "primary"
+COMMIT
+
+statement ok
+ROLLBACK
+
+query II
+SELECT k, v FROM kv ORDER BY k
+----
+1  2
+3  4
+4  8
+5  9
+6  10
