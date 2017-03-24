@@ -20,9 +20,7 @@ import (
 	"testing"
 
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -43,21 +41,7 @@ func TestEagerReplication(t *testing.T) {
 	// Disable the replica scanner so that we rely on the eager replication code
 	// path that occurs after splits.
 	store.SetReplicaScannerActive(false)
-
-	<-store.Gossip().Connected
-	if err := store.GossipStore(context.Background()); err != nil {
-		t.Fatal(err)
-	}
-	// Wait for the range to achieve quorum.
-	repl := store.LookupReplica(roachpb.RKeyMin, nil)
-	testutils.SucceedsSoon(t, func() error {
-		if !repl.HasQuorum() {
-			return errors.New("first range has not reached quorum")
-		}
-		return nil
-	})
-
-	// Now enable the split queue and force a scan and process.
+	// Enable the split queue and force a scan and process.
 	store.SetSplitQueueActive(true)
 	store.ForceSplitScanAndProcess()
 
