@@ -27,6 +27,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 )
@@ -56,8 +57,8 @@ func ExportStorageConfFromURI(path string) (roachpb.ExportStorage, error) {
 		conf.S3Config = &roachpb.ExportStorage_S3{
 			Bucket:    uri.Host,
 			Prefix:    uri.Path,
-			AccessKey: uri.Query().Get(S3AccessKeyParam),
-			Secret:    uri.Query().Get(S3SecretParam),
+			AccessKey: getParamOrEnv(uri, S3AccessKeyParam),
+			Secret:    getParamOrEnv(uri, S3SecretParam),
 		}
 		if conf.S3Config.AccessKey == "" {
 			return conf, errors.Errorf("s3 uri missing %q parameter", S3AccessKeyParam)
@@ -78,8 +79,8 @@ func ExportStorageConfFromURI(path string) (roachpb.ExportStorage, error) {
 		conf.AzureConfig = &roachpb.ExportStorage_Azure{
 			Container:   uri.Host,
 			Prefix:      uri.Path,
-			AccountName: uri.Query().Get(AzureAccountNameParam),
-			AccountKey:  uri.Query().Get(AzureAccountKeyParam),
+			AccountName: getParamOrEnv(uri, AzureAccountNameParam),
+			AccountKey:  getParamOrEnv(uri, AzureAccountKeyParam),
 		}
 		if conf.AzureConfig.AccountName == "" {
 			return conf, errors.Errorf("azure uri missing %q parameter", AzureAccountNameParam)
@@ -98,6 +99,14 @@ func ExportStorageConfFromURI(path string) (roachpb.ExportStorage, error) {
 		return conf, errors.Errorf("unsupported storage scheme: %q", uri.Scheme)
 	}
 	return conf, nil
+}
+
+func getParamOrEnv(u *url.URL, name string) string {
+	s := u.Query().Get(name)
+	if s != "" {
+		return s
+	}
+	return envutil.EnvOrDefaultString(name, "")
 }
 
 // ExportStorageFromURI returns an ExportStorage for the given URI.

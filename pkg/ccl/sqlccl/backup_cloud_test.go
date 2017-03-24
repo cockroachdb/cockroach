@@ -55,8 +55,16 @@ func TestCloudBackupRestoreS3(t *testing.T) {
 	defer cleanupFn()
 	prefix := fmt.Sprintf("TestBackupRestoreS3-%d", timeutil.Now().UnixNano())
 	uri := url.URL{Scheme: "s3", Host: bucket, Path: prefix}
+	// Test that we can pass keys as params or env vars.
+	if err := os.Setenv(storageccl.S3AccessKeyParam, s3Keys.AccessKey); err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		if err := os.Unsetenv(storageccl.S3AccessKeyParam); err != nil {
+			t.Fatal(err)
+		}
+	}()
 	values := uri.Query()
-	values.Add(storageccl.S3AccessKeyParam, s3Keys.AccessKey)
 	values.Add(storageccl.S3SecretParam, s3Keys.SecretKey)
 	uri.RawQuery = values.Encode()
 
@@ -126,8 +134,16 @@ func TestCloudBackupRestoreAzure(t *testing.T) {
 	defer cleanupFn()
 	prefix := fmt.Sprintf("TestBackupRestoreAzure-%d", timeutil.Now().UnixNano())
 	uri := url.URL{Scheme: "azure", Host: bucket, Path: prefix}
+	// Test that we can pass keys as params or env vars.
+	if err := os.Setenv(storageccl.AzureAccountNameParam, accountName); err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		if err := os.Unsetenv(storageccl.AzureAccountNameParam); err != nil {
+			t.Fatal(err)
+		}
+	}()
 	values := uri.Query()
-	values.Add(storageccl.AzureAccountNameParam, accountName)
 	values.Add(storageccl.AzureAccountKeyParam, accountKey)
 	uri.RawQuery = values.Encode()
 
