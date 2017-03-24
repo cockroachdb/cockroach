@@ -628,6 +628,7 @@ func TestRedirectStderr(t *testing.T) {
 	defer s.Close(t)
 
 	setFlags()
+	logging.stderrThreshold = Severity_NONE
 
 	Infof(context.Background(), "test")
 

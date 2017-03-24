@@ -70,6 +70,9 @@ func Scope(t tShim, testName string) TestLogScope {
 	if err := enableLogFileOutput(tempDir, Severity_ERROR); err != nil {
 		t.Fatal(err)
 	}
+	if !showLogs {
+		fmt.Fprintln(OrigStderr, "test logs captured to:", tempDir, " (use -show-logs to present inline)")
+	}
 	return TestLogScope(tempDir)
 }
 
@@ -96,9 +99,15 @@ func (l TestLogScope) Close(t tShim) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if (t.Failed() || calledDuringPanic()) && !emptyDir {
-			// If the test failed, we keep the log files for further investigation,
-			// but only if there were any.
+		inPanic := calledDuringPanic()
+		if (t.Failed() && !emptyDir) || inPanic {
+			// If the test failed or there was a panic, we keep the log
+			// files for further investigation.
+			if inPanic {
+				fmt.Fprintln(OrigStderr, "\nERROR: a panic has occurred!\n"+
+					"Details cannot be printed yet because we are still unwinding.\n"+
+					"Hopefully the test harness prints the panic below, otherwise check the test logs.\n")
+			}
 			fmt.Fprintln(OrigStderr, "test logs left over in:", l)
 		} else {
 			// Clean up.
