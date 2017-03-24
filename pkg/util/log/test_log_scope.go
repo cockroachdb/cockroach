@@ -99,7 +99,7 @@ func (l TestLogScope) Close(t tShim) {
 		if (t.Failed() || calledDuringPanic()) && !emptyDir {
 			// If the test failed, we keep the log files for further investigation,
 			// but only if there were any.
-			fmt.Fprintf(os.Stderr, "test log files left over in: %s\n", l)
+			fmt.Fprintln(OrigStderr, "test logs left over in:", l)
 		} else {
 			// Clean up.
 			if err := os.RemoveAll(string(l)); err != nil {
