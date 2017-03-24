@@ -98,8 +98,8 @@ func (u *sqlSymUnion) strPtr() *string {
 func (u *sqlSymUnion) strs() []string {
 	return u.val.([]string)
 }
-func (u *sqlSymUnion) tableWithIdx() *TableNameWithIndex {
-	return u.val.(*TableNameWithIndex)
+func (u *sqlSymUnion) tableWithIdx() TableNameWithIndex {
+	return u.val.(TableNameWithIndex)
 }
 func (u *sqlSymUnion) tableWithIdxList() TableNameWithIndexList {
 	return u.val.(TableNameWithIndexList)
@@ -10585,7 +10585,7 @@ sqldefault:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
 		//line sql.y:4891
 		{
-			sqlVAL.union.val = &TableNameWithIndex{Table: sqlDollar[1].union.normalizableTableName(), Index: Name(sqlDollar[3].str)}
+			sqlVAL.union.val = TableNameWithIndex{Table: sqlDollar[1].union.normalizableTableName(), Index: Name(sqlDollar[3].str)}
 		}
 	case 879:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
@@ -10593,7 +10593,7 @@ sqldefault:
 		{
 			// This case allows specifying just an index name (potentially schema-qualified).
 			// We temporarily store the index name in Table (see TableNameWithIndex).
-			sqlVAL.union.val = &TableNameWithIndex{Table: sqlDollar[1].union.normalizableTableName(), SearchTable: true}
+			sqlVAL.union.val = TableNameWithIndex{Table: sqlDollar[1].union.normalizableTableName(), SearchTable: true}
 		}
 	case 880:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]

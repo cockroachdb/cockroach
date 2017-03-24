@@ -18,10 +18,10 @@ package parser
 
 import "bytes"
 
-// Split represents a SPLIT statement.
+// Split represents a SPLIT statement. Only one of Table and Index can be set.
 type Split struct {
 	Table NormalizableTableName
-	Index *TableNameWithIndex
+	Index TableNameWithIndex
 	// Each row contains values for the columns in the PK or index (or a prefix
 	// of the columns).
 	Rows *Select
@@ -30,7 +30,7 @@ type Split struct {
 // Format implements the NodeFormatter interface.
 func (node *Split) Format(buf *bytes.Buffer, f FmtFlags) {
 	buf.WriteString("ALTER ")
-	if node.Index != nil {
+	if node.Table.TableNameReference == nil {
 		buf.WriteString("INDEX ")
 		FormatNode(buf, f, node.Index)
 	} else {

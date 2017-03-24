@@ -110,8 +110,8 @@ func (u *sqlSymUnion) strPtr() *string {
 func (u *sqlSymUnion) strs() []string {
     return u.val.([]string)
 }
-func (u *sqlSymUnion) tableWithIdx() *TableNameWithIndex {
-    return u.val.(*TableNameWithIndex)
+func (u *sqlSymUnion) tableWithIdx() TableNameWithIndex {
+    return u.val.(TableNameWithIndex)
 }
 func (u *sqlSymUnion) tableWithIdxList() TableNameWithIndexList {
     return u.val.(TableNameWithIndexList)
@@ -431,7 +431,7 @@ func (u *sqlSymUnion) kvOptions() []KVOption {
 %type <UnresolvedName> table_pattern
 %type <TableExpr> insert_target
 
-%type <*TableNameWithIndex> table_name_with_index
+%type <TableNameWithIndex> table_name_with_index
 %type <TableNameWithIndexList> table_name_with_index_list
 
 %type <operator> math_op
@@ -4896,13 +4896,13 @@ qualified_name:
 table_name_with_index:
   qualified_name '@' name
   {
-    $$.val = &TableNameWithIndex{Table: $1.normalizableTableName(), Index: Name($3)}
+    $$.val = TableNameWithIndex{Table: $1.normalizableTableName(), Index: Name($3)}
   }
 | qualified_name
   {
     // This case allows specifying just an index name (potentially schema-qualified).
     // We temporarily store the index name in Table (see TableNameWithIndex).
-    $$.val = &TableNameWithIndex{Table: $1.normalizableTableName(), SearchTable: true}
+    $$.val = TableNameWithIndex{Table: $1.normalizableTableName(), SearchTable: true}
   }
 
 // table_pattern accepts:

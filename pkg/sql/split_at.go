@@ -31,12 +31,12 @@ import (
 func (p *planner) Split(ctx context.Context, n *parser.Split) (planNode, error) {
 	var tn *parser.TableName
 	var err error
-	if n.Index == nil {
+	if n.Table.TableNameReference != nil {
 		// Variant: ALTER TABLE ... SPLIT AT ...
 		tn, err = n.Table.NormalizeWithDatabaseName(p.session.Database)
 	} else {
 		// Variant: ALTER INDEX ... SPLIT AT ...
-		tn, err = p.expandIndexName(ctx, n.Index)
+		tn, err = p.expandIndexName(ctx, &n.Index)
 	}
 	if err != nil {
 		return nil, err
@@ -55,7 +55,7 @@ func (p *planner) Split(ctx context.Context, n *parser.Split) (planNode, error) 
 
 	// Determine which index to use.
 	var index sqlbase.IndexDescriptor
-	if n.Index == nil {
+	if n.Table.TableNameReference != nil {
 		index = tableDesc.PrimaryIndex
 	} else {
 		normIdxName := n.Index.Index.Normalize()

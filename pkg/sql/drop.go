@@ -234,8 +234,8 @@ type fullIndexName struct {
 //          mysql requires the INDEX privilege on the table.
 func (p *planner) DropIndex(ctx context.Context, n *parser.DropIndex) (planNode, error) {
 	idxNames := make([]fullIndexName, len(n.IndexList))
-	for i, index := range n.IndexList {
-		tn, err := p.expandIndexName(ctx, index)
+	for i := range n.IndexList {
+		tn, err := p.expandIndexName(ctx, &n.IndexList[i])
 		if err != nil {
 			return nil, err
 		}
@@ -250,7 +250,7 @@ func (p *planner) DropIndex(ctx context.Context, n *parser.DropIndex) (planNode,
 		}
 
 		idxNames[i].tn = tn
-		idxNames[i].idxName = index.Index
+		idxNames[i].idxName = n.IndexList[i].Index
 	}
 	return &dropIndexNode{n: n, p: p, idxNames: idxNames}, nil
 }
