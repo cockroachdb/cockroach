@@ -4,8 +4,8 @@ import * as React from "react";
  * findChildrenOfType performs a DFS of the supplied React children collection,
  * returning all children which are ReactElements of the supplied type.
  */
-export function findChildrenOfType(children: React.ReactNode, type: any) {
-  let matchingChildren: React.ReactElement<any>[] = [];
+export function findChildrenOfType<P>(children: React.ReactNode, type: string | React.ComponentClass<P> | React.SFC<P>): React.ReactElement<P>[] {
+  let matchingChildren: React.ReactElement<P>[] = [];
   let childrenToSearch = React.Children.toArray(children);
   while (childrenToSearch.length > 0) {
     let child = childrenToSearch.shift();
@@ -27,9 +27,8 @@ export function findChildrenOfType(children: React.ReactNode, type: any) {
 }
 
 /**
- * Predicate function to determine if a react child is a ReactElement (as
- * opposed to a string or number).
+ * Predicate function to determine if a react child is a ReactElement.
  */
-function isReactElement(child: any): child is React.ReactElement<any> {
-  return (child && child.type);
+function isReactElement(child: React.ReactChild): child is React.ReactElement<any> {
+  return (<React.ReactElement<any>>child).type !== undefined;
 }

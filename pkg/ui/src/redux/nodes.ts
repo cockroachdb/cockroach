@@ -4,7 +4,7 @@ import { createSelector } from "reselect";
 
 import { AdminUIState } from "./state";
 import { NanoToMilli } from "../util/convert";
-import { NodeStatus, MetricConstants, BytesUsed } from "../util/proto";
+import { NodeStatus$Properties, MetricConstants, BytesUsed } from "../util/proto";
 import { nullOfReturnType } from "../util/types";
 
 /**
@@ -63,7 +63,7 @@ const livenessByNodeIDSelector = createSelector(
   livenessesSelector,
   (livenesses) => {
     if (livenesses) {
-      return _.keyBy(livenesses.getLivenesses(), (l) => l.getNodeId());
+      return _.keyBy(livenesses.livenesses, (l) => l.node_id);
     }
     return {};
   },
@@ -81,7 +81,7 @@ const livenessStatusByNodeIDSelector = createSelector(
       const deadCutoff = livenessCheckedAt.clone().subtract(deadTimeout);
       const suspectCutoff = livenessCheckedAt.clone().subtract(suspectTimeout);
       return _.mapValues(livenessByNodeID, (l) => {
-        const expiration = moment(NanoToMilli(l.expiration.getWallTime().toNumber()));
+        const expiration = moment(NanoToMilli(l.expiration.wall_time.toNumber()));
         if (expiration.isBefore(deadCutoff)) {
           return LivenessStatus.DEAD;
         } else if (expiration.isBefore(suspectCutoff)) {
@@ -105,12 +105,12 @@ const nodeIDsSelector = createSelector(
 );
 
 /**
- * nodeStatusByIDSelector returns a map from NodeID to a current NodeStatus.
+ * nodeStatusByIDSelector returns a map from NodeID to a current NodeStatus$Properties.
  */
 const nodeStatusByIDSelector = createSelector(
   nodeStatusesSelector,
   (nodeStatuses) => {
-    const statuses: {[s: string]: NodeStatus} = {};
+    const statuses: {[s: string]: NodeStatus$Properties} = {};
     _.each(nodeStatuses, (ns) => {
       statuses[ns.desc.node_id.toString()] = ns;
     });
@@ -143,7 +143,7 @@ const nodeSumsSelector = createSelector(
     if (_.isArray(nodeStatuses) && _.isObject(livenessStatusByNodeID)) {
       nodeStatuses.forEach((n) => {
         result.nodeCounts.total += 1;
-        const status = livenessStatusByNodeID[n.getDesc().getNodeId()];
+        const status = livenessStatusByNodeID[n.desc.node_id];
         switch (status) {
           case LivenessStatus.HEALTHY:
             result.nodeCounts.healthy++;
@@ -159,12 +159,12 @@ const nodeSumsSelector = createSelector(
             break;
         }
         if (status !== LivenessStatus.DEAD) {
-          result.capacityAvailable += n.metrics.get(MetricConstants.availableCapacity);
-          result.capacityTotal += n.metrics.get(MetricConstants.capacity);
+          result.capacityAvailable += n.metrics[MetricConstants.availableCapacity];
+          result.capacityTotal += n.metrics[MetricConstants.capacity];
           result.usedBytes += BytesUsed(n);
-          result.usedMem += n.metrics.get(MetricConstants.rss);
-          result.unavailableRanges += n.metrics.get(MetricConstants.unavailableRanges);
-          result.replicas += n.metrics.get(MetricConstants.replicas);
+          result.usedMem += n.metrics[MetricConstants.rss];
+          result.unavailableRanges += n.metrics[MetricConstants.unavailableRanges];
+          result.replicas += n.metrics[MetricConstants.replicas];
         }
       });
     }

@@ -28,7 +28,7 @@ describe("rest api", function() {
     }
 
     it("creates an appropriate querystring", function () {
-      let testValues: any = {
+      let testValues: { [k: string]: any } = {
         a: "testa",
         b: "testb",
       };
@@ -43,7 +43,7 @@ describe("rest api", function() {
     });
 
     it("handles falsy values correctly", function () {
-      let testValues: any = {
+      let testValues: { [k: string]: any } = {
         // null and undefined should be ignored
         undefined: undefined,
         null: null,
@@ -68,7 +68,7 @@ describe("rest api", function() {
     it("handles special characters", function () {
       let key = "!@#$%^&*()=+-_\\|\"`'?/<>";
       let value = key.split("").reverse().join(""); // key reversed
-      let testValues: any = {
+      let testValues: { [k: string]: any } = {
         [key] : value,
       };
 
@@ -79,14 +79,14 @@ describe("rest api", function() {
     });
 
     it("handles non-string values", function () {
-      let testValues: any = {
+      let testValues: { [k: string]: any } = {
         boolean: true,
         number: 1,
         emptyObject: {},
         emptyArray: [],
         objectWithProps: { a: 1, b: 2 },
         arrayWithElts: [1, 2, 3],
-        long: new Long(1),
+        long: Long.fromNumber(1),
       };
 
       let querystring = api.propsToQueryString(testValues);
@@ -105,11 +105,11 @@ describe("rest api", function() {
         method: "GET",
         response: (_url: string, requestObj: RequestInit) => {
           assert.isUndefined(requestObj.body);
-
+          const encodedResponse = protos.cockroach.server.serverpb.DatabasesResponse.encode({
+            databases: ["system", "test"],
+          }).finish();
           return {
-            body: new protos.cockroach.server.serverpb.DatabasesResponse({
-              databases: ["system", "test"],
-            }).toArrayBuffer(),
+            body: api.toArrayBuffer(encodedResponse),
           };
         },
       });
@@ -174,14 +174,15 @@ describe("rest api", function() {
         method: "GET",
         response: (_url: string, requestObj: RequestInit) => {
           assert.isUndefined(requestObj.body);
+          const encodedResponse = protos.cockroach.server.serverpb.DatabaseDetailsResponse.encode({
+            table_names: ["table1", "table2"],
+            grants: [
+              { user: "root", privileges: ["ALL"] },
+              { user: "other", privileges: [] },
+            ],
+          }).finish();
           return {
-            body: new protos.cockroach.server.serverpb.DatabaseDetailsResponse({
-              table_names: ["table1", "table2"],
-              grants: [
-                { user: "root", privileges: ["ALL"] },
-                { user: "other", privileges: [] },
-              ],
-            }).toArrayBuffer(),
+            body: api.toArrayBuffer(encodedResponse),
           };
         },
       });
@@ -248,8 +249,9 @@ describe("rest api", function() {
         method: "GET",
         response: (_url: string, requestObj: RequestInit) => {
           assert.isUndefined(requestObj.body);
+          const encodedResponse = protos.cockroach.server.serverpb.TableDetailsResponse.encode({}).finish();
           return {
-            body: new protos.cockroach.server.serverpb.TableDetailsResponse().toArrayBuffer(),
+            body: api.toArrayBuffer(encodedResponse),
           };
         },
       });
@@ -304,7 +306,7 @@ describe("rest api", function() {
   });
 
   describe("events request", function() {
-    let eventsPrefixMatcher = `begin:${api.API_PREFIX}/events?`;
+    const eventsPrefixMatcher = `begin:${api.API_PREFIX}/events?`;
 
     afterEach(fetchMock.restore);
 
@@ -312,22 +314,23 @@ describe("rest api", function() {
       this.timeout(1000);
       // Mock out the fetch query
       fetchMock.mock({
-        matcher: api.API_PREFIX + "/events?",
+        matcher: eventsPrefixMatcher,
         method: "GET",
         response: (_url: string, requestObj: RequestInit) => {
           assert.isUndefined(requestObj.body);
+          const encodedResponse = protos.cockroach.server.serverpb.EventsResponse.encode({
+            events: [
+              { event_type: "test" },
+            ],
+          }).finish();
           return {
-            body: new protos.cockroach.server.serverpb.EventsResponse({
-              events: [
-                { event_type: "test" },
-              ],
-            }).toArrayBuffer(),
+            body: api.toArrayBuffer(encodedResponse),
           };
         },
       });
 
       return api.getEvents(new protos.cockroach.server.serverpb.EventsRequest()).then((result) => {
-        assert.lengthOf(fetchMock.calls(api.API_PREFIX + "/events?"), 1);
+        assert.lengthOf(fetchMock.calls(eventsPrefixMatcher), 1);
         assert.lengthOf(result.events, 1);
       });
     });
@@ -336,7 +339,7 @@ describe("rest api", function() {
       this.timeout(1000);
 
       let req = new protos.cockroach.server.serverpb.EventsRequest({
-        target_id: new Long(1),
+        target_id: Long.fromNumber(1),
         type: "test type",
       });
 
@@ -349,15 +352,29 @@ describe("rest api", function() {
           assert.lengthOf(params, 2);
           _.each(params, (param) => {
             let [k, v] = param.split("=");
-            assert.equal(String((req as any)[decodeURIComponent(k)]), decodeURIComponent(v));
+            k = decodeURIComponent(k);
+            v = decodeURIComponent(v);
+            switch (k) {
+              case "target_id":
+                assert.equal(req.target_id, v);
+                break;
+
+              case "type":
+                assert.equal(req.type, v);
+                break;
+
+              default:
+                 throw new Error(`Unknown property ${k}`);
+            }
           });
           assert.isUndefined(requestObj.body);
+          const encodedResponse = protos.cockroach.server.serverpb.EventsResponse.encode({
+            events: [
+              { event_type: "test" },
+            ],
+          }).finish();
           return {
-            body: new protos.cockroach.server.serverpb.EventsResponse({
-              events: [
-                { event_type: "test" },
-              ],
-            }).toArrayBuffer(),
+            body: api.toArrayBuffer(encodedResponse),
           };
         },
       });
@@ -423,8 +440,9 @@ describe("rest api", function() {
         method: "GET",
         response: (_url: string, requestObj: RequestInit) => {
           assert.isUndefined(requestObj.body);
+          const encodedResponse = protos.cockroach.server.serverpb.HealthResponse.encode({}).finish();
           return {
-            body: new protos.cockroach.server.serverpb.HealthResponse().toArrayBuffer(),
+            body: api.toArrayBuffer(encodedResponse),
           };
         },
       });
@@ -490,8 +508,9 @@ describe("rest api", function() {
         method: "GET",
         response: (_url: string, requestObj: RequestInit) => {
           assert.isUndefined(requestObj.body);
+          const encodedResponse = protos.cockroach.server.serverpb.ClusterResponse.encode({ cluster_id: clusterID }).finish();
           return {
-            body: new protos.cockroach.server.serverpb.ClusterResponse({ cluster_id: clusterID }).toArrayBuffer(),
+            body: api.toArrayBuffer(encodedResponse),
           };
         },
       });
