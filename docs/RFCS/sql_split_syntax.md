@@ -178,7 +178,32 @@ ALTER TABLE t TESTING_RELOCATE SELECT ARRAY[1+i%2], i FROM GENERATE_SERIES(1, 10
 
 The statement returns only after the relocations are complete.
 
-# Drawbacks
+### 4. `SHOW RANGES TABLE/INDEX` ###
+
+To facilitate testing the implementation of the new commands (as well as allow a
+user to verify what the commands did), the `SHOW RANGES` statement returns
+information about the ranges of a table:
+
+```sql
+SHOW RANGES TABLE t
+SHOW RANGES INDEX t@i
+```
+
+Each output row contains:
+ - pretty printed range start key (skipping the `/Table/<tableID>/<indexID>`
+   prefix; NULL for the first range of the table/table);
+ - pretty printed range end key (NULL for the last range of the table/index);
+ - list of replica store IDs (as an int array);
+ - current lease holder (NULL if none).
+
+Sample output:
+
+```
+Start Key   End Key   Replicas    Lease Holder
+NULL        /1        [1, 2, 3]   1
+/1          /5/2      [4, 5, 6]   NULL
+/5/2        NULL      [1, 3, 6]   3
+```
 
 # Alternatives
 
