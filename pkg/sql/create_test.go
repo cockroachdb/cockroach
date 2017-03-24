@@ -92,7 +92,7 @@ func TestDatabaseDescriptor(t *testing.T) {
 	if kvs, err := kvDB.Scan(ctx, start, start.PrefixEnd(), 0); err != nil {
 		t.Fatal(err)
 	} else {
-		migrationDescriptors, err := migrations.AdditionalInitialDescriptors(ctx, kvDB)
+		migrationDescriptors, _, err := migrations.AdditionalInitialDescriptors(ctx, kvDB)
 		if err != nil {
 			t.Fatal(err)
 		}
