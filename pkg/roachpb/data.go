@@ -927,6 +927,9 @@ func (t Transaction) String() string {
 	fmt.Fprintf(&buf, "id=%s key=%s rw=%t pri=%.8f iso=%s stat=%s epo=%d ts=%s orig=%s max=%s wto=%t rop=%t",
 		t.Short(), Key(t.Key), t.Writing, floatPri, t.Isolation, t.Status, t.Epoch, t.Timestamp,
 		t.OrigTimestamp, t.MaxTimestamp, t.WriteTooOld, t.RetryOnPush)
+	if t.Status != PENDING {
+		fmt.Fprintf(&buf, " (%d intents)", len(t.Intents))
+	}
 	return buf.String()
 }
 

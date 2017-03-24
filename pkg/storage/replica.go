@@ -78,6 +78,8 @@ const (
 	optimizePutThreshold = 10
 
 	replicaChangeTxnName = "change-replica"
+	splitTxnName         = "split"
+	mergeTxnName         = "merge"
 
 	defaultReplicaRaftMuWarnThreshold = 500 * time.Millisecond
 )
