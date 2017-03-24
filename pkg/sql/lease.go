@@ -375,7 +375,9 @@ func (s LeaseStore) Publish(
 			}
 
 			// Write the updated descriptor.
-			txn.SetSystemConfigTrigger()
+			if err := txn.SetSystemConfigTrigger(); err != nil {
+				return err
+			}
 			b := txn.NewBatch()
 			b.Put(descKey, desc)
 			if logEvent != nil {
