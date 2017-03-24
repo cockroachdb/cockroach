@@ -92,7 +92,6 @@ func TestHeartbeatCB(t *testing.T) {
 // heartbeats succeed or fail.
 func TestHeartbeatHealth(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	t.Skip("#13939")
 
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
@@ -139,11 +138,26 @@ func TestHeartbeatHealth(t *testing.T) {
 		}
 	}()
 
+	// Wait for the connection.
+	testutils.SucceedsSoon(t, func() error {
+		err := clientCtx.ConnHealth(remoteAddr)
+		if err == errNotHeartbeated {
+			return errors.Wrapf(err, "not connected yet")
+		}
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		return nil
+	})
+
 	// Should be unhealthy in the presence of failing heartbeats.
 	hbSuccess.Store(false)
-	if err := clientCtx.ConnHealth(remoteAddr); err != errNotHeartbeated {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	testutils.SucceedsSoon(t, func() error {
+		if err := clientCtx.ConnHealth(remoteAddr); !testutils.IsError(err, errFailedHeartbeat.Error()) {
+			return errors.Errorf("unexpected error: %v", err)
+		}
+		return nil
+	})
 
 	// Should become healthy in the presence of successful heartbeats.
 	hbSuccess.Store(true)
