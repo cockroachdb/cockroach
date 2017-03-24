@@ -254,7 +254,9 @@ func (sc *SchemaChanger) maybeWriteResumeSpan(
 	} else {
 		tableDesc.Mutations[mutationIdx].ResumeSpans = append(tableDesc.Mutations[mutationIdx].ResumeSpans, resume)
 	}
-	txn.SetSystemConfigTrigger()
+	if err := txn.SetSystemConfigTrigger(); err != nil {
+		return err
+	}
 	if err := txn.Put(
 		ctx,
 		sqlbase.MakeDescMetadataKey(tableDesc.GetID()),
@@ -397,7 +399,9 @@ func (sc *SchemaChanger) truncateAndBackfillColumnsChunk(
 		}
 
 		// TODO(vivek): See comment in backfillIndexesChunk.
-		txn.SetSystemConfigTrigger()
+		if err := txn.SetSystemConfigTrigger(); err != nil {
+			return err
+		}
 
 		p := sc.makePlanner(txn)
 		defer p.releaseLeases(ctx)
@@ -547,7 +551,9 @@ func (sc *SchemaChanger) truncateIndexes(
 				}
 
 				// TODO(vivek): See comment in backfillIndexesChunk.
-				txn.SetSystemConfigTrigger()
+				if err := txn.SetSystemConfigTrigger(); err != nil {
+					return err
+				}
 
 				p := sc.makePlanner(txn)
 				defer p.releaseLeases(ctx)

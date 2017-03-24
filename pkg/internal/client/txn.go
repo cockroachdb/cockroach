@@ -190,13 +190,15 @@ func (txn *Txn) Isolation() enginepb.IsolationType {
 
 // SetTxnAnchorKey sets the key at which to anchor the transaction record. The
 // transaction anchor key defaults to the first key written in a transaction.
-func (txn *Txn) SetTxnAnchorKey(key roachpb.Key) {
+func (txn *Txn) SetTxnAnchorKey(key roachpb.Key) error {
 	txn.mu.Lock()
 	if txn.mu.Proto.Writing || txn.mu.writingTxnRecord {
-		panic("must set txn anchor key before any txn writes")
+		txn.mu.Unlock()
+		return errors.Errorf("transaction anchor key already set")
 	}
 	txn.mu.txnAnchorKey = key
 	txn.mu.Unlock()
+	return nil
 }
 
 // SetSystemConfigTrigger sets the system db trigger to true on this transaction.
@@ -208,14 +210,15 @@ func (txn *Txn) SetTxnAnchorKey(key roachpb.Key) {
 // should be ensured that the transaction record itself is on the system span.
 // This can be done by making sure a system key is the first key touched in the
 // transaction.
-func (txn *Txn) SetSystemConfigTrigger() {
+func (txn *Txn) SetSystemConfigTrigger() error {
 	if !txn.systemConfigTrigger {
 		txn.systemConfigTrigger = true
 		// The system-config trigger must be run on the system-config range which
 		// means any transaction with the trigger set needs to be anchored to the
 		// system-config range.
-		txn.SetTxnAnchorKey(keys.SystemConfigSpan.Key)
+		return txn.SetTxnAnchorKey(keys.SystemConfigSpan.Key)
 	}
+	return nil
 }
 
 // Proto returns the transactions underlying protocol buffer. It is not thread-safe,
