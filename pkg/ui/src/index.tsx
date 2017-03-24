@@ -1,3 +1,5 @@
+/// <reference path="../node_modules/protobufjs/stub-node.d.ts" />
+
 /**
  * UI/NEXT TODO LIST
  *
@@ -104,6 +106,8 @@ ReactDOM.render(
           <Route path="events" component={ EventPage } />
         </Route>
         <Route path="nodes">
+          // wtf is this? it doesn't seem to render, and I can't figure out what the hell it is for.
+          //
           // This path has to match the "nodes" route for the purpose of
           // highlighting links, but the page does not render as a child of the
           // Nodes component.

@@ -1,6 +1,8 @@
 import moment from "moment";
 
-type Timestamp = Proto2TypeScript.cockroach.server.serverpb.EventsResponse.Event.Timestamp | Proto2TypeScript.cockroach.server.serverpb.GetUIDataResponse.Timestamp;
+import * as protos from "../js/protos";
+
+type Timestamp = protos.cockroach.server.serverpb.EventsResponse.Event.Timestamp | protos.cockroach.server.serverpb.GetUIDataResponse.Timestamp;
 
 /**
  * NanoToMilli converts a nanoseconds value into milliseconds.

@@ -8,7 +8,7 @@ import * as protos from "../js/protos";
 import * as metrics from "./metrics";
 import reducer from "./metrics";
 
-type TSRequestMessage = Proto2TypeScript.cockroach.ts.tspb.TimeSeriesQueryRequestMessage;
+type TSRequest = protos.cockroach.ts.tspb.TimeSeriesQueryRequest;
 
 describe("metrics reducer", function() {
   describe("actions", function() {
@@ -51,8 +51,8 @@ describe("metrics reducer", function() {
 
     it("should correctly dispatch requestMetrics", function() {
       let request = new protos.cockroach.ts.tspb.TimeSeriesQueryRequest({
-        start_nanos: Long.fromInt(0),
-        end_nanos: Long.fromInt(10),
+        start_nanos: Long.fromNumber(0),
+        end_nanos: Long.fromNumber(10),
         queries: [
           {
             name: "test.metric.1",
@@ -80,8 +80,8 @@ describe("metrics reducer", function() {
         ],
       });
       let request = new protos.cockroach.ts.tspb.TimeSeriesQueryRequest({
-        start_nanos: Long.fromInt(0),
-        end_nanos: Long.fromInt(10),
+        start_nanos: Long.fromNumber(0),
+        end_nanos: Long.fromNumber(10),
         queries: [
           {
             name: "test.metric.1",
@@ -107,8 +107,8 @@ describe("metrics reducer", function() {
         ],
       });
       let request = new protos.cockroach.ts.tspb.TimeSeriesQueryRequest({
-        start_nanos: Long.fromInt(0),
-        end_nanos: Long.fromInt(10),
+        start_nanos: Long.fromNumber(0),
+        end_nanos: Long.fromNumber(10),
         queries: [
           {
             name: "test.metric.1",
@@ -151,7 +151,7 @@ describe("metrics reducer", function() {
     type timespan = [Long, Long];
 
     // Helper function to generate metrics request.
-    let createRequest = function(ts: timespan, ...names: string[]): TSRequestMessage {
+    let createRequest = function(ts: timespan, ...names: string[]): TSRequest {
       return new protos.cockroach.ts.tspb.TimeSeriesQueryRequest({
         start_nanos: ts[0],
         end_nanos: ts[1],
@@ -169,7 +169,7 @@ describe("metrics reducer", function() {
       mockMetricsState = reducer(mockMetricsState, action);
       return undefined;
     };
-    let queryMetrics = function(id: string, request: TSRequestMessage): Promise<void> {
+    let queryMetrics = function(id: string, request: TSRequest): Promise<void> {
       return metrics.queryMetrics(id, request)(mockDispatch);
     };
 
@@ -192,17 +192,18 @@ describe("metrics reducer", function() {
           assert.isAtLeast(mockMetricsState.inFlight, 1);
           assert.isAtMost(mockMetricsState.inFlight, 2);
 
-          let request = protos.cockroach.ts.tspb.TimeSeriesQueryRequest.decode(requestObj.body as ArrayBuffer);
+          const request = protos.cockroach.ts.tspb.TimeSeriesQueryRequest.decode(new Uint8Array(requestObj.body as ArrayBuffer));
+          const encodedResponse = protos.cockroach.ts.tspb.TimeSeriesQueryResponse.encode({
+            results: _.map(request.queries, (q) => {
+              return {
+                query: q,
+                datapoints: [],
+              };
+            }),
+          }).finish();
 
           return {
-            body: new protos.cockroach.ts.tspb.TimeSeriesQueryResponse({
-              results: _.map(request.queries, (q) => {
-                return {
-                  query: q,
-                  datapoints: [],
-                };
-              }),
-            }).toArrayBuffer(),
+            body: encodedResponse.buffer.slice(encodedResponse.byteOffset, encodedResponse.byteOffset + encodedResponse.byteLength),
           };
         },
       });
@@ -266,17 +267,18 @@ describe("metrics reducer", function() {
           }
           successSent = true;
 
-          let request = protos.cockroach.ts.tspb.TimeSeriesQueryRequest.decode(requestObj.body as ArrayBuffer);
+          const request = protos.cockroach.ts.tspb.TimeSeriesQueryRequest.decode(new Uint8Array(requestObj.body as ArrayBuffer));
+          const encodedResponse = protos.cockroach.ts.tspb.TimeSeriesQueryResponse.encode({
+            results: _.map(request.queries, (q) => {
+              return {
+                query: q,
+                datapoints: [],
+              };
+            }),
+          }).finish();
 
           return {
-            body: new protos.cockroach.ts.tspb.TimeSeriesQueryResponse({
-              results: _.map(request.queries, (q) => {
-                return {
-                  query: q,
-                  datapoints: [],
-                };
-              }),
-            }).toArrayBuffer(),
+            body: encodedResponse.buffer.slice(encodedResponse.byteOffset, encodedResponse.byteOffset + encodedResponse.byteLength),
           };
         },
       });

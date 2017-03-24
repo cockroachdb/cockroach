@@ -12,7 +12,7 @@ import { QueryTimeInfo } from "../containers/metricsDataProvider";
 
 import { MetricProps } from "./metric";
 
-type TSResponseMessage = Proto2TypeScript.cockroach.ts.tspb.TimeSeriesQueryResponseMessage;
+type TSResponse = protos.cockroach.ts.tspb.TimeSeriesQueryResponse;
 
 // Global set of colors for graph series.
 const seriesPalette = [
@@ -346,7 +346,7 @@ interface SeenTimestamps {
  * returns a SeenTimestamps object with all the values set to false. This object
  * is used to track missing timestamps for each individual dataset.
  */
-function getTimestamps(metrics: React.ReactElement<MetricProps>[], data: TSResponseMessage): SeenTimestamps {
+function getTimestamps(metrics: React.ReactElement<MetricProps>[], data: TSResponse): SeenTimestamps {
   return _(metrics)
      // Get all the datapoints from all series in a single array.
     .flatMap((_s, idx) => data.results[idx].datapoints)
@@ -366,7 +366,7 @@ function getTimestamps(metrics: React.ReactElement<MetricProps>[], data: TSRespo
 function ProcessDataPoints(
   metrics: React.ReactElement<MetricProps>[],
   axis: React.ReactElement<AxisProps>,
-  data: TSResponseMessage,
+  data: TSResponse,
   timeInfo: QueryTimeInfo,
   stacked = false,
 ) {
@@ -450,8 +450,8 @@ function ProcessDataPoints(
 
 export function InitLineChart(chart: nvd3.LineChart | nvd3.StackedAreaChart) {
     chart
-      .x((d: Proto2TypeScript.cockroach.ts.tspb.TimeSeriesDatapoint) => new Date(NanoToMilli(d && d.timestamp_nanos.toNumber())))
-      .y((d: Proto2TypeScript.cockroach.ts.tspb.TimeSeriesDatapoint) => d && d.value)
+      .x((d: protos.cockroach.ts.tspb.TimeSeriesDatapoint) => new Date(NanoToMilli(d && d.timestamp_nanos.toNumber())))
+      .y((d: protos.cockroach.ts.tspb.TimeSeriesDatapoint) => d && d.value)
       .useInteractiveGuideline(true)
       .showLegend(true)
       .showYAxis(true)
@@ -473,7 +473,7 @@ export function ConfigureLineChart(
   svgEl: SVGElement,
   metrics: React.ReactElement<MetricProps>[],
   axis: React.ReactElement<AxisProps>,
-  data: TSResponseMessage,
+  data: TSResponse,
   timeInfo: QueryTimeInfo,
   stacked = false,
 ) {
@@ -523,7 +523,7 @@ export function ConfigureLineChart(
 // components directly contained by a MetricsDataProvider. It is used by a
 // MetricsDataProvider to pass query data to its contained component.
 export interface MetricsDataComponentProps {
-  data?: TSResponseMessage;
+  data?: TSResponse;
   timeInfo?: QueryTimeInfo;
   // Allow graphs to declare a single source for all metrics. This is a
   // convenient syntax for a common use case where all metrics on a graph are

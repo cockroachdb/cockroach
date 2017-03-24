@@ -19,13 +19,13 @@ import { Metric } from "../components/metric";
 import { EventBox } from "../containers/events";
 import { Bytes } from "../util/format";
 import { NanoToMilli } from "../util/convert";
-import { NodeStatus, MetricConstants, BytesUsed } from "../util/proto";
+import { NodeStatus$Properties, MetricConstants, BytesUsed } from "../util/proto";
 
 interface NodeGraphsOwnProps {
   refreshNodes: typeof refreshNodes;
   nodesQueryValid: boolean;
   nodeIds: string[];
-  nodeStatusByID: {[s: string]: NodeStatus};
+  nodeStatusByID: {[s: string]: NodeStatus$Properties};
   nodeCount: number;
   capacityAvailable: number;
   capacityTotal: number;
@@ -629,12 +629,12 @@ export let nodeSums = createSelector(
     if (_.isArray(ns)) {
       ns.forEach((n) => {
         result.nodeCount += 1;
-        result.capacityAvailable += n.metrics.get(MetricConstants.availableCapacity);
-        result.capacityTotal += n.metrics.get(MetricConstants.capacity);
+        result.capacityAvailable += n.metrics[MetricConstants.availableCapacity];
+        result.capacityTotal += n.metrics[MetricConstants.capacity];
         result.usedBytes += BytesUsed(n);
-        result.usedMem += n.metrics.get(MetricConstants.rss);
-        result.unavailableRanges += n.metrics.get(MetricConstants.unavailableRanges);
-        result.replicas += n.metrics.get(MetricConstants.replicas);
+        result.usedMem += n.metrics[MetricConstants.rss];
+        result.unavailableRanges += n.metrics[MetricConstants.unavailableRanges];
+        result.replicas += n.metrics[MetricConstants.replicas];
       });
     }
     return result;
@@ -653,7 +653,7 @@ let nodeIds = createSelector(
 let nodeStatusByID = createSelector(
   nodeStatuses,
   (nss) => {
-    let statuses: {[s: string]: NodeStatus} = {};
+    let statuses: {[s: string]: NodeStatus$Properties} = {};
     _.each(nss, (ns) => {
       statuses[ns.desc.node_id.toString()] = ns;
     });

@@ -1,7 +1,7 @@
 import { assert } from "chai";
 import _ from "lodash";
-import * as ByteBuffer from "bytebuffer";
 import { Action } from "redux";
+import * as protobuf from "protobufjs/minimal";
 import fetchMock from "../util/fetch-mock";
 
 import * as protos from "../js/protos";
@@ -336,19 +336,20 @@ describe("UIData reducer", function() {
           assert.equal(state[uiKey1].state, uidata.UIDataState.SAVING);
           assert.equal(state[uiKey2].state, uidata.UIDataState.SAVING);
 
-          let kvs = protos.cockroach.server.serverpb.SetUIDataRequest.decode(requestObj.body as ArrayBuffer).getKeyValues();
+          let kvs = protos.cockroach.server.serverpb.SetUIDataRequest.decode(new Uint8Array(requestObj.body as ArrayBuffer)).key_values;
 
-          assert.equal(kvs.size, 2);
+          assert.lengthOf(_.keys(kvs), 2);
 
-          let deserialize = function(buff: ByteBuffer): Object {
-            return JSON.parse(buff.readString(buff.limit - buff.offset));
+          let deserialize = function(buffer: Uint8Array): Object {
+            return JSON.parse(protobuf.util.utf8.read(buffer, 0, buffer.byteLength));
           };
 
-          assert.deepEqual(deserialize(kvs.get(uiKey1)), uiObj1);
-          assert.deepEqual(deserialize(kvs.get(uiKey2)), uiObj2);
+          assert.deepEqual(deserialize(kvs[uiKey1]), uiObj1);
+          assert.deepEqual(deserialize(kvs[uiKey2]), uiObj2);
 
+          const encodedResponse = protos.cockroach.server.serverpb.SetUIDataResponse.encode({}).finish();
           return {
-            body: new protos.cockroach.server.serverpb.SetUIDataResponse().toArrayBuffer(),
+            body: encodedResponse.buffer.slice(encodedResponse.byteOffset, encodedResponse.byteOffset + encodedResponse.byteLength),
           };
         },
       });
@@ -427,17 +428,21 @@ describe("UIData reducer", function() {
           assert.equal(state[uiKey1].state, uidata.UIDataState.LOADING);
           assert.equal(state[uiKey2].state, uidata.UIDataState.LOADING);
 
-          let response = new protos.cockroach.server.serverpb.GetUIDataResponse();
-          let setValue = function(key: string, obj: Object) {
-            let value = new protos.cockroach.server.serverpb.GetUIDataResponse.Value();
-            value.setValue(ByteBuffer.fromUTF8(JSON.stringify(obj)));
-            response.key_values.set(key, value);
+          const response: protos.cockroach.server.serverpb.GetUIDataResponse$Properties = {
+            key_values: {},
+          };
+          const setValue = function(key: string, obj: Object) {
+            const stringifiedValue = JSON.stringify(obj);
+            const buffer = new Uint8Array(protobuf.util.utf8.length(stringifiedValue));
+            protobuf.util.utf8.write(stringifiedValue, buffer, 0);
+            response.key_values[key] = { value: buffer };
           };
           setValue(uiKey1, uiObj1);
           setValue(uiKey2, uiObj2);
 
+          const encodedResponse = protos.cockroach.server.serverpb.GetUIDataResponse.encode(response).finish();
           return {
-            body: response.toArrayBuffer(),
+            body: encodedResponse.buffer.slice(encodedResponse.byteOffset, encodedResponse.byteOffset + encodedResponse.byteLength),
           };
         },
       });
@@ -505,10 +510,9 @@ describe("UIData reducer", function() {
         response: () => {
           assert.equal(state[missingKey].state, uidata.UIDataState.LOADING);
 
-          let response = new protos.cockroach.server.serverpb.GetUIDataResponse();
-
+          const encodedResponse = protos.cockroach.server.serverpb.GetUIDataResponse.encode({}).finish();
           return {
-            body: response.toArrayBuffer(),
+            body: encodedResponse.buffer.slice(encodedResponse.byteOffset, encodedResponse.byteOffset + encodedResponse.byteLength),
           };
         },
       });

@@ -3,6 +3,8 @@ import { Link } from "react-router";
 import { connect } from "react-redux";
 import moment from "moment";
 
+import * as protos from "../js/protos";
+
 import { nodeSums } from "./nodeGraphs";
 import { SummaryBar, SummaryHeadlineStat } from "../components/summaryBar";
 import { AdminUIState } from "../redux/state";
@@ -12,7 +14,7 @@ import { SortSetting } from "../components/sortabletable";
 import { SortedTable } from "../components/sortedtable";
 import { NanoToMilli } from "../util/convert";
 import { Bytes } from "../util/format";
-import { NodeStatus, MetricConstants, BytesUsed } from  "../util/proto";
+import { NodeStatus$Properties, MetricConstants, BytesUsed } from  "../util/proto";
 
 // Constant used to store sort settings in the redux UI store.
 const UI_NODES_SORT_SETTING_KEY = "nodes/sort_setting";
@@ -23,7 +25,7 @@ const UI_NODES_SORT_SETTING_KEY = "nodes/sort_setting";
 // The variable name must start with a capital letter or TSX will not recognize
 // it as a component.
 // tslint:disable-next-line:variable-name
-const NodeSortedTable = SortedTable as new () => SortedTable<Proto2TypeScript.cockroach.server.status.NodeStatus>;
+const NodeSortedTable = SortedTable as new () => SortedTable<protos.cockroach.server.status.NodeStatus$Properties>;
 
 /**
  * NodesMainData are the data properties which should be passed to the NodesMain
@@ -34,7 +36,7 @@ interface NodesMainData {
   // component.
   sortSetting: SortSetting;
   // A list of store statuses to display.
-  statuses: NodeStatus[];
+  statuses: NodeStatus$Properties[];
   // Count of replicas across all nodes.
   replicaCount: number;
   // Total used bytes across all nodes.
@@ -149,14 +151,14 @@ class NodesMain extends React.Component<NodesMainProps, {}> {
               // Replicas - displays the total number of replicas on the node.
               {
                 title: "Replicas",
-                cell: (ns) => ns.metrics.get(MetricConstants.replicas).toString(),
-                sort: (ns) => ns.metrics.get(MetricConstants.replicas),
+                cell: (ns) => ns.metrics[MetricConstants.replicas].toString(),
+                sort: (ns) => ns.metrics[MetricConstants.replicas],
               },
               // Mem Usage - total memory being used on this node.
               {
                 title: "Mem Usage",
-                cell: (ns) => Bytes(ns.metrics.get(MetricConstants.rss)),
-                sort: (ns) => ns.metrics.get(MetricConstants.rss),
+                cell: (ns) => Bytes(ns.metrics[MetricConstants.rss]),
+                sort: (ns) => ns.metrics[MetricConstants.rss],
               },
               // Logs - a link to the logs data for this node.
               {
@@ -199,7 +201,7 @@ class NodesMain extends React.Component<NodesMainProps, {}> {
 
 // Base selectors to extract data from redux state.
 let nodeQueryValid = (state: AdminUIState): boolean => state.cachedData.nodes.valid;
-let nodeStatuses = (state: AdminUIState): NodeStatus[] => state.cachedData.nodes.data;
+let nodeStatuses = (state: AdminUIState): NodeStatus$Properties[] => state.cachedData.nodes.data;
 let sortSetting = (state: AdminUIState): SortSetting => state.ui[UI_NODES_SORT_SETTING_KEY] || {};
 
 // Connect the NodesMain class with our redux store.

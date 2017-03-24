@@ -1,7 +1,10 @@
 import _ from "lodash";
 
-type NodeStatus = Proto2TypeScript.cockroach.server.status.NodeStatus;
-type StatusMetrics = Proto2TypeScript.ProtoBufMap<string, number>;
+import * as protos from "../js/protos";
+
+export type NodeStatus$Properties = protos.cockroach.server.status.NodeStatus$Properties;
+const nodeStatus: NodeStatus$Properties = null;
+export type StatusMetrics = typeof nodeStatus.metrics;
 
 /**
  * AccumulateMetrics is a convenience function which accumulates the values
@@ -11,11 +14,11 @@ type StatusMetrics = Proto2TypeScript.ProtoBufMap<string, number>;
  */
 export function AccumulateMetrics(dest: StatusMetrics, ...srcs: StatusMetrics[]): void {
   srcs.forEach((s: StatusMetrics) => {
-    s.forEach((val: number, key: string) => {
-      if (dest.has(key)) {
-        dest.set(key, dest.get(key) + val);
+    _.forEach(s, (val: number, key: string) => {
+      if (_.has(dest, key)) {
+        dest[key] =  dest[key] + val;
       } else {
-        dest.set(key, val);
+        dest[key] = val;
       }
     });
   });
@@ -26,7 +29,7 @@ export function AccumulateMetrics(dest: StatusMetrics, ...srcs: StatusMetrics[])
  * metrics collection of the supplied NodeStatus object. This is convenient
  * for all current usages of NodeStatus in the UI.
  */
-export function RollupStoreMetrics(ns: NodeStatus): void {
+export function RollupStoreMetrics(ns: NodeStatus$Properties): void {
   AccumulateMetrics(ns.metrics, ..._.map(ns.store_statuses, (ss) => ss.metrics));
 }
 
@@ -69,9 +72,9 @@ export namespace MetricConstants {
 /**
  * TotalCPU computes the total CPU usage accounted for in a NodeStatus.
  */
-export function TotalCpu(status: NodeStatus): number {
+export function TotalCpu(status: NodeStatus$Properties): number {
   let metrics = status.metrics;
-  return metrics.get(MetricConstants.sysCPUPercent) + metrics.get(MetricConstants.userCPUPercent);
+  return metrics[MetricConstants.sysCPUPercent] + metrics[MetricConstants.userCPUPercent];
 }
 
 /**
@@ -83,10 +86,8 @@ let aggregateByteKeys = [
   MetricConstants.sysBytes,
 ];
 
-export function BytesUsed(s: NodeStatus): number {
+export function BytesUsed(s: NodeStatus$Properties): number {
   return _.sumBy(aggregateByteKeys, (key: string) => {
-    return s.metrics.get(key);
+    return s.metrics[key];
   });
 };
-
-export { NodeStatus };

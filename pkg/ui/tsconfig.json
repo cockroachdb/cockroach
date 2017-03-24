@@ -3,7 +3,7 @@
     "allowSyntheticDefaultImports": true,
     "alwaysStrict": true,
     "forceConsistentCasingInFileNames": true,
-    "isolatedModules": false,
+    "isolatedModules": true,
     "jsx": "preserve",
     "moduleResolution": "node",
     "noFallthroughCasesInSwitch": true,

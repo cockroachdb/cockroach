@@ -32,12 +32,13 @@ module.exports = function(config) {
     // preprocess matching files before serving them to the browser
     // available preprocessors: https://npmjs.org/browse/keyword/karma-preprocessor
     preprocessors: {
-      'src/**/*.spec.*': ['webpack'],
+      'src/**/*.spec.*': ['webpack', 'sourcemap'],
     },
 
 
     // https://github.com/airbnb/enzyme/blob/master/docs/guides/webpack.md
     webpack: Object.assign(webpackConfig, {
+      devtool: 'source-map',
       externals: {
         'react/addons': true,
         'react/lib/ExecutionEnvironment': true,

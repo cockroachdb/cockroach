@@ -11,9 +11,6 @@ import { SortSetting } from "../../components/sortabletable";
 
 import { TableInfo } from "./data";
 
-type DatabaseDetailsResponseMessage = Proto2TypeScript.cockroach.server.serverpb.DatabaseDetailsResponseMessage;
-type Grant = Proto2TypeScript.cockroach.server.serverpb.DatabaseDetailsResponse.Grant;
-
 // DatabaseSummaryImplicitData describes properties which must be explicitly set
 // on a DatabaseSummary component.
 export interface DatabaseSummaryExplicitData {
@@ -25,8 +22,8 @@ export interface DatabaseSummaryExplicitData {
 interface DatabaseSummaryConnectedData {
   sortSetting: SortSetting;
   tableInfos: TableInfo[];
-  dbResponse: DatabaseDetailsResponseMessage;
-  grants: Grant[];
+  dbResponse: protos.cockroach.server.serverpb.DatabaseDetailsResponse;
+  grants: protos.cockroach.server.serverpb.DatabaseDetailsResponse.Grant[];
 }
 
 // DatabaseSummaryActions describes actions which can be dispatched by a
