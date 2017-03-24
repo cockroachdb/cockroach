@@ -1742,15 +1742,14 @@ func MVCCIterate(
 // ResolveWriteIntent will skip write intents of other txns.
 //
 // Transaction epochs deserve a bit of explanation. The epoch for a
-// transaction is incremented on transaction retry. Transaction retry
-// is different from abort. Retries occur in SSI transactions when the
-// commit timestamp is not equal to the proposed transaction
-// timestamp. This might be because writes to different keys had to
-// use higher timestamps than expected because of existing, committed
-// value, or because reads pushed the transaction's commit timestamp
-// forward. Retries also occur in the event that the txn tries to push
-// another txn in order to write an intent but fails (i.e. it has
-// lower priority).
+// transaction is incremented on transaction retries. A transaction
+// retry is different from an abort. Retries can occur in SSI
+// transactions when the commit timestamp is not equal to the proposed
+// transaction timestamp. On a retry, the epoch is incremented instead
+// of creating an entirely new transaction. This allows the intents
+// that were written on previous runs to serve as locks which prevent
+// concurrent reads from further incrementing the timestamp cache,
+// making further transaction retries less likely.
 //
 // Because successive retries of a transaction may end up writing to
 // different keys, the epochs serve to classify which intents get
