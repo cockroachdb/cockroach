@@ -149,4 +149,5 @@ docker run --privileged -i ${tty-} --rm \
   --env="GOTRACEBACK=${GOTRACEBACK-all}" \
   --env="COVERALLS_TOKEN=${COVERALLS_TOKEN-}" \
   --env="CODECOV_TOKEN=${CODECOV_TOKEN-}" \
+  --env=ARM_SUBSCRIPTION_ID --env=ARM_CLIENT_ID --env=ARM_CLIENT_SECRET --env=ARM_TENANT_ID \
   "${image}:${version}" "${@-bash}"
