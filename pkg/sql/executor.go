@@ -1130,15 +1130,15 @@ func (e *Executor) execStmtInOpenTxn(
 		}
 	}()
 
+	// Check if the statement is pipelined or is independent from pipeline
+	// execution. If neither of these cases are true, we need to synchronize
+	// the pipeline by letting it drain before we can begin executing ourselves.
 	pipelined := IsStmtPipelined(stmt)
 	if pipelined && implicitTxn {
 		return Result{}, errNoTransactionToPipeline
 	}
-	// Don't wait on Show, because the cockroach --sql CLI currently sends
-	// these after every request.
-	// TODO(nvanbenschoten) This should be generalized/reconsidered/improved.
-	_, isShow := stmt.(*parser.Show)
-	if !(isShow || pipelined) {
+	_, independentFromPipelined := stmt.(parser.IndependentFromPipelinedPriors)
+	if !(pipelined || independentFromPipelined) {
 		if err := session.pipelineQueue.Wait(); err != nil {
 			return Result{}, err
 		}
@@ -1235,6 +1235,12 @@ func (e *Executor) execStmtInOpenTxn(
 		result, err = e.execStmt(stmt, planner, autoCommit, automaticRetryCount)
 	}
 	if err != nil {
+		_, retryableErr := err.(*roachpb.RetryableTxnError)
+		if independentFromPipelined && retryableErr {
+			panic(fmt.Sprintf("statements that are independent from pipeline execution cannot "+
+				"throw retryable errors. %v returned the error %v", stmt, err))
+		}
+
 		log.ErrEventf(session.Ctx(), "ERROR: %v", err)
 		return Result{}, err
 	}
