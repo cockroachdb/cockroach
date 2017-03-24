@@ -335,7 +335,11 @@ ifneq ($(GIT_DIR),)
 endif
 
 ifneq ($(GIT_DIR),)
-GITHOOKSDIR := $(GIT_DIR)/hooks
+# If we're in a git worktree, the git hooks directory may not be in our root,
+# so we ask git for the location.
+#
+# Note that `git rev-parse --git-path hooks` requires git 2.5+.
+GITHOOKSDIR := $(shell test -d .git && echo '.git/hooks' || git rev-parse --git-path hooks)
 GITHOOKS := $(subst githooks/,$(GITHOOKSDIR)/,$(wildcard githooks/*))
 $(GITHOOKSDIR)/%: githooks/%
 	@echo installing $<
