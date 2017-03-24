@@ -72,6 +72,7 @@ type planner struct {
 	subqueryVisitor       subqueryVisitor
 	subqueryPlanVisitor   subqueryPlanVisitor
 	nameResolutionVisitor nameResolutionVisitor
+	srfExtractionVisitor  srfExtractionVisitor
 
 	// If set, called after the planner is done executing the current SQL statement.
 	// It can be used to verify assumptions about how metadata will be asynchronously
