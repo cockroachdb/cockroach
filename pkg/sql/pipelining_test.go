@@ -25,9 +25,8 @@ import (
 	"github.com/pkg/errors"
 )
 
-func newPlanNode() *planNode {
-	var plan planNode = &emptyNode{}
-	return &plan
+func newPlanNode() planNode {
+	return &emptyNode{}
 }
 
 // assertLen asserts the number of plans in the PipelineQueue.
@@ -74,20 +73,20 @@ func TestPipelineQueueNoDependencies(t *testing.T) {
 
 	// Executes: plan3 -> plan1 -> plan2.
 	pq := MakePipelineQueue(NoDependenciesAnalyzer)
-	pq.Add(newPlanNode(), func() error {
+	pq.Add(newPlanNode(), func(plan planNode) error {
 		<-run1
 		res = append(res, 1)
 		assertLen(t, &pq, 3)
 		close(run3)
 		return nil
 	})
-	pq.Add(newPlanNode(), func() error {
+	pq.Add(newPlanNode(), func(plan planNode) error {
 		<-run2
 		res = append(res, 2)
 		assertLenEventually(t, &pq, 1)
 		return nil
 	})
-	pq.Add(newPlanNode(), func() error {
+	pq.Add(newPlanNode(), func(plan planNode) error {
 		<-run3
 		res = append(res, 3)
 		assertLenEventually(t, &pq, 2)
@@ -110,24 +109,24 @@ func TestPipelineQueueAllDependent(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	var res []int
 	run := make(chan struct{})
-	analyzer := dependencyAnalyzerFunc(func(p1 *planNode, p2 *planNode) bool {
+	analyzer := dependencyAnalyzerFunc(func(p1 planNode, p2 planNode) bool {
 		return false
 	})
 
 	// Executes: plan1 -> plan2 -> plan3.
 	pq := MakePipelineQueue(analyzer)
-	pq.Add(newPlanNode(), func() error {
+	pq.Add(newPlanNode(), func(plan planNode) error {
 		<-run
 		res = append(res, 1)
 		assertLen(t, &pq, 3)
 		return nil
 	})
-	pq.Add(newPlanNode(), func() error {
+	pq.Add(newPlanNode(), func(plan planNode) error {
 		res = append(res, 2)
 		assertLen(t, &pq, 2)
 		return nil
 	})
-	pq.Add(newPlanNode(), func() error {
+	pq.Add(newPlanNode(), func(plan planNode) error {
 		res = append(res, 3)
 		assertLen(t, &pq, 1)
 		return nil
@@ -149,7 +148,7 @@ func TestPipelineQueueSingleDependency(t *testing.T) {
 	var res []int
 	plan1, plan2, plan3 := newPlanNode(), newPlanNode(), newPlanNode()
 	run1, run3 := make(chan struct{}), make(chan struct{})
-	analyzer := dependencyAnalyzerFunc(func(p1 *planNode, p2 *planNode) bool {
+	analyzer := dependencyAnalyzerFunc(func(p1 planNode, p2 planNode) bool {
 		if (p1 == plan1 && p2 == plan2) || (p1 == plan2 && p2 == plan1) {
 			// plan1 and plan2 are dependent
 			return false
@@ -159,18 +158,18 @@ func TestPipelineQueueSingleDependency(t *testing.T) {
 
 	// Executes: plan3 -> plan1 -> plan2.
 	pq := MakePipelineQueue(analyzer)
-	pq.Add(plan1, func() error {
+	pq.Add(plan1, func(plan planNode) error {
 		<-run1
 		res = append(res, 1)
 		assertLenEventually(t, &pq, 2)
 		return nil
 	})
-	pq.Add(plan2, func() error {
+	pq.Add(plan2, func(plan planNode) error {
 		res = append(res, 2)
 		assertLen(t, &pq, 1)
 		return nil
 	})
-	pq.Add(plan3, func() error {
+	pq.Add(plan3, func(plan planNode) error {
 		<-run3
 		res = append(res, 3)
 		assertLen(t, &pq, 3)
@@ -194,7 +193,7 @@ func TestPipelineQueueError(t *testing.T) {
 	plan1, plan2, plan3 := newPlanNode(), newPlanNode(), newPlanNode()
 	run1, run3 := make(chan struct{}), make(chan struct{})
 	planErr := errors.Errorf("plan1 will throw this error")
-	analyzer := dependencyAnalyzerFunc(func(p1 *planNode, p2 *planNode) bool {
+	analyzer := dependencyAnalyzerFunc(func(p1 planNode, p2 planNode) bool {
 		if (p1 == plan1 && p2 == plan2) || (p1 == plan2 && p2 == plan1) {
 			// plan1 and plan2 are dependent
 			return false
@@ -204,19 +203,19 @@ func TestPipelineQueueError(t *testing.T) {
 
 	// Executes: plan3 -> plan1 (error!) -> plan2 (dropped).
 	pq := MakePipelineQueue(analyzer)
-	pq.Add(plan1, func() error {
+	pq.Add(plan1, func(plan planNode) error {
 		<-run1
 		res = append(res, 1)
 		assertLenEventually(t, &pq, 2)
 		return planErr
 	})
-	pq.Add(plan2, func() error {
+	pq.Add(plan2, func(plan planNode) error {
 		// Should never be called. We assert this using the res slice, because
 		// we can't call t.Fatalf in a different goroutine.
 		res = append(res, 2)
 		return nil
 	})
-	pq.Add(plan3, func() error {
+	pq.Add(plan3, func(plan planNode) error {
 		<-run3
 		res = append(res, 3)
 		assertLen(t, &pq, 3)
@@ -248,7 +247,7 @@ func TestPipelineQueueAddAfterError(t *testing.T) {
 
 	// Executes: plan1 (error!) -> plan2 (dropped) -> plan3.
 	pq := MakePipelineQueue(NoDependenciesAnalyzer)
-	pq.Add(plan1, func() error {
+	pq.Add(plan1, func(plan planNode) error {
 		res = append(res, 1)
 		assertLen(t, &pq, 1)
 		return planErr
@@ -262,7 +261,7 @@ func TestPipelineQueueAddAfterError(t *testing.T) {
 		return nil
 	})
 
-	pq.Add(plan2, func() error {
+	pq.Add(plan2, func(plan planNode) error {
 		// Should never be called. We assert this using the res slice, because
 		// we can't call t.Fatalf in a different goroutine.
 		res = append(res, 2)
@@ -276,7 +275,7 @@ func TestPipelineQueueAddAfterError(t *testing.T) {
 		t.Fatalf("expected plan1 to throw error %v, found %v", planErr, resErr)
 	}
 
-	pq.Add(plan3, func() error {
+	pq.Add(plan3, func(plan planNode) error {
 		// Will be called, because the error is cleared when Wait is called.
 		res = append(res, 3)
 		assertLen(t, &pq, 1)
