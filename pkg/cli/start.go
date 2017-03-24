@@ -351,6 +351,13 @@ func runStart(cmd *cobra.Command, args []string) error {
 	var s *server.Server
 	errChan := make(chan error, 1)
 	go func() {
+		defer func() {
+			if err := recover(); err != nil {
+				fmt.Fprintln(stderr, "\nERROR: a panic has occurred!\n"+
+					"If no details are printed below, check the log file for details.")
+			}
+		}()
+
 		defer sp.Finish()
 		if err := func() error {
 			if err := serverCfg.InitNode(); err != nil {

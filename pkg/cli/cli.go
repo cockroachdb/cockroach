@@ -39,6 +39,14 @@ func Main() {
 	if len(os.Args) == 1 {
 		os.Args = append(os.Args, "help")
 	}
+
+	defer func() {
+		if err := recover(); err != nil {
+			fmt.Fprintln(stderr, "\nERROR: a panic has occurred!\n"+
+				"If no details are printed below, check the log file for details.")
+		}
+	}()
+
 	if err := Run(os.Args[1:]); err != nil {
 		fmt.Fprintf(stderr, "Failed running %q\n", os.Args[1])
 		os.Exit(ErrorCode)
