@@ -23,6 +23,8 @@ import (
 	"github.com/pkg/errors"
 )
 
+const autoGenerateRenderOutputName = ""
+
 // computeRender expands a target expression into a result column.
 func (p *planner) computeRender(
 	ctx context.Context,
@@ -30,11 +32,17 @@ func (p *planner) computeRender(
 	desiredType parser.Type,
 	info multiSourceInfo,
 	ivarHelper parser.IndexedVarHelper,
+	outputName string,
 ) (column ResultColumn, expr parser.TypedExpr, err error) {
 	// When generating an output column name it should exactly match the original
-	// expression, so determine the output column name before we perform any
-	// manipulations to the expression.
-	outputName := getRenderColName(target)
+	// expression, so if our caller has requested that we generate the output
+	// column name, we determine the name before we perform any manipulations to
+	// the expression.
+	if outputName == autoGenerateRenderOutputName {
+		if outputName, err = getRenderColName(p.session.SearchPath, target); err != nil {
+			return ResultColumn{}, nil, err
+		}
+	}
 
 	normalized, err := p.analyzeExpr(ctx, target.Expr, info, ivarHelper, desiredType, false, "")
 	if err != nil {
@@ -53,6 +61,7 @@ func (p *planner) computeRenderAllowingStars(
 	desiredType parser.Type,
 	info multiSourceInfo,
 	ivarHelper parser.IndexedVarHelper,
+	outputName string,
 ) (columns ResultColumns, exprs []parser.TypedExpr, hasStar bool, err error) {
 	// Pre-normalize any VarName so the work is not done twice below.
 	if err := target.NormalizeTopLevelVarName(); err != nil {
@@ -65,7 +74,7 @@ func (p *planner) computeRenderAllowingStars(
 		return cols, typedExprs, hasStar, nil
 	}
 
-	col, expr, err := p.computeRender(ctx, target, desiredType, info, ivarHelper)
+	col, expr, err := p.computeRender(ctx, target, desiredType, info, ivarHelper, outputName)
 	if err != nil {
 		return nil, nil, false, err
 	}
