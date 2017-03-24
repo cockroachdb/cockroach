@@ -12,11 +12,6 @@ module.exports = {
     path: __dirname + '/dist',
   },
 
-  // TODO(tamird): why does the source map differ on darwin/linux?
-  //
-  // Enable sourcemaps for debugging webpack's output.
-  // devtool: 'source-map',
-
   resolve: {
     // Add '.ts' and '.tsx' as resolvable extensions.
     extensions: ['.ts', '.tsx', '.js', '.json'],

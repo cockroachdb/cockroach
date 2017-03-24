@@ -1,3 +1,5 @@
+/// <reference path="../node_modules/protobufjs/stub-node.d.ts" />
+
 /**
  * UI/NEXT TODO LIST
  *
@@ -62,6 +64,12 @@ import "nvd3/build/nv.d3.min.css";
 import "react-select/dist/react-select.css";
 import "../styl/app.styl";
 import "./js/sim/style.css";
+
+import * as protobuf from "protobufjs/minimal";
+import Long from "long";
+
+protobuf.util.Long = Long as any;
+protobuf.configure();
 
 import * as React from "react";
 import * as ReactDOM from "react-dom";

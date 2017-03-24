@@ -41,7 +41,7 @@ export class HelpUs extends React.Component<HelpUsProps, HelpUsState> {
   }
 
   componentWillMount() {
-    this.setState({ initialized: false } as any);
+    this.setState({ initialized: false });
     this.props.loadUIData(uiData.KEY_HELPUS);
     if (!this.props.helpusDismissed) {
       this.props.setUISetting(HELPUS_BANNER_DISMISSED_KEY, true);
@@ -53,9 +53,9 @@ export class HelpUs extends React.Component<HelpUsProps, HelpUsState> {
       this.setState({ optInAttributes: props.optInAttributes || new uiData.OptInAttributes(), initialized: true });
     }
     if (props.saveError) {
-      this.setState({ lastSaveFailed: true } as any);
+      this.setState({ lastSaveFailed: true });
     } else if (props.saving) {
-      this.setState({ lastSaveFailed: false } as any);
+      this.setState({ lastSaveFailed: false });
     }
   }
 

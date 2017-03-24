@@ -9,7 +9,7 @@ import { AdminUIState } from "../../redux/state";
 import { refreshNodes, refreshCluster, refreshVersion } from "../../redux/apiReducers";
 import { VERSION_DISMISSED_KEY, loadUIData, saveUIData } from "../../redux/uiData";
 import { VersionList } from "../../interfaces/cockroachlabs";
-import { NodeStatus } from "../../util/proto";
+import { NodeStatus$Properties } from "../../util/proto";
 
 const MILLISECONDS_IN_DAY = moment.duration(1, "day").asMilliseconds();
 
@@ -95,7 +95,7 @@ class OutdatedBanner extends React.Component<OutdatedBannerProps, OutdatedBanner
   }
 }
 
-let nodeStatuses = (state: AdminUIState): NodeStatus[] => state.cachedData.nodes.data;
+let nodeStatuses = (state: AdminUIState): NodeStatus$Properties[] => state.cachedData.nodes.data;
 let newerVersions = (state: AdminUIState): VersionList => state.cachedData.version.valid ? state.cachedData.version.data : null;
 let clusterID = (state: AdminUIState): string => state.cachedData.cluster.data && state.cachedData.cluster.data.cluster_id;
 
@@ -106,12 +106,12 @@ let versionCheckDismissed = (state: AdminUIState): number => versionCheckDismiss
 
 let versions = createSelector(
   nodeStatuses,
-  (statuses: NodeStatus[]): string[] => statuses && _.uniq(_.map(statuses, (s: NodeStatus) => s.build_info && s.build_info.tag)),
+  (statuses: NodeStatus$Properties[]): string[] => statuses && _.uniq(_.map(statuses, (s: NodeStatus$Properties) => s.build_info && s.build_info.tag)),
 );
 
 let nodeCount = createSelector(
   nodeStatuses,
-  (statuses: NodeStatus[]) => statuses && statuses.length,
+  (statuses: NodeStatus$Properties[]) => statuses && statuses.length,
 );
 
 let versionCount = createSelector(

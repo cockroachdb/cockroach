@@ -4,6 +4,8 @@ import _ from "lodash";
 import { connect } from "react-redux";
 import moment from "moment";
 
+import * as protos from "../js/protos";
+
 import { AdminUIState } from "../redux/state";
 import { refreshEvents } from "../redux/apiReducers";
 import { setUISetting } from "../redux/ui";
@@ -12,7 +14,7 @@ import * as eventTypes from "../util/eventTypes";
 import { SortSetting } from "../components/sortabletable";
 import { SortedTable } from "../components/sortedtable";
 
-type Event = Proto2TypeScript.cockroach.server.serverpb.EventsResponse.Event;
+type Event$Properties = protos.cockroach.server.serverpb.EventsResponse.Event$Properties;
 
 // Constant used to store sort settings in the redux UI store.
 const UI_EVENTS_SORT_SETTING_KEY = "events/sort_setting";
@@ -35,13 +37,21 @@ export interface SimplifiedEvent {
 const EventSortedTable = SortedTable as new () => SortedTable<SimplifiedEvent>;
 
 export interface EventRowProps {
-  event: Event;
+  event: Event$Properties;
 }
 
-let s = (v: any) => JSON.stringify(v, undefined, 2);
+let s = (v: {}) => JSON.stringify(v, undefined, 2);
 
-export function getEventInfo(e: Event): SimplifiedEvent {
-  let info: any = _.isString(e.info) ? JSON.parse(e.info) : {};
+export function getEventInfo(e: Event$Properties): SimplifiedEvent {
+  let info: {
+    DatabaseName: string,
+    DroppedTables: string[],
+    IndexName: string,
+    MutationID: string,
+    TableName: string,
+    User: string,
+    ViewName: string,
+  } = e.hasOwnProperty("info") ? JSON.parse(e.info) : {};
   let targetId: number = e.target_id ? e.target_id.toNumber() : null;
   let content: React.ReactNode;
 
@@ -117,7 +127,7 @@ export class EventRow extends React.Component<EventRowProps, {}> {
 }
 
 export interface EventBoxProps {
-  events: Event[];
+  events: Event$Properties[];
   refreshEvents: typeof refreshEvents;
 };
 
@@ -133,7 +143,7 @@ export class EventBoxUnconnected extends React.Component<EventBoxProps, {}> {
     return <div className="events">
       <table>
         <tbody>
-          {_.map(_.take(events, EVENT_BOX_NUM_EVENTS), (e: Event, i: number) => {
+          {_.map(_.take(events, EVENT_BOX_NUM_EVENTS), (e: Event$Properties, i: number) => {
             return <EventRow event={e} key={i} />;
           })}
           <tr>
@@ -146,7 +156,7 @@ export class EventBoxUnconnected extends React.Component<EventBoxProps, {}> {
 }
 
 export interface EventPageProps {
-  events: Event[];
+  events: Event$Properties[];
   refreshEvents: typeof refreshEvents;
   sortSetting: SortSetting;
   setUISetting: typeof setUISetting;
@@ -203,7 +213,7 @@ export class EventPageUnconnected extends React.Component<EventPageProps, {}> {
   }
 }
 
-let events = (state: AdminUIState): Event[] => state.cachedData.events.data && state.cachedData.events.data.events;
+let events = (state: AdminUIState): Event$Properties[] => state.cachedData.events.data && state.cachedData.events.data.events;
 
 // Connect the EventsList class with our redux store.
 let eventBoxConnected = connect(

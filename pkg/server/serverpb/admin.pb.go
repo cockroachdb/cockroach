@@ -71,7 +71,6 @@ import math "math"
 import cockroach_config "github.com/cockroachdb/cockroach/pkg/config"
 import cockroach_storage_engine_enginepb "github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 import cockroach_storage "github.com/cockroachdb/cockroach/pkg/storage"
-import _ "github.com/grpc-ecosystem/grpc-gateway/third_party/googleapis/google/api"
 
 import (
 	context "golang.org/x/net/context"

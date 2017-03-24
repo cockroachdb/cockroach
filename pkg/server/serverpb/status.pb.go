@@ -15,7 +15,6 @@ import cockroach_storage_storagebase "github.com/cockroachdb/cockroach/pkg/stora
 import cockroach_util_log "github.com/cockroachdb/cockroach/pkg/util/log"
 import cockroach_util "github.com/cockroachdb/cockroach/pkg/util"
 import raftpb "github.com/coreos/etcd/raft/raftpb"
-import _ "github.com/grpc-ecosystem/grpc-gateway/third_party/googleapis/google/api"
 
 import github_com_cockroachdb_cockroach_pkg_roachpb "github.com/cockroachdb/cockroach/pkg/roachpb"
 

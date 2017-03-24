@@ -274,10 +274,10 @@ func ListLogFiles() ([]FileInfo, error) {
 		details, err := getFileDetails(info)
 		if err == nil {
 			results = append(results, FileInfo{
-				Name:         info.Name(),
-				SizeBytes:    info.Size(),
-				ModTimeNanos: info.ModTime().UnixNano(),
-				Details:      details,
+				Name:      info.Name(),
+				SizeBytes: info.Size(),
+				Modified:  info.ModTime(),
+				Details:   details,
 			})
 		}
 	}

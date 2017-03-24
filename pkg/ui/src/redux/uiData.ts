@@ -1,6 +1,6 @@
 import _ from "lodash";
 import { Action, Dispatch } from "redux";
-import * as ByteBuffer from "bytebuffer";
+import * as protobuf from "protobufjs/minimal";
 
 import * as protos from  "../js/protos";
 import { PayloadAction } from "../interfaces/action";
@@ -235,12 +235,13 @@ export function saveUIData(...values: KeyValue[]) {
     }
     dispatch(beginSaveUIData(_.map(values, (kv) => kv.key)));
 
-    // Encode data for each UIData key. Each object is stringified and written
-    // to a ByteBuffer.
+    // Encode data for each UIData key.
     let request = new protos.cockroach.server.serverpb.SetUIDataRequest();
     _.each(values, (kv) => {
-      let stringifiedValue = JSON.stringify(kv.value);
-      request.key_values.set(kv.key, ByteBuffer.fromUTF8(stringifiedValue));
+      const stringifiedValue = JSON.stringify(kv.value);
+      const buffer = new Uint8Array(protobuf.util.utf8.length(stringifiedValue));
+      protobuf.util.utf8.write(stringifiedValue, buffer, 0);
+      request.key_values[kv.key] = buffer;
     });
 
     return setUIData(request).then((_response) => {
@@ -267,15 +268,11 @@ export function loadUIData(...keys: string[]) {
     dispatch(beginLoadUIData(keys));
 
     return getUIData(new protos.cockroach.server.serverpb.GetUIDataRequest({ keys })).then((response) => {
-      let keyValues = response.getKeyValues();
-
+      // Decode data for each UIData key.
       _.each(keys, (key) => {
-        // Responses from the server return values as ByteBuffer objects, which
-        // represent stringified JSON objects.
-        let bb = keyValues.has(key) && keyValues.get(key).getValue();
-        let str = bb && bb.readString(bb.limit - bb.offset);
-        if (str) {
-          dispatch(setUIDataKey(key, JSON.parse(str)));
+        if (_.has(response.key_values, key)) {
+          const buffer = response.key_values[key].value;
+          dispatch(setUIDataKey(key, JSON.parse(protobuf.util.utf8.read(buffer, 0, buffer.byteLength))));
         } else {
           dispatch(setUIDataKey(key, undefined));
         }

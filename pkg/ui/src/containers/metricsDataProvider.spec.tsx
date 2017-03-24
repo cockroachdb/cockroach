@@ -12,16 +12,15 @@ import {
   MetricsDataProviderUnconnected as MetricsDataProvider,
   QueryTimeInfo,
 } from "./metricsDataProvider";
-import { TimeSeriesQueryAggregator, TimeSeriesQueryDerivative } from "../util/protoEnums";
-import { MetricsQuery } from "../redux/metrics";
+import { queryMetrics, MetricsQuery } from "../redux/metrics";
 
-type TSRequestMessage = Proto2TypeScript.cockroach.ts.tspb.TimeSeriesQueryRequestMessage;
-
-function makeDataProvider(id: string,
-                          metrics: MetricsQuery,
-                          timeInfo: QueryTimeInfo,
-                          queryMetrics: (id: string, request: TSRequestMessage) => any) {
-  return shallow(<MetricsDataProvider id={id} metrics={metrics} timeInfo={timeInfo} queryMetrics={queryMetrics}>
+function makeDataProvider(
+  id: string,
+  metrics: MetricsQuery,
+  timeInfo: QueryTimeInfo,
+  qm: typeof queryMetrics,
+) {
+  return shallow(<MetricsDataProvider id={id} metrics={metrics} timeInfo={timeInfo} queryMetrics={qm}>
     <TextGraph>
       <Axis>
         <Metric name="test.metric.1" />
@@ -43,23 +42,23 @@ function makeMetricsRequest(timeInfo: QueryTimeInfo, sources?: string[]) {
       {
         name: "test.metric.1",
         sources: sources,
-        downsampler: TimeSeriesQueryAggregator.AVG as number as Proto2TypeScript.cockroach.ts.tspb.TimeSeriesQueryAggregator,
-        source_aggregator: TimeSeriesQueryAggregator.SUM as number as Proto2TypeScript.cockroach.ts.tspb.TimeSeriesQueryAggregator,
-        derivative: TimeSeriesQueryDerivative.NONE as number as Proto2TypeScript.cockroach.ts.tspb.TimeSeriesQueryDerivative,
+        downsampler: protos.cockroach.ts.tspb.TimeSeriesQueryAggregator.AVG,
+        source_aggregator: protos.cockroach.ts.tspb.TimeSeriesQueryAggregator.SUM,
+        derivative: protos.cockroach.ts.tspb.TimeSeriesQueryDerivative.NONE,
       },
       {
         name: "test.metric.2",
         sources: sources,
-        downsampler: TimeSeriesQueryAggregator.AVG as number as Proto2TypeScript.cockroach.ts.tspb.TimeSeriesQueryAggregator,
-        source_aggregator: TimeSeriesQueryAggregator.SUM as number as Proto2TypeScript.cockroach.ts.tspb.TimeSeriesQueryAggregator,
-        derivative: TimeSeriesQueryDerivative.NONE as number as Proto2TypeScript.cockroach.ts.tspb.TimeSeriesQueryDerivative,
+        downsampler: protos.cockroach.ts.tspb.TimeSeriesQueryAggregator.AVG,
+        source_aggregator: protos.cockroach.ts.tspb.TimeSeriesQueryAggregator.SUM,
+        derivative: protos.cockroach.ts.tspb.TimeSeriesQueryDerivative.NONE,
       },
       {
         name: "test.metric.3",
         sources: sources,
-        downsampler: TimeSeriesQueryAggregator.AVG as number as Proto2TypeScript.cockroach.ts.tspb.TimeSeriesQueryAggregator,
-        source_aggregator: TimeSeriesQueryAggregator.SUM as number as Proto2TypeScript.cockroach.ts.tspb.TimeSeriesQueryAggregator,
-        derivative: TimeSeriesQueryDerivative.NONE as number as Proto2TypeScript.cockroach.ts.tspb.TimeSeriesQueryDerivative,
+        downsampler: protos.cockroach.ts.tspb.TimeSeriesQueryAggregator.AVG,
+        source_aggregator: protos.cockroach.ts.tspb.TimeSeriesQueryAggregator.SUM,
+        derivative: protos.cockroach.ts.tspb.TimeSeriesQueryDerivative.NONE,
       },
     ],
   });
@@ -68,12 +67,12 @@ function makeMetricsRequest(timeInfo: QueryTimeInfo, sources?: string[]) {
 function makeMetricsQuery(id: string, timeSpan: QueryTimeInfo, sources?: string[]): MetricsQuery {
   let request = makeMetricsRequest(timeSpan, sources);
   let data = new protos.cockroach.ts.tspb.TimeSeriesQueryResponse({
-    results: _(request.queries).map((q) => {
+    results: _.map(request.queries, (q) => {
       return {
         query: q,
         datapoints: [],
       };
-    }).value(),
+    }),
   });
   return {
     id,
@@ -103,18 +102,18 @@ describe("<MetricsDataProvider>", function() {
   });
 
   describe("refresh", function() {
-    it("refreshes query data when mounted.", function () {
+    it("refreshes query data when mounted", function () {
       makeDataProvider(graphid, null, timespan1, spy);
       assert.isTrue(spy.called);
       assert.isTrue(spy.calledWith(graphid, makeMetricsRequest(timespan1)));
     });
 
-    it("does nothing when mounted if current request fulfilled.", function () {
+    it("does nothing when mounted if current request fulfilled", function () {
       makeDataProvider(graphid, makeMetricsQuery(graphid, timespan1), timespan1, spy);
       assert.isTrue(spy.notCalled);
     });
 
-    it("does nothing when mounted if current request is in flight.", function () {
+    it("does nothing when mounted if current request is in flight", function () {
       let query = makeMetricsQuery(graphid, timespan1);
       query.request = null;
       query.data = null;
@@ -122,7 +121,7 @@ describe("<MetricsDataProvider>", function() {
       assert.isTrue(spy.notCalled);
     });
 
-    it("refreshes query data when receiving props.", function () {
+    it("refreshes query data when receiving props", function () {
       let provider = makeDataProvider(graphid, makeMetricsQuery(graphid, timespan1), timespan1, spy);
       assert.isTrue(spy.notCalled);
       provider.setProps({
@@ -132,7 +131,7 @@ describe("<MetricsDataProvider>", function() {
       assert.isTrue(spy.calledWith(graphid, makeMetricsRequest(timespan1)));
     });
 
-    it("refreshes if timespan changes.", function () {
+    it("refreshes if timespan changes", function () {
       let provider = makeDataProvider(graphid, makeMetricsQuery(graphid, timespan1), timespan1, spy);
       assert.isTrue(spy.notCalled);
       provider.setProps({
@@ -142,7 +141,7 @@ describe("<MetricsDataProvider>", function() {
       assert.isTrue(spy.calledWith(graphid, makeMetricsRequest(timespan2)));
     });
 
-    it("refreshes if query changes.", function () {
+    it("refreshes if query changes", function () {
       let provider = makeDataProvider(graphid, makeMetricsQuery(graphid, timespan1), timespan1, spy);
       assert.isTrue(spy.notCalled);
       // Modify "sources" parameter.

@@ -25,19 +25,19 @@ function computeValue(value: number, format: (n: number) => string = numberToStr
 // SummaryBar is a simple component backing a common motif in our UI: a
 // collection of summarized statistics.
 // TODO(mrtracy): Add tooltip support.
-export function SummaryBar(props: { children?: any }) {
+export function SummaryBar(props: { children?: React.ReactNode }) {
   return <div className="summary-section">
     { props.children }
   </div>;
 }
 
-export function SummaryLabel(props: {children?: any}) {
+export function SummaryLabel(props: {children?: React.ReactNode}) {
   return <div className="summary-label">
     { props.children }
   </div>;
 }
 
-export function SummaryStat(props: SummaryStatProps & {children?: any}) {
+export function SummaryStat(props: SummaryStatProps & {children?: React.ReactNode}) {
   return <div className="summary-stat">
     <span className="summary-stat__title">
       { props.title }
@@ -53,13 +53,13 @@ export function SummaryStat(props: SummaryStatProps & {children?: any}) {
   </div>;
 }
 
-function SummaryMetricStatHelper(props: MetricsDataComponentProps & SummaryStatProps & { children?: any }) {
+function SummaryMetricStatHelper(props: MetricsDataComponentProps & SummaryStatProps & { children?: React.ReactNode }) {
   let datapoints = props.data && props.data.results && props.data.results[0] && props.data.results[0].datapoints;
   let value = datapoints && datapoints[0] && _.last(datapoints).value;
   return <SummaryStat {...props} value={_.isNumber(value) ? value : props.value} />;
 }
 
-export function SummaryMetricStat(props: SummaryStatProps & { id: string } & { children?: any }) {
+export function SummaryMetricStat(props: SummaryStatProps & { id: string } & { children?: React.ReactNode }) {
   return <MetricsDataProvider current id={props.id} >
     <SummaryMetricStatHelper {...props} />
   </MetricsDataProvider>;

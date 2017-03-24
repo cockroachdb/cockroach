@@ -15,15 +15,13 @@ import { SortSetting } from "../../components/sortabletable";
 import { SortedTable } from "../../components/sortedtable";
 import * as hljs from "highlight.js";
 
-type Grant = Proto2TypeScript.cockroach.server.serverpb.TableDetailsResponse.Grant;
-
 // Specialization of generic SortedTable component:
 //   https://github.com/Microsoft/TypeScript/issues/3960
 //
 // The variable name must start with a capital letter or TSX will not recognize
 // it as a component.
 // tslint:disable-next-line:variable-name
-export const GrantsSortedTable = SortedTable as new () => SortedTable<Grant>;
+export const GrantsSortedTable = SortedTable as new () => SortedTable<protos.cockroach.server.serverpb.TableDetailsResponse.Grant$Properties>;
 
 // Constants used to store per-page sort settings in the redux UI store.
 const UI_DATABASE_TABLE_GRANTS_SORT_SETTING_KEY = "tableDetails/sort_setting/grants";
