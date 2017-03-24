@@ -176,3 +176,13 @@ func (ms MetadataSchema) GetInitialValues() []roachpb.KeyValue {
 	sort.Sort(roachpb.KeyValueByKey(ret))
 	return ret
 }
+
+// GetInitialRangeCount returns the number of ranges that would be installed
+// if this metadata schema were installed on a fresh cluster and nothing else.
+// Most clusters will have additional ranges installed by migrations, so this
+// function should be used when only a lower bound, and not an exact count, is
+// needed. See server.ExpectedInitialRangeCount() for a count that includes
+// migrations.
+func (ms MetadataSchema) GetInitialRangeCount() int {
+	return len(ms.descs) - ms.configs + 2 /* first-range + system-config-range */
+}

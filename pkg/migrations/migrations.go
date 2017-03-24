@@ -52,6 +52,7 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 		name:           "create system.jobs table",
 		workFn:         createJobsTable,
 		newDescriptors: 1,
+		newRanges:      1,
 	},
 }
 
@@ -64,10 +65,11 @@ type migrationDescriptor struct {
 	// workFn must be idempotent so that we can safely re-run it if a node failed
 	// while running it.
 	workFn func(context.Context, runner) error
-	// newDescriptors is the number of additional descriptors that would be added
-	// by this migration in a fresh cluster. This is needed to automate certain
-	// tests, which check the number of ranges present on server bootup.
-	newDescriptors int
+	// newRanges and descriptors are the number of additional ranges/descriptors
+	// that would be added by this migration in a fresh cluster. This is needed to
+	// automate certain tests, which check the number of ranges/descriptors
+	// present on server bootup.
+	newRanges, newDescriptors int
 }
 
 type runner struct {
@@ -132,26 +134,26 @@ func NewManager(
 	}
 }
 
-// AdditionalInitialDescriptors returns the number of system descriptors that
-// have been added by migrations. This is needed for certain tests, which check
-// the number of ranges at node startup.
+// AdditionalInitialDescriptors returns the number of system descriptors and
+// ranges that have been added by migrations. This is needed for certain tests,
+// which check the number of ranges at node startup.
 //
 // NOTE: This value may be out-of-date if another node is actively running
 // migrations, and so should only be used in test code where the migration
 // lifecycle is tightly controlled.
-func AdditionalInitialDescriptors(ctx context.Context, db db) (int, error) {
+func AdditionalInitialDescriptors(ctx context.Context, db db) (descriptors int, ranges int, e error) {
 	completedMigrations, err := getCompletedMigrations(ctx, db)
 	if err != nil {
-		return 0, err
+		return 0, 0, err
 	}
-	n := 0
 	for _, migration := range backwardCompatibleMigrations {
 		key := migrationKey(migration)
 		if _, ok := completedMigrations[string(key)]; ok {
-			n += migration.newDescriptors
+			descriptors += migration.newDescriptors
+			ranges += migration.newRanges
 		}
 	}
-	return n, nil
+	return descriptors, ranges, nil
 }
 
 // EnsureMigrations should be run during node startup to ensure that all

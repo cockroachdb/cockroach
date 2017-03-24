@@ -314,10 +314,7 @@ func (ts *TestServer) Start(params base.TestServerArgs) error {
 // migrations. This function should be used when only a lower bound, and not
 // an exact count, is needed.
 func ExpectedInitialRangeCountWithoutMigrations() int {
-	bootstrap := GetBootstrapSchema()
-	return bootstrap.SystemDescriptorCount() -
-		bootstrap.SystemConfigDescriptorCount() +
-		2 /* first-range + system-config-range */
+	return GetBootstrapSchema().GetInitialRangeCount()
 }
 
 // ExpectedInitialRangeCount returns the expected number of ranges that should
@@ -333,9 +330,7 @@ func (ts *TestServer) ExpectedInitialRangeCount() (int, error) {
 // assuming no additional information is added outside of the normal bootstrap
 // process.
 func ExpectedInitialRangeCount(db *client.DB) (int, error) {
-	// XXX: This assumes that the number of descriptors added by migrations is equal
-	// to the number of ranges added, which may not be true in the future.
-	migrationRangeCount, err := migrations.AdditionalInitialDescriptors(
+	_, migrationRangeCount, err := migrations.AdditionalInitialDescriptors(
 		context.Background(), db)
 	if err != nil {
 		return 0, errors.Wrap(err, "counting initial migration ranges")
