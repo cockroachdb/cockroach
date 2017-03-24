@@ -1748,9 +1748,7 @@ func MVCCIterate(
 // timestamp. This might be because writes to different keys had to
 // use higher timestamps than expected because of existing, committed
 // value, or because reads pushed the transaction's commit timestamp
-// forward. Retries also occur in the event that the txn tries to push
-// another txn in order to write an intent but fails (i.e. it has
-// lower priority).
+// forward.
 //
 // Because successive retries of a transaction may end up writing to
 // different keys, the epochs serve to classify which intents get
