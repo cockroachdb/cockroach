@@ -687,7 +687,7 @@ func (u *sqlSymUnion) kvOptions() []KVOption {
 %token <str>   START STDIN STRICT STRING STORING SUBSTRING
 %token <str>   SYMMETRIC SYSTEM
 
-%token <str>   TABLE TABLES TEMPLATE TEXT THEN
+%token <str>   TABLE TABLES TEMPLATE TESTING_RANGES TEXT THEN
 %token <str>   TIME TIMESTAMP TIMESTAMPTZ TO TRAILING TRANSACTION TREAT TRIM TRUE
 %token <str>   TRUNCATE TYPE
 
@@ -1651,6 +1651,16 @@ show_stmt:
 | SHOW USERS
   {
     $$.val = &ShowUsers{}
+  }
+| SHOW TESTING_RANGES FROM TABLE qualified_name
+  {
+    /* SKIP DOC */
+    $$.val = &ShowRanges{Table: $5.newNormalizableTableName()}
+  }
+| SHOW TESTING_RANGES FROM INDEX table_name_with_index
+  {
+    /* SKIP DOC */
+    $$.val = &ShowRanges{Index: $5.tableWithIdx()}
   }
 
 help_stmt:
@@ -5213,6 +5223,7 @@ unreserved_keyword:
 | SYSTEM
 | TABLES
 | TEMPLATE
+| TESTING_RANGES
 | TEXT
 | TRANSACTION
 | TRUNCATE

@@ -420,6 +420,14 @@ func (*ShowUsers) StatementTag() string { return "SHOW USERS" }
 func (*ShowUsers) hiddenFromStats() {}
 
 // StatementType implements the Statement interface.
+func (*ShowRanges) StatementType() StatementType { return Rows }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*ShowRanges) StatementTag() string { return "SHOW TESTING_RANGES" }
+
+func (*ShowRanges) hiddenFromStats() {}
+
+// StatementType implements the Statement interface.
 func (*Help) StatementType() StatementType { return Rows }
 
 // StatementTag returns a short string identifying the type of statement.
@@ -530,6 +538,7 @@ func (n *ShowConstraints) String() string          { return AsString(n) }
 func (n *ShowTables) String() string               { return AsString(n) }
 func (n *ShowTransactionStatus) String() string    { return AsString(n) }
 func (n *ShowUsers) String() string                { return AsString(n) }
+func (n *ShowRanges) String() string               { return AsString(n) }
 func (n *Split) String() string                    { return AsString(n) }
 func (l StatementList) String() string             { return AsString(l) }
 func (n *Truncate) String() string                 { return AsString(n) }
