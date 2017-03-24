@@ -620,8 +620,7 @@ func TestRedirectStderr(t *testing.T) {
 	// This test requires that the logs go to files. We must disable
 	// showLogs, if it was specified, for otherwise the Scope() does not
 	// do its job properly.
-	showLogsSave := showLogs
-	defer func(s bool) { showLogs = s }(showLogsSave)
+	defer func(s bool) { showLogs = s }(showLogs)
 	showLogs = false
 
 	s := Scope(t, "")
