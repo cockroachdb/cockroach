@@ -19,6 +19,7 @@ package storage_test
 import (
 	"bytes"
 	"fmt"
+	"math"
 	"math/rand"
 	"reflect"
 	"sync"
@@ -1777,8 +1778,6 @@ func TestStoreRangeGossipOnSplits(t *testing.T) {
 	config.TestingSetupZoneConfigHook(stopper)
 	config.TestingSetZoneConfig(0, config.ZoneConfig{NumReplicas: 1})
 
-	<-store.Gossip().Connected
-
 	rangeCountCh := make(chan int32)
 	unregister := store.Gossip().RegisterCallback(storeKey, func(_ string, val roachpb.Value) {
 		var sd roachpb.StoreDescriptor
@@ -1793,6 +1792,9 @@ func TestStoreRangeGossipOnSplits(t *testing.T) {
 	})
 	defer unregister()
 
+	// Pull the first gossiped range count.
+	lastRangeCount := <-rangeCountCh
+
 	splitFunc := func(i int) *roachpb.Error {
 		splitKey := roachpb.Key(fmt.Sprintf("%02d", i))
 		_, pErr := store.LookupReplica(roachpb.RKey(splitKey), nil).AdminSplit(
@@ -1804,44 +1806,22 @@ func TestStoreRangeGossipOnSplits(t *testing.T) {
 		return pErr
 	}
 
-	// Split 9 times; verify range count is gossiped.
-	for i := 0; i < 9; i++ {
+	// Split until we split at least 20 ranges.
+	var rangeCount int32
+	for i := 0; rangeCount < 20; i++ {
 		if pErr := splitFunc(i); pErr != nil {
 			t.Fatal(pErr)
 		}
-	}
-	testutils.SucceedsSoon(t, func() error {
-		if err := store.GossipStore(context.Background()); err != nil {
-			t.Fatal(err)
+		select {
+		case rangeCount = <-rangeCountCh:
+			changeCount := int32(math.Ceil(math.Max(float64(lastRangeCount)*0.5, 1)))
+			diff := rangeCount - (lastRangeCount + changeCount)
+			if diff < -1 || diff > 1 {
+				t.Errorf("gossiped range count %d more than 1 away from expected %d", rangeCount, lastRangeCount+changeCount)
+			}
+			lastRangeCount = rangeCount
+		case <-time.After(10 * time.Millisecond):
 		}
-		if rangeCount := <-rangeCountCh; rangeCount != 10 {
-			return errors.Errorf("expected 10 ranges; got %d", rangeCount)
-		}
-		return nil
-	})
-
-	// Now, since we require 50% of range/lease count to re-gossip, verify
-	// that with 5 more splits, we gossip.
-	for i := 9; i < 14; i++ {
-		if pErr := splitFunc(i); pErr != nil {
-			t.Fatal(pErr)
-		}
-	}
-
-	if rangeCount := <-rangeCountCh; rangeCount != 15 {
-		t.Errorf("expected 15 ranges; got %d", rangeCount)
-	}
-
-	// However, with four more splits, expect no gossip.
-	for i := 14; i < 18; i++ {
-		if pErr := splitFunc(i); pErr != nil {
-			t.Fatal(pErr)
-		}
-	}
-	select {
-	case <-rangeCountCh:
-		t.Errorf("expected no further gossip")
-	default:
 	}
 }
 
@@ -1864,5 +1844,74 @@ func TestStorePushTxnQueueEnabledOnSplit(t *testing.T) {
 	rhsRepl := store.LookupReplica(roachpb.RKey(keys.UserTableDataMin), nil)
 	if !rhsRepl.IsPushTxnQueueEnabled() {
 		t.Errorf("expected RHS replica's push txn queue to be enabled post-split")
+	}
+}
+
+// TestDistributedTxnCleanup verifies that distributed transactions
+// cleanup their txn records after commit or abort.
+func TestDistributedTxnCleanup(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	storeCfg := storage.TestStoreConfig(nil)
+	storeCfg.TestingKnobs.DisableSplitQueue = true
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+	store := createTestStoreWithConfig(t, stopper, storeCfg)
+
+	// Split at "a".
+	lhsKey := roachpb.Key("a")
+	args := adminSplitArgs(lhsKey, lhsKey)
+	if _, pErr := client.SendWrapped(context.Background(), rg1(store), args); pErr != nil {
+		t.Fatalf("split at %q: %s", lhsKey, pErr)
+	}
+	lhs := store.LookupReplica(roachpb.RKey("a"), nil)
+
+	// Split at "b".
+	rhsKey := roachpb.Key("b")
+	args = adminSplitArgs(rhsKey, rhsKey)
+	if _, pErr := client.SendWrappedWith(context.Background(), store, roachpb.Header{
+		RangeID: lhs.RangeID,
+	}, args); pErr != nil {
+		t.Fatalf("split at %q: %s", rhsKey, pErr)
+	}
+	rhs := store.LookupReplica(roachpb.RKey("b"), nil)
+
+	if lhs == rhs {
+		t.Errorf("LHS == RHS after split: %s == %s", lhs, rhs)
+	}
+
+	// Test both commit and abort cases.
+	for _, commit := range []bool{true, false} {
+		t.Run(fmt.Sprintf("commit=%t", commit), func(t *testing.T) {
+			// Run a distributed transaction involving the lhsKey and rhsKey.
+			var txnKey roachpb.Key
+			ctx := context.Background()
+			if err := store.DB().Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+				b := txn.NewBatch()
+				b.Put(fmt.Sprintf("%s-%t", string(lhsKey), commit), "lhsValue")
+				b.Put(fmt.Sprintf("%s-%t", string(rhsKey), commit), "rhsValue")
+				if err := txn.Run(ctx, b); err != nil {
+					return err
+				}
+				txnKey = keys.TransactionKey(txn.Proto().Key, *txn.Proto().ID)
+				if commit {
+					return nil
+				}
+				return errors.New("forced abort")
+			}); err != nil && commit {
+				t.Fatalf("expected success with commit == true; got %v", err)
+			}
+
+			// Verify that the transaction record is cleaned up.
+			testutils.SucceedsSoon(t, func() error {
+				kv, err := store.DB().Get(ctx, txnKey)
+				if err != nil {
+					return err
+				}
+				if kv.Value != nil {
+					return errors.Errorf("expected txn record %s to have been cleaned", txnKey)
+				}
+				return nil
+			})
+		})
 	}
 }
