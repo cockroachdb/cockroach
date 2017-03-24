@@ -918,7 +918,7 @@ func (sb *syncBuffer) rotateFile(now time.Time) error {
 	// --logtostderr is true we'll never enter this code path and panic stack
 	// traces will go to the original stderr as you would expect.
 	if logging.stderrThreshold > Severity_INFO &&
-		!logging.noStderrRedirect {
+		!logging.noStderrRedirect && !showLogs {
 		// NB: any concurrent output to stderr may straddle the old and new
 		// files. This doesn't apply to log messages as we won't reach this code
 		// unless we're not logging to stderr.
@@ -977,7 +977,7 @@ func (l *loggingT) closeFileLocked() error {
 		}
 		l.file = nil
 	}
-	return nil
+	return restoreStderr()
 }
 
 // createFile creates the log file.

@@ -48,3 +48,8 @@ func init() {
 func hijackStderr(fd int) error {
 	return syscall.Dup2(fd, syscall.Stderr)
 }
+
+// restoreStderr cancels the effect of hijackStderr()
+func restoreStderr() error {
+	return syscall.Dup2(OrigStderrFd, syscall.Stderr)
+}
