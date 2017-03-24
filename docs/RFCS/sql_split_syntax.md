@@ -94,6 +94,9 @@ order; for example, if there are many splits, it is advantageous to sort the
 split points, split at the middle point, then recursively process the left and
 right sides (in parallel).
 
+*Interleaved tables*: the command works as expected; the split will inherently
+cause a corresponding split in the parent or child tables/indexes.
+
 ##### Return values #####
 
 `ALTER TABLE/INDEX SPLIT AT` currently returns a row with two columns: the key
@@ -138,6 +141,9 @@ ALTER INDEX t@idx SCATTER (1) (2)
 
 The statement returns only after the relocations are complete.
 
+*Interleaved tables*: the command works as expected (the ranges may contain rows
+for parent or child tables/indexes).
+
 ### 3. `ALTER TABLE/INDEX TESTING_RELOCATE` ###
 
 The `TESTING_RELOCATE` statements can be used to relocate specific ranges to
@@ -178,7 +184,41 @@ ALTER TABLE t TESTING_RELOCATE SELECT ARRAY[1+i%2], i FROM GENERATE_SERIES(1, 10
 
 The statement returns only after the relocations are complete.
 
-# Drawbacks
+*Interleaved tables*: the command works as expected (the ranges may contain rows
+for parent or child tables/indexes).
+
+### 4. `crdb_internal.ranges` system table ###
+
+To facilitate testing the implementation of the new commands (as well as allow a
+user to verify what the commands did), we introduce a `crdb_internal.ranges`
+system table that can be used to look at all the ranges on the system, or the
+ranges from a table.
+
+The schema of the table is as follows:
+
+Column         | Type       | Description
+---------------|------------|------------------------------
+`start_key`    | BYTES      | Range start key (raw)
+`start_pretty` | STRING     | Range start key (pretty-printed)
+`end_key`      | BYTES      | Range end key (raw)
+`end_pretty`   | STRING     | Range end key (pretty-printed)
+`database`     | STRING     | Database name (if range is part of a table)
+`table`        | STRING     | Table name (if range is part of a table); for interleaved tables this is always the root table.
+`index`        | STRING     | Index name (if range is part of a non-primary index); 
+`replicas`     | ARRAY(INT) | Replica store IDs
+`lease_holder` | INT        | Lease holder store ID
+`range_cache`  | STRING     | Range cache information
+
+The last two columns could be hidden (so they are only available if `SELECT`ed
+for specifically).
+
+Implementation notes:
+ - the system table infrastructure will be improved so the row producing
+   function has access to filters; specifying a `table` or `index` filter that
+   should be optimized to only look at the ranges for that table.
+ - the row producing function should also have access to needed columns; that
+   way the more expensive lease holder determination can be omitted if the
+   column is not needed.
 
 # Alternatives
 
@@ -191,5 +231,12 @@ functionality, e.g. `SELECT split_at(..)`. The problem is that it forces the
 splits to happen sequentially; we cannot implement the algorithm mentioned above
 that parallelizes the splits. One way around this would be to introduce `split_at`
 as an *aggregation* function (akin to `sum`).
+
+Alternatives considered for `crdb_internal.ranges`:
+ - a `SHOW RANGES FOR TABLE/INDEX` statement; the system table was deemed more
+   useful.
+ - having multiple system tables (e.g. a separate one for lease holders) and
+   using joins as necessary; this requires too many changes to make sure we only
+   generate the parts of the table that are needed.
 
 # Unresolved questions
