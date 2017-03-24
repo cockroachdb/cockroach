@@ -257,6 +257,7 @@ jobs
 lease
 namespace
 rangelog
+settings
 ui
 users
 zones
@@ -274,6 +275,7 @@ tables
 table_privileges
 table_constraints
 statistics
+settings
 schemata
 schema_privileges
 schema_changes
@@ -357,6 +359,7 @@ def            system              jobs               BASE TABLE   1
 def            system              lease              BASE TABLE   1
 def            system              namespace          BASE TABLE   1
 def            system              rangelog           BASE TABLE   1
+def            system              settings           BASE TABLE   1
 def            system              ui                 BASE TABLE   1
 def            system              users              BASE TABLE   1
 def            system              zones              BASE TABLE   1
@@ -482,6 +485,7 @@ def                 system             primary          system        jobs      
 def                 system             primary          system        lease       PRIMARY KEY
 def                 system             primary          system        namespace   PRIMARY KEY
 def                 system             primary          system        rangelog    PRIMARY KEY
+def                 system             primary          system        settings    PRIMARY KEY
 def                 system             primary          system        ui          PRIMARY KEY
 def                 system             primary          system        users       PRIMARY KEY
 def                 system             primary          system        zones       PRIMARY KEY
@@ -553,6 +557,10 @@ def            system              rangelog    eventType                 4
 def            system              rangelog    otherRangeID              5
 def            system              rangelog    info                      6
 def            system              rangelog    uniqueID                  7
+def            system              settings    name                      1
+def            system              settings    value                     2
+def            system              settings    lastUpdated               3
+def            system              settings    valueType                 4
 def            system              ui          key                       1
 def            system              ui          value                     2
 def            system              ui          lastUpdated               3
@@ -756,6 +764,11 @@ NULL     root     def            system             rangelog    GRANT           
 NULL     root     def            system             rangelog    INSERT          NULL          NULL
 NULL     root     def            system             rangelog    SELECT          NULL          NULL
 NULL     root     def            system             rangelog    UPDATE          NULL          NULL
+NULL     root     def            system             settings    DELETE          NULL          NULL
+NULL     root     def            system             settings    GRANT           NULL          NULL
+NULL     root     def            system             settings    INSERT          NULL          NULL
+NULL     root     def            system             settings    SELECT          NULL          NULL
+NULL     root     def            system             settings    UPDATE          NULL          NULL
 NULL     root     def            system             ui          DELETE          NULL          NULL
 NULL     root     def            system             ui          GRANT           NULL          NULL
 NULL     root     def            system             ui          INSERT          NULL          NULL

@@ -54,6 +54,12 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 		newDescriptors: 1,
 		newRanges:      1,
 	},
+	{
+		name:           "create system.settings table",
+		workFn:         createSettingsTable,
+		newDescriptors: 1,
+		newRanges:      0, // it lives in gossip range.
+	},
 }
 
 // migrationDescriptor describes a single migration hook that's used to modify
@@ -326,6 +332,21 @@ func createJobsTable(ctx context.Context, r runner) error {
 	return r.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		b := txn.NewBatch()
 		desc := sqlbase.JobsTable
+		b.CPut(sqlbase.MakeNameMetadataKey(desc.GetParentID(), desc.GetName()), desc.GetID(), nil)
+		b.CPut(sqlbase.MakeDescMetadataKey(desc.GetID()), sqlbase.WrapDescriptor(&desc), nil)
+		if err := txn.SetSystemConfigTrigger(); err != nil {
+			return err
+		}
+		return txn.Run(ctx, b)
+	})
+}
+
+func createSettingsTable(ctx context.Context, r runner) error {
+	// We install the table at the KV layer so that we can choose a known ID in
+	// the reserved ID space. (The SQL layer doesn't allow this.)
+	return r.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+		b := txn.NewBatch()
+		desc := sqlbase.SettingsTable
 		b.CPut(sqlbase.MakeNameMetadataKey(desc.GetParentID(), desc.GetName()), desc.GetID(), nil)
 		b.CPut(sqlbase.MakeDescMetadataKey(desc.GetID()), sqlbase.WrapDescriptor(&desc), nil)
 		if err := txn.SetSystemConfigTrigger(); err != nil {
