@@ -245,7 +245,7 @@ type TableNameWithIndex struct {
 }
 
 // Format implements the NodeFormatter interface.
-func (n *TableNameWithIndex) Format(buf *bytes.Buffer, f FmtFlags) {
+func (n TableNameWithIndex) Format(buf *bytes.Buffer, f FmtFlags) {
 	FormatNode(buf, f, n.Table)
 	if !n.SearchTable {
 		buf.WriteByte('@')

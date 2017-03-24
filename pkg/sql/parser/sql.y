@@ -1683,7 +1683,7 @@ for_grantee_clause:
 split_stmt:
   ALTER TABLE qualified_name SPLIT AT select_stmt
   {
-    $$.val = &Split{Table: $3.normalizableTableName(), Rows: $6.slct()}
+    $$.val = &Split{Table: $3.newNormalizableTableName(), Rows: $6.slct()}
   }
 | ALTER INDEX table_name_with_index SPLIT AT select_stmt
   {

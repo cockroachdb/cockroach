@@ -6683,7 +6683,7 @@ sqldefault:
 		sqlDollar = sqlS[sqlpt-6 : sqlpt+1]
 		//line sql.y:1683
 		{
-			sqlVAL.union.val = &Split{Table: sqlDollar[3].union.normalizableTableName(), Rows: sqlDollar[6].union.slct()}
+			sqlVAL.union.val = &Split{Table: sqlDollar[3].union.newNormalizableTableName(), Rows: sqlDollar[6].union.slct()}
 		}
 	case 222:
 		sqlDollar = sqlS[sqlpt-6 : sqlpt+1]

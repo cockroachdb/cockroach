@@ -18,9 +18,9 @@ package parser
 
 import "bytes"
 
-// Split represents a SPLIT statement.
+// Split represents a SPLIT statement. Only one of Table and Index can be set.
 type Split struct {
-	Table NormalizableTableName
+	Table *NormalizableTableName
 	Index *TableNameWithIndex
 	// Each row contains values for the columns in the PK or index (or a prefix
 	// of the columns).
