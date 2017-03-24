@@ -94,6 +94,9 @@ order; for example, if there are many splits, it is advantageous to sort the
 split points, split at the middle point, then recursively process the left and
 right sides (in parallel).
 
+*Interleaved tables*: the command works as expected; the split will inherently
+cause a corresponding split in the parent or child tables/indexes.
+
 ##### Return values #####
 
 `ALTER TABLE/INDEX SPLIT AT` currently returns a row with two columns: the key
@@ -138,6 +141,9 @@ ALTER INDEX t@idx SCATTER (1) (2)
 
 The statement returns only after the relocations are complete.
 
+*Interleaved tables*: the command works as expected (the ranges may contain rows
+for parent or child tables/indexes, but that's ok).
+
 ### 3. `ALTER TABLE/INDEX TESTING_RELOCATE` ###
 
 The `TESTING_RELOCATE` statements can be used to relocate specific ranges to
@@ -178,7 +184,40 @@ ALTER TABLE t TESTING_RELOCATE SELECT ARRAY[1+i%2], i FROM GENERATE_SERIES(1, 10
 
 The statement returns only after the relocations are complete.
 
-# Drawbacks
+*Interleaved tables*: the command works as expected (the ranges may contain rows
+for parent or child tables/indexes, but that's ok).
+
+### 4. `SHOW RANGES FROM TABLE/INDEX` ###
+
+To facilitate testing the implementation of the new commands (as well as allow a
+user to verify what the commands did), the `SHOW RANGES` statement returns
+information about the ranges of a table:
+
+```sql
+SHOW RANGES FROM TABLE t
+SHOW RANGES FROM INDEX t@i
+```
+
+Each output row contains:
+ - pretty printed range start key (skipping the `/Table/<tableID>/<indexID>`
+   prefix; NULL for the first range of the table/table);
+ - pretty printed range end key (NULL for the last range of the table/index);
+ - list of replica store IDs (as an int array);
+ - current lease holder (NULL if none).
+
+Sample output:
+
+```
+Start Key   End Key   Replicas    Lease Holder
+NULL        /1        [1, 2, 3]   1
+/1          /5/2      [4, 5, 6]   NULL
+/5/2        NULL      [1, 3, 6]   3
+```
+
+*Interleaved tables*: the command works as expected (the ranges may contain rows
+for parent or child tables/indexes, but that's ok). The Start and End keys
+contain all the components of the key (only the initial
+`/Table/<tableID>/<indexID>` prefix is stripped).
 
 # Alternatives
 
