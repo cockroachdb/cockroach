@@ -3,55 +3,52 @@
  */
 
 import _ from "lodash";
-import "whatwg-fetch";
+import "whatwg-fetch"; // needed for jsdom?
 import moment from "moment";
 
 import * as protos from "../js/protos";
 
-let serverpb = protos.cockroach.server.serverpb;
-let ts = protos.cockroach.ts.tspb;
+export type DatabasesRequestMessage = protos.cockroach.server.serverpb.DatabasesRequest;
+export type DatabasesResponseMessage = protos.cockroach.server.serverpb.DatabasesResponse;
 
-export type DatabasesRequestMessage = Proto2TypeScript.cockroach.server.serverpb.DatabasesRequestMessage;
-export type DatabasesResponseMessage = Proto2TypeScript.cockroach.server.serverpb.DatabasesResponseMessage;
+export type DatabaseDetailsRequestMessage = protos.cockroach.server.serverpb.DatabaseDetailsRequest;
+export type DatabaseDetailsResponseMessage = protos.cockroach.server.serverpb.DatabaseDetailsResponse;
 
-export type DatabaseDetailsRequestMessage = Proto2TypeScript.cockroach.server.serverpb.DatabaseDetailsRequestMessage;
-export type DatabaseDetailsResponseMessage = Proto2TypeScript.cockroach.server.serverpb.DatabaseDetailsResponseMessage;
+export type TableDetailsRequestMessage = protos.cockroach.server.serverpb.TableDetailsRequest;
+export type TableDetailsResponseMessage = protos.cockroach.server.serverpb.TableDetailsResponse;
 
-export type TableDetailsRequestMessage = Proto2TypeScript.cockroach.server.serverpb.TableDetailsRequestMessage;
-export type TableDetailsResponseMessage = Proto2TypeScript.cockroach.server.serverpb.TableDetailsResponseMessage;
+export type EventsRequestMessage = protos.cockroach.server.serverpb.EventsRequest;
+export type EventsResponseMessage = protos.cockroach.server.serverpb.EventsResponse;
 
-export type EventsRequestMessage = Proto2TypeScript.cockroach.server.serverpb.EventsRequestMessage;
-export type EventsResponseMessage = Proto2TypeScript.cockroach.server.serverpb.EventsResponseMessage;
+export type NodesRequestMessage = protos.cockroach.server.serverpb.NodesRequest;
+export type NodesResponseMessage = protos.cockroach.server.serverpb.NodesResponse;
 
-export type NodesRequestMessage = Proto2TypeScript.cockroach.server.serverpb.NodesRequestMessage;
-export type NodesResponseMessage = Proto2TypeScript.cockroach.server.serverpb.NodesResponseMessage;
+export type GetUIDataRequestMessage = protos.cockroach.server.serverpb.GetUIDataRequest;
+export type GetUIDataResponseMessage = protos.cockroach.server.serverpb.GetUIDataResponse;
 
-export type GetUIDataRequestMessage = Proto2TypeScript.cockroach.server.serverpb.GetUIDataRequestMessage;
-export type GetUIDataResponseMessage = Proto2TypeScript.cockroach.server.serverpb.GetUIDataResponseMessage;
+export type SetUIDataRequestMessage = protos.cockroach.server.serverpb.SetUIDataRequest;
+export type SetUIDataResponseMessage = protos.cockroach.server.serverpb.SetUIDataResponse;
 
-export type SetUIDataRequestMessage = Proto2TypeScript.cockroach.server.serverpb.SetUIDataRequestMessage;
-export type SetUIDataResponseMessage = Proto2TypeScript.cockroach.server.serverpb.SetUIDataResponseMessage;
+export type RaftDebugRequestMessage = protos.cockroach.server.serverpb.RaftDebugRequest;
+export type RaftDebugResponseMessage = protos.cockroach.server.serverpb.RaftDebugResponse;
 
-export type RaftDebugRequestMessage = Proto2TypeScript.cockroach.server.serverpb.RaftDebugRequestMessage;
-export type RaftDebugResponseMessage = Proto2TypeScript.cockroach.server.serverpb.RaftDebugResponseMessage;
+export type TimeSeriesQueryRequestMessage = protos.cockroach.ts.tspb.TimeSeriesQueryRequest;
+export type TimeSeriesQueryResponseMessage = protos.cockroach.ts.tspb.TimeSeriesQueryResponse;
 
-export type TimeSeriesQueryRequestMessage = Proto2TypeScript.cockroach.ts.tspb.TimeSeriesQueryRequestMessage;
-export type TimeSeriesQueryResponseMessage = Proto2TypeScript.cockroach.ts.tspb.TimeSeriesQueryResponseMessage;
+export type HealthRequestMessage = protos.cockroach.server.serverpb.HealthRequest;
+export type HealthResponseMessage = protos.cockroach.server.serverpb.HealthResponse;
 
-export type HealthRequestMessage = Proto2TypeScript.cockroach.server.serverpb.HealthRequestMessage;
-export type HealthResponseMessage = Proto2TypeScript.cockroach.server.serverpb.HealthResponseMessage;
+export type ClusterRequestMessage = protos.cockroach.server.serverpb.ClusterRequest;
+export type ClusterResponseMessage = protos.cockroach.server.serverpb.ClusterResponse;
 
-export type ClusterRequestMessage = Proto2TypeScript.cockroach.server.serverpb.ClusterRequestMessage;
-export type ClusterResponseMessage = Proto2TypeScript.cockroach.server.serverpb.ClusterResponseMessage;
+export type TableStatsRequestMessage = protos.cockroach.server.serverpb.TableStatsRequest;
+export type TableStatsResponseMessage = protos.cockroach.server.serverpb.TableStatsResponse;
 
-export type TableStatsRequestMessage = Proto2TypeScript.cockroach.server.serverpb.TableStatsRequestMessage;
-export type TableStatsResponseMessage = Proto2TypeScript.cockroach.server.serverpb.TableStatsResponseMessage;
+export type LogsRequestMessage = protos.cockroach.server.serverpb.LogsRequest;
+export type LogEntriesResponseMessage = protos.cockroach.server.serverpb.LogEntriesResponse;
 
-export type LogsRequestMessage = Proto2TypeScript.cockroach.server.serverpb.LogsRequestMessage;
-export type LogEntriesResponseMessage = Proto2TypeScript.cockroach.server.serverpb.LogEntriesResponseMessage;
-
-export type LivenessRequestMessage = Proto2TypeScript.cockroach.server.serverpb.LivenessRequestMessage;
-export type LivenessResponseMessage = Proto2TypeScript.cockroach.server.serverpb.LivenessResponseMessage;
+export type LivenessRequestMessage = protos.cockroach.server.serverpb.LivenessRequest;
+export type LivenessResponseMessage = protos.cockroach.server.serverpb.LivenessResponse;
 
 // API constants
 
@@ -74,47 +71,51 @@ export function withTimeout<T>(promise: Promise<T>, timeout?: moment.Duration): 
   }
 }
 
-interface TRequestMessage {
-  encodeJSON(): string;
-  toArrayBuffer(): ArrayBuffer;
+interface TRequest {
+  constructor: {
+    encode(message: TRequest, writer?: protobuf.Writer): protobuf.Writer;
+  };
+  toObject(): { [k: string]: any };
 }
 
 // timeoutFetch is a wrapper around fetch that provides timeout and protocol
 // buffer marshalling and unmarshalling.
 //
 // This function is intended for use with generated protocol buffers. In
-// particular, TResponse is a generated interface that describes the JSON
-// representation of the response, while TRequestMessage and TResponseMessage
+// particular, TResponse$Properties is a generated interface that describes the JSON
+// representation of the response, while TRequest and TResponse
 // are generated interfaces which are implemented by the protocol buffer
-// objects themselves. TResponseMessageBuilder is an interface implemented by
+// objects themselves. TResponseBuilder is an interface implemented by
 // the builder objects provided at runtime by protobuf.js.
-function timeoutFetch<TResponse, TResponseMessage, TResponseMessageBuilder extends {
-  new (json: TResponse): TResponseMessage
-  decode(buffer: ArrayBuffer): TResponseMessage
-  decode(buffer: ByteBuffer): TResponseMessage
-  decode64(buffer: string): TResponseMessage,
-}>(builder: TResponseMessageBuilder, url: string, req: TRequestMessage = null, timeout: moment.Duration = moment.duration(30, "s")): Promise<TResponseMessage> {
-  return withTimeout(
-    fetch(url, {
-      method: req ? "POST" : "GET",
-      headers: {
-        "Accept": "application/x-protobuf",
-        "Content-Type": "application/x-protobuf",
-        "Grpc-Timeout": timeout ? timeout.asMilliseconds() + "m" : undefined,
-      },
-      body: req ? req.toArrayBuffer() : undefined,
-      credentials: "same-origin",
-    }),
-    timeout,
-   ).then((res) => {
+function timeoutFetch<TResponse$Properties, TResponse, TResponseBuilder extends {
+  new (properties?: TResponse$Properties): TResponse
+  encode(message: TResponse$Properties, writer?: protobuf.Writer): protobuf.Writer
+  decode(reader: (protobuf.Reader|Uint8Array), length?: number): TResponse;
+}>(builder: TResponseBuilder, url: string, req: TRequest = null, timeout: moment.Duration = moment.duration(30, "s")): Promise<TResponse> {
+  const params: RequestInit = {
+    headers: {
+      "Accept": "application/x-protobuf",
+      "Content-Type": "application/x-protobuf",
+      "Grpc-Timeout": timeout ? timeout.asMilliseconds() + "m" : undefined,
+    },
+    credentials: "same-origin",
+  };
+
+  if (req) {
+    const encodedRequest = req.constructor.encode(req).finish();
+    params.method = "POST";
+    params.body = encodedRequest.buffer.slice(encodedRequest.byteOffset, encodedRequest.byteOffset + encodedRequest.byteLength);
+  }
+
+  return withTimeout(fetch(url, params), timeout).then((res) => {
     if (!res.ok) {
       throw Error(res.statusText);
     }
-    return res.arrayBuffer().then((buffer) => builder.decode(buffer));
+    return res.arrayBuffer().then((buffer) => builder.decode(new Uint8Array(buffer)));
   });
 }
 
-export type APIRequestFn<TRequestMessage, TResponseMessage> = (req: TRequestMessage, timeout?: moment.Duration) => Promise<TResponseMessage>;
+export type APIRequestFn<TRequest, TResponse> = (req: TRequest, timeout?: moment.Duration) => Promise<TResponse>;
 
 // propsToQueryString is a helper function that converts a set of object
 // properties to a query string
@@ -126,6 +127,9 @@ export function propsToQueryString(props: any) {
 /**
  * ENDPOINTS
  */
+
+const serverpb = protos.cockroach.server.serverpb;
+const tspb = protos.cockroach.ts.tspb;
 
 // getDatabaseList gets a list of all database names
 export function getDatabaseList(_req: DatabasesRequestMessage, timeout?: moment.Duration): Promise<DatabasesResponseMessage> {
@@ -150,7 +154,7 @@ export function getUIData(req: GetUIDataRequestMessage, timeout?: moment.Duratio
 
 // setUIData sets UI data
 export function setUIData(req: SetUIDataRequestMessage, timeout?: moment.Duration): Promise<SetUIDataResponseMessage> {
-  return timeoutFetch(serverpb.SetUIDataResponse, `${API_PREFIX}/uidata`, req, timeout);
+  return timeoutFetch(serverpb.SetUIDataResponse, `${API_PREFIX}/uidata`, req as any, timeout);
 }
 
 // getEvents gets event data
@@ -171,7 +175,7 @@ export function raftDebug(_req: RaftDebugRequestMessage): Promise<RaftDebugRespo
 
 // queryTimeSeries queries for time series data
 export function queryTimeSeries(req: TimeSeriesQueryRequestMessage, timeout?: moment.Duration): Promise<TimeSeriesQueryResponseMessage> {
-  return timeoutFetch(ts.TimeSeriesQueryResponse, `ts/query`, req, timeout);
+  return timeoutFetch(tspb.TimeSeriesQueryResponse, `ts/query`, req as any, timeout);
 }
 
 // getHealth gets health data

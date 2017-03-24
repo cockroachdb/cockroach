@@ -7,11 +7,11 @@ import _ from "lodash";
 import { nodeIDAttr } from "./../util/constants";
 import { AdminUIState } from "../redux/state";
 import { refreshNodes } from "../redux/apiReducers";
-import { NodeStatus, MetricConstants } from  "../util/proto";
+import { NodeStatus$Properties, MetricConstants, StatusMetrics } from  "../util/proto";
 import { Bytes, Percentage } from "../util/format";
 
 interface NodeOverviewProps extends RouterState {
-  node: NodeStatus;
+  node: NodeStatus$Properties;
   refreshNodes: typeof refreshNodes;
 }
 
@@ -56,43 +56,43 @@ class NodeOverview extends React.Component<NodeOverviewProps, {}> {
             <tbody>
               <TableRow data={node}
                         title="Live Bytes"
-                        valueFn={(metrics) => Bytes(metrics.get(MetricConstants.liveBytes))} />
+                        valueFn={(metrics) => Bytes(metrics[MetricConstants.liveBytes])} />
               <TableRow data={node}
                         title="Key Bytes"
-                        valueFn={(metrics) => Bytes(metrics.get(MetricConstants.keyBytes))} />
+                        valueFn={(metrics) => Bytes(metrics[MetricConstants.keyBytes])} />
               <TableRow data={node}
                         title="Value Bytes"
-                        valueFn={(metrics) => Bytes(metrics.get(MetricConstants.valBytes))} />
+                        valueFn={(metrics) => Bytes(metrics[MetricConstants.valBytes])} />
               <TableRow data={node}
                         title="Intent Bytes"
-                        valueFn={(metrics) => Bytes(metrics.get(MetricConstants.intentBytes))} />
+                        valueFn={(metrics) => Bytes(metrics[MetricConstants.intentBytes])} />
               <TableRow data={node}
                         title="Sys Bytes"
-                        valueFn={(metrics) => Bytes(metrics.get(MetricConstants.sysBytes))} />
+                        valueFn={(metrics) => Bytes(metrics[MetricConstants.sysBytes])} />
               <TableRow data={node}
                         title="GC Bytes Age"
-                        valueFn={(metrics) => metrics.get(MetricConstants.gcBytesAge).toString()} />
+                        valueFn={(metrics) => metrics[MetricConstants.gcBytesAge].toString()} />
               <TableRow data={node}
                         title="Total Replicas"
-                        valueFn={(metrics) => metrics.get(MetricConstants.replicas).toString()} />
+                        valueFn={(metrics) => metrics[MetricConstants.replicas].toString()} />
               <TableRow data={node}
                         title="Raft Leaders"
-                        valueFn={(metrics) => metrics.get(MetricConstants.raftLeaders).toString()} />
+                        valueFn={(metrics) => metrics[MetricConstants.raftLeaders].toString()} />
               <TableRow data={node}
                         title="Total Ranges"
-                        valueFn={(metrics) => metrics.get(MetricConstants.ranges)} />
+                        valueFn={(metrics) => metrics[MetricConstants.ranges]} />
               <TableRow data={node}
                         title="Unavailable"
-                        valueFn={(metrics) => Percentage(metrics.get(MetricConstants.unavailableRanges), metrics.get(MetricConstants.ranges))} />
+                        valueFn={(metrics) => Percentage(metrics[MetricConstants.unavailableRanges], metrics[MetricConstants.ranges])} />
               <TableRow data={node}
                         title="Under Replicated"
-                        valueFn={(metrics) => Percentage(metrics.get(MetricConstants.underReplicatedRanges), metrics.get(MetricConstants.ranges))} />
+                        valueFn={(metrics) => Percentage(metrics[MetricConstants.underReplicatedRanges], metrics[MetricConstants.ranges])} />
               <TableRow data={node}
                         title="Available Capacity"
-                        valueFn={(metrics) => Bytes(metrics.get(MetricConstants.availableCapacity))} />
+                        valueFn={(metrics) => Bytes(metrics[MetricConstants.availableCapacity])} />
               <TableRow data={node}
                         title="Total Capacity"
-                        valueFn={(metrics) => Bytes(metrics.get(MetricConstants.capacity))} />
+                        valueFn={(metrics) => Bytes(metrics[MetricConstants.capacity])} />
             </tbody>
           </table>
         </div>
@@ -109,7 +109,7 @@ class NodeOverview extends React.Component<NodeOverviewProps, {}> {
  * across the different stores on the node (along with a total value for the
  * node itself).
  */
-function TableRow(props: { data: NodeStatus, title: string, valueFn: (s: Proto2TypeScript.ProtoBufMap<string, number>) => React.ReactNode }) {
+function TableRow(props: { data: NodeStatus$Properties, title: string, valueFn: (s: StatusMetrics) => React.ReactNode }) {
   return <tr>
     <td className="title">{ props.title }</td>
     <td className="value">{ props.valueFn(props.data.metrics) }</td>
@@ -122,7 +122,7 @@ function TableRow(props: { data: NodeStatus, title: string, valueFn: (s: Proto2T
 }
 
 let currentNode = createSelector(
-  (state: AdminUIState, _props: RouterState): NodeStatus[] => state.cachedData.nodes.data,
+  (state: AdminUIState, _props: RouterState): NodeStatus$Properties[] => state.cachedData.nodes.data,
   (_state: AdminUIState, props: RouterState): number => parseInt(props.params[nodeIDAttr], 10),
   (nodes, id) => {
     if (!nodes || !id) {
