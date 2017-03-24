@@ -660,7 +660,7 @@ func (t *tableState) acquireFreshestFromStoreLocked(
 
 // releaseInactiveLeases releases the leases in t.active.data with refcount 0.
 // t.mu must be locked.
-func (t *tableState) releaseInactiveLeases(store LeaseStore) {
+func (t *tableState) releaseInactiveLeases(m *LeaseManager) {
 	// A copy of t.active.data must be made since t.active.data will be changed
 	// by `removeLease`.
 	for _, lease := range append([]*LeaseState(nil), t.active.data...) {
@@ -668,7 +668,7 @@ func (t *tableState) releaseInactiveLeases(store LeaseStore) {
 			lease.mu.Lock()
 			defer lease.mu.Unlock()
 			if lease.refcount == 0 {
-				t.removeLease(lease, store)
+				t.removeLease(lease, m)
 			}
 		}()
 	}
@@ -767,20 +767,28 @@ func (t *tableState) release(lease *LeaseState, m *LeaseManager) error {
 		return s.released
 	}
 	if decRefcount(s) {
-		t.removeLease(s, m.LeaseStore)
+		t.removeLease(s, m)
 	}
 	return nil
 }
 
 // t.mu needs to be locked.
-func (t *tableState) removeLease(lease *LeaseState, store LeaseStore) {
+func (t *tableState) removeLease(lease *LeaseState, m *LeaseManager) {
 	t.active.remove(lease)
 	t.tableNameCache.remove(lease)
+
+	ctx := context.TODO()
+	if m.isDraining() {
+		// Release synchronously to guarantee release before exiting.
+		m.LeaseStore.Release(ctx, t.stopper, lease)
+		return
+	}
+
 	// Release to the store asynchronously, without the tableState lock.
-	if err := t.stopper.RunAsyncTask(context.TODO(), func(ctx context.Context) {
-		store.Release(ctx, t.stopper, lease)
+	if err := t.stopper.RunAsyncTask(ctx, func(ctx context.Context) {
+		m.LeaseStore.Release(ctx, t.stopper, lease)
 	}); err != nil {
-		log.Warningf(context.TODO(), "error: %s, not releasing lease: %q", err, lease)
+		log.Warningf(ctx, "error: %s, not releasing lease: %q", err, lease)
 	}
 }
 
@@ -823,7 +831,7 @@ func (t *tableState) purgeOldLeases(
 			if deleted {
 				t.deleted = true
 			}
-			t.releaseInactiveLeases(m.LeaseStore)
+			t.releaseInactiveLeases(m)
 			return nil
 		}
 		return err
@@ -1195,7 +1203,7 @@ func (m *LeaseManager) SetDraining(drain bool) {
 	defer m.mu.Unlock()
 	for _, t := range m.mu.tables {
 		t.mu.Lock()
-		t.releaseInactiveLeases(m.LeaseStore)
+		t.releaseInactiveLeases(m)
 		t.mu.Unlock()
 	}
 }
