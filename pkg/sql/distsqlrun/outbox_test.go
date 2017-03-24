@@ -386,12 +386,14 @@ func startMockDistSQLServer(stopper *stop.Stopper) (*MockDistSQLServer, net.Addr
 }
 
 func newInsecureRPCContext(stopper *stop.Stopper) *rpc.Context {
-	return rpc.NewContext(
-		log.AmbientContext{},
-		&base.Config{Insecure: true},
-		hlc.NewClock(hlc.UnixNano, time.Nanosecond),
-		stopper,
-	)
+	rpcCfg := rpc.Config{
+		Config: &base.Config{Insecure: true},
+		Clock:  hlc.NewClock(hlc.UnixNano, time.Nanosecond),
+		// Disable heartbeats. Not needed for these tests.
+		HeartbeatInterval:     0,
+		EnableClockSkewChecks: false,
+	}
+	return rpc.NewContext(log.AmbientContext{}, rpcCfg, stopper)
 }
 
 // MockDistSQLServer implements the DistSQLServer (gRPC) interface and allows

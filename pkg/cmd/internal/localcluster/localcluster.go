@@ -80,6 +80,8 @@ type Cluster struct {
 	separateAddrs bool
 	stopper       *stop.Stopper
 	started       time.Time
+	// clientClock is used by the cluster's gRPC client.
+	clientClock *hlc.Clock
 }
 
 // New creates a cluster of size nodes.
@@ -93,6 +95,7 @@ func New(size int, separateAddrs bool) *Cluster {
 		DB:            make([]*gosql.DB, size),
 		separateAddrs: separateAddrs,
 		stopper:       stop.NewStopper(),
+		clientClock:   hlc.NewClock(hlc.UnixNano, 0 /* maxOffset */),
 	}
 }
 
@@ -114,8 +117,15 @@ func (c *Cluster) Start(
 		User:     security.NodeUser,
 		Insecure: true,
 	}
-	c.rpcCtx = rpc.NewContext(log.AmbientContext{}, baseCtx,
-		hlc.NewClock(hlc.UnixNano, 0), c.stopper)
+	rpcCfg := rpc.Config{
+		Config: baseCtx,
+		Clock:  c.clientClock,
+		// Disable hearbeats. We don't need clock skew checks as all the nodes are
+		// local.
+		HeartbeatInterval:     0,
+		EnableClockSkewChecks: false,
+	}
+	c.rpcCtx = rpc.NewContext(log.AmbientContext{}, rpcCfg, c.stopper)
 
 	if perNodeArgs != nil && len(perNodeArgs) != len(c.Nodes) {
 		panic(fmt.Sprintf("there are %d nodes, but perNodeArgs' length is %d",
@@ -202,7 +212,7 @@ func (c *Cluster) makeClient(nodeIdx int) *client.DB {
 	if err != nil {
 		log.Fatalf(context.Background(), "failed to initialize KV client: %s", err)
 	}
-	return client.NewDB(client.NewSender(conn), c.rpcCtx.LocalClock)
+	return client.NewDB(client.NewSender(conn), c.clientClock)
 }
 
 func (c *Cluster) makeStatus(nodeIdx int) serverpb.StatusClient {

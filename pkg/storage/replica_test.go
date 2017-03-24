@@ -144,7 +144,14 @@ func (tc *testContext) StartWithStoreConfig(t testing.TB, stopper *stop.Stopper,
 	// Setup fake zone config handler.
 	config.TestingSetupZoneConfigHook(stopper)
 	if tc.gossip == nil {
-		rpcContext := rpc.NewContext(cfg.AmbientCtx, &base.Config{Insecure: true}, cfg.Clock, stopper)
+		rpcCfg := rpc.Config{
+			Config:                &base.Config{Insecure: true},
+			Clock:                 cfg.Clock,
+			HeartbeatInterval:     rpc.ArbitraryServerHeartbeatInterval,
+			HeartbeatTimeout:      rpc.ArbitraryServerHeartbeatTimeout,
+			EnableClockSkewChecks: true,
+		}
+		rpcContext := rpc.NewContext(cfg.AmbientCtx, rpcCfg, stopper)
 		server := rpc.NewServer(rpcContext) // never started
 		tc.gossip = gossip.NewTest(1, rpcContext, server, stopper, metric.NewRegistry())
 	}

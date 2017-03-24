@@ -127,6 +127,9 @@ func (r *RemoteClockMonitor) Latency(addr string) (time.Duration, bool) {
 func (r *RemoteClockMonitor) UpdateOffset(
 	ctx context.Context, addr string, offset RemoteOffset, roundTripLatency time.Duration,
 ) {
+	if addr == "127.0.0.1:0" {
+		log.Fatal(ctx, "uninitialized address in UpdateOffset call")
+	}
 	emptyOffset := offset == RemoteOffset{}
 
 	r.mu.Lock()

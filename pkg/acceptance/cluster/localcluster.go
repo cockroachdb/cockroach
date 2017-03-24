@@ -786,11 +786,19 @@ func (l *LocalCluster) stop(ctx context.Context) {
 
 // NewClient implements the Cluster interface.
 func (l *LocalCluster) NewClient(ctx context.Context, i int) (*roachClient.DB, error) {
-	clock := hlc.NewClock(hlc.UnixNano, 0)
-	rpcContext := rpc.NewContext(log.AmbientContext{}, &base.Config{
-		User:        security.NodeUser,
-		SSLCertsDir: l.CertsDir,
-	}, clock, l.stopper)
+	clock := hlc.NewClock(hlc.UnixNano, 0 /* maxOffset */)
+	rpcCfg := rpc.Config{
+		Config: &base.Config{
+			User:        security.NodeUser,
+			SSLCertsDir: l.CertsDir,
+		},
+		Clock:             clock,
+		HeartbeatInterval: rpc.ArbitraryServerHeartbeatInterval,
+		HeartbeatTimeout:  rpc.ArbitraryServerHeartbeatTimeout,
+		// No clock skew on local cluster.
+		EnableClockSkewChecks: false,
+	}
+	rpcContext := rpc.NewContext(log.AmbientContext{}, rpcCfg, l.stopper)
 	conn, err := rpcContext.GRPCDial(l.Nodes[i].Addr(ctx, DefaultTCP).String())
 	if err != nil {
 		return nil, err

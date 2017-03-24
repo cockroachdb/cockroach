@@ -30,4 +30,5 @@ type TestingKnobs struct {
 	SQLLeaseManager  ModuleTestingKnobs
 	SQLSchemaChanger ModuleTestingKnobs
 	DistSQL          ModuleTestingKnobs
+	RPCContext       ModuleTestingKnobs
 }

@@ -221,7 +221,7 @@ func TestUseCerts(t *testing.T) {
 	defer s.Stopper().Stop(context.TODO())
 
 	// Insecure mode.
-	clientContext := testutils.NewNodeTestBaseContext()
+	clientContext := testutils.NewNodeTestBaseConfig()
 	clientContext.Insecure = true
 	httpClient, err := clientContext.GetHTTPClient()
 	if err != nil {
@@ -239,7 +239,7 @@ func TestUseCerts(t *testing.T) {
 	}
 
 	// New client. With certs this time.
-	clientContext = testutils.NewNodeTestBaseContext()
+	clientContext = testutils.NewNodeTestBaseConfig()
 	clientContext.SSLCertsDir = certsDir
 	httpClient, err = clientContext.GetHTTPClient()
 	if err != nil {

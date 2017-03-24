@@ -84,9 +84,9 @@ func TestRotateCerts(t *testing.T) {
 	}
 
 	// Test client with the same certs.
-	clientContext := testutils.NewNodeTestBaseContext()
-	clientContext.SSLCertsDir = certsDir
-	firstClient, err := clientContext.GetHTTPClient()
+	clientConfig := testutils.NewNodeTestBaseConfig()
+	clientConfig.SSLCertsDir = certsDir
+	firstClient, err := clientConfig.GetHTTPClient()
 	if err != nil {
 		t.Fatalf("could not create http client: %v", err)
 	}
@@ -107,9 +107,9 @@ func TestRotateCerts(t *testing.T) {
 	// Setup a second http client. It will load the new certs.
 	// We need to use a new context as it keeps the certificate manager around.
 	// Fails on crypto errors.
-	clientContext = testutils.NewNodeTestBaseContext()
-	clientContext.SSLCertsDir = certsDir
-	secondClient, err := clientContext.GetHTTPClient()
+	clientConfig = testutils.NewNodeTestBaseConfig()
+	clientConfig.SSLCertsDir = certsDir
+	secondClient, err := clientConfig.GetHTTPClient()
 	if err != nil {
 		t.Fatalf("could not create http client: %v", err)
 	}
@@ -154,9 +154,9 @@ func TestRotateCerts(t *testing.T) {
 	// Setup a third http client. It will load the new certs.
 	// We need to use a new context as it keeps the certificate manager around.
 	// Fails on crypto errors.
-	clientContext = testutils.NewNodeTestBaseContext()
-	clientContext.SSLCertsDir = certsDir
-	thirdClient, err := clientContext.GetHTTPClient()
+	clientConfig = testutils.NewNodeTestBaseConfig()
+	clientConfig.SSLCertsDir = certsDir
+	thirdClient, err := clientConfig.GetHTTPClient()
 	if err != nil {
 		t.Fatalf("could not create http client: %v", err)
 	}

@@ -91,15 +91,15 @@ func TestSSLEnforcement(t *testing.T) {
 	defer s.Stopper().Stop(context.TODO())
 
 	// HTTPS with client certs for security.RootUser.
-	rootCertsContext := testutils.NewTestBaseContext(security.RootUser)
+	rootCertsContext := testutils.NewTestBaseConfig(security.RootUser)
 	// HTTPS with client certs for security.NodeUser.
-	nodeCertsContext := testutils.NewNodeTestBaseContext()
+	nodeCertsContext := testutils.NewNodeTestBaseConfig()
 	// HTTPS with client certs for TestUser.
-	testCertsContext := testutils.NewTestBaseContext(TestUser)
+	testCertsContext := testutils.NewTestBaseConfig(TestUser)
 	// HTTPS without client certs. The user does not matter.
 	noCertsContext := insecureCtx{}
 	// Plain http.
-	insecureContext := testutils.NewTestBaseContext(TestUser)
+	insecureContext := testutils.NewTestBaseConfig(TestUser)
 	insecureContext.Insecure = true
 
 	kvGet := &roachpb.GetRequest{}

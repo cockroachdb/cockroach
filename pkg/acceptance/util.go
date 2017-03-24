@@ -273,28 +273,31 @@ func MakeFarmer(t testing.TB, prefix string, stopper *stop.Stopper) *terrafarm.F
 		t.Fatalf("generated cluster name '%s' must match regex %s", name, prefixRE)
 	}
 
-	// We need to configure a MaxOffset on this clock so that the rpc.Context will
-	// enforce the offset. We're going to initialize the client.Txn using the
-	// Context's clock and send them through the ExternalSender, so the client's
-	// clock needs to be synchronized.
+	// We need to EnableClockSkewChecks on the rpcContext, and so we also have to
+	// configure a MaxOffset on this clock so that the rpc.Context will enforce
+	// the offset. We're going to initialize the client.Txn using the Context's
+	// clock and send them through the ExternalSender, so the client's clock needs
+	// to be synchronized.
 	//
 	// TODO(andrei): It's unfortunate that this client, which is not part of the
 	// cluster, needs to do offset checks. Also, we igore the env variable that
 	// may control a different acceptable offset for the nodes in the cluster. We
 	// should stop creating transaction outside of the cluster.
 	clientClock := hlc.NewClock(hlc.UnixNano, base.DefaultMaxClockOffset)
-	rpcContext := rpc.NewContext(log.AmbientContext{}, &base.Config{
-		Insecure: true,
-		User:     security.NodeUser,
-		// Set a bogus address, to be used by the clock skew checks as the ID of
-		// this "node". We can't leave it blank.
-		Addr: "acceptance test client",
-	}, clientClock, stopper)
-	rpcContext.HeartbeatCB = func() {
-		if err := rpcContext.RemoteClocks.VerifyClockOffset(context.Background()); err != nil {
-			log.Fatal(context.Background(), err)
-		}
+	rpcCfg := rpc.Config{
+		Config: &base.Config{
+			Insecure: true,
+			User:     security.NodeUser,
+			// Set a bogus address, to be used by the clock skew checks as the ID of
+			// this "node". We can't leave it blank.
+			Addr: "acceptance test client",
+		},
+		Clock:                 clientClock,
+		HeartbeatInterval:     rpc.ArbitraryServerHeartbeatInterval,
+		HeartbeatTimeout:      rpc.ArbitraryServerHeartbeatTimeout,
+		EnableClockSkewChecks: true,
 	}
+	rpcContext := rpc.NewContext(log.AmbientContext{}, rpcCfg, stopper)
 
 	f := &terrafarm.Farmer{
 		Output:      os.Stderr,
@@ -307,6 +310,7 @@ func MakeFarmer(t testing.TB, prefix string, stopper *stop.Stopper) *terrafarm.F
 		AddVars:     terraformVars,
 		KeepCluster: flagTFKeepCluster.String(),
 		RPCContext:  rpcContext,
+		ClientClock: clientClock,
 	}
 	log.Infof(context.Background(), "logging to %s", logDir)
 	return f

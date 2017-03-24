@@ -162,12 +162,22 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 			"running in insecure mode, this is strongly discouraged. See --insecure.")
 	}
 
-	s.rpcContext = rpc.NewContext(s.cfg.AmbientCtx, s.cfg.Config, s.clock, s.stopper)
-	s.rpcContext.HeartbeatCB = func() {
-		if err := s.rpcContext.RemoteClocks.VerifyClockOffset(ctx); err != nil {
-			log.Fatal(ctx, err)
-		}
+	var rpcCtxTestingKnobs rpc.ContextTestingKnobs
+	if knobs := s.cfg.TestingKnobs.RPCContext; knobs != nil {
+		rpcCtxTestingKnobs = *s.cfg.TestingKnobs.RPCContext.(*rpc.ContextTestingKnobs)
 	}
+	rpcContextCfg := rpc.Config{
+		Config:       s.cfg.Config,
+		Clock:        s.clock,
+		TestingKnobs: rpcCtxTestingKnobs,
+		// Enable heartbeats to consider nodes unhealthy if heartbeats don't respond
+		// in time.
+		HeartbeatInterval: rpc.ArbitraryServerHeartbeatInterval,
+		HeartbeatTimeout:  rpc.ArbitraryServerHeartbeatTimeout,
+		// Crash if large clock skew is detected.
+		EnableClockSkewChecks: true,
+	}
+	s.rpcContext = rpc.NewContext(s.cfg.AmbientCtx, rpcContextCfg, s.stopper)
 	s.grpc = rpc.NewServer(s.rpcContext)
 
 	s.registry = metric.NewRegistry()

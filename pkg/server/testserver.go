@@ -471,6 +471,11 @@ func (ts *TestServer) GetFirstStoreID() roachpb.StoreID {
 	return firstStoreID
 }
 
+// BaseConfig is part of TestServerInterface.
+func (ts *TestServer) BaseConfig() *base.Config {
+	return ts.Cfg.Config
+}
+
 // LookupRange returns the descriptor of the range containing key.
 func (ts *TestServer) LookupRange(key roachpb.Key) (roachpb.RangeDescriptor, error) {
 	rangeLookupReq := roachpb.RangeLookupRequest{

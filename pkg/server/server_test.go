@@ -49,7 +49,7 @@ import (
 	"github.com/pkg/errors"
 )
 
-var nodeTestBaseContext = testutils.NewNodeTestBaseContext()
+var nodeTestBaseContext = testutils.NewNodeTestBaseConfig()
 
 // TestSelfBootstrap verifies operation when no bootstrap hosts have
 // been specified.
@@ -119,8 +119,9 @@ func TestPlainHTTPServer(t *testing.T) {
 		return getStatusJSONProto(s, "metrics/local", &data)
 	})
 
-	ctx := s.RPCContext()
-	ctx.Insecure = false
+	// Edit the server's config so that it report its admin url using the https
+	// scheme.
+	s.BaseConfig().Insecure = false
 	if err := getStatusJSONProto(s, "metrics/local", &data); !testutils.IsError(err, "http: server gave HTTP response to HTTPS client") {
 		t.Fatalf("unexpected error %v", err)
 	}

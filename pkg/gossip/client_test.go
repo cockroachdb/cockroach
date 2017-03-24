@@ -49,12 +49,14 @@ func startGossip(
 }
 
 func newInsecureRPCContext(stopper *stop.Stopper) *rpc.Context {
-	return rpc.NewContext(
-		log.AmbientContext{},
-		&base.Config{Insecure: true},
-		hlc.NewClock(hlc.UnixNano, time.Nanosecond),
-		stopper,
-	)
+	cfg := rpc.Config{
+		Config:                &base.Config{Insecure: true},
+		Clock:                 hlc.NewClock(hlc.UnixNano, time.Nanosecond),
+		HeartbeatInterval:     rpc.ArbitraryServerHeartbeatInterval,
+		HeartbeatTimeout:      rpc.ArbitraryServerHeartbeatTimeout,
+		EnableClockSkewChecks: true,
+	}
+	return rpc.NewContext(log.AmbientContext{}, cfg, stopper)
 }
 
 func startGossipAtAddr(
