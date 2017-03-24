@@ -4900,6 +4900,8 @@ table_name_with_index:
   }
 | qualified_name
   {
+    // This case allows specifying just an index name (potentially schema-qualified).
+    // We temporarily store the index name in Table (see TableNameWithIndex).
     $$.val = &TableNameWithIndex{Table: $1.normalizableTableName(), SearchTable: true}
   }
 
