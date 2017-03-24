@@ -2118,7 +2118,7 @@ func Example_rebalancing() {
 	// Model a set of stores in a cluster,
 	// randomly adding / removing stores and adding bytes.
 	cfg := rpc.ContextConfig{
-		Config:                &base.Config{Insecure: true},
+		Config:                base.Config{Insecure: true},
 		HLCClock:              clock,
 		HeartbeatInterval:     time.Second,
 		HeartbeatTimeout:      time.Second,

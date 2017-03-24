@@ -79,6 +79,8 @@ var SourceAddr = func() net.Addr {
 // NewServer is a thin wrapper around grpc.NewServer that registers a heartbeat
 // service.
 func NewServer(ctx *Context) *grpc.Server {
+	connHelper := base.NewConnectingHelper(ctx.cfg.Config)
+
 	opts := []grpc.ServerOption{
 		// The limiting factor for lowering the max message size is the fact
 		// that a single large kv can be sent over the network in one message.
@@ -87,7 +89,7 @@ func NewServer(ctx *Context) *grpc.Server {
 		grpc.MaxMsgSize(math.MaxInt32),
 	}
 	if !ctx.cfg.Insecure {
-		tlsConfig, err := ctx.cfg.GetServerTLSConfig()
+		tlsConfig, err := connHelper.GetServerTLSConfig()
 		if err != nil {
 			panic(err)
 		}
@@ -125,7 +127,11 @@ var _ base.ModuleTestingKnobs = &ContextTestingKnobs{}
 // ContextConfig contains parameters for creating a Context.
 type ContextConfig struct {
 	// The base.Config used to open gRPC connections.
-	*base.Config
+	base.Config
+
+	// Addr is the address of the local server. It is used for heartbeats - this
+	// is reported as the heartbeat sender's address.
+	Addr string
 
 	// KeepaliveInterval is the interval at which gRPC is going to perform HTTP2
 	// pings to check that the connection is still alive.
@@ -185,9 +191,14 @@ type Context struct {
 		syncutil.Mutex
 		cache map[string]*connMeta
 	}
+
+	connHelper *base.ConnectingHelper
 }
 
-// NewContext creates an rpc Context with the supplied values.
+// NewContext creates an rpc Context.
+//
+// If heartbeats are enabled and cfg.Addr is not set, SetAddr() needs to be
+// called before the Context is used to open any connections.
 func NewContext(ambient log.AmbientContext, cfg ContextConfig, stopper *stop.Stopper) *Context {
 	if cfg.HLCClock == nil {
 		panic("nil clock is forbidden")
@@ -241,7 +252,16 @@ func NewContext(ambient log.AmbientContext, cfg ContextConfig, stopper *stop.Sto
 		ctx.conns.Unlock()
 	})
 
+	ctx.connHelper = base.NewConnectingHelper(cfg.Config)
+
 	return ctx
+}
+
+// SetAddr sets the address that will be reported by this Context through
+// heartbeats to the other servers. Use this if the address wasn't resolved at
+// creation time.
+func (ctx *Context) SetAddr(addr string) {
+	ctx.cfg.Addr = addr
 }
 
 // GetLocalInternalServerForAddr returns the context's internal batch server
@@ -295,7 +315,7 @@ func (ctx *Context) GRPCDial(target string, opts ...grpc.DialOption) (*grpc.Clie
 		if ctx.cfg.Insecure {
 			dialOpt = grpc.WithInsecure()
 		} else {
-			tlsConfig, err := ctx.cfg.GetClientTLSConfig()
+			tlsConfig, err := ctx.connHelper.GetClientTLSConfig()
 			if err != nil {
 				meta.dialErr = err
 				return
@@ -382,6 +402,9 @@ func (ctx *Context) ConnHealth(remoteAddr string) error {
 func (ctx *Context) runPeriodicHeartbeats(meta *connMeta, remoteAddr string) {
 	if ctx.cfg.HeartbeatInterval == 0 {
 		log.Fatal(ctx.masterCtx, "invalid HeartbeatInterval: 0")
+	}
+	if ctx.cfg.Addr == "" || ctx.cfg.Addr == "127.0.0.1:0" {
+		log.Fatal(context.TODO(), "attempting to send heartbeats with uninitialized client address")
 	}
 	maxOffset := ctx.LocalClock.MaxOffset()
 

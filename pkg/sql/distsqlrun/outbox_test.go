@@ -392,7 +392,7 @@ func startMockDistSQLServer(stopper *stop.Stopper) (*MockDistSQLServer, net.Addr
 
 func newInsecureRPCContext(stopper *stop.Stopper) *rpc.Context {
 	rpcCfg := rpc.ContextConfig{
-		Config:   &base.Config{Insecure: true},
+		Config:   base.Config{Insecure: true},
 		HLCClock: hlc.NewClock(hlc.UnixNano, time.Nanosecond),
 		// Disable heartbeats. Not needed for these tests.
 		HeartbeatInterval:     0,

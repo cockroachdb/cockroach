@@ -189,7 +189,8 @@ func TestAdminDebugRedirect(t *testing.T) {
 	origURL := expURL + "incorrect"
 
 	// There are no particular permissions on admin endpoints, TestUser is fine.
-	client, err := testutils.NewTestBaseConfig(TestUser).GetHTTPClient()
+	connHelper := base.NewConnectingHelper(testutils.MakeTestBaseConfig(TestUser))
+	client, err := connHelper.GetHTTPClient()
 	if err != nil {
 		t.Fatal(err)
 	}

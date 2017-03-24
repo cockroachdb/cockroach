@@ -785,7 +785,7 @@ func (l *LocalCluster) stop(ctx context.Context) {
 func (l *LocalCluster) NewClient(ctx context.Context, i int) (*roachClient.DB, error) {
 	clock := hlc.NewClock(hlc.UnixNano, 0)
 	rpcCfg := rpc.ContextConfig{
-		Config: &base.Config{
+		Config: base.Config{
 			User:       security.NodeUser,
 			SSLCA:      filepath.Join(l.CertsDir, security.EmbeddedCACert),
 			SSLCert:    filepath.Join(l.CertsDir, security.EmbeddedNodeCert),

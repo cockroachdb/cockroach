@@ -43,8 +43,11 @@ import (
 // It is meant to be used by nodes.
 func newNodeTestContext(clock *hlc.Clock, stopper *stop.Stopper) *rpc.Context {
 	cfg := rpc.ContextConfig{
-		Config:                testutils.NewNodeTestBaseConfig(),
-		HLCClock:              clock,
+		Config:   testutils.MakeNodeTestBaseConfig(),
+		HLCClock: clock,
+		// Enable heartbeats. Some of the tests require the health check
+		// functionality. This forces us to set a bogus Addr.
+		Addr:                  "127.0.0.1:4242",
 		HeartbeatInterval:     10 * time.Millisecond,
 		HeartbeatTimeout:      5 * time.Second,
 		EnableClockSkewChecks: true,

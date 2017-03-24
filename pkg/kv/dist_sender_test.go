@@ -577,7 +577,7 @@ func TestRetryOnDescriptorLookupError(t *testing.T) {
 func makeGossip(t *testing.T, stopper *stop.Stopper) (*gossip.Gossip, *hlc.Clock) {
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	cfg := rpc.ContextConfig{
-		Config:                &base.Config{Insecure: true},
+		Config:                base.Config{Insecure: true},
 		HLCClock:              clock,
 		HeartbeatInterval:     time.Second,
 		HeartbeatTimeout:      time.Second,

@@ -113,6 +113,7 @@ type Server struct {
 	engines            Engines
 	internalMemMetrics sql.MemoryMetrics
 	adminMemMetrics    sql.MemoryMetrics
+	connHelper         *base.ConnectingHelper
 }
 
 // NewServer creates a Server from a server.Context.
@@ -125,19 +126,22 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		cfg.AmbientCtx.Tracer = tracing.NewTracer()
 	}
 
+	connHelper := base.NewConnectingHelper(cfg.Config)
+
 	// Try loading the TLS configs before anything else.
-	if _, err := cfg.GetServerTLSConfig(); err != nil {
+	if _, err := connHelper.GetServerTLSConfig(); err != nil {
 		return nil, err
 	}
-	if _, err := cfg.GetClientTLSConfig(); err != nil {
+	if _, err := connHelper.GetClientTLSConfig(); err != nil {
 		return nil, err
 	}
 
 	s := &Server{
-		mux:     http.NewServeMux(),
-		clock:   hlc.NewClock(hlc.UnixNano, cfg.MaxOffset),
-		stopper: stopper,
-		cfg:     cfg,
+		mux:        http.NewServeMux(),
+		clock:      hlc.NewClock(hlc.UnixNano, cfg.MaxOffset),
+		stopper:    stopper,
+		cfg:        cfg,
+		connHelper: connHelper,
 	}
 	// Add a dynamic log tag value for the node ID.
 	//
@@ -243,7 +247,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		s.cfg.AmbientCtx, storage.GossipAddressResolver(s.gossip), s.grpc, s.rpcContext,
 	)
 
-	s.kvDB = kv.NewDBServer(s.cfg.Config, s.txnCoordSender, s.stopper)
+	s.kvDB = kv.NewDBServer(&s.cfg.Config, s.txnCoordSender, s.stopper)
 	roachpb.RegisterExternalServer(s.grpc, s.kvDB)
 
 	// Set up internal memory metrics for use by internal SQL executors.
@@ -310,6 +314,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		&s.internalMemMetrics,
 		s.cfg.SQLMemoryPoolSize,
 		s.cfg.HistogramWindowInterval(),
+		s.connHelper,
 	)
 	s.registry.AddMetricStruct(s.pgServer.Metrics())
 
@@ -427,7 +432,7 @@ func (s *Server) Start(ctx context.Context) error {
 
 	startTime := timeutil.Now()
 
-	tlsConfig, err := s.cfg.GetServerTLSConfig()
+	tlsConfig, err := s.connHelper.GetServerTLSConfig()
 	if err != nil {
 		return err
 	}
@@ -468,6 +473,7 @@ func (s *Server) Start(ctx context.Context) error {
 		return err
 	}
 	s.cfg.Addr = unresolvedListenAddr.String()
+	s.rpcContext.SetAddr(s.cfg.Addr)
 	unresolvedAdvertAddr, err := officialAddr(s.cfg.AdvertiseAddr, ln.Addr())
 	if err != nil {
 		return err

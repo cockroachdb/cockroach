@@ -268,7 +268,7 @@ func MakeFarmer(t testing.TB, prefix string, stopper *stop.Stopper) *terrafarm.F
 	}
 
 	rpcCfg := rpc.ContextConfig{
-		Config: &base.Config{
+		Config: base.Config{
 			Insecure: true,
 			User:     security.NodeUser,
 		},

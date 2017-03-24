@@ -59,14 +59,15 @@ func TestClientSSLSettings(t *testing.T) {
 	}
 
 	for tcNum, tc := range testCases {
-		cfg := &base.Config{Insecure: tc.insecure, User: tc.user}
+		cfg := base.Config{Insecure: tc.insecure, User: tc.user}
 		if tc.hasCerts {
-			fillCertPaths(cfg, tc.user)
+			fillCertPaths(&cfg, tc.user)
 		}
 		if cfg.HTTPRequestScheme() != tc.requestScheme {
 			t.Fatalf("#%d: expected HTTPRequestScheme=%s, got: %s", tcNum, tc.requestScheme, cfg.HTTPRequestScheme())
 		}
-		tlsConfig, err := cfg.GetClientTLSConfig()
+		connHelper := base.NewConnectingHelper(cfg)
+		tlsConfig, err := connHelper.GetClientTLSConfig()
 		if !testutils.IsError(err, tc.configErr) {
 			t.Fatalf("#%d: expected err=%s, got err=%v", tcNum, tc.configErr, err)
 		}
@@ -104,14 +105,15 @@ func TestServerSSLSettings(t *testing.T) {
 	}
 
 	for tcNum, tc := range testCases {
-		cfg := &base.Config{Insecure: tc.insecure, User: security.NodeUser}
+		cfg := base.Config{Insecure: tc.insecure, User: security.NodeUser}
 		if tc.hasCerts {
-			fillCertPaths(cfg, security.NodeUser)
+			fillCertPaths(&cfg, security.NodeUser)
 		}
 		if cfg.HTTPRequestScheme() != tc.requestScheme {
 			t.Fatalf("#%d: expected HTTPRequestScheme=%s, got: %s", tcNum, tc.requestScheme, cfg.HTTPRequestScheme())
 		}
-		tlsConfig, err := cfg.GetServerTLSConfig()
+		connHelper := base.NewConnectingHelper(cfg)
+		tlsConfig, err := connHelper.GetServerTLSConfig()
 		if (err == nil) != tc.configSuccess {
 			t.Fatalf("#%d: expected GetServerTLSConfig success=%t, got err=%v", tcNum, tc.configSuccess, err)
 		}

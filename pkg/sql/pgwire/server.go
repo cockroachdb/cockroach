@@ -87,7 +87,7 @@ type cancelChanMap map[chan struct{}]context.CancelFunc
 // Server implements the server side of the PostgreSQL wire protocol.
 type Server struct {
 	AmbientCtx log.AmbientContext
-	cfg        *base.Config
+	cfg        base.Config
 	executor   *sql.Executor
 
 	metrics ServerMetrics
@@ -104,6 +104,8 @@ type Server struct {
 
 	sqlMemoryPool mon.MemoryMonitor
 	connMonitor   mon.MemoryMonitor
+
+	connHelper *base.ConnectingHelper
 }
 
 // ServerMetrics is the set of metrics for the pgwire server.
@@ -143,17 +145,19 @@ var noteworthyConnMemoryUsageBytes = envutil.EnvOrDefaultInt64("COCKROACH_NOTEWO
 // MakeServer creates a Server.
 func MakeServer(
 	ambientCtx log.AmbientContext,
-	cfg *base.Config,
+	cfg base.Config,
 	executor *sql.Executor,
 	internalMemMetrics *sql.MemoryMetrics,
 	maxSQLMem int64,
 	histogramWindow time.Duration,
+	connHelper *base.ConnectingHelper,
 ) *Server {
 	server := &Server{
 		AmbientCtx: ambientCtx,
 		cfg:        cfg,
 		executor:   executor,
 		metrics:    makeServerMetrics(internalMemMetrics, histogramWindow),
+		connHelper: connHelper,
 	}
 	server.sqlMemoryPool = mon.MakeMonitor("sql",
 		server.metrics.SQLMemMetrics.CurBytesCount,
@@ -354,7 +358,7 @@ func (s *Server) ServeConn(ctx context.Context, conn net.Conn) error {
 			if _, err := conn.Write(sslSupported); err != nil {
 				return err
 			}
-			tlsConfig, err := s.cfg.GetServerTLSConfig()
+			tlsConfig, err := s.connHelper.GetServerTLSConfig()
 			if err != nil {
 				return err
 			}

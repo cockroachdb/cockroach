@@ -23,7 +23,6 @@ import (
 	"path/filepath"
 	"sync/atomic"
 	"testing"
-	"time"
 
 	"golang.org/x/net/context"
 
@@ -55,11 +54,11 @@ func createTestClientForUser(
 	ctx.SSLCert = filepath.Join(security.EmbeddedCertsDir, fmt.Sprintf("%s.crt", user))
 	ctx.SSLCertKey = filepath.Join(security.EmbeddedCertsDir, fmt.Sprintf("%s.key", user))
 	cfg := rpc.ContextConfig{
-		Config:                &ctx,
-		HLCClock:              s.Clock(),
-		HeartbeatInterval:     time.Second,
-		HeartbeatTimeout:      time.Second,
-		EnableClockSkewChecks: true,
+		Config:   ctx,
+		HLCClock: s.Clock(),
+		// Disable the heartbeats. Not needed for these tests.
+		HeartbeatInterval:     0,
+		EnableClockSkewChecks: false,
 	}
 	conn, err := rpc.NewContext(log.AmbientContext{}, cfg, s.Stopper()).GRPCDial(s.ServingAddr())
 	if err != nil {

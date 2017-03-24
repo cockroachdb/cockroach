@@ -146,7 +146,7 @@ func (tc *testContext) StartWithStoreConfig(t testing.TB, stopper *stop.Stopper,
 	config.TestingSetupZoneConfigHook(stopper)
 	if tc.gossip == nil {
 		rpcCfg := rpc.ContextConfig{
-			Config:                &base.Config{Insecure: true},
+			Config:                base.Config{Insecure: true},
 			HLCClock:              cfg.Clock,
 			HeartbeatInterval:     time.Second,
 			HeartbeatTimeout:      time.Second,

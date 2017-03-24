@@ -20,6 +20,9 @@ import (
 	"fmt"
 	"io/ioutil"
 	"math"
+	"net/url"
+	"os"
+	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
@@ -33,6 +36,7 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
 	"github.com/cockroachdb/cockroach/pkg/gossip/resolver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -46,6 +50,10 @@ import (
 
 // Context defaults.
 const (
+	// NB: net.JoinHostPort is not a constant.
+	defaultAddr     = ":" + base.DefaultPort
+	defaultHTTPAddr = ":" + base.DefaultHTTPPort
+
 	// On Azure, clock offsets between 250ms and 500ms are common. On
 	// AWS and GCE, clock offsets generally stay below 250ms.
 	// See comments on Config.MaxOffset for more on this setting.
@@ -71,7 +79,23 @@ const (
 // Config holds parameters needed to setup a server.
 type Config struct {
 	// Embed the base context.
-	*base.Config
+	base.Config
+
+	// Addr is the address the server is listening on.
+	Addr string
+
+	// AdvertiseAddr is the address advertised by the server to other nodes
+	// in the cluster. It should be reachable by all other nodes and should
+	// route to an interface that Addr is listening on.
+	AdvertiseAddr string
+
+	// HTTPAddr is server's public HTTP address.
+	//
+	// This is temporary, and will be removed when grpc.(*Server).ServeHTTP
+	// performance problems are addressed upstream.
+	//
+	// See https://github.com/grpc/grpc-go/issues/586.
+	HTTPAddr string
 
 	// Unix socket: for postgres only.
 	SocketFile string
@@ -377,7 +401,10 @@ func SetOpenFileLimitForOneStore() (int, error) {
 // MakeConfig returns a Context with default values.
 func MakeConfig() Config {
 	cfg := Config{
-		Config:                   new(base.Config),
+		Config:                   base.Config{},
+		Addr:                     defaultAddr,
+		HTTPAddr:                 defaultHTTPAddr,
+		AdvertiseAddr:            defaultAddr,
 		MaxOffset:                defaultMaxOffset,
 		CacheSize:                defaultCacheSize,
 		SQLMemoryPoolSize:        defaultSQLMemoryPoolSize,
@@ -562,4 +589,71 @@ func parseAttributes(attrsStr string) roachpb.Attributes {
 		}
 	}
 	return roachpb.Attributes{Attrs: filtered}
+}
+
+// PGURL returns the URL for the postgres endpoint.
+func (cfg *Config) PGURL(user *url.Userinfo) (*url.URL, error) {
+	// Try to convert path to an absolute path. Failing to do so return path
+	// unchanged.
+	absPath := func(path string) string {
+		r, err := filepath.Abs(path)
+		if err != nil {
+			return path
+		}
+		return r
+	}
+
+	options := url.Values{}
+	if cfg.Insecure {
+		options.Add("sslmode", "disable")
+	} else {
+		if cfg.SSLCA == "" {
+			return nil, fmt.Errorf("missing --%s flag", cliflags.CACert.Name)
+		}
+
+		// Check that cfg.SSLCert and cfg.SSLCertKey are either both empty or
+		// both non-empty.
+		// If both are provided, the server will authenticate the client using
+		// certificate authentication. If not, password authentication will be
+		// used.
+		if cfg.SSLCert == "" && cfg.SSLCertKey != "" {
+			return nil, fmt.Errorf("missing --%s flag", cliflags.Cert.Name)
+		}
+		if cfg.SSLCertKey == "" && cfg.SSLCert != "" {
+			return nil, fmt.Errorf("missing --%s flag", cliflags.Key.Name)
+		}
+
+		options.Add("sslmode", "verify-full")
+		sslFlags := []struct {
+			name     string
+			value    string
+			flagName string
+		}{
+			{"sslcert", cfg.SSLCert, cliflags.Cert.Name},
+			{"sslkey", cfg.SSLCertKey, cliflags.Key.Name},
+			{"sslrootcert", cfg.SSLCA, cliflags.CACert.Name},
+		}
+
+		for _, c := range sslFlags {
+			if c.value == "" {
+				continue
+			}
+			path := absPath(c.value)
+			if _, err := os.Stat(path); err != nil {
+				return nil, fmt.Errorf("file for --%s flag gave error: %v", c.flagName, err)
+			}
+			options.Add(c.name, path)
+		}
+	}
+	return &url.URL{
+		Scheme:   "postgresql",
+		User:     user,
+		Host:     cfg.AdvertiseAddr,
+		RawQuery: options.Encode(),
+	}, nil
+}
+
+// AdminURL returns the URL for the admin UI.
+func (cfg *Config) AdminURL() string {
+	return fmt.Sprintf("%s://%s", cfg.HTTPRequestScheme(), cfg.HTTPAddr)
 }

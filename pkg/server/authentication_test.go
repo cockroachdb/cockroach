@@ -59,7 +59,6 @@ func doHTTPReq(
 }
 
 type ctxI interface {
-	GetHTTPClient() (http.Client, error)
 	HTTPRequestScheme() string
 }
 
@@ -82,6 +81,13 @@ func (insecureCtx) HTTPRequestScheme() string {
 	return "https"
 }
 
+func getHTTPClient(cfg ctxI) (http.Client, error) {
+	if bcfg, ok := cfg.(*base.Config); ok {
+		return base.NewConnectingHelper(*bcfg).GetHTTPClient()
+	}
+	return cfg.(insecureCtx).GetHTTPClient()
+}
+
 // Verify client certificate enforcement and user whitelisting.
 func TestSSLEnforcement(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -89,15 +95,15 @@ func TestSSLEnforcement(t *testing.T) {
 	defer s.Stopper().Stop()
 
 	// HTTPS with client certs for security.RootUser.
-	rootCertsContext := testutils.NewTestBaseConfig(security.RootUser)
+	rootCertsContext := testutils.MakeTestBaseConfig(security.RootUser)
 	// HTTPS with client certs for security.NodeUser.
-	nodeCertsContext := testutils.NewNodeTestBaseConfig()
+	nodeCertsContext := testutils.MakeNodeTestBaseConfig()
 	// HTTPS with client certs for TestUser.
-	testCertsContext := testutils.NewTestBaseConfig(TestUser)
+	testCertsContext := testutils.MakeTestBaseConfig(TestUser)
 	// HTTPS without client certs. The user does not matter.
 	noCertsContext := insecureCtx{}
 	// Plain http.
-	insecureContext := testutils.NewTestBaseConfig(TestUser)
+	insecureContext := testutils.MakeTestBaseConfig(TestUser)
 	insecureContext.Insecure = true
 
 	kvGet := &roachpb.GetRequest{}
@@ -111,43 +117,43 @@ func TestSSLEnforcement(t *testing.T) {
 		code         int  // http response code
 	}{
 		// /ui/: basic file server: no auth.
-		{"GET", "", nil, rootCertsContext, true, http.StatusOK},
-		{"GET", "", nil, nodeCertsContext, true, http.StatusOK},
-		{"GET", "", nil, testCertsContext, true, http.StatusOK},
+		{"GET", "", nil, &rootCertsContext, true, http.StatusOK},
+		{"GET", "", nil, &nodeCertsContext, true, http.StatusOK},
+		{"GET", "", nil, &testCertsContext, true, http.StatusOK},
 		{"GET", "", nil, noCertsContext, true, http.StatusOK},
-		{"GET", "", nil, insecureContext, true, http.StatusPermanentRedirect},
+		{"GET", "", nil, &insecureContext, true, http.StatusPermanentRedirect},
 
 		// /_admin/: server.adminServer: no auth.
-		{"GET", adminPrefix + "health", nil, rootCertsContext, true, http.StatusOK},
-		{"GET", adminPrefix + "health", nil, nodeCertsContext, true, http.StatusOK},
-		{"GET", adminPrefix + "health", nil, testCertsContext, true, http.StatusOK},
+		{"GET", adminPrefix + "health", nil, &rootCertsContext, true, http.StatusOK},
+		{"GET", adminPrefix + "health", nil, &nodeCertsContext, true, http.StatusOK},
+		{"GET", adminPrefix + "health", nil, &testCertsContext, true, http.StatusOK},
 		{"GET", adminPrefix + "health", nil, noCertsContext, true, http.StatusOK},
-		{"GET", adminPrefix + "health", nil, insecureContext, true, http.StatusPermanentRedirect},
+		{"GET", adminPrefix + "health", nil, &insecureContext, true, http.StatusPermanentRedirect},
 
 		// /debug/: server.adminServer: no auth.
-		{"GET", debugEndpoint + "vars", nil, rootCertsContext, true, http.StatusOK},
-		{"GET", debugEndpoint + "vars", nil, nodeCertsContext, true, http.StatusOK},
-		{"GET", debugEndpoint + "vars", nil, testCertsContext, true, http.StatusOK},
+		{"GET", debugEndpoint + "vars", nil, &rootCertsContext, true, http.StatusOK},
+		{"GET", debugEndpoint + "vars", nil, &nodeCertsContext, true, http.StatusOK},
+		{"GET", debugEndpoint + "vars", nil, &testCertsContext, true, http.StatusOK},
 		{"GET", debugEndpoint + "vars", nil, noCertsContext, true, http.StatusOK},
-		{"GET", debugEndpoint + "vars", nil, insecureContext, true, http.StatusPermanentRedirect},
+		{"GET", debugEndpoint + "vars", nil, &insecureContext, true, http.StatusPermanentRedirect},
 
 		// /_status/nodes: server.statusServer: no auth.
-		{"GET", statusPrefix + "nodes", nil, rootCertsContext, true, http.StatusOK},
-		{"GET", statusPrefix + "nodes", nil, nodeCertsContext, true, http.StatusOK},
-		{"GET", statusPrefix + "nodes", nil, testCertsContext, true, http.StatusOK},
+		{"GET", statusPrefix + "nodes", nil, &rootCertsContext, true, http.StatusOK},
+		{"GET", statusPrefix + "nodes", nil, &nodeCertsContext, true, http.StatusOK},
+		{"GET", statusPrefix + "nodes", nil, &testCertsContext, true, http.StatusOK},
 		{"GET", statusPrefix + "nodes", nil, noCertsContext, true, http.StatusOK},
-		{"GET", statusPrefix + "nodes", nil, insecureContext, true, http.StatusPermanentRedirect},
+		{"GET", statusPrefix + "nodes", nil, &insecureContext, true, http.StatusPermanentRedirect},
 
 		// /ts/: ts.Server: no auth.
-		{"GET", ts.URLPrefix, nil, rootCertsContext, true, http.StatusNotFound},
-		{"GET", ts.URLPrefix, nil, nodeCertsContext, true, http.StatusNotFound},
-		{"GET", ts.URLPrefix, nil, testCertsContext, true, http.StatusNotFound},
+		{"GET", ts.URLPrefix, nil, &rootCertsContext, true, http.StatusNotFound},
+		{"GET", ts.URLPrefix, nil, &nodeCertsContext, true, http.StatusNotFound},
+		{"GET", ts.URLPrefix, nil, &testCertsContext, true, http.StatusNotFound},
 		{"GET", ts.URLPrefix, nil, noCertsContext, true, http.StatusNotFound},
-		{"GET", ts.URLPrefix, nil, insecureContext, true, http.StatusPermanentRedirect},
+		{"GET", ts.URLPrefix, nil, &insecureContext, true, http.StatusPermanentRedirect},
 	}
 
 	for tcNum, tc := range testCases {
-		client, err := tc.ctx.GetHTTPClient()
+		client, err := getHTTPClient(tc.ctx)
 		if err != nil {
 			t.Fatalf("[%d]: failed to get http client: %v", tcNum, err)
 		}

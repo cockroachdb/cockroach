@@ -122,7 +122,7 @@ func createTestStoreWithoutStart(t testing.TB, stopper *stop.Stopper, cfg *Store
 	config.TestingSetupZoneConfigHook(stopper)
 
 	rpcCfg := rpc.ContextConfig{
-		Config:                &base.Config{Insecure: true},
+		Config:                base.Config{Insecure: true},
 		HLCClock:              cfg.Clock,
 		HeartbeatInterval:     time.Second,
 		HeartbeatTimeout:      time.Second,

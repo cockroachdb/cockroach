@@ -398,7 +398,7 @@ func (ts *TestServer) AdminURL() string {
 
 // GetHTTPClient implements TestServerInterface.
 func (ts *TestServer) GetHTTPClient() (http.Client, error) {
-	return ts.Cfg.GetHTTPClient()
+	return ts.connHelper.GetHTTPClient()
 }
 
 // MustGetSQLCounter implements TestServerInterface.
@@ -484,7 +484,7 @@ func (ts *TestServer) GetFirstStoreID() roachpb.StoreID {
 }
 
 // BaseConfig is part of TestServerInterface.
-func (ts *TestServer) BaseConfig() *base.Config {
+func (ts *TestServer) BaseConfig() base.Config {
 	return ts.Cfg.Config
 }
 

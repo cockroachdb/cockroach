@@ -117,11 +117,11 @@ func createTestStoreWithEngine(
 	storeCfg.AmbientCtx = ac
 
 	rpcCfg := rpc.ContextConfig{
-		Config:   &base.Config{Insecure: true},
-		HLCClock: storeCfg.Clock,
-		// Disable heartbeats. Not needed for these tests.
-		HeartbeatInterval:     0,
-		EnableClockSkewChecks: false,
+		Config:                base.Config{Insecure: true},
+		HLCClock:              storeCfg.Clock,
+		HeartbeatInterval:     time.Second,
+		HeartbeatTimeout:      time.Second,
+		EnableClockSkewChecks: true,
 	}
 	rpcContext := rpc.NewContext(ac, rpcCfg, stopper)
 	nodeDesc := &roachpb.NodeDescriptor{NodeID: 1}
@@ -263,7 +263,7 @@ func (m *multiTestContext) Start(t *testing.T, numStores int) {
 	}
 	if m.rpcContext == nil {
 		rpcCfg := rpc.ContextConfig{
-			Config:   &base.Config{Insecure: true},
+			Config:   base.Config{Insecure: true},
 			HLCClock: m.clock,
 			// Disable heartbeats. Not needed for these tests.
 			HeartbeatInterval:     0,

@@ -73,15 +73,16 @@ func NewNetwork(stopper *stop.Stopper, nodeCount int, createResolvers bool) *Net
 		Stopper: stopper,
 	}
 	cfg := rpc.ContextConfig{
-		Config:                &base.Config{Insecure: true},
-		HLCClock:              hlc.NewClock(hlc.UnixNano, time.Nanosecond),
-		HeartbeatInterval:     time.Second,
-		HeartbeatTimeout:      time.Second,
-		EnableClockSkewChecks: true,
+		Config:   base.Config{Insecure: true},
+		HLCClock: hlc.NewClock(hlc.UnixNano, time.Nanosecond),
+		// Disable heartbeats; not needed for simulations and, if we'd enable them,
+		// we'd need to set an Addr.
+		HeartbeatInterval:     0,
+		EnableClockSkewChecks: false,
 	}
 	n.rpcContext = rpc.NewContext(log.AmbientContext{}, cfg, n.Stopper)
 	var err error
-	n.tlsConfig, err = cfg.GetServerTLSConfig()
+	n.tlsConfig, err = base.NewConnectingHelper(cfg.Config).GetServerTLSConfig()
 	if err != nil {
 		log.Fatal(context.TODO(), err)
 	}

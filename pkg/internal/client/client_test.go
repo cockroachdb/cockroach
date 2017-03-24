@@ -126,16 +126,16 @@ func createTestClientForUser(
 	t *testing.T, s serverutils.TestServerInterface, user string, dbCtx client.DBContext,
 ) *client.DB {
 	rpcCfg := rpc.ContextConfig{
-		Config: &base.Config{
+		Config: base.Config{
 			User:       user,
 			SSLCA:      filepath.Join(security.EmbeddedCertsDir, security.EmbeddedCACert),
 			SSLCert:    filepath.Join(security.EmbeddedCertsDir, fmt.Sprintf("%s.crt", user)),
 			SSLCertKey: filepath.Join(security.EmbeddedCertsDir, fmt.Sprintf("%s.key", user)),
 		},
-		HLCClock:              s.Clock(),
-		HeartbeatInterval:     time.Second,
-		HeartbeatTimeout:      time.Second,
-		EnableClockSkewChecks: true,
+		HLCClock: s.Clock(),
+		// Disable heartbeats. Not needed for these tests.
+		HeartbeatInterval:     0,
+		EnableClockSkewChecks: false,
 	}
 	rpcContext := rpc.NewContext(log.AmbientContext{}, rpcCfg, s.Stopper())
 	conn, err := rpcContext.GRPCDial(s.ServingAddr())

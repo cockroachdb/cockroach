@@ -19,6 +19,14 @@ package base
 import "time"
 
 const (
+	// DefaultPort is CRDB's default pgwire and RPC port.
+	// From IANA Service Name and Transport Protocol Port Number Registry. See
+	// https://www.iana.org/assignments/service-names-port-numbers/service-names-port-numbers.xhtml?search=cockroachdb
+	DefaultPort = "26257"
+
+	// DefaultHTTPPort is the default port for HTTP-for-humans.
+	DefaultHTTPPort = "8080"
+
 	// DefaultHeartbeatInterval is how often heartbeats are sent from the
 	// transaction coordinator to a live transaction. These keep it from
 	// being preempted by other transactions writing the same keys. If a

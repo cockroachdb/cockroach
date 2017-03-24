@@ -43,7 +43,7 @@ import (
 // It is meant to be used by nodes.
 func newNodeTestContext(clock *hlc.Clock, stopper *stop.Stopper) *Context {
 	cfg := ContextConfig{
-		Config:            testutils.NewNodeTestBaseConfig(),
+		Config:            testutils.MakeNodeTestBaseConfig(),
 		HLCClock:          clock,
 		HeartbeatInterval: 10 * time.Millisecond,
 		HeartbeatTimeout:  10 * time.Millisecond,
@@ -52,12 +52,14 @@ func newNodeTestContext(clock *hlc.Clock, stopper *stop.Stopper) *Context {
 	return ctx
 }
 
-// newTestServer returns a grpc.Server listening on addr. cfg.Addr is updated
-// with the port the server is listening on.
+// newTestServer returns a grpc.Server listening on addr. An unresolved address
+// can be passed in, in which case the returned Listener can be used to get the
+// resolved address.
 func newTestServer(
-	t *testing.T, stopper *stop.Stopper, cfg *base.Config, addr net.Addr,
+	t *testing.T, stopper *stop.Stopper, cfg base.Config, addr net.Addr,
 ) (*grpc.Server, net.Listener) {
-	tlsConfig, err := cfg.GetServerTLSConfig()
+	connHelper := base.NewConnectingHelper(cfg)
+	tlsConfig, err := connHelper.GetServerTLSConfig()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -67,7 +69,6 @@ func newTestServer(
 	if err != nil {
 		t.Fatal(err)
 	}
-	cfg.Addr = ln.Addr().String()
 
 	return s, ln
 }
@@ -80,7 +81,7 @@ func TestClockCheck(t *testing.T) {
 
 	// Clocks don't matter in this test.
 	clock := hlc.NewClock(time.Unix(0, 20).UnixNano, time.Nanosecond)
-	s, ln := newTestServer(t, stopper, testutils.NewNodeTestBaseConfig(), util.TestAddr)
+	s, ln := newTestServer(t, stopper, testutils.MakeNodeTestBaseConfig(), util.TestAddr)
 	remoteAddr := ln.Addr().String()
 
 	RegisterHeartbeatServer(s, &HeartbeatService{
@@ -92,7 +93,8 @@ func TestClockCheck(t *testing.T) {
 	var once sync.Once
 	ch := make(chan struct{})
 	cfg := ContextConfig{
-		Config:                testutils.NewNodeTestBaseConfig(),
+		Addr:                  ln.Addr().String(),
+		Config:                testutils.MakeNodeTestBaseConfig(),
 		HLCClock:              clock,
 		HeartbeatInterval:     10 * time.Millisecond,
 		HeartbeatTimeout:      10 * time.Millisecond,
@@ -127,7 +129,7 @@ func TestHeartbeatHealth(t *testing.T) {
 	// Can't be zero because that'd be an empty offset.
 	clock := hlc.NewClock(time.Unix(0, 1).UnixNano, time.Nanosecond)
 
-	s, ln := newTestServer(t, stopper, testutils.NewNodeTestBaseConfig(), util.TestAddr)
+	s, ln := newTestServer(t, stopper, testutils.MakeNodeTestBaseConfig(), util.TestAddr)
 	remoteAddr := ln.Addr().String()
 	serverClockMonitor := newRemoteClockMonitor(
 		clock, time.Second /* offsetTTL */, time.Second /* histogramWindowInterval */)
@@ -141,7 +143,9 @@ func TestHeartbeatHealth(t *testing.T) {
 	RegisterHeartbeatServer(s, heartbeat)
 
 	cfg := ContextConfig{
-		Config:            testutils.NewNodeTestBaseConfig(),
+		// Bogus client address; just needed to report with the heartbeats.
+		Addr:              "127.0.0.1:4242",
+		Config:            testutils.MakeNodeTestBaseConfig(),
 		HLCClock:          clock,
 		HeartbeatInterval: time.Millisecond,
 		// High timeout, otherwise heartbeats sometimes timeout under stress.
@@ -248,7 +252,8 @@ func TestHeartbeatHealthTransport(t *testing.T) {
 
 	serverCtx := newNodeTestContext(clock, stopper)
 	// newTestServer with a custom listener.
-	tlsConfig, err := serverCtx.cfg.GetServerTLSConfig()
+	connHelper := base.NewConnectingHelper(serverCtx.cfg.Config)
+	tlsConfig, err := connHelper.GetServerTLSConfig()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -359,7 +364,7 @@ func TestOffsetMeasurement(t *testing.T) {
 
 	serverTime := time.Unix(0, 20)
 	serverClock := hlc.NewClock(serverTime.UnixNano, time.Nanosecond /* maxOffset */)
-	s, ln := newTestServer(t, stopper, testutils.NewNodeTestBaseConfig(), util.TestAddr)
+	s, ln := newTestServer(t, stopper, testutils.MakeNodeTestBaseConfig(), util.TestAddr)
 	RegisterHeartbeatServer(s, &HeartbeatService{
 		clock: serverClock,
 		remoteClockMonitor: newRemoteClockMonitor(
@@ -371,7 +376,9 @@ func TestOffsetMeasurement(t *testing.T) {
 	clientAdvancing := AdvancingClock{time: time.Unix(0, 10)}
 	clientClock := hlc.NewClock(clientAdvancing.UnixNano, time.Nanosecond)
 	cfg := ContextConfig{
-		Config:                testutils.NewNodeTestBaseConfig(),
+		// Bogus client address; just needed to report with the heartbeats.
+		Addr:                  "127.0.0.1:4242",
+		Config:                testutils.MakeNodeTestBaseConfig(),
 		HLCClock:              clientClock,
 		HeartbeatInterval:     time.Millisecond,
 		HeartbeatTimeout:      10 * time.Millisecond,
@@ -429,7 +436,7 @@ func TestFailedOffsetMeasurement(t *testing.T) {
 	// Can't be zero because that'd be an empty offset.
 	clock := hlc.NewClock(time.Unix(0, 1).UnixNano, time.Nanosecond)
 
-	s, ln := newTestServer(t, stopper, testutils.NewNodeTestBaseConfig(), util.TestAddr)
+	s, ln := newTestServer(t, stopper, testutils.MakeNodeTestBaseConfig(), util.TestAddr)
 	remoteAddr := ln.Addr().String()
 	serverClockMonitor := newRemoteClockMonitor(
 		clock, time.Second /* offsetTTL */, time.Second /* histogramWindowInterval */)
@@ -443,7 +450,9 @@ func TestFailedOffsetMeasurement(t *testing.T) {
 
 	// Create a client that never receives a heartbeat response after the first.
 	cfg := ContextConfig{
-		Config:            testutils.NewNodeTestBaseConfig(),
+		// Bogus client address; just needed to report with the heartbeats.
+		Addr:              "127.0.0.1:4242",
+		Config:            testutils.MakeNodeTestBaseConfig(),
 		HLCClock:          clock,
 		HeartbeatInterval: time.Millisecond,
 		// Large timeout so that failure arises from exceeding the maximum clock
@@ -535,11 +544,12 @@ func TestRemoteOffsetUnhealthy(t *testing.T) {
 	for i := range nodeCtxs {
 		clock := hlc.NewClock(start.Add(nodeCtxs[i].offset).UnixNano, maxOffset)
 		addr := util.TestAddr
-		baseConfig := testutils.NewNodeTestBaseConfig()
+		baseConfig := testutils.MakeNodeTestBaseConfig()
 		// Create the server, so that baseConfig.Addr is filled in.
 		s, ln := newTestServer(t, stopper, baseConfig, addr)
 		nodeCtxs[i].addr = ln.Addr()
 		cfg := ContextConfig{
+			Addr:                  ln.Addr().String(),
 			Config:                baseConfig,
 			HLCClock:              clock,
 			HeartbeatInterval:     maxOffset,

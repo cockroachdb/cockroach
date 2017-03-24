@@ -73,7 +73,7 @@ func createTestDBWithContext(
 	s := &localtestcluster.LocalTestCluster{
 		DBContext: &dbCtx,
 	}
-	s.Start(t, testutils.NewNodeTestBaseConfig(), InitSenderForLocalTestCluster)
+	s.Start(t, testutils.MakeNodeTestBaseConfig(), InitSenderForLocalTestCluster)
 	return s, s.Sender.(*TxnCoordSender)
 }
 

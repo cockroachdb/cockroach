@@ -25,6 +25,7 @@ import (
 	"net/url"
 	"os"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -48,7 +49,7 @@ import (
 	"github.com/pkg/errors"
 )
 
-var nodeTestBaseContext = testutils.NewNodeTestBaseConfig()
+var nodeTestBaseContext = testutils.MakeNodeTestBaseConfig()
 
 // TestSelfBootstrap verifies operation when no bootstrap hosts have
 // been specified.
@@ -115,13 +116,19 @@ func TestPlainHTTPServer(t *testing.T) {
 
 	var data serverpb.JSONResponse
 	testutils.SucceedsSoon(t, func() error {
-		return getStatusJSONProto(s, "metrics/local", &data)
+		err := getStatusJSONProto(s, "metrics/local", &data)
+		return err
 	})
 
-	// Edit the server's config so that it's goint to report its admin url using
-	// the https scheme.
-	s.BaseConfig().Insecure = false
-	if err := getStatusJSONProto(s, "metrics/local", &data); !testutils.IsError(err, "http: server gave HTTP response to HTTPS client") {
+	// Perform an https request.
+	httpClient, err := s.GetHTTPClient()
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := s.AdminURL() + statusPrefix + "metrics/local"
+	path = strings.Replace(path, "http:", "https:", 1)
+	err = httputil.GetJSON(httpClient, path, &data)
+	if !testutils.IsError(err, "http: server gave HTTP response to HTTPS client") {
 		t.Fatalf("unexpected error %v", err)
 	}
 }

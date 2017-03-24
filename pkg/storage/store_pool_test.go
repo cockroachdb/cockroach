@@ -93,7 +93,7 @@ func createTestStorePool(
 	mc := hlc.NewManualClock(123)
 	clock := hlc.NewClock(mc.UnixNano, time.Nanosecond)
 	cfg := rpc.ContextConfig{
-		Config:                &base.Config{Insecure: true},
+		Config:                base.Config{Insecure: true},
 		HLCClock:              clock,
 		HeartbeatInterval:     time.Second,
 		HeartbeatTimeout:      time.Second,

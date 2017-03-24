@@ -52,6 +52,8 @@ func TestHeartbeatReply(t *testing.T) {
 	}
 
 	request := &PingRequest{
+		// Bogus client address.
+		Addr: "127.0.0.1:4242",
 		Ping: "testPing",
 	}
 	response, err := heartbeat.Ping(context.Background(), request)
@@ -112,6 +114,8 @@ func TestManualHeartbeat(t *testing.T) {
 	}
 
 	request := &PingRequest{
+		// Bogus client address.
+		Addr: "127.0.0.1:4242",
 		Ping: "testManual",
 	}
 	manualHeartbeat.ready <- nil
