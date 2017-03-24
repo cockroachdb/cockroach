@@ -18,7 +18,6 @@ package engine
 
 import (
 	"bytes"
-	"encoding/binary"
 	"fmt"
 	"reflect"
 	"sync/atomic"
@@ -141,90 +140,34 @@ func TestBatchRepr(t *testing.T) {
 	testBatchBasics(t, false /* writeOnly */, func(e Engine, b Batch) error {
 		repr := b.Repr()
 
-		// Simple sanity checks about the format of the batch representation. This
-		// is inefficient decoding code. Do not move outside of test code.
-		buf := bytes.NewReader(repr)
-		var seq uint64
-		var count uint32
-		if err := binary.Read(buf, binary.LittleEndian, &seq); err != nil {
-			t.Fatal(err)
+		r, err := NewRocksDBBatchReader(repr)
+		if err != nil {
+			t.Fatalf("%+v", err)
 		}
-		if seq != 0 {
-			// The sequence number is set when the batch is written.
-			t.Fatalf("bad sequence: expected 0, but found %d", seq)
-		}
-		if err := binary.Read(buf, binary.LittleEndian, &count); err != nil {
-			t.Fatal(err)
-		}
-		if expected := uint32(3); expected != count {
+		if count, expected := r.Count(), 3; count != expected {
 			t.Fatalf("bad count: expected %d, but found %d", expected, count)
 		}
 
-		const (
-			// These constants come from rocksdb/db/dbformat.h.
-			TypeDeletion = 0x0
-			TypeValue    = 0x1
-			TypeMerge    = 0x2
-			// TypeLogData                    = 0x3
-			// TypeColumnFamilyDeletion       = 0x4
-			// TypeColumnFamilyValue          = 0x5
-			// TypeColumnFamilyMerge          = 0x6
-			// TypeSingleDeletion             = 0x7
-			// TypeColumnFamilySingleDeletion = 0x8
-		)
-
-		varstring := func(buf *bytes.Reader) (string, error) {
-			n, err := binary.ReadUvarint(buf)
-			if err != nil {
-				return "", err
-			}
-			s := make([]byte, n)
-			c, err := buf.Read(s)
-			if err != nil {
-				return "", err
-			}
-			if c != int(n) {
-				return "", fmt.Errorf("expected %d, but found %d", n, c)
-			}
-			return string(s), nil
-		}
-
 		var ops []string
-		for i := uint32(0); i < count; i++ {
-			typ, err := buf.ReadByte()
-			if err != nil {
-				t.Fatal(err)
+		for i := 0; i < r.Count(); i++ {
+			if ok := r.Next(); !ok {
+				t.Fatalf("%d: unexpected end of batch", i)
 			}
-			switch typ {
-			case TypeDeletion:
-				k, err := varstring(buf)
-				if err != nil {
-					t.Fatal(err)
-				}
-				ops = append(ops, fmt.Sprintf("delete(%s)", k))
-			case TypeValue:
-				k, err := varstring(buf)
-				if err != nil {
-					t.Fatal(err)
-				}
-				v, err := varstring(buf)
-				if err != nil {
-					t.Fatal(err)
-				}
-				ops = append(ops, fmt.Sprintf("put(%s,%s)", k, v))
-			case TypeMerge:
-				k, err := varstring(buf)
-				if err != nil {
-					t.Fatal(err)
-				}
+			switch r.BatchType() {
+			case BatchTypeDeletion:
+				ops = append(ops, fmt.Sprintf("delete(%s)", string(r.UnsafeKey())))
+			case BatchTypeValue:
+				ops = append(ops, fmt.Sprintf("put(%s,%s)", string(r.UnsafeKey()), string(r.UnsafeValue())))
+			case BatchTypeMerge:
 				// The merge value is a protobuf and not easily displayable.
-				if _, err = varstring(buf); err != nil {
-					t.Fatal(err)
-				}
-				ops = append(ops, fmt.Sprintf("merge(%s)", k))
-			default:
-				t.Fatalf("%d: unexpected type %d", i, typ)
+				ops = append(ops, fmt.Sprintf("merge(%s)", string(r.UnsafeKey())))
 			}
+		}
+		if err != nil {
+			t.Fatalf("unexpected err during iteration: %+v", err)
+		}
+		if ok := r.Next(); ok {
+			t.Errorf("expected end of batch")
 		}
 
 		// The keys in the batch have the internal MVCC encoding applied which for
