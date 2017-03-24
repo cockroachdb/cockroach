@@ -114,6 +114,15 @@ CREATE TABLE system.jobs (
 	INDEX (status, created),
 	FAMILY (id, status, created, payload)
 );`
+
+	SettingsTableSchema = `
+CREATE TABLE system.settings (
+	name              STRING    NOT NULL PRIMARY KEY,
+	value            	STRING    NOT NULL,
+	lastUpdated       TIMESTAMP NOT NULL DEFAULT now(),
+	valueType         STRING,
+	FAMILY (name, value, lastUpdated, valueType)
+);`
 )
 
 func pk(name string) IndexDescriptor {
@@ -162,6 +171,10 @@ var SystemAllowedPrivileges = map[ID]privilege.Lists{
 	// DROP privileges are allowed on the above system tables for backwards
 	// compatibility reasons only!
 	keys.JobsTableID: {privilege.ReadWriteData},
+	// We eventually want to migrate the table to appear read-only to force the
+	// the use of a validating, logging accessor, so we'll go ahead and tolerate
+	// read-only privs to make that migration possible later.
+	keys.SettingsTableID: {privilege.ReadWriteData, privilege.ReadData},
 }
 
 // SystemDesiredPrivileges returns the desired privilege list (i.e., the
@@ -478,6 +491,34 @@ var (
 		},
 		NextIndexID:    3,
 		Privileges:     NewPrivilegeDescriptor(security.RootUser, SystemDesiredPrivileges(keys.JobsTableID)),
+		FormatVersion:  InterleavedFormatVersion,
+		NextMutationID: 1,
+	}
+	// SettingsTable is the descriptor for the jobs table.
+	SettingsTable = TableDescriptor{
+		Name:     "settings",
+		ID:       keys.SettingsTableID,
+		ParentID: 1,
+		Version:  1,
+		Columns: []ColumnDescriptor{
+			{Name: "name", ID: 1, Type: colTypeString},
+			{Name: "value", ID: 2, Type: colTypeString},
+			{Name: "lastUpdated", ID: 3, Type: colTypeTimestamp, DefaultExpr: &nowString},
+			{Name: "valueType", ID: 4, Type: colTypeString, Nullable: true},
+		},
+		NextColumnID: 5,
+		Families: []ColumnFamilyDescriptor{
+			{
+				Name:        "fam_0_name_value_lastUpdated_valueType",
+				ID:          0,
+				ColumnNames: []string{"name", "value", "lastUpdated", "valueType"},
+				ColumnIDs:   []ColumnID{1, 2, 3, 4},
+			},
+		},
+		NextFamilyID:   1,
+		PrimaryIndex:   pk("name"),
+		NextIndexID:    2,
+		Privileges:     NewPrivilegeDescriptor(security.RootUser, SystemDesiredPrivileges(keys.SettingsTableID)),
 		FormatVersion:  InterleavedFormatVersion,
 		NextMutationID: 1,
 	}
