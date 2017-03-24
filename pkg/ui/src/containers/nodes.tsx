@@ -2,10 +2,13 @@ import _ from "lodash";
 import * as React from "react";
 import { InjectedRouter, RouterState } from "react-router";
 import { connect } from "react-redux";
+
+import * as protos from "../js/protos";
+
+import Dropdown, { DropdownOption } from "../components/dropdown";
 import { PageConfig, PageConfigItem } from "../components/pageconfig";
 
 import { refreshNodes } from "../redux/apiReducers";
-import Dropdown, { DropdownOption } from "../components/dropdown";
 import { AdminUIState } from "../redux/state";
 
 import {
@@ -15,7 +18,7 @@ import {
 import TimeScaleDropdown from "./timescale";
 
 interface ClusterOverviewOwnProps {
-  nodes: Proto2TypeScript.cockroach.server.status.NodeStatus[];
+  nodes: protos.cockroach.server.status.NodeStatus[];
   refreshNodes: typeof refreshNodes;
 }
 

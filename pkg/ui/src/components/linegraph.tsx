@@ -31,7 +31,7 @@ export class LineGraph extends React.Component<LineGraphProps, {}> {
   chart: nvd3.LineChart;
 
   axis = createSelector(
-    (props: {children?: any}) => props.children,
+    (props: {children?: React.ReactNode}) => props.children,
     (children) => {
       let axes: React.ReactElement<AxisProps>[] = findChildrenOfType(children, Axis);
       if (axes.length === 0) {
@@ -45,7 +45,7 @@ export class LineGraph extends React.Component<LineGraphProps, {}> {
     });
 
   metrics = createSelector(
-    (props: {children?: any}) => props.children,
+    (props: {children?: React.ReactNode}) => props.children,
     (children) => {
       return findChildrenOfType(children, Metric) as React.ReactElement<MetricProps>[];
     });

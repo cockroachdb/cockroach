@@ -99,7 +99,7 @@ describe("<SortableTable>", () => {
       assert.isTrue(spy.calledWith({
         sortKey: 1,
         ascending: false,
-      } as SortSetting));
+      }));
     });
 
     // Click on sorted data, different column.
@@ -112,7 +112,7 @@ describe("<SortableTable>", () => {
       assert.isTrue(spy.calledWith({
         sortKey: 1,
         ascending: false,
-      } as SortSetting));
+      }));
     });
 
     it("sorts ascending if same column is clicked twice.", () => {
@@ -124,7 +124,7 @@ describe("<SortableTable>", () => {
       assert.isTrue( spy.calledWith({
         sortKey: 1,
         ascending: true,
-      } as SortSetting));
+      }));
     });
 
     it("removes sorting if same column is clicked thrice.", () => {
@@ -136,7 +136,7 @@ describe("<SortableTable>", () => {
       assert.isTrue( spy.calledWith({
         sortKey: null,
         ascending: false,
-      } as SortSetting));
+      }));
     });
 
     // Click on unsortable column does nothing.

@@ -10,9 +10,12 @@ import { EventBoxUnconnected as EventBox, EventRow, getEventInfo } from "./event
 import { refreshEvents } from "../redux/apiReducers";
 import { allEvents } from "../util/eventTypes";
 
-type Event = Proto2TypeScript.cockroach.server.serverpb.EventsResponse.Event;
+type Event = protos.cockroach.server.serverpb.EventsResponse.Event;
 
-function makeEventBox(events: Event[], refreshEventsFn: typeof refreshEvents) {
+function makeEventBox(
+  events: protos.cockroach.server.serverpb.EventsResponse.Event$Properties[],
+  refreshEventsFn: typeof refreshEvents,
+) {
   return shallow(<EventBox events={events} refreshEvents={refreshEventsFn}></EventBox>);
 }
 
@@ -29,7 +32,7 @@ describe("<EventBox>", function() {
 
   describe("refresh", function() {
     it("refreshes events when mounted.", function () {
-      makeEventBox((new protos.cockroach.server.serverpb.EventsResponse()).events, spy);
+      makeEventBox([], spy);
       assert.isTrue(spy.called);
     });
   });
@@ -37,17 +40,17 @@ describe("<EventBox>", function() {
   describe("attach", function() {
     it("attaches event data to contained component", function () {
       let eventsResponse = new protos.cockroach.server.serverpb.EventsResponse({
-      events: [
-        {
-          target_id: Long.fromString("1"),
-          event_type: "test1",
-        },
-        {
-          target_id: Long.fromString("2"),
-          event_type: "test2",
-        },
-      ],
-    });
+        events: [
+          {
+            target_id: Long.fromNumber(1),
+            event_type: "test1",
+          },
+          {
+            target_id: Long.fromNumber(2),
+            event_type: "test2",
+          },
+        ],
+      });
 
       let provider = makeEventBox(eventsResponse.events, spy);
       let eventRows = provider.children().first().children().first().children();
@@ -66,7 +69,7 @@ describe("<EventRow>", function () {
   describe("attach", function () {
     it("correctly renders a known event", function () {
       let e = new protos.cockroach.server.serverpb.EventsResponse.Event({
-        target_id: Long.fromString("1"),
+        target_id: Long.fromNumber(1),
         event_type: "create_database",
       });
 
@@ -78,7 +81,7 @@ describe("<EventRow>", function () {
 
     it("correctly renders an unknown event", function () {
       let e = new protos.cockroach.server.serverpb.EventsResponse.Event({
-        target_id: Long.fromString("1"),
+        target_id: Long.fromNumber(1),
         event_type: "unknown",
       });
 

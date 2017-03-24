@@ -4,6 +4,8 @@ import ReactPaginate from "react-paginate";
 import { Link } from "react-router";
 import { connect } from "react-redux";
 
+import * as protos from "../js/protos";
+
 import { AdminUIState } from "../redux/state";
 import { refreshRaft } from "../redux/apiReducers";
 import { CachedDataReducerState } from "../redux/cachedDataReducer";
@@ -20,7 +22,7 @@ const RANGES_PER_PAGE = 100;
  * container.
  */
 interface RangesMainData {
-  state: CachedDataReducerState<Proto2TypeScript.cockroach.server.serverpb.RaftDebugResponse>;
+  state: CachedDataReducerState<protos.cockroach.server.serverpb.RaftDebugResponse>;
 }
 
 /**
@@ -134,7 +136,11 @@ class RangesMain extends React.Component<RangesMainProps, RangesMainState> {
       errors = errors.concat(statuses.errors.map(err => err.message));
 
       // Build list of all nodes for static ordering.
-      let nodeIDs = _(statuses.ranges.map).flatMap("value.nodes").map("node_id").uniq().value().sort() as number[];
+      let nodeIDs = _(statuses.ranges).flatMap((range: protos.cockroach.server.serverpb.RaftRangeStatus$Properties) => {
+        return range.nodes;
+      }).map((node: protos.cockroach.server.serverpb.RaftRangeNode$Properties) => {
+        return node.node_id;
+      }).uniq().sort().value();
 
       let nodeIDIndex: {[nodeID: number]: number} = {};
       let columns = [<th key={-1}>Range</th>];
@@ -144,8 +150,11 @@ class RangesMain extends React.Component<RangesMainProps, RangesMainState> {
       });
 
       // Filter ranges and paginate
-      let filteredRanges = _.filter(statuses.ranges.map, (range) => {
-        return !this.state.showOnlyErrors || range.value.errors.length > 0;
+      // https://github.com/DefinitelyTyped/DefinitelyTyped/pull/15363
+      // let rangesPairs: [string, protos.cockroach.server.serverpb.RaftRangeStatus$Properties][] = _.toPairs(statuses.ranges);
+      let rangesPairs = _.toPairs(statuses.ranges) as [string, protos.cockroach.server.serverpb.RaftRangeStatus$Properties][];
+      let filteredRanges = _.filter(rangesPairs, ([, range]) => {
+        return !this.state.showOnlyErrors || range.errors.length > 0;
       });
       let offset = this.state.offset;
       if (this.state.offset > filteredRanges.length) {
@@ -153,13 +162,13 @@ class RangesMain extends React.Component<RangesMainProps, RangesMainState> {
       }
       let ranges = filteredRanges.slice(offset, offset + RANGES_PER_PAGE);
       let rows: React.ReactNode[][] = [];
-      ranges.forEach((range, i) => {
-        let hasErrors = range.value.errors.length > 0;
-        let rangeErrors = <ul>{_.map(range.value.errors, (error, j) => {
+      ranges.forEach(([key, range], i) => {
+        let hasErrors = range.errors.length > 0;
+        let rangeErrors = <ul>{_.map(range.errors, (error, j) => {
           return <li key={j}>{error.message}</li>;
           })}</ul>;
         let row = [<td key={-1}>
-            {range.key.toString()}
+            {key}
             {
               (hasErrors) ? (<span style={{position: "relative"}}>
                 <div className="viz-info-icon">
@@ -172,7 +181,7 @@ class RangesMain extends React.Component<RangesMainProps, RangesMainState> {
         rows[i] = row;
 
         // Render each replica into a cell
-        range.value.nodes.forEach((node) => {
+        range.nodes.forEach((node) => {
           let nodeRange = node.range;
           let replicaLocations = nodeRange.state.state.desc.replicas.map(
             (replica) => "(Node " + replica.node_id.toString() +
@@ -255,7 +264,7 @@ class RangesMain extends React.Component<RangesMainProps, RangesMainState> {
  */
 
 // Base selectors to extract data from redux state.
-const raftState = (state: AdminUIState): CachedDataReducerState<Proto2TypeScript.cockroach.server.serverpb.RaftDebugResponse> => state.cachedData.raft;
+const raftState = (state: AdminUIState): CachedDataReducerState<protos.cockroach.server.serverpb.RaftDebugResponse> => state.cachedData.raft;
 
 // Connect the RangesMain class with our redux store.
 let rangesMainConnected = connect(

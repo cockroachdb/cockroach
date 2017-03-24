@@ -8,9 +8,7 @@ import proto "github.com/gogo/protobuf/proto"
 import fmt "fmt"
 import math "math"
 import cockroach_roachpb1 "github.com/cockroachdb/cockroach/pkg/roachpb"
-import _ "github.com/cockroachdb/cockroach/pkg/roachpb"
 import cockroach_sql_sqlbase1 "github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-import _ "github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 
 import time "time"
 
