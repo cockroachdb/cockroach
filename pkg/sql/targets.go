@@ -23,6 +23,8 @@ import (
 	"github.com/pkg/errors"
 )
 
+const autoGenerateRenderOutputName = ""
+
 // computeRender expands a target expression into a result column (or more
 // than one, in case there is a star). Whether star expansion occurred
 // is indicated by the third return value.
@@ -32,6 +34,7 @@ func (p *planner) computeRender(
 	desiredType parser.Type,
 	info *dataSourceInfo,
 	ivarHelper parser.IndexedVarHelper,
+	outputName string,
 	allowStars bool,
 ) (columns ResultColumns, exprs []parser.TypedExpr, hasStar bool, err error) {
 	// Pre-normalize any VarName so the work is not done twice below.
@@ -47,9 +50,14 @@ func (p *planner) computeRender(
 	}
 
 	// When generating an output column name it should exactly match the original
-	// expression, so determine the output column name before we perform any
-	// manipulations to the expression.
-	outputName := getRenderColName(target)
+	// expression. If our caller has requested that we generate the output column
+	// name, we determine the name before we perform any manipulations to the
+	// expression.
+	if outputName == autoGenerateRenderOutputName {
+		if outputName, err = getRenderColName(target); err != nil {
+			return nil, nil, false, err
+		}
+	}
 
 	normalized, err := p.analyzeExpr(
 		ctx, target.Expr, multiSourceInfo{info}, ivarHelper, desiredType, false, "")

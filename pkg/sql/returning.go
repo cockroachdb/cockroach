@@ -90,7 +90,8 @@ func (p *planner) newReturningHelper(
 	ivarHelper := parser.MakeIndexedVarHelper(rh, len(tablecols))
 	for _, target := range rExprs {
 		cols, typedExprs, _, err := p.computeRender(
-			ctx, target, parser.TypeAny, rh.source, ivarHelper, true /* allowStars */)
+			ctx, target, parser.TypeAny, rh.source, ivarHelper,
+			autoGenerateRenderOutputName, true /* allowStars */)
 		if err != nil {
 			return nil, err
 		}

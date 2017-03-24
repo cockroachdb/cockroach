@@ -199,7 +199,7 @@ func (p *planner) groupBy(
 	// Add the group-by expressions so they are available for bucketing.
 	for _, g := range groupByExprs {
 		cols, exprs, hasStar, err := s.planner.computeRender(ctx, parser.SelectExpr{Expr: g}, parser.TypeAny,
-			s.source.info, s.ivarHelper, true)
+			s.source.info, s.ivarHelper, autoGenerateRenderOutputName, true)
 		if err != nil {
 			return nil, err
 		}
@@ -226,7 +226,7 @@ func (p *planner) groupBy(
 
 		cols, exprs, hasStar, err := s.planner.computeRender(
 			ctx, parser.SelectExpr{Expr: f.filter}, parser.TypeAny,
-			s.source.info, s.ivarHelper, true)
+			s.source.info, s.ivarHelper, autoGenerateRenderOutputName, true)
 		if err != nil {
 			return nil, err
 		}
