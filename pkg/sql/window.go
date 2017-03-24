@@ -177,7 +177,8 @@ func (n *windowNode) constructWindowDefinitions(
 		// Validate PARTITION BY clause.
 		for _, partition := range windowDef.Partitions {
 			cols, exprs, _, err := s.planner.computeRenderAllowingStars(ctx,
-				parser.SelectExpr{Expr: partition}, parser.TypeAny, s.sourceInfo, s.ivarHelper)
+				parser.SelectExpr{Expr: partition}, parser.TypeAny, s.sourceInfo, s.ivarHelper,
+				autoGenerateRenderOutputName)
 			if err != nil {
 				return err
 			}
@@ -187,7 +188,8 @@ func (n *windowNode) constructWindowDefinitions(
 		// Validate ORDER BY clause.
 		for _, orderBy := range windowDef.OrderBy {
 			cols, exprs, _, err := s.planner.computeRenderAllowingStars(ctx,
-				parser.SelectExpr{Expr: orderBy.Expr}, parser.TypeAny, s.sourceInfo, s.ivarHelper)
+				parser.SelectExpr{Expr: orderBy.Expr}, parser.TypeAny, s.sourceInfo, s.ivarHelper,
+				autoGenerateRenderOutputName)
 			if err != nil {
 				return err
 			}
