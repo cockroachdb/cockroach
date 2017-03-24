@@ -585,17 +585,18 @@ func runStart(cmd *cobra.Command, args []string) error {
 }
 
 func getClientGRPCConn() (*grpc.ClientConn, *hlc.Clock, *stop.Stopper, error) {
-	// 0 to disable max offset checks; this RPC context is not a member of the
-	// cluster, so there's no need to enforce that its max offset is the same
-	// as that of nodes in the cluster.
 	clock := hlc.NewClock(hlc.UnixNano, 0)
 	stopper := stop.NewStopper()
-	rpcContext := rpc.NewContext(
-		log.AmbientContext{},
-		serverCfg.Config,
-		clock,
-		stopper,
-	)
+	rpcContextCfg := rpc.Config{
+		Config: serverCfg.Config,
+		Clock:  clock,
+		// Disable heartbeats and clock skew checks. The CLI is not a member of the
+		// cluster, so there's no need to enforce that its max offset is the same as
+		// that of nodes in the cluster.
+		HeartbeatInterval:     0,
+		EnableClockSkewChecks: false,
+	}
+	rpcContext := rpc.NewContext(log.AmbientContext{}, rpcContextCfg, stopper)
 	addr, err := addrWithDefaultHost(serverCfg.AdvertiseAddr)
 	if err != nil {
 		return nil, nil, nil, err

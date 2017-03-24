@@ -124,12 +124,18 @@ func createTestClient(t *testing.T, s serverutils.TestServerInterface) *client.D
 func createTestClientForUser(
 	t *testing.T, s serverutils.TestServerInterface, user string, dbCtx client.DBContext,
 ) *client.DB {
-	cfg := &base.Config{
-		User: user,
+	rpcCfg := rpc.Config{
+		Config: &base.Config{
+			User: user,
+		},
+		Clock: s.Clock(),
+		// Disable heartbeats. Not needed for this client external to the cluster.
+		HeartbeatInterval:     0,
+		EnableClockSkewChecks: false,
 	}
-	testutils.FillCerts(cfg)
+	testutils.FillCerts(rpcCfg.Config)
+	rpcContext := rpc.NewContext(log.AmbientContext{}, rpcCfg, s.Stopper())
 
-	rpcContext := rpc.NewContext(log.AmbientContext{}, cfg, s.Clock(), s.Stopper())
 	conn, err := rpcContext.GRPCDial(s.ServingAddr())
 	if err != nil {
 		t.Fatal(err)

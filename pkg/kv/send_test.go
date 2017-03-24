@@ -75,19 +75,25 @@ func TestInvalidAddrLength(t *testing.T) {
 }
 
 // TestSendToOneClient verifies that Send correctly sends a request
-// to one server using the heartbeat RPC.
+// to one server by RPC.
 func TestSendToOneClient(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 
-	rpcContext := rpc.NewContext(
-		log.AmbientContext{},
-		testutils.NewNodeTestBaseContext(),
-		hlc.NewClock(hlc.UnixNano, time.Nanosecond),
-		stopper,
-	)
+	// We're going to share an rpc.Context for both the server and the "client".
+	// That's because the client in this test is conceptually also a node from the
+	// cluster (i.e. the client uses internal interfaces to communicate with the
+	// server).
+	cfg := rpc.Config{
+		Config:                testutils.NewNodeTestBaseConfig(),
+		Clock:                 hlc.NewClock(hlc.UnixNano, time.Nanosecond),
+		HeartbeatInterval:     rpc.ArbitraryServerHeartbeatInterval,
+		HeartbeatTimeout:      rpc.ArbitraryServerHeartbeatTimeout,
+		EnableClockSkewChecks: true,
+	}
+	rpcContext := rpc.NewContext(log.AmbientContext{}, cfg, stopper)
 	s, ln := newTestServer(t, rpcContext)
 	roachpb.RegisterInternalServer(s, Node(0))
 
@@ -134,12 +140,14 @@ func (*channelSaveTransport) Close() {
 // distinguishing them and just send a single channel.
 func setupSendNextTest(t *testing.T) ([]chan<- BatchCall, chan BatchCall, *stop.Stopper) {
 	stopper := stop.NewStopper()
-	nodeContext := rpc.NewContext(
-		log.AmbientContext{},
-		testutils.NewNodeTestBaseContext(),
-		hlc.NewClock(hlc.UnixNano, time.Nanosecond),
-		stopper,
-	)
+	cfg := rpc.Config{
+		Config:                testutils.NewNodeTestBaseConfig(),
+		Clock:                 hlc.NewClock(hlc.UnixNano, time.Nanosecond),
+		HeartbeatInterval:     rpc.ArbitraryServerHeartbeatInterval,
+		HeartbeatTimeout:      rpc.ArbitraryServerHeartbeatTimeout,
+		EnableClockSkewChecks: true,
+	}
+	nodeContext := rpc.NewContext(log.AmbientContext{}, cfg, stopper)
 
 	addrs := []net.Addr{
 		util.NewUnresolvedAddr("dummy", "1"),
@@ -391,12 +399,14 @@ func TestComplexScenarios(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 
-	nodeContext := rpc.NewContext(
-		log.AmbientContext{},
-		testutils.NewNodeTestBaseContext(),
-		hlc.NewClock(hlc.UnixNano, time.Nanosecond),
-		stopper,
-	)
+	cfg := rpc.Config{
+		Config:                testutils.NewNodeTestBaseConfig(),
+		Clock:                 hlc.NewClock(hlc.UnixNano, time.Nanosecond),
+		HeartbeatInterval:     rpc.ArbitraryServerHeartbeatInterval,
+		HeartbeatTimeout:      rpc.ArbitraryServerHeartbeatTimeout,
+		EnableClockSkewChecks: true,
+	}
+	nodeContext := rpc.NewContext(log.AmbientContext{}, cfg, stopper)
 
 	// TODO(bdarnell): the retryable flag is no longer used for RPC errors.
 	// Rework this test to incorporate application-level errors carried in

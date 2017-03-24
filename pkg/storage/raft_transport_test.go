@@ -111,12 +111,14 @@ func newRaftTransportTestContext(t testing.TB) *raftTransportTestContext {
 		stopper:    stop.NewStopper(),
 		transports: map[roachpb.NodeID]*storage.RaftTransport{},
 	}
-	rttc.nodeRPCContext = rpc.NewContext(
-		log.AmbientContext{},
-		testutils.NewNodeTestBaseContext(),
-		hlc.NewClock(hlc.UnixNano, time.Nanosecond),
-		rttc.stopper,
-	)
+	rpcCfg := rpc.Config{
+		Config: testutils.NewNodeTestBaseConfig(),
+		Clock:  hlc.NewClock(hlc.UnixNano, time.Nanosecond),
+		// Disable heartbeats. Not needed for these tests.
+		HeartbeatInterval:     0,
+		EnableClockSkewChecks: false,
+	}
+	rttc.nodeRPCContext = rpc.NewContext(log.AmbientContext{}, rpcCfg, rttc.stopper)
 	server := rpc.NewServer(rttc.nodeRPCContext) // never started
 	rttc.gossip = gossip.NewTest(
 		1, rttc.nodeRPCContext, server, nil, rttc.stopper, metric.NewRegistry(),

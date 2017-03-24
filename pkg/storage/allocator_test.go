@@ -2117,12 +2117,14 @@ func Example_rebalancing() {
 
 	// Model a set of stores in a cluster,
 	// randomly adding / removing stores and adding bytes.
-	rpcContext := rpc.NewContext(
-		log.AmbientContext{},
-		&base.Config{Insecure: true},
-		clock,
-		stopper,
-	)
+	cfg := rpc.Config{
+		Config:                &base.Config{Insecure: true},
+		Clock:                 clock,
+		HeartbeatInterval:     rpc.ArbitraryServerHeartbeatInterval,
+		HeartbeatTimeout:      rpc.ArbitraryServerHeartbeatTimeout,
+		EnableClockSkewChecks: true,
+	}
+	rpcContext := rpc.NewContext(log.AmbientContext{}, cfg, stopper)
 	server := rpc.NewServer(rpcContext) // never started
 	g := gossip.NewTest(1, rpcContext, server, nil, stopper, metric.NewRegistry())
 	// Deterministic must be set as this test is comparing the exact output

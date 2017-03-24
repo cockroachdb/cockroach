@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/pkg/errors"
 )
@@ -71,6 +72,8 @@ type Farmer struct {
 	// RPCContext is used to open an ExternalClient which provides a KV connection
 	// to the cluster by gRPC.
 	RPCContext *rpc.Context
+	// ClientClock is used by the cluster's gRPC client.
+	ClientClock *hlc.Clock
 }
 
 func (f *Farmer) refresh() {
@@ -221,7 +224,7 @@ func (f *Farmer) NewClient(ctx context.Context, i int) (*client.DB, error) {
 	if err != nil {
 		return nil, err
 	}
-	return client.NewDB(client.NewSender(conn), f.RPCContext.LocalClock), nil
+	return client.NewDB(client.NewSender(conn), f.ClientClock), nil
 }
 
 // PGUrl returns a URL string for the given node postgres server.

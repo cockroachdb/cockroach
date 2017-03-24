@@ -65,7 +65,14 @@ func createTestNode(
 	cfg := storage.TestStoreConfig(nil)
 
 	stopper := stop.NewStopper()
-	nodeRPCContext := rpc.NewContext(log.AmbientContext{}, nodeTestBaseContext, cfg.Clock, stopper)
+	rpcCfg := rpc.Config{
+		Config: nodeTestBaseContext,
+		Clock:  cfg.Clock,
+		// Disable heartbeats. Not needed for these tests.
+		HeartbeatInterval:     0,
+		EnableClockSkewChecks: false,
+	}
+	nodeRPCContext := rpc.NewContext(log.AmbientContext{}, rpcCfg, stopper)
 	cfg.ScanInterval = 10 * time.Hour
 	cfg.ConsistencyCheckInterval = 10 * time.Hour
 	grpcServer := rpc.NewServer(nodeRPCContext)

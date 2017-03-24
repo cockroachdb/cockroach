@@ -211,9 +211,15 @@ func TestStopServer(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rpcContext := rpc.NewContext(
-		log.AmbientContext{}, tc.Server(1).RPCContext().Config, tc.Server(1).Clock(), tc.Stopper(),
-	)
+	rpcCfg := rpc.Config{
+		Config: tc.Server(1).BaseConfig(),
+		Clock:  tc.Server(1).Clock(),
+		// Disable heartbeats and clock skew checks for this connection that's
+		// outside the cluster.
+		HeartbeatInterval:     0,
+		EnableClockSkewChecks: false,
+	}
+	rpcContext := rpc.NewContext(log.AmbientContext{}, rpcCfg, tc.Stopper())
 	conn, err := rpcContext.GRPCDial(server1.ServingAddr())
 	if err != nil {
 		t.Fatal(err)

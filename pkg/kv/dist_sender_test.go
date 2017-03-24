@@ -576,12 +576,14 @@ func TestRetryOnDescriptorLookupError(t *testing.T) {
 
 func makeGossip(t *testing.T, stopper *stop.Stopper) (*gossip.Gossip, *hlc.Clock) {
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
-	rpcContext := rpc.NewContext(
-		log.AmbientContext{},
-		&base.Config{Insecure: true},
-		clock,
-		stopper,
-	)
+	cfg := rpc.Config{
+		Config:                &base.Config{Insecure: true},
+		Clock:                 clock,
+		HeartbeatInterval:     rpc.ArbitraryServerHeartbeatInterval,
+		HeartbeatTimeout:      rpc.ArbitraryServerHeartbeatTimeout,
+		EnableClockSkewChecks: true,
+	}
+	rpcContext := rpc.NewContext(log.AmbientContext{}, cfg, stopper)
 	server := rpc.NewServer(rpcContext)
 
 	const nodeID = 1

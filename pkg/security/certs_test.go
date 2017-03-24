@@ -162,7 +162,7 @@ func TestUseCerts(t *testing.T) {
 	defer s.Stopper().Stop()
 
 	// Insecure mode.
-	clientContext := testutils.NewNodeTestBaseContext()
+	clientContext := testutils.NewNodeTestBaseConfig()
 	clientContext.Insecure = true
 	httpClient, err := clientContext.GetHTTPClient()
 	if err != nil {
@@ -180,7 +180,7 @@ func TestUseCerts(t *testing.T) {
 	}
 
 	// New client. With certs this time.
-	clientContext = testutils.NewNodeTestBaseContext()
+	clientContext = testutils.NewNodeTestBaseConfig()
 	clientContext.SSLCA = filepath.Join(certsDir, security.EmbeddedCACert)
 	clientContext.SSLCert = filepath.Join(certsDir, security.EmbeddedNodeCert)
 	clientContext.SSLCertKey = filepath.Join(certsDir, security.EmbeddedNodeKey)
