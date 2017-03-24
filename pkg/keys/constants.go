@@ -286,6 +286,7 @@ const (
 	DescriptorTableID = 3
 	UsersTableID      = 4
 	ZonesTableID      = 5
+	SettingsTableID   = 6
 
 	// Reserved IDs for other system tables. If you're adding a new system table,
 	// it probably belongs here.
