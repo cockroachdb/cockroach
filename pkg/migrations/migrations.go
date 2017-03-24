@@ -328,7 +328,9 @@ func createJobsTable(ctx context.Context, r runner) error {
 		desc := sqlbase.JobsTable
 		b.CPut(sqlbase.MakeNameMetadataKey(desc.GetParentID(), desc.GetName()), desc.GetID(), nil)
 		b.CPut(sqlbase.MakeDescMetadataKey(desc.GetID()), sqlbase.WrapDescriptor(&desc), nil)
-		txn.SetSystemConfigTrigger()
+		if err := txn.SetSystemConfigTrigger(); err != nil {
+			return err
+		}
 		return txn.Run(ctx, b)
 	})
 }

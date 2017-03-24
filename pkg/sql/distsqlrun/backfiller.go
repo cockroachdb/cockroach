@@ -206,7 +206,9 @@ func WriteResumeSpan(
 				mutation.ResumeSpans = append(before, after...)
 
 				log.VEventf(ctx, 2, "ckpt %+v", mutation.ResumeSpans)
-				txn.SetSystemConfigTrigger()
+				if err := txn.SetSystemConfigTrigger(); err != nil {
+					return err
+				}
 				return txn.Put(ctx, sqlbase.MakeDescMetadataKey(tableDesc.GetID()), sqlbase.WrapDescriptor(tableDesc))
 			}
 		}

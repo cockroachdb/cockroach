@@ -95,7 +95,9 @@ func (r *editNodeRun) initEditNode(
 func (r *editNodeRun) startEditNode(ctx context.Context, en *editNodeBase, tw tableWriter) error {
 	if sqlbase.IsSystemConfigID(en.tableDesc.GetID()) {
 		// Mark transaction as operating on the system DB.
-		en.p.txn.SetSystemConfigTrigger()
+		if err := en.p.txn.SetSystemConfigTrigger(); err != nil {
+			return err
+		}
 	}
 
 	r.tw = tw

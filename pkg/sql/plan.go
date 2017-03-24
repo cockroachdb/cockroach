@@ -265,7 +265,9 @@ func (p *planner) newPlan(
 	// where the table already exists. This will generate some false
 	// refreshes, but that's expected to be quite rare in practice.
 	if stmt.StatementType() == parser.DDL {
-		p.txn.SetSystemConfigTrigger()
+		if err := p.txn.SetSystemConfigTrigger(); err != nil {
+			return nil, err
+		}
 	}
 
 	if plan, err := p.maybePlanHook(ctx, stmt); plan != nil || err != nil {
