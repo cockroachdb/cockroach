@@ -22,7 +22,9 @@ import (
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -30,9 +32,13 @@ import (
 
 func TestEagerReplication(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+
+	// Start with the split queue disabled.
+	storeCfg := storage.TestStoreConfig(nil)
+	storeCfg.TestingKnobs.DisableSplitQueue = true
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
-	store, _ := createTestStore(t, stopper)
+	store := createTestStoreWithConfig(t, stopper, storeCfg)
 
 	// Disable the replica scanner so that we rely on the eager replication code
 	// path that occurs after splits.
@@ -42,6 +48,18 @@ func TestEagerReplication(t *testing.T) {
 	if err := store.GossipStore(context.Background()); err != nil {
 		t.Fatal(err)
 	}
+	// Wait for the range to achieve quorum.
+	repl := store.LookupReplica(roachpb.RKeyMin, nil)
+	testutils.SucceedsSoon(t, func() error {
+		if !repl.HasQuorum() {
+			return errors.New("first range has not reached quorum")
+		}
+		return nil
+	})
+
+	// Now enable the split queue and force a scan and process.
+	store.SetSplitQueueActive(true)
+	store.ForceSplitScanAndProcess()
 
 	// The addition of replicas to the replicateQueue after a split
 	// occurs happens after the update of the descriptors in meta2
