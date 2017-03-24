@@ -14,14 +14,6 @@ To bootstrap local development, you'll need to run `make` in this directory;
 this will download the dependencies, run the tests, and build the web console
 assets.
 
-### Visual Studio Code
-
-To get autocomplete and type-checking working in Visual Studio Code, you may
-need to manually configure your typescript version. Typescript 2 is included
-in our package.json, but you'll need to configure your project/workspace to
-point to it. See
-https://code.visualstudio.com/docs/languages/typescript#_using-newer-typescript-versions.
-
 ## Modification
 
 As mentioned above, be sure to run the CockroachDB server in UI debug mode
