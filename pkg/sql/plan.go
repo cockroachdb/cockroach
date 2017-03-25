@@ -188,6 +188,7 @@ var _ planNode = &limitNode{}
 var _ planNode = &ordinalityNode{}
 var _ planNode = &scanNode{}
 var _ planNode = &renderNode{}
+var _ planNode = &showRangesNode{}
 var _ planNode = &sortNode{}
 var _ planNode = &splitNode{}
 var _ planNode = &unionNode{}
@@ -350,6 +351,8 @@ func (p *planner) newPlan(
 		return p.ShowTables(ctx, n)
 	case *parser.ShowUsers:
 		return p.ShowUsers(ctx, n)
+	case *parser.ShowRanges:
+		return p.ShowRanges(ctx, n)
 	case *parser.Split:
 		return p.Split(ctx, n)
 	case *parser.Truncate:
@@ -407,6 +410,8 @@ func (p *planner) prepare(ctx context.Context, stmt parser.Statement) (planNode,
 		return p.ShowTables(ctx, n)
 	case *parser.ShowUsers:
 		return p.ShowUsers(ctx, n)
+	case *parser.ShowRanges:
+		return p.ShowRanges(ctx, n)
 	case *parser.Split:
 		return p.Split(ctx, n)
 	case *parser.Update:
