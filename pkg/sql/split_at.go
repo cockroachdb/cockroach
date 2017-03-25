@@ -29,46 +29,13 @@ import (
 // Split executes a KV split.
 // Privileges: INSERT on table.
 func (p *planner) Split(ctx context.Context, n *parser.Split) (planNode, error) {
-	var tn *parser.TableName
-	var err error
-	if n.Index == nil {
-		// Variant: ALTER TABLE ... SPLIT AT ...
-		tn, err = n.Table.NormalizeWithDatabaseName(p.session.Database)
-	} else {
-		// Variant: ALTER INDEX ... SPLIT AT ...
-		tn, err = p.expandIndexName(ctx, n.Index)
-	}
+	tableDesc, index, err := p.getTableAndIndex(ctx, n.Table, n.Index)
 	if err != nil {
 		return nil, err
-	}
-
-	tableDesc, err := p.getTableDesc(ctx, tn)
-	if err != nil {
-		return nil, err
-	}
-	if tableDesc == nil {
-		return nil, sqlbase.NewUndefinedTableError(tn.String())
 	}
 	if err := p.CheckPrivilege(tableDesc, privilege.INSERT); err != nil {
 		return nil, err
 	}
-
-	// Determine which index to use.
-	var index sqlbase.IndexDescriptor
-	if n.Index == nil {
-		index = tableDesc.PrimaryIndex
-	} else {
-		normIdxName := n.Index.Index.Normalize()
-		status, i, err := tableDesc.FindIndexByNormalizedName(normIdxName)
-		if err != nil {
-			return nil, err
-		}
-		if status != sqlbase.DescriptorActive {
-			return nil, errors.Errorf("unknown index %s", normIdxName)
-		}
-		index = tableDesc.Indexes[i]
-	}
-
 	// Calculate the desired types for the select statement. It is OK if the
 	// select statement returns fewer columns (the relevant prefix is used).
 	desiredTypes := make([]parser.Type, len(index.ColumnIDs))
@@ -113,7 +80,7 @@ func (p *planner) Split(ctx context.Context, n *parser.Split) (planNode, error) 
 type splitNode struct {
 	p            *planner
 	tableDesc    *sqlbase.TableDescriptor
-	index        sqlbase.IndexDescriptor
+	index        *sqlbase.IndexDescriptor
 	rows         planNode
 	lastSplitKey []byte
 }
@@ -145,7 +112,7 @@ func (n *splitNode) Next(ctx context.Context) (bool, error) {
 		colMap[colID] = i
 	}
 	prefix := sqlbase.MakeIndexKeyPrefix(n.tableDesc, n.index.ID)
-	key, _, err := sqlbase.EncodeIndexKey(n.tableDesc, &n.index, colMap, values, prefix)
+	key, _, err := sqlbase.EncodeIndexKey(n.tableDesc, n.index, colMap, values, prefix)
 	if err != nil {
 		return false, err
 	}
