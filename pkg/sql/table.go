@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -657,6 +658,7 @@ func (p *planner) getTableAndIndex(
 	ctx context.Context,
 	table *parser.NormalizableTableName,
 	tableWithIndex *parser.TableNameWithIndex,
+	privilege privilege.Kind,
 ) (*sqlbase.TableDescriptor, *sqlbase.IndexDescriptor, error) {
 	var tn *parser.TableName
 	var err error
@@ -676,6 +678,9 @@ func (p *planner) getTableAndIndex(
 	}
 	if tableDesc == nil {
 		return nil, nil, sqlbase.NewUndefinedTableError(tn.String())
+	}
+	if err := p.CheckPrivilege(tableDesc, privilege); err != nil {
+		return nil, nil, err
 	}
 
 	// Determine which index to use.
