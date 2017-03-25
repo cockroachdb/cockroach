@@ -183,6 +183,9 @@ func setNeededColumns(plan planNode, needed []bool) {
 		// foreign key relations and that are not needed for RETURNING.
 		setNeededColumns(n.run.rows, allColumns(n.run.rows))
 
+	case *splitNode:
+		setNeededColumns(n.rows, allColumns(n.rows))
+
 	case *alterTableNode:
 	case *copyNode:
 	case *createDatabaseNode:
@@ -195,7 +198,6 @@ func setNeededColumns(plan planNode, needed []bool) {
 	case *dropViewNode:
 	case *emptyNode:
 	case *hookFnNode:
-	case *splitNode:
 	case *valueGenerator:
 
 	default:

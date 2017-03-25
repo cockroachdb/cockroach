@@ -248,6 +248,9 @@ func doExpandPlan(
 			n.plan, err = doExpandPlan(ctx, p, params, n.plan)
 		}
 
+	case *splitNode:
+		n.rows, err = doExpandPlan(ctx, p, noParams, n.rows)
+
 	case *valuesNode:
 	case *alterTableNode:
 	case *copyNode:
@@ -260,7 +263,6 @@ func doExpandPlan(
 	case *dropViewNode:
 	case *emptyNode:
 	case *hookFnNode:
-	case *splitNode:
 	case *valueGenerator:
 	case nil:
 
@@ -525,6 +527,9 @@ func simplifyOrderings(plan planNode, usefulOrdering sqlbase.ColumnOrdering) pla
 	case *delayedNode:
 		n.plan = simplifyOrderings(n.plan, usefulOrdering)
 
+	case *splitNode:
+		n.rows = simplifyOrderings(n.rows, nil)
+
 	case *valuesNode:
 	case *alterTableNode:
 	case *copyNode:
@@ -537,7 +542,6 @@ func simplifyOrderings(plan planNode, usefulOrdering sqlbase.ColumnOrdering) pla
 	case *dropViewNode:
 	case *emptyNode:
 	case *hookFnNode:
-	case *splitNode:
 	case *valueGenerator:
 
 	default:
