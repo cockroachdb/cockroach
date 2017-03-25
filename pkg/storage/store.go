@@ -4065,6 +4065,15 @@ func (s *Store) FrozenStatus(collectFrozen bool) (repDescs []roachpb.ReplicaDesc
 	return
 }
 
+// GetTempDir returns path to a store-specific tempdir. In-mem and non-RocksDB
+// stores return "" (nb: ioutil.TempDir replaces "" with os.TempDir).
+func (s *Store) GetTempDir() string {
+	if rocksdb, ok := s.engine.(*engine.RocksDB); ok {
+		return rocksdb.GetTempDir()
+	}
+	return ""
+}
+
 // The methods below can be used to control a store's queues. Stopping a queue
 // is only meant to happen in tests.
 

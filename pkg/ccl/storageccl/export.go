@@ -64,7 +64,7 @@ func evalExport(
 	}
 	defer endLimitedRequest()
 
-	exportStore, err := MakeExportStorage(ctx, args.Storage)
+	exportStore, err := MakeExportStorage(ctx, args.Storage, r.GetTempDir())
 	if err != nil {
 		return storage.EvalResult{}, err
 	}
