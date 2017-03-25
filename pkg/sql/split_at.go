@@ -29,11 +29,8 @@ import (
 // Split executes a KV split.
 // Privileges: INSERT on table.
 func (p *planner) Split(ctx context.Context, n *parser.Split) (planNode, error) {
-	tableDesc, index, err := p.getTableAndIndex(ctx, n.Table, n.Index)
+	tableDesc, index, err := p.getTableAndIndex(ctx, n.Table, n.Index, privilege.INSERT)
 	if err != nil {
-		return nil, err
-	}
-	if err := p.CheckPrivilege(tableDesc, privilege.INSERT); err != nil {
 		return nil, err
 	}
 	// Calculate the desired types for the select statement. It is OK if the

@@ -248,6 +248,7 @@ func (b *Batch) fillResults() error {
 			case *roachpb.AdminChangeReplicasRequest:
 			case *roachpb.HeartbeatTxnRequest:
 			case *roachpb.GCRequest:
+			case *roachpb.LeaseInfoRequest:
 			case *roachpb.PushTxnRequest:
 			case *roachpb.QueryTxnRequest:
 			case *roachpb.RangeLookupRequest:
