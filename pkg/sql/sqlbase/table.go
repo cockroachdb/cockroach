@@ -57,7 +57,10 @@ func SanitizeVarFreeExpr(
 	if err != nil {
 		return err
 	}
-	if defaultType := typedExpr.ResolvedType(); !expectedType.Equivalent(defaultType) {
+	defaultType := typedExpr.ResolvedType()
+	if !expectedType.Equivalent(defaultType) && defaultType != parser.TypeNull {
+		// The DEFAULT expression must match the column type exactly unless it is a
+		// constant NULL value.
 		return incompatibleExprTypeError(context, expectedType, defaultType)
 	}
 	return nil
