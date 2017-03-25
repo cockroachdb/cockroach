@@ -156,6 +156,9 @@ func applyLimit(plan planNode, numRows int64, soft bool) {
 			setUnlimited(n.plan)
 		}
 
+	case *splitNode:
+		setUnlimited(n.rows)
+
 	case *valuesNode:
 	case *alterTableNode:
 	case *copyNode:
@@ -168,7 +171,6 @@ func applyLimit(plan planNode, numRows int64, soft bool) {
 	case *dropViewNode:
 	case *emptyNode:
 	case *hookFnNode:
-	case *splitNode:
 	case *valueGenerator:
 
 	default:
