@@ -560,3 +560,19 @@ ALTER TABLE privsview ADD d INT
 
 statement error pgcode 42809 "privsview" is not a table
 ALTER TABLE privsview SPLIT AT VALUES (42)
+
+statement ok
+CREATE TABLE s (k1 INT, k2 INT, v INT, PRIMARY KEY (k1,k2))
+
+# Verify limits and orderings are propagated correctly to the select.
+query ITTTTT colnames
+EXPLAIN (METADATA) ALTER TABLE s SPLIT AT SELECT k1,k2 FROM s ORDER BY k1 LIMIT 3
+----
+Level  Type    Field  Description  Columns        Ordering
+0      split                       (key, pretty)
+1      limit                       (k1, k2)              +k1
+2      render                      (k1, k2)              +k1
+3      scan                        (k1, k2, v[omitted])  +k1
+3              table  s@primary
+3              spans  ALL
+3              limit  3
