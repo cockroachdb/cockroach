@@ -667,3 +667,50 @@ func (p *planner) expandIndexName(
 	}
 	return tn, nil
 }
+
+// getTableAndIndex returns the table and index descriptors for a table
+// (primary index) or table-with-index. Only one of table and tableWithIndex can
+// be set.  This is useful for statements that have both table and index
+// variants (like `ALTER TABLE/INDEX ... SPLIT AT ...`).
+func (p *planner) getTableAndIndex(
+	ctx context.Context,
+	table *parser.NormalizableTableName,
+	tableWithIndex *parser.TableNameWithIndex,
+) (*sqlbase.TableDescriptor, *sqlbase.IndexDescriptor, error) {
+	var tn *parser.TableName
+	var err error
+	if tableWithIndex == nil {
+		// Variant: ALTER TABLE
+		tn, err = table.NormalizeWithDatabaseName(p.session.Database)
+	} else {
+		// Variant: ALTER INDEX
+		tn, err = p.expandIndexName(ctx, tableWithIndex)
+	}
+	if err != nil {
+		return nil, nil, err
+	}
+	tableDesc, err := p.getTableDesc(ctx, tn)
+	if err != nil {
+		return nil, nil, err
+	}
+	if tableDesc == nil {
+		return nil, nil, sqlbase.NewUndefinedTableError(tn.String())
+	}
+
+	// Determine which index to use.
+	var index *sqlbase.IndexDescriptor
+	if tableWithIndex == nil {
+		index = &tableDesc.PrimaryIndex
+	} else {
+		normIdxName := tableWithIndex.Index.Normalize()
+		status, i, err := tableDesc.FindIndexByNormalizedName(normIdxName)
+		if err != nil {
+			return nil, nil, err
+		}
+		if status != sqlbase.DescriptorActive {
+			return nil, nil, errors.Errorf("unknown index %s", normIdxName)
+		}
+		index = &tableDesc.Indexes[i]
+	}
+	return tableDesc, index, nil
+}
