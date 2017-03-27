@@ -122,6 +122,7 @@ vols="${vols} --volume=${gocache}/pkg/docker_amd64_race:/usr/local/go/pkg/linux_
 vols="${vols} --volume=${gocache}/bin/docker_amd64:/go/bin"
 vols="${vols} --volume=${HOME}/.yarn-cache:${container_home}/.yarn-cache"
 vols="${vols} --volume=${cockroach_toplevel}:/go/src/github.com/cockroachdb/cockroach"
+vols="${vols} --volume=${HOME}/.ssh:/root/.ssh"
 
 backtrace_dir="${cockroach_toplevel}/../../cockroachlabs/backtrace"
 if test -d "${backtrace_dir}"; then
