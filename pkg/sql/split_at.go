@@ -42,7 +42,7 @@ func (p *planner) Split(ctx context.Context, n *parser.Split) (planNode, error) 
 		return nil, err
 	}
 
-	tableDesc, err := p.getTableDesc(ctx, tn)
+	tableDesc, err := getTableDesc(ctx, p.txn, p.getVirtualTabler(), tn)
 	if err != nil {
 		return nil, err
 	}
