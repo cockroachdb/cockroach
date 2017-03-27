@@ -2598,6 +2598,7 @@ func (r *Replica) adminSplitWithDescriptor(
 	if err := r.store.DB().Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		log.Event(ctx, "split closure begins")
 		defer log.Event(ctx, "split closure ends")
+		txn.SetDebugName(splitTxnName)
 		// Update existing range descriptor for left hand side of
 		// split. Note that we mutate the descriptor for the left hand
 		// side of the split first to locate the txn record there.
@@ -3076,6 +3077,7 @@ func (r *Replica) AdminMerge(
 
 	if err := r.store.DB().Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		log.Event(ctx, "merge closure begins")
+		txn.SetDebugName(mergeTxnName)
 		// Update the range descriptor for the receiving range.
 		{
 			b := txn.NewBatch()

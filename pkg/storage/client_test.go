@@ -165,6 +165,21 @@ func createTestStoreWithEngine(
 	if err := store.Start(context.Background(), stopper); err != nil {
 		t.Fatal(err)
 	}
+
+	// Connect to gossip and gossip the store's capacity.
+	<-store.Gossip().Connected
+	if err := store.GossipStore(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	// Wait for the store's single range to have quorum before proceeding.
+	repl := store.LookupReplica(roachpb.RKeyMin, nil)
+	testutils.SucceedsSoon(t, func() error {
+		if !repl.HasQuorum() {
+			return errors.New("first range has not reached quorum")
+		}
+		return nil
+	})
+
 	return store
 }
 
