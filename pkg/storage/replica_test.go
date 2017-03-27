@@ -2973,6 +2973,56 @@ func TestEndTransactionDeadline_1PC(t *testing.T) {
 	}
 }
 
+// Test1PCTransactionWriteTimestamp verifies that the transaction's
+// timestamp is used when writing values in a 1PC transaction. We
+// verify this by updating the timestamp cache for the key being
+// written so that the timestamp there is greater than the txn's
+// OrigTimestamp.
+func Test1PCTransactionWriteTimestamp(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	tc := testContext{}
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+	tc.Start(t, stopper)
+
+	for _, iso := range []enginepb.IsolationType{enginepb.SNAPSHOT, enginepb.SERIALIZABLE} {
+		t.Run(fmt.Sprintf("%s", iso), func(t *testing.T) {
+			key := roachpb.Key(fmt.Sprintf("%s", iso))
+			txn := newTransaction("test", key, 1, iso, tc.Clock())
+			bt, _ := beginTxnArgs(key, txn)
+			put := putArgs(key, []byte("value"))
+			et, etH := endTxnArgs(txn, true)
+
+			// Update the timestamp cache for the key being written.
+			gArgs := getArgs(key)
+			if _, pErr := tc.SendWrapped(&gArgs); pErr != nil {
+				t.Fatal(pErr)
+			}
+
+			// Now verify that the write triggers a retry for SERIALIZABLE and
+			// writes at the higher timestamp for SNAPSHOT.
+			var ba roachpb.BatchRequest
+			ba.Header = etH
+			ba.Add(&bt, &put, &et)
+			br, pErr := tc.Sender().Send(context.Background(), ba)
+			if iso == enginepb.SNAPSHOT {
+				if pErr != nil {
+					t.Error(pErr)
+				}
+				if !txn.OrigTimestamp.Less(br.Txn.Timestamp) {
+					t.Errorf(
+						"expected result timestamp %s > txn orig timestamp %s", br.Txn.Timestamp, txn.OrigTimestamp,
+					)
+				}
+			} else {
+				if _, ok := pErr.GetDetail().(*roachpb.TransactionRetryError); !ok {
+					t.Errorf("expected retry error; got %s", pErr)
+				}
+			}
+		})
+	}
+}
+
 // TestEndTransactionWithMalformedSplitTrigger verifies an
 // EndTransaction call with a malformed commit trigger fails.
 func TestEndTransactionWithMalformedSplitTrigger(t *testing.T) {
