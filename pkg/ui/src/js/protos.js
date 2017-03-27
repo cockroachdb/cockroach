@@ -4121,7 +4121,7 @@ export const cockroach = $root.cockroach = (function() {
                      * Properties of an Event.
                      * @typedef cockroach.server.serverpb.EventsResponse.Event$Properties
                      * @type {Object}
-                     * @property {cockroach.server.serverpb.EventsResponse.Event.Timestamp$Properties} [timestamp] Event timestamp.
+                     * @property {google.protobuf.Timestamp$Properties} [timestamp] Event timestamp.
                      * @property {string} [event_type] Event event_type.
                      * @property {Long} [target_id] Event target_id.
                      * @property {Long} [reporting_id] Event reporting_id.
@@ -4143,7 +4143,7 @@ export const cockroach = $root.cockroach = (function() {
 
                     /**
                      * Event timestamp.
-                     * @type {cockroach.server.serverpb.EventsResponse.Event.Timestamp$Properties|undefined}
+                     * @type {google.protobuf.Timestamp$Properties|undefined}
                      */
                     Event.prototype.timestamp = null;
 
@@ -4196,7 +4196,7 @@ export const cockroach = $root.cockroach = (function() {
                         if (!writer)
                             writer = $Writer.create();
                         if (message.timestamp && message.hasOwnProperty("timestamp"))
-                            $root.cockroach.server.serverpb.EventsResponse.Event.Timestamp.encode(message.timestamp, writer.uint32(/* id 1, wireType 2 =*/10).fork()).ldelim();
+                            $root.google.protobuf.Timestamp.encode(message.timestamp, writer.uint32(/* id 1, wireType 2 =*/10).fork()).ldelim();
                         if (message.event_type != null && message.hasOwnProperty("event_type"))
                             writer.uint32(/* id 2, wireType 2 =*/18).string(message.event_type);
                         if (message.target_id != null && message.hasOwnProperty("target_id"))
@@ -4236,7 +4236,7 @@ export const cockroach = $root.cockroach = (function() {
                             let tag = reader.uint32();
                             switch (tag >>> 3) {
                             case 1:
-                                message.timestamp = $root.cockroach.server.serverpb.EventsResponse.Event.Timestamp.decode(reader, reader.uint32());
+                                message.timestamp = $root.google.protobuf.Timestamp.decode(reader, reader.uint32());
                                 break;
                             case 2:
                                 message.event_type = reader.string();
@@ -4283,7 +4283,7 @@ export const cockroach = $root.cockroach = (function() {
                         if (typeof message !== "object" || message === null)
                             return "object expected";
                         if (message.timestamp != null) {
-                            let error = $root.cockroach.server.serverpb.EventsResponse.Event.Timestamp.verify(message.timestamp);
+                            let error = $root.google.protobuf.Timestamp.verify(message.timestamp);
                             if (error)
                                 return "timestamp." + error;
                         }
@@ -4317,7 +4317,7 @@ export const cockroach = $root.cockroach = (function() {
                         if (object.timestamp != null) {
                             if (typeof object.timestamp !== "object")
                                 throw TypeError(".cockroach.server.serverpb.EventsResponse.Event.timestamp: object expected");
-                            message.timestamp = $root.cockroach.server.serverpb.EventsResponse.Event.Timestamp.fromObject(object.timestamp);
+                            message.timestamp = $root.google.protobuf.Timestamp.fromObject(object.timestamp);
                         }
                         if (object.event_type != null)
                             message.event_type = String(object.event_type);
@@ -4385,7 +4385,7 @@ export const cockroach = $root.cockroach = (function() {
                             object.unique_id = options.bytes === String ? "" : [];
                         }
                         if (message.timestamp != null && message.hasOwnProperty("timestamp"))
-                            object.timestamp = $root.cockroach.server.serverpb.EventsResponse.Event.Timestamp.toObject(message.timestamp, options);
+                            object.timestamp = $root.google.protobuf.Timestamp.toObject(message.timestamp, options);
                         if (message.event_type != null && message.hasOwnProperty("event_type"))
                             object.event_type = message.event_type;
                         if (message.target_id != null && message.hasOwnProperty("target_id"))
@@ -4421,214 +4421,6 @@ export const cockroach = $root.cockroach = (function() {
                     Event.prototype.toJSON = function toJSON() {
                         return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
                     };
-
-                    Event.Timestamp = (function() {
-
-                        /**
-                         * Properties of a Timestamp.
-                         * @typedef cockroach.server.serverpb.EventsResponse.Event.Timestamp$Properties
-                         * @type {Object}
-                         * @property {Long} [sec] Timestamp sec.
-                         * @property {number} [nsec] Timestamp nsec.
-                         */
-
-                        /**
-                         * Constructs a new Timestamp.
-                         * @exports cockroach.server.serverpb.EventsResponse.Event.Timestamp
-                         * @constructor
-                         * @param {cockroach.server.serverpb.EventsResponse.Event.Timestamp$Properties=} [properties] Properties to set
-                         */
-                        function Timestamp(properties) {
-                            if (properties)
-                                for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                                    this[keys[i]] = properties[keys[i]];
-                        }
-
-                        /**
-                         * Timestamp sec.
-                         * @type {Long|undefined}
-                         */
-                        Timestamp.prototype.sec = $util.Long ? $util.Long.fromBits(0,0,false) : 0;
-
-                        /**
-                         * Timestamp nsec.
-                         * @type {number|undefined}
-                         */
-                        Timestamp.prototype.nsec = 0;
-
-                        /**
-                         * Creates a new Timestamp instance using the specified properties.
-                         * @param {cockroach.server.serverpb.EventsResponse.Event.Timestamp$Properties=} [properties] Properties to set
-                         * @returns {cockroach.server.serverpb.EventsResponse.Event.Timestamp} Timestamp instance
-                         */
-                        Timestamp.create = function create(properties) {
-                            return new Timestamp(properties);
-                        };
-
-                        /**
-                         * Encodes the specified Timestamp message. Does not implicitly {@link cockroach.server.serverpb.EventsResponse.Event.Timestamp.verify|verify} messages.
-                         * @param {cockroach.server.serverpb.EventsResponse.Event.Timestamp$Properties} message Timestamp message or plain object to encode
-                         * @param {$protobuf.Writer} [writer] Writer to encode to
-                         * @returns {$protobuf.Writer} Writer
-                         */
-                        Timestamp.encode = function encode(message, writer) {
-                            if (!writer)
-                                writer = $Writer.create();
-                            if (message.sec != null && message.hasOwnProperty("sec"))
-                                writer.uint32(/* id 1, wireType 0 =*/8).int64(message.sec);
-                            if (message.nsec != null && message.hasOwnProperty("nsec"))
-                                writer.uint32(/* id 2, wireType 0 =*/16).uint32(message.nsec);
-                            return writer;
-                        };
-
-                        /**
-                         * Encodes the specified Timestamp message, length delimited. Does not implicitly {@link cockroach.server.serverpb.EventsResponse.Event.Timestamp.verify|verify} messages.
-                         * @param {cockroach.server.serverpb.EventsResponse.Event.Timestamp$Properties} message Timestamp message or plain object to encode
-                         * @param {$protobuf.Writer} [writer] Writer to encode to
-                         * @returns {$protobuf.Writer} Writer
-                         */
-                        Timestamp.encodeDelimited = function encodeDelimited(message, writer) {
-                            return this.encode(message, writer).ldelim();
-                        };
-
-                        /**
-                         * Decodes a Timestamp message from the specified reader or buffer.
-                         * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
-                         * @param {number} [length] Message length if known beforehand
-                         * @returns {cockroach.server.serverpb.EventsResponse.Event.Timestamp} Timestamp
-                         * @throws {Error} If the payload is not a reader or valid buffer
-                         * @throws {$protobuf.util.ProtocolError} If required fields are missing
-                         */
-                        Timestamp.decode = function decode(reader, length) {
-                            if (!(reader instanceof $Reader))
-                                reader = $Reader.create(reader);
-                            let end = length === undefined ? reader.len : reader.pos + length, message = new $root.cockroach.server.serverpb.EventsResponse.Event.Timestamp();
-                            while (reader.pos < end) {
-                                let tag = reader.uint32();
-                                switch (tag >>> 3) {
-                                case 1:
-                                    message.sec = reader.int64();
-                                    break;
-                                case 2:
-                                    message.nsec = reader.uint32();
-                                    break;
-                                default:
-                                    reader.skipType(tag & 7);
-                                    break;
-                                }
-                            }
-                            return message;
-                        };
-
-                        /**
-                         * Decodes a Timestamp message from the specified reader or buffer, length delimited.
-                         * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
-                         * @returns {cockroach.server.serverpb.EventsResponse.Event.Timestamp} Timestamp
-                         * @throws {Error} If the payload is not a reader or valid buffer
-                         * @throws {$protobuf.util.ProtocolError} If required fields are missing
-                         */
-                        Timestamp.decodeDelimited = function decodeDelimited(reader) {
-                            if (!(reader instanceof $Reader))
-                                reader = $Reader(reader);
-                            return this.decode(reader, reader.uint32());
-                        };
-
-                        /**
-                         * Verifies a Timestamp message.
-                         * @param {Object.<string,*>} message Plain object to verify
-                         * @returns {?string} `null` if valid, otherwise the reason why it is not
-                         */
-                        Timestamp.verify = function verify(message) {
-                            if (typeof message !== "object" || message === null)
-                                return "object expected";
-                            if (message.sec != null)
-                                if (!$util.isInteger(message.sec) && !(message.sec && $util.isInteger(message.sec.low) && $util.isInteger(message.sec.high)))
-                                    return "sec: integer|Long expected";
-                            if (message.nsec != null)
-                                if (!$util.isInteger(message.nsec))
-                                    return "nsec: integer expected";
-                            return null;
-                        };
-
-                        /**
-                         * Creates a Timestamp message from a plain object. Also converts values to their respective internal types.
-                         * @param {Object.<string,*>} object Plain object
-                         * @returns {cockroach.server.serverpb.EventsResponse.Event.Timestamp} Timestamp
-                         */
-                        Timestamp.fromObject = function fromObject(object) {
-                            if (object instanceof $root.cockroach.server.serverpb.EventsResponse.Event.Timestamp)
-                                return object;
-                            let message = new $root.cockroach.server.serverpb.EventsResponse.Event.Timestamp();
-                            if (object.sec != null)
-                                if ($util.Long)
-                                    (message.sec = $util.Long.fromValue(object.sec)).unsigned = false;
-                                else if (typeof object.sec === "string")
-                                    message.sec = parseInt(object.sec, 10);
-                                else if (typeof object.sec === "number")
-                                    message.sec = object.sec;
-                                else if (typeof object.sec === "object")
-                                    message.sec = new $util.LongBits(object.sec.low >>> 0, object.sec.high >>> 0).toNumber();
-                            if (object.nsec != null)
-                                message.nsec = object.nsec >>> 0;
-                            return message;
-                        };
-
-                        /**
-                         * Creates a Timestamp message from a plain object. Also converts values to their respective internal types.
-                         * This is an alias of {@link cockroach.server.serverpb.EventsResponse.Event.Timestamp.fromObject}.
-                         * @function
-                         * @param {Object.<string,*>} object Plain object
-                         * @returns {cockroach.server.serverpb.EventsResponse.Event.Timestamp} Timestamp
-                         */
-                        Timestamp.from = Timestamp.fromObject;
-
-                        /**
-                         * Creates a plain object from a Timestamp message. Also converts values to other types if specified.
-                         * @param {cockroach.server.serverpb.EventsResponse.Event.Timestamp} message Timestamp
-                         * @param {$protobuf.ConversionOptions} [options] Conversion options
-                         * @returns {Object.<string,*>} Plain object
-                         */
-                        Timestamp.toObject = function toObject(message, options) {
-                            if (!options)
-                                options = {};
-                            let object = {};
-                            if (options.defaults) {
-                                if ($util.Long) {
-                                    let long = new $util.Long(0, 0, false);
-                                    object.sec = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
-                                } else
-                                    object.sec = options.longs === String ? "0" : 0;
-                                object.nsec = 0;
-                            }
-                            if (message.sec != null && message.hasOwnProperty("sec"))
-                                if (typeof message.sec === "number")
-                                    object.sec = options.longs === String ? String(message.sec) : message.sec;
-                                else
-                                    object.sec = options.longs === String ? $util.Long.prototype.toString.call(message.sec) : options.longs === Number ? new $util.LongBits(message.sec.low >>> 0, message.sec.high >>> 0).toNumber() : message.sec;
-                            if (message.nsec != null && message.hasOwnProperty("nsec"))
-                                object.nsec = message.nsec;
-                            return object;
-                        };
-
-                        /**
-                         * Creates a plain object from this Timestamp message. Also converts values to other types if specified.
-                         * @param {$protobuf.ConversionOptions} [options] Conversion options
-                         * @returns {Object.<string,*>} Plain object
-                         */
-                        Timestamp.prototype.toObject = function toObject(options) {
-                            return this.constructor.toObject(this, options);
-                        };
-
-                        /**
-                         * Converts this Timestamp to JSON.
-                         * @returns {Object.<string,*>} JSON object
-                         */
-                        Timestamp.prototype.toJSON = function toJSON() {
-                            return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
-                        };
-
-                        return Timestamp;
-                    })();
 
                     return Event;
                 })();
@@ -5368,214 +5160,6 @@ export const cockroach = $root.cockroach = (function() {
                     return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
                 };
 
-                GetUIDataResponse.Timestamp = (function() {
-
-                    /**
-                     * Properties of a Timestamp.
-                     * @typedef cockroach.server.serverpb.GetUIDataResponse.Timestamp$Properties
-                     * @type {Object}
-                     * @property {Long} [sec] Timestamp sec.
-                     * @property {number} [nsec] Timestamp nsec.
-                     */
-
-                    /**
-                     * Constructs a new Timestamp.
-                     * @exports cockroach.server.serverpb.GetUIDataResponse.Timestamp
-                     * @constructor
-                     * @param {cockroach.server.serverpb.GetUIDataResponse.Timestamp$Properties=} [properties] Properties to set
-                     */
-                    function Timestamp(properties) {
-                        if (properties)
-                            for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                                this[keys[i]] = properties[keys[i]];
-                    }
-
-                    /**
-                     * Timestamp sec.
-                     * @type {Long|undefined}
-                     */
-                    Timestamp.prototype.sec = $util.Long ? $util.Long.fromBits(0,0,false) : 0;
-
-                    /**
-                     * Timestamp nsec.
-                     * @type {number|undefined}
-                     */
-                    Timestamp.prototype.nsec = 0;
-
-                    /**
-                     * Creates a new Timestamp instance using the specified properties.
-                     * @param {cockroach.server.serverpb.GetUIDataResponse.Timestamp$Properties=} [properties] Properties to set
-                     * @returns {cockroach.server.serverpb.GetUIDataResponse.Timestamp} Timestamp instance
-                     */
-                    Timestamp.create = function create(properties) {
-                        return new Timestamp(properties);
-                    };
-
-                    /**
-                     * Encodes the specified Timestamp message. Does not implicitly {@link cockroach.server.serverpb.GetUIDataResponse.Timestamp.verify|verify} messages.
-                     * @param {cockroach.server.serverpb.GetUIDataResponse.Timestamp$Properties} message Timestamp message or plain object to encode
-                     * @param {$protobuf.Writer} [writer] Writer to encode to
-                     * @returns {$protobuf.Writer} Writer
-                     */
-                    Timestamp.encode = function encode(message, writer) {
-                        if (!writer)
-                            writer = $Writer.create();
-                        if (message.sec != null && message.hasOwnProperty("sec"))
-                            writer.uint32(/* id 1, wireType 0 =*/8).int64(message.sec);
-                        if (message.nsec != null && message.hasOwnProperty("nsec"))
-                            writer.uint32(/* id 2, wireType 0 =*/16).uint32(message.nsec);
-                        return writer;
-                    };
-
-                    /**
-                     * Encodes the specified Timestamp message, length delimited. Does not implicitly {@link cockroach.server.serverpb.GetUIDataResponse.Timestamp.verify|verify} messages.
-                     * @param {cockroach.server.serverpb.GetUIDataResponse.Timestamp$Properties} message Timestamp message or plain object to encode
-                     * @param {$protobuf.Writer} [writer] Writer to encode to
-                     * @returns {$protobuf.Writer} Writer
-                     */
-                    Timestamp.encodeDelimited = function encodeDelimited(message, writer) {
-                        return this.encode(message, writer).ldelim();
-                    };
-
-                    /**
-                     * Decodes a Timestamp message from the specified reader or buffer.
-                     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
-                     * @param {number} [length] Message length if known beforehand
-                     * @returns {cockroach.server.serverpb.GetUIDataResponse.Timestamp} Timestamp
-                     * @throws {Error} If the payload is not a reader or valid buffer
-                     * @throws {$protobuf.util.ProtocolError} If required fields are missing
-                     */
-                    Timestamp.decode = function decode(reader, length) {
-                        if (!(reader instanceof $Reader))
-                            reader = $Reader.create(reader);
-                        let end = length === undefined ? reader.len : reader.pos + length, message = new $root.cockroach.server.serverpb.GetUIDataResponse.Timestamp();
-                        while (reader.pos < end) {
-                            let tag = reader.uint32();
-                            switch (tag >>> 3) {
-                            case 1:
-                                message.sec = reader.int64();
-                                break;
-                            case 2:
-                                message.nsec = reader.uint32();
-                                break;
-                            default:
-                                reader.skipType(tag & 7);
-                                break;
-                            }
-                        }
-                        return message;
-                    };
-
-                    /**
-                     * Decodes a Timestamp message from the specified reader or buffer, length delimited.
-                     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
-                     * @returns {cockroach.server.serverpb.GetUIDataResponse.Timestamp} Timestamp
-                     * @throws {Error} If the payload is not a reader or valid buffer
-                     * @throws {$protobuf.util.ProtocolError} If required fields are missing
-                     */
-                    Timestamp.decodeDelimited = function decodeDelimited(reader) {
-                        if (!(reader instanceof $Reader))
-                            reader = $Reader(reader);
-                        return this.decode(reader, reader.uint32());
-                    };
-
-                    /**
-                     * Verifies a Timestamp message.
-                     * @param {Object.<string,*>} message Plain object to verify
-                     * @returns {?string} `null` if valid, otherwise the reason why it is not
-                     */
-                    Timestamp.verify = function verify(message) {
-                        if (typeof message !== "object" || message === null)
-                            return "object expected";
-                        if (message.sec != null)
-                            if (!$util.isInteger(message.sec) && !(message.sec && $util.isInteger(message.sec.low) && $util.isInteger(message.sec.high)))
-                                return "sec: integer|Long expected";
-                        if (message.nsec != null)
-                            if (!$util.isInteger(message.nsec))
-                                return "nsec: integer expected";
-                        return null;
-                    };
-
-                    /**
-                     * Creates a Timestamp message from a plain object. Also converts values to their respective internal types.
-                     * @param {Object.<string,*>} object Plain object
-                     * @returns {cockroach.server.serverpb.GetUIDataResponse.Timestamp} Timestamp
-                     */
-                    Timestamp.fromObject = function fromObject(object) {
-                        if (object instanceof $root.cockroach.server.serverpb.GetUIDataResponse.Timestamp)
-                            return object;
-                        let message = new $root.cockroach.server.serverpb.GetUIDataResponse.Timestamp();
-                        if (object.sec != null)
-                            if ($util.Long)
-                                (message.sec = $util.Long.fromValue(object.sec)).unsigned = false;
-                            else if (typeof object.sec === "string")
-                                message.sec = parseInt(object.sec, 10);
-                            else if (typeof object.sec === "number")
-                                message.sec = object.sec;
-                            else if (typeof object.sec === "object")
-                                message.sec = new $util.LongBits(object.sec.low >>> 0, object.sec.high >>> 0).toNumber();
-                        if (object.nsec != null)
-                            message.nsec = object.nsec >>> 0;
-                        return message;
-                    };
-
-                    /**
-                     * Creates a Timestamp message from a plain object. Also converts values to their respective internal types.
-                     * This is an alias of {@link cockroach.server.serverpb.GetUIDataResponse.Timestamp.fromObject}.
-                     * @function
-                     * @param {Object.<string,*>} object Plain object
-                     * @returns {cockroach.server.serverpb.GetUIDataResponse.Timestamp} Timestamp
-                     */
-                    Timestamp.from = Timestamp.fromObject;
-
-                    /**
-                     * Creates a plain object from a Timestamp message. Also converts values to other types if specified.
-                     * @param {cockroach.server.serverpb.GetUIDataResponse.Timestamp} message Timestamp
-                     * @param {$protobuf.ConversionOptions} [options] Conversion options
-                     * @returns {Object.<string,*>} Plain object
-                     */
-                    Timestamp.toObject = function toObject(message, options) {
-                        if (!options)
-                            options = {};
-                        let object = {};
-                        if (options.defaults) {
-                            if ($util.Long) {
-                                let long = new $util.Long(0, 0, false);
-                                object.sec = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
-                            } else
-                                object.sec = options.longs === String ? "0" : 0;
-                            object.nsec = 0;
-                        }
-                        if (message.sec != null && message.hasOwnProperty("sec"))
-                            if (typeof message.sec === "number")
-                                object.sec = options.longs === String ? String(message.sec) : message.sec;
-                            else
-                                object.sec = options.longs === String ? $util.Long.prototype.toString.call(message.sec) : options.longs === Number ? new $util.LongBits(message.sec.low >>> 0, message.sec.high >>> 0).toNumber() : message.sec;
-                        if (message.nsec != null && message.hasOwnProperty("nsec"))
-                            object.nsec = message.nsec;
-                        return object;
-                    };
-
-                    /**
-                     * Creates a plain object from this Timestamp message. Also converts values to other types if specified.
-                     * @param {$protobuf.ConversionOptions} [options] Conversion options
-                     * @returns {Object.<string,*>} Plain object
-                     */
-                    Timestamp.prototype.toObject = function toObject(options) {
-                        return this.constructor.toObject(this, options);
-                    };
-
-                    /**
-                     * Converts this Timestamp to JSON.
-                     * @returns {Object.<string,*>} JSON object
-                     */
-                    Timestamp.prototype.toJSON = function toJSON() {
-                        return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
-                    };
-
-                    return Timestamp;
-                })();
-
                 GetUIDataResponse.Value = (function() {
 
                     /**
@@ -5583,7 +5167,7 @@ export const cockroach = $root.cockroach = (function() {
                      * @typedef cockroach.server.serverpb.GetUIDataResponse.Value$Properties
                      * @type {Object}
                      * @property {Uint8Array} [value] Value value.
-                     * @property {cockroach.server.serverpb.GetUIDataResponse.Timestamp$Properties} [last_updated] Value last_updated.
+                     * @property {google.protobuf.Timestamp$Properties} [last_updated] Value last_updated.
                      */
 
                     /**
@@ -5606,7 +5190,7 @@ export const cockroach = $root.cockroach = (function() {
 
                     /**
                      * Value last_updated.
-                     * @type {cockroach.server.serverpb.GetUIDataResponse.Timestamp$Properties|undefined}
+                     * @type {google.protobuf.Timestamp$Properties|undefined}
                      */
                     Value.prototype.last_updated = null;
 
@@ -5631,7 +5215,7 @@ export const cockroach = $root.cockroach = (function() {
                         if (message.value && message.hasOwnProperty("value"))
                             writer.uint32(/* id 1, wireType 2 =*/10).bytes(message.value);
                         if (message.last_updated && message.hasOwnProperty("last_updated"))
-                            $root.cockroach.server.serverpb.GetUIDataResponse.Timestamp.encode(message.last_updated, writer.uint32(/* id 2, wireType 2 =*/18).fork()).ldelim();
+                            $root.google.protobuf.Timestamp.encode(message.last_updated, writer.uint32(/* id 2, wireType 2 =*/18).fork()).ldelim();
                         return writer;
                     };
 
@@ -5664,7 +5248,7 @@ export const cockroach = $root.cockroach = (function() {
                                 message.value = reader.bytes();
                                 break;
                             case 2:
-                                message.last_updated = $root.cockroach.server.serverpb.GetUIDataResponse.Timestamp.decode(reader, reader.uint32());
+                                message.last_updated = $root.google.protobuf.Timestamp.decode(reader, reader.uint32());
                                 break;
                             default:
                                 reader.skipType(tag & 7);
@@ -5699,7 +5283,7 @@ export const cockroach = $root.cockroach = (function() {
                             if (!(message.value && typeof message.value.length === "number" || $util.isString(message.value)))
                                 return "value: buffer expected";
                         if (message.last_updated != null) {
-                            let error = $root.cockroach.server.serverpb.GetUIDataResponse.Timestamp.verify(message.last_updated);
+                            let error = $root.google.protobuf.Timestamp.verify(message.last_updated);
                             if (error)
                                 return "last_updated." + error;
                         }
@@ -5723,7 +5307,7 @@ export const cockroach = $root.cockroach = (function() {
                         if (object.last_updated != null) {
                             if (typeof object.last_updated !== "object")
                                 throw TypeError(".cockroach.server.serverpb.GetUIDataResponse.Value.last_updated: object expected");
-                            message.last_updated = $root.cockroach.server.serverpb.GetUIDataResponse.Timestamp.fromObject(object.last_updated);
+                            message.last_updated = $root.google.protobuf.Timestamp.fromObject(object.last_updated);
                         }
                         return message;
                     };
@@ -5754,7 +5338,7 @@ export const cockroach = $root.cockroach = (function() {
                         if (message.value != null && message.hasOwnProperty("value"))
                             object.value = options.bytes === String ? $util.base64.encode(message.value, 0, message.value.length) : options.bytes === Array ? Array.prototype.slice.call(message.value) : message.value;
                         if (message.last_updated != null && message.hasOwnProperty("last_updated"))
-                            object.last_updated = $root.cockroach.server.serverpb.GetUIDataResponse.Timestamp.toObject(message.last_updated, options);
+                            object.last_updated = $root.google.protobuf.Timestamp.toObject(message.last_updated, options);
                         return object;
                     };
 
@@ -23822,7 +23406,7 @@ export const cockroach = $root.cockroach = (function() {
                  * @type {Object}
                  * @property {string} [name] FileInfo name.
                  * @property {Long} [size_bytes] FileInfo size_bytes.
-                 * @property {google.protobuf.Timestamp$Properties} [modified] FileInfo modified.
+                 * @property {Long} [mod_time_nanos] FileInfo mod_time_nanos.
                  * @property {cockroach.util.log.FileDetails$Properties} [details] FileInfo details.
                  */
 
@@ -23851,10 +23435,10 @@ export const cockroach = $root.cockroach = (function() {
                 FileInfo.prototype.size_bytes = $util.Long ? $util.Long.fromBits(0,0,false) : 0;
 
                 /**
-                 * FileInfo modified.
-                 * @type {google.protobuf.Timestamp$Properties|undefined}
+                 * FileInfo mod_time_nanos.
+                 * @type {Long|undefined}
                  */
-                FileInfo.prototype.modified = null;
+                FileInfo.prototype.mod_time_nanos = $util.Long ? $util.Long.fromBits(0,0,false) : 0;
 
                 /**
                  * FileInfo details.
@@ -23884,8 +23468,8 @@ export const cockroach = $root.cockroach = (function() {
                         writer.uint32(/* id 1, wireType 2 =*/10).string(message.name);
                     if (message.size_bytes != null && message.hasOwnProperty("size_bytes"))
                         writer.uint32(/* id 2, wireType 0 =*/16).int64(message.size_bytes);
-                    if (message.modified && message.hasOwnProperty("modified"))
-                        $root.google.protobuf.Timestamp.encode(message.modified, writer.uint32(/* id 3, wireType 2 =*/26).fork()).ldelim();
+                    if (message.mod_time_nanos != null && message.hasOwnProperty("mod_time_nanos"))
+                        writer.uint32(/* id 3, wireType 0 =*/24).int64(message.mod_time_nanos);
                     if (message.details && message.hasOwnProperty("details"))
                         $root.cockroach.util.log.FileDetails.encode(message.details, writer.uint32(/* id 4, wireType 2 =*/34).fork()).ldelim();
                     return writer;
@@ -23923,7 +23507,7 @@ export const cockroach = $root.cockroach = (function() {
                             message.size_bytes = reader.int64();
                             break;
                         case 3:
-                            message.modified = $root.google.protobuf.Timestamp.decode(reader, reader.uint32());
+                            message.mod_time_nanos = reader.int64();
                             break;
                         case 4:
                             message.details = $root.cockroach.util.log.FileDetails.decode(reader, reader.uint32());
@@ -23963,11 +23547,9 @@ export const cockroach = $root.cockroach = (function() {
                     if (message.size_bytes != null)
                         if (!$util.isInteger(message.size_bytes) && !(message.size_bytes && $util.isInteger(message.size_bytes.low) && $util.isInteger(message.size_bytes.high)))
                             return "size_bytes: integer|Long expected";
-                    if (message.modified != null) {
-                        let error = $root.google.protobuf.Timestamp.verify(message.modified);
-                        if (error)
-                            return "modified." + error;
-                    }
+                    if (message.mod_time_nanos != null)
+                        if (!$util.isInteger(message.mod_time_nanos) && !(message.mod_time_nanos && $util.isInteger(message.mod_time_nanos.low) && $util.isInteger(message.mod_time_nanos.high)))
+                            return "mod_time_nanos: integer|Long expected";
                     if (message.details != null) {
                         let error = $root.cockroach.util.log.FileDetails.verify(message.details);
                         if (error)
@@ -23996,11 +23578,15 @@ export const cockroach = $root.cockroach = (function() {
                             message.size_bytes = object.size_bytes;
                         else if (typeof object.size_bytes === "object")
                             message.size_bytes = new $util.LongBits(object.size_bytes.low >>> 0, object.size_bytes.high >>> 0).toNumber();
-                    if (object.modified != null) {
-                        if (typeof object.modified !== "object")
-                            throw TypeError(".cockroach.util.log.FileInfo.modified: object expected");
-                        message.modified = $root.google.protobuf.Timestamp.fromObject(object.modified);
-                    }
+                    if (object.mod_time_nanos != null)
+                        if ($util.Long)
+                            (message.mod_time_nanos = $util.Long.fromValue(object.mod_time_nanos)).unsigned = false;
+                        else if (typeof object.mod_time_nanos === "string")
+                            message.mod_time_nanos = parseInt(object.mod_time_nanos, 10);
+                        else if (typeof object.mod_time_nanos === "number")
+                            message.mod_time_nanos = object.mod_time_nanos;
+                        else if (typeof object.mod_time_nanos === "object")
+                            message.mod_time_nanos = new $util.LongBits(object.mod_time_nanos.low >>> 0, object.mod_time_nanos.high >>> 0).toNumber();
                     if (object.details != null) {
                         if (typeof object.details !== "object")
                             throw TypeError(".cockroach.util.log.FileInfo.details: object expected");
@@ -24035,7 +23621,11 @@ export const cockroach = $root.cockroach = (function() {
                             object.size_bytes = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
                         } else
                             object.size_bytes = options.longs === String ? "0" : 0;
-                        object.modified = null;
+                        if ($util.Long) {
+                            let long = new $util.Long(0, 0, false);
+                            object.mod_time_nanos = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
+                        } else
+                            object.mod_time_nanos = options.longs === String ? "0" : 0;
                         object.details = null;
                     }
                     if (message.name != null && message.hasOwnProperty("name"))
@@ -24045,8 +23635,11 @@ export const cockroach = $root.cockroach = (function() {
                             object.size_bytes = options.longs === String ? String(message.size_bytes) : message.size_bytes;
                         else
                             object.size_bytes = options.longs === String ? $util.Long.prototype.toString.call(message.size_bytes) : options.longs === Number ? new $util.LongBits(message.size_bytes.low >>> 0, message.size_bytes.high >>> 0).toNumber() : message.size_bytes;
-                    if (message.modified != null && message.hasOwnProperty("modified"))
-                        object.modified = $root.google.protobuf.Timestamp.toObject(message.modified, options);
+                    if (message.mod_time_nanos != null && message.hasOwnProperty("mod_time_nanos"))
+                        if (typeof message.mod_time_nanos === "number")
+                            object.mod_time_nanos = options.longs === String ? String(message.mod_time_nanos) : message.mod_time_nanos;
+                        else
+                            object.mod_time_nanos = options.longs === String ? $util.Long.prototype.toString.call(message.mod_time_nanos) : options.longs === Number ? new $util.LongBits(message.mod_time_nanos.low >>> 0, message.mod_time_nanos.high >>> 0).toNumber() : message.mod_time_nanos;
                     if (message.details != null && message.hasOwnProperty("details"))
                         object.details = $root.cockroach.util.log.FileDetails.toObject(message.details, options);
                     return object;
