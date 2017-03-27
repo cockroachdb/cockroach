@@ -4847,3 +4847,8 @@ func calcGoodReplicas(
 	}
 	return goodReplicas, behindCount
 }
+
+// GetTempPrefix proxies Store.GetTempPrefix.
+func (r *Replica) GetTempPrefix() (string, error) {
+	return r.store.GetTempPrefix()
+}

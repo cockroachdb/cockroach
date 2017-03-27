@@ -110,7 +110,15 @@ func backupRestoreTestSetup(
 
 	dir, dirCleanupFn := testutils.TempDir(t, 1)
 
+	tmp := filepath.Join(dir, "must-be-cleaned-up")
+
 	tc = testcluster.StartTestCluster(t, clusterSize, base.TestClusterArgs{})
+	for _, s := range tc.Servers {
+		for _, e := range s.Engines() {
+			e.SetTempDir(tmp)
+		}
+	}
+
 	sqlDB = sqlutils.MakeSQLRunner(t, tc.Conns[0])
 
 	sqlDB.Exec(bankCreateDatabase)
@@ -130,6 +138,13 @@ func backupRestoreTestSetup(
 	}
 
 	cleanupFn := func() {
+		items, err := ioutil.ReadDir(tmp)
+		if err != nil && !os.IsNotExist(err) {
+			t.Fatal(err)
+		}
+		for _, leftover := range items {
+			t.Fatalf("found %q remaining in tmpdir", leftover.Name())
+		}
 		tc.Stopper().Stop()
 		dirCleanupFn()
 	}

@@ -199,6 +199,11 @@ type Engine interface {
 	// by invoking Close(). Note that snapshots must not be used after the
 	// original engine has been stopped.
 	NewSnapshot() Reader
+
+	// GetTempDir returns a path under which tempdirs or tmpfiles can be created.
+	GetTempDir() string
+	// SetTempDir overrides the tempdir path returned by GetTempDir.
+	SetTempDir(dir string)
 }
 
 // Batch is the interface for batch specific operations.
