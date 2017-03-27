@@ -63,6 +63,7 @@ func evalExport(
 		return storage.EvalResult{}, err
 	}
 	defer endLimitedRequest()
+	log.Infof(ctx, "export [%s,%s)", args.Key, args.EndKey)
 
 	exportStore, err := MakeExportStorage(ctx, args.Storage)
 	if err != nil {

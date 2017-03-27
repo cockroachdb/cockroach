@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
@@ -46,6 +47,9 @@ func evalWriteBatch(
 
 	_, span := tracing.ChildSpan(ctx, fmt.Sprintf("WriteBatch [%s,%s)", args.Key, args.EndKey))
 	defer tracing.FinishSpan(span)
+	if log.V(1) {
+		log.Infof(ctx, "writebatch [%s,%s)", args.Key, args.EndKey)
+	}
 
 	// We can't use the normal RangeKeyMismatchError mechanism for dealing with
 	// splits because args.Data should stay an opaque blob to DistSender.

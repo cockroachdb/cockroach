@@ -44,16 +44,24 @@ func Import(
 	files []roachpb.ImportRequest_File,
 	kr storageccl.KeyRewriter,
 ) error {
+	var newStartKey, newEndKey roachpb.Key
+	{
+		var ok bool
+		newStartKey, ok = kr.RewriteKey(append([]byte(nil), startKey...))
+		if !ok {
+			return errors.Errorf("could not rewrite key: %s", newStartKey)
+		}
+		newEndKey, ok = kr.RewriteKey(append([]byte(nil), endKey...))
+		if !ok {
+			return errors.Errorf("could not rewrite key: %s", newEndKey)
+		}
+	}
+
 	if log.V(1) {
-		log.Infof(ctx, "import %s-%s (%d files)", startKey, endKey, len(files))
+		log.Infof(ctx, "import [%s,%s) (%d files)", newStartKey, newEndKey, len(files))
 	}
 	if len(files) == 0 {
 		return nil
-	}
-
-	newStartKey, ok := kr.RewriteKey(append([]byte(nil), startKey...))
-	if !ok {
-		return errors.Errorf("could not rewrite key: %s", startKey)
 	}
 
 	req := &roachpb.ImportRequest{
