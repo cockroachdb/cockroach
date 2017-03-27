@@ -228,7 +228,7 @@ func (tc *testContext) StartWithStoreConfig(t testing.TB, stopper *stop.Stopper,
 
 func (tc *testContext) Sender() client.Sender {
 	return client.Wrap(tc.repl, func(ba roachpb.BatchRequest) roachpb.BatchRequest {
-		if ba.RangeID != 0 {
+		if ba.RangeID == 0 {
 			ba.RangeID = 1
 		}
 		if ba.Timestamp == (hlc.Timestamp{}) {
@@ -3720,6 +3720,7 @@ func setupResolutionTest(
 	{
 		var ba roachpb.BatchRequest
 		ba.Header = h
+		ba.RangeID = newRepl.RangeID
 		if err := ba.SetActiveTimestamp(newRepl.store.Clock().Now); err != nil {
 			t.Fatal(err)
 		}
@@ -3767,6 +3768,7 @@ func TestEndTransactionResolveOnlyLocalIntents(t *testing.T) {
 	// Check if the intent in the other range has not yet been resolved.
 	{
 		var ba roachpb.BatchRequest
+		ba.Header.RangeID = newRepl.RangeID
 		gArgs := getArgs(splitKey)
 		ba.Add(&gArgs)
 		if err := ba.SetActiveTimestamp(tc.Clock().Now); err != nil {
@@ -6124,6 +6126,7 @@ func TestReplicaCancelRaft(t *testing.T) {
 				cancel()
 			}
 			var ba roachpb.BatchRequest
+			ba.RangeID = 1
 			ba.Add(&roachpb.GetRequest{
 				Span: roachpb.Span{Key: key},
 			})
@@ -6180,6 +6183,7 @@ func TestReplicaTryAbandon(t *testing.T) {
 	tc.repl.mu.Unlock()
 
 	var ba roachpb.BatchRequest
+	ba.RangeID = 1
 	ba.Add(&roachpb.PutRequest{
 		Span: roachpb.Span{Key: []byte("acdfg")},
 	})
@@ -6568,6 +6572,7 @@ func TestReplicaRetryRaftProposal(t *testing.T) {
 	log.Infof(ctx, "test begins")
 
 	var ba roachpb.BatchRequest
+	ba.RangeID = 1
 	ba.Timestamp = tc.Clock().Now()
 	const expInc = 123
 	iArg := incrementArgs(roachpb.Key("b"), expInc)
