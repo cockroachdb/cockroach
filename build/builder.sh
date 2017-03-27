@@ -144,9 +144,5 @@ docker run --privileged -i ${tty-} --rm \
   --workdir="/go/src/github.com/cockroachdb/cockroach" \
   --env="TMPDIR=/go/src/github.com/cockroachdb/cockroach/artifacts" \
   --env="PAGER=cat" \
-  --env="CLOUDSDK_CORE_PROJECT=${CLOUDSDK_CORE_PROJECT-${GOOGLE_PROJECT-}}" \
-  --env="GOOGLE_CREDENTIALS=${GOOGLE_CREDENTIALS-}" \
   --env="GOTRACEBACK=${GOTRACEBACK-all}" \
-  --env="COVERALLS_TOKEN=${COVERALLS_TOKEN-}" \
-  --env="CODECOV_TOKEN=${CODECOV_TOKEN-}" \
   "${image}:${version}" "${@-bash}"
