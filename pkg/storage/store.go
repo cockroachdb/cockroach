@@ -4065,6 +4065,12 @@ func (s *Store) FrozenStatus(collectFrozen bool) (repDescs []roachpb.ReplicaDesc
 	return
 }
 
+// GetTempPrefix returns a path where temporary files and directories can be
+// allocated.
+func (s *Store) GetTempPrefix() string {
+	return s.engine.GetTempDir()
+}
+
 // The methods below can be used to control a store's queues. Stopping a queue
 // is only meant to happen in tests.
 
