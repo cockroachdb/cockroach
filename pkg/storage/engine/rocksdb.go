@@ -287,6 +287,7 @@ type RocksDB struct {
 	rdb          *C.DBEngine
 	attrs        roachpb.Attributes // Attributes for this engine
 	dir          string             // The data directory
+	tempDir      string             // A path for storing tmp files (ideally under dir).
 	cache        RocksDBCache       // Shared cache.
 	maxSize      int64              // Used for calculating rebalancing and free space.
 	maxOpenFiles int                // The maximum number of open files this instance will use.
@@ -317,6 +318,7 @@ func NewRocksDB(
 	if dir == "" {
 		panic("dir must be non-empty")
 	}
+
 	r := &RocksDB{
 		attrs:        attrs,
 		dir:          dir,
@@ -325,6 +327,16 @@ func NewRocksDB(
 		maxOpenFiles: maxOpenFiles,
 		deallocated:  make(chan struct{}),
 	}
+
+	tmp := filepath.Join(dir, "tmp")
+	if err := os.RemoveAll(tmp); err != nil {
+		return nil, err
+	}
+
+	if err := r.SetTempDir(tmp); err != nil {
+		return nil, err
+	}
+
 	if err := r.open(); err != nil {
 		return nil, err
 	}
@@ -339,9 +351,15 @@ func newMemRocksDB(attrs roachpb.Attributes, cache RocksDBCache, maxSize int64) 
 		maxSize:     maxSize,
 		deallocated: make(chan struct{}),
 	}
+
+	if err := r.SetTempDir(os.TempDir()); err != nil {
+		return nil, err
+	}
+
 	if err := r.open(); err != nil {
 		return nil, err
 	}
+
 	return r, nil
 }
 
@@ -1792,4 +1810,18 @@ func RunLDB(args []string) {
 	}()
 
 	C.DBRunLDB(C.int(len(argv)), &argv[0])
+}
+
+// GetTempDir returns a tmp path (usually under the store directory).
+func (r *RocksDB) GetTempDir() string {
+	return r.tempDir
+}
+
+// SetTempDir allows overriding the tmpdir returned by GetTempDir.
+func (r *RocksDB) SetTempDir(d string) error {
+	if err := os.MkdirAll(d, 0755); err != nil {
+		return err
+	}
+	r.tempDir = d
+	return nil
 }

@@ -507,18 +507,14 @@ func FetchFile(
 	ctx context.Context, tmpPrefix string, e ExportStorage, basename string,
 ) (string, func(), error) {
 	cleanup := func() {}
-<<<<<<< cd199936d861d13ee8785dc427f8dea64bf90b7a
 	// special-case local files to avoid copying to tmp.
 	if loc, ok := e.(*localFileStorage); ok {
 		return filepath.Join(loc.base, basename), cleanup, nil
 	}
 
-||||||| merged common ancestors
-=======
 	if tmpPrefix == "" {
 		return "", cleanup, errors.New("must provide tmpdir path")
 	}
->>>>>>> storageccl: plumb explicit tmp prefix to FetchFile and MakeExportFileTmpWriter
 	r, err := e.ReadFile(ctx, basename)
 	if err != nil {
 		return "", cleanup, errors.Wrapf(err, "creating reader for %q", basename)
@@ -587,7 +583,6 @@ func MakeExportFileTmpWriter(
 		return &localTmpWriter{tmpWriter{tmpfile: f}, filepath.Join(loc.base, name)}, nil
 	}
 
-	f, err := ioutil.TempFile("", name)
 	if tmpPrefix == "" {
 		return nil, errors.New("must provide tmpdir path")
 	}
