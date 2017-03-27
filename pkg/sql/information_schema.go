@@ -535,7 +535,7 @@ func forEachDatabaseDesc(
 	ctx context.Context, p *planner, fn func(*sqlbase.DatabaseDescriptor) error,
 ) error {
 	// Handle real schemas
-	dbDescs, err := p.getAllDatabaseDescs(ctx)
+	dbDescs, err := getAllDatabaseDescs(ctx, p.txn)
 	if err != nil {
 		return err
 	}
@@ -616,7 +616,7 @@ func forEachTableDescWithTableLookup(
 	databases := make(map[string]dbDescTables)
 
 	// Handle real schemas.
-	descs, err := p.getAllDescriptors(ctx)
+	descs, err := getAllDescriptors(ctx, p.txn)
 	if err != nil {
 		return err
 	}

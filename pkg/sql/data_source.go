@@ -487,10 +487,13 @@ func (p *planner) getTableScanOrViewPlan(
 	if p.avoidCachedDescriptors {
 		// AS OF SYSTEM TIME queries need to fetch the table descriptor at the
 		// specified time, and never lease anything. The proto transaction already
-		// has its timestamps set correctly so mustGetTableOrViewDesc will fetch
-		// with the correct timestamp.
-		descFunc = p.mustGetTableOrViewDesc
+		// has its timestamps set correctly so getTableOrViewDesc will fetch with
+		// the correct timestamp.
+		descFunc = func(ctx context.Context, tn *parser.TableName) (*sqlbase.TableDescriptor, error) {
+			return mustGetTableOrViewDesc(ctx, p.txn, p.getVirtualTabler(), tn)
+		}
 	}
+
 	desc, err := descFunc(ctx, tn)
 	if err != nil {
 		return planDataSource{}, err

@@ -312,7 +312,7 @@ func (p *planner) ShowCreateTable(ctx context.Context, n *parser.ShowCreateTable
 		return nil, err
 	}
 
-	desc, err := p.mustGetTableDesc(ctx, tn)
+	desc, err := mustGetTableDesc(ctx, p.txn, p.getVirtualTabler(), tn)
 	if err != nil {
 		return nil, err
 	}
@@ -475,7 +475,7 @@ func (p *planner) ShowCreateView(ctx context.Context, n *parser.ShowCreateView) 
 		return nil, err
 	}
 
-	desc, err := p.mustGetViewDesc(ctx, tn)
+	desc, err := mustGetViewDesc(ctx, p.txn, p.getVirtualTabler(), tn)
 	if err != nil {
 		return nil, err
 	}
@@ -646,7 +646,7 @@ func (p *planner) ShowGrants(ctx context.Context, n *parser.ShowGrants) (planNod
 						v.rows.Close(ctx)
 						return nil, err
 					}
-					tables, err := p.expandTableGlob(ctx, tableGlob)
+					tables, err := expandTableGlob(ctx, p.txn, p.getVirtualTabler(), p.session.Database, tableGlob)
 					if err != nil {
 						v.rows.Close(ctx)
 						return nil, err
@@ -763,7 +763,7 @@ func (p *planner) ShowConstraints(ctx context.Context, n *parser.ShowConstraints
 		return nil, err
 	}
 
-	desc, err := p.mustGetTableDesc(ctx, tn)
+	desc, err := mustGetTableDesc(ctx, p.txn, p.getVirtualTabler(), tn)
 	if err != nil {
 		return nil, err
 	}
