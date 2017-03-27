@@ -490,14 +490,19 @@ func (s *azureStorage) Close() error {
 
 // FetchFile returns the path to a local file containing the content of
 // the requested filename, and a cleanup func to be called when done reading it.
-func FetchFile(ctx context.Context, e ExportStorage, basename string) (string, func(), error) {
+func FetchFile(
+	ctx context.Context, tmpPrefix string, e ExportStorage, basename string,
+) (string, func(), error) {
 	cleanup := func() {}
+	if tmpPrefix == "" {
+		return "", cleanup, errors.New("must provide tmpdir path")
+	}
 	r, err := e.ReadFile(ctx, basename)
 	if err != nil {
 		return "", cleanup, errors.Wrapf(err, "creating reader for %q", basename)
 	}
 	defer r.Close()
-	f, err := ioutil.TempFile("", basename)
+	f, err := ioutil.TempFile(tmpPrefix, basename)
 	if err != nil {
 		return "", cleanup, errors.Wrap(err, "creating tmpfile")
 	}
@@ -545,9 +550,12 @@ var _ ExportFileWriter = &tmpWriter{}
 
 // MakeExportFileTmpWriter returns an ExportFileWriter backed by a tempfile.
 func MakeExportFileTmpWriter(
-	ctx context.Context, store ExportStorage, name string,
+	ctx context.Context, tmpPrefix string, store ExportStorage, name string,
 ) (ExportFileWriter, error) {
-	f, err := ioutil.TempFile("", name)
+	if tmpPrefix == "" {
+		return nil, errors.New("must provide tmpdir path")
+	}
+	f, err := ioutil.TempFile(tmpPrefix, name)
 	if err != nil {
 		return nil, err
 	}
