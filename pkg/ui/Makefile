@@ -43,34 +43,38 @@ GO_BINDATA = $(GOPATH_BIN)/go-bindata
 
 GOBINDATA_TARGET = embedded.go
 
+# Tell Make to delete the target if its recipe fails. Otherwise, if a recipe
+# modifies its target before failing, the target's timestamp will make it appear
+# up-to-date on the next invocation of Make, even though it is likely corrupt.
+# See: https://www.gnu.org/software/make/manual/html_node/Errors.html#Errors
+.DELETE_ON_ERROR:
+
 .PHONY: all
 all: lint test $(GOBINDATA_TARGET)
+
+.PHONY: protos
+protos:
+	$(MAKE) -C $(ORG_ROOT) -f cockroach/build/protobuf.mk
 
 # Running `go generate` will call this target. Update this if you add new
 # generated files.
 .PHONY: generate
 generate: $(GOBINDATA_TARGET)
 
-# TODO(tamird): is there a way to not repeat this here? It's already in protobuf.mk
-app/js/protos.js generated/protos.json generated/protos.d.ts: $(addprefix $(REPO_ROOT)/, $(sort $(shell cd $(REPO_ROOT) && git ls-files --exclude-standard --cached --others -- '*.proto')))
-	$(MAKE) -C $(ORG_ROOT) -f cockroach/build/protobuf.mk
-
 .PHONY: lint
 lint: yarn.installed
 	stylint -c .stylintrc styl
-	tslint -c tslint.json $(shell find src -name '*.tsx' -or -name '*.ts')
+	tslint -c tslint.json $(shell find src -name '*.tsx' -or -name '*.ts' -not -path 'src/js/*')
 
 .PHONY: test
-test: yarn.installed
+test: yarn.installed protos
 	karma start
 
-test-debug: yarn.installed
+.PHONY: test-debug
+test-debug: yarn.installed protos
 	karma start --browsers Chrome --no-single-run --reporters mocha
 
-.ALWAYS_REBUILD:
-.PHONY: .ALWAYS_REBUILD
-
-$(GOBINDATA_TARGET): yarn.installed $(GO_BINDATA) .ALWAYS_REBUILD
+$(GOBINDATA_TARGET): yarn.installed $(GO_BINDATA) protos
 	rm -rf dist
 	webpack -p
 	$(GO_BINDATA) -nometadata -pkg ui -o $@ -prefix dist dist
@@ -81,4 +85,5 @@ $(GOBINDATA_TARGET): yarn.installed $(GO_BINDATA) .ALWAYS_REBUILD
 
 yarn.installed: package.json yarn.lock
 	yarn install
+	rm -rf node_modules/@types/node # https://github.com/yarnpkg/yarn/issues/2987
 	touch $@

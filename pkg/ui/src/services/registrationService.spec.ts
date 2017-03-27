@@ -2,6 +2,7 @@ import _ from "lodash";
 import { assert } from "chai";
 import { spy, SinonSpy } from "sinon";
 import { Store } from "redux";
+import * as protobuf from "protobufjs/minimal";
 
 import registrationSyncListener from "./registrationService";
 import * as registrationService from "./registrationService";
@@ -27,14 +28,18 @@ let store: Store<AdminUIState>;
 // Generates a GetUIDataResponse with the given key value pairs.
 function generateGetUIDataResponse(kvPairs: { [key: string]: any; }) {
   let values = _.mapValues(kvPairs, (v) => {
+    const stringifiedValue = JSON.stringify(v);
+    const buffer = new Uint8Array(protobuf.util.utf8.length(stringifiedValue));
+    protobuf.util.utf8.write(stringifiedValue, buffer, 0);
+
     return {
-      value: btoa(JSON.stringify(v)),
-      // last_updated currently isn't used.
-      last_updated: { sec: "1476990411", nsec: 939569000 },
+      value: buffer,
+      // // last_updated currently isn't used.
+      // last_updated: { sec: "1476990411", nsec: 939569000 },
     };
   });
-  return (protos.cockroach.server.serverpb.GetUIDataResponse as any)
-    .decodeJSON(JSON.stringify({ key_values: values })).toArrayBuffer();
+  const encodedResponse = protos.cockroach.server.serverpb.GetUIDataResponse.encode({ key_values: values }).finish();
+  return api.toArrayBuffer(encodedResponse);
 }
 
 describe("registration service helper functions", function () {
@@ -166,7 +171,7 @@ describe("registration service helper functions", function () {
 
     afterEach(fetchMock.restore);
 
-    it("unregisters of optin is false", function (done) {
+    it("unregisters if optin is false", function (done) {
       fetchMock.mock({
         matcher: unregistrationFetchURL,
         response: () => {
@@ -178,11 +183,12 @@ describe("registration service helper functions", function () {
 
       fetchMock.mock({
         matcher: uiDataPostFetchURL,
-        response: (_url, req) => {
+        response: (_url: string, requestObj: RequestInit) => {
           assert(registrationService.getSaving());
           assert.equal(registrationService.getErrors(), 0);
-          let uiDataRequest = protos.cockroach.server.serverpb.SetUIDataRequest.decode((req as any).body);
-          assert.equal(uiDataRequest.key_values.get(KEY_REGISTRATION_SYNCHRONIZED).toUTF8(), "true");
+          const uiDataRequest = protos.cockroach.server.serverpb.SetUIDataRequest.decode(new Uint8Array(requestObj.body as ArrayBuffer));
+          const buffer = uiDataRequest.key_values[KEY_REGISTRATION_SYNCHRONIZED];
+          assert.equal(JSON.parse(protobuf.util.utf8.read(buffer, 0, buffer.byteLength)), true);
           return 200;
         },
       });
@@ -218,11 +224,12 @@ describe("registration service helper functions", function () {
 
       fetchMock.mock({
         matcher: uiDataPostFetchURL,
-        response: (_url, req) => {
+        response: (_url: string, requestObj: RequestInit) => {
           assert(registrationService.getSaving());
           assert.equal(registrationService.getErrors(), 0);
-          let uiDataRequest = protos.cockroach.server.serverpb.SetUIDataRequest.decode((req as any).body);
-          assert.equal(uiDataRequest.key_values.get(KEY_REGISTRATION_SYNCHRONIZED).toUTF8(), "true");
+          const uiDataRequest = protos.cockroach.server.serverpb.SetUIDataRequest.decode(new Uint8Array(requestObj.body as ArrayBuffer));
+          const buffer = uiDataRequest.key_values[KEY_REGISTRATION_SYNCHRONIZED];
+          assert.equal(JSON.parse(protobuf.util.utf8.read(buffer, 0, buffer.byteLength)), true);
           return 200;
         },
       });
@@ -310,8 +317,9 @@ describe("registration sync end to end", function() {
     fetchMock.mock({
       matcher: clusterFetchURL,
       response: () => {
+        const encodedResponse = protos.cockroach.server.serverpb.ClusterResponse.encode({ cluster_id: CLUSTER_ID }).finish();
         return {
-          body: (new protos.cockroach.server.serverpb.ClusterResponse({ cluster_id: CLUSTER_ID })).toArrayBuffer(),
+          body: api.toArrayBuffer(encodedResponse),
         };
       },
     });
@@ -379,8 +387,9 @@ describe("registration sync end to end", function() {
         // This dispatch will trigger the listener, but it shouldn't trigger any
         // other requests.
         store.dispatch({ type: null });
+        const encodedResponse = protos.cockroach.server.serverpb.ClusterResponse.encode({ cluster_id: CLUSTER_ID }).finish();
         return {
-          body: (new protos.cockroach.server.serverpb.ClusterResponse({ cluster_id: CLUSTER_ID })).toArrayBuffer(),
+          body: api.toArrayBuffer(encodedResponse),
         };
       },
     });
@@ -453,8 +462,9 @@ describe("registration sync end to end", function() {
         // This dispatch will trigger the listener, but it shouldn't trigger any
         // other requests.
         store.dispatch({ type: null });
+        const encodedResponse = protos.cockroach.server.serverpb.ClusterResponse.encode({ cluster_id: CLUSTER_ID }).finish();
         return {
-          body: (new protos.cockroach.server.serverpb.ClusterResponse({ cluster_id: CLUSTER_ID })).toArrayBuffer(),
+          body: api.toArrayBuffer(encodedResponse),
         };
       },
     });

@@ -12,56 +12,47 @@ import { MetricsDataComponentProps } from "../components/graphs";
 import { Metric, MetricProps } from "../components/metric";
 import { findChildrenOfType } from "../util/find";
 import { MilliToNano } from "../util/convert";
-import { TimeSeriesQueryAggregator, TimeSeriesQueryDerivative } from "../util/protoEnums";
-
-type TSQueryMessage = Proto2TypeScript.cockroach.ts.tspb.QueryMessage;
 
 /**
  * queryFromProps is a helper method which generates a TimeSeries Query data
  * structure based on a MetricProps object.
  */
-function queryFromProps(metricProps: MetricProps,
-                        graphProps: MetricsDataComponentProps): TSQueryMessage {
-    let derivative = TimeSeriesQueryDerivative.NONE;
-    let sourceAggregator = TimeSeriesQueryAggregator.SUM;
-    let downsampler = TimeSeriesQueryAggregator.AVG;
+function queryFromProps(
+  metricProps: MetricProps,
+  graphProps: MetricsDataComponentProps,
+): protos.cockroach.ts.tspb.Query$Properties {
+    let derivative = protos.cockroach.ts.tspb.TimeSeriesQueryDerivative.NONE;
+    let sourceAggregator = protos.cockroach.ts.tspb.TimeSeriesQueryAggregator.SUM;
+    let downsampler = protos.cockroach.ts.tspb.TimeSeriesQueryAggregator.AVG;
 
     // Compute derivative function.
     if (metricProps.rate) {
-      derivative = TimeSeriesQueryDerivative.DERIVATIVE;
+      derivative = protos.cockroach.ts.tspb.TimeSeriesQueryDerivative.DERIVATIVE;
     } else if (metricProps.nonNegativeRate) {
-      derivative = TimeSeriesQueryDerivative.NON_NEGATIVE_DERIVATIVE;
+      derivative = protos.cockroach.ts.tspb.TimeSeriesQueryDerivative.NON_NEGATIVE_DERIVATIVE;
     }
     // Compute downsample function.
     if (metricProps.downsampleMax) {
-      downsampler = TimeSeriesQueryAggregator.MAX;
+      downsampler = protos.cockroach.ts.tspb.TimeSeriesQueryAggregator.MAX;
     } else if (metricProps.downsampleMin) {
-      downsampler = TimeSeriesQueryAggregator.MIN;
+      downsampler = protos.cockroach.ts.tspb.TimeSeriesQueryAggregator.MIN;
     }
     // Compute aggregation function.
     if (metricProps.aggregateMax) {
-      sourceAggregator = TimeSeriesQueryAggregator.MAX;
+      sourceAggregator = protos.cockroach.ts.tspb.TimeSeriesQueryAggregator.MAX;
     } else if (metricProps.aggregateMin) {
-      sourceAggregator = TimeSeriesQueryAggregator.MIN;
+      sourceAggregator = protos.cockroach.ts.tspb.TimeSeriesQueryAggregator.MIN;
     } else if (metricProps.aggregateAvg) {
-      sourceAggregator = TimeSeriesQueryAggregator.AVG;
+      sourceAggregator = protos.cockroach.ts.tspb.TimeSeriesQueryAggregator.AVG;
     }
 
-    return new protos.cockroach.ts.tspb.Query({
+    return {
       name: metricProps.name,
       sources: metricProps.sources || graphProps.sources || undefined,
-
-      /**
-       * HACK: This casting is related to the problem outlined in the comment on
-       * TimeSeriesQueryAggregator above. TSQueryMessage expects values in terms of the
-       * original enumeration (provided by Proto2Typescript), but the values are
-       * not available in the SystemJS compiler. Values are cast *through*
-       * number, as apparently direct casts between enumerations are forbidden.
-       */
-      downsampler: downsampler as number as Proto2TypeScript.cockroach.ts.tspb.TimeSeriesQueryAggregator,
-      source_aggregator: sourceAggregator as number as Proto2TypeScript.cockroach.ts.tspb.TimeSeriesQueryAggregator,
-      derivative: derivative as number as Proto2TypeScript.cockroach.ts.tspb.TimeSeriesQueryDerivative,
-    });
+      downsampler: downsampler,
+      source_aggregator: sourceAggregator,
+      derivative: derivative,
+    };
 }
 
 // QueryTimeInfo is a convenience structure which can be used to pass important
@@ -126,15 +117,14 @@ type MetricsDataProviderProps = MetricsDataProviderConnectProps & MetricsDataPro
  */
 class MetricsDataProvider extends React.Component<MetricsDataProviderProps, {}> {
   private queriesSelector = createSelector(
-    (props: MetricsDataProviderProps & {children?: any}) => props.children,
+    (props: MetricsDataProviderProps & {children?: React.ReactNode}) => props.children,
     (children) => {
       // MetricsDataProvider should contain only one direct child.
-      let child = React.Children.only(this.props.children) as
-        React.ReactElement<MetricsDataComponentProps>;
+      let child: React.ReactElement<MetricsDataComponentProps> = React.Children.only(this.props.children);
       // Perform a simple DFS to find all children which are Metric objects.
       let selectors: React.ReactElement<MetricProps>[] = findChildrenOfType(children, Metric);
       // Construct a query for each found selector child.
-      return _(selectors).map((s) => queryFromProps(s.props, child.props)).value();
+      return _.map(selectors, (s) => queryFromProps(s.props, child.props));
     });
 
   private requestMessage = createSelector(
@@ -179,11 +169,11 @@ class MetricsDataProvider extends React.Component<MetricsDataProviderProps, {}> 
     this.refreshMetricsIfStale(props);
   }
 
-  getData(props = this.props) {
+  getData() {
     if (this.props.metrics) {
       let { data, request } = this.props.metrics;
       // Do not attach data if queries are not equivalent.
-      if (data && request && _.isEqual(request.queries, this.requestMessage(props).queries)) {
+      if (data && request && _.isEqual(request.queries, this.requestMessage(this.props).queries)) {
         return data;
       }
     }
@@ -194,7 +184,7 @@ class MetricsDataProvider extends React.Component<MetricsDataProviderProps, {}> 
     // MetricsDataProvider should contain only one direct child.
     let child = React.Children.only(this.props.children);
     let dataProps: MetricsDataComponentProps = {
-      data: this.getData(this.props),
+      data: this.getData(),
       timeInfo: this.props.timeInfo,
     };
     return React.cloneElement(child as React.ReactElement<MetricsDataComponentProps>, dataProps);

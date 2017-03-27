@@ -12,7 +12,7 @@ import { QueryTimeInfo } from "../containers/metricsDataProvider";
 
 import { MetricProps } from "./metric";
 
-type TSResponseMessage = Proto2TypeScript.cockroach.ts.tspb.TimeSeriesQueryResponseMessage;
+type TSResponse = protos.cockroach.ts.tspb.TimeSeriesQueryResponse;
 
 // Global set of colors for graph series.
 const seriesPalette = [
@@ -121,10 +121,10 @@ class AxisDomain {
   // label returns the label for the axis.
   label: string = "";
   // tickFormat returns a function used to format the tick values for display.
-  tickFormat: (n: number) => any = _.identity;
+  tickFormat: (n: number) => string = _.identity;
   // guideFormat returns a function used to format the axis values in the
   // chart's interactive guideline.
-  guideFormat: (n: number) => any = _.identity;
+  guideFormat: (n: number) => string = _.identity;
 
   // constructs a new AxisRange with the given minimum and maximum value, with
   // ticks placed at intervals of the given increment in between the min and
@@ -346,7 +346,7 @@ interface SeenTimestamps {
  * returns a SeenTimestamps object with all the values set to false. This object
  * is used to track missing timestamps for each individual dataset.
  */
-function getTimestamps(metrics: React.ReactElement<MetricProps>[], data: TSResponseMessage): SeenTimestamps {
+function getTimestamps(metrics: React.ReactElement<MetricProps>[], data: TSResponse): SeenTimestamps {
   return _(metrics)
      // Get all the datapoints from all series in a single array.
     .flatMap((_s, idx) => data.results[idx].datapoints)
@@ -358,6 +358,13 @@ function getTimestamps(metrics: React.ReactElement<MetricProps>[], data: TSRespo
     .value();
 }
 
+type formattedDatum = {
+  values: protos.cockroach.ts.tspb.TimeSeriesDatapoint$Properties,
+  key: string,
+  area: boolean,
+  fillOpacity: number,
+};
+
 /**
  * ProcessDataPoints is a helper function to process graph data from the server
  * into a format appropriate for display on an NVD3 graph. This includes the
@@ -366,14 +373,14 @@ function getTimestamps(metrics: React.ReactElement<MetricProps>[], data: TSRespo
 function ProcessDataPoints(
   metrics: React.ReactElement<MetricProps>[],
   axis: React.ReactElement<AxisProps>,
-  data: TSResponseMessage,
+  data: TSResponse,
   timeInfo: QueryTimeInfo,
   stacked = false,
 ) {
   let yAxisRange = new AxisRange();
   let xAxisRange = new AxisRange();
 
-  let formattedData: any[] = [];
+  let formattedData: formattedDatum[];
 
   // timestamps has a key for all the timestamps present across all datasets
   let timestamps = getTimestamps(metrics, data);
@@ -402,15 +409,15 @@ function ProcessDataPoints(
       _.each(datapoints, (d) => seenTimestamps[d.timestamp_nanos.toNumber()] = true);
       _.each(seenTimestamps, (seen, ts) => {
         if (!seen) {
-          datapoints.push(new protos.cockroach.ts.tspb.TimeSeriesDatapoint({
+          datapoints.push({
             timestamp_nanos: Long.fromString(ts),
             value: null,
-          }));
+          });
         }
       });
 
       formattedData.push({
-        values: datapoints || [],
+        values: datapoints,
         key: s.props.title || s.props.name,
         area: true,
         fillOpacity: .1,
@@ -450,8 +457,8 @@ function ProcessDataPoints(
 
 export function InitLineChart(chart: nvd3.LineChart | nvd3.StackedAreaChart) {
     chart
-      .x((d: Proto2TypeScript.cockroach.ts.tspb.TimeSeriesDatapoint) => new Date(NanoToMilli(d && d.timestamp_nanos.toNumber())))
-      .y((d: Proto2TypeScript.cockroach.ts.tspb.TimeSeriesDatapoint) => d && d.value)
+      .x((d: protos.cockroach.ts.tspb.TimeSeriesDatapoint) => new Date(NanoToMilli(d && d.timestamp_nanos.toNumber())))
+      .y((d: protos.cockroach.ts.tspb.TimeSeriesDatapoint) => d && d.value)
       .useInteractiveGuideline(true)
       .showLegend(true)
       .showYAxis(true)
@@ -473,12 +480,12 @@ export function ConfigureLineChart(
   svgEl: SVGElement,
   metrics: React.ReactElement<MetricProps>[],
   axis: React.ReactElement<AxisProps>,
-  data: TSResponseMessage,
+  data: TSResponse,
   timeInfo: QueryTimeInfo,
   stacked = false,
 ) {
   chart.showLegend(metrics.length > 1 && metrics.length <= MAX_LEGEND_SERIES);
-  let formattedData: any[] = [];
+  let formattedData: formattedDatum[];
 
   if (data) {
     let processed = ProcessDataPoints(metrics, axis, data, timeInfo, stacked);
@@ -523,7 +530,7 @@ export function ConfigureLineChart(
 // components directly contained by a MetricsDataProvider. It is used by a
 // MetricsDataProvider to pass query data to its contained component.
 export interface MetricsDataComponentProps {
-  data?: TSResponseMessage;
+  data?: TSResponse;
   timeInfo?: QueryTimeInfo;
   // Allow graphs to declare a single source for all metrics. This is a
   // convenient syntax for a common use case where all metrics on a graph are

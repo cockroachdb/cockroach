@@ -2,7 +2,9 @@
 
 import _ from "lodash";
 
-type Event = Proto2TypeScript.cockroach.server.serverpb.EventsResponse.Event;
+import * as protos from "../js/protos";
+
+type Event = protos.cockroach.server.serverpb.EventsResponse.Event;
 
 // Recorded when a database is created.
 export const CREATE_DATABASE = "create_database";

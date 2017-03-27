@@ -2,7 +2,7 @@
  * This module contains all the REST endpoints for communicating with the admin UI.
  */
 
-import "whatwg-fetch";
+import "whatwg-fetch"; // needed for jsdom?
 import moment from "moment";
 
 import { VersionList, VersionCheckRequest, RegistrationRequest, UnregistrationRequest } from "../interfaces/cockroachlabs";
@@ -31,8 +31,8 @@ function timeoutFetch<T extends BodyInit, R>(url: string, req?: T, config: Fetch
     if (!res.ok) {
       throw Error(res.statusText);
     }
-    return res.json();
-  }) as Promise<any>; // TODO(tamird): why is this cast required?
+    return res.json() as Promise<R>;
+  });
 }
 
 /**

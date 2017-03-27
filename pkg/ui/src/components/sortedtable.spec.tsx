@@ -80,8 +80,8 @@ describe("<SortedTable>", function() {
     };
     assertMatches(data);
     wrapper = makeTable(data, {sortKey: 0, ascending: true});
-    assertMatches(_(data).sortBy((r) => r.name).value());
+    assertMatches(_.sortBy(data, (r) => r.name));
     wrapper.setProps({uiSortSetting: {sortKey: 1, ascending: true} as SortSetting});
-    assertMatches(_(data).sortBy((r) => r.value).value());
+    assertMatches(_.sortBy(data, (r) => r.value));
   });
 });

@@ -1,6 +1,8 @@
 import * as React from "react";
 import { connect } from "react-redux";
 
+import * as protos from  "../../js/protos";
+
 import { SummaryBar, SummaryHeadlineStat } from "../../components/summaryBar";
 import { SortSetting } from "../../components/sortabletable";
 import { SortedTable } from "../../components/sortedtable";
@@ -15,15 +17,13 @@ import {
     DatabaseSummaryBase, DatabaseSummaryExplicitData, databaseDetails, tableInfos, grants,
 } from "./databaseSummary";
 
-type Grant = Proto2TypeScript.cockroach.server.serverpb.DatabaseDetailsResponse.Grant;
-
 // Specialization of generic SortedTable component:
 //   https://github.com/Microsoft/TypeScript/issues/3960
 //
 // The variable name must start with a capital letter or TSX will not recognize
 // it as a component.
 // tslint:disable-next-line:variable-name
-export const DatabaseGrantsSortedTable = SortedTable as new () => SortedTable<Grant>;
+export const DatabaseGrantsSortedTable = SortedTable as new () => SortedTable<protos.cockroach.server.serverpb.DatabaseDetailsResponse.Grant>;
 
 // Constants used to store per-page sort settings in the redux UI store.
 const UI_DATABASE_GRANTS_SORT_SETTING_KEY = "databases/sort_setting/grants";

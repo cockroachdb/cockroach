@@ -36,7 +36,6 @@ message NodeStatus {
   optional int64 updated_at = 4 [(gogoproto.nullable) = false];
   map<string, double> metrics = 5;
   repeated StoreStatus store_statuses = 6 [(gogoproto.nullable) = false];
-  repeated string args = 7 [(gogoproto.nullable) = false];
-  repeated string env = 8 [(gogoproto.nullable) = false];
+  repeated string args = 7;
+  repeated string env = 8;
 }
-

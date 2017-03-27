@@ -7,7 +7,7 @@ import { MetricsDataProvider } from "../containers/metricsDataProvider";
  * children of this component) in a MetricsDataProvider and some additional tags
  * relevant to the layout of our graphs pages.
  */
-export default function (props: { groupId: string, hide: boolean, childClassName?: string, children?: any }) {
+export default function (props: { groupId: string, hide: boolean, childClassName?: string, children?: React.ReactNode }) {
   if (props.hide) {
     return null;
   }

@@ -16,7 +16,7 @@ import { SortSetting } from "../components/sortabletable";
 import { SortedTable } from "../components/sortedtable";
 import { NanoToMilli, LongToMoment } from "../util/convert";
 import { Bytes } from "../util/format";
-import { NodeStatus, MetricConstants, BytesUsed } from  "../util/proto";
+import { NodeStatus$Properties, MetricConstants, BytesUsed } from  "../util/proto";
 
 // Constant used to store sort settings in the redux UI store.
 const UI_NODES_LIVE_SORT_SETTING_KEY = "nodes/live_sort_setting";
@@ -29,7 +29,7 @@ const UI_NODES_DEAD_SORT_SETTING_KEY = "nodes/dead_sort_setting";
 // The variable name must start with a capital letter or TSX will not recognize
 // it as a component.
 // tslint:disable-next-line:variable-name
-const NodeSortedTable = SortedTable as new () => SortedTable<Proto2TypeScript.cockroach.server.status.NodeStatus>;
+const NodeSortedTable = SortedTable as new () => SortedTable<NodeStatus$Properties>;
 
 /**
  * NodeCategoryListProps are the properties shared by both LiveNodeList and
@@ -38,7 +38,7 @@ const NodeSortedTable = SortedTable as new () => SortedTable<Proto2TypeScript.co
 interface NodeCategoryListProps {
   sortSetting: SortSetting;
   setUISetting: typeof setUISetting;
-  statuses: NodeStatus[];
+  statuses: NodeStatus$Properties[];
   nodesSummary: NodesSummary;
 }
 
@@ -75,7 +75,7 @@ class LiveNodeList extends React.Component<NodeCategoryListProps, {}> {
               {
                 title: "Node",
                 cell: (ns) => {
-                  const status = nodesSummary.livenessStatusByNodeID[ns.getDesc().getNodeId()] || 0;
+                  const status = nodesSummary.livenessStatusByNodeID[ns.desc.node_id] || 0;
                   const s = LivenessStatus[status].toLowerCase();
                   const tooltip = (status === LivenessStatus.HEALTHY) ?
                     "This node is currently healthy." :
@@ -110,14 +110,14 @@ class LiveNodeList extends React.Component<NodeCategoryListProps, {}> {
               // Replicas - displays the total number of replicas on the node.
               {
                 title: "Replicas",
-                cell: (ns) => ns.metrics.get(MetricConstants.replicas).toString(),
-                sort: (ns) => ns.metrics.get(MetricConstants.replicas),
+                cell: (ns) => ns.metrics[MetricConstants.replicas].toString(),
+                sort: (ns) => ns.metrics[MetricConstants.replicas],
               },
               // Mem Usage - total memory being used on this node.
               {
                 title: "Mem Usage",
-                cell: (ns) => Bytes(ns.metrics.get(MetricConstants.rss)),
-                sort: (ns) => ns.metrics.get(MetricConstants.rss),
+                cell: (ns) => Bytes(ns.metrics[MetricConstants.rss]),
+                sort: (ns) => ns.metrics[MetricConstants.rss],
               },
               // Logs - a link to the logs data for this node.
               {
@@ -203,8 +203,8 @@ class DeadNodeList extends React.Component<NodeCategoryListProps, {}> {
               {
                 title: "Downtime",
                 cell: (ns) => {
-                  const liveness = nodesSummary.livenessByNodeID[ns.getDesc().getNodeId()];
-                  const deadTime = liveness.expiration.getWallTime();
+                  const liveness = nodesSummary.livenessByNodeID[ns.desc.node_id];
+                  const deadTime = liveness.expiration.wall_time;
                   const deadMoment = LongToMoment(deadTime);
                   return moment.duration(deadMoment.diff(moment())).humanize();
                 },
@@ -238,7 +238,7 @@ const partitonedStatuses = createSelector(
   (summary) => {
     const liveOrDead = _.partition(
       summary.nodeStatuses,
-      (ns) => summary.livenessStatusByNodeID[ns.getDesc().node_id] !== LivenessStatus.DEAD,
+      (ns) => summary.livenessStatusByNodeID[ns.desc.node_id] !== LivenessStatus.DEAD,
     );
     return {
       live: liveOrDead[0],

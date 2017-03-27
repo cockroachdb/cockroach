@@ -6,7 +6,7 @@ import { CachedDataReducer, CachedDataReducerState, KeyedCachedDataReducer, Keye
 import * as api from "../util/api";
 import { VersionList } from "../interfaces/cockroachlabs";
 import { versionCheck } from "../util/cockroachlabsAPI";
-import { NodeStatus, RollupStoreMetrics } from "../util/proto";
+import { NodeStatus$Properties, RollupStoreMetrics } from "../util/proto";
 
 export const clusterReducerObj = new CachedDataReducer(api.getCluster, "cluster");
 export const refreshCluster = clusterReducerObj.refresh;
@@ -18,7 +18,7 @@ export type HealthState = CachedDataReducerState<api.HealthResponseMessage>;
 const healthReducerObj = new CachedDataReducer(api.getHealth, "health", moment.duration(2, "s"));
 export const refreshHealth = healthReducerObj.refresh;
 
-function rollupStoreMetrics(res: api.NodesResponseMessage): NodeStatus[] {
+function rollupStoreMetrics(res: api.NodesResponseMessage): NodeStatus$Properties[] {
   return _.map(res.nodes, (node) => {
     RollupStoreMetrics(node);
     return node;
@@ -66,7 +66,7 @@ export interface APIReducersState {
   cluster: CachedDataReducerState<api.ClusterResponseMessage>;
   events: CachedDataReducerState<api.EventsResponseMessage>;
   health: HealthState;
-  nodes: CachedDataReducerState<NodeStatus[]>;
+  nodes: CachedDataReducerState<NodeStatus$Properties[]>;
   raft: CachedDataReducerState<api.RaftDebugResponseMessage>;
   version: CachedDataReducerState<VersionList>;
   databases: CachedDataReducerState<api.DatabasesResponseMessage>;

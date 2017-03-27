@@ -11,7 +11,9 @@ const webpackConfig = require('./webpack.config');
 
 const app = express();
 
-const compiler = webpack(webpackConfig);
+const compiler = webpack(Object.assign(webpackConfig, {
+  devtool: 'source-map',
+}));
 
 const argv = require('yargs')
   .usage('Usage: $0 <remote-cockroach-ui-url> [options]')
