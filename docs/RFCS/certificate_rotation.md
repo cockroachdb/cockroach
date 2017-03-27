@@ -10,13 +10,13 @@
 This RFC proposes changes to certificate and key management.
 
 The main goals of this RFC are:
-* support addition and use of new certs without node restart
+* support addition and use of new certificates and keys without node restart
 * decouple CA from node certificate rotation
 * simplify generation and use of certificates and keys
 
 Out of scope for this RFC:
 * certificate revocation
-* certificate/key deployment
+* certificate/key deployment (aka: getting the files onto the nodes/clients)
 * automatic certificate renewal
 * use of CSRs (certificate signing requests)
 
@@ -41,13 +41,17 @@ CA and node certificates need radically different lifetimes to allow new
 node certificates to be rolled out rapidly without waiting for CA propagation
 to all clients and nodes.
 
-We propose:
+We propose the following defaults:
 * 5 year expiration on CA certificates
 * 1 year expiration on node certificates
 
+This may not always be appropriate. See "unresolved questions".
+
+## Expiration monitoring
+
 To provide enough warning of potential problems, each node should record
 and export the start/end validity timestamp for each type of certificate:
-* the CA certificate (has contraint `CA:TRUE`)
+* the CA certificate
 * the combined client/server certificate issued to user `node`
 
 If two certificates of the same type are present (eg: two CA certificates), report
@@ -59,6 +63,44 @@ remaining or when a fraction of the lifetime has expired.
 It may be preferable to monitor certificate chains rather than individual certificates
 (see Known Issues below) and report validity dates for the latest valid chain.
 
+# Certificate and key files
+
+## Storage location
+
+The location of certificates and keys can be specified using the `--certs-dir` command-line
+flag or the corresponding `COCKROACH_CERTS_DIR` environment variable.
+
+The flag value is a relative directory, with a default value of `cockroach-certs`.
+
+All files within the directory are examined, but sub-directories are not traversed.
+
+## Naming scheme
+
+We propose the following naming scheme:
+`<prefix>.<middle>.<extension>
+
+`<prefix> determines the role:
+* `ca`: certificate authority certificate/key.
+* `node`: node combined client/server certificate/key.
+* `client`: client certificate/key.
+
+`<middle>` is required for client certificates, where `<middle>` is the name
+of the client as specified in the certificate Common Name (eg: `client.marc.crt`).
+For other certificate types, this may be used to differentiate between multiple versions of a similar
+certificate/key. See "unresolved questions".
+
+`<extension` determines the type of file:
+* `crt` files are certificates
+* `key` files are keys
+
+## Permissions and file types
+
+The only check is for the key to be read-write by the current user only (maximum permissions of `-rwx------`).
+
+We need to provide admins with a way to disable permissions checks, due both to incompatible
+certificate deployment methods, and incompatible filesystems/architectures. An environment variable
+`COCKROACH_SKIP_CERTS_PERMISSION_CHECKS` with a stern warning should be sufficient.
+
 # Certificate creation and renewal
 
 ## CA certificate
@@ -68,10 +110,9 @@ Initial CA creation involves creating the certificate and private key.
 * `ca.key`: the CA private key. Must be kept safe and **not** distributed to nodes and clients.
 
 CA renewal involves creating a new certificate using either the same, or a new private key.
-Since CA certificates may overlap in validity, we want to keep the old certificate. However, we no
-longer wish to sign new certificates using the old key, so we can simply:
+All valid CA certificates need to be kept as well as their corresponding keys:
 * append the new certificate to the existing `ca.cert` (optionally removing expired certificates along the way).
-* overwrite the old key with the new key.
+* store the new key in a new file.
 
 The updated `ca.cert` file must be communicated to all nodes and clients.
 The `ca.key` must still be kept safe and **not** distributed to nodes and clients.
@@ -93,65 +134,14 @@ Filenames for node/client certificates and keys can remain the same as before, o
 
 # Reloading certificate/key files
 
-The current method for providing certificates and private keys requires naming them specifically
-using flags or environment variables:
-* `--ca-cert`, `--ca-key` for CA certificate and key
-* `--cert`, `--key` for node or client certificate and key
+## Triggering a reload
 
-We can use a single file for CA certificates (see CA certificate renewal above), and client/node
-certificates can be overwritten.
+Running nodes can be told to re-read the certificate directory by issuing a `SIGHUP` to the process.
 
-However, we may have multiple sets of certificates:
-* server certificate for the node itself
-* root client certificate for ease of debugging from the node host
+Since we cannot control when nodes may be restarted, it is important to keep the reload process
+identical to the initial load.
 
-We thus need to be able to specify a storage location containing an arbitrary number of
-certificates and keys.
-
-We propose a single directory containing all relevant certificates and private keys for
-the current node or client.
-
-## Directory
-
-The directory can be specified by command-line flag `--certs-dir` or environment variable
-`COCKROACH_CERTS_DIR`, with a default value of `cockroach-certs`.
-
-The permissions on the directory cannot be more permissive than `drwx------`.
-Directory ownership will not be checked (too much incompatibility across filesystems and
-architectures), relying instead on permissions to list the directory contents.
-
-We need to provide admins with a way to disable permissions checks, due both to incompatible
-certificate deployment methods, and incompatible filesystems/architectures. An environment variable
-`COCKROACH_SKIP_CERTS_PERMISSION_CHECKS` with a stern warning should be sufficient.
-
-## Files
-
-File requirements are as follows:
-* all files must be in the `COCKROACH_CERTS_DIR` directory, sub-directories are ignored
-* all files must be plain files, no sym-links allowed
-* maximum permissions for certificates: `-rwxr-xr-x`
-* maximum permissions for keys: `-rwx------`
-* all files are PEM-encoded
-
-File types and functions are determined automatically into categories by
-checking the following PEM or certificate information:
-
-| `pem.Block.Type` | `IsCA` | `ExtendedKeyUsage` | `Subject.CommonName` | Category |
-|---|---|---|---|---|
-| `CERTIFICATE` | `TRUE` | `CertSign | ContentCommitment` | Any | CA Certificate |
-| `CERTIFICATE` | `FALSE` | `ServerAuth | ClientAuth` | `Node` | Node certificate |
-| `CERTIFICATE` | `FALSE` | `ClientAuth` | not `Node` | Client certificate |
-| `PRIVATE KEY` | | | | Private Key |
-
-Any other combination (eg: `ExtendedKeyUsage = ServerAuth | ClientAuth` and `User = foo`) is invalid.
-
-Certificates and private keys can be matched by checking public-key components:
-* `rsa.PublicKey.N.Cmp(rsa.PrivateKey.N) == 0` for RSA keys.
-* `ecdsa.PublicKey.X.Cmp(ecdsa.PrivateKey.X) == 0 && ecdsa.PublicKey.Y.Cmp(ecdsa.PrivateKey.Y) == 0` for ecdsa keys.
-
-Details of PEM parsing and key checking can be found in [tls.X509KeyPair](https://golang.org/src/crypto/tls/tls.go?s=5915:5986#L183)
-
-CA certificates can be added to the certificate pool with little extra validation.
+## Validating certificates
 
 Node certificates must be checked for validity. Specifically:
 * we must have a valid certificate/private key pair
@@ -159,17 +149,10 @@ Node certificates must be checked for validity. Specifically:
 * the certificate must be signed by one of the CA certificates on this node
 
 The last condition is an attempt to avoid loading a certificate that may not be verifiable
-by other nodes or clients. If we do not have the right CA, chances are someone else does no either.
+by other nodes or clients. If we do not have the right CA, chances are someone else does not either.
 
 We may need to set a timer for certificates that have not reached their `Not Before` date, otherwise
 we would need to trigger a second refresh.
-
-## Triggering a reload
-
-Running nodes can be told to re-read the certificate directory by issuing a `SIGHUP` to the process.
-
-Since we cannot control when nodes may be restarted, it is important to keep the reload process
-identical to the initial load.
 
 # Online certificate rotation
 
@@ -191,8 +174,8 @@ safe modification of the pool while serving connections.
 Node certificates are tricker than CA certificates as we must pick exactly one to present.
 
 The `tls.Config` object allows us to specify node certificates in two ways:
-* set the certificate in `tls.Config.Certificates []Certificate`
-* set a per-connection callback in `tls.Config.GetCertificate func(*ClientHelloInfo) (*Certificate, error)`
+* set the certificate in `tls.Config.Certificates`
+* set a per-connection callback in `tls.Config.GetCertificate`
 
 Modifying either will change which certificate is presented at session initiation or renegotiation.
 The `Certificates` object is not safe for concurrent use, making `GetCertificate` preferable.
@@ -269,6 +252,28 @@ The Go `lib/pq` will use all certificates found in `ca.crt`, but this may not be
 case of other libraries.
 It may be safer to keep a single CA certificate per file.
 
+## Allow use of multiple certs directories
+
+Instead of the `--certs-dir` flag being a single directory, we could allow specification of
+multiple directories. This would be useful to separate CA certificates from other certs.
+
+## File permissions
+
+Is checking for `-rwx------` on keys sufficient? A more stringent check would be similar
+to what the ssh client does (strict directory/file permissions).
+
+## Multiple versions of the same certificate
+
+Should we allow multiple versions of the same certificate? eg: multiple files matching `ca.*.crt` or `node.*.crt`? If so, how do we handle them?
+
+## Certificate lifetime
+
+We need to pick some defaults for certificate lifetimes.
+
+The proposed ones may be inappropriate for most users: security-minded admins or those with
+a good certificate-rotation process in place may want much shorter periods while casual
+users may want to never be bothered by certificates.
+
 # Drawbacks
 
 ## Monitoring certificates
@@ -337,7 +342,7 @@ Advantages:
 * simple code: we use the files as specified, relying on the standard library for mismatches.
 * allows separate storage locations for certs (eg: CA in `/etc/...`, node certs in user directory).
 
-### Globs or naming schemes
+### Globs
 
 Command-line flags for filename globs (either per pair, or per file). Optionally, allow specification
 or a certs directory, with globs matching files within the directory.
@@ -354,7 +359,10 @@ Advantages:
 
 ### Automatically-determine files
 
-This is the proposed solution in this RFC.
+Automatically determine file types (key vs cert) and cert usage (CA vs node vs client) by analyzing
+all files in the certs directory.
+Certificates can be determine by looking at `IsCA` or `ExtendedUsage`. The keys can be matched
+to certificates by comparing algorithms and public keys.
 
 Drawbacks:
 * does not allow for separate storage location. We could allow specification of multiple certs directories.
