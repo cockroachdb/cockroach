@@ -99,10 +99,11 @@ func evalImport(ctx context.Context, cArgs storage.CommandArgs) error {
 			}
 		}()
 
-		localPath, err := dir.FetchFile(ctx, file.Path)
+		localPath, cleanup, err := FetchFile(ctx, dir, file.Path)
 		if err != nil {
 			return err
 		}
+		defer cleanup()
 
 		if len(file.Sha512) > 0 {
 			checksum, err := sha512ChecksumFile(localPath)
