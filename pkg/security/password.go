@@ -20,7 +20,7 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"fmt"
-	"syscall"
+	"os"
 
 	"github.com/pkg/errors"
 
@@ -51,7 +51,7 @@ func HashPassword(password string) ([]byte, error) {
 // they match, or an error.
 func PromptForPassword() (string, error) {
 	fmt.Print("Enter password: ")
-	one, err := terminal.ReadPassword(syscall.Stdin)
+	one, err := terminal.ReadPassword(int(os.Stdin.Fd()))
 	if err != nil {
 		return "", err
 	}
@@ -59,7 +59,7 @@ func PromptForPassword() (string, error) {
 		return "", ErrEmptyPassword
 	}
 	fmt.Print("\nConfirm password: ")
-	two, err := terminal.ReadPassword(syscall.Stdin)
+	two, err := terminal.ReadPassword(int(os.Stdin.Fd()))
 	if err != nil {
 		return "", err
 	}
