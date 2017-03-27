@@ -722,7 +722,7 @@ func (s *adminServer) Events(
 		if err := scanner.ScanIndex(row, 0, &ts); err != nil {
 			return nil, err
 		}
-		event.Timestamp = serverpb.EventsResponse_Event_Timestamp{Sec: ts.Unix(), Nsec: uint32(ts.Nanosecond())}
+		event.Timestamp = ts
 		if err := scanner.ScanIndex(row, 1, &event.EventType); err != nil {
 			return nil, err
 		}
@@ -791,7 +791,7 @@ func (s *adminServer) getUIData(
 
 		resp.KeyValues[string(dKey)] = serverpb.GetUIDataResponse_Value{
 			Value:       []byte(*dValue),
-			LastUpdated: serverpb.GetUIDataResponse_Timestamp{Sec: dLastUpdated.Unix(), Nsec: uint32(dLastUpdated.Nanosecond())},
+			LastUpdated: dLastUpdated.Time,
 		}
 	}
 	return &resp, nil
