@@ -44,7 +44,7 @@ func BenchmarkClusterBackup(b *testing.B) {
 	defer cleanupFn()
 
 	ts := hlc.Timestamp{WallTime: hlc.UnixNano()}
-	if _, err := Load(ctx, sqlDB.DB, bankStatementBuf(b.N), "bench", dir, ts, 0); err != nil {
+	if _, err := Load(ctx, sqlDB.DB, bankStatementBuf(b.N), "bench", dir, ts, 0, dir); err != nil {
 		b.Fatalf("%+v", err)
 	}
 	sqlDB.Exec(fmt.Sprintf(`RESTORE DATABASE bench FROM '%s'`, dir))
@@ -79,7 +79,7 @@ func BenchmarkClusterRestore(b *testing.B) {
 	defer cleanup()
 
 	ts := hlc.Timestamp{WallTime: hlc.UnixNano()}
-	backup, err := Load(ctx, sqlDB.DB, bankStatementBuf(b.N), "bench", dir, ts, 0)
+	backup, err := Load(ctx, sqlDB.DB, bankStatementBuf(b.N), "bench", dir, ts, 0, dir)
 	if err != nil {
 		b.Fatalf("%+v", err)
 	}
@@ -105,7 +105,7 @@ func BenchmarkLoadRestore(b *testing.B) {
 	b.SetBytes(int64(buf.Len() / b.N))
 	ts := hlc.Timestamp{WallTime: hlc.UnixNano()}
 	b.ResetTimer()
-	if _, err := Load(ctx, sqlDB.DB, buf, "bench", dir, ts, 0); err != nil {
+	if _, err := Load(ctx, sqlDB.DB, buf, "bench", dir, ts, 0, dir); err != nil {
 		b.Fatalf("%+v", err)
 	}
 	sqlDB.Exec(fmt.Sprintf(`RESTORE DATABASE bench FROM '%s'`, dir))

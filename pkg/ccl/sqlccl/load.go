@@ -15,7 +15,6 @@ import (
 	"fmt"
 	"io"
 	"math/rand"
-	"os"
 
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
@@ -46,6 +45,7 @@ func Load(
 	database, uri string,
 	ts hlc.Timestamp,
 	loadChunkBytes int64,
+	tmpPrefix string,
 ) (BackupDescriptor, error) {
 	if loadChunkBytes == 0 {
 		loadChunkBytes = config.DefaultZoneConfig().RangeMaxBytes / 2
@@ -125,7 +125,7 @@ func Load(
 		switch s := stmt.(type) {
 		case *parser.CreateTable:
 			if tableDesc != nil {
-				if err := writeSST(ctx, &backup, dir, kvs, ts); err != nil {
+				if err := writeSST(ctx, &backup, dir, tmpPrefix, kvs, ts); err != nil {
 					return BackupDescriptor{}, errors.Wrap(err, "writeSST")
 				}
 				kvs = kvs[:0]
@@ -195,7 +195,7 @@ func Load(
 			}
 
 			if kvBytes > loadChunkBytes {
-				if err := writeSST(ctx, &backup, dir, kvs, ts); err != nil {
+				if err := writeSST(ctx, &backup, dir, tmpPrefix, kvs, ts); err != nil {
 					return BackupDescriptor{}, errors.Wrap(err, "writeSST")
 				}
 				kvs = kvs[:0]
@@ -208,7 +208,7 @@ func Load(
 	}
 
 	if tableDesc != nil {
-		if err := writeSST(ctx, &backup, dir, kvs, ts); err != nil {
+		if err := writeSST(ctx, &backup, dir, tmpPrefix, kvs, ts); err != nil {
 			return BackupDescriptor{}, errors.Wrap(err, "writeSST")
 		}
 	}
@@ -317,12 +317,13 @@ func writeSST(
 	ctx context.Context,
 	backup *BackupDescriptor,
 	base storageccl.ExportStorage,
+	tmpPrefix string,
 	kvs []engine.MVCCKeyValue,
 	ts hlc.Timestamp,
 ) error {
 	filename := fmt.Sprintf("load-%d.sst", rand.Int63())
 	log.Info(ctx, "writesst ", filename)
-	sstFile, err := storageccl.MakeExportFileTmpWriter(ctx, os.TempDir(), base, filename)
+	sstFile, err := storageccl.MakeExportFileTmpWriter(ctx, tmpPrefix, base, filename)
 	if err != nil {
 		return err
 	}
