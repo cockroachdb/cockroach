@@ -51,22 +51,6 @@ type DescriptorAccessor interface {
 		descriptor sqlbase.DescriptorProto,
 		ifNotExists bool,
 	) (bool, error)
-
-	// getDescriptor looks up the descriptor for `plainKey`, validates it,
-	// and unmarshals it into `descriptor`.
-	// If `plainKey` doesn't exist, returns false and nil error.
-	// In most cases you'll want to use wrappers: `getDatabaseDesc` or
-	// `getTableDesc`.
-	getDescriptor(ctx context.Context, plainKey sqlbase.DescriptorKey, descriptor sqlbase.DescriptorProto) (bool, error)
-
-	// getAllDescriptors looks up and returns all available descriptors.
-	getAllDescriptors(ctx context.Context) ([]sqlbase.DescriptorProto, error)
-
-	// getDescriptorsFromTargetList examines a TargetList and fetches the
-	// appropriate descriptors.
-	getDescriptorsFromTargetList(
-		ctx context.Context, targets parser.TargetList,
-	) ([]sqlbase.DescriptorProto, error)
 }
 
 var _ DescriptorAccessor = &planner{}
@@ -100,7 +84,7 @@ func (p *planner) createDescriptor(
 ) (bool, error) {
 	idKey := plainKey.Key()
 
-	if exists, err := p.descExists(ctx, idKey); err == nil && exists {
+	if exists, err := descExists(ctx, p.txn, idKey); err == nil && exists {
 		if ifNotExists {
 			// Noop.
 			return false, nil
@@ -126,9 +110,9 @@ func (p *planner) createDescriptor(
 	return true, p.createDescriptorWithID(ctx, idKey, id, descriptor)
 }
 
-func (p *planner) descExists(ctx context.Context, idKey roachpb.Key) (bool, error) {
+func descExists(ctx context.Context, txn *client.Txn, idKey roachpb.Key) (bool, error) {
 	// Check whether idKey exists.
-	gr, err := p.txn.Get(ctx, idKey)
+	gr, err := txn.Get(ctx, idKey)
 	if err != nil {
 		return false, err
 	}
@@ -170,13 +154,12 @@ func (p *planner) createDescriptorWithID(
 	return p.txn.Run(ctx, b)
 }
 
-// getDescriptor implements the DescriptorAccessor interface.
-func (p *planner) getDescriptor(
-	ctx context.Context, plainKey sqlbase.DescriptorKey, descriptor sqlbase.DescriptorProto,
-) (bool, error) {
-	return getDescriptor(ctx, p.txn, plainKey, descriptor)
-}
-
+// getDescriptor looks up the descriptor for `plainKey`, validates it,
+// and unmarshals it into `descriptor`.
+//
+// If `plainKey` doesn't exist, returns false and nil error.
+// In most cases you'll want to use wrappers: `getDatabaseDesc` or
+// `getTableDesc`.
 func getDescriptor(
 	ctx context.Context,
 	txn *client.Txn,
@@ -226,10 +209,10 @@ func getDescriptor(
 	return true, nil
 }
 
-// getAllDescriptors implements the DescriptorAccessor interface.
-func (p *planner) getAllDescriptors(ctx context.Context) ([]sqlbase.DescriptorProto, error) {
+// getAllDescriptors looks up and returns all available descriptors.
+func getAllDescriptors(ctx context.Context, txn *client.Txn) ([]sqlbase.DescriptorProto, error) {
 	descsKey := sqlbase.MakeAllDescsMetadataKey()
-	kvs, err := p.txn.Scan(ctx, descsKey, descsKey.PrefixEnd(), 0)
+	kvs, err := txn.Scan(ctx, descsKey, descsKey.PrefixEnd(), 0)
 	if err != nil {
 		return nil, err
 	}
@@ -252,9 +235,9 @@ func (p *planner) getAllDescriptors(ctx context.Context) ([]sqlbase.DescriptorPr
 	return descs, nil
 }
 
-// getDescriptorsFromTargetList implements the DescriptorAccessor interface.
-func (p *planner) getDescriptorsFromTargetList(
-	ctx context.Context, targets parser.TargetList,
+// getDescriptorsFromTargetList fetches the descriptors for the targets.
+func getDescriptorsFromTargetList(
+	ctx context.Context, txn *client.Txn, vt VirtualTabler, db string, targets parser.TargetList,
 ) ([]sqlbase.DescriptorProto, error) {
 	if targets.Databases != nil {
 		if len(targets.Databases) == 0 {
@@ -262,7 +245,7 @@ func (p *planner) getDescriptorsFromTargetList(
 		}
 		descs := make([]sqlbase.DescriptorProto, 0, len(targets.Databases))
 		for _, database := range targets.Databases {
-			descriptor, err := p.mustGetDatabaseDesc(ctx, string(database))
+			descriptor, err := MustGetDatabaseDesc(ctx, txn, vt, string(database))
 			if err != nil {
 				return nil, err
 			}
@@ -280,12 +263,12 @@ func (p *planner) getDescriptorsFromTargetList(
 		if err != nil {
 			return nil, err
 		}
-		tables, err := p.expandTableGlob(ctx, tableGlob)
+		tables, err := expandTableGlob(ctx, txn, vt, db, tableGlob)
 		if err != nil {
 			return nil, err
 		}
 		for i := range tables {
-			descriptor, err := p.mustGetTableOrViewDesc(ctx, &tables[i])
+			descriptor, err := mustGetTableOrViewDesc(ctx, txn, vt, &tables[i])
 			if err != nil {
 				return nil, err
 			}

@@ -54,7 +54,7 @@ func (p *planner) DropDatabase(ctx context.Context, n *parser.DropDatabase) (pla
 	}
 
 	// Check that the database exists.
-	dbDesc, err := p.getDatabaseDesc(ctx, string(n.Name))
+	dbDesc, err := getDatabaseDesc(ctx, p.txn, p.getVirtualTabler(), string(n.Name))
 	if err != nil {
 		return nil, err
 	}
@@ -70,7 +70,7 @@ func (p *planner) DropDatabase(ctx context.Context, n *parser.DropDatabase) (pla
 		return nil, err
 	}
 
-	tbNames, err := p.getTableNames(ctx, dbDesc)
+	tbNames, err := getTableNames(ctx, p.txn, p.getVirtualTabler(), dbDesc)
 	if err != nil {
 		return nil, err
 	}
@@ -240,7 +240,7 @@ func (p *planner) DropIndex(ctx context.Context, n *parser.DropIndex) (planNode,
 			return nil, err
 		}
 
-		tableDesc, err := p.mustGetTableDesc(ctx, tn)
+		tableDesc, err := mustGetTableDesc(ctx, p.txn, p.getVirtualTabler(), tn)
 		if err != nil {
 			return nil, err
 		}
@@ -261,7 +261,7 @@ func (n *dropIndexNode) Start(ctx context.Context) error {
 		// the list: when two or more index names refer to the same table,
 		// the mutation list and new version number created by the first
 		// drop need to be visible to the second drop.
-		tableDesc, err := n.p.getTableDesc(ctx, index.tn)
+		tableDesc, err := getTableDesc(ctx, n.p.txn, n.p.getVirtualTabler(), index.tn)
 		if err != nil || tableDesc == nil {
 			// newPlan() and Start() ultimately run within the same
 			// transaction. If we got a descriptor during newPlan(), we
@@ -771,7 +771,7 @@ func (n *dropTableNode) MarkDebug(mode explainMode)         {}
 func (p *planner) dropTableOrViewPrepare(
 	ctx context.Context, name *parser.TableName,
 ) (*sqlbase.TableDescriptor, error) {
-	tableDesc, err := p.getTableOrViewDesc(ctx, name)
+	tableDesc, err := getTableOrViewDesc(ctx, p.txn, p.getVirtualTabler(), name)
 	if err != nil {
 		return nil, err
 	}

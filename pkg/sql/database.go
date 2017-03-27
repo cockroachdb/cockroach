@@ -93,19 +93,6 @@ func getKeysForDatabaseDescriptor(
 
 // DatabaseAccessor provides helper methods for using SQL database descriptors.
 type DatabaseAccessor interface {
-	// getDatabaseDesc looks up the database descriptor given its name,
-	// returning nil if the descriptor is not found. If you want the "not
-	// found" condition to return an error, use mustGetDatabaseDesc() instead.
-	getDatabaseDesc(ctx context.Context, name string) (*sqlbase.DatabaseDescriptor, error)
-
-	// mustGetDatabaseDesc looks up the database descriptor given its name,
-	// returning an error if the descriptor is not found.
-	mustGetDatabaseDesc(ctx context.Context, name string) (*sqlbase.DatabaseDescriptor, error)
-
-	// getAllDatabaseDescs looks up and returns all available database
-	// descriptors.
-	getAllDatabaseDescs(ctx context.Context) ([]*sqlbase.DatabaseDescriptor, error)
-
 	// getDatabaseID returns the ID of a database given its name.  It
 	// uses the descriptor cache if possible, otherwise falls back to KV
 	// operations.
@@ -127,12 +114,9 @@ type DatabaseAccessor interface {
 
 var _ DatabaseAccessor = &planner{}
 
-func (p *planner) getDatabaseDesc(
-	ctx context.Context, name string,
-) (*sqlbase.DatabaseDescriptor, error) {
-	return getDatabaseDesc(ctx, p.txn, &p.session.virtualSchemas, name)
-}
-
+// getDatabaseDesc looks up the database descriptor given its name,
+// returning nil if the descriptor is not found. If you want the "not
+// found" condition to return an error, use mustGetDatabaseDesc() instead.
 func getDatabaseDesc(
 	ctx context.Context, txn *client.Txn, vt VirtualTabler, name string,
 ) (*sqlbase.DatabaseDescriptor, error) {
@@ -145,13 +129,6 @@ func getDatabaseDesc(
 		return nil, err
 	}
 	return desc, err
-}
-
-// mustGetDatabaseDesc implements the DatabaseAccessor interface.
-func (p *planner) mustGetDatabaseDesc(
-	ctx context.Context, name string,
-) (*sqlbase.DatabaseDescriptor, error) {
-	return MustGetDatabaseDesc(ctx, p.txn, &p.session.virtualSchemas, name)
 }
 
 // MustGetDatabaseDesc looks up the database descriptor given its name,
@@ -206,9 +183,12 @@ func (p *planner) getCachedDatabaseDesc(name string) (*sqlbase.DatabaseDescripto
 	return database, database.Validate()
 }
 
-// getAllDatabaseDescs implements the DatabaseAccessor interface.
-func (p *planner) getAllDatabaseDescs(ctx context.Context) ([]*sqlbase.DatabaseDescriptor, error) {
-	descs, err := p.getAllDescriptors(ctx)
+// getAllDatabaseDescs looks up and returns all available database
+// descriptors.
+func getAllDatabaseDescs(
+	ctx context.Context, txn *client.Txn,
+) ([]*sqlbase.DatabaseDescriptor, error) {
+	descs, err := getAllDescriptors(ctx, txn)
 	if err != nil {
 		return nil, err
 	}
@@ -241,7 +221,7 @@ func (p *planner) getDatabaseID(ctx context.Context, name string) (sqlbase.ID, e
 			log.Infof(ctx, "error getting database descriptor: %s", err)
 		}
 		var err error
-		desc, err = p.mustGetDatabaseDesc(ctx, name)
+		desc, err = MustGetDatabaseDesc(ctx, p.txn, p.getVirtualTabler(), name)
 		if err != nil {
 			return 0, err
 		}
