@@ -3,7 +3,6 @@ import * as React from "react";
 import * as d3 from "d3";
 import { RouterState, Link } from "react-router";
 import { connect } from "react-redux";
-import { createSelector } from "reselect";
 
 import {
   nodeIDAttr, dashboardNameAttr,
@@ -11,6 +10,7 @@ import {
 
 import { AdminUIState } from "../redux/state";
 import { refreshNodes } from "../redux/apiReducers";
+import { nodesSummarySelector, NodesSummary } from "../redux/nodes";
 import GraphGroup from "../components/graphGroup";
 import { SummaryBar, SummaryLabel, SummaryStat, SummaryMetricStat } from "../components/summaryBar";
 import { Axis, AxisUnits } from "../components/graphs";
@@ -19,23 +19,17 @@ import { Metric } from "../components/metric";
 import { EventBox } from "../containers/events";
 import { Bytes } from "../util/format";
 import { NanoToMilli } from "../util/convert";
-import { NodeStatus, MetricConstants, BytesUsed } from "../util/proto";
 
 interface NodeGraphsOwnProps {
   refreshNodes: typeof refreshNodes;
   nodesQueryValid: boolean;
-  nodeIds: string[];
-  nodeStatusByID: {[s: string]: NodeStatus};
-  nodeCount: number;
-  capacityAvailable: number;
-  capacityTotal: number;
-  unavailableRanges: number;
+  nodesSummary: NodesSummary;
 }
 
 type NodeGraphsProps = NodeGraphsOwnProps & RouterState;
 
 /**
- * Renders the main content of the help us page.
+ * NodeGraphs renders the main content of the cluster graphs page.
  */
 class NodeGraphs extends React.Component<NodeGraphsProps, {}> {
   static displayTimeScale = true;
@@ -55,17 +49,17 @@ class NodeGraphs extends React.Component<NodeGraphsProps, {}> {
   }
 
   nodeAddress(nid: string) {
-    let ns = this.props.nodeStatusByID[nid];
+    let ns = this.props.nodesSummary.nodeStatusByID[nid];
     if (!ns) {
       // This should only happen immediately after loading a page, and
       // associated graphs should display no data.
       return "unknown address";
     }
-    return this.props.nodeStatusByID[nid].desc.address.address_field;
+    return this.props.nodesSummary.nodeStatusByID[nid].desc.address.address_field;
   }
 
   storeIDsForNode(nid: string): string[] {
-    let ns = this.props.nodeStatusByID[nid];
+    let ns = this.props.nodesSummary.nodeStatusByID[nid];
     if (!ns) {
       return [];
     }
@@ -78,16 +72,16 @@ class NodeGraphs extends React.Component<NodeGraphsProps, {}> {
     let storeSources: string[] = null;
 
     // When "all" is the selected source, some graphs display a line for every
-    // node in the cluster using the nodeIds collection. However, if a specific
+    // node in the cluster using the nodeIDs collection. However, if a specific
     // node is already selected, these per-node graphs should only display data
     // only for the selected node.
     //
     // Similarly, if a single node is selected, we also need to restrict the
     // set of stores queried (only stores that belong to that node will be
     // queried).
-    let nodeIds = this.props.nodeIds;
+    let { nodeIDs } = this.props.nodesSummary;
     if (nodeSources && nodeSources.length !== 0) {
-      nodeIds = nodeSources;
+      nodeIDs = nodeSources;
       storeSources = [];
       _.each(nodeSources, (nid) => {
         _.each(this.storeIDsForNode(nid), (sid) => storeSources.push(sid));
@@ -98,7 +92,7 @@ class NodeGraphs extends React.Component<NodeGraphsProps, {}> {
     let specifier = (nodeSources && nodeSources.length === 1) ? `on node ${nodeSources[0]}` : "across all nodes";
 
     // Capacity math used in the summary status section.
-    let { capacityTotal, capacityAvailable } = this.props;
+    let { capacityTotal, capacityAvailable } = this.props.nodesSummary.nodeSums;
     let capacityUsed = capacityTotal - capacityAvailable;
     let capacityPercent = capacityTotal !== 0 ? (capacityUsed / capacityTotal * 100) : 100;
 
@@ -120,7 +114,7 @@ class NodeGraphs extends React.Component<NodeGraphsProps, {}> {
                     Values are displayed individually for each node on each node.`}>
             <Axis units={ AxisUnits.Duration }>
               {
-                _.map(nodeIds, (node) =>
+                _.map(nodeIDs, (node) =>
                   <Metric key={node}
                           name="cr.node.exec.latency-p99"
                           title={this.nodeAddress(node)}
@@ -136,7 +130,7 @@ class NodeGraphs extends React.Component<NodeGraphsProps, {}> {
                               Values are displayed individually for each node on each node.`}>
             <Axis units={ AxisUnits.Duration }>
               {
-                _.map(nodeIds, (node) =>
+                _.map(nodeIDs, (node) =>
                   <Metric key={node}
                           name="cr.node.exec.latency-p90"
                           title={this.nodeAddress(node)}
@@ -150,7 +144,7 @@ class NodeGraphs extends React.Component<NodeGraphsProps, {}> {
                     tooltip={`The number of replicas on each store.`}>
             <Axis>
               {
-                _.map(nodeIds, (nid) =>
+                _.map(nodeIDs, (nid) =>
                   <Metric key={nid}
                           name="cr.store.replicas"
                           title={this.nodeAddress(nid)}
@@ -255,7 +249,7 @@ class NodeGraphs extends React.Component<NodeGraphsProps, {}> {
                        tooltip={`The latency of backend statements executed over 10 second periods ${specifier}.`}>
             <Axis units={ AxisUnits.Duration }>
               {
-                _.map(nodeIds, (node) =>
+                _.map(nodeIDs, (node) =>
                   <Metric key={node}
                           name="cr.node.sql.exec.latency-p99"
                           title={this.nodeAddress(node)}
@@ -270,7 +264,7 @@ class NodeGraphs extends React.Component<NodeGraphsProps, {}> {
                        tooltip={`The latency of backend statements executed over 10 second periods ${specifier}.`}>
             <Axis units={ AxisUnits.Duration }>
               {
-                _.map(nodeIds, (node) =>
+                _.map(nodeIDs, (node) =>
                   <Metric key={node}
                           name="cr.node.sql.exec.latency-p90"
                           title={this.nodeAddress(node)}
@@ -285,7 +279,7 @@ class NodeGraphs extends React.Component<NodeGraphsProps, {}> {
                        tooltip={`The latency of backend statements executed over 10 second periods ${specifier}.`}>
             <Axis units={ AxisUnits.Duration }>
               {
-                _.map(nodeIds, (node) =>
+                _.map(nodeIDs, (node) =>
                   <Metric key={node}
                           name="cr.node.sql.distsql.exec.latency-p99"
                           title={this.nodeAddress(node)}
@@ -300,7 +294,7 @@ class NodeGraphs extends React.Component<NodeGraphsProps, {}> {
                        tooltip={`The latency of backend statements executed over 10 second periods ${specifier}.`}>
             <Axis units={ AxisUnits.Duration }>
               {
-                _.map(nodeIds, (node) =>
+                _.map(nodeIDs, (node) =>
                   <Metric key={node}
                           name="cr.node.sql.distsql.exec.latency-p90"
                           title={this.nodeAddress(node)}
@@ -317,7 +311,7 @@ class NodeGraphs extends React.Component<NodeGraphsProps, {}> {
                               Values are displayed individually for each node on each node.`}>
             <Axis units={ AxisUnits.Duration }>
               {
-                _.map(nodeIds, (node) =>
+                _.map(nodeIDs, (node) =>
                   <Metric key={node}
                           name="cr.node.exec.latency-p99"
                           title={this.nodeAddress(node)}
@@ -334,7 +328,7 @@ class NodeGraphs extends React.Component<NodeGraphsProps, {}> {
                               Values are displayed individually for each node on each node.`}>
             <Axis units={ AxisUnits.Duration }>
               {
-                _.map(nodeIds, (node) =>
+                _.map(nodeIDs, (node) =>
                   <Metric key={node}
                           name="cr.node.exec.latency-p90"
                           title={this.nodeAddress(node)}
@@ -420,7 +414,7 @@ class NodeGraphs extends React.Component<NodeGraphsProps, {}> {
                     tooltip={`The number of replicas on each store.`}>
             <Axis>
               {
-                _.map(nodeIds, (nid) =>
+                _.map(nodeIDs, (nid) =>
                   <Metric key={nid}
                           name="cr.store.replicas"
                           title={this.nodeAddress(nid)}
@@ -434,7 +428,7 @@ class NodeGraphs extends React.Component<NodeGraphsProps, {}> {
                     tooltip={`The number of replicas on each store.`}>
             <Axis>
               {
-                _.map(nodeIds, (nid) =>
+                _.map(nodeIDs, (nid) =>
                   <Metric key={nid}
                           name="cr.store.replicas.leaseholders"
                           title={this.nodeAddress(nid)}
@@ -587,12 +581,12 @@ class NodeGraphs extends React.Component<NodeGraphsProps, {}> {
         <SummaryBar>
           <SummaryLabel>Summary</SummaryLabel>
           <SummaryStat title={<span>Total Nodes <Link to="/cluster/nodes">View nodes list</Link></span>}
-                       value={this.props.nodeCount} />
+                       value={this.props.nodesSummary.nodeSums.nodeCounts.total} />
           <SummaryStat title="Capacity Used" value={capacityPercent}
                        format={(v) => `${d3.format(".2f")(v)}%`}
                        tooltip={`You are using ${Bytes(capacityUsed)} of ${Bytes(capacityTotal)}
                        storage capacity across all nodes.`} />
-          <SummaryStat title="Unavailable ranges" value={this.props.unavailableRanges} />
+          <SummaryStat title="Unavailable ranges" value={this.props.nodesSummary.nodeSums.unavailableRanges} />
           <SummaryMetricStat id="qps" title="Queries per second" format={d3.format(".1f")} >
             <Metric sources={nodeSources} name="cr.node.sql.query.count" title="Queries/Sec" nonNegativeRate />
           </SummaryMetricStat>
@@ -612,65 +606,10 @@ class NodeGraphs extends React.Component<NodeGraphsProps, {}> {
   }
 }
 
-let nodeStatuses = (state: AdminUIState) => state.cachedData.nodes.data;
-
-export let nodeSums = createSelector(
-  nodeStatuses,
-  (ns) => {
-    let result = {
-      nodeCount: 0,
-      capacityAvailable: 0,
-      capacityTotal: 0,
-      usedBytes: 0,
-      usedMem: 0,
-      unavailableRanges: 0,
-      replicas: 0,
-    };
-    if (_.isArray(ns)) {
-      ns.forEach((n) => {
-        result.nodeCount += 1;
-        result.capacityAvailable += n.metrics.get(MetricConstants.availableCapacity);
-        result.capacityTotal += n.metrics.get(MetricConstants.capacity);
-        result.usedBytes += BytesUsed(n);
-        result.usedMem += n.metrics.get(MetricConstants.rss);
-        result.unavailableRanges += n.metrics.get(MetricConstants.unavailableRanges);
-        result.replicas += n.metrics.get(MetricConstants.replicas);
-      });
-    }
-    return result;
-  },
-);
-
-let nodeIds = createSelector(
-  nodeStatuses,
-  (nss) => {
-    return _.map(nss, (ns) => {
-      return ns.desc.node_id.toString();
-    });
-  },
-);
-
-let nodeStatusByID = createSelector(
-  nodeStatuses,
-  (nss) => {
-    let statuses: {[s: string]: NodeStatus} = {};
-    _.each(nss, (ns) => {
-      statuses[ns.desc.node_id.toString()] = ns;
-    });
-    return statuses;
-  },
-);
-
 export default connect(
   (state: AdminUIState) => {
-    let sums = nodeSums(state);
     return {
-      nodeIds: nodeIds(state),
-      nodeStatusByID: nodeStatusByID(state),
-      nodeCount: sums.nodeCount,
-      capacityAvailable: sums.capacityAvailable,
-      capacityTotal: sums.capacityTotal,
-      unavailableRanges: sums.unavailableRanges,
+      nodesSummary: nodesSummarySelector(state),
       nodesQueryValid: state.cachedData.nodes.valid,
     };
   },
