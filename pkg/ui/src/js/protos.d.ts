@@ -2421,7 +2421,7 @@ export namespace cockroach {
                  * Properties of an Event.
                  * @typedef cockroach.server.serverpb.EventsResponse.Event$Properties
                  * @type {Object}
-                 * @property {cockroach.server.serverpb.EventsResponse.Event.Timestamp$Properties} [timestamp] Event timestamp.
+                 * @property {google.protobuf.Timestamp$Properties} [timestamp] Event timestamp.
                  * @property {string} [event_type] Event event_type.
                  * @property {Long} [target_id] Event target_id.
                  * @property {Long} [reporting_id] Event reporting_id.
@@ -2429,7 +2429,7 @@ export namespace cockroach {
                  * @property {Uint8Array} [unique_id] Event unique_id.
                  */
                 type Event$Properties = {
-                    timestamp?: cockroach.server.serverpb.EventsResponse.Event.Timestamp$Properties;
+                    timestamp?: google.protobuf.Timestamp$Properties;
                     event_type?: string;
                     target_id?: Long;
                     reporting_id?: Long;
@@ -2455,9 +2455,9 @@ export namespace cockroach {
 
                     /**
                      * Event timestamp.
-                     * @type {cockroach.server.serverpb.EventsResponse.Event.Timestamp$Properties|undefined}
+                     * @type {google.protobuf.Timestamp$Properties|undefined}
                      */
-                    public timestamp?: cockroach.server.serverpb.EventsResponse.Event.Timestamp$Properties;
+                    public timestamp?: google.protobuf.Timestamp$Properties;
 
                     /**
                      * Event event_type.
@@ -2574,136 +2574,6 @@ export namespace cockroach {
                      * @returns {Object.<string,*>} JSON object
                      */
                     public toJSON(): { [k: string]: any };
-                }
-
-                namespace Event {
-
-                    /**
-                     * Properties of a Timestamp.
-                     * @typedef cockroach.server.serverpb.EventsResponse.Event.Timestamp$Properties
-                     * @type {Object}
-                     * @property {Long} [sec] Timestamp sec.
-                     * @property {number} [nsec] Timestamp nsec.
-                     */
-                    type Timestamp$Properties = {
-                        sec?: Long;
-                        nsec?: number;
-                    };
-
-                    /**
-                     * Constructs a new Timestamp.
-                     * @exports cockroach.server.serverpb.EventsResponse.Event.Timestamp
-                     * @constructor
-                     * @param {cockroach.server.serverpb.EventsResponse.Event.Timestamp$Properties=} [properties] Properties to set
-                     */
-                    class Timestamp {
-
-                        /**
-                         * Constructs a new Timestamp.
-                         * @exports cockroach.server.serverpb.EventsResponse.Event.Timestamp
-                         * @constructor
-                         * @param {cockroach.server.serverpb.EventsResponse.Event.Timestamp$Properties=} [properties] Properties to set
-                         */
-                        constructor(properties?: cockroach.server.serverpb.EventsResponse.Event.Timestamp$Properties);
-
-                        /**
-                         * Timestamp sec.
-                         * @type {Long|undefined}
-                         */
-                        public sec?: Long;
-
-                        /**
-                         * Timestamp nsec.
-                         * @type {number|undefined}
-                         */
-                        public nsec?: number;
-
-                        /**
-                         * Creates a new Timestamp instance using the specified properties.
-                         * @param {cockroach.server.serverpb.EventsResponse.Event.Timestamp$Properties=} [properties] Properties to set
-                         * @returns {cockroach.server.serverpb.EventsResponse.Event.Timestamp} Timestamp instance
-                         */
-                        public static create(properties?: cockroach.server.serverpb.EventsResponse.Event.Timestamp$Properties): cockroach.server.serverpb.EventsResponse.Event.Timestamp;
-
-                        /**
-                         * Encodes the specified Timestamp message. Does not implicitly {@link cockroach.server.serverpb.EventsResponse.Event.Timestamp.verify|verify} messages.
-                         * @param {cockroach.server.serverpb.EventsResponse.Event.Timestamp$Properties} message Timestamp message or plain object to encode
-                         * @param {$protobuf.Writer} [writer] Writer to encode to
-                         * @returns {$protobuf.Writer} Writer
-                         */
-                        public static encode(message: cockroach.server.serverpb.EventsResponse.Event.Timestamp$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
-
-                        /**
-                         * Encodes the specified Timestamp message, length delimited. Does not implicitly {@link cockroach.server.serverpb.EventsResponse.Event.Timestamp.verify|verify} messages.
-                         * @param {cockroach.server.serverpb.EventsResponse.Event.Timestamp$Properties} message Timestamp message or plain object to encode
-                         * @param {$protobuf.Writer} [writer] Writer to encode to
-                         * @returns {$protobuf.Writer} Writer
-                         */
-                        public static encodeDelimited(message: cockroach.server.serverpb.EventsResponse.Event.Timestamp$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
-
-                        /**
-                         * Decodes a Timestamp message from the specified reader or buffer.
-                         * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
-                         * @param {number} [length] Message length if known beforehand
-                         * @returns {cockroach.server.serverpb.EventsResponse.Event.Timestamp} Timestamp
-                         * @throws {Error} If the payload is not a reader or valid buffer
-                         * @throws {$protobuf.util.ProtocolError} If required fields are missing
-                         */
-                        public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): cockroach.server.serverpb.EventsResponse.Event.Timestamp;
-
-                        /**
-                         * Decodes a Timestamp message from the specified reader or buffer, length delimited.
-                         * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
-                         * @returns {cockroach.server.serverpb.EventsResponse.Event.Timestamp} Timestamp
-                         * @throws {Error} If the payload is not a reader or valid buffer
-                         * @throws {$protobuf.util.ProtocolError} If required fields are missing
-                         */
-                        public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): cockroach.server.serverpb.EventsResponse.Event.Timestamp;
-
-                        /**
-                         * Verifies a Timestamp message.
-                         * @param {Object.<string,*>} message Plain object to verify
-                         * @returns {?string} `null` if valid, otherwise the reason why it is not
-                         */
-                        public static verify(message: { [k: string]: any }): string;
-
-                        /**
-                         * Creates a Timestamp message from a plain object. Also converts values to their respective internal types.
-                         * @param {Object.<string,*>} object Plain object
-                         * @returns {cockroach.server.serverpb.EventsResponse.Event.Timestamp} Timestamp
-                         */
-                        public static fromObject(object: { [k: string]: any }): cockroach.server.serverpb.EventsResponse.Event.Timestamp;
-
-                        /**
-                         * Creates a Timestamp message from a plain object. Also converts values to their respective internal types.
-                         * This is an alias of {@link cockroach.server.serverpb.EventsResponse.Event.Timestamp.fromObject}.
-                         * @function
-                         * @param {Object.<string,*>} object Plain object
-                         * @returns {cockroach.server.serverpb.EventsResponse.Event.Timestamp} Timestamp
-                         */
-                        public static from(object: { [k: string]: any }): cockroach.server.serverpb.EventsResponse.Event.Timestamp;
-
-                        /**
-                         * Creates a plain object from a Timestamp message. Also converts values to other types if specified.
-                         * @param {cockroach.server.serverpb.EventsResponse.Event.Timestamp} message Timestamp
-                         * @param {$protobuf.ConversionOptions} [options] Conversion options
-                         * @returns {Object.<string,*>} Plain object
-                         */
-                        public static toObject(message: cockroach.server.serverpb.EventsResponse.Event.Timestamp, options?: $protobuf.ConversionOptions): { [k: string]: any };
-
-                        /**
-                         * Creates a plain object from this Timestamp message. Also converts values to other types if specified.
-                         * @param {$protobuf.ConversionOptions} [options] Conversion options
-                         * @returns {Object.<string,*>} Plain object
-                         */
-                        public toObject(options?: $protobuf.ConversionOptions): { [k: string]: any };
-
-                        /**
-                         * Converts this Timestamp to JSON.
-                         * @returns {Object.<string,*>} JSON object
-                         */
-                        public toJSON(): { [k: string]: any };
-                    }
                 }
             }
 
@@ -3177,142 +3047,15 @@ export namespace cockroach {
             namespace GetUIDataResponse {
 
                 /**
-                 * Properties of a Timestamp.
-                 * @typedef cockroach.server.serverpb.GetUIDataResponse.Timestamp$Properties
-                 * @type {Object}
-                 * @property {Long} [sec] Timestamp sec.
-                 * @property {number} [nsec] Timestamp nsec.
-                 */
-                type Timestamp$Properties = {
-                    sec?: Long;
-                    nsec?: number;
-                };
-
-                /**
-                 * Constructs a new Timestamp.
-                 * @exports cockroach.server.serverpb.GetUIDataResponse.Timestamp
-                 * @constructor
-                 * @param {cockroach.server.serverpb.GetUIDataResponse.Timestamp$Properties=} [properties] Properties to set
-                 */
-                class Timestamp {
-
-                    /**
-                     * Constructs a new Timestamp.
-                     * @exports cockroach.server.serverpb.GetUIDataResponse.Timestamp
-                     * @constructor
-                     * @param {cockroach.server.serverpb.GetUIDataResponse.Timestamp$Properties=} [properties] Properties to set
-                     */
-                    constructor(properties?: cockroach.server.serverpb.GetUIDataResponse.Timestamp$Properties);
-
-                    /**
-                     * Timestamp sec.
-                     * @type {Long|undefined}
-                     */
-                    public sec?: Long;
-
-                    /**
-                     * Timestamp nsec.
-                     * @type {number|undefined}
-                     */
-                    public nsec?: number;
-
-                    /**
-                     * Creates a new Timestamp instance using the specified properties.
-                     * @param {cockroach.server.serverpb.GetUIDataResponse.Timestamp$Properties=} [properties] Properties to set
-                     * @returns {cockroach.server.serverpb.GetUIDataResponse.Timestamp} Timestamp instance
-                     */
-                    public static create(properties?: cockroach.server.serverpb.GetUIDataResponse.Timestamp$Properties): cockroach.server.serverpb.GetUIDataResponse.Timestamp;
-
-                    /**
-                     * Encodes the specified Timestamp message. Does not implicitly {@link cockroach.server.serverpb.GetUIDataResponse.Timestamp.verify|verify} messages.
-                     * @param {cockroach.server.serverpb.GetUIDataResponse.Timestamp$Properties} message Timestamp message or plain object to encode
-                     * @param {$protobuf.Writer} [writer] Writer to encode to
-                     * @returns {$protobuf.Writer} Writer
-                     */
-                    public static encode(message: cockroach.server.serverpb.GetUIDataResponse.Timestamp$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
-
-                    /**
-                     * Encodes the specified Timestamp message, length delimited. Does not implicitly {@link cockroach.server.serverpb.GetUIDataResponse.Timestamp.verify|verify} messages.
-                     * @param {cockroach.server.serverpb.GetUIDataResponse.Timestamp$Properties} message Timestamp message or plain object to encode
-                     * @param {$protobuf.Writer} [writer] Writer to encode to
-                     * @returns {$protobuf.Writer} Writer
-                     */
-                    public static encodeDelimited(message: cockroach.server.serverpb.GetUIDataResponse.Timestamp$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
-
-                    /**
-                     * Decodes a Timestamp message from the specified reader or buffer.
-                     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
-                     * @param {number} [length] Message length if known beforehand
-                     * @returns {cockroach.server.serverpb.GetUIDataResponse.Timestamp} Timestamp
-                     * @throws {Error} If the payload is not a reader or valid buffer
-                     * @throws {$protobuf.util.ProtocolError} If required fields are missing
-                     */
-                    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): cockroach.server.serverpb.GetUIDataResponse.Timestamp;
-
-                    /**
-                     * Decodes a Timestamp message from the specified reader or buffer, length delimited.
-                     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
-                     * @returns {cockroach.server.serverpb.GetUIDataResponse.Timestamp} Timestamp
-                     * @throws {Error} If the payload is not a reader or valid buffer
-                     * @throws {$protobuf.util.ProtocolError} If required fields are missing
-                     */
-                    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): cockroach.server.serverpb.GetUIDataResponse.Timestamp;
-
-                    /**
-                     * Verifies a Timestamp message.
-                     * @param {Object.<string,*>} message Plain object to verify
-                     * @returns {?string} `null` if valid, otherwise the reason why it is not
-                     */
-                    public static verify(message: { [k: string]: any }): string;
-
-                    /**
-                     * Creates a Timestamp message from a plain object. Also converts values to their respective internal types.
-                     * @param {Object.<string,*>} object Plain object
-                     * @returns {cockroach.server.serverpb.GetUIDataResponse.Timestamp} Timestamp
-                     */
-                    public static fromObject(object: { [k: string]: any }): cockroach.server.serverpb.GetUIDataResponse.Timestamp;
-
-                    /**
-                     * Creates a Timestamp message from a plain object. Also converts values to their respective internal types.
-                     * This is an alias of {@link cockroach.server.serverpb.GetUIDataResponse.Timestamp.fromObject}.
-                     * @function
-                     * @param {Object.<string,*>} object Plain object
-                     * @returns {cockroach.server.serverpb.GetUIDataResponse.Timestamp} Timestamp
-                     */
-                    public static from(object: { [k: string]: any }): cockroach.server.serverpb.GetUIDataResponse.Timestamp;
-
-                    /**
-                     * Creates a plain object from a Timestamp message. Also converts values to other types if specified.
-                     * @param {cockroach.server.serverpb.GetUIDataResponse.Timestamp} message Timestamp
-                     * @param {$protobuf.ConversionOptions} [options] Conversion options
-                     * @returns {Object.<string,*>} Plain object
-                     */
-                    public static toObject(message: cockroach.server.serverpb.GetUIDataResponse.Timestamp, options?: $protobuf.ConversionOptions): { [k: string]: any };
-
-                    /**
-                     * Creates a plain object from this Timestamp message. Also converts values to other types if specified.
-                     * @param {$protobuf.ConversionOptions} [options] Conversion options
-                     * @returns {Object.<string,*>} Plain object
-                     */
-                    public toObject(options?: $protobuf.ConversionOptions): { [k: string]: any };
-
-                    /**
-                     * Converts this Timestamp to JSON.
-                     * @returns {Object.<string,*>} JSON object
-                     */
-                    public toJSON(): { [k: string]: any };
-                }
-
-                /**
                  * Properties of a Value.
                  * @typedef cockroach.server.serverpb.GetUIDataResponse.Value$Properties
                  * @type {Object}
                  * @property {Uint8Array} [value] Value value.
-                 * @property {cockroach.server.serverpb.GetUIDataResponse.Timestamp$Properties} [last_updated] Value last_updated.
+                 * @property {google.protobuf.Timestamp$Properties} [last_updated] Value last_updated.
                  */
                 type Value$Properties = {
                     value?: Uint8Array;
-                    last_updated?: cockroach.server.serverpb.GetUIDataResponse.Timestamp$Properties;
+                    last_updated?: google.protobuf.Timestamp$Properties;
                 };
 
                 /**
@@ -3339,9 +3082,9 @@ export namespace cockroach {
 
                     /**
                      * Value last_updated.
-                     * @type {cockroach.server.serverpb.GetUIDataResponse.Timestamp$Properties|undefined}
+                     * @type {google.protobuf.Timestamp$Properties|undefined}
                      */
-                    public last_updated?: cockroach.server.serverpb.GetUIDataResponse.Timestamp$Properties;
+                    public last_updated?: google.protobuf.Timestamp$Properties;
 
                     /**
                      * Creates a new Value instance using the specified properties.
@@ -13938,13 +13681,13 @@ export namespace cockroach {
              * @type {Object}
              * @property {string} [name] FileInfo name.
              * @property {Long} [size_bytes] FileInfo size_bytes.
-             * @property {google.protobuf.Timestamp$Properties} [modified] FileInfo modified.
+             * @property {Long} [mod_time_nanos] FileInfo mod_time_nanos.
              * @property {cockroach.util.log.FileDetails$Properties} [details] FileInfo details.
              */
             type FileInfo$Properties = {
                 name?: string;
                 size_bytes?: Long;
-                modified?: google.protobuf.Timestamp$Properties;
+                mod_time_nanos?: Long;
                 details?: cockroach.util.log.FileDetails$Properties;
             };
 
@@ -13977,10 +13720,10 @@ export namespace cockroach {
                 public size_bytes?: Long;
 
                 /**
-                 * FileInfo modified.
-                 * @type {google.protobuf.Timestamp$Properties|undefined}
+                 * FileInfo mod_time_nanos.
+                 * @type {Long|undefined}
                  */
-                public modified?: google.protobuf.Timestamp$Properties;
+                public mod_time_nanos?: Long;
 
                 /**
                  * FileInfo details.

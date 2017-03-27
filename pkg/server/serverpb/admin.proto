@@ -23,6 +23,7 @@ import "cockroach/pkg/storage/engine/enginepb/mvcc.proto";
 import "cockroach/pkg/storage/liveness.proto";
 import "gogoproto/gogo.proto";
 import "google/api/annotations.proto";
+import "google/protobuf/timestamp.proto";
 
 // ZoneConfigurationLevel indicates, for objects with a Zone Configuration,
 // the object level at which the configuration is defined. This is needed
@@ -230,20 +231,8 @@ message EventsRequest {
 // to the latest N entries (N is enforced in the associated endpoint).
 message EventsResponse {
   message Event {
-    // Timestamp is embedded in each place it's used, because proto3 defines a
-    // built-in Timestamp message that we can't use, because gogoprotobuf
-    // doesn't support all proto3 protobuf types yet. See
-    // https://github.com/gogo/protobuf/issues/155.
-    message Timestamp {
-      // The time in seconds since, January 1, 1970 UTC (Unix time).
-      int64 sec = 1;
-      // nsec specifies a non-negative nanosecond offset within sec.
-      // It must be in the range [0, 999999999].
-      uint32 nsec = 2;
-    }
-
     // timestamp is the time at which the event occurred.
-    Timestamp timestamp = 1 [(gogoproto.nullable) = false];
+    google.protobuf.Timestamp timestamp = 1 [(gogoproto.nullable) = false, (gogoproto.stdtime) = true];
 
     // event_type is the type of the event (e.g. "create_table", "drop_table".
     string event_type = 2;
@@ -285,23 +274,12 @@ message GetUIDataRequest {
 // GetUIDataResponse contains the requested values and the times at which
 // the values were last updated.
 message GetUIDataResponse {
-  // Timestamp is embedded in each place it's used, because proto3 defines a
-  // built-in Timestamp message that we can't use, because gogoprotobuf doesn't
-  // support all proto3 protobuf types yet. See gogoprotobuf issue #113.
-  message Timestamp {
-    // The time in seconds since, January 1, 1970 UTC (Unix time).
-    int64 sec = 1;
-    // nsec specifies a non-negative nanosecond offset within sec.
-    // It must be in the range [0, 999999999].
-    uint32 nsec = 2;
-  }
-
   message Value {
     // value is the value of the requested key.
     bytes value = 1;
 
     // last_updated is the time at which the value was last updated.
-    Timestamp last_updated = 2 [(gogoproto.nullable) = false];
+    google.protobuf.Timestamp last_updated = 2 [(gogoproto.nullable) = false, (gogoproto.stdtime) = true];
   }
 
   // key_values maps keys to their retrieved values. If this doesn't contain a
