@@ -503,19 +503,24 @@ func (s *azureStorage) Close() error {
 
 // FetchFile returns the path to a local file containing the content of
 // the requested filename, and a cleanup func to be called when done reading it.
-func FetchFile(ctx context.Context, e ExportStorage, basename string) (string, func(), error) {
+func FetchFile(
+	ctx context.Context, tempPrefix string, e ExportStorage, basename string,
+) (string, func(), error) {
 	cleanup := func() {}
 	// special-case local files to avoid copying to tmp.
 	if loc, ok := e.(*localFileStorage); ok {
 		return filepath.Join(loc.base, basename), cleanup, nil
 	}
 
+	if tempPrefix == "" {
+		return "", cleanup, errors.New("must provide tempdir path")
+	}
 	r, err := e.ReadFile(ctx, basename)
 	if err != nil {
 		return "", cleanup, errors.Wrapf(err, "creating reader for %q", basename)
 	}
 	defer r.Close()
-	f, err := ioutil.TempFile("", basename)
+	f, err := ioutil.TempFile(tempPrefix, basename)
 	if err != nil {
 		return "", cleanup, errors.Wrap(err, "creating tmpfile")
 	}
@@ -563,7 +568,7 @@ var _ ExportFileWriter = &tmpWriter{}
 
 // MakeExportFileTmpWriter returns an ExportFileWriter backed by a tempfile.
 func MakeExportFileTmpWriter(
-	ctx context.Context, store ExportStorage, name string,
+	_ context.Context, tempPrefix string, store ExportStorage, name string,
 ) (ExportFileWriter, error) {
 	// the special-case that allows local stores to rename rather than copy works
 	// only if we alloc the tempfile on same device, so we force dest prefix here.
@@ -578,7 +583,10 @@ func MakeExportFileTmpWriter(
 		return &localTmpWriter{tmpWriter{tmpfile: f}, filepath.Join(loc.base, name)}, nil
 	}
 
-	f, err := ioutil.TempFile("", name)
+	if tempPrefix == "" {
+		return nil, errors.New("must provide tempdir path")
+	}
+	f, err := ioutil.TempFile(tempPrefix, name)
 	if err != nil {
 		return nil, err
 	}

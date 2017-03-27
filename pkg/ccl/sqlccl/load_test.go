@@ -26,7 +26,7 @@ func TestImportChunking(t *testing.T) {
 	defer cleanupFn()
 
 	ts := hlc.Timestamp{WallTime: hlc.UnixNano()}
-	desc, err := Load(ctx, sqlDB.DB, bankStatementBuf(numAccounts), "bench", dir, ts, chunkSize)
+	desc, err := Load(ctx, sqlDB.DB, bankStatementBuf(numAccounts), "bench", dir, ts, chunkSize, dir)
 	if err != nil {
 		t.Fatalf("%+v", err)
 	}
@@ -46,7 +46,7 @@ func TestImportOutOfOrder(t *testing.T) {
 	buf.WriteString(stmts[0] + ";\n")
 
 	ts := hlc.Timestamp{WallTime: hlc.UnixNano()}
-	_, err := Load(ctx, sqlDB.DB, &buf, "bench", dir, ts, 0)
+	_, err := Load(ctx, sqlDB.DB, &buf, "bench", dir, ts, 0, dir)
 	if !testutils.IsError(err, "out of order row") {
 		t.Fatalf("expected out of order row, got: %+v", err)
 	}
@@ -64,7 +64,7 @@ func BenchmarkImport(b *testing.B) {
 	ts := hlc.Timestamp{WallTime: hlc.UnixNano()}
 	b.SetBytes(int64(buf.Len() / b.N))
 	b.ResetTimer()
-	if _, err := Load(ctx, sqlDB.DB, buf, "bench", dir, ts, 0); err != nil {
+	if _, err := Load(ctx, sqlDB.DB, buf, "bench", dir, ts, 0, dir); err != nil {
 		b.Fatalf("%+v", err)
 	}
 }
