@@ -707,15 +707,44 @@ func (expr *ArrayFlatten) TypeCheck(ctx *SemaContext, desired Type) (TypedExpr, 
 	return expr, nil
 }
 
+// implicitCast returns a cast from the input expression to the desired type.
+func implicitCast(ctx *SemaContext, expr Expr, desired Type) (TypedExpr, error) {
+	t, err := DatumTypeToColumnType(desired)
+	if err != nil {
+		return nil, err
+	}
+	cast := &CastExpr{Expr: expr, Type: t}
+	return cast.TypeCheck(ctx, desired)
+}
+
 // TypeCheck implements the Expr interface.
 func (expr *Placeholder) TypeCheck(ctx *SemaContext, desired Type) (TypedExpr, error) {
 	// If there is a value known already, immediately substitute with it.
 	if v, ok := ctx.Placeholders.Value(expr.Name); ok {
+		if !v.ResolvedType().Equivalent(desired) {
+			// If the known value type provided to us by the client, and typed via the
+			// pgwire type hints, is not equal to the desired type, add an implicit
+			// cast. This happens when a client provides an imprecise type hint for an
+			// expression that doesn't expect a particular type during placeholder
+			// typing, but does expect one during expression evaluation, such as when
+			// inserting a placeholder value into a table that expects a different column
+			// type than the one implied by the type hint.
+			return implicitCast(ctx, v, desired)
+		}
 		return v, nil
 	}
 
 	// Otherwise, perform placeholder typing.
 	if typ, ok := ctx.Placeholders.Type(expr.Name); ok {
+		if !typ.Equivalent(desired) {
+			// If we have a placeholder type available from the pgwire type hints, but
+			// it doesn't match the desired type, add an implicit cast. This can happen,
+			// for instance, when the placeholder appears in a comparison expression that
+			// expects a type that's equivalent to but distinct from the pgwire type.
+			// Clients commonly send an integer type hint when they're trying to query
+			// based on an OID value, for example.
+			return implicitCast(ctx, expr, desired)
+		}
 		expr.typ = typ
 		return expr, nil
 	}

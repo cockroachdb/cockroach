@@ -136,6 +136,30 @@ public class main {
 		if (nCols != 0) {
 		    throw new Exception("unexpected: SELECT returns " + nCols + " columns, expected 0");
 		}
+
+		// Check that imprecise placeholder typing works correctly. See issues
+		// #14245 and #14311 for more detail.
+		stmt = conn.prepareStatement("CREATE TABLE test.t (price decimal(5,2) NOT NULL)");
+		res = stmt.executeUpdate();
+		if (res != 0) {
+		    throw new Exception("unexpected: CREATE TABLE test.t " + res + " rows changed, expecting 0");
+		}
+
+		stmt = conn.prepareStatement("INSERT INTO test.t VALUES (?)");
+		stmt.setFloat(1, 3.3f);
+		res = stmt.executeUpdate();
+		if (res != 1) {
+		    throw new Exception("unexpected: INSERT INTO test.t " + res + " rows changed, expecting 0");
+		}
+
+		stmt = conn.prepareStatement("SELECT nspname FROM pg_catalog.pg_namespace WHERE oid=?");
+		stmt.setLong(1, 1782195457);
+		rs = stmt.executeQuery();
+		rs.next();
+		String nspName = rs.getString(1);
+		if (!"pg_catalog".equals(nspName)) {
+		    throw new Exception("unexpected: SELECT can't find pg_catalog database: found " + nspName);
+		}
 	}
 }
 EOF
