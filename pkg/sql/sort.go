@@ -201,7 +201,7 @@ func (p *planner) orderBy(
 		if index == -1 && s != nil {
 			cols, exprs, hasStar, err := p.computeRender(
 				ctx, parser.SelectExpr{Expr: expr}, parser.TypeAny,
-				s.source.info, s.ivarHelper, true)
+				s.sourceInfo, s.ivarHelper, true)
 			if err != nil {
 				return nil, err
 			}
