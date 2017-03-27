@@ -139,6 +139,7 @@ func initMemProfile(ctx context.Context, dir string) {
 	}
 
 	go func() {
+		ctx := context.Background()
 		t := time.NewTicker(memProfileInterval)
 		defer t.Stop()
 
@@ -186,6 +187,7 @@ func initCPUProfile(ctx context.Context, dir string) {
 	}
 
 	go func() {
+		ctx := context.Background()
 		t := time.NewTicker(cpuProfileInterval)
 		defer t.Stop()
 
