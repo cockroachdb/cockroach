@@ -18,12 +18,11 @@ package sqlutils
 
 import (
 	gosql "database/sql"
-	"testing"
 )
 
 // QueryTableID returns the table ID of the specified database.table
 // using the system.namespace table.
-func QueryTableID(t *testing.T, sqlDB *gosql.DB, dbName, tableName string) uint32 {
+func QueryTableID(sqlDB *gosql.DB, dbName, tableName string) (uint32, error) {
 	tableIDQuery := `
  SELECT tables.id FROM system.namespace tables
    JOIN system.namespace dbs ON dbs.id = tables.parentid
@@ -32,7 +31,7 @@ func QueryTableID(t *testing.T, sqlDB *gosql.DB, dbName, tableName string) uint3
 	var tableID uint32
 	result := sqlDB.QueryRow(tableIDQuery, dbName, tableName)
 	if err := result.Scan(&tableID); err != nil {
-		t.Fatal(err)
+		return 0, err
 	}
-	return tableID
+	return tableID, nil
 }
