@@ -1674,8 +1674,11 @@ type RocksDBSstFileReader struct {
 
 // MakeRocksDBSstFileReader creates a RocksDBSstFileReader that uses a scratch
 // directory which is cleaned up by `Close`.
-func MakeRocksDBSstFileReader() (RocksDBSstFileReader, error) {
-	dir, err := ioutil.TempDir("", "RocksDBSstFileReader")
+func MakeRocksDBSstFileReader(tmpPrefix string) (RocksDBSstFileReader, error) {
+	if tmpPrefix == "" {
+		return RocksDBSstFileReader{}, errors.New("must provide a tmpdir path")
+	}
+	dir, err := ioutil.TempDir(tmpPrefix, "RocksDBSstFileReader")
 	if err != nil {
 		return RocksDBSstFileReader{}, err
 	}
