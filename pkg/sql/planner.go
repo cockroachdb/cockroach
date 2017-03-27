@@ -227,6 +227,14 @@ func (p *planner) ExecCfg() *ExecutorConfig {
 	return p.session.execCfg
 }
 
+func (p *planner) LeaseMgr() *LeaseManager {
+	return p.session.leaseMgr
+}
+
+func (p *planner) User() string {
+	return p.session.User
+}
+
 // setTxn implements the queryRunner interface.
 func (p *planner) setTxn(txn *client.Txn) {
 	p.txn = txn
