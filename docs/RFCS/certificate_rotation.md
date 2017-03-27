@@ -174,8 +174,8 @@ safe modification of the pool while serving connections.
 Node certificates are tricker than CA certificates as we must pick exactly one to present.
 
 The `tls.Config` object allows us to specify node certificates in two ways:
-* set the certificate in `tls.Config.Certificates`
-* set a per-connection callback in `tls.Config.GetCertificate`
+1. set the certificate in `tls.Config.Certificates`
+1. use per-connection callbacks (`tls.Config.GetCertificate` for server-side certs, and `tls.Config.GetClientCertificate`. The client-side callback provides us with a list of server-supported CAs).
 
 Modifying either will change which certificate is presented at session initiation or renegotiation.
 The `Certificates` object is not safe for concurrent use, making `GetCertificate` preferable.
