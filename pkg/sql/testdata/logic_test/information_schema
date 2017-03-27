@@ -208,6 +208,7 @@ CREATE VIEW other_db.abc AS SELECT i from other_db.xyz
 query T
 SELECT table_name FROM information_schema.tables
 ----
+jobs
 leases
 node_build_info
 node_statement_statistics
@@ -307,6 +308,7 @@ query TTTTI colnames
 SELECT * FROM information_schema.tables
 ----
 TABLE_CATALOG  TABLE_SCHEMA        TABLE_NAME         TABLE_TYPE   VERSION
+def            crdb_internal       jobs               SYSTEM VIEW  1
 def            crdb_internal       leases             SYSTEM VIEW  1
 def            crdb_internal       node_build_info    SYSTEM VIEW  1
 def            crdb_internal       node_statement_statistics SYSTEM VIEW  1
