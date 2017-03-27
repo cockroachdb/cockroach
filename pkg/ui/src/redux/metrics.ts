@@ -12,8 +12,8 @@ import * as protos from  "../js/protos";
 import { PayloadAction } from "../interfaces/action";
 import { queryTimeSeries } from "../util/api";
 
-type TSRequestMessage = Proto2TypeScript.cockroach.ts.tspb.TimeSeriesQueryRequestMessage;
-type TSResponseMessage = Proto2TypeScript.cockroach.ts.tspb.TimeSeriesQueryResponseMessage;
+type TSRequest = protos.cockroach.ts.tspb.TimeSeriesQueryRequest;
+type TSResponse = protos.cockroach.ts.tspb.TimeSeriesQueryResponse;
 
 export const REQUEST = "cockroachui/metrics/REQUEST";
 export const RECEIVE = "cockroachui/metrics/RECEIVE";
@@ -34,8 +34,8 @@ interface WithID<T> {
  * A request/response pair.
  */
 interface RequestWithResponse {
-  request: TSRequestMessage;
-  response: TSResponseMessage;
+  request: TSRequest;
+  response: TSResponse;
 }
 
 /**
@@ -45,18 +45,18 @@ export class MetricsQuery {
   // ID of the component which owns this data.
   id: string;
   // The currently cached response data for this component.
-  data: TSResponseMessage;
+  data: TSResponse;
   // If the immediately previous request attempt returned an error, rather than
   // a response, it is maintained here. Null if the previous request was
   // successful.
   error: Error;
   // The previous request, which will have resulted in either "data" or "error"
   // being populated.
-  request: TSRequestMessage;
+  request: TSRequest;
   // A possibly outstanding request used to retrieve data from the server for this
   // component. This may represent a currently in-flight query, and thus is not
   // necessarily the request used to retrieve the current value of "data".
-  nextRequest: TSRequestMessage;
+  nextRequest: TSRequest;
 
   constructor(id: string) {
     this.id = id;
@@ -71,7 +71,7 @@ function metricsQueryReducer(state: MetricsQuery, action: Action) {
   switch (action.type) {
     // This component has requested a new set of metrics from the server.
     case REQUEST:
-      let { payload: request } = action as PayloadAction<WithID<TSRequestMessage>>;
+      let { payload: request } = action as PayloadAction<WithID<TSRequest>>;
       state = _.clone(state);
       state.nextRequest = request.data;
       return state;
@@ -170,7 +170,7 @@ export default function reducer(state: MetricQueryState = new MetricQueryState()
  * requestMetrics indicates that a component is requesting new data from the
  * server.
  */
-export function requestMetrics(id: string, request: TSRequestMessage): PayloadAction<WithID<TSRequestMessage>> {
+export function requestMetrics(id: string, request: TSRequest): PayloadAction<WithID<TSRequest>> {
   return {
     type: REQUEST,
     payload: {
@@ -184,8 +184,11 @@ export function requestMetrics(id: string, request: TSRequestMessage): PayloadAc
  * receiveMetrics indicates that a previous request from this component has been
  * fulfilled by the server.
  */
-export function receiveMetrics(id: string, request: TSRequestMessage,
-                               response: TSResponseMessage): PayloadAction<WithID<RequestWithResponse>> {
+export function receiveMetrics(
+  id: string,
+  request: TSRequest,
+  response: TSResponse,
+): PayloadAction<WithID<RequestWithResponse>> {
   return {
     type: RECEIVE,
     payload: {
@@ -236,7 +239,7 @@ export function fetchMetricsComplete(): Action {
  * the server. As a purely asynchronous concept, this lives outside of the redux
  * store.
  */
-let queuedRequests: WithID<TSRequestMessage>[] = [];
+let queuedRequests: WithID<TSRequest>[] = [];
 
 /**
  * queuePromise is a promise that will be resolved when the current batch of
@@ -254,7 +257,7 @@ let queuePromise: Promise<void> = null;
  * specifically, queries which have the same time span can be handled by the
  * server in a single call.
  */
-export function queryMetrics<S>(id: string, query: TSRequestMessage) {
+export function queryMetrics<S>(id: string, query: TSRequest) {
   return (dispatch: Dispatch<S>): Promise<void> => {
     // Indicate that this request has been received and queued.
     dispatch(requestMetrics(id, query));

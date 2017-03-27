@@ -21,7 +21,6 @@ import proto "github.com/gogo/protobuf/proto"
 import fmt "fmt"
 import math "math"
 import cockroach_roachpb1 "github.com/cockroachdb/cockroach/pkg/roachpb"
-import _ "github.com/cockroachdb/cockroach/pkg/roachpb"
 import cockroach_util_hlc "github.com/cockroachdb/cockroach/pkg/util/hlc"
 import cockroach_util "github.com/cockroachdb/cockroach/pkg/util"
 
