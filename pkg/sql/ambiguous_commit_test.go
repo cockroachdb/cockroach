@@ -87,7 +87,10 @@ func TestAmbiguousCommitDueToLeadershipChange(t *testing.T) {
 	sqlDB.Exec(`CREATE DATABASE test`)
 	sqlDB.Exec(`CREATE TABLE test.t (k SERIAL PRIMARY KEY, v INT)`)
 
-	tableID := sqlutils.QueryTableID(t, tc.Conns[0], "test", "t")
+	tableID, err := sqlutils.QueryTableID(tc.Conns[0], "test", "t")
+	if err != nil {
+		t.Fatal(err)
+	}
 	tableStartKey.Store(keys.MakeTablePrefix(tableID))
 
 	// Wait for new table to split & replication.
