@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"io"
 	"math/rand"
+	"os"
 
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
@@ -321,7 +322,7 @@ func writeSST(
 ) error {
 	filename := fmt.Sprintf("load-%d.sst", rand.Int63())
 	log.Info(ctx, "writesst ", filename)
-	sstFile, err := storageccl.MakeExportFileTmpWriter(ctx, base, filename)
+	sstFile, err := storageccl.MakeExportFileTmpWriter(ctx, os.TempDir(), base, filename)
 	if err != nil {
 		return err
 	}

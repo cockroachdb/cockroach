@@ -74,7 +74,7 @@ func evalExport(
 	defer exportStore.Close()
 
 	filename := fmt.Sprintf("%d.sst", parser.GenerateUniqueInt(cArgs.EvalCtx.NodeID()))
-	tmp, err := MakeExportFileTmpWriter(ctx, exportStore, filename)
+	tmp, err := MakeExportFileTmpWriter(ctx, os.TempDir(), exportStore, filename)
 	if err != nil {
 		return storage.EvalResult{}, err
 	}

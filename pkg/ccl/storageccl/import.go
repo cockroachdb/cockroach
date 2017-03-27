@@ -101,7 +101,7 @@ func evalImport(ctx context.Context, cArgs storage.CommandArgs) error {
 			}
 		}()
 
-		localPath, cleanup, err := FetchFile(ctx, dir, file.Path)
+		localPath, cleanup, err := FetchFile(ctx, os.TempDir(), dir, file.Path)
 		if err != nil {
 			return err
 		}
