@@ -30,7 +30,7 @@ func (p *planner) changePrivileges(
 	grantees parser.NameList,
 	changePrivilege func(*sqlbase.PrivilegeDescriptor, string),
 ) (planNode, error) {
-	descriptors, err := p.getDescriptorsFromTargetList(ctx, targets)
+	descriptors, err := getDescriptorsFromTargetList(ctx, p.txn, p.getVirtualTabler(), p.session.Database, targets)
 	if err != nil {
 		return nil, err
 	}
