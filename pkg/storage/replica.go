@@ -1261,6 +1261,8 @@ func (r *Replica) GetMVCCStats() enginepb.MVCCStats {
 }
 
 // ContainsKey returns whether this range contains the specified key.
+//
+// TODO(bdarnell): This is not the same as RangeDescriptor.ContainsKey.
 func (r *Replica) ContainsKey(key roachpb.Key) bool {
 	return containsKey(*r.Desc(), key)
 }
@@ -1651,6 +1653,13 @@ func collectSpans(desc roachpb.RangeDescriptor, ba *roachpb.BatchRequest) (*Span
 			return nil, errors.Errorf("unrecognized command %s", inner.Method())
 		}
 	}
+
+	// All commands depend on the RangeLastGCKey and the range descriptor.
+	// TODO(bdarnell): Move this to a special case to avoid the cost of
+	// all the command queue entries (and the stall when a GC or split command
+	// goes through)?
+	spans.Add(SpanReadOnly, roachpb.Span{Key: keys.RangeLastGCKey(ba.Header.RangeID)})
+	spans.Add(SpanReadOnly, roachpb.Span{Key: keys.RangeDescriptorKey(desc.StartKey)})
 
 	// When running with experimental proposer-evaluated KV, insert a
 	// span that effectively linearizes evaluation and application of
