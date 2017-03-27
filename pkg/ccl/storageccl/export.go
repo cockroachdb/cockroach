@@ -72,12 +72,12 @@ func evalExport(
 	defer exportStore.Close()
 
 	filename := fmt.Sprintf("%d.sst", parser.GenerateUniqueInt(r.NodeID()))
-	writer, err := exportStore.PutFile(ctx, filename)
+	tmp, err := MakeExportFileTmpWriter(ctx, exportStore, filename)
 	if err != nil {
 		return storage.EvalResult{}, err
 	}
-	localPath := writer.LocalFile()
-	defer writer.Cleanup()
+	localPath := tmp.LocalFile()
+	defer tmp.Close(ctx)
 
 	sstWriter := engine.MakeRocksDBSstFileWriter()
 	sst := &sstWriter
@@ -136,7 +136,7 @@ func evalExport(
 		return storage.EvalResult{}, err
 	}
 
-	if err := writer.Finish(); err != nil {
+	if err := tmp.Finish(ctx); err != nil {
 		return storage.EvalResult{}, err
 	}
 

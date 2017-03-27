@@ -85,15 +85,11 @@ func loadBackupDescs(ctx context.Context, uris []string) ([]BackupDescriptor, er
 	backupDescs := make([]BackupDescriptor, len(uris))
 
 	for i, uri := range uris {
-		dir, err := storageccl.ExportStorageFromURI(ctx, uri)
-		if err != nil {
-			return nil, errors.Wrapf(err, "failed to create export storage handler from %q", uri)
-		}
-		backupDescs[i], err = ReadBackupDescriptor(ctx, dir)
+		desc, err := readBackupDescriptor(ctx, uri)
 		if err != nil {
 			return nil, errors.Wrap(err, "failed to read backup descriptor")
 		}
-		backupDescs[i].Dir = dir.Conf()
+		backupDescs[i] = desc
 	}
 	if len(backupDescs) == 0 {
 		return nil, errors.Errorf("no backups found")
