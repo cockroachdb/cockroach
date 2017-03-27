@@ -18,8 +18,11 @@ package sql_test
 
 import (
 	"bytes"
+	"context"
 	"sync/atomic"
 	"testing"
+
+	"golang.org/x/sync/errgroup"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -124,5 +127,35 @@ func TestUpsertFastPath(t *testing.T) {
 	}
 	if s := atomic.LoadUint64(&beginTxn); s != 0 {
 		t.Errorf("expected no begin-txn (1PC) but got %d", s)
+	}
+}
+
+func TestConcurrentUpsert(t *testing.T) {
+	s, conn, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop()
+	sqlDB := sqlutils.MakeSQLRunner(t, conn)
+
+	sqlDB.Exec(`CREATE DATABASE d`)
+	sqlDB.Exec(`CREATE TABLE d.t (a INT PRIMARY KEY, b INT, INDEX b_idx (b))`)
+	sqlDB.Exec(`SET DEFAULT_TRANSACTION_ISOLATION TO SNAPSHOT`)
+	sqlDB.Exec(`INSERT INTO d.t VALUES (1, -1)`)
+
+	g, ctx := errgroup.WithContext(context.Background())
+	for i := 0; i < 2; i++ {
+		gr := i
+		g.Go(func() error {
+			for j := 0; j < 1000; j++ {
+				if _, err := sqlDB.DB.ExecContext(ctx, `UPDATE d.t SET b = $1 WHERE a = 1`, j); err != nil {
+					return err
+				}
+			}
+			return nil
+		})
+	}
+	if err := g.Wait(); err != nil {
+		t.Errorf(`%+v
+SELECT * FROM d.t@primary = %s
+SELECT * FROM d.t@b_idx   = %s
+`, err, sqlDB.QueryStr(`SELECT * FROM d.t@primary`), sqlDB.QueryStr(`SELECT * FROM d.t@b_idx`))
 	}
 }
