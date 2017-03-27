@@ -17,6 +17,11 @@
 # This file is evaluated in the repo's parent directory. See main.go's
 # go:generate invocation.
 
+SED := sed
+# To edit in-place without creating a backup file, GNU sed requires a bare -i,
+# while BSD sed requires an empty string as the following argument.
+SED_INPLACE := $(SED) $(shell $(SED) --version &> /dev/null | grep -q GNU && echo -i || echo "-i ''")
+
 ORG_ROOT       := .
 REPO_ROOT      := $(ORG_ROOT)/cockroach
 PKG_ROOT       := $(REPO_ROOT)/pkg
@@ -82,10 +87,10 @@ $(GO_SOURCES): $(PROTOC) $(GO_PROTOS) $(GOGOPROTO_PROTO)
 	for dir in $(sort $(dir $(GO_PROTOS))); do \
 	  $(PROTOC) -I.:$(GOGOPROTO_ROOT):$(PROTOBUF_ROOT):$(COREOS_PATH):$(GRPC_GATEWAY_GOOGLEAPIS_PATH) --plugin=$(PROTOC_PLUGIN) --$(PLUGIN_SUFFIX)_out=$(GRPC_GATEWAY_MAPPING),plugins=grpc,import_prefix=$(IMPORT_PREFIX):$(ORG_ROOT) $$dir/*.proto; \
 	done
-	sed -i~ -E '/gogoproto/d' $(GO_SOURCES)
-	sed -i~ -E 's!import (fmt|math) "$(IMPORT_PREFIX)(fmt|math)"! !g' $(GO_SOURCES)
-	sed -i~ -E 's!$(IMPORT_PREFIX)(errors|fmt|io|github\.com|golang\.org|google\.golang\.org)!\1!g' $(GO_SOURCES)
-	sed -i~ -E 's!$(REPO_NAME)/(etcd)!coreos/\1!g' $(GO_SOURCES)
+	$(SED_INPLACE) -E '/gogoproto/d' $(GO_SOURCES)
+	$(SED_INPLACE) -E 's!import (fmt|math) "$(IMPORT_PREFIX)(fmt|math)"! !g' $(GO_SOURCES)
+	$(SED_INPLACE) -E 's!$(IMPORT_PREFIX)(errors|fmt|io|github\.com|golang\.org|google\.golang\.org)!\1!g' $(GO_SOURCES)
+	$(SED_INPLACE) -E 's!$(REPO_NAME)/(etcd)!coreos/\1!g' $(GO_SOURCES)
 	gofmt -s -w $(GO_SOURCES)
 
 $(GW_SOURCES) : $(GW_SERVER_PROTOS) $(GW_TS_PROTOS) $(GO_PROTOS) $(GOGOPROTO_PROTO) $(PROTOC)
@@ -111,12 +116,12 @@ $(PKG_ROOT)/ui/generated/protos.d.ts: $(PKG_ROOT)/ui/generated/protos.json
 	# Add comment recognized by reviewable.
 	echo '// GENERATED FILE DO NOT EDIT' > $@
 	$(REPO_ROOT)/build/node_modules/.bin/proto2ts --file $(PKG_ROOT)/ui/generated/protos.json >> $@
-	sed -i~ -E '/delete : string/d' $@ # This line produces a duplicate identifier error. Why?
+	$(SED_INPLACE) -E '/delete : string/d' $@ # This line produces a duplicate identifier error. Why?
 
 $(CPP_HEADERS) $(CPP_SOURCES): $(PROTOC) $(CPP_PROTOS)
 	(cd $(REPO_ROOT) && git ls-files --exclude-standard --cached --others -- '*.pb.h' '*.pb.cc' | xargs rm -f)
 	$(PROTOC) -I.:$(GOGOPROTO_ROOT):$(PROTOBUF_ROOT) --cpp_out=lite:$(NATIVE_ROOT) $(CPP_PROTOS)
-	sed -i~ -E '/gogoproto/d' $(CPP_HEADERS) $(CPP_SOURCES)
+	$(SED_INPLACE) -E '/gogoproto/d' $(CPP_HEADERS) $(CPP_SOURCES)
 	@# For c++, protoc generates a directory structure mirroring the package
 	@# structure (and these directories must be in the include path), but cgo can
 	@# only compile a single directory so we symlink the generated pb.cc files
