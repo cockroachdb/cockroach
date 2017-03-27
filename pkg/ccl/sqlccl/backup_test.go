@@ -19,11 +19,15 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"reflect"
+	"sort"
 	"strconv"
 	"strings"
 	"sync/atomic"
 	"testing"
 
+	"github.com/kr/pretty"
+	"github.com/lib/pq"
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
@@ -31,8 +35,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -203,6 +211,103 @@ func backupAndRestore(
 		sqlDBRestore.QueryRow(`SELECT COUNT(*) FROM bench.bank@balance_idx`).Scan(&rowCount)
 		if rowCount != numAccounts {
 			t.Fatalf("expected %d rows but found %d", numAccounts, rowCount)
+		}
+	}
+}
+
+func verifySystemJob(
+	db *sqlutils.SQLRunner, offset int, expectedType string, expected sql.JobRecord,
+) error {
+	var actual sql.JobRecord
+	var rawDescriptorIDs pq.Int64Array
+	var actualType string
+	var statusString string
+	// We have to query for the nth job created rather than filtering by ID,
+	// because job-generating SQL queries (e.g. BACKUP) do not currently return
+	// the job ID.
+	db.QueryRow(`
+		SELECT type, description, username, descriptor_ids, status
+		FROM crdb_internal.jobs ORDER BY created LIMIT 1 OFFSET $1`,
+		offset,
+	).Scan(
+		&actualType, &actual.Description, &actual.Username, &rawDescriptorIDs,
+		&statusString,
+	)
+
+	for _, id := range rawDescriptorIDs {
+		actual.DescriptorIDs = append(actual.DescriptorIDs, sqlbase.ID(id))
+	}
+	sort.Sort(actual.DescriptorIDs)
+	sort.Sort(expected.DescriptorIDs)
+	expected.Details = nil
+	if e, a := expected, actual; !reflect.DeepEqual(e, a) {
+		return errors.Errorf("job %d did not match:%s",
+			offset, strings.Join(pretty.Diff(e, a), "\n"))
+	}
+
+	if e, a := sql.JobStatusSucceeded, sql.JobStatus(statusString); e != a {
+		return errors.Errorf("job %d: expected status %v, got %v", offset, e, a)
+	}
+	if e, a := expectedType, actualType; e != a {
+		return errors.Errorf("job %d: expected type %v, got type %v", offset, e, a)
+	}
+
+	return nil
+}
+
+func TestBackupRestoreSystemJobs(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	if !storage.ProposerEvaluatedKVEnabled() {
+		t.Skip("command WriteBatch is not allowed without proposer evaluated KV")
+	}
+
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop()
+
+	dir, dirCleanupFn := testutils.TempDir(t, 1)
+	defer dirCleanupFn()
+
+	dest := dir + "?secretCredentialsHere"
+	sanitizedDest := dir
+
+	sqlDB := sqlutils.MakeSQLRunner(t, db)
+	sqlDB.Exec(bankCreateDatabase)
+	sqlDB.Exec(bankCreateTable)
+	{
+		sqlDB.Exec(`BACKUP DATABASE bench TO $1`, dest)
+		tableID, err := sqlutils.QueryTableID(db, "bench", "bank")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := verifySystemJob(sqlDB, 0, sql.JobTypeBackup, sql.JobRecord{
+			Username:    security.RootUser,
+			Description: fmt.Sprintf(`BACKUP DATABASE bench TO '%s'`, sanitizedDest),
+			DescriptorIDs: sqlbase.IDs{
+				keys.DescriptorTableID,
+				keys.UsersTableID,
+				sqlbase.ID(tableID),
+			},
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	sqlDB.Exec(`CREATE DATABASE bench2`)
+	{
+		sqlDB.Exec(`RESTORE bench.* FROM $1 WITH OPTIONS ('into_db'='bench2')`, dest)
+		databaseID, err := sqlutils.QueryDatabaseID(db, "bench2")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := verifySystemJob(sqlDB, 1, sql.JobTypeRestore, sql.JobRecord{
+			Username: security.RootUser,
+			Description: fmt.Sprintf(
+				`RESTORE bench.* FROM '%s' WITH OPTIONS ('into_db'='bench2')`, sanitizedDest,
+			),
+			DescriptorIDs: sqlbase.IDs{
+				sqlbase.ID(databaseID + 1),
+			},
+		}); err != nil {
+			t.Fatal(err)
 		}
 	}
 }
