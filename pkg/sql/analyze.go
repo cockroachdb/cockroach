@@ -694,6 +694,8 @@ func simplifyOneAndInExpr(
 		ltuple := left.Right.(*parser.DTuple)
 		ltuple.AssertSorted()
 
+		values := ltuple.D
+
 		switch right.Operator {
 		case parser.Is:
 			if right.Right == parser.DNull {
@@ -715,74 +717,74 @@ func simplifyOneAndInExpr(
 
 			case parser.NE:
 				if found {
-					if len(ltuple.D) < 2 {
+					if len(values) < 2 {
 						return parser.MakeDBool(false), nil
 					}
-					ltuple.D = remove(ltuple.D, i)
+					values = remove(values, i)
 				}
 				return parser.NewTypedComparisonExpr(
 					parser.In,
 					left.TypedLeft(),
-					parser.NewDTuple(ltuple.D...).SetSorted(),
+					parser.NewDTuple(values...).SetSorted(),
 				), nil
 
 			case parser.GT:
-				if i < len(ltuple.D) {
+				if i < len(values) {
 					if found {
-						ltuple.D = ltuple.D[i+1:]
+						values = values[i+1:]
 					} else {
-						ltuple.D = ltuple.D[i:]
+						values = values[i:]
 					}
-					if len(ltuple.D) > 0 {
+					if len(values) > 0 {
 						return parser.NewTypedComparisonExpr(
 							parser.In,
 							left.TypedLeft(),
-							parser.NewDTuple(ltuple.D...).SetSorted(),
+							parser.NewDTuple(values...).SetSorted(),
 						), nil
 					}
 				}
 				return parser.MakeDBool(false), nil
 
 			case parser.GE:
-				if i < len(ltuple.D) {
-					ltuple.D = ltuple.D[i:]
-					if len(ltuple.D) > 0 {
+				if i < len(values) {
+					values = values[i:]
+					if len(values) > 0 {
 						return parser.NewTypedComparisonExpr(
 							parser.In,
 							left.TypedLeft(),
-							parser.NewDTuple(ltuple.D...).SetSorted(),
+							parser.NewDTuple(values...).SetSorted(),
 						), nil
 					}
 				}
 				return parser.MakeDBool(false), nil
 
 			case parser.LT:
-				if i < len(ltuple.D) {
+				if i < len(values) {
 					if i == 0 {
 						return parser.MakeDBool(false), nil
 					}
-					ltuple.D = ltuple.D[:i]
+					values = values[:i]
 					return parser.NewTypedComparisonExpr(
 						parser.In,
 						left.TypedLeft(),
-						parser.NewDTuple(ltuple.D...).SetSorted(),
+						parser.NewDTuple(values...).SetSorted(),
 					), nil
 				}
 				return left, nil
 
 			case parser.LE:
-				if i < len(ltuple.D) {
+				if i < len(values) {
 					if found {
 						i++
 					}
 					if i == 0 {
 						return parser.MakeDBool(false), nil
 					}
-					ltuple.D = ltuple.D[:i]
+					values = values[:i]
 					return parser.NewTypedComparisonExpr(
 						parser.In,
 						left.TypedLeft(),
-						parser.NewDTuple(ltuple.D...).SetSorted(),
+						parser.NewDTuple(values...).SetSorted(),
 					), nil
 				}
 				return left, nil
@@ -791,7 +793,7 @@ func simplifyOneAndInExpr(
 		case parser.In:
 			// Both of our tuples are sorted. Intersect the lists.
 			rtuple := right.Right.(*parser.DTuple)
-			intersection := intersectSorted(evalCtx, ltuple.D, rtuple.D)
+			intersection := intersectSorted(evalCtx, values, rtuple.D)
 			if len(intersection) == 0 {
 				return parser.MakeDBool(false), nil
 			}
