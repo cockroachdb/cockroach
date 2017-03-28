@@ -617,12 +617,17 @@ func TestFatalStacktraceStderr(t *testing.T) {
 }
 
 func TestRedirectStderr(t *testing.T) {
+	// This test requires that the logs go to files. We must disable
+	// showLogs, if it was specified, for otherwise the Scope() does not
+	// do its job properly.
+	defer func(s bool) { showLogs = s }(showLogs)
+	showLogs = false
+
 	s := Scope(t, "")
 	defer s.Close(t)
 
 	setFlags()
 	logging.stderrThreshold = Severity_NONE
-	logging.toStderr = false
 
 	Infof(context.Background(), "test")
 

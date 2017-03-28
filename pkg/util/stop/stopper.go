@@ -195,6 +195,7 @@ func (s *Stopper) Recover() {
 			s.onPanic(r)
 			return
 		}
+		log.ReportPanic(r)
 		panic(r)
 	}
 }
