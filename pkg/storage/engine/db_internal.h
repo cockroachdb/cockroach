@@ -28,6 +28,9 @@ std::string ToString(DBSlice s);
 // ordering as these keys do not sort lexicographically correctly.
 std::string EncodeKey(DBKey k);
 
+// ToDBStatus converts a rocksdb Status to a DBStatus.
+DBStatus ToDBStatus(const rocksdb::Status& status);
+
 // FmtStatus formats the given arguments printf-style into a DBStatus.
 DBStatus FmtStatus(const char *fmt, ...);
 
