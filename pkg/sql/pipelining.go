@@ -24,6 +24,14 @@ import (
 )
 
 // PipelineQueue maintains a set of planNodes running with pipelined execution.
+// Pipelined execution means that multiple statements run asynchronously, with
+// their results mocked out to the client and with independent statements allowed
+// to run in parallel. Any errors seen when running these statements are delayed
+// until the pipelined execution is "synchronized" on the next non-pipelined
+// statement. The syntax to pipeline statement execution is the statement with
+// RETURNING NOTHING appended to it. The feature is described further in
+// docs/RFCS/sql_pipelining.md.
+//
 // It uses a DependencyAnalyzer to determine dependencies between plans. Using
 // this knowledge, the queue provides the following guarantees about the execution
 // of plans:
@@ -33,9 +41,6 @@ import (
 // 3. No plans will begin execution once an error has been seen until Wait is
 //    called to drain the plans and reset the error state.
 //
-// The queue performs all computation on pointers to planNode interfaces. This is
-// because it wants to operate on unique objects, and equality of interfaces does
-// not necessarily imply pointer equality.
 type PipelineQueue struct {
 	// analyzer is a DependencyAnalyzer that computes when certain plans are dependent
 	// on one another. It determines if it is safe to run plans concurrently.
@@ -43,7 +48,7 @@ type PipelineQueue struct {
 
 	// plans is a set of all running and pending plans, with their corresponding "done"
 	// channels. These channels are closed when the plan has finished executing.
-	plans map[*planNode]doneChan
+	plans map[planNode]doneChan
 
 	// err is the first error seen since the last call to PipelineQueue.Wait. Referred to
 	// as the current "pipeline batch's error".
@@ -60,17 +65,19 @@ type doneChan chan struct{}
 // DependencyAnalyzer to determine plan dependencies.
 func MakePipelineQueue(analyzer DependencyAnalyzer) PipelineQueue {
 	return PipelineQueue{
-		plans:    make(map[*planNode]doneChan),
+		plans:    make(map[planNode]doneChan),
 		analyzer: analyzer,
 	}
 }
 
 // Add inserts a new plan in the queue and executes the provided function when
-// appropriate, obeying the guarantees made by the PipelineQueue.
+// all plans that it depends on have completed successfully, obeying the guarantees
+// made by the PipelineQueue above. The exec function should be used to run the
+// planNode and return any error observed during its execution.
 //
 // Add should not be called concurrently with Wait. See Wait's comment for more
 // details.
-func (pq *PipelineQueue) Add(plan *planNode, exec func() error) {
+func (pq *PipelineQueue) Add(plan planNode, exec func(planNode) error) {
 	prereqs, finishLocked := pq.insertInQueue(plan)
 	pq.runningGroup.Add(1)
 	go func() {
@@ -95,7 +102,7 @@ func (pq *PipelineQueue) Add(plan *planNode, exec func() error) {
 		}
 
 		// Execute the plan.
-		err := exec()
+		err := exec(plan)
 
 		pq.mu.Lock()
 		defer pq.mu.Unlock()
@@ -114,7 +121,7 @@ func (pq *PipelineQueue) Add(plan *planNode, exec func() error) {
 // channels of prerequisite blocking the new plan from executing. It also returns a
 // function to call when the new plan has finished executing. This function must be
 // called while pq.mu is held.
-func (pq *PipelineQueue) insertInQueue(newPlan *planNode) ([]doneChan, func()) {
+func (pq *PipelineQueue) insertInQueue(newPlan planNode) ([]doneChan, func()) {
 	pq.mu.Lock()
 	defer pq.mu.Unlock()
 
@@ -134,10 +141,10 @@ func (pq *PipelineQueue) insertInQueue(newPlan *planNode) ([]doneChan, func()) {
 }
 
 // prereqsForPlanLocked determines the set of plans currently running and pending
-// that a new plan is dependent on, It returns a slice of doneChans for each plan
+// that a new plan is dependent on. It returns a slice of doneChans for each plan
 // in this set. Returns a nil slice if the plan has no prerequisites and can be run
 // immediately.
-func (pq *PipelineQueue) prereqsForPlanLocked(newPlan *planNode) []doneChan {
+func (pq *PipelineQueue) prereqsForPlanLocked(newPlan planNode) []doneChan {
 	// Add all plans from the plan set that this new plan is dependent on.
 	var prereqs []doneChan
 	for plan, doneChan := range pq.plans {
@@ -185,28 +192,28 @@ func (pq *PipelineQueue) Err() error {
 }
 
 // DependencyAnalyzer determines if plans are independent of one another, where
-// independent plans are defined by whether their execution could be safely reordered
-// without having an effect on their runtime semantics or on their results. This
-// means that DependencyAnalyzer can be used to test whether it is safe for multiple
-// statements to be run concurrently by the PipelineQueue.
+// independent plans are defined by whether their execution could be safely
+// reordered without having an effect on their runtime semantics or on their
+// results. DependencyAnalyzer is used by PipelineQueue to test whether it is
+// safe for multiple statements to be run concurrently.
 type DependencyAnalyzer interface {
 	// Independent determines if the provided planNodes are independent from one
 	// another. Implementations of Independent are always commutative.
-	Independent(*planNode, *planNode) bool
+	Independent(planNode, planNode) bool
 }
 
 // dependencyAnalyzerFunc is an implementation of DependencyAnalyzer that defers
 // to a function for all dependency decisions.
-type dependencyAnalyzerFunc func(*planNode, *planNode) bool
+type dependencyAnalyzerFunc func(planNode, planNode) bool
 
-func (f dependencyAnalyzerFunc) Independent(p1 *planNode, p2 *planNode) bool {
+func (f dependencyAnalyzerFunc) Independent(p1 planNode, p2 planNode) bool {
 	return f(p1, p2)
 }
 
 // NoDependenciesAnalyzer is a DependencyAnalyzer that performs no analysis on
 // planNodes and asserts that all plans are independent.
 var NoDependenciesAnalyzer DependencyAnalyzer = dependencyAnalyzerFunc(func(
-	_ *planNode, _ *planNode,
+	_ planNode, _ planNode,
 ) bool {
 	return true
 })
