@@ -49,12 +49,14 @@ func startGossip(
 }
 
 func newInsecureRPCContext(stopper *stop.Stopper) *rpc.Context {
-	return rpc.NewContext(
-		log.AmbientContext{},
-		&base.Config{Insecure: true},
-		hlc.NewClock(hlc.UnixNano, time.Nanosecond),
-		stopper,
-	)
+	cfg := rpc.ContextConfig{
+		Config:   base.Config{Insecure: true},
+		HLCClock: hlc.NewClock(hlc.UnixNano, time.Nanosecond),
+		// Disable heartbeats. Not needed for these tests.
+		HeartbeatInterval:     0,
+		EnableClockSkewChecks: false,
+	}
+	return rpc.NewContext(log.AmbientContext{}, cfg, stopper)
 }
 
 func startGossipAtAddr(

@@ -49,8 +49,8 @@ var startBackground bool
 var undoFreezeCluster bool
 
 var serverCfg = server.MakeConfig()
-var baseCfg = serverCfg.Config
-var cliCtx = cliContext{Config: baseCfg}
+var baseCfg = &serverCfg.Config
+var cliCtx = cliContext{Config: &serverCfg}
 var sqlCtx = sqlContext{cliContext: &cliCtx}
 var dumpCtx = dumpContext{cliContext: &cliCtx, dumpMode: dumpBoth}
 var debugCtx = debugContext{

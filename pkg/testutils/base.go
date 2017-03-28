@@ -24,16 +24,16 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 )
 
-// NewNodeTestBaseContext creates a base context for testing. This uses
+// MakeNodeTestBaseConfig creates a base config for testing. This uses
 // embedded certs and the default node user. The default node user has both
 // server and client certificates.
-func NewNodeTestBaseContext() *base.Config {
-	return NewTestBaseContext(security.NodeUser)
+func MakeNodeTestBaseConfig() base.Config {
+	return MakeTestBaseConfig(security.NodeUser)
 }
 
-// NewTestBaseContext creates a secure base context for user.
-func NewTestBaseContext(user string) *base.Config {
-	return &base.Config{
+// MakeTestBaseConfig creates a secure base config for user.
+func MakeTestBaseConfig(user string) base.Config {
+	return base.Config{
 		Insecure:   false,
 		SSLCA:      filepath.Join(security.EmbeddedCertsDir, security.EmbeddedCACert),
 		SSLCert:    filepath.Join(security.EmbeddedCertsDir, fmt.Sprintf("%s.crt", user)),

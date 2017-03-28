@@ -35,7 +35,7 @@ import (
 )
 
 func addrWithDefaultHost(addr string) (string, error) {
-	host, port, err := net.SplitHostPort(baseCfg.Addr)
+	host, port, err := net.SplitHostPort(serverCfg.Addr)
 	if err != nil {
 		return "", err
 	}

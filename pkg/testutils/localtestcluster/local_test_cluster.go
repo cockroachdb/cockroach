@@ -83,7 +83,7 @@ type InitSenderFn func(
 // node RPC server and all HTTP endpoints. Use the value of
 // TestServer.Addr after Start() for client connections. Use Stop()
 // to shutdown the server after the test completes.
-func (ltc *LocalTestCluster) Start(t testing.TB, baseCtx *base.Config, initSender InitSenderFn) {
+func (ltc *LocalTestCluster) Start(t testing.TB, baseCtx base.Config, initSender InitSenderFn) {
 	ambient := log.AmbientContext{Tracer: tracing.NewTracer()}
 	nc := &base.NodeIDContainer{}
 	ambient.AddLogTag("n", nc)
@@ -95,7 +95,14 @@ func (ltc *LocalTestCluster) Start(t testing.TB, baseCtx *base.Config, initSende
 	ltc.Manual = hlc.NewManualClock(123)
 	ltc.Clock = hlc.NewClock(ltc.Manual.UnixNano, 50*time.Millisecond)
 	ltc.Stopper = stop.NewStopper()
-	rpcContext := rpc.NewContext(ambient, baseCtx, ltc.Clock, ltc.Stopper)
+	rpcCfg := rpc.ContextConfig{
+		Config:                baseCtx,
+		HLCClock:              ltc.Clock,
+		HeartbeatInterval:     time.Second,
+		HeartbeatTimeout:      time.Second,
+		EnableClockSkewChecks: true,
+	}
+	rpcContext := rpc.NewContext(ambient, rpcCfg, ltc.Stopper)
 	server := rpc.NewServer(rpcContext) // never started
 	ltc.Gossip = gossip.New(ambient, nc, rpcContext, server, nil, ltc.Stopper, metric.NewRegistry())
 	ltc.Eng = engine.NewInMem(roachpb.Attributes{}, 50<<20)

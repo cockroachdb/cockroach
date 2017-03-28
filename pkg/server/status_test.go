@@ -532,7 +532,12 @@ func TestSpanStatsGRPCResponse(t *testing.T) {
 
 	rpcStopper := stop.NewStopper()
 	defer rpcStopper.Stop()
-	rpcContext := rpc.NewContext(log.AmbientContext{}, ts.RPCContext().Config, ts.Clock(), rpcStopper)
+
+	rpcCfg := rpc.ContextConfig{
+		Config:   ts.BaseConfig(),
+		HLCClock: ts.clock,
+	}
+	rpcContext := rpc.NewContext(log.AmbientContext{}, rpcCfg, rpcStopper)
 	request := serverpb.SpanStatsRequest{
 		NodeID:   "1",
 		StartKey: []byte(roachpb.RKeyMin),

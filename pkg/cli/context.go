@@ -20,9 +20,9 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 )
 
@@ -44,8 +44,8 @@ func (s *statementsValue) Set(value string) error {
 }
 
 type cliContext struct {
-	// Embed the base context.
-	*base.Config
+	// Embed the server context. The CLI needs to talk to a server.
+	*server.Config
 
 	// tableDisplayFormat indicates how to format result tables.
 	tableDisplayFormat tableDisplayFormat

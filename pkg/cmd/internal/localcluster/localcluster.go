@@ -112,12 +112,17 @@ func (c *Cluster) Start(
 ) {
 	c.started = timeutil.Now()
 
-	baseCtx := &base.Config{
-		User:     security.NodeUser,
-		Insecure: true,
+	rpcCfg := rpc.ContextConfig{
+		Config: base.Config{
+			User:     security.NodeUser,
+			Insecure: true,
+		},
+		HLCClock: hlc.NewClock(hlc.UnixNano, 0),
+		// Disable heartbeats for this client external to the cluster.
+		HeartbeatInterval:     0,
+		EnableClockSkewChecks: false,
 	}
-	c.rpcCtx = rpc.NewContext(log.AmbientContext{}, baseCtx,
-		hlc.NewClock(hlc.UnixNano, 0), c.stopper)
+	c.rpcCtx = rpc.NewContext(log.AmbientContext{}, rpcCfg, c.stopper)
 
 	if perNodeArgs != nil && len(perNodeArgs) != len(c.Nodes) {
 		panic(fmt.Sprintf("there are %d nodes, but perNodeArgs' length is %d",
