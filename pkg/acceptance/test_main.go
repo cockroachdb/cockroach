@@ -11,8 +11,6 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
-//
-// Author: Tamir Duberstein (tamird@gmail.com)
 
 // +build !acceptance
 
@@ -27,14 +25,13 @@
 package acceptance
 
 import (
+	"context"
 	"testing"
-
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
-func TestMain(m *testing.M) {
+func MainTest(m *testing.M) {
 	if !*flagRemote {
 		log.Infof(context.Background(), "not running with `acceptance` build tag or against remote cluster; skipping")
 		return
