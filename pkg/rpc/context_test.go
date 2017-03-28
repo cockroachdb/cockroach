@@ -32,10 +32,20 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
+
+// newNodeTestContext returns a rpc.Context for testing.
+// It is meant to be used by nodes.
+func newNodeTestContext(clock *hlc.Clock, stopper *stop.Stopper) *Context {
+	ctx := NewContext(log.AmbientContext{}, testutils.NewNodeTestBaseContext(), clock, stopper)
+	ctx.HeartbeatInterval = 10 * time.Millisecond
+	ctx.HeartbeatTimeout = 2 * defaultHeartbeatInterval
+	return ctx
+}
 
 func newTestServer(t *testing.T, ctx *Context, manual bool) (*grpc.Server, net.Listener) {
 	tlsConfig, err := ctx.GetServerTLSConfig()
@@ -396,9 +406,9 @@ func TestFailedOffsetMeasurement(t *testing.T) {
 
 	// Create a client that never receives a heartbeat after the first.
 	clientCtx := newNodeTestContext(clock, stopper)
-	// Increase the timeout so that failure arises from exceeding the maximum
+	// Remove the timeout so that failure arises from exceeding the maximum
 	// clock reading delay, not the timeout.
-	clientCtx.HeartbeatTimeout = 20 * clientCtx.HeartbeatInterval
+	clientCtx.HeartbeatTimeout = 0
 	if _, err := clientCtx.GRPCDial(remoteAddr); err != nil {
 		t.Fatal(err)
 	}
