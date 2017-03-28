@@ -199,11 +199,6 @@ func (ln *interceptingListener) Accept() (net.Conn, error) {
 // heartbeats succeed or fail due to transport failures.
 func TestHeartbeatHealthTransport(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	t.Skip("#13734")
-
-	if testing.Short() {
-		t.Skip("short flag")
-	}
 
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
@@ -291,15 +286,20 @@ func TestHeartbeatHealthTransport(t *testing.T) {
 	})
 
 	// Close the listener and all the connections.
+	//
+	// NB: Closing the connections is done in the retry loop below because
+	// sometimes the call to `ln.Close` interleaves with a connection attempt in
+	// such a way that a connection manages to slip through.
 	if err := ln.Close(); err != nil {
-		t.Fatal(err)
-	}
-	if err := closeConns(); err != nil {
 		t.Fatal(err)
 	}
 
 	// Should become unhealthy again now that the connection was closed.
 	testutils.SucceedsSoon(t, func() error {
+		if err := closeConns(); err != nil {
+			t.Fatal(err)
+		}
+
 		if err := clientCtx.ConnHealth(remoteAddr); grpc.Code(err) != codes.Unavailable {
 			return errors.Errorf("unexpected error: %v", err)
 		}
