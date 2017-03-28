@@ -10,6 +10,10 @@ CREATE TABLE t (a INT PRIMARY KEY DEFAULT (SELECT 1))
 statement error DEFAULT expression .* may not contain variable sub-expressions
 CREATE TABLE t (a INT PRIMARY KEY DEFAULT b)
 
+# Issue #14308: support tables with DEFAULT NULL columns.
+statement ok
+CREATE TABLE null_default (ts TIMESTAMP PRIMARY KEY NULL DEFAULT NULL)
+
 # Aggregate function calls in CHECK are not ok.
 statement error aggregate functions are not allowed in DEFAULT expressions
 CREATE TABLE bad (a INT DEFAULT COUNT(1))
@@ -92,3 +96,17 @@ UPDATE t SET b = DEFAULT, c = DEFAULT
 
 statement ok
 UPDATE t SET (b) = (DEFAULT), (c) = (DEFAULT)
+
+# Test a table without a default and with a null default
+statement ok
+CREATE TABLE v (
+  a INT PRIMARY KEY,
+  b TIMESTAMP NULL DEFAULT NULL
+)
+
+query TTBTT colnames
+SHOW COLUMNS FROM v
+----
+Field Type      Null  Default  Indices
+a     INT       false NULL     {primary}
+b     TIMESTAMP true  NULL     {}

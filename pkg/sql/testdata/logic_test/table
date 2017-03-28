@@ -435,3 +435,18 @@ CREATE TABLE test.empty ()
 
 statement ok
 SELECT * FROM test.empty
+
+# Issue #14308: support tables with DEFAULT NULL columns.
+statement ok
+CREATE TABLE test.null_default (
+  ts timestamp NULL DEFAULT NULL
+)
+
+query TT
+SHOW CREATE TABLE test.null_default
+----
+test.null_default CREATE TABLE null_default
+(
+  ts  TIMESTAMP NULL DEFAULT NULL,
+  FAMILY "primary" (ts, rowid)
+)
