@@ -34,7 +34,7 @@ import (
 // instrumentation and returns the list of downstream-of-raft protos.
 func TrackRaftProtos() func() []reflect.Type {
 	// Grab the name of the function that roots all raft operations.
-	applyRaftFunc := runtime.FuncForPC(reflect.ValueOf((*Replica).executeBatch).Pointer()).Name()
+	applyRaftFunc := runtime.FuncForPC(reflect.ValueOf(executeBatch).Pointer()).Name()
 	// Some raft operations trigger gossip, but we don't care about proto
 	// serialization in gossip, so we're going to ignore it.
 	addInfoFunc := runtime.FuncForPC(reflect.ValueOf((*gossip.Gossip).AddInfoProto).Pointer()).Name()
