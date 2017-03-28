@@ -76,7 +76,7 @@ func postFreeze(
 func testFreezeClusterInner(
 	ctx context.Context, t *testing.T, c cluster.Cluster, cfg cluster.TestConfig,
 ) {
-	minAffected := int64(server.ExpectedInitialRangeCountWithoutMigrations())
+	minAffected := int64(server.GetBootstrapSchema().InitialRangeCount())
 
 	const long = time.Minute
 	const short = 10 * time.Second
