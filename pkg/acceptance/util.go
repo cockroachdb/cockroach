@@ -131,6 +131,16 @@ var testFuncRE = regexp.MustCompile("^(Test|Benchmark)")
 
 var stopper = stop.NewStopper()
 
+// GetStopper returns the stopper used by acceptance tests.
+func GetStopper() *stop.Stopper {
+	return stopper
+}
+
+// IsRemote is true when terraform should be used instead of docker.
+func IsRemote() bool {
+	return *flagRemote
+}
+
 // RunTests runs the tests in a package while gracefully handling interrupts.
 func RunTests(m *testing.M) {
 	randutil.SeedForTests()
