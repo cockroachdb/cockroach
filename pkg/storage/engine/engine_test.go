@@ -594,7 +594,7 @@ func testEngineDeleteRange(t *testing.T, clearRange func(engine Engine, start, e
 
 		// Delete a range of keys
 		if err := clearRange(engine, mvccKey("aa"), mvccKey("abc")); err != nil {
-			t.Error("Not expecting an error")
+			t.Fatal(err)
 		}
 		// Verify what's left
 		verifyScan(mvccKey(roachpb.RKeyMin), mvccKey(roachpb.RKeyMax), 10,
@@ -607,6 +607,23 @@ func TestEngineDeleteRange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	testEngineDeleteRange(t, func(engine Engine, start, end MVCCKey) error {
 		return engine.ClearRange(start, end)
+	})
+}
+
+func TestEngineDeleteRangeBatch(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	testEngineDeleteRange(t, func(engine Engine, start, end MVCCKey) error {
+		batch := engine.NewWriteOnlyBatch()
+		defer batch.Close()
+		if err := batch.ClearRange(start, end); err != nil {
+			return err
+		}
+		batch2 := engine.NewWriteOnlyBatch()
+		defer batch2.Close()
+		if err := batch2.ApplyBatchRepr(batch.Repr(), false); err != nil {
+			return err
+		}
+		return batch2.Commit(false)
 	})
 }
 
