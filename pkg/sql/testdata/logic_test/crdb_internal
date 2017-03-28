@@ -102,3 +102,9 @@ CgoCompiler
 Platform
 Distribution
 Type
+
+# The validity of the rows in this table are tested elsewhere; we merely assert the columns.
+query ITTTTTTTTTRT colnames
+SELECT * FROM crdb_internal.jobs
+----
+id  type  description  username  descriptor_ids  status  created  started  finished  modified  fraction_completed  error

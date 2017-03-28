@@ -174,7 +174,7 @@ func reassignParentIDs(
 // reflect the ID remapping it has done in the descriptors.
 func reassignTableIDs(
 	ctx context.Context, db client.DB, tables []*sqlbase.TableDescriptor, opt parser.KVOptions,
-) (storageccl.KeyRewriter, error) {
+) (storageccl.KeyRewriter, map[sqlbase.ID]sqlbase.ID, error) {
 	var newTableIDs map[sqlbase.ID]sqlbase.ID
 	var kr storageccl.KeyRewriter
 
@@ -191,14 +191,14 @@ func reassignTableIDs(
 		}
 		return nil
 	}); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	if err := reassignReferencedTables(tables, newTableIDs, opt); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
-	return kr, nil
+	return kr, newTableIDs, nil
 }
 
 func reassignReferencedTables(
@@ -520,6 +520,25 @@ func restoreTableDescs(ctx context.Context, db client.DB, tables []*sqlbase.Tabl
 	return errors.Wrap(err, "restoring table desc and namespace entries")
 }
 
+func restoreJobDescription(restore *parser.Restore, from []string) (string, error) {
+	r := parser.Restore{
+		AsOf:    restore.AsOf,
+		Options: restore.Options,
+		Targets: restore.Targets,
+		From:    make(parser.Exprs, len(restore.From)),
+	}
+
+	for i, f := range from {
+		sf, err := storageccl.SanitizeExportStorageURI(f)
+		if err != nil {
+			return "", err
+		}
+		r.From[i] = parser.NewDString(sf)
+	}
+
+	return r.String(), nil
+}
+
 // Restore imports a SQL table (or tables) from sets of non-overlapping sstable
 // files.
 func Restore(
@@ -528,6 +547,7 @@ func Restore(
 	uris []string,
 	targets parser.TargetList,
 	opt parser.KVOptions,
+	jobLogger *sql.JobLogger,
 ) error {
 
 	db := *p.ExecCfg().DB
@@ -584,7 +604,7 @@ func Restore(
 	// restore since restarts would be terrible (and our bulk import primitive
 	// are non-transactional), but this does mean if something fails during Import,
 	// we've "leaked" the IDs, in that the generator will have been incremented.
-	kr, err := reassignTableIDs(ctx, db, tables, opt)
+	kr, newTableIDs, err := reassignTableIDs(ctx, db, tables, opt)
 	if err != nil {
 		// We expect user-facing usage errors here, so don't wrapf.
 		return err
@@ -597,9 +617,19 @@ func Restore(
 		return errors.Wrapf(err, "making import requests for %d backups", len(backupDescs))
 	}
 
+	for _, desc := range newTableIDs {
+		jobLogger.Job.DescriptorIDs = append(jobLogger.Job.DescriptorIDs, desc)
+	}
+	if err := jobLogger.Created(ctx); err != nil {
+		return err
+	}
+	if err := jobLogger.Started(ctx); err != nil {
+		return err
+	}
+
 	// The Import (and resulting WriteBatch) requests made below run on
 	// leaseholders, so presplit the ranges to balance the work among many
-	// nodes.
+	// nodes
 	splitKeys := make([]roachpb.Key, len(importRequests))
 	for i, r := range importRequests {
 		var ok bool
@@ -667,8 +697,33 @@ func restorePlanHook(
 		ctx, span := tracing.ChildSpan(baseCtx, stmt.StatementTag())
 		defer tracing.FinishSpan(span)
 
-		err := Restore(ctx, p, fromFn(), restore.Targets, restore.Options)
-		return nil, err
+		from := fromFn()
+		description, err := restoreJobDescription(restore, from)
+		if err != nil {
+			return nil, err
+		}
+		jobLogger := sql.NewJobLogger(p.ExecCfg().DB, p.LeaseMgr(), sql.JobRecord{
+			Description: description,
+			Username:    p.User(),
+			Details:     sql.RestoreJobDetails{},
+		})
+		err = Restore(
+			ctx,
+			p,
+			from,
+			restore.Targets,
+			restore.Options,
+			&jobLogger,
+		)
+		if err != nil {
+			jobLogger.Failed(ctx, err)
+			return nil, err
+		}
+		if err := jobLogger.Succeeded(ctx); err != nil {
+			log.Errorf(ctx, "RESTORE ignoring error while marking job '%s' as successful: %+v",
+				description, err)
+		}
+		return nil, nil
 	}
 	return fn, nil, nil
 }

@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/interval"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
@@ -139,6 +140,33 @@ func spansForAllTableIndexes(tables []*sqlbase.TableDescriptor) []roachpb.Span {
 	return spans
 }
 
+func backupJobDescription(
+	backup *parser.Backup, to string, incrementalFrom []string,
+) (string, error) {
+	b := parser.Backup{
+		AsOf:            backup.AsOf,
+		Options:         backup.Options,
+		Targets:         backup.Targets,
+		IncrementalFrom: make(parser.Exprs, len(incrementalFrom)),
+	}
+
+	to, err := storageccl.SanitizeExportStorageURI(to)
+	if err != nil {
+		return "", err
+	}
+	backup.To = parser.NewDString(to)
+
+	for i, from := range incrementalFrom {
+		sanitizedFrom, err := storageccl.SanitizeExportStorageURI(from)
+		if err != nil {
+			return "", err
+		}
+		b.IncrementalFrom[i] = parser.NewDString(sanitizedFrom)
+	}
+
+	return backup.String(), nil
+}
+
 type backupFileDescriptors []BackupDescriptor_File
 
 func (r backupFileDescriptors) Len() int      { return len(r) }
@@ -164,6 +192,7 @@ func Backup(
 	targets parser.TargetList,
 	startTime, endTime hlc.Timestamp,
 	_ parser.KVOptions,
+	jobLogger *sql.JobLogger,
 ) (BackupDescriptor, error) {
 	// TODO(dan): Figure out how permissions should work. #6713 is tracking this
 	// for grpc.
@@ -225,6 +254,16 @@ func Backup(
 		files    []BackupDescriptor_File
 		dataSize int64
 	}{}
+
+	for _, desc := range tables {
+		jobLogger.Job.DescriptorIDs = append(jobLogger.Job.DescriptorIDs, desc.GetID())
+	}
+	if err := jobLogger.Created(ctx); err != nil {
+		return BackupDescriptor{}, err
+	}
+	if err := jobLogger.Started(ctx); err != nil {
+		return BackupDescriptor{}, err
+	}
 
 	header := roachpb.Header{Timestamp: endTime}
 	g, gCtx := errgroup.WithContext(ctx)
@@ -318,10 +357,13 @@ func backupPlanHook(
 		ctx, span := tracing.ChildSpan(baseCtx, stmt.StatementTag())
 		defer tracing.FinishSpan(span)
 
+		to := toFn()
+		incrementalFrom := incrementalFromFn()
+
 		var startTime hlc.Timestamp
 		if backup.IncrementalFrom != nil {
 			var err error
-			startTime, err = ValidatePreviousBackups(ctx, incrementalFromFn())
+			startTime, err = ValidatePreviousBackups(ctx, incrementalFrom)
 			if err != nil {
 				return nil, err
 			}
@@ -333,17 +375,30 @@ func backupPlanHook(
 				return nil, err
 			}
 		}
-
-		to := toFn()
+		description, err := backupJobDescription(backup, to, incrementalFrom)
+		if err != nil {
+			return nil, err
+		}
+		jobLogger := sql.NewJobLogger(p.ExecCfg().DB, p.LeaseMgr(), sql.JobRecord{
+			Description: description,
+			Username:    p.User(),
+			Details:     sql.BackupJobDetails{},
+		})
 		desc, err := Backup(ctx,
 			p,
 			to,
 			backup.Targets,
 			startTime, endTime,
 			backup.Options,
+			&jobLogger,
 		)
 		if err != nil {
+			jobLogger.Failed(ctx, err)
 			return nil, err
+		}
+		if err := jobLogger.Succeeded(ctx); err != nil {
+			log.Errorf(ctx, "BACKUP ignoring error while marking job '%s' as successful: %+v",
+				description, err)
 		}
 		ret := []parser.Datums{{
 			parser.NewDString(to),
