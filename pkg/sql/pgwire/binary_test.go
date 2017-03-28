@@ -85,7 +85,7 @@ func TestBinaryDecimal(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	testBinaryDatumType(t, "decimal", func(val string) parser.Datum {
 		dec := new(parser.DDecimal)
-		if _, _, err := dec.SetString(val); err != nil {
+		if err := dec.SetString(val); err != nil {
 			t.Fatalf("could not set %q on decimal", val)
 		}
 		return dec
@@ -197,7 +197,7 @@ func TestRandomBinaryDecimal(t *testing.T) {
 		buf := writeBuffer{bytecount: metric.NewCounter(metric.Metadata{})}
 		dec := new(parser.DDecimal)
 
-		if _, _, err := dec.SetString(test.In); err != nil {
+		if err := dec.SetString(test.In); err != nil {
 			t.Fatalf("could not set %q on decimal", test.In)
 		}
 		buf.writeBinaryDatum(dec, time.UTC)

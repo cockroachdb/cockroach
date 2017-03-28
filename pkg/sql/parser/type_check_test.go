@@ -102,6 +102,11 @@ func TestTypeCheck(t *testing.T) {
 		{`1 + $1`, `1:::INT + $1:::INT`},
 		{`1:::DECIMAL + $1`, `1:::DECIMAL + $1:::DECIMAL`},
 		{`$1:::INT`, `$1:::INT`},
+
+		{`'NaN'::decimal`, `'NaN':::STRING::DECIMAL`},
+		{`'-NaN'::decimal`, `'-NaN':::STRING::DECIMAL`},
+		{`'Inf'::decimal`, `'Inf':::STRING::DECIMAL`},
+		{`'-Inf'::decimal`, `'-Inf':::STRING::DECIMAL`},
 	}
 	for _, d := range testData {
 		expr, err := ParseExprTraditional(d.expr)
@@ -116,6 +121,39 @@ func TestTypeCheck(t *testing.T) {
 		} else if s := Serialize(typeChecked); s != d.expected {
 			t.Errorf("%s: expected %s, but found %s", d.expr, d.expected, s)
 		}
+	}
+}
+
+func TestTypeCheckNormalize(t *testing.T) {
+	testData := []struct {
+		expr     string
+		expected string
+	}{
+		{`'NaN'::decimal`, `'NaN'::DECIMAL:::DECIMAL`},
+		{`'-NaN'::decimal`, `'NaN'::DECIMAL:::DECIMAL`},
+		{`'Inf'::decimal`, `'Infinity'::DECIMAL:::DECIMAL`},
+		{`'-Inf'::decimal`, `'-Infinity'::DECIMAL:::DECIMAL`},
+	}
+	for _, d := range testData {
+		t.Run(d.expr, func(t *testing.T) {
+			expr, err := ParseExprTraditional(d.expr)
+			if err != nil {
+				t.Fatal(err)
+			}
+			ctx := MakeSemaContext()
+			typeChecked, err := TypeCheck(expr, &ctx, TypeAny)
+			if err != nil {
+				t.Fatal(err)
+			}
+			evalCtx := &EvalContext{}
+			typedExpr, err := evalCtx.NormalizeExpr(typeChecked)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if s := Serialize(typedExpr); s != d.expected {
+				t.Errorf("expected %s, but found %s", d.expected, s)
+			}
+		})
 	}
 }
 

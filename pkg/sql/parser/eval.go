@@ -1356,8 +1356,8 @@ func isNaN(d Datum) bool {
 	switch t := d.(type) {
 	case *DFloat:
 		return math.IsNaN(float64(*t))
-	// case *DDecimal:
-	// TODO(mjibson) add case when decimals learn about NaN.
+	case *DDecimal:
+		return t.Decimal.Form == apd.NaN
 	default:
 		return false
 	}
