@@ -326,12 +326,18 @@ func (ctx *Context) runHeartbeat(meta *connMeta, remoteAddr string) error {
 			heartbeatTimer.Read = true
 		}
 
-		goCtx, cancel := context.WithTimeout(ctx.masterCtx, ctx.HeartbeatTimeout)
+		goCtx := ctx.masterCtx
+		var cancel context.CancelFunc
+		if hbTimeout := ctx.HeartbeatTimeout; hbTimeout > 0 {
+			goCtx, cancel = context.WithTimeout(goCtx, hbTimeout)
+		}
 		sendTime := ctx.LocalClock.PhysicalTime()
 		// NB: We want the request to fail-fast (the default), otherwise we won't
 		// be notified of transport failures.
 		response, err := heartbeatClient.Ping(goCtx, &request)
-		cancel()
+		if cancel != nil {
+			cancel()
+		}
 		ctx.conns.Lock()
 		meta.heartbeatErr = err
 		ctx.conns.Unlock()
