@@ -309,17 +309,6 @@ func (ts *TestServer) Start(params base.TestServerArgs) error {
 	return nil
 }
 
-// ExpectedInitialRangeCountWithoutMigrations is like ExpectedInitialRangeCount,
-// but does not take into account any ranges that may have been added by
-// migrations. This function should be used when only a lower bound, and not
-// an exact count, is needed.
-func ExpectedInitialRangeCountWithoutMigrations() int {
-	bootstrap := GetBootstrapSchema()
-	return bootstrap.SystemDescriptorCount() -
-		bootstrap.SystemConfigDescriptorCount() +
-		2 /* first-range + system-config-range */
-}
-
 // ExpectedInitialRangeCount returns the expected number of ranges that should
 // be on the server after initial (asynchronous) splits have been completed,
 // assuming no additional information is added outside of the normal bootstrap
@@ -333,14 +322,12 @@ func (ts *TestServer) ExpectedInitialRangeCount() (int, error) {
 // assuming no additional information is added outside of the normal bootstrap
 // process.
 func ExpectedInitialRangeCount(db *client.DB) (int, error) {
-	// XXX: This assumes that the number of descriptors added by migrations is equal
-	// to the number of ranges added, which may not be true in the future.
-	migrationRangeCount, err := migrations.AdditionalInitialDescriptors(
+	_, migrationRangeCount, err := migrations.AdditionalInitialDescriptors(
 		context.Background(), db)
 	if err != nil {
 		return 0, errors.Wrap(err, "counting initial migration ranges")
 	}
-	return ExpectedInitialRangeCountWithoutMigrations() + migrationRangeCount, nil
+	return GetBootstrapSchema().InitialRangeCount() + migrationRangeCount, nil
 }
 
 // WaitForInitialSplits waits for the server to complete its expected initial
