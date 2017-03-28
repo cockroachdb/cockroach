@@ -485,15 +485,28 @@ type DDecimal struct {
 // ParseDDecimal parses and returns the *DDecimal Datum value represented by the
 // provided string, or an error if parsing is unsuccessful.
 func ParseDDecimal(s string) (*DDecimal, error) {
+	dd := &DDecimal{}
+	err := dd.SetString(s)
+	return dd, err
+}
+
+// SetString sets d to s. Any non-standard NaN values are converted to a
+// normal NaN.
+func (d *DDecimal) SetString(s string) error {
 	// Using HighPrecisionCtx here restricts the max and min exponents to 2000,
 	// and the precision to 2000 places. Any rounding or other inexact conversion
 	// will result in an error.
-	dd := &DDecimal{}
-	_, res, err := HighPrecisionCtx.SetString(&dd.Decimal, s)
+	_, res, err := HighPrecisionCtx.SetString(&d.Decimal, s)
 	if res != 0 || err != nil {
-		return nil, makeParseError(s, TypeDecimal, nil)
+		return makeParseError(s, TypeDecimal, nil)
 	}
-	return dd, nil
+	if d.Decimal.Form == apd.NaNSignaling {
+		d.Decimal.Form = apd.NaN
+	}
+	if d.Decimal.Form == apd.NaN {
+		d.Negative = false
+	}
+	return nil
 }
 
 // ResolvedType implements the TypedExpr interface.
@@ -519,6 +532,14 @@ func (d *DDecimal) Compare(ctx *EvalContext, other Datum) int {
 		}
 	default:
 		panic(makeUnsupportedComparisonMessage(d, other))
+	}
+	// NaNs sort first in SQL.
+	if dn, vn := d.Form == apd.NaN, v.Form == apd.NaN; dn && !vn {
+		return -1
+	} else if !dn && vn {
+		return 1
+	} else if dn && vn {
+		return 0
 	}
 	return d.Cmp(v)
 }
@@ -558,7 +579,14 @@ func (*DDecimal) AmbiguousFormat() bool { return true }
 
 // Format implements the NodeFormatter interface.
 func (d *DDecimal) Format(buf *bytes.Buffer, f FmtFlags) {
+	quote := f.disambiguateDatumTypes && d.Decimal.Form != apd.Finite
+	if quote {
+		buf.WriteByte('\'')
+	}
 	buf.WriteString(d.Decimal.ToStandard())
+	if quote {
+		buf.WriteString(`'::DECIMAL`)
+	}
 }
 
 // Size implements the Datum interface.
