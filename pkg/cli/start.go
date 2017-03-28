@@ -187,7 +187,10 @@ func initCPUProfile(ctx context.Context, dir string) {
 	}
 
 	go func() {
+		defer log.RecoverAndReportPanic()
+
 		ctx := context.Background()
+
 		t := time.NewTicker(cpuProfileInterval)
 		defer t.Stop()
 
@@ -353,6 +356,8 @@ func runStart(cmd *cobra.Command, args []string) error {
 	var s *server.Server
 	errChan := make(chan error, 1)
 	go func() {
+		defer log.RecoverAndReportPanic()
+
 		defer sp.Finish()
 		if err := func() error {
 			if err := serverCfg.InitNode(); err != nil {
