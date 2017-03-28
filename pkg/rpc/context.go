@@ -117,8 +117,8 @@ type Context struct {
 	RemoteClocks *RemoteClockMonitor
 	masterCtx    context.Context
 
-	HeartbeatInterval time.Duration
-	HeartbeatTimeout  time.Duration
+	heartbeatInterval time.Duration
+	heartbeatTimeout  time.Duration
 	HeartbeatCB       func()
 
 	localInternalServer roachpb.InternalServer
@@ -151,8 +151,8 @@ func NewContext(
 	ctx.Stopper = stopper
 	ctx.RemoteClocks = newRemoteClockMonitor(
 		ctx.LocalClock, 10*defaultHeartbeatInterval, baseCtx.HistogramWindowInterval)
-	ctx.HeartbeatInterval = defaultHeartbeatInterval
-	ctx.HeartbeatTimeout = 2 * defaultHeartbeatInterval
+	ctx.heartbeatInterval = defaultHeartbeatInterval
+	ctx.heartbeatTimeout = 2 * defaultHeartbeatInterval
 	ctx.conns.cache = make(map[string]*connMeta)
 
 	stopper.RunWorker(func() {
@@ -328,7 +328,7 @@ func (ctx *Context) runHeartbeat(meta *connMeta, remoteAddr string) error {
 
 		goCtx := ctx.masterCtx
 		var cancel context.CancelFunc
-		if hbTimeout := ctx.HeartbeatTimeout; hbTimeout > 0 {
+		if hbTimeout := ctx.heartbeatTimeout; hbTimeout > 0 {
 			goCtx, cancel = context.WithTimeout(goCtx, hbTimeout)
 		}
 		sendTime := ctx.LocalClock.PhysicalTime()
@@ -395,6 +395,6 @@ func (ctx *Context) runHeartbeat(meta *connMeta, remoteAddr string) error {
 			}
 		}
 
-		heartbeatTimer.Reset(ctx.HeartbeatInterval)
+		heartbeatTimer.Reset(ctx.heartbeatInterval)
 	}
 }

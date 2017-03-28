@@ -39,15 +39,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 )
 
-// newNodeTestContext returns a rpc.Context for testing.
-// It is meant to be used by nodes.
-func newNodeTestContext(clock *hlc.Clock, stopper *stop.Stopper) *rpc.Context {
-	ctx := rpc.NewContext(log.AmbientContext{}, testutils.NewNodeTestBaseContext(), clock, stopper)
-	ctx.HeartbeatInterval = 10 * time.Millisecond
-	ctx.HeartbeatTimeout = 5 * time.Second
-	return ctx
-}
-
 func newTestServer(t *testing.T, ctx *rpc.Context) (*grpc.Server, net.Listener) {
 	s := rpc.NewServer(ctx)
 
@@ -92,7 +83,12 @@ func TestSendToOneClient(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 
-	rpcContext := newNodeTestContext(hlc.NewClock(hlc.UnixNano, time.Nanosecond), stopper)
+	rpcContext := rpc.NewContext(
+		log.AmbientContext{},
+		testutils.NewNodeTestBaseContext(),
+		hlc.NewClock(hlc.UnixNano, time.Nanosecond),
+		stopper,
+	)
 	s, ln := newTestServer(t, rpcContext)
 	roachpb.RegisterInternalServer(s, Node(0))
 
@@ -112,10 +108,20 @@ func TestRetryableError(t *testing.T) {
 
 	clientStopper := stop.NewStopper()
 	defer clientStopper.Stop()
-	clientContext := newNodeTestContext(hlc.NewClock(hlc.UnixNano, time.Nanosecond), clientStopper)
+	clientContext := rpc.NewContext(
+		log.AmbientContext{},
+		testutils.NewNodeTestBaseContext(),
+		hlc.NewClock(hlc.UnixNano, time.Nanosecond),
+		clientStopper,
+	)
 
 	serverStopper := stop.NewStopper()
-	serverContext := newNodeTestContext(hlc.NewClock(hlc.UnixNano, time.Nanosecond), serverStopper)
+	serverContext := rpc.NewContext(
+		log.AmbientContext{},
+		testutils.NewNodeTestBaseContext(),
+		hlc.NewClock(hlc.UnixNano, time.Nanosecond),
+		serverStopper,
+	)
 
 	s, ln := newTestServer(t, serverContext)
 	roachpb.RegisterInternalServer(s, Node(0))
@@ -176,7 +182,12 @@ func (*channelSaveTransport) Close() {
 // distinguishing them and just send a single channel.
 func setupSendNextTest(t *testing.T) ([]chan<- BatchCall, chan BatchCall, *stop.Stopper) {
 	stopper := stop.NewStopper()
-	nodeContext := newNodeTestContext(hlc.NewClock(hlc.UnixNano, time.Nanosecond), stopper)
+	nodeContext := rpc.NewContext(
+		log.AmbientContext{},
+		testutils.NewNodeTestBaseContext(),
+		hlc.NewClock(hlc.UnixNano, time.Nanosecond),
+		stopper,
+	)
 
 	addrs := []net.Addr{
 		util.NewUnresolvedAddr("dummy", "1"),
@@ -428,7 +439,12 @@ func TestComplexScenarios(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 
-	nodeContext := newNodeTestContext(hlc.NewClock(hlc.UnixNano, time.Nanosecond), stopper)
+	nodeContext := rpc.NewContext(
+		log.AmbientContext{},
+		testutils.NewNodeTestBaseContext(),
+		hlc.NewClock(hlc.UnixNano, time.Nanosecond),
+		stopper,
+	)
 
 	// TODO(bdarnell): the retryable flag is no longer used for RPC errors.
 	// Rework this test to incorporate application-level errors carried in
