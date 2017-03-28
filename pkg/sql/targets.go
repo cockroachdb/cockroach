@@ -30,7 +30,7 @@ func (p *planner) computeRender(
 	ctx context.Context,
 	target parser.SelectExpr,
 	desiredType parser.Type,
-	info *dataSourceInfo,
+	info multiSourceInfo,
 	ivarHelper parser.IndexedVarHelper,
 	allowStars bool,
 ) (columns ResultColumns, exprs []parser.TypedExpr, hasStar bool, err error) {
@@ -52,7 +52,7 @@ func (p *planner) computeRender(
 	outputName := getRenderColName(target)
 
 	normalized, err := p.analyzeExpr(
-		ctx, target.Expr, multiSourceInfo{info}, ivarHelper, desiredType, false, "")
+		ctx, target.Expr, info, ivarHelper, desiredType, false, "")
 	if err != nil {
 		return nil, nil, false, err
 	}
@@ -120,7 +120,7 @@ func (s *renderNode) addOrMergeRenders(
 // pair is returned for each column.
 func checkRenderStar(
 	target parser.SelectExpr,
-	src *dataSourceInfo,
+	info multiSourceInfo,
 	ivarHelper parser.IndexedVarHelper,
 	allowStars bool,
 ) (isStar bool, columns ResultColumns, exprs []parser.TypedExpr, err error) {
@@ -141,6 +141,6 @@ func checkRenderStar(
 		return false, nil, nil, errors.Errorf("\"%s\" cannot be aliased", v)
 	}
 
-	columns, exprs, err = src.expandStar(v, ivarHelper)
+	columns, exprs, err = info[0].expandStar(v, ivarHelper)
 	return true, columns, exprs, err
 }
