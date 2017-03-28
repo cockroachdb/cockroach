@@ -4122,8 +4122,10 @@ func (r *Replica) executeWriteBatch(
 		arg, _ := ba.GetArg(roachpb.EndTransaction)
 		etArg := arg.(*roachpb.EndTransactionRequest)
 
-		// Try executing with transaction stripped.
+		// Try executing with transaction stripped. We use the transaction timestamp
+		// to write any values as it may have been advanced by the timestamp cache.
 		strippedBa := ba
+		strippedBa.Timestamp = strippedBa.Txn.Timestamp
 		strippedBa.Txn = nil
 		strippedBa.Requests = ba.Requests[1 : len(ba.Requests)-1] // strip begin/end txn reqs
 
