@@ -1,3 +1,6 @@
+# LogicTest: subtest=default nodes=1
+# LogicTest: subtest=distsql nodes=3 fake-span-resolver distsql=on
+
 statement error pq: invalid locale bad_locale: language: subtag "locale" is well-formed but unknown
 SELECT 'a' COLLATE bad_locale
 

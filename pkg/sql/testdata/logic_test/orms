@@ -1,3 +1,6 @@
+# LogicTest: subtest=default nodes=1
+# LogicTest: subtest=distsql nodes=3 fake-span-resolver distsql=on
+
 ## This test file contains various complex queries that ORMs issue during
 ## startup or general use.
 

@@ -1,3 +1,6 @@
+# LogicTest: subtest=default nodes=1
+# LogicTest: subtest=distsql nodes=3 fake-span-resolver distsql=on
+
 # This test verifies that when a SNAPSHOT transaction reads without
 # uncertainty, it actually does that. We had a performance bug which caused the
 # MaxTimestamp to be set to the Timestamp instead of OrigTimestamp on such

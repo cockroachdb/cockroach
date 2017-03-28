@@ -1,3 +1,6 @@
+# LogicTest: subtest=default nodes=1
+# LogicTest: subtest=distsql nodes=3 fake-span-resolver distsql=on
+
 # The placeholder returns one row with one value: the string 'planhook'.
 query T
 SHOW planhook

@@ -1,3 +1,6 @@
+# LogicTest: subtest=default nodes=1
+# LogicTest: subtest=distsql nodes=3 fake-span-resolver distsql=on
+
 query I rowsort
 VALUES (1), (1), (1), (2), (2) UNION VALUES (1), (3), (1)
 ----

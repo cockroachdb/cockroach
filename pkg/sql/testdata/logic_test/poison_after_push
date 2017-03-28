@@ -1,3 +1,6 @@
+# LogicTest: subtest=default nodes=1
+# LogicTest: subtest=distsql nodes=3 fake-span-resolver distsql=on
+
 # This example session documents that a SERIALIZABLE transaction is
 # not immediately poisoned when it revisits a Range on which one of
 # its intents has had its timestamp pushed. This allows it to continue

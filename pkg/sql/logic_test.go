@@ -21,7 +21,6 @@ import (
 	"bytes"
 	"crypto/md5"
 	gosql "database/sql"
-	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -39,6 +38,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
 	"go/build"
@@ -89,8 +89,8 @@ import (
 //
 // The Test-Script language is extended here for use with CockroachDB,
 // for example it introduces the "traceon" and "traceoff"
-// directives. See processTestFile() for all supported test
-// directives.
+// directives. See readTestFileDirectives() and processTestFile() for all
+// supported test directives.
 //
 // Test-Script is line-oriented. It supports both statements which
 // generate no result rows, and queries that produce result rows. The
@@ -439,13 +439,10 @@ type logicQuery struct {
 type logicTest struct {
 	t *testing.T
 	// the number of nodes in the cluster.
-	numNodes int
-	// the cluster instantiated for this input file.
 	cluster serverutils.TestClusterInterface
 	// the index of the node (within the cluster) against which we run the test
 	// statements.
-	nodeIdx         int
-	useFakeResolver bool
+	nodeIdx int
 	// map of built clients. Needs to be persisted so that we can
 	// re-use them and close them all on exit.
 	clients map[string]*gosql.DB
@@ -567,7 +564,7 @@ func (t *logicTest) setUser(user string) func() {
 	return cleanupFunc
 }
 
-func (t *logicTest) setup() {
+func (t *logicTest) setup(numNodes int, useFakeSpanResolver bool) {
 	t.logScope = log.Scope(t.t, "TestLogic")
 
 	// TODO(pmattis): Add a flag to make it easy to run the tests against a local
@@ -589,8 +586,8 @@ func (t *logicTest) setup() {
 		// matter where the data really is.
 		ReplicationMode: base.ReplicationManual,
 	}
-	t.cluster = serverutils.StartTestCluster(t.t, t.numNodes, params)
-	if t.useFakeResolver {
+	t.cluster = serverutils.StartTestCluster(t.t, numNodes, params)
+	if useFakeSpanResolver {
 		fakeResolver := distsqlutils.FakeResolverForTestCluster(t.cluster)
 		t.cluster.Server(t.nodeIdx).SetDistSQLSpanResolver(fakeResolver)
 	}
@@ -615,6 +612,81 @@ SET DATABASE = test;
 	t.progress = 0
 	t.failures = 0
 	t.unsupported = 0
+}
+
+// readTestFileDirectives reads any LogicTest directives at the beginning of a
+// test file. A line that starts with "# LogicTest:" specifies a set of
+// key=value for testing parameters. If multiple lines are specified, the test
+// file will be run multiple times; in this case, each line must specify a
+// subtest=<name>.
+//
+// Example:
+//   # LogicTest: subtest=default nodes=1
+//   # LogicTest: subtest=distsql nodes=3 fake-span-resolver distsql=on
+//
+// The returned directives in this case:
+//   []map[string]string {
+//      map[string]string{
+//        "subtest": "default",
+//        "nodes": "1",
+//      },
+//      map[string]string{
+//      	"subtest": "distsql",
+//      	"nodes": "3",
+//      	"fake-span-resolver" : " ",
+//      	"distsql": "on"},
+//     },
+//   }
+func (t *logicTest) readTestFileDirectives(path string) ([]map[string]string, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+
+	var directives []map[string]string
+	s := newLineScanner(file)
+	for s.Scan() {
+		fields := strings.Fields(s.Text())
+		if len(fields) == 0 {
+			continue
+		}
+		cmd := fields[0]
+		if !strings.HasPrefix(cmd, "#") {
+			// Stop at the first line that's not a comment (or empty).
+			break
+		}
+		// Directive lines are of the form:
+		// # LogicTest: opt1=val1 opt2=val3 boolopt1
+		if len(fields) > 2 && cmd == "#" && fields[1] == "LogicTest:" {
+			m := make(map[string]string)
+			for _, kv := range fields[2:] {
+				idx := strings.IndexByte(kv, '=')
+				if idx == -1 {
+					m[kv] = ""
+				} else {
+					key, value := kv[:idx], kv[idx+1:]
+					m[key] = value
+				}
+			}
+			directives = append(directives, m)
+		}
+	}
+	if len(directives) == 0 {
+		// We return a single empty directive map (corresponding to a default
+		// configuration).
+		return []map[string]string{nil}, nil
+	}
+	// If we have multiple configurations, it is required they all must specify
+	// subtest names.
+	if len(directives) > 1 {
+		for _, d := range directives {
+			if _, ok := d["subtest"]; !ok {
+				return nil, errors.Errorf("subtest required for multiple configurations")
+			}
+		}
+	}
+	return directives, nil
 }
 
 func (t *logicTest) processTestFile(path string) error {
@@ -1224,13 +1296,51 @@ func (t *logicTest) success(file string) {
 	}
 }
 
-func makeLogicTest(t *testing.T, numNodes int, useFakeSpanResolver bool) *logicTest {
-	return &logicTest{
-		t:               t,
-		numNodes:        numNodes,
-		useFakeResolver: true,
-		verbose:         testing.Verbose() || log.V(1),
-		perErrorSummary: make(map[string][]string),
+func (t *logicTest) setupAndRunFile(tst *testing.T, path string, options map[string]string) {
+	// Rebind t.t for the duration of this test, since the framework will
+	// pass us a different testing.T than what we started with.
+	t.t = tst
+
+	// Initialize options for the test cluster.
+	numNodes := 1
+	useFakeSpanResolver := false
+	defaultDistSQLMode := ""
+
+	for k, v := range options {
+		switch k {
+		case "nodes":
+			var err error
+			numNodes, err = strconv.Atoi(v)
+			if err != nil {
+				t.Fatalf("invalid nodes value %s", v)
+			}
+
+		case "fake-span-resolver":
+			useFakeSpanResolver = true
+
+		case "distsql":
+			defaultDistSQLMode = v
+
+		case "subtest": // ignore
+		default:
+			t.Fatalf("unknown option %s", k)
+		}
+	}
+	defer t.close()
+	t.setup(numNodes, useFakeSpanResolver)
+	if defaultDistSQLMode != "" {
+		defer sql.SetDefaultDistSQLMode(defaultDistSQLMode)()
+	}
+
+	defer func() {
+		if r := recover(); r != nil {
+			// Translate panics during the test to test errors.
+			t.Fatalf("panic: %v\n%s", r, string(debug.Stack()))
+		}
+	}()
+
+	if err := t.processTestFile(path); err != nil {
+		t.Fatal(err)
 	}
 }
 
@@ -1306,21 +1416,18 @@ func (t *logicTest) run() {
 	topLevelTest := t.t
 	for _, path := range paths {
 		topLevelTest.Run(filepath.Base(path), func(tst *testing.T) {
-			// Rebind t.t for the duration of this test, since the framework will
-			// pass us a different testing.T than what we started with.
-			t.t = tst
-			defer t.close()
-			t.setup()
-
-			defer func() {
-				if r := recover(); r != nil {
-					// Translate panics during the test to test errors.
-					t.Fatalf("panic: %v\n%s", r, string(debug.Stack()))
+			directives, err := t.readTestFileDirectives(path)
+			if err != nil {
+				tst.Fatal(err)
+			}
+			if len(directives) == 1 && directives[0]["subtest"] == "" {
+				t.setupAndRunFile(tst, path, directives[0])
+			} else {
+				for _, d := range directives {
+					tst.Run(d["subtest"], func(tst *testing.T) {
+						t.setupAndRunFile(tst, path, d)
+					})
 				}
-			}()
-
-			if err := t.processTestFile(path); err != nil {
-				t.Fatal(err)
 			}
 		})
 
@@ -1349,27 +1456,11 @@ func TestLogic(t *testing.T) {
 		t.Skip()
 	}
 
-	l := makeLogicTest(t, 1 /* numNodes */, false /* useFakeSpanResolver */)
-	l.run()
-}
-
-// TestLogicDistSQL is a variant of TestLogic that uses DistSQL for all
-// supported queries.
-func TestLogicDistSQL(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	if testing.Short() {
-		t.Skip("short flag")
+	l := &logicTest{
+		t:               t,
+		verbose:         testing.Verbose() || log.V(1),
+		perErrorSummary: make(map[string][]string),
 	}
-
-	if testutils.Stress() {
-		t.Skip()
-	}
-
-	defer sql.SetDefaultDistSQLMode("ON")()
-
-	// TODO(radu): make this run on 3 nodes (#13377)
-	l := makeLogicTest(t, 3 /* numNodes */, true /* useFakeSpanResolver */)
 	l.run()
 }
 

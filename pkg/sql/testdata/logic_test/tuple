@@ -1,3 +1,6 @@
+# LogicTest: subtest=default nodes=1
+# LogicTest: subtest=distsql nodes=3 fake-span-resolver distsql=on
+
 query TT
 SELECT (1, 2, 'hello', NULL, NULL), (true, NULL, (false, 6.6, false))
 ----

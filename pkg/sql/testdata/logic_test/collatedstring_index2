@@ -1,3 +1,6 @@
+# LogicTest: subtest=default nodes=1
+# LogicTest: subtest=distsql nodes=3 fake-span-resolver distsql=on
+
 ##
 # Test a primary key with a collated string in second position (cannot get a key range).
 #

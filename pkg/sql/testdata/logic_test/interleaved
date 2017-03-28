@@ -1,3 +1,6 @@
+# LogicTest: subtest=default nodes=1
+# LogicTest: subtest=distsql nodes=3 fake-span-resolver distsql=on
+
 # Grandparent table
 statement ok
 CREATE TABLE p2 (i INT PRIMARY KEY, s STRING)

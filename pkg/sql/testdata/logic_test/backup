@@ -1,3 +1,6 @@
+# LogicTest: subtest=default nodes=1
+# LogicTest: subtest=distsql nodes=3 fake-span-resolver distsql=on
+
 query error unknown statement type
 BACKUP DATABASE foo TO '/bar' INCREMENTAL FROM '/baz'
 

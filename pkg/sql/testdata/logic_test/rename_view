@@ -1,3 +1,6 @@
+# LogicTest: subtest=default nodes=1
+# LogicTest: subtest=distsql nodes=3 fake-span-resolver distsql=on
+
 statement error pgcode 42P01 view "foo" does not exist
 ALTER VIEW foo RENAME TO bar
 

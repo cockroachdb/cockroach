@@ -1,3 +1,6 @@
+# LogicTest: subtest=default nodes=1
+# LogicTest: subtest=distsql nodes=3 fake-span-resolver distsql=on
+
 # These tests verify that while we are joining an index with the table, we
 # evaluate what parts of the filter we can using the columns in the index
 # to avoid unnecessary lookups in the table.

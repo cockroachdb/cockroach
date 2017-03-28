@@ -1,3 +1,6 @@
+# LogicTest: subtest=default nodes=1
+# LogicTest: subtest=distsql nodes=3 fake-span-resolver distsql=on
+
 # Demonstrates late restarting of a serializable transaction when its
 # commit timestamp has moved forward.
 # TODO(tschottdorf): implement eager restart for CLI.

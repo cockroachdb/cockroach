@@ -1,3 +1,6 @@
+# LogicTest: subtest=default nodes=1
+# LogicTest: subtest=distsql nodes=3 fake-span-resolver distsql=on
+
 # This test verifies that we correctly perform an index join when the KV
 # batches span ranges. This is testing that SQL disables batch limits for index
 # join; otherwise it can get out of order results from KV that it can't handle.
