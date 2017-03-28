@@ -72,14 +72,18 @@ flag or the corresponding `COCKROACH_CERTS_DIR` environment variable.
 
 The flag value is a relative directory, with a default value of `cockroach-certs`.
 
+We avoid using the `cockroach-data` directory for a few reasons:
+* the certs must exist before cockroach is run, making the directory less discoverable
+* wiping a node would wipe certs as well
+
 All files within the directory are examined, but sub-directories are not traversed.
 
 ## Naming scheme
 
 We propose the following naming scheme:
-`<prefix>.<middle>.<extension>
+`<prefix>[.<middle>].<extension>`
 
-`<prefix> determines the role:
+`<prefix>` determines the role:
 * `ca`: certificate authority certificate/key.
 * `node`: node combined client/server certificate/key.
 * `client`: client certificate/key.
@@ -89,7 +93,7 @@ of the client as specified in the certificate Common Name (eg: `client.marc.crt`
 For other certificate types, this may be used to differentiate between multiple versions of a similar
 certificate/key. See "unresolved questions".
 
-`<extension` determines the type of file:
+`<extension>` determines the type of file:
 * `crt` files are certificates
 * `key` files are keys
 
@@ -106,18 +110,18 @@ certificate deployment methods, and incompatible filesystems/architectures. An e
 ## CA certificate
 
 Initial CA creation involves creating the certificate and private key.
-* `ca.cert`: the CA certificate, valid 5 years. Provided to all nodes and clients.
+* `ca.crt`: the CA certificate, valid 5 years. Provided to all nodes and clients.
 * `ca.key`: the CA private key. Must be kept safe and **not** distributed to nodes and clients.
 
 CA renewal involves creating a new certificate using either the same, or a new private key.
 All valid CA certificates need to be kept as well as their corresponding keys:
-* append the new certificate to the existing `ca.cert` (optionally removing expired certificates along the way).
+* append the new certificate to the existing `ca.crt` (optionally removing expired certificates along the way).
 * store the new key in a new file.
 
-The updated `ca.cert` file must be communicated to all nodes and clients.
+The updated `ca.crt` file must be communicated to all nodes and clients.
 The `ca.key` must still be kept safe and **not** distributed to nodes and clients.
 
-When signing node/client certificate, if multiple CA certificates are found inside `ca.cert`, the
+When signing node/client certificate, if multiple CA certificates are found inside `ca.crt`, the
 certificate matching the private key will be used. If multiple such certificates exist, the one with
 the latest expiration date will be used.
 
@@ -202,7 +206,7 @@ available through external metrics.
 
 ## Packaging certificates for other languages/libraries
 
-Separate `.cert` and `.key` files are expected by libpq, but other libraries/languages may have different ways of specifying/packaging them.
+Separate `.crt` and `.key` files are expected by libpq, but other libraries/languages may have different ways of specifying/packaging them.
 
 We need to:
 * augment our per-language examples to include secure mode. see [docs/631](https://github.com/cockroachdb/docs/issues/631)
@@ -336,7 +340,7 @@ This is the current method, all files are specified by their own flags.
 Drawbacks:
 * tedious. this can be alleviated by having default file names
 * does not support multiple files. If renewal is done using new file pairs, these flags would need to be changed.
-* using multiple CA certificates inside a single `ca.cert` file requires finding the certificate matching the key. This can be partially avoided by always putting the newest certificate first.
+* using multiple CA certificates inside a single `ca.crt` file requires finding the certificate matching the key. This can be partially avoided by always putting the newest certificate first.
 
 Advantages:
 * simple code: we use the files as specified, relying on the standard library for mismatches.
@@ -348,9 +352,9 @@ Command-line flags for filename globs (either per pair, or per file). Optionally
 or a certs directory, with globs matching files within the directory.
 
 Drawbacks:
-* how do we deal with multiple matching certificates? (eg: `node.old.cert` and `node.new.cert`)?
-* if a glob matches multiple types of certs (eg: `*.cert` glob matches CA/node/client certs), do we just fail?
-* same problem with multi-cert `ca.cert` files.
+* how do we deal with multiple matching certificates? (eg: `node.old.crt` and `node.new.crt`)?
+* if a glob matches multiple types of certs (eg: `*.crt` glob matches CA/node/client certs), do we just fail?
+* same problem with multi-cert `ca.crt` files.
 * if using a shared directory, does not allow separate storage locations.
 
 Advantages:
