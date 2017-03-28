@@ -2,8 +2,6 @@ import moment from "moment";
 
 import * as protos from "../js/protos";
 
-type Timestamp$Properties = protos.cockroach.server.serverpb.EventsResponse.Event.Timestamp$Properties | protos.cockroach.server.serverpb.GetUIDataResponse.Timestamp$Properties;
-
 /**
  * NanoToMilli converts a nanoseconds value into milliseconds.
  */
@@ -22,11 +20,11 @@ export function MilliToNano(milli: number): number {
  * TimestampToMoment converts a Timestamp$Properties object, as seen in wire.proto, to
  * a Moment object. If timestamp is null, it returns the current time.
  */
-export function TimestampToMoment(timestamp?: Timestamp$Properties): moment.Moment {
+export function TimestampToMoment(timestamp?: protos.google.protobuf.Timestamp$Properties): moment.Moment {
   if (!timestamp) {
     return moment.utc();
   }
-  return moment.utc((timestamp.sec.toNumber() * 1e3) + NanoToMilli(timestamp.nsec));
+  return moment.utc((timestamp.seconds.toNumber() * 1e3) + NanoToMilli(timestamp.nanos));
 }
 
 /**

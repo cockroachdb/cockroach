@@ -731,8 +731,6 @@ func TestAdminAPIEvents(t *testing.T) {
 		}
 	}
 
-	var zeroTimestamp serverpb.EventsResponse_Event_Timestamp
-
 	const allEvents = ""
 	type testcase struct {
 		eventType sql.EventLogType
@@ -776,7 +774,7 @@ func TestAdminAPIEvents(t *testing.T) {
 
 		// Ensure we don't have blank / nonsensical fields.
 		for _, e := range resp.Events {
-			if e.Timestamp == zeroTimestamp {
+			if e.Timestamp == (time.Time{}) {
 				t.Errorf("%d: missing/empty timestamp", i)
 			}
 
@@ -847,12 +845,11 @@ func TestAdminAPIUIData(t *testing.T) {
 		// Sanity check LastUpdated.
 		for _, val := range resp.KeyValues {
 			now := timeutil.Now()
-			lastUpdated := time.Unix(val.LastUpdated.Sec, int64(val.LastUpdated.Nsec))
-			if lastUpdated.Before(start) {
-				t.Fatalf("lastUpdated %s < start %s", lastUpdated, start)
+			if val.LastUpdated.Before(start) {
+				t.Fatalf("val.LastUpdated %s < start %s", val.LastUpdated, start)
 			}
-			if lastUpdated.After(now) {
-				t.Fatalf("lastUpdated %s > now %s", lastUpdated, now)
+			if val.LastUpdated.After(now) {
+				t.Fatalf("val.LastUpdated %s > now %s", val.LastUpdated, now)
 			}
 		}
 	}

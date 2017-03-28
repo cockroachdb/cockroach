@@ -380,7 +380,7 @@ function ProcessDataPoints(
   let yAxisRange = new AxisRange();
   let xAxisRange = new AxisRange();
 
-  let formattedData: formattedDatum[];
+  let formattedData: formattedDatum[] = [];
 
   // timestamps has a key for all the timestamps present across all datasets
   let timestamps = getTimestamps(metrics, data);

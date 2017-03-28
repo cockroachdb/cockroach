@@ -19,7 +19,6 @@ package cockroach.util.log;
 option go_package = "log";
 
 import "gogoproto/gogo.proto";
-import "google/protobuf/timestamp.proto";
 
 enum Severity {
   UNKNOWN = 0;
@@ -57,6 +56,6 @@ message FileDetails {
 message FileInfo {
   string name = 1;
   int64 size_bytes = 2;
-  google.protobuf.Timestamp modified = 3 [(gogoproto.nullable) = false, (gogoproto.stdtime) = true];
+  int64 mod_time_nanos = 3;
   FileDetails details = 4 [(gogoproto.nullable) = false];
 }
