@@ -48,10 +48,10 @@ const (
 	// Executor phases.
 	sessionStartParse
 	sessionEndParse
-	sessionStartLogicalPlan
-	sessionEndLogicalPlan
-	sessionStartExecStmt
-	sessionEndExecStmt
+	plannerStartLogicalPlan
+	plannerEndLogicalPlan
+	plannerStartExecStmt
+	plannerEndExecStmt
 
 	// sessionNumPhases must be listed last so that it can be used to
 	// define arrays sufficiently large to hold all the other values.
@@ -81,7 +81,7 @@ func (e *Executor) recordStatementSummary(
 
 	// Compute the run latency. This is always recorded in the
 	// server metrics.
-	runLatRaw := phaseTimes[sessionEndExecStmt].Sub(phaseTimes[sessionStartExecStmt])
+	runLatRaw := phaseTimes[plannerEndExecStmt].Sub(phaseTimes[plannerStartExecStmt])
 
 	if automaticRetryCount == 0 {
 		if distSQLUsed {
@@ -104,10 +104,10 @@ func (e *Executor) recordStatementSummary(
 
 	parseLat := phaseTimes[sessionEndParse].
 		Sub(phaseTimes[sessionStartParse]).Seconds()
-	planLat := phaseTimes[sessionEndLogicalPlan].
-		Sub(phaseTimes[sessionStartLogicalPlan]).Seconds()
+	planLat := phaseTimes[plannerEndLogicalPlan].
+		Sub(phaseTimes[plannerStartLogicalPlan]).Seconds()
 	// service latency: start to parse to end of run
-	svcLat := phaseTimes[sessionEndExecStmt].
+	svcLat := phaseTimes[plannerEndExecStmt].
 		Sub(phaseTimes[sessionStartParse]).Seconds()
 
 	// processing latency: contributing towards SQL results.
@@ -123,9 +123,9 @@ func (e *Executor) recordStatementSummary(
 
 	if log.V(2) {
 		// ages since significant epochs
-		batchAge := phaseTimes[sessionEndExecStmt].
+		batchAge := phaseTimes[plannerEndExecStmt].
 			Sub(phaseTimes[sessionStartBatch]).Seconds()
-		sessionAge := phaseTimes[sessionEndExecStmt].
+		sessionAge := phaseTimes[plannerEndExecStmt].
 			Sub(phaseTimes[sessionInit]).Seconds()
 
 		log.Infof(planner.session.Ctx(),
