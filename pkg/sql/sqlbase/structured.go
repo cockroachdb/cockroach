@@ -39,6 +39,13 @@ import (
 // ID is a custom type for {Database,Table}Descriptor IDs.
 type ID parser.ID
 
+// IDs is a sortable list of IDs.
+type IDs []ID
+
+func (ids IDs) Len() int           { return len(ids) }
+func (ids IDs) Less(i, j int) bool { return ids[i] < ids[j] }
+func (ids IDs) Swap(i, j int)      { ids[i], ids[j] = ids[j], ids[i] }
+
 // ColumnID is a custom type for ColumnDescriptor IDs.
 type ColumnID parser.ColumnID
 
