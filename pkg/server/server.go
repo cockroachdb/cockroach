@@ -78,6 +78,13 @@ var (
 	// GracefulDrainModes is the standard succession of drain modes entered
 	// for a graceful shutdown.
 	GracefulDrainModes = []serverpb.DrainMode{serverpb.DrainMode_CLIENT, serverpb.DrainMode_LEASES}
+
+	// COCKROACH_SLOW_DRAIN triggers a 10s wait for a draining node's updated
+	// liveness record to propagate to the rest of the cluster. This is a
+	// best-effort attempt to avoid nodes unkowingly transferring leases to a
+	// draining node after it has attempted to transfer away its leases, which
+	// could result in temporary unavailability.
+	slowDrain = envutil.EnvOrDefaultBool("COCKROACH_SLOW_DRAIN", false)
 )
 
 // Server is the cockroach server node.
@@ -839,6 +846,9 @@ func (s *Server) doDrain(modes []serverpb.DrainMode, setTo bool) ([]serverpb.Dra
 			}
 		case serverpb.DrainMode_LEASES:
 			s.nodeLiveness.SetDraining(context.TODO(), setTo)
+			if setTo && slowDrain {
+				time.Sleep(10 * time.Second)
+			}
 			if err := s.node.SetDraining(setTo); err != nil {
 				return nil, err
 			}
