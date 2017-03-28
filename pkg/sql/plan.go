@@ -181,6 +181,7 @@ var _ planNode = &explainTraceNode{}
 var _ planNode = &hookFnNode{}
 var _ planNode = &filterNode{}
 var _ planNode = &groupNode{}
+var _ planNode = &hookFnNode{}
 var _ planNode = &indexJoinNode{}
 var _ planNode = &insertNode{}
 var _ planNode = &joinNode{}
@@ -195,6 +196,8 @@ var _ planNode = &updateNode{}
 var _ planNode = &valueGenerator{}
 var _ planNode = &valuesNode{}
 var _ planNode = &windowNode{}
+
+var _ planNodeFastPath = &deleteNode{}
 
 // makePlan implements the Planner interface.
 func (p *planner) makePlan(

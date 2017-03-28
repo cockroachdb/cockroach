@@ -122,9 +122,6 @@ type SchemaAccessor interface {
 	// released when the planner closes.
 	getTableLease(ctx context.Context, tn *parser.TableName) (*sqlbase.TableDescriptor, error)
 
-	// releaseLeases releases all leases currently held by the planner.
-	releaseLeases(ctx context.Context)
-
 	// writeTableDesc effectively writes a table descriptor to the
 	// database within the current planner transaction.
 	writeTableDesc(ctx context.Context, tableDesc *sqlbase.TableDescriptor) error
@@ -482,22 +479,6 @@ func (p *planner) notifySchemaChange(id sqlbase.ID, mutationID sqlbase.MutationI
 		leaseMgr:   p.session.leaseMgr,
 	}
 	p.session.TxnState.schemaChangers.queueSchemaChanger(sc)
-}
-
-// releaseLeases implements the SchemaAccessor interface.
-func (p *planner) releaseLeases(ctx context.Context) {
-	session := p.session
-	if session.leases != nil {
-		if log.V(2) {
-			log.Infof(ctx, "planner releasing %d leases", len(session.leases))
-		}
-		for _, lease := range session.leases {
-			if err := session.leaseMgr.Release(lease); err != nil {
-				log.Warning(ctx, err)
-			}
-		}
-		session.leases = nil
-	}
 }
 
 // writeTableDesc implements the SchemaAccessor interface.
