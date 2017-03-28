@@ -434,3 +434,26 @@ EXPLAIN SELECT c FROM abz ORDER BY c DESC LIMIT 1
 2          table  abz@abz_c_b_key
 2          spans  ALL
 2          limit            1
+
+# Issue #14426: verify we don't have an internal filter that contains "a IN ()"
+# (which causes an error in DistSQL due to expression serialization).
+statement ok
+CREATE TABLE tab0(
+  k INT PRIMARY KEY,
+  a INT,
+  b INT
+)
+
+query ITTTTT
+EXPLAIN (VERBOSE) SELECT k FROM tab0 WHERE (a IN (6) AND a > 6) OR b >= 4
+----
+0  render                                                  (k)
+0          render 0  test.tab0.k
+1  scan                                                    (k, a, b)
+1          table     tab0@primary
+1          spans     ALL
+1          filter    ((a IN (6)) AND (a > 6)) OR (b >= 4)
+
+query I
+SELECT k FROM tab0 WHERE (a IN (6) AND a > 6) OR b >= 4
+----
