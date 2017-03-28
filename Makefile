@@ -381,5 +381,5 @@ build/variables.mk: Makefile .go-version
 	@echo 'define VALID_VARS' >> $@
 	@sed -nE -e '/^	/d' -e 's/([^#]*)#.*/\1/' \
 	  -e 's/(^|^[^:]+:)[ ]*(override|export)?[ ]*([^ ]+)[ ]*[:?+]?=.*/  \3/p' $^ \
-	  | sort -u >> $@
+	  | LC_COLLATE=C sort -u >> $@
 	@echo 'endef' >> $@
