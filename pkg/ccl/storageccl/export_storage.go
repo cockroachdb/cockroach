@@ -505,6 +505,11 @@ func (s *azureStorage) Close() error {
 // the requested filename, and a cleanup func to be called when done reading it.
 func FetchFile(ctx context.Context, e ExportStorage, basename string) (string, func(), error) {
 	cleanup := func() {}
+	// special-case local files to avoid copying to tmp.
+	if loc, ok := e.(*localFileStorage); ok {
+		return filepath.Join(loc.base, basename), cleanup, nil
+	}
+
 	r, err := e.ReadFile(ctx, basename)
 	if err != nil {
 		return "", cleanup, errors.Wrapf(err, "creating reader for %q", basename)
@@ -560,6 +565,19 @@ var _ ExportFileWriter = &tmpWriter{}
 func MakeExportFileTmpWriter(
 	ctx context.Context, store ExportStorage, name string,
 ) (ExportFileWriter, error) {
+	// the special-case that allows local stores to rename rather than copy works
+	// only if we alloc the tempfile on same device, so we force dest prefix here.
+	if loc, ok := store.(*localFileStorage); ok {
+		if err := os.MkdirAll(loc.base, 0755); err != nil {
+			return nil, errors.Wrap(err, "creating local file dest")
+		}
+		f, err := ioutil.TempFile(loc.base, name)
+		if err != nil {
+			return nil, err
+		}
+		return &localTmpWriter{tmpWriter{tmpfile: f}, filepath.Join(loc.base, name)}, nil
+	}
+
 	f, err := ioutil.TempFile("", name)
 	if err != nil {
 		return nil, err
@@ -587,4 +605,21 @@ func (e *tmpWriter) Close(ctx context.Context) {
 		}
 		e.tmpfile = nil
 	}
+}
+
+// localTmpWriter overrides the usual Finish to just rename.
+type localTmpWriter struct {
+	tmpWriter
+	dest string
+}
+
+// Finish uploads the content of the tmpfile using the store's WriteFile.
+func (l *localTmpWriter) Finish(ctx context.Context) error {
+	if err := os.Rename(l.tmpfile.Name(), l.dest); err != nil {
+		return err
+	}
+	// prevent the usual Close()'s deletion.
+	l.tmpfile.Close()
+	l.tmpfile = nil
+	return nil
 }
