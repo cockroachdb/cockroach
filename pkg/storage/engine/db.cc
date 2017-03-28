@@ -536,41 +536,6 @@ bool IsTimeSeriesData(const std::string &val) {
   return GetTag(val) == cockroach::roachpb::TIMESERIES;
 }
 
-double GetMax(const cockroach::roachpb::InternalTimeSeriesSample *sample) {
-  if (sample->has_max()) return sample->max();
-  return sample->sum();
-}
-
-double GetMin(const cockroach::roachpb::InternalTimeSeriesSample *sample) {
-  if (sample->has_min()) return sample->min();
-  return sample->sum();
-}
-
-// AccumulateTimeSeriesSamples accumulates the individual values of two
-// InternalTimeSeriesSamples which have a matching timestamp. The dest parameter
-// is modified to contain the accumulated values. Message src MUST have a
-// non-zero count of samples; it is assumed that no system will attempt to merge
-// a sample with zero datapoints.
-void AccumulateTimeSeriesSamples(cockroach::roachpb::InternalTimeSeriesSample* dest,
-                                 const cockroach::roachpb::InternalTimeSeriesSample &src) {
-  assert(src.has_sum());
-  assert(src.count() > 0);
-
-  // If dest is empty, just copy from the src.
-  if (dest->count() == 0) {
-    dest->CopyFrom(src);
-    return;
-  }
-  assert(dest->has_sum());
-
-  // Keep explicit max and min values.
-  dest->set_max(std::max(GetMax(dest), GetMax(&src)));
-  dest->set_min(std::min(GetMin(dest), GetMin(&src)));
-  // Accumulate sum and count.
-  dest->set_sum(dest->sum() + src.sum());
-  dest->set_count(dest->count() + src.count());
-}
-
 void SerializeTimeSeriesToValue(
     std::string *val, const cockroach::roachpb::InternalTimeSeriesData &ts) {
   SerializeProtoToValue(val, ts);
@@ -1437,8 +1402,8 @@ DBString DBEngine::GetUserProperties() {
 
 DBBatch::DBBatch(DBEngine* db)
     : DBEngine(db->rep),
-      batch(&kComparator),
-      updates(0) {
+      updates(0),
+      batch(&kComparator) {
 }
 
 DBWriteOnlyBatch::DBWriteOnlyBatch(DBEngine* db)
