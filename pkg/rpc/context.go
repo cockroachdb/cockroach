@@ -28,8 +28,8 @@ import (
 	"github.com/rubyist/circuitbreaker"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/keepalive"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -247,7 +247,7 @@ func (ctx *Context) GRPCDial(target string, opts ...grpc.DialOption) (*grpc.Clie
 			dialOpt = grpc.WithTransportCredentials(credentials.NewTLS(tlsConfig))
 		}
 
-		dialOpts := make([]grpc.DialOption, 0, 2+len(opts))
+		var dialOpts []grpc.DialOption
 		dialOpts = append(dialOpts, dialOpt)
 		dialOpts = append(dialOpts, grpc.WithBackoffMaxDelay(maxBackoff))
 		dialOpts = append(dialOpts, grpc.WithDecompressor(snappyDecompressor{}))
@@ -256,6 +256,16 @@ func (ctx *Context) GRPCDial(target string, opts ...grpc.DialOption) (*grpc.Clie
 		if ctx.rpcCompression {
 			dialOpts = append(dialOpts, grpc.WithCompressor(snappyCompressor{}))
 		}
+		dialOpts = append(dialOpts, grpc.WithKeepaliveParams(keepalive.ClientParameters{
+			// Send periodic pings on the connection.
+			Time: base.NetworkTimeout,
+			// If the pings don't get a response within the timeout, the connection
+			// will be closed: we might be experiencing a network partition. All the
+			// pending RPCs (which may not have timeouts) will fail eagerly.
+			Timeout: base.NetworkTimeout,
+			// Do the pings even when there are no ongoing RPCs.
+			PermitWithoutStream: true,
+		}))
 		dialOpts = append(dialOpts, opts...)
 
 		if SourceAddr != nil {
@@ -358,24 +368,6 @@ func (ctx *Context) runHeartbeat(meta *connMeta, remoteAddr string) error {
 		ctx.conns.Lock()
 		meta.heartbeatErr = err
 		ctx.conns.Unlock()
-
-		// If we got a timeout, we might be experiencing a network partition. We
-		// close the connection so that all other pending RPCs (which may not have
-		// timeouts) fail eagerly. Any other error is likely to be noticed by
-		// other RPCs, so it's OK to leave the connection open while grpc
-		// internally reconnects if necessary.
-		//
-		// NB: This check is skipped when the connection is initiated from a CLI
-		// client since those clients aren't sensitive to partitions, are likely
-		// to be invoked while the server is starting (particularly in tests), and
-		// are not equipped with the retry logic necessary to deal with this
-		// connection termination.
-		//
-		// TODO(tamird): That we rely on the zero maxOffset to indicate a CLI
-		// client is a hack; we should do something more explicit.
-		if maxOffset != 0 && grpc.Code(err) == codes.DeadlineExceeded {
-			return err
-		}
 
 		// HACK: work around https://github.com/grpc/grpc-go/issues/1026
 		// Getting a "connection refused" error from the "write" system call
