@@ -1,3 +1,5 @@
+# LogicTest: default distsql
+
 # Transaction involving schema changes.
 statement ok
 BEGIN TRANSACTION

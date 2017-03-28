@@ -1,3 +1,5 @@
+# LogicTest: default distsql
+
 statement error incompatible type for DEFAULT expression: int vs bool
 CREATE TABLE t (a INT PRIMARY KEY DEFAULT false)
 

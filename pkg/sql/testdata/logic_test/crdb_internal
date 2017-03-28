@@ -1,3 +1,5 @@
+# LogicTest: default distsql
+
 query error user root does not have DROP privilege on database crdb_internal
 ALTER DATABASE crdb_internal RENAME TO not_crdb_internal
 

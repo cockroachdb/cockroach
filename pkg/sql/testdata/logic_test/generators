@@ -1,3 +1,5 @@
+# LogicTest: default distsql
+
 query I colnames
 SELECT * FROM GENERATE_SERIES(1, 3)
 ----
