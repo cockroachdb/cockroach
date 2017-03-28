@@ -129,6 +129,8 @@ func TestEncodeDecimal(t *testing.T) {
 		Value    *apd.Decimal
 		Encoding []byte
 	}{
+		{&apd.Decimal{Form: apd.NaN}, []byte{0x18}},
+		{&apd.Decimal{Form: apd.Infinite, Negative: true}, []byte{0x19}},
 		{apd.New(-99122, 99999), []byte{0x1a, 0x86, 0x3c, 0xad, 0x38, 0xe6, 0xd7, 0x00}},
 		// Three duplicates to make sure -13*10^1000 <= -130*10^999 <= -13*10^1000
 		{apd.New(-13, 1000), []byte{0x1a, 0x86, 0xfe, 0x0a, 0xe5, 0x00}},
@@ -153,6 +155,7 @@ func TestEncodeDecimal(t *testing.T) {
 		{apd.New(-11, -6), []byte{0x26, 0x8a, 0xe9, 0x00}},
 		{mustDecimalFloat64(-math.SmallestNonzeroFloat64), []byte{0x26, 0xf6, 0xa1, 0xf5, 0x00}},
 		{apd.New(-11, -66666), []byte{0x26, 0xf7, 0x82, 0x34, 0xe9, 0x00}},
+		{mustDecimal("-0"), []byte{0x27}},
 		{apd.New(0, 0), []byte{0x27}},
 		{mustDecimalFloat64(math.SmallestNonzeroFloat64), []byte{0x28, 0x87, 0x5e, 0x0a, 0x00}},
 		{apd.New(11, -6), []byte{0x28, 0x87, 0xfd, 0x16, 0x00}},
@@ -171,6 +174,7 @@ func TestEncodeDecimal(t *testing.T) {
 		{apd.New(13, 1000), []byte{0x34, 0xf7, 0x01, 0xf5, 0x1a, 0x00}},
 		{apd.New(99122, 99999), []byte{0x34, 0xf7, 0xc3, 0x52, 0xc7, 0x19, 0x28, 0x00}},
 		{apd.New(99122839898321208, 99999), []byte{0x34, 0xf7, 0xc3, 0x58, 0xc7, 0x19, 0x39, 0x4f, 0xb3, 0xa7, 0x2b, 0x29, 0xa0, 0x00}},
+		{&apd.Decimal{Form: apd.Infinite}, []byte{0x35}},
 	}
 
 	rng, _ := randutil.NewPseudoRand()
@@ -179,53 +183,55 @@ func TestEncodeDecimal(t *testing.T) {
 	for _, dir := range []Direction{Ascending, Descending} {
 		for _, tmp := range [][]byte{nil, make([]byte, 0, 100)} {
 			for i, c := range testCases {
-				enc := encodeDecimalWithDir(dir, nil, c.Value)
-				_, dec := decodeDecimalWithDir(t, dir, enc, tmp)
-				if dir == Ascending && !bytes.Equal(enc, c.Encoding) {
-					t.Errorf("unexpected mismatch for %s. expected [% x], got [% x]",
-						c.Value, c.Encoding, enc)
-				}
-				if i > 0 {
-					if (bytes.Compare(lastEncoded, enc) > 0 && dir == Ascending) ||
-						(bytes.Compare(lastEncoded, enc) < 0 && dir == Descending) {
-						t.Errorf("%v: expected [% x] to be less than or equal to [% x]",
-							c.Value, testCases[i-1].Encoding, enc)
+				t.Run(fmt.Sprintf("%v_%d_%d_%s", dir, cap(tmp), i, c.Value), func(t *testing.T) {
+					enc := encodeDecimalWithDir(dir, nil, c.Value)
+					_, dec := decodeDecimalWithDir(t, dir, enc, tmp)
+					if dir == Ascending && !bytes.Equal(enc, c.Encoding) {
+						t.Errorf("unexpected mismatch for %s. expected [% x], got [% x]",
+							c.Value, c.Encoding, enc)
 					}
-				}
-				testPeekLength(t, enc)
-				if dec.Cmp(c.Value) != 0 {
-					t.Errorf("%d unexpected mismatch for %v. got %v", i, c.Value, dec)
-				}
-				lastEncoded = enc
-
-				// Test that appending the decimal to an existing buffer works. It
-				// is important to test with various values, slice lengths, and
-				// capacities because the various encoding paths try to use any
-				// spare capacity to avoid allocations.
-				for trials := 0; trials < 5; trials++ {
-					orig := randBuf(rng, 30)
-					origLen := len(orig)
-
-					bufCap := origLen + rng.Intn(30)
-					buf := make([]byte, origLen, bufCap)
-					copy(buf, orig)
-
-					enc := encodeDecimalWithDir(dir, buf, c.Value)
-					// Append some random bytes
-					enc = append(enc, randBuf(rng, 20)...)
-					_, dec := decodeDecimalWithDir(t, dir, enc[origLen:], tmp)
-
-					if dec.Cmp(c.Value) != 0 {
-						t.Errorf("unexpected mismatch for %v. got %v", c.Value, dec)
-					}
-					// Verify the existing values weren't modified.
-					for i := range orig {
-						if enc[i] != orig[i] {
-							t.Errorf("existing byte %d changed after encoding (from %d to %d)",
-								i, orig[i], enc[i])
+					if i > 0 {
+						if (bytes.Compare(lastEncoded, enc) > 0 && dir == Ascending) ||
+							(bytes.Compare(lastEncoded, enc) < 0 && dir == Descending) {
+							t.Errorf("%v: expected [% x] to be less than or equal to [% x]",
+								c.Value, testCases[i-1].Encoding, enc)
 						}
 					}
-				}
+					testPeekLength(t, enc)
+					if dec.Cmp(c.Value) != 0 {
+						t.Errorf("%d unexpected mismatch for %v. got %v", i, c.Value, dec)
+					}
+					lastEncoded = enc
+
+					// Test that appending the decimal to an existing buffer works. It
+					// is important to test with various values, slice lengths, and
+					// capacities because the various encoding paths try to use any
+					// spare capacity to avoid allocations.
+					for trials := 0; trials < 5; trials++ {
+						orig := randBuf(rng, 30)
+						origLen := len(orig)
+
+						bufCap := origLen + rng.Intn(30)
+						buf := make([]byte, origLen, bufCap)
+						copy(buf, orig)
+
+						enc := encodeDecimalWithDir(dir, buf, c.Value)
+						// Append some random bytes
+						enc = append(enc, randBuf(rng, 20)...)
+						_, dec := decodeDecimalWithDir(t, dir, enc[origLen:], tmp)
+
+						if dec.Cmp(c.Value) != 0 {
+							t.Errorf("unexpected mismatch for %v. got %v", c.Value, dec)
+						}
+						// Verify the existing values weren't modified.
+						for i := range orig {
+							if enc[i] != orig[i] {
+								t.Errorf("existing byte %d changed after encoding (from %d to %d)",
+									i, orig[i], enc[i])
+							}
+						}
+					}
+				})
 			}
 		}
 	}
@@ -297,6 +303,8 @@ func TestNonsortingEncodeDecimal(t *testing.T) {
 		Value    *apd.Decimal
 		Encoding []byte
 	}{
+		{&apd.Decimal{Form: apd.NaN}, []byte{0x18}},
+		{&apd.Decimal{Form: apd.Infinite, Negative: true}, []byte{0x19}},
 		{apd.New(-99122, 99999), []byte{0x1a, 0xf8, 0x01, 0x86, 0xa4, 0x01, 0x83, 0x32}},
 		// Three duplicates to make sure -13*10^1000 <= -130*10^999 <= -13*10^1000
 		{apd.New(-13, 1000), []byte{0x1a, 0xf7, 0x03, 0xea, 0x0d}},
@@ -313,6 +321,7 @@ func TestNonsortingEncodeDecimal(t *testing.T) {
 		{apd.New(-11, -6), []byte{0x26, 0x8c, 0x0b}},
 		{mustDecimalFloat64(-math.SmallestNonzeroFloat64), []byte{0x26, 0xf7, 0x01, 0x43, 0x05}},
 		{apd.New(-11, -66666), []byte{0x26, 0xf8, 0x01, 0x04, 0x68, 0x0b}},
+		{mustDecimal("-0"), []byte{0x1a, 0x89}},
 		{apd.New(0, 0), []byte{0x27}},
 		{mustDecimalFloat64(math.SmallestNonzeroFloat64), []byte{0x28, 0xf7, 0x01, 0x43, 0x05}},
 		{apd.New(11, -6), []byte{0x28, 0x8c, 0x0b}},
@@ -334,54 +343,56 @@ func TestNonsortingEncodeDecimal(t *testing.T) {
 		{apd.New(13, 1000), []byte{0x34, 0xf7, 0x03, 0xea, 0x0d}},
 		{apd.New(99122, 99999), []byte{0x34, 0xf8, 0x01, 0x86, 0xa4, 0x01, 0x83, 0x32}},
 		{apd.New(99122839898321208, 99999), []byte{0x34, 0xf8, 0x01, 0x86, 0xb0, 0x01, 0x60, 0x27, 0xb2, 0x9d, 0x44, 0x71, 0x38}},
+		{&apd.Decimal{Form: apd.Infinite}, []byte{0x35}},
 	}
 
 	rng, _ := randutil.NewPseudoRand()
 
 	for _, tmp := range [][]byte{nil, make([]byte, 0, 100)} {
 		for i, c := range testCases {
-			enc := EncodeNonsortingDecimal(nil, c.Value)
-			dec, err := DecodeNonsortingDecimal(enc, tmp)
-			if err != nil {
-				t.Error(err)
-				continue
-			}
-			if !bytes.Equal(enc, c.Encoding) {
-				t.Errorf("unexpected mismatch for %s. expected [% x], got [% x]",
-					c.Value, c.Encoding, enc)
-			}
-			if dec.Cmp(c.Value) != 0 {
-				t.Errorf("%d unexpected mismatch for %v. got %v", i, c.Value, dec)
-			}
-			// Test that appending the decimal to an existing buffer works. It
-			// is important to test with various values, slice lengths, and
-			// capacities because the various encoding paths try to use any
-			// spare capacity to avoid allocations.
-			for trials := 0; trials < 5; trials++ {
-				orig := randBuf(rng, 30)
-				origLen := len(orig)
-
-				bufCap := origLen + rng.Intn(30)
-				buf := make([]byte, origLen, bufCap)
-				copy(buf, orig)
-
-				enc := EncodeNonsortingDecimal(buf, c.Value)
-				dec, err := DecodeNonsortingDecimal(enc[origLen:], tmp)
+			t.Run(fmt.Sprintf("%d_%d_%s", cap(tmp), i, c.Value), func(t *testing.T) {
+				enc := EncodeNonsortingDecimal(nil, c.Value)
+				dec, err := DecodeNonsortingDecimal(enc, tmp)
 				if err != nil {
 					t.Fatal(err)
 				}
-
-				if dec.Cmp(c.Value) != 0 {
-					t.Errorf("unexpected mismatch for %v. got %v", c.Value, dec)
+				if !bytes.Equal(enc, c.Encoding) {
+					t.Errorf("unexpected mismatch for %s. expected [% x], got [% x]",
+						c.Value, c.Encoding, enc)
 				}
-				// Verify the existing values weren't modified.
-				for i := range orig {
-					if enc[i] != orig[i] {
-						t.Errorf("existing byte %d changed after encoding (from %d to %d)",
-							i, orig[i], enc[i])
+				if dec.CmpTotal(c.Value) != 0 {
+					t.Errorf("%d unexpected mismatch for %v. got %v", i, c.Value, dec)
+				}
+				// Test that appending the decimal to an existing buffer works. It
+				// is important to test with various values, slice lengths, and
+				// capacities because the various encoding paths try to use any
+				// spare capacity to avoid allocations.
+				for trials := 0; trials < 5; trials++ {
+					orig := randBuf(rng, 30)
+					origLen := len(orig)
+
+					bufCap := origLen + rng.Intn(30)
+					buf := make([]byte, origLen, bufCap)
+					copy(buf, orig)
+
+					enc := EncodeNonsortingDecimal(buf, c.Value)
+					dec, err := DecodeNonsortingDecimal(enc[origLen:], tmp)
+					if err != nil {
+						t.Fatal(err)
+					}
+
+					if dec.CmpTotal(c.Value) != 0 {
+						t.Errorf("unexpected mismatch for %v. got %v", c.Value, dec)
+					}
+					// Verify the existing values weren't modified.
+					for i := range orig {
+						if enc[i] != orig[i] {
+							t.Errorf("existing byte %d changed after encoding (from %d to %d)",
+								i, orig[i], enc[i])
+						}
 					}
 				}
-			}
+			})
 		}
 	}
 }

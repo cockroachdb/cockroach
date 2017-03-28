@@ -21,7 +21,7 @@ import:
 # removing/changing other deps. These are grouped separately to make it easier
 # to comment them out in bulk when running an across-the-board dep update.
 - package: github.com/cockroachdb/apd
-  version: 9d4eee129cac486270e6bc42462961a569057f81
+  version: 4c0c15263a45c631e8f0310f0acbc1e89c722ac2
 - package: github.com/cockroachdb/c-jemalloc
   version: 5fc986390622939c1f0e6df236040deca8c821b0
 - package: github.com/cockroachdb/c-protobuf

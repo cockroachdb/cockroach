@@ -26,8 +26,6 @@ import (
 	"unicode/utf8"
 
 	"github.com/pkg/errors"
-
-	"github.com/cockroachdb/apd"
 )
 
 // Constant is an constant literal expression which may be resolved to more than one type.
@@ -227,21 +225,21 @@ func (expr *NumVal) ResolveAsType(ctx *SemaContext, typ Type) (Datum, error) {
 			// Handle constant.ratVal, which will return a rational string
 			// like 6/7. If only we could call big.Rat.FloatString() on it...
 			num, den := s[:idx], s[idx+1:]
-			if _, _, err := dd.SetString(num); err != nil {
+			if err := dd.SetString(num); err != nil {
 				return nil, errors.Wrapf(err, "could not evaluate numerator of %v as Datum type DDecimal "+
 					"from string %q", expr, num)
 			}
 			// TODO(nvanbenschoten) Should we try to avoid this allocation?
-			denDec := new(apd.Decimal)
-			if _, _, err := denDec.SetString(den); err != nil {
+			denDec, err := ParseDDecimal(den)
+			if err != nil {
 				return nil, errors.Wrapf(err, "could not evaluate denominator %v as Datum type DDecimal "+
 					"from string %q", expr, den)
 			}
-			if _, err := DecimalCtx.Quo(&dd.Decimal, &dd.Decimal, denDec); err != nil {
+			if _, err := DecimalCtx.Quo(&dd.Decimal, &dd.Decimal, &denDec.Decimal); err != nil {
 				return nil, err
 			}
 		} else {
-			if _, _, err := dd.SetString(s); err != nil {
+			if err := dd.SetString(s); err != nil {
 				return nil, errors.Wrapf(err, "could not evaluate %v as Datum type DDecimal from "+
 					"string %q", expr, s)
 			}
