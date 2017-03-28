@@ -1,3 +1,5 @@
+# LogicTest: default distsql
+
 #### column CHECK constraints
 
 statement ok

@@ -1,3 +1,5 @@
+# LogicTest: default distsql
+
 statement error pq: unimplemented
 WITH a AS (SELECT 1) SELECT *
 

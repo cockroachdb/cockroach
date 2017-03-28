@@ -1,3 +1,5 @@
+# LogicTest: default distsql
+
 statement ok
 CREATE TABLE foo(x INT DEFAULT LENGTH(PG_TYPEOF(1234))-1)
 

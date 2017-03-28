@@ -1,3 +1,5 @@
+# LogicTest: default distsql
+
 statement error unknown variable: "FOO"
 SET FOO = bar
 

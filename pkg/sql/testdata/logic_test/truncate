@@ -1,3 +1,5 @@
+# LogicTest: default distsql
+
 statement ok
 CREATE TABLE kv (
   k INT PRIMARY KEY,

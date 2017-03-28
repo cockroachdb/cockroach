@@ -1,3 +1,5 @@
+# LogicTest: default distsql
+
 
 # Unqualified pg_type resolves from pg_catalog.
 query T

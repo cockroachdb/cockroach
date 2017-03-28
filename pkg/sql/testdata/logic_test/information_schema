@@ -1,3 +1,5 @@
+# LogicTest: default distsql
+
 # Verify information_schema database handles mutation statements correctly.
 
 query error user root does not have DROP privilege on database information_schema
