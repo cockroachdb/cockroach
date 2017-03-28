@@ -1491,13 +1491,12 @@ func (r *Replica) Send(
 	return br, pErr
 }
 
-func (r *Replica) checkBatchRange(ba roachpb.BatchRequest) error {
+func checkBatchRange(store *Store, desc *roachpb.RangeDescriptor, ba roachpb.BatchRequest) error {
 	rspan, err := keys.Range(ba)
 	if err != nil {
 		return err
 	}
 
-	desc := r.Desc()
 	if desc.ContainsKeyRange(rspan.Key, rspan.EndKey) {
 		return nil
 	}
@@ -1507,11 +1506,11 @@ func (r *Replica) checkBatchRange(ba roachpb.BatchRequest) error {
 	// Try to suggest the correct range on a key mismatch error where
 	// even the start key of the request went to the wrong range.
 	if !desc.ContainsKey(rspan.Key) {
-		if repl := r.store.LookupReplica(rspan.Key, nil); repl != nil {
+		if repl := store.LookupReplica(rspan.Key, nil); repl != nil {
 			// Only return the correct range descriptor as a hint
 			// if we know the current lease holder for that range, which
 			// indicates that our knowledge is not stale.
-			if lease, _ := repl.getLease(); repl.IsLeaseValid(lease, r.store.Clock().Now()) {
+			if lease, _ := repl.getLease(); repl.IsLeaseValid(lease, store.Clock().Now()) {
 				mismatchErr.SuggestedRange = repl.Desc()
 			}
 		}
@@ -1933,7 +1932,7 @@ func (r *Replica) addAdminCmd(
 		return nil, roachpb.NewErrorf("only single-element admin batches allowed")
 	}
 
-	if err := r.checkBatchRange(ba); err != nil {
+	if err := checkBatchRange(r.store, r.Desc(), ba); err != nil {
 		return nil, roachpb.NewErrorWithTxn(err, ba.Txn)
 	}
 
@@ -1982,9 +1981,9 @@ func (r *Replica) addAdminCmd(
 
 	case *roachpb.ImportRequest:
 		cArgs := CommandArgs{
-			Repl:   r,
-			Header: ba.Header,
-			Args:   args,
+			EvalCtx: ReplicaEvalContext{r, nil},
+			Header:  ba.Header,
+			Args:    args,
 		}
 		resp = &roachpb.ImportResponse{}
 		err := importCmdFn(ctx, cArgs)
@@ -2056,7 +2055,8 @@ func (r *Replica) addReadOnlyCmd(
 	// that holding readMu throughout is important to avoid reads from the
 	// "wrong" key range being served after the range has been split.
 	var result EvalResult
-	br, result, pErr = r.executeBatch(ctx, storagebase.CmdIDKey(""), r.store.Engine(), nil, ba)
+	rec := ReplicaEvalContext{r, spans}
+	br, result, pErr = executeBatch(ctx, storagebase.CmdIDKey(""), r.store.Engine(), rec, nil, ba)
 
 	if pErr == nil && ba.Txn != nil && ba.Txn.Writing {
 		// Checking whether the transaction has been aborted on reads makes sure
@@ -4134,7 +4134,8 @@ func (r *Replica) executeWriteBatch(
 		if spans != nil {
 			batch = makeSpanSetBatch(batch, spans)
 		}
-		br, result, pErr := r.executeBatch(ctx, idKey, batch, &ms, strippedBa)
+		rec := ReplicaEvalContext{r, spans}
+		br, result, pErr := executeBatch(ctx, idKey, batch, rec, &ms, strippedBa)
 		if pErr == nil && ba.Timestamp == br.Timestamp {
 			clonedTxn := ba.Txn.Clone()
 			clonedTxn.Writing = true
@@ -4148,7 +4149,7 @@ func (r *Replica) executeWriteBatch(
 				ms = enginepb.MVCCStats{}
 			} else {
 				// Run commit trigger manually.
-				innerResult, err := r.runCommitTrigger(ctx, batch, &ms, *etArg, &clonedTxn)
+				innerResult, err := runCommitTrigger(ctx, rec, batch, &ms, *etArg, &clonedTxn)
 				if err != nil {
 					return batch, ms, br, result, roachpb.NewErrorf("failed to run commit trigger: %s", err)
 				}
@@ -4197,7 +4198,8 @@ func (r *Replica) executeWriteBatch(
 	if spans != nil {
 		batch = makeSpanSetBatch(batch, spans)
 	}
-	br, result, pErr := r.executeBatch(ctx, idKey, batch, &ms, ba)
+	rec := ReplicaEvalContext{r, spans}
+	br, result, pErr := executeBatch(ctx, idKey, batch, rec, &ms, ba)
 	return batch, ms, br, result, pErr
 }
 
@@ -4311,31 +4313,20 @@ func optimizePuts(
 	return reqs
 }
 
-// GCThreshold returns the GC threshold of the Range, typically updated when
-// keys are garbage collected. Reads and writes at timestamps <= this time will
-// not be served.
-func (r *Replica) GCThreshold() hlc.Timestamp {
-	r.mu.RLock()
-	threshold := r.mu.state.GCThreshold
-	r.mu.RUnlock()
-	return threshold
-}
-
-// DB returns the Replica's client.DB.
-func (r *Replica) DB() *client.DB {
-	return r.store.DB()
-}
-
-func (r *Replica) executeBatch(
+func executeBatch(
 	ctx context.Context,
 	idKey storagebase.CmdIDKey,
 	batch engine.ReadWriter,
+	rec ReplicaEvalContext,
 	ms *enginepb.MVCCStats,
 	ba roachpb.BatchRequest,
 ) (*roachpb.BatchResponse, EvalResult, *roachpb.Error) {
 	br := ba.CreateReply()
 
-	threshold := r.GCThreshold()
+	threshold, err := rec.GCThreshold()
+	if err != nil {
+		return nil, EvalResult{}, roachpb.NewError(err)
+	}
 	if !threshold.Less(ba.Timestamp) {
 		return nil, EvalResult{}, roachpb.NewError(fmt.Errorf("batch timestamp %v must be after replica GC threshold %v", ba.Timestamp, threshold))
 	}
@@ -4352,7 +4343,11 @@ func (r *Replica) executeBatch(
 		ba.Requests = optimizePuts(batch, ba.Requests, ba.Header.DistinctSpans)
 	}
 
-	if err := r.checkBatchRange(ba); err != nil {
+	desc, err := rec.Desc()
+	if err != nil {
+		return nil, EvalResult{}, roachpb.NewError(err)
+	}
+	if err := checkBatchRange(rec.Store(), desc, ba); err != nil {
 		return nil, EvalResult{}, roachpb.NewErrorWithTxn(err, ba.Header.Txn)
 	}
 
@@ -4374,7 +4369,7 @@ func (r *Replica) executeBatch(
 		// Note that responses are populated even when an error is returned.
 		// TODO(tschottdorf): Change that. IIRC there is nontrivial use of it currently.
 		reply := br.Responses[index].GetInner()
-		curResult, pErr := r.executeCmd(ctx, idKey, index, batch, ms, ba.Header, maxKeys, args, reply)
+		curResult, pErr := executeCmd(ctx, idKey, index, batch, rec, ms, ba.Header, maxKeys, args, reply)
 
 		if err := result.MergeAndDestroy(curResult); err != nil {
 			// TODO(tschottdorf): see whether we really need to pass nontrivial
@@ -4627,8 +4622,9 @@ func (r *Replica) maybeGossipNodeLiveness(ctx context.Context, span roachpb.Span
 	ba.Timestamp = r.store.Clock().Now()
 	ba.Add(&roachpb.ScanRequest{Span: span})
 	// Call executeBatch instead of Send to avoid command queue reentrance.
+	rec := ReplicaEvalContext{r, nil}
 	br, result, pErr :=
-		r.executeBatch(ctx, storagebase.CmdIDKey(""), r.store.Engine(), nil, ba)
+		executeBatch(ctx, storagebase.CmdIDKey(""), r.store.Engine(), rec, nil, ba)
 	if pErr != nil {
 		return errors.Wrapf(pErr.GoError(), "couldn't scan node liveness records in span %s", span)
 	}
@@ -4706,8 +4702,9 @@ func (r *Replica) loadSystemConfig(ctx context.Context) (config.SystemConfig, er
 	ba.Timestamp = r.store.Clock().Now()
 	ba.Add(&roachpb.ScanRequest{Span: keys.SystemConfigSpan})
 	// Call executeBatch instead of Send to avoid command queue reentrance.
-	br, result, pErr := r.executeBatch(
-		ctx, storagebase.CmdIDKey(""), r.store.Engine(), nil, ba,
+	rec := ReplicaEvalContext{r, nil}
+	br, result, pErr := executeBatch(
+		ctx, storagebase.CmdIDKey(""), r.store.Engine(), rec, nil, ba,
 	)
 	if pErr != nil {
 		return config.SystemConfig{}, pErr.GoError()
