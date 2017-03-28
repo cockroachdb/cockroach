@@ -1351,12 +1351,12 @@ DBSSTable* DBEngine::GetSSTables(int* n) {
       // This is a bit ugly because we want DBKey.key to be copied and
       // not refer to the memory in metadata[i].smallestkey.
       DBString str = ToDBString(tmp);
-      tables[i].start_key.key = *reinterpret_cast<DBSlice*>(&str);
+      tables[i].start_key.key = DBSlice{str.data, str.len};
     }
     if (DecodeKey(metadata[i].largestkey, &tmp,
                   &tables[i].end_key.wall_time, &tables[i].end_key.logical)) {
       DBString str = ToDBString(tmp);
-      tables[i].end_key.key = *reinterpret_cast<DBSlice*>(&str);
+      tables[i].end_key.key = DBSlice{str.data, str.len};
     }
   }
   return tables;
