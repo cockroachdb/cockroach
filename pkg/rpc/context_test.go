@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -59,7 +60,7 @@ func TestHeartbeatCB(t *testing.T) {
 	defer stopper.Stop()
 
 	clock := hlc.NewClock(time.Unix(0, 20).UnixNano, time.Nanosecond)
-	serverCtx := newNodeTestContext(clock, stopper)
+	serverCtx := NewContext(log.AmbientContext{}, testutils.NewNodeTestBaseContext(), clock, stopper)
 	s, ln := newTestServer(t, serverCtx, true)
 	remoteAddr := ln.Addr().String()
 
@@ -69,7 +70,7 @@ func TestHeartbeatCB(t *testing.T) {
 	})
 
 	// Clocks don't matter in this test.
-	clientCtx := newNodeTestContext(clock, stopper)
+	clientCtx := NewContext(log.AmbientContext{}, testutils.NewNodeTestBaseContext(), clock, stopper)
 
 	var once sync.Once
 	ch := make(chan struct{})
@@ -99,7 +100,7 @@ func TestHeartbeatHealth(t *testing.T) {
 	// Can't be zero because that'd be an empty offset.
 	clock := hlc.NewClock(time.Unix(0, 1).UnixNano, time.Nanosecond)
 
-	serverCtx := newNodeTestContext(clock, stopper)
+	serverCtx := NewContext(log.AmbientContext{}, testutils.NewNodeTestBaseContext(), clock, stopper)
 	s, ln := newTestServer(t, serverCtx, true)
 	remoteAddr := ln.Addr().String()
 
@@ -111,9 +112,9 @@ func TestHeartbeatHealth(t *testing.T) {
 	}
 	RegisterHeartbeatServer(s, heartbeat)
 
-	clientCtx := newNodeTestContext(clock, stopper)
-	// Make the intervals and timeouts shorter to speed up the tests.
-	clientCtx.HeartbeatInterval = 1 * time.Millisecond
+	clientCtx := NewContext(log.AmbientContext{}, testutils.NewNodeTestBaseContext(), clock, stopper)
+	// Make the interval shorter to speed up the test.
+	clientCtx.heartbeatInterval = 1 * time.Millisecond
 	if _, err := clientCtx.GRPCDial(remoteAddr); err != nil {
 		t.Fatal(err)
 	}
@@ -206,7 +207,7 @@ func TestHeartbeatHealthTransport(t *testing.T) {
 	// Can't be zero because that'd be an empty offset.
 	clock := hlc.NewClock(time.Unix(0, 1).UnixNano, time.Nanosecond)
 
-	serverCtx := newNodeTestContext(clock, stopper)
+	serverCtx := NewContext(log.AmbientContext{}, testutils.NewNodeTestBaseContext(), clock, stopper)
 	// newTestServer with a custom listener.
 	tlsConfig, err := serverCtx.GetServerTLSConfig()
 	if err != nil {
@@ -244,9 +245,9 @@ func TestHeartbeatHealthTransport(t *testing.T) {
 		remoteClockMonitor: serverCtx.RemoteClocks,
 	})
 
-	clientCtx := newNodeTestContext(clock, stopper)
-	// Make the intervals shorter to speed up the tests.
-	clientCtx.HeartbeatInterval = 1 * time.Millisecond
+	clientCtx := NewContext(log.AmbientContext{}, testutils.NewNodeTestBaseContext(), clock, stopper)
+	// Make the interval shorter to speed up the test.
+	clientCtx.heartbeatInterval = 1 * time.Millisecond
 	if _, err := clientCtx.GRPCDial(remoteAddr); err != nil {
 		t.Fatal(err)
 	}
@@ -308,7 +309,7 @@ func TestHeartbeatHealthTransport(t *testing.T) {
 
 	// Should stay unhealthy despite reconnection attempts.
 	errUnhealthy := errors.New("connection is still unhealthy")
-	if err := util.RetryForDuration(100*clientCtx.HeartbeatInterval, func() error {
+	if err := util.RetryForDuration(100*clientCtx.heartbeatInterval, func() error {
 		if err := clientCtx.ConnHealth(remoteAddr); grpc.Code(err) != codes.Unavailable {
 			return errors.Errorf("unexpected error: %v", err)
 		}
@@ -326,7 +327,7 @@ func TestOffsetMeasurement(t *testing.T) {
 
 	serverTime := time.Unix(0, 20)
 	serverClock := hlc.NewClock(serverTime.UnixNano, time.Nanosecond)
-	serverCtx := newNodeTestContext(serverClock, stopper)
+	serverCtx := NewContext(log.AmbientContext{}, testutils.NewNodeTestBaseContext(), serverClock, stopper)
 	s, ln := newTestServer(t, serverCtx, true)
 	remoteAddr := ln.Addr().String()
 
@@ -338,7 +339,9 @@ func TestOffsetMeasurement(t *testing.T) {
 	// Create a client clock that is behind the server clock.
 	clientAdvancing := AdvancingClock{time: time.Unix(0, 10)}
 	clientClock := hlc.NewClock(clientAdvancing.UnixNano, time.Nanosecond)
-	clientCtx := newNodeTestContext(clientClock, stopper)
+	clientCtx := NewContext(log.AmbientContext{}, testutils.NewNodeTestBaseContext(), clientClock, stopper)
+	// Make the interval shorter to speed up the test.
+	clientCtx.heartbeatInterval = 1 * time.Millisecond
 	clientCtx.RemoteClocks.offsetTTL = 5 * clientAdvancing.getAdvancementInterval()
 	if _, err := clientCtx.GRPCDial(remoteAddr); err != nil {
 		t.Fatal(err)
@@ -382,7 +385,7 @@ func TestFailedOffsetMeasurement(t *testing.T) {
 	// Can't be zero because that'd be an empty offset.
 	clock := hlc.NewClock(time.Unix(0, 1).UnixNano, time.Nanosecond)
 
-	serverCtx := newNodeTestContext(clock, stopper)
+	serverCtx := NewContext(log.AmbientContext{}, testutils.NewNodeTestBaseContext(), clock, stopper)
 	s, ln := newTestServer(t, serverCtx, true)
 	remoteAddr := ln.Addr().String()
 
@@ -395,10 +398,10 @@ func TestFailedOffsetMeasurement(t *testing.T) {
 	RegisterHeartbeatServer(s, heartbeat)
 
 	// Create a client that never receives a heartbeat after the first.
-	clientCtx := newNodeTestContext(clock, stopper)
-	// Increase the timeout so that failure arises from exceeding the maximum
+	clientCtx := NewContext(log.AmbientContext{}, testutils.NewNodeTestBaseContext(), clock, stopper)
+	// Remove the timeout so that failure arises from exceeding the maximum
 	// clock reading delay, not the timeout.
-	clientCtx.HeartbeatTimeout = 20 * clientCtx.HeartbeatInterval
+	clientCtx.heartbeatTimeout = 0
 	if _, err := clientCtx.GRPCDial(remoteAddr); err != nil {
 		t.Fatal(err)
 	}
@@ -478,8 +481,8 @@ func TestRemoteOffsetUnhealthy(t *testing.T) {
 	for i := range nodeCtxs {
 		clock := hlc.NewClock(start.Add(nodeCtxs[i].offset).UnixNano, maxOffset)
 		nodeCtxs[i].errChan = make(chan error, 1)
-		nodeCtxs[i].ctx = newNodeTestContext(clock, stopper)
-		nodeCtxs[i].ctx.HeartbeatInterval = maxOffset
+		nodeCtxs[i].ctx = NewContext(log.AmbientContext{}, testutils.NewNodeTestBaseContext(), clock, stopper)
+		nodeCtxs[i].ctx.heartbeatInterval = maxOffset
 
 		s, ln := newTestServer(t, nodeCtxs[i].ctx, true)
 		RegisterHeartbeatServer(s, &HeartbeatService{
