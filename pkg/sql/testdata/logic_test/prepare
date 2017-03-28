@@ -1,3 +1,6 @@
+# LogicTest: name=default nodes=1
+# LogicTest: name=distsql nodes=3 fake-span-resolver distsql=on
+
 statement error unimplemented: Prepared statements are supported only via the Postgres wire protocol \(see issue https://github.com/cockroachdb/cockroach/issues/7568\)
 PREPARE a AS SELECT 1
 

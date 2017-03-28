@@ -1,3 +1,6 @@
+# LogicTest: name=default nodes=1
+# LogicTest: name=distsql nodes=3 fake-span-resolver distsql=on
+
 # Verify pg_catalog database handles mutation statements correctly.
 
 query error user root does not have DROP privilege on database pg_catalog

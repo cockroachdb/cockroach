@@ -1,3 +1,6 @@
+# LogicTest: name=default nodes=1
+# LogicTest: name=distsql nodes=3 fake-span-resolver distsql=on
+
 # English collation chart: http://www.unicode.org/cldr/charts/30/collation/en_US_POSIX.html
 
 statement ok

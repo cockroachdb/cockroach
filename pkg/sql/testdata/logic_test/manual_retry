@@ -1,3 +1,6 @@
+# LogicTest: name=default nodes=1
+# LogicTest: name=distsql nodes=3 fake-span-resolver distsql=on
+
 # On an implicit transaction, we retry implicitly and the function
 # eventually returns a result.
 query I

@@ -1,3 +1,6 @@
+# LogicTest: name=default nodes=1
+# LogicTest: name=distsql nodes=3 fake-span-resolver distsql=on
+
 # Prevents regression of #4293: We used the commit timestamp candidate instead
 # of the original timestamp for reads, which means that transactions were
 # changing their snapshot while they were active, which is wildly inconsistent.

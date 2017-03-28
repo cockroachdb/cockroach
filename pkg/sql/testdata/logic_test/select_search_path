@@ -1,3 +1,6 @@
+# LogicTest: name=default nodes=1
+# LogicTest: name=distsql nodes=3 fake-span-resolver distsql=on
+
 # Test that pg_catalog tables are accessible without qualifying table/view
 # names.
 

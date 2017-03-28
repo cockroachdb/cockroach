@@ -1,3 +1,6 @@
+# LogicTest: name=default nodes=1
+# LogicTest: name=distsql nodes=3 fake-span-resolver distsql=on
+
 query III colnames
 VALUES (1, 2, 3), (4, 5, 6)
 ----
