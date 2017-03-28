@@ -163,26 +163,28 @@ we would need to trigger a second refresh.
 A good description of online key rotation in Go can be found in
 [Hitless TLS Certificate Rotation in Go](https://diogomonica.com/2017/01/11/hitless-tls-certificate-rotation-in-go/)
 
+Adding or swapping certificates can be done in multiple ways:
+1. construct a new `tls.Config` object
+1. modify individual fields
+1. implement callbacks corresponding to individual fields
+
+The `tls.Config` object is specified at connection time and cannot be modified after as it
+is not safe for concurrent use.
+
+A node needs to maintain two `tls.Config` objects, one for server-side connections, one for client-side connections. A new config can be constructed upon reload, then reused for all subsequent connections.
+
+The server-side `tls.Config` object can be specified for each client connection by implementing
+the `tls.Config.GetConfigForClient`. This should return the most recent `tls.Config` object.`
+
 ## Adding a new CA certificate
 
-All TLS connections are given a [tls.Config](https://golang.org/pkg/crypto/tls/#Config) object
-containing a [*x509.CertPool](https://golang.org/pkg/crypto/x509/#CertPool) to verify
-server certificates (`tls.Config.RootCAs`) and client certificates (`tls.Config.ClientCAs`).
+Root CAs for server and client certificate verification are in `tls.Config.RootCAs` and `tls.Config.ClientCAs` respectively. We should add all detected CA certificates to both pools.
 
-Adding a new certificate to the pool can be done as long as we have access to the `tls.Config` or
-the `x509.CertPool`. Neither is safe for concurrent use so we will need a small wrapper to allow
-safe modification of the pool while serving connections.
+## Rotating node/client certificate
 
-## Rotating node certificate
-
-Node certificates are tricker than CA certificates as we must pick exactly one to present.
-
-The `tls.Config` object allows us to specify node certificates in two ways:
-1. set the certificate in `tls.Config.Certificates`
-1. use per-connection callbacks (`tls.Config.GetCertificate` for server-side certs, and `tls.Config.GetClientCertificate`. The client-side callback provides us with a list of server-supported CAs).
-
-Modifying either will change which certificate is presented at session initiation or renegotiation.
-The `Certificates` object is not safe for concurrent use, making `GetCertificate` preferable.
+The node and client certificates are set in `tls.Config.Certificates`. 
+If more than one node certificate is present, the one matching the requested `ServerName` is presented.
+We should set only one certificate in `tls.Config.Certificates`.
 
 # Additional interfaces
 
@@ -234,10 +236,12 @@ with CA knowledge, but would provide better visibility into user authentication 
 
 We need to verify that the proposed CA and node cert rotation mechanisms work, especially through
 grpc.
-We may be able to modify the `tls.Config.Certificates` field, but this would require a wrapper
-to allow concurrent use.
-On the other hand, using the `tls.Config.GetCertificate` callback mechanism **seems** to work
-(tested superficially by mberhault on 2017/03/18).
+
+Since everything uses `tls.Config`, implementing `tls.Config.GetConfigForClient` to rotate
+the config on the server should be sufficient,
+
+However, we need to ensure that all client-side connections are able to use the new config when
+initiating a connection.
 
 ## Renegotiation and certificate rotation
 
