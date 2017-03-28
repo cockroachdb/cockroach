@@ -610,6 +610,23 @@ func TestEngineDeleteRange(t *testing.T) {
 	})
 }
 
+func TestEngineDeleteRangeBatch(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	testEngineDeleteRange(t, func(engine Engine, start, end MVCCKey) error {
+		batch := engine.NewWriteOnlyBatch()
+		defer batch.Close()
+		if err := batch.ClearRange(start, end); err != nil {
+			return err
+		}
+		batch2 := engine.NewWriteOnlyBatch()
+		defer batch2.Close()
+		if err := batch2.ApplyBatchRepr(batch.Repr(), false); err != nil {
+			return err
+		}
+		return batch2.Commit(false)
+	})
+}
+
 func TestEngineDeleteIterRange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	testEngineDeleteRange(t, func(engine Engine, start, end MVCCKey) error {

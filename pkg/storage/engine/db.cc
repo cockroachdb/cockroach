@@ -509,8 +509,16 @@ class DBBatchInserter : public rocksdb::WriteBatch::Handler {
   virtual void Merge(const rocksdb::Slice& key, const rocksdb::Slice& value) {
     batch_->Merge(key, value);
   }
-  // NB: we don't support DeleteRangeCF yet which causes us to pick up
-  // the default implementation that returns an error.
+  virtual rocksdb::Status DeleteRangeCF(
+      uint32_t column_family_id,
+      const rocksdb::Slice& begin_key,
+      const rocksdb::Slice& end_key) {
+    if (column_family_id == 0) {
+      batch_->DeleteRange(begin_key, end_key);
+      return rocksdb::Status::OK();
+    }
+    return rocksdb::Status::InvalidArgument("DeleteRangeCF not implemented");
+  }
 
  private:
   rocksdb::WriteBatchBase* const batch_;
