@@ -33,7 +33,10 @@ DBStatus DBBatchReprVerify(
   rocksdb::WriteBatchWithIndex batch(kComparator, 0, true);
   rocksdb::WriteBatch b(ToString(repr));
   std::unique_ptr<rocksdb::WriteBatch::Handler> inserter(GetDBBatchInserter(&batch));
-  b.Iterate(inserter.get());
+  rocksdb::Status status = b.Iterate(inserter.get());
+  if (!status.ok()) {
+    return ToDBStatus(status);
+  }
   std::unique_ptr<rocksdb::Iterator> iter;
   iter.reset(batch.NewIteratorWithBase(rocksdb::NewEmptyIterator()));
 
@@ -50,4 +53,3 @@ DBStatus DBBatchReprVerify(
 
   return kSuccess;
 }
-
