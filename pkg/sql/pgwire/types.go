@@ -478,12 +478,11 @@ func decodeOidDatum(id oid.Oid, code formatCode, b []byte) (parser.Datum, error)
 			}
 			return parser.NewDFloat(parser.DFloat(f)), nil
 		case oid.T_numeric:
-			dd := &parser.DDecimal{}
-			_, res, err := parser.HighPrecisionCtx.SetString(&dd.Decimal, string(b))
-			if res != 0 || err != nil {
+			d, err := parser.ParseDDecimal(string(b))
+			if err != nil {
 				return nil, errors.Errorf("could not parse string %q as decimal", b)
 			}
-			return dd, nil
+			return d, nil
 		case oid.T_bytea:
 			// http://www.postgresql.org/docs/current/static/datatype-binary.html#AEN5667
 			// Code cribbed from github.com/lib/pq.

@@ -1483,7 +1483,7 @@ func CheckValueWidth(col ColumnDescriptor, val parser.Datum) error {
 		}
 	case ColumnType_DECIMAL:
 		if v, ok := val.(*parser.DDecimal); ok {
-			if col.Type.Precision > 0 {
+			if v.Decimal.Form == apd.Finite && col.Type.Precision > 0 {
 				// http://www.postgresql.org/docs/9.5/static/datatype-numeric.html
 				// "If the scale of a value to be stored is greater than
 				// the declared scale of the column, the system will round the
