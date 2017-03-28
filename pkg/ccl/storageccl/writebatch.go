@@ -9,7 +9,6 @@
 package storageccl
 
 import (
-	"errors"
 	"fmt"
 
 	"golang.org/x/net/context"
@@ -20,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/pkg/errors"
 )
 
 func init() {
@@ -59,12 +59,42 @@ func evalWriteBatch(
 		return storage.EvalResult{}, errors.New("data spans multiple ranges")
 	}
 
+	// We store a 4 byte checksum of each key/value entry in the value. Make
+	// sure the all ones in this WriteBatch validate.
+	{
+		var v roachpb.Value
+		r, err := engine.NewRocksDBBatchReader(args.Data)
+		if err != nil {
+			return storage.EvalResult{}, errors.Wrapf(err, "verifying key/value checksums")
+		}
+		for ok := r.Next(); ok; ok = r.Next() {
+			switch r.BatchType() {
+			case engine.BatchTypeValue:
+				key, err := engine.KeyFromEncodedMVCCKey(r.UnsafeKey())
+				if err != nil {
+					return storage.EvalResult{}, errors.Wrapf(err, "verifying key/value checksums")
+				}
+				v.RawBytes = r.UnsafeValue()
+				if err := v.Verify(key); err != nil {
+					return storage.EvalResult{}, err
+				}
+			default:
+				return storage.EvalResult{}, errors.Errorf(
+					"unexpected entry type in batch: %d", r.BatchType())
+			}
+		}
+		if err := r.Error(); err != nil {
+			return storage.EvalResult{}, errors.Wrapf(err, "verifying key/value checksums")
+		}
+	}
+
 	mvccStartKey := engine.MVCCKey{Key: args.Key}
 	mvccEndKey := engine.MVCCKey{Key: args.EndKey}
 
 	// Verify that the keys in the batch are within the range specified by the
 	// request header.
-	msBatch, err := engineccl.VerifyBatchRepr(args.Data, mvccStartKey, mvccEndKey, h.Timestamp.WallTime)
+	msBatch, err := engineccl.VerifyBatchRepr(
+		args.Data, mvccStartKey, mvccEndKey, h.Timestamp.WallTime)
 	if err != nil {
 		return storage.EvalResult{}, err
 	}
