@@ -1,71 +1,66 @@
-# Embedded UI
+# Admin UI
 
-This directory contains the client-side code for cockroach's web admin
-console. These files are embedded into the cockroach binary via the
-[go-bindata](https://github.com/jteeuwen/go-bindata) package, which is used to
-generate the `embedded.go` file in this directory.
+This directory contains the client-side code for CockroachDB's web-based admin
+UI, which provides details about a cluster's performance and health. See the
+[Admin UI docs](https://www.cockroachlabs.com/docs/explore-the-admin-ui.html)
+for an expanded overview.
 
 ## Getting Started
 
-To get started with the UI, be sure you're able to build and run the
-CockroachDB server. Instructions for this are located in the top-level README.
+To start developing the UI, be sure you're able to build and run a CockroachDB
+node. Instructions for this are located in the top-level README. Every Cockroach
+node serves the UI, by default on port 8080, but you can customize the port with
+the `--http-port` flag. If you've started a node with the default options,
+you'll be able to access the UI at <http://localhost:8080>.
 
-To bootstrap local development, you'll need to run `make` in this directory;
-this will download the dependencies, run the tests, and build the web console
-assets.
+Our UI is compiled using a collection of tools that depends on
+[Node.js](https://nodejs.org/), so you'll need a recent version of Node
+installed. These Node dependencies are managed with [Yarn](https://yarnpkg.com),
+a package manager that offers more deterministic package installation than NPM.
+On macOS, you can install both of these dependencies with Homebrew:
 
-## Modification
+```shell
+brew install node yarn
+```
 
-As mentioned above, be sure to run the CockroachDB server in UI debug mode
-while developing the web console. This causes the CockroachDB server to serve
-assets directly from the disk, rather than use the compiled-in assets. These
-assets will be compiled in the browser each time the page is reloaded.
+With Node and Yarn installed, bootstrap local development by running `make` in
+this directory. This will run `yarn install` to install our Node dependencies,
+run the tests, and compile the assets. Asset compilation happens in two steps.
+First, [Webpack](https://webpack.github.io) runs the TypeScript compiler and CSS
+preprocessor to assemble assets into the `dist` directory. Then, we package
+those assets into `embedded.go` using
+[go-bindata](https://github.com/jteeuwen/go-bindata). When you later run `make
+build` in the parent directory, `embedded.go` is linked into the `cockroach`
+binary so that it can serve the admin UI when you run `cockroach start`.
 
-NOTE: styles are not yet compiled in the browser. As a workaround, `make
-watch` is available; it automatically watches for style changes and recompiles
-them, though a browser reload is still required. Note that if you add a new
-file, you'll need to restart `make watch`.
+## Developing
+
+When making changes to the UI, it is desirable to see those changes with data
+from an existing cluster without rebuilding and relaunching the cluster for each
+change. This is useful for rapidly visualizing local development changes against
+a consistent and realistic dataset.
+
+We've created a simple NodeJS proxy to accomplish this. This server serves all
+requests for web resources (JavaScript, HTML, CSS) out of the code in this
+directory, while proxying all API requests to the specified CockroachDB node.
+
+To use this proxy, run `./proxy.js <target-cluster-http-uri>` and navigate to
+`http://localhost:3000` to access the UI.
 
 When you're ready to submit your changes, be sure to run `make` in this
 directory to regenerate the on-disk assets so that your commit includes the
 updated `embedded.go`. This is enforced by our build system, but forgetting to
-do this will result in wasted time waiting for the build.
+do this will result in wasted time waiting for CI. We commit this generated file
+so that CockroachDB can be compiled with minimal [non-go
+dependencies](#dependencies).
 
-We commit the generated file so that CockroachDB can be compiled with minimal
-[non-go dependencies](#dependencies).
+Be sure to also commit any modifications resulting from dependency changes, like
+updates to `package.json` and `yarn.lock`.
 
 ## Running tests
 
 If you'd like to run the tests directly you can run `make test`. If you're
 having trouble debugging tests, we recommend using `make test-debug` which
 prettifies the test output and runs the tests in Chrome. When a webpage opens,
-you can press the debug button in the top righthand corner to run tests and set
+you can press the debug button in the top right-hand corner to run tests and set
 breakpoints directly in the browser.
-
-## Proxying
-
-When prototyping changes to the CockroachDB Admin UI, it is desirable to see
-those changes with data from an existing cluster without the headache of having
-to redeploy a cluster. This is useful for rapidly visualizing local development
-changes against a consistent and realistic dataset.
-
-We have created a simple NodeJS reverse-proxy server to accomplish this; this
-server proxies all requests for web resources (javascript, HTML, CSS) to a local
-CockroachDB server, while proxying all requests for actual data to a remote
-CockroachDB server.
-
-To use this server, navigate to the `pkg/ui/proxy` directory, install the
-dependencies using `yarn` or `npm`, then run `./proxy.js <existing- instance-
-ui-url> --local <development-instance-ui-url>` and navigate to
-`http://localhost:3000` to access the UI.
-
-## Dependencies
-
-Our web console is compiled using a collection of tools that depends on
-[Node.js](https://nodejs.org/), so you'll want to have that installed.
-
-We use [yarn](https://yarnpkg.com) to manage various dependencies. It is also
-possible to use `npm`, though you may run into problems as `npm` does not
-respect yarn's yarn.lock.
-
-Be sure to commit any changes resulting from your dependency changes.
