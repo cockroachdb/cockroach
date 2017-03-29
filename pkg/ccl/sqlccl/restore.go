@@ -9,6 +9,9 @@
 package sqlccl
 
 import (
+	"fmt"
+	"time"
+
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 	"golang.org/x/sync/errgroup"
@@ -26,6 +29,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/interval"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
@@ -434,6 +439,7 @@ func makeImportRequests(
 				entryType: request,
 				files:     files,
 			})
+			fmt.Printf("request %+v\n", requestEntries[len(requestEntries)-1])
 		}
 	}
 	return requestEntries, maxEndTime, nil
@@ -643,11 +649,32 @@ func Restore(
 	}
 	// TODO(dan): Wait for the newly created ranges (and leaseholders) to
 	// rebalance.
+
+	mu := struct {
+		syncutil.Mutex
+		responseCount        int
+		lastReportedAt       time.Time
+		lastReportedFraction float32
+	}{}
+
 	g, gCtx := errgroup.WithContext(ctx)
 	for i := range importRequests {
 		ir := importRequests[i]
 		g.Go(func() error {
-			return Import(gCtx, db, ir.Key, ir.EndKey, ir.files, kr)
+			err := Import(gCtx, db, ir.Key, ir.EndKey, ir.files, kr)
+			mu.Lock()
+			defer mu.Unlock()
+			mu.responseCount++
+			fractionCompleted := float32(mu.responseCount) / float32(len(importRequests))
+			if shouldLogProgress(fractionCompleted, mu.lastReportedFraction, mu.lastReportedAt) {
+				mu.lastReportedAt = timeutil.Now()
+				mu.lastReportedFraction = fractionCompleted
+				if err := jobLogger.Progressed(ctx, fractionCompleted); err != nil {
+					log.Errorf(ctx, "RESTORE ignoring error while updating progress on job '%s' to %f: %+v",
+						jobLogger.Job.Description, fractionCompleted, err)
+				}
+			}
+			return err
 		})
 	}
 

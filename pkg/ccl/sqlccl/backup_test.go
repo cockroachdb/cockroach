@@ -25,6 +25,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/kr/pretty"
 	"github.com/lib/pq"
@@ -40,7 +41,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -105,8 +105,8 @@ func bankSplitStmt(numAccounts int, numRanges int) string {
 	return stmt.String()
 }
 
-func backupRestoreTestSetup(
-	t testing.TB, clusterSize int, numAccounts int,
+func backupRestoreTestSetupWithParams(
+	t testing.TB, clusterSize int, numAccounts int, params base.TestClusterArgs,
 ) (
 	ctx context.Context,
 	tempDir string,
@@ -120,7 +120,7 @@ func backupRestoreTestSetup(
 
 	temp := filepath.Join(dir, "must-be-cleaned-up")
 
-	tc = testcluster.StartTestCluster(t, clusterSize, base.TestClusterArgs{})
+	tc = testcluster.StartTestCluster(t, clusterSize, params)
 	for _, s := range tc.Servers {
 		for _, e := range s.Engines() {
 			if err := e.SetTempDir(temp); err != nil {
@@ -160,6 +160,18 @@ func backupRestoreTestSetup(
 	}
 
 	return ctx, dir, tc, sqlDB, cleanupFn
+}
+
+func backupRestoreTestSetup(
+	t testing.TB, clusterSize int, numAccounts int,
+) (
+	ctx context.Context,
+	tempDir string,
+	tc *testcluster.TestCluster,
+	sqlDB *sqlutils.SQLRunner,
+	cleanup func(),
+) {
+	return backupRestoreTestSetupWithParams(t, clusterSize, numAccounts, base.TestClusterArgs{})
 }
 
 func TestBackupRestoreLocal(t *testing.T) {
@@ -272,27 +284,110 @@ func verifySystemJob(
 	return nil
 }
 
+func startTrackingSystemJobProgress(db *gosql.DB, responseComplete chan bool) func(int) error {
+	var verifierErr error
+	seenFractions := map[float32]struct{}{0.0: {}}
+	stop := make(chan bool)
+	done := make(chan bool)
+
+	go func() {
+		for {
+			select {
+			case <-stop:
+				done <- true
+				return
+			case <-responseComplete:
+			}
+
+			if err := util.RetryForDuration(100*time.Millisecond, func() error {
+				var fractionCompleted float32
+				if err := db.QueryRow(
+					`SELECT fraction_completed FROM crdb_internal.jobs ORDER BY created DESC LIMIT 1`,
+				).Scan(&fractionCompleted); err != nil {
+					return err
+				}
+
+				if _, ok := seenFractions[fractionCompleted]; ok {
+					return errors.Errorf(
+						"job progress has not changed in 100ms after completed import or export response")
+				}
+				seenFractions[fractionCompleted] = struct{}{}
+
+				return nil
+			}); err != nil {
+				verifierErr = err
+			}
+		}
+	}()
+
+	return func(minDistinct int) error {
+		stop <- true
+		<-done
+
+		if verifierErr != nil {
+			return verifierErr
+		}
+
+		if e, a := minDistinct, len(seenFractions); a < e {
+			return errors.Errorf(
+				"expected job progress to have at least %d distinct immediate fractions, but got only %d: %+v",
+				e, a, seenFractions,
+			)
+		}
+
+		return nil
+	}
+}
+
 func TestBackupRestoreSystemJobs(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	if !storage.ProposerEvaluatedKVEnabled() {
 		t.Skip("command WriteBatch is not allowed without proposer evaluated KV")
 	}
 
-	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop()
+	// To test incremental progress updates, we install a store response filter,
+	// which runs immediately before a KV command returns its response, in our
+	// test cluster. Whenever we see an Export or Import response, we do a
+	// blocking send on a message on the responseComplete channel.
+	// startTrackingSystemProgress, after receiving on this channel, verifies that
+	// the progress is updated in the system.jobs table before it does its next
+	// receive, thus ensuring that each response causes a progress update.
+	responseComplete := make(chan bool)
+	params := base.TestClusterArgs{}
+	params.ServerArgs.Knobs.Store = &storage.StoreTestingKnobs{
+		TestingResponseFilter: func(ba roachpb.BatchRequest, br *roachpb.BatchResponse) *roachpb.Error {
+			hasExportOrImport := false
+			for _, res := range br.Responses {
+				hasExportOrImport = hasExportOrImport || res.Export != nil || res.Import != nil
+			}
+			if !hasExportOrImport {
+				return nil
+			}
+			responseComplete <- true
+			return nil
+		},
+	}
 
-	dir, dirCleanupFn := testutils.TempDir(t, 1)
-	defer dirCleanupFn()
+	const numAccounts = 1000
+
+	// We require that we see a progress update for at least each range that we've
+	// backed up.
+	if 1.0/float32(backupRestoreDefaultRanges) < ProgressCompletionThreshold {
+		t.Fatalf("ProgressCompletionThreshold %f is too high and does not guarantee an update for "+
+			"each of the %d ranges in the backup", ProgressCompletionThreshold, backupRestoreDefaultRanges)
+	}
+	const minProgressUpdateCount = backupRestoreDefaultRanges
+
+	_, dir, tc, sqlDB, cleanupFn := backupRestoreTestSetupWithParams(t, multiNode, numAccounts, params)
+	defer cleanupFn()
 
 	dest := dir + "?secretCredentialsHere"
 	sanitizedDest := dir
 
-	sqlDB := sqlutils.MakeSQLRunner(t, db)
-	sqlDB.Exec(bankCreateDatabase)
-	sqlDB.Exec(bankCreateTable)
 	{
+		verifyJobProgress := startTrackingSystemJobProgress(tc.Conns[0], responseComplete)
 		sqlDB.Exec(`BACKUP DATABASE bench TO $1`, dest)
-		tableID, err := sqlutils.QueryTableID(db, "bench", "bank")
+		tableID, err := sqlutils.QueryTableID(tc.Conns[0], "bench", "bank")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -307,11 +402,15 @@ func TestBackupRestoreSystemJobs(t *testing.T) {
 		}); err != nil {
 			t.Fatal(err)
 		}
+		if err := verifyJobProgress(minProgressUpdateCount); err != nil {
+			t.Fatal(err)
+		}
 	}
 	sqlDB.Exec(`CREATE DATABASE bench2`)
 	{
+		verifyJobProgress := startTrackingSystemJobProgress(tc.Conns[0], responseComplete)
 		sqlDB.Exec(`RESTORE bench.* FROM $1 WITH OPTIONS ('into_db'='bench2')`, dest)
-		databaseID, err := sqlutils.QueryDatabaseID(db, "bench2")
+		databaseID, err := sqlutils.QueryDatabaseID(tc.Conns[0], "bench2")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -324,6 +423,9 @@ func TestBackupRestoreSystemJobs(t *testing.T) {
 				sqlbase.ID(databaseID + 1),
 			},
 		}); err != nil {
+			t.Fatal(err)
+		}
+		if err := verifyJobProgress(minProgressUpdateCount); err != nil {
 			t.Fatal(err)
 		}
 	}
