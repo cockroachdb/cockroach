@@ -96,7 +96,7 @@ mkdir -p "${host_home}"/.yarn-cache
 #
 # This script supports both circleci and development hosts, so it must
 # support cases where the architecture inside the container is
-# different from that outside the container. We map /src/ directly
+# different from that outside the container. We can map /src/ directly
 # into the container because it is architecture-independent. We then
 # map certain subdirectories of ${GOPATH}/pkg into both ${GOPATH}/pkg
 # and ${GOROOT}/pkg. The ${GOROOT} mapping is needed so they can be
@@ -105,12 +105,21 @@ mkdir -p "${host_home}"/.yarn-cache
 # path used for the /bin/ mapping is also used in the defaultBinary
 # function of localcluster.go.
 #
-# -i causes some commands (including `git diff`) to attempt to use
-# a pager, so we override $PAGER to disable.
+# We always map the cockroach source directory that contains this script into
+# the container's $GOPATH/src. By default, we also mount the host's $GOPATH/src
+# directory to the container's $GOPATH/src. That behavior can be turned off by
+# setting BUILDER_HIDE_GOPATH_SRC to 1, which results in only the cockroach
+# source code (and its vendored dependencies) being available within the
+# container. This setting is useful to prevent missing vendored dependencies
+# from being accidentally resolved to the hosts's copy of those dependencies.
+
 vols=""
 vols="${vols} --volume=${passwd_file}:/etc/passwd"
 vols="${vols} --volume=${host_home}:${container_home}"
-vols="${vols} --volume=${gopath0}/src:/go/src"
+if [ "${BUILDER_HIDE_GOPATH_SRC:-}" != "1" ]; then
+  vols="${vols} --volume=${gopath0}/src:/go/src"
+fi
+vols="${vols} --volume=${cockroach_toplevel}:/go/src/github.com/cockroachdb/cockroach"
 vols="${vols} --volume=${gocache}/pkg/docker_amd64:/go/pkg/linux_amd64"
 vols="${vols} --volume=${gocache}/pkg/docker_amd64_msan:/go/pkg/linux_amd64_msan"
 vols="${vols} --volume=${gocache}/pkg/docker_amd64_musl:/go/pkg/linux_amd64_musl"
@@ -121,7 +130,6 @@ vols="${vols} --volume=${gocache}/pkg/docker_amd64_musl:/usr/local/go/pkg/linux_
 vols="${vols} --volume=${gocache}/pkg/docker_amd64_race:/usr/local/go/pkg/linux_amd64_race"
 vols="${vols} --volume=${gocache}/bin/docker_amd64:/go/bin"
 vols="${vols} --volume=${HOME}/.yarn-cache:${container_home}/.yarn-cache"
-vols="${vols} --volume=${cockroach_toplevel}:/go/src/github.com/cockroachdb/cockroach"
 
 backtrace_dir="${cockroach_toplevel}/../../cockroachlabs/backtrace"
 if test -d "${backtrace_dir}"; then
@@ -136,6 +144,9 @@ if test -e "${alternates_file}"; then
   alternates_path=$(cat "${alternates_file}")
   vols="${vols} --volume=${alternates_path}:${alternates_path}"
 fi
+
+# -i causes some commands (including `git diff`) to attempt to use
+# a pager, so we override $PAGER to disable.
 
 # shellcheck disable=SC2086
 docker run --privileged -i ${tty-} --rm \
