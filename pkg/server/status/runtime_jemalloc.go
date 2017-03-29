@@ -22,8 +22,8 @@ package status
 // #cgo darwin CPPFLAGS: -I../../../vendor/github.com/cockroachdb/c-jemalloc/darwin_includes/internal/include
 // #cgo freebsd CPPFLAGS: -I../../../vendor/github.com/cockroachdb/c-jemalloc/freebsd_includes/internal/include
 // #cgo linux CPPFLAGS: -I../../../vendor/github.com/cockroachdb/c-jemalloc/linux_includes/internal/include
-// #cgo !strictld,darwin LDFLAGS: -Wl,-undefined -Wl,dynamic_lookup
-// #cgo !strictld,!darwin LDFLAGS: -Wl,-unresolved-symbols=ignore-all
+// #cgo darwin LDFLAGS: -Wl,-undefined -Wl,dynamic_lookup
+// #cgo !darwin LDFLAGS: -Wl,-unresolved-symbols=ignore-all
 //
 // #include <jemalloc/jemalloc.h>
 //
