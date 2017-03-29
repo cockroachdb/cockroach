@@ -27,7 +27,7 @@
     "@types/sinon": "^1.16.36",
     "babel-core": "^6.24.0",
     "babel-loader": "^6.4.1",
-    "babel-preset-latest": "^6.24.0",
+    "babel-preset-env": "^1.2.2",
     "babel-preset-react": "^6.23.0",
     "bytebuffer": "^5.0.1",
     "chai": "^3.5.0",
