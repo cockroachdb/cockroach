@@ -22,6 +22,6 @@ import (
 	_ "github.com/cockroachdb/c-rocksdb"
 )
 
-// #cgo !strictld,darwin LDFLAGS: -Wl,-undefined -Wl,dynamic_lookup
-// #cgo !strictld,!darwin LDFLAGS: -Wl,-unresolved-symbols=ignore-all
+// #cgo darwin LDFLAGS: -Wl,-undefined -Wl,dynamic_lookup
+// #cgo !darwin LDFLAGS: -Wl,-unresolved-symbols=ignore-all
 import "C"
