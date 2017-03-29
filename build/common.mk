@@ -336,7 +336,7 @@ endif
 $(ROCKSDB_DIR)/Makefile: $(C_DEPS_DIR)/rocksdb.src.tar.xz | libsnappy libjemalloc $(ROCKSDB_SRC_DIR)
 	mkdir -p $(ROCKSDB_DIR)
 	cd $(ROCKSDB_DIR) && cmake $(CMAKE_FLAGS) $(ROCKSDB_SRC_DIR) \
-	  -DWITH_$(if $(ISWINDOWS),AVX2,SSE42)=ON \
+	  $(if $(findstring release,$(TYPE)),-DWITH_$(if $(ISWINDOWS),AVX2,SSE42)=ON) \
 	  -DSNAPPY_LIBRARIES=$(SNAPPY_DIR)/.libs/libsnappy.a -DSNAPPY_INCLUDE_DIR=$(SNAPPY_SRC_DIR) -DWITH_SNAPPY=ON \
 	  -DJEMALLOC_ROOT_DIR=$(JEMALLOC_DIR) -DWITH_JEMALLOC=ON
 
