@@ -74,7 +74,7 @@ CPP_HEADERS := $(subst ./,$(NATIVE_ROOT)/,$(CPP_PROTOS:%.proto=%.pb.h))
 CPP_SOURCES := $(subst ./,$(NATIVE_ROOT)/,$(CPP_PROTOS:%.proto=%.pb.cc))
 
 .PHONY: protos
-protos: $(GO_SOURCES) $(UI_SOURCES) $(CPP_HEADERS) $(CPP_SOURCES) $(ENGINE_CPP_HEADERS) $(ENGINE_CPP_SOURCES) $(GW_SOURCES)
+protos: $(GO_SOURCES) $(UI_SOURCES) $(CPP_HEADERS) $(CPP_SOURCES) $(GW_SOURCES)
 
 $(PROTOC): goinstall
 
@@ -122,10 +122,11 @@ $(CPP_HEADERS) $(CPP_SOURCES): $(PROTOC) $(CPP_PROTOS)
 	$(PROTOC) -I.:$(GOGO_PROTOBUF_PATH):$(PROTOBUF_PATH) --cpp_out=lite:$(NATIVE_ROOT) $(CPP_PROTOS)
 	$(SED_INPLACE) -E '/gogoproto/d' $(CPP_HEADERS) $(CPP_SOURCES)
 	@# For c++, protoc generates a directory structure mirroring the package
-	@# structure (and these directories must be in the include path), but cgo can
-	@# only compile a single directory so we symlink the generated pb.cc files
-	@# into the storage/engine directory.
+	@# structure (and these directories must be in the include path), but cgo
+	@# only compiles a single directory so we "symlink" the generated pb.cc files
+	@# into the storage/engine directory, taking care to avoid collisions between
+	@# files with identical names.
 	@# We use `find` and not `git ls-files` here because `git ls-files` will
-	@# include deleted files (i.e. these very symlinks) in its output, resulting
-	@# in recursive symlinks, which is Bad™.
-	(cd $(NATIVE_ROOT) && find . -name *.pb.cc | xargs -I % ln -sf % .)
+	@# include deleted files (i.e. these very "symlinks") in its output,
+	@# resulting in recursive "symlinks", which is Bad™.
+	(cd $(NATIVE_ROOT) && find . -name *.pb.cc | sed 's!./!!' | xargs -I % sh -c 'echo "#include \"%\"" > $$(echo % | tr / _)')
