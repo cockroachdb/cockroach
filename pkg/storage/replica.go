@@ -1634,7 +1634,7 @@ func makeCacheRequest(ba *roachpb.BatchRequest, br *roachpb.BatchResponse) cache
 	return cr
 }
 
-func collectSpans(ba *roachpb.BatchRequest) (*SpanSet, error) {
+func collectSpans(desc roachpb.RangeDescriptor, ba *roachpb.BatchRequest) (*SpanSet, error) {
 	spans := &SpanSet{}
 	// TODO(bdarnell): need to make this less global when the local
 	// command queue is used more heavily. For example, a split will
@@ -1658,7 +1658,7 @@ func collectSpans(ba *roachpb.BatchRequest) (*SpanSet, error) {
 			continue
 		}
 		if cmd, ok := commands[inner.Method()]; ok {
-			cmd.DeclareKeys(ba.Header, inner, spans)
+			cmd.DeclareKeys(desc, ba.Header, inner, spans)
 		} else {
 			return nil, errors.Errorf("unrecognized command %s", inner.Method())
 		}
@@ -2024,7 +2024,7 @@ func (r *Replica) addReadOnlyCmd(
 		}
 	}
 
-	spans, err := collectSpans(&ba)
+	spans, err := collectSpans(*r.Desc(), &ba)
 	if err != nil {
 		return nil, roachpb.NewError(err)
 	}
@@ -2184,7 +2184,7 @@ func (r *Replica) tryAddWriteCmd(
 ) (br *roachpb.BatchResponse, pErr *roachpb.Error, retry proposalRetryReason) {
 	startTime := timeutil.Now()
 
-	spans, err := collectSpans(&ba)
+	spans, err := collectSpans(*r.Desc(), &ba)
 	if err != nil {
 		return nil, roachpb.NewError(err), proposalNoRetry
 	}
