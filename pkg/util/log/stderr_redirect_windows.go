@@ -30,7 +30,7 @@ func dupFD(fd uintptr) (uintptr, error) {
 		return 0, err
 	}
 	var h syscall.Handle
-	return h, syscall.DuplicateHandle(p, syscall.Handle(fd), p, &h, 0, true, DUPLICATE_SAME_ACCESS)
+	return uintptr(h), syscall.DuplicateHandle(p, syscall.Handle(fd), p, &h, 0, true, syscall.DUPLICATE_SAME_ACCESS)
 }
 
 func dupFD2(oldfd uintptr, newfd uintptr) error {
