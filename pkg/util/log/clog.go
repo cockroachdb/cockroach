@@ -922,7 +922,7 @@ func (sb *syncBuffer) rotateFile(now time.Time) error {
 		// NB: any concurrent output to stderr may straddle the old and new
 		// files. This doesn't apply to log messages as we won't reach this code
 		// unless we're not logging to stderr.
-		if err := hijackStderr(int(sb.file.Fd())); err != nil {
+		if err := hijackStderr(sb.file); err != nil {
 			return err
 		}
 	}
