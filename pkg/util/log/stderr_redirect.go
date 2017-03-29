@@ -11,54 +11,42 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
-//
 
 package log
 
 import (
 	"fmt"
 	"os"
-	"syscall"
 )
 
-// OrigStderrFd is a file descriptor that is initialized to a copy of
-// the original stderr file descriptor 2, before file descriptor 2 is
-// replaced to point to a log file by hijackStderr().
-var OrigStderrFd int
-
 // OrigStderr points to the original stderr stream.
-var OrigStderr *os.File
+var OrigStderr = func() *os.File {
+	fd, err := dupFD(os.Stderr.Fd())
+	if err != nil {
+		panic(err)
+	}
+
+	return os.NewFile(fd, os.Stderr.Name())
+}()
 
 // stderrRedirected attempts to track whether stderr was redirected.
 // This is used to de-duplicate the panic log.
 var stderrRedirected bool
 
-func init() {
-	var err error
-	OrigStderrFd, err = syscall.Dup(syscall.Stderr)
-	if err != nil {
-		panic(err)
-	}
-	OrigStderr = os.NewFile(uintptr(OrigStderrFd), "/dev/stderr")
-	if OrigStderr == nil {
-		panic(err)
-	}
-}
-
 // hijackStderr replaces syscall.Stderr (and thus the target of
 // os.Stderr and pretty much anything that targets stderr using
 // standard ways) by the given file descriptor.
 // A client that wishes to use the original stderr must use
-// OrigStderrFd / OrigStderr defined above.
-func hijackStderr(fd int) error {
+// OrigStderr defined above.
+func hijackStderr(f *os.File) error {
 	stderrRedirected = true
-	return syscall.Dup2(fd, syscall.Stderr)
+	return dupFD2(f.Fd(), os.Stderr.Fd())
 }
 
 // restoreStderr cancels the effect of hijackStderr()
 func restoreStderr() error {
 	stderrRedirected = false
-	return syscall.Dup2(OrigStderrFd, syscall.Stderr)
+	return dupFD2(OrigStderr.Fd(), os.Stderr.Fd())
 }
 
 // RecoverAndReportPanic can be invoked on goroutines that run with
@@ -81,7 +69,7 @@ func ReportPanic(r interface{}) {
 		// The panic message will go to "stderr" which is actually the log
 		// file. Copy it to the real stderr to give the user a chance to
 		// see it.
-		fmt.Fprintf(OrigStderr, "%v\n", r)
+		fmt.Fprintln(OrigStderr, r)
 	} else {
 		// We're not redirecting stderr at this point, so the panic
 		// message should be printed below. However we're not very strict
