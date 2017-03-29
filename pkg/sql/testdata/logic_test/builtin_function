@@ -1459,9 +1459,6 @@ SELECT col_description('pg_class'::regclass::oid, 2),
 ----
 NULL  NULL  NULL  NULL
 
-query error pq: array_in\(\): unimplemented
-SELECT array_in('foo', 3, -1)
-
 # Check that base function names are also visible in namespace pg_catalog.
 query I
 SELECT pg_catalog.length('hello')

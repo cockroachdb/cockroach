@@ -28,6 +28,32 @@ import (
 
 const notUsableInfo = "Not usable; exposed only for compatibility with PostgreSQL."
 
+// typeBuiltinsHaveUnderscore is a map to keep track of which types have i/o
+// builtins with underscores in between their type name and the i/o builtin
+// name, like date_in vs int8int. There seems to be no other way to
+// programmatically determine whether or not this underscore is present, hence
+// the existence of this map.
+var typeBuiltinsHaveUnderscore = map[oid.Oid]struct{}{
+	TypeAny.Oid():         {},
+	TypeDate.Oid():        {},
+	TypeDecimal.Oid():     {},
+	TypeInterval.Oid():    {},
+	TypeTimestamp.Oid():   {},
+	TypeTimestampTZ.Oid(): {},
+	TypeTuple.Oid():       {},
+}
+
+// PGIOBuiltinPrefix returns the string prefix to a type's IO functions. This
+// is either the type's postgres display name or the type's postgres display
+// name plus an underscore, depending on the type.
+func PGIOBuiltinPrefix(typ Type) string {
+	builtinPrefix := PGDisplayName(typ)
+	if _, ok := typeBuiltinsHaveUnderscore[typ.Oid()]; ok {
+		return builtinPrefix + "_"
+	}
+	return builtinPrefix
+}
+
 // initPGBuiltins adds all of the postgres builtins to the Builtins map.
 func initPGBuiltins() {
 	for k, v := range pgBuiltins {
@@ -35,6 +61,52 @@ func initPGBuiltins() {
 			v[i].category = categoryCompatibility
 		}
 		Builtins[k] = v
+	}
+
+	// Make non-array type i/o builtins.
+	for _, typ := range OidToType {
+		// Skip array types. We're doing them separately below.
+		if typ != TypeAny && typ.Equivalent(TypeAnyArray) {
+			continue
+		}
+		builtinPrefix := PGIOBuiltinPrefix(typ)
+		for name, builtins := range makeTypeIOBuiltins(builtinPrefix, typ) {
+			Builtins[name] = builtins
+		}
+	}
+	// Make array type i/o builtins.
+	for name, builtins := range makeTypeIOBuiltins("array_", TypeAnyArray) {
+		Builtins[name] = builtins
+	}
+}
+
+func makeTypeIOBuiltin(argTypes typeList, returnType Type) []Builtin {
+	return []Builtin{
+		{
+			Types:      argTypes,
+			ReturnType: fixedReturnType(returnType),
+			fn:         func(_ *EvalContext, _ Datums) (Datum, error) { return nil, errors.New("unimplemented") },
+			Info:       notUsableInfo,
+		},
+	}
+}
+
+// makeTypeIOBuiltins generates the 4 i/o builtins that Postgres implements for
+// every type: typein, typeout, typerecv, and typsend. All 4 builtins are no-op,
+// and only supported because ORMs sometimes use their names to form a map for
+// client-side type encoding and decoding. See issue #12526 for more details.
+func makeTypeIOBuiltins(builtinPrefix string, typ Type) map[string][]Builtin {
+	typname := typ.String()
+	return map[string][]Builtin{
+		builtinPrefix + "send": makeTypeIOBuiltin(ArgTypes{{typname, typ}}, TypeBytes),
+		// Note: PG takes type 2281 "internal" for these builtins, which we don't
+		// provide. We won't implement these functions anyway, so it shouldn't
+		// matter.
+		builtinPrefix + "recv": makeTypeIOBuiltin(ArgTypes{{"input", TypeAny}}, typ),
+		// Note: PG returns 'cstring' for these builtins, but we don't support that.
+		builtinPrefix + "out": makeTypeIOBuiltin(ArgTypes{{typname, typ}}, TypeBytes),
+		// Note: PG takes 'cstring' for these builtins, but we don't support that.
+		builtinPrefix + "in": makeTypeIOBuiltin(ArgTypes{{"input", TypeAny}}, typ),
 	}
 }
 
@@ -223,16 +295,6 @@ var pgBuiltins = map[string][]Builtin{
 			ReturnType: fixedReturnType(TypeBool),
 			fn: func(_ *EvalContext, _ Datums) (Datum, error) {
 				return DBoolTrue, nil
-			},
-			Info: notUsableInfo,
-		},
-	},
-	"array_in": {
-		Builtin{
-			Types:      ArgTypes{{"string", TypeString}, {"element_oid", TypeInt}, {"element_typmod", TypeInt}},
-			ReturnType: fixedReturnType(TypeString),
-			fn: func(_ *EvalContext, _ Datums) (Datum, error) {
-				return nil, errors.New("unimplemented")
 			},
 			Info: notUsableInfo,
 		},
