@@ -21,7 +21,6 @@ import (
 // #cgo CXXFLAGS: -std=c++11 -Werror -Wall -Wno-sign-compare
 // #cgo !strictld,darwin LDFLAGS: -Wl,-undefined -Wl,dynamic_lookup
 // #cgo !strictld,!darwin LDFLAGS: -Wl,-unresolved-symbols=ignore-all
-// #cgo linux LDFLAGS: -lrt
 //
 // #include <stdlib.h>
 // #include "db.h"
