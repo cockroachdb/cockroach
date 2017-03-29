@@ -1000,7 +1000,9 @@ func truncateAndDropTable(
 		b := &client.Batch{}
 		// Use CPut because we want to remove a specific name -> id map.
 		b.CPut(nameKey, nil, tableDesc.ID)
-		txn.SetSystemConfigTrigger()
+		if err := txn.SetSystemConfigTrigger(); err != nil {
+			return err
+		}
 		err := txn.Run(ctx, b)
 		if _, ok := err.(*roachpb.ConditionFailedError); ok {
 			return nil
@@ -1027,7 +1029,9 @@ func truncateAndDropTable(
 		b.Del(descKey)
 		// Delete the zone config entry for this table.
 		b.Del(zoneKey)
-		txn.SetSystemConfigTrigger()
+		if err := txn.SetSystemConfigTrigger(); err != nil {
+			return err
+		}
 		return txn.Run(ctx, b)
 	})
 }

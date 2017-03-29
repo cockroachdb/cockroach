@@ -117,7 +117,9 @@ func TestStoreRangeSplitAtTablePrefix(t *testing.T) {
 
 	// Update SystemConfig to trigger gossip.
 	if err := store.DB().Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
-		txn.SetSystemConfigTrigger()
+		if err := txn.SetSystemConfigTrigger(); err != nil {
+			return err
+		}
 		// We don't care about the values, just the keys.
 		k := sqlbase.MakeDescMetadataKey(sqlbase.ID(keys.MaxReservedDescID + 1))
 		return txn.Put(ctx, k, &desc)
@@ -815,7 +817,9 @@ func TestStoreRangeSystemSplits(t *testing.T) {
 	// We should end up with splits at each user table prefix.
 	if err := store.DB().Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
 		prefix := keys.MakeTablePrefix(keys.DescriptorTableID)
-		txn.SetSystemConfigTrigger()
+		if err := txn.SetSystemConfigTrigger(); err != nil {
+			return err
+		}
 		for i, kv := range initialSystemValues {
 			if !bytes.HasPrefix(kv.Key, prefix) {
 				continue
@@ -884,7 +888,9 @@ func TestStoreRangeSystemSplits(t *testing.T) {
 	// Write another, disjoint (+3) descriptor for a user table.
 	numTotalValues := userTableMax + 3
 	if err := store.DB().Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
-		txn.SetSystemConfigTrigger()
+		if err := txn.SetSystemConfigTrigger(); err != nil {
+			return err
+		}
 		// This time, only write the last table descriptor. Splits
 		// still occur for every intervening ID.
 		// We don't care about the values, just the keys.
