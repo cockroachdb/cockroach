@@ -1,8 +1,8 @@
-hash: be0e2ed33e131c2a36537e2decea3b91f5851bae7b53f79508061b563b762657
-updated: 2017-03-21T16:13:13.141174248-04:00
+hash: 8b6c6c915adbc5c97805111f13154d2d5de0a3266b1237fe904163d343778680
+updated: 2017-03-29T13:42:02.341359385-04:00
 imports:
 - name: cloud.google.com/go
-  version: daf945bb8684eb8df711af0c3e3a07930a2a01b0
+  version: 343c80ab593aa89f77de6f29d03929c5bffe9842
   subpackages:
   - compute/metadata
   - internal
@@ -28,7 +28,7 @@ imports:
   - interval
   - llrb
 - name: github.com/cenk/backoff
-  version: 3db60c813733fce657c114634171689bbf1f8dee
+  version: 5d150e7eec023ce7a124856b37c68e54b4050ac7
 - name: github.com/chzyer/readline
   version: 41eea22f717c616615e1e59aa06cf831f9901f35
 - name: github.com/client9/misspell
@@ -168,10 +168,12 @@ imports:
   - protoc-gen-go/generator
   - protoc-gen-go/plugin
   - ptypes/timestamp
+- name: github.com/golang/snappy
+  version: 553a641470496b2327abcac10b36396bd98e45c9
 - name: github.com/google/btree
   version: 316fb6d3f031ae8f4d457c6c5186b9e3ded70435
 - name: github.com/google/go-github
-  version: d683a1c6198d75c6be7a7ab5e2f9834cb6408834
+  version: 3c8f26c1ae8c61ba5d06731b36435a4f46ea9da5
   subpackages:
   - github
 - name: github.com/google/go-querystring
@@ -241,7 +243,7 @@ imports:
   - thrift_0_9_2/lib/go/thrift
   - thrift_rpc
 - name: github.com/mattn/go-isatty
-  version: 57fdcb988a5c543893cc61bce354a6e24ab70022
+  version: fc9e8d8ef48496124e79ae0df75490096eccf6fe
 - name: github.com/mattn/go-runewidth
   version: 9e777a8366cce605130a531d2cd6363d07ad7317
   subpackages:
@@ -302,13 +304,13 @@ imports:
 - name: github.com/robfig/glock
   version: 39b969c322811a58be9ec8be9d65198d43d8ba82
 - name: github.com/rubyist/circuitbreaker
-  version: af9583088c3453556f6e4f580693ba8606ca459a
+  version: 9d2405c9a39876d9c85a8d6cc8ce16b63eb83610
 - name: github.com/russross/blackfriday
   version: 5f33e7b7878355cd2b7e6b8eefc48a5472c69f70
 - name: github.com/sasha-s/go-deadlock
   version: 341000892f3dd25f440e6231e8533eb3688ed7ec
 - name: github.com/satori/go.uuid
-  version: b061729afc07e77a8aa4fad0a2fd840958f1942a
+  version: 5bf94b69c6b68ee1b541973bb8e1144db23a194b
 - name: github.com/shurcooL/sanitized_anchor_name
   version: 1dba4b3954bc059efc3991ec364f9f9a35f597d2
 - name: github.com/Sirupsen/logrus
@@ -318,7 +320,7 @@ imports:
   subpackages:
   - doc
 - name: github.com/spf13/pflag
-  version: 9ff6c6923cfffbcd502984b8e0c80539a94968b7
+  version: d16db1e50e33dff1b6cdf37596cef36742128670
 - name: github.com/StackExchange/wmi
   version: 9f32b5905fd6ce7384093f9d048437e79f7b4d85
 - name: github.com/tebeka/go2xunit
@@ -365,7 +367,7 @@ imports:
   - unix
   - windows
 - name: golang.org/x/text
-  version: f28f36722d5ef2f9655ad3de1f248e3e52ad5ebd
+  version: fc7fa097411d30e6708badff276c4c164425590c
   subpackages:
   - collate
   - internal/colltab
@@ -375,7 +377,7 @@ imports:
   - unicode/norm
   - width
 - name: golang.org/x/tools
-  version: 23ca8a2633c38bca2a2fd4d0c0f8523a2f266d65
+  version: d63e2b22b05a9682de336cd4802bba367ed429e7
   subpackages:
   - cmd/goimports
   - cmd/goyacc
@@ -389,7 +391,7 @@ imports:
   - go/types/typeutil
   - imports
 - name: google.golang.org/api
-  version: 16ab375f94503bfa0d19db78e96bffbe1a34354f
+  version: 48e49d1645e228d1c50c3d54fb476b2224477303
   subpackages:
   - gensupport
   - googleapi
@@ -401,7 +403,7 @@ imports:
   - storage/v1
   - transport
 - name: google.golang.org/appengine
-  version: b5c7c247998fb18ace83308f41199d04c78d58f1
+  version: 56d253d1dd14aa01937e12c73a0971bcfd797ff2
   subpackages:
   - internal
   - internal/app_identity
@@ -451,6 +453,6 @@ testImports:
 - name: github.com/ghemawat/stream
   version: 78e682abcae4f96ac7ddbe39912967a5f7cbbaa6
 - name: github.com/go-sql-driver/mysql
-  version: 2e00b5cd70399450106cec6431c2e2ce3cae5034
+  version: 9dee4ca50b83acdf57a35fb9e6fb4be640afa2f3
 - name: github.com/termie/go-shutil
   version: bcacb06fecaeec8dc42af03c87c6949f4a05c74c
