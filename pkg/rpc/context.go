@@ -75,6 +75,8 @@ var SourceAddr = func() net.Addr {
 	return nil
 }()
 
+var enableRPCCompression = envutil.EnvOrDefaultBool("COCKROACH_ENABLE_RPC_COMPRESSION", false)
+
 // NewServer is a thin wrapper around grpc.NewServer that registers a heartbeat
 // service.
 func NewServer(ctx *Context) *grpc.Server {
@@ -84,6 +86,12 @@ func NewServer(ctx *Context) *grpc.Server {
 		// Our maximum kv size is unlimited, so we need this to be very large.
 		// TODO(peter,tamird): need tests before lowering
 		grpc.MaxMsgSize(math.MaxInt32),
+		grpc.RPCDecompressor(snappyDecompressor{}),
+	}
+	// Compression is enabled separately from decompression to allow staged
+	// rollout.
+	if ctx.rpcCompression {
+		opts = append(opts, grpc.RPCCompressor(snappyCompressor{}))
 	}
 	if !ctx.Insecure {
 		tlsConfig, err := ctx.GetServerTLSConfig()
@@ -121,6 +129,8 @@ type Context struct {
 	heartbeatTimeout  time.Duration
 	HeartbeatCB       func()
 
+	rpcCompression bool
+
 	localInternalServer roachpb.InternalServer
 
 	conns struct {
@@ -145,6 +155,7 @@ func NewContext(
 		breakerClock: breakerClock{
 			clock: hlcClock,
 		},
+		rpcCompression: enableRPCCompression,
 	}
 	var cancel context.CancelFunc
 	ctx.masterCtx, cancel = context.WithCancel(ambient.AnnotateCtx(context.Background()))
@@ -239,6 +250,12 @@ func (ctx *Context) GRPCDial(target string, opts ...grpc.DialOption) (*grpc.Clie
 		dialOpts := make([]grpc.DialOption, 0, 2+len(opts))
 		dialOpts = append(dialOpts, dialOpt)
 		dialOpts = append(dialOpts, grpc.WithBackoffMaxDelay(maxBackoff))
+		dialOpts = append(dialOpts, grpc.WithDecompressor(snappyDecompressor{}))
+		// Compression is enabled separately from decompression to allow staged
+		// rollout.
+		if ctx.rpcCompression {
+			dialOpts = append(dialOpts, grpc.WithCompressor(snappyCompressor{}))
+		}
 		dialOpts = append(dialOpts, opts...)
 
 		if SourceAddr != nil {
