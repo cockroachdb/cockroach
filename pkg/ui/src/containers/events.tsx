@@ -3,6 +3,7 @@ import { Link } from "react-router";
 import _ from "lodash";
 import { connect } from "react-redux";
 import moment from "moment";
+import * as protobuf from "protobufjs/minimal";
 
 import * as protos from "../js/protos";
 
@@ -51,7 +52,7 @@ export function getEventInfo(e: Event$Properties): SimplifiedEvent {
     TableName: string,
     User: string,
     ViewName: string,
-  } = e.hasOwnProperty("info") ? JSON.parse(e.info) : {};
+  } = protobuf.util.isset(e, "info") ? JSON.parse(e.info) : {};
   let targetId: number = e.target_id ? e.target_id.toNumber() : null;
   let content: React.ReactNode;
 
