@@ -26,6 +26,8 @@ import (
 // This file contains builtin functions that we implement primarily for
 // compatibility with Postgres.
 
+const notUsableInfo = "Not usable; exposed only for compatibility with PostgreSQL."
+
 // initPGBuiltins adds all of the postgres builtins to the Builtins map.
 func initPGBuiltins() {
 	for k, v := range pgBuiltins {
@@ -43,7 +45,7 @@ var pgBuiltins = map[string][]Builtin{
 				return NewDInt(-1), nil
 			},
 			category: categoryCompatibility,
-			Info:     "Not usable; exposed only for ORM compatibility with PostgreSQL.",
+			Info:     notUsableInfo,
 		},
 	},
 
@@ -64,7 +66,7 @@ var pgBuiltins = map[string][]Builtin{
 				return args[0], nil
 			},
 			category: categoryCompatibility,
-			Info:     "Not usable; exposed only for ORM compatibility with PostgreSQL.",
+			Info:     notUsableInfo,
 		},
 		Builtin{
 			Types: ArgTypes{
@@ -77,7 +79,7 @@ var pgBuiltins = map[string][]Builtin{
 				return args[0], nil
 			},
 			category: categoryCompatibility,
-			Info:     "Not usable; exposed only for ORM compatibility with PostgreSQL.",
+			Info:     notUsableInfo,
 		},
 	},
 
@@ -101,7 +103,7 @@ var pgBuiltins = map[string][]Builtin{
 				return r[0], nil
 			},
 			category: categoryCompatibility,
-			Info:     "Not usable; exposed only for ORM compatibility with PostgreSQL.",
+			Info:     notUsableInfo,
 		},
 		// The other overload for this function, pg_get_indexdef(index_oid,
 		// column_no, pretty_bool), is unimplemented, because it isn't used by
@@ -118,7 +120,7 @@ var pgBuiltins = map[string][]Builtin{
 				return NewDString(args[0].ResolvedType().String()), nil
 			},
 			category: categoryCompatibility,
-			Info:     "Not usable; exposed only for ORM compatibility with PostgreSQL.",
+			Info:     notUsableInfo,
 		},
 	},
 	"pg_get_userbyid": {
@@ -140,7 +142,7 @@ var pgBuiltins = map[string][]Builtin{
 				return t[0], nil
 			},
 			category: categoryCompatibility,
-			Info:     "Not usable; exposed only for ORM compatibility with PostgreSQL.",
+			Info:     notUsableInfo,
 		},
 	},
 	"format_type": {
@@ -169,7 +171,7 @@ var pgBuiltins = map[string][]Builtin{
 				return DNull, nil
 			},
 			category: categoryCompatibility,
-			Info:     "Not usable; exposed only for ORM compatibility with PostgreSQL.",
+			Info:     notUsableInfo,
 		},
 	},
 	"obj_description": {
@@ -180,7 +182,7 @@ var pgBuiltins = map[string][]Builtin{
 				return DNull, nil
 			},
 			category: categoryCompatibility,
-			Info:     "Not usable; exposed only for ORM compatibility with PostgreSQL.",
+			Info:     notUsableInfo,
 		},
 		Builtin{
 			Types:      ArgTypes{{"object_oid", TypeOid}, {"catalog_name", TypeString}},
@@ -189,7 +191,7 @@ var pgBuiltins = map[string][]Builtin{
 				return DNull, nil
 			},
 			category: categoryCompatibility,
-			Info:     "Not usable; exposed only for ORM compatibility.",
+			Info:     notUsableInfo,
 		},
 	},
 	"oid": {
@@ -211,7 +213,7 @@ var pgBuiltins = map[string][]Builtin{
 				return DNull, nil
 			},
 			category: categoryCompatibility,
-			Info:     "Not usable; exposed only for ORM compatibility with PostgreSQL.",
+			Info:     notUsableInfo,
 		},
 	},
 	"pg_try_advisory_lock": {
@@ -222,7 +224,7 @@ var pgBuiltins = map[string][]Builtin{
 				return DBoolTrue, nil
 			},
 			category: categoryCompatibility,
-			Info:     "Not usable; exposed only for ORM compatibility.",
+			Info:     notUsableInfo,
 		},
 	},
 	"pg_advisory_unlock": {
@@ -233,7 +235,7 @@ var pgBuiltins = map[string][]Builtin{
 				return DBoolTrue, nil
 			},
 			category: categoryCompatibility,
-			Info:     "Not usable; exposed only for ORM compatibility.",
+			Info:     notUsableInfo,
 		},
 	},
 	"array_in": {
@@ -244,7 +246,7 @@ var pgBuiltins = map[string][]Builtin{
 				return nil, errors.New("unimplemented")
 			},
 			category: categoryCompatibility,
-			Info:     "Not usable; exposed only for ORM compatibility with PostgreSQL.",
+			Info:     notUsableInfo,
 		},
 	},
 }
