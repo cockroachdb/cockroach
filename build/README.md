@@ -43,16 +43,8 @@ and checked out as a submodule at `./vendor`.
 
 This snapshot was built and is managed using `glide`.
 
-### Installing Glide
-
-Get or update glide with `go get -u github.com/Masterminds/glide`
+Install the pinned version of `glide` with `go install ./vendor/github.com/Masterminds/glide`
 - Note that versions in `brew` or elsewhere are sometimes missing recent fixes.
-- If installing from master becomes unstable, you can use the oldest version that correctly handles
-submodules (`ab0972eb`), e.g.
-```
-git -C $GOPATH/src/github.com/Masterminds/glide checkout ab0972eb && \
-go install github.com/Masterminds/glide
-```
 
 ### Using Glide
 
