@@ -20,8 +20,6 @@ import (
 // #cgo CPPFLAGS: -I../../../../vendor/github.com/cockroachdb/c-protobuf/internal/src
 // #cgo CPPFLAGS: -I../../../../vendor/github.com/cockroachdb/c-rocksdb/internal/include
 // #cgo CXXFLAGS: -std=c++11 -Werror -Wall -Wno-sign-compare
-// #cgo darwin LDFLAGS: -Wl,-undefined -Wl,dynamic_lookup
-// #cgo !darwin LDFLAGS: -Wl,-unresolved-symbols=ignore-all
 // #cgo linux LDFLAGS: -lrt
 //
 // #include <stdlib.h>

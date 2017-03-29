@@ -22,8 +22,6 @@ package cli
 // #cgo darwin CPPFLAGS: -I../../vendor/github.com/cockroachdb/c-jemalloc/darwin_includes/internal/include
 // #cgo freebsd CPPFLAGS: -I../../vendor/github.com/cockroachdb/c-jemalloc/freebsd_includes/internal/include
 // #cgo linux CPPFLAGS: -I../../vendor/github.com/cockroachdb/c-jemalloc/linux_includes/internal/include
-// #cgo darwin LDFLAGS: -Wl,-undefined -Wl,dynamic_lookup
-// #cgo !darwin LDFLAGS: -Wl,-unresolved-symbols=ignore-all
 //
 // #include <jemalloc/jemalloc.h>
 // #include <stddef.h>
@@ -59,9 +57,6 @@ import "C"
 import (
 	"fmt"
 	"unsafe"
-
-	// This is explicit because this Go library does not export any Go symbols.
-	_ "github.com/cockroachdb/c-jemalloc"
 )
 
 func init() {

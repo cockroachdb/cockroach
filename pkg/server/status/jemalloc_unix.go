@@ -12,15 +12,15 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-// +build !windows
+// +build !stdmalloc,!windows
 
-package log
+package status
 
 import (
-	"syscall"
+	// This is explicit because this Go library does not export any Go symbols.
+	_ "github.com/cockroachdb/c-jemalloc"
 )
 
-func dupFD(fd uintptr) (uintptr, error) {
-	nfd, err := syscall.Dup(int(fd))
-	return uintptr(nfd), err
-}
+// #cgo darwin LDFLAGS: -Wl,-undefined -Wl,dynamic_lookup
+// #cgo !darwin LDFLAGS: -Wl,-unresolved-symbols=ignore-all
+import "C"
