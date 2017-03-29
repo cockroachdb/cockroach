@@ -39,6 +39,7 @@
 
 extern "C" {
 #include "_cgo_export.h"
+}
 
 struct DBCache {
   std::shared_ptr<rocksdb::Cache> rep;
@@ -174,8 +175,6 @@ struct DBSnapshot : public DBEngine {
 struct DBIterator {
   std::unique_ptr<rocksdb::Iterator> rep;
 };
-
-}  // extern "C"
 
 // NOTE: these constants must be kept in sync with the values in
 // storage/engine/keys.go. Both kKeyLocalRangeIDPrefix and
