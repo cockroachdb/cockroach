@@ -17,12 +17,12 @@
 package sql_test
 
 import (
-	"errors"
 	"reflect"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -39,18 +39,18 @@ import (
 // jobExpectation defines the information necessary to determine the validity of
 // a job in the system.jobs table.
 type jobExpectation struct {
-	Offset int
-	Job    sql.JobRecord
-	Type   string
-	Before time.Time
-	Error  string
+	Job               sql.JobRecord
+	Type              string
+	Before            time.Time
+	FractionCompleted float32
+	Error             string
 }
 
 // verifyJobRecord verifies that the jobExpectation matches the job record
 // stored in the system.jobs table.
 func verifyJobRecord(
-	t *testing.T, db *sqlutils.SQLRunner, expectedStatus sql.JobStatus, expected jobExpectation,
-) {
+	db *sqlutils.SQLRunner, expectedStatus sql.JobStatus, expected jobExpectation,
+) error {
 	var actualJob sql.JobRecord
 	var typ string
 	var rawDescriptorIDs pq.Int64Array
@@ -59,18 +59,19 @@ func verifyJobRecord(
 	var started pq.NullTime
 	var finished pq.NullTime
 	var modified pq.NullTime
+	var fractionCompleted float32
 	var err string
 	// We have to query for the nth job created rather than filtering by ID,
 	// because job-generating SQL queries (e.g. BACKUP) do not currently return
 	// the job ID.
 	db.QueryRow(`
 		SELECT type, description, username, descriptor_ids, status,
-			   created, started, finished, modified, error
-		FROM crdb_internal.jobs ORDER BY created LIMIT 1 OFFSET $1`,
-		expected.Offset,
+			   created, started, finished, modified, fraction_completed, error
+		FROM crdb_internal.jobs WHERE created >= $1 ORDER BY created LIMIT 1`,
+		expected.Before,
 	).Scan(
 		&typ, &actualJob.Description, &actualJob.Username, &rawDescriptorIDs, &statusString,
-		&created, &started, &finished, &modified, &err,
+		&created, &started, &finished, &modified, &fractionCompleted, &err,
 	)
 
 	// Verify the upstream-provided fields.
@@ -80,58 +81,59 @@ func verifyJobRecord(
 	}
 	if e, a := expected.Job, actualJob; !reflect.DeepEqual(e, a) {
 		diff := strings.Join(pretty.Diff(e, a), "\n")
-		t.Errorf("job %d: JobRecords do not match:\n%s", expected.Offset, diff)
+		return errors.Errorf("JobRecords do not match:\n%s", diff)
 	}
 
-	// Verify JobLogger-managed text fields.
+	// Verify JobLogger-managed fields.
 	status := sql.JobStatus(statusString)
 	if e, a := expectedStatus, status; e != a {
-		t.Errorf("job %d: expected status %v, got %v", expected.Offset, e, a)
-		return
+		return errors.Errorf("expected status %v, got %v", e, a)
 	}
 	if e, a := expected.Type, typ; e != a {
-		t.Errorf("job %d: expected type %v, got type %v", expected.Offset, e, a)
+		return errors.Errorf("expected type %v, got type %v", e, a)
+	}
+	if e, a := expected.FractionCompleted, fractionCompleted; e != a {
+		return errors.Errorf("expected fraction completed %f, got %f", e, a)
 	}
 
 	// Check JobLogger-managed timestamps for sanity.
-	verifyModifiedAgainst := func(name string, ts time.Time) {
+	verifyModifiedAgainst := func(name string, ts time.Time) error {
 		if modified.Time.Before(ts) {
-			t.Errorf("job %d: modified time %v before %s time %v", expected.Offset, modified, name, ts)
+			return errors.Errorf("modified time %v before %s time %v", modified, name, ts)
 		}
 		if now := timeutil.Now().Round(time.Microsecond); modified.Time.After(now) {
-			t.Errorf("job %d: modified time %v after current time %v", expected.Offset, modified, now)
+			return errors.Errorf("modified time %v after current time %v", modified, now)
 		}
+		return nil
 	}
 
 	if expected.Before.After(created.Time) {
-		t.Errorf(
-			"job %d: created time %v is before expected created time %v",
-			expected.Offset, created, expected.Before,
+		return errors.Errorf(
+			"created time %v is before expected created time %v",
+			created, expected.Before,
 		)
 	}
 	if status == sql.JobStatusPending {
-		verifyModifiedAgainst("created", created.Time)
-		return
+		return verifyModifiedAgainst("created", created.Time)
 	}
 
 	if !started.Valid && status == sql.JobStatusSucceeded {
-		t.Errorf("job %d: started time is NULL but job claims to be successful", expected.Offset)
+		return errors.Errorf("started time is NULL but job claims to be successful")
 	}
 	if started.Valid && created.Time.After(started.Time) {
-		t.Errorf("job %d: created time %v is after started time %v", expected.Offset, created, started)
+		return errors.Errorf("created time %v is after started time %v", created, started)
 	}
 	if status == sql.JobStatusRunning {
-		verifyModifiedAgainst("started", started.Time)
-		return
+		return verifyModifiedAgainst("started", started.Time)
 	}
 
 	if started.Time.After(finished.Time) {
-		t.Errorf("job %d: started time %v is after finished time %v", expected.Offset, started, finished)
+		return errors.Errorf("started time %v is after finished time %v", started, finished)
 	}
-	verifyModifiedAgainst("finished", finished.Time)
 	if e, a := expected.Error, err; e != a {
-		t.Errorf("job %d: expected error %v, got %v", expected.Offset, e, a)
+		return errors.Errorf("expected error %v, got %v", e, a)
 	}
+	return verifyModifiedAgainst("finished", finished.Time)
 }
 
 func TestJobLogger(t *testing.T) {
@@ -157,18 +159,39 @@ func TestJobLogger(t *testing.T) {
 			Before: timeutil.Now(),
 		}
 		woodyLogger := sql.NewJobLogger(kvDB, s.LeaseManager().(*sql.LeaseManager), woodyJob)
+
 		if err := woodyLogger.Created(ctx); err != nil {
 			t.Fatal(err)
 		}
-		verifyJobRecord(t, db, sql.JobStatusPending, woodyExpectation)
+		if err := verifyJobRecord(db, sql.JobStatusPending, woodyExpectation); err != nil {
+			t.Fatal(err)
+		}
+
 		if err := woodyLogger.Started(ctx); err != nil {
 			t.Fatal(err)
 		}
-		verifyJobRecord(t, db, sql.JobStatusRunning, woodyExpectation)
+		if err := verifyJobRecord(db, sql.JobStatusRunning, woodyExpectation); err != nil {
+			t.Fatal(err)
+		}
+
+		// This fraction completed progression is intentionally not strictly
+		// increasing to simulate our progress estimates.
+		for _, f := range []float32{0.0, 0.5, 0.5, 0.4, 0.8, 1.0} {
+			if err := woodyLogger.Progressed(ctx, f); err != nil {
+				t.Fatal(err)
+			}
+			woodyExpectation.FractionCompleted = f
+			if err := verifyJobRecord(db, sql.JobStatusRunning, woodyExpectation); err != nil {
+				t.Fatal(err)
+			}
+		}
+
 		if err := woodyLogger.Succeeded(ctx); err != nil {
 			t.Fatal(err)
 		}
-		verifyJobRecord(t, db, sql.JobStatusSucceeded, woodyExpectation)
+		if err := verifyJobRecord(db, sql.JobStatusSucceeded, woodyExpectation); err != nil {
+			t.Fatal(err)
+		}
 
 		// Buzz fails after it starts running.
 		buzzJob := sql.JobRecord{
@@ -177,27 +200,46 @@ func TestJobLogger(t *testing.T) {
 			DescriptorIDs: []sqlbase.ID{3, 2, 1},
 		}
 		buzzExpectation := jobExpectation{
-			Offset: 1,
 			Job:    buzzJob,
 			Type:   sql.JobTypeRestore,
 			Before: timeutil.Now(),
 			Error:  "Buzz Lightyear can't fly",
 		}
 		buzzLogger := sql.NewJobLogger(kvDB, s.LeaseManager().(*sql.LeaseManager), buzzJob)
+
 		// Test modifying the job details before calling `Created`.
 		buzzLogger.Job.Details = sql.RestoreJobDetails{}
 		if err := buzzLogger.Created(ctx); err != nil {
 			t.Fatal(err)
 		}
-		verifyJobRecord(t, db, sql.JobStatusPending, buzzExpectation)
+		if err := verifyJobRecord(db, sql.JobStatusPending, buzzExpectation); err != nil {
+			t.Fatal(err)
+		}
+
 		if err := buzzLogger.Started(ctx); err != nil {
 			t.Fatal(err)
 		}
-		verifyJobRecord(t, db, sql.JobStatusRunning, buzzExpectation)
+		if err := verifyJobRecord(db, sql.JobStatusRunning, buzzExpectation); err != nil {
+			t.Fatal(err)
+		}
+
+		if err := buzzLogger.Progressed(ctx, .42); err != nil {
+			t.Fatal(err)
+		}
+		buzzExpectation.FractionCompleted = .42
+		if err := verifyJobRecord(db, sql.JobStatusRunning, buzzExpectation); err != nil {
+			t.Fatal(err)
+		}
+
 		buzzLogger.Failed(ctx, errors.New("Buzz Lightyear can't fly"))
-		verifyJobRecord(t, db, sql.JobStatusFailed, buzzExpectation)
+		if err := verifyJobRecord(db, sql.JobStatusFailed, buzzExpectation); err != nil {
+			t.Fatal(err)
+		}
+
 		// Ensure that logging Buzz didn't corrupt Woody.
-		verifyJobRecord(t, db, sql.JobStatusSucceeded, woodyExpectation)
+		if err := verifyJobRecord(db, sql.JobStatusSucceeded, woodyExpectation); err != nil {
+			t.Fatal(err)
+		}
 
 		// Sid fails before it starts running.
 		sidJob := sql.JobRecord{
@@ -207,22 +249,32 @@ func TestJobLogger(t *testing.T) {
 			Details:       sql.RestoreJobDetails{},
 		}
 		sidExpectation := jobExpectation{
-			Offset: 2,
 			Job:    sidJob,
 			Type:   sql.JobTypeRestore,
 			Before: timeutil.Now(),
 			Error:  "Sid is a total failure",
 		}
 		sidLogger := sql.NewJobLogger(kvDB, s.LeaseManager().(*sql.LeaseManager), sidJob)
+
 		if err := sidLogger.Created(ctx); err != nil {
 			t.Fatal(err)
 		}
-		verifyJobRecord(t, db, sql.JobStatusPending, sidExpectation)
+		if err := verifyJobRecord(db, sql.JobStatusPending, sidExpectation); err != nil {
+			t.Fatal(err)
+		}
+
 		sidLogger.Failed(ctx, errors.New("Sid is a total failure"))
-		verifyJobRecord(t, db, sql.JobStatusFailed, sidExpectation)
+		if err := verifyJobRecord(db, sql.JobStatusFailed, sidExpectation); err != nil {
+			t.Fatal(err)
+		}
+
 		// Ensure that logging Sid didn't corrupt Woody or Buzz.
-		verifyJobRecord(t, db, sql.JobStatusSucceeded, woodyExpectation)
-		verifyJobRecord(t, db, sql.JobStatusFailed, buzzExpectation)
+		if err := verifyJobRecord(db, sql.JobStatusSucceeded, woodyExpectation); err != nil {
+			t.Fatal(err)
+		}
+		if err := verifyJobRecord(db, sql.JobStatusFailed, buzzExpectation); err != nil {
+			t.Fatal(err)
+		}
 	})
 
 	t.Run("bad job details fail", func(t *testing.T) {
@@ -241,7 +293,7 @@ func TestJobLogger(t *testing.T) {
 		}
 	})
 
-	t.Run("same status twice fails", func(t *testing.T) {
+	t.Run("same state transition twice fails", func(t *testing.T) {
 		logger := sql.NewJobLogger(kvDB, s.LeaseManager().(*sql.LeaseManager), sql.JobRecord{
 			Details: sql.BackupJobDetails{},
 		})
@@ -262,6 +314,81 @@ func TestJobLogger(t *testing.T) {
 		}
 		if err := logger.Succeeded(ctx); !testutils.IsError(err, `job \d+ already finished`) {
 			t.Fatalf("expected 'job already finished' error, but got %v", err)
+		}
+	})
+
+	t.Run("out of bounds progress fails", func(t *testing.T) {
+		logger := sql.NewJobLogger(kvDB, s.LeaseManager().(*sql.LeaseManager), sql.JobRecord{
+			Details: sql.BackupJobDetails{},
+		})
+		if err := logger.Created(ctx); err != nil {
+			t.Fatal(err)
+		}
+		if err := logger.Started(ctx); err != nil {
+			t.Fatal(err)
+		}
+		if err := logger.Progressed(ctx, -0.1); !testutils.IsError(err, "outside allowable range") {
+			t.Fatalf("expected 'outside allowable range' error, but got %v", err)
+		}
+		if err := logger.Progressed(ctx, 1.1); !testutils.IsError(err, "outside allowable range") {
+			t.Fatalf("expected 'outside allowable range' error, but got %v", err)
+		}
+	})
+
+	t.Run("progress on non-started job fails", func(t *testing.T) {
+		logger := sql.NewJobLogger(kvDB, s.LeaseManager().(*sql.LeaseManager), sql.JobRecord{
+			Details: sql.BackupJobDetails{},
+		})
+		if err := logger.Created(ctx); err != nil {
+			t.Fatal(err)
+		}
+		if err := logger.Progressed(ctx, 0.5); !testutils.IsError(err, `job \d+ not started`) {
+			t.Fatalf("expected 'job not started' error, but got %v", err)
+		}
+	})
+
+	t.Run("progress on finished job fails", func(t *testing.T) {
+		logger := sql.NewJobLogger(kvDB, s.LeaseManager().(*sql.LeaseManager), sql.JobRecord{
+			Details: sql.BackupJobDetails{},
+		})
+		if err := logger.Created(ctx); err != nil {
+			t.Fatal(err)
+		}
+		if err := logger.Started(ctx); err != nil {
+			t.Fatal(err)
+		}
+		if err := logger.Succeeded(ctx); err != nil {
+			t.Fatal(err)
+		}
+		if err := logger.Progressed(ctx, 0.5); !testutils.IsError(err, `job \d+ already finished`) {
+			t.Fatalf("expected 'job already finished' error, but got %v", err)
+		}
+	})
+
+	t.Run("succeeded forces fraction completed to 1.0", func(t *testing.T) {
+		db := sqlutils.MakeSQLRunner(t, rawSQLDB)
+		job := sql.JobRecord{Details: sql.BackupJobDetails{}}
+		expectation := jobExpectation{
+			Job:               job,
+			Type:              sql.JobTypeBackup,
+			Before:            timeutil.Now(),
+			FractionCompleted: 1.0,
+		}
+		logger := sql.NewJobLogger(kvDB, s.LeaseManager().(*sql.LeaseManager), job)
+		if err := logger.Created(ctx); err != nil {
+			t.Fatal(err)
+		}
+		if err := logger.Started(ctx); err != nil {
+			t.Fatal(err)
+		}
+		if err := logger.Progressed(ctx, 0.2); err != nil {
+			t.Fatal(err)
+		}
+		if err := logger.Succeeded(ctx); err != nil {
+			t.Fatal(err)
+		}
+		if err := verifyJobRecord(db, sql.JobStatusSucceeded, expectation); err != nil {
+			t.Fatal(err)
 		}
 	})
 }
