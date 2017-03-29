@@ -108,6 +108,26 @@ func (jl *JobLogger) Started(ctx context.Context) error {
 	})
 }
 
+// Progressed updates the progress of the tracked job to fractionCompleted.
+func (jl *JobLogger) Progressed(ctx context.Context, fractionCompleted float32) error {
+	if fractionCompleted < 0.0 || fractionCompleted > 1.0 {
+		return errors.Errorf(
+			"JobLogger: fractionCompleted %f is outside allowable range [0.0, 1.0] (job %d)",
+			fractionCompleted, jl.jobID,
+		)
+	}
+	return jl.updateJobRecord(ctx, JobStatusRunning, func(payload *JobPayload) error {
+		if payload.StartedMicros == 0 {
+			return errors.Errorf("JobLogger: job %d not started", jl.jobID)
+		}
+		if payload.FinishedMicros != 0 {
+			return errors.Errorf("JobLogger: job %d already finished", jl.jobID)
+		}
+		payload.FractionCompleted = fractionCompleted
+		return nil
+	})
+}
+
 // Failed marks the tracked job as having failed with the given error. Any
 // errors encountered while updating the jobs table are logged but not returned,
 // under the assumption that the the caller is already handling a more important
@@ -132,13 +152,15 @@ func (jl *JobLogger) Failed(ctx context.Context, err error) {
 	}
 }
 
-// Succeeded marks the tracked job as having succeeded.
+// Succeeded marks the tracked job as having succeeded and sets its fraction
+// completed to 1.0.
 func (jl *JobLogger) Succeeded(ctx context.Context) error {
 	return jl.updateJobRecord(ctx, JobStatusSucceeded, func(payload *JobPayload) error {
 		if payload.FinishedMicros != 0 {
 			return errors.Errorf("JobLogger: job %d already finished", jl.jobID)
 		}
 		payload.FinishedMicros = jobTimestamp(timeutil.Now())
+		payload.FractionCompleted = 1.0
 		return nil
 	})
 }
