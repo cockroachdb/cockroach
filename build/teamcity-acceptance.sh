@@ -4,6 +4,8 @@ set -euxo pipefail
 # Ensure that no stale binary remains.
 rm -f acceptance.test
 
+
+export BUILDER_HIDE_UNVENDORED=1
 build/builder.sh make build
 build/builder.sh make install
 build/builder.sh go test -v -c -tags acceptance ./pkg/acceptance

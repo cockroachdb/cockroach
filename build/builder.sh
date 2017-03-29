@@ -110,7 +110,13 @@ mkdir -p "${host_home}"/.yarn-cache
 vols=""
 vols="${vols} --volume=${passwd_file}:/etc/passwd"
 vols="${vols} --volume=${host_home}:${container_home}"
-vols="${vols} --volume=${gopath0}/src:/go/src"
+if [ "${BUILDER_HIDE_UNVENDORED}" == "1" ]; then
+  # If BUILDER_HIDE_UNVENDORED is set to 1, mount just the cockroach source.
+  vols="${vols} --volume=${gopath0}/src/github.com/cockroachdb/cockroach:/go/src/github.com/cockroachdb/cockroach"
+else
+  # By default, mount the entire GOPATH.
+  vols="${vols} --volume=${gopath0}/src:/go/src"
+fi
 vols="${vols} --volume=${gocache}/pkg/docker_amd64:/go/pkg/linux_amd64"
 vols="${vols} --volume=${gocache}/pkg/docker_amd64_msan:/go/pkg/linux_amd64_msan"
 vols="${vols} --volume=${gocache}/pkg/docker_amd64_musl:/go/pkg/linux_amd64_musl"

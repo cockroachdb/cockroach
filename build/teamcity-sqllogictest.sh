@@ -3,6 +3,7 @@ set -euxo pipefail
 
 mkdir -p artifacts
 
+export BUILDER_HIDE_UNVENDORED=1
 build/builder.sh env \
 		 make -C pkg/sql bigtest \
 		 TESTFLAGS='-v' \

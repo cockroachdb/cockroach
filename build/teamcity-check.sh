@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 set -exuo pipefail
+
+
 # All packages need to be installed before we can run (some) of the checks
 # and code generators reliably. More precisely, anything that using
 # x/tools/go/loader is fragile (this includes stringer, vet and others).
@@ -7,6 +9,7 @@ set -exuo pipefail
 # The blocking issue is https://github.com/golang/go/issues/14120; see
 # https://github.com/golang/go/issues/10249 for some more concrete discussion
 # on `stringer` and https://github.com/golang/go/issues/16086 for `vet`.
+export BUILDER_HIDE_UNVENDORED=1
 build/builder.sh make gotestdashi
 
 mkdir -p artifacts
