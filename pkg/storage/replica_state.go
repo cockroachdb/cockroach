@@ -725,3 +725,8 @@ func (rec ReplicaEvalContext) GetLease() (*roachpb.Lease, *roachpb.Lease, error)
 	lease, nextLease := rec.repl.getLease()
 	return lease, nextLease, nil
 }
+
+// GetTempPrefix proxies Replica.GetTempDir
+func (rec ReplicaEvalContext) GetTempPrefix() string {
+	return rec.repl.GetTempPrefix()
+}

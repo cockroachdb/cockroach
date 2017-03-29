@@ -98,8 +98,8 @@ func evalImport(ctx context.Context, cArgs storage.CommandArgs) error {
 				log.Warningf(ctx, "close export storage failed %v", err)
 			}
 		}()
-
-		localPath, cleanup, err := FetchFile(ctx, dir, file.Path)
+		tempPrefix := cArgs.EvalCtx.GetTempPrefix()
+		localPath, cleanup, err := FetchFile(ctx, tempPrefix, dir, file.Path)
 		if err != nil {
 			return err
 		}
@@ -115,7 +115,7 @@ func evalImport(ctx context.Context, cArgs storage.CommandArgs) error {
 			}
 		}
 
-		sst, err := engine.MakeRocksDBSstFileReader()
+		sst, err := engine.MakeRocksDBSstFileReader(tempPrefix)
 		if err != nil {
 			return err
 		}

@@ -29,6 +29,8 @@ import (
 
 func testExportToTarget(t *testing.T, args roachpb.ExportStorage) {
 	ctx := context.TODO()
+	dir, dirCleanup := testutils.TempDir(t, 0)
+	defer dirCleanup()
 
 	// Setup a sink for the given args.
 	s, err := MakeExportStorage(ctx, args)
@@ -75,13 +77,13 @@ func testExportToTarget(t *testing.T, args roachpb.ExportStorage) {
 		}
 		testingFilename := "testing-123"
 
-		tmp, err := MakeExportFileTmpWriter(ctx, s, testingFilename)
+		temp, err := MakeExportFileTmpWriter(ctx, dir, s, testingFilename)
 		if err != nil {
 			t.Fatal(err)
 		}
 		// Write something to the local file specified by our sink.
-		t.Logf("writing %d bytes to %s", len(testingContent), tmp.LocalFile())
-		reopened, err := os.Create(tmp.LocalFile())
+		t.Logf("writing %d bytes to %s", len(testingContent), temp.LocalFile())
+		reopened, err := os.Create(temp.LocalFile())
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -91,7 +93,7 @@ func testExportToTarget(t *testing.T, args roachpb.ExportStorage) {
 		}
 		reopened.Close()
 
-		if err := tmp.Finish(ctx); err != nil {
+		if err := temp.Finish(ctx); err != nil {
 			t.Fatal(err)
 		}
 

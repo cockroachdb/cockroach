@@ -180,6 +180,8 @@ type Engine interface {
 	Flush() error
 	// GetStats retrieves stats from the engine.
 	GetStats() (*Stats, error)
+	// GetTempDir returns a path under which tempdirs or tempfiles can be created.
+	GetTempDir() string
 	// NewBatch returns a new instance of a batched engine which wraps
 	// this engine. Batched engines accumulate all mutations and apply
 	// them atomically on a call to Commit().
@@ -199,6 +201,8 @@ type Engine interface {
 	// by invoking Close(). Note that snapshots must not be used after the
 	// original engine has been stopped.
 	NewSnapshot() Reader
+	// SetTempDir overrides the tempdir path returned by GetTempDir.
+	SetTempDir(dir string) error
 }
 
 // Batch is the interface for batch specific operations.
