@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/interval"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
@@ -643,13 +644,35 @@ func Restore(
 	}
 	// TODO(dan): Wait for the newly created ranges (and leaseholders) to
 	// rebalance.
-	g, gCtx := errgroup.WithContext(ctx)
+
+	mu := struct {
+		syncutil.Mutex
+		responseCount int
+	}{}
+
+	g, gCtx := syncutil.NewErrGroupWithProgress(ctx)
 	for i := range importRequests {
 		ir := importRequests[i]
 		g.Go(func() error {
-			return Import(gCtx, db, ir.Key, ir.EndKey, ir.files, kr)
+			err := Import(gCtx, db, ir.Key, ir.EndKey, ir.files, kr)
+			mu.Lock()
+			defer mu.Unlock()
+			mu.responseCount++
+			return err
 		})
 	}
+
+	g.Every(ProgressReportingInterval, func() {
+		mu.Lock()
+		// As in backup, we make the simplifying assumption that the number of
+		// completed requests is a rough measure of progress.
+		fractionCompleted := float32(mu.responseCount) / float32(len(importRequests))
+		mu.Unlock()
+		if err := jobLogger.Progressed(ctx, fractionCompleted); err != nil {
+			log.Errorf(ctx, "RESTORE ignoring error while updating progress on job '%s' to %f: %+v",
+				jobLogger.Job.Description, fractionCompleted, err)
+		}
+	})
 
 	if err := g.Wait(); err != nil {
 		// This leaves the data that did get imported in case the user wants to

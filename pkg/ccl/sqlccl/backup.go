@@ -12,13 +12,14 @@ import (
 	"bytes"
 	"io/ioutil"
 	"sort"
+	"time"
 
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
-	"golang.org/x/sync/errgroup"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
+	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl/intervalccl"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -38,6 +39,10 @@ const (
 	// BackupDescriptor protos.
 	BackupDescriptorName = "BACKUP"
 )
+
+// ProgressReportingInterval is the interval at which the system.jobs table is
+// updated with the latest progress information for a backup or restore.
+var ProgressReportingInterval = time.Second
 
 // exportStorageFromURI returns an ExportStorage for the given URI.
 func exportStorageFromURI(ctx context.Context, uri string) (storageccl.ExportStorage, error) {
@@ -115,6 +120,21 @@ func allSQLDescriptors(ctx context.Context, txn *client.Txn) ([]sqlbase.Descript
 	return sqlDescs, nil
 }
 
+func allRangeDescriptors(ctx context.Context, txn *client.Txn) ([]roachpb.RangeDescriptor, error) {
+	rows, err := txn.Scan(ctx, keys.Meta2Prefix, keys.MetaMax, 0)
+	if err != nil {
+		return nil, errors.Wrap(err, "unable to scan range descriptors")
+	}
+
+	rangeDescs := make([]roachpb.RangeDescriptor, len(rows))
+	for i, row := range rows {
+		if err := row.ValueProto(&rangeDescs[i]); err != nil {
+			return nil, errors.Wrapf(err, "%s: unable to unmarshal range descriptor", row.Key)
+		}
+	}
+	return rangeDescs, nil
+}
+
 // spansForAllTableIndexes returns non-overlapping spans for every index and
 // table passed in. They would normally overlap if any of them are interleaved.
 func spansForAllTableIndexes(tables []*sqlbase.TableDescriptor) []roachpb.Span {
@@ -138,6 +158,49 @@ func spansForAllTableIndexes(tables []*sqlbase.TableDescriptor) []roachpb.Span {
 		return false
 	})
 	return spans
+}
+
+// splitSpansByRanges takes a slice of non-overlapping spans and a slice of
+// range descriptors and returns a new slice of spans in which each span has
+// been split so that no single span extends beyond the boundaries of a range.
+func splitSpansByRanges(spans []roachpb.Span, ranges []roachpb.RangeDescriptor) []roachpb.Span {
+	type spanMarker struct{}
+
+	var spanCovering intervalccl.Covering
+	for _, span := range spans {
+		spanCovering = append(spanCovering, intervalccl.Range{
+			Start:   []byte(span.Key),
+			End:     []byte(span.EndKey),
+			Payload: spanMarker{},
+		})
+	}
+
+	var rangeCovering intervalccl.Covering
+	for _, rangeDesc := range ranges {
+		rangeCovering = append(rangeCovering, intervalccl.Range{
+			Start: []byte(rangeDesc.StartKey),
+			End:   []byte(rangeDesc.EndKey),
+		})
+	}
+
+	splits := intervalccl.OverlapCoveringMerge([]intervalccl.Covering{spanCovering, rangeCovering})
+
+	var splitSpans []roachpb.Span
+	for _, split := range splits {
+		needed := false
+		for _, payload := range split.Payload.([]interface{}) {
+			if _, ok := payload.(spanMarker); ok {
+				needed = true
+			}
+		}
+		if needed {
+			splitSpans = append(splitSpans, roachpb.Span{
+				Key:    roachpb.Key(split.Start),
+				EndKey: roachpb.Key(split.End),
+			})
+		}
+	}
+	return splitSpans
 }
 
 func backupJobDescription(
@@ -247,12 +310,25 @@ func Backup(
 		}
 	}
 
-	spans := spansForAllTableIndexes(tables)
+	var ranges []roachpb.RangeDescriptor
+	if err := db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+		var err error
+		ranges, err = allRangeDescriptors(ctx, txn)
+		return err
+	}); err != nil {
+		return BackupDescriptor{}, err
+	}
+
+	// We split the spans into range-sized pieces so that no request is
+	// responsible for more than 64MB of data. This allows us to use the number of
+	// completed requests as a rough measure of progress.
+	spans := splitSpansByRanges(spansForAllTableIndexes(tables), ranges)
 
 	mu := struct {
 		syncutil.Mutex
-		files    []BackupDescriptor_File
-		dataSize int64
+		files         []BackupDescriptor_File
+		dataSize      int64
+		responseCount int
 	}{}
 
 	for _, desc := range tables {
@@ -266,7 +342,7 @@ func Backup(
 	}
 
 	header := roachpb.Header{Timestamp: endTime}
-	g, gCtx := errgroup.WithContext(ctx)
+	g, gCtx := syncutil.NewErrGroupWithProgress(ctx)
 	for i := range spans {
 		span := spans[i]
 		g.Go(func() error {
@@ -281,6 +357,7 @@ func Backup(
 			}
 			mu.Lock()
 			defer mu.Unlock()
+			mu.responseCount++
 			for _, file := range res.(*roachpb.ExportResponse).Files {
 				mu.files = append(mu.files, BackupDescriptor_File{
 					Span:   file.Span,
@@ -292,7 +369,18 @@ func Backup(
 			return nil
 		})
 	}
-	if err := g.Wait(); err != nil {
+
+	g.Every(ProgressReportingInterval, func() {
+		mu.Lock()
+		fractionCompleted := float32(mu.responseCount) / float32(len(spans))
+		mu.Unlock()
+		if err := jobLogger.Progressed(ctx, fractionCompleted); err != nil {
+			log.Errorf(ctx, "BACKUP ignoring error while updating progress on job '%s' to %f: %+v",
+				jobLogger.Job.Description, fractionCompleted, err)
+		}
+	})
+
+	if err = g.Wait(); err != nil {
 		return BackupDescriptor{}, errors.Wrapf(err, "exporting %d ranges", len(spans))
 	}
 	files, dataSize := mu.files, mu.dataSize // No more concurrency, so this is safe.

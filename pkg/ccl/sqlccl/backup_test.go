@@ -25,6 +25,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/kr/pretty"
 	"github.com/lib/pq"
@@ -40,7 +41,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -48,6 +48,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
 const (
@@ -105,8 +106,8 @@ func bankSplitStmt(numAccounts int, numRanges int) string {
 	return stmt.String()
 }
 
-func backupRestoreTestSetup(
-	t testing.TB, clusterSize int, numAccounts int,
+func backupRestoreTestSetupWithParams(
+	t testing.TB, clusterSize int, numAccounts int, params base.TestClusterArgs,
 ) (
 	ctx context.Context,
 	tempDir string,
@@ -118,7 +119,7 @@ func backupRestoreTestSetup(
 
 	dir, dirCleanupFn := testutils.TempDir(t, 1)
 
-	tc = testcluster.StartTestCluster(t, clusterSize, base.TestClusterArgs{})
+	tc = testcluster.StartTestCluster(t, clusterSize, params)
 	sqlDB = sqlutils.MakeSQLRunner(t, tc.Conns[0])
 
 	sqlDB.Exec(bankCreateDatabase)
@@ -143,6 +144,18 @@ func backupRestoreTestSetup(
 	}
 
 	return ctx, dir, tc, sqlDB, cleanupFn
+}
+
+func backupRestoreTestSetup(
+	t testing.TB, clusterSize int, numAccounts int,
+) (
+	ctx context.Context,
+	tempDir string,
+	tc *testcluster.TestCluster,
+	sqlDB *sqlutils.SQLRunner,
+	cleanup func(),
+) {
+	return backupRestoreTestSetupWithParams(t, clusterSize, numAccounts, base.TestClusterArgs{})
 }
 
 func TestBackupRestoreLocal(t *testing.T) {
@@ -255,27 +268,117 @@ func verifySystemJob(
 	return nil
 }
 
+func verifySystemJobProgress(minDistinct int, seenFractions []float32) error {
+	intermediateFractions := make(map[float32]struct{})
+	for i, f := range seenFractions {
+		if i > 0 && f < seenFractions[i-1] {
+			return errors.Errorf("job progress not increasing over time: %+v", seenFractions)
+		}
+		if f > 0.0 && f < 1.0 {
+			intermediateFractions[f] = struct{}{}
+		}
+	}
+	if e, a := minDistinct, len(intermediateFractions); a < e {
+		return errors.Errorf(
+			"expected job progress to have at least %d distinct immediate fractions, but got only %d: %+v",
+			e, a, intermediateFractions,
+		)
+	}
+	return nil
+}
+
+func startTrackingSystemJobProgress(db *gosql.DB, offset int) func() ([]float32, error) {
+	var queryErr error
+	var seenFractions []float32
+	quit := make(chan bool)
+	go func() {
+		for {
+			var fractionCompleted float32
+			if err := db.QueryRow(
+				`SELECT fraction_completed FROM crdb_internal.jobs ORDER BY created LIMIT 1 OFFSET $1`,
+				offset,
+			).Scan(&fractionCompleted); err != nil {
+				// We expect to see a few gosql.ErrNoRows errors because this goroutine
+				// launches before the job is created. (If the job never appears, we'll
+				// notice in verifySystemJobProgress.)
+				if err != gosql.ErrNoRows {
+					queryErr = err
+					<-quit
+					return
+				}
+			} else {
+				seenFractions = append(seenFractions, fractionCompleted)
+			}
+			select {
+			case <-time.After(ProgressReportingInterval):
+			case <-quit:
+				return
+			}
+		}
+	}()
+	return func() ([]float32, error) {
+		quit <- true
+		return seenFractions, queryErr
+	}
+}
+
 func TestBackupRestoreSystemJobs(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	if !storage.ProposerEvaluatedKVEnabled() {
 		t.Skip("command WriteBatch is not allowed without proposer evaluated KV")
 	}
 
-	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop()
+	// To test incremental progress updates, we install a store response filter,
+	// which runs immediately before a KV command returns its response, in our
+	// test cluster. Whenever we see an Export or Import response, we sleep for a
+	// duration much longer than ProgressReportingInterval while holding a mutex.
+	// Assuming a reasonable goroutine scheduler, this gives the progress-
+	// reporting goroutine a chance to log progress between each Export or Import
+	// response.
+	var mu syncutil.Mutex
+	params := base.TestClusterArgs{}
+	params.ServerArgs.Knobs.Store = &storage.StoreTestingKnobs{
+		TestingResponseFilter: func(ba roachpb.BatchRequest, br *roachpb.BatchResponse) *roachpb.Error {
+			hasExportOrImport := false
+			for _, res := range br.Responses {
+				hasExportOrImport = hasExportOrImport || res.Export != nil || res.Import != nil
+			}
+			if !hasExportOrImport {
+				return nil
+			}
+			mu.Lock()
+			defer mu.Unlock()
+			time.Sleep(ProgressReportingInterval * 100)
+			return nil
+		},
+	}
 
-	dir, dirCleanupFn := testutils.TempDir(t, 1)
-	defer dirCleanupFn()
+	const numAccounts = 1000
+
+	// Ideally, we'd see a progress update for each range (and we have a total of
+	// backupRestoreDefaultRanges ranges). But the Go scheduler does not guarantee
+	// that the progress logging goroutine will run after each request returns;
+	// we'll miss one or two progress updates on most executions. We could
+	// introduce some form of synchronization to prevent this, but that would make
+	// the test lest realistic, so we insetad introduce a generous fudge factor of
+	// 1/2 to prevent flakes.
+	const requiredDistinctFractions = backupRestoreDefaultRanges / 2
+
+	_, dir, tc, sqlDB, cleanupFn := backupRestoreTestSetupWithParams(t, multiNode, numAccounts, params)
+	defer cleanupFn()
+
+	// We knock the ProgressReportingInterval down by several orders of magnitude
+	// to minimize the runtime of this test.
+	defer func(t time.Duration) { ProgressReportingInterval = t }(ProgressReportingInterval)
+	ProgressReportingInterval = time.Millisecond
 
 	dest := dir + "?secretCredentialsHere"
 	sanitizedDest := dir
 
-	sqlDB := sqlutils.MakeSQLRunner(t, db)
-	sqlDB.Exec(bankCreateDatabase)
-	sqlDB.Exec(bankCreateTable)
 	{
+		stopTracking := startTrackingSystemJobProgress(tc.Conns[0], 0)
 		sqlDB.Exec(`BACKUP DATABASE bench TO $1`, dest)
-		tableID, err := sqlutils.QueryTableID(db, "bench", "bank")
+		tableID, err := sqlutils.QueryTableID(tc.Conns[0], "bench", "bank")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -290,11 +393,19 @@ func TestBackupRestoreSystemJobs(t *testing.T) {
 		}); err != nil {
 			t.Fatal(err)
 		}
+		seenFractions, err := stopTracking()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := verifySystemJobProgress(requiredDistinctFractions, seenFractions); err != nil {
+			t.Fatal(err)
+		}
 	}
 	sqlDB.Exec(`CREATE DATABASE bench2`)
 	{
+		stopTracking := startTrackingSystemJobProgress(tc.Conns[0], 1)
 		sqlDB.Exec(`RESTORE bench.* FROM $1 WITH OPTIONS ('into_db'='bench2')`, dest)
-		databaseID, err := sqlutils.QueryDatabaseID(db, "bench2")
+		databaseID, err := sqlutils.QueryDatabaseID(tc.Conns[0], "bench2")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -307,6 +418,13 @@ func TestBackupRestoreSystemJobs(t *testing.T) {
 				sqlbase.ID(databaseID + 1),
 			},
 		}); err != nil {
+			t.Fatal(err)
+		}
+		seenFractions, err := stopTracking()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := verifySystemJobProgress(requiredDistinctFractions, seenFractions); err != nil {
 			t.Fatal(err)
 		}
 	}
