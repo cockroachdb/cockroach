@@ -175,7 +175,7 @@ func TestJobLogger(t *testing.T) {
 		}
 
 		// This fraction completed progression is intentionally not strictly
-		// increasing to simulate our progress estimates.
+		// increasing to simulate imprecise progress estimates.
 		for _, f := range []float32{0.0, 0.5, 0.5, 0.4, 0.8, 1.0} {
 			if err := woodyLogger.Progressed(ctx, f); err != nil {
 				t.Fatal(err)
