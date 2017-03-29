@@ -19,8 +19,8 @@ import (
 // #cgo CPPFLAGS: -I../../../../vendor/github.com/cockroachdb/c-protobuf/internal/src
 // #cgo CPPFLAGS: -I../../../../vendor/github.com/cockroachdb/c-rocksdb/internal/include
 // #cgo CXXFLAGS: -std=c++11 -Werror -Wall -Wno-sign-compare
-// #cgo !strictld,darwin LDFLAGS: -Wl,-undefined -Wl,dynamic_lookup
-// #cgo !strictld,!darwin LDFLAGS: -Wl,-unresolved-symbols=ignore-all
+// #cgo darwin LDFLAGS: -Wl,-undefined -Wl,dynamic_lookup
+// #cgo !darwin LDFLAGS: -Wl,-unresolved-symbols=ignore-all
 //
 // #include <stdlib.h>
 // #include "db.h"
