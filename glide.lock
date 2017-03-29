@@ -1,8 +1,8 @@
-hash: 8b6c6c915adbc5c97805111f13154d2d5de0a3266b1237fe904163d343778680
-updated: 2017-03-29T13:42:02.341359385-04:00
+hash: 47cb930494140062e1154da07ed282890c32bcb12861fd464e260c7fa7931181
+updated: 2017-03-29T18:15:09.580089273-04:00
 imports:
 - name: cloud.google.com/go
-  version: 343c80ab593aa89f77de6f29d03929c5bffe9842
+  version: 5fd028f47f3170cfe2a87666eae9ff5595027282
   subpackages:
   - compute/metadata
   - internal
@@ -61,6 +61,8 @@ imports:
   version: ce09c414594390d1d6432280c7cac55e62c6b0af
 - name: github.com/codahale/hdrhistogram
   version: 3a0bb77429bd3a61596f5e8a3172445844342120
+- name: github.com/codegangsta/cli
+  version: 0bdeddeeb0f650497d603c4ad7b20cfe685682f6
 - name: github.com/coreos/etcd
   version: 7b541f90039c625d8242f90816066ecd5cf78744
   subpackages:
@@ -181,7 +183,7 @@ imports:
   subpackages:
   - query
 - name: github.com/google/pprof
-  version: 402739d38bd5f4bd5c0e14131347ce6b9481d1b5
+  version: 5c63cc70220dd56546d4d417f30d5460138b93b5
   subpackages:
   - driver
   - internal/binutils
@@ -242,6 +244,29 @@ imports:
   - lightstep_thrift
   - thrift_0_9_2/lib/go/thrift
   - thrift_rpc
+- name: github.com/Masterminds/glide
+  version: ab0972eb70bbb48926b62b3401b19845b186c3c0
+  subpackages:
+  - action
+  - cache
+  - cfg
+  - dependency
+  - gb
+  - godep
+  - godep/strip
+  - gom
+  - gpm
+  - importer
+  - mirrors
+  - msg
+  - path
+  - repo
+  - tree
+  - util
+- name: github.com/Masterminds/semver
+  version: 59c29afe1a994eacb71c833025ca7acf874bb1da
+- name: github.com/Masterminds/vcs
+  version: 795e20f901c3d561de52811fb3488a2cb2c8588b
 - name: github.com/mattn/go-isatty
   version: fc9e8d8ef48496124e79ae0df75490096eccf6fe
 - name: github.com/mattn/go-runewidth
@@ -266,6 +291,8 @@ imports:
   - syntax/golang
 - name: github.com/Microsoft/go-winio
   version: fff283ad5116362ca252298cfc9b95828956d85d
+- name: github.com/mitchellh/go-homedir
+  version: b8bc1bf767474819792c23f32d8286a45736f1c6
 - name: github.com/montanaflynn/stats
   version: f8cd06f93c6c1b06028caafb88b540fc820f77c1
 - name: github.com/olekukonko/tablewriter
