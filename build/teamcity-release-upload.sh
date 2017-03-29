@@ -26,6 +26,7 @@ cat .buildinfo/tag || true
 cat .buildinfo/rev || true
 git status
 
+export BUILDER_HIDE_GOPATH_SRC=1
 build/builder.sh build/build-static-binaries.sh static-tests.tar.gz
 for archive in cockroach-latest "cockroach-${VERSION}"
 do
