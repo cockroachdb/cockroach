@@ -1387,10 +1387,6 @@ var (
 	_ = typCategoryUnknown
 
 	typDelim = parser.NewDString(",")
-
-	arrayInProcName = "array_in"
-	arrayInProcOid  = makeOidHasher().BuiltinOid(
-		arrayInProcName, &parser.Builtins[arrayInProcName][0]).AsRegProc(arrayInProcName)
 )
 
 // See: https://www.postgresql.org/docs/9.6/static/catalog-pg-type.html.
@@ -1434,16 +1430,16 @@ CREATE TABLE pg_catalog.pg_type (
 		h := makeOidHasher()
 		for oid, typ := range parser.OidToType {
 			cat := typCategory(typ)
-			typInput := oidZero
 			typElem := oidZero
+			builtinPrefix := parser.PGIOBuiltinPrefix(typ)
 			if cat == typCategoryArray {
-				typInput = arrayInProcOid
 				typElem = parser.NewDOid(parser.DInt(parser.UnwrapType(typ).(parser.TArray).Typ.Oid()))
+				if typ != parser.TypeIntVector {
+					builtinPrefix = "array_"
+				}
 			}
-			typname := typ.String()
-			if n, ok := aliasedOidToName[oid]; ok {
-				typname = n
-			}
+			typname := parser.PGDisplayName(typ)
+
 			if err := addRow(
 				parser.NewDOid(parser.DInt(oid)), // oid
 				parser.NewDName(typname),         // typname
@@ -1461,13 +1457,13 @@ CREATE TABLE pg_catalog.pg_type (
 				oidZero,                 // typarray
 
 				// regproc references
-				typInput, // typinput
-				oidZero,  // typoutput
-				oidZero,  // typreceive
-				oidZero,  // typsend
-				oidZero,  // typmodin
-				oidZero,  // typmodout
-				oidZero,  // typanalyze
+				h.RegProc(builtinPrefix+"in"),   // typinput
+				h.RegProc(builtinPrefix+"out"),  // typoutput
+				h.RegProc(builtinPrefix+"recv"), // typrecv
+				h.RegProc(builtinPrefix+"send"), // typsend
+				oidZero, // typmodin
+				oidZero, // typmodout
+				oidZero, // typanalyze
 
 				parser.DNull,            // typalign
 				parser.DNull,            // typstorage
@@ -1485,27 +1481,6 @@ CREATE TABLE pg_catalog.pg_type (
 		}
 		return nil
 	},
-}
-
-// aliasedOidToName maps Postgres object IDs to type names for those OIDs that map to
-// Cockroach types that have more than one associated OID, like Int. The name
-// for these OIDs will override the type name of the corresponding type when
-// looking up the display name for an OID.
-var aliasedOidToName = map[oid.Oid]string{
-	oid.T_float4:     "float4",
-	oid.T_float8:     "float8",
-	oid.T_int2:       "int2",
-	oid.T_int4:       "int4",
-	oid.T_int8:       "int8",
-	oid.T_int2vector: "int2vector",
-	oid.T_text:       "text",
-	oid.T_bytea:      "bytea",
-	oid.T_varchar:    "varchar",
-	oid.T_numeric:    "numeric",
-	oid.T__int2:      "int2[]",
-	oid.T__int4:      "int4[]",
-	oid.T__int8:      "int8[]",
-	oid.T__text:      "text[]",
 }
 
 // typOid is the only OID generation approach that does not use oidHasher, because
@@ -1791,6 +1766,14 @@ func (h oidHasher) BuiltinOid(name string, builtin *parser.Builtin) *parser.DOid
 	h.writeStr(name)
 	h.writeStr(builtin.Types.String())
 	return h.getOid()
+}
+
+func (h oidHasher) RegProc(name string) parser.Datum {
+	builtin, ok := parser.Builtins[name]
+	if !ok {
+		return parser.DNull
+	}
+	return h.BuiltinOid(name, &builtin[0]).AsRegProc(name)
 }
 
 func (h oidHasher) UserOid(username string) *parser.DOid {
