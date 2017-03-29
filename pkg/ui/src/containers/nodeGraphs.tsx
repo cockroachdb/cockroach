@@ -9,10 +9,12 @@ import {
 } from "../util/constants";
 
 import { AdminUIState } from "../redux/state";
-import { refreshNodes } from "../redux/apiReducers";
+import { refreshNodes, refreshLiveness } from "../redux/apiReducers";
 import { nodesSummarySelector, NodesSummary } from "../redux/nodes";
 import GraphGroup from "../components/graphGroup";
-import { SummaryBar, SummaryLabel, SummaryStat, SummaryMetricStat } from "../components/summaryBar";
+import {
+  SummaryBar, SummaryLabel, SummaryStat, SummaryStatMessage, SummaryStatBreakdown, SummaryMetricStat,
+} from "../components/summaryBar";
 import { Axis, AxisUnits } from "../components/graphs";
 import { LineGraph } from "../components/linegraph";
 import { Metric } from "../components/metric";
@@ -20,9 +22,42 @@ import { EventBox } from "../containers/events";
 import { Bytes } from "../util/format";
 import { NanoToMilli } from "../util/convert";
 
+// The properties required by the NodeTotalsSummary component.
+interface NodeTotalsSummaryProps {
+  nodesSummary: NodesSummary;
+}
+
+/**
+ * NodeTotalsSummary displays a high-level breakdown of the nodes on the cluster
+ * and their current liveness status.
+ */
+class NodeTotalsSummary extends React.Component<NodeTotalsSummaryProps, {}> {
+  render() {
+    if (!this.props.nodesSummary || !this.props.nodesSummary.nodeSums) {
+      return;
+    }
+    const { nodeCounts } = this.props.nodesSummary.nodeSums;
+    let children: React.ReactNode;
+    if (nodeCounts.dead > 0 || nodeCounts.suspect > 0) {
+      children = <div>
+        <SummaryStatBreakdown title="Healthy" value={nodeCounts.healthy} modifier="healthy" />
+        <SummaryStatBreakdown title="Suspect" value={nodeCounts.suspect} modifier="suspect" />
+        <SummaryStatBreakdown title="Dead" value={nodeCounts.dead} modifier="dead" />
+      </div>;
+    }
+    return <SummaryStat title={<span>Total Nodes <Link to="/cluster/nodes">View nodes list</Link></span>}
+                        value={nodeCounts.total}>
+                        { children }
+    </SummaryStat>;
+  }
+}
+
+// The properties required by a NodeGraphs component.
 interface NodeGraphsOwnProps {
   refreshNodes: typeof refreshNodes;
+  refreshLiveness: typeof refreshLiveness;
   nodesQueryValid: boolean;
+  livenessQueryValid: boolean;
   nodesSummary: NodesSummary;
 }
 
@@ -37,6 +72,9 @@ class NodeGraphs extends React.Component<NodeGraphsProps, {}> {
   refresh(props = this.props) {
     if (!props.nodesQueryValid) {
       props.refreshNodes();
+    }
+    if (!props.livenessQueryValid) {
+      props.refreshLiveness();
     }
   }
 
@@ -580,12 +618,12 @@ class NodeGraphs extends React.Component<NodeGraphsProps, {}> {
       <div className="l-columns__right">
         <SummaryBar>
           <SummaryLabel>Summary</SummaryLabel>
-          <SummaryStat title={<span>Total Nodes <Link to="/cluster/nodes">View nodes list</Link></span>}
-                       value={this.props.nodesSummary.nodeSums.nodeCounts.total} />
+          <NodeTotalsSummary nodesSummary={this.props.nodesSummary}/>
           <SummaryStat title="Capacity Used" value={capacityPercent}
-                       format={(v) => `${d3.format(".2f")(v)}%`}
-                       tooltip={`You are using ${Bytes(capacityUsed)} of ${Bytes(capacityTotal)}
-                       storage capacity across all nodes.`} />
+                       format={(v) => `${d3.format(".2f")(v)}%`}>
+            <SummaryStatMessage message={`You are using ${Bytes(capacityUsed)} of ${Bytes(capacityTotal)}
+                                          storage capacity across all nodes.`} />
+          </SummaryStat>
           <SummaryStat title="Unavailable ranges" value={this.props.nodesSummary.nodeSums.unavailableRanges} />
           <SummaryMetricStat id="qps" title="Queries per second" format={d3.format(".1f")} >
             <Metric sources={nodeSources} name="cr.node.sql.query.count" title="Queries/Sec" nonNegativeRate />
@@ -611,9 +649,11 @@ export default connect(
     return {
       nodesSummary: nodesSummarySelector(state),
       nodesQueryValid: state.cachedData.nodes.valid,
+      livenessQueryValid: state.cachedData.nodes.valid,
     };
   },
   {
     refreshNodes,
+    refreshLiveness,
   },
 )(NodeGraphs);
