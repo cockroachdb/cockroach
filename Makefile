@@ -88,9 +88,11 @@ TAR_XFORM_FLAG = $(shell $(TAR) --version | grep -q GNU && echo "--xform='flags=
 
 GIT_DIR := $(shell git rev-parse --git-dir 2> /dev/null)
 
+MFLAG = -march=native
 ifeq ($(TYPE),)
 override LINKFLAGS += -X github.com/cockroachdb/cockroach/pkg/build.typ=development
 else ifeq ($(TYPE),release)
+override MFLAG = -msse -msse4.2
 override LINKFLAGS += -s -w -X github.com/cockroachdb/cockroach/pkg/build.typ=release
 else ifeq ($(TYPE),musl)
 # This tag disables jemalloc profiling. See https://github.com/jemalloc/jemalloc/issues/585.
@@ -103,6 +105,7 @@ else
 $(error unknown build type $(TYPE))
 endif
 
+export CGO_CPPFLAGS += $(MFLAG)
 export MACOSX_DEPLOYMENT_TARGET=10.9
 
 -include customenv.mk
