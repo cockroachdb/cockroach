@@ -627,6 +627,11 @@ func Restore(
 		return err
 	}
 
+	progressLogger := jobProgressLogger{
+		jobLogger:   jobLogger,
+		totalChunks: len(importRequests),
+	}
+
 	// The Import (and resulting WriteBatch) requests made below run on
 	// leaseholders, so presplit the ranges to balance the work among many
 	// nodes
@@ -643,11 +648,21 @@ func Restore(
 	}
 	// TODO(dan): Wait for the newly created ranges (and leaseholders) to
 	// rebalance.
+
 	g, gCtx := errgroup.WithContext(ctx)
 	for i := range importRequests {
 		ir := importRequests[i]
 		g.Go(func() error {
-			return Import(gCtx, db, ir.Key, ir.EndKey, ir.files, kr)
+			if err := Import(gCtx, db, ir.Key, ir.EndKey, ir.files, kr); err != nil {
+				return err
+			}
+			if err := progressLogger.chunkFinished(gCtx); err != nil {
+				// Errors while updating progress are not important enough to merit
+				// failing the entire restore.
+				log.Errorf(ctx, "RESTORE ignoring error while updating progress on job %d (%s): %+v",
+					jobLogger.JobID(), jobLogger.Job.Description, err)
+			}
+			return nil
 		})
 	}
 
