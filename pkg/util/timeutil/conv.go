@@ -59,6 +59,6 @@ func Strptime(layout, value string) (time.Time, error) {
 		int(cTime.tm_min),
 		int(cTime.tm_sec),
 		0,
-		time.FixedZone("", int(cTime.tm_gmtoff)),
+		time.FixedZone(C.GoString(cTime.tm_zone), int(cTime.tm_gmtoff)),
 	), nil
 }
