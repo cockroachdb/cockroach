@@ -5,6 +5,9 @@ mkdir -p artifacts
 
 exit_status=0
 export BUILDER_HIDE_GOPATH_SRC=1
+
+build/builder.sh go install ./pkg/cmd/github-post
+
 build/builder.sh env \
 		 COCKROACH_PROPOSER_EVALUATED_KV="${COCKROACH_PROPOSER_EVALUATED_KV:-false}" \
 		 make stress \
