@@ -53,6 +53,6 @@ import:
 - package: gopkg.in/yaml.v2
   version: a3f3340b5840cee44f372bddb5880fcbc419b46a
 - package: golang.org/x/crypto
-  version: 728b753d0135da6801d45a38e6f43ff55779c5c2
+  version: 3cb07270c9455e8ad27956a70891c962d121a228
 - package: golang.org/x/net
   version: a6577fac2d73be281a500b310739095313165611
