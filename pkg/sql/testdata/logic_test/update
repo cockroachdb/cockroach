@@ -6,6 +6,15 @@ CREATE TABLE kv (
   v INT
 )
 
+statement error value type tuple{int, int} doesn't match type INT of column "v"
+UPDATE kv SET v = (SELECT (10, 11))
+
+statement error value type decimal doesn't match type INT of column "v"
+UPDATE kv SET v = 3.2
+
+statement error value type decimal doesn't match type INT of column "v"
+UPDATE kv SET (k, v) = (3, 3.2)
+
 statement ok
 INSERT INTO kv VALUES (1, 2), (3, 4), (5, 6), (7, 8)
 
@@ -276,6 +285,24 @@ UPDATE abc SET (b, b) = (10, 11)
 
 statement error multiple assignments to the same column "b"
 UPDATE abc SET (b, c) = (10, 11), b = 12
+
+statement ok
+CREATE TABLE xyz (
+  x INT PRIMARY KEY,
+  y INT,
+  z INT
+)
+
+statement ok
+INSERT INTO xyz VALUES (111, 222, 333)
+
+statement ok
+UPDATE xyz SET (z, y) = (SELECT 666, 777), x = (SELECT 2)
+
+query III
+SELECT * from xyz
+----
+2 777 666
 
 statement ok
 CREATE TABLE pks (
