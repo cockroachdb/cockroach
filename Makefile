@@ -350,7 +350,7 @@ endif
 
 # Update the git hooks and run the bootstrap script whenever any
 # of them (or their dependencies) change.
-.bootstrap: $(GITHOOKS) glide.lock
+.bootstrap: $(GITHOOKS) glide.lock build/tool_imports.go
 ifneq ($(GIT_DIR),)
 	git submodule update --init
 endif
