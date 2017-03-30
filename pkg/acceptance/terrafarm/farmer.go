@@ -102,6 +102,20 @@ func (f *Farmer) NumNodes() int {
 	return len(f.nodes)
 }
 
+// AddEnvVar adds an environment variable to supervisord.conf when starting cockroach.
+func (f *Farmer) AddEnvVar(key, value string) {
+	s := fmt.Sprintf("%s=%s", key, value)
+	// This is a Terraform variable defined in acceptance/terraform/variables.tf
+	// and passed through to the supervisor.conf file through
+	// acceptance/terraform/main.tf.
+	const envVar = "cockroach_env"
+	if env := f.AddVars[envVar]; env == "" {
+		f.AddVars[envVar] = s
+	} else {
+		f.AddVars[envVar] += "," + s
+	}
+}
+
 // Add provisions the given number of nodes.
 func (f *Farmer) Add(nodes int) error {
 	nodes += f.NumNodes()
@@ -112,16 +126,7 @@ func (f *Farmer) Add(nodes int) error {
 
 	// Disable update checks for test clusters by setting the required environment
 	// variable.
-	const skipCheck = "COCKROACH_SKIP_UPDATE_CHECK=1"
-	// This is a Terraform variable defined in acceptance/terraform/variables.tf
-	// and passed through to the supervisor.conf file through
-	// acceptance/terraform/main.tf.
-	const envVar = "cockroach_env"
-	if env := f.AddVars[envVar]; env == "" {
-		f.AddVars[envVar] = skipCheck
-	} else {
-		f.AddVars[envVar] += "," + skipCheck
-	}
+	f.AddEnvVar("COCKROACH_SKIP_UPDATE_CHECK", "1")
 
 	for v, val := range f.AddVars {
 		args = append(args, fmt.Sprintf(`-var=%s="%s"`, v, val))
