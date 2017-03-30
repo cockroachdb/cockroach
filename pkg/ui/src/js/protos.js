@@ -26608,6 +26608,7 @@ export const cockroach = $root.cockroach = (function() {
              * @property {cockroach.util.UnresolvedAddr$Properties} [addr] Request addr.
              * @property {Object.<string,Long>} [high_water_stamps] Request high_water_stamps.
              * @property {Object.<string,cockroach.gossip.Info$Properties>} [delta] Request delta.
+             * @property {Uint8Array} [cluster_id] Request cluster_id.
              */
 
             /**
@@ -26649,6 +26650,12 @@ export const cockroach = $root.cockroach = (function() {
             Request.prototype.delta = $util.emptyObject;
 
             /**
+             * Request cluster_id.
+             * @type {Uint8Array|undefined}
+             */
+            Request.prototype.cluster_id = $util.newBuffer([]);
+
+            /**
              * Creates a new Request instance using the specified properties.
              * @param {cockroach.gossip.Request$Properties=} [properties] Properties to set
              * @returns {cockroach.gossip.Request} Request instance
@@ -26678,6 +26685,8 @@ export const cockroach = $root.cockroach = (function() {
                         writer.uint32(/* id 4, wireType 2 =*/34).fork().uint32(/* id 1, wireType 2 =*/10).string(keys[i]);
                         $root.cockroach.gossip.Info.encode(message.delta[keys[i]], writer.uint32(/* id 2, wireType 2 =*/18).fork()).ldelim().ldelim();
                     }
+                if (message.cluster_id && message.hasOwnProperty("cluster_id"))
+                    writer.uint32(/* id 5, wireType 2 =*/42).bytes(message.cluster_id);
                 return writer;
             };
 
@@ -26727,6 +26736,9 @@ export const cockroach = $root.cockroach = (function() {
                         key = reader.string();
                         reader.pos++;
                         message.delta[key] = $root.cockroach.gossip.Info.decode(reader, reader.uint32());
+                        break;
+                    case 5:
+                        message.cluster_id = reader.bytes();
                         break;
                     default:
                         reader.skipType(tag & 7);
@@ -26786,6 +26798,9 @@ export const cockroach = $root.cockroach = (function() {
                             return "delta." + error;
                     }
                 }
+                if (message.cluster_id != null)
+                    if (!(message.cluster_id && typeof message.cluster_id.length === "number" || $util.isString(message.cluster_id)))
+                        return "cluster_id: buffer expected";
                 return null;
             };
 
@@ -26829,6 +26844,11 @@ export const cockroach = $root.cockroach = (function() {
                         message.delta[keys[i]] = $root.cockroach.gossip.Info.fromObject(object.delta[keys[i]]);
                     }
                 }
+                if (object.cluster_id != null)
+                    if (typeof object.cluster_id === "string")
+                        $util.base64.decode(object.cluster_id, message.cluster_id = $util.newBuffer($util.base64.length(object.cluster_id)), 0);
+                    else if (object.cluster_id.length)
+                        message.cluster_id = object.cluster_id;
                 return message;
             };
 
@@ -26858,6 +26878,7 @@ export const cockroach = $root.cockroach = (function() {
                 if (options.defaults) {
                     object.node_id = 0;
                     object.addr = null;
+                    object.cluster_id = options.bytes === String ? "" : [];
                 }
                 if (message.node_id != null && message.hasOwnProperty("node_id"))
                     object.node_id = message.node_id;
@@ -26877,6 +26898,8 @@ export const cockroach = $root.cockroach = (function() {
                     for (let j = 0; j < keys2.length; ++j)
                         object.delta[keys2[j]] = $root.cockroach.gossip.Info.toObject(message.delta[keys2[j]], options);
                 }
+                if (message.cluster_id != null && message.hasOwnProperty("cluster_id"))
+                    object.cluster_id = options.bytes === String ? $util.base64.encode(message.cluster_id, 0, message.cluster_id.length) : options.bytes === Array ? Array.prototype.slice.call(message.cluster_id) : message.cluster_id;
                 return object;
             };
 

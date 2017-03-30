@@ -15258,12 +15258,14 @@ export namespace cockroach {
          * @property {cockroach.util.UnresolvedAddr$Properties} [addr] Request addr.
          * @property {Object.<string,Long>} [high_water_stamps] Request high_water_stamps.
          * @property {Object.<string,cockroach.gossip.Info$Properties>} [delta] Request delta.
+         * @property {Uint8Array} [cluster_id] Request cluster_id.
          */
         type Request$Properties = {
             node_id?: number;
             addr?: cockroach.util.UnresolvedAddr$Properties;
             high_water_stamps?: { [k: string]: Long };
             delta?: { [k: string]: cockroach.gossip.Info$Properties };
+            cluster_id?: Uint8Array;
         };
 
         /**
@@ -15305,6 +15307,12 @@ export namespace cockroach {
              * @type {Object.<string,cockroach.gossip.Info$Properties>|undefined}
              */
             public delta?: { [k: string]: cockroach.gossip.Info$Properties };
+
+            /**
+             * Request cluster_id.
+             * @type {Uint8Array|undefined}
+             */
+            public cluster_id?: Uint8Array;
 
             /**
              * Creates a new Request instance using the specified properties.
