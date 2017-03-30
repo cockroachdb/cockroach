@@ -1383,7 +1383,7 @@ int[]
 query T
 VALUES (format_type('anyelement'::regtype, -1)),
        (format_type('bool'::regtype, -1)),
-       (format_type('bytes'::regtype, -1)),
+       (format_type('bytea'::regtype, -1)),
        (format_type('date'::regtype, -1)),
        (format_type('numeric'::regtype, -1)),
        (format_type('interval'::regtype, -1)),
