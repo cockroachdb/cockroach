@@ -130,11 +130,11 @@ func (p *planner) Insert(
 		return nil, fmt.Errorf("INSERT error: table %s has %d columns but %d values were supplied", n.Table, numInputColumns, expressions)
 	}
 
-	fkTables := tablesNeededForFKs(*en.tableDesc, CheckInserts)
+	fkTables := sqlbase.TablesNeededForFKs(*en.tableDesc, sqlbase.CheckInserts)
 	if err := p.fillFKTableMap(ctx, fkTables); err != nil {
 		return nil, err
 	}
-	ri, err := MakeRowInserter(p.txn, en.tableDesc, fkTables, cols, checkFKs)
+	ri, err := sqlbase.MakeRowInserter(p.txn, en.tableDesc, fkTables, cols, sqlbase.CheckFKs)
 	if err != nil {
 		return nil, err
 	}
@@ -143,7 +143,7 @@ func (p *planner) Insert(
 	if n.OnConflict == nil {
 		tw = &tableInserter{ri: ri, autoCommit: autoCommit}
 	} else {
-		updateExprs, conflictIndex, err := upsertExprsAndIndex(en.tableDesc, *n.OnConflict, ri.insertCols)
+		updateExprs, conflictIndex, err := upsertExprsAndIndex(en.tableDesc, *n.OnConflict, ri.InsertCols)
 		if err != nil {
 			return nil, err
 		}
@@ -183,12 +183,12 @@ func (p *planner) Insert(
 			}
 
 			helper, err := p.makeUpsertHelper(
-				ctx, tn, en.tableDesc, ri.insertCols, updateCols, updateExprs, conflictIndex)
+				ctx, tn, en.tableDesc, ri.InsertCols, updateCols, updateExprs, conflictIndex)
 			if err != nil {
 				return nil, err
 			}
 
-			fkTables := tablesNeededForFKs(*en.tableDesc, CheckUpdates)
+			fkTables := sqlbase.TablesNeededForFKs(*en.tableDesc, sqlbase.CheckUpdates)
 			if err := p.fillFKTableMap(ctx, fkTables); err != nil {
 				return nil, err
 			}
@@ -207,7 +207,7 @@ func (p *planner) Insert(
 		n:                     n,
 		editNodeBase:          en,
 		defaultExprs:          defaultExprs,
-		insertCols:            ri.insertCols,
+		insertCols:            ri.InsertCols,
 		insertColIDtoRowIndex: ri.InsertColIDtoRowIndex,
 		tw: tw,
 	}
@@ -262,7 +262,7 @@ func ProcessDefaultColumns(
 		}
 	}
 
-	defaultExprs, err := makeDefaultExprs(cols, parse, evalCtx)
+	defaultExprs, err := sqlbase.MakeDefaultExprs(cols, parse, evalCtx)
 	return cols, defaultExprs, err
 }
 
@@ -509,56 +509,6 @@ func fillDefaults(
 		}
 	}
 	return ret
-}
-
-func makeDefaultExprs(
-	cols []sqlbase.ColumnDescriptor, parse *parser.Parser, evalCtx *parser.EvalContext,
-) ([]parser.TypedExpr, error) {
-	// Check to see if any of the columns have DEFAULT expressions. If there
-	// are no DEFAULT expressions, we don't bother with constructing the
-	// defaults map as the defaults are all NULL.
-	haveDefaults := false
-	for _, col := range cols {
-		if col.DefaultExpr != nil {
-			haveDefaults = true
-			break
-		}
-	}
-	if !haveDefaults {
-		return nil, nil
-	}
-
-	// Build the default expressions map from the parsed SELECT statement.
-	defaultExprs := make([]parser.TypedExpr, 0, len(cols))
-	exprStrings := make([]string, 0, len(cols))
-	for _, col := range cols {
-		if col.DefaultExpr != nil {
-			exprStrings = append(exprStrings, *col.DefaultExpr)
-		}
-	}
-	exprs, err := parser.ParseExprsTraditional(exprStrings)
-	if err != nil {
-		return nil, err
-	}
-
-	defExprIdx := 0
-	for _, col := range cols {
-		if col.DefaultExpr == nil {
-			defaultExprs = append(defaultExprs, parser.DNull)
-			continue
-		}
-		expr := exprs[defExprIdx]
-		typedExpr, err := parser.TypeCheck(expr, nil, col.Type.ToDatumType())
-		if err != nil {
-			return nil, err
-		}
-		if typedExpr, err = parse.NormalizeExpr(evalCtx, typedExpr); err != nil {
-			return nil, err
-		}
-		defaultExprs = append(defaultExprs, typedExpr)
-		defExprIdx++
-	}
-	return defaultExprs, nil
 }
 
 func (n *insertNode) Columns() ResultColumns {

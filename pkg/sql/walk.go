@@ -315,9 +315,9 @@ func (v *planVisitor) visit(plan planNode) {
 	case *updateNode:
 		if v.observer.attr != nil {
 			v.observer.attr(name, "table", n.tableDesc.Name)
-			if len(n.tw.ru.updateCols) > 0 {
+			if len(n.tw.ru.UpdateCols) > 0 {
 				var buf bytes.Buffer
-				for i, col := range n.tw.ru.updateCols {
+				for i, col := range n.tw.ru.UpdateCols {
 					if i > 0 {
 						buf.WriteString(", ")
 					}
