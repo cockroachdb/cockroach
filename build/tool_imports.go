@@ -41,7 +41,6 @@ import (
 	_ "github.com/mattn/goveralls"
 	_ "github.com/mdempsky/unconvert"
 	_ "github.com/mibk/dupl"
-	_ "github.com/robfig/glock"
 	_ "github.com/wadey/gocovmerge"
 	_ "golang.org/x/tools/cmd/goimports"
 	_ "golang.org/x/tools/cmd/goyacc"

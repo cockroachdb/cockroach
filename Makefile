@@ -348,20 +348,20 @@ $(GITHOOKSDIR)/%: githooks/%
 	@ln -s ../../$(basename $<) $(dir $@)
 endif
 
-GLOCK := ../../../../bin/glock
-#        ^  ^  ^  ^~ GOPATH
-#        |  |  |~ GOPATH/src
-#        |  |~ GOPATH/src/github.com
-#        |~ GOPATH/src/github.com/cockroachdb
-
 # Update the git hooks and run the bootstrap script whenever any
 # of them (or their dependencies) change.
-.bootstrap: $(GITHOOKS) GLOCKFILE glide.lock
+.bootstrap: $(GITHOOKS) glide.lock
 ifneq ($(GIT_DIR),)
 	git submodule update --init
 endif
-	$(GO) install ./vendor/github.com/robfig/glock
-	@unset GIT_WORK_TREE; $(GLOCK) sync -n < GLOCKFILE
+	$(GO) install -v \
+	./pkg/cmd/github-post \
+	./pkg/cmd/github-pull-request-make \
+	./pkg/cmd/glock-diff-parser \
+	./pkg/cmd/metacheck \
+	./pkg/cmd/returncheck \
+	./pkg/cmd/teamcity-trigger \
+	&& $(GO) list -tags glide -f '{{join .Imports "\n"}}' ./build | grep -vF protoc | xargs $(GO) install -v
 	touch $@
 
 # Force Make to run the .bootstrap recipe before building any other targets.
