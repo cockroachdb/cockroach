@@ -308,6 +308,9 @@ SET TRANSACTION PRIORITY HIGH
 statement ok
 ROLLBACK
 
+statement error there is no transaction in progress
+SHOW TRANSACTION PRIORITY
+
 # User priority default to normal
 
 statement ok
@@ -410,11 +413,8 @@ SHOW DEFAULT_TRANSACTION_ISOLATION
 ----
 SNAPSHOT
 
-# SHOW without a transaction should create an auto-transaction with the default level
-query T
+statement error there is no transaction in progress
 SHOW TRANSACTION ISOLATION LEVEL
-----
-SNAPSHOT
 
 statement ok
 SET SESSION CHARACTERISTICS AS TRANSACTION ISOLATION LEVEL SERIALIZABLE

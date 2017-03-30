@@ -35,18 +35,45 @@ const (
 	PgServerVersion = "9.5.0"
 )
 
-var varGen = map[string]func(p *planner) string{
-	`application_name`:              func(p *planner) string { return p.session.ApplicationName },
-	`database`:                      func(p *planner) string { return p.session.Database },
-	`default_transaction_isolation`: func(p *planner) string { return p.session.DefaultIsolationLevel.String() },
-	`syntax`:                        func(p *planner) string { return p.session.Syntax.String() },
-	`time zone`:                     func(p *planner) string { return p.session.Location.String() },
-	`transaction isolation level`:   func(p *planner) string { return p.txn.Isolation().String() },
-	`transaction priority`:          func(p *planner) string { return p.txn.UserPriority().String() },
-	`max_index_keys`:                func(_ *planner) string { return "32" },
-	`search_path`:                   func(p *planner) string { return strings.Join(p.session.SearchPath, ", ") },
-	`server_version`:                func(_ *planner) string { return PgServerVersion },
-	`session_user`:                  func(p *planner) string { return p.session.User },
+var varGen = map[string]struct {
+	genFn              func(p *planner) string
+	requireExplicitTxn bool
+}{
+	`application_name`: {
+		genFn: func(p *planner) string { return p.session.ApplicationName },
+	},
+	`database`: {
+		genFn: func(p *planner) string { return p.session.Database },
+	},
+	`default_transaction_isolation`: {
+		genFn: func(p *planner) string { return p.session.DefaultIsolationLevel.String() },
+	},
+	`syntax`: {
+		genFn: func(p *planner) string { return p.session.Syntax.String() },
+	},
+	`time zone`: {
+		genFn: func(p *planner) string { return p.session.Location.String() },
+	},
+	`transaction isolation level`: {
+		genFn:              func(p *planner) string { return p.txn.Isolation().String() },
+		requireExplicitTxn: true,
+	},
+	`transaction priority`: {
+		genFn:              func(p *planner) string { return p.txn.UserPriority().String() },
+		requireExplicitTxn: true,
+	},
+	`max_index_keys`: {
+		genFn: func(_ *planner) string { return "32" },
+	},
+	`search_path`: {
+		genFn: func(p *planner) string { return strings.Join(p.session.SearchPath, ", ") },
+	},
+	`server_version`: {
+		genFn: func(_ *planner) string { return PgServerVersion },
+	},
+	`session_user`: {
+		genFn: func(p *planner) string { return p.session.User },
+	},
 }
 var varNames = func() []string {
 	res := make([]string, 0, len(varGen))
@@ -166,7 +193,7 @@ func queryInfoSchema(
 }
 
 // Show a session-local variable name.
-func (p *planner) Show(n *parser.Show) (planNode, error) {
+func (p *planner) Show(n *parser.Show, autoCommit bool) (planNode, error) {
 	origName := n.Name
 	name := strings.ToLower(n.Name)
 
@@ -179,8 +206,10 @@ func (p *planner) Show(n *parser.Show) (planNode, error) {
 			{Name: "Value", Typ: parser.TypeString},
 		}
 	default:
-		if _, ok := varGen[name]; !ok {
+		if gen, ok := varGen[name]; !ok {
 			return nil, fmt.Errorf("unknown variable: %q", origName)
+		} else if gen.requireExplicitTxn && autoCommit {
+			return nil, errNoTransactionInProgress
 		}
 		columns = ResultColumns{{Name: name, Typ: parser.TypeString}}
 	}
@@ -195,7 +224,10 @@ func (p *planner) Show(n *parser.Show) (planNode, error) {
 			case `all`:
 				for _, vName := range varNames {
 					gen := varGen[vName]
-					value := gen(p)
+					if gen.requireExplicitTxn && autoCommit {
+						continue
+					}
+					value := gen.genFn(p)
 					if _, err := v.rows.AddRow(
 						ctx, parser.Datums{parser.NewDString(vName), parser.NewDString(value)},
 					); err != nil {
@@ -207,7 +239,7 @@ func (p *planner) Show(n *parser.Show) (planNode, error) {
 				// The key in varGen is guaranteed to exist thanks to the
 				// check above.
 				gen := varGen[name]
-				value := gen(p)
+				value := gen.genFn(p)
 				if _, err := v.rows.AddRow(ctx, parser.Datums{parser.NewDString(value)}); err != nil {
 					v.rows.Close(ctx)
 					return nil, err
