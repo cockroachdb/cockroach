@@ -18,7 +18,7 @@
 // under stress in our CI infrastructure.
 //
 // Note that this program will directly exec `make`, so there is no need to
-// process its output. See build/teamcity- test{,race}.sh for usage examples.
+// process its output. See build/teamcity-test{,race}.sh for usage examples.
 //
 // Note that our CI infrastructure has no notion of "pull requests", forcing
 // the approach taken here be quite brute-force with respect to its use of the
@@ -186,32 +186,68 @@ func main() {
 		log.Fatal(err)
 	}
 
-	pkgs, err := pkgsFromDiff(strings.NewReader(diff))
-	if err != nil {
-		log.Fatal(err)
-	}
-	if len(pkgs) > 0 {
-		// 5 minutes total seems OK.
-		duration := (5 * time.Minute) / time.Duration(len(pkgs))
-		for name, pkg := range pkgs {
-			tests := "-"
-			if len(pkg.tests) > 0 {
-				tests = "(" + strings.Join(pkg.tests, "|") + ")"
+	if target == "checkdeps" {
+		var vendorChanged bool
+		for _, path := range []string{"glide.lock", "vendor"} {
+			if strings.Contains(diff, fmt.Sprintf("\n--- a/%[1]s\n+++ b/%[1]s\n", path)) {
+				vendorChanged = true
+				break
+			}
+		}
+		if vendorChanged {
+			for _, cmd := range []*exec.Cmd{
+				exec.Command("go", "install", crdb.ImportPath+"/vendor/github.com/Masterminds/glide"),
+				exec.Command("glide", "install"),
+			} {
+				cmd.Dir = crdb.Dir
+				cmd.Stdout = os.Stdout
+				cmd.Stderr = os.Stderr
+				log.Println(cmd.Args)
+				if err := cmd.Run(); err != nil {
+					log.Fatal(err)
+				}
 			}
 
-			cmd := exec.Command(
-				"make",
-				target,
-				fmt.Sprintf("PKG=./%s", name),
-				fmt.Sprintf("TESTS=%s", tests),
-				fmt.Sprintf("STRESSFLAGS=-stderr -maxfails 1 -maxtime %s", duration),
-			)
-			cmd.Dir = crdb.Dir
-			cmd.Stdout = os.Stdout
-			cmd.Stderr = os.Stderr
-			log.Println(cmd.Args)
-			if err := cmd.Run(); err != nil {
-				log.Fatal(err)
+			// Check for diffs.
+			for _, dir := range []string{crdb.Dir, filepath.Join(crdb.Dir, "vendor")} {
+				cmd := exec.Command("git", "diff")
+				cmd.Dir = dir
+				log.Println(cmd.Args)
+				if output, err := cmd.Output(); err != nil {
+					log.Fatal(err)
+				} else if len(output) > 0 {
+					log.Fatalf("unexpected diff:\n%s", output)
+				}
+			}
+		}
+	} else {
+		pkgs, err := pkgsFromDiff(strings.NewReader(diff))
+		if err != nil {
+			log.Fatal(err)
+		}
+		if len(pkgs) > 0 {
+			// 5 minutes total seems OK.
+			duration := (5 * time.Minute) / time.Duration(len(pkgs))
+			for name, pkg := range pkgs {
+				tests := "-"
+				if len(pkg.tests) > 0 {
+					tests = "(" + strings.Join(pkg.tests, "|") + ")"
+				}
+
+				cmd := exec.Command(
+					"make",
+					target,
+					fmt.Sprintf("PKG=./%s", name),
+					fmt.Sprintf("TESTS=%s", tests),
+					fmt.Sprintf("STRESSFLAGS=-stderr -maxfails 1 -maxtime %s", duration),
+				)
+				cmd.Dir = crdb.Dir
+				cmd.Stdout = os.Stdout
+				cmd.Stderr = os.Stderr
+				log.Println(cmd.Args)
+				if err := cmd.Run(); err != nil {
+					log.Fatal(err)
+				}
 			}
 		}
 	}
