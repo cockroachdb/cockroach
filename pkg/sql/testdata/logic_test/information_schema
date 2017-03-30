@@ -1,4 +1,4 @@
-# LogicTest: default distsql
+# LogicTest: default
 
 # Verify information_schema database handles mutation statements correctly.
 

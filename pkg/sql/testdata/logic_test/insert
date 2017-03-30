@@ -1,4 +1,4 @@
-# LogicTest: default distsql
+# LogicTest: default
 
 statement error table "kv" does not exist
 INSERT INTO kv VALUES ('a', 'b')
