@@ -1,3 +1,5 @@
+# LogicTest: default distsql
+
 query III colnames
 VALUES (1, 2, 3), (4, 5, 6)
 ----

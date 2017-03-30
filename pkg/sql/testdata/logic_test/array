@@ -1,3 +1,5 @@
+# LogicTest: default distsql
+
 # array construction
 
 query error cannot determine type of empty array

@@ -1,3 +1,5 @@
+# LogicTest: default distsql
+
 query ITTT colnames
 EXPLAIN (PLAN) SELECT 1
 ----

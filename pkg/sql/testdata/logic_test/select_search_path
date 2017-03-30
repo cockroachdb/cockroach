@@ -1,3 +1,5 @@
+# LogicTest: default distsql
+
 # Test that pg_catalog tables are accessible without qualifying table/view
 # names.
 

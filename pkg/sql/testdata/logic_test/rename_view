@@ -1,3 +1,5 @@
+# LogicTest: default distsql
+
 statement error pgcode 42P01 view "foo" does not exist
 ALTER VIEW foo RENAME TO bar
 

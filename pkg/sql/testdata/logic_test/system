@@ -1,3 +1,5 @@
+# LogicTest: default distsql
+
 query T
 SHOW DATABASES
 ----

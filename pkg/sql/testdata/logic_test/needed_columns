@@ -1,3 +1,5 @@
+# LogicTest: default distsql
+
 query ITTTTT
 EXPLAIN (METADATA,NOOPTIMIZE) SELECT 1 FROM (SELECT 2 AS s)
 ----
