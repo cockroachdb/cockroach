@@ -651,7 +651,7 @@ ORDER BY oid
 ----
 oid   typname       typnamespace  typowner  typlen  typbyval  typtype
 16    bool          1782195457    NULL      1       true      b
-17    bytes         1782195457    NULL      -1      false     b
+17    bytea         1782195457    NULL      -1      false     b
 19    name          1782195457    NULL      -1      false     b
 20    int8          1782195457    NULL      8       true      b
 21    int2          1782195457    NULL      8       true      b
@@ -686,7 +686,7 @@ ORDER BY oid
 ----
 oid   typname       typcategory  typispreferred  typisdefined  typdelim  typrelid  typelem  typarray
 16    bool          B            false           true          ,         0         0        0
-17    bytes         U            false           true          ,         0         0        0
+17    bytea         U            false           true          ,         0         0        0
 19    name          S            false           true          ,         0         0        0
 20    int8          N            false           true          ,         0         0        0
 21    int2          N            false           true          ,         0         0        0
@@ -721,7 +721,7 @@ ORDER BY oid
 ----
 oid   typname       typinput  typoutput  typreceive  typsend  typmodin  typmodout  typanalyze
 16    bool          0         0          0           0        0         0          0
-17    bytes         0         0          0           0        0         0          0
+17    bytea         0         0          0           0        0         0          0
 19    name          0         0          0           0        0         0          0
 20    int8          0         0          0           0        0         0          0
 21    int2          0         0          0           0        0         0          0
@@ -756,7 +756,7 @@ ORDER BY oid
 ----
 oid   typname       typalign  typstorage  typnotnull  typbasetype  typtypmod
 16    bool          NULL      NULL        false       0            -1
-17    bytes         NULL      NULL        false       0            -1
+17    bytea         NULL      NULL        false       0            -1
 19    name          NULL      NULL        false       0            -1
 20    int8          NULL      NULL        false       0            -1
 21    int2          NULL      NULL        false       0            -1
@@ -791,7 +791,7 @@ ORDER BY oid
 ----
 oid   typname       typndims  typcollation  typdefaultbin  typdefault  typacl
 16    bool          0         0             NULL           NULL        NULL
-17    bytes         0         0             NULL           NULL        NULL
+17    bytea         0         0             NULL           NULL        NULL
 19    name          0         1661428263    NULL           NULL        NULL
 20    int8          0         0             NULL           NULL        NULL
 21    int2          0         0             NULL           NULL        NULL
