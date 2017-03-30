@@ -67,7 +67,7 @@ LINKFLAGS =
 
 export GOPATH := $(realpath ../../../..)
 # Prefer tools from $GOPATH/bin over those elsewhere on the path.
-# This ensures that we get the versions pinned in the GLOCKFILE.
+# This ensures that we get the versions we go install.
 export PATH := $(GOPATH)/bin:$(PATH)
 # HACK: Make has a fast path and a slow path for command execution,
 # but the fast path uses the PATH variable from when make was started,
@@ -355,12 +355,8 @@ ifneq ($(GIT_DIR),)
 	git submodule update --init
 endif
 	$(GO) install -v \
-	./pkg/cmd/github-post \
-	./pkg/cmd/github-pull-request-make \
-	./pkg/cmd/glock-diff-parser \
 	./pkg/cmd/metacheck \
 	./pkg/cmd/returncheck \
-	./pkg/cmd/teamcity-trigger \
 	&& $(GO) list -tags glide -f '{{join .Imports "\n"}}' ./build | grep -vF protoc | xargs $(GO) install -v
 	touch $@
 
