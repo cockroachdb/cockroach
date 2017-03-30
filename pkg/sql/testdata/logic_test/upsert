@@ -197,3 +197,27 @@ INSERT INTO issue_14052 (a, b) VALUES (1, 1), (2, 2)
 
 statement ok
 UPSERT INTO issue_14052 (a, c) (SELECT a, b from issue_14052)
+
+statement ok
+CREATE TABLE issue_14052_2 ("id"  SERIAL , "name" VARCHAR(255), "createdAt" TIMESTAMP WITH TIME ZONE NOT NULL, "updatedAt" TIMESTAMP WITH TIME ZONE NOT NULL, PRIMARY KEY ("id"));
+
+statement ok
+INSERT INTO issue_14052_2 ("id","name","createdAt","updatedAt") VALUES (1,'original','2017-03-07 16:05:50.924 +00:00','2017-03-07 16:05:50.924 +00:00');
+
+# Make sure the fast path isn't taken (createdAt is not in the ON CONFLICT clause)
+statement ok
+INSERT INTO issue_14052_2 ("id","name","createdAt","updatedAt") VALUES (1,'UPDATED','2017-03-07 16:05:51.946 +00:00','2017-03-07 16:05:51.946 +00:00') ON CONFLICT (id) DO UPDATE SET "id" = excluded."id", "name" = excluded."name", "updatedAt" = excluded."updatedAt";
+
+query ITTT
+SELECT * FROM issue_14052_2;
+----
+1  UPDATED  2017-03-07 16:05:50.924 +0000 +0000  2017-03-07 16:05:51.946 +0000 +0000
+
+# Make sure the fast path isn't taken (repeating a column in the ON CONFLICT clause doesn't do anything)
+statement ok
+INSERT INTO issue_14052_2 ("id","name","createdAt","updatedAt") VALUES (1,'FOO','2017-03-08','2017-03-08') ON CONFLICT (id) DO UPDATE SET "id" = excluded."id", "name" = excluded."name", "name" = excluded."name", "name" = excluded."name";
+
+query ITTT
+SELECT * FROM issue_14052_2;
+----
+1  FOO  2017-03-07 16:05:50.924 +0000 +0000  2017-03-07 16:05:51.946 +0000 +0000

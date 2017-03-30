@@ -34,13 +34,14 @@ import (
 var upsertExcludedTable = parser.TableName{TableName: "excluded"}
 
 type upsertHelper struct {
-	p                  *planner
-	evalExprs          []parser.TypedExpr
-	sourceInfo         *dataSourceInfo
-	excludedSourceInfo *dataSourceInfo
-	allExprsIdentity   bool
-	curSourceRow       parser.Datums
-	curExcludedRow     parser.Datums
+	p                      *planner
+	evalExprs              []parser.TypedExpr
+	sourceInfo             *dataSourceInfo
+	excludedSourceInfo     *dataSourceInfo
+	allUpdateExprsIdentity bool
+	allColumnsUpdated      bool
+	curSourceRow           parser.Datums
+	curExcludedRow         parser.Datums
 
 	// This struct must be allocated on the heap and its location stay
 	// stable after construction because it implements
@@ -135,21 +136,33 @@ func (p *planner) makeUpsertHelper(
 	}
 	helper.evalExprs = evalExprs
 
-	helper.allExprsIdentity = true
+	helper.allUpdateExprsIdentity = true
 	for _, expr := range evalExprs {
 		ivar, ok := expr.(*parser.IndexedVar)
 		if !ok {
-			helper.allExprsIdentity = false
+			helper.allUpdateExprsIdentity = false
 			break
 		}
 		// Idx on the IndexedVar references a columns from one of the two
 		// sources. They're ordered table source then excluded source. If any
 		// expr references a table column, then the fast path doesn't apply.
 		if ivar.Idx < len(sourceInfo.sourceColumns) {
-			helper.allExprsIdentity = false
+			helper.allUpdateExprsIdentity = false
 			break
 		}
 	}
+
+	// All the columns in the ON CONFLICT clause are considered updated if
+	// everything not in the conflict index is included. Columns that are in the
+	// conflict index can be included or not.
+	updateColIDs := make(map[sqlbase.ColumnID]struct{}, len(tableDesc.Columns))
+	for _, col := range updateCols {
+		updateColIDs[col.ID] = struct{}{}
+	}
+	for _, colID := range upsertConflictIndex.ColumnIDs {
+		updateColIDs[colID] = struct{}{}
+	}
+	helper.allColumnsUpdated = len(updateColIDs) == len(tableDesc.Columns)
 
 	return helper, nil
 }
@@ -180,7 +193,7 @@ func (uh *upsertHelper) eval(
 }
 
 func (uh *upsertHelper) isIdentityEvaler() bool {
-	return uh.allExprsIdentity
+	return uh.allUpdateExprsIdentity && uh.allColumnsUpdated
 }
 
 // upsertExprsAndIndex returns the upsert conflict index and the (possibly

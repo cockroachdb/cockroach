@@ -227,17 +227,18 @@ func (tu *tableUpserter) init(txn *client.Txn) error {
 	tu.tableDesc = tu.ri.helper.tableDesc
 	tu.indexKeyPrefix = sqlbase.MakeIndexKeyPrefix(tu.tableDesc, tu.tableDesc.PrimaryIndex.ID)
 
-	// For the fast path, all columns must be specified in the insert.
-	allColsIdentityExpr := len(tu.ri.insertCols) == len(tu.tableDesc.Columns) &&
-		// Plus, all columns not in the conflict index must be specified in the
-		// DO UPDATE clause and be of the form `x = excluded.x`.
-		len(tu.updateCols) == len(tu.tableDesc.Columns)-len(tu.conflictIndex.ColumnIDs) &&
-		tu.evaler != nil && tu.evaler.isIdentityEvaler()
 	// When adding or removing a column in a schema change (mutation), the user
 	// can't specify it, which means we need to do a lookup and so we can't use
 	// the fast path. When adding or removing an index, same result, so the fast
 	// path is disabled during all mutations.
-	if len(tu.tableDesc.Indexes) == 0 && len(tu.tableDesc.Mutations) == 0 && allColsIdentityExpr {
+	fastPathEnabled := len(tu.tableDesc.Indexes) == 0 && len(tu.tableDesc.Mutations) == 0 &&
+		// For the fast path, all columns must be specified in the insert.
+		len(tu.ri.insertCols) == len(tu.tableDesc.Columns) &&
+		// Plus, all columns not in the conflict index must be specified in the
+		// DO UPDATE clause and be of the form `x = excluded.x`.
+		len(tu.updateCols) == len(tu.tableDesc.Columns)-len(tu.conflictIndex.ColumnIDs) &&
+		tu.evaler != nil && tu.evaler.isIdentityEvaler()
+	if fastPathEnabled {
 		tu.fastPathBatch = tu.txn.NewBatch()
 		tu.fastPathKeys = make(map[string]struct{})
 		return nil
