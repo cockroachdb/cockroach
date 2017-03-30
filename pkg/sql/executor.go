@@ -454,6 +454,7 @@ func (e *Executor) Prepare(
 	if err := txn.SetIsolation(session.DefaultIsolationLevel); err != nil {
 		panic(err)
 	}
+	txn.Proto().OrigTimestamp = e.cfg.Clock.Now()
 
 	planner := session.newPlanner(e, txn)
 	planner.semaCtx.Placeholders.SetTypes(pinfo)
