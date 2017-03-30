@@ -1,7 +1,8 @@
-# LogicTest: default distsql
+# LogicTest: default
 
 #
 # Tests that verify DistSQL support and auto mode determination.
+# The cluster size isn't important for these tests.
 #
 
 statement ok

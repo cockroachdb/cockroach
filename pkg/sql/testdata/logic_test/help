@@ -1,4 +1,4 @@
-# LogicTest: default distsql
+# LogicTest: default
 
 query TTTT colnames
 HELP replace
