@@ -1531,6 +1531,34 @@ var Builtins = map[string][]Builtin{
 			Info:     "This function is used only by CockroachDB's developers for testing purposes.",
 		},
 	},
+
+	// A function used to generate strings for test tables. It takes an integer
+	// and returns a string: 1234 -> "one-two-three-four"
+	"crdb_testing.to_english": {
+		Builtin{
+			Types:      ArgTypes{{"val", TypeInt}},
+			ReturnType: fixedReturnType(TypeString),
+			fn: func(_ *EvalContext, args Datums) (Datum, error) {
+				val := int(*args[0].(*DInt))
+				if val < 0 {
+					return nil, errors.New("negative value")
+				}
+				d := []string{"zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine"}
+				var digits []string
+				digits = append(digits, d[val%10])
+				for val > 9 {
+					val /= 10
+					digits = append(digits, d[val%10])
+				}
+				for i, j := 0, len(digits)-1; i < j; i, j = i+1, j-1 {
+					digits[i], digits[j] = digits[j], digits[i]
+				}
+				return NewDString(strings.Join(digits, "-")), nil
+			},
+			category: categoryString,
+			Info:     "Returns an English string derived from a number.",
+		},
+	},
 }
 
 var substringImpls = []Builtin{
