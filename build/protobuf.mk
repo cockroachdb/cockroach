@@ -73,6 +73,12 @@ CPP_PROTOS := $(filter %/roachpb/metadata.proto %/roachpb/data.proto %/roachpb/i
 CPP_HEADERS := $(subst ./,$(NATIVE_ROOT)/,$(CPP_PROTOS:%.proto=%.pb.h))
 CPP_SOURCES := $(subst ./,$(NATIVE_ROOT)/,$(CPP_PROTOS:%.proto=%.pb.cc))
 
+# Tell Make to delete the target if its recipe fails. Otherwise, if a recipe
+# modifies its target before failing, the target's timestamp will make it appear
+# up-to-date on the next invocation of Make, even though it is likely corrupt.
+# See: https://www.gnu.org/software/make/manual/html_node/Errors.html#Errors
+.DELETE_ON_ERROR:
+
 .PHONY: protos
 protos: $(GO_SOURCES) $(UI_SOURCES) $(CPP_HEADERS) $(CPP_SOURCES) $(GW_SOURCES)
 
