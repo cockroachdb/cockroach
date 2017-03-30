@@ -239,6 +239,7 @@ var keywords = map[string]int{
 	"TABLE":             TABLE,
 	"TABLES":            TABLES,
 	"TEMPLATE":          TEMPLATE,
+	"TESTING_RANGES":    TESTING_RANGES,
 	"TEXT":              TEXT,
 	"THEN":              THEN,
 	"TIME":              TIME,

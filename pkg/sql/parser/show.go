@@ -164,3 +164,22 @@ func (node *Help) Format(buf *bytes.Buffer, f FmtFlags) {
 	buf.WriteString("HELP ")
 	FormatNode(buf, f, node.Name)
 }
+
+// ShowRanges represents a SHOW TESTING_RANGES statement.
+// Only one of Table and Index can be set.
+type ShowRanges struct {
+	Table *NormalizableTableName
+	Index *TableNameWithIndex
+}
+
+// Format implements the NodeFormatter interface.
+func (node *ShowRanges) Format(buf *bytes.Buffer, f FmtFlags) {
+	buf.WriteString("SHOW TESTING_RANGES FROM ")
+	if node.Index != nil {
+		buf.WriteString("INDEX ")
+		FormatNode(buf, f, node.Index)
+	} else {
+		buf.WriteString("TABLE ")
+		FormatNode(buf, f, node.Table)
+	}
+}

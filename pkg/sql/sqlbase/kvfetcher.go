@@ -29,7 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 )
 
-// prettyKey pretty-prints the specified key, skipping over the first `skip`
+// PrettyKey pretty-prints the specified key, skipping over the first `skip`
 // fields. The pretty printed key looks like:
 //
 //   /Table/<tableID>/<indexID>/...
@@ -38,7 +38,7 @@ import (
 // this assumes that the fields themselves do not contain '/', but that is
 // currently true for the fields we care about stripping (the table and index
 // ID).
-func prettyKey(key roachpb.Key, skip int) string {
+func PrettyKey(key roachpb.Key, skip int) string {
 	p := key.String()
 	for i := 0; i <= skip; i++ {
 		n := strings.IndexByte(p[1:], '/')
@@ -53,7 +53,7 @@ func prettyKey(key roachpb.Key, skip int) string {
 // PrettySpan returns a human-readable representation of a span.
 func PrettySpan(span roachpb.Span, skip int) string {
 	var buf bytes.Buffer
-	fmt.Fprintf(&buf, "%s-%s", prettyKey(span.Key, skip), prettyKey(span.EndKey, skip))
+	fmt.Fprintf(&buf, "%s-%s", PrettyKey(span.Key, skip), PrettyKey(span.EndKey, skip))
 	return buf.String()
 }
 
