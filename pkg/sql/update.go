@@ -113,11 +113,84 @@ type updateNode struct {
 	updateColsIdx map[sqlbase.ColumnID]int // index in updateCols slice
 	tw            tableUpdater
 	checkHelper   checkHelper
+	sourceSlots   []sourceSlot
 
 	run struct {
 		// The following fields are populated during Start().
 		editNodeRun
 	}
+}
+
+// sourceSlot abstracts the idea that our update sources can either be tuples
+// or scalars. Tuples are for cases such as SET (a, b) = (1, 2) or SET (a, b) =
+// (SELECT 1, 2), and scalars are for situations like SET a = b. A sourceSlot
+// represents how to extract and type-check the results of the right-hand side
+// of a single SET statement. We could treat everything as tuples, including
+// scalars as tuples of size 1, and eliminate this indirection, but that makes
+// the query plan more complex.
+type sourceSlot interface {
+	// extractValues returns a slice of the values this slot is responsible for,
+	// as extracted from the row of results.
+	extractValues(resultRow parser.Datums) parser.Datums
+	// checkColumnTypes compares the types of the results that this slot refers to to the types of
+	// the columns those values will be assigned to. It returns an error if those types don't match up.
+	// It also populates the types of any placeholders by way of calling into sqlbase.CheckColumnType.
+	checkColumnTypes(row []parser.TypedExpr, pmap *parser.PlaceholderInfo) error
+}
+
+type tupleSlot struct {
+	columns     []sqlbase.ColumnDescriptor
+	sourceIndex int
+}
+
+func (ts tupleSlot) extractValues(row parser.Datums) parser.Datums {
+	return row[ts.sourceIndex].(*parser.DTuple).D
+}
+
+func (ts tupleSlot) checkColumnTypes(row []parser.TypedExpr, pmap *parser.PlaceholderInfo) error {
+	renderedResult := row[ts.sourceIndex]
+	for i, typ := range renderedResult.ResolvedType().(parser.TTuple) {
+		if err := sqlbase.CheckColumnType(ts.columns[i], typ, pmap); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+type scalarSlot struct {
+	column      sqlbase.ColumnDescriptor
+	sourceIndex int
+}
+
+func (ss scalarSlot) extractValues(row parser.Datums) parser.Datums {
+	return row[ss.sourceIndex : ss.sourceIndex+1]
+}
+
+func (ss scalarSlot) checkColumnTypes(row []parser.TypedExpr, pmap *parser.PlaceholderInfo) error {
+	renderedResult := row[ss.sourceIndex]
+	typ := renderedResult.ResolvedType()
+	return sqlbase.CheckColumnType(ss.column, typ, pmap)
+}
+
+// addOrMergeExpr takes an Expr
+func addOrMergeExpr(
+	ctx context.Context,
+	e parser.Expr,
+	currentUpdateIdx int,
+	updateCols []sqlbase.ColumnDescriptor,
+	defaultExprs []parser.TypedExpr,
+	render *renderNode,
+) (int, error) {
+	e = fillDefault(e, currentUpdateIdx, defaultExprs)
+	selectExpr := parser.SelectExpr{Expr: e}
+	typ := updateCols[currentUpdateIdx].Type.ToDatumType()
+	col, expr, err := render.planner.computeRender(ctx, selectExpr, typ,
+		render.sourceInfo, render.ivarHelper)
+	if err != nil {
+		return -1, err
+	}
+
+	return render.addOrMergeRender(col, expr, true), nil
 }
 
 // Update updates columns for a selection of rows from a table.
@@ -140,18 +213,18 @@ func (p *planner) Update(
 		return nil, err
 	}
 
-	exprs := make([]*parser.UpdateExpr, len(n.Exprs))
+	setExprs := make([]*parser.UpdateExpr, len(n.Exprs))
 	for i, expr := range n.Exprs {
 		// Replace the sub-query nodes.
 		newExpr, err := p.replaceSubqueries(ctx, expr.Expr, len(expr.Names))
 		if err != nil {
 			return nil, err
 		}
-		exprs[i] = &parser.UpdateExpr{Tuple: expr.Tuple, Expr: newExpr, Names: expr.Names}
+		setExprs[i] = &parser.UpdateExpr{Tuple: expr.Tuple, Expr: newExpr, Names: expr.Names}
 	}
 
 	// Determine which columns we're inserting into.
-	names, err := p.namesForExprs(exprs)
+	names, err := p.namesForExprs(setExprs)
 	if err != nil {
 		return nil, err
 	}
@@ -185,50 +258,81 @@ func (p *planner) Update(
 
 	tracing.AnnotateTrace()
 
-	// Generate the list of select targets. We need to select all of the columns
-	// plus we select all of the update expressions in case those expressions
-	// reference columns (e.g. "UPDATE t SET v = v + 1"). Note that we flatten
-	// expressions for tuple assignments just as we flattened the column names
-	// above. So "UPDATE t SET (a, b) = (1, 2)" translates into select targets of
-	// "*, 1, 2", not "*, (1, 2)".
-	targets := sqlbase.ColumnsSelectors(ru.FetchCols)
-	i := 0
-	// Remember the index where the targets for exprs start.
-	exprTargetIdx := len(targets)
-	desiredTypesFromSelect := make([]parser.Type, len(targets), len(targets)+len(exprs))
-	for i := range targets {
-		desiredTypesFromSelect[i] = parser.TypeAny
-	}
-	for _, expr := range exprs {
-		if expr.Tuple {
-			switch t := expr.Expr.(type) {
-			case (*parser.Tuple):
-				for _, e := range t.Exprs {
-					typ := updateCols[i].Type.ToDatumType()
-					e = fillDefault(e, typ, i, defaultExprs)
-					targets = append(targets, parser.SelectExpr{Expr: e})
-					desiredTypesFromSelect = append(desiredTypesFromSelect, typ)
-					i++
-				}
-			default:
-				return nil, fmt.Errorf("cannot use this expression to assign multiple columns: %s", expr.Expr)
-			}
-		} else {
-			typ := updateCols[i].Type.ToDatumType()
-			e := fillDefault(expr.Expr, typ, i, defaultExprs)
-			targets = append(targets, parser.SelectExpr{Expr: e})
-			desiredTypesFromSelect = append(desiredTypesFromSelect, typ)
-			i++
-		}
-	}
-
+	// We construct a query containing the columns being updated, and then later merge the values
+	// they are being updated with into that renderNode to ideally reuse some of the queries.
 	rows, err := p.SelectClause(ctx, &parser.SelectClause{
-		Exprs: targets,
+		Exprs: sqlbase.ColumnsSelectors(ru.FetchCols),
 		From:  &parser.From{Tables: []parser.TableExpr{n.Table}},
 		Where: n.Where,
-	}, nil, nil, desiredTypesFromSelect, publicAndNonPublicColumns)
+	}, nil, nil, nil, publicAndNonPublicColumns)
 	if err != nil {
 		return nil, err
+	}
+
+	// This capacity is an overestimate, since subqueries only take up one sourceSlot.
+	sourceSlots := make([]sourceSlot, 0, len(ru.FetchCols))
+
+	// currentUpdateIdx is the index of the first column descriptor in updateCols
+	// that is assigned to by the current setExpr.
+	currentUpdateIdx := 0
+	render := rows.(*renderNode)
+
+	for _, setExpr := range setExprs {
+		if setExpr.Tuple {
+			switch t := setExpr.Expr.(type) {
+			case *parser.Tuple:
+				// The user assigned an explicit set of values to the columns. We can't
+				// treat this case the same as when we have a subquery (and just evaluate
+				// the tuple) because when assigning a literal tuple like this it's valid
+				// to assign DEFAULT to some of the columns, which is not valid generally.
+				for _, e := range t.Exprs {
+					colIdx, err := addOrMergeExpr(ctx, e, currentUpdateIdx, updateCols, defaultExprs, render)
+					if err != nil {
+						return nil, err
+					}
+
+					sourceSlots = append(sourceSlots, scalarSlot{
+						column:      updateCols[currentUpdateIdx],
+						sourceIndex: colIdx,
+					})
+
+					currentUpdateIdx++
+				}
+			case *subquery:
+				selectExpr := parser.SelectExpr{Expr: t}
+				desiredTupleType := make(parser.TTuple, len(setExpr.Names))
+				for i := range setExpr.Names {
+					desiredTupleType[i] = updateCols[currentUpdateIdx+i].Type.ToDatumType()
+				}
+				col, expr, err := render.planner.computeRender(ctx, selectExpr, desiredTupleType,
+					render.sourceInfo, render.ivarHelper)
+				if err != nil {
+					return nil, err
+				}
+
+				colIdx := render.addOrMergeRender(col, expr, false)
+
+				sourceSlots = append(sourceSlots, tupleSlot{
+					columns:     updateCols[currentUpdateIdx : currentUpdateIdx+len(setExpr.Names)],
+					sourceIndex: colIdx,
+				})
+				currentUpdateIdx += len(setExpr.Names)
+			default:
+				panic(fmt.Sprintf("assigning to tuple with expression that is neither a tuple nor a subquery: %s", setExpr.Expr))
+			}
+
+		} else {
+			colIdx, err := addOrMergeExpr(ctx, setExpr.Expr, currentUpdateIdx, updateCols, defaultExprs, render)
+			if err != nil {
+				return nil, err
+			}
+
+			sourceSlots = append(sourceSlots, scalarSlot{
+				column:      updateCols[currentUpdateIdx],
+				sourceIndex: colIdx,
+			})
+			currentUpdateIdx++
+		}
 	}
 
 	// Placeholders have their types populated in the above Select if they are part
@@ -237,18 +341,8 @@ func (p *planner) Update(
 	// using checkColumnType. This step also verifies that the expression
 	// types match the column types.
 	sel := rows.(*renderNode)
-	for i, target := range sel.render[exprTargetIdx:] {
-		// DefaultVal doesn't implement TypeCheck
-		if _, ok := target.(parser.DefaultVal); ok {
-			continue
-		}
-		// TODO(nvanbenschoten) isn't this TypeCheck redundant with the call to SelectClause?
-		typedTarget, err := parser.TypeCheck(target, &p.semaCtx, updateCols[i].Type.ToDatumType())
-		if err != nil {
-			return nil, err
-		}
-		err = sqlbase.CheckColumnType(updateCols[i], typedTarget.ResolvedType(), &p.semaCtx.Placeholders)
-		if err != nil {
+	for _, sourceSlot := range sourceSlots {
+		if err := sourceSlot.checkColumnTypes(sel.render, &p.semaCtx.Placeholders); err != nil {
 			return nil, err
 		}
 	}
@@ -264,6 +358,7 @@ func (p *planner) Update(
 		updateCols:    ru.UpdateCols,
 		updateColsIdx: updateColsIdx,
 		tw:            tw,
+		sourceSlots:   sourceSlots,
 	}
 	if err := un.checkHelper.init(ctx, p, tn, en.tableDesc); err != nil {
 		return nil, err
@@ -302,12 +397,21 @@ func (u *updateNode) Next(ctx context.Context) (bool, error) {
 
 	tracing.AnnotateTrace()
 
-	oldValues := u.run.rows.Values()
+	entireRow := u.run.rows.Values()
 
 	// Our updated value expressions occur immediately after the plain
 	// columns in the output.
-	updateValues := oldValues[len(u.tw.ru.FetchCols):]
-	oldValues = oldValues[:len(u.tw.ru.FetchCols)]
+	oldValues := entireRow[:len(u.tw.ru.FetchCols)]
+
+	updateValues := make(parser.Datums, len(u.tw.ru.UpdateCols))
+	valueIdx := 0
+
+	for _, slot := range u.sourceSlots {
+		for _, value := range slot.extractValues(entireRow) {
+			updateValues[valueIdx] = value
+			valueIdx++
+		}
+	}
 
 	u.checkHelper.loadRow(u.tw.ru.FetchColIDtoRowIndex, oldValues, false)
 	u.checkHelper.loadRow(u.updateColsIdx, updateValues, true)
@@ -322,7 +426,6 @@ func (u *updateNode) Next(ctx context.Context) (bool, error) {
 		}
 	}
 
-	// Update the row values.
 	for i, col := range u.tw.ru.UpdateCols {
 		val := updateValues[i]
 		if !col.Nullable && val == parser.DNull {
@@ -330,6 +433,7 @@ func (u *updateNode) Next(ctx context.Context) (bool, error) {
 		}
 	}
 
+	// Update the row values.
 	newValues, err := u.tw.row(ctx, append(oldValues, updateValues...))
 	if err != nil {
 		return false, err
@@ -373,9 +477,7 @@ func (p *planner) namesForExprs(exprs parser.UpdateExprs) (parser.UnresolvedName
 	return names, nil
 }
 
-func fillDefault(
-	expr parser.Expr, desired parser.Type, index int, defaultExprs []parser.TypedExpr,
-) parser.Expr {
+func fillDefault(expr parser.Expr, index int, defaultExprs []parser.TypedExpr) parser.Expr {
 	switch expr.(type) {
 	case parser.DefaultVal:
 		if defaultExprs == nil {
