@@ -20,12 +20,15 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/google/btree"
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/cache"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/interval"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
-	"github.com/google/btree"
 )
 
 const (
@@ -36,7 +39,7 @@ const (
 	// timestamp.
 	MinTSCacheWindow = 10 * time.Second
 
-	defaultEvictionSizeThreshold = 512
+	defaultEvictionSizeThreshold = 1024 * 1024
 
 	// Max entries in each btree node.
 	// TODO(peter): Not yet tuned.
@@ -115,6 +118,22 @@ type timestampCache struct {
 	evictionSizeThreshold int
 }
 
+// lowWaterTxnIDMarker is a special txn ID that identifies a cache entry as a
+// low water mark. It is specified when a lease is acquired to clear the
+// timestamp cache for a range. Also see timestampCache.getMax where this txn
+// ID is checked in order to return whether the max read/write timestamp came
+// from a regular entry or one of these low water mark entries.
+var lowWaterTxnIDMarker = func() *uuid.UUID {
+	// TODO(peter): The txn ID here was generated using uuid.MakeV4(). Should we
+	// use something that is more recognizable, such as the all 0's UUID? Or all
+	// 1's?
+	u, err := uuid.FromString("a0aada20-1436-4298-a8b5-94256c7f67b7")
+	if err != nil {
+		log.Fatal(context.Background(), err)
+	}
+	return &u
+}()
+
 // A cacheValue combines the timestamp with an optional txn ID.
 type cacheValue struct {
 	timestamp hlc.Timestamp
@@ -162,14 +181,6 @@ func (tc *timestampCache) Clear(lowWater hlc.Timestamp) {
 // TimestampCache.
 func (tc *timestampCache) len() int {
 	return tc.rCache.Len() + tc.wCache.Len() + tc.reqSpans
-}
-
-// SetLowWater sets the cache's low water mark, which is the minimum
-// value the cache will return from calls to GetMax().
-func (tc *timestampCache) SetLowWater(lowWater hlc.Timestamp) {
-	if tc.lowWater.Less(lowWater) {
-		tc.lowWater = lowWater
-	}
 }
 
 // add the specified timestamp to the cache as covering the range of
@@ -630,57 +641,10 @@ func (tc *timestampCache) getMax(
 			maxTxnID = nil
 		}
 	}
-	return maxTS, maxTxnID, ok
-}
-
-// MergeInto merges all entries from this timestamp cache into the
-// dest timestamp cache. The clear parameter, if true, copies the
-// values of lowWater and latest and clears the destination cache
-// before merging in the source.
-func (tc *timestampCache) MergeInto(dest *timestampCache, clear bool) {
-	if clear {
-		dest.Clear(tc.lowWater)
-		dest.latest = tc.latest
-		dest.reqIDAlloc = 0
-
-		// Because we just cleared the destination cache, we can directly
-		// insert entries from this cache.
-		hardMerge := func(srcCache, destCache *cache.IntervalCache) {
-			srcCache.Do(func(k, v interface{}) {
-				// Cache entries are mutable (see Add), so we give each cache its own
-				// unique copy.
-				entry := makeCacheEntry(*k.(*cache.IntervalKey), *v.(*cacheValue))
-				destCache.AddEntry(entry)
-			})
-		}
-		hardMerge(tc.rCache, dest.rCache)
-		hardMerge(tc.wCache, dest.wCache)
-	} else {
-		dest.lowWater.Forward(tc.lowWater)
-		dest.latest.Forward(tc.latest)
-
-		// The cache was not cleared before, so we can't just insert entries because
-		// intervals may need to be adjusted or removed to maintain the non-overlapping
-		// guarantee.
-		softMerge := func(srcCache *cache.IntervalCache, readTSCache bool) {
-			srcCache.Do(func(k, v interface{}) {
-				key, val := *k.(*cache.IntervalKey), *v.(*cacheValue)
-				dest.add(roachpb.Key(key.Start), roachpb.Key(key.End), val.timestamp, val.txnID, readTSCache)
-			})
-		}
-		softMerge(tc.rCache, true)
-		softMerge(tc.wCache, false)
+	if maxTxnID == lowWaterTxnIDMarker {
+		ok = false
 	}
-
-	// Copy the requests.
-	tc.requests.Ascend(func(i btree.Item) bool {
-		req := *(i.(*cacheRequest))
-		dest.reqIDAlloc++
-		req.uniqueID = dest.reqIDAlloc
-		dest.requests.ReplaceOrInsert(&req)
-		dest.reqSpans += req.numSpans()
-		return true
-	})
+	return maxTS, maxTxnID, ok
 }
 
 // shouldEvict returns true if the cache entry's timestamp is no

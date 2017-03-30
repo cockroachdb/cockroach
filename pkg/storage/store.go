@@ -544,6 +544,13 @@ type Store struct {
 		replicaQueues map[roachpb.RangeID]raftRequestQueue
 	}
 
+	tsCacheMu struct {
+		// Protects all fields in the tsCacheMu struct.
+		syncutil.Mutex
+		// Most recent timestamps for keys / key ranges.
+		cache *timestampCache
+	}
+
 	scheduler *raftScheduler
 
 	counts struct {
@@ -918,6 +925,10 @@ func NewStore(cfg StoreConfig, eng engine.Engine, nodeDesc *roachpb.NodeDescript
 	s.mu.replicasByKey = btree.New(64 /* degree */)
 	s.mu.uninitReplicas = map[roachpb.RangeID]*Replica{}
 	s.mu.Unlock()
+
+	s.tsCacheMu.Lock()
+	s.tsCacheMu.cache = newTimestampCache(s.cfg.Clock)
+	s.tsCacheMu.Unlock()
 
 	s.snapshotApplySem = make(chan struct{}, cfg.concurrentSnapshotApplyLimit)
 
@@ -1889,15 +1900,6 @@ func splitPostApply(
 
 	// Finish initialization of the RHS.
 
-	// Copy the timestamp cache from the LHS.
-	// TODO(andrei): We should truncate the entries in both LHS and RHS' timestamp
-	// caches to the respective spans of these new ranges.
-	r.tsCacheMu.Lock()
-	rightRng.tsCacheMu.Lock()
-	r.tsCacheMu.cache.MergeInto(rightRng.tsCacheMu.cache, true /* clear */)
-	rightRng.tsCacheMu.Unlock()
-	r.tsCacheMu.Unlock()
-
 	r.mu.Lock()
 	rightRng.mu.Lock()
 	// Copy the minLeaseProposedTS from the LHS.
@@ -2082,14 +2084,6 @@ func (s *Store) maybeMergeTimestampCaches(
 			"Subsuming lease: %s. Subsumed lease: %s.", subsumingLease, subsumedLease)
 	}
 
-	if subsumingRep.isLeaseValidRLocked(subsumingLease, now) &&
-		subsumingLease.OwnedBy(s.StoreID()) {
-		subsumingRep.tsCacheMu.Lock()
-		subsumedRep.tsCacheMu.Lock()
-		subsumedRep.tsCacheMu.cache.MergeInto(subsumingRep.tsCacheMu.cache, false /* clear */)
-		subsumedRep.tsCacheMu.Unlock()
-		subsumingRep.tsCacheMu.Unlock()
-	}
 	return nil
 }
 

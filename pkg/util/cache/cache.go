@@ -553,11 +553,3 @@ func (ic *IntervalCache) doOverlaps(i interval.Interface) bool {
 	ic.overlaps = append(ic.overlaps, e)
 	return false
 }
-
-// Do invokes f on all of the entries in the cache.
-func (ic *IntervalCache) Do(f func(k, v interface{})) {
-	ic.tree.Do(func(e interval.Interface) (done bool) {
-		f(e.(*Entry).Key, e.(*Entry).Value)
-		return
-	})
-}
