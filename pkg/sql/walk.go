@@ -86,7 +86,7 @@ func (v *planVisitor) visit(plan planNode) {
 	}
 
 	name := nodeName(plan)
-	var recurse bool
+	recurse := true
 	if v.observer.enterNode != nil {
 		recurse = v.observer.enterNode(v.ctx, name, plan)
 	}
