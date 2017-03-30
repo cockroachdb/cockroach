@@ -335,8 +335,8 @@ func (s *renderNode) initTargets(
 		if len(desiredTypes) > i {
 			desiredType = desiredTypes[i]
 		}
-		cols, exprs, hasStar, err := s.planner.computeRender(ctx, target, desiredType,
-			s.sourceInfo, s.ivarHelper, true)
+		cols, exprs, hasStar, err := s.planner.computeRenderAllowingStars(ctx, target, desiredType,
+			s.sourceInfo, s.ivarHelper)
 		if err != nil {
 			return err
 		}
@@ -399,8 +399,8 @@ func (s *renderNode) transformToCrossJoin(
 	newTarget := parser.SelectExpr{
 		Expr: s.ivarHelper.IndexedVar(s.ivarHelper.NumVars() - 1),
 	}
-	return s.planner.computeRender(ctx, newTarget, desiredType,
-		s.sourceInfo, s.ivarHelper, true)
+	return s.planner.computeRenderAllowingStars(ctx, newTarget, desiredType,
+		s.sourceInfo, s.ivarHelper)
 }
 
 func (s *renderNode) initWhere(ctx context.Context, where *parser.Where) (*filterNode, error) {

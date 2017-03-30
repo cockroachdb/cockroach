@@ -6,6 +6,18 @@ CREATE TABLE kv (
   v INT
 )
 
+statement error value type tuple{int, int} doesn't match type INT of column "v"
+UPDATE kv SET v = (SELECT (10, 11))
+
+statement error value type decimal doesn't match type INT of column "v"
+UPDATE kv SET v = 3.2
+
+statement error value type decimal doesn't match type INT of column "v"
+UPDATE kv SET (k, v) = (3, 3.2)
+
+statement error value type decimal doesn't match type INT of column "v"
+UPDATE kv SET (k, v) = (SELECT 3, 3.2)
+
 statement ok
 INSERT INTO kv VALUES (1, 2), (3, 4), (5, 6), (7, 8)
 
@@ -185,6 +197,9 @@ INSERT INTO abc VALUES (1, 2, 3)
 statement error number of columns \(2\) does not match number of values \(1\)
 UPDATE abc SET (b, c) = (4)
 
+statement error DEFAULT can only appear in a VALUES list within INSERT or on the right side of a SET within UPDATE
+UPDATE abc SET (b, c) = (SELECT (VALUES (DEFAULT, DEFAULT)))
+
 statement ok
 UPDATE abc SET (b, c) = (4, 5)
 
@@ -192,6 +207,9 @@ query III
 SELECT * FROM abc
 ----
 1 4 5
+
+statement ok
+UPDATE abc SET a = 1, (b, c) = (SELECT 1, 2)
 
 query III colnames
 UPDATE abc SET (b, c) = (8, 9) RETURNING abc.b, c, 4
@@ -276,6 +294,94 @@ UPDATE abc SET (b, b) = (10, 11)
 
 statement error multiple assignments to the same column "b"
 UPDATE abc SET (b, c) = (10, 11), b = 12
+
+statement ok
+CREATE TABLE xyz (
+  x INT PRIMARY KEY,
+  y INT,
+  z INT
+)
+
+statement ok
+INSERT INTO xyz VALUES (111, 222, 333)
+
+statement ok
+UPDATE xyz SET (z, y) = (SELECT 666, 777), x = (SELECT 2)
+
+query III
+SELECT * from xyz
+----
+2 777 666
+
+query ITTT
+EXPLAIN UPDATE xyz SET y = x
+----
+0  update
+0         table  xyz
+0         set    y
+1  scan
+1         table  xyz@primary
+1         spans  ALL
+
+query ITTTTT
+EXPLAIN (METADATA) UPDATE xyz SET (x, y) = (1, 2)
+----
+0  update                      ()
+0          table  xyz
+0          set    x, y
+1  render                      (x, y, z, "1", "2")
+2  scan                        (x, y, z)
+2          table  xyz@primary
+2          spans  ALL
+
+query ITTTTT
+EXPLAIN (METADATA) UPDATE xyz SET (x, y) = (y, x)
+----
+0  update                      ()
+0          table  xyz
+0          set    x, y
+1  scan                        (x, y, z)
+1          table  xyz@primary
+1          spans  ALL
+
+query ITTTTT
+EXPLAIN (METADATA) UPDATE xyz SET (x, y) = (2, 2)
+----
+0  update                      ()
+0          table  xyz
+0          set    x, y
+1  render                      (x, y, z, "2")
+2  scan                        (x, y, z)
+2          table  xyz@primary
+2          spans  ALL
+
+statement ok
+CREATE TABLE lots (
+  k1 INT,
+  k2 INT,
+  k3 INT,
+  k4 INT,
+  k5 INT
+)
+
+statement ok
+INSERT INTO lots VALUES (1, 2, 3, 4, 5)
+
+statement ok
+UPDATE lots SET (k1, k2) = (6, 7), k3 = 8, (k4, k5) = (9, 10)
+
+query IIIII
+SELECT * FROM lots
+----
+6  7  8  9  10
+
+statement ok
+UPDATE lots SET (k5, k4, k3, k2, k1) = (SELECT * FROM lots)
+
+query IIIII
+SELECT * FROM lots
+----
+10  9  8  7  6
 
 statement ok
 CREATE TABLE pks (
