@@ -45,6 +45,10 @@ message Request {
   map<int32, int64> high_water_stamps = 3 [(gogoproto.castkey) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID", (gogoproto.nullable) = false];
   // Delta of Infos originating at sender.
   map<string, Info> delta = 4;
+  // Cluster ID to prevent illegal connections.
+  bytes cluster_id = 5 [(gogoproto.nullable) = false,
+                        (gogoproto.customname) = "ClusterID",
+                        (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID"];
 }
 
 // Response is returned from the Gossip.Gossip RPC.

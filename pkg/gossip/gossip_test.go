@@ -19,6 +19,7 @@ package gossip
 import (
 	"bytes"
 	"fmt"
+	"net"
 	"strconv"
 	"testing"
 	"time"
@@ -35,7 +36,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
 // TestGossipInfoStore verifies operation of gossip instance infostore.
@@ -456,4 +459,101 @@ func TestGossipOrphanedStallDetection(t *testing.T) {
 		}
 		return errors.Errorf("node %d not yet connected", peerNodeID)
 	})
+}
+
+// TestGossipCantJoinTwoClusters verifies that a node can't
+// participate in two separate clusters if two nodes from different
+// clusters are specified as bootstrap hosts. Previously, this would
+// be allowed, because a node verifies the cluster ID only at startup.
+// If after joining the first cluster via that cluster's init node,
+// the init node shuts down, the joining node will reconnect via its
+// second bootstrap host and begin to participate [illegally] in
+// another cluster.
+func TestGossipJoinTwoClusters(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	const interval = 10 * time.Millisecond
+	var stoppers []*stop.Stopper
+	var g []*Gossip
+	var clusterIDs []uuid.UUID
+	var addrs []net.Addr
+
+	// Create three gossip nodes, init the first two with no bootstrap
+	// hosts, but unique cluster IDs. The third host has the first two
+	// hosts as bootstrap hosts, but has the same cluster ID as the
+	// first of its bootstrap hosts.
+	for i := 0; i < 3; i++ {
+		stopper := stop.NewStopper()
+		stoppers = append(stoppers, stopper)
+		defer func() {
+			select {
+			case <-stopper.ShouldQuiesce():
+			default:
+				stopper.Stop()
+			}
+		}()
+		rpcCtx := newInsecureRPCContext(stopper)
+		server := rpc.NewServer(rpcCtx)
+		ln, err := netutil.ListenAndServeGRPC(stopper, server, util.IsolatedTestAddr)
+		if err != nil {
+			t.Fatal(err)
+		}
+		addrs = append(addrs, ln.Addr())
+
+		var resolvers []resolver.Resolver
+		// Only third node has resolvers.
+		switch i {
+		case 0, 1:
+			clusterIDs = append(clusterIDs, uuid.MakeV4())
+		case 2:
+			clusterIDs = append(clusterIDs, clusterIDs[0])
+			for j := 0; j < 2; j++ {
+				resolver, err := resolver.NewResolver(addrs[j].String())
+				if err != nil {
+					t.Fatal(err)
+				}
+				resolvers = append(resolvers, resolver)
+			}
+		}
+
+		// node ID must be non-zero
+		gnode := NewTest(
+			roachpb.NodeID(i+1), rpcCtx, server, resolvers, stopper, metric.NewRegistry(),
+		)
+		g = append(g, gnode)
+		gnode.SetStallInterval(interval)
+		gnode.SetBootstrapInterval(interval)
+		gnode.SetClusterID(clusterIDs[i])
+		gnode.Start(ln.Addr())
+	}
+
+	// Wait for connections.
+	testutils.SucceedsSoon(t, func() error {
+		// The first gossip node should have one gossip client address
+		// in nodeMap if the 2nd gossip node connected. The second gossip
+		// node should have none.
+		g[0].mu.Lock()
+		defer g[0].mu.Unlock()
+		if a, e := len(g[0].mu.nodeMap), 1; a != e {
+			return errors.Errorf("expected %s to contain %d nodes, got %d", g[0].mu.nodeMap, e, a)
+		}
+		g[1].mu.Lock()
+		defer g[1].mu.Unlock()
+		if a, e := len(g[1].mu.nodeMap), 0; a != e {
+			return errors.Errorf("expected %s to contain %d nodes, got %d", g[1].mu.nodeMap, e, a)
+		}
+		return nil
+	})
+
+	// Kill node 0 to force node 2 to bootstrap with node 1.
+	stoppers[0].Stop()
+	// Wait for twice the bootstrap interval, and verify that
+	// node 2 still has not connected to node 1.
+	time.Sleep(2 * interval)
+
+	g[1].mu.Lock()
+	if a, e := len(g[1].mu.nodeMap), 0; a != e {
+		t.Errorf("expected %s to contain %d nodes, got %d", g[1].mu.nodeMap, e, a)
+	}
+	g[1].mu.Unlock()
 }
