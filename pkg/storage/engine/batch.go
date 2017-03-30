@@ -16,13 +16,34 @@
 
 package engine
 
-import "github.com/cockroachdb/cockroach/pkg/util/hlc"
+import (
+	"bytes"
+	"encoding/binary"
+	"fmt"
+	"io"
+
+	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/pkg/errors"
+)
+
+// BatchType represents the type of an entry in an encoded RocksDB batch.
+type BatchType byte
+
+// These constants come from rocksdb/db/dbformat.h.
+const (
+	BatchTypeDeletion BatchType = 0x0
+	BatchTypeValue              = 0x1
+	BatchTypeMerge              = 0x2
+	// BatchTypeLogData                    = 0x3
+	// BatchTypeColumnFamilyDeletion       = 0x4
+	// BatchTypeColumnFamilyValue          = 0x5
+	// BatchTypeColumnFamilyMerge          = 0x6
+	// BatchTypeSingleDeletion             = 0x7
+	// BatchTypeColumnFamilySingleDeletion = 0x8
+)
 
 const (
-	batchTypeDeletion byte = 0x0
-	batchTypeValue         = 0x1
-	batchTypeMerge         = 0x2
-
 	// The batch header is composed of an 8-byte sequence number (all zeroes) and
 	// 4-byte count of the number of entries in the batch.
 	headerSize       int = 12
@@ -51,8 +72,8 @@ const (
 //      data: uint8[len]
 //
 // The RocksDBBatchBuilder code currently only supports kTypeValue
-// (batchTypeValue), kTypeDeletion (batchTypeDeletion)and kTypeMerge
-// (batchTypeMerge) operations. Before a batch is written to the RocksDB
+// (BatchTypeValue), kTypeDeletion (BatchTypeDeletion)and kTypeMerge
+// (BatchTypeMerge) operations. Before a batch is written to the RocksDB
 // write-ahead-log, the sequence number is 0. The "fixed32" format is little
 // endian.
 //
@@ -199,7 +220,7 @@ func (b *RocksDBBatchBuilder) encodeKeyValue(key MVCCKey, value []byte, tag byte
 
 // Put sets the given key to the value provided.
 func (b *RocksDBBatchBuilder) Put(key MVCCKey, value []byte) {
-	b.encodeKeyValue(key, value, batchTypeValue)
+	b.encodeKeyValue(key, value, BatchTypeValue)
 }
 
 // Merge is a high-performance write operation used for values which are
@@ -207,7 +228,7 @@ func (b *RocksDBBatchBuilder) Put(key MVCCKey, value []byte) {
 // into a single key; a subsequent read will return a "merged" value which is
 // computed from the original merged values.
 func (b *RocksDBBatchBuilder) Merge(key MVCCKey, value []byte) {
-	b.encodeKeyValue(key, value, batchTypeMerge)
+	b.encodeKeyValue(key, value, BatchTypeMerge)
 }
 
 // Clear removes the item from the db with the given key.
@@ -216,5 +237,196 @@ func (b *RocksDBBatchBuilder) Clear(key MVCCKey) {
 	b.count++
 	pos := len(b.repr)
 	b.encodeKey(key, 0)
-	b.repr[pos] = batchTypeDeletion
+	b.repr[pos] = byte(BatchTypeDeletion)
+}
+
+// DecodeKey decodes an engine.MVCCKey from its serialized representation. This
+// decoding must match engine/db.cc:DecodeKey().
+func DecodeKey(encodedKey []byte) (MVCCKey, error) {
+	tsLen := int(encodedKey[len(encodedKey)-1])
+	keyPartEnd := len(encodedKey) - 1 - tsLen
+	if keyPartEnd < 0 {
+		return MVCCKey{}, errors.Errorf("invalid encoded mvcc key: %x", encodedKey)
+	}
+
+	key := MVCCKey{Key: encodedKey[:keyPartEnd]}
+	encodedTs := encodedKey[keyPartEnd:]
+
+	switch tsLen {
+	case 0:
+		// No-op.
+	case 9:
+		key.Timestamp.WallTime = int64(binary.BigEndian.Uint64(encodedTs[1:9]))
+	case 13:
+		key.Timestamp.WallTime = int64(binary.BigEndian.Uint64(encodedTs[1:9]))
+		key.Timestamp.Logical = int32(binary.BigEndian.Uint32(encodedTs[9:13]))
+	default:
+		return MVCCKey{}, errors.Errorf(
+			"invalid encoded mvcc key: bad timestamp len %d: %x", encodedKey, tsLen)
+	}
+
+	return key, nil
+}
+
+// RocksDBBatchReader is used to iterate the entries in a RocksDB batch
+// representation.
+//
+// Example:
+// r, err := NewRocksDBBatchReader(...)
+// if err != nil {
+//   return err
+// }
+// for r.Next() {
+// 	 switch r.BatchType() {
+// 	 case BatchTypeDeletion:
+// 	   fmt.Printf("delete(%x)", r.UnsafeKey())
+// 	 case BatchTypeValue:
+// 	   fmt.Printf("put(%x,%x)", r.UnsafeKey(), r.UnsafeValue())
+// 	 case BatchTypeMerge:
+// 	   fmt.Printf("merge(%x,%x)", r.UnsafeKey(), r.UnsafeValue())
+// 	 }
+// }
+// if err != nil {
+//   return nil
+// }
+type RocksDBBatchReader struct {
+	buf *bytes.Reader
+
+	// The error encountered during iterator, if any
+	err error
+
+	// The total number of entries, decoded from the batch header
+	count uint32
+
+	// For allocation avoidance
+	alloc bufalloc.ByteAllocator
+
+	// The following all represent the current entry and are updated by Next.
+	// `value` is not applicable for BatchTypeDeletion.
+	offset int
+	typ    BatchType
+	key    []byte
+	value  []byte
+}
+
+// NewRocksDBBatchReader creates a RocksDBBatchReader from the given repr and
+// verifies the header.
+func NewRocksDBBatchReader(repr []byte) (*RocksDBBatchReader, error) {
+	// Set offset to -1 so the first call to Next will increment it to 0.
+	r := RocksDBBatchReader{buf: bytes.NewReader(repr), offset: -1}
+
+	var seq uint64
+	if err := binary.Read(r.buf, binary.LittleEndian, &seq); err != nil {
+		return nil, err
+	}
+	if seq != 0 {
+		return nil, errors.Errorf("bad sequence: expected 0, but found %d", seq)
+	}
+
+	if err := binary.Read(r.buf, binary.LittleEndian, &r.count); err != nil {
+		return nil, err
+	}
+
+	return &r, nil
+}
+
+// Count returns the declared number of entries in the batch.
+func (r *RocksDBBatchReader) Count() int {
+	return int(r.count)
+}
+
+// Error returns the error, if any, which the iterator encountered.
+func (r *RocksDBBatchReader) Error() error {
+	return r.err
+}
+
+// BatchType returns the type of the current batch entry.
+func (r *RocksDBBatchReader) BatchType() BatchType {
+	return r.typ
+}
+
+// UnsafeKey returns the key of the current batch entry. The memory is
+// invalidated on the next call to Next.
+func (r *RocksDBBatchReader) UnsafeKey() []byte {
+	return r.key
+}
+
+// UnsafeValue returns the value of the current batch entry. The memory is
+// invalidated on the next call to Next. UnsafeValue panics if the BatchType is
+// BatchTypeDeleted.
+func (r *RocksDBBatchReader) UnsafeValue() []byte {
+	if r.typ == BatchTypeDeletion {
+		panic("cannot call UnsafeValue on a deletion entry")
+	}
+	return r.value
+}
+
+// Next advances to the next entry in the batch, returning false when the batch
+// is empty.
+func (r *RocksDBBatchReader) Next() bool {
+	if r.err != nil {
+		return false
+	}
+
+	r.offset++
+	typ, err := r.buf.ReadByte()
+	if err == io.EOF {
+		if r.offset < int(r.count) {
+			r.err = errors.Errorf("invalid batch: expected %d entries but found %d", r.count, r.offset)
+		}
+		return false
+	} else if err != nil {
+		r.err = err
+		return false
+	}
+
+	// Reset alloc.
+	r.alloc = r.alloc[:0]
+
+	r.typ = BatchType(typ)
+	switch r.typ {
+	case BatchTypeDeletion:
+		if r.key, r.err = r.varstring(); r.err != nil {
+			return false
+		}
+	case BatchTypeValue:
+		if r.key, r.err = r.varstring(); r.err != nil {
+			return false
+		}
+		if r.value, r.err = r.varstring(); r.err != nil {
+			return false
+		}
+	case BatchTypeMerge:
+		if r.key, r.err = r.varstring(); r.err != nil {
+			return false
+		}
+		if r.value, r.err = r.varstring(); r.err != nil {
+			return false
+		}
+	default:
+		r.err = errors.Errorf("unexpected type %d", typ)
+		return false
+	}
+	return true
+}
+
+func (r *RocksDBBatchReader) varstring() ([]byte, error) {
+	n, err := binary.ReadUvarint(r.buf)
+	if err != nil {
+		return nil, err
+	}
+	if n == 0 {
+		return nil, nil
+	}
+
+	var s []byte
+	r.alloc, s = r.alloc.Alloc(int(n), 0)
+	c, err := r.buf.Read(s)
+	if err != nil {
+		return nil, err
+	}
+	if c != int(n) {
+		return nil, fmt.Errorf("expected %d bytes, but found %d", n, c)
+	}
+	return s, nil
 }
