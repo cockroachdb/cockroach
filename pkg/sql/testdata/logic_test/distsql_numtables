@@ -1,0 +1,236 @@
+# LogicTest: 5node
+
+# First, we set up two data tables:
+#   - NumToSquare maps integers from 1 to 100 to their squares
+#   - NumToStr maps integers from 1 to 100*100 to strings; this table is
+#     split and distributed to all nodes.
+statement ok
+CREATE TABLE NumToSquare (x INT PRIMARY KEY, xsquared INT)
+
+statement ok
+INSERT INTO NumToSquare SELECT i, i*i FROM GENERATE_SERIES(1, 100) AS g(i)
+
+statement ok
+CREATE TABLE NumToStr (y INT PRIMARY KEY, str STRING)
+
+# Split into five parts.
+statement ok
+ALTER TABLE NumToStr SPLIT AT SELECT (i * 100 * 100 / 5)::int FROM GENERATE_SERIES(1, 4) AS g(i)
+
+# Relocate the five parts to the five nodes.
+statement ok
+ALTER TABLE NumToStr TESTING_RELOCATE
+  SELECT ARRAY[i+1], (i * 100 * 100 / 5)::int FROM GENERATE_SERIES(0, 4) AS g(i)
+
+statement ok
+INSERT INTO NumToStr SELECT i, crdb_testing.to_english(i) FROM GENERATE_SERIES(1, 100*100) AS g(i)
+
+# Verify data placement.
+query TTTI colnames
+SHOW TESTING_RANGES FROM TABLE NumToSquare
+----
+Start Key  End Key  Replicas  Lease Holder
+NULL       NULL     {1}       1
+
+query TTTI colnames
+SHOW TESTING_RANGES FROM TABLE NumToStr
+----
+Start Key  End Key  Replicas  Lease Holder
+NULL       /2000    {1}       1
+/2000      /4000    {2}       2
+/4000      /6000    {3}       3
+/6000      /8000    {4}       4
+/8000      NULL     {5}       5
+
+# Ready to roll!
+statement ok
+SET DISTSQL = ON
+
+
+#
+# -- Basic tests --
+#
+
+# Query with a restricted span.
+query T
+SELECT url FROM [EXPLAIN (DISTSQL) SELECT 5, 2+y, * FROM NumToStr WHERE y <= 10 ORDER BY str]
+----
+https://raduberinde.github.io/decode.html?eJykkLFLxjAQxXf_inLrl8EWXTJ17VKlXzfJEJuHFNpcuaSgfPR_lyQI2kEEIcu9d-93j9zIs0NvVwTSL1STUbQJTwiBJUlloXPvpO8VzX7bY5KNookFpG8U57iANI32dcEA6yCkyCHaecnQTebVykfb7-vI15jcAd5BdPVYNVrrrh-rS9XW-TVkDkW8x69Lh_p7hytLPJ9vHy7_QQ4IG_uAH9AzzyiCe0P5sMC7THgWnjK8jE95OwsOIRa3LkPni5VqfQ_Xv4abU9gcd58BAAD__3JRmC8=
+
+query IIIT
+SELECT 5, 2+y, * FROM NumToStr WHERE y <= 10 ORDER BY str
+----
+5 10  8 eight
+5  7  5 five
+5  6  4 four
+5 11  9 nine
+5  3  1 one
+5 12 10 one-zero
+5  9  7 seven
+5  8  6 six
+5  5  3 three
+5  4  2 two
+
+
+# Query which requires a full table scan.
+query T
+SELECT url FROM [EXPLAIN (DISTSQL) SELECT 5, 2 + y, * FROM NumToStr WHERE y % 1000 = 0 ORDER BY str]
+----
+https://raduberinde.github.io/decode.html?eJzUlEFr4zAQhe_7K8SDhV2iBctxsqmg4FMhF7ckuRUfXGsoBscysgwtIf-92GppE4Ic4pMhh2hm3nxvZDEHVFpRku2pgXyGAEcIjjk4InAskHLURufUNNp0JU6wVm-QAUdR1a3twilHrg1BHmALWxIkdtlLSRvKFBlwKLJZUfaQ2hT7zLzHSbvf6a3tsg9FaclI9icW7DcTQRBIKdfJ7i-7Z59_wbGhSnVVCxa6GJuxWPS_EOmRQ7f2y8-RX-90q409NxlHs6tbfnfSRpEhdanVBW6i_-n6pNZHFJO57gGnt1x3OJnhB5zeMvx8MsMPOL1l-Ggyww84HbtlLrTcUFPrqiHvDkk5SL2SW1SNbk1OT0bnfXN3fOyr-4CixrqscId15VKdrZ9i4RWHJ2JxLg795AH03KuO_OJojO-FV7z0k5djyP-94pWfvBpDvvN_q2Dgmfgf2Tk7Pf76CAAA__9KsrtY
+
+query IIIT
+SELECT 5, 2 + y, * FROM NumToStr WHERE y % 1000 = 0 ORDER BY str
+----
+5  8002  8000 eight-zero-zero-zero
+5  5002  5000 five-zero-zero-zero
+5  4002  4000 four-zero-zero-zero
+5  9002  9000 nine-zero-zero-zero
+5  1002  1000 one-zero-zero-zero
+5 10002 10000 one-zero-zero-zero-zero
+5  7002  7000 seven-zero-zero-zero
+5  6002  6000 six-zero-zero-zero
+5  3002  3000 three-zero-zero-zero
+5  2002  2000 two-zero-zero-zero
+
+# Query with a restricted span + filter.
+query T
+SELECT url FROM [EXPLAIN (DISTSQL) SELECT str FROM NumToStr WHERE y < 10 AND str LIKE '%e%' ORDER BY y]
+----
+https://raduberinde.github.io/decode.html?eJyMjzFLxEAQhXt_RXhwXLOFZ7nVNSpByUkunWyxZgdZSDJhdhaUkP8uyWKh1ZXvfY83bxZMHKjxIyXYd5zgDGbhnlJi2awSqMMX7L1BnOasm-0MehaCXaBRB4JF5z8GaskHEhgEUh-HvXSWOHr5Pjd57PiqG32Kg5LY6vxQvdYvj9XxQIejtfbatXXzDINL1o3CrQac9ffqam7f01KaeUr0Z8z_PmdA4ZPKp4mz9PQm3O_lRV729G4ESlroqYh6Kmh1691PAAAA__-Tvmw0
+
+
+query T
+SELECT str FROM NumToStr WHERE y < 10 AND str LIKE '%e%' ORDER BY y
+----
+one
+three
+five
+seven
+eight
+nine
+
+# Query which requires a full table scan.
+query T
+SELECT url FROM [EXPLAIN (DISTSQL) SELECT str FROM NumToStr WHERE y % 1000 = 0 AND str LIKE '%i%' ORDER BY y]
+----
+https://raduberinde.github.io/decode.html?eJzUlFtLwzAUx9_9FOEPYxtGaLrNh4BQwQtF6WTrm_ShNgcpdE1JUlBGv7u0xctEJ9KnvvVcfj2_BE72KLWiKN2RhXyEAIcPjgU4luBYIeGojM7IWm3alh4I1Qukx5GXVe3adMKRaUOQe7jcFQSJOH0qaEOpIgMORS7Ni25IZfJdal6DqN7Feuva6k1eODKSzWaBYBMmPM-TUoZRPGcX7OPzMrpis8Bn9-HdNZtO8slUSrmNN2F0OwfHunaSBT4PBJKGQ9fuXa7hv2h_2mqjyJA6NA38UyTND2eL9JmuDnqPTRTjvCh_nNqLcWovx6n9xyOwIVvp0tLRXUk4SD1Tv5BW1yajB6Oz7ud9uO66u4Qi6_qq6IOw7Eqi1foKi6Pw-QHsfYf9IZMXQ-DlEHj1LzhpTt4CAAD__7vb2l8=
+
+query T
+SELECT str FROM NumToStr WHERE y % 1000 = 0 AND str LIKE '%i%' ORDER BY y
+----
+five-zero-zero-zero
+six-zero-zero-zero
+eight-zero-zero-zero
+nine-zero-zero-zero
+
+
+#
+# -- Join tests --
+#
+
+query T
+SELECT url FROM [EXPLAIN (DISTSQL) SELECT x, str FROM NumToSquare JOIN NumToStr ON y = xsquared]
+----
+https://raduberinde.github.io/decode.html?eJzUlcGK2zAQhu99ijCnXVAhkp2mMRR87PaQlO3eig_aaLoxJJYrydBlybuX2IXdOOlMjXqwj7b1yTPfDzMvUFmDa31AD9l3kCBAgYAEBKQgYAGFgNrZLXpv3elIB9yZX5DNBZRV3YTT60LA1jqE7AVCGfYIGTzoxz3eozboQIDBoMt9-5PalQftnvN1c3iw33422iEI2DQhm-VS5AqKowDbhD9Xv974-Dzbab87v609XxzFfy8suJiqJFnVK91U1hl0aM74luSOXGnts_a7L7as-p1t1rM9_gg3ubr95MqnXbjJ5e3b9tJeezGlX6lrbd_but_hX38nR5mfnG5-apRC1XSFJqMUmkxXaDpKoel0hTI78B59bSuP5EwuBKB5wq57bxu3xa_ObtvLu8dNe7qdjQZ96L6q7uGu6j6dyvp3eBEDL2PgVQwsJU3LAcbUMHgRAy9j4FUM3DN2Qas-PX9LJ7TuhITlue95n05jwqJhJiwaZsKiYSYsGubCWsSE9SFGNw0zummY0U3DjG4a5nQvY3R_jNFNw4xuGmZ00zCjm4Y53asY3XLIsrycoUO25VCaG_5D9uVQmnMuL7YHKb04vvsdAAD__41Jl-A=
+
+# Save the result of the following statement to a label.
+query IT rowsort label-sq-str
+SELECT i, crdb_testing.to_english(i*i) FROM GENERATE_SERIES(1, 101) AS g(i)
+
+# Compare the results of this query to the one above.
+query IT rowsort label-sq-str
+SELECT x, str FROM NumToSquare JOIN NumToStr ON y = xsquared
+
+
+#
+# -- Aggregation tests --
+#
+
+# Sum the numbers in the NumToStr table. The expected result is
+#  n * n * (n * n + 1) / 2
+query T
+SELECT url FROM [EXPLAIN (DISTSQL) SELECT SUM(y) FROM NumToStr]
+----
+https://raduberinde.github.io/decode.html?eJy8kzFr-zAQxff_p_jzphY0RI6Tpp7SMUOTkqRT8eBahzEklpFkaAn-7sUWpbUpUkDBo3R673fPvrugkoK22Zk0kjdwMERgmIMhBsMCKUOtZE5aS9U9sYKN-EAyYyirujHddcqQS0VILjClORESHLP3E-0pE6TAIMhk5amH1Ko8Z-pzvW3OR3kwXXXXmOT_miNtGWRjvk1bdj3uqSgUFZmRI9rh9fluze-vtv5xbCqpBCkSA8O0vTGcT_sZPbiQJNG0STy4kCTzaZN4cCFJ4mmTeHC3WtI_rPeka1lpGi3r0C9lIFGQ3XMtG5XTi5J5b26Pu_51fyFIG1vl9rCpbKlr67eYO8XRQMzH4shN9qDnTnXsFschfS-c4qWbvAwhPzjFKzd5FUJ-dP-rmWdM3EM2Zqftv68AAAD__6gZh5g=
+
+query R
+SELECT SUM(y) FROM NumToStr
+----
+50005000
+
+# Count the rows in the NumToStr table.
+query T
+SELECT url FROM [EXPLAIN (DISTSQL) SELECT COUNT(*) FROM NumToStr]
+----
+https://raduberinde.github.io/decode.html?eJy8k19LwzAUxd_9FHKeFPKwdt2cfZr4tAc32Z8nKVKbSylsTblJQRn97tIW0RVJK5E-Jjfn_O5Jcs_IlaR1fCKN8AUeBHwITCEQQGCGSKBglZDWiusjrWAl3xFOBLK8KE29HQkkignhGSYzR0KIffx2pC3FkhgCkkycHRtIwdkp5o_lujzt1c7U1S3lkji8niCqBFRpvmwrMRz4kKZMaWxUh_e4Oaz3N0vvdrD5t2eZK5bEJC8so-oP-N3h6XU1oAFv7OvsAbpdpz92mh6gW5rp2Gl6gG5pgrHT9AD_b3B_Md-SLlSuqTPAl36RAMmU2tnXquSEnlkljXm73DSnmw1J2rRVr12s8rZUt_VT7FnF_oXY64p9O7kHPbWqA7s4cOl7ZhXP7eS5C_nOKl7YyQsX8r39rSY938T-ybrsqLr6DAAA__9KvJBJ
+
+query I
+SELECT COUNT(*) FROM NumToStr
+----
+10000
+
+# Count how many numbers contain the digit 5.
+query T
+SELECT url FROM [EXPLAIN (DISTSQL) SELECT COUNT(*) FROM NumToStr WHERE str LIKE '%five%']
+----
+https://raduberinde.github.io/decode.html?eJzMlMFLwzAUxu_-FePBmEIOa9fNmdNEVIraSdedpEhtnqXQNSVJRRn936UtoiuSTuKhx-a97_t9Lw1vDzln6EU7lECfwAICNhCYAQEHCMwhJFAIHqOUXNQtrcBl70CnBNK8KFV9HBKIuUCge1CpyhAoBNFLhj5GDAUQYKiiNGsghUh3kfhYeeUu4BtVV2_STKGgo5U9unfvrkeT8Wv6huMJpXQT-K53CwR8zFndM4WwIsBL9YWuyPGhLpNEYBIp3sl0td56wenKOjva_NuzzLlgKJAdWIbVH_Cb7cOze0QAa4hX3hPK7MrtIU7cE8ps4tkQJ-4JZTaxM8SJe0L93yL5xdxHWfBcYmehHPqFBJAl2O4iyUsR46PgcWPefq6b7uaAoVRt1Wo_3Lwt1bF-ii2t2D4QW12xrSf3oGdataMXOya551rxQk9emJDPteKlnrw0IV_o_9W055noH1mXHVYnnwEAAP__L-LBTw==
+
+# Result calculated here: https://play.golang.org/p/e-YsJRDsXF
+query I
+SELECT COUNT(*) FROM NumToStr WHERE str LIKE '%five%'
+----
+3439
+
+
+#
+# -- Limit tests --
+#
+
+query T
+SELECT url FROM [EXPLAIN (DISTSQL) SELECT y FROM NumToStr LIMIT 5]
+----
+https://raduberinde.github.io/decode.html?eJzMkk1Lw0AQhu_-ivKeR2i-POTUa0FSqb3JHmJ2kIUkE_YDlJL_LkkQTami5BCPOzPPPLPwntGK5qJs2CF_QgRCDEICQgpCBkXorFTsnNhhZAL2-hX5lmDaLvihrAiVWEZ-hje-ZuQ4lc81H7nUbEHQ7EtTj5LOmqa0b7siNCd59EP3EHy-2Q32e9MYv8mgeoIE_7G-p2_En77QitVsWc9sqr9yWiG30s2P-o03WuvD8VriZC1x-h-ydUV8ZNdJ6_giY_N9isD6had4Ogm24gcr1bh8eh7G6bGg2fmpG02PfTu2ouGsr3D0I3w3g7eXcLzEnCyB0yVw9idY9TfvAQAA__8y9peK
+
+query T
+SELECT url FROM [EXPLAIN (DISTSQL) SELECT y FROM NumToStr ORDER BY y LIMIT 5]
+----
+https://raduberinde.github.io/decode.html?eJzMkkFrs0AQhu_frwjv9ZtCNmoPnrwGiilpbmUP1h3Kgjqyu0JL8L8XldIa0tLiwR53Zp73mYU5oxHDeVGzR_oIBcIOhAiEGIQEmtA6Kdl7ccPIBOzNC9ItwTZtF4ayJpTiGOkZwYaKkeJUPFV85MKwA8FwKGw1Slpn68K9ZnlXn-QhDN1DF9JNNtjvbG3DJoHuCdKF9_ievhB_-MQZdmzmrkz9h-6vbJfLjbTz2Z-o1Vp_3q0ljtYSx3_hvK6Ij-xbaTzPrJd5msDmmacL9dK5ku-dlGP49DyM02PBsA9TV02PfTO21LDWZ1h9C9_O4O0lvFtijpbA8RI4-RWs-39vAQAA___6U5eH
+
+query I
+SELECT y FROM NumToStr ORDER BY y LIMIT 5
+----
+1
+2
+3
+4
+5
+
+query I
+SELECT y FROM NumToStr ORDER BY y OFFSET 5 LIMIT 2
+----
+6 7
+
+query I
+SELECT y FROM NumToStr ORDER BY y LIMIT 0
+----
+
+query I
+SELECT * FROM (SELECT y FROM NumToStr LIMIT 3) AS a ORDER BY y OFFSET 3
+----
+
+query I
+SELECT y FROM NumToStr ORDER BY str LIMIT 5
+----
+8
+88
+888
+8888
+8885
+
+query I
+SELECT y FROM (SELECT y FROM NumToStr ORDER BY y LIMIT 5) AS a WHERE y <> 2
+----
+1
+3
+4
+5
