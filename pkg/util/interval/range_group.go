@@ -65,11 +65,22 @@ type RangeGroup interface {
 	// itself. If no error is returned from the callback, the method
 	// will visit all Ranges in the group before returning a nil error.
 	ForEach(func(Range) error) error
+	// Iterator returns an iterator to visit each Range stored in the
+	// group, in-order. It is not safe to mutate the RangeGroup while
+	// iteration is being performed.
+	Iterator() RangeGroupIterator
 	// Len returns the number of Ranges currently within the RangeGroup.
 	// This will always be equal to or less than the number of ranges added,
 	// as ranges that overlap will merge to produce a single larger range.
 	Len() int
 	fmt.Stringer
+}
+
+// RangeGroupIterator is an iterator that walks in-order over a RangeGroup.
+type RangeGroupIterator interface {
+	// Next returns the next Range in the RangeGroup. It returns false
+	// if there are no more Ranges.
+	Next() (Range, bool)
 }
 
 // rangeList is an implementation of a RangeGroup using a linked
@@ -82,9 +93,9 @@ type rangeList struct {
 
 // NewRangeList constructs a linked-list backed RangeGroup.
 func NewRangeList() RangeGroup {
-	var r rangeList
-	r.ll.Init()
-	return &r
+	var rl rangeList
+	rl.ll.Init()
+	return &rl
 }
 
 // Add implements RangeGroup. It iterates over the current ranges in the
@@ -95,11 +106,11 @@ func NewRangeList() RangeGroup {
 // added to the list, and false if it does not increase the range, in which
 // case it won't be added. If the range is added, the function will also attempt
 // to merge any ranges within the list that now overlap.
-func (rg *rangeList) Add(r Range) bool {
+func (rl *rangeList) Add(r Range) bool {
 	if err := rangeError(r); err != nil {
 		panic(err)
 	}
-	for e := rg.ll.Front(); e != nil; e = e.Next() {
+	for e := rl.ll.Front(); e != nil; e = e.Next() {
 		er := e.Value.(Range)
 		switch {
 		case er.OverlapInclusive(r):
@@ -117,7 +128,7 @@ func (rg *rangeList) Add(r Range) bool {
 					newR = merge(newR, pr)
 
 					nextP := p.Next()
-					rg.ll.Remove(p)
+					rl.ll.Remove(p)
 					p = nextP
 				} else {
 					break
@@ -127,11 +138,11 @@ func (rg *rangeList) Add(r Range) bool {
 			return true
 		case r.End.Compare(er.Start) < 0:
 			// Past where inclusive overlapping ranges would be.
-			rg.ll.InsertBefore(r, e)
+			rl.ll.InsertBefore(r, e)
 			return true
 		}
 	}
-	rg.ll.PushBack(r)
+	rl.ll.PushBack(r)
 	return true
 }
 
@@ -142,12 +153,12 @@ func (rg *rangeList) Add(r Range) bool {
 // the rangeList, the range in the rangeList will be removed. The method
 // returns whether the subtraction resulted in any decrease to the size
 // of the RangeGroup.
-func (rg *rangeList) Sub(r Range) bool {
+func (rl *rangeList) Sub(r Range) bool {
 	if err := rangeError(r); err != nil {
 		panic(err)
 	}
 	dec := false
-	for e := rg.ll.Front(); e != nil; {
+	for e := rl.ll.Front(); e != nil; {
 		er := e.Value.(Range)
 		switch {
 		case er.OverlapExclusive(r):
@@ -162,7 +173,7 @@ func (rg *rangeList) Sub(r Range) bool {
 			case delStart && delEnd:
 				// Remove the entire range.
 				nextE := e.Next()
-				rg.ll.Remove(e)
+				rl.ll.Remove(e)
 				e = nextE
 			case delStart:
 				// Remove the start of the range by truncating.
@@ -181,7 +192,7 @@ func (rg *rangeList) Sub(r Range) bool {
 				e.Value = er
 
 				rSplit := Range{Start: r.End, End: oldEnd}
-				newE := rg.ll.InsertAfter(rSplit, e)
+				newE := rl.ll.InsertAfter(rSplit, e)
 				e = newE.Next()
 			}
 
@@ -201,17 +212,17 @@ func (rg *rangeList) Sub(r Range) bool {
 
 // Clear implements RangeGroup. It clears all ranges from the
 // rangeList.
-func (rg *rangeList) Clear() {
-	rg.ll.Init()
+func (rl *rangeList) Clear() {
+	rl.ll.Init()
 }
 
 // Overlaps implements RangeGroup. It returns whether the provided
 // Range is partially contained within the group of Ranges in the rangeList.
-func (rg *rangeList) Overlaps(r Range) bool {
+func (rl *rangeList) Overlaps(r Range) bool {
 	if err := rangeError(r); err != nil {
 		panic(err)
 	}
-	for e := rg.ll.Front(); e != nil; e = e.Next() {
+	for e := rl.ll.Front(); e != nil; e = e.Next() {
 		er := e.Value.(Range)
 		switch {
 		case er.OverlapExclusive(r):
@@ -226,11 +237,11 @@ func (rg *rangeList) Overlaps(r Range) bool {
 
 // Encloses implements RangeGroup. It returns whether the provided
 // Range is fully contained within the group of Ranges in the rangeList.
-func (rg *rangeList) Encloses(r Range) bool {
+func (rl *rangeList) Encloses(r Range) bool {
 	if err := rangeError(r); err != nil {
 		panic(err)
 	}
-	for e := rg.ll.Front(); e != nil; e = e.Next() {
+	for e := rl.ll.Front(); e != nil; e = e.Next() {
 		er := e.Value.(Range)
 		switch {
 		case contains(er, r):
@@ -245,23 +256,46 @@ func (rg *rangeList) Encloses(r Range) bool {
 
 // ForEach implements RangeGroup. It calls the provided function f
 // with each Range stored in the rangeList.
-func (rg *rangeList) ForEach(f func(Range) error) error {
-	for e := rg.ll.Front(); e != nil; e = e.Next() {
-		if err := f(e.Value.(Range)); err != nil {
+func (rl *rangeList) ForEach(f func(Range) error) error {
+	it := rangeListIterator{e: rl.ll.Front()}
+	for r, ok := it.Next(); ok; r, ok = it.Next() {
+		if err := f(r); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-// Len implements RangeGroup. It returns the number of ranges in
-// the rangeList.
-func (rg *rangeList) Len() int {
-	return rg.ll.Len()
+// rangeListIterator is an in-order iterator operating over a rangeList.
+type rangeListIterator struct {
+	e *list.Element
 }
 
-func (rg *rangeList) String() string {
-	return rgString(rg)
+// Next implements RangeGroupIterator. It returns the next Range in the
+// rangeList, or false.
+func (rli *rangeListIterator) Next() (r Range, ok bool) {
+	if rli.e != nil {
+		r = rli.e.Value.(Range)
+		ok = true
+		rli.e = rli.e.Next()
+	}
+	return r, ok
+}
+
+// Iterator implements RangeGroup. It returns an iterator to iterate over
+// the group of ranges.
+func (rl *rangeList) Iterator() RangeGroupIterator {
+	return &rangeListIterator{e: rl.ll.Front()}
+}
+
+// Len implements RangeGroup. It returns the number of ranges in
+// the rangeList.
+func (rl *rangeList) Len() int {
+	return rl.ll.Len()
+}
+
+func (rl *rangeList) String() string {
+	return rgString(rl)
 }
 
 // rangeTree is an implementation of a RangeGroup using an interval
@@ -445,6 +479,27 @@ func (rt *rangeTree) ForEach(f func(Range) error) error {
 	return err
 }
 
+// rangeListIterator is an in-order iterator operating over a rangeTree.
+type rangeTreeIterator struct {
+	it TreeIterator
+}
+
+// Next implements RangeGroupIterator. It returns the next Range in the
+// rangeTree, or false.
+func (rti *rangeTreeIterator) Next() (r Range, ok bool) {
+	i, ok := rti.it.Next()
+	if !ok {
+		return Range{}, false
+	}
+	return i.Range(), true
+}
+
+// Iterator implements RangeGroup. It returns an iterator to iterate over
+// the group of ranges.
+func (rt *rangeTree) Iterator() RangeGroupIterator {
+	return &rangeTreeIterator{it: rt.t.Iterator()}
+}
+
 // Len implements RangeGroup. It returns the number of rangeKeys in
 // the rangeTree.
 func (rt *rangeTree) Len() int {
@@ -492,4 +547,33 @@ func rgString(rg RangeGroup) string {
 	}
 	buffer.WriteRune(']')
 	return buffer.String()
+}
+
+// RangeGroupsOverlap determines if two RangeGroups contain any overlapping
+// Ranges or if they are fully disjoint. It does so by iterating over the
+// RangeGroups together and comparing subsequent ranges.
+func RangeGroupsOverlap(rg1, rg2 RangeGroup) bool {
+	it1, it2 := rg1.Iterator(), rg2.Iterator()
+	r1, ok1 := it1.Next()
+	r2, ok2 := it2.Next()
+	if !ok1 || !ok2 {
+		return false
+	}
+	for {
+		// Check if the current pair of Ranges overlap.
+		if r1.OverlapExclusive(r2) {
+			return true
+		}
+
+		// If not, advance the Range further behind.
+		var ok bool
+		if r1.Start.Compare(r2.Start) < 0 {
+			r1, ok = it1.Next()
+		} else {
+			r2, ok = it2.Next()
+		}
+		if !ok {
+			return false
+		}
+	}
 }
