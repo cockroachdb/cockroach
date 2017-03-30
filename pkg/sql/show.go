@@ -56,6 +56,10 @@ var varNames = func() []string {
 	sort.Strings(res)
 	return res
 }()
+var varRequireExplicitTxn = map[string]struct{}{
+	`transaction isolation level`: struct{}{},
+	`transaction priority`:        struct{}{},
+}
 
 const (
 	checkSchemaQuery = `
@@ -166,11 +170,15 @@ func queryInfoSchema(
 }
 
 // Show a session-local variable name.
-func (p *planner) Show(n *parser.Show) (planNode, error) {
+func (p *planner) Show(n *parser.Show, autoCommit bool) (planNode, error) {
 	origName := n.Name
 	name := strings.ToLower(n.Name)
 
 	var columns ResultColumns
+
+	if _, ok := varRequireExplicitTxn[name]; ok && autoCommit {
+		return nil, errNoTransactionInProgress
+	}
 
 	switch name {
 	case `all`:
