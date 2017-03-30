@@ -355,7 +355,7 @@ imports:
 - name: github.com/wadey/gocovmerge
   version: b5bfa59ec0adc420475f97f89b58045c721d761c
 - name: golang.org/x/crypto
-  version: 728b753d0135da6801d45a38e6f43ff55779c5c2
+  version: 3cb07270c9455e8ad27956a70891c962d121a228
   subpackages:
   - bcrypt
   - blowfish
