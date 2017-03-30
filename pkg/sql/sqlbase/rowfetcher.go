@@ -80,9 +80,6 @@ type RowFetcher struct {
 	// If set, GetRangeInfo() can be used to retrieve the accumulated info.
 	returnRangeInfo bool
 
-	// Types for composite columns.
-	compositeColTypes map[ColumnID]ColumnType
-
 	// -- Fields updated during a scan --
 
 	kvFetcher      kvFetcher
@@ -167,12 +164,6 @@ func (rf *RowFetcher) Init(
 		}
 	}
 
-	rf.compositeColTypes = make(map[ColumnID]ColumnType)
-	for _, col := range desc.Columns {
-		if HasCompositeKeyEncoding(col.Type.Kind) {
-			rf.compositeColTypes[col.ID] = col.Type
-		}
-	}
 	return nil
 }
 
@@ -301,21 +292,24 @@ func (rf *RowFetcher) ProcessKV(
 		}
 	}
 
+	// Composite columns that are not present use the key in the index. Record
+	// those values here for use later on if the datums are not present in
+	// the value.
+	unsetCols := map[int]EncDatum{}
+	// This value contains values for the composite columns. Clear the
+	// undecodable bytes that came from the key so that there is no panic for
+	// a duplicate value.
+	for _, colID := range rf.index.CompositeColumnIDs {
+		if idx, ok := rf.colIdxMap[colID]; ok {
+			unsetCols[idx] = rf.row[idx]
+			rf.row[idx].UnsetDatum()
+		}
+	}
+
 	if !rf.isSecondaryIndex && len(rf.keyRemainingBytes) > 0 {
 		_, familyID, err := encoding.DecodeUvarintAscending(rf.keyRemainingBytes)
 		if err != nil {
 			return "", "", err
-		}
-
-		if familyID == 0 {
-			// This value contains values for the composite columns. Clear the
-			// undecodable bytes that came from the key so that there is no panic for
-			// a duplicate value.
-			for _, colID := range rf.index.CompositeColumnIDs {
-				if idx, ok := rf.colIdxMap[colID]; ok {
-					rf.row[idx].UnsetDatum()
-				}
-			}
 		}
 
 		family, err := rf.desc.FindFamilyByID(FamilyID(familyID))
@@ -325,7 +319,7 @@ func (rf *RowFetcher) ProcessKV(
 
 		switch kv.Value.GetTag() {
 		case roachpb.ValueType_TUPLE:
-			prettyKey, prettyValue, err = rf.processValueTuple(family, kv, debugStrings, prettyKey)
+			prettyKey, prettyValue, err = rf.processValueTuple(kv, debugStrings, prettyKey)
 		default:
 			prettyKey, prettyValue, err = rf.processValueSingle(family, kv, debugStrings, prettyKey)
 		}
@@ -333,12 +327,12 @@ func (rf *RowFetcher) ProcessKV(
 			return "", "", err
 		}
 	} else {
-		rvalue := kv.ValueBytes()
+		valueBytes := kv.ValueBytes()
 		if rf.extraVals != nil {
 			// This is a unique index; decode the extra column values from
 			// the value.
 			var err error
-			rvalue, err = DecodeKeyVals(&rf.alloc, rf.extraVals, nil, rvalue)
+			valueBytes, err = DecodeKeyVals(&rf.alloc, rf.extraVals, nil, valueBytes)
 			if err != nil {
 				return "", "", err
 			}
@@ -352,35 +346,25 @@ func (rf *RowFetcher) ProcessKV(
 			}
 		}
 
-		for _, id := range rf.index.CompositeColumnIDs {
-			d := parser.DNull
-			var isNull bool
-			rvalue, isNull = encoding.DecodeIfNull(rvalue)
-			if !isNull {
-				switch typ := rf.compositeColTypes[id]; typ.Kind {
-				case ColumnType_COLLATEDSTRING:
-					var r string
-					var err error
-					rvalue, r, err = encoding.DecodeUnsafeStringAscending(rvalue, nil)
-					if err != nil {
-						return "", "", err
-					}
-					d = parser.NewDCollatedString(r, *typ.Locale, &rf.alloc.env)
-				default:
-					panic(fmt.Sprintf("unknown composite encoding for kind %d", typ.Kind))
-				}
-			}
-			if idx, ok := rf.colIdxMap[id]; ok && rf.valNeededForCol[idx] {
-				rf.row[idx].Datum = d
-			}
-		}
-
 		if log.V(2) {
 			if rf.extraVals != nil {
 				log.Infof(context.TODO(), "Scan %s -> %s", kv.Key, prettyEncDatums(rf.extraVals))
 			} else {
 				log.Infof(context.TODO(), "Scan %s", kv.Key)
 			}
+		}
+
+		if len(valueBytes) > 0 {
+			prettyKey, prettyValue, err = rf.processValueBytes(kv, valueBytes, debugStrings, prettyKey)
+			if err != nil {
+				return "", "", err
+			}
+		}
+	}
+
+	for idx, ed := range unsetCols {
+		if rf.row[idx].IsUnset() {
+			rf.row[idx] = ed
 		}
 	}
 
@@ -445,25 +429,16 @@ func (rf *RowFetcher) processValueSingle(
 	return prettyKey, prettyValue, nil
 }
 
-// processValueTuple processes the given values (of columns family.ColumnIDs),
-// setting values in the rf.row accordingly. The key is only used for logging.
-func (rf *RowFetcher) processValueTuple(
-	family *ColumnFamilyDescriptor, kv client.KeyValue, debugStrings bool, prettyKeyPrefix string,
-) (prettyKey string, prettyValue string, err error) {
+func (rf *RowFetcher) processValueBytes(kv client.KeyValue, bytes []byte, debugStrings bool, prettyKeyPrefix string) (prettyKey string, prettyValue string, err error) {
 	prettyKey = prettyKeyPrefix
 	if debugStrings {
 		rf.prettyValueBuf.Reset()
 	}
 
-	tupleBytes, err := kv.Value.GetTuple()
-	if err != nil {
-		return "", "", err
-	}
-
 	var colIDDiff uint32
 	var lastColID ColumnID
-	for len(tupleBytes) > 0 {
-		_, _, colIDDiff, _, err = encoding.DecodeValueTag(tupleBytes)
+	for len(bytes) > 0 {
+		_, _, colIDDiff, _, err = encoding.DecodeValueTag(bytes)
 		if err != nil {
 			return "", "", err
 		}
@@ -472,11 +447,11 @@ func (rf *RowFetcher) processValueTuple(
 		idx, ok := rf.colIdxMap[colID]
 		if !ok || !rf.valNeededForCol[idx] {
 			// This column wasn't requested, so read its length and skip it.
-			_, len, err := encoding.PeekValueLength(tupleBytes)
+			_, len, err := encoding.PeekValueLength(bytes)
 			if err != nil {
 				return "", "", err
 			}
-			tupleBytes = tupleBytes[len:]
+			bytes = bytes[len:]
 			if log.V(3) {
 				log.Infof(context.TODO(), "Scan %s -> [%d] (skipped)", kv.Key, colID)
 			}
@@ -488,8 +463,8 @@ func (rf *RowFetcher) processValueTuple(
 		}
 
 		var encValue EncDatum
-		encValue, tupleBytes, err =
-			EncDatumFromBuffer(rf.cols[idx].Type, DatumEncoding_VALUE, tupleBytes)
+		encValue, bytes, err =
+			EncDatumFromBuffer(rf.cols[idx].Type, DatumEncoding_VALUE, bytes)
 		if err != nil {
 			return "", "", err
 		}
@@ -508,11 +483,22 @@ func (rf *RowFetcher) processValueTuple(
 			log.Infof(context.TODO(), "Scan %d -> %v", idx, encValue)
 		}
 	}
-
 	if debugStrings {
 		prettyValue = rf.prettyValueBuf.String()
 	}
 	return prettyKey, prettyValue, nil
+}
+
+// processValueTuple processes the given values (of columns family.ColumnIDs),
+// setting values in the rf.row accordingly. The key is only used for logging.
+func (rf *RowFetcher) processValueTuple(
+	kv client.KeyValue, debugStrings bool, prettyKeyPrefix string,
+) (prettyKey string, prettyValue string, err error) {
+	tupleBytes, err := kv.Value.GetTuple()
+	if err != nil {
+		return "", "", err
+	}
+	return rf.processValueBytes(kv, tupleBytes, debugStrings, prettyKeyPrefix)
 }
 
 // NextRow processes keys until we complete one row, which is returned as an

@@ -18,13 +18,14 @@ package encoding
 
 import (
 	"bytes"
+	"fmt"
 	"math"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
 
-func TestEncodeFloat(t *testing.T) {
+func TestEncodeFloatOrdered(t *testing.T) {
 	testCases := []struct {
 		Value    float64
 		Encoding []byte
@@ -41,7 +42,7 @@ func TestEncodeFloat(t *testing.T) {
 		{-0.00123, []byte{0x03, 0x40, 0xab, 0xd9, 0x01, 0x8e, 0x75, 0x79, 0x28}},
 		{-1e-307, []byte{0x03, 0x7f, 0xce, 0x05, 0xe7, 0xd3, 0xbf, 0x39, 0xf2}},
 		{-math.SmallestNonzeroFloat64, []byte{0x03, 0x7f, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xfe}},
-		{math.Copysign(0, -1), []byte{0x03, 0x7f, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff}},
+		{math.Copysign(0, -1), []byte{0x04}},
 		{0, []byte{0x04}},
 		{math.SmallestNonzeroFloat64, []byte{0x05, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01}},
 		{1e-307, []byte{0x05, 0x00, 0x31, 0xfa, 0x18, 0x2c, 0x40, 0xc6, 0x0d}},
@@ -130,6 +131,36 @@ func TestEncodeFloat(t *testing.T) {
 		if dec != 1.23 {
 			t.Errorf("unexpected mismatch for %v. got %v", 1.23, dec)
 		}
+	}
+}
+
+// TestEncodeFloatValue tests that EncodeFloatValue is bit-for-bit equal
+// after decoding. Important for the 0/-0 case because 0 == -0, but we need
+// to verify that -0 came out of the decoder.
+func TestEncodeFloatValue(t *testing.T) {
+	testCases := []float64{
+		math.NaN(),
+		math.Inf(-1),
+		-1,
+		math.Copysign(0, -1),
+		0,
+		1,
+		math.Inf(1),
+	}
+
+	for _, f := range testCases {
+		t.Run(fmt.Sprint(f), func(t *testing.T) {
+			enc := EncodeFloatValue(nil, NoColumnID, f)
+			_, dec, err := DecodeFloatValue(enc)
+			if err != nil {
+				t.Fatal(err)
+			}
+			testBits := math.Float64bits(f)
+			encBits := math.Float64bits(dec)
+			if testBits != encBits {
+				t.Fatalf("unexpected decoded float64 value. expected %f, got %f", f, dec)
+			}
+		})
 	}
 }
 
