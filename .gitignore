@@ -14,6 +14,7 @@
 artifacts
 .bootstrap
 .buildinfo
+.glide
 /cockroach
 /cockroach-data
 /cockroach-darwin*
