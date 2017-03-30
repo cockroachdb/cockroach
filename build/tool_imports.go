@@ -44,5 +44,6 @@ import (
 	_ "github.com/wadey/gocovmerge"
 	_ "golang.org/x/tools/cmd/goimports"
 	_ "golang.org/x/tools/cmd/goyacc"
+	_ "golang.org/x/tools/cmd/guru"
 	_ "golang.org/x/tools/cmd/stringer"
 )
