@@ -454,6 +454,12 @@ type logicQuery struct {
 	// expectedErr and expectedErrCode are as in logicStatement.
 	expectErr     string
 	expectErrCode string
+
+	// if set, the results are cross-checked against previous queries with the
+	// same label.
+	label string
+
+	checkResults bool
 	// expectedResults indicates the expected sequence of text words
 	// when flattening a query's results.
 	expectedResults []string
@@ -465,6 +471,7 @@ type logicQuery struct {
 	// expectedHash indicates the expected hash of all result rows
 	// combined. "" indicates hash checking is disabled.
 	expectedHash string
+
 	// expectedValues indicates the number of rows expected when
 	// expectedHash is set.
 	expectedValues int
@@ -819,6 +826,7 @@ func (t *logicTest) processTestFile(path string) error {
 				//   - I for integer
 				//   - R for floating point or decimal
 				//   - B for boolean
+				//   - O for oid
 				//
 				// Options are a comma separated strings from the following:
 				//   - "nosort" (default)
@@ -842,7 +850,8 @@ func (t *logicTest) processTestFile(path string) error {
 				// reused, the test runner verifies that the results are the
 				// same. This can be used to verify that two or more queries in the
 				// same test script that are logically equivalent always generate the
-				// same output.
+				// same output. If a label is provided, expected results don't need to
+				// be provided (in which case there should be no ---- separator).
 				query.colTypes = fields[1]
 				if len(fields) >= 3 {
 					query.rawOpts = fields[2]
@@ -898,11 +907,16 @@ func (t *logicTest) processTestFile(path string) error {
 			}
 
 			var buf bytes.Buffer
+			separator := false
 			for s.Scan() {
 				line := s.Text()
 				if line == "----" {
+					separator = true
 					if query.expectErr != "" {
-						return fmt.Errorf("%s: invalid ---- delimiter after a query expecting an error: %s", query.pos, query.expectErr)
+						return fmt.Errorf(
+							"%s: invalid ---- delimiter after a query expecting an error: %s",
+							query.pos, query.expectErr,
+						)
 					}
 					break
 				}
@@ -913,7 +927,8 @@ func (t *logicTest) processTestFile(path string) error {
 			}
 			query.sql = strings.TrimSpace(buf.String())
 
-			if query.expectErr == "" {
+			query.checkResults = true
+			if separator {
 				// Query results are either a space separated list of values up to a
 				// blank line or a line of the form "xx values hashing to yyy". The
 				// latter format is used by sqllogictest when a large number of results
@@ -926,6 +941,7 @@ func (t *logicTest) processTestFile(path string) error {
 							return err
 						}
 						query.expectedHash = m[2]
+						query.checkResults = false
 					} else {
 						for {
 							query.expectedResultsRaw = append(query.expectedResultsRaw, s.Text())
@@ -940,27 +956,11 @@ func (t *logicTest) processTestFile(path string) error {
 						}
 						query.expectedValues = len(query.expectedResults)
 					}
-
-					if label != "" {
-						expectedHash := query.expectedHash
-						if expectedHash == "" {
-							hash, err := t.hashResults(query.expectedResults)
-							if err != nil {
-								t.Error(err)
-								continue
-							}
-							expectedHash = hash
-						}
-						if prevHash, ok := t.labelMap[label]; ok {
-							if prevHash != expectedHash {
-								t.Errorf("%s: error in input: previous reference values for label %s (hash %s) do not match new definition (hash %s)", query.pos, label, prevHash, expectedHash)
-								continue
-							}
-						} else {
-							t.labelMap[label] = expectedHash
-						}
-					}
 				}
+			} else if label != "" {
+				// Label and no separator; we won't be directly checking results; we
+				// cross-check results between all queries with the same label.
+				query.checkResults = false
 			}
 
 			if !s.skip {
@@ -1264,19 +1264,21 @@ func (t *logicTest) execQuery(query logicQuery) error {
 		trimDecimals(query.expectedResults)
 	}
 
+	hash, err := t.hashResults(results)
+	if err != nil {
+		return err
+	}
+
 	if query.expectedHash != "" {
 		n := len(results)
 		if query.expectedValues != n {
 			return fmt.Errorf("%s: expected %d results, but found %d", query.pos, query.expectedValues, n)
 		}
-		hash, err := t.hashResults(results)
-		if err != nil {
-			return err
-		}
 		if query.expectedHash != hash {
 			return fmt.Errorf("%s: expected %s, but found %s", query.pos, query.expectedHash, hash)
 		}
-	} else if !reflect.DeepEqual(query.expectedResults, results) {
+	}
+	if query.checkResults && !reflect.DeepEqual(query.expectedResults, results) {
 		var buf bytes.Buffer
 		tw := tabwriter.NewWriter(&buf, 2, 1, 2, ' ', 0)
 
@@ -1302,6 +1304,16 @@ func (t *logicTest) execQuery(query logicQuery) error {
 		}
 		_ = tw.Flush()
 		return errors.New(buf.String())
+	}
+
+	if query.label != "" {
+		if prevHash, ok := t.labelMap[query.label]; ok && prevHash != hash {
+			t.Errorf(
+				"%s: error in input: previous values for label %s (hash %s) do not match (hash %s)",
+				query.pos, query.label, prevHash, hash,
+			)
+		}
+		t.labelMap[query.label] = hash
 	}
 
 	t.finishOne("OK")
