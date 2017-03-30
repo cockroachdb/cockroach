@@ -1,3 +1,5 @@
+# LogicTest: default distsql
+
 #
 # Tests that verify DistSQL support and auto mode determination.
 #

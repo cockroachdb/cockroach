@@ -1,3 +1,5 @@
+# LogicTest: default distsql
+
 # SELECT with no table.
 
 query I

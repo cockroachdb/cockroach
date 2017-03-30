@@ -1,3 +1,5 @@
+# LogicTest: default distsql
+
 statement error unimplemented: Prepared statements are supported only via the Postgres wire protocol \(see issue https://github.com/cockroachdb/cockroach/issues/7568\)
 PREPARE a AS SELECT 1
 

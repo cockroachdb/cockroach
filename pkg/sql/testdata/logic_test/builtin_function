@@ -1,3 +1,5 @@
+# LogicTest: default distsql
+
 query error unknown function: foo.bar
 SELECT foo.bar()
 

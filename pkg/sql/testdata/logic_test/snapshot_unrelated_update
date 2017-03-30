@@ -1,3 +1,5 @@
+# LogicTest: default distsql
+
 statement ok
 CREATE TABLE t (id INT PRIMARY KEY, v string)
 

@@ -1,3 +1,5 @@
+# LogicTest: default distsql
+
 ## This test file contains various complex queries that ORMs issue during
 ## startup or general use.
 
