@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
 type serverInfo struct {
@@ -53,9 +54,10 @@ type server struct {
 
 	mu struct {
 		syncutil.Mutex
-		is       *infoStore                         // The backing infostore
-		incoming nodeSet                            // Incoming client node IDs
-		nodeMap  map[util.UnresolvedAddr]serverInfo // Incoming client's local address -> serverInfo
+		is        *infoStore                         // The backing infostore
+		incoming  nodeSet                            // Incoming client node IDs
+		nodeMap   map[util.UnresolvedAddr]serverInfo // Incoming client's local address -> serverInfo
+		clusterID uuid.UUID
 		// ready broadcasts a wakeup to waiting gossip requests. This is done
 		// via closing the current ready channel and opening a new one. This
 		// is required due to the fact that condition variables are not
@@ -98,6 +100,21 @@ func newServer(
 	return s
 }
 
+// SetClusterID sets the cluster ID to prevent nodes from illegally
+// connecting to incorrect clusters, or from allowing nodes from
+// other clusters to incorrectly connect to this one.
+func (s *server) SetClusterID(clusterID uuid.UUID) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.mu.clusterID = clusterID
+}
+
+func (s *server) GetClusterID() uuid.UUID {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.mu.clusterID
+}
+
 // GetNodeMetrics returns this server's node metrics struct.
 func (s *server) GetNodeMetrics() *Metrics {
 	return &s.nodeMetrics
@@ -110,6 +127,9 @@ func (s *server) Gossip(stream Gossip_GossipServer) error {
 	args, err := stream.Recv()
 	if err != nil {
 		return err
+	}
+	if (args.ClusterID != uuid.UUID{}) && args.ClusterID != s.GetClusterID() {
+		return errors.Errorf("gossip connection refused from different cluster %s", args.ClusterID)
 	}
 
 	ctx, cancel := context.WithCancel(s.AnnotateCtx(stream.Context()))
