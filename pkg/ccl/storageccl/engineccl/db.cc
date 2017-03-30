@@ -16,7 +16,7 @@
 
 extern "C" {
 #include "_cgo_export.h"
-}
+}  // extern "C"
 
 const DBStatus kSuccess = { NULL, 0 };
 
