@@ -61,6 +61,17 @@ send "\rselect 1;\r"
 eexpect "1 row"
 eexpect root@
 
+# Test that ambiguous datum types are pretty-printed in a parsable
+# form. #14484
+send "SELECT INTERVAL '4' SECOND;\r"
+eexpect "1 row"
+eexpect root@
+send "\033\[A"
+eexpect "SELECT '4s':::INTERVAL;"
+send "\r"
+eexpect "1 row"
+eexpect root@
+
 # Finally terminate with Ctrl+C
 interrupt
 eexpect eof
