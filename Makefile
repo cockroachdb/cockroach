@@ -355,12 +355,8 @@ ifneq ($(GIT_DIR),)
 	git submodule update --init
 endif
 	$(GO) install -v \
-	./pkg/cmd/github-post \
-	./pkg/cmd/github-pull-request-make \
-	./pkg/cmd/glock-diff-parser \
 	./pkg/cmd/metacheck \
 	./pkg/cmd/returncheck \
-	./pkg/cmd/teamcity-trigger \
 	&& $(GO) list -tags glide -f '{{join .Imports "\n"}}' ./build | grep -vF protoc | xargs $(GO) install -v
 	touch $@
 
