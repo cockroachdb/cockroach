@@ -186,6 +186,40 @@ func main() {
 		log.Fatal(err)
 	}
 
+	var vendorChanged bool
+	for _, path := range []string{"glide.yaml", "glide.lock", "vendor"} {
+		if strings.Contains(diff, fmt.Sprintf("\n--- a/%[1]s\n+++ b/%[1]s\n", path)) {
+			vendorChanged = true
+			break
+		}
+	}
+	if vendorChanged {
+		for _, cmd := range []*exec.Cmd{
+			exec.Command("go", "install", crdb.ImportPath+"/vendor/github.com/Masterminds/glide"),
+			exec.Command("glide", "install"),
+		} {
+			cmd.Dir = crdb.Dir
+			cmd.Stdout = os.Stdout
+			cmd.Stderr = os.Stderr
+			log.Println(cmd.Args)
+			if err := cmd.Run(); err != nil {
+				log.Fatal(err)
+			}
+		}
+
+		// Check for diffs.
+		for _, dir := range []string{crdb.Dir, filepath.Join(crdb.Dir, "vendor")} {
+			cmd := exec.Command("git", "diff")
+			cmd.Dir = dir
+			log.Println(cmd.Args)
+			if output, err := cmd.Output(); err != nil {
+				log.Fatal(err)
+			} else if len(output) > 0 {
+				log.Fatalf("unexpected diff:\n%s", output)
+			}
+		}
+	}
+
 	pkgs, err := pkgsFromDiff(strings.NewReader(diff))
 	if err != nil {
 		log.Fatal(err)
