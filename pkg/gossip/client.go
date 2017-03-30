@@ -161,6 +161,7 @@ func (c *client) requestGossip(g *Gossip, stream Gossip_GossipClient) error {
 		NodeID:          g.NodeID.Get(),
 		Addr:            g.mu.is.NodeAddr,
 		HighWaterStamps: g.mu.is.getHighWaterStamps(),
+		ClusterID:       g.mu.clusterID,
 	}
 	g.mu.Unlock()
 
@@ -181,6 +182,7 @@ func (c *client) sendGossip(g *Gossip, stream Gossip_GossipClient) error {
 			Addr:            g.mu.is.NodeAddr,
 			Delta:           delta,
 			HighWaterStamps: g.mu.is.getHighWaterStamps(),
+			ClusterID:       g.mu.clusterID,
 		}
 
 		bytesSent := int64(args.Size())
