@@ -31,6 +31,9 @@ const notUsableInfo = "Not usable; exposed only for compatibility with PostgreSQ
 // initPGBuiltins adds all of the postgres builtins to the Builtins map.
 func initPGBuiltins() {
 	for k, v := range pgBuiltins {
+		for i := range v {
+			v[i].category = categoryCompatibility
+		}
 		Builtins[k] = v
 	}
 }
@@ -44,8 +47,7 @@ var pgBuiltins = map[string][]Builtin{
 			fn: func(_ *EvalContext, _ Datums) (Datum, error) {
 				return NewDInt(-1), nil
 			},
-			category: categoryCompatibility,
-			Info:     notUsableInfo,
+			Info: notUsableInfo,
 		},
 	},
 
@@ -65,8 +67,7 @@ var pgBuiltins = map[string][]Builtin{
 			fn: func(_ *EvalContext, args Datums) (Datum, error) {
 				return args[0], nil
 			},
-			category: categoryCompatibility,
-			Info:     notUsableInfo,
+			Info: notUsableInfo,
 		},
 		Builtin{
 			Types: ArgTypes{
@@ -78,8 +79,7 @@ var pgBuiltins = map[string][]Builtin{
 			fn: func(_ *EvalContext, args Datums) (Datum, error) {
 				return args[0], nil
 			},
-			category: categoryCompatibility,
-			Info:     notUsableInfo,
+			Info: notUsableInfo,
 		},
 	},
 
@@ -102,8 +102,7 @@ var pgBuiltins = map[string][]Builtin{
 				}
 				return r[0], nil
 			},
-			category: categoryCompatibility,
-			Info:     notUsableInfo,
+			Info: notUsableInfo,
 		},
 		// The other overload for this function, pg_get_indexdef(index_oid,
 		// column_no, pretty_bool), is unimplemented, because it isn't used by
@@ -119,8 +118,7 @@ var pgBuiltins = map[string][]Builtin{
 			fn: func(_ *EvalContext, args Datums) (Datum, error) {
 				return NewDString(args[0].ResolvedType().String()), nil
 			},
-			category: categoryCompatibility,
-			Info:     notUsableInfo,
+			Info: notUsableInfo,
 		},
 	},
 	"pg_get_userbyid": {
@@ -141,8 +139,7 @@ var pgBuiltins = map[string][]Builtin{
 				}
 				return t[0], nil
 			},
-			category: categoryCompatibility,
-			Info:     notUsableInfo,
+			Info: notUsableInfo,
 		},
 	},
 	"format_type": {
@@ -157,7 +154,6 @@ var pgBuiltins = map[string][]Builtin{
 				}
 				return NewDString(typ.SQLName()), nil
 			},
-			category: categoryCompatibility,
 			Info: "Returns the SQL name of a data type that is " +
 				"identified by its type OID and possibly a type modifier. " +
 				"Currently, the type modifier is ignored.",
@@ -170,8 +166,7 @@ var pgBuiltins = map[string][]Builtin{
 			fn: func(_ *EvalContext, _ Datums) (Datum, error) {
 				return DNull, nil
 			},
-			category: categoryCompatibility,
-			Info:     notUsableInfo,
+			Info: notUsableInfo,
 		},
 	},
 	"obj_description": {
@@ -181,8 +176,7 @@ var pgBuiltins = map[string][]Builtin{
 			fn: func(_ *EvalContext, _ Datums) (Datum, error) {
 				return DNull, nil
 			},
-			category: categoryCompatibility,
-			Info:     notUsableInfo,
+			Info: notUsableInfo,
 		},
 		Builtin{
 			Types:      ArgTypes{{"object_oid", TypeOid}, {"catalog_name", TypeString}},
@@ -190,8 +184,7 @@ var pgBuiltins = map[string][]Builtin{
 			fn: func(_ *EvalContext, _ Datums) (Datum, error) {
 				return DNull, nil
 			},
-			category: categoryCompatibility,
-			Info:     notUsableInfo,
+			Info: notUsableInfo,
 		},
 	},
 	"oid": {
@@ -201,8 +194,7 @@ var pgBuiltins = map[string][]Builtin{
 			fn: func(_ *EvalContext, args Datums) (Datum, error) {
 				return NewDOid(*args[0].(*DInt)), nil
 			},
-			category: categoryCompatibility,
-			Info:     "Converts an integer to an OID.",
+			Info: "Converts an integer to an OID.",
 		},
 	},
 	"shobj_description": {
@@ -212,8 +204,7 @@ var pgBuiltins = map[string][]Builtin{
 			fn: func(_ *EvalContext, _ Datums) (Datum, error) {
 				return DNull, nil
 			},
-			category: categoryCompatibility,
-			Info:     notUsableInfo,
+			Info: notUsableInfo,
 		},
 	},
 	"pg_try_advisory_lock": {
@@ -223,8 +214,7 @@ var pgBuiltins = map[string][]Builtin{
 			fn: func(_ *EvalContext, _ Datums) (Datum, error) {
 				return DBoolTrue, nil
 			},
-			category: categoryCompatibility,
-			Info:     notUsableInfo,
+			Info: notUsableInfo,
 		},
 	},
 	"pg_advisory_unlock": {
@@ -234,8 +224,7 @@ var pgBuiltins = map[string][]Builtin{
 			fn: func(_ *EvalContext, _ Datums) (Datum, error) {
 				return DBoolTrue, nil
 			},
-			category: categoryCompatibility,
-			Info:     notUsableInfo,
+			Info: notUsableInfo,
 		},
 	},
 	"array_in": {
@@ -245,8 +234,7 @@ var pgBuiltins = map[string][]Builtin{
 			fn: func(_ *EvalContext, _ Datums) (Datum, error) {
 				return nil, errors.New("unimplemented")
 			},
-			category: categoryCompatibility,
-			Info:     notUsableInfo,
+			Info: notUsableInfo,
 		},
 	},
 }
