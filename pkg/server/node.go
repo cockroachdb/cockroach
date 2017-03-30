@@ -536,6 +536,7 @@ func (n *Node) validateStores() error {
 		if n.ClusterID == (uuid.UUID{}) {
 			n.ClusterID = s.Ident.ClusterID
 			n.initNodeID(s.Ident.NodeID)
+			n.storeCfg.Gossip.SetClusterID(s.Ident.ClusterID)
 		} else if n.ClusterID != s.Ident.ClusterID {
 			return errors.Errorf("store %s cluster ID doesn't match node cluster %q", s, n.ClusterID)
 		} else if n.Descriptor.NodeID != s.Ident.NodeID {
@@ -616,6 +617,7 @@ func (n *Node) connectGossip(ctx context.Context) error {
 
 	if n.ClusterID == (uuid.UUID{}) {
 		n.ClusterID = gossipClusterID
+		n.storeCfg.Gossip.SetClusterID(gossipClusterID)
 	} else if n.ClusterID != gossipClusterID {
 		return errors.Errorf("node %d belongs to cluster %q but is attempting to connect to a gossip network for cluster %q",
 			n.Descriptor.NodeID, n.ClusterID, gossipClusterID)
