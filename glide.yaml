@@ -20,7 +20,7 @@ import:
 # We pin glide itself to prevent changes to glide's dependency resolution
 # algorithm from modifying our dependencies unexpectedly.
 - package: github.com/Masterminds/glide
-  version: ab0972eb70bbb48926b62b3401b19845b186c3c0
+  version: 869001d1571ce5f03fd0078bff188b9d3f272807
 # Pins to prevent unintended version changes to libs we care about when adding/
 # removing/changing other deps. These are grouped separately to make it easier
 # to comment them out in bulk when running an across-the-board dep update.
