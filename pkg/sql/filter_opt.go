@@ -339,6 +339,7 @@ func (p *planner) propagateFilters(
 	case *hookFnNode:
 	case *valueGenerator:
 	case *valuesNode:
+	case *showRangesNode:
 
 	default:
 		panic(fmt.Sprintf("unhandled node type: %T", plan))
