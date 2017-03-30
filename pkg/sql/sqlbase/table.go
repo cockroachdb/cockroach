@@ -18,6 +18,7 @@ package sqlbase
 
 import (
 	"fmt"
+	"sort"
 	"time"
 	"unicode/utf8"
 
@@ -390,7 +391,9 @@ func EncodeDatums(b []byte, d parser.Datums) ([]byte, error) {
 	return b, nil
 }
 
-// EncodeTableKey encodes `val` into `b` and returns the new buffer.
+// EncodeTableKey encodes `val` into `b` and returns the new buffer. The
+// encoded value is guaranteed to be lexicographically sortable, but not
+// guaranteed to be round-trippable during decoding.
 func EncodeTableKey(b []byte, val parser.Datum, dir encoding.Direction) ([]byte, error) {
 	if (dir != encoding.Ascending) && (dir != encoding.Descending) {
 		return nil, errors.Errorf("invalid direction: %d", dir)
@@ -493,8 +496,10 @@ func EncodeTableKey(b []byte, val parser.Datum, dir encoding.Direction) ([]byte,
 	return nil, errors.Errorf("unable to encode table key: %T", val)
 }
 
-// EncodeTableValue encodes `val` into `appendTo` using DatumEncoding_VALUE and
-// returns the new buffer.
+// EncodeTableValue encodes `val` into `appendTo` using DatumEncoding_VALUE
+// and returns the new buffer. The encoded value is guaranteed to round
+// trip and decode exactly to its input, but is not guaranteed to be
+// lexicographically sortable.
 func EncodeTableValue(appendTo []byte, colID ColumnID, val parser.Datum) ([]byte, error) {
 	if val == parser.DNull {
 		return encoding.EncodeNullValue(appendTo, uint32(colID)), nil
@@ -698,7 +703,6 @@ func DecodeKeyVals(
 			len(directions), len(vals))
 	}
 	for j := range vals {
-
 		enc := DatumEncoding_ASCENDING_KEY
 		if directions != nil && (directions[j] == encoding.Descending) {
 			enc = DatumEncoding_DESCENDING_KEY
@@ -1205,18 +1209,28 @@ func EncodeSecondaryIndex(
 		// The zero value for an index-key is a 0-length bytes value.
 		entryValue = []byte{}
 	}
+
+	colIDs := append([]ColumnID(nil), secondaryIndex.CompositeColumnIDs...)
+	sort.Sort(columnIDs(colIDs))
+
+	var lastColID ColumnID
 	// Composite columns have their contents at the end of the value.
-	for _, colID := range secondaryIndex.CompositeColumnIDs {
+	for _, colID := range colIDs {
 		val := values[colMap[colID]]
 		if val == parser.DNull {
-			entryValue = encoding.EncodeNullAscending(entryValue)
 			continue
 		}
-		switch d := val.(type) {
-		case *parser.DCollatedString:
-			entryValue = encoding.EncodeStringAscending(entryValue, d.Contents)
-		default:
-			panic(fmt.Sprintf("unknown composite encoding for datum %s", d))
+		if !val.(parser.CompositeDatum).IsComposite() {
+			continue
+		}
+		if lastColID > colID {
+			panic(fmt.Errorf("cannot write column id %d after %d", colID, lastColID))
+		}
+		colIDDiff := colID - lastColID
+		lastColID = colID
+		entryValue, err = EncodeTableValue(entryValue, colIDDiff, val)
+		if err != nil {
+			return IndexEntry{}, err
 		}
 	}
 	entry.Value.SetBytes(entryValue)

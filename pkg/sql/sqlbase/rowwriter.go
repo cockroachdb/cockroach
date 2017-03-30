@@ -49,7 +49,6 @@ type rowHelper struct {
 	// Computed and cached.
 	primaryIndexKeyPrefix []byte
 	primaryIndexCols      map[ColumnID]struct{}
-	compositeCols         map[ColumnID]struct{}
 	sortedColumnFamilies  map[FamilyID][]ColumnID
 }
 
@@ -94,26 +93,31 @@ func (rh *rowHelper) encodeSecondaryIndexes(
 
 // TODO(dan): This logic is common and being moved into TableDescriptor (see
 // #6233). Once it is, use the shared one.
-func (rh *rowHelper) columnInPK(colID ColumnID) bool {
+func (rh *rowHelper) skipColumnInPK(colID ColumnID, family FamilyID, value parser.Datum) (bool, error) {
 	if rh.primaryIndexCols == nil {
 		rh.primaryIndexCols = make(map[ColumnID]struct{})
 		for _, colID := range rh.TableDesc.PrimaryIndex.ColumnIDs {
 			rh.primaryIndexCols[colID] = struct{}{}
 		}
 	}
-	_, ok := rh.primaryIndexCols[colID]
-	return ok
-}
-
-func (rh *rowHelper) isCompositeColumn(colID ColumnID) bool {
-	if rh.compositeCols == nil {
-		rh.compositeCols = make(map[ColumnID]struct{})
-		for _, id := range rh.TableDesc.PrimaryIndex.CompositeColumnIDs {
-			rh.compositeCols[id] = struct{}{}
-		}
+	if _, ok := rh.primaryIndexCols[colID]; !ok {
+		return false, nil
 	}
-	_, ok := rh.compositeCols[colID]
-	return ok
+	if family != 0 {
+		return false, errors.Errorf("primary index column %d must be in family 0, was %d", colID, family)
+	}
+	if cdatum, ok := value.(parser.CompositeDatum); ok {
+		// Composite columns are encoded in both the key and the value.
+		if !cdatum.IsComposite() {
+			return true, nil
+		}
+	} else {
+		// Skip primary key columns as their values are encoded in the key of
+		// each family. Family 0 is guaranteed to exist and acts as a
+		// sentinel.
+		return true, nil
+	}
+	return false, nil
 }
 
 type columnIDs []ColumnID
@@ -293,29 +297,22 @@ func (ri *RowInserter) InsertRow(
 			panic("invalid family sorted column id map")
 		}
 		for _, colID := range familySortedColumnIDs {
-			if ri.Helper.columnInPK(colID) {
-				if family.ID != 0 {
-					return errors.Errorf("primary index column %d must be in family 0, was %d", colID, family.ID)
-				}
-				if !ri.Helper.isCompositeColumn(colID) {
-					// Skip primary key columns as their values are encoded in the key of
-					// each family. Family 0 is guaranteed to exist and acts as a
-					// sentinel.
-					continue
-				}
-				// Composite columns are encoded in both the key and the value.
-			}
-
 			idx, ok := ri.InsertColIDtoRowIndex[colID]
 			if !ok {
 				// Column not being inserted.
 				continue
 			}
-			col := ri.InsertCols[idx]
-
 			if values[idx] == parser.DNull {
 				continue
 			}
+
+			if skip, err := ri.Helper.skipColumnInPK(colID, family.ID, values[idx]); err != nil {
+				return err
+			} else if skip {
+				continue
+			}
+
+			col := ri.InsertCols[idx]
 
 			if lastColID > col.ID {
 				panic(fmt.Errorf("cannot write column id %d after %d", col.ID, lastColID))
@@ -663,28 +660,21 @@ func (ru *RowUpdater) UpdateRow(
 			panic("invalid family sorted column id map")
 		}
 		for _, colID := range familySortedColumnIDs {
-			if ru.Helper.columnInPK(colID) {
-				if family.ID != 0 {
-					return nil, errors.Errorf("primary index column %d must be in family 0, was %d", colID, family.ID)
-				}
-				if !ru.Helper.isCompositeColumn(colID) {
-					// Skip primary key columns as their values are encoded in the key of
-					// each family. Family 0 is guaranteed to exist and acts as a
-					// sentinel.
-					continue
-				}
-				// Composite columns are encoded in both the key and the value.
-			}
-
 			idx, ok := ru.FetchColIDtoRowIndex[colID]
 			if !ok {
 				return nil, errors.Errorf("column %d was expected to be fetched, but wasn't", colID)
 			}
-			col := ru.FetchCols[idx]
-
 			if ru.newValues[idx] == parser.DNull {
 				continue
 			}
+
+			if skip, err := ru.Helper.skipColumnInPK(colID, family.ID, ru.newValues[idx]); err != nil {
+				return nil, err
+			} else if skip {
+				continue
+			}
+
+			col := ru.FetchCols[idx]
 
 			if lastColID > col.ID {
 				panic(fmt.Errorf("cannot write column id %d after %d", col.ID, lastColID))
