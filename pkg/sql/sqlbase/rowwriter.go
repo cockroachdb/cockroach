@@ -15,7 +15,7 @@
 // Author: Peter Mattis (peter@cockroachlabs.com)
 // Author: Daniel Harrison (daniel.harrison@gmail.com)
 
-package sql
+package sqlbase
 
 import (
 	"bytes"
@@ -29,41 +29,42 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 const (
-	checkFKs = true
-	skipFKs  = false
+	// CheckFKs can be passed to row writers to check fk validity.
+	CheckFKs = true
+	// SkipFKs can be passed to row writer to skip fk validity checks.
+	SkipFKs = false
 )
 
 // rowHelper has the common methods for table row manipulations.
 type rowHelper struct {
-	tableDesc    *sqlbase.TableDescriptor
-	indexes      []sqlbase.IndexDescriptor
-	indexEntries []sqlbase.IndexEntry
+	TableDesc    *TableDescriptor
+	Indexes      []IndexDescriptor
+	indexEntries []IndexEntry
 
 	// Computed and cached.
 	primaryIndexKeyPrefix []byte
-	primaryIndexCols      map[sqlbase.ColumnID]struct{}
-	compositeCols         map[sqlbase.ColumnID]struct{}
-	sortedColumnFamilies  map[sqlbase.FamilyID][]sqlbase.ColumnID
+	primaryIndexCols      map[ColumnID]struct{}
+	compositeCols         map[ColumnID]struct{}
+	sortedColumnFamilies  map[FamilyID][]ColumnID
 }
 
 // encodeIndexes encodes the primary and secondary index keys. The
 // secondaryIndexEntries are only valid until the next call to encodeIndexes or
 // encodeSecondaryIndexes.
 func (rh *rowHelper) encodeIndexes(
-	colIDtoRowIndex map[sqlbase.ColumnID]int, values []parser.Datum,
-) (primaryIndexKey []byte, secondaryIndexEntries []sqlbase.IndexEntry, err error) {
+	colIDtoRowIndex map[ColumnID]int, values []parser.Datum,
+) (primaryIndexKey []byte, secondaryIndexEntries []IndexEntry, err error) {
 	if rh.primaryIndexKeyPrefix == nil {
-		rh.primaryIndexKeyPrefix = sqlbase.MakeIndexKeyPrefix(rh.tableDesc,
-			rh.tableDesc.PrimaryIndex.ID)
+		rh.primaryIndexKeyPrefix = MakeIndexKeyPrefix(rh.TableDesc,
+			rh.TableDesc.PrimaryIndex.ID)
 	}
-	primaryIndexKey, _, err = sqlbase.EncodeIndexKey(
-		rh.tableDesc, &rh.tableDesc.PrimaryIndex, colIDtoRowIndex, values, rh.primaryIndexKeyPrefix)
+	primaryIndexKey, _, err = EncodeIndexKey(
+		rh.TableDesc, &rh.TableDesc.PrimaryIndex, colIDtoRowIndex, values, rh.primaryIndexKeyPrefix)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -78,25 +79,25 @@ func (rh *rowHelper) encodeIndexes(
 // secondaryIndexEntries are only valid until the next call to encodeIndexes or
 // encodeSecondaryIndexes.
 func (rh *rowHelper) encodeSecondaryIndexes(
-	colIDtoRowIndex map[sqlbase.ColumnID]int, values []parser.Datum,
-) (secondaryIndexEntries []sqlbase.IndexEntry, err error) {
-	if len(rh.indexEntries) != len(rh.indexes) {
-		rh.indexEntries = make([]sqlbase.IndexEntry, len(rh.indexes))
+	colIDtoRowIndex map[ColumnID]int, values []parser.Datum,
+) (secondaryIndexEntries []IndexEntry, err error) {
+	if len(rh.indexEntries) != len(rh.Indexes) {
+		rh.indexEntries = make([]IndexEntry, len(rh.Indexes))
 	}
-	err = sqlbase.EncodeSecondaryIndexes(
-		rh.tableDesc, rh.indexes, colIDtoRowIndex, values, rh.indexEntries)
+	err = EncodeSecondaryIndexes(
+		rh.TableDesc, rh.Indexes, colIDtoRowIndex, values, rh.indexEntries)
 	if err != nil {
 		return nil, err
 	}
 	return rh.indexEntries, nil
 }
 
-// TODO(dan): This logic is common and being moved into sqlbase.TableDescriptor (see
+// TODO(dan): This logic is common and being moved into TableDescriptor (see
 // #6233). Once it is, use the shared one.
-func (rh *rowHelper) columnInPK(colID sqlbase.ColumnID) bool {
+func (rh *rowHelper) columnInPK(colID ColumnID) bool {
 	if rh.primaryIndexCols == nil {
-		rh.primaryIndexCols = make(map[sqlbase.ColumnID]struct{})
-		for _, colID := range rh.tableDesc.PrimaryIndex.ColumnIDs {
+		rh.primaryIndexCols = make(map[ColumnID]struct{})
+		for _, colID := range rh.TableDesc.PrimaryIndex.ColumnIDs {
 			rh.primaryIndexCols[colID] = struct{}{}
 		}
 	}
@@ -104,10 +105,10 @@ func (rh *rowHelper) columnInPK(colID sqlbase.ColumnID) bool {
 	return ok
 }
 
-func (rh *rowHelper) isCompositeColumn(colID sqlbase.ColumnID) bool {
+func (rh *rowHelper) isCompositeColumn(colID ColumnID) bool {
 	if rh.compositeCols == nil {
-		rh.compositeCols = make(map[sqlbase.ColumnID]struct{})
-		for _, id := range rh.tableDesc.PrimaryIndex.CompositeColumnIDs {
+		rh.compositeCols = make(map[ColumnID]struct{})
+		for _, id := range rh.TableDesc.PrimaryIndex.CompositeColumnIDs {
 			rh.compositeCols[id] = struct{}{}
 		}
 	}
@@ -115,17 +116,17 @@ func (rh *rowHelper) isCompositeColumn(colID sqlbase.ColumnID) bool {
 	return ok
 }
 
-type columnIDs []sqlbase.ColumnID
+type columnIDs []ColumnID
 
 func (c columnIDs) Len() int           { return len(c) }
 func (c columnIDs) Swap(i, j int)      { c[i], c[j] = c[j], c[i] }
 func (c columnIDs) Less(i, j int) bool { return c[i] < c[j] }
 
-func (rh *rowHelper) sortedColumnFamily(famID sqlbase.FamilyID) ([]sqlbase.ColumnID, bool) {
+func (rh *rowHelper) sortedColumnFamily(famID FamilyID) ([]ColumnID, bool) {
 	if rh.sortedColumnFamilies == nil {
-		rh.sortedColumnFamilies = make(map[sqlbase.FamilyID][]sqlbase.ColumnID, len(rh.tableDesc.Families))
-		for _, family := range rh.tableDesc.Families {
-			colIDs := append([]sqlbase.ColumnID(nil), family.ColumnIDs...)
+		rh.sortedColumnFamilies = make(map[FamilyID][]ColumnID, len(rh.TableDesc.Families))
+		for _, family := range rh.TableDesc.Families {
+			colIDs := append([]ColumnID(nil), family.ColumnIDs...)
 			sort.Sort(columnIDs(colIDs))
 			rh.sortedColumnFamilies[family.ID] = colIDs
 		}
@@ -136,9 +137,9 @@ func (rh *rowHelper) sortedColumnFamily(famID sqlbase.FamilyID) ([]sqlbase.Colum
 
 // RowInserter abstracts the key/value operations for inserting table rows.
 type RowInserter struct {
-	helper                rowHelper
-	insertCols            []sqlbase.ColumnDescriptor
-	InsertColIDtoRowIndex map[sqlbase.ColumnID]int
+	Helper                rowHelper
+	InsertCols            []ColumnDescriptor
+	InsertColIDtoRowIndex map[ColumnID]int
 	fks                   fkInsertHelper
 
 	// For allocation avoidance.
@@ -150,18 +151,18 @@ type RowInserter struct {
 
 // MakeRowInserter creates a RowInserter for the given table.
 //
-// insertCols must contain every column in the primary key.
+// InsertCols must contain every column in the primary key.
 func MakeRowInserter(
 	txn *client.Txn,
-	tableDesc *sqlbase.TableDescriptor,
-	fkTables tableLookupsByID,
-	insertCols []sqlbase.ColumnDescriptor,
+	tableDesc *TableDescriptor,
+	fkTables TableLookupsByID,
+	insertCols []ColumnDescriptor,
 	checkFKs bool,
 ) (RowInserter, error) {
 	indexes := tableDesc.Indexes
 	// Also include the secondary indexes in mutation state WRITE_ONLY.
 	for _, m := range tableDesc.Mutations {
-		if m.State == sqlbase.DescriptorMutation_WRITE_ONLY {
+		if m.State == DescriptorMutation_WRITE_ONLY {
 			if index := m.GetIndex(); index != nil {
 				indexes = append(indexes, *index)
 			}
@@ -169,9 +170,9 @@ func MakeRowInserter(
 	}
 
 	ri := RowInserter{
-		helper:                rowHelper{tableDesc: tableDesc, indexes: indexes},
-		insertCols:            insertCols,
-		InsertColIDtoRowIndex: colIDtoRowIndexFromCols(insertCols),
+		Helper:                rowHelper{TableDesc: tableDesc, Indexes: indexes},
+		InsertCols:            insertCols,
+		InsertColIDtoRowIndex: ColIDtoRowIndexFromCols(insertCols),
 		marshalled:            make([]roachpb.Value, len(insertCols)),
 	}
 
@@ -220,8 +221,8 @@ type puter interface {
 func (ri *RowInserter) InsertRow(
 	ctx context.Context, b puter, values []parser.Datum, ignoreConflicts bool,
 ) error {
-	if len(values) != len(ri.insertCols) {
-		return errors.Errorf("got %d values but expected %d", len(values), len(ri.insertCols))
+	if len(values) != len(ri.InsertCols) {
+		return errors.Errorf("got %d values but expected %d", len(values), len(ri.InsertCols))
 	}
 
 	putFn := insertCPutFn
@@ -235,7 +236,7 @@ func (ri *RowInserter) InsertRow(
 	for i, val := range values {
 		// Make sure the value can be written to the column before proceeding.
 		var err error
-		if ri.marshalled[i], err = sqlbase.MarshalColumnValue(ri.insertCols[i], val); err != nil {
+		if ri.marshalled[i], err = MarshalColumnValue(ri.InsertCols[i], val); err != nil {
 			return err
 		}
 	}
@@ -244,16 +245,16 @@ func (ri *RowInserter) InsertRow(
 		return err
 	}
 
-	primaryIndexKey, secondaryIndexEntries, err := ri.helper.encodeIndexes(ri.InsertColIDtoRowIndex, values)
+	primaryIndexKey, secondaryIndexEntries, err := ri.Helper.encodeIndexes(ri.InsertColIDtoRowIndex, values)
 	if err != nil {
 		return err
 	}
 
 	// Add the new values.
-	// TODO(dan): This has gotten very similar to the loop in updateRow, see if
+	// TODO(dan): This has gotten very similar to the loop in UpdateRow, see if
 	// they can be DRY'd. Ideally, this would also work for
 	// truncateAndBackfillColumnsChunk, which is currently abusing rowUdpdater.
-	for i, family := range ri.helper.tableDesc.Families {
+	for i, family := range ri.Helper.TableDesc.Families {
 		if i > 0 {
 			// HACK: MakeFamilyKey appends to its argument, so on every loop iteration
 			// after the first, trim primaryIndexKey so nothing gets overwritten.
@@ -286,17 +287,17 @@ func (ri *RowInserter) InsertRow(
 		ri.key = keys.MakeFamilyKey(primaryIndexKey, uint32(family.ID))
 		ri.valueBuf = ri.valueBuf[:0]
 
-		var lastColID sqlbase.ColumnID
-		familySortedColumnIDs, ok := ri.helper.sortedColumnFamily(family.ID)
+		var lastColID ColumnID
+		familySortedColumnIDs, ok := ri.Helper.sortedColumnFamily(family.ID)
 		if !ok {
 			panic("invalid family sorted column id map")
 		}
 		for _, colID := range familySortedColumnIDs {
-			if ri.helper.columnInPK(colID) {
+			if ri.Helper.columnInPK(colID) {
 				if family.ID != 0 {
 					return errors.Errorf("primary index column %d must be in family 0, was %d", colID, family.ID)
 				}
-				if !ri.helper.isCompositeColumn(colID) {
+				if !ri.Helper.isCompositeColumn(colID) {
 					// Skip primary key columns as their values are encoded in the key of
 					// each family. Family 0 is guaranteed to exist and acts as a
 					// sentinel.
@@ -310,7 +311,7 @@ func (ri *RowInserter) InsertRow(
 				// Column not being inserted.
 				continue
 			}
-			col := ri.insertCols[idx]
+			col := ri.InsertCols[idx]
 
 			if values[idx] == parser.DNull {
 				continue
@@ -321,7 +322,7 @@ func (ri *RowInserter) InsertRow(
 			}
 			colIDDiff := col.ID - lastColID
 			lastColID = col.ID
-			ri.valueBuf, err = sqlbase.EncodeTableValue(ri.valueBuf, colIDDiff, values[idx])
+			ri.valueBuf, err = EncodeTableValue(ri.valueBuf, colIDDiff, values[idx])
 			if err != nil {
 				return err
 			}
@@ -343,17 +344,17 @@ func (ri *RowInserter) InsertRow(
 	return nil
 }
 
-// rowUpdater abstracts the key/value operations for updating table rows.
-type rowUpdater struct {
-	helper                rowHelper
-	fetchCols             []sqlbase.ColumnDescriptor
-	fetchColIDtoRowIndex  map[sqlbase.ColumnID]int
-	updateCols            []sqlbase.ColumnDescriptor
-	updateColIDtoRowIndex map[sqlbase.ColumnID]int
+// RowUpdater abstracts the key/value operations for updating table rows.
+type RowUpdater struct {
+	Helper                rowHelper
+	FetchCols             []ColumnDescriptor
+	FetchColIDtoRowIndex  map[ColumnID]int
+	UpdateCols            []ColumnDescriptor
+	updateColIDtoRowIndex map[ColumnID]int
 	deleteOnlyIndex       map[int]struct{}
 	primaryKeyColChange   bool
 
-	rd rowDeleter
+	rd RowDeleter
 	ri RowInserter
 
 	fks fkUpdateHelper
@@ -362,7 +363,7 @@ type rowUpdater struct {
 	marshalled      []roachpb.Value
 	newValues       []parser.Datum
 	key             roachpb.Key
-	indexEntriesBuf []sqlbase.IndexEntry
+	indexEntriesBuf []IndexEntry
 	valueBuf        []byte
 	value           roachpb.Value
 }
@@ -370,29 +371,33 @@ type rowUpdater struct {
 type rowUpdaterType int
 
 const (
-	rowUpdaterDefault     rowUpdaterType = 0
-	rowUpdaterOnlyColumns rowUpdaterType = 1
+	// RowUpdaterDefault indicates that a RowUpdater should update everything
+	// about a row, including secondary indexes.
+	RowUpdaterDefault rowUpdaterType = 0
+	// RowUpdaterOnlyColumns indicates that a RowUpdater should only update the
+	// columns of a row.
+	RowUpdaterOnlyColumns rowUpdaterType = 1
 )
 
-// makeRowUpdater creates a rowUpdater for the given table.
+// MakeRowUpdater creates a RowUpdater for the given table.
 //
-// updateCols are the columns being updated and correspond to the updateValues
-// that will be passed to updateRow.
+// UpdateCols are the columns being updated and correspond to the updateValues
+// that will be passed to UpdateRow.
 //
-// The returned rowUpdater contains a fetchCols field that defines the
-// expectation of which values are passed as oldValues to updateRow. Any column
-// passed in requestedCols will be included in fetchCols.
-func makeRowUpdater(
+// The returned RowUpdater contains a FetchCols field that defines the
+// expectation of which values are passed as oldValues to UpdateRow. Any column
+// passed in requestedCols will be included in FetchCols.
+func MakeRowUpdater(
 	txn *client.Txn,
-	tableDesc *sqlbase.TableDescriptor,
-	fkTables tableLookupsByID,
-	updateCols []sqlbase.ColumnDescriptor,
-	requestedCols []sqlbase.ColumnDescriptor,
+	tableDesc *TableDescriptor,
+	fkTables TableLookupsByID,
+	updateCols []ColumnDescriptor,
+	requestedCols []ColumnDescriptor,
 	updateType rowUpdaterType,
-) (rowUpdater, error) {
-	updateColIDtoRowIndex := colIDtoRowIndexFromCols(updateCols)
+) (RowUpdater, error) {
+	updateColIDtoRowIndex := ColIDtoRowIndexFromCols(updateCols)
 
-	primaryIndexCols := make(map[sqlbase.ColumnID]struct{}, len(tableDesc.PrimaryIndex.ColumnIDs))
+	primaryIndexCols := make(map[ColumnID]struct{}, len(tableDesc.PrimaryIndex.ColumnIDs))
 	for _, colID := range tableDesc.PrimaryIndex.ColumnIDs {
 		primaryIndexCols[colID] = struct{}{}
 	}
@@ -406,8 +411,8 @@ func makeRowUpdater(
 	}
 
 	// Secondary indexes needing updating.
-	needsUpdate := func(index sqlbase.IndexDescriptor) bool {
-		if updateType == rowUpdaterOnlyColumns {
+	needsUpdate := func(index IndexDescriptor) bool {
+		if updateType == RowUpdaterOnlyColumns {
 			// Only update columns.
 			return false
 		}
@@ -423,7 +428,7 @@ func makeRowUpdater(
 		return false
 	}
 
-	indexes := make([]sqlbase.IndexDescriptor, 0, len(tableDesc.Indexes)+len(tableDesc.Mutations))
+	indexes := make([]IndexDescriptor, 0, len(tableDesc.Indexes)+len(tableDesc.Mutations))
 	for _, index := range tableDesc.Indexes {
 		if needsUpdate(index) {
 			indexes = append(indexes, index)
@@ -437,22 +442,22 @@ func makeRowUpdater(
 				indexes = append(indexes, *index)
 
 				switch m.State {
-				case sqlbase.DescriptorMutation_DELETE_ONLY:
+				case DescriptorMutation_DELETE_ONLY:
 					if deleteOnlyIndex == nil {
 						// Allocate at most once.
 						deleteOnlyIndex = make(map[int]struct{}, len(tableDesc.Mutations))
 					}
 					deleteOnlyIndex[len(indexes)-1] = struct{}{}
 
-				case sqlbase.DescriptorMutation_WRITE_ONLY:
+				case DescriptorMutation_WRITE_ONLY:
 				}
 			}
 		}
 	}
 
-	ru := rowUpdater{
-		helper:                rowHelper{tableDesc: tableDesc, indexes: indexes},
-		updateCols:            updateCols,
+	ru := RowUpdater{
+		Helper:                rowHelper{TableDesc: tableDesc, Indexes: indexes},
+		UpdateCols:            updateCols,
 		updateColIDtoRowIndex: updateColIDtoRowIndex,
 		deleteOnlyIndex:       deleteOnlyIndex,
 		primaryKeyColChange:   primaryKeyColChange,
@@ -465,32 +470,32 @@ func makeRowUpdater(
 		var err error
 		// When changing the primary key, we delete the old values and reinsert
 		// them, so request them all.
-		if ru.rd, err = makeRowDeleter(txn, tableDesc, fkTables, tableDesc.Columns, skipFKs); err != nil {
-			return rowUpdater{}, err
+		if ru.rd, err = MakeRowDeleter(txn, tableDesc, fkTables, tableDesc.Columns, SkipFKs); err != nil {
+			return RowUpdater{}, err
 		}
-		ru.fetchCols = ru.rd.fetchCols
-		ru.fetchColIDtoRowIndex = colIDtoRowIndexFromCols(ru.fetchCols)
-		if ru.ri, err = MakeRowInserter(txn, tableDesc, fkTables, tableDesc.Columns, skipFKs); err != nil {
-			return rowUpdater{}, err
+		ru.FetchCols = ru.rd.FetchCols
+		ru.FetchColIDtoRowIndex = ColIDtoRowIndexFromCols(ru.FetchCols)
+		if ru.ri, err = MakeRowInserter(txn, tableDesc, fkTables, tableDesc.Columns, SkipFKs); err != nil {
+			return RowUpdater{}, err
 		}
 	} else {
-		ru.fetchCols = requestedCols[:len(requestedCols):len(requestedCols)]
-		ru.fetchColIDtoRowIndex = colIDtoRowIndexFromCols(ru.fetchCols)
+		ru.FetchCols = requestedCols[:len(requestedCols):len(requestedCols)]
+		ru.FetchColIDtoRowIndex = ColIDtoRowIndexFromCols(ru.FetchCols)
 
-		maybeAddCol := func(colID sqlbase.ColumnID) error {
-			if _, ok := ru.fetchColIDtoRowIndex[colID]; !ok {
+		maybeAddCol := func(colID ColumnID) error {
+			if _, ok := ru.FetchColIDtoRowIndex[colID]; !ok {
 				col, err := tableDesc.FindColumnByID(colID)
 				if err != nil {
 					return err
 				}
-				ru.fetchColIDtoRowIndex[col.ID] = len(ru.fetchCols)
-				ru.fetchCols = append(ru.fetchCols, *col)
+				ru.FetchColIDtoRowIndex[col.ID] = len(ru.FetchCols)
+				ru.FetchCols = append(ru.FetchCols, *col)
 			}
 			return nil
 		}
 		for _, colID := range tableDesc.PrimaryIndex.ColumnIDs {
 			if err := maybeAddCol(colID); err != nil {
-				return rowUpdater{}, err
+				return RowUpdater{}, err
 			}
 		}
 		for _, fam := range tableDesc.Families {
@@ -504,7 +509,7 @@ func makeRowUpdater(
 			if familyBeingUpdated {
 				for _, colID := range fam.ColumnIDs {
 					if err := maybeAddCol(colID); err != nil {
-						return rowUpdater{}, err
+						return RowUpdater{}, err
 					}
 				}
 			}
@@ -512,37 +517,37 @@ func makeRowUpdater(
 		for _, index := range indexes {
 			for _, colID := range index.ColumnIDs {
 				if err := maybeAddCol(colID); err != nil {
-					return rowUpdater{}, err
+					return RowUpdater{}, err
 				}
 			}
 		}
 	}
 
 	var err error
-	if ru.fks, err = makeFKUpdateHelper(txn, *tableDesc, fkTables, ru.fetchColIDtoRowIndex); err != nil {
-		return rowUpdater{}, err
+	if ru.fks, err = makeFKUpdateHelper(txn, *tableDesc, fkTables, ru.FetchColIDtoRowIndex); err != nil {
+		return RowUpdater{}, err
 	}
 	return ru, nil
 }
 
-// updateRow adds to the batch the kv operations necessary to update a table row
+// UpdateRow adds to the batch the kv operations necessary to update a table row
 // with the given values.
 //
 // The row corresponding to oldValues is updated with the ones in updateValues.
 // Note that updateValues only contains the ones that are changing.
 //
 // The return value is only good until the next call to UpdateRow.
-func (ru *rowUpdater) updateRow(
+func (ru *RowUpdater) UpdateRow(
 	ctx context.Context, b *client.Batch, oldValues []parser.Datum, updateValues []parser.Datum,
 ) ([]parser.Datum, error) {
-	if len(oldValues) != len(ru.fetchCols) {
-		return nil, errors.Errorf("got %d values but expected %d", len(oldValues), len(ru.fetchCols))
+	if len(oldValues) != len(ru.FetchCols) {
+		return nil, errors.Errorf("got %d values but expected %d", len(oldValues), len(ru.FetchCols))
 	}
-	if len(updateValues) != len(ru.updateCols) {
-		return nil, errors.Errorf("got %d values but expected %d", len(updateValues), len(ru.updateCols))
+	if len(updateValues) != len(ru.UpdateCols) {
+		return nil, errors.Errorf("got %d values but expected %d", len(updateValues), len(ru.UpdateCols))
 	}
 
-	primaryIndexKey, secondaryIndexEntries, err := ru.helper.encodeIndexes(ru.fetchColIDtoRowIndex, oldValues)
+	primaryIndexKey, secondaryIndexEntries, err := ru.Helper.encodeIndexes(ru.FetchColIDtoRowIndex, oldValues)
 	if err != nil {
 		return nil, err
 	}
@@ -557,48 +562,48 @@ func (ru *rowUpdater) updateRow(
 	// happen before index encoding because certain datum types (i.e. tuple)
 	// cannot be used as index values.
 	for i, val := range updateValues {
-		if ru.marshalled[i], err = sqlbase.MarshalColumnValue(ru.updateCols[i], val); err != nil {
+		if ru.marshalled[i], err = MarshalColumnValue(ru.UpdateCols[i], val); err != nil {
 			return nil, err
 		}
 	}
 
 	// Update the row values.
 	copy(ru.newValues, oldValues)
-	for i, updateCol := range ru.updateCols {
-		ru.newValues[ru.fetchColIDtoRowIndex[updateCol.ID]] = updateValues[i]
+	for i, updateCol := range ru.UpdateCols {
+		ru.newValues[ru.FetchColIDtoRowIndex[updateCol.ID]] = updateValues[i]
 	}
 
 	rowPrimaryKeyChanged := false
-	var newSecondaryIndexEntries []sqlbase.IndexEntry
+	var newSecondaryIndexEntries []IndexEntry
 	if ru.primaryKeyColChange {
 		var newPrimaryIndexKey []byte
 		newPrimaryIndexKey, newSecondaryIndexEntries, err =
-			ru.helper.encodeIndexes(ru.fetchColIDtoRowIndex, ru.newValues)
+			ru.Helper.encodeIndexes(ru.FetchColIDtoRowIndex, ru.newValues)
 		if err != nil {
 			return nil, err
 		}
 		rowPrimaryKeyChanged = !bytes.Equal(primaryIndexKey, newPrimaryIndexKey)
 	} else {
 		newSecondaryIndexEntries, err =
-			ru.helper.encodeSecondaryIndexes(ru.fetchColIDtoRowIndex, ru.newValues)
+			ru.Helper.encodeSecondaryIndexes(ru.FetchColIDtoRowIndex, ru.newValues)
 		if err != nil {
 			return nil, err
 		}
 	}
 
 	if rowPrimaryKeyChanged {
-		if err := ru.fks.checkIdx(ctx, ru.helper.tableDesc.PrimaryIndex.ID, oldValues, ru.newValues); err != nil {
+		if err := ru.fks.checkIdx(ctx, ru.Helper.TableDesc.PrimaryIndex.ID, oldValues, ru.newValues); err != nil {
 			return nil, err
 		}
 		for i := range newSecondaryIndexEntries {
 			if !bytes.Equal(newSecondaryIndexEntries[i].Key, secondaryIndexEntries[i].Key) {
-				if err := ru.fks.checkIdx(ctx, ru.helper.indexes[i].ID, oldValues, ru.newValues); err != nil {
+				if err := ru.fks.checkIdx(ctx, ru.Helper.Indexes[i].ID, oldValues, ru.newValues); err != nil {
 					return nil, err
 				}
 			}
 		}
 
-		if err := ru.rd.deleteRow(ctx, b, oldValues); err != nil {
+		if err := ru.rd.DeleteRow(ctx, b, oldValues); err != nil {
 			return nil, err
 		}
 		if err := ru.ri.InsertRow(ctx, b, ru.newValues, false); err != nil {
@@ -611,7 +616,7 @@ func (ru *rowUpdater) updateRow(
 	// TODO(dan): This has gotten very similar to the loop in insertRow, see if
 	// they can be DRY'd. Ideally, this would also work for
 	// truncateAndBackfillColumnsChunk, which is currently abusing rowUdpdater.
-	for i, family := range ru.helper.tableDesc.Families {
+	for i, family := range ru.Helper.TableDesc.Families {
 		update := false
 		for _, colID := range family.ColumnIDs {
 			if _, ok := ru.updateColIDtoRowIndex[colID]; ok {
@@ -652,17 +657,17 @@ func (ru *rowUpdater) updateRow(
 		ru.key = keys.MakeFamilyKey(primaryIndexKey, uint32(family.ID))
 		ru.valueBuf = ru.valueBuf[:0]
 
-		var lastColID sqlbase.ColumnID
-		familySortedColumnIDs, ok := ru.helper.sortedColumnFamily(family.ID)
+		var lastColID ColumnID
+		familySortedColumnIDs, ok := ru.Helper.sortedColumnFamily(family.ID)
 		if !ok {
 			panic("invalid family sorted column id map")
 		}
 		for _, colID := range familySortedColumnIDs {
-			if ru.helper.columnInPK(colID) {
+			if ru.Helper.columnInPK(colID) {
 				if family.ID != 0 {
 					return nil, errors.Errorf("primary index column %d must be in family 0, was %d", colID, family.ID)
 				}
-				if !ru.helper.isCompositeColumn(colID) {
+				if !ru.Helper.isCompositeColumn(colID) {
 					// Skip primary key columns as their values are encoded in the key of
 					// each family. Family 0 is guaranteed to exist and acts as a
 					// sentinel.
@@ -671,11 +676,11 @@ func (ru *rowUpdater) updateRow(
 				// Composite columns are encoded in both the key and the value.
 			}
 
-			idx, ok := ru.fetchColIDtoRowIndex[colID]
+			idx, ok := ru.FetchColIDtoRowIndex[colID]
 			if !ok {
 				return nil, errors.Errorf("column %d was expected to be fetched, but wasn't", colID)
 			}
-			col := ru.fetchCols[idx]
+			col := ru.FetchCols[idx]
 
 			if ru.newValues[idx] == parser.DNull {
 				continue
@@ -686,7 +691,7 @@ func (ru *rowUpdater) updateRow(
 			}
 			colIDDiff := col.ID - lastColID
 			lastColID = col.ID
-			ru.valueBuf, err = sqlbase.EncodeTableValue(ru.valueBuf, colIDDiff, ru.newValues[idx])
+			ru.valueBuf, err = EncodeTableValue(ru.valueBuf, colIDDiff, ru.newValues[idx])
 			if err != nil {
 				return nil, err
 			}
@@ -716,7 +721,7 @@ func (ru *rowUpdater) updateRow(
 		secondaryIndexEntry := secondaryIndexEntries[i]
 		secondaryKeyChanged := !bytes.Equal(newSecondaryIndexEntry.Key, secondaryIndexEntry.Key)
 		if secondaryKeyChanged {
-			if err := ru.fks.checkIdx(ctx, ru.helper.indexes[i].ID, oldValues, ru.newValues); err != nil {
+			if err := ru.fks.checkIdx(ctx, ru.Helper.Indexes[i].ID, oldValues, ru.newValues); err != nil {
 				return nil, err
 			}
 
@@ -737,41 +742,41 @@ func (ru *rowUpdater) updateRow(
 	return ru.newValues, nil
 }
 
-// isColumnOnlyUpdate returns true if this rowUpdater is only updating column
+// IsColumnOnlyUpdate returns true if this RowUpdater is only updating column
 // data (in contrast to updating the primary key or other indexes).
-func (ru *rowUpdater) isColumnOnlyUpdate() bool {
+func (ru *RowUpdater) IsColumnOnlyUpdate() bool {
 	// TODO(dan): This is used in the schema change backfill to assert that it was
 	// configured correctly and will not be doing things it shouldn't. This is an
 	// unfortunate bleeding of responsibility and indicates the abstraction could
-	// be improved. Specifically, rowUpdater currently has two responsibilities
+	// be improved. Specifically, RowUpdater currently has two responsibilities
 	// (computing which indexes need to be updated and mapping sql rows to k/v
 	// operations) and these should be split.
-	return !ru.primaryKeyColChange && len(ru.deleteOnlyIndex) == 0 && len(ru.helper.indexes) == 0
+	return !ru.primaryKeyColChange && len(ru.deleteOnlyIndex) == 0 && len(ru.Helper.Indexes) == 0
 }
 
-// rowDeleter abstracts the key/value operations for deleting table rows.
-type rowDeleter struct {
-	helper               rowHelper
-	fetchCols            []sqlbase.ColumnDescriptor
-	fetchColIDtoRowIndex map[sqlbase.ColumnID]int
+// RowDeleter abstracts the key/value operations for deleting table rows.
+type RowDeleter struct {
+	Helper               rowHelper
+	FetchCols            []ColumnDescriptor
+	FetchColIDtoRowIndex map[ColumnID]int
 	fks                  fkDeleteHelper
 	// For allocation avoidance.
 	startKey roachpb.Key
 	endKey   roachpb.Key
 }
 
-// makeRowDeleter creates a rowDeleter for the given table.
+// MakeRowDeleter creates a RowDeleter for the given table.
 //
-// The returned rowDeleter contains a fetchCols field that defines the
-// expectation of which values are passed as values to deleteRow. Any column
-// passed in requestedCols will be included in fetchCols.
-func makeRowDeleter(
+// The returned RowDeleter contains a FetchCols field that defines the
+// expectation of which values are passed as values to DeleteRow. Any column
+// passed in requestedCols will be included in FetchCols.
+func MakeRowDeleter(
 	txn *client.Txn,
-	tableDesc *sqlbase.TableDescriptor,
-	fkTables tableLookupsByID,
-	requestedCols []sqlbase.ColumnDescriptor,
+	tableDesc *TableDescriptor,
+	fkTables TableLookupsByID,
+	requestedCols []ColumnDescriptor,
 	checkFKs bool,
-) (rowDeleter, error) {
+) (RowDeleter, error) {
 	indexes := tableDesc.Indexes
 	for _, m := range tableDesc.Mutations {
 		if index := m.GetIndex(); index != nil {
@@ -780,9 +785,9 @@ func makeRowDeleter(
 	}
 
 	fetchCols := requestedCols[:len(requestedCols):len(requestedCols)]
-	fetchColIDtoRowIndex := colIDtoRowIndexFromCols(fetchCols)
+	fetchColIDtoRowIndex := ColIDtoRowIndexFromCols(fetchCols)
 
-	maybeAddCol := func(colID sqlbase.ColumnID) error {
+	maybeAddCol := func(colID ColumnID) error {
 		if _, ok := fetchColIDtoRowIndex[colID]; !ok {
 			col, err := tableDesc.FindColumnByID(colID)
 			if err != nil {
@@ -795,40 +800,40 @@ func makeRowDeleter(
 	}
 	for _, colID := range tableDesc.PrimaryIndex.ColumnIDs {
 		if err := maybeAddCol(colID); err != nil {
-			return rowDeleter{}, err
+			return RowDeleter{}, err
 		}
 	}
 	for _, index := range indexes {
 		for _, colID := range index.ColumnIDs {
 			if err := maybeAddCol(colID); err != nil {
-				return rowDeleter{}, err
+				return RowDeleter{}, err
 			}
 		}
 	}
 
-	rd := rowDeleter{
-		helper:               rowHelper{tableDesc: tableDesc, indexes: indexes},
-		fetchCols:            fetchCols,
-		fetchColIDtoRowIndex: fetchColIDtoRowIndex,
+	rd := RowDeleter{
+		Helper:               rowHelper{TableDesc: tableDesc, Indexes: indexes},
+		FetchCols:            fetchCols,
+		FetchColIDtoRowIndex: fetchColIDtoRowIndex,
 	}
 	if checkFKs {
 		var err error
 		if rd.fks, err = makeFKDeleteHelper(txn, *tableDesc, fkTables, fetchColIDtoRowIndex); err != nil {
-			return rowDeleter{}, err
+			return RowDeleter{}, err
 		}
 	}
 
 	return rd, nil
 }
 
-// deleteRow adds to the batch the kv operations necessary to delete a table row
+// DeleteRow adds to the batch the kv operations necessary to delete a table row
 // with the given values.
-func (rd *rowDeleter) deleteRow(ctx context.Context, b *client.Batch, values []parser.Datum) error {
+func (rd *RowDeleter) DeleteRow(ctx context.Context, b *client.Batch, values []parser.Datum) error {
 	if err := rd.fks.checkAll(ctx, values); err != nil {
 		return err
 	}
 
-	primaryIndexKey, secondaryIndexEntries, err := rd.helper.encodeIndexes(rd.fetchColIDtoRowIndex, values)
+	primaryIndexKey, secondaryIndexEntries, err := rd.Helper.encodeIndexes(rd.FetchColIDtoRowIndex, values)
 	if err != nil {
 		return err
 	}
@@ -852,16 +857,16 @@ func (rd *rowDeleter) deleteRow(ctx context.Context, b *client.Batch, values []p
 	return nil
 }
 
-// deleteIndexRow adds to the batch the kv operations necessary to delete a
+// DeleteIndexRow adds to the batch the kv operations necessary to delete a
 // table row from the given index.
-func (rd *rowDeleter) deleteIndexRow(
-	ctx context.Context, b *client.Batch, idx *sqlbase.IndexDescriptor, values []parser.Datum,
+func (rd *RowDeleter) DeleteIndexRow(
+	ctx context.Context, b *client.Batch, idx *IndexDescriptor, values []parser.Datum,
 ) error {
 	if err := rd.fks.checkAll(ctx, values); err != nil {
 		return err
 	}
-	secondaryIndexEntry, err := sqlbase.EncodeSecondaryIndex(
-		rd.helper.tableDesc, idx, rd.fetchColIDtoRowIndex, values)
+	secondaryIndexEntry, err := EncodeSecondaryIndex(
+		rd.Helper.TableDesc, idx, rd.FetchColIDtoRowIndex, values)
 	if err != nil {
 		return err
 	}
@@ -872,8 +877,11 @@ func (rd *rowDeleter) deleteIndexRow(
 	return nil
 }
 
-func colIDtoRowIndexFromCols(cols []sqlbase.ColumnDescriptor) map[sqlbase.ColumnID]int {
-	colIDtoRowIndex := make(map[sqlbase.ColumnID]int, len(cols))
+// ColIDtoRowIndexFromCols groups a slice of ColumnDescriptors by their ID
+// field, returning a map from ID to ColumnDescriptor. It assumes there are no
+// duplicate descriptors in the input.
+func ColIDtoRowIndexFromCols(cols []ColumnDescriptor) map[ColumnID]int {
+	colIDtoRowIndex := make(map[ColumnID]int, len(cols))
 	for i, col := range cols {
 		colIDtoRowIndex[col.ID] = i
 	}

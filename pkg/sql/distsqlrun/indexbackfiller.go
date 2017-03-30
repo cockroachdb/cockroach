@@ -38,6 +38,7 @@ type indexBackfiller struct {
 }
 
 var _ processor = &indexBackfiller{}
+var _ chunkBackfiller = &indexBackfiller{}
 
 // IndexMutationFilter is a filter that allows mutations that add indexes.
 func IndexMutationFilter(m sqlbase.DescriptorMutation) bool {
@@ -45,7 +46,7 @@ func IndexMutationFilter(m sqlbase.DescriptorMutation) bool {
 }
 
 func newIndexBackfiller(
-	flowCtx *FlowCtx, spec *BackfillerSpec, post *PostProcessSpec, output RowReceiver,
+	flowCtx *FlowCtx, spec BackfillerSpec, post *PostProcessSpec, output RowReceiver,
 ) (*indexBackfiller, error) {
 	ib := &indexBackfiller{
 		backfiller: backfiller{
@@ -53,7 +54,7 @@ func newIndexBackfiller(
 			filter:  IndexMutationFilter,
 			flowCtx: flowCtx,
 			output:  output,
-			spec:    *spec,
+			spec:    spec,
 		},
 	}
 	ib.backfiller.chunkBackfiller = ib

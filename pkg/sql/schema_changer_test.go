@@ -1130,9 +1130,6 @@ func TestSchemaChangeRetryOnVersionChange(t *testing.T) {
 	params, _ := createTestServerParams()
 	var upTableVersion func()
 	currChunk := 0
-	// This represents the number of backfill chunks that get reevaluated.
-	// A retry results in a reevaluation of a chunk.
-	var numReevaluated uint32
 	var numBackfills uint32
 	seenSpan := roachpb.Span{}
 	params.Knobs = base.TestingKnobs{
@@ -1149,10 +1146,6 @@ func TestSchemaChangeRetryOnVersionChange(t *testing.T) {
 					upTableVersion()
 				}
 				if seenSpan.Key != nil {
-					// Keep track of the number of reevaluations.
-					if seenSpan.Key.Compare(sp.Key) >= 0 {
-						atomic.AddUint32(&numReevaluated, 1)
-					}
 					if !seenSpan.EndKey.Equal(sp.EndKey) {
 						t.Errorf("different EndKey: span %s, already seen span %s", sp, seenSpan)
 					}
@@ -1174,10 +1167,6 @@ func TestSchemaChangeRetryOnVersionChange(t *testing.T) {
 					upTableVersion()
 				}
 				if seenSpan.Key != nil {
-					// Keep track of the number of reevaluations.
-					if seenSpan.Key.Compare(sp.Key) >= 0 {
-						atomic.AddUint32(&numReevaluated, 1)
-					}
 					if !seenSpan.EndKey.Equal(sp.EndKey) {
 						t.Errorf("different EndKey: span %s, already seen span %s", sp, seenSpan)
 					}
@@ -1231,9 +1220,6 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 	}
 
 	addIndexSchemaChange(t, sqlDB, kvDB, maxValue, 2)
-	if reevaluated := atomic.SwapUint32(&numReevaluated, 0); reevaluated != 0 {
-		t.Fatalf("expected %d reevaluations, but seen %d", 0, reevaluated)
-	}
 	if num := atomic.SwapUint32(&numBackfills, 0); num != 2 {
 		t.Fatalf("expected %d backfills, but seen %d", 2, num)
 	}
@@ -1241,9 +1227,6 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 	currChunk = 0
 	seenSpan = roachpb.Span{}
 	addColumnSchemaChange(t, sqlDB, kvDB, maxValue, 2)
-	if reevaluated := atomic.SwapUint32(&numReevaluated, 0); reevaluated != 1 {
-		t.Fatalf("expected %d reevaluations, but seen %d", 1, reevaluated)
-	}
 	if num := atomic.SwapUint32(&numBackfills, 0); num != 2 {
 		t.Fatalf("expected %d backfills, but seen %d", 2, num)
 	}
@@ -1251,9 +1234,6 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 	currChunk = 0
 	seenSpan = roachpb.Span{}
 	dropColumnSchemaChange(t, sqlDB, kvDB, maxValue, 2)
-	if reevaluated := atomic.SwapUint32(&numReevaluated, 0); reevaluated != 1 {
-		t.Fatalf("expected %d reevaluations, but seen %d", 1, reevaluated)
-	}
 	if num := atomic.SwapUint32(&numBackfills, 0); num != 2 {
 		t.Fatalf("expected %d backfills, but seen %d", 2, num)
 	}
@@ -1706,7 +1686,7 @@ func TestUpdateDuringColumnBackfill(t *testing.T) {
 	continueBackfillNotification := make(chan bool)
 	params, _ := createTestServerParams()
 	params.Knobs = base.TestingKnobs{
-		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
+		DistSQL: &distsqlrun.TestingKnobs{
 			RunBeforeBackfillChunk: func(sp roachpb.Span) error {
 				if backfillNotification != nil {
 					// Close channel to notify that the schema change has
@@ -1717,7 +1697,6 @@ func TestUpdateDuringColumnBackfill(t *testing.T) {
 				}
 				return nil
 			},
-			AsyncExecNotification: asyncSchemaChangerDisabled,
 		},
 	}
 	server, sqlDB, _ := serverutils.StartServer(t, params)

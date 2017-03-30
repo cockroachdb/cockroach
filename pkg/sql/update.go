@@ -161,7 +161,7 @@ func (p *planner) Update(
 		return nil, err
 	}
 
-	defaultExprs, err := makeDefaultExprs(updateCols, &p.parser, &p.evalCtx)
+	defaultExprs, err := sqlbase.MakeDefaultExprs(updateCols, &p.parser, &p.evalCtx)
 	if err != nil {
 		return nil, err
 	}
@@ -173,11 +173,11 @@ func (p *planner) Update(
 		requestedCols = en.tableDesc.Columns
 	}
 
-	fkTables := tablesNeededForFKs(*en.tableDesc, CheckUpdates)
+	fkTables := sqlbase.TablesNeededForFKs(*en.tableDesc, sqlbase.CheckUpdates)
 	if err := p.fillFKTableMap(ctx, fkTables); err != nil {
 		return nil, err
 	}
-	ru, err := makeRowUpdater(p.txn, en.tableDesc, fkTables, updateCols, requestedCols, rowUpdaterDefault)
+	ru, err := sqlbase.MakeRowUpdater(p.txn, en.tableDesc, fkTables, updateCols, requestedCols, sqlbase.RowUpdaterDefault)
 	if err != nil {
 		return nil, err
 	}
@@ -191,7 +191,7 @@ func (p *planner) Update(
 	// expressions for tuple assignments just as we flattened the column names
 	// above. So "UPDATE t SET (a, b) = (1, 2)" translates into select targets of
 	// "*, 1, 2", not "*, (1, 2)".
-	targets := sqlbase.ColumnsSelectors(ru.fetchCols)
+	targets := sqlbase.ColumnsSelectors(ru.FetchCols)
 	i := 0
 	// Remember the index where the targets for exprs start.
 	exprTargetIdx := len(targets)
@@ -253,15 +253,15 @@ func (p *planner) Update(
 		}
 	}
 
-	updateColsIdx := make(map[sqlbase.ColumnID]int, len(ru.updateCols))
-	for i, col := range ru.updateCols {
+	updateColsIdx := make(map[sqlbase.ColumnID]int, len(ru.UpdateCols))
+	for i, col := range ru.UpdateCols {
 		updateColsIdx[col.ID] = i
 	}
 
 	un := &updateNode{
 		n:             n,
 		editNodeBase:  en,
-		updateCols:    ru.updateCols,
+		updateCols:    ru.UpdateCols,
 		updateColsIdx: updateColsIdx,
 		tw:            tw,
 	}
@@ -306,10 +306,10 @@ func (u *updateNode) Next(ctx context.Context) (bool, error) {
 
 	// Our updated value expressions occur immediately after the plain
 	// columns in the output.
-	updateValues := oldValues[len(u.tw.ru.fetchCols):]
-	oldValues = oldValues[:len(u.tw.ru.fetchCols)]
+	updateValues := oldValues[len(u.tw.ru.FetchCols):]
+	oldValues = oldValues[:len(u.tw.ru.FetchCols)]
 
-	u.checkHelper.loadRow(u.tw.ru.fetchColIDtoRowIndex, oldValues, false)
+	u.checkHelper.loadRow(u.tw.ru.FetchColIDtoRowIndex, oldValues, false)
 	u.checkHelper.loadRow(u.updateColsIdx, updateValues, true)
 	if err := u.checkHelper.check(&u.p.evalCtx); err != nil {
 		return false, err
@@ -317,13 +317,13 @@ func (u *updateNode) Next(ctx context.Context) (bool, error) {
 
 	// Ensure that the values honor the specified column widths.
 	for i := range updateValues {
-		if err := sqlbase.CheckValueWidth(u.tw.ru.updateCols[i], updateValues[i]); err != nil {
+		if err := sqlbase.CheckValueWidth(u.tw.ru.UpdateCols[i], updateValues[i]); err != nil {
 			return false, err
 		}
 	}
 
 	// Update the row values.
-	for i, col := range u.tw.ru.updateCols {
+	for i, col := range u.tw.ru.UpdateCols {
 		val := updateValues[i]
 		if !col.Nullable && val == parser.DNull {
 			return false, sqlbase.NewNonNullViolationError(col.Name)
