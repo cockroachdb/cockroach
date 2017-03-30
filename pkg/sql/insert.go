@@ -199,6 +199,7 @@ func (p *planner) Insert(
 				updateCols:    updateCols,
 				conflictIndex: *conflictIndex,
 				evaler:        helper,
+				isUpsertAlias: n.OnConflict.IsUpsertAlias(),
 			}
 		}
 	}

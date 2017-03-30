@@ -74,12 +74,12 @@ func TestUpsertFastPath(t *testing.T) {
 		t.Errorf("expected no begin-txn (1PC) but got %d", s)
 	}
 
-	// This should hit the fast path.
+	// This could hit the fast path, but doesn't right now because of #14482.
 	atomic.StoreUint64(&scans, 0)
 	atomic.StoreUint64(&beginTxn, 0)
 	sqlDB.Exec(`INSERT INTO d.kv VALUES (1, 1) ON CONFLICT (k) DO UPDATE SET v=excluded.v`)
-	if s := atomic.LoadUint64(&scans); s != 0 {
-		t.Errorf("expected no scans (the upsert fast path) but got %d", s)
+	if s := atomic.LoadUint64(&scans); s != 1 {
+		t.Errorf("expected 1 scans (no upsert fast path) but got %d", s)
 	}
 	if s := atomic.LoadUint64(&beginTxn); s != 0 {
 		t.Errorf("expected no begin-txn (1PC) but got %d", s)

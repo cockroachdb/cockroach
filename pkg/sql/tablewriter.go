@@ -165,8 +165,6 @@ type tableUpsertEvaler interface {
 	// eval returns the values for the update case of an upsert, given the row
 	// that would have been inserted and the existing (conflicting) values.
 	eval(insertRow parser.Datums, existingRow parser.Datums) (parser.Datums, error)
-
-	isIdentityEvaler() bool
 }
 
 // tableUpserter handles writing kvs and forming table rows for upserts.
@@ -189,6 +187,7 @@ type tableUpserter struct {
 	ri            sqlbase.RowInserter
 	autoCommit    bool
 	conflictIndex sqlbase.IndexDescriptor
+	isUpsertAlias bool
 
 	// These are set for ON CONFLICT DO UPDATE, but not for DO NOTHING
 	updateCols []sqlbase.ColumnDescriptor
@@ -227,17 +226,25 @@ func (tu *tableUpserter) init(txn *client.Txn) error {
 	tu.tableDesc = tu.ri.Helper.TableDesc
 	tu.indexKeyPrefix = sqlbase.MakeIndexKeyPrefix(tu.tableDesc, tu.tableDesc.PrimaryIndex.ID)
 
-	// For the fast path, all columns must be specified in the insert.
-	allColsIdentityExpr := len(tu.ri.InsertCols) == len(tu.tableDesc.Columns) &&
-		// Plus, all columns not in the conflict index must be specified in the
-		// DO UPDATE clause and be of the form `x = excluded.x`.
-		len(tu.updateCols) == len(tu.tableDesc.Columns)-len(tu.conflictIndex.ColumnIDs) &&
-		tu.evaler != nil && tu.evaler.isIdentityEvaler()
-	// When adding or removing a column in a schema change (mutation), the user
-	// can't specify it, which means we need to do a lookup and so we can't use
-	// the fast path. When adding or removing an index, same result, so the fast
-	// path is disabled during all mutations.
-	if len(tu.tableDesc.Indexes) == 0 && len(tu.tableDesc.Mutations) == 0 && allColsIdentityExpr {
+	// TODO(dan): The fast path is currently only enabled when the UPSERT alias
+	// is explicitly selected by the user. It's possible to fast path some
+	// queries of the form INSERT ... ON CONFLICT, but the utility is low and
+	// there are lots of edge cases (that caused real correctness bugs #13437
+	// #13962). As a result, we've decided to remove this until after 1.0 and
+	// re-enable it then. See #14482.
+	enableFastPath := tu.isUpsertAlias &&
+		// Tables with secondary indexes are not eligible for fast path (it
+		// would be easy to add the new secondary index entry but we can't clean
+		// up the old one without the previous values).
+		len(tu.tableDesc.Indexes) == 0 &&
+		// When adding or removing a column in a schema change (mutation), the user
+		// can't specify it, which means we need to do a lookup and so we can't use
+		// the fast path. When adding or removing an index, same result, so the fast
+		// path is disabled during all mutations.
+		len(tu.tableDesc.Mutations) == 0 &&
+		// For the fast path, all columns must be specified in the insert.
+		len(tu.ri.InsertCols) == len(tu.tableDesc.Columns)
+	if enableFastPath {
 		tu.fastPathBatch = tu.txn.NewBatch()
 		tu.fastPathKeys = make(map[string]struct{})
 		return nil
