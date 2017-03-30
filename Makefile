@@ -67,7 +67,7 @@ LINKFLAGS =
 
 export GOPATH := $(realpath ../../../..)
 # Prefer tools from $GOPATH/bin over those elsewhere on the path.
-# This ensures that we get the versions pinned in the GLOCKFILE.
+# This ensures that we get the versions we go install.
 export PATH := $(GOPATH)/bin:$(PATH)
 # HACK: Make has a fast path and a slow path for command execution,
 # but the fast path uses the PATH variable from when make was started,
