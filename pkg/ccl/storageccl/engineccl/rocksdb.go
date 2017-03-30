@@ -9,11 +9,12 @@
 package engineccl
 
 import (
-	"errors"
 	"unsafe"
 
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/pkg/errors"
 )
 
 // #cgo CPPFLAGS: -I../../../../vendor/github.com/cockroachdb/c-protobuf/internal/src
@@ -32,6 +33,39 @@ import "C"
 func VerifyBatchRepr(
 	repr []byte, start, end engine.MVCCKey, nowNanos int64,
 ) (enginepb.MVCCStats, error) {
+	// We store a 4 byte checksum of each key/value entry in the value. Make
+	// sure the all ones in this BatchRepr validate.
+	//
+	// TODO(dan): After a number of hours of trying, I was unable to get a
+	// performant c++ implementation of crc32 ieee, so this verifies the
+	// checksums in go and constructs the MVCCStats in c++. It'd be nice to move
+	// one or the other.
+	{
+		r, err := engine.NewRocksDBBatchReader(repr)
+		if err != nil {
+			return enginepb.MVCCStats{}, errors.Wrapf(err, "verifying key/value checksums")
+		}
+		for r.Next() {
+			switch r.BatchType() {
+			case engine.BatchTypeValue:
+				mvccKey, err := engine.DecodeKey(r.UnsafeKey())
+				if err != nil {
+					return enginepb.MVCCStats{}, errors.Wrapf(err, "verifying key/value checksums")
+				}
+				v := roachpb.Value{RawBytes: r.UnsafeValue()}
+				if err := v.Verify(mvccKey.Key); err != nil {
+					return enginepb.MVCCStats{}, err
+				}
+			default:
+				return enginepb.MVCCStats{}, errors.Errorf(
+					"unexpected entry type in batch: %d", r.BatchType())
+			}
+		}
+		if err := r.Error(); err != nil {
+			return enginepb.MVCCStats{}, errors.Wrapf(err, "verifying key/value checksums")
+		}
+	}
+
 	var stats C.MVCCStatsResult
 	if err := statusToError(C.DBBatchReprVerify(
 		goToCSlice(repr), goToCKey(start), goToCKey(end), C.int64_t(nowNanos), &stats,
