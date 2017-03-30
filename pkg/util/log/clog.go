@@ -792,7 +792,20 @@ func (l *loggingT) getTermColorProfile() *colorProfile {
 	if !l.hasColorProfile {
 		l.hasColorProfile = true
 		if !l.nocolor {
-			fi, _ := OrigStderr.Stat() // get the FileInfo struct describing the standard input.
+			fi, err := OrigStderr.Stat() // get the FileInfo struct describing the standard input.
+			if err != nil {
+				// Stat() will return an error on Windows in both Powershell and
+				// console until go1.9. See https://github.com/golang/go/issues/14853.
+				//
+				// Note that this bug does not affect MSYS/Cygwin terminals.
+				//
+				// TODO(bram): remove this hack once we move to go 1.9.
+				//
+				// Console does not support our color profiles but
+				// Powershell supports colorProfile256. Sadly, detecting the
+				// shell is not well supported, so default to no-color.
+				return l.colorProfile
+			}
 			if (fi.Mode() & os.ModeCharDevice) != 0 {
 				term := os.Getenv("TERM")
 				switch term {
