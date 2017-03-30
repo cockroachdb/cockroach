@@ -1,5 +1,13 @@
 #!/usr/bin/env bash
-set -exuo pipefail
+set -euxo pipefail
+
+mkdir -p artifacts
 
 export BUILDER_HIDE_GOPATH_SRC=1
-exec ./build/builder.sh build/checkdeps.sh
+
+build/builder.sh go install ./pkg/cmd/github-pull-request-make
+
+build/builder.sh env \
+	BUILD_VCS_NUMBER="$BUILD_VCS_NUMBER" \
+	TARGET=checkdeps \
+	github-pull-request-make
