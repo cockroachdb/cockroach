@@ -404,9 +404,16 @@ func (r *Replica) leasePostApply(
 			log.Infof(ctx, "new range lease %s following %s [physicalTime=%s]",
 				newLease, prevLease, r.store.Clock().PhysicalTime())
 		}
-		r.tsCacheMu.Lock()
-		r.tsCacheMu.cache.SetLowWater(newLease.Start)
-		r.tsCacheMu.Unlock()
+		desc := r.Desc()
+		r.store.tsCacheMu.Lock()
+		for _, keyRange := range makeReplicatedKeyRanges(desc) {
+			for _, readOnly := range []bool{true, false} {
+				r.store.tsCacheMu.cache.add(
+					keyRange.start.Key, keyRange.end.Key,
+					newLease.Start, lowWaterTxnIDMarker, readOnly)
+			}
+		}
+		r.store.tsCacheMu.Unlock()
 
 		// Reset the request counts used to make lease placement decisions whenever
 		// starting a new lease.
@@ -422,13 +429,6 @@ func (r *Replica) leasePostApply(
 		}
 	}
 	if leaseChangingHands && !iAmTheLeaseHolder {
-		// We're not the lease holder, reset our timestamp cache, releasing
-		// anything currently cached. The timestamp cache is only used by the
-		// lease holder. Note that we'll call SetLowWater when we next acquire
-		// the lease.
-		r.tsCacheMu.Lock()
-		r.tsCacheMu.cache.Clear(r.store.Clock().Now())
-		r.tsCacheMu.Unlock()
 		// Also clear and disable the push transaction queue. Any waiters
 		// must be redirected to the new lease holder.
 		r.pushTxnQueue.ClearAndDisable()

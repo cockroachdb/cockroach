@@ -255,9 +255,19 @@ func (r *Replica) GetLease() (*roachpb.Lease, *roachpb.Lease) {
 
 // GetTimestampCacheLowWater returns the timestamp cache low water mark.
 func (r *Replica) GetTimestampCacheLowWater() hlc.Timestamp {
-	r.tsCacheMu.Lock()
-	defer r.tsCacheMu.Unlock()
-	return r.tsCacheMu.cache.lowWater
+	r.store.tsCacheMu.Lock()
+	defer r.store.tsCacheMu.Unlock()
+	t := r.store.tsCacheMu.cache.lowWater
+	// Bump the per-Store low-water mark using the per-range read and write info.
+	start := roachpb.Key(r.Desc().StartKey)
+	end := roachpb.Key(r.Desc().EndKey)
+	if r, _, ok := r.store.tsCacheMu.cache.GetMaxRead(start, end); !ok && t.Less(r) {
+		t = r
+	}
+	if w, _, ok := r.store.tsCacheMu.cache.GetMaxWrite(start, end); !ok && t.Less(w) {
+		t = w
+	}
+	return t
 }
 
 // GetRaftLogSize returns the raft log size.

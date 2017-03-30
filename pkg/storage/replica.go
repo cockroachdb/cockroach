@@ -299,13 +299,6 @@ type Replica struct {
 		global, local *CommandQueue
 	}
 
-	tsCacheMu struct {
-		// Protects all fields in the tsCacheMu struct.
-		syncutil.Mutex
-		// Most recent timestamps for keys / key ranges.
-		cache *timestampCache
-	}
-
 	mu struct {
 		// Protects all fields in the mu struct.
 		syncutil.RWMutex
@@ -626,7 +619,6 @@ func (r *Replica) initLocked(
 	r.cmdQMu.local = NewCommandQueue(false /* !optimizeOverlap */)
 	r.cmdQMu.Unlock()
 
-	r.tsCacheMu.cache = newTimestampCache(clock)
 	r.mu.proposals = map[storagebase.CmdIDKey]*ProposalData{}
 	r.mu.checksums = map[uuid.UUID]replicaChecksum{}
 	// Clear the internal raft group in case we're being reset. Since we're
@@ -1559,9 +1551,10 @@ func (ec *endCmds) done(br *roachpb.BatchResponse, pErr *roachpb.Error, retry pr
 	// marked as affecting the cache are processed. Inconsistent reads
 	// are excluded.
 	if pErr == nil && retry == proposalNoRetry && ec.ba.ReadConsistency != roachpb.INCONSISTENT {
-		ec.repl.tsCacheMu.Lock()
-		ec.repl.tsCacheMu.cache.AddRequest(makeCacheRequest(&ec.ba, br))
-		ec.repl.tsCacheMu.Unlock()
+		creq := makeCacheRequest(&ec.ba, br)
+		ec.repl.store.tsCacheMu.Lock()
+		ec.repl.store.tsCacheMu.cache.AddRequest(creq)
+		ec.repl.store.tsCacheMu.Unlock()
 	}
 
 	ec.repl.cmdQMu.Lock()
@@ -1847,13 +1840,15 @@ func (r *Replica) beginCmds(
 // will inform the batch response timestamp or batch response txn
 // timestamp.
 func (r *Replica) applyTimestampCache(ba *roachpb.BatchRequest) (bool, *roachpb.Error) {
-	r.tsCacheMu.Lock()
-	defer r.tsCacheMu.Unlock()
+	// TODO(peter): We only need to hold a write lock during the ExpandRequests
+	// calls. Investigate whether using a RWMutex here reduces lock contention.
+	r.store.tsCacheMu.Lock()
+	defer r.store.tsCacheMu.Unlock()
 
 	if ba.Txn != nil {
-		r.tsCacheMu.cache.ExpandRequests(ba.Txn.Timestamp)
+		r.store.tsCacheMu.cache.ExpandRequests(ba.Txn.Timestamp)
 	} else {
-		r.tsCacheMu.cache.ExpandRequests(ba.Timestamp)
+		r.store.tsCacheMu.cache.ExpandRequests(ba.Timestamp)
 	}
 
 	var bumped bool
@@ -1866,7 +1861,7 @@ func (r *Replica) applyTimestampCache(ba *roachpb.BatchRequest) (bool, *roachpb.
 			// has already been finalized, in which case this is a replay.
 			if _, ok := args.(*roachpb.BeginTransactionRequest); ok {
 				key := keys.TransactionKey(header.Key, *ba.GetTxnID())
-				wTS, _, wOK := r.tsCacheMu.cache.GetMaxWrite(key, nil)
+				wTS, _, wOK := r.store.tsCacheMu.cache.GetMaxWrite(key, nil)
 				if wOK {
 					return bumped, roachpb.NewError(roachpb.NewTransactionReplayError())
 				} else if !wTS.Less(ba.Txn.Timestamp) {
@@ -1884,7 +1879,7 @@ func (r *Replica) applyTimestampCache(ba *roachpb.BatchRequest) (bool, *roachpb.
 			}
 
 			// Forward the timestamp if there's been a more recent read (by someone else).
-			rTS, rTxnID, _ := r.tsCacheMu.cache.GetMaxRead(header.Key, header.EndKey)
+			rTS, rTxnID, _ := r.store.tsCacheMu.cache.GetMaxRead(header.Key, header.EndKey)
 			if ba.Txn != nil {
 				if rTxnID == nil || *ba.Txn.ID != *rTxnID {
 					nextTS := rTS.Next()
@@ -1902,7 +1897,7 @@ func (r *Replica) applyTimestampCache(ba *roachpb.BatchRequest) (bool, *roachpb.
 			// write too old boolean for transactions. Note that currently
 			// only EndTransaction and DeleteRange requests update the
 			// write timestamp cache.
-			wTS, wTxnID, _ := r.tsCacheMu.cache.GetMaxWrite(header.Key, header.EndKey)
+			wTS, wTxnID, _ := r.store.tsCacheMu.cache.GetMaxWrite(header.Key, header.EndKey)
 			if ba.Txn != nil {
 				if wTxnID == nil || *ba.Txn.ID != *wTxnID {
 					if !wTS.Less(ba.Txn.Timestamp) {
