@@ -100,7 +100,7 @@ import (
 // names for query results, or expected errors.
 //
 // The overall architecture of TestLogic is as follows:
-
+//
 // - TestLogic() selects the input files and instantiates
 //   a `logicTest` object for each input file.
 //
@@ -130,7 +130,7 @@ import (
 // -bigtest   cancels any -d setting and selects all relevant input
 //            files from CockroachDB's fork of Sqllogictest.
 //
-// Error mode:
+// Testing mode:
 //
 // -max-errors N  stop testing after N errors have been
 //                encountered. Default 1. Set to 0 for no limit.
@@ -147,6 +147,9 @@ import (
 //                different numeric type than the one expected by the
 //                test. This enables reusing tests designed for
 //                database with sligtly different typing semantics.
+//
+// -distsql       if the given query is supported by distSQL, run the
+//                tests through the distSQL physical planner instead.
 //
 // Test output:
 //
@@ -195,6 +198,8 @@ var (
 	allowPrepareFail = flag.Bool("allow-prepare-fail", false, "tolerate unexpected errors when preparing a query")
 	flexTypes        = flag.Bool("flex-types", false,
 		"do not fail when a test expects a column of a numeric type but the query provides another type")
+	distSQL = flag.Bool("distsql", false,
+		"run distSQL supported queries through distSQL instead")
 
 	// Output parameters
 	showSQL = flag.Bool("show-sql", false,
@@ -557,6 +562,12 @@ func (t *logicTest) setUser(user string) func() {
 	db, err := gosql.Open("postgres", pgURL.String())
 	if err != nil {
 		t.Fatal(err)
+	}
+	if *distSQL {
+		_, err := t.db.Exec(`SET DIST_SQL = ON`)
+		if err != nil {
+			t.Fatal(err)
+		}
 	}
 	t.clients[user] = db
 	t.db = db
