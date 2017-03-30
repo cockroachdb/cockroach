@@ -48,8 +48,16 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
+// TODO(tamird): why does rocksdb not link jemalloc,snappy statically?
+
 // #cgo CXXFLAGS: -std=c++11 -Werror -Wall -Wno-sign-compare
 // #cgo linux LDFLAGS: -lrt
+// #cgo windows CPPFLAGS: -I../../../obj/protobufsrc/src -I../../../obj/rocksdbsrc/include
+// #cgo windows LDFLAGS: -L${SRCDIR}/../../../obj/protobuf-build -lprotobuf
+// #cgo windows LDFLAGS: -L${SRCDIR}/../../../obj/rocksdb-build -lrocksdblib
+// #cgo windows LDFLAGS: -L${SRCDIR}/../../../obj/jemalloc/lib -ljemalloc
+// #cgo windows LDFLAGS: -L${SRCDIR}/../../../obj/snappy/lib -lsnappy
+// #cgo windows LDFLAGS: -lrpcrt4
 //
 // #include <stdlib.h>
 // #include "db.h"

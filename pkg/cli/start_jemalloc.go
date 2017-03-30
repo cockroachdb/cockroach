@@ -19,6 +19,8 @@
 package cli
 
 // #cgo CPPFLAGS: -DJEMALLOC_NO_DEMANGLE
+// #cgo windows CPPFLAGS: -I../../obj/jemalloc/include
+// #cgo windows LDFLAGS: -L${SRCDIR}/../../obj/jemalloc/lib -ljemalloc
 //
 // #include <jemalloc/jemalloc.h>
 // #include <stddef.h>
