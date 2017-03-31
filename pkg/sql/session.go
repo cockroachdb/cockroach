@@ -161,9 +161,7 @@ type Session struct {
 	leases []*LeaseState
 	// leaseMgr manages acquiring and releasing per-table leases.
 	leaseMgr *LeaseManager
-	// systemConfig holds a copy of the latest system config since the last
-	// call to resetForBatch.
-	systemConfig config.SystemConfig
+
 	// databaseCache is used as a cache for database names.
 	// TODO(andrei): get rid of it and replace it with a leasing system for
 	// database descriptors.
@@ -222,7 +220,6 @@ func NewSession(
 	ctx context.Context, args SessionArgs, e *Executor, remote net.Addr, memMetrics *MemoryMetrics,
 ) *Session {
 	ctx = e.AnnotateCtx(ctx)
-	cfg, cache := e.getSystemConfig()
 	s := &Session{
 		Database:       args.Database,
 		SearchPath:     parser.SearchPath{"pg_catalog"},
@@ -233,8 +230,7 @@ func NewSession(
 		distSQLPlanner: e.distSQLPlanner,
 		pipelineQueue:  MakePipelineQueue(NoDependenciesAnalyzer),
 		leaseMgr:       e.cfg.LeaseManager,
-		systemConfig:   cfg,
-		databaseCache:  cache,
+		databaseCache:  e.getDatabaseCache(),
 		memMetrics:     memMetrics,
 		sqlStats:       &e.sqlStats,
 		defaults: sessionDefaults{
@@ -368,11 +364,9 @@ func (s *Session) evalCtx() parser.EvalContext {
 
 // resetForBatch prepares the Session for executing a new batch of statements.
 func (s *Session) resetForBatch(e *Executor) {
-	// Update the systemConfig to a more recent copy, so that we can use tables
+	// Update the database cache to a more recent copy, so that we can use tables
 	// that we created in previous batches of the same transaction.
-	cfg, cache := e.getSystemConfig()
-	s.systemConfig = cfg
-	s.databaseCache = cache
+	s.databaseCache = e.getDatabaseCache()
 	s.TxnState.schemaChangers.curGroupNum++
 }
 

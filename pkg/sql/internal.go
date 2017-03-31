@@ -97,7 +97,7 @@ func getTableID(ctx context.Context, p *planner, tn *parser.TableName) (sqlbase.
 		return virtual.GetID(), nil
 	}
 
-	dbID, err := p.getDatabaseID(ctx, tn.Database())
+	dbID, err := p.session.databaseCache.getDatabaseID(ctx, p.txn, p.getVirtualTabler(), tn.Database())
 	if err != nil {
 		return 0, err
 	}

@@ -392,17 +392,19 @@ func (e *Executor) updateSystemConfig(cfg config.SystemConfig) {
 	e.systemConfig = cfg
 	// The database cache gets reset whenever the system config changes.
 	e.databaseCache = &databaseCache{
-		databases: map[string]sqlbase.ID{},
+		databases:    map[string]sqlbase.ID{},
+		systemConfig: cfg,
 	}
 	e.systemConfigCond.Broadcast()
 }
 
-// getSystemConfig returns a copy of the latest system config.
-func (e *Executor) getSystemConfig() (config.SystemConfig, *databaseCache) {
+// getDatabaseCache returns a database cache with a copy of the latest
+// system config.
+func (e *Executor) getDatabaseCache() *databaseCache {
 	e.systemConfigMu.RLock()
 	defer e.systemConfigMu.RUnlock()
-	cfg, cache := e.systemConfig, e.databaseCache
-	return cfg, cache
+	cache := e.databaseCache
+	return cache
 }
 
 // Prepare returns the result types of the given statement. pinfo may
