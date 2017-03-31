@@ -177,6 +177,9 @@ users  foo      false   2    id      ASC        false    true
 users  bar      true    1    id      ASC        false    false
 users  bar      true    2    name    ASC        false    false
 
+statement error precision for type float must be at least 1 bit
+CREATE TABLE test.precision (x FLOAT(0))
+
 statement error invalid NUMERIC precision 0
 CREATE TABLE test.precision (x DECIMAL(0, 2))
 

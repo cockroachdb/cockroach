@@ -40,7 +40,7 @@ func TestParseColumnType(t *testing.T) {
 		{"REAL", &FloatColType{Name: "REAL"}},
 		{"DOUBLE PRECISION", &FloatColType{Name: "DOUBLE PRECISION"}},
 		{"FLOAT", &FloatColType{Name: "FLOAT"}},
-		{"FLOAT(4)", &FloatColType{Name: "FLOAT", Prec: 4}},
+		{"FLOAT(4)", &FloatColType{Name: "FLOAT", Prec: 4, PrecSpecified: true}},
 		{"DEC", &DecimalColType{Name: "DEC"}},
 		{"DECIMAL", &DecimalColType{Name: "DECIMAL"}},
 		{"NUMERIC", &DecimalColType{Name: "NUMERIC"}},
