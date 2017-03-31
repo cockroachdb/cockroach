@@ -445,15 +445,12 @@ func (p *planner) getTableScanByRef(
 	hints *parser.IndexHints,
 	scanVisibility scanVisibility,
 ) (planDataSource, error) {
-	var desc *sqlbase.TableDescriptor
-	var err error
-
 	tableID := sqlbase.ID(tref.TableID)
+	descFunc := p.session.leases.getTableLeaseByID
 	if p.avoidCachedDescriptors {
-		desc, err = sqlbase.GetTableDescFromID(ctx, p.txn, tableID)
-	} else {
-		desc, err = p.getTableLeaseByID(ctx, tableID)
+		descFunc = sqlbase.GetTableDescFromID
 	}
+	desc, err := descFunc(ctx, p.txn, tableID)
 	if err != nil {
 		return planDataSource{}, err
 	}
@@ -483,18 +480,16 @@ func (p *planner) getTableScanOrViewPlan(
 	hints *parser.IndexHints,
 	scanVisibility scanVisibility,
 ) (planDataSource, error) {
-	descFunc := p.getTableLease
+	descFunc := p.session.leases.getTableLease
 	if p.avoidCachedDescriptors {
 		// AS OF SYSTEM TIME queries need to fetch the table descriptor at the
 		// specified time, and never lease anything. The proto transaction already
 		// has its timestamps set correctly so getTableOrViewDesc will fetch with
 		// the correct timestamp.
-		descFunc = func(ctx context.Context, tn *parser.TableName) (*sqlbase.TableDescriptor, error) {
-			return mustGetTableOrViewDesc(ctx, p.txn, p.getVirtualTabler(), tn)
-		}
+		descFunc = mustGetTableOrViewDesc
 	}
 
-	desc, err := descFunc(ctx, tn)
+	desc, err := descFunc(ctx, p.txn, p.getVirtualTabler(), tn)
 	if err != nil {
 		return planDataSource{}, err
 	}
