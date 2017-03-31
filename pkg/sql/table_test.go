@@ -273,31 +273,29 @@ func TestRemoveLeaseIfExpiring(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	mc := hlc.NewManualClock(123)
-	s := &Session{
-		context: context.Background(),
+	lc := &LeaseCollection{
 		leaseMgr: &LeaseManager{
 			LeaseStore: LeaseStore{clock: hlc.NewClock(mc.UnixNano, time.Nanosecond)},
 		},
 	}
-	p := planner{session: s}
-	var txn client.Txn
-	p.setTxn(&txn)
 
-	if p.removeLeaseIfExpiring(context.TODO(), nil) {
+	var txn client.Txn
+
+	if lc.removeLeaseIfExpiring(context.TODO(), &txn, nil) {
 		t.Error("expected false with nil input")
 	}
 
 	// Add a lease to the planner.
 	d := int64(LeaseDuration)
 	l1 := &LeaseState{expiration: parser.DTimestamp{Time: time.Unix(0, mc.UnixNano()+d+1)}}
-	s.leases = append(s.leases, l1)
+	lc.leases = append(lc.leases, l1)
 	et := hlc.Timestamp{WallTime: l1.Expiration().UnixNano()}
 	txn.UpdateDeadlineMaybe(et)
 
-	if p.removeLeaseIfExpiring(context.TODO(), l1) {
+	if lc.removeLeaseIfExpiring(context.TODO(), &txn, l1) {
 		t.Error("expected false with a non-expiring lease")
 	}
-	if d := *p.txn.GetDeadline(); d != et {
+	if d := *txn.GetDeadline(); d != et {
 		t.Errorf("expected deadline %s but got %s", et, d)
 	}
 
@@ -306,18 +304,18 @@ func TestRemoveLeaseIfExpiring(t *testing.T) {
 
 	// Add another lease.
 	l2 := &LeaseState{expiration: parser.DTimestamp{Time: time.Unix(0, mc.UnixNano()+d+1)}}
-	s.leases = append(s.leases, l2)
-	if !p.removeLeaseIfExpiring(context.TODO(), l1) {
+	lc.leases = append(lc.leases, l2)
+	if !lc.removeLeaseIfExpiring(context.TODO(), &txn, l1) {
 		t.Error("expected true with an expiring lease")
 	}
 	et = hlc.Timestamp{WallTime: l2.Expiration().UnixNano()}
 	txn.UpdateDeadlineMaybe(et)
 
-	if !(len(s.leases) == 1 && s.leases[0] == l2) {
-		t.Errorf("expected leases to contain %s but has %s", l2, s.leases)
+	if !(len(lc.leases) == 1 && lc.leases[0] == l2) {
+		t.Errorf("expected leases to contain %s but has %s", l2, lc.leases)
 	}
 
-	if d := *p.txn.GetDeadline(); d != et {
+	if d := *txn.GetDeadline(); d != et {
 		t.Errorf("expected deadline %s, but got %s", et, d)
 	}
 }

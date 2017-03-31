@@ -51,7 +51,7 @@ CREATE TABLE crdb_internal.node_build_info (
 );
 `,
 	populate: func(_ context.Context, p *planner, addRow func(...parser.Datum) error) error {
-		leaseMgr := p.session.leaseMgr
+		leaseMgr := p.LeaseMgr()
 		nodeID := parser.NewDInt(parser.DInt(int64(leaseMgr.nodeID.Get())))
 
 		if err := addRow(
@@ -225,7 +225,7 @@ CREATE TABLE crdb_internal.leases (
 );
 `,
 	populate: func(_ context.Context, p *planner, addRow func(...parser.Datum) error) error {
-		leaseMgr := p.session.leaseMgr
+		leaseMgr := p.LeaseMgr()
 		nodeID := parser.NewDInt(parser.DInt(int64(leaseMgr.nodeID.Get())))
 
 		leaseMgr.mu.Lock()
@@ -366,7 +366,7 @@ CREATE TABLE crdb_internal.node_statement_statistics (
 			return errors.New("cannot access sql statistics from this context")
 		}
 
-		leaseMgr := p.session.leaseMgr
+		leaseMgr := p.LeaseMgr()
 		nodeID := parser.NewDInt(parser.DInt(int64(leaseMgr.nodeID.Get())))
 
 		// Retrieve the application names and sort them to ensure the

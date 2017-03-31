@@ -789,7 +789,7 @@ func (e *Executor) execRequest(
 			// Exec the schema changers (if the txn rolled back, the schema changers
 			// will short-circuit because the corresponding descriptor mutation is not
 			// found).
-			session.releaseLeases(session.Ctx())
+			session.leases.releaseLeases(session.Ctx())
 			txnState.schemaChangers.execSchemaChanges(session.Ctx(), e, session, res.ResultList)
 		} else {
 			// We're still in a txn, so we only check that the verifyMetadata callback

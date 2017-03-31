@@ -231,21 +231,10 @@ func (sc *SchemaChanger) maybeWriteResumeSpan(
 	return nil
 }
 
-// TODO(vivek): we shouldn't need to use a planner here. Use the sc.leaseMgr
-// directly instead.
-func (sc *SchemaChanger) makePlanner(txn *client.Txn) *planner {
-	return &planner{
-		txn: txn,
-		session: &Session{
-			leaseMgr: sc.leaseMgr,
-		},
-	}
-}
-
 func (sc *SchemaChanger) getTableLease(
-	ctx context.Context, p *planner, version sqlbase.DescriptorVersion,
+	ctx context.Context, txn *client.Txn, lc *LeaseCollection, version sqlbase.DescriptorVersion,
 ) (*sqlbase.TableDescriptor, error) {
-	tableDesc, err := p.getTableLeaseByID(ctx, sc.tableID)
+	tableDesc, err := lc.getTableLeaseByID(ctx, txn, sc.tableID)
 	if err != nil {
 		return nil, err
 	}
@@ -295,9 +284,9 @@ func (sc *SchemaChanger) truncateIndexes(
 					return err
 				}
 
-				p := sc.makePlanner(txn)
-				defer p.session.releaseLeases(ctx)
-				tableDesc, err := sc.getTableLease(ctx, p, version)
+				lc := &LeaseCollection{leaseMgr: sc.leaseMgr}
+				defer lc.releaseLeases(ctx)
+				tableDesc, err := sc.getTableLease(ctx, txn, lc, version)
 				if err != nil {
 					return err
 				}
@@ -403,10 +392,10 @@ func (sc *SchemaChanger) distBackfill(
 		}
 		log.VEventf(ctx, 2, "backfill: process %+v spans", spans)
 		if err := sc.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
-			p := sc.makePlanner(txn)
+			lc := &LeaseCollection{leaseMgr: sc.leaseMgr}
 			// Use a leased table descriptor for the backfill.
-			defer p.session.releaseLeases(ctx)
-			tableDesc, err := sc.getTableLease(ctx, p, version)
+			defer lc.releaseLeases(ctx)
+			tableDesc, err := sc.getTableLease(ctx, txn, lc, version)
 			if err != nil {
 				return err
 			}
@@ -416,7 +405,7 @@ func (sc *SchemaChanger) distBackfill(
 			if backfillType == columnBackfill {
 				fkTables := sqlbase.TablesNeededForFKs(*tableDesc, sqlbase.CheckUpdates)
 				for k := range fkTables {
-					table, err := p.getTableLeaseByID(ctx, k)
+					table, err := lc.getTableLeaseByID(ctx, txn, k)
 					if err != nil {
 						return err
 					}

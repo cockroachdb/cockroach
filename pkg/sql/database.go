@@ -149,7 +149,7 @@ func MustGetDatabaseDesc(
 // given its name.
 func (dc *databaseCache) getCachedDatabaseDesc(name string) (*sqlbase.DatabaseDescriptor, error) {
 	if dc == nil {
-		return nil, fmt.Errorf("database %q does not exist in empty system cache", name)
+		return nil, fmt.Errorf("database %q not found, system cache uninitialized", name)
 	}
 	if name == sqlbase.SystemDB.Name {
 		return &sqlbase.SystemDB, nil

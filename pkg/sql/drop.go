@@ -191,7 +191,7 @@ func (n *dropDatabaseNode) Start(ctx context.Context) error {
 
 	// Log Drop Database event. This is an auditable log event and is recorded
 	// in the same transaction as the table descriptor update.
-	if err := MakeEventLogger(n.p.session.leaseMgr).InsertEventRecord(
+	if err := MakeEventLogger(n.p.LeaseMgr()).InsertEventRecord(
 		ctx,
 		n.p.txn,
 		EventLogDropDatabase,
@@ -378,7 +378,7 @@ func (p *planner) dropIndexByName(
 	// Record index drop in the event log. This is an auditable log event
 	// and is recorded in the same transaction as the table descriptor
 	// update.
-	if err := MakeEventLogger(p.session.leaseMgr).InsertEventRecord(
+	if err := MakeEventLogger(p.LeaseMgr()).InsertEventRecord(
 		ctx,
 		p.txn,
 		EventLogDropIndex,
@@ -491,7 +491,7 @@ func (n *dropViewNode) Start(ctx context.Context) error {
 		// Log a Drop View event for this table. This is an auditable log event
 		// and is recorded in the same transaction as the table descriptor
 		// update.
-		if err := MakeEventLogger(n.p.session.leaseMgr).InsertEventRecord(
+		if err := MakeEventLogger(n.p.LeaseMgr()).InsertEventRecord(
 			ctx,
 			n.p.txn,
 			EventLogDropView,
@@ -729,7 +729,7 @@ func (n *dropTableNode) Start(ctx context.Context) error {
 		// Log a Drop Table event for this table. This is an auditable log event
 		// and is recorded in the same transaction as the table descriptor
 		// update.
-		if err := MakeEventLogger(n.p.session.leaseMgr).InsertEventRecord(
+		if err := MakeEventLogger(n.p.LeaseMgr()).InsertEventRecord(
 			ctx,
 			n.p.txn,
 			EventLogDropTable,

@@ -80,10 +80,6 @@ type SchemaAccessor interface {
 	// exists for the table.
 	notifySchemaChange(id sqlbase.ID, mutationID sqlbase.MutationID)
 
-	// getTableLease acquires a lease for the specified table. The lease will be
-	// released when the planner closes.
-	getTableLease(ctx context.Context, tn *parser.TableName) (*sqlbase.TableDescriptor, error)
-
 	// writeTableDesc effectively writes a table descriptor to the
 	// database within the current planner transaction.
 	writeTableDesc(ctx context.Context, tableDesc *sqlbase.TableDescriptor) error
@@ -230,16 +226,17 @@ func filterTableState(tableDesc *sqlbase.TableDescriptor) error {
 	return nil
 }
 
-// getTableLease implements the SchemaAccessor interface.
-func (p *planner) getTableLease(
-	ctx context.Context, tn *parser.TableName,
+// getTableLease acquires a lease for the specified table. The lease must
+// be released by calling lc.releaseLeases().
+func (lc *LeaseCollection) getTableLease(
+	ctx context.Context, txn *client.Txn, vt VirtualTabler, tn *parser.TableName,
 ) (*sqlbase.TableDescriptor, error) {
 	if log.V(2) {
 		log.Infof(ctx, "planner acquiring lease on table '%s'", tn)
 	}
 
 	isSystemDB := tn.Database() == sqlbase.SystemDB.Name
-	isVirtualDB := p.session.virtualSchemas.isVirtualDatabase(tn.Database())
+	isVirtualDB := vt.getVirtualDatabaseDesc(tn.Database()) != nil
 	if isSystemDB || isVirtualDB || testDisableTableLeases {
 		// We don't go through the normal lease mechanism for:
 		// - system tables. The system.lease and system.descriptor table, in
@@ -249,7 +246,7 @@ func (p *planner) getTableLease(
 		//   so they cannot be leased. Instead, we simply return the static
 		//   descriptor and rely on the immutability privileges set on the
 		//   descriptors to cause upper layers to reject mutations statements.
-		tbl, err := mustGetTableDesc(ctx, p.txn, p.getVirtualTabler(), tn)
+		tbl, err := mustGetTableDesc(ctx, txn, vt, tn)
 		if err != nil {
 			return nil, err
 		}
@@ -259,7 +256,7 @@ func (p *planner) getTableLease(
 		return tbl, nil
 	}
 
-	dbID, err := p.session.databaseCache.getDatabaseID(ctx, p.txn, p.getVirtualTabler(), tn.Database())
+	dbID, err := lc.databaseCache.getDatabaseID(ctx, txn, vt, tn.Database())
 	if err != nil {
 		return nil, err
 	}
@@ -269,7 +266,7 @@ func (p *planner) getTableLease(
 	// continue to use N to refer to X even if N is renamed during the
 	// transaction.
 	var lease *LeaseState
-	for _, l := range p.session.leases {
+	for _, l := range lc.leases {
 		if parser.ReNormalizeName(l.Name) == tn.TableName.Normalize() &&
 			l.ParentID == dbID {
 			lease = l
@@ -281,9 +278,9 @@ func (p *planner) getTableLease(
 	}
 
 	// If we didn't find a lease or the lease is about to expire, acquire one.
-	if lease == nil || p.removeLeaseIfExpiring(ctx, lease) {
+	if lease == nil || lc.removeLeaseIfExpiring(ctx, txn, lease) {
 		var err error
-		lease, err = p.session.leaseMgr.AcquireByName(ctx, p.txn, dbID, tn.Table())
+		lease, err = lc.leaseMgr.AcquireByName(ctx, txn, dbID, tn.Table())
 		if err != nil {
 			if err == sqlbase.ErrDescriptorNotFound {
 				// Transform the descriptor error into an error that references the
@@ -292,27 +289,27 @@ func (p *planner) getTableLease(
 			}
 			return nil, err
 		}
-		p.session.leases = append(p.session.leases, lease)
+		lc.leases = append(lc.leases, lease)
 		if log.V(2) {
 			log.Infof(ctx, "added lease on table '%s' to planner cache", tn)
 		}
 		// If the lease we just acquired expires before the txn's deadline, reduce
 		// the deadline.
-		p.txn.UpdateDeadlineMaybe(hlc.Timestamp{WallTime: lease.Expiration().UnixNano()})
+		txn.UpdateDeadlineMaybe(hlc.Timestamp{WallTime: lease.Expiration().UnixNano()})
 	}
 	return &lease.TableDescriptor, nil
 }
 
 // getTableLeaseByID is a by-ID variant of getTableLease (i.e. uses same cache).
-func (p *planner) getTableLeaseByID(
-	ctx context.Context, tableID sqlbase.ID,
+func (lc *LeaseCollection) getTableLeaseByID(
+	ctx context.Context, txn *client.Txn, tableID sqlbase.ID,
 ) (*sqlbase.TableDescriptor, error) {
 	if log.V(2) {
 		log.Infof(ctx, "planner acquiring lease on table ID %d", tableID)
 	}
 
 	if testDisableTableLeases {
-		table, err := sqlbase.GetTableDescFromID(ctx, p.txn, tableID)
+		table, err := sqlbase.GetTableDescFromID(ctx, txn, tableID)
 		if err != nil {
 			return nil, err
 		}
@@ -325,7 +322,7 @@ func (p *planner) getTableLeaseByID(
 	// First, look to see if we already have a lease for this table -- including
 	// leases acquired via `getTableLease`.
 	var lease *LeaseState
-	for _, l := range p.session.leases {
+	for _, l := range lc.leases {
 		if l.ID == tableID {
 			lease = l
 			if log.V(2) {
@@ -336,9 +333,9 @@ func (p *planner) getTableLeaseByID(
 	}
 
 	// If we didn't find a lease or the lease is about to expire, acquire one.
-	if lease == nil || p.removeLeaseIfExpiring(ctx, lease) {
+	if lease == nil || lc.removeLeaseIfExpiring(ctx, txn, lease) {
 		var err error
-		lease, err = p.session.leaseMgr.Acquire(ctx, p.txn, tableID, 0)
+		lease, err = lc.leaseMgr.Acquire(ctx, txn, tableID, 0)
 		if err != nil {
 			if err == sqlbase.ErrDescriptorNotFound {
 				// Transform the descriptor error into an error that references the
@@ -347,25 +344,26 @@ func (p *planner) getTableLeaseByID(
 			}
 			return nil, err
 		}
-		p.session.leases = append(p.session.leases, lease)
+		lc.leases = append(lc.leases, lease)
 		// If the lease we just acquired expires before the txn's deadline, reduce
 		// the deadline.
-		p.txn.UpdateDeadlineMaybe(hlc.Timestamp{WallTime: lease.Expiration().UnixNano()})
+		txn.UpdateDeadlineMaybe(hlc.Timestamp{WallTime: lease.Expiration().UnixNano()})
 	}
 	return &lease.TableDescriptor, nil
 }
 
 // removeLeaseIfExpiring removes a lease and returns true if it is about to expire.
 // The method also resets the transaction deadline.
-func (p *planner) removeLeaseIfExpiring(ctx context.Context, lease *LeaseState) bool {
-	session := p.session
-	if lease == nil || lease.hasSomeLifeLeft(session.leaseMgr.clock) {
+func (lc *LeaseCollection) removeLeaseIfExpiring(
+	ctx context.Context, txn *client.Txn, lease *LeaseState,
+) bool {
+	if lease == nil || lease.hasSomeLifeLeft(lc.leaseMgr.clock) {
 		return false
 	}
 
 	// Remove the lease from session.leases.
 	idx := -1
-	for i, l := range session.leases {
+	for i, l := range lc.leases {
 		if l == lease {
 			idx = i
 			break
@@ -375,18 +373,18 @@ func (p *planner) removeLeaseIfExpiring(ctx context.Context, lease *LeaseState) 
 		log.Warningf(ctx, "lease (%s) not found", lease)
 		return false
 	}
-	session.leases[idx] = session.leases[len(session.leases)-1]
-	session.leases[len(session.leases)-1] = nil
-	session.leases = session.leases[:len(session.leases)-1]
+	lc.leases[idx] = lc.leases[len(lc.leases)-1]
+	lc.leases[len(lc.leases)-1] = nil
+	lc.leases = lc.leases[:len(lc.leases)-1]
 
-	if err := session.leaseMgr.Release(lease); err != nil {
+	if err := lc.leaseMgr.Release(lease); err != nil {
 		log.Warning(ctx, err)
 	}
 
 	// Reset the deadline so that a new deadline will be set after the lease is acquired.
-	p.txn.ResetDeadline()
-	for _, l := range session.leases {
-		p.txn.UpdateDeadlineMaybe(hlc.Timestamp{WallTime: l.Expiration().UnixNano()})
+	txn.ResetDeadline()
+	for _, l := range lc.leases {
+		txn.UpdateDeadlineMaybe(hlc.Timestamp{WallTime: l.Expiration().UnixNano()})
 	}
 	return true
 }
@@ -439,7 +437,7 @@ func (p *planner) notifySchemaChange(id sqlbase.ID, mutationID sqlbase.MutationI
 		tableID:    id,
 		mutationID: mutationID,
 		nodeID:     p.evalCtx.NodeID,
-		leaseMgr:   p.session.leaseMgr,
+		leaseMgr:   p.LeaseMgr(),
 	}
 	p.session.TxnState.schemaChangers.queueSchemaChanger(sc)
 }
@@ -497,20 +495,18 @@ func expandTableGlob(
 func (p *planner) searchAndQualifyDatabase(ctx context.Context, tn *parser.TableName) error {
 	t := *tn
 
-	descFunc := p.getTableLease
+	descFunc := p.session.leases.getTableLease
 	if p.avoidCachedDescriptors {
 		// AS OF SYSTEM TIME queries need to fetch the table descriptor at the
 		// specified time, and never lease anything. The proto transaction already
 		// has its timestamps set correctly so getTableOrViewDesc will fetch with
 		// the correct timestamp.
-		descFunc = func(ctx context.Context, tn *parser.TableName) (*sqlbase.TableDescriptor, error) {
-			return getTableOrViewDesc(ctx, p.txn, p.getVirtualTabler(), tn)
-		}
+		descFunc = getTableOrViewDesc
 	}
 
 	if p.session.Database != "" {
 		t.DatabaseName = parser.Name(p.session.Database)
-		desc, err := descFunc(ctx, &t)
+		desc, err := descFunc(ctx, p.txn, p.getVirtualTabler(), &t)
 		if err != nil && !sqlbase.IsUndefinedTableError(err) && !sqlbase.IsUndefinedDatabaseError(err) {
 			return err
 		}
@@ -525,7 +521,7 @@ func (p *planner) searchAndQualifyDatabase(ctx context.Context, tn *parser.Table
 	// the search path instead.
 	for _, database := range p.session.SearchPath {
 		t.DatabaseName = parser.Name(database)
-		desc, err := descFunc(ctx, &t)
+		desc, err := descFunc(ctx, p.txn, p.getVirtualTabler(), &t)
 		if err != nil && !sqlbase.IsUndefinedTableError(err) && !sqlbase.IsUndefinedDatabaseError(err) {
 			return err
 		}
