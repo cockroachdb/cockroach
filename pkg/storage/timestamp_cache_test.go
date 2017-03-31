@@ -106,7 +106,7 @@ func TestTimestampCacheEviction(t *testing.T) {
 	manual := hlc.NewManualClock(123)
 	clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
 	tc := newTimestampCache(clock)
-	tc.evictionSizeThreshold = 0
+	tc.maxBytes = 0
 
 	// Increment time to the low water mark + 1.
 	manual.Increment(1)
