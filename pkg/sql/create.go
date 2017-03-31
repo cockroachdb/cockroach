@@ -138,7 +138,7 @@ func (p *planner) CreateIndex(ctx context.Context, n *parser.CreateIndex) (planN
 		return nil, err
 	}
 
-	tableDesc, err := p.mustGetTableDesc(ctx, tn)
+	tableDesc, err := mustGetTableDesc(ctx, p.txn, p.getVirtualTabler(), tn)
 	if err != nil {
 		return nil, err
 	}
@@ -251,7 +251,7 @@ func (p *planner) CreateUser(ctx context.Context, n *parser.CreateUser) (planNod
 		return nil, errors.New("no username specified")
 	}
 
-	tDesc, err := p.getTableDesc(ctx, &parser.TableName{DatabaseName: "system", TableName: "users"})
+	tDesc, err := getTableDesc(ctx, p.txn, p.getVirtualTabler(), &parser.TableName{DatabaseName: "system", TableName: "users"})
 	if err != nil {
 		return nil, err
 	}
@@ -333,7 +333,7 @@ func (p *planner) CreateView(ctx context.Context, n *parser.CreateView) (planNod
 		return nil, err
 	}
 
-	dbDesc, err := p.mustGetDatabaseDesc(ctx, name.Database())
+	dbDesc, err := MustGetDatabaseDesc(ctx, p.txn, p.getVirtualTabler(), name.Database())
 	if err != nil {
 		return nil, err
 	}
@@ -412,7 +412,7 @@ func (p *planner) CreateView(ctx context.Context, n *parser.CreateView) (planNod
 func (n *createViewNode) Start(ctx context.Context) error {
 	tKey := tableKey{parentID: n.dbDesc.ID, name: n.n.Name.TableName().Table()}
 	key := tKey.Key()
-	if exists, err := n.p.descExists(ctx, key); err == nil && exists {
+	if exists, err := descExists(ctx, n.p.txn, key); err == nil && exists {
 		// TODO(a-robinson): Support CREATE OR REPLACE commands.
 		return sqlbase.NewRelationAlreadyExistsError(tKey.Name())
 	} else if err != nil {
@@ -506,7 +506,7 @@ func (p *planner) CreateTable(ctx context.Context, n *parser.CreateTable) (planN
 		return nil, err
 	}
 
-	dbDesc, err := p.mustGetDatabaseDesc(ctx, tn.Database())
+	dbDesc, err := MustGetDatabaseDesc(ctx, p.txn, p.getVirtualTabler(), tn.Database())
 	if err != nil {
 		return nil, err
 	}
@@ -581,7 +581,7 @@ func hoistConstraints(n *parser.CreateTable) {
 func (n *createTableNode) Start(ctx context.Context) error {
 	tKey := tableKey{parentID: n.dbDesc.ID, name: n.n.Table.TableName().Table()}
 	key := tKey.Key()
-	if exists, err := n.p.descExists(ctx, key); err == nil && exists {
+	if exists, err := descExists(ctx, n.p.txn, key); err == nil && exists {
 		if n.n.IfNotExists {
 			return nil
 		}

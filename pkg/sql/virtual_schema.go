@@ -246,6 +246,7 @@ func (vs *virtualSchemaHolder) getVirtualTableEntry(
 type VirtualTabler interface {
 	getVirtualTableDesc(tn *parser.TableName) (*sqlbase.TableDescriptor, error)
 	getVirtualDatabaseDesc(name string) *sqlbase.DatabaseDescriptor
+	getVirtualSchemaEntry(name string) (virtualSchemaEntry, bool)
 }
 
 // getVirtualTableDesc checks if the provided name matches a virtual database/table
@@ -271,10 +272,16 @@ var NilVirtualTabler nilVirtualTabler
 
 type nilVirtualTabler struct{}
 
+var _ VirtualTabler = nilVirtualTabler{}
+
 func (nilVirtualTabler) getVirtualTableDesc(tn *parser.TableName) (*sqlbase.TableDescriptor, error) {
 	return nil, nil
 }
 
 func (nilVirtualTabler) getVirtualDatabaseDesc(name string) *sqlbase.DatabaseDescriptor {
 	return nil
+}
+
+func (nilVirtualTabler) getVirtualSchemaEntry(name string) (virtualSchemaEntry, bool) {
+	return virtualSchemaEntry{}, false
 }
