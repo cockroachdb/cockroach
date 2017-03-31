@@ -734,7 +734,9 @@ CREATE UNIQUE INDEX vidx ON t.test (v);
 	}
 }
 
-// Test schema change backfill fails when it hits an error on a remote node.
+// Test that a schema change on encountering a permanent backfill error
+// on a remote node terminates properly and returns the database to a
+// proper state.
 func TestBackfillErrors(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -802,6 +804,26 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 	if _, err := sqlDB.Exec(`
 CREATE UNIQUE INDEX vidx ON t.test (v);
 `); !testutils.IsError(err, `duplicate key value \(v\)=\(1\) violates unique constraint "vidx"`) {
+		t.Fatalf("got err=%s", err)
+	}
+
+	if err := checkTableKeyCount(ctx, kvDB, 1, maxValue); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := sqlDB.Exec(`
+	   ALTER TABLE t.test ADD COLUMN p DECIMAL NOT NULL DEFAULT (DECIMAL '1-3');
+	   `); !testutils.IsError(err, `could not parse '1-3' as type decimal`) {
+		t.Fatalf("got err=%s", err)
+	}
+
+	if err := checkTableKeyCount(ctx, kvDB, 1, maxValue); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := sqlDB.Exec(`
+	ALTER TABLE t.test ADD COLUMN p DECIMAL NOT NULL;
+	`); !testutils.IsError(err, `null value in column \"p\" violates not-null constraint`) {
 		t.Fatalf("got err=%s", err)
 	}
 
