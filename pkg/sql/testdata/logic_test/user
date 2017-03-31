@@ -1,4 +1,4 @@
-# LogicTest: default distsql
+# LogicTest: default
 
 query T colnames
 SHOW USERS
