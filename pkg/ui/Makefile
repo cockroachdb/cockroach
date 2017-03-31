@@ -14,40 +14,11 @@
 #
 # Author: Tamir Duberstein (tamird@gmail.com)
 
-# Prefer tools from node_modules over those elsewhere on the path.
-# This ensures that we get the versions pinned in yarn.lck.
-export PATH := $(shell yarn bin):$(PATH)
-# HACK: Make has a fast path and a slow path for command execution,
-# but the fast path uses the PATH variable from when make was started,
-# not the one we set on the previous line. In order for the above
-# line to have any effect, we must force make to always take the slow path.
-# Setting the SHELL variable to a value other than the default (/bin/sh)
-# is one way to do this globally.
-# http://stackoverflow.com/questions/8941110/how-i-could-add-dir-to-path-in-makefile/13468229#13468229
-export SHELL := $(shell which bash)
-ifeq ($(SHELL),)
-$(error bash is required)
-endif
-
-REPO_ROOT   = $(realpath ../..)
-ORG_ROOT    = $(REPO_ROOT)/..
-GITHUB_ROOT = $(ORG_ROOT)/..
-
-# Ensure we only have one entry in GOPATH
-GOPATH = $(GITHUB_ROOT)/../..
-#                        ^  ^~ GOPATH
-#                        |~ GOPATH/src
-
-GOPATH_BIN = $(GOPATH)/bin
-GO_BINDATA = $(GOPATH_BIN)/go-bindata
+override .DEFAULT_GOAL := all
+override REPO_ROOT := ../..
+include $(REPO_ROOT)/build/common.mk
 
 GOBINDATA_TARGET = embedded.go
-
-# Tell Make to delete the target if its recipe fails. Otherwise, if a recipe
-# modifies its target before failing, the target's timestamp will make it appear
-# up-to-date on the next invocation of Make, even though it is likely corrupt.
-# See: https://www.gnu.org/software/make/manual/html_node/Errors.html#Errors
-.DELETE_ON_ERROR:
 
 .PHONY: all
 all: lint test $(GOBINDATA_TARGET)
@@ -74,16 +45,11 @@ test: yarn.installed protos
 test-debug: yarn.installed protos
 	karma start --browsers Chrome --no-single-run --reporters mocha
 
-$(GOBINDATA_TARGET): yarn.installed $(GO_BINDATA) protos
+$(GOBINDATA_TARGET): yarn.installed protos
 	rm -rf dist
 	webpack -p
-	$(GO_BINDATA) -nometadata -pkg ui -o $@ -prefix dist dist
+	go-bindata -nometadata -pkg ui -o $@ -prefix dist dist
 	# Add comment recognized by reviewable.
 	echo '// GENERATED FILE DO NOT EDIT' >> $@
 	gofmt -s -w $@
 	goimports -w $@
-
-yarn.installed: package.json yarn.lock
-	yarn install
-	rm -rf node_modules/@types/node # https://github.com/yarnpkg/yarn/issues/2987
-	touch $@
