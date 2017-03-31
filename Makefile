@@ -366,8 +366,8 @@ endif
 # resort to sed magic. Roughly, this sed command prints VARIABLE in lines of the
 # following forms:
 #
-#     [override|export] VARIABLE [:+?]=
-#     TARGET-NAME: [override|export] VARIABLE [:+?]=
+#     [export] VARIABLE [:+?]=
+#     TARGET-NAME: [export] VARIABLE [:+?]=
 #
 # The additional complexity below handles whitespace and comments.
 build/variables.mk: Makefile .go-version
@@ -375,6 +375,6 @@ build/variables.mk: Makefile .go-version
 	@echo '# DO NOT EDIT!' >> $@
 	@echo 'define VALID_VARS' >> $@
 	@sed -nE -e '/^	/d' -e 's/([^#]*)#.*/\1/' \
-	  -e 's/(^|^[^:]+:)[ ]*(override|export)?[ ]*([^ ]+)[ ]*[:?+]?=.*/  \3/p' $^ \
+	  -e 's/(^|^[^:]+:)[ ]*(export)?[ ]*([^ ]+)[ ]*[:?+]?=.*/  \3/p' $^ \
 	  | LC_COLLATE=C sort -u >> $@
 	@echo 'endef' >> $@
