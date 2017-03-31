@@ -1,0 +1,92 @@
+# LogicTest: 5node
+
+statement ok
+CREATE TABLE data (a INT, b INT, c INT, d INT, PRIMARY KEY (a, b, c, d))
+
+# Split into ten parts.
+statement ok
+ALTER TABLE data SPLIT AT SELECT i FROM GENERATE_SERIES(1, 9) AS g(i)
+
+# Relocate the ten parts to the five nodes.
+statement ok
+ALTER TABLE data TESTING_RELOCATE
+  SELECT ARRAY[i%5+1], i FROM GENERATE_SERIES(0, 9) AS g(i)
+
+# Generate all combinations of values 1 to 10.
+statement ok
+INSERT INTO data SELECT a, b, c, d FROM
+   GENERATE_SERIES(1, 10) AS A(a),
+   GENERATE_SERIES(1, 10) AS B(b),
+   GENERATE_SERIES(1, 10) AS C(c),
+   GENERATE_SERIES(1, 10) AS D(d)
+
+# Verify data placement.
+query TTTI colnames
+SHOW TESTING_RANGES FROM TABLE data
+----
+Start Key          End Key            Replicas  Lease Holder
+NULL               /1/NULL/NULL/NULL  {1}       1
+/1/NULL/NULL/NULL  /2/NULL/NULL/NULL  {2}       2
+/2/NULL/NULL/NULL  /3/NULL/NULL/NULL  {3}       3
+/3/NULL/NULL/NULL  /4/NULL/NULL/NULL  {4}       4
+/4/NULL/NULL/NULL  /5/NULL/NULL/NULL  {5}       5
+/5/NULL/NULL/NULL  /6/NULL/NULL/NULL  {1}       1
+/6/NULL/NULL/NULL  /7/NULL/NULL/NULL  {2}       2
+/7/NULL/NULL/NULL  /8/NULL/NULL/NULL  {3}       3
+/8/NULL/NULL/NULL  /9/NULL/NULL/NULL  {4}       4
+/9/NULL/NULL/NULL  NULL               {5}       5
+
+# Ready to roll!
+statement ok
+SET DISTSQL = ON
+
+query T
+SELECT url FROM [EXPLAIN (DISTSQL) SELECT SUM(a) FROM data]
+----
+https://raduberinde.github.io/decode.html?eJy8k09LwzAYxu9-CnlOCu9h6bo5e5rHHXQy9SQ9xOalFLamJCkoo99d1iLaIukgo8f8-T2_PG1yRKkVP8kDWyTvECBEIMxBiEFYICVURmdsrTanLR2wUZ9IZoSirGp3mk4JmTaM5AhXuD0jwav82POOpWIDgmIni30rqUxxkOZrraSTIGxrl1yvBdKGoGv3E9jQ-aqHPDecS6cHppe3x5u1uD07-jexLrVRbFj1AtPmwnIx3SccUYW0iKZrMaIKaTGfrsWIKqRFPF2LEdWlHuU_0Tu2lS4tDx5nPy8lsMq5e9dW1ybjZ6OzNrwbbtvd7YRi67pV0Q02Zbd0OtZfWHjhqAeLIRz5zSPquZeO_XAccu6FF176zcsQ850XXvnNqxDzvf9fzUauif-SDd1pc_UdAAD__1oVf74=
+
+query R
+SELECT SUM(a) FROM data
+----
+55000
+
+query T
+SELECT url FROM [EXPLAIN (DISTSQL) SELECT SUM((a-1)*1000 + (b-1)*100 + (c-1)*10 + (d-1)) FROM data]
+----
+https://raduberinde.github.io/decode.html?eJzcVDFvszAU3L9fgd7kr3UlDCRNPdExQ9MqTaeKwcVPCCnByDZSq4j_XgUSNdDKRCIT4_P57nxny3solMSV2KEB_g4MKARAIQQKEVCYQUKh1CpFY5Q-bGkJS_kJ3KeQF2VlD8sJhVRpBL4Hm9stAoeN-NjiGoVEDRQkWpFvG5NS5zuhv2IprAAKaywkau4RQkjMvDuPcc6Xq81_78Zjvu-fpluPkDj4hR-HIx728XM4js5QSGoKqrKnADW9PNpjlmnMhFW9ZK9vTyRml0v_KFaF0hI1yo5gUl_ZnE33ygaijWktmG5rA9HGtBZOt7WBaGNai6bb2kC0a32qf0iv0ZSqMNj7XLt6CQWUGbb_slGVTvFFq7QRb8fnZnezINHYFmXtsCxa6HCsczJzkoMOmfXJgdt5wDp0siM3ORpz7pmTPHc7z8c43zvJC7fzYozzg_uu_IFn4n5kfe-k_vcdAAD__2P1870=
+
+query R
+SELECT SUM((a-1)*1000 + (b-1)*100 + (c-1)*10 + (d-1)) FROM data
+----
+49995000
+
+query T
+SELECT url FROM [EXPLAIN (DISTSQL) SELECT SUM((a-1)*1000) + SUM((b-1)*100) + SUM((c-1)*10) + SUM(d-1) FROM data]
+----
+https://raduberinde.github.io/decode.html?eJzcVU1vozAUvO-vQO8Udr0SBpLN-kSPOTSt0vRUcXDxE0JKMLKN1Criv1fgNh-0MpHS9MAF2R6P5808y-yglAKXfIsa2BNQIBACgQgIxEBgCimBSskMtZaq3WIJC_ECLCBQlFVt2uWUQCYVAtuBKcwGgcGaP29whVygAgICDS82nUilii1Xr4nghgOBFZYCFfMmCfX-epQxtliufe-3R4MgsDNvkoSfsD0U9aF3JIkPAKQNAVmbj3Ibcr6RmzxXmHMjez4eHm8nCfWB2FG4H0X7UeyfLXzQq0upBCoUJ3Jp8-2lHWXfhv_HS0K__UbdN3aWTsfS_AEj12t-OJYEB4xcL8FoLAkOGLlegvFYEhww8jNP-BfCK9SVLDX2nvLT81ICKHK0fwEta5XhvZJZd7id3nW7uwWB2liU2smitFBb1jGZOsnhCZn2yaFbeUA6crJjNzm-pO6pkzxzK88uUf7nJM_dyvNLlP-7exUMXBP3Jetrp82vtwAAAP__9bkTog==
+
+query R
+SELECT SUM((a-1)*1000) + SUM((b-1)*100) + SUM((c-1)*10) + SUM(d-1) FROM data
+----
+49995000
+
+query T
+SELECT url FROM [EXPLAIN (DISTSQL) SELECT SUM(a), MIN(b), MAX(c), COUNT(d) FROM data]
+----
+https://raduberinde.github.io/decode.html?eJzElM1q4zAQgO_7FMucHJhDZDvZrE8Ke_IhyZIfKBRTVGswhsQykgwtwe9ebFPamCIH0tQ3_X3zzTBizlAoSWtxIgPRIzBA8AEhAIQQEGaQIJRapWSM0s2TDojlC0RThLwoK9scJwip0gTRGWxujwQR7MXzkbYkJGlAkGRFfmwlpc5PQr9yKawAhE1lo9-cIfeRB8hDSGoEVdn3yDVe71xmmaZMWNVT7g4rj7MJIKzitcf9drV88HjQrP5tDuu9x8PJ1eoPY1UoLUmTvBAm9bcltzusnuIr0mMjdGPAec9u-COUO-C8Z7nBCOUOOO9ZbjhCuQPOnxotX6i3ZEpVGOqNmMt4CQLJjLrpZFSlU_qvVdoG77ab9nV7IMnY7pZ1m7jorpq0PsPMCfsXMOvDvts8oA6cdOiGw1vynjnhuds8v8X8xwkv3ObFLea_7l5NB76J-5P13Un96y0AAP__3tqzXw==
+
+query RIII
+SELECT SUM(a), MIN(b), MAX(c), COUNT(d) FROM data
+----
+55000 1 10 10000
+
+# We don't yet support local stages for AVG (or STDDEV, VARIANCE).
+query T
+SELECT url FROM [EXPLAIN (DISTSQL) SELECT SUM(a), MIN(b), MAX(c), COUNT(d), AVG(a+b+c+d) FROM data]
+----
+https://raduberinde.github.io/decode.html?eJzMkzFr8zAQhvfvV5h3Uvg0RLbTwZNCh5IhSUmTUigeVOswhsQykgwtwf-9WKa0CW1KyeJFnHT33D0Y3xG10bRSB3LIniHAEYMjAUcKjhlyjsaagpwzti8ZgIV-RTblqOqm9f1zzlEYS8iO8JXfEzJs1cueNqQ0WXBo8qrahyGNrQ7KvkmtvALHhmpNNoukiGQcySSSacSYFNH_SMaT_kzCmSLvOEzrP0Z2_AeZT4e2NlaTJX1ikHff6M7L0lKpvDmzfdgtmRQTcCwXKybjEM2fmEz66Ha9W22ZTPt4_njH5GxyUVOM6ZvFY5JJxiSTjknmlz3bkGtM7ejsFz_tl3OQLmnYDmdaW9C9NUVoPlzXoTo8aHJ-yIrhsqhDSvRaX2FxEb45gafncHzN5OQaOL0Gnv0Jzrt_7wEAAP__y32t4g==
+
+query RIIIR
+SELECT SUM(a), MIN(b), MAX(c), COUNT(d), AVG(a+b+c+d) FROM data
+----
+55000 1 10 10000 22
