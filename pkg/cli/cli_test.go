@@ -263,6 +263,30 @@ func (c cliTest) RunWithArgs(origArgs []string) {
 	}
 }
 
+func (c cliTest) RunWithCAArgs(origArgs []string) {
+	sqlCtx.execStmts = nil
+	zoneConfig = ""
+	zoneDisableReplication = false
+
+	if err := func() error {
+		args := append([]string(nil), origArgs[:1]...)
+		if c.TestServer != nil {
+			args = append(args, fmt.Sprintf("--ca-cert=%s", filepath.Join(c.certsDir, security.EmbeddedCACert)))
+			args = append(args, fmt.Sprintf("--ca-key=%s", filepath.Join(c.certsDir, security.EmbeddedCAKey)))
+			args = append(args, fmt.Sprintf("--cert=%s", filepath.Join(c.certsDir, security.EmbeddedRootCert)))
+			args = append(args, fmt.Sprintf("--key=%s", filepath.Join(c.certsDir, security.EmbeddedRootKey)))
+		}
+		args = append(args, origArgs[1:]...)
+
+		fmt.Fprintf(os.Stderr, "%s\n", args)
+		fmt.Println(strings.Join(origArgs, " "))
+
+		return Run(args)
+	}(); err != nil {
+		fmt.Println(err)
+	}
+}
+
 func TestQuit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -1071,7 +1095,26 @@ func Example_user() {
 	c.Run("user ls")
 	c.Run("user ls --format=pretty")
 	c.Run("user ls --format=tsv")
+	c.Run("user set FOO")
+	c.Run("user set Foo")
+	c.Run("user set fOo")
+	c.Run("user set foO")
 	c.Run("user set foo")
+	c.Run("user set _foo")
+	c.Run("user set f_oo")
+	c.Run("user set foo_")
+	c.Run("user set ,foo")
+	c.Run("user set f,oo")
+	c.Run("user set foo,")
+	c.Run("user set 0foo")
+	c.Run("user set foo0")
+	c.Run("user set f0oo")
+	c.Run("user set foofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoof")
+	c.Run("user set foofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoo")
+	c.Run("user set Ομηρος")
+	// Try some reserved keywords.
+	c.Run("user set and")
+	c.Run("user set table")
 	// Don't use get, since the output of hashedPassword is random.
 	// c.Run("user get foo")
 	c.Run("user ls --format=pretty")
@@ -1091,23 +1134,92 @@ func Example_user() {
 	// user ls --format=tsv
 	// 0 rows
 	// username
+	// user set FOO
+	// INSERT 1
+	// user set Foo
+	// INSERT 1
+	// user set fOo
+	// INSERT 1
+	// user set foO
+	// INSERT 1
 	// user set foo
 	// INSERT 1
+	// user set _foo
+	// INSERT 1
+	// user set f_oo
+	// INSERT 1
+	// user set foo_
+	// INSERT 1
+	// user set ,foo
+	// username ",foo" invalid; usernames are case insensitive, must start with a letter or underscore, may contain letters, digits or underscores, and must not exceed 63 characters
+	// user set f,oo
+	// username "f,oo" invalid; usernames are case insensitive, must start with a letter or underscore, may contain letters, digits or underscores, and must not exceed 63 characters
+	// user set foo,
+	// username "foo," invalid; usernames are case insensitive, must start with a letter or underscore, may contain letters, digits or underscores, and must not exceed 63 characters
+	// user set 0foo
+	// username "0foo" invalid; usernames are case insensitive, must start with a letter or underscore, may contain letters, digits or underscores, and must not exceed 63 characters
+	// user set foo0
+	// INSERT 1
+	// user set f0oo
+	// INSERT 1
+	// user set foofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoof
+	// username "foofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoof" invalid; usernames are case insensitive, must start with a letter or underscore, may contain letters, digits or underscores, and must not exceed 63 characters
+	// user set foofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoo
+	// INSERT 1
+	// user set Ομηρος
+	// INSERT 1
+	// user set and
+	// INSERT 1
+	// user set table
+	// INSERT 1
 	// user ls --format=pretty
-	// +----------+
-	// | username |
-	// +----------+
-	// | foo      |
-	// +----------+
-	// (1 row)
+	// +-----------------------------------------------------------------+
+	// |                            username                             |
+	// +-----------------------------------------------------------------+
+	// | _foo                                                            |
+	// | and                                                             |
+	// | f0oo                                                            |
+	// | f_oo                                                            |
+	// | foo                                                             |
+	// | foo0                                                            |
+	// | foo_                                                            |
+	// | foofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoo |
+	// | table                                                           |
+	// | ομηρος                                                          |
+	// +-----------------------------------------------------------------+
+	// (10 rows)
 	// user rm foo
 	// DELETE 1
 	// user ls --format=pretty
-	// +----------+
-	// | username |
-	// +----------+
-	// +----------+
-	// (0 rows)
+	// +-----------------------------------------------------------------+
+	// |                            username                             |
+	// +-----------------------------------------------------------------+
+	// | _foo                                                            |
+	// | and                                                             |
+	// | f0oo                                                            |
+	// | f_oo                                                            |
+	// | foo0                                                            |
+	// | foo_                                                            |
+	// | foofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoo |
+	// | table                                                           |
+	// | ομηρος                                                          |
+	// +-----------------------------------------------------------------+
+	// (9 rows)
+}
+
+func Example_cert() {
+	c := newCLITest(cliTestParams{})
+	defer c.cleanup()
+
+	c.RunWithCAArgs([]string{"cert", "create-client", "foo"})
+	c.RunWithCAArgs([]string{"cert", "create-client", "Ομηρος"})
+	c.RunWithCAArgs([]string{"cert", "create-client", "0foo"})
+
+	// Output:
+	// cert create-client foo
+	// cert create-client Ομηρος
+	// cert create-client 0foo
+	// username "0foo" invalid; usernames are case insensitive, must start with a letter or underscore, may contain letters, digits or underscores, and must not exceed 63 characters
 }
 
 // TestFlagUsage is a basic test to make sure the fragile
