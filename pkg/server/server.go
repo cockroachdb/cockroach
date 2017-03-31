@@ -250,6 +250,8 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		s.stopper, &s.internalMemMetrics)
 	s.leaseMgr.RefreshLeases(s.stopper, s.db, s.gossip)
 
+	sql.RefreshSettings(s.stopper, s.db, s.leaseMgr, s.gossip)
+
 	// Set up the DistSQL server
 	distSQLCfg := distsqlrun.ServerConfig{
 		AmbientContext: s.cfg.AmbientCtx,

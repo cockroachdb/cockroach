@@ -61,6 +61,18 @@ func (ie InternalExecutor) QueryRowInTransaction(
 	return p.QueryRow(ctx, statement, qargs...)
 }
 
+// QueryRowsInTransaction executes the supplied SQL statement as part of the
+// supplied transaction and returns the result. Statements are currently
+// executed as the root user.
+func (ie InternalExecutor) queryRowsInTransaction(
+	ctx context.Context, opName string, txn *client.Txn, statement string, qargs ...interface{},
+) ([]parser.Datums, error) {
+	p := makeInternalPlanner(opName, txn, security.RootUser, ie.LeaseManager.memMetrics)
+	defer finishInternalPlanner(p)
+	p.session.leases.leaseMgr = ie.LeaseManager
+	return p.queryRows(ctx, statement, qargs...)
+}
+
 // GetTableSpan gets the key span for a SQL table, including any indices.
 func (ie InternalExecutor) GetTableSpan(
 	ctx context.Context, user string, txn *client.Txn, dbName, tableName string,
