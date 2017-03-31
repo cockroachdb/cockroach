@@ -24,6 +24,7 @@ import (
 	"github.com/google/btree"
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/cache"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -638,8 +639,12 @@ func (tc *timestampCache) ExpandRequests(timestamp hlc.Timestamp) {
 			tc.add(sp.Key, sp.EndKey, req.timestamp, req.txnID, false /* !readTSCache */)
 		}
 		if req.txn.Key != nil {
+			// Make the transaction key from the request key. We're guaranteed
+			// req.txnID != nil because we only hit this code path for
+			// EndTransactionRequests.
+			key := keys.TransactionKey(req.txn.Key, *req.txnID)
 			// We set txnID=nil because we want hits for same txn ID.
-			tc.add(req.txn.Key, req.txn.EndKey, req.timestamp, nil, false /* !readTSCache */)
+			tc.add(key, nil, req.timestamp, nil, false /* !readTSCache */)
 		}
 	}
 }
