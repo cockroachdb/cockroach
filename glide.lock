@@ -1,23 +1,31 @@
-hash: 80f7320370f47a99f184fc83f9bca5ff77c90a86578b9b9324ce83fe88a8e018
-updated: 2017-03-29T20:15:41.23469927-04:00
+hash: a56a4427635b572dc56835e2656e2580439685cf31171d02b10eff3c4fa2321e
+updated: 2017-04-02T14:09:43.042237791-04:00
 imports:
 - name: cloud.google.com/go
-  version: 5fd028f47f3170cfe2a87666eae9ff5595027282
+  version: 7be0b05e70c6f84387d33d2d7db0830b35147486
   subpackages:
   - compute/metadata
   - internal
   - internal/optional
+  - internal/version
   - storage
 - name: github.com/abourget/teamcity
   version: 6dde447fa54bc5b08b1a7bb1b85e39089cf27fb1
 - name: github.com/Azure/azure-sdk-for-go
-  version: 4897648e310020dae650a89c31ff633284c13a24
+  version: 8b742db0f792bb89ee4dadbdb2314aeb9a5626d2
   subpackages:
   - storage
 - name: github.com/Azure/go-ansiterm
   version: fa152c58bc15761d0200cb75fe958b89a9d4888e
   subpackages:
   - winterm
+- name: github.com/Azure/go-autorest
+  version: ec5f4903f77ed9927ac95b19ab8e44ada64c1356
+  subpackages:
+  - autorest
+  - autorest/azure
+  - autorest/date
+  - autorest/to
 - name: github.com/backtrace-labs/go-bcd
   version: 4ad9137a248599da4b00da0be6e71a75c9e1b8d9
 - name: github.com/biogo/store
@@ -70,6 +78,8 @@ imports:
   version: a65d4d2de4d5f7c74868dfa9b202a3c8be315aaa
   subpackages:
   - md2man
+- name: github.com/dgrijalva/jwt-go
+  version: d2709f9f1f31ebcda9651b03077758c1f3a0018c
 - name: github.com/docker/distribution
   version: 0700fa570d7bcc1b3e46ee127c4489fd25f4daa3
   subpackages:
@@ -102,7 +112,7 @@ imports:
   - pkg/term/windows
   - pkg/tlsconfig
 - name: github.com/docker/go-connections
-  version: a2afab9802043837035592f1c24827fb70766de9
+  version: e15c02316c12de00874640cd76311849de2aeed5
   subpackages:
   - nat
   - sockets
@@ -112,7 +122,7 @@ imports:
 - name: github.com/dustin/go-humanize
   version: 259d2a102b871d17f30e3cd9881a642961a1e486
 - name: github.com/elastic/gosigar
-  version: 4c790f73760ca6dccd61882b263e03a5f23fbb77
+  version: 6ebbe1b8b574474c7fab31b154f170d14f5b638f
   subpackages:
   - sys/windows
 - name: github.com/elazarl/go-bindata-assetfs
@@ -173,7 +183,7 @@ imports:
 - name: github.com/google/btree
   version: 316fb6d3f031ae8f4d457c6c5186b9e3ded70435
 - name: github.com/google/go-github
-  version: 3c8f26c1ae8c61ba5d06731b36435a4f46ea9da5
+  version: 12363ffc10018c93407ebf303040586d55957271
   subpackages:
   - github
 - name: github.com/google/go-querystring
@@ -302,7 +312,7 @@ imports:
   subpackages:
   - wire
 - name: github.com/opentracing/opentracing-go
-  version: 6edb48674bd9467b8e91fda004f2bd7202d60ce4
+  version: e79bb85e0bffa13bdca9541f6f6d75e2b3a03fc8
   subpackages:
   - ext
   - log
@@ -327,7 +337,7 @@ imports:
 - name: github.com/rlmcpherson/s3gof3r
   version: 864ae0bf7cf2e20c0002b7ea17f4d84fec1abc14
 - name: github.com/rubyist/circuitbreaker
-  version: 9d2405c9a39876d9c85a8d6cc8ce16b63eb83610
+  version: 2074adba5ddc7d5f7559448a9c3066573521c5bf
 - name: github.com/russross/blackfriday
   version: 5f33e7b7878355cd2b7e6b8eefc48a5472c69f70
 - name: github.com/sasha-s/go-deadlock
@@ -339,7 +349,7 @@ imports:
 - name: github.com/Sirupsen/logrus
   version: 10f801ebc38b33738c9d17d50860f484a0988ff5
 - name: github.com/spf13/cobra
-  version: 7be4beda01ec05d0b93d80b3facd2b6f44080d94
+  version: 7aeaa2cce6ae7e18d2a6ee597b60ee137e999bd9
   subpackages:
   - doc
 - name: github.com/spf13/pflag
@@ -390,7 +400,7 @@ imports:
   - unix
   - windows
 - name: golang.org/x/text
-  version: fc7fa097411d30e6708badff276c4c164425590c
+  version: f4b4367115ec2de254587813edaa901bc1c723a8
   subpackages:
   - collate
   - internal/colltab
@@ -400,19 +410,28 @@ imports:
   - unicode/norm
   - width
 - name: golang.org/x/tools
-  version: d63e2b22b05a9682de336cd4802bba367ed429e7
+  version: 620ecdb8d7943e20dc030b61bfe898d1b000bdea
   subpackages:
   - cmd/goimports
   - cmd/goyacc
+  - cmd/guru
+  - cmd/guru/serial
   - cmd/stringer
+  - container/intsets
   - cover
   - go/ast/astutil
   - go/buildutil
+  - go/callgraph
+  - go/callgraph/static
   - go/gcexportdata
   - go/gcimporter15
   - go/loader
+  - go/pointer
+  - go/ssa
+  - go/ssa/ssautil
   - go/types/typeutil
   - imports
+  - refactor/importgraph
 - name: google.golang.org/api
   version: 48e49d1645e228d1c50c3d54fb476b2224477303
   subpackages:
