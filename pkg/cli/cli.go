@@ -96,6 +96,15 @@ var isInteractive = isatty.IsTerminal(os.Stdout.Fd()) &&
 func init() {
 	cobra.EnableCommandSorting = false
 
+	// Set an error function for flag parsing which prints the usage message.
+	cockroachCmd.SetFlagErrorFunc(func(c *cobra.Command, err error) error {
+		if usageErr := c.Usage(); usageErr != nil {
+			return usageErr
+		}
+		fmt.Println()
+		return err
+	})
+
 	cockroachCmd.AddCommand(
 		startCmd,
 		certCmd,
