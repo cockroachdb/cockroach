@@ -98,10 +98,10 @@ func init() {
 
 	// Set an error function for flag parsing which prints the usage message.
 	cockroachCmd.SetFlagErrorFunc(func(c *cobra.Command, err error) error {
-		if usageErr := c.Usage(); usageErr != nil {
-			return usageErr
+		if err := c.Usage(); err != nil {
+			return err
 		}
-		fmt.Println()
+		fmt.Fprintf(c.OutOrStderr(), "\n") // provide a line break between usage and error
 		return err
 	})
 
