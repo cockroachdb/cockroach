@@ -1115,46 +1115,7 @@ func Example_user() {
 func TestFlagUsage(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	// Override os.Stdout with our own.
-	old := os.Stdout
-	defer func() {
-		os.Stdout = old
-	}()
-
-	r, w, _ := os.Pipe()
-	os.Stdout = w
-
-	done := make(chan struct{})
-	var buf bytes.Buffer
-	// copy the output in a separate goroutine so printing can't block indefinitely.
-	go func() {
-		// Copy reads 'r' until EOF is reached.
-		_, _ = io.Copy(&buf, r)
-		close(done)
-	}()
-
-	if err := Run([]string{"help"}); err != nil {
-		fmt.Println(err)
-	}
-
-	// back to normal state
-	w.Close()
-	<-done
-
-	// Filter out all test flags.
-	testFlagRE := regexp.MustCompile(`--(test\.|verbosity|vmodule)`)
-	lines := strings.Split(buf.String(), "\n")
-	final := []string{}
-	for _, l := range lines {
-		if testFlagRE.MatchString(l) {
-			continue
-		}
-		final = append(final, l)
-	}
-	got := strings.Join(final, "\n")
-	expected := `CockroachDB command-line interface and server.
-
-Usage:
+	expUsage := `Usage:
   cockroach [command]
 
 Available Commands:
@@ -1183,9 +1144,58 @@ Flags:
 
 Use "cockroach [command] --help" for more information about a command.
 `
+	helpExpected := fmt.Sprintf("CockroachDB command-line interface and server.\n\n%s", expUsage)
+	badFlagExpected := fmt.Sprintf("%s\nError: unknown flag: --foo\n", expUsage)
 
-	if got != expected {
-		t.Errorf("got:\n%s\n----\nexpected:\n%s", got, expected)
+	testCases := []struct {
+		flags    []string
+		expErr   bool
+		expected string
+	}{
+		{[]string{"help"}, false, helpExpected},    // request help specifically
+		{[]string{"--foo"}, true, badFlagExpected}, // unknown flag
+	}
+	for _, test := range testCases {
+		t.Run(strings.Join(test.flags, ","), func(t *testing.T) {
+			// Override os.Stdout or os.Stderr with our own.
+			r, w, _ := os.Pipe()
+			cockroachCmd.SetOutput(w)
+
+			done := make(chan error)
+			var buf bytes.Buffer
+			// copy the output in a separate goroutine so printing can't block indefinitely.
+			go func() {
+				// Copy reads 'r' until EOF is reached.
+				_, err := io.Copy(&buf, r)
+				done <- err
+			}()
+
+			if err := Run(test.flags); err != nil && !test.expErr {
+				fmt.Fprintln(w, "%s", err)
+			}
+
+			// back to normal state
+			w.Close()
+			if err := <-done; err != nil {
+				t.Fatal(err)
+			}
+
+			// Filter out all test flags.
+			testFlagRE := regexp.MustCompile(`--(test\.|verbosity|vmodule)`)
+			lines := strings.Split(buf.String(), "\n")
+			final := []string{}
+			for _, l := range lines {
+				if testFlagRE.MatchString(l) {
+					continue
+				}
+				final = append(final, l)
+			}
+			got := strings.Join(final, "\n")
+
+			if got != test.expected {
+				t.Errorf("got:\n%s\n----\nexpected:\n%s", got, test.expected)
+			}
+		})
 	}
 }
 
