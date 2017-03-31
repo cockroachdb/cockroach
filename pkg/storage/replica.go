@@ -1600,7 +1600,13 @@ func makeCacheRequest(ba *roachpb.BatchRequest, br *roachpb.BatchResponse) cache
 					// to prevent phantom read anomalies. That means we can only
 					// perform this truncate if the scan requested a limited number of
 					// results and we hit that limit.
-					header.EndKey = resp.Rows[len(resp.Rows)-1].Key.Next()
+					//
+					// Make a copy of the key to avoid holding on to the large buffer the
+					// key was allocated from for the response.
+					src := resp.Rows[len(resp.Rows)-1].Key
+					key := make(roachpb.Key, len(src), len(src)+1)
+					copy(key, src)
+					header.EndKey = key.Next()
 				}
 				cr.reads = append(cr.reads, header)
 			case *roachpb.ReverseScanRequest:
@@ -1610,7 +1616,13 @@ func makeCacheRequest(ba *roachpb.BatchRequest, br *roachpb.BatchResponse) cache
 					// See comment in the ScanRequest case. For revert scans, results
 					// are returned in reverse order and we truncate the start key of
 					// the span.
-					header.Key = resp.Rows[len(resp.Rows)-1].Key
+					//
+					// Make a copy of the key to avoid holding on to the large buffer the
+					// key was allocated from for the response.
+					src := resp.Rows[len(resp.Rows)-1].Key
+					key := make(roachpb.Key, len(src))
+					copy(key, src)
+					header.Key = key
 				}
 				cr.reads = append(cr.reads, header)
 			default:
