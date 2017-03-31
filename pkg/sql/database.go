@@ -53,24 +53,28 @@ func (dk databaseKey) Name() string {
 type databaseCache struct {
 	mu        syncutil.Mutex
 	databases map[string]sqlbase.ID
+
+	// systemConfig holds a copy of the latest system config since the last
+	// call to resetForBatch.
+	systemConfig config.SystemConfig
 }
 
-func (s *databaseCache) getID(name string) sqlbase.ID {
-	if s == nil {
+func (dc *databaseCache) getID(name string) sqlbase.ID {
+	if dc == nil {
 		return 0
 	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.databases[name]
+	dc.mu.Lock()
+	defer dc.mu.Unlock()
+	return dc.databases[name]
 }
 
-func (s *databaseCache) setID(name string, id sqlbase.ID) {
-	if s == nil {
+func (dc *databaseCache) setID(name string, id sqlbase.ID) {
+	if dc == nil {
 		return
 	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.databases[name] = id
+	dc.mu.Lock()
+	defer dc.mu.Unlock()
+	dc.databases[name] = id
 }
 
 func makeDatabaseDesc(p *parser.CreateDatabase) sqlbase.DatabaseDescriptor {
@@ -93,11 +97,6 @@ func getKeysForDatabaseDescriptor(
 
 // DatabaseAccessor provides helper methods for using SQL database descriptors.
 type DatabaseAccessor interface {
-	// getDatabaseID returns the ID of a database given its name.  It
-	// uses the descriptor cache if possible, otherwise falls back to KV
-	// operations.
-	getDatabaseID(ctx context.Context, name string) (sqlbase.ID, error)
-
 	// createDatabase attempts to create a database with the provided DatabaseDescriptor.
 	// Returns true if the database is actually created, false if it already existed,
 	// or an error if one was encountered. The ifNotExists flag is used to declare
@@ -148,13 +147,16 @@ func MustGetDatabaseDesc(
 
 // getCachedDatabaseDesc looks up the database descriptor from the descriptor cache,
 // given its name.
-func (p *planner) getCachedDatabaseDesc(name string) (*sqlbase.DatabaseDescriptor, error) {
+func (dc *databaseCache) getCachedDatabaseDesc(name string) (*sqlbase.DatabaseDescriptor, error) {
+	if dc == nil {
+		return nil, fmt.Errorf("database %q does not exist in empty system cache", name)
+	}
 	if name == sqlbase.SystemDB.Name {
 		return &sqlbase.SystemDB, nil
 	}
 
 	nameKey := databaseKey{name}
-	nameVal := p.session.systemConfig.GetValue(nameKey.Key())
+	nameVal := dc.systemConfig.GetValue(nameKey.Key())
 	if nameVal == nil {
 		return nil, fmt.Errorf("database %q does not exist in system cache", name)
 	}
@@ -165,7 +167,7 @@ func (p *planner) getCachedDatabaseDesc(name string) (*sqlbase.DatabaseDescripto
 	}
 
 	descKey := sqlbase.MakeDescMetadataKey(sqlbase.ID(id))
-	descVal := p.session.systemConfig.GetValue(descKey)
+	descVal := dc.systemConfig.GetValue(descKey)
 	if descVal == nil {
 		return nil, fmt.Errorf("database %q has name entry, but no descriptor in system cache", name)
 	}
@@ -202,32 +204,36 @@ func getAllDatabaseDescs(
 	return dbDescs, nil
 }
 
-// getDatabaseID implements the DatabaseAccessor interface.
-func (p *planner) getDatabaseID(ctx context.Context, name string) (sqlbase.ID, error) {
-	if virtual := p.session.virtualSchemas.getVirtualDatabaseDesc(name); virtual != nil {
+// getDatabaseID returns the ID of a database given its name. It
+// uses the descriptor cache if possible, otherwise falls back to KV
+// operations.
+func (dc *databaseCache) getDatabaseID(
+	ctx context.Context, txn *client.Txn, vt VirtualTabler, name string,
+) (sqlbase.ID, error) {
+	if virtual := vt.getVirtualDatabaseDesc(name); virtual != nil {
 		return virtual.GetID(), nil
 	}
 
-	if id := p.session.databaseCache.getID(name); id != 0 {
+	if id := dc.getID(name); id != 0 {
 		return id, nil
 	}
 
 	// Lookup the database in the cache first, falling back to the KV store if it
 	// isn't present. The cache might cause the usage of a recently renamed
 	// database, but that's a race that could occur anyways.
-	desc, err := p.getCachedDatabaseDesc(name)
+	desc, err := dc.getCachedDatabaseDesc(name)
 	if err != nil {
 		if log.V(3) {
 			log.Infof(ctx, "error getting database descriptor: %s", err)
 		}
 		var err error
-		desc, err = MustGetDatabaseDesc(ctx, p.txn, p.getVirtualTabler(), name)
+		desc, err = MustGetDatabaseDesc(ctx, txn, vt, name)
 		if err != nil {
 			return 0, err
 		}
 	}
 
-	p.session.databaseCache.setID(name, desc.ID)
+	dc.setID(name, desc.ID)
 	return desc.ID, nil
 }
 

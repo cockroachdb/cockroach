@@ -259,7 +259,7 @@ func (p *planner) getTableLease(
 		return tbl, nil
 	}
 
-	dbID, err := p.getDatabaseID(ctx, tn.Database())
+	dbID, err := p.session.databaseCache.getDatabaseID(ctx, p.txn, p.getVirtualTabler(), tn.Database())
 	if err != nil {
 		return nil, err
 	}
