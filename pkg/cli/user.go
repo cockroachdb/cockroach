@@ -22,6 +22,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 )
 
 var password bool
@@ -103,6 +104,10 @@ var setUserCmd = &cobra.Command{
 	Long: `
 Create or update a user for the specified username, prompting
 for the password.
+
+Valid usernames contain 1 to 63 alphanumeric characters. They must
+begin with either a letter or an underscore. Subsequent characters
+may be letters, numbers, or underscores.
 `,
 	RunE: MaybeDecorateGRPCError(runSetUser),
 }
@@ -116,10 +121,13 @@ func runSetUser(cmd *cobra.Command, args []string) error {
 		return usageAndError(cmd)
 	}
 	var err error
+	var username string
+	if username, err = sql.NormalizeAndValidateUsername(args[0]); err != nil {
+		return err
+	}
 	var hashed []byte
 	if password {
-		hashed, err = security.PromptForPasswordAndHash()
-		if err != nil {
+		if hashed, err = security.PromptForPasswordAndHash(); err != nil {
 			return err
 		}
 	}
@@ -132,7 +140,7 @@ func runSetUser(cmd *cobra.Command, args []string) error {
 	// TODO(asubiotto): Implement appropriate server-side authorization rules
 	// for users to be able to change their own passwords.
 	return runQueryAndFormatResults(conn, os.Stdout,
-		makeQuery(`UPSERT INTO system.users VALUES ($1, $2)`, args[0], hashed),
+		makeQuery(`UPSERT INTO system.users VALUES ($1, $2)`, username, hashed),
 		cliCtx.tableDisplayFormat)
 }
 
