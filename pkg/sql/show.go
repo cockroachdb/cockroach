@@ -388,7 +388,7 @@ func (p *planner) showCreateTable(
 			return "", err
 		}
 		if fk := idx.ForeignKey; fk.IsSet() {
-			fkTable, err := p.getTableLeaseByID(ctx, fk.Table)
+			fkTable, err := p.session.leases.getTableLeaseByID(ctx, p.txn, fk.Table)
 			if err != nil {
 				return "", err
 			}

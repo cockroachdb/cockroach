@@ -1286,3 +1286,15 @@ func (m *LeaseManager) RefreshLeases(s *stop.Stopper, db *client.DB, gossip *gos
 		}
 	})
 }
+
+// LeaseCollection is a set of leases.
+type LeaseCollection struct {
+	// leases holds the state of per-table leases acquired by the leaseMgr.
+	leases []*LeaseState
+	// leaseMgr manages acquiring and releasing per-table leases.
+	leaseMgr *LeaseManager
+	// databaseCache is used as a cache for database names.
+	// TODO(andrei): get rid of it and replace it with a leasing system for
+	// database descriptors.
+	databaseCache *databaseCache
+}
