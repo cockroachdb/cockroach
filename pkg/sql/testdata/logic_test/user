@@ -22,6 +22,9 @@ CREATE USER user1
 statement error user user1 already exists
 CREATE USER UsEr1
 
+statement ok
+CREATE USER Ομηρος
+
 statement error empty passwords are not permitted
 CREATE USER test WITH PASSWORD ''
 
@@ -31,8 +34,8 @@ CREATE USER uSEr2 WITH PASSWORD 'cockroach'
 statement ok
 CREATE USER user3 WITH PASSWORD '蟑螂'
 
-statement ok
-CREATE USER ☂ WITH PASSWORD '☂umbrella'
+statement error pq: username "foo☂" invalid; usernames are case insensitive, must start with a letter or underscore, may contain letters, digits or underscores, and must not exceed 63 characters
+CREATE USER foo☂
 
 query T colnames
 SHOW USERS
@@ -42,7 +45,7 @@ testuser
 user1
 user2
 user3
-☂
+ομηρος
 
 statement error no username specified
 CREATE USER ""
