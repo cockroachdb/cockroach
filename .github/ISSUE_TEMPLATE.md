@@ -4,7 +4,7 @@ Is this a question, feature request, or bug report?
 
 Have you checked our documentation at https://cockroachlabs.com/docs/? If you could not find an answer there, please consider asking your question in our community forum at https://forum.cockroachlabs.com/, as it would benefit other members of our community.
 
-Prefer live chat? Message our engineers on our Gitter channel at https://gitter.im/cockroachdb/cockroach. 
+Prefer live chat? Message our engineers on our Gitter channel at https://gitter.im/cockroachdb/cockroach.
 
 **FEATURE REQUEST**
 
@@ -20,7 +20,7 @@ Prefer live chat? Message our engineers on our Gitter channel at https://gitter.
    log file **for each node in your cluster**. On most unix-based systems
    running with defaults, this boils down to the output of
 
-     grep -F '[config]' cockroach-data/logs/cockroach.INFO
+     grep -F '[config]' cockroach-data/logs/cockroach.log
 
    When log files are not available, supply the output of `cockroach version`
    and all flags/environment variables passed to `cockroach start` instead.
