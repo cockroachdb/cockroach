@@ -16,17 +16,11 @@
 # Author: Shawn Morel (shawnmorel@gmail.com)
 # Author: Spencer Kimball (spencer.kimball@gmail.com)
 
-# Variables to be overridden in the environment or on the command line, e.g.
-#
-#   GOFLAGS=-msan make build
-GO      ?= go
-GOFLAGS ?=
-XGO     ?= xgo
-TAR     ?= tar
-
 # Variables to be overridden on the command line only, e.g.
 #
 #   make test PKG=./pkg/storage TESTFLAGS=--vmodule=raft=1
+#
+# Note that environment variable overrides are intentionally ignored.
 PKG          := ./pkg/...
 TAGS         :=
 TESTS        := .
@@ -65,28 +59,6 @@ TYPE :=
 # toolchain.
 LINKFLAGS =
 
-export GOPATH := $(realpath ../../../..)
-# Prefer tools from $GOPATH/bin over those elsewhere on the path.
-# This ensures that we get the versions we go install.
-export PATH := $(GOPATH)/bin:$(PATH)
-# HACK: Make has a fast path and a slow path for command execution,
-# but the fast path uses the PATH variable from when make was started,
-# not the one we set on the previous line. In order for the above
-# line to have any effect, we must force make to always take the slow path.
-# Setting the SHELL variable to a value other than the default (/bin/sh)
-# is one way to do this globally.
-# http://stackoverflow.com/questions/8941110/how-i-could-add-dir-to-path-in-makefile/13468229#13468229
-export SHELL := $(shell which bash)
-ifeq ($(SHELL),)
-$(error bash is required)
-endif
-
-# GNU tar and BSD tar both support transforming filenames according to a regular
-# expression, but have different flags to do so.
-TAR_XFORM_FLAG = $(shell $(TAR) --version | grep -q GNU && echo "--xform='flags=r;s'" || echo "-s")
-
-GIT_DIR := $(shell git rev-parse --git-dir 2> /dev/null)
-
 ifeq ($(TYPE),)
 override LINKFLAGS += -X github.com/cockroachdb/cockroach/pkg/build.typ=development
 else ifeq ($(TYPE),release)
@@ -104,37 +76,10 @@ endif
 
 export MACOSX_DEPLOYMENT_TARGET=10.9
 
--include customenv.mk
+REPO_ROOT := .
+include $(REPO_ROOT)/build/common.mk
 
-# We used to check the Go version in a .PHONY .go-version target, but the error
-# message, if any, would get mixed in with noise from other targets if Make was
-# executed in parallel job mode. This check, by contrast, is guaranteed to print
-# its error message before any noisy output.
-include .go-version
-ifeq ($(shell $(GO) version | grep -q -E '\b$(GOVERS)\b' && echo y),)
-$(error "$(GOVERS) required (see CONTRIBUTING.md): $(shell $(GO) version)")
-endif
-
-# Print an error if the user specified any variables on the command line that
-# don't appear in this Makefile. The list of valid variables is automatically
-# rebuilt on the first successful `make` invocation after the Makefile changes.
-include build/variables.mk
-$(foreach v,$(filter-out $(strip $(VALID_VARS)),$(.VARIABLES)),\
-	$(if $(findstring command line,$(origin $v)),$(error Variable `$v' is not recognized by this Makefile)))
-
-# Tell Make to delete the target if its recipe fails. Otherwise, if a recipe
-# modifies its target before failing, the target's timestamp will make it appear
-# up-to-date on the next invocation of Make, even though it is likely corrupt.
-# See: https://www.gnu.org/software/make/manual/html_node/Errors.html#Errors
-.DELETE_ON_ERROR:
-
-# Targets that name a real file that must be rebuilt on every Make invocation
-# should depend on .ALWAYS_REBUILD. (.PHONY should only be used on targets that
-# don't name a real file because .DELETE_ON_ERROR does not apply to .PHONY
-# targets.)
-.ALWAYS_REBUILD:
-.PHONY: .ALWAYS_REBUILD
-
+.DEFAULT_GOAL := all
 .PHONY: all
 all: build test check
 
@@ -332,49 +277,3 @@ ifneq ($(GIT_DIR),)
 .buildinfo/tag: .ALWAYS_REBUILD
 .buildinfo/rev: .ALWAYS_REBUILD
 endif
-
-ifneq ($(GIT_DIR),)
-# If we're in a git worktree, the git hooks directory may not be in our root,
-# so we ask git for the location.
-#
-# Note that `git rev-parse --git-path hooks` requires git 2.5+.
-GITHOOKSDIR := $(shell test -d .git && echo '.git/hooks' || git rev-parse --git-path hooks)
-GITHOOKS := $(subst githooks/,$(GITHOOKSDIR)/,$(wildcard githooks/*))
-$(GITHOOKSDIR)/%: githooks/%
-	@echo installing $<
-	@rm -f $@
-	@mkdir -p $(dir $@)
-	@ln -s ../../$(basename $<) $(dir $@)
-endif
-
-# Update the git hooks and run the bootstrap script whenever any
-# of them (or their dependencies) change.
-.bootstrap: $(GITHOOKS) glide.lock build/tool_imports.go
-ifneq ($(GIT_DIR),)
-	git submodule update --init
-endif
-	$(GO) install -v \
-	./pkg/cmd/metacheck \
-	./pkg/cmd/returncheck \
-	&& $(GO) list -tags glide -f '{{join .Imports "\n"}}' ./build | grep -vF protoc | xargs $(GO) install -v
-	touch $@
-
-# Force Make to run the .bootstrap recipe before building any other targets.
--include .bootstrap
-
-# Make doesn't expose a list of the variables declared in a given file, so we
-# resort to sed magic. Roughly, this sed command prints VARIABLE in lines of the
-# following forms:
-#
-#     [export] VARIABLE [:+?]=
-#     TARGET-NAME: [export] VARIABLE [:+?]=
-#
-# The additional complexity below handles whitespace and comments.
-build/variables.mk: Makefile .go-version
-	@echo '# This file is auto-generated by Make.' > $@
-	@echo '# DO NOT EDIT!' >> $@
-	@echo 'define VALID_VARS' >> $@
-	@sed -nE -e '/^	/d' -e 's/([^#]*)#.*/\1/' \
-	  -e 's/(^|^[^:]+:)[ ]*(export)?[ ]*([^ ]+)[ ]*[:?+]?=.*/  \3/p' $^ \
-	  | LC_COLLATE=C sort -u >> $@
-	@echo 'endef' >> $@
