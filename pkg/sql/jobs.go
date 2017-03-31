@@ -77,6 +77,12 @@ func NewJobLogger(db *client.DB, leaseMgr *LeaseManager, job JobRecord) JobLogge
 	}
 }
 
+// JobID returns the ID of the job that this JobLogger is currently tracking.
+// This will be nil if Created has not yet been called.
+func (jl *JobLogger) JobID() *int64 {
+	return jl.jobID
+}
+
 // Created records the creation of a new job in the system.jobs table and
 // remembers the assigned ID of the job in the JobLogger. The job information is
 // read from the Job field at the time Created is called.
