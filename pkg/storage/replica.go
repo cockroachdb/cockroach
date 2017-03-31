@@ -1583,8 +1583,10 @@ func makeCacheRequest(ba *roachpb.BatchRequest, br *roachpb.BatchResponse) cache
 			case *roachpb.EndTransactionRequest:
 				// EndTransaction adds to the write timestamp cache to ensure replays
 				// create a transaction record with WriteTooOld set.
-				key := keys.TransactionKey(header.Key, *cr.txnID)
-				cr.txn = roachpb.Span{Key: key}
+				//
+				// Note that TimestampCache.ExpandRequests lazily creates the
+				// transaction key from the request key.
+				cr.txn = roachpb.Span{Key: header.Key}
 			case *roachpb.ScanRequest:
 				resp := br.Responses[i].GetInner().(*roachpb.ScanResponse)
 				if ba.Header.MaxSpanRequestKeys != 0 &&
