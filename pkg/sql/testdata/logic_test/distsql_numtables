@@ -138,7 +138,7 @@ https://raduberinde.github.io/decode.html?eJzUlcGK2zAQhu99ijCnXVAhkp2mMRR87PaQlO
 
 # Save the result of the following statement to a label.
 query IT rowsort label-sq-str
-SELECT i, crdb_testing.to_english(i*i) FROM GENERATE_SERIES(1, 101) AS g(i)
+SELECT i, crdb_testing.to_english(i*i) FROM GENERATE_SERIES(1, 100) AS g(i)
 
 # Compare the results of this query to the one above.
 query IT rowsort label-sq-str
