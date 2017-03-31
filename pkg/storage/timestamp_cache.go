@@ -19,6 +19,7 @@ package storage
 import (
 	"fmt"
 	"time"
+	"unsafe"
 
 	"github.com/google/btree"
 	"golang.org/x/net/context"
@@ -32,20 +33,17 @@ import (
 )
 
 const (
-	// MinTSCacheWindow specifies the minimum duration to hold entries in
-	// the cache before allowing eviction. After this window expires,
-	// transactions writing to this node with timestamps lagging by more
-	// than minCacheWindow will necessarily have to advance their commit
-	// timestamp.
+	// MinTSCacheWindow specifies the minimum duration to hold entries in the
+	// cache before allowing eviction. After this window expires, transactions
+	// writing to this node with timestamps lagging by more than MinTSCacheWindow
+	// will necessarily have to advance their commit timestamp.
 	MinTSCacheWindow = 10 * time.Second
 
-	// defaultEvictionSizeThreshold is the number of entries to allow in the
-	// per-Store timestamp cache. A cache entry is ~150-200 bytes with the bulk
-	// of that memory coming from the start and end keys.
-	//
-	// TODO(peter): We should accurately track the memory usage of the timestamp
-	// cache and change to using a cache sized by bytes.
-	defaultEvictionSizeThreshold = 1024 * 1024
+	// defaultTimestampCacheSize is the default size in bytes for a store's
+	// timestamp cache. Note that the timestamp cache can use more memory than
+	// this because it holds on to all entries that are younger than
+	// MinTSCacheWindow.
+	defaultTimestampCacheSize = 64 << 20 // 64 MB
 
 	// Max entries in each btree node.
 	// TODO(peter): Not yet tuned.
@@ -91,6 +89,40 @@ func (cr *cacheRequest) numSpans() int {
 	return n
 }
 
+func (cr *cacheRequest) size() uint64 {
+	var n uint64
+	for _, s := range cr.reads {
+		n += cacheEntrySize(interval.Comparable(s.Key), interval.Comparable(s.EndKey), cr.txnID)
+	}
+	for _, s := range cr.writes {
+		n += cacheEntrySize(interval.Comparable(s.Key), interval.Comparable(s.EndKey), cr.txnID)
+	}
+	if cr.txn.Key != nil {
+		n += cacheEntrySize(interval.Comparable(cr.txn.Key), nil, nil)
+	}
+	return n
+}
+
+var cacheEntryOverhead = uint64(unsafe.Sizeof(cache.IntervalKey{}) +
+	unsafe.Sizeof(cacheValue{}) + unsafe.Sizeof(cache.Entry{}))
+
+func cacheEntrySize(start, end interval.Comparable, txnID *uuid.UUID) uint64 {
+	n := uint64(cap(start))
+	if end != nil && len(start) > 0 && len(end) > 0 && &end[0] != &start[0] {
+		// If the end key exists and is not sharing memory with the start key,
+		// account for its memory usage.
+		n += uint64(cap(end))
+	}
+	if txnID != nil {
+		// Every entry which references the txn ID is charged for its memory. This
+		// results in counting that memory multiple times with the result that the
+		// cache might not be using as much memory as we've configured it for.
+		n += uint64(unsafe.Sizeof(*txnID))
+	}
+	n += cacheEntryOverhead
+	return n
+}
+
 // A TimestampCache maintains an interval tree FIFO cache of keys or
 // key ranges and the timestamps at which they were most recently read
 // or written. If a timestamp was read or written by a transaction,
@@ -114,14 +146,8 @@ type timestampCache struct {
 	reqIDAlloc int64
 	reqSpans   int
 
-	// evictionSizeThreshold allows old entries to stay in the TimestampCache
-	// indefinitely as long as the number of intervals in the cache doesn't
-	// exceed this value. Once the cache grows beyond it, intervals are
-	// evicted according to the time window. This threshold is intended to
-	// permit transactions to take longer than the eviction window duration
-	// if the size of the cache is not a concern, such as when a user
-	// is using an interactive SQL shell.
-	evictionSizeThreshold int
+	bytes    uint64
+	maxBytes uint64
 }
 
 // lowWaterTxnIDMarker is a special txn ID that identifies a cache entry as a
@@ -163,13 +189,21 @@ func makeCacheEntry(key cache.IntervalKey, value cacheValue) *cache.Entry {
 // hybrid clock.
 func newTimestampCache(clock *hlc.Clock) *timestampCache {
 	tc := &timestampCache{
-		rCache:                cache.NewIntervalCache(cache.Config{Policy: cache.CacheFIFO}),
-		wCache:                cache.NewIntervalCache(cache.Config{Policy: cache.CacheFIFO}),
-		evictionSizeThreshold: defaultEvictionSizeThreshold,
+		rCache:   cache.NewIntervalCache(cache.Config{Policy: cache.CacheFIFO}),
+		wCache:   cache.NewIntervalCache(cache.Config{Policy: cache.CacheFIFO}),
+		maxBytes: uint64(defaultTimestampCacheSize),
 	}
 	tc.Clear(clock.Now())
 	tc.rCache.Config.ShouldEvict = tc.shouldEvict
 	tc.wCache.Config.ShouldEvict = tc.shouldEvict
+
+	onEvicted := func(k, v interface{}) {
+		ck := k.(*cache.IntervalKey)
+		cv := v.(*cacheValue)
+		tc.bytes -= cacheEntrySize(ck.Start, ck.End, cv.txnID)
+	}
+	tc.rCache.Config.OnEvicted = onEvicted
+	tc.wCache.Config.OnEvicted = onEvicted
 	return tc
 }
 
@@ -214,6 +248,7 @@ func (tc *timestampCache) add(
 			value := cacheValue{timestamp: timestamp, txnID: txnID}
 			key := tcache.MakeKey(r.Start, r.End)
 			entry := makeCacheEntry(key, value)
+			tc.bytes += cacheEntrySize(r.Start, r.End, txnID)
 			tcache.AddEntry(entry)
 		}
 		r := interval.Range{
@@ -532,6 +567,7 @@ func (tc *timestampCache) AddRequest(req cacheRequest) {
 	req.uniqueID = tc.reqIDAlloc
 	tc.requests.ReplaceOrInsert(&req)
 	tc.reqSpans += req.numSpans()
+	tc.bytes += req.size()
 
 	// Bump the latest timestamp and evict any requests that are now too old.
 	tc.latest.Forward(req.timestamp)
@@ -540,7 +576,7 @@ func (tc *timestampCache) AddRequest(req cacheRequest) {
 
 	// Evict requests as long as the number of cached spans (both in the requests
 	// queue and the interval caches) is larger than the eviction threshold.
-	for tc.len() > tc.evictionSizeThreshold {
+	for tc.bytes > tc.maxBytes {
 		// TODO(peter): It might be more efficient to gather up the requests to
 		// delete using BTree.AscendLessThan rather than calling Min
 		// repeatedly. Maybe.
@@ -558,6 +594,11 @@ func (tc *timestampCache) AddRequest(req cacheRequest) {
 			panic(fmt.Sprintf("bad reqSpans: %d < %d", tc.reqSpans, minReq.numSpans()))
 		}
 		tc.reqSpans -= minReq.numSpans()
+		minReqSize := minReq.size()
+		if tc.bytes < minReqSize {
+			panic(fmt.Sprintf("bad reqSize: %d < %d", tc.bytes, minReqSize))
+		}
+		tc.bytes -= minReqSize
 	}
 }
 
@@ -585,6 +626,11 @@ func (tc *timestampCache) ExpandRequests(timestamp hlc.Timestamp) {
 			panic(fmt.Sprintf("bad reqSpans: %d < %d", tc.reqSpans, req.numSpans()))
 		}
 		tc.reqSpans -= req.numSpans()
+		reqSize := req.size()
+		if tc.bytes < reqSize {
+			panic(fmt.Sprintf("bad reqSize: %d < %d", tc.bytes, reqSize))
+		}
+		tc.bytes -= reqSize
 		for _, sp := range req.reads {
 			tc.add(sp.Key, sp.EndKey, req.timestamp, req.txnID, true /* readTSCache */)
 		}
@@ -655,7 +701,7 @@ func (tc *timestampCache) getMax(
 // shouldEvict returns true if the cache entry's timestamp is no
 // longer within the MinTSCacheWindow.
 func (tc *timestampCache) shouldEvict(size int, key, value interface{}) bool {
-	if tc.len() <= tc.evictionSizeThreshold {
+	if tc.bytes <= tc.maxBytes {
 		return false
 	}
 	ce := value.(*cacheValue)
