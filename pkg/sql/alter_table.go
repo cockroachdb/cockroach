@@ -44,7 +44,7 @@ func (p *planner) AlterTable(ctx context.Context, n *parser.AlterTable) (planNod
 		return nil, err
 	}
 
-	tableDesc, err := p.getTableDesc(ctx, tn)
+	tableDesc, err := getTableDesc(ctx, p.txn, p.getVirtualTabler(), tn)
 	if err != nil {
 		return nil, err
 	}

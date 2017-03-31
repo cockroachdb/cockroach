@@ -59,7 +59,7 @@ func (p *planner) Set(ctx context.Context, n *parser.Set) (planNode, error) {
 		}
 		if len(dbName) != 0 {
 			// Verify database descriptor exists.
-			if _, err := p.mustGetDatabaseDesc(ctx, dbName); err != nil {
+			if _, err := MustGetDatabaseDesc(ctx, p.txn, p.getVirtualTabler(), dbName); err != nil {
 				return nil, err
 			}
 		}
