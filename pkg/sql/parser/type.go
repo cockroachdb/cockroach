@@ -204,6 +204,7 @@ var aliasedOidToName = map[oid.Oid]string{
 	oid.T_bytea:      "bytea",
 	oid.T_varchar:    "varchar",
 	oid.T_numeric:    "numeric",
+	oid.T_record:     "record",
 	oid.T__int2:      "int2[]",
 	oid.T__int4:      "int4[]",
 	oid.T__int8:      "int8[]",
