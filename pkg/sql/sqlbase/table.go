@@ -94,6 +94,10 @@ func MakeColumnDefDescs(
 			col.DefaultExpr = &s
 		}
 	case *parser.FloatColType:
+		// If the precision for this float col was intentionally specified as 0, return an error.
+		if t.Prec == 0 && t.PrecSpecified {
+			return nil, nil, errors.New("precision for type float must be at least 1 bit")
+		}
 		col.Type.Precision = int32(t.Prec)
 	case *parser.DecimalColType:
 		col.Type.Width = int32(t.Scale)
