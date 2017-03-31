@@ -3441,7 +3441,7 @@ numeric:
       sqllex.Error(err.Error())
       return 1
     }
-    $$.val = newFloatColType(int(prec), len(nv.OrigString) > 0)
+    $$.val = NewFloatColType(int(prec), len(nv.OrigString) > 0)
   }
 | DOUBLE PRECISION
   {
