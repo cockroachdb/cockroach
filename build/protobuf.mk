@@ -16,32 +16,20 @@
 
 # This file is evaluated in the repo's parent directory. See main.go's
 # go:generate invocation.
-
-# To edit in-place without creating a backup file, GNU sed requires a bare -i,
-# while BSD sed requires an empty string as the following argument.
-SED_INPLACE := sed $(shell sed --version 2>&1 | grep -q GNU && echo -i || echo "-i ''")
-
-ORG_ROOT    := .
-REPO_ROOT   := $(ORG_ROOT)/cockroach
-PKG_ROOT    := $(REPO_ROOT)/pkg
+REPO_ROOT := ./cockroach
+include $(REPO_ROOT)/build/common.mk
 
 NATIVE_ROOT := $(PKG_ROOT)/storage/engine
 GITHUB_ROOT := $(REPO_ROOT)/vendor/github.com
-
-# Ensure we have an unambiguous GOPATH
-GOPATH := $(realpath $(ORG_ROOT)/../../..)
-#                                   ^  ^~ GOPATH
-#                                   |~ GOPATH/src
 
 GOGO_PROTOBUF_PACKAGE := github.com/gogo/protobuf
 GOGO_PROTOBUF_TYPES_PACKAGE := $(GOGO_PROTOBUF_PACKAGE)/types
 GOGO_PROTOBUF_PATH := $(GITHUB_ROOT)/../$(GOGO_PROTOBUF_PACKAGE)
 PROTOBUF_PATH  := $(GOGO_PROTOBUF_PATH)/protobuf
 
-GOPATH_BIN      := $(GOPATH)/bin
-PROTOC          := $(GOPATH_BIN)/protoc
+PROTOC          := $(GOPATH)/bin/protoc
 PLUGIN_SUFFIX   := gogoroach
-PROTOC_PLUGIN   := $(GOPATH_BIN)/protoc-gen-$(PLUGIN_SUFFIX)
+PROTOC_PLUGIN   := $(GOPATH)/bin/protoc-gen-$(PLUGIN_SUFFIX)
 GOGOPROTO_PROTO := $(GOGO_PROTOBUF_PATH)/gogoproto/gogo.proto
 
 COREOS_PATH := $(GITHUB_ROOT)/coreos
@@ -65,20 +53,15 @@ GW_SOURCES := $(GW_PROTOS:%.proto=%.pb.gw.go)
 GO_PROTOS := $(addprefix $(REPO_ROOT)/, $(sort $(shell git -C $(REPO_ROOT) ls-files --exclude-standard --cached --others -- '*.proto')))
 GO_SOURCES := $(GO_PROTOS:%.proto=%.pb.go)
 
-UI_JS := $(PKG_ROOT)/ui/src/js/protos.js
-UI_TS := $(PKG_ROOT)/ui/src/js/protos.d.ts
+UI_JS := $(UI_ROOT)/src/js/protos.js
+UI_TS := $(UI_ROOT)/src/js/protos.d.ts
 UI_SOURCES := $(UI_JS) $(UI_TS)
 
 CPP_PROTOS := $(filter %/roachpb/metadata.proto %/roachpb/data.proto %/roachpb/internal.proto %/engine/enginepb/mvcc.proto %/engine/enginepb/rocksdb.proto %/hlc/timestamp.proto %/unresolved_addr.proto,$(GO_PROTOS))
 CPP_HEADERS := $(subst ./,$(NATIVE_ROOT)/,$(CPP_PROTOS:%.proto=%.pb.h))
 CPP_SOURCES := $(subst ./,$(NATIVE_ROOT)/,$(CPP_PROTOS:%.proto=%.pb.cc))
 
-# Tell Make to delete the target if its recipe fails. Otherwise, if a recipe
-# modifies its target before failing, the target's timestamp will make it appear
-# up-to-date on the next invocation of Make, even though it is likely corrupt.
-# See: https://www.gnu.org/software/make/manual/html_node/Errors.html#Errors
-.DELETE_ON_ERROR:
-
+.DEFAULT_GOAL := protos
 .PHONY: protos
 protos: $(GO_SOURCES) $(UI_SOURCES) $(CPP_HEADERS) $(CPP_SOURCES) $(GW_SOURCES)
 
@@ -110,18 +93,15 @@ $(GW_SOURCES) : $(GW_SERVER_PROTOS) $(GW_TS_PROTOS) $(GO_PROTOS) $(GOGOPROTO_PRO
 	$(PROTOC) -I.:$(GOGO_PROTOBUF_PATH):$(PROTOBUF_PATH):$(COREOS_PATH):$(GRPC_GATEWAY_GOOGLEAPIS_PATH) --grpc-gateway_out=logtostderr=true,request_context=true:. $(GW_SERVER_PROTOS)
 	$(PROTOC) -I.:$(GOGO_PROTOBUF_PATH):$(PROTOBUF_PATH):$(COREOS_PATH):$(GRPC_GATEWAY_GOOGLEAPIS_PATH) --grpc-gateway_out=logtostderr=true,request_context=true:. $(GW_TS_PROTOS)
 
-$(PKG_ROOT)/ui/yarn.installed: $(PKG_ROOT)/ui/package.json $(PKG_ROOT)/ui/yarn.lock
-	$(MAKE) -C $(PKG_ROOT)/ui yarn.installed
-
-$(UI_JS): $(GO_PROTOS) $(COREOS_RAFT_PROTOS) $(PKG_ROOT)/ui/yarn.installed
+$(UI_JS): $(GO_PROTOS) $(COREOS_RAFT_PROTOS) $(UI_ROOT)/yarn.installed
 	# Add comment recognized by reviewable.
 	echo '// GENERATED FILE DO NOT EDIT' > $@
-	$(REPO_ROOT)/pkg/ui/node_modules/.bin/pbjs -t static-module -w es6 --strict-long --keep-case --path $(ORG_ROOT) --path $(GOGO_PROTOBUF_PATH) --path $(COREOS_PATH) --path $(GRPC_GATEWAY_GOOGLEAPIS_PATH) $(GW_PROTOS) >> $@
+	pbjs -t static-module -w es6 --strict-long --keep-case --path $(ORG_ROOT) --path $(GOGO_PROTOBUF_PATH) --path $(COREOS_PATH) --path $(GRPC_GATEWAY_GOOGLEAPIS_PATH) $(GW_PROTOS) >> $@
 
 $(UI_TS): $(UI_JS)
 	# Add comment recognized by reviewable.
 	echo '// GENERATED FILE DO NOT EDIT' > $@
-	$(REPO_ROOT)/pkg/ui/node_modules/.bin/pbts $(UI_JS) >> $@
+	pbts $(UI_JS) >> $@
 
 $(CPP_HEADERS) $(CPP_SOURCES): $(PROTOC) $(CPP_PROTOS)
 	(cd $(REPO_ROOT) && git ls-files --exclude-standard --cached --others -- '*.pb.h' '*.pb.cc' | xargs rm -f)
