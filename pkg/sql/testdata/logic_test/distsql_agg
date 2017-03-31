@@ -82,13 +82,58 @@ SELECT SUM(a), MIN(b), MAX(c), COUNT(d) FROM data
 ----
 55000 1 10 10000
 
-# We don't yet support local stages for AVG (or STDDEV, VARIANCE).
+# AVG is more tricky: we do two aggregations (for the sum and for the count)
+# and calculate the average at the end.
+query T
+SELECT url FROM [EXPLAIN (DISTSQL) SELECT AVG(a+b+c+d) FROM data]
+----
+https://raduberinde.github.io/decode.html?eJzElE9rq0AUxffvU8hZJbyBl1GTl-fKR1dZJCn5sypSps5FhMSRcYSW4HcvKqWJlDE0KW4G58-5v3Oc4Z6QKUkrcaQCwRM4GFwweGDwwTBFxJBrFVNRKF0faQUL-YpgwpBmeWnq5YghVpoQnGBScyAE2ImXA21ISNJgkGREemgguU6PQr-FUhgBhg1lknTgjEYhd347oTuuR68ZfUQVgyrNB6Zi1xv4nySaEmFUh7_dL0chH4PhYb1f7ZrvazGf1ctMaUma5EXxqPqWke1--byorbjjsz8ScuePE7pWc3zoS-gxcK9LcIfO2WPgXjm9oXP2GLhXTn_onD0GfqJ5fIHZUJGrrKBOE7msFzGQTKjtP4UqdUyPWsVN8Xa6bk43C5IK0-7ydrLI2q3a1rmYW8XuhZh3xa6d3IP2rGrfLvZv8T21imd28uwW8l-reG4nz28h_7Pf1aTnmdgfWZcdVb_eAwAA__9miKtH
+
+query R
+SELECT AVG(a+b+c+d) FROM data
+----
+22
+
+# Test various combinations of aggregation functions and verify that the
+# aggregation processors are set up correctly.
+query T
+SELECT url FROM [EXPLAIN (DISTSQL) SELECT SUM(a), AVG(b), SUM(c), AVG(d), SUM(a+b+c+d) FROM data]
+----
+https://raduberinde.github.io/decode.html?eJzMlM-OmzAQxu99CmtOQbXUNRiy5eSqpxx2U-XPqUKVi0cIKcHIGKlVxLtXQJImtDKROIQLGo_9-fsxHs0JCq3wXR6xgvg7MKDgA4UAKHCgEEJCoTQ6xarSpj3SC1bqF8QvFPKirG2bTiik2iDEJ7C5PSDEsJM_D7hBqdAABYVW5ofOpDT5UZrfQkkrgcIGC4UmJoIR4RMREMHJYiEY-UiE77XfoPtySBoKurYXy4Y-DvMlywxm0uoBy3b_thDMA9pHfht9Xe_fd-e4ywbXiN_s82s29B5G-0tUF9ooNKjugJJmIvx2__Zj1eINoC-gNyeia37p_fMOn84vIcI2jIhYOv-RzakXRmCe2Qv-nOo0AvPMOgVzqtMIzDPrxOdUpxGYuczg_6BtsCp1UeFgFt_fl1BAlWE_xitdmxS_GZ12l_fLdXe6SyisbL_L-sWq6LdarFsxc4r9OzEbin2384h14FRzt5hP4Q6d4sjtHE1xXjrFr27n1ynOn91v9TLSJu4mG3onzYc_AQAA__9v-P8L
+
+query RRRRR
+SELECT SUM(a), AVG(b), SUM(c), AVG(d), SUM(a+b+c+d) FROM data
+----
+55000 5.5 55000 5.5 220000
+
 query T
 SELECT url FROM [EXPLAIN (DISTSQL) SELECT SUM(a), MIN(b), MAX(c), COUNT(d), AVG(a+b+c+d) FROM data]
 ----
-https://raduberinde.github.io/decode.html?eJzMkzFr8zAQhvfvV5h3Uvg0RLbTwZNCh5IhSUmTUigeVOswhsQykgwtwf-9WKa0CW1KyeJFnHT33D0Y3xG10bRSB3LIniHAEYMjAUcKjhlyjsaagpwzti8ZgIV-RTblqOqm9f1zzlEYS8iO8JXfEzJs1cueNqQ0WXBo8qrahyGNrQ7KvkmtvALHhmpNNoukiGQcySSSacSYFNH_SMaT_kzCmSLvOEzrP0Z2_AeZT4e2NlaTJX1ikHff6M7L0lKpvDmzfdgtmRQTcCwXKybjEM2fmEz66Ha9W22ZTPt4_njH5GxyUVOM6ZvFY5JJxiSTjknmlz3bkGtM7ejsFz_tl3OQLmnYDmdaW9C9NUVoPlzXoTo8aHJ-yIrhsqhDSvRaX2FxEb45gafncHzN5OQaOL0Gnv0Jzrt_7wEAAP__y32t4g==
+https://raduberinde.github.io/decode.html?eJzMlF8LmzAUxd_3KcJ9UhZY4791PqXsyYe2o39gMGRk5iJCayRG2Ch-96GyrZUuFjo6XyS5ycn5eRLuBUolcSPOWEP8BRhQ8ICCDxQCoBBCSqHSKsO6VrrbMggS-R3iBYWirBrTlVMKmdII8QVMYU4IMRzEtxPuUEjUQEGiEcWpN6l0cRb6B5fCCKCww1KijglnhHuE-4QHxHE4I28J99zu6_ffANKWgmrML8uWPg6zynONuTBqxLI_rh3OXKCwTjYO9_rR6rPD_W70cXvcHBwedON-Z3hVDd2Hgf5wNKXSEjXKG4y0_WfI--P6a3IH-nc9cv-SOQ_JO8Ij60-xOV35BMzrr9ybUzoTMK9Px59TOhMwr08nmFM6EzD_t5neAdphXamyxlFTvT0vpYAyx6Ef16rRGX7SKusPH6bbfndfkFibYZUNk6QcljqsazGzir0bMRuLPbvzhLVvVQd2cfAMd2gVR3bn6Bnn91bx0u68fMb5g_2uFhPPxP7Ixt5p--ZnAAAA__8JB_B1
 
 query RIIIR
 SELECT SUM(a), MIN(b), MAX(c), COUNT(d), AVG(a+b+c+d) FROM data
 ----
 55000 1 10 10000 22
+
+# We don't yet support local stages for STDDEV, VARIANCE.
+
+query T
+SELECT url FROM [EXPLAIN (DISTSQL) SELECT SUM(a), round(STDDEV(b), 1) FROM data]
+----
+https://raduberinde.github.io/decode.html?eJzEkjFr8zAQhvfvV5h3cuCGyE6-wZMKyZChaUnSLsWDah3GkEhGkqEl-L8X25TWIQ2UQDqe7p57XsQdYazmtTqwR_YCAUICQgrCDIQ5ckLtbMHeW9eNDMBKvyGbEipTN6F7zgmFdYzsiFCFPSPDTr3uecNKswNBc1DVvpfUrjoo9y61CgqEDRvNLoukiGQSCeQtwTbhc3FLPyi_TI2xTrNjPfLk7ZlQd2XpuFTBnmTaPt3HUkxA2O4Wi-VzLJOuWC2W610s08k4p7ON0bFMKOpalwKL2_9Rcntlenvl7G-P74xyw762xvPJEY735QTWJQ_3623jCn50tuiXD-VDP90_aPZh6IqhWJm-JbpY32FxEf4_gqencHKNOb0Gnl0Dz38F5-2_jwAAAP__E4Saug==
+
+query RR
+SELECT SUM(a), round(STDDEV(b), 1) FROM data
+----
+55000 2.9
+
+query T
+SELECT url FROM [EXPLAIN (DISTSQL) SELECT SUM(a), round(VARIANCE(b), 1) FROM data]
+----
+https://raduberinde.github.io/decode.html?eJzEkjFr8zAQhvfvV5h3cuCGyE6-wZNDm8FD0-KmXYoH1TqMIZGMJENL8H8vtimtQxoogXQ83T33vIg7QBvFG7lnh-QFAoQIhBiEBQhLFITGmpKdM7YfGYFMvSGZE2rdtL5_LgilsYzkAF_7HSPBVr7uOGep2IKg2Mt6N0gaW--lfU-V9BKEnLVimwSpCNIoECg6gmn95-KOflB-mVptrGLLauIpuhOhVlVluZLeHGV6fLoLUzED4XmVZ6vNzTpMo77MbtebbZjGs2lSa1qtwjSioG-diyyu_0vR9ZXx9ZWLvz2_E8qcXWO046MznO4rCKwqHi_YmdaW_GBNOSwfy_thenhQ7PzYFWOR6aEl-ljfYXEW_j-B58dwdIk5vgReXAIvfwUX3b-PAAAA__-rZJs5
+
+query RR
+SELECT SUM(a), round(VARIANCE(b), 1) FROM data
+----
+55000 8.3

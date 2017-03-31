@@ -745,6 +745,8 @@ func (dsp *distSQLPlanner) addAggregators(
 		aggregations[i].ColIdx = uint32(p.planToStreamColMap[i])
 	}
 
+	inputTypes := p.ResultTypes
+
 	// The way our planNode construction currently orders columns between
 	// groupNode and its source is that the first len(n.funcs) columns are the
 	// arguments for the aggregation functions. The remaining columns are
@@ -792,6 +794,7 @@ func (dsp *distSQLPlanner) addAggregators(
 	}
 
 	var finalAggSpec distsqlrun.AggregatorSpec
+	var finalAggPost distsqlrun.PostProcessSpec
 
 	if !multiStage {
 		finalAggSpec = distsqlrun.AggregatorSpec{
@@ -799,40 +802,71 @@ func (dsp *distSQLPlanner) addAggregators(
 			GroupCols:    groupCols,
 		}
 	} else {
-		localAgg := make([]distsqlrun.AggregatorSpec_Aggregation, len(aggregations)+len(groupCols))
-		intermediateTypes := make([]sqlbase.ColumnType, len(aggregations)+len(groupCols))
-		finalAgg := make([]distsqlrun.AggregatorSpec_Aggregation, len(aggregations))
-		finalGroupCols := make([]uint32, len(groupCols))
-
-		for i, e := range aggregations {
+		// Some aggregations might need multiple local and final aggregations (with
+		// a final render expression to get the final result); count of
+		// aggregations.
+		numAgg := 0
+		needRender := false
+		for _, e := range aggregations {
 			info := distsqlplan.DistAggregationTable[e.Func]
-			localAgg[i] = distsqlrun.AggregatorSpec_Aggregation{
-				Func:   info.LocalStage,
-				ColIdx: e.ColIdx,
+			numAgg += len(info.LocalStage)
+			if info.FinalRendering != nil {
+				needRender = true
 			}
-			finalAgg[i] = distsqlrun.AggregatorSpec_Aggregation{
-				Func: info.FinalStage,
-				// The input of the i-th final expression is the output of the i-th
-				// local expression.
-				ColIdx: uint32(i),
-			}
-			var err error
-			_, intermediateTypes[i], err = distsqlrun.GetAggregateInfo(e.Func, p.ResultTypes[e.ColIdx])
-			if err != nil {
-				return err
+		}
+
+		localAgg := make([]distsqlrun.AggregatorSpec_Aggregation, numAgg+len(groupCols))
+		intermediateTypes := make([]sqlbase.ColumnType, numAgg+len(groupCols))
+		finalAgg := make([]distsqlrun.AggregatorSpec_Aggregation, numAgg)
+		finalGroupCols := make([]uint32, len(groupCols))
+		var finalPreRenderTypes []sqlbase.ColumnType
+		if needRender {
+			finalPreRenderTypes = make([]sqlbase.ColumnType, numAgg)
+		}
+
+		aIdx := 0
+		for _, e := range aggregations {
+			info := distsqlplan.DistAggregationTable[e.Func]
+			for i, localFunc := range info.LocalStage {
+				localAgg[aIdx] = distsqlrun.AggregatorSpec_Aggregation{
+					Func:   localFunc,
+					ColIdx: e.ColIdx,
+				}
+
+				_, localResultType, err := distsqlrun.GetAggregateInfo(localFunc, inputTypes[e.ColIdx])
+				if err != nil {
+					return err
+				}
+				intermediateTypes[aIdx] = localResultType
+
+				finalAgg[aIdx] = distsqlrun.AggregatorSpec_Aggregation{
+					Func: info.FinalStage[i],
+					// The input of final expression aIdx is the output of the
+					// local expression aIdx.
+					ColIdx: uint32(aIdx),
+				}
+				if needRender {
+					_, finalPreRenderTypes[aIdx], err = distsqlrun.GetAggregateInfo(
+						info.FinalStage[i], localResultType,
+					)
+					if err != nil {
+						return err
+					}
+				}
+				aIdx++
 			}
 		}
 
 		// Add IDENT expressions for the group columns; these need to be part of the
 		// output of the local stage because the final stage needs them.
 		for i, groupColIdx := range groupCols {
-			exprIdx := len(aggregations) + i
-			localAgg[exprIdx] = distsqlrun.AggregatorSpec_Aggregation{
+			localAgg[aIdx] = distsqlrun.AggregatorSpec_Aggregation{
 				Func:   distsqlrun.AggregatorSpec_IDENT,
 				ColIdx: groupColIdx,
 			}
-			intermediateTypes[exprIdx] = p.ResultTypes[groupColIdx]
-			finalGroupCols[i] = uint32(exprIdx)
+			intermediateTypes[aIdx] = inputTypes[groupColIdx]
+			finalGroupCols[i] = uint32(aIdx)
+			aIdx++
 		}
 
 		localAggSpec := distsqlrun.AggregatorSpec{
@@ -851,6 +885,27 @@ func (dsp *distSQLPlanner) addAggregators(
 			Aggregations: finalAgg,
 			GroupCols:    finalGroupCols,
 		}
+
+		if needRender {
+			// Build rendering expressions.
+			renderExprs := make([]distsqlrun.Expression, len(aggregations))
+			h := distsqlplan.MakeTypeIndexedVarHelper(finalPreRenderTypes)
+			aIdx := 0
+			for i, e := range aggregations {
+				info := distsqlplan.DistAggregationTable[e.Func]
+				if info.FinalRendering == nil {
+					renderExprs[i] = distsqlplan.MakeExpression(h.IndexedVar(aIdx), nil)
+				} else {
+					expr, err := info.FinalRendering(&h, aIdx)
+					if err != nil {
+						return err
+					}
+					renderExprs[i] = distsqlplan.MakeExpression(expr, nil)
+				}
+				aIdx += len(info.LocalStage)
+			}
+			finalAggPost.RenderExprs = renderExprs
+		}
 	}
 
 	// TODO(radu): we could distribute the final stage by hash.
@@ -862,18 +917,19 @@ func (dsp *distSQLPlanner) addAggregators(
 		node = prevStageNode
 	}
 
-	finalOutTypes := make([]sqlbase.ColumnType, len(finalAggSpec.Aggregations))
-	for i, agg := range finalAggSpec.Aggregations {
+	finalOutTypes := make([]sqlbase.ColumnType, len(aggregations))
+	for i, agg := range aggregations {
 		var err error
-		_, finalOutTypes[i], err = distsqlrun.GetAggregateInfo(agg.Func, p.ResultTypes[agg.ColIdx])
+		_, finalOutTypes[i], err = distsqlrun.GetAggregateInfo(agg.Func, inputTypes[agg.ColIdx])
 		if err != nil {
 			return err
 		}
 	}
+
 	p.AddSingleGroupStage(
 		node,
 		distsqlrun.ProcessorCoreUnion{Aggregator: &finalAggSpec},
-		distsqlrun.PostProcessSpec{},
+		finalAggPost,
 		finalOutTypes,
 	)
 
