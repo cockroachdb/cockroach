@@ -839,8 +839,8 @@ func (c *cliState) doPrepareStatementLine(
 
 func (c *cliState) doCheckStatement(startState, contState, execState cliStateEnum) cliStateEnum {
 	// From here on, client-side syntax checking is enabled.
-	var parser parser.Parser
-	parsedStmts, err := parser.Parse(c.concatLines, c.syntax)
+	var p parser.Parser
+	parsedStmts, err := p.Parse(c.concatLines, c.syntax)
 	if err != nil {
 		_ = c.invalidSyntax(0, "statement ignored: %v", err)
 
@@ -871,7 +871,7 @@ func (c *cliState) doCheckStatement(startState, contState, execState cliStateEnu
 	if c.normalizeHistory {
 		// Add statements, not lines, to the history.
 		for i := c.partialStmtsLen; i < len(parsedStmts); i++ {
-			c.addHistory(parsedStmts[i].String() + ";")
+			c.addHistory(parser.AsStringWithFlags(parsedStmts[i], parser.FmtParsable) + ";")
 		}
 	} else {
 		// Add the last lines received to the history.
