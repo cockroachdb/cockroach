@@ -80,7 +80,6 @@ export SHELL := $(shell which bash)
 ifeq ($(SHELL),)
 $(error bash is required)
 endif
-export GIT_PAGER :=
 
 # GNU tar and BSD tar both support transforming filenames according to a regular
 # expression, but have different flags to do so.
