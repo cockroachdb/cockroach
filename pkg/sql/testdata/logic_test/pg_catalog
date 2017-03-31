@@ -675,7 +675,7 @@ oid   typname       typnamespace  typowner  typlen  typbyval  typtype
 2202  regprocedure  1782195457    NULL      8       true      b
 2205  regclass      1782195457    NULL      8       true      b
 2206  regtype       1782195457    NULL      8       true      b
-2249  tuple         1782195457    NULL      0       true      b
+2249  record        1782195457    NULL      0       true      b
 2283  anyelement    1782195457    NULL      -1      false     b
 4089  regnamespace  1782195457    NULL      8       true      b
 
@@ -710,7 +710,7 @@ oid   typname       typcategory  typispreferred  typisdefined  typdelim  typreli
 2202  regprocedure  N            false           true          ,         0         0        0
 2205  regclass      N            false           true          ,         0         0        0
 2206  regtype       N            false           true          ,         0         0        0
-2249  tuple         P            false           true          ,         0         0        0
+2249  record        P            false           true          ,         0         0        0
 2283  anyelement    P            false           true          ,         0         0        0
 4089  regnamespace  N            false           true          ,         0         0        0
 
@@ -745,7 +745,7 @@ oid   typname       typinput        typoutput        typreceive        typsend  
 2202  regprocedure  regprocedurein  regprocedureout  regprocedurerecv  regproceduresend  0         0          0
 2205  regclass      regclassin      regclassout      regclassrecv      regclasssend      0         0          0
 2206  regtype       regtypein       regtypeout       regtyperecv       regtypesend       0         0          0
-2249  tuple         tuple_in        tuple_out        tuple_recv        tuple_send       0         0          0
+2249  record        record_in       record_out       record_recv       record_send       0         0          0
 2283  anyelement    anyelement_in   anyelement_out   anyelement_recv   anyelement_send   0         0          0
 4089  regnamespace  regnamespacein  regnamespaceout  regnamespacerecv  regnamespacesend  0         0          0
 
@@ -780,7 +780,7 @@ oid   typname       typalign  typstorage  typnotnull  typbasetype  typtypmod
 2202  regprocedure  NULL      NULL        false       0            -1
 2205  regclass      NULL      NULL        false       0            -1
 2206  regtype       NULL      NULL        false       0            -1
-2249  tuple         NULL      NULL        false       0            -1
+2249  record        NULL      NULL        false       0            -1
 2283  anyelement    NULL      NULL        false       0            -1
 4089  regnamespace  NULL      NULL        false       0            -1
 
@@ -815,7 +815,7 @@ oid   typname       typndims  typcollation  typdefaultbin  typdefault  typacl
 2202  regprocedure  0         0             NULL           NULL        NULL
 2205  regclass      0         0             NULL           NULL        NULL
 2206  regtype       0         0             NULL           NULL        NULL
-2249  tuple         0         0             NULL           NULL        NULL
+2249  record        0         0             NULL           NULL        NULL
 2283  anyelement    0         0             NULL           NULL        NULL
 4089  regnamespace  0         0             NULL           NULL        NULL
 
