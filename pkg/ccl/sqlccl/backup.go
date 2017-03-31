@@ -397,8 +397,10 @@ func backupPlanHook(
 			return nil, err
 		}
 		if err := jobLogger.Succeeded(ctx); err != nil {
-			log.Errorf(ctx, "BACKUP ignoring error while marking job '%s' as successful: %+v",
-				description, err)
+			// An error while marking the job as successful is not important enough to
+			// merit failing the entire backup.
+			log.Errorf(ctx, "BACKUP ignoring error while marking job %d (%s) as successful: %+v",
+				jobLogger.JobID(), description, err)
 		}
 		ret := []parser.Datums{{
 			parser.NewDString(to),

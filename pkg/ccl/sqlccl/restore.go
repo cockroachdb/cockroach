@@ -720,8 +720,10 @@ func restorePlanHook(
 			return nil, err
 		}
 		if err := jobLogger.Succeeded(ctx); err != nil {
-			log.Errorf(ctx, "RESTORE ignoring error while marking job '%s' as successful: %+v",
-				description, err)
+			// An error while marking the job as successful is not important enough to
+			// merit failing the entire restore.
+			log.Errorf(ctx, "RESTORE ignoring error while marking job %d (%s) as successful: %+v",
+				jobLogger.JobID(), description, err)
 		}
 		return nil, nil
 	}
