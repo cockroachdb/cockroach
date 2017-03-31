@@ -30,7 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
-	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -516,8 +515,6 @@ const (
 	snapTypePreemptive = "preemptive"
 )
 
-var fastClearRange = envutil.EnvOrDefaultBool("COCKROACH_ENABLE_FAST_CLEAR_RANGE", false)
-
 func clearRangeData(desc *roachpb.RangeDescriptor, eng engine.Engine, batch engine.Batch) error {
 	iter := eng.NewIterator(false)
 	defer iter.Close()
@@ -527,7 +524,7 @@ func clearRangeData(desc *roachpb.RangeDescriptor, eng engine.Engine, batch engi
 		// The metadata ranges have a relatively small number of keys making usage
 		// of range tombstones (as created by ClearRange) a pessimization.
 		var err error
-		if i < metadataRanges || !fastClearRange {
+		if i < metadataRanges {
 			err = batch.ClearIterRange(iter, keyRange.start, keyRange.end)
 		} else {
 			err = batch.ClearRange(keyRange.start, keyRange.end)
