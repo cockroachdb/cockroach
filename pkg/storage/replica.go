@@ -1604,6 +1604,8 @@ func makeCacheRequest(ba *roachpb.BatchRequest, br *roachpb.BatchResponse) cache
 					// Make a copy of the key to avoid holding on to the large buffer the
 					// key was allocated from for the response.
 					src := resp.Rows[len(resp.Rows)-1].Key
+					// Size the new key to be exactly what we need for key.Next() to not
+					// allocate.
 					key := make(roachpb.Key, len(src), len(src)+1)
 					copy(key, src)
 					header.EndKey = key.Next()
