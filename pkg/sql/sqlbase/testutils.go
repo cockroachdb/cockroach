@@ -87,9 +87,11 @@ func RandDatum(rng *rand.Rand, typ ColumnType, null bool) parser.Datum {
 	case ColumnType_TIMESTAMP:
 		return &parser.DTimestamp{Time: time.Unix(rng.Int63n(1000000), rng.Int63n(1000000))}
 	case ColumnType_INTERVAL:
-		return &parser.DInterval{Duration: duration.Duration{Months: rng.Int63n(1000),
-			Days:  rng.Int63n(1000),
-			Nanos: rng.Int63n(1000000),
+		sign := 1 - rng.Int63n(2)*2
+		return &parser.DInterval{Duration: duration.Duration{
+			Months: sign * rng.Int63n(1000),
+			Days:   sign * rng.Int63n(1000),
+			Nanos:  sign * rng.Int63n(25*3600*int64(1000000000)),
 		}}
 	case ColumnType_STRING:
 		// Generate a random ASCII string.

@@ -1788,7 +1788,7 @@ func TestPrettyPrintValueEncoded(t *testing.T) {
 		{EncodeTimeValue(nil, NoColumnID,
 			time.Date(2016, 6, 29, 16, 2, 50, 5, time.UTC)), "2016-06-29T16:02:50.000000005Z"},
 		{EncodeDurationValue(nil, NoColumnID,
-			duration.Duration{Months: 1, Days: 2, Nanos: 3}), "1m2d3ns"},
+			duration.Duration{Months: 1, Days: 2, Nanos: 3}), "1mon2d3ns"},
 		{EncodeBytesValue(nil, NoColumnID, []byte{0x1, 0x2, 0xF, 0xFF}), "01020fff"},
 		{EncodeBytesValue(nil, NoColumnID, []byte("foo")), "foo"},
 	}
