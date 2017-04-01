@@ -311,6 +311,9 @@ func (dsp *distSQLPlanner) checkSupportForNode(node planNode) (distRecommendatio
 		}
 		return dsp.checkSupportForNode(n.plan)
 
+	case *distinctNode:
+		return dsp.checkSupportForNode(n.plan)
+
 	default:
 		return 0, errors.Errorf("unsupported node %T", node)
 	}
@@ -1268,9 +1271,55 @@ func (dsp *distSQLPlanner) createPlanForNode(
 		}
 		return plan, nil
 
+	case *distinctNode:
+		return dsp.createPlanForDistinct(planCtx, n)
+
 	default:
 		panic(fmt.Sprintf("unsupported node type %T", n))
 	}
+}
+
+func (dsp *distSQLPlanner) createPlanForDistinct(
+	planCtx *planningCtx, n *distinctNode,
+) (physicalPlan, error) {
+	plan, err := dsp.createPlanForNode(planCtx, n.plan)
+	if err != nil {
+		return physicalPlan{}, err
+	}
+	currentResultRouters := plan.ResultRouters
+	var orderedColumns []uint32
+	for i := 0; i < len(n.columnsInOrder); i++ {
+		if n.columnsInOrder[i] {
+			orderedColumns = append(orderedColumns, uint32(i))
+		}
+	}
+	var distinctColumns []uint32
+	for i := range n.Columns() {
+		if plan.planToStreamColMap[i] != -1 {
+			distinctColumns = append(distinctColumns, uint32(i))
+		}
+	}
+
+	distinctSpec := distsqlrun.ProcessorCoreUnion{
+		Distinct: &distsqlrun.DistinctSpec{
+			OrderedColumns:  orderedColumns,
+			DistinctColumns: distinctColumns,
+		},
+	}
+
+	if len(currentResultRouters) == 1 {
+		plan.AddNoGroupingStage(distinctSpec, distsqlrun.PostProcessSpec{}, plan.ResultTypes, plan.MergeOrdering)
+		return plan, nil
+	}
+
+	// TODO(arjun): This is potentially memory inefficient if we don't have any sorted columns.
+
+	// Add distinct processors local to each existing current result processor.
+	plan.AddNoGroupingStage(distinctSpec, distsqlrun.PostProcessSpec{}, plan.ResultTypes, plan.MergeOrdering)
+
+	// TODO(arjun): We could distribute this final stage by hash.
+	plan.AddSingleGroupStage(dsp.nodeDesc.NodeID, distinctSpec, distsqlrun.PostProcessSpec{}, plan.ResultTypes)
+	return plan, nil
 }
 
 func (dsp *distSQLPlanner) NewPlanningCtx(ctx context.Context, txn *client.Txn) planningCtx {
