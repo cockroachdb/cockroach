@@ -55,7 +55,6 @@ var errNoTransactionInProgress = errors.New("there is no transaction in progress
 var errNoTransactionToPipeline = errors.New("statement pipelining is only allowed in a transaction")
 var errStaleMetadata = errors.New("metadata is still stale")
 var errTransactionInProgress = errors.New("there is already a transaction in progress")
-var errNotRetriable = errors.New("the transaction is not in a retriable state")
 
 const sqlTxnName string = "sql txn"
 const sqlImplicitTxnName string = "sql txn implicit"
@@ -1038,7 +1037,6 @@ func (e *Executor) execStmtInAbortedTxn(session *Session, stmt parser.Statement)
 		if txnState.State == RestartWait {
 			// Reset the state. Txn is Open again.
 			txnState.State = Open
-			txnState.retrying = true
 			// TODO(andrei/cdo): add a counter for user-directed retries.
 			return Result{}, nil
 		}
@@ -1174,17 +1172,9 @@ func (e *Executor) execStmtInOpenTxn(
 			return Result{}, err
 		}
 		// We want to disallow SAVEPOINTs to be issued after a transaction has
-		// started running, but such enforcement is problematic in the
-		// presence of transaction retries (since the transaction proto is
-		// necessarily reused). To work around this, we keep track of the
-		// transaction's retrying state and special-case SAVEPOINT when it is
-		// set.
-		//
-		// TODO(andrei): the check for retrying is a hack - we erroneously
-		// allow SAVEPOINT to be issued at any time during a retry, not just
-		// in the beginning. We should figure out how to track whether we
-		// started using the transaction during a retry.
-		if txnState.txn.IsInitialized() && !txnState.retrying {
+		// started running. The client txn's statement count indicates how many
+		// statements have been executed as part of this transaction.
+		if txnState.txn.CommandCount() > 0 {
 			return Result{}, errors.Errorf("SAVEPOINT %s needs to be the first statement in a "+
 				"transaction", parser.RestartSavepointName)
 		}
@@ -1194,10 +1184,11 @@ func (e *Executor) execStmtInOpenTxn(
 		return Result{}, nil
 	case *parser.RollbackToSavepoint:
 		err := parser.ValidateRestartCheckpoint(s.Savepoint)
-		if err == nil {
-			// Can't restart if we didn't get an error first, which would've put the
-			// txn in a different state.
-			err = errNotRetriable
+		// If commands have already been sent through the transaction,
+		// restart the client txn's proto to increment the epoch. The SQL
+		// txn's state is already set to OPEN.
+		if err == nil && txnState.txn.CommandCount() > 0 {
+			txnState.txn.Proto().Restart(0, 0, hlc.Timestamp{})
 		}
 		return Result{}, err
 	case *parser.Prepare:

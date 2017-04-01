@@ -462,12 +462,6 @@ type txnState struct {
 	// Ctx is the context for everything running in this SQL txn.
 	Ctx context.Context
 
-	// retrying is used to work around the non-idempotence of SAVEPOINT
-	// queries.
-	//
-	// See the comment at the site of its use for more detail.
-	retrying bool
-
 	// If set, the user declared the intention to retry the txn in case of retriable
 	// errors. The txn will enter a RestartWait state in case of such errors.
 	retryIntent bool
@@ -511,7 +505,6 @@ func (ts *txnState) resetForNewSQLTxn(e *Executor, s *Session) {
 	}
 
 	// Reset state vars to defaults.
-	ts.retrying = false
 	ts.retryIntent = false
 	ts.autoRetry = false
 	ts.commitSeen = false

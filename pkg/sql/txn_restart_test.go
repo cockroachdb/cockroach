@@ -933,13 +933,8 @@ func TestRollbackToSavepointStatement(t *testing.T) {
 	s, sqlDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop()
 
-	// ROLLBACK TO SAVEPOINT without a transaction
-	_, err := sqlDB.Exec("ROLLBACK TO SAVEPOINT cockroach_restart")
-	if !testutils.IsError(err, "the transaction is not in a retriable state") {
-		t.Fatalf("unexpected error: %v", err)
-	}
 	// ROLLBACK TO SAVEPOINT with a wrong name
-	_, err = sqlDB.Exec("ROLLBACK TO SAVEPOINT foo")
+	_, err := sqlDB.Exec("ROLLBACK TO SAVEPOINT foo")
 	if !testutils.IsError(err, "SAVEPOINT not supported except for COCKROACH_RESTART") {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -950,6 +945,10 @@ func TestRollbackToSavepointStatement(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, err := tx.Exec("SAVEPOINT cockroach_restart"); err != nil {
+		t.Fatal(err)
+	}
+	// ROLLBACK TO SAVEPOINT without an "empty" transaction.
+	if _, err := sqlDB.Exec("ROLLBACK TO SAVEPOINT cockroach_restart"); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := tx.Exec("BOGUS SQL STATEMENT"); !testutils.IsError(err, `syntax error at or near "BOGUS"`) {
