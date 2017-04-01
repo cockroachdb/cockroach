@@ -6133,7 +6133,7 @@ func TestReplicaCancelRaft(t *testing.T) {
 			if err := ba.SetActiveTimestamp(tc.Clock().Now); err != nil {
 				t.Fatal(err)
 			}
-			_, pErr := tc.repl.addWriteCmd(ctx, ba)
+			_, pErr := tc.repl.executeWriteBatch(ctx, ba)
 			if cancelEarly {
 				if !testutils.IsPError(pErr, context.Canceled.Error()) {
 					t.Fatalf("expected canceled error; got %v", pErr)
@@ -6190,7 +6190,7 @@ func TestReplicaTryAbandon(t *testing.T) {
 	if err := ba.SetActiveTimestamp(tc.Clock().Now); err != nil {
 		t.Fatal(err)
 	}
-	_, pErr := tc.repl.addWriteCmd(ctx, ba)
+	_, pErr := tc.repl.executeWriteBatch(ctx, ba)
 	if pErr == nil {
 		t.Fatalf("expected failure, but found success")
 	}
@@ -6578,7 +6578,7 @@ func TestReplicaRetryRaftProposal(t *testing.T) {
 	iArg := incrementArgs(roachpb.Key("b"), expInc)
 	ba.Add(&iArg)
 	{
-		br, pErr, retry := tc.repl.tryAddWriteCmd(
+		br, pErr, retry := tc.repl.tryExecuteWriteBatch(
 			context.WithValue(ctx, magicKey{}, "foo"),
 			ba,
 		)
@@ -6592,7 +6592,7 @@ func TestReplicaRetryRaftProposal(t *testing.T) {
 
 	atomic.StoreInt32(&c, 0)
 	{
-		br, pErr := tc.repl.addWriteCmd(
+		br, pErr := tc.repl.executeWriteBatch(
 			context.WithValue(ctx, magicKey{}, "foo"),
 			ba,
 		)
@@ -7240,7 +7240,7 @@ func TestReplicaEvaluationNotTxnMutation(t *testing.T) {
 	ba.Add(&txnPut)
 	ba.Add(&txnPut)
 
-	batch, _, _, _, pErr := tc.repl.executeWriteBatch(ctx, makeIDKey(), ba, nil)
+	batch, _, _, _, pErr := tc.repl.evaluateTxnWriteBatch(ctx, makeIDKey(), ba, nil)
 	defer batch.Close()
 	if pErr != nil {
 		t.Fatal(pErr)

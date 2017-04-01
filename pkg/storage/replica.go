@@ -1425,11 +1425,8 @@ func (r *Replica) maybeInitializeRaftGroup(ctx context.Context) {
 	}
 }
 
-// Send adds a command for execution on this range. The command's
-// affected keys are verified to be contained within the range and the
-// range's lease is confirmed. The command is then dispatched
-// either along the read-only execution path or the read-write Raft
-// command queue.
+// Send executes a command on this range, dispatching it to the
+// read-only, read-write, or admin execution path as appropriate.
 // ctx should contain the log tags from the store (and up).
 func (r *Replica) Send(
 	ctx context.Context, ba roachpb.BatchRequest,
@@ -1455,13 +1452,13 @@ func (r *Replica) Send(
 	var pErr *roachpb.Error
 	if ba.IsWrite() {
 		log.Event(ctx, "read-write path")
-		br, pErr = r.addWriteCmd(ctx, ba)
+		br, pErr = r.executeWriteBatch(ctx, ba)
 	} else if ba.IsReadOnly() {
 		log.Event(ctx, "read-only path")
-		br, pErr = r.addReadOnlyCmd(ctx, ba)
+		br, pErr = r.executeReadOnlyBatch(ctx, ba)
 	} else if ba.IsAdmin() {
 		log.Event(ctx, "admin path")
-		br, pErr = r.addAdminCmd(ctx, ba)
+		br, pErr = r.executeAdminBatch(ctx, ba)
 	} else if len(ba.Requests) == 0 {
 		// empty batch; shouldn't happen (we could handle it, but it hints
 		// at someone doing weird things, and once we drop the key range
@@ -1937,12 +1934,12 @@ func (r *Replica) applyTimestampCache(ba *roachpb.BatchRequest) (bool, *roachpb.
 	return bumped, nil
 }
 
-// addAdminCmd executes the command directly. There is no interaction
+// executeAdminBatch executes the command directly. There is no interaction
 // with the command queue or the timestamp cache, as admin commands
 // are not meant to consistently access or modify the underlying data.
 // Admin commands must run on the lease holder replica. Batch support here is
 // limited to single-element batches; everything else catches an error.
-func (r *Replica) addAdminCmd(
+func (r *Replica) executeAdminBatch(
 	ctx context.Context, ba roachpb.BatchRequest,
 ) (*roachpb.BatchResponse, *roachpb.Error) {
 	if len(ba.Requests) != 1 {
@@ -2019,10 +2016,10 @@ func (r *Replica) addAdminCmd(
 	return br, nil
 }
 
-// addReadOnlyCmd updates the read timestamp cache and waits for any
+// executeReadOnlyBatch updates the read timestamp cache and waits for any
 // overlapping writes currently processing through Raft ahead of us to
 // clear via the command queue.
-func (r *Replica) addReadOnlyCmd(
+func (r *Replica) executeReadOnlyBatch(
 	ctx context.Context, ba roachpb.BatchRequest,
 ) (br *roachpb.BatchResponse, pErr *roachpb.Error) {
 	// If the read is consistent, the read requires the range lease.
@@ -2068,12 +2065,12 @@ func (r *Replica) addReadOnlyCmd(
 		return nil, roachpb.NewError(err)
 	}
 
-	// Execute read-only batch command. It checks for matching key range; note
-	// that holding readMu throughout is important to avoid reads from the
+	// Evaluate read-only batch command. It checks for matching key range; note
+	// that holding readOnlyCmdMu throughout is important to avoid reads from the
 	// "wrong" key range being served after the range has been split.
 	var result EvalResult
 	rec := ReplicaEvalContext{r, spans}
-	br, result, pErr = executeBatch(ctx, storagebase.CmdIDKey(""), r.store.Engine(), rec, nil, ba)
+	br, result, pErr = evaluateBatch(ctx, storagebase.CmdIDKey(""), r.store.Engine(), rec, nil, ba)
 
 	if pErr == nil && ba.Txn != nil && ba.Txn.Writing {
 		// Checking whether the transaction has been aborted on reads makes sure
@@ -2098,8 +2095,8 @@ func (r *Replica) addReadOnlyCmd(
 	return br, pErr
 }
 
-// addWriteCmd is the entry point for client requests which may mutate the
-// Range's replicated state. Requests taking this path are ultimately
+// executeWriteBatch is the entry point for client requests which may mutate the
+// range's replicated state. Requests taking this path are ultimately
 // serialized through Raft, but pass through additional machinery whose goal is
 // to allow commands which commute to be proposed in parallel. The naive
 // alternative, submitting requests to Raft one after another, paying massive
@@ -2108,12 +2105,12 @@ func (r *Replica) addReadOnlyCmd(
 // Internally, multiple iterations of the above process may take place
 // due to the Raft proposal failing retryably, possibly due to proposal
 // reordering or re-proposals.
-func (r *Replica) addWriteCmd(
+func (r *Replica) executeWriteBatch(
 	ctx context.Context, ba roachpb.BatchRequest,
 ) (*roachpb.BatchResponse, *roachpb.Error) {
 	var ambiguousResult bool
 	for count := 0; ; count++ {
-		br, pErr, retry := r.tryAddWriteCmd(ctx, ba)
+		br, pErr, retry := r.tryExecuteWriteBatch(ctx, ba)
 		switch retry {
 		case proposalIllegalLeaseIndex:
 			continue // retry
@@ -2149,16 +2146,14 @@ func (r *Replica) addWriteCmd(
 	}
 }
 
-// tryAddWriteCmd is invoked by addWriteCmd, who will call this method
-// until the returned retry does not indicate a retry condition, in
-// which case a result of the proposal (which is either an error or a
-// successful response) is returned. Retries may happen if either the
-// proposal was submitted to Raft but did not end up in a legal log
-// position, or the proposal was submitted to Raft and then was
-// re-proposed. On re-proposals, the proposal may have applied
-// successfully and so the caller must be careful to indicate an
-// ambiguous result to the caller in the event proposalReproposed
-// is returned.
+// tryExecuteWriteBatch is invoked by executeWriteBatch, which will
+// call this method until it returns a non-retryable result. Retries
+// may happen if either the proposal was submitted to Raft but did not
+// end up in a legal log position, or the proposal was submitted to
+// Raft and then was re-proposed. On re-proposals, the proposal may
+// have applied successfully and so the caller must be careful to
+// indicate an ambiguous result to the caller in the event
+// proposalReproposed is returned.
 //
 // Concretely,
 //
@@ -2169,9 +2164,9 @@ func (r *Replica) addWriteCmd(
 // - The timestamp cache is checked to determine if the command's affected keys
 //   were accessed with a timestamp exceeding that of the command; if so, the
 //   command's timestamp is incremented accordingly.
-// - A RaftCommand is constructed. If proposer-evaluated KV is active, the request
-//   and the EvalResult is placed in the RaftCommand. If not, the request itself
-//   is added to the command.
+// - A RaftCommand is constructed. If proposer-evaluated KV is active,
+//   the request is evaluated and the EvalResult is placed in the
+//   RaftCommand. If not, the request itself is added to the command.
 // - The proposal is inserted into the Replica's in-flight proposals map,
 //   a lease index is assigned to it, and it is submitted to Raft, returning
 //   a channel.
@@ -2187,7 +2182,7 @@ func (r *Replica) addWriteCmd(
 // NB: changing BatchRequest to a pointer here would have to be done cautiously
 // as this method makes the assumption that it operates on a shallow copy (see
 // call to applyTimestampCache).
-func (r *Replica) tryAddWriteCmd(
+func (r *Replica) tryExecuteWriteBatch(
 	ctx context.Context, ba roachpb.BatchRequest,
 ) (br *roachpb.BatchResponse, pErr *roachpb.Error, retry proposalRetryReason) {
 	startTime := timeutil.Now()
@@ -2351,7 +2346,7 @@ func (r *Replica) tryAddWriteCmd(
 	}
 }
 
-// requestToProposal converts a BatchRequest into an EvalResult,
+// requestToProposal converts a BatchRequest into a ProposalData,
 // evalutating it or not according to the propEvalKV setting. The
 // returned ProposalData is partially valid even on a non-nil
 // *roachpb.Error.
@@ -2392,10 +2387,11 @@ func (r *Replica) requestToProposal(
 	return proposal, pErr
 }
 
-// evaluateProposal generates an EvalResult from the given request by evaluating
-// it, returning both state which is held only on the proposer and that which
-// is to be replicated through Raft. The return value is ready to be inserted
-// into Replica's proposal map and subsequently passed to submitProposalLocked.
+// evaluateProposal generates an EvalResult from the given request by
+// evaluating it, returning both state which is held only on the
+// proposer and that which is to be replicated through Raft. The
+// return value is ready to be inserted into Replica's proposal map
+// and subsequently passed to submitProposalLocked.
 //
 // If an *Error is returned, the proposal should fail fast, i.e. be
 // sent directly back to the client without going through Raft, but
@@ -2417,7 +2413,7 @@ func (r *Replica) evaluateProposal(
 		return nil, roachpb.NewErrorf("can't propose Raft command with zero timestamp")
 	}
 
-	result = r.applyRaftCommandInBatch(ctx, idKey, ba, spans)
+	result = r.evaluateProposalInner(ctx, idKey, ba, spans)
 
 	if result.Local.Err != nil {
 		// Failed proposals (whether they're failfast or not) can't have any
@@ -3999,7 +3995,7 @@ func (r *Replica) applyRaftCommand(
 	return rResult.Delta, nil
 }
 
-// applyRaftCommandInBatch executes the command in a batch engine and returns
+// evaluateProposalInner executes the command in a batch engine and returns
 // the batch containing the results. If the return value contains a non-nil
 // WriteBatch, the caller should go ahead with the proposal (eventually
 // committing the data contained in the batch), even when the Err field is set
@@ -4012,16 +4008,16 @@ func (r *Replica) applyRaftCommand(
 // but the resulting WriteTooOld flag on the transaction is lost, letting the
 // test pass erroneously.
 //
-// TODO(tschottdorf): rename to evaluateRaftCommandInBatch (or something like
-// that).
-func (r *Replica) applyRaftCommandInBatch(
+// TODO(bdarnell): merge evaluateProposal and evaluateProposalInner. There
+// is no longer a clear distinction between them.
+func (r *Replica) evaluateProposalInner(
 	ctx context.Context, idKey storagebase.CmdIDKey, ba roachpb.BatchRequest, spans *SpanSet,
 ) EvalResult {
 	// Keep track of original txn Writing state to sanitize txn
 	// reported with any error except TransactionRetryError.
 	wasWriting := ba.Txn != nil && ba.Txn.Writing
 
-	// Execute the commands. If this returns without an error, the batch should
+	// Evaluate the commands. If this returns without an error, the batch should
 	// be committed.
 	var result EvalResult
 	var batch engine.Batch
@@ -4031,7 +4027,7 @@ func (r *Replica) applyRaftCommandInBatch(
 		var pErr *roachpb.Error
 		var ms enginepb.MVCCStats
 		var br *roachpb.BatchResponse
-		batch, ms, br, result, pErr = r.executeWriteBatch(ctx, idKey, ba, spans)
+		batch, ms, br, result, pErr = r.evaluateTxnWriteBatch(ctx, idKey, ba, spans)
 		result.Replicated.Delta = ms
 		result.Local.Reply = br
 		result.Local.Err = pErr
@@ -4119,17 +4115,22 @@ type intentsWithArg struct {
 	intents []roachpb.Intent
 }
 
-// executeWriteBatch attempts to execute transactional batches on the
-// 1-phase-commit path as just an atomic, non-transactional batch of
-// write commands. One phase commit batches contain transactional
+// evaluateTxnWriteBatch attempts to execute transactional batches on
+// the 1-phase-commit path as just an atomic, non-transactional batch
+// of write commands. One phase commit batches contain transactional
 // writes sandwiched by BeginTransaction and EndTransaction requests.
 //
 // If the batch is transactional, and there's nothing to suggest that
 // the transaction will require retry or restart, the batch's txn is
 // stripped and it's executed as a normal batch write. If the writes
-// cannot all be completed at the intended timestamp, the batch's
-// txn is restored and it's re-executed as transactional.
-func (r *Replica) executeWriteBatch(
+// cannot all be completed at the intended timestamp, the batch's txn
+// is restored and it's re-executed as transactional. This allows it
+// to lay down intents and return an appropriate retryable error.
+//
+// This method is also responsible for checking the abort cache.
+// TODO(bdarnell): Can we move checkIfTxnAborted from here and
+// executeReadOnlyBatch to evaluateBatch?
+func (r *Replica) evaluateTxnWriteBatch(
 	ctx context.Context, idKey storagebase.CmdIDKey, ba roachpb.BatchRequest, spans *SpanSet,
 ) (engine.Batch, enginepb.MVCCStats, *roachpb.BatchResponse, EvalResult, *roachpb.Error) {
 	ms := enginepb.MVCCStats{}
@@ -4152,7 +4153,7 @@ func (r *Replica) executeWriteBatch(
 			batch = makeSpanSetBatch(batch, spans)
 		}
 		rec := ReplicaEvalContext{r, spans}
-		br, result, pErr := executeBatch(ctx, idKey, batch, rec, &ms, strippedBa)
+		br, result, pErr := evaluateBatch(ctx, idKey, batch, rec, &ms, strippedBa)
 		if pErr == nil && ba.Timestamp == br.Timestamp {
 			clonedTxn := ba.Txn.Clone()
 			clonedTxn.Writing = true
@@ -4216,7 +4217,7 @@ func (r *Replica) executeWriteBatch(
 		batch = makeSpanSetBatch(batch, spans)
 	}
 	rec := ReplicaEvalContext{r, spans}
-	br, result, pErr := executeBatch(ctx, idKey, batch, rec, &ms, ba)
+	br, result, pErr := evaluateBatch(ctx, idKey, batch, rec, &ms, ba)
 	return batch, ms, br, result, pErr
 }
 
@@ -4330,7 +4331,10 @@ func optimizePuts(
 	return reqs
 }
 
-func executeBatch(
+// evaluateBatch evaluates a batch request by splitting it up into its
+// individual commands, passing them to evaluateCommand, and combining
+// the results.
+func evaluateBatch(
 	ctx context.Context,
 	idKey storagebase.CmdIDKey,
 	batch engine.ReadWriter,
@@ -4386,7 +4390,7 @@ func executeBatch(
 		// Note that responses are populated even when an error is returned.
 		// TODO(tschottdorf): Change that. IIRC there is nontrivial use of it currently.
 		reply := br.Responses[index].GetInner()
-		curResult, pErr := executeCmd(ctx, idKey, index, batch, rec, ms, ba.Header, maxKeys, args, reply)
+		curResult, pErr := evaluateCommand(ctx, idKey, index, batch, rec, ms, ba.Header, maxKeys, args, reply)
 
 		if err := result.MergeAndDestroy(curResult); err != nil {
 			// TODO(tschottdorf): see whether we really need to pass nontrivial
@@ -4638,10 +4642,10 @@ func (r *Replica) maybeGossipNodeLiveness(ctx context.Context, span roachpb.Span
 	ba := roachpb.BatchRequest{}
 	ba.Timestamp = r.store.Clock().Now()
 	ba.Add(&roachpb.ScanRequest{Span: span})
-	// Call executeBatch instead of Send to avoid command queue reentrance.
+	// Call evaluateBatch instead of Send to avoid command queue reentrance.
 	rec := ReplicaEvalContext{r, nil}
 	br, result, pErr :=
-		executeBatch(ctx, storagebase.CmdIDKey(""), r.store.Engine(), rec, nil, ba)
+		evaluateBatch(ctx, storagebase.CmdIDKey(""), r.store.Engine(), rec, nil, ba)
 	if pErr != nil {
 		return errors.Wrapf(pErr.GoError(), "couldn't scan node liveness records in span %s", span)
 	}
@@ -4718,9 +4722,9 @@ func (r *Replica) loadSystemConfig(ctx context.Context) (config.SystemConfig, er
 	ba.ReadConsistency = roachpb.INCONSISTENT
 	ba.Timestamp = r.store.Clock().Now()
 	ba.Add(&roachpb.ScanRequest{Span: keys.SystemConfigSpan})
-	// Call executeBatch instead of Send to avoid command queue reentrance.
+	// Call evaluateBatch instead of Send to avoid command queue reentrance.
 	rec := ReplicaEvalContext{r, nil}
-	br, result, pErr := executeBatch(
+	br, result, pErr := evaluateBatch(
 		ctx, storagebase.CmdIDKey(""), r.store.Engine(), rec, nil, ba,
 	)
 	if pErr != nil {
