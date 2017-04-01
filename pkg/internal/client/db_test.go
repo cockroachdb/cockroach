@@ -396,7 +396,7 @@ func TestCommonMethods(t *testing.T) {
 		{txnType, "SetTxnAnchorKey"}:           {},
 		{txnType, "UpdateDeadlineMaybe"}:       {},
 		{txnType, "AddCommitTrigger"}:          {},
-		{txnType, "IsInitialized"}:             {},
+		{txnType, "StatementCount"}:            {},
 		{txnType, "IsRetryableErrMeantForTxn"}: {},
 		{txnType, "Isolation"}:                 {},
 		{txnType, "OrigTimestamp"}:             {},
