@@ -96,8 +96,8 @@ func TestTypeCheck(t *testing.T) {
 		{`1 + 2`, `3:::INT`},
 		{`1:::decimal + 2`, `1:::DECIMAL + 2:::DECIMAL`},
 		{`1:::float + 2`, `1.0:::FLOAT + 2.0:::FLOAT`},
-		{`INTERVAL '1.5s' * 2`, `'1.5s':::INTERVAL * 2:::INT`},
-		{`2 * INTERVAL '1.5s'`, `2:::INT * '1.5s':::INTERVAL`},
+		{`INTERVAL '1.5s' * 2`, `'1s500ms':::INTERVAL * 2:::INT`},
+		{`2 * INTERVAL '1.5s'`, `2:::INT * '1s500ms':::INTERVAL`},
 
 		{`1 + $1`, `1:::INT + $1:::INT`},
 		{`1:::DECIMAL + $1`, `1:::DECIMAL + $1:::DECIMAL`},

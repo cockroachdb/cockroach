@@ -805,9 +805,9 @@ func TestParse2(t *testing.T) {
 		{`SET TIME ZONE "Europe/Rome"`,
 			`SET TIME ZONE 'Europe/Rome'`},
 		{`SET TIME ZONE INTERVAL '-7h'`,
-			`SET TIME ZONE '-7h0m0s'`},
+			`SET TIME ZONE '-7h'`},
 		{`SET TIME ZONE INTERVAL '-7h0m5s' HOUR TO MINUTE`,
-			`SET TIME ZONE '-7h0m0s'`},
+			`SET TIME ZONE '-6h-59m'`},
 		// Special substring syntax
 		{`SELECT SUBSTRING('RoacH' from 2 for 3)`,
 			`SELECT substring('RoacH', 2, 3)`},
@@ -953,11 +953,11 @@ SET a = 1,
 b = 2
   ^
 `},
-		{`SET TIME ZONE INTERVAL 'foobar'`, `could not parse 'foobar' as type interval: time: invalid duration foobar at or near "EOF"
+		{`SET TIME ZONE INTERVAL 'foobar'`, `could not parse 'foobar' as type interval: interval: missing unit at position 0: "foobar" at or near "EOF"
 SET TIME ZONE INTERVAL 'foobar'
                                ^
 `},
-		{`SELECT INTERVAL 'foo'`, `could not parse 'foo' as type interval: time: invalid duration foo at or near "EOF"
+		{`SELECT INTERVAL 'foo'`, `could not parse 'foo' as type interval: interval: missing unit at position 0: "foo" at or near "EOF"
 SELECT INTERVAL 'foo'
                      ^
 `},

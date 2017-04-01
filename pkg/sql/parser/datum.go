@@ -1402,22 +1402,15 @@ func parseDInterval(s string, field durationField) (*DInterval, error) {
 			return nil, makeParseError(s, TypeInterval, err)
 		}
 		return &DInterval{Duration: dur}, nil
-	} else if strings.ContainsRune(s, ' ') {
-		// If it has a space, then we're most likely a postgres string,
-		// as golang duration does not permit spaces and iso8601, SQL standard have been tested.
-		dur, err := postgresToDuration(s)
-		if err != nil {
-			return nil, makeParseError(s, TypeInterval, err)
-		}
-		return &DInterval{Duration: dur}, nil
 	}
-	ret := &DInterval{Duration: duration.Duration{}}
-	d, err := time.ParseDuration(s)
+
+	// We're either a postgres string or a Go duration.
+	// Our postgres syntax parser also supports golang, so just use that for both.
+	dur, err := parseDuration(s)
 	if err != nil {
 		return nil, makeParseError(s, TypeInterval, err)
 	}
-	ret.Nanos = d.Nanoseconds()
-	return ret, nil
+	return &DInterval{Duration: dur}, nil
 }
 
 // ResolvedType implements the TypedExpr interface.
@@ -1483,11 +1476,7 @@ func (d *DInterval) min() (Datum, bool) {
 
 // ValueAsString returns the interval as a string (e.g. "1h2m").
 func (d *DInterval) ValueAsString() string {
-	if d.Months != 0 || d.Days != 0 {
-		return d.Duration.String()
-	}
-	// TODO(radu): we should use Postgres syntax instead of converting to nanoseconds.
-	return (time.Duration(d.Duration.Nanos) * time.Nanosecond).String()
+	return d.Duration.String()
 }
 
 // AmbiguousFormat implements the Datum interface.
@@ -1498,7 +1487,7 @@ func (d *DInterval) Format(buf *bytes.Buffer, f FmtFlags) {
 	if !f.bareStrings {
 		buf.WriteByte('\'')
 	}
-	buf.WriteString(d.ValueAsString())
+	d.Duration.Format(buf)
 	if !f.bareStrings {
 		buf.WriteByte('\'')
 	}

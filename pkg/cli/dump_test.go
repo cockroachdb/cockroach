@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -376,7 +377,13 @@ func TestDumpRandom(t *testing.T) {
 			f := rnd.Float64()
 			d := time.Unix(0, rnd.Int63()).Round(time.Hour * 24).UTC()
 			m := time.Unix(0, rnd.Int63()).Round(time.Microsecond).UTC()
-			n := time.Duration(rnd.Int63()).String()
+			sign := 1 - rnd.Int63n(2)*2
+			dur := duration.Duration{
+				Months: sign * rnd.Int63n(1000),
+				Days:   sign * rnd.Int63n(1000),
+				Nanos:  sign * rnd.Int63(),
+			}
+			n := dur.String()
 			o := rnd.Intn(2) == 1
 			e := strings.TrimRight(apd.New(rnd.Int63(), int32(rnd.Int31n(20)-10)).ToStandard(), ".0")
 			sr := make([]byte, rnd.Intn(500))

@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/lib/pq"
 )
@@ -176,7 +177,15 @@ func TestCopyRandom(t *testing.T) {
 	for i := 0; i < 100; i++ {
 		row := make([]interface{}, len(types)+2)
 		row[0] = strconv.Itoa(i)
-		row[1] = time.Duration(rng.Int63()).String()
+
+		sign := 1 - rng.Int63n(2)*2
+		d := duration.Duration{
+			Months: sign * rng.Int63n(1000),
+			Days:   sign * rng.Int63n(1000),
+			Nanos:  sign * rng.Int63(),
+		}
+
+		row[1] = d.String()
 		for j, t := range types {
 			d := sqlbase.RandDatum(rng, sqlbase.ColumnType{Kind: t}, false)
 			ds := parser.AsStringWithFlags(d, parser.FmtBareStrings)
