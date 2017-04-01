@@ -69,6 +69,9 @@ type Txn struct {
 		// across transaction aborts. This allows us to determine if a given response
 		// was meant for any incarnation of this transaction.
 		previousIDs map[uuid.UUID]struct{}
+		// commandCount indicates how many commands have been sent through
+		// this transaction. Reset on retryable txn errors.
+		commandCount int
 	}
 }
 
@@ -85,11 +88,12 @@ func NewTxnWithProto(db *DB, proto roachpb.Transaction) *Txn {
 	return txn
 }
 
-// IsInitialized returns true if the transaction has been initialized.
-func (txn *Txn) IsInitialized() bool {
+// CommandCount returns the count of commands executed through this txn.
+// Retryable errors on the transaction will reset the count to 0.
+func (txn *Txn) CommandCount() int {
 	txn.mu.Lock()
 	defer txn.mu.Unlock()
-	return txn.mu.Proto.IsInitialized()
+	return txn.mu.commandCount
 }
 
 // IsFinalized returns true if this Txn has been finalized and should therefore
@@ -778,6 +782,9 @@ func (txn *Txn) send(
 			ba.Requests = ba.Requests[:lastIndex]
 		}
 
+		// Increment the statement count sent through this transaction.
+		txn.mu.commandCount += len(ba.Requests)
+
 		// Clone the Txn's Proto so that future modifications can be made without
 		// worrying about synchronization.
 		newTxn := txn.mu.Proto.Clone()
@@ -913,6 +920,9 @@ func (txn *Txn) updateStateOnErrLocked(pErr *roachpb.Error) {
 		panic(fmt.Sprintf("Got a retryable error meant for a different transaction. "+
 			"txn.mu.Proto.ID: %v, pErr.ID: %v", txn.mu.Proto.ID, pErr.GetTxn().ID))
 	}
+
+	// Reset the statement count as this is a retryable txn error.
+	txn.mu.commandCount = 0
 
 	if roachpb.TxnIDEqual(retryErr.TxnID, txn.mu.Proto.ID) {
 		// Only update the proto if the retryable error is meant for the current
