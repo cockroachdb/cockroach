@@ -29,6 +29,12 @@ import (
 	"github.com/pkg/errors"
 )
 
+func init() {
+	skipPermissionChecks = envutil.EnvOrDefaultBool("COCKROACH_SKIP_KEY_PERMISSION_CHECK", false)
+}
+
+var skipPermissionChecks bool
+
 // AssetLoader describes the functions necessary to read certificate and key files.
 type AssetLoader struct {
 	ReadDir  func(dirname string) ([]os.FileInfo, error)
@@ -140,9 +146,15 @@ func (cl *CertificateLoader) Certificates() []*CertInfo {
 func NewCertificateLoader(certsDir string) *CertificateLoader {
 	return &CertificateLoader{
 		certsDir:             certsDir,
-		skipPermissionChecks: envutil.EnvOrDefaultBool("COCKROACH_SKIP_KEY_PERMISSION_CHECK", false),
+		skipPermissionChecks: skipPermissionChecks,
 		certificates:         make([]*CertInfo, 0),
 	}
+}
+
+// TestDisablePermissionChecks turns off permissions checks.
+// Used by tests only.
+func (cl *CertificateLoader) TestDisablePermissionChecks() {
+	cl.skipPermissionChecks = true
 }
 
 // Load examines all .crt files in the certs directory, determines their

@@ -17,7 +17,6 @@
 package security_test
 
 import (
-	"fmt"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -25,7 +24,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
-	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
@@ -87,10 +85,6 @@ func TestNamingScheme(t *testing.T) {
 		if err := os.RemoveAll(certsDir); err != nil {
 			t.Fatal(err)
 		}
-
-		// Reset env variable.
-		_ = os.Setenv("COCKROACH_SKIP_KEY_PERMISSION_CHECK", "false")
-		envutil.ClearEnvCache()
 	}()
 
 	type testFile struct {
@@ -191,15 +185,11 @@ func TestNamingScheme(t *testing.T) {
 			}
 		}
 
-		// Set env variable.
-		envValue := fmt.Sprintf("%t", data.skipChecks)
-		if err := os.Setenv("COCKROACH_SKIP_KEY_PERMISSION_CHECK", envValue); err != nil {
-			t.Fatalf("could not set env var to %s", envValue)
-		}
-		envutil.ClearEnvCache()
-
 		// Load certs.
 		cl := security.NewCertificateLoader(certsDir)
+		if data.skipChecks {
+			cl.TestDisablePermissionChecks()
+		}
 		if err := cl.Load(); err != nil {
 			t.Errorf("#%d: unexpected error: %v", testNum, err)
 		}

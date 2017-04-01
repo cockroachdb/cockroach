@@ -19,9 +19,6 @@ package security
 import (
 	"crypto/tls"
 
-	"golang.org/x/net/context"
-
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 
 	"github.com/pkg/errors"
@@ -92,7 +89,6 @@ func (cm *CertificateManager) LoadCertificates() error {
 		return errors.Errorf("problem loading certs directory %s", cm.certsDir)
 	}
 
-	log.Infof(context.Background(), "Found certificate: %+v", cl.Certificates())
 	var caCert, nodeCert *CertInfo
 	clientCerts := make(map[string]*CertInfo)
 	for _, ci := range cl.Certificates() {
