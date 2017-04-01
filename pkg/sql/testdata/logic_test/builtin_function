@@ -1389,7 +1389,7 @@ VALUES (format_type('anyelement'::regtype, -1)),
        (format_type('interval'::regtype, -1)),
        (format_type('timestamp'::regtype, -1)),
        (format_type('timestamptz'::regtype, -1)),
-       (format_type('tuple'::regtype, -1))
+       (format_type('record'::regtype, -1))
 ----
 anyelement
 boolean
@@ -1458,9 +1458,6 @@ SELECT col_description('pg_class'::regclass::oid, 2),
        shobj_description('pg_class'::regclass::oid, 'pg_class')
 ----
 NULL  NULL  NULL  NULL
-
-query error pq: array_in\(\): unimplemented
-SELECT array_in('foo', 3, -1)
 
 # Check that base function names are also visible in namespace pg_catalog.
 query I

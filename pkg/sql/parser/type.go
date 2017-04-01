@@ -189,6 +189,36 @@ var OidToType = map[oid.Oid]Type{
 	oid.T_varchar:      typeVarChar,
 }
 
+// AliasedOidToName maps Postgres object IDs to type names for those OIDs that map to
+// Cockroach types that have more than one associated OID, like Int. The name
+// for these OIDs will override the type name of the corresponding type when
+// looking up the display name for an OID.
+var aliasedOidToName = map[oid.Oid]string{
+	oid.T_float4:     "float4",
+	oid.T_float8:     "float8",
+	oid.T_int2:       "int2",
+	oid.T_int4:       "int4",
+	oid.T_int8:       "int8",
+	oid.T_int2vector: "int2vector",
+	oid.T_text:       "text",
+	oid.T_bytea:      "bytea",
+	oid.T_varchar:    "varchar",
+	oid.T_numeric:    "numeric",
+	oid.T_record:     "record",
+	oid.T__int2:      "int2[]",
+	oid.T__int4:      "int4[]",
+	oid.T__int8:      "int8[]",
+	oid.T__text:      "text[]",
+}
+
+// PGDisplayName returns the Postgres display name for a given type.
+func PGDisplayName(typ Type) string {
+	if typname, ok := aliasedOidToName[typ.Oid()]; ok {
+		return typname
+	}
+	return typ.String()
+}
+
 // Do not instantiate the tXxx types elsewhere. The variables above are intended
 // to be singletons.
 type tNull struct{}
@@ -488,6 +518,8 @@ func (TArray) Size() (uintptr, bool) {
 
 // oidToArrayOid maps scalar type Oids to their corresponding array type Oid.
 var oidToArrayOid = map[oid.Oid]oid.Oid{
+	oid.T_int2: oid.T__int2,
+	oid.T_int4: oid.T__int4,
 	oid.T_int8: oid.T__int8,
 	oid.T_text: oid.T__text,
 	oid.T_name: oid.T__name,
