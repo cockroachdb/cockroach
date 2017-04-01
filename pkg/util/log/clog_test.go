@@ -639,7 +639,7 @@ func TestRedirectStderr(t *testing.T) {
 		t.Fatal(err)
 	}
 	if !strings.Contains(string(contents), stderrText) {
-		t.Fatalf("INFO log does not contain stderr text\n%s", contents)
+		t.Fatalf("log does not contain stderr text\n%s", contents)
 	}
 }
 
