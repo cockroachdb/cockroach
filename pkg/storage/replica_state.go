@@ -678,22 +678,47 @@ func (rec ReplicaEvalContext) Term(i uint64) (uint64, error) {
 }
 
 // Fields backed by on-disk data must be registered in the SpanSet.
-// TODO(bdarnell): Add calls to SpanSet.checkAllowed to all of the following.
 
 // Desc returns the Replica's RangeDescriptor.
 func (rec ReplicaEvalContext) Desc() (*roachpb.RangeDescriptor, error) {
 	rec.repl.mu.RLock()
 	defer rec.repl.mu.RUnlock()
+	if rec.ss != nil {
+		if err := rec.ss.checkAllowed(SpanReadOnly,
+			roachpb.Span{Key: keys.RangeDescriptorKey(rec.repl.mu.state.Desc.StartKey)},
+		); err != nil {
+			return nil, err
+		}
+	}
 	return rec.repl.mu.state.Desc, nil
 }
 
 // ContainsKey returns true if the given key is within the Replica's range.
+//
+// TODO(bdarnell): Replace this method with one on Desc(). See comment
+// on Replica.ContainsKey.
 func (rec ReplicaEvalContext) ContainsKey(key roachpb.Key) (bool, error) {
-	return rec.repl.ContainsKey(key), nil
+	rec.repl.mu.RLock()
+	defer rec.repl.mu.RUnlock()
+	if rec.ss != nil {
+		if err := rec.ss.checkAllowed(SpanReadOnly,
+			roachpb.Span{Key: keys.RangeDescriptorKey(rec.repl.mu.state.Desc.StartKey)},
+		); err != nil {
+			return false, err
+		}
+	}
+	return containsKey(*rec.repl.mu.state.Desc, key), nil
 }
 
 // GetMVCCStats returns the Replica's MVCCStats.
 func (rec ReplicaEvalContext) GetMVCCStats() (enginepb.MVCCStats, error) {
+	if rec.ss != nil {
+		if err := rec.ss.checkAllowed(SpanReadOnly,
+			roachpb.Span{Key: keys.RangeStatsKey(rec.RangeID())},
+		); err != nil {
+			return enginepb.MVCCStats{}, err
+		}
+	}
 	return rec.repl.GetMVCCStats(), nil
 }
 
@@ -701,6 +726,13 @@ func (rec ReplicaEvalContext) GetMVCCStats() (enginepb.MVCCStats, error) {
 // keys are garbage collected. Reads and writes at timestamps <= this time will
 // not be served.
 func (rec ReplicaEvalContext) GCThreshold() (hlc.Timestamp, error) {
+	if rec.ss != nil {
+		if err := rec.ss.checkAllowed(SpanReadOnly,
+			roachpb.Span{Key: keys.RangeLastGCKey(rec.RangeID())},
+		); err != nil {
+			return hlc.Timestamp{}, err
+		}
+	}
 	rec.repl.mu.RLock()
 	defer rec.repl.mu.RUnlock()
 	return rec.repl.mu.state.GCThreshold, nil
@@ -709,6 +741,13 @@ func (rec ReplicaEvalContext) GCThreshold() (hlc.Timestamp, error) {
 // TxnSpanGCThreshold returns the time of the Replica's last
 // transaction span GC.
 func (rec ReplicaEvalContext) TxnSpanGCThreshold() (hlc.Timestamp, error) {
+	if rec.ss != nil {
+		if err := rec.ss.checkAllowed(SpanReadOnly,
+			roachpb.Span{Key: keys.RangeTxnSpanGCThresholdKey(rec.RangeID())},
+		); err != nil {
+			return hlc.Timestamp{}, err
+		}
+	}
 	rec.repl.mu.RLock()
 	defer rec.repl.mu.RUnlock()
 	return rec.repl.mu.state.TxnSpanGCThreshold, nil
@@ -717,11 +756,25 @@ func (rec ReplicaEvalContext) TxnSpanGCThreshold() (hlc.Timestamp, error) {
 // GetLastReplicaGCTimestamp returns the last time the Replica was
 // considered for GC.
 func (rec ReplicaEvalContext) GetLastReplicaGCTimestamp(ctx context.Context) (hlc.Timestamp, error) {
+	if rec.ss != nil {
+		if err := rec.ss.checkAllowed(SpanReadOnly,
+			roachpb.Span{Key: keys.RangeLastReplicaGCTimestampKey(rec.RangeID())},
+		); err != nil {
+			return hlc.Timestamp{}, err
+		}
+	}
 	return rec.repl.getLastReplicaGCTimestamp(ctx)
 }
 
 // GetLease returns the Replica's current and next lease (if any).
 func (rec ReplicaEvalContext) GetLease() (*roachpb.Lease, *roachpb.Lease, error) {
+	if rec.ss != nil {
+		if err := rec.ss.checkAllowed(SpanReadOnly,
+			roachpb.Span{Key: keys.RangeLeaseKey(rec.RangeID())},
+		); err != nil {
+			return nil, nil, err
+		}
+	}
 	lease, nextLease := rec.repl.getLease()
 	return lease, nextLease, nil
 }

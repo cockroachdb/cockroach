@@ -83,7 +83,7 @@ type CommandArgs struct {
 // A Command is the implementation of a single request within a BatchRequest.
 type Command struct {
 	// DeclareKeys adds all keys this command touches to the given spanSet.
-	DeclareKeys func(roachpb.Header, roachpb.Request, *SpanSet)
+	DeclareKeys func(roachpb.RangeDescriptor, roachpb.Header, roachpb.Request, *SpanSet)
 
 	// Eval evaluates a command on the given engine. It should populate
 	// the supplied response (always a non-nil pointer to the correct
@@ -94,11 +94,16 @@ type Command struct {
 }
 
 // DefaultDeclareKeys is the default implementation of Command.DeclareKeys
-func DefaultDeclareKeys(header roachpb.Header, req roachpb.Request, spans *SpanSet) {
+func DefaultDeclareKeys(
+	_ roachpb.RangeDescriptor, header roachpb.Header, req roachpb.Request, spans *SpanSet,
+) {
 	if roachpb.IsReadOnly(req) {
 		spans.Add(SpanReadOnly, req.Header())
 	} else {
 		spans.Add(SpanReadWrite, req.Header())
+	}
+	if header.ReturnRangeInfo {
+		spans.Add(SpanReadOnly, roachpb.Span{Key: keys.RangeLeaseKey(header.RangeID)})
 	}
 }
 
@@ -112,7 +117,7 @@ var commands = map[roachpb.Method]Command{
 	roachpb.DeleteRange:        {DeclareKeys: DefaultDeclareKeys, Eval: evalDeleteRange},
 	roachpb.Scan:               {DeclareKeys: DefaultDeclareKeys, Eval: evalScan},
 	roachpb.ReverseScan:        {DeclareKeys: DefaultDeclareKeys, Eval: evalReverseScan},
-	roachpb.BeginTransaction:   {DeclareKeys: declareKeysWriteTransaction, Eval: evalBeginTransaction},
+	roachpb.BeginTransaction:   {DeclareKeys: declareKeysBeginTransaction, Eval: evalBeginTransaction},
 	roachpb.EndTransaction:     {DeclareKeys: declareKeysEndTransaction, Eval: evalEndTransaction},
 	roachpb.RangeLookup:        {DeclareKeys: DefaultDeclareKeys, Eval: evalRangeLookup},
 	roachpb.HeartbeatTxn:       {DeclareKeys: declareKeysWriteTransaction, Eval: evalHeartbeatTxn},
@@ -125,7 +130,7 @@ var commands = map[roachpb.Method]Command{
 	roachpb.TruncateLog:        {DeclareKeys: declareKeysTruncateLog, Eval: evalTruncateLog},
 	roachpb.RequestLease:       {DeclareKeys: declareKeysRequestLease, Eval: evalRequestLease},
 	roachpb.TransferLease:      {DeclareKeys: declareKeysRequestLease, Eval: evalTransferLease},
-	roachpb.LeaseInfo:          {DeclareKeys: DefaultDeclareKeys, Eval: evalLeaseInfo},
+	roachpb.LeaseInfo:          {DeclareKeys: declareKeysLeaseInfo, Eval: evalLeaseInfo},
 	roachpb.ComputeChecksum:    {DeclareKeys: DefaultDeclareKeys, Eval: evalComputeChecksum},
 	roachpb.ChangeFrozen:       {DeclareKeys: declareKeysChangeFrozen, Eval: evalChangeFrozen},
 	roachpb.WriteBatch:         writeBatchCmd,
@@ -424,12 +429,21 @@ func verifyTransaction(h roachpb.Header, args roachpb.Request) error {
 	return nil
 }
 
-// declareKeysWriteTransaction is the DeclareKeys function for {Begin,Heartbeat}Transaction,
-// and is called by declareKeysEndTransaction
-func declareKeysWriteTransaction(header roachpb.Header, req roachpb.Request, spans *SpanSet) {
+// declareKeysWriteTransaction is the DeclareKeys function for HeartbeatTransaction,
+// and is called by declareKeys{Begin,End}Transaction
+func declareKeysWriteTransaction(
+	_ roachpb.RangeDescriptor, header roachpb.Header, req roachpb.Request, spans *SpanSet,
+) {
 	if header.Txn != nil && header.Txn.ID != nil {
 		spans.Add(SpanReadWrite, roachpb.Span{Key: keys.TransactionKey(req.Header().Key, *header.Txn.ID)})
 	}
+}
+
+func declareKeysBeginTransaction(
+	desc roachpb.RangeDescriptor, header roachpb.Header, req roachpb.Request, spans *SpanSet,
+) {
+	declareKeysWriteTransaction(desc, header, req, spans)
+	spans.Add(SpanReadOnly, roachpb.Span{Key: keys.RangeTxnSpanGCThresholdKey(header.RangeID)})
 }
 
 // evalBeginTransaction writes the initial transaction record. Fails in
@@ -511,8 +525,10 @@ func evalBeginTransaction(
 	return EvalResult{}, engine.MVCCPutProto(ctx, batch, cArgs.Stats, key, hlc.Timestamp{}, nil, reply.Txn)
 }
 
-func declareKeysEndTransaction(header roachpb.Header, req roachpb.Request, spans *SpanSet) {
-	declareKeysWriteTransaction(header, req, spans)
+func declareKeysEndTransaction(
+	desc roachpb.RangeDescriptor, header roachpb.Header, req roachpb.Request, spans *SpanSet,
+) {
+	declareKeysWriteTransaction(desc, header, req, spans)
 	et := req.(*roachpb.EndTransactionRequest)
 	// The spans may extend beyond this Range, but it's ok for the
 	// purpose of the command queue. The parts in our Range will
@@ -556,10 +572,16 @@ func declareKeysEndTransaction(header roachpb.Header, req roachpb.Request, spans
 				Key:    rightRangeIDUnreplicatedPrefix,
 				EndKey: rightRangeIDUnreplicatedPrefix.PrefixEnd(),
 			})
+
+			leftStateLoader := makeReplicaStateLoader(st.LeftDesc.RangeID)
+			spans.Add(SpanReadOnly, roachpb.Span{
+				Key: leftStateLoader.RangeLastReplicaGCTimestampKey(),
+			})
 			rightStateLoader := makeReplicaStateLoader(st.RightDesc.RangeID)
 			spans.Add(SpanReadWrite, roachpb.Span{
 				Key: rightStateLoader.RangeLastReplicaGCTimestampKey(),
 			})
+
 			spans.Add(SpanReadOnly, roachpb.Span{
 				Key:    abortCacheMinKey(header.RangeID),
 				EndKey: abortCacheMaxKey(header.RangeID)})
@@ -1298,7 +1320,9 @@ func evalHeartbeatTxn(
 	return EvalResult{}, nil
 }
 
-func declareKeysGC(header roachpb.Header, req roachpb.Request, spans *SpanSet) {
+func declareKeysGC(
+	_ roachpb.RangeDescriptor, header roachpb.Header, req roachpb.Request, spans *SpanSet,
+) {
 	gcr := req.(*roachpb.GCRequest)
 	for _, key := range gcr.Keys {
 		spans.Add(SpanReadWrite, roachpb.Span{Key: key.Key})
@@ -1373,7 +1397,9 @@ func evalGC(
 	return pd, nil
 }
 
-func declareKeysPushTransaction(header roachpb.Header, req roachpb.Request, spans *SpanSet) {
+func declareKeysPushTransaction(
+	_ roachpb.RangeDescriptor, header roachpb.Header, req roachpb.Request, spans *SpanSet,
+) {
 	pr := req.(*roachpb.PushTxnRequest)
 	spans.Add(SpanReadWrite, roachpb.Span{Key: keys.TransactionKey(pr.PusheeTxn.Key, *pr.PusheeTxn.ID)})
 	spans.Add(SpanReadWrite, roachpb.Span{Key: keys.AbortCacheKey(header.RangeID, *pr.PusheeTxn.ID)})
@@ -1646,8 +1672,10 @@ func setAbortCache(
 	return rec.AbortCache().Put(ctx, batch, ms, *txn.ID, &entry)
 }
 
-func declareKeysResolveIntent(header roachpb.Header, req roachpb.Request, spans *SpanSet) {
-	DefaultDeclareKeys(header, req, spans)
+func declareKeysResolveIntent(
+	desc roachpb.RangeDescriptor, header roachpb.Header, req roachpb.Request, spans *SpanSet,
+) {
+	DefaultDeclareKeys(desc, header, req, spans)
 	ri := req.(*roachpb.ResolveIntentRequest)
 	spans.Add(SpanReadWrite, roachpb.Span{Key: keys.AbortCacheKey(header.RangeID, *ri.IntentTxn.ID)})
 }
@@ -1679,8 +1707,10 @@ func evalResolveIntent(
 	return EvalResult{}, nil
 }
 
-func declareKeysResolveIntentRange(header roachpb.Header, req roachpb.Request, spans *SpanSet) {
-	DefaultDeclareKeys(header, req, spans)
+func declareKeysResolveIntentRange(
+	desc roachpb.RangeDescriptor, header roachpb.Header, req roachpb.Request, spans *SpanSet,
+) {
+	DefaultDeclareKeys(desc, header, req, spans)
 	ri := req.(*roachpb.ResolveIntentRangeRequest)
 	spans.Add(SpanReadWrite, roachpb.Span{Key: keys.AbortCacheKey(header.RangeID, *ri.IntentTxn.ID)})
 }
@@ -1728,7 +1758,9 @@ func evalMerge(
 	return EvalResult{}, engine.MVCCMerge(ctx, batch, cArgs.Stats, args.Key, h.Timestamp, args.Value)
 }
 
-func declareKeysTruncateLog(header roachpb.Header, req roachpb.Request, spans *SpanSet) {
+func declareKeysTruncateLog(
+	_ roachpb.RangeDescriptor, header roachpb.Header, req roachpb.Request, spans *SpanSet,
+) {
 	spans.Add(SpanReadWrite, roachpb.Span{Key: keys.RaftTruncatedStateKey(header.RangeID)})
 	prefix := keys.RaftLogPrefix(header.RangeID)
 	spans.Add(SpanReadWrite, roachpb.Span{Key: prefix, EndKey: prefix.PrefixEnd()})
@@ -1803,9 +1835,12 @@ func newFailedLeaseTrigger(isTransfer bool) EvalResult {
 	return trigger
 }
 
-func declareKeysRequestLease(header roachpb.Header, req roachpb.Request, spans *SpanSet) {
+func declareKeysRequestLease(
+	desc roachpb.RangeDescriptor, header roachpb.Header, req roachpb.Request, spans *SpanSet,
+) {
 	loader := makeReplicaStateLoader(header.RangeID)
 	spans.Add(SpanReadWrite, roachpb.Span{Key: loader.RangeLeaseKey()})
+	spans.Add(SpanReadOnly, roachpb.Span{Key: keys.RangeDescriptorKey(desc.StartKey)})
 }
 
 // evalRequestLease sets the range lease for this range. The command fails
@@ -2252,7 +2287,9 @@ func (r *Replica) sha512(
 	return hasher.Sum(sha), nil
 }
 
-func declareKeysChangeFrozen(header roachpb.Header, req roachpb.Request, spans *SpanSet) {
+func declareKeysChangeFrozen(
+	_ roachpb.RangeDescriptor, header roachpb.Header, req roachpb.Request, spans *SpanSet,
+) {
 	loader := makeReplicaStateLoader(header.RangeID)
 	spans.Add(SpanReadWrite, roachpb.Span{Key: loader.RangeFrozenStatusKey()})
 }
@@ -3710,6 +3747,12 @@ func updateRangeDescriptor(
 	}
 	b.CPut(descKey, newValue, oldValue)
 	return nil
+}
+
+func declareKeysLeaseInfo(
+	_ roachpb.RangeDescriptor, header roachpb.Header, req roachpb.Request, spans *SpanSet,
+) {
+	spans.Add(SpanReadOnly, roachpb.Span{Key: keys.RangeLeaseKey(header.RangeID)})
 }
 
 // LeaseInfo returns information about the lease holder for the range.

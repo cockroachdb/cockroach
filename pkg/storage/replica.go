@@ -1261,6 +1261,8 @@ func (r *Replica) GetMVCCStats() enginepb.MVCCStats {
 }
 
 // ContainsKey returns whether this range contains the specified key.
+//
+// TODO(bdarnell): This is not the same as RangeDescriptor.ContainsKey.
 func (r *Replica) ContainsKey(key roachpb.Key) bool {
 	return containsKey(*r.Desc(), key)
 }
@@ -1634,7 +1636,7 @@ func makeCacheRequest(ba *roachpb.BatchRequest, br *roachpb.BatchResponse) cache
 	return cr
 }
 
-func collectSpans(ba *roachpb.BatchRequest) (*SpanSet, error) {
+func collectSpans(desc roachpb.RangeDescriptor, ba *roachpb.BatchRequest) (*SpanSet, error) {
 	spans := &SpanSet{}
 	// TODO(bdarnell): need to make this less global when the local
 	// command queue is used more heavily. For example, a split will
@@ -1658,17 +1660,23 @@ func collectSpans(ba *roachpb.BatchRequest) (*SpanSet, error) {
 			continue
 		}
 		if cmd, ok := commands[inner.Method()]; ok {
-			cmd.DeclareKeys(ba.Header, inner, spans)
+			cmd.DeclareKeys(desc, ba.Header, inner, spans)
 		} else {
 			return nil, errors.Errorf("unrecognized command %s", inner.Method())
 		}
 	}
 
+	// All commands depend on the RangeLastGCKey and the range descriptor.
+	// TODO(bdarnell): Move this to a special case to avoid the cost of
+	// all the command queue entries (and the stall when a GC or split command
+	// goes through)?
+	spans.Add(SpanReadOnly, roachpb.Span{Key: keys.RangeLastGCKey(ba.Header.RangeID)})
+	spans.Add(SpanReadOnly, roachpb.Span{Key: keys.RangeDescriptorKey(desc.StartKey)})
+
 	// When running with experimental proposer-evaluated KV, insert a
 	// span that effectively linearizes evaluation and application of
 	// all commands. This is horrible from a performance perspective
-	// but is required for passing tests until correctness work in
-	// #6290 is addressed.
+	// but is required for correctness until work in #6290 is addressed.
 	if propEvalKV {
 		access := SpanReadWrite
 		if ba.IsReadOnly() {
@@ -2024,7 +2032,7 @@ func (r *Replica) addReadOnlyCmd(
 		}
 	}
 
-	spans, err := collectSpans(&ba)
+	spans, err := collectSpans(*r.Desc(), &ba)
 	if err != nil {
 		return nil, roachpb.NewError(err)
 	}
@@ -2184,7 +2192,7 @@ func (r *Replica) tryAddWriteCmd(
 ) (br *roachpb.BatchResponse, pErr *roachpb.Error, retry proposalRetryReason) {
 	startTime := timeutil.Now()
 
-	spans, err := collectSpans(&ba)
+	spans, err := collectSpans(*r.Desc(), &ba)
 	if err != nil {
 		return nil, roachpb.NewError(err), proposalNoRetry
 	}
