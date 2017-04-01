@@ -1,22 +1,19 @@
 # LogicTest: default distsql
 
 statement ok
-----
 CREATE TABLE t (
   a INT PRIMARY KEY,
   b STRING COLLATE en
-);
+)
 
 statement ok
-----
-INSERT INTO t VALUES (1, 'foo' COLLATE en), (2, NULL), (3, 'bar' COLLATE en);
+INSERT INTO t VALUES (1, 'foo' COLLATE en), (2, NULL), (3, 'bar' COLLATE en)
 
 statement ok
-----
-CREATE INDEX ON t (b, a);
+CREATE INDEX ON t (b, a)
 
 query T
-SELECT b FROM t ORDER BY b;
+SELECT b FROM t ORDER BY b
 ----
 NULL
 bar
