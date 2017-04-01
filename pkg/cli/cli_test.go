@@ -32,9 +32,9 @@ import (
 	"testing"
 	"time"
 
-	"golang.org/x/net/context"
-
 	"github.com/pkg/errors"
+	"github.com/spf13/cobra"
+	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
@@ -45,7 +45,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/spf13/cobra"
 )
 
 type cliTest struct {
@@ -1624,35 +1623,44 @@ func TestJunkPositionalArguments(t *testing.T) {
 	}
 }
 
-func Example_zip() {
+func TestZip(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
 	c := newCLITest(cliTestParams{})
 	defer c.cleanup()
 
-	c.Run("debug zip /dev/null")
+	out, err := c.RunWithCapture("debug zip " + os.DevNull)
+	if err != nil {
+		t.Fatal(err)
+	}
 
-	// Output:
-	// debug zip /dev/null
-	// writing /dev/null
-	//   debug/events
-	//   debug/liveness
-	//   debug/nodes/1/status
-	//   debug/nodes/1/gossip
-	//   debug/nodes/1/stacks
-	//   debug/nodes/1/ranges/1
-	//   debug/nodes/1/ranges/2
-	//   debug/nodes/1/ranges/3
-	//   debug/nodes/1/ranges/4
-	//   debug/nodes/1/ranges/5
-	//   debug/nodes/1/ranges/6
-	//   debug/nodes/1/ranges/7
-	//   debug/schema/system@details
-	//   debug/schema/system/descriptor
-	//   debug/schema/system/eventlog
-	//   debug/schema/system/jobs
-	//   debug/schema/system/lease
-	//   debug/schema/system/namespace
-	//   debug/schema/system/rangelog
-	//   debug/schema/system/ui
-	//   debug/schema/system/users
-	//   debug/schema/system/zones
+	const expected = `debug zip ` + os.DevNull + `
+writing ` + os.DevNull + `
+  debug/events
+  debug/liveness
+  debug/nodes/1/status
+  debug/nodes/1/gossip
+  debug/nodes/1/stacks
+  debug/nodes/1/ranges/1
+  debug/nodes/1/ranges/2
+  debug/nodes/1/ranges/3
+  debug/nodes/1/ranges/4
+  debug/nodes/1/ranges/5
+  debug/nodes/1/ranges/6
+  debug/nodes/1/ranges/7
+  debug/schema/system@details
+  debug/schema/system/descriptor
+  debug/schema/system/eventlog
+  debug/schema/system/jobs
+  debug/schema/system/lease
+  debug/schema/system/namespace
+  debug/schema/system/rangelog
+  debug/schema/system/ui
+  debug/schema/system/users
+  debug/schema/system/zones
+`
+
+	if out != expected {
+		t.Errorf("expected:\n%s\ngot:\n%s", expected, out)
+	}
 }
