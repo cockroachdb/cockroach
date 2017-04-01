@@ -458,32 +458,6 @@ func (n *Node) Start() {
 	}(n.cmd)
 }
 
-// Pause pauses a node by sending it SIGSTOP.
-func (n *Node) Pause() {
-	n.Lock()
-	defer n.Unlock()
-	if n.cmd == nil || n.cmd.Process == nil {
-		return
-	}
-	_ = n.cmd.Process.Signal(syscall.SIGSTOP)
-}
-
-// TODO(peter): Node.Pause is currently unused.
-var _ = (*Node).Pause
-
-// Resume resumes a node by sending it SIGCONT.
-func (n *Node) Resume() {
-	n.Lock()
-	defer n.Unlock()
-	if n.cmd == nil || n.cmd.Process == nil {
-		return
-	}
-	_ = n.cmd.Process.Signal(syscall.SIGCONT)
-}
-
-// TODO(peter): Node.Resume is currently unused.
-var _ = (*Node).Resume
-
 // Kill stops a node abruptly by sending it SIGKILL.
 func (n *Node) Kill() {
 	n.Lock()
