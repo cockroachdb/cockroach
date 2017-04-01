@@ -816,45 +816,45 @@ SELECT INTERVAL '5' HOUR, INTERVAL '5' DAY TO HOUR;
 query T
 SELECT INTERVAL '5' DAY;
 ----
-0m5d0ns
+5d
 
 query TT
 SELECT INTERVAL '5' MONTH, INTERVAL '5' YEAR TO MONTH;
 ----
-5m0d0ns  5m0d0ns
+5mon 5mon
 
 query T
 SELECT INTERVAL '5' YEAR
 ----
-60m0d0ns
+60mon
 
 ## Test truncation via field specifiers
 query TTTT
 SELECT INTERVAL '1-2 3 4:5:6' SECOND, INTERVAL '1-2 3 4:5:6' MINUTE TO SECOND, INTERVAL '1-2 3 4:5:6' HOUR TO SECOND, INTERVAL '1-2 3 4:5:6' DAY TO SECOND;
 ----
-14m3d4h5m6s  14m3d4h5m6s  14m3d4h5m6s  14m3d4h5m6s
+14mon3d4h5m6s  14mon3d4h5m6s  14mon3d4h5m6s  14mon3d4h5m6s
 
 query TTT
 SELECT INTERVAL '1-2 3 4:5:6' MINUTE, INTERVAL '1-2 3 4:5:6' HOUR TO MINUTE, INTERVAL '1-2 3 4:5:6' DAY TO MINUTE;
 ----
-14m3d4h5m0s  14m3d4h5m0s  14m3d4h5m0s
+14mon3d4h5m0s  14mon3d4h5m0s  14mon3d4h5m0s
 
 query TT
 SELECT INTERVAL '1-2 3 4:5:6' HOUR, INTERVAL '1-2 3 4:5:6' DAY TO HOUR
 ----
-14m3d4h0m0s  14m3d4h0m0s
+14mon3d4h0m0s  14mon3d4h0m0s
 
 query T
 SELECT INTERVAL '1-2 3 4:5:6' DAY;
 ----
-14m3d0ns
+14mon3d
 
 query TT
 SELECT INTERVAL '1-2 3 4:5:6' MONTH, INTERVAL '1-2 3 4:5:6' YEAR TO MONTH;
 ----
-14m0d0ns  14m0d0ns
+14mon  14mon
 
 query T
 SELECT INTERVAL '1-2 3 4:5:6' YEAR
 ----
-12m0d0ns
+12mon

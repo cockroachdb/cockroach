@@ -1402,22 +1402,15 @@ func parseDInterval(s string, field durationField) (*DInterval, error) {
 			return nil, makeParseError(s, TypeInterval, err)
 		}
 		return &DInterval{Duration: dur}, nil
-	} else if strings.ContainsRune(s, ' ') {
-		// If it has a space, then we're most likely a postgres string,
-		// as golang duration does not permit spaces and iso8601, SQL standard have been tested.
-		dur, err := postgresToDuration(s)
-		if err != nil {
-			return nil, makeParseError(s, TypeInterval, err)
-		}
-		return &DInterval{Duration: dur}, nil
 	}
-	ret := &DInterval{Duration: duration.Duration{}}
-	d, err := time.ParseDuration(s)
+
+	// We're either a postgres string or a Go duration.
+	// Our postgres syntax parser also supports golang, so just use that for both.
+	dur, err := postgresToDuration(s)
 	if err != nil {
 		return nil, makeParseError(s, TypeInterval, err)
 	}
-	ret.Nanos = d.Nanoseconds()
-	return ret, nil
+	return &DInterval{Duration: dur}, nil
 }
 
 // ResolvedType implements the TypedExpr interface.

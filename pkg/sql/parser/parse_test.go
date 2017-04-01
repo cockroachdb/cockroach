@@ -953,11 +953,11 @@ SET a = 1,
 b = 2
   ^
 `},
-		{`SET TIME ZONE INTERVAL 'foobar'`, `could not parse 'foobar' as type interval: time: invalid duration foobar at or near "EOF"
+		{`SET TIME ZONE INTERVAL 'foobar'`, `could not parse 'foobar' as type interval: interval: missing unit in duration foobar at or near "EOF"
 SET TIME ZONE INTERVAL 'foobar'
                                ^
 `},
-		{`SELECT INTERVAL 'foo'`, `could not parse 'foo' as type interval: time: invalid duration foo at or near "EOF"
+		{`SELECT INTERVAL 'foo'`, `could not parse 'foo' as type interval: interval: missing unit in duration foo at or near "EOF"
 SELECT INTERVAL 'foo'
                      ^
 `},

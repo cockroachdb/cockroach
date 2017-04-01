@@ -555,7 +555,7 @@ INSERT INTO intervals VALUES (INTERVAL '1 year 2 months 3 days 4 seconds'), (INT
 query T
 SELECT SUM(a) FROM intervals
 ----
-41m7d19s
+41mon7d19s
 
 
 query error unknown signature: avg\(string\)

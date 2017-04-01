@@ -92,15 +92,15 @@ func TestDatumOrdering(t *testing.T) {
 
 		// Intervals
 		{`'1 day':::interval`, noPrev, noNext,
-			`'-9223372036854775808m-9223372036854775808d-2562047h47m16.854775808s'`,
-			`'9223372036854775807m9223372036854775807d2562047h47m16.854775807s'`},
+			`'-9223372036854775808mon-9223372036854775808d-2562047h47m16.854775808s'`,
+			`'9223372036854775807mon9223372036854775807d2562047h47m16.854775807s'`},
 		// Max interval: we use Postgres syntax, because Go doesn't accept
 		// months/days and ISO8601 doesn't accept nanoseconds.
 		{`'9223372036854775807 months 9223372036854775807 days ` +
 			`2562047 hours 47 minutes 16 seconds 854775807 nanoseconds':::interval`,
 			noPrev, valIsMax,
-			`'-9223372036854775808m-9223372036854775808d-2562047h47m16.854775808s'`,
-			`'9223372036854775807m9223372036854775807d2562047h47m16.854775807s'`},
+			`'-9223372036854775808mon-9223372036854775808d-2562047h47m16.854775808s'`,
+			`'9223372036854775807mon9223372036854775807d2562047h47m16.854775807s'`},
 		// It's hard to generate a minimum interval! We can't use a
 		// negative value inside the string constant, because that's not
 		// allowed in a Postgres duration specification. We can't use the
@@ -112,8 +112,8 @@ func TestDatumOrdering(t *testing.T) {
 			`2562047 hours 47 minutes 16 seconds':::interval` +
 			`-'1 month 1 day 854775808 nanoseconds':::interval`,
 			valIsMin, noNext,
-			`'-9223372036854775808m-9223372036854775808d-2562047h47m16.854775808s'`,
-			`'9223372036854775807m9223372036854775807d2562047h47m16.854775807s'`},
+			`'-9223372036854775808mon-9223372036854775808d-2562047h47m16.854775808s'`,
+			`'9223372036854775807mon9223372036854775807d2562047h47m16.854775807s'`},
 
 		// NULL
 		{`NULL`, valIsMin, valIsMax, `NULL`, `NULL`},

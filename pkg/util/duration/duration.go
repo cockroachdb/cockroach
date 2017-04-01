@@ -17,6 +17,7 @@
 package duration
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"math"
@@ -80,11 +81,21 @@ func (d Duration) Compare(x Duration) int {
 
 // String returns a string representation of a Duration.
 func (d Duration) String() string {
-	nanos := "0ns"
-	if d.Nanos != 0 {
-		nanos = (time.Duration(d.Nanos) * time.Nanosecond).String()
+	var buf bytes.Buffer
+	if d.Months != 0 {
+		fmt.Fprintf(&buf, "%dmon", d.Months)
 	}
-	return fmt.Sprintf("%dm%dd%s", d.Months, d.Days, nanos)
+	if d.Days != 0 {
+		fmt.Fprintf(&buf, "%dd", d.Days)
+	}
+	if d.Nanos != 0 {
+		buf.WriteString((time.Duration(d.Nanos) * time.Nanosecond).String())
+	}
+	s := buf.String()
+	if len(s) == 0 {
+		return "0s"
+	}
+	return s
 }
 
 // Encode returns three integers such that the original Duration is recoverable
@@ -147,6 +158,15 @@ func (d Duration) Sub(x Duration) Duration {
 // Mul returns a Duration representing a time length of d*x.
 func (d Duration) Mul(x int64) Duration {
 	return Duration{d.Months * x, d.Days * x, d.Nanos * x}
+}
+
+// MulFloat returns a Duration representing a time length of d*x.
+func (d Duration) MulFloat(x float64) Duration {
+	return Duration{
+		Months: int64(float64(d.Months) * x),
+		Days:   int64(float64(d.Days) * x),
+		Nanos:  int64(float64(d.Nanos) * x),
+	}
 }
 
 // Div returns a Duration representing a time length of d/x.

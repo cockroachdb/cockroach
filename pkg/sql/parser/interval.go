@@ -32,6 +32,57 @@ type intervalLexer struct {
 	err    error
 }
 
+// Consumes the next decimal number.
+// 1st return value is the integer part.
+// 2nd return value is whether a decimal part was encountered.
+// 3rd return value is the decimal part as a float.
+// If the number is negative, both the 1st and 3rd return
+// value are negative.
+// The decimal value is returned separately from the integer value so
+// as to support large integer value which would not fit in a float.
+func (l *intervalLexer) consumeNum() (int64, bool, float64) {
+	if l.err != nil {
+		return 0, false, 0
+	}
+
+	hasDecimal := false
+	sign := int64(1)
+	offset := l.offset
+	// Accept a leading negative sign.
+	if l.offset < len(l.str) && l.str[l.offset] == '-' {
+		l.offset++
+		sign = -1
+	}
+
+	// Integer part before the decimal separator.
+	intPart := l.consumeInt()
+	var decPart float64
+	if l.offset < len(l.str) && l.str[l.offset] == '.' {
+		hasDecimal = true
+		start := l.offset
+
+		// Advance offset to prepare a valid argument to ParseFloat().
+		l.offset++
+		for ; l.offset < len(l.str) && l.str[l.offset] >= '0' && l.str[l.offset] <= '9'; l.offset++ {
+		}
+		// Try to convert.
+		value, err := strconv.ParseFloat(l.str[start:l.offset], 64)
+		if err != nil {
+			l.err = fmt.Errorf("interval: %v", err)
+			return 0, false, 0
+		}
+		decPart = value
+	}
+
+	// Ensure we have something.
+	if offset == l.offset {
+		l.err = fmt.Errorf("interval: missing number at %v", l.str[offset])
+		return 0, false, 0
+	}
+
+	return intPart * sign, hasDecimal, decPart * float64(sign)
+}
+
 // Consumes the next integer.
 func (l *intervalLexer) consumeInt() int64 {
 	if l.err != nil {
@@ -71,13 +122,15 @@ func (l *intervalLexer) consumeUnit(skipCharacter byte) string {
 
 	offset := l.offset
 	for ; l.offset < len(l.str); l.offset++ {
-		if (l.str[l.offset] >= '0' && l.str[l.offset] <= '9') || l.str[l.offset] == skipCharacter {
+		if (l.str[l.offset] >= '0' && l.str[l.offset] <= '9') ||
+			l.str[l.offset] == skipCharacter ||
+			l.str[l.offset] == '-' {
 			break
 		}
 	}
 
 	if offset == l.offset {
-		l.err = fmt.Errorf("interval: missing unit at offset %d, %v", offset, l.str[offset])
+		l.err = fmt.Errorf("interval: missing unit in duration %v", l.str)
 		return ""
 	}
 	return l.str[offset:l.offset]
@@ -308,22 +361,36 @@ func iso8601ToDuration(s string) (duration.Duration, error) {
 
 // Postgres Units.
 var postgresUnitMap = map[string]duration.Duration{
-	"nanosecond":   {Nanos: time.Nanosecond.Nanoseconds()},
-	"nanoseconds":  {Nanos: time.Nanosecond.Nanoseconds()},
+	"ns":          {Nanos: time.Nanosecond.Nanoseconds()},
+	"nanosecond":  {Nanos: time.Nanosecond.Nanoseconds()},
+	"nanoseconds": {Nanos: time.Nanosecond.Nanoseconds()},
+	"us":          {Nanos: time.Microsecond.Nanoseconds()},
+	// The two micron symbols below are not the same unicode character
+	// (one is greek small letter mu, the other one is micro).
+	"µs":           {Nanos: time.Microsecond.Nanoseconds()},
+	"μs":           {Nanos: time.Microsecond.Nanoseconds()},
 	"microsecond":  {Nanos: time.Microsecond.Nanoseconds()},
 	"microseconds": {Nanos: time.Microsecond.Nanoseconds()},
+	"ms":           {Nanos: time.Millisecond.Nanoseconds()},
+	"s":            {Nanos: time.Second.Nanoseconds()},
 	"second":       {Nanos: time.Second.Nanoseconds()},
 	"seconds":      {Nanos: time.Second.Nanoseconds()},
+	"m":            {Nanos: time.Minute.Nanoseconds()},
 	"minute":       {Nanos: time.Minute.Nanoseconds()},
 	"minutes":      {Nanos: time.Minute.Nanoseconds()},
+	"h":            {Nanos: time.Hour.Nanoseconds()},
 	"hour":         {Nanos: time.Hour.Nanoseconds()},
 	"hours":        {Nanos: time.Hour.Nanoseconds()},
+	"d":            {Days: 1},
 	"day":          {Days: 1},
 	"days":         {Days: 1},
+	"w":            {Days: 7},
 	"week":         {Days: 7},
 	"weeks":        {Days: 7},
+	"mon":          {Months: 1},
 	"month":        {Months: 1},
 	"months":       {Months: 1},
+	"y":            {Months: 12},
 	"year":         {Months: 12},
 	"years":        {Months: 12},
 }
@@ -334,17 +401,84 @@ func postgresToDuration(s string) (duration.Duration, error) {
 	var d duration.Duration
 	l := intervalLexer{str: s, offset: 0, err: nil}
 	for l.offset != len(l.str) {
-		v := l.consumeInt()
+		v, hasDecimal, vp := l.consumeNum()
+		curOffset := l.offset
 		l.consumeSpaces()
 		u := l.consumeUnit(' ')
 		l.consumeSpaces()
-		if unit, ok := postgresUnitMap[u]; ok {
+		if u == ":" && !hasDecimal {
+			// pg interval strings can also contain the syntax
+			// 'hh:mm[:ss[.fff]]' or mm:ss[.fff]. So first, rewind, to just
+			// after the hour number, then move forward again. The reason
+			// why we rewind is that the common code above has skipped over
+			// spaces, whereas no space is allowed within a XX:YY pair.
+			l.offset = curOffset
+			dd, err := l.parseShortDuration(v)
+			if err != nil {
+				return d, err
+			}
+			d = d.Add(dd)
+		} else if unit, ok := postgresUnitMap[u]; ok {
+			// A regular number followed by a unit, such as "9 day".
 			d = d.Add(unit.Mul(v))
+			d = d.Add(unit.MulFloat(vp))
 		} else if u != "" {
-			return d, fmt.Errorf("interval: unknown unit %s in postgres duration %s", u, s)
+			return d, fmt.Errorf("interval: unknown unit %s in duration %s", u, s)
 		} else {
-			return d, fmt.Errorf("interval: missing unit in postgres duration %s", s)
+			return d, fmt.Errorf("interval: missing unit in duration %s", s)
 		}
 	}
-	return d, nil
+	return d, l.err
+}
+
+func (l *intervalLexer) parseShortDuration(h int64) (duration.Duration, error) {
+	// postgresToDuration() has rewound the cursor to just after the
+	// first number, so that we can check here there are no unwanted
+	// spaces.
+	if l.str[l.offset] != ':' {
+		return duration.Duration{}, fmt.Errorf("interval: invalid format %s", l.str[l.offset:])
+	}
+	l.offset++
+	// Parse the second number.
+	m, hasDecimal, mp := l.consumeNum()
+
+	if m < 0 {
+		return duration.Duration{}, fmt.Errorf("interval: invalid format: %s", l.str)
+	}
+	// We have three possible formats:
+	// - MM:SS.mmmmm
+	// - HH:MM
+	// - HH:MM:SS[.mmmmm]
+	//
+	// The top format has the "h" field parsed above actually
+	// represent minutes. Get this out of the way first.
+	if hasDecimal {
+		l.consumeSpaces()
+		return duration.Duration{
+			Nanos: h*time.Minute.Nanoseconds() +
+				m*time.Second.Nanoseconds() +
+				int64(mp*float64(time.Second.Nanoseconds())),
+		}, nil
+	}
+
+	// Remaining formats
+	var s int64
+	var sp float64
+	if l.offset != len(l.str) && l.str[l.offset] == ':' {
+		// The last :NN part.
+		l.offset++
+		s, _, sp = l.consumeNum()
+		if s < 0 {
+			return duration.Duration{}, fmt.Errorf("interval: invalid format: %s", l.str)
+		}
+	}
+
+	l.consumeSpaces()
+	return duration.Duration{
+		Nanos: h*time.Hour.Nanoseconds() +
+			m*time.Minute.Nanoseconds() +
+			int64(mp*float64(time.Minute.Nanoseconds())) +
+			s*time.Second.Nanoseconds() +
+			int64(sp*float64(time.Second.Nanoseconds())),
+	}, nil
 }
