@@ -508,6 +508,7 @@ func TestStyle(t *testing.T) {
 			stream.Grep(` (github\.com/golang/protobuf/proto|github\.com/satori/go\.uuid|log|path|context)$`),
 			stream.GrepNot(`cockroach/pkg/(base|security|util/(log|randutil|stop)): log$`),
 			stream.GrepNot(`cockroach/pkg/(server/serverpb|ts/tspb): github\.com/golang/protobuf/proto$`),
+			stream.GrepNot(`cockroach/pkg/util/caller: path$`),
 			stream.GrepNot(`cockroach/pkg/util/uuid: github\.com/satori/go\.uuid$`),
 		), func(s string) {
 			if strings.HasSuffix(s, " path") {
