@@ -3411,12 +3411,13 @@ numeric:
   }
 | FLOAT opt_float
   {
-    prec, err := $2.numVal().AsInt64()
+    nv := $2.numVal()
+    prec, err := nv.AsInt64()
     if err != nil {
       sqllex.Error(err.Error())
       return 1
     }
-    $$.val = newFloatColType(int(prec))
+    $$.val = newFloatColType(int(prec), len(nv.OrigString) > 0)
   }
 | DOUBLE PRECISION
   {
