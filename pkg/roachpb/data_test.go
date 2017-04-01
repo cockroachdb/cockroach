@@ -1030,7 +1030,7 @@ func TestValuePrettyPrint(t *testing.T) {
 		{floatValue, "/FLOAT/6.28"},
 		{timeValue, "/TIME/2016-06-29T16:02:50.000000005Z"},
 		{decimalValue, "/DECIMAL/6.28"},
-		{durationValue, "/DURATION/1m2d3ns"},
+		{durationValue, "/DURATION/1mon2d3ns"},
 		{MakeValueFromBytes([]byte{0x1, 0x2, 0xF, 0xFF}), "/BYTES/01020fff"},
 		{MakeValueFromString("foo"), "/BYTES/foo"},
 		{tupleValue, "/TUPLE/1:1:Int/8/2:3:Bytes/foo"},
