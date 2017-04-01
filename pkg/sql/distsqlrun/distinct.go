@@ -30,6 +30,7 @@ type distinct struct {
 	lastGroupKey sqlbase.EncDatumRow
 	seen         map[string]struct{}
 	orderedCols  map[uint32]struct{}
+	distinctCols map[uint32]struct{}
 	datumAlloc   sqlbase.DatumAlloc
 	out          procOutputHelper
 }
@@ -40,11 +41,15 @@ func newDistinct(
 	flowCtx *FlowCtx, spec *DistinctSpec, input RowSource, post *PostProcessSpec, output RowReceiver,
 ) (*distinct, error) {
 	d := &distinct{
-		input:       input,
-		orderedCols: make(map[uint32]struct{}),
+		input:        input,
+		orderedCols:  make(map[uint32]struct{}),
+		distinctCols: make(map[uint32]struct{}),
 	}
 	for _, col := range spec.OrderedColumns {
 		d.orderedCols[col] = struct{}{}
+	}
+	for _, col := range spec.DistinctColumns {
+		d.distinctCols[col] = struct{}{}
 	}
 
 	if err := d.out.init(post, input.Types(), &flowCtx.evalCtx, output); err != nil {
@@ -122,7 +127,9 @@ func (d *distinct) Run(ctx context.Context, wg *sync.WaitGroup) {
 
 		key := string(encoding)
 		if _, ok := d.seen[key]; !ok {
-			d.seen[key] = struct{}{}
+			if len(key) > 0 {
+				d.seen[key] = struct{}{}
+			}
 			if !emitHelper(ctx, &d.out, row, ProducerMetadata{}, d.input) {
 				// No cleanup required; emitHelper() took care of it.
 				return
@@ -150,12 +157,11 @@ func (d *distinct) matchLastGroupKey(row sqlbase.EncDatumRow) (bool, error) {
 func (d *distinct) encode(appendTo []byte, row sqlbase.EncDatumRow) ([]byte, error) {
 	var err error
 	for i, datum := range row {
-		// If we are processing DISTINCT(x, y) and the input stream is ordered
-		// by x, we are using x as our group key (our 'seen' set at any given
-		// time is the set of all rows with the same group key). This alleviates
-		// the need to use x in our encoding when computing the key into our
-		// set.
-		if _, ordered := d.orderedCols[uint32(i)]; ordered {
+		// Ignore columns that are not in the distinctCols, as if we are
+		// post-processing to strip out column Y, we cannot include it as
+		// (X1, Y1) and (X1, Y2) will appear as distinct rows, but if we are
+		// stripping out Y, we do not want (X1) and (X1) to be in the results.
+		if _, distinct := d.distinctCols[uint32(i)]; !distinct {
 			continue
 		}
 
