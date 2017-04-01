@@ -345,9 +345,6 @@ func GetLogReader(filename string, restricted bool) (io.ReadCloser, error) {
 
 func fileExists(path string) (bool, error) {
 	_, err := os.Stat(path)
-	if err == nil {
-		return true, nil
-	}
 	if os.IsNotExist(err) {
 		return false, nil
 	}
