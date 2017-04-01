@@ -141,15 +141,16 @@ var (
 
 // FloatColType represents a REAL, DOUBLE or FLOAT type.
 type FloatColType struct {
-	Name string
-	Prec int
+	Name          string
+	Prec          int
+	PrecSpecified bool // true if the value of Prec is not the default
 }
 
-func newFloatColType(prec int) *FloatColType {
-	if prec == 0 {
+func newFloatColType(prec int, precSpecified bool) *FloatColType {
+	if prec == 0 && !precSpecified {
 		return floatColTypeFloat
 	}
-	return &FloatColType{Name: "FLOAT", Prec: prec}
+	return &FloatColType{Name: "FLOAT", Prec: prec, PrecSpecified: precSpecified}
 }
 
 // Format implements the NodeFormatter interface.
