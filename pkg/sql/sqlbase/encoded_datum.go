@@ -169,8 +169,14 @@ func (ed *EncDatum) EnsureDecoded(a *DatumAlloc) error {
 	var rem []byte
 	switch ed.encoding {
 	case DatumEncoding_ASCENDING_KEY:
+		if HasCompositeKeyEncoding(ed.Type.Kind) {
+			return errors.Errorf("composite type cannot be decoded from key encoding")
+		}
 		ed.Datum, rem, err = DecodeTableKey(a, datType, ed.encoded, encoding.Ascending)
 	case DatumEncoding_DESCENDING_KEY:
+		if HasCompositeKeyEncoding(ed.Type.Kind) {
+			return errors.Errorf("composite type cannot be decoded from key encoding")
+		}
 		ed.Datum, rem, err = DecodeTableKey(a, datType, ed.encoded, encoding.Descending)
 	case DatumEncoding_VALUE:
 		ed.Datum, rem, err = DecodeTableValue(a, datType, ed.encoded)

@@ -28,7 +28,7 @@ INSERT INTO t VALUES
   ('x' COLLATE de, 5, FALSE);
 
 query TI
-SELECT a, b FROM t ORDER BY (a, b);
+SELECT a, b FROM t ORDER BY a, b
 ----
 a  2
 a  3
@@ -41,7 +41,7 @@ B  3
 x  5
 
 query IT
-SELECT b, a FROM t ORDER BY (b, a);
+SELECT b, a FROM t ORDER BY b, a
 ----
 1  A
 2  a
@@ -75,7 +75,7 @@ statement ok
 CREATE INDEX ON t (a, b) STORING (c);
 
 query TI
-SELECT a, b FROM t ORDER BY (a, b);
+SELECT a, b FROM t ORDER BY a, b
 ----
 a  2
 a  3
@@ -150,18 +150,17 @@ SELECT b, a FROM t ORDER BY (b, a);
 # Delete and try again
 
 statement ok
-----
 DELETE FROM t WHERE a > ('a' COLLATE de) AND a < ('c' COLLATE de);
 
 query TI
-SELECT a, b FROM t ORDER BY (a, b);
+SELECT a, b FROM t ORDER BY a, b
 ----
 üü  5
 üü  6
 xx  5
 
 query IT
-SELECT b, a FROM t ORDER BY (b, a);
+SELECT b, a FROM t ORDER BY b, a
 ----
 5  üü
 5  xx

@@ -27,8 +27,21 @@ INSERT INTO t VALUES
   ('ü' COLLATE da, 5, NULL),
   ('x' COLLATE da, 5, FALSE);
 
+query T
+SELECT a FROM t ORDER BY a
+----
+a
+a
+A
+A
+b
+B
+x
+ü
+ü
+
 query TI
-SELECT a, b FROM t ORDER BY (a, b);
+SELECT a, b FROM t ORDER BY a, b
 ----
 a  2
 a  3
@@ -41,7 +54,7 @@ x  5
 ü  6
 
 query IT
-SELECT b, a FROM t ORDER BY (b, a);
+SELECT b, a FROM t ORDER BY b, a
 ----
 1  A
 2  a
@@ -75,7 +88,7 @@ statement ok
 CREATE INDEX ON t (b, a) STORING (c);
 
 query TI
-SELECT a, b FROM t ORDER BY (a, b);
+SELECT a, b FROM t ORDER BY a, b
 ----
 a  2
 a  3
@@ -154,7 +167,7 @@ statement ok
 DELETE FROM t WHERE a > ('a' COLLATE da) AND a < ('c' COLLATE da);
 
 query TI
-SELECT a, b FROM t ORDER BY (a, b);
+SELECT a, b FROM t ORDER BY a, b
 ----
 xx  5
 üü  5
