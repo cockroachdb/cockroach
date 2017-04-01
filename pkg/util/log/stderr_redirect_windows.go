@@ -15,6 +15,7 @@
 package log
 
 import (
+	"os"
 	"syscall"
 )
 
@@ -24,7 +25,7 @@ var (
 )
 
 func dupFD(fd uintptr) (uintptr, error) {
-	// Cribbed from https://github.com/golang/go/blob/go1.8/src/syscall/exec_windows.go#L303.
+	// Adapted from https://github.com/golang/go/blob/go1.8/src/syscall/exec_windows.go#L303.
 	p, err := syscall.GetCurrentProcess()
 	if err != nil {
 		return 0, err
@@ -33,14 +34,19 @@ func dupFD(fd uintptr) (uintptr, error) {
 	return uintptr(h), syscall.DuplicateHandle(p, syscall.Handle(fd), p, &h, 0, true, syscall.DUPLICATE_SAME_ACCESS)
 }
 
-func dupFD2(oldfd uintptr, newfd uintptr) error {
-	// Cribbed from https://groups.google.com/d/msg/golang-nuts/fG8hEAs7ZXs/tahEOuCEPn0J.
-	r0, _, e1 := syscall.Syscall(procSetStdHandle.Addr(), 2, oldfd, newfd, 0)
+func setStdHandle(nStdHandle int32, hHandle syscall.Handle) error {
+	// Adapted from https://github.com/ncw/rclone/blob/v1.36/fs/redirect_stderr_windows.go.
+	r0, _, err := procSetStdHandle.Call(uintptr(nStdHandle), uintptr(hHandle))
 	if r0 == 0 {
-		if e1 != 0 {
-			return error(e1)
+		if err != nil {
+			return err
 		}
 		return syscall.EINVAL
 	}
 	return nil
+}
+
+func redirectStderr(f *os.File) error {
+	os.Stderr = f
+	return setStdHandle(syscall.STD_ERROR_HANDLE, syscall.Handle(f.Fd()))
 }
