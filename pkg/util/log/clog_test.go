@@ -423,33 +423,35 @@ func TestGetLogReader(t *testing.T) {
 		{relPath, "pathnames must be basenames", ""},
 	}
 
-	for i, test := range testCases {
-		for _, restricted := range []bool{true, false} {
-			var expErr string
-			if restricted {
-				expErr = test.expErrRestricted
-			} else {
-				expErr = test.expErrUnrestricted
+	for _, test := range testCases {
+		t.Run(test.filename, func(t *testing.T) {
+			for _, restricted := range []bool{true, false} {
+				t.Run(fmt.Sprintf("restricted=%t", restricted), func(t *testing.T) {
+					var expErr string
+					if restricted {
+						expErr = test.expErrRestricted
+					} else {
+						expErr = test.expErrUnrestricted
+					}
+					reader, err := GetLogReader(test.filename, restricted)
+					if expErr == "" {
+						if err != nil {
+							t.Errorf("expected ok, got %s", err)
+						}
+					} else {
+						if err == nil {
+							t.Errorf("expected error %s; got nil", expErr)
+						} else if matched, matchErr := regexp.MatchString(expErr, err.Error()); matchErr != nil || !matched {
+							t.Errorf("expected error %s; got %v", expErr, err)
+						}
+					}
+					if reader != nil {
+						reader.Close()
+					}
+				})
+
 			}
-			reader, err := GetLogReader(test.filename, restricted)
-			if expErr == "" {
-				if err != nil {
-					t.Errorf("%d (%s, restricted=%t): expected ok, got %s",
-						i, test.filename, restricted, err)
-				}
-			} else {
-				if err == nil {
-					t.Errorf("%d (%s, restricted=%t): expected error %s; got nil",
-						i, test.filename, restricted, expErr)
-				} else if matched, matchErr := regexp.MatchString(expErr, err.Error()); matchErr != nil || !matched {
-					t.Errorf("%d (%s, restricted=%t): expected error %s; got %v",
-						i, test.filename, restricted, expErr, err)
-				}
-			}
-			if reader != nil {
-				reader.Close()
-			}
-		}
+		})
 	}
 }
 
