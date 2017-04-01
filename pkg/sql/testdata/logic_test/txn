@@ -576,3 +576,40 @@ ROLLBACK TO SAVEPOINT other
 
 statement ok
 ROLLBACK
+
+# Savepoint must be first statement in a transaction.
+statement ok
+BEGIN TRANSACTION; UPSERT INTO kv VALUES('savepoint', 'true')
+
+statement error SAVEPOINT COCKROACH_RESTART needs to be the first statement in a transaction
+SAVEPOINT cockroach_restart
+
+statement ok
+ROLLBACK
+
+# Can rollback to a savepoint if no statements have been executed.
+statement ok
+BEGIN TRANSACTION; SAVEPOINT cockroach_restart
+
+statement ok
+ROLLBACK TO SAVEPOINT cockroach_restart
+
+# Can do it twice in a row.
+statement ok
+ROLLBACK TO SAVEPOINT cockroach_restart
+
+# Can rollback after a transactional write, even if not in a retryable state.
+statement ok
+UPSERT INTO kv VALUES('savepoint', 'true')
+
+statement ok
+ROLLBACK TO SAVEPOINT cockroach_restart
+
+statement ok
+COMMIT
+
+# Because we rolled back, the 'savepoint' insert will not have been committed.
+query I
+SELECT COUNT(*) FROM kv WHERE k = 'savepoint'
+----
+0
