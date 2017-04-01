@@ -202,6 +202,12 @@ message DistinctSpec {
   // the column itself is not important nor is the order in which the columns
   // are specified.
   repeated uint32 ordered_columns = 1;
+  // The distinct columns in the input stream are those columns on which we
+  // check for distinct rows. If A,B,C are in distinct_columns and there is a
+  // 4th column D which is not included in distinct_columns, its values are not
+  // considered, so rows A1,B1,C1,D1 and A1,B1,C1,D2 are considered equal and
+  // only one of them (the first) is output.
+  repeated uint32 distinct_columns = 2;
 }
 
 enum JoinType {
