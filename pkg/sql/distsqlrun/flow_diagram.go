@@ -146,7 +146,10 @@ func (bf *BackfillerSpec) summary() (string, []string) {
 }
 
 func (d *DistinctSpec) summary() (string, []string) {
-	details := []string{fmt.Sprintf("orderedCols: %v", d.OrderedColumns)}
+	details := []string{
+		fmt.Sprintf("orderedCols: %v", d.OrderedColumns),
+		fmt.Sprintf("distinctCols: %v", d.DistinctColumns),
+	}
 	return "Distinct", details
 }
 
