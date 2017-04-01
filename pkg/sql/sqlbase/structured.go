@@ -527,8 +527,9 @@ func (desc *TableDescriptor) ensurePrimaryKey() error {
 	return nil
 }
 
-// HasCompositeKeyEncoding returns true if key columns of the given kind have a
-// composite encoding.
+// HasCompositeKeyEncoding returns true if key columns of the given kind can
+// have a composite encoding. For such types, it can be decided on a
+// case-by-base basis whether a given Datum requires the composite encoding.
 func HasCompositeKeyEncoding(kind ColumnType_Kind) bool {
 	switch kind {
 	case ColumnType_COLLATEDSTRING,
