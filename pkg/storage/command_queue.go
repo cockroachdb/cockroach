@@ -151,12 +151,26 @@ func NewCommandQueue(coveringOptimization bool) *CommandQueue {
 // String dumps the contents of the command queue for testing.
 func (cq *CommandQueue) String() string {
 	var buf bytes.Buffer
+	var keysPrinted int
+	const keysToPrint = 10
 	f := func(i interval.Interface) bool {
 		fmt.Fprintf(&buf, "  %s\n", i)
-		return false
+		keysPrinted++
+		return keysPrinted >= keysToPrint
 	}
+
 	cq.reads.Do(f)
+	if keysPrinted >= keysToPrint {
+		fmt.Fprintf(&buf, "  ...remaining %d reads omitted\n", cq.reads.Len()-keysPrinted)
+	}
+	keysPrinted = 0
+
 	cq.writes.Do(f)
+	if keysPrinted >= keysToPrint {
+		fmt.Fprintf(&buf, "  ...remaining %d writes omitted", cq.writes.Len()-keysPrinted)
+	}
+	keysPrinted = 0
+
 	return buf.String()
 }
 
