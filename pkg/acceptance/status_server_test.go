@@ -105,8 +105,10 @@ func checkNode(
 // TestStatusServer starts up an N node cluster and tests the status server on
 // each node.
 func TestStatusServer(t *testing.T) {
-	s := log.Scope(t, "")
-	defer s.Close(t)
+	if !*flagShowLogs {
+		s := log.Scope(t, "")
+		defer s.Close(t)
+	}
 
 	runTestOnConfigs(t, testStatusServerInner)
 }

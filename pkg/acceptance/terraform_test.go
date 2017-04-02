@@ -33,8 +33,10 @@ import (
 func TestBuildBabyCluster(t *testing.T) {
 	t.Skip("only enabled during testing")
 
-	s := log.Scope(t, "")
-	defer s.Close(t)
+	if !*flagShowLogs {
+		s := log.Scope(t, "")
+		defer s.Close(t)
+	}
 
 	ctx := context.Background()
 	f := MakeFarmer(t, "baby", stopper)

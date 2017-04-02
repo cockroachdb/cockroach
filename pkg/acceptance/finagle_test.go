@@ -27,8 +27,10 @@ func TestDockerFinagle(t *testing.T) {
 	ctx := context.Background()
 	t.Skip("#8332. Upstream has a 2s timeout, disabled until we run tests somewhere more consistent.")
 
-	s := log.Scope(t, "")
-	defer s.Close(t)
+	if !*flagShowLogs {
+		s := log.Scope(t, "")
+		defer s.Close(t)
+	}
 
 	testDockerSuccess(ctx, t, "finagle", []string{"/bin/sh", "-c", finagle})
 }

@@ -26,8 +26,10 @@ import (
 )
 
 func TestDockerRuby(t *testing.T) {
-	s := log.Scope(t, "")
-	defer s.Close(t)
+	if !*flagShowLogs {
+		s := log.Scope(t, "")
+		defer s.Close(t)
+	}
 
 	ctx := context.Background()
 	testDockerSuccess(ctx, t, "ruby", []string{"ruby", "-e", strings.Replace(ruby, "%v", "3", 1)})

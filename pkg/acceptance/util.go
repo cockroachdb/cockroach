@@ -91,6 +91,7 @@ var flagRemote = flag.Bool("remote", false, "run the test using terrafarm instea
 var flagCwd = flag.String("cwd", "../cloud/aws", "directory to run terraform from")
 var flagKeyName = flag.String("key-name", "", "name of key for remote cluster")
 var flagLogDir = flag.String("l", "", "the directory to store log files, relative to the test source")
+var flagShowLogs = flag.Bool("show-logs", false, "print logs instead of saving them in files")
 var flagTestConfigs = flag.Bool("test-configs", false, "instead of using the passed in configuration, use the default "+
 	"cluster configurations for each test. This overrides the nodes, stores and duration flags and will run the test "+
 	"against a collection of pre-specified cluster configurations.")

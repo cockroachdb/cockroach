@@ -26,8 +26,10 @@ import (
 )
 
 func TestDockerC(t *testing.T) {
-	s := log.Scope(t, "")
-	defer s.Close(t)
+	if !*flagShowLogs {
+		s := log.Scope(t, "")
+		defer s.Close(t)
+	}
 
 	ctx := context.Background()
 	t.Run("Success", func(t *testing.T) {

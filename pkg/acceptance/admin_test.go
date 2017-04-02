@@ -34,8 +34,10 @@ import (
 )
 
 func TestAdminLossOfQuorum(t *testing.T) {
-	s := log.Scope(t, "")
-	defer s.Close(t)
+	if !*flagShowLogs {
+		s := log.Scope(t, "")
+		defer s.Close(t)
+	}
 
 	runTestOnConfigs(t, testAdminLossOfQuorumInner)
 }

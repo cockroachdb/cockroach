@@ -33,8 +33,10 @@ const longWaitTime = 2 * time.Minute
 const shortWaitTime = 20 * time.Second
 
 func TestGossipPeerings(t *testing.T) {
-	s := log.Scope(t, "")
-	defer s.Close(t)
+	if !*flagShowLogs {
+		s := log.Scope(t, "")
+		defer s.Close(t)
+	}
 
 	runTestOnConfigs(t, testGossipPeeringsInner)
 }

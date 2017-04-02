@@ -26,8 +26,10 @@ import (
 )
 
 func TestDockerPHP(t *testing.T) {
-	s := log.Scope(t, "")
-	defer s.Close(t)
+	if !*flagShowLogs {
+		s := log.Scope(t, "")
+		defer s.Close(t)
+	}
 
 	ctx := context.Background()
 	testDockerSuccess(ctx, t, "php", []string{"php", "-r", strings.Replace(php, "%v", "3", 1)})

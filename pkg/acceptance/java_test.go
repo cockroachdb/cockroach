@@ -26,8 +26,10 @@ import (
 )
 
 func TestDockerJava(t *testing.T) {
-	s := log.Scope(t, "")
-	defer s.Close(t)
+	if !*flagShowLogs {
+		s := log.Scope(t, "")
+		defer s.Close(t)
+	}
 
 	ctx := context.Background()
 	testDockerSuccess(ctx, t, "java", []string{"/bin/sh", "-c", strings.Replace(java, "%v", "Int(2, 3)", 1)})

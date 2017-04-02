@@ -35,8 +35,10 @@ import (
 // TestEventLog verifies that "node joined" and "node restart" events are
 // recorded whenever a node starts and contacts the cluster.
 func TestEventLog(t *testing.T) {
-	s := log.Scope(t, "")
-	defer s.Close(t)
+	if !*flagShowLogs {
+		s := log.Scope(t, "")
+		defer s.Close(t)
+	}
 
 	runTestOnConfigs(t, testEventLogInner)
 }
