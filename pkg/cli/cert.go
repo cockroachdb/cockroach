@@ -18,6 +18,7 @@ package cli
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 )
@@ -96,8 +97,14 @@ func runCreateClientCert(cmd *cobra.Command, args []string) error {
 		return errMissingParams
 	}
 
+	var err error
+	var username string
+	if username, err = sql.NormalizeAndValidateUsername(args[0]); err != nil {
+		return err
+	}
+
 	return errors.Wrap(security.RunCreateClientCert(baseCfg.SSLCA, baseCfg.SSLCAKey,
-		baseCfg.SSLCert, baseCfg.SSLCertKey, keySize, args[0]),
+		baseCfg.SSLCert, baseCfg.SSLCertKey, keySize, username),
 		"failed to generate clent certificate",
 	)
 }

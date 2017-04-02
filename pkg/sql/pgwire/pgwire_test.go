@@ -1467,7 +1467,7 @@ func TestPGWireAuth(t *testing.T) {
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop()
 	{
-		unicodeUser := "♫"
+		unicodeUser := "Ὀδυσσεύς"
 
 		t.Run("RootUserAuth", func(t *testing.T) {
 			// Authenticate as root with certificate and expect success.

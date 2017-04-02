@@ -20,6 +20,7 @@ import (
 	"bytes"
 	"fmt"
 	"reflect"
+	"regexp"
 	"strings"
 
 	"github.com/pkg/errors"
@@ -271,6 +272,28 @@ func (p *planner) CreateUser(ctx context.Context, n *parser.CreateUser) (planNod
 	return &createUserNode{p: p, n: n, password: resolvedPassword}, nil
 }
 
+const usernameHelp = "usernames are case insensitive, must start with a letter " +
+	"or underscore, may contain letters, digits or underscores, and must not exceed 63 characters"
+
+var usernameRE = regexp.MustCompile(`^[\p{Ll}_][\p{Ll}0-9_]{0,62}$`)
+
+var blacklistedUsernames = map[string]struct{}{
+	security.NodeUser: {},
+}
+
+// NormalizeAndValidateUsername case folds the specified username and verifies
+// it validates according to the usernameRE regular expression.
+func NormalizeAndValidateUsername(username string) (string, error) {
+	username = parser.Name(username).Normalize()
+	if !usernameRE.MatchString(username) {
+		return "", errors.Errorf("username %q invalid; %s", username, usernameHelp)
+	}
+	if _, ok := blacklistedUsernames[username]; ok {
+		return "", errors.Errorf("username %q reserved", username)
+	}
+	return username, nil
+}
+
 func (n *createUserNode) Start(ctx context.Context) error {
 	var hashedPassword []byte
 	if n.password != "" {
@@ -281,7 +304,10 @@ func (n *createUserNode) Start(ctx context.Context) error {
 		}
 	}
 
-	normalizedUsername := n.n.Name.Normalize()
+	normalizedUsername, err := NormalizeAndValidateUsername(string(n.n.Name))
+	if err != nil {
+		return err
+	}
 
 	internalExecutor := InternalExecutor{LeaseManager: n.p.session.leaseMgr}
 	rowsAffected, err := internalExecutor.ExecuteStatementInTransaction(
