@@ -49,7 +49,7 @@ import:
 - package: github.com/lib/pq
   version: 472a0745531a17dbac346e828b4c60e73ddff30c
 - package: github.com/spf13/cobra
-  version: 7be4beda01ec05d0b93d80b3facd2b6f44080d94
+  version: 7aeaa2cce6ae7e18d2a6ee597b60ee137e999bd9
 - package: gopkg.in/yaml.v2
   version: a3f3340b5840cee44f372bddb5880fcbc419b46a
 - package: golang.org/x/crypto
