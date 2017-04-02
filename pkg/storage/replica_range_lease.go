@@ -86,7 +86,7 @@ func (p *pendingLeaseRequest) RequestPending() (roachpb.Lease, bool) {
 //
 // Note: Once this function gets a context to be used for cancellation, instead
 // of replica.store.Stopper().ShouldQuiesce(), care will be needed for cancelling
-// the Raft command, similar to replica.addWriteCmd.
+// the Raft command, similar to replica.executeWriteBatch.
 //
 // Requires repl.mu is exclusively locked.
 func (p *pendingLeaseRequest) InitOrJoinRequest(
