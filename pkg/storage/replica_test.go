@@ -4227,7 +4227,8 @@ func TestAbortCacheError(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	pErr := tc.repl.checkIfTxnAborted(context.Background(), tc.engine, txn)
+	rec := ReplicaEvalContext{tc.repl, nil}
+	pErr := checkIfTxnAborted(context.Background(), rec, tc.engine, txn)
 	if _, ok := pErr.GetDetail().(*roachpb.TransactionAbortedError); ok {
 		expected := txn.Clone()
 		expected.Timestamp = txn.Timestamp
