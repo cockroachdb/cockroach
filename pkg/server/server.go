@@ -659,7 +659,7 @@ func (s *Server) Start(ctx context.Context) error {
 	log.Event(ctx, "started node")
 
 	// We can now add the node registry.
-	s.recorder.AddNode(s.registry, s.node.Descriptor, s.node.startedAt)
+	s.recorder.AddNode(s.registry, s.node.Descriptor, s.node.startedAt, s.cfg.AdvertiseAddr, s.cfg.HTTPAddr)
 
 	// Begin recording runtime statistics.
 	s.startSampleEnvironment(s.cfg.MetricsSampleInterval)

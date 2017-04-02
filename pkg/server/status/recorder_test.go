@@ -148,7 +148,7 @@ func TestMetricsRecorder(t *testing.T) {
 	recorder := NewMetricsRecorder(hlc.NewClock(manual.UnixNano, time.Nanosecond))
 	recorder.AddStore(store1)
 	recorder.AddStore(store2)
-	recorder.AddNode(reg1, nodeDesc, 50)
+	recorder.AddNode(reg1, nodeDesc, 50, "foo:26257", "foo:26258")
 
 	// Ensure the metric system's view of time does not advance during this test
 	// as the test expects time to not advance too far which would age the actual
@@ -252,6 +252,11 @@ func TestMetricsRecorder(t *testing.T) {
 			expectedStoreSummaryMetrics[prefix+name] = float64(val)
 		}
 	}
+
+	// Add metric for node ID.
+	g := metric.NewGauge(metric.Metadata{Name: "node-id"})
+	g.Update(int64(nodeDesc.NodeID))
+	addExpected("", "node-id", 1, 100, g.Value(), true)
 
 	for _, reg := range regList {
 		for _, data := range metricNames {
