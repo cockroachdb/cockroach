@@ -143,12 +143,11 @@ var commands = map[roachpb.Method]Command{
 		}},
 }
 
-// executeCmd switches over the method and multiplexes to execute the appropriate storage API
-// command. It returns the response, an error, and a post commit trigger which
-// may be actionable even in the case of an error.
-// maxKeys is the number of scan results remaining for this batch
-// (MaxInt64 for no limit).
-func executeCmd(
+// evaluateCommand delegates to the eval method for the given
+// roachpb.Request. The returned EvalResult may be partially valid
+// even if an error is returned. maxKeys is the number of scan results
+// remaining for this batch (MaxInt64 for no limit).
+func evaluateCommand(
 	ctx context.Context,
 	raftCmdID storagebase.CmdIDKey,
 	index int,
