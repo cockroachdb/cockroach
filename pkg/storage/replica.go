@@ -758,10 +758,10 @@ func (r *Replica) setTombstoneKey(
 // descriptor for the range that was looked up outside the replica code.
 func (r *Replica) nextReplicaIDLocked(externalDesc *roachpb.RangeDescriptor) roachpb.ReplicaID {
 	result := r.mu.state.Desc.NextReplicaID
-	if externalDesc != nil && externalDesc.NextReplicaID > result {
+	if externalDesc != nil && result < externalDesc.NextReplicaID {
 		result = externalDesc.NextReplicaID
 	}
-	if r.mu.minReplicaID > result {
+	if result < r.mu.minReplicaID {
 		result = r.mu.minReplicaID
 	}
 	return result
@@ -796,7 +796,7 @@ func (r *Replica) setReplicaIDLocked(replicaID roachpb.ReplicaID) error {
 	// }
 
 	previousReplicaID := r.mu.replicaID
-	r.mu.replicaID = replicaID // TODO(DONOTMERGE): Should we update the log string here? Or keep the log string consistent with the descriptor?
+	r.mu.replicaID = replicaID
 	if replicaID >= r.mu.minReplicaID {
 		r.mu.minReplicaID = replicaID + 1
 	}
