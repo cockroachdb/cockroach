@@ -46,6 +46,9 @@ const (
 	// nodeTimeSeriesPrefix is the common prefix for time series keys which
 	// record node-specific data.
 	nodeTimeSeriesPrefix = "cr.node.%s"
+
+	advertiseAddrLabelKey = "advertiseAddr"
+	httpAddrLabelKey      = "httpAddr"
 )
 
 type quantile struct {
@@ -126,13 +129,27 @@ func NewMetricsRecorder(clock *hlc.Clock) *MetricsRecorder {
 // AddNode adds the Registry from an initialized node, along with its descriptor
 // and start time.
 func (mr *MetricsRecorder) AddNode(
-	reg *metric.Registry, desc roachpb.NodeDescriptor, startedAt int64,
+	reg *metric.Registry,
+	desc roachpb.NodeDescriptor,
+	startedAt int64,
+	advertiseAddr, httpAddr string,
 ) {
 	mr.mu.Lock()
 	defer mr.mu.Unlock()
 	mr.mu.nodeRegistry = reg
 	mr.mu.desc = desc
 	mr.mu.startedAt = startedAt
+
+	// Create node ID gauge metric with host as a label.
+	metadata := metric.Metadata{
+		Name: "node_id",
+		Help: "node ID with labels for advertised RPC and HTTP addresses",
+	}
+	metadata.AddLabel(advertiseAddrLabelKey, advertiseAddr)
+	metadata.AddLabel(httpAddrLabelKey, httpAddr)
+	nodeIDGauge := metric.NewGauge(metadata)
+	nodeIDGauge.Update(int64(desc.NodeID))
+	reg.AddMetric(nodeIDGauge)
 }
 
 // AddStore adds the Registry from the provided store as a store-level registry
@@ -255,7 +272,7 @@ func (mr *MetricsRecorder) GetStatusSummary() *NodeStatus {
 
 	now := mr.mu.clock.PhysicalNow()
 
-	// Generate an node status with no store data.
+	// Generate a node status with no store data.
 	nodeStat := &NodeStatus{
 		Desc:          mr.mu.desc,
 		BuildInfo:     build.GetInfo(),
