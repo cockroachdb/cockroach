@@ -17,8 +17,6 @@ import (
 	"github.com/pkg/errors"
 )
 
-// #cgo CPPFLAGS: -I../../../../vendor/github.com/cockroachdb/c-protobuf/internal/src
-// #cgo CPPFLAGS: -I../../../../vendor/github.com/cockroachdb/c-rocksdb/internal/include
 // #cgo CXXFLAGS: -std=c++11 -Werror -Wall -Wno-sign-compare
 // #cgo linux LDFLAGS: -lrt
 //

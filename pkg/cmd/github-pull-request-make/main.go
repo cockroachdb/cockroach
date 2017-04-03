@@ -195,17 +195,13 @@ func main() {
 			}
 		}
 		if vendorChanged {
-			for _, cmd := range []*exec.Cmd{
-				exec.Command("go", "install", crdb.ImportPath+"/vendor/github.com/Masterminds/glide"),
-				exec.Command("glide", "install"),
-			} {
-				cmd.Dir = crdb.Dir
-				cmd.Stdout = os.Stdout
-				cmd.Stderr = os.Stderr
-				log.Println(cmd.Args)
-				if err := cmd.Run(); err != nil {
-					log.Fatal(err)
-				}
+			cmd := exec.Command("glide", "install")
+			cmd.Dir = crdb.Dir
+			cmd.Stdout = os.Stdout
+			cmd.Stderr = os.Stderr
+			log.Println(cmd.Args)
+			if err := cmd.Run(); err != nil {
+				log.Fatal(err)
 			}
 
 			// Check for diffs.

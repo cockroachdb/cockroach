@@ -19,9 +19,6 @@
 package status
 
 // #cgo CPPFLAGS: -DJEMALLOC_NO_DEMANGLE
-// #cgo darwin CPPFLAGS: -I../../../vendor/github.com/cockroachdb/c-jemalloc/darwin_includes/internal/include
-// #cgo freebsd CPPFLAGS: -I../../../vendor/github.com/cockroachdb/c-jemalloc/freebsd_includes/internal/include
-// #cgo linux CPPFLAGS: -I../../../vendor/github.com/cockroachdb/c-jemalloc/linux_includes/internal/include
 //
 // #include <jemalloc/jemalloc.h>
 //

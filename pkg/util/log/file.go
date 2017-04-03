@@ -34,8 +34,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/pkg/errors"
+
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
 // MaxSize is the maximum size of a log file in bytes.
@@ -250,7 +251,7 @@ func getFileDetails(info os.FileInfo) (FileDetails, error) {
 func verifyFile(filename string) error {
 	info, err := os.Stat(filename)
 	if err != nil {
-		return errors.Errorf("stat: %s: %v", filename, err)
+		return errors.Wrapf(err, "Stat: %s", filename)
 	}
 	_, err = getFileDetails(info)
 	return err
@@ -331,7 +332,7 @@ func GetLogReader(filename string, restricted bool) (io.ReadCloser, error) {
 		// Normalize the name to an absolute path without symlinks.
 		filename, err = filepath.EvalSymlinks(filename)
 		if err != nil {
-			return nil, errors.Errorf("EvalSymLinks: %s: %v", filename, err)
+			return nil, errors.Wrapf(err, "EvalSymLinks: %s", filename)
 		}
 	}
 
@@ -345,9 +346,6 @@ func GetLogReader(filename string, restricted bool) (io.ReadCloser, error) {
 
 func fileExists(path string) (bool, error) {
 	_, err := os.Stat(path)
-	if err == nil {
-		return true, nil
-	}
 	if os.IsNotExist(err) {
 		return false, nil
 	}
