@@ -145,6 +145,7 @@ testshort: override TESTFLAGS += -short
 testshort: test
 
 testrace: override GOFLAGS += -race
+testrace: GORACE := halt_on_error=1
 testrace: TESTTIMEOUT := $(RACETIMEOUT)
 testrace: test
 
