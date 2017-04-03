@@ -6,7 +6,7 @@ import * as protos from "../../js/protos";
 import { databaseNameAttr, tableNameAttr } from "../../util/constants";
 import { Bytes } from "../../util/format";
 import { AdminUIState } from "../../redux/state";
-import { setUISetting } from "../../redux/ui";
+import { LocalSetting } from "../../redux/localsettings";
 import { refreshTableDetails, refreshTableStats, generateTableID } from "../../redux/apiReducers";
 import { SummaryBar, SummaryHeadlineStat } from "../../components/summaryBar";
 
@@ -23,8 +23,10 @@ import * as hljs from "highlight.js";
 // tslint:disable-next-line:variable-name
 export const GrantsSortedTable = SortedTable as new () => SortedTable<protos.cockroach.server.serverpb.TableDetailsResponse.Grant$Properties>;
 
-// Constants used to store per-page sort settings in the redux UI store.
-const UI_DATABASE_TABLE_GRANTS_SORT_SETTING_KEY = "tableDetails/sort_setting/grants";
+// LocalSetting which maintains table sort order.
+const databaseTableGrantsSortSetting = new LocalSetting<AdminUIState, SortSetting>(
+  "tableDetails/sort_setting/grants", (s) => s.ui,
+);
 
 /**
  * TableMainData are the data properties which should be passed to the TableMain
@@ -43,7 +45,7 @@ interface TableMainActions {
   // Refresh the table data
   refreshTableDetails: typeof refreshTableDetails;
   refreshTableStats: typeof refreshTableStats;
-  setUISetting: typeof setUISetting;
+  setSort: typeof databaseTableGrantsSortSetting.set;
 }
 
 /**
@@ -68,11 +70,6 @@ class TableMain extends React.Component<TableMainProps, {}> {
       database: this.props.params[databaseNameAttr],
       table: this.props.params[tableNameAttr],
     }));
-  }
-
-  // Callback when the user elects to change the grant table sort setting.
-  changeGrantSortSetting(setting: SortSetting) {
-    this.props.setUISetting(UI_DATABASE_TABLE_GRANTS_SORT_SETTING_KEY, setting);
   }
 
   componentDidMount() {
@@ -101,7 +98,7 @@ class TableMain extends React.Component<TableMainProps, {}> {
                 <GrantsSortedTable
                   data={tableInfo.grants}
                   sortSetting={grantsSortSetting}
-                  onChangeSortSetting={(setting) => this.changeGrantSortSetting(setting) }
+                  onChangeSortSetting={(setting) => this.props.setSort(setting) }
                   columns={[
                     {
                       title: "User",
@@ -149,20 +146,16 @@ function tableInfo(state: AdminUIState, props: RouterState): TableInfo {
   return new TableInfo(table, details && details.data, stats && stats.data);
 }
 
-function grantsSortSetting(state: AdminUIState): SortSetting {
-  return state.ui[UI_DATABASE_TABLE_GRANTS_SORT_SETTING_KEY] || {};
-}
-
 // Connect the TableMain class with our redux store.
 let tableMainConnected = connect(
   (state: AdminUIState, ownProps: RouterState) => {
     return {
       tableInfo: tableInfo(state, ownProps),
-      grantsSortSetting: grantsSortSetting(state),
+      grantsSortSetting: databaseTableGrantsSortSetting.selector(state),
     };
   },
   {
-    setUISetting,
+    setSort: databaseTableGrantsSortSetting.set,
     refreshTableDetails,
     refreshTableStats,
   },

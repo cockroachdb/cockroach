@@ -11,17 +11,21 @@ import {
 import { SummaryBar, SummaryHeadlineStat } from "../components/summaryBar";
 import { AdminUIState } from "../redux/state";
 import { refreshNodes, refreshLiveness } from "../redux/apiReducers";
-import { setUISetting } from "../redux/ui";
+import { LocalSetting } from "../redux/localsettings";
 import { SortSetting } from "../components/sortabletable";
 import { SortedTable } from "../components/sortedtable";
 import { NanoToMilli, LongToMoment } from "../util/convert";
 import { Bytes } from "../util/format";
 import { NodeStatus$Properties, MetricConstants, BytesUsed } from  "../util/proto";
 
-// Constant used to store sort settings in the redux UI store.
-const UI_NODES_LIVE_SORT_SETTING_KEY = "nodes/live_sort_setting";
-// Constant used to store sort settings in the redux UI store.
-const UI_NODES_DEAD_SORT_SETTING_KEY = "nodes/dead_sort_setting";
+// LocalSetting which maintains live table sort order.
+const liveNodesSortSetting = new LocalSetting<AdminUIState, SortSetting>(
+  "nodes/live_sort_setting", (s) => s.ui,
+);
+// LocalSetting which maintains dead table sort order.
+const deadNodesSortSetting = new LocalSetting<AdminUIState, SortSetting>(
+  "nodes/dead_sort_setting", (s) => s.ui,
+);
 
 // Specialization of generic SortedTable component:
 //   https://github.com/Microsoft/TypeScript/issues/3960
@@ -37,7 +41,7 @@ const NodeSortedTable = SortedTable as new () => SortedTable<NodeStatus$Properti
  */
 interface NodeCategoryListProps {
   sortSetting: SortSetting;
-  setUISetting: typeof setUISetting;
+  setSort: typeof liveNodesSortSetting.set;
   statuses: NodeStatus$Properties[];
   nodesSummary: NodesSummary;
 }
@@ -48,11 +52,6 @@ interface NodeCategoryListProps {
  * statistics for these nodes.
  */
 class LiveNodeList extends React.Component<NodeCategoryListProps, {}> {
-  // Callback when the user elects to change the sort setting.
-  changeSortSetting(setting: SortSetting) {
-    this.props.setUISetting(UI_NODES_LIVE_SORT_SETTING_KEY, setting);
-  }
-
   render() {
     const { statuses, nodesSummary, sortSetting } = this.props;
     if (!statuses || statuses.length === 0) {
@@ -68,7 +67,7 @@ class LiveNodeList extends React.Component<NodeCategoryListProps, {}> {
           <NodeSortedTable
             data={statuses}
             sortSetting={sortSetting}
-            onChangeSortSetting={(setting) => this.changeSortSetting(setting)}
+            onChangeSortSetting={(setting) => this.props.setSort(setting)}
             columns={[
               // Node ID column.
               {
@@ -165,11 +164,6 @@ class LiveNodeList extends React.Component<NodeCategoryListProps, {}> {
  * DeadNodeList renders a sortable table of all "dead" nodes on the cluster.
  */
 class DeadNodeList extends React.Component<NodeCategoryListProps, {}> {
-  // Callback when the user elects to change the sort setting.
-  changeSortSetting(setting: SortSetting) {
-    this.props.setUISetting(UI_NODES_DEAD_SORT_SETTING_KEY, setting);
-  }
-
   render() {
     const { statuses, nodesSummary, sortSetting } = this.props;
     if (!statuses || statuses.length === 0) {
@@ -185,7 +179,7 @@ class DeadNodeList extends React.Component<NodeCategoryListProps, {}> {
           <NodeSortedTable
             data={statuses}
             sortSetting={sortSetting}
-            onChangeSortSetting={(setting) => this.changeSortSetting(setting)}
+            onChangeSortSetting={(setting) => this.props.setSort(setting)}
             columns={[
               // Node ID column.
               {
@@ -240,8 +234,6 @@ class DeadNodeList extends React.Component<NodeCategoryListProps, {}> {
 
 // Base selectors to extract data from redux state.
 const nodeQueryValid = (state: AdminUIState): boolean => state.cachedData.nodes.valid && state.cachedData.liveness.valid;
-const liveSortSetting = (state: AdminUIState): SortSetting => state.ui[UI_NODES_LIVE_SORT_SETTING_KEY] || {};
-const deadSortSetting = (state: AdminUIState): SortSetting => state.ui[UI_NODES_DEAD_SORT_SETTING_KEY] || {};
 
 /**
  * partitionedStatuses divides the list of node statuses into "live" and "dead".
@@ -268,13 +260,13 @@ const LiveNodesConnected = connect(
   (state: AdminUIState) => {
     const statuses = partitonedStatuses(state);
     return {
-      sortSetting: liveSortSetting(state),
+      sortSetting: liveNodesSortSetting.selector(state),
       statuses: statuses.live,
       nodesSummary: nodesSummarySelector(state),
     };
   },
   {
-    setUISetting,
+    setSort: liveNodesSortSetting.set,
   },
 )(LiveNodeList);
 
@@ -286,13 +278,13 @@ const DeadNodesConnected = connect(
   (state: AdminUIState) => {
     const statuses = partitonedStatuses(state);
     return {
-      sortSetting: deadSortSetting(state),
+      sortSetting: deadNodesSortSetting.selector(state),
       statuses: statuses.dead,
       nodesSummary: nodesSummarySelector(state),
     };
   },
   {
-    setUISetting,
+    setSort: deadNodesSortSetting.set,
   },
 )(DeadNodeList);
 

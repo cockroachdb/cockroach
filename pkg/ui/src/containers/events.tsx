@@ -9,7 +9,7 @@ import * as protos from "../js/protos";
 
 import { AdminUIState } from "../redux/state";
 import { refreshEvents } from "../redux/apiReducers";
-import { setUISetting } from "../redux/ui";
+import { LocalSetting } from "../redux/localsettings";
 import { TimestampToMoment } from "../util/convert";
 import * as eventTypes from "../util/eventTypes";
 import { SortSetting } from "../components/sortabletable";
@@ -17,10 +17,13 @@ import { SortedTable } from "../components/sortedtable";
 
 type Event$Properties = protos.cockroach.server.serverpb.EventsResponse.Event$Properties;
 
-// Constant used to store sort settings in the redux UI store.
-const UI_EVENTS_SORT_SETTING_KEY = "events/sort_setting";
 // Number of events to show in the sidebar.
 const EVENT_BOX_NUM_EVENTS = 10;
+
+// LocalSetting which maintains table sort order.
+const eventsSortSetting = new LocalSetting<AdminUIState, SortSetting>(
+  "events/sort_setting", (s) => s.ui,
+);
 
 export interface SimplifiedEvent {
    // How long ago the event occurred  (e.g. "10 minutes ago").
@@ -160,15 +163,10 @@ export interface EventPageProps {
   events: Event$Properties[];
   refreshEvents: typeof refreshEvents;
   sortSetting: SortSetting;
-  setUISetting: typeof setUISetting;
+  setSort: typeof eventsSortSetting.set;
 };
 
 export class EventPageUnconnected extends React.Component<EventPageProps, {}> {
-  // Callback when the user elects to change the sort setting.
-  changeSortSetting(setting: SortSetting) {
-    this.props.setUISetting(UI_EVENTS_SORT_SETTING_KEY, setting);
-  }
-
   componentWillMount() {
     // Refresh events when mounting.
     this.props.refreshEvents();
@@ -195,7 +193,7 @@ export class EventPageUnconnected extends React.Component<EventPageProps, {}> {
           <EventSortedTable
             data={simplifiedEvents}
             sortSetting={sortSetting}
-            onChangeSortSetting={(setting) => this.changeSortSetting(setting)}
+            onChangeSortSetting={(setting) => this.props.setSort(setting)}
             columns={[
               {
                 title: "Event",
@@ -228,19 +226,17 @@ let eventBoxConnected = connect(
   },
 )(EventBoxUnconnected);
 
-let sortSetting = (state: AdminUIState): SortSetting => state.ui[UI_EVENTS_SORT_SETTING_KEY] || {};
-
 // Connect the EventsList class with our redux store.
 let eventPageConnected = connect(
   (state: AdminUIState) => {
     return {
       events: events(state),
-      sortSetting: sortSetting(state),
+      sortSetting: eventsSortSetting.selector(state),
     };
   },
   {
     refreshEvents,
-    setUISetting,
+    setSort: eventsSortSetting.set,
   },
 )(EventPageUnconnected);
 

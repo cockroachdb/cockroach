@@ -8,7 +8,7 @@ import { SortSetting } from "../../components/sortabletable";
 import { SortedTable } from "../../components/sortedtable";
 
 import { AdminUIState } from "../../redux/state";
-import { setUISetting } from "../../redux/ui";
+import { LocalSetting } from "../../redux/localsettings";
 import {
     refreshDatabaseDetails, refreshTableDetails, refreshTableStats,
 } from "../../redux/apiReducers";
@@ -21,8 +21,10 @@ import {
     DatabaseSummaryBase, DatabaseSummaryExplicitData, databaseDetails, tableInfos, grants,
 } from "./databaseSummary";
 
-// Constants used to store per-page sort settings in the redux UI store.
-const UI_DATABASE_TABLES_SORT_SETTING_KEY = "databases/sort_setting/tables";
+// LocalSetting which maintains table sort order.
+const databaseTablesSortSetting = new LocalSetting<AdminUIState, SortSetting>(
+  "databases/sort_setting/tables", (s) => s.ui,
+);
 
 // Specialization of generic SortedTable component:
 //   https://github.com/Microsoft/TypeScript/issues/3960
@@ -35,11 +37,6 @@ const DatabaseTableListSortedTable = SortedTable as new () => SortedTable<TableI
 // DatabaseSummaryTables displays a summary section describing the tables
 // contained in a single database.
 class DatabaseSummaryTables extends DatabaseSummaryBase {
-  // Callback when the user elects to change the table table sort setting.
-  changeTableSortSetting(setting: SortSetting) {
-    this.props.setUISetting(UI_DATABASE_TABLES_SORT_SETTING_KEY, setting);
-  }
-
   totalSize() {
     let tableInfos = this.props.tableInfos;
     return _.sumBy(tableInfos, (ti) => ti.size);
@@ -67,7 +64,7 @@ class DatabaseSummaryTables extends DatabaseSummaryBase {
           <DatabaseTableListSortedTable
               data={tableInfos}
               sortSetting={sortSetting}
-              onChangeSortSetting={(setting) => this.changeTableSortSetting(setting) }
+              onChangeSortSetting={(setting) => this.props.setSort(setting) }
               columns={[
               {
                 title: "Table Name",
@@ -126,21 +123,18 @@ class DatabaseSummaryTables extends DatabaseSummaryBase {
   }
 }
 
-// Base selectors to extract data from redux state.
-let tablesSortSetting = (state: AdminUIState): SortSetting => state.ui[UI_DATABASE_TABLES_SORT_SETTING_KEY] || {};
-
 // Connect the DatabaseSummaryTables class with redux store.
 export default connect(
   (state: AdminUIState, ownProps: DatabaseSummaryExplicitData) => {
     return {
       tableInfos: tableInfos(state, ownProps.name),
-      sortSetting: tablesSortSetting(state),
+      sortSetting: databaseTablesSortSetting.selector(state),
       dbResponse: databaseDetails(state)[ownProps.name] && databaseDetails(state)[ownProps.name].data,
       grants: grants(state, ownProps.name),
     };
   },
   {
-    setUISetting,
+    setSort: databaseTablesSortSetting.set,
     refreshDatabaseDetails,
     refreshTableDetails,
     refreshTableStats,
