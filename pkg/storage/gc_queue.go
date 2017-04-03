@@ -541,7 +541,12 @@ func RunGC(
 	}
 
 	// Iterate through the keys and values of this replica's range.
-	for ; iter.Valid(); iter.Next() {
+	for ; ; iter.Next() {
+		if ok, err := iter.Valid(); err != nil {
+			return nil, GCInfo{}, err
+		} else if !ok {
+			break
+		}
 		iterKey := iter.Key()
 		if !iterKey.IsValue() || !iterKey.Key.Equal(expBaseKey) {
 			// Moving to the next key (& values).
@@ -561,9 +566,6 @@ func RunGC(
 		}
 		keys = append(keys, iter.Key())
 		vals = append(vals, iter.Value())
-	}
-	if iter.Error() != nil {
-		return nil, GCInfo{}, iter.Error()
 	}
 	// Handle last collected set of keys/vals.
 	processKeysAndValues()

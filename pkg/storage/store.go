@@ -3289,7 +3289,12 @@ func sendSnapshot(
 	const batchSize = 1 << 20
 	n := 0
 	var b engine.Batch
-	for ; snap.Iter.Valid(); snap.Iter.Next() {
+	for ; ; snap.Iter.Next() {
+		if ok, err := snap.Iter.Valid(); err != nil {
+			return err
+		} else if !ok {
+			break
+		}
 		var key engine.MVCCKey
 		var value []byte
 		alloc, key, value = snap.Iter.allocIterKeyValue(alloc)
