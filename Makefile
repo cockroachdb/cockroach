@@ -25,6 +25,7 @@ PKG          := ./pkg/...
 TAGS         :=
 TESTS        := .
 BENCHES      := -
+FILES        := -
 TESTTIMEOUT  := 3m
 RACETIMEOUT  := 10m
 BENCHTIMEOUT := 5m
@@ -161,6 +162,16 @@ endif
 testraceslow: override GOFLAGS += -race
 testraceslow: TESTTIMEOUT := $(RACETIMEOUT)
 testraceslow: testslow
+
+# This is how you get a literal space into a Makefile.
+space := $(eval) $(eval)
+
+# Run make testlogic FILES="foo bar" to run the logic tests named foo and bar.
+.PHONY: testlogic
+testlogic: PKG := ./pkg/sql
+testlogic: TESTS := TestLogic$$//^$(subst $(space),$$|^,$(FILES))$$
+testlogic: TESTFLAGS := -v -show-sql
+testlogic: test
 
 # Beware! This target is complicated because it needs to handle complexity:
 # - PKG may be specified as relative (e.g. './gossip') or absolute (e.g.
