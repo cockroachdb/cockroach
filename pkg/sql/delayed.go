@@ -19,6 +19,7 @@ package sql
 import (
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 )
 
@@ -48,3 +49,6 @@ func (d *delayedNode) Start(ctx context.Context) error        { return d.plan.St
 func (d *delayedNode) Next(ctx context.Context) (bool, error) { return d.plan.Next(ctx) }
 func (d *delayedNode) Values() parser.Datums                  { return d.plan.Values() }
 func (d *delayedNode) DebugValues() debugValues               { return d.plan.DebugValues() }
+func (d *delayedNode) Spans(ctx context.Context) (_, _ roachpb.Spans, _ error) {
+	return d.plan.Spans(ctx)
+}

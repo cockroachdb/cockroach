@@ -28,6 +28,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -115,13 +116,17 @@ func (n *createDatabaseNode) Start(ctx context.Context) error {
 	return nil
 }
 
-func (n *createDatabaseNode) Next(context.Context) (bool, error) { return false, nil }
-func (n *createDatabaseNode) Close(context.Context)              {}
-func (n *createDatabaseNode) Columns() ResultColumns             { return make(ResultColumns, 0) }
-func (n *createDatabaseNode) Ordering() orderingInfo             { return orderingInfo{} }
-func (n *createDatabaseNode) Values() parser.Datums              { return parser.Datums{} }
-func (n *createDatabaseNode) DebugValues() debugValues           { return debugValues{} }
-func (n *createDatabaseNode) MarkDebug(mode explainMode)         {}
+func (*createDatabaseNode) Next(context.Context) (bool, error) { return false, nil }
+func (*createDatabaseNode) Close(context.Context)              {}
+func (*createDatabaseNode) Columns() ResultColumns             { return make(ResultColumns, 0) }
+func (*createDatabaseNode) Ordering() orderingInfo             { return orderingInfo{} }
+func (*createDatabaseNode) Values() parser.Datums              { return parser.Datums{} }
+func (*createDatabaseNode) DebugValues() debugValues           { return debugValues{} }
+func (*createDatabaseNode) MarkDebug(mode explainMode)         {}
+
+func (*createDatabaseNode) Spans(context.Context) (_, _ roachpb.Spans, _ error) {
+	panic("unimplemented")
+}
 
 type createIndexNode struct {
 	p         *planner
@@ -229,13 +234,17 @@ func (n *createIndexNode) Start(ctx context.Context) error {
 	return nil
 }
 
-func (n *createIndexNode) Next(context.Context) (bool, error) { return false, nil }
-func (n *createIndexNode) Close(context.Context)              {}
-func (n *createIndexNode) Columns() ResultColumns             { return make(ResultColumns, 0) }
-func (n *createIndexNode) Ordering() orderingInfo             { return orderingInfo{} }
-func (n *createIndexNode) Values() parser.Datums              { return parser.Datums{} }
-func (n *createIndexNode) DebugValues() debugValues           { return debugValues{} }
-func (n *createIndexNode) MarkDebug(mode explainMode)         {}
+func (*createIndexNode) Next(context.Context) (bool, error) { return false, nil }
+func (*createIndexNode) Close(context.Context)              {}
+func (*createIndexNode) Columns() ResultColumns             { return make(ResultColumns, 0) }
+func (*createIndexNode) Ordering() orderingInfo             { return orderingInfo{} }
+func (*createIndexNode) Values() parser.Datums              { return parser.Datums{} }
+func (*createIndexNode) DebugValues() debugValues           { return debugValues{} }
+func (*createIndexNode) MarkDebug(mode explainMode)         {}
+
+func (*createIndexNode) Spans(context.Context) (_, _ roachpb.Spans, _ error) {
+	panic("unimplemented")
+}
 
 type createUserNode struct {
 	p        *planner
@@ -332,13 +341,17 @@ func (n *createUserNode) Start(ctx context.Context) error {
 	return nil
 }
 
-func (n *createUserNode) Next(context.Context) (bool, error) { return false, nil }
-func (n *createUserNode) Close(context.Context)              {}
-func (n *createUserNode) Columns() ResultColumns             { return make(ResultColumns, 0) }
-func (n *createUserNode) Ordering() orderingInfo             { return orderingInfo{} }
-func (n *createUserNode) Values() parser.Datums              { return parser.Datums{} }
-func (n *createUserNode) DebugValues() debugValues           { return debugValues{} }
-func (n *createUserNode) MarkDebug(mode explainMode)         {}
+func (*createUserNode) Next(context.Context) (bool, error) { return false, nil }
+func (*createUserNode) Close(context.Context)              {}
+func (*createUserNode) Columns() ResultColumns             { return make(ResultColumns, 0) }
+func (*createUserNode) Ordering() orderingInfo             { return orderingInfo{} }
+func (*createUserNode) Values() parser.Datums              { return parser.Datums{} }
+func (*createUserNode) DebugValues() debugValues           { return debugValues{} }
+func (*createUserNode) MarkDebug(mode explainMode)         {}
+
+func (*createUserNode) Spans(context.Context) (_, _ roachpb.Spans, _ error) {
+	panic("unimplemented")
+}
 
 type createViewNode struct {
 	p           *planner
@@ -509,12 +522,16 @@ func (n *createViewNode) Close(ctx context.Context) {
 	n.p.avoidCachedDescriptors = false
 }
 
-func (n *createViewNode) Next(context.Context) (bool, error) { return false, nil }
-func (n *createViewNode) Columns() ResultColumns             { return make(ResultColumns, 0) }
-func (n *createViewNode) Ordering() orderingInfo             { return orderingInfo{} }
-func (n *createViewNode) Values() parser.Datums              { return parser.Datums{} }
-func (n *createViewNode) DebugValues() debugValues           { return debugValues{} }
-func (n *createViewNode) MarkDebug(mode explainMode)         {}
+func (*createViewNode) Next(context.Context) (bool, error) { return false, nil }
+func (*createViewNode) Columns() ResultColumns             { return make(ResultColumns, 0) }
+func (*createViewNode) Ordering() orderingInfo             { return orderingInfo{} }
+func (*createViewNode) Values() parser.Datums              { return parser.Datums{} }
+func (*createViewNode) DebugValues() debugValues           { return debugValues{} }
+func (*createViewNode) MarkDebug(mode explainMode)         {}
+
+func (*createViewNode) Spans(context.Context) (_, _ roachpb.Spans, _ error) {
+	panic("unimplemented")
+}
 
 type createTableNode struct {
 	p          *planner
@@ -742,12 +759,16 @@ func (n *createTableNode) Close(ctx context.Context) {
 	}
 }
 
-func (n *createTableNode) Next(context.Context) (bool, error) { return false, nil }
-func (n *createTableNode) Columns() ResultColumns             { return make(ResultColumns, 0) }
-func (n *createTableNode) Ordering() orderingInfo             { return orderingInfo{} }
-func (n *createTableNode) Values() parser.Datums              { return parser.Datums{} }
-func (n *createTableNode) DebugValues() debugValues           { return debugValues{} }
-func (n *createTableNode) MarkDebug(mode explainMode)         {}
+func (*createTableNode) Next(context.Context) (bool, error) { return false, nil }
+func (*createTableNode) Columns() ResultColumns             { return make(ResultColumns, 0) }
+func (*createTableNode) Ordering() orderingInfo             { return orderingInfo{} }
+func (*createTableNode) Values() parser.Datums              { return parser.Datums{} }
+func (*createTableNode) DebugValues() debugValues           { return debugValues{} }
+func (*createTableNode) MarkDebug(mode explainMode)         {}
+
+func (*createTableNode) Spans(context.Context) (_, _ roachpb.Spans, _ error) {
+	panic("unimplemented")
+}
 
 type indexMatch bool
 

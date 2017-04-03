@@ -208,13 +208,17 @@ func (n *dropDatabaseNode) Start(ctx context.Context) error {
 	return nil
 }
 
-func (n *dropDatabaseNode) Next(context.Context) (bool, error) { return false, nil }
-func (n *dropDatabaseNode) Close(context.Context)              {}
-func (n *dropDatabaseNode) Columns() ResultColumns             { return make(ResultColumns, 0) }
-func (n *dropDatabaseNode) Ordering() orderingInfo             { return orderingInfo{} }
-func (n *dropDatabaseNode) Values() parser.Datums              { return parser.Datums{} }
-func (n *dropDatabaseNode) DebugValues() debugValues           { return debugValues{} }
-func (n *dropDatabaseNode) MarkDebug(mode explainMode)         {}
+func (*dropDatabaseNode) Next(context.Context) (bool, error) { return false, nil }
+func (*dropDatabaseNode) Close(context.Context)              {}
+func (*dropDatabaseNode) Columns() ResultColumns             { return make(ResultColumns, 0) }
+func (*dropDatabaseNode) Ordering() orderingInfo             { return orderingInfo{} }
+func (*dropDatabaseNode) Values() parser.Datums              { return parser.Datums{} }
+func (*dropDatabaseNode) DebugValues() debugValues           { return debugValues{} }
+func (*dropDatabaseNode) MarkDebug(mode explainMode)         {}
+
+func (*dropDatabaseNode) Spans(context.Context) (_, _ roachpb.Spans, _ error) {
+	panic("unimplemented")
+}
 
 type dropIndexNode struct {
 	p        *planner
@@ -400,13 +404,17 @@ func (p *planner) dropIndexByName(
 	return nil
 }
 
-func (n *dropIndexNode) Next(context.Context) (bool, error) { return false, nil }
-func (n *dropIndexNode) Close(context.Context)              {}
-func (n *dropIndexNode) Columns() ResultColumns             { return make(ResultColumns, 0) }
-func (n *dropIndexNode) Ordering() orderingInfo             { return orderingInfo{} }
-func (n *dropIndexNode) Values() parser.Datums              { return parser.Datums{} }
-func (n *dropIndexNode) DebugValues() debugValues           { return debugValues{} }
-func (n *dropIndexNode) MarkDebug(mode explainMode)         {}
+func (*dropIndexNode) Next(context.Context) (bool, error) { return false, nil }
+func (*dropIndexNode) Close(context.Context)              {}
+func (*dropIndexNode) Columns() ResultColumns             { return make(ResultColumns, 0) }
+func (*dropIndexNode) Ordering() orderingInfo             { return orderingInfo{} }
+func (*dropIndexNode) Values() parser.Datums              { return parser.Datums{} }
+func (*dropIndexNode) DebugValues() debugValues           { return debugValues{} }
+func (*dropIndexNode) MarkDebug(mode explainMode)         {}
+
+func (*dropIndexNode) Spans(context.Context) (_, _ roachpb.Spans, _ error) {
+	panic("unimplemented")
+}
 
 type dropViewNode struct {
 	p  *planner
@@ -509,13 +517,17 @@ func (n *dropViewNode) Start(ctx context.Context) error {
 	return nil
 }
 
-func (n *dropViewNode) Next(context.Context) (bool, error) { return false, nil }
-func (n *dropViewNode) Close(context.Context)              {}
-func (n *dropViewNode) Columns() ResultColumns             { return make(ResultColumns, 0) }
-func (n *dropViewNode) Ordering() orderingInfo             { return orderingInfo{} }
-func (n *dropViewNode) Values() parser.Datums              { return parser.Datums{} }
-func (n *dropViewNode) DebugValues() debugValues           { return debugValues{} }
-func (n *dropViewNode) MarkDebug(mode explainMode)         {}
+func (*dropViewNode) Next(context.Context) (bool, error) { return false, nil }
+func (*dropViewNode) Close(context.Context)              {}
+func (*dropViewNode) Columns() ResultColumns             { return make(ResultColumns, 0) }
+func (*dropViewNode) Ordering() orderingInfo             { return orderingInfo{} }
+func (*dropViewNode) Values() parser.Datums              { return parser.Datums{} }
+func (*dropViewNode) DebugValues() debugValues           { return debugValues{} }
+func (*dropViewNode) MarkDebug(mode explainMode)         {}
+
+func (*dropViewNode) Spans(context.Context) (_, _ roachpb.Spans, _ error) {
+	panic("unimplemented")
+}
 
 type dropTableNode struct {
 	p  *planner
@@ -747,13 +759,17 @@ func (n *dropTableNode) Start(ctx context.Context) error {
 	return nil
 }
 
-func (n *dropTableNode) Next(context.Context) (bool, error) { return false, nil }
-func (n *dropTableNode) Close(context.Context)              {}
-func (n *dropTableNode) Columns() ResultColumns             { return make(ResultColumns, 0) }
-func (n *dropTableNode) Ordering() orderingInfo             { return orderingInfo{} }
-func (n *dropTableNode) Values() parser.Datums              { return parser.Datums{} }
-func (n *dropTableNode) DebugValues() debugValues           { return debugValues{} }
-func (n *dropTableNode) MarkDebug(mode explainMode)         {}
+func (*dropTableNode) Next(context.Context) (bool, error) { return false, nil }
+func (*dropTableNode) Close(context.Context)              {}
+func (*dropTableNode) Columns() ResultColumns             { return make(ResultColumns, 0) }
+func (*dropTableNode) Ordering() orderingInfo             { return orderingInfo{} }
+func (*dropTableNode) Values() parser.Datums              { return parser.Datums{} }
+func (*dropTableNode) DebugValues() debugValues           { return debugValues{} }
+func (*dropTableNode) MarkDebug(mode explainMode)         {}
+
+func (*dropTableNode) Spans(context.Context) (_, _ roachpb.Spans, _ error) {
+	panic("unimplemented")
+}
 
 // dropTableOrViewPrepare/dropTableImpl is used to drop a single table by
 // name, which can result from either a DROP TABLE or DROP DATABASE

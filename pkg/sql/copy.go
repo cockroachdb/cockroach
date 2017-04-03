@@ -25,6 +25,7 @@ import (
 
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 )
@@ -52,11 +53,12 @@ type copyNode struct {
 	rowsMemAcc    WrappableMemoryAccount
 }
 
-func (n *copyNode) Columns() ResultColumns           { return n.resultColumns }
-func (*copyNode) Ordering() orderingInfo             { return orderingInfo{} }
-func (*copyNode) Values() parser.Datums              { return nil }
-func (*copyNode) MarkDebug(_ explainMode)            {}
-func (*copyNode) Next(context.Context) (bool, error) { return false, nil }
+func (n *copyNode) Columns() ResultColumns                            { return n.resultColumns }
+func (*copyNode) Ordering() orderingInfo                              { return orderingInfo{} }
+func (*copyNode) Values() parser.Datums                               { return nil }
+func (*copyNode) MarkDebug(_ explainMode)                             {}
+func (*copyNode) Next(context.Context) (bool, error)                  { return false, nil }
+func (*copyNode) Spans(context.Context) (_, _ roachpb.Spans, _ error) { panic("unimplemented") }
 
 func (n *copyNode) Close(ctx context.Context) {
 	n.rowsMemAcc.Wsession(n.p.session).Close(ctx)
