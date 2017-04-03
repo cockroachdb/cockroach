@@ -729,9 +729,13 @@ func (e *Executor) execRequest(
 			if aErr, ok := err.(*client.AutoCommitError); ok {
 				// TODO(andrei): Until #7881 fixed.
 				{
+					var txnProto *roachpb.Transaction
+					if txnState.txn != nil {
+						txnProto = txnState.txn.Proto()
+					}
 					log.Eventf(session.Ctx(), "executor got AutoCommitError: %s\n"+
 						"txn: %+v\nexecOpt.AutoRetry %t, execOpt.AutoCommit:%t, stmts %+v, remaining %+v",
-						aErr, txnState.txn.Proto(), execOpt.AutoRetry, execOpt.AutoCommit, stmts,
+						aErr, txnProto, execOpt.AutoRetry, execOpt.AutoCommit, stmts,
 						remainingStmts)
 					if txnState.txn == nil {
 						log.Errorf(session.Ctx(), "7881: AutoCommitError on nil txn: %s, "+
@@ -741,6 +745,8 @@ func (e *Executor) execRequest(
 					}
 				}
 				e.TxnAbortCount.Inc(1)
+				// TODO(andrei): Once 7881 is fixed, this should be
+				// txnState.txn.CleanupOnError().
 				txn.CleanupOnError(session.Ctx(), err)
 			}
 		}
