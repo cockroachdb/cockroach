@@ -17,7 +17,6 @@
 package engine
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -28,6 +27,8 @@ import (
 	"strconv"
 	"testing"
 	"time"
+
+	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -521,10 +522,10 @@ func BenchmarkRocksDBSstFileReader(b *testing.B) {
 	if err != nil {
 		b.Fatal(err)
 	}
+	defer sst.Close(ctx)
 	if err := sst.AddFile(sstPath); err != nil {
 		b.Fatal(err)
 	}
-	defer sst.Close(ctx)
 	count := 0
 	iterateFn := func(kv MVCCKeyValue) (bool, error) {
 		count++
