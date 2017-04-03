@@ -22,6 +22,7 @@ import (
 
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/util"
 )
@@ -116,6 +117,10 @@ func (s *renderNode) MarkDebug(mode explainMode) {
 
 func (s *renderNode) DebugValues() debugValues {
 	return s.source.plan.DebugValues()
+}
+
+func (s *renderNode) Spans(ctx context.Context) (_, _ roachpb.Spans) {
+	return s.source.plan.Spans(ctx)
 }
 
 func (s *renderNode) Start(ctx context.Context) error {

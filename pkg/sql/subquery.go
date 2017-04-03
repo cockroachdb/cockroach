@@ -22,6 +22,7 @@ import (
 
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -272,6 +273,32 @@ func (p *planner) startSubqueryPlans(ctx context.Context, plan planNode) error {
 		subqueryNode: p.subqueryPlanVisitor.subqueryNode,
 		enterNode:    p.subqueryPlanVisitor.enterNode,
 	})
+}
+
+// subquerySpanCollector is responsible for collecting all read spans that
+// subqueries in a query plan may touch. Subqueries should never be performing
+// any write operations, so only the read spans are collected.
+// FOR REVIEW: this assumption is correct, right?
+type subquerySpanCollector struct {
+	reads roachpb.Spans
+}
+
+func (v *subquerySpanCollector) subqueryNode(ctx context.Context, sq *subquery) error {
+	reads, writes := sq.plan.Spans(ctx)
+	if len(writes) > 0 {
+		panic(fmt.Sprintf("unexpected span writes in subquery: %v", writes))
+	}
+	v.reads = append(v.reads, reads...)
+	return nil
+}
+
+func collectSubquerySpans(ctx context.Context, plan planNode) roachpb.Spans {
+	var v subquerySpanCollector
+	po := planObserver{subqueryNode: v.subqueryNode}
+	if err := walkPlan(ctx, plan, po); err != nil {
+		panic(err)
+	}
+	return v.reads
 }
 
 // subqueryVisitor replaces parser.Subquery syntax nodes by a

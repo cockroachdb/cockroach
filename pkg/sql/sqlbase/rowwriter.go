@@ -59,12 +59,8 @@ type rowHelper struct {
 func (rh *rowHelper) encodeIndexes(
 	colIDtoRowIndex map[ColumnID]int, values []parser.Datum,
 ) (primaryIndexKey []byte, secondaryIndexEntries []IndexEntry, err error) {
-	if rh.primaryIndexKeyPrefix == nil {
-		rh.primaryIndexKeyPrefix = MakeIndexKeyPrefix(rh.TableDesc,
-			rh.TableDesc.PrimaryIndex.ID)
-	}
 	primaryIndexKey, _, err = EncodeIndexKey(
-		rh.TableDesc, &rh.TableDesc.PrimaryIndex, colIDtoRowIndex, values, rh.primaryIndexKeyPrefix)
+		rh.TableDesc, &rh.TableDesc.PrimaryIndex, colIDtoRowIndex, values, rh.pkeyPrefix())
 	if err != nil {
 		return nil, nil, err
 	}
@@ -116,6 +112,27 @@ func (rh *rowHelper) isCompositeColumn(colID ColumnID) bool {
 	return ok
 }
 
+func (rh *rowHelper) pkeyPrefix() []byte {
+	if rh.primaryIndexKeyPrefix == nil {
+		rh.primaryIndexKeyPrefix = MakeIndexKeyPrefix(rh.TableDesc,
+			rh.TableDesc.PrimaryIndex.ID)
+	}
+	return rh.primaryIndexKeyPrefix
+}
+
+// CollectSpans implements the SpanCollector interface.
+func (rh *rowHelper) CollectSpans() (reads, writes roachpb.Spans) {
+	pkey := roachpb.Key(rh.pkeyPrefix())
+	pkeySpan := roachpb.Span{Key: pkey, EndKey: pkey.PrefixEnd()}
+	writes = append(writes, pkeySpan)
+	for _, secIdx := range rh.Indexes {
+		secIdxPrefix := roachpb.Key(MakeIndexKeyPrefix(rh.TableDesc, secIdx.ID))
+		secIdxSpan := roachpb.Span{Key: secIdxPrefix, EndKey: secIdxPrefix.PrefixEnd()}
+		writes = append(writes, secIdxSpan)
+	}
+	return nil, writes
+}
+
 type columnIDs []ColumnID
 
 func (c columnIDs) Len() int           { return len(c) }
@@ -140,7 +157,7 @@ type RowInserter struct {
 	Helper                rowHelper
 	InsertCols            []ColumnDescriptor
 	InsertColIDtoRowIndex map[ColumnID]int
-	fks                   fkInsertHelper
+	Fks                   fkInsertHelper
 
 	// For allocation avoidance.
 	marshalled []roachpb.Value
@@ -184,7 +201,7 @@ func MakeRowInserter(
 
 	if checkFKs {
 		var err error
-		if ri.fks, err = makeFKInsertHelper(txn, *tableDesc, fkTables, ri.InsertColIDtoRowIndex); err != nil {
+		if ri.Fks, err = makeFKInsertHelper(txn, *tableDesc, fkTables, ri.InsertColIDtoRowIndex); err != nil {
 			return ri, err
 		}
 	}
@@ -241,7 +258,7 @@ func (ri *RowInserter) InsertRow(
 		}
 	}
 
-	if err := ri.fks.checkAll(ctx, values); err != nil {
+	if err := ri.Fks.checkAll(ctx, values); err != nil {
 		return err
 	}
 
@@ -357,7 +374,7 @@ type RowUpdater struct {
 	rd RowDeleter
 	ri RowInserter
 
-	fks fkUpdateHelper
+	Fks fkUpdateHelper
 
 	// For allocation avoidance.
 	marshalled      []roachpb.Value
@@ -524,7 +541,7 @@ func MakeRowUpdater(
 	}
 
 	var err error
-	if ru.fks, err = makeFKUpdateHelper(txn, *tableDesc, fkTables, ru.FetchColIDtoRowIndex); err != nil {
+	if ru.Fks, err = makeFKUpdateHelper(txn, *tableDesc, fkTables, ru.FetchColIDtoRowIndex); err != nil {
 		return RowUpdater{}, err
 	}
 	return ru, nil
@@ -592,12 +609,12 @@ func (ru *RowUpdater) UpdateRow(
 	}
 
 	if rowPrimaryKeyChanged {
-		if err := ru.fks.checkIdx(ctx, ru.Helper.TableDesc.PrimaryIndex.ID, oldValues, ru.newValues); err != nil {
+		if err := ru.Fks.checkIdx(ctx, ru.Helper.TableDesc.PrimaryIndex.ID, oldValues, ru.newValues); err != nil {
 			return nil, err
 		}
 		for i := range newSecondaryIndexEntries {
 			if !bytes.Equal(newSecondaryIndexEntries[i].Key, secondaryIndexEntries[i].Key) {
-				if err := ru.fks.checkIdx(ctx, ru.Helper.Indexes[i].ID, oldValues, ru.newValues); err != nil {
+				if err := ru.Fks.checkIdx(ctx, ru.Helper.Indexes[i].ID, oldValues, ru.newValues); err != nil {
 					return nil, err
 				}
 			}
@@ -721,7 +738,7 @@ func (ru *RowUpdater) UpdateRow(
 		secondaryIndexEntry := secondaryIndexEntries[i]
 		secondaryKeyChanged := !bytes.Equal(newSecondaryIndexEntry.Key, secondaryIndexEntry.Key)
 		if secondaryKeyChanged {
-			if err := ru.fks.checkIdx(ctx, ru.Helper.Indexes[i].ID, oldValues, ru.newValues); err != nil {
+			if err := ru.Fks.checkIdx(ctx, ru.Helper.Indexes[i].ID, oldValues, ru.newValues); err != nil {
 				return nil, err
 			}
 
@@ -759,7 +776,7 @@ type RowDeleter struct {
 	Helper               rowHelper
 	FetchCols            []ColumnDescriptor
 	FetchColIDtoRowIndex map[ColumnID]int
-	fks                  fkDeleteHelper
+	Fks                  fkDeleteHelper
 	// For allocation avoidance.
 	startKey roachpb.Key
 	endKey   roachpb.Key
@@ -818,7 +835,7 @@ func MakeRowDeleter(
 	}
 	if checkFKs {
 		var err error
-		if rd.fks, err = makeFKDeleteHelper(txn, *tableDesc, fkTables, fetchColIDtoRowIndex); err != nil {
+		if rd.Fks, err = makeFKDeleteHelper(txn, *tableDesc, fkTables, fetchColIDtoRowIndex); err != nil {
 			return RowDeleter{}, err
 		}
 	}
@@ -829,7 +846,7 @@ func MakeRowDeleter(
 // DeleteRow adds to the batch the kv operations necessary to delete a table row
 // with the given values.
 func (rd *RowDeleter) DeleteRow(ctx context.Context, b *client.Batch, values []parser.Datum) error {
-	if err := rd.fks.checkAll(ctx, values); err != nil {
+	if err := rd.Fks.checkAll(ctx, values); err != nil {
 		return err
 	}
 
@@ -862,7 +879,7 @@ func (rd *RowDeleter) DeleteRow(ctx context.Context, b *client.Batch, values []p
 func (rd *RowDeleter) DeleteIndexRow(
 	ctx context.Context, b *client.Batch, idx *IndexDescriptor, values []parser.Datum,
 ) error {
-	if err := rd.fks.checkAll(ctx, values); err != nil {
+	if err := rd.Fks.checkAll(ctx, values); err != nil {
 		return err
 	}
 	secondaryIndexEntry, err := EncodeSecondaryIndex(

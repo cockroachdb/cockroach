@@ -19,7 +19,11 @@ package sql
 import (
 	"sync"
 
+	"golang.org/x/net/context"
+
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/util/interval"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
@@ -77,8 +81,8 @@ func MakePipelineQueue(analyzer DependencyAnalyzer) PipelineQueue {
 //
 // Add should not be called concurrently with Wait. See Wait's comment for more
 // details.
-func (pq *PipelineQueue) Add(plan planNode, exec func(planNode) error) {
-	prereqs, finishLocked := pq.insertInQueue(plan)
+func (pq *PipelineQueue) Add(ctx context.Context, plan planNode, exec func(planNode) error) {
+	prereqs, finishLocked := pq.insertInQueue(ctx, plan)
 	pq.runningGroup.Add(1)
 	go func() {
 		defer pq.runningGroup.Done()
@@ -121,12 +125,12 @@ func (pq *PipelineQueue) Add(plan planNode, exec func(planNode) error) {
 // channels of prerequisite blocking the new plan from executing. It also returns a
 // function to call when the new plan has finished executing. This function must be
 // called while pq.mu is held.
-func (pq *PipelineQueue) insertInQueue(newPlan planNode) ([]doneChan, func()) {
+func (pq *PipelineQueue) insertInQueue(ctx context.Context, newPlan planNode) ([]doneChan, func()) {
 	pq.mu.Lock()
 	defer pq.mu.Unlock()
 
 	// Determine the set of prerequisite plans.
-	prereqs := pq.prereqsForPlanLocked(newPlan)
+	prereqs := pq.prereqsForPlanLocked(ctx, newPlan)
 
 	// Insert newPlan in running set.
 	newDoneChan := make(doneChan)
@@ -136,6 +140,10 @@ func (pq *PipelineQueue) insertInQueue(newPlan planNode) ([]doneChan, func()) {
 		// plans that we're done by closing our done channel.
 		delete(pq.plans, newPlan)
 		close(newDoneChan)
+
+		// Remove the current plan from the DependencyAnalyzer, in case it was
+		// caching any state about the plan.
+		pq.analyzer.Clear(newPlan)
 	}
 	return prereqs, finish
 }
@@ -144,11 +152,11 @@ func (pq *PipelineQueue) insertInQueue(newPlan planNode) ([]doneChan, func()) {
 // that a new plan is dependent on. It returns a slice of doneChans for each plan
 // in this set. Returns a nil slice if the plan has no prerequisites and can be run
 // immediately.
-func (pq *PipelineQueue) prereqsForPlanLocked(newPlan planNode) []doneChan {
+func (pq *PipelineQueue) prereqsForPlanLocked(ctx context.Context, newPlan planNode) []doneChan {
 	// Add all plans from the plan set that this new plan is dependent on.
 	var prereqs []doneChan
 	for plan, doneChan := range pq.plans {
-		if !pq.analyzer.Independent(plan, newPlan) {
+		if !pq.analyzer.Independent(ctx, plan, newPlan) {
 			prereqs = append(prereqs, doneChan)
 		}
 	}
@@ -196,19 +204,31 @@ func (pq *PipelineQueue) Err() error {
 // reordered without having an effect on their runtime semantics or on their
 // results. DependencyAnalyzer is used by PipelineQueue to test whether it is
 // safe for multiple statements to be run concurrently.
+//
+// DependencyAnalyzer implementations do not need to be safe to use from multiple
+// goroutines concurrently.
 type DependencyAnalyzer interface {
 	// Independent determines if the provided planNodes are independent from one
 	// another. Implementations of Independent are always commutative.
-	Independent(planNode, planNode) bool
+	Independent(context.Context, planNode, planNode) bool
+	// Clear is a hint to the DependencyAnalyzer that the provided planNode will
+	// no longer be needed. It is useful for DependencyAnalyzers that cache state
+	// on the planNodes.
+	Clear(planNode)
 }
+
+var _ DependencyAnalyzer = dependencyAnalyzerFunc(nil)
+var _ DependencyAnalyzer = &spanBasedDependencyAnalyzer{}
 
 // dependencyAnalyzerFunc is an implementation of DependencyAnalyzer that defers
 // to a function for all dependency decisions.
 type dependencyAnalyzerFunc func(planNode, planNode) bool
 
-func (f dependencyAnalyzerFunc) Independent(p1 planNode, p2 planNode) bool {
+func (f dependencyAnalyzerFunc) Independent(_ context.Context, p1 planNode, p2 planNode) bool {
 	return f(p1, p2)
 }
+
+func (f dependencyAnalyzerFunc) Clear(_ planNode) {}
 
 // NoDependenciesAnalyzer is a DependencyAnalyzer that performs no analysis on
 // planNodes and asserts that all plans are independent.
@@ -217,6 +237,73 @@ var NoDependenciesAnalyzer DependencyAnalyzer = dependencyAnalyzerFunc(func(
 ) bool {
 	return true
 })
+
+// planSpans holds the read and write spans that a planNode will touch during
+// execution. It represents the effect of a plan's execution and is used to
+// determine if two plans are independent.
+type planSpans struct {
+	read  interval.RangeGroup
+	write interval.RangeGroup
+}
+
+// spanBasedDependencyAnalyzer determines planNode independence based off of
+// the read and write spans that a pair of planNodes interact with. The
+// implementation of DependencyAnalyzer expects all planNodes to implement the
+// spanCollector interface, and will panic if they do not.
+type spanBasedDependencyAnalyzer struct {
+	// spanCache caches the read and write spans of all active planNodes, so
+	// that the spans only need to be collected once.
+	spanCache map[planNode]planSpans
+}
+
+// NewSpanBasedDependencyAnalyzer creates a new SpanBasedDependencyAnalyzer.
+func NewSpanBasedDependencyAnalyzer() DependencyAnalyzer {
+	return &spanBasedDependencyAnalyzer{
+		spanCache: make(map[planNode]planSpans),
+	}
+}
+
+func (a *spanBasedDependencyAnalyzer) Independent(
+	ctx context.Context, p1 planNode, p2 planNode,
+) bool {
+	s1, s2 := a.spansForPlan(ctx, p1), a.spansForPlan(ctx, p2)
+	if interval.RangeGroupsOverlap(s1.write, s2.write) {
+		return false
+	}
+	if interval.RangeGroupsOverlap(s1.read, s2.write) {
+		return false
+	}
+	if interval.RangeGroupsOverlap(s1.write, s2.read) {
+		return false
+	}
+	return true
+}
+
+func (a *spanBasedDependencyAnalyzer) spansForPlan(ctx context.Context, p planNode) planSpans {
+	if spans, ok := a.spanCache[p]; ok {
+		return spans
+	}
+
+	readSpans, writeSpans := p.Spans(ctx)
+	spans := planSpans{
+		read:  rangeGroupFromSpans(readSpans),
+		write: rangeGroupFromSpans(writeSpans),
+	}
+	a.spanCache[p] = spans
+	return spans
+}
+
+func rangeGroupFromSpans(spans roachpb.Spans) interval.RangeGroup {
+	rg := interval.NewRangeList()
+	for _, s := range spans {
+		rg.Add(s.AsRange())
+	}
+	return rg
+}
+
+func (a *spanBasedDependencyAnalyzer) Clear(p planNode) {
+	delete(a.spanCache, p)
+}
 
 // IsStmtPipelined determines if a given statement's execution should be pipelined.
 // This means that its results should be mocked out, and that it should be run

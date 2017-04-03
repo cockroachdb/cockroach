@@ -21,6 +21,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -146,8 +147,9 @@ func (*splitNode) Columns() ResultColumns {
 	}
 }
 
-func (*splitNode) Ordering() orderingInfo  { return orderingInfo{} }
-func (*splitNode) MarkDebug(_ explainMode) {}
+func (*splitNode) Ordering() orderingInfo                     { return orderingInfo{} }
+func (*splitNode) MarkDebug(_ explainMode)                    {}
+func (*splitNode) Spans(context.Context) (_, _ roachpb.Spans) { panic("unimplemented") }
 
 func (n *splitNode) DebugValues() debugValues {
 	return debugValues{

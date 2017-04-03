@@ -19,6 +19,7 @@ package sql
 import (
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 )
 
@@ -103,3 +104,7 @@ func (o *ordinalityNode) MarkDebug(mode explainMode)      { o.source.MarkDebug(m
 func (o *ordinalityNode) Columns() ResultColumns          { return o.columns }
 func (o *ordinalityNode) Start(ctx context.Context) error { return o.source.Start(ctx) }
 func (o *ordinalityNode) Close(ctx context.Context)       { o.source.Close(ctx) }
+
+func (o *ordinalityNode) Spans(ctx context.Context) (_, _ roachpb.Spans) {
+	return o.source.Spans(ctx)
+}

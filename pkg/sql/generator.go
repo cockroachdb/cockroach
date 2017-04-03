@@ -22,6 +22,7 @@ import (
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 )
 
@@ -123,6 +124,10 @@ func (n *valueGenerator) DebugValues() debugValues {
 		value:  row.String(),
 		output: debugValueRow,
 	}
+}
+
+func (n *valueGenerator) Spans(context.Context) (_, _ roachpb.Spans) {
+	return nil, nil
 }
 
 func (n *valueGenerator) Ordering() orderingInfo  { return orderingInfo{} }

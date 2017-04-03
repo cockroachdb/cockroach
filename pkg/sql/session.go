@@ -222,7 +222,7 @@ func NewSession(
 		virtualSchemas: e.virtualSchemas,
 		execCfg:        &e.cfg,
 		distSQLPlanner: e.distSQLPlanner,
-		pipelineQueue:  MakePipelineQueue(NoDependenciesAnalyzer),
+		pipelineQueue:  MakePipelineQueue(NewSpanBasedDependencyAnalyzer()),
 		memMetrics:     memMetrics,
 		sqlStats:       &e.sqlStats,
 		defaults: sessionDefaults{

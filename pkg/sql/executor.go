@@ -1513,7 +1513,7 @@ func (e *Executor) execStmtPipelined(stmt parser.Statement, planner *planner) (R
 		return Result{}, err
 	}
 
-	session.pipelineQueue.Add(plan, func(plan planNode) error {
+	session.pipelineQueue.Add(ctx, plan, func(plan planNode) error {
 		defer plan.Close(ctx)
 
 		result, err := makeRes(stmt, planner, plan)

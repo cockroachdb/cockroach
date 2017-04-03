@@ -239,6 +239,12 @@ func (n *indexJoinNode) DebugValues() debugValues {
 	return n.debugVals
 }
 
+func (n *indexJoinNode) Spans(ctx context.Context) (_, _ roachpb.Spans) {
+	indexRead, indexWrite := n.index.Spans(ctx)
+	tableRead, tableWrite := n.table.Spans(ctx)
+	return append(indexRead, tableRead...), append(indexWrite, tableWrite...)
+}
+
 func (n *indexJoinNode) Start(ctx context.Context) error {
 	if err := n.table.Start(ctx); err != nil {
 		return err
