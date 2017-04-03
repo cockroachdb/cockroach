@@ -79,7 +79,7 @@ SHOW SYNTAX
 syntax
 Modern
 
-statement error SYNTAX: "a" is not in \("Modern", "Traditional"\)
+statement error set syntax: "a" is not in \("Modern", "Traditional"\)
 SET SYNTAX = a
 
 query T colnames
@@ -88,7 +88,7 @@ SHOW SYNTAX
 syntax
 Modern
 
-statement error SYNTAX: requires a single string value
+statement error set syntax: requires a single string value
 SET SYNTAX = a, b
 
 query T colnames
@@ -113,12 +113,17 @@ query TT
 SHOW ALL
 ----
 application_name               helloworld
+client_encoding                UTF8
+client_min_messages
 database                       foo
 default_transaction_isolation  SERIALIZABLE
+distsql                        off
+extra_float_digits
 max_index_keys                 32
 search_path                    pg_catalog
 server_version                 9.5.0
 session_user                   root
+standard_conforming_strings    on
 syntax                         Modern
 time zone                      UTC
 
@@ -129,12 +134,17 @@ query TT
 SHOW ALL
 ----
 application_name               helloworld
+client_encoding                UTF8
+client_min_messages
 database                       foo
 default_transaction_isolation  SERIALIZABLE
+distsql                        off
+extra_float_digits
 max_index_keys                 32
 search_path                    pg_catalog
 server_version                 9.5.0
 session_user                   root
+standard_conforming_strings    on
 syntax                         Modern
 time zone                      UTC
 transaction isolation level    SERIALIZABLE
@@ -142,6 +152,26 @@ transaction priority           NORMAL
 
 statement ok
 ROLLBACK
+
+## Test SET ... TO DEFAULT works
+
+statement ok
+SET DISTSQL TO ON
+
+query T colnames
+SHOW DISTSQL
+----
+distsql
+on
+
+statement ok
+SET DISTSQL TO DEFAULT
+
+query T colnames
+SHOW DISTSQL
+----
+distsql
+off
 
 ## Test that our no-op compatibility vars work
 
@@ -157,7 +187,7 @@ SET CLIENT_MIN_MESSAGES = 'debug'
 statement ok
 SET STANDARD_CONFORMING_STRINGS = 'on'
 
-statement error STANDARD_CONFORMING_STRINGS: "off" not supported
+statement error set standard_conforming_strings: "off" not supported
 SET STANDARD_CONFORMING_STRINGS = 'off'
 
 statement ok
@@ -186,3 +216,7 @@ SHOW SERVER_VERSION
 ----
 server_version
 9.5.0
+
+# Test read-only variables
+statement error variable "max_index_keys" cannot be changed
+SET max_index_keys = 32

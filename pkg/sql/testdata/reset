@@ -1,0 +1,39 @@
+statement error unknown variable: "FOO"
+RESET FOO
+
+statement ok
+SET SEARCH_PATH = foo
+
+query T
+SHOW SEARCH_PATH
+----
+pg_catalog, foo
+
+statement ok
+RESET SEARCH_PATH
+
+query T
+SHOW SEARCH_PATH
+----
+pg_catalog
+
+statement error variable "SERVER_VERSION" cannot be reset
+RESET SERVER_VERSION
+
+# Lower case
+
+statement ok
+SET search_path = foo
+
+query T
+SHOW search_path
+----
+pg_catalog, foo
+
+statement ok
+RESET search_path
+
+query T
+SHOW search_path
+----
+pg_catalog

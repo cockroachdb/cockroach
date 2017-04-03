@@ -200,6 +200,7 @@ var keywords = map[string]int{
 	"RELEASE":           RELEASE,
 	"RENAME":            RENAME,
 	"REPEATABLE":        REPEATABLE,
+	"RESET":             RESET,
 	"RESTORE":           RESTORE,
 	"RESTRICT":          RESTRICT,
 	"RETURNING":         RETURNING,

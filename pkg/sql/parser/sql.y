@@ -382,6 +382,7 @@ func (u *sqlSymUnion) kvOptions() []KVOption {
 %type <Statement> insert_stmt
 %type <Statement> release_stmt
 %type <Statement> rename_stmt
+%type <Statement> reset_stmt
 %type <Statement> revoke_stmt
 %type <*Select> select_stmt
 %type <Statement> savepoint_stmt
@@ -678,7 +679,7 @@ func (u *sqlSymUnion) kvOptions() []KVOption {
 %token <str>   RANGE READ REAL RECURSIVE REF REFERENCES
 %token <str>   REGCLASS REGPROC REGPROCEDURE REGNAMESPACE REGTYPE
 %token <str>   RENAME REPEATABLE
-%token <str>   RELEASE RESTORE RESTRICT RETURNING REVOKE RIGHT ROLLBACK ROLLUP
+%token <str>   RELEASE RESET RESTORE RESTRICT RETURNING REVOKE RIGHT ROLLBACK ROLLUP
 %token <str>   ROW ROWS RSHIFT
 
 %token <str>   STATUS SAVEPOINT SEARCH SECOND SELECT
@@ -825,6 +826,7 @@ stmt:
 | split_stmt
 | transaction_stmt
 | release_stmt
+| reset_stmt
 | truncate_stmt
 | update_stmt
 | /* EMPTY */
@@ -1367,6 +1369,13 @@ grantee_list:
 | grantee_list ',' name
   {
     $$.val = append($1.nameList(), Name($3))
+  }
+
+// RESET name
+reset_stmt:
+  RESET var_name
+  {
+    $$.val = &Set{Name: $2.unresolvedName(), SetMode: SetModeReset}
   }
 
 // SET name TO 'var_value'
@@ -5193,6 +5202,7 @@ unreserved_keyword:
 | RELEASE
 | RENAME
 | REPEATABLE
+| RESET
 | RESTORE
 | RESTRICT
 | REVOKE

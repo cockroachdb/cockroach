@@ -24,23 +24,41 @@ package parser
 
 import "bytes"
 
-// Set represents a SET statement.
+// Set represents a SET or RESET statement.
 type Set struct {
-	Name   VarName
-	Values Exprs
+	Name    VarName
+	Values  Exprs
+	SetMode SetMode
 }
+
+// SetMode is an enum of the various set modes.
+type SetMode int
+
+const (
+	// SetModeAssign represents a SET statement.
+	SetModeAssign SetMode = iota
+
+	// SetModeReset represents a RESET statement.
+	SetModeReset
+)
 
 // Format implements the NodeFormatter interface.
 func (node *Set) Format(buf *bytes.Buffer, f FmtFlags) {
-	buf.WriteString("SET ")
-	if node.Name != nil {
+	switch node.SetMode {
+	case SetModeAssign:
+		buf.WriteString("SET ")
+		if node.Name != nil {
+			FormatNode(buf, f, node.Name)
+			buf.WriteString(" = ")
+		}
+		if node.Values == nil {
+			buf.WriteString("DEFAULT")
+		} else {
+			FormatNode(buf, f, node.Values)
+		}
+	case SetModeReset:
+		buf.WriteString("RESET ")
 		FormatNode(buf, f, node.Name)
-		buf.WriteString(" = ")
-	}
-	if node.Values == nil {
-		buf.WriteString("DEFAULT")
-	} else {
-		FormatNode(buf, f, node.Values)
 	}
 }
 
