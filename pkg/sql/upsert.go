@@ -38,7 +38,6 @@ type upsertHelper struct {
 	evalExprs          []parser.TypedExpr
 	sourceInfo         *dataSourceInfo
 	excludedSourceInfo *dataSourceInfo
-	allExprsIdentity   bool
 	curSourceRow       parser.Datums
 	curExcludedRow     parser.Datums
 
@@ -135,22 +134,6 @@ func (p *planner) makeUpsertHelper(
 	}
 	helper.evalExprs = evalExprs
 
-	helper.allExprsIdentity = true
-	for _, expr := range evalExprs {
-		ivar, ok := expr.(*parser.IndexedVar)
-		if !ok {
-			helper.allExprsIdentity = false
-			break
-		}
-		// Idx on the IndexedVar references a columns from one of the two
-		// sources. They're ordered table source then excluded source. If any
-		// expr references a table column, then the fast path doesn't apply.
-		if ivar.Idx < len(sourceInfo.sourceColumns) {
-			helper.allExprsIdentity = false
-			break
-		}
-	}
-
 	return helper, nil
 }
 
@@ -177,10 +160,6 @@ func (uh *upsertHelper) eval(
 		}
 	}
 	return ret, nil
-}
-
-func (uh *upsertHelper) isIdentityEvaler() bool {
-	return uh.allExprsIdentity
 }
 
 // upsertExprsAndIndex returns the upsert conflict index and the (possibly

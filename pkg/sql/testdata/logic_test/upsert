@@ -199,3 +199,51 @@ INSERT INTO issue_14052 (a, b) VALUES (1, 1), (2, 2)
 
 statement ok
 UPSERT INTO issue_14052 (a, c) (SELECT a, b from issue_14052)
+
+statement ok
+CREATE TABLE issue_14052_2 (
+  id SERIAL PRIMARY KEY,
+  name VARCHAR(255),
+  createdAt INT,
+  updatedAt INT
+)
+
+statement ok
+INSERT INTO issue_14052_2 (id, name, createdAt, updatedAt) VALUES
+  (1, 'original', 1, 1)
+
+# Make sure the fast path isn't taken (createdAt is not in the ON CONFLICT clause)
+statement ok
+INSERT INTO issue_14052_2 (id, name, createdAt, updatedAt) VALUES
+  (1, 'UPDATED', 2, 2)
+ON CONFLICT (id) DO UPDATE
+  SET id = excluded.id, name = excluded.name, updatedAt = excluded.updatedAt
+
+query ITII
+SELECT * FROM issue_14052_2;
+----
+1  UPDATED  1  2
+
+# Make sure the fast path isn't taken (repeating a column in the ON CONFLICT clause doesn't do anything)
+statement ok
+INSERT INTO issue_14052_2 (id, name, createdAt, updatedAt) VALUES
+  (1, 'FOO', 3, 3)
+ON CONFLICT (id) DO UPDATE
+  SET id = excluded.id, name = excluded.name, name = excluded.name, name = excluded.name
+
+query ITII
+SELECT * FROM issue_14052_2;
+----
+1  FOO  1  2
+
+# Make sure the fast path isn't taken (all clauses in the set must be of the form x = excluded.x)
+statement ok
+INSERT INTO issue_14052_2 (id, name, createdAt, updatedAt) VALUES
+  (1, 'BAR', 4, 5)
+ON CONFLICT (id) DO UPDATE
+  SET name = excluded.name, createdAt = excluded.updatedAt, updatedAt = excluded.updatedAt
+
+query ITII
+SELECT * FROM issue_14052_2;
+----
+1  BAR  5  5
