@@ -344,6 +344,7 @@ func (e *Executor) Start(
 		nodeDesc, e.cfg.RPCContext, e.cfg.DistSQLSrv, e.cfg.DistSender, e.cfg.Gossip,
 	)
 
+	e.databaseCache = NewDatabaseCache(e.systemConfig)
 	e.systemConfigCond = sync.NewCond(e.systemConfigMu.RLocker())
 
 	gossipUpdateC := e.cfg.Gossip.RegisterSystemConfigChannel()
@@ -391,10 +392,7 @@ func (e *Executor) updateSystemConfig(cfg config.SystemConfig) {
 	defer e.systemConfigMu.Unlock()
 	e.systemConfig = cfg
 	// The database cache gets reset whenever the system config changes.
-	e.databaseCache = &databaseCache{
-		databases:    map[string]sqlbase.ID{},
-		systemConfig: cfg,
-	}
+	e.databaseCache = NewDatabaseCache(cfg)
 	e.systemConfigCond.Broadcast()
 }
 
