@@ -12,6 +12,7 @@ define VALID_VARS
   COCKROACH
   CXX
   DUPLFLAGS
+  FILES
   GITHOOKS
   GITHOOKSDIR
   GIT_DIR
@@ -41,4 +42,5 @@ define VALID_VARS
   TYPE
   UI_ROOT
   XGO
+  space
 endef
