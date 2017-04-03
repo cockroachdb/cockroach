@@ -207,6 +207,11 @@ func (r *RSG) GenerateRandomArg(typ parser.Type) string {
 	case parser.TypeIntArray,
 		parser.TypeStringArray,
 		parser.TypeOid,
+		parser.TypeRegClass,
+		parser.TypeRegNamespace,
+		parser.TypeRegProc,
+		parser.TypeRegProcedure,
+		parser.TypeRegType,
 		parser.TypeAnyArray,
 		parser.TypeAny:
 		v = "NULL"
