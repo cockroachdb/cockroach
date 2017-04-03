@@ -265,6 +265,22 @@ func reassignReferencedTables(
 		}); err != nil {
 			return err
 		}
+
+		for i, dest := range table.DependsOn {
+			if newID, ok := newTableIDs[dest]; ok {
+				table.DependsOn[i] = newID
+			} else {
+				return errors.Errorf("cannot restore %q without referenced table %d", table.Name, dest)
+			}
+		}
+		origRefs := table.DependedOnBy
+		table.DependedOnBy = nil
+		for _, ref := range origRefs {
+			if newID, ok := newTableIDs[ref.ID]; ok {
+				ref.ID = newID
+				table.DependedOnBy = append(table.DependedOnBy, ref)
+			}
+		}
 	}
 	return nil
 }
