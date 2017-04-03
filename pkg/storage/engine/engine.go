@@ -38,10 +38,14 @@ type Iterator interface {
 	// SeekReverse advances the iterator to the first key in the engine which
 	// is <= the provided key.
 	SeekReverse(key MVCCKey)
-	// Valid returns true if the iterator is currently valid. An iterator that
-	// hasn't had Seek called on it or has gone past the end of the key range
-	// is invalid.
-	Valid() bool
+	// Valid must be called after any call to Seek(), Next(), Prev(), or
+	// similar methods. It returns (true, nil) if the iterator points to
+	// a valid key (it is undefined to call Key(), Value(), or similar
+	// methods unless Valid() has returned (true, nil)). It returns
+	// (false, nil) if the iterator has moved past the end of the valid
+	// range, or (false, err) if an error has occurred. Valid() will
+	// never return true with a non-nil error.
+	Valid() (bool, error)
 	// Next advances the iterator to the next key/value in the
 	// iteration. After this call, Valid() will be true if the
 	// iterator was not positioned at the last key.
@@ -76,8 +80,6 @@ type Iterator interface {
 	// Less returns true if the key the iterator is currently positioned at is
 	// less than the specified key.
 	Less(key MVCCKey) bool
-	// Error returns the error, if any, which the iterator encountered.
-	Error() error
 	// ComputeStats scans the underlying engine from start to end keys and
 	// computes stats counters based on the values. This method is used after a
 	// range is split to recompute stats for each subrange. The start key is

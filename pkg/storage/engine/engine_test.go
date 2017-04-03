@@ -152,7 +152,9 @@ func TestEngineBatchStaleCachedIterator(t *testing.T) {
 			// Iterator should not reuse its cached result.
 			iter.Seek(key)
 
-			if iter.Valid() {
+			if ok, err := iter.Valid(); err != nil {
+				t.Fatal(err)
+			} else if ok {
 				t.Fatalf("iterator unexpectedly valid: %v -> %v",
 					iter.UnsafeKey(), iter.UnsafeValue())
 			}
@@ -299,9 +301,9 @@ func TestEngineBatch(t *testing.T) {
 			// Try using an iterator to get the value from the batch.
 			iter := b.NewIterator(false)
 			iter.Seek(key)
-			if !iter.Valid() {
+			if ok, err := iter.Valid(); !ok {
 				if currentBatch[len(currentBatch)-1].value != nil {
-					t.Errorf("%d: batch seek invalid", i)
+					t.Errorf("%d: batch seek invalid, err=%v", i, err)
 				}
 			} else if !iter.Key().Equal(key) {
 				t.Errorf("%d: batch seek expected key %s, but got %s", i, key, iter.Key())
@@ -763,7 +765,9 @@ func TestSnapshotMethods(t *testing.T) {
 		// Verify NewIterator still iterates over original snapshot.
 		iter := snap.NewIterator(false)
 		iter.Seek(newKey)
-		if iter.Valid() {
+		if ok, err := iter.Valid(); err != nil {
+			t.Fatal(err)
+		} else if ok {
 			t.Error("expected invalid iterator when seeking to element which shouldn't be visible to snapshot")
 		}
 		iter.Close()

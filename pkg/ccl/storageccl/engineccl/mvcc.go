@@ -77,8 +77,8 @@ func (i *MVCCIncrementalIterator) Next() {
 		if !i.valid {
 			return
 		}
-		if !i.iter.Valid() {
-			i.err = i.iter.Error()
+		if ok, err := i.iter.Valid(); !ok {
+			i.err = err
 			i.valid = false
 			return
 		}

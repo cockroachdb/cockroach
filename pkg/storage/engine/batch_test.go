@@ -767,8 +767,8 @@ func TestBatchDistinct(t *testing.T) {
 	// batch.
 	iter := distinct.NewIterator(false)
 	iter.Seek(mvccKey("a"))
-	if !iter.Valid() {
-		t.Fatalf("expected iterator to be valid")
+	if ok, err := iter.Valid(); !ok {
+		t.Fatalf("expected iterator to be valid; err=%v", err)
 	}
 	if string(iter.Key().Key) != "a" {
 		t.Fatalf("expected a, but got %s", iter.Key())
@@ -818,8 +818,8 @@ func TestWriteOnlyBatchDistinct(t *testing.T) {
 	// to the write-only batch.
 	iter := distinct.NewIterator(false)
 	iter.Seek(mvccKey("a"))
-	if !iter.Valid() {
-		t.Fatalf("expected iterator to be valid")
+	if ok, err := iter.Valid(); !ok {
+		t.Fatalf("expected iterator to be valid, err=%v", err)
 	}
 	if string(iter.Key().Key) != "b" {
 		t.Fatalf("expected b, but got %s", iter.Key())
@@ -906,8 +906,8 @@ func TestBatchIteration(t *testing.T) {
 
 	// Forward iteration
 	iter.Seek(k1)
-	if !iter.Valid() {
-		t.Fatal(iter.Error())
+	if ok, err := iter.Valid(); !ok {
+		t.Fatal(err)
 	}
 	if !reflect.DeepEqual(iter.Key(), k1) {
 		t.Fatalf("expected %s, got %s", k1, iter.Key())
@@ -916,8 +916,8 @@ func TestBatchIteration(t *testing.T) {
 		t.Fatalf("expected %s, got %s", v1, iter.Value())
 	}
 	iter.Next()
-	if !iter.Valid() {
-		t.Fatal(iter.Error())
+	if ok, err := iter.Valid(); !ok {
+		t.Fatal(err)
 	}
 	if !reflect.DeepEqual(iter.Key(), k2) {
 		t.Fatalf("expected %s, got %s", k2, iter.Key())
@@ -926,14 +926,16 @@ func TestBatchIteration(t *testing.T) {
 		t.Fatalf("expected %s, got %s", v2, iter.Value())
 	}
 	iter.Next()
-	if iter.Valid() {
+	if ok, err := iter.Valid(); err != nil {
+		t.Fatal(err)
+	} else if ok {
 		t.Fatalf("expected invalid, got valid at key %s", iter.Key())
 	}
 
 	// SeekReverse works, but reverse iteration is not supported.
 	iter.SeekReverse(k2)
-	if !iter.Valid() {
-		t.Fatal(iter.Error())
+	if ok, err := iter.Valid(); !ok {
+		t.Fatal(err)
 	}
 	if !reflect.DeepEqual(iter.Key(), k2) {
 		t.Fatalf("expected %s, got %s", k2, iter.Key())
@@ -942,11 +944,10 @@ func TestBatchIteration(t *testing.T) {
 		t.Fatalf("expected %s, got %s", v2, iter.Value())
 	}
 	iter.Prev()
-	if iter.Valid() {
+	if ok, err := iter.Valid(); ok {
 		t.Fatalf("expected invalid, got valid at key %s", iter.Key())
-	}
-	if !testutils.IsError(iter.Error(), "Prev\\(\\) not supported") {
-		t.Fatalf("expected 'Prev() not supported', got %s", iter.Error())
+	} else if !testutils.IsError(err, "Prev\\(\\) not supported") {
+		t.Fatalf("expected 'Prev() not supported', got %s", err)
 	}
 }
 

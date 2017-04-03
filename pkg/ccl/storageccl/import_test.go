@@ -73,11 +73,13 @@ func slurpSSTablesLatestKey(
 	var kvs []engine.MVCCKeyValue
 	it := batch.NewIterator(false)
 	defer it.Close()
-	for it.Seek(start); it.Valid() && it.UnsafeKey().Less(end); it.NextKey() {
+	for it.Seek(start); ; it.NextKey() {
+		if ok, err := it.Valid(); err != nil {
+			return nil, err
+		} else if !ok || !it.UnsafeKey().Less(end) {
+			break
+		}
 		kvs = append(kvs, engine.MVCCKeyValue{Key: it.Key(), Value: it.Value()})
-	}
-	if err := it.Error(); err != nil {
-		return nil, err
 	}
 	return kvs, nil
 }
