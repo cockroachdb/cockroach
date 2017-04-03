@@ -8,14 +8,16 @@ import Dropdown, { DropdownOption, ArrowDirection } from "../components/dropdown
 import { AdminUIState } from "../redux/state";
 import { refreshNodes } from "../redux/apiReducers";
 import * as timewindow from "../redux/timewindow";
-import { setUISetting } from "../redux/ui";
+import { LocalSetting } from "../redux/localsettings";
 
 import { NodeStatus$Properties } from "../util/proto";
 import { LongToMoment } from "../util/convert";
 
 // Tracks whether the default timescale been set once in the app. Tracked across
 // the entire app so that changing pages doesn't cause it to reset.
-const UI_TIMESCALE_DEFAULT_SET = "timescale/default_set";
+const timescaleDefaultSet = new LocalSetting(
+  "timescale/default_set", (s: AdminUIState) => s.ui, false,
+);
 
 interface TimeRangeProps {
   start: moment.Moment;
@@ -62,7 +64,7 @@ interface TimeScaleDropdownProps {
   nodeStatuses: NodeStatus$Properties[];
   nodeStatusesValid: boolean;
   // Track whether the default has been set.
-  setUISetting: typeof setUISetting;
+  setDefaultSet: typeof timescaleDefaultSet.set;
   defaultTimescaleSet: boolean;
 }
 
@@ -135,7 +137,7 @@ class TimeScaleDropdown extends React.Component<TimeScaleDropdownProps, {}> {
           props.setTimeScale(props.availableScales["6 hours"]);
         }
       }
-      props.setUISetting(UI_TIMESCALE_DEFAULT_SET, true);
+      props.setDefaultSet(true);
     }
   }
 
@@ -187,12 +189,12 @@ export default connect(
       nodeStatuses: state.cachedData.nodes.data,
       currentScale: (state.timewindow as timewindow.TimeWindowState).scale,
       availableScales: timewindow.availableTimeScales,
-      defaultTimescaleSet: state.ui[UI_TIMESCALE_DEFAULT_SET] || false,
+      defaultTimescaleSet: timescaleDefaultSet.selector(state),
     };
   },
   {
     setTimeScale: timewindow.setTimeScale,
     refreshNodes: refreshNodes,
-    setUISetting: setUISetting,
+    setDefaultSet: timescaleDefaultSet.set,
   },
 )(TimeScaleDropdown);

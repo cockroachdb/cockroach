@@ -8,8 +8,7 @@ import classNames from "classnames";
 
 import { AdminUIState } from "../redux/state";
 import * as uiData from "../redux/uiData";
-import { setUISetting } from "../redux/ui";
-import { HELPUS_BANNER_DISMISSED_KEY } from "./banner/helpusBanner";
+import { bannerDismissedSetting } from "./banner/helpusBanner";
 
 export interface HelpUsProps {
   optInAttributes: uiData.OptInAttributes;
@@ -21,7 +20,7 @@ export interface HelpUsProps {
   helpusDismissed: boolean;
   loadUIData: typeof uiData.loadUIData;
   saveUIData: typeof uiData.saveUIData;
-  setUISetting: typeof setUISetting;
+  setDismissedBanner: typeof bannerDismissedSetting.set;
 }
 
 class HelpUsState {
@@ -44,7 +43,7 @@ export class HelpUs extends React.Component<HelpUsProps, HelpUsState> {
     this.setState({ initialized: false });
     this.props.loadUIData(uiData.KEY_HELPUS);
     if (!this.props.helpusDismissed) {
-      this.props.setUISetting(HELPUS_BANNER_DISMISSED_KEY, true);
+      this.props.setDismissedBanner(true);
     }
   }
 
@@ -164,7 +163,6 @@ let saving = (state: AdminUIState): boolean => uiData.isSaving(state, uiData.KEY
 let loading = (state: AdminUIState): boolean => uiData.isLoading(state, uiData.KEY_HELPUS);
 let saveError = (state: AdminUIState): Error => uiData.getSaveError(state, uiData.KEY_HELPUS);
 let loadError = (state: AdminUIState): Error => uiData.getLoadError(state, uiData.KEY_HELPUS);
-let helpusDismissed = (state: AdminUIState): boolean => uiData.getData(state, HELPUS_BANNER_DISMISSED_KEY);
 
 // Connect the HelpUs class with our redux store.
 let helpusConnected = connect(
@@ -176,13 +174,13 @@ let helpusConnected = connect(
       loading: loading(state),
       saveError: saveError(state),
       loadError: loadError(state),
-      helpusDismissed: helpusDismissed(state),
+      helpusDismissed: bannerDismissedSetting.selector(state),
     };
   },
   {
     loadUIData: uiData.loadUIData,
     saveUIData: uiData.saveUIData,
-    setUISetting,
+    setDismissedBanner: bannerDismissedSetting.set,
   },
 )(HelpUs);
 
