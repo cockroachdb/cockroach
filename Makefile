@@ -162,6 +162,14 @@ testraceslow: override GOFLAGS += -race
 testraceslow: TESTTIMEOUT := $(RACETIMEOUT)
 testraceslow: testslow
 
+# Run make logic-foo to run the logic testfile named foo.
+.PHONY: logic-%
+logic-%: PKG := ./pkg/sql
+logic-%: TESTS := TestLogic$$/^$(patsubst logic-%,%,$(word 1, $(MAKECMDGOALS)))$$
+logic-%: TESTFLAGS := -v -show-sql
+logic-%: test
+	@echo ''
+
 # Beware! This target is complicated because it needs to handle complexity:
 # - PKG may be specified as relative (e.g. './gossip') or absolute (e.g.
 # github.com/cockroachdb/cockroach/gossip), and this target needs to create
