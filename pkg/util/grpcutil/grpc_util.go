@@ -38,6 +38,7 @@ func IsClosedConnection(err error) bool {
 		grpc.Code(err) == codes.Unavailable ||
 		grpc.ErrorDesc(err) == grpc.ErrClientConnClosing.Error() ||
 		strings.Contains(err.Error(), "is closing") ||
+		strings.Contains(err.Error(), "use of closed network connection") ||
 		strings.Contains(err.Error(), "node unavailable") {
 		return true
 	}
@@ -45,4 +46,12 @@ func IsClosedConnection(err error) bool {
 		return true
 	}
 	return netutil.IsClosedConnection(err)
+}
+
+// IsClosingConnection returns true if err's Cause is an error produced by gRPC
+// on a connection that was working but has started closing.
+func IsClosingConnection(err error) bool {
+	err = errors.Cause(err)
+	return grpc.ErrorDesc(err) == grpc.ErrClientConnClosing.Error() ||
+		strings.Contains(err.Error(), "use of closed network connection")
 }

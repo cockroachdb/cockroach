@@ -626,6 +626,15 @@ func doShutdown(ctx context.Context, c serverpb.AdminClient, onModes []int32) er
 					// down successfully.
 					return nil
 				}
+				if grpcutil.IsClosingConnection(err) {
+					// While we can only consider a "closed" connection a success if we
+					// have received at lease one response from the server, there is a
+					// race where the server starts closing the connection before an
+					// acknowledgment gets sent back to us. We do not want to consider
+					// this a failure, as it can confuse users and cause test flakes
+					// (#14184).
+					return nil
+				}
 				if tryHard {
 					// Either we hadn't seen a response yet (in which case it's
 					// likely that our connection broke while waiting for the
