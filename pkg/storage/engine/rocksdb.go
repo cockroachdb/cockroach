@@ -1686,7 +1686,7 @@ type RocksDBSstFileReader struct {
 
 // MakeRocksDBSstFileReader creates a RocksDBSstFileReader that uses a scratch
 // directory which is cleaned up by `Close`.
-func MakeRocksDBSstFileReader(tempPrefix string) (RocksDBSstFileReader, error) {
+func MakeRocksDBSstFileReader(ctx context.Context, tempPrefix string) (RocksDBSstFileReader, error) {
 	if tempPrefix == "" {
 		return RocksDBSstFileReader{}, errors.New("must provide a tempdir path")
 	}
@@ -1732,14 +1732,14 @@ func (fr *RocksDBSstFileReader) NewIterator(prefix bool) Iterator {
 }
 
 // Close finishes the reader.
-func (fr *RocksDBSstFileReader) Close() {
+func (fr *RocksDBSstFileReader) Close(ctx context.Context) {
 	if fr.rocksDB == nil {
 		return
 	}
 	fr.rocksDB.Close()
 	fr.rocksDB = nil
 	if err := os.RemoveAll(fr.dir); err != nil {
-		log.Warningf(context.TODO(), "error removing temp rocksdb directory %q: %s", fr.dir, err)
+		log.Warningf(ctx, "error removing temp rocksdb directory %q: %s", fr.dir, err)
 	}
 }
 

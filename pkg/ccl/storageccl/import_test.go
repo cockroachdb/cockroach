@@ -36,6 +36,7 @@ import (
 func slurpSSTablesLatestKey(
 	dir string, paths []string, kr KeyRewriter,
 ) ([]engine.MVCCKeyValue, error) {
+	ctx := context.TODO()
 	start, end := engine.MVCCKey{Key: keys.MinKey}, engine.MVCCKey{Key: keys.MaxKey}
 
 	e := engine.NewInMem(roachpb.Attributes{}, 1<<20)
@@ -44,11 +45,11 @@ func slurpSSTablesLatestKey(
 	defer batch.Close()
 
 	for _, path := range paths {
-		sst, err := engine.MakeRocksDBSstFileReader(dir)
+		sst, err := engine.MakeRocksDBSstFileReader(ctx, dir)
 		if err != nil {
 			return nil, err
 		}
-		defer sst.Close()
+		defer sst.Close(ctx)
 		if err := sst.AddFile(filepath.Join(dir, path)); err != nil {
 			return nil, err
 		}

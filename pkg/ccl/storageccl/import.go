@@ -115,11 +115,11 @@ func evalImport(ctx context.Context, cArgs storage.CommandArgs) error {
 			}
 		}
 
-		sst, err := engine.MakeRocksDBSstFileReader(tempPrefix)
+		sst, err := engine.MakeRocksDBSstFileReader(ctx, tempPrefix)
 		if err != nil {
 			return err
 		}
-		defer sst.Close()
+		defer sst.Close(ctx)
 
 		// Add each file in its own sst reader because AddFile requires the
 		// affected keyrange be empty and the keys in these files might overlap.

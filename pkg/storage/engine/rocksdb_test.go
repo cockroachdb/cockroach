@@ -17,6 +17,7 @@
 package engine
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -471,6 +472,7 @@ func BenchmarkRocksDBSstFileWriter(b *testing.B) {
 }
 
 func BenchmarkRocksDBSstFileReader(b *testing.B) {
+	ctx := context.TODO()
 	dir, err := ioutil.TempDir("", "BenchmarkRocksDBSstFileReader")
 	if err != nil {
 		b.Fatal(err)
@@ -515,14 +517,14 @@ func BenchmarkRocksDBSstFileReader(b *testing.B) {
 	}
 
 	b.ResetTimer()
-	sst, err := MakeRocksDBSstFileReader(dir)
+	sst, err := MakeRocksDBSstFileReader(ctx, dir)
 	if err != nil {
 		b.Fatal(err)
 	}
 	if err := sst.AddFile(sstPath); err != nil {
 		b.Fatal(err)
 	}
-	defer sst.Close()
+	defer sst.Close(ctx)
 	count := 0
 	iterateFn := func(kv MVCCKeyValue) (bool, error) {
 		count++

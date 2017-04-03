@@ -59,11 +59,11 @@ func TestExport(t *testing.T) {
 		for _, file := range res.(*roachpb.ExportResponse).Files {
 			paths = append(paths, file.Path)
 
-			sst, err := engine.MakeRocksDBSstFileReader(dir)
+			sst, err := engine.MakeRocksDBSstFileReader(ctx, dir)
 			if err != nil {
 				t.Fatalf("%+v", err)
 			}
-			defer sst.Close()
+			defer sst.Close(ctx)
 			if err := sst.AddFile(filepath.Join(dir, file.Path)); err != nil {
 				t.Fatalf("%+v", err)
 			}
