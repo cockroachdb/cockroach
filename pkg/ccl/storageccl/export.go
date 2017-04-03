@@ -101,13 +101,13 @@ func evalExport(
 	defer iter.Close()
 	iter.Reset(args.Key, args.EndKey, args.StartTime, h.Timestamp)
 	for ; iter.Valid(); iter.Next() {
-		key, value := iter.Key(), iter.Value()
 		if log.V(3) {
-			log.Infof(ctx, "Export %+v %+v", key, value)
+			v := roachpb.Value{RawBytes: iter.UnsafeValue()}
+			log.Infof(ctx, "Export %s %s", iter.UnsafeKey(), v.PrettyPrint())
 		}
 		entries++
-		if err := sst.Add(engine.MVCCKeyValue{Key: key, Value: value}); err != nil {
-			return storage.EvalResult{}, errors.Wrapf(err, "adding key %s", key)
+		if err := sst.Add(engine.MVCCKeyValue{Key: iter.UnsafeKey(), Value: iter.UnsafeValue()}); err != nil {
+			return storage.EvalResult{}, errors.Wrapf(err, "adding key %s", iter.UnsafeKey())
 		}
 	}
 	if err := iter.Error(); err != nil {
