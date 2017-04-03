@@ -729,18 +729,21 @@ func (e *Executor) execRequest(
 			if aErr, ok := err.(*client.AutoCommitError); ok {
 				// TODO(andrei): Until #7881 fixed.
 				{
-					log.Eventf(session.Ctx(), "executor got AutoCommitError: %s\n"+
-						"txn: %+v\nexecOpt.AutoRetry %t, execOpt.AutoCommit:%t, stmts %+v, remaining %+v",
-						aErr, txnState.txn.Proto(), execOpt.AutoRetry, execOpt.AutoCommit, stmts,
-						remainingStmts)
-					if txnState.txn == nil {
+					if txnState.txn != nil {
+						log.Eventf(session.Ctx(), "executor got AutoCommitError: %s\n"+
+							"txn: %+v\nexecOpt.AutoRetry %t, execOpt.AutoCommit:%t, stmts %+v, remaining %+v",
+							aErr, txnState.txn.Proto(), execOpt.AutoRetry, execOpt.AutoCommit, stmts,
+							remainingStmts)
+					} else {
 						log.Errorf(session.Ctx(), "7881: AutoCommitError on nil txn: %s, "+
-							"txnState %+v, execOpt %+v, stmts %+v, remaining %+v",
-							aErr, txnState, execOpt, stmts, remainingStmts)
+							"txnState %+v, execOpt %+v, stmts %+v, remaining %+v, txn captured before executing batch: %+v",
+							aErr, txnState, execOpt, stmts, remainingStmts, txn)
 						txnState.sp.SetBaggageItem(keyFor7881Sample, "sample me please")
 					}
 				}
 				e.TxnAbortCount.Inc(1)
+				// TODO(andrei): Once 7881 is fixed, this should be
+				// txnState.txn.CleanupOnError().
 				txn.CleanupOnError(session.Ctx(), err)
 			}
 		}
