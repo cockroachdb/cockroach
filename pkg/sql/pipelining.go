@@ -238,12 +238,12 @@ var NoDependenciesAnalyzer DependencyAnalyzer = dependencyAnalyzerFunc(func(
 	return true
 })
 
-// planSpans holds the read and write spans that a planNode will touch during
-// execution. It represents the effect of a plan's execution and is used to
-// determine if two plans are independent.
-type planSpans struct {
-	read  interval.RangeGroup
-	write interval.RangeGroup
+// planAnalysis holds the read and write spans that a planNode will touch during
+// execution, along with other information necessary to determine plan independence.
+type planAnalysis struct {
+	read          interval.RangeGroup
+	write         interval.RangeGroup
+	hasOrderingFn bool
 }
 
 // spanBasedDependencyAnalyzer determines planNode independence based off of
@@ -251,46 +251,73 @@ type planSpans struct {
 // implementation of DependencyAnalyzer expects all planNodes to implement the
 // spanCollector interface, and will panic if they do not.
 type spanBasedDependencyAnalyzer struct {
-	// spanCache caches the read and write spans of all active planNodes, so
-	// that the spans only need to be collected once.
-	spanCache map[planNode]planSpans
+	// spanCache caches the analysis results of all active planNodes, so
+	// that the analysis only needs to be performed once.
+	analysisCache map[planNode]planAnalysis
 }
 
 // NewSpanBasedDependencyAnalyzer creates a new SpanBasedDependencyAnalyzer.
 func NewSpanBasedDependencyAnalyzer() DependencyAnalyzer {
 	return &spanBasedDependencyAnalyzer{
-		spanCache: make(map[planNode]planSpans),
+		analysisCache: make(map[planNode]planAnalysis),
 	}
 }
 
 func (a *spanBasedDependencyAnalyzer) Independent(
 	ctx context.Context, p1 planNode, p2 planNode,
 ) bool {
-	s1, s2 := a.spansForPlan(ctx, p1), a.spansForPlan(ctx, p2)
-	if interval.RangeGroupsOverlap(s1.write, s2.write) {
+	a1, a2 := a.analyzePlan(ctx, p1), a.analyzePlan(ctx, p2)
+	if a1.hasOrderingFn || a2.hasOrderingFn {
 		return false
 	}
-	if interval.RangeGroupsOverlap(s1.read, s2.write) {
+	if interval.RangeGroupsOverlap(a1.write, a2.write) {
 		return false
 	}
-	if interval.RangeGroupsOverlap(s1.write, s2.read) {
+	if interval.RangeGroupsOverlap(a1.read, a2.write) {
+		return false
+	}
+	if interval.RangeGroupsOverlap(a1.write, a2.read) {
 		return false
 	}
 	return true
 }
 
-func (a *spanBasedDependencyAnalyzer) spansForPlan(ctx context.Context, p planNode) planSpans {
-	if spans, ok := a.spanCache[p]; ok {
-		return spans
+func (a *spanBasedDependencyAnalyzer) analyzePlan(ctx context.Context, p planNode) planAnalysis {
+	if a, ok := a.analysisCache[p]; ok {
+		return a
 	}
 
 	readSpans, writeSpans := p.Spans(ctx)
-	spans := planSpans{
-		read:  rangeGroupFromSpans(readSpans),
-		write: rangeGroupFromSpans(writeSpans),
+	hasOrderingFn := containsOrderingFunction(ctx, p)
+	analysis := planAnalysis{
+		read:          rangeGroupFromSpans(readSpans),
+		write:         rangeGroupFromSpans(writeSpans),
+		hasOrderingFn: hasOrderingFn,
 	}
-	a.spanCache[p] = spans
-	return spans
+	a.analysisCache[p] = analysis
+	return analysis
+}
+
+// orderingFunctions is a set of all functions that preclude statement independence.
+// These functions are contractually monotonic within a transaction and thus prevents
+// reordering.
+var orderingFunctions = map[string]struct{}{
+	"statement_timestamp": {},
+}
+
+func containsOrderingFunction(ctx context.Context, plan planNode) bool {
+	sawOrderingFn := false
+	po := planObserver{expr: func(_, _ string, n int, expr parser.Expr) {
+		if f, ok := expr.(*parser.FuncExpr); ok {
+			if _, ok := orderingFunctions[f.Func.String()]; ok {
+				sawOrderingFn = true
+			}
+		}
+	}}
+	if err := walkPlan(ctx, plan, po); err != nil {
+		panic(err)
+	}
+	return sawOrderingFn
 }
 
 func rangeGroupFromSpans(spans roachpb.Spans) interval.RangeGroup {
@@ -302,7 +329,7 @@ func rangeGroupFromSpans(spans roachpb.Spans) interval.RangeGroup {
 }
 
 func (a *spanBasedDependencyAnalyzer) Clear(p planNode) {
-	delete(a.spanCache, p)
+	delete(a.analysisCache, p)
 }
 
 // IsStmtPipelined determines if a given statement's execution should be pipelined.

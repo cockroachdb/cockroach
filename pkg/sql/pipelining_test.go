@@ -407,21 +407,34 @@ func TestSpanBasedDependencyAnalyzer(t *testing.T) {
 		{`UPDATE bar SET k = 1`, `SELECT * FROM bar@idx`, false},
 		{`UPDATE foo SET k = 1`, `DELETE FROM foo`, false},
 		{`UPDATE foo SET k = 1`, `DELETE FROM bar`, true},
+
+		// Statements like statement_timestamp enforce a strict ordering on
+		// statements, restricting reordering and thus independence.
+		{`SELECT * FROM foo`, `SELECT *, statement_timestamp() FROM bar`, false},
+		{`DELETE FROM foo`, `DELETE FROM bar WHERE '2015-10-01'::TIMESTAMP = statement_timestamp()`, true},
 	} {
-		name := fmt.Sprintf("%s | %s", test.query1, test.query2)
-		t.Run(name, func(t *testing.T) {
-			da := NewSpanBasedDependencyAnalyzer()
-
-			plan1, finish1 := planNodeForQuery(t, s, test.query1)
-			defer finish1()
-			plan2, finish2 := planNodeForQuery(t, s, test.query2)
-			defer finish2()
-
-			indep := da.Independent(context.TODO(), plan1, plan2)
-			if exp := test.independent; indep != exp {
-				t.Errorf("expected da.Independent(%q, %q) = %t, but found %t",
-					test.query1, test.query2, exp, indep)
+		for _, reverse := range []bool{false, true} {
+			q1, q2 := test.query1, test.query2
+			if reverse {
+				// Verify commutativity.
+				q1, q2 = q2, q1
 			}
-		})
+
+			name := fmt.Sprintf("%s | %s", q1, q2)
+			t.Run(name, func(t *testing.T) {
+				da := NewSpanBasedDependencyAnalyzer()
+
+				plan1, finish1 := planNodeForQuery(t, s, q1)
+				defer finish1()
+				plan2, finish2 := planNodeForQuery(t, s, q2)
+				defer finish2()
+
+				indep := da.Independent(context.TODO(), plan1, plan2)
+				if exp := test.independent; indep != exp {
+					t.Errorf("expected da.Independent(%q, %q) = %t, but found %t",
+						q1, q2, exp, indep)
+				}
+			})
+		}
 	}
 }
