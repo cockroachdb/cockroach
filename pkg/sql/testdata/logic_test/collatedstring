@@ -175,25 +175,21 @@ true
 
 
 statement error invalid locale e: language: tag is not well-formed at or near "\)"
-----
 CREATE TABLE e1 (
   a STRING COLLATE e
 )
 
 statement error multiple COLLATE declarations for column "a" at or near "\)"
-----
 CREATE TABLE e2 (
   a STRING COLLATE en COLLATE de
 )
 
 statement error COLLATE declaration for non-string-typed column "a" at or near "\)"
-----
 CREATE TABLE e3 (
   a INT COLLATE en
 )
 
 statement ok
-----
 CREATE TABLE t (
   a STRING COLLATE en
 )
@@ -207,7 +203,6 @@ t  CREATE TABLE t (
    )
 
 statement ok
-----
 INSERT INTO t VALUES
   ('A' COLLATE en),
   ('B' COLLATE en),
@@ -217,7 +212,6 @@ INSERT INTO t VALUES
   ('ü' COLLATE en)
 
 statement error locale "de" doesn't match locale "en" of column "a"
-----
 INSERT INTO t VALUES ('X' COLLATE de)
 
 query T
