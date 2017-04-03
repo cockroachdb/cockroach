@@ -113,11 +113,10 @@ func (f *MultiIterator) advance() {
 		// If this iterator is exhausted skip it (or error if it's errored).
 		// TODO(dan): Iterators that are exhausted could be removed to save
 		// having to check them on all future calls to advance.
-		if !iter.Valid() {
-			if err := iter.Error(); err != nil {
-				f.err = err
-				return
-			}
+		if ok, err := iter.Valid(); err != nil {
+			f.err = err
+			return
+		} else if !ok {
 			continue
 		}
 

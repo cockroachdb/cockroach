@@ -66,13 +66,18 @@ func TestBatchIterReadOwnWrite(t *testing.T) {
 	after := b.NewIterator(true /* prefix */)
 	defer after.Close()
 
-	if after.Seek(k); !after.Valid() {
-		t.Fatal("write missing on batch iter created after write")
+	after.Seek(k)
+	if ok, err := after.Valid(); !ok {
+		t.Fatalf("write missing on batch iter created after write, err=%v", err)
 	}
-	if before.Seek(k); !before.Valid() {
-		t.Fatal("write missing on batch iter created before write")
+	before.Seek(k)
+	if ok, err := before.Valid(); !ok {
+		t.Fatalf("write missing on batch iter created before write, err=%v", err)
 	}
-	if nonBatchBefore.Seek(k); nonBatchBefore.Valid() {
+	nonBatchBefore.Seek(k)
+	if ok, err := nonBatchBefore.Valid(); err != nil {
+		t.Fatal(err)
+	} else if ok {
 		t.Fatal("uncommitted write seen by non-batch iter")
 	}
 
@@ -83,11 +88,15 @@ func TestBatchIterReadOwnWrite(t *testing.T) {
 	nonBatchAfter := db.NewIterator(false)
 	defer nonBatchAfter.Close()
 
-	if nonBatchBefore.Seek(k); nonBatchBefore.Valid() {
+	nonBatchBefore.Seek(k)
+	if ok, err := nonBatchBefore.Valid(); err != nil {
+		t.Fatal(err)
+	} else if ok {
 		t.Fatal("committed write seen by non-batch iter created before commit")
 	}
-	if nonBatchAfter.Seek(k); !nonBatchAfter.Valid() {
-		t.Fatal("committed write missing by non-batch iter created after commit")
+	nonBatchAfter.Seek(k)
+	if ok, err := nonBatchAfter.Valid(); !ok {
+		t.Fatalf("committed write missing by non-batch iter created after commit, err=%v", err)
 	}
 
 	// `Commit` frees the batch, so iterators backed by it should panic.
@@ -129,10 +138,14 @@ func TestBatchPrefixIter(t *testing.T) {
 	iter := b.NewIterator(true /* prefix */)
 	defer iter.Close()
 
-	if iter.Seek(mvccKey("b")); !iter.Valid() {
-		t.Fatalf("expected to find \"b\"")
+	iter.Seek(mvccKey("b"))
+	if ok, err := iter.Valid(); !ok {
+		t.Fatalf("expected to find \"b\", err=%v", err)
 	}
-	if iter.Seek(mvccKey("a")); iter.Valid() {
+	iter.Seek(mvccKey("a"))
+	if ok, err := iter.Valid(); err != nil {
+		t.Fatal(err)
+	} else if ok {
 		t.Fatalf("expected to not find anything, found %s -> %q", iter.Key(), iter.Value())
 	}
 }

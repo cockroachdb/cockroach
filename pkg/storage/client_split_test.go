@@ -253,7 +253,13 @@ func TestStoreRangeSplitIntents(t *testing.T) {
 	iter := store.Engine().NewIterator(false)
 
 	defer iter.Close()
-	for iter.Seek(start); iter.Valid() && iter.Less(end); iter.Next() {
+	for iter.Seek(start); ; iter.Next() {
+		if ok, err := iter.Valid(); err != nil {
+			t.Fatal(err)
+		} else if !ok || !iter.Less(end) {
+			break
+		}
+
 		if bytes.HasPrefix([]byte(iter.Key().Key), txnPrefix(roachpb.KeyMin)) ||
 			bytes.HasPrefix([]byte(iter.Key().Key), txnPrefix(splitKey)) {
 			t.Errorf("unexpected system key: %s; txn record should have been cleaned up", iter.Key())

@@ -179,7 +179,12 @@ func runDebugRangeData(cmd *cobra.Command, args []string) error {
 	}
 
 	iter := storage.NewReplicaDataIterator(&desc, db, debugCtx.replicated)
-	for ; iter.Valid(); iter.Next() {
+	for ; ; iter.Next() {
+		if ok, err := iter.Valid(); err != nil {
+			return err
+		} else if !ok {
+			break
+		}
 		if _, err := printKeyValue(engine.MVCCKeyValue{
 			Key:   iter.Key(),
 			Value: iter.Value(),
@@ -187,7 +192,7 @@ func runDebugRangeData(cmd *cobra.Command, args []string) error {
 			return err
 		}
 	}
-	return iter.Error()
+	return nil
 }
 
 var debugRangeDescriptorsCmd = &cobra.Command{

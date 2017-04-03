@@ -622,8 +622,8 @@ func mvccGetMetadata(
 		return false, 0, 0, nil
 	}
 	iter.Seek(metaKey)
-	if !iter.Valid() {
-		return false, 0, 0, nil
+	if ok, err := iter.Valid(); !ok {
+		return false, 0, 0, err
 	}
 
 	unsafeKey := iter.UnsafeKey()
@@ -765,10 +765,9 @@ func mvccGetInternal(
 	}
 
 	iter.Seek(seekKey)
-	if !iter.Valid() {
-		if err := iter.Error(); err != nil {
-			return nil, nil, safeValue, err
-		}
+	if ok, err := iter.Valid(); err != nil {
+		return nil, nil, safeValue, err
+	} else if !ok {
 		return nil, ignoredIntents, safeValue, nil
 	}
 
@@ -1430,7 +1429,8 @@ func MVCCDeleteRange(
 func getScanMeta(iter Iterator, encEndKey MVCCKey, meta *enginepb.MVCCMetadata) (MVCCKey, error) {
 	metaKey := iter.UnsafeKey()
 	if !metaKey.Less(encEndKey) {
-		return NilKey, iter.Error()
+		_, err := iter.Valid()
+		return NilKey, err
 	}
 	if metaKey.IsValue() {
 		meta.Reset()
@@ -1459,7 +1459,8 @@ func getReverseScanMeta(
 	metaKey := iter.UnsafeKey()
 	// The metaKey < encEndKey is exceeding the boundary.
 	if metaKey.Less(encEndKey) {
-		return NilKey, iter.Error()
+		_, err := iter.Valid()
+		return NilKey, err
 	}
 
 	// If this isn't the meta key yet, scan again to get the meta key.
@@ -1471,8 +1472,8 @@ func getReverseScanMeta(
 		// The row with oldest version will be got by seeking reversely. We use the
 		// key of this row to get the MVCC metadata key.
 		iter.Seek(MakeMVCCMetadataKey(metaKey.Key))
-		if !iter.Valid() {
-			return NilKey, iter.Error()
+		if ok, err := iter.Valid(); !ok {
+			return NilKey, err
 		}
 
 		meta.Reset()
@@ -1620,8 +1621,8 @@ func MVCCIterate(
 	// Seeking for the first defined position.
 	if reverse {
 		iter.SeekReverse(encKey)
-		if !iter.Valid() {
-			return nil, iter.Error()
+		if ok, err := iter.Valid(); !ok {
+			return nil, err
 		}
 
 		// If the key doesn't exist, the iterator is at the next key that does
@@ -1634,8 +1635,8 @@ func MVCCIterate(
 		iter.Seek(encKey)
 	}
 
-	if !iter.Valid() {
-		return nil, iter.Error()
+	if ok, err := iter.Valid(); !ok {
+		return nil, err
 	}
 
 	// A slice to gather all encountered intents we skipped, in case of
@@ -1691,7 +1692,9 @@ func MVCCIterate(
 		}
 
 		if reverse {
-			if iter.Valid() {
+			if ok, err := iter.Valid(); err != nil {
+				return nil, err
+			} else if ok {
 				if buf.meta.IsInline() {
 					// The current entry is an inline value. We can reach the previous
 					// entry using Prev() which is slightly faster than PrevKey().
@@ -1701,7 +1704,9 @@ func MVCCIterate(
 					// next key in which case we have to reset our position.
 					if !iter.UnsafeKey().Key.Equal(metaKey.Key) {
 						iter.Seek(metaKey)
-						if iter.Valid() {
+						if ok, err := iter.Valid(); err != nil {
+							return nil, err
+						} else if ok {
 							iter.Prev()
 						}
 					} else {
@@ -1710,7 +1715,9 @@ func MVCCIterate(
 				}
 			}
 		} else {
-			if iter.Valid() {
+			if ok, err := iter.Valid(); err != nil {
+				return nil, err
+			} else if ok {
 				if buf.meta.IsInline() {
 					// The current entry is an inline value. We can reach the next entry
 					// using Next() which is slightly faster than NextKey().
@@ -1727,10 +1734,9 @@ func MVCCIterate(
 			}
 		}
 
-		if !iter.Valid() {
-			if err := iter.Error(); err != nil {
-				return nil, err
-			}
+		if ok, err := iter.Valid(); err != nil {
+			return nil, err
+		} else if !ok {
 			break
 		}
 	}
@@ -1936,7 +1942,9 @@ func mvccResolveWriteIntent(
 	iter.Seek(nextKey)
 
 	// If there is no other version, we should just clean up the key entirely.
-	if !iter.Valid() || !iter.UnsafeKey().Key.Equal(intent.Key) {
+	if ok, err := iter.Valid(); err != nil {
+		return err
+	} else if !ok || !iter.UnsafeKey().Key.Equal(intent.Key) {
 		if err = engine.Clear(metaKey); err != nil {
 			return err
 		}
@@ -2031,7 +2039,9 @@ func MVCCResolveWriteIntentRangeUsingIter(
 
 	for num < max {
 		iterAndBuf.iter.Seek(nextKey)
-		if !iterAndBuf.iter.Valid() || !iterAndBuf.iter.UnsafeKey().Less(encEndKey) {
+		if ok, err := iterAndBuf.iter.Valid(); err != nil {
+			return 0, err
+		} else if !ok || !iterAndBuf.iter.UnsafeKey().Less(encEndKey) {
 			// No more keys exists in the given range.
 			break
 		}
@@ -2121,7 +2131,12 @@ func MVCCGarbageCollect(
 		}
 
 		// Now, iterate through all values, GC'ing ones which have expired.
-		for ; iter.Valid(); iter.Next() {
+		for ; ; iter.Next() {
+			if ok, err := iter.Valid(); err != nil {
+				return err
+			} else if !ok {
+				break
+			}
 			unsafeIterKey := iter.UnsafeKey()
 			if !unsafeIterKey.Key.Equal(encKey.Key) {
 				break

@@ -4307,7 +4307,11 @@ func optimizePuts(
 	// Find the first non-empty key in the run.
 	iter.Seek(engine.MakeMVCCMetadataKey(minKey))
 	var iterKey roachpb.Key
-	if iter.Valid() && bytes.Compare(iter.Key().Key, maxKey) <= 0 {
+	if ok, err := iter.Valid(); err != nil {
+		// TODO(bdarnell): return an error here instead of silently
+		// running without the optimization?
+		return origReqs
+	} else if ok && bytes.Compare(iter.Key().Key, maxKey) <= 0 {
 		iterKey = iter.Key().Key
 	}
 	// Set the prefix of the run which is being written to virgin
