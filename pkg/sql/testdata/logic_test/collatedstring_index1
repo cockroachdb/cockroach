@@ -6,16 +6,14 @@
 # Danish collation chart: http://www.unicode.org/cldr/charts/30/collation/da.html
 
 statement ok
-----
 CREATE TABLE t (
   a STRING COLLATE da,
   b INT,
   c BOOL,
   PRIMARY KEY (a, b)
-);
+)
 
 statement ok
-----
 INSERT INTO t VALUES
   ('A' COLLATE da, 1, TRUE),
   ('A' COLLATE da, 2, NULL),
@@ -25,10 +23,10 @@ INSERT INTO t VALUES
   ('b' COLLATE da, 4, FALSE),
   ('ü' COLLATE da, 6, TRUE),
   ('ü' COLLATE da, 5, NULL),
-  ('x' COLLATE da, 5, FALSE);
+  ('x' COLLATE da, 5, FALSE)
 
 query TI
-SELECT a, b FROM t ORDER BY (a, b);
+SELECT a, b FROM t ORDER BY (a, b)
 ----
 a  2
 a  3
@@ -41,7 +39,7 @@ x  5
 ü  6
 
 query IT
-SELECT b, a FROM t ORDER BY (b, a);
+SELECT b, a FROM t ORDER BY (b, a)
 ----
 1  A
 2  a
@@ -54,28 +52,27 @@ SELECT b, a FROM t ORDER BY (b, a);
 6  ü
 
 query I
-SELECT COUNT (a) FROM t WHERE a = ('a' COLLATE da);
+SELECT COUNT (a) FROM t WHERE a = ('a' COLLATE da)
 ----
 2
 
 query I
-SELECT COUNT (a) FROM t WHERE a = ('y' COLLATE da);
+SELECT COUNT (a) FROM t WHERE a = ('y' COLLATE da)
 ----
 0
 
 query I
-SELECT COUNT (a) FROM t WHERE a > ('a' COLLATE da) AND a < ('c' COLLATE da);
+SELECT COUNT (a) FROM t WHERE a > ('a' COLLATE da) AND a < ('c' COLLATE da)
 ----
 4
 
 # Create an index and try again.
 
 statement ok
-----
-CREATE INDEX ON t (b, a) STORING (c);
+CREATE INDEX ON t (b, a) STORING (c)
 
 query TI
-SELECT a, b FROM t ORDER BY (a, b);
+SELECT a, b FROM t ORDER BY (a, b)
 ----
 a  2
 a  3
@@ -88,7 +85,7 @@ x  5
 ü  6
 
 query IT
-SELECT b, a FROM t ORDER BY (b, a);
+SELECT b, a FROM t ORDER BY (b, a)
 ----
 1  A
 2  a
@@ -101,28 +98,27 @@ SELECT b, a FROM t ORDER BY (b, a);
 6  ü
 
 query I
-SELECT COUNT (a) FROM t WHERE a = ('a' COLLATE da);
+SELECT COUNT (a) FROM t WHERE a = ('a' COLLATE da)
 ----
 2
 
 query I
-SELECT COUNT (a) FROM t WHERE a = ('y' COLLATE da);
+SELECT COUNT (a) FROM t WHERE a = ('y' COLLATE da)
 ----
 0
 
 query I
-SELECT COUNT (a) FROM t WHERE a > ('a' COLLATE da) AND a < ('c' COLLATE da);
+SELECT COUNT (a) FROM t WHERE a > ('a' COLLATE da) AND a < ('c' COLLATE da)
 ----
 4
 
 # Update and try again.
 
 statement ok
-----
-UPDATE t SET a = (a :: STRING || a :: STRING) COLLATE da;
+UPDATE t SET a = (a :: STRING || a :: STRING) COLLATE da
 
 query TI
-SELECT a, b FROM t ORDER BY (a, b);
+SELECT a, b FROM t ORDER BY (a, b)
 ----
 bb  4
 BB  3
@@ -135,7 +131,7 @@ AA  1
 AA  2
 
 query IT
-SELECT b, a FROM t ORDER BY (b, a);
+SELECT b, a FROM t ORDER BY (b, a)
 ----
 1  AA
 2  aa
@@ -150,11 +146,10 @@ SELECT b, a FROM t ORDER BY (b, a);
 # Delete and try again
 
 statement ok
-----
-DELETE FROM t WHERE a > ('a' COLLATE da) AND a < ('c' COLLATE da);
+DELETE FROM t WHERE a > ('a' COLLATE da) AND a < ('c' COLLATE da)
 
 query TI
-SELECT a, b FROM t ORDER BY (a, b);
+SELECT a, b FROM t ORDER BY (a, b)
 ----
 xx  5
 üü  5
@@ -165,7 +160,7 @@ AA  1
 AA  2
 
 query IT
-SELECT b, a FROM t ORDER BY (b, a);
+SELECT b, a FROM t ORDER BY (b, a)
 ----
 1  AA
 2  aa

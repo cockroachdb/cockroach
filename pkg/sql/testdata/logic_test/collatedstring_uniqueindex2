@@ -6,16 +6,14 @@
 # German collation chart: http://www.unicode.org/cldr/charts/30/collation/de.html
 
 statement ok
-----
 CREATE TABLE t (
   a STRING COLLATE de,
   b INT,
   c BOOL,
   PRIMARY KEY (b, a)
-);
+)
 
 statement ok
-----
 INSERT INTO t VALUES
   ('A' COLLATE de, 1, TRUE),
   ('A' COLLATE de, 2, NULL),
@@ -25,14 +23,13 @@ INSERT INTO t VALUES
   ('b' COLLATE de, 4, FALSE),
   ('ü' COLLATE de, 6, TRUE),
   ('ü' COLLATE de, 5, NULL),
-  ('x' COLLATE de, 5, FALSE);
+  ('x' COLLATE de, 5, FALSE)
 
 statement ok
-----
-CREATE UNIQUE INDEX ON t (a, b);
+CREATE UNIQUE INDEX ON t (a, b)
 
 query TI
-SELECT a, b FROM t ORDER BY (a, b);
+SELECT a, b FROM t ORDER BY (a, b)
 ----
 a  2
 a  3
@@ -45,7 +42,7 @@ B  3
 x  5
 
 query IT
-SELECT b, a FROM t ORDER BY (b, a);
+SELECT b, a FROM t ORDER BY (b, a)
 ----
 1  A
 2  a
@@ -58,28 +55,27 @@ SELECT b, a FROM t ORDER BY (b, a);
 6  ü
 
 query I
-SELECT COUNT (a) FROM t WHERE a = ('a' COLLATE de);
+SELECT COUNT (a) FROM t WHERE a = ('a' COLLATE de)
 ----
 2
 
 query I
-SELECT COUNT (a) FROM t WHERE a = ('y' COLLATE de);
+SELECT COUNT (a) FROM t WHERE a = ('y' COLLATE de)
 ----
 0
 
 query I
-SELECT COUNT (a) FROM t WHERE a > ('a' COLLATE de) AND a < ('c' COLLATE de);
+SELECT COUNT (a) FROM t WHERE a > ('a' COLLATE de) AND a < ('c' COLLATE de)
 ----
 4
 
 # Update and try again.
 
 statement ok
-----
-UPDATE t SET a = (a :: STRING || a :: STRING) COLLATE de;
+UPDATE t SET a = (a :: STRING || a :: STRING) COLLATE de
 
 query TI
-SELECT a, b FROM t ORDER BY (a, b);
+SELECT a, b FROM t ORDER BY (a, b)
 ----
 aa  2
 aa  3
@@ -92,7 +88,7 @@ BB  3
 xx  5
 
 query IT
-SELECT b, a FROM t ORDER BY (b, a);
+SELECT b, a FROM t ORDER BY (b, a)
 ----
 1  AA
 2  aa
@@ -107,18 +103,17 @@ SELECT b, a FROM t ORDER BY (b, a);
 # Delete and try again
 
 statement ok
-----
-DELETE FROM t WHERE a > ('a' COLLATE de) AND a < ('c' COLLATE de);
+DELETE FROM t WHERE a > ('a' COLLATE de) AND a < ('c' COLLATE de)
 
 query TI
-SELECT a, b FROM t ORDER BY (a, b);
+SELECT a, b FROM t ORDER BY (a, b)
 ----
 üü  5
 üü  6
 xx  5
 
 query IT
-SELECT b, a FROM t ORDER BY (b, a);
+SELECT b, a FROM t ORDER BY (b, a)
 ----
 5  üü
 5  xx
