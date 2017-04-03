@@ -18,13 +18,13 @@ package sql
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"strings"
 
 	"golang.org/x/net/context"
 
-	"errors"
-
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -330,6 +330,10 @@ func (n *groupNode) DebugValues() debugValues {
 		vals.output = debugValueBuffered
 	}
 	return vals
+}
+
+func (n *groupNode) Spans(ctx context.Context) (_, _ roachpb.Spans) {
+	return n.plan.Spans(ctx)
 }
 
 func (n *groupNode) Start(ctx context.Context) error {

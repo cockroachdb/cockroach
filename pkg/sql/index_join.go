@@ -239,6 +239,15 @@ func (n *indexJoinNode) DebugValues() debugValues {
 	return n.debugVals
 }
 
+func (n *indexJoinNode) Spans(ctx context.Context) (reads, writes roachpb.Spans) {
+	// We can not be sure which spans in the table we will read based only on the
+	// initial index span because we will dynamically lookup rows in the table based
+	// on the result of the index scan. We conservatively report that we will read all
+	// spans in the table.
+	tableSpans := n.table.desc.AllIndexSpans()
+	return tableSpans, nil
+}
+
 func (n *indexJoinNode) Start(ctx context.Context) error {
 	if err := n.table.Start(ctx); err != nil {
 		return err

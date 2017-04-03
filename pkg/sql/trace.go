@@ -26,6 +26,7 @@ import (
 
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -83,9 +84,6 @@ func (p *planner) makeTraceNode(plan planNode) planNode {
 		columns: traceColumns,
 	}
 }
-
-func (*explainTraceNode) Columns() ResultColumns { return traceColumnsWithTS }
-func (*explainTraceNode) Ordering() orderingInfo { return orderingInfo{} }
 
 func (n *explainTraceNode) Start(ctx context.Context) error {
 	return n.plan.Start(ctx)
@@ -233,5 +231,11 @@ func (n *explainTraceNode) Values() parser.Datums {
 	return n.rows[0]
 }
 
+func (*explainTraceNode) Columns() ResultColumns   { return traceColumnsWithTS }
+func (*explainTraceNode) Ordering() orderingInfo   { return orderingInfo{} }
 func (*explainTraceNode) MarkDebug(_ explainMode)  {}
 func (*explainTraceNode) DebugValues() debugValues { return debugValues{} }
+
+func (n *explainTraceNode) Spans(ctx context.Context) (_, _ roachpb.Spans) {
+	return n.plan.Spans(ctx)
+}

@@ -21,6 +21,7 @@ import (
 
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 )
 
@@ -271,12 +272,14 @@ type explainPlanNode struct {
 	optimized bool
 }
 
-func (e *explainPlanNode) Next(ctx context.Context) (bool, error) { return e.results.Next(ctx) }
-func (e *explainPlanNode) Columns() ResultColumns                 { return e.results.Columns() }
-func (e *explainPlanNode) Ordering() orderingInfo                 { return e.results.Ordering() }
-func (e *explainPlanNode) Values() parser.Datums                  { return e.results.Values() }
-func (e *explainPlanNode) DebugValues() debugValues               { return debugValues{} }
-func (e *explainPlanNode) MarkDebug(mode explainMode)             {}
+func (e *explainPlanNode) Next(ctx context.Context) (bool, error)         { return e.results.Next(ctx) }
+func (e *explainPlanNode) Columns() ResultColumns                         { return e.results.Columns() }
+func (e *explainPlanNode) Ordering() orderingInfo                         { return e.results.Ordering() }
+func (e *explainPlanNode) Values() parser.Datums                          { return e.results.Values() }
+func (e *explainPlanNode) DebugValues() debugValues                       { return debugValues{} }
+func (e *explainPlanNode) MarkDebug(mode explainMode)                     {}
+func (e *explainPlanNode) Spans(ctx context.Context) (_, _ roachpb.Spans) { return e.plan.Spans(ctx) }
+
 func (e *explainPlanNode) Start(ctx context.Context) error {
 	// Note that we don't call start on e.plan. That's on purpose, Start() can
 	// have side effects. And it's supposed to not be needed for the way in which

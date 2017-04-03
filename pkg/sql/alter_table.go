@@ -23,6 +23,7 @@ import (
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -472,13 +473,14 @@ func (n *alterTableNode) Start(ctx context.Context) error {
 	return nil
 }
 
-func (n *alterTableNode) Next(context.Context) (bool, error) { return false, nil }
-func (n *alterTableNode) Close(context.Context)              {}
-func (n *alterTableNode) Columns() ResultColumns             { return make(ResultColumns, 0) }
-func (n *alterTableNode) Ordering() orderingInfo             { return orderingInfo{} }
-func (n *alterTableNode) Values() parser.Datums              { return parser.Datums{} }
-func (n *alterTableNode) DebugValues() debugValues           { return debugValues{} }
-func (n *alterTableNode) MarkDebug(mode explainMode)         {}
+func (n *alterTableNode) Next(context.Context) (bool, error)         { return false, nil }
+func (n *alterTableNode) Close(context.Context)                      {}
+func (n *alterTableNode) Columns() ResultColumns                     { return make(ResultColumns, 0) }
+func (n *alterTableNode) Ordering() orderingInfo                     { return orderingInfo{} }
+func (n *alterTableNode) Values() parser.Datums                      { return parser.Datums{} }
+func (n *alterTableNode) DebugValues() debugValues                   { return debugValues{} }
+func (n *alterTableNode) MarkDebug(mode explainMode)                 {}
+func (n *alterTableNode) Spans(context.Context) (_, _ roachpb.Spans) { panic("unimplemented") }
 
 func applyColumnMutation(
 	col *sqlbase.ColumnDescriptor, mut parser.ColumnMutationCmd, searchPath parser.SearchPath,

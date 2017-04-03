@@ -21,6 +21,7 @@ import (
 
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -215,7 +216,7 @@ func (p *planner) Insert(
 	}
 
 	if err := in.run.initEditNode(
-		ctx, &in.editNodeBase, rows, n.Returning, desiredTypes); err != nil {
+		ctx, &in.editNodeBase, rows, in.tw, n.Returning, desiredTypes); err != nil {
 		return nil, err
 	}
 
@@ -288,7 +289,7 @@ func (n *insertNode) Start(ctx context.Context) error {
 		}
 	}
 
-	if err := n.run.startEditNode(ctx, &n.editNodeBase, n.tw); err != nil {
+	if err := n.run.startEditNode(ctx, &n.editNodeBase); err != nil {
 		return err
 	}
 
@@ -530,3 +531,7 @@ func (n *insertNode) DebugValues() debugValues {
 }
 
 func (n *insertNode) Ordering() orderingInfo { return orderingInfo{} }
+
+func (n *insertNode) Spans(ctx context.Context) (reads, writes roachpb.Spans) {
+	return n.run.collectSpans(ctx)
+}

@@ -22,6 +22,7 @@ import (
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
@@ -142,6 +143,12 @@ type unionNode struct {
 
 func (n *unionNode) Columns() ResultColumns { return n.left.Columns() }
 func (n *unionNode) Ordering() orderingInfo { return orderingInfo{} }
+
+func (n *unionNode) Spans(ctx context.Context) (reads, writes roachpb.Spans) {
+	leftReads, leftWrites := n.left.Spans(ctx)
+	rightReads, rightWrites := n.right.Spans(ctx)
+	return append(leftReads, rightReads...), append(leftWrites, rightWrites...)
+}
 
 func (n *unionNode) Values() parser.Datums {
 	switch {

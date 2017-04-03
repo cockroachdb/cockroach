@@ -156,8 +156,9 @@ func (*splitNode) Columns() ResultColumns {
 	}
 }
 
-func (*splitNode) Ordering() orderingInfo  { return orderingInfo{} }
-func (*splitNode) MarkDebug(_ explainMode) {}
+func (*splitNode) Ordering() orderingInfo                     { return orderingInfo{} }
+func (*splitNode) MarkDebug(_ explainMode)                    {}
+func (*splitNode) Spans(context.Context) (_, _ roachpb.Spans) { panic("unimplemented") }
 
 func (n *splitNode) DebugValues() debugValues {
 	return debugValues{
@@ -407,8 +408,9 @@ func (*relocateNode) Columns() ResultColumns {
 	}
 }
 
-func (*relocateNode) Ordering() orderingInfo  { return orderingInfo{} }
-func (*relocateNode) MarkDebug(_ explainMode) {}
+func (*relocateNode) Ordering() orderingInfo                     { return orderingInfo{} }
+func (*relocateNode) MarkDebug(_ explainMode)                    {}
+func (*relocateNode) Spans(context.Context) (_, _ roachpb.Spans) { panic("unimplemented") }
 
 func (n *relocateNode) DebugValues() debugValues {
 	return debugValues{
