@@ -21,6 +21,7 @@ import (
 
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/mon"
@@ -89,6 +90,7 @@ func makeInternalPlanner(
 		User:     user,
 		TxnState: txnState{Ctx: ctx},
 		context:  ctx,
+		leases:   LeaseCollection{databaseCache: newDatabaseCache(config.SystemConfig{})},
 	}
 
 	s.mon = mon.MakeUnlimitedMonitor(ctx,
@@ -134,7 +136,7 @@ func (p *planner) ExecCfg() *ExecutorConfig {
 }
 
 func (p *planner) LeaseMgr() *LeaseManager {
-	return p.session.leaseMgr
+	return p.session.leases.leaseMgr
 }
 
 func (p *planner) User() string {
@@ -251,7 +253,7 @@ func (p *planner) exec(ctx context.Context, sql string, args ...interface{}) (in
 
 func (p *planner) fillFKTableMap(ctx context.Context, m sqlbase.TableLookupsByID) error {
 	for tableID := range m {
-		table, err := p.getTableLeaseByID(ctx, tableID)
+		table, err := p.session.leases.getTableLeaseByID(ctx, p.txn, tableID)
 		if err == errTableAdding {
 			m[tableID] = sqlbase.TableLookup{IsAdding: true}
 			continue
