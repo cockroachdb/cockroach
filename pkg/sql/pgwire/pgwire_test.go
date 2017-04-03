@@ -1426,17 +1426,22 @@ func TestPrepareSyntax(t *testing.T) {
 func TestPGWireOverUnixSocket(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	// We need a temp directory in which we'll create the
-	// unix socket ".s.PGSQL.<port>".
-	// We hard-code "/tmp" as the directory as the osx default can cause
-	// the socket filename length to exceed 104 characters, triggering an error.
-	tempDir, err := ioutil.TempDir("/tmp", "cockroach-unix")
+	// We need a temp directory in which we'll create the unix socket.
+	//
+	// On BSD, binding to a socket is limited to a path length of 104 characters
+	// (including the NUL terminator). In glibc, this limit is 108 characters.
+	//
+	// macOS has a tendency to produce very long temporary directory names, so
+	// we are careful to keep all the constants involved short.
+	tempDir, err := ioutil.TempDir("", "PGSQL")
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer func() { _ = os.RemoveAll(tempDir) }()
 
-	socketFile := filepath.Join(tempDir, ".s.PGSQL.123456")
+	const port = "6"
+
+	socketFile := filepath.Join(tempDir, ".s.PGSQL."+port)
 
 	params := base.TestServerArgs{
 		Insecure:   true,
@@ -1452,7 +1457,7 @@ func TestPGWireOverUnixSocket(t *testing.T) {
 	pgURL := url.URL{
 		Scheme:   "postgres",
 		User:     url.User(security.RootUser),
-		Host:     ":123456",
+		Host:     net.JoinHostPort("", port),
 		RawQuery: options.Encode(),
 	}
 	t.Logf("PGURL: %s", pgURL.String())
