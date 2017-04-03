@@ -20,6 +20,7 @@ import (
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -143,6 +144,14 @@ type planNode interface {
 	// Available after Next() and MarkDebug(explainDebug), see
 	// explain.go.
 	DebugValues() debugValues
+
+	// Spans collects the upper bound set of read and write spans that the
+	// planNode expects to touch when executed. The two sets do not need to be
+	// disjoint, and any span in the write set will be implicitly considered in
+	// the read set as well. It is an error for a planNode to touch any span
+	// outside those that it reports from this method, but a planNode is not
+	// required to touch all spans that it reports.
+	Spans(ctx context.Context) (reads, writes roachpb.Spans, err error)
 
 	// Close terminates the planNode execution and releases its resources.
 	// This method should be called if the node has been used in any way (any
