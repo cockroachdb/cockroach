@@ -45,7 +45,6 @@ var maxResults int64
 var connURL, connUser, connHost, connPort, advertiseHost string
 var httpHost, httpPort, connDBName, zoneConfig string
 var zoneDisableReplication bool
-var startBackground bool
 var undoFreezeCluster bool
 
 var serverCfg = server.MakeConfig()
@@ -298,7 +297,6 @@ func init() {
 
 		varFlag(f, &serverCfg.Stores, cliflags.Store)
 		durationFlag(f, &serverCfg.RaftTickInterval, cliflags.RaftTickInterval, base.DefaultRaftTickInterval)
-		boolFlag(f, &startBackground, cliflags.Background, false)
 
 		// Usage for the unix socket is odd as we use a real file, whereas
 		// postgresql and clients consider it a directory and build a filename
