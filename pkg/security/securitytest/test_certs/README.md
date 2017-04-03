@@ -24,5 +24,5 @@ rm -f pkg/security/securitytest/test_certs/*.{crt,key}
 ./cockroach cert --ca-cert=pkg/security/securitytest/test_certs/ca.crt --ca-key=pkg/security/securitytest/test_certs/ca.key --cert=pkg/security/securitytest/test_certs/node.crt --key=pkg/security/securitytest/test_certs/node.key create-node 127.0.0.1 ::1 localhost *.local
 ./cockroach cert --ca-cert=pkg/security/securitytest/test_certs/ca.crt --ca-key=pkg/security/securitytest/test_certs/ca.key --cert=pkg/security/securitytest/test_certs/root.crt --key=pkg/security/securitytest/test_certs/root.key create-client root
 ./cockroach cert --ca-cert=pkg/security/securitytest/test_certs/ca.crt --ca-key=pkg/security/securitytest/test_certs/ca.key --cert=pkg/security/securitytest/test_certs/testuser.crt --key=pkg/security/securitytest/test_certs/testuser.key create-client testuser
-go generate security/securitytest/securitytest.go
+go generate ./pkg/security/securitytest
 ```
