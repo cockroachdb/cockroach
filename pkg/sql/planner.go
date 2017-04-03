@@ -21,6 +21,7 @@ import (
 
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/mon"
@@ -89,6 +90,7 @@ func makeInternalPlanner(
 		User:     user,
 		TxnState: txnState{Ctx: ctx},
 		context:  ctx,
+		leases:   LeaseCollection{databaseCache: newDatabaseCache(config.SystemConfig{})},
 	}
 
 	s.mon = mon.MakeUnlimitedMonitor(ctx,
