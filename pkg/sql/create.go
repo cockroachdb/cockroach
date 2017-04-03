@@ -97,7 +97,7 @@ func (n *createDatabaseNode) Start(ctx context.Context) error {
 	if created {
 		// Log Create Database event. This is an auditable log event and is
 		// recorded in the same transaction as the table descriptor update.
-		if err := MakeEventLogger(n.p.session.leaseMgr).InsertEventRecord(
+		if err := MakeEventLogger(n.p.LeaseMgr()).InsertEventRecord(
 			ctx,
 			n.p.txn,
 			EventLogCreateDatabase,
@@ -208,7 +208,7 @@ func (n *createIndexNode) Start(ctx context.Context) error {
 	// Record index creation in the event log. This is an auditable log
 	// event and is recorded in the same transaction as the table descriptor
 	// update.
-	if err := MakeEventLogger(n.p.session.leaseMgr).InsertEventRecord(
+	if err := MakeEventLogger(n.p.LeaseMgr()).InsertEventRecord(
 		ctx,
 		n.p.txn,
 		EventLogCreateIndex,
@@ -309,7 +309,7 @@ func (n *createUserNode) Start(ctx context.Context) error {
 		return err
 	}
 
-	internalExecutor := InternalExecutor{LeaseManager: n.p.session.leaseMgr}
+	internalExecutor := InternalExecutor{LeaseManager: n.p.LeaseMgr()}
 	rowsAffected, err := internalExecutor.ExecuteStatementInTransaction(
 		ctx,
 		"create-user",
@@ -485,7 +485,7 @@ func (n *createViewNode) Start(ctx context.Context) error {
 
 	// Log Create View event. This is an auditable log event and is
 	// recorded in the same transaction as the table descriptor update.
-	if err := MakeEventLogger(n.p.session.leaseMgr).InsertEventRecord(
+	if err := MakeEventLogger(n.p.LeaseMgr()).InsertEventRecord(
 		ctx,
 		n.p.txn,
 		EventLogCreateView,
@@ -675,7 +675,7 @@ func (n *createTableNode) Start(ctx context.Context) error {
 
 	// Log Create Table event. This is an auditable log event and is
 	// recorded in the same transaction as the table descriptor update.
-	if err := MakeEventLogger(n.p.session.leaseMgr).InsertEventRecord(
+	if err := MakeEventLogger(n.p.LeaseMgr()).InsertEventRecord(
 		ctx,
 		n.p.txn,
 		EventLogCreateTable,

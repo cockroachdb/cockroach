@@ -157,17 +157,9 @@ type Session struct {
 	// statistics for result sets (which escape transactions).
 	mon        mon.MemoryMonitor
 	sessionMon mon.MemoryMonitor
-	// leases holds the state of per-table leases acquired by the leaseMgr.
-	leases []*LeaseState
-	// leaseMgr manages acquiring and releasing per-table leases.
-	leaseMgr *LeaseManager
-	// systemConfig holds a copy of the latest system config since the last
-	// call to resetForBatch.
-	systemConfig config.SystemConfig
-	// databaseCache is used as a cache for database names.
-	// TODO(andrei): get rid of it and replace it with a leasing system for
-	// database descriptors.
-	databaseCache *databaseCache
+
+	leases LeaseCollection
+
 	// If set, contains the in progress COPY FROM columns.
 	copyFrom *copyNode
 
@@ -222,7 +214,6 @@ func NewSession(
 	ctx context.Context, args SessionArgs, e *Executor, remote net.Addr, memMetrics *MemoryMetrics,
 ) *Session {
 	ctx = e.AnnotateCtx(ctx)
-	cfg, cache := e.getSystemConfig()
 	s := &Session{
 		Database:       args.Database,
 		SearchPath:     parser.SearchPath{"pg_catalog"},
@@ -232,14 +223,15 @@ func NewSession(
 		execCfg:        &e.cfg,
 		distSQLPlanner: e.distSQLPlanner,
 		pipelineQueue:  MakePipelineQueue(NoDependenciesAnalyzer),
-		leaseMgr:       e.cfg.LeaseManager,
-		systemConfig:   cfg,
-		databaseCache:  cache,
 		memMetrics:     memMetrics,
 		sqlStats:       &e.sqlStats,
 		defaults: sessionDefaults{
 			applicationName: args.ApplicationName,
 			database:        args.Database,
+		},
+		leases: LeaseCollection{
+			leaseMgr:      e.cfg.LeaseManager,
+			databaseCache: e.getDatabaseCache(),
 		},
 	}
 	s.phaseTimes[sessionInit] = timeutil.Now()
@@ -283,7 +275,7 @@ func (s *Session) Finish(e *Executor) {
 	// Cleanup leases. We might have unreleased leases if we're finishing the
 	// session abruptly in the middle of a transaction, or, until #7648 is
 	// addressed, there might be leases accumulated by preparing statements.
-	s.releaseLeases(s.context)
+	s.leases.releaseLeases(s.context)
 
 	s.ClearStatementsAndPortals(s.context)
 	s.sessionMon.Stop(s.context)
@@ -368,26 +360,24 @@ func (s *Session) evalCtx() parser.EvalContext {
 
 // resetForBatch prepares the Session for executing a new batch of statements.
 func (s *Session) resetForBatch(e *Executor) {
-	// Update the systemConfig to a more recent copy, so that we can use tables
+	// Update the database cache to a more recent copy, so that we can use tables
 	// that we created in previous batches of the same transaction.
-	cfg, cache := e.getSystemConfig()
-	s.systemConfig = cfg
-	s.databaseCache = cache
+	s.leases.databaseCache = e.getDatabaseCache()
 	s.TxnState.schemaChangers.curGroupNum++
 }
 
 // releaseLeases releases all leases currently held by the Session.
-func (s *Session) releaseLeases(ctx context.Context) {
-	if s.leases != nil {
+func (lc *LeaseCollection) releaseLeases(ctx context.Context) {
+	if lc.leases != nil {
 		if log.V(2) {
-			log.VEventf(ctx, 2, "Session releasing %d leases", len(s.leases))
+			log.VEventf(ctx, 2, "releasing %d leases", len(lc.leases))
 		}
-		for _, lease := range s.leases {
-			if err := s.leaseMgr.Release(lease); err != nil {
+		for _, lease := range lc.leases {
+			if err := lc.leaseMgr.Release(lease); err != nil {
 				log.Warning(ctx, err)
 			}
 		}
-		s.leases = nil
+		lc.leases = nil
 	}
 }
 
@@ -704,7 +694,7 @@ func (scc *schemaChangerCollection) execSchemaChanges(
 	ctx context.Context, e *Executor, session *Session, results ResultList,
 ) {
 	// Release the leases once a transaction is complete.
-	session.releaseLeases(ctx)
+	session.leases.releaseLeases(ctx)
 	if e.cfg.SchemaChangerTestingKnobs.SyncFilter != nil {
 		e.cfg.SchemaChangerTestingKnobs.SyncFilter(TestingSchemaChangerCollection{scc})
 	}

@@ -344,6 +344,7 @@ func (e *Executor) Start(
 		nodeDesc, e.cfg.RPCContext, e.cfg.DistSQLSrv, e.cfg.DistSender, e.cfg.Gossip,
 	)
 
+	e.databaseCache = newDatabaseCache(e.systemConfig)
 	e.systemConfigCond = sync.NewCond(e.systemConfigMu.RLocker())
 
 	gossipUpdateC := e.cfg.Gossip.RegisterSystemConfigChannel()
@@ -391,18 +392,17 @@ func (e *Executor) updateSystemConfig(cfg config.SystemConfig) {
 	defer e.systemConfigMu.Unlock()
 	e.systemConfig = cfg
 	// The database cache gets reset whenever the system config changes.
-	e.databaseCache = &databaseCache{
-		databases: map[string]sqlbase.ID{},
-	}
+	e.databaseCache = newDatabaseCache(cfg)
 	e.systemConfigCond.Broadcast()
 }
 
-// getSystemConfig returns a copy of the latest system config.
-func (e *Executor) getSystemConfig() (config.SystemConfig, *databaseCache) {
+// getDatabaseCache returns a database cache with a copy of the latest
+// system config.
+func (e *Executor) getDatabaseCache() *databaseCache {
 	e.systemConfigMu.RLock()
 	defer e.systemConfigMu.RUnlock()
-	cfg, cache := e.systemConfig, e.databaseCache
-	return cfg, cache
+	cache := e.databaseCache
+	return cache
 }
 
 // Prepare returns the result types of the given statement. pinfo may
@@ -787,7 +787,7 @@ func (e *Executor) execRequest(
 			// Exec the schema changers (if the txn rolled back, the schema changers
 			// will short-circuit because the corresponding descriptor mutation is not
 			// found).
-			session.releaseLeases(session.Ctx())
+			session.leases.releaseLeases(session.Ctx())
 			txnState.schemaChangers.execSchemaChanges(session.Ctx(), e, session, res.ResultList)
 		} else {
 			// We're still in a txn, so we only check that the verifyMetadata callback
