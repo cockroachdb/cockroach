@@ -75,7 +75,9 @@ func evalWriteBatch(
 	iter := batch.NewIterator(false)
 	defer iter.Close()
 	iter.Seek(mvccStartKey)
-	if iter.Valid() && iter.Key().Less(mvccEndKey) {
+	if ok, err := iter.Valid(); err != nil {
+		return storage.EvalResult{}, err
+	} else if ok && iter.Key().Less(mvccEndKey) {
 		existingStats, err := iter.ComputeStats(mvccStartKey, mvccEndKey, h.Timestamp.WallTime)
 		if err != nil {
 			return storage.EvalResult{}, err

@@ -885,7 +885,7 @@ func (r *rocksDBBatchIterator) SeekReverse(key MVCCKey) {
 	r.iter.SeekReverse(key)
 }
 
-func (r *rocksDBBatchIterator) Valid() bool {
+func (r *rocksDBBatchIterator) Valid() (bool, error) {
 	return r.iter.Valid()
 }
 
@@ -934,10 +934,6 @@ func (r *rocksDBBatchIterator) UnsafeKey() MVCCKey {
 
 func (r *rocksDBBatchIterator) UnsafeValue() []byte {
 	return r.iter.UnsafeValue()
-}
-
-func (r *rocksDBBatchIterator) Error() error {
-	return r.iter.Error()
 }
 
 func (r *rocksDBBatchIterator) Less(key MVCCKey) bool {
@@ -1347,10 +1343,10 @@ func (r *rocksDBIterator) SeekReverse(key MVCCKey) {
 		}
 		r.setState(C.DBIterSeek(r.iter, goToCKey(key)))
 		// Maybe the key sorts after the last key in RocksDB.
-		if !r.Valid() {
+		if ok, _ := r.Valid(); !ok {
 			r.setState(C.DBIterSeekToLast(r.iter))
 		}
-		if !r.Valid() {
+		if ok, _ := r.Valid(); !ok {
 			return
 		}
 		// Make sure the current key is <= the provided key.
@@ -1360,8 +1356,8 @@ func (r *rocksDBIterator) SeekReverse(key MVCCKey) {
 	}
 }
 
-func (r *rocksDBIterator) Valid() bool {
-	return r.valid
+func (r *rocksDBIterator) Valid() (bool, error) {
+	return r.valid, statusToError(C.DBIterError(r.iter))
 }
 
 func (r *rocksDBIterator) Next() {
@@ -1408,10 +1404,6 @@ func (r *rocksDBIterator) UnsafeKey() MVCCKey {
 
 func (r *rocksDBIterator) UnsafeValue() []byte {
 	return cSliceToUnsafeGoBytes(r.value)
-}
-
-func (r *rocksDBIterator) Error() error {
-	return statusToError(C.DBIterError(r.iter))
 }
 
 func (r *rocksDBIterator) Less(key MVCCKey) bool {
@@ -1663,7 +1655,12 @@ func dbIterate(
 	defer it.Close()
 
 	it.Seek(start)
-	for ; it.Valid(); it.Next() {
+	for ; ; it.Next() {
+		if ok, err := it.Valid(); err != nil {
+			return err
+		} else if !ok {
+			break
+		}
 		k := it.Key()
 		if !k.Less(end) {
 			break
@@ -1672,8 +1669,7 @@ func dbIterate(
 			return err
 		}
 	}
-	// Check for any errors during iteration.
-	return it.Error()
+	return nil
 }
 
 // TODO(dan): Rename this to RocksDBSSTFileReader and RocksDBSSTFileWriter.

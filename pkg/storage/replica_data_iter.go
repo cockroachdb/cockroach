@@ -115,7 +115,7 @@ func (ri *ReplicaDataIterator) Next() {
 // invalid.
 func (ri *ReplicaDataIterator) advance() {
 	for {
-		if !ri.Valid() || ri.iterator.Less(ri.ranges[ri.curIndex].end) {
+		if ok, _ := ri.Valid(); !ok || ri.iterator.Less(ri.ranges[ri.curIndex].end) {
 			return
 		}
 		ri.curIndex++
@@ -130,7 +130,7 @@ func (ri *ReplicaDataIterator) advance() {
 }
 
 // Valid returns true if the iterator currently points to a valid value.
-func (ri *ReplicaDataIterator) Valid() bool {
+func (ri *ReplicaDataIterator) Valid() (bool, error) {
 	return ri.iterator.Valid()
 }
 
@@ -142,11 +142,6 @@ func (ri *ReplicaDataIterator) Key() engine.MVCCKey {
 // Value returns the current value.
 func (ri *ReplicaDataIterator) Value() []byte {
 	return ri.iterator.Value()
-}
-
-// Error returns the error, if any, which the iterator encountered.
-func (ri *ReplicaDataIterator) Error() error {
-	return ri.iterator.Error()
 }
 
 // allocIterKeyValue returns ri.Key() and ri.Value() with the underlying

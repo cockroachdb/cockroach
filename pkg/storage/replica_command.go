@@ -2244,7 +2244,12 @@ func (r *Replica) sha512(
 	iter := NewReplicaDataIterator(&desc, snap, true /* replicatedOnly */)
 	defer iter.Close()
 
-	for ; iter.Valid(); iter.Next() {
+	for ; ; iter.Next() {
+		if ok, err := iter.Valid(); err != nil {
+			return nil, err
+		} else if !ok {
+			break
+		}
 		key := iter.Key()
 		if key.Equal(tombstoneKey) {
 			// Skip the tombstone key which is marked as replicated even though it

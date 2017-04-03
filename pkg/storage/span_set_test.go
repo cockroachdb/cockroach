@@ -231,32 +231,31 @@ func TestSpanSetBatch(t *testing.T) {
 
 		// Iterators check boundaries on seek and next/prev
 		iter.Seek(outsideKey)
-		if iter.Valid() {
-			t.Fatalf("expected invalid iterator; found valid at key %s", iter.Key())
+		if _, err := iter.Valid(); !isReadSpanErr(err) {
+			t.Fatalf("Seek: unexpected error %v", err)
 		}
 		// Seeking back in bounds restores validity.
 		iter.Seek(insideKey)
-		if !iter.Valid() {
-			t.Fatalf("expected valid iterator")
+		if ok, err := iter.Valid(); !ok {
+			t.Fatalf("expected valid iterator, err=%v", err)
 		}
 		if !reflect.DeepEqual(iter.Key(), insideKey) {
 			t.Fatalf("expected key %s, got %s", insideKey, iter.Key())
 		}
 		iter.Next()
-		if !iter.Valid() {
-			t.Fatalf("expected valid iterator")
+		if ok, err := iter.Valid(); !ok {
+			t.Fatalf("expected valid iterator, err=%v", err)
 		}
 		if !reflect.DeepEqual(iter.Key(), insideKey2) {
 			t.Fatalf("expected key %s, got %s", insideKey2, iter.Key())
 		}
 		// Scan out of bounds.
 		iter.Next()
-		if iter.Valid() {
+		if ok, err := iter.Valid(); ok {
 			t.Fatalf("expected invalid iterator; found valid at key %s", iter.Key())
-		}
-		// Scanning out of bounds sets Valid() to false but is not an error.
-		if iter.Error() != nil {
-			t.Errorf("unexpected error on iterator: %s", iter.Error())
+		} else if err != nil {
+			// Scanning out of bounds sets Valid() to false but is not an error.
+			t.Errorf("unexpected error on iterator: %s", err)
 		}
 	}()
 
@@ -269,35 +268,34 @@ func TestSpanSetBatch(t *testing.T) {
 	iter := &SpanSetIterator{eng.NewIterator(false), &ss, nil, false}
 	defer iter.Close()
 	iter.SeekReverse(outsideKey)
-	if iter.Valid() {
-		t.Fatalf("expected invalid iterator; found valid at key %s", iter.Key())
+	if _, err := iter.Valid(); !isReadSpanErr(err) {
+		t.Fatalf("SeekReverse: unexpected error %v", err)
 	}
 	// Seeking back in bounds restores validity.
 	iter.SeekReverse(insideKey2)
-	if !iter.Valid() {
-		t.Fatalf("expected valid iterator")
+	if ok, err := iter.Valid(); !ok {
+		t.Fatalf("expected valid iterator, err=%v", err)
 	}
 	if !reflect.DeepEqual(iter.Key(), insideKey2) {
 		t.Fatalf("expected key %s, got %s", insideKey2, iter.Key())
 	}
 	iter.Prev()
-	if !iter.Valid() {
-		t.Fatalf("expected valid iterator")
+	if ok, err := iter.Valid(); !ok {
+		t.Fatalf("expected valid iterator, err=%v", err)
 	}
 	if !reflect.DeepEqual(iter.Key(), insideKey) {
 		t.Fatalf("expected key %s, got %s", insideKey, iter.Key())
 	}
 	// Scan out of bounds.
 	iter.Prev()
-	if iter.Valid() {
+	if ok, err := iter.Valid(); ok {
 		t.Fatalf("expected invalid iterator; found valid at key %s", iter.Key())
-	}
-	if iter.Error() != nil {
-		t.Errorf("unexpected error on iterator: %s", iter.Error())
+	} else if err != nil {
+		t.Errorf("unexpected error on iterator: %s", err)
 	}
 	// Seeking back in bounds restores validity.
 	iter.SeekReverse(insideKey)
-	if !iter.Valid() {
-		t.Fatalf("expected valid iterator")
+	if ok, err := iter.Valid(); !ok {
+		t.Fatalf("expected valid iterator, err=%v", err)
 	}
 }
