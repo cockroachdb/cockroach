@@ -60,18 +60,12 @@ type databaseCache struct {
 }
 
 func (dc *databaseCache) getID(name string) sqlbase.ID {
-	if dc == nil {
-		return 0
-	}
 	dc.mu.Lock()
 	defer dc.mu.Unlock()
 	return dc.databases[name]
 }
 
 func (dc *databaseCache) setID(name string, id sqlbase.ID) {
-	if dc == nil {
-		return
-	}
 	dc.mu.Lock()
 	defer dc.mu.Unlock()
 	dc.databases[name] = id
@@ -148,9 +142,6 @@ func MustGetDatabaseDesc(
 // getCachedDatabaseDesc looks up the database descriptor from the descriptor cache,
 // given its name.
 func (dc *databaseCache) getCachedDatabaseDesc(name string) (*sqlbase.DatabaseDescriptor, error) {
-	if dc == nil {
-		return nil, fmt.Errorf("database %q not found, system cache uninitialized", name)
-	}
 	if name == sqlbase.SystemDB.Name {
 		return &sqlbase.SystemDB, nil
 	}

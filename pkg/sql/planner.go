@@ -89,6 +89,9 @@ func makeInternalPlanner(
 		User:     user,
 		TxnState: txnState{Ctx: ctx},
 		context:  ctx,
+		leases: LeaseCollection{databaseCache: &databaseCache{
+			databases: map[string]sqlbase.ID{},
+		}},
 	}
 
 	s.mon = mon.MakeUnlimitedMonitor(ctx,

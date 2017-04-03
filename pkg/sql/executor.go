@@ -331,6 +331,9 @@ func NewExecutor(cfg ExecutorConfig, stopper *stop.Stopper) *Executor {
 		MiscCount:   metric.NewCounter(MetaMisc),
 		QueryCount:  metric.NewCounter(MetaQuery),
 		sqlStats:    sqlStats{apps: make(map[string]*appStats)},
+		databaseCache: &databaseCache{
+			databases: map[string]sqlbase.ID{},
+		},
 	}
 }
 
