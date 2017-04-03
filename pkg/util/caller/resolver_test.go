@@ -18,7 +18,7 @@ package caller
 
 import (
 	"fmt"
-	"path/filepath"
+	"path"
 	"regexp"
 	"testing"
 )
@@ -54,8 +54,9 @@ func TestDefaultCallResolver(t *testing.T) {
 			t.Fatalf("unexpected caller reported: %s", fun)
 		}
 
-		if file != filepath.Join("util", "caller", "resolver_test.go") {
-			t.Fatalf("wrong file '%s'", file)
+		// NB: runtime.Caller always returns unix paths.
+		if expected := path.Join("util", "caller", "resolver_test.go"); file != expected {
+			t.Fatalf("expected '%s' got '%s'", expected, file)
 		}
 	}
 }

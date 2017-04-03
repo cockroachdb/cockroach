@@ -40,13 +40,13 @@ var stderrRedirected bool
 // OrigStderr defined above.
 func hijackStderr(f *os.File) error {
 	stderrRedirected = true
-	return dupFD2(f.Fd(), os.Stderr.Fd())
+	return redirectStderr(f)
 }
 
 // restoreStderr cancels the effect of hijackStderr()
 func restoreStderr() error {
 	stderrRedirected = false
-	return dupFD2(OrigStderr.Fd(), os.Stderr.Fd())
+	return redirectStderr(OrigStderr)
 }
 
 // RecoverAndReportPanic can be invoked on goroutines that run with

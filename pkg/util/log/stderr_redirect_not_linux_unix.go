@@ -17,9 +17,10 @@
 package log
 
 import (
+	"os"
 	"syscall"
 )
 
-func dupFD2(oldfd uintptr, newfd uintptr) error {
-	return syscall.Dup2(int(oldfd), int(newfd))
+func redirectStderr(f *os.File) error {
+	return syscall.Dup2(int(f.Fd()), syscall.Stderr)
 }
