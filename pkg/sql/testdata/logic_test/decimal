@@ -91,16 +91,15 @@ INSERT INTO t2 VALUES
 	('-Inf'::decimal, '-Inf'::decimal),
 	('-0.0000'::decimal, '-0.0000'::decimal)
 
-# TODO(mjibson): fix removal of trailing zeros
 query RR
 SELECT * FROM t2 ORDER BY d
 ----
 NaN        NaN
 -Infinity  -Infinity
-0          0
-1          1
-2          2
-3          3
+-0.0000    -0.0
+1.00       1.0
+2.0        2.0
+3          3.0
 Infinity   Infinity
 
 # Ensure uniqueness in PK columns with +/- NaN and 0.
