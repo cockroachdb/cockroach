@@ -47,7 +47,7 @@ func BenchmarkClusterBackup(b *testing.B) {
 	if _, err := Load(ctx, sqlDB.DB, bankStatementBuf(b.N), "bench", dir, ts, 0, dir); err != nil {
 		b.Fatalf("%+v", err)
 	}
-	sqlDB.Exec(fmt.Sprintf(`RESTORE DATABASE bench FROM '%s'`, dir))
+	sqlDB.Exec(fmt.Sprintf(`RESTORE bench.* FROM '%s'`, dir))
 
 	// TODO(dan): Ideally, this would split and rebalance the ranges in a more
 	// controlled way. A previous version of this code did it manually with
@@ -85,7 +85,7 @@ func BenchmarkClusterRestore(b *testing.B) {
 	}
 	b.SetBytes(backup.DataSize / int64(b.N))
 	b.ResetTimer()
-	sqlDB.Exec(fmt.Sprintf(`RESTORE DATABASE bench FROM '%s'`, dir))
+	sqlDB.Exec(fmt.Sprintf(`RESTORE bench.* FROM '%s'`, dir))
 	b.StopTimer()
 }
 
@@ -108,7 +108,7 @@ func BenchmarkLoadRestore(b *testing.B) {
 	if _, err := Load(ctx, sqlDB.DB, buf, "bench", dir, ts, 0, dir); err != nil {
 		b.Fatalf("%+v", err)
 	}
-	sqlDB.Exec(fmt.Sprintf(`RESTORE DATABASE bench FROM '%s'`, dir))
+	sqlDB.Exec(fmt.Sprintf(`RESTORE bench.* FROM '%s'`, dir))
 	b.StopTimer()
 }
 
