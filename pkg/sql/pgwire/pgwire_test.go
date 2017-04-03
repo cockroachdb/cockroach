@@ -27,6 +27,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"testing"
 	"time"
 
@@ -1426,6 +1427,10 @@ func TestPrepareSyntax(t *testing.T) {
 func TestPGWireOverUnixSocket(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	if runtime.GOOS == "windows" {
+		t.Skip("unix sockets not support on windows")
+	}
+
 	// We need a temp directory in which we'll create the unix socket.
 	//
 	// On BSD, binding to a socket is limited to a path length of 104 characters
@@ -1460,7 +1465,6 @@ func TestPGWireOverUnixSocket(t *testing.T) {
 		Host:     net.JoinHostPort("", port),
 		RawQuery: options.Encode(),
 	}
-	t.Logf("PGURL: %s", pgURL.String())
 	if err := trivialQuery(pgURL); err != nil {
 		t.Fatal(err)
 	}
