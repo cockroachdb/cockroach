@@ -89,15 +89,14 @@ func (i *MVCCIncrementalIterator) Next() {
 			continue
 		}
 
-		// TODO(dan): iter.unsafeKey() to avoid the allocation.
-		metaKey := i.iter.Key()
-		if !metaKey.Less(i.endKey) {
+		unsafeMetaKey := i.iter.UnsafeKey()
+		if !unsafeMetaKey.Less(i.endKey) {
 			i.valid = false
 			return
 		}
-		if metaKey.IsValue() {
+		if unsafeMetaKey.IsValue() {
 			i.meta.Reset()
-			i.meta.Timestamp = metaKey.Timestamp
+			i.meta.Timestamp = unsafeMetaKey.Timestamp
 		} else {
 			if i.err = i.iter.ValueProto(&i.meta); i.err != nil {
 				i.valid = false
@@ -110,18 +109,19 @@ func (i *MVCCIncrementalIterator) Next() {
 			// up, throw an error so it's obvious something is wrong.
 			i.valid = false
 			i.err = errors.Errorf("inline values are unsupported by MVCCIncrementalIterator: %s",
-				metaKey.Key)
+				unsafeMetaKey.Key)
 			return
 		}
-		if metaKey.Key == nil {
+		if unsafeMetaKey.Key == nil {
 			// iter was pointed after i.endKey.
 			break
 		}
 
 		if i.meta.Txn != nil {
 			if !i.endTime.Less(i.meta.Timestamp) {
+				key := append([]byte(nil), unsafeMetaKey.Key...)
 				i.err = &roachpb.WriteIntentError{
-					Intents: []roachpb.Intent{{Span: roachpb.Span{Key: metaKey.Key}, Status: roachpb.PENDING, Txn: *i.meta.Txn}},
+					Intents: []roachpb.Intent{{Span: roachpb.Span{Key: key}, Status: roachpb.PENDING, Txn: *i.meta.Txn}},
 				}
 				i.valid = false
 				return
@@ -156,12 +156,14 @@ func (i *MVCCIncrementalIterator) Error() error {
 	return i.err
 }
 
-// Key returns the current key.
-func (i *MVCCIncrementalIterator) Key() engine.MVCCKey {
-	return i.iter.Key()
+// UnsafeKey returns the current key, but the memory is invalidated on the next
+// call to {Next,Reset,Close}.
+func (i *MVCCIncrementalIterator) UnsafeKey() engine.MVCCKey {
+	return i.iter.UnsafeKey()
 }
 
-// Value returns the current value as a byte slice.
-func (i *MVCCIncrementalIterator) Value() []byte {
-	return i.iter.Value()
+// UnsafeValue returns the current value as a byte slice, but the memory is
+// invalidated on the next call to {Next,Reset,Close}.
+func (i *MVCCIncrementalIterator) UnsafeValue() []byte {
+	return i.iter.UnsafeValue()
 }

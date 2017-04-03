@@ -50,7 +50,14 @@ func assertEqualKVs(
 		defer iter.Close()
 		var kvs []engine.MVCCKeyValue
 		for iter.Reset(startKey, endKey, startTime, endTime); iter.Valid(); iter.Next() {
-			kvs = append(kvs, engine.MVCCKeyValue{Key: iter.Key(), Value: iter.Value()})
+			kv := engine.MVCCKeyValue{
+				Key: engine.MVCCKey{
+					Key:       append([]byte(nil), iter.UnsafeKey().Key...),
+					Timestamp: iter.UnsafeKey().Timestamp,
+				},
+				Value: append([]byte(nil), iter.UnsafeValue()...),
+			}
+			kvs = append(kvs, kv)
 		}
 
 		if len(kvs) != len(expected) {
