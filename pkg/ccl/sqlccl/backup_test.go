@@ -25,6 +25,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/kr/pretty"
 	"github.com/lib/pq"
@@ -40,7 +41,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -105,8 +105,8 @@ func bankSplitStmt(numAccounts int, numRanges int) string {
 	return stmt.String()
 }
 
-func backupRestoreTestSetup(
-	t testing.TB, clusterSize int, numAccounts int,
+func backupRestoreTestSetupWithParams(
+	t testing.TB, clusterSize int, numAccounts int, params base.TestClusterArgs,
 ) (
 	ctx context.Context,
 	tempDir string,
@@ -120,7 +120,7 @@ func backupRestoreTestSetup(
 
 	temp := filepath.Join(dir, "must-be-cleaned-up")
 
-	tc = testcluster.StartTestCluster(t, clusterSize, base.TestClusterArgs{})
+	tc = testcluster.StartTestCluster(t, clusterSize, params)
 	for _, s := range tc.Servers {
 		for _, e := range s.Engines() {
 			if err := e.SetTempDir(temp); err != nil {
@@ -160,6 +160,18 @@ func backupRestoreTestSetup(
 	}
 
 	return ctx, dir, tc, sqlDB, cleanupFn
+}
+
+func backupRestoreTestSetup(
+	t testing.TB, clusterSize int, numAccounts int,
+) (
+	ctx context.Context,
+	tempDir string,
+	tc *testcluster.TestCluster,
+	sqlDB *sqlutils.SQLRunner,
+	cleanup func(),
+) {
+	return backupRestoreTestSetupWithParams(t, clusterSize, numAccounts, base.TestClusterArgs{})
 }
 
 func TestBackupRestoreLocal(t *testing.T) {
@@ -272,27 +284,95 @@ func verifySystemJob(
 	return nil
 }
 
+// verifySystemJobProgress asserts that the fractionCompleted of the latest job
+// in the system.jobs table is approximately 0.5 when half of the expected
+// responses have completed.
+func verifySystemJobProgress(
+	sqlDB *sqlutils.SQLRunner, allowResponse chan struct{}, totalExpectedResponses int,
+) error {
+	// Allow half the total expected responses to proceed.
+	for i := 0; i < totalExpectedResponses/2; i++ {
+		allowResponse <- struct{}{}
+	}
+
+	// Ensure the fractionCompleted of the latest job is in the range [0.25, 0.75].
+	err := util.RetryForDuration(time.Second, func() error {
+		var fractionCompleted float32
+		sqlDB.QueryRow(
+			`SELECT fraction_completed FROM crdb_internal.jobs ORDER BY created DESC LIMIT 1`,
+		).Scan(&fractionCompleted)
+		if fractionCompleted < 0.25 || fractionCompleted > 0.75 {
+			return errors.Errorf("expected progress to be in range [0.25, 0.75] after 1s but got %f",
+				fractionCompleted)
+		}
+		return nil
+	})
+
+	// Close the channel to allow future responses to proceed without us
+	// explicitly writing messages to the channel.
+	close(allowResponse)
+	return err
+}
+
 func TestBackupRestoreSystemJobs(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	if !storage.ProposerEvaluatedKVEnabled() {
 		t.Skip("command WriteBatch is not allowed without proposer evaluated KV")
 	}
 
-	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop()
+	const expectedProgressUpdateCount = backupRestoreDefaultRanges
 
-	dir, dirCleanupFn := testutils.TempDir(t, 1)
-	defer dirCleanupFn()
+	// To test incremental progress updates, we install a store response filter,
+	// which runs immediately before a KV command returns its response, in our
+	// test cluster. Whenever we see an Export or Import responses, we do a
+	// blocking read on the allowResponse channel to give the test a chance to
+	// assert the progress of the job.
+	var allowResponse chan struct{}
+	params := base.TestClusterArgs{}
+	params.ServerArgs.Knobs.Store = &storage.StoreTestingKnobs{
+		TestingResponseFilter: func(ba roachpb.BatchRequest, br *roachpb.BatchResponse) *roachpb.Error {
+			hasExportOrImport := false
+			for _, res := range br.Responses {
+				if hasExportOrImport = res.Export != nil || res.Import != nil; hasExportOrImport {
+					break
+				}
+			}
+			if !hasExportOrImport {
+				return nil
+			}
+			<-allowResponse
+			return nil
+		},
+	}
+
+	const numAccounts = 1000
+
+	_, dir, _, sqlDB, cleanupFn := backupRestoreTestSetupWithParams(t, multiNode, numAccounts, params)
+	defer cleanupFn()
 
 	dest := dir + "?secretCredentialsHere"
 	sanitizedDest := dir
 
-	sqlDB := sqlutils.MakeSQLRunner(t, db)
-	sqlDB.Exec(bankCreateDatabase)
-	sqlDB.Exec(bankCreateTable)
+	jobDone := make(chan error)
+
 	{
-		sqlDB.Exec(`BACKUP DATABASE bench TO $1`, dest)
-		tableID, err := sqlutils.QueryTableID(db, "bench", "bank")
+		allowResponse = make(chan struct{})
+		go func() {
+			_, err := sqlDB.DB.Exec(`BACKUP DATABASE bench TO $1`, dest)
+			jobDone <- err
+		}()
+
+		if err := verifySystemJobProgress(
+			sqlDB, allowResponse, expectedProgressUpdateCount,
+		); err != nil {
+			t.Fatal(err)
+		}
+
+		if err := <-jobDone; err != nil {
+			t.Fatal(err)
+		}
+
+		tableID, err := sqlutils.QueryTableID(sqlDB.DB, "bench", "bank")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -308,10 +388,27 @@ func TestBackupRestoreSystemJobs(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	sqlDB.Exec(`CREATE DATABASE bench2`)
+
 	{
-		sqlDB.Exec(`RESTORE bench.* FROM $1 WITH OPTIONS ('into_db'='bench2')`, dest)
-		databaseID, err := sqlutils.QueryDatabaseID(db, "bench2")
+		sqlDB.Exec(`CREATE DATABASE bench2`)
+
+		allowResponse = make(chan struct{})
+		go func() {
+			_, err := sqlDB.DB.Exec(`RESTORE bench.* FROM $1 WITH OPTIONS ('into_db'='bench2')`, dest)
+			jobDone <- err
+		}()
+
+		if err := verifySystemJobProgress(
+			sqlDB, allowResponse, expectedProgressUpdateCount,
+		); err != nil {
+			t.Fatal(err)
+		}
+
+		if err := <-jobDone; err != nil {
+			t.Fatal(err)
+		}
+
+		databaseID, err := sqlutils.QueryDatabaseID(sqlDB.DB, "bench2")
 		if err != nil {
 			t.Fatal(err)
 		}
