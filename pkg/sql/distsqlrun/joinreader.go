@@ -99,11 +99,11 @@ func (jr *joinReader) generateKey(
 }
 
 // mainLoop runs the mainLoop and returns any error.
-// It does not close the output.
 //
-// If no error is returned, the input has been drained. Otherwise, it hasn't
-// necessarily been drained; the caller should attempt to drain. If an error is
-// returned, it's the caller's responsibility to pass it to the consumer.
+// If no error is returned, the input has been drained and the output has been
+// closed. If an error is returned, the input hasn't been drained; the caller
+// should drain and close the output. The caller should also pass the returned
+// error to the consumer.
 func (jr *joinReader) mainLoop(ctx context.Context) error {
 	primaryKeyPrefix := sqlbase.MakeIndexKeyPrefix(&jr.desc, jr.index.ID)
 
@@ -134,6 +134,9 @@ func (jr *joinReader) mainLoop(ctx context.Context) error {
 			}
 			if row == nil {
 				if len(spans) == 0 {
+					// No fetching needed since we have collected no spans and
+					// the input has signalled that no more records are coming.
+					jr.out.close()
 					return nil
 				}
 				break
@@ -177,6 +180,7 @@ func (jr *joinReader) mainLoop(ctx context.Context) error {
 
 		if len(spans) != joinReaderBatchSize {
 			// This was the last batch.
+			jr.out.close()
 			return nil
 		}
 	}
@@ -195,7 +199,5 @@ func (jr *joinReader) Run(ctx context.Context, wg *sync.WaitGroup) {
 	err := jr.mainLoop(ctx)
 	if err != nil {
 		DrainAndClose(ctx, jr.out.output, err /* cause */, jr.input)
-	} else {
-		jr.out.close()
 	}
 }
