@@ -162,7 +162,7 @@ func (tr *tableReader) Run(ctx context.Context, wg *sync.WaitGroup) {
 	}
 
 	if err := tr.fetcher.StartScan(
-		ctx, txn, tr.spans, true /* limit batches */, tr.limitHint,
+		ctx, txn, nil /* constraints */, tr.spans, true /* limit batches */, tr.limitHint,
 	); err != nil {
 		log.Errorf(ctx, "scan error: %s", err)
 		tr.out.output.Push(nil /* row */, ProducerMetadata{Err: err})

@@ -153,7 +153,7 @@ func (jr *joinReader) mainLoop(ctx context.Context) error {
 			})
 		}
 
-		err := jr.fetcher.StartScan(ctx, txn, spans, false /* no batch limits */, 0)
+		err := jr.fetcher.StartScan(ctx, txn, nil /* constraints */, spans, false /* no batch limits */, 0)
 		if err != nil {
 			log.Errorf(ctx, "scan error: %s", err)
 			return err

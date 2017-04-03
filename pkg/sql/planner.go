@@ -43,6 +43,7 @@ import (
 // If one needs to be created outside of a Session, use makeInternalPlanner().
 type planner struct {
 	txn *client.Txn
+	sc  client.SpanConstraints
 
 	// As the planner executes statements, it may change the current user session.
 	session *Session

@@ -17,9 +17,12 @@
 package client
 
 import (
+	"fmt"
+
 	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/interval"
 )
 
 const (
@@ -37,6 +40,8 @@ type Batch struct {
 	// The Txn the batch is associated with. This field may be nil if the batch
 	// was not created via Txn.NewBatch.
 	txn *Txn
+	// Any constraints placed on the operations performed by the batch.
+	bc *SpanConstraints
 	// Results contains an entry for each operation added to the batch. The order
 	// of the results matches the order the operations were added to the
 	// batch. For example:
@@ -302,8 +307,13 @@ func (b *Batch) growReqs(n int) {
 func (b *Batch) appendReqs(args ...roachpb.Request) {
 	n := len(b.reqs)
 	b.growReqs(len(args))
-	for i := range args {
-		b.reqs[n+i].MustSetInner(args[i])
+	for i, req := range args {
+		if roachpb.IsReadOnly(req) {
+			b.bc.assertRead(req.Header())
+		} else {
+			b.bc.assertWrite(req.Header())
+		}
+		b.reqs[n+i].MustSetInner(req)
 	}
 }
 
@@ -651,4 +661,39 @@ func (b *Batch) writeBatch(s, e interface{}, data []byte) {
 	}
 	b.appendReqs(req)
 	b.initResult(1, 0, notRaw, nil)
+}
+
+// Constrain constrains the batch to only operating over the key ranges
+// specified in the SpanConstraints.
+func (b *Batch) Constrain(bc *SpanConstraints) {
+	b.bc = bc
+}
+
+// SpanConstraints constrains the set of keys that a Batch is permitted to
+// touch.
+type SpanConstraints struct {
+	// PermittedReads constrains the set of reads allowed by the batch. If
+	// nil, reads will not be constrained.
+	PermittedReads interval.RangeGroup
+	// PermittedWrites constrains the set of reads allowed by the batch. If
+	// nil, writes will not be constrained.
+	PermittedWrites interval.RangeGroup
+}
+
+func (bc *SpanConstraints) assertRead(s roachpb.Span) {
+	if bc == nil || bc.PermittedReads == nil {
+		return
+	}
+	if pr := bc.PermittedReads; !pr.Encloses(s.AsRange()) {
+		panic(fmt.Sprintf("found read span %v outside of permitted reads %v", s, pr))
+	}
+}
+
+func (bc *SpanConstraints) assertWrite(s roachpb.Span) {
+	if bc == nil || bc.PermittedWrites == nil {
+		return
+	}
+	if pw := bc.PermittedWrites; !pw.Encloses(s.AsRange()) {
+		panic(fmt.Sprintf("found write span %v outside of permitted writes %v", s, pw))
+	}
 }

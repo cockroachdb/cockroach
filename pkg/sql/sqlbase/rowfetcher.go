@@ -170,7 +170,12 @@ func (rf *RowFetcher) Init(
 // StartScan initializes and starts the key-value scan. Can be used multiple
 // times.
 func (rf *RowFetcher) StartScan(
-	ctx context.Context, txn *client.Txn, spans roachpb.Spans, limitBatches bool, limitHint int64,
+	ctx context.Context,
+	txn *client.Txn,
+	sc *client.SpanConstraints,
+	spans roachpb.Spans,
+	limitBatches bool,
+	limitHint int64,
 ) error {
 	if len(spans) == 0 {
 		panic("no spans")
@@ -191,7 +196,8 @@ func (rf *RowFetcher) StartScan(
 	}
 
 	var err error
-	rf.kvFetcher, err = makeKVFetcher(txn, spans, rf.reverse, limitBatches, firstBatchLimit, rf.returnRangeInfo)
+	rf.kvFetcher, err = makeKVFetcher(txn, sc, spans, rf.reverse,
+		limitBatches, firstBatchLimit, rf.returnRangeInfo)
 	if err != nil {
 		return err
 	}

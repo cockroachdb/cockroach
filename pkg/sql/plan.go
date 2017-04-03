@@ -26,6 +26,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
+type plan struct {
+	planner   *planner
+	queryPlan planNode
+}
+
 type planMaker interface {
 	// newPlan starts preparing the query plan for a single SQL
 	// statement.

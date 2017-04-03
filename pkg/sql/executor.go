@@ -1470,29 +1470,30 @@ func (e *Executor) execStmtPipelined(stmt parser.Statement, planner *planner) (R
 	session := planner.session
 	ctx := session.Ctx()
 
-	plan, err := planner.makePlan(ctx, stmt, false)
+	queryPlan, err := planner.makePlan(ctx, stmt, false)
 	if err != nil {
 		return Result{}, err
 	}
 
-	mockResult, err := makeRes(stmt, planner, plan)
+	mockResult, err := makeRes(stmt, planner, queryPlan)
 	if err != nil {
 		return Result{}, err
 	}
 
-	session.pipelineQueue.Add(ctx, plan, func(plan planNode) error {
-		defer plan.Close(ctx)
+	p := plan{planner: planner, queryPlan: queryPlan}
+	session.pipelineQueue.Add(ctx, p, func(p plan) error {
+		defer p.queryPlan.Close(ctx)
 
-		result, err := makeRes(stmt, planner, plan)
+		result, err := makeRes(stmt, p.planner, p.queryPlan)
 		if err != nil {
 			return err
 		}
 		defer result.Close(ctx)
 
-		planner.phaseTimes[plannerStartExecStmt] = timeutil.Now()
-		err = e.execClassic(planner, plan, &result)
-		planner.phaseTimes[plannerEndExecStmt] = timeutil.Now()
-		e.recordStatementSummary(planner, stmt, false, 0, result, err)
+		p.planner.phaseTimes[plannerStartExecStmt] = timeutil.Now()
+		err = e.execClassic(p.planner, p.queryPlan, &result)
+		p.planner.phaseTimes[plannerEndExecStmt] = timeutil.Now()
+		e.recordStatementSummary(p.planner, stmt, false, 0, result, err)
 		return err
 	})
 	return mockResult, nil

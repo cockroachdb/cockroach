@@ -70,7 +70,7 @@ func (p *planner) Delete(
 	if err := p.fillFKTableMap(ctx, fkTables); err != nil {
 		return nil, err
 	}
-	rd, err := sqlbase.MakeRowDeleter(p.txn, en.tableDesc, fkTables, requestedCols, sqlbase.CheckFKs)
+	rd, err := sqlbase.MakeRowDeleter(p.txn, &p.sc, en.tableDesc, fkTables, requestedCols, sqlbase.CheckFKs)
 	if err != nil {
 		return nil, err
 	}
@@ -128,7 +128,7 @@ func (d *deleteNode) Start(ctx context.Context) error {
 		}
 	}
 
-	return d.run.tw.init(d.p.txn)
+	return d.run.tw.init(d.p.txn, &d.p.sc)
 }
 
 func (d *deleteNode) Close(ctx context.Context) {
@@ -204,7 +204,7 @@ func (d *deleteNode) fastDelete(ctx context.Context, scan *scanNode) error {
 		return err
 	}
 
-	if err := d.tw.init(d.p.txn); err != nil {
+	if err := d.tw.init(d.p.txn, &d.p.sc); err != nil {
 		return err
 	}
 	rowCount, err := d.tw.fastDelete(ctx, scan)

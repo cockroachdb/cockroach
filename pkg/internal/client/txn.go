@@ -253,6 +253,15 @@ func (txn *Txn) NewBatch() *Batch {
 	return &Batch{txn: txn}
 }
 
+// NewConstrainedBatch creates and returns a new empty batch object for use
+// with the Txn. The batch is constrained to only operate over the key ranges
+// specified in the SpanConstraints.
+func (txn *Txn) NewConstrainedBatch(bc *SpanConstraints) *Batch {
+	b := txn.NewBatch()
+	b.Constrain(bc)
+	return b
+}
+
 // Get retrieves the value for a key, returning the retrieved key/value or an
 // error. It is not considered an error for the key to not exist.
 //
