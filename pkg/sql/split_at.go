@@ -26,6 +26,25 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
+// getRowKey generates a key that corresponds to a row (or prefix of a row) in a table or index.
+// Both tableDesc and index are required (index can be the primary index).
+func getRowKey(
+	tableDesc *sqlbase.TableDescriptor, index *sqlbase.IndexDescriptor, values []parser.Datum,
+) ([]byte, error) {
+	colMap := make(map[sqlbase.ColumnID]int)
+	for i := range values {
+		colMap[index.ColumnIDs[i]] = i
+	}
+	prefix := sqlbase.MakeIndexKeyPrefix(tableDesc, index.ID)
+	key, _, err := sqlbase.EncodePartialIndexKey(
+		tableDesc, index, len(values), colMap, values, prefix,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return keys.MakeRowSentinelKey(key), nil
+}
+
 // Split executes a KV split.
 // Privileges: INSERT on table.
 func (p *planner) Split(ctx context.Context, n *parser.Split) (planNode, error) {
@@ -95,29 +114,16 @@ func (n *splitNode) Next(ctx context.Context) (bool, error) {
 		return ok, err
 	}
 
-	values := make([]parser.Datum, 0, len(n.index.ColumnIDs))
-	values = append(values, n.rows.Values()...)
-	for len(values) < len(n.index.ColumnIDs) {
-		// It is acceptable if only a prefix of the columns are given values. We
-		// could generate a partial key, but it's easier to just encode NULLs for
-		// the rest of the columns.
-		values = append(values, parser.DNull)
-	}
-
-	colMap := make(map[sqlbase.ColumnID]int)
-	for i, colID := range n.index.ColumnIDs {
-		colMap[colID] = i
-	}
-	prefix := sqlbase.MakeIndexKeyPrefix(n.tableDesc, n.index.ID)
-	key, _, err := sqlbase.EncodeIndexKey(n.tableDesc, n.index, colMap, values, prefix)
+	rowKey, err := getRowKey(n.tableDesc, n.index, n.rows.Values())
 	if err != nil {
 		return false, err
 	}
-	n.lastSplitKey = keys.MakeRowSentinelKey(key)
 
-	if err := n.p.session.execCfg.DB.AdminSplit(ctx, n.lastSplitKey); err != nil {
+	if err := n.p.session.execCfg.DB.AdminSplit(ctx, rowKey); err != nil {
 		return false, err
 	}
+
+	n.lastSplitKey = rowKey
 
 	return true, nil
 }
