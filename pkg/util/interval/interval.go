@@ -727,3 +727,32 @@ func (n *Node) doMatchReverse(fn Operation, r Range, overlaps func(Range, Range)
 	}
 	return
 }
+
+// TreeIterator iterates over all intervals stored in the Tree, in-order.
+type TreeIterator struct {
+	stack []*Node
+}
+
+// Next moves the iterator to the next Node in the Tree and returns the node's
+// Elem. The method returns false if no Nodes remain in the Tree.
+func (ti *TreeIterator) Next() (i Interface, ok bool) {
+	if len(ti.stack) == 0 {
+		return nil, false
+	}
+	n := ti.stack[len(ti.stack)-1]
+	ti.stack = ti.stack[:len(ti.stack)-1]
+	for r := n.Right; r != nil; r = r.Left {
+		ti.stack = append(ti.stack, r)
+	}
+	return n.Elem, true
+}
+
+// Iterator creates an iterator to iterate over all intervals stored in the
+// tree, in-order.
+func (t *Tree) Iterator() TreeIterator {
+	var ti TreeIterator
+	for n := t.Root; n != nil; n = n.Left {
+		ti.stack = append(ti.stack, n)
+	}
+	return ti
+}

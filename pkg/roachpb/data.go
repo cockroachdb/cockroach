@@ -31,7 +31,6 @@ import (
 	"time"
 	"unicode"
 
-	"github.com/biogo/store/interval"
 	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
 
@@ -40,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/interval"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
@@ -168,9 +168,9 @@ func (k Key) Equal(l Key) bool {
 	return bytes.Equal(k, l)
 }
 
-// Compare implements the interval.Comparable interface for tree nodes.
-func (k Key) Compare(b interval.Comparable) int {
-	return bytes.Compare(k, b.(Key))
+// Compare compares the two Keys.
+func (k Key) Compare(b Key) int {
+	return bytes.Compare(k, b)
 }
 
 // String returns a string-formatted version of the key.
@@ -1063,6 +1063,20 @@ func (s Span) Contains(o Span) bool {
 		return bytes.Compare(o.Key, s.Key) >= 0 && bytes.Compare(o.Key, s.EndKey) < 0
 	}
 	return bytes.Compare(s.Key, o.Key) <= 0 && bytes.Compare(s.EndKey, o.EndKey) >= 0
+}
+
+// AsRange returns the Span as an interval.Range.
+func (s Span) AsRange() interval.Range {
+	startKey := s.Key
+	endKey := s.EndKey
+	if len(endKey) == 0 {
+		endKey = s.Key.Next()
+		startKey = endKey[:len(startKey)]
+	}
+	return interval.Range{
+		Start: interval.Comparable(startKey),
+		End:   interval.Comparable(endKey),
+	}
 }
 
 // Spans is a slice of spans.

@@ -228,15 +228,11 @@ func (cq *CommandQueue) getWait(
 
 	for i := 0; i < len(spans); i++ {
 		span := spans[i]
-		start, end := span.Key, span.EndKey
-		if end == nil {
+		if span.EndKey == nil {
 			panic(fmt.Sprintf("%d: unexpected nil EndKey: %s", i, span))
 		}
-		newCmdRange := interval.Range{
-			Start: interval.Comparable(start),
-			End:   interval.Comparable(end),
-		}
-		overlaps := cq.getOverlaps(readOnly, timestamp, newCmdRange.Start, newCmdRange.End)
+		newCmdRange := span.AsRange()
+		overlaps := cq.getOverlaps(readOnly, timestamp, newCmdRange)
 
 		// Check to see if any of the overlapping entries are "covering"
 		// entries. If we encounter a covering entry, we remove it from the
@@ -430,12 +426,8 @@ func (cq *CommandQueue) getWait(
 // getOverlaps returns a slice of values which overlap the specified
 // interval. The slice is only valid until the next call to GetOverlaps.
 func (cq *CommandQueue) getOverlaps(
-	readOnly bool, timestamp hlc.Timestamp, start, end []byte,
+	readOnly bool, timestamp hlc.Timestamp, rng interval.Range,
 ) []*cmd {
-	rng := interval.Range{
-		Start: interval.Comparable(start),
-		End:   interval.Comparable(end),
-	}
 	if !readOnly {
 		cq.reads.DoMatching(func(i interval.Interface) bool {
 			c := i.(*cmd)
@@ -529,6 +521,10 @@ func (cq *CommandQueue) add(readOnly bool, timestamp hlc.Timestamp, spans []roac
 			maxKey = end
 		}
 	}
+	coveringSpan := roachpb.Span{
+		Key:    minKey,
+		EndKey: maxKey,
+	}
 
 	if keys.IsLocal(minKey) != keys.IsLocal(maxKey) {
 		log.Fatalf(
@@ -547,10 +543,7 @@ func (cq *CommandQueue) add(readOnly bool, timestamp hlc.Timestamp, spans []roac
 	// Create the covering entry.
 	cmd := &cmds[0]
 	cmd.id = cq.nextID()
-	cmd.key = interval.Range{
-		Start: interval.Comparable(minKey),
-		End:   interval.Comparable(maxKey),
-	}
+	cmd.key = coveringSpan.AsRange()
 	cmd.readOnly = readOnly
 	cmd.timestamp = timestamp
 	cmd.expanded = false
@@ -561,10 +554,7 @@ func (cq *CommandQueue) add(readOnly bool, timestamp hlc.Timestamp, spans []roac
 		for i, span := range spans {
 			child := &cmd.children[i]
 			child.id = cq.nextID()
-			child.key = interval.Range{
-				Start: interval.Comparable(span.Key),
-				End:   interval.Comparable(span.EndKey),
-			}
+			child.key = span.AsRange()
 			child.readOnly = readOnly
 			child.timestamp = timestamp
 			child.expanded = true

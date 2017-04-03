@@ -19,6 +19,7 @@ package interval
 import (
 	"bytes"
 	"crypto/rand"
+	"errors"
 	"reflect"
 	"testing"
 
@@ -537,6 +538,146 @@ func testRangeGroupEnclosesRange(t *testing.T, rg RangeGroup) {
 	}
 }
 
+func TestRangeListForEach(t *testing.T) {
+	testRangeGroupForEach(t, NewRangeList())
+}
+
+func TestRangeTreeForEach(t *testing.T) {
+	testRangeGroupForEach(t, NewRangeTree())
+}
+
+func testRangeGroupForEach(t *testing.T, rg RangeGroup) {
+	errToThrow := errors.New("this error should be thrown")
+	dontErr := -1
+	tests := []struct {
+		rngs     []Range
+		errAfter int // after this many iterations, throw error. -1 to ignore.
+	}{
+		{
+			rngs:     []Range{},
+			errAfter: dontErr,
+		},
+		{
+			rngs:     []Range{{Start: []byte{0x01}, End: []byte{0x05}}},
+			errAfter: dontErr,
+		},
+		{
+			rngs: []Range{
+				{Start: []byte{0x01}, End: []byte{0x05}},
+				{Start: []byte{0x09}, End: []byte{0xff}},
+			},
+			errAfter: dontErr,
+		},
+		{
+			rngs: []Range{
+				{Start: []byte{0x01}, End: []byte{0x05}},
+				{Start: []byte{0x09}, End: []byte{0x10}},
+				{Start: []byte{0x1a}, End: []byte{0x1c}},
+				{Start: []byte{0x44}, End: []byte{0xf0}},
+				{Start: []byte{0xf1}, End: []byte{0xff}},
+			},
+			errAfter: dontErr,
+		},
+		{
+			rngs: []Range{
+				{Start: []byte{0x01}, End: []byte{0x05}},
+				{Start: []byte{0x09}, End: []byte{0x10}},
+				{Start: []byte{0x1a}, End: []byte{0x1c}},
+				{Start: []byte{0x44}, End: []byte{0xf0}},
+				{Start: []byte{0xf1}, End: []byte{0xff}},
+			},
+			errAfter: 1,
+		},
+	}
+
+	for _, test := range tests {
+		rg.Clear()
+		for _, r := range test.rngs {
+			rg.Add(r)
+		}
+
+		n := 0
+		acc := []Range{}
+		throwingErr := test.errAfter != -1
+		errSaw := rg.ForEach(func(r Range) error {
+			if throwingErr && n >= test.errAfter {
+				return errToThrow
+			}
+			n++
+			acc = append(acc, r)
+			return nil
+		})
+
+		expRngs := test.rngs
+		if throwingErr {
+			expRngs = test.rngs[:test.errAfter]
+			if errSaw != errToThrow {
+				t.Errorf("expected error %v from RangeGroup.ForEach, found %v", errToThrow, errSaw)
+			}
+		} else {
+			if errSaw != nil {
+				t.Errorf("no error expected from RangeGroup.ForEach, found %v", errSaw)
+			}
+		}
+		if !reflect.DeepEqual(acc, expRngs) {
+			t.Errorf("expected to accumulate Ranges %v, found %v", expRngs, acc)
+		}
+	}
+}
+
+func TestRangeListIterator(t *testing.T) {
+	testRangeGroupIterator(t, NewRangeList())
+}
+
+func TestRangeTreeIterator(t *testing.T) {
+	testRangeGroupIterator(t, NewRangeTree())
+}
+
+func testRangeGroupIterator(t *testing.T, rg RangeGroup) {
+	tests := []struct {
+		rngs []Range
+	}{
+		{
+			rngs: []Range{},
+		},
+		{
+			rngs: []Range{{Start: []byte{0x01}, End: []byte{0x05}}},
+		},
+		{
+			rngs: []Range{
+				{Start: []byte{0x01}, End: []byte{0x05}},
+				{Start: []byte{0x09}, End: []byte{0xff}},
+			},
+		},
+		{
+			rngs: []Range{
+				{Start: []byte{0x01}, End: []byte{0x05}},
+				{Start: []byte{0x09}, End: []byte{0x10}},
+				{Start: []byte{0x1a}, End: []byte{0x1c}},
+				{Start: []byte{0x44}, End: []byte{0xf0}},
+				{Start: []byte{0xf1}, End: []byte{0xff}},
+			},
+		},
+	}
+
+	for _, test := range tests {
+		rg.Clear()
+		for _, r := range test.rngs {
+			rg.Add(r)
+		}
+
+		acc := []Range{}
+		it := rg.Iterator()
+		for r, ok := it.Next(); ok; r, ok = it.Next() {
+			acc = append(acc, r)
+		}
+
+		if !reflect.DeepEqual(acc, test.rngs) {
+			t.Errorf("expected to accumulate Ranges %v, found %v", test.rngs, acc)
+		}
+	}
+}
+
 func TestRangeListStringer(t *testing.T) {
 	testRangeGroupStringer(t, NewRangeList())
 }
@@ -565,6 +706,14 @@ func testRangeGroupStringer(t *testing.T, rg RangeGroup) {
 			},
 			str: "[[01-05) [09-ff)]",
 		},
+		{
+			rngs: []Range{
+				{Start: []byte{0x01}, End: []byte{0x05}},
+				{Start: []byte{0x09}, End: []byte{0xf0}},
+				{Start: []byte{0xf1}, End: []byte{0xff}},
+			},
+			str: "[[01-05) [09-f0) [f1-ff)]",
+		},
 	}
 
 	for _, test := range tests {
@@ -574,6 +723,114 @@ func testRangeGroupStringer(t *testing.T, rg RangeGroup) {
 		}
 		if str := rg.String(); str != test.str {
 			t.Errorf("added new ranges %v to range group, wanted string value %s; got %s", test.rngs, test.str, str)
+		}
+	}
+}
+
+func TestRangeListsOverlap(t *testing.T) {
+	testRangeGroupsOverlap(t, NewRangeList(), NewRangeList())
+}
+
+func TestRangeTreesIterator(t *testing.T) {
+	testRangeGroupsOverlap(t, NewRangeTree(), NewRangeTree())
+}
+
+func TestRangeListAndRangeTreeOverlap(t *testing.T) {
+	testRangeGroupsOverlap(t, NewRangeList(), NewRangeTree())
+}
+
+func testRangeGroupsOverlap(t *testing.T, rg1, rg2 RangeGroup) {
+	tests := []struct {
+		rngs1   []Range
+		rngs2   []Range
+		overlap bool
+	}{
+		{
+			rngs1:   []Range{},
+			rngs2:   []Range{},
+			overlap: false,
+		},
+		{
+			rngs1:   []Range{},
+			rngs2:   []Range{{Start: []byte{0x01}, End: []byte{0x05}}},
+			overlap: false,
+		},
+		{
+			rngs1:   []Range{{Start: []byte{0x01}, End: []byte{0x05}}},
+			rngs2:   []Range{{Start: []byte{0x01}, End: []byte{0x05}}},
+			overlap: true,
+		},
+		{
+			rngs1:   []Range{{Start: []byte{0x01}, End: []byte{0x05}}},
+			rngs2:   []Range{{Start: []byte{0x05}, End: []byte{0x08}}},
+			overlap: false,
+		},
+		{
+			rngs1:   []Range{{Start: []byte{0x01}, End: []byte{0x05}}},
+			rngs2:   []Range{{Start: []byte{0x04}, End: []byte{0x08}}},
+			overlap: true,
+		},
+		{
+			rngs1: []Range{
+				{Start: []byte{0x01}, End: []byte{0x05}},
+				{Start: []byte{0x09}, End: []byte{0xf0}},
+			},
+			rngs2:   []Range{{Start: []byte{0xf1}, End: []byte{0xff}}},
+			overlap: false,
+		},
+		{
+			rngs1: []Range{
+				{Start: []byte{0x01}, End: []byte{0x05}},
+				{Start: []byte{0x09}, End: []byte{0xf0}},
+			},
+			rngs2:   []Range{{Start: []byte{0xe0}, End: []byte{0xff}}},
+			overlap: true,
+		},
+		{
+			rngs1: []Range{
+				{Start: []byte{0x01}, End: []byte{0x05}},
+				{Start: []byte{0x09}, End: []byte{0x10}},
+				{Start: []byte{0x1a}, End: []byte{0x1c}},
+				{Start: []byte{0x44}, End: []byte{0xf0}},
+				{Start: []byte{0xf1}, End: []byte{0xff}},
+			},
+			rngs2:   []Range{{Start: []byte{0x11}, End: []byte{0x19}}},
+			overlap: false,
+		},
+		{
+			rngs1: []Range{
+				{Start: []byte{0x01}, End: []byte{0x05}},
+				{Start: []byte{0x09}, End: []byte{0x10}},
+				{Start: []byte{0x1a}, End: []byte{0x1c}},
+				{Start: []byte{0x44}, End: []byte{0xf0}},
+				{Start: []byte{0xf1}, End: []byte{0xff}},
+			},
+			rngs2:   []Range{{Start: []byte{0x11}, End: []byte{0xff}}},
+			overlap: true,
+		},
+	}
+
+	for _, test := range tests {
+		for _, swap := range []bool{false, true} {
+			rg1.Clear()
+			rg2.Clear()
+
+			rngs1, rngs2 := test.rngs1, test.rngs2
+			if swap {
+				rngs1, rngs2 = rngs2, rngs1
+			}
+
+			for _, r := range rngs1 {
+				rg1.Add(r)
+			}
+			for _, r := range rngs2 {
+				rg2.Add(r)
+			}
+
+			overlap := RangeGroupsOverlap(rg1, rg2)
+			if e, a := test.overlap, overlap; a != e {
+				t.Errorf("expected RangeGroupsOverlap(%s, %s) = %t, found %t", rg1, rg2, e, a)
+			}
 		}
 	}
 }
