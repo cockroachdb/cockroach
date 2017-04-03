@@ -388,9 +388,11 @@ func init() {
 	for _, cmd := range sqlCmds {
 		f := cmd.PersistentFlags()
 		stringFlag(f, &connURL, cliflags.URL, "")
-
 		stringFlag(f, &connUser, cliflags.User, security.RootUser)
-		stringFlag(f, &connDBName, cliflags.Database, "")
+
+		if cmd == sqlShellCmd {
+			stringFlag(f, &connDBName, cliflags.Database, "")
+		}
 	}
 
 	// Commands that print tables.
