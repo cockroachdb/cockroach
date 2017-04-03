@@ -1701,6 +1701,12 @@ func MakeRocksDBSstFileReader(ctx context.Context, tempPrefix string) (RocksDBSs
 	rocksDB, err := NewRocksDB(
 		roachpb.Attributes{}, dir, cache, 512<<20, DefaultMaxOpenFiles)
 	if err != nil {
+		// Usually the tempdir is cleaned up by Close below, but we need to do it
+		// ourselves in this err case.
+		if rmErr := os.RemoveAll(dir); err != nil {
+			log.Warningf(ctx, "error removing temp rocksdb directory %q: %s", dir, rmErr)
+		}
+
 		return RocksDBSstFileReader{}, err
 	}
 	return RocksDBSstFileReader{dir, rocksDB}, nil
