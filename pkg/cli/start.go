@@ -617,13 +617,14 @@ func doShutdown(ctx context.Context, c serverpb.AdminClient, onModes []int32) er
 		// not already trying to do that, and if the initial connection attempt
 		// (without shutdown) has succeeded.
 		tryHard := i > 0 && len(onModes) > 0
-		var hasResp bool
 		for {
 			if _, err := stream.Recv(); err != nil {
-				if hasResp && grpcutil.IsClosedConnection(err) {
-					// We're trying to shut down, and we already got a response
-					// and now the connection is closed. This means we shut
-					// down successfully.
+				if grpcutil.IsClosedConnection(err) {
+					// We're trying to shut down, we successfully sent a drain request,
+					// and now the connection is closed. This most likely means that we
+					// shut down successfully. Note that sometimes the stream can be shut
+					// down even before a DrainResponse gets sent back to us, so we don't
+					// require a response on the stream (see #14184).
 					return nil
 				}
 				if tryHard {
@@ -640,7 +641,6 @@ func doShutdown(ctx context.Context, c serverpb.AdminClient, onModes []int32) er
 				// Our liveness probe succeeded.
 				break
 			}
-			hasResp = true
 		}
 	}
 	return nil
