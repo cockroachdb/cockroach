@@ -4,7 +4,6 @@ import * as React from "react";
 import * as protos from "../../js/protos";
 
 import { AdminUIState } from "../../redux/state";
-import { setUISetting } from "../../redux/ui";
 import { refreshDatabaseDetails, refreshTableDetails, refreshTableStats, generateTableID} from "../../redux/apiReducers";
 
 import { SortSetting } from "../../components/sortabletable";
@@ -29,7 +28,7 @@ interface DatabaseSummaryConnectedData {
 // DatabaseSummaryActions describes actions which can be dispatched by a
 // DatabaseSummary component.
 interface DatabaseSummaryActions {
-  setUISetting: typeof setUISetting;
+  setSort: (setting: SortSetting) => void;
   refreshDatabaseDetails: typeof refreshDatabaseDetails;
   refreshTableDetails: typeof refreshTableDetails;
   refreshTableStats: typeof refreshTableStats;

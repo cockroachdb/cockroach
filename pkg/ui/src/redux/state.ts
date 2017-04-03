@@ -4,8 +4,8 @@ import { hashHistory } from "react-router";
 import { syncHistoryWithStore, routerReducer, RouterState } from "react-router-redux";
 import thunk from "redux-thunk";
 
-import uiReducer from "./ui";
-import * as ui from "./ui";
+import localSettingsReducer from "./localsettings";
+import * as localSettings from "./localsettings";
 import uiDataReducer from "./uiData";
 import * as uiData from "./uiData";
 import metricsReducer from "./metrics";
@@ -17,7 +17,7 @@ import * as apiReducers from "./apiReducers";
 
 export interface AdminUIState {
     routing: RouterState;
-    ui: ui.UISettingsDict;
+    ui: localSettings.LocalSettingsDict;
     uiData: uiData.UIDataSet;
     metrics: metrics.MetricQueryState;
     timewindow: timewindow.TimeWindowState;
@@ -29,7 +29,7 @@ export interface AdminUIState {
 export const createAdminUIStore = () => createStore(
   combineReducers<AdminUIState>({
     routing: routerReducer,
-    ui: uiReducer,
+    ui: localSettingsReducer,
     uiData: uiDataReducer,
     metrics: metricsReducer,
     timewindow: timeWindowReducer,
