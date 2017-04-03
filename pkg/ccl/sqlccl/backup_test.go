@@ -505,7 +505,7 @@ func TestBackupRestoreInterleaved(t *testing.T) {
 	})
 }
 
-func TestBackupRestoreFKs(t *testing.T) {
+func TestBackupRestoreCrossTableReferences(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	if !storage.ProposerEvaluatedKVEnabled() {
 		t.Skip("command WriteBatch is not allowed without proposer evaluated KV")
@@ -513,6 +513,7 @@ func TestBackupRestoreFKs(t *testing.T) {
 
 	const numAccounts = 30
 	const createStore = "CREATE DATABASE store"
+	const createStoreStats = "CREATE DATABASE storestats"
 
 	_, dir, _, origDB, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts)
 	defer cleanupFn()
@@ -520,6 +521,7 @@ func TestBackupRestoreFKs(t *testing.T) {
 	// Generate some testdata and back it up.
 	{
 		origDB.Exec(createStore)
+		origDB.Exec(createStoreStats)
 
 		// customers has multiple inbound FKs, to different indexes.
 		origDB.Exec(`CREATE TABLE store.customers (
@@ -547,6 +549,17 @@ func TestBackupRestoreFKs(t *testing.T) {
 			orderid INT REFERENCES store.orders
 		)`)
 
+		// and a few views for good measure.
+		origDB.Exec(`CREATE VIEW store.early_customers AS SELECT id from store.customers WHERE id < 5`)
+		origDB.Exec(`CREATE VIEW storestats.ordercounts AS
+			SELECT c.id, c.email, COUNT(o.id)
+			FROM store.customers AS c
+			LEFT OUTER JOIN store.orders AS o ON o.customerid = c.id
+			GROUP BY c.id, c.email
+			ORDER BY c.id, c.email
+		`)
+		origDB.Exec(`CREATE VIEW store.unused_view AS SELECT id from store.customers WHERE FALSE`)
+
 		for i := 0; i < numAccounts; i++ {
 			origDB.Exec(`INSERT INTO store.customers VALUES ($1, $1::string)`, i)
 		}
@@ -562,12 +575,15 @@ func TestBackupRestoreFKs(t *testing.T) {
 				}
 			}
 		}
-		_ = origDB.Exec(`BACKUP DATABASE store TO $1`, dir)
+		_ = origDB.Exec(`BACKUP DATABASE store, storestats TO $1`, dir)
 	}
 
 	origCustomers := origDB.QueryStr(`SHOW CONSTRAINTS FROM store.customers`)
 	origOrders := origDB.QueryStr(`SHOW CONSTRAINTS FROM store.orders`)
 	origReceipts := origDB.QueryStr(`SHOW CONSTRAINTS FROM store.receipts`)
+
+	origEarlyCustomers := origDB.QueryStr(`SELECT * from store.early_customers`)
+	origOrderCounts := origDB.QueryStr(`SELECT * from storestats.ordercounts ORDER BY id`)
 
 	t.Run("restore everything to new cluster", func(t *testing.T) {
 		tc := testcluster.StartTestCluster(t, singleNode, base.TestClusterArgs{})
@@ -640,7 +656,7 @@ func TestBackupRestoreFKs(t *testing.T) {
 		if _, err := db.DB.Exec(
 			`RESTORE store.orders FROM $1`, dir,
 		); !testutils.IsError(
-			err, "cannot restore table \"orders\" without referenced table 53 \\(or \"skip_missing_foreign_keys\" option\\)",
+			err, "cannot restore table \"orders\" without referenced table .* \\(or \"skip_missing_foreign_keys\" option\\)",
 		) {
 			t.Fatal(err)
 		}
@@ -703,6 +719,75 @@ func TestBackupRestoreFKs(t *testing.T) {
 		); !testutils.IsError(err, "foreign key violation: value .999. not found in receipts@primary") {
 			t.Fatal(err)
 		}
+	})
+
+	t.Run("restore simple view", func(t *testing.T) {
+		tc := testcluster.StartTestCluster(t, singleNode, base.TestClusterArgs{})
+		defer tc.Stopper().Stop()
+		db := sqlutils.MakeSQLRunner(t, tc.Conns[0])
+		db.Exec(createStore)
+		if _, err := db.DB.Exec(`RESTORE store.early_customers FROM $1`, dir); !testutils.IsError(err,
+			`cannot restore "early_customers" without restoring referenced table`,
+		) {
+			t.Fatal(err)
+		}
+		db.Exec(`RESTORE store.early_customers, store.customers, store.orders FROM $1`, dir)
+		db.CheckQueryResults(`SELECT * FROM store.early_customers`, origEarlyCustomers)
+
+		// nothing depends on orders so it can be dropped.
+		db.Exec(`DROP TABLE store.orders`)
+
+		// customers is aware of the view that depends on it.
+		if _, err := db.DB.Exec(`DROP TABLE store.customers`); !testutils.IsError(err,
+			`cannot drop table "customers" because view "early_customers" depends on it`,
+		) {
+			t.Fatal(err)
+		}
+
+		// columns not depended on by the view are unaffected.
+		db.Exec(`ALTER TABLE store.customers DROP COLUMN email`)
+		db.CheckQueryResults(`SELECT * FROM store.early_customers`, origEarlyCustomers)
+
+		db.Exec(`DROP TABLE store.customers CASCADE`)
+	})
+
+	t.Run("restore multi-table view", func(t *testing.T) {
+		tc := testcluster.StartTestCluster(t, singleNode, base.TestClusterArgs{})
+		defer tc.Stopper().Stop()
+		db := sqlutils.MakeSQLRunner(t, tc.Conns[0])
+		db.Exec(createStore)
+		db.Exec(createStoreStats)
+
+		if _, err := db.DB.Exec(
+			`RESTORE storestats.ordercounts, store.customers FROM $1`, dir,
+		); !testutils.IsError(err, `cannot restore "ordercounts" without restoring referenced table`) {
+			t.Fatal(err)
+		}
+
+		db.Exec(`RESTORE store.customers, storestats.ordercounts, store.orders FROM $1`, dir)
+
+		// we want to observe just the view-related errors, not fk errors below.
+		db.Exec(`ALTER TABLE store.orders DROP CONSTRAINT fk_customerid_ref_customers`)
+
+		// customers is aware of the view that depends on it.
+		if _, err := db.DB.Exec(`DROP TABLE store.customers`); !testutils.IsError(err,
+			`cannot drop table "customers" because view "storestats.ordercounts" depends on it`,
+		) {
+			t.Fatal(err)
+		}
+		if _, err := db.DB.Exec(`ALTER TABLE store.customers DROP COLUMN email`); !testutils.IsError(
+			err, `cannot drop column "email" because view "storestats.ordercounts" depends on it`) {
+			t.Fatal(err)
+		}
+
+		// orders is aware of the view that depends on it.
+		if _, err := db.DB.Exec(`DROP TABLE store.orders`); !testutils.IsError(err,
+			`cannot drop table "orders" because view "storestats.ordercounts" depends on it`,
+		) {
+			t.Fatal(err)
+		}
+
+		db.CheckQueryResults(`SELECT * FROM storestats.ordercounts ORDER BY id`, origOrderCounts)
 	})
 }
 
