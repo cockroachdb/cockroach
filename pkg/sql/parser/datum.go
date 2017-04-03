@@ -131,6 +131,16 @@ func (d *Datums) Format(buf *bytes.Buffer, f FmtFlags) {
 	buf.WriteByte(')')
 }
 
+// CompositeDatum is a Datum that may require composite encoding in
+// indexes. Any Datum implementing this interface must also add itself to
+// sqlbase/HasCompositeKeyEncoding.
+type CompositeDatum interface {
+	Datum
+	// IsComposite returns true if this datum is not round-tripable in a key
+	// encoding.
+	IsComposite() bool
+}
+
 // DBool is the boolean Datum.
 type DBool bool
 
@@ -477,6 +487,12 @@ func (d *DFloat) Size() uintptr {
 	return unsafe.Sizeof(*d)
 }
 
+// IsComposite implements the CompositeDatum interface.
+func (d *DFloat) IsComposite() bool {
+	// -0 is composite.
+	return math.Float64bits(float64(*d)) == 1<<63
+}
+
 // DDecimal is the decimal Datum.
 type DDecimal struct {
 	apd.Decimal
@@ -593,6 +609,24 @@ func (d *DDecimal) Format(buf *bytes.Buffer, f FmtFlags) {
 func (d *DDecimal) Size() uintptr {
 	intVal := d.Decimal.Coeff
 	return unsafe.Sizeof(*d) + uintptr(cap(intVal.Bits()))*unsafe.Sizeof(big.Word(0))
+}
+
+var (
+	decimalNegativeZero = &apd.Decimal{Negative: true}
+	bigTen              = big.NewInt(10)
+)
+
+// IsComposite implements the CompositeDatum interface.
+func (d *DDecimal) IsComposite() bool {
+	// -0 is composite.
+	if d.Decimal.CmpTotal(decimalNegativeZero) == 0 {
+		return true
+	}
+
+	// Check if d is divisible by 10.
+	var r big.Int
+	r.Rem(&d.Decimal.Coeff, bigTen)
+	return r.Sign() == 0
 }
 
 // DString is the string Datum.
@@ -805,6 +839,11 @@ func (d *DCollatedString) max() (Datum, bool) {
 // Size implements the Datum interface.
 func (d *DCollatedString) Size() uintptr {
 	return unsafe.Sizeof(*d) + uintptr(len(d.Contents)) + uintptr(len(d.Locale)) + uintptr(len(d.Key))
+}
+
+// IsComposite implements the CompositeDatum interface.
+func (d *DCollatedString) IsComposite() bool {
+	return true
 }
 
 // DBytes is the bytes Datum. The underlying type is a string because we want
