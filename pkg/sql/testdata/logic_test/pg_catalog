@@ -698,7 +698,7 @@ oid   typname       typcategory  typispreferred  typisdefined  typdelim  typreli
 700   float4        N            false           true          ,         0         0        0
 701   float8        N            false           true          ,         0         0        0
 1005  _int2         A            false           true          ,         0         21       0
-1007  -int4         A            false           true          ,         0         23       0
+1007  _int4         A            false           true          ,         0         23       0
 1009  _text         A            false           true          ,         0         25       0
 1016  _int8         A            false           true          ,         0         20       0
 1043  varchar       S            false           true          ,         0         0        0
