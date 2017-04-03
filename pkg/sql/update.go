@@ -21,6 +21,7 @@ import (
 
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -78,10 +79,12 @@ func (r *editNodeRun) initEditNode(
 	ctx context.Context,
 	en *editNodeBase,
 	rows planNode,
+	tw tableWriter,
 	re parser.ReturningClause,
 	desiredTypes []parser.Type,
 ) error {
 	r.rows = rows
+	r.tw = tw
 
 	rh, err := en.p.newReturningHelper(ctx, re, desiredTypes, en.tableDesc.Name, en.tableDesc.Columns)
 	if err != nil {
@@ -92,7 +95,7 @@ func (r *editNodeRun) initEditNode(
 	return nil
 }
 
-func (r *editNodeRun) startEditNode(ctx context.Context, en *editNodeBase, tw tableWriter) error {
+func (r *editNodeRun) startEditNode(ctx context.Context, en *editNodeBase) error {
 	if sqlbase.IsSystemConfigID(en.tableDesc.GetID()) {
 		// Mark transaction as operating on the system DB.
 		if err := en.p.txn.SetSystemConfigTrigger(); err != nil {
@@ -100,9 +103,28 @@ func (r *editNodeRun) startEditNode(ctx context.Context, en *editNodeBase, tw ta
 		}
 	}
 
-	r.tw = tw
-
 	return r.rows.Start(ctx)
+}
+
+func (r *editNodeRun) collectSpans(ctx context.Context) (reads, writes roachpb.Spans, err error) {
+	scanReads, scanWrites, err := r.rows.Spans(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
+	if len(scanWrites) > 0 {
+		return nil, nil, errors.Errorf("unexpected scan span writes: %v", scanWrites)
+	}
+	// TODO(nvanbenschoten) if we notice that r.rows is a ValuesClause, we
+	// may be able to contrain the tableWriter Spans.
+	writerReads, writerWrites, err := r.tw.spans()
+	if err != nil {
+		return nil, nil, err
+	}
+	sqReads, err := collectSubquerySpans(ctx, r.rows)
+	if err != nil {
+		return nil, nil, err
+	}
+	return append(scanReads, append(writerReads, sqReads...)...), writerWrites, nil
 }
 
 type updateNode struct {
@@ -366,14 +388,14 @@ func (p *planner) Update(
 		return nil, err
 	}
 	if err := un.run.initEditNode(
-		ctx, &un.editNodeBase, rows, n.Returning, desiredTypes); err != nil {
+		ctx, &un.editNodeBase, rows, &un.tw, n.Returning, desiredTypes); err != nil {
 		return nil, err
 	}
 	return un, nil
 }
 
 func (u *updateNode) Start(ctx context.Context) error {
-	if err := u.run.startEditNode(ctx, &u.editNodeBase, &u.tw); err != nil {
+	if err := u.run.startEditNode(ctx, &u.editNodeBase); err != nil {
 		return err
 	}
 	return u.run.tw.init(u.p.txn)
@@ -511,3 +533,7 @@ func (u *updateNode) DebugValues() debugValues {
 }
 
 func (u *updateNode) Ordering() orderingInfo { return orderingInfo{} }
+
+func (u *updateNode) Spans(ctx context.Context) (reads, writes roachpb.Spans, err error) {
+	return u.run.collectSpans(ctx)
+}

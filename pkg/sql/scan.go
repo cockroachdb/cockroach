@@ -148,14 +148,6 @@ func (n *scanNode) Close(context.Context) {}
 
 // initScan sets up the rowFetcher and starts a scan.
 func (n *scanNode) initScan(ctx context.Context) error {
-	if len(n.spans) == 0 {
-		// If no spans were specified retrieve all of the keys that start with our
-		// index key prefix. This isn't needed for the fetcher, but it is for
-		// other external users of n.spans.
-		start := roachpb.Key(sqlbase.MakeIndexKeyPrefix(&n.desc, n.index.ID))
-		n.spans = append(n.spans, roachpb.Span{Key: start, EndKey: start.PrefixEnd()})
-	}
-
 	limitHint := n.limitHint()
 	if err := n.fetcher.StartScan(ctx, n.p.txn, n.spans, !n.disableBatchLimits, limitHint); err != nil {
 		return err
@@ -434,6 +426,10 @@ func (n *scanNode) computeOrdering(
 	// We included any implicit columns, so the results are unique.
 	ordering.unique = true
 	return ordering
+}
+
+func (n *scanNode) Spans(ctx context.Context) (reads, writes roachpb.Spans, err error) {
+	return n.spans, nil, nil
 }
 
 // scanNode implements parser.IndexedVarContainer.
