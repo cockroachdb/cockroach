@@ -45,6 +45,9 @@ INSERT INTO kv (k, v) VALUES (99, COUNT(1) OVER ())
 query error window functions are not allowed in WHERE
 SELECT k FROM kv WHERE AVG(k) OVER () > 1
 
+query error window functions are not allowed in HAVING
+SELECT 1 GROUP BY 1 HAVING SUM(1) OVER (PARTITION BY 1) > 1;
+
 query R
 SELECT avg(k) OVER () FROM kv ORDER BY 1
 ----
