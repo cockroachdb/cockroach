@@ -1260,7 +1260,15 @@ func evalRangeLookup(
 	if len(reply.Ranges) == 0 {
 		// No matching results were returned from the scan. This should
 		// never happen with the above logic.
-		log.Fatalf(ctx, "range lookup of meta key %q found only non-matching ranges: %+v", args.Key, reply.PrefetchedRanges)
+		var buf bytes.Buffer
+		buf.WriteString("range lookup of meta key '")
+		buf.Write(args.Key)
+		buf.WriteString("' found only non-matching ranges:")
+		for _, desc := range reply.PrefetchedRanges {
+			buf.WriteByte('\n')
+			buf.WriteString(desc.String())
+		}
+		log.Fatal(ctx, buf.String())
 	}
 
 	if preCount := int64(len(reply.PrefetchedRanges)); 1+preCount > rangeCount {
