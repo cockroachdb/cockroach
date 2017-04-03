@@ -82,6 +82,13 @@ executable will be in your current directory and can be run as shown in the
   make test PKG=./pkg/sql TESTS='TestLogic$$/select$$'
   ```
 
+  Logs are disabled during tests by default. To enable them, include
+  `TESTFLAGS="-v -show-logs"` as an argument the test command:
+
+  ```shell
+  make test ... TESTFLAGS="-v -show-logs"
+  ```
+
   When you're ready to commit, be sure to write a Good Commit Message™. Consult
   https://github.com/erlang/otp/wiki/Writing-good-commit-messages if you're
   not sure what constitutes a Good Commit Message™.
