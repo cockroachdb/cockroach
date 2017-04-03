@@ -102,6 +102,11 @@ func DefaultDeclareKeys(
 	} else {
 		spans.Add(SpanReadWrite, req.Header())
 	}
+	if header.Txn != nil && header.Txn.ID != nil {
+		spans.Add(SpanReadOnly, roachpb.Span{
+			Key: keys.AbortCacheKey(header.RangeID, *header.Txn.ID),
+		})
+	}
 	if header.ReturnRangeInfo {
 		spans.Add(SpanReadOnly, roachpb.Span{Key: keys.RangeLeaseKey(header.RangeID)})
 	}
@@ -120,7 +125,7 @@ var commands = map[roachpb.Method]Command{
 	roachpb.BeginTransaction:   {DeclareKeys: declareKeysBeginTransaction, Eval: evalBeginTransaction},
 	roachpb.EndTransaction:     {DeclareKeys: declareKeysEndTransaction, Eval: evalEndTransaction},
 	roachpb.RangeLookup:        {DeclareKeys: DefaultDeclareKeys, Eval: evalRangeLookup},
-	roachpb.HeartbeatTxn:       {DeclareKeys: declareKeysWriteTransaction, Eval: evalHeartbeatTxn},
+	roachpb.HeartbeatTxn:       {DeclareKeys: declareKeysHeartbeatTransaction, Eval: evalHeartbeatTxn},
 	roachpb.GC:                 {DeclareKeys: declareKeysGC, Eval: evalGC},
 	roachpb.PushTxn:            {DeclareKeys: declareKeysPushTransaction, Eval: evalPushTxn},
 	roachpb.QueryTxn:           {DeclareKeys: DefaultDeclareKeys, Eval: evalQueryTxn},
@@ -428,13 +433,15 @@ func verifyTransaction(h roachpb.Header, args roachpb.Request) error {
 	return nil
 }
 
-// declareKeysWriteTransaction is the DeclareKeys function for HeartbeatTransaction,
-// and is called by declareKeys{Begin,End}Transaction
+// declareKeysWriteTransaction is the shared portion of
+// declareKeys{Begin,End,Heartbeat}Transaction
 func declareKeysWriteTransaction(
 	_ roachpb.RangeDescriptor, header roachpb.Header, req roachpb.Request, spans *SpanSet,
 ) {
 	if header.Txn != nil && header.Txn.ID != nil {
-		spans.Add(SpanReadWrite, roachpb.Span{Key: keys.TransactionKey(req.Header().Key, *header.Txn.ID)})
+		spans.Add(SpanReadWrite, roachpb.Span{
+			Key: keys.TransactionKey(req.Header().Key, *header.Txn.ID),
+		})
 	}
 }
 
@@ -1276,6 +1283,17 @@ func evalRangeLookup(
 	}
 
 	return intentsToEvalResult(intents, args), nil
+}
+
+func declareKeysHeartbeatTransaction(
+	desc roachpb.RangeDescriptor, header roachpb.Header, req roachpb.Request, spans *SpanSet,
+) {
+	declareKeysWriteTransaction(desc, header, req, spans)
+	if header.Txn != nil && header.Txn.ID != nil {
+		spans.Add(SpanReadOnly, roachpb.Span{
+			Key: keys.AbortCacheKey(header.RangeID, *header.Txn.ID),
+		})
+	}
 }
 
 // evalHeartbeatTxn updates the transaction status and heartbeat

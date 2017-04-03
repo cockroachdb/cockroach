@@ -2074,17 +2074,6 @@ func (r *Replica) executeReadOnlyBatch(
 	rec := ReplicaEvalContext{r, spans}
 	br, result, pErr = evaluateBatch(ctx, storagebase.CmdIDKey(""), r.store.Engine(), rec, nil, ba)
 
-	if pErr == nil && ba.Txn != nil && ba.Txn.Writing {
-		// Checking whether the transaction has been aborted on reads makes sure
-		// that we don't experience anomalous conditions as described in #2231. We
-		// only perform this check for transactional reads in which the transaction
-		// has written a transaction record (Txn.Writing is true). The anomalous
-		// condition being avoided is for an aborted transaction to continue
-		// successfully performing reads. Note that this check doesn't completely
-		// avoid that behavior because we only detect the aborted transaction if
-		// this read is to a range that previously had a write.
-		pErr = r.checkIfTxnAborted(ctx, r.store.Engine(), *ba.Txn)
-	}
 	if intents := result.Local.detachIntents(); len(intents) > 0 {
 		log.Eventf(ctx, "submitting %d intents to asynchronous processing", len(intents))
 		r.store.intentResolver.processIntentsAsync(r, intents)
@@ -4085,15 +4074,12 @@ func (r *Replica) evaluateProposalInner(
 
 // checkIfTxnAborted checks the txn abort cache for the given
 // transaction. In case the transaction has been aborted, return a
-// transaction abort error. Locks the replica.
-func (r *Replica) checkIfTxnAborted(
-	ctx context.Context, b engine.Reader, txn roachpb.Transaction,
+// transaction abort error.
+func checkIfTxnAborted(
+	ctx context.Context, rec ReplicaEvalContext, b engine.Reader, txn roachpb.Transaction,
 ) *roachpb.Error {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-
 	var entry roachpb.AbortCacheEntry
-	aborted, err := r.abortCache.Get(ctx, b, *txn.ID, &entry)
+	aborted, err := rec.AbortCache().Get(ctx, b, *txn.ID, &entry)
 	if err != nil {
 		return roachpb.NewError(NewReplicaCorruptionError(errors.Wrap(err, "could not read from abort cache")))
 	}
@@ -4128,10 +4114,6 @@ type intentsWithArg struct {
 // cannot all be completed at the intended timestamp, the batch's txn
 // is restored and it's re-executed as transactional. This allows it
 // to lay down intents and return an appropriate retryable error.
-//
-// This method is also responsible for checking the abort cache.
-// TODO(bdarnell): Can we move checkIfTxnAborted from here and
-// executeReadOnlyBatch to evaluateBatch?
 func (r *Replica) evaluateTxnWriteBatch(
 	ctx context.Context, idKey storagebase.CmdIDKey, ba roachpb.BatchRequest, spans *SpanSet,
 ) (engine.Batch, enginepb.MVCCStats, *roachpb.BatchResponse, EvalResult, *roachpb.Error) {
@@ -4199,19 +4181,6 @@ func (r *Replica) evaluateTxnWriteBatch(
 		}
 
 		log.VEventf(ctx, 2, "1PC execution failed, reverting to regular execution for batch")
-	}
-
-	// Check whether this txn has been aborted. Only applies to transactional
-	// requests which write intents (for example HeartbeatTxn does not get
-	// hindered by this). Note that we don't do this check for 1PC transactions
-	// that never write a transaction record.
-	if ba.Txn != nil && ba.IsTransactionWrite() {
-		// TODO(tschottdorf): confusing and potentially incorrect use of
-		// r.store.Engine() here (likely OK with proposer-evaluated KV,
-		// though still confusing).
-		if pErr := r.checkIfTxnAborted(ctx, r.store.Engine(), *ba.Txn); pErr != nil {
-			return nil, ms, nil, EvalResult{}, pErr
-		}
 	}
 
 	batch := r.store.Engine().NewBatch()
@@ -4385,6 +4354,20 @@ func evaluateBatch(
 	if ba.Txn != nil {
 		txnShallow := *ba.Txn
 		ba.Txn = &txnShallow
+
+		// Check whether this transaction has been aborted, if applicable.
+		// This applies to writes that leave intents (the use of the
+		// IsTransactionWrite flag excludes operations like HeartbeatTxn),
+		// and reads that occur in a transaction that has already written
+		// (see #2231 for more about why we check for aborted transactions
+		// on reads). Note that 1PC transactions have had their
+		// transaction field cleared by this point so we do not execute
+		// this check in that case.
+		if ba.IsTransactionWrite() || ba.Txn.Writing {
+			if pErr := checkIfTxnAborted(ctx, rec, batch, *ba.Txn); pErr != nil {
+				return nil, EvalResult{}, pErr
+			}
+		}
 	}
 
 	var result EvalResult
