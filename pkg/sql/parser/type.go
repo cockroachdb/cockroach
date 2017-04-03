@@ -205,10 +205,10 @@ var aliasedOidToName = map[oid.Oid]string{
 	oid.T_varchar:    "varchar",
 	oid.T_numeric:    "numeric",
 	oid.T_record:     "record",
-	oid.T__int2:      "int2[]",
-	oid.T__int4:      "int4[]",
-	oid.T__int8:      "int8[]",
-	oid.T__text:      "text[]",
+	oid.T__int2:      "_int2",
+	oid.T__int4:      "_int4",
+	oid.T__int8:      "_int8",
+	oid.T__text:      "_text",
 }
 
 // PGDisplayName returns the Postgres display name for a given type.
