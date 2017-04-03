@@ -15,10 +15,10 @@ ALTER TABLE t SPLIT AT VALUES (1), (10)
 query TTTI colnames
 SHOW TESTING_RANGES FROM TABLE t
 ----
-Start Key  End Key   Replicas  Lease Holder
-NULL       /1/NULL   {1}       1
-/1/NULL    /10/NULL  {1}       1
-/10/NULL   NULL      {1}       1
+Start Key  End Key  Replicas  Lease Holder
+NULL       /1       {1}       1
+/1         /10      {1}       1
+/10        NULL     {1}       1
 
 statement ok
 ALTER TABLE t SPLIT AT VALUES (5,1), (5,2), (5,3)
@@ -26,13 +26,13 @@ ALTER TABLE t SPLIT AT VALUES (5,1), (5,2), (5,3)
 query TTTI colnames
 SHOW TESTING_RANGES FROM TABLE t
 ----
-Start Key  End Key   Replicas  Lease Holder
-NULL       /1/NULL   {1}       1
-/1/NULL    /5/1      {1}       1
-/5/1       /5/2      {1}       1
-/5/2       /5/3      {1}       1
-/5/3       /10/NULL  {1}       1
-/10/NULL   NULL      {1}       1
+Start Key  End Key  Replicas  Lease Holder
+NULL       /1       {1}       1
+/1         /5/1     {1}       1
+/5/1       /5/2     {1}       1
+/5/2       /5/3     {1}       1
+/5/3       /10      {1}       1
+/10        NULL     {1}       1
 
 statement ok
 CREATE INDEX idx ON t(v, w)
@@ -61,9 +61,9 @@ query TTTI colnames
 SHOW TESTING_RANGES FROM INDEX t@idx
 ----
 Start Key  End Key  Replicas  Lease Holder
-NULL       /8/NULL  {1}       1
-/8/NULL    /9/NULL  {1}       1
-/9/NULL    /100/1   {1}       1
+NULL       /8       {1}       1
+/8         /9       {1}       1
+/9         /100/1   {1}       1
 /100/1     /100/50  {1}       1
 /100/50    NULL     {1}       1
 
@@ -91,13 +91,13 @@ CREATE TABLE t0 (
 query TTTI colnames
 SHOW TESTING_RANGES FROM TABLE t0
 ----
-Start Key  End Key   Replicas  Lease Holder
-NULL       /1/NULL   {1}       1
-/1/NULL    /5/1      {1}       1
-/5/1       /5/2      {1}       1
-/5/2       /5/3      {1}       1
-/5/3       /10/NULL  {1}       1
-/10/NULL   NULL      {1}       1
+Start Key  End Key  Replicas  Lease Holder
+NULL       /1       {1}       1
+/1         /5/1     {1}       1
+/5/1       /5/2     {1}       1
+/5/2       /5/3     {1}       1
+/5/3       /10      {1}       1
+/10        NULL     {1}       1
 
 statement ok
 ALTER TABLE t0 SPLIT AT VALUES (7, 8, 9)
@@ -106,25 +106,25 @@ query TTTI colnames
 SHOW TESTING_RANGES FROM TABLE t0
 ----
 Start Key      End Key        Replicas  Lease Holder
-NULL           /1/NULL        {1}       1
-/1/NULL        /5/1           {1}       1
+NULL           /1             {1}       1
+/1             /5/1           {1}       1
 /5/1           /5/2           {1}       1
 /5/2           /5/3           {1}       1
 /5/3           /7/8/#/52/1/9  {1}       1
-/7/8/#/52/1/9  /10/NULL       {1}       1
-/10/NULL       NULL           {1}       1
+/7/8/#/52/1/9  /10            {1}       1
+/10            NULL           {1}       1
 
 query TTTI colnames
 SHOW TESTING_RANGES FROM TABLE t
 ----
 Start Key      End Key        Replicas  Lease Holder
-NULL           /1/NULL        {1}       1
-/1/NULL        /5/1           {1}       1
+NULL           /1             {1}       1
+/1             /5/1           {1}       1
 /5/1           /5/2           {1}       1
 /5/2           /5/3           {1}       1
 /5/3           /7/8/#/52/1/9  {1}       1
-/7/8/#/52/1/9  /10/NULL       {1}       1
-/10/NULL       NULL           {1}       1
+/7/8/#/52/1/9  /10            {1}       1
+/10            NULL           {1}       1
 
 statement ok
 CREATE TABLE t1 (k INT PRIMARY KEY, v1 INT, v2 INT, v3 INT)
@@ -137,13 +137,13 @@ query TTTI colnames
 SHOW TESTING_RANGES FROM INDEX t1@idx
 ----
 Start Key      End Key        Replicas  Lease Holder
-NULL           /1/NULL        {1}       1
-/1/NULL        /5/1           {1}       1
+NULL           /1             {1}       1
+/1             /5/1           {1}       1
 /5/1           /5/2           {1}       1
 /5/2           /5/3           {1}       1
 /5/3           /7/8/#/52/1/9  {1}       1
-/7/8/#/52/1/9  /10/NULL       {1}       1
-/10/NULL       NULL           {1}       1
+/7/8/#/52/1/9  /10            {1}       1
+/10            NULL           {1}       1
 
 statement ok
 ALTER INDEX t1@idx SPLIT AT VALUES (15,16)
@@ -152,11 +152,11 @@ query TTTI colnames
 SHOW TESTING_RANGES FROM INDEX t1@idx
 ----
 Start Key      End Key        Replicas  Lease Holder
-NULL                /1/NULL             {1}       1
-/1/NULL             /5/1                {1}       1
-/5/1                /5/2                {1}       1
-/5/2                /5/3                {1}       1
-/5/3                /7/8/#/52/1/9       {1}       1
-/7/8/#/52/1/9       /10/NULL            {1}       1
-/10/NULL            /15/16/#/53/2/NULL  {1}       1
-/15/16/#/53/2/NULL  NULL                {1}       1
+NULL           /1             {1}       1
+/1             /5/1           {1}       1
+/5/1           /5/2           {1}       1
+/5/2           /5/3           {1}       1
+/5/3           /7/8/#/52/1/9  {1}       1
+/7/8/#/52/1/9  /10            {1}       1
+/10            /15/16/#/53/2  {1}       1
+/15/16/#/53/2  NULL           {1}       1

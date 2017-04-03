@@ -220,8 +220,28 @@ func EncodeIndexKey(
 	values []parser.Datum,
 	keyPrefix []byte,
 ) (key []byte, containsNull bool, err error) {
+	return EncodePartialIndexKey(
+		tableDesc,
+		index,
+		len(index.ColumnIDs), /* encode all columns */
+		colMap,
+		values,
+		keyPrefix,
+	)
+}
+
+// EncodePartialIndexKey encodes a partial index key; only the first numCols of
+// index.ColumnIDs are encoded.
+func EncodePartialIndexKey(
+	tableDesc *TableDescriptor,
+	index *IndexDescriptor,
+	numCols int,
+	colMap map[ColumnID]int,
+	values []parser.Datum,
+	keyPrefix []byte,
+) (key []byte, containsNull bool, err error) {
+	colIDs := index.ColumnIDs[:numCols]
 	key = keyPrefix
-	colIDs := index.ColumnIDs
 	dirs := directions(index.ColumnDirections)
 
 	if len(index.Interleave.Ancestors) > 0 {
