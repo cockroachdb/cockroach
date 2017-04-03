@@ -31,7 +31,10 @@ import (
 // ensures that the log files are stored in a directory specific to a
 // test, and asserts that logging output is not written to this
 // directory beyond the lifetime of the scope.
-type TestLogScope string
+type TestLogScope struct {
+	logDir   string
+	keepLogs bool
+}
 
 // tShim is the part of testing.T used by TestLogScope.
 // We can't use testing.T directly because we have
@@ -49,9 +52,9 @@ var showLogs bool
 // logging directory. If testName is empty, the logging directory is
 // named after the caller of Scope, up `skip` caller levels. It also
 // disables logging to stderr for severity levels below ERROR.
-func Scope(t tShim, testName string) TestLogScope {
+func Scope(t tShim, testName string) *TestLogScope {
 	if showLogs {
-		return TestLogScope("")
+		return (*TestLogScope)(nil)
 	}
 	if testName == "" {
 		testName = "logUnknown"
@@ -73,7 +76,7 @@ func Scope(t tShim, testName string) TestLogScope {
 	if !showLogs {
 		fmt.Fprintln(OrigStderr, "test logs captured to:", tempDir, " (use -show-logs to present inline)")
 	}
-	return TestLogScope(tempDir)
+	return &TestLogScope{logDir: tempDir}
 }
 
 // enableLogFileOutput turns on logging using the specified directory.
@@ -86,16 +89,33 @@ func enableLogFileOutput(dir string, stderrSeverity Severity) error {
 	return logDir.Set(dir)
 }
 
+// KeepLogs can be used to control whether the log files get removed by Close().
+// Log files are always kept if the test Failed() or panicked, but this doesn't
+// cover everything (e.g. race detector). Recommended usage:
+//
+//   defer l.Close(t)
+//   l.KeepLogs(true)
+//
+//   .. test code ..
+//
+//   // If we got this far, we don't need to keep logs (unless the test fails).
+//   l.KeepLogs(false)
+func (l *TestLogScope) KeepLogs(keep bool) {
+	if l != nil {
+		l.keepLogs = true
+	}
+}
+
 // Close cleans up a TestLogScope. The directory and its contents are
 // deleted, unless the test has failed and the directory is non-empty.
-func (l TestLogScope) Close(t tShim) {
-	if string(l) == "" {
+func (l *TestLogScope) Close(t tShim) {
+	if l == nil {
 		// Never initialized.
 		return
 	}
 	defer func() {
 		// Check whether there is something to remove.
-		emptyDir, err := isDirEmpty(string(l))
+		emptyDir, err := isDirEmpty(l.logDir)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -109,9 +129,9 @@ func (l TestLogScope) Close(t tShim) {
 					"Hopefully the test harness prints the panic below, otherwise check the test logs.\n")
 			}
 			fmt.Fprintln(OrigStderr, "test logs left over in:", l)
-		} else {
+		} else if !l.keepLogs {
 			// Clean up.
-			if err := os.RemoveAll(string(l)); err != nil {
+			if err := os.RemoveAll(l.logDir); err != nil {
 				t.Error(err)
 			}
 		}

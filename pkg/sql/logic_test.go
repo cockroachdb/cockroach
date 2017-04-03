@@ -519,7 +519,7 @@ type logicTest struct {
 	labelMap map[string]string
 
 	// logScope binds the lifetime of the log files to this test.
-	logScope log.TestLogScope
+	logScope *log.TestLogScope
 }
 
 func (t *logicTest) close() {
@@ -1330,9 +1330,14 @@ func (t *logicTest) setupAndRunFile(path string, config testClusterConfig) {
 		}
 	}()
 
+	t.logScope.KeepLogs(true)
+
 	if err := t.processTestFile(path); err != nil {
 		t.Fatal(err)
 	}
+
+	// If we got this far, we don't need to keep logs (unless the test fails).
+	t.logScope.KeepLogs(false)
 }
 
 // run runs the logic tests indicated by the bigtest and logictestdata flags.
