@@ -22,16 +22,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 )
 
-var (
-	nowFunc = time.Now
-)
+var nowFunc = now
 
 func initFakeTime() {
 	if offset := envutil.EnvOrDefaultDuration("COCKROACH_SIMULATED_OFFSET", 0); offset == 0 {
-		nowFunc = time.Now
+		nowFunc = now
 	} else {
 		nowFunc = func() time.Time {
-			return time.Now().Add(offset)
+			return now().Add(offset)
 		}
 	}
 }

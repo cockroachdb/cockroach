@@ -22,7 +22,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
-	_ "github.com/cockroachdb/cockroach/pkg/util/log" // for flags
 )
 
 func TestOffset(t *testing.T) {
@@ -35,9 +34,9 @@ func TestOffset(t *testing.T) {
 
 		initFakeTime()
 
-		lowerBound := time.Now().Add(expectedOffset)
+		lowerBound := now().Add(expectedOffset)
 		offsetTime := Now()
-		upperBound := time.Now().Add(expectedOffset)
+		upperBound := now().Add(expectedOffset)
 
 		if offsetTime.Before(lowerBound) || offsetTime.After(upperBound) {
 			t.Errorf("expected offset time %s to be in the interval\n[%s,%s]", offsetTime, lowerBound, upperBound)
