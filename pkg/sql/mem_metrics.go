@@ -59,13 +59,25 @@ const log10int64times1000 = 19 * 1000
 
 // MakeMemMetrics instantiates the metric objects for an SQL endpoint.
 func MakeMemMetrics(endpoint string, histogramWindow time.Duration) MemoryMetrics {
-	prefix := "sql.mon." + endpoint
-	MetaMemMaxBytes := metric.Metadata{Name: prefix + ".max"}
-	MetaMemCurBytes := metric.Metadata{Name: prefix + ".cur"}
-	MetaMemMaxTxnBytes := metric.Metadata{Name: prefix + ".txn.max"}
-	MetaMemTxnCurBytes := metric.Metadata{Name: prefix + ".txn.cur"}
-	MetaMemMaxSessionBytes := metric.Metadata{Name: prefix + ".session.max"}
-	MetaMemSessionCurBytes := metric.Metadata{Name: prefix + ".session.cur"}
+	prefix := "sql.mem." + endpoint
+	MetaMemMaxBytes := metric.Metadata{
+		Name: prefix + ".max",
+		Help: "Memory usage per sql statement for " + endpoint}
+	MetaMemCurBytes := metric.Metadata{
+		Name: prefix + ".current",
+		Help: "Current sql statement memory usage for " + endpoint}
+	MetaMemMaxTxnBytes := metric.Metadata{
+		Name: prefix + ".txn.max",
+		Help: "Memory usage per sql transaction for " + endpoint}
+	MetaMemTxnCurBytes := metric.Metadata{
+		Name: prefix + ".txn.current",
+		Help: "Current sql transaction memory usage for " + endpoint}
+	MetaMemMaxSessionBytes := metric.Metadata{
+		Name: prefix + ".session.max",
+		Help: "Memory usage per sql session for " + endpoint}
+	MetaMemSessionCurBytes := metric.Metadata{
+		Name: prefix + ".session.current",
+		Help: "Current sql session memory usage for " + endpoint}
 	return MemoryMetrics{
 		MaxBytesHist:         metric.NewHistogram(MetaMemMaxBytes, histogramWindow, log10int64times1000, 3),
 		CurBytesCount:        metric.NewCounter(MetaMemCurBytes),
