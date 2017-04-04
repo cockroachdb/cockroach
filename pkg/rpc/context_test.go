@@ -18,6 +18,7 @@ package rpc
 
 import (
 	"net"
+	"runtime"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -213,6 +214,10 @@ func (ln *interceptingListener) Accept() (net.Conn, error) {
 // heartbeats succeed or fail due to transport failures.
 func TestHeartbeatHealthTransport(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+
+	if runtime.GOOS == "windows" {
+		t.Skip("TODO(tamird): https://golang.org/cl/39490")
+	}
 
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
