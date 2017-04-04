@@ -128,7 +128,7 @@ func TestHttpHostFlagValue(t *testing.T) {
 
 	for i, td := range testData {
 		// Ensure each test case starts with an empty package-level variable.
-		httpHost = ""
+		serverHTTPHost = ""
 
 		if err := f.Parse(td.args); err != nil {
 			t.Fatal(err)

@@ -96,24 +96,24 @@ func setDefaultSizeParameters(ctx *server.Config) {
 	}
 }
 
-func initInsecure() error {
+func initInsecureServer() error {
 	if !serverCfg.Insecure || insecure.isSet {
 		return nil
 	}
 	// The --insecure flag was not specified on the command line, verify that the
 	// host refers to a loopback address.
-	if connHost != "" {
-		addr, err := net.ResolveIPAddr("ip", connHost)
+	if serverConnHost != "" {
+		addr, err := net.ResolveIPAddr("ip", serverConnHost)
 		if err != nil {
 			return err
 		}
 		if !addr.IP.IsLoopback() {
-			return fmt.Errorf("specify --insecure to listen on external address %s", connHost)
+			return fmt.Errorf("specify --insecure to listen on external address %s", serverConnHost)
 		}
 	} else {
-		serverCfg.Addr = net.JoinHostPort("localhost", connPort)
+		serverCfg.Addr = net.JoinHostPort("localhost", serverConnPort)
 		serverCfg.AdvertiseAddr = serverCfg.Addr
-		serverCfg.HTTPAddr = net.JoinHostPort("localhost", httpPort)
+		serverCfg.HTTPAddr = net.JoinHostPort("localhost", serverHTTPPort)
 	}
 	return nil
 }
@@ -272,7 +272,7 @@ func runStart(cmd *cobra.Command, args []string) error {
 	sp := tracer.StartSpan("server start")
 	startCtx := opentracing.ContextWithSpan(context.Background(), sp)
 
-	if err := initInsecure(); err != nil {
+	if err := initInsecureServer(); err != nil {
 		return err
 	}
 
@@ -391,7 +391,7 @@ func runStart(cmd *cobra.Command, args []string) error {
 				s.PeriodicallyCheckForUpdates()
 			}
 
-			pgURL, err := serverCfg.PGURL(url.User(connUser))
+			pgURL, err := serverCfg.PGURL(url.User(sqlConnUser))
 			if err != nil {
 				return err
 			}
@@ -521,7 +521,7 @@ func runStart(cmd *cobra.Command, args []string) error {
 	return returnErr
 }
 
-func getGRPCConn() (*grpc.ClientConn, *hlc.Clock, *stop.Stopper, error) {
+func getClientGRPCConn() (*grpc.ClientConn, *hlc.Clock, *stop.Stopper, error) {
 	// 0 to disable max offset checks; this RPC context is not a member of the
 	// cluster, so there's no need to enforce that its max offset is the same
 	// as that of nodes in the cluster.
@@ -529,11 +529,11 @@ func getGRPCConn() (*grpc.ClientConn, *hlc.Clock, *stop.Stopper, error) {
 	stopper := stop.NewStopper()
 	rpcContext := rpc.NewContext(
 		log.AmbientContext{},
-		serverCfg.Config,
+		clientCfg.Config,
 		clock,
 		stopper,
 	)
-	addr, err := addrWithDefaultHost(serverCfg.AdvertiseAddr)
+	addr, err := addrWithDefaultHost(clientCfg.AdvertiseAddr)
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -545,7 +545,7 @@ func getGRPCConn() (*grpc.ClientConn, *hlc.Clock, *stop.Stopper, error) {
 }
 
 func getAdminClient() (serverpb.AdminClient, *stop.Stopper, error) {
-	conn, _, stopper, err := getGRPCConn()
+	conn, _, stopper, err := getClientGRPCConn()
 	if err != nil {
 		return nil, nil, err
 	}
