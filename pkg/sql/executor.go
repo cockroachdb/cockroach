@@ -446,15 +446,21 @@ func (e *Executor) Prepare(
 
 	// Prepare needs a transaction because it needs to retrieve db/table
 	// descriptors for type checking.
-	// TODO(andrei): is this OK? If we're preparing as part of a SQL txn, how do
-	// we check that they're reading descriptors consistent with the txn in which
-	// they'll be used?
-	txn := client.NewTxn(e.cfg.DB)
-	if err := txn.SetIsolation(session.DefaultIsolationLevel); err != nil {
-		panic(err)
+	txn := session.TxnState.txn
+	if txn == nil {
+		// The new txn need not be the same transaction used by statements following
+		// this prepare statement because it can only be used by prepare() to get a
+		// table lease that is eventually added to the session.
+		//
+		// TODO(vivek): perhaps we should be more consistent and update
+		// session.TxnState.txn, but more thought needs to be put into whether that
+		// is really needed.
+		txn = client.NewTxn(e.cfg.DB)
+		if err := txn.SetIsolation(session.DefaultIsolationLevel); err != nil {
+			panic(err)
+		}
+		txn.Proto().OrigTimestamp = e.cfg.Clock.Now()
 	}
-	txn.Proto().OrigTimestamp = e.cfg.Clock.Now()
-
 	planner := session.newPlanner(e, txn)
 	planner.semaCtx.Placeholders.SetTypes(pinfo)
 	planner.evalCtx.PrepareOnly = true
