@@ -26,7 +26,7 @@ INSERT INTO t VALUES
   ('x' COLLATE da, 5, FALSE)
 
 query TI
-SELECT a, b FROM t ORDER BY (a, b)
+SELECT a, b FROM t ORDER BY a, b
 ----
 a  2
 a  3
@@ -39,7 +39,7 @@ x  5
 ü  6
 
 query IT
-SELECT b, a FROM t ORDER BY (b, a)
+SELECT b, a FROM t ORDER BY b, a
 ----
 1  A
 2  a
@@ -69,10 +69,19 @@ SELECT COUNT (a) FROM t WHERE a > ('a' COLLATE da) AND a < ('c' COLLATE da)
 # Create an index and try again.
 
 statement ok
-CREATE INDEX ON t (b, a) STORING (c)
+CREATE INDEX ON t (b, a)
+# TODO(#14533): add STORING (c)
+
+query ITTT
+EXPLAIN SELECT a, b FROM t ORDER BY a, b
+----
+0  render
+1  scan
+1          table  t@primary
+1          spans  ALL
 
 query TI
-SELECT a, b FROM t ORDER BY (a, b)
+SELECT a, b FROM t ORDER BY a, b
 ----
 a  2
 a  3
@@ -84,8 +93,16 @@ x  5
 ü  5
 ü  6
 
+query ITTT
+EXPLAIN SELECT b, a FROM t ORDER BY b, a
+----
+0  render
+1  scan
+1          table  t@t_b_a_idx
+1          spans  ALL
+
 query IT
-SELECT b, a FROM t ORDER BY (b, a)
+SELECT b, a FROM t ORDER BY b, a
 ----
 1  A
 2  a
@@ -117,8 +134,16 @@ SELECT COUNT (a) FROM t WHERE a > ('a' COLLATE da) AND a < ('c' COLLATE da)
 statement ok
 UPDATE t SET a = (a :: STRING || a :: STRING) COLLATE da
 
+query ITTT
+EXPLAIN SELECT a, b FROM t ORDER BY a, b
+----
+0  render
+1  scan
+1          table  t@primary
+1          spans  ALL
+
 query TI
-SELECT a, b FROM t ORDER BY (a, b)
+SELECT a, b FROM t ORDER BY a, b
 ----
 bb  4
 BB  3
@@ -130,8 +155,16 @@ aa  3
 AA  1
 AA  2
 
+query ITTT
+EXPLAIN SELECT b, a FROM t ORDER BY b, a
+----
+0  render
+1  scan
+1          table  t@t_b_a_idx
+1          spans  ALL
+
 query IT
-SELECT b, a FROM t ORDER BY (b, a)
+SELECT b, a FROM t ORDER BY b, a
 ----
 1  AA
 2  aa
@@ -148,8 +181,16 @@ SELECT b, a FROM t ORDER BY (b, a)
 statement ok
 DELETE FROM t WHERE a > ('a' COLLATE da) AND a < ('c' COLLATE da)
 
+query ITTT
+EXPLAIN SELECT a, b FROM t ORDER BY a, b
+----
+0  render
+1  scan
+1          table  t@primary
+1          spans  ALL
+
 query TI
-SELECT a, b FROM t ORDER BY (a, b)
+SELECT a, b FROM t ORDER BY a, b
 ----
 xx  5
 üü  5
@@ -159,8 +200,16 @@ aa  3
 AA  1
 AA  2
 
+query ITTT
+EXPLAIN SELECT b, a FROM t ORDER BY b, a
+----
+0  render
+1  scan
+1          table  t@t_b_a_idx
+1          spans  ALL
+
 query IT
-SELECT b, a FROM t ORDER BY (b, a)
+SELECT b, a FROM t ORDER BY b, a
 ----
 1  AA
 2  aa
