@@ -42,12 +42,16 @@ import (
 
 var maxResults int64
 
-var connURL, connUser, connHost, connPort, advertiseHost string
-var httpHost, httpPort, connDBName, zoneConfig string
+var sqlConnURL, sqlConnUser, sqlConnDBName string
+var serverConnHost, serverConnPort, serverAdvertiseHost string
+var serverHTTPHost, serverHTTPPort string
+var clientConnHost, clientConnPort string
+var zoneConfig string
 var zoneDisableReplication bool
 var undoFreezeCluster bool
 
 var serverCfg = server.MakeConfig()
+var clientCfg = serverCfg // copy in order to share a base.Config pointer
 var baseCfg = serverCfg.Config
 var cliCtx = cliContext{Config: baseCfg}
 var sqlCtx = sqlContext{cliContext: &cliCtx}
@@ -287,11 +291,11 @@ func init() {
 		f := startCmd.Flags()
 
 		// Server flags.
-		stringFlag(f, &connHost, cliflags.ServerHost, "")
-		stringFlag(f, &connPort, cliflags.ServerPort, base.DefaultPort)
-		stringFlag(f, &advertiseHost, cliflags.AdvertiseHost, "")
-		stringFlag(f, &httpHost, cliflags.ServerHTTPHost, "")
-		stringFlag(f, &httpPort, cliflags.ServerHTTPPort, base.DefaultHTTPPort)
+		stringFlag(f, &serverConnHost, cliflags.ServerHost, "")
+		stringFlag(f, &serverConnPort, cliflags.ServerPort, base.DefaultPort)
+		stringFlag(f, &serverAdvertiseHost, cliflags.AdvertiseHost, "")
+		stringFlag(f, &serverHTTPHost, cliflags.ServerHTTPHost, "")
+		stringFlag(f, &serverHTTPPort, cliflags.ServerHTTPPort, base.DefaultHTTPPort)
 		stringFlag(f, &serverCfg.Attrs, cliflags.Attrs, serverCfg.Attrs)
 		varFlag(f, &serverCfg.Locality, cliflags.Locality)
 
@@ -356,8 +360,8 @@ func init() {
 	clientCmds = append(clientCmds, nodeCmds...)
 	for _, cmd := range clientCmds {
 		f := cmd.PersistentFlags()
-		stringFlag(f, &connHost, cliflags.ClientHost, "")
-		stringFlag(f, &connPort, cliflags.ClientPort, base.DefaultPort)
+		stringFlag(f, &clientConnHost, cliflags.ClientHost, "")
+		stringFlag(f, &clientConnPort, cliflags.ClientPort, base.DefaultPort)
 
 		varFlag(f, insecure, cliflags.Insecure)
 		// Allow '--insecure'
@@ -385,11 +389,11 @@ func init() {
 	sqlCmds = append(sqlCmds, userCmds...)
 	for _, cmd := range sqlCmds {
 		f := cmd.PersistentFlags()
-		stringFlag(f, &connURL, cliflags.URL, "")
-		stringFlag(f, &connUser, cliflags.User, security.RootUser)
+		stringFlag(f, &sqlConnURL, cliflags.URL, "")
+		stringFlag(f, &sqlConnUser, cliflags.User, security.RootUser)
 
 		if cmd == sqlShellCmd {
-			stringFlag(f, &connDBName, cliflags.Database, "")
+			stringFlag(f, &sqlConnDBName, cliflags.Database, "")
 		}
 	}
 
@@ -441,17 +445,18 @@ func extraFlagInit() {
 		baseCfg.Insecure = false
 	}
 
-	serverCfg.Addr = net.JoinHostPort(connHost, connPort)
-
-	if advertiseHost == "" {
-		advertiseHost = connHost
+	serverCfg.Addr = net.JoinHostPort(serverConnHost, serverConnPort)
+	if serverAdvertiseHost == "" {
+		serverAdvertiseHost = serverConnHost
 	}
-	serverCfg.AdvertiseAddr = net.JoinHostPort(advertiseHost, connPort)
-
-	if httpHost == "" {
-		httpHost = connHost
+	serverCfg.AdvertiseAddr = net.JoinHostPort(serverAdvertiseHost, serverConnPort)
+	if serverHTTPHost == "" {
+		serverHTTPHost = serverConnHost
 	}
-	serverCfg.HTTPAddr = net.JoinHostPort(httpHost, httpPort)
+	serverCfg.HTTPAddr = net.JoinHostPort(serverHTTPHost, serverHTTPPort)
+
+	clientCfg.Addr = net.JoinHostPort(clientConnHost, clientConnPort)
+	clientCfg.AdvertiseAddr = clientCfg.Addr
 }
 
 func setDefaultStderrVerbosity(cmd *cobra.Command, defaultSeverity log.Severity) error {

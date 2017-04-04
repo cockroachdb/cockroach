@@ -47,7 +47,7 @@ func addrWithDefaultHost(addr string) (string, error) {
 
 // MakeDBClient creates a kv client for use in cli tools.
 func MakeDBClient() (*client.DB, *stop.Stopper, error) {
-	conn, clock, stopper, err := getGRPCConn()
+	conn, clock, stopper, err := getClientGRPCConn()
 	if err != nil {
 		return nil, nil, err
 	}

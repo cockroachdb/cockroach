@@ -65,7 +65,7 @@ func TestInitInsecure(t *testing.T) {
 			t.Fatalf("%d: expected %v, but found %v", i, c.insecure, ctx.Insecure)
 		}
 
-		err := initInsecure()
+		err := initInsecureServer()
 		if !testutils.IsError(err, c.expected) {
 			t.Fatalf("%d: expected %q, but found %v", i, c.expected, err)
 		}
