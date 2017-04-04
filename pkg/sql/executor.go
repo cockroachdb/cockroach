@@ -446,12 +446,12 @@ func (e *Executor) Prepare(
 
 	// Prepare needs a transaction because it needs to retrieve db/table
 	// descriptors for type checking.
-	// TODO(andrei): is this OK? If we're preparing as part of a SQL txn, how do
-	// we check that they're reading descriptors consistent with the txn in which
-	// they'll be used?
-	txn := client.NewTxn(e.cfg.DB)
-	if err := txn.SetIsolation(session.DefaultIsolationLevel); err != nil {
-		panic(err)
+	txn := session.TxnState.txn
+	if txn == nil {
+		txn = client.NewTxn(e.cfg.DB)
+		if err := txn.SetIsolation(session.DefaultIsolationLevel); err != nil {
+			panic(err)
+		}
 	}
 	txn.Proto().OrigTimestamp = e.cfg.Clock.Now()
 
