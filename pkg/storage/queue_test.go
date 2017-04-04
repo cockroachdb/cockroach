@@ -771,8 +771,8 @@ func TestBaseQueueTimeMetric(t *testing.T) {
 		if v := bq.successes.Count(); v != 1 {
 			return errors.Errorf("expected 1 processed replicas; got %d", v)
 		}
-		if min, v := 5*time.Millisecond, bq.processingNanos.Count(); v < min.Nanoseconds() {
-			return errors.Errorf("expected >= %s in processing time; got %d", min, v)
+		if min, v := bq.queueConfig.processTimeout, bq.processingNanos.Count(); v < min.Nanoseconds() {
+			return errors.Errorf("expected >= %s in processing time; got %s", min, time.Duration(v))
 		}
 		return nil
 	})
