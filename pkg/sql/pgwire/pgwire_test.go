@@ -434,6 +434,42 @@ func TestPGPrepareFail(t *testing.T) {
 	}
 }
 
+// Run a Prepare referencing a table created in the same transaction.
+func TestPGPrepareAfterCreateInTxn(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop()
+
+	pgURL, cleanupFn := sqlutils.PGUrl(t, s.ServingAddr(), "TestPGPrepareAfterCreateInTxn", url.User(security.RootUser))
+	defer cleanupFn()
+
+	db, err := gosql.Open("postgres", pgURL.String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	tx, err := db.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := tx.Exec(`
+	CREATE DATABASE d;
+	CREATE TABLE d.kv (k CHAR PRIMARY KEY, v CHAR);
+`); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := tx.Prepare(`INSERT INTO d.kv (k,v) VALUES ($1, $2);`); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+}
+
 type preparedQueryTest struct {
 	qargs   []interface{}
 	results [][]interface{}
