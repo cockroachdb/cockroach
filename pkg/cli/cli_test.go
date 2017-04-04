@@ -57,7 +57,7 @@ type cliTest struct {
 	t *testing.T
 	// logScope binds the lifetime of the log files to this test, when t
 	// is not nil
-	logScope log.TestLogScope
+	logScope *log.TestLogScope
 }
 
 type cliTestParams struct {
