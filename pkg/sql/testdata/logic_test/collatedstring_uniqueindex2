@@ -28,8 +28,16 @@ INSERT INTO t VALUES
 statement ok
 CREATE UNIQUE INDEX ON t (a, b)
 
+query ITTT
+EXPLAIN SELECT a, b FROM t ORDER BY a, b
+----
+0  render
+1  scan
+1          table  t@t_a_b_key
+1          spans  ALL
+
 query TI
-SELECT a, b FROM t ORDER BY (a, b)
+SELECT a, b FROM t ORDER BY a, b
 ----
 a  2
 a  3
@@ -41,8 +49,16 @@ B  3
 ü  6
 x  5
 
+query ITTT
+EXPLAIN SELECT b, a FROM t ORDER BY b, a
+----
+0  render
+1  scan
+1          table  t@primary
+1          spans  ALL
+
 query IT
-SELECT b, a FROM t ORDER BY (b, a)
+SELECT b, a FROM t ORDER BY b, a
 ----
 1  A
 2  a
@@ -74,8 +90,16 @@ SELECT COUNT (a) FROM t WHERE a > ('a' COLLATE de) AND a < ('c' COLLATE de)
 statement ok
 UPDATE t SET a = (a :: STRING || a :: STRING) COLLATE de
 
+query ITTT
+EXPLAIN SELECT a, b FROM t ORDER BY a, b
+----
+0  render
+1  scan
+1          table  t@t_a_b_key
+1          spans  ALL
+
 query TI
-SELECT a, b FROM t ORDER BY (a, b)
+SELECT a, b FROM t ORDER BY a, b
 ----
 aa  2
 aa  3
@@ -87,8 +111,16 @@ BB  3
 üü  6
 xx  5
 
+query ITTT
+EXPLAIN SELECT b, a FROM t ORDER BY b, a
+----
+0  render
+1  scan
+1          table  t@primary
+1          spans  ALL
+
 query IT
-SELECT b, a FROM t ORDER BY (b, a)
+SELECT b, a FROM t ORDER BY b, a
 ----
 1  AA
 2  aa
@@ -105,15 +137,31 @@ SELECT b, a FROM t ORDER BY (b, a)
 statement ok
 DELETE FROM t WHERE a > ('a' COLLATE de) AND a < ('c' COLLATE de)
 
+query ITTT
+EXPLAIN SELECT a, b FROM t ORDER BY a, b
+----
+0  render
+1  scan
+1          table  t@t_a_b_key
+1          spans  ALL
+
 query TI
-SELECT a, b FROM t ORDER BY (a, b)
+SELECT a, b FROM t ORDER BY a, b
 ----
 üü  5
 üü  6
 xx  5
 
+query ITTT
+EXPLAIN SELECT b, a FROM t ORDER BY b, a
+----
+0  render
+1  scan
+1          table  t@primary
+1          spans  ALL
+
 query IT
-SELECT b, a FROM t ORDER BY (b, a)
+SELECT b, a FROM t ORDER BY b, a
 ----
 5  üü
 5  xx
