@@ -65,6 +65,22 @@ func typeCheckConstant(c Constant, ctx *SemaContext, desired Type) (TypedExpr, e
 		}
 	}
 
+	// If a numeric constant will be promoted to a DECIMAL because it was out
+	// of range of an INT, but an INT is desired, throw an error here so that
+	// the error message specifically mentions the overflow.
+	if desired.FamilyEqual(TypeInt) {
+		if n, ok := c.(*NumVal); ok {
+			_, err := n.AsInt64()
+			switch err {
+			case errConstOutOfRange:
+				return nil, err
+			case errConstNotInt:
+			default:
+				panic(fmt.Sprintf("unexpected error %v", err))
+			}
+		}
+	}
+
 	natural := avail[0]
 	return c.ResolveAsType(ctx, natural)
 }
