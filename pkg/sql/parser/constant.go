@@ -50,11 +50,6 @@ func isConstant(expr Expr) bool {
 	return ok
 }
 
-func isNumericConstant(expr Expr) bool {
-	_, ok := expr.(*NumVal)
-	return ok
-}
-
 func typeCheckConstant(c Constant, ctx *SemaContext, desired Type) (TypedExpr, error) {
 	avail := c.AvailableTypes()
 	if desired != TypeAny {
@@ -264,9 +259,38 @@ func (expr *NumVal) ResolveAsType(ctx *SemaContext, typ Type) (Datum, error) {
 	}
 }
 
-// commonNumericConstantType returns the best constant type which is shared
-// between a set of provided numeric constants. Here, "best" is defined as
-// the smallest numeric data type which will not lose information.
+// commonConstantType returns the most constrained type which is mutually
+// resolvable between a set of provided constants. It returns false if constants
+// are not all of the same kind, and therefore share no common type.
+//
+// The function takes a slice of indexedExprs, but expects all indexedExprs
+// to wrap a Constant. The reason it does no take a slice of Constants instead
+// is to avoid forcing callers to allocate separate slices of Constant.
+func commonConstantType(vals []indexedExpr) (Type, bool) {
+	switch vals[0].e.(Constant).(type) {
+	case *NumVal:
+		for _, val := range vals[1:] {
+			if _, ok := val.e.(Constant).(*NumVal); !ok {
+				return nil, false
+			}
+		}
+		return commonNumericConstantType(vals), true
+	case *StrVal:
+		for _, val := range vals[1:] {
+			if _, ok := val.e.(Constant).(*StrVal); !ok {
+				return nil, false
+			}
+		}
+		return commonStringConstantType(vals), true
+	default:
+		panic(fmt.Sprintf("unexpected Constant type %T", vals[0].e))
+	}
+}
+
+// commonNumericConstantType returns the best type which is mutually
+// resolvable between a set of provided numeric constants. Here, "best"
+// is defined as the smallest numeric data type that all constants can
+// become without losing information.
 //
 // The function takes a slice of indexedExprs, but expects all indexedExprs
 // to wrap a *NumVal. The reason it does no take a slice of *NumVals instead
@@ -278,6 +302,23 @@ func commonNumericConstantType(vals []indexedExpr) Type {
 		}
 	}
 	return TypeInt
+}
+
+// commonStringConstantType returns the best type which is shared
+// between a set of provided string constants. Here, "best" is defined as
+// the most specific string-like type that applies to all constants. This
+// suffers from the same limitation as StrVal.AvailableTypes.
+//
+// The function takes a slice of indexedExprs, but expects all indexedExprs
+// to wrap a *StrVal. The reason it does no take a slice of *StrVals instead
+// is to avoid forcing callers to allocate separate slices of *StrVals.
+func commonStringConstantType(vals []indexedExpr) Type {
+	for _, c := range vals {
+		if c.e.(*StrVal).bytesEsc {
+			return TypeBytes
+		}
+	}
+	return TypeString
 }
 
 // StrVal represents a constant string value.

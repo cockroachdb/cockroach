@@ -98,7 +98,7 @@ SELECT
 ----
 true NULL false NULL
 
-statement error pq: tuples \(1, 2\), \(1, 'hi'\) are not the same type: expected 2 to be of type string, found type int
+statement error pq: tuples \(1, 2\), \(1, 'hi'\) are not the same type: expected 'hi' to be of type int, found type string
 SELECT (1, 2) > (1, 'hi')
 
 statement error pq: expected tuple \(1, 2, 3\) to have a length of 2
@@ -138,7 +138,7 @@ SELECT (ROW(POW(1, 10.0) + 9), 'a' || 'b') = (ROW(SQRT(100)), 'ab')
 ----
 true
 
-query error pq: tuples \(\(1, 2\), 'equal'\), \(\(1, 'huh'\), 'equal'\) are not the same type: tuples \(1, 2\), \(1, 'huh'\) are not the same type: expected 2 to be of type string, found type int
+query error pq: tuples \(\(1, 2\), 'equal'\), \(\(1, 'huh'\), 'equal'\) are not the same type: tuples \(1, 2\), \(1, 'huh'\) are not the same type: expected 'huh' to be of type int, found type string
 SELECT ((1, 2), 'equal') = ((1, 'huh'), 'equal')
 
 # Issue #3568

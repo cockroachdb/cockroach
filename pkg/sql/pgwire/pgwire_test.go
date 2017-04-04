@@ -622,9 +622,6 @@ func TestPGPreparedQuery(t *testing.T) {
 				time.Date(2001, 1, 2, 3, 4, 5, 6000, time.FixedZone("", 0)),
 			),
 		},
-		"SELECT (CASE a WHEN 10 THEN 'one' WHEN 11 THEN (CASE 'en' WHEN 'en' THEN $1 END) END) AS ret FROM d.T ORDER BY ret DESC LIMIT 2": {
-			baseTest.SetArgs("hello").Results("one").Results("hello"),
-		},
 		"INSERT INTO d.ts VALUES($1, $2) RETURNING *": {
 			baseTest.SetArgs("2001-01-02 03:04:05", "2006-07-08").Results(
 				time.Date(2001, 1, 2, 3, 4, 5, 0, time.FixedZone("", 0)),
@@ -749,6 +746,11 @@ func TestPGPreparedQuery(t *testing.T) {
 		// TODO(jordan) blocked on #13651
 		//"SELECT $1::INT[]": {
 		//	baseTest.SetArgs(pq.Array([]int{10})).Results(pq.Array([]int{10})),
+		//},
+
+		// TODO(nvanbenschoten) Same class of limitation as that in logic_test/typing.
+		//"SELECT (CASE a WHEN 10 THEN 'one' WHEN 11 THEN (CASE 'en' WHEN 'en' THEN $1 END) END) AS ret FROM d.T ORDER BY ret DESC LIMIT 2": {
+		// 	baseTest.SetArgs("hello").Results("one").Results("hello"),
 		//},
 	}
 

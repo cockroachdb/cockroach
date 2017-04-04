@@ -1025,13 +1025,13 @@ func typeCheckSameTypedExprs(
 
 	// Split the expressions into three groups of indexed expressions:
 	// - Placeholders
-	// - Numeric constants
+	// - Constants
 	// - All other Exprs
 	var resolvableExprs, constExprs, placeholderExprs []indexedExpr
 	for i, expr := range exprs {
 		idxExpr := indexedExpr{e: expr, i: i}
 		switch {
-		case isNumericConstant(expr):
+		case isConstant(expr):
 			constExprs = append(constExprs, idxExpr)
 		case ctx.isUnresolvedPlaceholder(expr):
 			placeholderExprs = append(placeholderExprs, idxExpr)
@@ -1059,7 +1059,7 @@ func typeCheckSameTypedExprs(
 	typeCheckSameTypedConsts := func(typ Type, required bool) (Type, error) {
 		setTypeForConsts := func(typ Type) {
 			for _, constExpr := range constExprs {
-				typedExpr, err := typeCheckAndRequire(ctx, constExpr.e, typ, "numeric constant")
+				typedExpr, err := typeCheckAndRequire(ctx, constExpr.e, typ, "constant")
 				if err != nil {
 					panic(err)
 				}
@@ -1089,10 +1089,29 @@ func typeCheckSameTypedExprs(
 			}
 		}
 
-		// If all consts could not become typ, use their best shared type.
-		bestType := commonNumericConstantType(constExprs)
-		setTypeForConsts(bestType)
-		return bestType, nil
+		// If not all constExprs could become typ but they have a mutual
+		// resolvable type, use this common type.
+		if bestType, ok := commonConstantType(constExprs); ok {
+			setTypeForConsts(bestType)
+			return bestType, nil
+		}
+
+		// If not, we want to force an error because the constants cannot all
+		// become the same type.
+		reqTyp := typ
+		for _, constExpr := range constExprs {
+			typedExpr, err := constExpr.e.TypeCheck(ctx, reqTyp)
+			if err != nil {
+				return nil, err
+			}
+			if typ := typedExpr.ResolvedType(); !typ.Equivalent(reqTyp) {
+				return nil, unexpectedTypeError{constExpr.e, reqTyp, typ}
+			}
+			if reqTyp == TypeAny {
+				reqTyp = typedExpr.ResolvedType()
+			}
+		}
+		panic("should throw error above")
 	}
 
 	// Used to type check all constants with the optional desired type. The
