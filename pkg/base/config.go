@@ -57,7 +57,7 @@ const (
 	DefaultRaftTickInterval = 200 * time.Millisecond
 
 	// DefaultCertsDirectory is the default value for the cert directory flag.
-	DefaultCertsDirectory = "cockroach-certs"
+	DefaultCertsDirectory = "${HOME}/.cockroach-certs"
 )
 
 type lazyTLSConfig struct {
@@ -219,7 +219,8 @@ func (cfg *Config) PGURL(user *url.Userinfo) (*url.URL, error) {
 // on the first call.
 func (cfg *Config) GetCertificateManager() (*security.CertificateManager, error) {
 	cfg.certificateManager.once.Do(func() {
-		cfg.certificateManager.cm, cfg.certificateManager.err = security.NewCertificateManager(cfg.SSLCertsDir)
+		cfg.certificateManager.cm, cfg.certificateManager.err =
+			security.NewCertificateManager(os.ExpandEnv(cfg.SSLCertsDir))
 	})
 	return cfg.certificateManager.cm, cfg.certificateManager.err
 }
