@@ -208,6 +208,24 @@ func (d Duration) Div(x int64) Duration {
 	return Duration{d.Months / x, d.Days / x, d.Nanos / x}
 }
 
+// MulFloat returns a Duration representing a time length of d*x.
+func (d Duration) MulFloat(x float64) Duration {
+	return Duration{
+		int64(float64(d.Months) * x),
+		int64(float64(d.Days) * x),
+		int64(float64(d.Nanos) * x),
+	}
+}
+
+// DivFloat returns a Duration representing a time length of d/x.
+func (d Duration) DivFloat(x float64) Duration {
+	return Duration{
+		int64(float64(d.Months) / x),
+		int64(float64(d.Days) / x),
+		int64(float64(d.Nanos) / x),
+	}
+}
+
 // normalized returns a new Duration transformed using the equivalence rules.
 // Each quantity of days greater than the threshold is moved into months,
 // likewise for nanos. Integer overflow is avoided by partial transformation.
