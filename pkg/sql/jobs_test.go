@@ -174,13 +174,20 @@ func TestJobLogger(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		// This fraction completed progression is intentionally not strictly
-		// increasing to simulate imprecise progress estimates.
-		for _, f := range []float32{0.0, 0.5, 0.5, 0.4, 0.8, 1.0} {
-			if err := woodyLogger.Progressed(ctx, f); err != nil {
+		// This fraction completed progression tests that calling Progressed with a
+		// fractionCompleted that is less than the last-recorded fractionCompleted
+		// is silently ignored.
+		progresses := []struct {
+			actual   float32
+			expected float32
+		}{
+			{0.0, 0.0}, {0.5, 0.5}, {0.5, 0.5}, {0.4, 0.5}, {0.8, 0.8}, {1.0, 1.0},
+		}
+		for _, f := range progresses {
+			if err := woodyLogger.Progressed(ctx, f.actual); err != nil {
 				t.Fatal(err)
 			}
-			woodyExpectation.FractionCompleted = f
+			woodyExpectation.FractionCompleted = f.expected
 			if err := verifyJobRecord(db, sql.JobStatusRunning, woodyExpectation); err != nil {
 				t.Fatal(err)
 			}
