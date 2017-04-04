@@ -4507,6 +4507,8 @@ func (r *Replica) maybeGossipFirstRange(ctx context.Context) *roachpb.Error {
 		return nil
 	}
 
+	ctx := r.AnnotateCtx(ctx)
+
 	// When multiple nodes are initialized with overlapping Gossip addresses, they all
 	// will attempt to gossip their cluster ID. This is a fairly obvious misconfiguration,
 	// so we error out below.
