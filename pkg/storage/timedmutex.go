@@ -58,9 +58,8 @@ func thresholdLogger(
 		if heldFor > warnDuration {
 			// NB: this doesn't use `util/caller.Lookup` because that would result
 			// in an import cycle.
-			pc, _, _, ok := runtime.Caller(2)
 			fun := "?"
-			if ok {
+			if pc, _, _, ok := runtime.Caller(2); ok {
 				if f := runtime.FuncForPC(pc); f != nil {
 					fun = f.Name()
 				}
