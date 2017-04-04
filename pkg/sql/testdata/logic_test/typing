@@ -58,8 +58,9 @@ SELECT * FROM d
 statement ok
 CREATE TABLE s (x STRING)
 
-query error unsupported comparison operator: <string> > <bytes>
+query T
 SELECT * FROM s WHERE x > b'\x00'
+----
 
 statement ok
 INSERT INTO s(x) VALUES (b'qwe'), ('start' || b'end')
@@ -76,10 +77,10 @@ startend
 statement error incompatible COALESCE expressions: expected 1 to be of type string, found type int
 INSERT INTO s VALUES (COALESCE(1, 'foo'))
 
-statement error incompatible COALESCE expressions: expected 1 to be of type string, found type int
+statement error incompatible COALESCE expressions: expected 'foo' to be of type int, found type string
 INSERT INTO i VALUES (COALESCE(1, 'foo'))
 
-query error incompatible COALESCE expressions: expected 1 to be of type string, found type int
+query error incompatible COALESCE expressions: expected 'foo' to be of type int, found type string
 SELECT COALESCE(1, 'foo')
 
 query error incompatible COALESCE expressions: expected 'foo' to be of type int, found type string
@@ -89,6 +90,16 @@ query R
 SELECT GREATEST(-1, 1, 2.3, 123456789, 3 + 5, -(-4))
 ----
 123456789
+
+query T
+SELECT GREATEST('2010-09-29', '2010-09-28'::TIMESTAMP)
+----
+2010-09-29 00:00:00 +0000 +0000
+
+query T
+SELECT GREATEST('PT12H2M', 'PT12H2M'::INTERVAL, '1s')
+----
+12h2m
 
 # This is a current limitation where a nested constant that does not get folded (eg. ABS(-9))
 # will not be exposed to the same constant type resolution rules as other constants, meaning that
@@ -115,3 +126,9 @@ query BTTTT
 SELECT * FROM untyped
 ----
 false   2010-09-28 00:00:00 +0000 +0000   2010-09-28 12:00:00.1 +0000 +0000   2010-09-29 12:00:00.1 +0000 +0000   12h2m
+
+# Issue #14527: support string literal coercion during overload resolution
+query T
+SELECT ts FROM untyped WHERE ts != '2015-09-18 00:00:00'
+----
+2010-09-28 12:00:00.1 +0000 +0000
