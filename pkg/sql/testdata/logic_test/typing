@@ -22,6 +22,9 @@ INSERT INTO i(x) VALUES (4.5)
 statement ok
 INSERT INTO i(x) VALUES (((9 / 3) * (1 / 3))), (2.0), (2.4 + 4.6)
 
+statement error numeric constant out of int64 range
+INSERT INTO i(x) VALUES (9223372036854775809)
+
 query I rowsort
 SELECT * FROM i
 ----
