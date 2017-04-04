@@ -1830,3 +1830,70 @@ func TestBackfillCompletesOnChunkBoundary(t *testing.T) {
 		})
 	}
 }
+
+func TestSchemaChangeInTxn(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	params, _ := createTestServerParams()
+	s, sqlDB, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop()
+
+	if _, err := sqlDB.Exec(`
+CREATE DATABASE t;
+CREATE TABLE t.kv (k CHAR PRIMARY KEY, v CHAR);
+INSERT INTO t.kv VALUES ('a', 'b');
+`); err != nil {
+		t.Fatal(err)
+	}
+
+	testCases := []struct {
+		name        string
+		firstStmt   string
+		secondStmt  string
+		expectedErr string
+	}{
+		// drop table followed by create table case.
+		{`drop-create`, `DROP TABLE t.kv`, `CREATE TABLE t.kv (k CHAR PRIMARY KEY, v CHAR)`,
+			`statement cannot follow a schema change in a transaction`},
+		// schema change followed by another statement.
+		{`create-insert`, `CREATE INDEX foo ON t.kv (v)`, `INSERT INTO t.kv VALUES ('c', 'd')`,
+			`statement cannot follow a schema change in a transaction`},
+		// schema change at the end of a transaction that has written.
+		{`insert-create`, `INSERT INTO t.kv VALUES ('c', 'd')`, `CREATE INDEX foo ON t.kv (v)`,
+			`schema change statement cannot follow a statement that has written in the same transaction`},
+		// schema change at the end of a read only transaction.
+		{`select-create`, `SELECT * FROM t.kv`, `CREATE INDEX foo ON t.kv (v)`, ``},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			tx, err := sqlDB.Begin()
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			if _, err := tx.Exec(testCase.firstStmt); err != nil {
+				t.Fatal(err)
+			}
+
+			_, err = tx.Exec(testCase.secondStmt)
+
+			if testCase.expectedErr != "" {
+				if !testutils.IsError(err, testCase.expectedErr) {
+					t.Fatalf("different error than expected: %v", err)
+				}
+
+				// Can't commit after ALTER errored, so we ROLLBACK.
+				if err := tx.Rollback(); err != nil {
+					t.Fatal(err)
+				}
+			} else {
+				if err != nil {
+					t.Fatal(err)
+				}
+				if err := tx.Commit(); err != nil {
+					t.Fatal(err)
+				}
+			}
+		})
+	}
+}
