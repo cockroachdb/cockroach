@@ -8,7 +8,7 @@ import { SortSetting } from "../../components/sortabletable";
 import { SortedTable } from "../../components/sortedtable";
 
 import { AdminUIState } from "../../redux/state";
-import { setUISetting } from "../../redux/ui";
+import { LocalSetting } from "../../redux/localsettings";
 import {
     refreshDatabaseDetails, refreshTableDetails, refreshTableStats,
 } from "../../redux/apiReducers";
@@ -25,17 +25,13 @@ import {
 // tslint:disable-next-line:variable-name
 export const DatabaseGrantsSortedTable = SortedTable as new () => SortedTable<protos.cockroach.server.serverpb.DatabaseDetailsResponse.Grant>;
 
-// Constants used to store per-page sort settings in the redux UI store.
-const UI_DATABASE_GRANTS_SORT_SETTING_KEY = "databases/sort_setting/grants";
+const grantsSortSetting = new LocalSetting<AdminUIState, SortSetting>(
+  "databases/sort_setting/grants", (s) => s.ui,
+);
 
 // DatabaseSummaryGrants displays a summary section describing the grants
 // active on a single database.
 class DatabaseSummaryGrants extends DatabaseSummaryBase {
-  // Callback when the user elects to change the table table sort setting.
-  changeTableSortSetting(setting: SortSetting) {
-    this.props.setUISetting(UI_DATABASE_GRANTS_SORT_SETTING_KEY, setting);
-  }
-
   totalUsers() {
     let grants = this.props.grants;
     return grants && grants.length;
@@ -58,7 +54,7 @@ class DatabaseSummaryGrants extends DatabaseSummaryBase {
           <DatabaseGrantsSortedTable
               data={grants}
               sortSetting={sortSetting}
-              onChangeSortSetting={(setting) => this.changeTableSortSetting(setting) }
+              onChangeSortSetting={(setting) => this.props.setSort(setting) }
               columns={[
                 {
                     title: "User",
@@ -85,21 +81,18 @@ class DatabaseSummaryGrants extends DatabaseSummaryBase {
   }
 }
 
-// Base selectors to extract data from redux state.
-let grantsSortSetting = (state: AdminUIState): SortSetting => state.ui[UI_DATABASE_GRANTS_SORT_SETTING_KEY] || {};
-
 // Connect the DatabaseSummaryGrants class with our redux store.
 export default connect(
   (state: AdminUIState, ownProps: DatabaseSummaryExplicitData) => {
     return {
       tableInfos: tableInfos(state, ownProps.name),
-      sortSetting: grantsSortSetting(state),
+      sortSetting: grantsSortSetting.selector(state),
       dbResponse: databaseDetails(state)[ownProps.name] && databaseDetails(state)[ownProps.name].data,
       grants: grants(state, ownProps.name),
     };
   },
   {
-    setUISetting,
+    setSort: grantsSortSetting.set,
     refreshDatabaseDetails,
     refreshTableDetails,
     refreshTableStats,

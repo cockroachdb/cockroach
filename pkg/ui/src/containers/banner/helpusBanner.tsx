@@ -7,17 +7,19 @@ import _ from "lodash";
 import Banner from "./banner";
 import { AdminUIState } from "../../redux/state";
 import { KEY_HELPUS, OptInAttributes, loadUIData, saveUIData, UIDataSet } from "../../redux/uiData";
-import { setUISetting } from "../../redux/ui";
+import { LocalSetting } from "../../redux/localsettings";
 
-export let HELPUS_BANNER_DISMISSED_KEY = "banner/helpusBanner/DISMISSED";
+export const bannerDismissedSetting = new LocalSetting(
+  "banner/helpusBanner/DISMISSED", (s: AdminUIState) => s.ui, false,
+);
 
 class HelpusBannerProps {
   attributes: OptInAttributes;
   attributesLoaded: boolean;
-  dismissed: boolean = false;
+  dismissed: boolean;
   loadUIData: typeof loadUIData;
   saveUIData: typeof saveUIData;
-  setUISetting: typeof setUISetting;
+  setDismissed: typeof bannerDismissedSetting.set;
 }
 
 class HelpusBanner extends React.Component<HelpusBannerProps, {}> {
@@ -26,7 +28,7 @@ class HelpusBanner extends React.Component<HelpusBannerProps, {}> {
   }
 
   dismiss = () => {
-    this.props.setUISetting(HELPUS_BANNER_DISMISSED_KEY, true);
+    this.props.setDismissed(true);
     if (this.props.attributesLoaded) {
       let attributes = this.props.attributes || new OptInAttributes();
       attributes.dismissed = attributes.dismissed ? attributes.dismissed + 1 : 1;
@@ -72,21 +74,19 @@ let attributesLoaded = createSelector(
   (state: UIDataSet) => state && _.has(state, KEY_HELPUS),
 );
 
-let helpusBannerDismissed = (state: AdminUIState): boolean => state.ui[HELPUS_BANNER_DISMISSED_KEY] || false;
-
 // Connect the HelpUsBanner class with our redux store.
 let helpusBannerConnected = connect(
   (state: AdminUIState) => {
     return {
       attributes: optinAttributes(state),
       attributesLoaded: attributesLoaded(state),
-      dismissed: helpusBannerDismissed(state),
+      dismissed: bannerDismissedSetting.selector(state),
     };
   },
   {
     loadUIData,
     saveUIData,
-    setUISetting,
+    setDismissed: bannerDismissedSetting.set,
   },
 )(HelpusBanner);
 
