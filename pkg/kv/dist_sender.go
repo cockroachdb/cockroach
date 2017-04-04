@@ -64,36 +64,28 @@ const (
 var (
 	metaDistSenderBatchCount = metric.Metadata{
 		Name: "distsender.batches",
-		Help: "Number of batches processed",
-	}
+		Help: "Number of batches processed"}
 	metaDistSenderPartialBatchCount = metric.Metadata{
 		Name: "distsender.batches.partial",
-		Help: "Number of partial batches processed",
-	}
+		Help: "Number of partial batches processed"}
 	metaTransportSentCount = metric.Metadata{
 		Name: "distsender.rpc.sent",
-		Help: "Number of RPCs sent",
-	}
+		Help: "Number of RPCs sent"}
 	metaTransportLocalSentCount = metric.Metadata{
 		Name: "distsender.rpc.sent.local",
-		Help: "Number of local RPCs sent",
-	}
+		Help: "Number of local RPCs sent"}
 	metaDistSenderSendNextTimeoutCount = metric.Metadata{
 		Name: "distsender.rpc.sent.sendnexttimeout",
-		Help: "Number of RPCs sent due to outstanding RPCs not returning promptly",
-	}
+		Help: "Number of RPCs sent due to outstanding RPCs not returning promptly"}
 	metaDistSenderNextReplicaErrCount = metric.Metadata{
 		Name: "distsender.rpc.sent.nextreplicaerror",
-		Help: "Number of RPCs sent due to per-replica errors",
-	}
+		Help: "Number of RPCs sent due to per-replica errors"}
 	metaDistSenderNotLeaseHolderErrCount = metric.Metadata{
 		Name: "distsender.errors.notleaseholder",
-		Help: "Number of NotLeaseHolderErrors encountered",
-	}
+		Help: "Number of NotLeaseHolderErrors encountered"}
 	metaSlowDistSenderRequests = metric.Metadata{
 		Name: "requests.slow.distsender",
-		Help: "Number of requests that have been stuck for a long time in the dist sender",
-	}
+		Help: "Number of requests that have been stuck for a long time in the dist sender"}
 )
 
 // DistSenderMetrics is the set of metrics for a given distributed sender.

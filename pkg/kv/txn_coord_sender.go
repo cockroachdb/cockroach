@@ -115,12 +115,24 @@ type TxnMetrics struct {
 }
 
 var (
-	metaAbortsRates         = metric.Metadata{Name: "txn.aborts"}
-	metaCommitsRates        = metric.Metadata{Name: "txn.commits"}
-	metaCommits1PCRates     = metric.Metadata{Name: "txn.commits1PC"}
-	metaAbandonsRates       = metric.Metadata{Name: "txn.abandons"}
-	metaDurationsHistograms = metric.Metadata{Name: "txn.durations"}
-	metaRestartsHistogram   = metric.Metadata{Name: "txn.restarts"}
+	metaAbortsRates = metric.Metadata{
+		Name: "txn.aborts",
+		Help: "Number of aborted KV transactions"}
+	metaCommitsRates = metric.Metadata{
+		Name: "txn.commits",
+		Help: "Number of committed KV transactions (including 1PC)"}
+	metaCommits1PCRates = metric.Metadata{
+		Name: "txn.commits1PC",
+		Help: "Number of committed one-piece KV transactions"}
+	metaAbandonsRates = metric.Metadata{
+		Name: "txn.abandons",
+		Help: "Number of abandonned KV transactions"}
+	metaDurationsHistograms = metric.Metadata{
+		Name: "txn.durations",
+		Help: "KV transaction durations"}
+	metaRestartsHistogram = metric.Metadata{
+		Name: "txn.restarts",
+		Help: "Number of restarted KV transactions"}
 )
 
 // MakeTxnMetrics returns a TxnMetrics struct that contains metrics whose

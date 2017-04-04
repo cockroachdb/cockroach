@@ -64,9 +64,15 @@ const (
 
 // Metric names.
 var (
-	metaExecLatency = metric.Metadata{Name: "exec.latency"}
-	metaExecSuccess = metric.Metadata{Name: "exec.success"}
-	metaExecError   = metric.Metadata{Name: "exec.error"}
+	metaExecLatency = metric.Metadata{
+		Name: "exec.latency",
+		Help: "Latency of batch calls executed on this node"}
+	metaExecSuccess = metric.Metadata{
+		Name: "exec.success",
+		Help: "Number of batch calls executed successfully on this node"}
+	metaExecError = metric.Metadata{
+		Name: "exec.error",
+		Help: "Number of batch calls that failed to execute on this node"}
 )
 
 // errNeedsBootstrap indicates the node should be used as the seed of
