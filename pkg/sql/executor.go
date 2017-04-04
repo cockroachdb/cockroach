@@ -63,20 +63,48 @@ const metricsSampleInterval = 10 * time.Second
 
 // Fully-qualified names for metrics.
 var (
-	MetaTxnBegin           = metric.Metadata{Name: "sql.txn.begin.count"}
-	MetaTxnCommit          = metric.Metadata{Name: "sql.txn.commit.count"}
-	MetaTxnAbort           = metric.Metadata{Name: "sql.txn.abort.count"}
-	MetaTxnRollback        = metric.Metadata{Name: "sql.txn.rollback.count"}
-	MetaSelect             = metric.Metadata{Name: "sql.select.count"}
-	MetaSQLExecLatency     = metric.Metadata{Name: "sql.exec.latency"}
-	MetaDistSQLSelect      = metric.Metadata{Name: "sql.distsql.select.count"}
-	MetaDistSQLExecLatency = metric.Metadata{Name: "sql.distsql.exec.latency"}
-	MetaUpdate             = metric.Metadata{Name: "sql.update.count"}
-	MetaInsert             = metric.Metadata{Name: "sql.insert.count"}
-	MetaDelete             = metric.Metadata{Name: "sql.delete.count"}
-	MetaDdl                = metric.Metadata{Name: "sql.ddl.count"}
-	MetaMisc               = metric.Metadata{Name: "sql.misc.count"}
-	MetaQuery              = metric.Metadata{Name: "sql.query.count"}
+	MetaTxnBegin = metric.Metadata{
+		Name: "sql.txn.begin.count",
+		Help: "Number of begun sql transactions"}
+	MetaTxnCommit = metric.Metadata{
+		Name: "sql.txn.commit.count",
+		Help: "Number of committed sql transactions"}
+	MetaTxnAbort = metric.Metadata{
+		Name: "sql.txn.abort.count",
+		Help: "Number of aborted sql transactions"}
+	MetaTxnRollback = metric.Metadata{
+		Name: "sql.txn.rollback.count",
+		Help: "Number of rolled back sql transactions"}
+	MetaSelect = metric.Metadata{
+		Name: "sql.select.count",
+		Help: "Number of sql select calls"}
+	MetaSQLExecLatency = metric.Metadata{
+		Name: "sql.exec.latency",
+		Help: "Latency of sql statement execution"}
+	MetaDistSQLSelect = metric.Metadata{
+		Name: "sql.distsql.select.count",
+		Help: "Number of dist-sql select calls"}
+	MetaDistSQLExecLatency = metric.Metadata{
+		Name: "sql.distsql.exec.latency",
+		Help: "Latency of dist-sql statement execution"}
+	MetaUpdate = metric.Metadata{
+		Name: "sql.update.count",
+		Help: "Number of sql update calls"}
+	MetaInsert = metric.Metadata{
+		Name: "sql.insert.count",
+		Help: "Number of sql insert calls"}
+	MetaDelete = metric.Metadata{
+		Name: "sql.delete.count",
+		Help: "Number of sql delete calls"}
+	MetaDdl = metric.Metadata{
+		Name: "sql.ddl.count",
+		Help: "Number of sql DDL calls"}
+	MetaMisc = metric.Metadata{
+		Name: "sql.misc.count",
+		Help: "Number of other sql calls"}
+	MetaQuery = metric.Metadata{
+		Name: "sql.query.count",
+		Help: "Number of sql queries"}
 )
 
 // distSQLExecMode controls if and when the Executor uses DistSQL.

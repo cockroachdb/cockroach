@@ -124,13 +124,27 @@ const (
 
 // Gossip metrics counter names.
 var (
-	MetaConnectionsIncomingGauge = metric.Metadata{Name: "gossip.connections.incoming"}
-	MetaConnectionsOutgoingGauge = metric.Metadata{Name: "gossip.connections.outgoing"}
-	MetaConnectionsRefusedRates  = metric.Metadata{Name: "gossip.connections.refused"}
-	MetaInfosSentRates           = metric.Metadata{Name: "gossip.infos.sent"}
-	MetaInfosReceivedRates       = metric.Metadata{Name: "gossip.infos.received"}
-	MetaBytesSentRates           = metric.Metadata{Name: "gossip.bytes.sent"}
-	MetaBytesReceivedRates       = metric.Metadata{Name: "gossip.bytes.received"}
+	MetaConnectionsIncomingGauge = metric.Metadata{
+		Name: "gossip.connections.incoming",
+		Help: "Number of active incoming gossip connections"}
+	MetaConnectionsOutgoingGauge = metric.Metadata{
+		Name: "gossip.connections.outgoing",
+		Help: "Number of active outgoing gossip connections"}
+	MetaConnectionsRefused = metric.Metadata{
+		Name: "gossip.connections.refused",
+		Help: "Number of refused incoming gossip connections"}
+	MetaInfosSent = metric.Metadata{
+		Name: "gossip.infos.sent",
+		Help: "Number of sent gossip Info objects"}
+	MetaInfosReceived = metric.Metadata{
+		Name: "gossip.infos.received",
+		Help: "Number of received gossip Info objects"}
+	MetaBytesSent = metric.Metadata{
+		Name: "gossip.bytes.sent",
+		Help: "Number of sent gossip bytes"}
+	MetaBytesReceived = metric.Metadata{
+		Name: "gossip.bytes.received",
+		Help: "Number of received gossip bytes"}
 )
 
 var (
@@ -1292,10 +1306,10 @@ func (m Metrics) String() string {
 
 func makeMetrics() Metrics {
 	return Metrics{
-		ConnectionsRefused: metric.NewCounter(MetaConnectionsRefusedRates),
-		BytesReceived:      metric.NewCounter(MetaBytesReceivedRates),
-		BytesSent:          metric.NewCounter(MetaBytesSentRates),
-		InfosReceived:      metric.NewCounter(MetaInfosReceivedRates),
-		InfosSent:          metric.NewCounter(MetaInfosSentRates),
+		ConnectionsRefused: metric.NewCounter(MetaConnectionsRefused),
+		BytesReceived:      metric.NewCounter(MetaBytesReceived),
+		BytesSent:          metric.NewCounter(MetaBytesSent),
+		InfosReceived:      metric.NewCounter(MetaInfosReceived),
+		InfosSent:          metric.NewCounter(MetaInfosSent),
 	}
 }
