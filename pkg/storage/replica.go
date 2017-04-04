@@ -994,6 +994,7 @@ func (r *Replica) leaseGoodToGo(ctx context.Context) (LeaseStatus, bool) {
 //  will not incur latency waiting for the command to complete.
 //  Reads, however, must wait.
 func (r *Replica) redirectOnOrAcquireLease(ctx context.Context) (LeaseStatus, *roachpb.Error) {
+	ctx = r.AnnotateCtx(ctx)
 	if status, ok := r.leaseGoodToGo(ctx); ok {
 		return status, nil
 	}
