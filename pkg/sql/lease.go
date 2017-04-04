@@ -552,13 +552,21 @@ type tableState struct {
 	deleted bool
 }
 
-// acquire returns a lease at the specifies version. The lease will have its
+// acquire returns a lease at the specified version. The lease will have its
 // refcount incremented, so the caller is responsible to call release() on it.
 func (t *tableState) acquire(
 	ctx context.Context, txn *client.Txn, version sqlbase.DescriptorVersion, m *LeaseManager,
 ) (*LeaseState, error) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
+
+	if m.testingKnobs.LeaseStoreTestingKnobs.AlwaysAcquireNewLease {
+		// Don't check to see if we already have a lease at the specified version:
+		// just get a new one.
+		if err := t.acquireFromStoreLocked(ctx, txn, version, m); err != nil {
+			return nil, err
+		}
+	}
 
 	for {
 		s := t.active.findNewest(version)
@@ -859,6 +867,12 @@ type LeaseStoreTestingKnobs struct {
 	// RemoveOnceDereferenced forces leases to be removed
 	// as soon as they are dereferenced.
 	RemoveOnceDereferenced bool
+	// AlwaysAcquireNewLease forces the lease store to acquire a new lease even
+	// if there's already a cached one available.
+	// Caveat: This testing knob only affects the lease store itself, and does
+	// not prevent entries in the session's lease cache from getting returned,
+	// e.g. by LeaseCollection.getTableLeaseById.
+	AlwaysAcquireNewLease bool
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
