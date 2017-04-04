@@ -105,16 +105,18 @@ func (jl *JobLogger) Created(ctx context.Context) error {
 
 // Started marks the tracked job as started.
 func (jl *JobLogger) Started(ctx context.Context) error {
-	return jl.updateJobRecord(ctx, JobStatusRunning, func(payload *JobPayload) error {
+	return jl.updateJobRecord(ctx, JobStatusRunning, func(payload *JobPayload) (bool, error) {
 		if payload.StartedMicros != 0 {
-			return errors.Errorf("JobLogger: job %d already started", jl.jobID)
+			return false, errors.Errorf("JobLogger: job %d already started", jl.jobID)
 		}
 		payload.StartedMicros = jobTimestamp(timeutil.Now())
-		return nil
+		return true, nil
 	})
 }
 
-// Progressed updates the progress of the tracked job to fractionCompleted.
+// Progressed updates the progress of the tracked job to fractionCompleted. A
+// fractionCompleted that is less than the currently-recorded fractionCompleted
+// will be silently ignored.
 func (jl *JobLogger) Progressed(ctx context.Context, fractionCompleted float32) error {
 	if fractionCompleted < 0.0 || fractionCompleted > 1.0 {
 		return errors.Errorf(
@@ -122,15 +124,18 @@ func (jl *JobLogger) Progressed(ctx context.Context, fractionCompleted float32) 
 			fractionCompleted, jl.jobID,
 		)
 	}
-	return jl.updateJobRecord(ctx, JobStatusRunning, func(payload *JobPayload) error {
+	return jl.updateJobRecord(ctx, JobStatusRunning, func(payload *JobPayload) (bool, error) {
 		if payload.StartedMicros == 0 {
-			return errors.Errorf("JobLogger: job %d not started", jl.jobID)
+			return false, errors.Errorf("JobLogger: job %d not started", jl.jobID)
 		}
 		if payload.FinishedMicros != 0 {
-			return errors.Errorf("JobLogger: job %d already finished", jl.jobID)
+			return false, errors.Errorf("JobLogger: job %d already finished", jl.jobID)
+		}
+		if fractionCompleted <= payload.FractionCompleted {
+			return false, nil
 		}
 		payload.FractionCompleted = fractionCompleted
-		return nil
+		return true, nil
 	})
 }
 
@@ -144,13 +149,13 @@ func (jl *JobLogger) Failed(ctx context.Context, err error) {
 	if jl.jobID == nil {
 		return
 	}
-	internalErr := jl.updateJobRecord(ctx, JobStatusFailed, func(payload *JobPayload) error {
+	internalErr := jl.updateJobRecord(ctx, JobStatusFailed, func(payload *JobPayload) (bool, error) {
 		if payload.FinishedMicros != 0 {
-			return errors.Errorf("JobLogger: job %d already finished", jl.jobID)
+			return false, errors.Errorf("JobLogger: job %d already finished", jl.jobID)
 		}
 		payload.Error = err.Error()
 		payload.FinishedMicros = jobTimestamp(timeutil.Now())
-		return nil
+		return true, nil
 	})
 	if internalErr != nil {
 		log.Errorf(ctx, "JobLogger: ignoring error while logging failure for job %d: %+v",
@@ -161,13 +166,13 @@ func (jl *JobLogger) Failed(ctx context.Context, err error) {
 // Succeeded marks the tracked job as having succeeded and sets its fraction
 // completed to 1.0.
 func (jl *JobLogger) Succeeded(ctx context.Context) error {
-	return jl.updateJobRecord(ctx, JobStatusSucceeded, func(payload *JobPayload) error {
+	return jl.updateJobRecord(ctx, JobStatusSucceeded, func(payload *JobPayload) (bool, error) {
 		if payload.FinishedMicros != 0 {
-			return errors.Errorf("JobLogger: job %d already finished", jl.jobID)
+			return false, errors.Errorf("JobLogger: job %d already finished", jl.jobID)
 		}
 		payload.FinishedMicros = jobTimestamp(timeutil.Now())
 		payload.FractionCompleted = 1.0
-		return nil
+		return true, nil
 	})
 }
 
@@ -195,8 +200,10 @@ func (jl *JobLogger) insertJobRecord(ctx context.Context, payload *JobPayload) e
 	return nil
 }
 
+type jobUpdateFn func(*JobPayload) (doUpdate bool, err error)
+
 func (jl *JobLogger) updateJobRecord(
-	ctx context.Context, newStatus JobStatus, updateFn func(payload *JobPayload) error,
+	ctx context.Context, newStatus JobStatus, updateFn jobUpdateFn,
 ) error {
 	if jl.jobID == nil {
 		return errors.New("JobLogger cannot update job: job not created")
@@ -213,8 +220,12 @@ func (jl *JobLogger) updateJobRecord(
 		if err != nil {
 			return err
 		}
-		if err := updateFn(payload); err != nil {
+		doUpdate, err := updateFn(payload)
+		if err != nil {
 			return err
+		}
+		if !doUpdate {
+			return nil
 		}
 		payload.ModifiedMicros = jobTimestamp(timeutil.Now())
 		payloadBytes, err := protoutil.Marshal(payload)
