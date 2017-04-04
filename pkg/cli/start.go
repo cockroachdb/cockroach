@@ -25,7 +25,6 @@ import (
 	"net"
 	"net/url"
 	"os"
-	"os/exec"
 	"os/signal"
 	"path/filepath"
 	"runtime"
@@ -51,7 +50,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logflags"
-	"github.com/cockroachdb/cockroach/pkg/util/sdnotify"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -260,8 +258,8 @@ func runStart(cmd *cobra.Command, args []string) error {
 		return usageAndError(cmd)
 	}
 
-	if startBackground {
-		return rerunBackground()
+	if ok, err := maybeRerunBackground(); ok {
+		return err
 	}
 
 	signalCh := make(chan os.Signal, 1)
@@ -521,26 +519,6 @@ func runStart(cmd *cobra.Command, args []string) error {
 	log.Flush()
 
 	return returnErr
-}
-
-// rerunBackground restarts the current process in the background.
-func rerunBackground() error {
-	args := make([]string, 0, len(os.Args))
-	foundBackground := false
-	for _, arg := range os.Args {
-		if arg == "--background" || strings.HasPrefix(arg, "--background=") {
-			foundBackground = true
-			continue
-		}
-		args = append(args, arg)
-	}
-	if !foundBackground {
-		args = append(args, "--background=false")
-	}
-	cmd := exec.Command(args[0], args[1:]...)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = stderr
-	return sdnotify.Exec(cmd)
 }
 
 func getGRPCConn() (*grpc.ClientConn, *hlc.Clock, *stop.Stopper, error) {

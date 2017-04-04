@@ -315,7 +315,7 @@ communicate with a secure cluster\).
 		return preamble + s
 	}
 
-	for i, test := range []struct {
+	for _, test := range []struct {
 		cmd, expOutPattern string
 	}{
 		// Error returned from GRPC to internal/client (which has to pass it
@@ -329,22 +329,34 @@ communicate with a secure cluster\).
 		},
 		// Going through the SQL client libraries gives a *net.OpError which
 		// we also handle.
+		//
+		// On *nix, this error is:
+		//
+		// dial tcp 127.0.0.1:65054: getsockopt: connection refused
+		//
+		// On Windows, this error is:
+		//
+		// dial tcp 127.0.0.1:59951: connectex: No connection could be made because the target machine actively refused it.
+		//
+		// So we look for the common bit.
 		{`zone ls`, styled(
-			`dial tcp .*: getsockopt: connection refused`),
+			`dial tcp .*: .* refused`),
 		},
 		// A real error before we hit any networking ones.
 		{`debug kv scan b a`, `start key must be smaller than end key`},
 		{`debug kv inc`, `invalid arguments`},
 	} {
-		out, err := c.RunWithCapture(test.cmd)
-		if err != nil {
-			t.Fatal(errors.Wrap(err, strconv.Itoa(i)))
-		}
-		exp := test.cmd + "\n" + test.expOutPattern
-		re := regexp.MustCompile(exp)
-		if !re.MatchString(out) {
-			t.Errorf("expected '%s' to match pattern\n%s\ngot:\n%s", test.cmd, exp, out)
-		}
+		t.Run(test.cmd, func(t *testing.T) {
+			out, err := c.RunWithCapture(test.cmd)
+			if err != nil {
+				t.Fatal(err)
+			}
+			exp := test.cmd + "\n" + test.expOutPattern
+			re := regexp.MustCompile(exp)
+			if !re.MatchString(out) {
+				t.Errorf("expected '%s' to match pattern:\n%s\ngot:\n%s", test.cmd, exp, out)
+			}
+		})
 	}
 }
 

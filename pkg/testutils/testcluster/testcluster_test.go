@@ -229,7 +229,17 @@ func TestStopServer(t *testing.T) {
 	tc.StopServer(1)
 
 	// Verify HTTP and GRPC requests to server now fail.
-	httpErrorText := "connection refused"
+	//
+	// On *nix, this error is:
+	//
+	// dial tcp 127.0.0.1:65054: getsockopt: connection refused
+	//
+	// On Windows, this error is:
+	//
+	// dial tcp 127.0.0.1:59951: connectex: No connection could be made because the target machine actively refused it.
+	//
+	// So we look for the common bit.
+	httpErrorText := `dial tcp .*: .* refused`
 	if err := httputil.GetJSON(httpClient1, url, &response); err == nil {
 		t.Fatal("Expected HTTP Request to fail after server stopped")
 	} else if !testutils.IsError(err, httpErrorText) {
