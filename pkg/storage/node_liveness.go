@@ -51,20 +51,16 @@ var (
 var (
 	metaLiveNodes = metric.Metadata{
 		Name: "liveness.livenodes",
-		Help: "Number of live nodes in the cluster (will be 0 if this node is not itself live)",
-	}
+		Help: "Number of live nodes in the cluster (will be 0 if this node is not itself live)"}
 	metaHeartbeatSuccesses = metric.Metadata{
 		Name: "liveness.heartbeatsuccesses",
-		Help: "Number of successful node liveness heartbeats from this node",
-	}
+		Help: "Number of successful node liveness heartbeats from this node"}
 	metaHeartbeatFailures = metric.Metadata{
 		Name: "liveness.heartbeatfailures",
-		Help: "Number of failed node liveness heartbeats from this node",
-	}
+		Help: "Number of failed node liveness heartbeats from this node"}
 	metaEpochIncrements = metric.Metadata{
 		Name: "liveness.epochincrements",
-		Help: "Number of times this node has incremented its liveness epoch",
-	}
+		Help: "Number of times this node has incremented its liveness epoch"}
 )
 
 func (l *Liveness) isLive(now hlc.Timestamp, maxOffset time.Duration) bool {

@@ -45,15 +45,20 @@ const (
 )
 
 var (
-	metaReplicateQueueAddReplicaCount = metric.Metadata{Name: "queue.replicate.addreplica",
+	metaReplicateQueueAddReplicaCount = metric.Metadata{
+		Name: "queue.replicate.addreplica",
 		Help: "Number of replica additions attempted by the replicate queue"}
-	metaReplicateQueueRemoveReplicaCount = metric.Metadata{Name: "queue.replicate.removereplica",
+	metaReplicateQueueRemoveReplicaCount = metric.Metadata{
+		Name: "queue.replicate.removereplica",
 		Help: "Number of replica removals attempted by the replicate queue (typically in response to a rebalancer-initiated addition)"}
-	metaReplicateQueueRemoveDeadReplicaCount = metric.Metadata{Name: "queue.replicate.removedeadreplica",
+	metaReplicateQueueRemoveDeadReplicaCount = metric.Metadata{
+		Name: "queue.replicate.removedeadreplica",
 		Help: "Number of dead replica removals attempted by the replicate queue (typically in response to a node outage)"}
-	metaReplicateQueueRebalanceReplicaCount = metric.Metadata{Name: "queue.replicate.rebalancereplica",
+	metaReplicateQueueRebalanceReplicaCount = metric.Metadata{
+		Name: "queue.replicate.rebalancereplica",
 		Help: "Number of replica rebalancer-initiated additions attempted by the replicate queue"}
-	metaReplicateQueueTransferLeaseCount = metric.Metadata{Name: "queue.replicate.transferlease",
+	metaReplicateQueueTransferLeaseCount = metric.Metadata{
+		Name: "queue.replicate.transferlease",
 		Help: "Number of range lease transfers attempted by the replicate queue"}
 )
 
