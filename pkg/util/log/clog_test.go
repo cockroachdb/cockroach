@@ -530,7 +530,7 @@ func TestGC(t *testing.T) {
 	}
 	files := selectFiles(allFiles, math.MaxInt64)
 	if expectedFiles != len(files) {
-		t.Fatalf("%s: expected %d, but found %d", s, expectedFiles, len(files))
+		t.Fatalf("%s: expected %d, but found %d", s.logDir, expectedFiles, len(files))
 	}
 }
 
