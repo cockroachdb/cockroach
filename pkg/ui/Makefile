@@ -33,19 +33,19 @@ protos:
 generate: $(GOBINDATA_TARGET)
 
 .PHONY: lint
-lint: yarn.installed
+lint: $(YARN_INSTALLED_TARGET)
 	stylint -c .stylintrc styl
 	tslint -c tslint.json $(shell find src -name '*.tsx' -or -name '*.ts' -not -path 'src/js/*')
 
 .PHONY: test
-test: yarn.installed protos
+test: $(YARN_INSTALLED_TARGET) protos
 	karma start
 
 .PHONY: test-debug
-test-debug: yarn.installed protos
+test-debug: $(YARN_INSTALLED_TARGET) protos
 	karma start --browsers Chrome --no-single-run --reporters mocha
 
-$(GOBINDATA_TARGET): yarn.installed protos
+$(GOBINDATA_TARGET): $(YARN_INSTALLED_TARGET) protos
 	rm -rf dist
 	webpack -p
 	go-bindata -nometadata -pkg ui -o $@ -prefix dist dist
