@@ -43,5 +43,6 @@ define VALID_VARS
   TYPE
   UI_ROOT
   XGO
+  YARN_INSTALLED_TARGET
   space
 endef

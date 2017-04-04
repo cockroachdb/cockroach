@@ -121,7 +121,14 @@ $(GITHOOKSDIR)/%: githooks/%
 	@ln -s ../../$(basename $<) $(dir $@)
 endif
 
-$(UI_ROOT)/yarn.installed: $(UI_ROOT)/package.json $(UI_ROOT)/yarn.lock
+# Make does textual matching on target names, so e.g. yarn.installed and
+# ../../pkg/ui/yarn.installed are considered different targets even when the CWD
+# is pkg/ui. Introducing a variable for targets that are used across Makefiles
+# with different CWDs decreases the chance of accidentally using the wrong path
+# to a target.
+YARN_INSTALLED_TARGET := $(UI_ROOT)/yarn.installed
+
+$(YARN_INSTALLED_TARGET): $(UI_ROOT)/package.json $(UI_ROOT)/yarn.lock
 	cd $(UI_ROOT) && yarn install
 	rm -rf $(UI_ROOT)/node_modules/@types/node # https://github.com/yarnpkg/yarn/issues/2987
 	touch $@
