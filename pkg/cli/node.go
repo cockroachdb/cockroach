@@ -206,7 +206,7 @@ func init() {
 }
 
 func getStatusClient() (serverpb.StatusClient, *stop.Stopper, error) {
-	conn, _, stopper, err := getGRPCConn()
+	conn, _, stopper, err := getClientGRPCConn()
 	if err != nil {
 		return nil, nil, err
 	}

@@ -180,30 +180,31 @@ func makeSQLConn(url string) *sqlConn {
 // for a password as the only authentication method available for this user is
 // certificate authentication.
 func getPasswordAndMakeSQLClient() (*sqlConn, error) {
-	if len(connURL) != 0 {
-		return makeSQLConn(connURL), nil
+	if len(sqlConnURL) != 0 {
+		return makeSQLConn(sqlConnURL), nil
 	}
 	var user *url.Userinfo
-	if !baseCfg.Insecure && connUser != security.RootUser && baseCfg.SSLCert == "" && baseCfg.SSLCertKey == "" {
+	if !baseCfg.Insecure && sqlConnUser != security.RootUser &&
+		baseCfg.SSLCert == "" && baseCfg.SSLCertKey == "" {
 		pwd, err := security.PromptForPassword()
 		if err != nil {
 			return nil, err
 		}
-		user = url.UserPassword(connUser, pwd)
+		user = url.UserPassword(sqlConnUser, pwd)
 	} else {
-		user = url.User(connUser)
+		user = url.User(sqlConnUser)
 	}
 	return makeSQLClient(user)
 }
 
 func makeSQLClient(user *url.Userinfo) (*sqlConn, error) {
-	sqlURL := connURL
-	if len(connURL) == 0 {
+	sqlURL := sqlConnURL
+	if len(sqlConnURL) == 0 {
 		u, err := sqlCtx.PGURL(user)
 		if err != nil {
 			return nil, err
 		}
-		u.Path = connDBName
+		u.Path = sqlConnDBName
 		sqlURL = u.String()
 	}
 	return makeSQLConn(sqlURL), nil
