@@ -1851,12 +1851,15 @@ INSERT INTO t.kv VALUES ('a', 'b');
 		secondStmt  string
 		expectedErr string
 	}{
-		// drop table followed by create table case.
+		// DROP TABLE followed by CREATE TABLE case.
 		{`drop-create`, `DROP TABLE t.kv`, `CREATE TABLE t.kv (k CHAR PRIMARY KEY, v CHAR)`,
 			`statement cannot follow a schema change in a transaction`},
 		// schema change followed by another statement.
-		{`create-insert`, `CREATE INDEX foo ON t.kv (v)`, `INSERT INTO t.kv VALUES ('c', 'd')`,
+		{`createindex-insert`, `CREATE INDEX foo ON t.kv (v)`, `INSERT INTO t.kv VALUES ('c', 'd')`,
 			`statement cannot follow a schema change in a transaction`},
+		// CREATE TABLE followed by INSERT works.
+		{`createtable-insert`, `CREATE TABLE t.origin (k CHAR PRIMARY KEY, v CHAR);`,
+			`INSERT INTO t.origin VALUES ('c', 'd')`, ``},
 		// schema change at the end of a transaction that has written.
 		{`insert-create`, `INSERT INTO t.kv VALUES ('c', 'd')`, `CREATE INDEX foo ON t.kv (v)`,
 			`schema change statement cannot follow a statement that has written in the same transaction`},
@@ -1878,13 +1881,13 @@ INSERT INTO t.kv VALUES ('a', 'b');
 			_, err = tx.Exec(testCase.secondStmt)
 
 			if testCase.expectedErr != "" {
-				if !testutils.IsError(err, testCase.expectedErr) {
-					t.Fatalf("different error than expected: %v", err)
+				// Can't commit after ALTER errored, so we ROLLBACK.
+				if rollbackErr := tx.Rollback(); rollbackErr != nil {
+					t.Fatal(rollbackErr)
 				}
 
-				// Can't commit after ALTER errored, so we ROLLBACK.
-				if err := tx.Rollback(); err != nil {
-					t.Fatal(err)
+				if !testutils.IsError(err, testCase.expectedErr) {
+					t.Fatalf("different error than expected: %v", err)
 				}
 			} else {
 				if err != nil {
