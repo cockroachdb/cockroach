@@ -1,4 +1,4 @@
-// Copyright 2016 The Cockroach Authors.
+// Copyright 2017 The Cockroach Authors.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,33 +12,18 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License. See the AUTHORS file
 // for names of contributors.
-//
-// Author: Ben Darnell
 
 package sdnotify
 
 import (
-	"testing"
-
-	_ "github.com/cockroachdb/cockroach/pkg/util/log" // for flags
+	"errors"
+	"os/exec"
 )
 
-func TestSDNotify(t *testing.T) {
-	l, err := listen()
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() { _ = l.close() }()
+func ready() error {
+	return nil
+}
 
-	ch := make(chan error)
-	go func() {
-		ch <- l.wait()
-	}()
-
-	if err := notify(l.Path, readyMsg); err != nil {
-		t.Fatal(err)
-	}
-	if err := <-ch; err != nil {
-		t.Fatal(err)
-	}
+func bgExec(*exec.Cmd) error {
+	return errors.New("not implemented")
 }
