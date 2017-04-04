@@ -870,8 +870,9 @@ func (dsp *distSQLPlanner) addAggregators(
 		}
 
 		localAggSpec := distsqlrun.AggregatorSpec{
-			Aggregations: localAgg,
-			GroupCols:    groupCols,
+			Aggregations:        localAgg,
+			GroupCols:           groupCols,
+			SuppressEmptyResult: true,
 		}
 
 		p.AddNoGroupingStage(

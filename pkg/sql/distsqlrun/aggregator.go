@@ -73,6 +73,9 @@ type aggregator struct {
 	inputCols columns
 	buckets   map[string]struct{} // The set of bucket keys.
 
+	// See AggregatorSpec.SuppressEmptyResult.
+	suppressEmptyResult bool
+
 	out procOutputHelper
 }
 
@@ -86,13 +89,14 @@ func newAggregator(
 	output RowReceiver,
 ) (*aggregator, error) {
 	ag := &aggregator{
-		flowCtx:     flowCtx,
-		input:       input,
-		buckets:     make(map[string]struct{}),
-		inputCols:   make(columns, len(spec.Aggregations)),
-		funcs:       make([]*aggregateFuncHolder, len(spec.Aggregations)),
-		outputTypes: make([]sqlbase.ColumnType, len(spec.Aggregations)),
-		groupCols:   make(columns, len(spec.GroupCols)),
+		flowCtx:             flowCtx,
+		input:               input,
+		buckets:             make(map[string]struct{}),
+		inputCols:           make(columns, len(spec.Aggregations)),
+		funcs:               make([]*aggregateFuncHolder, len(spec.Aggregations)),
+		outputTypes:         make([]sqlbase.ColumnType, len(spec.Aggregations)),
+		groupCols:           make(columns, len(spec.GroupCols)),
+		suppressEmptyResult: spec.SuppressEmptyResult,
 	}
 
 	for i, aggInfo := range spec.Aggregations {
@@ -150,7 +154,7 @@ func (ag *aggregator) Run(ctx context.Context, wg *sync.WaitGroup) {
 
 	// Queries like `SELECT MAX(n) FROM t` expect a row of NULLs if nothing was
 	// aggregated.
-	if len(ag.buckets) < 1 && len(ag.groupCols) == 0 {
+	if len(ag.buckets) < 1 && len(ag.groupCols) == 0 && !ag.suppressEmptyResult {
 		ag.buckets[""] = struct{}{}
 	}
 
