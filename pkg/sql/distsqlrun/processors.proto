@@ -322,6 +322,12 @@ message AggregatorSpec {
   repeated uint32 group_cols = 2 [packed = true];
 
   repeated Aggregation aggregations = 3 [(gogoproto.nullable) = false];
+
+  // For queries where there are no group columns (e.g. `SELECT MAX(x)`), if
+  // there are no input rows, we still emit a row of results (0 for COUNT, NULL
+  // for everything else). If this flag is set, this row is suppressed. This is
+  // useful for the local stage of a distributed aggregation.
+  optional bool suppress_empty_result = 4 [(gogoproto.nullable) = false];
 }
 
 // BackfillerSpec is the specification for a "schema change backfiller".

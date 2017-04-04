@@ -139,7 +139,7 @@ var Aggregates = map[string][]Builtin{
 
 	"sum_int": {
 		makeAggBuiltin(TypeInt, TypeInt, newSmallIntSumAggregate,
-			"Calculates the sum of the selected values."),
+			"Calculates the integer sum of the selected values."),
 	},
 
 	"sum": {
@@ -488,8 +488,7 @@ func (a *MinAggregate) Result() Datum {
 }
 
 type smallIntSumAggregate struct {
-	sum         int64
-	seenNonNull bool
+	sum int64
 }
 
 func newSmallIntSumAggregate(_ []Type) AggregateFunc {
@@ -503,14 +502,10 @@ func (a *smallIntSumAggregate) Add(_ *EvalContext, datum Datum) {
 	}
 
 	a.sum += int64(MustBeDInt(datum))
-	a.seenNonNull = true
 }
 
-// Result returns the sum.
+// Result returns the sum. Returns 0 if there are no rows.
 func (a *smallIntSumAggregate) Result() Datum {
-	if !a.seenNonNull {
-		return DNull
-	}
 	return NewDInt(DInt(a.sum))
 }
 
