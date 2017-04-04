@@ -19,6 +19,7 @@ package sql
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -39,7 +40,7 @@ import (
 	"golang.org/x/net/context"
 )
 
-// distSQLPLanner implements distSQL physical planning and running logic.
+// distSQLPlanner implements distSQL physical planning and running logic.
 //
 // A rough overview of the process:
 //
@@ -60,6 +61,7 @@ import (
 //    and add processing stages (connected to the result routers of the children
 //    node).
 type distSQLPlanner struct {
+	// The node descriptor for the gateway node that initiated this query.
 	nodeDesc     roachpb.NodeDescriptor
 	rpcContext   *rpc.Context
 	distSQLSrv   *distsqlrun.ServerImpl
@@ -766,7 +768,13 @@ func (dsp *distSQLPlanner) addAggregators(
 	//  - all aggregation functions support it. TODO(radu): we could relax this by
 	//    splitting the aggregation into two different paths and joining on the
 	//    results.
+	//  - we have a mix of aggregations that use distinct and aggregations that
+	//    don't use distinct. TODO(arjun): This would require doing the same as
+	//    the todo as above.
 	multiStage := false
+	allDistinct := true
+	anyDistinct := false
+	//
 
 	// Check if the previous stage is all on one node.
 	prevStageNode := p.Processors[p.ResultRouters[0]].Node
@@ -782,10 +790,13 @@ func (dsp *distSQLPlanner) addAggregators(
 		multiStage = true
 		for _, e := range aggregations {
 			if e.Distinct {
-				// We can't do local aggregation for functions with distinct (at least not
-				// in general).
+				// We can't do local aggregation for functions with distinct.
 				multiStage = false
-				break
+				anyDistinct = true
+			} else {
+				// We can't do local distinct if we have a mix of distinct and
+				// non-distinct aggregations.
+				allDistinct = false
 			}
 			if _, ok := distsqlplan.DistAggregationTable[e.Func]; !ok {
 				multiStage = false
@@ -793,8 +804,54 @@ func (dsp *distSQLPlanner) addAggregators(
 			}
 		}
 	}
+	if !anyDistinct {
+		allDistinct = false
+	}
+
+	// If the previous stage was all on a single node, we will put the final
+	// stage there. Otherwise, bring the results back on this node.
+	node := dsp.nodeDesc.NodeID
+	if prevStageNode != 0 {
+		node = prevStageNode
+	}
 
 	var finalAggSpec distsqlrun.AggregatorSpec
+
+	if !multiStage && allDistinct {
+		// We can't do local aggregation, but we can do local distinct processing
+		// to reduce streaming duplicates, and aggregate on the final node.
+
+		ordering := dsp.convertOrdering(n.plan.Ordering().ordering, p.planToStreamColMap).Columns
+		orderedColsMap := make(map[uint32]struct{})
+		for _, ord := range ordering {
+			orderedColsMap[ord.ColIdx] = struct{}{}
+		}
+		distinctColsMap := make(map[uint32]struct{})
+		for _, agg := range aggregations {
+			distinctColsMap[agg.ColIdx] = struct{}{}
+		}
+		orderedColumns := make([]uint32, 0, len(orderedColsMap))
+		for o := range orderedColsMap {
+			orderedColumns = append(orderedColumns, o)
+		}
+		distinctColumns := make([]uint32, 0, len(distinctColsMap))
+		for o := range distinctColsMap {
+			distinctColumns = append(distinctColumns, o)
+		}
+
+		sort.Slice(orderedColumns, func(i, j int) bool { return orderedColumns[i] < orderedColumns[j] })
+		sort.Slice(distinctColumns, func(i, j int) bool { return distinctColumns[i] < distinctColumns[j] })
+
+		distinctSpec := distsqlrun.ProcessorCoreUnion{
+			Distinct: &distsqlrun.DistinctSpec{
+				OrderedColumns:  orderedColumns,
+				DistinctColumns: distinctColumns,
+			},
+		}
+
+		// Add distinct processors local to each existing current result processor.
+		p.AddNoGroupingStage(distinctSpec, distsqlrun.PostProcessSpec{}, p.ResultTypes, p.MergeOrdering)
+	}
 
 	if !multiStage {
 		finalAggSpec = distsqlrun.AggregatorSpec{
@@ -857,13 +914,6 @@ func (dsp *distSQLPlanner) addAggregators(
 	}
 
 	// TODO(radu): we could distribute the final stage by hash.
-
-	// If the previous stage was all on a single node, put the final stage there.
-	// Otherwise, bring the results back on this node.
-	node := dsp.nodeDesc.NodeID
-	if prevStageNode != 0 {
-		node = prevStageNode
-	}
 
 	finalOutTypes := make([]sqlbase.ColumnType, len(finalAggSpec.Aggregations))
 	for i, agg := range finalAggSpec.Aggregations {
@@ -1279,13 +1329,13 @@ func (dsp *distSQLPlanner) createPlanForDistinct(
 	var orderedColumns []uint32
 	for i := 0; i < len(n.columnsInOrder); i++ {
 		if n.columnsInOrder[i] {
-			orderedColumns = append(orderedColumns, uint32(i))
+			orderedColumns = append(orderedColumns, uint32(plan.planToStreamColMap[i]))
 		}
 	}
 	var distinctColumns []uint32
 	for i := range n.Columns() {
 		if plan.planToStreamColMap[i] != -1 {
-			distinctColumns = append(distinctColumns, uint32(i))
+			distinctColumns = append(distinctColumns, uint32(plan.planToStreamColMap[i]))
 		}
 	}
 
