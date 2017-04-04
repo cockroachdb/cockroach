@@ -83,13 +83,13 @@ CREATE TABLE t2 (d decimal, v decimal(3, 1), primary key (d, v))
 
 statement ok
 INSERT INTO t2 VALUES
-	(1.00::decimal, 1.00::decimal),
-	(2.0::decimal, 2.0::decimal),
-	(3::decimal, 3::decimal),
-	('NaN'::decimal, 'NaN'::decimal),
-	('Inf'::decimal, 'Inf'::decimal),
-	('-Inf'::decimal, '-Inf'::decimal),
-	('-0.0000'::decimal, '-0.0000'::decimal)
+  (1.00::decimal, 1.00::decimal),
+  (2.0::decimal, 2.0::decimal),
+  (3::decimal, 3::decimal),
+  ('NaN'::decimal, 'NaN'::decimal),
+  ('Inf'::decimal, 'Inf'::decimal),
+  ('-Inf'::decimal, '-Inf'::decimal),
+  ('-0.0000'::decimal, '-0.0000'::decimal)
 
 query RR
 SELECT * FROM t2 ORDER BY d
@@ -124,14 +124,14 @@ CREATE TABLE s (d decimal null)
 
 statement ok
 INSERT INTO s VALUES
-	(null),
-	('NaN'::decimal),
-	('-NaN'::decimal),
-	('Inf'::decimal),
-	('-Inf'::decimal),
-	('0'::decimal),
-	(1),
-	(-1)
+  (null),
+  ('NaN'::decimal),
+  ('-NaN'::decimal),
+  ('Inf'::decimal),
+  ('-Inf'::decimal),
+  ('0'::decimal),
+  (1),
+  (-1)
 
 query R
 SELECT * FROM s ORDER BY d
@@ -159,11 +159,11 @@ NULL
 
 statement ok
 INSERT INTO s VALUES
-	('-0'::decimal),
-	('-0.0'::decimal),
-	('-0.00'::decimal),
-	('-0.00E-1'::decimal),
-	('-0.0E-3'::decimal)
+  ('-0'::decimal),
+  ('-0.0'::decimal),
+  ('-0.00'::decimal),
+  ('-0.00E-1'::decimal),
+  ('-0.0E-3'::decimal)
 
 query R rowsort
 SELECT * FROM s WHERE d = 0
@@ -185,3 +185,49 @@ query R
 SELECT * FROM s WHERE d = 'inf'::decimal
 ----
 Infinity
+
+# Verify that decimals don't lose trailing 0s even when used for an index.
+statement ok
+CREATE INDEX idx ON s (d)
+
+query R rowsort
+SELECT * FROM s@idx WHERE d = 0
+----
+0
+-0
+-0.0
+-0.00
+-0.000
+-0.0000
+
+statement ok
+INSERT INTO s VALUES
+  ('10'::decimal),
+  ('10.0'::decimal),
+  ('10.00'::decimal),
+  ('10.000'::decimal),
+  ('100000E-4'::decimal),
+  ('1000000E-5'::decimal),
+  ('1.0000000E+1'::decimal)
+
+query R rowsort
+SELECT * FROM s@primary WHERE d = 10
+----
+10
+10.0
+10.00
+10.000
+10.0000
+10.00000
+10.000000
+
+query R rowsort
+SELECT * FROM s@idx WHERE d = 10
+----
+10
+10.0
+10.00
+10.000
+10.0000
+10.00000
+10.000000
