@@ -100,6 +100,6 @@ listen psql
     bind :26257
     mode tcp
     balance roundrobin
-{{range .}}    server cockroach{{.Desc.NodeID}} {{.Desc.Address.AddressField}}
+{{range .}}    server cockroach{{.Desc.NodeID}} {{.Desc.Address.AddressField}} check
 {{end}}
 `
