@@ -24,7 +24,6 @@ RUN curl -fsSL https://deb.nodesource.com/gpgkey/nodesource.gpg.key | apt-key ad
 # cmake - msan: libcxx
 # file - crosstool-ng/build
 # flex - crosstool-ng/configure
-# fontconfig - ui: phantomjs
 # g++ - crosstool-ng/build
 # gawk - crosstool-ng/configure
 # git - crosstool-ng/configure
@@ -50,7 +49,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     cmake \
     file \
     flex \
-    fontconfig \
     g++ \
     gawk \
     git \
@@ -71,23 +69,23 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # TODO(tamird): use the shallow clone when crosstool-ng 1.23 is released.
 # RUN git clone --depth 1 --branch crosstool-ng-1.23.0 https://github.com/crosstool-ng/crosstool-ng \
-RUN git clone https://github.com/crosstool-ng/crosstool-ng && git -C crosstool-ng checkout 1ec5e7aa3400b534264ba1c2fa3949dc6a2cca90 \
+RUN git clone https://github.com/crosstool-ng/crosstool-ng && git -C crosstool-ng checkout ee7662fa58a7f45ccd3e3520919ee70301ab7648 \
  && cd crosstool-ng \
  && ./bootstrap \
  && ./configure --prefix /usr/local/ct-ng \
  && make -j$(nproc) \
  && make install \
+ && cp ct-ng.comp /etc/bash_completion.d/ \
  && cd .. \
  && rm -rf crosstool-ng
 
-COPY x86-linux-gnu.defconfig x86-linux-musl.defconfig ./
-RUN mkdir build && cd build \
- && rm -rf * && cp ../x86-linux-gnu.defconfig  defconfig && /usr/local/ct-ng/bin/ct-ng defconfig && CC=gcc CXX=g++ /usr/local/ct-ng/bin/ct-ng build \
- && rm -rf * && cp ../x86-linux-musl.defconfig defconfig && /usr/local/ct-ng/bin/ct-ng defconfig && CC=gcc CXX=g++ /usr/local/ct-ng/bin/ct-ng build \
+COPY x86_64-unknown-linux-gnu.defconfig x86_64-unknown-linux-musl.defconfig x86_64-w64-mingw.defconfig ./
+RUN mkdir build src && cd build \
+ && rm -rf * && cp ../x86_64-unknown-linux-gnu.defconfig  defconfig && /usr/local/ct-ng/bin/ct-ng defconfig && /usr/local/ct-ng/bin/ct-ng build \
+ && rm -rf * && cp ../x86_64-unknown-linux-musl.defconfig defconfig && /usr/local/ct-ng/bin/ct-ng defconfig && /usr/local/ct-ng/bin/ct-ng build \
+ && rm -rf * && cp ../x86_64-w64-mingw.defconfig          defconfig && /usr/local/ct-ng/bin/ct-ng defconfig && /usr/local/ct-ng/bin/ct-ng build \
  && cd .. \
- && rm -rf build
-
-USER root
+ && rm -rf build src
 
 RUN apt-get autoremove -y gcc g++
 
@@ -116,8 +114,8 @@ ENV CXX /x-tools/x86_64-unknown-linux-gnu/bin/x86_64-unknown-linux-gnu-g++
 # BEGIN https://github.com/docker-library/golang/blob/master/1.8/alpine/Dockerfile
 
 COPY parallelbuilds-go1.8.patch /
-RUN curl -fsSL https://golang.org/dl/go1.8.src.tar.gz -o golang.tar.gz \
- && echo '406865f587b44be7092f206d73fc1de252600b79b3cacc587b74b5ef5c623596  golang.tar.gz' | sha256sum -c - \
+RUN curl -fsSL https://storage.googleapis.com/golang/go1.8.1.src.tar.gz -o golang.tar.gz \
+ && echo '33daf4c03f86120fdfdc66bddf6bfff4661c7ca11c5da473e537f4d69b470e57  golang.tar.gz' | sha256sum -c - \
  && tar -C /usr/local -xzf golang.tar.gz \
  && rm golang.tar.gz \
  && cd /usr/local/go/src \
