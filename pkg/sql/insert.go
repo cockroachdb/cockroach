@@ -94,9 +94,6 @@ func (p *planner) Insert(
 	if err != nil {
 		return nil, err
 	}
-	if err != nil {
-		return nil, err
-	}
 
 	var insertRows parser.SelectStatement
 	if n.DefaultValues() {
