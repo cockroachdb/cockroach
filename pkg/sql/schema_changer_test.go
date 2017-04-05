@@ -1003,23 +1003,6 @@ COMMIT;
 
 			wg.Wait() // for schema change to complete
 
-			// Backfill retry happened.
-			if count, e := atomic.SwapInt64(&retriedBackfill, 0), int64(1); count != e {
-				t.Fatalf("expected = %d, found = %d", e, count)
-			}
-			// 1 failed + 2 retried backfill chunks.
-			expectNumBackfills := int64(3)
-			if testCase == testCases[len(testCases)-1] {
-				// The DROP INDEX case: The above INSERTs do not add any index
-				// entries for the inserted rows, so the index remains smaller
-				// than a backfill chunk and is dropped in a single retried
-				// backfill chunk.
-				expectNumBackfills = 2
-			}
-			if count := atomic.SwapInt64(&backfillCount, 0); count != expectNumBackfills {
-				t.Fatalf("expected = %d, found = %d", expectNumBackfills, count)
-			}
-
 			ctx := context.TODO()
 
 			// Verify the number of keys left behind in the table to validate

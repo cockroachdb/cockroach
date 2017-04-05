@@ -211,7 +211,7 @@ func (cb *columnBackfiller) runChunk(
 		}
 
 		oldValues := make(parser.Datums, len(ru.FetchCols))
-		b := &client.Batch{}
+		b := txn.NewBatch()
 		rowLength := 0
 		for i := int64(0); i < chunkSize; i++ {
 			row, err := cb.fetcher.NextRowDecoded(ctx)
@@ -240,7 +240,7 @@ func (cb *columnBackfiller) runChunk(
 			}
 		}
 		// Write the new row values.
-		if err := txn.Run(ctx, b); err != nil {
+		if err := txn.CommitInBatch(ctx, b); err != nil {
 			return ConvertBackfillError(&cb.spec.Table, b)
 		}
 		return nil

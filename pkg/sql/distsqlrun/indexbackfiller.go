@@ -138,7 +138,7 @@ func (ib *indexBackfiller) runChunk(
 			return err
 		}
 
-		b := &client.Batch{}
+		b := txn.NewBatch()
 		for i := int64(0); i < chunkSize; i++ {
 			encRow, err := ib.fetcher.NextRow(ctx)
 			if err != nil {
@@ -165,7 +165,7 @@ func (ib *indexBackfiller) runChunk(
 			}
 		}
 		// Write the new index values.
-		if err := txn.Run(ctx, b); err != nil {
+		if err := txn.CommitInBatch(ctx, b); err != nil {
 			return ConvertBackfillError(&ib.spec.Table, b)
 		}
 		return nil
