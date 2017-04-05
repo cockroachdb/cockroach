@@ -103,8 +103,15 @@ UPDATE t SET (b) = (DEFAULT), (c) = (DEFAULT)
 statement ok
 CREATE TABLE v (
   a INT PRIMARY KEY,
-  b TIMESTAMP NULL DEFAULT NULL
+  b TIMESTAMP NULL DEFAULT NULL,
+  c INT
 )
+
+statement ok
+UPDATE v SET a = DEFAULT
+
+statement ok
+UPDATE v SET (a, c) = (DEFAULT, DEFAULT)
 
 query TTBTT colnames
 SHOW COLUMNS FROM v
@@ -112,3 +119,4 @@ SHOW COLUMNS FROM v
 Field Type      Null  Default  Indices
 a     INT       false NULL     {primary}
 b     TIMESTAMP true  NULL     {}
+c     INT       true  NULL     {}
