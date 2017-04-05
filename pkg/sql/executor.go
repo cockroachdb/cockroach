@@ -1710,44 +1710,27 @@ func EvalAsOfTimestamp(
 	}
 	switch d := d.(type) {
 	case *parser.DString:
+		s := string(*d)
 		// Allow nanosecond precision because the timestamp is only used by the
 		// system and won't be returned to the user over pgwire.
-		dt, err := parser.ParseDTimestamp(string(*d), time.Nanosecond)
-		if err != nil {
-			return hlc.Timestamp{}, err
+		dt, err := parser.ParseDTimestamp(s, time.Nanosecond)
+		if err == nil {
+			ts.WallTime = dt.Time.UnixNano()
+			break
 		}
-		ts.WallTime = dt.Time.UnixNano()
+		// Attempt to parse as a decimal.
+		dec, _, err := apd.NewFromString(s)
+		if err == nil {
+			err = decimalToHLC(&ts, dec)
+			break
+		}
+		return hlc.Timestamp{}, fmt.Errorf("could not parse '%s' as timestamp", s)
 	case *parser.DInt:
 		ts.WallTime = int64(*d)
 	case *parser.DDecimal:
-		// Format the decimal into a string and split on `.` to extract the nanosecond
-		// walltime and logical tick parts.
-		// TODO(mjibson): use d.Modf() instead of converting to a string.
-		s := d.ToStandard()
-		parts := strings.SplitN(s, ".", 2)
-		nanos, err := strconv.ParseInt(parts[0], 10, 64)
-		if err != nil {
-			return hlc.Timestamp{}, errors.Wrap(err, "parse AS OF SYSTEM TIME argument")
+		if err := decimalToHLC(&ts, &d.Decimal); err != nil {
+			return hlc.Timestamp{}, err
 		}
-		var logical int64
-		if len(parts) > 1 {
-			// logicalLength is the number of decimal digits expected in the
-			// logical part to the right of the decimal. See the implementation of
-			// cluster_logical_timestamp().
-			const logicalLength = 10
-			p := parts[1]
-			if lp := len(p); lp > logicalLength {
-				return hlc.Timestamp{}, errors.Errorf("bad AS OF SYSTEM TIME argument: logical part has too many digits")
-			} else if lp < logicalLength {
-				p += strings.Repeat("0", logicalLength-lp)
-			}
-			logical, err = strconv.ParseInt(p, 10, 32)
-			if err != nil {
-				return hlc.Timestamp{}, errors.Wrap(err, "parse AS OF SYSTEM TIME argument")
-			}
-		}
-		ts.WallTime = nanos
-		ts.Logical = int32(logical)
 	default:
 		return hlc.Timestamp{}, fmt.Errorf("unexpected AS OF SYSTEM TIME argument: %s (%T)", d.ResolvedType(), d)
 	}
@@ -1755,6 +1738,38 @@ func EvalAsOfTimestamp(
 		return hlc.Timestamp{}, fmt.Errorf("cannot specify timestamp in the future")
 	}
 	return ts, nil
+}
+
+func decimalToHLC(ts *hlc.Timestamp, d *apd.Decimal) error {
+	// Format the decimal into a string and split on `.` to extract the nanosecond
+	// walltime and logical tick parts.
+	// TODO(mjibson): use d.Modf() instead of converting to a string.
+	s := d.ToStandard()
+	parts := strings.SplitN(s, ".", 2)
+	nanos, err := strconv.ParseInt(parts[0], 10, 64)
+	if err != nil {
+		return errors.Wrap(err, "parse AS OF SYSTEM TIME argument")
+	}
+	var logical int64
+	if len(parts) > 1 {
+		// logicalLength is the number of decimal digits expected in the
+		// logical part to the right of the decimal. See the implementation of
+		// cluster_logical_timestamp().
+		const logicalLength = 10
+		p := parts[1]
+		if lp := len(p); lp > logicalLength {
+			return errors.Errorf("bad AS OF SYSTEM TIME argument: logical part has too many digits")
+		} else if lp < logicalLength {
+			p += strings.Repeat("0", logicalLength-lp)
+		}
+		logical, err = strconv.ParseInt(p, 10, 32)
+		if err != nil {
+			return errors.Wrap(err, "parse AS OF SYSTEM TIME argument")
+		}
+	}
+	ts.WallTime = nanos
+	ts.Logical = int32(logical)
+	return nil
 }
 
 // isAsOf analyzes a select statement to bypass the logic in newPlan(),
