@@ -53,7 +53,6 @@ specialized hardware or number of cores (e.g. "gpu", "x16c"). For example:
 	Locality = FlagInfo{
 		Name: "locality",
 		Description: `
-Not fully implemented. https://github.com/cockroachdb/cockroach/issues/4868
 An ordered, comma-separated list of key-value pairs that describe the topography
 of the machine. Topography might include country, datacenter or rack
 designations. Data is automatically replicated to maximize diversities of each
