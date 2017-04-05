@@ -560,14 +560,6 @@ func (t *tableState) acquire(
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	if m.testingKnobs.LeaseStoreTestingKnobs.AlwaysAcquireNewLease {
-		// Don't check to see if we already have a lease at the specified version:
-		// just get a new one.
-		if err := t.acquireFromStoreLocked(ctx, txn, version, m); err != nil {
-			return nil, err
-		}
-	}
-
 	for {
 		s := t.active.findNewest(version)
 		if s != nil {
@@ -624,6 +616,10 @@ func (t *tableState) acquireFromStoreLocked(
 		return nil
 	}
 
+	event := m.testingKnobs.LeaseStoreTestingKnobs.LeaseAcquiringEvent
+	if event != nil {
+		event(t.id, txn)
+	}
 	s, err := t.acquireNodeLease(ctx, txn, version, m, parser.DTimestamp{})
 	if err != nil {
 		return err
@@ -860,6 +856,9 @@ type LeaseStoreTestingKnobs struct {
 	// Called after a lease is removed from the store, with any operation error.
 	// See LeaseRemovalTracker.
 	LeaseReleasedEvent func(lease *LeaseState, err error)
+	// Called just before a lease is about to be acquired by the store. Gives
+	// access to the txn doing the acquiring.
+	LeaseAcquiringEvent func(tableID sqlbase.ID, txn *client.Txn)
 	// Called after a lease is acquired, with any operation error.
 	LeaseAcquiredEvent func(lease *LeaseState, err error)
 	// Allow the use of expired leases.
@@ -867,12 +866,6 @@ type LeaseStoreTestingKnobs struct {
 	// RemoveOnceDereferenced forces leases to be removed
 	// as soon as they are dereferenced.
 	RemoveOnceDereferenced bool
-	// AlwaysAcquireNewLease forces the lease store to acquire a new lease even
-	// if there's already a cached one available.
-	// Caveat: This testing knob only affects the lease store itself, and does
-	// not prevent entries in the session's lease cache from getting returned,
-	// e.g. by LeaseCollection.getTableLeaseById.
-	AlwaysAcquireNewLease bool
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
