@@ -72,3 +72,132 @@ query ITTT
 EXPLAIN (DEBUG) SELECT a, b FROM t@a_idx
 ----
 0  /t/a_idx/1  /2  ROW
+
+# Regression test for #14601.
+
+statement ok
+CREATE TABLE t14601 (a STRING, b BOOL)
+
+statement ok
+CREATE INDEX i14601 ON t14601 (a) STORING (b)
+
+statement ok
+INSERT INTO t14601 VALUES
+  ('a', FALSE),
+  ('b', FALSE),
+  ('c', FALSE)
+
+statement ok
+DELETE FROM t14601 WHERE a > 'a' AND a < 'c'
+
+query ITTT
+EXPLAIN SELECT a FROM t14601 ORDER BY a
+----
+0  render
+1  scan
+1          table  t14601@i14601
+1          spans  ALL
+
+query T
+SELECT a FROM t14601 ORDER BY a
+----
+a
+c
+
+statement ok
+DROP INDEX i14601
+
+query T
+SELECT a FROM t14601 ORDER BY a
+----
+a
+c
+
+# Updates were broken too.
+
+statement ok
+CREATE TABLE t14601a (
+  a STRING,
+  b BOOL,
+  c INT,
+  FAMILY f1 (a),
+  FAMILY f2 (b),
+  FAMILY f3 (c)
+)
+
+statement ok
+CREATE INDEX i14601a ON t14601a (a) STORING (b, c)
+
+statement ok
+INSERT INTO t14601a VALUES
+  ('a', FALSE, 1),
+  ('b', TRUE, 2),
+  ('c', FALSE, 3)
+
+statement ok
+UPDATE t14601a SET b = NOT b WHERE a > 'a' AND a < 'c'
+
+query ITTT
+EXPLAIN SELECT a, b FROM t14601a ORDER BY a
+----
+0  render
+1  scan
+1          table  t14601a@i14601a
+1          spans  ALL
+
+query TB
+SELECT a, b FROM t14601a ORDER BY a
+----
+a  false
+b  false
+c  false
+
+statement ok
+DROP INDEX i14601a
+
+query TB
+SELECT a, b FROM t14601a ORDER BY a
+----
+a  false
+b  false
+c  false
+
+statement ok
+DELETE FROM t14601a
+
+statement ok
+CREATE UNIQUE INDEX i14601a ON t14601a (a) STORING (b)
+
+statement ok
+INSERT INTO t14601a VALUES
+  ('a', FALSE),
+  ('b', TRUE),
+  ('c', FALSE)
+
+statement ok
+UPDATE t14601a SET b = NOT b WHERE a > 'a' AND a < 'c'
+
+query ITTT
+EXPLAIN SELECT a, b FROM t14601a ORDER BY a
+----
+0  render
+1  scan
+1          table  t14601a@i14601a
+1          spans  ALL
+
+query TB
+SELECT a, b FROM t14601a ORDER BY a
+----
+a  false
+b  false
+c  false
+
+statement ok
+DROP INDEX i14601a
+
+query TB
+SELECT a, b FROM t14601a ORDER BY a
+----
+a  false
+b  false
+c  false
