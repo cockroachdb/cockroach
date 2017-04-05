@@ -418,6 +418,11 @@ SELECT abs(-1.2::float), abs(1.2::float), abs(-0.0::float), abs(0), abs(1), abs(
 ----
 1.2 1.2 0 0 1 1.2121
 
+query R
+SELECT abs(NULL)
+----
+NULL
+
 query error abs\(\): abs of min integer value \(-9223372036854775808\) not defined
 SELECT abs(-9223372036854775808)
 
@@ -1390,6 +1395,27 @@ VALUES (format_type('anyelement'::regtype, -1)),
        (format_type('timestamp'::regtype, -1)),
        (format_type('timestamptz'::regtype, -1)),
        (format_type('record'::regtype, -1))
+----
+anyelement
+boolean
+bytea
+date
+numeric
+interval
+timestamp without time zone
+timestamp with time zone
+record
+
+query T
+VALUES (format_type('anyelement'::regtype, NULL)),
+       (format_type('bool'::regtype, NULL)),
+       (format_type('bytea'::regtype, NULL)),
+       (format_type('date'::regtype, NULL)),
+       (format_type('numeric'::regtype, NULL)),
+       (format_type('interval'::regtype, NULL)),
+       (format_type('timestamp'::regtype, NULL)),
+       (format_type('timestamptz'::regtype, NULL)),
+       (format_type('record'::regtype, NULL))
 ----
 anyelement
 boolean

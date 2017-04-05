@@ -101,6 +101,14 @@ type Builtin struct {
 	// in separate statements, and should not be marked as impure.
 	impure bool
 
+	// Set to true when a function's definition can handle NULL arguments. When
+	// set, the function will be given the chance to see NULL values instead of
+	// evaluating directly to NULL in the presence of any NULL values.
+	//
+	// NOTE: when set, a function should be prepared for any of its arguments to
+	// be NULL and should act accordinly.
+	nullableArgs bool
+
 	// Set to true when a function depends on data stored in the EvalContext, e.g.
 	// statement_timestamp. Currently used for DistSQL to determine if expressions
 	// can be evaluated on a different node without sending over the EvalContext.
@@ -264,8 +272,9 @@ var Builtins = map[string][]Builtin{
 	// NULL arguments are ignored.
 	"concat": {
 		Builtin{
-			Types:      VariadicType{TypeString},
-			ReturnType: fixedReturnType(TypeString),
+			Types:        VariadicType{TypeString},
+			ReturnType:   fixedReturnType(TypeString),
+			nullableArgs: true,
 			fn: func(_ *EvalContext, args Datums) (Datum, error) {
 				var buffer bytes.Buffer
 				for _, d := range args {
@@ -282,8 +291,9 @@ var Builtins = map[string][]Builtin{
 
 	"concat_ws": {
 		Builtin{
-			Types:      VariadicType{TypeString},
-			ReturnType: fixedReturnType(TypeString),
+			Types:        VariadicType{TypeString},
+			ReturnType:   fixedReturnType(TypeString),
+			nullableArgs: true,
 			fn: func(_ *EvalContext, args Datums) (Datum, error) {
 				if len(args) == 0 {
 					return nil, errInsufficientArgs
@@ -782,21 +792,22 @@ var Builtins = map[string][]Builtin{
 
 	"greatest": {
 		Builtin{
-			Types:      HomogeneousType{},
-			ReturnType: identityReturnType(0),
-			category:   categoryComparison,
+			Types:        HomogeneousType{},
+			ReturnType:   identityReturnType(0),
+			nullableArgs: true,
+			category:     categoryComparison,
 			fn: func(ctx *EvalContext, args Datums) (Datum, error) {
 				return pickFromTuple(ctx, true /* greatest */, args)
 			},
 			Info: "Returns the element with the greatest value.",
 		},
 	},
-
 	"least": {
 		Builtin{
-			Types:      HomogeneousType{},
-			ReturnType: identityReturnType(0),
-			category:   categoryComparison,
+			Types:        HomogeneousType{},
+			ReturnType:   identityReturnType(0),
+			nullableArgs: true,
+			category:     categoryComparison,
 			fn: func(ctx *EvalContext, args Datums) (Datum, error) {
 				return pickFromTuple(ctx, false /* !greatest */, args)
 			},
