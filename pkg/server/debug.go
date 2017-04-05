@@ -23,6 +23,7 @@ import (
 	// Register the net/trace endpoint with http.DefaultServeMux.
 	"golang.org/x/net/trace"
 
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/rcrowley/go-metrics"
 	"github.com/rcrowley/go-metrics/exp"
 
@@ -56,13 +57,22 @@ func init() {
 	// TODO(mberhault): properly secure this once we require client certs.
 	origAuthRequest := trace.AuthRequest
 	trace.AuthRequest = func(req *http.Request) (bool, bool) {
-		_, sensitive := origAuthRequest(req)
-		return true, sensitive
+		any, sensitive := origAuthRequest(req)
+		if envutil.EnvOrDefaultBool("COCKROACH_REMOTE_DEBUG", false) {
+			any = true
+		}
+		return any, sensitive
 	}
 
 	debugServeMux.HandleFunc(debugEndpoint, func(w http.ResponseWriter, r *http.Request) {
+		if any, _ := trace.AuthRequest(r); !any {
+			http.Error(w, "not allowed", http.StatusUnauthorized)
+			return
+		}
+
 		if r.URL.Path != debugEndpoint {
 			http.Redirect(w, r, debugEndpoint, http.StatusMovedPermanently)
+			return
 		}
 
 		// The explicit header is necessary or (at least Chrome) will try to
