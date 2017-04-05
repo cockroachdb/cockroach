@@ -40,7 +40,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
-	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -1015,40 +1014,6 @@ func TestPGPreparedExec(t *testing.T) {
 				),
 			},
 		},
-		// Test for #14473: assert that looking up a table lease for a foreign key
-		// during a prepared update doesn't kill the server. This test requires
-		// the AlwaysAcquireNewLease testing knob be set to true below.
-		{
-			"CREATE TABLE d.t (i INT primary key)",
-			[]preparedExecTest{
-				baseTest,
-			},
-		},
-		{
-			"CREATE TABLE d.u (i INT REFERENCES d.t(i))",
-			[]preparedExecTest{
-				baseTest,
-			},
-		},
-		{
-			"INSERT INTO d.t VALUES($1)",
-			[]preparedExecTest{
-				baseTest.RowsAffected(1).SetArgs(1),
-				baseTest.RowsAffected(1).SetArgs(2),
-			},
-		},
-		{
-			"INSERT INTO d.u VALUES($1)",
-			[]preparedExecTest{
-				baseTest.RowsAffected(1).SetArgs(1),
-			},
-		},
-		{
-			"UPDATE d.u SET i = $1 WHERE i = $2",
-			[]preparedExecTest{
-				baseTest.RowsAffected(1).SetArgs(2, 1),
-			},
-		},
 		{
 			"DROP DATABASE d",
 			[]preparedExecTest{
@@ -1079,27 +1044,8 @@ func TestPGPreparedExec(t *testing.T) {
 		},
 	}
 
-	// Ensure that leases are always acquired fresh to test that table lease
-	// acquiration works properly during PREPARE.
-	testingKnobs := base.TestingKnobs{
-		SQLLeaseManager: &sql.LeaseManagerTestingKnobs{
-			LeaseStoreTestingKnobs: sql.LeaseStoreTestingKnobs{
-				AlwaysAcquireNewLease: true,
-			},
-		},
-	}
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{Knobs: testingKnobs})
-
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop()
-
-	pgURL, cleanupFn := sqlutils.PGUrl(t, s.ServingAddr(), "TestPGPreparedExec", url.User(security.RootUser))
-	defer cleanupFn()
-
-	db, err := gosql.Open("postgres", pgURL.String())
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
 
 	runTests := func(query string, tests []preparedExecTest, execFunc func(...interface{}) (gosql.Result, error)) {
 		for _, test := range tests {
