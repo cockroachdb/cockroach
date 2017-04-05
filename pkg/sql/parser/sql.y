@@ -631,7 +631,7 @@ func (u *sqlSymUnion) kvOptions() []KVOption {
 
 %token <str>   CASCADE CASE CAST CHAR
 %token <str>   CHARACTER CHARACTERISTICS CHECK
-%token <str>   COALESCE COLLATE COLLATION COLUMN COLUMNS COMMIT
+%token <str>   CLUSTER COALESCE COLLATE COLLATION COLUMN COLUMNS COMMIT
 %token <str>   COMMITTED CONCAT CONFLICT CONSTRAINT CONSTRAINTS
 %token <str>   COPY COVERING CREATE
 %token <str>   CROSS CUBE CURRENT CURRENT_CATALOG CURRENT_DATE
@@ -684,7 +684,7 @@ func (u *sqlSymUnion) kvOptions() []KVOption {
 %token <str>   ROW ROWS RSHIFT
 
 %token <str>   STATUS SAVEPOINT SEARCH SECOND SELECT
-%token <str>   SERIAL SERIALIZABLE SESSION SESSION_USER SET SHOW
+%token <str>   SERIAL SERIALIZABLE SESSION SESSION_USER SET SETTING SHOW
 %token <str>   SIMILAR SIMPLE SMALLINT SMALLSERIAL SNAPSHOT SOME SPLIT SQL
 %token <str>   START STDIN STRICT STRING STORING SUBSTRING
 %token <str>   SYMMETRIC SYSTEM
@@ -1396,6 +1396,11 @@ set_stmt:
 | SET SESSION set_rest
   {
     $$.val = $3.stmt()
+  }
+| SET CLUSTER SETTING generic_set
+  {
+    $$.val = $4.stmt()
+    $$.val.(*Set).SetMode = SetModeClusterSetting
   }
 | set_exprs_internal { /* SKIP DOC */ }
 
@@ -5140,6 +5145,7 @@ unreserved_keyword:
 | BLOB
 | BY
 | CASCADE
+| CLUSTER
 | COLUMNS
 | COMMIT
 | COMMITTED
@@ -5224,6 +5230,7 @@ unreserved_keyword:
 | ROLLBACK
 | ROLLUP
 | ROWS
+| SETTING
 | STATUS
 | SAVEPOINT
 | SEARCH
