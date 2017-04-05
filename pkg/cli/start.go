@@ -22,6 +22,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"net"
 	"net/url"
 	"os"
@@ -118,9 +119,56 @@ func initInsecureServer() error {
 	return nil
 }
 
+// maxSizePerProfile is the maximum total size in bytes for profiles per
+// profile type.
+var maxSizePerProfile = envutil.EnvOrDefaultInt64(
+	"COCKROACH_MAX_SIZE_PER_PROFILE", 100<<20 /* 100 MB */)
+
+// gcProfiles removes old profiles matching the specified prefix when the sum
+// of newer profiles is larger than maxSize. Requires that the suffix used for
+// the profiles indicates age (e.g. by using a date/timestamp suffix) such that
+// sorting the filenames corresponds to ordering the profiles from oldest to
+// newest.
+func gcProfiles(dir, prefix string, maxSize int64) {
+	files, err := ioutil.ReadDir(dir)
+	if err != nil {
+		log.Warning(context.Background(), err)
+		return
+	}
+	var sum int64
+	var found int
+	for i := len(files) - 1; i >= 0; i-- {
+		f := files[i]
+		if !f.Mode().IsRegular() {
+			continue
+		}
+		if !strings.HasPrefix(f.Name(), prefix) {
+			continue
+		}
+		found++
+		sum += f.Size()
+		if found == 1 {
+			// Always keep the most recent profile.
+			continue
+		}
+		if sum <= maxSize {
+			continue
+		}
+		if err := os.Remove(filepath.Join(dir, f.Name())); err != nil {
+			log.Info(context.Background(), err)
+		}
+	}
+}
+
 func initMemProfile(ctx context.Context, dir string) {
+	const jeprof = "jeprof."
+	const memprof = "memprof."
+
+	gcProfiles(dir, jeprof, maxSizePerProfile)
+	gcProfiles(dir, memprof, maxSizePerProfile)
+
 	memProfileInterval := envutil.EnvOrDefaultDuration("COCKROACH_MEMPROF_INTERVAL", -1)
-	if memProfileInterval < 0 {
+	if memProfileInterval <= 0 {
 		return
 	}
 	if min := time.Second; memProfileInterval < min {
@@ -150,13 +198,14 @@ func initMemProfile(ctx context.Context, dir string) {
 
 				// Try jemalloc heap profile first, we only log errors.
 				if jemallocHeapDump != nil {
-					jepath := filepath.Join(dir, "jeprof."+suffix)
+					jepath := filepath.Join(dir, jeprof+suffix)
 					if err := jemallocHeapDump(jepath); err != nil {
 						log.Warningf(ctx, "error writing jemalloc heap %s: %s", jepath, err)
 					}
+					gcProfiles(dir, jeprof, maxSizePerProfile)
 				}
 
-				path := filepath.Join(dir, "memprof."+suffix)
+				path := filepath.Join(dir, memprof+suffix)
 				// Try writing a go heap profile.
 				f, err := os.Create(path)
 				if err != nil {
@@ -168,14 +217,18 @@ func initMemProfile(ctx context.Context, dir string) {
 					log.Warningf(ctx, "error writing go heap %s: %s", path, err)
 					return
 				}
+				gcProfiles(dir, memprof, maxSizePerProfile)
 			}()
 		}
 	}()
 }
 
 func initCPUProfile(ctx context.Context, dir string) {
+	const cpuprof = "cpuprof."
+	gcProfiles(dir, cpuprof, maxSizePerProfile)
+
 	cpuProfileInterval := envutil.EnvOrDefaultDuration("COCKROACH_CPUPROF_INTERVAL", -1)
-	if cpuProfileInterval < 0 {
+	if cpuProfileInterval <= 0 {
 		return
 	}
 	if min := time.Second; cpuProfileInterval < min {
@@ -204,7 +257,7 @@ func initCPUProfile(ctx context.Context, dir string) {
 			func() {
 				const format = "2006-01-02T15_04_05.999"
 				suffix := timeutil.Now().Add(cpuProfileInterval).Format(format)
-				f, err := os.Create(filepath.Join(dir, "cpuprof."+suffix))
+				f, err := os.Create(filepath.Join(dir, cpuprof+suffix))
 				if err != nil {
 					log.Warningf(ctx, "error creating go cpu file %s", err)
 					return
@@ -215,6 +268,7 @@ func initCPUProfile(ctx context.Context, dir string) {
 					pprof.StopCPUProfile()
 					currentProfile.Close()
 					currentProfile = nil
+					gcProfiles(dir, cpuprof, maxSizePerProfile)
 				}
 
 				// Start the new profile.
