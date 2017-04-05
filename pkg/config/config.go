@@ -412,7 +412,8 @@ func (s SystemConfig) GetZoneConfigForKey(key roachpb.RKey) (ZoneConfig, error) 
 		objectID = keys.MetaSystemID
 	}
 	if bytes.HasPrefix(key, keys.SystemPrefix) {
-		if bytes.HasPrefix(key, keys.TimeseriesPrefix) || bytes.HasPrefix(key, keys.StatusPrefix) || bytes.HasPrefix(key, keys.UpdateCheckPrefix) {
+		if bytes.HasPrefix(key, keys.TimeseriesPrefix) || bytes.HasPrefix(key, keys.StatusPrefix) ||
+			bytes.HasPrefix(key, keys.ReportUsagePrefix) {
 			objectID = keys.NormalSystemID
 		}
 		objectID = keys.IdentifierSystemID
