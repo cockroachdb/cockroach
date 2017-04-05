@@ -12,6 +12,7 @@
 #   git config --global core.excludesfile ~/.gitignore_global)
 
 artifacts
+/bin
 .bootstrap
 .buildinfo
 /cockroach
