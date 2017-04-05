@@ -110,10 +110,6 @@ func (v *distSQLExprCheckVisitor) VisitPre(expr parser.Expr) (recurse bool, newE
 		v.err = errors.Errorf("subqueries not supported yet")
 		return false, expr
 
-	case *parser.CollateExpr:
-		v.err = errors.Errorf("collations not supported yet (#13496)")
-		return false, expr
-
 	case *parser.FuncExpr:
 		if t.IsContextDependent() {
 			v.err = errors.Errorf("context-dependent function %s not supported", t)
@@ -245,13 +241,6 @@ func (dsp *distSQLPlanner) checkSupportForNode(node planNode) (distRecommendatio
 		return rec, nil
 
 	case *scanNode:
-		// TODO(radu): remove this limitation.
-		for _, id := range n.index.CompositeColumnIDs {
-			idx, ok := n.colIdxMap[id]
-			if ok && n.valNeededForCol[idx] {
-				return 0, errors.Errorf("cannot scan composite column")
-			}
-		}
 		rec := canDistribute
 		if n.hardLimit != 0 || n.softLimit != 0 {
 			// We don't yet recommend distributing plans where limits propagate
