@@ -17,10 +17,16 @@
 package log
 
 import (
-	"syscall"
+	"os"
+
+	"golang.org/x/sys/unix"
 )
 
 func dupFD(fd uintptr) (uintptr, error) {
-	nfd, err := syscall.Dup(int(fd))
+	nfd, err := unix.Dup(int(fd))
 	return uintptr(nfd), err
+}
+
+func redirectStderr(f *os.File) error {
+	return unix.Dup2(int(f.Fd()), unix.Stderr)
 }
