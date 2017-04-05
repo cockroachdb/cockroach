@@ -486,7 +486,7 @@ SELECT AVG(DISTINCT k), AVG(DISTINCT v), SUM(DISTINCT k), SUM(DISTINCT v) FROM k
 ----
 5 3 30 6
 
-query R trimdecimals
+query R
 SELECT AVG(k) * 2.0 + MAX(v)::DECIMAL FROM kv
 ----
 14.0
@@ -759,23 +759,23 @@ EXPLAIN (EXPRS) SELECT MAX(x) FROM xyz WHERE (z, y) = (3.0, 2)
 2                 spans        /3/2/#-/3/3
 2                 limit        1
 
-query RRR trimdecimals
+query RRR
 SELECT VARIANCE(x), VARIANCE(y::decimal), round(VARIANCE(z), 14) FROM xyz
 ----
-9.00 4.5 6.33333333333333
+9 4.5 6.33333333333333
 
 query ITTT
 EXPLAIN (DEBUG) SELECT VARIANCE(x), VARIANCE(y::decimal), round(VARIANCE(z), 14) FROM xyz
 ----
-0  /xyz/primary/1    NULL                            PARTIAL
-0  /xyz/primary/1/y  2                               PARTIAL
-0  /xyz/primary/1/z  3.0                             BUFFERED
-1  /xyz/primary/4    NULL                            PARTIAL
-1  /xyz/primary/4/y  5                               PARTIAL
-1  /xyz/primary/4/z  6.0                             BUFFERED
-2  /xyz/primary/7    NULL                            PARTIAL
-2  /xyz/primary/7/z  8.0                             BUFFERED
-0  0                 (9.00, 4.5, 6.33333333333333)   ROW
+0  /xyz/primary/1    NULL                        PARTIAL
+0  /xyz/primary/1/y  2                           PARTIAL
+0  /xyz/primary/1/z  3.0                         BUFFERED
+1  /xyz/primary/4    NULL                        PARTIAL
+1  /xyz/primary/4/y  5                           PARTIAL
+1  /xyz/primary/4/z  6.0                         BUFFERED
+2  /xyz/primary/7    NULL                        PARTIAL
+2  /xyz/primary/7/z  8.0                         BUFFERED
+0  0                 (9, 4.5, 6.33333333333333)  ROW
 
 query R
 SELECT VARIANCE(x) FROM xyz WHERE x = 10
