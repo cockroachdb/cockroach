@@ -33,9 +33,8 @@ var OrigStderr = func() *os.File {
 // This is used to de-duplicate the panic log.
 var stderrRedirected bool
 
-// hijackStderr replaces syscall.Stderr (and thus the target of
-// os.Stderr and pretty much anything that targets stderr using
-// standard ways) by the given file descriptor.
+// hijackStderr replaces stderr with the given file descriptor.
+//
 // A client that wishes to use the original stderr must use
 // OrigStderr defined above.
 func hijackStderr(f *os.File) error {
@@ -43,7 +42,7 @@ func hijackStderr(f *os.File) error {
 	return redirectStderr(f)
 }
 
-// restoreStderr cancels the effect of hijackStderr()
+// restoreStderr cancels the effect of hijackStderr().
 func restoreStderr() error {
 	stderrRedirected = false
 	return redirectStderr(OrigStderr)

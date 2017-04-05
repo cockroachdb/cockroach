@@ -17,24 +17,27 @@ package log
 import (
 	"os"
 	"syscall"
+
+	"golang.org/x/sys/windows"
 )
 
 var (
-	kernel32         = syscall.MustLoadDLL("kernel32.dll")
+	kernel32         = windows.MustLoadDLL("kernel32.dll")
 	procSetStdHandle = kernel32.MustFindProc("SetStdHandle")
 )
 
 func dupFD(fd uintptr) (uintptr, error) {
 	// Adapted from https://github.com/golang/go/blob/go1.8/src/syscall/exec_windows.go#L303.
-	p, err := syscall.GetCurrentProcess()
+	p, err := windows.GetCurrentProcess()
 	if err != nil {
 		return 0, err
 	}
-	var h syscall.Handle
-	return uintptr(h), syscall.DuplicateHandle(p, syscall.Handle(fd), p, &h, 0, true, syscall.DUPLICATE_SAME_ACCESS)
+	var h windows.Handle
+	return uintptr(h), windows.DuplicateHandle(p, windows.Handle(fd), p, &h, 0, true, windows.DUPLICATE_SAME_ACCESS)
 }
 
-func setStdHandle(nStdHandle int32, hHandle syscall.Handle) error {
+// TODO(tamird): use windows.SetStdHandle https://go-review.googlesource.com/c/39609/ is merged.
+func setStdHandle(nStdHandle int32, hHandle windows.Handle) error {
 	// Adapted from https://github.com/ncw/rclone/blob/v1.36/fs/redirect_stderr_windows.go.
 	r0, _, err := procSetStdHandle.Call(uintptr(nStdHandle), uintptr(hHandle))
 	if r0 == 0 {
@@ -48,5 +51,5 @@ func setStdHandle(nStdHandle int32, hHandle syscall.Handle) error {
 
 func redirectStderr(f *os.File) error {
 	os.Stderr = f
-	return setStdHandle(syscall.STD_ERROR_HANDLE, syscall.Handle(f.Fd()))
+	return setStdHandle(windows.STD_ERROR_HANDLE, windows.Handle(f.Fd()))
 }

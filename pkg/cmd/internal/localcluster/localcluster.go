@@ -26,7 +26,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
-	"syscall"
 	"text/tabwriter"
 	"time"
 
@@ -410,47 +409,48 @@ func (n *Node) Start() {
 	n.cmd.Env = os.Environ()
 	n.cmd.Env = append(n.cmd.Env, n.env...)
 
+	ctx := context.Background()
+
 	stdoutPath := filepath.Join(n.logDir, "stdout")
-	stdout, err := os.OpenFile(stdoutPath,
-		os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
+	stdout, err := os.OpenFile(stdoutPath, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
 	if err != nil {
-		log.Fatalf(context.Background(), "unable to open file %s: %s", stdoutPath, err)
+		log.Fatalf(ctx, "unable to open file %s: %s", stdoutPath, err)
 	}
 	n.cmd.Stdout = stdout
 
 	stderrPath := filepath.Join(n.logDir, "stderr")
-	stderr, err := os.OpenFile(stderrPath,
-		os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
+	stderr, err := os.OpenFile(stderrPath, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
 	if err != nil {
-		log.Fatalf(context.Background(), "unable to open file %s: %s", stderrPath, err)
+		log.Fatalf(ctx, "unable to open file %s: %s", stderrPath, err)
 	}
 	n.cmd.Stderr = stderr
 
-	err = n.cmd.Start()
-	if n.cmd.Process != nil {
-		log.Infof(context.Background(), "process %d started: %s",
-			n.cmd.Process.Pid, strings.Join(n.args, " "))
-	}
-	if err != nil {
-		log.Infof(context.Background(), "%v", err)
-		_ = stdout.Close()
-		_ = stderr.Close()
+	if err := n.cmd.Start(); err != nil {
+		log.Error(ctx, err)
+		if err := stdout.Close(); err != nil {
+			log.Warning(ctx, err)
+		}
+		if err := stderr.Close(); err != nil {
+			log.Warning(ctx, err)
+		}
 		return
 	}
 
+	pid := n.cmd.ProcessState.Pid()
+	log.Infof(ctx, "process %d started: %s", pid, n.cmd.Args)
+
 	go func(cmd *exec.Cmd) {
 		if err := cmd.Wait(); err != nil {
-			log.Errorf(context.Background(), "waiting for command: %v", err)
+			log.Errorf(ctx, "waiting for command: %s", err)
 		}
-		_ = stdout.Close()
-		_ = stderr.Close()
+		if err := stdout.Close(); err != nil {
+			log.Warning(ctx, err)
+		}
+		if err := stderr.Close(); err != nil {
+			log.Warning(ctx, err)
+		}
 
-		ps := cmd.ProcessState
-		sy := ps.Sys().(syscall.WaitStatus)
-
-		log.Infof(context.Background(), "Process %d exited with status %d",
-			ps.Pid(), sy.ExitStatus())
-		log.Infof(context.Background(), ps.String())
+		log.Infof(ctx, "Process %d: %s", pid, cmd.ProcessState)
 
 		n.Lock()
 		n.cmd = nil
