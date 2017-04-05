@@ -56,7 +56,7 @@ func TestInitInsecure(t *testing.T) {
 		// Reset the context and insecure flag for every test case.
 		ctx.InitDefaults()
 		ctx.Insecure = true
-		insecure.isSet = false
+		serverInsecure.isSet = false
 
 		if err := f.Parse(c.args); err != nil {
 			t.Fatal(err)

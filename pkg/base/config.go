@@ -242,7 +242,7 @@ func (cfg *Config) GetServerTLSConfig() (*tls.Config, error) {
 			}
 		} else {
 			cfg.serverTLSConfig.err = errors.Errorf("--%s=false, but --%s is empty. Certificates must be specified.",
-				cliflags.Insecure.Name, cliflags.Cert.Name)
+				cliflags.ServerInsecure.Name, cliflags.Cert.Name)
 		}
 	})
 
