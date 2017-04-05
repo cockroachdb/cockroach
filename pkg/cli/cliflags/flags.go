@@ -235,13 +235,19 @@ Note: when given a path to a unix socket, most postgres clients will
 open "<given path>/.s.PGSQL.<server port>"`,
 	}
 
-	Insecure = FlagInfo{
-		Name:   "insecure",
-		EnvVar: "COCKROACH_INSECURE",
+	ServerInsecure = FlagInfo{
+		Name: "insecure",
 		Description: `
 Run over non-encrypted (non-TLS) connections. This is strongly discouraged for
 production usage and this flag must be explicitly specified in order for the
 server to listen on an external address in insecure mode.`,
+	}
+
+	ClientInsecure = FlagInfo{
+		Name:   "insecure",
+		EnvVar: "COCKROACH_INSECURE",
+		Description: `
+Connect to a cluster over non-encrypted (non-TLS) connections.`,
 	}
 
 	KeySize = FlagInfo{

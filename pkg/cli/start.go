@@ -98,7 +98,7 @@ func setDefaultSizeParameters(ctx *server.Config) {
 }
 
 func initInsecureServer() error {
-	if !serverCfg.Insecure || insecure.isSet {
+	if !serverCfg.Insecure || serverInsecure.isSet {
 		return nil
 	}
 	// The --insecure flag was not specified on the command line, verify that the
