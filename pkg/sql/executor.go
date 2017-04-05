@@ -461,6 +461,9 @@ func (e *Executor) Prepare(
 		}
 		txn.Proto().OrigTimestamp = e.cfg.Clock.Now()
 	}
+	if len(session.TxnState.schemaChangers.schemaChangers) > 0 {
+		return nil, errStmtFollowsSchemaChange
+	}
 	planner := session.newPlanner(e, txn)
 	planner.semaCtx.Placeholders.SetTypes(pinfo)
 	planner.evalCtx.PrepareOnly = true
