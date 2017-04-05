@@ -288,10 +288,6 @@ const (
 	ZonesTableID      = 5
 	SettingsTableID   = 6
 
-	MetaSystemID       = 15
-	IdentifierSystemID = 16
-	NormalSystemID     = 17
-
 	// Reserved IDs for other system tables. If you're adding a new system table,
 	// it probably belongs here.
 	// NOTE: IDs must be <= MaxReservedDescID.
@@ -300,4 +296,8 @@ const (
 	RangeEventTableID = 13
 	UITableID         = 14
 	JobsTableID       = 15
+
+	MetaSystemID       = 16
+	IdentifierSystemID = 17
+	NormalSystemID     = 18
 )
