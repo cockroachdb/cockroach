@@ -317,10 +317,7 @@ func runStart(cmd *cobra.Command, args []string) error {
 	}
 
 	signalCh := make(chan os.Signal, 1)
-	signal.Notify(signalCh, os.Interrupt)
-	// TODO(spencer): Move this behind a build tag for portability to
-	// non-unix platforms.
-	signal.Notify(signalCh, syscall.SIGTERM, syscall.SIGQUIT)
+	signal.Notify(signalCh, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
 
 	tracer := tracing.NewTracer()
 	sp := tracer.StartSpan("server start")
@@ -552,11 +549,11 @@ func runStart(cmd *cobra.Command, args []string) error {
 		returnErr = fmt.Errorf("received signal '%s' during shutdown, initiating hard shutdown", sig)
 		log.Errorf(shutdownCtx, "%v", returnErr)
 		fmt.Fprintln(os.Stdout, returnErr)
-		// This new signal is not welcome, as it interferes with the
-		// graceful shutdown process.  On Unix, a signal that was not
-		// handled gracefully by the application should be visible to
-		// other processes as an exit code encoded as 128+signal number.
-
+		// This new signal is not welcome, as it interferes with the graceful
+		// shutdown process. On Unix, a signal that was not handled gracefully by
+		// the application should be visible to other processes as an exit code
+		// encoded as 128+signal number.
+		//
 		// Also, on Unix, os.Signal is syscall.Signal and it's convertible to int.
 		ErrorCode = 128 + int(sig.(syscall.Signal))
 		// NB: we do not return here to go through log.Flush below.
