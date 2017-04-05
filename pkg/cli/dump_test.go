@@ -38,6 +38,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
+// sleepOffset performs a time.Sleep for COCKROACH_MAX_OFFSET. This is used
+// to make sure that if a backward time jump has occurred during an invocation
+// of dump, the clock will still be after the time of the previous query.
+func (c cliTest) sleepOffset() {
+	time.Sleep(c.TestServer.Cfg.MaxOffset)
+}
+
 func TestDumpRow(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -90,6 +97,7 @@ func TestDumpRow(t *testing.T) {
 
 	c.RunWithArgs([]string{"sql", "-e", create})
 
+	c.sleepOffset()
 	out, err := c.RunWithCapture("dump d t")
 	if err != nil {
 		t.Fatal(err)
@@ -138,6 +146,7 @@ func TestDumpFlags(t *testing.T) {
 
 	c.RunWithArgs([]string{"sql", "-e", "create database t; create table t.f (x int, y int); insert into t.f values (42, 69)"})
 
+	c.sleepOffset()
 	out, err := c.RunWithCapture("dump t f --dump-mode=both")
 	if err != nil {
 		t.Fatal(err)
@@ -156,6 +165,7 @@ INSERT INTO f (x, y) VALUES
 		t.Fatalf("expected %s\ngot: %s", expected, out)
 	}
 
+	c.sleepOffset()
 	out, err = c.RunWithCapture("dump t f --dump-mode=schema")
 	if err != nil {
 		t.Fatal(err)
@@ -171,6 +181,7 @@ CREATE TABLE f (
 		t.Fatalf("expected %s\ngot: %s", expected, out)
 	}
 
+	c.sleepOffset()
 	out, err = c.RunWithCapture("dump t f --dump-mode=data")
 	if err != nil {
 		t.Fatal(err)
@@ -194,6 +205,7 @@ func TestDumpMultipleTables(t *testing.T) {
 	c.RunWithArgs([]string{"sql", "-e", "create database t; create table t.f (x int, y int); insert into t.f values (42, 69)"})
 	c.RunWithArgs([]string{"sql", "-e", "create table t.g (x int, y int); insert into t.g values (3, 4)"})
 
+	c.sleepOffset()
 	out, err := c.RunWithCapture("dump t f g")
 	if err != nil {
 		t.Fatal(err)
@@ -222,6 +234,7 @@ INSERT INTO g (x, y) VALUES
 		t.Fatalf("expected %s\ngot: %s", expected, out)
 	}
 
+	c.sleepOffset()
 	out, err = c.RunWithCapture("dump t")
 	if err != nil {
 		t.Fatal(err)
@@ -251,7 +264,8 @@ INSERT INTO g (x, y) VALUES
 	}
 }
 
-func dumpSingleTable(w io.Writer, conn *sqlConn, dbName string, tName string) error {
+func dumpSingleTable(c cliTest, w io.Writer, conn *sqlConn, dbName string, tName string) error {
+	c.sleepOffset()
 	mds, ts, err := getDumpMetadata(conn, dbName, []string{tName}, "")
 	if err != nil {
 		return err
@@ -289,7 +303,7 @@ func TestDumpBytes(t *testing.T) {
 	}
 
 	var b bytes.Buffer
-	if err := dumpSingleTable(&b, conn, "d", "t"); err != nil {
+	if err := dumpSingleTable(c, &b, conn, "d", "t"); err != nil {
 		t.Fatal(err)
 	}
 	dump := b.String()
@@ -304,7 +318,7 @@ func TestDumpBytes(t *testing.T) {
 	if err := conn.Exec(dump, nil); err != nil {
 		t.Fatal(err)
 	}
-	if err := dumpSingleTable(&b, conn, "o", "t"); err != nil {
+	if err := dumpSingleTable(c, &b, conn, "o", "t"); err != nil {
 		t.Fatal(err)
 	}
 	dump2 := b.String()
@@ -451,7 +465,7 @@ func TestDumpRandom(t *testing.T) {
 		check("d.t")
 
 		var buf bytes.Buffer
-		if err := dumpSingleTable(&buf, conn, "d", "t"); err != nil {
+		if err := dumpSingleTable(c, &buf, conn, "d", "t"); err != nil {
 			t.Fatal(err)
 		}
 		dump := buf.String()
@@ -469,7 +483,7 @@ func TestDumpRandom(t *testing.T) {
 
 		check("o.t")
 
-		if err := dumpSingleTable(&buf, conn, "o", "t"); err != nil {
+		if err := dumpSingleTable(c, &buf, conn, "o", "t"); err != nil {
 			t.Fatal(err)
 		}
 		dump2 := buf.String()
@@ -501,6 +515,7 @@ func TestDumpAsOf(t *testing.T) {
 	fs := strings.Split(strings.TrimSpace(out), "\n")
 	ts := fs[len(fs)-1]
 
+	c.sleepOffset()
 	dump1, err := c.RunWithCaptureArgs([]string{"dump", "d", "t"})
 	if err != nil {
 		t.Fatal(err)
@@ -524,6 +539,7 @@ INSERT INTO t (i) VALUES
 		INSERT INTO d.t VALUES (3, 4);
 	`})
 
+	c.sleepOffset()
 	dump2, err := c.RunWithCaptureArgs([]string{"dump", "d", "t"})
 	if err != nil {
 		t.Fatal(err)
@@ -543,6 +559,7 @@ INSERT INTO t (i, j) VALUES
 		t.Fatalf("expected: %s\ngot: %s", want2, dump2)
 	}
 
+	c.sleepOffset()
 	dumpAsOf, err := c.RunWithCaptureArgs([]string{"dump", "d", "t", "--as-of", ts})
 	if err != nil {
 		t.Fatal(err)
@@ -553,6 +570,7 @@ INSERT INTO t (i, j) VALUES
 		t.Fatalf("expected: %s\ngot: %s", want1, dumpAsOf)
 	}
 
+	c.sleepOffset()
 	if out, err := c.RunWithCaptureArgs([]string{"dump", "d", "t", "--as-of", "2000-01-01 00:00:00"}); err != nil {
 		t.Fatal(err)
 	} else if !strings.Contains(string(out), "table d.t does not exist") {
