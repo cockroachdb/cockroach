@@ -18,8 +18,6 @@
 package sql
 
 import (
-	"strconv"
-	"strings"
 	"testing"
 	"time"
 
@@ -72,7 +70,7 @@ func SplitTable(
 	}
 }
 
-func TestDistSQLPlanner(t *testing.T) {
+func TestDistBackfill(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	// This test sets up various queries using these tables:
@@ -126,188 +124,22 @@ func TestDistSQLPlanner(t *testing.T) {
 	r.DB.SetMaxOpenConns(1)
 	r.Exec("SET DISTSQL = ALWAYS")
 
-	t.Run("Basic", func(t *testing.T) {
-		r = r.Subtest(t)
-		// Query with a restricted span.
-		r.CheckQueryResults(
-			"SELECT 5, 2 + y, * FROM NumToStr WHERE y <= 10 ORDER BY str",
-			[][]string{
-				strings.Fields("5 10  8 eight"),
-				strings.Fields("5  7  5 five"),
-				strings.Fields("5  6  4 four"),
-				strings.Fields("5 11  9 nine"),
-				strings.Fields("5  3  1 one"),
-				strings.Fields("5 12 10 one-zero"),
-				strings.Fields("5  9  7 seven"),
-				strings.Fields("5  8  6 six"),
-				strings.Fields("5  5  3 three"),
-				strings.Fields("5  4  2 two"),
-			},
-		)
-		// Query which requires a full table scan.
-		r.CheckQueryResults(
-			"SELECT 5, 2 + y, * FROM NumToStr WHERE y % 1000 = 0 ORDER BY str",
-			[][]string{
-				strings.Fields("5 8002 8000 eight-zero-zero-zero"),
-				strings.Fields("5 5002 5000 five-zero-zero-zero"),
-				strings.Fields("5 4002 4000 four-zero-zero-zero"),
-				strings.Fields("5 9002 9000 nine-zero-zero-zero"),
-				strings.Fields("5 1002 1000 one-zero-zero-zero"),
-				strings.Fields("5 10002 10000 one-zero-zero-zero-zero"),
-				strings.Fields("5 7002 7000 seven-zero-zero-zero"),
-				strings.Fields("5 6002 6000 six-zero-zero-zero"),
-				strings.Fields("5 3002 3000 three-zero-zero-zero"),
-				strings.Fields("5 2002 2000 two-zero-zero-zero"),
-			},
-		)
-		// Query with a restricted span + filter.
-		r.CheckQueryResults(
-			"SELECT str FROM NumToStr WHERE y < 10 AND str LIKE '%e%' ORDER BY y",
-			[][]string{
-				{"one"},
-				{"three"},
-				{"five"},
-				{"seven"},
-				{"eight"},
-				{"nine"},
-			},
-		)
-		// Query which requires a full table scan.
-		r.CheckQueryResults(
-			"SELECT str FROM NumToStr WHERE y % 1000 = 0 AND str LIKE '%i%' ORDER BY y",
-			[][]string{
-				{"five-zero-zero-zero"},
-				{"six-zero-zero-zero"},
-				{"eight-zero-zero-zero"},
-				{"nine-zero-zero-zero"},
-			},
-		)
-	})
-
-	t.Run("Join", func(t *testing.T) {
-		r = r.Subtest(t)
-		res := r.QueryStr("SELECT x, str FROM NumToSquare JOIN NumToStr ON y = xsquared")
-		// Verify that res contains one entry for each integer, with the string
-		// representation of its square, e.g.:
-		//  [1, one]
-		//  [2, two]
-		//  [3, nine]
-		//  [4, one-six]
-		// (but not necessarily in order).
-		if len(res) != n {
-			t.Fatalf("expected %d rows, got %d", n, len(res))
+	r = r.Subtest(t)
+	r.Exec("SET DISTSQL = OFF")
+	if _, err := tc.ServerConn(0).Exec("CREATE INDEX foo ON NumToStr (str)"); err != nil {
+		t.Fatal(err)
+	}
+	r.Exec("SET DISTSQL = ALWAYS")
+	res := r.QueryStr("SELECT str FROM NumToStr@foo")
+	if len(res) != n*n {
+		t.Errorf("expected %d entries, got %d", n*n, len(res))
+	}
+	// Check res is sorted.
+	curr := ""
+	for i, str := range res {
+		if curr > str[0] {
+			t.Errorf("unexpected unsorted %s > %s at %d", curr, str[0], i)
 		}
-		resMap := make(map[int]string)
-		for _, row := range res {
-			if len(row) != 2 {
-				t.Fatalf("invalid row %v", row)
-			}
-			n, err := strconv.Atoi(row[0])
-			if err != nil {
-				t.Fatalf("error parsing row %v: %s", row, err)
-			}
-			resMap[n] = row[1]
-		}
-		for i := 1; i <= n; i++ {
-			if resMap[i] != sqlutils.IntToEnglish(i*i) {
-				t.Errorf("invalid string for %d: %s", i, resMap[i])
-			}
-		}
-	})
-
-	t.Run("Agg", func(t *testing.T) {
-		r = r.Subtest(t)
-		var res [][]string
-		checkRes := func(exp int) bool {
-			return len(res) == 1 && len(res[0]) == 1 && res[0][0] == strconv.Itoa(exp)
-		}
-
-		// Sum the numbers in the NumToStr table.
-		res = r.QueryStr("SELECT SUM(y) FROM NumToStr")
-		if exp := n * n * (n*n + 1) / 2; !checkRes(exp) {
-			t.Errorf("expected [[%d]], got %s", exp, res)
-		}
-
-		// Count the rows in the NumToStr table.
-		res = r.QueryStr("SELECT COUNT(*) FROM NumToStr")
-		if !checkRes(n * n) {
-			t.Errorf("expected [[%d]], got %s", n*n, res)
-		}
-
-		// Count how many numbers contain the digit 5.
-		res = r.QueryStr("SELECT COUNT(*) FROM NumToStr WHERE str LIKE '%five%'")
-		exp := 0
-		for i := 1; i <= n*n; i++ {
-			for x := i; x > 0; x /= 10 {
-				if x%10 == 5 {
-					exp++
-					break
-				}
-			}
-		}
-		if !checkRes(exp) {
-			t.Errorf("expected [[%d]], got %s", exp, res)
-		}
-	})
-
-	t.Run("Limit", func(t *testing.T) {
-		r = r.Subtest(t)
-
-		res := r.QueryStr("SELECT y FROM NumToStr LIMIT 5")
-		if len(res) != 5 || len(res[0]) != 1 {
-			t.Errorf("expected 5 rows, 1 cols; got %v", res)
-		}
-
-		r.CheckQueryResults(
-			"SELECT y FROM NumToStr ORDER BY y LIMIT 5",
-			[][]string{{"1"}, {"2"}, {"3"}, {"4"}, {"5"}},
-		)
-
-		r.CheckQueryResults(
-			"SELECT y FROM NumToStr ORDER BY y OFFSET 5 LIMIT 2",
-			[][]string{{"6"}, {"7"}},
-		)
-
-		r.CheckQueryResults(
-			"SELECT y FROM NumToStr ORDER BY y LIMIT 0",
-			[][]string{},
-		)
-
-		r.CheckQueryResults(
-			"SELECT * FROM (SELECT y FROM NumToStr LIMIT 3) AS a ORDER BY y OFFSET 3",
-			[][]string{},
-		)
-
-		r.CheckQueryResults(
-			"SELECT y FROM NumToStr ORDER BY str LIMIT 5",
-			[][]string{{"8"}, {"88"}, {"888"}, {"8888"}, {"8885"}},
-		)
-
-		r.CheckQueryResults(
-			"SELECT y FROM (SELECT y FROM NumToStr ORDER BY y LIMIT 5) AS a WHERE y <> 2",
-			[][]string{{"1"}, {"3"}, {"4"}, {"5"}},
-		)
-	})
-
-	// This test modifies the schema and can affect subsequent tests.
-	t.Run("CreateIndex", func(t *testing.T) {
-		r = r.Subtest(t)
-		r.Exec("SET DISTSQL = OFF")
-		if _, err := tc.ServerConn(0).Exec("CREATE INDEX foo ON NumToStr (str)"); err != nil {
-			t.Fatal(err)
-		}
-		r.Exec("SET DISTSQL = ALWAYS")
-		res := r.QueryStr("SELECT str FROM NumToStr@foo")
-		if len(res) != n*n {
-			t.Errorf("expected %d entries, got %d", n*n, len(res))
-		}
-		// Check res is sorted.
-		curr := ""
-		for i, str := range res {
-			if curr > str[0] {
-				t.Errorf("unexpected unsorted %s > %s at %d", curr, str[0], i)
-			}
-			curr = str[0]
-		}
-	})
+		curr = str[0]
+	}
 }
