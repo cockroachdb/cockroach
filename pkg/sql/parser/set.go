@@ -40,13 +40,19 @@ const (
 
 	// SetModeReset represents a RESET statement.
 	SetModeReset
+
+	// SetModeClusterSetting represents a SET CLUSTER SETTING statement.
+	SetModeClusterSetting
 )
 
 // Format implements the NodeFormatter interface.
 func (node *Set) Format(buf *bytes.Buffer, f FmtFlags) {
 	switch node.SetMode {
-	case SetModeAssign:
+	case SetModeAssign, SetModeClusterSetting:
 		buf.WriteString("SET ")
+		if node.SetMode == SetModeClusterSetting {
+			buf.WriteString("CLUSTER SETTING ")
+		}
 		if node.Name != nil {
 			FormatNode(buf, f, node.Name)
 			buf.WriteString(" = ")
