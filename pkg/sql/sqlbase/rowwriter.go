@@ -420,6 +420,12 @@ func MakeRowUpdater(
 				return true
 			}
 		}
+		// The extra columns are needed to fix #14601.
+		for _, id := range index.ExtraColumnIDs {
+			if _, ok := updateColIDtoRowIndex[id]; ok {
+				return true
+			}
+		}
 		return false
 	}
 
@@ -511,6 +517,12 @@ func MakeRowUpdater(
 		}
 		for _, index := range indexes {
 			for _, colID := range index.ColumnIDs {
+				if err := maybeAddCol(colID); err != nil {
+					return RowUpdater{}, err
+				}
+			}
+			// The extra columns are needed to fix #14601.
+			for _, colID := range index.ExtraColumnIDs {
 				if err := maybeAddCol(colID); err != nil {
 					return RowUpdater{}, err
 				}
@@ -707,8 +719,8 @@ func (ru *RowUpdater) UpdateRow(
 	// Update secondary indexes.
 	for i, newSecondaryIndexEntry := range newSecondaryIndexEntries {
 		secondaryIndexEntry := secondaryIndexEntries[i]
-		secondaryKeyChanged := !bytes.Equal(newSecondaryIndexEntry.Key, secondaryIndexEntry.Key)
-		if secondaryKeyChanged {
+		var expValue interface{}
+		if !bytes.Equal(newSecondaryIndexEntry.Key, secondaryIndexEntry.Key) {
 			if err := ru.fks.checkIdx(ctx, ru.Helper.Indexes[i].ID, oldValues, ru.newValues); err != nil {
 				return nil, err
 			}
@@ -717,13 +729,17 @@ func (ru *RowUpdater) UpdateRow(
 				log.Infof(ctx, "Del %s", secondaryIndexEntry.Key)
 			}
 			b.Del(secondaryIndexEntry.Key)
-			// Do not update Indexes in the DELETE_ONLY state.
-			if _, ok := ru.deleteOnlyIndex[i]; !ok {
-				if log.V(2) {
-					log.Infof(ctx, "CPut %s -> %v", newSecondaryIndexEntry.Key, newSecondaryIndexEntry.Value.PrettyPrint())
-				}
-				b.CPut(newSecondaryIndexEntry.Key, &newSecondaryIndexEntry.Value, nil)
+		} else if !bytes.Equal(newSecondaryIndexEntry.Value.RawBytes, secondaryIndexEntry.Value.RawBytes) {
+			expValue = &secondaryIndexEntry.Value
+		} else {
+			continue
+		}
+		// Do not update Indexes in the DELETE_ONLY state.
+		if _, ok := ru.deleteOnlyIndex[i]; !ok {
+			if log.V(2) {
+				log.Infof(ctx, "CPut %s -> %v", newSecondaryIndexEntry.Key, newSecondaryIndexEntry.Value.PrettyPrint())
 			}
+			b.CPut(newSecondaryIndexEntry.Key, &newSecondaryIndexEntry.Value, expValue)
 		}
 	}
 
@@ -793,6 +809,12 @@ func MakeRowDeleter(
 	}
 	for _, index := range indexes {
 		for _, colID := range index.ColumnIDs {
+			if err := maybeAddCol(colID); err != nil {
+				return RowDeleter{}, err
+			}
+		}
+		// The extra columns are needed to fix #14601.
+		for _, colID := range index.ExtraColumnIDs {
 			if err := maybeAddCol(colID); err != nil {
 				return RowDeleter{}, err
 			}
