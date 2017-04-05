@@ -132,7 +132,7 @@ query IT rowsort
 SELECT * FROM p2
 ----
 
-query ITTT rowsort,trimdecimals
+query ITTT rowsort
 SELECT * FROM p1_0
 ----
 2  2  2.01  2
@@ -158,7 +158,7 @@ SELECT * FROM p0
 statement ok
 DROP TABLE p0
 
-query ITTT rowsort,trimdecimals
+query ITTT rowsort
 SELECT * FROM p1_0
 ----
 2  2  2.01  2
@@ -173,7 +173,7 @@ DROP TABLE p2
 statement ok
 CREATE INDEX p1_s2 ON p1_1 (s2)
 
-query ITTT rowsort,trimdecimals
+query ITTT rowsort
 SELECT * FROM p1_0
 ----
 2  2  2.01  2

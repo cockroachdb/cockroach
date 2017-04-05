@@ -789,6 +789,10 @@ func (a *decimalVarianceAggregate) Result() Datum {
 	if err := a.ed.Err(); err != nil {
 		panic(err)
 	}
+	// Remove trailing zeros. Depending on the order in which the input
+	// is processed, some number of trailing zeros could be added to the
+	// output. Remove them so that the results are the same regardless of order.
+	dd.Decimal.Reduce(&dd.Decimal)
 	return dd
 }
 

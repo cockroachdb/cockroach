@@ -254,7 +254,7 @@ DROP INDEX t@t_f_idx
 statement ok
 ALTER TABLE t DROP COLUMN f
 
-query IITTT colnames,rowsort,trimdecimals
+query IITTT colnames,rowsort
 SELECT * FROM t
 ----
 a   d     x     y     z
@@ -338,7 +338,7 @@ ALTER TABLE t ADD f INT UNIQUE REFERENCES other
 statement ok
 ALTER TABLE t ADD d INT UNIQUE, ADD e INT UNIQUE, ADD f INT
 
-query ITTTIII colnames,rowsort,trimdecimals
+query ITTTIII colnames,rowsort
 SELECT * FROM t
 ----
 a   x     y     z     d     e     f
