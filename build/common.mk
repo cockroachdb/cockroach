@@ -37,6 +37,14 @@ export GOPATH := $(realpath $(ORG_ROOT)/../../..)
 #                                       |  |~ GOPATH/src
 #                                       |~ GOPATH/src/github.com
 
+$(info GOPATH set to $(GOPATH))
+
+# We install our vendored tools to a directory within this repository to avoid
+# overwriting any user-installed binaries of the same name in the default GOBIN.
+# To ensure the cockroach binary installs to the default GOBIN, we only override
+# GOBIN to LOCAL_BIN when installing these vendored tools.
+LOCAL_BIN := $(abspath $(REPO_ROOT)/bin)
+
 # Prefer tools we've installed with go install and Yarn to those elsewhere on
 # the PATH.
 #
@@ -46,7 +54,7 @@ export GOPATH := $(realpath $(ORG_ROOT)/../../..)
 # ORG_ROOT. It's much simpler to add the Yarn executable-installation directory
 # to the PATH than have protobuf.mk adjust its paths to work in both ORG_ROOT
 # and UI_ROOT.
-export PATH := $(GOPATH)/bin:$(UI_ROOT)/node_modules/.bin:$(PATH)
+export PATH := $(LOCAL_BIN):$(UI_ROOT)/node_modules/.bin:$(PATH)
 
 # HACK: Make has a fast path and a slow path for command execution,
 # but the fast path uses the PATH variable from when make was started,
@@ -133,8 +141,9 @@ $(YARN_INSTALLED_TARGET): $(UI_ROOT)/package.json $(UI_ROOT)/yarn.lock
 	rm -rf $(UI_ROOT)/node_modules/@types/node # https://github.com/yarnpkg/yarn/issues/2987
 	touch $@
 
-# Update the git hooks and install commands from dependencies whenever they
-# change.
+# Update the git hooks and install commands from dependencies into LOCAL_BIN
+# whenever they change.
+$(REPO_ROOT)/.bootstrap: export GOBIN := $(LOCAL_BIN)
 $(REPO_ROOT)/.bootstrap: $(GITHOOKS) $(REPO_ROOT)/glide.lock
 ifneq ($(GIT_DIR),)
 	git submodule update --init

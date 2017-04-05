@@ -117,8 +117,6 @@ install: override LINKFLAGS += \
 # dependencies are rebuilt which is useful when switching between
 # normal and race test builds.
 install: .buildinfo/tag .buildinfo/rev
-	@echo "GOPATH set to $$GOPATH"
-	@echo "$$GOPATH/bin added to PATH"
 	$(GO) $(BUILDMODE) -v $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' $(BUILDTARGET)
 
 # Build, but do not run the tests.
