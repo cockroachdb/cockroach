@@ -22,6 +22,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"net"
 	"net/url"
 	"os"
@@ -118,6 +119,40 @@ func initInsecureServer() error {
 	return nil
 }
 
+// keepLastNFiles looks for files in `dir` with names starting with `prefix` (eg: memprof.)
+// and keeps the last `maxFiles` in lexicographical order.
+func keepLastNFiles(dir, prefix string, maxFiles int) error {
+	if maxFiles <= 0 {
+		return nil
+	}
+
+	// ReadDir returns a list of FileInfos sorted by name.
+	entries, err := ioutil.ReadDir(dir)
+	if err != nil {
+		return err
+	}
+
+	var deleteErr error
+	var found int
+	for i := len(entries) - 1; i >= 0; i-- {
+		info := entries[i]
+		if !info.Mode().IsRegular() {
+			continue
+		}
+		if !strings.HasPrefix(info.Name(), prefix) {
+			continue
+		}
+		found++
+
+		if found > maxFiles {
+			// We keep the last error around, but still attempt to delete files.
+			deleteErr = os.Remove(filepath.Join(dir, info.Name()))
+		}
+	}
+
+	return deleteErr
+}
+
 func initMemProfile(ctx context.Context, dir string) {
 	memProfileInterval := envutil.EnvOrDefaultDuration("COCKROACH_MEMPROF_INTERVAL", -1)
 	if memProfileInterval < 0 {
@@ -129,10 +164,18 @@ func initMemProfile(ctx context.Context, dir string) {
 		memProfileInterval = min
 	}
 
+	profilesToKeep := envutil.EnvOrDefaultInt("COCKROACH_MEMPROF_TO_KEEP", 50)
+	keepingStr := "all"
+	if profilesToKeep > 0 {
+		keepingStr = fmt.Sprintf("latest %d", profilesToKeep)
+	}
+
 	if jemallocHeapDump != nil {
-		log.Infof(ctx, "writing go and jemalloc memory profiles to %s every %s", dir, memProfileInterval)
+		log.Infof(ctx, "writing go and jemalloc memory profiles to %s every %s, keeping %s profiles",
+			dir, memProfileInterval, keepingStr)
 	} else {
-		log.Infof(ctx, "writing go only memory profiles to %s every %s", dir, memProfileInterval)
+		log.Infof(ctx, "writing go only memory profiles to %s every %s, keeping %s profiles",
+			dir, memProfileInterval, keepingStr)
 		log.Infof(ctx, `to enable jmalloc profiling: "export MALLOC_CONF=prof:true" or "ln -s prof:true /etc/malloc.conf"`)
 	}
 
@@ -140,6 +183,9 @@ func initMemProfile(ctx context.Context, dir string) {
 		ctx := context.Background()
 		t := time.NewTicker(memProfileInterval)
 		defer t.Stop()
+
+		memProfPrefix := "memprof."
+		jememProfPrefix := "jeprof."
 
 		for {
 			<-t.C
@@ -150,13 +196,13 @@ func initMemProfile(ctx context.Context, dir string) {
 
 				// Try jemalloc heap profile first, we only log errors.
 				if jemallocHeapDump != nil {
-					jepath := filepath.Join(dir, "jeprof."+suffix)
+					jepath := filepath.Join(dir, jememProfPrefix+suffix)
 					if err := jemallocHeapDump(jepath); err != nil {
 						log.Warningf(ctx, "error writing jemalloc heap %s: %s", jepath, err)
 					}
 				}
 
-				path := filepath.Join(dir, "memprof."+suffix)
+				path := filepath.Join(dir, memProfPrefix+suffix)
 				// Try writing a go heap profile.
 				f, err := os.Create(path)
 				if err != nil {
@@ -169,6 +215,15 @@ func initMemProfile(ctx context.Context, dir string) {
 					return
 				}
 			}()
+
+			if jemallocHeapDump != nil {
+				if err := keepLastNFiles(dir, jememProfPrefix, profilesToKeep); err != nil {
+					log.Warningf(ctx, "error deleting old jeprof profiles: %s", err)
+				}
+			}
+			if err := keepLastNFiles(dir, memProfPrefix, profilesToKeep); err != nil {
+				log.Warningf(ctx, "error deleting old memprof profiles: %s", err)
+			}
 		}
 	}()
 }
@@ -183,6 +238,15 @@ func initCPUProfile(ctx context.Context, dir string) {
 			cpuProfileInterval, min)
 		cpuProfileInterval = min
 	}
+
+	profilesToKeep := envutil.EnvOrDefaultInt("COCKROACH_CPUPROF_TO_KEEP", 50)
+	keepingStr := "all"
+	if profilesToKeep > 0 {
+		keepingStr = fmt.Sprintf("latest %d", profilesToKeep)
+	}
+
+	log.Infof(ctx, "writing CPU profiles to %s every %s, keeping %s profiles",
+		dir, cpuProfileInterval, keepingStr)
 
 	go func() {
 		defer log.RecoverAndReportPanic()
@@ -200,11 +264,13 @@ func initCPUProfile(ctx context.Context, dir string) {
 			}
 		}()
 
+		cpuProfPrefix := "cpuprof."
+
 		for {
 			func() {
 				const format = "2006-01-02T15_04_05.999"
 				suffix := timeutil.Now().Add(cpuProfileInterval).Format(format)
-				f, err := os.Create(filepath.Join(dir, "cpuprof."+suffix))
+				f, err := os.Create(filepath.Join(dir, cpuProfPrefix+suffix))
 				if err != nil {
 					log.Warningf(ctx, "error creating go cpu file %s", err)
 					return
@@ -225,6 +291,10 @@ func initCPUProfile(ctx context.Context, dir string) {
 				}
 				currentProfile = f
 			}()
+
+			if err := keepLastNFiles(dir, cpuProfPrefix, profilesToKeep); err != nil {
+				log.Warningf(ctx, "error deleting old cpuprof profiles: %s", err)
+			}
 
 			<-t.C
 		}
