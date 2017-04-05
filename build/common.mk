@@ -37,6 +37,19 @@ export GOPATH := $(realpath $(ORG_ROOT)/../../..)
 #                                       |  |~ GOPATH/src
 #                                       |~ GOPATH/src/github.com
 
+# Avoid printing twice if Make restarts (because a Makefile was changed) or is
+# called recursively from another Makefile.
+ifeq ($(MAKE_RESTARTS)$(MAKELEVEL),0)
+$(info GOPATH set to $(GOPATH))
+endif
+
+# We install our vendored tools to a directory within this repository to avoid
+# overwriting any user-installed binaries of the same name in the default GOBIN.
+# We must remember the original value of GOBIN so we can install the cockroach
+# binary to the user's GOBIN instead of our repository-local GOBIN.
+ORIGINAL_GOBIN := $(GOBIN)
+export GOBIN := $(abspath $(REPO_ROOT)/bin)
+
 # Prefer tools we've installed with go install and Yarn to those elsewhere on
 # the PATH.
 #
@@ -46,7 +59,7 @@ export GOPATH := $(realpath $(ORG_ROOT)/../../..)
 # ORG_ROOT. It's much simpler to add the Yarn executable-installation directory
 # to the PATH than have protobuf.mk adjust its paths to work in both ORG_ROOT
 # and UI_ROOT.
-export PATH := $(GOPATH)/bin:$(UI_ROOT)/node_modules/.bin:$(PATH)
+export PATH := $(GOBIN):$(UI_ROOT)/node_modules/.bin:$(PATH)
 
 # HACK: Make has a fast path and a slow path for command execution,
 # but the fast path uses the PATH variable from when make was started,
