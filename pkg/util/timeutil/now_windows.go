@@ -15,14 +15,9 @@
 package timeutil
 
 import (
-	"syscall"
 	"time"
-	"unsafe"
-)
 
-var (
-	kernel32                           = syscall.MustLoadDLL("kernel32.dll")
-	procGetSystemTimePreciseAsFileTime = kernel32.MustFindProc("GetSystemTimePreciseAsFileTime")
+	"golang.org/x/sys/windows"
 )
 
 // This has a higher precision than time.Now in go1.8, but is much slower
@@ -34,7 +29,7 @@ var (
 // obviate the need for this, since we only need the higher precision when
 // subtracting `time.Time`s.
 func now() time.Time {
-	var ft syscall.Filetime
-	_, _, _ = procGetSystemTimePreciseAsFileTime.Call(uintptr(unsafe.Pointer(&ft)))
+	var ft windows.Filetime
+	windows.GetSystemTimePreciseAsFileTime(&ft)
 	return time.Unix(0, ft.Nanoseconds())
 }

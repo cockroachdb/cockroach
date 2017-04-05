@@ -56,3 +56,5 @@ import:
   version: 728b753d0135da6801d45a38e6f43ff55779c5c2
 - package: golang.org/x/net
   version: a6577fac2d73be281a500b310739095313165611
+- package: golang.org/x/sys
+  version: 39e3dc274464e7d2f663aa606a830611bae5f1db

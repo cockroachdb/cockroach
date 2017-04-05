@@ -507,26 +507,27 @@ func TestStyle(t *testing.T) {
 			stream.Sort(),
 			stream.Uniq(),
 			stream.GrepNot(`cockroach/pkg/cmd/`),
-			stream.Grep(` (github\.com/golang/protobuf/proto|github\.com/satori/go\.uuid|log|path|context)$`),
+			stream.Grep(` (github\.com/golang/protobuf/proto|github\.com/satori/go\.uuid|log|path|context|syscall)$`),
+			// TODO(tamird): remove util/log https://go-review.googlesource.com/c/39609/ is merged.
+			stream.GrepNot(`cockroach/pkg/(cli|util/log): syscall$`),
 			stream.GrepNot(`cockroach/pkg/(base|security|util/(log|randutil|stop)): log$`),
 			stream.GrepNot(`cockroach/pkg/(server/serverpb|ts/tspb): github\.com/golang/protobuf/proto$`),
 			stream.GrepNot(`cockroach/pkg/util/caller: path$`),
 			stream.GrepNot(`cockroach/pkg/util/uuid: github\.com/satori/go\.uuid$`),
 		), func(s string) {
-			if strings.HasSuffix(s, " path") {
+			switch {
+			case strings.HasSuffix(s, " path"):
 				t.Errorf(`%s <- please use "path/filepath" instead of "path"`, s)
-			}
-			if strings.HasSuffix(s, " log") {
+			case strings.HasSuffix(s, " log"):
 				t.Errorf(`%s <- please use "util/log" instead of "log"`, s)
-			}
-			if strings.HasSuffix(s, " github.com/golang/protobuf/proto") {
+			case strings.HasSuffix(s, " github.com/golang/protobuf/proto"):
 				t.Errorf(`%s <- please use "github.com/gogo/protobuf/proto" instead of "github.com/golang/protobuf/proto"`, s)
-			}
-			if strings.HasSuffix(s, " github.com/satori/go.uuid") {
+			case strings.HasSuffix(s, " github.com/satori/go.uuid"):
 				t.Errorf(`%s <- please use "util/uuid" instead of "github.com/satori/go.uuid"`, s)
-			}
-			if strings.HasSuffix(s, " context") {
+			case strings.HasSuffix(s, " context"):
 				t.Errorf(`%s <- please use "golang.org/x/net/context" instead of "context"`, s)
+			case strings.HasSuffix(s, " syscall"):
+				t.Errorf(`%s <- please use "golang.org/x/sys" instead of "syscall"`, s)
 			}
 		}); err != nil {
 			t.Error(err)

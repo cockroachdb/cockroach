@@ -1,8 +1,8 @@
-hash: a56a4427635b572dc56835e2656e2580439685cf31171d02b10eff3c4fa2321e
-updated: 2017-04-02T14:09:43.042237791-04:00
+hash: 1590a185352ece7ca4ed3180a804c4ecbcef3a42bf81a3c24d10e651c6b976a9
+updated: 2017-04-05T14:44:01.5496102-04:00
 imports:
 - name: cloud.google.com/go
-  version: 7be0b05e70c6f84387d33d2d7db0830b35147486
+  version: ee12de41f35ce1867cec29587f14bd686362e4fa
   subpackages:
   - compute/metadata
   - internal
@@ -12,7 +12,7 @@ imports:
 - name: github.com/abourget/teamcity
   version: 6dde447fa54bc5b08b1a7bb1b85e39089cf27fb1
 - name: github.com/Azure/azure-sdk-for-go
-  version: 8b742db0f792bb89ee4dadbdb2314aeb9a5626d2
+  version: 5b0aa1d05fbf518373abb366951e3587cc1b3154
   subpackages:
   - storage
 - name: github.com/Azure/go-ansiterm
@@ -31,7 +31,6 @@ imports:
 - name: github.com/biogo/store
   version: 913427a1d5e89604e50ea1db0f28f34966d61602
   subpackages:
-  - interval
   - llrb
 - name: github.com/cenk/backoff
   version: 5d150e7eec023ce7a124856b37c68e54b4050ac7
@@ -122,7 +121,7 @@ imports:
 - name: github.com/dustin/go-humanize
   version: 259d2a102b871d17f30e3cd9881a642961a1e486
 - name: github.com/elastic/gosigar
-  version: 6ebbe1b8b574474c7fab31b154f170d14f5b638f
+  version: e13db0ac2b64d60bf73b98cff394b13b1c1b20d8
   subpackages:
   - sys/windows
 - name: github.com/elazarl/go-bindata-assetfs
@@ -191,7 +190,7 @@ imports:
   subpackages:
   - query
 - name: github.com/google/pprof
-  version: 5c63cc70220dd56546d4d417f30d5460138b93b5
+  version: e48932ed15d832ff9444525c5888be176e8731a1
   subpackages:
   - driver
   - internal/binutils
@@ -272,7 +271,7 @@ imports:
   - tree
   - util
 - name: github.com/Masterminds/semver
-  version: 59c29afe1a994eacb71c833025ca7acf874bb1da
+  version: 3f0ab6d4ab4bed1c61caf056b63a6e62190c7801
 - name: github.com/Masterminds/vcs
   version: 795e20f901c3d561de52811fb3488a2cb2c8588b
 - name: github.com/mattn/go-isatty
@@ -302,7 +301,7 @@ imports:
 - name: github.com/mitchellh/go-homedir
   version: b8bc1bf767474819792c23f32d8286a45736f1c6
 - name: github.com/montanaflynn/stats
-  version: f8cd06f93c6c1b06028caafb88b540fc820f77c1
+  version: 41c34e4914ec3c05d485e564d9028d8861d5d9ad
 - name: github.com/olekukonko/tablewriter
   version: a0225b3f23b5ce0cbec6d7a66a968f8a59eca9c4
 - name: github.com/opencontainers/go-digest
@@ -312,7 +311,7 @@ imports:
   subpackages:
   - wire
 - name: github.com/opentracing/opentracing-go
-  version: e79bb85e0bffa13bdca9541f6f6d75e2b3a03fc8
+  version: eaa2524c1b95618f98127d9c4149d28b852397b4
   subpackages:
   - ext
   - log
@@ -353,7 +352,7 @@ imports:
   subpackages:
   - doc
 - name: github.com/spf13/pflag
-  version: d16db1e50e33dff1b6cdf37596cef36742128670
+  version: 9a906f17374922ed0f74e1b2f593d3723f2ffb00
 - name: github.com/StackExchange/wmi
   version: 9f32b5905fd6ce7384093f9d048437e79f7b4d85
 - name: github.com/tebeka/go2xunit
@@ -395,7 +394,7 @@ imports:
   - errgroup
   - singleflight
 - name: golang.org/x/sys
-  version: e48874b42435b4347fc52bdee0424a52abc974d7
+  version: 39e3dc274464e7d2f663aa606a830611bae5f1db
   subpackages:
   - unix
   - windows
@@ -410,7 +409,7 @@ imports:
   - unicode/norm
   - width
 - name: golang.org/x/tools
-  version: 620ecdb8d7943e20dc030b61bfe898d1b000bdea
+  version: 5054e612afecd2460e8659117a716cb5b58d4b88
   subpackages:
   - cmd/goimports
   - cmd/goyacc
