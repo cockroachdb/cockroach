@@ -2380,16 +2380,10 @@ func (expr *FuncExpr) Eval(ctx *EvalContext) (Datum, error) {
 		if err != nil {
 			return nil, err
 		}
+		if arg == DNull && !expr.fn.nullableArgs {
+			return DNull, nil
+		}
 		args.D = append(args.D, arg)
-	}
-
-	if !expr.fn.Types.match([]Type(args.ResolvedType().(TTuple))) {
-		// The argument types no longer match the memoized function. This happens
-		// when a non-NULL argument becomes NULL and the function does not support
-		// NULL arguments. For example, "SELECT LOWER(col) FROM TABLE" where col is
-		// nullable. The SELECT does not error, but returns a NULL value for that
-		// select expression.
-		return DNull, nil
 	}
 
 	res, err := expr.fn.fn(ctx, args.D)
