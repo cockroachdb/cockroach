@@ -378,6 +378,9 @@ func fillDefault(
 ) parser.Expr {
 	switch expr.(type) {
 	case parser.DefaultVal:
+		if defaultExprs == nil {
+			return parser.DNull
+		}
 		return defaultExprs[index]
 	}
 	return expr
