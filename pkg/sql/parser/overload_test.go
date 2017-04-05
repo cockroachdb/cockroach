@@ -172,7 +172,11 @@ func TestTypeCheckOverloadedExprs(t *testing.T) {
 		if d.desired != nil {
 			desired = d.desired
 		}
-		_, fn, err := typeCheckOverloadedExprs(&ctx, desired, d.overloads, d.exprs...)
+		_, fns, err := typeCheckOverloadedExprs(&ctx, desired, d.overloads, d.exprs...)
+		var fn overloadImpl
+		if len(fns) == 1 {
+			fn = fns[0]
+		}
 		if d.expectedOverload != nil {
 			if err != nil {
 				t.Errorf("%d: unexpected error returned from typeCheckOverloadedExprs when type checking %s: %v", i, d.exprs, err)
