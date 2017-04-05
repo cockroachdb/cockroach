@@ -23,6 +23,7 @@ import (
 	// Register the net/trace endpoint with http.DefaultServeMux.
 	"golang.org/x/net/trace"
 
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/rcrowley/go-metrics"
 	"github.com/rcrowley/go-metrics/exp"
 
@@ -48,21 +49,29 @@ func handleDebug(w http.ResponseWriter, r *http.Request) {
 }
 
 func init() {
-	// Tweak the authentication logic for the tracing endpoint. By default it's
-	// open for localhost only, but with Docker we want to get there from
-	// anywhere. We maintain the default behavior of only allowing access to
-	// sensitive logs from localhost.
-	//
-	// TODO(mberhault): properly secure this once we require client certs.
-	origAuthRequest := trace.AuthRequest
-	trace.AuthRequest = func(req *http.Request) (bool, bool) {
-		_, sensitive := origAuthRequest(req)
-		return true, sensitive
+	if envutil.EnvOrDefaultBool("COCKROACH_REMOTE_DEBUG", false) {
+		// Tweak the authentication logic for the tracing endpoint. By default it's
+		// open for localhost only, but with Docker we want to get there from
+		// anywhere. We maintain the default behavior of only allowing access to
+		// sensitive logs from localhost.
+		//
+		// TODO(mberhault): properly secure this once we require client certs.
+		origAuthRequest := trace.AuthRequest
+		trace.AuthRequest = func(req *http.Request) (bool, bool) {
+			_, sensitive := origAuthRequest(req)
+			return true, sensitive
+		}
 	}
 
 	debugServeMux.HandleFunc(debugEndpoint, func(w http.ResponseWriter, r *http.Request) {
+		if any, _ := trace.AuthRequest(r); !any {
+			http.Error(w, "not allowed", http.StatusUnauthorized)
+			return
+		}
+
 		if r.URL.Path != debugEndpoint {
 			http.Redirect(w, r, debugEndpoint, http.StatusMovedPermanently)
+			return
 		}
 
 		// The explicit header is necessary or (at least Chrome) will try to
