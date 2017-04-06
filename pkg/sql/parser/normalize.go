@@ -503,33 +503,39 @@ func (expr *AnnotateTypeExpr) normalize(v *normalizeVisitor) TypedExpr {
 
 func (expr *RangeCond) normalize(v *normalizeVisitor) TypedExpr {
 	left, from, to := expr.TypedLeft(), expr.TypedFrom(), expr.TypedTo()
-	if left == DNull || from == DNull || to == DNull {
+	if left == DNull || (from == DNull && to == DNull) {
 		return DNull
 	}
 
+	// "a BETWEEN b AND c" -> "a >= b AND a <= c"
+	leftCmp := GE
+	rightCmp := LE
+	makeOpExpr := func(left, right TypedExpr) normalizableExpr { return NewTypedAndExpr(left, right) }
 	if expr.Not {
 		// "a NOT BETWEEN b AND c" -> "a < b OR a > c"
-		newLeft := NewTypedComparisonExpr(LT, left, from).normalize(v)
-		if v.err != nil {
-			return expr
-		}
-		newRight := NewTypedComparisonExpr(GT, left, to).normalize(v)
-		if v.err != nil {
-			return expr
-		}
-		return NewTypedOrExpr(newLeft, newRight).normalize(v)
+		leftCmp = LT
+		rightCmp = GT
+		makeOpExpr = func(left, right TypedExpr) normalizableExpr { return NewTypedOrExpr(left, right) }
 	}
 
-	// "a BETWEEN b AND c" -> "a >= b AND a <= c"
-	newLeft := NewTypedComparisonExpr(GE, left, from).normalize(v)
-	if v.err != nil {
-		return expr
+	var newLeft, newRight TypedExpr
+	if from == DNull {
+		newLeft = DNull
+	} else {
+		newLeft = NewTypedComparisonExpr(leftCmp, left, from).normalize(v)
+		if v.err != nil {
+			return expr
+		}
 	}
-	newRight := NewTypedComparisonExpr(LE, left, to).normalize(v)
-	if v.err != nil {
-		return expr
+	if to == DNull {
+		newRight = DNull
+	} else {
+		newRight = NewTypedComparisonExpr(rightCmp, left, to).normalize(v)
+		if v.err != nil {
+			return expr
+		}
 	}
-	return NewTypedAndExpr(newLeft, newRight).normalize(v)
+	return makeOpExpr(newLeft, newRight).normalize(v)
 }
 
 // NormalizeExpr normalizes a typed expression, simplifying where possible,
