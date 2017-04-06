@@ -51,8 +51,13 @@ func TestDebugRemote(t *testing.T) {
 		remoteDebug string
 		status      int
 	}{
-		{"true", http.StatusOK},
+		{"any", http.StatusOK},
+		{"TRUE", http.StatusOK},
+		{"t", http.StatusOK},
+		{"1", http.StatusOK},
+		{"local", http.StatusUnauthorized},
 		{"false", http.StatusUnauthorized},
+		{"unrecognized", http.StatusUnauthorized},
 	}
 	for _, c := range testCases {
 		envutil.ClearEnvCache()

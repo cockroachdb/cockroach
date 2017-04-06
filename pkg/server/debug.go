@@ -19,6 +19,7 @@ package server
 import (
 	"fmt"
 	"net/http"
+	"strings"
 
 	// Register the net/trace endpoint with http.DefaultServeMux.
 	"golang.org/x/net/trace"
@@ -49,6 +50,10 @@ func handleDebug(w http.ResponseWriter, r *http.Request) {
 }
 
 func init() {
+	// Register our interest in the COCKROACH_REMOTE_DEBUG env var.
+	const remoteDebug = "COCKROACH_REMOTE_DEBUG"
+	_ = envutil.EnvOrDefaultString(remoteDebug, "local")
+
 	// Tweak the authentication logic for the tracing endpoint. By default it's
 	// open for localhost only, but with Docker we want to get there from
 	// anywhere. We maintain the default behavior of only allowing access to
@@ -57,11 +62,16 @@ func init() {
 	// TODO(mberhault): properly secure this once we require client certs.
 	origAuthRequest := trace.AuthRequest
 	trace.AuthRequest = func(req *http.Request) (bool, bool) {
-		any, sensitive := origAuthRequest(req)
-		if envutil.EnvOrDefaultBool("COCKROACH_REMOTE_DEBUG", false) {
-			any = true
+		allow, sensitive := origAuthRequest(req)
+		switch strings.ToLower(envutil.EnvOrDefaultString(remoteDebug, "local")) {
+		case "any", "true", "t", "1":
+			allow = true
+		case "local":
+			break
+		default:
+			allow = false
 		}
-		return any, sensitive
+		return allow, sensitive
 	}
 
 	debugServeMux.HandleFunc(debugEndpoint, func(w http.ResponseWriter, r *http.Request) {
