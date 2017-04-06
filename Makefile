@@ -136,9 +136,6 @@ testrace: override GOFLAGS += -race
 testrace: GORACE := halt_on_error=1
 testrace: TESTTIMEOUT := $(RACETIMEOUT)
 
-# This is how you get a literal space into a Makefile.
-space := $(eval) $(eval)
-
 # Run make testlogic to run all of the logic tests. Specify test files to run
 # with make testlogic FILES="foo bar".
 testlogic: PKG := ./pkg/sql
