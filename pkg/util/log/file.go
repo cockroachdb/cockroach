@@ -232,29 +232,33 @@ func create(
 
 var errNotAFile = errors.New("not a regular file")
 
-// getFileDetails verifies that the file specified by filename is a
-// regular file and filename matches the expected filename pattern.
-// Returns the log file details success; otherwise error.
-func getFileDetails(info os.FileInfo) (FileDetails, error) {
-	if info.Mode()&os.ModeType != 0 {
+// getFileDetails verifies that the file specified by path is a regular file and
+// that the filename conforms to the expected pattern.
+func getFileDetails(path string) (FileDetails, error) {
+	// Normalize the path to an absolute path without symlinks. Note that
+	// calling os.Stat on a Windows' symlink will return a path not found error.
+	normalizedPath, err := filepath.EvalSymlinks(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			// Windows' error for none-existent files "The system cannot find
+			// the file specified." differs from the one on unix systems of "no
+			// such file or directory" so we emulate the unix one for
+			// consistency.
+			return FileDetails{}, errors.Errorf("EvalSymLinks: no such file %s", path)
+		}
+		return FileDetails{}, errors.Wrapf(err, "EvalSymLinks: %s", path)
+	}
+
+	info, err := os.Stat(normalizedPath)
+	if err != nil {
+		return FileDetails{}, errors.Wrapf(err, "Stat: %s", normalizedPath)
+	}
+
+	if !info.Mode().IsRegular() {
 		return FileDetails{}, errNotAFile
 	}
 
-	details, err := parseLogFilename(info.Name())
-	if err != nil {
-		return FileDetails{}, err
-	}
-
-	return details, nil
-}
-
-func verifyFile(filename string) error {
-	info, err := os.Stat(filename)
-	if err != nil {
-		return errors.Wrapf(err, "Stat: %s", filename)
-	}
-	_, err = getFileDetails(info)
-	return err
+	return parseLogFilename(info.Name())
 }
 
 // ListLogFiles returns a slice of FileInfo structs for each log file
@@ -272,7 +276,11 @@ func ListLogFiles() ([]FileInfo, error) {
 		return results, err
 	}
 	for _, info := range infos {
-		details, err := getFileDetails(info)
+		// Skip all symlink files.
+		if !info.Mode().IsRegular() {
+			continue
+		}
+		details, err := getFileDetails(filepath.Join(dir, info.Name()))
 		if err == nil {
 			results = append(results, FileInfo{
 				Name:         info.Name(),
@@ -328,16 +336,10 @@ func GetLogReader(filename string, restricted bool) (io.ReadCloser, error) {
 				filename = fileNameAttempt
 			}
 		}
-
-		// Normalize the name to an absolute path without symlinks.
-		filename, err = filepath.EvalSymlinks(filename)
-		if err != nil {
-			return nil, errors.Wrapf(err, "EvalSymLinks: %s", filename)
-		}
 	}
 
 	// Check the file name is valid.
-	if err := verifyFile(filename); err != nil {
+	if _, err := getFileDetails(filename); err != nil {
 		return nil, err
 	}
 
@@ -345,11 +347,22 @@ func GetLogReader(filename string, restricted bool) (io.ReadCloser, error) {
 }
 
 func fileExists(path string) (bool, error) {
-	_, err := os.Stat(path)
-	if os.IsNotExist(err) {
-		return false, nil
+	// Normalize the path to an absolute path without symlinks. Note that
+	// calling os.Stat on a Windows' symlink will return a path not found error.
+	normalizedPath, err := filepath.EvalSymlinks(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return false, nil
+		}
+		return false, errors.Wrapf(err, "EvalSymLinks: %s", path)
 	}
-	return true, err
+	if _, err = os.Stat(normalizedPath); err != nil {
+		if os.IsNotExist(err) {
+			return false, nil
+		}
+		return false, err
+	}
+	return true, nil
 }
 
 // sortableFileInfoSlice is required so we can sort FileInfos.
