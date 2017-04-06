@@ -269,6 +269,12 @@ func (at *allocatorTest) ValidateSchemaChanges(ctx context.Context, t *testing.T
 	if err := db.QueryRow("SELECT cluster_logical_timestamp()").Scan(&now); err != nil {
 		t.Fatal(err)
 	}
+
+	// Set distsql for these queries because it's still not the default.
+	if _, err := db.Exec(`SET DISTSQL = on`); err != nil {
+		t.Fatal(err)
+	}
+
 	var eCount int64
 	q := fmt.Sprintf(`SELECT COUNT(*) FROM %s AS OF SYSTEM TIME %s`, tableName, now)
 	if err := db.QueryRow(q).Scan(&eCount); err != nil {
