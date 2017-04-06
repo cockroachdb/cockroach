@@ -18,6 +18,7 @@ jobs
 lease
 namespace
 rangelog
+settings
 ui
 users
 zones
@@ -33,9 +34,10 @@ EXPLAIN (DEBUG) SELECT * FROM system.namespace
 5  /namespace/primary/1/'lease'/id      11   ROW
 6  /namespace/primary/1/'namespace'/id  2    ROW
 7  /namespace/primary/1/'rangelog'/id   13   ROW
-8  /namespace/primary/1/'ui'/id         14   ROW
-9  /namespace/primary/1/'users'/id      4    ROW
-10 /namespace/primary/1/'zones'/id      5    ROW
+8  /namespace/primary/1/'settings'/id   6    ROW
+9  /namespace/primary/1/'ui'/id         14   ROW
+10 /namespace/primary/1/'users'/id      4    ROW
+11 /namespace/primary/1/'zones'/id      5    ROW
 
 query ITI rowsort
 SELECT * FROM system.namespace
@@ -48,6 +50,7 @@ SELECT * FROM system.namespace
 1 lease      11
 1 namespace  2
 1 rangelog   13
+1 settings   6
 1 ui         14
 1 users      4
 1 zones      5
@@ -60,6 +63,7 @@ SELECT id FROM system.descriptor
 3
 4
 5
+6
 11
 12
 13
@@ -143,6 +147,14 @@ status   STRING     false  NULL            {jobs_status_created_idx}
 created  TIMESTAMP  false  now()           {jobs_status_created_idx}
 payload  BYTES      false  NULL            {}
 
+query TTBTT
+SHOW COLUMNS FROM system.settings
+----
+name         STRING     false  NULL   {primary}
+value        STRING     false  NULL   {}
+lastUpdated  TIMESTAMP  false  now()  {}
+valueType    STRING     true   NULL   {}
+
 # Verify default privileges on system tables.
 query TTT
 SHOW GRANTS ON DATABASE system
@@ -225,6 +237,15 @@ jobs  root  INSERT
 jobs  root  SELECT
 jobs  root  UPDATE
 
+query TTT
+SHOW GRANTS ON system.settings
+----
+settings  root  DELETE
+settings  root  GRANT
+settings  root  INSERT
+settings  root  SELECT
+settings  root  UPDATE
+
 statement error user root does not have DROP privilege on database system
 ALTER DATABASE system RENAME TO not_system
 
@@ -292,3 +313,16 @@ GRANT ALL ON system.lease TO root
 
 statement ok
 GRANT ALL ON system.lease TO testuser
+
+query TTTT
+select * from system.settings
+----
+
+statement ok
+INSERT INTO system.settings (name, value) VALUES ('somesetting', 'somevalue')
+
+query TT
+select name, value from system.settings
+----
+somesetting   somevalue
+

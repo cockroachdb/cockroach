@@ -1667,6 +1667,7 @@ writing ` + os.DevNull + `
   debug/schema/system/lease
   debug/schema/system/namespace
   debug/schema/system/rangelog
+  debug/schema/system/settings
   debug/schema/system/ui
   debug/schema/system/users
   debug/schema/system/zones
