@@ -1954,3 +1954,67 @@ func TestDistributedTxnCleanup(t *testing.T) {
 		}
 	}
 }
+
+func TestUnsplittableRange(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+
+	store := createTestStoreWithConfig(t, stopper, storage.TestStoreConfig(nil))
+	store.ForceSplitScanAndProcess()
+
+	// Add a single large row to /Table/14.
+	tableKey := keys.MakeTablePrefix(keys.UITableID)
+	row1Key := roachpb.Key(encoding.EncodeVarintAscending(append([]byte(nil), tableKey...), 1))
+	col1Key := keys.MakeFamilyKey(append([]byte(nil), row1Key...), 0)
+	value := bytes.Repeat([]byte("x"), 64<<10)
+	if err := store.DB().Put(context.Background(), col1Key, value); err != nil {
+		t.Fatal(err)
+	}
+
+	store.ForceSplitScanAndProcess()
+	testutils.SucceedsSoon(t, func() error {
+		repl := store.LookupReplica(tableKey, nil)
+		if repl.Desc().StartKey.Equal(tableKey) {
+			return nil
+		}
+		return errors.Errorf("waiting for split: %s", repl)
+	})
+
+	repl := store.LookupReplica(tableKey, nil)
+	origMaxBytes := repl.GetMaxBytes()
+	repl.SetMaxBytes(int64(len(value)))
+
+	// Wait for an attempt to split the range which will fail because it contains
+	// a single large value. The max-bytes for the range will be changed, but it
+	// should not have been reset to its original value.
+	store.ForceSplitScanAndProcess()
+	testutils.SucceedsSoon(t, func() error {
+		maxBytes := repl.GetMaxBytes()
+		if maxBytes != int64(len(value)) && maxBytes < origMaxBytes {
+			return nil
+		}
+		return errors.Errorf("expected max-bytes to be changed: %d", repl.GetMaxBytes())
+	})
+
+	// Add two more rows to the range.
+	for i := int64(2); i < 4; i++ {
+		rowKey := roachpb.Key(encoding.EncodeVarintAscending(append([]byte(nil), tableKey...), i))
+		colKey := keys.MakeFamilyKey(append([]byte(nil), rowKey...), 0)
+		if err := store.DB().Put(context.Background(), colKey, value); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Wait for the range to be split and verify that max-bytes was reset to the
+	// value in the zone config.
+	store.ForceSplitScanAndProcess()
+	testutils.SucceedsSoon(t, func() error {
+		if origMaxBytes == repl.GetMaxBytes() {
+			return nil
+		}
+		return errors.Errorf("expected max-bytes=%d, but got max-bytes=%d",
+			origMaxBytes, repl.GetMaxBytes())
+	})
+}
