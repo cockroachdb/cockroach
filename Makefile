@@ -24,7 +24,7 @@
 PKG          := ./pkg/...
 TAGS         :=
 TESTS        := .
-BENCHES      := -
+BENCHES      :=
 FILES        :=
 TESTTIMEOUT  := 3m
 RACETIMEOUT  := 10m
@@ -142,13 +142,13 @@ testlogic: PKG := ./pkg/sql
 testlogic: TESTS := $(if $(FILES),TestLogic$$//^$(subst $(space),$$|^,$(FILES))$$,TestLogic)
 testlogic: TESTFLAGS := -v $(if $(FILES),-show-sql)
 
-.PHONY: test testshort testrace testlogic
-test testshort testrace testlogic: gotestdashi
-ifeq ($(BENCHES),-)
-	$(GO) test $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -run "$(TESTS)" -timeout $(TESTTIMEOUT) $(PKG) $(TESTFLAGS)
-else
-	$(GO) test $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -run "$(TESTS)" -bench "$(BENCHES)" -timeout $(TESTTIMEOUT) $(PKG) $(TESTFLAGS)
-endif
+bench: BENCHES := .
+bench: TESTS := -
+bench: TESTTIMEOUT := $(BENCHTIMEOUT)
+
+.PHONY: test testshort testrace testlogic bench
+test testshort testrace testlogic bench: gotestdashi
+	$(GO) test $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -run "$(TESTS)" $(if $(BENCHES),-bench "$(BENCHES)") -timeout $(TESTTIMEOUT) $(PKG) $(TESTFLAGS)
 
 testraceslow: override GOFLAGS += -race
 testraceslow: TESTTIMEOUT := $(RACETIMEOUT)
@@ -156,11 +156,7 @@ testraceslow: TESTTIMEOUT := $(RACETIMEOUT)
 .PHONY: testslow testraceslow
 testslow testraceslow: override TESTFLAGS += -v
 testslow testraceslow: gotestdashi
-ifeq ($(BENCHES),-)
-	$(GO) test $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -run "$(TESTS)" -timeout $(TESTTIMEOUT) $(PKG) $(TESTFLAGS) | grep -F ': Test' | sed -E 's/(--- PASS: |\(|\))//g' | awk '{ print $$2, $$1 }' | sort -rn | head -n 10
-else
-	$(GO) test $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -run "$(TESTS)" -bench "$(BENCHES)" -timeout $(TESTTIMEOUT) $(PKG) $(TESTFLAGS) | grep -F ': Test' | sed -E 's/(--- PASS: |\(|\))//g' | awk '{ print $$2, $$1 }' | sort -rn | head -n 10
-endif
+	$(GO) test $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -run "$(TESTS)" $(if $(BENCHES),-bench "$(BENCHES)") -timeout $(TESTTIMEOUT) $(PKG) $(TESTFLAGS) | grep -F ': Test' | sed -E 's/(--- PASS: |\(|\))//g' | awk '{ print $$2, $$1 }' | sort -rn | head -n 10
 
 stressrace: override GOFLAGS += -race
 stressrace: TESTTIMEOUT := $(RACETIMEOUT)
@@ -176,29 +172,7 @@ stressrace: TESTTIMEOUT := $(RACETIMEOUT)
 # checks for the presence of a test binary before running `stress` on it.
 .PHONY: stress stressrace
 stress stressrace:
-ifeq ($(BENCHES),-)
-	$(GO) list -tags '$(TAGS)' -f '$(GO) test -v $(GOFLAGS) -tags '\''$(TAGS)'\'' -ldflags '\''$(LINKFLAGS)'\'' -i -c {{.ImportPath}} -o '\''{{.Dir}}'\''/stress.test && (cd '\''{{.Dir}}'\'' && if [ -f stress.test ]; then COCKROACH_STRESS=true stress $(STRESSFLAGS) ./stress.test -test.run '\''$(TESTS)'\'' -test.timeout $(TESTTIMEOUT) $(TESTFLAGS); fi)' $(PKG) | $(SHELL)
-else
-	$(GO) list -tags '$(TAGS)' -f '$(GO) test -v $(GOFLAGS) -tags '\''$(TAGS)'\'' -ldflags '\''$(LINKFLAGS)'\'' -i -c {{.ImportPath}} -o '\''{{.Dir}}'\''/stress.test && (cd '\''{{.Dir}}'\'' && if [ -f stress.test ]; then COCKROACH_STRESS=true stress $(STRESSFLAGS) ./stress.test -test.run '\''$(TESTS)'\'' -test.bench '\''$(BENCHES)'\'' -test.timeout $(TESTTIMEOUT) $(TESTFLAGS); fi)' $(PKG) | $(SHELL)
-endif
-
-# We're stuck copy-pasting this command from the test target because `ifeq`
-# clauses are all executed by Make before any targets are ever run. That means
-# that setting the BENCHES variable here doesn't effect the `ifeq` evaluation in
-# the test target. Thus, if we were to simply set BENCHES and declare the test
-# target as a prerequisite, we'd never actually run the benchmarks unless an
-# override for BENCHES was specified on the command-line (which would take
-# effect during `ifeq` processing). The alternative to copy-pasting would be to
-# use shell-conditionals in the test target, which would quickly make the output
-# of running `make test` or `make bench` very ugly.
-# If golang/go#18010 is ever fixed, we can just get rid of all the `ifeq`s,
-# always include -bench, and switch this back to specifying test as a prereq.
-.PHONY: bench
-bench: BENCHES := .
-bench: TESTS := -
-bench: TESTTIMEOUT := $(BENCHTIMEOUT)
-bench: gotestdashi
-	$(GO) test $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -run "$(TESTS)" -bench "$(BENCHES)" -timeout $(TESTTIMEOUT) $(PKG) $(TESTFLAGS)
+	$(GO) list -tags '$(TAGS)' -f '$(GO) test -v $(GOFLAGS) -tags '\''$(TAGS)'\'' -ldflags '\''$(LINKFLAGS)'\'' -i -c {{.ImportPath}} -o '\''{{.Dir}}'\''/stress.test && (cd '\''{{.Dir}}'\'' && if [ -f stress.test ]; then COCKROACH_STRESS=true stress $(STRESSFLAGS) ./stress.test -test.run '\''$(TESTS)'\'' $(if $(BENCHES),-test.bench '\''$(BENCHES)'\'') -test.timeout $(TESTTIMEOUT) $(TESTFLAGS); fi)' $(PKG) | $(SHELL)
 
 .PHONY: upload-coverage
 upload-coverage:
