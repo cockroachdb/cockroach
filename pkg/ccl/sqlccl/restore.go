@@ -287,6 +287,10 @@ func reassignReferencedTables(
 				table.DependedOnBy = append(table.DependedOnBy, ref)
 			}
 		}
+
+		// since this is a "new" table in eyes of new cluster, any leftover change
+		// lease is obviously bogus (plus the nodeID is relative to backup cluster).
+		table.Lease = nil
 	}
 	return nil
 }
