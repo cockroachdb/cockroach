@@ -145,6 +145,16 @@ func (bf *BackfillerSpec) summary() (string, []string) {
 	return "Backfiller", details
 }
 
+func (d *DistinctSpec) summary() (string, []string) {
+	details := []string{
+		colListStr(d.DistinctColumns),
+	}
+	if len(d.OrderedColumns) > 0 {
+		details = append(details, fmt.Sprintf("Ordered: %s", colListStr(d.DistinctColumns)))
+	}
+	return "Distinct", details
+}
+
 func (is *InputSyncSpec) summary() (string, []string) {
 	switch is.Type {
 	case InputSyncSpec_UNORDERED:
