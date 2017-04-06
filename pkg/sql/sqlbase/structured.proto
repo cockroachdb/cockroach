@@ -184,7 +184,7 @@ message InterleaveDescriptor {
 //   column_directions:   ASC, ASC
 //   column_ids:          1, 2   // k1, k2
 //
-// Index k1v (k1, v) STORING (w):
+// [old STORING encoding] Index k1v (k1, v) STORING (w):
 //   name:                k1v
 //   id:                  2
 //   unique:              false
@@ -193,6 +193,17 @@ message InterleaveDescriptor {
 //   store_column_names:  w
 //   column_ids:          1, 4   // k1, v
 //   extra_column_ids:    2, 5   // k2, w
+//
+// [new STORING encoding] Index k1v (k1, v) STORING (w):
+//   name:                k1v
+//   id:                  2
+//   unique:              false
+//   column_names:        k1, v
+//   column_directions:   ASC, ASC
+//   store_column_names:  w
+//   column_ids:          1, 4   // k1, v
+//   extra_column_ids:    2      // k2
+//   store_column_ids:    5      // w
 message IndexDescriptor {
   // The direction of a column in the index.
   enum Direction {
@@ -232,18 +243,22 @@ message IndexDescriptor {
   // index:
   //  - implicit columns, which are all the primary key columns that are not
   //    already part of the index (i.e. PrimaryIndex.column_ids - column_ids).
-  //  - stored columns (the columns in store_column_names).
+  //  - stored columns (the columns in store_column_names) if this index uses the
+  //    old STORING encoding (key-encoded data).
   //
   // Only used for secondary indexes.
   // For non-unique indexes, these columns are appended to the key.
   // For unique indexes, these columns are stored in the value.
   // This distinction exists because we want to be able to insert an entry using
   // a single conditional put on the key.
-  //
-  // Note: for non-unique indexes, the stored columns could be part of the
-  // value rather than the key, but we don't currently do this.
   repeated uint32 extra_column_ids = 7 [(gogoproto.customname) = "ExtraColumnIDs",
       (gogoproto.casttype) = "ColumnID"];
+
+  // An ordered list of column IDs that parallels store_column_names if this
+  // index uses the new STORING encoding (value-encoded data, always in the KV
+  // value).
+  repeated uint32 store_column_ids = 14
+      [(gogoproto.customname) = "StoreColumnIDs", (gogoproto.casttype) = "ColumnID"];
 
   // CompositeColumnIDs contains an ordered list of IDs of columns that appear
   // in the index and have a composite encoding. Includes IDs from both
