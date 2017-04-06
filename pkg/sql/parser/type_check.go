@@ -950,11 +950,11 @@ func typeCheckComparisonOp(
 			return nil, nil, CmpOp{}, fmt.Errorf(unsupportedCompErrFmtWithTypes, TypeTuple, op, TypeTuple)
 		}
 		// Using non-folded left and right to avoid having to swap later.
-		typedSubExprs, _, err := typeCheckSameTypedTupleExprs(ctx, TypeAny, left, right)
+		typedLeft, typedRight, err := typeCheckTupleComparison(ctx, op, left.(*Tuple), right.(*Tuple))
 		if err != nil {
 			return nil, nil, CmpOp{}, err
 		}
-		return typedSubExprs[0], typedSubExprs[1], fn, nil
+		return typedLeft, typedRight, fn, nil
 	}
 
 	overloads := make([]overloadImpl, len(ops))
@@ -1173,6 +1173,34 @@ func typeCheckSameTypedExprs(
 	}
 }
 
+// typeCheckTupleComparison type checks a comparison between two tuples,
+// asserting that the elements of the two tuples are comparable at each index.
+func typeCheckTupleComparison(
+	ctx *SemaContext, op ComparisonOperator, left *Tuple, right *Tuple,
+) (TypedExpr, TypedExpr, error) {
+	// All tuples must have the same length.
+	len := len(left.Exprs)
+	if err := checkTupleHasLength(right, len); err != nil {
+		return nil, nil, err
+	}
+	left.types = make(TTuple, len)
+	right.types = make(TTuple, len)
+	for elemIdx := range left.Exprs {
+		leftSubExpr := left.Exprs[elemIdx]
+		rightSubExpr := right.Exprs[elemIdx]
+		leftSubExprTyped, rightSubExprTyped, _, err := typeCheckComparisonOp(ctx, op, leftSubExpr, rightSubExpr)
+		if err != nil {
+			return nil, nil, fmt.Errorf("tuples %s are not comparable at index %d: %s",
+				Exprs([]Expr{left, right}), elemIdx+1, err)
+		}
+		left.Exprs[elemIdx] = leftSubExprTyped
+		left.types[elemIdx] = leftSubExprTyped.ResolvedType()
+		right.Exprs[elemIdx] = rightSubExprTyped
+		right.types[elemIdx] = rightSubExprTyped.ResolvedType()
+	}
+	return left, right, nil
+}
+
 // typeCheckSameTypedTupleExprs type checks a list of expressions, asserting that all
 // are tuples which have the same type. The function expects the first provided expression
 // to be a tuple, and will panic if it is not. However, it does not expect all other
@@ -1246,10 +1274,16 @@ func checkAllExprsAreTuples(ctx *SemaContext, exprs []Expr) error {
 
 func checkAllTuplesHaveLength(exprs []Expr, expectedLen int) error {
 	for _, expr := range exprs {
-		t := expr.(*Tuple)
-		if len(t.Exprs) != expectedLen {
-			return fmt.Errorf("expected tuple %v to have a length of %d", t, expectedLen)
+		if err := checkTupleHasLength(expr.(*Tuple), expectedLen); err != nil {
+			return err
 		}
+	}
+	return nil
+}
+
+func checkTupleHasLength(t *Tuple, expectedLen int) error {
+	if len(t.Exprs) != expectedLen {
+		return fmt.Errorf("expected tuple %v to have a length of %d", t, expectedLen)
 	}
 	return nil
 }
