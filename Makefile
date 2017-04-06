@@ -236,14 +236,21 @@ dupl:
 	       -not -name 'sql.go'      \
 	| dupl -files $(DUPLFLAGS)
 
+# All packages need to be installed before we can run (some) of the checks
+# and code generators reliably. More precisely, anything that using
+# x/tools/go/loader is fragile (this includes stringer, vet and others).
+#
+# The blocking issue is https://github.com/golang/go/issues/14120; see
+# https://github.com/golang/go/issues/10249 for some more concrete discussion
+# on `stringer` and https://github.com/golang/go/issues/16086 for `vet`.
 .PHONY: check
 check: override TAGS += check
-check:
+check: gotestdashi
 	$(GO) test ./build -v -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -run 'TestStyle/$(TESTS)'
 
 .PHONY: checkshort
 checkshort: override TAGS += check
-checkshort:
+checkshort: gotestdashi
 	$(GO) test ./build -v -tags '$(TAGS)' -short -run 'TestStyle/$(TESTS)'
 
 .PHONY: clean
@@ -251,6 +258,10 @@ clean:
 	$(GO) clean $(GOFLAGS) -i github.com/cockroachdb/...
 	find . -name '*.test*' -type f -exec rm -f {} \;
 	rm -f .bootstrap $(ARCHIVE)
+
+.PHONY: generate
+generate: gotestdashi
+	$(GO) generate $(PKG)
 
 .PHONY: protobuf
 protobuf:
