@@ -87,25 +87,13 @@ all: build test check
 .PHONY: short
 short: build testshort checkshort
 
-.PHONY: buildoss
 buildoss: BUILDTARGET = ./pkg/cmd/cockroach-oss
-buildoss: build
 
-.PHONY: build
-build: BUILDMODE = build -i -o cockroach$(SUFFIX)
-build: install
+build buildoss: BUILDMODE = build -i -o cockroach$(SUFFIX)
 
-.PHONY: xgo-build
 xgo-build: GO = $(XGO)
 xgo-build: BUILDMODE =
-xgo-build: install
 
-.PHONY: start
-start: build
-start:
-	$(COCKROACH) start $(STARTFLAGS)
-
-.PHONY: install
 # The build.utcTime format must remain in sync with TimeFormat in pkg/build/info.go.
 install: override LINKFLAGS += \
 	-X "github.com/cockroachdb/cockroach/pkg/build.tag=$(shell cat .buildinfo/tag)" \
@@ -120,7 +108,15 @@ install: GOBIN := $(ORIGINAL_GOBIN)
 # dependencies are rebuilt which is useful when switching between
 # normal and race test builds.
 install: .buildinfo/tag .buildinfo/rev
+
+.PHONY: build buildoss xgo-build install
+build buildoss xgo-build install:
 	$(GO) $(BUILDMODE) -v $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' $(BUILDTARGET)
+
+.PHONY: start
+start: build
+start:
+	$(COCKROACH) start $(STARTFLAGS)
 
 # Build, but do not run the tests.
 # PKG is expanded and all packages are built and moved to their directory.
@@ -134,47 +130,43 @@ testbuild:
 gotestdashi:
 	$(GO) test -v $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -i $(PKG)
 
-.PHONY: test
-test: gotestdashi
-ifeq ($(BENCHES),-)
-	$(GO) test $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -run "$(TESTS)" -timeout $(TESTTIMEOUT) $(PKG) $(TESTFLAGS)
-else
-	$(GO) test $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -run "$(TESTS)" -bench "$(BENCHES)" -timeout $(TESTTIMEOUT) $(PKG) $(TESTFLAGS)
-endif
-
-.PHONY: testshort
 testshort: override TESTFLAGS += -short
-testshort: test
 
 testrace: override GOFLAGS += -race
 testrace: GORACE := halt_on_error=1
 testrace: TESTTIMEOUT := $(RACETIMEOUT)
-testrace: test
-
-.PHONY: testslow
-testslow: override TESTFLAGS += -v
-testslow: gotestdashi
-ifeq ($(BENCHES),-)
-	$(GO) test $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -run "$(TESTS)" -timeout $(TESTTIMEOUT) $(PKG) $(TESTFLAGS) | grep -F ': Test' | sed -E 's/(--- PASS: |\(|\))//g' | awk '{ print $$2, $$1 }' | sort -rn | head -n 10
-else
-	$(GO) test $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -run "$(TESTS)" -bench "$(BENCHES)" -timeout $(TESTTIMEOUT) $(PKG) $(TESTFLAGS) | grep -F ': Test' | sed -E 's/(--- PASS: |\(|\))//g' | awk '{ print $$2, $$1 }' | sort -rn | head -n 10
-endif
-
-.PHONY: testraceslow
-testraceslow: override GOFLAGS += -race
-testraceslow: TESTTIMEOUT := $(RACETIMEOUT)
-testraceslow: testslow
 
 # This is how you get a literal space into a Makefile.
 space := $(eval) $(eval)
 
 # Run make testlogic to run all of the logic tests. Specify test files to run
 # with make testlogic FILES="foo bar".
-.PHONY: testlogic
 testlogic: PKG := ./pkg/sql
 testlogic: TESTS := $(if $(FILES),TestLogic$$//^$(subst $(space),$$|^,$(FILES))$$,TestLogic)
 testlogic: TESTFLAGS := -v $(if $(FILES),-show-sql)
-testlogic: test
+
+.PHONY: test testshort testrace testlogic
+test testshort testrace testlogic: gotestdashi
+ifeq ($(BENCHES),-)
+	$(GO) test $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -run "$(TESTS)" -timeout $(TESTTIMEOUT) $(PKG) $(TESTFLAGS)
+else
+	$(GO) test $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -run "$(TESTS)" -bench "$(BENCHES)" -timeout $(TESTTIMEOUT) $(PKG) $(TESTFLAGS)
+endif
+
+testraceslow: override GOFLAGS += -race
+testraceslow: TESTTIMEOUT := $(RACETIMEOUT)
+
+.PHONY: testslow testraceslow
+testslow testraceslow: override TESTFLAGS += -v
+testslow testraceslow: gotestdashi
+ifeq ($(BENCHES),-)
+	$(GO) test $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -run "$(TESTS)" -timeout $(TESTTIMEOUT) $(PKG) $(TESTFLAGS) | grep -F ': Test' | sed -E 's/(--- PASS: |\(|\))//g' | awk '{ print $$2, $$1 }' | sort -rn | head -n 10
+else
+	$(GO) test $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -run "$(TESTS)" -bench "$(BENCHES)" -timeout $(TESTTIMEOUT) $(PKG) $(TESTFLAGS) | grep -F ': Test' | sed -E 's/(--- PASS: |\(|\))//g' | awk '{ print $$2, $$1 }' | sort -rn | head -n 10
+endif
+
+stressrace: override GOFLAGS += -race
+stressrace: TESTTIMEOUT := $(RACETIMEOUT)
 
 # Beware! This target is complicated because it needs to handle complexity:
 # - PKG may be specified as relative (e.g. './gossip') or absolute (e.g.
@@ -185,18 +177,13 @@ testlogic: test
 # through `go list`.
 # - PKG may not contain any tests! This is handled with an `if` statement that
 # checks for the presence of a test binary before running `stress` on it.
-.PHONY: stress
-stress:
+.PHONY: stress stressrace
+stress stressrace:
 ifeq ($(BENCHES),-)
 	$(GO) list -tags '$(TAGS)' -f '$(GO) test -v $(GOFLAGS) -tags '\''$(TAGS)'\'' -ldflags '\''$(LINKFLAGS)'\'' -i -c {{.ImportPath}} -o '\''{{.Dir}}'\''/stress.test && (cd '\''{{.Dir}}'\'' && if [ -f stress.test ]; then COCKROACH_STRESS=true stress $(STRESSFLAGS) ./stress.test -test.run '\''$(TESTS)'\'' -test.timeout $(TESTTIMEOUT) $(TESTFLAGS); fi)' $(PKG) | $(SHELL)
 else
 	$(GO) list -tags '$(TAGS)' -f '$(GO) test -v $(GOFLAGS) -tags '\''$(TAGS)'\'' -ldflags '\''$(LINKFLAGS)'\'' -i -c {{.ImportPath}} -o '\''{{.Dir}}'\''/stress.test && (cd '\''{{.Dir}}'\'' && if [ -f stress.test ]; then COCKROACH_STRESS=true stress $(STRESSFLAGS) ./stress.test -test.run '\''$(TESTS)'\'' -test.bench '\''$(BENCHES)'\'' -test.timeout $(TESTTIMEOUT) $(TESTFLAGS); fi)' $(PKG) | $(SHELL)
 endif
-
-.PHONY: stressrace
-stressrace: override GOFLAGS += -race
-stressrace: TESTTIMEOUT := $(RACETIMEOUT)
-stressrace: stress
 
 # We're stuck copy-pasting this command from the test target because `ifeq`
 # clauses are all executed by Make before any targets are ever run. That means
