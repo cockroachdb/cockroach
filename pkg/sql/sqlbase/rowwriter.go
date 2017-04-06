@@ -426,6 +426,11 @@ func MakeRowUpdater(
 				return true
 			}
 		}
+		for _, id := range index.StoreColumnIDs {
+			if _, ok := updateColIDtoRowIndex[id]; ok {
+				return true
+			}
+		}
 		return false
 	}
 
@@ -523,6 +528,11 @@ func MakeRowUpdater(
 			}
 			// The extra columns are needed to fix #14601.
 			for _, colID := range index.ExtraColumnIDs {
+				if err := maybeAddCol(colID); err != nil {
+					return RowUpdater{}, err
+				}
+			}
+			for _, colID := range index.StoreColumnIDs {
 				if err := maybeAddCol(colID); err != nil {
 					return RowUpdater{}, err
 				}

@@ -226,6 +226,11 @@ func (desc *IndexDescriptor) ContainsColumnID(colID ColumnID) bool {
 			return true
 		}
 	}
+	for _, id := range desc.StoreColumnIDs {
+		if id == colID {
+			return true
+		}
+	}
 	return false
 }
 
@@ -593,9 +598,12 @@ func (desc *TableDescriptor) allocateIndexIDs(columnNames map[string]ColumnID) e
 		}
 
 		if index != &desc.PrimaryIndex {
-			// Need to clear ExtraColumnIDs because it is used by
-			// ContainsColumnID.
+			indexUsesOldStoringEncoding := len(index.ExtraColumnIDs) > 0 &&
+				len(index.StoreColumnIDs) < len(index.StoreColumnNames)
+			// Need to clear ExtraColumnIDs and StoreColumnIDs because they are used
+			// by ContainsColumnID.
 			index.ExtraColumnIDs = nil
+			index.StoreColumnIDs = nil
 			var extraColumnIDs []ColumnID
 			for _, primaryColID := range desc.PrimaryIndex.ColumnIDs {
 				if !index.ContainsColumnID(primaryColID) {
@@ -621,7 +629,11 @@ func (desc *TableDescriptor) allocateIndexIDs(columnNames map[string]ColumnID) e
 				if index.ContainsColumnID(col.ID) {
 					return fmt.Errorf("index \"%s\" already contains column \"%s\"", index.Name, col.Name)
 				}
-				index.ExtraColumnIDs = append(index.ExtraColumnIDs, col.ID)
+				if indexUsesOldStoringEncoding {
+					index.ExtraColumnIDs = append(index.ExtraColumnIDs, col.ID)
+				} else {
+					index.StoreColumnIDs = append(index.StoreColumnIDs, col.ID)
+				}
 			}
 		}
 
