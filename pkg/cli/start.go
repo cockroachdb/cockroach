@@ -708,17 +708,22 @@ func runQuit(_ *cobra.Command, _ []string) (err error) {
 	defer stopper.Stop()
 
 	ctx := stopperContext(stopper)
-
-	if err := doShutdown(ctx, c, onModes); err != nil {
-		if _, ok := err.(*errTryHardShutdown); ok {
-			fmt.Fprintf(
-				os.Stdout, "graceful shutdown failed: %s\nproceeding with hard shutdown\n", err,
-			)
-		} else {
-			return err
+	errChan := make(chan error, 1)
+	go func() {
+		errChan <- doShutdown(ctx, c, onModes)
+	}()
+	select {
+	case err := <-errChan:
+		if err != nil {
+		    if _, ok := err.(errTryHardShutdown); ok {
+		        fmt.Printf("graceful shutdown failed: %s; proceeding with hard shutdown\n", err)
+		        break
+		    }
+		    return err
 		}
-	} else {
-		return nil
+		return nil		
+	case <-time.After(time.Minute):
+		fmt.Println("timed out; proceeding with hard shutdown")
 	}
 	// Not passing drain modes tells the server to not bother and go
 	// straight to shutdown.
