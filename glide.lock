@@ -1,5 +1,5 @@
 hash: 620ed7b5a97e5e1c3f144f49863859862222390b5e00249714aab0b1d4c581c7
-updated: 2017-04-07T01:28:30.307271586-04:00
+updated: 2017-04-07T17:26:49.573117984-04:00
 imports:
 - name: cloud.google.com/go
   version: f4dfefc998d92c53913c2ae5bc7cd3fba18e9e4b
@@ -12,7 +12,7 @@ imports:
 - name: github.com/abourget/teamcity
   version: 6dde447fa54bc5b08b1a7bb1b85e39089cf27fb1
 - name: github.com/Azure/azure-sdk-for-go
-  version: 088007b3b08cc02b27f2eadfdcd870958460ce7e
+  version: 5b0aa1d05fbf518373abb366951e3587cc1b3154
   subpackages:
   - storage
 - name: github.com/Azure/go-ansiterm
@@ -408,6 +408,10 @@ imports:
   - transform
   - unicode/norm
   - width
+- name: golang.org/x/time
+  version: a4bde12657593d5e90d0533a3e4fd95e635124cb
+  subpackages:
+  - rate
 - name: golang.org/x/tools
   version: 24acc66eabead631b4e856255a9ad925549cee80
   subpackages:
