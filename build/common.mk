@@ -90,6 +90,9 @@ $(call make-lazy,TAR_XFORM_FLAG)
 SED_INPLACE = sed $(shell sed --version 2>&1 | grep -q GNU && echo -i || echo "-i ''")
 $(call make-lazy,SED_INPLACE)
 
+# This is how you get a literal space into a Makefile.
+space := $(eval) $(eval)
+
 # We used to check the Go version in a .PHONY .go-version target, but the error
 # message, if any, would get mixed in with noise from other targets if Make was
 # executed in parallel job mode. This check, by contrast, is guaranteed to print
