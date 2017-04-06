@@ -98,7 +98,7 @@ SELECT
 ----
 true NULL false NULL
 
-statement error pq: tuples \(1, 2\), \(1, 'hi'\) are not the same type: expected 2 to be of type string, found type int
+statement error pq: tuples \(1, 2\), \(1, 'hi'\) are not comparable at index 2: unsupported comparison operator: <int> > <string>
 SELECT (1, 2) > (1, 'hi')
 
 statement error pq: expected tuple \(1, 2, 3\) to have a length of 2
@@ -134,11 +134,16 @@ SELECT ((1, 2), 'equal') = ((1, 2.1), 'equal')
 false
 
 query B
-SELECT (ROW(POW(1, 10.0) + 9), 'a' || 'b') = (ROW(SQRT(100)), 'ab')
+SELECT (ROW(POW(1, 10.0) + 9), 'a' || 'b') = (ROW(SQRT(100.0)), 'ab')
 ----
 true
 
-query error pq: tuples \(\(1, 2\), 'equal'\), \(\(1, 'huh'\), 'equal'\) are not the same type: tuples \(1, 2\), \(1, 'huh'\) are not the same type: expected 2 to be of type string, found type int
+query B
+SELECT (ROW(SQRT(100.0)), 'ab') = (ROW(POW(1, 10.0) + 9), 'a' || 'b')
+----
+true
+
+query error pq: tuples \(\(1, 2\), 'equal'\), \(\(1, 'huh'\), 'equal'\) are not comparable at index 1: tuples \(1, 2\), \(1, 'huh'\) are not comparable at index 2: unsupported comparison operator: <int> = <string>
 SELECT ((1, 2), 'equal') = ((1, 'huh'), 'equal')
 
 # Issue #3568
@@ -205,3 +210,14 @@ query B
 SELECT 1 IN (2, x) FROM (SELECT NULL AS x)
 ----
 NULL
+
+# Issue 10407: tuple comparisons should not require homogeneous types
+query B
+SELECT (now(), 2) = ((now() :: timestamp), 2)
+----
+true
+
+query B
+SELECT (1, 2) > (1.0, 2.0)
+----
+false
