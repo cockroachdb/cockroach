@@ -42,6 +42,8 @@ type TestServerArgs struct {
 
 	// Addr (if nonempty) is the address to use for the test server.
 	Addr string
+	// HTTPAddr (if nonempty) is the HTTP address to use for the test server.
+	HTTPAddr string
 
 	// JoinAddr (if nonempty) is the address of a node we are joining.
 	JoinAddr string
