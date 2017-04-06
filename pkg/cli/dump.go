@@ -107,14 +107,11 @@ func getDumpMetadata(
 	conn *sqlConn, dbName string, tableNames []string, asOf string,
 ) (mds []tableMetadata, clusterTS string, err error) {
 	if asOf == "" {
-		// Converting to a string here is useful since we only need a string below
-		// for the AS OF SYSTEM TIME insertion and the database is guaranteed to be
-		// able to parse its own output.
-		vals, err := conn.QueryRow("SELECT now()::string", nil)
+		vals, err := conn.QueryRow("SELECT cluster_logical_timestamp()", nil)
 		if err != nil {
 			return nil, "", err
 		}
-		clusterTS = vals[0].(string)
+		clusterTS = string(vals[0].([]byte))
 	} else {
 		// Validate the timestamp. This prevents SQL injection.
 		if _, err := parser.ParseDTimestamp(asOf, time.Nanosecond); err != nil {
