@@ -92,3 +92,83 @@ query RIIIR
 SELECT SUM(a), MIN(b), MAX(c), COUNT(d), AVG(a+b+c+d) FROM data
 ----
 55000 1 10 10000 22
+
+# planNode recursion figures out that DISTINCT can take advantage of orderings,
+# and so it retains the primary key ordering, which is why we don't need to
+# specify rowsort.
+query T
+SELECT URL FROM [EXPLAIN (DISTSQL) SELECT DISTINCT (a) FROM data]
+----
+https://raduberinde.github.io/decode.html?eJy8k71OwzAUhXeeAp2VOzRpWkqmDixdKKrYUAYTXyFLbRzZjgSq8u4osRA0QjYoIaN_vvP5JPYZlZb8IE5skT8jASEFYQlCBsIKBaE2umRrtem2eGAn35AvCKqqG9dNF4RSG0Z-hlPuyMjxJF6OfGAh2YAg2Ql17CW1USdh3rdSOAHCvnH59TZB0RJ04z4DW_q96l5Zp6rSXXq2XZu9kWxY_snwFaw9Pcy9QdH-zzGS-b5pRDVBmXS-MhHVBGWW85WJqCYok81XJqKa-On-YDiwrXVl-cIwzCsILF_Zv36rG1Pyo9FlH-6H-353PyHZOr-a-MGu8kvdsb7DSRBOL-BkCKdhc0S9DNJZGM7GnHsVhNdh83qM-TYIb8LmzRjzXfhfLSLXJHzJhu6ivfoIAAD__0aXi5E=
+
+query I
+SELECT DISTINCT (a) FROM data
+----
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+
+query T
+SELECT URL FROM [EXPLAIN (DISTSQL) SELECT SUM (DISTINCT A) FROM data]
+----
+https://raduberinde.github.io/decode.html?eJy8k09rgzAchu_7FOU9bZBDY23XeepYLx7WjrY7DQ-Z-SFCaySJsFH87qPK2JQSNwWP-fO8z2tMzsiUpI04kUHwBg4GDwwzMPhgmCNiyLWKyRilL1tqIJQfCKYMaZYX9jIdMcRKE4IzbGqPhAAH8X6kHQlJGgySrEiPlSTX6Unoz5UUVoBhW9hgsuKISgZV2O_Akv1dtU6NTbPYNj3_yPyJKjKlJWmSjayovGJ9TBJNibCq9X371-fbdbg_hJunw2TF75wt-HiH2KHqdYjeePU7VL3qz8ar36HqVd8fr36HavALvJK5I5OrzFDrJTbzIgaSCdWP2KhCx_SiVVyF18NttbuakGRsvcrrQZjVS5dav2HuhL0GzNuw5zZ3qGdO2nfD_pDecye8cJsXQ8z3TnjpNi-HmB_c_2racU3cl6ztjsqbrwAAAP__I2l4HQ==
+
+query R
+SELECT SUM (DISTINCT A) FROM data
+----
+55
+
+query T
+SELECT URL FROM [EXPLAIN (DISTSQL) SELECT SUM (DISTINCT A), SUM (DISTINCT B) FROM data]
+----
+https://raduberinde.github.io/decode.html?eJy8k8FLwzAUxu_-FeM7Ochh6bo5e6q4Sw9uss2T9BCbRylsTUlSUEb_d1mLaMtIdZMe85Lv-70vyTsiV5JW4kAGwSs4GDwwTMHgg2GGmKHQKiFjlD4daQSRfEcwYcjyorSncsyQKE0IjrCZ3RMC7MTbnjYkJGkwSLIi29eQQmcHoT9CKawAw7q0wSjkLPQQVwyqtF-eFfs9bZkZm-WJbaP-ZvvtVuZKS9IkW3ZxdQb8kKaaUmFVJ-X25el2GW130epxNwr5GKxT8sbOxvigt9tDu_R2vUFD9NAuDTEdNEQP7dIQ_qAhemj_MaxnbDdkCpUb6gxt2y9mIJlSM-9GlTqhZ62S2rxZruvTdUGSsc0ubxZR3myd2vop5k6x1xLzrthzk3vQU6fad4v9a_qeOcVzN3l-DfnOKV64yYtryPfut5r0fBP3J-uy4-rmMwAA__9Dp4Lz
+
+query RR
+SELECT SUM (DISTINCT A), SUM (DISTINCT B) from data
+----
+55 55
+
+query T
+SELECT URL FROM [EXPLAIN (DISTSQL) SELECT DISTINCT a, b FROM data WHERE (a + b + c) = 27 ORDER BY c,b,a]
+----
+https://raduberinde.github.io/decode.html?eJzMlb3q2zAUxfc-hbnTP_gOlex8CQoaSiFLUtJsxYNrXYrBsYwkQ0vwuxfblDamlULiwUtAH797To4OyQ1qreiYX8mC-AoMEDggJICQAsIaMoTG6IKs1aa_MgIH9QPEe4SyblrXb2cIhTYE4gaudBWBgEv-raIz5YoMIChyeVkNIo0pr7n5KVXuckD4VFaOjIje3iSL4kjyVf-ZrKIPEd8KIQ7HCyCcWiciyVBylAlkHYJu3W_xDh-39UUbN3Ukkxglj1GyeE6pj6V1ZV24iVg_-eGxf6Zpo8iQ-r_zrJvRA1vm4wZszfm4Aalng-XLDDZga85gA1LPBpssM9iArTmDDUg9G2y6zGADtuYMNiA1x-_8P8aeyTa6tnQ3djovQyD1nca_CqtbU9Bno4th-Lg8DbeHDUXWjadsXBzq8ai39TfMvDD3w9wLJ3cwm8KJ3_bGL5166bUfXnvhgPLmlS-99cI7v_LOC-_98P4V2yzQsVDJ_C1jgZqxl3rGAkVLA-L-prFA1Zi_a1PvWffuVwAAAP__o1Sz6A==
+
+query II
+SELECT DISTINCT a, b FROM data WHERE (a + b + c) = 27 ORDER BY c,b,a;
+----
+10 10
+10 9
+9 10
+10 8
+9 9
+8 10
+10 7
+9 8
+8 9
+7 10
+
+query T
+SELECT URL FROM [EXPLAIN (DISTSQL) SELECT DISTINCT a, b FROM data WHERE (a + b + c) = 27 ORDER BY b,a,c]
+----
+https://raduberinde.github.io/decode.html?eJzMlU-rnDAUxff9FHJX7-FdNNF5fwKFLEphNjNlOrviwppLERwjSYSWwe9e1JZ2pC8ZmAy4EdSc-zs5OZAztFrRrjyRBfEVGCBwQMgAIQeEDRQIndEVWavNuGQWbNUPEO8R6rbr3fi5QKi0IRBncLVrCAQcy28NHahUZABBkSvrZoJ0pj6V5qdUpSsB4VPdODIieXiQLEkTyR_HZ_aYfEj4sxBiuzsCwr53IpEMJUeZQTEg6N79gQ94va0v2rilI8lTlCxFmaUxUR9r6-q2cgvYOHnEGEWG1G_U1Zy_4_U84O2tFMM9TbF1Hn_AVszjD6CiJc3XmXTAVsykA6hoSWfrTDpgK2bSAVS0pPN1Jh2wFTPpAOoul8d_OAeynW4tXXCW8woEUt9pvn-s7k1Fn42upuHz635aPX1QZN38l80v23b-Ndr6V8y8Yu4Xc684uxCzpTjz237yo3OveuMXb7ziAPnplk0_e8UvfvKLV_zqF7_eYpsFOhYqmb9lLFAzdlPPWKBoeQDubxoLVI35u7b0XgzvfgUAAP__lQPPnA==
+
+query II
+SELECT DISTINCT a, b FROM data WHERE (a + b + c) = 27 ORDER BY b,a,c;
+----
+10 7
+9 8
+10 8
+8 9
+9 9
+10 9
+7 10
+8 10
+9 10
+10 10

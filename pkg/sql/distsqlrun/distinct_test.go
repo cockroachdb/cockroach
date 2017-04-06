@@ -41,26 +41,30 @@ func TestDistinct(t *testing.T) {
 		expected sqlbase.EncDatumRows
 	}{
 		{
-			spec: DistinctSpec{},
-			input: sqlbase.EncDatumRows{
-				{v[2], v[3]},
-				{v[5], v[6]},
-				{v[2], v[3]},
-				{v[5], v[6]},
-				{v[2], v[6]},
-				{v[3], v[5]},
-				{v[2], v[9]},
-			},
-			expected: sqlbase.EncDatumRows{
-				{v[2], v[3]},
-				{v[5], v[6]},
-				{v[2], v[6]},
-				{v[3], v[5]},
-				{v[2], v[9]},
-			},
-		}, {
 			spec: DistinctSpec{
-				OrderedColumns: []uint32{1},
+				DistinctColumns: []uint32{0, 1},
+			},
+			input: sqlbase.EncDatumRows{
+				{v[2], v[3]},
+				{v[5], v[6]},
+				{v[2], v[3]},
+				{v[5], v[6]},
+				{v[2], v[6]},
+				{v[3], v[5]},
+				{v[2], v[9]},
+			},
+			expected: sqlbase.EncDatumRows{
+				{v[2], v[3]},
+				{v[5], v[6]},
+				{v[2], v[6]},
+				{v[3], v[5]},
+				{v[2], v[9]},
+			},
+		},
+		{
+			spec: DistinctSpec{
+				OrderedColumns:  []uint32{1},
+				DistinctColumns: []uint32{0, 1},
 			},
 			input: sqlbase.EncDatumRows{
 				{v[2], v[3]},
@@ -77,6 +81,53 @@ func TestDistinct(t *testing.T) {
 				{v[2], v[9]},
 				{v[3], v[5]},
 				{v[5], v[6]},
+			},
+		},
+		{
+			spec: DistinctSpec{
+				OrderedColumns:  []uint32{1},
+				DistinctColumns: []uint32{1},
+			},
+			input: sqlbase.EncDatumRows{
+				{v[2], v[3]},
+				{v[2], v[3]},
+				{v[2], v[6]},
+				{v[2], v[9]},
+				{v[3], v[5]},
+				{v[5], v[6]},
+				{v[6], v[6]},
+				{v[7], v[6]},
+			},
+			expected: sqlbase.EncDatumRows{
+				{v[2], v[3]},
+				{v[2], v[6]},
+				{v[2], v[9]},
+				{v[3], v[5]},
+				{v[5], v[6]},
+			},
+		},
+		{
+			spec: DistinctSpec{
+				OrderedColumns:  []uint32{1},
+				DistinctColumns: []uint32{},
+			},
+			input: sqlbase.EncDatumRows{
+				{v[2], v[3]},
+				{v[2], v[3]},
+				{v[2], v[6]},
+				{v[2], v[9]},
+				{v[3], v[5]},
+				{v[5], v[6]},
+				{v[6], v[6]},
+			},
+			expected: sqlbase.EncDatumRows{
+				{v[2], v[3]},
+				{v[2], v[3]},
+				{v[2], v[6]},
+				{v[2], v[9]},
+				{v[3], v[5]},
+				{v[5], v[6]},
+				{v[6], v[6]},
 			},
 		},
 	}
