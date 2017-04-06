@@ -1955,3 +1955,65 @@ func TestDistributedTxnCleanup(t *testing.T) {
 		}
 	}
 }
+
+func TestUnsplittableRange(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+
+	store := createTestStoreWithConfig(t, stopper, storage.TestStoreConfig(nil))
+	store.ForceSplitScanAndProcess()
+
+	// Add a single large row to /Table/14.
+	tableKey := keys.MakeTablePrefix(keys.UITableID)
+	rowKey := keys.MakeFamilyKey(append([]byte(nil), tableKey...), 0)
+	value := bytes.Repeat([]byte("x"), 64<<10)
+	if err := store.DB().Put(context.Background(), rowKey, value); err != nil {
+		t.Fatal(err)
+	}
+
+	store.ForceSplitScanAndProcess()
+	testutils.SucceedsSoon(t, func() error {
+		repl := store.LookupReplica(tableKey, nil)
+		if repl.Desc().StartKey.Equal(tableKey) {
+			return nil
+		}
+		return errors.Errorf("waiting for split: %s", repl)
+	})
+
+	repl := store.LookupReplica(tableKey, nil)
+	origMaxBytes := repl.GetMaxBytes()
+	repl.SetMaxBytes(int64(len(value)))
+
+	// Wait for an attempt to split the range which will fail because it contains
+	// a single large value. The max-bytes for the range will be changed, but it
+	// should not have been reset to its original value.
+	store.ForceSplitScanAndProcess()
+	testutils.SucceedsSoon(t, func() error {
+		maxBytes := repl.GetMaxBytes()
+		if maxBytes != int64(len(value)) && maxBytes < origMaxBytes {
+			return nil
+		}
+		return errors.Errorf("expected max-bytes to be changed: %d", repl.GetMaxBytes())
+	})
+
+	// Add another row to the range. Are funky key construction requires this to
+	// be /Table/15.
+	table2Key := keys.MakeTablePrefix(keys.UITableID + 1)
+	row2Key := keys.MakeFamilyKey(table2Key, 0)
+	if err := store.DB().Put(context.Background(), row2Key, value); err != nil {
+		t.Fatal(err)
+	}
+
+	// Wait for the range to be split and verify that max-bytes was reset to the
+	// value in the zone config.
+	store.ForceSplitScanAndProcess()
+	testutils.SucceedsSoon(t, func() error {
+		if origMaxBytes == repl.GetMaxBytes() {
+			return nil
+		}
+		return errors.Errorf("expected max-bytes=%d, but got max-bytes=%d",
+			origMaxBytes, repl.GetMaxBytes())
+	})
+}

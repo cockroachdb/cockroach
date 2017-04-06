@@ -2990,8 +2990,11 @@ func TestFindSplitKey(t *testing.T) {
 			t.Fatal(err)
 		}
 		ind, _ := strconv.Atoi(string(humanSplitKey))
+		if ind == 0 {
+			t.Fatalf("%d: should never select first key as split key", i)
+		}
 		if diff := td.splitInd - ind; diff > 1 || diff < -1 {
-			t.Fatalf("%d. wanted key #%d+-1, but got %d (diff %d)", i, td.splitInd, ind, diff)
+			t.Fatalf("%d: wanted key #%d+-1, but got %d (diff %d)", i, td.splitInd, ind, diff)
 		}
 	}
 }

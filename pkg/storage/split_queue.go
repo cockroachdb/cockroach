@@ -77,13 +77,7 @@ func (sq *splitQueue) shouldQueue(
 
 	// Add priority based on the size of range compared to the max
 	// size for the zone it's in.
-	zone, err := sysCfg.GetZoneConfigForKey(desc.StartKey)
-	if err != nil {
-		log.Error(ctx, err)
-		return
-	}
-
-	if ratio := float64(repl.GetMVCCStats().Total()) / float64(zone.RangeMaxBytes); ratio > 1 {
+	if ratio := float64(repl.GetMVCCStats().Total()) / float64(repl.GetMaxBytes()); ratio > 1 {
 		priority += ratio
 		shouldQ = true
 	}
@@ -96,7 +90,7 @@ func (sq *splitQueue) process(ctx context.Context, r *Replica, sysCfg config.Sys
 	desc := r.Desc()
 	if splitKey := sysCfg.ComputeSplitKey(desc.StartKey, desc.EndKey); splitKey != nil {
 		log.Infof(ctx, "splitting at key %v", splitKey)
-		if _, pErr := r.adminSplitWithDescriptor(
+		if _, _, pErr := r.adminSplitWithDescriptor(
 			ctx,
 			roachpb.AdminSplitRequest{
 				SplitKey: splitKey.AsRawKey(),
@@ -109,19 +103,28 @@ func (sq *splitQueue) process(ctx context.Context, r *Replica, sysCfg config.Sys
 	}
 
 	// Next handle case of splitting due to size.
-	zone, err := sysCfg.GetZoneConfigForKey(desc.StartKey)
-	if err != nil {
-		return err
-	}
 	size := r.GetMVCCStats().Total()
-	if float64(size)/float64(zone.RangeMaxBytes) > 1 {
-		log.Infof(ctx, "splitting size=%d max=%d", size, zone.RangeMaxBytes)
-		if _, pErr := r.adminSplitWithDescriptor(
+	maxBytes := r.GetMaxBytes()
+	if float64(size)/float64(maxBytes) > 1 {
+		log.Infof(ctx, "splitting size=%d max=%d", size, maxBytes)
+		if _, noSplitKey, pErr := r.adminSplitWithDescriptor(
 			ctx,
 			roachpb.AdminSplitRequest{},
 			desc,
 		); pErr != nil {
 			return pErr.GoError()
+		} else if noSplitKey {
+			// If we couldn't find a split key, set the max-bytes for the range to
+			// its current size to prevent future attempts to split the range until
+			// it grows again.
+			r.SetMaxBytes(size)
+		} else {
+			// We successfully split the range, reset max-bytes to the zone setting.
+			zone, err := sysCfg.GetZoneConfigForKey(desc.StartKey)
+			if err != nil {
+				return err
+			}
+			r.SetMaxBytes(zone.RangeMaxBytes)
 		}
 	}
 	return nil

@@ -2226,10 +2226,13 @@ func MVCCFindSplitKey(
 	bestSplitKey := encStartKey
 	bestSplitDiff := int64(math.MaxInt64)
 	var lastKey roachpb.Key
+	var n int
 
 	if err := engine.Iterate(encStartKey, encEndKey, func(kv MVCCKeyValue) (bool, error) {
-		// Is key within a legal key range?
-		valid := IsValidSplitKey(kv.Key.Key)
+		n++
+		// Is key within a legal key range? Note that we never choose the first key
+		// as the split key.
+		valid := n > 1 && IsValidSplitKey(kv.Key.Key)
 
 		// Determine if this key would make a better split than last "best" key.
 		diff := targetSize - sizeSoFar
