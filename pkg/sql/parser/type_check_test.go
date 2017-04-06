@@ -184,7 +184,7 @@ func TestTypeCheckError(t *testing.T) {
 		{`CASE 1 WHEN 1 THEN 'one' WHEN 2 THEN 2 END`, `incompatible value type`},
 		{`CASE 1 WHEN 1 THEN 'one' ELSE 2 END`, `incompatible value type`},
 		{`(1, 2, 3) = (1, 2)`, `expected tuple (1, 2) to have a length of 3`},
-		{`(1, 2) = (1, 'a')`, `tuples (1, 2), (1, 'a') are not the same type: expected 2 to be of type string, found type int`},
+		{`(1, 2) = (1, 'a')`, `tuples (1, 2), (1, 'a') are not comparable at index 2: unsupported comparison operator: <int> = <string>`},
 		{`1 IN ('a', 'b')`, `unsupported comparison operator: 1 IN ('a', 'b'): expected 1 to be of type string, found type int`},
 		{`1 IN (1, 'a')`, `unsupported comparison operator: 1 IN (1, 'a'): expected 1 to be of type string, found type int`},
 		{`1 = ANY 2`, `unsupported comparison operator: 1 = ANY 2: op ANY array requires array on right side`},
