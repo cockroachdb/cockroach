@@ -515,14 +515,24 @@ func BenchmarkRocksDBSstFileReader(b *testing.B) {
 	}
 
 	b.ResetTimer()
-	sst, err := MakeRocksDBSstFileReader(dir)
+	readerTempDir, err := ioutil.TempDir(dir, "RocksDBSstFileReader")
 	if err != nil {
 		b.Fatal(err)
 	}
-	if err := sst.AddFile(sstPath); err != nil {
+	defer func() {
+		if err := os.RemoveAll(readerTempDir); err != nil {
+			b.Fatal(err)
+		}
+	}()
+
+	sst, err := MakeRocksDBSstFileReader(readerTempDir)
+	if err != nil {
 		b.Fatal(err)
 	}
 	defer sst.Close()
+	if err := sst.AddFile(sstPath); err != nil {
+		b.Fatal(err)
+	}
 	count := 0
 	iterateFn := func(kv MVCCKeyValue) (bool, error) {
 		count++
