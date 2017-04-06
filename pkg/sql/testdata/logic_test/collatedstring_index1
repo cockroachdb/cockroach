@@ -69,9 +69,7 @@ SELECT COUNT (a) FROM t WHERE a > ('a' COLLATE da) AND a < ('c' COLLATE da)
 # Create an index and try again.
 
 statement ok
-CREATE INDEX ON t (b, a)
-
-# TODO(#14533): add STORING (c)
+CREATE INDEX ON t (b, a) STORING (c)
 
 query ITTT
 EXPLAIN SELECT a, b FROM t ORDER BY a, b
