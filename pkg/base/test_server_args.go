@@ -64,6 +64,7 @@ type TestServerArgs struct {
 	SSLCA                    string
 	SSLCert                  string
 	SSLCertKey               string
+	SSLCertsDir              string
 	TimeSeriesQueryWorkerMax int
 	SQLMemoryPoolSize        int64
 

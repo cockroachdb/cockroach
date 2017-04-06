@@ -22,7 +22,7 @@ import (
 )
 
 func init() {
-	security.SetReadFileFn(securitytest.Asset)
+	security.SetAssetLoader(securitytest.EmbeddedAssets)
 }
 
 //go:generate ../util/leaktest/add-leaktest.sh *_test.go

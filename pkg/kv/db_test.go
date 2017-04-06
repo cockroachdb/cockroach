@@ -20,7 +20,6 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	"path/filepath"
 	"sync/atomic"
 	"testing"
 
@@ -50,9 +49,8 @@ func createTestClientForUser(
 	var ctx base.Config
 	ctx.InitDefaults()
 	ctx.User = user
-	ctx.SSLCA = filepath.Join(security.EmbeddedCertsDir, security.EmbeddedCACert)
-	ctx.SSLCert = filepath.Join(security.EmbeddedCertsDir, fmt.Sprintf("%s.crt", user))
-	ctx.SSLCertKey = filepath.Join(security.EmbeddedCertsDir, fmt.Sprintf("%s.key", user))
+	testutils.FillCerts(&ctx)
+
 	conn, err := rpc.NewContext(log.AmbientContext{}, &ctx, s.Clock(), s.Stopper()).GRPCDial(s.ServingAddr())
 	if err != nil {
 		t.Fatal(err)

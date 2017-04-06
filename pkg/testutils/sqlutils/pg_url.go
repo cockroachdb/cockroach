@@ -53,8 +53,8 @@ func PGUrl(t testing.TB, servingAddr, prefix string, user *url.Userinfo) (url.UR
 	}
 
 	caPath := filepath.Join(security.EmbeddedCertsDir, security.EmbeddedCACert)
-	certPath := filepath.Join(security.EmbeddedCertsDir, fmt.Sprintf("%s.crt", user.Username()))
-	keyPath := filepath.Join(security.EmbeddedCertsDir, fmt.Sprintf("%s.key", user.Username()))
+	certPath := filepath.Join(security.EmbeddedCertsDir, fmt.Sprintf("client.%s.crt", user.Username()))
+	keyPath := filepath.Join(security.EmbeddedCertsDir, fmt.Sprintf("client.%s.key", user.Username()))
 
 	// Copy these assets to disk from embedded strings, so this test can
 	// run from a standalone binary.

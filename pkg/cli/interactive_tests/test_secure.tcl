@@ -5,8 +5,8 @@ source [file join [file dirname $argv0] common.tcl]
 set ca_crt "/certs/ca.crt"
 set node_crt "/certs/node.crt"
 set node_key "/certs/node.key"
-set root_crt "/certs/root.crt"
-set root_key "/certs/root.key"
+set root_crt "/certs/client.root.crt"
+set root_key "/certs/client.root.key"
 
 proc start_secure_server {argv ca_crt node_crt node_key} {
     system "mkfifo pid_fifo || true; $argv start --ca-cert=$ca_crt --cert=$node_crt --key=$node_key --pid-file=pid_fifo & cat pid_fifo > server_pid"

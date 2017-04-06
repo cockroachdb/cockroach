@@ -319,6 +319,7 @@ func init() {
 		stringFlag(f, &baseCfg.SSLCA, cliflags.CACert, baseCfg.SSLCA)
 		stringFlag(f, &baseCfg.SSLCert, cliflags.Cert, baseCfg.SSLCert)
 		stringFlag(f, &baseCfg.SSLCertKey, cliflags.Key, baseCfg.SSLCertKey)
+		stringFlag(f, &baseCfg.SSLCertsDir, cliflags.CertsDir, base.DefaultCertsDirectory)
 
 		// Cluster joining flags.
 		varFlag(f, &serverCfg.JoinList, cliflags.Join)
@@ -339,6 +340,7 @@ func init() {
 		stringFlag(f, &baseCfg.SSLCAKey, cliflags.CAKey, baseCfg.SSLCAKey)
 		stringFlag(f, &baseCfg.SSLCert, cliflags.Cert, baseCfg.SSLCert)
 		stringFlag(f, &baseCfg.SSLCertKey, cliflags.Key, baseCfg.SSLCertKey)
+		stringFlag(f, &baseCfg.SSLCertsDir, cliflags.CertsDir, base.DefaultCertsDirectory)
 		intFlag(f, &keySize, cliflags.KeySize, defaultKeySize)
 	}
 
@@ -371,6 +373,7 @@ func init() {
 		stringFlag(f, &baseCfg.SSLCA, cliflags.CACert, baseCfg.SSLCA)
 		stringFlag(f, &baseCfg.SSLCert, cliflags.Cert, baseCfg.SSLCert)
 		stringFlag(f, &baseCfg.SSLCertKey, cliflags.Key, baseCfg.SSLCertKey)
+		stringFlag(f, &baseCfg.SSLCertsDir, cliflags.CertsDir, base.DefaultCertsDirectory)
 	}
 
 	zf := setZoneCmd.Flags()

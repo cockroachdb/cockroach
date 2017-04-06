@@ -34,7 +34,7 @@ import (
 func TestGenerateCerts(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	// Do not mock cert access for this test.
-	security.ResetReadFileFn()
+	security.ResetAssetLoader()
 	defer ResetTest()
 
 	certsDir, err := ioutil.TempDir("", "certs_test")
@@ -94,7 +94,7 @@ func TestGenerateCerts(t *testing.T) {
 func TestUseCerts(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	// Do not mock cert access for this test.
-	security.ResetReadFileFn()
+	security.ResetAssetLoader()
 	defer ResetTest()
 	certsDir, err := ioutil.TempDir("", "certs_test")
 	if err != nil {
@@ -153,9 +153,10 @@ func TestUseCerts(t *testing.T) {
 	// Start a test server and override certs.
 	// We use a real context since we want generated certs.
 	params := base.TestServerArgs{
-		SSLCA:      filepath.Join(certsDir, security.EmbeddedCACert),
-		SSLCert:    filepath.Join(certsDir, security.EmbeddedNodeCert),
-		SSLCertKey: filepath.Join(certsDir, security.EmbeddedNodeKey),
+		SSLCA:       filepath.Join(certsDir, security.EmbeddedCACert),
+		SSLCert:     filepath.Join(certsDir, security.EmbeddedNodeCert),
+		SSLCertKey:  filepath.Join(certsDir, security.EmbeddedNodeKey),
+		SSLCertsDir: certsDir,
 	}
 	s, _, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop()
@@ -183,6 +184,7 @@ func TestUseCerts(t *testing.T) {
 	clientContext.SSLCA = filepath.Join(certsDir, security.EmbeddedCACert)
 	clientContext.SSLCert = filepath.Join(certsDir, security.EmbeddedNodeCert)
 	clientContext.SSLCertKey = filepath.Join(certsDir, security.EmbeddedNodeKey)
+	clientContext.SSLCertsDir = certsDir
 	httpClient, err = clientContext.GetHTTPClient()
 	if err != nil {
 		t.Fatalf("Expected success, got %v", err)
