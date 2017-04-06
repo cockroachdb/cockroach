@@ -159,7 +159,13 @@ func (ag *aggregator) Run(ctx context.Context, wg *sync.WaitGroup) {
 	row := make(sqlbase.EncDatumRow, len(ag.funcs))
 	for bucket := range ag.buckets {
 		for i, f := range ag.funcs {
-			row[i] = sqlbase.DatumToEncDatum(ag.outputTypes[i], f.get(bucket))
+			result := f.get(bucket)
+			if result == nil {
+				// Special case useful when this is a local stage of a distributed
+				// aggregation.
+				result = parser.DNull
+			}
+			row[i] = sqlbase.DatumToEncDatum(ag.outputTypes[i], result)
 		}
 
 		consumerDone = !emitHelper(ctx, &ag.out, row, ProducerMetadata{})

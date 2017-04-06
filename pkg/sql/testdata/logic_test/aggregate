@@ -491,6 +491,13 @@ SELECT AVG(k) * 2.0 + MAX(v)::DECIMAL FROM kv
 ----
 14.0
 
+# Verify things work with distsql when some of the nodes emit no results in the
+# local stage.
+query R
+SELECT AVG(k) * 2.0 + MAX(v)::DECIMAL FROM kv WHERE w*2 = k
+----
+14.0
+
 query ITTT
 EXPLAIN (EXPRS) SELECT COUNT(k) FROM kv
 ----
