@@ -216,6 +216,7 @@ func NewSession(
 	ctx = e.AnnotateCtx(ctx)
 	s := &Session{
 		Database:       args.Database,
+		DistSQLMode:    defaultDistSQLMode,
 		SearchPath:     parser.SearchPath{"pg_catalog"},
 		Location:       time.UTC,
 		User:           args.User,

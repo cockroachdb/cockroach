@@ -1392,11 +1392,7 @@ func (e *Executor) execClassic(planner *planner, plan planNode, result *Result) 
 // shouldUseDistSQL determines whether we should use DistSQL for a plan, based
 // on the session settings.
 func (e *Executor) shouldUseDistSQL(planner *planner, plan planNode) (bool, error) {
-	distSQLMode := defaultDistSQLMode
-	if planner.session.DistSQLMode != distSQLOff {
-		distSQLMode = planner.session.DistSQLMode
-	}
-
+	distSQLMode := planner.session.DistSQLMode
 	if distSQLMode == distSQLOff {
 		return false, nil
 	}

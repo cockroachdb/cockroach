@@ -166,7 +166,7 @@ var varGen = map[string]sessionVar{
 			return "auto"
 		},
 		Reset: func(p *planner) error {
-			p.session.DistSQLMode = distSQLExecMode(0)
+			p.session.DistSQLMode = defaultDistSQLMode
 			return nil
 		},
 	},
