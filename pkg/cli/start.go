@@ -698,7 +698,7 @@ func runQuit(_ *cobra.Command, _ []string) (err error) {
 	ctx := stopperContext(stopper)
 
 	if err := doShutdown(ctx, c, onModes); err != nil {
-		if _, ok := err.(*errTryHardShutdown); ok {
+		if _, ok := err.(errTryHardShutdown); ok {
 			fmt.Fprintf(
 				os.Stdout, "graceful shutdown failed: %s\nproceeding with hard shutdown\n", err,
 			)
