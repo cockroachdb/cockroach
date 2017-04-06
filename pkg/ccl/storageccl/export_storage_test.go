@@ -131,6 +131,8 @@ func TestPutLocal(t *testing.T) {
 }
 
 func TestPutHttp(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
 	tmp, dirCleanup := testutils.TempDir(t, 0)
 	defer dirCleanup()
 

@@ -14,10 +14,13 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
 func TestImportChunking(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
 	// Generate at least 2 chunks.
 	const chunkSize = 1024 * 500
 	numAccounts := int(chunkSize / backupRestoreRowPayloadSize * 2)
@@ -36,6 +39,8 @@ func TestImportChunking(t *testing.T) {
 }
 
 func TestImportOutOfOrder(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
 	ctx, dir, _, sqlDB, cleanupFn := backupRestoreTestSetup(t, singleNode, 0)
 	defer cleanupFn()
 

@@ -26,9 +26,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
 func TestExport(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
 	ctx := context.Background()
 	dir, dirCleanupFn := testutils.TempDir(t, 0)
 	defer dirCleanupFn()
@@ -132,6 +135,8 @@ func TestExport(t *testing.T) {
 }
 
 func TestExportGCThreshold(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
 	ctx := context.Background()
 	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
 	defer tc.Stopper().Stop()
