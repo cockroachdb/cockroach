@@ -2601,7 +2601,7 @@ func (r *Replica) AdminSplit(
 		return roachpb.AdminSplitResponse{}, roachpb.NewErrorf("cannot split range with no key provided")
 	}
 	for retryable := retry.StartWithCtx(ctx, base.DefaultRetryOptions()); retryable.Next(); {
-		reply, pErr := r.adminSplitWithDescriptor(ctx, args, r.Desc())
+		reply, _, pErr := r.adminSplitWithDescriptor(ctx, args, r.Desc())
 		// On seeing a ConditionFailedError, retry the command with the
 		// updated descriptor.
 		if _, ok := pErr.GetDetail().(*roachpb.ConditionFailedError); !ok {
@@ -2631,7 +2631,7 @@ func (r *Replica) AdminSplit(
 // See the comment on splitTrigger for details on the complexities.
 func (r *Replica) adminSplitWithDescriptor(
 	ctx context.Context, args roachpb.AdminSplitRequest, desc *roachpb.RangeDescriptor,
-) (roachpb.AdminSplitResponse, *roachpb.Error) {
+) (_ roachpb.AdminSplitResponse, validSplitKey bool, _ *roachpb.Error) {
 	var reply roachpb.AdminSplitResponse
 
 	// Determine split key if not provided with args. This scan is
@@ -2648,27 +2648,31 @@ func (r *Replica) adminSplitWithDescriptor(
 			targetSize := r.GetMaxBytes() / 2
 			foundSplitKey, err = engine.MVCCFindSplitKey(ctx, snap, desc.RangeID, desc.StartKey, desc.EndKey, targetSize, nil /* logFn */)
 			if err != nil {
-				return reply, roachpb.NewErrorf("unable to determine split key: %s", err)
+				return reply, false, roachpb.NewErrorf("unable to determine split key: %s", err)
 			}
 		} else if !r.ContainsKey(foundSplitKey) {
-			return reply, roachpb.NewError(roachpb.NewRangeKeyMismatchError(args.SplitKey, args.SplitKey, desc))
+			return reply, false,
+				roachpb.NewError(roachpb.NewRangeKeyMismatchError(args.SplitKey, args.SplitKey, desc))
+		}
+		if foundSplitKey == nil {
+			return reply, false, nil
 		}
 
 		foundSplitKey, err := keys.EnsureSafeSplitKey(foundSplitKey)
 		if err != nil {
-			return reply, roachpb.NewErrorf("cannot split range at key %s: %v",
+			return reply, false, roachpb.NewErrorf("cannot split range at key %s: %v",
 				args.SplitKey, err)
 		}
 
 		splitKey, err = keys.Addr(foundSplitKey)
 		if err != nil {
-			return reply, roachpb.NewError(err)
+			return reply, false, roachpb.NewError(err)
 		}
 		if !splitKey.Equal(foundSplitKey) {
-			return reply, roachpb.NewErrorf("cannot split range at range-local key %s", splitKey)
+			return reply, false, roachpb.NewErrorf("cannot split range at range-local key %s", splitKey)
 		}
 		if !engine.IsValidSplitKey(foundSplitKey) {
-			return reply, roachpb.NewErrorf("cannot split range at key %s", splitKey)
+			return reply, false, roachpb.NewErrorf("cannot split range at key %s", splitKey)
 		}
 	}
 
@@ -2677,14 +2681,15 @@ func (r *Replica) adminSplitWithDescriptor(
 	// otherwise it will cause infinite retry loop.
 	if desc.StartKey.Equal(splitKey) || desc.EndKey.Equal(splitKey) {
 		log.Event(ctx, "range already split")
-		return reply, nil
+		return reply, false, nil
 	}
 	log.Event(ctx, "found split key")
 
 	// Create right hand side range descriptor with the newly-allocated Range ID.
 	rightDesc, err := r.store.NewRangeDescriptor(splitKey, desc.EndKey, desc.Replicas)
 	if err != nil {
-		return reply, roachpb.NewErrorf("unable to allocate right hand side range descriptor: %s", err)
+		return reply, true,
+			roachpb.NewErrorf("unable to allocate right hand side range descriptor: %s", err)
 	}
 
 	// Init updated version of existing range descriptor.
@@ -2770,11 +2775,11 @@ func (r *Replica) adminSplitWithDescriptor(
 		// ConditionFailedError in the error detail so that the command can be
 		// retried.
 		if _, ok := err.(*roachpb.ConditionFailedError); ok {
-			return reply, roachpb.NewError(err)
+			return reply, true, roachpb.NewError(err)
 		}
-		return reply, roachpb.NewErrorf("split at key %s failed: %s", splitKey, err)
+		return reply, true, roachpb.NewErrorf("split at key %s failed: %s", splitKey, err)
 	}
-	return reply, nil
+	return reply, true, nil
 }
 
 // splitTrigger is called on a successful commit of a transaction
