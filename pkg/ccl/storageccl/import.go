@@ -11,6 +11,8 @@ package storageccl
 import (
 	"bytes"
 	"fmt"
+	"io/ioutil"
+	"os"
 
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
@@ -115,7 +117,17 @@ func evalImport(ctx context.Context, cArgs storage.CommandArgs) error {
 			}
 		}
 
-		sst, err := engine.MakeRocksDBSstFileReader(tempPrefix)
+		readerTempDir, err := ioutil.TempDir(tempPrefix, "RocksDBSstFileReader")
+		if err != nil {
+			return err
+		}
+		defer func() {
+			if err := os.RemoveAll(readerTempDir); err != nil {
+				log.Warning(ctx, err)
+			}
+		}()
+
+		sst, err := engine.MakeRocksDBSstFileReader(readerTempDir)
 		if err != nil {
 			return err
 		}
