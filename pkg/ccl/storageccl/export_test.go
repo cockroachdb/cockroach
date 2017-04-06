@@ -9,6 +9,8 @@
 package storageccl
 
 import (
+	"io/ioutil"
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -59,7 +61,17 @@ func TestExport(t *testing.T) {
 		for _, file := range res.(*roachpb.ExportResponse).Files {
 			paths = append(paths, file.Path)
 
-			sst, err := engine.MakeRocksDBSstFileReader(dir)
+			readerTempDir, err := ioutil.TempDir(dir, "RocksDBSstFileReader")
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer func() {
+				if err := os.RemoveAll(readerTempDir); err != nil {
+					t.Fatal(err)
+				}
+			}()
+
+			sst, err := engine.MakeRocksDBSstFileReader(readerTempDir)
 			if err != nil {
 				t.Fatalf("%+v", err)
 			}

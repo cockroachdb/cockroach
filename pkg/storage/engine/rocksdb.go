@@ -22,7 +22,6 @@ package engine
 import (
 	"bytes"
 	"fmt"
-	"io/ioutil"
 	"math"
 	"os"
 	"path/filepath"
@@ -1680,30 +1679,20 @@ type RocksDBSstFileReader struct {
 	// we can use an in-memory RocksDB with this, because AddFile doesn't then
 	// work with files on disk. This should also work with overlapping files.
 
-	dir     string
 	rocksDB *RocksDB
 }
 
 // MakeRocksDBSstFileReader creates a RocksDBSstFileReader that uses a scratch
 // directory which is cleaned up by `Close`.
-func MakeRocksDBSstFileReader(tempPrefix string) (RocksDBSstFileReader, error) {
-	if tempPrefix == "" {
-		return RocksDBSstFileReader{}, errors.New("must provide a tempdir path")
-	}
-	dir, err := ioutil.TempDir(tempPrefix, "RocksDBSstFileReader")
-	if err != nil {
-		return RocksDBSstFileReader{}, err
-	}
-
+func MakeRocksDBSstFileReader(tempdir string) (RocksDBSstFileReader, error) {
 	// TODO(dan): I pulled all these magic numbers out of nowhere. Make them
 	// less magic.
 	cache := NewRocksDBCache(1 << 20)
-	rocksDB, err := NewRocksDB(
-		roachpb.Attributes{}, dir, cache, 512<<20, DefaultMaxOpenFiles)
+	rocksDB, err := NewRocksDB(roachpb.Attributes{}, tempdir, cache, 512<<20, DefaultMaxOpenFiles)
 	if err != nil {
 		return RocksDBSstFileReader{}, err
 	}
-	return RocksDBSstFileReader{dir, rocksDB}, nil
+	return RocksDBSstFileReader{rocksDB}, nil
 }
 
 // AddFile links the file at the given path into a database. See the RocksDB
@@ -1738,9 +1727,6 @@ func (fr *RocksDBSstFileReader) Close() {
 	}
 	fr.rocksDB.Close()
 	fr.rocksDB = nil
-	if err := os.RemoveAll(fr.dir); err != nil {
-		log.Warningf(context.TODO(), "error removing temp rocksdb directory %q: %s", fr.dir, err)
-	}
 }
 
 // RocksDBSstFileWriter creates a file suitable for importing with
