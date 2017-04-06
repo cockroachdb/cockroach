@@ -15,9 +15,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
 func TestKeyRewriter(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
 	desc := sqlbase.NamespaceTable
 	kr := MakeKeyRewriterForNewTableID(&desc, desc.ID+1)
 

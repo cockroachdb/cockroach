@@ -13,9 +13,12 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
 func TestKeyRewriter(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
 	kr := KeyRewriter([]roachpb.KeyRewrite{
 		{
 			OldPrefix: []byte{1, 2, 3},
