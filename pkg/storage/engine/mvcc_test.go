@@ -2985,7 +2985,8 @@ func TestFindSplitKey(t *testing.T) {
 	}
 
 	for i, td := range testData {
-		humanSplitKey, err := MVCCFindSplitKey(context.Background(), snap, rangeID, roachpb.RKeyMin, roachpb.RKeyMax, td.targetSize, nil)
+		humanSplitKey, err := MVCCFindSplitKey(
+			context.Background(), snap, rangeID, roachpb.RKeyMin, roachpb.RKeyMax, td.targetSize)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -3116,7 +3117,8 @@ func TestFindValidSplitKeys(t *testing.T) {
 			t.Fatal(err)
 		}
 		targetSize := (ms.KeyBytes + ms.ValBytes) / 2
-		splitKey, err := MVCCFindSplitKey(context.Background(), snap, rangeID, rangeStartAddr, rangeEndAddr, targetSize, nil)
+		splitKey, err := MVCCFindSplitKey(
+			context.Background(), snap, rangeID, rangeStartAddr, rangeEndAddr, targetSize)
 		if test.expError {
 			if !testutils.IsError(err, "has no valid splits") {
 				t.Errorf("%d: unexpected error: %v", i, err)
@@ -3204,7 +3206,8 @@ func TestFindBalancedSplitKeys(t *testing.T) {
 		snap := engine.NewSnapshot()
 		defer snap.Close()
 		targetSize := (ms.KeyBytes + ms.ValBytes) / 2
-		splitKey, err := MVCCFindSplitKey(context.Background(), snap, rangeID, roachpb.RKey("\x02"), roachpb.RKeyMax, targetSize, nil)
+		splitKey, err := MVCCFindSplitKey(
+			context.Background(), snap, rangeID, roachpb.RKey("\x02"), roachpb.RKeyMax, targetSize)
 		if err != nil {
 			t.Errorf("unexpected error: %s", err)
 			continue
