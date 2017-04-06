@@ -60,6 +60,15 @@ CREATE TABLE system.zones (
   id     INT PRIMARY KEY,
   config BYTES
 );`
+
+	SettingsTableSchema = `
+CREATE TABLE system.settings (
+	name              STRING    NOT NULL PRIMARY KEY,
+	value             STRING    NOT NULL,
+	lastUpdated       TIMESTAMP NOT NULL DEFAULT now(),
+	valueType         STRING,
+	FAMILY (name, value, lastUpdated, valueType)
+);`
 )
 
 // These system tables are not part of the system config.
@@ -153,6 +162,10 @@ var SystemAllowedPrivileges = map[ID]privilege.Lists{
 	keys.DescriptorTableID: {privilege.ReadData},
 	keys.UsersTableID:      {privilege.ReadWriteData},
 	keys.ZonesTableID:      {privilege.ReadWriteData},
+	// We eventually want to migrate the table to appear read-only to force the
+	// the use of a validating, logging accessor, so we'll go ahead and tolerate
+	// read-only privs to make that migration possible later.
+	keys.SettingsTableID:   {privilege.ReadWriteData, privilege.ReadData},
 	keys.LeaseTableID:      {privilege.ReadWriteData, {privilege.ALL}},
 	keys.EventLogTableID:   {privilege.ReadWriteData, {privilege.ALL}},
 	keys.RangeEventTableID: {privilege.ReadWriteData, {privilege.ALL}},
@@ -293,6 +306,34 @@ var (
 		NextFamilyID:   3,
 		NextIndexID:    2,
 		Privileges:     NewPrivilegeDescriptor(security.RootUser, SystemDesiredPrivileges(keys.ZonesTableID)),
+		FormatVersion:  InterleavedFormatVersion,
+		NextMutationID: 1,
+	}
+	// SettingsTable is the descriptor for the jobs table.
+	SettingsTable = TableDescriptor{
+		Name:     "settings",
+		ID:       keys.SettingsTableID,
+		ParentID: 1,
+		Version:  1,
+		Columns: []ColumnDescriptor{
+			{Name: "name", ID: 1, Type: colTypeString},
+			{Name: "value", ID: 2, Type: colTypeString},
+			{Name: "lastUpdated", ID: 3, Type: colTypeTimestamp, DefaultExpr: &nowString},
+			{Name: "valueType", ID: 4, Type: colTypeString, Nullable: true},
+		},
+		NextColumnID: 5,
+		Families: []ColumnFamilyDescriptor{
+			{
+				Name:        "fam_0_name_value_lastUpdated_valueType",
+				ID:          0,
+				ColumnNames: []string{"name", "value", "lastUpdated", "valueType"},
+				ColumnIDs:   []ColumnID{1, 2, 3, 4},
+			},
+		},
+		NextFamilyID:   1,
+		PrimaryIndex:   pk("name"),
+		NextIndexID:    2,
+		Privileges:     NewPrivilegeDescriptor(security.RootUser, SystemDesiredPrivileges(keys.SettingsTableID)),
 		FormatVersion:  InterleavedFormatVersion,
 		NextMutationID: 1,
 	}
