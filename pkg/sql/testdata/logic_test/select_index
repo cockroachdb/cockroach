@@ -337,8 +337,13 @@ EXPLAIN SELECT a FROM t WHERE (b, c) = (5.0, 1)
 1        table  t@bc
 1        spans  /5/1-/5/2
 
-query error tuples \(b, c\), \(5.1, 1\) are not the same type: expected 5.1 to be of type int, found type decimal
+query ITTT
 EXPLAIN SELECT a FROM t WHERE (b, c) = (5.1, 1)
+----
+0  render
+1  scan
+1          table  t@bc
+1          spans  ALL
 
 query ITTT
 EXPLAIN SELECT a FROM t WHERE b IN (5.0, 1)
