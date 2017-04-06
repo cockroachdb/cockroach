@@ -2194,24 +2194,17 @@ func MVCCFindSplitKey(
 	key,
 	endKey roachpb.RKey,
 	targetSize int64,
-	debugFn func(msg string, args ...interface{}),
 ) (roachpb.Key, error) {
 	if key.Less(roachpb.RKey(keys.LocalMax)) {
 		key = roachpb.RKey(keys.LocalMax)
 	}
 
-	logf := func(msg string, args ...interface{}) {
-		if debugFn != nil {
-			debugFn(msg, args...)
-		} else if log.V(2) {
-			log.Infof(ctx, "FindSplitKey["+rangeID.String()+"] "+msg, args...)
-		}
-	}
-
 	encStartKey := MakeMVCCMetadataKey(key.AsRawKey())
 	encEndKey := MakeMVCCMetadataKey(endKey.AsRawKey())
 
-	logf("searching split key for %d [%s, %s)", rangeID, key, endKey)
+	if log.V(2) {
+		log.Infof(ctx, "searching split key for %d [%s, %s)", rangeID, key, endKey)
+	}
 
 	// Get range size from stats.
 	ms, err := MVCCGetRangeStats(ctx, engine, rangeID)
@@ -2220,16 +2213,22 @@ func MVCCFindSplitKey(
 	}
 
 	rangeSize := ms.KeyBytes + ms.ValBytes
-	logf("range size: %s, targetSize %s", humanize.IBytes(uint64(rangeSize)), humanize.IBytes(uint64(targetSize)))
+	if log.V(2) {
+		log.Infof(ctx, "range size: %s, targetSize %s",
+			humanize.IBytes(uint64(rangeSize)), humanize.IBytes(uint64(targetSize)))
+	}
 
 	sizeSoFar := int64(0)
 	bestSplitKey := encStartKey
 	bestSplitDiff := int64(math.MaxInt64)
 	var lastKey roachpb.Key
+	var n int
 
 	if err := engine.Iterate(encStartKey, encEndKey, func(kv MVCCKeyValue) (bool, error) {
-		// Is key within a legal key range?
-		valid := IsValidSplitKey(kv.Key.Key)
+		n++
+		// Is key within a legal key range? Note that we never choose the first key
+		// as the split key.
+		valid := n > 1 && IsValidSplitKey(kv.Key.Key)
 
 		// Determine if this key would make a better split than last "best" key.
 		diff := targetSize - sizeSoFar
@@ -2237,15 +2236,17 @@ func MVCCFindSplitKey(
 			diff = -diff
 		}
 		if valid && diff < bestSplitDiff {
-			logf("better split: diff %d at %s", diff, kv.Key)
+			if log.V(2) {
+				log.Infof(ctx, "better split: diff %d at %s", diff, kv.Key)
+			}
 			bestSplitKey = kv.Key
 			bestSplitDiff = diff
 		}
 
 		// Determine whether we've found best key and can exit iteration.
 		done := !bestSplitKey.Key.Equal(encStartKey.Key) && diff > bestSplitDiff
-		if done {
-			logf("target size reached")
+		if done && log.V(2) {
+			log.Infof(ctx, "target size reached")
 		}
 
 		// Add this key/value to the size scanned so far.
@@ -2262,7 +2263,7 @@ func MVCCFindSplitKey(
 	}
 
 	if bestSplitKey.Key.Equal(encStartKey.Key) {
-		return nil, errors.Errorf("the range cannot be split; considered range %q-%q has no valid splits", key, endKey)
+		return nil, nil
 	}
 
 	// The key is an MVCC (versioned) key, so to avoid corrupting MVCC we only
