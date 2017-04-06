@@ -12,22 +12,15 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package migrations_test
+package migrations
 
 import (
-	"os"
-	"testing"
-
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
-	"github.com/cockroachdb/cockroach/pkg/server"
-	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 )
 
-func TestMain(m *testing.M) {
-	security.SetReadFileFn(securitytest.Asset)
-	serverutils.InitTestServerFactory(server.TestServerFactory)
-	os.Exit(m.Run())
+func init() {
+	security.SetAssetLoader(securitytest.EmbeddedAssets)
 }
 
 //go:generate ../util/leaktest/add-leaktest.sh *_test.go
