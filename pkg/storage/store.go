@@ -32,6 +32,7 @@ import (
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
+	"golang.org/x/time/rate"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
@@ -3234,6 +3235,11 @@ type SnapshotStorePool interface {
 	throttle(reason throttleReason, toStoreID roachpb.StoreID)
 }
 
+var preemptiveSnapshotRate = envutil.EnvOrDefaultBytes(
+	"COCKROACH_PREEMPTIVE_SNAPSHOT_RATE", 2<<20 /* 2 MB */)
+var raftSnapshotRate = envutil.EnvOrDefaultBytes(
+	"COCKROACH_RAFT_SNAPSHOT_RATE", 4<<20 /* 4 MB */)
+
 // sendSnapshot sends an outgoing snapshot via a pre-opened GRPC stream.
 func sendSnapshot(
 	ctx context.Context,
@@ -3281,12 +3287,26 @@ func sendSnapshot(
 			header.State.Desc.RangeID, resp.Status)
 	}
 
+	// The size of batches to send. This is the granularity of rate limiting.
+	const batchSize = 256 << 10 // 256 KB
+
+	// Convert the bytes/sec rate limit to batches/sec.
+	//
+	// TODO(peter): Using bytes/sec for rate limiting seems more natural but has
+	// practical difficulties. We either need to use a very large burst size
+	// which seems to disable the rate limiting, or call WaitN in smaller than
+	// burst size chunks which caused excessive slowness in testing. Would be
+	// nice to figure this out, but the batches/sec rate limit works for now.
+	targetRate := rate.Limit(raftSnapshotRate) / batchSize
+	if header.CanDecline {
+		targetRate = rate.Limit(preemptiveSnapshotRate) / batchSize
+	}
+	limiter := rate.NewLimiter(targetRate, 1 /* burst size */)
+
 	// Determine the unreplicated key prefix so we can drop any
 	// unreplicated keys from the snapshot.
 	unreplicatedPrefix := keys.MakeRangeIDUnreplicatedPrefix(header.State.Desc.RangeID)
 	var alloc bufalloc.ByteAllocator
-	// TODO(jordan) make this configurable. For now, 1MB.
-	const batchSize = 1 << 20
 	n := 0
 	var b engine.Batch
 	for ; ; snap.Iter.Next() {
@@ -3315,6 +3335,9 @@ func sendSnapshot(
 		}
 
 		if len(b.Repr()) >= batchSize {
+			if err := limiter.WaitN(ctx, 1); err != nil {
+				return err
+			}
 			if err := sendBatch(stream, b); err != nil {
 				return err
 			}
@@ -3325,6 +3348,9 @@ func sendSnapshot(
 		}
 	}
 	if b != nil {
+		if err := limiter.WaitN(ctx, 1); err != nil {
+			return err
+		}
 		if err := sendBatch(stream, b); err != nil {
 			return err
 		}
