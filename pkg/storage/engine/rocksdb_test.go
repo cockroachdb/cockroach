@@ -515,7 +515,17 @@ func BenchmarkRocksDBSstFileReader(b *testing.B) {
 	}
 
 	b.ResetTimer()
-	sst, err := MakeRocksDBSstFileReader(dir)
+	readerTempDir, err := ioutil.TempDir(dir, "RocksDBSstFileReader")
+	if err != nil {
+		b.Fatal(err)
+	}
+	defer func() {
+		if err := os.RemoveAll(readerTempDir); err != nil {
+			b.Fatal(err)
+		}
+	}()
+
+	sst, err := MakeRocksDBSstFileReader(readerTempDir)
 	if err != nil {
 		b.Fatal(err)
 	}
