@@ -236,15 +236,28 @@ dupl:
 	       -not -name 'sql.go'      \
 	| dupl -files $(DUPLFLAGS)
 
+# All packages need to be installed before we can run (some) of the checks and
+# code generators reliably. More precisely, anything that uses x/tools/go/loader
+# is fragile (this includes stringer, vet and others). The blocking issue is
+# https://github.com/golang/go/issues/14120.
+
+# `go generate` uses stringer and so must depend on gotestdashi per the above
+# comment. See https://github.com/golang/go/issues/10249 for details.
+.PHONY: generate
+generate: gotestdashi
+	$(GO) generate $(PKG)
+
+# The style checks depend on `go vet` and so must depend on gotestdashi per the
+# above comment. See https://github.com/golang/go/issues/16086 for details.
 .PHONY: check
 check: override TAGS += check
-check:
+check: gotestdashi
 	$(GO) test ./build -v -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -run 'TestStyle/$(TESTS)'
 
 .PHONY: checkshort
 checkshort: override TAGS += check
-checkshort:
-	$(GO) test ./build -v -tags '$(TAGS)' -short -run 'TestStyle/$(TESTS)'
+checkshort: gotestdashi
+	$(GO) test ./build -v -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -short -run 'TestStyle/$(TESTS)'
 
 .PHONY: clean
 clean:

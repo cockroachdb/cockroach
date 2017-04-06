@@ -37,19 +37,19 @@ executable will be in your current directory and can be run as shown in the
   [blog post]: https://www.cockroachlabs.com/blog/how-were-building-a-business-to-last/
 
 - If you edit a `.proto` or `.ts` file, you will need to manually regenerate
-  the associated `.pb.{go,cc,h}` or `.js` files using `go generate ./pkg/...`.
+  the associated `.pb.{go,cc,h}` or `.js` files using `make generate`.
 
-- We advise to run `go generate` using our embedded Docker setup.
+- We advise to run `make generate` using our embedded Docker setup.
   `build/builder.sh` is a wrapper script designed to make this convenient. You
-  can run `build/builder.sh go generate ./pkg/...` from the repository root to
-  get the intended result.
+  can run `build/builder.sh make generate` from the repository root to get the
+  intended result.
 
 - If you plan on working on the UI, check out [the UI README](pkg/ui).
 
 - To add or update a Go dependency:
   - See [`build/README.md`](build/README.md) for details on adding or updating
     dependencies.
-  - Run `go generate ./pkg/...` to update generated files.
+  - Run `make generate` to update generated files.
   - Create a PR with all the changes.
 
 ## Style Guide
@@ -108,7 +108,7 @@ executable will be in your current directory and can be run as shown in the
 
 + Run the test suite locally:
 
-  `go generate ./pkg/... && make check test testrace`
+  `make generate check test testrace`
 
 + When you’re ready for review, groom your work: each commit should pass tests
   and contain a substantial (but not overwhelming) unit of work. You may also
