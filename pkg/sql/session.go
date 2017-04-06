@@ -20,6 +20,7 @@ package sql
 import (
 	"fmt"
 	"net"
+	"strings"
 	"time"
 
 	opentracing "github.com/opentracing/opentracing-go"
@@ -62,6 +63,42 @@ var traceSQLFor7881 = envutil.EnvOrDefaultBool("COCKROACH_TRACE_7881", false)
 
 // span baggage key used for marking a span
 const keyFor7881Sample = "found#7881"
+
+// distSQLExecMode controls if and when the Executor uses DistSQL.
+type distSQLExecMode int
+
+const (
+	// distSQLOff means that we never use distSQL.
+	distSQLOff distSQLExecMode = iota
+	// distSQLAuto means that we automatically decide on a case-by-case basis if
+	// we use distSQL.
+	distSQLAuto
+	// distSQLOn means that we use distSQL for queries that are supported.
+	distSQLOn
+	// distSQLAlways means that we only use distSQL; unsupported queries fail.
+	distSQLAlways
+)
+
+func distSQLExecModeFromString(val string) distSQLExecMode {
+	switch strings.ToUpper(val) {
+	case "OFF":
+		return distSQLOff
+	case "AUTO":
+		return distSQLAuto
+	case "ON":
+		return distSQLOn
+	case "ALWAYS":
+		return distSQLAlways
+	default:
+		panic(fmt.Sprintf("unknown DistSQL mode %s", val))
+	}
+}
+
+// defaultDistSQLMode controls the default DistSQL mode (see above). It can
+// still be overridden per-session using `SET DIST_SQL = ...`.
+var defaultDistSQLMode = distSQLExecModeFromString(
+	envutil.EnvOrDefaultString("COCKROACH_DISTSQL_MODE", "OFF"),
+)
 
 // Session contains the state of a SQL client connection.
 // Create instances using NewSession().
@@ -216,6 +253,7 @@ func NewSession(
 	ctx = e.AnnotateCtx(ctx)
 	s := &Session{
 		Database:       args.Database,
+		DistSQLMode:    defaultDistSQLMode,
 		SearchPath:     parser.SearchPath{"pg_catalog"},
 		Location:       time.UTC,
 		User:           args.User,
