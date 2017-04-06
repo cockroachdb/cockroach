@@ -529,10 +529,10 @@ func BenchmarkRocksDBSstFileReader(b *testing.B) {
 	if err != nil {
 		b.Fatal(err)
 	}
+	defer sst.Close()
 	if err := sst.AddFile(sstPath); err != nil {
 		b.Fatal(err)
 	}
-	defer sst.Close()
 	count := 0
 	iterateFn := func(kv MVCCKeyValue) (bool, error) {
 		count++
