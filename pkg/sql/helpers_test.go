@@ -98,3 +98,13 @@ func (m *LeaseManager) ExpireLeases(clock *hlc.Clock) {
 	}
 	m.tableNames.mu.Unlock()
 }
+
+// SetDefaultDistSQLMode changes the default DistSQL mode; returns a function
+// that can be used to restore the previous mode.
+func SetDefaultDistSQLMode(mode string) func() {
+	prevMode := defaultDistSQLMode
+	defaultDistSQLMode = distSQLExecModeFromString(mode)
+	return func() {
+		defaultDistSQLMode = prevMode
+	}
+}
