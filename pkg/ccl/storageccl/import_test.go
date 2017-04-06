@@ -10,6 +10,8 @@ package storageccl
 
 import (
 	"fmt"
+	"io/ioutil"
+	"os"
 	"path/filepath"
 	"reflect"
 	"strconv"
@@ -34,8 +36,8 @@ import (
 )
 
 func slurpSSTablesLatestKey(
-	dir string, paths []string, kr KeyRewriter,
-) ([]engine.MVCCKeyValue, error) {
+	t *testing.T, dir string, paths []string, kr KeyRewriter,
+) []engine.MVCCKeyValue {
 	start, end := engine.MVCCKey{Key: keys.MinKey}, engine.MVCCKey{Key: keys.MaxKey}
 
 	e := engine.NewInMem(roachpb.Attributes{}, 1<<20)
@@ -44,13 +46,23 @@ func slurpSSTablesLatestKey(
 	defer batch.Close()
 
 	for _, path := range paths {
-		sst, err := engine.MakeRocksDBSstFileReader(dir)
+		readerTempDir, err := ioutil.TempDir(dir, "RocksDBSstFileReader")
 		if err != nil {
-			return nil, err
+			t.Fatalf("%+v", err)
+		}
+		defer func() {
+			if err := os.RemoveAll(readerTempDir); err != nil {
+				t.Fatalf("%+v", err)
+			}
+		}()
+
+		sst, err := engine.MakeRocksDBSstFileReader(readerTempDir)
+		if err != nil {
+			t.Fatalf("%+v", err)
 		}
 		defer sst.Close()
 		if err := sst.AddFile(filepath.Join(dir, path)); err != nil {
-			return nil, err
+			t.Fatalf("%+v", err)
 		}
 		if err := sst.Iterate(start, end, func(kv engine.MVCCKeyValue) (bool, error) {
 			var ok bool
@@ -66,7 +78,7 @@ func slurpSSTablesLatestKey(
 			}
 			return false, nil
 		}); err != nil {
-			return nil, err
+			t.Fatalf("%+v", err)
 		}
 	}
 
@@ -75,13 +87,13 @@ func slurpSSTablesLatestKey(
 	defer it.Close()
 	for it.Seek(start); ; it.NextKey() {
 		if ok, err := it.Valid(); err != nil {
-			return nil, err
+			t.Fatal(err)
 		} else if !ok || !it.UnsafeKey().Less(end) {
 			break
 		}
 		kvs = append(kvs, engine.MVCCKeyValue{Key: it.Key(), Value: it.Value()})
 	}
-	return kvs, nil
+	return kvs
 }
 
 func clientKVsToEngineKVs(kvs []client.KeyValue) []engine.MVCCKeyValue {
@@ -179,10 +191,7 @@ func TestImport(t *testing.T) {
 			for _, f := range files[:i] {
 				req.Files = append(req.Files, roachpb.ImportRequest_File{Dir: storage, Path: f})
 			}
-			expectedKVs, err := slurpSSTablesLatestKey(dir, files[:i], kr)
-			if err != nil {
-				t.Fatalf("%+v", err)
-			}
+			expectedKVs := slurpSSTablesLatestKey(t, dir, files[:i], kr)
 
 			// Import may be retried by DistSender if it takes too long to return, so
 			// make sure it's idempotent.
