@@ -257,7 +257,7 @@ check: gotestdashi
 .PHONY: checkshort
 checkshort: override TAGS += check
 checkshort: gotestdashi
-	$(GO) test ./build -v -tags '$(TAGS)' -short -run 'TestStyle/$(TESTS)'
+	$(GO) test ./build -v -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -short -run 'TestStyle/$(TESTS)'
 
 .PHONY: clean
 clean:
