@@ -620,7 +620,7 @@ statement ok
 CREATE TABLE s(x INT); INSERT INTO s(x) VALUES (1),(2),(3),(4),(5),(6),(7),(8),(9),(10)
 
 # TODO(radu): test case disabled due to lack of memory accounting in distsqlrun
-# (which causes timeout when running with COCKROACH_DISTSQLMODE=on). Reenable
+# (which causes timeout when running with COCKROACH_DISTSQL_MODE=on). Reenable
 # this test when distsqlrun has memory accounting.
 #
 # # The following query demands at least 100GB of RAM if unoptimized.
