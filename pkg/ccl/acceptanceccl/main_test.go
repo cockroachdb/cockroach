@@ -17,3 +17,5 @@ import (
 func TestMain(m *testing.M) {
 	acceptance.MainTest(m)
 }
+
+//go:generate ../../util/leaktest/add-leaktest.sh *_test.go
