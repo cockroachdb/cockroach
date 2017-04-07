@@ -42,6 +42,8 @@ func runTestFlow(
 	distSQLSrv := srv.DistSQLServer().(*distsqlrun.ServerImpl)
 
 	req := distsqlrun.SetupFlowRequest{
+		MajorVersion: distsqlrun.MajorVersion,
+		MinorVersion: distsqlrun.MinorVersion,
 		Flow: distsqlrun.FlowSpec{
 			FlowID:     distsqlrun.FlowID{UUID: uuid.MakeV4()},
 			Processors: procs,
