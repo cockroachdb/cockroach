@@ -38,9 +38,9 @@ func (u UUID) Short() string {
 // which do not match the semantics of the shadowed method. See
 // https://github.com/golang/protobuf/blob/5386fff/proto/text.go#L173:L176.
 //
-//
-// TODO(tschottdorf): fix upstream.
-// TODO(tamird): what does fixing upstream even mean?
+// TODO(tamird): remove when fixed upstream. See
+// https://github.com/gogo/protobuf/pull/227 and
+// https://github.com/golang/protobuf/issues/311.
 func (UUID) Bytes() {
 	panic("intentionally shadowed; use GetBytes()")
 }
