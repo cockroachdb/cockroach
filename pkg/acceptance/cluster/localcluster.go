@@ -490,9 +490,7 @@ func (l *LocalCluster) createNodeCerts() {
 func (l *LocalCluster) startNode(ctx context.Context, node *testNode) {
 	cmd := []string{
 		"start",
-		"--ca-cert=/certs/ca.crt",
-		"--cert=/certs/node.crt",
-		"--key=/certs/node.key",
+		"--certs-dir=/certs/",
 		"--host=" + node.nodeStr,
 		"--verbosity=1",
 	}
@@ -787,10 +785,8 @@ func (l *LocalCluster) stop(ctx context.Context) {
 func (l *LocalCluster) NewClient(ctx context.Context, i int) (*roachClient.DB, error) {
 	clock := hlc.NewClock(hlc.UnixNano, 0)
 	rpcContext := rpc.NewContext(log.AmbientContext{}, &base.Config{
-		User:       security.NodeUser,
-		SSLCA:      filepath.Join(l.CertsDir, security.EmbeddedCACert),
-		SSLCert:    filepath.Join(l.CertsDir, security.EmbeddedNodeCert),
-		SSLCertKey: filepath.Join(l.CertsDir, security.EmbeddedNodeKey),
+		User:        security.NodeUser,
+		SSLCertsDir: l.CertsDir,
 	}, clock, l.stopper)
 	conn, err := rpcContext.GRPCDial(l.Nodes[i].Addr(ctx, DefaultTCP).String())
 	if err != nil {

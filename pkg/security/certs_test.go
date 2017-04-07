@@ -153,9 +153,6 @@ func TestUseCerts(t *testing.T) {
 	// Start a test server and override certs.
 	// We use a real context since we want generated certs.
 	params := base.TestServerArgs{
-		SSLCA:       filepath.Join(certsDir, security.EmbeddedCACert),
-		SSLCert:     filepath.Join(certsDir, security.EmbeddedNodeCert),
-		SSLCertKey:  filepath.Join(certsDir, security.EmbeddedNodeKey),
 		SSLCertsDir: certsDir,
 	}
 	s, _, _ := serverutils.StartServer(t, params)
@@ -181,9 +178,6 @@ func TestUseCerts(t *testing.T) {
 
 	// New client. With certs this time.
 	clientContext = testutils.NewNodeTestBaseContext()
-	clientContext.SSLCA = filepath.Join(certsDir, security.EmbeddedCACert)
-	clientContext.SSLCert = filepath.Join(certsDir, security.EmbeddedNodeCert)
-	clientContext.SSLCertKey = filepath.Join(certsDir, security.EmbeddedNodeKey)
 	clientContext.SSLCertsDir = certsDir
 	httpClient, err = clientContext.GetHTTPClient()
 	if err != nil {

@@ -185,7 +185,7 @@ func getPasswordAndMakeSQLClient() (*sqlConn, error) {
 	}
 	var user *url.Userinfo
 	if !baseCfg.Insecure && sqlConnUser != security.RootUser &&
-		baseCfg.SSLCert == "" && baseCfg.SSLCertKey == "" {
+		!baseCfg.ClientHasValidCerts(sqlConnUser) {
 		pwd, err := security.PromptForPassword()
 		if err != nil {
 			return nil, err
