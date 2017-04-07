@@ -40,4 +40,5 @@ build/push-docker-deploy.sh
 mv build/deploy/cockroach cockroach
 aws configure set region us-east-1
 build/build-osx.sh
+build/build-windows.sh
 eval $push

@@ -30,7 +30,6 @@ package main
 import (
 	_ "github.com/Masterminds/glide"
 	_ "github.com/client9/misspell/cmd/misspell"
-	_ "github.com/cockroachdb/c-protobuf/cmd/protoc"
 	_ "github.com/cockroachdb/crlfmt"
 	_ "github.com/cockroachdb/stress"
 	_ "github.com/golang/lint/golint"

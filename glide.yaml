@@ -28,12 +28,6 @@ import:
   version: ed63fb27efcf32e25fe7837e4662457d3da4c4f2
 - package: github.com/cockroachdb/apd
   version: 4c0c15263a45c631e8f0310f0acbc1e89c722ac2
-- package: github.com/cockroachdb/c-jemalloc
-  version: 5fc986390622939c1f0e6df236040deca8c821b0
-- package: github.com/cockroachdb/c-protobuf
-  version: 323984796a7b4794ee62a00e12456743a5b66765
-- package: github.com/cockroachdb/c-rocksdb
-  version: 7def73c53db126b0e62552e97629784d5317e932
 - package: github.com/cockroachdb/cmux
   version: 30d10be492927e2dcae0089c374c455d42414fcb
 - package: github.com/cockroachdb/cockroach-go
