@@ -75,7 +75,6 @@ var cockroachImage = flag.String("i", builderImageFull, "the docker image to run
 var cockroachBinary = flag.String("b", defaultBinary(), "the host-side binary to run (if image == "+builderImage+")")
 var cockroachEntry = flag.String("e", "", "the entry point for the image")
 var waitOnStop = flag.Bool("w", false, "wait for the user to interrupt before tearing down the cluster")
-var pwd = filepath.Clean(os.ExpandEnv("${PWD}"))
 var maxRangeBytes = config.DefaultZoneConfig().RangeMaxBytes
 
 // keyLen is the length (in bits) of the generated CA and node certs.
@@ -323,6 +322,9 @@ func (l *LocalCluster) initCluster(ctx context.Context) {
 	maybePanic(err)
 	log.Infof(ctx, "Initializing Cluster %s:\n%s", l.config.Name, configJSON)
 	l.panicOnStop()
+
+	pwd, err := os.Getwd()
+	maybePanic(err)
 
 	// Create the temporary certs directory in the current working
 	// directory. Boot2docker's handling of binding local directories
