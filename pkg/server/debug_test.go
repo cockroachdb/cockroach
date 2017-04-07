@@ -27,6 +27,7 @@ import (
 
 func TestDebugRemote(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	t.Skip("#14714")
 
 	// Test servers listen on a local address only by default. Listen on :0 to
 	// force listening on a non-local address. We can't use certs because the
