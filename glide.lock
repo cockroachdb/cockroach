@@ -1,4 +1,4 @@
-hash: 620ed7b5a97e5e1c3f144f49863859862222390b5e00249714aab0b1d4c581c7
+hash: 0d5c8b0748075100a382d54227239d8f867d077cbe1b5d571c3b177f520f6f68
 updated: 2017-04-11T15:02:41.785025807-04:00
 imports:
 - name: cloud.google.com/go
@@ -43,16 +43,6 @@ imports:
   - cmd/misspell
 - name: github.com/cockroachdb/apd
   version: 4c0c15263a45c631e8f0310f0acbc1e89c722ac2
-- name: github.com/cockroachdb/c-jemalloc
-  version: 5fc986390622939c1f0e6df236040deca8c821b0
-- name: github.com/cockroachdb/c-protobuf
-  version: 323984796a7b4794ee62a00e12456743a5b66765
-  subpackages:
-  - cmd/protoc
-- name: github.com/cockroachdb/c-rocksdb
-  version: 7def73c53db126b0e62552e97629784d5317e932
-- name: github.com/cockroachdb/c-snappy
-  version: c0cd3c9ce92f195001595e1fbbe66f045daad34f
 - name: github.com/cockroachdb/cmux
   version: 30d10be492927e2dcae0089c374c455d42414fcb
 - name: github.com/cockroachdb/cockroach-go
