@@ -402,6 +402,7 @@ func TestCommonMethods(t *testing.T) {
 		{txnType, "OrigTimestamp"}:             {},
 		{txnType, "Proto"}:                     {},
 		{txnType, "UserPriority"}:              {},
+		{txnType, "AnchorKey"}:                 {},
 	}
 
 	for b := range omittedChecks {

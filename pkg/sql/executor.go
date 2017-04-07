@@ -1369,7 +1369,7 @@ func (e *Executor) shouldUseDistSQL(planner *planner, plan planNode) (bool, erro
 	// Temporary workaround for #13376: if the transaction modified something,
 	// TxnCoordSender will freak out if it sees scans in this txn from other
 	// nodes. We detect this by checking if the transaction's "anchor" key is set.
-	if planner.txn.Proto().TxnMeta.Key != nil {
+	if planner.txn.AnchorKey() != nil {
 		err = errors.New("writing txn")
 	} else {
 		// Trigger limit propagation.

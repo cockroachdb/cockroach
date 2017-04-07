@@ -199,6 +199,14 @@ func (txn *Txn) OrigTimestamp() hlc.Timestamp {
 	return txn.mu.Proto.OrigTimestamp
 }
 
+// AnchorKey returns the transaction's anchor key. The caller should treat the
+// returned byte slice as immutable.
+func (txn *Txn) AnchorKey() []byte {
+	txn.mu.Lock()
+	defer txn.mu.Unlock()
+	return txn.mu.Proto.Key
+}
+
 // SetTxnAnchorKey sets the key at which to anchor the transaction record. The
 // transaction anchor key defaults to the first key written in a transaction.
 func (txn *Txn) SetTxnAnchorKey(key roachpb.Key) error {
