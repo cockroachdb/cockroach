@@ -826,12 +826,18 @@ func resolveFK(
 			}
 		}
 
-		// If we resolve the same table more than once, we only want to edit a
-		// single instance of it, so replace target with previously resolved table.
-		if prev, ok := backrefs[target.ID]; ok {
-			target = prev
+		// When adding a self-ref FK to an _existing_ table, we want to make sure
+		// we edit the same copy.
+		if target.ID == tbl.ID {
+			target = tbl
 		} else {
-			backrefs[target.ID] = target
+			// If we resolve the same table more than once, we only want to edit a
+			// single instance of it, so replace target with previously resolved table.
+			if prev, ok := backrefs[target.ID]; ok {
+				target = prev
+			} else {
+				backrefs[target.ID] = target
+			}
 		}
 	}
 
