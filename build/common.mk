@@ -143,12 +143,17 @@ endif
 # with different CWDs decreases the chance of accidentally using the wrong path
 # to a target.
 YARN_INSTALLED_TARGET := $(UI_ROOT)/yarn.installed
-BOOTSTRAP_TARGET := $(REPO_ROOT)/.bootstrap
 
 $(YARN_INSTALLED_TARGET): $(BOOTSTRAP_TARGET) $(UI_ROOT)/package.json $(UI_ROOT)/yarn.lock
 	cd $(UI_ROOT) && yarn install
 	rm -rf $(UI_ROOT)/node_modules/@types/node # https://github.com/yarnpkg/yarn/issues/2987
 	touch $@
+
+# We store the bootstrap marker file in the bin directory so that remapping bin,
+# like we do in the builder container to allow for different host and guest
+# systems, will trigger bootstrapping in the container as necessary. This is
+# extracted into a variable for the same reasons as YARN_INSTALLED_TARGET.
+BOOTSTRAP_TARGET := $(REPO_ROOT)/bin/.bootstrap
 
 # Update the git hooks and install commands from dependencies whenever they
 # change.
