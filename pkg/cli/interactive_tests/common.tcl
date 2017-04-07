@@ -6,6 +6,7 @@ set env(TERM) vt100
 # developer's own history file.
 set histfile ".cockroachdb_history_test"
 set ::env(COCKROACH_SQL_CLI_HISTORY) $histfile
+set ::env(COCKROACH_INSECURE) "true"
 system "rm -f $histfile"
 
 # Everything in this test should be fast. Don't be tolerant for long

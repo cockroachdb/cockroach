@@ -2,17 +2,18 @@
 
 source [file join [file dirname $argv0] common.tcl]
 
-set ca_crt "/certs/ca.crt"
-set node_crt "/certs/node.crt"
-set node_key "/certs/node.key"
-set root_crt "/certs/client.root.crt"
-set root_key "/certs/client.root.key"
+set certs_dir "certs"
+set ::env(COCKROACH_INSECURE) "false"
 
-proc start_secure_server {argv ca_crt node_crt node_key} {
-    system "mkfifo pid_fifo || true; $argv start --ca-cert=$ca_crt --cert=$node_crt --key=$node_key --pid-file=pid_fifo & cat pid_fifo > server_pid"
+proc start_secure_server {argv certs_dir} {
+    system "mkfifo pid_fifo || true; $argv start --certs-dir=$certs_dir --pid-file=pid_fifo >>stdout.log 2>>stderr.log & cat pid_fifo > server_pid"
 }
 
-start_secure_server $argv $ca_crt $node_crt $node_key
+proc stop_secure_server {argv certs_dir} {
+    system "set -e; if kill -CONT `cat server_pid`; then $argv quit --certs-dir=$certs_dir || true & sleep 1; kill -9 `cat server_pid` || true; else $argv quit --certs-dir=$certs_dir || true; fi"
+}
+
+start_secure_server $argv $certs_dir
 
 spawn /bin/bash
 send "PS1=':''/# '\r"
@@ -20,47 +21,22 @@ send "PS1=':''/# '\r"
 set prompt ":/# "
 eexpect $prompt
 
-send "$argv node ls --ca-cert=$ca_crt --cert=$node_crt --key=$node_key\r"
+send "$argv node ls --certs-dir=$certs_dir\r"
 eexpect "id"
 eexpect "1"
 eexpect "1 row"
 
 eexpect $prompt
 
-# Invalid combination.
-send "$argv sql --ca-cert=$ca_crt --cert=$node_crt\r"
-eexpect "Error: missing --key flag"
-eexpect "Failed running \"sql\""
-
-eexpect $prompt
-
-# CA cert must be specified regardless of authentication mode.
-send "$argv sql\r"
-eexpect "cleartext connections are not permitted"
-
-eexpect $prompt
-
-# A nonexistent user cannot authenticate with either form of authentication.
-send "$argv sql --user=nonexistent --ca-cert=$ca_crt --cert=$node_crt --key=$node_key\r"
-eexpect "user nonexistent does not exist"
-
-eexpect $prompt
-
-# Root can only authenticate using certificate authentication.
-send "$argv sql --ca-cert=$ca_crt\r"
-eexpect "user root must use certificate authentication instead of password authentication"
-
-eexpect $prompt
-
 # Cannot create users with empty passwords.
-send "$argv user set carl --password --ca-cert=$ca_crt --cert=$root_crt --key=$root_key\r"
+send "$argv user set carl --password --certs-dir=$certs_dir\r"
 eexpect "Enter password:"
 send "\r"
 eexpect "empty passwords are not permitted"
 
 eexpect $prompt
 
-send "$argv user set carl --password --ca-cert=$ca_crt --cert=$root_crt --key=$root_key\r"
+send "$argv user set carl --password --certs-dir=$certs_dir\r"
 eexpect "Enter password:"
 send "woof\r"
 eexpect "Confirm password:"
@@ -69,7 +45,7 @@ eexpect "INSERT 1\r\n"
 
 eexpect $prompt
 
-send "$argv sql --ca-cert=$ca_crt --user=carl\r"
+send "$argv sql --certs-dir=$certs_dir --user=carl\r"
 eexpect "Enter password:"
 send "woof\r"
 eexpect "Confirm password:"
@@ -84,4 +60,4 @@ eexpect $prompt
 send "exit 0\r"
 eexpect eof
 
-stop_server $argv
+stop_secure_server $argv $certs_dir

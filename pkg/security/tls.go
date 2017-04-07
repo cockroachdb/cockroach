@@ -47,15 +47,15 @@ const (
 // - sslCertKey: path to the server key
 // If the path is prefixed with "embedded=", load the embedded certs.
 func LoadServerTLSConfig(sslCA, sslCert, sslCertKey string) (*tls.Config, error) {
-	certPEM, err := readFileFn(sslCert)
+	certPEM, err := assetLoaderImpl.ReadFile(sslCert)
 	if err != nil {
 		return nil, err
 	}
-	keyPEM, err := readFileFn(sslCertKey)
+	keyPEM, err := assetLoaderImpl.ReadFile(sslCertKey)
 	if err != nil {
 		return nil, err
 	}
-	caPEM, err := readFileFn(sslCA)
+	caPEM, err := assetLoaderImpl.ReadFile(sslCA)
 	if err != nil {
 		return nil, err
 	}
@@ -104,15 +104,15 @@ func newServerTLSConfig(certPEM, keyPEM, caPEM []byte) (*tls.Config, error) {
 // - sslCertKey: path to the client key
 // If the path is prefixed with "embedded=", load the embedded certs.
 func LoadClientTLSConfig(sslCA, sslCert, sslCertKey string) (*tls.Config, error) {
-	certPEM, err := readFileFn(sslCert)
+	certPEM, err := assetLoaderImpl.ReadFile(sslCert)
 	if err != nil {
 		return nil, err
 	}
-	keyPEM, err := readFileFn(sslCertKey)
+	keyPEM, err := assetLoaderImpl.ReadFile(sslCertKey)
 	if err != nil {
 		return nil, err
 	}
-	caPEM, err := readFileFn(sslCA)
+	caPEM, err := assetLoaderImpl.ReadFile(sslCA)
 	if err != nil {
 		return nil, err
 	}

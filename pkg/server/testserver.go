@@ -19,7 +19,6 @@ package server
 import (
 	"fmt"
 	"net/http"
-	"path/filepath"
 	"time"
 
 	"github.com/pkg/errors"
@@ -70,9 +69,6 @@ func makeTestConfig() Config {
 	// in their init to mock out the file system calls for calls to AssetFS,
 	// which has the test certs compiled in. Typically this is done
 	// once per package, in main_test.go.
-	cfg.SSLCA = filepath.Join(security.EmbeddedCertsDir, security.EmbeddedCACert)
-	cfg.SSLCert = filepath.Join(security.EmbeddedCertsDir, security.EmbeddedNodeCert)
-	cfg.SSLCertKey = filepath.Join(security.EmbeddedCertsDir, security.EmbeddedNodeKey)
 	cfg.SSLCertsDir = security.EmbeddedCertsDir
 
 	// Addr defaults to localhost with port set at time of call to
@@ -118,15 +114,6 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 	}
 	if params.ScanMaxIdleTime != 0 {
 		cfg.ScanMaxIdleTime = params.ScanMaxIdleTime
-	}
-	if params.SSLCA != "" {
-		cfg.SSLCA = params.SSLCA
-	}
-	if params.SSLCert != "" {
-		cfg.SSLCert = params.SSLCert
-	}
-	if params.SSLCertKey != "" {
-		cfg.SSLCertKey = params.SSLCertKey
 	}
 	if params.SSLCertsDir != "" {
 		cfg.SSLCertsDir = params.SSLCertsDir

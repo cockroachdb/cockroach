@@ -63,9 +63,6 @@ type TestServerArgs struct {
 	SocketFile               string
 	ScanInterval             time.Duration
 	ScanMaxIdleTime          time.Duration
-	SSLCA                    string
-	SSLCert                  string
-	SSLCertKey               string
 	SSLCertsDir              string
 	TimeSeriesQueryWorkerMax int
 	SQLMemoryPoolSize        int64

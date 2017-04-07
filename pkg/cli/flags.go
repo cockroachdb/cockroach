@@ -21,7 +21,6 @@ import (
 	"flag"
 	"fmt"
 	"net"
-	"strconv"
 	"strings"
 	"time"
 
@@ -65,8 +64,6 @@ func InitCLIDefaults() {
 	cliCtx.tableDisplayFormat = tableDisplayTSV
 	dumpCtx.dumpMode = dumpBoth
 }
-
-var insecure *insecureValue
 
 const usageIndentation = 8
 const wrapWidth = 79 - usageIndentation
@@ -121,46 +118,6 @@ func makeUsageString(flagInfo cliflags.FlagInfo) string {
 	// the correct indentation (7 spaces) here. This is admittedly fragile.
 	return text.Indent(s, strings.Repeat(" ", usageIndentation)) +
 		strings.Repeat(" ", usageIndentation-1)
-}
-
-type insecureValue struct {
-	ctx   *base.Config
-	isSet bool
-}
-
-func newInsecureValue(ctx *base.Config) *insecureValue {
-	return &insecureValue{ctx: ctx}
-}
-
-func (b *insecureValue) IsBoolFlag() bool {
-	return true
-}
-
-func (b *insecureValue) Set(s string) error {
-	v, err := strconv.ParseBool(s)
-	if err != nil {
-		return err
-	}
-	b.isSet = true
-	b.ctx.Insecure = v
-	if b.ctx.Insecure {
-		// If --insecure is specified, clear any of the existing security flags if
-		// they were set. This allows composition of command lines where a later
-		// specification of --insecure clears an earlier security specification.
-		b.ctx.SSLCA = ""
-		b.ctx.SSLCAKey = ""
-		b.ctx.SSLCert = ""
-		b.ctx.SSLCertKey = ""
-	}
-	return nil
-}
-
-func (b *insecureValue) Type() string {
-	return "bool"
-}
-
-func (b *insecureValue) String() string {
-	return fmt.Sprint(b.ctx.Insecure)
 }
 
 func setFlagFromEnv(f *pflag.FlagSet, flagInfo cliflags.FlagInfo) {
@@ -263,8 +220,6 @@ func init() {
 	pf.Lookup(logflags.LogToStderrName).NoOptDefVal = log.Severity_DEFAULT.String()
 
 	// Security flags.
-	baseCfg.Insecure = true
-	insecure = newInsecureValue(baseCfg)
 
 	{
 		f := startCmd.Flags()
@@ -290,15 +245,16 @@ func init() {
 
 		stringFlag(f, &serverCfg.PIDFile, cliflags.PIDFile, "")
 
-		varFlag(f, insecure, cliflags.Insecure)
-		// Allow '--insecure'
-		f.Lookup(cliflags.Insecure.Name).NoOptDefVal = "true"
+		boolFlag(f, &serverCfg.Insecure, cliflags.Insecure, serverCfg.Insecure)
 
 		// Certificate flags.
-		stringFlag(f, &baseCfg.SSLCA, cliflags.CACert, baseCfg.SSLCA)
-		stringFlag(f, &baseCfg.SSLCert, cliflags.Cert, baseCfg.SSLCert)
-		stringFlag(f, &baseCfg.SSLCertKey, cliflags.Key, baseCfg.SSLCertKey)
 		stringFlag(f, &baseCfg.SSLCertsDir, cliflags.CertsDir, base.DefaultCertsDirectory)
+
+		// The start command support the old flags for backwards compatibility.
+		// This will be removed soon.
+		stringFlag(f, &baseCfg.SSLCA, cliflags.CACert, "")
+		stringFlag(f, &baseCfg.SSLCert, cliflags.Cert, "")
+		stringFlag(f, &baseCfg.SSLCertKey, cliflags.Key, "")
 
 		// Cluster joining flags.
 		varFlag(f, &serverCfg.JoinList, cliflags.Join)
@@ -314,13 +270,29 @@ func init() {
 
 	for _, cmd := range certCmds {
 		f := cmd.Flags()
-		// Certificate flags.
-		stringFlag(f, &baseCfg.SSLCA, cliflags.CACert, baseCfg.SSLCA)
-		stringFlag(f, &baseCfg.SSLCAKey, cliflags.CAKey, baseCfg.SSLCAKey)
-		stringFlag(f, &baseCfg.SSLCert, cliflags.Cert, baseCfg.SSLCert)
-		stringFlag(f, &baseCfg.SSLCertKey, cliflags.Key, baseCfg.SSLCertKey)
+		// All certs commands need the certificate directory.
 		stringFlag(f, &baseCfg.SSLCertsDir, cliflags.CertsDir, base.DefaultCertsDirectory)
+	}
+
+	for _, cmd := range []*cobra.Command{createCACertCmd} {
+		f := cmd.Flags()
+		// CA certificates have a longer expiration time.
+		durationFlag(f, &certificateLifetime, cliflags.CertificateLifetime, defaultCALifetime)
+		// The CA key can be re-used if it exists.
+		boolFlag(f, &allowCAKeyReuse, cliflags.AllowCAKeyReuse, false)
+	}
+
+	for _, cmd := range []*cobra.Command{createNodeCertCmd, createClientCertCmd} {
+		f := cmd.Flags()
+		durationFlag(f, &certificateLifetime, cliflags.CertificateLifetime, defaultCertLifetime)
+	}
+
+	// The remaining flags are shared between all cert-generating functions.
+	for _, cmd := range []*cobra.Command{createCACertCmd, createNodeCertCmd, createClientCertCmd} {
+		f := cmd.Flags()
+		stringFlag(f, &baseCfg.SSLCAKey, cliflags.CAKey, baseCfg.SSLCAKey)
 		intFlag(f, &keySize, cliflags.KeySize, defaultKeySize)
+		boolFlag(f, &overwriteFiles, cliflags.OverwriteFiles, false)
 	}
 
 	boolFlag(setUserCmd.Flags(), &password, cliflags.Password, false)
@@ -342,14 +314,9 @@ func init() {
 		stringFlag(f, &clientConnHost, cliflags.ClientHost, "")
 		stringFlag(f, &clientConnPort, cliflags.ClientPort, base.DefaultPort)
 
-		varFlag(f, insecure, cliflags.Insecure)
-		// Allow '--insecure'
-		f.Lookup(cliflags.Insecure.Name).NoOptDefVal = "true"
+		boolFlag(f, &baseCfg.Insecure, cliflags.Insecure, serverCfg.Insecure)
 
 		// Certificate flags.
-		stringFlag(f, &baseCfg.SSLCA, cliflags.CACert, baseCfg.SSLCA)
-		stringFlag(f, &baseCfg.SSLCert, cliflags.Cert, baseCfg.SSLCert)
-		stringFlag(f, &baseCfg.SSLCertKey, cliflags.Key, baseCfg.SSLCertKey)
 		stringFlag(f, &baseCfg.SSLCertsDir, cliflags.CertsDir, base.DefaultCertsDirectory)
 	}
 
@@ -408,18 +375,7 @@ func init() {
 	}
 }
 
-func extraSSLInit() {
-	// If any of the security flags have been set, clear the insecure
-	// setting. Note that we do the inverse when the --insecure flag is
-	// set. See insecureValue.Set().
-	if baseCfg.SSLCA != "" || baseCfg.SSLCAKey != "" ||
-		baseCfg.SSLCert != "" || baseCfg.SSLCertKey != "" {
-		baseCfg.Insecure = false
-	}
-}
-
 func extraServerFlagInit() {
-	extraSSLInit()
 	serverCfg.Addr = net.JoinHostPort(serverConnHost, serverConnPort)
 	if serverAdvertiseHost == "" {
 		serverAdvertiseHost = serverConnHost
@@ -432,7 +388,6 @@ func extraServerFlagInit() {
 }
 
 func extraClientFlagInit() {
-	extraSSLInit()
 	serverCfg.Addr = net.JoinHostPort(clientConnHost, clientConnPort)
 	serverCfg.AdvertiseAddr = serverCfg.Addr
 	if serverHTTPHost == "" {

@@ -45,9 +45,13 @@ func TestLoadEmbeddedCerts(t *testing.T) {
 		t.Errorf("found %d keypairs, but have %d embedded files", act, exp)
 	}
 
-	// Check that all pairs include a key.
+	// Check that all non-CA pairs include a key.
 	for _, c := range certs {
-		if len(c.KeyFilename) == 0 {
+		if c.FileUsage == security.CAPem {
+			if len(c.KeyFilename) != 0 {
+				t.Errorf("CA key was loaded for CertInfo %+v", c)
+			}
+		} else if len(c.KeyFilename) == 0 {
 			t.Errorf("no key found as part of CertInfo %+v", c)
 		}
 	}
@@ -131,6 +135,7 @@ func TestNamingScheme(t *testing.T) {
 		},
 		{
 			// Key files, but wrong permissions.
+			// We don't load CA keys here, so permissions for them don't matter.
 			files: []testFile{
 				{"ca.crt", 0777},
 				{"ca.key", 0777},
@@ -139,7 +144,9 @@ func TestNamingScheme(t *testing.T) {
 				{"client.root.crt", 0777},
 				{"client.root.key", 0740},
 			},
-			certs: []security.CertInfo{},
+			certs: []security.CertInfo{
+				{FileUsage: security.CAPem, Filename: "ca.crt"},
+			},
 		},
 		{
 			// Everything loads.
@@ -152,7 +159,7 @@ func TestNamingScheme(t *testing.T) {
 				{"client.root.key", 0700},
 			},
 			certs: []security.CertInfo{
-				{FileUsage: security.CAPem, Filename: "ca.crt", KeyFilename: "ca.key"},
+				{FileUsage: security.CAPem, Filename: "ca.crt"},
 				{FileUsage: security.ClientPem, Filename: "client.root.crt", KeyFilename: "client.root.key", Name: "root"},
 				{FileUsage: security.NodePem, Filename: "node.crt", KeyFilename: "node.key"},
 			},
@@ -168,7 +175,7 @@ func TestNamingScheme(t *testing.T) {
 				{"client.root.key", 0777},
 			},
 			certs: []security.CertInfo{
-				{FileUsage: security.CAPem, Filename: "ca.crt", KeyFilename: "ca.key"},
+				{FileUsage: security.CAPem, Filename: "ca.crt"},
 				{FileUsage: security.ClientPem, Filename: "client.root.crt", KeyFilename: "client.root.key", Name: "root"},
 				{FileUsage: security.NodePem, Filename: "node.crt", KeyFilename: "node.key"},
 			},
