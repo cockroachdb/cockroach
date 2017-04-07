@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 
-set -euo pipefail
+# Trigger this script by running `make generate PKG=./pkg/sql/parser` from the
+# repository root to ensure your PATH includes vendored binaries.
 
-YACC="../../../../../../../bin/goyacc"
+set -euo pipefail
 
 # This step runs sql.y through the YACC compiler directly without
 # performing any type/token declaration modifications, throwing out
@@ -12,7 +13,7 @@ YACC="../../../../../../../bin/goyacc"
 # to union type accessors in the Go code within rules, as the YACC
 # compiler does not type check Go code.
 function type_check() {
-    ret=$($YACC -o /dev/null -p sql sql.y)
+    ret=$(goyacc -o /dev/null -p sql sql.y)
     ! echo "$ret" | grep -F 'conflicts'
 }
 
@@ -45,7 +46,7 @@ function compile() {
 
     # Compile this new "unionized" syntax file through YACC, this time writing
     # the output to sql.go.
-    ret=$($YACC -o sql.go -p sql sql.y)
+    ret=$(goyacc -o sql.go -p sql sql.y)
     ! echo "$ret" | grep -F 'conflicts'
 
     # Overwrite the migrated syntax file with the original syntax file.

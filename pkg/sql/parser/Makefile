@@ -1,3 +1,6 @@
+# Trigger these rules by running `make generate PKG=./pkg/sql/parser` from the
+# repository root to ensure your PATH includes vendored binaries.
+
 all: sql.go keywords.go reserved_keywords.go
 
 .PHONY: sql.go
