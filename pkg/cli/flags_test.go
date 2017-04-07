@@ -24,6 +24,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
@@ -108,6 +109,109 @@ func TestRaftTickIntervalFlagValue(t *testing.T) {
 	}
 }
 
+func TestServerConnSettings(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	resetGlobals := func() {
+		// Ensure each test case starts with empty package-level variables and
+		// that we don't leak non-default values of them from this test.
+		// Resetting serverConnPort overwrites the default written by the
+		// package-level init method, or else none of the cases above would have
+		// an empty port.
+		serverConnHost = ""
+		serverAdvertiseHost = ""
+		serverConnPort = ""
+	}
+	defer resetGlobals()
+
+	f := startCmd.Flags()
+	testData := []struct {
+		args                  []string
+		expectedAddr          string
+		expectedAdvertiseAddr string
+	}{
+		{[]string{"start"}, ":", ":"},
+		{[]string{"start", "--host", "127.0.0.1"}, "127.0.0.1:", "127.0.0.1:"},
+		{[]string{"start", "--host", "192.168.0.111"}, "192.168.0.111:", "192.168.0.111:"},
+		{[]string{"start", "--port", "12345"}, ":12345", ":12345"},
+		{[]string{"start", "--host", "127.0.0.1", "--port", "12345"}, "127.0.0.1:12345", "127.0.0.1:12345"},
+		{[]string{"start", "--advertise-host", "192.168.0.111"}, ":", "192.168.0.111:"},
+		{[]string{"start", "--host", "127.0.0.1", "--advertise-host", "192.168.0.111"}, "127.0.0.1:", "192.168.0.111:"},
+		{[]string{"start", "--host", "127.0.0.1", "--advertise-host", "192.168.0.111", "--port", "12345"}, "127.0.0.1:12345", "192.168.0.111:12345"},
+		{[]string{"start", "--advertise-host", "192.168.0.111", "--port", "12345"}, ":12345", "192.168.0.111:12345"},
+		// confirm hostnames will work
+		{[]string{"start", "--host", "my.host.name"}, "my.host.name:", "my.host.name:"},
+		{[]string{"start", "--host", "myhostname"}, "myhostname:", "myhostname:"},
+		// confirm IPv6 works too
+		{[]string{"start", "--host", "::1"}, "[::1]:", "[::1]:"},
+		{[]string{"start", "--host", "2622:6221:e663:4922:fc2b:788b:fadd:7b48"}, "[2622:6221:e663:4922:fc2b:788b:fadd:7b48]:", "[2622:6221:e663:4922:fc2b:788b:fadd:7b48]:"},
+	}
+
+	for i, td := range testData {
+		resetGlobals()
+		if err := f.Parse(td.args); err != nil {
+			t.Fatalf("Parse(%#v) got unexpected error: %v", td.args, err)
+		}
+
+		extraServerFlagInit()
+		if td.expectedAddr != serverCfg.Addr {
+			t.Errorf("%d. serverCfg.Addr expected '%s', but got '%s'. td.args was '%#v'.",
+				i, td.expectedAddr, serverCfg.Addr, td.args)
+		}
+		if td.expectedAdvertiseAddr != serverCfg.AdvertiseAddr {
+			t.Errorf("%d. serverCfg.AdvertiseAddr expected '%s', but got '%s'. td.args was '%#v'.",
+				i, td.expectedAdvertiseAddr, serverCfg.AdvertiseAddr, td.args)
+		}
+	}
+}
+
+func TestClientConnSettings(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	// For some reason, when run under stress all these test cases fail due to the
+	// `--host` flag being unknown to quitCmd. Just skip this under stress.
+	if testutils.Stress() {
+		t.Skip()
+	}
+
+	resetGlobals := func() {
+		clientConnHost = ""
+		clientConnPort = ""
+	}
+	defer resetGlobals()
+
+	f := quitCmd.Flags()
+	testData := []struct {
+		args         []string
+		expectedAddr string
+	}{
+		{[]string{"quit"}, ":"},
+		{[]string{"quit", "--host", "127.0.0.1"}, "127.0.0.1:"},
+		{[]string{"quit", "--host", "192.168.0.111"}, "192.168.0.111:"},
+		{[]string{"quit", "--port", "12345"}, ":12345"},
+		{[]string{"quit", "--host", "127.0.0.1", "--port", "12345"}, "127.0.0.1:12345"},
+		// confirm hostnames will work
+		{[]string{"quit", "--host", "my.host.name"}, "my.host.name:"},
+		{[]string{"quit", "--host", "myhostname"}, "myhostname:"},
+		// confirm IPv6 works too
+		{[]string{"quit", "--host", "::1"}, "[::1]:"},
+		{[]string{"quit", "--host", "2622:6221:e663:4922:fc2b:788b:fadd:7b48"}, "[2622:6221:e663:4922:fc2b:788b:fadd:7b48]:"},
+	}
+
+	for i, td := range testData {
+		resetGlobals()
+		if err := f.Parse(td.args); err != nil {
+			t.Fatalf("Parse(%#v) got unexpected error: %v", td.args, err)
+		}
+
+		extraClientFlagInit()
+		if td.expectedAddr != serverCfg.Addr {
+			t.Errorf("%d. serverCfg.Addr expected '%s', but got '%s'. td.args was '%#v'.",
+				i, td.expectedAddr, serverCfg.Addr, td.args)
+		}
+	}
+}
+
 func TestHttpHostFlagValue(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -131,10 +235,10 @@ func TestHttpHostFlagValue(t *testing.T) {
 		serverHTTPHost = ""
 
 		if err := f.Parse(td.args); err != nil {
-			t.Fatal(err)
+			t.Fatalf("Parse(%#v) got unexpected error: %v", td.args, err)
 		}
 
-		extraFlagInit()
+		extraServerFlagInit()
 		if td.expected != serverCfg.HTTPAddr {
 			t.Errorf("%d. serverCfg.HTTPAddr expected '%s', but got '%s'. td.args was '%#v'.", i, td.expected, serverCfg.HTTPAddr, td.args)
 		}
