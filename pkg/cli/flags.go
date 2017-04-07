@@ -51,7 +51,6 @@ var zoneDisableReplication bool
 var undoFreezeCluster bool
 
 var serverCfg = server.MakeConfig()
-var clientCfg = serverCfg // copy in order to share a base.Config pointer
 var baseCfg = serverCfg.Config
 var cliCtx = cliContext{Config: baseCfg}
 var sqlCtx = sqlContext{cliContext: &cliCtx}
@@ -253,11 +252,13 @@ func init() {
 
 	// Every command but start will inherit the following setting.
 	cockroachCmd.PersistentPreRunE = func(cmd *cobra.Command, _ []string) error {
+		extraClientFlagInit()
 		return setDefaultStderrVerbosity(cmd, log.Severity_WARNING)
 	}
 
 	// The following only runs for `start`.
 	startCmd.PersistentPreRunE = func(cmd *cobra.Command, _ []string) error {
+		extraServerFlagInit()
 		return setDefaultStderrVerbosity(cmd, log.Severity_INFO)
 	}
 
@@ -434,12 +435,9 @@ func init() {
 		f = debugRangeDataCmd.Flags()
 		boolFlag(f, &debugCtx.replicated, cliflags.Replicated, false)
 	}
-
-	cobra.OnInitialize(extraFlagInit)
 }
 
-// extraFlagInit is a standalone function so we can test more easily.
-func extraFlagInit() {
+func extraSSLInit() {
 	// If any of the security flags have been set, clear the insecure
 	// setting. Note that we do the inverse when the --insecure flag is
 	// set. See insecureValue.Set().
@@ -447,7 +445,10 @@ func extraFlagInit() {
 		baseCfg.SSLCert != "" || baseCfg.SSLCertKey != "" {
 		baseCfg.Insecure = false
 	}
+}
 
+func extraServerFlagInit() {
+	extraSSLInit()
 	serverCfg.Addr = net.JoinHostPort(serverConnHost, serverConnPort)
 	if serverAdvertiseHost == "" {
 		serverAdvertiseHost = serverConnHost
@@ -457,9 +458,16 @@ func extraFlagInit() {
 		serverHTTPHost = serverConnHost
 	}
 	serverCfg.HTTPAddr = net.JoinHostPort(serverHTTPHost, serverHTTPPort)
+}
 
-	clientCfg.Addr = net.JoinHostPort(clientConnHost, clientConnPort)
-	clientCfg.AdvertiseAddr = clientCfg.Addr
+func extraClientFlagInit() {
+	extraSSLInit()
+	serverCfg.Addr = net.JoinHostPort(clientConnHost, clientConnPort)
+	serverCfg.AdvertiseAddr = serverCfg.Addr
+	if serverHTTPHost == "" {
+		serverHTTPHost = serverConnHost
+	}
+	serverCfg.HTTPAddr = net.JoinHostPort(serverHTTPHost, serverHTTPPort)
 }
 
 func setDefaultStderrVerbosity(cmd *cobra.Command, defaultSeverity log.Severity) error {

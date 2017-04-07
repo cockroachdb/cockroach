@@ -580,11 +580,11 @@ func getClientGRPCConn() (*grpc.ClientConn, *hlc.Clock, *stop.Stopper, error) {
 	stopper := stop.NewStopper()
 	rpcContext := rpc.NewContext(
 		log.AmbientContext{},
-		clientCfg.Config,
+		serverCfg.Config,
 		clock,
 		stopper,
 	)
-	addr, err := addrWithDefaultHost(clientCfg.AdvertiseAddr)
+	addr, err := addrWithDefaultHost(serverCfg.AdvertiseAddr)
 	if err != nil {
 		return nil, nil, nil, err
 	}
