@@ -90,9 +90,7 @@ func (*NodeRequest) Descriptor() ([]byte, []int) { return fileDescriptorStatus, 
 // RaftState gives internal details about a Raft group's state.
 // Closely mirrors the upstream definitions in github.com/coreos/etcd/raft.
 type RaftState struct {
-	ReplicaID uint64 `protobuf:"varint,1,opt,name=replica_id,json=replicaId,proto3" json:"replica_id,omitempty"`
-	// TODO(tamird): use raftpb's HardState. This leads to complications for
-	// the ui protos which are currently unsolved.
+	ReplicaID uint64           `protobuf:"varint,1,opt,name=replica_id,json=replicaId,proto3" json:"replica_id,omitempty"`
 	HardState raftpb.HardState `protobuf:"bytes,2,opt,name=hard_state,json=hardState" json:"hard_state"`
 	// Lead is part of Raft's SoftState.
 	Lead uint64 `protobuf:"varint,3,opt,name=lead,proto3" json:"lead,omitempty"`

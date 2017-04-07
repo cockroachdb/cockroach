@@ -76,8 +76,6 @@ message RaftState {
   }
 
   uint64 replica_id = 1 [(gogoproto.customname) = "ReplicaID"];
-  // TODO(tamird): use raftpb's HardState. This leads to complications for
-  // the ui protos which are currently unsolved.
   raftpb.HardState hard_state  = 2 [(gogoproto.nullable) = false];
   // Lead is part of Raft's SoftState.
   uint64 lead = 3;
