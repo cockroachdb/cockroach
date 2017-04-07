@@ -161,6 +161,17 @@ func TestNormalizeExpr(t *testing.T) {
 		{`IF((true OR a < 0), (0 + a)::decimal, 2 / (1 - 1))`, `a::DECIMAL`},
 		{`COALESCE(NULL, (NULL < 3), a = 2 - 1, d)`, `COALESCE(a = 1, d)`},
 		{`COALESCE(NULL, a)`, `a`},
+		// #14687: ensure that negative divisors flip the inequality when rotating.
+		{`1 < a / -2`, `a < -2`},
+		{`1 <= a / -2`, `a <= -2`},
+		{`1 > a / -2`, `a > -2`},
+		{`1 >= a / -2`, `a >= -2`},
+		{`1 = a / -2`, `a = -2`},
+		{`1 < a / 2`, `a > 2`},
+		{`1 <= a / 2`, `a >= 2`},
+		{`1 > a / 2`, `a < 2`},
+		{`1 >= a / 2`, `a <= 2`},
+		{`1 = a / 2`, `a = 2`},
 	}
 	for _, d := range testData {
 		expr, err := ParseExprTraditional(d.expr)
