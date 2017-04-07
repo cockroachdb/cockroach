@@ -1075,6 +1075,7 @@ const (
 	timestampRFC3339NanoWithoutZoneFormat = "2006-01-02T15:04:05"
 	timestampSequelizeFormat              = timestampFormat + ".000 -07:00"
 
+	TimestampJdbcFormat = timestampFormat + ".999999 -07:00:00"
 	TimestampNodeFormat = timestampFormat + ".999999-07:00"
 )
 
@@ -1088,6 +1089,7 @@ var timeFormats = []string{
 	timestampRFC3339NanoWithoutZoneFormat,
 	timestampSequelizeFormat,
 	TimestampNodeFormat,
+	TimestampJdbcFormat,
 }
 
 func parseTimestampInLocation(s string, loc *time.Location) (time.Time, error) {
