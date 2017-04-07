@@ -50,13 +50,14 @@ import (
 
 // TODO(tamird): why does rocksdb not link jemalloc,snappy statically?
 
+// #cgo CPPFLAGS: -I../../../c-deps/rocksdb/include
+// #cgo CPPFLAGS: -I../../../c-deps/protobuf/src
+// #cgo LDFLAGS: ${SRCDIR}/../../../c-deps/protobuf/libprotobuf.a
+// #cgo LDFLAGS: ${SRCDIR}/../../../c-deps/rocksdb/librocksdb.a
+// #cgo LDFLAGS: ${SRCDIR}/../../../c-deps/jemalloc/lib/libjemalloc.a
+// #cgo LDFLAGS: ${SRCDIR}/../../../c-deps/snappy/.libs/libsnappy.a
 // #cgo CXXFLAGS: -std=c++11 -Werror -Wall -Wno-sign-compare
 // #cgo linux LDFLAGS: -lrt
-// #cgo windows CPPFLAGS: -I../../../obj/protobufsrc/src -I../../../obj/rocksdbsrc/include
-// #cgo windows LDFLAGS: -L${SRCDIR}/../../../obj/protobuf-build -lprotobuf
-// #cgo windows LDFLAGS: -L${SRCDIR}/../../../obj/rocksdb-build -lrocksdblib
-// #cgo windows LDFLAGS: -L${SRCDIR}/../../../obj/jemalloc/lib -ljemalloc
-// #cgo windows LDFLAGS: -L${SRCDIR}/../../../obj/snappy/lib -lsnappy
 // #cgo windows LDFLAGS: -lrpcrt4
 //
 // #include <stdlib.h>

@@ -102,7 +102,7 @@ build buildoss xgo-build install: override LINKFLAGS += \
 # dependencies are rebuilt which is useful when switching between
 # normal and race test builds.
 .PHONY: build buildoss install
-build buildoss install: $(BOOTSTRAP_TARGET) .buildinfo/tag .buildinfo/rev
+build buildoss install: $(C_LIBS) $(BOOTSTRAP_TARGET) .buildinfo/tag .buildinfo/rev
 	$(GO) $(BUILDMODE) -v $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' $(BUILDTARGET)
 
 .PHONY: xgo-build
@@ -123,7 +123,7 @@ testbuild: $(BOOTSTRAP_TARGET)
 	$(SHELL)
 
 .PHONY: gotestdashi
-gotestdashi: $(BOOTSTRAP_TARGET)
+gotestdashi: $(C_LIBS) $(BOOTSTRAP_TARGET)
 	$(GO) test -v $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -i $(PKG)
 
 testshort: override TESTFLAGS += -short
@@ -215,7 +215,7 @@ checkshort: gotestdashi
 	$(GO) test ./build -v -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -short -run 'TestStyle/$(TESTS)'
 
 .PHONY: clean
-clean:
+clean: clean-c-deps
 	$(GO) clean $(GOFLAGS) -i github.com/cockroachdb/...
 	find . -name '*.test*' -type f -exec rm -f {} \;
 	rm -f .bootstrap $(ARCHIVE)

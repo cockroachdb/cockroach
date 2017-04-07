@@ -19,13 +19,22 @@ import (
 
 // TODO(tamird): why does rocksdb not link jemalloc,snappy statically?
 
+// #cgo CPPFLAGS: -I../../../../c-deps/rocksdb/include
+// #cgo LDFLAGS: ${SRCDIR}/../../../../c-deps/protobuf/libprotobuf.a
+// #cgo LDFLAGS: ${SRCDIR}/../../../../c-deps/rocksdb/librocksdb.a
+// #cgo LDFLAGS: ${SRCDIR}/../../../../c-deps/jemalloc/lib/libjemalloc.a
+// #cgo LDFLAGS: ${SRCDIR}/../../../../c-deps/snappy/.libs/libsnappy.a
 // #cgo CXXFLAGS: -std=c++11 -Werror -Wall -Wno-sign-compare
 // #cgo linux LDFLAGS: -lrt
-// #cgo windows CPPFLAGS: -I../../../../obj/rocksdbsrc/include
-// #cgo windows LDFLAGS: -L${SRCDIR}/../../../../obj/rocksdb-build -lrocksdblib
-// #cgo windows LDFLAGS: -L${SRCDIR}/../../../../obj/jemalloc/lib -ljemalloc
-// #cgo windows LDFLAGS: -L${SRCDIR}/../../../../obj/snappy/lib -lsnappy
 // #cgo windows LDFLAGS: -lrpcrt4
+//
+// // Building this package will trigger "unresolved symbol" errors
+// // because it depends on C symbols defined in pkg/storage/engine,
+// // which aren't linked until the final binary is built. This is the
+// // platform voodoo to make the linker ignore these errors.
+// // TODO: Make this work on Windows.
+// #cgo darwin LDFLAGS: -Wl,-undefined -Wl,dynamic_lookup
+// #cgo !darwin LDFLAGS: -Wl,-unresolved-symbols=ignore-all
 //
 // #include <stdlib.h>
 // #include "db.h"

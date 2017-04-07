@@ -78,6 +78,14 @@ GIT_DIR := $(shell git rev-parse --git-dir 2> /dev/null)
 # used. See: http://blog.jgc.org/2016/07/lazy-gnu-make-variables.html
 override make-lazy = $(eval $1 = $$(eval $1 := $(value $1))$$($1))
 
+OS := $(shell uname)
+OS_WINDOWS := $(findstring MINGW,$(OS))
+
+CMAKE_FLAGS = $(if $(OS_WINDOWS),-G 'MSYS Makefiles')
+
+NCPUS = $(shell $(LOCAL_BIN)/ncpus)
+$(call make-lazy,NCPUS)
+
 # GNU tar and BSD tar both support transforming filenames according to a regular
 # expression, but have different flags to do so.
 TAR_XFORM_FLAG = $(shell $(TAR) --version | grep -q GNU && echo "--xform='flags=r;s'" || echo "-s")
@@ -162,7 +170,8 @@ endif
 	$(GO_INSTALL) -v \
 	$(PKG_ROOT)/cmd/metacheck \
 	$(PKG_ROOT)/cmd/returncheck \
-	&& $(GO) list -tags glide -f '{{join .Imports "\n"}}' $(REPO_ROOT)/build | grep -vF protoc | xargs $(GO) install -v
+	$(PKG_ROOT)/cmd/ncpus \
+	&& $(GO) list -tags glide -f '{{join .Imports "\n"}}' $(REPO_ROOT)/build | xargs $(GO) install -v
 	touch $@
 
 # Make doesn't expose a list of the variables declared in a given file, so we
@@ -181,3 +190,77 @@ $(REPO_ROOT)/build/variables.mk: $(REPO_ROOT)/Makefile $(REPO_ROOT)/.go-version 
 	  -e 's/(^|^[^:]+:)[ ]*(export)?[ ]*([^ ]+)[ ]*[:?+]?=.*/  \3/p' $^ \
 	  | LC_COLLATE=C sort -u >> $@
 	@echo 'endef' >> $@
+
+# The following section handles building our C/C++ dependencies. These are
+# common because both the root Makefile and protobuf.mk have C dependencies.
+
+C_DEPS_DIR := $(REPO_ROOT)/c-deps
+
+PROTOBUF_DIR := $(C_DEPS_DIR)/protobuf
+JEMALLOC_DIR := $(C_DEPS_DIR)/jemalloc
+SNAPPY_DIR   := $(C_DEPS_DIR)/snappy
+ROCKSDB_DIR  := $(C_DEPS_DIR)/rocksdb
+
+PROTOC := $(PROTOBUF_DIR)/protoc
+
+LIBPROTOBUF := $(PROTOBUF_DIR)/libprotobuf.a
+LIBJEMALLOC := $(JEMALLOC_DIR)/lib/libjemalloc.a
+LIBSNAPPY   := $(SNAPPY_DIR)/.libs/libsnappy.a
+LIBROCKSDB  := $(ROCKSDB_DIR)/librocksdb.a
+
+JEMALLOC_INCLUDES := $(JEMALLOC_DIR)/include
+SNAPPY_INCLUDES   := $(SNAPPY_DIR)
+
+C_LIBS      := $(LIBJEMALLOC) $(LIBPROTOBUF) $(LIBSNAPPY) $(LIBROCKSDB)
+C_DEPS      := $(PROTOC) $(C_LIBS)
+C_DEPS_DIRS := $(PROTOBUF_DIR) $(JEMALLOC_DIR) $(SNAPPY_DIR) $(ROCKSDB_DIR)
+
+# We package tarballs in c-deps so that DEP.src.tgz is guaranteed to extract to
+# folder DEP.
+$(C_DEPS_DIR)/%: $(C_DEPS_DIR)/%.src.tgz $(BOOTSTRAP_TARGET)
+	rm -rf $@
+	tar -C $(C_DEPS_DIR) -zxf $<
+	touch $@
+
+$(PROTOBUF_DIR)/Makefile: $(C_DEPS_DIR)/protobuf.src.tgz | $(PROTOBUF_DIR)
+	cd $(PROTOBUF_DIR) && cmake $(CMAKE_FLAGS) ./cmake
+
+$(JEMALLOC_DIR)/Makefile: $(C_DEPS_DIR)/jemalloc.src.tgz | $(JEMALLOC_DIR)
+	cd $(JEMALLOC_DIR) && ./configure
+
+$(SNAPPY_DIR)/Makefile: $(C_DEPS_DIR)/snappy.src.tgz | $(SNAPPY_DIR)
+	cd $(SNAPPY_DIR) && ./configure --disable-shared
+
+$(ROCKSDB_DIR)/Makefile: $(C_DEPS_DIR)/rocksdb.src.tgz | $(ROCKSDB_DIR)
+	cd $(ROCKSDB_DIR) && cmake $(CMAKE_FLAGS) \
+	  -DSNAPPY_INCLUDE_DIR=../../$(SNAPPY_INCLUDES) -DSNAPPY_LIBRARIES=../../$(LIBSNAPPY) -DWITH_SNAPPY=ON \
+	  -DJEMALLOC_INCLUDE_DIR=../../$(JEMALLOC_INCLUDES) -DJEMALLOC_LIBRARIES=../../$(LIBJEMALLOC) -DWITH_JEMALLOC=ON
+
+# We mark C and C++ dependencies as .ALWAYS_REBUILD so the child Makefile can
+# determine whether the target is up to date. We don't have the targets'
+# prerequisites here, and we certainly don't want to duplicate them.
+
+$(PROTOC): $(PROTOBUF_DIR)/Makefile .ALWAYS_REBUILD
+	$(MAKE) -C $(PROTOBUF_DIR) -j$(NCPUS) protoc
+
+$(LIBPROTOBUF): $(PROTOBUF_DIR)/Makefile .ALWAYS_REBUILD
+	$(MAKE) -C $(PROTOBUF_DIR) -j$(NCPUS) libprotobuf
+
+$(LIBJEMALLOC): $(JEMALLOC_DIR)/Makefile .ALWAYS_REBUILD
+	$(MAKE) -C $(JEMALLOC_DIR) -j$(NCPUS) build_lib_static LIBPREFIX=lib A=a
+
+$(LIBSNAPPY): $(SNAPPY_DIR)/Makefile .ALWAYS_REBUILD
+	$(MAKE) -C $(SNAPPY_DIR) -j$(NCPUS) libsnappy.la
+
+$(LIBROCKSDB): $(ROCKSDB_DIR)/Makefile $(LIBSNAPPY) $(LIBJEMALLOC) .ALWAYS_REBUILD
+	$(MAKE) -C $(ROCKSDB_DIR) -j$(NCPUS) rocksdb
+
+.PHONY: c-libs
+c-libs: $(C_LIBS)
+
+.PHONY: c-deps
+c-deps: $(C_DEPS)
+
+.PHONY: clean-c-deps
+clean-c-deps:
+	rm -rf $(C_DEPS_DIRS)
