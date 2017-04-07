@@ -108,7 +108,7 @@ build buildoss xgo-build install: override LINKFLAGS += \
 # from the linker aren't suppressed. The usage of `-v` also shows when
 # dependencies are rebuilt which is useful when switching between
 # normal and race test builds.
-build buildoss xgo-build install: $(BOOTSTRAP_TARGET) .buildinfo/tag .buildinfo/rev
+build buildoss xgo-build install: $(C_LIBS) $(BOOTSTRAP_TARGET) .buildinfo/tag .buildinfo/rev
 	$(GO) $(BUILDMODE) -v $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' $(BUILDTARGET)
 
 .PHONY: start
@@ -125,7 +125,7 @@ testbuild: $(BOOTSTRAP_TARGET)
 	$(SHELL)
 
 .PHONY: gotestdashi
-gotestdashi: $(BOOTSTRAP_TARGET)
+gotestdashi: $(C_LIBS) $(BOOTSTRAP_TARGET)
 	$(GO) test -v $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -i $(PKG)
 
 testshort: override TESTFLAGS += -short
@@ -220,6 +220,7 @@ clean:
 	$(GO) clean $(GOFLAGS) -i github.com/cockroachdb/...
 	find . -name '*.test*' -type f -exec rm -f {} \;
 	rm -f .bootstrap $(ARCHIVE)
+	rm -rf $(C_DEPS_DIRS)
 
 .PHONY: protobuf
 protobuf:

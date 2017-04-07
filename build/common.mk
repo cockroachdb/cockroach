@@ -80,6 +80,11 @@ GIT_DIR := $(shell git rev-parse --git-dir 2> /dev/null)
 # used. See: http://blog.jgc.org/2016/07/lazy-gnu-make-variables.html
 override make-lazy = $(eval $1 = $$(eval $1 := $(value $1))$$($1))
 
+OS := $(shell uname)
+OS_WINDOWS := $(findstring MINGW,$(OS))
+
+CMAKE_FLAGS = $(if $(OS_WINDOWS),-G "MSYS Makefiles")
+
 # GNU tar and BSD tar both support transforming filenames according to a regular
 # expression, but have different flags to do so.
 TAR_XFORM_FLAG = $(shell $(TAR) --version | grep -q GNU && echo "--xform='flags=r;s'" || echo "-s")
@@ -159,7 +164,7 @@ endif
 	$(GO) install -v \
 	$(PKG_ROOT)/cmd/metacheck \
 	$(PKG_ROOT)/cmd/returncheck \
-	&& $(GO) list -tags glide -f '{{join .Imports "\n"}}' $(REPO_ROOT)/build | grep -vF protoc | xargs $(GO) install -v
+	&& $(GO) list -tags glide -f '{{join .Imports "\n"}}' $(REPO_ROOT)/build | xargs $(GO) install -v
 	touch $@
 
 # Make doesn't expose a list of the variables declared in a given file, so we
@@ -178,3 +183,105 @@ $(REPO_ROOT)/build/variables.mk: $(REPO_ROOT)/Makefile $(REPO_ROOT)/.go-version 
 	  -e 's/(^|^[^:]+:)[ ]*(export)?[ ]*([^ ]+)[ ]*[:?+]?=.*/  \3/p' $^ \
 	  | LC_COLLATE=C sort -u >> $@
 	@echo 'endef' >> $@
+
+# The following section handles building our C and C++ dependencies.
+
+# We absolutize the base path to ensure all derived paths are absolute. This
+# makes the command printouts hard to read, but is far easier than adjusting the
+# paths when we `cd` into a dependency's tree.
+C_DEPS_DIR := $(abspath $(REPO_ROOT)/vendor/github.com/cockroachdb/c-deps)
+
+ifneq ($(OS_WINDOWS),)
+# CGO_CPPFLAGS doesn't work with Unix-style paths, unlike everything else in
+# MinGW, so we convert it to a Windows style path.
+#
+# TODO(benesch): Figure out why.
+C_DEPS_DIR := $(shell cygpath -m $(C_DEPS_DIR))
+endif
+
+PROTOBUF_DIR := $(C_DEPS_DIR)/protobuf/_build
+JEMALLOC_DIR := $(C_DEPS_DIR)/jemalloc/_build
+SNAPPY_DIR   := $(C_DEPS_DIR)/snappy/_build
+ROCKSDB_DIR  := $(C_DEPS_DIR)/rocksdb/_build
+
+PROTOC := $(PROTOBUF_DIR)/protoc
+
+LIBPROTOBUF := $(PROTOBUF_DIR)/libprotobuf.a
+LIBJEMALLOC := $(JEMALLOC_DIR)/lib/libjemalloc.a
+LIBSNAPPY   := $(SNAPPY_DIR)/.libs/libsnappy.a
+LIBROCKSDB  := $(ROCKSDB_DIR)/librocksdb.a
+
+PROTOBUF_INCLUDES := $(PROTOBUF_DIR)/../src
+JEMALLOC_INCLUDES := $(JEMALLOC_DIR)/include
+SNAPPY_INCLUDES   := $(SNAPPY_DIR)/..
+ROCKSDB_INCLUDES  := $(ROCKSDB_DIR)/../include
+
+C_LIBS      := $(LIBJEMALLOC) $(LIBPROTOBUF) $(LIBSNAPPY) $(LIBROCKSDB)
+C_INCLUDES  := $(PROTOBUF_INCLUDES) $(JEMALLOC_INCLUDES) $(SNAPPY_INCLUDES) $(ROCKSDB_INCLUDES)
+C_DEPS_DIRS := $(PROTOBUF_DIR) $(JEMALLOC_DIR) $(SNAPPY_DIR) $(ROCKSDB_DIR)
+
+# The cgo documentation insists that CGO_* environment variables are only to be
+# set by the user, and asks package authors to set all necessary configuration
+# in package `#cgo` directives. `#cgo` directives, unfortunately, are so
+# cumbersome as to be completely hopeless:
+#
+#    1. cgo requires absolute paths to static libraries.
+#    2. To work around this, cgo provides a ${SRCDIR} variable that expands to
+#       the absolute directory of the source file, but this requires a clunky
+#       climb up several layers (../../../..) to get to the repository root.
+#    3. cgo will not expand any other variables in directives, so we'd have to
+#       duplicate library and include paths in every source file, in addition
+#       to this Makefile.
+#
+# All of these problems disappear instantly if we add the library and include
+# paths to the appropriate CGO_* environment variables, so we do that below. Now
+# Go packages can link to any of our built libraries with the pithy directive
+#
+#    #cgo LDFLAGS: -lDEPENDENCY
+#
+# and headers for all dependencies are automatically in the include path.
+export CGO_LDFLAGS CGO_CPPFLAGS
+
+# `override` and append so that we don't blow away any flags specified on the
+# command line but guarantee our flags are included.
+override CGO_LDFLAGS  += $(addprefix -L,$(dir $(C_LIBS)))
+override CGO_CPPFLAGS += $(addprefix -I,$(C_INCLUDES))
+
+# jemalloc prefixes its symbols with `je_` on macOS, but not on platforms. By
+# defining `JEMALLOC_NO_DEMANGLE`, we ensure we can always refer to the symbol
+# with the `je_` prefix in our code.
+override CGO_CPPFLAGS += -DJEMALLOC_NO_DEMANGLE
+
+$(C_DEPS_DIRS):
+	mkdir $@
+
+$(PROTOBUF_DIR)/Makefile: | $(PROTOBUF_DIR)
+	cd $(PROTOBUF_DIR) && cmake $(CMAKE_FLAGS) ../cmake
+
+$(JEMALLOC_DIR)/Makefile: | $(JEMALLOC_DIR)
+	cd $(JEMALLOC_DIR) && ../configure
+
+$(SNAPPY_DIR)/Makefile: | $(SNAPPY_DIR)
+	cd $(SNAPPY_DIR) && ../configure --disable-shared
+
+$(ROCKSDB_DIR)/Makefile: | $(ROCKSDB_DIR)
+	cd $(ROCKSDB_DIR) && cmake .. -B. $(CMAKE_FLAGS) \
+	  -DSNAPPY_INCLUDE_DIR=$(SNAPPY_INCLUDES) -DSNAPPY_LIBRARIES=$(LIBSNAPPY) -DWITH_SNAPPY=ON -DSNAPPY=1 \
+	  -DJEMALLOC_INCLUDE_DIR=$(JEMALLOC_INCLUDES) -DJEMALLOC_LIBRARIES=$(LIBJEMALLOC) -DWITH_JEMALLOC=ON
+
+# C and C++ dependencies must be marked as .ALWAYS_REBUILD.
+
+$(PROTOC): $(PROTOBUF_DIR)/Makefile .ALWAYS_REBUILD
+	cd $(PROTOBUF_DIR) && $(MAKE) protoc
+
+$(LIBPROTOBUF): $(PROTOBUF_DIR)/Makefile .ALWAYS_REBUILD
+	cd $(PROTOBUF_DIR) && $(MAKE) libprotobuf
+
+$(LIBJEMALLOC): $(JEMALLOC_DIR)/Makefile .ALWAYS_REBUILD
+	cd $(JEMALLOC_DIR) && $(MAKE) build_lib_static
+
+$(LIBSNAPPY): $(SNAPPY_DIR)/Makefile .ALWAYS_REBUILD
+	cd $(SNAPPY_DIR) && $(MAKE) libsnappy.la
+
+$(LIBROCKSDB): $(ROCKSDB_DIR)/Makefile $(LIBSNAPPY) $(LIBJEMALLOC) .ALWAYS_REBUILD
+	cd $(ROCKSDB_DIR) && $(MAKE) rocksdb

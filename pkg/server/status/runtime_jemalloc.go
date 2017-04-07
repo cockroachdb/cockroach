@@ -18,9 +18,7 @@
 
 package status
 
-// #cgo CPPFLAGS: -DJEMALLOC_NO_DEMANGLE
-// #cgo windows CPPFLAGS: -I../../../obj/jemalloc/include
-// #cgo windows LDFLAGS: -L${SRCDIR}/../../../obj/jemalloc/lib -ljemalloc
+// #cgo LDFLAGS: -ljemalloc
 //
 // #include <jemalloc/jemalloc.h>
 //
