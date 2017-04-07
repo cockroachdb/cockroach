@@ -63,18 +63,12 @@ func TestInitInsecure(t *testing.T) {
 		// Reset the context and insecure flag for every test case.
 		ctx.InitDefaults()
 		ctx.Insecure = true
-		insecure.isSet = false
 
 		if err := f.Parse(c.args); err != nil {
 			t.Fatal(err)
 		}
 		if c.insecure != ctx.Insecure {
 			t.Fatalf("%d: expected %v, but found %v", i, c.insecure, ctx.Insecure)
-		}
-
-		err := initInsecureServer()
-		if !testutils.IsError(err, c.expected) {
-			t.Fatalf("%d: expected %q, but found %v", i, c.expected, err)
 		}
 	}
 }
