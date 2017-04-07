@@ -307,6 +307,30 @@ func (expr *ComparisonExpr) normalize(v *normalizeVisitor) TypedExpr {
 					op = Plus
 				case Div:
 					op = Mult
+					if expr.Operator != EQ {
+						// In this case, we must remember to *flip* the inequality if the
+						// divisor is negative, since we are in effect multiplying both sides
+						// of the inequality by a negative number.
+						divisor, err := left.TypedRight().Eval(v.ctx)
+						if err != nil {
+							v.err = err
+							return expr
+						}
+						if divisor.Compare(v.ctx, NewDInt(0)) < 0 {
+							if !exprCopied {
+								exprCopy := *expr
+								expr = &exprCopy
+								exprCopied = true
+							}
+
+							invertedOp, err := invertComparisonOp(expr.Operator)
+							if err != nil {
+								v.err = nil
+								return expr
+							}
+							expr = NewTypedComparisonExpr(invertedOp, expr.TypedLeft(), expr.TypedRight())
+						}
+					}
 				}
 
 				newBinExpr := newBinExprIfValidOverload(op,
