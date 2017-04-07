@@ -96,12 +96,6 @@ func newCLITest(params cliTestParams) cliTest {
 	c.cleanupFunc = func() error { return nil }
 
 	if !params.noServer {
-		s, err := serverutils.StartServerRaw(base.TestServerArgs{Insecure: params.insecure})
-		if err != nil {
-			fail(err)
-		}
-		c.TestServer = s.(*server.TestServer)
-
 		if !params.insecure {
 			// Copy these assets to disk from embedded strings, so this test can
 			// run from a standalone binary.
@@ -121,13 +115,25 @@ func newCLITest(params cliTestParams) cliTest {
 			for _, a := range assets {
 				securitytest.RestrictedCopy(nil, a, certsDir, filepath.Base(a))
 			}
+			baseCfg.SSLCertsDir = certsDir
 
 			c.cleanupFunc = func() error {
 				security.SetAssetLoader(securitytest.EmbeddedAssets)
 				return os.RemoveAll(certsDir)
 			}
 		}
+
+		s, err := serverutils.StartServerRaw(base.TestServerArgs{
+			Insecure:    params.insecure,
+			SSLCertsDir: certsDir,
+		})
+		if err != nil {
+			fail(err)
+		}
+		c.TestServer = s.(*server.TestServer)
 	}
+
+	baseCfg.User = security.NodeUser
 
 	// Ensure that CLI error messages and anything meant for the
 	// original stderr is redirected to stdout, where it can be
@@ -243,9 +249,6 @@ func (c cliTest) RunWithArgs(origArgs []string) {
 				args = append(args, "--insecure")
 			} else {
 				args = append(args, "--insecure=false")
-				args = append(args, fmt.Sprintf("--ca-cert=%s", filepath.Join(c.certsDir, security.EmbeddedCACert)))
-				args = append(args, fmt.Sprintf("--cert=%s", filepath.Join(c.certsDir, security.EmbeddedNodeCert)))
-				args = append(args, fmt.Sprintf("--key=%s", filepath.Join(c.certsDir, security.EmbeddedNodeKey)))
 			}
 			args = append(args, fmt.Sprintf("--host=%s", h))
 			args = append(args, fmt.Sprintf("--port=%s", p))
@@ -269,10 +272,8 @@ func (c cliTest) RunWithCAArgs(origArgs []string) {
 	if err := func() error {
 		args := append([]string(nil), origArgs[:1]...)
 		if c.TestServer != nil {
-			args = append(args, fmt.Sprintf("--ca-cert=%s", filepath.Join(c.certsDir, security.EmbeddedCACert)))
 			args = append(args, fmt.Sprintf("--ca-key=%s", filepath.Join(c.certsDir, security.EmbeddedCAKey)))
-			args = append(args, fmt.Sprintf("--cert=%s", filepath.Join(c.certsDir, security.EmbeddedRootCert)))
-			args = append(args, fmt.Sprintf("--key=%s", filepath.Join(c.certsDir, security.EmbeddedRootKey)))
+			args = append(args, fmt.Sprintf("--certs-dir=%s", c.certsDir))
 		}
 		args = append(args, origArgs[1:]...)
 
