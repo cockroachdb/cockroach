@@ -470,9 +470,9 @@ type logicTest struct {
 	// client currently in use. This can change during processing
 	// of a test input file when encountering the "user" directive.
 	// see setUser() for details.
-	user            string
-	db              *gosql.DB
-	cleanupRootUser func()
+	user         string
+	db           *gosql.DB
+	cleanupFuncs []func()
 	// progress holds the number of tests executed so far.
 	progress int
 	// failures holds the number of tests failed so far, when
@@ -505,10 +505,11 @@ func (t *logicTest) close() {
 
 	t.traceStop()
 
-	if t.cleanupRootUser != nil {
-		t.cleanupRootUser()
-		t.cleanupRootUser = nil
+	for _, cleanup := range t.cleanupFuncs {
+		cleanup()
 	}
+	t.cleanupFuncs = nil
+
 	if t.cluster != nil {
 		t.cluster.Stopper().Stop()
 		t.cluster = nil
@@ -585,7 +586,7 @@ func (t *logicTest) setUser(user string) func() {
 	return cleanupFunc
 }
 
-func (t *logicTest) setup(numNodes int, useFakeSpanResolver bool) {
+func (t *logicTest) setup(numNodes int, useFakeSpanResolver bool, defaultDistSQLMode string) {
 	t.logScope = log.Scope(t.t, "TestLogic")
 
 	// TODO(pmattis): Add a flag to make it easy to run the tests against a local
@@ -613,9 +614,13 @@ func (t *logicTest) setup(numNodes int, useFakeSpanResolver bool) {
 		t.cluster.Server(t.nodeIdx).SetDistSQLSpanResolver(fakeResolver)
 	}
 
+	if defaultDistSQLMode != "" {
+		t.cleanupFuncs = append(t.cleanupFuncs, sql.SetDefaultDistSQLMode(defaultDistSQLMode))
+	}
+
 	// db may change over the lifetime of this function, with intermediate
 	// values cached in t.clients and finally closed in t.close().
-	t.cleanupRootUser = t.setUser(security.RootUser)
+	t.cleanupFuncs = append(t.cleanupFuncs, t.setUser(security.RootUser))
 
 	if _, err := t.db.Exec(`
 CREATE DATABASE test;
@@ -1291,10 +1296,7 @@ func (t *logicTest) success(file string) {
 
 func (t *logicTest) setupAndRunFile(path string, config testClusterConfig) {
 	defer t.close()
-	t.setup(config.numNodes, config.useFakeSpanResolver)
-	if config.defaultDistSQLMode != "" {
-		defer sql.SetDefaultDistSQLMode(config.defaultDistSQLMode)()
-	}
+	t.setup(config.numNodes, config.useFakeSpanResolver, config.defaultDistSQLMode)
 
 	defer func() {
 		if r := recover(); r != nil {
