@@ -12,8 +12,8 @@
 #   git config --global core.excludesfile ~/.gitignore_global)
 
 artifacts
-/bin
-.bootstrap
+/bin.*
+.bootstrap.*
 .buildinfo
 /cockroach
 /cockroach-data
@@ -23,6 +23,12 @@ artifacts
 *.test*
 # Various `sed -i~` invocations in our scripts.
 *~
+
+# TODO(benesch): Remove these non-platform-specific versions of /bin.*
+# and /bootstrap.* once it's unlikely that developers have branches spanning
+# this change (4/7/2017).
+/bin
+.bootstrap
 
 # Custom or private env vars (e.g. internal keys, access tokens, etc).
 customenv.mk
