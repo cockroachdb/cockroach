@@ -32,6 +32,38 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
+// MajorVersion and MinorVersion identify the distsqlrun protocol version.
+//
+// The planner populates major and minor versions in SetupFlorRequest.
+// A server only accepts requests with:
+//  - the same MajorVersion, and
+//  - a MinorVersion in the range MinAcceptedMinorVersion to MinorVersion.
+//
+// This can be used to provide a "window" of compatibility when new features are
+// added.
+//
+// Example:
+//  - we start with MinorVersion=1; distsqlrun servers with minor version 1
+//    only accept requests with minor version 1.
+//  - a new distsqlrun feature is added; MinorVersion is bumped to 2. The
+//    planner does not yet use this feature by default; it still issues
+//    requests with minor version 1.
+//  - MinAcceptedMinorVersion is still 1, i.e. servers with minor version 2
+//    accept both versions 1 and 2.
+//  - after an upgrade cycle, we can enable the feature in the planner,
+//    requiring minor version 2.
+//  - at some later point, we can choose to deprecate version 1 and have
+//    servers only accept minor versions >= 2 (by setting
+//    MinAcceptedMinorVersion to 2).
+const MajorVersion = 1
+
+// MinorVersion is the server's minor version; see above.
+const MinorVersion = 1
+
+// MinAcceptedMinorVersion is the oldest minor version that the server is
+// compatible with; see above.
+const MinAcceptedMinorVersion = 1
+
 // ServerConfig encompasses the configuration required to create a
 // DistSQLServer.
 type ServerConfig struct {
@@ -76,6 +108,19 @@ func (ds *ServerImpl) Start() {
 func (ds *ServerImpl) setupFlow(
 	ctx context.Context, req *SetupFlowRequest, syncFlowConsumer RowReceiver,
 ) (context.Context, *Flow, error) {
+	if req.MajorVersion != MajorVersion ||
+		req.MinorVersion < MinAcceptedMinorVersion ||
+		req.MinorVersion > MinorVersion {
+		err := errors.Errorf(
+			"version mismatch in flow request: %d.%d; this node accepts %d.%d through %d.%d",
+			req.MajorVersion, req.MinorVersion,
+			MajorVersion, MinAcceptedMinorVersion,
+			MajorVersion, MinorVersion,
+		)
+		log.Warning(ctx, err)
+		return ctx, nil, err
+	}
+
 	const opName = "flow"
 	var sp opentracing.Span
 	if req.TraceContext == nil {
