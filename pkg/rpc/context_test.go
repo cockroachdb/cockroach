@@ -216,7 +216,7 @@ func TestHeartbeatHealthTransport(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	if runtime.GOOS == "windows" {
-		t.Skip("TODO(tamird): https://golang.org/cl/39490")
+		t.Skip("TODO(tamird): remove in Go 1.9; https://github.com/golang/go/commit/03d1aa6")
 	}
 
 	stopper := stop.NewStopper()
