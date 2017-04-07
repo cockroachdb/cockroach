@@ -94,23 +94,21 @@ build buildoss: BUILDMODE = build -i -o cockroach$(SUFFIX)
 xgo-build: GO = $(XGO)
 xgo-build: BUILDMODE =
 
-# The build.utcTime format must remain in sync with TimeFormat in pkg/build/info.go.
-install: override LINKFLAGS += \
-	-X "github.com/cockroachdb/cockroach/pkg/build.tag=$(shell cat .buildinfo/tag)" \
-	-X "github.com/cockroachdb/cockroach/pkg/build.utcTime=$(shell date -u '+%Y/%m/%d %H:%M:%S')" \
-	-X "github.com/cockroachdb/cockroach/pkg/build.rev=$(shell cat .buildinfo/rev)"
-
 # Special case: we install the cockroach binary to the user-specified GOBIN
 # (usually GOPATH/bin) rather than our repository-local GOBIN.
 install: GOBIN := $(ORIGINAL_GOBIN)
+
+.PHONY: build buildoss xgo-build install
+# The build.utcTime format must remain in sync with TimeFormat in pkg/build/info.go.
+build buildoss xgo-build install: override LINKFLAGS += \
+	-X "github.com/cockroachdb/cockroach/pkg/build.tag=$(shell cat .buildinfo/tag)" \
+	-X "github.com/cockroachdb/cockroach/pkg/build.utcTime=$(shell date -u '+%Y/%m/%d %H:%M:%S')" \
+	-X "github.com/cockroachdb/cockroach/pkg/build.rev=$(shell cat .buildinfo/rev)"
 # Note: We pass `-v` to `go build` and `go test -i` so that warnings
 # from the linker aren't suppressed. The usage of `-v` also shows when
 # dependencies are rebuilt which is useful when switching between
 # normal and race test builds.
-install: .buildinfo/tag .buildinfo/rev
-
-.PHONY: build buildoss xgo-build install
-build buildoss xgo-build install:
+build buildoss xgo-build install: .buildinfo/tag .buildinfo/rev
 	$(GO) $(BUILDMODE) -v $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' $(BUILDTARGET)
 
 .PHONY: start
