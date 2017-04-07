@@ -1,8 +1,8 @@
-hash: 1590a185352ece7ca4ed3180a804c4ecbcef3a42bf81a3c24d10e651c6b976a9
-updated: 2017-04-05T14:44:01.5496102-04:00
+hash: 620ed7b5a97e5e1c3f144f49863859862222390b5e00249714aab0b1d4c581c7
+updated: 2017-04-07T01:28:30.307271586-04:00
 imports:
 - name: cloud.google.com/go
-  version: ee12de41f35ce1867cec29587f14bd686362e4fa
+  version: f4dfefc998d92c53913c2ae5bc7cd3fba18e9e4b
   subpackages:
   - compute/metadata
   - internal
@@ -12,7 +12,7 @@ imports:
 - name: github.com/abourget/teamcity
   version: 6dde447fa54bc5b08b1a7bb1b85e39089cf27fb1
 - name: github.com/Azure/azure-sdk-for-go
-  version: 5b0aa1d05fbf518373abb366951e3587cc1b3154
+  version: 088007b3b08cc02b27f2eadfdcd870958460ce7e
   subpackages:
   - storage
 - name: github.com/Azure/go-ansiterm
@@ -20,7 +20,7 @@ imports:
   subpackages:
   - winterm
 - name: github.com/Azure/go-autorest
-  version: ec5f4903f77ed9927ac95b19ab8e44ada64c1356
+  version: a2fdd780c9a50455cecd249b00bdc3eb73a78e31
   subpackages:
   - autorest
   - autorest/azure
@@ -80,7 +80,7 @@ imports:
 - name: github.com/dgrijalva/jwt-go
   version: d2709f9f1f31ebcda9651b03077758c1f3a0018c
 - name: github.com/docker/distribution
-  version: 0700fa570d7bcc1b3e46ee127c4489fd25f4daa3
+  version: 0dd6ca97afaf3da69b1508d69c2bc23effb4e8b9
   subpackages:
   - digestset
   - reference
@@ -121,7 +121,7 @@ imports:
 - name: github.com/dustin/go-humanize
   version: 259d2a102b871d17f30e3cd9881a642961a1e486
 - name: github.com/elastic/gosigar
-  version: e13db0ac2b64d60bf73b98cff394b13b1c1b20d8
+  version: 6e68f248575b29cdac5c8853b6c76bad600ddffe
   subpackages:
   - sys/windows
 - name: github.com/elazarl/go-bindata-assetfs
@@ -394,7 +394,7 @@ imports:
   - errgroup
   - singleflight
 - name: golang.org/x/sys
-  version: 39e3dc274464e7d2f663aa606a830611bae5f1db
+  version: f3918c30c5c2cb527c0b071a27c35120a6c0719a
   subpackages:
   - unix
   - windows
@@ -409,7 +409,7 @@ imports:
   - unicode/norm
   - width
 - name: golang.org/x/tools
-  version: 5054e612afecd2460e8659117a716cb5b58d4b88
+  version: 24acc66eabead631b4e856255a9ad925549cee80
   subpackages:
   - cmd/goimports
   - cmd/goyacc

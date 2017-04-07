@@ -16,7 +16,6 @@ package log
 
 import (
 	"os"
-	"syscall"
 
 	"golang.org/x/sys/windows"
 )
@@ -36,20 +35,7 @@ func dupFD(fd uintptr) (uintptr, error) {
 	return uintptr(h), windows.DuplicateHandle(p, windows.Handle(fd), p, &h, 0, true, windows.DUPLICATE_SAME_ACCESS)
 }
 
-// TODO(tamird): use windows.SetStdHandle https://go-review.googlesource.com/c/39609/ is merged.
-func setStdHandle(nStdHandle int32, hHandle windows.Handle) error {
-	// Adapted from https://github.com/ncw/rclone/blob/v1.36/fs/redirect_stderr_windows.go.
-	r0, _, err := procSetStdHandle.Call(uintptr(nStdHandle), uintptr(hHandle))
-	if r0 == 0 {
-		if err != nil {
-			return err
-		}
-		return syscall.EINVAL
-	}
-	return nil
-}
-
 func redirectStderr(f *os.File) error {
 	os.Stderr = f
-	return setStdHandle(windows.STD_ERROR_HANDLE, windows.Handle(f.Fd()))
+	return windows.SetStdHandle(windows.STD_ERROR_HANDLE, windows.Handle(f.Fd()))
 }
