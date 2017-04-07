@@ -508,8 +508,7 @@ func TestStyle(t *testing.T) {
 			stream.Uniq(),
 			stream.GrepNot(`cockroach/pkg/cmd/`),
 			stream.Grep(` (github\.com/golang/protobuf/proto|github\.com/satori/go\.uuid|log|path|context|syscall)$`),
-			// TODO(tamird): remove util/log https://go-review.googlesource.com/c/39609/ is merged.
-			stream.GrepNot(`cockroach/pkg/(cli|util/log): syscall$`),
+			stream.GrepNot(`cockroach/pkg/cli: syscall$`),
 			stream.GrepNot(`cockroach/pkg/(base|security|util/(log|randutil|stop)): log$`),
 			stream.GrepNot(`cockroach/pkg/(server/serverpb|ts/tspb): github\.com/golang/protobuf/proto$`),
 			stream.GrepNot(`cockroach/pkg/util/caller: path$`),
