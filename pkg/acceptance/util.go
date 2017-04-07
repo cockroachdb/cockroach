@@ -218,7 +218,11 @@ func MakeFarmer(t testing.TB, prefix string, stopper *stop.Stopper) *terrafarm.F
 		}
 	}
 	if !filepath.IsAbs(logDir) {
-		logDir = filepath.Join(filepath.Clean(os.ExpandEnv("${PWD}")), logDir)
+		pwd, err := os.Getwd()
+		if err != nil {
+			t.Fatal(err)
+		}
+		logDir = filepath.Join(pwd, logDir)
 	}
 	stores := "--store=/mnt/data0"
 	for j := 1; j < *flagStores; j++ {
