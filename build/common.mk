@@ -151,7 +151,11 @@ $(YARN_INSTALLED_TARGET): $(UI_ROOT)/package.json $(UI_ROOT)/yarn.lock
 
 # Update the git hooks and install commands from dependencies whenever they
 # change.
-$(REPO_ROOT)/.bootstrap: $(GITHOOKS) $(REPO_ROOT)/glide.lock
+#
+# We store the marker file in the bin directory so that remapping bin, like we
+# do in the builder container to allow for different host and guest systems,
+# will trigger bootstrapping in the container as necessary.
+$(REPO_ROOT)/bin/.bootstrap: $(GITHOOKS) $(REPO_ROOT)/glide.lock
 ifneq ($(GIT_DIR),)
 	git submodule update --init
 endif
@@ -162,7 +166,7 @@ endif
 	touch $@
 
 # Force Make to run the .bootstrap recipe before building any other targets.
--include $(REPO_ROOT)/.bootstrap
+-include $(REPO_ROOT)/bin/.bootstrap
 
 # Make doesn't expose a list of the variables declared in a given file, so we
 # resort to sed magic. Roughly, this sed command prints VARIABLE in lines of the
