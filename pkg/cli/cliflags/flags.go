@@ -260,33 +260,15 @@ server to listen on an external address in insecure mode.`,
 	}
 
 	CertsDir = FlagInfo{
-		Name:        "debug-certs-dir",
-		EnvVar:      "COCKROACH_DEBUG_CERTS_DIR",
-		Description: `DEBUG only: Path to the directory containing SSL certificates and keys.`,
-	}
-
-	CACert = FlagInfo{
-		Name:        "ca-cert",
-		EnvVar:      "COCKROACH_CA_CERT",
-		Description: `Path to the CA certificate. Needed by clients and servers in secure mode.`,
+		Name:        "certs-dir",
+		EnvVar:      "COCKROACH_CERTS_DIR",
+		Description: `Path to the directory containing SSL certificates and keys.`,
 	}
 
 	CAKey = FlagInfo{
 		Name:        "ca-key",
 		EnvVar:      "COCKROACH_CA_KEY",
-		Description: `Path to the key protecting --ca-cert. Only needed when signing new certificates.`,
-	}
-
-	Cert = FlagInfo{
-		Name:        "cert",
-		EnvVar:      "COCKROACH_CERT",
-		Description: `Path to the client or server certificate. Needed in secure mode.`,
-	}
-
-	Key = FlagInfo{
-		Name:        "key",
-		EnvVar:      "COCKROACH_KEY",
-		Description: `Path to the key protecting --cert. Needed in secure mode.`,
+		Description: `Path to the CA key.`,
 	}
 
 	Store = FlagInfo{

@@ -18,6 +18,7 @@ package security
 
 import (
 	"crypto/tls"
+	"path/filepath"
 
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 
@@ -154,44 +155,103 @@ func (cm *CertificateManager) GetServerTLSConfig() (*tls.Config, error) {
 	return cfg, nil
 }
 
+// getClientCertsLocked returns the CA cert and client cert/key for the specified user,
+// or an error if not found.
+// cm.mu must be held.
+func (cm *CertificateManager) getClientCertsLocked(user string) (*CertInfo, *CertInfo, error) {
+	ci, ok := cm.clientCerts[user]
+	if !ok {
+		return nil, nil, errors.Errorf("no client certificate found for user %s", user)
+	}
+
+	if cm.caCert == nil {
+		return nil, nil, errors.New("no CA certificate found")
+	}
+
+	return cm.caCert, ci, nil
+}
+
+// getNodeClientCertsLocked returns the CA cert and client cert/key for the node user.
+// cm.mu must be held.
+func (cm *CertificateManager) getNodeClientCertsLocked() (*CertInfo, *CertInfo, error) {
+	if cm.nodeCert == nil {
+		return nil, nil, errors.New("no node certificate found")
+	}
+
+	if cm.caCert == nil {
+		return nil, nil, errors.New("no CA certificate found")
+	}
+
+	return cm.caCert, cm.nodeCert, nil
+}
+
 // GetClientTLSConfig returns the most up-to-date server tls.Config.
+// Returns the dual-purpose node certs if user == NodeUser.
 func (cm *CertificateManager) GetClientTLSConfig(user string) (*tls.Config, error) {
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
 
-	var ci *CertInfo
-	if user == NodeUser {
-		// Node user requested: use the combined server/client certificate.
-		if cm.clientConfig != nil {
-			return cm.clientConfig, nil
+	if user != NodeUser {
+		caCert, clientCert, err := cm.getClientCertsLocked(user)
+		if err != nil {
+			return nil, err
 		}
-		if cm.nodeCert == nil {
-			return nil, errors.New("no node certificate found")
+
+		cfg, err := newClientTLSConfig(
+			clientCert.FileContents,
+			clientCert.KeyFileContents,
+			caCert.FileContents)
+		if err != nil {
+			return nil, err
 		}
-		ci = cm.nodeCert
-	} else {
-		// Other clients.
-		clientCi, ok := cm.clientCerts[user]
-		if !ok {
-			return nil, errors.Errorf("no client certificate found for user %s", user)
-		}
-		ci = clientCi
+
+		return cfg, nil
 	}
 
-	if cm.caCert == nil {
-		return nil, errors.New("no CA certificate found")
+	// We're the node user:
+	// Return the cache config if we have one.
+	if cm.clientConfig != nil {
+		return cm.clientConfig, nil
 	}
 
-	cfg, err := newClientTLSConfig(
-		ci.FileContents,
-		ci.KeyFileContents,
-		cm.caCert.FileContents)
+	caCert, clientCert, err := cm.getNodeClientCertsLocked()
 	if err != nil {
 		return nil, err
 	}
 
-	if user == NodeUser {
-		cm.clientConfig = cfg
+	cfg, err := newClientTLSConfig(
+		clientCert.FileContents,
+		clientCert.KeyFileContents,
+		caCert.FileContents)
+	if err != nil {
+		return nil, err
 	}
+
+	// Cache the config.
+	cm.clientConfig = cfg
 	return cfg, nil
+}
+
+// GetClientCertPaths returns the paths to the client certs, specifically:
+// CA cert, Client certs, Client key.
+func (cm *CertificateManager) GetClientCertPaths(user string) (string, string, string, error) {
+	var caCert, clientCert *CertInfo
+	var err error
+
+	cm.mu.RLock()
+	defer cm.mu.RUnlock()
+
+	if user == NodeUser {
+		caCert, clientCert, err = cm.getNodeClientCertsLocked()
+	} else {
+		caCert, clientCert, err = cm.getClientCertsLocked(user)
+	}
+	if err != nil {
+		return "", "", "", err
+	}
+
+	return filepath.Join(cm.certsDir, caCert.Filename),
+		filepath.Join(cm.certsDir, clientCert.Filename),
+		filepath.Join(cm.certsDir, clientCert.KeyFilename),
+		nil
 }
