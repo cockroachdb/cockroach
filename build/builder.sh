@@ -129,6 +129,7 @@ vols="${vols} --volume=${gocache}/pkg/docker_amd64_msan:/usr/local/go/pkg/linux_
 vols="${vols} --volume=${gocache}/pkg/docker_amd64_musl:/usr/local/go/pkg/linux_amd64_musl"
 vols="${vols} --volume=${gocache}/pkg/docker_amd64_race:/usr/local/go/pkg/linux_amd64_race"
 vols="${vols} --volume=${gocache}/bin/docker_amd64:/go/bin"
+vols="${vols} --volume=${cockroach_toplevel}/bin.docker_amd64:/go/src/github.com/cockroachdb/cockroach/bin"
 vols="${vols} --volume=${HOME}/.yarn-cache:${container_home}/.yarn-cache"
 
 backtrace_dir="${cockroach_toplevel}/../../cockroachlabs/backtrace"
