@@ -68,7 +68,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     yarn
 
 # TODO(tamird): use the shallow clone when crosstool-ng 1.23 is released.
-# RUN git clone --depth 1 --branch crosstool-ng-1.23.0 https://github.com/crosstool-ng/crosstool-ng \
+# RUN git clone --depth 1 --branch crosstool-ng-1.23.0 https://github.com/crosstool-ng/crosstool-ng.git \
 RUN git clone https://github.com/crosstool-ng/crosstool-ng && git -C crosstool-ng checkout ee7662fa58a7f45ccd3e3520919ee70301ab7648 \
  && cd crosstool-ng \
  && ./bootstrap \
@@ -103,6 +103,12 @@ RUN mkdir llvm                    && curl -sfSL http://releases.llvm.org/3.9.1/l
 # Go assumes "gcc" and "g++", so we must teach it otherwise.
 ENV CC  clang
 ENV CXX clang++
+
+RUN git clone --depth 1 https://github.com/tpoechtrager/osxcross.git \
+ && (cd osxcross/tarballs && curl -sfSL https://s3.amazonaws.com/andrew-osx-sdks/MacOSX10.9.sdk.tar.xz -O) \
+ && OSX_VERSION_MIN=10.9 PORTABLE=1 UNATTENDED=1 osxcross/build.sh \
+ && mv osxcross/target /x-tools/x86_64-apple-darwin13 \
+ && rm -rf osxcross
 
 # BEGIN https://github.com/docker-library/golang/blob/master/1.8/alpine/Dockerfile
 

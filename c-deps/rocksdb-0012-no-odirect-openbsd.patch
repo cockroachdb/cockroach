@@ -1,0 +1,59 @@
+From 72fc1e9d07cf967555235fe9cca436a2f93d3fe4 Mon Sep 17 00:00:00 2001
+From: Nikhil Benesch <nikhil.benesch@gmail.com>
+Date: Fri, 7 Apr 2017 10:26:19 -0700
+Subject: [PATCH] avoid non-existent O_DIRECT on OpenBSD
+
+Summary:
+OpenBSD doesn't have `O_DIRECT`, so avoid it. (RocksDB compiles successfully on
+OpenBSD with this patch.)
+Closes https://github.com/facebook/rocksdb/pull/2106
+
+Differential Revision: D4847833
+
+Pulled By: siying
+
+fbshipit-source-id: 214b785
+---
+ env/env_posix.cc | 8 ++++----
+ 1 file changed, 4 insertions(+), 4 deletions(-)
+
+diff --git a/env/env_posix.cc b/env/env_posix.cc
+index 2d1e6cb..02f82e9 100644
+--- a/util/env_posix.cc
++++ b/util/env_posix.cc
+@@ -154,7 +154,7 @@ class PosixEnv : public Env {
+     FILE* file = nullptr;
+
+     if (options.use_direct_reads && !options.use_mmap_reads) {
+-#ifndef OS_MACOSX
++#if !defined(OS_MACOSX) && !defined(OS_OPENBSD)
+       flags |= O_DIRECT;
+ #endif
+     }
+@@ -198,7 +198,7 @@ class PosixEnv : public Env {
+     int fd;
+     int flags = O_RDONLY;
+     if (options.use_direct_reads && !options.use_mmap_reads) {
+-#ifndef OS_MACOSX
++#if !defined(OS_MACOSX) && !defined(OS_OPENBSD)
+       flags |= O_DIRECT;
+       TEST_SYNC_POINT_CALLBACK("NewRandomAccessFile:O_DIRECT", &flags);
+ #endif
+@@ -260,7 +260,7 @@ class PosixEnv : public Env {
+       // offset.
+       // More info here: https://linux.die.net/man/2/pwrite
+       flags |= O_WRONLY;
+-#ifndef OS_MACOSX
++#if !defined(OS_MACOSX) && !defined(OS_OPENBSD)
+       flags |= O_DIRECT;
+ #endif
+       TEST_SYNC_POINT_CALLBACK("NewWritableFile:O_DIRECT", &flags);
+@@ -324,7 +324,7 @@ class PosixEnv : public Env {
+     // Direct IO mode with O_DIRECT flag or F_NOCAHCE (MAC OSX)
+     if (options.use_direct_writes && !options.use_mmap_writes) {
+       flags |= O_WRONLY;
+-#ifndef OS_MACOSX
++#if !defined(OS_MACOSX) && !defined(OS_OPENBSD)
+       flags |= O_DIRECT;
+ #endif
+       TEST_SYNC_POINT_CALLBACK("NewWritableFile:O_DIRECT", &flags);

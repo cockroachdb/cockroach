@@ -42,13 +42,13 @@ SUFFIX       :=
 
 # Possible values:
 # <empty>: use the default toolchain
-# release: target Linux 2.6.32, dynamically link GLIBC 2.12.2
-# musl:  target Linux 2.6.32, statically link musl 1.1.16
+# release-linux-gnu:  target Linux 2.6.32, dynamically link GLIBC 2.12.2
+# release-linux-musl: target Linux 2.6.32, statically link musl 1.1.16
+# release-darwin:     target OS X 10.9
+# release-windows:    target Windows 8, statically link all non-Windows libraries
 #
-# Both release and musl only work in the cockroachdb/builder docker image,
-# as they depend on cross-compilation toolchains available there.
-#
-# The release variant targets RHEL/CentOS 6.
+# All non-empty variants only work in the cockroachdb/builder docker image, as
+# they depend on cross-compilation toolchains available there.
 TYPE :=
 
 # We intentionally use LINKFLAGS instead of the more traditional LDFLAGS
@@ -58,29 +58,41 @@ LINKFLAGS ?=
 
 ifeq ($(TYPE),)
 override LINKFLAGS += -X github.com/cockroachdb/cockroach/pkg/build.typ=development
-else ifeq ($(TYPE),release)
+# Temporary shim to prevent build pollution in CI, which may still have agents
+# with caches populated with the release toolchain.
+#
+# TODO(tamird): replace with `else ifeq ($(TYPE),release-linux-gnu)` when
+# sufficient time has passed.
+else ifeq ($(TYPE),$(filter $(TYPE),release release-linux-gnu))
 # We use a custom toolchain to target old Linux and glibc versions. However,
 # this toolchain's libstdc++ version is quite recent and must be statically
 # linked to avoid depending on the target's available libstdc++.
-export CC  = /x-tools/x86_64-unknown-linux-gnu/bin/x86_64-unknown-linux-gnu-gcc
-export CXX = /x-tools/x86_64-unknown-linux-gnu/bin/x86_64-unknown-linux-gnu-g++
+XHOST_TRIPLE := x86_64-unknown-linux-gnu
 override LINKFLAGS += -s -w -extldflags "-static-libgcc -static-libstdc++" -X github.com/cockroachdb/cockroach/pkg/build.typ=release
 override GOFLAGS += -installsuffix release
-else ifeq ($(TYPE),musl)
-# This tag disables jemalloc profiling. See https://github.com/jemalloc/jemalloc/issues/585.
-override TAGS += musl
-export CC  = /x-tools/x86_64-unknown-linux-musl/bin/x86_64-unknown-linux-musl-gcc
-export CXX = /x-tools/x86_64-unknown-linux-musl/bin/x86_64-unknown-linux-musl-g++
+else ifeq ($(TYPE),release-linux-musl)
+XHOST_TRIPLE := x86_64-unknown-linux-musl
 override LINKFLAGS += -s -w -extldflags "-static" -X github.com/cockroachdb/cockroach/pkg/build.typ=release-musl
-override GOFLAGS += -installsuffix musl
+override GOFLAGS += -installsuffix release-musl
+else ifeq ($(TYPE),release-darwin)
+XGOOS := darwin
+export CGO_ENABLED := 1
+XHOST_TRIPLE := x86_64-apple-darwin13
+SUFFIX := $(SUFFIX)-darwin-10.9-amd64
+override LINKFLAGS += -s -w -X github.com/cockroachdb/cockroach/pkg/build.typ=release
+else ifeq ($(TYPE),release-windows)
+XGOOS := windows
+export CGO_ENABLED := 1
+XHOST_TRIPLE := x86_64-w64-mingw32
+SUFFIX := $(SUFFIX)-windows-6.2-amd64
+override LINKFLAGS += -s -w -extldflags "-static" -X github.com/cockroachdb/cockroach/pkg/build.typ=release
 else
 $(error unknown build type $(TYPE))
 endif
 
-export MACOSX_DEPLOYMENT_TARGET=10.9
-
 REPO_ROOT := .
 include $(REPO_ROOT)/build/common.mk
+override TAGS += make $(TARGET_TRIPLE_TAG)
 
 .DEFAULT_GOAL := all
 .PHONY: all
@@ -94,22 +106,20 @@ buildoss: BUILDTARGET = ./pkg/cmd/cockroach-oss
 build buildoss: BUILDMODE = build -i -o cockroach$(SUFFIX)
 
 # The build.utcTime format must remain in sync with TimeFormat in pkg/build/info.go.
-build buildoss xgo-build install: override LINKFLAGS += \
+build buildoss install: override LINKFLAGS += \
 	-X "github.com/cockroachdb/cockroach/pkg/build.tag=$(shell cat .buildinfo/tag)" \
 	-X "github.com/cockroachdb/cockroach/pkg/build.utcTime=$(shell date -u '+%Y/%m/%d %H:%M:%S')" \
 	-X "github.com/cockroachdb/cockroach/pkg/build.rev=$(shell cat .buildinfo/rev)"
+
+XGO := $(if $(XGOOS),GOOS=$(XGOOS)) $(if $(XGOARCH),GOARCH=$(XGOARCH)) $(if $(XHOST_TRIPLE),CC=$(CC_PATH) CXX=$(CXX_PATH)) $(GO)
 
 # Note: We pass `-v` to `go build` and `go test -i` so that warnings
 # from the linker aren't suppressed. The usage of `-v` also shows when
 # dependencies are rebuilt which is useful when switching between
 # normal and race test builds.
 .PHONY: build buildoss install
-build buildoss install: $(BOOTSTRAP_TARGET) .buildinfo/tag .buildinfo/rev
-	$(GO) $(BUILDMODE) -v $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' $(BUILDTARGET)
-
-.PHONY: xgo-build
-xgo-build:
-	$(XGO) -v $(XGOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' $(BUILDTARGET)
+build buildoss install: $(C_LIBS) $(CGO_FLAGS_FILES) $(BOOTSTRAP_TARGET) .buildinfo/tag .buildinfo/rev
+	 $(XGO) $(BUILDMODE) -v $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' $(BUILDTARGET)
 
 .PHONY: start
 start: build
@@ -120,13 +130,13 @@ start:
 # PKG is expanded and all packages are built and moved to their directory.
 .PHONY: testbuild
 testbuild: gotestdashi
-	$(GO) list -tags '$(TAGS)' -f \
-	'$(GO) test -v $(GOFLAGS) -tags '\''$(TAGS)'\'' -ldflags '\''$(LINKFLAGS)'\'' -i -c {{.ImportPath}} -o {{.Dir}}/{{.Name}}.test$(SUFFIX)' $(PKG) | \
+	$(XGO) list -tags '$(TAGS)' -f \
+	'$(XGO) test -v $(GOFLAGS) -tags '\''$(TAGS)'\'' -ldflags '\''$(LINKFLAGS)'\'' -i -c {{.ImportPath}} -o {{.Dir}}/{{.Name}}.test$(SUFFIX)' $(PKG) | \
 	$(SHELL)
 
 .PHONY: gotestdashi
-gotestdashi: $(BOOTSTRAP_TARGET)
-	$(GO) test -v $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -i $(PKG)
+gotestdashi: $(C_LIBS) $(CGO_FLAGS_FILES) $(BOOTSTRAP_TARGET)
+	$(XGO) test -v $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -i $(PKG)
 
 testshort: override TESTFLAGS += -short
 
@@ -140,7 +150,7 @@ testrace: TESTTIMEOUT := $(RACETIMEOUT)
 FIND_RELEVANT := find pkg -name node_modules -prune -o
 
 bin/sql.test: main.go $(shell $(FIND_RELEVANT) -name '*.go')
-	$(GO) test $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -c -o bin/sql.test ./pkg/sql
+	$(XGO) test $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -c -o bin/sql.test ./pkg/sql
 
 bench: BENCHES := .
 bench: TESTS := -
@@ -148,7 +158,7 @@ bench: TESTTIMEOUT := $(BENCHTIMEOUT)
 
 .PHONY: test testshort testrace testlogic bench
 test testshort testrace bench: gotestdashi
-	$(GO) test $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -run "$(TESTS)" $(if $(BENCHES),-bench "$(BENCHES)") -timeout $(TESTTIMEOUT) $(PKG) $(TESTFLAGS)
+	$(XGO) test $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -run "$(TESTS)" $(if $(BENCHES),-bench "$(BENCHES)") -timeout $(TESTTIMEOUT) $(PKG) $(TESTFLAGS)
 
 # Run make testlogic to run all of the logic tests. Specify test files to run
 # with make testlogic FILES="foo bar".
@@ -163,7 +173,7 @@ testraceslow: TESTTIMEOUT := $(RACETIMEOUT)
 .PHONY: testslow testraceslow
 testslow testraceslow: override TESTFLAGS += -v
 testslow testraceslow: gotestdashi
-	$(GO) test $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -run "$(TESTS)" $(if $(BENCHES),-bench "$(BENCHES)") -timeout $(TESTTIMEOUT) $(PKG) $(TESTFLAGS) | grep -F ': Test' | sed -E 's/(--- PASS: |\(|\))//g' | awk '{ print $$2, $$1 }' | sort -rn | head -n 10
+	$(XGO) test $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -run "$(TESTS)" $(if $(BENCHES),-bench "$(BENCHES)") -timeout $(TESTTIMEOUT) $(PKG) $(TESTFLAGS) | grep -F ': Test' | sed -E 's/(--- PASS: |\(|\))//g' | awk '{ print $$2, $$1 }' | sort -rn | head -n 10
 
 stressrace: override GOFLAGS += -race
 stressrace: TESTTIMEOUT := $(RACETIMEOUT)
@@ -179,7 +189,7 @@ stressrace: TESTTIMEOUT := $(RACETIMEOUT)
 # checks for the presence of a test binary before running `stress` on it.
 .PHONY: stress stressrace
 stress stressrace: $(BOOTSTRAP_TARGET)
-	$(GO) list -tags '$(TAGS)' -f '$(GO) test -v $(GOFLAGS) -tags '\''$(TAGS)'\'' -ldflags '\''$(LINKFLAGS)'\'' -i -c {{.ImportPath}} -o '\''{{.Dir}}'\''/stress.test && (cd '\''{{.Dir}}'\'' && if [ -f stress.test ]; then COCKROACH_STRESS=true stress $(STRESSFLAGS) ./stress.test -test.run '\''$(TESTS)'\'' $(if $(BENCHES),-test.bench '\''$(BENCHES)'\'') -test.timeout $(TESTTIMEOUT) $(TESTFLAGS); fi)' $(PKG) | $(SHELL)
+	$(GO) list -tags '$(TAGS)' -f '$(XGO) test -v $(GOFLAGS) -tags '\''$(TAGS)'\'' -ldflags '\''$(LINKFLAGS)'\'' -i -c {{.ImportPath}} -o '\''{{.Dir}}'\''/stress.test && (cd '\''{{.Dir}}'\'' && if [ -f stress.test ]; then COCKROACH_STRESS=true stress $(STRESSFLAGS) ./stress.test -test.run '\''$(TESTS)'\'' $(if $(BENCHES),-test.bench '\''$(BENCHES)'\'') -test.timeout $(TESTTIMEOUT) $(TESTFLAGS); fi)' $(PKG) | $(SHELL)
 
 .PHONY: upload-coverage
 upload-coverage: $(BOOTSTRAP_TARGET)
@@ -218,17 +228,17 @@ generate: gotestdashi
 .PHONY: check
 check: override TAGS += check
 check: gotestdashi
-	$(GO) test ./build -v $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -run 'TestStyle/$(TESTS)'
+	$(XGO) test ./build -v $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -run 'TestStyle/$(TESTS)'
 
 .PHONY: checkshort
 checkshort: override TAGS += check
 checkshort: gotestdashi
-	$(GO) test ./build -v $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -short -run 'TestStyle/$(TESTS)'
+	$(XGO) test ./build -v $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -short -run 'TestStyle/$(TESTS)'
 
 .PHONY: clean
-clean:
+clean: clean-c-deps
 	$(GO) clean $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -i github.com/cockroachdb/...
-	$(FIND_RELEVANT) -name '*.test*' -type f -exec rm -f {} \;
+	$(FIND_RELEVANT) -type f \( -name 'zcgo_flags*.go' -o -name '*.test*' \) -exec rm {} +
 	rm -f $(BOOTSTRAP_TARGET) $(ARCHIVE)
 
 .PHONY: protobuf

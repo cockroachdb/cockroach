@@ -1,5 +1,5 @@
-hash: e106243b597946210b4024bce458ba886b36363992d53b51bc0b3aa4bc599258
-updated: 2017-04-18T13:23:36.893924457-04:00
+hash: ed1063398b86b5d46f97337f7e816645f275282f96f13b2ceccc91a06c1a3e35
+updated: 2017-04-18T17:02:26.996981026-04:00
 imports:
 - name: cloud.google.com/go
   version: ed63fb27efcf32e25fe7837e4662457d3da4c4f2
@@ -26,6 +26,7 @@ imports:
   - autorest
   - autorest/azure
   - autorest/date
+  - autorest/to
 - name: github.com/backtrace-labs/go-bcd
   version: 4ad9137a248599da4b00da0be6e71a75c9e1b8d9
 - name: github.com/biogo/store
@@ -42,16 +43,6 @@ imports:
   - cmd/misspell
 - name: github.com/cockroachdb/apd
   version: 0ccdf9dd91d85d9f95d131fd2420c78c56f76c1f
-- name: github.com/cockroachdb/c-jemalloc
-  version: 5fc986390622939c1f0e6df236040deca8c821b0
-- name: github.com/cockroachdb/c-protobuf
-  version: 323984796a7b4794ee62a00e12456743a5b66765
-  subpackages:
-  - cmd/protoc
-- name: github.com/cockroachdb/c-rocksdb
-  version: 7def73c53db126b0e62552e97629784d5317e932
-- name: github.com/cockroachdb/c-snappy
-  version: c0cd3c9ce92f195001595e1fbbe66f045daad34f
 - name: github.com/cockroachdb/cmux
   version: 30d10be492927e2dcae0089c374c455d42414fcb
 - name: github.com/cockroachdb/cockroach-go
@@ -190,7 +181,7 @@ imports:
   subpackages:
   - query
 - name: github.com/google/pprof
-  version: e48932ed15d832ff9444525c5888be176e8731a1
+  version: 813536d15e1777e55ba62a8644ccb355ab5db409
   subpackages:
   - driver
   - internal/binutils
@@ -436,7 +427,7 @@ imports:
   - imports
   - refactor/importgraph
 - name: google.golang.org/api
-  version: 48e49d1645e228d1c50c3d54fb476b2224477303
+  version: 0b0f5a5147930d092abd132cf09fafa23e8c3942
   subpackages:
   - gensupport
   - googleapi

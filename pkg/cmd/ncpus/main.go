@@ -11,19 +11,16 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
+//
+// Author: Nikhil Benesch (nikhil.benesch@gmail.com)
 
-// +build !stdmalloc,!windows
-
-package cli
+package main
 
 import (
-	// This is explicit because this Go library does not export any Go symbols.
-	_ "github.com/cockroachdb/c-jemalloc"
+	"fmt"
+	"runtime"
 )
 
-// #cgo darwin CPPFLAGS: -I../../vendor/github.com/cockroachdb/c-jemalloc/darwin_includes/internal/include
-// #cgo freebsd CPPFLAGS: -I../../vendor/github.com/cockroachdb/c-jemalloc/freebsd_includes/internal/include
-// #cgo linux CPPFLAGS: -I../../vendor/github.com/cockroachdb/c-jemalloc/linux_includes/internal/include
-// #cgo darwin LDFLAGS: -Wl,-undefined -Wl,dynamic_lookup
-// #cgo !darwin LDFLAGS: -Wl,-unresolved-symbols=ignore-all
-import "C"
+func main() {
+	fmt.Println(runtime.NumCPU())
+}

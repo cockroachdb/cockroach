@@ -1,0 +1,122 @@
+From 18ee7b0df4e34ab82cec838a6bd949894b6a96eb Mon Sep 17 00:00:00 2001
+From: Arun Sharma <asharma@fb.com>
+Date: Tue, 24 Jan 2017 10:48:55 -0800
+Subject: [PATCH 2/8] Version librocksdb.so
+
+Summary:
+After make install, I see a directory hierarchy that looks like
+
+```
+./usr
+./usr/include
+./usr/include/rocksdb
+./usr/include/rocksdb/filter_policy.h
+[..]
+./usr/include/rocksdb/iterator.h
+./usr/include/rocksdb/utilities
+./usr/include/rocksdb/utilities/ldb_cmd_execute_result.h
+./usr/include/rocksdb/utilities/lua
+./usr/include/rocksdb/utilities/lua/rocks_lua_custom_library.h
+./usr/include/rocksdb/utilities/lua/rocks_lua_util.h
+./usr/include/rocksdb/utilities/lua/rocks_lua_compaction_filter.h
+./usr/include/rocksdb/utilities/backupable_db.h
+[..]
+./usr/include/rocksdb/utilities/env_registry.h
+[..]
+./usr/include/rocksdb/env.h
+./usr/lib64
+./usr/lib64/librocksdb.so.5
+./usr/lib64/librocksdb.so.5.0.0
+./usr/lib64/librocksdb.so
+./usr/lib64/librocksdb.a
+```
+Closes https://github.com/facebook/rocksdb/pull/1798
+
+Differential Revision: D4456536
+
+Pulled By: yiwu-arbug
+
+fbshipit-source-id: 5494e91
+---
+ CMakeLists.txt         | 27 +++++++++++++++++++++++++++
+ build_tools/version.sh | 10 +++++++++-
+ 2 files changed, 36 insertions(+), 1 deletion(-)
+
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index fbf31059..31e0080f 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -90,6 +90,21 @@ endif()
+ 
+ string(REGEX REPLACE "[^0-9a-f]+" "" GIT_SHA "${GIT_SHA}")
+ 
++if (NOT WIN32)
++  execute_process(COMMAND
++      "./build_tools/version.sh" "full"
++      WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
++      OUTPUT_VARIABLE ROCKSDB_VERSION
++  )
++  string(STRIP "${ROCKSDB_VERSION}" ROCKSDB_VERSION)
++  execute_process(COMMAND
++      "./build_tools/version.sh" "major"
++      WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
++      OUTPUT_VARIABLE ROCKSDB_VERSION_MAJOR
++  )
++  string(STRIP "${ROCKSDB_VERSION_MAJOR}" ROCKSDB_VERSION_MAJOR)
++endif()
++
+ set(BUILD_VERSION_CC ${CMAKE_BINARY_DIR}/build_version.cc)
+ configure_file(util/build_version.cc.in ${BUILD_VERSION_CC} @ONLY)
+ add_library(build_version OBJECT ${BUILD_VERSION_CC})
+@@ -465,6 +480,8 @@ else()
+     ${THIRDPARTY_LIBS} ${SYSTEM_LIBS})
+   set_target_properties(${ROCKSDB_SHARED_LIB} PROPERTIES
+                         LINKER_LANGUAGE CXX
++                        VERSION ${ROCKSDB_VERSION}
++                        SOVERSION ${ROCKSDB_VERSION_MAJOR}
+                         CXX_STANDARD 11
+                         OUTPUT_NAME "rocksdb")
+ endif()
+@@ -702,3 +719,13 @@ foreach(sourcefile ${C_TEST_EXES})
+     add_dependencies(check ${exename}${ARTIFACT_SUFFIX})
+ endforeach(sourcefile ${C_TEST_EXES})
+ add_subdirectory(tools)
++
++# Installation and packaging for Linux
++if (NOT WIN32)
++install(TARGETS ${ROCKSDB_STATIC_LIB} COMPONENT devel ARCHIVE DESTINATION lib64)
++install(TARGETS ${ROCKSDB_SHARED_LIB} COMPONENT runtime DESTINATION lib64)
++install(DIRECTORY "${PROJECT_SOURCE_DIR}/include/rocksdb/"
++        COMPONENT devel
++        DESTINATION include/rocksdb)
++set(CMAKE_INSTALL_PREFIX /usr)
++endif()
+diff --git a/build_tools/version.sh b/build_tools/version.sh
+index c5a8595f..f3ca98cf 100755
+--- a/build_tools/version.sh
++++ b/build_tools/version.sh
+@@ -1,8 +1,9 @@
+ #!/bin/sh
+ if [ "$#" = "0" ]; then
+-  echo "Usage: $0 major|minor|patch"
++  echo "Usage: $0 major|minor|patch|full"
+   exit 1
+ fi
++
+ if [ "$1" = "major" ]; then
+   cat include/rocksdb/version.h  | grep MAJOR | head -n1 | awk '{print $3}'
+ fi
+@@ -12,3 +13,10 @@ fi
+ if [ "$1" = "patch" ]; then
+   cat include/rocksdb/version.h  | grep PATCH | head -n1 | awk '{print $3}'
+ fi
++if [ "$1" = "full" ]; then
++  awk '/#define ROCKSDB/ { env[$2] = $3 }
++       END { printf "%s.%s.%s\n", env["ROCKSDB_MAJOR"],
++                                  env["ROCKSDB_MINOR"],
++                                  env["ROCKSDB_PATCH"] }'  \
++      include/rocksdb/version.h
++fi
+-- 
+2.12.1
+
