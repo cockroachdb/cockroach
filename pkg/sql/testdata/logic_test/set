@@ -196,3 +196,51 @@ server_version
 # Test read-only variables
 statement error variable "max_index_keys" cannot be changed
 SET max_index_keys = 32
+
+query TT
+SELECT name, value FROM system.settings WHERE name = 'foo'
+----
+
+user testuser
+statement error only root is allowed to SET CLUSTER SETTING
+SET CLUSTER SETTING foo = 'bar'
+
+user root
+
+query TT
+SELECT name, value FROM system.settings WHERE name = 'foo'
+----
+
+statement ok
+SET CLUSTER SETTING foo = 'bar'
+
+query TT
+SELECT name, value FROM system.settings WHERE name = 'foo'
+----
+foo   bar
+
+statement ok
+SET CLUSTER SETTING foo = 'baz'
+
+query TT
+SELECT name, value FROM system.settings WHERE name = 'foo'
+----
+foo   baz
+
+user testuser
+statement error only root is allowed to SET CLUSTER SETTING
+SET CLUSTER SETTING foo = 'bar'
+
+user root
+
+query TT
+SELECT name, value FROM system.settings WHERE name = 'foo'
+----
+foo   baz
+
+statement ok
+SET CLUSTER SETTING foo TO DEFAULT
+
+query TT
+SELECT name, value FROM system.settings WHERE name = 'foo'
+----
