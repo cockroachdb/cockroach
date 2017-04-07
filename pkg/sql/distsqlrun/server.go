@@ -32,6 +32,35 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
+// Version identifies the distsqlrun protocol version.
+//
+// This version is separate from the main CockroachDB version numbering; it is
+// only changed when the distsqlrun API changes.
+//
+// The planner populates the version in SetupFlowRequest.
+// A server only accepts requests with versions in the range MinAcceptedVersion
+// to Version.
+//
+// Is is possible used to provide a "window" of compatibility when new features are
+// added. Example:
+//  - we start with Version=1; distsqlrun servers with version 1 only accept
+//    requests with version 1.
+//  - a new distsqlrun feature is added; Version is bumped to 2. The
+//    planner does not yet use this feature by default; it still issues
+//    requests with version 1.
+//  - MinAcceptedVersion is still 1, i.e. servers with version 2
+//    accept both versions 1 and 2.
+//  - after an upgrade cycle, we can enable the feature in the planner,
+//    requiring version 2.
+//  - at some later point, we can choose to deprecate version 1 and have
+//    servers only accept versions >= 2 (by setting
+//    MinAcceptedVersion to 2).
+const Version = 1
+
+// MinAcceptedVersion is the oldest version that the server is
+// compatible with; see above.
+const MinAcceptedVersion = 1
+
 // ServerConfig encompasses the configuration required to create a
 // DistSQLServer.
 type ServerConfig struct {
@@ -76,6 +105,16 @@ func (ds *ServerImpl) Start() {
 func (ds *ServerImpl) setupFlow(
 	ctx context.Context, req *SetupFlowRequest, syncFlowConsumer RowReceiver,
 ) (context.Context, *Flow, error) {
+	if req.Version < MinAcceptedVersion ||
+		req.Version > Version {
+		err := errors.Errorf(
+			"version mismatch in flow request: %d; this node accepts %d through %d",
+			req.Version, MinAcceptedVersion, Version,
+		)
+		log.Warning(ctx, err)
+		return ctx, nil, err
+	}
+
 	const opName = "flow"
 	var sp opentracing.Span
 	if req.TraceContext == nil {
