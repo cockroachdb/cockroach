@@ -326,3 +326,13 @@ select name, value from system.settings
 ----
 somesetting   somevalue
 
+user testuser
+
+statement error user testuser does not have SELECT privilege on table settings
+select * from system.settings
+----
+
+statement error user testuser does not have INSERT privilege on table settings
+UPSERT INTO system.settings (name, value) VALUES ('somesetting', 'somevalueother')
+
+user root
