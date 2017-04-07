@@ -77,7 +77,7 @@ echo "${username}:x:${uid_gid}::${container_home}:/bin/bash" > "${passwd_file}"
 # created as the invoking user. Docker would otherwise create them when
 # mounting, but that would deny write access to the invoking user since docker
 # runs as root.
-mkdir -p "${HOME}"/.yarn-cache "${gocache}"/pkg/docker_amd64{,_musl,_release}{,_msan,_race} "${gocache}"/bin/docker_amd64 "${cockroach_toplevel}"/bin.docker_amd64
+mkdir -p "${HOME}"/.yarn-cache "${gocache}"/native/x86_64-pc-docker-gnu "${gocache}"/pkg/{darwin_amd64,windows_amd64,docker_amd64{,_musl,_release}{,_msan,_race}} "${gocache}"/bin/docker_amd64 "${cockroach_toplevel}"/bin.docker_amd64
 
 # Since we're mounting both /root and its subdirectories in our container,
 # Docker will create the subdirectories on the host side under the directory
@@ -121,7 +121,12 @@ if [ "${BUILDER_HIDE_GOPATH_SRC:-}" != "1" ]; then
 fi
 vols="${vols} --volume=${cockroach_toplevel}:/go/src/github.com/cockroachdb/cockroach"
 vols="${vols} --volume=${cockroach_toplevel}/bin.docker_amd64:/go/src/github.com/cockroachdb/cockroach/bin"
+vols="${vols} --volume=${gocache}/native:/go/native"
+vols="${vols} --volume=${gocache}/native/x86_64-pc-docker-gnu:/go/native/x86_64-pc-linux-gnu"
+vols="${vols} --volume=${gocache}/pkg:/go/pkg"
 vols="${vols} --volume=${gocache}/pkg/docker_amd64:/go/pkg/linux_amd64"
+vols="${vols} --volume=${gocache}/pkg/darwin_amd64:/usr/local/go/pkg/darwin_amd64"
+vols="${vols} --volume=${gocache}/pkg/windows_amd64:/usr/local/go/pkg/windows_amd64"
 # NB: it would be slightly more natural to move "amd64" inside the loop body,
 # but the shell discards empty strings in this expansion, which would elide
 # the unsuffixed case.
