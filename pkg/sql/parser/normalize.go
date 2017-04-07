@@ -263,7 +263,7 @@ func (expr *ComparisonExpr) normalize(v *normalizeVisitor) TypedExpr {
 
 				invertedOp, err := invertComparisonOp(expr.Operator)
 				if err != nil {
-					v.err = nil
+					v.err = err
 					return expr
 				}
 
@@ -325,7 +325,7 @@ func (expr *ComparisonExpr) normalize(v *normalizeVisitor) TypedExpr {
 
 							invertedOp, err := invertComparisonOp(expr.Operator)
 							if err != nil {
-								v.err = nil
+								v.err = err
 								return expr
 							}
 							expr = NewTypedComparisonExpr(invertedOp, expr.TypedLeft(), expr.TypedRight())
