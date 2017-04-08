@@ -322,6 +322,12 @@ func (*Savepoint) StatementType() StatementType { return Ack }
 func (*Savepoint) StatementTag() string { return "SAVEPOINT" }
 
 // StatementType implements the Statement interface.
+func (*Scatter) StatementType() StatementType { return Rows }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*Scatter) StatementTag() string { return "SCATTER" }
+
+// StatementType implements the Statement interface.
 func (*Select) StatementType() StatementType { return Rows }
 
 // StatementTag returns a short string identifying the type of statement.
@@ -552,6 +558,7 @@ func (n *Revoke) String() string                   { return AsString(n) }
 func (n *RollbackToSavepoint) String() string      { return AsString(n) }
 func (n *RollbackTransaction) String() string      { return AsString(n) }
 func (n *Savepoint) String() string                { return AsString(n) }
+func (n *Scatter) String() string                  { return AsString(n) }
 func (n *Select) String() string                   { return AsString(n) }
 func (n *SelectClause) String() string             { return AsString(n) }
 func (n *Set) String() string                      { return AsString(n) }
