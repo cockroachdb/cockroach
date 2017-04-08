@@ -211,6 +211,7 @@ var keywords = map[string]int{
 	"ROW":               ROW,
 	"ROWS":              ROWS,
 	"SAVEPOINT":         SAVEPOINT,
+	"SCATTER":           SCATTER,
 	"SEARCH":            SEARCH,
 	"SECOND":            SECOND,
 	"SELECT":            SELECT,

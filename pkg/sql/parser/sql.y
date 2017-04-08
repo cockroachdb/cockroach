@@ -390,6 +390,7 @@ func (u *sqlSymUnion) kvOptions() []KVOption {
 %type <Statement> show_stmt
 %type <Statement> split_stmt
 %type <Statement> testing_relocate_stmt
+%type <Statement> scatter_stmt
 %type <Statement> transaction_stmt
 %type <Statement> truncate_stmt
 %type <Statement> update_stmt
@@ -683,10 +684,10 @@ func (u *sqlSymUnion) kvOptions() []KVOption {
 %token <str>   RELEASE RESET RESTORE RESTRICT RETURNING REVOKE RIGHT ROLLBACK ROLLUP
 %token <str>   ROW ROWS RSHIFT
 
-%token <str>   STATUS SAVEPOINT SEARCH SECOND SELECT
+%token <str>   SAVEPOINT SCATTER SEARCH SECOND SELECT
 %token <str>   SERIAL SERIALIZABLE SESSION SESSION_USER SET SHOW
 %token <str>   SIMILAR SIMPLE SMALLINT SMALLSERIAL SNAPSHOT SOME SPLIT SQL
-%token <str>   START STDIN STRICT STRING STORING SUBSTRING
+%token <str>   START STATUS STDIN STRICT STRING STORING SUBSTRING
 %token <str>   SYMMETRIC SYSTEM
 
 %token <str>   TABLE TABLES TEMPLATE TESTING_RANGES TESTING_RELOCATE TEXT THEN
@@ -826,6 +827,7 @@ stmt:
 | show_stmt
 | split_stmt
 | testing_relocate_stmt
+| scatter_stmt
 | transaction_stmt
 | release_stmt
 | reset_stmt
@@ -1194,6 +1196,7 @@ explainable_stmt:
 | help_stmt
 | split_stmt
 | testing_relocate_stmt
+| scatter_stmt
 | explain_stmt { /* SKIP DOC */ }
 
 explain_option_list:
@@ -1722,6 +1725,28 @@ testing_relocate_stmt:
   {
     /* SKIP DOC */
     $$.val = &Relocate{Index: $3.tableWithIdx(), Rows: $5.slct()}
+  }
+
+scatter_stmt:
+  ALTER TABLE qualified_name SCATTER
+  {
+    /* SKIP DOC */
+    $$.val = &Scatter{Table: $3.newNormalizableTableName()}
+  }
+| ALTER TABLE qualified_name SCATTER FROM '(' expr_list ')' TO '(' expr_list ')'
+  {
+    /* SKIP DOC */
+    $$.val = &Scatter{Table: $3.newNormalizableTableName(), From: $7.exprs(), To: $11.exprs()}
+  }
+| ALTER INDEX table_name_with_index SCATTER
+  {
+    /* SKIP DOC */
+    $$.val = &Scatter{Index: $3.tableWithIdx()}
+  }
+| ALTER INDEX table_name_with_index SCATTER FROM '(' expr_list ')' TO '(' expr_list ')'
+  {
+    /* SKIP DOC */
+    $$.val = &Scatter{Index: $3.tableWithIdx(), From: $7.exprs(), To: $11.exprs()}
   }
 
 // CREATE TABLE relname
@@ -5226,6 +5251,7 @@ unreserved_keyword:
 | ROWS
 | STATUS
 | SAVEPOINT
+| SCATTER
 | SEARCH
 | SECOND
 | SERIALIZABLE
