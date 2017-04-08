@@ -17,6 +17,8 @@
 package sql
 
 import (
+	"math/rand"
+
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
@@ -156,23 +158,15 @@ func (*splitNode) Columns() ResultColumns {
 	}
 }
 
-func (*splitNode) Ordering() orderingInfo  { return orderingInfo{} }
-func (*splitNode) MarkDebug(_ explainMode) {}
+func (*splitNode) Ordering() orderingInfo   { return orderingInfo{} }
+func (*splitNode) MarkDebug(_ explainMode)  { panic("unimplemented") }
+func (*splitNode) DebugValues() debugValues { panic("unimplemented") }
 func (*splitNode) Spans(context.Context) (_, _ roachpb.Spans, _ error) {
 	panic("unimplemented")
 }
 
-func (n *splitNode) DebugValues() debugValues {
-	return debugValues{
-		rowIdx: 0,
-		key:    "",
-		value:  parser.DNull.String(),
-		output: debugValueRow,
-	}
-}
-
 // Relocate moves ranges to specific stores
-// (`ALTER TABLE/INDEX ... tESTING_RELOCATE ...` statement)
+// (`ALTER TABLE/INDEX ... TESTING_RELOCATE ...` statement)
 // Privileges: INSERT on table.
 func (p *planner) Relocate(ctx context.Context, n *parser.Relocate) (planNode, error) {
 	tableDesc, index, err := p.getTableAndIndex(ctx, n.Table, n.Index, privilege.INSERT)
@@ -320,8 +314,27 @@ func (n *relocateNode) Next(ctx context.Context) (bool, error) {
 	if err != nil {
 		return false, errors.Wrap(err, "error looking up range descriptor")
 	}
+	n.lastRangeStartKey = rangeDesc.StartKey.AsRawKey()
 
-	// Step 1: Add any stores that don't already h ave a replica in of the range.
+	if err := relocateRange(ctx, n.p.ExecCfg().DB, rangeDesc, targets); err != nil {
+		return false, err
+	}
+
+	return true, nil
+}
+
+// relocateRange relocates a given range to a given set of stores. The first
+// store in the slice becomes the new leaseholder.
+//
+// This is best-effort; if replication queues are enabled and a change in
+// membership happens at the same time, there will be errors.
+func relocateRange(
+	ctx context.Context,
+	db *client.DB,
+	rangeDesc roachpb.RangeDescriptor,
+	targets []roachpb.ReplicationTarget,
+) error {
+	// Step 1: Add any stores that don't already have a replica in of the range.
 	//
 	// TODO(radu): we can't have multiple replicas on different stores on the same
 	// node, which can lead to some odd corner cases where we would have to first
@@ -341,18 +354,20 @@ func (n *relocateNode) Next(ctx context.Context) (bool, error) {
 		}
 	}
 	if len(addTargets) > 0 {
-		if err := n.p.session.execCfg.DB.AdminChangeReplicas(
-			ctx, rowKey, roachpb.ADD_REPLICA, addTargets,
+		if err := db.AdminChangeReplicas(
+			ctx, rangeDesc.StartKey.AsRawKey(), roachpb.ADD_REPLICA, addTargets,
 		); err != nil {
-			return false, err
+			return err
 		}
 	}
 
 	// Step 2: Transfer the lease to the first target. This needs to happen before
 	// we remove replicas or we may try to remove the lease holder.
 
-	if err := n.p.session.execCfg.DB.AdminTransferLease(ctx, rowKey, targets[0].StoreID); err != nil {
-		return false, err
+	if err := db.AdminTransferLease(
+		ctx, rangeDesc.StartKey.AsRawKey(), targets[0].StoreID,
+	); err != nil {
+		return err
 	}
 
 	// Step 3: Remove any replicas that are not targets.
@@ -374,16 +389,13 @@ func (n *relocateNode) Next(ctx context.Context) (bool, error) {
 		}
 	}
 	if len(removeTargets) > 0 {
-		if err := n.p.session.execCfg.DB.AdminChangeReplicas(
-			ctx, rowKey, roachpb.REMOVE_REPLICA, removeTargets,
+		if err := db.AdminChangeReplicas(
+			ctx, rangeDesc.StartKey.AsRawKey(), roachpb.REMOVE_REPLICA, removeTargets,
 		); err != nil {
-			return false, err
+			return err
 		}
 	}
-
-	n.lastRangeStartKey = rangeDesc.StartKey.AsRawKey()
-
-	return true, nil
+	return nil
 }
 
 func (n *relocateNode) Values() parser.Datums {
@@ -410,17 +422,189 @@ func (*relocateNode) Columns() ResultColumns {
 	}
 }
 
-func (*relocateNode) Ordering() orderingInfo  { return orderingInfo{} }
-func (*relocateNode) MarkDebug(_ explainMode) {}
+func (*relocateNode) Ordering() orderingInfo   { return orderingInfo{} }
+func (*relocateNode) MarkDebug(_ explainMode)  { panic("unimplemented") }
+func (*relocateNode) DebugValues() debugValues { panic("unimplemented") }
 func (*relocateNode) Spans(context.Context) (_, _ roachpb.Spans, _ error) {
 	panic("unimplemented")
 }
 
-func (n *relocateNode) DebugValues() debugValues {
-	return debugValues{
-		rowIdx: 0,
-		key:    "",
-		value:  parser.DNull.String(),
-		output: debugValueRow,
+// Scatter moves ranges to random stores
+// (`ALTER TABLE/INDEX ... SCATTER ...` statement)
+// Privileges: INSERT on table.
+func (p *planner) Scatter(ctx context.Context, n *parser.Scatter) (planNode, error) {
+	tableDesc, index, err := p.getTableAndIndex(ctx, n.Table, n.Index, privilege.INSERT)
+	if err != nil {
+		return nil, err
 	}
+
+	var span roachpb.Span
+	if n.From == nil {
+		// No FROM/TO specified; the span is the entire table/index.
+		span.Key = roachpb.Key(sqlbase.MakeIndexKeyPrefix(tableDesc, index.ID))
+		span.EndKey = span.Key.PrefixEnd()
+	} else {
+		switch {
+		case len(n.From) == 0:
+			return nil, errors.Errorf("no columns in SCATTER FROM expression")
+		case len(n.From) > len(index.ColumnIDs):
+			return nil, errors.Errorf("too many columns in SCATTER FROM expression")
+		case len(n.To) == 0:
+			return nil, errors.Errorf("no columns in SCATTER TO expression")
+		case len(n.To) > len(index.ColumnIDs):
+			return nil, errors.Errorf("too many columns in SCATTER TO expression")
+		}
+
+		// Calculate the desired types for the select statement:
+		//  - column values; it is OK if the select statement returns fewer columns
+		//  (the relevant prefix is used).
+		desiredTypes := make([]parser.Type, len(index.ColumnIDs))
+		for i, colID := range index.ColumnIDs {
+			c, err := tableDesc.FindColumnByID(colID)
+			if err != nil {
+				return nil, err
+			}
+			desiredTypes[i] = c.Type.ToDatumType()
+		}
+		fromVals := make([]parser.Datum, len(n.From))
+		for i, expr := range n.From {
+			typedExpr, err := p.analyzeExpr(
+				ctx, expr, nil, parser.IndexedVarHelper{}, desiredTypes[i], true, "SCATTER",
+			)
+			if err != nil {
+				return nil, err
+			}
+			fromVals[i], err = typedExpr.Eval(&p.evalCtx)
+			if err != nil {
+				return nil, err
+			}
+		}
+		toVals := make([]parser.Datum, len(n.From))
+		for i, expr := range n.To {
+			typedExpr, err := p.analyzeExpr(
+				ctx, expr, nil, parser.IndexedVarHelper{}, desiredTypes[i], true, "SCATTER",
+			)
+			if err != nil {
+				return nil, err
+			}
+			toVals[i], err = typedExpr.Eval(&p.evalCtx)
+			if err != nil {
+				return nil, err
+			}
+		}
+
+		span.Key, err = getRowKey(tableDesc, index, fromVals)
+		if err != nil {
+			return nil, err
+		}
+		span.EndKey, err = getRowKey(tableDesc, index, toVals)
+		if err != nil {
+			return nil, err
+		}
+		// Tolerate reversing FROM and TO; this can be useful for descending
+		// indexes.
+		if span.Key.Compare(span.EndKey) > 0 {
+			span.Key, span.EndKey = span.EndKey, span.Key
+		}
+	}
+
+	stores := p.ExecCfg().ClusterStoresUpcall()
+	if log.V(1) {
+		log.Infof(ctx, "Stores: %v", stores)
+	}
+	if len(stores) == 0 {
+		return nil, errors.Errorf("no known stores")
+	}
+
+	return &scatterNode{
+		p:      p,
+		span:   span,
+		stores: stores,
+		rng:    rand.New(rand.NewSource(rand.Int63())),
+	}, nil
+}
+
+type scatterNode struct {
+	p             *planner
+	span          roachpb.Span
+	descriptorKVs []client.KeyValue
+	stores        []roachpb.ReplicationTarget
+	rng           *rand.Rand
+
+	rowIdx            int
+	lastRangeStartKey []byte
+	lastRelocateErr   error
+}
+
+func (n *scatterNode) Start(ctx context.Context) error {
+	var err error
+	n.descriptorKVs, err = scanMetaKVs(ctx, n.p.txn, n.span)
+	return err
+}
+
+func (n *scatterNode) Next(ctx context.Context) (bool, error) {
+	if n.rowIdx >= len(n.descriptorKVs) {
+		return false, nil
+	}
+
+	var desc roachpb.RangeDescriptor
+	if err := n.descriptorKVs[n.rowIdx].ValueProto(&desc); err != nil {
+		return false, err
+	}
+
+	// Choose three random stores.
+	// TODO(radu): this is a toy implementation; we need to get a real
+	// recommendation based on the zone config.
+	num := 3
+	if num > len(n.stores) {
+		num = len(n.stores)
+	}
+	for i := 0; i < num; i++ {
+		j := i + n.rng.Intn(len(n.stores)-i)
+		n.stores[i], n.stores[j] = n.stores[j], n.stores[i]
+	}
+
+	targets := n.stores[:num]
+
+	n.lastRelocateErr = relocateRange(ctx, n.p.ExecCfg().DB, desc, targets)
+	n.lastRangeStartKey = desc.StartKey
+	n.rowIdx++
+	return true, nil
+}
+
+func (*scatterNode) Columns() ResultColumns {
+	return ResultColumns{
+		{
+			Name: "key",
+			Typ:  parser.TypeBytes,
+		},
+		{
+			Name: "pretty",
+			Typ:  parser.TypeString,
+		},
+		{
+			Name: "status",
+			Typ:  parser.TypeString,
+		},
+	}
+}
+
+func (n *scatterNode) Values() parser.Datums {
+	status := "OK"
+	if n.lastRelocateErr != nil {
+		status = n.lastRelocateErr.Error()
+	}
+	return parser.Datums{
+		parser.NewDBytes(parser.DBytes(n.lastRangeStartKey)),
+		parser.NewDString(keys.PrettyPrint(n.lastRangeStartKey)),
+		parser.NewDString(status),
+	}
+}
+
+func (*scatterNode) Close(ctx context.Context) {}
+func (*scatterNode) Ordering() orderingInfo    { return orderingInfo{} }
+func (*scatterNode) MarkDebug(_ explainMode)   { panic("unimplemented") }
+func (*scatterNode) DebugValues() debugValues  { panic("unimplemented") }
+func (*scatterNode) Spans(context.Context) (_, _ roachpb.Spans, _ error) {
+	panic("unimplemented")
 }

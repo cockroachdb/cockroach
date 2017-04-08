@@ -203,6 +203,7 @@ func setNeededColumns(plan planNode, needed []bool) {
 	case *hookFnNode:
 	case *valueGenerator:
 	case *showRangesNode:
+	case *scatterNode:
 
 	default:
 		panic(fmt.Sprintf("unhandled node type: %T", plan))
