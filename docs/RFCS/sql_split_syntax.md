@@ -123,8 +123,10 @@ values) for the start and end of the area. The values are interpreted similar to
 specified:
 
 ```sql
-ALTER TABLE <table> SCATTER (startPK1, startPK2, ...) (endPK1, endPK2, ...)
-ALTER INDEX <table>@index SCATTER (startCol1, startCol2, ...) (endCol1, endCol2, ...)
+ALTER TABLE <table> SCATTER
+ALTER TABLE <table> SCATTER FROM (startPK1, startPK2, ...) TO (endPK1, endPK2, ...)
+ALTER INDEX <table>@index SCATTER
+ALTER INDEX <table>@index SCATTER FROM (startCol1, startCol2, ...) TO (endCol1, endCol2, ...)
 ```
 
 Note that no new split points are introduced by `SCATTER`.
@@ -132,8 +134,8 @@ Note that no new split points are introduced by `SCATTER`.
 Examples:
 ```sql
 ALTER TABLE t SCATTER
-ALTER TABLE t SCATTER (1,1) (1,2)
-ALTER INDEX t@idx SCATTER (1) (2)
+ALTER TABLE t SCATTER FROM (1,1) TO (1,2)
+ALTER INDEX t@idx SCATTER FROM (1) TO (2)
 ```
 
 The statement returns only after the relocations are complete.
