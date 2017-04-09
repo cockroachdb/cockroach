@@ -65,10 +65,9 @@ const (
 	initialConnWindowSize = initialWindowSize * 16 // for a connection
 )
 
-// SourceAddr provides a way to specify a source/local address for outgoing
-// connections. It should only ever be set by testing code, and is not thread
-// safe (so it must be initialized before the server starts).
-var SourceAddr = func() net.Addr {
+// sourceAddr is the environment-provided local address for outgoing
+// connections.
+var sourceAddr = func() net.Addr {
 	const envKey = "COCKROACH_SOURCE_IP_ADDRESS"
 	if sourceAddr, ok := envutil.EnvString(envKey, 0); ok {
 		sourceIP := net.ParseIP(sourceAddr)
@@ -345,12 +344,12 @@ func (ctx *Context) GRPCDial(target string, opts ...grpc.DialOption) (*grpc.Clie
 			grpc.WithInitialConnWindowSize(initialConnWindowSize))
 		dialOpts = append(dialOpts, opts...)
 
-		if SourceAddr != nil {
+		if sourceAddr != nil {
 			dialOpts = append(dialOpts, grpc.WithDialer(
 				func(addr string, timeout time.Duration) (net.Conn, error) {
 					dialer := net.Dialer{
 						Timeout:   timeout,
-						LocalAddr: SourceAddr,
+						LocalAddr: sourceAddr,
 					}
 					return dialer.Dial("tcp", addr)
 				},
