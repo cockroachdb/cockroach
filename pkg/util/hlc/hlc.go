@@ -112,13 +112,13 @@ func UnixNano() int64 {
 	return timeutil.Now().UnixNano()
 }
 
-// NewClock creates a new hybrid logical clock associated
-// with the given physical clock, initializing both wall time
-// and logical time with zero.
+// NewClock creates a new hybrid logical clock associated with the given
+// physical clock. The logical ts is initiated to zero.
 //
-// The physical clock is typically given by the wall time
-// of the local machine in unix epoch nanoseconds, using
-// hlc.UnixNano. This is not a requirement.
+// The physical clock is typically given by the wall time of the local machine
+// in unix epoch nanoseconds, using hlc.UnixNano. This is not a requirement.
+//
+// A value of 0 for maxOffset means that offset checking is disabled.
 func NewClock(physicalClock func() int64, maxOffset time.Duration) *Clock {
 	return &Clock{
 		physicalClock: physicalClock,

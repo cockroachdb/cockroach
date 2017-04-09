@@ -19,6 +19,12 @@ package base
 import "time"
 
 const (
+	// DefaultMaxClockOffset is the default maximum acceptable clock offset value.
+	// On Azure, clock offsets between 250ms and 500ms are common. On AWS and GCE,
+	// clock offsets generally stay below 250ms.  See comments on Config.MaxOffset
+	// for more on this setting.
+	DefaultMaxClockOffset = 500 * time.Millisecond
+
 	// DefaultHeartbeatInterval is how often heartbeats are sent from the
 	// transaction coordinator to a live transaction. These keep it from
 	// being preempted by other transactions writing the same keys. If a
