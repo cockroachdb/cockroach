@@ -328,7 +328,7 @@ func (cq *CommandQueue) getWait(
 		//   being consolidated because of range group overlaps.
 		maxWriteTS, minReadTS := hlc.Timestamp{}, hlc.MaxTimestamp
 		cq.oHeap.Init(overlaps)
-		for enclosed := false; cq.oHeap.Len() > 0 && !enclosed; {
+		for cq.oHeap.Len() > 0 {
 			cmd := cq.oHeap.PopOverlap()
 			keyRange := cmd.key
 			cmdHasTimestamp := cmd.timestamp != hlc.Timestamp{}
@@ -388,22 +388,8 @@ func (cq *CommandQueue) getWait(
 					chans = append(chans, cmd.pending)
 				}
 
-				// The current command is a write, so add it to the write RangeGroup and observe if the group grows.
-				if cq.wRg.Add(keyRange) {
-					// We can stop dependency creation early in the case that the write RangeGroup fully encloses
-					// our new range, which means that no new dependencies are needed. This looks only at the
-					// write RangeGroup because even if the combined range group encloses us, there can always be
-					// more reads that are necessary dependencies if they themselves don't overlap any writes. We
-					// only need to perform this check when the write RangeGroup grows.
-					//
-					// We check the write RangeGroup's length before checking if it encloses the new command's
-					// range because we know (based on the fact that these are all overlapping commands) that the
-					// RangeGroup can enclose us only if its length is 1 (meaning all ranges inserted have coalesced).
-					// This guarantees that this enclosure check will always be run in constant time.
-					if cq.wRg.Len() == 1 && cq.wRg.Encloses(newCmdRange) {
-						enclosed = true
-					}
-				}
+				// The current command is a write, so add it to the write RangeGroup.
+				cq.wRg.Add(keyRange)
 
 				// Make sure the current command's range gets added to the combined RangeGroup if we are using it.
 				if overlapRg == cq.rwRg {

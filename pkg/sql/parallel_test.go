@@ -42,7 +42,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -234,10 +233,6 @@ func (t *parallelTest) setup(spec *parTestSpec) {
 
 func TestParallel(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-
-	if testutils.Stress() {
-		t.Skip()
-	}
 
 	glob := string(*paralleltestdata)
 	paths, err := filepath.Glob(glob)
