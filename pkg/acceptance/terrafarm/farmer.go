@@ -68,7 +68,9 @@ type Farmer struct {
 	AddVars     map[string]string
 	KeepCluster string
 	nodes       []node
-	RPCContext  *rpc.Context
+	// RPCContext is used to open an ExternalClient which provides a KV connection
+	// to the cluster by gRPC.
+	RPCContext *rpc.Context
 }
 
 func (f *Farmer) refresh() {
