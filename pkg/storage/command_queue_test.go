@@ -468,6 +468,39 @@ func TestCommandQueueTimestamps(t *testing.T) {
 	}
 }
 
+// TestCommandQueueEnclosed verifies that the command queue doesn't
+// fail to return read-only dependencies that a candidate read/write
+// span depends on, despite there being an overlapping span which
+// completely encloses the candidate.
+//
+//      Span  TS  RO  a  b  depends
+//         1   2   T  -     n/a
+//         2   3   F  ---   n/a
+// Candidate   1   F  -     spans 1, 2
+func TestCommandQueueEnclosed(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	cq := NewCommandQueue(true)
+
+	spans1 := []roachpb.Span{
+		mkSpan("a", ""),
+	}
+	spans2 := []roachpb.Span{
+		mkSpan("a", "b"),
+	}
+	spansCandidate := []roachpb.Span{
+		mkSpan("a", ""),
+	}
+
+	cmd1 := cq.add(true, makeTS(2, 0), spans1)
+	cmd2 := cq.add(false, makeTS(3, 0), spans2)
+
+	w := cq.getWait(false, makeTS(1, 0), spansCandidate)
+	expW := []<-chan struct{}{cmd2.pending, cmd1.pending}
+	if !reflect.DeepEqual(w, expW) {
+		t.Errorf("expected wait channels %+v; got %+v", expW, w)
+	}
+}
+
 // TestCommandQueueTimestampsEmpty verifies command queue wait
 // behavior when added commands have zero timestamps and when
 // the waiter has a zero timestamp.
