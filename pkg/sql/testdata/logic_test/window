@@ -599,6 +599,34 @@ EXPLAIN (TYPES) SELECT k, k + stddev(d) OVER (PARTITION BY v, 'a') FROM kv ORDER
 3          table     kv@primary
 3          spans     ALL
 
+query ITTTTT
+EXPLAIN (TYPES) SELECT MAX(k), stddev(d) OVER (PARTITION BY v, 'a') FROM kv GROUP BY d, v ORDER BY 1
+----
+0  sort                                                                                              ("MAX(k)" int, "stddev(d) OVER (PARTITION BY v, 'a')" decimal)                                   +"MAX(k)"
+0          order        +"MAX(k)"
+1  window                                                                                            ("MAX(k)" int, "stddev(d) OVER (PARTITION BY v, 'a')" decimal)
+1          window 0     (stddev((d)[decimal]) OVER (PARTITION BY (v)[int], ('a')[string]))[decimal]
+1          render 1     (stddev((d)[decimal]) OVER (PARTITION BY (v)[int], ('a')[string]))[decimal]
+2  group                                                                                             ("MAX(k)" int, d decimal, v int, "'a'" string)
+2          aggregate 0  (max((k)[int]))[int]
+2          aggregate 1  (d)[decimal]
+2          aggregate 2  (v)[int]
+2          aggregate 3  ('a')[string]
+2          render 0     (max((k)[int]))[int]
+2          render 1     (d)[decimal]
+2          render 2     (v)[int]
+2          render 3     ('a')[string]
+3  render                                                                                            (k int, d decimal, v int, "'a'" string, d decimal, v int)
+3          render 0     (k)[int]
+3          render 1     (d)[decimal]
+3          render 2     (v)[int]
+3          render 3     ('a')[string]
+3          render 4     (d)[decimal]
+3          render 5     (v)[int]
+4  scan                                                                                              (k int, v int, w[omitted] int, f[omitted] float, d decimal, s[omitted] string, b[omitted] bool)
+4          table        kv@primary
+4          spans        ALL
+
 statement OK
 INSERT INTO kv VALUES
 (9, 2, 9, .1, DEFAULT, DEFAULT, DEFAULT),
@@ -656,6 +684,11 @@ SELECT k, v, w, v - w + 2 + row_number() OVER (PARTITION BY v ORDER BY w) FROM k
 9   2     9  -1
 10  4     9  0
 11  NULL  9  NULL
+
+query RIII
+SELECT AVG(k), MAX(v), MIN(w), 2 + row_number() OVER () FROM kv ORDER BY 1
+----
+6.666666666666667  4  2  3
 
 query II
 SELECT k, rank() OVER () FROM kv ORDER BY 1
@@ -1567,3 +1600,9 @@ DELETE FROM kv WHERE k = 12
 
 query error FILTER within a window function call is not yet supported
 SELECT k, rank() FILTER (WHERE k=1) OVER () FROM kv
+
+# Issue #14606: correctly handle aggregation functions above the windowing level
+query I
+SELECT MAX(i) * (ROW_NUMBER() OVER (ORDER BY MAX(i))) FROM (SELECT 1 AS i, 2 AS j) GROUP BY j
+----
+1
