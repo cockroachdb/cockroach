@@ -126,34 +126,10 @@ session_user                   root
 standard_conforming_strings    on
 syntax                         Modern
 time zone                      UTC
-
-statement ok
-BEGIN TRANSACTION
-
-query TT
-SHOW ALL
-----
-application_name               helloworld
-client_encoding                UTF8
-client_min_messages
-database                       foo
-default_transaction_isolation  SERIALIZABLE
-distsql                        off
-extra_float_digits
-max_index_keys                 32
-search_path                    pg_catalog
-server_version                 9.5.0
-session_user                   root
-standard_conforming_strings    on
-syntax                         Modern
-time zone                      UTC
 transaction isolation level    SERIALIZABLE
 transaction priority           NORMAL
 
-statement ok
-ROLLBACK
-
-## Test SET ... TO DEFAULT works
+## Test SET ... TO DEFAULT works
 
 statement ok
 SET DISTSQL TO ON
