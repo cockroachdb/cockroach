@@ -6,11 +6,13 @@ sed "s/<EMAIL>/$DOCKER_EMAIL/;s/<AUTH>/$DOCKER_AUTH/" < build/.dockercfg.in > ~/
 case "$TC_BUILD_BRANCH" in
   master)
     VERSION=$(git describe || git rev-parse --short HEAD)
+    STABLE_RELEASE=false
     push=build/push-aws.sh
     ;;
 
   beta-*)
     VERSION="$TC_BUILD_BRANCH"
+    STABLE_RELEASE=true
     push=build/push-tagged-aws.sh
     ;;
 
@@ -20,6 +22,7 @@ case "$TC_BUILD_BRANCH" in
 esac
 
 export VERSION
+export STABLE_RELEASE
 echo "Deploying $VERSION..."
 
 cat .buildinfo/tag || true
