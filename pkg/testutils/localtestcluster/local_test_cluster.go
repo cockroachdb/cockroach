@@ -55,6 +55,7 @@ type LocalTestCluster struct {
 	Gossip                   *gossip.Gossip
 	Eng                      engine.Engine
 	Store                    *storage.Store
+	StoreTestingKnobs        *storage.StoreTestingKnobs
 	DBContext                *client.DBContext
 	DB                       *client.DB
 	RangeRetryOptions        *retry.Options
@@ -112,10 +113,14 @@ func (ltc *LocalTestCluster) Start(t testing.TB, baseCtx *base.Config, initSende
 	ltc.DB = client.NewDBWithContext(ltc.Sender, ltc.Clock, *ltc.DBContext)
 	transport := storage.NewDummyRaftTransport()
 	cfg := storage.TestStoreConfig(ltc.Clock)
-	// Disable the replica scanner and split queue, which confuse tests using
-	// LocalTestCluster.
-	cfg.TestingKnobs.DisableScanner = true
-	cfg.TestingKnobs.DisableSplitQueue = true
+	// By default, disable the replica scanner and split queue, which
+	// confuse tests using LocalTestCluster.
+	if ltc.StoreTestingKnobs == nil {
+		cfg.TestingKnobs.DisableScanner = true
+		cfg.TestingKnobs.DisableSplitQueue = true
+	} else {
+		cfg.TestingKnobs = *ltc.StoreTestingKnobs
+	}
 	if ltc.RangeRetryOptions != nil {
 		cfg.RangeRetryOptions = *ltc.RangeRetryOptions
 	}
