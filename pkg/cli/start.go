@@ -652,7 +652,7 @@ func doShutdown(ctx context.Context, c serverpb.AdminClient, onModes []int32) er
 			Shutdown: i > 0,
 		})
 		if err != nil {
-			return err
+			return errors.Wrap(err, "Error sending drain request")
 		}
 		// Only signal the caller to try again with a hard shutdown if we're
 		// not already trying to do that, and if the initial connection attempt
