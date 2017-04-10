@@ -327,6 +327,18 @@ func runStart(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	// Ensure that the store paths are absolute. This will clarify the
+	// output of the startup messages below, and ensure that logging
+	// doesn't get confused if any future change in the code introduces
+	// a call to `os.Chdir`.
+	for i, spec := range serverCfg.Stores.Specs {
+		absPath, err := filepath.Abs(spec.Path)
+		if err != nil {
+			return err
+		}
+		serverCfg.Stores.Specs[i].Path = absPath
+	}
+
 	// Default the log directory to the "logs" subdirectory of the first
 	// non-memory store. We only do this for the "start" command which is why
 	// this work occurs here and not in an OnInitialize function.
