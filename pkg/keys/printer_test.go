@@ -141,10 +141,10 @@ func TestPrettyPrint(t *testing.T) {
 			"/Table/42/-12.34"},
 		{makeKey(MakeTablePrefix(42),
 			roachpb.RKey(durationAsc)),
-			"/Table/42/1m1d1s"},
+			"/Table/42/1mon1d1s"},
 		{makeKey(MakeTablePrefix(42),
 			roachpb.RKey(durationDesc)),
-			"/Table/42/-2m-2d743h59m58.999999999s"},
+			"/Table/42/-2mon-2d743h59m58s999ms999µs999ns"},
 
 		// others
 		{makeKey([]byte("")), "/Min"},

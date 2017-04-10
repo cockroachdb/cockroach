@@ -17,6 +17,7 @@
 package duration
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"math"
@@ -78,13 +79,66 @@ func (d Duration) Compare(x Duration) int {
 	return 0
 }
 
+// Format emits a string representation of a Duration to a Buffer.
+func (d Duration) Format(buf *bytes.Buffer) {
+	if d.Nanos == 0 && d.Days == 0 && d.Months == 0 {
+		buf.WriteString("0s")
+		return
+	}
+
+	if absGE(d.Months, 11) {
+		fmt.Fprintf(buf, "%dy", d.Months/12)
+		d.Months %= 12
+	}
+	if d.Months != 0 {
+		fmt.Fprintf(buf, "%dmon", d.Months)
+	}
+	if d.Days != 0 {
+		fmt.Fprintf(buf, "%dd", d.Days)
+	}
+
+	// The following comparisons are careful to preserve the sign in
+	// case the value is MinInt64, and thus cannot be made positive lest
+	// an overflow occur.
+	if absGE(d.Nanos, time.Hour.Nanoseconds()) {
+		fmt.Fprintf(buf, "%dh", d.Nanos/time.Hour.Nanoseconds())
+		d.Nanos %= time.Hour.Nanoseconds()
+	}
+	if absGE(d.Nanos, time.Minute.Nanoseconds()) {
+		fmt.Fprintf(buf, "%dm", d.Nanos/time.Minute.Nanoseconds())
+		d.Nanos %= time.Minute.Nanoseconds()
+	}
+	if absGE(d.Nanos, time.Second.Nanoseconds()) {
+		fmt.Fprintf(buf, "%ds", d.Nanos/time.Second.Nanoseconds())
+		d.Nanos %= time.Second.Nanoseconds()
+	}
+	if absGE(d.Nanos, time.Millisecond.Nanoseconds()) {
+		fmt.Fprintf(buf, "%dms", d.Nanos/time.Millisecond.Nanoseconds())
+		d.Nanos %= time.Millisecond.Nanoseconds()
+	}
+	if absGE(d.Nanos, time.Microsecond.Nanoseconds()) {
+		fmt.Fprintf(buf, "%dµs", d.Nanos/time.Microsecond.Nanoseconds())
+		d.Nanos %= time.Microsecond.Nanoseconds()
+	}
+	if d.Nanos != 0 {
+		fmt.Fprintf(buf, "%dns", d.Nanos)
+	}
+}
+
+// absGE returns whether x is greater than or equal to y in magnitude.
+// y is always positive, x may be negative.
+func absGE(x, y int64) bool {
+	if x < 0 {
+		return x <= -y
+	}
+	return x >= y
+}
+
 // String returns a string representation of a Duration.
 func (d Duration) String() string {
-	nanos := "0ns"
-	if d.Nanos != 0 {
-		nanos = (time.Duration(d.Nanos) * time.Nanosecond).String()
-	}
-	return fmt.Sprintf("%dm%dd%s", d.Months, d.Days, nanos)
+	var buf bytes.Buffer
+	d.Format(&buf)
+	return buf.String()
 }
 
 // Encode returns three integers such that the original Duration is recoverable
