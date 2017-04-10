@@ -138,7 +138,7 @@ func queryInfoSchema(
 }
 
 // Show a session-local variable name.
-func (p *planner) Show(n *parser.Show, autoCommit bool) (planNode, error) {
+func (p *planner) Show(n *parser.Show) (planNode, error) {
 	origName := n.Name
 	name := strings.ToLower(n.Name)
 
@@ -151,10 +151,8 @@ func (p *planner) Show(n *parser.Show, autoCommit bool) (planNode, error) {
 			{Name: "Value", Typ: parser.TypeString},
 		}
 	default:
-		if gen, ok := varGen[name]; !ok {
+		if _, ok := varGen[name]; !ok {
 			return nil, fmt.Errorf("unknown variable: %q", origName)
-		} else if gen.requireExplicitTxn && autoCommit {
-			return nil, errNoTransactionInProgress
 		}
 		columns = ResultColumns{{Name: name, Typ: parser.TypeString}}
 	}
@@ -169,9 +167,6 @@ func (p *planner) Show(n *parser.Show, autoCommit bool) (planNode, error) {
 			case `all`:
 				for _, vName := range varNames {
 					gen := varGen[vName]
-					if gen.requireExplicitTxn && autoCommit {
-						continue
-					}
 					value := gen.Get(p)
 					if _, err := v.rows.AddRow(
 						ctx, parser.Datums{parser.NewDString(vName), parser.NewDString(value)},
