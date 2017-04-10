@@ -26,7 +26,6 @@ import (
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/codes"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
@@ -98,53 +97,6 @@ func TestSendToOneClient(t *testing.T) {
 	}
 	if reply == nil {
 		t.Errorf("expected reply")
-	}
-}
-
-// TestRetryableError verifies that Send returns a retryable error
-// when it hits an RPC error.
-func TestRetryableError(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	clientStopper := stop.NewStopper()
-	defer clientStopper.Stop()
-	clientContext := rpc.NewContext(
-		log.AmbientContext{},
-		testutils.NewNodeTestBaseContext(),
-		hlc.NewClock(hlc.UnixNano, time.Nanosecond),
-		clientStopper,
-	)
-
-	serverStopper := stop.NewStopper()
-	serverContext := rpc.NewContext(
-		log.AmbientContext{},
-		testutils.NewNodeTestBaseContext(),
-		hlc.NewClock(hlc.UnixNano, time.Nanosecond),
-		serverStopper,
-	)
-
-	s, ln := newTestServer(t, serverContext)
-	roachpb.RegisterInternalServer(s, Node(0))
-
-	addr := ln.Addr().String()
-	if _, err := clientContext.GRPCDial(addr); err != nil {
-		t.Fatal(err)
-	}
-	// Wait until the client becomes healthy and shut down the server.
-	testutils.SucceedsSoon(t, func() error {
-		return clientContext.ConnHealth(addr)
-	})
-	serverStopper.Stop()
-	// Wait until the client becomes unhealthy.
-	testutils.SucceedsSoon(t, func() error {
-		if err := clientContext.ConnHealth(addr); grpc.Code(err) != codes.Unavailable {
-			return errors.Errorf("unexpected error: %v", err)
-		}
-		return nil
-	})
-
-	if _, err := sendBatch(context.Background(), SendOptions{}, []net.Addr{ln.Addr()}, clientContext); err == nil {
-		t.Fatalf("Unexpected success")
 	}
 }
 
