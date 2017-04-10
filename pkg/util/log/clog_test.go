@@ -385,7 +385,7 @@ func TestGetLogReader(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	relPath, err := filepath.Rel(curDir, info.file.Name())
+	relPathFromCurDir, err := filepath.Rel(curDir, info.file.Name())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -399,6 +399,8 @@ func TestGetLogReader(t *testing.T) {
 		t.Fatal(err)
 	}
 	otherFile.Close()
+	_, lastDir := filepath.Split(dir)
+	relPathFromLogDir := strings.Join([]string{"..", lastDir, infoName}, string(os.PathSeparator))
 
 	testCases := []struct {
 		filename           string
@@ -412,7 +414,7 @@ func TestGetLogReader(t *testing.T) {
 		// Symlink to a log file.
 		{filepath.Join(dir, removePeriods(program)+".log"), "pathnames must be basenames", ""},
 		// Symlink relative to logDir.
-		{removePeriods(program) + ".log", "malformed log filename", ""},
+		{removePeriods(program) + ".log", "symlinks are not allowed", ""},
 		// Non-log file.
 		{"other.txt", "malformed log filename", "malformed log filename"},
 		// Non-existent file matching RE.
@@ -420,7 +422,9 @@ func TestGetLogReader(t *testing.T) {
 		// Base filename is specified.
 		{infoName, "", ""},
 		// Relative path with directory components.
-		{relPath, "pathnames must be basenames", ""},
+		{relPathFromCurDir, "pathnames must be basenames", ""},
+		// Relative path within the logs directory.
+		{relPathFromLogDir, "pathnames must be basenames", ""},
 	}
 
 	for _, test := range testCases {
