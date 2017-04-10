@@ -31,8 +31,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/localtestcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -176,18 +178,26 @@ func TestRangeSplitsWithConcurrentTxns(t *testing.T) {
 // a range to 256K and writes data until there are five ranges.
 func TestRangeSplitsWithWritePressure(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	t.Skip("#12373")
 	// Override default zone config.
 	cfg := config.DefaultZoneConfig()
 	cfg.RangeMaxBytes = 1 << 18
 	defer config.TestingSetDefaultZoneConfig(cfg)()
 
-	s, _ := createTestDB(t)
+	// Manually create the local test cluster so that the split queue
+	// is not disabled (LocalTestCluster disables it by default).
+	s := &localtestcluster.LocalTestCluster{
+		StoreTestingKnobs: &storage.StoreTestingKnobs{
+			DisableScanner: true,
+		},
+	}
+	s.Start(t, testutils.NewNodeTestBaseContext(), InitSenderForLocalTestCluster)
+
 	// This is purely to silence log spam.
 	config.TestingSetupZoneConfigHook(s.Stopper)
 	defer s.Stop()
 
-	// Start test writer write about a 32K/key so there aren't too many writes necessary to split 64K range.
+	// Start test writer write about a 32K/key so there aren't too many
+	// writes necessary to split 5 ranges.
 	done := make(chan struct{})
 	var wg sync.WaitGroup
 	wg.Add(1)
