@@ -221,3 +221,19 @@ query B
 SELECT (1, 2) > (1.0, 2.0)
 ----
 false
+
+# Mixed-type IN expressions work when the LHS is comparable to every items in
+# the RHS.
+query B
+SELECT 2::int IN (2.5, 2)
+----
+true
+
+query error unsupported comparison operator: 2::INT IN \(2.5, 2, 'a'\): unsupported comparison operator: <int> = <string>
+SELECT 2::int IN (2.5, 2, 'a')
+
+# TODO(jordan): the following query doesn't properly type check because we're
+# not trying to coerce the left hand side to any of the types of the inner
+# expressions. This should work and is a candidate for improvement.
+query error unsupported comparison operator
+select '2017-09-09' in ('2010-01-01', '2017-09-09'::date)
