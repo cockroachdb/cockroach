@@ -325,7 +325,7 @@ communicate with a secure cluster\).
 		},
 		// Error returned directly from GRPC.
 		{`quit`, styled(
-			`Error sending drain request: rpc error: code = Unavailable desc = grpc: the connection is unavailable`),
+			`Failed to connect to the node: error sending drain request: rpc error: code = Unavailable desc = grpc: the connection is unavailable`),
 		},
 		// Going through the SQL client libraries gives a *net.OpError which
 		// we also handle.

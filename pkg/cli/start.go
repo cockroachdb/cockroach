@@ -633,58 +633,66 @@ completed, the server exits.
 	RunE: MaybeDecorateGRPCError(runQuit),
 }
 
-// doShutdown attempts to trigger a server shutdown. When given an empty
-// onModes slice, it's a hard shutdown.
-func doShutdown(ctx context.Context, c serverpb.AdminClient, onModes []int32) error {
-	// This is kind of hairy, but should work well in practice. We want to
-	// distinguish between the case in which we can't even connect to the
-	// server (in which case we don't want our caller to try to come back with
-	// a hard retry) and the case in which an attempt to shut down fails (times
-	// out, or perhaps drops the connection while waiting). To that end, we
-	// first run a noop DrainRequest. If that fails, we give up. Otherwise, we
-	// wait for the "real" request to give us a response and then continue
-	// reading until the connection drops (which then counts as a success, for
-	// the connection dropping is likely the result of the Stopper having
-	// reached the final stages of shutdown).
-	for i, modes := range [][]int32{nil, onModes} {
-		stream, err := c.Drain(ctx, &serverpb.DrainRequest{
-			On:       modes,
-			Shutdown: i > 0,
-		})
-		if err != nil {
-			return errors.Wrap(err, "Error sending drain request")
-		}
-		// Only signal the caller to try again with a hard shutdown if we're
-		// not already trying to do that, and if the initial connection attempt
-		// (without shutdown) has succeeded.
-		tryHard := i > 0 && len(onModes) > 0
-		for {
-			if _, err := stream.Recv(); err != nil {
-				if grpcutil.IsClosedConnection(err) {
-					// We're trying to shut down, we successfully sent a drain request,
-					// and now the connection is closed. This most likely means that we
-					// shut down successfully. Note that sometimes the stream can be shut
-					// down even before a DrainResponse gets sent back to us, so we don't
-					// require a response on the stream (see #14184).
-					return nil
-				}
-				if tryHard {
-					// Either we hadn't seen a response yet (in which case it's
-					// likely that our connection broke while waiting for the
-					// shutdown to happen); try again (and harder).
-					return errTryHardShutdown{err}
-				}
-				// Case in which we don't even know whether the server is
-				// running. No point in trying again.
-				return errors.Wrap(err, "Got unexpected error while receiving on stream")
-			}
-			if i == 0 {
-				// Our liveness probe succeeded.
-				break
-			}
+// checkNodeRunning performs a no-op RPC and returns an error if it failed to
+// connect to the server.
+func checkNodeRunning(ctx context.Context, c serverpb.AdminClient) error {
+	// Send a no-op Drain request.
+	stream, err := c.Drain(ctx, &serverpb.DrainRequest{
+		On:       nil,
+		Shutdown: false,
+	})
+	if err != nil {
+		return errors.Wrap(err, "Failed to connect to the node: error sending drain request")
+	}
+	// Ignore errors from the stream. We've managed to connect to the node above,
+	// and that's all that this function is interested in.
+	for {
+		if _, err := stream.Recv(); err != nil {
+			break
 		}
 	}
 	return nil
+}
+
+// doShutdown attempts to trigger a server shutdown. When given an empty
+// onModes slice, it's a hard shutdown.
+//
+// errTryHardShutdown is returned if the caller should do a hard-shutdown.
+func doShutdown(ctx context.Context, c serverpb.AdminClient, onModes []int32) error {
+	// We want to distinguish between the case in which we can't even connect to
+	// the server (in which case we don't want our caller to try to come back with
+	// a hard retry) and the case in which an attempt to shut down fails (times
+	// out, or perhaps drops the connection while waiting). To that end, we first
+	// run a noop DrainRequest. If that fails, we give up.
+	if err := checkNodeRunning(ctx, c); err != nil {
+		return err
+	}
+	// Send a drain request and continue reading until the connection drops (which
+	// then counts as a success, for the connection dropping is likely the result
+	// of the Stopper having reached the final stages of shutdown).
+	stream, err := c.Drain(ctx, &serverpb.DrainRequest{
+		On:       onModes,
+		Shutdown: true,
+	})
+	if err != nil {
+		//  This most likely means that we shut down successfully. Note that
+		//  sometimes the connection can be shut down even before a DrainResponse gets
+		//  sent back to us, so we don't require a response on the stream (see
+		//  #14184).
+		if grpcutil.IsClosedConnection(err) {
+			return nil
+		}
+		return errors.Wrap(err, "Error sending drain request")
+	}
+	for {
+		if _, err := stream.Recv(); err != nil {
+			if grpcutil.IsClosedConnection(err) {
+				return nil
+			}
+			// Unexpected error; the caller should try again (and harder).
+			return errTryHardShutdown{err}
+		}
+	}
 }
 
 type errTryHardShutdown struct{ error }
