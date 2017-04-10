@@ -51,6 +51,13 @@ func TestEval(t *testing.T) {
 		{`1.1 % 2.4`, `1.1`},
 		{`4.1 // 2.4`, `1`},
 		{`-4.5:::float // 1.2:::float`, `-3.0`},
+		// Various near-edge cases for overflow.
+		{`0:::int * 0:::int`, `0`},
+		{`0:::int * 1:::int`, `0`},
+		{`1:::int * 0:::int`, `0`},
+		{`1:::int * 1:::int`, `1`},
+		{`4611686018427387904:::int * 1:::int`, `4611686018427387904`},
+		{`-4611686018427387905:::int * 1:::int`, `-4611686018427387905`},
 		// Heterogeneous int/decimal arithmetic is valid.
 		{`1.1:::decimal + 2:::int`, `3.1`},
 		{`1.1:::decimal - 2:::int`, `-0.9`},
@@ -891,6 +898,16 @@ func TestEvalError(t *testing.T) {
 		{`ARRAY[ARRAY[1, 2], ARRAY[1]]`, `multidimensional arrays must have array expressions with matching dimensions`},
 		// TODO(pmattis): Check for overflow.
 		// {`~0 + 1`, `0`},
+		{`9223372036854775807::int + 1::int`, `integer out of range`},
+		{`-9223372036854775807::int + -2::int`, `integer out of range`},
+		{`-9223372036854775807::int + -9223372036854775807::int`, `integer out of range`},
+		{`9223372036854775807::int + 9223372036854775807::int`, `integer out of range`},
+		{`9223372036854775807::int - -1::int`, `integer out of range`},
+		{`-9223372036854775807::int - 2::int`, `integer out of range`},
+		{`-9223372036854775807::int - 9223372036854775807::int`, `integer out of range`},
+		{`9223372036854775807::int - -9223372036854775807::int`, `integer out of range`},
+		{`4611686018427387904::int * 2::int`, `integer out of range`},
+		{`4611686018427387904::int * 2::int`, `integer out of range`},
 	}
 	for _, d := range testData {
 		expr, err := ParseExprTraditional(d.expr)

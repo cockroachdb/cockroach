@@ -342,8 +342,8 @@ func (expr *ComparisonExpr) normalize(v *normalizeVisitor) TypedExpr {
 
 				newRightExpr, err := newBinExpr.Eval(v.ctx)
 				if err != nil {
-					v.err = err
-					return expr
+					// An error occurred, give up.
+					break
 				}
 
 				if !exprCopied {
@@ -396,8 +396,7 @@ func (expr *ComparisonExpr) normalize(v *normalizeVisitor) TypedExpr {
 
 				newRightExpr, err := newBinExpr.Eval(v.ctx)
 				if err != nil {
-					v.err = err
-					return expr
+					break
 				}
 
 				if !exprCopied {

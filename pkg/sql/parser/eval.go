@@ -242,15 +242,20 @@ var BinOps = map[BinaryOperator]binOpOverload{
 		},
 	},
 
-	// TODO(pmattis): Overflow/underflow checks?
-
 	Plus: {
 		BinOp{
 			LeftType:   TypeInt,
 			RightType:  TypeInt,
 			ReturnType: TypeInt,
 			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
-				return NewDInt(MustBeDInt(left) + MustBeDInt(right)), nil
+				a, b := MustBeDInt(left), MustBeDInt(right)
+				if b > 0 && a > math.MaxInt64-b {
+					return nil, errIntOutOfRange
+				}
+				if b < 0 && a < math.MinInt64-b {
+					return nil, errIntOutOfRange
+				}
+				return NewDInt(a + b), nil
 			},
 		},
 		BinOp{
@@ -385,7 +390,14 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			RightType:  TypeInt,
 			ReturnType: TypeInt,
 			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
-				return NewDInt(MustBeDInt(left) - MustBeDInt(right)), nil
+				a, b := MustBeDInt(left), MustBeDInt(right)
+				if b < 0 && a > math.MaxInt64+b {
+					return nil, errIntOutOfRange
+				}
+				if b > 0 && a < math.MinInt64+b {
+					return nil, errIntOutOfRange
+				}
+				return NewDInt(a - b), nil
 			},
 		},
 		BinOp{
@@ -529,7 +541,19 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			RightType:  TypeInt,
 			ReturnType: TypeInt,
 			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
-				return NewDInt(MustBeDInt(left) * MustBeDInt(right)), nil
+				const mostPositive = 1<<63 - 1
+				const mostNegative = -(mostPositive + 1)
+
+				a, b := MustBeDInt(left), MustBeDInt(right)
+				c := a * b
+				if a == 0 || b == 0 || a == 1 || b == 1 {
+					// ignore
+				} else if a == mostNegative || b == mostNegative {
+					return nil, errIntOutOfRange
+				} else if c/b != a {
+					return nil, errIntOutOfRange
+				}
+				return NewDInt(c), nil
 			},
 		},
 		BinOp{
