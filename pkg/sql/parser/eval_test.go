@@ -722,6 +722,8 @@ func TestEval(t *testing.T) {
 		{`'PT3H'::interval / 2`, `'1h30m'`},
 		{`'3:00'::interval / 2`, `'1h30m'`},
 		{`'3 hours'::interval / 2`, `'1h30m'`},
+		{`'3 hours'::interval * 2.5`, `'7h30m'`},
+		{`'3 hours'::interval / 2.5`, `'1h12m'`},
 		// Conditional expressions.
 		{`IF(true, 1, 2/0)`, `1`},
 		{`IF(false, 1/0, 2)`, `2`},
@@ -866,6 +868,7 @@ func TestEvalError(t *testing.T) {
 		{`1 // 0`, `division by zero`},
 		{`1.5 / 0`, `division by zero`},
 		{`'11h2m'::interval / 0`, `division by zero`},
+		{`'11h2m'::interval / 0.0::float`, `division by zero`},
 		{`'???'::bool`,
 			`could not parse '???' as type bool: strconv.ParseBool: parsing "???": invalid syntax`},
 		{`'foo'::int`,
