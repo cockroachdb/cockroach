@@ -45,11 +45,6 @@ import (
 
 // Context defaults.
 const (
-	// On Azure, clock offsets between 250ms and 500ms are common. On
-	// AWS and GCE, clock offsets generally stay below 250ms.
-	// See comments on Config.MaxOffset for more on this setting.
-	defaultMaxOffset = 500 * time.Millisecond
-
 	defaultCGroupMemPath            = "/sys/fs/cgroup/memory/memory.limit_in_bytes"
 	defaultCacheSize                = 512 << 20 // 512 MB
 	defaultSQLMemoryPoolSize        = 512 << 20 // 512 MB
@@ -300,7 +295,7 @@ func SetOpenFileLimitForOneStore() (int, error) {
 func MakeConfig() Config {
 	cfg := Config{
 		Config:                   new(base.Config),
-		MaxOffset:                defaultMaxOffset,
+		MaxOffset:                base.DefaultMaxClockOffset,
 		CacheSize:                defaultCacheSize,
 		SQLMemoryPoolSize:        defaultSQLMemoryPoolSize,
 		ScanInterval:             defaultScanInterval,
