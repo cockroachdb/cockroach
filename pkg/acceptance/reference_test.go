@@ -72,13 +72,13 @@ $bin sql -e "CREATE DATABASE old"
 $bin sql -d old -e "CREATE TABLE testing_old (i int primary key, b bool, s string unique, d decimal, f float, t timestamp, v interval, index sb (s, b))"
 $bin sql -d old -e "INSERT INTO testing_old values (1, true, 'hello', decimal '3.14159', 3.14159, NOW(), interval '1h')"
 $bin sql -d old -e "INSERT INTO testing_old values (2, false, 'world', decimal '0.14159', 0.14159, NOW(), interval '234h45m2s234ms')"
-$bin sql -d old -e "SELECT i, b, s, d, f, v, extract(epoch FROM t) as e FROM testing_old" > old.everything
+$bin sql -d old -e "SELECT i, b, s, d, f, extract(epoch from (timestamp '1970-01-01 00:00:00' + v)) as v, extract(epoch FROM t) as e FROM testing_old" > old.everything
 $bin quit && wait # wait will block until all background jobs finish.
 
 bin=/cockroach/cockroach
 $bin start --background --alsologtostderr &> newout
 echo "Read data written by reference version using new binary"
-$bin sql -d old -e "SELECT i, b, s, d, f, v, extract(epoch FROM t) as e FROM testing_old" > new.everything
+$bin sql -d old -e "SELECT i, b, s, d, f, extract(epoch from (timestamp '1970-01-01 00:00:00' + v)) as v, extract(epoch FROM t) as e FROM testing_old" > new.everything
 # diff returns non-zero if different. With set -e above, that would exit here.
 diff new.everything old.everything
 
@@ -88,10 +88,10 @@ $bin debug kv scan
 
 echo "Add a row with the new binary and render the updated data before shutting down."
 $bin sql -d old -e "INSERT INTO testing_old values (3, false, '!', decimal '2.14159', 2.14159, NOW(), interval '3h')"
-$bin sql -d old -e "SELECT i, b, s, d, f, v, extract(epoch FROM t) as e FROM testing_old" > new.everything
+$bin sql -d old -e "SELECT i, b, s, d, f, extract(epoch from (timestamp '1970-01-01 00:00:00' + v)) as v, extract(epoch FROM t) as e FROM testing_old" > new.everything
 $bin sql -d old -e "CREATE TABLE testing_new (i int primary key, b bool, s string unique, d decimal, f float, t timestamp, v interval, index sb (s, b))"
 $bin sql -d old -e "INSERT INTO testing_new values (4, false, '!!', decimal '1.14159', 1.14159, NOW(), interval '4h')"
-$bin sql -d old -e "SELECT i, b, s, d, f, v, extract(epoch FROM t) as e FROM testing_new" >> new.everything
+$bin sql -d old -e "SELECT i, b, s, d, f, extract(epoch from (timestamp '1970-01-01 00:00:00' + v)) as v, extract(epoch FROM t) as e FROM testing_new" >> new.everything
 $bin quit
 # Let it close its listening sockets.
 sleep 1
@@ -116,8 +116,8 @@ function finish() {
 trap finish EXIT
 
 $bin start --background --alsologtostderr &> out
-$bin sql -d old -e "SELECT i, b, s, d, f, v, extract(epoch FROM t) as e FROM testing_old" > old.everything
-$bin sql -d old -e "SELECT i, b, s, d, f, v, extract(epoch FROM t) as e FROM testing_new" >> old.everything
+$bin sql -d old -e "SELECT i, b, s, d, f, extract(epoch from (timestamp '1970-01-01 00:00:00' + v)) as v, extract(epoch FROM t) as e FROM testing_old" > old.everything
+$bin sql -d old -e "SELECT i, b, s, d, f, extract(epoch from (timestamp '1970-01-01 00:00:00' + v)) as v, extract(epoch FROM t) as e FROM testing_new" >> old.everything
 # diff returns non-zero if different. With set -e above, that would exit here.
 diff new.everything old.everything
 $bin quit && wait
@@ -140,7 +140,7 @@ trap finish EXIT
 $bin start & &> out
 until $bin sql -e "SELECT 1"; do sleep 1; done
 # grep returns non-zero if it didn't match anything. With set -e above, that would exit here.
-$bin sql -d old -e "SELECT i, b, s, d, f, v, extract(epoch FROM t) as e FROM testing_new" 2>&1 | grep "is encoded using using version 3, but this client only supports version 1"
+$bin sql -d old -e "SELECT i, b, s, d, f, extract(epoch from (timestamp '1970-01-01 00:00:00' + v)) as v, extract(epoch FROM t) as e FROM testing_new" 2>&1 | grep "is encoded using using version 3, but this client only supports version 1"
 $bin quit && wait
 `
 	runReadWriteReferenceTest(ctx, t, `forward-reference-version`, backwardReferenceTest)
