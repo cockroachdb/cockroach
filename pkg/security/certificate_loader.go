@@ -223,19 +223,19 @@ func (cl *CertificateLoader) certInfoFromFilename(filename string) (*CertInfo, e
 	case `ca`:
 		pu = CAPem
 		if numParts != 2 {
-			return nil, errors.Errorf("CA certificate filename should match ca.%s", certExtension)
+			return nil, errors.Errorf("CA certificate filename should match ca%s", certExtension)
 		}
 	case `node`:
 		pu = NodePem
 		if numParts != 2 {
-			return nil, errors.Errorf("node certificate filename should match node.%s", certExtension)
+			return nil, errors.Errorf("node certificate filename should match node%s", certExtension)
 		}
 	case `client`:
 		pu = ClientPem
 		// strip prefix and suffix and re-join middle parts.
 		name = strings.Join(parts[1:numParts-1], `.`)
 		if len(name) == 0 {
-			return nil, errors.Errorf("client certificate filename should match client.<user>.%s", certExtension)
+			return nil, errors.Errorf("client certificate filename should match client.<user>%s", certExtension)
 		}
 	default:
 		return nil, errors.Errorf("unknown prefix %q", prefix)
@@ -258,17 +258,18 @@ func (cl *CertificateLoader) certInfoFromFilename(filename string) (*CertInfo, e
 
 // findKey takes a CertInfo and looks for the corresponding key file.
 // If found, sets the 'keyFilename' and returns nil, returns error otherwise.
+// Does not load CA keys.
 func (cl *CertificateLoader) findKey(ci *CertInfo) error {
+	if ci.FileUsage == CAPem {
+		return nil
+	}
+
 	keyFilename := strings.TrimSuffix(ci.Filename, certExtension) + keyExtension
 	fullKeyPath := filepath.Join(cl.certsDir, keyFilename)
 
 	// Stat the file. This follows symlinks.
 	info, err := assetLoaderImpl.Stat(fullKeyPath)
 	if err != nil {
-		if os.IsNotExist(err) && ci.FileUsage == CAPem {
-			// This is a CA cert with no key: not an error.
-			return nil
-		}
 		return errors.Errorf("could not stat key file %s: %v", fullKeyPath, err)
 	}
 
