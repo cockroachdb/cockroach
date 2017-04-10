@@ -66,11 +66,13 @@ func (l *logDirName) Set(dir string) error {
 	if len(dir) > 0 && dir[0] == '~' {
 		return fmt.Errorf("log directory cannot start with '~': %s", dir)
 	}
-	absDir, err := filepath.Abs(dir)
-	if err != nil {
-		return err
+	if len(dir) > 0 {
+		absDir, err := filepath.Abs(dir)
+		if err != nil {
+			return err
+		}
+		dir = absDir
 	}
-	dir = absDir
 	l.Lock()
 	defer l.Unlock()
 	l.name = dir
