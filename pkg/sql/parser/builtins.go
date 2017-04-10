@@ -472,7 +472,7 @@ var Builtins = map[string][]Builtin{
 	"strpos": {stringBuiltin2("input", "find", func(s, substring string) (Datum, error) {
 		index := strings.Index(s, substring)
 		if index < 0 {
-			return NewDInt(0), nil
+			return DZero, nil
 		}
 
 		return NewDInt(DInt(utf8.RuneCountInString(s[:index]) + 1)), nil
@@ -1315,7 +1315,7 @@ var Builtins = map[string][]Builtin{
 				case x < 0:
 					return NewDInt(-1), nil
 				case x == 0:
-					return NewDInt(0), nil
+					return DZero, nil
 				}
 				return NewDInt(1), nil
 			},
@@ -1501,7 +1501,7 @@ var Builtins = map[string][]Builtin{
 				if elapsed.Compare(minDuration) < 0 {
 					return nil, roachpb.NewRetryableTxnError("forced by crdb_internal.force_retry()", nil /* txnID */)
 				}
-				return NewDInt(0), nil
+				return DZero, nil
 			},
 			category: categorySystemInfo,
 			Info:     "This function is used only by CockroachDB's developers for testing purposes.",
@@ -1525,7 +1525,7 @@ var Builtins = map[string][]Builtin{
 					}
 					return nil, roachpb.NewRetryableTxnError("forced by crdb_internal.force_retry()", &uuid)
 				}
-				return NewDInt(0), nil
+				return DZero, nil
 			},
 			category: categorySystemInfo,
 			Info:     "This function is used only by CockroachDB's developers for testing purposes.",

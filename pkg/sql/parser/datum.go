@@ -51,6 +51,9 @@ var (
 
 	// DNull is the NULL Datum.
 	DNull Datum = dNull{}
+
+	// DZero is the zero-valued integer Datum.
+	DZero = NewDInt(0)
 )
 
 // Datum represents a SQL value.

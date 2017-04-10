@@ -316,7 +316,7 @@ func (expr *ComparisonExpr) normalize(v *normalizeVisitor) TypedExpr {
 							v.err = err
 							return expr
 						}
-						if divisor.Compare(v.ctx, NewDInt(0)) < 0 {
+						if divisor.Compare(v.ctx, DZero) < 0 {
 							if !exprCopied {
 								exprCopy := *expr
 								expr = &exprCopy
