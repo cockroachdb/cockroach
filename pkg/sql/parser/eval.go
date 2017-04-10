@@ -1917,7 +1917,7 @@ func (expr *CastExpr) Eval(ctx *EvalContext) (Datum, error) {
 			if *v {
 				res = NewDInt(1)
 			} else {
-				res = NewDInt(0)
+				res = DZero
 			}
 		case *DInt:
 			res = v
