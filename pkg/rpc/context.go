@@ -86,6 +86,12 @@ func NewServer(ctx *Context) *grpc.Server {
 		// Our maximum kv size is unlimited, so we need this to be very large.
 		// TODO(peter,tamird): need tests before lowering
 		grpc.MaxMsgSize(math.MaxInt32),
+		// The default number of concurrent streams/requests on a client connection
+		// is 100, while the server is unlimited. The client setting can only be
+		// controlled by adjusting the server value. Set a very large value for the
+		// server value so that we have no fixed limit on the number of concurrent
+		// streams/requests on either the client or server.
+		grpc.MaxConcurrentStreams(math.MaxInt32),
 		grpc.RPCDecompressor(snappyDecompressor{}),
 	}
 	// Compression is enabled separately from decompression to allow staged
