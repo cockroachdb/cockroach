@@ -28,7 +28,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -254,5 +256,68 @@ func TestClusterFlow(t *testing.T) {
 	expected = "[" + expected + "]"
 	if rowStr := rows.String(); rowStr != expected {
 		t.Errorf("Result: %s\n Expected: %s\n", rowStr, expected)
+	}
+
+	// Create a new flow that returns an error through the network.
+
+	// Deliberately use unordered spans.
+	tr1.Spans = []TableReaderSpan{makeIndexSpan(4, 8), makeIndexSpan(0, 4)}
+
+	if err := SetFlowRequestTrace(ctx, req1); err != nil {
+		t.Fatal(err)
+	}
+	if err := SetFlowRequestTrace(ctx, req2); err != nil {
+		t.Fatal(err)
+	}
+	if err := SetFlowRequestTrace(ctx, req3); err != nil {
+		t.Fatal(err)
+	}
+
+	log.Infof(ctx, "Setting up flow on 0")
+	if resp, err := clients[0].SetupFlow(ctx, req1); err != nil {
+		t.Fatal(err)
+	} else if resp.Error != nil {
+		t.Fatal(resp.Error)
+	}
+
+	log.Infof(ctx, "Setting up flow on 1")
+	if resp, err := clients[1].SetupFlow(ctx, req2); err != nil {
+		t.Fatal(err)
+	} else if resp.Error != nil {
+		t.Fatal(resp.Error)
+	}
+
+	log.Infof(ctx, "Running flow on 2")
+	stream, err = clients[2].RunSyncFlow(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = stream.Send(&ConsumerSignal{SetupFlowRequest: req3})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for foundErr := false; !foundErr; {
+		log.Info(ctx, "stream recv")
+		msg, err := stream.Recv()
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		for _, m := range msg.Data.Metadata {
+			if distSQLErr := m.GetError(); distSQLErr != nil {
+				if pgErr := distSQLErr.GetPGError(); pgErr != nil {
+					if pgErr.Code != pgerror.CodeInternalError {
+						t.Fatal(pgErr.Code)
+					}
+					if err := distSQLErr.ErrorDetail(); !testutils.IsError(err, "unordered spans") {
+						t.Fatal(err)
+					}
+					foundErr = true
+					break
+				}
+			}
+		}
 	}
 }
