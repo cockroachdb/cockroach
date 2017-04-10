@@ -1786,16 +1786,19 @@ func TestStoreRangeGossipOnSplits(t *testing.T) {
 	config.TestingSetupZoneConfigHook(stopper)
 	config.TestingSetZoneConfig(0, config.ZoneConfig{NumReplicas: 1})
 
+	var lastSD roachpb.StoreDescriptor
 	rangeCountCh := make(chan int32)
 	unregister := store.Gossip().RegisterCallback(storeKey, func(_ string, val roachpb.Value) {
 		var sd roachpb.StoreDescriptor
 		if err := val.GetProto(&sd); err != nil {
 			panic(err)
 		}
-		// Wait for lease count to equal range count, as they're incremented in lockstep.
-		if sd.Capacity.LeaseCount != sd.Capacity.RangeCount {
+		// Wait for range count to change as this callback is invoked
+		// for lease count changes as well.
+		if sd.Capacity.RangeCount == lastSD.Capacity.RangeCount {
 			return
 		}
+		lastSD = sd
 		rangeCountCh <- sd.Capacity.RangeCount
 	})
 	defer unregister()
