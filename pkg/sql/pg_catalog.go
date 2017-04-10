@@ -38,7 +38,7 @@ import (
 
 var (
 	oidZero   = parser.NewDOid(0)
-	zeroVal   = parser.NewDInt(0)
+	zeroVal   = parser.DZero
 	negOneVal = parser.NewDInt(-1)
 )
 
