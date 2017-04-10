@@ -516,6 +516,10 @@ func (ds *DistSender) initAndVerifyBatch(
 		if len(ba.Txn.ObservedTimestamps) == 0 {
 			// Ensure the local NodeID is marked as free from clock offset;
 			// the transaction's timestamp was taken off the local clock.
+			// TODO(andrei): This is broken when Txn.OrigTimestamp has not been, in
+			// fact, taken off this node's clock. This happens when the transaction
+			// was created remotely and is being run through the ExternalClient. I
+			// think we shold move this initialization to client.Txn.
 			if nDesc := ds.getNodeDescriptor(); nDesc != nil {
 				// TODO(tschottdorf): future refactoring should move this to txn
 				// creation in TxnCoordSender, which is currently unaware of the
