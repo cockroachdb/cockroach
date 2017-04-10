@@ -79,6 +79,50 @@ func TestInitInsecure(t *testing.T) {
 	}
 }
 
+func TestStartArgChecking(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	f := startCmd.Flags()
+
+	testCases := []struct {
+		args     []string
+		expected string
+	}{
+		{[]string{}, ``},
+		{[]string{`--insecure=blu`}, `parsing "blu": invalid syntax`},
+		{[]string{`--store=path=`}, `no value specified`},
+		{[]string{`--store=path=blah,path=blih`}, `field was used twice`},
+		{[]string{`--store=path=~/blah`}, `store path cannot start with '~'`},
+		{[]string{`--store=path=./~/blah`}, ``},
+		{[]string{`--store=size=blih`}, `could not parse store size`},
+		{[]string{`--store=size=0.005`}, `store size \(0.005\) must be between 1% and 100%`},
+		{[]string{`--store=size=100.5`}, `store size \(100.5\) must be between 1% and 100%`},
+		{[]string{`--store=size=0.5%`}, `store size \(0.5%\) must be between 1% and 100%`},
+		{[]string{`--store=size=0.5%`}, `store size \(0.5%\) must be between 1% and 100%`},
+		{[]string{`--store=size=500.0%`}, `store size \(500.0%\) must be between 1% and 100%`},
+		{[]string{`--store=size=.5,path=.`}, ``},
+		{[]string{`--store=size=50.%,path=.`}, ``},
+		{[]string{`--store=size=50%,path=.`}, ``},
+		{[]string{`--store=size=50.5%,path=.`}, ``},
+		{[]string{`--store=size=-1231MB`}, `store size \(-1231MB\) must be larger than`},
+		{[]string{`--store=size=1231B`}, `store size \(1231B\) must be larger than`},
+		{[]string{`--store=size=1231BLA`}, `unhandled size name: bla`},
+		{[]string{`--store=attrs=bli:bli`}, `duplicate attribute`},
+		{[]string{`--store=type=bli`}, `bli is not a valid store type`},
+		{[]string{`--store=bla=bli`}, `bla is not a valid store field`},
+		{[]string{`--store=size=123gb`}, `no path specified`},
+		{[]string{`--store=type=mem`}, `size must be specified for an in memory store`},
+		{[]string{`--store=type=mem,path=blah`}, `path specified for in memory store`},
+	}
+	for i, c := range testCases {
+		// Reset the context and insecure flag for every test case.
+		err := f.Parse(c.args)
+		if !testutils.IsError(err, c.expected) {
+			t.Errorf("%d: expected %q, but found %v", i, c.expected, err)
+		}
+	}
+}
+
 func TestGCProfiles(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 

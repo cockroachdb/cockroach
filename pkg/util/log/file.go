@@ -63,6 +63,14 @@ var logDir logDirName
 
 // Set implements the flag.Value interface.
 func (l *logDirName) Set(dir string) error {
+	if len(dir) > 0 && dir[0] == '~' {
+		return fmt.Errorf("log directory cannot start with '~': %s", dir)
+	}
+	absDir, err := filepath.Abs(dir)
+	if err != nil {
+		return err
+	}
+	dir = absDir
 	l.Lock()
 	defer l.Unlock()
 	l.name = dir
