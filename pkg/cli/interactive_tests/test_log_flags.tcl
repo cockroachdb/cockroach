@@ -1,0 +1,44 @@
+#! /usr/bin/env expect -f
+
+source [file join [file dirname $argv0] common.tcl]
+
+spawn /bin/bash
+send "PS1=':''/# '\r"
+eexpect ":/# "
+
+# Perform command-line checking for logging flags. We cannot use a
+# regular unit test for this, because the logging flags are declared
+# for the global `CommandLine` object of package `flag`, and any
+# errors when parsing flags in that context cause the (test) process
+# to exit entirely (it has errorHandling set to ExitOnError).
+
+# Check that leading tildes are properly rejected.
+send "$argv start --log-dir=\~/blah\r"
+eexpect "log directory cannot start with '~'"
+eexpect ":/# "
+
+# Check that the user can override.
+send "$argv start --log-dir=blah/\~/blah\r"
+eexpect "logs: *blah/~/blah"
+send "\003"
+eexpect ":/# "
+
+# Check that TRUE and FALSE are valid values for the severity flags.
+send "$argv start --alsologtostderr=false\r"
+eexpect "node starting"
+send "\003"
+eexpect ":/# "
+send "$argv start --alsologtostderr=true\r"
+eexpect "node starting"
+send "\003"
+eexpect ":/# "
+send "$argv start --alsologtostderr=2\r"
+eexpect "node starting"
+send "\003"
+eexpect ":/# "
+send "$argv start --alsologtostderr=cantparse\r"
+eexpect "parsing \"cantparse\": invalid syntax"
+eexpect ":/# "
+
+send "exit 0\r"
+eexpect eof
