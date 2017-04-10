@@ -199,9 +199,9 @@ func (p *planner) orderBy(
 		// If we are dealing with a UNION or something else we would need
 		// to fabricate an intermediate renderNode to add the new render.
 		if index == -1 && s != nil {
-			cols, exprs, hasStar, err := p.computeRender(
+			cols, exprs, hasStar, err := p.computeRenderAllowingStars(
 				ctx, parser.SelectExpr{Expr: expr}, parser.TypeAny,
-				s.sourceInfo, s.ivarHelper, true)
+				s.sourceInfo, s.ivarHelper)
 			if err != nil {
 				return nil, err
 			}
