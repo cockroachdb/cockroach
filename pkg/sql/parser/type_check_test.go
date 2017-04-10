@@ -48,6 +48,7 @@ func TestTypeCheck(t *testing.T) {
 		{`true AND NULL`, `true AND NULL`},
 		{`NULL OR false`, `NULL OR false`},
 		{`1 IN (1, 2, 3)`, `1:::INT IN (1:::INT, 2:::INT, 3:::INT)`},
+		{`1 IN (1, 2.3, 3)`, `1:::INT IN (1:::INT, 2.3:::DECIMAL, 3:::INT)`},
 		{`IF(true, 2, 3)`, `IF(true, 2:::INT, 3:::INT)`},
 		{`IF(false, 2, 3)`, `IF(false, 2:::INT, 3:::INT)`},
 		{`IF(NULL, 2, 3)`, `IF(NULL, 2:::INT, 3:::INT)`},

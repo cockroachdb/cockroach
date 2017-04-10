@@ -921,28 +921,33 @@ func typeCheckComparisonOp(
 	rightTuple, rightIsTuple := foldedRight.(*Tuple)
 	switch {
 	case foldedOp == In && rightIsTuple:
-		sameTypeExprs := make([]Expr, len(rightTuple.Exprs)+1)
-		sameTypeExprs[0] = foldedLeft
-		copy(sameTypeExprs[1:], rightTuple.Exprs)
-
-		typedSubExprs, retType, err := typeCheckSameTypedExprs(ctx, TypeAny, sameTypeExprs...)
+		typedLeft, err := foldedLeft.TypeCheck(ctx, TypeAny)
 		if err != nil {
-			return nil, nil, CmpOp{}, fmt.Errorf(unsupportedCompErrFmtWithExprs,
-				left, op, right, err)
+			return nil, nil, CmpOp{}, err
+		}
+		rightTuple.types = make(TTuple, len(rightTuple.Exprs))
+		var firstNonNullType Type
+		for i, elt := range rightTuple.Exprs {
+			_, rightSubExprTyped, _, err := typeCheckComparisonOp(ctx, EQ, foldedLeft, elt)
+			if err != nil {
+				return nil, nil, CmpOp{}, fmt.Errorf(unsupportedCompErrFmtWithExprs,
+					left, op, right, err)
+			}
+			rightSubExprType := rightSubExprTyped.ResolvedType()
+			rightTuple.Exprs[i] = rightSubExprTyped
+			rightTuple.types[i] = rightSubExprType
+			if rightSubExprType != TypeNull {
+				firstNonNullType = rightSubExprType
+			}
+		}
+		leftType := typedLeft.ResolvedType()
+		if leftType == TypeNull && firstNonNullType != nil {
+			leftType = firstNonNullType
 		}
 
-		fn, ok := ops.lookupImpl(retType, TypeTuple)
+		fn, ok := ops.lookupImpl(leftType, TypeTuple)
 		if !ok {
-			return nil, nil, CmpOp{}, fmt.Errorf(unsupportedCompErrFmtWithTypes, retType, op, TypeTuple)
-		}
-
-		typedLeft := typedSubExprs[0]
-		typedSubExprs = typedSubExprs[1:]
-
-		rightTuple.types = make(TTuple, len(typedSubExprs))
-		for i, typedExpr := range typedSubExprs {
-			rightTuple.Exprs[i] = typedExpr
-			rightTuple.types[i] = retType
+			return nil, nil, CmpOp{}, fmt.Errorf(unsupportedCompErrFmtWithTypes, typedLeft.ResolvedType(), op, TypeTuple)
 		}
 		if switched {
 			return rightTuple, typedLeft, fn, nil
