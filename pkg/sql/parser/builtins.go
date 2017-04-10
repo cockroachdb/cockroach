@@ -21,8 +21,9 @@ import (
 	"crypto/md5"
 	"crypto/sha1"
 	"crypto/sha256"
-	"errors"
+	"crypto/sha512"
 	"fmt"
+	"hash"
 	"math"
 	"math/rand"
 	"net"
@@ -45,6 +46,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/pkg/errors"
 )
 
 var (
@@ -459,17 +461,25 @@ var Builtins = map[string][]Builtin{
 		return nil, errEmptyInputString
 	}, TypeInt, "Calculates the ASCII value for the first character in `val`.")},
 
-	"md5": {stringBuiltin1(func(s string) (Datum, error) {
-		return NewDString(fmt.Sprintf("%x", md5.Sum([]byte(s)))), nil
-	}, TypeString, "Calculates the MD5 hash value of `val`.")},
+	"md5": {hashBuiltin(
+		func() hash.Hash { return md5.New() },
+		"Calculates the MD5 hash value of a set of values.",
+	)},
 
-	"sha1": {stringBuiltin1(func(s string) (Datum, error) {
-		return NewDString(fmt.Sprintf("%x", sha1.Sum([]byte(s)))), nil
-	}, TypeString, "Calculates the SHA1 hash value of `val`.")},
+	"sha1": {hashBuiltin(
+		func() hash.Hash { return sha1.New() },
+		"Calculates the SHA1 hash value of a set of values.",
+	)},
 
-	"sha256": {stringBuiltin1(func(s string) (Datum, error) {
-		return NewDString(fmt.Sprintf("%x", sha256.Sum256([]byte(s)))), nil
-	}, TypeString, "Calculates the SHA256 hash value of `val`.")},
+	"sha256": {hashBuiltin(
+		func() hash.Hash { return sha256.New() },
+		"Calculates the SHA256 hash value of a set of values.",
+	)},
+
+	"sha512": {hashBuiltin(
+		func() hash.Hash { return sha512.New() },
+		"Calculates the SHA512 hash value of a set of values.",
+	)},
 
 	"to_hex": {
 		Builtin{
@@ -1889,6 +1899,27 @@ func bytesBuiltin1(f func(string) (Datum, error), returnType Type, info string) 
 		ReturnType: fixedReturnType(returnType),
 		fn: func(_ *EvalContext, args Datums) (Datum, error) {
 			return f(string(*args[0].(*DBytes)))
+		},
+		Info: info,
+	}
+}
+
+func hashBuiltin(newHash func() hash.Hash, info string) Builtin {
+	return Builtin{
+		Types:      VariadicType{TypeString},
+		ReturnType: fixedReturnType(TypeString),
+		fn: func(_ *EvalContext, args Datums) (Datum, error) {
+			h := newHash()
+			for _, datum := range args {
+				if datum == DNull {
+					continue
+				}
+				buf := []byte(MustBeDString(datum))
+				if _, err := h.Write(buf); err != nil {
+					return nil, errors.Errorf("hashing %s: %s", datum, err)
+				}
+			}
+			return NewDString(fmt.Sprintf("%x", h.Sum(nil))), nil
 		},
 		Info: info,
 	}

@@ -1519,3 +1519,42 @@ one
 one-three
 six-one-seven
 minus-two
+
+# Do some basic sanity checking of the variadic hash functions.
+query BBBBBB
+SELECT
+  sha512('1') = sha512('1'),
+  sha512('1') = sha512('2'),
+  sha512('1', '2') = sha512('1', '2'),
+  sha512('1', '2') = sha512('2', '1'),
+  sha512('1', '2') = sha512('12'),
+  sha512('1', '2') = sha512('21')
+----
+true false true false true false
+
+# The hash functions should be stable, so verify that the  following hashes
+# don't change.
+query T
+SELECT i FROM (VALUES
+  (sha512(NULL)),
+  (sha512(true::string)),
+  (sha512(false::string)),
+  (sha512(1::int::string)),
+  (sha512(1.1::float::string)),
+  (sha512('foo'::string)),
+  (sha512('3m'::interval::string)),
+  (sha512('2016-11-12'::date::string)),
+  (sha512('2015-08-24 23:45:45.53453'::timestamptz::string)),
+  (sha512(b'bar':::bytes::string))
+) AS a(i)
+----
+cf83e1357eefb8bdf1542850d66d8007d620e4050b5715dc83f4a921d36ce9ce47d0d13c5d85f2b0ff8318d2877eec2f63b931bd47417a81a538327af927da3e
+9120cd5faef07a08e971ff024a3fcbea1e3a6b44142a6d82ca28c6c42e4f852595bcf53d81d776f10541045abdb7c37950629415d0dc66c8d86c64a5606d32de
+719fa67eef49c4b2a2b83f0c62bddd88c106aaadb7e21ae057c8802b700e36f81fe3f144812d8b05d66dc663d908b25645e153262cf6d457aa34e684af9e328d
+4dff4ea340f0a823f15d3f4f01ab62eae0e5da579ccb851f8db9dfe84c58b2b37b89903a740e1ee172da793a6e79d560e5f7f9bd058a12a280433ed6fa46510a
+be09b235155bae6cb96b94ce4645260937e856ac3907d710850256e6351f50b428f948a7af33937445604f41cf3a3121b2dd069a057708ed1f047e133e09151e
+f7fbba6e0636f890e56fbbf3283e524c6fa3204ae298382d624741d0dc6638326e282c41be5e4254d8820772c5518a2c5a8c0c7f7eda19594a7eb539453e1ed7
+6ca65db2a861fa0ecd0c1e29ef9566425e952d2a205706a6e955a6b1bbd721fdc2d28efdba515f9d29f34aa84223382f6ca6d11bdef23984b8ff9339b59e80f5
+b2d173023893f71caadf7cb2f9557355462570de2c9c971b9cfa5494936e28df8e13d0db4d550aab66d5e7a002f678ddb02def092c069ce473cf5fb293953986
+960b0fed9378be1e9adefd91e1be6ac9c1de7208008dfec438ff845135727bebea0f7458a5181079f61288176e0168cfea501b900c3e495b3ab9bbe4d372486d
+d82c4eb5261cb9c8aa9855edd67d1bd10482f41529858d925094d173fa662aa91ff39bc5b188615273484021dfb16fd8284cf684ccf0fc795be3aa2fc1e6c181
