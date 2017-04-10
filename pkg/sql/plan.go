@@ -341,7 +341,7 @@ func (p *planner) newPlan(
 	case *parser.SetDefaultIsolation:
 		return p.SetDefaultIsolation(n)
 	case *parser.Show:
-		return p.Show(n, autoCommit)
+		return p.Show(n)
 	case *parser.ShowColumns:
 		return p.ShowColumns(ctx, n)
 	case *parser.ShowConstraints:
@@ -400,7 +400,7 @@ func (p *planner) prepare(ctx context.Context, stmt parser.Statement) (planNode,
 	case *parser.SelectClause:
 		return p.SelectClause(ctx, n, nil, nil, nil, publicColumns)
 	case *parser.Show:
-		return p.Show(n, false)
+		return p.Show(n)
 	case *parser.ShowCreateTable:
 		return p.ShowCreateTable(ctx, n)
 	case *parser.ShowCreateView:

@@ -44,8 +44,6 @@ type sessionVar struct {
 	// Reset performs mutations (usually on p.session) to effect the change
 	// desired by RESET commands.
 	Reset func(*planner) error
-
-	requireExplicitTxn bool
 }
 
 // nopVar is a placeholder for a number of settings sent by various client
@@ -243,26 +241,12 @@ var varGen = map[string]sessionVar{
 			return nil
 		},
 	},
-	`time zone`: {
-		Get: func(p *planner) string { return p.session.Location.String() },
-	},
-	`transaction isolation level`: {
-		Get:                func(p *planner) string { return p.txn.Isolation().String() },
-		requireExplicitTxn: true,
-	},
-	`transaction priority`: {
-		Get:                func(p *planner) string { return p.txn.UserPriority().String() },
-		requireExplicitTxn: true,
-	},
-	`max_index_keys`: {
-		Get: func(*planner) string { return "32" },
-	},
-	`server_version`: {
-		Get: func(*planner) string { return PgServerVersion },
-	},
-	`session_user`: {
-		Get: func(p *planner) string { return p.session.User },
-	},
+	`time zone`:                   {Get: func(p *planner) string { return p.session.Location.String() }},
+	`transaction isolation level`: {Get: func(p *planner) string { return p.txn.Isolation().String() }},
+	`transaction priority`:        {Get: func(p *planner) string { return p.txn.UserPriority().String() }},
+	`max_index_keys`:              {Get: func(*planner) string { return "32" }},
+	`server_version`:              {Get: func(*planner) string { return PgServerVersion }},
+	`session_user`:                {Get: func(p *planner) string { return p.session.User }},
 
 	// See https://www.postgresql.org/docs/9.6/static/runtime-config-client.html
 	`extra_float_digits`: nopVar,
