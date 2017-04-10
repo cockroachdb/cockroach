@@ -2352,8 +2352,11 @@ func (r *Replica) requestToProposal(
 		proposal.command = storagebase.RaftCommand{
 			ReplicatedEvalResult: &result.Replicated,
 			WriteBatch:           result.WriteBatch,
-			// TODO(bdarnell): shouldn't set this in the propEvalKV branch; see proposer_kv.proto
-			BatchRequest: &ba,
+		}
+		if r.store.TestingKnobs().TestingEvalFilter != nil {
+			// For backwards compatibility, tests that use TestingEvalFilter
+			// need the original request to be preserved. See #10493
+			proposal.command.BatchRequest = &ba
 		}
 	} else {
 		proposal.command = storagebase.RaftCommand{
@@ -3546,7 +3549,7 @@ func (r *Replica) processRaftCommand(
 	// leases.
 	verifyLease := func() error {
 		// Freeze commands do not verify lease.
-		if raftCmd.BatchRequest.IsFreeze() {
+		if raftCmd.BatchRequest != nil && raftCmd.BatchRequest.IsFreeze() {
 			return nil
 		}
 		// Handle the case of pre-epoch-based-leases command.
