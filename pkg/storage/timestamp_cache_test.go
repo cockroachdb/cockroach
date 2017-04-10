@@ -33,6 +33,8 @@ func TestTimestampCache(t *testing.T) {
 	manual := hlc.NewManualClock(baseTS)
 	clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
 	tc := newTimestampCache(clock)
+	defer tc.Clear(clock.Now())
+
 	tc.lowWater = hlc.Timestamp{WallTime: baseTS}
 
 	// First simulate a read of just "a" at time 50.
@@ -106,6 +108,8 @@ func TestTimestampCacheEviction(t *testing.T) {
 	manual := hlc.NewManualClock(123)
 	clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
 	tc := newTimestampCache(clock)
+	defer tc.Clear(clock.Now())
+
 	tc.maxBytes = 0
 
 	// Increment time to the low water mark + 1.
@@ -131,6 +135,7 @@ func TestTimestampCacheNoEviction(t *testing.T) {
 	manual := hlc.NewManualClock(123)
 	clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
 	tc := newTimestampCache(clock)
+	defer tc.Clear(clock.Now())
 
 	// Increment time to the low water mark + 1.
 	manual.Increment(1)
@@ -344,6 +349,7 @@ func TestTimestampCacheLayeredIntervals(t *testing.T) {
 	manual := hlc.NewManualClock(123)
 	clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
 	tc := newTimestampCache(clock)
+	defer tc.Clear(clock.Now())
 
 	// Run each test case in several configurations.
 	for _, testCase := range []layeredIntervalTestCase{
@@ -420,6 +426,7 @@ func TestTimestampCacheClear(t *testing.T) {
 	manual := hlc.NewManualClock(123)
 	clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
 	tc := newTimestampCache(clock)
+	defer tc.Clear(clock.Now())
 
 	key := roachpb.Key("a")
 
@@ -448,6 +455,7 @@ func TestTimestampCacheReadVsWrite(t *testing.T) {
 	manual := hlc.NewManualClock(123)
 	clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
 	tc := newTimestampCache(clock)
+	defer tc.Clear(clock.Now())
 
 	// Add read-only non-txn entry at current time.
 	ts1 := clock.Now()
@@ -476,6 +484,7 @@ func TestTimestampCacheEqualTimestamps(t *testing.T) {
 	manual := hlc.NewManualClock(123)
 	clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
 	tc := newTimestampCache(clock)
+	defer tc.Clear(clock.Now())
 
 	txn1 := uuid.MakeV4()
 	txn2 := uuid.MakeV4()

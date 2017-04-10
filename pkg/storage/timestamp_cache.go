@@ -201,7 +201,11 @@ func newTimestampCache(clock *hlc.Clock) *timestampCache {
 	onEvicted := func(k, v interface{}) {
 		ck := k.(*cache.IntervalKey)
 		cv := v.(*cacheValue)
-		tc.bytes -= cacheEntrySize(ck.Start, ck.End, cv.txnID)
+		reqSize := cacheEntrySize(ck.Start, ck.End, cv.txnID)
+		if tc.bytes < reqSize {
+			panic(fmt.Sprintf("bad reqSize: %d < %d", tc.bytes, reqSize))
+		}
+		tc.bytes -= reqSize
 	}
 	tc.rCache.Config.OnEvicted = onEvicted
 	tc.wCache.Config.OnEvicted = onEvicted
@@ -252,6 +256,13 @@ func (tc *timestampCache) add(
 			tc.bytes += cacheEntrySize(r.Start, r.End, txnID)
 			tcache.AddEntry(entry)
 		}
+		addEntryAfter := func(entry, after *cache.Entry) {
+			ck := entry.Key.(*cache.IntervalKey)
+			cv := entry.Value.(*cacheValue)
+			tc.bytes += cacheEntrySize(ck.Start, ck.End, cv.txnID)
+			tcache.AddEntryAfter(entry, after)
+		}
+
 		r := interval.Range{
 			Start: interval.Comparable(start),
 			End:   interval.Comparable(end),
@@ -303,7 +314,7 @@ func (tc *timestampCache) add(
 
 					newKey := tcache.MakeKey(r.End, oldEnd)
 					newEntry := makeCacheEntry(newKey, *cv)
-					tcache.AddEntryAfter(newEntry, entry)
+					addEntryAfter(newEntry, entry)
 				case eCmp >= 0:
 					// Left partial overlap; truncate old end.
 					//
@@ -471,7 +482,7 @@ func (tc *timestampCache) add(
 					cv.txnID = nil
 					newKey := tcache.MakeKey(r.Start, key.Start)
 					newEntry := makeCacheEntry(newKey, cacheValue{timestamp: timestamp, txnID: txnID})
-					tcache.AddEntryAfter(newEntry, entry)
+					addEntryAfter(newEntry, entry)
 					r.Start = key.End
 				case sCmp > 0 && eCmp < 0:
 					// Old contains new; split up old into two. New segment is
@@ -489,7 +500,7 @@ func (tc *timestampCache) add(
 
 					newKey := tcache.MakeKey(r.End, oldEnd)
 					newEntry := makeCacheEntry(newKey, *cv)
-					tcache.AddEntryAfter(newEntry, entry)
+					addEntryAfter(newEntry, entry)
 				case eCmp == 0:
 					// Old contains new, right-aligned; truncate old end and clear
 					// ownership of new segment.
@@ -527,7 +538,7 @@ func (tc *timestampCache) add(
 					newKey := tcache.MakeKey(key.End, r.Start)
 					newCV := cacheValue{timestamp: cv.timestamp, txnID: nil}
 					newEntry := makeCacheEntry(newKey, newCV)
-					tcache.AddEntryAfter(newEntry, entry)
+					addEntryAfter(newEntry, entry)
 				case sCmp < 0:
 					// Right partial overlap; truncate old start and split new into
 					// segments owned by no txn (the overlap) and the new txn.
@@ -542,7 +553,7 @@ func (tc *timestampCache) add(
 					newKey := tcache.MakeKey(r.End, key.Start)
 					newCV := cacheValue{timestamp: cv.timestamp, txnID: nil}
 					newEntry := makeCacheEntry(newKey, newCV)
-					tcache.AddEntryAfter(newEntry, entry)
+					addEntryAfter(newEntry, entry)
 				default:
 					panic(fmt.Sprintf("no overlap between %v and %v", key.Range, r))
 				}
