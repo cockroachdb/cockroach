@@ -652,7 +652,7 @@ func doShutdown(ctx context.Context, c serverpb.AdminClient, onModes []int32) er
 			Shutdown: i > 0,
 		})
 		if err != nil {
-			return err
+			return errors.Wrap(err, "Error sending drain request")
 		}
 		// Only signal the caller to try again with a hard shutdown if we're
 		// not already trying to do that, and if the initial connection attempt
@@ -676,7 +676,7 @@ func doShutdown(ctx context.Context, c serverpb.AdminClient, onModes []int32) er
 				}
 				// Case in which we don't even know whether the server is
 				// running. No point in trying again.
-				return err
+				return errors.Wrap(err, "Got unexpected error while receiving on stream")
 			}
 			if i == 0 {
 				// Our liveness probe succeeded.
