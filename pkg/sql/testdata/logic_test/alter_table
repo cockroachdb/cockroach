@@ -499,7 +499,7 @@ SELECT a,b,f FROM add_default
 # Adding a unique column to an existing table with data with a default value
 # is illegal
 statement error duplicate key value .* violates unique constraint \"add_default_g_key\"
-ALTER TABLE add_default ADD g TIMESTAMP UNIQUE DEFAULT current_timestamp()
+ALTER TABLE add_default ADD g INT UNIQUE DEFAULT 1
 
 # Multiple columns can be added at once with heterogeneous DEFAULT usage
 statement ok
