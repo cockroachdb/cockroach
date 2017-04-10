@@ -412,7 +412,7 @@ func TestGetLogReader(t *testing.T) {
 		// Symlink to a log file.
 		{filepath.Join(dir, removePeriods(program)+".log"), "pathnames must be basenames", ""},
 		// Symlink relative to logDir.
-		{removePeriods(program) + ".log", "malformed log filename", ""},
+		{removePeriods(program) + ".log", "symlinks are not allowed", ""},
 		// Non-log file.
 		{"other.txt", "malformed log filename", "malformed log filename"},
 		// Non-existent file matching RE.
