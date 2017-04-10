@@ -2072,14 +2072,22 @@ func (ncc *noConfChangeTestHandler) HandleRaftRequest(
 			if err := command.Unmarshal(ccCtx.Payload); err != nil {
 				panic(err)
 			}
-			if command.BatchRequest.RangeID == ncc.rangeID {
-				if ba, ok := command.BatchRequest.GetArg(roachpb.EndTransaction); ok {
-					et := ba.(*roachpb.EndTransactionRequest)
-					if crt := et.InternalCommitTrigger.GetChangeReplicasTrigger(); crt != nil {
+			if req.RangeID == ncc.rangeID {
+				if command.BatchRequest != nil { // !propEvalKV
+					if ba, ok := command.BatchRequest.GetArg(roachpb.EndTransaction); ok {
+						et := ba.(*roachpb.EndTransactionRequest)
+						if crt := et.InternalCommitTrigger.GetChangeReplicasTrigger(); crt != nil {
+							// We found a configuration change headed for our victim range;
+							// sink it.
+							req.Message.Entries = req.Message.Entries[:i]
+							break
+						}
+					}
+				} else { // propEvalKV
+					if command.ReplicatedEvalResult.ChangeReplicas != nil {
 						// We found a configuration change headed for our victim range;
 						// sink it.
 						req.Message.Entries = req.Message.Entries[:i]
-						break
 					}
 				}
 			}
