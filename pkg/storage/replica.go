@@ -1672,21 +1672,6 @@ func collectSpans(desc roachpb.RangeDescriptor, ba *roachpb.BatchRequest) (*Span
 	spans.Add(SpanReadOnly, roachpb.Span{Key: keys.RangeLastGCKey(ba.Header.RangeID)})
 	spans.Add(SpanReadOnly, roachpb.Span{Key: keys.RangeDescriptorKey(desc.StartKey)})
 
-	// When running with experimental proposer-evaluated KV, insert a
-	// span that effectively linearizes evaluation and application of
-	// all commands. This is horrible from a performance perspective
-	// but is required for correctness until work in #6290 is addressed.
-	if propEvalKV {
-		access := SpanReadWrite
-		if ba.IsReadOnly() {
-			access = SpanReadOnly
-		}
-		spans.Add(access, roachpb.Span{
-			Key:    keys.LocalMax,
-			EndKey: keys.MaxKey,
-		})
-	}
-
 	// If any command gave us spans that are invalid, bail out early
 	// (before passing them to the command queue, which may panic).
 	if err := spans.validate(); err != nil {
