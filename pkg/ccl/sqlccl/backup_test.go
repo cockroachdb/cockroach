@@ -148,13 +148,16 @@ func backupRestoreTestSetupWithParams(
 	}
 
 	cleanupFn := func() {
-		items, err := ioutil.ReadDir(temp)
-		if err != nil && !os.IsNotExist(err) {
-			t.Fatal(err)
-		}
-		for _, leftover := range items {
-			t.Errorf("found %q remaining in tempdir", leftover.Name())
-		}
+		testutils.SucceedsSoon(t, func() error {
+			items, err := ioutil.ReadDir(temp)
+			if err != nil && !os.IsNotExist(err) {
+				t.Fatal(err)
+			}
+			for _, leftover := range items {
+				return errors.Errorf("found %q remaining in tempdir", leftover.Name())
+			}
+			return nil
+		})
 		tc.Stopper().Stop()
 		dirCleanupFn()
 	}
