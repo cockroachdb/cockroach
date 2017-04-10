@@ -10,6 +10,7 @@ package sqlccl
 
 import (
 	"bytes"
+	"io"
 	"io/ioutil"
 	"sort"
 
@@ -402,8 +403,11 @@ func Backup(
 		return BackupDescriptor{}, err
 	}
 	defer exportStore.Close()
-	if err := exportStore.WriteFile(ctx, BackupDescriptorName, bytes.NewReader(descBuf)); err != nil {
-		return BackupDescriptor{}, err
+
+	if err := storageccl.RetryWriteFile(ctx, BackupDescriptorName, exportStore, func() (io.Reader, error) {
+		return bytes.NewReader(descBuf), nil
+	}); err != nil {
+		return BackupDescriptor{}, errors.Wrap(err, "uploading backup descriptor")
 	}
 	return desc, nil
 }

@@ -149,6 +149,25 @@ type ExportStorage interface {
 	Delete(ctx context.Context, basename string) error
 }
 
+// RetryWriteFile calls store.WriteFile with retries if errors occur. reader
+// is a function that returns a reader (so that, for example, file readers
+// can Seek back to the start). This function is needed, for example, because
+// the Azure block storage appears to sometimes fail during put block list,
+// but retrying that function is not sufficient to succeed, and instead we
+// believe the entire put, including the block puts, must be retried.
+func RetryWriteFile(ctx context.Context, basename string, store ExportStorage, reader func() (io.Reader, error)) error {
+	const maxAttempts = 3
+
+	err := retry.WithMaxAttempts(ctx, base.DefaultRetryOptions(), maxAttempts, func() error {
+		content, err := reader()
+		if err != nil {
+			return err
+		}
+		return store.WriteFile(ctx, basename, content)
+	})
+	return errors.Wrap(err, "WriteFile")
+}
+
 type localFileStorage struct {
 	base string
 }
@@ -600,7 +619,12 @@ func (e *tmpWriter) LocalFile() string {
 
 // Finish uploads the content of the tmpfile using the store's WriteFile.
 func (e *tmpWriter) Finish(ctx context.Context) error {
-	return e.store.WriteFile(ctx, e.name, e.tmpfile)
+	return RetryWriteFile(ctx, e.name, e.store, func() (io.Reader, error) {
+		if _, err := e.tmpfile.Seek(0, os.SEEK_SET); err != nil {
+			return nil, err
+		}
+		return e.tmpfile, nil
+	})
 }
 
 func (e *tmpWriter) Close(ctx context.Context) {

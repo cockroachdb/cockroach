@@ -217,7 +217,9 @@ func Load(
 	if err != nil {
 		return BackupDescriptor{}, errors.Wrap(err, "marshal backup descriptor")
 	}
-	if err := dir.WriteFile(ctx, BackupDescriptorName, bytes.NewReader(descBuf)); err != nil {
+	if err := storageccl.RetryWriteFile(ctx, BackupDescriptorName, dir, func() (io.Reader, error) {
+		return bytes.NewReader(descBuf), nil
+	}); err != nil {
 		return BackupDescriptor{}, errors.Wrap(err, "uploading backup descriptor")
 	}
 
