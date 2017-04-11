@@ -46,6 +46,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -1432,6 +1433,10 @@ func (t *logicTest) run() {
 
 func TestLogic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+
+	// Needed for settings logic tests.
+	_, _, cleanup := settings.TestingAddTestVars()
+	defer cleanup()
 
 	if testutils.Stress() {
 		t.Skip()

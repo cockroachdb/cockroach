@@ -198,7 +198,7 @@ statement error variable "max_index_keys" cannot be changed
 SET max_index_keys = 32
 
 query TT
-SELECT name, value FROM system.settings WHERE name = 'foo'
+SELECT name, value FROM system.settings WHERE name = 'testing.str'
 ----
 
 user testuser
@@ -208,39 +208,55 @@ SET CLUSTER SETTING foo = 'bar'
 user root
 
 query TT
-SELECT name, value FROM system.settings WHERE name = 'foo'
+SELECT name, value FROM system.settings WHERE name = 'testing.str'
 ----
 
 statement ok
-SET CLUSTER SETTING foo = 'bar'
+SET CLUSTER SETTING testing.str = 'bar'
 
 query TT
-SELECT name, value FROM system.settings WHERE name = 'foo'
+SELECT name, value FROM system.settings WHERE name = 'testing.str'
 ----
-foo   bar
+testing.str   bar
 
 statement ok
-SET CLUSTER SETTING foo = 'baz'
+SET CLUSTER SETTING testing.str = 'baz'
 
 query TT
-SELECT name, value FROM system.settings WHERE name = 'foo'
+SELECT name, value FROM system.settings WHERE name = 'testing.str'
 ----
-foo   baz
+testing.str   baz
 
 user testuser
 statement error only root is allowed to SET CLUSTER SETTING
-SET CLUSTER SETTING foo = 'bar'
+SET CLUSTER SETTING testing.str = 'bar'
 
 user root
 
 query TT
-SELECT name, value FROM system.settings WHERE name = 'foo'
+SELECT name, value FROM system.settings WHERE name = 'testing.str'
 ----
-foo   baz
+testing.str   baz
 
 statement ok
-SET CLUSTER SETTING foo TO DEFAULT
+SET CLUSTER SETTING testing.str TO DEFAULT
 
 query TT
-SELECT name, value FROM system.settings WHERE name = 'foo'
+SELECT name, value FROM system.settings WHERE name = 'testing.str'
 ----
+
+statement ok
+SET CLUSTER SETTING testing.int TO 5
+
+query TT
+SELECT name, value FROM system.settings WHERE name = 'testing.int'
+----
+testing.int 5
+
+statement error argument of testing.int must be type int, not type string
+SET CLUSTER SETTING testing.int TO 'hello'
+
+query TT
+SELECT name, value FROM system.settings WHERE name = 'testing.int'
+----
+testing.int 5
