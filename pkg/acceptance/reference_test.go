@@ -59,6 +59,7 @@ trap finish EXIT
 export PGHOST=localhost
 export PGPORT=""
 export COCKROACH_SKIP_UPDATE_CHECK=1
+export COCKROACH_CERTS_DIR=/certs/
 
 bin=/%s/cockroach
 # TODO(bdarnell): when --background is in referenceBinPath, use it here and below.
@@ -113,6 +114,7 @@ function finish() {
 }
 trap finish EXIT
 
+export COCKROACH_CERTS_DIR=/certs/
 $bin start --background --logtostderr &> out
 $bin sql -d old -e "SELECT i, b, s, d, f, extract(epoch from (timestamp '1970-01-01 00:00:00' + v)) as v, extract(epoch FROM t) as e FROM testing_old" > old.everything
 $bin sql -d old -e "SELECT i, b, s, d, f, extract(epoch from (timestamp '1970-01-01 00:00:00' + v)) as v, extract(epoch FROM t) as e FROM testing_new" >> old.everything
@@ -135,6 +137,7 @@ function finish() {
 }
 trap finish EXIT
 
+export COCKROACH_CERTS_DIR=/certs/
 $bin start & &> out
 until $bin sql -e "SELECT 1"; do sleep 1; done
 # grep returns non-zero if it didn't match anything. With set -e above, that would exit here.
@@ -160,7 +163,12 @@ function finish() {
 trap finish EXIT
 
 export COCKROACH_SKIP_UPDATE_CHECK=1
+<<<<<<< HEAD
 $bin start --logtostderr=INFO --background --store=/cockroach-data-reference-7429 &> out
+=======
+export COCKROACH_CERTS_DIR=/certs/
+$bin start --alsologtostderr=INFO --background --store=/cockroach-data-reference-7429 &> out
+>>>>>>> 1f562f024... Lots of test fixes.
 $bin debug range ls
 $bin quit
 `

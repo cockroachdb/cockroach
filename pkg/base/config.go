@@ -21,7 +21,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-	"path/filepath"
 	"sync"
 	"time"
 
@@ -143,47 +142,50 @@ func (cfg *Config) AdminURL() string {
 	return fmt.Sprintf("%s://%s", cfg.HTTPRequestScheme(), cfg.HTTPAddr)
 }
 
-// GetClientCertPaths returns the paths to the client certs, specifically:
-// CA cert, Client certs, Client key.
-func (cfg *Config) GetClientCertPaths(user string) (string, string, string, error) {
+// GetClientCertPaths returns the paths to the client cert and key.
+func (cfg *Config) GetClientCertPaths(user string) (string, string, error) {
 	cm, err := cfg.GetCertificateManager()
 	if err != nil {
-		return "", "", "", err
+		return "", "", err
 	}
 	return cm.GetClientCertPaths(user)
 }
 
-// ClientHasValidCerts returns true if the specified client has valid certs,
-// meaning we have a CA cert and a client cert/key pair.
+// GetCACertPath returns the path to the CA certificate.
+func (cfg *Config) GetCACertPath() (string, error) {
+	cm, err := cfg.GetCertificateManager()
+	if err != nil {
+		return "", err
+	}
+	return cm.GetCACertPath()
+}
+
+// ClientHasValidCerts returns true if the specified client has a valid client cert and key.
 func (cfg *Config) ClientHasValidCerts(user string) bool {
-	_, _, _, err := cfg.GetClientCertPaths(user)
+	_, _, err := cfg.GetClientCertPaths(user)
 	return err == nil
 }
 
 // PGURL returns the URL for the postgres endpoint.
 func (cfg *Config) PGURL(user *url.Userinfo) (*url.URL, error) {
-	// Try to convert path to an absolute path. Failing to do so return path
-	// unchanged.
-	absPath := func(path string) string {
-		r, err := filepath.Abs(path)
-		if err != nil {
-			return path
-		}
-		return r
-	}
-
 	options := url.Values{}
 	if cfg.Insecure {
 		options.Add("sslmode", "disable")
 	} else {
-		caCertPath, certPath, keyPath, err := cfg.GetClientCertPaths(user.Username())
+		// Fetch CA cert. This is required.
+		caCertPath, err := cfg.GetCACertPath()
 		if err != nil {
 			return nil, didYouMeanInsecureError(err)
 		}
 		options.Add("sslmode", "verify-full")
-		options.Add("sslrootcert", absPath(caCertPath))
-		options.Add("sslcert", absPath(certPath))
-		options.Add("sslkey", absPath(keyPath))
+		options.Add("sslrootcert", caCertPath)
+
+		// Fetch certs, but don't fail, we may be using a password.
+		certPath, keyPath, err := cfg.GetClientCertPaths(user.Username())
+		if err == nil {
+			options.Add("sslcert", certPath)
+			options.Add("sslkey", keyPath)
+		}
 	}
 
 	return &url.URL{
