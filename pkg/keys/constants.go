@@ -297,4 +297,11 @@ const (
 	RangeEventTableID = 13
 	UITableID         = 14
 	JobsTableID       = 15
+
+	// Reserved IDs used to refer to certain parts of the system ranges that
+	// come before the system config span and user table ranges.
+	// NOTE: IDs must be <= MaxReservedDescID.
+	MetaRangesID       = 16
+	SystemRangesID     = 17
+	TimeseriesRangesID = 18
 )

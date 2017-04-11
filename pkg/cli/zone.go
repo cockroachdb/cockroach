@@ -37,6 +37,20 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 )
 
+const (
+	defaultZoneName    = ".default"
+	metaZoneName       = ".meta"
+	systemZoneName     = ".system"
+	timeseriesZoneName = ".timeseries"
+)
+
+var specialZonesByID = map[sqlbase.ID]string{
+	keys.RootNamespaceID:    defaultZoneName,
+	keys.MetaRangesID:       metaZoneName,
+	keys.SystemRangesID:     systemZoneName,
+	keys.TimeseriesRangesID: timeseriesZoneName,
+}
+
 func unmarshalProto(val driver.Value, msg proto.Message) error {
 	raw, ok := val.([]byte)
 	if !ok {
@@ -166,6 +180,16 @@ func queryNamespace(conn *sqlConn, parentID sqlbase.ID, name string) (sqlbase.ID
 
 func queryDescriptorIDPath(conn *sqlConn, names []string) ([]sqlbase.ID, error) {
 	path := []sqlbase.ID{keys.RootNamespaceID}
+	switch strings.Join(names, ".") {
+	case defaultZoneName:
+		return path, nil
+	case metaZoneName:
+		return []sqlbase.ID{keys.MetaRangesID}, nil
+	case systemZoneName:
+		return []sqlbase.ID{keys.SystemRangesID}, nil
+	case timeseriesZoneName:
+		return []sqlbase.ID{keys.TimeseriesRangesID}, nil
+	}
 	for _, name := range names {
 		id, err := queryNamespace(conn, path[len(path)-1], name)
 		if err != nil {
@@ -177,9 +201,11 @@ func queryDescriptorIDPath(conn *sqlConn, names []string) ([]sqlbase.ID, error) 
 }
 
 func parseZoneName(s string) ([]string, error) {
-	if strings.ToLower(s) == ".default" {
-		return nil, nil
+	switch t := strings.ToLower(s); s {
+	case defaultZoneName, metaZoneName, timeseriesZoneName, systemZoneName:
+		return []string{t}, nil
 	}
+
 	// TODO(knz): we are passing a name that might not be escaped correctly.
 	// See #8389.
 	tn, err := parser.ParseTableNameTraditional(s)
@@ -243,8 +269,8 @@ func runGetZone(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	if id == 0 {
-		fmt.Println(".default")
+	if zoneName, ok := specialZonesByID[id]; ok {
+		fmt.Println(zoneName)
 	} else {
 		for i := range path {
 			if path[i] == id {
@@ -324,11 +350,14 @@ func runLsZones(cmd *cobra.Command, args []string) error {
 		output = append(output, name)
 	}
 
-	sort.Strings(output)
-	// Ensure the default zone is always printed first.
-	if _, ok := zones[0]; ok {
-		fmt.Println(".default")
+	for id, zoneName := range specialZonesByID {
+		if _, ok := zones[id]; ok {
+			output = append(output, zoneName)
+		}
 	}
+
+	// Ensure the system zones are always printed first.
+	sort.Strings(output)
 	for _, o := range output {
 		fmt.Println(o)
 	}
@@ -375,7 +404,7 @@ func runRmZone(cmd *cobra.Command, args []string) error {
 	}
 	id := path[len(path)-1]
 	if id == keys.RootNamespaceID {
-		return fmt.Errorf("unable to remove %s", args[0])
+		return fmt.Errorf("unable to remove special zone %s", args[0])
 	}
 
 	if err := runQueryAndFormatResults(conn, os.Stdout,
