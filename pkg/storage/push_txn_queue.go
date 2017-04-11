@@ -19,7 +19,6 @@ package storage
 import (
 	"bytes"
 	"sync/atomic"
-	"time"
 
 	"golang.org/x/net/context"
 
@@ -28,9 +27,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
@@ -279,31 +278,18 @@ func (ptq *pushTxnQueue) MaybeWait(
 
 	ptq.mu.Unlock()
 
-	// Periodically refresh the pusher txn (with an exponential backoff),
-	// in order to determine whether its status or priority have changed,
-	// and also to get a list of dependent transactions.
-	var queryPusherCh <-chan time.Time
-	var r retry.Retry
-	if req.PusherTxn.ID != nil {
-		retryOpts := ptq.store.cfg.RangeRetryOptions
-		r = retry.Start(retryOpts)
-		queryPusherCh = r.NextCh()
-	}
-	var pusheeTxnTimer timeutil.Timer
-	defer pusheeTxnTimer.Stop()
+	// Periodically refresh the pusher and pushee txns (with an
+	// exponential backoff), in order to determine whether statuses or
+	// priorities have changed, and also to get a list of dependent
+	// transactions.
+	r := retry.Start(ptq.store.cfg.RangeRetryOptions)
+	queryCh := r.NextCh()
 
 	// Keep local values for the pusher and pushee priorities to avoid
 	// modifying values in the original request on QueryTxn updates.
 	pusheePriority := req.PusheeTxn.Priority
 
 	for {
-		// Set the timer to check for the pushee txn's expiration.
-		{
-			expiration := txnExpiration(pending.txn.Load().(*roachpb.Transaction)).GoTime()
-			now := ptq.store.Clock().Now().GoTime()
-			pusheeTxnTimer.Reset(expiration.Sub(now))
-		}
-
 		select {
 		case <-ctx.Done():
 			// Caller has given up.
@@ -325,9 +311,9 @@ func (ptq *pushTxnQueue) MaybeWait(
 			// If not successfully pushed, return not pushed so request proceeds.
 			return nil, nil
 
-		case <-pusheeTxnTimer.C:
-			pusheeTxnTimer.Read = true
-			// Periodically check whether the pushee txn has been abandoned.
+		case <-queryCh:
+			// Query the pusher & pushee txns periodically to get updated
+			// status or notice either has expired.
 			updatedPushee, _, pErr := ptq.queryTxnStatus(ctx, req.PusheeTxn, ptq.store.Clock().Now())
 			if pErr != nil {
 				return nil, pErr
@@ -335,39 +321,64 @@ func (ptq *pushTxnQueue) MaybeWait(
 				pusheePriority = updatedPushee.Priority
 				pending.txn.Store(updatedPushee)
 				if isExpired(ptq.store.Clock().Now(), updatedPushee) {
+					if log.V(1) {
+						log.Warningf(ctx, "%s pushing expired txn %s", req.PusherTxn.ID.Short(), req.PusheeTxn.ID.Short())
+					}
 					return nil, nil
 				}
 			}
 
-		case <-queryPusherCh:
-			// Query the pusher txn periodically to get updated status.
-			updatedPusher, waitingTxns, pErr := ptq.queryTxnStatus(ctx, req.PusherTxn.TxnMeta, ptq.store.Clock().Now())
-			if pErr != nil {
-				return nil, pErr
-			} else if updatedPusher != nil {
-				pusherPriority := updatedPusher.Priority
-				// Check for dependency cycle to find and break deadlocks.
-				push.mu.Lock()
-				if push.mu.dependents == nil {
-					push.mu.dependents = map[uuid.UUID]struct{}{}
-				}
-				for _, txnID := range waitingTxns {
-					push.mu.dependents[txnID] = struct{}{}
-				}
-				// Check for a dependency cycle.
-				_, haveDependency := push.mu.dependents[*req.PusheeTxn.ID]
-				push.mu.Unlock()
+			if req.PusherTxn.ID != nil {
+				updatedPusher, waitingTxns, pErr := ptq.queryTxnStatus(ctx, req.PusherTxn.TxnMeta, ptq.store.Clock().Now())
+				if pErr != nil {
+					return nil, pErr
+				} else if updatedPusher != nil {
+					switch updatedPusher.Status {
+					case roachpb.COMMITTED:
+						return nil, roachpb.NewErrorWithTxn(roachpb.NewTransactionStatusError("already committed"), updatedPusher)
+					case roachpb.ABORTED:
+						return nil, roachpb.NewErrorWithTxn(roachpb.NewTransactionAbortedError(), updatedPusher)
+					}
+					pusherPriority := updatedPusher.Priority
+					// Check for dependency cycle to find and break deadlocks.
+					push.mu.Lock()
+					if push.mu.dependents == nil {
+						push.mu.dependents = map[uuid.UUID]struct{}{}
+					}
+					for _, txnID := range waitingTxns {
+						push.mu.dependents[txnID] = struct{}{}
+					}
+					// Check for a dependency cycle.
+					_, haveDependency := push.mu.dependents[*req.PusheeTxn.ID]
+					dependents := make([]string, 0, len(push.mu.dependents))
+					for id := range push.mu.dependents {
+						dependents = append(dependents, id.Short())
+					}
+					if log.V(2) {
+						log.Infof(ctx, "%s has dependencies=%s", req.PusherTxn.ID.Short(), dependents)
+					}
+					push.mu.Unlock()
 
-				if haveDependency {
-					// Break the deadlock if the pusher has higher priority.
-					p1, p2 := pusheePriority, pusherPriority
-					if p1 < p2 || (p1 == p2 && bytes.Compare(req.PusheeTxn.ID.GetBytes(), req.PusherTxn.ID.GetBytes()) < 0) {
-						return nil, errDeadlock
+					if haveDependency {
+						// Break the deadlock if the pusher has higher priority.
+						p1, p2 := pusheePriority, pusherPriority
+						if p1 < p2 || (p1 == p2 && bytes.Compare(req.PusheeTxn.ID.GetBytes(), req.PusherTxn.ID.GetBytes()) < 0) {
+							if log.V(1) {
+								log.Warningf(
+									ctx,
+									"%s breaking deadlock by force push of %s; dependencies=%s",
+									req.PusherTxn.ID.Short(),
+									req.PusheeTxn.ID.Short(),
+									dependents,
+								)
+							}
+							return nil, errDeadlock
+						}
 					}
 				}
 			}
 
-			if queryPusherCh = r.NextCh(); queryPusherCh == nil {
+			if queryCh = r.NextCh(); queryCh == nil {
 				return nil, nil
 			}
 		}
@@ -421,12 +432,6 @@ func (ptq *pushTxnQueue) queryTxnStatus(
 	resp := br.Responses[0].GetInner().(*roachpb.QueryTxnResponse)
 	// ID can be nil if no BeginTransaction has been sent yet.
 	if updatedTxn := &resp.QueriedTxn; updatedTxn.ID != nil {
-		switch updatedTxn.Status {
-		case roachpb.COMMITTED:
-			return nil, nil, roachpb.NewErrorWithTxn(roachpb.NewTransactionStatusError("already committed"), updatedTxn)
-		case roachpb.ABORTED:
-			return nil, nil, roachpb.NewErrorWithTxn(roachpb.NewTransactionAbortedError(), updatedTxn)
-		}
 		return updatedTxn, resp.WaitingTxns, nil
 	}
 	return nil, nil, nil

@@ -2522,13 +2522,13 @@ func (s *Store) Send(
 		if ba.IsSinglePushTxnRequest() {
 			pushReq := ba.Requests[0].GetInner().(*roachpb.PushTxnRequest)
 			pushResp, pErr := repl.pushTxnQueue.MaybeWait(ctx, pushReq)
+			// Copy the request in anticipation of setting the force arg and
+			// updating the Now timestamp (see below).
+			pushReqCopy := *pushReq
 			if pErr == errDeadlock {
 				// We've experienced a deadlock; we need to copy the batch request
 				// in order to modify the push txn request to set Force=true.
-				pushReqCopy := *pushReq
 				pushReqCopy.Force = true
-				ba.Requests = nil
-				ba.Add(&pushReqCopy)
 			} else if pErr != nil {
 				return nil, pErr
 			} else if pushResp != nil {
@@ -2536,6 +2536,13 @@ func (s *Store) Send(
 				br.Add(pushResp)
 				return br, nil
 			}
+			// Move the push timestamp forward to the current time, as this
+			// request may have been waiting to push the txn. If we don't
+			// move the timestamp forward to the current time, we may fail
+			// to push a txn which has expired.
+			pushReqCopy.Now = s.Clock().Now()
+			ba.Requests = nil
+			ba.Add(&pushReqCopy)
 		}
 
 		br, pErr = repl.Send(ctx, ba)
