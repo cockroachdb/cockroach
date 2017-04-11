@@ -171,10 +171,11 @@ func TestStoreRecoverWithErrors(t *testing.T) {
 		stopper := stop.NewStopper()
 		defer stopper.Stop()
 		storeCfg := storeCfg // copy
+		keyA := rg1Key("a")
 		storeCfg.TestingKnobs.TestingEvalFilter =
 			func(filterArgs storagebase.FilterArgs) *roachpb.Error {
 				_, ok := filterArgs.Req.(*roachpb.IncrementRequest)
-				if ok && filterArgs.Req.Header().Key.Equal(roachpb.Key("a")) {
+				if ok && filterArgs.Req.Header().Key.Equal(keyA) {
 					numIncrements++
 				}
 				return nil
@@ -182,14 +183,14 @@ func TestStoreRecoverWithErrors(t *testing.T) {
 		store := createTestStoreWithEngine(t, eng, true, storeCfg, stopper)
 
 		// Write a bytes value so the increment will fail.
-		putArgs := putArgs(roachpb.Key("a"), []byte("asdf"))
+		putArgs := putArgs(keyA, []byte("asdf"))
 		if _, err := client.SendWrapped(context.Background(), rg1(store), putArgs); err != nil {
 			t.Fatal(err)
 		}
 
 		// Try and fail to increment the key. It is important for this test that the
 		// failure be the last thing in the raft log when the store is stopped.
-		incArgs := incrementArgs(roachpb.Key("a"), 42)
+		incArgs := incrementArgs(keyA, 42)
 		if _, err := client.SendWrapped(context.Background(), rg1(store), incArgs); err == nil {
 			t.Fatal("did not get expected error")
 		}
@@ -206,7 +207,8 @@ func TestStoreRecoverWithErrors(t *testing.T) {
 	store := createTestStoreWithEngine(t, eng, false, storeCfg, stopper)
 
 	// Issue a no-op write to lazily initialize raft on the range.
-	incArgs := incrementArgs(roachpb.Key("b"), 0)
+	keyB := rg1Key("b")
+	incArgs := incrementArgs(keyB, 0)
 	if _, err := client.SendWrapped(context.Background(), rg1(store), incArgs); err != nil {
 		t.Fatal(err)
 	}
