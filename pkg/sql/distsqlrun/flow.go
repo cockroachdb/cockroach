@@ -58,7 +58,10 @@ type FlowCtx struct {
 	// in the flow must be performed.
 	txnProto *roachpb.Transaction
 	// clientDB is a handle to the cluster. Used to run transactions.
-	clientDB     *client.DB
+	clientDB *client.DB
+	// nodeID is the ID of the node on which the processors using this FlowCtx
+	// run.
+	nodeID       roachpb.NodeID
 	testingKnobs TestingKnobs
 }
 

@@ -613,7 +613,3 @@ func (rf *RowFetcher) Key() roachpb.Key {
 func (rf *RowFetcher) GetRangeInfo() []roachpb.RangeInfo {
 	return rf.kvFetcher.getRangesInfo()
 }
-
-// TODO(andrei): This is only here so that the unused functions linter doesn't
-// complain. Remove it once GetRangeInfo() starts being used.
-var _ func(*RowFetcher) []roachpb.RangeInfo = (*RowFetcher).GetRangeInfo
