@@ -400,6 +400,12 @@ func TestAdminAPITableDetails(t *testing.T) {
 	testAdminAPITableDetailsInner(t, "test", "tbl")
 }
 
+// #14056
+func TestAdminAPITableDetailsUppercase(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	testAdminAPITableDetailsInner(t, "TEST", "TBL")
+}
+
 func TestAdminAPITableDetailsEscapedNames(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	testAdminAPITableDetailsInner(t, "test test", "tbl tbl")
