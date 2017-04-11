@@ -600,6 +600,10 @@ type loggingT struct {
 	// Level flag. Handled atomically.
 	stderrThreshold Severity // The -alsologtostderr flag.
 
+	// disableDeamons can be used to turn off both the GC and flush deamons.
+	// Handled atomically.
+	disableDeamons int32
+
 	// freeList is a list of byte buffers, maintained under freeListMu.
 	freeList *buffer
 	// freeListMu maintains the free list. It is separate from the main mutex
@@ -1018,7 +1022,9 @@ const flushInterval = 30 * time.Second
 func (l *loggingT) flushDaemon() {
 	// doesn't need to be Stop()'d as the loop never escapes
 	for range time.Tick(flushInterval) {
-		l.lockAndFlushAll()
+		if atomic.LoadInt32(&l.disableDeamons) == 0 {
+			l.lockAndFlushAll()
+		}
 	}
 }
 
@@ -1041,7 +1047,9 @@ func (l *loggingT) flushAll() {
 func (l *loggingT) gcDaemon() {
 	l.gcOldFiles()
 	for range l.gcNotify {
-		l.gcOldFiles()
+		if atomic.LoadInt32(&l.disableDeamons) == 0 {
+			l.gcOldFiles()
+		}
 	}
 }
 
