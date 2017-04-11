@@ -21,6 +21,7 @@ import (
 	"bytes"
 	"flag"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"net"
 	"net/url"
