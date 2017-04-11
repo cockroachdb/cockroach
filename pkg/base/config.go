@@ -21,7 +21,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-	"os"
 	"path/filepath"
 	"sync"
 	"time"
@@ -196,7 +195,7 @@ func (cfg *Config) PGURL(user *url.Userinfo) (*url.URL, error) {
 func (cfg *Config) GetCertificateManager() (*security.CertificateManager, error) {
 	cfg.certificateManager.once.Do(func() {
 		cfg.certificateManager.cm, cfg.certificateManager.err =
-			security.NewCertificateManager(os.ExpandEnv(cfg.SSLCertsDir))
+			security.NewCertificateManager(cfg.SSLCertsDir)
 	})
 	return cfg.certificateManager.cm, cfg.certificateManager.err
 }

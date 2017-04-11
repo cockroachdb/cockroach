@@ -249,6 +249,11 @@ server to listen on an external address in insecure mode.`,
 		Description: `Key size in bits for CA/Node/Client certificates.`,
 	}
 
+	CertificateLifetime = FlagInfo{
+		Name:        "lifetime",
+		Description: `Certificate lifetime.`,
+	}
+
 	MaxResults = FlagInfo{
 		Name:        "max-results",
 		Description: `Define the maximum number of results that will be retrieved.`,

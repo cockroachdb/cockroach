@@ -466,10 +466,9 @@ func (l *LocalCluster) createRoach(
 }
 
 func (l *LocalCluster) createCACert() {
-	maybePanic(security.RunCreateCACert(
-		filepath.Join(l.CertsDir, security.EmbeddedCACert),
-		filepath.Join(l.CertsDir, security.EmbeddedCAKey),
-		keyLen))
+	maybePanic(security.CreateCAPair(
+		l.CertsDir, filepath.Join(l.CertsDir, security.EmbeddedCAKey),
+		keyLen, 48*time.Hour))
 }
 
 func (l *LocalCluster) createNodeCerts() {
@@ -477,12 +476,10 @@ func (l *LocalCluster) createNodeCerts() {
 	for _, node := range l.Nodes {
 		nodes = append(nodes, node.nodeStr)
 	}
-	maybePanic(security.RunCreateNodeCert(
-		filepath.Join(l.CertsDir, security.EmbeddedCACert),
+	maybePanic(security.CreateNodePair(
+		l.CertsDir,
 		filepath.Join(l.CertsDir, security.EmbeddedCAKey),
-		filepath.Join(l.CertsDir, security.EmbeddedNodeCert),
-		filepath.Join(l.CertsDir, security.EmbeddedNodeKey),
-		keyLen, nodes))
+		keyLen, 48*time.Hour, nodes))
 }
 
 // startNode starts a Docker container to run testNode. It may be called in
@@ -490,7 +487,7 @@ func (l *LocalCluster) createNodeCerts() {
 func (l *LocalCluster) startNode(ctx context.Context, node *testNode) {
 	cmd := []string{
 		"start",
-		"--certs-dir=/certs/",
+		"--certs-dir=" + l.CertsDir,
 		"--host=" + node.nodeStr,
 		"--verbosity=1",
 	}
@@ -541,7 +538,7 @@ func (l *LocalCluster) startNode(ctx context.Context, node *testNode) {
   pprof:     docker exec -it %[4]s pprof https+insecure://$(hostname):%[5]s/debug/pprof/heap
   cockroach: %[6]s
 
-  cli-env:   COCKROACH_INSECURE=false COCKROACH_CA_CERT=%[7]s/ca.crt COCKROACH_CERT=%[7]s/node.crt COCKROACH_KEY=%[7]s/node.key COCKROACH_HOST=%s COCKROACH_PORT=%d`,
+  cli-env:   COCKROACH_INSECURE=false COCKROACH_CERTS_DIR=%[7]s COCKROACH_HOST=%s COCKROACH_PORT=%d`,
 		node.Name(), "https://"+httpAddr.String(), locallogDir, node.Container.id[:5],
 		base.DefaultHTTPPort, cmd, l.CertsDir, httpAddr.IP, httpAddr.Port)
 }
@@ -650,12 +647,9 @@ func (l *LocalCluster) Start(ctx context.Context) {
 	log.Infof(ctx, "creating certs (%dbit) in: %s", keyLen, l.CertsDir)
 	l.createCACert()
 	l.createNodeCerts()
-	maybePanic(security.RunCreateClientCert(
-		filepath.Join(l.CertsDir, security.EmbeddedCACert),
-		filepath.Join(l.CertsDir, security.EmbeddedCAKey),
-		filepath.Join(l.CertsDir, security.EmbeddedRootCert),
-		filepath.Join(l.CertsDir, security.EmbeddedRootKey),
-		512, security.RootUser))
+	maybePanic(security.CreateClientPair(
+		l.CertsDir, filepath.Join(l.CertsDir, security.EmbeddedCAKey),
+		512, 48*time.Hour, security.RootUser))
 
 	l.monitorCtx, l.monitorCtxCancelFunc = context.WithCancel(context.Background())
 	go l.monitor(ctx)
