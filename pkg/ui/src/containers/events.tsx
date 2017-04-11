@@ -132,7 +132,7 @@ export class EventRow extends React.Component<EventRowProps, {}> {
 export interface EventBoxProps {
   events: Event$Properties[];
   refreshEvents: typeof refreshEvents;
-};
+}
 
 export class EventBoxUnconnected extends React.Component<EventBoxProps, {}> {
 
@@ -163,7 +163,7 @@ export interface EventPageProps {
   refreshEvents: typeof refreshEvents;
   sortSetting: SortSetting;
   setSort: typeof eventsSortSetting.set;
-};
+}
 
 export class EventPageUnconnected extends React.Component<EventPageProps, {}> {
   componentWillMount() {
