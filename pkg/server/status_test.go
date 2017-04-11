@@ -190,19 +190,34 @@ func TestStatusLocalLogs(t *testing.T) {
 		t.Skip("Test only works with low verbosity levels")
 	}
 
-	s := log.Scope(t)
+	s := log.ScopeWithoutShowLogs(t)
 	defer s.Close(t)
 
 	ts := startServer(t)
 	defer ts.Stopper().Stop()
 
-	// Log an error which we expect to show up on every log file.
+	// Log an error of each main type which we expect to be able to retrieve.
+	// The resolution of our log timestamps is such that it's possible to get
+	// two subsequent log messages with the same timestamp. This test will fail
+	// when that occurs. By adding a small sleep in here after each timestamp to
+	// ensures this isn't the case and that the log filtering doesn't filter out
+	// the log entires we're looking for. The value of 20 μs was chosen because
+	// the log timestamps have a fidelity of 10 μs and thus doubling that should
+	// be a sufficient buffer.
+	// See util/log/clog.go formatHeader() for more details.
+	const sleepBuffer = time.Microsecond * 20
 	timestamp := timeutil.Now().UnixNano()
+	time.Sleep(sleepBuffer)
 	log.Errorf(context.Background(), "TestStatusLocalLogFile test message-Error")
+	time.Sleep(sleepBuffer)
 	timestampE := timeutil.Now().UnixNano()
+	time.Sleep(sleepBuffer)
 	log.Warningf(context.Background(), "TestStatusLocalLogFile test message-Warning")
+	time.Sleep(sleepBuffer)
 	timestampEW := timeutil.Now().UnixNano()
+	time.Sleep(sleepBuffer)
 	log.Infof(context.Background(), "TestStatusLocalLogFile test message-Info")
+	time.Sleep(sleepBuffer)
 	timestampEWI := timeutil.Now().UnixNano()
 
 	var wrapper serverpb.LogFilesListResponse
