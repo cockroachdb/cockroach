@@ -627,6 +627,8 @@ type loggingT struct {
 	filterLength int32
 	// traceLocation is the state of the -log_backtrace_at flag.
 	traceLocation traceLocation
+	// disableDeamons can be used to turn off both the GC and flush deamons.
+	disableDeamons bool
 	// These flags are modified only under lock, although verbosity may be fetched
 	// safely using atomic.LoadInt32.
 	vmodule   moduleSpec    // The state of the --vmodule flag.
@@ -1025,8 +1027,10 @@ func (l *loggingT) flushDaemon() {
 // lockAndFlushAll is like flushAll but locks l.mu first.
 func (l *loggingT) lockAndFlushAll() {
 	l.mu.Lock()
-	l.flushAll()
-	l.mu.Unlock()
+	defer l.mu.Unlock()
+	if !l.disableDeamons {
+		l.flushAll()
+	}
 }
 
 // flushAll flushes all the logs and attempts to "sync" their data to disk.
@@ -1041,7 +1045,11 @@ func (l *loggingT) flushAll() {
 func (l *loggingT) gcDaemon() {
 	l.gcOldFiles()
 	for range l.gcNotify {
-		l.gcOldFiles()
+		l.mu.Lock()
+		if !l.disableDeamons {
+			l.gcOldFiles()
+		}
+		l.mu.Unlock()
 	}
 }
 
