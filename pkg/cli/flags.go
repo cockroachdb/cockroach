@@ -21,7 +21,6 @@ import (
 	"flag"
 	"fmt"
 	"net"
-	"strconv"
 	"strings"
 	"time"
 
@@ -65,8 +64,6 @@ func InitCLIDefaults() {
 	cliCtx.tableDisplayFormat = tableDisplayTSV
 	dumpCtx.dumpMode = dumpBoth
 }
-
-var insecure *insecureValue
 
 const usageIndentation = 8
 const wrapWidth = 79 - usageIndentation
@@ -121,37 +118,6 @@ func makeUsageString(flagInfo cliflags.FlagInfo) string {
 	// the correct indentation (7 spaces) here. This is admittedly fragile.
 	return text.Indent(s, strings.Repeat(" ", usageIndentation)) +
 		strings.Repeat(" ", usageIndentation-1)
-}
-
-type insecureValue struct {
-	ctx   *base.Config
-	isSet bool
-}
-
-func newInsecureValue(ctx *base.Config) *insecureValue {
-	return &insecureValue{ctx: ctx}
-}
-
-func (b *insecureValue) IsBoolFlag() bool {
-	return true
-}
-
-func (b *insecureValue) Set(s string) error {
-	v, err := strconv.ParseBool(s)
-	if err != nil {
-		return err
-	}
-	b.isSet = true
-	b.ctx.Insecure = v
-	return nil
-}
-
-func (b *insecureValue) Type() string {
-	return "bool"
-}
-
-func (b *insecureValue) String() string {
-	return fmt.Sprint(b.ctx.Insecure)
 }
 
 func setFlagFromEnv(f *pflag.FlagSet, flagInfo cliflags.FlagInfo) {
@@ -254,8 +220,6 @@ func init() {
 	pf.Lookup(logflags.LogToStderrName).NoOptDefVal = log.Severity_DEFAULT.String()
 
 	// Security flags.
-	baseCfg.Insecure = true
-	insecure = newInsecureValue(baseCfg)
 
 	{
 		f := startCmd.Flags()
@@ -281,9 +245,7 @@ func init() {
 
 		stringFlag(f, &serverCfg.PIDFile, cliflags.PIDFile, "")
 
-		varFlag(f, insecure, cliflags.Insecure)
-		// Allow '--insecure'
-		f.Lookup(cliflags.Insecure.Name).NoOptDefVal = "true"
+		boolFlag(f, &serverCfg.Insecure, cliflags.Insecure, serverCfg.Insecure)
 
 		// Certificate flags.
 		stringFlag(f, &baseCfg.SSLCertsDir, cliflags.CertsDir, base.DefaultCertsDirectory)
@@ -340,9 +302,7 @@ func init() {
 		stringFlag(f, &clientConnHost, cliflags.ClientHost, "")
 		stringFlag(f, &clientConnPort, cliflags.ClientPort, base.DefaultPort)
 
-		varFlag(f, insecure, cliflags.Insecure)
-		// Allow '--insecure'
-		f.Lookup(cliflags.Insecure.Name).NoOptDefVal = "true"
+		boolFlag(f, &baseCfg.Insecure, cliflags.Insecure, serverCfg.Insecure)
 
 		// Certificate flags.
 		stringFlag(f, &baseCfg.SSLCertsDir, cliflags.CertsDir, base.DefaultCertsDirectory)
