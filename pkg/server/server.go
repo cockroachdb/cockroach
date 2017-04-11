@@ -279,6 +279,10 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		Clock:                   s.clock,
 		DistSQLSrv:              s.distSQLServer,
 		HistogramWindowInterval: s.cfg.HistogramWindowInterval(),
+
+		ClusterStoresUpcall: func() []roachpb.ReplicationTarget {
+			return s.ClusterStores()
+		},
 	}
 	if s.cfg.TestingKnobs.SQLExecutor != nil {
 		execCfg.TestingKnobs = s.cfg.TestingKnobs.SQLExecutor.(*sql.ExecutorTestingKnobs)
@@ -395,6 +399,11 @@ func (s *Server) NodeID() roachpb.NodeID {
 // Only intended to help print debugging info during server startup.
 func (s *Server) InitialBoot() bool {
 	return s.node.initialBoot
+}
+
+// ClusterStores returns a list of known stores in the cluster.
+func (s *Server) ClusterStores() []roachpb.ReplicationTarget {
+	return s.storePool.GetStores()
 }
 
 // grpcGatewayServer represents a grpc service with HTTP endpoints through GRPC

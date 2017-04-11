@@ -467,6 +467,17 @@ storeLoop:
 	return makeStoreList(filteredDescs)
 }
 
+// GetStores returns a list of known stores in the cluster.
+func (sp *StorePool) GetStores() []roachpb.ReplicationTarget {
+	sl, _, _ := sp.getStoreList(roachpb.RangeID(0))
+	result := make([]roachpb.ReplicationTarget, len(sl.stores))
+	for i, sd := range sl.stores {
+		result[i].StoreID = sd.StoreID
+		result[i].NodeID = sd.Node.NodeID
+	}
+	return result
+}
+
 // getStoreList returns a storeList that contains all active stores that
 // contain the required attributes and their associated stats. It also returns
 // the total number of alive and throttled stores. The passed in rangeID is used
