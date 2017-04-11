@@ -487,7 +487,7 @@ func (l *LocalCluster) createNodeCerts() {
 func (l *LocalCluster) startNode(ctx context.Context, node *testNode) {
 	cmd := []string{
 		"start",
-		"--certs-dir=" + l.CertsDir,
+		"--certs-dir=/certs/",
 		"--host=" + node.nodeStr,
 		"--verbosity=1",
 	}

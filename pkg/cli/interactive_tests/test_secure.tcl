@@ -2,10 +2,15 @@
 
 source [file join [file dirname $argv0] common.tcl]
 
-set certs_dir "/certs"
+set certs_dir "certs"
+set ::env(COCKROACH_INSECURE) "false"
 
 proc start_secure_server {argv certs_dir} {
-    system "mkfifo pid_fifo || true; $argv start --certs-dir=$certs_dir --pid-file=pid_fifo & cat pid_fifo > server_pid"
+    system "mkfifo pid_fifo || true; $argv start --certs-dir=$certs_dir --pid-file=pid_fifo >>stdout.log 2>>stderr.log & cat pid_fifo > server_pid"
+}
+
+proc stop_secure_server {argv certs_dir} {
+    system "set -e; if kill -CONT `cat server_pid`; then $argv quit --certs-dir=$certs_dir || true & sleep 1; kill -9 `cat server_pid` || true; else $argv quit --certs-dir=$certs_dir || true; fi"
 }
 
 start_secure_server $argv $certs_dir
@@ -20,24 +25,6 @@ send "$argv node ls --certs-dir=$certs_dir\r"
 eexpect "id"
 eexpect "1"
 eexpect "1 row"
-
-eexpect $prompt
-
-# CA cert must be specified regardless of authentication mode.
-send "$argv sql\r"
-eexpect "cleartext connections are not permitted"
-
-eexpect $prompt
-
-# A nonexistent user cannot authenticate with either form of authentication.
-send "$argv sql --user=nonexistent --certs-dir=$certs_dir\r"
-eexpect "user nonexistent does not exist"
-
-eexpect $prompt
-
-# Root can only authenticate using certificate authentication.
-send "$argv sql --certs-dir=$certs_dir\r"
-eexpect "user root must use certificate authentication instead of password authentication"
 
 eexpect $prompt
 
@@ -73,4 +60,4 @@ eexpect $prompt
 send "exit 0\r"
 eexpect eof
 
-stop_server $argv
+stop_secure_server $argv $certs_dir
