@@ -143,15 +143,16 @@ endif
 # with different CWDs decreases the chance of accidentally using the wrong path
 # to a target.
 YARN_INSTALLED_TARGET := $(UI_ROOT)/yarn.installed
+BOOTSTRAP_TARGET := $(REPO_ROOT)/.bootstrap
 
-$(YARN_INSTALLED_TARGET): $(UI_ROOT)/package.json $(UI_ROOT)/yarn.lock
+$(YARN_INSTALLED_TARGET): $(BOOTSTRAP_TARGET) $(UI_ROOT)/package.json $(UI_ROOT)/yarn.lock
 	cd $(UI_ROOT) && yarn install
 	rm -rf $(UI_ROOT)/node_modules/@types/node # https://github.com/yarnpkg/yarn/issues/2987
 	touch $@
 
 # Update the git hooks and install commands from dependencies whenever they
 # change.
-$(REPO_ROOT)/.bootstrap: $(GITHOOKS) $(REPO_ROOT)/glide.lock
+$(BOOTSTRAP_TARGET): $(GITHOOKS) $(REPO_ROOT)/glide.lock
 ifneq ($(GIT_DIR),)
 	git submodule update --init
 endif
@@ -160,9 +161,6 @@ endif
 	$(PKG_ROOT)/cmd/returncheck \
 	&& $(GO) list -tags glide -f '{{join .Imports "\n"}}' $(REPO_ROOT)/build | grep -vF protoc | xargs $(GO) install -v
 	touch $@
-
-# Force Make to run the .bootstrap recipe before building any other targets.
--include $(REPO_ROOT)/.bootstrap
 
 # Make doesn't expose a list of the variables declared in a given file, so we
 # resort to sed magic. Roughly, this sed command prints VARIABLE in lines of the
