@@ -162,6 +162,9 @@ func (rs *replicaScanner) GetDisabled() bool {
 func (rs *replicaScanner) avgScan() time.Duration {
 	rs.mu.Lock()
 	defer rs.mu.Unlock()
+	if rs.mu.scanCount == 0 {
+		return 0
+	}
 	return time.Duration(rs.mu.total.Nanoseconds() / rs.mu.scanCount)
 }
 
