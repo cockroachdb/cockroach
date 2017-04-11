@@ -346,7 +346,7 @@ func TestVmoduleGlob(t *testing.T) {
 }
 
 func TestListLogFiles(t *testing.T) {
-	s := Scope(t, "")
+	s := scopeWithoutShowLogs(t, "")
 	defer s.Close(t)
 	setFlags()
 
@@ -370,9 +370,8 @@ func TestListLogFiles(t *testing.T) {
 }
 
 func TestGetLogReader(t *testing.T) {
-	s := Scope(t, "")
+	s := scopeWithoutShowLogs(t, "")
 	defer s.Close(t)
-
 	setFlags()
 	Info(context.Background(), "x")
 	info, ok := logging.file.(*syncBuffer)
@@ -459,7 +458,7 @@ func TestGetLogReader(t *testing.T) {
 }
 
 func TestRollover(t *testing.T) {
-	s := Scope(t, "")
+	s := scopeWithoutShowLogs(t, "")
 	defer s.Close(t)
 
 	setFlags()
@@ -502,7 +501,7 @@ func TestRollover(t *testing.T) {
 }
 
 func TestGC(t *testing.T) {
-	s := Scope(t, "")
+	s := scopeWithoutShowLogs(t, "")
 	defer s.Close(t)
 
 	setFlags()
@@ -538,7 +537,7 @@ func TestGC(t *testing.T) {
 }
 
 func TestLogBacktraceAt(t *testing.T) {
-	s := Scope(t, "")
+	s := scopeWithoutShowLogs(t, "")
 	defer s.Close(t)
 
 	setFlags()
@@ -583,7 +582,7 @@ func TestLogBacktraceAt(t *testing.T) {
 // in the future clog and this test can be adapted to actually test that;
 // right now clog writes straight to os.StdErr.
 func TestFatalStacktraceStderr(t *testing.T) {
-	s := Scope(t, "")
+	s := scopeWithoutShowLogs(t, "")
 	defer s.Close(t)
 
 	setFlags()
@@ -622,13 +621,7 @@ func TestFatalStacktraceStderr(t *testing.T) {
 }
 
 func TestRedirectStderr(t *testing.T) {
-	// This test requires that the logs go to files. We must disable
-	// showLogs, if it was specified, for otherwise the Scope() does not
-	// do its job properly.
-	defer func(s bool) { showLogs = s }(showLogs)
-	showLogs = false
-
-	s := Scope(t, "")
+	s := scopeWithoutShowLogs(t, "")
 	defer s.Close(t)
 
 	setFlags()
