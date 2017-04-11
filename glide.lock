@@ -1,10 +1,11 @@
 hash: 620ed7b5a97e5e1c3f144f49863859862222390b5e00249714aab0b1d4c581c7
-updated: 2017-04-07T17:26:49.573117984-04:00
+updated: 2017-04-11T15:02:41.785025807-04:00
 imports:
 - name: cloud.google.com/go
-  version: f4dfefc998d92c53913c2ae5bc7cd3fba18e9e4b
+  version: 70fd9bf9d3537b799ae260d468f1ef7bf6afeaf1
   subpackages:
   - compute/metadata
+  - iam
   - internal
   - internal/optional
   - internal/version
@@ -12,7 +13,7 @@ imports:
 - name: github.com/abourget/teamcity
   version: 6dde447fa54bc5b08b1a7bb1b85e39089cf27fb1
 - name: github.com/Azure/azure-sdk-for-go
-  version: 5b0aa1d05fbf518373abb366951e3587cc1b3154
+  version: 088007b3b08cc02b27f2eadfdcd870958460ce7e
   subpackages:
   - storage
 - name: github.com/Azure/go-ansiterm
@@ -80,7 +81,7 @@ imports:
 - name: github.com/dgrijalva/jwt-go
   version: d2709f9f1f31ebcda9651b03077758c1f3a0018c
 - name: github.com/docker/distribution
-  version: 0dd6ca97afaf3da69b1508d69c2bc23effb4e8b9
+  version: c3e06c6069653bf72034ed907d6749d3928fdacb
   subpackages:
   - digestset
   - reference
@@ -182,7 +183,7 @@ imports:
 - name: github.com/google/btree
   version: 316fb6d3f031ae8f4d457c6c5186b9e3ded70435
 - name: github.com/google/go-github
-  version: 12363ffc10018c93407ebf303040586d55957271
+  version: 6896997c7c9fe603fb9d2e8e92303bb18481e60a
   subpackages:
   - github
 - name: github.com/google/go-querystring
@@ -219,7 +220,7 @@ imports:
   - third_party/googleapis/google/api
   - utilities
 - name: github.com/ianlancetaylor/cgosymbolizer
-  version: b4ad58b5f686244b454e2e305f14cb598a5910a5
+  version: 7c5585d44729f382a061b64ec9e7123724abe529
 - name: github.com/ianlancetaylor/demangle
   version: 4883227f66371e02c4948937d3e2be1664d9be38
 - name: github.com/inconshreveable/mousetrap
@@ -234,12 +235,12 @@ imports:
   - internal/errcheck
 - name: github.com/kisielk/gotool
   version: 0de1eaf82fa3f583ce21fde859f1e7e0c5e9b220
+- name: github.com/knz/strtime
+  version: 813725a7c183ac304d1ed8fb7e37a567733e9c05
 - name: github.com/kr/pretty
   version: cfb55aafdaf3ec08f0db22699ab822c50091b1c4
 - name: github.com/kr/text
   version: 7cafcd837844e784b526369c9bce262804aebc60
-- name: github.com/leekchan/timeutil
-  version: 28917288c48df3d2c1cfe468c273e0b2adda0aa5
 - name: github.com/lib/pq
   version: 472a0745531a17dbac346e828b4c60e73ddff30c
   subpackages:
@@ -354,7 +355,7 @@ imports:
 - name: github.com/spf13/pflag
   version: 9a906f17374922ed0f74e1b2f593d3723f2ffb00
 - name: github.com/StackExchange/wmi
-  version: 9f32b5905fd6ce7384093f9d048437e79f7b4d85
+  version: ea383cf3ba6ec950874b8486cd72356d007c768f
 - name: github.com/tebeka/go2xunit
   version: 13c29c7515e660c2d5ccc1a2122b9ca38826a949
   subpackages:
@@ -413,7 +414,7 @@ imports:
   subpackages:
   - rate
 - name: golang.org/x/tools
-  version: 24acc66eabead631b4e856255a9ad925549cee80
+  version: 7ee420f17d7525d013c72c05ed371361a29895d3
   subpackages:
   - cmd/goimports
   - cmd/goyacc
@@ -448,7 +449,7 @@ imports:
   - storage/v1
   - transport
 - name: google.golang.org/appengine
-  version: 56d253d1dd14aa01937e12c73a0971bcfd797ff2
+  version: 170382fa85b10b94728989dfcf6cc818b335c952
   subpackages:
   - internal
   - internal/app_identity
@@ -461,6 +462,11 @@ imports:
   - internal/urlfetch
   - socket
   - urlfetch
+- name: google.golang.org/genproto
+  version: 411e09b969b1170a9f0c467558eb4c4c110d9c77
+  subpackages:
+  - googleapis/api/annotations
+  - googleapis/iam/v1
 - name: google.golang.org/grpc
   version: 9d55a95b90eb10d08a07e0213d23797dbd7b7552
   repo: https://github.com/andreimatei/grpc-go

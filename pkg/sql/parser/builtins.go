@@ -34,6 +34,8 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/knz/strtime"
+
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -813,7 +815,7 @@ var Builtins = map[string][]Builtin{
 			fn: func(_ *EvalContext, args Datums) (Datum, error) {
 				fromTime := args[0].(*DTimestamp).Time
 				format := string(MustBeDString(args[1]))
-				t, err := timeutil.Strftime(fromTime, format)
+				t, err := strtime.Strftime(fromTime, format)
 				if err != nil {
 					return nil, err
 				}
@@ -828,7 +830,7 @@ var Builtins = map[string][]Builtin{
 			fn: func(_ *EvalContext, args Datums) (Datum, error) {
 				fromTime := time.Unix(int64(*args[0].(*DDate))*secondsInDay, 0).UTC()
 				format := string(MustBeDString(args[1]))
-				t, err := timeutil.Strftime(fromTime, format)
+				t, err := strtime.Strftime(fromTime, format)
 				if err != nil {
 					return nil, err
 				}
@@ -843,7 +845,7 @@ var Builtins = map[string][]Builtin{
 			fn: func(_ *EvalContext, args Datums) (Datum, error) {
 				fromTime := args[0].(*DTimestampTZ).Time
 				format := string(MustBeDString(args[1]))
-				t, err := timeutil.Strftime(fromTime, format)
+				t, err := strtime.Strftime(fromTime, format)
 				if err != nil {
 					return nil, err
 				}
@@ -856,12 +858,12 @@ var Builtins = map[string][]Builtin{
 
 	"experimental_strptime": {
 		Builtin{
-			Types:      ArgTypes{{"format", TypeString}, {"input", TypeString}},
+			Types:      ArgTypes{{"input", TypeString}, {"format", TypeString}},
 			ReturnType: fixedReturnType(TypeTimestampTZ),
 			fn: func(_ *EvalContext, args Datums) (Datum, error) {
-				format := string(MustBeDString(args[0]))
-				toParse := string(MustBeDString(args[1]))
-				t, err := timeutil.Strptime(format, toParse)
+				toParse := string(MustBeDString(args[0]))
+				format := string(MustBeDString(args[1]))
+				t, err := strtime.Strptime(toParse, format)
 				if err != nil {
 					return nil, err
 				}
