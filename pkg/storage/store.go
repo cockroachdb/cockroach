@@ -2492,7 +2492,7 @@ func (s *Store) Send(
 	}
 
 	// Add the command to the range for execution; exit retry loop on success.
-	for {
+	for r := retry.Start(base.DefaultRetryOptions()); r.Next(); {
 		// Exit loop if context has been canceled or timed out.
 		if err := ctx.Err(); err != nil {
 			return nil, roachpb.NewError(err)
@@ -2531,7 +2531,11 @@ func (s *Store) Send(
 		// If this is a push txn request, check the push queue first, which
 		// may cause this request to wait and either return a successful push
 		// txn response or else allow this request to proceed.
+		// TODO(bdarnell,spencer): PushTxn ops are not always sent individually.
+		// Either make that so or make this work with multiple pushes at a time.
+		usingPushTxnQueue := false
 		if ba.IsSinglePushTxnRequest() {
+			usingPushTxnQueue = true
 			pushReq := ba.Requests[0].GetInner().(*roachpb.PushTxnRequest)
 			pushResp, pErr := repl.pushTxnQueue.MaybeWait(ctx, pushReq)
 			if pErr == errDeadlock {
@@ -2548,6 +2552,7 @@ func (s *Store) Send(
 				br.Add(pushResp)
 				return br, nil
 			}
+			r.Reset()
 		}
 
 		br, pErr = repl.Send(ctx, ba)
@@ -2619,12 +2624,19 @@ func (s *Store) Send(
 			// Increase the sequence counter to avoid getting caught in replay
 			// protection on retry.
 			ba.SetNewRequest()
+
+			// If we can use the pushTxnQueue, we don't also use the
+			// exponential backoff.
+			if usingPushTxnQueue {
+				r.Reset()
+			}
 		}
 
 		if pErr != nil {
 			return nil, pErr
 		}
 	}
+	return nil, roachpb.NewErrorf("retry loop exhausted")
 }
 
 // reserveSnapshot throttles incoming snapshots. The returned closure is used
