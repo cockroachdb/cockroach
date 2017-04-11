@@ -343,11 +343,38 @@ func Backup(
 		return BackupDescriptor{}, err
 	}
 
+	// We're already limiting these on the server-side, but sending all the
+	// Export requests at once would fill up distsender/grpc/something and cause
+	// all sorts of badness (node liveness timeouts leading to mass leaseholder
+	// transfers, poor performance on SQL workloads, etc) as well as log spam
+	// about slow distsender requests. Rate limit them here, too.
+	//
+	// TODO(dan): See if there's some better solution #14798.
+	var maxConcurrentExports int
+	{
+		maxReplicas := 1
+		for _, r := range ranges {
+			if numReplicas := len(r.Replicas); numReplicas > maxReplicas {
+				maxReplicas = numReplicas
+			}
+		}
+		maxConcurrentExports = maxReplicas * storageccl.ParallelRequestsLimit
+	}
+	exportsSem := make(chan struct{}, maxConcurrentExports)
+
 	header := roachpb.Header{Timestamp: endTime}
 	g, gCtx := errgroup.WithContext(ctx)
 	for i := range spans {
+		select {
+		case exportsSem <- struct{}{}:
+		case <-ctx.Done():
+			return BackupDescriptor{}, ctx.Err()
+		}
+
 		span := spans[i]
 		g.Go(func() error {
+			defer func() { <-exportsSem }()
+
 			req := &roachpb.ExportRequest{
 				Span:      span,
 				Storage:   storageConf,

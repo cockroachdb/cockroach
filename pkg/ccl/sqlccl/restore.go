@@ -675,10 +675,46 @@ func Restore(
 	// TODO(dan): Wait for the newly created ranges (and leaseholders) to
 	// rebalance.
 
+	// We're already limiting these on the server-side, but sending all the
+	// Import requests at once would fill up distsender/grpc/something and cause
+	// all sorts of badness (node liveness timeouts leading to mass leaseholder
+	// transfers, poor performance on SQL workloads, etc) as well as log spam
+	// about slow distsender requests. Rate limit them here, too.
+	//
+	// TODO(dan): See if there's some better solution #14798.
+	var maxConcurrentImports int
+	{
+		var ranges []roachpb.RangeDescriptor
+		if err := db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+			var err error
+			ranges, err = allRangeDescriptors(ctx, txn)
+			return err
+		}); err != nil {
+			return err
+		}
+
+		maxReplicas := 1
+		for _, r := range ranges {
+			if numReplicas := len(r.Replicas); numReplicas > maxReplicas {
+				maxReplicas = numReplicas
+			}
+		}
+		maxConcurrentImports = maxReplicas * storageccl.ParallelRequestsLimit
+	}
+	importsSem := make(chan struct{}, maxConcurrentImports)
+
 	g, gCtx := errgroup.WithContext(ctx)
 	for i := range importRequests {
+		select {
+		case importsSem <- struct{}{}:
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+
 		ir := importRequests[i]
 		g.Go(func() error {
+			defer func() { <-importsSem }()
+
 			if err := Import(gCtx, db, ir.Key, ir.EndKey, ir.files, kr); err != nil {
 				return err
 			}
