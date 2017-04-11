@@ -8659,7 +8659,7 @@ sqldefault:
 				sqllex.Error(err.Error())
 				return 1
 			}
-			sqlVAL.union.val = newFloatColType(int(prec), len(nv.OrigString) > 0)
+			sqlVAL.union.val = NewFloatColType(int(prec), len(nv.OrigString) > 0)
 		}
 	case 551:
 		sqlDollar = sqlS[sqlpt-2 : sqlpt+1]

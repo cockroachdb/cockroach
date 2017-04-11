@@ -231,7 +231,19 @@ func NewIdentAggregate() AggregateFunc {
 
 // Add sets the value to the passed datum.
 func (a *identAggregate) Add(_ *EvalContext, datum Datum) {
-	a.val = datum
+	// If we see at least one non-NULL value, ignore any NULLs.
+	// This is used in distributed multi-stage aggregations, where a local stage
+	// with multiple (parallel) instances feeds into a final stage. If some of the
+	// instances see no rows, they emit a NULL; the final IDENT aggregator needs
+	// to ignore these.
+	// TODO(radu): this - along with other hacks like special-handling of the nil
+	// result in (*aggregateGroupHolder).Eval - illustrates why IDENT as an
+	// aggregator is not a sound. We should remove this concept and handle GROUP
+	// BY columns separately in the groupNode and the aggregator processor
+	// (#12525).
+	if a.val == nil || datum != DNull {
+		a.val = datum
+	}
 }
 
 // Result returns the value most recently passed to Add.
