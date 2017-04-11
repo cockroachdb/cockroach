@@ -217,6 +217,10 @@ type ExecutorConfig struct {
 	Clock        *hlc.Clock
 	DistSQLSrv   *distsqlrun.ServerImpl
 
+	// ClusterStoresUpcall is a callback that the executor can use to get a list of
+	// stores in the cluster; used for SCATTER.
+	ClusterStoresUpcall func() []roachpb.ReplicationTarget
+
 	TestingKnobs              *ExecutorTestingKnobs
 	SchemaChangerTestingKnobs *SchemaChangerTestingKnobs
 	// HistogramWindowInterval is (server.Context).HistogramWindowInterval.
