@@ -23,6 +23,7 @@ import (
 	"os"
 	"runtime"
 	"strings"
+	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/util/caller"
 )
@@ -44,6 +45,8 @@ type tShim interface {
 	Failed() bool
 	Error(...interface{})
 	Errorf(fmt string, args ...interface{})
+	Log(...interface{})
+	Logf(fmt string, args ...interface{})
 }
 
 var showLogs bool
@@ -54,8 +57,24 @@ var showLogs bool
 // disables logging to stderr for severity levels below ERROR.
 func Scope(t tShim, testName string) *TestLogScope {
 	if showLogs {
+		atomic.StoreInt32(&logging.showLogs, 1)
 		return (*TestLogScope)(nil)
 	}
+	if testName == "" {
+		testName = "logUnknown"
+		if _, _, f := caller.Lookup(1); f != "" {
+			parts := strings.Split(f, ".")
+			testName = "log" + parts[len(parts)-1]
+		}
+	}
+	scope := scopeWithoutShowLogs(t, testName)
+	t.Log("use -show-logs to present logs inline")
+	return scope
+}
+
+// scopeWithoutShowLogs ignores the -show-logs flag and should be used for tests
+// that require the logs go to files.
+func scopeWithoutShowLogs(t tShim, testName string) *TestLogScope {
 	if testName == "" {
 		testName = "logUnknown"
 		if _, _, f := caller.Lookup(1); f != "" {
@@ -73,9 +92,7 @@ func Scope(t tShim, testName string) *TestLogScope {
 	if err := enableLogFileOutput(tempDir, Severity_ERROR); err != nil {
 		t.Fatal(err)
 	}
-	if !showLogs {
-		fmt.Fprintln(OrigStderr, "test logs captured to:", tempDir, " (use -show-logs to present inline)")
-	}
+	t.Logf("test logs captured to: %s", tempDir)
 	return &TestLogScope{logDir: tempDir}
 }
 
@@ -109,6 +126,8 @@ func (l *TestLogScope) KeepLogs(keep bool) {
 // Close cleans up a TestLogScope. The directory and its contents are
 // deleted, unless the test has failed and the directory is non-empty.
 func (l *TestLogScope) Close(t tShim) {
+	// Return showlogs to its default of 0.
+	atomic.StoreInt32(&logging.showLogs, 0)
 	if l == nil {
 		// Never initialized.
 		return

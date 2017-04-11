@@ -600,6 +600,9 @@ type loggingT struct {
 	// Level flag. Handled atomically.
 	stderrThreshold Severity // The -alsologtostderr flag.
 
+	// Flag used for testing, Handled atomically.
+	showLogs int32
+
 	// freeList is a list of byte buffers, maintained under freeListMu.
 	freeList *buffer
 	// freeListMu maintains the free list. It is separate from the main mutex
@@ -934,7 +937,7 @@ func (sb *syncBuffer) rotateFile(now time.Time) error {
 	// --logtostderr is true we'll never enter this code path and panic stack
 	// traces will go to the original stderr as you would expect.
 	if logging.stderrThreshold > Severity_INFO &&
-		!logging.noStderrRedirect && !showLogs {
+		!logging.noStderrRedirect && atomic.LoadInt32(&logging.showLogs) == 0 {
 		// NB: any concurrent output to stderr may straddle the old and new
 		// files. This doesn't apply to log messages as we won't reach this code
 		// unless we're not logging to stderr.
