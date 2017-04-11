@@ -23,7 +23,6 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
-	"net"
 	"net/url"
 	"os"
 	"os/signal"
@@ -93,28 +92,6 @@ func setDefaultSizeParameters(ctx *server.Config) {
 		// against OS buffers and decrease overall client throughput.
 		ctx.SQLMemoryPoolSize = size / 4
 	}
-}
-
-func initInsecureServer() error {
-	if !serverCfg.Insecure || insecure.isSet {
-		return nil
-	}
-	// The --insecure flag was not specified on the command line, verify that the
-	// host refers to a loopback address.
-	if serverConnHost != "" {
-		addr, err := net.ResolveIPAddr("ip", serverConnHost)
-		if err != nil {
-			return err
-		}
-		if !addr.IP.IsLoopback() {
-			return fmt.Errorf("specify --insecure to listen on external address %s", serverConnHost)
-		}
-	} else {
-		serverCfg.Addr = net.JoinHostPort("localhost", serverConnPort)
-		serverCfg.AdvertiseAddr = serverCfg.Addr
-		serverCfg.HTTPAddr = net.JoinHostPort("localhost", serverHTTPPort)
-	}
-	return nil
 }
 
 // maxSizePerProfile is the maximum total size in bytes for profiles per
@@ -320,10 +297,6 @@ func runStart(cmd *cobra.Command, args []string) error {
 	tracer := tracing.NewTracer()
 	sp := tracer.StartSpan("server start")
 	startCtx := opentracing.ContextWithSpan(context.Background(), sp)
-
-	if err := initInsecureServer(); err != nil {
-		return err
-	}
 
 	// Ensure that the store paths are absolute. This will clarify the
 	// output of the startup messages below, and ensure that logging
