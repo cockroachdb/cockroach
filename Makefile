@@ -208,6 +208,9 @@ generate: gotestdashi
 .PHONY: check
 check: override TAGS += check
 check: gotestdashi
+	env || true
+	ls $$GOBIN || true
+	ls $$GOPATH/bin || true
 	$(GO) test ./build -v -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -run 'TestStyle/$(TESTS)'
 
 .PHONY: checkshort
