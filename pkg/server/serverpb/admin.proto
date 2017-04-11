@@ -345,23 +345,6 @@ message LivenessResponse {
   repeated cockroach.storage.Liveness livenesses = 1 [(gogoproto.nullable) = false];
 }
 
-// ClusterFreezeRequest lets the receiving node go through all Ranges in the
-// cluster, freezing them in preparation for an upgrade.
-message ClusterFreezeRequest {
-  // When set, attempt to freeze the cluster in preparation for a
-  // stop-the-world upgrade. When unset, attempt to unfreeze any
-  // frozen Ranges.
-  bool freeze = 1;
-}
-
-// ClusterFreezeResponse is the streaming response to a ClusterFreezeRequest.
-// It contains a message intended for human consumption, and, for some updates,
-// the number of ranges whose state changed as a result of the request.
-message ClusterFreezeResponse {
-  int64 ranges_affected = 1;
-  string message = 2;
-}
-
 // Admin is the gRPC API for the admin UI. Through grpc-gateway, we offer
 // REST-style HTTP endpoints that locally proxy to the gRPC endpoints.
 service Admin {
@@ -471,14 +454,6 @@ service Admin {
   rpc Drain(DrainRequest) returns (stream DrainResponse) {
     option (google.api.http) = {
       post: "/_admin/v1/drain"
-      body: "*"
-    };
-  }
-
-  // ClusterFreeze freezes/unfreezes the cluster.
-  rpc ClusterFreeze(ClusterFreezeRequest) returns (stream ClusterFreezeResponse) {
-    option (google.api.http) = {
-      post: "/_admin/v1/cluster/freeze"
       body: "*"
     };
   }
