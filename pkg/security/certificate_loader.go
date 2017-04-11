@@ -84,6 +84,8 @@ const (
 	// Filename extenstions.
 	certExtension = `.crt`
 	keyExtension  = `.key`
+	// Certificate directory permissions.
+	defaultCertsDirPerm = 0700
 )
 
 func (p pemUsage) String() string {
@@ -149,6 +151,27 @@ func NewCertificateLoader(certsDir string) *CertificateLoader {
 		skipPermissionChecks: skipPermissionChecks,
 		certificates:         make([]*CertInfo, 0),
 	}
+}
+
+// MaybeCreateCertsDir creates the certificate directory if it does not
+// exist. Returns an error if we could not stat or create the directory.
+func (cl *CertificateLoader) MaybeCreateCertsDir() error {
+	dirInfo, err := os.Stat(cl.certsDir)
+	if err == nil {
+		if !dirInfo.IsDir() {
+			return errors.Errorf("certs directory %s exists but is not a directory", cl.certsDir)
+		}
+		return nil
+	}
+
+	if !os.IsNotExist(err) {
+		return errors.Errorf("could not stat certs directory %s: %v", cl.certsDir, err)
+	}
+
+	if err := os.Mkdir(cl.certsDir, defaultCertsDirPerm); err != nil {
+		return errors.Errorf("could not create certs directory %s: %v", cl.certsDir, err)
+	}
+	return nil
 }
 
 // TestDisablePermissionChecks turns off permissions checks.
