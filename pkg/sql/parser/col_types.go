@@ -146,7 +146,9 @@ type FloatColType struct {
 	PrecSpecified bool // true if the value of Prec is not the default
 }
 
-func newFloatColType(prec int, precSpecified bool) *FloatColType {
+// NewFloatColType creates a type representing a FLOAT, optionally with a
+// precision.
+func NewFloatColType(prec int, precSpecified bool) *FloatColType {
 	if prec == 0 && !precSpecified {
 		return floatColTypeFloat
 	}
