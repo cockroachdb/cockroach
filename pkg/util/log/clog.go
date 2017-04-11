@@ -935,8 +935,7 @@ func (sb *syncBuffer) rotateFile(now time.Time) error {
 	// stack traces that are written by the Go runtime to stderr. Note that if
 	// --logtostderr is true we'll never enter this code path and panic stack
 	// traces will go to the original stderr as you would expect.
-	if logging.stderrThreshold > Severity_INFO &&
-		!logging.noStderrRedirect && !showLogs {
+	if logging.stderrThreshold > Severity_INFO && !logging.noStderrRedirect {
 		// NB: any concurrent output to stderr may straddle the old and new
 		// files. This doesn't apply to log messages as we won't reach this code
 		// unless we're not logging to stderr.

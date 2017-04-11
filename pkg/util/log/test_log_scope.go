@@ -44,9 +44,19 @@ type tShim interface {
 	Failed() bool
 	Error(...interface{})
 	Errorf(fmt string, args ...interface{})
+	Log(...interface{})
+	Logf(fmt string, args ...interface{})
 }
 
 var showLogs bool
+
+func createTestNameFromFuncName(fun string) string {
+	if fun != "" {
+		parts := strings.Split(fun, ".")
+		return "log" + parts[len(parts)-1]
+	}
+	return "logUnknown"
+}
 
 // Scope creates a TestLogScope which corresponds to the lifetime of a
 // logging directory. If testName is empty, the logging directory is
@@ -57,11 +67,20 @@ func Scope(t tShim, testName string) *TestLogScope {
 		return (*TestLogScope)(nil)
 	}
 	if testName == "" {
-		testName = "logUnknown"
-		if _, _, f := caller.Lookup(1); f != "" {
-			parts := strings.Split(f, ".")
-			testName = "log" + parts[len(parts)-1]
-		}
+		_, _, fun := caller.Lookup(1)
+		testName = createTestNameFromFuncName(fun)
+	}
+	scope := ScopeWithoutShowLogs(t, testName)
+	t.Log("use -show-logs to present logs inline")
+	return scope
+}
+
+// ScopeWithoutShowLogs ignores the -show-logs flag and should be used for tests
+// that require the logs go to files.
+func ScopeWithoutShowLogs(t tShim, testName string) *TestLogScope {
+	if testName == "" {
+		_, _, fun := caller.Lookup(1)
+		testName = createTestNameFromFuncName(fun)
 	}
 	tempDir, err := ioutil.TempDir("", testName)
 	if err != nil {
@@ -73,9 +92,7 @@ func Scope(t tShim, testName string) *TestLogScope {
 	if err := enableLogFileOutput(tempDir, Severity_ERROR); err != nil {
 		t.Fatal(err)
 	}
-	if !showLogs {
-		fmt.Fprintln(OrigStderr, "test logs captured to:", tempDir, " (use -show-logs to present inline)")
-	}
+	t.Logf("test logs captured to: %s", tempDir)
 	return &TestLogScope{logDir: tempDir}
 }
 
