@@ -150,9 +150,7 @@ class RangesMain extends React.Component<RangesMainProps, RangesMainState> {
       });
 
       // Filter ranges and paginate
-      // https://github.com/DefinitelyTyped/DefinitelyTyped/pull/15363
-      // let rangesPairs: [string, protos.cockroach.server.serverpb.RaftRangeStatus$Properties][] = _.toPairs(statuses.ranges);
-      let rangesPairs = _.toPairs(statuses.ranges) as [string, protos.cockroach.server.serverpb.RaftRangeStatus$Properties][];
+      let rangesPairs: [string, protos.cockroach.server.serverpb.RaftRangeStatus$Properties][] = _.toPairs(statuses.ranges);
       let filteredRanges = _.filter(rangesPairs, ([, range]) => {
         return !this.state.showOnlyErrors || range.errors.length > 0;
       });

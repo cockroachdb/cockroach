@@ -6,11 +6,11 @@ import { CachedDataReducer, CachedDataReducerState, KeyedCachedDataReducer, Keye
 
 describe("basic cachedDataReducer", function () {
   class Request {
-    constructor(public request: string) { };
+    constructor(public request: string) { }
   }
 
   class Response {
-    constructor(public response: string) { };
+    constructor(public response: string) { }
   }
 
   let apiEndpointMock = (req = new Request(null)) => new Promise((resolve, _reject) => resolve(new Response(req.request)));
@@ -123,8 +123,10 @@ describe("basic cachedDataReducer", function () {
 
   describe("multiple reducer objects", function () {
     it("should throw an error if the same actionNamespace is used twice", function () {
+      // tslint:disable-next-line:no-unused-expression
       new CachedDataReducer<Request, Response>(apiEndpointMock, "duplicatenamespace");
       try {
+        // tslint:disable-next-line:no-unused-expression
         new CachedDataReducer<Request, Response>(apiEndpointMock, "duplicatenamespace");
       } catch (e) {
         assert(_.isError(e));
@@ -137,11 +139,11 @@ describe("basic cachedDataReducer", function () {
 
 describe("keyed cachedDataReducer", function () {
   class Request {
-    constructor(public request: string) { };
+    constructor(public request: string) { }
   }
 
   class Response {
-    constructor(public response: string) { };
+    constructor(public response: string) { }
   }
 
   let apiEndpointMock = (req = new Request(null)) => new Promise((resolve, _reject) => resolve(new Response(req.request)));

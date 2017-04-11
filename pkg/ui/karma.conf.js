@@ -23,7 +23,7 @@ module.exports = function(config) {
     ],
 
 
-    // https://github.com/webpack-contrib/karma-webpack/issues/188
+    // TODO(tamird): https://github.com/webpack-contrib/karma-webpack/issues/188.
     mime: {
       'text/x-typescript': ['ts','tsx'],
     },
