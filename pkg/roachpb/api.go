@@ -250,29 +250,6 @@ func (cc *CheckConsistencyResponse) combine(c combinable) error {
 var _ combinable = &CheckConsistencyResponse{}
 
 // Combine implements the combinable interface.
-func (af *ChangeFrozenResponse) combine(c combinable) error {
-	if af != nil {
-		otherAF := c.(*ChangeFrozenResponse)
-		if err := af.ResponseHeader.combine(otherAF.Header()); err != nil {
-			return err
-		}
-		af.RangesAffected += otherAF.RangesAffected
-		if otherAF.MinStartKey.Less(af.MinStartKey) {
-			af.MinStartKey = otherAF.MinStartKey
-		}
-		for storeID, nodeID := range otherAF.Stores {
-			if af.Stores == nil {
-				af.Stores = make(map[StoreID]NodeID, len(otherAF.Stores))
-			}
-			af.Stores[storeID] = nodeID
-		}
-	}
-	return nil
-}
-
-var _ combinable = &ChangeFrozenResponse{}
-
-// Combine implements the combinable interface.
 func (er *ExportResponse) combine(c combinable) error {
 	if er != nil {
 		otherER := c.(*ExportResponse)
@@ -419,9 +396,6 @@ func (*ReverseScanRequest) Method() Method { return ReverseScan }
 func (*CheckConsistencyRequest) Method() Method { return CheckConsistency }
 
 // Method implements the Request interface.
-func (*ChangeFrozenRequest) Method() Method { return ChangeFrozen }
-
-// Method implements the Request interface.
 func (*BeginTransactionRequest) Method() Method { return BeginTransaction }
 
 // Method implements the Request interface.
@@ -550,12 +524,6 @@ func (rsr *ReverseScanRequest) ShallowCopy() Request {
 // ShallowCopy implements the Request interface.
 func (ccr *CheckConsistencyRequest) ShallowCopy() Request {
 	shallowCopy := *ccr
-	return &shallowCopy
-}
-
-// ShallowCopy implements the Request interface.
-func (afr *ChangeFrozenRequest) ShallowCopy() Request {
-	shallowCopy := *afr
 	return &shallowCopy
 }
 
@@ -812,18 +780,6 @@ func NewScan(key, endKey Key) Request {
 	}
 }
 
-// NewChangeFrozen returns a Request initialized to scan from start to end keys.
-func NewChangeFrozen(key, endKey Key, frozen bool, mustVersion string) Request {
-	return &ChangeFrozenRequest{
-		Span: Span{
-			Key:    key,
-			EndKey: endKey,
-		},
-		Frozen:      frozen,
-		MustVersion: mustVersion,
-	}
-}
-
 // NewCheckConsistency returns a Request initialized to scan from start to end keys.
 func NewCheckConsistency(key, endKey Key, withDiff bool) Request {
 	return &CheckConsistencyRequest{
@@ -917,7 +873,6 @@ func (*TransferLeaseRequest) flags() int {
 func (*ComputeChecksumRequest) flags() int          { return isWrite | isNonKV | isRange }
 func (*DeprecatedVerifyChecksumRequest) flags() int { return isWrite }
 func (*CheckConsistencyRequest) flags() int         { return isAdmin | isRange }
-func (*ChangeFrozenRequest) flags() int             { return isWrite | isRange | isNonKV }
 func (*WriteBatchRequest) flags() int               { return isWrite | isRange }
 func (*ExportRequest) flags() int                   { return isRead | isRange }
 func (*ImportRequest) flags() int                   { return isAdmin | isAlone }

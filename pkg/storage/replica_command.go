@@ -36,7 +36,6 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -137,7 +136,6 @@ var commands = map[roachpb.Method]Command{
 	roachpb.TransferLease:      {DeclareKeys: declareKeysRequestLease, Eval: evalTransferLease},
 	roachpb.LeaseInfo:          {DeclareKeys: declareKeysLeaseInfo, Eval: evalLeaseInfo},
 	roachpb.ComputeChecksum:    {DeclareKeys: DefaultDeclareKeys, Eval: evalComputeChecksum},
-	roachpb.ChangeFrozen:       {DeclareKeys: declareKeysChangeFrozen, Eval: evalChangeFrozen},
 	roachpb.WriteBatch:         writeBatchCmd,
 	roachpb.Export:             exportCmd,
 
@@ -2315,103 +2313,6 @@ func (r *Replica) sha512(
 	}
 	sha := make([]byte, 0, sha512.Size)
 	return hasher.Sum(sha), nil
-}
-
-func declareKeysChangeFrozen(
-	_ roachpb.RangeDescriptor, header roachpb.Header, req roachpb.Request, spans *SpanSet,
-) {
-	loader := makeReplicaStateLoader(header.RangeID)
-	spans.Add(SpanReadWrite, roachpb.Span{Key: loader.RangeFrozenStatusKey()})
-}
-
-// evalChangeFrozen freezes or unfreezes the Replica idempotently.
-func evalChangeFrozen(
-	ctx context.Context, batch engine.ReadWriter, cArgs CommandArgs, resp roachpb.Response,
-) (EvalResult, error) {
-	args := cArgs.Args.(*roachpb.ChangeFrozenRequest)
-	reply := resp.(*roachpb.ChangeFrozenResponse)
-
-	reply.MinStartKey = roachpb.RKeyMax
-	curStart, err := keys.Addr(args.Key)
-	if err != nil {
-		return EvalResult{}, err
-	}
-	if !bytes.Equal(curStart, args.Key) {
-		return EvalResult{}, errors.Errorf("unsupported range-local key")
-	}
-
-	desc, err := cArgs.EvalCtx.Desc()
-	if err != nil {
-		return EvalResult{}, err
-	}
-
-	frozen, err := cArgs.EvalCtx.stateLoader().loadFrozenStatus(ctx, batch)
-	if err != nil || (frozen == storagebase.ReplicaState_FROZEN) == args.Frozen {
-		// Something went wrong or we're already in the right frozen state. In
-		// the latter case, we avoid writing the "same thing" because "we"
-		// might actually not be the same version of the code (picture a couple
-		// of freeze requests lined up, but not all of them applied between
-		// version changes).
-		return EvalResult{}, err
-	}
-
-	if args.MustVersion == "" {
-		return EvalResult{}, errors.Errorf("empty version tag")
-	} else if bi := build.GetInfo(); (frozen != storagebase.ReplicaState_FROZEN) && args.Frozen && args.MustVersion != bi.Tag {
-		// Some earlier version tried to freeze but we never applied it until
-		// someone restarted this node with another version. No bueno - have to
-		// assume that integrity has already been compromised.
-		// Note that we have extra hooks upstream which delay returning success
-		// to the caller until it's reasonable to assume that all Replicas have
-		// applied the freeze.
-		// This is a classical candidate for returning replica corruption, but
-		// we don't do it (yet); for now we'll assume that the update steps
-		// are carried out in correct order.
-		log.Warningf(ctx, "freeze %s issued from %s is applied by %s",
-			desc, args.MustVersion, &bi)
-	}
-
-	// Generally, we want to act only if the request hits the Range's StartKey.
-	// The one case in which that behaves unexpectedly is if we're the first
-	// range, which has StartKey equal to KeyMin, but the lowest curStart which
-	// is feasible is LocalMax.
-	if !desc.StartKey.Less(curStart) {
-		reply.RangesAffected++
-	} else if locMax, err := keys.Addr(keys.LocalMax); err != nil {
-		return EvalResult{}, err
-	} else if !locMax.Less(curStart) {
-		reply.RangesAffected++
-	}
-
-	// Note down the Stores on which this request ran, even if the Range was
-	// not affected.
-	reply.Stores = make(map[roachpb.StoreID]roachpb.NodeID, len(desc.Replicas))
-	for i := range desc.Replicas {
-		reply.Stores[desc.Replicas[i].StoreID] = desc.Replicas[i].NodeID
-	}
-
-	if reply.RangesAffected == 0 {
-		return EvalResult{}, nil
-	}
-
-	reply.MinStartKey = desc.StartKey
-
-	frozenStatus := storagebase.ReplicaState_UNFROZEN
-	if args.Frozen {
-		frozenStatus = storagebase.ReplicaState_FROZEN
-	}
-	if err := cArgs.EvalCtx.stateLoader().setFrozenStatus(ctx, batch, cArgs.Stats, frozenStatus); err != nil {
-		*reply = roachpb.ChangeFrozenResponse{}
-		return EvalResult{}, err
-	}
-
-	var pd EvalResult
-	if args.Frozen {
-		pd.Replicated.State.Frozen = storagebase.ReplicaState_FROZEN
-	} else {
-		pd.Replicated.State.Frozen = storagebase.ReplicaState_UNFROZEN
-	}
-	return pd, nil
 }
 
 func makeUnimplementedCommand(method roachpb.Method) Command {

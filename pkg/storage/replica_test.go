@@ -1147,7 +1147,7 @@ func TestReplicaDrainLease(t *testing.T) {
 		t.Fatalf("expected NotLeaseHolderError, not %v", pErr)
 	}
 	tc.store.SetDraining(false)
-	// Newly unfrozen, leases work again.
+	// Newly undrained, leases work again.
 	if _, pErr := tc.repl.redirectOnOrAcquireLease(context.Background()); pErr != nil {
 		t.Fatal(pErr)
 	}

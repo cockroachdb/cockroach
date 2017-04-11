@@ -349,7 +349,6 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	s.node = NewNode(storeCfg, s.recorder, s.registry, s.stopper, txnMetrics, sql.MakeEventLogger(s.leaseMgr))
 	roachpb.RegisterInternalServer(s.grpc, s.node)
 	storage.RegisterConsistencyServer(s.grpc, s.node.storesServer)
-	storage.RegisterFreezeServer(s.grpc, s.node.storesServer)
 
 	s.admin = newAdminServer(s)
 	s.status = newStatusServer(

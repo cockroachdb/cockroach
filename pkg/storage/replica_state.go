@@ -67,10 +67,6 @@ func (rsl replicaStateLoader) load(
 	}
 	s.Lease = &lease
 
-	if s.Frozen, err = rsl.loadFrozenStatus(ctx, reader); err != nil {
-		return storagebase.ReplicaState{}, err
-	}
-
 	if s.GCThreshold, err = rsl.loadGCThreshold(ctx, reader); err != nil {
 		return storagebase.ReplicaState{}, err
 	}
@@ -119,9 +115,6 @@ func (rsl replicaStateLoader) save(
 	if err := rsl.setAppliedIndex(
 		ctx, eng, ms, state.RaftAppliedIndex, state.LeaseAppliedIndex,
 	); err != nil {
-		return enginepb.MVCCStats{}, err
-	}
-	if err := rsl.setFrozenStatus(ctx, eng, ms, state.Frozen); err != nil {
 		return enginepb.MVCCStats{}, err
 	}
 	if err := rsl.setGCThreshold(ctx, eng, ms, &state.GCThreshold); err != nil {
@@ -358,40 +351,6 @@ func (rsl replicaStateLoader) setMVCCStats(
 	return engine.MVCCPutProto(ctx, eng, nil, rsl.RangeStatsKey(), hlc.Timestamp{}, nil, newMS)
 }
 
-func (rsl replicaStateLoader) setFrozenStatus(
-	ctx context.Context,
-	eng engine.ReadWriter,
-	ms *enginepb.MVCCStats,
-	frozen storagebase.ReplicaState_FrozenEnum,
-) error {
-	if frozen == storagebase.ReplicaState_FROZEN_UNSPECIFIED {
-		return errors.New("cannot persist unspecified FrozenStatus")
-	}
-	var val roachpb.Value
-	val.SetBool(frozen == storagebase.ReplicaState_FROZEN)
-	return engine.MVCCPut(ctx, eng, ms, rsl.RangeFrozenStatusKey(), hlc.Timestamp{}, val, nil)
-}
-
-func (rsl replicaStateLoader) loadFrozenStatus(
-	ctx context.Context, reader engine.Reader,
-) (storagebase.ReplicaState_FrozenEnum, error) {
-	var zero storagebase.ReplicaState_FrozenEnum
-	val, _, err := engine.MVCCGet(ctx, reader, rsl.RangeFrozenStatusKey(),
-		hlc.Timestamp{}, true, nil)
-	if err != nil {
-		return zero, err
-	}
-	if val == nil {
-		return storagebase.ReplicaState_UNFROZEN, nil
-	}
-	if frozen, err := val.GetBool(); err != nil {
-		return zero, err
-	} else if frozen {
-		return storagebase.ReplicaState_FROZEN, nil
-	}
-	return storagebase.ReplicaState_UNFROZEN, nil
-}
-
 // The rest is not technically part of ReplicaState.
 // TODO(tschottdorf): more consolidation of ad-hoc structures: last index and
 // hard state. These are closely coupled with ReplicaState (and in particular
@@ -558,7 +517,6 @@ func writeInitialState(
 	s.Desc = &roachpb.RangeDescriptor{
 		RangeID: desc.RangeID,
 	}
-	s.Frozen = storagebase.ReplicaState_UNFROZEN
 	s.Stats = ms
 	s.Lease = lease
 

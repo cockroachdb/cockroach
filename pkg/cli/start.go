@@ -21,7 +21,6 @@ import (
 	"bytes"
 	"flag"
 	"fmt"
-	"io"
 	"io/ioutil"
 	"net"
 	"net/url"
@@ -723,43 +722,4 @@ func runQuit(_ *cobra.Command, _ []string) (err error) {
 	// Not passing drain modes tells the server to not bother and go
 	// straight to shutdown.
 	return errors.Wrap(doShutdown(ctx, c, nil), "hard shutdown failed")
-}
-
-// freezeClusterCmd command issues a cluster-wide freeze.
-var freezeClusterCmd = &cobra.Command{
-	Use:   "freeze-cluster",
-	Short: "freeze the cluster in preparation for an update",
-	Long: `
-Disables all Raft groups and stops new commands from being executed in preparation
-for a stop-the-world update of the cluster. Once the command has completed, the
-nodes in the cluster should be terminated, all binaries updated, and only then
-restarted. A failed or incomplete invocation of this command can be rolled back
-using the --undo flag, or by restarting all the nodes in the cluster.
-`,
-	RunE: MaybeDecorateGRPCError(runFreezeCluster),
-}
-
-func runFreezeCluster(_ *cobra.Command, _ []string) error {
-	c, stopper, err := getAdminClient()
-	if err != nil {
-		return err
-	}
-	defer stopper.Stop()
-	stream, err := c.ClusterFreeze(stopperContext(stopper),
-		&serverpb.ClusterFreezeRequest{Freeze: !undoFreezeCluster})
-	if err != nil {
-		return err
-	}
-	for {
-		resp, err := stream.Recv()
-		if err != nil {
-			if err == io.EOF {
-				break
-			}
-			return err
-		}
-		fmt.Println(resp.Message)
-	}
-	fmt.Println("ok")
-	return nil
 }

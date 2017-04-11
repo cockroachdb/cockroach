@@ -43,7 +43,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -952,43 +951,5 @@ func TestHealthAPI(t *testing.T) {
 	var resp serverpb.HealthResponse
 	if err := getAdminJSONProto(s, "health", &resp); !testutils.IsError(err, expected) {
 		t.Errorf("expected %q error, got %v", expected, err)
-	}
-}
-
-func TestClusterFreeze(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop()
-
-	for _, freeze := range []bool{true, false} {
-		req := serverpb.ClusterFreezeRequest{
-			Freeze: freeze,
-		}
-
-		var resp serverpb.ClusterFreezeResponse
-		cb := func(v proto.Message) {
-			oldNum := resp.RangesAffected
-			resp = *v.(*serverpb.ClusterFreezeResponse)
-			if oldNum > resp.RangesAffected {
-				resp.RangesAffected = oldNum
-			}
-		}
-
-		cli, err := s.GetHTTPClient()
-		if err != nil {
-			t.Fatal(err)
-		}
-		path := s.AdminURL() + adminPrefix + "cluster/freeze"
-
-		if err := httputil.StreamJSON(cli, path, &req, &serverpb.ClusterFreezeResponse{}, cb); err != nil {
-			t.Fatal(err)
-		}
-		if aff := resp.RangesAffected; aff == 0 {
-			t.Fatalf("expected affected ranges: %+v", resp)
-		}
-
-		if err := httputil.StreamJSON(cli, path, &req, &serverpb.ClusterFreezeResponse{}, cb); err != nil {
-			t.Fatal(err)
-		}
 	}
 }

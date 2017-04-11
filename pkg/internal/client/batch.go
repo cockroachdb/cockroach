@@ -258,7 +258,6 @@ func (b *Batch) fillResults() error {
 			case *roachpb.TruncateLogRequest:
 			case *roachpb.RequestLeaseRequest:
 			case *roachpb.CheckConsistencyRequest:
-			case *roachpb.ChangeFrozenRequest:
 			case *roachpb.WriteBatchRequest:
 			case *roachpb.ImportRequest:
 			}
