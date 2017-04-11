@@ -183,7 +183,7 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 	// key is selected to fall within the meta range in order for the later
 	// routing of requests to range 1 to work properly. Removing the routing
 	// of all requests to range 1 would allow us to make the key more normal.
-	const key = "\x03key"
+	key := rg1Key("key")
 	// Set up a filter to so that the get operation at Step 3 will return an error.
 	var numGets int32
 
