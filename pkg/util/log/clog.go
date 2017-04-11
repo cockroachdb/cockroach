@@ -600,6 +600,10 @@ type loggingT struct {
 	// Level flag. Handled atomically.
 	stderrThreshold Severity // The -alsologtostderr flag.
 
+	// disableGCDeamon can be used to turn off the logging GC. Handled
+	// atomically.
+	disableGCDeamon int32
+
 	// freeList is a list of byte buffers, maintained under freeListMu.
 	freeList *buffer
 	// freeListMu maintains the free list. It is separate from the main mutex
@@ -1041,7 +1045,9 @@ func (l *loggingT) flushAll() {
 func (l *loggingT) gcDaemon() {
 	l.gcOldFiles()
 	for range l.gcNotify {
-		l.gcOldFiles()
+		if atomic.LoadInt32(&l.disableGCDeamon) == 0 {
+			l.gcOldFiles()
+		}
 	}
 }
 
