@@ -33,7 +33,6 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
-	"github.com/spf13/cobra"
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -1614,21 +1613,18 @@ func TestJunkPositionalArguments(t *testing.T) {
 	c := newCLITest(cliTestParams{t: t, noServer: true})
 	defer c.cleanup()
 
-	for i, test := range []struct {
-		cmd        *cobra.Command
-		invocation string
-	}{
-		{startCmd, "start junk"},
-		{sqlShellCmd, "sql junk"},
-		{genManCmd, "gen man junk"},
-		{genAutocompleteCmd, "gen autocomplete junk"},
-		{genExamplesCmd, "gen example-data file junk"},
+	for i, test := range []string{
+		"start junk",
+		"sql junk",
+		"gen man junk",
+		"gen autocomplete junk",
+		"gen example-data file junk",
 	} {
-		out, err := c.RunWithCapture(test.invocation)
+		out, err := c.RunWithCapture(test)
 		if err != nil {
 			t.Fatal(errors.Wrap(err, strconv.Itoa(i)))
 		}
-		exp := test.invocation + "\ninvalid arguments\n"
+		exp := test + "\ninvalid arguments\n"
 		if exp != out {
 			t.Errorf("expected:\n%s\ngot:\n%s", exp, out)
 		}
