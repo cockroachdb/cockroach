@@ -397,150 +397,152 @@ func TestAdminAPITableSQLInjection(t *testing.T) {
 
 func TestAdminAPITableDetails(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	testAdminAPITableDetailsInner(t, "test", "tbl")
-}
 
-func TestAdminAPITableDetailsEscapedNames(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	testAdminAPITableDetailsInner(t, "test test", "tbl tbl")
-}
+	for _, tc := range []struct {
+		name, dbName, tblName string
+	}{
+		{name: "lower", dbName: "test", tblName: "tbl"},
+		{name: "lower with space", dbName: "test test", tblName: "tbl tbl"},
+		{name: "upper", dbName: "TEST", tblName: "TBL"}, // Regression test for issue #14056
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+			defer s.Stopper().Stop()
+			ts := s.(*TestServer)
 
-func testAdminAPITableDetailsInner(t *testing.T, dbName, tblName string) {
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop()
-	ts := s.(*TestServer)
+			escDBName := parser.Name(tc.dbName).String()
+			escTblName := parser.Name(tc.tblName).String()
 
-	escDBName := parser.Name(dbName).String()
-	escTblName := parser.Name(tblName).String()
+			ac := log.AmbientContext{Tracer: tracing.NewTracer()}
+			ctx, span := ac.AnnotateCtxWithSpan(context.Background(), "test")
+			defer span.Finish()
 
-	ac := log.AmbientContext{Tracer: tracing.NewTracer()}
-	ctx, span := ac.AnnotateCtxWithSpan(context.Background(), "test")
-	defer span.Finish()
+			session := sql.NewSession(
+				ctx, sql.SessionArgs{User: security.RootUser}, ts.sqlExecutor, nil, &sql.MemoryMetrics{})
+			session.StartUnlimitedMonitor()
+			defer session.Finish(ts.sqlExecutor)
+			setupQueries := []string{
+				fmt.Sprintf("CREATE DATABASE %s", escDBName),
+				fmt.Sprintf(`CREATE TABLE %s.%s (
+							nulls_allowed INT,
+							nulls_not_allowed INT NOT NULL DEFAULT 1000,
+							default2 INT DEFAULT 2,
+							string_default STRING DEFAULT 'default_string'
+						)`, escDBName, escTblName),
+				fmt.Sprintf("GRANT SELECT ON %s.%s TO readonly", escDBName, escTblName),
+				fmt.Sprintf("GRANT SELECT,UPDATE,DELETE ON %s.%s TO app", escDBName, escTblName),
+				fmt.Sprintf("CREATE INDEX descIdx ON %s.%s (default2 DESC)", escDBName, escTblName),
+			}
 
-	session := sql.NewSession(
-		ctx, sql.SessionArgs{User: security.RootUser}, ts.sqlExecutor, nil, &sql.MemoryMetrics{})
-	session.StartUnlimitedMonitor()
-	defer session.Finish(ts.sqlExecutor)
-	setupQueries := []string{
-		fmt.Sprintf("CREATE DATABASE %s", escDBName),
-		fmt.Sprintf(`CREATE TABLE %s.%s (
-	nulls_allowed INT,
-	nulls_not_allowed INT NOT NULL DEFAULT 1000,
-	default2 INT DEFAULT 2,
-	string_default STRING DEFAULT 'default_string'
-)`, escDBName, escTblName),
-		fmt.Sprintf("GRANT SELECT ON %s.%s TO readonly", escDBName, escTblName),
-		fmt.Sprintf("GRANT SELECT,UPDATE,DELETE ON %s.%s TO app", escDBName, escTblName),
-		fmt.Sprintf("CREATE INDEX descIdx ON %s.%s (default2 DESC)", escDBName, escTblName),
-	}
+			for _, q := range setupQueries {
+				res := ts.sqlExecutor.ExecuteStatements(session, q, nil)
+				defer res.Close(ctx)
+				if res.ResultList[0].Err != nil {
+					t.Fatalf("error executing '%s': %s", q, res.ResultList[0].Err)
+				}
+			}
 
-	for _, q := range setupQueries {
-		res := ts.sqlExecutor.ExecuteStatements(session, q, nil)
-		defer res.Close(ctx)
-		if res.ResultList[0].Err != nil {
-			t.Fatalf("error executing '%s': %s", q, res.ResultList[0].Err)
-		}
-	}
+			// Perform API call.
+			var resp serverpb.TableDetailsResponse
+			url := fmt.Sprintf("databases/%s/tables/%s", tc.dbName, tc.tblName)
+			if err := getAdminJSONProto(s, url, &resp); err != nil {
+				t.Fatal(err)
+			}
 
-	// Perform API call.
-	var resp serverpb.TableDetailsResponse
-	url := fmt.Sprintf("databases/%s/tables/%s", dbName, tblName)
-	if err := getAdminJSONProto(s, url, &resp); err != nil {
-		t.Fatal(err)
-	}
+			// Verify columns.
+			expColumns := []serverpb.TableDetailsResponse_Column{
+				{Name: "nulls_allowed", Type: "INT", Nullable: true, DefaultValue: ""},
+				{Name: "nulls_not_allowed", Type: "INT", Nullable: false, DefaultValue: "1000"},
+				{Name: "default2", Type: "INT", Nullable: true, DefaultValue: "2"},
+				{Name: "string_default", Type: "STRING", Nullable: true, DefaultValue: "'default_string'"},
+			}
+			testutils.SortStructs(expColumns, "Name")
+			testutils.SortStructs(resp.Columns, "Name")
+			if a, e := len(resp.Columns), len(expColumns); a != e {
+				t.Fatalf("# of result columns %d != expected %d (got: %#v)", a, e, resp.Columns)
+			}
+			for i, a := range resp.Columns {
+				e := expColumns[i]
+				if a.String() != e.String() {
+					t.Fatalf("mismatch at column %d: actual %#v != %#v", i, a, e)
+				}
+			}
 
-	// Verify columns.
-	expColumns := []serverpb.TableDetailsResponse_Column{
-		{Name: "nulls_allowed", Type: "INT", Nullable: true, DefaultValue: ""},
-		{Name: "nulls_not_allowed", Type: "INT", Nullable: false, DefaultValue: "1000"},
-		{Name: "default2", Type: "INT", Nullable: true, DefaultValue: "2"},
-		{Name: "string_default", Type: "STRING", Nullable: true, DefaultValue: "'default_string'"},
-	}
-	testutils.SortStructs(expColumns, "Name")
-	testutils.SortStructs(resp.Columns, "Name")
-	if a, e := len(resp.Columns), len(expColumns); a != e {
-		t.Fatalf("# of result columns %d != expected %d (got: %#v)", a, e, resp.Columns)
-	}
-	for i, a := range resp.Columns {
-		e := expColumns[i]
-		if a.String() != e.String() {
-			t.Fatalf("mismatch at column %d: actual %#v != %#v", i, a, e)
-		}
-	}
+			// Verify grants.
+			expGrants := []serverpb.TableDetailsResponse_Grant{
+				{User: security.RootUser, Privileges: []string{"ALL"}},
+				{User: "app", Privileges: []string{"DELETE"}},
+				{User: "app", Privileges: []string{"SELECT"}},
+				{User: "app", Privileges: []string{"UPDATE"}},
+				{User: "readonly", Privileges: []string{"SELECT"}},
+			}
+			testutils.SortStructs(expGrants, "User")
+			testutils.SortStructs(resp.Grants, "User")
+			if a, e := len(resp.Grants), len(expGrants); a != e {
+				t.Fatalf("# of grant columns %d != expected %d (got: %#v)", a, e, resp.Grants)
+			}
+			for i, a := range resp.Grants {
+				e := expGrants[i]
+				sort.Strings(a.Privileges)
+				sort.Strings(e.Privileges)
+				if a.String() != e.String() {
+					t.Fatalf("mismatch at index %d: actual %#v != %#v", i, a, e)
+				}
+			}
 
-	// Verify grants.
-	expGrants := []serverpb.TableDetailsResponse_Grant{
-		{User: security.RootUser, Privileges: []string{"ALL"}},
-		{User: "app", Privileges: []string{"DELETE"}},
-		{User: "app", Privileges: []string{"SELECT"}},
-		{User: "app", Privileges: []string{"UPDATE"}},
-		{User: "readonly", Privileges: []string{"SELECT"}},
-	}
-	testutils.SortStructs(expGrants, "User")
-	testutils.SortStructs(resp.Grants, "User")
-	if a, e := len(resp.Grants), len(expGrants); a != e {
-		t.Fatalf("# of grant columns %d != expected %d (got: %#v)", a, e, resp.Grants)
-	}
-	for i, a := range resp.Grants {
-		e := expGrants[i]
-		sort.Strings(a.Privileges)
-		sort.Strings(e.Privileges)
-		if a.String() != e.String() {
-			t.Fatalf("mismatch at index %d: actual %#v != %#v", i, a, e)
-		}
-	}
+			// Verify indexes.
+			expIndexes := []serverpb.TableDetailsResponse_Index{
+				{Name: "primary", Column: "rowid", Direction: "ASC", Unique: true, Seq: 1},
+				{Name: "descIdx", Column: "rowid", Direction: "ASC", Unique: false, Seq: 2, Implicit: true},
+				{Name: "descIdx", Column: "default2", Direction: "DESC", Unique: false, Seq: 1},
+			}
+			testutils.SortStructs(expIndexes, "Name", "Seq")
+			testutils.SortStructs(resp.Indexes, "Name", "Seq")
+			for i, a := range resp.Indexes {
+				e := expIndexes[i]
+				if a.String() != e.String() {
+					t.Fatalf("mismatch at index %d: actual %#v != %#v", i, a, e)
+				}
+			}
 
-	// Verify indexes.
-	expIndexes := []serverpb.TableDetailsResponse_Index{
-		{Name: "primary", Column: "rowid", Direction: "ASC", Unique: true, Seq: 1},
-		{Name: "descIdx", Column: "rowid", Direction: "ASC", Unique: false, Seq: 2, Implicit: true},
-		{Name: "descIdx", Column: "default2", Direction: "DESC", Unique: false, Seq: 1},
-	}
-	testutils.SortStructs(expIndexes, "Name", "Seq")
-	testutils.SortStructs(resp.Indexes, "Name", "Seq")
-	for i, a := range resp.Indexes {
-		e := expIndexes[i]
-		if a.String() != e.String() {
-			t.Fatalf("mismatch at index %d: actual %#v != %#v", i, a, e)
-		}
-	}
+			// Verify range count.
+			if a, e := resp.RangeCount, int64(1); a != e {
+				t.Fatalf("# of ranges %d != expected %d", a, e)
+			}
 
-	// Verify range count.
-	if a, e := resp.RangeCount, int64(1); a != e {
-		t.Fatalf("# of ranges %d != expected %d", a, e)
-	}
+			// Verify Create Table Statement.
+			{
 
-	// Verify Create Table Statement.
-	{
+				const createTableCol = "CreateTable"
+				showCreateTableQuery := fmt.Sprintf("SHOW CREATE TABLE %s.%s", escDBName, escTblName)
 
-		const createTableCol = "CreateTable"
-		showCreateTableQuery := fmt.Sprintf("SHOW CREATE TABLE %s.%s", escDBName, escTblName)
+				resSet := ts.sqlExecutor.ExecuteStatements(session, showCreateTableQuery, nil)
+				defer resSet.Close(ctx)
+				res := resSet.ResultList[0]
+				if res.Err != nil {
+					t.Fatalf("error executing '%s': %s", showCreateTableQuery, res.Err)
+				}
 
-		resSet := ts.sqlExecutor.ExecuteStatements(session, showCreateTableQuery, nil)
-		defer resSet.Close(ctx)
-		res := resSet.ResultList[0]
-		if res.Err != nil {
-			t.Fatalf("error executing '%s': %s", showCreateTableQuery, res.Err)
-		}
+				scanner := makeResultScanner(res.Columns)
+				var createStmt string
+				if err := scanner.Scan(res.Rows.At(0), createTableCol, &createStmt); err != nil {
+					t.Fatal(err)
+				}
 
-		scanner := makeResultScanner(res.Columns)
-		var createStmt string
-		if err := scanner.Scan(res.Rows.At(0), createTableCol, &createStmt); err != nil {
-			t.Fatal(err)
-		}
+				if a, e := resp.CreateTableStatement, createStmt; a != e {
+					t.Fatalf("mismatched create table statement; expected %s, got %s", e, a)
+				}
+			}
 
-		if a, e := resp.CreateTableStatement, createStmt; a != e {
-			t.Fatalf("mismatched create table statement; expected %s, got %s", e, a)
-		}
-	}
-
-	// Verify Descriptor ID.
-	path, err := ts.admin.queryDescriptorIDPath(ctx, session, []string{dbName, tblName})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if a, e := resp.DescriptorID, int64(path[2]); a != e {
-		t.Fatalf("table had descriptorID %d, expected %d", a, e)
+			// Verify Descriptor ID.
+			path, err := ts.admin.queryDescriptorIDPath(ctx, session, []string{tc.dbName, tc.tblName})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if a, e := resp.DescriptorID, int64(path[2]); a != e {
+				t.Fatalf("table had descriptorID %d, expected %d", a, e)
+			}
+		})
 	}
 }
 
