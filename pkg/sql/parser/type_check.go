@@ -136,8 +136,12 @@ func (expr *BinaryExpr) TypeCheck(ctx *SemaContext, desired Type) (TypedExpr, er
 		if desired != TypeAny {
 			desStr = fmt.Sprintf(" (desired <%s>)", desired)
 		}
-		return nil, fmt.Errorf("unsupported binary operator: <%s> %s <%s>%s",
-			leftReturn, expr.Operator, rightReturn, desStr)
+		sig := fmt.Sprintf("<%s> %s <%s>%s", leftReturn, expr.Operator, rightReturn, desStr)
+		if len(fns) == 0 {
+			return nil, fmt.Errorf("unsupported binary operator: %s", sig)
+		}
+		fnsStr := formatCandidates(expr.Operator.String(), fns)
+		return nil, fmt.Errorf("ambiguous binary operator: %s, candidates are:\n%s", sig, fnsStr)
 	}
 
 	binOp := fns[0].(BinOp)
@@ -430,8 +434,12 @@ func (expr *FuncExpr) TypeCheck(ctx *SemaContext, desired Type) (TypedExpr, erro
 		if desired != TypeAny {
 			desStr = fmt.Sprintf(" (desired <%s>)", desired)
 		}
-		return nil, fmt.Errorf("unknown signature: %s(%s)%s",
-			expr.Func, strings.Join(typeNames, ", "), desStr)
+		sig := fmt.Sprintf("%s(%s)%s", expr.Func, strings.Join(typeNames, ", "), desStr)
+		if len(fns) == 0 {
+			return nil, fmt.Errorf("unknown signature: %s", sig)
+		}
+		fnsStr := formatCandidates(expr.Func.String(), fns)
+		return nil, fmt.Errorf("ambiguous call: %s, candidates are:\n%s", sig, fnsStr)
 	}
 
 	if expr.WindowDef != nil {
@@ -668,8 +676,12 @@ func (expr *UnaryExpr) TypeCheck(ctx *SemaContext, desired Type) (TypedExpr, err
 		if desired != TypeAny {
 			desStr = fmt.Sprintf(" (desired <%s>)", desired)
 		}
-		return nil, fmt.Errorf("unsupported unary operator: %s <%s>%s",
-			expr.Operator, exprReturn, desStr)
+		sig := fmt.Sprintf("%s <%s>%s", expr.Operator, exprReturn, desStr)
+		if len(fns) == 0 {
+			return nil, fmt.Errorf("unsupported unary operator: %s", sig)
+		}
+		fnsStr := formatCandidates(expr.Operator.String(), fns)
+		return nil, fmt.Errorf("ambiguous unary operator: %s, candidates are:\n%s", sig, fnsStr)
 	}
 
 	unaryOp := fns[0].(UnaryOp)
@@ -874,10 +886,12 @@ func typeCheckAndRequire(ctx *SemaContext, expr Expr, required Type, op string) 
 }
 
 const (
-	unsupportedCompErrFmtWithTypes         = "unsupported comparison operator: <%s> %s <%s>"
-	unsupportedCompErrFmtWithTypesAndSubOp = "unsupported comparison operator: <%s> %s %s <%s>"
-	unsupportedCompErrFmtWithExprs         = "unsupported comparison operator: %s %s %s: %v"
-	unsupportedCompErrFmtWithExprsAndSubOp = "unsupported comparison operator: %s %s %s %s: %v"
+	compSignatureFmt          = "<%s> %s <%s>"
+	compSignatureWithSubOpFmt = "<%s> %s %s <%s>"
+	compExprsFmt              = "%s %s %s: %v"
+	compExprsWithSubOpFmt     = "%s %s %s %s: %v"
+	unsupportedCompErrFmt     = "unsupported comparison operator: %s"
+	ambiguousCompErrFmt       = "ambiguous comparison operator: %s, candidates are:\n%s"
 )
 
 func typeCheckComparisonOpWithSubOperator(
@@ -899,8 +913,8 @@ func typeCheckComparisonOpWithSubOperator(
 
 		typedSubExprs, retType, err := typeCheckSameTypedExprs(ctx, TypeAny, sameTypeExprs...)
 		if err != nil {
-			return nil, nil, CmpOp{}, fmt.Errorf(unsupportedCompErrFmtWithExprsAndSubOp,
-				left, op, subOp, right, err)
+			sigWithErr := fmt.Sprintf(compExprsWithSubOpFmt, left, op, subOp, right, err)
+			return nil, nil, CmpOp{}, fmt.Errorf(unsupportedCompErrFmt, sigWithErr)
 		}
 
 		// Determine TypedExpr and comparison type for left operand.
@@ -953,17 +967,17 @@ func typeCheckComparisonOpWithSubOperator(
 
 		rightArr, ok := UnwrapType(rightReturn).(TArray)
 		if !ok {
-			return nil, nil, CmpOp{},
-				errors.Errorf(unsupportedCompErrFmtWithExprsAndSubOp, left, subOp, op, right,
-					fmt.Sprintf("op %s array requires array on right side", op))
+			sigWithErr := fmt.Sprintf(compExprsWithSubOpFmt, left, subOp, op, right,
+				fmt.Sprintf("op %s array requires array on right side", op))
+			return nil, nil, CmpOp{}, errors.Errorf(unsupportedCompErrFmt, sigWithErr)
 		}
 		cmpTypeRight = rightArr.Typ
 	}
 
 	fn, ok := ops.lookupImpl(cmpTypeLeft, cmpTypeRight)
 	if !ok {
-		return nil, nil, CmpOp{}, fmt.Errorf(unsupportedCompErrFmtWithTypesAndSubOp,
-			cmpTypeLeft, subOp, op, TArray{cmpTypeRight})
+		sig := fmt.Sprintf(compSignatureWithSubOpFmt, cmpTypeLeft, subOp, op, TArray{cmpTypeRight})
+		return nil, nil, CmpOp{}, fmt.Errorf(unsupportedCompErrFmt, sig)
 	}
 	return leftTyped, rightTyped, fn, nil
 }
@@ -984,13 +998,14 @@ func typeCheckComparisonOp(
 
 		typedSubExprs, retType, err := typeCheckSameTypedExprs(ctx, TypeAny, sameTypeExprs...)
 		if err != nil {
-			return nil, nil, CmpOp{}, fmt.Errorf(unsupportedCompErrFmtWithExprs,
-				left, op, right, err)
+			sigWithErr := fmt.Sprintf(compExprsFmt, left, op, right, err)
+			return nil, nil, CmpOp{}, fmt.Errorf(unsupportedCompErrFmt, sigWithErr)
 		}
 
 		fn, ok := ops.lookupImpl(retType, TypeTuple)
 		if !ok {
-			return nil, nil, CmpOp{}, fmt.Errorf(unsupportedCompErrFmtWithTypes, retType, op, TypeTuple)
+			sig := fmt.Sprintf(compSignatureFmt, retType, op, TypeTuple)
+			return nil, nil, CmpOp{}, fmt.Errorf(unsupportedCompErrFmt, sig)
 		}
 
 		typedLeft := typedSubExprs[0]
@@ -1008,7 +1023,8 @@ func typeCheckComparisonOp(
 	case leftIsTuple && rightIsTuple:
 		fn, ok := ops.lookupImpl(TypeTuple, TypeTuple)
 		if !ok {
-			return nil, nil, CmpOp{}, fmt.Errorf(unsupportedCompErrFmtWithTypes, TypeTuple, op, TypeTuple)
+			sig := fmt.Sprintf(compSignatureFmt, TypeTuple, op, TypeTuple)
+			return nil, nil, CmpOp{}, fmt.Errorf(unsupportedCompErrFmt, sig)
 		}
 		// Using non-folded left and right to avoid having to swap later.
 		typedLeft, typedRight, err := typeCheckTupleComparison(ctx, op, left.(*Tuple), right.(*Tuple))
@@ -1044,10 +1060,14 @@ func typeCheckComparisonOp(
 
 	// Throw a typing error if overload resolution found either no compatible candidates
 	// or if it found an ambiguity.
-	if len(fns) != 1 || (leftReturn.FamilyEqual(TypeCollatedString) &&
-		!leftReturn.Equivalent(rightReturn)) {
-		return nil, nil, CmpOp{},
-			fmt.Errorf(unsupportedCompErrFmtWithTypes, leftReturn, op, rightReturn)
+	collationMismatch := leftReturn.FamilyEqual(TypeCollatedString) && !leftReturn.Equivalent(rightReturn)
+	if len(fns) != 1 || collationMismatch {
+		sig := fmt.Sprintf(compSignatureFmt, leftReturn, op, rightReturn)
+		if len(fns) == 0 || collationMismatch {
+			return nil, nil, CmpOp{}, fmt.Errorf(unsupportedCompErrFmt, sig)
+		}
+		fnsStr := formatCandidates(op.String(), fns)
+		return nil, nil, CmpOp{}, fmt.Errorf(ambiguousCompErrFmt, sig, fnsStr)
 	}
 
 	return leftExpr, rightExpr, fns[0].(CmpOp), nil

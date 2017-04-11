@@ -542,3 +542,27 @@ func typeCheckOverloadedExprs(
 	}
 	return typedExprs, overloads, nil
 }
+
+func formatCandidates(prefix string, candidates []overloadImpl) string {
+	var buf bytes.Buffer
+	for _, candidate := range candidates {
+		buf.WriteString(prefix)
+		buf.WriteByte('(')
+		params := candidate.params()
+		tLen := params.Length()
+		for i := 0; i < tLen; i++ {
+			t := params.getAt(i)
+			if i > 0 {
+				buf.WriteString(", ")
+			}
+			buf.WriteString(t.String())
+		}
+		buf.WriteString(") -> ")
+		buf.WriteString(returnTypeToFixedType(candidate.returnType()).String())
+		if candidate.preferred() {
+			buf.WriteString(" [preferred]")
+		}
+		buf.WriteByte('\n')
+	}
+	return buf.String()
+}
