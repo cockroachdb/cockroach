@@ -17,13 +17,13 @@
 package sqlbase
 
 import (
+	"fmt"
+
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"golang.org/x/net/context"
 )
 
 // sql CREATE commands and full schema for each system table.
@@ -524,19 +524,17 @@ var (
 	}
 )
 
-// Create the key/value pairs for the default zone config entry.
-func createDefaultZoneConfig() []roachpb.KeyValue {
-	var ret []roachpb.KeyValue
+// Create the key/value pair for the default zone config entry.
+func createDefaultZoneConfig() roachpb.KeyValue {
+	zoneConfig := config.DefaultZoneConfig()
 	value := roachpb.Value{}
-	desc := config.DefaultZoneConfig()
-	if err := value.SetProto(&desc); err != nil {
-		log.Fatalf(context.TODO(), "could not marshal %v", desc)
+	if err := value.SetProto(&zoneConfig); err != nil {
+		panic(fmt.Sprintf("could not marshal DefaultZoneConfig: %s", err))
 	}
-	ret = append(ret, roachpb.KeyValue{
+	return roachpb.KeyValue{
 		Key:   MakeZoneKey(keys.RootNamespaceID),
 		Value: value,
-	})
-	return ret
+	}
 }
 
 // addSystemDatabaseToSchema populates the supplied MetadataSchema with the
@@ -567,7 +565,7 @@ func addSystemDatabaseToSchema(target *MetadataSchema) {
 	// responsible for creating the table. Please follow a similar scheme for any
 	// new system tables you create.
 
-	target.otherKV = append(target.otherKV, createDefaultZoneConfig()...)
+	target.otherKV = append(target.otherKV, createDefaultZoneConfig())
 }
 
 // IsSystemConfigID returns whether this ID is for a system config object.
