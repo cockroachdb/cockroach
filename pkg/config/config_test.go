@@ -374,8 +374,6 @@ func TestGetZoneConfigForKey(t *testing.T) {
 		key        roachpb.RKey
 		expectedID uint32
 	}{
-		{keys.MakeTablePrefix(keys.MaxReservedDescID + 1), keys.MaxReservedDescID + 1},
-		{keys.MakeTablePrefix(keys.MaxReservedDescID + 23), keys.MaxReservedDescID + 23},
 		{roachpb.RKeyMin, keys.MetaRangesID},
 		{roachpb.RKey(keys.Meta1Prefix), keys.MetaRangesID},
 		{roachpb.RKey(keys.Meta1Prefix.Next()), keys.MetaRangesID},
@@ -395,9 +393,15 @@ func TestGetZoneConfigForKey(t *testing.T) {
 		{roachpb.RKey(keys.TimeseriesPrefix), keys.TimeseriesRangesID},
 		{roachpb.RKey(keys.TimeseriesPrefix.Next()), keys.TimeseriesRangesID},
 		{roachpb.RKey(keys.TimeseriesPrefix.PrefixEnd()), keys.SystemRangesID},
-		{roachpb.RKey(keys.TableDataMin), keys.RootNamespaceID},
-		{roachpb.RKey(keys.SystemConfigSplitKey), keys.RootNamespaceID},
-		{keys.MakeTablePrefix(keys.ZonesTableID), keys.RootNamespaceID},
+		{roachpb.RKey(keys.TableDataMin), keys.SystemDatabaseID},
+		{roachpb.RKey(keys.SystemConfigSplitKey), keys.SystemDatabaseID},
+		{keys.MakeTablePrefix(keys.NamespaceTableID), keys.SystemDatabaseID},
+		{keys.MakeTablePrefix(keys.ZonesTableID), keys.SystemDatabaseID},
+		{keys.MakeTablePrefix(keys.LeaseTableID), keys.SystemDatabaseID},
+		{keys.MakeTablePrefix(keys.JobsTableID), keys.SystemDatabaseID},
+		{keys.MakeTablePrefix(keys.MaxReservedDescID + 1), keys.MaxReservedDescID + 1},
+		{keys.MakeTablePrefix(keys.MaxReservedDescID + 23), keys.MaxReservedDescID + 23},
+		{roachpb.RKeyMax, keys.RootNamespaceID},
 	}
 
 	originalZoneConfigHook := config.ZoneConfigHook
