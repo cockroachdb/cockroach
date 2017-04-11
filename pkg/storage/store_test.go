@@ -34,7 +34,6 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
@@ -2018,130 +2017,6 @@ func TestMaybeRemove(t *testing.T) {
 	removedRng := <-fq.maybeRemovedRngs
 	if removedRng != repl.RangeID {
 		t.Errorf("Unexpected removed range %v", removedRng)
-	}
-}
-
-func TestStoreChangeFrozen(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	tc := testContext{}
-	stopper := stop.NewStopper()
-	defer stopper.Stop()
-	tc.Start(t, stopper)
-	store := tc.store
-
-	assertFrozen := func(b storagebase.ReplicaState_FrozenEnum) {
-		repl, err := store.GetReplica(1)
-		if err != nil {
-			t.Fatal(err)
-		}
-		repl.mu.Lock()
-		frozen := repl.mu.state.Frozen
-		repl.mu.Unlock()
-		pFrozen, err := repl.stateLoader.loadFrozenStatus(context.Background(), store.Engine())
-		if err != nil {
-			t.Fatal(err)
-		}
-		if pFrozen != frozen {
-			t.Fatal(errors.Errorf("persisted != in-memory frozen status: %v vs %v",
-				pFrozen, frozen))
-		}
-		if pFrozen != b {
-			t.Fatal(errors.Errorf("expected status %v, got %v", b, pFrozen))
-		}
-		collectFrozen := pFrozen == storagebase.ReplicaState_UNFROZEN
-		results := store.FrozenStatus(collectFrozen)
-		if len(results) != 0 {
-			t.Fatal(errors.Errorf(
-				"expected frozen=%v, got %d mismatching replicas: %+v",
-				pFrozen, len(results), results))
-		}
-	}
-
-	fReqVersMismatch := roachpb.NewChangeFrozen(keys.LocalMax, keys.LocalMax.Next(),
-		true /* frozen */, "notvalidversion").(*roachpb.ChangeFrozenRequest)
-
-	yes := storagebase.ReplicaState_FROZEN
-	no := storagebase.ReplicaState_UNFROZEN
-
-	// When processing a freeze from a different version, we log a message (not
-	// tested here) but otherwise keep going. We may want to indicate replica
-	// corruption for this in the future.
-	{
-		b := tc.store.Engine().NewBatch()
-		defer b.Close()
-		var h roachpb.Header
-		cArgs := CommandArgs{EvalCtx: ReplicaEvalContext{tc.repl, nil}, Header: h, Args: fReqVersMismatch}
-		if _, err := evalChangeFrozen(context.Background(), b, cArgs, &roachpb.ChangeFrozenResponse{}); err != nil {
-			t.Fatal(err)
-		}
-		assertFrozen(no) // since we do not commit the above batch
-	}
-
-	fReqValid := roachpb.NewChangeFrozen(keys.LocalMax, keys.LocalMax.Next(),
-		true /* frozen */, build.GetInfo().Tag).(*roachpb.ChangeFrozenRequest)
-	{
-		fResp, pErr := client.SendWrapped(context.Background(), store.testSender(), fReqValid)
-		if pErr != nil {
-			t.Fatal(pErr)
-		}
-		assertFrozen(yes)
-		resp := fResp.(*roachpb.ChangeFrozenResponse)
-		if resp.RangesAffected != 1 {
-			t.Fatalf("expected one affected range, got %d", resp.RangesAffected)
-		}
-		if len(resp.MinStartKey) != 0 {
-			t.Fatalf("expected KeyMin as smallest affected range, got %s", resp.MinStartKey)
-		}
-	}
-
-	pArgs := putArgs(roachpb.Key("a"), roachpb.Key("b"))
-
-	// Now that we're frozen, can't use Raft.
-	{
-		_, pErr := client.SendWrapped(context.Background(), store.testSender(), &pArgs)
-		if !testutils.IsPError(pErr, "range is frozen") {
-			t.Fatal(pErr)
-		}
-	}
-
-	// The successful freeze goes through again idempotently, not affecting the
-	// Range.
-	{
-		fResp, pErr := client.SendWrapped(context.Background(), store.testSender(), fReqValid)
-		if pErr != nil {
-			t.Fatal(pErr)
-		}
-		assertFrozen(yes)
-
-		resp := fResp.(*roachpb.ChangeFrozenResponse)
-		if resp.RangesAffected != 0 {
-			t.Fatalf("expected no affected ranges, got %d", resp.RangesAffected)
-		}
-		assertFrozen(yes)
-	}
-
-	// Still frozen.
-	{
-		_, pErr := client.SendWrapped(context.Background(), store.testSender(), &pArgs)
-		if !testutils.IsPError(pErr, "range is frozen") {
-			t.Fatal(pErr)
-		}
-	}
-
-	uReq := roachpb.NewChangeFrozen(keys.LocalMax, keys.LocalMax.Next(),
-		false /* !frozen */, "anyversiondoesit")
-	{
-		if _, pErr := client.SendWrapped(context.Background(), store.testSender(), uReq); pErr != nil {
-			t.Fatal(pErr)
-		}
-		assertFrozen(no)
-	}
-
-	// Not frozen.
-	{
-		if _, pErr := client.SendWrapped(context.Background(), store.testSender(), &pArgs); pErr != nil {
-			t.Fatal(pErr)
-		}
 	}
 }
 

@@ -1242,21 +1242,20 @@ func TestFlagUsage(t *testing.T) {
   cockroach [command]
 
 Available Commands:
-  start          start a node
-  cert           create ca, node, and client certs
-  freeze-cluster freeze the cluster in preparation for an update
-  quit           drain and shutdown node
+  start       start a node
+  cert        create ca, node, and client certs
+  quit        drain and shutdown node
 
-  sql            open a sql shell
-  user           get, set, list and remove users
-  zone           get, set, list and remove zones
-  node           list nodes and show their status
-  dump           dump sql tables
+  sql         open a sql shell
+  user        get, set, list and remove users
+  zone        get, set, list and remove zones
+  node        list nodes and show their status
+  dump        dump sql tables
 
-  gen            generate auxiliary files
-  version        output version information
-  debug          debugging commands
-  help           Help about any command
+  gen         generate auxiliary files
+  version     output version information
+  debug       debugging commands
+  help        Help about any command
 
 Flags:
       --alsologtostderr Severity[=INFO]   logs at or above this threshold go to stderr (default INFO)
@@ -1353,34 +1352,6 @@ func Example_node() {
 	// (1 row)
 	// node status 10000
 	// Error: node 10000 doesn't exist
-}
-
-func TestFreeze(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	c := newCLITest(cliTestParams{})
-	defer c.cleanup()
-
-	assertOutput := func(msg string) {
-		if !strings.HasSuffix(strings.TrimSpace(msg), "ok") {
-			t.Fatal(errors.Errorf("expected trailing 'ok':\n%s", msg))
-		}
-	}
-
-	{
-		out, err := c.RunWithCapture("freeze-cluster")
-		if err != nil {
-			t.Fatal(err)
-		}
-		assertOutput(out)
-	}
-	{
-		out, err := c.RunWithCapture("freeze-cluster --undo")
-		if err != nil {
-			t.Fatal(err)
-		}
-		assertOutput(out)
-	}
 }
 
 func TestNodeStatus(t *testing.T) {

@@ -87,31 +87,6 @@ func TestCombinable(t *testing.T) {
 	if !reflect.DeepEqual(dr1, wantedDR) {
 		t.Errorf("wanted %v, got %v", wantedDR, dr1)
 	}
-
-	cf1 := &ChangeFrozenResponse{RangesAffected: 3, MinStartKey: RKey("x"),
-		Stores: map[StoreID]NodeID{1: 11, 2: 12, 4: 14},
-	}
-	cf2 := &ChangeFrozenResponse{RangesAffected: 1, MinStartKey: RKey("b"),
-		Stores: map[StoreID]NodeID{3: 13},
-	}
-	cf3 := &ChangeFrozenResponse{RangesAffected: 0, MinStartKey: RKey("b"),
-		Stores: map[StoreID]NodeID{8: 18, 1: 11, 3: 13},
-	}
-
-	wantedCF := &ChangeFrozenResponse{
-		RangesAffected: 4, MinStartKey: RKey("b"),
-		Stores: map[StoreID]NodeID{1: 11, 2: 12, 3: 13, 4: 14, 8: 18},
-	}
-	if err := cf1.combine(cf2); err != nil {
-		t.Fatal(err)
-	}
-	if err := cf1.combine(cf3); err != nil {
-		t.Fatal(err)
-	}
-
-	if !reflect.DeepEqual(cf1, wantedCF) {
-		t.Errorf("wanted %v, got %v", wantedCF, cf1)
-	}
 }
 
 // TestMustSetInner makes sure that calls to MustSetInner correctly reset the

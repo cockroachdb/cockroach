@@ -74,14 +74,8 @@ message ReplicaState {
   // TODO(tschottdorf): should be nullable; see gc_threshold.
   util.hlc.Timestamp txn_span_gc_threshold = 9 [(gogoproto.nullable) = false,
       (gogoproto.customname) = "TxnSpanGCThreshold"];
-  // Use an enum because proto3 does not give nullable primitive values, and we
-  // need to be able to send EvalResults which don't specify frozen.
-  enum FrozenEnum {
-    FROZEN_UNSPECIFIED = 0;
-    FROZEN = 1;
-    UNFROZEN = 2;
-  }
-  FrozenEnum frozen  = 10;
+
+  reserved 10;
 }
 
 message RangeInfo {
