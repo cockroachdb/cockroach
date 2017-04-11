@@ -22,6 +22,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -30,8 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
-// This is just the mechanics of certs generation.
-func TestGenerateCerts(t *testing.T) {
+func TestGenerateCACert(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	// Do not mock cert access for this test.
 	security.ResetAssetLoader()
@@ -47,43 +47,92 @@ func TestGenerateCerts(t *testing.T) {
 		}
 	}()
 
-	// Try certs generation with empty Certs dir argument.
-	if err := security.RunCreateCACert("", "", 512); err == nil {
-		t.Fatalf("Expected error, but got none")
-	}
-	if err := security.RunCreateNodeCert(
-		"", "", "", "",
-		512, []string{"localhost"},
-	); err == nil {
-		t.Fatalf("Expected error, but got none")
+	cm, err := security.NewCertificateManager(certsDir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
 	}
 
+	keyPath := filepath.Join(certsDir, "ca.key")
+
+	testCases := []struct {
+		certsDir, caKey string
+		errStr          string // error string for CreateCAPair, empty for nil.
+		numCerts        int    // number of certificates found in ca.crt
+	}{
+		{"", "ca.key", "the path to the certs directory is required", 0},
+		{certsDir, "", "the path to the CA key is required", 0},
+		{certsDir, keyPath, "", 1},
+		{certsDir, keyPath, "", 2},
+		{certsDir, keyPath + "2", "", 3}, // Using a new key still keeps the ca.crt
+	}
+
+	for i, tc := range testCases {
+		err := security.CreateCAPair(tc.certsDir, tc.caKey, 512, time.Hour*48)
+		if !testutils.IsError(err, tc.errStr) {
+			t.Errorf("#%d: expected error %s but got %+v", i, tc.errStr, err)
+			continue
+		}
+
+		if err != nil {
+			continue
+		}
+
+		// No failures on CreateCAPair, we expect a valid CA cert.
+		err = cm.LoadCertificates()
+		if err != nil {
+			t.Fatalf("#%d: unexpected failure: %v", i, err)
+		}
+
+		ci := cm.CACert()
+		if ci == nil {
+			t.Fatalf("#%d: no CA cert found", i)
+		}
+
+		certs, err := security.PEMToCertificates(ci.FileContents)
+		if err != nil {
+			t.Fatalf("#%d: unexpected parsing error for %+v: %v", i, ci, err)
+		}
+
+		if actual := len(certs); actual != tc.numCerts {
+			t.Errorf("#%d: expected %d certificates, found %d", i, tc.numCerts, actual)
+		}
+	}
+}
+
+func TestGenerateNodeCerts(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	// Do not mock cert access for this test.
+	security.ResetAssetLoader()
+	defer ResetTest()
+
+	certsDir, err := ioutil.TempDir("", "certs_test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		if err := os.RemoveAll(certsDir); err != nil {
+			t.Fatal(err)
+		}
+	}()
+
 	// Try generating node certs without CA certs present.
-	if err := security.RunCreateNodeCert(
-		filepath.Join(certsDir, security.EmbeddedCACert),
-		filepath.Join(certsDir, security.EmbeddedCAKey),
-		filepath.Join(certsDir, security.EmbeddedNodeCert),
-		filepath.Join(certsDir, security.EmbeddedNodeKey),
-		512, []string{"localhost"},
+	if err := security.CreateNodePair(
+		certsDir, filepath.Join(certsDir, security.EmbeddedCAKey),
+		512, time.Hour*48, []string{"localhost"},
 	); err == nil {
 		t.Fatalf("Expected error, but got none")
 	}
 
 	// Now try in the proper order.
-	if err := security.RunCreateCACert(
-		filepath.Join(certsDir, security.EmbeddedCACert),
-		filepath.Join(certsDir, security.EmbeddedCAKey),
-		512,
+	if err := security.CreateCAPair(
+		certsDir, filepath.Join(certsDir, security.EmbeddedCAKey), 512, time.Hour*48,
 	); err != nil {
 		t.Fatalf("Expected success, got %v", err)
 	}
 
-	if err := security.RunCreateNodeCert(
-		filepath.Join(certsDir, security.EmbeddedCACert),
-		filepath.Join(certsDir, security.EmbeddedCAKey),
-		filepath.Join(certsDir, security.EmbeddedNodeCert),
-		filepath.Join(certsDir, security.EmbeddedNodeKey),
-		512, []string{"localhost"},
+	if err := security.CreateNodePair(
+		certsDir, filepath.Join(certsDir, security.EmbeddedCAKey),
+		512, time.Hour*48, []string{"localhost"},
 	); err != nil {
 		t.Fatalf("Expected success, got %v", err)
 	}
@@ -106,30 +155,22 @@ func TestUseCerts(t *testing.T) {
 		}
 	}()
 
-	if err := security.RunCreateCACert(
-		filepath.Join(certsDir, security.EmbeddedCACert),
-		filepath.Join(certsDir, security.EmbeddedCAKey),
-		512,
+	if err := security.CreateCAPair(
+		certsDir, filepath.Join(certsDir, security.EmbeddedCAKey), 512, time.Hour*48,
 	); err != nil {
 		t.Fatalf("Expected success, got %v", err)
 	}
 
-	if err := security.RunCreateNodeCert(
-		filepath.Join(certsDir, security.EmbeddedCACert),
-		filepath.Join(certsDir, security.EmbeddedCAKey),
-		filepath.Join(certsDir, security.EmbeddedNodeCert),
-		filepath.Join(certsDir, security.EmbeddedNodeKey),
-		512, []string{"127.0.0.1"},
+	if err := security.CreateNodePair(
+		certsDir, filepath.Join(certsDir, security.EmbeddedCAKey),
+		512, time.Hour*48, []string{"127.0.0.1"},
 	); err != nil {
 		t.Fatalf("Expected success, got %v", err)
 	}
 
-	if err := security.RunCreateClientCert(
-		filepath.Join(certsDir, security.EmbeddedCACert),
-		filepath.Join(certsDir, security.EmbeddedCAKey),
-		filepath.Join(certsDir, security.EmbeddedRootCert),
-		filepath.Join(certsDir, security.EmbeddedRootKey),
-		512, security.RootUser,
+	if err := security.CreateClientPair(
+		certsDir, filepath.Join(certsDir, security.EmbeddedCAKey),
+		512, time.Hour*48, security.RootUser,
 	); err != nil {
 		t.Fatalf("Expected success, got %v", err)
 	}
