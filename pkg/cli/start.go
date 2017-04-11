@@ -390,8 +390,8 @@ func runStart(cmd *cobra.Command, args []string) error {
 	info := build.GetInfo()
 	log.Infof(startCtx, info.Short())
 
-	initMemProfile(startCtx, f.Value.String())
-	initCPUProfile(startCtx, f.Value.String())
+	initMemProfile(startCtx, logDir)
+	initCPUProfile(startCtx, logDir)
 	initBlockProfile()
 
 	// Default user for servers.
