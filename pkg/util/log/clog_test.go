@@ -93,12 +93,16 @@ func contains(str string, t *testing.T) bool {
 // them.
 func setFlags() {
 	SetExitFunc(os.Exit)
+	logging.mu.Lock()
+	defer logging.mu.Unlock()
 	logging.noStderrRedirect = false
 	logging.stderrThreshold = Severity_ERROR
 }
 
 // Test that Info works as advertised.
 func TestInfo(t *testing.T) {
+	s := ScopeWithoutShowLogs(t)
+	defer s.Close(t)
 	setFlags()
 	defer logging.swap(logging.newBuffers())
 	Info(context.Background(), "test")
@@ -123,6 +127,8 @@ func TestCopyStandardLogToPanic(t *testing.T) {
 
 // Test that using the standard log package logs to INFO.
 func TestStandardLog(t *testing.T) {
+	s := ScopeWithoutShowLogs(t)
+	defer s.Close(t)
 	setFlags()
 	defer logging.swap(logging.newBuffers())
 	stdLog.Print("test")
@@ -219,6 +225,8 @@ func TestEntryDecoder(t *testing.T) {
 // Even in the Info log, the source character will be E, so the data should
 // all be identical.
 func TestError(t *testing.T) {
+	s := ScopeWithoutShowLogs(t)
+	defer s.Close(t)
 	setFlags()
 	defer logging.swap(logging.newBuffers())
 	Error(context.Background(), "test")
@@ -234,6 +242,8 @@ func TestError(t *testing.T) {
 // Even in the Info log, the source character will be W, so the data should
 // all be identical.
 func TestWarning(t *testing.T) {
+	s := ScopeWithoutShowLogs(t)
+	defer s.Close(t)
 	setFlags()
 	defer logging.swap(logging.newBuffers())
 	Warning(context.Background(), "test")
@@ -247,6 +257,8 @@ func TestWarning(t *testing.T) {
 
 // Test that a V log goes to Info.
 func TestV(t *testing.T) {
+	s := ScopeWithoutShowLogs(t)
+	defer s.Close(t)
 	setFlags()
 	defer logging.swap(logging.newBuffers())
 	_ = logging.verbosity.Set("2")
@@ -264,6 +276,8 @@ func TestV(t *testing.T) {
 
 // Test that a vmodule enables a log in this file.
 func TestVmoduleOn(t *testing.T) {
+	s := ScopeWithoutShowLogs(t)
+	defer s.Close(t)
 	setFlags()
 	defer logging.swap(logging.newBuffers())
 	_ = logging.vmodule.Set("clog_test=2")
@@ -344,7 +358,7 @@ func TestVmoduleGlob(t *testing.T) {
 }
 
 func TestListLogFiles(t *testing.T) {
-	s := Scope(t)
+	s := ScopeWithoutShowLogs(t)
 	defer s.Close(t)
 	setFlags()
 
@@ -368,9 +382,8 @@ func TestListLogFiles(t *testing.T) {
 }
 
 func TestGetLogReader(t *testing.T) {
-	s := Scope(t)
+	s := ScopeWithoutShowLogs(t)
 	defer s.Close(t)
-
 	setFlags()
 	Info(context.Background(), "x")
 	info, ok := logging.file.(*syncBuffer)
@@ -457,7 +470,7 @@ func TestGetLogReader(t *testing.T) {
 }
 
 func TestRollover(t *testing.T) {
-	s := Scope(t)
+	s := ScopeWithoutShowLogs(t)
 	defer s.Close(t)
 
 	setFlags()
@@ -500,7 +513,7 @@ func TestRollover(t *testing.T) {
 }
 
 func TestGC(t *testing.T) {
-	s := Scope(t)
+	s := ScopeWithoutShowLogs(t)
 	defer s.Close(t)
 
 	logging.mu.Lock()
@@ -570,7 +583,7 @@ func TestGC(t *testing.T) {
 }
 
 func TestLogBacktraceAt(t *testing.T) {
-	s := Scope(t)
+	s := ScopeWithoutShowLogs(t)
 	defer s.Close(t)
 
 	setFlags()
@@ -615,7 +628,7 @@ func TestLogBacktraceAt(t *testing.T) {
 // in the future clog and this test can be adapted to actually test that;
 // right now clog writes straight to os.StdErr.
 func TestFatalStacktraceStderr(t *testing.T) {
-	s := Scope(t)
+	s := ScopeWithoutShowLogs(t)
 	defer s.Close(t)
 
 	setFlags()
@@ -653,13 +666,7 @@ func TestFatalStacktraceStderr(t *testing.T) {
 }
 
 func TestRedirectStderr(t *testing.T) {
-	// This test requires that the logs go to files. We must disable
-	// showLogs, if it was specified, for otherwise the Scope() does not
-	// do its job properly.
-	defer func(s bool) { showLogs = s }(showLogs)
-	showLogs = false
-
-	s := Scope(t)
+	s := ScopeWithoutShowLogs(t)
 	defer s.Close(t)
 
 	setFlags()
@@ -680,13 +687,7 @@ func TestRedirectStderr(t *testing.T) {
 }
 
 func TestFileSeverityFilter(t *testing.T) {
-	// This test requires that the logs go to files. We must disable
-	// showLogs, if it was specified, for otherwise the Scope() does not
-	// do its job properly.
-	defer func(s bool) { showLogs = s }(showLogs)
-	showLogs = false
-
-	s := Scope(t)
+	s := ScopeWithoutShowLogs(t)
 	defer s.Close(t)
 
 	setFlags()
