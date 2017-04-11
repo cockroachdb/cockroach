@@ -256,6 +256,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		DB:             s.db,
 		RPCContext:     s.rpcContext,
 		Stopper:        s.stopper,
+		NodeID:         &s.nodeIDContainer,
 	}
 	if s.cfg.TestingKnobs.DistSQL != nil {
 		distSQLCfg.TestingKnobs = *s.cfg.TestingKnobs.DistSQL.(*distsqlrun.TestingKnobs)

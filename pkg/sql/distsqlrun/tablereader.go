@@ -17,6 +17,7 @@
 package distsqlrun
 
 import (
+	"fmt"
 	"sync"
 
 	"github.com/pkg/errors"
@@ -50,6 +51,9 @@ var _ processor = &tableReader{}
 func newTableReader(
 	flowCtx *FlowCtx, spec *TableReaderSpec, post *PostProcessSpec, output RowReceiver,
 ) (*tableReader, error) {
+	if flowCtx.nodeID == 0 {
+		return nil, errors.Errorf("attempting to create a tableReader with uninitialized NodeID")
+	}
 	tr := &tableReader{
 		flowCtx: flowCtx,
 		tableID: spec.Table.ID,
@@ -144,6 +148,30 @@ func initRowFetcher(
 	return index, isSecondaryIndex, nil
 }
 
+// sendMisplannedRangesMetadata sends information about the non-local ranges
+// that were read by this tableReads. This should be called after the fetcher
+// was used to read everything this tableReader was supposed to read.
+func (tr *tableReader) sendMisplannedRangesMetadata(ctx context.Context) {
+	rangeInfos := tr.fetcher.GetRangeInfo()
+	var misplannedRanges []roachpb.RangeInfo
+	for _, ri := range rangeInfos {
+		if ri.Lease.Replica.NodeID != tr.flowCtx.nodeID {
+			misplannedRanges = append(misplannedRanges, ri)
+		}
+	}
+	if len(misplannedRanges) != 0 {
+		var msg string
+		if len(misplannedRanges) < 3 {
+			msg = fmt.Sprintf("%+v", misplannedRanges)
+		} else {
+			msg = fmt.Sprintf("%+v...", misplannedRanges[:3])
+		}
+		log.VEventf(ctx, 2, "tableReader pushing metadata about misplanned ranges: %s",
+			msg)
+		tr.out.output.Push(nil /* row */, ProducerMetadata{Ranges: misplannedRanges})
+	}
+}
+
 // Run is part of the processor interface.
 func (tr *tableReader) Run(ctx context.Context, wg *sync.WaitGroup) {
 	if wg != nil {
@@ -176,6 +204,7 @@ func (tr *tableReader) Run(ctx context.Context, wg *sync.WaitGroup) {
 			if err != nil {
 				tr.out.output.Push(nil /* row */, ProducerMetadata{Err: err})
 			}
+			tr.sendMisplannedRangesMetadata(ctx)
 			tr.out.close()
 			return
 		}
@@ -185,7 +214,7 @@ func (tr *tableReader) Run(ctx context.Context, wg *sync.WaitGroup) {
 			if err != nil {
 				tr.out.output.Push(nil /* row */, ProducerMetadata{Err: err})
 			}
-			// TODO(andrei): send trailing metadata.
+			tr.sendMisplannedRangesMetadata(ctx)
 			tr.out.close()
 			return
 		}

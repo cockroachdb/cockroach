@@ -22,6 +22,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -118,6 +119,7 @@ func TestTableReader(t *testing.T) {
 			evalCtx:  parser.EvalContext{},
 			txnProto: &roachpb.Transaction{},
 			clientDB: kvDB,
+			nodeID:   s.NodeID(),
 		}
 
 		out := &RowBuffer{}
@@ -134,7 +136,7 @@ func TestTableReader(t *testing.T) {
 		for {
 			row, meta := out.Next()
 			if !meta.Empty() {
-				t.Fatalf("unexpected metadata: %v", meta)
+				t.Fatalf("unexpected metadata: %+v", meta)
 			}
 			if row == nil {
 				break
@@ -145,5 +147,87 @@ func TestTableReader(t *testing.T) {
 		if result := res.String(); result != c.expected {
 			t.Errorf("invalid results: %s, expected %s'", result, c.expected)
 		}
+	}
+}
+
+// Test that a TableReader outputs metadata about non-local ranges that it read.
+func TestMisplannedRangesMetadata(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	tc := serverutils.StartTestCluster(t, 3, /* numNodes */
+		base.TestClusterArgs{
+			ReplicationMode: base.ReplicationManual,
+			ServerArgs: base.TestServerArgs{
+				UseDatabase: "test",
+			},
+		})
+	defer tc.Stopper().Stop()
+
+	db := tc.ServerConn(0)
+	sqlutils.CreateTable(t, db, "t",
+		"num INT PRIMARY KEY",
+		3, /* numRows */
+		sqlutils.ToRowFn(sqlutils.RowIdxFn))
+
+	_, err := db.Exec(`
+ALTER TABLE t SPLIT AT VALUES (1), (2), (3);
+ALTER TABLE t TESTING_RELOCATE VALUES (ARRAY[2], 1), (ARRAY[1], 2), (ARRAY[3], 3);
+`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	kvDB := tc.Server(0).KVClient().(*client.DB)
+	td := sqlbase.GetTableDescriptor(kvDB, "test", "t")
+
+	flowCtx := FlowCtx{
+		evalCtx:  parser.EvalContext{},
+		txnProto: &roachpb.Transaction{},
+		clientDB: kvDB,
+		nodeID:   tc.Server(0).NodeID(),
+	}
+	spec := TableReaderSpec{
+		Spans: []TableReaderSpan{{Span: td.PrimaryIndexSpan()}},
+		Table: *td,
+	}
+	post := PostProcessSpec{
+		OutputColumns: []uint32{0},
+	}
+
+	out := &RowBuffer{}
+	tr, err := newTableReader(&flowCtx, &spec, &post, out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tr.Run(context.TODO(), nil)
+	if !out.ProducerClosed {
+		t.Fatalf("output RowReceiver not closed")
+	}
+	var res sqlbase.EncDatumRows
+	var metas []ProducerMetadata
+	for {
+		row, meta := out.Next()
+		if !meta.Empty() {
+			metas = append(metas, meta)
+			continue
+		}
+		if row == nil {
+			break
+		}
+		res = append(res, row)
+	}
+	if len(res) != 3 {
+		t.Fatalf("expected 3 rows, got: %s", res)
+	}
+	if len(metas) != 1 {
+		t.Fatalf("expected one meta with misplanned ranges, got: %+v", metas)
+	}
+	misplannedRanges := metas[0].Ranges
+	if len(misplannedRanges) != 2 {
+		t.Fatalf("expected 2 misplanned ranges, got: %+v", misplannedRanges)
+	}
+	if misplannedRanges[0].Lease.Replica.NodeID != 2 ||
+		misplannedRanges[1].Lease.Replica.NodeID != 3 {
+		t.Fatalf("expected misplanned ranges from nodes 2 and 3, got: %+v", metas[0])
 	}
 }
