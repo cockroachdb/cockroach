@@ -1561,6 +1561,9 @@ func evalPushTxn(
 	var reason string
 
 	switch {
+	case args.Force:
+		reason = "forced txn abort"
+		pusherWins = true
 	case isExpired(args.Now, &reply.PusheeTxn):
 		reason = "pushee is expired"
 		// When cleaning up, actually clean up (as opposed to simply pushing
@@ -1578,9 +1581,6 @@ func evalPushTxn(
 		pusherWins = true
 	case canPushWithPriority(&args.PusherTxn, &reply.PusheeTxn, args.NewPriorities):
 		reason = "pusher has priority"
-		pusherWins = true
-	case args.Force:
-		reason = "forced txn abort"
 		pusherWins = true
 	}
 
