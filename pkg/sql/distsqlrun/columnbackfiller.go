@@ -118,7 +118,7 @@ func (cb *columnBackfiller) init() error {
 			} else {
 				cb.updateValues[j], err = defaultExprs[j].Eval(&cb.flowCtx.evalCtx)
 				if err != nil {
-					return err
+					return sqlbase.NewInvalidSchemaDefinitionError(err)
 				}
 			}
 			if !col.Nullable && cb.updateValues[j].Compare(&cb.flowCtx.evalCtx, parser.DNull) == 0 {

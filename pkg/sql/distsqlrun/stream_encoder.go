@@ -19,7 +19,6 @@ package distsqlrun
 import (
 	"golang.org/x/net/context"
 
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/pkg/errors"
 )
@@ -84,7 +83,7 @@ func (se *StreamEncoder) AddMetadata(meta ProducerMetadata) {
 		}
 	} else {
 		enc.Value = &RemoteProducerMetadata_Error{
-			Error: roachpb.NewError(meta.Err),
+			Error: NewError(meta.Err),
 		}
 	}
 	se.metadata = append(se.metadata, enc)

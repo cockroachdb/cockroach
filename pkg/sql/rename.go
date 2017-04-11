@@ -26,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -98,7 +97,7 @@ func (p *planner) RenameDatabase(ctx context.Context, n *parser.RenameDatabase) 
 			}
 			msg := fmt.Sprintf("cannot rename database because view %q depends on table %q", viewName, tbDesc.Name)
 			hint := fmt.Sprintf("you can drop %s instead.", viewName)
-			return nil, pgerror.WithHint(sqlbase.NewDependentObjectError(msg), hint)
+			return nil, sqlbase.NewDependentObjectErrorWithHint(msg, hint)
 		}
 	}
 
@@ -463,5 +462,5 @@ func (p *planner) dependentViewRenameError(
 	msg := fmt.Sprintf("cannot rename %s %q because view %q depends on it",
 		typeName, objName, viewName)
 	hint := fmt.Sprintf("you can drop %s instead.", viewName)
-	return pgerror.WithHint(sqlbase.NewDependentObjectError(msg), hint)
+	return sqlbase.NewDependentObjectErrorWithHint(msg, hint)
 }
