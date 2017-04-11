@@ -25,12 +25,6 @@ import "cockroach/pkg/util/hlc/timestamp.proto";
 
 import "gogoproto/gogo.proto";
 
-// TODO(bdarnell): could do away with Merge and ChangeReplicas and use their
-// roachpb counterparts directly. See how this turns out as the protos here
-// stabilize: the original intention is being more flexible with future
-// additions to the local proto without having to touch the roachpb one, but
-// that may not be required.
-
 // Split is emitted when a Replica commits a split trigger. It signals that the
 // Replica has prepared the on-disk state for both the left and right hand
 // sides of the split, and that the left hand side Replica should be updated as
@@ -65,33 +59,30 @@ message ChangeReplicas {
 // trivial; only changes to the metadata state (splits, merges, rebalances,
 // leases, log truncation, ...) of the Replica or certain special commands must
 // sideline information here based on which all Replicas must take action.
-//
-// TODO(tschottdorf): We may need to add a lease identifier to allow the
-// followers to reliably produce errors for proposals which apply after a
-// lease change.
 message ReplicatedEvalResult {
   // Whether to block concurrent readers while processing the proposal data.
-  optional bool block_reads = 10001 [(gogoproto.nullable) = false];
+  optional bool block_reads = 1 [(gogoproto.nullable) = false];
   // Updates to the Replica's ReplicaState. By convention and as outlined on
   // the comment on the ReplicaState message, this field is sparsely populated
   // and any field set overwrites the corresponding field in the state, perhaps
   // which additional side effects (for instance on a descriptor update).
-  optional storage.storagebase.ReplicaState state = 10002 [(gogoproto.nullable) = false];
-  optional Split split = 10003;
-  optional Merge merge = 10004;
-  // TODO(tschottdorf): trim this down; we shouldn't need the whole request.
-  optional roachpb.ComputeChecksumRequest compute_checksum = 10005;
-  optional bool is_lease_request = 10006 [(gogoproto.nullable) = false];
-  optional bool is_freeze = 10007 [(gogoproto.nullable) = false];
+  optional storage.storagebase.ReplicaState state = 2 [(gogoproto.nullable) = false];
+  optional Split split = 3;
+  optional Merge merge = 4;
+  optional roachpb.ComputeChecksumRequest compute_checksum = 5;
+  optional bool is_lease_request = 6 [(gogoproto.nullable) = false];
+  optional bool is_freeze = 7 [(gogoproto.nullable) = false];
   // Denormalizes BatchRequest.Timestamp during the transition period for
   // proposer-evaluated KV. Only used to verify lease coverage.
-  optional util.hlc.Timestamp timestamp = 10008 [(gogoproto.nullable) = false];
-  optional bool is_consistency_related = 10009 [(gogoproto.nullable) = false];
+  optional util.hlc.Timestamp timestamp = 8 [(gogoproto.nullable) = false];
+  optional bool is_consistency_related = 9 [(gogoproto.nullable) = false];
   // The stats delta corresponding to the data in this WriteBatch. On
   // a split, contains only the contributions to the left-hand side.
-  optional storage.engine.enginepb.MVCCStats delta = 10010 [(gogoproto.nullable) = false];
-  optional ChangeReplicas change_replicas = 10012;
-  optional int64 raft_log_delta = 10013;
+  optional storage.engine.enginepb.MVCCStats delta = 10 [(gogoproto.nullable) = false];
+  optional ChangeReplicas change_replicas = 12;
+  optional int64 raft_log_delta = 13;
+
+  reserved 10001 to 10013;
 }
 
 // WriteBatch is the serialized representation of a RocksDB write
@@ -170,22 +161,16 @@ message RaftCommand {
   // Legacy mode (post-raft evaluation):
 
   // batch_request is the KV command to apply.
-  // TODO(bdarnell): Should not be set when propEvalKV is used, but is currently
-  // required to support test filters.
+  //
+  // TODO(bdarnell): This is currently populated even in
+  // proposer-evaluated mode in certain tests (only those that use
+  // TestingEvalFilter). See #10493
   optional roachpb.BatchRequest batch_request = 3;
 
   // Proposer-evaluated KV mode.
-  // These are not stable. While general proto compatibility rules
-  // apply, these are intentionally kept at high tag numbers for now so that
-  // a stabilized version can be inserted at low tag numbers in the future.
-  // These fields are only populated if proposer-evaluated KV was in effect when
-  // the command was proposed.
 
-  optional ReplicatedEvalResult replicated_eval_result = 10013;
-  // TODO(tschottdorf): using an extra message here (and not just `bytes`) to
-  // allow the generated RaftCommand to be compared directly. If
-  // this costs an extra large allocation, we need to do something different.
-  optional WriteBatch write_batch = 10014;
+  optional ReplicatedEvalResult replicated_eval_result = 13;
+  optional WriteBatch write_batch = 14;
 
-  reserved 1, 10001 to 10012;
+  reserved 1, 10001 to 10014;
 }
