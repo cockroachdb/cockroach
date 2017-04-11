@@ -12,6 +12,7 @@ import (
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 	"golang.org/x/sync/errgroup"
+	"golang.org/x/time/rate"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
@@ -479,14 +480,26 @@ func presplitRanges(baseCtx context.Context, db client.DB, input []roachpb.Key) 
 
 	ctx, span := tracing.ChildSpan(baseCtx, "presplitRanges")
 	defer tracing.FinishSpan(span)
+	log.Infof(ctx, "presplitting %d ranges", len(input))
 
 	if len(input) == 0 {
 		return nil
 	}
 
+	// 100 was picked because it's small enough to work with on a 3-node cluster
+	// on my laptop and large enough that it only takes a couple minutes to
+	// presplit for a ~16000 range dataset.
+	// TODO(dan): See if there's some better solution #14798.
+	const splitsPerSecond, splitsBurst = 100, 1
+	limiter := rate.NewLimiter(splitsPerSecond, splitsBurst)
+
 	g, ctx := errgroup.WithContext(ctx)
 	var splitFn func([]roachpb.Key) error
 	splitFn = func(splitPoints []roachpb.Key) error {
+		if err := limiter.Wait(ctx); err != nil {
+			return err
+		}
+
 		// Pick the index such that it's 0 if len(splitPoints) == 1.
 		splitIdx := len(splitPoints) / 2
 		// AdminSplit requires that the key be a valid table key, which means
