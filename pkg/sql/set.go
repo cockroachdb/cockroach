@@ -25,6 +25,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/apd"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -93,6 +94,11 @@ func (p *planner) setClusterSetting(
 	if err := p.RequireSuperUser("SET CLUSTER SETTING"); err != nil {
 		return nil, err
 	}
+	typ, ok := settings.TypeOf(name)
+	if !ok {
+		return nil, errors.Errorf("unknown cluster setting '%s'", name)
+	}
+
 	name = strings.ToLower(name)
 	ie := InternalExecutor{LeaseManager: p.LeaseMgr()}
 
@@ -105,7 +111,7 @@ func (p *planner) setClusterSetting(
 		}
 	case 1:
 		// TODO(dt): validate and properly encode str according to type.
-		encoded, err := p.toSettingString(v[0])
+		encoded, err := p.toSettingString(name, typ, v[0])
 		if err != nil {
 			return nil, err
 		}
@@ -121,17 +127,53 @@ func (p *planner) setClusterSetting(
 	return &emptyNode{}, nil
 }
 
-func (p *planner) toSettingString(raw parser.Expr) (string, error) {
-	// TODO(dt): typecheck and handle according to setting's desired type.
-	typed, err := parser.TypeCheckAndRequire(raw, nil, parser.TypeString, "SET")
-	if err != nil {
-		return "", err
+func (p *planner) toSettingString(
+	name string, typ settings.ValueType, raw parser.Expr,
+) (string, error) {
+	typeCheckAndParse := func(t parser.Type, f func(parser.Datum) (string, error)) (string, error) {
+		typed, err := parser.TypeCheckAndRequire(raw, nil, t, name)
+		if err != nil {
+			return "", err
+		}
+		d, err := typed.Eval(&p.evalCtx)
+		if err != nil {
+			return "", err
+		}
+		return f(d)
 	}
-	d, err := typed.Eval(&p.evalCtx)
-	if err != nil {
-		return "", err
+
+	switch typ {
+	case settings.StringValue:
+		return typeCheckAndParse(parser.TypeString, func(d parser.Datum) (string, error) {
+			if s, ok := d.(*parser.DString); ok {
+				return string(*s), nil
+			}
+			return "", errors.Errorf("cannot use %s %T value for string setting", d.ResolvedType(), d)
+		})
+	case settings.BoolValue:
+		return typeCheckAndParse(parser.TypeBool, func(d parser.Datum) (string, error) {
+			if b, ok := d.(*parser.DBool); ok {
+				return settings.EncodeBool(bool(*b)), nil
+			}
+			return "", errors.Errorf("cannot use %s %T value for bool setting", d.ResolvedType(), d)
+		})
+	case settings.IntValue:
+		return typeCheckAndParse(parser.TypeInt, func(d parser.Datum) (string, error) {
+			if i, ok := d.(*parser.DInt); ok {
+				return settings.EncodeInt(int(*i)), nil
+			}
+			return "", errors.Errorf("cannot use %s %T value for int setting", d.ResolvedType(), d)
+		})
+	case settings.FloatValue:
+		return typeCheckAndParse(parser.TypeFloat, func(d parser.Datum) (string, error) {
+			if f, ok := d.(*parser.DFloat); ok {
+				return settings.EncodeFloat(float64(*f)), nil
+			}
+			return "", errors.Errorf("cannot use %s %T value for float setting", d.ResolvedType(), d)
+		})
+	default:
+		return "", errors.Errorf("unsupported setting type %c", typ)
 	}
-	return string(parser.MustBeDString(d)), nil
 }
 
 func (p *planner) getStringVal(name string, values []parser.TypedExpr) (string, error) {
