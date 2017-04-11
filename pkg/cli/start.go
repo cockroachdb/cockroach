@@ -57,8 +57,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
-var errMissingParams = errors.New("missing or invalid parameters")
-
 // jemallocHeapDump is an optional function to be called at heap dump time.
 // This will be non-nil when jemalloc is linked in with profiling enabled.
 // The function takes a filename to write the profile to.

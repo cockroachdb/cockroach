@@ -19,7 +19,9 @@ package cli
 import (
 	"fmt"
 	"os"
+	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/olekukonko/tablewriter"
 	"github.com/pkg/errors"
@@ -27,100 +29,102 @@ import (
 )
 
 const defaultKeySize = 2048
+const defaultCALifetime = 5 * 265 * 24 * time.Hour // five years
+const defaultCertLifetime = 265 * 24 * time.Hour   // one year
 
 var keySize int
+var certificateLifetime time.Duration
 
 // A createCACert command generates a CA certificate and stores it
 // in the cert directory.
 var createCACertCmd = &cobra.Command{
-	Use:   "create-ca --ca-cert=<path-to-ca-cert> --ca-key=<path-to-ca-key>",
-	Short: "create CA cert and key",
+	Use:   "create-ca --certs-dir=<path to cockroach certs dir> --ca-key=<path-to-ca-key>",
+	Short: "create CA certificate and key",
 	Long: `
-Generates CA certificate and key, writing them to --ca-cert and --ca-key.
+Generates a CA certificate "<certs-dir>/ca.crt" and CA key "<ca-key>".
+If "<certs-dir>" does not exist, it is created.
+If "<certs-dir>/ca.crt" already exist, its contents are appended to the new certificate,
+resulting in the latest certificate always being the first in the file.
 `,
 	RunE: MaybeDecorateGRPCError(runCreateCACert),
 }
 
-// runCreateCACert generates key pair and CA certificate and writes them
+// runCreateCACert generates a key and CA certificate and writes them
 // to their corresponding files.
 func runCreateCACert(cmd *cobra.Command, args []string) error {
-	// TODO(mberhault): fix
-	/*	if len(baseCfg.SSLCA) == 0 || len(baseCfg.SSLCAKey) == 0 {
-			return errMissingParams
-		}
-		return errors.Wrap(security.RunCreateCACert(baseCfg.SSLCA, baseCfg.SSLCAKey, keySize), "failed to generate CA certificate")
-	*/
-	return nil
+	return security.CreateCAPair(
+		baseCfg.SSLCertsDir,
+		baseCfg.SSLCAKey,
+		keySize,
+		certificateLifetime)
 }
 
 // A createNodeCert command generates a node certificate and stores it
 // in the cert directory.
 var createNodeCertCmd = &cobra.Command{
-	Use:   "create-node --ca-cert=<ca-cert> --ca-key=<ca-key> --cert=<node-cert> --key=<node-key> <host 1> <host 2> ... <host N>",
-	Short: "create node cert and key",
+	Use:   "create-node --certs-dir=<path to cockroach certs dir> --ca-key=<path-to-ca-key> <host 1> <host 2> ... <host N>",
+	Short: "create node certificate and key",
 	Long: `
-Generates node certificate and keys for a given node, writing them to
---cert and --key. CA certificate and key must be passed in.
+Generates a node certificate and key for a given node, writing them to
+"<certs-dir>/node.crt" and "<certs-dir>/node.key". Any existing files are overwritten.
 At least one host should be passed in (either IP address or dns name).
+
+Requires a CA cert in "<certs-dir>/ca.crt" and matching key in "--ca-key".
+If "ca.crt" contains more than one certificate, the first is used.
 `,
 	RunE: MaybeDecorateGRPCError(runCreateNodeCert),
 }
 
 // runCreateNodeCert generates key pair and CA certificate and writes them
 // to their corresponding files.
+// TODO(marc): there is currently no way to specify which CA cert to use if more
+// than one if present.
 func runCreateNodeCert(cmd *cobra.Command, args []string) error {
-	// TODO(mberhaul): fix
-	/*
-		if len(baseCfg.SSLCA) == 0 || len(baseCfg.SSLCAKey) == 0 ||
-			len(baseCfg.SSLCert) == 0 || len(baseCfg.SSLCertKey) == 0 {
-			return errMissingParams
-		}
-		return errors.Wrap(security.RunCreateNodeCert(baseCfg.SSLCA, baseCfg.SSLCAKey,
-			baseCfg.SSLCert, baseCfg.SSLCertKey, keySize, args),
-			"failed to generate node certificate",
-		)*/
-	return nil
+	return security.CreateNodePair(
+		baseCfg.SSLCertsDir,
+		baseCfg.SSLCAKey,
+		keySize,
+		certificateLifetime,
+		args)
 }
 
 // A createClientCert command generates a client certificate and stores it
 // in the cert directory under <username>.crt and key under <username>.key.
 var createClientCertCmd = &cobra.Command{
-	Use:   "create-client --ca-cert=<ca-cert> --ca-key=<ca-key> --cert=<node-cert> --key=<node-key> username",
-	Short: "create client cert and key",
+	Use:   "create-client --certs-dir=<path to cockroach certs dir> --ca-key=<path-to-ca-key> <username>",
+	Short: "create client certificate and key",
 	Long: `
-Generates a client certificate and key, writing them to --cert and --key.
-CA certificate and key must be passed in.
-The certs directory should contain a CA cert and key.
+Generates a client certificate and key for a given node, writing them to
+"<certs-dir>/client.<username>.crt" and "<certs-dir>/client.<username>.key".
+Any existing files are overwritten.
+
+Requires a CA cert in "<certs-dir>/ca.crt" and matching key in "--ca-key".
+If "ca.crt" contains more than one certificate, the first is used.
 `,
 	RunE: MaybeDecorateGRPCError(runCreateClientCert),
 }
 
 // runCreateClientCert generates key pair and CA certificate and writes them
 // to their corresponding files.
+// TODO(marc): there is currently no way to specify which CA cert to use if more
+// than one if present.
 func runCreateClientCert(cmd *cobra.Command, args []string) error {
 	if len(args) != 1 {
 		return usageAndError(cmd)
 	}
 
 	var err error
-	//var username string
-	//if username, err = sql.NormalizeAndValidateUsername(args[0]); err != nil {
-	if _, err = sql.NormalizeAndValidateUsername(args[0]); err != nil {
+	var username string
+	if username, err = sql.NormalizeAndValidateUsername(args[0]); err != nil {
 		return err
 	}
 
-	// TODO(mberhault): fix
-	/*
-		if len(baseCfg.SSLCA) == 0 || len(baseCfg.SSLCAKey) == 0 ||
-			len(baseCfg.SSLCert) == 0 || len(baseCfg.SSLCertKey) == 0 {
-			return errMissingParams
-		}
-
-		return errors.Wrap(security.RunCreateClientCert(baseCfg.SSLCA, baseCfg.SSLCAKey,
-			baseCfg.SSLCert, baseCfg.SSLCertKey, keySize, username),
-			"failed to generate client certificate",
-		)*/
-	return nil
+	return security.CreateClientPair(
+		baseCfg.SSLCertsDir,
+		baseCfg.SSLCAKey,
+		keySize,
+		certificateLifetime,
+		username)
 }
 
 // A listCerts command generates a client certificate and stores it

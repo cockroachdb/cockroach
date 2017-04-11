@@ -18,6 +18,7 @@ package security
 
 import (
 	"crypto/tls"
+	"os"
 	"path/filepath"
 
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -57,8 +58,44 @@ type CertificateManager struct {
 
 // NewCertificateManager creates a new certificate manager.
 func NewCertificateManager(certsDir string) (*CertificateManager, error) {
-	cm := &CertificateManager{certsDir: certsDir}
+	cm := &CertificateManager{certsDir: os.ExpandEnv(certsDir)}
 	return cm, cm.LoadCertificates()
+}
+
+// NewCertificateManagerFirstRun creates a new certificate manager.
+// The certsDir is created if it does not exist.
+func NewCertificateManagerFirstRun(certsDir string) (*CertificateManager, error) {
+	cm := &CertificateManager{certsDir: os.ExpandEnv(certsDir)}
+	if err := NewCertificateLoader(cm.certsDir).MaybeCreateCertsDir(); err != nil {
+		return nil, err
+	}
+
+	return cm, cm.LoadCertificates()
+}
+
+// CACertPath returns the expected file path for the CA certificate.
+func (cm *CertificateManager) CACertPath() string {
+	return filepath.Join(cm.certsDir, "ca"+certExtension)
+}
+
+// NodeCertPath returns the expected file path for the node certificate.
+func (cm *CertificateManager) NodeCertPath() string {
+	return filepath.Join(cm.certsDir, "node"+certExtension)
+}
+
+// NodeKeyPath returns the expected file path for the node key.
+func (cm *CertificateManager) NodeKeyPath() string {
+	return filepath.Join(cm.certsDir, "node"+keyExtension)
+}
+
+// ClientCertPath returns the expected file path for the user's certificate.
+func (cm *CertificateManager) ClientCertPath(user string) string {
+	return filepath.Join(cm.certsDir, "client."+user+certExtension)
+}
+
+// ClientKeyPath returns the expected file path for the user's key.
+func (cm *CertificateManager) ClientKeyPath(user string) string {
+	return filepath.Join(cm.certsDir, "client."+user+keyExtension)
 }
 
 // CACert returns the CA cert. May be nil.
