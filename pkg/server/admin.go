@@ -1389,7 +1389,7 @@ func (s *adminServer) queryNamespaceID(
 	const query = `SELECT id FROM system.namespace WHERE parentID = $1 AND name = $2`
 	params := parser.MakePlaceholderInfo()
 	params.SetValue(`1`, parser.NewDInt(parser.DInt(parentID)))
-	params.SetValue(`2`, parser.NewDString(name))
+	params.SetValue(`2`, parser.NewDString(parser.ReNormalizeName(name)))
 	r := s.server.sqlExecutor.ExecuteStatements(session, query, &params)
 	defer r.Close(ctx)
 	if err := s.checkQueryResults(r.ResultList, 1); err != nil {
