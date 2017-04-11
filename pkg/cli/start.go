@@ -361,8 +361,12 @@ func runStart(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	logDir := f.Value.String()
-	if logDir != "" {
+	// We need an output directory below. We use the current directory unless
+	// the log directory is configured, in which case we use that.
+	outputDirectory := "."
+	if logDir := f.Value.String(); logDir != "" {
+		outputDirectory = logDir
+
 		vf := pf.Lookup(logflags.AlsoLogToStderrName)
 		ls := pf.Lookup(logflags.LogToStderrName)
 		if ls.Value.String() == "false" && !vf.Changed {
@@ -378,11 +382,6 @@ func runStart(cmd *cobra.Command, args []string) error {
 			return err
 		}
 		log.Eventf(startCtx, "created log directory %s", logDir)
-	} else {
-		// The backtrace generator below wants an output directory.  If
-		// there is none configured, simply emit the backtraces to the
-		// current directory.
-		logDir = "."
 	}
 
 	// We log build information to stdout (for the short summary), but also
@@ -390,8 +389,8 @@ func runStart(cmd *cobra.Command, args []string) error {
 	info := build.GetInfo()
 	log.Infof(startCtx, info.Short())
 
-	initMemProfile(startCtx, f.Value.String())
-	initCPUProfile(startCtx, f.Value.String())
+	initMemProfile(startCtx, outputDirectory)
+	initCPUProfile(startCtx, outputDirectory)
 	initBlockProfile()
 
 	// Default user for servers.
@@ -400,7 +399,7 @@ func runStart(cmd *cobra.Command, args []string) error {
 	// Disable Stopper task tracking as performing that call site tracking is
 	// moderately expensive (certainly outweighing the infrequent benefit it
 	// provides).
-	stopper := initBacktrace(logDir, stop.TrackTasks(false))
+	stopper := initBacktrace(outputDirectory, stop.TrackTasks(false))
 	log.Event(startCtx, "initialized profiles")
 
 	// Run the rest of the startup process in the background to avoid preventing
