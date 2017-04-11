@@ -39,12 +39,7 @@ export namespace cockroach {
                 TABLE = 3
             }
 
-            /**
-             * Properties of a DatabasesRequest.
-             * @typedef cockroach.server.serverpb.DatabasesRequest$Properties
-             * @type {Object}
-             */
-            type DatabasesRequest$Properties = Object;
+            type DatabasesRequest$Properties = {};
 
             /**
              * Constructs a new DatabasesRequest.
@@ -149,12 +144,6 @@ export namespace cockroach {
                 public toJSON(): { [k: string]: any };
             }
 
-            /**
-             * Properties of a DatabasesResponse.
-             * @typedef cockroach.server.serverpb.DatabasesResponse$Properties
-             * @type {Object}
-             * @property {Array.<string>} [databases] DatabasesResponse databases.
-             */
             type DatabasesResponse$Properties = {
                 databases?: string[];
             };
@@ -177,9 +166,9 @@ export namespace cockroach {
 
                 /**
                  * DatabasesResponse databases.
-                 * @type {Array.<string>|undefined}
+                 * @type {Array.<string>}
                  */
-                public databases?: string[];
+                public databases: string[];
 
                 /**
                  * Creates a new DatabasesResponse instance using the specified properties.
@@ -268,12 +257,6 @@ export namespace cockroach {
                 public toJSON(): { [k: string]: any };
             }
 
-            /**
-             * Properties of a DatabaseDetailsRequest.
-             * @typedef cockroach.server.serverpb.DatabaseDetailsRequest$Properties
-             * @type {Object}
-             * @property {string} [database] DatabaseDetailsRequest database.
-             */
             type DatabaseDetailsRequest$Properties = {
                 database?: string;
             };
@@ -296,9 +279,9 @@ export namespace cockroach {
 
                 /**
                  * DatabaseDetailsRequest database.
-                 * @type {string|undefined}
+                 * @type {string}
                  */
-                public database?: string;
+                public database: string;
 
                 /**
                  * Creates a new DatabaseDetailsRequest instance using the specified properties.
@@ -387,16 +370,6 @@ export namespace cockroach {
                 public toJSON(): { [k: string]: any };
             }
 
-            /**
-             * Properties of a DatabaseDetailsResponse.
-             * @typedef cockroach.server.serverpb.DatabaseDetailsResponse$Properties
-             * @type {Object}
-             * @property {Array.<cockroach.server.serverpb.DatabaseDetailsResponse.Grant$Properties>} [grants] DatabaseDetailsResponse grants.
-             * @property {Array.<string>} [table_names] DatabaseDetailsResponse table_names.
-             * @property {Long} [descriptor_id] DatabaseDetailsResponse descriptor_id.
-             * @property {cockroach.config.ZoneConfig$Properties} [zone_config] DatabaseDetailsResponse zone_config.
-             * @property {cockroach.server.serverpb.ZoneConfigurationLevel} [zone_config_level] DatabaseDetailsResponse zone_config_level.
-             */
             type DatabaseDetailsResponse$Properties = {
                 grants?: cockroach.server.serverpb.DatabaseDetailsResponse.Grant$Properties[];
                 table_names?: string[];
@@ -423,33 +396,33 @@ export namespace cockroach {
 
                 /**
                  * DatabaseDetailsResponse grants.
-                 * @type {Array.<cockroach.server.serverpb.DatabaseDetailsResponse.Grant$Properties>|undefined}
+                 * @type {Array.<cockroach.server.serverpb.DatabaseDetailsResponse.Grant$Properties>}
                  */
-                public grants?: cockroach.server.serverpb.DatabaseDetailsResponse.Grant$Properties[];
+                public grants: cockroach.server.serverpb.DatabaseDetailsResponse.Grant$Properties[];
 
                 /**
                  * DatabaseDetailsResponse table_names.
-                 * @type {Array.<string>|undefined}
+                 * @type {Array.<string>}
                  */
-                public table_names?: string[];
+                public table_names: string[];
 
                 /**
                  * DatabaseDetailsResponse descriptor_id.
-                 * @type {Long|undefined}
+                 * @type {Long}
                  */
-                public descriptor_id?: Long;
+                public descriptor_id: Long;
 
                 /**
                  * DatabaseDetailsResponse zone_config.
-                 * @type {cockroach.config.ZoneConfig$Properties|undefined}
+                 * @type {(cockroach.config.ZoneConfig$Properties|null)}
                  */
-                public zone_config?: cockroach.config.ZoneConfig$Properties;
+                public zone_config: (cockroach.config.ZoneConfig$Properties|null);
 
                 /**
                  * DatabaseDetailsResponse zone_config_level.
-                 * @type {cockroach.server.serverpb.ZoneConfigurationLevel|undefined}
+                 * @type {cockroach.server.serverpb.ZoneConfigurationLevel}
                  */
-                public zone_config_level?: cockroach.server.serverpb.ZoneConfigurationLevel;
+                public zone_config_level: cockroach.server.serverpb.ZoneConfigurationLevel;
 
                 /**
                  * Creates a new DatabaseDetailsResponse instance using the specified properties.
@@ -540,13 +513,6 @@ export namespace cockroach {
 
             namespace DatabaseDetailsResponse {
 
-                /**
-                 * Properties of a Grant.
-                 * @typedef cockroach.server.serverpb.DatabaseDetailsResponse.Grant$Properties
-                 * @type {Object}
-                 * @property {string} [user] Grant user.
-                 * @property {Array.<string>} [privileges] Grant privileges.
-                 */
                 type Grant$Properties = {
                     user?: string;
                     privileges?: string[];
@@ -570,15 +536,15 @@ export namespace cockroach {
 
                     /**
                      * Grant user.
-                     * @type {string|undefined}
+                     * @type {string}
                      */
-                    public user?: string;
+                    public user: string;
 
                     /**
                      * Grant privileges.
-                     * @type {Array.<string>|undefined}
+                     * @type {Array.<string>}
                      */
-                    public privileges?: string[];
+                    public privileges: string[];
 
                     /**
                      * Creates a new Grant instance using the specified properties.
@@ -668,13 +634,6 @@ export namespace cockroach {
                 }
             }
 
-            /**
-             * Properties of a TableDetailsRequest.
-             * @typedef cockroach.server.serverpb.TableDetailsRequest$Properties
-             * @type {Object}
-             * @property {string} [database] TableDetailsRequest database.
-             * @property {string} [table] TableDetailsRequest table.
-             */
             type TableDetailsRequest$Properties = {
                 database?: string;
                 table?: string;
@@ -698,15 +657,15 @@ export namespace cockroach {
 
                 /**
                  * TableDetailsRequest database.
-                 * @type {string|undefined}
+                 * @type {string}
                  */
-                public database?: string;
+                public database: string;
 
                 /**
                  * TableDetailsRequest table.
-                 * @type {string|undefined}
+                 * @type {string}
                  */
-                public table?: string;
+                public table: string;
 
                 /**
                  * Creates a new TableDetailsRequest instance using the specified properties.
@@ -795,19 +754,6 @@ export namespace cockroach {
                 public toJSON(): { [k: string]: any };
             }
 
-            /**
-             * Properties of a TableDetailsResponse.
-             * @typedef cockroach.server.serverpb.TableDetailsResponse$Properties
-             * @type {Object}
-             * @property {Array.<cockroach.server.serverpb.TableDetailsResponse.Grant$Properties>} [grants] TableDetailsResponse grants.
-             * @property {Array.<cockroach.server.serverpb.TableDetailsResponse.Column$Properties>} [columns] TableDetailsResponse columns.
-             * @property {Array.<cockroach.server.serverpb.TableDetailsResponse.Index$Properties>} [indexes] TableDetailsResponse indexes.
-             * @property {Long} [range_count] TableDetailsResponse range_count.
-             * @property {string} [create_table_statement] TableDetailsResponse create_table_statement.
-             * @property {cockroach.config.ZoneConfig$Properties} [zone_config] TableDetailsResponse zone_config.
-             * @property {cockroach.server.serverpb.ZoneConfigurationLevel} [zone_config_level] TableDetailsResponse zone_config_level.
-             * @property {Long} [descriptor_id] TableDetailsResponse descriptor_id.
-             */
             type TableDetailsResponse$Properties = {
                 grants?: cockroach.server.serverpb.TableDetailsResponse.Grant$Properties[];
                 columns?: cockroach.server.serverpb.TableDetailsResponse.Column$Properties[];
@@ -837,51 +783,51 @@ export namespace cockroach {
 
                 /**
                  * TableDetailsResponse grants.
-                 * @type {Array.<cockroach.server.serverpb.TableDetailsResponse.Grant$Properties>|undefined}
+                 * @type {Array.<cockroach.server.serverpb.TableDetailsResponse.Grant$Properties>}
                  */
-                public grants?: cockroach.server.serverpb.TableDetailsResponse.Grant$Properties[];
+                public grants: cockroach.server.serverpb.TableDetailsResponse.Grant$Properties[];
 
                 /**
                  * TableDetailsResponse columns.
-                 * @type {Array.<cockroach.server.serverpb.TableDetailsResponse.Column$Properties>|undefined}
+                 * @type {Array.<cockroach.server.serverpb.TableDetailsResponse.Column$Properties>}
                  */
-                public columns?: cockroach.server.serverpb.TableDetailsResponse.Column$Properties[];
+                public columns: cockroach.server.serverpb.TableDetailsResponse.Column$Properties[];
 
                 /**
                  * TableDetailsResponse indexes.
-                 * @type {Array.<cockroach.server.serverpb.TableDetailsResponse.Index$Properties>|undefined}
+                 * @type {Array.<cockroach.server.serverpb.TableDetailsResponse.Index$Properties>}
                  */
-                public indexes?: cockroach.server.serverpb.TableDetailsResponse.Index$Properties[];
+                public indexes: cockroach.server.serverpb.TableDetailsResponse.Index$Properties[];
 
                 /**
                  * TableDetailsResponse range_count.
-                 * @type {Long|undefined}
+                 * @type {Long}
                  */
-                public range_count?: Long;
+                public range_count: Long;
 
                 /**
                  * TableDetailsResponse create_table_statement.
-                 * @type {string|undefined}
+                 * @type {string}
                  */
-                public create_table_statement?: string;
+                public create_table_statement: string;
 
                 /**
                  * TableDetailsResponse zone_config.
-                 * @type {cockroach.config.ZoneConfig$Properties|undefined}
+                 * @type {(cockroach.config.ZoneConfig$Properties|null)}
                  */
-                public zone_config?: cockroach.config.ZoneConfig$Properties;
+                public zone_config: (cockroach.config.ZoneConfig$Properties|null);
 
                 /**
                  * TableDetailsResponse zone_config_level.
-                 * @type {cockroach.server.serverpb.ZoneConfigurationLevel|undefined}
+                 * @type {cockroach.server.serverpb.ZoneConfigurationLevel}
                  */
-                public zone_config_level?: cockroach.server.serverpb.ZoneConfigurationLevel;
+                public zone_config_level: cockroach.server.serverpb.ZoneConfigurationLevel;
 
                 /**
                  * TableDetailsResponse descriptor_id.
-                 * @type {Long|undefined}
+                 * @type {Long}
                  */
-                public descriptor_id?: Long;
+                public descriptor_id: Long;
 
                 /**
                  * Creates a new TableDetailsResponse instance using the specified properties.
@@ -972,13 +918,6 @@ export namespace cockroach {
 
             namespace TableDetailsResponse {
 
-                /**
-                 * Properties of a Grant.
-                 * @typedef cockroach.server.serverpb.TableDetailsResponse.Grant$Properties
-                 * @type {Object}
-                 * @property {string} [user] Grant user.
-                 * @property {Array.<string>} [privileges] Grant privileges.
-                 */
                 type Grant$Properties = {
                     user?: string;
                     privileges?: string[];
@@ -1002,15 +941,15 @@ export namespace cockroach {
 
                     /**
                      * Grant user.
-                     * @type {string|undefined}
+                     * @type {string}
                      */
-                    public user?: string;
+                    public user: string;
 
                     /**
                      * Grant privileges.
-                     * @type {Array.<string>|undefined}
+                     * @type {Array.<string>}
                      */
-                    public privileges?: string[];
+                    public privileges: string[];
 
                     /**
                      * Creates a new Grant instance using the specified properties.
@@ -1099,15 +1038,6 @@ export namespace cockroach {
                     public toJSON(): { [k: string]: any };
                 }
 
-                /**
-                 * Properties of a Column.
-                 * @typedef cockroach.server.serverpb.TableDetailsResponse.Column$Properties
-                 * @type {Object}
-                 * @property {string} [name] Column name.
-                 * @property {string} [type] Column type.
-                 * @property {boolean} [nullable] Column nullable.
-                 * @property {string} [default_value] Column default_value.
-                 */
                 type Column$Properties = {
                     name?: string;
                     type?: string;
@@ -1133,27 +1063,27 @@ export namespace cockroach {
 
                     /**
                      * Column name.
-                     * @type {string|undefined}
+                     * @type {string}
                      */
-                    public name?: string;
+                    public name: string;
 
                     /**
                      * Column type.
-                     * @type {string|undefined}
+                     * @type {string}
                      */
-                    public type?: string;
+                    public type: string;
 
                     /**
                      * Column nullable.
-                     * @type {boolean|undefined}
+                     * @type {boolean}
                      */
-                    public nullable?: boolean;
+                    public nullable: boolean;
 
                     /**
                      * Column default_value.
-                     * @type {string|undefined}
+                     * @type {string}
                      */
-                    public default_value?: string;
+                    public default_value: string;
 
                     /**
                      * Creates a new Column instance using the specified properties.
@@ -1242,18 +1172,6 @@ export namespace cockroach {
                     public toJSON(): { [k: string]: any };
                 }
 
-                /**
-                 * Properties of an Index.
-                 * @typedef cockroach.server.serverpb.TableDetailsResponse.Index$Properties
-                 * @type {Object}
-                 * @property {string} [name] Index name.
-                 * @property {boolean} [unique] Index unique.
-                 * @property {Long} [seq] Index seq.
-                 * @property {string} [column] Index column.
-                 * @property {string} [direction] Index direction.
-                 * @property {boolean} [storing] Index storing.
-                 * @property {boolean} [implicit] Index implicit.
-                 */
                 type Index$Properties = {
                     name?: string;
                     unique?: boolean;
@@ -1282,45 +1200,45 @@ export namespace cockroach {
 
                     /**
                      * Index name.
-                     * @type {string|undefined}
+                     * @type {string}
                      */
-                    public name?: string;
+                    public name: string;
 
                     /**
                      * Index unique.
-                     * @type {boolean|undefined}
+                     * @type {boolean}
                      */
-                    public unique?: boolean;
+                    public unique: boolean;
 
                     /**
                      * Index seq.
-                     * @type {Long|undefined}
+                     * @type {Long}
                      */
-                    public seq?: Long;
+                    public seq: Long;
 
                     /**
                      * Index column.
-                     * @type {string|undefined}
+                     * @type {string}
                      */
-                    public column?: string;
+                    public column: string;
 
                     /**
                      * Index direction.
-                     * @type {string|undefined}
+                     * @type {string}
                      */
-                    public direction?: string;
+                    public direction: string;
 
                     /**
                      * Index storing.
-                     * @type {boolean|undefined}
+                     * @type {boolean}
                      */
-                    public storing?: boolean;
+                    public storing: boolean;
 
                     /**
                      * Index implicit.
-                     * @type {boolean|undefined}
+                     * @type {boolean}
                      */
-                    public implicit?: boolean;
+                    public implicit: boolean;
 
                     /**
                      * Creates a new Index instance using the specified properties.
@@ -1410,13 +1328,6 @@ export namespace cockroach {
                 }
             }
 
-            /**
-             * Properties of a TableStatsRequest.
-             * @typedef cockroach.server.serverpb.TableStatsRequest$Properties
-             * @type {Object}
-             * @property {string} [database] TableStatsRequest database.
-             * @property {string} [table] TableStatsRequest table.
-             */
             type TableStatsRequest$Properties = {
                 database?: string;
                 table?: string;
@@ -1440,15 +1351,15 @@ export namespace cockroach {
 
                 /**
                  * TableStatsRequest database.
-                 * @type {string|undefined}
+                 * @type {string}
                  */
-                public database?: string;
+                public database: string;
 
                 /**
                  * TableStatsRequest table.
-                 * @type {string|undefined}
+                 * @type {string}
                  */
-                public table?: string;
+                public table: string;
 
                 /**
                  * Creates a new TableStatsRequest instance using the specified properties.
@@ -1537,16 +1448,6 @@ export namespace cockroach {
                 public toJSON(): { [k: string]: any };
             }
 
-            /**
-             * Properties of a TableStatsResponse.
-             * @typedef cockroach.server.serverpb.TableStatsResponse$Properties
-             * @type {Object}
-             * @property {Long} [range_count] TableStatsResponse range_count.
-             * @property {Long} [replica_count] TableStatsResponse replica_count.
-             * @property {Long} [node_count] TableStatsResponse node_count.
-             * @property {cockroach.storage.engine.enginepb.MVCCStats$Properties} [stats] TableStatsResponse stats.
-             * @property {Array.<cockroach.server.serverpb.TableStatsResponse.MissingNode$Properties>} [missing_nodes] TableStatsResponse missing_nodes.
-             */
             type TableStatsResponse$Properties = {
                 range_count?: Long;
                 replica_count?: Long;
@@ -1573,33 +1474,33 @@ export namespace cockroach {
 
                 /**
                  * TableStatsResponse range_count.
-                 * @type {Long|undefined}
+                 * @type {Long}
                  */
-                public range_count?: Long;
+                public range_count: Long;
 
                 /**
                  * TableStatsResponse replica_count.
-                 * @type {Long|undefined}
+                 * @type {Long}
                  */
-                public replica_count?: Long;
+                public replica_count: Long;
 
                 /**
                  * TableStatsResponse node_count.
-                 * @type {Long|undefined}
+                 * @type {Long}
                  */
-                public node_count?: Long;
+                public node_count: Long;
 
                 /**
                  * TableStatsResponse stats.
-                 * @type {cockroach.storage.engine.enginepb.MVCCStats$Properties|undefined}
+                 * @type {(cockroach.storage.engine.enginepb.MVCCStats$Properties|null)}
                  */
-                public stats?: cockroach.storage.engine.enginepb.MVCCStats$Properties;
+                public stats: (cockroach.storage.engine.enginepb.MVCCStats$Properties|null);
 
                 /**
                  * TableStatsResponse missing_nodes.
-                 * @type {Array.<cockroach.server.serverpb.TableStatsResponse.MissingNode$Properties>|undefined}
+                 * @type {Array.<cockroach.server.serverpb.TableStatsResponse.MissingNode$Properties>}
                  */
-                public missing_nodes?: cockroach.server.serverpb.TableStatsResponse.MissingNode$Properties[];
+                public missing_nodes: cockroach.server.serverpb.TableStatsResponse.MissingNode$Properties[];
 
                 /**
                  * Creates a new TableStatsResponse instance using the specified properties.
@@ -1690,13 +1591,6 @@ export namespace cockroach {
 
             namespace TableStatsResponse {
 
-                /**
-                 * Properties of a MissingNode.
-                 * @typedef cockroach.server.serverpb.TableStatsResponse.MissingNode$Properties
-                 * @type {Object}
-                 * @property {string} [node_id] MissingNode node_id.
-                 * @property {string} [error_message] MissingNode error_message.
-                 */
                 type MissingNode$Properties = {
                     node_id?: string;
                     error_message?: string;
@@ -1720,15 +1614,15 @@ export namespace cockroach {
 
                     /**
                      * MissingNode node_id.
-                     * @type {string|undefined}
+                     * @type {string}
                      */
-                    public node_id?: string;
+                    public node_id: string;
 
                     /**
                      * MissingNode error_message.
-                     * @type {string|undefined}
+                     * @type {string}
                      */
-                    public error_message?: string;
+                    public error_message: string;
 
                     /**
                      * Creates a new MissingNode instance using the specified properties.
@@ -1818,12 +1712,7 @@ export namespace cockroach {
                 }
             }
 
-            /**
-             * Properties of a UsersRequest.
-             * @typedef cockroach.server.serverpb.UsersRequest$Properties
-             * @type {Object}
-             */
-            type UsersRequest$Properties = Object;
+            type UsersRequest$Properties = {};
 
             /**
              * Constructs a new UsersRequest.
@@ -1928,12 +1817,6 @@ export namespace cockroach {
                 public toJSON(): { [k: string]: any };
             }
 
-            /**
-             * Properties of a UsersResponse.
-             * @typedef cockroach.server.serverpb.UsersResponse$Properties
-             * @type {Object}
-             * @property {Array.<cockroach.server.serverpb.UsersResponse.User$Properties>} [users] UsersResponse users.
-             */
             type UsersResponse$Properties = {
                 users?: cockroach.server.serverpb.UsersResponse.User$Properties[];
             };
@@ -1956,9 +1839,9 @@ export namespace cockroach {
 
                 /**
                  * UsersResponse users.
-                 * @type {Array.<cockroach.server.serverpb.UsersResponse.User$Properties>|undefined}
+                 * @type {Array.<cockroach.server.serverpb.UsersResponse.User$Properties>}
                  */
-                public users?: cockroach.server.serverpb.UsersResponse.User$Properties[];
+                public users: cockroach.server.serverpb.UsersResponse.User$Properties[];
 
                 /**
                  * Creates a new UsersResponse instance using the specified properties.
@@ -2049,12 +1932,6 @@ export namespace cockroach {
 
             namespace UsersResponse {
 
-                /**
-                 * Properties of a User.
-                 * @typedef cockroach.server.serverpb.UsersResponse.User$Properties
-                 * @type {Object}
-                 * @property {string} [username] User username.
-                 */
                 type User$Properties = {
                     username?: string;
                 };
@@ -2077,9 +1954,9 @@ export namespace cockroach {
 
                     /**
                      * User username.
-                     * @type {string|undefined}
+                     * @type {string}
                      */
-                    public username?: string;
+                    public username: string;
 
                     /**
                      * Creates a new User instance using the specified properties.
@@ -2169,13 +2046,6 @@ export namespace cockroach {
                 }
             }
 
-            /**
-             * Properties of an EventsRequest.
-             * @typedef cockroach.server.serverpb.EventsRequest$Properties
-             * @type {Object}
-             * @property {string} [type] EventsRequest type.
-             * @property {Long} [target_id] EventsRequest target_id.
-             */
             type EventsRequest$Properties = {
                 type?: string;
                 target_id?: Long;
@@ -2199,15 +2069,15 @@ export namespace cockroach {
 
                 /**
                  * EventsRequest type.
-                 * @type {string|undefined}
+                 * @type {string}
                  */
-                public type?: string;
+                public type: string;
 
                 /**
                  * EventsRequest target_id.
-                 * @type {Long|undefined}
+                 * @type {Long}
                  */
-                public target_id?: Long;
+                public target_id: Long;
 
                 /**
                  * Creates a new EventsRequest instance using the specified properties.
@@ -2296,12 +2166,6 @@ export namespace cockroach {
                 public toJSON(): { [k: string]: any };
             }
 
-            /**
-             * Properties of an EventsResponse.
-             * @typedef cockroach.server.serverpb.EventsResponse$Properties
-             * @type {Object}
-             * @property {Array.<cockroach.server.serverpb.EventsResponse.Event$Properties>} [events] EventsResponse events.
-             */
             type EventsResponse$Properties = {
                 events?: cockroach.server.serverpb.EventsResponse.Event$Properties[];
             };
@@ -2324,9 +2188,9 @@ export namespace cockroach {
 
                 /**
                  * EventsResponse events.
-                 * @type {Array.<cockroach.server.serverpb.EventsResponse.Event$Properties>|undefined}
+                 * @type {Array.<cockroach.server.serverpb.EventsResponse.Event$Properties>}
                  */
-                public events?: cockroach.server.serverpb.EventsResponse.Event$Properties[];
+                public events: cockroach.server.serverpb.EventsResponse.Event$Properties[];
 
                 /**
                  * Creates a new EventsResponse instance using the specified properties.
@@ -2417,17 +2281,6 @@ export namespace cockroach {
 
             namespace EventsResponse {
 
-                /**
-                 * Properties of an Event.
-                 * @typedef cockroach.server.serverpb.EventsResponse.Event$Properties
-                 * @type {Object}
-                 * @property {google.protobuf.Timestamp$Properties} [timestamp] Event timestamp.
-                 * @property {string} [event_type] Event event_type.
-                 * @property {Long} [target_id] Event target_id.
-                 * @property {Long} [reporting_id] Event reporting_id.
-                 * @property {string} [info] Event info.
-                 * @property {Uint8Array} [unique_id] Event unique_id.
-                 */
                 type Event$Properties = {
                     timestamp?: google.protobuf.Timestamp$Properties;
                     event_type?: string;
@@ -2455,39 +2308,39 @@ export namespace cockroach {
 
                     /**
                      * Event timestamp.
-                     * @type {google.protobuf.Timestamp$Properties|undefined}
+                     * @type {(google.protobuf.Timestamp$Properties|null)}
                      */
-                    public timestamp?: google.protobuf.Timestamp$Properties;
+                    public timestamp: (google.protobuf.Timestamp$Properties|null);
 
                     /**
                      * Event event_type.
-                     * @type {string|undefined}
+                     * @type {string}
                      */
-                    public event_type?: string;
+                    public event_type: string;
 
                     /**
                      * Event target_id.
-                     * @type {Long|undefined}
+                     * @type {Long}
                      */
-                    public target_id?: Long;
+                    public target_id: Long;
 
                     /**
                      * Event reporting_id.
-                     * @type {Long|undefined}
+                     * @type {Long}
                      */
-                    public reporting_id?: Long;
+                    public reporting_id: Long;
 
                     /**
                      * Event info.
-                     * @type {string|undefined}
+                     * @type {string}
                      */
-                    public info?: string;
+                    public info: string;
 
                     /**
                      * Event unique_id.
-                     * @type {Uint8Array|undefined}
+                     * @type {Uint8Array}
                      */
-                    public unique_id?: Uint8Array;
+                    public unique_id: Uint8Array;
 
                     /**
                      * Creates a new Event instance using the specified properties.
@@ -2577,12 +2430,6 @@ export namespace cockroach {
                 }
             }
 
-            /**
-             * Properties of a SetUIDataRequest.
-             * @typedef cockroach.server.serverpb.SetUIDataRequest$Properties
-             * @type {Object}
-             * @property {Object.<string,Uint8Array>} [key_values] SetUIDataRequest key_values.
-             */
             type SetUIDataRequest$Properties = {
                 key_values?: { [k: string]: Uint8Array };
             };
@@ -2605,9 +2452,9 @@ export namespace cockroach {
 
                 /**
                  * SetUIDataRequest key_values.
-                 * @type {Object.<string,Uint8Array>|undefined}
+                 * @type {Object.<string,Uint8Array>}
                  */
-                public key_values?: { [k: string]: Uint8Array };
+                public key_values: { [k: string]: Uint8Array };
 
                 /**
                  * Creates a new SetUIDataRequest instance using the specified properties.
@@ -2696,12 +2543,7 @@ export namespace cockroach {
                 public toJSON(): { [k: string]: any };
             }
 
-            /**
-             * Properties of a SetUIDataResponse.
-             * @typedef cockroach.server.serverpb.SetUIDataResponse$Properties
-             * @type {Object}
-             */
-            type SetUIDataResponse$Properties = Object;
+            type SetUIDataResponse$Properties = {};
 
             /**
              * Constructs a new SetUIDataResponse.
@@ -2806,12 +2648,6 @@ export namespace cockroach {
                 public toJSON(): { [k: string]: any };
             }
 
-            /**
-             * Properties of a GetUIDataRequest.
-             * @typedef cockroach.server.serverpb.GetUIDataRequest$Properties
-             * @type {Object}
-             * @property {Array.<string>} [keys] GetUIDataRequest keys.
-             */
             type GetUIDataRequest$Properties = {
                 keys?: string[];
             };
@@ -2834,9 +2670,9 @@ export namespace cockroach {
 
                 /**
                  * GetUIDataRequest keys.
-                 * @type {Array.<string>|undefined}
+                 * @type {Array.<string>}
                  */
-                public keys?: string[];
+                public keys: string[];
 
                 /**
                  * Creates a new GetUIDataRequest instance using the specified properties.
@@ -2925,12 +2761,6 @@ export namespace cockroach {
                 public toJSON(): { [k: string]: any };
             }
 
-            /**
-             * Properties of a GetUIDataResponse.
-             * @typedef cockroach.server.serverpb.GetUIDataResponse$Properties
-             * @type {Object}
-             * @property {Object.<string,cockroach.server.serverpb.GetUIDataResponse.Value$Properties>} [key_values] GetUIDataResponse key_values.
-             */
             type GetUIDataResponse$Properties = {
                 key_values?: { [k: string]: cockroach.server.serverpb.GetUIDataResponse.Value$Properties };
             };
@@ -2953,9 +2783,9 @@ export namespace cockroach {
 
                 /**
                  * GetUIDataResponse key_values.
-                 * @type {Object.<string,cockroach.server.serverpb.GetUIDataResponse.Value$Properties>|undefined}
+                 * @type {Object.<string,cockroach.server.serverpb.GetUIDataResponse.Value$Properties>}
                  */
-                public key_values?: { [k: string]: cockroach.server.serverpb.GetUIDataResponse.Value$Properties };
+                public key_values: { [k: string]: cockroach.server.serverpb.GetUIDataResponse.Value$Properties };
 
                 /**
                  * Creates a new GetUIDataResponse instance using the specified properties.
@@ -3046,13 +2876,6 @@ export namespace cockroach {
 
             namespace GetUIDataResponse {
 
-                /**
-                 * Properties of a Value.
-                 * @typedef cockroach.server.serverpb.GetUIDataResponse.Value$Properties
-                 * @type {Object}
-                 * @property {Uint8Array} [value] Value value.
-                 * @property {google.protobuf.Timestamp$Properties} [last_updated] Value last_updated.
-                 */
                 type Value$Properties = {
                     value?: Uint8Array;
                     last_updated?: google.protobuf.Timestamp$Properties;
@@ -3076,15 +2899,15 @@ export namespace cockroach {
 
                     /**
                      * Value value.
-                     * @type {Uint8Array|undefined}
+                     * @type {Uint8Array}
                      */
-                    public value?: Uint8Array;
+                    public value: Uint8Array;
 
                     /**
                      * Value last_updated.
-                     * @type {google.protobuf.Timestamp$Properties|undefined}
+                     * @type {(google.protobuf.Timestamp$Properties|null)}
                      */
-                    public last_updated?: google.protobuf.Timestamp$Properties;
+                    public last_updated: (google.protobuf.Timestamp$Properties|null);
 
                     /**
                      * Creates a new Value instance using the specified properties.
@@ -3174,12 +2997,7 @@ export namespace cockroach {
                 }
             }
 
-            /**
-             * Properties of a ClusterRequest.
-             * @typedef cockroach.server.serverpb.ClusterRequest$Properties
-             * @type {Object}
-             */
-            type ClusterRequest$Properties = Object;
+            type ClusterRequest$Properties = {};
 
             /**
              * Constructs a new ClusterRequest.
@@ -3284,12 +3102,6 @@ export namespace cockroach {
                 public toJSON(): { [k: string]: any };
             }
 
-            /**
-             * Properties of a ClusterResponse.
-             * @typedef cockroach.server.serverpb.ClusterResponse$Properties
-             * @type {Object}
-             * @property {string} [cluster_id] ClusterResponse cluster_id.
-             */
             type ClusterResponse$Properties = {
                 cluster_id?: string;
             };
@@ -3312,9 +3124,9 @@ export namespace cockroach {
 
                 /**
                  * ClusterResponse cluster_id.
-                 * @type {string|undefined}
+                 * @type {string}
                  */
-                public cluster_id?: string;
+                public cluster_id: string;
 
                 /**
                  * Creates a new ClusterResponse instance using the specified properties.
@@ -3416,14 +3228,6 @@ export namespace cockroach {
                 LEASES = 1
             }
 
-            /**
-             * Properties of a DrainRequest.
-             * @typedef cockroach.server.serverpb.DrainRequest$Properties
-             * @type {Object}
-             * @property {Array.<number>} [on] DrainRequest on.
-             * @property {Array.<number>} [off] DrainRequest off.
-             * @property {boolean} [shutdown] DrainRequest shutdown.
-             */
             type DrainRequest$Properties = {
                 on?: number[];
                 off?: number[];
@@ -3448,21 +3252,21 @@ export namespace cockroach {
 
                 /**
                  * DrainRequest on.
-                 * @type {Array.<number>|undefined}
+                 * @type {Array.<number>}
                  */
-                public on?: number[];
+                public on: number[];
 
                 /**
                  * DrainRequest off.
-                 * @type {Array.<number>|undefined}
+                 * @type {Array.<number>}
                  */
-                public off?: number[];
+                public off: number[];
 
                 /**
                  * DrainRequest shutdown.
-                 * @type {boolean|undefined}
+                 * @type {boolean}
                  */
-                public shutdown?: boolean;
+                public shutdown: boolean;
 
                 /**
                  * Creates a new DrainRequest instance using the specified properties.
@@ -3551,12 +3355,6 @@ export namespace cockroach {
                 public toJSON(): { [k: string]: any };
             }
 
-            /**
-             * Properties of a DrainResponse.
-             * @typedef cockroach.server.serverpb.DrainResponse$Properties
-             * @type {Object}
-             * @property {Array.<number>} [on] DrainResponse on.
-             */
             type DrainResponse$Properties = {
                 on?: number[];
             };
@@ -3579,9 +3377,9 @@ export namespace cockroach {
 
                 /**
                  * DrainResponse on.
-                 * @type {Array.<number>|undefined}
+                 * @type {Array.<number>}
                  */
-                public on?: number[];
+                public on: number[];
 
                 /**
                  * Creates a new DrainResponse instance using the specified properties.
@@ -3670,12 +3468,7 @@ export namespace cockroach {
                 public toJSON(): { [k: string]: any };
             }
 
-            /**
-             * Properties of a HealthRequest.
-             * @typedef cockroach.server.serverpb.HealthRequest$Properties
-             * @type {Object}
-             */
-            type HealthRequest$Properties = Object;
+            type HealthRequest$Properties = {};
 
             /**
              * Constructs a new HealthRequest.
@@ -3780,12 +3573,7 @@ export namespace cockroach {
                 public toJSON(): { [k: string]: any };
             }
 
-            /**
-             * Properties of a HealthResponse.
-             * @typedef cockroach.server.serverpb.HealthResponse$Properties
-             * @type {Object}
-             */
-            type HealthResponse$Properties = Object;
+            type HealthResponse$Properties = {};
 
             /**
              * Constructs a new HealthResponse.
@@ -3890,12 +3678,7 @@ export namespace cockroach {
                 public toJSON(): { [k: string]: any };
             }
 
-            /**
-             * Properties of a LivenessRequest.
-             * @typedef cockroach.server.serverpb.LivenessRequest$Properties
-             * @type {Object}
-             */
-            type LivenessRequest$Properties = Object;
+            type LivenessRequest$Properties = {};
 
             /**
              * Constructs a new LivenessRequest.
@@ -4000,12 +3783,6 @@ export namespace cockroach {
                 public toJSON(): { [k: string]: any };
             }
 
-            /**
-             * Properties of a LivenessResponse.
-             * @typedef cockroach.server.serverpb.LivenessResponse$Properties
-             * @type {Object}
-             * @property {Array.<cockroach.storage.Liveness$Properties>} [livenesses] LivenessResponse livenesses.
-             */
             type LivenessResponse$Properties = {
                 livenesses?: cockroach.storage.Liveness$Properties[];
             };
@@ -4028,9 +3805,9 @@ export namespace cockroach {
 
                 /**
                  * LivenessResponse livenesses.
-                 * @type {Array.<cockroach.storage.Liveness$Properties>|undefined}
+                 * @type {Array.<cockroach.storage.Liveness$Properties>}
                  */
-                public livenesses?: cockroach.storage.Liveness$Properties[];
+                public livenesses: cockroach.storage.Liveness$Properties[];
 
                 /**
                  * Creates a new LivenessResponse instance using the specified properties.
@@ -4247,12 +4024,6 @@ export namespace cockroach {
                 public drain(request: (cockroach.server.serverpb.DrainRequest|{ [k: string]: any }), callback: Admin_drain_Callback): void;
             }
 
-            /**
-             * Properties of a DetailsRequest.
-             * @typedef cockroach.server.serverpb.DetailsRequest$Properties
-             * @type {Object}
-             * @property {string} [node_id] DetailsRequest node_id.
-             */
             type DetailsRequest$Properties = {
                 node_id?: string;
             };
@@ -4275,9 +4046,9 @@ export namespace cockroach {
 
                 /**
                  * DetailsRequest node_id.
-                 * @type {string|undefined}
+                 * @type {string}
                  */
-                public node_id?: string;
+                public node_id: string;
 
                 /**
                  * Creates a new DetailsRequest instance using the specified properties.
@@ -4366,14 +4137,6 @@ export namespace cockroach {
                 public toJSON(): { [k: string]: any };
             }
 
-            /**
-             * Properties of a DetailsResponse.
-             * @typedef cockroach.server.serverpb.DetailsResponse$Properties
-             * @type {Object}
-             * @property {number} [node_id] DetailsResponse node_id.
-             * @property {cockroach.util.UnresolvedAddr$Properties} [address] DetailsResponse address.
-             * @property {cockroach.build.Info$Properties} [build_info] DetailsResponse build_info.
-             */
             type DetailsResponse$Properties = {
                 node_id?: number;
                 address?: cockroach.util.UnresolvedAddr$Properties;
@@ -4398,21 +4161,21 @@ export namespace cockroach {
 
                 /**
                  * DetailsResponse node_id.
-                 * @type {number|undefined}
+                 * @type {number}
                  */
-                public node_id?: number;
+                public node_id: number;
 
                 /**
                  * DetailsResponse address.
-                 * @type {cockroach.util.UnresolvedAddr$Properties|undefined}
+                 * @type {(cockroach.util.UnresolvedAddr$Properties|null)}
                  */
-                public address?: cockroach.util.UnresolvedAddr$Properties;
+                public address: (cockroach.util.UnresolvedAddr$Properties|null);
 
                 /**
                  * DetailsResponse build_info.
-                 * @type {cockroach.build.Info$Properties|undefined}
+                 * @type {(cockroach.build.Info$Properties|null)}
                  */
-                public build_info?: cockroach.build.Info$Properties;
+                public build_info: (cockroach.build.Info$Properties|null);
 
                 /**
                  * Creates a new DetailsResponse instance using the specified properties.
@@ -4501,12 +4264,7 @@ export namespace cockroach {
                 public toJSON(): { [k: string]: any };
             }
 
-            /**
-             * Properties of a NodesRequest.
-             * @typedef cockroach.server.serverpb.NodesRequest$Properties
-             * @type {Object}
-             */
-            type NodesRequest$Properties = Object;
+            type NodesRequest$Properties = {};
 
             /**
              * Constructs a new NodesRequest.
@@ -4611,12 +4369,6 @@ export namespace cockroach {
                 public toJSON(): { [k: string]: any };
             }
 
-            /**
-             * Properties of a NodesResponse.
-             * @typedef cockroach.server.serverpb.NodesResponse$Properties
-             * @type {Object}
-             * @property {Array.<cockroach.server.status.NodeStatus$Properties>} [nodes] NodesResponse nodes.
-             */
             type NodesResponse$Properties = {
                 nodes?: cockroach.server.status.NodeStatus$Properties[];
             };
@@ -4639,9 +4391,9 @@ export namespace cockroach {
 
                 /**
                  * NodesResponse nodes.
-                 * @type {Array.<cockroach.server.status.NodeStatus$Properties>|undefined}
+                 * @type {Array.<cockroach.server.status.NodeStatus$Properties>}
                  */
-                public nodes?: cockroach.server.status.NodeStatus$Properties[];
+                public nodes: cockroach.server.status.NodeStatus$Properties[];
 
                 /**
                  * Creates a new NodesResponse instance using the specified properties.
@@ -4730,12 +4482,6 @@ export namespace cockroach {
                 public toJSON(): { [k: string]: any };
             }
 
-            /**
-             * Properties of a NodeRequest.
-             * @typedef cockroach.server.serverpb.NodeRequest$Properties
-             * @type {Object}
-             * @property {string} [node_id] NodeRequest node_id.
-             */
             type NodeRequest$Properties = {
                 node_id?: string;
             };
@@ -4758,9 +4504,9 @@ export namespace cockroach {
 
                 /**
                  * NodeRequest node_id.
-                 * @type {string|undefined}
+                 * @type {string}
                  */
-                public node_id?: string;
+                public node_id: string;
 
                 /**
                  * Creates a new NodeRequest instance using the specified properties.
@@ -4849,17 +4595,6 @@ export namespace cockroach {
                 public toJSON(): { [k: string]: any };
             }
 
-            /**
-             * Properties of a RaftState.
-             * @typedef cockroach.server.serverpb.RaftState$Properties
-             * @type {Object}
-             * @property {Long} [replica_id] RaftState replica_id.
-             * @property {raftpb.HardState$Properties} [hard_state] RaftState hard_state.
-             * @property {Long} [lead] RaftState lead.
-             * @property {string} [state] RaftState state.
-             * @property {Long} [applied] RaftState applied.
-             * @property {Object.<string,cockroach.server.serverpb.RaftState.Progress$Properties>} [progress] RaftState progress.
-             */
             type RaftState$Properties = {
                 replica_id?: Long;
                 hard_state?: raftpb.HardState$Properties;
@@ -4887,39 +4622,39 @@ export namespace cockroach {
 
                 /**
                  * RaftState replica_id.
-                 * @type {Long|undefined}
+                 * @type {Long}
                  */
-                public replica_id?: Long;
+                public replica_id: Long;
 
                 /**
                  * RaftState hard_state.
-                 * @type {raftpb.HardState$Properties|undefined}
+                 * @type {(raftpb.HardState$Properties|null)}
                  */
-                public hard_state?: raftpb.HardState$Properties;
+                public hard_state: (raftpb.HardState$Properties|null);
 
                 /**
                  * RaftState lead.
-                 * @type {Long|undefined}
+                 * @type {Long}
                  */
-                public lead?: Long;
+                public lead: Long;
 
                 /**
                  * RaftState state.
-                 * @type {string|undefined}
+                 * @type {string}
                  */
-                public state?: string;
+                public state: string;
 
                 /**
                  * RaftState applied.
-                 * @type {Long|undefined}
+                 * @type {Long}
                  */
-                public applied?: Long;
+                public applied: Long;
 
                 /**
                  * RaftState progress.
-                 * @type {Object.<string,cockroach.server.serverpb.RaftState.Progress$Properties>|undefined}
+                 * @type {Object.<string,cockroach.server.serverpb.RaftState.Progress$Properties>}
                  */
-                public progress?: { [k: string]: cockroach.server.serverpb.RaftState.Progress$Properties };
+                public progress: { [k: string]: cockroach.server.serverpb.RaftState.Progress$Properties };
 
                 /**
                  * Creates a new RaftState instance using the specified properties.
@@ -5010,16 +4745,6 @@ export namespace cockroach {
 
             namespace RaftState {
 
-                /**
-                 * Properties of a Progress.
-                 * @typedef cockroach.server.serverpb.RaftState.Progress$Properties
-                 * @type {Object}
-                 * @property {Long} [match] Progress match.
-                 * @property {Long} [next] Progress next.
-                 * @property {string} [state] Progress state.
-                 * @property {boolean} [paused] Progress paused.
-                 * @property {Long} [pending_snapshot] Progress pending_snapshot.
-                 */
                 type Progress$Properties = {
                     match?: Long;
                     next?: Long;
@@ -5046,33 +4771,33 @@ export namespace cockroach {
 
                     /**
                      * Progress match.
-                     * @type {Long|undefined}
+                     * @type {Long}
                      */
-                    public match?: Long;
+                    public match: Long;
 
                     /**
                      * Progress next.
-                     * @type {Long|undefined}
+                     * @type {Long}
                      */
-                    public next?: Long;
+                    public next: Long;
 
                     /**
                      * Progress state.
-                     * @type {string|undefined}
+                     * @type {string}
                      */
-                    public state?: string;
+                    public state: string;
 
                     /**
                      * Progress paused.
-                     * @type {boolean|undefined}
+                     * @type {boolean}
                      */
-                    public paused?: boolean;
+                    public paused: boolean;
 
                     /**
                      * Progress pending_snapshot.
-                     * @type {Long|undefined}
+                     * @type {Long}
                      */
-                    public pending_snapshot?: Long;
+                    public pending_snapshot: Long;
 
                     /**
                      * Creates a new Progress instance using the specified properties.
@@ -5162,17 +4887,6 @@ export namespace cockroach {
                 }
             }
 
-            /**
-             * Properties of a RangeInfo.
-             * @typedef cockroach.server.serverpb.RangeInfo$Properties
-             * @type {Object}
-             * @property {cockroach.server.serverpb.PrettySpan$Properties} [span] RangeInfo span.
-             * @property {cockroach.server.serverpb.RaftState$Properties} [raft_state] RangeInfo raft_state.
-             * @property {cockroach.storage.storagebase.RangeInfo$Properties} [state] RangeInfo state.
-             * @property {number} [source_node_id] RangeInfo source_node_id.
-             * @property {number} [source_store_id] RangeInfo source_store_id.
-             * @property {string} [error_message] RangeInfo error_message.
-             */
             type RangeInfo$Properties = {
                 span?: cockroach.server.serverpb.PrettySpan$Properties;
                 raft_state?: cockroach.server.serverpb.RaftState$Properties;
@@ -5200,39 +4914,39 @@ export namespace cockroach {
 
                 /**
                  * RangeInfo span.
-                 * @type {cockroach.server.serverpb.PrettySpan$Properties|undefined}
+                 * @type {(cockroach.server.serverpb.PrettySpan$Properties|null)}
                  */
-                public span?: cockroach.server.serverpb.PrettySpan$Properties;
+                public span: (cockroach.server.serverpb.PrettySpan$Properties|null);
 
                 /**
                  * RangeInfo raft_state.
-                 * @type {cockroach.server.serverpb.RaftState$Properties|undefined}
+                 * @type {(cockroach.server.serverpb.RaftState$Properties|null)}
                  */
-                public raft_state?: cockroach.server.serverpb.RaftState$Properties;
+                public raft_state: (cockroach.server.serverpb.RaftState$Properties|null);
 
                 /**
                  * RangeInfo state.
-                 * @type {cockroach.storage.storagebase.RangeInfo$Properties|undefined}
+                 * @type {(cockroach.storage.storagebase.RangeInfo$Properties|null)}
                  */
-                public state?: cockroach.storage.storagebase.RangeInfo$Properties;
+                public state: (cockroach.storage.storagebase.RangeInfo$Properties|null);
 
                 /**
                  * RangeInfo source_node_id.
-                 * @type {number|undefined}
+                 * @type {number}
                  */
-                public source_node_id?: number;
+                public source_node_id: number;
 
                 /**
                  * RangeInfo source_store_id.
-                 * @type {number|undefined}
+                 * @type {number}
                  */
-                public source_store_id?: number;
+                public source_store_id: number;
 
                 /**
                  * RangeInfo error_message.
-                 * @type {string|undefined}
+                 * @type {string}
                  */
-                public error_message?: string;
+                public error_message: string;
 
                 /**
                  * Creates a new RangeInfo instance using the specified properties.
@@ -5321,13 +5035,6 @@ export namespace cockroach {
                 public toJSON(): { [k: string]: any };
             }
 
-            /**
-             * Properties of a RangesRequest.
-             * @typedef cockroach.server.serverpb.RangesRequest$Properties
-             * @type {Object}
-             * @property {string} [node_id] RangesRequest node_id.
-             * @property {Array.<Long>} [range_ids] RangesRequest range_ids.
-             */
             type RangesRequest$Properties = {
                 node_id?: string;
                 range_ids?: Long[];
@@ -5351,15 +5058,15 @@ export namespace cockroach {
 
                 /**
                  * RangesRequest node_id.
-                 * @type {string|undefined}
+                 * @type {string}
                  */
-                public node_id?: string;
+                public node_id: string;
 
                 /**
                  * RangesRequest range_ids.
-                 * @type {Array.<Long>|undefined}
+                 * @type {Array.<Long>}
                  */
-                public range_ids?: Long[];
+                public range_ids: Long[];
 
                 /**
                  * Creates a new RangesRequest instance using the specified properties.
@@ -5448,12 +5155,6 @@ export namespace cockroach {
                 public toJSON(): { [k: string]: any };
             }
 
-            /**
-             * Properties of a RangesResponse.
-             * @typedef cockroach.server.serverpb.RangesResponse$Properties
-             * @type {Object}
-             * @property {Array.<cockroach.server.serverpb.RangeInfo$Properties>} [ranges] RangesResponse ranges.
-             */
             type RangesResponse$Properties = {
                 ranges?: cockroach.server.serverpb.RangeInfo$Properties[];
             };
@@ -5476,9 +5177,9 @@ export namespace cockroach {
 
                 /**
                  * RangesResponse ranges.
-                 * @type {Array.<cockroach.server.serverpb.RangeInfo$Properties>|undefined}
+                 * @type {Array.<cockroach.server.serverpb.RangeInfo$Properties>}
                  */
-                public ranges?: cockroach.server.serverpb.RangeInfo$Properties[];
+                public ranges: cockroach.server.serverpb.RangeInfo$Properties[];
 
                 /**
                  * Creates a new RangesResponse instance using the specified properties.
@@ -5567,12 +5268,6 @@ export namespace cockroach {
                 public toJSON(): { [k: string]: any };
             }
 
-            /**
-             * Properties of a GossipRequest.
-             * @typedef cockroach.server.serverpb.GossipRequest$Properties
-             * @type {Object}
-             * @property {string} [node_id] GossipRequest node_id.
-             */
             type GossipRequest$Properties = {
                 node_id?: string;
             };
@@ -5595,9 +5290,9 @@ export namespace cockroach {
 
                 /**
                  * GossipRequest node_id.
-                 * @type {string|undefined}
+                 * @type {string}
                  */
-                public node_id?: string;
+                public node_id: string;
 
                 /**
                  * Creates a new GossipRequest instance using the specified properties.
@@ -5686,12 +5381,6 @@ export namespace cockroach {
                 public toJSON(): { [k: string]: any };
             }
 
-            /**
-             * Properties of a JSONResponse.
-             * @typedef cockroach.server.serverpb.JSONResponse$Properties
-             * @type {Object}
-             * @property {Uint8Array} [data] JSONResponse data.
-             */
             type JSONResponse$Properties = {
                 data?: Uint8Array;
             };
@@ -5714,9 +5403,9 @@ export namespace cockroach {
 
                 /**
                  * JSONResponse data.
-                 * @type {Uint8Array|undefined}
+                 * @type {Uint8Array}
                  */
-                public data?: Uint8Array;
+                public data: Uint8Array;
 
                 /**
                  * Creates a new JSONResponse instance using the specified properties.
@@ -5805,17 +5494,6 @@ export namespace cockroach {
                 public toJSON(): { [k: string]: any };
             }
 
-            /**
-             * Properties of a LogsRequest.
-             * @typedef cockroach.server.serverpb.LogsRequest$Properties
-             * @type {Object}
-             * @property {string} [node_id] LogsRequest node_id.
-             * @property {string} [level] LogsRequest level.
-             * @property {string} [start_time] LogsRequest start_time.
-             * @property {string} [end_time] LogsRequest end_time.
-             * @property {string} [max] LogsRequest max.
-             * @property {string} [pattern] LogsRequest pattern.
-             */
             type LogsRequest$Properties = {
                 node_id?: string;
                 level?: string;
@@ -5843,39 +5521,39 @@ export namespace cockroach {
 
                 /**
                  * LogsRequest node_id.
-                 * @type {string|undefined}
+                 * @type {string}
                  */
-                public node_id?: string;
+                public node_id: string;
 
                 /**
                  * LogsRequest level.
-                 * @type {string|undefined}
+                 * @type {string}
                  */
-                public level?: string;
+                public level: string;
 
                 /**
                  * LogsRequest start_time.
-                 * @type {string|undefined}
+                 * @type {string}
                  */
-                public start_time?: string;
+                public start_time: string;
 
                 /**
                  * LogsRequest end_time.
-                 * @type {string|undefined}
+                 * @type {string}
                  */
-                public end_time?: string;
+                public end_time: string;
 
                 /**
                  * LogsRequest max.
-                 * @type {string|undefined}
+                 * @type {string}
                  */
-                public max?: string;
+                public max: string;
 
                 /**
                  * LogsRequest pattern.
-                 * @type {string|undefined}
+                 * @type {string}
                  */
-                public pattern?: string;
+                public pattern: string;
 
                 /**
                  * Creates a new LogsRequest instance using the specified properties.
@@ -5964,12 +5642,6 @@ export namespace cockroach {
                 public toJSON(): { [k: string]: any };
             }
 
-            /**
-             * Properties of a LogEntriesResponse.
-             * @typedef cockroach.server.serverpb.LogEntriesResponse$Properties
-             * @type {Object}
-             * @property {Array.<cockroach.util.log.Entry$Properties>} [entries] LogEntriesResponse entries.
-             */
             type LogEntriesResponse$Properties = {
                 entries?: cockroach.util.log.Entry$Properties[];
             };
@@ -5992,9 +5664,9 @@ export namespace cockroach {
 
                 /**
                  * LogEntriesResponse entries.
-                 * @type {Array.<cockroach.util.log.Entry$Properties>|undefined}
+                 * @type {Array.<cockroach.util.log.Entry$Properties>}
                  */
-                public entries?: cockroach.util.log.Entry$Properties[];
+                public entries: cockroach.util.log.Entry$Properties[];
 
                 /**
                  * Creates a new LogEntriesResponse instance using the specified properties.
@@ -6083,12 +5755,6 @@ export namespace cockroach {
                 public toJSON(): { [k: string]: any };
             }
 
-            /**
-             * Properties of a LogFilesListRequest.
-             * @typedef cockroach.server.serverpb.LogFilesListRequest$Properties
-             * @type {Object}
-             * @property {string} [node_id] LogFilesListRequest node_id.
-             */
             type LogFilesListRequest$Properties = {
                 node_id?: string;
             };
@@ -6111,9 +5777,9 @@ export namespace cockroach {
 
                 /**
                  * LogFilesListRequest node_id.
-                 * @type {string|undefined}
+                 * @type {string}
                  */
-                public node_id?: string;
+                public node_id: string;
 
                 /**
                  * Creates a new LogFilesListRequest instance using the specified properties.
@@ -6202,12 +5868,6 @@ export namespace cockroach {
                 public toJSON(): { [k: string]: any };
             }
 
-            /**
-             * Properties of a LogFilesListResponse.
-             * @typedef cockroach.server.serverpb.LogFilesListResponse$Properties
-             * @type {Object}
-             * @property {Array.<cockroach.util.log.FileInfo$Properties>} [files] LogFilesListResponse files.
-             */
             type LogFilesListResponse$Properties = {
                 files?: cockroach.util.log.FileInfo$Properties[];
             };
@@ -6230,9 +5890,9 @@ export namespace cockroach {
 
                 /**
                  * LogFilesListResponse files.
-                 * @type {Array.<cockroach.util.log.FileInfo$Properties>|undefined}
+                 * @type {Array.<cockroach.util.log.FileInfo$Properties>}
                  */
-                public files?: cockroach.util.log.FileInfo$Properties[];
+                public files: cockroach.util.log.FileInfo$Properties[];
 
                 /**
                  * Creates a new LogFilesListResponse instance using the specified properties.
@@ -6321,13 +5981,6 @@ export namespace cockroach {
                 public toJSON(): { [k: string]: any };
             }
 
-            /**
-             * Properties of a LogFileRequest.
-             * @typedef cockroach.server.serverpb.LogFileRequest$Properties
-             * @type {Object}
-             * @property {string} [node_id] LogFileRequest node_id.
-             * @property {string} [file] LogFileRequest file.
-             */
             type LogFileRequest$Properties = {
                 node_id?: string;
                 file?: string;
@@ -6351,15 +6004,15 @@ export namespace cockroach {
 
                 /**
                  * LogFileRequest node_id.
-                 * @type {string|undefined}
+                 * @type {string}
                  */
-                public node_id?: string;
+                public node_id: string;
 
                 /**
                  * LogFileRequest file.
-                 * @type {string|undefined}
+                 * @type {string}
                  */
-                public file?: string;
+                public file: string;
 
                 /**
                  * Creates a new LogFileRequest instance using the specified properties.
@@ -6448,12 +6101,6 @@ export namespace cockroach {
                 public toJSON(): { [k: string]: any };
             }
 
-            /**
-             * Properties of a StacksRequest.
-             * @typedef cockroach.server.serverpb.StacksRequest$Properties
-             * @type {Object}
-             * @property {string} [node_id] StacksRequest node_id.
-             */
             type StacksRequest$Properties = {
                 node_id?: string;
             };
@@ -6476,9 +6123,9 @@ export namespace cockroach {
 
                 /**
                  * StacksRequest node_id.
-                 * @type {string|undefined}
+                 * @type {string}
                  */
-                public node_id?: string;
+                public node_id: string;
 
                 /**
                  * Creates a new StacksRequest instance using the specified properties.
@@ -6567,12 +6214,6 @@ export namespace cockroach {
                 public toJSON(): { [k: string]: any };
             }
 
-            /**
-             * Properties of a MetricsRequest.
-             * @typedef cockroach.server.serverpb.MetricsRequest$Properties
-             * @type {Object}
-             * @property {string} [node_id] MetricsRequest node_id.
-             */
             type MetricsRequest$Properties = {
                 node_id?: string;
             };
@@ -6595,9 +6236,9 @@ export namespace cockroach {
 
                 /**
                  * MetricsRequest node_id.
-                 * @type {string|undefined}
+                 * @type {string}
                  */
-                public node_id?: string;
+                public node_id: string;
 
                 /**
                  * Creates a new MetricsRequest instance using the specified properties.
@@ -6686,13 +6327,6 @@ export namespace cockroach {
                 public toJSON(): { [k: string]: any };
             }
 
-            /**
-             * Properties of a RaftRangeNode.
-             * @typedef cockroach.server.serverpb.RaftRangeNode$Properties
-             * @type {Object}
-             * @property {number} [node_id] RaftRangeNode node_id.
-             * @property {cockroach.server.serverpb.RangeInfo$Properties} [range] RaftRangeNode range.
-             */
             type RaftRangeNode$Properties = {
                 node_id?: number;
                 range?: cockroach.server.serverpb.RangeInfo$Properties;
@@ -6716,15 +6350,15 @@ export namespace cockroach {
 
                 /**
                  * RaftRangeNode node_id.
-                 * @type {number|undefined}
+                 * @type {number}
                  */
-                public node_id?: number;
+                public node_id: number;
 
                 /**
                  * RaftRangeNode range.
-                 * @type {cockroach.server.serverpb.RangeInfo$Properties|undefined}
+                 * @type {(cockroach.server.serverpb.RangeInfo$Properties|null)}
                  */
-                public range?: cockroach.server.serverpb.RangeInfo$Properties;
+                public range: (cockroach.server.serverpb.RangeInfo$Properties|null);
 
                 /**
                  * Creates a new RaftRangeNode instance using the specified properties.
@@ -6813,12 +6447,6 @@ export namespace cockroach {
                 public toJSON(): { [k: string]: any };
             }
 
-            /**
-             * Properties of a RaftRangeError.
-             * @typedef cockroach.server.serverpb.RaftRangeError$Properties
-             * @type {Object}
-             * @property {string} [message] RaftRangeError message.
-             */
             type RaftRangeError$Properties = {
                 message?: string;
             };
@@ -6841,9 +6469,9 @@ export namespace cockroach {
 
                 /**
                  * RaftRangeError message.
-                 * @type {string|undefined}
+                 * @type {string}
                  */
-                public message?: string;
+                public message: string;
 
                 /**
                  * Creates a new RaftRangeError instance using the specified properties.
@@ -6932,14 +6560,6 @@ export namespace cockroach {
                 public toJSON(): { [k: string]: any };
             }
 
-            /**
-             * Properties of a RaftRangeStatus.
-             * @typedef cockroach.server.serverpb.RaftRangeStatus$Properties
-             * @type {Object}
-             * @property {Long} [range_id] RaftRangeStatus range_id.
-             * @property {Array.<cockroach.server.serverpb.RaftRangeError$Properties>} [errors] RaftRangeStatus errors.
-             * @property {Array.<cockroach.server.serverpb.RaftRangeNode$Properties>} [nodes] RaftRangeStatus nodes.
-             */
             type RaftRangeStatus$Properties = {
                 range_id?: Long;
                 errors?: cockroach.server.serverpb.RaftRangeError$Properties[];
@@ -6964,21 +6584,21 @@ export namespace cockroach {
 
                 /**
                  * RaftRangeStatus range_id.
-                 * @type {Long|undefined}
+                 * @type {Long}
                  */
-                public range_id?: Long;
+                public range_id: Long;
 
                 /**
                  * RaftRangeStatus errors.
-                 * @type {Array.<cockroach.server.serverpb.RaftRangeError$Properties>|undefined}
+                 * @type {Array.<cockroach.server.serverpb.RaftRangeError$Properties>}
                  */
-                public errors?: cockroach.server.serverpb.RaftRangeError$Properties[];
+                public errors: cockroach.server.serverpb.RaftRangeError$Properties[];
 
                 /**
                  * RaftRangeStatus nodes.
-                 * @type {Array.<cockroach.server.serverpb.RaftRangeNode$Properties>|undefined}
+                 * @type {Array.<cockroach.server.serverpb.RaftRangeNode$Properties>}
                  */
-                public nodes?: cockroach.server.serverpb.RaftRangeNode$Properties[];
+                public nodes: cockroach.server.serverpb.RaftRangeNode$Properties[];
 
                 /**
                  * Creates a new RaftRangeStatus instance using the specified properties.
@@ -7067,12 +6687,6 @@ export namespace cockroach {
                 public toJSON(): { [k: string]: any };
             }
 
-            /**
-             * Properties of a RaftDebugRequest.
-             * @typedef cockroach.server.serverpb.RaftDebugRequest$Properties
-             * @type {Object}
-             * @property {Array.<Long>} [range_ids] RaftDebugRequest range_ids.
-             */
             type RaftDebugRequest$Properties = {
                 range_ids?: Long[];
             };
@@ -7095,9 +6709,9 @@ export namespace cockroach {
 
                 /**
                  * RaftDebugRequest range_ids.
-                 * @type {Array.<Long>|undefined}
+                 * @type {Array.<Long>}
                  */
-                public range_ids?: Long[];
+                public range_ids: Long[];
 
                 /**
                  * Creates a new RaftDebugRequest instance using the specified properties.
@@ -7186,13 +6800,6 @@ export namespace cockroach {
                 public toJSON(): { [k: string]: any };
             }
 
-            /**
-             * Properties of a RaftDebugResponse.
-             * @typedef cockroach.server.serverpb.RaftDebugResponse$Properties
-             * @type {Object}
-             * @property {Object.<string,cockroach.server.serverpb.RaftRangeStatus$Properties>} [ranges] RaftDebugResponse ranges.
-             * @property {Array.<cockroach.server.serverpb.RaftRangeError$Properties>} [errors] RaftDebugResponse errors.
-             */
             type RaftDebugResponse$Properties = {
                 ranges?: { [k: string]: cockroach.server.serverpb.RaftRangeStatus$Properties };
                 errors?: cockroach.server.serverpb.RaftRangeError$Properties[];
@@ -7216,15 +6823,15 @@ export namespace cockroach {
 
                 /**
                  * RaftDebugResponse ranges.
-                 * @type {Object.<string,cockroach.server.serverpb.RaftRangeStatus$Properties>|undefined}
+                 * @type {Object.<string,cockroach.server.serverpb.RaftRangeStatus$Properties>}
                  */
-                public ranges?: { [k: string]: cockroach.server.serverpb.RaftRangeStatus$Properties };
+                public ranges: { [k: string]: cockroach.server.serverpb.RaftRangeStatus$Properties };
 
                 /**
                  * RaftDebugResponse errors.
-                 * @type {Array.<cockroach.server.serverpb.RaftRangeError$Properties>|undefined}
+                 * @type {Array.<cockroach.server.serverpb.RaftRangeError$Properties>}
                  */
-                public errors?: cockroach.server.serverpb.RaftRangeError$Properties[];
+                public errors: cockroach.server.serverpb.RaftRangeError$Properties[];
 
                 /**
                  * Creates a new RaftDebugResponse instance using the specified properties.
@@ -7313,14 +6920,6 @@ export namespace cockroach {
                 public toJSON(): { [k: string]: any };
             }
 
-            /**
-             * Properties of a SpanStatsRequest.
-             * @typedef cockroach.server.serverpb.SpanStatsRequest$Properties
-             * @type {Object}
-             * @property {string} [node_id] SpanStatsRequest node_id.
-             * @property {Uint8Array} [start_key] SpanStatsRequest start_key.
-             * @property {Uint8Array} [end_key] SpanStatsRequest end_key.
-             */
             type SpanStatsRequest$Properties = {
                 node_id?: string;
                 start_key?: Uint8Array;
@@ -7345,21 +6944,21 @@ export namespace cockroach {
 
                 /**
                  * SpanStatsRequest node_id.
-                 * @type {string|undefined}
+                 * @type {string}
                  */
-                public node_id?: string;
+                public node_id: string;
 
                 /**
                  * SpanStatsRequest start_key.
-                 * @type {Uint8Array|undefined}
+                 * @type {Uint8Array}
                  */
-                public start_key?: Uint8Array;
+                public start_key: Uint8Array;
 
                 /**
                  * SpanStatsRequest end_key.
-                 * @type {Uint8Array|undefined}
+                 * @type {Uint8Array}
                  */
-                public end_key?: Uint8Array;
+                public end_key: Uint8Array;
 
                 /**
                  * Creates a new SpanStatsRequest instance using the specified properties.
@@ -7448,13 +7047,6 @@ export namespace cockroach {
                 public toJSON(): { [k: string]: any };
             }
 
-            /**
-             * Properties of a SpanStatsResponse.
-             * @typedef cockroach.server.serverpb.SpanStatsResponse$Properties
-             * @type {Object}
-             * @property {number} [range_count] SpanStatsResponse range_count.
-             * @property {cockroach.storage.engine.enginepb.MVCCStats$Properties} [total_stats] SpanStatsResponse total_stats.
-             */
             type SpanStatsResponse$Properties = {
                 range_count?: number;
                 total_stats?: cockroach.storage.engine.enginepb.MVCCStats$Properties;
@@ -7478,15 +7070,15 @@ export namespace cockroach {
 
                 /**
                  * SpanStatsResponse range_count.
-                 * @type {number|undefined}
+                 * @type {number}
                  */
-                public range_count?: number;
+                public range_count: number;
 
                 /**
                  * SpanStatsResponse total_stats.
-                 * @type {cockroach.storage.engine.enginepb.MVCCStats$Properties|undefined}
+                 * @type {(cockroach.storage.engine.enginepb.MVCCStats$Properties|null)}
                  */
-                public total_stats?: cockroach.storage.engine.enginepb.MVCCStats$Properties;
+                public total_stats: (cockroach.storage.engine.enginepb.MVCCStats$Properties|null);
 
                 /**
                  * Creates a new SpanStatsResponse instance using the specified properties.
@@ -7703,13 +7295,6 @@ export namespace cockroach {
                 public logs(request: (cockroach.server.serverpb.LogsRequest|{ [k: string]: any }), callback: Status_logs_Callback): void;
             }
 
-            /**
-             * Properties of a PrettySpan.
-             * @typedef cockroach.server.serverpb.PrettySpan$Properties
-             * @type {Object}
-             * @property {string} [start_key] PrettySpan start_key.
-             * @property {string} [end_key] PrettySpan end_key.
-             */
             type PrettySpan$Properties = {
                 start_key?: string;
                 end_key?: string;
@@ -7733,15 +7318,15 @@ export namespace cockroach {
 
                 /**
                  * PrettySpan start_key.
-                 * @type {string|undefined}
+                 * @type {string}
                  */
-                public start_key?: string;
+                public start_key: string;
 
                 /**
                  * PrettySpan end_key.
-                 * @type {string|undefined}
+                 * @type {string}
                  */
-                public end_key?: string;
+                public end_key: string;
 
                 /**
                  * Creates a new PrettySpan instance using the specified properties.
@@ -7838,13 +7423,6 @@ export namespace cockroach {
          */
         namespace status {
 
-            /**
-             * Properties of a StoreStatus.
-             * @typedef cockroach.server.status.StoreStatus$Properties
-             * @type {Object}
-             * @property {cockroach.roachpb.StoreDescriptor$Properties} [desc] StoreStatus desc.
-             * @property {Object.<string,number>} [metrics] StoreStatus metrics.
-             */
             type StoreStatus$Properties = {
                 desc?: cockroach.roachpb.StoreDescriptor$Properties;
                 metrics?: { [k: string]: number };
@@ -7868,15 +7446,15 @@ export namespace cockroach {
 
                 /**
                  * StoreStatus desc.
-                 * @type {cockroach.roachpb.StoreDescriptor$Properties|undefined}
+                 * @type {(cockroach.roachpb.StoreDescriptor$Properties|null)}
                  */
-                public desc?: cockroach.roachpb.StoreDescriptor$Properties;
+                public desc: (cockroach.roachpb.StoreDescriptor$Properties|null);
 
                 /**
                  * StoreStatus metrics.
-                 * @type {Object.<string,number>|undefined}
+                 * @type {Object.<string,number>}
                  */
-                public metrics?: { [k: string]: number };
+                public metrics: { [k: string]: number };
 
                 /**
                  * Creates a new StoreStatus instance using the specified properties.
@@ -7965,19 +7543,6 @@ export namespace cockroach {
                 public toJSON(): { [k: string]: any };
             }
 
-            /**
-             * Properties of a NodeStatus.
-             * @typedef cockroach.server.status.NodeStatus$Properties
-             * @type {Object}
-             * @property {cockroach.roachpb.NodeDescriptor$Properties} [desc] NodeStatus desc.
-             * @property {cockroach.build.Info$Properties} [build_info] NodeStatus build_info.
-             * @property {Long} [started_at] NodeStatus started_at.
-             * @property {Long} [updated_at] NodeStatus updated_at.
-             * @property {Object.<string,number>} [metrics] NodeStatus metrics.
-             * @property {Array.<cockroach.server.status.StoreStatus$Properties>} [store_statuses] NodeStatus store_statuses.
-             * @property {Array.<string>} [args] NodeStatus args.
-             * @property {Array.<string>} [env] NodeStatus env.
-             */
             type NodeStatus$Properties = {
                 desc?: cockroach.roachpb.NodeDescriptor$Properties;
                 build_info?: cockroach.build.Info$Properties;
@@ -8007,51 +7572,51 @@ export namespace cockroach {
 
                 /**
                  * NodeStatus desc.
-                 * @type {cockroach.roachpb.NodeDescriptor$Properties|undefined}
+                 * @type {(cockroach.roachpb.NodeDescriptor$Properties|null)}
                  */
-                public desc?: cockroach.roachpb.NodeDescriptor$Properties;
+                public desc: (cockroach.roachpb.NodeDescriptor$Properties|null);
 
                 /**
                  * NodeStatus build_info.
-                 * @type {cockroach.build.Info$Properties|undefined}
+                 * @type {(cockroach.build.Info$Properties|null)}
                  */
-                public build_info?: cockroach.build.Info$Properties;
+                public build_info: (cockroach.build.Info$Properties|null);
 
                 /**
                  * NodeStatus started_at.
-                 * @type {Long|undefined}
+                 * @type {Long}
                  */
-                public started_at?: Long;
+                public started_at: Long;
 
                 /**
                  * NodeStatus updated_at.
-                 * @type {Long|undefined}
+                 * @type {Long}
                  */
-                public updated_at?: Long;
+                public updated_at: Long;
 
                 /**
                  * NodeStatus metrics.
-                 * @type {Object.<string,number>|undefined}
+                 * @type {Object.<string,number>}
                  */
-                public metrics?: { [k: string]: number };
+                public metrics: { [k: string]: number };
 
                 /**
                  * NodeStatus store_statuses.
-                 * @type {Array.<cockroach.server.status.StoreStatus$Properties>|undefined}
+                 * @type {Array.<cockroach.server.status.StoreStatus$Properties>}
                  */
-                public store_statuses?: cockroach.server.status.StoreStatus$Properties[];
+                public store_statuses: cockroach.server.status.StoreStatus$Properties[];
 
                 /**
                  * NodeStatus args.
-                 * @type {Array.<string>|undefined}
+                 * @type {Array.<string>}
                  */
-                public args?: string[];
+                public args: string[];
 
                 /**
                  * NodeStatus env.
-                 * @type {Array.<string>|undefined}
+                 * @type {Array.<string>}
                  */
-                public env?: string[];
+                public env: string[];
 
                 /**
                  * Creates a new NodeStatus instance using the specified properties.
@@ -8149,12 +7714,6 @@ export namespace cockroach {
      */
     namespace config {
 
-        /**
-         * Properties of a GCPolicy.
-         * @typedef cockroach.config.GCPolicy$Properties
-         * @type {Object}
-         * @property {number} [ttl_seconds] GCPolicy ttl_seconds.
-         */
         type GCPolicy$Properties = {
             ttl_seconds?: number;
         };
@@ -8177,9 +7736,9 @@ export namespace cockroach {
 
             /**
              * GCPolicy ttl_seconds.
-             * @type {number|undefined}
+             * @type {number}
              */
-            public ttl_seconds?: number;
+            public ttl_seconds: number;
 
             /**
              * Creates a new GCPolicy instance using the specified properties.
@@ -8268,14 +7827,6 @@ export namespace cockroach {
             public toJSON(): { [k: string]: any };
         }
 
-        /**
-         * Properties of a Constraint.
-         * @typedef cockroach.config.Constraint$Properties
-         * @type {Object}
-         * @property {cockroach.config.Constraint.Type} [type] Constraint type.
-         * @property {string} [key] Constraint key.
-         * @property {string} [value] Constraint value.
-         */
         type Constraint$Properties = {
             type?: cockroach.config.Constraint.Type;
             key?: string;
@@ -8300,21 +7851,21 @@ export namespace cockroach {
 
             /**
              * Constraint type.
-             * @type {cockroach.config.Constraint.Type|undefined}
+             * @type {cockroach.config.Constraint.Type}
              */
-            public type?: cockroach.config.Constraint.Type;
+            public type: cockroach.config.Constraint.Type;
 
             /**
              * Constraint key.
-             * @type {string|undefined}
+             * @type {string}
              */
-            public key?: string;
+            public key: string;
 
             /**
              * Constraint value.
-             * @type {string|undefined}
+             * @type {string}
              */
-            public value?: string;
+            public value: string;
 
             /**
              * Creates a new Constraint instance using the specified properties.
@@ -8421,12 +7972,6 @@ export namespace cockroach {
             }
         }
 
-        /**
-         * Properties of a Constraints.
-         * @typedef cockroach.config.Constraints$Properties
-         * @type {Object}
-         * @property {Array.<cockroach.config.Constraint$Properties>} [constraints] Constraints constraints.
-         */
         type Constraints$Properties = {
             constraints?: cockroach.config.Constraint$Properties[];
         };
@@ -8449,9 +7994,9 @@ export namespace cockroach {
 
             /**
              * Constraints constraints.
-             * @type {Array.<cockroach.config.Constraint$Properties>|undefined}
+             * @type {Array.<cockroach.config.Constraint$Properties>}
              */
-            public constraints?: cockroach.config.Constraint$Properties[];
+            public constraints: cockroach.config.Constraint$Properties[];
 
             /**
              * Creates a new Constraints instance using the specified properties.
@@ -8540,17 +8085,6 @@ export namespace cockroach {
             public toJSON(): { [k: string]: any };
         }
 
-        /**
-         * Properties of a ZoneConfig.
-         * @typedef cockroach.config.ZoneConfig$Properties
-         * @type {Object}
-         * @property {Array.<cockroach.roachpb.Attributes$Properties>} [replica_attrs] ZoneConfig replica_attrs.
-         * @property {Long} [range_min_bytes] ZoneConfig range_min_bytes.
-         * @property {Long} [range_max_bytes] ZoneConfig range_max_bytes.
-         * @property {cockroach.config.GCPolicy$Properties} [gc] ZoneConfig gc.
-         * @property {number} [num_replicas] ZoneConfig num_replicas.
-         * @property {cockroach.config.Constraints$Properties} [constraints] ZoneConfig constraints.
-         */
         type ZoneConfig$Properties = {
             replica_attrs?: cockroach.roachpb.Attributes$Properties[];
             range_min_bytes?: Long;
@@ -8578,39 +8112,39 @@ export namespace cockroach {
 
             /**
              * ZoneConfig replica_attrs.
-             * @type {Array.<cockroach.roachpb.Attributes$Properties>|undefined}
+             * @type {Array.<cockroach.roachpb.Attributes$Properties>}
              */
-            public replica_attrs?: cockroach.roachpb.Attributes$Properties[];
+            public replica_attrs: cockroach.roachpb.Attributes$Properties[];
 
             /**
              * ZoneConfig range_min_bytes.
-             * @type {Long|undefined}
+             * @type {Long}
              */
-            public range_min_bytes?: Long;
+            public range_min_bytes: Long;
 
             /**
              * ZoneConfig range_max_bytes.
-             * @type {Long|undefined}
+             * @type {Long}
              */
-            public range_max_bytes?: Long;
+            public range_max_bytes: Long;
 
             /**
              * ZoneConfig gc.
-             * @type {cockroach.config.GCPolicy$Properties|undefined}
+             * @type {(cockroach.config.GCPolicy$Properties|null)}
              */
-            public gc?: cockroach.config.GCPolicy$Properties;
+            public gc: (cockroach.config.GCPolicy$Properties|null);
 
             /**
              * ZoneConfig num_replicas.
-             * @type {number|undefined}
+             * @type {number}
              */
-            public num_replicas?: number;
+            public num_replicas: number;
 
             /**
              * ZoneConfig constraints.
-             * @type {cockroach.config.Constraints$Properties|undefined}
+             * @type {(cockroach.config.Constraints$Properties|null)}
              */
-            public constraints?: cockroach.config.Constraints$Properties;
+            public constraints: (cockroach.config.Constraints$Properties|null);
 
             /**
              * Creates a new ZoneConfig instance using the specified properties.
@@ -8699,12 +8233,6 @@ export namespace cockroach {
             public toJSON(): { [k: string]: any };
         }
 
-        /**
-         * Properties of a SystemConfig.
-         * @typedef cockroach.config.SystemConfig$Properties
-         * @type {Object}
-         * @property {Array.<cockroach.roachpb.KeyValue$Properties>} [values] SystemConfig values.
-         */
         type SystemConfig$Properties = {
             values?: cockroach.roachpb.KeyValue$Properties[];
         };
@@ -8727,9 +8255,9 @@ export namespace cockroach {
 
             /**
              * SystemConfig values.
-             * @type {Array.<cockroach.roachpb.KeyValue$Properties>|undefined}
+             * @type {Array.<cockroach.roachpb.KeyValue$Properties>}
              */
-            public values?: cockroach.roachpb.KeyValue$Properties[];
+            public values: cockroach.roachpb.KeyValue$Properties[];
 
             /**
              * Creates a new SystemConfig instance using the specified properties.
@@ -8826,13 +8354,6 @@ export namespace cockroach {
      */
     namespace roachpb {
 
-        /**
-         * Properties of a Span.
-         * @typedef cockroach.roachpb.Span$Properties
-         * @type {Object}
-         * @property {Uint8Array} [key] Span key.
-         * @property {Uint8Array} [end_key] Span end_key.
-         */
         type Span$Properties = {
             key?: Uint8Array;
             end_key?: Uint8Array;
@@ -8856,15 +8377,15 @@ export namespace cockroach {
 
             /**
              * Span key.
-             * @type {Uint8Array|undefined}
+             * @type {Uint8Array}
              */
-            public key?: Uint8Array;
+            public key: Uint8Array;
 
             /**
              * Span end_key.
-             * @type {Uint8Array|undefined}
+             * @type {Uint8Array}
              */
-            public end_key?: Uint8Array;
+            public end_key: Uint8Array;
 
             /**
              * Creates a new Span instance using the specified properties.
@@ -8986,13 +8507,6 @@ export namespace cockroach {
             TIMESERIES = 100
         }
 
-        /**
-         * Properties of a Value.
-         * @typedef cockroach.roachpb.Value$Properties
-         * @type {Object}
-         * @property {Uint8Array} [raw_bytes] Value raw_bytes.
-         * @property {cockroach.util.hlc.Timestamp$Properties} [timestamp] Value timestamp.
-         */
         type Value$Properties = {
             raw_bytes?: Uint8Array;
             timestamp?: cockroach.util.hlc.Timestamp$Properties;
@@ -9016,15 +8530,15 @@ export namespace cockroach {
 
             /**
              * Value raw_bytes.
-             * @type {Uint8Array|undefined}
+             * @type {Uint8Array}
              */
-            public raw_bytes?: Uint8Array;
+            public raw_bytes: Uint8Array;
 
             /**
              * Value timestamp.
-             * @type {cockroach.util.hlc.Timestamp$Properties|undefined}
+             * @type {(cockroach.util.hlc.Timestamp$Properties|null)}
              */
-            public timestamp?: cockroach.util.hlc.Timestamp$Properties;
+            public timestamp: (cockroach.util.hlc.Timestamp$Properties|null);
 
             /**
              * Creates a new Value instance using the specified properties.
@@ -9113,13 +8627,6 @@ export namespace cockroach {
             public toJSON(): { [k: string]: any };
         }
 
-        /**
-         * Properties of a KeyValue.
-         * @typedef cockroach.roachpb.KeyValue$Properties
-         * @type {Object}
-         * @property {Uint8Array} [key] KeyValue key.
-         * @property {cockroach.roachpb.Value$Properties} [value] KeyValue value.
-         */
         type KeyValue$Properties = {
             key?: Uint8Array;
             value?: cockroach.roachpb.Value$Properties;
@@ -9143,15 +8650,15 @@ export namespace cockroach {
 
             /**
              * KeyValue key.
-             * @type {Uint8Array|undefined}
+             * @type {Uint8Array}
              */
-            public key?: Uint8Array;
+            public key: Uint8Array;
 
             /**
              * KeyValue value.
-             * @type {cockroach.roachpb.Value$Properties|undefined}
+             * @type {(cockroach.roachpb.Value$Properties|null)}
              */
-            public value?: cockroach.roachpb.Value$Properties;
+            public value: (cockroach.roachpb.Value$Properties|null);
 
             /**
              * Creates a new KeyValue instance using the specified properties.
@@ -9240,14 +8747,6 @@ export namespace cockroach {
             public toJSON(): { [k: string]: any };
         }
 
-        /**
-         * Properties of a StoreIdent.
-         * @typedef cockroach.roachpb.StoreIdent$Properties
-         * @type {Object}
-         * @property {Uint8Array} [cluster_id] StoreIdent cluster_id.
-         * @property {number} [node_id] StoreIdent node_id.
-         * @property {number} [store_id] StoreIdent store_id.
-         */
         type StoreIdent$Properties = {
             cluster_id?: Uint8Array;
             node_id?: number;
@@ -9272,21 +8771,21 @@ export namespace cockroach {
 
             /**
              * StoreIdent cluster_id.
-             * @type {Uint8Array|undefined}
+             * @type {Uint8Array}
              */
-            public cluster_id?: Uint8Array;
+            public cluster_id: Uint8Array;
 
             /**
              * StoreIdent node_id.
-             * @type {number|undefined}
+             * @type {number}
              */
-            public node_id?: number;
+            public node_id: number;
 
             /**
              * StoreIdent store_id.
-             * @type {number|undefined}
+             * @type {number}
              */
-            public store_id?: number;
+            public store_id: number;
 
             /**
              * Creates a new StoreIdent instance using the specified properties.
@@ -9375,13 +8874,6 @@ export namespace cockroach {
             public toJSON(): { [k: string]: any };
         }
 
-        /**
-         * Properties of a SplitTrigger.
-         * @typedef cockroach.roachpb.SplitTrigger$Properties
-         * @type {Object}
-         * @property {cockroach.roachpb.RangeDescriptor$Properties} [left_desc] SplitTrigger left_desc.
-         * @property {cockroach.roachpb.RangeDescriptor$Properties} [right_desc] SplitTrigger right_desc.
-         */
         type SplitTrigger$Properties = {
             left_desc?: cockroach.roachpb.RangeDescriptor$Properties;
             right_desc?: cockroach.roachpb.RangeDescriptor$Properties;
@@ -9405,15 +8897,15 @@ export namespace cockroach {
 
             /**
              * SplitTrigger left_desc.
-             * @type {cockroach.roachpb.RangeDescriptor$Properties|undefined}
+             * @type {(cockroach.roachpb.RangeDescriptor$Properties|null)}
              */
-            public left_desc?: cockroach.roachpb.RangeDescriptor$Properties;
+            public left_desc: (cockroach.roachpb.RangeDescriptor$Properties|null);
 
             /**
              * SplitTrigger right_desc.
-             * @type {cockroach.roachpb.RangeDescriptor$Properties|undefined}
+             * @type {(cockroach.roachpb.RangeDescriptor$Properties|null)}
              */
-            public right_desc?: cockroach.roachpb.RangeDescriptor$Properties;
+            public right_desc: (cockroach.roachpb.RangeDescriptor$Properties|null);
 
             /**
              * Creates a new SplitTrigger instance using the specified properties.
@@ -9502,13 +8994,6 @@ export namespace cockroach {
             public toJSON(): { [k: string]: any };
         }
 
-        /**
-         * Properties of a MergeTrigger.
-         * @typedef cockroach.roachpb.MergeTrigger$Properties
-         * @type {Object}
-         * @property {cockroach.roachpb.RangeDescriptor$Properties} [left_desc] MergeTrigger left_desc.
-         * @property {cockroach.roachpb.RangeDescriptor$Properties} [right_desc] MergeTrigger right_desc.
-         */
         type MergeTrigger$Properties = {
             left_desc?: cockroach.roachpb.RangeDescriptor$Properties;
             right_desc?: cockroach.roachpb.RangeDescriptor$Properties;
@@ -9532,15 +9017,15 @@ export namespace cockroach {
 
             /**
              * MergeTrigger left_desc.
-             * @type {cockroach.roachpb.RangeDescriptor$Properties|undefined}
+             * @type {(cockroach.roachpb.RangeDescriptor$Properties|null)}
              */
-            public left_desc?: cockroach.roachpb.RangeDescriptor$Properties;
+            public left_desc: (cockroach.roachpb.RangeDescriptor$Properties|null);
 
             /**
              * MergeTrigger right_desc.
-             * @type {cockroach.roachpb.RangeDescriptor$Properties|undefined}
+             * @type {(cockroach.roachpb.RangeDescriptor$Properties|null)}
              */
-            public right_desc?: cockroach.roachpb.RangeDescriptor$Properties;
+            public right_desc: (cockroach.roachpb.RangeDescriptor$Properties|null);
 
             /**
              * Creates a new MergeTrigger instance using the specified properties.
@@ -9642,15 +9127,6 @@ export namespace cockroach {
             REMOVE_REPLICA = 1
         }
 
-        /**
-         * Properties of a ChangeReplicasTrigger.
-         * @typedef cockroach.roachpb.ChangeReplicasTrigger$Properties
-         * @type {Object}
-         * @property {cockroach.roachpb.ReplicaChangeType} [change_type] ChangeReplicasTrigger change_type.
-         * @property {cockroach.roachpb.ReplicaDescriptor$Properties} [replica] ChangeReplicasTrigger replica.
-         * @property {Array.<cockroach.roachpb.ReplicaDescriptor$Properties>} [updated_replicas] ChangeReplicasTrigger updated_replicas.
-         * @property {number} [next_replica_id] ChangeReplicasTrigger next_replica_id.
-         */
         type ChangeReplicasTrigger$Properties = {
             change_type?: cockroach.roachpb.ReplicaChangeType;
             replica?: cockroach.roachpb.ReplicaDescriptor$Properties;
@@ -9676,27 +9152,27 @@ export namespace cockroach {
 
             /**
              * ChangeReplicasTrigger change_type.
-             * @type {cockroach.roachpb.ReplicaChangeType|undefined}
+             * @type {cockroach.roachpb.ReplicaChangeType}
              */
-            public change_type?: cockroach.roachpb.ReplicaChangeType;
+            public change_type: cockroach.roachpb.ReplicaChangeType;
 
             /**
              * ChangeReplicasTrigger replica.
-             * @type {cockroach.roachpb.ReplicaDescriptor$Properties|undefined}
+             * @type {(cockroach.roachpb.ReplicaDescriptor$Properties|null)}
              */
-            public replica?: cockroach.roachpb.ReplicaDescriptor$Properties;
+            public replica: (cockroach.roachpb.ReplicaDescriptor$Properties|null);
 
             /**
              * ChangeReplicasTrigger updated_replicas.
-             * @type {Array.<cockroach.roachpb.ReplicaDescriptor$Properties>|undefined}
+             * @type {Array.<cockroach.roachpb.ReplicaDescriptor$Properties>}
              */
-            public updated_replicas?: cockroach.roachpb.ReplicaDescriptor$Properties[];
+            public updated_replicas: cockroach.roachpb.ReplicaDescriptor$Properties[];
 
             /**
              * ChangeReplicasTrigger next_replica_id.
-             * @type {number|undefined}
+             * @type {number}
              */
-            public next_replica_id?: number;
+            public next_replica_id: number;
 
             /**
              * Creates a new ChangeReplicasTrigger instance using the specified properties.
@@ -9785,13 +9261,6 @@ export namespace cockroach {
             public toJSON(): { [k: string]: any };
         }
 
-        /**
-         * Properties of a ModifiedSpanTrigger.
-         * @typedef cockroach.roachpb.ModifiedSpanTrigger$Properties
-         * @type {Object}
-         * @property {boolean} [system_config_span] ModifiedSpanTrigger system_config_span.
-         * @property {cockroach.roachpb.Span$Properties} [node_liveness_span] ModifiedSpanTrigger node_liveness_span.
-         */
         type ModifiedSpanTrigger$Properties = {
             system_config_span?: boolean;
             node_liveness_span?: cockroach.roachpb.Span$Properties;
@@ -9815,15 +9284,15 @@ export namespace cockroach {
 
             /**
              * ModifiedSpanTrigger system_config_span.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
-            public system_config_span?: boolean;
+            public system_config_span: boolean;
 
             /**
              * ModifiedSpanTrigger node_liveness_span.
-             * @type {cockroach.roachpb.Span$Properties|undefined}
+             * @type {(cockroach.roachpb.Span$Properties|null)}
              */
-            public node_liveness_span?: cockroach.roachpb.Span$Properties;
+            public node_liveness_span: (cockroach.roachpb.Span$Properties|null);
 
             /**
              * Creates a new ModifiedSpanTrigger instance using the specified properties.
@@ -9912,15 +9381,6 @@ export namespace cockroach {
             public toJSON(): { [k: string]: any };
         }
 
-        /**
-         * Properties of an InternalCommitTrigger.
-         * @typedef cockroach.roachpb.InternalCommitTrigger$Properties
-         * @type {Object}
-         * @property {cockroach.roachpb.SplitTrigger$Properties} [split_trigger] InternalCommitTrigger split_trigger.
-         * @property {cockroach.roachpb.MergeTrigger$Properties} [merge_trigger] InternalCommitTrigger merge_trigger.
-         * @property {cockroach.roachpb.ChangeReplicasTrigger$Properties} [change_replicas_trigger] InternalCommitTrigger change_replicas_trigger.
-         * @property {cockroach.roachpb.ModifiedSpanTrigger$Properties} [modified_span_trigger] InternalCommitTrigger modified_span_trigger.
-         */
         type InternalCommitTrigger$Properties = {
             split_trigger?: cockroach.roachpb.SplitTrigger$Properties;
             merge_trigger?: cockroach.roachpb.MergeTrigger$Properties;
@@ -9946,27 +9406,27 @@ export namespace cockroach {
 
             /**
              * InternalCommitTrigger split_trigger.
-             * @type {cockroach.roachpb.SplitTrigger$Properties|undefined}
+             * @type {(cockroach.roachpb.SplitTrigger$Properties|null)}
              */
-            public split_trigger?: cockroach.roachpb.SplitTrigger$Properties;
+            public split_trigger: (cockroach.roachpb.SplitTrigger$Properties|null);
 
             /**
              * InternalCommitTrigger merge_trigger.
-             * @type {cockroach.roachpb.MergeTrigger$Properties|undefined}
+             * @type {(cockroach.roachpb.MergeTrigger$Properties|null)}
              */
-            public merge_trigger?: cockroach.roachpb.MergeTrigger$Properties;
+            public merge_trigger: (cockroach.roachpb.MergeTrigger$Properties|null);
 
             /**
              * InternalCommitTrigger change_replicas_trigger.
-             * @type {cockroach.roachpb.ChangeReplicasTrigger$Properties|undefined}
+             * @type {(cockroach.roachpb.ChangeReplicasTrigger$Properties|null)}
              */
-            public change_replicas_trigger?: cockroach.roachpb.ChangeReplicasTrigger$Properties;
+            public change_replicas_trigger: (cockroach.roachpb.ChangeReplicasTrigger$Properties|null);
 
             /**
              * InternalCommitTrigger modified_span_trigger.
-             * @type {cockroach.roachpb.ModifiedSpanTrigger$Properties|undefined}
+             * @type {(cockroach.roachpb.ModifiedSpanTrigger$Properties|null)}
              */
-            public modified_span_trigger?: cockroach.roachpb.ModifiedSpanTrigger$Properties;
+            public modified_span_trigger: (cockroach.roachpb.ModifiedSpanTrigger$Properties|null);
 
             /**
              * Creates a new InternalCommitTrigger instance using the specified properties.
@@ -10070,13 +9530,6 @@ export namespace cockroach {
             ABORTED = 2
         }
 
-        /**
-         * Properties of an ObservedTimestamp.
-         * @typedef cockroach.roachpb.ObservedTimestamp$Properties
-         * @type {Object}
-         * @property {number} [node_id] ObservedTimestamp node_id.
-         * @property {cockroach.util.hlc.Timestamp$Properties} [timestamp] ObservedTimestamp timestamp.
-         */
         type ObservedTimestamp$Properties = {
             node_id?: number;
             timestamp?: cockroach.util.hlc.Timestamp$Properties;
@@ -10100,15 +9553,15 @@ export namespace cockroach {
 
             /**
              * ObservedTimestamp node_id.
-             * @type {number|undefined}
+             * @type {number}
              */
-            public node_id?: number;
+            public node_id: number;
 
             /**
              * ObservedTimestamp timestamp.
-             * @type {cockroach.util.hlc.Timestamp$Properties|undefined}
+             * @type {(cockroach.util.hlc.Timestamp$Properties|null)}
              */
-            public timestamp?: cockroach.util.hlc.Timestamp$Properties;
+            public timestamp: (cockroach.util.hlc.Timestamp$Properties|null);
 
             /**
              * Creates a new ObservedTimestamp instance using the specified properties.
@@ -10197,22 +9650,6 @@ export namespace cockroach {
             public toJSON(): { [k: string]: any };
         }
 
-        /**
-         * Properties of a Transaction.
-         * @typedef cockroach.roachpb.Transaction$Properties
-         * @type {Object}
-         * @property {cockroach.storage.engine.enginepb.TxnMeta$Properties} [meta] Transaction meta.
-         * @property {string} [name] Transaction name.
-         * @property {cockroach.roachpb.TransactionStatus} [status] Transaction status.
-         * @property {cockroach.util.hlc.Timestamp$Properties} [last_heartbeat] Transaction last_heartbeat.
-         * @property {cockroach.util.hlc.Timestamp$Properties} [orig_timestamp] Transaction orig_timestamp.
-         * @property {cockroach.util.hlc.Timestamp$Properties} [max_timestamp] Transaction max_timestamp.
-         * @property {Array.<cockroach.roachpb.ObservedTimestamp$Properties>} [observed_timestamps] Transaction observed_timestamps.
-         * @property {boolean} [writing] Transaction writing.
-         * @property {boolean} [write_too_old] Transaction write_too_old.
-         * @property {boolean} [retry_on_push] Transaction retry_on_push.
-         * @property {Array.<cockroach.roachpb.Span$Properties>} [intents] Transaction intents.
-         */
         type Transaction$Properties = {
             meta?: cockroach.storage.engine.enginepb.TxnMeta$Properties;
             name?: string;
@@ -10245,69 +9682,69 @@ export namespace cockroach {
 
             /**
              * Transaction meta.
-             * @type {cockroach.storage.engine.enginepb.TxnMeta$Properties|undefined}
+             * @type {(cockroach.storage.engine.enginepb.TxnMeta$Properties|null)}
              */
-            public meta?: cockroach.storage.engine.enginepb.TxnMeta$Properties;
+            public meta: (cockroach.storage.engine.enginepb.TxnMeta$Properties|null);
 
             /**
              * Transaction name.
-             * @type {string|undefined}
+             * @type {string}
              */
-            public name?: string;
+            public name: string;
 
             /**
              * Transaction status.
-             * @type {cockroach.roachpb.TransactionStatus|undefined}
+             * @type {cockroach.roachpb.TransactionStatus}
              */
-            public status?: cockroach.roachpb.TransactionStatus;
+            public status: cockroach.roachpb.TransactionStatus;
 
             /**
              * Transaction last_heartbeat.
-             * @type {cockroach.util.hlc.Timestamp$Properties|undefined}
+             * @type {(cockroach.util.hlc.Timestamp$Properties|null)}
              */
-            public last_heartbeat?: cockroach.util.hlc.Timestamp$Properties;
+            public last_heartbeat: (cockroach.util.hlc.Timestamp$Properties|null);
 
             /**
              * Transaction orig_timestamp.
-             * @type {cockroach.util.hlc.Timestamp$Properties|undefined}
+             * @type {(cockroach.util.hlc.Timestamp$Properties|null)}
              */
-            public orig_timestamp?: cockroach.util.hlc.Timestamp$Properties;
+            public orig_timestamp: (cockroach.util.hlc.Timestamp$Properties|null);
 
             /**
              * Transaction max_timestamp.
-             * @type {cockroach.util.hlc.Timestamp$Properties|undefined}
+             * @type {(cockroach.util.hlc.Timestamp$Properties|null)}
              */
-            public max_timestamp?: cockroach.util.hlc.Timestamp$Properties;
+            public max_timestamp: (cockroach.util.hlc.Timestamp$Properties|null);
 
             /**
              * Transaction observed_timestamps.
-             * @type {Array.<cockroach.roachpb.ObservedTimestamp$Properties>|undefined}
+             * @type {Array.<cockroach.roachpb.ObservedTimestamp$Properties>}
              */
-            public observed_timestamps?: cockroach.roachpb.ObservedTimestamp$Properties[];
+            public observed_timestamps: cockroach.roachpb.ObservedTimestamp$Properties[];
 
             /**
              * Transaction writing.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
-            public writing?: boolean;
+            public writing: boolean;
 
             /**
              * Transaction write_too_old.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
-            public write_too_old?: boolean;
+            public write_too_old: boolean;
 
             /**
              * Transaction retry_on_push.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
-            public retry_on_push?: boolean;
+            public retry_on_push: boolean;
 
             /**
              * Transaction intents.
-             * @type {Array.<cockroach.roachpb.Span$Properties>|undefined}
+             * @type {Array.<cockroach.roachpb.Span$Properties>}
              */
-            public intents?: cockroach.roachpb.Span$Properties[];
+            public intents: cockroach.roachpb.Span$Properties[];
 
             /**
              * Creates a new Transaction instance using the specified properties.
@@ -10396,14 +9833,6 @@ export namespace cockroach {
             public toJSON(): { [k: string]: any };
         }
 
-        /**
-         * Properties of an Intent.
-         * @typedef cockroach.roachpb.Intent$Properties
-         * @type {Object}
-         * @property {cockroach.roachpb.Span$Properties} [span] Intent span.
-         * @property {cockroach.storage.engine.enginepb.TxnMeta$Properties} [txn] Intent txn.
-         * @property {cockroach.roachpb.TransactionStatus} [status] Intent status.
-         */
         type Intent$Properties = {
             span?: cockroach.roachpb.Span$Properties;
             txn?: cockroach.storage.engine.enginepb.TxnMeta$Properties;
@@ -10428,21 +9857,21 @@ export namespace cockroach {
 
             /**
              * Intent span.
-             * @type {cockroach.roachpb.Span$Properties|undefined}
+             * @type {(cockroach.roachpb.Span$Properties|null)}
              */
-            public span?: cockroach.roachpb.Span$Properties;
+            public span: (cockroach.roachpb.Span$Properties|null);
 
             /**
              * Intent txn.
-             * @type {cockroach.storage.engine.enginepb.TxnMeta$Properties|undefined}
+             * @type {(cockroach.storage.engine.enginepb.TxnMeta$Properties|null)}
              */
-            public txn?: cockroach.storage.engine.enginepb.TxnMeta$Properties;
+            public txn: (cockroach.storage.engine.enginepb.TxnMeta$Properties|null);
 
             /**
              * Intent status.
-             * @type {cockroach.roachpb.TransactionStatus|undefined}
+             * @type {cockroach.roachpb.TransactionStatus}
              */
-            public status?: cockroach.roachpb.TransactionStatus;
+            public status: cockroach.roachpb.TransactionStatus;
 
             /**
              * Creates a new Intent instance using the specified properties.
@@ -10531,17 +9960,6 @@ export namespace cockroach {
             public toJSON(): { [k: string]: any };
         }
 
-        /**
-         * Properties of a Lease.
-         * @typedef cockroach.roachpb.Lease$Properties
-         * @type {Object}
-         * @property {cockroach.util.hlc.Timestamp$Properties} [start] Lease start.
-         * @property {cockroach.util.hlc.Timestamp$Properties} [expiration] Lease expiration.
-         * @property {cockroach.roachpb.ReplicaDescriptor$Properties} [replica] Lease replica.
-         * @property {cockroach.util.hlc.Timestamp$Properties} [deprecated_start_stasis] Lease deprecated_start_stasis.
-         * @property {cockroach.util.hlc.Timestamp$Properties} [proposed_ts] Lease proposed_ts.
-         * @property {Long} [epoch] Lease epoch.
-         */
         type Lease$Properties = {
             start?: cockroach.util.hlc.Timestamp$Properties;
             expiration?: cockroach.util.hlc.Timestamp$Properties;
@@ -10569,39 +9987,39 @@ export namespace cockroach {
 
             /**
              * Lease start.
-             * @type {cockroach.util.hlc.Timestamp$Properties|undefined}
+             * @type {(cockroach.util.hlc.Timestamp$Properties|null)}
              */
-            public start?: cockroach.util.hlc.Timestamp$Properties;
+            public start: (cockroach.util.hlc.Timestamp$Properties|null);
 
             /**
              * Lease expiration.
-             * @type {cockroach.util.hlc.Timestamp$Properties|undefined}
+             * @type {(cockroach.util.hlc.Timestamp$Properties|null)}
              */
-            public expiration?: cockroach.util.hlc.Timestamp$Properties;
+            public expiration: (cockroach.util.hlc.Timestamp$Properties|null);
 
             /**
              * Lease replica.
-             * @type {cockroach.roachpb.ReplicaDescriptor$Properties|undefined}
+             * @type {(cockroach.roachpb.ReplicaDescriptor$Properties|null)}
              */
-            public replica?: cockroach.roachpb.ReplicaDescriptor$Properties;
+            public replica: (cockroach.roachpb.ReplicaDescriptor$Properties|null);
 
             /**
              * Lease deprecated_start_stasis.
-             * @type {cockroach.util.hlc.Timestamp$Properties|undefined}
+             * @type {(cockroach.util.hlc.Timestamp$Properties|null)}
              */
-            public deprecated_start_stasis?: cockroach.util.hlc.Timestamp$Properties;
+            public deprecated_start_stasis: (cockroach.util.hlc.Timestamp$Properties|null);
 
             /**
              * Lease proposed_ts.
-             * @type {cockroach.util.hlc.Timestamp$Properties|undefined}
+             * @type {(cockroach.util.hlc.Timestamp$Properties|null)}
              */
-            public proposed_ts?: cockroach.util.hlc.Timestamp$Properties;
+            public proposed_ts: (cockroach.util.hlc.Timestamp$Properties|null);
 
             /**
              * Lease epoch.
-             * @type {Long|undefined}
+             * @type {Long}
              */
-            public epoch?: Long;
+            public epoch: Long;
 
             /**
              * Creates a new Lease instance using the specified properties.
@@ -10690,14 +10108,6 @@ export namespace cockroach {
             public toJSON(): { [k: string]: any };
         }
 
-        /**
-         * Properties of an AbortCacheEntry.
-         * @typedef cockroach.roachpb.AbortCacheEntry$Properties
-         * @type {Object}
-         * @property {Uint8Array} [key] AbortCacheEntry key.
-         * @property {cockroach.util.hlc.Timestamp$Properties} [timestamp] AbortCacheEntry timestamp.
-         * @property {number} [priority] AbortCacheEntry priority.
-         */
         type AbortCacheEntry$Properties = {
             key?: Uint8Array;
             timestamp?: cockroach.util.hlc.Timestamp$Properties;
@@ -10722,21 +10132,21 @@ export namespace cockroach {
 
             /**
              * AbortCacheEntry key.
-             * @type {Uint8Array|undefined}
+             * @type {Uint8Array}
              */
-            public key?: Uint8Array;
+            public key: Uint8Array;
 
             /**
              * AbortCacheEntry timestamp.
-             * @type {cockroach.util.hlc.Timestamp$Properties|undefined}
+             * @type {(cockroach.util.hlc.Timestamp$Properties|null)}
              */
-            public timestamp?: cockroach.util.hlc.Timestamp$Properties;
+            public timestamp: (cockroach.util.hlc.Timestamp$Properties|null);
 
             /**
              * AbortCacheEntry priority.
-             * @type {number|undefined}
+             * @type {number}
              */
-            public priority?: number;
+            public priority: number;
 
             /**
              * Creates a new AbortCacheEntry instance using the specified properties.
@@ -10825,12 +10235,6 @@ export namespace cockroach {
             public toJSON(): { [k: string]: any };
         }
 
-        /**
-         * Properties of an Attributes.
-         * @typedef cockroach.roachpb.Attributes$Properties
-         * @type {Object}
-         * @property {Array.<string>} [attrs] Attributes attrs.
-         */
         type Attributes$Properties = {
             attrs?: string[];
         };
@@ -10853,9 +10257,9 @@ export namespace cockroach {
 
             /**
              * Attributes attrs.
-             * @type {Array.<string>|undefined}
+             * @type {Array.<string>}
              */
-            public attrs?: string[];
+            public attrs: string[];
 
             /**
              * Creates a new Attributes instance using the specified properties.
@@ -10944,13 +10348,6 @@ export namespace cockroach {
             public toJSON(): { [k: string]: any };
         }
 
-        /**
-         * Properties of a ReplicationTarget.
-         * @typedef cockroach.roachpb.ReplicationTarget$Properties
-         * @type {Object}
-         * @property {number} [node_id] ReplicationTarget node_id.
-         * @property {number} [store_id] ReplicationTarget store_id.
-         */
         type ReplicationTarget$Properties = {
             node_id?: number;
             store_id?: number;
@@ -10974,15 +10371,15 @@ export namespace cockroach {
 
             /**
              * ReplicationTarget node_id.
-             * @type {number|undefined}
+             * @type {number}
              */
-            public node_id?: number;
+            public node_id: number;
 
             /**
              * ReplicationTarget store_id.
-             * @type {number|undefined}
+             * @type {number}
              */
-            public store_id?: number;
+            public store_id: number;
 
             /**
              * Creates a new ReplicationTarget instance using the specified properties.
@@ -11071,14 +10468,6 @@ export namespace cockroach {
             public toJSON(): { [k: string]: any };
         }
 
-        /**
-         * Properties of a ReplicaDescriptor.
-         * @typedef cockroach.roachpb.ReplicaDescriptor$Properties
-         * @type {Object}
-         * @property {number} [node_id] ReplicaDescriptor node_id.
-         * @property {number} [store_id] ReplicaDescriptor store_id.
-         * @property {number} [replica_id] ReplicaDescriptor replica_id.
-         */
         type ReplicaDescriptor$Properties = {
             node_id?: number;
             store_id?: number;
@@ -11103,21 +10492,21 @@ export namespace cockroach {
 
             /**
              * ReplicaDescriptor node_id.
-             * @type {number|undefined}
+             * @type {number}
              */
-            public node_id?: number;
+            public node_id: number;
 
             /**
              * ReplicaDescriptor store_id.
-             * @type {number|undefined}
+             * @type {number}
              */
-            public store_id?: number;
+            public store_id: number;
 
             /**
              * ReplicaDescriptor replica_id.
-             * @type {number|undefined}
+             * @type {number}
              */
-            public replica_id?: number;
+            public replica_id: number;
 
             /**
              * Creates a new ReplicaDescriptor instance using the specified properties.
@@ -11206,13 +10595,6 @@ export namespace cockroach {
             public toJSON(): { [k: string]: any };
         }
 
-        /**
-         * Properties of a ReplicaIdent.
-         * @typedef cockroach.roachpb.ReplicaIdent$Properties
-         * @type {Object}
-         * @property {Long} [range_id] ReplicaIdent range_id.
-         * @property {cockroach.roachpb.ReplicaDescriptor$Properties} [replica] ReplicaIdent replica.
-         */
         type ReplicaIdent$Properties = {
             range_id?: Long;
             replica?: cockroach.roachpb.ReplicaDescriptor$Properties;
@@ -11236,15 +10618,15 @@ export namespace cockroach {
 
             /**
              * ReplicaIdent range_id.
-             * @type {Long|undefined}
+             * @type {Long}
              */
-            public range_id?: Long;
+            public range_id: Long;
 
             /**
              * ReplicaIdent replica.
-             * @type {cockroach.roachpb.ReplicaDescriptor$Properties|undefined}
+             * @type {(cockroach.roachpb.ReplicaDescriptor$Properties|null)}
              */
-            public replica?: cockroach.roachpb.ReplicaDescriptor$Properties;
+            public replica: (cockroach.roachpb.ReplicaDescriptor$Properties|null);
 
             /**
              * Creates a new ReplicaIdent instance using the specified properties.
@@ -11333,16 +10715,6 @@ export namespace cockroach {
             public toJSON(): { [k: string]: any };
         }
 
-        /**
-         * Properties of a RangeDescriptor.
-         * @typedef cockroach.roachpb.RangeDescriptor$Properties
-         * @type {Object}
-         * @property {Long} [range_id] RangeDescriptor range_id.
-         * @property {Uint8Array} [start_key] RangeDescriptor start_key.
-         * @property {Uint8Array} [end_key] RangeDescriptor end_key.
-         * @property {Array.<cockroach.roachpb.ReplicaDescriptor$Properties>} [replicas] RangeDescriptor replicas.
-         * @property {number} [next_replica_id] RangeDescriptor next_replica_id.
-         */
         type RangeDescriptor$Properties = {
             range_id?: Long;
             start_key?: Uint8Array;
@@ -11369,33 +10741,33 @@ export namespace cockroach {
 
             /**
              * RangeDescriptor range_id.
-             * @type {Long|undefined}
+             * @type {Long}
              */
-            public range_id?: Long;
+            public range_id: Long;
 
             /**
              * RangeDescriptor start_key.
-             * @type {Uint8Array|undefined}
+             * @type {Uint8Array}
              */
-            public start_key?: Uint8Array;
+            public start_key: Uint8Array;
 
             /**
              * RangeDescriptor end_key.
-             * @type {Uint8Array|undefined}
+             * @type {Uint8Array}
              */
-            public end_key?: Uint8Array;
+            public end_key: Uint8Array;
 
             /**
              * RangeDescriptor replicas.
-             * @type {Array.<cockroach.roachpb.ReplicaDescriptor$Properties>|undefined}
+             * @type {Array.<cockroach.roachpb.ReplicaDescriptor$Properties>}
              */
-            public replicas?: cockroach.roachpb.ReplicaDescriptor$Properties[];
+            public replicas: cockroach.roachpb.ReplicaDescriptor$Properties[];
 
             /**
              * RangeDescriptor next_replica_id.
-             * @type {number|undefined}
+             * @type {number}
              */
-            public next_replica_id?: number;
+            public next_replica_id: number;
 
             /**
              * Creates a new RangeDescriptor instance using the specified properties.
@@ -11484,15 +10856,6 @@ export namespace cockroach {
             public toJSON(): { [k: string]: any };
         }
 
-        /**
-         * Properties of a StoreCapacity.
-         * @typedef cockroach.roachpb.StoreCapacity$Properties
-         * @type {Object}
-         * @property {Long} [capacity] StoreCapacity capacity.
-         * @property {Long} [available] StoreCapacity available.
-         * @property {number} [range_count] StoreCapacity range_count.
-         * @property {number} [lease_count] StoreCapacity lease_count.
-         */
         type StoreCapacity$Properties = {
             capacity?: Long;
             available?: Long;
@@ -11518,27 +10881,27 @@ export namespace cockroach {
 
             /**
              * StoreCapacity capacity.
-             * @type {Long|undefined}
+             * @type {Long}
              */
-            public capacity?: Long;
+            public capacity: Long;
 
             /**
              * StoreCapacity available.
-             * @type {Long|undefined}
+             * @type {Long}
              */
-            public available?: Long;
+            public available: Long;
 
             /**
              * StoreCapacity range_count.
-             * @type {number|undefined}
+             * @type {number}
              */
-            public range_count?: number;
+            public range_count: number;
 
             /**
              * StoreCapacity lease_count.
-             * @type {number|undefined}
+             * @type {number}
              */
-            public lease_count?: number;
+            public lease_count: number;
 
             /**
              * Creates a new StoreCapacity instance using the specified properties.
@@ -11627,15 +10990,6 @@ export namespace cockroach {
             public toJSON(): { [k: string]: any };
         }
 
-        /**
-         * Properties of a NodeDescriptor.
-         * @typedef cockroach.roachpb.NodeDescriptor$Properties
-         * @type {Object}
-         * @property {number} [node_id] NodeDescriptor node_id.
-         * @property {cockroach.util.UnresolvedAddr$Properties} [address] NodeDescriptor address.
-         * @property {cockroach.roachpb.Attributes$Properties} [attrs] NodeDescriptor attrs.
-         * @property {cockroach.roachpb.Locality$Properties} [locality] NodeDescriptor locality.
-         */
         type NodeDescriptor$Properties = {
             node_id?: number;
             address?: cockroach.util.UnresolvedAddr$Properties;
@@ -11661,27 +11015,27 @@ export namespace cockroach {
 
             /**
              * NodeDescriptor node_id.
-             * @type {number|undefined}
+             * @type {number}
              */
-            public node_id?: number;
+            public node_id: number;
 
             /**
              * NodeDescriptor address.
-             * @type {cockroach.util.UnresolvedAddr$Properties|undefined}
+             * @type {(cockroach.util.UnresolvedAddr$Properties|null)}
              */
-            public address?: cockroach.util.UnresolvedAddr$Properties;
+            public address: (cockroach.util.UnresolvedAddr$Properties|null);
 
             /**
              * NodeDescriptor attrs.
-             * @type {cockroach.roachpb.Attributes$Properties|undefined}
+             * @type {(cockroach.roachpb.Attributes$Properties|null)}
              */
-            public attrs?: cockroach.roachpb.Attributes$Properties;
+            public attrs: (cockroach.roachpb.Attributes$Properties|null);
 
             /**
              * NodeDescriptor locality.
-             * @type {cockroach.roachpb.Locality$Properties|undefined}
+             * @type {(cockroach.roachpb.Locality$Properties|null)}
              */
-            public locality?: cockroach.roachpb.Locality$Properties;
+            public locality: (cockroach.roachpb.Locality$Properties|null);
 
             /**
              * Creates a new NodeDescriptor instance using the specified properties.
@@ -11770,15 +11124,6 @@ export namespace cockroach {
             public toJSON(): { [k: string]: any };
         }
 
-        /**
-         * Properties of a StoreDescriptor.
-         * @typedef cockroach.roachpb.StoreDescriptor$Properties
-         * @type {Object}
-         * @property {number} [store_id] StoreDescriptor store_id.
-         * @property {cockroach.roachpb.Attributes$Properties} [attrs] StoreDescriptor attrs.
-         * @property {cockroach.roachpb.NodeDescriptor$Properties} [node] StoreDescriptor node.
-         * @property {cockroach.roachpb.StoreCapacity$Properties} [capacity] StoreDescriptor capacity.
-         */
         type StoreDescriptor$Properties = {
             store_id?: number;
             attrs?: cockroach.roachpb.Attributes$Properties;
@@ -11804,27 +11149,27 @@ export namespace cockroach {
 
             /**
              * StoreDescriptor store_id.
-             * @type {number|undefined}
+             * @type {number}
              */
-            public store_id?: number;
+            public store_id: number;
 
             /**
              * StoreDescriptor attrs.
-             * @type {cockroach.roachpb.Attributes$Properties|undefined}
+             * @type {(cockroach.roachpb.Attributes$Properties|null)}
              */
-            public attrs?: cockroach.roachpb.Attributes$Properties;
+            public attrs: (cockroach.roachpb.Attributes$Properties|null);
 
             /**
              * StoreDescriptor node.
-             * @type {cockroach.roachpb.NodeDescriptor$Properties|undefined}
+             * @type {(cockroach.roachpb.NodeDescriptor$Properties|null)}
              */
-            public node?: cockroach.roachpb.NodeDescriptor$Properties;
+            public node: (cockroach.roachpb.NodeDescriptor$Properties|null);
 
             /**
              * StoreDescriptor capacity.
-             * @type {cockroach.roachpb.StoreCapacity$Properties|undefined}
+             * @type {(cockroach.roachpb.StoreCapacity$Properties|null)}
              */
-            public capacity?: cockroach.roachpb.StoreCapacity$Properties;
+            public capacity: (cockroach.roachpb.StoreCapacity$Properties|null);
 
             /**
              * Creates a new StoreDescriptor instance using the specified properties.
@@ -11913,13 +11258,6 @@ export namespace cockroach {
             public toJSON(): { [k: string]: any };
         }
 
-        /**
-         * Properties of a StoreDeadReplicas.
-         * @typedef cockroach.roachpb.StoreDeadReplicas$Properties
-         * @type {Object}
-         * @property {number} [store_id] StoreDeadReplicas store_id.
-         * @property {Array.<cockroach.roachpb.ReplicaIdent$Properties>} [replicas] StoreDeadReplicas replicas.
-         */
         type StoreDeadReplicas$Properties = {
             store_id?: number;
             replicas?: cockroach.roachpb.ReplicaIdent$Properties[];
@@ -11943,15 +11281,15 @@ export namespace cockroach {
 
             /**
              * StoreDeadReplicas store_id.
-             * @type {number|undefined}
+             * @type {number}
              */
-            public store_id?: number;
+            public store_id: number;
 
             /**
              * StoreDeadReplicas replicas.
-             * @type {Array.<cockroach.roachpb.ReplicaIdent$Properties>|undefined}
+             * @type {Array.<cockroach.roachpb.ReplicaIdent$Properties>}
              */
-            public replicas?: cockroach.roachpb.ReplicaIdent$Properties[];
+            public replicas: cockroach.roachpb.ReplicaIdent$Properties[];
 
             /**
              * Creates a new StoreDeadReplicas instance using the specified properties.
@@ -12040,12 +11378,6 @@ export namespace cockroach {
             public toJSON(): { [k: string]: any };
         }
 
-        /**
-         * Properties of a Locality.
-         * @typedef cockroach.roachpb.Locality$Properties
-         * @type {Object}
-         * @property {Array.<cockroach.roachpb.Tier$Properties>} [tiers] Locality tiers.
-         */
         type Locality$Properties = {
             tiers?: cockroach.roachpb.Tier$Properties[];
         };
@@ -12068,9 +11400,9 @@ export namespace cockroach {
 
             /**
              * Locality tiers.
-             * @type {Array.<cockroach.roachpb.Tier$Properties>|undefined}
+             * @type {Array.<cockroach.roachpb.Tier$Properties>}
              */
-            public tiers?: cockroach.roachpb.Tier$Properties[];
+            public tiers: cockroach.roachpb.Tier$Properties[];
 
             /**
              * Creates a new Locality instance using the specified properties.
@@ -12159,13 +11491,6 @@ export namespace cockroach {
             public toJSON(): { [k: string]: any };
         }
 
-        /**
-         * Properties of a Tier.
-         * @typedef cockroach.roachpb.Tier$Properties
-         * @type {Object}
-         * @property {string} [key] Tier key.
-         * @property {string} [value] Tier value.
-         */
         type Tier$Properties = {
             key?: string;
             value?: string;
@@ -12189,15 +11514,15 @@ export namespace cockroach {
 
             /**
              * Tier key.
-             * @type {string|undefined}
+             * @type {string}
              */
-            public key?: string;
+            public key: string;
 
             /**
              * Tier value.
-             * @type {string|undefined}
+             * @type {string}
              */
-            public value?: string;
+            public value: string;
 
             /**
              * Creates a new Tier instance using the specified properties.
@@ -12286,13 +11611,6 @@ export namespace cockroach {
             public toJSON(): { [k: string]: any };
         }
 
-        /**
-         * Properties of a RaftTruncatedState.
-         * @typedef cockroach.roachpb.RaftTruncatedState$Properties
-         * @type {Object}
-         * @property {Long} [index] RaftTruncatedState index.
-         * @property {Long} [term] RaftTruncatedState term.
-         */
         type RaftTruncatedState$Properties = {
             index?: Long;
             term?: Long;
@@ -12316,15 +11634,15 @@ export namespace cockroach {
 
             /**
              * RaftTruncatedState index.
-             * @type {Long|undefined}
+             * @type {Long}
              */
-            public index?: Long;
+            public index: Long;
 
             /**
              * RaftTruncatedState term.
-             * @type {Long|undefined}
+             * @type {Long}
              */
-            public term?: Long;
+            public term: Long;
 
             /**
              * Creates a new RaftTruncatedState instance using the specified properties.
@@ -12413,12 +11731,6 @@ export namespace cockroach {
             public toJSON(): { [k: string]: any };
         }
 
-        /**
-         * Properties of a RaftTombstone.
-         * @typedef cockroach.roachpb.RaftTombstone$Properties
-         * @type {Object}
-         * @property {number} [next_replica_id] RaftTombstone next_replica_id.
-         */
         type RaftTombstone$Properties = {
             next_replica_id?: number;
         };
@@ -12441,9 +11753,9 @@ export namespace cockroach {
 
             /**
              * RaftTombstone next_replica_id.
-             * @type {number|undefined}
+             * @type {number}
              */
-            public next_replica_id?: number;
+            public next_replica_id: number;
 
             /**
              * Creates a new RaftTombstone instance using the specified properties.
@@ -12532,14 +11844,6 @@ export namespace cockroach {
             public toJSON(): { [k: string]: any };
         }
 
-        /**
-         * Properties of a RaftSnapshotData.
-         * @typedef cockroach.roachpb.RaftSnapshotData$Properties
-         * @type {Object}
-         * @property {cockroach.roachpb.RangeDescriptor$Properties} [range_descriptor] RaftSnapshotData range_descriptor.
-         * @property {Array.<cockroach.roachpb.RaftSnapshotData.KeyValue$Properties>} [KV] RaftSnapshotData KV.
-         * @property {Array.<Uint8Array>} [log_entries] RaftSnapshotData log_entries.
-         */
         type RaftSnapshotData$Properties = {
             range_descriptor?: cockroach.roachpb.RangeDescriptor$Properties;
             KV?: cockroach.roachpb.RaftSnapshotData.KeyValue$Properties[];
@@ -12564,21 +11868,21 @@ export namespace cockroach {
 
             /**
              * RaftSnapshotData range_descriptor.
-             * @type {cockroach.roachpb.RangeDescriptor$Properties|undefined}
+             * @type {(cockroach.roachpb.RangeDescriptor$Properties|null)}
              */
-            public range_descriptor?: cockroach.roachpb.RangeDescriptor$Properties;
+            public range_descriptor: (cockroach.roachpb.RangeDescriptor$Properties|null);
 
             /**
              * RaftSnapshotData KV.
-             * @type {Array.<cockroach.roachpb.RaftSnapshotData.KeyValue$Properties>|undefined}
+             * @type {Array.<cockroach.roachpb.RaftSnapshotData.KeyValue$Properties>}
              */
-            public KV?: cockroach.roachpb.RaftSnapshotData.KeyValue$Properties[];
+            public KV: cockroach.roachpb.RaftSnapshotData.KeyValue$Properties[];
 
             /**
              * RaftSnapshotData log_entries.
-             * @type {Array.<Uint8Array>|undefined}
+             * @type {Array.<Uint8Array>}
              */
-            public log_entries?: Uint8Array[];
+            public log_entries: Uint8Array[];
 
             /**
              * Creates a new RaftSnapshotData instance using the specified properties.
@@ -12669,14 +11973,6 @@ export namespace cockroach {
 
         namespace RaftSnapshotData {
 
-            /**
-             * Properties of a KeyValue.
-             * @typedef cockroach.roachpb.RaftSnapshotData.KeyValue$Properties
-             * @type {Object}
-             * @property {Uint8Array} [key] KeyValue key.
-             * @property {Uint8Array} [value] KeyValue value.
-             * @property {cockroach.util.hlc.Timestamp$Properties} [timestamp] KeyValue timestamp.
-             */
             type KeyValue$Properties = {
                 key?: Uint8Array;
                 value?: Uint8Array;
@@ -12701,21 +11997,21 @@ export namespace cockroach {
 
                 /**
                  * KeyValue key.
-                 * @type {Uint8Array|undefined}
+                 * @type {Uint8Array}
                  */
-                public key?: Uint8Array;
+                public key: Uint8Array;
 
                 /**
                  * KeyValue value.
-                 * @type {Uint8Array|undefined}
+                 * @type {Uint8Array}
                  */
-                public value?: Uint8Array;
+                public value: Uint8Array;
 
                 /**
                  * KeyValue timestamp.
-                 * @type {cockroach.util.hlc.Timestamp$Properties|undefined}
+                 * @type {(cockroach.util.hlc.Timestamp$Properties|null)}
                  */
-                public timestamp?: cockroach.util.hlc.Timestamp$Properties;
+                public timestamp: (cockroach.util.hlc.Timestamp$Properties|null);
 
                 /**
                  * Creates a new KeyValue instance using the specified properties.
@@ -12813,13 +12109,6 @@ export namespace cockroach {
      */
     namespace util {
 
-        /**
-         * Properties of an UnresolvedAddr.
-         * @typedef cockroach.util.UnresolvedAddr$Properties
-         * @type {Object}
-         * @property {string} [network_field] UnresolvedAddr network_field.
-         * @property {string} [address_field] UnresolvedAddr address_field.
-         */
         type UnresolvedAddr$Properties = {
             network_field?: string;
             address_field?: string;
@@ -12843,15 +12132,15 @@ export namespace cockroach {
 
             /**
              * UnresolvedAddr network_field.
-             * @type {string|undefined}
+             * @type {string}
              */
-            public network_field?: string;
+            public network_field: string;
 
             /**
              * UnresolvedAddr address_field.
-             * @type {string|undefined}
+             * @type {string}
              */
-            public address_field?: string;
+            public address_field: string;
 
             /**
              * Creates a new UnresolvedAddr instance using the specified properties.
@@ -12947,13 +12236,6 @@ export namespace cockroach {
          */
         namespace hlc {
 
-            /**
-             * Properties of a Timestamp.
-             * @typedef cockroach.util.hlc.Timestamp$Properties
-             * @type {Object}
-             * @property {Long} [wall_time] Timestamp wall_time.
-             * @property {number} [logical] Timestamp logical.
-             */
             type Timestamp$Properties = {
                 wall_time?: Long;
                 logical?: number;
@@ -12977,15 +12259,15 @@ export namespace cockroach {
 
                 /**
                  * Timestamp wall_time.
-                 * @type {Long|undefined}
+                 * @type {Long}
                  */
-                public wall_time?: Long;
+                public wall_time: Long;
 
                 /**
                  * Timestamp logical.
-                 * @type {number|undefined}
+                 * @type {number}
                  */
-                public logical?: number;
+                public logical: number;
 
                 /**
                  * Creates a new Timestamp instance using the specified properties.
@@ -13103,17 +12385,6 @@ export namespace cockroach {
                 NONE = 5
             }
 
-            /**
-             * Properties of an Entry.
-             * @typedef cockroach.util.log.Entry$Properties
-             * @type {Object}
-             * @property {cockroach.util.log.Severity} [severity] Entry severity.
-             * @property {Long} [time] Entry time.
-             * @property {Long} [goroutine] Entry goroutine.
-             * @property {string} [file] Entry file.
-             * @property {Long} [line] Entry line.
-             * @property {string} [message] Entry message.
-             */
             type Entry$Properties = {
                 severity?: cockroach.util.log.Severity;
                 time?: Long;
@@ -13141,39 +12412,39 @@ export namespace cockroach {
 
                 /**
                  * Entry severity.
-                 * @type {cockroach.util.log.Severity|undefined}
+                 * @type {cockroach.util.log.Severity}
                  */
-                public severity?: cockroach.util.log.Severity;
+                public severity: cockroach.util.log.Severity;
 
                 /**
                  * Entry time.
-                 * @type {Long|undefined}
+                 * @type {Long}
                  */
-                public time?: Long;
+                public time: Long;
 
                 /**
                  * Entry goroutine.
-                 * @type {Long|undefined}
+                 * @type {Long}
                  */
-                public goroutine?: Long;
+                public goroutine: Long;
 
                 /**
                  * Entry file.
-                 * @type {string|undefined}
+                 * @type {string}
                  */
-                public file?: string;
+                public file: string;
 
                 /**
                  * Entry line.
-                 * @type {Long|undefined}
+                 * @type {Long}
                  */
-                public line?: Long;
+                public line: Long;
 
                 /**
                  * Entry message.
-                 * @type {string|undefined}
+                 * @type {string}
                  */
-                public message?: string;
+                public message: string;
 
                 /**
                  * Creates a new Entry instance using the specified properties.
@@ -13262,17 +12533,6 @@ export namespace cockroach {
                 public toJSON(): { [k: string]: any };
             }
 
-            /**
-             * Properties of a FileDetails.
-             * @typedef cockroach.util.log.FileDetails$Properties
-             * @type {Object}
-             * @property {string} [program] FileDetails program.
-             * @property {string} [host] FileDetails host.
-             * @property {string} [user_name] FileDetails user_name.
-             * @property {cockroach.util.log.Severity} [severity] FileDetails severity.
-             * @property {Long} [time] FileDetails time.
-             * @property {Long} [pid] FileDetails pid.
-             */
             type FileDetails$Properties = {
                 program?: string;
                 host?: string;
@@ -13300,39 +12560,39 @@ export namespace cockroach {
 
                 /**
                  * FileDetails program.
-                 * @type {string|undefined}
+                 * @type {string}
                  */
-                public program?: string;
+                public program: string;
 
                 /**
                  * FileDetails host.
-                 * @type {string|undefined}
+                 * @type {string}
                  */
-                public host?: string;
+                public host: string;
 
                 /**
                  * FileDetails user_name.
-                 * @type {string|undefined}
+                 * @type {string}
                  */
-                public user_name?: string;
+                public user_name: string;
 
                 /**
                  * FileDetails severity.
-                 * @type {cockroach.util.log.Severity|undefined}
+                 * @type {cockroach.util.log.Severity}
                  */
-                public severity?: cockroach.util.log.Severity;
+                public severity: cockroach.util.log.Severity;
 
                 /**
                  * FileDetails time.
-                 * @type {Long|undefined}
+                 * @type {Long}
                  */
-                public time?: Long;
+                public time: Long;
 
                 /**
                  * FileDetails pid.
-                 * @type {Long|undefined}
+                 * @type {Long}
                  */
-                public pid?: Long;
+                public pid: Long;
 
                 /**
                  * Creates a new FileDetails instance using the specified properties.
@@ -13421,15 +12681,6 @@ export namespace cockroach {
                 public toJSON(): { [k: string]: any };
             }
 
-            /**
-             * Properties of a FileInfo.
-             * @typedef cockroach.util.log.FileInfo$Properties
-             * @type {Object}
-             * @property {string} [name] FileInfo name.
-             * @property {Long} [size_bytes] FileInfo size_bytes.
-             * @property {Long} [mod_time_nanos] FileInfo mod_time_nanos.
-             * @property {cockroach.util.log.FileDetails$Properties} [details] FileInfo details.
-             */
             type FileInfo$Properties = {
                 name?: string;
                 size_bytes?: Long;
@@ -13455,27 +12706,27 @@ export namespace cockroach {
 
                 /**
                  * FileInfo name.
-                 * @type {string|undefined}
+                 * @type {string}
                  */
-                public name?: string;
+                public name: string;
 
                 /**
                  * FileInfo size_bytes.
-                 * @type {Long|undefined}
+                 * @type {Long}
                  */
-                public size_bytes?: Long;
+                public size_bytes: Long;
 
                 /**
                  * FileInfo mod_time_nanos.
-                 * @type {Long|undefined}
+                 * @type {Long}
                  */
-                public mod_time_nanos?: Long;
+                public mod_time_nanos: Long;
 
                 /**
                  * FileInfo details.
-                 * @type {cockroach.util.log.FileDetails$Properties|undefined}
+                 * @type {(cockroach.util.log.FileDetails$Properties|null)}
                  */
-                public details?: cockroach.util.log.FileDetails$Properties;
+                public details: (cockroach.util.log.FileDetails$Properties|null);
 
                 /**
                  * Creates a new FileInfo instance using the specified properties.
@@ -13600,19 +12851,6 @@ export namespace cockroach {
                     SNAPSHOT = 1
                 }
 
-                /**
-                 * Properties of a TxnMeta.
-                 * @typedef cockroach.storage.engine.enginepb.TxnMeta$Properties
-                 * @type {Object}
-                 * @property {Uint8Array} [id] TxnMeta id.
-                 * @property {cockroach.storage.engine.enginepb.IsolationType} [isolation] TxnMeta isolation.
-                 * @property {Uint8Array} [key] TxnMeta key.
-                 * @property {number} [epoch] TxnMeta epoch.
-                 * @property {cockroach.util.hlc.Timestamp$Properties} [timestamp] TxnMeta timestamp.
-                 * @property {number} [priority] TxnMeta priority.
-                 * @property {number} [sequence] TxnMeta sequence.
-                 * @property {number} [batch_index] TxnMeta batch_index.
-                 */
                 type TxnMeta$Properties = {
                     id?: Uint8Array;
                     isolation?: cockroach.storage.engine.enginepb.IsolationType;
@@ -13642,51 +12880,51 @@ export namespace cockroach {
 
                     /**
                      * TxnMeta id.
-                     * @type {Uint8Array|undefined}
+                     * @type {Uint8Array}
                      */
-                    public id?: Uint8Array;
+                    public id: Uint8Array;
 
                     /**
                      * TxnMeta isolation.
-                     * @type {cockroach.storage.engine.enginepb.IsolationType|undefined}
+                     * @type {cockroach.storage.engine.enginepb.IsolationType}
                      */
-                    public isolation?: cockroach.storage.engine.enginepb.IsolationType;
+                    public isolation: cockroach.storage.engine.enginepb.IsolationType;
 
                     /**
                      * TxnMeta key.
-                     * @type {Uint8Array|undefined}
+                     * @type {Uint8Array}
                      */
-                    public key?: Uint8Array;
+                    public key: Uint8Array;
 
                     /**
                      * TxnMeta epoch.
-                     * @type {number|undefined}
+                     * @type {number}
                      */
-                    public epoch?: number;
+                    public epoch: number;
 
                     /**
                      * TxnMeta timestamp.
-                     * @type {cockroach.util.hlc.Timestamp$Properties|undefined}
+                     * @type {(cockroach.util.hlc.Timestamp$Properties|null)}
                      */
-                    public timestamp?: cockroach.util.hlc.Timestamp$Properties;
+                    public timestamp: (cockroach.util.hlc.Timestamp$Properties|null);
 
                     /**
                      * TxnMeta priority.
-                     * @type {number|undefined}
+                     * @type {number}
                      */
-                    public priority?: number;
+                    public priority: number;
 
                     /**
                      * TxnMeta sequence.
-                     * @type {number|undefined}
+                     * @type {number}
                      */
-                    public sequence?: number;
+                    public sequence: number;
 
                     /**
                      * TxnMeta batch_index.
-                     * @type {number|undefined}
+                     * @type {number}
                      */
-                    public batch_index?: number;
+                    public batch_index: number;
 
                     /**
                      * Creates a new TxnMeta instance using the specified properties.
@@ -13775,18 +13013,6 @@ export namespace cockroach {
                     public toJSON(): { [k: string]: any };
                 }
 
-                /**
-                 * Properties of a MVCCMetadata.
-                 * @typedef cockroach.storage.engine.enginepb.MVCCMetadata$Properties
-                 * @type {Object}
-                 * @property {cockroach.storage.engine.enginepb.TxnMeta$Properties} [txn] MVCCMetadata txn.
-                 * @property {cockroach.util.hlc.Timestamp$Properties} [timestamp] MVCCMetadata timestamp.
-                 * @property {boolean} [deleted] MVCCMetadata deleted.
-                 * @property {Long} [key_bytes] MVCCMetadata key_bytes.
-                 * @property {Long} [val_bytes] MVCCMetadata val_bytes.
-                 * @property {Uint8Array} [raw_bytes] MVCCMetadata raw_bytes.
-                 * @property {cockroach.util.hlc.Timestamp$Properties} [merge_timestamp] MVCCMetadata merge_timestamp.
-                 */
                 type MVCCMetadata$Properties = {
                     txn?: cockroach.storage.engine.enginepb.TxnMeta$Properties;
                     timestamp?: cockroach.util.hlc.Timestamp$Properties;
@@ -13815,45 +13041,45 @@ export namespace cockroach {
 
                     /**
                      * MVCCMetadata txn.
-                     * @type {cockroach.storage.engine.enginepb.TxnMeta$Properties|undefined}
+                     * @type {(cockroach.storage.engine.enginepb.TxnMeta$Properties|null)}
                      */
-                    public txn?: cockroach.storage.engine.enginepb.TxnMeta$Properties;
+                    public txn: (cockroach.storage.engine.enginepb.TxnMeta$Properties|null);
 
                     /**
                      * MVCCMetadata timestamp.
-                     * @type {cockroach.util.hlc.Timestamp$Properties|undefined}
+                     * @type {(cockroach.util.hlc.Timestamp$Properties|null)}
                      */
-                    public timestamp?: cockroach.util.hlc.Timestamp$Properties;
+                    public timestamp: (cockroach.util.hlc.Timestamp$Properties|null);
 
                     /**
                      * MVCCMetadata deleted.
-                     * @type {boolean|undefined}
+                     * @type {boolean}
                      */
-                    public deleted?: boolean;
+                    public deleted: boolean;
 
                     /**
                      * MVCCMetadata key_bytes.
-                     * @type {Long|undefined}
+                     * @type {Long}
                      */
-                    public key_bytes?: Long;
+                    public key_bytes: Long;
 
                     /**
                      * MVCCMetadata val_bytes.
-                     * @type {Long|undefined}
+                     * @type {Long}
                      */
-                    public val_bytes?: Long;
+                    public val_bytes: Long;
 
                     /**
                      * MVCCMetadata raw_bytes.
-                     * @type {Uint8Array|undefined}
+                     * @type {Uint8Array}
                      */
-                    public raw_bytes?: Uint8Array;
+                    public raw_bytes: Uint8Array;
 
                     /**
                      * MVCCMetadata merge_timestamp.
-                     * @type {cockroach.util.hlc.Timestamp$Properties|undefined}
+                     * @type {(cockroach.util.hlc.Timestamp$Properties|null)}
                      */
-                    public merge_timestamp?: cockroach.util.hlc.Timestamp$Properties;
+                    public merge_timestamp: (cockroach.util.hlc.Timestamp$Properties|null);
 
                     /**
                      * Creates a new MVCCMetadata instance using the specified properties.
@@ -13942,25 +13168,6 @@ export namespace cockroach {
                     public toJSON(): { [k: string]: any };
                 }
 
-                /**
-                 * Properties of a MVCCStats.
-                 * @typedef cockroach.storage.engine.enginepb.MVCCStats$Properties
-                 * @type {Object}
-                 * @property {boolean} [contains_estimates] MVCCStats contains_estimates.
-                 * @property {Long} [last_update_nanos] MVCCStats last_update_nanos.
-                 * @property {Long} [intent_age] MVCCStats intent_age.
-                 * @property {Long} [gc_bytes_age] MVCCStats gc_bytes_age.
-                 * @property {Long} [live_bytes] MVCCStats live_bytes.
-                 * @property {Long} [live_count] MVCCStats live_count.
-                 * @property {Long} [key_bytes] MVCCStats key_bytes.
-                 * @property {Long} [key_count] MVCCStats key_count.
-                 * @property {Long} [val_bytes] MVCCStats val_bytes.
-                 * @property {Long} [val_count] MVCCStats val_count.
-                 * @property {Long} [intent_bytes] MVCCStats intent_bytes.
-                 * @property {Long} [intent_count] MVCCStats intent_count.
-                 * @property {Long} [sys_bytes] MVCCStats sys_bytes.
-                 * @property {Long} [sys_count] MVCCStats sys_count.
-                 */
                 type MVCCStats$Properties = {
                     contains_estimates?: boolean;
                     last_update_nanos?: Long;
@@ -13996,87 +13203,87 @@ export namespace cockroach {
 
                     /**
                      * MVCCStats contains_estimates.
-                     * @type {boolean|undefined}
+                     * @type {boolean}
                      */
-                    public contains_estimates?: boolean;
+                    public contains_estimates: boolean;
 
                     /**
                      * MVCCStats last_update_nanos.
-                     * @type {Long|undefined}
+                     * @type {Long}
                      */
-                    public last_update_nanos?: Long;
+                    public last_update_nanos: Long;
 
                     /**
                      * MVCCStats intent_age.
-                     * @type {Long|undefined}
+                     * @type {Long}
                      */
-                    public intent_age?: Long;
+                    public intent_age: Long;
 
                     /**
                      * MVCCStats gc_bytes_age.
-                     * @type {Long|undefined}
+                     * @type {Long}
                      */
-                    public gc_bytes_age?: Long;
+                    public gc_bytes_age: Long;
 
                     /**
                      * MVCCStats live_bytes.
-                     * @type {Long|undefined}
+                     * @type {Long}
                      */
-                    public live_bytes?: Long;
+                    public live_bytes: Long;
 
                     /**
                      * MVCCStats live_count.
-                     * @type {Long|undefined}
+                     * @type {Long}
                      */
-                    public live_count?: Long;
+                    public live_count: Long;
 
                     /**
                      * MVCCStats key_bytes.
-                     * @type {Long|undefined}
+                     * @type {Long}
                      */
-                    public key_bytes?: Long;
+                    public key_bytes: Long;
 
                     /**
                      * MVCCStats key_count.
-                     * @type {Long|undefined}
+                     * @type {Long}
                      */
-                    public key_count?: Long;
+                    public key_count: Long;
 
                     /**
                      * MVCCStats val_bytes.
-                     * @type {Long|undefined}
+                     * @type {Long}
                      */
-                    public val_bytes?: Long;
+                    public val_bytes: Long;
 
                     /**
                      * MVCCStats val_count.
-                     * @type {Long|undefined}
+                     * @type {Long}
                      */
-                    public val_count?: Long;
+                    public val_count: Long;
 
                     /**
                      * MVCCStats intent_bytes.
-                     * @type {Long|undefined}
+                     * @type {Long}
                      */
-                    public intent_bytes?: Long;
+                    public intent_bytes: Long;
 
                     /**
                      * MVCCStats intent_count.
-                     * @type {Long|undefined}
+                     * @type {Long}
                      */
-                    public intent_count?: Long;
+                    public intent_count: Long;
 
                     /**
                      * MVCCStats sys_bytes.
-                     * @type {Long|undefined}
+                     * @type {Long}
                      */
-                    public sys_bytes?: Long;
+                    public sys_bytes: Long;
 
                     /**
                      * MVCCStats sys_count.
-                     * @type {Long|undefined}
+                     * @type {Long}
                      */
-                    public sys_count?: Long;
+                    public sys_count: Long;
 
                     /**
                      * Creates a new MVCCStats instance using the specified properties.
@@ -14167,15 +13374,6 @@ export namespace cockroach {
             }
         }
 
-        /**
-         * Properties of a Liveness.
-         * @typedef cockroach.storage.Liveness$Properties
-         * @type {Object}
-         * @property {number} [node_id] Liveness node_id.
-         * @property {Long} [epoch] Liveness epoch.
-         * @property {cockroach.util.hlc.Timestamp$Properties} [expiration] Liveness expiration.
-         * @property {boolean} [draining] Liveness draining.
-         */
         type Liveness$Properties = {
             node_id?: number;
             epoch?: Long;
@@ -14201,27 +13399,27 @@ export namespace cockroach {
 
             /**
              * Liveness node_id.
-             * @type {number|undefined}
+             * @type {number}
              */
-            public node_id?: number;
+            public node_id: number;
 
             /**
              * Liveness epoch.
-             * @type {Long|undefined}
+             * @type {Long}
              */
-            public epoch?: Long;
+            public epoch: Long;
 
             /**
              * Liveness expiration.
-             * @type {cockroach.util.hlc.Timestamp$Properties|undefined}
+             * @type {(cockroach.util.hlc.Timestamp$Properties|null)}
              */
-            public expiration?: cockroach.util.hlc.Timestamp$Properties;
+            public expiration: (cockroach.util.hlc.Timestamp$Properties|null);
 
             /**
              * Liveness draining.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
-            public draining?: boolean;
+            public draining: boolean;
 
             /**
              * Creates a new Liveness instance using the specified properties.
@@ -14317,19 +13515,6 @@ export namespace cockroach {
          */
         namespace storagebase {
 
-            /**
-             * Properties of a ReplicaState.
-             * @typedef cockroach.storage.storagebase.ReplicaState$Properties
-             * @type {Object}
-             * @property {Long} [raft_applied_index] ReplicaState raft_applied_index.
-             * @property {Long} [lease_applied_index] ReplicaState lease_applied_index.
-             * @property {cockroach.roachpb.RangeDescriptor$Properties} [desc] ReplicaState desc.
-             * @property {cockroach.roachpb.Lease$Properties} [lease] ReplicaState lease.
-             * @property {cockroach.roachpb.RaftTruncatedState$Properties} [truncated_state] ReplicaState truncated_state.
-             * @property {cockroach.util.hlc.Timestamp$Properties} [gc_threshold] ReplicaState gc_threshold.
-             * @property {cockroach.storage.engine.enginepb.MVCCStats$Properties} [stats] ReplicaState stats.
-             * @property {cockroach.util.hlc.Timestamp$Properties} [txn_span_gc_threshold] ReplicaState txn_span_gc_threshold.
-             */
             type ReplicaState$Properties = {
                 raft_applied_index?: Long;
                 lease_applied_index?: Long;
@@ -14359,51 +13544,51 @@ export namespace cockroach {
 
                 /**
                  * ReplicaState raft_applied_index.
-                 * @type {Long|undefined}
+                 * @type {Long}
                  */
-                public raft_applied_index?: Long;
+                public raft_applied_index: Long;
 
                 /**
                  * ReplicaState lease_applied_index.
-                 * @type {Long|undefined}
+                 * @type {Long}
                  */
-                public lease_applied_index?: Long;
+                public lease_applied_index: Long;
 
                 /**
                  * ReplicaState desc.
-                 * @type {cockroach.roachpb.RangeDescriptor$Properties|undefined}
+                 * @type {(cockroach.roachpb.RangeDescriptor$Properties|null)}
                  */
-                public desc?: cockroach.roachpb.RangeDescriptor$Properties;
+                public desc: (cockroach.roachpb.RangeDescriptor$Properties|null);
 
                 /**
                  * ReplicaState lease.
-                 * @type {cockroach.roachpb.Lease$Properties|undefined}
+                 * @type {(cockroach.roachpb.Lease$Properties|null)}
                  */
-                public lease?: cockroach.roachpb.Lease$Properties;
+                public lease: (cockroach.roachpb.Lease$Properties|null);
 
                 /**
                  * ReplicaState truncated_state.
-                 * @type {cockroach.roachpb.RaftTruncatedState$Properties|undefined}
+                 * @type {(cockroach.roachpb.RaftTruncatedState$Properties|null)}
                  */
-                public truncated_state?: cockroach.roachpb.RaftTruncatedState$Properties;
+                public truncated_state: (cockroach.roachpb.RaftTruncatedState$Properties|null);
 
                 /**
                  * ReplicaState gc_threshold.
-                 * @type {cockroach.util.hlc.Timestamp$Properties|undefined}
+                 * @type {(cockroach.util.hlc.Timestamp$Properties|null)}
                  */
-                public gc_threshold?: cockroach.util.hlc.Timestamp$Properties;
+                public gc_threshold: (cockroach.util.hlc.Timestamp$Properties|null);
 
                 /**
                  * ReplicaState stats.
-                 * @type {cockroach.storage.engine.enginepb.MVCCStats$Properties|undefined}
+                 * @type {(cockroach.storage.engine.enginepb.MVCCStats$Properties|null)}
                  */
-                public stats?: cockroach.storage.engine.enginepb.MVCCStats$Properties;
+                public stats: (cockroach.storage.engine.enginepb.MVCCStats$Properties|null);
 
                 /**
                  * ReplicaState txn_span_gc_threshold.
-                 * @type {cockroach.util.hlc.Timestamp$Properties|undefined}
+                 * @type {(cockroach.util.hlc.Timestamp$Properties|null)}
                  */
-                public txn_span_gc_threshold?: cockroach.util.hlc.Timestamp$Properties;
+                public txn_span_gc_threshold: (cockroach.util.hlc.Timestamp$Properties|null);
 
                 /**
                  * Creates a new ReplicaState instance using the specified properties.
@@ -14492,16 +13677,6 @@ export namespace cockroach {
                 public toJSON(): { [k: string]: any };
             }
 
-            /**
-             * Properties of a RangeInfo.
-             * @typedef cockroach.storage.storagebase.RangeInfo$Properties
-             * @type {Object}
-             * @property {cockroach.storage.storagebase.ReplicaState$Properties} [state] RangeInfo state.
-             * @property {Long} [lastIndex] RangeInfo lastIndex.
-             * @property {Long} [num_pending] RangeInfo num_pending.
-             * @property {Long} [num_dropped] RangeInfo num_dropped.
-             * @property {Long} [raft_log_size] RangeInfo raft_log_size.
-             */
             type RangeInfo$Properties = {
                 state?: cockroach.storage.storagebase.ReplicaState$Properties;
                 lastIndex?: Long;
@@ -14528,33 +13703,33 @@ export namespace cockroach {
 
                 /**
                  * RangeInfo state.
-                 * @type {cockroach.storage.storagebase.ReplicaState$Properties|undefined}
+                 * @type {(cockroach.storage.storagebase.ReplicaState$Properties|null)}
                  */
-                public state?: cockroach.storage.storagebase.ReplicaState$Properties;
+                public state: (cockroach.storage.storagebase.ReplicaState$Properties|null);
 
                 /**
                  * RangeInfo lastIndex.
-                 * @type {Long|undefined}
+                 * @type {Long}
                  */
-                public lastIndex?: Long;
+                public lastIndex: Long;
 
                 /**
                  * RangeInfo num_pending.
-                 * @type {Long|undefined}
+                 * @type {Long}
                  */
-                public num_pending?: Long;
+                public num_pending: Long;
 
                 /**
                  * RangeInfo num_dropped.
-                 * @type {Long|undefined}
+                 * @type {Long}
                  */
-                public num_dropped?: Long;
+                public num_dropped: Long;
 
                 /**
                  * RangeInfo raft_log_size.
-                 * @type {Long|undefined}
+                 * @type {Long}
                  */
-                public raft_log_size?: Long;
+                public raft_log_size: Long;
 
                 /**
                  * Creates a new RangeInfo instance using the specified properties.
@@ -14652,20 +13827,6 @@ export namespace cockroach {
      */
     namespace build {
 
-        /**
-         * Properties of an Info.
-         * @typedef cockroach.build.Info$Properties
-         * @type {Object}
-         * @property {string} [go_version] Info go_version.
-         * @property {string} [tag] Info tag.
-         * @property {string} [time] Info time.
-         * @property {string} [revision] Info revision.
-         * @property {string} [cgo_compiler] Info cgo_compiler.
-         * @property {string} [platform] Info platform.
-         * @property {string} [distribution] Info distribution.
-         * @property {string} [type] Info type.
-         * @property {string} [dependencies] Info dependencies.
-         */
         type Info$Properties = {
             go_version?: string;
             tag?: string;
@@ -14696,57 +13857,57 @@ export namespace cockroach {
 
             /**
              * Info go_version.
-             * @type {string|undefined}
+             * @type {string}
              */
-            public go_version?: string;
+            public go_version: string;
 
             /**
              * Info tag.
-             * @type {string|undefined}
+             * @type {string}
              */
-            public tag?: string;
+            public tag: string;
 
             /**
              * Info time.
-             * @type {string|undefined}
+             * @type {string}
              */
-            public time?: string;
+            public time: string;
 
             /**
              * Info revision.
-             * @type {string|undefined}
+             * @type {string}
              */
-            public revision?: string;
+            public revision: string;
 
             /**
              * Info cgo_compiler.
-             * @type {string|undefined}
+             * @type {string}
              */
-            public cgo_compiler?: string;
+            public cgo_compiler: string;
 
             /**
              * Info platform.
-             * @type {string|undefined}
+             * @type {string}
              */
-            public platform?: string;
+            public platform: string;
 
             /**
              * Info distribution.
-             * @type {string|undefined}
+             * @type {string}
              */
-            public distribution?: string;
+            public distribution: string;
 
             /**
              * Info type.
-             * @type {string|undefined}
+             * @type {string}
              */
-            public type?: string;
+            public type: string;
 
             /**
              * Info dependencies.
-             * @type {string|undefined}
+             * @type {string}
              */
-            public dependencies?: string;
+            public dependencies: string;
 
             /**
              * Creates a new Info instance using the specified properties.
@@ -14843,13 +14004,6 @@ export namespace cockroach {
      */
     namespace gossip {
 
-        /**
-         * Properties of a BootstrapInfo.
-         * @typedef cockroach.gossip.BootstrapInfo$Properties
-         * @type {Object}
-         * @property {Array.<cockroach.util.UnresolvedAddr$Properties>} [addresses] BootstrapInfo addresses.
-         * @property {cockroach.util.hlc.Timestamp$Properties} [timestamp] BootstrapInfo timestamp.
-         */
         type BootstrapInfo$Properties = {
             addresses?: cockroach.util.UnresolvedAddr$Properties[];
             timestamp?: cockroach.util.hlc.Timestamp$Properties;
@@ -14873,15 +14027,15 @@ export namespace cockroach {
 
             /**
              * BootstrapInfo addresses.
-             * @type {Array.<cockroach.util.UnresolvedAddr$Properties>|undefined}
+             * @type {Array.<cockroach.util.UnresolvedAddr$Properties>}
              */
-            public addresses?: cockroach.util.UnresolvedAddr$Properties[];
+            public addresses: cockroach.util.UnresolvedAddr$Properties[];
 
             /**
              * BootstrapInfo timestamp.
-             * @type {cockroach.util.hlc.Timestamp$Properties|undefined}
+             * @type {(cockroach.util.hlc.Timestamp$Properties|null)}
              */
-            public timestamp?: cockroach.util.hlc.Timestamp$Properties;
+            public timestamp: (cockroach.util.hlc.Timestamp$Properties|null);
 
             /**
              * Creates a new BootstrapInfo instance using the specified properties.
@@ -14970,16 +14124,6 @@ export namespace cockroach {
             public toJSON(): { [k: string]: any };
         }
 
-        /**
-         * Properties of a Request.
-         * @typedef cockroach.gossip.Request$Properties
-         * @type {Object}
-         * @property {number} [node_id] Request node_id.
-         * @property {cockroach.util.UnresolvedAddr$Properties} [addr] Request addr.
-         * @property {Object.<string,Long>} [high_water_stamps] Request high_water_stamps.
-         * @property {Object.<string,cockroach.gossip.Info$Properties>} [delta] Request delta.
-         * @property {Uint8Array} [cluster_id] Request cluster_id.
-         */
         type Request$Properties = {
             node_id?: number;
             addr?: cockroach.util.UnresolvedAddr$Properties;
@@ -15006,33 +14150,33 @@ export namespace cockroach {
 
             /**
              * Request node_id.
-             * @type {number|undefined}
+             * @type {number}
              */
-            public node_id?: number;
+            public node_id: number;
 
             /**
              * Request addr.
-             * @type {cockroach.util.UnresolvedAddr$Properties|undefined}
+             * @type {(cockroach.util.UnresolvedAddr$Properties|null)}
              */
-            public addr?: cockroach.util.UnresolvedAddr$Properties;
+            public addr: (cockroach.util.UnresolvedAddr$Properties|null);
 
             /**
              * Request high_water_stamps.
-             * @type {Object.<string,Long>|undefined}
+             * @type {Object.<string,Long>}
              */
-            public high_water_stamps?: { [k: string]: Long };
+            public high_water_stamps: { [k: string]: Long };
 
             /**
              * Request delta.
-             * @type {Object.<string,cockroach.gossip.Info$Properties>|undefined}
+             * @type {Object.<string,cockroach.gossip.Info$Properties>}
              */
-            public delta?: { [k: string]: cockroach.gossip.Info$Properties };
+            public delta: { [k: string]: cockroach.gossip.Info$Properties };
 
             /**
              * Request cluster_id.
-             * @type {Uint8Array|undefined}
+             * @type {Uint8Array}
              */
-            public cluster_id?: Uint8Array;
+            public cluster_id: Uint8Array;
 
             /**
              * Creates a new Request instance using the specified properties.
@@ -15121,17 +14265,6 @@ export namespace cockroach {
             public toJSON(): { [k: string]: any };
         }
 
-        /**
-         * Properties of a Response.
-         * @typedef cockroach.gossip.Response$Properties
-         * @type {Object}
-         * @property {number} [node_id] Response node_id.
-         * @property {cockroach.util.UnresolvedAddr$Properties} [addr] Response addr.
-         * @property {cockroach.util.UnresolvedAddr$Properties} [alternate_addr] Response alternate_addr.
-         * @property {number} [alternate_node_id] Response alternate_node_id.
-         * @property {Object.<string,cockroach.gossip.Info$Properties>} [delta] Response delta.
-         * @property {Object.<string,Long>} [high_water_stamps] Response high_water_stamps.
-         */
         type Response$Properties = {
             node_id?: number;
             addr?: cockroach.util.UnresolvedAddr$Properties;
@@ -15159,39 +14292,39 @@ export namespace cockroach {
 
             /**
              * Response node_id.
-             * @type {number|undefined}
+             * @type {number}
              */
-            public node_id?: number;
+            public node_id: number;
 
             /**
              * Response addr.
-             * @type {cockroach.util.UnresolvedAddr$Properties|undefined}
+             * @type {(cockroach.util.UnresolvedAddr$Properties|null)}
              */
-            public addr?: cockroach.util.UnresolvedAddr$Properties;
+            public addr: (cockroach.util.UnresolvedAddr$Properties|null);
 
             /**
              * Response alternate_addr.
-             * @type {cockroach.util.UnresolvedAddr$Properties|undefined}
+             * @type {(cockroach.util.UnresolvedAddr$Properties|null)}
              */
-            public alternate_addr?: cockroach.util.UnresolvedAddr$Properties;
+            public alternate_addr: (cockroach.util.UnresolvedAddr$Properties|null);
 
             /**
              * Response alternate_node_id.
-             * @type {number|undefined}
+             * @type {number}
              */
-            public alternate_node_id?: number;
+            public alternate_node_id: number;
 
             /**
              * Response delta.
-             * @type {Object.<string,cockroach.gossip.Info$Properties>|undefined}
+             * @type {Object.<string,cockroach.gossip.Info$Properties>}
              */
-            public delta?: { [k: string]: cockroach.gossip.Info$Properties };
+            public delta: { [k: string]: cockroach.gossip.Info$Properties };
 
             /**
              * Response high_water_stamps.
-             * @type {Object.<string,Long>|undefined}
+             * @type {Object.<string,Long>}
              */
-            public high_water_stamps?: { [k: string]: Long };
+            public high_water_stamps: { [k: string]: Long };
 
             /**
              * Creates a new Response instance using the specified properties.
@@ -15280,12 +14413,6 @@ export namespace cockroach {
             public toJSON(): { [k: string]: any };
         }
 
-        /**
-         * Properties of an InfoStatus.
-         * @typedef cockroach.gossip.InfoStatus$Properties
-         * @type {Object}
-         * @property {Object.<string,cockroach.gossip.Info$Properties>} [infos] InfoStatus infos.
-         */
         type InfoStatus$Properties = {
             infos?: { [k: string]: cockroach.gossip.Info$Properties };
         };
@@ -15308,9 +14435,9 @@ export namespace cockroach {
 
             /**
              * InfoStatus infos.
-             * @type {Object.<string,cockroach.gossip.Info$Properties>|undefined}
+             * @type {Object.<string,cockroach.gossip.Info$Properties>}
              */
-            public infos?: { [k: string]: cockroach.gossip.Info$Properties };
+            public infos: { [k: string]: cockroach.gossip.Info$Properties };
 
             /**
              * Creates a new InfoStatus instance using the specified properties.
@@ -15399,17 +14526,6 @@ export namespace cockroach {
             public toJSON(): { [k: string]: any };
         }
 
-        /**
-         * Properties of an Info.
-         * @typedef cockroach.gossip.Info$Properties
-         * @type {Object}
-         * @property {cockroach.roachpb.Value$Properties} [value] Info value.
-         * @property {Long} [orig_stamp] Info orig_stamp.
-         * @property {Long} [ttl_stamp] Info ttl_stamp.
-         * @property {number} [hops] Info hops.
-         * @property {number} [node_id] Info node_id.
-         * @property {number} [peer_id] Info peer_id.
-         */
         type Info$Properties = {
             value?: cockroach.roachpb.Value$Properties;
             orig_stamp?: Long;
@@ -15437,39 +14553,39 @@ export namespace cockroach {
 
             /**
              * Info value.
-             * @type {cockroach.roachpb.Value$Properties|undefined}
+             * @type {(cockroach.roachpb.Value$Properties|null)}
              */
-            public value?: cockroach.roachpb.Value$Properties;
+            public value: (cockroach.roachpb.Value$Properties|null);
 
             /**
              * Info orig_stamp.
-             * @type {Long|undefined}
+             * @type {Long}
              */
-            public orig_stamp?: Long;
+            public orig_stamp: Long;
 
             /**
              * Info ttl_stamp.
-             * @type {Long|undefined}
+             * @type {Long}
              */
-            public ttl_stamp?: Long;
+            public ttl_stamp: Long;
 
             /**
              * Info hops.
-             * @type {number|undefined}
+             * @type {number}
              */
-            public hops?: number;
+            public hops: number;
 
             /**
              * Info node_id.
-             * @type {number|undefined}
+             * @type {number}
              */
-            public node_id?: number;
+            public node_id: number;
 
             /**
              * Info peer_id.
-             * @type {number|undefined}
+             * @type {number}
              */
-            public peer_id?: number;
+            public peer_id: number;
 
             /**
              * Creates a new Info instance using the specified properties.
@@ -15613,13 +14729,6 @@ export namespace cockroach {
          */
         namespace tspb {
 
-            /**
-             * Properties of a TimeSeriesDatapoint.
-             * @typedef cockroach.ts.tspb.TimeSeriesDatapoint$Properties
-             * @type {Object}
-             * @property {Long} [timestamp_nanos] TimeSeriesDatapoint timestamp_nanos.
-             * @property {number} [value] TimeSeriesDatapoint value.
-             */
             type TimeSeriesDatapoint$Properties = {
                 timestamp_nanos?: Long;
                 value?: number;
@@ -15643,15 +14752,15 @@ export namespace cockroach {
 
                 /**
                  * TimeSeriesDatapoint timestamp_nanos.
-                 * @type {Long|undefined}
+                 * @type {Long}
                  */
-                public timestamp_nanos?: Long;
+                public timestamp_nanos: Long;
 
                 /**
                  * TimeSeriesDatapoint value.
-                 * @type {number|undefined}
+                 * @type {number}
                  */
-                public value?: number;
+                public value: number;
 
                 /**
                  * Creates a new TimeSeriesDatapoint instance using the specified properties.
@@ -15740,14 +14849,6 @@ export namespace cockroach {
                 public toJSON(): { [k: string]: any };
             }
 
-            /**
-             * Properties of a TimeSeriesData.
-             * @typedef cockroach.ts.tspb.TimeSeriesData$Properties
-             * @type {Object}
-             * @property {string} [name] TimeSeriesData name.
-             * @property {string} [source] TimeSeriesData source.
-             * @property {Array.<cockroach.ts.tspb.TimeSeriesDatapoint$Properties>} [datapoints] TimeSeriesData datapoints.
-             */
             type TimeSeriesData$Properties = {
                 name?: string;
                 source?: string;
@@ -15772,21 +14873,21 @@ export namespace cockroach {
 
                 /**
                  * TimeSeriesData name.
-                 * @type {string|undefined}
+                 * @type {string}
                  */
-                public name?: string;
+                public name: string;
 
                 /**
                  * TimeSeriesData source.
-                 * @type {string|undefined}
+                 * @type {string}
                  */
-                public source?: string;
+                public source: string;
 
                 /**
                  * TimeSeriesData datapoints.
-                 * @type {Array.<cockroach.ts.tspb.TimeSeriesDatapoint$Properties>|undefined}
+                 * @type {Array.<cockroach.ts.tspb.TimeSeriesDatapoint$Properties>}
                  */
-                public datapoints?: cockroach.ts.tspb.TimeSeriesDatapoint$Properties[];
+                public datapoints: cockroach.ts.tspb.TimeSeriesDatapoint$Properties[];
 
                 /**
                  * Creates a new TimeSeriesData instance using the specified properties.
@@ -15907,16 +15008,6 @@ export namespace cockroach {
                 NON_NEGATIVE_DERIVATIVE = 2
             }
 
-            /**
-             * Properties of a Query.
-             * @typedef cockroach.ts.tspb.Query$Properties
-             * @type {Object}
-             * @property {string} [name] Query name.
-             * @property {cockroach.ts.tspb.TimeSeriesQueryAggregator} [downsampler] Query downsampler.
-             * @property {cockroach.ts.tspb.TimeSeriesQueryAggregator} [source_aggregator] Query source_aggregator.
-             * @property {cockroach.ts.tspb.TimeSeriesQueryDerivative} [derivative] Query derivative.
-             * @property {Array.<string>} [sources] Query sources.
-             */
             type Query$Properties = {
                 name?: string;
                 downsampler?: cockroach.ts.tspb.TimeSeriesQueryAggregator;
@@ -15943,33 +15034,33 @@ export namespace cockroach {
 
                 /**
                  * Query name.
-                 * @type {string|undefined}
+                 * @type {string}
                  */
-                public name?: string;
+                public name: string;
 
                 /**
                  * Query downsampler.
-                 * @type {cockroach.ts.tspb.TimeSeriesQueryAggregator|undefined}
+                 * @type {cockroach.ts.tspb.TimeSeriesQueryAggregator}
                  */
-                public downsampler?: cockroach.ts.tspb.TimeSeriesQueryAggregator;
+                public downsampler: cockroach.ts.tspb.TimeSeriesQueryAggregator;
 
                 /**
                  * Query source_aggregator.
-                 * @type {cockroach.ts.tspb.TimeSeriesQueryAggregator|undefined}
+                 * @type {cockroach.ts.tspb.TimeSeriesQueryAggregator}
                  */
-                public source_aggregator?: cockroach.ts.tspb.TimeSeriesQueryAggregator;
+                public source_aggregator: cockroach.ts.tspb.TimeSeriesQueryAggregator;
 
                 /**
                  * Query derivative.
-                 * @type {cockroach.ts.tspb.TimeSeriesQueryDerivative|undefined}
+                 * @type {cockroach.ts.tspb.TimeSeriesQueryDerivative}
                  */
-                public derivative?: cockroach.ts.tspb.TimeSeriesQueryDerivative;
+                public derivative: cockroach.ts.tspb.TimeSeriesQueryDerivative;
 
                 /**
                  * Query sources.
-                 * @type {Array.<string>|undefined}
+                 * @type {Array.<string>}
                  */
-                public sources?: string[];
+                public sources: string[];
 
                 /**
                  * Creates a new Query instance using the specified properties.
@@ -16058,15 +15149,6 @@ export namespace cockroach {
                 public toJSON(): { [k: string]: any };
             }
 
-            /**
-             * Properties of a TimeSeriesQueryRequest.
-             * @typedef cockroach.ts.tspb.TimeSeriesQueryRequest$Properties
-             * @type {Object}
-             * @property {Long} [start_nanos] TimeSeriesQueryRequest start_nanos.
-             * @property {Long} [end_nanos] TimeSeriesQueryRequest end_nanos.
-             * @property {Array.<cockroach.ts.tspb.Query$Properties>} [queries] TimeSeriesQueryRequest queries.
-             * @property {Long} [sample_nanos] TimeSeriesQueryRequest sample_nanos.
-             */
             type TimeSeriesQueryRequest$Properties = {
                 start_nanos?: Long;
                 end_nanos?: Long;
@@ -16092,27 +15174,27 @@ export namespace cockroach {
 
                 /**
                  * TimeSeriesQueryRequest start_nanos.
-                 * @type {Long|undefined}
+                 * @type {Long}
                  */
-                public start_nanos?: Long;
+                public start_nanos: Long;
 
                 /**
                  * TimeSeriesQueryRequest end_nanos.
-                 * @type {Long|undefined}
+                 * @type {Long}
                  */
-                public end_nanos?: Long;
+                public end_nanos: Long;
 
                 /**
                  * TimeSeriesQueryRequest queries.
-                 * @type {Array.<cockroach.ts.tspb.Query$Properties>|undefined}
+                 * @type {Array.<cockroach.ts.tspb.Query$Properties>}
                  */
-                public queries?: cockroach.ts.tspb.Query$Properties[];
+                public queries: cockroach.ts.tspb.Query$Properties[];
 
                 /**
                  * TimeSeriesQueryRequest sample_nanos.
-                 * @type {Long|undefined}
+                 * @type {Long}
                  */
-                public sample_nanos?: Long;
+                public sample_nanos: Long;
 
                 /**
                  * Creates a new TimeSeriesQueryRequest instance using the specified properties.
@@ -16201,12 +15283,6 @@ export namespace cockroach {
                 public toJSON(): { [k: string]: any };
             }
 
-            /**
-             * Properties of a TimeSeriesQueryResponse.
-             * @typedef cockroach.ts.tspb.TimeSeriesQueryResponse$Properties
-             * @type {Object}
-             * @property {Array.<cockroach.ts.tspb.TimeSeriesQueryResponse.Result$Properties>} [results] TimeSeriesQueryResponse results.
-             */
             type TimeSeriesQueryResponse$Properties = {
                 results?: cockroach.ts.tspb.TimeSeriesQueryResponse.Result$Properties[];
             };
@@ -16229,9 +15305,9 @@ export namespace cockroach {
 
                 /**
                  * TimeSeriesQueryResponse results.
-                 * @type {Array.<cockroach.ts.tspb.TimeSeriesQueryResponse.Result$Properties>|undefined}
+                 * @type {Array.<cockroach.ts.tspb.TimeSeriesQueryResponse.Result$Properties>}
                  */
-                public results?: cockroach.ts.tspb.TimeSeriesQueryResponse.Result$Properties[];
+                public results: cockroach.ts.tspb.TimeSeriesQueryResponse.Result$Properties[];
 
                 /**
                  * Creates a new TimeSeriesQueryResponse instance using the specified properties.
@@ -16322,13 +15398,6 @@ export namespace cockroach {
 
             namespace TimeSeriesQueryResponse {
 
-                /**
-                 * Properties of a Result.
-                 * @typedef cockroach.ts.tspb.TimeSeriesQueryResponse.Result$Properties
-                 * @type {Object}
-                 * @property {cockroach.ts.tspb.Query$Properties} [query] Result query.
-                 * @property {Array.<cockroach.ts.tspb.TimeSeriesDatapoint$Properties>} [datapoints] Result datapoints.
-                 */
                 type Result$Properties = {
                     query?: cockroach.ts.tspb.Query$Properties;
                     datapoints?: cockroach.ts.tspb.TimeSeriesDatapoint$Properties[];
@@ -16352,15 +15421,15 @@ export namespace cockroach {
 
                     /**
                      * Result query.
-                     * @type {cockroach.ts.tspb.Query$Properties|undefined}
+                     * @type {(cockroach.ts.tspb.Query$Properties|null)}
                      */
-                    public query?: cockroach.ts.tspb.Query$Properties;
+                    public query: (cockroach.ts.tspb.Query$Properties|null);
 
                     /**
                      * Result datapoints.
-                     * @type {Array.<cockroach.ts.tspb.TimeSeriesDatapoint$Properties>|undefined}
+                     * @type {Array.<cockroach.ts.tspb.TimeSeriesDatapoint$Properties>}
                      */
-                    public datapoints?: cockroach.ts.tspb.TimeSeriesDatapoint$Properties[];
+                    public datapoints: cockroach.ts.tspb.TimeSeriesDatapoint$Properties[];
 
                     /**
                      * Creates a new Result instance using the specified properties.
@@ -16493,238 +15562,56 @@ export namespace cockroach {
     }
 }
 
-/**
- * Callback as used by {@link Admin#users}.
- * @typedef Admin_users_Callback
- * @type {function}
- * @param {?Error} error Error, if any
- * @param {cockroach.server.serverpb.UsersResponse} [response] UsersResponse
- */
 type Admin_users_Callback = (error: Error, response?: cockroach.server.serverpb.UsersResponse) => void;
 
-/**
- * Callback as used by {@link Admin#databases}.
- * @typedef Admin_databases_Callback
- * @type {function}
- * @param {?Error} error Error, if any
- * @param {cockroach.server.serverpb.DatabasesResponse} [response] DatabasesResponse
- */
 type Admin_databases_Callback = (error: Error, response?: cockroach.server.serverpb.DatabasesResponse) => void;
 
-/**
- * Callback as used by {@link Admin#databaseDetails}.
- * @typedef Admin_databaseDetails_Callback
- * @type {function}
- * @param {?Error} error Error, if any
- * @param {cockroach.server.serverpb.DatabaseDetailsResponse} [response] DatabaseDetailsResponse
- */
 type Admin_databaseDetails_Callback = (error: Error, response?: cockroach.server.serverpb.DatabaseDetailsResponse) => void;
 
-/**
- * Callback as used by {@link Admin#tableDetails}.
- * @typedef Admin_tableDetails_Callback
- * @type {function}
- * @param {?Error} error Error, if any
- * @param {cockroach.server.serverpb.TableDetailsResponse} [response] TableDetailsResponse
- */
 type Admin_tableDetails_Callback = (error: Error, response?: cockroach.server.serverpb.TableDetailsResponse) => void;
 
-/**
- * Callback as used by {@link Admin#tableStats}.
- * @typedef Admin_tableStats_Callback
- * @type {function}
- * @param {?Error} error Error, if any
- * @param {cockroach.server.serverpb.TableStatsResponse} [response] TableStatsResponse
- */
 type Admin_tableStats_Callback = (error: Error, response?: cockroach.server.serverpb.TableStatsResponse) => void;
 
-/**
- * Callback as used by {@link Admin#events}.
- * @typedef Admin_events_Callback
- * @type {function}
- * @param {?Error} error Error, if any
- * @param {cockroach.server.serverpb.EventsResponse} [response] EventsResponse
- */
 type Admin_events_Callback = (error: Error, response?: cockroach.server.serverpb.EventsResponse) => void;
 
-/**
- * Callback as used by {@link Admin#setUIData}.
- * @typedef Admin_setUIData_Callback
- * @type {function}
- * @param {?Error} error Error, if any
- * @param {cockroach.server.serverpb.SetUIDataResponse} [response] SetUIDataResponse
- */
 type Admin_setUIData_Callback = (error: Error, response?: cockroach.server.serverpb.SetUIDataResponse) => void;
 
-/**
- * Callback as used by {@link Admin#getUIData}.
- * @typedef Admin_getUIData_Callback
- * @type {function}
- * @param {?Error} error Error, if any
- * @param {cockroach.server.serverpb.GetUIDataResponse} [response] GetUIDataResponse
- */
 type Admin_getUIData_Callback = (error: Error, response?: cockroach.server.serverpb.GetUIDataResponse) => void;
 
-/**
- * Callback as used by {@link Admin#cluster}.
- * @typedef Admin_cluster_Callback
- * @type {function}
- * @param {?Error} error Error, if any
- * @param {cockroach.server.serverpb.ClusterResponse} [response] ClusterResponse
- */
 type Admin_cluster_Callback = (error: Error, response?: cockroach.server.serverpb.ClusterResponse) => void;
 
-/**
- * Callback as used by {@link Admin#health}.
- * @typedef Admin_health_Callback
- * @type {function}
- * @param {?Error} error Error, if any
- * @param {cockroach.server.serverpb.HealthResponse} [response] HealthResponse
- */
 type Admin_health_Callback = (error: Error, response?: cockroach.server.serverpb.HealthResponse) => void;
 
-/**
- * Callback as used by {@link Admin#liveness}.
- * @typedef Admin_liveness_Callback
- * @type {function}
- * @param {?Error} error Error, if any
- * @param {cockroach.server.serverpb.LivenessResponse} [response] LivenessResponse
- */
 type Admin_liveness_Callback = (error: Error, response?: cockroach.server.serverpb.LivenessResponse) => void;
 
-/**
- * Callback as used by {@link Admin#drain}.
- * @typedef Admin_drain_Callback
- * @type {function}
- * @param {?Error} error Error, if any
- * @param {cockroach.server.serverpb.DrainResponse} [response] DrainResponse
- */
 type Admin_drain_Callback = (error: Error, response?: cockroach.server.serverpb.DrainResponse) => void;
 
-/**
- * Callback as used by {@link Status#details}.
- * @typedef Status_details_Callback
- * @type {function}
- * @param {?Error} error Error, if any
- * @param {cockroach.server.serverpb.DetailsResponse} [response] DetailsResponse
- */
 type Status_details_Callback = (error: Error, response?: cockroach.server.serverpb.DetailsResponse) => void;
 
-/**
- * Callback as used by {@link Status#nodes}.
- * @typedef Status_nodes_Callback
- * @type {function}
- * @param {?Error} error Error, if any
- * @param {cockroach.server.serverpb.NodesResponse} [response] NodesResponse
- */
 type Status_nodes_Callback = (error: Error, response?: cockroach.server.serverpb.NodesResponse) => void;
 
-/**
- * Callback as used by {@link Status#node}.
- * @typedef Status_node_Callback
- * @type {function}
- * @param {?Error} error Error, if any
- * @param {cockroach.server.status.NodeStatus} [response] NodeStatus
- */
 type Status_node_Callback = (error: Error, response?: cockroach.server.status.NodeStatus) => void;
 
-/**
- * Callback as used by {@link Status#raftDebug}.
- * @typedef Status_raftDebug_Callback
- * @type {function}
- * @param {?Error} error Error, if any
- * @param {cockroach.server.serverpb.RaftDebugResponse} [response] RaftDebugResponse
- */
 type Status_raftDebug_Callback = (error: Error, response?: cockroach.server.serverpb.RaftDebugResponse) => void;
 
-/**
- * Callback as used by {@link Status#ranges}.
- * @typedef Status_ranges_Callback
- * @type {function}
- * @param {?Error} error Error, if any
- * @param {cockroach.server.serverpb.RangesResponse} [response] RangesResponse
- */
 type Status_ranges_Callback = (error: Error, response?: cockroach.server.serverpb.RangesResponse) => void;
 
-/**
- * Callback as used by {@link Status#gossip}.
- * @typedef Status_gossip_Callback
- * @type {function}
- * @param {?Error} error Error, if any
- * @param {cockroach.gossip.InfoStatus} [response] InfoStatus
- */
 type Status_gossip_Callback = (error: Error, response?: cockroach.gossip.InfoStatus) => void;
 
-/**
- * Callback as used by {@link Status#spanStats}.
- * @typedef Status_spanStats_Callback
- * @type {function}
- * @param {?Error} error Error, if any
- * @param {cockroach.server.serverpb.SpanStatsResponse} [response] SpanStatsResponse
- */
 type Status_spanStats_Callback = (error: Error, response?: cockroach.server.serverpb.SpanStatsResponse) => void;
 
-/**
- * Callback as used by {@link Status#stacks}.
- * @typedef Status_stacks_Callback
- * @type {function}
- * @param {?Error} error Error, if any
- * @param {cockroach.server.serverpb.JSONResponse} [response] JSONResponse
- */
 type Status_stacks_Callback = (error: Error, response?: cockroach.server.serverpb.JSONResponse) => void;
 
-/**
- * Callback as used by {@link Status#metrics}.
- * @typedef Status_metrics_Callback
- * @type {function}
- * @param {?Error} error Error, if any
- * @param {cockroach.server.serverpb.JSONResponse} [response] JSONResponse
- */
 type Status_metrics_Callback = (error: Error, response?: cockroach.server.serverpb.JSONResponse) => void;
 
-/**
- * Callback as used by {@link Status#logFilesList}.
- * @typedef Status_logFilesList_Callback
- * @type {function}
- * @param {?Error} error Error, if any
- * @param {cockroach.server.serverpb.LogFilesListResponse} [response] LogFilesListResponse
- */
 type Status_logFilesList_Callback = (error: Error, response?: cockroach.server.serverpb.LogFilesListResponse) => void;
 
-/**
- * Callback as used by {@link Status#logFile}.
- * @typedef Status_logFile_Callback
- * @type {function}
- * @param {?Error} error Error, if any
- * @param {cockroach.server.serverpb.LogEntriesResponse} [response] LogEntriesResponse
- */
 type Status_logFile_Callback = (error: Error, response?: cockroach.server.serverpb.LogEntriesResponse) => void;
 
-/**
- * Callback as used by {@link Status#logs}.
- * @typedef Status_logs_Callback
- * @type {function}
- * @param {?Error} error Error, if any
- * @param {cockroach.server.serverpb.LogEntriesResponse} [response] LogEntriesResponse
- */
 type Status_logs_Callback = (error: Error, response?: cockroach.server.serverpb.LogEntriesResponse) => void;
 
-/**
- * Callback as used by {@link Gossip#gossip}.
- * @typedef Gossip_gossip_Callback
- * @type {function}
- * @param {?Error} error Error, if any
- * @param {cockroach.gossip.Response} [response] Response
- */
 type Gossip_gossip_Callback = (error: Error, response?: cockroach.gossip.Response) => void;
 
-/**
- * Callback as used by {@link TimeSeries#query}.
- * @typedef TimeSeries_query_Callback
- * @type {function}
- * @param {?Error} error Error, if any
- * @param {cockroach.ts.tspb.TimeSeriesQueryResponse} [response] TimeSeriesQueryResponse
- */
 type TimeSeries_query_Callback = (error: Error, response?: cockroach.ts.tspb.TimeSeriesQueryResponse) => void;
 
 /**
@@ -16749,12 +15636,6 @@ export namespace google {
      */
     namespace protobuf {
 
-        /**
-         * Properties of a FileDescriptorSet.
-         * @typedef google.protobuf.FileDescriptorSet$Properties
-         * @type {Object}
-         * @property {Array.<google.protobuf.FileDescriptorProto$Properties>} [file] FileDescriptorSet file.
-         */
         type FileDescriptorSet$Properties = {
             file?: google.protobuf.FileDescriptorProto$Properties[];
         };
@@ -16777,9 +15658,9 @@ export namespace google {
 
             /**
              * FileDescriptorSet file.
-             * @type {Array.<google.protobuf.FileDescriptorProto$Properties>|undefined}
+             * @type {Array.<google.protobuf.FileDescriptorProto$Properties>}
              */
-            public file?: google.protobuf.FileDescriptorProto$Properties[];
+            public file: google.protobuf.FileDescriptorProto$Properties[];
 
             /**
              * Creates a new FileDescriptorSet instance using the specified properties.
@@ -16868,23 +15749,6 @@ export namespace google {
             public toJSON(): { [k: string]: any };
         }
 
-        /**
-         * Properties of a FileDescriptorProto.
-         * @typedef google.protobuf.FileDescriptorProto$Properties
-         * @type {Object}
-         * @property {string} [name] FileDescriptorProto name.
-         * @property {string} ["package"] FileDescriptorProto package.
-         * @property {Array.<string>} [dependency] FileDescriptorProto dependency.
-         * @property {Array.<number>} [public_dependency] FileDescriptorProto public_dependency.
-         * @property {Array.<number>} [weak_dependency] FileDescriptorProto weak_dependency.
-         * @property {Array.<google.protobuf.DescriptorProto$Properties>} [message_type] FileDescriptorProto message_type.
-         * @property {Array.<google.protobuf.EnumDescriptorProto$Properties>} [enum_type] FileDescriptorProto enum_type.
-         * @property {Array.<google.protobuf.ServiceDescriptorProto$Properties>} [service] FileDescriptorProto service.
-         * @property {Array.<google.protobuf.FieldDescriptorProto$Properties>} [extension] FileDescriptorProto extension.
-         * @property {google.protobuf.FileOptions$Properties} [options] FileDescriptorProto options.
-         * @property {google.protobuf.SourceCodeInfo$Properties} [source_code_info] FileDescriptorProto source_code_info.
-         * @property {string} [syntax] FileDescriptorProto syntax.
-         */
         type FileDescriptorProto$Properties = {
             name?: string;
             "package"?: string;
@@ -16918,75 +15782,75 @@ export namespace google {
 
             /**
              * FileDescriptorProto name.
-             * @type {string|undefined}
+             * @type {string}
              */
-            public name?: string;
+            public name: string;
 
             /**
              * FileDescriptorProto package.
-             * @type {string|undefined}
+             * @type {string}
              */
-            public ["package"]?: string;
+            public ["package"]: string;
 
             /**
              * FileDescriptorProto dependency.
-             * @type {Array.<string>|undefined}
+             * @type {Array.<string>}
              */
-            public dependency?: string[];
+            public dependency: string[];
 
             /**
              * FileDescriptorProto public_dependency.
-             * @type {Array.<number>|undefined}
+             * @type {Array.<number>}
              */
-            public public_dependency?: number[];
+            public public_dependency: number[];
 
             /**
              * FileDescriptorProto weak_dependency.
-             * @type {Array.<number>|undefined}
+             * @type {Array.<number>}
              */
-            public weak_dependency?: number[];
+            public weak_dependency: number[];
 
             /**
              * FileDescriptorProto message_type.
-             * @type {Array.<google.protobuf.DescriptorProto$Properties>|undefined}
+             * @type {Array.<google.protobuf.DescriptorProto$Properties>}
              */
-            public message_type?: google.protobuf.DescriptorProto$Properties[];
+            public message_type: google.protobuf.DescriptorProto$Properties[];
 
             /**
              * FileDescriptorProto enum_type.
-             * @type {Array.<google.protobuf.EnumDescriptorProto$Properties>|undefined}
+             * @type {Array.<google.protobuf.EnumDescriptorProto$Properties>}
              */
-            public enum_type?: google.protobuf.EnumDescriptorProto$Properties[];
+            public enum_type: google.protobuf.EnumDescriptorProto$Properties[];
 
             /**
              * FileDescriptorProto service.
-             * @type {Array.<google.protobuf.ServiceDescriptorProto$Properties>|undefined}
+             * @type {Array.<google.protobuf.ServiceDescriptorProto$Properties>}
              */
-            public service?: google.protobuf.ServiceDescriptorProto$Properties[];
+            public service: google.protobuf.ServiceDescriptorProto$Properties[];
 
             /**
              * FileDescriptorProto extension.
-             * @type {Array.<google.protobuf.FieldDescriptorProto$Properties>|undefined}
+             * @type {Array.<google.protobuf.FieldDescriptorProto$Properties>}
              */
-            public extension?: google.protobuf.FieldDescriptorProto$Properties[];
+            public extension: google.protobuf.FieldDescriptorProto$Properties[];
 
             /**
              * FileDescriptorProto options.
-             * @type {google.protobuf.FileOptions$Properties|undefined}
+             * @type {(google.protobuf.FileOptions$Properties|null)}
              */
-            public options?: google.protobuf.FileOptions$Properties;
+            public options: (google.protobuf.FileOptions$Properties|null);
 
             /**
              * FileDescriptorProto source_code_info.
-             * @type {google.protobuf.SourceCodeInfo$Properties|undefined}
+             * @type {(google.protobuf.SourceCodeInfo$Properties|null)}
              */
-            public source_code_info?: google.protobuf.SourceCodeInfo$Properties;
+            public source_code_info: (google.protobuf.SourceCodeInfo$Properties|null);
 
             /**
              * FileDescriptorProto syntax.
-             * @type {string|undefined}
+             * @type {string}
              */
-            public syntax?: string;
+            public syntax: string;
 
             /**
              * Creates a new FileDescriptorProto instance using the specified properties.
@@ -17075,21 +15939,6 @@ export namespace google {
             public toJSON(): { [k: string]: any };
         }
 
-        /**
-         * Properties of a DescriptorProto.
-         * @typedef google.protobuf.DescriptorProto$Properties
-         * @type {Object}
-         * @property {string} [name] DescriptorProto name.
-         * @property {Array.<google.protobuf.FieldDescriptorProto$Properties>} [field] DescriptorProto field.
-         * @property {Array.<google.protobuf.FieldDescriptorProto$Properties>} [extension] DescriptorProto extension.
-         * @property {Array.<google.protobuf.DescriptorProto$Properties>} [nested_type] DescriptorProto nested_type.
-         * @property {Array.<google.protobuf.EnumDescriptorProto$Properties>} [enum_type] DescriptorProto enum_type.
-         * @property {Array.<google.protobuf.DescriptorProto.ExtensionRange$Properties>} [extension_range] DescriptorProto extension_range.
-         * @property {Array.<google.protobuf.OneofDescriptorProto$Properties>} [oneof_decl] DescriptorProto oneof_decl.
-         * @property {google.protobuf.MessageOptions$Properties} [options] DescriptorProto options.
-         * @property {Array.<google.protobuf.DescriptorProto.ReservedRange$Properties>} [reserved_range] DescriptorProto reserved_range.
-         * @property {Array.<string>} [reserved_name] DescriptorProto reserved_name.
-         */
         type DescriptorProto$Properties = {
             name?: string;
             field?: google.protobuf.FieldDescriptorProto$Properties[];
@@ -17121,63 +15970,63 @@ export namespace google {
 
             /**
              * DescriptorProto name.
-             * @type {string|undefined}
+             * @type {string}
              */
-            public name?: string;
+            public name: string;
 
             /**
              * DescriptorProto field.
-             * @type {Array.<google.protobuf.FieldDescriptorProto$Properties>|undefined}
+             * @type {Array.<google.protobuf.FieldDescriptorProto$Properties>}
              */
-            public field?: google.protobuf.FieldDescriptorProto$Properties[];
+            public field: google.protobuf.FieldDescriptorProto$Properties[];
 
             /**
              * DescriptorProto extension.
-             * @type {Array.<google.protobuf.FieldDescriptorProto$Properties>|undefined}
+             * @type {Array.<google.protobuf.FieldDescriptorProto$Properties>}
              */
-            public extension?: google.protobuf.FieldDescriptorProto$Properties[];
+            public extension: google.protobuf.FieldDescriptorProto$Properties[];
 
             /**
              * DescriptorProto nested_type.
-             * @type {Array.<google.protobuf.DescriptorProto$Properties>|undefined}
+             * @type {Array.<google.protobuf.DescriptorProto$Properties>}
              */
-            public nested_type?: google.protobuf.DescriptorProto$Properties[];
+            public nested_type: google.protobuf.DescriptorProto$Properties[];
 
             /**
              * DescriptorProto enum_type.
-             * @type {Array.<google.protobuf.EnumDescriptorProto$Properties>|undefined}
+             * @type {Array.<google.protobuf.EnumDescriptorProto$Properties>}
              */
-            public enum_type?: google.protobuf.EnumDescriptorProto$Properties[];
+            public enum_type: google.protobuf.EnumDescriptorProto$Properties[];
 
             /**
              * DescriptorProto extension_range.
-             * @type {Array.<google.protobuf.DescriptorProto.ExtensionRange$Properties>|undefined}
+             * @type {Array.<google.protobuf.DescriptorProto.ExtensionRange$Properties>}
              */
-            public extension_range?: google.protobuf.DescriptorProto.ExtensionRange$Properties[];
+            public extension_range: google.protobuf.DescriptorProto.ExtensionRange$Properties[];
 
             /**
              * DescriptorProto oneof_decl.
-             * @type {Array.<google.protobuf.OneofDescriptorProto$Properties>|undefined}
+             * @type {Array.<google.protobuf.OneofDescriptorProto$Properties>}
              */
-            public oneof_decl?: google.protobuf.OneofDescriptorProto$Properties[];
+            public oneof_decl: google.protobuf.OneofDescriptorProto$Properties[];
 
             /**
              * DescriptorProto options.
-             * @type {google.protobuf.MessageOptions$Properties|undefined}
+             * @type {(google.protobuf.MessageOptions$Properties|null)}
              */
-            public options?: google.protobuf.MessageOptions$Properties;
+            public options: (google.protobuf.MessageOptions$Properties|null);
 
             /**
              * DescriptorProto reserved_range.
-             * @type {Array.<google.protobuf.DescriptorProto.ReservedRange$Properties>|undefined}
+             * @type {Array.<google.protobuf.DescriptorProto.ReservedRange$Properties>}
              */
-            public reserved_range?: google.protobuf.DescriptorProto.ReservedRange$Properties[];
+            public reserved_range: google.protobuf.DescriptorProto.ReservedRange$Properties[];
 
             /**
              * DescriptorProto reserved_name.
-             * @type {Array.<string>|undefined}
+             * @type {Array.<string>}
              */
-            public reserved_name?: string[];
+            public reserved_name: string[];
 
             /**
              * Creates a new DescriptorProto instance using the specified properties.
@@ -17268,13 +16117,6 @@ export namespace google {
 
         namespace DescriptorProto {
 
-            /**
-             * Properties of an ExtensionRange.
-             * @typedef google.protobuf.DescriptorProto.ExtensionRange$Properties
-             * @type {Object}
-             * @property {number} [start] ExtensionRange start.
-             * @property {number} [end] ExtensionRange end.
-             */
             type ExtensionRange$Properties = {
                 start?: number;
                 end?: number;
@@ -17298,15 +16140,15 @@ export namespace google {
 
                 /**
                  * ExtensionRange start.
-                 * @type {number|undefined}
+                 * @type {number}
                  */
-                public start?: number;
+                public start: number;
 
                 /**
                  * ExtensionRange end.
-                 * @type {number|undefined}
+                 * @type {number}
                  */
-                public end?: number;
+                public end: number;
 
                 /**
                  * Creates a new ExtensionRange instance using the specified properties.
@@ -17395,13 +16237,6 @@ export namespace google {
                 public toJSON(): { [k: string]: any };
             }
 
-            /**
-             * Properties of a ReservedRange.
-             * @typedef google.protobuf.DescriptorProto.ReservedRange$Properties
-             * @type {Object}
-             * @property {number} [start] ReservedRange start.
-             * @property {number} [end] ReservedRange end.
-             */
             type ReservedRange$Properties = {
                 start?: number;
                 end?: number;
@@ -17425,15 +16260,15 @@ export namespace google {
 
                 /**
                  * ReservedRange start.
-                 * @type {number|undefined}
+                 * @type {number}
                  */
-                public start?: number;
+                public start: number;
 
                 /**
                  * ReservedRange end.
-                 * @type {number|undefined}
+                 * @type {number}
                  */
-                public end?: number;
+                public end: number;
 
                 /**
                  * Creates a new ReservedRange instance using the specified properties.
@@ -17523,21 +16358,6 @@ export namespace google {
             }
         }
 
-        /**
-         * Properties of a FieldDescriptorProto.
-         * @typedef google.protobuf.FieldDescriptorProto$Properties
-         * @type {Object}
-         * @property {string} [name] FieldDescriptorProto name.
-         * @property {number} [number] FieldDescriptorProto number.
-         * @property {google.protobuf.FieldDescriptorProto.Label} [label] FieldDescriptorProto label.
-         * @property {google.protobuf.FieldDescriptorProto.Type} [type] FieldDescriptorProto type.
-         * @property {string} [type_name] FieldDescriptorProto type_name.
-         * @property {string} [extendee] FieldDescriptorProto extendee.
-         * @property {string} [default_value] FieldDescriptorProto default_value.
-         * @property {number} [oneof_index] FieldDescriptorProto oneof_index.
-         * @property {string} [json_name] FieldDescriptorProto json_name.
-         * @property {google.protobuf.FieldOptions$Properties} [options] FieldDescriptorProto options.
-         */
         type FieldDescriptorProto$Properties = {
             name?: string;
             number?: number;
@@ -17569,63 +16389,63 @@ export namespace google {
 
             /**
              * FieldDescriptorProto name.
-             * @type {string|undefined}
+             * @type {string}
              */
-            public name?: string;
+            public name: string;
 
             /**
              * FieldDescriptorProto number.
-             * @type {number|undefined}
+             * @type {number}
              */
-            public number?: number;
+            public number: number;
 
             /**
              * FieldDescriptorProto label.
-             * @type {google.protobuf.FieldDescriptorProto.Label|undefined}
+             * @type {google.protobuf.FieldDescriptorProto.Label}
              */
-            public label?: google.protobuf.FieldDescriptorProto.Label;
+            public label: google.protobuf.FieldDescriptorProto.Label;
 
             /**
              * FieldDescriptorProto type.
-             * @type {google.protobuf.FieldDescriptorProto.Type|undefined}
+             * @type {google.protobuf.FieldDescriptorProto.Type}
              */
-            public type?: google.protobuf.FieldDescriptorProto.Type;
+            public type: google.protobuf.FieldDescriptorProto.Type;
 
             /**
              * FieldDescriptorProto type_name.
-             * @type {string|undefined}
+             * @type {string}
              */
-            public type_name?: string;
+            public type_name: string;
 
             /**
              * FieldDescriptorProto extendee.
-             * @type {string|undefined}
+             * @type {string}
              */
-            public extendee?: string;
+            public extendee: string;
 
             /**
              * FieldDescriptorProto default_value.
-             * @type {string|undefined}
+             * @type {string}
              */
-            public default_value?: string;
+            public default_value: string;
 
             /**
              * FieldDescriptorProto oneof_index.
-             * @type {number|undefined}
+             * @type {number}
              */
-            public oneof_index?: number;
+            public oneof_index: number;
 
             /**
              * FieldDescriptorProto json_name.
-             * @type {string|undefined}
+             * @type {string}
              */
-            public json_name?: string;
+            public json_name: string;
 
             /**
              * FieldDescriptorProto options.
-             * @type {google.protobuf.FieldOptions$Properties|undefined}
+             * @type {(google.protobuf.FieldOptions$Properties|null)}
              */
-            public options?: google.protobuf.FieldOptions$Properties;
+            public options: (google.protobuf.FieldOptions$Properties|null);
 
             /**
              * Creates a new FieldDescriptorProto instance using the specified properties.
@@ -17777,13 +16597,6 @@ export namespace google {
             }
         }
 
-        /**
-         * Properties of an OneofDescriptorProto.
-         * @typedef google.protobuf.OneofDescriptorProto$Properties
-         * @type {Object}
-         * @property {string} [name] OneofDescriptorProto name.
-         * @property {google.protobuf.OneofOptions$Properties} [options] OneofDescriptorProto options.
-         */
         type OneofDescriptorProto$Properties = {
             name?: string;
             options?: google.protobuf.OneofOptions$Properties;
@@ -17807,15 +16620,15 @@ export namespace google {
 
             /**
              * OneofDescriptorProto name.
-             * @type {string|undefined}
+             * @type {string}
              */
-            public name?: string;
+            public name: string;
 
             /**
              * OneofDescriptorProto options.
-             * @type {google.protobuf.OneofOptions$Properties|undefined}
+             * @type {(google.protobuf.OneofOptions$Properties|null)}
              */
-            public options?: google.protobuf.OneofOptions$Properties;
+            public options: (google.protobuf.OneofOptions$Properties|null);
 
             /**
              * Creates a new OneofDescriptorProto instance using the specified properties.
@@ -17904,14 +16717,6 @@ export namespace google {
             public toJSON(): { [k: string]: any };
         }
 
-        /**
-         * Properties of an EnumDescriptorProto.
-         * @typedef google.protobuf.EnumDescriptorProto$Properties
-         * @type {Object}
-         * @property {string} [name] EnumDescriptorProto name.
-         * @property {Array.<google.protobuf.EnumValueDescriptorProto$Properties>} [value] EnumDescriptorProto value.
-         * @property {google.protobuf.EnumOptions$Properties} [options] EnumDescriptorProto options.
-         */
         type EnumDescriptorProto$Properties = {
             name?: string;
             value?: google.protobuf.EnumValueDescriptorProto$Properties[];
@@ -17936,21 +16741,21 @@ export namespace google {
 
             /**
              * EnumDescriptorProto name.
-             * @type {string|undefined}
+             * @type {string}
              */
-            public name?: string;
+            public name: string;
 
             /**
              * EnumDescriptorProto value.
-             * @type {Array.<google.protobuf.EnumValueDescriptorProto$Properties>|undefined}
+             * @type {Array.<google.protobuf.EnumValueDescriptorProto$Properties>}
              */
-            public value?: google.protobuf.EnumValueDescriptorProto$Properties[];
+            public value: google.protobuf.EnumValueDescriptorProto$Properties[];
 
             /**
              * EnumDescriptorProto options.
-             * @type {google.protobuf.EnumOptions$Properties|undefined}
+             * @type {(google.protobuf.EnumOptions$Properties|null)}
              */
-            public options?: google.protobuf.EnumOptions$Properties;
+            public options: (google.protobuf.EnumOptions$Properties|null);
 
             /**
              * Creates a new EnumDescriptorProto instance using the specified properties.
@@ -18039,14 +16844,6 @@ export namespace google {
             public toJSON(): { [k: string]: any };
         }
 
-        /**
-         * Properties of an EnumValueDescriptorProto.
-         * @typedef google.protobuf.EnumValueDescriptorProto$Properties
-         * @type {Object}
-         * @property {string} [name] EnumValueDescriptorProto name.
-         * @property {number} [number] EnumValueDescriptorProto number.
-         * @property {google.protobuf.EnumValueOptions$Properties} [options] EnumValueDescriptorProto options.
-         */
         type EnumValueDescriptorProto$Properties = {
             name?: string;
             number?: number;
@@ -18071,21 +16868,21 @@ export namespace google {
 
             /**
              * EnumValueDescriptorProto name.
-             * @type {string|undefined}
+             * @type {string}
              */
-            public name?: string;
+            public name: string;
 
             /**
              * EnumValueDescriptorProto number.
-             * @type {number|undefined}
+             * @type {number}
              */
-            public number?: number;
+            public number: number;
 
             /**
              * EnumValueDescriptorProto options.
-             * @type {google.protobuf.EnumValueOptions$Properties|undefined}
+             * @type {(google.protobuf.EnumValueOptions$Properties|null)}
              */
-            public options?: google.protobuf.EnumValueOptions$Properties;
+            public options: (google.protobuf.EnumValueOptions$Properties|null);
 
             /**
              * Creates a new EnumValueDescriptorProto instance using the specified properties.
@@ -18174,14 +16971,6 @@ export namespace google {
             public toJSON(): { [k: string]: any };
         }
 
-        /**
-         * Properties of a ServiceDescriptorProto.
-         * @typedef google.protobuf.ServiceDescriptorProto$Properties
-         * @type {Object}
-         * @property {string} [name] ServiceDescriptorProto name.
-         * @property {Array.<google.protobuf.MethodDescriptorProto$Properties>} [method] ServiceDescriptorProto method.
-         * @property {google.protobuf.ServiceOptions$Properties} [options] ServiceDescriptorProto options.
-         */
         type ServiceDescriptorProto$Properties = {
             name?: string;
             method?: google.protobuf.MethodDescriptorProto$Properties[];
@@ -18206,21 +16995,21 @@ export namespace google {
 
             /**
              * ServiceDescriptorProto name.
-             * @type {string|undefined}
+             * @type {string}
              */
-            public name?: string;
+            public name: string;
 
             /**
              * ServiceDescriptorProto method.
-             * @type {Array.<google.protobuf.MethodDescriptorProto$Properties>|undefined}
+             * @type {Array.<google.protobuf.MethodDescriptorProto$Properties>}
              */
-            public method?: google.protobuf.MethodDescriptorProto$Properties[];
+            public method: google.protobuf.MethodDescriptorProto$Properties[];
 
             /**
              * ServiceDescriptorProto options.
-             * @type {google.protobuf.ServiceOptions$Properties|undefined}
+             * @type {(google.protobuf.ServiceOptions$Properties|null)}
              */
-            public options?: google.protobuf.ServiceOptions$Properties;
+            public options: (google.protobuf.ServiceOptions$Properties|null);
 
             /**
              * Creates a new ServiceDescriptorProto instance using the specified properties.
@@ -18309,17 +17098,6 @@ export namespace google {
             public toJSON(): { [k: string]: any };
         }
 
-        /**
-         * Properties of a MethodDescriptorProto.
-         * @typedef google.protobuf.MethodDescriptorProto$Properties
-         * @type {Object}
-         * @property {string} [name] MethodDescriptorProto name.
-         * @property {string} [input_type] MethodDescriptorProto input_type.
-         * @property {string} [output_type] MethodDescriptorProto output_type.
-         * @property {google.protobuf.MethodOptions$Properties} [options] MethodDescriptorProto options.
-         * @property {boolean} [client_streaming] MethodDescriptorProto client_streaming.
-         * @property {boolean} [server_streaming] MethodDescriptorProto server_streaming.
-         */
         type MethodDescriptorProto$Properties = {
             name?: string;
             input_type?: string;
@@ -18347,39 +17125,39 @@ export namespace google {
 
             /**
              * MethodDescriptorProto name.
-             * @type {string|undefined}
+             * @type {string}
              */
-            public name?: string;
+            public name: string;
 
             /**
              * MethodDescriptorProto input_type.
-             * @type {string|undefined}
+             * @type {string}
              */
-            public input_type?: string;
+            public input_type: string;
 
             /**
              * MethodDescriptorProto output_type.
-             * @type {string|undefined}
+             * @type {string}
              */
-            public output_type?: string;
+            public output_type: string;
 
             /**
              * MethodDescriptorProto options.
-             * @type {google.protobuf.MethodOptions$Properties|undefined}
+             * @type {(google.protobuf.MethodOptions$Properties|null)}
              */
-            public options?: google.protobuf.MethodOptions$Properties;
+            public options: (google.protobuf.MethodOptions$Properties|null);
 
             /**
              * MethodDescriptorProto client_streaming.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
-            public client_streaming?: boolean;
+            public client_streaming: boolean;
 
             /**
              * MethodDescriptorProto server_streaming.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
-            public server_streaming?: boolean;
+            public server_streaming: boolean;
 
             /**
              * Creates a new MethodDescriptorProto instance using the specified properties.
@@ -18468,55 +17246,6 @@ export namespace google {
             public toJSON(): { [k: string]: any };
         }
 
-        /**
-         * Properties of a FileOptions.
-         * @typedef google.protobuf.FileOptions$Properties
-         * @type {Object}
-         * @property {string} [java_package] FileOptions java_package.
-         * @property {string} [java_outer_classname] FileOptions java_outer_classname.
-         * @property {boolean} [java_multiple_files] FileOptions java_multiple_files.
-         * @property {boolean} [java_generate_equals_and_hash] FileOptions java_generate_equals_and_hash.
-         * @property {boolean} [java_string_check_utf8] FileOptions java_string_check_utf8.
-         * @property {google.protobuf.FileOptions.OptimizeMode} [optimize_for] FileOptions optimize_for.
-         * @property {string} [go_package] FileOptions go_package.
-         * @property {boolean} [cc_generic_services] FileOptions cc_generic_services.
-         * @property {boolean} [java_generic_services] FileOptions java_generic_services.
-         * @property {boolean} [py_generic_services] FileOptions py_generic_services.
-         * @property {boolean} [deprecated] FileOptions deprecated.
-         * @property {boolean} [cc_enable_arenas] FileOptions cc_enable_arenas.
-         * @property {string} [objc_class_prefix] FileOptions objc_class_prefix.
-         * @property {string} [csharp_namespace] FileOptions csharp_namespace.
-         * @property {Array.<google.protobuf.UninterpretedOption$Properties>} [uninterpreted_option] FileOptions uninterpreted_option.
-         * @property {boolean} [".gogoproto.goproto_getters_all"] FileOptions .gogoproto.goproto_getters_all.
-         * @property {boolean} [".gogoproto.goproto_enum_prefix_all"] FileOptions .gogoproto.goproto_enum_prefix_all.
-         * @property {boolean} [".gogoproto.goproto_stringer_all"] FileOptions .gogoproto.goproto_stringer_all.
-         * @property {boolean} [".gogoproto.verbose_equal_all"] FileOptions .gogoproto.verbose_equal_all.
-         * @property {boolean} [".gogoproto.face_all"] FileOptions .gogoproto.face_all.
-         * @property {boolean} [".gogoproto.gostring_all"] FileOptions .gogoproto.gostring_all.
-         * @property {boolean} [".gogoproto.populate_all"] FileOptions .gogoproto.populate_all.
-         * @property {boolean} [".gogoproto.stringer_all"] FileOptions .gogoproto.stringer_all.
-         * @property {boolean} [".gogoproto.onlyone_all"] FileOptions .gogoproto.onlyone_all.
-         * @property {boolean} [".gogoproto.equal_all"] FileOptions .gogoproto.equal_all.
-         * @property {boolean} [".gogoproto.description_all"] FileOptions .gogoproto.description_all.
-         * @property {boolean} [".gogoproto.testgen_all"] FileOptions .gogoproto.testgen_all.
-         * @property {boolean} [".gogoproto.benchgen_all"] FileOptions .gogoproto.benchgen_all.
-         * @property {boolean} [".gogoproto.marshaler_all"] FileOptions .gogoproto.marshaler_all.
-         * @property {boolean} [".gogoproto.unmarshaler_all"] FileOptions .gogoproto.unmarshaler_all.
-         * @property {boolean} [".gogoproto.stable_marshaler_all"] FileOptions .gogoproto.stable_marshaler_all.
-         * @property {boolean} [".gogoproto.sizer_all"] FileOptions .gogoproto.sizer_all.
-         * @property {boolean} [".gogoproto.goproto_enum_stringer_all"] FileOptions .gogoproto.goproto_enum_stringer_all.
-         * @property {boolean} [".gogoproto.enum_stringer_all"] FileOptions .gogoproto.enum_stringer_all.
-         * @property {boolean} [".gogoproto.unsafe_marshaler_all"] FileOptions .gogoproto.unsafe_marshaler_all.
-         * @property {boolean} [".gogoproto.unsafe_unmarshaler_all"] FileOptions .gogoproto.unsafe_unmarshaler_all.
-         * @property {boolean} [".gogoproto.goproto_extensions_map_all"] FileOptions .gogoproto.goproto_extensions_map_all.
-         * @property {boolean} [".gogoproto.goproto_unrecognized_all"] FileOptions .gogoproto.goproto_unrecognized_all.
-         * @property {boolean} [".gogoproto.gogoproto_import"] FileOptions .gogoproto.gogoproto_import.
-         * @property {boolean} [".gogoproto.protosizer_all"] FileOptions .gogoproto.protosizer_all.
-         * @property {boolean} [".gogoproto.compare_all"] FileOptions .gogoproto.compare_all.
-         * @property {boolean} [".gogoproto.typedecl_all"] FileOptions .gogoproto.typedecl_all.
-         * @property {boolean} [".gogoproto.enumdecl_all"] FileOptions .gogoproto.enumdecl_all.
-         * @property {boolean} [".gogoproto.goproto_registration"] FileOptions .gogoproto.goproto_registration.
-         */
         type FileOptions$Properties = {
             java_package?: string;
             java_outer_classname?: string;
@@ -18582,267 +17311,267 @@ export namespace google {
 
             /**
              * FileOptions java_package.
-             * @type {string|undefined}
+             * @type {string}
              */
-            public java_package?: string;
+            public java_package: string;
 
             /**
              * FileOptions java_outer_classname.
-             * @type {string|undefined}
+             * @type {string}
              */
-            public java_outer_classname?: string;
+            public java_outer_classname: string;
 
             /**
              * FileOptions java_multiple_files.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
-            public java_multiple_files?: boolean;
+            public java_multiple_files: boolean;
 
             /**
              * FileOptions java_generate_equals_and_hash.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
-            public java_generate_equals_and_hash?: boolean;
+            public java_generate_equals_and_hash: boolean;
 
             /**
              * FileOptions java_string_check_utf8.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
-            public java_string_check_utf8?: boolean;
+            public java_string_check_utf8: boolean;
 
             /**
              * FileOptions optimize_for.
-             * @type {google.protobuf.FileOptions.OptimizeMode|undefined}
+             * @type {google.protobuf.FileOptions.OptimizeMode}
              */
-            public optimize_for?: google.protobuf.FileOptions.OptimizeMode;
+            public optimize_for: google.protobuf.FileOptions.OptimizeMode;
 
             /**
              * FileOptions go_package.
-             * @type {string|undefined}
+             * @type {string}
              */
-            public go_package?: string;
+            public go_package: string;
 
             /**
              * FileOptions cc_generic_services.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
-            public cc_generic_services?: boolean;
+            public cc_generic_services: boolean;
 
             /**
              * FileOptions java_generic_services.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
-            public java_generic_services?: boolean;
+            public java_generic_services: boolean;
 
             /**
              * FileOptions py_generic_services.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
-            public py_generic_services?: boolean;
+            public py_generic_services: boolean;
 
             /**
              * FileOptions deprecated.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
-            public deprecated?: boolean;
+            public deprecated: boolean;
 
             /**
              * FileOptions cc_enable_arenas.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
-            public cc_enable_arenas?: boolean;
+            public cc_enable_arenas: boolean;
 
             /**
              * FileOptions objc_class_prefix.
-             * @type {string|undefined}
+             * @type {string}
              */
-            public objc_class_prefix?: string;
+            public objc_class_prefix: string;
 
             /**
              * FileOptions csharp_namespace.
-             * @type {string|undefined}
+             * @type {string}
              */
-            public csharp_namespace?: string;
+            public csharp_namespace: string;
 
             /**
              * FileOptions uninterpreted_option.
-             * @type {Array.<google.protobuf.UninterpretedOption$Properties>|undefined}
+             * @type {Array.<google.protobuf.UninterpretedOption$Properties>}
              */
-            public uninterpreted_option?: google.protobuf.UninterpretedOption$Properties[];
+            public uninterpreted_option: google.protobuf.UninterpretedOption$Properties[];
 
             /**
              * FileOptions .gogoproto.goproto_getters_all.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
-            public [".gogoproto.goproto_getters_all"]?: boolean;
+            public [".gogoproto.goproto_getters_all"]: boolean;
 
             /**
              * FileOptions .gogoproto.goproto_enum_prefix_all.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
-            public [".gogoproto.goproto_enum_prefix_all"]?: boolean;
+            public [".gogoproto.goproto_enum_prefix_all"]: boolean;
 
             /**
              * FileOptions .gogoproto.goproto_stringer_all.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
-            public [".gogoproto.goproto_stringer_all"]?: boolean;
+            public [".gogoproto.goproto_stringer_all"]: boolean;
 
             /**
              * FileOptions .gogoproto.verbose_equal_all.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
-            public [".gogoproto.verbose_equal_all"]?: boolean;
+            public [".gogoproto.verbose_equal_all"]: boolean;
 
             /**
              * FileOptions .gogoproto.face_all.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
-            public [".gogoproto.face_all"]?: boolean;
+            public [".gogoproto.face_all"]: boolean;
 
             /**
              * FileOptions .gogoproto.gostring_all.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
-            public [".gogoproto.gostring_all"]?: boolean;
+            public [".gogoproto.gostring_all"]: boolean;
 
             /**
              * FileOptions .gogoproto.populate_all.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
-            public [".gogoproto.populate_all"]?: boolean;
+            public [".gogoproto.populate_all"]: boolean;
 
             /**
              * FileOptions .gogoproto.stringer_all.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
-            public [".gogoproto.stringer_all"]?: boolean;
+            public [".gogoproto.stringer_all"]: boolean;
 
             /**
              * FileOptions .gogoproto.onlyone_all.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
-            public [".gogoproto.onlyone_all"]?: boolean;
+            public [".gogoproto.onlyone_all"]: boolean;
 
             /**
              * FileOptions .gogoproto.equal_all.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
-            public [".gogoproto.equal_all"]?: boolean;
+            public [".gogoproto.equal_all"]: boolean;
 
             /**
              * FileOptions .gogoproto.description_all.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
-            public [".gogoproto.description_all"]?: boolean;
+            public [".gogoproto.description_all"]: boolean;
 
             /**
              * FileOptions .gogoproto.testgen_all.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
-            public [".gogoproto.testgen_all"]?: boolean;
+            public [".gogoproto.testgen_all"]: boolean;
 
             /**
              * FileOptions .gogoproto.benchgen_all.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
-            public [".gogoproto.benchgen_all"]?: boolean;
+            public [".gogoproto.benchgen_all"]: boolean;
 
             /**
              * FileOptions .gogoproto.marshaler_all.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
-            public [".gogoproto.marshaler_all"]?: boolean;
+            public [".gogoproto.marshaler_all"]: boolean;
 
             /**
              * FileOptions .gogoproto.unmarshaler_all.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
-            public [".gogoproto.unmarshaler_all"]?: boolean;
+            public [".gogoproto.unmarshaler_all"]: boolean;
 
             /**
              * FileOptions .gogoproto.stable_marshaler_all.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
-            public [".gogoproto.stable_marshaler_all"]?: boolean;
+            public [".gogoproto.stable_marshaler_all"]: boolean;
 
             /**
              * FileOptions .gogoproto.sizer_all.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
-            public [".gogoproto.sizer_all"]?: boolean;
+            public [".gogoproto.sizer_all"]: boolean;
 
             /**
              * FileOptions .gogoproto.goproto_enum_stringer_all.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
-            public [".gogoproto.goproto_enum_stringer_all"]?: boolean;
+            public [".gogoproto.goproto_enum_stringer_all"]: boolean;
 
             /**
              * FileOptions .gogoproto.enum_stringer_all.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
-            public [".gogoproto.enum_stringer_all"]?: boolean;
+            public [".gogoproto.enum_stringer_all"]: boolean;
 
             /**
              * FileOptions .gogoproto.unsafe_marshaler_all.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
-            public [".gogoproto.unsafe_marshaler_all"]?: boolean;
+            public [".gogoproto.unsafe_marshaler_all"]: boolean;
 
             /**
              * FileOptions .gogoproto.unsafe_unmarshaler_all.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
-            public [".gogoproto.unsafe_unmarshaler_all"]?: boolean;
+            public [".gogoproto.unsafe_unmarshaler_all"]: boolean;
 
             /**
              * FileOptions .gogoproto.goproto_extensions_map_all.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
-            public [".gogoproto.goproto_extensions_map_all"]?: boolean;
+            public [".gogoproto.goproto_extensions_map_all"]: boolean;
 
             /**
              * FileOptions .gogoproto.goproto_unrecognized_all.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
-            public [".gogoproto.goproto_unrecognized_all"]?: boolean;
+            public [".gogoproto.goproto_unrecognized_all"]: boolean;
 
             /**
              * FileOptions .gogoproto.gogoproto_import.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
-            public [".gogoproto.gogoproto_import"]?: boolean;
+            public [".gogoproto.gogoproto_import"]: boolean;
 
             /**
              * FileOptions .gogoproto.protosizer_all.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
-            public [".gogoproto.protosizer_all"]?: boolean;
+            public [".gogoproto.protosizer_all"]: boolean;
 
             /**
              * FileOptions .gogoproto.compare_all.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
-            public [".gogoproto.compare_all"]?: boolean;
+            public [".gogoproto.compare_all"]: boolean;
 
             /**
              * FileOptions .gogoproto.typedecl_all.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
-            public [".gogoproto.typedecl_all"]?: boolean;
+            public [".gogoproto.typedecl_all"]: boolean;
 
             /**
              * FileOptions .gogoproto.enumdecl_all.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
-            public [".gogoproto.enumdecl_all"]?: boolean;
+            public [".gogoproto.enumdecl_all"]: boolean;
 
             /**
              * FileOptions .gogoproto.goproto_registration.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
-            public [".gogoproto.goproto_registration"]?: boolean;
+            public [".gogoproto.goproto_registration"]: boolean;
 
             /**
              * Creates a new FileOptions instance using the specified properties.
@@ -18949,39 +17678,6 @@ export namespace google {
             }
         }
 
-        /**
-         * Properties of a MessageOptions.
-         * @typedef google.protobuf.MessageOptions$Properties
-         * @type {Object}
-         * @property {boolean} [message_set_wire_format] MessageOptions message_set_wire_format.
-         * @property {boolean} [no_standard_descriptor_accessor] MessageOptions no_standard_descriptor_accessor.
-         * @property {boolean} [deprecated] MessageOptions deprecated.
-         * @property {boolean} [map_entry] MessageOptions map_entry.
-         * @property {Array.<google.protobuf.UninterpretedOption$Properties>} [uninterpreted_option] MessageOptions uninterpreted_option.
-         * @property {boolean} [".gogoproto.goproto_getters"] MessageOptions .gogoproto.goproto_getters.
-         * @property {boolean} [".gogoproto.goproto_stringer"] MessageOptions .gogoproto.goproto_stringer.
-         * @property {boolean} [".gogoproto.verbose_equal"] MessageOptions .gogoproto.verbose_equal.
-         * @property {boolean} [".gogoproto.face"] MessageOptions .gogoproto.face.
-         * @property {boolean} [".gogoproto.gostring"] MessageOptions .gogoproto.gostring.
-         * @property {boolean} [".gogoproto.populate"] MessageOptions .gogoproto.populate.
-         * @property {boolean} [".gogoproto.stringer"] MessageOptions .gogoproto.stringer.
-         * @property {boolean} [".gogoproto.onlyone"] MessageOptions .gogoproto.onlyone.
-         * @property {boolean} [".gogoproto.equal"] MessageOptions .gogoproto.equal.
-         * @property {boolean} [".gogoproto.description"] MessageOptions .gogoproto.description.
-         * @property {boolean} [".gogoproto.testgen"] MessageOptions .gogoproto.testgen.
-         * @property {boolean} [".gogoproto.benchgen"] MessageOptions .gogoproto.benchgen.
-         * @property {boolean} [".gogoproto.marshaler"] MessageOptions .gogoproto.marshaler.
-         * @property {boolean} [".gogoproto.unmarshaler"] MessageOptions .gogoproto.unmarshaler.
-         * @property {boolean} [".gogoproto.stable_marshaler"] MessageOptions .gogoproto.stable_marshaler.
-         * @property {boolean} [".gogoproto.sizer"] MessageOptions .gogoproto.sizer.
-         * @property {boolean} [".gogoproto.unsafe_marshaler"] MessageOptions .gogoproto.unsafe_marshaler.
-         * @property {boolean} [".gogoproto.unsafe_unmarshaler"] MessageOptions .gogoproto.unsafe_unmarshaler.
-         * @property {boolean} [".gogoproto.goproto_extensions_map"] MessageOptions .gogoproto.goproto_extensions_map.
-         * @property {boolean} [".gogoproto.goproto_unrecognized"] MessageOptions .gogoproto.goproto_unrecognized.
-         * @property {boolean} [".gogoproto.protosizer"] MessageOptions .gogoproto.protosizer.
-         * @property {boolean} [".gogoproto.compare"] MessageOptions .gogoproto.compare.
-         * @property {boolean} [".gogoproto.typedecl"] MessageOptions .gogoproto.typedecl.
-         */
         type MessageOptions$Properties = {
             message_set_wire_format?: boolean;
             no_standard_descriptor_accessor?: boolean;
@@ -19031,171 +17727,171 @@ export namespace google {
 
             /**
              * MessageOptions message_set_wire_format.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
-            public message_set_wire_format?: boolean;
+            public message_set_wire_format: boolean;
 
             /**
              * MessageOptions no_standard_descriptor_accessor.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
-            public no_standard_descriptor_accessor?: boolean;
+            public no_standard_descriptor_accessor: boolean;
 
             /**
              * MessageOptions deprecated.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
-            public deprecated?: boolean;
+            public deprecated: boolean;
 
             /**
              * MessageOptions map_entry.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
-            public map_entry?: boolean;
+            public map_entry: boolean;
 
             /**
              * MessageOptions uninterpreted_option.
-             * @type {Array.<google.protobuf.UninterpretedOption$Properties>|undefined}
+             * @type {Array.<google.protobuf.UninterpretedOption$Properties>}
              */
-            public uninterpreted_option?: google.protobuf.UninterpretedOption$Properties[];
+            public uninterpreted_option: google.protobuf.UninterpretedOption$Properties[];
 
             /**
              * MessageOptions .gogoproto.goproto_getters.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
-            public [".gogoproto.goproto_getters"]?: boolean;
+            public [".gogoproto.goproto_getters"]: boolean;
 
             /**
              * MessageOptions .gogoproto.goproto_stringer.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
-            public [".gogoproto.goproto_stringer"]?: boolean;
+            public [".gogoproto.goproto_stringer"]: boolean;
 
             /**
              * MessageOptions .gogoproto.verbose_equal.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
-            public [".gogoproto.verbose_equal"]?: boolean;
+            public [".gogoproto.verbose_equal"]: boolean;
 
             /**
              * MessageOptions .gogoproto.face.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
-            public [".gogoproto.face"]?: boolean;
+            public [".gogoproto.face"]: boolean;
 
             /**
              * MessageOptions .gogoproto.gostring.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
-            public [".gogoproto.gostring"]?: boolean;
+            public [".gogoproto.gostring"]: boolean;
 
             /**
              * MessageOptions .gogoproto.populate.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
-            public [".gogoproto.populate"]?: boolean;
+            public [".gogoproto.populate"]: boolean;
 
             /**
              * MessageOptions .gogoproto.stringer.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
-            public [".gogoproto.stringer"]?: boolean;
+            public [".gogoproto.stringer"]: boolean;
 
             /**
              * MessageOptions .gogoproto.onlyone.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
-            public [".gogoproto.onlyone"]?: boolean;
+            public [".gogoproto.onlyone"]: boolean;
 
             /**
              * MessageOptions .gogoproto.equal.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
-            public [".gogoproto.equal"]?: boolean;
+            public [".gogoproto.equal"]: boolean;
 
             /**
              * MessageOptions .gogoproto.description.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
-            public [".gogoproto.description"]?: boolean;
+            public [".gogoproto.description"]: boolean;
 
             /**
              * MessageOptions .gogoproto.testgen.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
-            public [".gogoproto.testgen"]?: boolean;
+            public [".gogoproto.testgen"]: boolean;
 
             /**
              * MessageOptions .gogoproto.benchgen.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
-            public [".gogoproto.benchgen"]?: boolean;
+            public [".gogoproto.benchgen"]: boolean;
 
             /**
              * MessageOptions .gogoproto.marshaler.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
-            public [".gogoproto.marshaler"]?: boolean;
+            public [".gogoproto.marshaler"]: boolean;
 
             /**
              * MessageOptions .gogoproto.unmarshaler.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
-            public [".gogoproto.unmarshaler"]?: boolean;
+            public [".gogoproto.unmarshaler"]: boolean;
 
             /**
              * MessageOptions .gogoproto.stable_marshaler.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
-            public [".gogoproto.stable_marshaler"]?: boolean;
+            public [".gogoproto.stable_marshaler"]: boolean;
 
             /**
              * MessageOptions .gogoproto.sizer.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
-            public [".gogoproto.sizer"]?: boolean;
+            public [".gogoproto.sizer"]: boolean;
 
             /**
              * MessageOptions .gogoproto.unsafe_marshaler.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
-            public [".gogoproto.unsafe_marshaler"]?: boolean;
+            public [".gogoproto.unsafe_marshaler"]: boolean;
 
             /**
              * MessageOptions .gogoproto.unsafe_unmarshaler.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
-            public [".gogoproto.unsafe_unmarshaler"]?: boolean;
+            public [".gogoproto.unsafe_unmarshaler"]: boolean;
 
             /**
              * MessageOptions .gogoproto.goproto_extensions_map.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
-            public [".gogoproto.goproto_extensions_map"]?: boolean;
+            public [".gogoproto.goproto_extensions_map"]: boolean;
 
             /**
              * MessageOptions .gogoproto.goproto_unrecognized.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
-            public [".gogoproto.goproto_unrecognized"]?: boolean;
+            public [".gogoproto.goproto_unrecognized"]: boolean;
 
             /**
              * MessageOptions .gogoproto.protosizer.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
-            public [".gogoproto.protosizer"]?: boolean;
+            public [".gogoproto.protosizer"]: boolean;
 
             /**
              * MessageOptions .gogoproto.compare.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
-            public [".gogoproto.compare"]?: boolean;
+            public [".gogoproto.compare"]: boolean;
 
             /**
              * MessageOptions .gogoproto.typedecl.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
-            public [".gogoproto.typedecl"]?: boolean;
+            public [".gogoproto.typedecl"]: boolean;
 
             /**
              * Creates a new MessageOptions instance using the specified properties.
@@ -19284,29 +17980,6 @@ export namespace google {
             public toJSON(): { [k: string]: any };
         }
 
-        /**
-         * Properties of a FieldOptions.
-         * @typedef google.protobuf.FieldOptions$Properties
-         * @type {Object}
-         * @property {google.protobuf.FieldOptions.CType} [ctype] FieldOptions ctype.
-         * @property {boolean} [packed] FieldOptions packed.
-         * @property {google.protobuf.FieldOptions.JSType} [jstype] FieldOptions jstype.
-         * @property {boolean} [lazy] FieldOptions lazy.
-         * @property {boolean} [deprecated] FieldOptions deprecated.
-         * @property {boolean} [weak] FieldOptions weak.
-         * @property {Array.<google.protobuf.UninterpretedOption$Properties>} [uninterpreted_option] FieldOptions uninterpreted_option.
-         * @property {boolean} [".gogoproto.nullable"] FieldOptions .gogoproto.nullable.
-         * @property {boolean} [".gogoproto.embed"] FieldOptions .gogoproto.embed.
-         * @property {string} [".gogoproto.customtype"] FieldOptions .gogoproto.customtype.
-         * @property {string} [".gogoproto.customname"] FieldOptions .gogoproto.customname.
-         * @property {string} [".gogoproto.jsontag"] FieldOptions .gogoproto.jsontag.
-         * @property {string} [".gogoproto.moretags"] FieldOptions .gogoproto.moretags.
-         * @property {string} [".gogoproto.casttype"] FieldOptions .gogoproto.casttype.
-         * @property {string} [".gogoproto.castkey"] FieldOptions .gogoproto.castkey.
-         * @property {string} [".gogoproto.castvalue"] FieldOptions .gogoproto.castvalue.
-         * @property {boolean} [".gogoproto.stdtime"] FieldOptions .gogoproto.stdtime.
-         * @property {boolean} [".gogoproto.stdduration"] FieldOptions .gogoproto.stdduration.
-         */
         type FieldOptions$Properties = {
             ctype?: google.protobuf.FieldOptions.CType;
             packed?: boolean;
@@ -19346,111 +18019,111 @@ export namespace google {
 
             /**
              * FieldOptions ctype.
-             * @type {google.protobuf.FieldOptions.CType|undefined}
+             * @type {google.protobuf.FieldOptions.CType}
              */
-            public ctype?: google.protobuf.FieldOptions.CType;
+            public ctype: google.protobuf.FieldOptions.CType;
 
             /**
              * FieldOptions packed.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
-            public packed?: boolean;
+            public packed: boolean;
 
             /**
              * FieldOptions jstype.
-             * @type {google.protobuf.FieldOptions.JSType|undefined}
+             * @type {google.protobuf.FieldOptions.JSType}
              */
-            public jstype?: google.protobuf.FieldOptions.JSType;
+            public jstype: google.protobuf.FieldOptions.JSType;
 
             /**
              * FieldOptions lazy.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
-            public lazy?: boolean;
+            public lazy: boolean;
 
             /**
              * FieldOptions deprecated.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
-            public deprecated?: boolean;
+            public deprecated: boolean;
 
             /**
              * FieldOptions weak.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
-            public weak?: boolean;
+            public weak: boolean;
 
             /**
              * FieldOptions uninterpreted_option.
-             * @type {Array.<google.protobuf.UninterpretedOption$Properties>|undefined}
+             * @type {Array.<google.protobuf.UninterpretedOption$Properties>}
              */
-            public uninterpreted_option?: google.protobuf.UninterpretedOption$Properties[];
+            public uninterpreted_option: google.protobuf.UninterpretedOption$Properties[];
 
             /**
              * FieldOptions .gogoproto.nullable.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
-            public [".gogoproto.nullable"]?: boolean;
+            public [".gogoproto.nullable"]: boolean;
 
             /**
              * FieldOptions .gogoproto.embed.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
-            public [".gogoproto.embed"]?: boolean;
+            public [".gogoproto.embed"]: boolean;
 
             /**
              * FieldOptions .gogoproto.customtype.
-             * @type {string|undefined}
+             * @type {string}
              */
-            public [".gogoproto.customtype"]?: string;
+            public [".gogoproto.customtype"]: string;
 
             /**
              * FieldOptions .gogoproto.customname.
-             * @type {string|undefined}
+             * @type {string}
              */
-            public [".gogoproto.customname"]?: string;
+            public [".gogoproto.customname"]: string;
 
             /**
              * FieldOptions .gogoproto.jsontag.
-             * @type {string|undefined}
+             * @type {string}
              */
-            public [".gogoproto.jsontag"]?: string;
+            public [".gogoproto.jsontag"]: string;
 
             /**
              * FieldOptions .gogoproto.moretags.
-             * @type {string|undefined}
+             * @type {string}
              */
-            public [".gogoproto.moretags"]?: string;
+            public [".gogoproto.moretags"]: string;
 
             /**
              * FieldOptions .gogoproto.casttype.
-             * @type {string|undefined}
+             * @type {string}
              */
-            public [".gogoproto.casttype"]?: string;
+            public [".gogoproto.casttype"]: string;
 
             /**
              * FieldOptions .gogoproto.castkey.
-             * @type {string|undefined}
+             * @type {string}
              */
-            public [".gogoproto.castkey"]?: string;
+            public [".gogoproto.castkey"]: string;
 
             /**
              * FieldOptions .gogoproto.castvalue.
-             * @type {string|undefined}
+             * @type {string}
              */
-            public [".gogoproto.castvalue"]?: string;
+            public [".gogoproto.castvalue"]: string;
 
             /**
              * FieldOptions .gogoproto.stdtime.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
-            public [".gogoproto.stdtime"]?: boolean;
+            public [".gogoproto.stdtime"]: boolean;
 
             /**
              * FieldOptions .gogoproto.stdduration.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
-            public [".gogoproto.stdduration"]?: boolean;
+            public [".gogoproto.stdduration"]: boolean;
 
             /**
              * Creates a new FieldOptions instance using the specified properties.
@@ -19572,12 +18245,6 @@ export namespace google {
             }
         }
 
-        /**
-         * Properties of an OneofOptions.
-         * @typedef google.protobuf.OneofOptions$Properties
-         * @type {Object}
-         * @property {Array.<google.protobuf.UninterpretedOption$Properties>} [uninterpreted_option] OneofOptions uninterpreted_option.
-         */
         type OneofOptions$Properties = {
             uninterpreted_option?: google.protobuf.UninterpretedOption$Properties[];
         };
@@ -19600,9 +18267,9 @@ export namespace google {
 
             /**
              * OneofOptions uninterpreted_option.
-             * @type {Array.<google.protobuf.UninterpretedOption$Properties>|undefined}
+             * @type {Array.<google.protobuf.UninterpretedOption$Properties>}
              */
-            public uninterpreted_option?: google.protobuf.UninterpretedOption$Properties[];
+            public uninterpreted_option: google.protobuf.UninterpretedOption$Properties[];
 
             /**
              * Creates a new OneofOptions instance using the specified properties.
@@ -19691,19 +18358,6 @@ export namespace google {
             public toJSON(): { [k: string]: any };
         }
 
-        /**
-         * Properties of an EnumOptions.
-         * @typedef google.protobuf.EnumOptions$Properties
-         * @type {Object}
-         * @property {boolean} [allow_alias] EnumOptions allow_alias.
-         * @property {boolean} [deprecated] EnumOptions deprecated.
-         * @property {Array.<google.protobuf.UninterpretedOption$Properties>} [uninterpreted_option] EnumOptions uninterpreted_option.
-         * @property {boolean} [".gogoproto.goproto_enum_prefix"] EnumOptions .gogoproto.goproto_enum_prefix.
-         * @property {boolean} [".gogoproto.goproto_enum_stringer"] EnumOptions .gogoproto.goproto_enum_stringer.
-         * @property {boolean} [".gogoproto.enum_stringer"] EnumOptions .gogoproto.enum_stringer.
-         * @property {string} [".gogoproto.enum_customname"] EnumOptions .gogoproto.enum_customname.
-         * @property {boolean} [".gogoproto.enumdecl"] EnumOptions .gogoproto.enumdecl.
-         */
         type EnumOptions$Properties = {
             allow_alias?: boolean;
             deprecated?: boolean;
@@ -19733,51 +18387,51 @@ export namespace google {
 
             /**
              * EnumOptions allow_alias.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
-            public allow_alias?: boolean;
+            public allow_alias: boolean;
 
             /**
              * EnumOptions deprecated.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
-            public deprecated?: boolean;
+            public deprecated: boolean;
 
             /**
              * EnumOptions uninterpreted_option.
-             * @type {Array.<google.protobuf.UninterpretedOption$Properties>|undefined}
+             * @type {Array.<google.protobuf.UninterpretedOption$Properties>}
              */
-            public uninterpreted_option?: google.protobuf.UninterpretedOption$Properties[];
+            public uninterpreted_option: google.protobuf.UninterpretedOption$Properties[];
 
             /**
              * EnumOptions .gogoproto.goproto_enum_prefix.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
-            public [".gogoproto.goproto_enum_prefix"]?: boolean;
+            public [".gogoproto.goproto_enum_prefix"]: boolean;
 
             /**
              * EnumOptions .gogoproto.goproto_enum_stringer.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
-            public [".gogoproto.goproto_enum_stringer"]?: boolean;
+            public [".gogoproto.goproto_enum_stringer"]: boolean;
 
             /**
              * EnumOptions .gogoproto.enum_stringer.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
-            public [".gogoproto.enum_stringer"]?: boolean;
+            public [".gogoproto.enum_stringer"]: boolean;
 
             /**
              * EnumOptions .gogoproto.enum_customname.
-             * @type {string|undefined}
+             * @type {string}
              */
-            public [".gogoproto.enum_customname"]?: string;
+            public [".gogoproto.enum_customname"]: string;
 
             /**
              * EnumOptions .gogoproto.enumdecl.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
-            public [".gogoproto.enumdecl"]?: boolean;
+            public [".gogoproto.enumdecl"]: boolean;
 
             /**
              * Creates a new EnumOptions instance using the specified properties.
@@ -19866,14 +18520,6 @@ export namespace google {
             public toJSON(): { [k: string]: any };
         }
 
-        /**
-         * Properties of an EnumValueOptions.
-         * @typedef google.protobuf.EnumValueOptions$Properties
-         * @type {Object}
-         * @property {boolean} [deprecated] EnumValueOptions deprecated.
-         * @property {Array.<google.protobuf.UninterpretedOption$Properties>} [uninterpreted_option] EnumValueOptions uninterpreted_option.
-         * @property {string} [".gogoproto.enumvalue_customname"] EnumValueOptions .gogoproto.enumvalue_customname.
-         */
         type EnumValueOptions$Properties = {
             deprecated?: boolean;
             uninterpreted_option?: google.protobuf.UninterpretedOption$Properties[];
@@ -19898,21 +18544,21 @@ export namespace google {
 
             /**
              * EnumValueOptions deprecated.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
-            public deprecated?: boolean;
+            public deprecated: boolean;
 
             /**
              * EnumValueOptions uninterpreted_option.
-             * @type {Array.<google.protobuf.UninterpretedOption$Properties>|undefined}
+             * @type {Array.<google.protobuf.UninterpretedOption$Properties>}
              */
-            public uninterpreted_option?: google.protobuf.UninterpretedOption$Properties[];
+            public uninterpreted_option: google.protobuf.UninterpretedOption$Properties[];
 
             /**
              * EnumValueOptions .gogoproto.enumvalue_customname.
-             * @type {string|undefined}
+             * @type {string}
              */
-            public [".gogoproto.enumvalue_customname"]?: string;
+            public [".gogoproto.enumvalue_customname"]: string;
 
             /**
              * Creates a new EnumValueOptions instance using the specified properties.
@@ -20001,13 +18647,6 @@ export namespace google {
             public toJSON(): { [k: string]: any };
         }
 
-        /**
-         * Properties of a ServiceOptions.
-         * @typedef google.protobuf.ServiceOptions$Properties
-         * @type {Object}
-         * @property {boolean} [deprecated] ServiceOptions deprecated.
-         * @property {Array.<google.protobuf.UninterpretedOption$Properties>} [uninterpreted_option] ServiceOptions uninterpreted_option.
-         */
         type ServiceOptions$Properties = {
             deprecated?: boolean;
             uninterpreted_option?: google.protobuf.UninterpretedOption$Properties[];
@@ -20031,15 +18670,15 @@ export namespace google {
 
             /**
              * ServiceOptions deprecated.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
-            public deprecated?: boolean;
+            public deprecated: boolean;
 
             /**
              * ServiceOptions uninterpreted_option.
-             * @type {Array.<google.protobuf.UninterpretedOption$Properties>|undefined}
+             * @type {Array.<google.protobuf.UninterpretedOption$Properties>}
              */
-            public uninterpreted_option?: google.protobuf.UninterpretedOption$Properties[];
+            public uninterpreted_option: google.protobuf.UninterpretedOption$Properties[];
 
             /**
              * Creates a new ServiceOptions instance using the specified properties.
@@ -20128,14 +18767,6 @@ export namespace google {
             public toJSON(): { [k: string]: any };
         }
 
-        /**
-         * Properties of a MethodOptions.
-         * @typedef google.protobuf.MethodOptions$Properties
-         * @type {Object}
-         * @property {boolean} [deprecated] MethodOptions deprecated.
-         * @property {Array.<google.protobuf.UninterpretedOption$Properties>} [uninterpreted_option] MethodOptions uninterpreted_option.
-         * @property {google.api.HttpRule$Properties} [".google.api.http"] MethodOptions .google.api.http.
-         */
         type MethodOptions$Properties = {
             deprecated?: boolean;
             uninterpreted_option?: google.protobuf.UninterpretedOption$Properties[];
@@ -20160,21 +18791,21 @@ export namespace google {
 
             /**
              * MethodOptions deprecated.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
-            public deprecated?: boolean;
+            public deprecated: boolean;
 
             /**
              * MethodOptions uninterpreted_option.
-             * @type {Array.<google.protobuf.UninterpretedOption$Properties>|undefined}
+             * @type {Array.<google.protobuf.UninterpretedOption$Properties>}
              */
-            public uninterpreted_option?: google.protobuf.UninterpretedOption$Properties[];
+            public uninterpreted_option: google.protobuf.UninterpretedOption$Properties[];
 
             /**
              * MethodOptions .google.api.http.
-             * @type {google.api.HttpRule$Properties|undefined}
+             * @type {(google.api.HttpRule$Properties|null)}
              */
-            public [".google.api.http"]?: google.api.HttpRule$Properties;
+            public [".google.api.http"]: (google.api.HttpRule$Properties|null);
 
             /**
              * Creates a new MethodOptions instance using the specified properties.
@@ -20263,18 +18894,6 @@ export namespace google {
             public toJSON(): { [k: string]: any };
         }
 
-        /**
-         * Properties of an UninterpretedOption.
-         * @typedef google.protobuf.UninterpretedOption$Properties
-         * @type {Object}
-         * @property {Array.<google.protobuf.UninterpretedOption.NamePart$Properties>} [name] UninterpretedOption name.
-         * @property {string} [identifier_value] UninterpretedOption identifier_value.
-         * @property {Long} [positive_int_value] UninterpretedOption positive_int_value.
-         * @property {Long} [negative_int_value] UninterpretedOption negative_int_value.
-         * @property {number} [double_value] UninterpretedOption double_value.
-         * @property {Uint8Array} [string_value] UninterpretedOption string_value.
-         * @property {string} [aggregate_value] UninterpretedOption aggregate_value.
-         */
         type UninterpretedOption$Properties = {
             name?: google.protobuf.UninterpretedOption.NamePart$Properties[];
             identifier_value?: string;
@@ -20303,45 +18922,45 @@ export namespace google {
 
             /**
              * UninterpretedOption name.
-             * @type {Array.<google.protobuf.UninterpretedOption.NamePart$Properties>|undefined}
+             * @type {Array.<google.protobuf.UninterpretedOption.NamePart$Properties>}
              */
-            public name?: google.protobuf.UninterpretedOption.NamePart$Properties[];
+            public name: google.protobuf.UninterpretedOption.NamePart$Properties[];
 
             /**
              * UninterpretedOption identifier_value.
-             * @type {string|undefined}
+             * @type {string}
              */
-            public identifier_value?: string;
+            public identifier_value: string;
 
             /**
              * UninterpretedOption positive_int_value.
-             * @type {Long|undefined}
+             * @type {Long}
              */
-            public positive_int_value?: Long;
+            public positive_int_value: Long;
 
             /**
              * UninterpretedOption negative_int_value.
-             * @type {Long|undefined}
+             * @type {Long}
              */
-            public negative_int_value?: Long;
+            public negative_int_value: Long;
 
             /**
              * UninterpretedOption double_value.
-             * @type {number|undefined}
+             * @type {number}
              */
-            public double_value?: number;
+            public double_value: number;
 
             /**
              * UninterpretedOption string_value.
-             * @type {Uint8Array|undefined}
+             * @type {Uint8Array}
              */
-            public string_value?: Uint8Array;
+            public string_value: Uint8Array;
 
             /**
              * UninterpretedOption aggregate_value.
-             * @type {string|undefined}
+             * @type {string}
              */
-            public aggregate_value?: string;
+            public aggregate_value: string;
 
             /**
              * Creates a new UninterpretedOption instance using the specified properties.
@@ -20432,13 +19051,6 @@ export namespace google {
 
         namespace UninterpretedOption {
 
-            /**
-             * Properties of a NamePart.
-             * @typedef google.protobuf.UninterpretedOption.NamePart$Properties
-             * @type {Object}
-             * @property {string} name_part NamePart name_part.
-             * @property {boolean} is_extension NamePart is_extension.
-             */
             type NamePart$Properties = {
                 name_part: string;
                 is_extension: boolean;
@@ -20560,12 +19172,6 @@ export namespace google {
             }
         }
 
-        /**
-         * Properties of a SourceCodeInfo.
-         * @typedef google.protobuf.SourceCodeInfo$Properties
-         * @type {Object}
-         * @property {Array.<google.protobuf.SourceCodeInfo.Location$Properties>} [location] SourceCodeInfo location.
-         */
         type SourceCodeInfo$Properties = {
             location?: google.protobuf.SourceCodeInfo.Location$Properties[];
         };
@@ -20588,9 +19194,9 @@ export namespace google {
 
             /**
              * SourceCodeInfo location.
-             * @type {Array.<google.protobuf.SourceCodeInfo.Location$Properties>|undefined}
+             * @type {Array.<google.protobuf.SourceCodeInfo.Location$Properties>}
              */
-            public location?: google.protobuf.SourceCodeInfo.Location$Properties[];
+            public location: google.protobuf.SourceCodeInfo.Location$Properties[];
 
             /**
              * Creates a new SourceCodeInfo instance using the specified properties.
@@ -20681,16 +19287,6 @@ export namespace google {
 
         namespace SourceCodeInfo {
 
-            /**
-             * Properties of a Location.
-             * @typedef google.protobuf.SourceCodeInfo.Location$Properties
-             * @type {Object}
-             * @property {Array.<number>} [path] Location path.
-             * @property {Array.<number>} [span] Location span.
-             * @property {string} [leading_comments] Location leading_comments.
-             * @property {string} [trailing_comments] Location trailing_comments.
-             * @property {Array.<string>} [leading_detached_comments] Location leading_detached_comments.
-             */
             type Location$Properties = {
                 path?: number[];
                 span?: number[];
@@ -20717,33 +19313,33 @@ export namespace google {
 
                 /**
                  * Location path.
-                 * @type {Array.<number>|undefined}
+                 * @type {Array.<number>}
                  */
-                public path?: number[];
+                public path: number[];
 
                 /**
                  * Location span.
-                 * @type {Array.<number>|undefined}
+                 * @type {Array.<number>}
                  */
-                public span?: number[];
+                public span: number[];
 
                 /**
                  * Location leading_comments.
-                 * @type {string|undefined}
+                 * @type {string}
                  */
-                public leading_comments?: string;
+                public leading_comments: string;
 
                 /**
                  * Location trailing_comments.
-                 * @type {string|undefined}
+                 * @type {string}
                  */
-                public trailing_comments?: string;
+                public trailing_comments: string;
 
                 /**
                  * Location leading_detached_comments.
-                 * @type {Array.<string>|undefined}
+                 * @type {Array.<string>}
                  */
-                public leading_detached_comments?: string[];
+                public leading_detached_comments: string[];
 
                 /**
                  * Creates a new Location instance using the specified properties.
@@ -20833,12 +19429,6 @@ export namespace google {
             }
         }
 
-        /**
-         * Properties of a GeneratedCodeInfo.
-         * @typedef google.protobuf.GeneratedCodeInfo$Properties
-         * @type {Object}
-         * @property {Array.<google.protobuf.GeneratedCodeInfo.Annotation$Properties>} [annotation] GeneratedCodeInfo annotation.
-         */
         type GeneratedCodeInfo$Properties = {
             annotation?: google.protobuf.GeneratedCodeInfo.Annotation$Properties[];
         };
@@ -20861,9 +19451,9 @@ export namespace google {
 
             /**
              * GeneratedCodeInfo annotation.
-             * @type {Array.<google.protobuf.GeneratedCodeInfo.Annotation$Properties>|undefined}
+             * @type {Array.<google.protobuf.GeneratedCodeInfo.Annotation$Properties>}
              */
-            public annotation?: google.protobuf.GeneratedCodeInfo.Annotation$Properties[];
+            public annotation: google.protobuf.GeneratedCodeInfo.Annotation$Properties[];
 
             /**
              * Creates a new GeneratedCodeInfo instance using the specified properties.
@@ -20954,15 +19544,6 @@ export namespace google {
 
         namespace GeneratedCodeInfo {
 
-            /**
-             * Properties of an Annotation.
-             * @typedef google.protobuf.GeneratedCodeInfo.Annotation$Properties
-             * @type {Object}
-             * @property {Array.<number>} [path] Annotation path.
-             * @property {string} [source_file] Annotation source_file.
-             * @property {number} [begin] Annotation begin.
-             * @property {number} [end] Annotation end.
-             */
             type Annotation$Properties = {
                 path?: number[];
                 source_file?: string;
@@ -20988,27 +19569,27 @@ export namespace google {
 
                 /**
                  * Annotation path.
-                 * @type {Array.<number>|undefined}
+                 * @type {Array.<number>}
                  */
-                public path?: number[];
+                public path: number[];
 
                 /**
                  * Annotation source_file.
-                 * @type {string|undefined}
+                 * @type {string}
                  */
-                public source_file?: string;
+                public source_file: string;
 
                 /**
                  * Annotation begin.
-                 * @type {number|undefined}
+                 * @type {number}
                  */
-                public begin?: number;
+                public begin: number;
 
                 /**
                  * Annotation end.
-                 * @type {number|undefined}
+                 * @type {number}
                  */
-                public end?: number;
+                public end: number;
 
                 /**
                  * Creates a new Annotation instance using the specified properties.
@@ -21098,13 +19679,6 @@ export namespace google {
             }
         }
 
-        /**
-         * Properties of a Timestamp.
-         * @typedef google.protobuf.Timestamp$Properties
-         * @type {Object}
-         * @property {Long} [seconds] Timestamp seconds.
-         * @property {number} [nanos] Timestamp nanos.
-         */
         type Timestamp$Properties = {
             seconds?: Long;
             nanos?: number;
@@ -21128,15 +19702,15 @@ export namespace google {
 
             /**
              * Timestamp seconds.
-             * @type {Long|undefined}
+             * @type {Long}
              */
-            public seconds?: Long;
+            public seconds: Long;
 
             /**
              * Timestamp nanos.
-             * @type {number|undefined}
+             * @type {number}
              */
-            public nanos?: number;
+            public nanos: number;
 
             /**
              * Creates a new Timestamp instance using the specified properties.
@@ -21233,19 +19807,6 @@ export namespace google {
      */
     namespace api {
 
-        /**
-         * Properties of a HttpRule.
-         * @typedef google.api.HttpRule$Properties
-         * @type {Object}
-         * @property {string} [get] HttpRule get.
-         * @property {string} [put] HttpRule put.
-         * @property {string} [post] HttpRule post.
-         * @property {string} ["delete"] HttpRule delete.
-         * @property {string} [patch] HttpRule patch.
-         * @property {google.api.CustomHttpPattern$Properties} [custom] HttpRule custom.
-         * @property {string} [body] HttpRule body.
-         * @property {Array.<google.api.HttpRule$Properties>} [additional_bindings] HttpRule additional_bindings.
-         */
         type HttpRule$Properties = {
             get?: string;
             put?: string;
@@ -21275,51 +19836,51 @@ export namespace google {
 
             /**
              * HttpRule get.
-             * @type {string|undefined}
+             * @type {string}
              */
-            public get?: string;
+            public get: string;
 
             /**
              * HttpRule put.
-             * @type {string|undefined}
+             * @type {string}
              */
-            public put?: string;
+            public put: string;
 
             /**
              * HttpRule post.
-             * @type {string|undefined}
+             * @type {string}
              */
-            public post?: string;
+            public post: string;
 
             /**
              * HttpRule delete.
-             * @type {string|undefined}
+             * @type {string}
              */
-            public ["delete"]?: string;
+            public ["delete"]: string;
 
             /**
              * HttpRule patch.
-             * @type {string|undefined}
+             * @type {string}
              */
-            public patch?: string;
+            public patch: string;
 
             /**
              * HttpRule custom.
-             * @type {google.api.CustomHttpPattern$Properties|undefined}
+             * @type {(google.api.CustomHttpPattern$Properties|null)}
              */
-            public custom?: google.api.CustomHttpPattern$Properties;
+            public custom: (google.api.CustomHttpPattern$Properties|null);
 
             /**
              * HttpRule body.
-             * @type {string|undefined}
+             * @type {string}
              */
-            public body?: string;
+            public body: string;
 
             /**
              * HttpRule additional_bindings.
-             * @type {Array.<google.api.HttpRule$Properties>|undefined}
+             * @type {Array.<google.api.HttpRule$Properties>}
              */
-            public additional_bindings?: google.api.HttpRule$Properties[];
+            public additional_bindings: google.api.HttpRule$Properties[];
 
             /**
              * HttpRule pattern.
@@ -21415,13 +19976,6 @@ export namespace google {
             public toJSON(): { [k: string]: any };
         }
 
-        /**
-         * Properties of a CustomHttpPattern.
-         * @typedef google.api.CustomHttpPattern$Properties
-         * @type {Object}
-         * @property {string} [kind] CustomHttpPattern kind.
-         * @property {string} [path] CustomHttpPattern path.
-         */
         type CustomHttpPattern$Properties = {
             kind?: string;
             path?: string;
@@ -21445,15 +19999,15 @@ export namespace google {
 
             /**
              * CustomHttpPattern kind.
-             * @type {string|undefined}
+             * @type {string}
              */
-            public kind?: string;
+            public kind: string;
 
             /**
              * CustomHttpPattern path.
-             * @type {string|undefined}
+             * @type {string}
              */
-            public path?: string;
+            public path: string;
 
             /**
              * Creates a new CustomHttpPattern instance using the specified properties.
@@ -21564,15 +20118,6 @@ export namespace raftpb {
         EntryConfChange = 1
     }
 
-    /**
-     * Properties of an Entry.
-     * @typedef raftpb.Entry$Properties
-     * @type {Object}
-     * @property {Long} [Term] Entry Term.
-     * @property {Long} [Index] Entry Index.
-     * @property {raftpb.EntryType} [Type] Entry Type.
-     * @property {Uint8Array} [Data] Entry Data.
-     */
     type Entry$Properties = {
         Term?: Long;
         Index?: Long;
@@ -21598,27 +20143,27 @@ export namespace raftpb {
 
         /**
          * Entry Term.
-         * @type {Long|undefined}
+         * @type {Long}
          */
-        public Term?: Long;
+        public Term: Long;
 
         /**
          * Entry Index.
-         * @type {Long|undefined}
+         * @type {Long}
          */
-        public Index?: Long;
+        public Index: Long;
 
         /**
          * Entry Type.
-         * @type {raftpb.EntryType|undefined}
+         * @type {raftpb.EntryType}
          */
-        public Type?: raftpb.EntryType;
+        public Type: raftpb.EntryType;
 
         /**
          * Entry Data.
-         * @type {Uint8Array|undefined}
+         * @type {Uint8Array}
          */
-        public Data?: Uint8Array;
+        public Data: Uint8Array;
 
         /**
          * Creates a new Entry instance using the specified properties.
@@ -21707,14 +20252,6 @@ export namespace raftpb {
         public toJSON(): { [k: string]: any };
     }
 
-    /**
-     * Properties of a SnapshotMetadata.
-     * @typedef raftpb.SnapshotMetadata$Properties
-     * @type {Object}
-     * @property {raftpb.ConfState$Properties} [conf_state] SnapshotMetadata conf_state.
-     * @property {Long} [index] SnapshotMetadata index.
-     * @property {Long} [term] SnapshotMetadata term.
-     */
     type SnapshotMetadata$Properties = {
         conf_state?: raftpb.ConfState$Properties;
         index?: Long;
@@ -21739,21 +20276,21 @@ export namespace raftpb {
 
         /**
          * SnapshotMetadata conf_state.
-         * @type {raftpb.ConfState$Properties|undefined}
+         * @type {(raftpb.ConfState$Properties|null)}
          */
-        public conf_state?: raftpb.ConfState$Properties;
+        public conf_state: (raftpb.ConfState$Properties|null);
 
         /**
          * SnapshotMetadata index.
-         * @type {Long|undefined}
+         * @type {Long}
          */
-        public index?: Long;
+        public index: Long;
 
         /**
          * SnapshotMetadata term.
-         * @type {Long|undefined}
+         * @type {Long}
          */
-        public term?: Long;
+        public term: Long;
 
         /**
          * Creates a new SnapshotMetadata instance using the specified properties.
@@ -21842,13 +20379,6 @@ export namespace raftpb {
         public toJSON(): { [k: string]: any };
     }
 
-    /**
-     * Properties of a Snapshot.
-     * @typedef raftpb.Snapshot$Properties
-     * @type {Object}
-     * @property {Uint8Array} [data] Snapshot data.
-     * @property {raftpb.SnapshotMetadata$Properties} [metadata] Snapshot metadata.
-     */
     type Snapshot$Properties = {
         data?: Uint8Array;
         metadata?: raftpb.SnapshotMetadata$Properties;
@@ -21872,15 +20402,15 @@ export namespace raftpb {
 
         /**
          * Snapshot data.
-         * @type {Uint8Array|undefined}
+         * @type {Uint8Array}
          */
-        public data?: Uint8Array;
+        public data: Uint8Array;
 
         /**
          * Snapshot metadata.
-         * @type {raftpb.SnapshotMetadata$Properties|undefined}
+         * @type {(raftpb.SnapshotMetadata$Properties|null)}
          */
-        public metadata?: raftpb.SnapshotMetadata$Properties;
+        public metadata: (raftpb.SnapshotMetadata$Properties|null);
 
         /**
          * Creates a new Snapshot instance using the specified properties.
@@ -22016,23 +20546,6 @@ export namespace raftpb {
         MsgPreVoteResp = 18
     }
 
-    /**
-     * Properties of a Message.
-     * @typedef raftpb.Message$Properties
-     * @type {Object}
-     * @property {raftpb.MessageType} [type] Message type.
-     * @property {Long} [to] Message to.
-     * @property {Long} [from] Message from.
-     * @property {Long} [term] Message term.
-     * @property {Long} [logTerm] Message logTerm.
-     * @property {Long} [index] Message index.
-     * @property {Array.<raftpb.Entry$Properties>} [entries] Message entries.
-     * @property {Long} [commit] Message commit.
-     * @property {raftpb.Snapshot$Properties} [snapshot] Message snapshot.
-     * @property {boolean} [reject] Message reject.
-     * @property {Long} [rejectHint] Message rejectHint.
-     * @property {Uint8Array} [context] Message context.
-     */
     type Message$Properties = {
         type?: raftpb.MessageType;
         to?: Long;
@@ -22066,75 +20579,75 @@ export namespace raftpb {
 
         /**
          * Message type.
-         * @type {raftpb.MessageType|undefined}
+         * @type {raftpb.MessageType}
          */
-        public type?: raftpb.MessageType;
+        public type: raftpb.MessageType;
 
         /**
          * Message to.
-         * @type {Long|undefined}
+         * @type {Long}
          */
-        public to?: Long;
+        public to: Long;
 
         /**
          * Message from.
-         * @type {Long|undefined}
+         * @type {Long}
          */
-        public from?: Long;
+        public from: Long;
 
         /**
          * Message term.
-         * @type {Long|undefined}
+         * @type {Long}
          */
-        public term?: Long;
+        public term: Long;
 
         /**
          * Message logTerm.
-         * @type {Long|undefined}
+         * @type {Long}
          */
-        public logTerm?: Long;
+        public logTerm: Long;
 
         /**
          * Message index.
-         * @type {Long|undefined}
+         * @type {Long}
          */
-        public index?: Long;
+        public index: Long;
 
         /**
          * Message entries.
-         * @type {Array.<raftpb.Entry$Properties>|undefined}
+         * @type {Array.<raftpb.Entry$Properties>}
          */
-        public entries?: raftpb.Entry$Properties[];
+        public entries: raftpb.Entry$Properties[];
 
         /**
          * Message commit.
-         * @type {Long|undefined}
+         * @type {Long}
          */
-        public commit?: Long;
+        public commit: Long;
 
         /**
          * Message snapshot.
-         * @type {raftpb.Snapshot$Properties|undefined}
+         * @type {(raftpb.Snapshot$Properties|null)}
          */
-        public snapshot?: raftpb.Snapshot$Properties;
+        public snapshot: (raftpb.Snapshot$Properties|null);
 
         /**
          * Message reject.
-         * @type {boolean|undefined}
+         * @type {boolean}
          */
-        public reject?: boolean;
+        public reject: boolean;
 
         /**
          * Message rejectHint.
-         * @type {Long|undefined}
+         * @type {Long}
          */
-        public rejectHint?: Long;
+        public rejectHint: Long;
 
         /**
          * Message context.
-         * @type {Uint8Array|undefined}
+         * @type {Uint8Array}
          */
-        public context?: Uint8Array;
+        public context: Uint8Array;
 
         /**
          * Creates a new Message instance using the specified properties.
@@ -22223,14 +20736,6 @@ export namespace raftpb {
         public toJSON(): { [k: string]: any };
     }
 
-    /**
-     * Properties of a HardState.
-     * @typedef raftpb.HardState$Properties
-     * @type {Object}
-     * @property {Long} [term] HardState term.
-     * @property {Long} [vote] HardState vote.
-     * @property {Long} [commit] HardState commit.
-     */
     type HardState$Properties = {
         term?: Long;
         vote?: Long;
@@ -22255,21 +20760,21 @@ export namespace raftpb {
 
         /**
          * HardState term.
-         * @type {Long|undefined}
+         * @type {Long}
          */
-        public term?: Long;
+        public term: Long;
 
         /**
          * HardState vote.
-         * @type {Long|undefined}
+         * @type {Long}
          */
-        public vote?: Long;
+        public vote: Long;
 
         /**
          * HardState commit.
-         * @type {Long|undefined}
+         * @type {Long}
          */
-        public commit?: Long;
+        public commit: Long;
 
         /**
          * Creates a new HardState instance using the specified properties.
@@ -22358,12 +20863,6 @@ export namespace raftpb {
         public toJSON(): { [k: string]: any };
     }
 
-    /**
-     * Properties of a ConfState.
-     * @typedef raftpb.ConfState$Properties
-     * @type {Object}
-     * @property {Array.<Long>} [nodes] ConfState nodes.
-     */
     type ConfState$Properties = {
         nodes?: Long[];
     };
@@ -22386,9 +20885,9 @@ export namespace raftpb {
 
         /**
          * ConfState nodes.
-         * @type {Array.<Long>|undefined}
+         * @type {Array.<Long>}
          */
-        public nodes?: Long[];
+        public nodes: Long[];
 
         /**
          * Creates a new ConfState instance using the specified properties.
@@ -22492,15 +20991,6 @@ export namespace raftpb {
         ConfChangeUpdateNode = 2
     }
 
-    /**
-     * Properties of a ConfChange.
-     * @typedef raftpb.ConfChange$Properties
-     * @type {Object}
-     * @property {Long} [ID] ConfChange ID.
-     * @property {raftpb.ConfChangeType} [Type] ConfChange Type.
-     * @property {Long} [NodeID] ConfChange NodeID.
-     * @property {Uint8Array} [Context] ConfChange Context.
-     */
     type ConfChange$Properties = {
         ID?: Long;
         Type?: raftpb.ConfChangeType;
@@ -22526,27 +21016,27 @@ export namespace raftpb {
 
         /**
          * ConfChange ID.
-         * @type {Long|undefined}
+         * @type {Long}
          */
-        public ID?: Long;
+        public ID: Long;
 
         /**
          * ConfChange Type.
-         * @type {raftpb.ConfChangeType|undefined}
+         * @type {raftpb.ConfChangeType}
          */
-        public Type?: raftpb.ConfChangeType;
+        public Type: raftpb.ConfChangeType;
 
         /**
          * ConfChange NodeID.
-         * @type {Long|undefined}
+         * @type {Long}
          */
-        public NodeID?: Long;
+        public NodeID: Long;
 
         /**
          * ConfChange Context.
-         * @type {Uint8Array|undefined}
+         * @type {Uint8Array}
          */
-        public Context?: Uint8Array;
+        public Context: Uint8Array;
 
         /**
          * Creates a new ConfChange instance using the specified properties.

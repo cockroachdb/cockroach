@@ -356,7 +356,7 @@ describe("rest api", function() {
             v = decodeURIComponent(v);
             switch (k) {
               case "target_id":
-                assert.equal(req.target_id, v);
+                assert.equal(req.target_id.toString(), v);
                 break;
 
               case "type":

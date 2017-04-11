@@ -90,4 +90,4 @@ export function BytesUsed(s: NodeStatus$Properties): number {
   return _.sumBy(aggregateByteKeys, (key: string) => {
     return s.metrics[key];
   });
-};
+}

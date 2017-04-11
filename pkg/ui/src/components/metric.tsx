@@ -29,4 +29,4 @@ export class Metric extends React.Component<MetricProps, {}> {
   render(): React.ReactElement<any> {
     throw new Error("Component <Metric /> should never render.");
   }
-};
+}
