@@ -23,6 +23,7 @@ import (
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
@@ -41,6 +42,8 @@ type ServerConfig struct {
 	RPCContext   *rpc.Context
 	Stopper      *stop.Stopper
 	TestingKnobs TestingKnobs
+	// NodeID is the id of the node on which this Server is running.
+	NodeID *base.NodeIDContainer
 }
 
 // ServerImpl implements the server for the distributed SQL APIs.
@@ -94,6 +97,10 @@ func (ds *ServerImpl) setupFlow(
 		}
 	}
 
+	nodeID := ds.ServerConfig.NodeID.Get()
+	if nodeID == 0 {
+		return nil, nil, errors.Errorf("setupFlow called before the NodeID was resolved")
+	}
 	// TODO(radu): we should sanity check some of these fields (especially
 	// txnProto).
 	flowCtx := FlowCtx{
@@ -105,6 +112,7 @@ func (ds *ServerImpl) setupFlow(
 		txnProto:     &req.Txn,
 		clientDB:     ds.DB,
 		testingKnobs: ds.TestingKnobs,
+		nodeID:       nodeID,
 	}
 	ctx = flowCtx.AnnotateCtx(ctx)
 	flowCtx.evalCtx.Ctx = func() context.Context {
