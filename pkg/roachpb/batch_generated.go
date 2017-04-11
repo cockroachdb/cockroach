@@ -8,7 +8,7 @@ import (
 	"strconv"
 )
 
-type reqCounts [35]int32
+type reqCounts [34]int32
 
 // getReqCounts returns the number of times each
 // request type appears in the batch.
@@ -72,20 +72,18 @@ func (ba *BatchRequest) getReqCounts() reqCounts {
 			counts[26]++
 		case r.InitPut != nil:
 			counts[27]++
-		case r.ChangeFrozen != nil:
-			counts[28]++
 		case r.TransferLease != nil:
-			counts[29]++
+			counts[28]++
 		case r.LeaseInfo != nil:
-			counts[30]++
+			counts[29]++
 		case r.WriteBatch != nil:
-			counts[31]++
+			counts[30]++
 		case r.Export != nil:
-			counts[32]++
+			counts[31]++
 		case r.Import != nil:
-			counts[33]++
+			counts[32]++
 		case r.QueryTxn != nil:
-			counts[34]++
+			counts[33]++
 		default:
 			panic(fmt.Sprintf("unsupported request: %+v", r))
 		}
@@ -122,7 +120,6 @@ var requestNames = []string{
 	"ChkConsistency",
 	"Noop",
 	"InitPut",
-	"ChangeFrozen",
 	"TransferLease",
 	"LeaseInfo",
 	"WriteBatch",
@@ -191,13 +188,12 @@ func (ba *BatchRequest) CreateReply() *BatchResponse {
 	var buf25 []CheckConsistencyResponse
 	var buf26 []NoopResponse
 	var buf27 []InitPutResponse
-	var buf28 []ChangeFrozenResponse
-	var buf29 []RequestLeaseResponse
-	var buf30 []LeaseInfoResponse
-	var buf31 []WriteBatchResponse
-	var buf32 []ExportResponse
-	var buf33 []ImportResponse
-	var buf34 []QueryTxnResponse
+	var buf28 []RequestLeaseResponse
+	var buf29 []LeaseInfoResponse
+	var buf30 []WriteBatchResponse
+	var buf31 []ExportResponse
+	var buf32 []ImportResponse
+	var buf33 []QueryTxnResponse
 
 	for i, r := range ba.Requests {
 		switch {
@@ -369,48 +365,42 @@ func (ba *BatchRequest) CreateReply() *BatchResponse {
 			}
 			br.Responses[i].InitPut = &buf27[0]
 			buf27 = buf27[1:]
-		case r.ChangeFrozen != nil:
-			if buf28 == nil {
-				buf28 = make([]ChangeFrozenResponse, counts[28])
-			}
-			br.Responses[i].ChangeFrozen = &buf28[0]
-			buf28 = buf28[1:]
 		case r.TransferLease != nil:
-			if buf29 == nil {
-				buf29 = make([]RequestLeaseResponse, counts[29])
+			if buf28 == nil {
+				buf28 = make([]RequestLeaseResponse, counts[28])
 			}
-			br.Responses[i].RequestLease = &buf29[0]
-			buf29 = buf29[1:]
+			br.Responses[i].RequestLease = &buf28[0]
+			buf28 = buf28[1:]
 		case r.LeaseInfo != nil:
-			if buf30 == nil {
-				buf30 = make([]LeaseInfoResponse, counts[30])
+			if buf29 == nil {
+				buf29 = make([]LeaseInfoResponse, counts[29])
 			}
-			br.Responses[i].LeaseInfo = &buf30[0]
-			buf30 = buf30[1:]
+			br.Responses[i].LeaseInfo = &buf29[0]
+			buf29 = buf29[1:]
 		case r.WriteBatch != nil:
-			if buf31 == nil {
-				buf31 = make([]WriteBatchResponse, counts[31])
+			if buf30 == nil {
+				buf30 = make([]WriteBatchResponse, counts[30])
 			}
-			br.Responses[i].WriteBatch = &buf31[0]
-			buf31 = buf31[1:]
+			br.Responses[i].WriteBatch = &buf30[0]
+			buf30 = buf30[1:]
 		case r.Export != nil:
-			if buf32 == nil {
-				buf32 = make([]ExportResponse, counts[32])
+			if buf31 == nil {
+				buf31 = make([]ExportResponse, counts[31])
 			}
-			br.Responses[i].Export = &buf32[0]
-			buf32 = buf32[1:]
+			br.Responses[i].Export = &buf31[0]
+			buf31 = buf31[1:]
 		case r.Import != nil:
-			if buf33 == nil {
-				buf33 = make([]ImportResponse, counts[33])
+			if buf32 == nil {
+				buf32 = make([]ImportResponse, counts[32])
 			}
-			br.Responses[i].Import = &buf33[0]
-			buf33 = buf33[1:]
+			br.Responses[i].Import = &buf32[0]
+			buf32 = buf32[1:]
 		case r.QueryTxn != nil:
-			if buf34 == nil {
-				buf34 = make([]QueryTxnResponse, counts[34])
+			if buf33 == nil {
+				buf33 = make([]QueryTxnResponse, counts[33])
 			}
-			br.Responses[i].QueryTxn = &buf34[0]
-			buf34 = buf34[1:]
+			br.Responses[i].QueryTxn = &buf33[0]
+			buf33 = buf33[1:]
 		default:
 			panic(fmt.Sprintf("unsupported request: %+v", r))
 		}

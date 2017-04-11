@@ -54,7 +54,6 @@ const (
 	debugRangeHeaderDroppedCommands   = "Dropped Commands"
 	debugRangeHeaderTruncatedIndex    = "Truncated Index"
 	debugRangeHeaderTruncatedTerm     = "Truncated Term"
-	debugRangeHeaderFrozen            = "Frozen"
 
 	debugRangeClassWarning       = "warning"
 	debugRangeClassMatch         = "match"
@@ -276,7 +275,6 @@ func (d *debugRangeData) postProcessing() {
 	addHeader(debugRangeHeaderDroppedCommands)
 	addHeader(debugRangeHeaderTruncatedIndex)
 	addHeader(debugRangeHeaderTruncatedTerm)
-	addHeader(debugRangeHeaderFrozen)
 
 	// Add the replica headers.
 	sort.Sort(d.ReplicaIDs)
@@ -473,10 +471,6 @@ func (d *debugRangeData) postProcessing() {
 			Title: strconv.FormatUint(info.State.TruncatedState.Term, 10),
 			Value: strconv.FormatUint(info.State.TruncatedState.Term, 10),
 		}
-		d.Results[debugRangeHeaderFrozen][info.SourceStoreID] = &debugRangeOutput{
-			Title: strconv.FormatBool(info.State.IsFrozen()),
-			Value: strconv.FormatBool(info.State.IsFrozen()),
-		}
 
 		// If the replica is dormant, set all classes in the store to dormant.
 		if info.RaftState.State == raftStateDormant {
@@ -562,10 +556,6 @@ func (d *debugRangeData) postProcessing() {
 			if leaderStoreInfo.State.TruncatedState.Term != info.State.TruncatedState.Term {
 				d.Results[debugRangeHeaderTruncatedTerm][d.HeaderFakeStoreID].Class = debugRangeClassWarning
 				d.Results[debugRangeHeaderTruncatedTerm][info.SourceStoreID].Class = debugRangeClassWarning
-			}
-			if leaderStoreInfo.State.IsFrozen() != info.State.IsFrozen() {
-				d.Results[debugRangeHeaderFrozen][d.HeaderFakeStoreID].Class = debugRangeClassWarning
-				d.Results[debugRangeHeaderFrozen][info.SourceStoreID].Class = debugRangeClassWarning
 			}
 
 			// Find all replicas that the leader doesn't know about and any

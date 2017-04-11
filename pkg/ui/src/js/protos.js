@@ -6799,387 +6799,6 @@ export const cockroach = $root.cockroach = (function() {
                 return LivenessResponse;
             })();
 
-            serverpb.ClusterFreezeRequest = (function() {
-
-                /**
-                 * Properties of a ClusterFreezeRequest.
-                 * @typedef cockroach.server.serverpb.ClusterFreezeRequest$Properties
-                 * @type {Object}
-                 * @property {boolean} [freeze] ClusterFreezeRequest freeze.
-                 */
-
-                /**
-                 * Constructs a new ClusterFreezeRequest.
-                 * @exports cockroach.server.serverpb.ClusterFreezeRequest
-                 * @constructor
-                 * @param {cockroach.server.serverpb.ClusterFreezeRequest$Properties=} [properties] Properties to set
-                 */
-                function ClusterFreezeRequest(properties) {
-                    if (properties)
-                        for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                            this[keys[i]] = properties[keys[i]];
-                }
-
-                /**
-                 * ClusterFreezeRequest freeze.
-                 * @type {boolean|undefined}
-                 */
-                ClusterFreezeRequest.prototype.freeze = false;
-
-                /**
-                 * Creates a new ClusterFreezeRequest instance using the specified properties.
-                 * @param {cockroach.server.serverpb.ClusterFreezeRequest$Properties=} [properties] Properties to set
-                 * @returns {cockroach.server.serverpb.ClusterFreezeRequest} ClusterFreezeRequest instance
-                 */
-                ClusterFreezeRequest.create = function create(properties) {
-                    return new ClusterFreezeRequest(properties);
-                };
-
-                /**
-                 * Encodes the specified ClusterFreezeRequest message. Does not implicitly {@link cockroach.server.serverpb.ClusterFreezeRequest.verify|verify} messages.
-                 * @param {cockroach.server.serverpb.ClusterFreezeRequest$Properties} message ClusterFreezeRequest message or plain object to encode
-                 * @param {$protobuf.Writer} [writer] Writer to encode to
-                 * @returns {$protobuf.Writer} Writer
-                 */
-                ClusterFreezeRequest.encode = function encode(message, writer) {
-                    if (!writer)
-                        writer = $Writer.create();
-                    if (message.freeze != null && message.hasOwnProperty("freeze"))
-                        writer.uint32(/* id 1, wireType 0 =*/8).bool(message.freeze);
-                    return writer;
-                };
-
-                /**
-                 * Encodes the specified ClusterFreezeRequest message, length delimited. Does not implicitly {@link cockroach.server.serverpb.ClusterFreezeRequest.verify|verify} messages.
-                 * @param {cockroach.server.serverpb.ClusterFreezeRequest$Properties} message ClusterFreezeRequest message or plain object to encode
-                 * @param {$protobuf.Writer} [writer] Writer to encode to
-                 * @returns {$protobuf.Writer} Writer
-                 */
-                ClusterFreezeRequest.encodeDelimited = function encodeDelimited(message, writer) {
-                    return this.encode(message, writer).ldelim();
-                };
-
-                /**
-                 * Decodes a ClusterFreezeRequest message from the specified reader or buffer.
-                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
-                 * @param {number} [length] Message length if known beforehand
-                 * @returns {cockroach.server.serverpb.ClusterFreezeRequest} ClusterFreezeRequest
-                 * @throws {Error} If the payload is not a reader or valid buffer
-                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
-                 */
-                ClusterFreezeRequest.decode = function decode(reader, length) {
-                    if (!(reader instanceof $Reader))
-                        reader = $Reader.create(reader);
-                    let end = length === undefined ? reader.len : reader.pos + length, message = new $root.cockroach.server.serverpb.ClusterFreezeRequest();
-                    while (reader.pos < end) {
-                        let tag = reader.uint32();
-                        switch (tag >>> 3) {
-                        case 1:
-                            message.freeze = reader.bool();
-                            break;
-                        default:
-                            reader.skipType(tag & 7);
-                            break;
-                        }
-                    }
-                    return message;
-                };
-
-                /**
-                 * Decodes a ClusterFreezeRequest message from the specified reader or buffer, length delimited.
-                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
-                 * @returns {cockroach.server.serverpb.ClusterFreezeRequest} ClusterFreezeRequest
-                 * @throws {Error} If the payload is not a reader or valid buffer
-                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
-                 */
-                ClusterFreezeRequest.decodeDelimited = function decodeDelimited(reader) {
-                    if (!(reader instanceof $Reader))
-                        reader = $Reader(reader);
-                    return this.decode(reader, reader.uint32());
-                };
-
-                /**
-                 * Verifies a ClusterFreezeRequest message.
-                 * @param {Object.<string,*>} message Plain object to verify
-                 * @returns {?string} `null` if valid, otherwise the reason why it is not
-                 */
-                ClusterFreezeRequest.verify = function verify(message) {
-                    if (typeof message !== "object" || message === null)
-                        return "object expected";
-                    if (message.freeze != null)
-                        if (typeof message.freeze !== "boolean")
-                            return "freeze: boolean expected";
-                    return null;
-                };
-
-                /**
-                 * Creates a ClusterFreezeRequest message from a plain object. Also converts values to their respective internal types.
-                 * @param {Object.<string,*>} object Plain object
-                 * @returns {cockroach.server.serverpb.ClusterFreezeRequest} ClusterFreezeRequest
-                 */
-                ClusterFreezeRequest.fromObject = function fromObject(object) {
-                    if (object instanceof $root.cockroach.server.serverpb.ClusterFreezeRequest)
-                        return object;
-                    let message = new $root.cockroach.server.serverpb.ClusterFreezeRequest();
-                    if (object.freeze != null)
-                        message.freeze = Boolean(object.freeze);
-                    return message;
-                };
-
-                /**
-                 * Creates a ClusterFreezeRequest message from a plain object. Also converts values to their respective internal types.
-                 * This is an alias of {@link cockroach.server.serverpb.ClusterFreezeRequest.fromObject}.
-                 * @function
-                 * @param {Object.<string,*>} object Plain object
-                 * @returns {cockroach.server.serverpb.ClusterFreezeRequest} ClusterFreezeRequest
-                 */
-                ClusterFreezeRequest.from = ClusterFreezeRequest.fromObject;
-
-                /**
-                 * Creates a plain object from a ClusterFreezeRequest message. Also converts values to other types if specified.
-                 * @param {cockroach.server.serverpb.ClusterFreezeRequest} message ClusterFreezeRequest
-                 * @param {$protobuf.ConversionOptions} [options] Conversion options
-                 * @returns {Object.<string,*>} Plain object
-                 */
-                ClusterFreezeRequest.toObject = function toObject(message, options) {
-                    if (!options)
-                        options = {};
-                    let object = {};
-                    if (options.defaults)
-                        object.freeze = false;
-                    if (message.freeze != null && message.hasOwnProperty("freeze"))
-                        object.freeze = message.freeze;
-                    return object;
-                };
-
-                /**
-                 * Creates a plain object from this ClusterFreezeRequest message. Also converts values to other types if specified.
-                 * @param {$protobuf.ConversionOptions} [options] Conversion options
-                 * @returns {Object.<string,*>} Plain object
-                 */
-                ClusterFreezeRequest.prototype.toObject = function toObject(options) {
-                    return this.constructor.toObject(this, options);
-                };
-
-                /**
-                 * Converts this ClusterFreezeRequest to JSON.
-                 * @returns {Object.<string,*>} JSON object
-                 */
-                ClusterFreezeRequest.prototype.toJSON = function toJSON() {
-                    return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
-                };
-
-                return ClusterFreezeRequest;
-            })();
-
-            serverpb.ClusterFreezeResponse = (function() {
-
-                /**
-                 * Properties of a ClusterFreezeResponse.
-                 * @typedef cockroach.server.serverpb.ClusterFreezeResponse$Properties
-                 * @type {Object}
-                 * @property {Long} [ranges_affected] ClusterFreezeResponse ranges_affected.
-                 * @property {string} [message] ClusterFreezeResponse message.
-                 */
-
-                /**
-                 * Constructs a new ClusterFreezeResponse.
-                 * @exports cockroach.server.serverpb.ClusterFreezeResponse
-                 * @constructor
-                 * @param {cockroach.server.serverpb.ClusterFreezeResponse$Properties=} [properties] Properties to set
-                 */
-                function ClusterFreezeResponse(properties) {
-                    if (properties)
-                        for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                            this[keys[i]] = properties[keys[i]];
-                }
-
-                /**
-                 * ClusterFreezeResponse ranges_affected.
-                 * @type {Long|undefined}
-                 */
-                ClusterFreezeResponse.prototype.ranges_affected = $util.Long ? $util.Long.fromBits(0,0,false) : 0;
-
-                /**
-                 * ClusterFreezeResponse message.
-                 * @type {string|undefined}
-                 */
-                ClusterFreezeResponse.prototype.message = "";
-
-                /**
-                 * Creates a new ClusterFreezeResponse instance using the specified properties.
-                 * @param {cockroach.server.serverpb.ClusterFreezeResponse$Properties=} [properties] Properties to set
-                 * @returns {cockroach.server.serverpb.ClusterFreezeResponse} ClusterFreezeResponse instance
-                 */
-                ClusterFreezeResponse.create = function create(properties) {
-                    return new ClusterFreezeResponse(properties);
-                };
-
-                /**
-                 * Encodes the specified ClusterFreezeResponse message. Does not implicitly {@link cockroach.server.serverpb.ClusterFreezeResponse.verify|verify} messages.
-                 * @param {cockroach.server.serverpb.ClusterFreezeResponse$Properties} message ClusterFreezeResponse message or plain object to encode
-                 * @param {$protobuf.Writer} [writer] Writer to encode to
-                 * @returns {$protobuf.Writer} Writer
-                 */
-                ClusterFreezeResponse.encode = function encode(message, writer) {
-                    if (!writer)
-                        writer = $Writer.create();
-                    if (message.ranges_affected != null && message.hasOwnProperty("ranges_affected"))
-                        writer.uint32(/* id 1, wireType 0 =*/8).int64(message.ranges_affected);
-                    if (message.message != null && message.hasOwnProperty("message"))
-                        writer.uint32(/* id 2, wireType 2 =*/18).string(message.message);
-                    return writer;
-                };
-
-                /**
-                 * Encodes the specified ClusterFreezeResponse message, length delimited. Does not implicitly {@link cockroach.server.serverpb.ClusterFreezeResponse.verify|verify} messages.
-                 * @param {cockroach.server.serverpb.ClusterFreezeResponse$Properties} message ClusterFreezeResponse message or plain object to encode
-                 * @param {$protobuf.Writer} [writer] Writer to encode to
-                 * @returns {$protobuf.Writer} Writer
-                 */
-                ClusterFreezeResponse.encodeDelimited = function encodeDelimited(message, writer) {
-                    return this.encode(message, writer).ldelim();
-                };
-
-                /**
-                 * Decodes a ClusterFreezeResponse message from the specified reader or buffer.
-                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
-                 * @param {number} [length] Message length if known beforehand
-                 * @returns {cockroach.server.serverpb.ClusterFreezeResponse} ClusterFreezeResponse
-                 * @throws {Error} If the payload is not a reader or valid buffer
-                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
-                 */
-                ClusterFreezeResponse.decode = function decode(reader, length) {
-                    if (!(reader instanceof $Reader))
-                        reader = $Reader.create(reader);
-                    let end = length === undefined ? reader.len : reader.pos + length, message = new $root.cockroach.server.serverpb.ClusterFreezeResponse();
-                    while (reader.pos < end) {
-                        let tag = reader.uint32();
-                        switch (tag >>> 3) {
-                        case 1:
-                            message.ranges_affected = reader.int64();
-                            break;
-                        case 2:
-                            message.message = reader.string();
-                            break;
-                        default:
-                            reader.skipType(tag & 7);
-                            break;
-                        }
-                    }
-                    return message;
-                };
-
-                /**
-                 * Decodes a ClusterFreezeResponse message from the specified reader or buffer, length delimited.
-                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
-                 * @returns {cockroach.server.serverpb.ClusterFreezeResponse} ClusterFreezeResponse
-                 * @throws {Error} If the payload is not a reader or valid buffer
-                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
-                 */
-                ClusterFreezeResponse.decodeDelimited = function decodeDelimited(reader) {
-                    if (!(reader instanceof $Reader))
-                        reader = $Reader(reader);
-                    return this.decode(reader, reader.uint32());
-                };
-
-                /**
-                 * Verifies a ClusterFreezeResponse message.
-                 * @param {Object.<string,*>} message Plain object to verify
-                 * @returns {?string} `null` if valid, otherwise the reason why it is not
-                 */
-                ClusterFreezeResponse.verify = function verify(message) {
-                    if (typeof message !== "object" || message === null)
-                        return "object expected";
-                    if (message.ranges_affected != null)
-                        if (!$util.isInteger(message.ranges_affected) && !(message.ranges_affected && $util.isInteger(message.ranges_affected.low) && $util.isInteger(message.ranges_affected.high)))
-                            return "ranges_affected: integer|Long expected";
-                    if (message.message != null)
-                        if (!$util.isString(message.message))
-                            return "message: string expected";
-                    return null;
-                };
-
-                /**
-                 * Creates a ClusterFreezeResponse message from a plain object. Also converts values to their respective internal types.
-                 * @param {Object.<string,*>} object Plain object
-                 * @returns {cockroach.server.serverpb.ClusterFreezeResponse} ClusterFreezeResponse
-                 */
-                ClusterFreezeResponse.fromObject = function fromObject(object) {
-                    if (object instanceof $root.cockroach.server.serverpb.ClusterFreezeResponse)
-                        return object;
-                    let message = new $root.cockroach.server.serverpb.ClusterFreezeResponse();
-                    if (object.ranges_affected != null)
-                        if ($util.Long)
-                            (message.ranges_affected = $util.Long.fromValue(object.ranges_affected)).unsigned = false;
-                        else if (typeof object.ranges_affected === "string")
-                            message.ranges_affected = parseInt(object.ranges_affected, 10);
-                        else if (typeof object.ranges_affected === "number")
-                            message.ranges_affected = object.ranges_affected;
-                        else if (typeof object.ranges_affected === "object")
-                            message.ranges_affected = new $util.LongBits(object.ranges_affected.low >>> 0, object.ranges_affected.high >>> 0).toNumber();
-                    if (object.message != null)
-                        message.message = String(object.message);
-                    return message;
-                };
-
-                /**
-                 * Creates a ClusterFreezeResponse message from a plain object. Also converts values to their respective internal types.
-                 * This is an alias of {@link cockroach.server.serverpb.ClusterFreezeResponse.fromObject}.
-                 * @function
-                 * @param {Object.<string,*>} object Plain object
-                 * @returns {cockroach.server.serverpb.ClusterFreezeResponse} ClusterFreezeResponse
-                 */
-                ClusterFreezeResponse.from = ClusterFreezeResponse.fromObject;
-
-                /**
-                 * Creates a plain object from a ClusterFreezeResponse message. Also converts values to other types if specified.
-                 * @param {cockroach.server.serverpb.ClusterFreezeResponse} message ClusterFreezeResponse
-                 * @param {$protobuf.ConversionOptions} [options] Conversion options
-                 * @returns {Object.<string,*>} Plain object
-                 */
-                ClusterFreezeResponse.toObject = function toObject(message, options) {
-                    if (!options)
-                        options = {};
-                    let object = {};
-                    if (options.defaults) {
-                        if ($util.Long) {
-                            let long = new $util.Long(0, 0, false);
-                            object.ranges_affected = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
-                        } else
-                            object.ranges_affected = options.longs === String ? "0" : 0;
-                        object.message = "";
-                    }
-                    if (message.ranges_affected != null && message.hasOwnProperty("ranges_affected"))
-                        if (typeof message.ranges_affected === "number")
-                            object.ranges_affected = options.longs === String ? String(message.ranges_affected) : message.ranges_affected;
-                        else
-                            object.ranges_affected = options.longs === String ? $util.Long.prototype.toString.call(message.ranges_affected) : options.longs === Number ? new $util.LongBits(message.ranges_affected.low >>> 0, message.ranges_affected.high >>> 0).toNumber() : message.ranges_affected;
-                    if (message.message != null && message.hasOwnProperty("message"))
-                        object.message = message.message;
-                    return object;
-                };
-
-                /**
-                 * Creates a plain object from this ClusterFreezeResponse message. Also converts values to other types if specified.
-                 * @param {$protobuf.ConversionOptions} [options] Conversion options
-                 * @returns {Object.<string,*>} Plain object
-                 */
-                ClusterFreezeResponse.prototype.toObject = function toObject(options) {
-                    return this.constructor.toObject(this, options);
-                };
-
-                /**
-                 * Converts this ClusterFreezeResponse to JSON.
-                 * @returns {Object.<string,*>} JSON object
-                 */
-                ClusterFreezeResponse.prototype.toJSON = function toJSON() {
-                    return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
-                };
-
-                return ClusterFreezeResponse;
-            })();
-
             serverpb.Admin = (function() {
 
                 /**
@@ -7529,33 +7148,6 @@ export const cockroach = $root.cockroach = (function() {
                  * @function
                  * @param {cockroach.server.serverpb.DrainRequest|Object.<string,*>} request DrainRequest message or plain object
                  * @returns {Promise<cockroach.server.serverpb.DrainResponse>} Promise
-                 * @variation 2
-                 */
-
-                /**
-                 * Callback as used by {@link Admin#clusterFreeze}.
-                 * @typedef Admin_clusterFreeze_Callback
-                 * @type {function}
-                 * @param {?Error} error Error, if any
-                 * @param {cockroach.server.serverpb.ClusterFreezeResponse} [response] ClusterFreezeResponse
-                 */
-
-                /**
-                 * Calls ClusterFreeze.
-                 * @param {cockroach.server.serverpb.ClusterFreezeRequest|Object.<string,*>} request ClusterFreezeRequest message or plain object
-                 * @param {Admin_clusterFreeze_Callback} callback Node-style callback called with the error, if any, and ClusterFreezeResponse
-                 * @returns {undefined}
-                 */
-                Admin.prototype.clusterFreeze = function clusterFreeze(request, callback) {
-                    return this.rpcCall(clusterFreeze, $root.cockroach.server.serverpb.ClusterFreezeRequest, $root.cockroach.server.serverpb.ClusterFreezeResponse, request, callback);
-                };
-
-                /**
-                 * Calls ClusterFreeze.
-                 * @name Admin#clusterFreeze
-                 * @function
-                 * @param {cockroach.server.serverpb.ClusterFreezeRequest|Object.<string,*>} request ClusterFreezeRequest message or plain object
-                 * @returns {Promise<cockroach.server.serverpb.ClusterFreezeResponse>} Promise
                  * @variation 2
                  */
 
@@ -25289,7 +24881,6 @@ export const cockroach = $root.cockroach = (function() {
                  * @property {cockroach.util.hlc.Timestamp$Properties} [gc_threshold] ReplicaState gc_threshold.
                  * @property {cockroach.storage.engine.enginepb.MVCCStats$Properties} [stats] ReplicaState stats.
                  * @property {cockroach.util.hlc.Timestamp$Properties} [txn_span_gc_threshold] ReplicaState txn_span_gc_threshold.
-                 * @property {cockroach.storage.storagebase.ReplicaState.FrozenEnum} [frozen] ReplicaState frozen.
                  */
 
                 /**
@@ -25353,12 +24944,6 @@ export const cockroach = $root.cockroach = (function() {
                 ReplicaState.prototype.txn_span_gc_threshold = null;
 
                 /**
-                 * ReplicaState frozen.
-                 * @type {cockroach.storage.storagebase.ReplicaState.FrozenEnum|undefined}
-                 */
-                ReplicaState.prototype.frozen = 0;
-
-                /**
                  * Creates a new ReplicaState instance using the specified properties.
                  * @param {cockroach.storage.storagebase.ReplicaState$Properties=} [properties] Properties to set
                  * @returns {cockroach.storage.storagebase.ReplicaState} ReplicaState instance
@@ -25392,8 +24977,6 @@ export const cockroach = $root.cockroach = (function() {
                         $root.cockroach.storage.engine.enginepb.MVCCStats.encode(message.stats, writer.uint32(/* id 7, wireType 2 =*/58).fork()).ldelim();
                     if (message.txn_span_gc_threshold && message.hasOwnProperty("txn_span_gc_threshold"))
                         $root.cockroach.util.hlc.Timestamp.encode(message.txn_span_gc_threshold, writer.uint32(/* id 9, wireType 2 =*/74).fork()).ldelim();
-                    if (message.frozen != null && message.hasOwnProperty("frozen"))
-                        writer.uint32(/* id 10, wireType 0 =*/80).uint32(message.frozen);
                     return writer;
                 };
 
@@ -25445,9 +25028,6 @@ export const cockroach = $root.cockroach = (function() {
                             break;
                         case 9:
                             message.txn_span_gc_threshold = $root.cockroach.util.hlc.Timestamp.decode(reader, reader.uint32());
-                            break;
-                        case 10:
-                            message.frozen = reader.uint32();
                             break;
                         default:
                             reader.skipType(tag & 7);
@@ -25514,15 +25094,6 @@ export const cockroach = $root.cockroach = (function() {
                         if (error)
                             return "txn_span_gc_threshold." + error;
                     }
-                    if (message.frozen != null)
-                        switch (message.frozen) {
-                        default:
-                            return "frozen: enum value expected";
-                        case 0:
-                        case 1:
-                        case 2:
-                            break;
-                        }
                     return null;
                 };
 
@@ -25583,20 +25154,6 @@ export const cockroach = $root.cockroach = (function() {
                             throw TypeError(".cockroach.storage.storagebase.ReplicaState.txn_span_gc_threshold: object expected");
                         message.txn_span_gc_threshold = $root.cockroach.util.hlc.Timestamp.fromObject(object.txn_span_gc_threshold);
                     }
-                    switch (object.frozen) {
-                    case "FROZEN_UNSPECIFIED":
-                    case 0:
-                        message.frozen = 0;
-                        break;
-                    case "FROZEN":
-                    case 1:
-                        message.frozen = 1;
-                        break;
-                    case "UNFROZEN":
-                    case 2:
-                        message.frozen = 2;
-                        break;
-                    }
                     return message;
                 };
 
@@ -25636,7 +25193,6 @@ export const cockroach = $root.cockroach = (function() {
                         object.gc_threshold = null;
                         object.stats = null;
                         object.txn_span_gc_threshold = null;
-                        object.frozen = options.enums === String ? "FROZEN_UNSPECIFIED" : 0;
                     }
                     if (message.raft_applied_index != null && message.hasOwnProperty("raft_applied_index"))
                         if (typeof message.raft_applied_index === "number")
@@ -25660,8 +25216,6 @@ export const cockroach = $root.cockroach = (function() {
                         object.stats = $root.cockroach.storage.engine.enginepb.MVCCStats.toObject(message.stats, options);
                     if (message.txn_span_gc_threshold != null && message.hasOwnProperty("txn_span_gc_threshold"))
                         object.txn_span_gc_threshold = $root.cockroach.util.hlc.Timestamp.toObject(message.txn_span_gc_threshold, options);
-                    if (message.frozen != null && message.hasOwnProperty("frozen"))
-                        object.frozen = options.enums === String ? $root.cockroach.storage.storagebase.ReplicaState.FrozenEnum[message.frozen] : message.frozen;
                     return object;
                 };
 
@@ -25681,23 +25235,6 @@ export const cockroach = $root.cockroach = (function() {
                 ReplicaState.prototype.toJSON = function toJSON() {
                     return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
                 };
-
-                /**
-                 * FrozenEnum enum.
-                 * @name FrozenEnum
-                 * @memberof cockroach.storage.storagebase.ReplicaState
-                 * @enum {number}
-                 * @property {number} FROZEN_UNSPECIFIED=0 FROZEN_UNSPECIFIED value
-                 * @property {number} FROZEN=1 FROZEN value
-                 * @property {number} UNFROZEN=2 UNFROZEN value
-                 */
-                ReplicaState.FrozenEnum = (function() {
-                    const valuesById = {}, values = Object.create(valuesById);
-                    values[valuesById[0] = "FROZEN_UNSPECIFIED"] = 0;
-                    values[valuesById[1] = "FROZEN"] = 1;
-                    values[valuesById[2] = "UNFROZEN"] = 2;
-                    return values;
-                })();
 
                 return ReplicaState;
             })();

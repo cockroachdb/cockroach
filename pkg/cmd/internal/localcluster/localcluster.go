@@ -20,7 +20,6 @@ import (
 	"bytes"
 	gosql "database/sql"
 	"fmt"
-	"io"
 	"math/rand"
 	"os"
 	"os/exec"
@@ -338,34 +337,6 @@ func (c *Cluster) lookupRange(nodeIdx int, key roachpb.Key) (*roachpb.RangeDescr
 		return nil, errors.Errorf("%s: lookup range: %s", key, pErr)
 	}
 	return &resp.(*roachpb.RangeLookupResponse).Ranges[0], nil
-}
-
-// Freeze freezes (or thaws) the cluster. The freeze request is sent to the
-// specified node.
-func (c *Cluster) Freeze(nodeIdx int, freeze bool) {
-	addr := c.RPCAddr(nodeIdx)
-	conn, err := c.rpcCtx.GRPCDial(addr)
-	if err != nil {
-		log.Fatalf(context.Background(), "unable to dial: %s: %v", addr, err)
-	}
-
-	adminClient := serverpb.NewAdminClient(conn)
-	stream, err := adminClient.ClusterFreeze(
-		context.Background(), &serverpb.ClusterFreezeRequest{Freeze: freeze})
-	if err != nil {
-		log.Fatal(context.Background(), err)
-	}
-	for {
-		resp, err := stream.Recv()
-		if err != nil {
-			if err == io.EOF {
-				break
-			}
-			log.Fatal(context.Background(), err)
-		}
-		fmt.Println(resp.Message)
-	}
-	fmt.Println("ok")
 }
 
 // RandNode returns the index of a random alive node.

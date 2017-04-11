@@ -78,12 +78,6 @@ message RangeKeyMismatchError {
   optional RangeDescriptor suggested_range = 4;
 }
 
-// A RangeFrozenError indicates that a Range refused to process a Raft command
-// due to being in frozen state.
-message RangeFrozenError {
-  optional RangeDescriptor desc = 1 [(gogoproto.nullable) = false];
-}
-
 // A ReadWithinUncertaintyIntervalError indicates that a read at timestamp
 // encountered a write within the uncertainty interval of the reader.
 // The read should be retried at a higher timestamp; the timestamps contained
@@ -238,7 +232,7 @@ message ErrorDetail {
   optional LeaseRejectedError lease_rejected = 13;
   optional NodeUnavailableError node_unavailable = 14;
   optional SendError send = 15;
-  optional RangeFrozenError range_frozen = 25;
+  reserved 25;
   optional AmbiguousResultError ambiguous_result = 26;
   optional StoreNotFoundError store_not_found = 27;
 

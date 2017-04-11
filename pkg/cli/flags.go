@@ -48,7 +48,6 @@ var serverHTTPHost, serverHTTPPort string
 var clientConnHost, clientConnPort string
 var zoneConfig string
 var zoneDisableReplication bool
-var undoFreezeCluster bool
 
 var serverCfg = server.MakeConfig()
 var baseCfg = serverCfg.Config
@@ -350,7 +349,6 @@ func init() {
 	clientCmds := []*cobra.Command{
 		debugZipCmd,
 		dumpCmd,
-		freezeClusterCmd,
 		genHAProxyCmd,
 		quitCmd,
 		sqlShellCmd,
@@ -384,8 +382,6 @@ func init() {
 	varFlag(sqlShellCmd.Flags(), &sqlCtx.execStmts, cliflags.Execute)
 	varFlag(dumpCmd.Flags(), &dumpCtx.dumpMode, cliflags.DumpMode)
 	stringFlag(dumpCmd.Flags(), &dumpCtx.asOf, cliflags.DumpTime, "")
-
-	boolFlag(freezeClusterCmd.PersistentFlags(), &undoFreezeCluster, cliflags.UndoFreezeCluster, false)
 
 	// Commands that establish a SQL connection.
 	sqlCmds := []*cobra.Command{sqlShellCmd, dumpCmd}

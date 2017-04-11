@@ -2198,22 +2198,12 @@ func (r *Replica) tryExecuteWriteBatch(
 		lease = ba.GetPrevLeaseForLeaseRequest()
 	} else {
 		// Other write commands require that this replica has the range
-		// lease, except when it's an attempt to unfreeze the Range. These
-		// are a special case in which any replica will propose it to get
-		// back to an active state.
+		// lease.
 		var status LeaseStatus
 		if status, pErr = r.redirectOnOrAcquireLease(ctx); pErr != nil {
-			if _, frozen := pErr.GetDetail().(*roachpb.RangeFrozenError); !frozen {
-				return nil, pErr, proposalNoRetry
-			}
-			// Only continue if the batch appears freezing-related.
-			if !ba.IsFreeze() {
-				return nil, pErr, proposalNoRetry
-			}
-			pErr = nil
-		} else {
-			lease = status.lease
+			return nil, pErr, proposalNoRetry
 		}
+		lease = status.lease
 	}
 
 	if !isNonKV {
@@ -2408,8 +2398,6 @@ func (r *Replica) evaluateProposal(
 	}
 
 	result.Replicated.IsLeaseRequest = ba.IsLeaseRequest()
-	result.Replicated.IsFreeze = ba.IsFreeze()
-	result.Replicated.IsConsistencyRelated = ba.IsConsistencyRelated()
 	result.Replicated.Timestamp = ba.Timestamp
 
 	if result.WriteBatch == nil {
@@ -3499,9 +3487,7 @@ func (r *Replica) processRaftCommand(
 		log.Infof(ctx, "processing command %x: maxLeaseIndex=%d", idKey, raftCmd.MaxLeaseIndex)
 	}
 
-	// TODO(bdarnell): the isConsistencyRelated field is insufficiently tested;
-	// no tests fail if it is always set to false.
-	var isLeaseRequest, isFreeze, isConsistencyRelated bool
+	var isLeaseRequest bool
 	var requestedLease roachpb.Lease
 	var ts hlc.Timestamp
 	if raftCmd.ReplicatedEvalResult != nil {
@@ -3512,8 +3498,6 @@ func (r *Replica) processRaftCommand(
 			}
 			requestedLease = *raftCmd.ReplicatedEvalResult.State.Lease
 		}
-		isFreeze = raftCmd.ReplicatedEvalResult.IsFreeze
-		isConsistencyRelated = raftCmd.ReplicatedEvalResult.IsConsistencyRelated
 		ts = raftCmd.ReplicatedEvalResult.Timestamp
 	} else if idKey != "" {
 		isLeaseRequest = raftCmd.BatchRequest.IsLeaseRequest()
@@ -3524,9 +3508,7 @@ func (r *Replica) processRaftCommand(
 			}
 			requestedLease = rl.(*roachpb.RequestLeaseRequest).Lease
 		}
-		isFreeze = raftCmd.BatchRequest.IsFreeze()
 		ts = raftCmd.BatchRequest.Timestamp
-		isConsistencyRelated = raftCmd.BatchRequest.IsConsistencyRelated()
 	}
 
 	r.mu.Lock()
@@ -3543,10 +3525,6 @@ func (r *Replica) processRaftCommand(
 	// TODO(spencer): remove the special-casing for the pre-epoch range
 	// leases.
 	verifyLease := func() error {
-		// Freeze commands do not verify lease.
-		if raftCmd.BatchRequest != nil && raftCmd.BatchRequest.IsFreeze() {
-			return nil
-		}
 		// Handle the case of pre-epoch-based-leases command.
 		if raftCmd.ProposerLease == nil {
 			// Skip verification for lease commands for legacy case.
@@ -3650,15 +3628,6 @@ func (r *Replica) processRaftCommand(
 				copyProposal.finish(proposalResult{ProposalRetry: proposalIllegalLeaseIndex})
 			}()
 		}
-	}
-	// When frozen, the Range only applies freeze- and consistency-related
-	// requests. Overrides any forcedError.
-	//
-	// TODO(tschottdorf): move up to processRaftCommand and factor it out from
-	// there so that proposer-evaluated KV can run this check too before even
-	// proposing.
-	if mayApply := !r.mu.state.IsFrozen() || isFreeze || isConsistencyRelated; !mayApply {
-		forcedErr = roachpb.NewError(roachpb.NewRangeFrozenError(*r.mu.state.Desc))
 	}
 	r.mu.Unlock()
 
@@ -4453,22 +4422,6 @@ func (r *Replica) getLeaseForGossip(ctx context.Context) (bool, *roachpb.Error) 
 				// NotLeaseHolderError means there is an active lease, but only if
 				// the lease holder is set; otherwise, it's likely a timeout.
 				if e.LeaseHolder != nil {
-					pErr = nil
-				}
-			case *roachpb.RangeFrozenError:
-				storeID := r.store.StoreID()
-				// Let the replica with the smallest StoreID gossip.
-				// TODO(tschottdorf): this is silly and hopefully not necessary
-				// after #6722 (which prevents Raft reproposals from spuriously
-				// re-freezing ranges unfrozen at node startup)
-				hasLease = true
-				for _, replica := range r.Desc().Replicas {
-					if storeID < replica.StoreID {
-						hasLease = false
-						break
-					}
-				}
-				if hasLease {
 					pErr = nil
 				}
 			default:

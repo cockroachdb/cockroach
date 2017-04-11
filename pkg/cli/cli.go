@@ -108,7 +108,6 @@ func init() {
 	cockroachCmd.AddCommand(
 		startCmd,
 		certCmd,
-		freezeClusterCmd,
 		quitCmd,
 
 		sqlShellCmd,

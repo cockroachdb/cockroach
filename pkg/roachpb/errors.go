@@ -345,21 +345,6 @@ func (e *RangeKeyMismatchError) message(_ *Error) string {
 
 var _ ErrorDetailInterface = &RangeKeyMismatchError{}
 
-// NewRangeFrozenError initializes a new RangeFrozenError.
-func NewRangeFrozenError(desc RangeDescriptor) *RangeFrozenError {
-	return &RangeFrozenError{Desc: desc}
-}
-
-func (e *RangeFrozenError) Error() string {
-	return fmt.Sprintf("range is frozen: %s", e.Desc)
-}
-
-func (e *RangeFrozenError) message(_ *Error) string {
-	return e.Error()
-}
-
-var _ ErrorDetailInterface = &RangeFrozenError{}
-
 // NewAmbiguousResultError initializes a new AmbiguousResultError with
 // an explanatory message.
 func NewAmbiguousResultError(msg string) *AmbiguousResultError {
