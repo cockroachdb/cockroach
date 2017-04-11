@@ -688,10 +688,34 @@ func Restore(
 	// TODO(dan): Wait for the newly created ranges (and leaseholders) to
 	// rebalance.
 
+	// We're already limiting these on the server-side, but sending all the
+	// Import requests at once would fill up distsender/grpc/something and cause
+	// all sorts of badness (node liveness timeouts leading to mass leaseholder
+	// transfers, poor performance on SQL workloads, etc) as well as log spam
+	// about slow distsender requests. Rate limit them here, too.
+	//
+	// Use the number of nodes in the cluster as the number of outstanding
+	// Import requests for the rate limiting. TODO(dan): This is very
+	// conservative, see if we can bump it back up by rate limiting WriteBatch.
+	//
+	// TODO(dan): Make this limiting per node.
+	//
+	// TODO(dan): See if there's some better solution than rate-limiting #14798.
+	maxConcurrentImports := clusterNodeCount(p.ExecCfg().Gossip)
+	importsSem := make(chan struct{}, maxConcurrentImports)
+
 	g, gCtx := errgroup.WithContext(ctx)
 	for i := range importRequests {
+		select {
+		case importsSem <- struct{}{}:
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+
 		ir := importRequests[i]
 		g.Go(func() error {
+			defer func() { <-importsSem }()
+
 			if err := Import(gCtx, db, ir.Key, ir.EndKey, ir.files, kr); err != nil {
 				return err
 			}
