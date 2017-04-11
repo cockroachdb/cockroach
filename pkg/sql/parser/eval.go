@@ -114,7 +114,11 @@ var UnaryOps = map[UnaryOperator]unaryOpOverload{
 			Typ:        TypeInt,
 			ReturnType: TypeInt,
 			fn: func(_ *EvalContext, d Datum) (Datum, error) {
-				return NewDInt(-MustBeDInt(d)), nil
+				i := MustBeDInt(d)
+				if i == math.MinInt64 {
+					return nil, errIntOutOfRange
+				}
+				return NewDInt(-i), nil
 			},
 		},
 		UnaryOp{
@@ -242,15 +246,20 @@ var BinOps = map[BinaryOperator]binOpOverload{
 		},
 	},
 
-	// TODO(pmattis): Overflow/underflow checks?
-
 	Plus: {
 		BinOp{
 			LeftType:   TypeInt,
 			RightType:  TypeInt,
 			ReturnType: TypeInt,
 			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
-				return NewDInt(MustBeDInt(left) + MustBeDInt(right)), nil
+				a, b := MustBeDInt(left), MustBeDInt(right)
+				if b > 0 && a > math.MaxInt64-b {
+					return nil, errIntOutOfRange
+				}
+				if b < 0 && a < math.MinInt64-b {
+					return nil, errIntOutOfRange
+				}
+				return NewDInt(a + b), nil
 			},
 		},
 		BinOp{
@@ -385,7 +394,14 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			RightType:  TypeInt,
 			ReturnType: TypeInt,
 			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
-				return NewDInt(MustBeDInt(left) - MustBeDInt(right)), nil
+				a, b := MustBeDInt(left), MustBeDInt(right)
+				if b < 0 && a > math.MaxInt64+b {
+					return nil, errIntOutOfRange
+				}
+				if b > 0 && a < math.MinInt64+b {
+					return nil, errIntOutOfRange
+				}
+				return NewDInt(a - b), nil
 			},
 		},
 		BinOp{
@@ -529,7 +545,20 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			RightType:  TypeInt,
 			ReturnType: TypeInt,
 			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
-				return NewDInt(MustBeDInt(left) * MustBeDInt(right)), nil
+				// See Rob Pike's implementation from
+				// https://groups.google.com/d/msg/golang-nuts/h5oSN5t3Au4/KaNQREhZh0QJ
+
+				a, b := MustBeDInt(left), MustBeDInt(right)
+				c := a * b
+				if a == 0 || b == 0 || a == 1 || b == 1 {
+					// ignore
+				} else if a == math.MinInt64 || b == math.MinInt64 {
+					// This test is required to detect math.MinInt64 * -1.
+					return nil, errIntOutOfRange
+				} else if c/b != a {
+					return nil, errIntOutOfRange
+				}
+				return NewDInt(c), nil
 			},
 		},
 		BinOp{
