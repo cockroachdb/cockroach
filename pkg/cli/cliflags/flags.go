@@ -240,8 +240,7 @@ open "<given path>/.s.PGSQL.<server port>"`,
 		EnvVar: "COCKROACH_INSECURE",
 		Description: `
 Run over non-encrypted (non-TLS) connections. This is strongly discouraged for
-production usage and this flag must be explicitly specified in order for the
-server to listen on an external address in insecure mode.`,
+production usage.`,
 	}
 
 	KeySize = FlagInfo{

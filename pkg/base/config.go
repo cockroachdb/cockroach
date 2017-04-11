@@ -114,6 +114,10 @@ type Config struct {
 	HistogramWindowInterval time.Duration
 }
 
+func didYouMeanInsecureError(err error) error {
+	return fmt.Errorf("problem using security settings: %v, did you mean to use --insecure?", err)
+}
+
 // InitDefaults sets up the default values for a config.
 // This is also used in tests to reset global objects.
 func (cfg *Config) InitDefaults() {
@@ -174,7 +178,7 @@ func (cfg *Config) PGURL(user *url.Userinfo) (*url.URL, error) {
 	} else {
 		caCertPath, certPath, keyPath, err := cfg.GetClientCertPaths(user.Username())
 		if err != nil {
-			return nil, err
+			return nil, didYouMeanInsecureError(err)
 		}
 		options.Add("sslmode", "verify-full")
 		options.Add("sslrootcert", absPath(caCertPath))
@@ -211,9 +215,14 @@ func (cfg *Config) GetClientTLSConfig() (*tls.Config, error) {
 
 	cm, err := cfg.GetCertificateManager()
 	if err != nil {
-		return nil, err
+		return nil, didYouMeanInsecureError(err)
 	}
-	return cm.GetClientTLSConfig(cfg.User)
+
+	tlsCfg, err := cm.GetClientTLSConfig(cfg.User)
+	if err != nil {
+		return nil, didYouMeanInsecureError(err)
+	}
+	return tlsCfg, nil
 }
 
 // GetServerTLSConfig returns the server TLS config, initializing it if needed.
@@ -227,10 +236,14 @@ func (cfg *Config) GetServerTLSConfig() (*tls.Config, error) {
 
 	cm, err := cfg.GetCertificateManager()
 	if err != nil {
-		return nil, err
+		return nil, didYouMeanInsecureError(err)
 	}
 
-	return cm.GetServerTLSConfig()
+	tlsCfg, err := cm.GetServerTLSConfig()
+	if err != nil {
+		return nil, didYouMeanInsecureError(err)
+	}
+	return tlsCfg, nil
 }
 
 // GetHTTPClient returns the http client, initializing it
