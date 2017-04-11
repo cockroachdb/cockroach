@@ -173,7 +173,6 @@ func TestStoreConfig(clock *hlc.Clock) StoreConfig {
 		ConsistencyCheckPanicOnFailure: true,
 		MetricsSampleInterval:          metric.TestSampleInterval,
 		HistogramWindowInterval:        metric.TestSampleInterval,
-		EnableCoalescedHeartbeats:      true,
 		EnableEpochRangeLeases:         true,
 	}
 	sc.SetDefaults()
@@ -678,9 +677,6 @@ type StoreConfig struct {
 	// HistogramWindowInterval is (server.Context).HistogramWindowInterval
 	HistogramWindowInterval time.Duration
 
-	// EnableCoalescedHeartbeats controls whether heartbeats are coalesced.
-	EnableCoalescedHeartbeats bool
-
 	// EnableEpochRangeLeases controls whether epoch-based range leases are used.
 	EnableEpochRangeLeases bool
 
@@ -894,14 +890,6 @@ func NewStore(cfg StoreConfig, eng engine.Engine, nodeDesc *roachpb.NodeDescript
 		nodeDesc: nodeDesc,
 		metrics:  newStoreMetrics(cfg.HistogramWindowInterval),
 	}
-	// EnableCoalescedHeartbeats is enabled by TestStoreConfig, so in that case
-	// ignore the environment variable. Otherwise, use whatever the environment
-	// variable says should be used.
-	if !cfg.EnableCoalescedHeartbeats {
-		s.cfg.EnableCoalescedHeartbeats = envutil.EnvOrDefaultBool(
-			"COCKROACH_ENABLE_COALESCED_HEARTBEATS", true)
-	}
-
 	if cfg.RPCContext != nil {
 		s.allocator = MakeAllocator(cfg.StorePool, cfg.RPCContext.RemoteClocks.Latency)
 	} else {
