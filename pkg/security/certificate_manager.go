@@ -192,34 +192,26 @@ func (cm *CertificateManager) GetServerTLSConfig() (*tls.Config, error) {
 	return cfg, nil
 }
 
-// getClientCertsLocked returns the CA cert and client cert/key for the specified user,
+// getClientCertsLocked returns the client cert/key for the specified user,
 // or an error if not found.
 // cm.mu must be held.
-func (cm *CertificateManager) getClientCertsLocked(user string) (*CertInfo, *CertInfo, error) {
+func (cm *CertificateManager) getClientCertsLocked(user string) (*CertInfo, error) {
 	ci, ok := cm.clientCerts[user]
 	if !ok {
-		return nil, nil, errors.Errorf("no client certificate found for user %s", user)
+		return nil, errors.Errorf("no client certificate found for user %s", user)
 	}
 
-	if cm.caCert == nil {
-		return nil, nil, errors.New("no CA certificate found")
-	}
-
-	return cm.caCert, ci, nil
+	return ci, nil
 }
 
-// getNodeClientCertsLocked returns the CA cert and client cert/key for the node user.
+// getNodeClientCertsLocked returns the client cert/key for the node user.
 // cm.mu must be held.
-func (cm *CertificateManager) getNodeClientCertsLocked() (*CertInfo, *CertInfo, error) {
+func (cm *CertificateManager) getNodeClientCertsLocked() (*CertInfo, error) {
 	if cm.nodeCert == nil {
-		return nil, nil, errors.New("no node certificate found")
+		return nil, errors.New("no node certificate found")
 	}
 
-	if cm.caCert == nil {
-		return nil, nil, errors.New("no CA certificate found")
-	}
-
-	return cm.caCert, cm.nodeCert, nil
+	return cm.nodeCert, nil
 }
 
 // GetClientTLSConfig returns the most up-to-date server tls.Config.
@@ -228,8 +220,13 @@ func (cm *CertificateManager) GetClientTLSConfig(user string) (*tls.Config, erro
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
 
+	// We always need the CA cert.
+	if cm.caCert == nil {
+		return nil, errors.New("no CA certificate found")
+	}
+
 	if user != NodeUser {
-		caCert, clientCert, err := cm.getClientCertsLocked(user)
+		clientCert, err := cm.getClientCertsLocked(user)
 		if err != nil {
 			return nil, err
 		}
@@ -237,7 +234,7 @@ func (cm *CertificateManager) GetClientTLSConfig(user string) (*tls.Config, erro
 		cfg, err := newClientTLSConfig(
 			clientCert.FileContents,
 			clientCert.KeyFileContents,
-			caCert.FileContents)
+			cm.caCert.FileContents)
 		if err != nil {
 			return nil, err
 		}
@@ -251,7 +248,7 @@ func (cm *CertificateManager) GetClientTLSConfig(user string) (*tls.Config, erro
 		return cm.clientConfig, nil
 	}
 
-	caCert, clientCert, err := cm.getNodeClientCertsLocked()
+	clientCert, err := cm.getNodeClientCertsLocked()
 	if err != nil {
 		return nil, err
 	}
@@ -259,7 +256,7 @@ func (cm *CertificateManager) GetClientTLSConfig(user string) (*tls.Config, erro
 	cfg, err := newClientTLSConfig(
 		clientCert.FileContents,
 		clientCert.KeyFileContents,
-		caCert.FileContents)
+		cm.caCert.FileContents)
 	if err != nil {
 		return nil, err
 	}
@@ -269,26 +266,37 @@ func (cm *CertificateManager) GetClientTLSConfig(user string) (*tls.Config, erro
 	return cfg, nil
 }
 
-// GetClientCertPaths returns the paths to the client certs, specifically:
-// CA cert, Client certs, Client key.
-func (cm *CertificateManager) GetClientCertPaths(user string) (string, string, string, error) {
-	var caCert, clientCert *CertInfo
+// GetClientCertPaths returns the paths to the client cert and key.
+// Returns the node cert and key if user == NodeUser.
+func (cm *CertificateManager) GetClientCertPaths(user string) (string, string, error) {
+	var clientCert *CertInfo
 	var err error
 
 	cm.mu.RLock()
 	defer cm.mu.RUnlock()
 
 	if user == NodeUser {
-		caCert, clientCert, err = cm.getNodeClientCertsLocked()
+		clientCert, err = cm.getNodeClientCertsLocked()
 	} else {
-		caCert, clientCert, err = cm.getClientCertsLocked(user)
+		clientCert, err = cm.getClientCertsLocked(user)
 	}
 	if err != nil {
-		return "", "", "", err
+		return "", "", err
 	}
 
-	return filepath.Join(cm.certsDir, caCert.Filename),
-		filepath.Join(cm.certsDir, clientCert.Filename),
+	return filepath.Join(cm.certsDir, clientCert.Filename),
 		filepath.Join(cm.certsDir, clientCert.KeyFilename),
 		nil
+}
+
+// GetCACertPath returns the path to the CA certificate.
+func (cm *CertificateManager) GetCACertPath() (string, error) {
+	cm.mu.RLock()
+	defer cm.mu.RUnlock()
+
+	if cm.caCert == nil {
+		return "", errors.New("no CA certificate found")
+	}
+
+	return filepath.Join(cm.certsDir, cm.caCert.Filename), nil
 }

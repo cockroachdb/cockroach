@@ -25,6 +25,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -206,6 +207,9 @@ func init() {
 }
 
 func getStatusClient() (serverpb.StatusClient, *stop.Stopper, error) {
+	// TODO(marc): Switch back to default user (security.RootUser) when fixed:
+	// https://github.com/cockroachdb/cockroach/issues/14839
+	baseCfg.User = security.NodeUser
 	conn, _, stopper, err := getClientGRPCConn()
 	if err != nil {
 		return nil, nil, err
