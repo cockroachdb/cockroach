@@ -141,7 +141,7 @@ func (h *hashJoiner) buildPhase(ctx context.Context) (bool, error) {
 				return true, meta.Err
 			}
 			if !emitHelper(
-				ctx, &h.out, nil /* row */, ProducerMetadata{}, h.leftSource, h.rightSource) {
+				ctx, &h.out, nil /* row */, meta, h.leftSource, h.rightSource) {
 				return false, nil
 			}
 			continue
@@ -217,7 +217,7 @@ func (h *hashJoiner) probePhase(ctx context.Context) (bool, error) {
 				return true, meta.Err
 			}
 			if !emitHelper(
-				ctx, &h.out, nil /* row */, ProducerMetadata{}, h.leftSource, h.rightSource) {
+				ctx, &h.out, nil /* row */, meta, h.leftSource, h.rightSource) {
 				return false, nil
 			}
 			continue
