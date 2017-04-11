@@ -8,7 +8,7 @@ const $Reader = $protobuf.Reader, $Writer = $protobuf.Writer, $util = $protobuf.
 // Exported root namespace
 const $root = $protobuf.roots["default"] || ($protobuf.roots["default"] = {});
 
-export const cockroach = $root.cockroach = (function() {
+export const cockroach = $root.cockroach = (() => {
 
     /**
      * Namespace cockroach.
@@ -71,7 +71,8 @@ export const cockroach = $root.cockroach = (function() {
                 function DatabasesRequest(properties) {
                     if (properties)
                         for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                            this[keys[i]] = properties[keys[i]];
+                            if (properties[keys[i]] != null)
+                                this[keys[i]] = properties[keys[i]];
                 }
 
                 /**
@@ -221,12 +222,13 @@ export const cockroach = $root.cockroach = (function() {
                     this.databases = [];
                     if (properties)
                         for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                            this[keys[i]] = properties[keys[i]];
+                            if (properties[keys[i]] != null)
+                                this[keys[i]] = properties[keys[i]];
                 }
 
                 /**
                  * DatabasesResponse databases.
-                 * @type {Array.<string>|undefined}
+                 * @type {Array.<string>}
                  */
                 DatabasesResponse.prototype.databases = $util.emptyArray;
 
@@ -248,7 +250,7 @@ export const cockroach = $root.cockroach = (function() {
                 DatabasesResponse.encode = function encode(message, writer) {
                     if (!writer)
                         writer = $Writer.create();
-                    if (message.databases && message.databases.length)
+                    if (message.databases != null && message.databases.length)
                         for (let i = 0; i < message.databases.length; ++i)
                             writer.uint32(/* id 1, wireType 2 =*/10).string(message.databases[i]);
                     return writer;
@@ -313,7 +315,7 @@ export const cockroach = $root.cockroach = (function() {
                 DatabasesResponse.verify = function verify(message) {
                     if (typeof message !== "object" || message === null)
                         return "object expected";
-                    if (message.databases != null) {
+                    if (message.databases != null && message.hasOwnProperty("databases")) {
                         if (!Array.isArray(message.databases))
                             return "databases: array expected";
                         for (let i = 0; i < message.databases.length; ++i)
@@ -409,12 +411,13 @@ export const cockroach = $root.cockroach = (function() {
                 function DatabaseDetailsRequest(properties) {
                     if (properties)
                         for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                            this[keys[i]] = properties[keys[i]];
+                            if (properties[keys[i]] != null)
+                                this[keys[i]] = properties[keys[i]];
                 }
 
                 /**
                  * DatabaseDetailsRequest database.
-                 * @type {string|undefined}
+                 * @type {string}
                  */
                 DatabaseDetailsRequest.prototype.database = "";
 
@@ -498,7 +501,7 @@ export const cockroach = $root.cockroach = (function() {
                 DatabaseDetailsRequest.verify = function verify(message) {
                     if (typeof message !== "object" || message === null)
                         return "object expected";
-                    if (message.database != null)
+                    if (message.database != null && message.hasOwnProperty("database"))
                         if (!$util.isString(message.database))
                             return "database: string expected";
                     return null;
@@ -588,36 +591,37 @@ export const cockroach = $root.cockroach = (function() {
                     this.table_names = [];
                     if (properties)
                         for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                            this[keys[i]] = properties[keys[i]];
+                            if (properties[keys[i]] != null)
+                                this[keys[i]] = properties[keys[i]];
                 }
 
                 /**
                  * DatabaseDetailsResponse grants.
-                 * @type {Array.<cockroach.server.serverpb.DatabaseDetailsResponse.Grant$Properties>|undefined}
+                 * @type {Array.<cockroach.server.serverpb.DatabaseDetailsResponse.Grant$Properties>}
                  */
                 DatabaseDetailsResponse.prototype.grants = $util.emptyArray;
 
                 /**
                  * DatabaseDetailsResponse table_names.
-                 * @type {Array.<string>|undefined}
+                 * @type {Array.<string>}
                  */
                 DatabaseDetailsResponse.prototype.table_names = $util.emptyArray;
 
                 /**
                  * DatabaseDetailsResponse descriptor_id.
-                 * @type {Long|undefined}
+                 * @type {Long}
                  */
                 DatabaseDetailsResponse.prototype.descriptor_id = $util.Long ? $util.Long.fromBits(0,0,false) : 0;
 
                 /**
                  * DatabaseDetailsResponse zone_config.
-                 * @type {cockroach.config.ZoneConfig$Properties|undefined}
+                 * @type {(cockroach.config.ZoneConfig$Properties|null)}
                  */
                 DatabaseDetailsResponse.prototype.zone_config = null;
 
                 /**
                  * DatabaseDetailsResponse zone_config_level.
-                 * @type {cockroach.server.serverpb.ZoneConfigurationLevel|undefined}
+                 * @type {cockroach.server.serverpb.ZoneConfigurationLevel}
                  */
                 DatabaseDetailsResponse.prototype.zone_config_level = 0;
 
@@ -639,15 +643,15 @@ export const cockroach = $root.cockroach = (function() {
                 DatabaseDetailsResponse.encode = function encode(message, writer) {
                     if (!writer)
                         writer = $Writer.create();
-                    if (message.grants && message.grants.length)
+                    if (message.grants != null && message.grants.length)
                         for (let i = 0; i < message.grants.length; ++i)
                             $root.cockroach.server.serverpb.DatabaseDetailsResponse.Grant.encode(message.grants[i], writer.uint32(/* id 1, wireType 2 =*/10).fork()).ldelim();
-                    if (message.table_names && message.table_names.length)
+                    if (message.table_names != null && message.table_names.length)
                         for (let i = 0; i < message.table_names.length; ++i)
                             writer.uint32(/* id 2, wireType 2 =*/18).string(message.table_names[i]);
                     if (message.descriptor_id != null && message.hasOwnProperty("descriptor_id"))
                         writer.uint32(/* id 3, wireType 0 =*/24).int64(message.descriptor_id);
-                    if (message.zone_config && message.hasOwnProperty("zone_config"))
+                    if (message.zone_config != null && message.hasOwnProperty("zone_config"))
                         $root.cockroach.config.ZoneConfig.encode(message.zone_config, writer.uint32(/* id 4, wireType 2 =*/34).fork()).ldelim();
                     if (message.zone_config_level != null && message.hasOwnProperty("zone_config_level"))
                         writer.uint32(/* id 5, wireType 0 =*/40).uint32(message.zone_config_level);
@@ -727,7 +731,7 @@ export const cockroach = $root.cockroach = (function() {
                 DatabaseDetailsResponse.verify = function verify(message) {
                     if (typeof message !== "object" || message === null)
                         return "object expected";
-                    if (message.grants != null) {
+                    if (message.grants != null && message.hasOwnProperty("grants")) {
                         if (!Array.isArray(message.grants))
                             return "grants: array expected";
                         for (let i = 0; i < message.grants.length; ++i) {
@@ -736,22 +740,22 @@ export const cockroach = $root.cockroach = (function() {
                                 return "grants." + error;
                         }
                     }
-                    if (message.table_names != null) {
+                    if (message.table_names != null && message.hasOwnProperty("table_names")) {
                         if (!Array.isArray(message.table_names))
                             return "table_names: array expected";
                         for (let i = 0; i < message.table_names.length; ++i)
                             if (!$util.isString(message.table_names[i]))
                                 return "table_names: string[] expected";
                     }
-                    if (message.descriptor_id != null)
+                    if (message.descriptor_id != null && message.hasOwnProperty("descriptor_id"))
                         if (!$util.isInteger(message.descriptor_id) && !(message.descriptor_id && $util.isInteger(message.descriptor_id.low) && $util.isInteger(message.descriptor_id.high)))
                             return "descriptor_id: integer|Long expected";
-                    if (message.zone_config != null) {
+                    if (message.zone_config != null && message.hasOwnProperty("zone_config")) {
                         let error = $root.cockroach.config.ZoneConfig.verify(message.zone_config);
                         if (error)
                             return "zone_config." + error;
                     }
-                    if (message.zone_config_level != null)
+                    if (message.zone_config_level != null && message.hasOwnProperty("zone_config_level"))
                         switch (message.zone_config_level) {
                         default:
                             return "zone_config_level: enum value expected";
@@ -916,18 +920,19 @@ export const cockroach = $root.cockroach = (function() {
                         this.privileges = [];
                         if (properties)
                             for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                                this[keys[i]] = properties[keys[i]];
+                                if (properties[keys[i]] != null)
+                                    this[keys[i]] = properties[keys[i]];
                     }
 
                     /**
                      * Grant user.
-                     * @type {string|undefined}
+                     * @type {string}
                      */
                     Grant.prototype.user = "";
 
                     /**
                      * Grant privileges.
-                     * @type {Array.<string>|undefined}
+                     * @type {Array.<string>}
                      */
                     Grant.prototype.privileges = $util.emptyArray;
 
@@ -951,7 +956,7 @@ export const cockroach = $root.cockroach = (function() {
                             writer = $Writer.create();
                         if (message.user != null && message.hasOwnProperty("user"))
                             writer.uint32(/* id 1, wireType 2 =*/10).string(message.user);
-                        if (message.privileges && message.privileges.length)
+                        if (message.privileges != null && message.privileges.length)
                             for (let i = 0; i < message.privileges.length; ++i)
                                 writer.uint32(/* id 2, wireType 2 =*/18).string(message.privileges[i]);
                         return writer;
@@ -1019,10 +1024,10 @@ export const cockroach = $root.cockroach = (function() {
                     Grant.verify = function verify(message) {
                         if (typeof message !== "object" || message === null)
                             return "object expected";
-                        if (message.user != null)
+                        if (message.user != null && message.hasOwnProperty("user"))
                             if (!$util.isString(message.user))
                                 return "user: string expected";
-                        if (message.privileges != null) {
+                        if (message.privileges != null && message.hasOwnProperty("privileges")) {
                             if (!Array.isArray(message.privileges))
                                 return "privileges: array expected";
                             for (let i = 0; i < message.privileges.length; ++i)
@@ -1128,18 +1133,19 @@ export const cockroach = $root.cockroach = (function() {
                 function TableDetailsRequest(properties) {
                     if (properties)
                         for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                            this[keys[i]] = properties[keys[i]];
+                            if (properties[keys[i]] != null)
+                                this[keys[i]] = properties[keys[i]];
                 }
 
                 /**
                  * TableDetailsRequest database.
-                 * @type {string|undefined}
+                 * @type {string}
                  */
                 TableDetailsRequest.prototype.database = "";
 
                 /**
                  * TableDetailsRequest table.
-                 * @type {string|undefined}
+                 * @type {string}
                  */
                 TableDetailsRequest.prototype.table = "";
 
@@ -1228,10 +1234,10 @@ export const cockroach = $root.cockroach = (function() {
                 TableDetailsRequest.verify = function verify(message) {
                     if (typeof message !== "object" || message === null)
                         return "object expected";
-                    if (message.database != null)
+                    if (message.database != null && message.hasOwnProperty("database"))
                         if (!$util.isString(message.database))
                             return "database: string expected";
-                    if (message.table != null)
+                    if (message.table != null && message.hasOwnProperty("table"))
                         if (!$util.isString(message.table))
                             return "table: string expected";
                     return null;
@@ -1331,54 +1337,55 @@ export const cockroach = $root.cockroach = (function() {
                     this.indexes = [];
                     if (properties)
                         for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                            this[keys[i]] = properties[keys[i]];
+                            if (properties[keys[i]] != null)
+                                this[keys[i]] = properties[keys[i]];
                 }
 
                 /**
                  * TableDetailsResponse grants.
-                 * @type {Array.<cockroach.server.serverpb.TableDetailsResponse.Grant$Properties>|undefined}
+                 * @type {Array.<cockroach.server.serverpb.TableDetailsResponse.Grant$Properties>}
                  */
                 TableDetailsResponse.prototype.grants = $util.emptyArray;
 
                 /**
                  * TableDetailsResponse columns.
-                 * @type {Array.<cockroach.server.serverpb.TableDetailsResponse.Column$Properties>|undefined}
+                 * @type {Array.<cockroach.server.serverpb.TableDetailsResponse.Column$Properties>}
                  */
                 TableDetailsResponse.prototype.columns = $util.emptyArray;
 
                 /**
                  * TableDetailsResponse indexes.
-                 * @type {Array.<cockroach.server.serverpb.TableDetailsResponse.Index$Properties>|undefined}
+                 * @type {Array.<cockroach.server.serverpb.TableDetailsResponse.Index$Properties>}
                  */
                 TableDetailsResponse.prototype.indexes = $util.emptyArray;
 
                 /**
                  * TableDetailsResponse range_count.
-                 * @type {Long|undefined}
+                 * @type {Long}
                  */
                 TableDetailsResponse.prototype.range_count = $util.Long ? $util.Long.fromBits(0,0,false) : 0;
 
                 /**
                  * TableDetailsResponse create_table_statement.
-                 * @type {string|undefined}
+                 * @type {string}
                  */
                 TableDetailsResponse.prototype.create_table_statement = "";
 
                 /**
                  * TableDetailsResponse zone_config.
-                 * @type {cockroach.config.ZoneConfig$Properties|undefined}
+                 * @type {(cockroach.config.ZoneConfig$Properties|null)}
                  */
                 TableDetailsResponse.prototype.zone_config = null;
 
                 /**
                  * TableDetailsResponse zone_config_level.
-                 * @type {cockroach.server.serverpb.ZoneConfigurationLevel|undefined}
+                 * @type {cockroach.server.serverpb.ZoneConfigurationLevel}
                  */
                 TableDetailsResponse.prototype.zone_config_level = 0;
 
                 /**
                  * TableDetailsResponse descriptor_id.
-                 * @type {Long|undefined}
+                 * @type {Long}
                  */
                 TableDetailsResponse.prototype.descriptor_id = $util.Long ? $util.Long.fromBits(0,0,false) : 0;
 
@@ -1400,20 +1407,20 @@ export const cockroach = $root.cockroach = (function() {
                 TableDetailsResponse.encode = function encode(message, writer) {
                     if (!writer)
                         writer = $Writer.create();
-                    if (message.grants && message.grants.length)
+                    if (message.grants != null && message.grants.length)
                         for (let i = 0; i < message.grants.length; ++i)
                             $root.cockroach.server.serverpb.TableDetailsResponse.Grant.encode(message.grants[i], writer.uint32(/* id 1, wireType 2 =*/10).fork()).ldelim();
-                    if (message.columns && message.columns.length)
+                    if (message.columns != null && message.columns.length)
                         for (let i = 0; i < message.columns.length; ++i)
                             $root.cockroach.server.serverpb.TableDetailsResponse.Column.encode(message.columns[i], writer.uint32(/* id 2, wireType 2 =*/18).fork()).ldelim();
-                    if (message.indexes && message.indexes.length)
+                    if (message.indexes != null && message.indexes.length)
                         for (let i = 0; i < message.indexes.length; ++i)
                             $root.cockroach.server.serverpb.TableDetailsResponse.Index.encode(message.indexes[i], writer.uint32(/* id 3, wireType 2 =*/26).fork()).ldelim();
                     if (message.range_count != null && message.hasOwnProperty("range_count"))
                         writer.uint32(/* id 4, wireType 0 =*/32).int64(message.range_count);
                     if (message.create_table_statement != null && message.hasOwnProperty("create_table_statement"))
                         writer.uint32(/* id 5, wireType 2 =*/42).string(message.create_table_statement);
-                    if (message.zone_config && message.hasOwnProperty("zone_config"))
+                    if (message.zone_config != null && message.hasOwnProperty("zone_config"))
                         $root.cockroach.config.ZoneConfig.encode(message.zone_config, writer.uint32(/* id 6, wireType 2 =*/50).fork()).ldelim();
                     if (message.zone_config_level != null && message.hasOwnProperty("zone_config_level"))
                         writer.uint32(/* id 7, wireType 0 =*/56).uint32(message.zone_config_level);
@@ -1506,7 +1513,7 @@ export const cockroach = $root.cockroach = (function() {
                 TableDetailsResponse.verify = function verify(message) {
                     if (typeof message !== "object" || message === null)
                         return "object expected";
-                    if (message.grants != null) {
+                    if (message.grants != null && message.hasOwnProperty("grants")) {
                         if (!Array.isArray(message.grants))
                             return "grants: array expected";
                         for (let i = 0; i < message.grants.length; ++i) {
@@ -1515,7 +1522,7 @@ export const cockroach = $root.cockroach = (function() {
                                 return "grants." + error;
                         }
                     }
-                    if (message.columns != null) {
+                    if (message.columns != null && message.hasOwnProperty("columns")) {
                         if (!Array.isArray(message.columns))
                             return "columns: array expected";
                         for (let i = 0; i < message.columns.length; ++i) {
@@ -1524,7 +1531,7 @@ export const cockroach = $root.cockroach = (function() {
                                 return "columns." + error;
                         }
                     }
-                    if (message.indexes != null) {
+                    if (message.indexes != null && message.hasOwnProperty("indexes")) {
                         if (!Array.isArray(message.indexes))
                             return "indexes: array expected";
                         for (let i = 0; i < message.indexes.length; ++i) {
@@ -1533,18 +1540,18 @@ export const cockroach = $root.cockroach = (function() {
                                 return "indexes." + error;
                         }
                     }
-                    if (message.range_count != null)
+                    if (message.range_count != null && message.hasOwnProperty("range_count"))
                         if (!$util.isInteger(message.range_count) && !(message.range_count && $util.isInteger(message.range_count.low) && $util.isInteger(message.range_count.high)))
                             return "range_count: integer|Long expected";
-                    if (message.create_table_statement != null)
+                    if (message.create_table_statement != null && message.hasOwnProperty("create_table_statement"))
                         if (!$util.isString(message.create_table_statement))
                             return "create_table_statement: string expected";
-                    if (message.zone_config != null) {
+                    if (message.zone_config != null && message.hasOwnProperty("zone_config")) {
                         let error = $root.cockroach.config.ZoneConfig.verify(message.zone_config);
                         if (error)
                             return "zone_config." + error;
                     }
-                    if (message.zone_config_level != null)
+                    if (message.zone_config_level != null && message.hasOwnProperty("zone_config_level"))
                         switch (message.zone_config_level) {
                         default:
                             return "zone_config_level: enum value expected";
@@ -1554,7 +1561,7 @@ export const cockroach = $root.cockroach = (function() {
                         case 3:
                             break;
                         }
-                    if (message.descriptor_id != null)
+                    if (message.descriptor_id != null && message.hasOwnProperty("descriptor_id"))
                         if (!$util.isInteger(message.descriptor_id) && !(message.descriptor_id && $util.isInteger(message.descriptor_id.low) && $util.isInteger(message.descriptor_id.high)))
                             return "descriptor_id: integer|Long expected";
                     return null;
@@ -1755,18 +1762,19 @@ export const cockroach = $root.cockroach = (function() {
                         this.privileges = [];
                         if (properties)
                             for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                                this[keys[i]] = properties[keys[i]];
+                                if (properties[keys[i]] != null)
+                                    this[keys[i]] = properties[keys[i]];
                     }
 
                     /**
                      * Grant user.
-                     * @type {string|undefined}
+                     * @type {string}
                      */
                     Grant.prototype.user = "";
 
                     /**
                      * Grant privileges.
-                     * @type {Array.<string>|undefined}
+                     * @type {Array.<string>}
                      */
                     Grant.prototype.privileges = $util.emptyArray;
 
@@ -1790,7 +1798,7 @@ export const cockroach = $root.cockroach = (function() {
                             writer = $Writer.create();
                         if (message.user != null && message.hasOwnProperty("user"))
                             writer.uint32(/* id 1, wireType 2 =*/10).string(message.user);
-                        if (message.privileges && message.privileges.length)
+                        if (message.privileges != null && message.privileges.length)
                             for (let i = 0; i < message.privileges.length; ++i)
                                 writer.uint32(/* id 2, wireType 2 =*/18).string(message.privileges[i]);
                         return writer;
@@ -1858,10 +1866,10 @@ export const cockroach = $root.cockroach = (function() {
                     Grant.verify = function verify(message) {
                         if (typeof message !== "object" || message === null)
                             return "object expected";
-                        if (message.user != null)
+                        if (message.user != null && message.hasOwnProperty("user"))
                             if (!$util.isString(message.user))
                                 return "user: string expected";
-                        if (message.privileges != null) {
+                        if (message.privileges != null && message.hasOwnProperty("privileges")) {
                             if (!Array.isArray(message.privileges))
                                 return "privileges: array expected";
                             for (let i = 0; i < message.privileges.length; ++i)
@@ -1966,30 +1974,31 @@ export const cockroach = $root.cockroach = (function() {
                     function Column(properties) {
                         if (properties)
                             for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                                this[keys[i]] = properties[keys[i]];
+                                if (properties[keys[i]] != null)
+                                    this[keys[i]] = properties[keys[i]];
                     }
 
                     /**
                      * Column name.
-                     * @type {string|undefined}
+                     * @type {string}
                      */
                     Column.prototype.name = "";
 
                     /**
                      * Column type.
-                     * @type {string|undefined}
+                     * @type {string}
                      */
                     Column.prototype.type = "";
 
                     /**
                      * Column nullable.
-                     * @type {boolean|undefined}
+                     * @type {boolean}
                      */
                     Column.prototype.nullable = false;
 
                     /**
                      * Column default_value.
-                     * @type {string|undefined}
+                     * @type {string}
                      */
                     Column.prototype.default_value = "";
 
@@ -2088,16 +2097,16 @@ export const cockroach = $root.cockroach = (function() {
                     Column.verify = function verify(message) {
                         if (typeof message !== "object" || message === null)
                             return "object expected";
-                        if (message.name != null)
+                        if (message.name != null && message.hasOwnProperty("name"))
                             if (!$util.isString(message.name))
                                 return "name: string expected";
-                        if (message.type != null)
+                        if (message.type != null && message.hasOwnProperty("type"))
                             if (!$util.isString(message.type))
                                 return "type: string expected";
-                        if (message.nullable != null)
+                        if (message.nullable != null && message.hasOwnProperty("nullable"))
                             if (typeof message.nullable !== "boolean")
                                 return "nullable: boolean expected";
-                        if (message.default_value != null)
+                        if (message.default_value != null && message.hasOwnProperty("default_value"))
                             if (!$util.isString(message.default_value))
                                 return "default_value: string expected";
                         return null;
@@ -2203,48 +2212,49 @@ export const cockroach = $root.cockroach = (function() {
                     function Index(properties) {
                         if (properties)
                             for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                                this[keys[i]] = properties[keys[i]];
+                                if (properties[keys[i]] != null)
+                                    this[keys[i]] = properties[keys[i]];
                     }
 
                     /**
                      * Index name.
-                     * @type {string|undefined}
+                     * @type {string}
                      */
                     Index.prototype.name = "";
 
                     /**
                      * Index unique.
-                     * @type {boolean|undefined}
+                     * @type {boolean}
                      */
                     Index.prototype.unique = false;
 
                     /**
                      * Index seq.
-                     * @type {Long|undefined}
+                     * @type {Long}
                      */
                     Index.prototype.seq = $util.Long ? $util.Long.fromBits(0,0,false) : 0;
 
                     /**
                      * Index column.
-                     * @type {string|undefined}
+                     * @type {string}
                      */
                     Index.prototype.column = "";
 
                     /**
                      * Index direction.
-                     * @type {string|undefined}
+                     * @type {string}
                      */
                     Index.prototype.direction = "";
 
                     /**
                      * Index storing.
-                     * @type {boolean|undefined}
+                     * @type {boolean}
                      */
                     Index.prototype.storing = false;
 
                     /**
                      * Index implicit.
-                     * @type {boolean|undefined}
+                     * @type {boolean}
                      */
                     Index.prototype.implicit = false;
 
@@ -2358,25 +2368,25 @@ export const cockroach = $root.cockroach = (function() {
                     Index.verify = function verify(message) {
                         if (typeof message !== "object" || message === null)
                             return "object expected";
-                        if (message.name != null)
+                        if (message.name != null && message.hasOwnProperty("name"))
                             if (!$util.isString(message.name))
                                 return "name: string expected";
-                        if (message.unique != null)
+                        if (message.unique != null && message.hasOwnProperty("unique"))
                             if (typeof message.unique !== "boolean")
                                 return "unique: boolean expected";
-                        if (message.seq != null)
+                        if (message.seq != null && message.hasOwnProperty("seq"))
                             if (!$util.isInteger(message.seq) && !(message.seq && $util.isInteger(message.seq.low) && $util.isInteger(message.seq.high)))
                                 return "seq: integer|Long expected";
-                        if (message.column != null)
+                        if (message.column != null && message.hasOwnProperty("column"))
                             if (!$util.isString(message.column))
                                 return "column: string expected";
-                        if (message.direction != null)
+                        if (message.direction != null && message.hasOwnProperty("direction"))
                             if (!$util.isString(message.direction))
                                 return "direction: string expected";
-                        if (message.storing != null)
+                        if (message.storing != null && message.hasOwnProperty("storing"))
                             if (typeof message.storing !== "boolean")
                                 return "storing: boolean expected";
-                        if (message.implicit != null)
+                        if (message.implicit != null && message.hasOwnProperty("implicit"))
                             if (typeof message.implicit !== "boolean")
                                 return "implicit: boolean expected";
                         return null;
@@ -2509,18 +2519,19 @@ export const cockroach = $root.cockroach = (function() {
                 function TableStatsRequest(properties) {
                     if (properties)
                         for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                            this[keys[i]] = properties[keys[i]];
+                            if (properties[keys[i]] != null)
+                                this[keys[i]] = properties[keys[i]];
                 }
 
                 /**
                  * TableStatsRequest database.
-                 * @type {string|undefined}
+                 * @type {string}
                  */
                 TableStatsRequest.prototype.database = "";
 
                 /**
                  * TableStatsRequest table.
-                 * @type {string|undefined}
+                 * @type {string}
                  */
                 TableStatsRequest.prototype.table = "";
 
@@ -2609,10 +2620,10 @@ export const cockroach = $root.cockroach = (function() {
                 TableStatsRequest.verify = function verify(message) {
                     if (typeof message !== "object" || message === null)
                         return "object expected";
-                    if (message.database != null)
+                    if (message.database != null && message.hasOwnProperty("database"))
                         if (!$util.isString(message.database))
                             return "database: string expected";
-                    if (message.table != null)
+                    if (message.table != null && message.hasOwnProperty("table"))
                         if (!$util.isString(message.table))
                             return "table: string expected";
                     return null;
@@ -2707,36 +2718,37 @@ export const cockroach = $root.cockroach = (function() {
                     this.missing_nodes = [];
                     if (properties)
                         for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                            this[keys[i]] = properties[keys[i]];
+                            if (properties[keys[i]] != null)
+                                this[keys[i]] = properties[keys[i]];
                 }
 
                 /**
                  * TableStatsResponse range_count.
-                 * @type {Long|undefined}
+                 * @type {Long}
                  */
                 TableStatsResponse.prototype.range_count = $util.Long ? $util.Long.fromBits(0,0,false) : 0;
 
                 /**
                  * TableStatsResponse replica_count.
-                 * @type {Long|undefined}
+                 * @type {Long}
                  */
                 TableStatsResponse.prototype.replica_count = $util.Long ? $util.Long.fromBits(0,0,false) : 0;
 
                 /**
                  * TableStatsResponse node_count.
-                 * @type {Long|undefined}
+                 * @type {Long}
                  */
                 TableStatsResponse.prototype.node_count = $util.Long ? $util.Long.fromBits(0,0,false) : 0;
 
                 /**
                  * TableStatsResponse stats.
-                 * @type {cockroach.storage.engine.enginepb.MVCCStats$Properties|undefined}
+                 * @type {(cockroach.storage.engine.enginepb.MVCCStats$Properties|null)}
                  */
                 TableStatsResponse.prototype.stats = null;
 
                 /**
                  * TableStatsResponse missing_nodes.
-                 * @type {Array.<cockroach.server.serverpb.TableStatsResponse.MissingNode$Properties>|undefined}
+                 * @type {Array.<cockroach.server.serverpb.TableStatsResponse.MissingNode$Properties>}
                  */
                 TableStatsResponse.prototype.missing_nodes = $util.emptyArray;
 
@@ -2764,9 +2776,9 @@ export const cockroach = $root.cockroach = (function() {
                         writer.uint32(/* id 2, wireType 0 =*/16).int64(message.replica_count);
                     if (message.node_count != null && message.hasOwnProperty("node_count"))
                         writer.uint32(/* id 3, wireType 0 =*/24).int64(message.node_count);
-                    if (message.stats && message.hasOwnProperty("stats"))
+                    if (message.stats != null && message.hasOwnProperty("stats"))
                         $root.cockroach.storage.engine.enginepb.MVCCStats.encode(message.stats, writer.uint32(/* id 4, wireType 2 =*/34).fork()).ldelim();
-                    if (message.missing_nodes && message.missing_nodes.length)
+                    if (message.missing_nodes != null && message.missing_nodes.length)
                         for (let i = 0; i < message.missing_nodes.length; ++i)
                             $root.cockroach.server.serverpb.TableStatsResponse.MissingNode.encode(message.missing_nodes[i], writer.uint32(/* id 5, wireType 2 =*/42).fork()).ldelim();
                     return writer;
@@ -2843,21 +2855,21 @@ export const cockroach = $root.cockroach = (function() {
                 TableStatsResponse.verify = function verify(message) {
                     if (typeof message !== "object" || message === null)
                         return "object expected";
-                    if (message.range_count != null)
+                    if (message.range_count != null && message.hasOwnProperty("range_count"))
                         if (!$util.isInteger(message.range_count) && !(message.range_count && $util.isInteger(message.range_count.low) && $util.isInteger(message.range_count.high)))
                             return "range_count: integer|Long expected";
-                    if (message.replica_count != null)
+                    if (message.replica_count != null && message.hasOwnProperty("replica_count"))
                         if (!$util.isInteger(message.replica_count) && !(message.replica_count && $util.isInteger(message.replica_count.low) && $util.isInteger(message.replica_count.high)))
                             return "replica_count: integer|Long expected";
-                    if (message.node_count != null)
+                    if (message.node_count != null && message.hasOwnProperty("node_count"))
                         if (!$util.isInteger(message.node_count) && !(message.node_count && $util.isInteger(message.node_count.low) && $util.isInteger(message.node_count.high)))
                             return "node_count: integer|Long expected";
-                    if (message.stats != null) {
+                    if (message.stats != null && message.hasOwnProperty("stats")) {
                         let error = $root.cockroach.storage.engine.enginepb.MVCCStats.verify(message.stats);
                         if (error)
                             return "stats." + error;
                     }
-                    if (message.missing_nodes != null) {
+                    if (message.missing_nodes != null && message.hasOwnProperty("missing_nodes")) {
                         if (!Array.isArray(message.missing_nodes))
                             return "missing_nodes: array expected";
                         for (let i = 0; i < message.missing_nodes.length; ++i) {
@@ -3023,18 +3035,19 @@ export const cockroach = $root.cockroach = (function() {
                     function MissingNode(properties) {
                         if (properties)
                             for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                                this[keys[i]] = properties[keys[i]];
+                                if (properties[keys[i]] != null)
+                                    this[keys[i]] = properties[keys[i]];
                     }
 
                     /**
                      * MissingNode node_id.
-                     * @type {string|undefined}
+                     * @type {string}
                      */
                     MissingNode.prototype.node_id = "";
 
                     /**
                      * MissingNode error_message.
-                     * @type {string|undefined}
+                     * @type {string}
                      */
                     MissingNode.prototype.error_message = "";
 
@@ -3123,10 +3136,10 @@ export const cockroach = $root.cockroach = (function() {
                     MissingNode.verify = function verify(message) {
                         if (typeof message !== "object" || message === null)
                             return "object expected";
-                        if (message.node_id != null)
+                        if (message.node_id != null && message.hasOwnProperty("node_id"))
                             if (!$util.isString(message.node_id))
                                 return "node_id: string expected";
-                        if (message.error_message != null)
+                        if (message.error_message != null && message.hasOwnProperty("error_message"))
                             if (!$util.isString(message.error_message))
                                 return "error_message: string expected";
                         return null;
@@ -3218,7 +3231,8 @@ export const cockroach = $root.cockroach = (function() {
                 function UsersRequest(properties) {
                     if (properties)
                         for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                            this[keys[i]] = properties[keys[i]];
+                            if (properties[keys[i]] != null)
+                                this[keys[i]] = properties[keys[i]];
                 }
 
                 /**
@@ -3368,12 +3382,13 @@ export const cockroach = $root.cockroach = (function() {
                     this.users = [];
                     if (properties)
                         for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                            this[keys[i]] = properties[keys[i]];
+                            if (properties[keys[i]] != null)
+                                this[keys[i]] = properties[keys[i]];
                 }
 
                 /**
                  * UsersResponse users.
-                 * @type {Array.<cockroach.server.serverpb.UsersResponse.User$Properties>|undefined}
+                 * @type {Array.<cockroach.server.serverpb.UsersResponse.User$Properties>}
                  */
                 UsersResponse.prototype.users = $util.emptyArray;
 
@@ -3395,7 +3410,7 @@ export const cockroach = $root.cockroach = (function() {
                 UsersResponse.encode = function encode(message, writer) {
                     if (!writer)
                         writer = $Writer.create();
-                    if (message.users && message.users.length)
+                    if (message.users != null && message.users.length)
                         for (let i = 0; i < message.users.length; ++i)
                             $root.cockroach.server.serverpb.UsersResponse.User.encode(message.users[i], writer.uint32(/* id 1, wireType 2 =*/10).fork()).ldelim();
                     return writer;
@@ -3460,7 +3475,7 @@ export const cockroach = $root.cockroach = (function() {
                 UsersResponse.verify = function verify(message) {
                     if (typeof message !== "object" || message === null)
                         return "object expected";
-                    if (message.users != null) {
+                    if (message.users != null && message.hasOwnProperty("users")) {
                         if (!Array.isArray(message.users))
                             return "users: array expected";
                         for (let i = 0; i < message.users.length; ++i) {
@@ -3558,12 +3573,13 @@ export const cockroach = $root.cockroach = (function() {
                     function User(properties) {
                         if (properties)
                             for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                                this[keys[i]] = properties[keys[i]];
+                                if (properties[keys[i]] != null)
+                                    this[keys[i]] = properties[keys[i]];
                     }
 
                     /**
                      * User username.
-                     * @type {string|undefined}
+                     * @type {string}
                      */
                     User.prototype.username = "";
 
@@ -3647,7 +3663,7 @@ export const cockroach = $root.cockroach = (function() {
                     User.verify = function verify(message) {
                         if (typeof message !== "object" || message === null)
                             return "object expected";
-                        if (message.username != null)
+                        if (message.username != null && message.hasOwnProperty("username"))
                             if (!$util.isString(message.username))
                                 return "username: string expected";
                         return null;
@@ -3735,18 +3751,19 @@ export const cockroach = $root.cockroach = (function() {
                 function EventsRequest(properties) {
                     if (properties)
                         for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                            this[keys[i]] = properties[keys[i]];
+                            if (properties[keys[i]] != null)
+                                this[keys[i]] = properties[keys[i]];
                 }
 
                 /**
                  * EventsRequest type.
-                 * @type {string|undefined}
+                 * @type {string}
                  */
                 EventsRequest.prototype.type = "";
 
                 /**
                  * EventsRequest target_id.
-                 * @type {Long|undefined}
+                 * @type {Long}
                  */
                 EventsRequest.prototype.target_id = $util.Long ? $util.Long.fromBits(0,0,false) : 0;
 
@@ -3835,10 +3852,10 @@ export const cockroach = $root.cockroach = (function() {
                 EventsRequest.verify = function verify(message) {
                     if (typeof message !== "object" || message === null)
                         return "object expected";
-                    if (message.type != null)
+                    if (message.type != null && message.hasOwnProperty("type"))
                         if (!$util.isString(message.type))
                             return "type: string expected";
-                    if (message.target_id != null)
+                    if (message.target_id != null && message.hasOwnProperty("target_id"))
                         if (!$util.isInteger(message.target_id) && !(message.target_id && $util.isInteger(message.target_id.low) && $util.isInteger(message.target_id.high)))
                             return "target_id: integer|Long expected";
                     return null;
@@ -3943,12 +3960,13 @@ export const cockroach = $root.cockroach = (function() {
                     this.events = [];
                     if (properties)
                         for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                            this[keys[i]] = properties[keys[i]];
+                            if (properties[keys[i]] != null)
+                                this[keys[i]] = properties[keys[i]];
                 }
 
                 /**
                  * EventsResponse events.
-                 * @type {Array.<cockroach.server.serverpb.EventsResponse.Event$Properties>|undefined}
+                 * @type {Array.<cockroach.server.serverpb.EventsResponse.Event$Properties>}
                  */
                 EventsResponse.prototype.events = $util.emptyArray;
 
@@ -3970,7 +3988,7 @@ export const cockroach = $root.cockroach = (function() {
                 EventsResponse.encode = function encode(message, writer) {
                     if (!writer)
                         writer = $Writer.create();
-                    if (message.events && message.events.length)
+                    if (message.events != null && message.events.length)
                         for (let i = 0; i < message.events.length; ++i)
                             $root.cockroach.server.serverpb.EventsResponse.Event.encode(message.events[i], writer.uint32(/* id 1, wireType 2 =*/10).fork()).ldelim();
                     return writer;
@@ -4035,7 +4053,7 @@ export const cockroach = $root.cockroach = (function() {
                 EventsResponse.verify = function verify(message) {
                     if (typeof message !== "object" || message === null)
                         return "object expected";
-                    if (message.events != null) {
+                    if (message.events != null && message.hasOwnProperty("events")) {
                         if (!Array.isArray(message.events))
                             return "events: array expected";
                         for (let i = 0; i < message.events.length; ++i) {
@@ -4138,42 +4156,43 @@ export const cockroach = $root.cockroach = (function() {
                     function Event(properties) {
                         if (properties)
                             for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                                this[keys[i]] = properties[keys[i]];
+                                if (properties[keys[i]] != null)
+                                    this[keys[i]] = properties[keys[i]];
                     }
 
                     /**
                      * Event timestamp.
-                     * @type {google.protobuf.Timestamp$Properties|undefined}
+                     * @type {(google.protobuf.Timestamp$Properties|null)}
                      */
                     Event.prototype.timestamp = null;
 
                     /**
                      * Event event_type.
-                     * @type {string|undefined}
+                     * @type {string}
                      */
                     Event.prototype.event_type = "";
 
                     /**
                      * Event target_id.
-                     * @type {Long|undefined}
+                     * @type {Long}
                      */
                     Event.prototype.target_id = $util.Long ? $util.Long.fromBits(0,0,false) : 0;
 
                     /**
                      * Event reporting_id.
-                     * @type {Long|undefined}
+                     * @type {Long}
                      */
                     Event.prototype.reporting_id = $util.Long ? $util.Long.fromBits(0,0,false) : 0;
 
                     /**
                      * Event info.
-                     * @type {string|undefined}
+                     * @type {string}
                      */
                     Event.prototype.info = "";
 
                     /**
                      * Event unique_id.
-                     * @type {Uint8Array|undefined}
+                     * @type {Uint8Array}
                      */
                     Event.prototype.unique_id = $util.newBuffer([]);
 
@@ -4195,7 +4214,7 @@ export const cockroach = $root.cockroach = (function() {
                     Event.encode = function encode(message, writer) {
                         if (!writer)
                             writer = $Writer.create();
-                        if (message.timestamp && message.hasOwnProperty("timestamp"))
+                        if (message.timestamp != null && message.hasOwnProperty("timestamp"))
                             $root.google.protobuf.Timestamp.encode(message.timestamp, writer.uint32(/* id 1, wireType 2 =*/10).fork()).ldelim();
                         if (message.event_type != null && message.hasOwnProperty("event_type"))
                             writer.uint32(/* id 2, wireType 2 =*/18).string(message.event_type);
@@ -4205,7 +4224,7 @@ export const cockroach = $root.cockroach = (function() {
                             writer.uint32(/* id 4, wireType 0 =*/32).int64(message.reporting_id);
                         if (message.info != null && message.hasOwnProperty("info"))
                             writer.uint32(/* id 5, wireType 2 =*/42).string(message.info);
-                        if (message.unique_id && message.hasOwnProperty("unique_id"))
+                        if (message.unique_id != null && message.hasOwnProperty("unique_id"))
                             writer.uint32(/* id 6, wireType 2 =*/50).bytes(message.unique_id);
                         return writer;
                     };
@@ -4282,24 +4301,24 @@ export const cockroach = $root.cockroach = (function() {
                     Event.verify = function verify(message) {
                         if (typeof message !== "object" || message === null)
                             return "object expected";
-                        if (message.timestamp != null) {
+                        if (message.timestamp != null && message.hasOwnProperty("timestamp")) {
                             let error = $root.google.protobuf.Timestamp.verify(message.timestamp);
                             if (error)
                                 return "timestamp." + error;
                         }
-                        if (message.event_type != null)
+                        if (message.event_type != null && message.hasOwnProperty("event_type"))
                             if (!$util.isString(message.event_type))
                                 return "event_type: string expected";
-                        if (message.target_id != null)
+                        if (message.target_id != null && message.hasOwnProperty("target_id"))
                             if (!$util.isInteger(message.target_id) && !(message.target_id && $util.isInteger(message.target_id.low) && $util.isInteger(message.target_id.high)))
                                 return "target_id: integer|Long expected";
-                        if (message.reporting_id != null)
+                        if (message.reporting_id != null && message.hasOwnProperty("reporting_id"))
                             if (!$util.isInteger(message.reporting_id) && !(message.reporting_id && $util.isInteger(message.reporting_id.low) && $util.isInteger(message.reporting_id.high)))
                                 return "reporting_id: integer|Long expected";
-                        if (message.info != null)
+                        if (message.info != null && message.hasOwnProperty("info"))
                             if (!$util.isString(message.info))
                                 return "info: string expected";
-                        if (message.unique_id != null)
+                        if (message.unique_id != null && message.hasOwnProperty("unique_id"))
                             if (!(message.unique_id && typeof message.unique_id.length === "number" || $util.isString(message.unique_id)))
                                 return "unique_id: buffer expected";
                         return null;
@@ -4447,12 +4466,13 @@ export const cockroach = $root.cockroach = (function() {
                     this.key_values = {};
                     if (properties)
                         for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                            this[keys[i]] = properties[keys[i]];
+                            if (properties[keys[i]] != null)
+                                this[keys[i]] = properties[keys[i]];
                 }
 
                 /**
                  * SetUIDataRequest key_values.
-                 * @type {Object.<string,Uint8Array>|undefined}
+                 * @type {Object.<string,Uint8Array>}
                  */
                 SetUIDataRequest.prototype.key_values = $util.emptyObject;
 
@@ -4474,7 +4494,7 @@ export const cockroach = $root.cockroach = (function() {
                 SetUIDataRequest.encode = function encode(message, writer) {
                     if (!writer)
                         writer = $Writer.create();
-                    if (message.key_values && message.hasOwnProperty("key_values"))
+                    if (message.key_values != null && message.hasOwnProperty("key_values"))
                         for (let keys = Object.keys(message.key_values), i = 0; i < keys.length; ++i)
                             writer.uint32(/* id 1, wireType 2 =*/10).fork().uint32(/* id 1, wireType 2 =*/10).string(keys[i]).uint32(/* id 2, wireType 2 =*/18).bytes(message.key_values[keys[i]]).ldelim();
                     return writer;
@@ -4542,7 +4562,7 @@ export const cockroach = $root.cockroach = (function() {
                 SetUIDataRequest.verify = function verify(message) {
                     if (typeof message !== "object" || message === null)
                         return "object expected";
-                    if (message.key_values != null) {
+                    if (message.key_values != null && message.hasOwnProperty("key_values")) {
                         if (!$util.isObject(message.key_values))
                             return "key_values: object expected";
                         let key = Object.keys(message.key_values);
@@ -4642,7 +4662,8 @@ export const cockroach = $root.cockroach = (function() {
                 function SetUIDataResponse(properties) {
                     if (properties)
                         for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                            this[keys[i]] = properties[keys[i]];
+                            if (properties[keys[i]] != null)
+                                this[keys[i]] = properties[keys[i]];
                 }
 
                 /**
@@ -4792,12 +4813,13 @@ export const cockroach = $root.cockroach = (function() {
                     this.keys = [];
                     if (properties)
                         for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                            this[keys[i]] = properties[keys[i]];
+                            if (properties[keys[i]] != null)
+                                this[keys[i]] = properties[keys[i]];
                 }
 
                 /**
                  * GetUIDataRequest keys.
-                 * @type {Array.<string>|undefined}
+                 * @type {Array.<string>}
                  */
                 GetUIDataRequest.prototype.keys = $util.emptyArray;
 
@@ -4819,7 +4841,7 @@ export const cockroach = $root.cockroach = (function() {
                 GetUIDataRequest.encode = function encode(message, writer) {
                     if (!writer)
                         writer = $Writer.create();
-                    if (message.keys && message.keys.length)
+                    if (message.keys != null && message.keys.length)
                         for (let i = 0; i < message.keys.length; ++i)
                             writer.uint32(/* id 1, wireType 2 =*/10).string(message.keys[i]);
                     return writer;
@@ -4884,7 +4906,7 @@ export const cockroach = $root.cockroach = (function() {
                 GetUIDataRequest.verify = function verify(message) {
                     if (typeof message !== "object" || message === null)
                         return "object expected";
-                    if (message.keys != null) {
+                    if (message.keys != null && message.hasOwnProperty("keys")) {
                         if (!Array.isArray(message.keys))
                             return "keys: array expected";
                         for (let i = 0; i < message.keys.length; ++i)
@@ -4981,12 +5003,13 @@ export const cockroach = $root.cockroach = (function() {
                     this.key_values = {};
                     if (properties)
                         for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                            this[keys[i]] = properties[keys[i]];
+                            if (properties[keys[i]] != null)
+                                this[keys[i]] = properties[keys[i]];
                 }
 
                 /**
                  * GetUIDataResponse key_values.
-                 * @type {Object.<string,cockroach.server.serverpb.GetUIDataResponse.Value$Properties>|undefined}
+                 * @type {Object.<string,cockroach.server.serverpb.GetUIDataResponse.Value$Properties>}
                  */
                 GetUIDataResponse.prototype.key_values = $util.emptyObject;
 
@@ -5008,7 +5031,7 @@ export const cockroach = $root.cockroach = (function() {
                 GetUIDataResponse.encode = function encode(message, writer) {
                     if (!writer)
                         writer = $Writer.create();
-                    if (message.key_values && message.hasOwnProperty("key_values"))
+                    if (message.key_values != null && message.hasOwnProperty("key_values"))
                         for (let keys = Object.keys(message.key_values), i = 0; i < keys.length; ++i) {
                             writer.uint32(/* id 1, wireType 2 =*/10).fork().uint32(/* id 1, wireType 2 =*/10).string(keys[i]);
                             $root.cockroach.server.serverpb.GetUIDataResponse.Value.encode(message.key_values[keys[i]], writer.uint32(/* id 2, wireType 2 =*/18).fork()).ldelim().ldelim();
@@ -5078,7 +5101,7 @@ export const cockroach = $root.cockroach = (function() {
                 GetUIDataResponse.verify = function verify(message) {
                     if (typeof message !== "object" || message === null)
                         return "object expected";
-                    if (message.key_values != null) {
+                    if (message.key_values != null && message.hasOwnProperty("key_values")) {
                         if (!$util.isObject(message.key_values))
                             return "key_values: object expected";
                         let key = Object.keys(message.key_values);
@@ -5179,18 +5202,19 @@ export const cockroach = $root.cockroach = (function() {
                     function Value(properties) {
                         if (properties)
                             for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                                this[keys[i]] = properties[keys[i]];
+                                if (properties[keys[i]] != null)
+                                    this[keys[i]] = properties[keys[i]];
                     }
 
                     /**
                      * Value value.
-                     * @type {Uint8Array|undefined}
+                     * @type {Uint8Array}
                      */
                     Value.prototype.value = $util.newBuffer([]);
 
                     /**
                      * Value last_updated.
-                     * @type {google.protobuf.Timestamp$Properties|undefined}
+                     * @type {(google.protobuf.Timestamp$Properties|null)}
                      */
                     Value.prototype.last_updated = null;
 
@@ -5212,9 +5236,9 @@ export const cockroach = $root.cockroach = (function() {
                     Value.encode = function encode(message, writer) {
                         if (!writer)
                             writer = $Writer.create();
-                        if (message.value && message.hasOwnProperty("value"))
+                        if (message.value != null && message.hasOwnProperty("value"))
                             writer.uint32(/* id 1, wireType 2 =*/10).bytes(message.value);
-                        if (message.last_updated && message.hasOwnProperty("last_updated"))
+                        if (message.last_updated != null && message.hasOwnProperty("last_updated"))
                             $root.google.protobuf.Timestamp.encode(message.last_updated, writer.uint32(/* id 2, wireType 2 =*/18).fork()).ldelim();
                         return writer;
                     };
@@ -5279,10 +5303,10 @@ export const cockroach = $root.cockroach = (function() {
                     Value.verify = function verify(message) {
                         if (typeof message !== "object" || message === null)
                             return "object expected";
-                        if (message.value != null)
+                        if (message.value != null && message.hasOwnProperty("value"))
                             if (!(message.value && typeof message.value.length === "number" || $util.isString(message.value)))
                                 return "value: buffer expected";
-                        if (message.last_updated != null) {
+                        if (message.last_updated != null && message.hasOwnProperty("last_updated")) {
                             let error = $root.google.protobuf.Timestamp.verify(message.last_updated);
                             if (error)
                                 return "last_updated." + error;
@@ -5382,7 +5406,8 @@ export const cockroach = $root.cockroach = (function() {
                 function ClusterRequest(properties) {
                     if (properties)
                         for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                            this[keys[i]] = properties[keys[i]];
+                            if (properties[keys[i]] != null)
+                                this[keys[i]] = properties[keys[i]];
                 }
 
                 /**
@@ -5531,12 +5556,13 @@ export const cockroach = $root.cockroach = (function() {
                 function ClusterResponse(properties) {
                     if (properties)
                         for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                            this[keys[i]] = properties[keys[i]];
+                            if (properties[keys[i]] != null)
+                                this[keys[i]] = properties[keys[i]];
                 }
 
                 /**
                  * ClusterResponse cluster_id.
-                 * @type {string|undefined}
+                 * @type {string}
                  */
                 ClusterResponse.prototype.cluster_id = "";
 
@@ -5620,7 +5646,7 @@ export const cockroach = $root.cockroach = (function() {
                 ClusterResponse.verify = function verify(message) {
                     if (typeof message !== "object" || message === null)
                         return "object expected";
-                    if (message.cluster_id != null)
+                    if (message.cluster_id != null && message.hasOwnProperty("cluster_id"))
                         if (!$util.isString(message.cluster_id))
                             return "cluster_id: string expected";
                     return null;
@@ -5723,24 +5749,25 @@ export const cockroach = $root.cockroach = (function() {
                     this.off = [];
                     if (properties)
                         for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                            this[keys[i]] = properties[keys[i]];
+                            if (properties[keys[i]] != null)
+                                this[keys[i]] = properties[keys[i]];
                 }
 
                 /**
                  * DrainRequest on.
-                 * @type {Array.<number>|undefined}
+                 * @type {Array.<number>}
                  */
                 DrainRequest.prototype.on = $util.emptyArray;
 
                 /**
                  * DrainRequest off.
-                 * @type {Array.<number>|undefined}
+                 * @type {Array.<number>}
                  */
                 DrainRequest.prototype.off = $util.emptyArray;
 
                 /**
                  * DrainRequest shutdown.
-                 * @type {boolean|undefined}
+                 * @type {boolean}
                  */
                 DrainRequest.prototype.shutdown = false;
 
@@ -5762,13 +5789,13 @@ export const cockroach = $root.cockroach = (function() {
                 DrainRequest.encode = function encode(message, writer) {
                     if (!writer)
                         writer = $Writer.create();
-                    if (message.on && message.on.length) {
+                    if (message.on != null && message.on.length) {
                         writer.uint32(/* id 1, wireType 2 =*/10).fork();
                         for (let i = 0; i < message.on.length; ++i)
                             writer.int32(message.on[i]);
                         writer.ldelim();
                     }
-                    if (message.off && message.off.length) {
+                    if (message.off != null && message.off.length) {
                         writer.uint32(/* id 2, wireType 2 =*/18).fork();
                         for (let i = 0; i < message.off.length; ++i)
                             writer.int32(message.off[i]);
@@ -5856,21 +5883,21 @@ export const cockroach = $root.cockroach = (function() {
                 DrainRequest.verify = function verify(message) {
                     if (typeof message !== "object" || message === null)
                         return "object expected";
-                    if (message.on != null) {
+                    if (message.on != null && message.hasOwnProperty("on")) {
                         if (!Array.isArray(message.on))
                             return "on: array expected";
                         for (let i = 0; i < message.on.length; ++i)
                             if (!$util.isInteger(message.on[i]))
                                 return "on: integer[] expected";
                     }
-                    if (message.off != null) {
+                    if (message.off != null && message.hasOwnProperty("off")) {
                         if (!Array.isArray(message.off))
                             return "off: array expected";
                         for (let i = 0; i < message.off.length; ++i)
                             if (!$util.isInteger(message.off[i]))
                                 return "off: integer[] expected";
                     }
-                    if (message.shutdown != null)
+                    if (message.shutdown != null && message.hasOwnProperty("shutdown"))
                         if (typeof message.shutdown !== "boolean")
                             return "shutdown: boolean expected";
                     return null;
@@ -5983,12 +6010,13 @@ export const cockroach = $root.cockroach = (function() {
                     this.on = [];
                     if (properties)
                         for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                            this[keys[i]] = properties[keys[i]];
+                            if (properties[keys[i]] != null)
+                                this[keys[i]] = properties[keys[i]];
                 }
 
                 /**
                  * DrainResponse on.
-                 * @type {Array.<number>|undefined}
+                 * @type {Array.<number>}
                  */
                 DrainResponse.prototype.on = $util.emptyArray;
 
@@ -6010,7 +6038,7 @@ export const cockroach = $root.cockroach = (function() {
                 DrainResponse.encode = function encode(message, writer) {
                     if (!writer)
                         writer = $Writer.create();
-                    if (message.on && message.on.length) {
+                    if (message.on != null && message.on.length) {
                         writer.uint32(/* id 1, wireType 2 =*/10).fork();
                         for (let i = 0; i < message.on.length; ++i)
                             writer.int32(message.on[i]);
@@ -6083,7 +6111,7 @@ export const cockroach = $root.cockroach = (function() {
                 DrainResponse.verify = function verify(message) {
                     if (typeof message !== "object" || message === null)
                         return "object expected";
-                    if (message.on != null) {
+                    if (message.on != null && message.hasOwnProperty("on")) {
                         if (!Array.isArray(message.on))
                             return "on: array expected";
                         for (let i = 0; i < message.on.length; ++i)
@@ -6178,7 +6206,8 @@ export const cockroach = $root.cockroach = (function() {
                 function HealthRequest(properties) {
                     if (properties)
                         for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                            this[keys[i]] = properties[keys[i]];
+                            if (properties[keys[i]] != null)
+                                this[keys[i]] = properties[keys[i]];
                 }
 
                 /**
@@ -6326,7 +6355,8 @@ export const cockroach = $root.cockroach = (function() {
                 function HealthResponse(properties) {
                     if (properties)
                         for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                            this[keys[i]] = properties[keys[i]];
+                            if (properties[keys[i]] != null)
+                                this[keys[i]] = properties[keys[i]];
                 }
 
                 /**
@@ -6474,7 +6504,8 @@ export const cockroach = $root.cockroach = (function() {
                 function LivenessRequest(properties) {
                     if (properties)
                         for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                            this[keys[i]] = properties[keys[i]];
+                            if (properties[keys[i]] != null)
+                                this[keys[i]] = properties[keys[i]];
                 }
 
                 /**
@@ -6624,12 +6655,13 @@ export const cockroach = $root.cockroach = (function() {
                     this.livenesses = [];
                     if (properties)
                         for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                            this[keys[i]] = properties[keys[i]];
+                            if (properties[keys[i]] != null)
+                                this[keys[i]] = properties[keys[i]];
                 }
 
                 /**
                  * LivenessResponse livenesses.
-                 * @type {Array.<cockroach.storage.Liveness$Properties>|undefined}
+                 * @type {Array.<cockroach.storage.Liveness$Properties>}
                  */
                 LivenessResponse.prototype.livenesses = $util.emptyArray;
 
@@ -6651,7 +6683,7 @@ export const cockroach = $root.cockroach = (function() {
                 LivenessResponse.encode = function encode(message, writer) {
                     if (!writer)
                         writer = $Writer.create();
-                    if (message.livenesses && message.livenesses.length)
+                    if (message.livenesses != null && message.livenesses.length)
                         for (let i = 0; i < message.livenesses.length; ++i)
                             $root.cockroach.storage.Liveness.encode(message.livenesses[i], writer.uint32(/* id 1, wireType 2 =*/10).fork()).ldelim();
                     return writer;
@@ -6716,7 +6748,7 @@ export const cockroach = $root.cockroach = (function() {
                 LivenessResponse.verify = function verify(message) {
                     if (typeof message !== "object" || message === null)
                         return "object expected";
-                    if (message.livenesses != null) {
+                    if (message.livenesses != null && message.hasOwnProperty("livenesses")) {
                         if (!Array.isArray(message.livenesses))
                             return "livenesses: array expected";
                         for (let i = 0; i < message.livenesses.length; ++i) {
@@ -7172,12 +7204,13 @@ export const cockroach = $root.cockroach = (function() {
                 function DetailsRequest(properties) {
                     if (properties)
                         for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                            this[keys[i]] = properties[keys[i]];
+                            if (properties[keys[i]] != null)
+                                this[keys[i]] = properties[keys[i]];
                 }
 
                 /**
                  * DetailsRequest node_id.
-                 * @type {string|undefined}
+                 * @type {string}
                  */
                 DetailsRequest.prototype.node_id = "";
 
@@ -7261,7 +7294,7 @@ export const cockroach = $root.cockroach = (function() {
                 DetailsRequest.verify = function verify(message) {
                     if (typeof message !== "object" || message === null)
                         return "object expected";
-                    if (message.node_id != null)
+                    if (message.node_id != null && message.hasOwnProperty("node_id"))
                         if (!$util.isString(message.node_id))
                             return "node_id: string expected";
                     return null;
@@ -7347,24 +7380,25 @@ export const cockroach = $root.cockroach = (function() {
                 function DetailsResponse(properties) {
                     if (properties)
                         for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                            this[keys[i]] = properties[keys[i]];
+                            if (properties[keys[i]] != null)
+                                this[keys[i]] = properties[keys[i]];
                 }
 
                 /**
                  * DetailsResponse node_id.
-                 * @type {number|undefined}
+                 * @type {number}
                  */
                 DetailsResponse.prototype.node_id = 0;
 
                 /**
                  * DetailsResponse address.
-                 * @type {cockroach.util.UnresolvedAddr$Properties|undefined}
+                 * @type {(cockroach.util.UnresolvedAddr$Properties|null)}
                  */
                 DetailsResponse.prototype.address = null;
 
                 /**
                  * DetailsResponse build_info.
-                 * @type {cockroach.build.Info$Properties|undefined}
+                 * @type {(cockroach.build.Info$Properties|null)}
                  */
                 DetailsResponse.prototype.build_info = null;
 
@@ -7388,9 +7422,9 @@ export const cockroach = $root.cockroach = (function() {
                         writer = $Writer.create();
                     if (message.node_id != null && message.hasOwnProperty("node_id"))
                         writer.uint32(/* id 1, wireType 0 =*/8).int32(message.node_id);
-                    if (message.address && message.hasOwnProperty("address"))
+                    if (message.address != null && message.hasOwnProperty("address"))
                         $root.cockroach.util.UnresolvedAddr.encode(message.address, writer.uint32(/* id 2, wireType 2 =*/18).fork()).ldelim();
-                    if (message.build_info && message.hasOwnProperty("build_info"))
+                    if (message.build_info != null && message.hasOwnProperty("build_info"))
                         $root.cockroach.build.Info.encode(message.build_info, writer.uint32(/* id 3, wireType 2 =*/26).fork()).ldelim();
                     return writer;
                 };
@@ -7458,15 +7492,15 @@ export const cockroach = $root.cockroach = (function() {
                 DetailsResponse.verify = function verify(message) {
                     if (typeof message !== "object" || message === null)
                         return "object expected";
-                    if (message.node_id != null)
+                    if (message.node_id != null && message.hasOwnProperty("node_id"))
                         if (!$util.isInteger(message.node_id))
                             return "node_id: integer expected";
-                    if (message.address != null) {
+                    if (message.address != null && message.hasOwnProperty("address")) {
                         let error = $root.cockroach.util.UnresolvedAddr.verify(message.address);
                         if (error)
                             return "address." + error;
                     }
-                    if (message.build_info != null) {
+                    if (message.build_info != null && message.hasOwnProperty("build_info")) {
                         let error = $root.cockroach.build.Info.verify(message.build_info);
                         if (error)
                             return "build_info." + error;
@@ -7568,7 +7602,8 @@ export const cockroach = $root.cockroach = (function() {
                 function NodesRequest(properties) {
                     if (properties)
                         for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                            this[keys[i]] = properties[keys[i]];
+                            if (properties[keys[i]] != null)
+                                this[keys[i]] = properties[keys[i]];
                 }
 
                 /**
@@ -7718,12 +7753,13 @@ export const cockroach = $root.cockroach = (function() {
                     this.nodes = [];
                     if (properties)
                         for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                            this[keys[i]] = properties[keys[i]];
+                            if (properties[keys[i]] != null)
+                                this[keys[i]] = properties[keys[i]];
                 }
 
                 /**
                  * NodesResponse nodes.
-                 * @type {Array.<cockroach.server.status.NodeStatus$Properties>|undefined}
+                 * @type {Array.<cockroach.server.status.NodeStatus$Properties>}
                  */
                 NodesResponse.prototype.nodes = $util.emptyArray;
 
@@ -7745,7 +7781,7 @@ export const cockroach = $root.cockroach = (function() {
                 NodesResponse.encode = function encode(message, writer) {
                     if (!writer)
                         writer = $Writer.create();
-                    if (message.nodes && message.nodes.length)
+                    if (message.nodes != null && message.nodes.length)
                         for (let i = 0; i < message.nodes.length; ++i)
                             $root.cockroach.server.status.NodeStatus.encode(message.nodes[i], writer.uint32(/* id 1, wireType 2 =*/10).fork()).ldelim();
                     return writer;
@@ -7810,7 +7846,7 @@ export const cockroach = $root.cockroach = (function() {
                 NodesResponse.verify = function verify(message) {
                     if (typeof message !== "object" || message === null)
                         return "object expected";
-                    if (message.nodes != null) {
+                    if (message.nodes != null && message.hasOwnProperty("nodes")) {
                         if (!Array.isArray(message.nodes))
                             return "nodes: array expected";
                         for (let i = 0; i < message.nodes.length; ++i) {
@@ -7911,12 +7947,13 @@ export const cockroach = $root.cockroach = (function() {
                 function NodeRequest(properties) {
                     if (properties)
                         for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                            this[keys[i]] = properties[keys[i]];
+                            if (properties[keys[i]] != null)
+                                this[keys[i]] = properties[keys[i]];
                 }
 
                 /**
                  * NodeRequest node_id.
-                 * @type {string|undefined}
+                 * @type {string}
                  */
                 NodeRequest.prototype.node_id = "";
 
@@ -8000,7 +8037,7 @@ export const cockroach = $root.cockroach = (function() {
                 NodeRequest.verify = function verify(message) {
                     if (typeof message !== "object" || message === null)
                         return "object expected";
-                    if (message.node_id != null)
+                    if (message.node_id != null && message.hasOwnProperty("node_id"))
                         if (!$util.isString(message.node_id))
                             return "node_id: string expected";
                     return null;
@@ -8090,42 +8127,43 @@ export const cockroach = $root.cockroach = (function() {
                     this.progress = {};
                     if (properties)
                         for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                            this[keys[i]] = properties[keys[i]];
+                            if (properties[keys[i]] != null)
+                                this[keys[i]] = properties[keys[i]];
                 }
 
                 /**
                  * RaftState replica_id.
-                 * @type {Long|undefined}
+                 * @type {Long}
                  */
                 RaftState.prototype.replica_id = $util.Long ? $util.Long.fromBits(0,0,true) : 0;
 
                 /**
                  * RaftState hard_state.
-                 * @type {raftpb.HardState$Properties|undefined}
+                 * @type {(raftpb.HardState$Properties|null)}
                  */
                 RaftState.prototype.hard_state = null;
 
                 /**
                  * RaftState lead.
-                 * @type {Long|undefined}
+                 * @type {Long}
                  */
                 RaftState.prototype.lead = $util.Long ? $util.Long.fromBits(0,0,true) : 0;
 
                 /**
                  * RaftState state.
-                 * @type {string|undefined}
+                 * @type {string}
                  */
                 RaftState.prototype.state = "";
 
                 /**
                  * RaftState applied.
-                 * @type {Long|undefined}
+                 * @type {Long}
                  */
                 RaftState.prototype.applied = $util.Long ? $util.Long.fromBits(0,0,true) : 0;
 
                 /**
                  * RaftState progress.
-                 * @type {Object.<string,cockroach.server.serverpb.RaftState.Progress$Properties>|undefined}
+                 * @type {Object.<string,cockroach.server.serverpb.RaftState.Progress$Properties>}
                  */
                 RaftState.prototype.progress = $util.emptyObject;
 
@@ -8149,7 +8187,7 @@ export const cockroach = $root.cockroach = (function() {
                         writer = $Writer.create();
                     if (message.replica_id != null && message.hasOwnProperty("replica_id"))
                         writer.uint32(/* id 1, wireType 0 =*/8).uint64(message.replica_id);
-                    if (message.hard_state && message.hasOwnProperty("hard_state"))
+                    if (message.hard_state != null && message.hasOwnProperty("hard_state"))
                         $root.raftpb.HardState.encode(message.hard_state, writer.uint32(/* id 2, wireType 2 =*/18).fork()).ldelim();
                     if (message.lead != null && message.hasOwnProperty("lead"))
                         writer.uint32(/* id 3, wireType 0 =*/24).uint64(message.lead);
@@ -8157,7 +8195,7 @@ export const cockroach = $root.cockroach = (function() {
                         writer.uint32(/* id 4, wireType 2 =*/34).string(message.state);
                     if (message.applied != null && message.hasOwnProperty("applied"))
                         writer.uint32(/* id 5, wireType 0 =*/40).uint64(message.applied);
-                    if (message.progress && message.hasOwnProperty("progress"))
+                    if (message.progress != null && message.hasOwnProperty("progress"))
                         for (let keys = Object.keys(message.progress), i = 0; i < keys.length; ++i) {
                             writer.uint32(/* id 6, wireType 2 =*/50).fork().uint32(/* id 1, wireType 0 =*/8).uint64(keys[i]);
                             $root.cockroach.server.serverpb.RaftState.Progress.encode(message.progress[keys[i]], writer.uint32(/* id 2, wireType 2 =*/18).fork()).ldelim().ldelim();
@@ -8242,24 +8280,24 @@ export const cockroach = $root.cockroach = (function() {
                 RaftState.verify = function verify(message) {
                     if (typeof message !== "object" || message === null)
                         return "object expected";
-                    if (message.replica_id != null)
+                    if (message.replica_id != null && message.hasOwnProperty("replica_id"))
                         if (!$util.isInteger(message.replica_id) && !(message.replica_id && $util.isInteger(message.replica_id.low) && $util.isInteger(message.replica_id.high)))
                             return "replica_id: integer|Long expected";
-                    if (message.hard_state != null) {
+                    if (message.hard_state != null && message.hasOwnProperty("hard_state")) {
                         let error = $root.raftpb.HardState.verify(message.hard_state);
                         if (error)
                             return "hard_state." + error;
                     }
-                    if (message.lead != null)
+                    if (message.lead != null && message.hasOwnProperty("lead"))
                         if (!$util.isInteger(message.lead) && !(message.lead && $util.isInteger(message.lead.low) && $util.isInteger(message.lead.high)))
                             return "lead: integer|Long expected";
-                    if (message.state != null)
+                    if (message.state != null && message.hasOwnProperty("state"))
                         if (!$util.isString(message.state))
                             return "state: string expected";
-                    if (message.applied != null)
+                    if (message.applied != null && message.hasOwnProperty("applied"))
                         if (!$util.isInteger(message.applied) && !(message.applied && $util.isInteger(message.applied.low) && $util.isInteger(message.applied.high)))
                             return "applied: integer|Long expected";
-                    if (message.progress != null) {
+                    if (message.progress != null && message.hasOwnProperty("progress")) {
                         if (!$util.isObject(message.progress))
                             return "progress: object expected";
                         let key = Object.keys(message.progress);
@@ -8437,36 +8475,37 @@ export const cockroach = $root.cockroach = (function() {
                     function Progress(properties) {
                         if (properties)
                             for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                                this[keys[i]] = properties[keys[i]];
+                                if (properties[keys[i]] != null)
+                                    this[keys[i]] = properties[keys[i]];
                     }
 
                     /**
                      * Progress match.
-                     * @type {Long|undefined}
+                     * @type {Long}
                      */
                     Progress.prototype.match = $util.Long ? $util.Long.fromBits(0,0,true) : 0;
 
                     /**
                      * Progress next.
-                     * @type {Long|undefined}
+                     * @type {Long}
                      */
                     Progress.prototype.next = $util.Long ? $util.Long.fromBits(0,0,true) : 0;
 
                     /**
                      * Progress state.
-                     * @type {string|undefined}
+                     * @type {string}
                      */
                     Progress.prototype.state = "";
 
                     /**
                      * Progress paused.
-                     * @type {boolean|undefined}
+                     * @type {boolean}
                      */
                     Progress.prototype.paused = false;
 
                     /**
                      * Progress pending_snapshot.
-                     * @type {Long|undefined}
+                     * @type {Long}
                      */
                     Progress.prototype.pending_snapshot = $util.Long ? $util.Long.fromBits(0,0,true) : 0;
 
@@ -8570,19 +8609,19 @@ export const cockroach = $root.cockroach = (function() {
                     Progress.verify = function verify(message) {
                         if (typeof message !== "object" || message === null)
                             return "object expected";
-                        if (message.match != null)
+                        if (message.match != null && message.hasOwnProperty("match"))
                             if (!$util.isInteger(message.match) && !(message.match && $util.isInteger(message.match.low) && $util.isInteger(message.match.high)))
                                 return "match: integer|Long expected";
-                        if (message.next != null)
+                        if (message.next != null && message.hasOwnProperty("next"))
                             if (!$util.isInteger(message.next) && !(message.next && $util.isInteger(message.next.low) && $util.isInteger(message.next.high)))
                                 return "next: integer|Long expected";
-                        if (message.state != null)
+                        if (message.state != null && message.hasOwnProperty("state"))
                             if (!$util.isString(message.state))
                                 return "state: string expected";
-                        if (message.paused != null)
+                        if (message.paused != null && message.hasOwnProperty("paused"))
                             if (typeof message.paused !== "boolean")
                                 return "paused: boolean expected";
-                        if (message.pending_snapshot != null)
+                        if (message.pending_snapshot != null && message.hasOwnProperty("pending_snapshot"))
                             if (!$util.isInteger(message.pending_snapshot) && !(message.pending_snapshot && $util.isInteger(message.pending_snapshot.low) && $util.isInteger(message.pending_snapshot.high)))
                                 return "pending_snapshot: integer|Long expected";
                         return null;
@@ -8737,42 +8776,43 @@ export const cockroach = $root.cockroach = (function() {
                 function RangeInfo(properties) {
                     if (properties)
                         for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                            this[keys[i]] = properties[keys[i]];
+                            if (properties[keys[i]] != null)
+                                this[keys[i]] = properties[keys[i]];
                 }
 
                 /**
                  * RangeInfo span.
-                 * @type {cockroach.server.serverpb.PrettySpan$Properties|undefined}
+                 * @type {(cockroach.server.serverpb.PrettySpan$Properties|null)}
                  */
                 RangeInfo.prototype.span = null;
 
                 /**
                  * RangeInfo raft_state.
-                 * @type {cockroach.server.serverpb.RaftState$Properties|undefined}
+                 * @type {(cockroach.server.serverpb.RaftState$Properties|null)}
                  */
                 RangeInfo.prototype.raft_state = null;
 
                 /**
                  * RangeInfo state.
-                 * @type {cockroach.storage.storagebase.RangeInfo$Properties|undefined}
+                 * @type {(cockroach.storage.storagebase.RangeInfo$Properties|null)}
                  */
                 RangeInfo.prototype.state = null;
 
                 /**
                  * RangeInfo source_node_id.
-                 * @type {number|undefined}
+                 * @type {number}
                  */
                 RangeInfo.prototype.source_node_id = 0;
 
                 /**
                  * RangeInfo source_store_id.
-                 * @type {number|undefined}
+                 * @type {number}
                  */
                 RangeInfo.prototype.source_store_id = 0;
 
                 /**
                  * RangeInfo error_message.
-                 * @type {string|undefined}
+                 * @type {string}
                  */
                 RangeInfo.prototype.error_message = "";
 
@@ -8794,11 +8834,11 @@ export const cockroach = $root.cockroach = (function() {
                 RangeInfo.encode = function encode(message, writer) {
                     if (!writer)
                         writer = $Writer.create();
-                    if (message.span && message.hasOwnProperty("span"))
+                    if (message.span != null && message.hasOwnProperty("span"))
                         $root.cockroach.server.serverpb.PrettySpan.encode(message.span, writer.uint32(/* id 1, wireType 2 =*/10).fork()).ldelim();
-                    if (message.raft_state && message.hasOwnProperty("raft_state"))
+                    if (message.raft_state != null && message.hasOwnProperty("raft_state"))
                         $root.cockroach.server.serverpb.RaftState.encode(message.raft_state, writer.uint32(/* id 2, wireType 2 =*/18).fork()).ldelim();
-                    if (message.state && message.hasOwnProperty("state"))
+                    if (message.state != null && message.hasOwnProperty("state"))
                         $root.cockroach.storage.storagebase.RangeInfo.encode(message.state, writer.uint32(/* id 4, wireType 2 =*/34).fork()).ldelim();
                     if (message.source_node_id != null && message.hasOwnProperty("source_node_id"))
                         writer.uint32(/* id 5, wireType 0 =*/40).int32(message.source_node_id);
@@ -8881,28 +8921,28 @@ export const cockroach = $root.cockroach = (function() {
                 RangeInfo.verify = function verify(message) {
                     if (typeof message !== "object" || message === null)
                         return "object expected";
-                    if (message.span != null) {
+                    if (message.span != null && message.hasOwnProperty("span")) {
                         let error = $root.cockroach.server.serverpb.PrettySpan.verify(message.span);
                         if (error)
                             return "span." + error;
                     }
-                    if (message.raft_state != null) {
+                    if (message.raft_state != null && message.hasOwnProperty("raft_state")) {
                         let error = $root.cockroach.server.serverpb.RaftState.verify(message.raft_state);
                         if (error)
                             return "raft_state." + error;
                     }
-                    if (message.state != null) {
+                    if (message.state != null && message.hasOwnProperty("state")) {
                         let error = $root.cockroach.storage.storagebase.RangeInfo.verify(message.state);
                         if (error)
                             return "state." + error;
                     }
-                    if (message.source_node_id != null)
+                    if (message.source_node_id != null && message.hasOwnProperty("source_node_id"))
                         if (!$util.isInteger(message.source_node_id))
                             return "source_node_id: integer expected";
-                    if (message.source_store_id != null)
+                    if (message.source_store_id != null && message.hasOwnProperty("source_store_id"))
                         if (!$util.isInteger(message.source_store_id))
                             return "source_store_id: integer expected";
-                    if (message.error_message != null)
+                    if (message.error_message != null && message.hasOwnProperty("error_message"))
                         if (!$util.isString(message.error_message))
                             return "error_message: string expected";
                     return null;
@@ -9023,18 +9063,19 @@ export const cockroach = $root.cockroach = (function() {
                     this.range_ids = [];
                     if (properties)
                         for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                            this[keys[i]] = properties[keys[i]];
+                            if (properties[keys[i]] != null)
+                                this[keys[i]] = properties[keys[i]];
                 }
 
                 /**
                  * RangesRequest node_id.
-                 * @type {string|undefined}
+                 * @type {string}
                  */
                 RangesRequest.prototype.node_id = "";
 
                 /**
                  * RangesRequest range_ids.
-                 * @type {Array.<Long>|undefined}
+                 * @type {Array.<Long>}
                  */
                 RangesRequest.prototype.range_ids = $util.emptyArray;
 
@@ -9058,7 +9099,7 @@ export const cockroach = $root.cockroach = (function() {
                         writer = $Writer.create();
                     if (message.node_id != null && message.hasOwnProperty("node_id"))
                         writer.uint32(/* id 1, wireType 2 =*/10).string(message.node_id);
-                    if (message.range_ids && message.range_ids.length) {
+                    if (message.range_ids != null && message.range_ids.length) {
                         writer.uint32(/* id 2, wireType 2 =*/18).fork();
                         for (let i = 0; i < message.range_ids.length; ++i)
                             writer.int64(message.range_ids[i]);
@@ -9134,10 +9175,10 @@ export const cockroach = $root.cockroach = (function() {
                 RangesRequest.verify = function verify(message) {
                     if (typeof message !== "object" || message === null)
                         return "object expected";
-                    if (message.node_id != null)
+                    if (message.node_id != null && message.hasOwnProperty("node_id"))
                         if (!$util.isString(message.node_id))
                             return "node_id: string expected";
-                    if (message.range_ids != null) {
+                    if (message.range_ids != null && message.hasOwnProperty("range_ids")) {
                         if (!Array.isArray(message.range_ids))
                             return "range_ids: array expected";
                         for (let i = 0; i < message.range_ids.length; ++i)
@@ -9250,12 +9291,13 @@ export const cockroach = $root.cockroach = (function() {
                     this.ranges = [];
                     if (properties)
                         for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                            this[keys[i]] = properties[keys[i]];
+                            if (properties[keys[i]] != null)
+                                this[keys[i]] = properties[keys[i]];
                 }
 
                 /**
                  * RangesResponse ranges.
-                 * @type {Array.<cockroach.server.serverpb.RangeInfo$Properties>|undefined}
+                 * @type {Array.<cockroach.server.serverpb.RangeInfo$Properties>}
                  */
                 RangesResponse.prototype.ranges = $util.emptyArray;
 
@@ -9277,7 +9319,7 @@ export const cockroach = $root.cockroach = (function() {
                 RangesResponse.encode = function encode(message, writer) {
                     if (!writer)
                         writer = $Writer.create();
-                    if (message.ranges && message.ranges.length)
+                    if (message.ranges != null && message.ranges.length)
                         for (let i = 0; i < message.ranges.length; ++i)
                             $root.cockroach.server.serverpb.RangeInfo.encode(message.ranges[i], writer.uint32(/* id 1, wireType 2 =*/10).fork()).ldelim();
                     return writer;
@@ -9342,7 +9384,7 @@ export const cockroach = $root.cockroach = (function() {
                 RangesResponse.verify = function verify(message) {
                     if (typeof message !== "object" || message === null)
                         return "object expected";
-                    if (message.ranges != null) {
+                    if (message.ranges != null && message.hasOwnProperty("ranges")) {
                         if (!Array.isArray(message.ranges))
                             return "ranges: array expected";
                         for (let i = 0; i < message.ranges.length; ++i) {
@@ -9443,12 +9485,13 @@ export const cockroach = $root.cockroach = (function() {
                 function GossipRequest(properties) {
                     if (properties)
                         for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                            this[keys[i]] = properties[keys[i]];
+                            if (properties[keys[i]] != null)
+                                this[keys[i]] = properties[keys[i]];
                 }
 
                 /**
                  * GossipRequest node_id.
-                 * @type {string|undefined}
+                 * @type {string}
                  */
                 GossipRequest.prototype.node_id = "";
 
@@ -9532,7 +9575,7 @@ export const cockroach = $root.cockroach = (function() {
                 GossipRequest.verify = function verify(message) {
                     if (typeof message !== "object" || message === null)
                         return "object expected";
-                    if (message.node_id != null)
+                    if (message.node_id != null && message.hasOwnProperty("node_id"))
                         if (!$util.isString(message.node_id))
                             return "node_id: string expected";
                     return null;
@@ -9616,12 +9659,13 @@ export const cockroach = $root.cockroach = (function() {
                 function JSONResponse(properties) {
                     if (properties)
                         for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                            this[keys[i]] = properties[keys[i]];
+                            if (properties[keys[i]] != null)
+                                this[keys[i]] = properties[keys[i]];
                 }
 
                 /**
                  * JSONResponse data.
-                 * @type {Uint8Array|undefined}
+                 * @type {Uint8Array}
                  */
                 JSONResponse.prototype.data = $util.newBuffer([]);
 
@@ -9643,7 +9687,7 @@ export const cockroach = $root.cockroach = (function() {
                 JSONResponse.encode = function encode(message, writer) {
                     if (!writer)
                         writer = $Writer.create();
-                    if (message.data && message.hasOwnProperty("data"))
+                    if (message.data != null && message.hasOwnProperty("data"))
                         writer.uint32(/* id 1, wireType 2 =*/10).bytes(message.data);
                     return writer;
                 };
@@ -9705,7 +9749,7 @@ export const cockroach = $root.cockroach = (function() {
                 JSONResponse.verify = function verify(message) {
                     if (typeof message !== "object" || message === null)
                         return "object expected";
-                    if (message.data != null)
+                    if (message.data != null && message.hasOwnProperty("data"))
                         if (!(message.data && typeof message.data.length === "number" || $util.isString(message.data)))
                             return "data: buffer expected";
                     return null;
@@ -9797,42 +9841,43 @@ export const cockroach = $root.cockroach = (function() {
                 function LogsRequest(properties) {
                     if (properties)
                         for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                            this[keys[i]] = properties[keys[i]];
+                            if (properties[keys[i]] != null)
+                                this[keys[i]] = properties[keys[i]];
                 }
 
                 /**
                  * LogsRequest node_id.
-                 * @type {string|undefined}
+                 * @type {string}
                  */
                 LogsRequest.prototype.node_id = "";
 
                 /**
                  * LogsRequest level.
-                 * @type {string|undefined}
+                 * @type {string}
                  */
                 LogsRequest.prototype.level = "";
 
                 /**
                  * LogsRequest start_time.
-                 * @type {string|undefined}
+                 * @type {string}
                  */
                 LogsRequest.prototype.start_time = "";
 
                 /**
                  * LogsRequest end_time.
-                 * @type {string|undefined}
+                 * @type {string}
                  */
                 LogsRequest.prototype.end_time = "";
 
                 /**
                  * LogsRequest max.
-                 * @type {string|undefined}
+                 * @type {string}
                  */
                 LogsRequest.prototype.max = "";
 
                 /**
                  * LogsRequest pattern.
-                 * @type {string|undefined}
+                 * @type {string}
                  */
                 LogsRequest.prototype.pattern = "";
 
@@ -9941,22 +9986,22 @@ export const cockroach = $root.cockroach = (function() {
                 LogsRequest.verify = function verify(message) {
                     if (typeof message !== "object" || message === null)
                         return "object expected";
-                    if (message.node_id != null)
+                    if (message.node_id != null && message.hasOwnProperty("node_id"))
                         if (!$util.isString(message.node_id))
                             return "node_id: string expected";
-                    if (message.level != null)
+                    if (message.level != null && message.hasOwnProperty("level"))
                         if (!$util.isString(message.level))
                             return "level: string expected";
-                    if (message.start_time != null)
+                    if (message.start_time != null && message.hasOwnProperty("start_time"))
                         if (!$util.isString(message.start_time))
                             return "start_time: string expected";
-                    if (message.end_time != null)
+                    if (message.end_time != null && message.hasOwnProperty("end_time"))
                         if (!$util.isString(message.end_time))
                             return "end_time: string expected";
-                    if (message.max != null)
+                    if (message.max != null && message.hasOwnProperty("max"))
                         if (!$util.isString(message.max))
                             return "max: string expected";
-                    if (message.pattern != null)
+                    if (message.pattern != null && message.hasOwnProperty("pattern"))
                         if (!$util.isString(message.pattern))
                             return "pattern: string expected";
                     return null;
@@ -10067,12 +10112,13 @@ export const cockroach = $root.cockroach = (function() {
                     this.entries = [];
                     if (properties)
                         for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                            this[keys[i]] = properties[keys[i]];
+                            if (properties[keys[i]] != null)
+                                this[keys[i]] = properties[keys[i]];
                 }
 
                 /**
                  * LogEntriesResponse entries.
-                 * @type {Array.<cockroach.util.log.Entry$Properties>|undefined}
+                 * @type {Array.<cockroach.util.log.Entry$Properties>}
                  */
                 LogEntriesResponse.prototype.entries = $util.emptyArray;
 
@@ -10094,7 +10140,7 @@ export const cockroach = $root.cockroach = (function() {
                 LogEntriesResponse.encode = function encode(message, writer) {
                     if (!writer)
                         writer = $Writer.create();
-                    if (message.entries && message.entries.length)
+                    if (message.entries != null && message.entries.length)
                         for (let i = 0; i < message.entries.length; ++i)
                             $root.cockroach.util.log.Entry.encode(message.entries[i], writer.uint32(/* id 1, wireType 2 =*/10).fork()).ldelim();
                     return writer;
@@ -10159,7 +10205,7 @@ export const cockroach = $root.cockroach = (function() {
                 LogEntriesResponse.verify = function verify(message) {
                     if (typeof message !== "object" || message === null)
                         return "object expected";
-                    if (message.entries != null) {
+                    if (message.entries != null && message.hasOwnProperty("entries")) {
                         if (!Array.isArray(message.entries))
                             return "entries: array expected";
                         for (let i = 0; i < message.entries.length; ++i) {
@@ -10260,12 +10306,13 @@ export const cockroach = $root.cockroach = (function() {
                 function LogFilesListRequest(properties) {
                     if (properties)
                         for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                            this[keys[i]] = properties[keys[i]];
+                            if (properties[keys[i]] != null)
+                                this[keys[i]] = properties[keys[i]];
                 }
 
                 /**
                  * LogFilesListRequest node_id.
-                 * @type {string|undefined}
+                 * @type {string}
                  */
                 LogFilesListRequest.prototype.node_id = "";
 
@@ -10349,7 +10396,7 @@ export const cockroach = $root.cockroach = (function() {
                 LogFilesListRequest.verify = function verify(message) {
                     if (typeof message !== "object" || message === null)
                         return "object expected";
-                    if (message.node_id != null)
+                    if (message.node_id != null && message.hasOwnProperty("node_id"))
                         if (!$util.isString(message.node_id))
                             return "node_id: string expected";
                     return null;
@@ -10434,12 +10481,13 @@ export const cockroach = $root.cockroach = (function() {
                     this.files = [];
                     if (properties)
                         for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                            this[keys[i]] = properties[keys[i]];
+                            if (properties[keys[i]] != null)
+                                this[keys[i]] = properties[keys[i]];
                 }
 
                 /**
                  * LogFilesListResponse files.
-                 * @type {Array.<cockroach.util.log.FileInfo$Properties>|undefined}
+                 * @type {Array.<cockroach.util.log.FileInfo$Properties>}
                  */
                 LogFilesListResponse.prototype.files = $util.emptyArray;
 
@@ -10461,7 +10509,7 @@ export const cockroach = $root.cockroach = (function() {
                 LogFilesListResponse.encode = function encode(message, writer) {
                     if (!writer)
                         writer = $Writer.create();
-                    if (message.files && message.files.length)
+                    if (message.files != null && message.files.length)
                         for (let i = 0; i < message.files.length; ++i)
                             $root.cockroach.util.log.FileInfo.encode(message.files[i], writer.uint32(/* id 1, wireType 2 =*/10).fork()).ldelim();
                     return writer;
@@ -10526,7 +10574,7 @@ export const cockroach = $root.cockroach = (function() {
                 LogFilesListResponse.verify = function verify(message) {
                     if (typeof message !== "object" || message === null)
                         return "object expected";
-                    if (message.files != null) {
+                    if (message.files != null && message.hasOwnProperty("files")) {
                         if (!Array.isArray(message.files))
                             return "files: array expected";
                         for (let i = 0; i < message.files.length; ++i) {
@@ -10628,18 +10676,19 @@ export const cockroach = $root.cockroach = (function() {
                 function LogFileRequest(properties) {
                     if (properties)
                         for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                            this[keys[i]] = properties[keys[i]];
+                            if (properties[keys[i]] != null)
+                                this[keys[i]] = properties[keys[i]];
                 }
 
                 /**
                  * LogFileRequest node_id.
-                 * @type {string|undefined}
+                 * @type {string}
                  */
                 LogFileRequest.prototype.node_id = "";
 
                 /**
                  * LogFileRequest file.
-                 * @type {string|undefined}
+                 * @type {string}
                  */
                 LogFileRequest.prototype.file = "";
 
@@ -10728,10 +10777,10 @@ export const cockroach = $root.cockroach = (function() {
                 LogFileRequest.verify = function verify(message) {
                     if (typeof message !== "object" || message === null)
                         return "object expected";
-                    if (message.node_id != null)
+                    if (message.node_id != null && message.hasOwnProperty("node_id"))
                         if (!$util.isString(message.node_id))
                             return "node_id: string expected";
-                    if (message.file != null)
+                    if (message.file != null && message.hasOwnProperty("file"))
                         if (!$util.isString(message.file))
                             return "file: string expected";
                     return null;
@@ -10821,12 +10870,13 @@ export const cockroach = $root.cockroach = (function() {
                 function StacksRequest(properties) {
                     if (properties)
                         for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                            this[keys[i]] = properties[keys[i]];
+                            if (properties[keys[i]] != null)
+                                this[keys[i]] = properties[keys[i]];
                 }
 
                 /**
                  * StacksRequest node_id.
-                 * @type {string|undefined}
+                 * @type {string}
                  */
                 StacksRequest.prototype.node_id = "";
 
@@ -10910,7 +10960,7 @@ export const cockroach = $root.cockroach = (function() {
                 StacksRequest.verify = function verify(message) {
                     if (typeof message !== "object" || message === null)
                         return "object expected";
-                    if (message.node_id != null)
+                    if (message.node_id != null && message.hasOwnProperty("node_id"))
                         if (!$util.isString(message.node_id))
                             return "node_id: string expected";
                     return null;
@@ -10994,12 +11044,13 @@ export const cockroach = $root.cockroach = (function() {
                 function MetricsRequest(properties) {
                     if (properties)
                         for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                            this[keys[i]] = properties[keys[i]];
+                            if (properties[keys[i]] != null)
+                                this[keys[i]] = properties[keys[i]];
                 }
 
                 /**
                  * MetricsRequest node_id.
-                 * @type {string|undefined}
+                 * @type {string}
                  */
                 MetricsRequest.prototype.node_id = "";
 
@@ -11083,7 +11134,7 @@ export const cockroach = $root.cockroach = (function() {
                 MetricsRequest.verify = function verify(message) {
                     if (typeof message !== "object" || message === null)
                         return "object expected";
-                    if (message.node_id != null)
+                    if (message.node_id != null && message.hasOwnProperty("node_id"))
                         if (!$util.isString(message.node_id))
                             return "node_id: string expected";
                     return null;
@@ -11168,18 +11219,19 @@ export const cockroach = $root.cockroach = (function() {
                 function RaftRangeNode(properties) {
                     if (properties)
                         for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                            this[keys[i]] = properties[keys[i]];
+                            if (properties[keys[i]] != null)
+                                this[keys[i]] = properties[keys[i]];
                 }
 
                 /**
                  * RaftRangeNode node_id.
-                 * @type {number|undefined}
+                 * @type {number}
                  */
                 RaftRangeNode.prototype.node_id = 0;
 
                 /**
                  * RaftRangeNode range.
-                 * @type {cockroach.server.serverpb.RangeInfo$Properties|undefined}
+                 * @type {(cockroach.server.serverpb.RangeInfo$Properties|null)}
                  */
                 RaftRangeNode.prototype.range = null;
 
@@ -11203,7 +11255,7 @@ export const cockroach = $root.cockroach = (function() {
                         writer = $Writer.create();
                     if (message.node_id != null && message.hasOwnProperty("node_id"))
                         writer.uint32(/* id 1, wireType 0 =*/8).int32(message.node_id);
-                    if (message.range && message.hasOwnProperty("range"))
+                    if (message.range != null && message.hasOwnProperty("range"))
                         $root.cockroach.server.serverpb.RangeInfo.encode(message.range, writer.uint32(/* id 2, wireType 2 =*/18).fork()).ldelim();
                     return writer;
                 };
@@ -11268,10 +11320,10 @@ export const cockroach = $root.cockroach = (function() {
                 RaftRangeNode.verify = function verify(message) {
                     if (typeof message !== "object" || message === null)
                         return "object expected";
-                    if (message.node_id != null)
+                    if (message.node_id != null && message.hasOwnProperty("node_id"))
                         if (!$util.isInteger(message.node_id))
                             return "node_id: integer expected";
-                    if (message.range != null) {
+                    if (message.range != null && message.hasOwnProperty("range")) {
                         let error = $root.cockroach.server.serverpb.RangeInfo.verify(message.range);
                         if (error)
                             return "range." + error;
@@ -11366,12 +11418,13 @@ export const cockroach = $root.cockroach = (function() {
                 function RaftRangeError(properties) {
                     if (properties)
                         for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                            this[keys[i]] = properties[keys[i]];
+                            if (properties[keys[i]] != null)
+                                this[keys[i]] = properties[keys[i]];
                 }
 
                 /**
                  * RaftRangeError message.
-                 * @type {string|undefined}
+                 * @type {string}
                  */
                 RaftRangeError.prototype.message = "";
 
@@ -11455,7 +11508,7 @@ export const cockroach = $root.cockroach = (function() {
                 RaftRangeError.verify = function verify(message) {
                     if (typeof message !== "object" || message === null)
                         return "object expected";
-                    if (message.message != null)
+                    if (message.message != null && message.hasOwnProperty("message"))
                         if (!$util.isString(message.message))
                             return "message: string expected";
                     return null;
@@ -11543,24 +11596,25 @@ export const cockroach = $root.cockroach = (function() {
                     this.nodes = [];
                     if (properties)
                         for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                            this[keys[i]] = properties[keys[i]];
+                            if (properties[keys[i]] != null)
+                                this[keys[i]] = properties[keys[i]];
                 }
 
                 /**
                  * RaftRangeStatus range_id.
-                 * @type {Long|undefined}
+                 * @type {Long}
                  */
                 RaftRangeStatus.prototype.range_id = $util.Long ? $util.Long.fromBits(0,0,false) : 0;
 
                 /**
                  * RaftRangeStatus errors.
-                 * @type {Array.<cockroach.server.serverpb.RaftRangeError$Properties>|undefined}
+                 * @type {Array.<cockroach.server.serverpb.RaftRangeError$Properties>}
                  */
                 RaftRangeStatus.prototype.errors = $util.emptyArray;
 
                 /**
                  * RaftRangeStatus nodes.
-                 * @type {Array.<cockroach.server.serverpb.RaftRangeNode$Properties>|undefined}
+                 * @type {Array.<cockroach.server.serverpb.RaftRangeNode$Properties>}
                  */
                 RaftRangeStatus.prototype.nodes = $util.emptyArray;
 
@@ -11584,10 +11638,10 @@ export const cockroach = $root.cockroach = (function() {
                         writer = $Writer.create();
                     if (message.range_id != null && message.hasOwnProperty("range_id"))
                         writer.uint32(/* id 1, wireType 0 =*/8).int64(message.range_id);
-                    if (message.errors && message.errors.length)
+                    if (message.errors != null && message.errors.length)
                         for (let i = 0; i < message.errors.length; ++i)
                             $root.cockroach.server.serverpb.RaftRangeError.encode(message.errors[i], writer.uint32(/* id 2, wireType 2 =*/18).fork()).ldelim();
-                    if (message.nodes && message.nodes.length)
+                    if (message.nodes != null && message.nodes.length)
                         for (let i = 0; i < message.nodes.length; ++i)
                             $root.cockroach.server.serverpb.RaftRangeNode.encode(message.nodes[i], writer.uint32(/* id 3, wireType 2 =*/26).fork()).ldelim();
                     return writer;
@@ -11660,10 +11714,10 @@ export const cockroach = $root.cockroach = (function() {
                 RaftRangeStatus.verify = function verify(message) {
                     if (typeof message !== "object" || message === null)
                         return "object expected";
-                    if (message.range_id != null)
+                    if (message.range_id != null && message.hasOwnProperty("range_id"))
                         if (!$util.isInteger(message.range_id) && !(message.range_id && $util.isInteger(message.range_id.low) && $util.isInteger(message.range_id.high)))
                             return "range_id: integer|Long expected";
-                    if (message.errors != null) {
+                    if (message.errors != null && message.hasOwnProperty("errors")) {
                         if (!Array.isArray(message.errors))
                             return "errors: array expected";
                         for (let i = 0; i < message.errors.length; ++i) {
@@ -11672,7 +11726,7 @@ export const cockroach = $root.cockroach = (function() {
                                 return "errors." + error;
                         }
                     }
-                    if (message.nodes != null) {
+                    if (message.nodes != null && message.hasOwnProperty("nodes")) {
                         if (!Array.isArray(message.nodes))
                             return "nodes: array expected";
                         for (let i = 0; i < message.nodes.length; ++i) {
@@ -11811,12 +11865,13 @@ export const cockroach = $root.cockroach = (function() {
                     this.range_ids = [];
                     if (properties)
                         for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                            this[keys[i]] = properties[keys[i]];
+                            if (properties[keys[i]] != null)
+                                this[keys[i]] = properties[keys[i]];
                 }
 
                 /**
                  * RaftDebugRequest range_ids.
-                 * @type {Array.<Long>|undefined}
+                 * @type {Array.<Long>}
                  */
                 RaftDebugRequest.prototype.range_ids = $util.emptyArray;
 
@@ -11838,7 +11893,7 @@ export const cockroach = $root.cockroach = (function() {
                 RaftDebugRequest.encode = function encode(message, writer) {
                     if (!writer)
                         writer = $Writer.create();
-                    if (message.range_ids && message.range_ids.length) {
+                    if (message.range_ids != null && message.range_ids.length) {
                         writer.uint32(/* id 1, wireType 2 =*/10).fork();
                         for (let i = 0; i < message.range_ids.length; ++i)
                             writer.int64(message.range_ids[i]);
@@ -11911,7 +11966,7 @@ export const cockroach = $root.cockroach = (function() {
                 RaftDebugRequest.verify = function verify(message) {
                     if (typeof message !== "object" || message === null)
                         return "object expected";
-                    if (message.range_ids != null) {
+                    if (message.range_ids != null && message.hasOwnProperty("range_ids")) {
                         if (!Array.isArray(message.range_ids))
                             return "range_ids: array expected";
                         for (let i = 0; i < message.range_ids.length; ++i)
@@ -12020,18 +12075,19 @@ export const cockroach = $root.cockroach = (function() {
                     this.errors = [];
                     if (properties)
                         for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                            this[keys[i]] = properties[keys[i]];
+                            if (properties[keys[i]] != null)
+                                this[keys[i]] = properties[keys[i]];
                 }
 
                 /**
                  * RaftDebugResponse ranges.
-                 * @type {Object.<string,cockroach.server.serverpb.RaftRangeStatus$Properties>|undefined}
+                 * @type {Object.<string,cockroach.server.serverpb.RaftRangeStatus$Properties>}
                  */
                 RaftDebugResponse.prototype.ranges = $util.emptyObject;
 
                 /**
                  * RaftDebugResponse errors.
-                 * @type {Array.<cockroach.server.serverpb.RaftRangeError$Properties>|undefined}
+                 * @type {Array.<cockroach.server.serverpb.RaftRangeError$Properties>}
                  */
                 RaftDebugResponse.prototype.errors = $util.emptyArray;
 
@@ -12053,12 +12109,12 @@ export const cockroach = $root.cockroach = (function() {
                 RaftDebugResponse.encode = function encode(message, writer) {
                     if (!writer)
                         writer = $Writer.create();
-                    if (message.ranges && message.hasOwnProperty("ranges"))
+                    if (message.ranges != null && message.hasOwnProperty("ranges"))
                         for (let keys = Object.keys(message.ranges), i = 0; i < keys.length; ++i) {
                             writer.uint32(/* id 1, wireType 2 =*/10).fork().uint32(/* id 1, wireType 0 =*/8).int64(keys[i]);
                             $root.cockroach.server.serverpb.RaftRangeStatus.encode(message.ranges[keys[i]], writer.uint32(/* id 2, wireType 2 =*/18).fork()).ldelim().ldelim();
                         }
-                    if (message.errors && message.errors.length)
+                    if (message.errors != null && message.errors.length)
                         for (let i = 0; i < message.errors.length; ++i)
                             $root.cockroach.server.serverpb.RaftRangeError.encode(message.errors[i], writer.uint32(/* id 2, wireType 2 =*/18).fork()).ldelim();
                     return writer;
@@ -12131,7 +12187,7 @@ export const cockroach = $root.cockroach = (function() {
                 RaftDebugResponse.verify = function verify(message) {
                     if (typeof message !== "object" || message === null)
                         return "object expected";
-                    if (message.ranges != null) {
+                    if (message.ranges != null && message.hasOwnProperty("ranges")) {
                         if (!$util.isObject(message.ranges))
                             return "ranges: object expected";
                         let key = Object.keys(message.ranges);
@@ -12143,7 +12199,7 @@ export const cockroach = $root.cockroach = (function() {
                                 return "ranges." + error;
                         }
                     }
-                    if (message.errors != null) {
+                    if (message.errors != null && message.hasOwnProperty("errors")) {
                         if (!Array.isArray(message.errors))
                             return "errors: array expected";
                         for (let i = 0; i < message.errors.length; ++i) {
@@ -12264,24 +12320,25 @@ export const cockroach = $root.cockroach = (function() {
                 function SpanStatsRequest(properties) {
                     if (properties)
                         for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                            this[keys[i]] = properties[keys[i]];
+                            if (properties[keys[i]] != null)
+                                this[keys[i]] = properties[keys[i]];
                 }
 
                 /**
                  * SpanStatsRequest node_id.
-                 * @type {string|undefined}
+                 * @type {string}
                  */
                 SpanStatsRequest.prototype.node_id = "";
 
                 /**
                  * SpanStatsRequest start_key.
-                 * @type {Uint8Array|undefined}
+                 * @type {Uint8Array}
                  */
                 SpanStatsRequest.prototype.start_key = $util.newBuffer([]);
 
                 /**
                  * SpanStatsRequest end_key.
-                 * @type {Uint8Array|undefined}
+                 * @type {Uint8Array}
                  */
                 SpanStatsRequest.prototype.end_key = $util.newBuffer([]);
 
@@ -12305,9 +12362,9 @@ export const cockroach = $root.cockroach = (function() {
                         writer = $Writer.create();
                     if (message.node_id != null && message.hasOwnProperty("node_id"))
                         writer.uint32(/* id 1, wireType 2 =*/10).string(message.node_id);
-                    if (message.start_key && message.hasOwnProperty("start_key"))
+                    if (message.start_key != null && message.hasOwnProperty("start_key"))
                         writer.uint32(/* id 2, wireType 2 =*/18).bytes(message.start_key);
-                    if (message.end_key && message.hasOwnProperty("end_key"))
+                    if (message.end_key != null && message.hasOwnProperty("end_key"))
                         writer.uint32(/* id 3, wireType 2 =*/26).bytes(message.end_key);
                     return writer;
                 };
@@ -12375,13 +12432,13 @@ export const cockroach = $root.cockroach = (function() {
                 SpanStatsRequest.verify = function verify(message) {
                     if (typeof message !== "object" || message === null)
                         return "object expected";
-                    if (message.node_id != null)
+                    if (message.node_id != null && message.hasOwnProperty("node_id"))
                         if (!$util.isString(message.node_id))
                             return "node_id: string expected";
-                    if (message.start_key != null)
+                    if (message.start_key != null && message.hasOwnProperty("start_key"))
                         if (!(message.start_key && typeof message.start_key.length === "number" || $util.isString(message.start_key)))
                             return "start_key: buffer expected";
-                    if (message.end_key != null)
+                    if (message.end_key != null && message.hasOwnProperty("end_key"))
                         if (!(message.end_key && typeof message.end_key.length === "number" || $util.isString(message.end_key)))
                             return "end_key: buffer expected";
                     return null;
@@ -12483,18 +12540,19 @@ export const cockroach = $root.cockroach = (function() {
                 function SpanStatsResponse(properties) {
                     if (properties)
                         for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                            this[keys[i]] = properties[keys[i]];
+                            if (properties[keys[i]] != null)
+                                this[keys[i]] = properties[keys[i]];
                 }
 
                 /**
                  * SpanStatsResponse range_count.
-                 * @type {number|undefined}
+                 * @type {number}
                  */
                 SpanStatsResponse.prototype.range_count = 0;
 
                 /**
                  * SpanStatsResponse total_stats.
-                 * @type {cockroach.storage.engine.enginepb.MVCCStats$Properties|undefined}
+                 * @type {(cockroach.storage.engine.enginepb.MVCCStats$Properties|null)}
                  */
                 SpanStatsResponse.prototype.total_stats = null;
 
@@ -12516,7 +12574,7 @@ export const cockroach = $root.cockroach = (function() {
                 SpanStatsResponse.encode = function encode(message, writer) {
                     if (!writer)
                         writer = $Writer.create();
-                    if (message.total_stats && message.hasOwnProperty("total_stats"))
+                    if (message.total_stats != null && message.hasOwnProperty("total_stats"))
                         $root.cockroach.storage.engine.enginepb.MVCCStats.encode(message.total_stats, writer.uint32(/* id 1, wireType 2 =*/10).fork()).ldelim();
                     if (message.range_count != null && message.hasOwnProperty("range_count"))
                         writer.uint32(/* id 2, wireType 0 =*/16).int32(message.range_count);
@@ -12583,10 +12641,10 @@ export const cockroach = $root.cockroach = (function() {
                 SpanStatsResponse.verify = function verify(message) {
                     if (typeof message !== "object" || message === null)
                         return "object expected";
-                    if (message.range_count != null)
+                    if (message.range_count != null && message.hasOwnProperty("range_count"))
                         if (!$util.isInteger(message.range_count))
                             return "range_count: integer expected";
-                    if (message.total_stats != null) {
+                    if (message.total_stats != null && message.hasOwnProperty("total_stats")) {
                         let error = $root.cockroach.storage.engine.enginepb.MVCCStats.verify(message.total_stats);
                         if (error)
                             return "total_stats." + error;
@@ -13037,18 +13095,19 @@ export const cockroach = $root.cockroach = (function() {
                 function PrettySpan(properties) {
                     if (properties)
                         for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                            this[keys[i]] = properties[keys[i]];
+                            if (properties[keys[i]] != null)
+                                this[keys[i]] = properties[keys[i]];
                 }
 
                 /**
                  * PrettySpan start_key.
-                 * @type {string|undefined}
+                 * @type {string}
                  */
                 PrettySpan.prototype.start_key = "";
 
                 /**
                  * PrettySpan end_key.
-                 * @type {string|undefined}
+                 * @type {string}
                  */
                 PrettySpan.prototype.end_key = "";
 
@@ -13137,10 +13196,10 @@ export const cockroach = $root.cockroach = (function() {
                 PrettySpan.verify = function verify(message) {
                     if (typeof message !== "object" || message === null)
                         return "object expected";
-                    if (message.start_key != null)
+                    if (message.start_key != null && message.hasOwnProperty("start_key"))
                         if (!$util.isString(message.start_key))
                             return "start_key: string expected";
-                    if (message.end_key != null)
+                    if (message.end_key != null && message.hasOwnProperty("end_key"))
                         if (!$util.isString(message.end_key))
                             return "end_key: string expected";
                     return null;
@@ -13244,18 +13303,19 @@ export const cockroach = $root.cockroach = (function() {
                     this.metrics = {};
                     if (properties)
                         for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                            this[keys[i]] = properties[keys[i]];
+                            if (properties[keys[i]] != null)
+                                this[keys[i]] = properties[keys[i]];
                 }
 
                 /**
                  * StoreStatus desc.
-                 * @type {cockroach.roachpb.StoreDescriptor$Properties|undefined}
+                 * @type {(cockroach.roachpb.StoreDescriptor$Properties|null)}
                  */
                 StoreStatus.prototype.desc = null;
 
                 /**
                  * StoreStatus metrics.
-                 * @type {Object.<string,number>|undefined}
+                 * @type {Object.<string,number>}
                  */
                 StoreStatus.prototype.metrics = $util.emptyObject;
 
@@ -13277,9 +13337,9 @@ export const cockroach = $root.cockroach = (function() {
                 StoreStatus.encode = function encode(message, writer) {
                     if (!writer)
                         writer = $Writer.create();
-                    if (message.desc && message.hasOwnProperty("desc"))
+                    if (message.desc != null && message.hasOwnProperty("desc"))
                         $root.cockroach.roachpb.StoreDescriptor.encode(message.desc, writer.uint32(/* id 1, wireType 2 =*/10).fork()).ldelim();
-                    if (message.metrics && message.hasOwnProperty("metrics"))
+                    if (message.metrics != null && message.hasOwnProperty("metrics"))
                         for (let keys = Object.keys(message.metrics), i = 0; i < keys.length; ++i)
                             writer.uint32(/* id 2, wireType 2 =*/18).fork().uint32(/* id 1, wireType 2 =*/10).string(keys[i]).uint32(/* id 2, wireType 1 =*/17).double(message.metrics[keys[i]]).ldelim();
                     return writer;
@@ -13350,12 +13410,12 @@ export const cockroach = $root.cockroach = (function() {
                 StoreStatus.verify = function verify(message) {
                     if (typeof message !== "object" || message === null)
                         return "object expected";
-                    if (message.desc != null) {
+                    if (message.desc != null && message.hasOwnProperty("desc")) {
                         let error = $root.cockroach.roachpb.StoreDescriptor.verify(message.desc);
                         if (error)
                             return "desc." + error;
                     }
-                    if (message.metrics != null) {
+                    if (message.metrics != null && message.hasOwnProperty("metrics")) {
                         if (!$util.isObject(message.metrics))
                             return "metrics: object expected";
                         let key = Object.keys(message.metrics);
@@ -13473,54 +13533,55 @@ export const cockroach = $root.cockroach = (function() {
                     this.env = [];
                     if (properties)
                         for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                            this[keys[i]] = properties[keys[i]];
+                            if (properties[keys[i]] != null)
+                                this[keys[i]] = properties[keys[i]];
                 }
 
                 /**
                  * NodeStatus desc.
-                 * @type {cockroach.roachpb.NodeDescriptor$Properties|undefined}
+                 * @type {(cockroach.roachpb.NodeDescriptor$Properties|null)}
                  */
                 NodeStatus.prototype.desc = null;
 
                 /**
                  * NodeStatus build_info.
-                 * @type {cockroach.build.Info$Properties|undefined}
+                 * @type {(cockroach.build.Info$Properties|null)}
                  */
                 NodeStatus.prototype.build_info = null;
 
                 /**
                  * NodeStatus started_at.
-                 * @type {Long|undefined}
+                 * @type {Long}
                  */
                 NodeStatus.prototype.started_at = $util.Long ? $util.Long.fromBits(0,0,false) : 0;
 
                 /**
                  * NodeStatus updated_at.
-                 * @type {Long|undefined}
+                 * @type {Long}
                  */
                 NodeStatus.prototype.updated_at = $util.Long ? $util.Long.fromBits(0,0,false) : 0;
 
                 /**
                  * NodeStatus metrics.
-                 * @type {Object.<string,number>|undefined}
+                 * @type {Object.<string,number>}
                  */
                 NodeStatus.prototype.metrics = $util.emptyObject;
 
                 /**
                  * NodeStatus store_statuses.
-                 * @type {Array.<cockroach.server.status.StoreStatus$Properties>|undefined}
+                 * @type {Array.<cockroach.server.status.StoreStatus$Properties>}
                  */
                 NodeStatus.prototype.store_statuses = $util.emptyArray;
 
                 /**
                  * NodeStatus args.
-                 * @type {Array.<string>|undefined}
+                 * @type {Array.<string>}
                  */
                 NodeStatus.prototype.args = $util.emptyArray;
 
                 /**
                  * NodeStatus env.
-                 * @type {Array.<string>|undefined}
+                 * @type {Array.<string>}
                  */
                 NodeStatus.prototype.env = $util.emptyArray;
 
@@ -13542,24 +13603,24 @@ export const cockroach = $root.cockroach = (function() {
                 NodeStatus.encode = function encode(message, writer) {
                     if (!writer)
                         writer = $Writer.create();
-                    if (message.desc && message.hasOwnProperty("desc"))
+                    if (message.desc != null && message.hasOwnProperty("desc"))
                         $root.cockroach.roachpb.NodeDescriptor.encode(message.desc, writer.uint32(/* id 1, wireType 2 =*/10).fork()).ldelim();
-                    if (message.build_info && message.hasOwnProperty("build_info"))
+                    if (message.build_info != null && message.hasOwnProperty("build_info"))
                         $root.cockroach.build.Info.encode(message.build_info, writer.uint32(/* id 2, wireType 2 =*/18).fork()).ldelim();
                     if (message.started_at != null && message.hasOwnProperty("started_at"))
                         writer.uint32(/* id 3, wireType 0 =*/24).int64(message.started_at);
                     if (message.updated_at != null && message.hasOwnProperty("updated_at"))
                         writer.uint32(/* id 4, wireType 0 =*/32).int64(message.updated_at);
-                    if (message.metrics && message.hasOwnProperty("metrics"))
+                    if (message.metrics != null && message.hasOwnProperty("metrics"))
                         for (let keys = Object.keys(message.metrics), i = 0; i < keys.length; ++i)
                             writer.uint32(/* id 5, wireType 2 =*/42).fork().uint32(/* id 1, wireType 2 =*/10).string(keys[i]).uint32(/* id 2, wireType 1 =*/17).double(message.metrics[keys[i]]).ldelim();
-                    if (message.store_statuses && message.store_statuses.length)
+                    if (message.store_statuses != null && message.store_statuses.length)
                         for (let i = 0; i < message.store_statuses.length; ++i)
                             $root.cockroach.server.status.StoreStatus.encode(message.store_statuses[i], writer.uint32(/* id 6, wireType 2 =*/50).fork()).ldelim();
-                    if (message.args && message.args.length)
+                    if (message.args != null && message.args.length)
                         for (let i = 0; i < message.args.length; ++i)
                             writer.uint32(/* id 7, wireType 2 =*/58).string(message.args[i]);
-                    if (message.env && message.env.length)
+                    if (message.env != null && message.env.length)
                         for (let i = 0; i < message.env.length; ++i)
                             writer.uint32(/* id 8, wireType 2 =*/66).string(message.env[i]);
                     return writer;
@@ -13654,23 +13715,23 @@ export const cockroach = $root.cockroach = (function() {
                 NodeStatus.verify = function verify(message) {
                     if (typeof message !== "object" || message === null)
                         return "object expected";
-                    if (message.desc != null) {
+                    if (message.desc != null && message.hasOwnProperty("desc")) {
                         let error = $root.cockroach.roachpb.NodeDescriptor.verify(message.desc);
                         if (error)
                             return "desc." + error;
                     }
-                    if (message.build_info != null) {
+                    if (message.build_info != null && message.hasOwnProperty("build_info")) {
                         let error = $root.cockroach.build.Info.verify(message.build_info);
                         if (error)
                             return "build_info." + error;
                     }
-                    if (message.started_at != null)
+                    if (message.started_at != null && message.hasOwnProperty("started_at"))
                         if (!$util.isInteger(message.started_at) && !(message.started_at && $util.isInteger(message.started_at.low) && $util.isInteger(message.started_at.high)))
                             return "started_at: integer|Long expected";
-                    if (message.updated_at != null)
+                    if (message.updated_at != null && message.hasOwnProperty("updated_at"))
                         if (!$util.isInteger(message.updated_at) && !(message.updated_at && $util.isInteger(message.updated_at.low) && $util.isInteger(message.updated_at.high)))
                             return "updated_at: integer|Long expected";
-                    if (message.metrics != null) {
+                    if (message.metrics != null && message.hasOwnProperty("metrics")) {
                         if (!$util.isObject(message.metrics))
                             return "metrics: object expected";
                         let key = Object.keys(message.metrics);
@@ -13678,7 +13739,7 @@ export const cockroach = $root.cockroach = (function() {
                             if (typeof message.metrics[key[i]] !== "number")
                                 return "metrics: number{k:string} expected";
                     }
-                    if (message.store_statuses != null) {
+                    if (message.store_statuses != null && message.hasOwnProperty("store_statuses")) {
                         if (!Array.isArray(message.store_statuses))
                             return "store_statuses: array expected";
                         for (let i = 0; i < message.store_statuses.length; ++i) {
@@ -13687,14 +13748,14 @@ export const cockroach = $root.cockroach = (function() {
                                 return "store_statuses." + error;
                         }
                     }
-                    if (message.args != null) {
+                    if (message.args != null && message.hasOwnProperty("args")) {
                         if (!Array.isArray(message.args))
                             return "args: array expected";
                         for (let i = 0; i < message.args.length; ++i)
                             if (!$util.isString(message.args[i]))
                                 return "args: string[] expected";
                     }
-                    if (message.env != null) {
+                    if (message.env != null && message.hasOwnProperty("env")) {
                         if (!Array.isArray(message.env))
                             return "env: array expected";
                         for (let i = 0; i < message.env.length; ++i)
@@ -13906,12 +13967,13 @@ export const cockroach = $root.cockroach = (function() {
             function GCPolicy(properties) {
                 if (properties)
                     for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                        this[keys[i]] = properties[keys[i]];
+                        if (properties[keys[i]] != null)
+                            this[keys[i]] = properties[keys[i]];
             }
 
             /**
              * GCPolicy ttl_seconds.
-             * @type {number|undefined}
+             * @type {number}
              */
             GCPolicy.prototype.ttl_seconds = 0;
 
@@ -13995,7 +14057,7 @@ export const cockroach = $root.cockroach = (function() {
             GCPolicy.verify = function verify(message) {
                 if (typeof message !== "object" || message === null)
                     return "object expected";
-                if (message.ttl_seconds != null)
+                if (message.ttl_seconds != null && message.hasOwnProperty("ttl_seconds"))
                     if (!$util.isInteger(message.ttl_seconds))
                         return "ttl_seconds: integer expected";
                 return null;
@@ -14081,24 +14143,25 @@ export const cockroach = $root.cockroach = (function() {
             function Constraint(properties) {
                 if (properties)
                     for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                        this[keys[i]] = properties[keys[i]];
+                        if (properties[keys[i]] != null)
+                            this[keys[i]] = properties[keys[i]];
             }
 
             /**
              * Constraint type.
-             * @type {cockroach.config.Constraint.Type|undefined}
+             * @type {cockroach.config.Constraint.Type}
              */
             Constraint.prototype.type = 0;
 
             /**
              * Constraint key.
-             * @type {string|undefined}
+             * @type {string}
              */
             Constraint.prototype.key = "";
 
             /**
              * Constraint value.
-             * @type {string|undefined}
+             * @type {string}
              */
             Constraint.prototype.value = "";
 
@@ -14192,7 +14255,7 @@ export const cockroach = $root.cockroach = (function() {
             Constraint.verify = function verify(message) {
                 if (typeof message !== "object" || message === null)
                     return "object expected";
-                if (message.type != null)
+                if (message.type != null && message.hasOwnProperty("type"))
                     switch (message.type) {
                     default:
                         return "type: enum value expected";
@@ -14201,10 +14264,10 @@ export const cockroach = $root.cockroach = (function() {
                     case 2:
                         break;
                     }
-                if (message.key != null)
+                if (message.key != null && message.hasOwnProperty("key"))
                     if (!$util.isString(message.key))
                         return "key: string expected";
-                if (message.value != null)
+                if (message.value != null && message.hasOwnProperty("value"))
                     if (!$util.isString(message.value))
                         return "value: string expected";
                 return null;
@@ -14329,12 +14392,13 @@ export const cockroach = $root.cockroach = (function() {
                 this.constraints = [];
                 if (properties)
                     for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                        this[keys[i]] = properties[keys[i]];
+                        if (properties[keys[i]] != null)
+                            this[keys[i]] = properties[keys[i]];
             }
 
             /**
              * Constraints constraints.
-             * @type {Array.<cockroach.config.Constraint$Properties>|undefined}
+             * @type {Array.<cockroach.config.Constraint$Properties>}
              */
             Constraints.prototype.constraints = $util.emptyArray;
 
@@ -14356,7 +14420,7 @@ export const cockroach = $root.cockroach = (function() {
             Constraints.encode = function encode(message, writer) {
                 if (!writer)
                     writer = $Writer.create();
-                if (message.constraints && message.constraints.length)
+                if (message.constraints != null && message.constraints.length)
                     for (let i = 0; i < message.constraints.length; ++i)
                         $root.cockroach.config.Constraint.encode(message.constraints[i], writer.uint32(/* id 6, wireType 2 =*/50).fork()).ldelim();
                 return writer;
@@ -14421,7 +14485,7 @@ export const cockroach = $root.cockroach = (function() {
             Constraints.verify = function verify(message) {
                 if (typeof message !== "object" || message === null)
                     return "object expected";
-                if (message.constraints != null) {
+                if (message.constraints != null && message.hasOwnProperty("constraints")) {
                     if (!Array.isArray(message.constraints))
                         return "constraints: array expected";
                     for (let i = 0; i < message.constraints.length; ++i) {
@@ -14528,42 +14592,43 @@ export const cockroach = $root.cockroach = (function() {
                 this.replica_attrs = [];
                 if (properties)
                     for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                        this[keys[i]] = properties[keys[i]];
+                        if (properties[keys[i]] != null)
+                            this[keys[i]] = properties[keys[i]];
             }
 
             /**
              * ZoneConfig replica_attrs.
-             * @type {Array.<cockroach.roachpb.Attributes$Properties>|undefined}
+             * @type {Array.<cockroach.roachpb.Attributes$Properties>}
              */
             ZoneConfig.prototype.replica_attrs = $util.emptyArray;
 
             /**
              * ZoneConfig range_min_bytes.
-             * @type {Long|undefined}
+             * @type {Long}
              */
             ZoneConfig.prototype.range_min_bytes = $util.Long ? $util.Long.fromBits(0,0,false) : 0;
 
             /**
              * ZoneConfig range_max_bytes.
-             * @type {Long|undefined}
+             * @type {Long}
              */
             ZoneConfig.prototype.range_max_bytes = $util.Long ? $util.Long.fromBits(0,0,false) : 0;
 
             /**
              * ZoneConfig gc.
-             * @type {cockroach.config.GCPolicy$Properties|undefined}
+             * @type {(cockroach.config.GCPolicy$Properties|null)}
              */
             ZoneConfig.prototype.gc = null;
 
             /**
              * ZoneConfig num_replicas.
-             * @type {number|undefined}
+             * @type {number}
              */
             ZoneConfig.prototype.num_replicas = 0;
 
             /**
              * ZoneConfig constraints.
-             * @type {cockroach.config.Constraints$Properties|undefined}
+             * @type {(cockroach.config.Constraints$Properties|null)}
              */
             ZoneConfig.prototype.constraints = null;
 
@@ -14585,18 +14650,18 @@ export const cockroach = $root.cockroach = (function() {
             ZoneConfig.encode = function encode(message, writer) {
                 if (!writer)
                     writer = $Writer.create();
-                if (message.replica_attrs && message.replica_attrs.length)
+                if (message.replica_attrs != null && message.replica_attrs.length)
                     for (let i = 0; i < message.replica_attrs.length; ++i)
                         $root.cockroach.roachpb.Attributes.encode(message.replica_attrs[i], writer.uint32(/* id 1, wireType 2 =*/10).fork()).ldelim();
                 if (message.range_min_bytes != null && message.hasOwnProperty("range_min_bytes"))
                     writer.uint32(/* id 2, wireType 0 =*/16).int64(message.range_min_bytes);
                 if (message.range_max_bytes != null && message.hasOwnProperty("range_max_bytes"))
                     writer.uint32(/* id 3, wireType 0 =*/24).int64(message.range_max_bytes);
-                if (message.gc && message.hasOwnProperty("gc"))
+                if (message.gc != null && message.hasOwnProperty("gc"))
                     $root.cockroach.config.GCPolicy.encode(message.gc, writer.uint32(/* id 4, wireType 2 =*/34).fork()).ldelim();
                 if (message.num_replicas != null && message.hasOwnProperty("num_replicas"))
                     writer.uint32(/* id 5, wireType 0 =*/40).int32(message.num_replicas);
-                if (message.constraints && message.hasOwnProperty("constraints"))
+                if (message.constraints != null && message.hasOwnProperty("constraints"))
                     $root.cockroach.config.Constraints.encode(message.constraints, writer.uint32(/* id 6, wireType 2 =*/50).fork()).ldelim();
                 return writer;
             };
@@ -14675,7 +14740,7 @@ export const cockroach = $root.cockroach = (function() {
             ZoneConfig.verify = function verify(message) {
                 if (typeof message !== "object" || message === null)
                     return "object expected";
-                if (message.replica_attrs != null) {
+                if (message.replica_attrs != null && message.hasOwnProperty("replica_attrs")) {
                     if (!Array.isArray(message.replica_attrs))
                         return "replica_attrs: array expected";
                     for (let i = 0; i < message.replica_attrs.length; ++i) {
@@ -14684,21 +14749,21 @@ export const cockroach = $root.cockroach = (function() {
                             return "replica_attrs." + error;
                     }
                 }
-                if (message.range_min_bytes != null)
+                if (message.range_min_bytes != null && message.hasOwnProperty("range_min_bytes"))
                     if (!$util.isInteger(message.range_min_bytes) && !(message.range_min_bytes && $util.isInteger(message.range_min_bytes.low) && $util.isInteger(message.range_min_bytes.high)))
                         return "range_min_bytes: integer|Long expected";
-                if (message.range_max_bytes != null)
+                if (message.range_max_bytes != null && message.hasOwnProperty("range_max_bytes"))
                     if (!$util.isInteger(message.range_max_bytes) && !(message.range_max_bytes && $util.isInteger(message.range_max_bytes.low) && $util.isInteger(message.range_max_bytes.high)))
                         return "range_max_bytes: integer|Long expected";
-                if (message.gc != null) {
+                if (message.gc != null && message.hasOwnProperty("gc")) {
                     let error = $root.cockroach.config.GCPolicy.verify(message.gc);
                     if (error)
                         return "gc." + error;
                 }
-                if (message.num_replicas != null)
+                if (message.num_replicas != null && message.hasOwnProperty("num_replicas"))
                     if (!$util.isInteger(message.num_replicas))
                         return "num_replicas: integer expected";
-                if (message.constraints != null) {
+                if (message.constraints != null && message.hasOwnProperty("constraints")) {
                     let error = $root.cockroach.config.Constraints.verify(message.constraints);
                     if (error)
                         return "constraints." + error;
@@ -14857,12 +14922,13 @@ export const cockroach = $root.cockroach = (function() {
                 this.values = [];
                 if (properties)
                     for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                        this[keys[i]] = properties[keys[i]];
+                        if (properties[keys[i]] != null)
+                            this[keys[i]] = properties[keys[i]];
             }
 
             /**
              * SystemConfig values.
-             * @type {Array.<cockroach.roachpb.KeyValue$Properties>|undefined}
+             * @type {Array.<cockroach.roachpb.KeyValue$Properties>}
              */
             SystemConfig.prototype.values = $util.emptyArray;
 
@@ -14884,7 +14950,7 @@ export const cockroach = $root.cockroach = (function() {
             SystemConfig.encode = function encode(message, writer) {
                 if (!writer)
                     writer = $Writer.create();
-                if (message.values && message.values.length)
+                if (message.values != null && message.values.length)
                     for (let i = 0; i < message.values.length; ++i)
                         $root.cockroach.roachpb.KeyValue.encode(message.values[i], writer.uint32(/* id 1, wireType 2 =*/10).fork()).ldelim();
                 return writer;
@@ -14949,7 +15015,7 @@ export const cockroach = $root.cockroach = (function() {
             SystemConfig.verify = function verify(message) {
                 if (typeof message !== "object" || message === null)
                     return "object expected";
-                if (message.values != null) {
+                if (message.values != null && message.hasOwnProperty("values")) {
                     if (!Array.isArray(message.values))
                         return "values: array expected";
                     for (let i = 0; i < message.values.length; ++i) {
@@ -15063,18 +15129,19 @@ export const cockroach = $root.cockroach = (function() {
             function Span(properties) {
                 if (properties)
                     for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                        this[keys[i]] = properties[keys[i]];
+                        if (properties[keys[i]] != null)
+                            this[keys[i]] = properties[keys[i]];
             }
 
             /**
              * Span key.
-             * @type {Uint8Array|undefined}
+             * @type {Uint8Array}
              */
             Span.prototype.key = $util.newBuffer([]);
 
             /**
              * Span end_key.
-             * @type {Uint8Array|undefined}
+             * @type {Uint8Array}
              */
             Span.prototype.end_key = $util.newBuffer([]);
 
@@ -15096,9 +15163,9 @@ export const cockroach = $root.cockroach = (function() {
             Span.encode = function encode(message, writer) {
                 if (!writer)
                     writer = $Writer.create();
-                if (message.key && message.hasOwnProperty("key"))
+                if (message.key != null && message.hasOwnProperty("key"))
                     writer.uint32(/* id 3, wireType 2 =*/26).bytes(message.key);
-                if (message.end_key && message.hasOwnProperty("end_key"))
+                if (message.end_key != null && message.hasOwnProperty("end_key"))
                     writer.uint32(/* id 4, wireType 2 =*/34).bytes(message.end_key);
                 return writer;
             };
@@ -15163,10 +15230,10 @@ export const cockroach = $root.cockroach = (function() {
             Span.verify = function verify(message) {
                 if (typeof message !== "object" || message === null)
                     return "object expected";
-                if (message.key != null)
+                if (message.key != null && message.hasOwnProperty("key"))
                     if (!(message.key && typeof message.key.length === "number" || $util.isString(message.key)))
                         return "key: buffer expected";
-                if (message.end_key != null)
+                if (message.end_key != null && message.hasOwnProperty("end_key"))
                     if (!(message.end_key && typeof message.end_key.length === "number" || $util.isString(message.end_key)))
                         return "end_key: buffer expected";
                 return null;
@@ -15298,18 +15365,19 @@ export const cockroach = $root.cockroach = (function() {
             function Value(properties) {
                 if (properties)
                     for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                        this[keys[i]] = properties[keys[i]];
+                        if (properties[keys[i]] != null)
+                            this[keys[i]] = properties[keys[i]];
             }
 
             /**
              * Value raw_bytes.
-             * @type {Uint8Array|undefined}
+             * @type {Uint8Array}
              */
             Value.prototype.raw_bytes = $util.newBuffer([]);
 
             /**
              * Value timestamp.
-             * @type {cockroach.util.hlc.Timestamp$Properties|undefined}
+             * @type {(cockroach.util.hlc.Timestamp$Properties|null)}
              */
             Value.prototype.timestamp = null;
 
@@ -15331,9 +15399,9 @@ export const cockroach = $root.cockroach = (function() {
             Value.encode = function encode(message, writer) {
                 if (!writer)
                     writer = $Writer.create();
-                if (message.raw_bytes && message.hasOwnProperty("raw_bytes"))
+                if (message.raw_bytes != null && message.hasOwnProperty("raw_bytes"))
                     writer.uint32(/* id 1, wireType 2 =*/10).bytes(message.raw_bytes);
-                if (message.timestamp && message.hasOwnProperty("timestamp"))
+                if (message.timestamp != null && message.hasOwnProperty("timestamp"))
                     $root.cockroach.util.hlc.Timestamp.encode(message.timestamp, writer.uint32(/* id 2, wireType 2 =*/18).fork()).ldelim();
                 return writer;
             };
@@ -15398,10 +15466,10 @@ export const cockroach = $root.cockroach = (function() {
             Value.verify = function verify(message) {
                 if (typeof message !== "object" || message === null)
                     return "object expected";
-                if (message.raw_bytes != null)
+                if (message.raw_bytes != null && message.hasOwnProperty("raw_bytes"))
                     if (!(message.raw_bytes && typeof message.raw_bytes.length === "number" || $util.isString(message.raw_bytes)))
                         return "raw_bytes: buffer expected";
-                if (message.timestamp != null) {
+                if (message.timestamp != null && message.hasOwnProperty("timestamp")) {
                     let error = $root.cockroach.util.hlc.Timestamp.verify(message.timestamp);
                     if (error)
                         return "timestamp." + error;
@@ -15500,18 +15568,19 @@ export const cockroach = $root.cockroach = (function() {
             function KeyValue(properties) {
                 if (properties)
                     for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                        this[keys[i]] = properties[keys[i]];
+                        if (properties[keys[i]] != null)
+                            this[keys[i]] = properties[keys[i]];
             }
 
             /**
              * KeyValue key.
-             * @type {Uint8Array|undefined}
+             * @type {Uint8Array}
              */
             KeyValue.prototype.key = $util.newBuffer([]);
 
             /**
              * KeyValue value.
-             * @type {cockroach.roachpb.Value$Properties|undefined}
+             * @type {(cockroach.roachpb.Value$Properties|null)}
              */
             KeyValue.prototype.value = null;
 
@@ -15533,9 +15602,9 @@ export const cockroach = $root.cockroach = (function() {
             KeyValue.encode = function encode(message, writer) {
                 if (!writer)
                     writer = $Writer.create();
-                if (message.key && message.hasOwnProperty("key"))
+                if (message.key != null && message.hasOwnProperty("key"))
                     writer.uint32(/* id 1, wireType 2 =*/10).bytes(message.key);
-                if (message.value && message.hasOwnProperty("value"))
+                if (message.value != null && message.hasOwnProperty("value"))
                     $root.cockroach.roachpb.Value.encode(message.value, writer.uint32(/* id 2, wireType 2 =*/18).fork()).ldelim();
                 return writer;
             };
@@ -15600,10 +15669,10 @@ export const cockroach = $root.cockroach = (function() {
             KeyValue.verify = function verify(message) {
                 if (typeof message !== "object" || message === null)
                     return "object expected";
-                if (message.key != null)
+                if (message.key != null && message.hasOwnProperty("key"))
                     if (!(message.key && typeof message.key.length === "number" || $util.isString(message.key)))
                         return "key: buffer expected";
-                if (message.value != null) {
+                if (message.value != null && message.hasOwnProperty("value")) {
                     let error = $root.cockroach.roachpb.Value.verify(message.value);
                     if (error)
                         return "value." + error;
@@ -15703,24 +15772,25 @@ export const cockroach = $root.cockroach = (function() {
             function StoreIdent(properties) {
                 if (properties)
                     for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                        this[keys[i]] = properties[keys[i]];
+                        if (properties[keys[i]] != null)
+                            this[keys[i]] = properties[keys[i]];
             }
 
             /**
              * StoreIdent cluster_id.
-             * @type {Uint8Array|undefined}
+             * @type {Uint8Array}
              */
             StoreIdent.prototype.cluster_id = $util.newBuffer([]);
 
             /**
              * StoreIdent node_id.
-             * @type {number|undefined}
+             * @type {number}
              */
             StoreIdent.prototype.node_id = 0;
 
             /**
              * StoreIdent store_id.
-             * @type {number|undefined}
+             * @type {number}
              */
             StoreIdent.prototype.store_id = 0;
 
@@ -15742,7 +15812,7 @@ export const cockroach = $root.cockroach = (function() {
             StoreIdent.encode = function encode(message, writer) {
                 if (!writer)
                     writer = $Writer.create();
-                if (message.cluster_id && message.hasOwnProperty("cluster_id"))
+                if (message.cluster_id != null && message.hasOwnProperty("cluster_id"))
                     writer.uint32(/* id 1, wireType 2 =*/10).bytes(message.cluster_id);
                 if (message.node_id != null && message.hasOwnProperty("node_id"))
                     writer.uint32(/* id 2, wireType 0 =*/16).int32(message.node_id);
@@ -15814,13 +15884,13 @@ export const cockroach = $root.cockroach = (function() {
             StoreIdent.verify = function verify(message) {
                 if (typeof message !== "object" || message === null)
                     return "object expected";
-                if (message.cluster_id != null)
+                if (message.cluster_id != null && message.hasOwnProperty("cluster_id"))
                     if (!(message.cluster_id && typeof message.cluster_id.length === "number" || $util.isString(message.cluster_id)))
                         return "cluster_id: buffer expected";
-                if (message.node_id != null)
+                if (message.node_id != null && message.hasOwnProperty("node_id"))
                     if (!$util.isInteger(message.node_id))
                         return "node_id: integer expected";
-                if (message.store_id != null)
+                if (message.store_id != null && message.hasOwnProperty("store_id"))
                     if (!$util.isInteger(message.store_id))
                         return "store_id: integer expected";
                 return null;
@@ -15919,18 +15989,19 @@ export const cockroach = $root.cockroach = (function() {
             function SplitTrigger(properties) {
                 if (properties)
                     for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                        this[keys[i]] = properties[keys[i]];
+                        if (properties[keys[i]] != null)
+                            this[keys[i]] = properties[keys[i]];
             }
 
             /**
              * SplitTrigger left_desc.
-             * @type {cockroach.roachpb.RangeDescriptor$Properties|undefined}
+             * @type {(cockroach.roachpb.RangeDescriptor$Properties|null)}
              */
             SplitTrigger.prototype.left_desc = null;
 
             /**
              * SplitTrigger right_desc.
-             * @type {cockroach.roachpb.RangeDescriptor$Properties|undefined}
+             * @type {(cockroach.roachpb.RangeDescriptor$Properties|null)}
              */
             SplitTrigger.prototype.right_desc = null;
 
@@ -15952,9 +16023,9 @@ export const cockroach = $root.cockroach = (function() {
             SplitTrigger.encode = function encode(message, writer) {
                 if (!writer)
                     writer = $Writer.create();
-                if (message.left_desc && message.hasOwnProperty("left_desc"))
+                if (message.left_desc != null && message.hasOwnProperty("left_desc"))
                     $root.cockroach.roachpb.RangeDescriptor.encode(message.left_desc, writer.uint32(/* id 1, wireType 2 =*/10).fork()).ldelim();
-                if (message.right_desc && message.hasOwnProperty("right_desc"))
+                if (message.right_desc != null && message.hasOwnProperty("right_desc"))
                     $root.cockroach.roachpb.RangeDescriptor.encode(message.right_desc, writer.uint32(/* id 2, wireType 2 =*/18).fork()).ldelim();
                 return writer;
             };
@@ -16019,12 +16090,12 @@ export const cockroach = $root.cockroach = (function() {
             SplitTrigger.verify = function verify(message) {
                 if (typeof message !== "object" || message === null)
                     return "object expected";
-                if (message.left_desc != null) {
+                if (message.left_desc != null && message.hasOwnProperty("left_desc")) {
                     let error = $root.cockroach.roachpb.RangeDescriptor.verify(message.left_desc);
                     if (error)
                         return "left_desc." + error;
                 }
-                if (message.right_desc != null) {
+                if (message.right_desc != null && message.hasOwnProperty("right_desc")) {
                     let error = $root.cockroach.roachpb.RangeDescriptor.verify(message.right_desc);
                     if (error)
                         return "right_desc." + error;
@@ -16123,18 +16194,19 @@ export const cockroach = $root.cockroach = (function() {
             function MergeTrigger(properties) {
                 if (properties)
                     for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                        this[keys[i]] = properties[keys[i]];
+                        if (properties[keys[i]] != null)
+                            this[keys[i]] = properties[keys[i]];
             }
 
             /**
              * MergeTrigger left_desc.
-             * @type {cockroach.roachpb.RangeDescriptor$Properties|undefined}
+             * @type {(cockroach.roachpb.RangeDescriptor$Properties|null)}
              */
             MergeTrigger.prototype.left_desc = null;
 
             /**
              * MergeTrigger right_desc.
-             * @type {cockroach.roachpb.RangeDescriptor$Properties|undefined}
+             * @type {(cockroach.roachpb.RangeDescriptor$Properties|null)}
              */
             MergeTrigger.prototype.right_desc = null;
 
@@ -16156,9 +16228,9 @@ export const cockroach = $root.cockroach = (function() {
             MergeTrigger.encode = function encode(message, writer) {
                 if (!writer)
                     writer = $Writer.create();
-                if (message.left_desc && message.hasOwnProperty("left_desc"))
+                if (message.left_desc != null && message.hasOwnProperty("left_desc"))
                     $root.cockroach.roachpb.RangeDescriptor.encode(message.left_desc, writer.uint32(/* id 1, wireType 2 =*/10).fork()).ldelim();
-                if (message.right_desc && message.hasOwnProperty("right_desc"))
+                if (message.right_desc != null && message.hasOwnProperty("right_desc"))
                     $root.cockroach.roachpb.RangeDescriptor.encode(message.right_desc, writer.uint32(/* id 2, wireType 2 =*/18).fork()).ldelim();
                 return writer;
             };
@@ -16223,12 +16295,12 @@ export const cockroach = $root.cockroach = (function() {
             MergeTrigger.verify = function verify(message) {
                 if (typeof message !== "object" || message === null)
                     return "object expected";
-                if (message.left_desc != null) {
+                if (message.left_desc != null && message.hasOwnProperty("left_desc")) {
                     let error = $root.cockroach.roachpb.RangeDescriptor.verify(message.left_desc);
                     if (error)
                         return "left_desc." + error;
                 }
-                if (message.right_desc != null) {
+                if (message.right_desc != null && message.hasOwnProperty("right_desc")) {
                     let error = $root.cockroach.roachpb.RangeDescriptor.verify(message.right_desc);
                     if (error)
                         return "right_desc." + error;
@@ -16345,30 +16417,31 @@ export const cockroach = $root.cockroach = (function() {
                 this.updated_replicas = [];
                 if (properties)
                     for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                        this[keys[i]] = properties[keys[i]];
+                        if (properties[keys[i]] != null)
+                            this[keys[i]] = properties[keys[i]];
             }
 
             /**
              * ChangeReplicasTrigger change_type.
-             * @type {cockroach.roachpb.ReplicaChangeType|undefined}
+             * @type {cockroach.roachpb.ReplicaChangeType}
              */
             ChangeReplicasTrigger.prototype.change_type = 0;
 
             /**
              * ChangeReplicasTrigger replica.
-             * @type {cockroach.roachpb.ReplicaDescriptor$Properties|undefined}
+             * @type {(cockroach.roachpb.ReplicaDescriptor$Properties|null)}
              */
             ChangeReplicasTrigger.prototype.replica = null;
 
             /**
              * ChangeReplicasTrigger updated_replicas.
-             * @type {Array.<cockroach.roachpb.ReplicaDescriptor$Properties>|undefined}
+             * @type {Array.<cockroach.roachpb.ReplicaDescriptor$Properties>}
              */
             ChangeReplicasTrigger.prototype.updated_replicas = $util.emptyArray;
 
             /**
              * ChangeReplicasTrigger next_replica_id.
-             * @type {number|undefined}
+             * @type {number}
              */
             ChangeReplicasTrigger.prototype.next_replica_id = 0;
 
@@ -16392,9 +16465,9 @@ export const cockroach = $root.cockroach = (function() {
                     writer = $Writer.create();
                 if (message.change_type != null && message.hasOwnProperty("change_type"))
                     writer.uint32(/* id 1, wireType 0 =*/8).uint32(message.change_type);
-                if (message.replica && message.hasOwnProperty("replica"))
+                if (message.replica != null && message.hasOwnProperty("replica"))
                     $root.cockroach.roachpb.ReplicaDescriptor.encode(message.replica, writer.uint32(/* id 2, wireType 2 =*/18).fork()).ldelim();
-                if (message.updated_replicas && message.updated_replicas.length)
+                if (message.updated_replicas != null && message.updated_replicas.length)
                     for (let i = 0; i < message.updated_replicas.length; ++i)
                         $root.cockroach.roachpb.ReplicaDescriptor.encode(message.updated_replicas[i], writer.uint32(/* id 3, wireType 2 =*/26).fork()).ldelim();
                 if (message.next_replica_id != null && message.hasOwnProperty("next_replica_id"))
@@ -16470,7 +16543,7 @@ export const cockroach = $root.cockroach = (function() {
             ChangeReplicasTrigger.verify = function verify(message) {
                 if (typeof message !== "object" || message === null)
                     return "object expected";
-                if (message.change_type != null)
+                if (message.change_type != null && message.hasOwnProperty("change_type"))
                     switch (message.change_type) {
                     default:
                         return "change_type: enum value expected";
@@ -16478,12 +16551,12 @@ export const cockroach = $root.cockroach = (function() {
                     case 1:
                         break;
                     }
-                if (message.replica != null) {
+                if (message.replica != null && message.hasOwnProperty("replica")) {
                     let error = $root.cockroach.roachpb.ReplicaDescriptor.verify(message.replica);
                     if (error)
                         return "replica." + error;
                 }
-                if (message.updated_replicas != null) {
+                if (message.updated_replicas != null && message.hasOwnProperty("updated_replicas")) {
                     if (!Array.isArray(message.updated_replicas))
                         return "updated_replicas: array expected";
                     for (let i = 0; i < message.updated_replicas.length; ++i) {
@@ -16492,7 +16565,7 @@ export const cockroach = $root.cockroach = (function() {
                             return "updated_replicas." + error;
                     }
                 }
-                if (message.next_replica_id != null)
+                if (message.next_replica_id != null && message.hasOwnProperty("next_replica_id"))
                     if (!$util.isInteger(message.next_replica_id))
                         return "next_replica_id: integer expected";
                 return null;
@@ -16616,18 +16689,19 @@ export const cockroach = $root.cockroach = (function() {
             function ModifiedSpanTrigger(properties) {
                 if (properties)
                     for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                        this[keys[i]] = properties[keys[i]];
+                        if (properties[keys[i]] != null)
+                            this[keys[i]] = properties[keys[i]];
             }
 
             /**
              * ModifiedSpanTrigger system_config_span.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
             ModifiedSpanTrigger.prototype.system_config_span = false;
 
             /**
              * ModifiedSpanTrigger node_liveness_span.
-             * @type {cockroach.roachpb.Span$Properties|undefined}
+             * @type {(cockroach.roachpb.Span$Properties|null)}
              */
             ModifiedSpanTrigger.prototype.node_liveness_span = null;
 
@@ -16651,7 +16725,7 @@ export const cockroach = $root.cockroach = (function() {
                     writer = $Writer.create();
                 if (message.system_config_span != null && message.hasOwnProperty("system_config_span"))
                     writer.uint32(/* id 1, wireType 0 =*/8).bool(message.system_config_span);
-                if (message.node_liveness_span && message.hasOwnProperty("node_liveness_span"))
+                if (message.node_liveness_span != null && message.hasOwnProperty("node_liveness_span"))
                     $root.cockroach.roachpb.Span.encode(message.node_liveness_span, writer.uint32(/* id 2, wireType 2 =*/18).fork()).ldelim();
                 return writer;
             };
@@ -16716,10 +16790,10 @@ export const cockroach = $root.cockroach = (function() {
             ModifiedSpanTrigger.verify = function verify(message) {
                 if (typeof message !== "object" || message === null)
                     return "object expected";
-                if (message.system_config_span != null)
+                if (message.system_config_span != null && message.hasOwnProperty("system_config_span"))
                     if (typeof message.system_config_span !== "boolean")
                         return "system_config_span: boolean expected";
-                if (message.node_liveness_span != null) {
+                if (message.node_liveness_span != null && message.hasOwnProperty("node_liveness_span")) {
                     let error = $root.cockroach.roachpb.Span.verify(message.node_liveness_span);
                     if (error)
                         return "node_liveness_span." + error;
@@ -16817,30 +16891,31 @@ export const cockroach = $root.cockroach = (function() {
             function InternalCommitTrigger(properties) {
                 if (properties)
                     for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                        this[keys[i]] = properties[keys[i]];
+                        if (properties[keys[i]] != null)
+                            this[keys[i]] = properties[keys[i]];
             }
 
             /**
              * InternalCommitTrigger split_trigger.
-             * @type {cockroach.roachpb.SplitTrigger$Properties|undefined}
+             * @type {(cockroach.roachpb.SplitTrigger$Properties|null)}
              */
             InternalCommitTrigger.prototype.split_trigger = null;
 
             /**
              * InternalCommitTrigger merge_trigger.
-             * @type {cockroach.roachpb.MergeTrigger$Properties|undefined}
+             * @type {(cockroach.roachpb.MergeTrigger$Properties|null)}
              */
             InternalCommitTrigger.prototype.merge_trigger = null;
 
             /**
              * InternalCommitTrigger change_replicas_trigger.
-             * @type {cockroach.roachpb.ChangeReplicasTrigger$Properties|undefined}
+             * @type {(cockroach.roachpb.ChangeReplicasTrigger$Properties|null)}
              */
             InternalCommitTrigger.prototype.change_replicas_trigger = null;
 
             /**
              * InternalCommitTrigger modified_span_trigger.
-             * @type {cockroach.roachpb.ModifiedSpanTrigger$Properties|undefined}
+             * @type {(cockroach.roachpb.ModifiedSpanTrigger$Properties|null)}
              */
             InternalCommitTrigger.prototype.modified_span_trigger = null;
 
@@ -16862,13 +16937,13 @@ export const cockroach = $root.cockroach = (function() {
             InternalCommitTrigger.encode = function encode(message, writer) {
                 if (!writer)
                     writer = $Writer.create();
-                if (message.split_trigger && message.hasOwnProperty("split_trigger"))
+                if (message.split_trigger != null && message.hasOwnProperty("split_trigger"))
                     $root.cockroach.roachpb.SplitTrigger.encode(message.split_trigger, writer.uint32(/* id 1, wireType 2 =*/10).fork()).ldelim();
-                if (message.merge_trigger && message.hasOwnProperty("merge_trigger"))
+                if (message.merge_trigger != null && message.hasOwnProperty("merge_trigger"))
                     $root.cockroach.roachpb.MergeTrigger.encode(message.merge_trigger, writer.uint32(/* id 2, wireType 2 =*/18).fork()).ldelim();
-                if (message.change_replicas_trigger && message.hasOwnProperty("change_replicas_trigger"))
+                if (message.change_replicas_trigger != null && message.hasOwnProperty("change_replicas_trigger"))
                     $root.cockroach.roachpb.ChangeReplicasTrigger.encode(message.change_replicas_trigger, writer.uint32(/* id 3, wireType 2 =*/26).fork()).ldelim();
-                if (message.modified_span_trigger && message.hasOwnProperty("modified_span_trigger"))
+                if (message.modified_span_trigger != null && message.hasOwnProperty("modified_span_trigger"))
                     $root.cockroach.roachpb.ModifiedSpanTrigger.encode(message.modified_span_trigger, writer.uint32(/* id 4, wireType 2 =*/34).fork()).ldelim();
                 return writer;
             };
@@ -16939,22 +17014,22 @@ export const cockroach = $root.cockroach = (function() {
             InternalCommitTrigger.verify = function verify(message) {
                 if (typeof message !== "object" || message === null)
                     return "object expected";
-                if (message.split_trigger != null) {
+                if (message.split_trigger != null && message.hasOwnProperty("split_trigger")) {
                     let error = $root.cockroach.roachpb.SplitTrigger.verify(message.split_trigger);
                     if (error)
                         return "split_trigger." + error;
                 }
-                if (message.merge_trigger != null) {
+                if (message.merge_trigger != null && message.hasOwnProperty("merge_trigger")) {
                     let error = $root.cockroach.roachpb.MergeTrigger.verify(message.merge_trigger);
                     if (error)
                         return "merge_trigger." + error;
                 }
-                if (message.change_replicas_trigger != null) {
+                if (message.change_replicas_trigger != null && message.hasOwnProperty("change_replicas_trigger")) {
                     let error = $root.cockroach.roachpb.ChangeReplicasTrigger.verify(message.change_replicas_trigger);
                     if (error)
                         return "change_replicas_trigger." + error;
                 }
-                if (message.modified_span_trigger != null) {
+                if (message.modified_span_trigger != null && message.hasOwnProperty("modified_span_trigger")) {
                     let error = $root.cockroach.roachpb.ModifiedSpanTrigger.verify(message.modified_span_trigger);
                     if (error)
                         return "modified_span_trigger." + error;
@@ -17086,18 +17161,19 @@ export const cockroach = $root.cockroach = (function() {
             function ObservedTimestamp(properties) {
                 if (properties)
                     for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                        this[keys[i]] = properties[keys[i]];
+                        if (properties[keys[i]] != null)
+                            this[keys[i]] = properties[keys[i]];
             }
 
             /**
              * ObservedTimestamp node_id.
-             * @type {number|undefined}
+             * @type {number}
              */
             ObservedTimestamp.prototype.node_id = 0;
 
             /**
              * ObservedTimestamp timestamp.
-             * @type {cockroach.util.hlc.Timestamp$Properties|undefined}
+             * @type {(cockroach.util.hlc.Timestamp$Properties|null)}
              */
             ObservedTimestamp.prototype.timestamp = null;
 
@@ -17121,7 +17197,7 @@ export const cockroach = $root.cockroach = (function() {
                     writer = $Writer.create();
                 if (message.node_id != null && message.hasOwnProperty("node_id"))
                     writer.uint32(/* id 1, wireType 0 =*/8).int32(message.node_id);
-                if (message.timestamp && message.hasOwnProperty("timestamp"))
+                if (message.timestamp != null && message.hasOwnProperty("timestamp"))
                     $root.cockroach.util.hlc.Timestamp.encode(message.timestamp, writer.uint32(/* id 2, wireType 2 =*/18).fork()).ldelim();
                 return writer;
             };
@@ -17186,10 +17262,10 @@ export const cockroach = $root.cockroach = (function() {
             ObservedTimestamp.verify = function verify(message) {
                 if (typeof message !== "object" || message === null)
                     return "object expected";
-                if (message.node_id != null)
+                if (message.node_id != null && message.hasOwnProperty("node_id"))
                     if (!$util.isInteger(message.node_id))
                         return "node_id: integer expected";
-                if (message.timestamp != null) {
+                if (message.timestamp != null && message.hasOwnProperty("timestamp")) {
                     let error = $root.cockroach.util.hlc.Timestamp.verify(message.timestamp);
                     if (error)
                         return "timestamp." + error;
@@ -17296,72 +17372,73 @@ export const cockroach = $root.cockroach = (function() {
                 this.intents = [];
                 if (properties)
                     for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                        this[keys[i]] = properties[keys[i]];
+                        if (properties[keys[i]] != null)
+                            this[keys[i]] = properties[keys[i]];
             }
 
             /**
              * Transaction meta.
-             * @type {cockroach.storage.engine.enginepb.TxnMeta$Properties|undefined}
+             * @type {(cockroach.storage.engine.enginepb.TxnMeta$Properties|null)}
              */
             Transaction.prototype.meta = null;
 
             /**
              * Transaction name.
-             * @type {string|undefined}
+             * @type {string}
              */
             Transaction.prototype.name = "";
 
             /**
              * Transaction status.
-             * @type {cockroach.roachpb.TransactionStatus|undefined}
+             * @type {cockroach.roachpb.TransactionStatus}
              */
             Transaction.prototype.status = 0;
 
             /**
              * Transaction last_heartbeat.
-             * @type {cockroach.util.hlc.Timestamp$Properties|undefined}
+             * @type {(cockroach.util.hlc.Timestamp$Properties|null)}
              */
             Transaction.prototype.last_heartbeat = null;
 
             /**
              * Transaction orig_timestamp.
-             * @type {cockroach.util.hlc.Timestamp$Properties|undefined}
+             * @type {(cockroach.util.hlc.Timestamp$Properties|null)}
              */
             Transaction.prototype.orig_timestamp = null;
 
             /**
              * Transaction max_timestamp.
-             * @type {cockroach.util.hlc.Timestamp$Properties|undefined}
+             * @type {(cockroach.util.hlc.Timestamp$Properties|null)}
              */
             Transaction.prototype.max_timestamp = null;
 
             /**
              * Transaction observed_timestamps.
-             * @type {Array.<cockroach.roachpb.ObservedTimestamp$Properties>|undefined}
+             * @type {Array.<cockroach.roachpb.ObservedTimestamp$Properties>}
              */
             Transaction.prototype.observed_timestamps = $util.emptyArray;
 
             /**
              * Transaction writing.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
             Transaction.prototype.writing = false;
 
             /**
              * Transaction write_too_old.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
             Transaction.prototype.write_too_old = false;
 
             /**
              * Transaction retry_on_push.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
             Transaction.prototype.retry_on_push = false;
 
             /**
              * Transaction intents.
-             * @type {Array.<cockroach.roachpb.Span$Properties>|undefined}
+             * @type {Array.<cockroach.roachpb.Span$Properties>}
              */
             Transaction.prototype.intents = $util.emptyArray;
 
@@ -17383,24 +17460,24 @@ export const cockroach = $root.cockroach = (function() {
             Transaction.encode = function encode(message, writer) {
                 if (!writer)
                     writer = $Writer.create();
-                if (message.meta && message.hasOwnProperty("meta"))
+                if (message.meta != null && message.hasOwnProperty("meta"))
                     $root.cockroach.storage.engine.enginepb.TxnMeta.encode(message.meta, writer.uint32(/* id 1, wireType 2 =*/10).fork()).ldelim();
                 if (message.name != null && message.hasOwnProperty("name"))
                     writer.uint32(/* id 2, wireType 2 =*/18).string(message.name);
                 if (message.status != null && message.hasOwnProperty("status"))
                     writer.uint32(/* id 4, wireType 0 =*/32).uint32(message.status);
-                if (message.last_heartbeat && message.hasOwnProperty("last_heartbeat"))
+                if (message.last_heartbeat != null && message.hasOwnProperty("last_heartbeat"))
                     $root.cockroach.util.hlc.Timestamp.encode(message.last_heartbeat, writer.uint32(/* id 5, wireType 2 =*/42).fork()).ldelim();
-                if (message.orig_timestamp && message.hasOwnProperty("orig_timestamp"))
+                if (message.orig_timestamp != null && message.hasOwnProperty("orig_timestamp"))
                     $root.cockroach.util.hlc.Timestamp.encode(message.orig_timestamp, writer.uint32(/* id 6, wireType 2 =*/50).fork()).ldelim();
-                if (message.max_timestamp && message.hasOwnProperty("max_timestamp"))
+                if (message.max_timestamp != null && message.hasOwnProperty("max_timestamp"))
                     $root.cockroach.util.hlc.Timestamp.encode(message.max_timestamp, writer.uint32(/* id 7, wireType 2 =*/58).fork()).ldelim();
-                if (message.observed_timestamps && message.observed_timestamps.length)
+                if (message.observed_timestamps != null && message.observed_timestamps.length)
                     for (let i = 0; i < message.observed_timestamps.length; ++i)
                         $root.cockroach.roachpb.ObservedTimestamp.encode(message.observed_timestamps[i], writer.uint32(/* id 8, wireType 2 =*/66).fork()).ldelim();
                 if (message.writing != null && message.hasOwnProperty("writing"))
                     writer.uint32(/* id 9, wireType 0 =*/72).bool(message.writing);
-                if (message.intents && message.intents.length)
+                if (message.intents != null && message.intents.length)
                     for (let i = 0; i < message.intents.length; ++i)
                         $root.cockroach.roachpb.Span.encode(message.intents[i], writer.uint32(/* id 11, wireType 2 =*/90).fork()).ldelim();
                 if (message.write_too_old != null && message.hasOwnProperty("write_too_old"))
@@ -17501,15 +17578,15 @@ export const cockroach = $root.cockroach = (function() {
             Transaction.verify = function verify(message) {
                 if (typeof message !== "object" || message === null)
                     return "object expected";
-                if (message.meta != null) {
+                if (message.meta != null && message.hasOwnProperty("meta")) {
                     let error = $root.cockroach.storage.engine.enginepb.TxnMeta.verify(message.meta);
                     if (error)
                         return "meta." + error;
                 }
-                if (message.name != null)
+                if (message.name != null && message.hasOwnProperty("name"))
                     if (!$util.isString(message.name))
                         return "name: string expected";
-                if (message.status != null)
+                if (message.status != null && message.hasOwnProperty("status"))
                     switch (message.status) {
                     default:
                         return "status: enum value expected";
@@ -17518,22 +17595,22 @@ export const cockroach = $root.cockroach = (function() {
                     case 2:
                         break;
                     }
-                if (message.last_heartbeat != null) {
+                if (message.last_heartbeat != null && message.hasOwnProperty("last_heartbeat")) {
                     let error = $root.cockroach.util.hlc.Timestamp.verify(message.last_heartbeat);
                     if (error)
                         return "last_heartbeat." + error;
                 }
-                if (message.orig_timestamp != null) {
+                if (message.orig_timestamp != null && message.hasOwnProperty("orig_timestamp")) {
                     let error = $root.cockroach.util.hlc.Timestamp.verify(message.orig_timestamp);
                     if (error)
                         return "orig_timestamp." + error;
                 }
-                if (message.max_timestamp != null) {
+                if (message.max_timestamp != null && message.hasOwnProperty("max_timestamp")) {
                     let error = $root.cockroach.util.hlc.Timestamp.verify(message.max_timestamp);
                     if (error)
                         return "max_timestamp." + error;
                 }
-                if (message.observed_timestamps != null) {
+                if (message.observed_timestamps != null && message.hasOwnProperty("observed_timestamps")) {
                     if (!Array.isArray(message.observed_timestamps))
                         return "observed_timestamps: array expected";
                     for (let i = 0; i < message.observed_timestamps.length; ++i) {
@@ -17542,16 +17619,16 @@ export const cockroach = $root.cockroach = (function() {
                             return "observed_timestamps." + error;
                     }
                 }
-                if (message.writing != null)
+                if (message.writing != null && message.hasOwnProperty("writing"))
                     if (typeof message.writing !== "boolean")
                         return "writing: boolean expected";
-                if (message.write_too_old != null)
+                if (message.write_too_old != null && message.hasOwnProperty("write_too_old"))
                     if (typeof message.write_too_old !== "boolean")
                         return "write_too_old: boolean expected";
-                if (message.retry_on_push != null)
+                if (message.retry_on_push != null && message.hasOwnProperty("retry_on_push"))
                     if (typeof message.retry_on_push !== "boolean")
                         return "retry_on_push: boolean expected";
-                if (message.intents != null) {
+                if (message.intents != null && message.hasOwnProperty("intents")) {
                     if (!Array.isArray(message.intents))
                         return "intents: array expected";
                     for (let i = 0; i < message.intents.length; ++i) {
@@ -17742,24 +17819,25 @@ export const cockroach = $root.cockroach = (function() {
             function Intent(properties) {
                 if (properties)
                     for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                        this[keys[i]] = properties[keys[i]];
+                        if (properties[keys[i]] != null)
+                            this[keys[i]] = properties[keys[i]];
             }
 
             /**
              * Intent span.
-             * @type {cockroach.roachpb.Span$Properties|undefined}
+             * @type {(cockroach.roachpb.Span$Properties|null)}
              */
             Intent.prototype.span = null;
 
             /**
              * Intent txn.
-             * @type {cockroach.storage.engine.enginepb.TxnMeta$Properties|undefined}
+             * @type {(cockroach.storage.engine.enginepb.TxnMeta$Properties|null)}
              */
             Intent.prototype.txn = null;
 
             /**
              * Intent status.
-             * @type {cockroach.roachpb.TransactionStatus|undefined}
+             * @type {cockroach.roachpb.TransactionStatus}
              */
             Intent.prototype.status = 0;
 
@@ -17781,9 +17859,9 @@ export const cockroach = $root.cockroach = (function() {
             Intent.encode = function encode(message, writer) {
                 if (!writer)
                     writer = $Writer.create();
-                if (message.span && message.hasOwnProperty("span"))
+                if (message.span != null && message.hasOwnProperty("span"))
                     $root.cockroach.roachpb.Span.encode(message.span, writer.uint32(/* id 1, wireType 2 =*/10).fork()).ldelim();
-                if (message.txn && message.hasOwnProperty("txn"))
+                if (message.txn != null && message.hasOwnProperty("txn"))
                     $root.cockroach.storage.engine.enginepb.TxnMeta.encode(message.txn, writer.uint32(/* id 2, wireType 2 =*/18).fork()).ldelim();
                 if (message.status != null && message.hasOwnProperty("status"))
                     writer.uint32(/* id 3, wireType 0 =*/24).uint32(message.status);
@@ -17853,17 +17931,17 @@ export const cockroach = $root.cockroach = (function() {
             Intent.verify = function verify(message) {
                 if (typeof message !== "object" || message === null)
                     return "object expected";
-                if (message.span != null) {
+                if (message.span != null && message.hasOwnProperty("span")) {
                     let error = $root.cockroach.roachpb.Span.verify(message.span);
                     if (error)
                         return "span." + error;
                 }
-                if (message.txn != null) {
+                if (message.txn != null && message.hasOwnProperty("txn")) {
                     let error = $root.cockroach.storage.engine.enginepb.TxnMeta.verify(message.txn);
                     if (error)
                         return "txn." + error;
                 }
-                if (message.status != null)
+                if (message.status != null && message.hasOwnProperty("status"))
                     switch (message.status) {
                     default:
                         return "status: enum value expected";
@@ -17987,42 +18065,43 @@ export const cockroach = $root.cockroach = (function() {
             function Lease(properties) {
                 if (properties)
                     for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                        this[keys[i]] = properties[keys[i]];
+                        if (properties[keys[i]] != null)
+                            this[keys[i]] = properties[keys[i]];
             }
 
             /**
              * Lease start.
-             * @type {cockroach.util.hlc.Timestamp$Properties|undefined}
+             * @type {(cockroach.util.hlc.Timestamp$Properties|null)}
              */
             Lease.prototype.start = null;
 
             /**
              * Lease expiration.
-             * @type {cockroach.util.hlc.Timestamp$Properties|undefined}
+             * @type {(cockroach.util.hlc.Timestamp$Properties|null)}
              */
             Lease.prototype.expiration = null;
 
             /**
              * Lease replica.
-             * @type {cockroach.roachpb.ReplicaDescriptor$Properties|undefined}
+             * @type {(cockroach.roachpb.ReplicaDescriptor$Properties|null)}
              */
             Lease.prototype.replica = null;
 
             /**
              * Lease deprecated_start_stasis.
-             * @type {cockroach.util.hlc.Timestamp$Properties|undefined}
+             * @type {(cockroach.util.hlc.Timestamp$Properties|null)}
              */
             Lease.prototype.deprecated_start_stasis = null;
 
             /**
              * Lease proposed_ts.
-             * @type {cockroach.util.hlc.Timestamp$Properties|undefined}
+             * @type {(cockroach.util.hlc.Timestamp$Properties|null)}
              */
             Lease.prototype.proposed_ts = null;
 
             /**
              * Lease epoch.
-             * @type {Long|undefined}
+             * @type {Long}
              */
             Lease.prototype.epoch = $util.Long ? $util.Long.fromBits(0,0,false) : 0;
 
@@ -18044,15 +18123,15 @@ export const cockroach = $root.cockroach = (function() {
             Lease.encode = function encode(message, writer) {
                 if (!writer)
                     writer = $Writer.create();
-                if (message.start && message.hasOwnProperty("start"))
+                if (message.start != null && message.hasOwnProperty("start"))
                     $root.cockroach.util.hlc.Timestamp.encode(message.start, writer.uint32(/* id 1, wireType 2 =*/10).fork()).ldelim();
-                if (message.expiration && message.hasOwnProperty("expiration"))
+                if (message.expiration != null && message.hasOwnProperty("expiration"))
                     $root.cockroach.util.hlc.Timestamp.encode(message.expiration, writer.uint32(/* id 2, wireType 2 =*/18).fork()).ldelim();
-                if (message.replica && message.hasOwnProperty("replica"))
+                if (message.replica != null && message.hasOwnProperty("replica"))
                     $root.cockroach.roachpb.ReplicaDescriptor.encode(message.replica, writer.uint32(/* id 3, wireType 2 =*/26).fork()).ldelim();
-                if (message.deprecated_start_stasis && message.hasOwnProperty("deprecated_start_stasis"))
+                if (message.deprecated_start_stasis != null && message.hasOwnProperty("deprecated_start_stasis"))
                     $root.cockroach.util.hlc.Timestamp.encode(message.deprecated_start_stasis, writer.uint32(/* id 4, wireType 2 =*/34).fork()).ldelim();
-                if (message.proposed_ts && message.hasOwnProperty("proposed_ts"))
+                if (message.proposed_ts != null && message.hasOwnProperty("proposed_ts"))
                     $root.cockroach.util.hlc.Timestamp.encode(message.proposed_ts, writer.uint32(/* id 5, wireType 2 =*/42).fork()).ldelim();
                 if (message.epoch != null && message.hasOwnProperty("epoch"))
                     writer.uint32(/* id 6, wireType 0 =*/48).int64(message.epoch);
@@ -18131,32 +18210,32 @@ export const cockroach = $root.cockroach = (function() {
             Lease.verify = function verify(message) {
                 if (typeof message !== "object" || message === null)
                     return "object expected";
-                if (message.start != null) {
+                if (message.start != null && message.hasOwnProperty("start")) {
                     let error = $root.cockroach.util.hlc.Timestamp.verify(message.start);
                     if (error)
                         return "start." + error;
                 }
-                if (message.expiration != null) {
+                if (message.expiration != null && message.hasOwnProperty("expiration")) {
                     let error = $root.cockroach.util.hlc.Timestamp.verify(message.expiration);
                     if (error)
                         return "expiration." + error;
                 }
-                if (message.replica != null) {
+                if (message.replica != null && message.hasOwnProperty("replica")) {
                     let error = $root.cockroach.roachpb.ReplicaDescriptor.verify(message.replica);
                     if (error)
                         return "replica." + error;
                 }
-                if (message.deprecated_start_stasis != null) {
+                if (message.deprecated_start_stasis != null && message.hasOwnProperty("deprecated_start_stasis")) {
                     let error = $root.cockroach.util.hlc.Timestamp.verify(message.deprecated_start_stasis);
                     if (error)
                         return "deprecated_start_stasis." + error;
                 }
-                if (message.proposed_ts != null) {
+                if (message.proposed_ts != null && message.hasOwnProperty("proposed_ts")) {
                     let error = $root.cockroach.util.hlc.Timestamp.verify(message.proposed_ts);
                     if (error)
                         return "proposed_ts." + error;
                 }
-                if (message.epoch != null)
+                if (message.epoch != null && message.hasOwnProperty("epoch"))
                     if (!$util.isInteger(message.epoch) && !(message.epoch && $util.isInteger(message.epoch.low) && $util.isInteger(message.epoch.high)))
                         return "epoch: integer|Long expected";
                 return null;
@@ -18297,24 +18376,25 @@ export const cockroach = $root.cockroach = (function() {
             function AbortCacheEntry(properties) {
                 if (properties)
                     for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                        this[keys[i]] = properties[keys[i]];
+                        if (properties[keys[i]] != null)
+                            this[keys[i]] = properties[keys[i]];
             }
 
             /**
              * AbortCacheEntry key.
-             * @type {Uint8Array|undefined}
+             * @type {Uint8Array}
              */
             AbortCacheEntry.prototype.key = $util.newBuffer([]);
 
             /**
              * AbortCacheEntry timestamp.
-             * @type {cockroach.util.hlc.Timestamp$Properties|undefined}
+             * @type {(cockroach.util.hlc.Timestamp$Properties|null)}
              */
             AbortCacheEntry.prototype.timestamp = null;
 
             /**
              * AbortCacheEntry priority.
-             * @type {number|undefined}
+             * @type {number}
              */
             AbortCacheEntry.prototype.priority = 0;
 
@@ -18336,9 +18416,9 @@ export const cockroach = $root.cockroach = (function() {
             AbortCacheEntry.encode = function encode(message, writer) {
                 if (!writer)
                     writer = $Writer.create();
-                if (message.key && message.hasOwnProperty("key"))
+                if (message.key != null && message.hasOwnProperty("key"))
                     writer.uint32(/* id 1, wireType 2 =*/10).bytes(message.key);
-                if (message.timestamp && message.hasOwnProperty("timestamp"))
+                if (message.timestamp != null && message.hasOwnProperty("timestamp"))
                     $root.cockroach.util.hlc.Timestamp.encode(message.timestamp, writer.uint32(/* id 2, wireType 2 =*/18).fork()).ldelim();
                 if (message.priority != null && message.hasOwnProperty("priority"))
                     writer.uint32(/* id 3, wireType 0 =*/24).int32(message.priority);
@@ -18408,15 +18488,15 @@ export const cockroach = $root.cockroach = (function() {
             AbortCacheEntry.verify = function verify(message) {
                 if (typeof message !== "object" || message === null)
                     return "object expected";
-                if (message.key != null)
+                if (message.key != null && message.hasOwnProperty("key"))
                     if (!(message.key && typeof message.key.length === "number" || $util.isString(message.key)))
                         return "key: buffer expected";
-                if (message.timestamp != null) {
+                if (message.timestamp != null && message.hasOwnProperty("timestamp")) {
                     let error = $root.cockroach.util.hlc.Timestamp.verify(message.timestamp);
                     if (error)
                         return "timestamp." + error;
                 }
-                if (message.priority != null)
+                if (message.priority != null && message.hasOwnProperty("priority"))
                     if (!$util.isInteger(message.priority))
                         return "priority: integer expected";
                 return null;
@@ -18518,12 +18598,13 @@ export const cockroach = $root.cockroach = (function() {
                 this.attrs = [];
                 if (properties)
                     for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                        this[keys[i]] = properties[keys[i]];
+                        if (properties[keys[i]] != null)
+                            this[keys[i]] = properties[keys[i]];
             }
 
             /**
              * Attributes attrs.
-             * @type {Array.<string>|undefined}
+             * @type {Array.<string>}
              */
             Attributes.prototype.attrs = $util.emptyArray;
 
@@ -18545,7 +18626,7 @@ export const cockroach = $root.cockroach = (function() {
             Attributes.encode = function encode(message, writer) {
                 if (!writer)
                     writer = $Writer.create();
-                if (message.attrs && message.attrs.length)
+                if (message.attrs != null && message.attrs.length)
                     for (let i = 0; i < message.attrs.length; ++i)
                         writer.uint32(/* id 1, wireType 2 =*/10).string(message.attrs[i]);
                 return writer;
@@ -18610,7 +18691,7 @@ export const cockroach = $root.cockroach = (function() {
             Attributes.verify = function verify(message) {
                 if (typeof message !== "object" || message === null)
                     return "object expected";
-                if (message.attrs != null) {
+                if (message.attrs != null && message.hasOwnProperty("attrs")) {
                     if (!Array.isArray(message.attrs))
                         return "attrs: array expected";
                     for (let i = 0; i < message.attrs.length; ++i)
@@ -18707,18 +18788,19 @@ export const cockroach = $root.cockroach = (function() {
             function ReplicationTarget(properties) {
                 if (properties)
                     for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                        this[keys[i]] = properties[keys[i]];
+                        if (properties[keys[i]] != null)
+                            this[keys[i]] = properties[keys[i]];
             }
 
             /**
              * ReplicationTarget node_id.
-             * @type {number|undefined}
+             * @type {number}
              */
             ReplicationTarget.prototype.node_id = 0;
 
             /**
              * ReplicationTarget store_id.
-             * @type {number|undefined}
+             * @type {number}
              */
             ReplicationTarget.prototype.store_id = 0;
 
@@ -18807,10 +18889,10 @@ export const cockroach = $root.cockroach = (function() {
             ReplicationTarget.verify = function verify(message) {
                 if (typeof message !== "object" || message === null)
                     return "object expected";
-                if (message.node_id != null)
+                if (message.node_id != null && message.hasOwnProperty("node_id"))
                     if (!$util.isInteger(message.node_id))
                         return "node_id: integer expected";
-                if (message.store_id != null)
+                if (message.store_id != null && message.hasOwnProperty("store_id"))
                     if (!$util.isInteger(message.store_id))
                         return "store_id: integer expected";
                 return null;
@@ -18902,24 +18984,25 @@ export const cockroach = $root.cockroach = (function() {
             function ReplicaDescriptor(properties) {
                 if (properties)
                     for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                        this[keys[i]] = properties[keys[i]];
+                        if (properties[keys[i]] != null)
+                            this[keys[i]] = properties[keys[i]];
             }
 
             /**
              * ReplicaDescriptor node_id.
-             * @type {number|undefined}
+             * @type {number}
              */
             ReplicaDescriptor.prototype.node_id = 0;
 
             /**
              * ReplicaDescriptor store_id.
-             * @type {number|undefined}
+             * @type {number}
              */
             ReplicaDescriptor.prototype.store_id = 0;
 
             /**
              * ReplicaDescriptor replica_id.
-             * @type {number|undefined}
+             * @type {number}
              */
             ReplicaDescriptor.prototype.replica_id = 0;
 
@@ -19013,13 +19096,13 @@ export const cockroach = $root.cockroach = (function() {
             ReplicaDescriptor.verify = function verify(message) {
                 if (typeof message !== "object" || message === null)
                     return "object expected";
-                if (message.node_id != null)
+                if (message.node_id != null && message.hasOwnProperty("node_id"))
                     if (!$util.isInteger(message.node_id))
                         return "node_id: integer expected";
-                if (message.store_id != null)
+                if (message.store_id != null && message.hasOwnProperty("store_id"))
                     if (!$util.isInteger(message.store_id))
                         return "store_id: integer expected";
-                if (message.replica_id != null)
+                if (message.replica_id != null && message.hasOwnProperty("replica_id"))
                     if (!$util.isInteger(message.replica_id))
                         return "replica_id: integer expected";
                 return null;
@@ -19115,18 +19198,19 @@ export const cockroach = $root.cockroach = (function() {
             function ReplicaIdent(properties) {
                 if (properties)
                     for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                        this[keys[i]] = properties[keys[i]];
+                        if (properties[keys[i]] != null)
+                            this[keys[i]] = properties[keys[i]];
             }
 
             /**
              * ReplicaIdent range_id.
-             * @type {Long|undefined}
+             * @type {Long}
              */
             ReplicaIdent.prototype.range_id = $util.Long ? $util.Long.fromBits(0,0,false) : 0;
 
             /**
              * ReplicaIdent replica.
-             * @type {cockroach.roachpb.ReplicaDescriptor$Properties|undefined}
+             * @type {(cockroach.roachpb.ReplicaDescriptor$Properties|null)}
              */
             ReplicaIdent.prototype.replica = null;
 
@@ -19150,7 +19234,7 @@ export const cockroach = $root.cockroach = (function() {
                     writer = $Writer.create();
                 if (message.range_id != null && message.hasOwnProperty("range_id"))
                     writer.uint32(/* id 1, wireType 0 =*/8).int64(message.range_id);
-                if (message.replica && message.hasOwnProperty("replica"))
+                if (message.replica != null && message.hasOwnProperty("replica"))
                     $root.cockroach.roachpb.ReplicaDescriptor.encode(message.replica, writer.uint32(/* id 2, wireType 2 =*/18).fork()).ldelim();
                 return writer;
             };
@@ -19215,10 +19299,10 @@ export const cockroach = $root.cockroach = (function() {
             ReplicaIdent.verify = function verify(message) {
                 if (typeof message !== "object" || message === null)
                     return "object expected";
-                if (message.range_id != null)
+                if (message.range_id != null && message.hasOwnProperty("range_id"))
                     if (!$util.isInteger(message.range_id) && !(message.range_id && $util.isInteger(message.range_id.low) && $util.isInteger(message.range_id.high)))
                         return "range_id: integer|Long expected";
-                if (message.replica != null) {
+                if (message.replica != null && message.hasOwnProperty("replica")) {
                     let error = $root.cockroach.roachpb.ReplicaDescriptor.verify(message.replica);
                     if (error)
                         return "replica." + error;
@@ -19332,36 +19416,37 @@ export const cockroach = $root.cockroach = (function() {
                 this.replicas = [];
                 if (properties)
                     for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                        this[keys[i]] = properties[keys[i]];
+                        if (properties[keys[i]] != null)
+                            this[keys[i]] = properties[keys[i]];
             }
 
             /**
              * RangeDescriptor range_id.
-             * @type {Long|undefined}
+             * @type {Long}
              */
             RangeDescriptor.prototype.range_id = $util.Long ? $util.Long.fromBits(0,0,false) : 0;
 
             /**
              * RangeDescriptor start_key.
-             * @type {Uint8Array|undefined}
+             * @type {Uint8Array}
              */
             RangeDescriptor.prototype.start_key = $util.newBuffer([]);
 
             /**
              * RangeDescriptor end_key.
-             * @type {Uint8Array|undefined}
+             * @type {Uint8Array}
              */
             RangeDescriptor.prototype.end_key = $util.newBuffer([]);
 
             /**
              * RangeDescriptor replicas.
-             * @type {Array.<cockroach.roachpb.ReplicaDescriptor$Properties>|undefined}
+             * @type {Array.<cockroach.roachpb.ReplicaDescriptor$Properties>}
              */
             RangeDescriptor.prototype.replicas = $util.emptyArray;
 
             /**
              * RangeDescriptor next_replica_id.
-             * @type {number|undefined}
+             * @type {number}
              */
             RangeDescriptor.prototype.next_replica_id = 0;
 
@@ -19385,11 +19470,11 @@ export const cockroach = $root.cockroach = (function() {
                     writer = $Writer.create();
                 if (message.range_id != null && message.hasOwnProperty("range_id"))
                     writer.uint32(/* id 1, wireType 0 =*/8).int64(message.range_id);
-                if (message.start_key && message.hasOwnProperty("start_key"))
+                if (message.start_key != null && message.hasOwnProperty("start_key"))
                     writer.uint32(/* id 2, wireType 2 =*/18).bytes(message.start_key);
-                if (message.end_key && message.hasOwnProperty("end_key"))
+                if (message.end_key != null && message.hasOwnProperty("end_key"))
                     writer.uint32(/* id 3, wireType 2 =*/26).bytes(message.end_key);
-                if (message.replicas && message.replicas.length)
+                if (message.replicas != null && message.replicas.length)
                     for (let i = 0; i < message.replicas.length; ++i)
                         $root.cockroach.roachpb.ReplicaDescriptor.encode(message.replicas[i], writer.uint32(/* id 4, wireType 2 =*/34).fork()).ldelim();
                 if (message.next_replica_id != null && message.hasOwnProperty("next_replica_id"))
@@ -19468,16 +19553,16 @@ export const cockroach = $root.cockroach = (function() {
             RangeDescriptor.verify = function verify(message) {
                 if (typeof message !== "object" || message === null)
                     return "object expected";
-                if (message.range_id != null)
+                if (message.range_id != null && message.hasOwnProperty("range_id"))
                     if (!$util.isInteger(message.range_id) && !(message.range_id && $util.isInteger(message.range_id.low) && $util.isInteger(message.range_id.high)))
                         return "range_id: integer|Long expected";
-                if (message.start_key != null)
+                if (message.start_key != null && message.hasOwnProperty("start_key"))
                     if (!(message.start_key && typeof message.start_key.length === "number" || $util.isString(message.start_key)))
                         return "start_key: buffer expected";
-                if (message.end_key != null)
+                if (message.end_key != null && message.hasOwnProperty("end_key"))
                     if (!(message.end_key && typeof message.end_key.length === "number" || $util.isString(message.end_key)))
                         return "end_key: buffer expected";
-                if (message.replicas != null) {
+                if (message.replicas != null && message.hasOwnProperty("replicas")) {
                     if (!Array.isArray(message.replicas))
                         return "replicas: array expected";
                     for (let i = 0; i < message.replicas.length; ++i) {
@@ -19486,7 +19571,7 @@ export const cockroach = $root.cockroach = (function() {
                             return "replicas." + error;
                     }
                 }
-                if (message.next_replica_id != null)
+                if (message.next_replica_id != null && message.hasOwnProperty("next_replica_id"))
                     if (!$util.isInteger(message.next_replica_id))
                         return "next_replica_id: integer expected";
                 return null;
@@ -19626,30 +19711,31 @@ export const cockroach = $root.cockroach = (function() {
             function StoreCapacity(properties) {
                 if (properties)
                     for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                        this[keys[i]] = properties[keys[i]];
+                        if (properties[keys[i]] != null)
+                            this[keys[i]] = properties[keys[i]];
             }
 
             /**
              * StoreCapacity capacity.
-             * @type {Long|undefined}
+             * @type {Long}
              */
             StoreCapacity.prototype.capacity = $util.Long ? $util.Long.fromBits(0,0,false) : 0;
 
             /**
              * StoreCapacity available.
-             * @type {Long|undefined}
+             * @type {Long}
              */
             StoreCapacity.prototype.available = $util.Long ? $util.Long.fromBits(0,0,false) : 0;
 
             /**
              * StoreCapacity range_count.
-             * @type {number|undefined}
+             * @type {number}
              */
             StoreCapacity.prototype.range_count = 0;
 
             /**
              * StoreCapacity lease_count.
-             * @type {number|undefined}
+             * @type {number}
              */
             StoreCapacity.prototype.lease_count = 0;
 
@@ -19748,16 +19834,16 @@ export const cockroach = $root.cockroach = (function() {
             StoreCapacity.verify = function verify(message) {
                 if (typeof message !== "object" || message === null)
                     return "object expected";
-                if (message.capacity != null)
+                if (message.capacity != null && message.hasOwnProperty("capacity"))
                     if (!$util.isInteger(message.capacity) && !(message.capacity && $util.isInteger(message.capacity.low) && $util.isInteger(message.capacity.high)))
                         return "capacity: integer|Long expected";
-                if (message.available != null)
+                if (message.available != null && message.hasOwnProperty("available"))
                     if (!$util.isInteger(message.available) && !(message.available && $util.isInteger(message.available.low) && $util.isInteger(message.available.high)))
                         return "available: integer|Long expected";
-                if (message.range_count != null)
+                if (message.range_count != null && message.hasOwnProperty("range_count"))
                     if (!$util.isInteger(message.range_count))
                         return "range_count: integer expected";
-                if (message.lease_count != null)
+                if (message.lease_count != null && message.hasOwnProperty("lease_count"))
                     if (!$util.isInteger(message.lease_count))
                         return "lease_count: integer expected";
                 return null;
@@ -19888,30 +19974,31 @@ export const cockroach = $root.cockroach = (function() {
             function NodeDescriptor(properties) {
                 if (properties)
                     for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                        this[keys[i]] = properties[keys[i]];
+                        if (properties[keys[i]] != null)
+                            this[keys[i]] = properties[keys[i]];
             }
 
             /**
              * NodeDescriptor node_id.
-             * @type {number|undefined}
+             * @type {number}
              */
             NodeDescriptor.prototype.node_id = 0;
 
             /**
              * NodeDescriptor address.
-             * @type {cockroach.util.UnresolvedAddr$Properties|undefined}
+             * @type {(cockroach.util.UnresolvedAddr$Properties|null)}
              */
             NodeDescriptor.prototype.address = null;
 
             /**
              * NodeDescriptor attrs.
-             * @type {cockroach.roachpb.Attributes$Properties|undefined}
+             * @type {(cockroach.roachpb.Attributes$Properties|null)}
              */
             NodeDescriptor.prototype.attrs = null;
 
             /**
              * NodeDescriptor locality.
-             * @type {cockroach.roachpb.Locality$Properties|undefined}
+             * @type {(cockroach.roachpb.Locality$Properties|null)}
              */
             NodeDescriptor.prototype.locality = null;
 
@@ -19935,11 +20022,11 @@ export const cockroach = $root.cockroach = (function() {
                     writer = $Writer.create();
                 if (message.node_id != null && message.hasOwnProperty("node_id"))
                     writer.uint32(/* id 1, wireType 0 =*/8).int32(message.node_id);
-                if (message.address && message.hasOwnProperty("address"))
+                if (message.address != null && message.hasOwnProperty("address"))
                     $root.cockroach.util.UnresolvedAddr.encode(message.address, writer.uint32(/* id 2, wireType 2 =*/18).fork()).ldelim();
-                if (message.attrs && message.hasOwnProperty("attrs"))
+                if (message.attrs != null && message.hasOwnProperty("attrs"))
                     $root.cockroach.roachpb.Attributes.encode(message.attrs, writer.uint32(/* id 3, wireType 2 =*/26).fork()).ldelim();
-                if (message.locality && message.hasOwnProperty("locality"))
+                if (message.locality != null && message.hasOwnProperty("locality"))
                     $root.cockroach.roachpb.Locality.encode(message.locality, writer.uint32(/* id 4, wireType 2 =*/34).fork()).ldelim();
                 return writer;
             };
@@ -20010,20 +20097,20 @@ export const cockroach = $root.cockroach = (function() {
             NodeDescriptor.verify = function verify(message) {
                 if (typeof message !== "object" || message === null)
                     return "object expected";
-                if (message.node_id != null)
+                if (message.node_id != null && message.hasOwnProperty("node_id"))
                     if (!$util.isInteger(message.node_id))
                         return "node_id: integer expected";
-                if (message.address != null) {
+                if (message.address != null && message.hasOwnProperty("address")) {
                     let error = $root.cockroach.util.UnresolvedAddr.verify(message.address);
                     if (error)
                         return "address." + error;
                 }
-                if (message.attrs != null) {
+                if (message.attrs != null && message.hasOwnProperty("attrs")) {
                     let error = $root.cockroach.roachpb.Attributes.verify(message.attrs);
                     if (error)
                         return "attrs." + error;
                 }
-                if (message.locality != null) {
+                if (message.locality != null && message.hasOwnProperty("locality")) {
                     let error = $root.cockroach.roachpb.Locality.verify(message.locality);
                     if (error)
                         return "locality." + error;
@@ -20137,30 +20224,31 @@ export const cockroach = $root.cockroach = (function() {
             function StoreDescriptor(properties) {
                 if (properties)
                     for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                        this[keys[i]] = properties[keys[i]];
+                        if (properties[keys[i]] != null)
+                            this[keys[i]] = properties[keys[i]];
             }
 
             /**
              * StoreDescriptor store_id.
-             * @type {number|undefined}
+             * @type {number}
              */
             StoreDescriptor.prototype.store_id = 0;
 
             /**
              * StoreDescriptor attrs.
-             * @type {cockroach.roachpb.Attributes$Properties|undefined}
+             * @type {(cockroach.roachpb.Attributes$Properties|null)}
              */
             StoreDescriptor.prototype.attrs = null;
 
             /**
              * StoreDescriptor node.
-             * @type {cockroach.roachpb.NodeDescriptor$Properties|undefined}
+             * @type {(cockroach.roachpb.NodeDescriptor$Properties|null)}
              */
             StoreDescriptor.prototype.node = null;
 
             /**
              * StoreDescriptor capacity.
-             * @type {cockroach.roachpb.StoreCapacity$Properties|undefined}
+             * @type {(cockroach.roachpb.StoreCapacity$Properties|null)}
              */
             StoreDescriptor.prototype.capacity = null;
 
@@ -20184,11 +20272,11 @@ export const cockroach = $root.cockroach = (function() {
                     writer = $Writer.create();
                 if (message.store_id != null && message.hasOwnProperty("store_id"))
                     writer.uint32(/* id 1, wireType 0 =*/8).int32(message.store_id);
-                if (message.attrs && message.hasOwnProperty("attrs"))
+                if (message.attrs != null && message.hasOwnProperty("attrs"))
                     $root.cockroach.roachpb.Attributes.encode(message.attrs, writer.uint32(/* id 2, wireType 2 =*/18).fork()).ldelim();
-                if (message.node && message.hasOwnProperty("node"))
+                if (message.node != null && message.hasOwnProperty("node"))
                     $root.cockroach.roachpb.NodeDescriptor.encode(message.node, writer.uint32(/* id 3, wireType 2 =*/26).fork()).ldelim();
-                if (message.capacity && message.hasOwnProperty("capacity"))
+                if (message.capacity != null && message.hasOwnProperty("capacity"))
                     $root.cockroach.roachpb.StoreCapacity.encode(message.capacity, writer.uint32(/* id 4, wireType 2 =*/34).fork()).ldelim();
                 return writer;
             };
@@ -20259,20 +20347,20 @@ export const cockroach = $root.cockroach = (function() {
             StoreDescriptor.verify = function verify(message) {
                 if (typeof message !== "object" || message === null)
                     return "object expected";
-                if (message.store_id != null)
+                if (message.store_id != null && message.hasOwnProperty("store_id"))
                     if (!$util.isInteger(message.store_id))
                         return "store_id: integer expected";
-                if (message.attrs != null) {
+                if (message.attrs != null && message.hasOwnProperty("attrs")) {
                     let error = $root.cockroach.roachpb.Attributes.verify(message.attrs);
                     if (error)
                         return "attrs." + error;
                 }
-                if (message.node != null) {
+                if (message.node != null && message.hasOwnProperty("node")) {
                     let error = $root.cockroach.roachpb.NodeDescriptor.verify(message.node);
                     if (error)
                         return "node." + error;
                 }
-                if (message.capacity != null) {
+                if (message.capacity != null && message.hasOwnProperty("capacity")) {
                     let error = $root.cockroach.roachpb.StoreCapacity.verify(message.capacity);
                     if (error)
                         return "capacity." + error;
@@ -20385,18 +20473,19 @@ export const cockroach = $root.cockroach = (function() {
                 this.replicas = [];
                 if (properties)
                     for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                        this[keys[i]] = properties[keys[i]];
+                        if (properties[keys[i]] != null)
+                            this[keys[i]] = properties[keys[i]];
             }
 
             /**
              * StoreDeadReplicas store_id.
-             * @type {number|undefined}
+             * @type {number}
              */
             StoreDeadReplicas.prototype.store_id = 0;
 
             /**
              * StoreDeadReplicas replicas.
-             * @type {Array.<cockroach.roachpb.ReplicaIdent$Properties>|undefined}
+             * @type {Array.<cockroach.roachpb.ReplicaIdent$Properties>}
              */
             StoreDeadReplicas.prototype.replicas = $util.emptyArray;
 
@@ -20420,7 +20509,7 @@ export const cockroach = $root.cockroach = (function() {
                     writer = $Writer.create();
                 if (message.store_id != null && message.hasOwnProperty("store_id"))
                     writer.uint32(/* id 1, wireType 0 =*/8).int32(message.store_id);
-                if (message.replicas && message.replicas.length)
+                if (message.replicas != null && message.replicas.length)
                     for (let i = 0; i < message.replicas.length; ++i)
                         $root.cockroach.roachpb.ReplicaIdent.encode(message.replicas[i], writer.uint32(/* id 2, wireType 2 =*/18).fork()).ldelim();
                 return writer;
@@ -20488,10 +20577,10 @@ export const cockroach = $root.cockroach = (function() {
             StoreDeadReplicas.verify = function verify(message) {
                 if (typeof message !== "object" || message === null)
                     return "object expected";
-                if (message.store_id != null)
+                if (message.store_id != null && message.hasOwnProperty("store_id"))
                     if (!$util.isInteger(message.store_id))
                         return "store_id: integer expected";
-                if (message.replicas != null) {
+                if (message.replicas != null && message.hasOwnProperty("replicas")) {
                     if (!Array.isArray(message.replicas))
                         return "replicas: array expected";
                     for (let i = 0; i < message.replicas.length; ++i) {
@@ -20599,12 +20688,13 @@ export const cockroach = $root.cockroach = (function() {
                 this.tiers = [];
                 if (properties)
                     for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                        this[keys[i]] = properties[keys[i]];
+                        if (properties[keys[i]] != null)
+                            this[keys[i]] = properties[keys[i]];
             }
 
             /**
              * Locality tiers.
-             * @type {Array.<cockroach.roachpb.Tier$Properties>|undefined}
+             * @type {Array.<cockroach.roachpb.Tier$Properties>}
              */
             Locality.prototype.tiers = $util.emptyArray;
 
@@ -20626,7 +20716,7 @@ export const cockroach = $root.cockroach = (function() {
             Locality.encode = function encode(message, writer) {
                 if (!writer)
                     writer = $Writer.create();
-                if (message.tiers && message.tiers.length)
+                if (message.tiers != null && message.tiers.length)
                     for (let i = 0; i < message.tiers.length; ++i)
                         $root.cockroach.roachpb.Tier.encode(message.tiers[i], writer.uint32(/* id 1, wireType 2 =*/10).fork()).ldelim();
                 return writer;
@@ -20691,7 +20781,7 @@ export const cockroach = $root.cockroach = (function() {
             Locality.verify = function verify(message) {
                 if (typeof message !== "object" || message === null)
                     return "object expected";
-                if (message.tiers != null) {
+                if (message.tiers != null && message.hasOwnProperty("tiers")) {
                     if (!Array.isArray(message.tiers))
                         return "tiers: array expected";
                     for (let i = 0; i < message.tiers.length; ++i) {
@@ -20793,18 +20883,19 @@ export const cockroach = $root.cockroach = (function() {
             function Tier(properties) {
                 if (properties)
                     for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                        this[keys[i]] = properties[keys[i]];
+                        if (properties[keys[i]] != null)
+                            this[keys[i]] = properties[keys[i]];
             }
 
             /**
              * Tier key.
-             * @type {string|undefined}
+             * @type {string}
              */
             Tier.prototype.key = "";
 
             /**
              * Tier value.
-             * @type {string|undefined}
+             * @type {string}
              */
             Tier.prototype.value = "";
 
@@ -20893,10 +20984,10 @@ export const cockroach = $root.cockroach = (function() {
             Tier.verify = function verify(message) {
                 if (typeof message !== "object" || message === null)
                     return "object expected";
-                if (message.key != null)
+                if (message.key != null && message.hasOwnProperty("key"))
                     if (!$util.isString(message.key))
                         return "key: string expected";
-                if (message.value != null)
+                if (message.value != null && message.hasOwnProperty("value"))
                     if (!$util.isString(message.value))
                         return "value: string expected";
                 return null;
@@ -20987,18 +21078,19 @@ export const cockroach = $root.cockroach = (function() {
             function RaftTruncatedState(properties) {
                 if (properties)
                     for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                        this[keys[i]] = properties[keys[i]];
+                        if (properties[keys[i]] != null)
+                            this[keys[i]] = properties[keys[i]];
             }
 
             /**
              * RaftTruncatedState index.
-             * @type {Long|undefined}
+             * @type {Long}
              */
             RaftTruncatedState.prototype.index = $util.Long ? $util.Long.fromBits(0,0,true) : 0;
 
             /**
              * RaftTruncatedState term.
-             * @type {Long|undefined}
+             * @type {Long}
              */
             RaftTruncatedState.prototype.term = $util.Long ? $util.Long.fromBits(0,0,true) : 0;
 
@@ -21087,10 +21179,10 @@ export const cockroach = $root.cockroach = (function() {
             RaftTruncatedState.verify = function verify(message) {
                 if (typeof message !== "object" || message === null)
                     return "object expected";
-                if (message.index != null)
+                if (message.index != null && message.hasOwnProperty("index"))
                     if (!$util.isInteger(message.index) && !(message.index && $util.isInteger(message.index.low) && $util.isInteger(message.index.high)))
                         return "index: integer|Long expected";
-                if (message.term != null)
+                if (message.term != null && message.hasOwnProperty("term"))
                     if (!$util.isInteger(message.term) && !(message.term && $util.isInteger(message.term.low) && $util.isInteger(message.term.high)))
                         return "term: integer|Long expected";
                 return null;
@@ -21208,12 +21300,13 @@ export const cockroach = $root.cockroach = (function() {
             function RaftTombstone(properties) {
                 if (properties)
                     for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                        this[keys[i]] = properties[keys[i]];
+                        if (properties[keys[i]] != null)
+                            this[keys[i]] = properties[keys[i]];
             }
 
             /**
              * RaftTombstone next_replica_id.
-             * @type {number|undefined}
+             * @type {number}
              */
             RaftTombstone.prototype.next_replica_id = 0;
 
@@ -21297,7 +21390,7 @@ export const cockroach = $root.cockroach = (function() {
             RaftTombstone.verify = function verify(message) {
                 if (typeof message !== "object" || message === null)
                     return "object expected";
-                if (message.next_replica_id != null)
+                if (message.next_replica_id != null && message.hasOwnProperty("next_replica_id"))
                     if (!$util.isInteger(message.next_replica_id))
                         return "next_replica_id: integer expected";
                 return null;
@@ -21385,24 +21478,25 @@ export const cockroach = $root.cockroach = (function() {
                 this.log_entries = [];
                 if (properties)
                     for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                        this[keys[i]] = properties[keys[i]];
+                        if (properties[keys[i]] != null)
+                            this[keys[i]] = properties[keys[i]];
             }
 
             /**
              * RaftSnapshotData range_descriptor.
-             * @type {cockroach.roachpb.RangeDescriptor$Properties|undefined}
+             * @type {(cockroach.roachpb.RangeDescriptor$Properties|null)}
              */
             RaftSnapshotData.prototype.range_descriptor = null;
 
             /**
              * RaftSnapshotData KV.
-             * @type {Array.<cockroach.roachpb.RaftSnapshotData.KeyValue$Properties>|undefined}
+             * @type {Array.<cockroach.roachpb.RaftSnapshotData.KeyValue$Properties>}
              */
             RaftSnapshotData.prototype.KV = $util.emptyArray;
 
             /**
              * RaftSnapshotData log_entries.
-             * @type {Array.<Uint8Array>|undefined}
+             * @type {Array.<Uint8Array>}
              */
             RaftSnapshotData.prototype.log_entries = $util.emptyArray;
 
@@ -21424,12 +21518,12 @@ export const cockroach = $root.cockroach = (function() {
             RaftSnapshotData.encode = function encode(message, writer) {
                 if (!writer)
                     writer = $Writer.create();
-                if (message.range_descriptor && message.hasOwnProperty("range_descriptor"))
+                if (message.range_descriptor != null && message.hasOwnProperty("range_descriptor"))
                     $root.cockroach.roachpb.RangeDescriptor.encode(message.range_descriptor, writer.uint32(/* id 1, wireType 2 =*/10).fork()).ldelim();
-                if (message.KV && message.KV.length)
+                if (message.KV != null && message.KV.length)
                     for (let i = 0; i < message.KV.length; ++i)
                         $root.cockroach.roachpb.RaftSnapshotData.KeyValue.encode(message.KV[i], writer.uint32(/* id 2, wireType 2 =*/18).fork()).ldelim();
-                if (message.log_entries && message.log_entries.length)
+                if (message.log_entries != null && message.log_entries.length)
                     for (let i = 0; i < message.log_entries.length; ++i)
                         writer.uint32(/* id 3, wireType 2 =*/26).bytes(message.log_entries[i]);
                 return writer;
@@ -21502,12 +21596,12 @@ export const cockroach = $root.cockroach = (function() {
             RaftSnapshotData.verify = function verify(message) {
                 if (typeof message !== "object" || message === null)
                     return "object expected";
-                if (message.range_descriptor != null) {
+                if (message.range_descriptor != null && message.hasOwnProperty("range_descriptor")) {
                     let error = $root.cockroach.roachpb.RangeDescriptor.verify(message.range_descriptor);
                     if (error)
                         return "range_descriptor." + error;
                 }
-                if (message.KV != null) {
+                if (message.KV != null && message.hasOwnProperty("KV")) {
                     if (!Array.isArray(message.KV))
                         return "KV: array expected";
                     for (let i = 0; i < message.KV.length; ++i) {
@@ -21516,7 +21610,7 @@ export const cockroach = $root.cockroach = (function() {
                             return "KV." + error;
                     }
                 }
-                if (message.log_entries != null) {
+                if (message.log_entries != null && message.hasOwnProperty("log_entries")) {
                     if (!Array.isArray(message.log_entries))
                         return "log_entries: array expected";
                     for (let i = 0; i < message.log_entries.length; ++i)
@@ -21640,24 +21734,25 @@ export const cockroach = $root.cockroach = (function() {
                 function KeyValue(properties) {
                     if (properties)
                         for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                            this[keys[i]] = properties[keys[i]];
+                            if (properties[keys[i]] != null)
+                                this[keys[i]] = properties[keys[i]];
                 }
 
                 /**
                  * KeyValue key.
-                 * @type {Uint8Array|undefined}
+                 * @type {Uint8Array}
                  */
                 KeyValue.prototype.key = $util.newBuffer([]);
 
                 /**
                  * KeyValue value.
-                 * @type {Uint8Array|undefined}
+                 * @type {Uint8Array}
                  */
                 KeyValue.prototype.value = $util.newBuffer([]);
 
                 /**
                  * KeyValue timestamp.
-                 * @type {cockroach.util.hlc.Timestamp$Properties|undefined}
+                 * @type {(cockroach.util.hlc.Timestamp$Properties|null)}
                  */
                 KeyValue.prototype.timestamp = null;
 
@@ -21679,11 +21774,11 @@ export const cockroach = $root.cockroach = (function() {
                 KeyValue.encode = function encode(message, writer) {
                     if (!writer)
                         writer = $Writer.create();
-                    if (message.key && message.hasOwnProperty("key"))
+                    if (message.key != null && message.hasOwnProperty("key"))
                         writer.uint32(/* id 1, wireType 2 =*/10).bytes(message.key);
-                    if (message.value && message.hasOwnProperty("value"))
+                    if (message.value != null && message.hasOwnProperty("value"))
                         writer.uint32(/* id 2, wireType 2 =*/18).bytes(message.value);
-                    if (message.timestamp && message.hasOwnProperty("timestamp"))
+                    if (message.timestamp != null && message.hasOwnProperty("timestamp"))
                         $root.cockroach.util.hlc.Timestamp.encode(message.timestamp, writer.uint32(/* id 3, wireType 2 =*/26).fork()).ldelim();
                     return writer;
                 };
@@ -21751,13 +21846,13 @@ export const cockroach = $root.cockroach = (function() {
                 KeyValue.verify = function verify(message) {
                     if (typeof message !== "object" || message === null)
                         return "object expected";
-                    if (message.key != null)
+                    if (message.key != null && message.hasOwnProperty("key"))
                         if (!(message.key && typeof message.key.length === "number" || $util.isString(message.key)))
                             return "key: buffer expected";
-                    if (message.value != null)
+                    if (message.value != null && message.hasOwnProperty("value"))
                         if (!(message.value && typeof message.value.length === "number" || $util.isString(message.value)))
                             return "value: buffer expected";
-                    if (message.timestamp != null) {
+                    if (message.timestamp != null && message.hasOwnProperty("timestamp")) {
                         let error = $root.cockroach.util.hlc.Timestamp.verify(message.timestamp);
                         if (error)
                             return "timestamp." + error;
@@ -21879,18 +21974,19 @@ export const cockroach = $root.cockroach = (function() {
             function UnresolvedAddr(properties) {
                 if (properties)
                     for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                        this[keys[i]] = properties[keys[i]];
+                        if (properties[keys[i]] != null)
+                            this[keys[i]] = properties[keys[i]];
             }
 
             /**
              * UnresolvedAddr network_field.
-             * @type {string|undefined}
+             * @type {string}
              */
             UnresolvedAddr.prototype.network_field = "";
 
             /**
              * UnresolvedAddr address_field.
-             * @type {string|undefined}
+             * @type {string}
              */
             UnresolvedAddr.prototype.address_field = "";
 
@@ -21979,10 +22075,10 @@ export const cockroach = $root.cockroach = (function() {
             UnresolvedAddr.verify = function verify(message) {
                 if (typeof message !== "object" || message === null)
                     return "object expected";
-                if (message.network_field != null)
+                if (message.network_field != null && message.hasOwnProperty("network_field"))
                     if (!$util.isString(message.network_field))
                         return "network_field: string expected";
-                if (message.address_field != null)
+                if (message.address_field != null && message.hasOwnProperty("address_field"))
                     if (!$util.isString(message.address_field))
                         return "address_field: string expected";
                 return null;
@@ -22082,18 +22178,19 @@ export const cockroach = $root.cockroach = (function() {
                 function Timestamp(properties) {
                     if (properties)
                         for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                            this[keys[i]] = properties[keys[i]];
+                            if (properties[keys[i]] != null)
+                                this[keys[i]] = properties[keys[i]];
                 }
 
                 /**
                  * Timestamp wall_time.
-                 * @type {Long|undefined}
+                 * @type {Long}
                  */
                 Timestamp.prototype.wall_time = $util.Long ? $util.Long.fromBits(0,0,false) : 0;
 
                 /**
                  * Timestamp logical.
-                 * @type {number|undefined}
+                 * @type {number}
                  */
                 Timestamp.prototype.logical = 0;
 
@@ -22182,10 +22279,10 @@ export const cockroach = $root.cockroach = (function() {
                 Timestamp.verify = function verify(message) {
                     if (typeof message !== "object" || message === null)
                         return "object expected";
-                    if (message.wall_time != null)
+                    if (message.wall_time != null && message.hasOwnProperty("wall_time"))
                         if (!$util.isInteger(message.wall_time) && !(message.wall_time && $util.isInteger(message.wall_time.low) && $util.isInteger(message.wall_time.high)))
                             return "wall_time: integer|Long expected";
-                    if (message.logical != null)
+                    if (message.logical != null && message.hasOwnProperty("logical"))
                         if (!$util.isInteger(message.logical))
                             return "logical: integer expected";
                     return null;
@@ -22329,42 +22426,43 @@ export const cockroach = $root.cockroach = (function() {
                 function Entry(properties) {
                     if (properties)
                         for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                            this[keys[i]] = properties[keys[i]];
+                            if (properties[keys[i]] != null)
+                                this[keys[i]] = properties[keys[i]];
                 }
 
                 /**
                  * Entry severity.
-                 * @type {cockroach.util.log.Severity|undefined}
+                 * @type {cockroach.util.log.Severity}
                  */
                 Entry.prototype.severity = 0;
 
                 /**
                  * Entry time.
-                 * @type {Long|undefined}
+                 * @type {Long}
                  */
                 Entry.prototype.time = $util.Long ? $util.Long.fromBits(0,0,false) : 0;
 
                 /**
                  * Entry goroutine.
-                 * @type {Long|undefined}
+                 * @type {Long}
                  */
                 Entry.prototype.goroutine = $util.Long ? $util.Long.fromBits(0,0,false) : 0;
 
                 /**
                  * Entry file.
-                 * @type {string|undefined}
+                 * @type {string}
                  */
                 Entry.prototype.file = "";
 
                 /**
                  * Entry line.
-                 * @type {Long|undefined}
+                 * @type {Long}
                  */
                 Entry.prototype.line = $util.Long ? $util.Long.fromBits(0,0,false) : 0;
 
                 /**
                  * Entry message.
-                 * @type {string|undefined}
+                 * @type {string}
                  */
                 Entry.prototype.message = "";
 
@@ -22473,7 +22571,7 @@ export const cockroach = $root.cockroach = (function() {
                 Entry.verify = function verify(message) {
                     if (typeof message !== "object" || message === null)
                         return "object expected";
-                    if (message.severity != null)
+                    if (message.severity != null && message.hasOwnProperty("severity"))
                         switch (message.severity) {
                         default:
                             return "severity: enum value expected";
@@ -22485,19 +22583,19 @@ export const cockroach = $root.cockroach = (function() {
                         case 5:
                             break;
                         }
-                    if (message.time != null)
+                    if (message.time != null && message.hasOwnProperty("time"))
                         if (!$util.isInteger(message.time) && !(message.time && $util.isInteger(message.time.low) && $util.isInteger(message.time.high)))
                             return "time: integer|Long expected";
-                    if (message.goroutine != null)
+                    if (message.goroutine != null && message.hasOwnProperty("goroutine"))
                         if (!$util.isInteger(message.goroutine) && !(message.goroutine && $util.isInteger(message.goroutine.low) && $util.isInteger(message.goroutine.high)))
                             return "goroutine: integer|Long expected";
-                    if (message.file != null)
+                    if (message.file != null && message.hasOwnProperty("file"))
                         if (!$util.isString(message.file))
                             return "file: string expected";
-                    if (message.line != null)
+                    if (message.line != null && message.hasOwnProperty("line"))
                         if (!$util.isInteger(message.line) && !(message.line && $util.isInteger(message.line.low) && $util.isInteger(message.line.high)))
                             return "line: integer|Long expected";
-                    if (message.message != null)
+                    if (message.message != null && message.hasOwnProperty("message"))
                         if (!$util.isString(message.message))
                             return "message: string expected";
                     return null;
@@ -22678,42 +22776,43 @@ export const cockroach = $root.cockroach = (function() {
                 function FileDetails(properties) {
                     if (properties)
                         for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                            this[keys[i]] = properties[keys[i]];
+                            if (properties[keys[i]] != null)
+                                this[keys[i]] = properties[keys[i]];
                 }
 
                 /**
                  * FileDetails program.
-                 * @type {string|undefined}
+                 * @type {string}
                  */
                 FileDetails.prototype.program = "";
 
                 /**
                  * FileDetails host.
-                 * @type {string|undefined}
+                 * @type {string}
                  */
                 FileDetails.prototype.host = "";
 
                 /**
                  * FileDetails user_name.
-                 * @type {string|undefined}
+                 * @type {string}
                  */
                 FileDetails.prototype.user_name = "";
 
                 /**
                  * FileDetails severity.
-                 * @type {cockroach.util.log.Severity|undefined}
+                 * @type {cockroach.util.log.Severity}
                  */
                 FileDetails.prototype.severity = 0;
 
                 /**
                  * FileDetails time.
-                 * @type {Long|undefined}
+                 * @type {Long}
                  */
                 FileDetails.prototype.time = $util.Long ? $util.Long.fromBits(0,0,false) : 0;
 
                 /**
                  * FileDetails pid.
-                 * @type {Long|undefined}
+                 * @type {Long}
                  */
                 FileDetails.prototype.pid = $util.Long ? $util.Long.fromBits(0,0,false) : 0;
 
@@ -22822,16 +22921,16 @@ export const cockroach = $root.cockroach = (function() {
                 FileDetails.verify = function verify(message) {
                     if (typeof message !== "object" || message === null)
                         return "object expected";
-                    if (message.program != null)
+                    if (message.program != null && message.hasOwnProperty("program"))
                         if (!$util.isString(message.program))
                             return "program: string expected";
-                    if (message.host != null)
+                    if (message.host != null && message.hasOwnProperty("host"))
                         if (!$util.isString(message.host))
                             return "host: string expected";
-                    if (message.user_name != null)
+                    if (message.user_name != null && message.hasOwnProperty("user_name"))
                         if (!$util.isString(message.user_name))
                             return "user_name: string expected";
-                    if (message.severity != null)
+                    if (message.severity != null && message.hasOwnProperty("severity"))
                         switch (message.severity) {
                         default:
                             return "severity: enum value expected";
@@ -22843,10 +22942,10 @@ export const cockroach = $root.cockroach = (function() {
                         case 5:
                             break;
                         }
-                    if (message.time != null)
+                    if (message.time != null && message.hasOwnProperty("time"))
                         if (!$util.isInteger(message.time) && !(message.time && $util.isInteger(message.time.low) && $util.isInteger(message.time.high)))
                             return "time: integer|Long expected";
-                    if (message.pid != null)
+                    if (message.pid != null && message.hasOwnProperty("pid"))
                         if (!$util.isInteger(message.pid) && !(message.pid && $util.isInteger(message.pid.low) && $util.isInteger(message.pid.high)))
                             return "pid: integer|Long expected";
                     return null;
@@ -23011,30 +23110,31 @@ export const cockroach = $root.cockroach = (function() {
                 function FileInfo(properties) {
                     if (properties)
                         for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                            this[keys[i]] = properties[keys[i]];
+                            if (properties[keys[i]] != null)
+                                this[keys[i]] = properties[keys[i]];
                 }
 
                 /**
                  * FileInfo name.
-                 * @type {string|undefined}
+                 * @type {string}
                  */
                 FileInfo.prototype.name = "";
 
                 /**
                  * FileInfo size_bytes.
-                 * @type {Long|undefined}
+                 * @type {Long}
                  */
                 FileInfo.prototype.size_bytes = $util.Long ? $util.Long.fromBits(0,0,false) : 0;
 
                 /**
                  * FileInfo mod_time_nanos.
-                 * @type {Long|undefined}
+                 * @type {Long}
                  */
                 FileInfo.prototype.mod_time_nanos = $util.Long ? $util.Long.fromBits(0,0,false) : 0;
 
                 /**
                  * FileInfo details.
-                 * @type {cockroach.util.log.FileDetails$Properties|undefined}
+                 * @type {(cockroach.util.log.FileDetails$Properties|null)}
                  */
                 FileInfo.prototype.details = null;
 
@@ -23062,7 +23162,7 @@ export const cockroach = $root.cockroach = (function() {
                         writer.uint32(/* id 2, wireType 0 =*/16).int64(message.size_bytes);
                     if (message.mod_time_nanos != null && message.hasOwnProperty("mod_time_nanos"))
                         writer.uint32(/* id 3, wireType 0 =*/24).int64(message.mod_time_nanos);
-                    if (message.details && message.hasOwnProperty("details"))
+                    if (message.details != null && message.hasOwnProperty("details"))
                         $root.cockroach.util.log.FileDetails.encode(message.details, writer.uint32(/* id 4, wireType 2 =*/34).fork()).ldelim();
                     return writer;
                 };
@@ -23133,16 +23233,16 @@ export const cockroach = $root.cockroach = (function() {
                 FileInfo.verify = function verify(message) {
                     if (typeof message !== "object" || message === null)
                         return "object expected";
-                    if (message.name != null)
+                    if (message.name != null && message.hasOwnProperty("name"))
                         if (!$util.isString(message.name))
                             return "name: string expected";
-                    if (message.size_bytes != null)
+                    if (message.size_bytes != null && message.hasOwnProperty("size_bytes"))
                         if (!$util.isInteger(message.size_bytes) && !(message.size_bytes && $util.isInteger(message.size_bytes.low) && $util.isInteger(message.size_bytes.high)))
                             return "size_bytes: integer|Long expected";
-                    if (message.mod_time_nanos != null)
+                    if (message.mod_time_nanos != null && message.hasOwnProperty("mod_time_nanos"))
                         if (!$util.isInteger(message.mod_time_nanos) && !(message.mod_time_nanos && $util.isInteger(message.mod_time_nanos.low) && $util.isInteger(message.mod_time_nanos.high)))
                             return "mod_time_nanos: integer|Long expected";
-                    if (message.details != null) {
+                    if (message.details != null && message.hasOwnProperty("details")) {
                         let error = $root.cockroach.util.log.FileDetails.verify(message.details);
                         if (error)
                             return "details." + error;
@@ -23330,54 +23430,55 @@ export const cockroach = $root.cockroach = (function() {
                     function TxnMeta(properties) {
                         if (properties)
                             for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                                this[keys[i]] = properties[keys[i]];
+                                if (properties[keys[i]] != null)
+                                    this[keys[i]] = properties[keys[i]];
                     }
 
                     /**
                      * TxnMeta id.
-                     * @type {Uint8Array|undefined}
+                     * @type {Uint8Array}
                      */
                     TxnMeta.prototype.id = $util.newBuffer([]);
 
                     /**
                      * TxnMeta isolation.
-                     * @type {cockroach.storage.engine.enginepb.IsolationType|undefined}
+                     * @type {cockroach.storage.engine.enginepb.IsolationType}
                      */
                     TxnMeta.prototype.isolation = 0;
 
                     /**
                      * TxnMeta key.
-                     * @type {Uint8Array|undefined}
+                     * @type {Uint8Array}
                      */
                     TxnMeta.prototype.key = $util.newBuffer([]);
 
                     /**
                      * TxnMeta epoch.
-                     * @type {number|undefined}
+                     * @type {number}
                      */
                     TxnMeta.prototype.epoch = 0;
 
                     /**
                      * TxnMeta timestamp.
-                     * @type {cockroach.util.hlc.Timestamp$Properties|undefined}
+                     * @type {(cockroach.util.hlc.Timestamp$Properties|null)}
                      */
                     TxnMeta.prototype.timestamp = null;
 
                     /**
                      * TxnMeta priority.
-                     * @type {number|undefined}
+                     * @type {number}
                      */
                     TxnMeta.prototype.priority = 0;
 
                     /**
                      * TxnMeta sequence.
-                     * @type {number|undefined}
+                     * @type {number}
                      */
                     TxnMeta.prototype.sequence = 0;
 
                     /**
                      * TxnMeta batch_index.
-                     * @type {number|undefined}
+                     * @type {number}
                      */
                     TxnMeta.prototype.batch_index = 0;
 
@@ -23399,15 +23500,15 @@ export const cockroach = $root.cockroach = (function() {
                     TxnMeta.encode = function encode(message, writer) {
                         if (!writer)
                             writer = $Writer.create();
-                        if (message.id && message.hasOwnProperty("id"))
+                        if (message.id != null && message.hasOwnProperty("id"))
                             writer.uint32(/* id 1, wireType 2 =*/10).bytes(message.id);
                         if (message.isolation != null && message.hasOwnProperty("isolation"))
                             writer.uint32(/* id 2, wireType 0 =*/16).uint32(message.isolation);
-                        if (message.key && message.hasOwnProperty("key"))
+                        if (message.key != null && message.hasOwnProperty("key"))
                             writer.uint32(/* id 3, wireType 2 =*/26).bytes(message.key);
                         if (message.epoch != null && message.hasOwnProperty("epoch"))
                             writer.uint32(/* id 4, wireType 0 =*/32).uint32(message.epoch);
-                        if (message.timestamp && message.hasOwnProperty("timestamp"))
+                        if (message.timestamp != null && message.hasOwnProperty("timestamp"))
                             $root.cockroach.util.hlc.Timestamp.encode(message.timestamp, writer.uint32(/* id 5, wireType 2 =*/42).fork()).ldelim();
                         if (message.priority != null && message.hasOwnProperty("priority"))
                             writer.uint32(/* id 6, wireType 0 =*/48).int32(message.priority);
@@ -23496,10 +23597,10 @@ export const cockroach = $root.cockroach = (function() {
                     TxnMeta.verify = function verify(message) {
                         if (typeof message !== "object" || message === null)
                             return "object expected";
-                        if (message.id != null)
+                        if (message.id != null && message.hasOwnProperty("id"))
                             if (!(message.id && typeof message.id.length === "number" || $util.isString(message.id)))
                                 return "id: buffer expected";
-                        if (message.isolation != null)
+                        if (message.isolation != null && message.hasOwnProperty("isolation"))
                             switch (message.isolation) {
                             default:
                                 return "isolation: enum value expected";
@@ -23507,24 +23608,24 @@ export const cockroach = $root.cockroach = (function() {
                             case 1:
                                 break;
                             }
-                        if (message.key != null)
+                        if (message.key != null && message.hasOwnProperty("key"))
                             if (!(message.key && typeof message.key.length === "number" || $util.isString(message.key)))
                                 return "key: buffer expected";
-                        if (message.epoch != null)
+                        if (message.epoch != null && message.hasOwnProperty("epoch"))
                             if (!$util.isInteger(message.epoch))
                                 return "epoch: integer expected";
-                        if (message.timestamp != null) {
+                        if (message.timestamp != null && message.hasOwnProperty("timestamp")) {
                             let error = $root.cockroach.util.hlc.Timestamp.verify(message.timestamp);
                             if (error)
                                 return "timestamp." + error;
                         }
-                        if (message.priority != null)
+                        if (message.priority != null && message.hasOwnProperty("priority"))
                             if (!$util.isInteger(message.priority))
                                 return "priority: integer expected";
-                        if (message.sequence != null)
+                        if (message.sequence != null && message.hasOwnProperty("sequence"))
                             if (!$util.isInteger(message.sequence))
                                 return "sequence: integer expected";
-                        if (message.batch_index != null)
+                        if (message.batch_index != null && message.hasOwnProperty("batch_index"))
                             if (!$util.isInteger(message.batch_index))
                                 return "batch_index: integer expected";
                         return null;
@@ -23667,48 +23768,49 @@ export const cockroach = $root.cockroach = (function() {
                     function MVCCMetadata(properties) {
                         if (properties)
                             for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                                this[keys[i]] = properties[keys[i]];
+                                if (properties[keys[i]] != null)
+                                    this[keys[i]] = properties[keys[i]];
                     }
 
                     /**
                      * MVCCMetadata txn.
-                     * @type {cockroach.storage.engine.enginepb.TxnMeta$Properties|undefined}
+                     * @type {(cockroach.storage.engine.enginepb.TxnMeta$Properties|null)}
                      */
                     MVCCMetadata.prototype.txn = null;
 
                     /**
                      * MVCCMetadata timestamp.
-                     * @type {cockroach.util.hlc.Timestamp$Properties|undefined}
+                     * @type {(cockroach.util.hlc.Timestamp$Properties|null)}
                      */
                     MVCCMetadata.prototype.timestamp = null;
 
                     /**
                      * MVCCMetadata deleted.
-                     * @type {boolean|undefined}
+                     * @type {boolean}
                      */
                     MVCCMetadata.prototype.deleted = false;
 
                     /**
                      * MVCCMetadata key_bytes.
-                     * @type {Long|undefined}
+                     * @type {Long}
                      */
                     MVCCMetadata.prototype.key_bytes = $util.Long ? $util.Long.fromBits(0,0,false) : 0;
 
                     /**
                      * MVCCMetadata val_bytes.
-                     * @type {Long|undefined}
+                     * @type {Long}
                      */
                     MVCCMetadata.prototype.val_bytes = $util.Long ? $util.Long.fromBits(0,0,false) : 0;
 
                     /**
                      * MVCCMetadata raw_bytes.
-                     * @type {Uint8Array|undefined}
+                     * @type {Uint8Array}
                      */
                     MVCCMetadata.prototype.raw_bytes = $util.newBuffer([]);
 
                     /**
                      * MVCCMetadata merge_timestamp.
-                     * @type {cockroach.util.hlc.Timestamp$Properties|undefined}
+                     * @type {(cockroach.util.hlc.Timestamp$Properties|null)}
                      */
                     MVCCMetadata.prototype.merge_timestamp = null;
 
@@ -23730,9 +23832,9 @@ export const cockroach = $root.cockroach = (function() {
                     MVCCMetadata.encode = function encode(message, writer) {
                         if (!writer)
                             writer = $Writer.create();
-                        if (message.txn && message.hasOwnProperty("txn"))
+                        if (message.txn != null && message.hasOwnProperty("txn"))
                             $root.cockroach.storage.engine.enginepb.TxnMeta.encode(message.txn, writer.uint32(/* id 1, wireType 2 =*/10).fork()).ldelim();
-                        if (message.timestamp && message.hasOwnProperty("timestamp"))
+                        if (message.timestamp != null && message.hasOwnProperty("timestamp"))
                             $root.cockroach.util.hlc.Timestamp.encode(message.timestamp, writer.uint32(/* id 2, wireType 2 =*/18).fork()).ldelim();
                         if (message.deleted != null && message.hasOwnProperty("deleted"))
                             writer.uint32(/* id 3, wireType 0 =*/24).bool(message.deleted);
@@ -23740,9 +23842,9 @@ export const cockroach = $root.cockroach = (function() {
                             writer.uint32(/* id 4, wireType 0 =*/32).int64(message.key_bytes);
                         if (message.val_bytes != null && message.hasOwnProperty("val_bytes"))
                             writer.uint32(/* id 5, wireType 0 =*/40).int64(message.val_bytes);
-                        if (message.raw_bytes && message.hasOwnProperty("raw_bytes"))
+                        if (message.raw_bytes != null && message.hasOwnProperty("raw_bytes"))
                             writer.uint32(/* id 6, wireType 2 =*/50).bytes(message.raw_bytes);
-                        if (message.merge_timestamp && message.hasOwnProperty("merge_timestamp"))
+                        if (message.merge_timestamp != null && message.hasOwnProperty("merge_timestamp"))
                             $root.cockroach.util.hlc.Timestamp.encode(message.merge_timestamp, writer.uint32(/* id 7, wireType 2 =*/58).fork()).ldelim();
                         return writer;
                     };
@@ -23822,29 +23924,29 @@ export const cockroach = $root.cockroach = (function() {
                     MVCCMetadata.verify = function verify(message) {
                         if (typeof message !== "object" || message === null)
                             return "object expected";
-                        if (message.txn != null) {
+                        if (message.txn != null && message.hasOwnProperty("txn")) {
                             let error = $root.cockroach.storage.engine.enginepb.TxnMeta.verify(message.txn);
                             if (error)
                                 return "txn." + error;
                         }
-                        if (message.timestamp != null) {
+                        if (message.timestamp != null && message.hasOwnProperty("timestamp")) {
                             let error = $root.cockroach.util.hlc.Timestamp.verify(message.timestamp);
                             if (error)
                                 return "timestamp." + error;
                         }
-                        if (message.deleted != null)
+                        if (message.deleted != null && message.hasOwnProperty("deleted"))
                             if (typeof message.deleted !== "boolean")
                                 return "deleted: boolean expected";
-                        if (message.key_bytes != null)
+                        if (message.key_bytes != null && message.hasOwnProperty("key_bytes"))
                             if (!$util.isInteger(message.key_bytes) && !(message.key_bytes && $util.isInteger(message.key_bytes.low) && $util.isInteger(message.key_bytes.high)))
                                 return "key_bytes: integer|Long expected";
-                        if (message.val_bytes != null)
+                        if (message.val_bytes != null && message.hasOwnProperty("val_bytes"))
                             if (!$util.isInteger(message.val_bytes) && !(message.val_bytes && $util.isInteger(message.val_bytes.low) && $util.isInteger(message.val_bytes.high)))
                                 return "val_bytes: integer|Long expected";
-                        if (message.raw_bytes != null)
+                        if (message.raw_bytes != null && message.hasOwnProperty("raw_bytes"))
                             if (!(message.raw_bytes && typeof message.raw_bytes.length === "number" || $util.isString(message.raw_bytes)))
                                 return "raw_bytes: buffer expected";
-                        if (message.merge_timestamp != null) {
+                        if (message.merge_timestamp != null && message.hasOwnProperty("merge_timestamp")) {
                             let error = $root.cockroach.util.hlc.Timestamp.verify(message.merge_timestamp);
                             if (error)
                                 return "merge_timestamp." + error;
@@ -24014,90 +24116,91 @@ export const cockroach = $root.cockroach = (function() {
                     function MVCCStats(properties) {
                         if (properties)
                             for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                                this[keys[i]] = properties[keys[i]];
+                                if (properties[keys[i]] != null)
+                                    this[keys[i]] = properties[keys[i]];
                     }
 
                     /**
                      * MVCCStats contains_estimates.
-                     * @type {boolean|undefined}
+                     * @type {boolean}
                      */
                     MVCCStats.prototype.contains_estimates = false;
 
                     /**
                      * MVCCStats last_update_nanos.
-                     * @type {Long|undefined}
+                     * @type {Long}
                      */
                     MVCCStats.prototype.last_update_nanos = $util.Long ? $util.Long.fromBits(0,0,false) : 0;
 
                     /**
                      * MVCCStats intent_age.
-                     * @type {Long|undefined}
+                     * @type {Long}
                      */
                     MVCCStats.prototype.intent_age = $util.Long ? $util.Long.fromBits(0,0,false) : 0;
 
                     /**
                      * MVCCStats gc_bytes_age.
-                     * @type {Long|undefined}
+                     * @type {Long}
                      */
                     MVCCStats.prototype.gc_bytes_age = $util.Long ? $util.Long.fromBits(0,0,false) : 0;
 
                     /**
                      * MVCCStats live_bytes.
-                     * @type {Long|undefined}
+                     * @type {Long}
                      */
                     MVCCStats.prototype.live_bytes = $util.Long ? $util.Long.fromBits(0,0,false) : 0;
 
                     /**
                      * MVCCStats live_count.
-                     * @type {Long|undefined}
+                     * @type {Long}
                      */
                     MVCCStats.prototype.live_count = $util.Long ? $util.Long.fromBits(0,0,false) : 0;
 
                     /**
                      * MVCCStats key_bytes.
-                     * @type {Long|undefined}
+                     * @type {Long}
                      */
                     MVCCStats.prototype.key_bytes = $util.Long ? $util.Long.fromBits(0,0,false) : 0;
 
                     /**
                      * MVCCStats key_count.
-                     * @type {Long|undefined}
+                     * @type {Long}
                      */
                     MVCCStats.prototype.key_count = $util.Long ? $util.Long.fromBits(0,0,false) : 0;
 
                     /**
                      * MVCCStats val_bytes.
-                     * @type {Long|undefined}
+                     * @type {Long}
                      */
                     MVCCStats.prototype.val_bytes = $util.Long ? $util.Long.fromBits(0,0,false) : 0;
 
                     /**
                      * MVCCStats val_count.
-                     * @type {Long|undefined}
+                     * @type {Long}
                      */
                     MVCCStats.prototype.val_count = $util.Long ? $util.Long.fromBits(0,0,false) : 0;
 
                     /**
                      * MVCCStats intent_bytes.
-                     * @type {Long|undefined}
+                     * @type {Long}
                      */
                     MVCCStats.prototype.intent_bytes = $util.Long ? $util.Long.fromBits(0,0,false) : 0;
 
                     /**
                      * MVCCStats intent_count.
-                     * @type {Long|undefined}
+                     * @type {Long}
                      */
                     MVCCStats.prototype.intent_count = $util.Long ? $util.Long.fromBits(0,0,false) : 0;
 
                     /**
                      * MVCCStats sys_bytes.
-                     * @type {Long|undefined}
+                     * @type {Long}
                      */
                     MVCCStats.prototype.sys_bytes = $util.Long ? $util.Long.fromBits(0,0,false) : 0;
 
                     /**
                      * MVCCStats sys_count.
-                     * @type {Long|undefined}
+                     * @type {Long}
                      */
                     MVCCStats.prototype.sys_count = $util.Long ? $util.Long.fromBits(0,0,false) : 0;
 
@@ -24246,46 +24349,46 @@ export const cockroach = $root.cockroach = (function() {
                     MVCCStats.verify = function verify(message) {
                         if (typeof message !== "object" || message === null)
                             return "object expected";
-                        if (message.contains_estimates != null)
+                        if (message.contains_estimates != null && message.hasOwnProperty("contains_estimates"))
                             if (typeof message.contains_estimates !== "boolean")
                                 return "contains_estimates: boolean expected";
-                        if (message.last_update_nanos != null)
+                        if (message.last_update_nanos != null && message.hasOwnProperty("last_update_nanos"))
                             if (!$util.isInteger(message.last_update_nanos) && !(message.last_update_nanos && $util.isInteger(message.last_update_nanos.low) && $util.isInteger(message.last_update_nanos.high)))
                                 return "last_update_nanos: integer|Long expected";
-                        if (message.intent_age != null)
+                        if (message.intent_age != null && message.hasOwnProperty("intent_age"))
                             if (!$util.isInteger(message.intent_age) && !(message.intent_age && $util.isInteger(message.intent_age.low) && $util.isInteger(message.intent_age.high)))
                                 return "intent_age: integer|Long expected";
-                        if (message.gc_bytes_age != null)
+                        if (message.gc_bytes_age != null && message.hasOwnProperty("gc_bytes_age"))
                             if (!$util.isInteger(message.gc_bytes_age) && !(message.gc_bytes_age && $util.isInteger(message.gc_bytes_age.low) && $util.isInteger(message.gc_bytes_age.high)))
                                 return "gc_bytes_age: integer|Long expected";
-                        if (message.live_bytes != null)
+                        if (message.live_bytes != null && message.hasOwnProperty("live_bytes"))
                             if (!$util.isInteger(message.live_bytes) && !(message.live_bytes && $util.isInteger(message.live_bytes.low) && $util.isInteger(message.live_bytes.high)))
                                 return "live_bytes: integer|Long expected";
-                        if (message.live_count != null)
+                        if (message.live_count != null && message.hasOwnProperty("live_count"))
                             if (!$util.isInteger(message.live_count) && !(message.live_count && $util.isInteger(message.live_count.low) && $util.isInteger(message.live_count.high)))
                                 return "live_count: integer|Long expected";
-                        if (message.key_bytes != null)
+                        if (message.key_bytes != null && message.hasOwnProperty("key_bytes"))
                             if (!$util.isInteger(message.key_bytes) && !(message.key_bytes && $util.isInteger(message.key_bytes.low) && $util.isInteger(message.key_bytes.high)))
                                 return "key_bytes: integer|Long expected";
-                        if (message.key_count != null)
+                        if (message.key_count != null && message.hasOwnProperty("key_count"))
                             if (!$util.isInteger(message.key_count) && !(message.key_count && $util.isInteger(message.key_count.low) && $util.isInteger(message.key_count.high)))
                                 return "key_count: integer|Long expected";
-                        if (message.val_bytes != null)
+                        if (message.val_bytes != null && message.hasOwnProperty("val_bytes"))
                             if (!$util.isInteger(message.val_bytes) && !(message.val_bytes && $util.isInteger(message.val_bytes.low) && $util.isInteger(message.val_bytes.high)))
                                 return "val_bytes: integer|Long expected";
-                        if (message.val_count != null)
+                        if (message.val_count != null && message.hasOwnProperty("val_count"))
                             if (!$util.isInteger(message.val_count) && !(message.val_count && $util.isInteger(message.val_count.low) && $util.isInteger(message.val_count.high)))
                                 return "val_count: integer|Long expected";
-                        if (message.intent_bytes != null)
+                        if (message.intent_bytes != null && message.hasOwnProperty("intent_bytes"))
                             if (!$util.isInteger(message.intent_bytes) && !(message.intent_bytes && $util.isInteger(message.intent_bytes.low) && $util.isInteger(message.intent_bytes.high)))
                                 return "intent_bytes: integer|Long expected";
-                        if (message.intent_count != null)
+                        if (message.intent_count != null && message.hasOwnProperty("intent_count"))
                             if (!$util.isInteger(message.intent_count) && !(message.intent_count && $util.isInteger(message.intent_count.low) && $util.isInteger(message.intent_count.high)))
                                 return "intent_count: integer|Long expected";
-                        if (message.sys_bytes != null)
+                        if (message.sys_bytes != null && message.hasOwnProperty("sys_bytes"))
                             if (!$util.isInteger(message.sys_bytes) && !(message.sys_bytes && $util.isInteger(message.sys_bytes.low) && $util.isInteger(message.sys_bytes.high)))
                                 return "sys_bytes: integer|Long expected";
-                        if (message.sys_count != null)
+                        if (message.sys_count != null && message.hasOwnProperty("sys_count"))
                             if (!$util.isInteger(message.sys_count) && !(message.sys_count && $util.isInteger(message.sys_count.low) && $util.isInteger(message.sys_count.high)))
                                 return "sys_count: integer|Long expected";
                         return null;
@@ -24626,30 +24729,31 @@ export const cockroach = $root.cockroach = (function() {
             function Liveness(properties) {
                 if (properties)
                     for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                        this[keys[i]] = properties[keys[i]];
+                        if (properties[keys[i]] != null)
+                            this[keys[i]] = properties[keys[i]];
             }
 
             /**
              * Liveness node_id.
-             * @type {number|undefined}
+             * @type {number}
              */
             Liveness.prototype.node_id = 0;
 
             /**
              * Liveness epoch.
-             * @type {Long|undefined}
+             * @type {Long}
              */
             Liveness.prototype.epoch = $util.Long ? $util.Long.fromBits(0,0,false) : 0;
 
             /**
              * Liveness expiration.
-             * @type {cockroach.util.hlc.Timestamp$Properties|undefined}
+             * @type {(cockroach.util.hlc.Timestamp$Properties|null)}
              */
             Liveness.prototype.expiration = null;
 
             /**
              * Liveness draining.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
             Liveness.prototype.draining = false;
 
@@ -24675,7 +24779,7 @@ export const cockroach = $root.cockroach = (function() {
                     writer.uint32(/* id 1, wireType 0 =*/8).int32(message.node_id);
                 if (message.epoch != null && message.hasOwnProperty("epoch"))
                     writer.uint32(/* id 2, wireType 0 =*/16).int64(message.epoch);
-                if (message.expiration && message.hasOwnProperty("expiration"))
+                if (message.expiration != null && message.hasOwnProperty("expiration"))
                     $root.cockroach.util.hlc.Timestamp.encode(message.expiration, writer.uint32(/* id 3, wireType 2 =*/26).fork()).ldelim();
                 if (message.draining != null && message.hasOwnProperty("draining"))
                     writer.uint32(/* id 4, wireType 0 =*/32).bool(message.draining);
@@ -24748,18 +24852,18 @@ export const cockroach = $root.cockroach = (function() {
             Liveness.verify = function verify(message) {
                 if (typeof message !== "object" || message === null)
                     return "object expected";
-                if (message.node_id != null)
+                if (message.node_id != null && message.hasOwnProperty("node_id"))
                     if (!$util.isInteger(message.node_id))
                         return "node_id: integer expected";
-                if (message.epoch != null)
+                if (message.epoch != null && message.hasOwnProperty("epoch"))
                     if (!$util.isInteger(message.epoch) && !(message.epoch && $util.isInteger(message.epoch.low) && $util.isInteger(message.epoch.high)))
                         return "epoch: integer|Long expected";
-                if (message.expiration != null) {
+                if (message.expiration != null && message.hasOwnProperty("expiration")) {
                     let error = $root.cockroach.util.hlc.Timestamp.verify(message.expiration);
                     if (error)
                         return "expiration." + error;
                 }
-                if (message.draining != null)
+                if (message.draining != null && message.hasOwnProperty("draining"))
                     if (typeof message.draining !== "boolean")
                         return "draining: boolean expected";
                 return null;
@@ -24892,54 +24996,55 @@ export const cockroach = $root.cockroach = (function() {
                 function ReplicaState(properties) {
                     if (properties)
                         for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                            this[keys[i]] = properties[keys[i]];
+                            if (properties[keys[i]] != null)
+                                this[keys[i]] = properties[keys[i]];
                 }
 
                 /**
                  * ReplicaState raft_applied_index.
-                 * @type {Long|undefined}
+                 * @type {Long}
                  */
                 ReplicaState.prototype.raft_applied_index = $util.Long ? $util.Long.fromBits(0,0,true) : 0;
 
                 /**
                  * ReplicaState lease_applied_index.
-                 * @type {Long|undefined}
+                 * @type {Long}
                  */
                 ReplicaState.prototype.lease_applied_index = $util.Long ? $util.Long.fromBits(0,0,true) : 0;
 
                 /**
                  * ReplicaState desc.
-                 * @type {cockroach.roachpb.RangeDescriptor$Properties|undefined}
+                 * @type {(cockroach.roachpb.RangeDescriptor$Properties|null)}
                  */
                 ReplicaState.prototype.desc = null;
 
                 /**
                  * ReplicaState lease.
-                 * @type {cockroach.roachpb.Lease$Properties|undefined}
+                 * @type {(cockroach.roachpb.Lease$Properties|null)}
                  */
                 ReplicaState.prototype.lease = null;
 
                 /**
                  * ReplicaState truncated_state.
-                 * @type {cockroach.roachpb.RaftTruncatedState$Properties|undefined}
+                 * @type {(cockroach.roachpb.RaftTruncatedState$Properties|null)}
                  */
                 ReplicaState.prototype.truncated_state = null;
 
                 /**
                  * ReplicaState gc_threshold.
-                 * @type {cockroach.util.hlc.Timestamp$Properties|undefined}
+                 * @type {(cockroach.util.hlc.Timestamp$Properties|null)}
                  */
                 ReplicaState.prototype.gc_threshold = null;
 
                 /**
                  * ReplicaState stats.
-                 * @type {cockroach.storage.engine.enginepb.MVCCStats$Properties|undefined}
+                 * @type {(cockroach.storage.engine.enginepb.MVCCStats$Properties|null)}
                  */
                 ReplicaState.prototype.stats = null;
 
                 /**
                  * ReplicaState txn_span_gc_threshold.
-                 * @type {cockroach.util.hlc.Timestamp$Properties|undefined}
+                 * @type {(cockroach.util.hlc.Timestamp$Properties|null)}
                  */
                 ReplicaState.prototype.txn_span_gc_threshold = null;
 
@@ -24965,17 +25070,17 @@ export const cockroach = $root.cockroach = (function() {
                         writer.uint32(/* id 1, wireType 0 =*/8).uint64(message.raft_applied_index);
                     if (message.lease_applied_index != null && message.hasOwnProperty("lease_applied_index"))
                         writer.uint32(/* id 2, wireType 0 =*/16).uint64(message.lease_applied_index);
-                    if (message.desc && message.hasOwnProperty("desc"))
+                    if (message.desc != null && message.hasOwnProperty("desc"))
                         $root.cockroach.roachpb.RangeDescriptor.encode(message.desc, writer.uint32(/* id 3, wireType 2 =*/26).fork()).ldelim();
-                    if (message.lease && message.hasOwnProperty("lease"))
+                    if (message.lease != null && message.hasOwnProperty("lease"))
                         $root.cockroach.roachpb.Lease.encode(message.lease, writer.uint32(/* id 4, wireType 2 =*/34).fork()).ldelim();
-                    if (message.truncated_state && message.hasOwnProperty("truncated_state"))
+                    if (message.truncated_state != null && message.hasOwnProperty("truncated_state"))
                         $root.cockroach.roachpb.RaftTruncatedState.encode(message.truncated_state, writer.uint32(/* id 5, wireType 2 =*/42).fork()).ldelim();
-                    if (message.gc_threshold && message.hasOwnProperty("gc_threshold"))
+                    if (message.gc_threshold != null && message.hasOwnProperty("gc_threshold"))
                         $root.cockroach.util.hlc.Timestamp.encode(message.gc_threshold, writer.uint32(/* id 6, wireType 2 =*/50).fork()).ldelim();
-                    if (message.stats && message.hasOwnProperty("stats"))
+                    if (message.stats != null && message.hasOwnProperty("stats"))
                         $root.cockroach.storage.engine.enginepb.MVCCStats.encode(message.stats, writer.uint32(/* id 7, wireType 2 =*/58).fork()).ldelim();
-                    if (message.txn_span_gc_threshold && message.hasOwnProperty("txn_span_gc_threshold"))
+                    if (message.txn_span_gc_threshold != null && message.hasOwnProperty("txn_span_gc_threshold"))
                         $root.cockroach.util.hlc.Timestamp.encode(message.txn_span_gc_threshold, writer.uint32(/* id 9, wireType 2 =*/74).fork()).ldelim();
                     return writer;
                 };
@@ -25058,38 +25163,38 @@ export const cockroach = $root.cockroach = (function() {
                 ReplicaState.verify = function verify(message) {
                     if (typeof message !== "object" || message === null)
                         return "object expected";
-                    if (message.raft_applied_index != null)
+                    if (message.raft_applied_index != null && message.hasOwnProperty("raft_applied_index"))
                         if (!$util.isInteger(message.raft_applied_index) && !(message.raft_applied_index && $util.isInteger(message.raft_applied_index.low) && $util.isInteger(message.raft_applied_index.high)))
                             return "raft_applied_index: integer|Long expected";
-                    if (message.lease_applied_index != null)
+                    if (message.lease_applied_index != null && message.hasOwnProperty("lease_applied_index"))
                         if (!$util.isInteger(message.lease_applied_index) && !(message.lease_applied_index && $util.isInteger(message.lease_applied_index.low) && $util.isInteger(message.lease_applied_index.high)))
                             return "lease_applied_index: integer|Long expected";
-                    if (message.desc != null) {
+                    if (message.desc != null && message.hasOwnProperty("desc")) {
                         let error = $root.cockroach.roachpb.RangeDescriptor.verify(message.desc);
                         if (error)
                             return "desc." + error;
                     }
-                    if (message.lease != null) {
+                    if (message.lease != null && message.hasOwnProperty("lease")) {
                         let error = $root.cockroach.roachpb.Lease.verify(message.lease);
                         if (error)
                             return "lease." + error;
                     }
-                    if (message.truncated_state != null) {
+                    if (message.truncated_state != null && message.hasOwnProperty("truncated_state")) {
                         let error = $root.cockroach.roachpb.RaftTruncatedState.verify(message.truncated_state);
                         if (error)
                             return "truncated_state." + error;
                     }
-                    if (message.gc_threshold != null) {
+                    if (message.gc_threshold != null && message.hasOwnProperty("gc_threshold")) {
                         let error = $root.cockroach.util.hlc.Timestamp.verify(message.gc_threshold);
                         if (error)
                             return "gc_threshold." + error;
                     }
-                    if (message.stats != null) {
+                    if (message.stats != null && message.hasOwnProperty("stats")) {
                         let error = $root.cockroach.storage.engine.enginepb.MVCCStats.verify(message.stats);
                         if (error)
                             return "stats." + error;
                     }
-                    if (message.txn_span_gc_threshold != null) {
+                    if (message.txn_span_gc_threshold != null && message.hasOwnProperty("txn_span_gc_threshold")) {
                         let error = $root.cockroach.util.hlc.Timestamp.verify(message.txn_span_gc_threshold);
                         if (error)
                             return "txn_span_gc_threshold." + error;
@@ -25261,36 +25366,37 @@ export const cockroach = $root.cockroach = (function() {
                 function RangeInfo(properties) {
                     if (properties)
                         for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                            this[keys[i]] = properties[keys[i]];
+                            if (properties[keys[i]] != null)
+                                this[keys[i]] = properties[keys[i]];
                 }
 
                 /**
                  * RangeInfo state.
-                 * @type {cockroach.storage.storagebase.ReplicaState$Properties|undefined}
+                 * @type {(cockroach.storage.storagebase.ReplicaState$Properties|null)}
                  */
                 RangeInfo.prototype.state = null;
 
                 /**
                  * RangeInfo lastIndex.
-                 * @type {Long|undefined}
+                 * @type {Long}
                  */
                 RangeInfo.prototype.lastIndex = $util.Long ? $util.Long.fromBits(0,0,true) : 0;
 
                 /**
                  * RangeInfo num_pending.
-                 * @type {Long|undefined}
+                 * @type {Long}
                  */
                 RangeInfo.prototype.num_pending = $util.Long ? $util.Long.fromBits(0,0,true) : 0;
 
                 /**
                  * RangeInfo num_dropped.
-                 * @type {Long|undefined}
+                 * @type {Long}
                  */
                 RangeInfo.prototype.num_dropped = $util.Long ? $util.Long.fromBits(0,0,true) : 0;
 
                 /**
                  * RangeInfo raft_log_size.
-                 * @type {Long|undefined}
+                 * @type {Long}
                  */
                 RangeInfo.prototype.raft_log_size = $util.Long ? $util.Long.fromBits(0,0,false) : 0;
 
@@ -25312,7 +25418,7 @@ export const cockroach = $root.cockroach = (function() {
                 RangeInfo.encode = function encode(message, writer) {
                     if (!writer)
                         writer = $Writer.create();
-                    if (message.state && message.hasOwnProperty("state"))
+                    if (message.state != null && message.hasOwnProperty("state"))
                         $root.cockroach.storage.storagebase.ReplicaState.encode(message.state, writer.uint32(/* id 1, wireType 2 =*/10).fork()).ldelim();
                     if (message.lastIndex != null && message.hasOwnProperty("lastIndex"))
                         writer.uint32(/* id 2, wireType 0 =*/16).uint64(message.lastIndex);
@@ -25394,21 +25500,21 @@ export const cockroach = $root.cockroach = (function() {
                 RangeInfo.verify = function verify(message) {
                     if (typeof message !== "object" || message === null)
                         return "object expected";
-                    if (message.state != null) {
+                    if (message.state != null && message.hasOwnProperty("state")) {
                         let error = $root.cockroach.storage.storagebase.ReplicaState.verify(message.state);
                         if (error)
                             return "state." + error;
                     }
-                    if (message.lastIndex != null)
+                    if (message.lastIndex != null && message.hasOwnProperty("lastIndex"))
                         if (!$util.isInteger(message.lastIndex) && !(message.lastIndex && $util.isInteger(message.lastIndex.low) && $util.isInteger(message.lastIndex.high)))
                             return "lastIndex: integer|Long expected";
-                    if (message.num_pending != null)
+                    if (message.num_pending != null && message.hasOwnProperty("num_pending"))
                         if (!$util.isInteger(message.num_pending) && !(message.num_pending && $util.isInteger(message.num_pending.low) && $util.isInteger(message.num_pending.high)))
                             return "num_pending: integer|Long expected";
-                    if (message.num_dropped != null)
+                    if (message.num_dropped != null && message.hasOwnProperty("num_dropped"))
                         if (!$util.isInteger(message.num_dropped) && !(message.num_dropped && $util.isInteger(message.num_dropped.low) && $util.isInteger(message.num_dropped.high)))
                             return "num_dropped: integer|Long expected";
-                    if (message.raft_log_size != null)
+                    if (message.raft_log_size != null && message.hasOwnProperty("raft_log_size"))
                         if (!$util.isInteger(message.raft_log_size) && !(message.raft_log_size && $util.isInteger(message.raft_log_size.low) && $util.isInteger(message.raft_log_size.high)))
                             return "raft_log_size: integer|Long expected";
                     return null;
@@ -25595,60 +25701,61 @@ export const cockroach = $root.cockroach = (function() {
             function Info(properties) {
                 if (properties)
                     for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                        this[keys[i]] = properties[keys[i]];
+                        if (properties[keys[i]] != null)
+                            this[keys[i]] = properties[keys[i]];
             }
 
             /**
              * Info go_version.
-             * @type {string|undefined}
+             * @type {string}
              */
             Info.prototype.go_version = "";
 
             /**
              * Info tag.
-             * @type {string|undefined}
+             * @type {string}
              */
             Info.prototype.tag = "";
 
             /**
              * Info time.
-             * @type {string|undefined}
+             * @type {string}
              */
             Info.prototype.time = "";
 
             /**
              * Info revision.
-             * @type {string|undefined}
+             * @type {string}
              */
             Info.prototype.revision = "";
 
             /**
              * Info cgo_compiler.
-             * @type {string|undefined}
+             * @type {string}
              */
             Info.prototype.cgo_compiler = "";
 
             /**
              * Info platform.
-             * @type {string|undefined}
+             * @type {string}
              */
             Info.prototype.platform = "";
 
             /**
              * Info distribution.
-             * @type {string|undefined}
+             * @type {string}
              */
             Info.prototype.distribution = "";
 
             /**
              * Info type.
-             * @type {string|undefined}
+             * @type {string}
              */
             Info.prototype.type = "";
 
             /**
              * Info dependencies.
-             * @type {string|undefined}
+             * @type {string}
              */
             Info.prototype.dependencies = "";
 
@@ -25772,31 +25879,31 @@ export const cockroach = $root.cockroach = (function() {
             Info.verify = function verify(message) {
                 if (typeof message !== "object" || message === null)
                     return "object expected";
-                if (message.go_version != null)
+                if (message.go_version != null && message.hasOwnProperty("go_version"))
                     if (!$util.isString(message.go_version))
                         return "go_version: string expected";
-                if (message.tag != null)
+                if (message.tag != null && message.hasOwnProperty("tag"))
                     if (!$util.isString(message.tag))
                         return "tag: string expected";
-                if (message.time != null)
+                if (message.time != null && message.hasOwnProperty("time"))
                     if (!$util.isString(message.time))
                         return "time: string expected";
-                if (message.revision != null)
+                if (message.revision != null && message.hasOwnProperty("revision"))
                     if (!$util.isString(message.revision))
                         return "revision: string expected";
-                if (message.cgo_compiler != null)
+                if (message.cgo_compiler != null && message.hasOwnProperty("cgo_compiler"))
                     if (!$util.isString(message.cgo_compiler))
                         return "cgo_compiler: string expected";
-                if (message.platform != null)
+                if (message.platform != null && message.hasOwnProperty("platform"))
                     if (!$util.isString(message.platform))
                         return "platform: string expected";
-                if (message.distribution != null)
+                if (message.distribution != null && message.hasOwnProperty("distribution"))
                     if (!$util.isString(message.distribution))
                         return "distribution: string expected";
-                if (message.type != null)
+                if (message.type != null && message.hasOwnProperty("type"))
                     if (!$util.isString(message.type))
                         return "type: string expected";
-                if (message.dependencies != null)
+                if (message.dependencies != null && message.hasOwnProperty("dependencies"))
                     if (!$util.isString(message.dependencies))
                         return "dependencies: string expected";
                 return null;
@@ -25935,18 +26042,19 @@ export const cockroach = $root.cockroach = (function() {
                 this.addresses = [];
                 if (properties)
                     for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                        this[keys[i]] = properties[keys[i]];
+                        if (properties[keys[i]] != null)
+                            this[keys[i]] = properties[keys[i]];
             }
 
             /**
              * BootstrapInfo addresses.
-             * @type {Array.<cockroach.util.UnresolvedAddr$Properties>|undefined}
+             * @type {Array.<cockroach.util.UnresolvedAddr$Properties>}
              */
             BootstrapInfo.prototype.addresses = $util.emptyArray;
 
             /**
              * BootstrapInfo timestamp.
-             * @type {cockroach.util.hlc.Timestamp$Properties|undefined}
+             * @type {(cockroach.util.hlc.Timestamp$Properties|null)}
              */
             BootstrapInfo.prototype.timestamp = null;
 
@@ -25968,10 +26076,10 @@ export const cockroach = $root.cockroach = (function() {
             BootstrapInfo.encode = function encode(message, writer) {
                 if (!writer)
                     writer = $Writer.create();
-                if (message.addresses && message.addresses.length)
+                if (message.addresses != null && message.addresses.length)
                     for (let i = 0; i < message.addresses.length; ++i)
                         $root.cockroach.util.UnresolvedAddr.encode(message.addresses[i], writer.uint32(/* id 1, wireType 2 =*/10).fork()).ldelim();
-                if (message.timestamp && message.hasOwnProperty("timestamp"))
+                if (message.timestamp != null && message.hasOwnProperty("timestamp"))
                     $root.cockroach.util.hlc.Timestamp.encode(message.timestamp, writer.uint32(/* id 2, wireType 2 =*/18).fork()).ldelim();
                 return writer;
             };
@@ -26038,7 +26146,7 @@ export const cockroach = $root.cockroach = (function() {
             BootstrapInfo.verify = function verify(message) {
                 if (typeof message !== "object" || message === null)
                     return "object expected";
-                if (message.addresses != null) {
+                if (message.addresses != null && message.hasOwnProperty("addresses")) {
                     if (!Array.isArray(message.addresses))
                         return "addresses: array expected";
                     for (let i = 0; i < message.addresses.length; ++i) {
@@ -26047,7 +26155,7 @@ export const cockroach = $root.cockroach = (function() {
                             return "addresses." + error;
                     }
                 }
-                if (message.timestamp != null) {
+                if (message.timestamp != null && message.hasOwnProperty("timestamp")) {
                     let error = $root.cockroach.util.hlc.Timestamp.verify(message.timestamp);
                     if (error)
                         return "timestamp." + error;
@@ -26159,36 +26267,37 @@ export const cockroach = $root.cockroach = (function() {
                 this.delta = {};
                 if (properties)
                     for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                        this[keys[i]] = properties[keys[i]];
+                        if (properties[keys[i]] != null)
+                            this[keys[i]] = properties[keys[i]];
             }
 
             /**
              * Request node_id.
-             * @type {number|undefined}
+             * @type {number}
              */
             Request.prototype.node_id = 0;
 
             /**
              * Request addr.
-             * @type {cockroach.util.UnresolvedAddr$Properties|undefined}
+             * @type {(cockroach.util.UnresolvedAddr$Properties|null)}
              */
             Request.prototype.addr = null;
 
             /**
              * Request high_water_stamps.
-             * @type {Object.<string,Long>|undefined}
+             * @type {Object.<string,Long>}
              */
             Request.prototype.high_water_stamps = $util.emptyObject;
 
             /**
              * Request delta.
-             * @type {Object.<string,cockroach.gossip.Info$Properties>|undefined}
+             * @type {Object.<string,cockroach.gossip.Info$Properties>}
              */
             Request.prototype.delta = $util.emptyObject;
 
             /**
              * Request cluster_id.
-             * @type {Uint8Array|undefined}
+             * @type {Uint8Array}
              */
             Request.prototype.cluster_id = $util.newBuffer([]);
 
@@ -26212,17 +26321,17 @@ export const cockroach = $root.cockroach = (function() {
                     writer = $Writer.create();
                 if (message.node_id != null && message.hasOwnProperty("node_id"))
                     writer.uint32(/* id 1, wireType 0 =*/8).int32(message.node_id);
-                if (message.addr && message.hasOwnProperty("addr"))
+                if (message.addr != null && message.hasOwnProperty("addr"))
                     $root.cockroach.util.UnresolvedAddr.encode(message.addr, writer.uint32(/* id 2, wireType 2 =*/18).fork()).ldelim();
-                if (message.high_water_stamps && message.hasOwnProperty("high_water_stamps"))
+                if (message.high_water_stamps != null && message.hasOwnProperty("high_water_stamps"))
                     for (let keys = Object.keys(message.high_water_stamps), i = 0; i < keys.length; ++i)
                         writer.uint32(/* id 3, wireType 2 =*/26).fork().uint32(/* id 1, wireType 0 =*/8).int32(keys[i]).uint32(/* id 2, wireType 0 =*/16).int64(message.high_water_stamps[keys[i]]).ldelim();
-                if (message.delta && message.hasOwnProperty("delta"))
+                if (message.delta != null && message.hasOwnProperty("delta"))
                     for (let keys = Object.keys(message.delta), i = 0; i < keys.length; ++i) {
                         writer.uint32(/* id 4, wireType 2 =*/34).fork().uint32(/* id 1, wireType 2 =*/10).string(keys[i]);
                         $root.cockroach.gossip.Info.encode(message.delta[keys[i]], writer.uint32(/* id 2, wireType 2 =*/18).fork()).ldelim().ldelim();
                     }
-                if (message.cluster_id && message.hasOwnProperty("cluster_id"))
+                if (message.cluster_id != null && message.hasOwnProperty("cluster_id"))
                     writer.uint32(/* id 5, wireType 2 =*/42).bytes(message.cluster_id);
                 return writer;
             };
@@ -26306,15 +26415,15 @@ export const cockroach = $root.cockroach = (function() {
             Request.verify = function verify(message) {
                 if (typeof message !== "object" || message === null)
                     return "object expected";
-                if (message.node_id != null)
+                if (message.node_id != null && message.hasOwnProperty("node_id"))
                     if (!$util.isInteger(message.node_id))
                         return "node_id: integer expected";
-                if (message.addr != null) {
+                if (message.addr != null && message.hasOwnProperty("addr")) {
                     let error = $root.cockroach.util.UnresolvedAddr.verify(message.addr);
                     if (error)
                         return "addr." + error;
                 }
-                if (message.high_water_stamps != null) {
+                if (message.high_water_stamps != null && message.hasOwnProperty("high_water_stamps")) {
                     if (!$util.isObject(message.high_water_stamps))
                         return "high_water_stamps: object expected";
                     let key = Object.keys(message.high_water_stamps);
@@ -26325,7 +26434,7 @@ export const cockroach = $root.cockroach = (function() {
                             return "high_water_stamps: integer|Long{k:int32} expected";
                     }
                 }
-                if (message.delta != null) {
+                if (message.delta != null && message.hasOwnProperty("delta")) {
                     if (!$util.isObject(message.delta))
                         return "delta: object expected";
                     let key = Object.keys(message.delta);
@@ -26335,7 +26444,7 @@ export const cockroach = $root.cockroach = (function() {
                             return "delta." + error;
                     }
                 }
-                if (message.cluster_id != null)
+                if (message.cluster_id != null && message.hasOwnProperty("cluster_id"))
                     if (!(message.cluster_id && typeof message.cluster_id.length === "number" || $util.isString(message.cluster_id)))
                         return "cluster_id: buffer expected";
                 return null;
@@ -26485,42 +26594,43 @@ export const cockroach = $root.cockroach = (function() {
                 this.high_water_stamps = {};
                 if (properties)
                     for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                        this[keys[i]] = properties[keys[i]];
+                        if (properties[keys[i]] != null)
+                            this[keys[i]] = properties[keys[i]];
             }
 
             /**
              * Response node_id.
-             * @type {number|undefined}
+             * @type {number}
              */
             Response.prototype.node_id = 0;
 
             /**
              * Response addr.
-             * @type {cockroach.util.UnresolvedAddr$Properties|undefined}
+             * @type {(cockroach.util.UnresolvedAddr$Properties|null)}
              */
             Response.prototype.addr = null;
 
             /**
              * Response alternate_addr.
-             * @type {cockroach.util.UnresolvedAddr$Properties|undefined}
+             * @type {(cockroach.util.UnresolvedAddr$Properties|null)}
              */
             Response.prototype.alternate_addr = null;
 
             /**
              * Response alternate_node_id.
-             * @type {number|undefined}
+             * @type {number}
              */
             Response.prototype.alternate_node_id = 0;
 
             /**
              * Response delta.
-             * @type {Object.<string,cockroach.gossip.Info$Properties>|undefined}
+             * @type {Object.<string,cockroach.gossip.Info$Properties>}
              */
             Response.prototype.delta = $util.emptyObject;
 
             /**
              * Response high_water_stamps.
-             * @type {Object.<string,Long>|undefined}
+             * @type {Object.<string,Long>}
              */
             Response.prototype.high_water_stamps = $util.emptyObject;
 
@@ -26544,18 +26654,18 @@ export const cockroach = $root.cockroach = (function() {
                     writer = $Writer.create();
                 if (message.node_id != null && message.hasOwnProperty("node_id"))
                     writer.uint32(/* id 1, wireType 0 =*/8).int32(message.node_id);
-                if (message.addr && message.hasOwnProperty("addr"))
+                if (message.addr != null && message.hasOwnProperty("addr"))
                     $root.cockroach.util.UnresolvedAddr.encode(message.addr, writer.uint32(/* id 2, wireType 2 =*/18).fork()).ldelim();
-                if (message.alternate_addr && message.hasOwnProperty("alternate_addr"))
+                if (message.alternate_addr != null && message.hasOwnProperty("alternate_addr"))
                     $root.cockroach.util.UnresolvedAddr.encode(message.alternate_addr, writer.uint32(/* id 3, wireType 2 =*/26).fork()).ldelim();
                 if (message.alternate_node_id != null && message.hasOwnProperty("alternate_node_id"))
                     writer.uint32(/* id 4, wireType 0 =*/32).int32(message.alternate_node_id);
-                if (message.delta && message.hasOwnProperty("delta"))
+                if (message.delta != null && message.hasOwnProperty("delta"))
                     for (let keys = Object.keys(message.delta), i = 0; i < keys.length; ++i) {
                         writer.uint32(/* id 5, wireType 2 =*/42).fork().uint32(/* id 1, wireType 2 =*/10).string(keys[i]);
                         $root.cockroach.gossip.Info.encode(message.delta[keys[i]], writer.uint32(/* id 2, wireType 2 =*/18).fork()).ldelim().ldelim();
                     }
-                if (message.high_water_stamps && message.hasOwnProperty("high_water_stamps"))
+                if (message.high_water_stamps != null && message.hasOwnProperty("high_water_stamps"))
                     for (let keys = Object.keys(message.high_water_stamps), i = 0; i < keys.length; ++i)
                         writer.uint32(/* id 6, wireType 2 =*/50).fork().uint32(/* id 1, wireType 0 =*/8).int32(keys[i]).uint32(/* id 2, wireType 0 =*/16).int64(message.high_water_stamps[keys[i]]).ldelim();
                 return writer;
@@ -26643,23 +26753,23 @@ export const cockroach = $root.cockroach = (function() {
             Response.verify = function verify(message) {
                 if (typeof message !== "object" || message === null)
                     return "object expected";
-                if (message.node_id != null)
+                if (message.node_id != null && message.hasOwnProperty("node_id"))
                     if (!$util.isInteger(message.node_id))
                         return "node_id: integer expected";
-                if (message.addr != null) {
+                if (message.addr != null && message.hasOwnProperty("addr")) {
                     let error = $root.cockroach.util.UnresolvedAddr.verify(message.addr);
                     if (error)
                         return "addr." + error;
                 }
-                if (message.alternate_addr != null) {
+                if (message.alternate_addr != null && message.hasOwnProperty("alternate_addr")) {
                     let error = $root.cockroach.util.UnresolvedAddr.verify(message.alternate_addr);
                     if (error)
                         return "alternate_addr." + error;
                 }
-                if (message.alternate_node_id != null)
+                if (message.alternate_node_id != null && message.hasOwnProperty("alternate_node_id"))
                     if (!$util.isInteger(message.alternate_node_id))
                         return "alternate_node_id: integer expected";
-                if (message.delta != null) {
+                if (message.delta != null && message.hasOwnProperty("delta")) {
                     if (!$util.isObject(message.delta))
                         return "delta: object expected";
                     let key = Object.keys(message.delta);
@@ -26669,7 +26779,7 @@ export const cockroach = $root.cockroach = (function() {
                             return "delta." + error;
                     }
                 }
-                if (message.high_water_stamps != null) {
+                if (message.high_water_stamps != null && message.hasOwnProperty("high_water_stamps")) {
                     if (!$util.isObject(message.high_water_stamps))
                         return "high_water_stamps: object expected";
                     let key = Object.keys(message.high_water_stamps);
@@ -26826,12 +26936,13 @@ export const cockroach = $root.cockroach = (function() {
                 this.infos = {};
                 if (properties)
                     for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                        this[keys[i]] = properties[keys[i]];
+                        if (properties[keys[i]] != null)
+                            this[keys[i]] = properties[keys[i]];
             }
 
             /**
              * InfoStatus infos.
-             * @type {Object.<string,cockroach.gossip.Info$Properties>|undefined}
+             * @type {Object.<string,cockroach.gossip.Info$Properties>}
              */
             InfoStatus.prototype.infos = $util.emptyObject;
 
@@ -26853,7 +26964,7 @@ export const cockroach = $root.cockroach = (function() {
             InfoStatus.encode = function encode(message, writer) {
                 if (!writer)
                     writer = $Writer.create();
-                if (message.infos && message.hasOwnProperty("infos"))
+                if (message.infos != null && message.hasOwnProperty("infos"))
                     for (let keys = Object.keys(message.infos), i = 0; i < keys.length; ++i) {
                         writer.uint32(/* id 1, wireType 2 =*/10).fork().uint32(/* id 1, wireType 2 =*/10).string(keys[i]);
                         $root.cockroach.gossip.Info.encode(message.infos[keys[i]], writer.uint32(/* id 2, wireType 2 =*/18).fork()).ldelim().ldelim();
@@ -26923,7 +27034,7 @@ export const cockroach = $root.cockroach = (function() {
             InfoStatus.verify = function verify(message) {
                 if (typeof message !== "object" || message === null)
                     return "object expected";
-                if (message.infos != null) {
+                if (message.infos != null && message.hasOwnProperty("infos")) {
                     if (!$util.isObject(message.infos))
                         return "infos: object expected";
                     let key = Object.keys(message.infos);
@@ -27031,42 +27142,43 @@ export const cockroach = $root.cockroach = (function() {
             function Info(properties) {
                 if (properties)
                     for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                        this[keys[i]] = properties[keys[i]];
+                        if (properties[keys[i]] != null)
+                            this[keys[i]] = properties[keys[i]];
             }
 
             /**
              * Info value.
-             * @type {cockroach.roachpb.Value$Properties|undefined}
+             * @type {(cockroach.roachpb.Value$Properties|null)}
              */
             Info.prototype.value = null;
 
             /**
              * Info orig_stamp.
-             * @type {Long|undefined}
+             * @type {Long}
              */
             Info.prototype.orig_stamp = $util.Long ? $util.Long.fromBits(0,0,false) : 0;
 
             /**
              * Info ttl_stamp.
-             * @type {Long|undefined}
+             * @type {Long}
              */
             Info.prototype.ttl_stamp = $util.Long ? $util.Long.fromBits(0,0,false) : 0;
 
             /**
              * Info hops.
-             * @type {number|undefined}
+             * @type {number}
              */
             Info.prototype.hops = 0;
 
             /**
              * Info node_id.
-             * @type {number|undefined}
+             * @type {number}
              */
             Info.prototype.node_id = 0;
 
             /**
              * Info peer_id.
-             * @type {number|undefined}
+             * @type {number}
              */
             Info.prototype.peer_id = 0;
 
@@ -27088,7 +27200,7 @@ export const cockroach = $root.cockroach = (function() {
             Info.encode = function encode(message, writer) {
                 if (!writer)
                     writer = $Writer.create();
-                if (message.value && message.hasOwnProperty("value"))
+                if (message.value != null && message.hasOwnProperty("value"))
                     $root.cockroach.roachpb.Value.encode(message.value, writer.uint32(/* id 1, wireType 2 =*/10).fork()).ldelim();
                 if (message.orig_stamp != null && message.hasOwnProperty("orig_stamp"))
                     writer.uint32(/* id 2, wireType 0 =*/16).int64(message.orig_stamp);
@@ -27175,24 +27287,24 @@ export const cockroach = $root.cockroach = (function() {
             Info.verify = function verify(message) {
                 if (typeof message !== "object" || message === null)
                     return "object expected";
-                if (message.value != null) {
+                if (message.value != null && message.hasOwnProperty("value")) {
                     let error = $root.cockroach.roachpb.Value.verify(message.value);
                     if (error)
                         return "value." + error;
                 }
-                if (message.orig_stamp != null)
+                if (message.orig_stamp != null && message.hasOwnProperty("orig_stamp"))
                     if (!$util.isInteger(message.orig_stamp) && !(message.orig_stamp && $util.isInteger(message.orig_stamp.low) && $util.isInteger(message.orig_stamp.high)))
                         return "orig_stamp: integer|Long expected";
-                if (message.ttl_stamp != null)
+                if (message.ttl_stamp != null && message.hasOwnProperty("ttl_stamp"))
                     if (!$util.isInteger(message.ttl_stamp) && !(message.ttl_stamp && $util.isInteger(message.ttl_stamp.low) && $util.isInteger(message.ttl_stamp.high)))
                         return "ttl_stamp: integer|Long expected";
-                if (message.hops != null)
+                if (message.hops != null && message.hasOwnProperty("hops"))
                     if (!$util.isInteger(message.hops))
                         return "hops: integer expected";
-                if (message.node_id != null)
+                if (message.node_id != null && message.hasOwnProperty("node_id"))
                     if (!$util.isInteger(message.node_id))
                         return "node_id: integer expected";
-                if (message.peer_id != null)
+                if (message.peer_id != null && message.hasOwnProperty("peer_id"))
                     if (!$util.isInteger(message.peer_id))
                         return "peer_id: integer expected";
                 return null;
@@ -27413,18 +27525,19 @@ export const cockroach = $root.cockroach = (function() {
                 function TimeSeriesDatapoint(properties) {
                     if (properties)
                         for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                            this[keys[i]] = properties[keys[i]];
+                            if (properties[keys[i]] != null)
+                                this[keys[i]] = properties[keys[i]];
                 }
 
                 /**
                  * TimeSeriesDatapoint timestamp_nanos.
-                 * @type {Long|undefined}
+                 * @type {Long}
                  */
                 TimeSeriesDatapoint.prototype.timestamp_nanos = $util.Long ? $util.Long.fromBits(0,0,false) : 0;
 
                 /**
                  * TimeSeriesDatapoint value.
-                 * @type {number|undefined}
+                 * @type {number}
                  */
                 TimeSeriesDatapoint.prototype.value = 0;
 
@@ -27513,10 +27626,10 @@ export const cockroach = $root.cockroach = (function() {
                 TimeSeriesDatapoint.verify = function verify(message) {
                     if (typeof message !== "object" || message === null)
                         return "object expected";
-                    if (message.timestamp_nanos != null)
+                    if (message.timestamp_nanos != null && message.hasOwnProperty("timestamp_nanos"))
                         if (!$util.isInteger(message.timestamp_nanos) && !(message.timestamp_nanos && $util.isInteger(message.timestamp_nanos.low) && $util.isInteger(message.timestamp_nanos.high)))
                             return "timestamp_nanos: integer|Long expected";
-                    if (message.value != null)
+                    if (message.value != null && message.hasOwnProperty("value"))
                         if (typeof message.value !== "number")
                             return "value: number expected";
                     return null;
@@ -27623,24 +27736,25 @@ export const cockroach = $root.cockroach = (function() {
                     this.datapoints = [];
                     if (properties)
                         for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                            this[keys[i]] = properties[keys[i]];
+                            if (properties[keys[i]] != null)
+                                this[keys[i]] = properties[keys[i]];
                 }
 
                 /**
                  * TimeSeriesData name.
-                 * @type {string|undefined}
+                 * @type {string}
                  */
                 TimeSeriesData.prototype.name = "";
 
                 /**
                  * TimeSeriesData source.
-                 * @type {string|undefined}
+                 * @type {string}
                  */
                 TimeSeriesData.prototype.source = "";
 
                 /**
                  * TimeSeriesData datapoints.
-                 * @type {Array.<cockroach.ts.tspb.TimeSeriesDatapoint$Properties>|undefined}
+                 * @type {Array.<cockroach.ts.tspb.TimeSeriesDatapoint$Properties>}
                  */
                 TimeSeriesData.prototype.datapoints = $util.emptyArray;
 
@@ -27666,7 +27780,7 @@ export const cockroach = $root.cockroach = (function() {
                         writer.uint32(/* id 1, wireType 2 =*/10).string(message.name);
                     if (message.source != null && message.hasOwnProperty("source"))
                         writer.uint32(/* id 2, wireType 2 =*/18).string(message.source);
-                    if (message.datapoints && message.datapoints.length)
+                    if (message.datapoints != null && message.datapoints.length)
                         for (let i = 0; i < message.datapoints.length; ++i)
                             $root.cockroach.ts.tspb.TimeSeriesDatapoint.encode(message.datapoints[i], writer.uint32(/* id 3, wireType 2 =*/26).fork()).ldelim();
                     return writer;
@@ -27737,13 +27851,13 @@ export const cockroach = $root.cockroach = (function() {
                 TimeSeriesData.verify = function verify(message) {
                     if (typeof message !== "object" || message === null)
                         return "object expected";
-                    if (message.name != null)
+                    if (message.name != null && message.hasOwnProperty("name"))
                         if (!$util.isString(message.name))
                             return "name: string expected";
-                    if (message.source != null)
+                    if (message.source != null && message.hasOwnProperty("source"))
                         if (!$util.isString(message.source))
                             return "source: string expected";
-                    if (message.datapoints != null) {
+                    if (message.datapoints != null && message.hasOwnProperty("datapoints")) {
                         if (!Array.isArray(message.datapoints))
                             return "datapoints: array expected";
                         for (let i = 0; i < message.datapoints.length; ++i) {
@@ -27897,36 +28011,37 @@ export const cockroach = $root.cockroach = (function() {
                     this.sources = [];
                     if (properties)
                         for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                            this[keys[i]] = properties[keys[i]];
+                            if (properties[keys[i]] != null)
+                                this[keys[i]] = properties[keys[i]];
                 }
 
                 /**
                  * Query name.
-                 * @type {string|undefined}
+                 * @type {string}
                  */
                 Query.prototype.name = "";
 
                 /**
                  * Query downsampler.
-                 * @type {cockroach.ts.tspb.TimeSeriesQueryAggregator|undefined}
+                 * @type {cockroach.ts.tspb.TimeSeriesQueryAggregator}
                  */
                 Query.prototype.downsampler = 1;
 
                 /**
                  * Query source_aggregator.
-                 * @type {cockroach.ts.tspb.TimeSeriesQueryAggregator|undefined}
+                 * @type {cockroach.ts.tspb.TimeSeriesQueryAggregator}
                  */
                 Query.prototype.source_aggregator = 2;
 
                 /**
                  * Query derivative.
-                 * @type {cockroach.ts.tspb.TimeSeriesQueryDerivative|undefined}
+                 * @type {cockroach.ts.tspb.TimeSeriesQueryDerivative}
                  */
                 Query.prototype.derivative = 0;
 
                 /**
                  * Query sources.
-                 * @type {Array.<string>|undefined}
+                 * @type {Array.<string>}
                  */
                 Query.prototype.sources = $util.emptyArray;
 
@@ -27956,7 +28071,7 @@ export const cockroach = $root.cockroach = (function() {
                         writer.uint32(/* id 3, wireType 0 =*/24).uint32(message.source_aggregator);
                     if (message.derivative != null && message.hasOwnProperty("derivative"))
                         writer.uint32(/* id 4, wireType 0 =*/32).uint32(message.derivative);
-                    if (message.sources && message.sources.length)
+                    if (message.sources != null && message.sources.length)
                         for (let i = 0; i < message.sources.length; ++i)
                             writer.uint32(/* id 5, wireType 2 =*/42).string(message.sources[i]);
                     return writer;
@@ -28033,10 +28148,10 @@ export const cockroach = $root.cockroach = (function() {
                 Query.verify = function verify(message) {
                     if (typeof message !== "object" || message === null)
                         return "object expected";
-                    if (message.name != null)
+                    if (message.name != null && message.hasOwnProperty("name"))
                         if (!$util.isString(message.name))
                             return "name: string expected";
-                    if (message.downsampler != null)
+                    if (message.downsampler != null && message.hasOwnProperty("downsampler"))
                         switch (message.downsampler) {
                         default:
                             return "downsampler: enum value expected";
@@ -28046,7 +28161,7 @@ export const cockroach = $root.cockroach = (function() {
                         case 4:
                             break;
                         }
-                    if (message.source_aggregator != null)
+                    if (message.source_aggregator != null && message.hasOwnProperty("source_aggregator"))
                         switch (message.source_aggregator) {
                         default:
                             return "source_aggregator: enum value expected";
@@ -28056,7 +28171,7 @@ export const cockroach = $root.cockroach = (function() {
                         case 4:
                             break;
                         }
-                    if (message.derivative != null)
+                    if (message.derivative != null && message.hasOwnProperty("derivative"))
                         switch (message.derivative) {
                         default:
                             return "derivative: enum value expected";
@@ -28065,7 +28180,7 @@ export const cockroach = $root.cockroach = (function() {
                         case 2:
                             break;
                         }
-                    if (message.sources != null) {
+                    if (message.sources != null && message.hasOwnProperty("sources")) {
                         if (!Array.isArray(message.sources))
                             return "sources: array expected";
                         for (let i = 0; i < message.sources.length; ++i)
@@ -28231,30 +28346,31 @@ export const cockroach = $root.cockroach = (function() {
                     this.queries = [];
                     if (properties)
                         for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                            this[keys[i]] = properties[keys[i]];
+                            if (properties[keys[i]] != null)
+                                this[keys[i]] = properties[keys[i]];
                 }
 
                 /**
                  * TimeSeriesQueryRequest start_nanos.
-                 * @type {Long|undefined}
+                 * @type {Long}
                  */
                 TimeSeriesQueryRequest.prototype.start_nanos = $util.Long ? $util.Long.fromBits(0,0,false) : 0;
 
                 /**
                  * TimeSeriesQueryRequest end_nanos.
-                 * @type {Long|undefined}
+                 * @type {Long}
                  */
                 TimeSeriesQueryRequest.prototype.end_nanos = $util.Long ? $util.Long.fromBits(0,0,false) : 0;
 
                 /**
                  * TimeSeriesQueryRequest queries.
-                 * @type {Array.<cockroach.ts.tspb.Query$Properties>|undefined}
+                 * @type {Array.<cockroach.ts.tspb.Query$Properties>}
                  */
                 TimeSeriesQueryRequest.prototype.queries = $util.emptyArray;
 
                 /**
                  * TimeSeriesQueryRequest sample_nanos.
-                 * @type {Long|undefined}
+                 * @type {Long}
                  */
                 TimeSeriesQueryRequest.prototype.sample_nanos = $util.Long ? $util.Long.fromBits(0,0,false) : 0;
 
@@ -28280,7 +28396,7 @@ export const cockroach = $root.cockroach = (function() {
                         writer.uint32(/* id 1, wireType 0 =*/8).int64(message.start_nanos);
                     if (message.end_nanos != null && message.hasOwnProperty("end_nanos"))
                         writer.uint32(/* id 2, wireType 0 =*/16).int64(message.end_nanos);
-                    if (message.queries && message.queries.length)
+                    if (message.queries != null && message.queries.length)
                         for (let i = 0; i < message.queries.length; ++i)
                             $root.cockroach.ts.tspb.Query.encode(message.queries[i], writer.uint32(/* id 3, wireType 2 =*/26).fork()).ldelim();
                     if (message.sample_nanos != null && message.hasOwnProperty("sample_nanos"))
@@ -28356,13 +28472,13 @@ export const cockroach = $root.cockroach = (function() {
                 TimeSeriesQueryRequest.verify = function verify(message) {
                     if (typeof message !== "object" || message === null)
                         return "object expected";
-                    if (message.start_nanos != null)
+                    if (message.start_nanos != null && message.hasOwnProperty("start_nanos"))
                         if (!$util.isInteger(message.start_nanos) && !(message.start_nanos && $util.isInteger(message.start_nanos.low) && $util.isInteger(message.start_nanos.high)))
                             return "start_nanos: integer|Long expected";
-                    if (message.end_nanos != null)
+                    if (message.end_nanos != null && message.hasOwnProperty("end_nanos"))
                         if (!$util.isInteger(message.end_nanos) && !(message.end_nanos && $util.isInteger(message.end_nanos.low) && $util.isInteger(message.end_nanos.high)))
                             return "end_nanos: integer|Long expected";
-                    if (message.queries != null) {
+                    if (message.queries != null && message.hasOwnProperty("queries")) {
                         if (!Array.isArray(message.queries))
                             return "queries: array expected";
                         for (let i = 0; i < message.queries.length; ++i) {
@@ -28371,7 +28487,7 @@ export const cockroach = $root.cockroach = (function() {
                                 return "queries." + error;
                         }
                     }
-                    if (message.sample_nanos != null)
+                    if (message.sample_nanos != null && message.hasOwnProperty("sample_nanos"))
                         if (!$util.isInteger(message.sample_nanos) && !(message.sample_nanos && $util.isInteger(message.sample_nanos.low) && $util.isInteger(message.sample_nanos.high)))
                             return "sample_nanos: integer|Long expected";
                     return null;
@@ -28526,12 +28642,13 @@ export const cockroach = $root.cockroach = (function() {
                     this.results = [];
                     if (properties)
                         for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                            this[keys[i]] = properties[keys[i]];
+                            if (properties[keys[i]] != null)
+                                this[keys[i]] = properties[keys[i]];
                 }
 
                 /**
                  * TimeSeriesQueryResponse results.
-                 * @type {Array.<cockroach.ts.tspb.TimeSeriesQueryResponse.Result$Properties>|undefined}
+                 * @type {Array.<cockroach.ts.tspb.TimeSeriesQueryResponse.Result$Properties>}
                  */
                 TimeSeriesQueryResponse.prototype.results = $util.emptyArray;
 
@@ -28553,7 +28670,7 @@ export const cockroach = $root.cockroach = (function() {
                 TimeSeriesQueryResponse.encode = function encode(message, writer) {
                     if (!writer)
                         writer = $Writer.create();
-                    if (message.results && message.results.length)
+                    if (message.results != null && message.results.length)
                         for (let i = 0; i < message.results.length; ++i)
                             $root.cockroach.ts.tspb.TimeSeriesQueryResponse.Result.encode(message.results[i], writer.uint32(/* id 1, wireType 2 =*/10).fork()).ldelim();
                     return writer;
@@ -28618,7 +28735,7 @@ export const cockroach = $root.cockroach = (function() {
                 TimeSeriesQueryResponse.verify = function verify(message) {
                     if (typeof message !== "object" || message === null)
                         return "object expected";
-                    if (message.results != null) {
+                    if (message.results != null && message.hasOwnProperty("results")) {
                         if (!Array.isArray(message.results))
                             return "results: array expected";
                         for (let i = 0; i < message.results.length; ++i) {
@@ -28718,18 +28835,19 @@ export const cockroach = $root.cockroach = (function() {
                         this.datapoints = [];
                         if (properties)
                             for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                                this[keys[i]] = properties[keys[i]];
+                                if (properties[keys[i]] != null)
+                                    this[keys[i]] = properties[keys[i]];
                     }
 
                     /**
                      * Result query.
-                     * @type {cockroach.ts.tspb.Query$Properties|undefined}
+                     * @type {(cockroach.ts.tspb.Query$Properties|null)}
                      */
                     Result.prototype.query = null;
 
                     /**
                      * Result datapoints.
-                     * @type {Array.<cockroach.ts.tspb.TimeSeriesDatapoint$Properties>|undefined}
+                     * @type {Array.<cockroach.ts.tspb.TimeSeriesDatapoint$Properties>}
                      */
                     Result.prototype.datapoints = $util.emptyArray;
 
@@ -28751,9 +28869,9 @@ export const cockroach = $root.cockroach = (function() {
                     Result.encode = function encode(message, writer) {
                         if (!writer)
                             writer = $Writer.create();
-                        if (message.query && message.hasOwnProperty("query"))
+                        if (message.query != null && message.hasOwnProperty("query"))
                             $root.cockroach.ts.tspb.Query.encode(message.query, writer.uint32(/* id 1, wireType 2 =*/10).fork()).ldelim();
-                        if (message.datapoints && message.datapoints.length)
+                        if (message.datapoints != null && message.datapoints.length)
                             for (let i = 0; i < message.datapoints.length; ++i)
                                 $root.cockroach.ts.tspb.TimeSeriesDatapoint.encode(message.datapoints[i], writer.uint32(/* id 2, wireType 2 =*/18).fork()).ldelim();
                         return writer;
@@ -28821,12 +28939,12 @@ export const cockroach = $root.cockroach = (function() {
                     Result.verify = function verify(message) {
                         if (typeof message !== "object" || message === null)
                             return "object expected";
-                        if (message.query != null) {
+                        if (message.query != null && message.hasOwnProperty("query")) {
                             let error = $root.cockroach.ts.tspb.Query.verify(message.query);
                             if (error)
                                 return "query." + error;
                         }
-                        if (message.datapoints != null) {
+                        if (message.datapoints != null && message.hasOwnProperty("datapoints")) {
                             if (!Array.isArray(message.datapoints))
                                 return "datapoints: array expected";
                             for (let i = 0; i < message.datapoints.length; ++i) {
@@ -28988,7 +29106,7 @@ export const cockroach = $root.cockroach = (function() {
     return cockroach;
 })();
 
-export const gogoproto = $root.gogoproto = (function() {
+export const gogoproto = $root.gogoproto = (() => {
 
     /**
      * Namespace gogoproto.
@@ -29000,7 +29118,7 @@ export const gogoproto = $root.gogoproto = (function() {
     return gogoproto;
 })();
 
-export const google = $root.google = (function() {
+export const google = $root.google = (() => {
 
     /**
      * Namespace google.
@@ -29037,12 +29155,13 @@ export const google = $root.google = (function() {
                 this.file = [];
                 if (properties)
                     for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                        this[keys[i]] = properties[keys[i]];
+                        if (properties[keys[i]] != null)
+                            this[keys[i]] = properties[keys[i]];
             }
 
             /**
              * FileDescriptorSet file.
-             * @type {Array.<google.protobuf.FileDescriptorProto$Properties>|undefined}
+             * @type {Array.<google.protobuf.FileDescriptorProto$Properties>}
              */
             FileDescriptorSet.prototype.file = $util.emptyArray;
 
@@ -29064,7 +29183,7 @@ export const google = $root.google = (function() {
             FileDescriptorSet.encode = function encode(message, writer) {
                 if (!writer)
                     writer = $Writer.create();
-                if (message.file && message.file.length)
+                if (message.file != null && message.file.length)
                     for (let i = 0; i < message.file.length; ++i)
                         $root.google.protobuf.FileDescriptorProto.encode(message.file[i], writer.uint32(/* id 1, wireType 2 =*/10).fork()).ldelim();
                 return writer;
@@ -29129,7 +29248,7 @@ export const google = $root.google = (function() {
             FileDescriptorSet.verify = function verify(message) {
                 if (typeof message !== "object" || message === null)
                     return "object expected";
-                if (message.file != null) {
+                if (message.file != null && message.hasOwnProperty("file")) {
                     if (!Array.isArray(message.file))
                         return "file: array expected";
                     for (let i = 0; i < message.file.length; ++i) {
@@ -29248,78 +29367,79 @@ export const google = $root.google = (function() {
                 this.extension = [];
                 if (properties)
                     for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                        this[keys[i]] = properties[keys[i]];
+                        if (properties[keys[i]] != null)
+                            this[keys[i]] = properties[keys[i]];
             }
 
             /**
              * FileDescriptorProto name.
-             * @type {string|undefined}
+             * @type {string}
              */
             FileDescriptorProto.prototype.name = "";
 
             /**
              * FileDescriptorProto package.
-             * @type {string|undefined}
+             * @type {string}
              */
             FileDescriptorProto.prototype["package"] = "";
 
             /**
              * FileDescriptorProto dependency.
-             * @type {Array.<string>|undefined}
+             * @type {Array.<string>}
              */
             FileDescriptorProto.prototype.dependency = $util.emptyArray;
 
             /**
              * FileDescriptorProto public_dependency.
-             * @type {Array.<number>|undefined}
+             * @type {Array.<number>}
              */
             FileDescriptorProto.prototype.public_dependency = $util.emptyArray;
 
             /**
              * FileDescriptorProto weak_dependency.
-             * @type {Array.<number>|undefined}
+             * @type {Array.<number>}
              */
             FileDescriptorProto.prototype.weak_dependency = $util.emptyArray;
 
             /**
              * FileDescriptorProto message_type.
-             * @type {Array.<google.protobuf.DescriptorProto$Properties>|undefined}
+             * @type {Array.<google.protobuf.DescriptorProto$Properties>}
              */
             FileDescriptorProto.prototype.message_type = $util.emptyArray;
 
             /**
              * FileDescriptorProto enum_type.
-             * @type {Array.<google.protobuf.EnumDescriptorProto$Properties>|undefined}
+             * @type {Array.<google.protobuf.EnumDescriptorProto$Properties>}
              */
             FileDescriptorProto.prototype.enum_type = $util.emptyArray;
 
             /**
              * FileDescriptorProto service.
-             * @type {Array.<google.protobuf.ServiceDescriptorProto$Properties>|undefined}
+             * @type {Array.<google.protobuf.ServiceDescriptorProto$Properties>}
              */
             FileDescriptorProto.prototype.service = $util.emptyArray;
 
             /**
              * FileDescriptorProto extension.
-             * @type {Array.<google.protobuf.FieldDescriptorProto$Properties>|undefined}
+             * @type {Array.<google.protobuf.FieldDescriptorProto$Properties>}
              */
             FileDescriptorProto.prototype.extension = $util.emptyArray;
 
             /**
              * FileDescriptorProto options.
-             * @type {google.protobuf.FileOptions$Properties|undefined}
+             * @type {(google.protobuf.FileOptions$Properties|null)}
              */
             FileDescriptorProto.prototype.options = null;
 
             /**
              * FileDescriptorProto source_code_info.
-             * @type {google.protobuf.SourceCodeInfo$Properties|undefined}
+             * @type {(google.protobuf.SourceCodeInfo$Properties|null)}
              */
             FileDescriptorProto.prototype.source_code_info = null;
 
             /**
              * FileDescriptorProto syntax.
-             * @type {string|undefined}
+             * @type {string}
              */
             FileDescriptorProto.prototype.syntax = "";
 
@@ -29345,29 +29465,29 @@ export const google = $root.google = (function() {
                     writer.uint32(/* id 1, wireType 2 =*/10).string(message.name);
                 if (message["package"] != null && message.hasOwnProperty("package"))
                     writer.uint32(/* id 2, wireType 2 =*/18).string(message["package"]);
-                if (message.dependency && message.dependency.length)
+                if (message.dependency != null && message.dependency.length)
                     for (let i = 0; i < message.dependency.length; ++i)
                         writer.uint32(/* id 3, wireType 2 =*/26).string(message.dependency[i]);
-                if (message.message_type && message.message_type.length)
+                if (message.message_type != null && message.message_type.length)
                     for (let i = 0; i < message.message_type.length; ++i)
                         $root.google.protobuf.DescriptorProto.encode(message.message_type[i], writer.uint32(/* id 4, wireType 2 =*/34).fork()).ldelim();
-                if (message.enum_type && message.enum_type.length)
+                if (message.enum_type != null && message.enum_type.length)
                     for (let i = 0; i < message.enum_type.length; ++i)
                         $root.google.protobuf.EnumDescriptorProto.encode(message.enum_type[i], writer.uint32(/* id 5, wireType 2 =*/42).fork()).ldelim();
-                if (message.service && message.service.length)
+                if (message.service != null && message.service.length)
                     for (let i = 0; i < message.service.length; ++i)
                         $root.google.protobuf.ServiceDescriptorProto.encode(message.service[i], writer.uint32(/* id 6, wireType 2 =*/50).fork()).ldelim();
-                if (message.extension && message.extension.length)
+                if (message.extension != null && message.extension.length)
                     for (let i = 0; i < message.extension.length; ++i)
                         $root.google.protobuf.FieldDescriptorProto.encode(message.extension[i], writer.uint32(/* id 7, wireType 2 =*/58).fork()).ldelim();
-                if (message.options && message.hasOwnProperty("options"))
+                if (message.options != null && message.hasOwnProperty("options"))
                     $root.google.protobuf.FileOptions.encode(message.options, writer.uint32(/* id 8, wireType 2 =*/66).fork()).ldelim();
-                if (message.source_code_info && message.hasOwnProperty("source_code_info"))
+                if (message.source_code_info != null && message.hasOwnProperty("source_code_info"))
                     $root.google.protobuf.SourceCodeInfo.encode(message.source_code_info, writer.uint32(/* id 9, wireType 2 =*/74).fork()).ldelim();
-                if (message.public_dependency && message.public_dependency.length)
+                if (message.public_dependency != null && message.public_dependency.length)
                     for (let i = 0; i < message.public_dependency.length; ++i)
                         writer.uint32(/* id 10, wireType 0 =*/80).int32(message.public_dependency[i]);
-                if (message.weak_dependency && message.weak_dependency.length)
+                if (message.weak_dependency != null && message.weak_dependency.length)
                     for (let i = 0; i < message.weak_dependency.length; ++i)
                         writer.uint32(/* id 11, wireType 0 =*/88).int32(message.weak_dependency[i]);
                 if (message.syntax != null && message.hasOwnProperty("syntax"))
@@ -29489,34 +29609,34 @@ export const google = $root.google = (function() {
             FileDescriptorProto.verify = function verify(message) {
                 if (typeof message !== "object" || message === null)
                     return "object expected";
-                if (message.name != null)
+                if (message.name != null && message.hasOwnProperty("name"))
                     if (!$util.isString(message.name))
                         return "name: string expected";
-                if (message["package"] != null)
+                if (message["package"] != null && message.hasOwnProperty("package"))
                     if (!$util.isString(message["package"]))
                         return "package: string expected";
-                if (message.dependency != null) {
+                if (message.dependency != null && message.hasOwnProperty("dependency")) {
                     if (!Array.isArray(message.dependency))
                         return "dependency: array expected";
                     for (let i = 0; i < message.dependency.length; ++i)
                         if (!$util.isString(message.dependency[i]))
                             return "dependency: string[] expected";
                 }
-                if (message.public_dependency != null) {
+                if (message.public_dependency != null && message.hasOwnProperty("public_dependency")) {
                     if (!Array.isArray(message.public_dependency))
                         return "public_dependency: array expected";
                     for (let i = 0; i < message.public_dependency.length; ++i)
                         if (!$util.isInteger(message.public_dependency[i]))
                             return "public_dependency: integer[] expected";
                 }
-                if (message.weak_dependency != null) {
+                if (message.weak_dependency != null && message.hasOwnProperty("weak_dependency")) {
                     if (!Array.isArray(message.weak_dependency))
                         return "weak_dependency: array expected";
                     for (let i = 0; i < message.weak_dependency.length; ++i)
                         if (!$util.isInteger(message.weak_dependency[i]))
                             return "weak_dependency: integer[] expected";
                 }
-                if (message.message_type != null) {
+                if (message.message_type != null && message.hasOwnProperty("message_type")) {
                     if (!Array.isArray(message.message_type))
                         return "message_type: array expected";
                     for (let i = 0; i < message.message_type.length; ++i) {
@@ -29525,7 +29645,7 @@ export const google = $root.google = (function() {
                             return "message_type." + error;
                     }
                 }
-                if (message.enum_type != null) {
+                if (message.enum_type != null && message.hasOwnProperty("enum_type")) {
                     if (!Array.isArray(message.enum_type))
                         return "enum_type: array expected";
                     for (let i = 0; i < message.enum_type.length; ++i) {
@@ -29534,7 +29654,7 @@ export const google = $root.google = (function() {
                             return "enum_type." + error;
                     }
                 }
-                if (message.service != null) {
+                if (message.service != null && message.hasOwnProperty("service")) {
                     if (!Array.isArray(message.service))
                         return "service: array expected";
                     for (let i = 0; i < message.service.length; ++i) {
@@ -29543,7 +29663,7 @@ export const google = $root.google = (function() {
                             return "service." + error;
                     }
                 }
-                if (message.extension != null) {
+                if (message.extension != null && message.hasOwnProperty("extension")) {
                     if (!Array.isArray(message.extension))
                         return "extension: array expected";
                     for (let i = 0; i < message.extension.length; ++i) {
@@ -29552,17 +29672,17 @@ export const google = $root.google = (function() {
                             return "extension." + error;
                     }
                 }
-                if (message.options != null) {
+                if (message.options != null && message.hasOwnProperty("options")) {
                     let error = $root.google.protobuf.FileOptions.verify(message.options);
                     if (error)
                         return "options." + error;
                 }
-                if (message.source_code_info != null) {
+                if (message.source_code_info != null && message.hasOwnProperty("source_code_info")) {
                     let error = $root.google.protobuf.SourceCodeInfo.verify(message.source_code_info);
                     if (error)
                         return "source_code_info." + error;
                 }
-                if (message.syntax != null)
+                if (message.syntax != null && message.hasOwnProperty("syntax"))
                     if (!$util.isString(message.syntax))
                         return "syntax: string expected";
                 return null;
@@ -29795,66 +29915,67 @@ export const google = $root.google = (function() {
                 this.reserved_name = [];
                 if (properties)
                     for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                        this[keys[i]] = properties[keys[i]];
+                        if (properties[keys[i]] != null)
+                            this[keys[i]] = properties[keys[i]];
             }
 
             /**
              * DescriptorProto name.
-             * @type {string|undefined}
+             * @type {string}
              */
             DescriptorProto.prototype.name = "";
 
             /**
              * DescriptorProto field.
-             * @type {Array.<google.protobuf.FieldDescriptorProto$Properties>|undefined}
+             * @type {Array.<google.protobuf.FieldDescriptorProto$Properties>}
              */
             DescriptorProto.prototype.field = $util.emptyArray;
 
             /**
              * DescriptorProto extension.
-             * @type {Array.<google.protobuf.FieldDescriptorProto$Properties>|undefined}
+             * @type {Array.<google.protobuf.FieldDescriptorProto$Properties>}
              */
             DescriptorProto.prototype.extension = $util.emptyArray;
 
             /**
              * DescriptorProto nested_type.
-             * @type {Array.<google.protobuf.DescriptorProto$Properties>|undefined}
+             * @type {Array.<google.protobuf.DescriptorProto$Properties>}
              */
             DescriptorProto.prototype.nested_type = $util.emptyArray;
 
             /**
              * DescriptorProto enum_type.
-             * @type {Array.<google.protobuf.EnumDescriptorProto$Properties>|undefined}
+             * @type {Array.<google.protobuf.EnumDescriptorProto$Properties>}
              */
             DescriptorProto.prototype.enum_type = $util.emptyArray;
 
             /**
              * DescriptorProto extension_range.
-             * @type {Array.<google.protobuf.DescriptorProto.ExtensionRange$Properties>|undefined}
+             * @type {Array.<google.protobuf.DescriptorProto.ExtensionRange$Properties>}
              */
             DescriptorProto.prototype.extension_range = $util.emptyArray;
 
             /**
              * DescriptorProto oneof_decl.
-             * @type {Array.<google.protobuf.OneofDescriptorProto$Properties>|undefined}
+             * @type {Array.<google.protobuf.OneofDescriptorProto$Properties>}
              */
             DescriptorProto.prototype.oneof_decl = $util.emptyArray;
 
             /**
              * DescriptorProto options.
-             * @type {google.protobuf.MessageOptions$Properties|undefined}
+             * @type {(google.protobuf.MessageOptions$Properties|null)}
              */
             DescriptorProto.prototype.options = null;
 
             /**
              * DescriptorProto reserved_range.
-             * @type {Array.<google.protobuf.DescriptorProto.ReservedRange$Properties>|undefined}
+             * @type {Array.<google.protobuf.DescriptorProto.ReservedRange$Properties>}
              */
             DescriptorProto.prototype.reserved_range = $util.emptyArray;
 
             /**
              * DescriptorProto reserved_name.
-             * @type {Array.<string>|undefined}
+             * @type {Array.<string>}
              */
             DescriptorProto.prototype.reserved_name = $util.emptyArray;
 
@@ -29878,30 +29999,30 @@ export const google = $root.google = (function() {
                     writer = $Writer.create();
                 if (message.name != null && message.hasOwnProperty("name"))
                     writer.uint32(/* id 1, wireType 2 =*/10).string(message.name);
-                if (message.field && message.field.length)
+                if (message.field != null && message.field.length)
                     for (let i = 0; i < message.field.length; ++i)
                         $root.google.protobuf.FieldDescriptorProto.encode(message.field[i], writer.uint32(/* id 2, wireType 2 =*/18).fork()).ldelim();
-                if (message.nested_type && message.nested_type.length)
+                if (message.nested_type != null && message.nested_type.length)
                     for (let i = 0; i < message.nested_type.length; ++i)
                         $root.google.protobuf.DescriptorProto.encode(message.nested_type[i], writer.uint32(/* id 3, wireType 2 =*/26).fork()).ldelim();
-                if (message.enum_type && message.enum_type.length)
+                if (message.enum_type != null && message.enum_type.length)
                     for (let i = 0; i < message.enum_type.length; ++i)
                         $root.google.protobuf.EnumDescriptorProto.encode(message.enum_type[i], writer.uint32(/* id 4, wireType 2 =*/34).fork()).ldelim();
-                if (message.extension_range && message.extension_range.length)
+                if (message.extension_range != null && message.extension_range.length)
                     for (let i = 0; i < message.extension_range.length; ++i)
                         $root.google.protobuf.DescriptorProto.ExtensionRange.encode(message.extension_range[i], writer.uint32(/* id 5, wireType 2 =*/42).fork()).ldelim();
-                if (message.extension && message.extension.length)
+                if (message.extension != null && message.extension.length)
                     for (let i = 0; i < message.extension.length; ++i)
                         $root.google.protobuf.FieldDescriptorProto.encode(message.extension[i], writer.uint32(/* id 6, wireType 2 =*/50).fork()).ldelim();
-                if (message.options && message.hasOwnProperty("options"))
+                if (message.options != null && message.hasOwnProperty("options"))
                     $root.google.protobuf.MessageOptions.encode(message.options, writer.uint32(/* id 7, wireType 2 =*/58).fork()).ldelim();
-                if (message.oneof_decl && message.oneof_decl.length)
+                if (message.oneof_decl != null && message.oneof_decl.length)
                     for (let i = 0; i < message.oneof_decl.length; ++i)
                         $root.google.protobuf.OneofDescriptorProto.encode(message.oneof_decl[i], writer.uint32(/* id 8, wireType 2 =*/66).fork()).ldelim();
-                if (message.reserved_range && message.reserved_range.length)
+                if (message.reserved_range != null && message.reserved_range.length)
                     for (let i = 0; i < message.reserved_range.length; ++i)
                         $root.google.protobuf.DescriptorProto.ReservedRange.encode(message.reserved_range[i], writer.uint32(/* id 9, wireType 2 =*/74).fork()).ldelim();
-                if (message.reserved_name && message.reserved_name.length)
+                if (message.reserved_name != null && message.reserved_name.length)
                     for (let i = 0; i < message.reserved_name.length; ++i)
                         writer.uint32(/* id 10, wireType 2 =*/82).string(message.reserved_name[i]);
                 return writer;
@@ -30007,10 +30128,10 @@ export const google = $root.google = (function() {
             DescriptorProto.verify = function verify(message) {
                 if (typeof message !== "object" || message === null)
                     return "object expected";
-                if (message.name != null)
+                if (message.name != null && message.hasOwnProperty("name"))
                     if (!$util.isString(message.name))
                         return "name: string expected";
-                if (message.field != null) {
+                if (message.field != null && message.hasOwnProperty("field")) {
                     if (!Array.isArray(message.field))
                         return "field: array expected";
                     for (let i = 0; i < message.field.length; ++i) {
@@ -30019,7 +30140,7 @@ export const google = $root.google = (function() {
                             return "field." + error;
                     }
                 }
-                if (message.extension != null) {
+                if (message.extension != null && message.hasOwnProperty("extension")) {
                     if (!Array.isArray(message.extension))
                         return "extension: array expected";
                     for (let i = 0; i < message.extension.length; ++i) {
@@ -30028,7 +30149,7 @@ export const google = $root.google = (function() {
                             return "extension." + error;
                     }
                 }
-                if (message.nested_type != null) {
+                if (message.nested_type != null && message.hasOwnProperty("nested_type")) {
                     if (!Array.isArray(message.nested_type))
                         return "nested_type: array expected";
                     for (let i = 0; i < message.nested_type.length; ++i) {
@@ -30037,7 +30158,7 @@ export const google = $root.google = (function() {
                             return "nested_type." + error;
                     }
                 }
-                if (message.enum_type != null) {
+                if (message.enum_type != null && message.hasOwnProperty("enum_type")) {
                     if (!Array.isArray(message.enum_type))
                         return "enum_type: array expected";
                     for (let i = 0; i < message.enum_type.length; ++i) {
@@ -30046,7 +30167,7 @@ export const google = $root.google = (function() {
                             return "enum_type." + error;
                     }
                 }
-                if (message.extension_range != null) {
+                if (message.extension_range != null && message.hasOwnProperty("extension_range")) {
                     if (!Array.isArray(message.extension_range))
                         return "extension_range: array expected";
                     for (let i = 0; i < message.extension_range.length; ++i) {
@@ -30055,7 +30176,7 @@ export const google = $root.google = (function() {
                             return "extension_range." + error;
                     }
                 }
-                if (message.oneof_decl != null) {
+                if (message.oneof_decl != null && message.hasOwnProperty("oneof_decl")) {
                     if (!Array.isArray(message.oneof_decl))
                         return "oneof_decl: array expected";
                     for (let i = 0; i < message.oneof_decl.length; ++i) {
@@ -30064,12 +30185,12 @@ export const google = $root.google = (function() {
                             return "oneof_decl." + error;
                     }
                 }
-                if (message.options != null) {
+                if (message.options != null && message.hasOwnProperty("options")) {
                     let error = $root.google.protobuf.MessageOptions.verify(message.options);
                     if (error)
                         return "options." + error;
                 }
-                if (message.reserved_range != null) {
+                if (message.reserved_range != null && message.hasOwnProperty("reserved_range")) {
                     if (!Array.isArray(message.reserved_range))
                         return "reserved_range: array expected";
                     for (let i = 0; i < message.reserved_range.length; ++i) {
@@ -30078,7 +30199,7 @@ export const google = $root.google = (function() {
                             return "reserved_range." + error;
                     }
                 }
-                if (message.reserved_name != null) {
+                if (message.reserved_name != null && message.hasOwnProperty("reserved_name")) {
                     if (!Array.isArray(message.reserved_name))
                         return "reserved_name: array expected";
                     for (let i = 0; i < message.reserved_name.length; ++i)
@@ -30300,18 +30421,19 @@ export const google = $root.google = (function() {
                 function ExtensionRange(properties) {
                     if (properties)
                         for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                            this[keys[i]] = properties[keys[i]];
+                            if (properties[keys[i]] != null)
+                                this[keys[i]] = properties[keys[i]];
                 }
 
                 /**
                  * ExtensionRange start.
-                 * @type {number|undefined}
+                 * @type {number}
                  */
                 ExtensionRange.prototype.start = 0;
 
                 /**
                  * ExtensionRange end.
-                 * @type {number|undefined}
+                 * @type {number}
                  */
                 ExtensionRange.prototype.end = 0;
 
@@ -30400,10 +30522,10 @@ export const google = $root.google = (function() {
                 ExtensionRange.verify = function verify(message) {
                     if (typeof message !== "object" || message === null)
                         return "object expected";
-                    if (message.start != null)
+                    if (message.start != null && message.hasOwnProperty("start"))
                         if (!$util.isInteger(message.start))
                             return "start: integer expected";
-                    if (message.end != null)
+                    if (message.end != null && message.hasOwnProperty("end"))
                         if (!$util.isInteger(message.end))
                             return "end: integer expected";
                     return null;
@@ -30494,18 +30616,19 @@ export const google = $root.google = (function() {
                 function ReservedRange(properties) {
                     if (properties)
                         for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                            this[keys[i]] = properties[keys[i]];
+                            if (properties[keys[i]] != null)
+                                this[keys[i]] = properties[keys[i]];
                 }
 
                 /**
                  * ReservedRange start.
-                 * @type {number|undefined}
+                 * @type {number}
                  */
                 ReservedRange.prototype.start = 0;
 
                 /**
                  * ReservedRange end.
-                 * @type {number|undefined}
+                 * @type {number}
                  */
                 ReservedRange.prototype.end = 0;
 
@@ -30594,10 +30717,10 @@ export const google = $root.google = (function() {
                 ReservedRange.verify = function verify(message) {
                     if (typeof message !== "object" || message === null)
                         return "object expected";
-                    if (message.start != null)
+                    if (message.start != null && message.hasOwnProperty("start"))
                         if (!$util.isInteger(message.start))
                             return "start: integer expected";
-                    if (message.end != null)
+                    if (message.end != null && message.hasOwnProperty("end"))
                         if (!$util.isInteger(message.end))
                             return "end: integer expected";
                     return null;
@@ -30699,66 +30822,67 @@ export const google = $root.google = (function() {
             function FieldDescriptorProto(properties) {
                 if (properties)
                     for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                        this[keys[i]] = properties[keys[i]];
+                        if (properties[keys[i]] != null)
+                            this[keys[i]] = properties[keys[i]];
             }
 
             /**
              * FieldDescriptorProto name.
-             * @type {string|undefined}
+             * @type {string}
              */
             FieldDescriptorProto.prototype.name = "";
 
             /**
              * FieldDescriptorProto number.
-             * @type {number|undefined}
+             * @type {number}
              */
             FieldDescriptorProto.prototype.number = 0;
 
             /**
              * FieldDescriptorProto label.
-             * @type {google.protobuf.FieldDescriptorProto.Label|undefined}
+             * @type {google.protobuf.FieldDescriptorProto.Label}
              */
             FieldDescriptorProto.prototype.label = 1;
 
             /**
              * FieldDescriptorProto type.
-             * @type {google.protobuf.FieldDescriptorProto.Type|undefined}
+             * @type {google.protobuf.FieldDescriptorProto.Type}
              */
             FieldDescriptorProto.prototype.type = 1;
 
             /**
              * FieldDescriptorProto type_name.
-             * @type {string|undefined}
+             * @type {string}
              */
             FieldDescriptorProto.prototype.type_name = "";
 
             /**
              * FieldDescriptorProto extendee.
-             * @type {string|undefined}
+             * @type {string}
              */
             FieldDescriptorProto.prototype.extendee = "";
 
             /**
              * FieldDescriptorProto default_value.
-             * @type {string|undefined}
+             * @type {string}
              */
             FieldDescriptorProto.prototype.default_value = "";
 
             /**
              * FieldDescriptorProto oneof_index.
-             * @type {number|undefined}
+             * @type {number}
              */
             FieldDescriptorProto.prototype.oneof_index = 0;
 
             /**
              * FieldDescriptorProto json_name.
-             * @type {string|undefined}
+             * @type {string}
              */
             FieldDescriptorProto.prototype.json_name = "";
 
             /**
              * FieldDescriptorProto options.
-             * @type {google.protobuf.FieldOptions$Properties|undefined}
+             * @type {(google.protobuf.FieldOptions$Properties|null)}
              */
             FieldDescriptorProto.prototype.options = null;
 
@@ -30794,7 +30918,7 @@ export const google = $root.google = (function() {
                     writer.uint32(/* id 6, wireType 2 =*/50).string(message.type_name);
                 if (message.default_value != null && message.hasOwnProperty("default_value"))
                     writer.uint32(/* id 7, wireType 2 =*/58).string(message.default_value);
-                if (message.options && message.hasOwnProperty("options"))
+                if (message.options != null && message.hasOwnProperty("options"))
                     $root.google.protobuf.FieldOptions.encode(message.options, writer.uint32(/* id 8, wireType 2 =*/66).fork()).ldelim();
                 if (message.oneof_index != null && message.hasOwnProperty("oneof_index"))
                     writer.uint32(/* id 9, wireType 0 =*/72).int32(message.oneof_index);
@@ -30887,13 +31011,13 @@ export const google = $root.google = (function() {
             FieldDescriptorProto.verify = function verify(message) {
                 if (typeof message !== "object" || message === null)
                     return "object expected";
-                if (message.name != null)
+                if (message.name != null && message.hasOwnProperty("name"))
                     if (!$util.isString(message.name))
                         return "name: string expected";
-                if (message.number != null)
+                if (message.number != null && message.hasOwnProperty("number"))
                     if (!$util.isInteger(message.number))
                         return "number: integer expected";
-                if (message.label != null)
+                if (message.label != null && message.hasOwnProperty("label"))
                     switch (message.label) {
                     default:
                         return "label: enum value expected";
@@ -30902,7 +31026,7 @@ export const google = $root.google = (function() {
                     case 3:
                         break;
                     }
-                if (message.type != null)
+                if (message.type != null && message.hasOwnProperty("type"))
                     switch (message.type) {
                     default:
                         return "type: enum value expected";
@@ -30926,22 +31050,22 @@ export const google = $root.google = (function() {
                     case 18:
                         break;
                     }
-                if (message.type_name != null)
+                if (message.type_name != null && message.hasOwnProperty("type_name"))
                     if (!$util.isString(message.type_name))
                         return "type_name: string expected";
-                if (message.extendee != null)
+                if (message.extendee != null && message.hasOwnProperty("extendee"))
                     if (!$util.isString(message.extendee))
                         return "extendee: string expected";
-                if (message.default_value != null)
+                if (message.default_value != null && message.hasOwnProperty("default_value"))
                     if (!$util.isString(message.default_value))
                         return "default_value: string expected";
-                if (message.oneof_index != null)
+                if (message.oneof_index != null && message.hasOwnProperty("oneof_index"))
                     if (!$util.isInteger(message.oneof_index))
                         return "oneof_index: integer expected";
-                if (message.json_name != null)
+                if (message.json_name != null && message.hasOwnProperty("json_name"))
                     if (!$util.isString(message.json_name))
                         return "json_name: string expected";
-                if (message.options != null) {
+                if (message.options != null && message.hasOwnProperty("options")) {
                     let error = $root.google.protobuf.FieldOptions.verify(message.options);
                     if (error)
                         return "options." + error;
@@ -31225,18 +31349,19 @@ export const google = $root.google = (function() {
             function OneofDescriptorProto(properties) {
                 if (properties)
                     for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                        this[keys[i]] = properties[keys[i]];
+                        if (properties[keys[i]] != null)
+                            this[keys[i]] = properties[keys[i]];
             }
 
             /**
              * OneofDescriptorProto name.
-             * @type {string|undefined}
+             * @type {string}
              */
             OneofDescriptorProto.prototype.name = "";
 
             /**
              * OneofDescriptorProto options.
-             * @type {google.protobuf.OneofOptions$Properties|undefined}
+             * @type {(google.protobuf.OneofOptions$Properties|null)}
              */
             OneofDescriptorProto.prototype.options = null;
 
@@ -31260,7 +31385,7 @@ export const google = $root.google = (function() {
                     writer = $Writer.create();
                 if (message.name != null && message.hasOwnProperty("name"))
                     writer.uint32(/* id 1, wireType 2 =*/10).string(message.name);
-                if (message.options && message.hasOwnProperty("options"))
+                if (message.options != null && message.hasOwnProperty("options"))
                     $root.google.protobuf.OneofOptions.encode(message.options, writer.uint32(/* id 2, wireType 2 =*/18).fork()).ldelim();
                 return writer;
             };
@@ -31325,10 +31450,10 @@ export const google = $root.google = (function() {
             OneofDescriptorProto.verify = function verify(message) {
                 if (typeof message !== "object" || message === null)
                     return "object expected";
-                if (message.name != null)
+                if (message.name != null && message.hasOwnProperty("name"))
                     if (!$util.isString(message.name))
                         return "name: string expected";
-                if (message.options != null) {
+                if (message.options != null && message.hasOwnProperty("options")) {
                     let error = $root.google.protobuf.OneofOptions.verify(message.options);
                     if (error)
                         return "options." + error;
@@ -31426,24 +31551,25 @@ export const google = $root.google = (function() {
                 this.value = [];
                 if (properties)
                     for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                        this[keys[i]] = properties[keys[i]];
+                        if (properties[keys[i]] != null)
+                            this[keys[i]] = properties[keys[i]];
             }
 
             /**
              * EnumDescriptorProto name.
-             * @type {string|undefined}
+             * @type {string}
              */
             EnumDescriptorProto.prototype.name = "";
 
             /**
              * EnumDescriptorProto value.
-             * @type {Array.<google.protobuf.EnumValueDescriptorProto$Properties>|undefined}
+             * @type {Array.<google.protobuf.EnumValueDescriptorProto$Properties>}
              */
             EnumDescriptorProto.prototype.value = $util.emptyArray;
 
             /**
              * EnumDescriptorProto options.
-             * @type {google.protobuf.EnumOptions$Properties|undefined}
+             * @type {(google.protobuf.EnumOptions$Properties|null)}
              */
             EnumDescriptorProto.prototype.options = null;
 
@@ -31467,10 +31593,10 @@ export const google = $root.google = (function() {
                     writer = $Writer.create();
                 if (message.name != null && message.hasOwnProperty("name"))
                     writer.uint32(/* id 1, wireType 2 =*/10).string(message.name);
-                if (message.value && message.value.length)
+                if (message.value != null && message.value.length)
                     for (let i = 0; i < message.value.length; ++i)
                         $root.google.protobuf.EnumValueDescriptorProto.encode(message.value[i], writer.uint32(/* id 2, wireType 2 =*/18).fork()).ldelim();
-                if (message.options && message.hasOwnProperty("options"))
+                if (message.options != null && message.hasOwnProperty("options"))
                     $root.google.protobuf.EnumOptions.encode(message.options, writer.uint32(/* id 3, wireType 2 =*/26).fork()).ldelim();
                 return writer;
             };
@@ -31540,10 +31666,10 @@ export const google = $root.google = (function() {
             EnumDescriptorProto.verify = function verify(message) {
                 if (typeof message !== "object" || message === null)
                     return "object expected";
-                if (message.name != null)
+                if (message.name != null && message.hasOwnProperty("name"))
                     if (!$util.isString(message.name))
                         return "name: string expected";
-                if (message.value != null) {
+                if (message.value != null && message.hasOwnProperty("value")) {
                     if (!Array.isArray(message.value))
                         return "value: array expected";
                     for (let i = 0; i < message.value.length; ++i) {
@@ -31552,7 +31678,7 @@ export const google = $root.google = (function() {
                             return "value." + error;
                     }
                 }
-                if (message.options != null) {
+                if (message.options != null && message.hasOwnProperty("options")) {
                     let error = $root.google.protobuf.EnumOptions.verify(message.options);
                     if (error)
                         return "options." + error;
@@ -31666,24 +31792,25 @@ export const google = $root.google = (function() {
             function EnumValueDescriptorProto(properties) {
                 if (properties)
                     for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                        this[keys[i]] = properties[keys[i]];
+                        if (properties[keys[i]] != null)
+                            this[keys[i]] = properties[keys[i]];
             }
 
             /**
              * EnumValueDescriptorProto name.
-             * @type {string|undefined}
+             * @type {string}
              */
             EnumValueDescriptorProto.prototype.name = "";
 
             /**
              * EnumValueDescriptorProto number.
-             * @type {number|undefined}
+             * @type {number}
              */
             EnumValueDescriptorProto.prototype.number = 0;
 
             /**
              * EnumValueDescriptorProto options.
-             * @type {google.protobuf.EnumValueOptions$Properties|undefined}
+             * @type {(google.protobuf.EnumValueOptions$Properties|null)}
              */
             EnumValueDescriptorProto.prototype.options = null;
 
@@ -31709,7 +31836,7 @@ export const google = $root.google = (function() {
                     writer.uint32(/* id 1, wireType 2 =*/10).string(message.name);
                 if (message.number != null && message.hasOwnProperty("number"))
                     writer.uint32(/* id 2, wireType 0 =*/16).int32(message.number);
-                if (message.options && message.hasOwnProperty("options"))
+                if (message.options != null && message.hasOwnProperty("options"))
                     $root.google.protobuf.EnumValueOptions.encode(message.options, writer.uint32(/* id 3, wireType 2 =*/26).fork()).ldelim();
                 return writer;
             };
@@ -31777,13 +31904,13 @@ export const google = $root.google = (function() {
             EnumValueDescriptorProto.verify = function verify(message) {
                 if (typeof message !== "object" || message === null)
                     return "object expected";
-                if (message.name != null)
+                if (message.name != null && message.hasOwnProperty("name"))
                     if (!$util.isString(message.name))
                         return "name: string expected";
-                if (message.number != null)
+                if (message.number != null && message.hasOwnProperty("number"))
                     if (!$util.isInteger(message.number))
                         return "number: integer expected";
-                if (message.options != null) {
+                if (message.options != null && message.hasOwnProperty("options")) {
                     let error = $root.google.protobuf.EnumValueOptions.verify(message.options);
                     if (error)
                         return "options." + error;
@@ -31886,24 +32013,25 @@ export const google = $root.google = (function() {
                 this.method = [];
                 if (properties)
                     for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                        this[keys[i]] = properties[keys[i]];
+                        if (properties[keys[i]] != null)
+                            this[keys[i]] = properties[keys[i]];
             }
 
             /**
              * ServiceDescriptorProto name.
-             * @type {string|undefined}
+             * @type {string}
              */
             ServiceDescriptorProto.prototype.name = "";
 
             /**
              * ServiceDescriptorProto method.
-             * @type {Array.<google.protobuf.MethodDescriptorProto$Properties>|undefined}
+             * @type {Array.<google.protobuf.MethodDescriptorProto$Properties>}
              */
             ServiceDescriptorProto.prototype.method = $util.emptyArray;
 
             /**
              * ServiceDescriptorProto options.
-             * @type {google.protobuf.ServiceOptions$Properties|undefined}
+             * @type {(google.protobuf.ServiceOptions$Properties|null)}
              */
             ServiceDescriptorProto.prototype.options = null;
 
@@ -31927,10 +32055,10 @@ export const google = $root.google = (function() {
                     writer = $Writer.create();
                 if (message.name != null && message.hasOwnProperty("name"))
                     writer.uint32(/* id 1, wireType 2 =*/10).string(message.name);
-                if (message.method && message.method.length)
+                if (message.method != null && message.method.length)
                     for (let i = 0; i < message.method.length; ++i)
                         $root.google.protobuf.MethodDescriptorProto.encode(message.method[i], writer.uint32(/* id 2, wireType 2 =*/18).fork()).ldelim();
-                if (message.options && message.hasOwnProperty("options"))
+                if (message.options != null && message.hasOwnProperty("options"))
                     $root.google.protobuf.ServiceOptions.encode(message.options, writer.uint32(/* id 3, wireType 2 =*/26).fork()).ldelim();
                 return writer;
             };
@@ -32000,10 +32128,10 @@ export const google = $root.google = (function() {
             ServiceDescriptorProto.verify = function verify(message) {
                 if (typeof message !== "object" || message === null)
                     return "object expected";
-                if (message.name != null)
+                if (message.name != null && message.hasOwnProperty("name"))
                     if (!$util.isString(message.name))
                         return "name: string expected";
-                if (message.method != null) {
+                if (message.method != null && message.hasOwnProperty("method")) {
                     if (!Array.isArray(message.method))
                         return "method: array expected";
                     for (let i = 0; i < message.method.length; ++i) {
@@ -32012,7 +32140,7 @@ export const google = $root.google = (function() {
                             return "method." + error;
                     }
                 }
-                if (message.options != null) {
+                if (message.options != null && message.hasOwnProperty("options")) {
                     let error = $root.google.protobuf.ServiceOptions.verify(message.options);
                     if (error)
                         return "options." + error;
@@ -32129,42 +32257,43 @@ export const google = $root.google = (function() {
             function MethodDescriptorProto(properties) {
                 if (properties)
                     for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                        this[keys[i]] = properties[keys[i]];
+                        if (properties[keys[i]] != null)
+                            this[keys[i]] = properties[keys[i]];
             }
 
             /**
              * MethodDescriptorProto name.
-             * @type {string|undefined}
+             * @type {string}
              */
             MethodDescriptorProto.prototype.name = "";
 
             /**
              * MethodDescriptorProto input_type.
-             * @type {string|undefined}
+             * @type {string}
              */
             MethodDescriptorProto.prototype.input_type = "";
 
             /**
              * MethodDescriptorProto output_type.
-             * @type {string|undefined}
+             * @type {string}
              */
             MethodDescriptorProto.prototype.output_type = "";
 
             /**
              * MethodDescriptorProto options.
-             * @type {google.protobuf.MethodOptions$Properties|undefined}
+             * @type {(google.protobuf.MethodOptions$Properties|null)}
              */
             MethodDescriptorProto.prototype.options = null;
 
             /**
              * MethodDescriptorProto client_streaming.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
             MethodDescriptorProto.prototype.client_streaming = false;
 
             /**
              * MethodDescriptorProto server_streaming.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
             MethodDescriptorProto.prototype.server_streaming = false;
 
@@ -32192,7 +32321,7 @@ export const google = $root.google = (function() {
                     writer.uint32(/* id 2, wireType 2 =*/18).string(message.input_type);
                 if (message.output_type != null && message.hasOwnProperty("output_type"))
                     writer.uint32(/* id 3, wireType 2 =*/26).string(message.output_type);
-                if (message.options && message.hasOwnProperty("options"))
+                if (message.options != null && message.hasOwnProperty("options"))
                     $root.google.protobuf.MethodOptions.encode(message.options, writer.uint32(/* id 4, wireType 2 =*/34).fork()).ldelim();
                 if (message.client_streaming != null && message.hasOwnProperty("client_streaming"))
                     writer.uint32(/* id 5, wireType 0 =*/40).bool(message.client_streaming);
@@ -32273,24 +32402,24 @@ export const google = $root.google = (function() {
             MethodDescriptorProto.verify = function verify(message) {
                 if (typeof message !== "object" || message === null)
                     return "object expected";
-                if (message.name != null)
+                if (message.name != null && message.hasOwnProperty("name"))
                     if (!$util.isString(message.name))
                         return "name: string expected";
-                if (message.input_type != null)
+                if (message.input_type != null && message.hasOwnProperty("input_type"))
                     if (!$util.isString(message.input_type))
                         return "input_type: string expected";
-                if (message.output_type != null)
+                if (message.output_type != null && message.hasOwnProperty("output_type"))
                     if (!$util.isString(message.output_type))
                         return "output_type: string expected";
-                if (message.options != null) {
+                if (message.options != null && message.hasOwnProperty("options")) {
                     let error = $root.google.protobuf.MethodOptions.verify(message.options);
                     if (error)
                         return "options." + error;
                 }
-                if (message.client_streaming != null)
+                if (message.client_streaming != null && message.hasOwnProperty("client_streaming"))
                     if (typeof message.client_streaming !== "boolean")
                         return "client_streaming: boolean expected";
-                if (message.server_streaming != null)
+                if (message.server_streaming != null && message.hasOwnProperty("server_streaming"))
                     if (typeof message.server_streaming !== "boolean")
                         return "server_streaming: boolean expected";
                 return null;
@@ -32447,270 +32576,271 @@ export const google = $root.google = (function() {
                 this.uninterpreted_option = [];
                 if (properties)
                     for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                        this[keys[i]] = properties[keys[i]];
+                        if (properties[keys[i]] != null)
+                            this[keys[i]] = properties[keys[i]];
             }
 
             /**
              * FileOptions java_package.
-             * @type {string|undefined}
+             * @type {string}
              */
             FileOptions.prototype.java_package = "";
 
             /**
              * FileOptions java_outer_classname.
-             * @type {string|undefined}
+             * @type {string}
              */
             FileOptions.prototype.java_outer_classname = "";
 
             /**
              * FileOptions java_multiple_files.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
             FileOptions.prototype.java_multiple_files = false;
 
             /**
              * FileOptions java_generate_equals_and_hash.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
             FileOptions.prototype.java_generate_equals_and_hash = false;
 
             /**
              * FileOptions java_string_check_utf8.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
             FileOptions.prototype.java_string_check_utf8 = false;
 
             /**
              * FileOptions optimize_for.
-             * @type {google.protobuf.FileOptions.OptimizeMode|undefined}
+             * @type {google.protobuf.FileOptions.OptimizeMode}
              */
             FileOptions.prototype.optimize_for = 1;
 
             /**
              * FileOptions go_package.
-             * @type {string|undefined}
+             * @type {string}
              */
             FileOptions.prototype.go_package = "";
 
             /**
              * FileOptions cc_generic_services.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
             FileOptions.prototype.cc_generic_services = false;
 
             /**
              * FileOptions java_generic_services.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
             FileOptions.prototype.java_generic_services = false;
 
             /**
              * FileOptions py_generic_services.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
             FileOptions.prototype.py_generic_services = false;
 
             /**
              * FileOptions deprecated.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
             FileOptions.prototype.deprecated = false;
 
             /**
              * FileOptions cc_enable_arenas.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
             FileOptions.prototype.cc_enable_arenas = false;
 
             /**
              * FileOptions objc_class_prefix.
-             * @type {string|undefined}
+             * @type {string}
              */
             FileOptions.prototype.objc_class_prefix = "";
 
             /**
              * FileOptions csharp_namespace.
-             * @type {string|undefined}
+             * @type {string}
              */
             FileOptions.prototype.csharp_namespace = "";
 
             /**
              * FileOptions uninterpreted_option.
-             * @type {Array.<google.protobuf.UninterpretedOption$Properties>|undefined}
+             * @type {Array.<google.protobuf.UninterpretedOption$Properties>}
              */
             FileOptions.prototype.uninterpreted_option = $util.emptyArray;
 
             /**
              * FileOptions .gogoproto.goproto_getters_all.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
             FileOptions.prototype[".gogoproto.goproto_getters_all"] = false;
 
             /**
              * FileOptions .gogoproto.goproto_enum_prefix_all.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
             FileOptions.prototype[".gogoproto.goproto_enum_prefix_all"] = false;
 
             /**
              * FileOptions .gogoproto.goproto_stringer_all.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
             FileOptions.prototype[".gogoproto.goproto_stringer_all"] = false;
 
             /**
              * FileOptions .gogoproto.verbose_equal_all.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
             FileOptions.prototype[".gogoproto.verbose_equal_all"] = false;
 
             /**
              * FileOptions .gogoproto.face_all.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
             FileOptions.prototype[".gogoproto.face_all"] = false;
 
             /**
              * FileOptions .gogoproto.gostring_all.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
             FileOptions.prototype[".gogoproto.gostring_all"] = false;
 
             /**
              * FileOptions .gogoproto.populate_all.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
             FileOptions.prototype[".gogoproto.populate_all"] = false;
 
             /**
              * FileOptions .gogoproto.stringer_all.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
             FileOptions.prototype[".gogoproto.stringer_all"] = false;
 
             /**
              * FileOptions .gogoproto.onlyone_all.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
             FileOptions.prototype[".gogoproto.onlyone_all"] = false;
 
             /**
              * FileOptions .gogoproto.equal_all.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
             FileOptions.prototype[".gogoproto.equal_all"] = false;
 
             /**
              * FileOptions .gogoproto.description_all.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
             FileOptions.prototype[".gogoproto.description_all"] = false;
 
             /**
              * FileOptions .gogoproto.testgen_all.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
             FileOptions.prototype[".gogoproto.testgen_all"] = false;
 
             /**
              * FileOptions .gogoproto.benchgen_all.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
             FileOptions.prototype[".gogoproto.benchgen_all"] = false;
 
             /**
              * FileOptions .gogoproto.marshaler_all.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
             FileOptions.prototype[".gogoproto.marshaler_all"] = false;
 
             /**
              * FileOptions .gogoproto.unmarshaler_all.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
             FileOptions.prototype[".gogoproto.unmarshaler_all"] = false;
 
             /**
              * FileOptions .gogoproto.stable_marshaler_all.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
             FileOptions.prototype[".gogoproto.stable_marshaler_all"] = false;
 
             /**
              * FileOptions .gogoproto.sizer_all.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
             FileOptions.prototype[".gogoproto.sizer_all"] = false;
 
             /**
              * FileOptions .gogoproto.goproto_enum_stringer_all.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
             FileOptions.prototype[".gogoproto.goproto_enum_stringer_all"] = false;
 
             /**
              * FileOptions .gogoproto.enum_stringer_all.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
             FileOptions.prototype[".gogoproto.enum_stringer_all"] = false;
 
             /**
              * FileOptions .gogoproto.unsafe_marshaler_all.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
             FileOptions.prototype[".gogoproto.unsafe_marshaler_all"] = false;
 
             /**
              * FileOptions .gogoproto.unsafe_unmarshaler_all.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
             FileOptions.prototype[".gogoproto.unsafe_unmarshaler_all"] = false;
 
             /**
              * FileOptions .gogoproto.goproto_extensions_map_all.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
             FileOptions.prototype[".gogoproto.goproto_extensions_map_all"] = false;
 
             /**
              * FileOptions .gogoproto.goproto_unrecognized_all.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
             FileOptions.prototype[".gogoproto.goproto_unrecognized_all"] = false;
 
             /**
              * FileOptions .gogoproto.gogoproto_import.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
             FileOptions.prototype[".gogoproto.gogoproto_import"] = false;
 
             /**
              * FileOptions .gogoproto.protosizer_all.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
             FileOptions.prototype[".gogoproto.protosizer_all"] = false;
 
             /**
              * FileOptions .gogoproto.compare_all.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
             FileOptions.prototype[".gogoproto.compare_all"] = false;
 
             /**
              * FileOptions .gogoproto.typedecl_all.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
             FileOptions.prototype[".gogoproto.typedecl_all"] = false;
 
             /**
              * FileOptions .gogoproto.enumdecl_all.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
             FileOptions.prototype[".gogoproto.enumdecl_all"] = false;
 
             /**
              * FileOptions .gogoproto.goproto_registration.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
             FileOptions.prototype[".gogoproto.goproto_registration"] = false;
 
@@ -32760,7 +32890,7 @@ export const google = $root.google = (function() {
                     writer.uint32(/* id 36, wireType 2 =*/290).string(message.objc_class_prefix);
                 if (message.csharp_namespace != null && message.hasOwnProperty("csharp_namespace"))
                     writer.uint32(/* id 37, wireType 2 =*/298).string(message.csharp_namespace);
-                if (message.uninterpreted_option && message.uninterpreted_option.length)
+                if (message.uninterpreted_option != null && message.uninterpreted_option.length)
                     for (let i = 0; i < message.uninterpreted_option.length; ++i)
                         $root.google.protobuf.UninterpretedOption.encode(message.uninterpreted_option[i], writer.uint32(/* id 999, wireType 2 =*/7994).fork()).ldelim();
                 if (message[".gogoproto.goproto_getters_all"] != null && message.hasOwnProperty(".gogoproto.goproto_getters_all"))
@@ -33012,22 +33142,22 @@ export const google = $root.google = (function() {
             FileOptions.verify = function verify(message) {
                 if (typeof message !== "object" || message === null)
                     return "object expected";
-                if (message.java_package != null)
+                if (message.java_package != null && message.hasOwnProperty("java_package"))
                     if (!$util.isString(message.java_package))
                         return "java_package: string expected";
-                if (message.java_outer_classname != null)
+                if (message.java_outer_classname != null && message.hasOwnProperty("java_outer_classname"))
                     if (!$util.isString(message.java_outer_classname))
                         return "java_outer_classname: string expected";
-                if (message.java_multiple_files != null)
+                if (message.java_multiple_files != null && message.hasOwnProperty("java_multiple_files"))
                     if (typeof message.java_multiple_files !== "boolean")
                         return "java_multiple_files: boolean expected";
-                if (message.java_generate_equals_and_hash != null)
+                if (message.java_generate_equals_and_hash != null && message.hasOwnProperty("java_generate_equals_and_hash"))
                     if (typeof message.java_generate_equals_and_hash !== "boolean")
                         return "java_generate_equals_and_hash: boolean expected";
-                if (message.java_string_check_utf8 != null)
+                if (message.java_string_check_utf8 != null && message.hasOwnProperty("java_string_check_utf8"))
                     if (typeof message.java_string_check_utf8 !== "boolean")
                         return "java_string_check_utf8: boolean expected";
-                if (message.optimize_for != null)
+                if (message.optimize_for != null && message.hasOwnProperty("optimize_for"))
                     switch (message.optimize_for) {
                     default:
                         return "optimize_for: enum value expected";
@@ -33036,31 +33166,31 @@ export const google = $root.google = (function() {
                     case 3:
                         break;
                     }
-                if (message.go_package != null)
+                if (message.go_package != null && message.hasOwnProperty("go_package"))
                     if (!$util.isString(message.go_package))
                         return "go_package: string expected";
-                if (message.cc_generic_services != null)
+                if (message.cc_generic_services != null && message.hasOwnProperty("cc_generic_services"))
                     if (typeof message.cc_generic_services !== "boolean")
                         return "cc_generic_services: boolean expected";
-                if (message.java_generic_services != null)
+                if (message.java_generic_services != null && message.hasOwnProperty("java_generic_services"))
                     if (typeof message.java_generic_services !== "boolean")
                         return "java_generic_services: boolean expected";
-                if (message.py_generic_services != null)
+                if (message.py_generic_services != null && message.hasOwnProperty("py_generic_services"))
                     if (typeof message.py_generic_services !== "boolean")
                         return "py_generic_services: boolean expected";
-                if (message.deprecated != null)
+                if (message.deprecated != null && message.hasOwnProperty("deprecated"))
                     if (typeof message.deprecated !== "boolean")
                         return "deprecated: boolean expected";
-                if (message.cc_enable_arenas != null)
+                if (message.cc_enable_arenas != null && message.hasOwnProperty("cc_enable_arenas"))
                     if (typeof message.cc_enable_arenas !== "boolean")
                         return "cc_enable_arenas: boolean expected";
-                if (message.objc_class_prefix != null)
+                if (message.objc_class_prefix != null && message.hasOwnProperty("objc_class_prefix"))
                     if (!$util.isString(message.objc_class_prefix))
                         return "objc_class_prefix: string expected";
-                if (message.csharp_namespace != null)
+                if (message.csharp_namespace != null && message.hasOwnProperty("csharp_namespace"))
                     if (!$util.isString(message.csharp_namespace))
                         return "csharp_namespace: string expected";
-                if (message.uninterpreted_option != null) {
+                if (message.uninterpreted_option != null && message.hasOwnProperty("uninterpreted_option")) {
                     if (!Array.isArray(message.uninterpreted_option))
                         return "uninterpreted_option: array expected";
                     for (let i = 0; i < message.uninterpreted_option.length; ++i) {
@@ -33069,91 +33199,91 @@ export const google = $root.google = (function() {
                             return "uninterpreted_option." + error;
                     }
                 }
-                if (message[".gogoproto.goproto_getters_all"] != null)
+                if (message[".gogoproto.goproto_getters_all"] != null && message.hasOwnProperty(".gogoproto.goproto_getters_all"))
                     if (typeof message[".gogoproto.goproto_getters_all"] !== "boolean")
                         return ".gogoproto.goproto_getters_all: boolean expected";
-                if (message[".gogoproto.goproto_enum_prefix_all"] != null)
+                if (message[".gogoproto.goproto_enum_prefix_all"] != null && message.hasOwnProperty(".gogoproto.goproto_enum_prefix_all"))
                     if (typeof message[".gogoproto.goproto_enum_prefix_all"] !== "boolean")
                         return ".gogoproto.goproto_enum_prefix_all: boolean expected";
-                if (message[".gogoproto.goproto_stringer_all"] != null)
+                if (message[".gogoproto.goproto_stringer_all"] != null && message.hasOwnProperty(".gogoproto.goproto_stringer_all"))
                     if (typeof message[".gogoproto.goproto_stringer_all"] !== "boolean")
                         return ".gogoproto.goproto_stringer_all: boolean expected";
-                if (message[".gogoproto.verbose_equal_all"] != null)
+                if (message[".gogoproto.verbose_equal_all"] != null && message.hasOwnProperty(".gogoproto.verbose_equal_all"))
                     if (typeof message[".gogoproto.verbose_equal_all"] !== "boolean")
                         return ".gogoproto.verbose_equal_all: boolean expected";
-                if (message[".gogoproto.face_all"] != null)
+                if (message[".gogoproto.face_all"] != null && message.hasOwnProperty(".gogoproto.face_all"))
                     if (typeof message[".gogoproto.face_all"] !== "boolean")
                         return ".gogoproto.face_all: boolean expected";
-                if (message[".gogoproto.gostring_all"] != null)
+                if (message[".gogoproto.gostring_all"] != null && message.hasOwnProperty(".gogoproto.gostring_all"))
                     if (typeof message[".gogoproto.gostring_all"] !== "boolean")
                         return ".gogoproto.gostring_all: boolean expected";
-                if (message[".gogoproto.populate_all"] != null)
+                if (message[".gogoproto.populate_all"] != null && message.hasOwnProperty(".gogoproto.populate_all"))
                     if (typeof message[".gogoproto.populate_all"] !== "boolean")
                         return ".gogoproto.populate_all: boolean expected";
-                if (message[".gogoproto.stringer_all"] != null)
+                if (message[".gogoproto.stringer_all"] != null && message.hasOwnProperty(".gogoproto.stringer_all"))
                     if (typeof message[".gogoproto.stringer_all"] !== "boolean")
                         return ".gogoproto.stringer_all: boolean expected";
-                if (message[".gogoproto.onlyone_all"] != null)
+                if (message[".gogoproto.onlyone_all"] != null && message.hasOwnProperty(".gogoproto.onlyone_all"))
                     if (typeof message[".gogoproto.onlyone_all"] !== "boolean")
                         return ".gogoproto.onlyone_all: boolean expected";
-                if (message[".gogoproto.equal_all"] != null)
+                if (message[".gogoproto.equal_all"] != null && message.hasOwnProperty(".gogoproto.equal_all"))
                     if (typeof message[".gogoproto.equal_all"] !== "boolean")
                         return ".gogoproto.equal_all: boolean expected";
-                if (message[".gogoproto.description_all"] != null)
+                if (message[".gogoproto.description_all"] != null && message.hasOwnProperty(".gogoproto.description_all"))
                     if (typeof message[".gogoproto.description_all"] !== "boolean")
                         return ".gogoproto.description_all: boolean expected";
-                if (message[".gogoproto.testgen_all"] != null)
+                if (message[".gogoproto.testgen_all"] != null && message.hasOwnProperty(".gogoproto.testgen_all"))
                     if (typeof message[".gogoproto.testgen_all"] !== "boolean")
                         return ".gogoproto.testgen_all: boolean expected";
-                if (message[".gogoproto.benchgen_all"] != null)
+                if (message[".gogoproto.benchgen_all"] != null && message.hasOwnProperty(".gogoproto.benchgen_all"))
                     if (typeof message[".gogoproto.benchgen_all"] !== "boolean")
                         return ".gogoproto.benchgen_all: boolean expected";
-                if (message[".gogoproto.marshaler_all"] != null)
+                if (message[".gogoproto.marshaler_all"] != null && message.hasOwnProperty(".gogoproto.marshaler_all"))
                     if (typeof message[".gogoproto.marshaler_all"] !== "boolean")
                         return ".gogoproto.marshaler_all: boolean expected";
-                if (message[".gogoproto.unmarshaler_all"] != null)
+                if (message[".gogoproto.unmarshaler_all"] != null && message.hasOwnProperty(".gogoproto.unmarshaler_all"))
                     if (typeof message[".gogoproto.unmarshaler_all"] !== "boolean")
                         return ".gogoproto.unmarshaler_all: boolean expected";
-                if (message[".gogoproto.stable_marshaler_all"] != null)
+                if (message[".gogoproto.stable_marshaler_all"] != null && message.hasOwnProperty(".gogoproto.stable_marshaler_all"))
                     if (typeof message[".gogoproto.stable_marshaler_all"] !== "boolean")
                         return ".gogoproto.stable_marshaler_all: boolean expected";
-                if (message[".gogoproto.sizer_all"] != null)
+                if (message[".gogoproto.sizer_all"] != null && message.hasOwnProperty(".gogoproto.sizer_all"))
                     if (typeof message[".gogoproto.sizer_all"] !== "boolean")
                         return ".gogoproto.sizer_all: boolean expected";
-                if (message[".gogoproto.goproto_enum_stringer_all"] != null)
+                if (message[".gogoproto.goproto_enum_stringer_all"] != null && message.hasOwnProperty(".gogoproto.goproto_enum_stringer_all"))
                     if (typeof message[".gogoproto.goproto_enum_stringer_all"] !== "boolean")
                         return ".gogoproto.goproto_enum_stringer_all: boolean expected";
-                if (message[".gogoproto.enum_stringer_all"] != null)
+                if (message[".gogoproto.enum_stringer_all"] != null && message.hasOwnProperty(".gogoproto.enum_stringer_all"))
                     if (typeof message[".gogoproto.enum_stringer_all"] !== "boolean")
                         return ".gogoproto.enum_stringer_all: boolean expected";
-                if (message[".gogoproto.unsafe_marshaler_all"] != null)
+                if (message[".gogoproto.unsafe_marshaler_all"] != null && message.hasOwnProperty(".gogoproto.unsafe_marshaler_all"))
                     if (typeof message[".gogoproto.unsafe_marshaler_all"] !== "boolean")
                         return ".gogoproto.unsafe_marshaler_all: boolean expected";
-                if (message[".gogoproto.unsafe_unmarshaler_all"] != null)
+                if (message[".gogoproto.unsafe_unmarshaler_all"] != null && message.hasOwnProperty(".gogoproto.unsafe_unmarshaler_all"))
                     if (typeof message[".gogoproto.unsafe_unmarshaler_all"] !== "boolean")
                         return ".gogoproto.unsafe_unmarshaler_all: boolean expected";
-                if (message[".gogoproto.goproto_extensions_map_all"] != null)
+                if (message[".gogoproto.goproto_extensions_map_all"] != null && message.hasOwnProperty(".gogoproto.goproto_extensions_map_all"))
                     if (typeof message[".gogoproto.goproto_extensions_map_all"] !== "boolean")
                         return ".gogoproto.goproto_extensions_map_all: boolean expected";
-                if (message[".gogoproto.goproto_unrecognized_all"] != null)
+                if (message[".gogoproto.goproto_unrecognized_all"] != null && message.hasOwnProperty(".gogoproto.goproto_unrecognized_all"))
                     if (typeof message[".gogoproto.goproto_unrecognized_all"] !== "boolean")
                         return ".gogoproto.goproto_unrecognized_all: boolean expected";
-                if (message[".gogoproto.gogoproto_import"] != null)
+                if (message[".gogoproto.gogoproto_import"] != null && message.hasOwnProperty(".gogoproto.gogoproto_import"))
                     if (typeof message[".gogoproto.gogoproto_import"] !== "boolean")
                         return ".gogoproto.gogoproto_import: boolean expected";
-                if (message[".gogoproto.protosizer_all"] != null)
+                if (message[".gogoproto.protosizer_all"] != null && message.hasOwnProperty(".gogoproto.protosizer_all"))
                     if (typeof message[".gogoproto.protosizer_all"] !== "boolean")
                         return ".gogoproto.protosizer_all: boolean expected";
-                if (message[".gogoproto.compare_all"] != null)
+                if (message[".gogoproto.compare_all"] != null && message.hasOwnProperty(".gogoproto.compare_all"))
                     if (typeof message[".gogoproto.compare_all"] !== "boolean")
                         return ".gogoproto.compare_all: boolean expected";
-                if (message[".gogoproto.typedecl_all"] != null)
+                if (message[".gogoproto.typedecl_all"] != null && message.hasOwnProperty(".gogoproto.typedecl_all"))
                     if (typeof message[".gogoproto.typedecl_all"] !== "boolean")
                         return ".gogoproto.typedecl_all: boolean expected";
-                if (message[".gogoproto.enumdecl_all"] != null)
+                if (message[".gogoproto.enumdecl_all"] != null && message.hasOwnProperty(".gogoproto.enumdecl_all"))
                     if (typeof message[".gogoproto.enumdecl_all"] !== "boolean")
                         return ".gogoproto.enumdecl_all: boolean expected";
-                if (message[".gogoproto.goproto_registration"] != null)
+                if (message[".gogoproto.goproto_registration"] != null && message.hasOwnProperty(".gogoproto.goproto_registration"))
                     if (typeof message[".gogoproto.goproto_registration"] !== "boolean")
                         return ".gogoproto.goproto_registration: boolean expected";
                 return null;
@@ -33522,174 +33652,175 @@ export const google = $root.google = (function() {
                 this.uninterpreted_option = [];
                 if (properties)
                     for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                        this[keys[i]] = properties[keys[i]];
+                        if (properties[keys[i]] != null)
+                            this[keys[i]] = properties[keys[i]];
             }
 
             /**
              * MessageOptions message_set_wire_format.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
             MessageOptions.prototype.message_set_wire_format = false;
 
             /**
              * MessageOptions no_standard_descriptor_accessor.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
             MessageOptions.prototype.no_standard_descriptor_accessor = false;
 
             /**
              * MessageOptions deprecated.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
             MessageOptions.prototype.deprecated = false;
 
             /**
              * MessageOptions map_entry.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
             MessageOptions.prototype.map_entry = false;
 
             /**
              * MessageOptions uninterpreted_option.
-             * @type {Array.<google.protobuf.UninterpretedOption$Properties>|undefined}
+             * @type {Array.<google.protobuf.UninterpretedOption$Properties>}
              */
             MessageOptions.prototype.uninterpreted_option = $util.emptyArray;
 
             /**
              * MessageOptions .gogoproto.goproto_getters.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
             MessageOptions.prototype[".gogoproto.goproto_getters"] = false;
 
             /**
              * MessageOptions .gogoproto.goproto_stringer.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
             MessageOptions.prototype[".gogoproto.goproto_stringer"] = false;
 
             /**
              * MessageOptions .gogoproto.verbose_equal.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
             MessageOptions.prototype[".gogoproto.verbose_equal"] = false;
 
             /**
              * MessageOptions .gogoproto.face.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
             MessageOptions.prototype[".gogoproto.face"] = false;
 
             /**
              * MessageOptions .gogoproto.gostring.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
             MessageOptions.prototype[".gogoproto.gostring"] = false;
 
             /**
              * MessageOptions .gogoproto.populate.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
             MessageOptions.prototype[".gogoproto.populate"] = false;
 
             /**
              * MessageOptions .gogoproto.stringer.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
             MessageOptions.prototype[".gogoproto.stringer"] = false;
 
             /**
              * MessageOptions .gogoproto.onlyone.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
             MessageOptions.prototype[".gogoproto.onlyone"] = false;
 
             /**
              * MessageOptions .gogoproto.equal.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
             MessageOptions.prototype[".gogoproto.equal"] = false;
 
             /**
              * MessageOptions .gogoproto.description.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
             MessageOptions.prototype[".gogoproto.description"] = false;
 
             /**
              * MessageOptions .gogoproto.testgen.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
             MessageOptions.prototype[".gogoproto.testgen"] = false;
 
             /**
              * MessageOptions .gogoproto.benchgen.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
             MessageOptions.prototype[".gogoproto.benchgen"] = false;
 
             /**
              * MessageOptions .gogoproto.marshaler.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
             MessageOptions.prototype[".gogoproto.marshaler"] = false;
 
             /**
              * MessageOptions .gogoproto.unmarshaler.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
             MessageOptions.prototype[".gogoproto.unmarshaler"] = false;
 
             /**
              * MessageOptions .gogoproto.stable_marshaler.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
             MessageOptions.prototype[".gogoproto.stable_marshaler"] = false;
 
             /**
              * MessageOptions .gogoproto.sizer.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
             MessageOptions.prototype[".gogoproto.sizer"] = false;
 
             /**
              * MessageOptions .gogoproto.unsafe_marshaler.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
             MessageOptions.prototype[".gogoproto.unsafe_marshaler"] = false;
 
             /**
              * MessageOptions .gogoproto.unsafe_unmarshaler.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
             MessageOptions.prototype[".gogoproto.unsafe_unmarshaler"] = false;
 
             /**
              * MessageOptions .gogoproto.goproto_extensions_map.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
             MessageOptions.prototype[".gogoproto.goproto_extensions_map"] = false;
 
             /**
              * MessageOptions .gogoproto.goproto_unrecognized.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
             MessageOptions.prototype[".gogoproto.goproto_unrecognized"] = false;
 
             /**
              * MessageOptions .gogoproto.protosizer.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
             MessageOptions.prototype[".gogoproto.protosizer"] = false;
 
             /**
              * MessageOptions .gogoproto.compare.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
             MessageOptions.prototype[".gogoproto.compare"] = false;
 
             /**
              * MessageOptions .gogoproto.typedecl.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
             MessageOptions.prototype[".gogoproto.typedecl"] = false;
 
@@ -33719,7 +33850,7 @@ export const google = $root.google = (function() {
                     writer.uint32(/* id 3, wireType 0 =*/24).bool(message.deprecated);
                 if (message.map_entry != null && message.hasOwnProperty("map_entry"))
                     writer.uint32(/* id 7, wireType 0 =*/56).bool(message.map_entry);
-                if (message.uninterpreted_option && message.uninterpreted_option.length)
+                if (message.uninterpreted_option != null && message.uninterpreted_option.length)
                     for (let i = 0; i < message.uninterpreted_option.length; ++i)
                         $root.google.protobuf.UninterpretedOption.encode(message.uninterpreted_option[i], writer.uint32(/* id 999, wireType 2 =*/7994).fork()).ldelim();
                 if (message[".gogoproto.goproto_getters"] != null && message.hasOwnProperty(".gogoproto.goproto_getters"))
@@ -33911,19 +34042,19 @@ export const google = $root.google = (function() {
             MessageOptions.verify = function verify(message) {
                 if (typeof message !== "object" || message === null)
                     return "object expected";
-                if (message.message_set_wire_format != null)
+                if (message.message_set_wire_format != null && message.hasOwnProperty("message_set_wire_format"))
                     if (typeof message.message_set_wire_format !== "boolean")
                         return "message_set_wire_format: boolean expected";
-                if (message.no_standard_descriptor_accessor != null)
+                if (message.no_standard_descriptor_accessor != null && message.hasOwnProperty("no_standard_descriptor_accessor"))
                     if (typeof message.no_standard_descriptor_accessor !== "boolean")
                         return "no_standard_descriptor_accessor: boolean expected";
-                if (message.deprecated != null)
+                if (message.deprecated != null && message.hasOwnProperty("deprecated"))
                     if (typeof message.deprecated !== "boolean")
                         return "deprecated: boolean expected";
-                if (message.map_entry != null)
+                if (message.map_entry != null && message.hasOwnProperty("map_entry"))
                     if (typeof message.map_entry !== "boolean")
                         return "map_entry: boolean expected";
-                if (message.uninterpreted_option != null) {
+                if (message.uninterpreted_option != null && message.hasOwnProperty("uninterpreted_option")) {
                     if (!Array.isArray(message.uninterpreted_option))
                         return "uninterpreted_option: array expected";
                     for (let i = 0; i < message.uninterpreted_option.length; ++i) {
@@ -33932,73 +34063,73 @@ export const google = $root.google = (function() {
                             return "uninterpreted_option." + error;
                     }
                 }
-                if (message[".gogoproto.goproto_getters"] != null)
+                if (message[".gogoproto.goproto_getters"] != null && message.hasOwnProperty(".gogoproto.goproto_getters"))
                     if (typeof message[".gogoproto.goproto_getters"] !== "boolean")
                         return ".gogoproto.goproto_getters: boolean expected";
-                if (message[".gogoproto.goproto_stringer"] != null)
+                if (message[".gogoproto.goproto_stringer"] != null && message.hasOwnProperty(".gogoproto.goproto_stringer"))
                     if (typeof message[".gogoproto.goproto_stringer"] !== "boolean")
                         return ".gogoproto.goproto_stringer: boolean expected";
-                if (message[".gogoproto.verbose_equal"] != null)
+                if (message[".gogoproto.verbose_equal"] != null && message.hasOwnProperty(".gogoproto.verbose_equal"))
                     if (typeof message[".gogoproto.verbose_equal"] !== "boolean")
                         return ".gogoproto.verbose_equal: boolean expected";
-                if (message[".gogoproto.face"] != null)
+                if (message[".gogoproto.face"] != null && message.hasOwnProperty(".gogoproto.face"))
                     if (typeof message[".gogoproto.face"] !== "boolean")
                         return ".gogoproto.face: boolean expected";
-                if (message[".gogoproto.gostring"] != null)
+                if (message[".gogoproto.gostring"] != null && message.hasOwnProperty(".gogoproto.gostring"))
                     if (typeof message[".gogoproto.gostring"] !== "boolean")
                         return ".gogoproto.gostring: boolean expected";
-                if (message[".gogoproto.populate"] != null)
+                if (message[".gogoproto.populate"] != null && message.hasOwnProperty(".gogoproto.populate"))
                     if (typeof message[".gogoproto.populate"] !== "boolean")
                         return ".gogoproto.populate: boolean expected";
-                if (message[".gogoproto.stringer"] != null)
+                if (message[".gogoproto.stringer"] != null && message.hasOwnProperty(".gogoproto.stringer"))
                     if (typeof message[".gogoproto.stringer"] !== "boolean")
                         return ".gogoproto.stringer: boolean expected";
-                if (message[".gogoproto.onlyone"] != null)
+                if (message[".gogoproto.onlyone"] != null && message.hasOwnProperty(".gogoproto.onlyone"))
                     if (typeof message[".gogoproto.onlyone"] !== "boolean")
                         return ".gogoproto.onlyone: boolean expected";
-                if (message[".gogoproto.equal"] != null)
+                if (message[".gogoproto.equal"] != null && message.hasOwnProperty(".gogoproto.equal"))
                     if (typeof message[".gogoproto.equal"] !== "boolean")
                         return ".gogoproto.equal: boolean expected";
-                if (message[".gogoproto.description"] != null)
+                if (message[".gogoproto.description"] != null && message.hasOwnProperty(".gogoproto.description"))
                     if (typeof message[".gogoproto.description"] !== "boolean")
                         return ".gogoproto.description: boolean expected";
-                if (message[".gogoproto.testgen"] != null)
+                if (message[".gogoproto.testgen"] != null && message.hasOwnProperty(".gogoproto.testgen"))
                     if (typeof message[".gogoproto.testgen"] !== "boolean")
                         return ".gogoproto.testgen: boolean expected";
-                if (message[".gogoproto.benchgen"] != null)
+                if (message[".gogoproto.benchgen"] != null && message.hasOwnProperty(".gogoproto.benchgen"))
                     if (typeof message[".gogoproto.benchgen"] !== "boolean")
                         return ".gogoproto.benchgen: boolean expected";
-                if (message[".gogoproto.marshaler"] != null)
+                if (message[".gogoproto.marshaler"] != null && message.hasOwnProperty(".gogoproto.marshaler"))
                     if (typeof message[".gogoproto.marshaler"] !== "boolean")
                         return ".gogoproto.marshaler: boolean expected";
-                if (message[".gogoproto.unmarshaler"] != null)
+                if (message[".gogoproto.unmarshaler"] != null && message.hasOwnProperty(".gogoproto.unmarshaler"))
                     if (typeof message[".gogoproto.unmarshaler"] !== "boolean")
                         return ".gogoproto.unmarshaler: boolean expected";
-                if (message[".gogoproto.stable_marshaler"] != null)
+                if (message[".gogoproto.stable_marshaler"] != null && message.hasOwnProperty(".gogoproto.stable_marshaler"))
                     if (typeof message[".gogoproto.stable_marshaler"] !== "boolean")
                         return ".gogoproto.stable_marshaler: boolean expected";
-                if (message[".gogoproto.sizer"] != null)
+                if (message[".gogoproto.sizer"] != null && message.hasOwnProperty(".gogoproto.sizer"))
                     if (typeof message[".gogoproto.sizer"] !== "boolean")
                         return ".gogoproto.sizer: boolean expected";
-                if (message[".gogoproto.unsafe_marshaler"] != null)
+                if (message[".gogoproto.unsafe_marshaler"] != null && message.hasOwnProperty(".gogoproto.unsafe_marshaler"))
                     if (typeof message[".gogoproto.unsafe_marshaler"] !== "boolean")
                         return ".gogoproto.unsafe_marshaler: boolean expected";
-                if (message[".gogoproto.unsafe_unmarshaler"] != null)
+                if (message[".gogoproto.unsafe_unmarshaler"] != null && message.hasOwnProperty(".gogoproto.unsafe_unmarshaler"))
                     if (typeof message[".gogoproto.unsafe_unmarshaler"] !== "boolean")
                         return ".gogoproto.unsafe_unmarshaler: boolean expected";
-                if (message[".gogoproto.goproto_extensions_map"] != null)
+                if (message[".gogoproto.goproto_extensions_map"] != null && message.hasOwnProperty(".gogoproto.goproto_extensions_map"))
                     if (typeof message[".gogoproto.goproto_extensions_map"] !== "boolean")
                         return ".gogoproto.goproto_extensions_map: boolean expected";
-                if (message[".gogoproto.goproto_unrecognized"] != null)
+                if (message[".gogoproto.goproto_unrecognized"] != null && message.hasOwnProperty(".gogoproto.goproto_unrecognized"))
                     if (typeof message[".gogoproto.goproto_unrecognized"] !== "boolean")
                         return ".gogoproto.goproto_unrecognized: boolean expected";
-                if (message[".gogoproto.protosizer"] != null)
+                if (message[".gogoproto.protosizer"] != null && message.hasOwnProperty(".gogoproto.protosizer"))
                     if (typeof message[".gogoproto.protosizer"] !== "boolean")
                         return ".gogoproto.protosizer: boolean expected";
-                if (message[".gogoproto.compare"] != null)
+                if (message[".gogoproto.compare"] != null && message.hasOwnProperty(".gogoproto.compare"))
                     if (typeof message[".gogoproto.compare"] !== "boolean")
                         return ".gogoproto.compare: boolean expected";
-                if (message[".gogoproto.typedecl"] != null)
+                if (message[".gogoproto.typedecl"] != null && message.hasOwnProperty(".gogoproto.typedecl"))
                     if (typeof message[".gogoproto.typedecl"] !== "boolean")
                         return ".gogoproto.typedecl: boolean expected";
                 return null;
@@ -34248,114 +34379,115 @@ export const google = $root.google = (function() {
                 this.uninterpreted_option = [];
                 if (properties)
                     for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                        this[keys[i]] = properties[keys[i]];
+                        if (properties[keys[i]] != null)
+                            this[keys[i]] = properties[keys[i]];
             }
 
             /**
              * FieldOptions ctype.
-             * @type {google.protobuf.FieldOptions.CType|undefined}
+             * @type {google.protobuf.FieldOptions.CType}
              */
             FieldOptions.prototype.ctype = 0;
 
             /**
              * FieldOptions packed.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
             FieldOptions.prototype.packed = false;
 
             /**
              * FieldOptions jstype.
-             * @type {google.protobuf.FieldOptions.JSType|undefined}
+             * @type {google.protobuf.FieldOptions.JSType}
              */
             FieldOptions.prototype.jstype = 0;
 
             /**
              * FieldOptions lazy.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
             FieldOptions.prototype.lazy = false;
 
             /**
              * FieldOptions deprecated.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
             FieldOptions.prototype.deprecated = false;
 
             /**
              * FieldOptions weak.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
             FieldOptions.prototype.weak = false;
 
             /**
              * FieldOptions uninterpreted_option.
-             * @type {Array.<google.protobuf.UninterpretedOption$Properties>|undefined}
+             * @type {Array.<google.protobuf.UninterpretedOption$Properties>}
              */
             FieldOptions.prototype.uninterpreted_option = $util.emptyArray;
 
             /**
              * FieldOptions .gogoproto.nullable.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
             FieldOptions.prototype[".gogoproto.nullable"] = false;
 
             /**
              * FieldOptions .gogoproto.embed.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
             FieldOptions.prototype[".gogoproto.embed"] = false;
 
             /**
              * FieldOptions .gogoproto.customtype.
-             * @type {string|undefined}
+             * @type {string}
              */
             FieldOptions.prototype[".gogoproto.customtype"] = "";
 
             /**
              * FieldOptions .gogoproto.customname.
-             * @type {string|undefined}
+             * @type {string}
              */
             FieldOptions.prototype[".gogoproto.customname"] = "";
 
             /**
              * FieldOptions .gogoproto.jsontag.
-             * @type {string|undefined}
+             * @type {string}
              */
             FieldOptions.prototype[".gogoproto.jsontag"] = "";
 
             /**
              * FieldOptions .gogoproto.moretags.
-             * @type {string|undefined}
+             * @type {string}
              */
             FieldOptions.prototype[".gogoproto.moretags"] = "";
 
             /**
              * FieldOptions .gogoproto.casttype.
-             * @type {string|undefined}
+             * @type {string}
              */
             FieldOptions.prototype[".gogoproto.casttype"] = "";
 
             /**
              * FieldOptions .gogoproto.castkey.
-             * @type {string|undefined}
+             * @type {string}
              */
             FieldOptions.prototype[".gogoproto.castkey"] = "";
 
             /**
              * FieldOptions .gogoproto.castvalue.
-             * @type {string|undefined}
+             * @type {string}
              */
             FieldOptions.prototype[".gogoproto.castvalue"] = "";
 
             /**
              * FieldOptions .gogoproto.stdtime.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
             FieldOptions.prototype[".gogoproto.stdtime"] = false;
 
             /**
              * FieldOptions .gogoproto.stdduration.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
             FieldOptions.prototype[".gogoproto.stdduration"] = false;
 
@@ -34389,7 +34521,7 @@ export const google = $root.google = (function() {
                     writer.uint32(/* id 6, wireType 0 =*/48).uint32(message.jstype);
                 if (message.weak != null && message.hasOwnProperty("weak"))
                     writer.uint32(/* id 10, wireType 0 =*/80).bool(message.weak);
-                if (message.uninterpreted_option && message.uninterpreted_option.length)
+                if (message.uninterpreted_option != null && message.uninterpreted_option.length)
                     for (let i = 0; i < message.uninterpreted_option.length; ++i)
                         $root.google.protobuf.UninterpretedOption.encode(message.uninterpreted_option[i], writer.uint32(/* id 999, wireType 2 =*/7994).fork()).ldelim();
                 if (message[".gogoproto.nullable"] != null && message.hasOwnProperty(".gogoproto.nullable"))
@@ -34527,7 +34659,7 @@ export const google = $root.google = (function() {
             FieldOptions.verify = function verify(message) {
                 if (typeof message !== "object" || message === null)
                     return "object expected";
-                if (message.ctype != null)
+                if (message.ctype != null && message.hasOwnProperty("ctype"))
                     switch (message.ctype) {
                     default:
                         return "ctype: enum value expected";
@@ -34536,10 +34668,10 @@ export const google = $root.google = (function() {
                     case 2:
                         break;
                     }
-                if (message.packed != null)
+                if (message.packed != null && message.hasOwnProperty("packed"))
                     if (typeof message.packed !== "boolean")
                         return "packed: boolean expected";
-                if (message.jstype != null)
+                if (message.jstype != null && message.hasOwnProperty("jstype"))
                     switch (message.jstype) {
                     default:
                         return "jstype: enum value expected";
@@ -34548,16 +34680,16 @@ export const google = $root.google = (function() {
                     case 2:
                         break;
                     }
-                if (message.lazy != null)
+                if (message.lazy != null && message.hasOwnProperty("lazy"))
                     if (typeof message.lazy !== "boolean")
                         return "lazy: boolean expected";
-                if (message.deprecated != null)
+                if (message.deprecated != null && message.hasOwnProperty("deprecated"))
                     if (typeof message.deprecated !== "boolean")
                         return "deprecated: boolean expected";
-                if (message.weak != null)
+                if (message.weak != null && message.hasOwnProperty("weak"))
                     if (typeof message.weak !== "boolean")
                         return "weak: boolean expected";
-                if (message.uninterpreted_option != null) {
+                if (message.uninterpreted_option != null && message.hasOwnProperty("uninterpreted_option")) {
                     if (!Array.isArray(message.uninterpreted_option))
                         return "uninterpreted_option: array expected";
                     for (let i = 0; i < message.uninterpreted_option.length; ++i) {
@@ -34566,37 +34698,37 @@ export const google = $root.google = (function() {
                             return "uninterpreted_option." + error;
                     }
                 }
-                if (message[".gogoproto.nullable"] != null)
+                if (message[".gogoproto.nullable"] != null && message.hasOwnProperty(".gogoproto.nullable"))
                     if (typeof message[".gogoproto.nullable"] !== "boolean")
                         return ".gogoproto.nullable: boolean expected";
-                if (message[".gogoproto.embed"] != null)
+                if (message[".gogoproto.embed"] != null && message.hasOwnProperty(".gogoproto.embed"))
                     if (typeof message[".gogoproto.embed"] !== "boolean")
                         return ".gogoproto.embed: boolean expected";
-                if (message[".gogoproto.customtype"] != null)
+                if (message[".gogoproto.customtype"] != null && message.hasOwnProperty(".gogoproto.customtype"))
                     if (!$util.isString(message[".gogoproto.customtype"]))
                         return ".gogoproto.customtype: string expected";
-                if (message[".gogoproto.customname"] != null)
+                if (message[".gogoproto.customname"] != null && message.hasOwnProperty(".gogoproto.customname"))
                     if (!$util.isString(message[".gogoproto.customname"]))
                         return ".gogoproto.customname: string expected";
-                if (message[".gogoproto.jsontag"] != null)
+                if (message[".gogoproto.jsontag"] != null && message.hasOwnProperty(".gogoproto.jsontag"))
                     if (!$util.isString(message[".gogoproto.jsontag"]))
                         return ".gogoproto.jsontag: string expected";
-                if (message[".gogoproto.moretags"] != null)
+                if (message[".gogoproto.moretags"] != null && message.hasOwnProperty(".gogoproto.moretags"))
                     if (!$util.isString(message[".gogoproto.moretags"]))
                         return ".gogoproto.moretags: string expected";
-                if (message[".gogoproto.casttype"] != null)
+                if (message[".gogoproto.casttype"] != null && message.hasOwnProperty(".gogoproto.casttype"))
                     if (!$util.isString(message[".gogoproto.casttype"]))
                         return ".gogoproto.casttype: string expected";
-                if (message[".gogoproto.castkey"] != null)
+                if (message[".gogoproto.castkey"] != null && message.hasOwnProperty(".gogoproto.castkey"))
                     if (!$util.isString(message[".gogoproto.castkey"]))
                         return ".gogoproto.castkey: string expected";
-                if (message[".gogoproto.castvalue"] != null)
+                if (message[".gogoproto.castvalue"] != null && message.hasOwnProperty(".gogoproto.castvalue"))
                     if (!$util.isString(message[".gogoproto.castvalue"]))
                         return ".gogoproto.castvalue: string expected";
-                if (message[".gogoproto.stdtime"] != null)
+                if (message[".gogoproto.stdtime"] != null && message.hasOwnProperty(".gogoproto.stdtime"))
                     if (typeof message[".gogoproto.stdtime"] !== "boolean")
                         return ".gogoproto.stdtime: boolean expected";
-                if (message[".gogoproto.stdduration"] != null)
+                if (message[".gogoproto.stdduration"] != null && message.hasOwnProperty(".gogoproto.stdduration"))
                     if (typeof message[".gogoproto.stdduration"] !== "boolean")
                         return ".gogoproto.stdduration: boolean expected";
                 return null;
@@ -34837,12 +34969,13 @@ export const google = $root.google = (function() {
                 this.uninterpreted_option = [];
                 if (properties)
                     for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                        this[keys[i]] = properties[keys[i]];
+                        if (properties[keys[i]] != null)
+                            this[keys[i]] = properties[keys[i]];
             }
 
             /**
              * OneofOptions uninterpreted_option.
-             * @type {Array.<google.protobuf.UninterpretedOption$Properties>|undefined}
+             * @type {Array.<google.protobuf.UninterpretedOption$Properties>}
              */
             OneofOptions.prototype.uninterpreted_option = $util.emptyArray;
 
@@ -34864,7 +34997,7 @@ export const google = $root.google = (function() {
             OneofOptions.encode = function encode(message, writer) {
                 if (!writer)
                     writer = $Writer.create();
-                if (message.uninterpreted_option && message.uninterpreted_option.length)
+                if (message.uninterpreted_option != null && message.uninterpreted_option.length)
                     for (let i = 0; i < message.uninterpreted_option.length; ++i)
                         $root.google.protobuf.UninterpretedOption.encode(message.uninterpreted_option[i], writer.uint32(/* id 999, wireType 2 =*/7994).fork()).ldelim();
                 return writer;
@@ -34929,7 +35062,7 @@ export const google = $root.google = (function() {
             OneofOptions.verify = function verify(message) {
                 if (typeof message !== "object" || message === null)
                     return "object expected";
-                if (message.uninterpreted_option != null) {
+                if (message.uninterpreted_option != null && message.hasOwnProperty("uninterpreted_option")) {
                     if (!Array.isArray(message.uninterpreted_option))
                         return "uninterpreted_option: array expected";
                     for (let i = 0; i < message.uninterpreted_option.length; ++i) {
@@ -35038,54 +35171,55 @@ export const google = $root.google = (function() {
                 this.uninterpreted_option = [];
                 if (properties)
                     for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                        this[keys[i]] = properties[keys[i]];
+                        if (properties[keys[i]] != null)
+                            this[keys[i]] = properties[keys[i]];
             }
 
             /**
              * EnumOptions allow_alias.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
             EnumOptions.prototype.allow_alias = false;
 
             /**
              * EnumOptions deprecated.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
             EnumOptions.prototype.deprecated = false;
 
             /**
              * EnumOptions uninterpreted_option.
-             * @type {Array.<google.protobuf.UninterpretedOption$Properties>|undefined}
+             * @type {Array.<google.protobuf.UninterpretedOption$Properties>}
              */
             EnumOptions.prototype.uninterpreted_option = $util.emptyArray;
 
             /**
              * EnumOptions .gogoproto.goproto_enum_prefix.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
             EnumOptions.prototype[".gogoproto.goproto_enum_prefix"] = false;
 
             /**
              * EnumOptions .gogoproto.goproto_enum_stringer.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
             EnumOptions.prototype[".gogoproto.goproto_enum_stringer"] = false;
 
             /**
              * EnumOptions .gogoproto.enum_stringer.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
             EnumOptions.prototype[".gogoproto.enum_stringer"] = false;
 
             /**
              * EnumOptions .gogoproto.enum_customname.
-             * @type {string|undefined}
+             * @type {string}
              */
             EnumOptions.prototype[".gogoproto.enum_customname"] = "";
 
             /**
              * EnumOptions .gogoproto.enumdecl.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
             EnumOptions.prototype[".gogoproto.enumdecl"] = false;
 
@@ -35111,7 +35245,7 @@ export const google = $root.google = (function() {
                     writer.uint32(/* id 2, wireType 0 =*/16).bool(message.allow_alias);
                 if (message.deprecated != null && message.hasOwnProperty("deprecated"))
                     writer.uint32(/* id 3, wireType 0 =*/24).bool(message.deprecated);
-                if (message.uninterpreted_option && message.uninterpreted_option.length)
+                if (message.uninterpreted_option != null && message.uninterpreted_option.length)
                     for (let i = 0; i < message.uninterpreted_option.length; ++i)
                         $root.google.protobuf.UninterpretedOption.encode(message.uninterpreted_option[i], writer.uint32(/* id 999, wireType 2 =*/7994).fork()).ldelim();
                 if (message[".gogoproto.goproto_enum_prefix"] != null && message.hasOwnProperty(".gogoproto.goproto_enum_prefix"))
@@ -35207,13 +35341,13 @@ export const google = $root.google = (function() {
             EnumOptions.verify = function verify(message) {
                 if (typeof message !== "object" || message === null)
                     return "object expected";
-                if (message.allow_alias != null)
+                if (message.allow_alias != null && message.hasOwnProperty("allow_alias"))
                     if (typeof message.allow_alias !== "boolean")
                         return "allow_alias: boolean expected";
-                if (message.deprecated != null)
+                if (message.deprecated != null && message.hasOwnProperty("deprecated"))
                     if (typeof message.deprecated !== "boolean")
                         return "deprecated: boolean expected";
-                if (message.uninterpreted_option != null) {
+                if (message.uninterpreted_option != null && message.hasOwnProperty("uninterpreted_option")) {
                     if (!Array.isArray(message.uninterpreted_option))
                         return "uninterpreted_option: array expected";
                     for (let i = 0; i < message.uninterpreted_option.length; ++i) {
@@ -35222,19 +35356,19 @@ export const google = $root.google = (function() {
                             return "uninterpreted_option." + error;
                     }
                 }
-                if (message[".gogoproto.goproto_enum_prefix"] != null)
+                if (message[".gogoproto.goproto_enum_prefix"] != null && message.hasOwnProperty(".gogoproto.goproto_enum_prefix"))
                     if (typeof message[".gogoproto.goproto_enum_prefix"] !== "boolean")
                         return ".gogoproto.goproto_enum_prefix: boolean expected";
-                if (message[".gogoproto.goproto_enum_stringer"] != null)
+                if (message[".gogoproto.goproto_enum_stringer"] != null && message.hasOwnProperty(".gogoproto.goproto_enum_stringer"))
                     if (typeof message[".gogoproto.goproto_enum_stringer"] !== "boolean")
                         return ".gogoproto.goproto_enum_stringer: boolean expected";
-                if (message[".gogoproto.enum_stringer"] != null)
+                if (message[".gogoproto.enum_stringer"] != null && message.hasOwnProperty(".gogoproto.enum_stringer"))
                     if (typeof message[".gogoproto.enum_stringer"] !== "boolean")
                         return ".gogoproto.enum_stringer: boolean expected";
-                if (message[".gogoproto.enum_customname"] != null)
+                if (message[".gogoproto.enum_customname"] != null && message.hasOwnProperty(".gogoproto.enum_customname"))
                     if (!$util.isString(message[".gogoproto.enum_customname"]))
                         return ".gogoproto.enum_customname: string expected";
-                if (message[".gogoproto.enumdecl"] != null)
+                if (message[".gogoproto.enumdecl"] != null && message.hasOwnProperty(".gogoproto.enumdecl"))
                     if (typeof message[".gogoproto.enumdecl"] !== "boolean")
                         return ".gogoproto.enumdecl: boolean expected";
                 return null;
@@ -35369,24 +35503,25 @@ export const google = $root.google = (function() {
                 this.uninterpreted_option = [];
                 if (properties)
                     for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                        this[keys[i]] = properties[keys[i]];
+                        if (properties[keys[i]] != null)
+                            this[keys[i]] = properties[keys[i]];
             }
 
             /**
              * EnumValueOptions deprecated.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
             EnumValueOptions.prototype.deprecated = false;
 
             /**
              * EnumValueOptions uninterpreted_option.
-             * @type {Array.<google.protobuf.UninterpretedOption$Properties>|undefined}
+             * @type {Array.<google.protobuf.UninterpretedOption$Properties>}
              */
             EnumValueOptions.prototype.uninterpreted_option = $util.emptyArray;
 
             /**
              * EnumValueOptions .gogoproto.enumvalue_customname.
-             * @type {string|undefined}
+             * @type {string}
              */
             EnumValueOptions.prototype[".gogoproto.enumvalue_customname"] = "";
 
@@ -35410,7 +35545,7 @@ export const google = $root.google = (function() {
                     writer = $Writer.create();
                 if (message.deprecated != null && message.hasOwnProperty("deprecated"))
                     writer.uint32(/* id 1, wireType 0 =*/8).bool(message.deprecated);
-                if (message.uninterpreted_option && message.uninterpreted_option.length)
+                if (message.uninterpreted_option != null && message.uninterpreted_option.length)
                     for (let i = 0; i < message.uninterpreted_option.length; ++i)
                         $root.google.protobuf.UninterpretedOption.encode(message.uninterpreted_option[i], writer.uint32(/* id 999, wireType 2 =*/7994).fork()).ldelim();
                 if (message[".gogoproto.enumvalue_customname"] != null && message.hasOwnProperty(".gogoproto.enumvalue_customname"))
@@ -35483,10 +35618,10 @@ export const google = $root.google = (function() {
             EnumValueOptions.verify = function verify(message) {
                 if (typeof message !== "object" || message === null)
                     return "object expected";
-                if (message.deprecated != null)
+                if (message.deprecated != null && message.hasOwnProperty("deprecated"))
                     if (typeof message.deprecated !== "boolean")
                         return "deprecated: boolean expected";
-                if (message.uninterpreted_option != null) {
+                if (message.uninterpreted_option != null && message.hasOwnProperty("uninterpreted_option")) {
                     if (!Array.isArray(message.uninterpreted_option))
                         return "uninterpreted_option: array expected";
                     for (let i = 0; i < message.uninterpreted_option.length; ++i) {
@@ -35495,7 +35630,7 @@ export const google = $root.google = (function() {
                             return "uninterpreted_option." + error;
                     }
                 }
-                if (message[".gogoproto.enumvalue_customname"] != null)
+                if (message[".gogoproto.enumvalue_customname"] != null && message.hasOwnProperty(".gogoproto.enumvalue_customname"))
                     if (!$util.isString(message[".gogoproto.enumvalue_customname"]))
                         return ".gogoproto.enumvalue_customname: string expected";
                 return null;
@@ -35604,18 +35739,19 @@ export const google = $root.google = (function() {
                 this.uninterpreted_option = [];
                 if (properties)
                     for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                        this[keys[i]] = properties[keys[i]];
+                        if (properties[keys[i]] != null)
+                            this[keys[i]] = properties[keys[i]];
             }
 
             /**
              * ServiceOptions deprecated.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
             ServiceOptions.prototype.deprecated = false;
 
             /**
              * ServiceOptions uninterpreted_option.
-             * @type {Array.<google.protobuf.UninterpretedOption$Properties>|undefined}
+             * @type {Array.<google.protobuf.UninterpretedOption$Properties>}
              */
             ServiceOptions.prototype.uninterpreted_option = $util.emptyArray;
 
@@ -35639,7 +35775,7 @@ export const google = $root.google = (function() {
                     writer = $Writer.create();
                 if (message.deprecated != null && message.hasOwnProperty("deprecated"))
                     writer.uint32(/* id 33, wireType 0 =*/264).bool(message.deprecated);
-                if (message.uninterpreted_option && message.uninterpreted_option.length)
+                if (message.uninterpreted_option != null && message.uninterpreted_option.length)
                     for (let i = 0; i < message.uninterpreted_option.length; ++i)
                         $root.google.protobuf.UninterpretedOption.encode(message.uninterpreted_option[i], writer.uint32(/* id 999, wireType 2 =*/7994).fork()).ldelim();
                 return writer;
@@ -35707,10 +35843,10 @@ export const google = $root.google = (function() {
             ServiceOptions.verify = function verify(message) {
                 if (typeof message !== "object" || message === null)
                     return "object expected";
-                if (message.deprecated != null)
+                if (message.deprecated != null && message.hasOwnProperty("deprecated"))
                     if (typeof message.deprecated !== "boolean")
                         return "deprecated: boolean expected";
-                if (message.uninterpreted_option != null) {
+                if (message.uninterpreted_option != null && message.hasOwnProperty("uninterpreted_option")) {
                     if (!Array.isArray(message.uninterpreted_option))
                         return "uninterpreted_option: array expected";
                     for (let i = 0; i < message.uninterpreted_option.length; ++i) {
@@ -35820,24 +35956,25 @@ export const google = $root.google = (function() {
                 this.uninterpreted_option = [];
                 if (properties)
                     for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                        this[keys[i]] = properties[keys[i]];
+                        if (properties[keys[i]] != null)
+                            this[keys[i]] = properties[keys[i]];
             }
 
             /**
              * MethodOptions deprecated.
-             * @type {boolean|undefined}
+             * @type {boolean}
              */
             MethodOptions.prototype.deprecated = false;
 
             /**
              * MethodOptions uninterpreted_option.
-             * @type {Array.<google.protobuf.UninterpretedOption$Properties>|undefined}
+             * @type {Array.<google.protobuf.UninterpretedOption$Properties>}
              */
             MethodOptions.prototype.uninterpreted_option = $util.emptyArray;
 
             /**
              * MethodOptions .google.api.http.
-             * @type {google.api.HttpRule$Properties|undefined}
+             * @type {(google.api.HttpRule$Properties|null)}
              */
             MethodOptions.prototype[".google.api.http"] = null;
 
@@ -35861,10 +35998,10 @@ export const google = $root.google = (function() {
                     writer = $Writer.create();
                 if (message.deprecated != null && message.hasOwnProperty("deprecated"))
                     writer.uint32(/* id 33, wireType 0 =*/264).bool(message.deprecated);
-                if (message.uninterpreted_option && message.uninterpreted_option.length)
+                if (message.uninterpreted_option != null && message.uninterpreted_option.length)
                     for (let i = 0; i < message.uninterpreted_option.length; ++i)
                         $root.google.protobuf.UninterpretedOption.encode(message.uninterpreted_option[i], writer.uint32(/* id 999, wireType 2 =*/7994).fork()).ldelim();
-                if (message[".google.api.http"] && message.hasOwnProperty(".google.api.http"))
+                if (message[".google.api.http"] != null && message.hasOwnProperty(".google.api.http"))
                     $root.google.api.HttpRule.encode(message[".google.api.http"], writer.uint32(/* id 72295728, wireType 2 =*/578365826).fork()).ldelim();
                 return writer;
             };
@@ -35934,10 +36071,10 @@ export const google = $root.google = (function() {
             MethodOptions.verify = function verify(message) {
                 if (typeof message !== "object" || message === null)
                     return "object expected";
-                if (message.deprecated != null)
+                if (message.deprecated != null && message.hasOwnProperty("deprecated"))
                     if (typeof message.deprecated !== "boolean")
                         return "deprecated: boolean expected";
-                if (message.uninterpreted_option != null) {
+                if (message.uninterpreted_option != null && message.hasOwnProperty("uninterpreted_option")) {
                     if (!Array.isArray(message.uninterpreted_option))
                         return "uninterpreted_option: array expected";
                     for (let i = 0; i < message.uninterpreted_option.length; ++i) {
@@ -35946,7 +36083,7 @@ export const google = $root.google = (function() {
                             return "uninterpreted_option." + error;
                     }
                 }
-                if (message[".google.api.http"] != null) {
+                if (message[".google.api.http"] != null && message.hasOwnProperty(".google.api.http")) {
                     let error = $root.google.api.HttpRule.verify(message[".google.api.http"]);
                     if (error)
                         return ".google.api.http." + error;
@@ -36065,48 +36202,49 @@ export const google = $root.google = (function() {
                 this.name = [];
                 if (properties)
                     for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                        this[keys[i]] = properties[keys[i]];
+                        if (properties[keys[i]] != null)
+                            this[keys[i]] = properties[keys[i]];
             }
 
             /**
              * UninterpretedOption name.
-             * @type {Array.<google.protobuf.UninterpretedOption.NamePart$Properties>|undefined}
+             * @type {Array.<google.protobuf.UninterpretedOption.NamePart$Properties>}
              */
             UninterpretedOption.prototype.name = $util.emptyArray;
 
             /**
              * UninterpretedOption identifier_value.
-             * @type {string|undefined}
+             * @type {string}
              */
             UninterpretedOption.prototype.identifier_value = "";
 
             /**
              * UninterpretedOption positive_int_value.
-             * @type {Long|undefined}
+             * @type {Long}
              */
             UninterpretedOption.prototype.positive_int_value = $util.Long ? $util.Long.fromBits(0,0,true) : 0;
 
             /**
              * UninterpretedOption negative_int_value.
-             * @type {Long|undefined}
+             * @type {Long}
              */
             UninterpretedOption.prototype.negative_int_value = $util.Long ? $util.Long.fromBits(0,0,false) : 0;
 
             /**
              * UninterpretedOption double_value.
-             * @type {number|undefined}
+             * @type {number}
              */
             UninterpretedOption.prototype.double_value = 0;
 
             /**
              * UninterpretedOption string_value.
-             * @type {Uint8Array|undefined}
+             * @type {Uint8Array}
              */
             UninterpretedOption.prototype.string_value = $util.newBuffer([]);
 
             /**
              * UninterpretedOption aggregate_value.
-             * @type {string|undefined}
+             * @type {string}
              */
             UninterpretedOption.prototype.aggregate_value = "";
 
@@ -36128,7 +36266,7 @@ export const google = $root.google = (function() {
             UninterpretedOption.encode = function encode(message, writer) {
                 if (!writer)
                     writer = $Writer.create();
-                if (message.name && message.name.length)
+                if (message.name != null && message.name.length)
                     for (let i = 0; i < message.name.length; ++i)
                         $root.google.protobuf.UninterpretedOption.NamePart.encode(message.name[i], writer.uint32(/* id 2, wireType 2 =*/18).fork()).ldelim();
                 if (message.identifier_value != null && message.hasOwnProperty("identifier_value"))
@@ -36139,7 +36277,7 @@ export const google = $root.google = (function() {
                     writer.uint32(/* id 5, wireType 0 =*/40).int64(message.negative_int_value);
                 if (message.double_value != null && message.hasOwnProperty("double_value"))
                     writer.uint32(/* id 6, wireType 1 =*/49).double(message.double_value);
-                if (message.string_value && message.hasOwnProperty("string_value"))
+                if (message.string_value != null && message.hasOwnProperty("string_value"))
                     writer.uint32(/* id 7, wireType 2 =*/58).bytes(message.string_value);
                 if (message.aggregate_value != null && message.hasOwnProperty("aggregate_value"))
                     writer.uint32(/* id 8, wireType 2 =*/66).string(message.aggregate_value);
@@ -36223,7 +36361,7 @@ export const google = $root.google = (function() {
             UninterpretedOption.verify = function verify(message) {
                 if (typeof message !== "object" || message === null)
                     return "object expected";
-                if (message.name != null) {
+                if (message.name != null && message.hasOwnProperty("name")) {
                     if (!Array.isArray(message.name))
                         return "name: array expected";
                     for (let i = 0; i < message.name.length; ++i) {
@@ -36232,22 +36370,22 @@ export const google = $root.google = (function() {
                             return "name." + error;
                     }
                 }
-                if (message.identifier_value != null)
+                if (message.identifier_value != null && message.hasOwnProperty("identifier_value"))
                     if (!$util.isString(message.identifier_value))
                         return "identifier_value: string expected";
-                if (message.positive_int_value != null)
+                if (message.positive_int_value != null && message.hasOwnProperty("positive_int_value"))
                     if (!$util.isInteger(message.positive_int_value) && !(message.positive_int_value && $util.isInteger(message.positive_int_value.low) && $util.isInteger(message.positive_int_value.high)))
                         return "positive_int_value: integer|Long expected";
-                if (message.negative_int_value != null)
+                if (message.negative_int_value != null && message.hasOwnProperty("negative_int_value"))
                     if (!$util.isInteger(message.negative_int_value) && !(message.negative_int_value && $util.isInteger(message.negative_int_value.low) && $util.isInteger(message.negative_int_value.high)))
                         return "negative_int_value: integer|Long expected";
-                if (message.double_value != null)
+                if (message.double_value != null && message.hasOwnProperty("double_value"))
                     if (typeof message.double_value !== "number")
                         return "double_value: number expected";
-                if (message.string_value != null)
+                if (message.string_value != null && message.hasOwnProperty("string_value"))
                     if (!(message.string_value && typeof message.string_value.length === "number" || $util.isString(message.string_value)))
                         return "string_value: buffer expected";
-                if (message.aggregate_value != null)
+                if (message.aggregate_value != null && message.hasOwnProperty("aggregate_value"))
                     if (!$util.isString(message.aggregate_value))
                         return "aggregate_value: string expected";
                 return null;
@@ -36403,7 +36541,8 @@ export const google = $root.google = (function() {
                 function NamePart(properties) {
                     if (properties)
                         for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                            this[keys[i]] = properties[keys[i]];
+                            if (properties[keys[i]] != null)
+                                this[keys[i]] = properties[keys[i]];
                 }
 
                 /**
@@ -36600,12 +36739,13 @@ export const google = $root.google = (function() {
                 this.location = [];
                 if (properties)
                     for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                        this[keys[i]] = properties[keys[i]];
+                        if (properties[keys[i]] != null)
+                            this[keys[i]] = properties[keys[i]];
             }
 
             /**
              * SourceCodeInfo location.
-             * @type {Array.<google.protobuf.SourceCodeInfo.Location$Properties>|undefined}
+             * @type {Array.<google.protobuf.SourceCodeInfo.Location$Properties>}
              */
             SourceCodeInfo.prototype.location = $util.emptyArray;
 
@@ -36627,7 +36767,7 @@ export const google = $root.google = (function() {
             SourceCodeInfo.encode = function encode(message, writer) {
                 if (!writer)
                     writer = $Writer.create();
-                if (message.location && message.location.length)
+                if (message.location != null && message.location.length)
                     for (let i = 0; i < message.location.length; ++i)
                         $root.google.protobuf.SourceCodeInfo.Location.encode(message.location[i], writer.uint32(/* id 1, wireType 2 =*/10).fork()).ldelim();
                 return writer;
@@ -36692,7 +36832,7 @@ export const google = $root.google = (function() {
             SourceCodeInfo.verify = function verify(message) {
                 if (typeof message !== "object" || message === null)
                     return "object expected";
-                if (message.location != null) {
+                if (message.location != null && message.hasOwnProperty("location")) {
                     if (!Array.isArray(message.location))
                         return "location: array expected";
                     for (let i = 0; i < message.location.length; ++i) {
@@ -36797,36 +36937,37 @@ export const google = $root.google = (function() {
                     this.leading_detached_comments = [];
                     if (properties)
                         for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                            this[keys[i]] = properties[keys[i]];
+                            if (properties[keys[i]] != null)
+                                this[keys[i]] = properties[keys[i]];
                 }
 
                 /**
                  * Location path.
-                 * @type {Array.<number>|undefined}
+                 * @type {Array.<number>}
                  */
                 Location.prototype.path = $util.emptyArray;
 
                 /**
                  * Location span.
-                 * @type {Array.<number>|undefined}
+                 * @type {Array.<number>}
                  */
                 Location.prototype.span = $util.emptyArray;
 
                 /**
                  * Location leading_comments.
-                 * @type {string|undefined}
+                 * @type {string}
                  */
                 Location.prototype.leading_comments = "";
 
                 /**
                  * Location trailing_comments.
-                 * @type {string|undefined}
+                 * @type {string}
                  */
                 Location.prototype.trailing_comments = "";
 
                 /**
                  * Location leading_detached_comments.
-                 * @type {Array.<string>|undefined}
+                 * @type {Array.<string>}
                  */
                 Location.prototype.leading_detached_comments = $util.emptyArray;
 
@@ -36848,13 +36989,13 @@ export const google = $root.google = (function() {
                 Location.encode = function encode(message, writer) {
                     if (!writer)
                         writer = $Writer.create();
-                    if (message.path && message.path.length) {
+                    if (message.path != null && message.path.length) {
                         writer.uint32(/* id 1, wireType 2 =*/10).fork();
                         for (let i = 0; i < message.path.length; ++i)
                             writer.int32(message.path[i]);
                         writer.ldelim();
                     }
-                    if (message.span && message.span.length) {
+                    if (message.span != null && message.span.length) {
                         writer.uint32(/* id 2, wireType 2 =*/18).fork();
                         for (let i = 0; i < message.span.length; ++i)
                             writer.int32(message.span[i]);
@@ -36864,7 +37005,7 @@ export const google = $root.google = (function() {
                         writer.uint32(/* id 3, wireType 2 =*/26).string(message.leading_comments);
                     if (message.trailing_comments != null && message.hasOwnProperty("trailing_comments"))
                         writer.uint32(/* id 4, wireType 2 =*/34).string(message.trailing_comments);
-                    if (message.leading_detached_comments && message.leading_detached_comments.length)
+                    if (message.leading_detached_comments != null && message.leading_detached_comments.length)
                         for (let i = 0; i < message.leading_detached_comments.length; ++i)
                             writer.uint32(/* id 6, wireType 2 =*/50).string(message.leading_detached_comments[i]);
                     return writer;
@@ -36955,27 +37096,27 @@ export const google = $root.google = (function() {
                 Location.verify = function verify(message) {
                     if (typeof message !== "object" || message === null)
                         return "object expected";
-                    if (message.path != null) {
+                    if (message.path != null && message.hasOwnProperty("path")) {
                         if (!Array.isArray(message.path))
                             return "path: array expected";
                         for (let i = 0; i < message.path.length; ++i)
                             if (!$util.isInteger(message.path[i]))
                                 return "path: integer[] expected";
                     }
-                    if (message.span != null) {
+                    if (message.span != null && message.hasOwnProperty("span")) {
                         if (!Array.isArray(message.span))
                             return "span: array expected";
                         for (let i = 0; i < message.span.length; ++i)
                             if (!$util.isInteger(message.span[i]))
                                 return "span: integer[] expected";
                     }
-                    if (message.leading_comments != null)
+                    if (message.leading_comments != null && message.hasOwnProperty("leading_comments"))
                         if (!$util.isString(message.leading_comments))
                             return "leading_comments: string expected";
-                    if (message.trailing_comments != null)
+                    if (message.trailing_comments != null && message.hasOwnProperty("trailing_comments"))
                         if (!$util.isString(message.trailing_comments))
                             return "trailing_comments: string expected";
-                    if (message.leading_detached_comments != null) {
+                    if (message.leading_detached_comments != null && message.hasOwnProperty("leading_detached_comments")) {
                         if (!Array.isArray(message.leading_detached_comments))
                             return "leading_detached_comments: array expected";
                         for (let i = 0; i < message.leading_detached_comments.length; ++i)
@@ -37114,12 +37255,13 @@ export const google = $root.google = (function() {
                 this.annotation = [];
                 if (properties)
                     for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                        this[keys[i]] = properties[keys[i]];
+                        if (properties[keys[i]] != null)
+                            this[keys[i]] = properties[keys[i]];
             }
 
             /**
              * GeneratedCodeInfo annotation.
-             * @type {Array.<google.protobuf.GeneratedCodeInfo.Annotation$Properties>|undefined}
+             * @type {Array.<google.protobuf.GeneratedCodeInfo.Annotation$Properties>}
              */
             GeneratedCodeInfo.prototype.annotation = $util.emptyArray;
 
@@ -37141,7 +37283,7 @@ export const google = $root.google = (function() {
             GeneratedCodeInfo.encode = function encode(message, writer) {
                 if (!writer)
                     writer = $Writer.create();
-                if (message.annotation && message.annotation.length)
+                if (message.annotation != null && message.annotation.length)
                     for (let i = 0; i < message.annotation.length; ++i)
                         $root.google.protobuf.GeneratedCodeInfo.Annotation.encode(message.annotation[i], writer.uint32(/* id 1, wireType 2 =*/10).fork()).ldelim();
                 return writer;
@@ -37206,7 +37348,7 @@ export const google = $root.google = (function() {
             GeneratedCodeInfo.verify = function verify(message) {
                 if (typeof message !== "object" || message === null)
                     return "object expected";
-                if (message.annotation != null) {
+                if (message.annotation != null && message.hasOwnProperty("annotation")) {
                     if (!Array.isArray(message.annotation))
                         return "annotation: array expected";
                     for (let i = 0; i < message.annotation.length; ++i) {
@@ -37308,30 +37450,31 @@ export const google = $root.google = (function() {
                     this.path = [];
                     if (properties)
                         for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                            this[keys[i]] = properties[keys[i]];
+                            if (properties[keys[i]] != null)
+                                this[keys[i]] = properties[keys[i]];
                 }
 
                 /**
                  * Annotation path.
-                 * @type {Array.<number>|undefined}
+                 * @type {Array.<number>}
                  */
                 Annotation.prototype.path = $util.emptyArray;
 
                 /**
                  * Annotation source_file.
-                 * @type {string|undefined}
+                 * @type {string}
                  */
                 Annotation.prototype.source_file = "";
 
                 /**
                  * Annotation begin.
-                 * @type {number|undefined}
+                 * @type {number}
                  */
                 Annotation.prototype.begin = 0;
 
                 /**
                  * Annotation end.
-                 * @type {number|undefined}
+                 * @type {number}
                  */
                 Annotation.prototype.end = 0;
 
@@ -37353,7 +37496,7 @@ export const google = $root.google = (function() {
                 Annotation.encode = function encode(message, writer) {
                     if (!writer)
                         writer = $Writer.create();
-                    if (message.path && message.path.length) {
+                    if (message.path != null && message.path.length) {
                         writer.uint32(/* id 1, wireType 2 =*/10).fork();
                         for (let i = 0; i < message.path.length; ++i)
                             writer.int32(message.path[i]);
@@ -37441,20 +37584,20 @@ export const google = $root.google = (function() {
                 Annotation.verify = function verify(message) {
                     if (typeof message !== "object" || message === null)
                         return "object expected";
-                    if (message.path != null) {
+                    if (message.path != null && message.hasOwnProperty("path")) {
                         if (!Array.isArray(message.path))
                             return "path: array expected";
                         for (let i = 0; i < message.path.length; ++i)
                             if (!$util.isInteger(message.path[i]))
                                 return "path: integer[] expected";
                     }
-                    if (message.source_file != null)
+                    if (message.source_file != null && message.hasOwnProperty("source_file"))
                         if (!$util.isString(message.source_file))
                             return "source_file: string expected";
-                    if (message.begin != null)
+                    if (message.begin != null && message.hasOwnProperty("begin"))
                         if (!$util.isInteger(message.begin))
                             return "begin: integer expected";
-                    if (message.end != null)
+                    if (message.end != null && message.hasOwnProperty("end"))
                         if (!$util.isInteger(message.end))
                             return "end: integer expected";
                     return null;
@@ -37567,18 +37710,19 @@ export const google = $root.google = (function() {
             function Timestamp(properties) {
                 if (properties)
                     for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                        this[keys[i]] = properties[keys[i]];
+                        if (properties[keys[i]] != null)
+                            this[keys[i]] = properties[keys[i]];
             }
 
             /**
              * Timestamp seconds.
-             * @type {Long|undefined}
+             * @type {Long}
              */
             Timestamp.prototype.seconds = $util.Long ? $util.Long.fromBits(0,0,false) : 0;
 
             /**
              * Timestamp nanos.
-             * @type {number|undefined}
+             * @type {number}
              */
             Timestamp.prototype.nanos = 0;
 
@@ -37667,10 +37811,10 @@ export const google = $root.google = (function() {
             Timestamp.verify = function verify(message) {
                 if (typeof message !== "object" || message === null)
                     return "object expected";
-                if (message.seconds != null)
+                if (message.seconds != null && message.hasOwnProperty("seconds"))
                     if (!$util.isInteger(message.seconds) && !(message.seconds && $util.isInteger(message.seconds.low) && $util.isInteger(message.seconds.high)))
                         return "seconds: integer|Long expected";
-                if (message.nanos != null)
+                if (message.nanos != null && message.hasOwnProperty("nanos"))
                     if (!$util.isInteger(message.nanos))
                         return "nanos: integer expected";
                 return null;
@@ -37794,54 +37938,55 @@ export const google = $root.google = (function() {
                 this.additional_bindings = [];
                 if (properties)
                     for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                        this[keys[i]] = properties[keys[i]];
+                        if (properties[keys[i]] != null)
+                            this[keys[i]] = properties[keys[i]];
             }
 
             /**
              * HttpRule get.
-             * @type {string|undefined}
+             * @type {string}
              */
             HttpRule.prototype.get = "";
 
             /**
              * HttpRule put.
-             * @type {string|undefined}
+             * @type {string}
              */
             HttpRule.prototype.put = "";
 
             /**
              * HttpRule post.
-             * @type {string|undefined}
+             * @type {string}
              */
             HttpRule.prototype.post = "";
 
             /**
              * HttpRule delete.
-             * @type {string|undefined}
+             * @type {string}
              */
             HttpRule.prototype["delete"] = "";
 
             /**
              * HttpRule patch.
-             * @type {string|undefined}
+             * @type {string}
              */
             HttpRule.prototype.patch = "";
 
             /**
              * HttpRule custom.
-             * @type {google.api.CustomHttpPattern$Properties|undefined}
+             * @type {(google.api.CustomHttpPattern$Properties|null)}
              */
             HttpRule.prototype.custom = null;
 
             /**
              * HttpRule body.
-             * @type {string|undefined}
+             * @type {string}
              */
             HttpRule.prototype.body = "";
 
             /**
              * HttpRule additional_bindings.
-             * @type {Array.<google.api.HttpRule$Properties>|undefined}
+             * @type {Array.<google.api.HttpRule$Properties>}
              */
             HttpRule.prototype.additional_bindings = $util.emptyArray;
 
@@ -37888,9 +38033,9 @@ export const google = $root.google = (function() {
                     writer.uint32(/* id 6, wireType 2 =*/50).string(message.patch);
                 if (message.body != null && message.hasOwnProperty("body"))
                     writer.uint32(/* id 7, wireType 2 =*/58).string(message.body);
-                if (message.custom && message.hasOwnProperty("custom"))
+                if (message.custom != null && message.hasOwnProperty("custom"))
                     $root.google.api.CustomHttpPattern.encode(message.custom, writer.uint32(/* id 8, wireType 2 =*/66).fork()).ldelim();
-                if (message.additional_bindings && message.additional_bindings.length)
+                if (message.additional_bindings != null && message.additional_bindings.length)
                     for (let i = 0; i < message.additional_bindings.length; ++i)
                         $root.google.api.HttpRule.encode(message.additional_bindings[i], writer.uint32(/* id 11, wireType 2 =*/90).fork()).ldelim();
                 return writer;
@@ -37977,40 +38122,40 @@ export const google = $root.google = (function() {
                 if (typeof message !== "object" || message === null)
                     return "object expected";
                 let properties = {};
-                if (message.get != null) {
+                if (message.get != null && message.hasOwnProperty("get")) {
                     properties.pattern = 1;
                     if (!$util.isString(message.get))
                         return "get: string expected";
                 }
-                if (message.put != null) {
+                if (message.put != null && message.hasOwnProperty("put")) {
                     if (properties.pattern === 1)
                         return "pattern: multiple values";
                     properties.pattern = 1;
                     if (!$util.isString(message.put))
                         return "put: string expected";
                 }
-                if (message.post != null) {
+                if (message.post != null && message.hasOwnProperty("post")) {
                     if (properties.pattern === 1)
                         return "pattern: multiple values";
                     properties.pattern = 1;
                     if (!$util.isString(message.post))
                         return "post: string expected";
                 }
-                if (message["delete"] != null) {
+                if (message["delete"] != null && message.hasOwnProperty("delete")) {
                     if (properties.pattern === 1)
                         return "pattern: multiple values";
                     properties.pattern = 1;
                     if (!$util.isString(message["delete"]))
                         return "delete: string expected";
                 }
-                if (message.patch != null) {
+                if (message.patch != null && message.hasOwnProperty("patch")) {
                     if (properties.pattern === 1)
                         return "pattern: multiple values";
                     properties.pattern = 1;
                     if (!$util.isString(message.patch))
                         return "patch: string expected";
                 }
-                if (message.custom != null) {
+                if (message.custom != null && message.hasOwnProperty("custom")) {
                     if (properties.pattern === 1)
                         return "pattern: multiple values";
                     properties.pattern = 1;
@@ -38018,10 +38163,10 @@ export const google = $root.google = (function() {
                     if (error)
                         return "custom." + error;
                 }
-                if (message.body != null)
+                if (message.body != null && message.hasOwnProperty("body"))
                     if (!$util.isString(message.body))
                         return "body: string expected";
-                if (message.additional_bindings != null) {
+                if (message.additional_bindings != null && message.hasOwnProperty("additional_bindings")) {
                     if (!Array.isArray(message.additional_bindings))
                         return "additional_bindings: array expected";
                     for (let i = 0; i < message.additional_bindings.length; ++i) {
@@ -38174,18 +38319,19 @@ export const google = $root.google = (function() {
             function CustomHttpPattern(properties) {
                 if (properties)
                     for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                        this[keys[i]] = properties[keys[i]];
+                        if (properties[keys[i]] != null)
+                            this[keys[i]] = properties[keys[i]];
             }
 
             /**
              * CustomHttpPattern kind.
-             * @type {string|undefined}
+             * @type {string}
              */
             CustomHttpPattern.prototype.kind = "";
 
             /**
              * CustomHttpPattern path.
-             * @type {string|undefined}
+             * @type {string}
              */
             CustomHttpPattern.prototype.path = "";
 
@@ -38274,10 +38420,10 @@ export const google = $root.google = (function() {
             CustomHttpPattern.verify = function verify(message) {
                 if (typeof message !== "object" || message === null)
                     return "object expected";
-                if (message.kind != null)
+                if (message.kind != null && message.hasOwnProperty("kind"))
                     if (!$util.isString(message.kind))
                         return "kind: string expected";
-                if (message.path != null)
+                if (message.path != null && message.hasOwnProperty("path"))
                     if (!$util.isString(message.path))
                         return "path: string expected";
                 return null;
@@ -38355,7 +38501,7 @@ export const google = $root.google = (function() {
     return google;
 })();
 
-export const raftpb = $root.raftpb = (function() {
+export const raftpb = $root.raftpb = (() => {
 
     /**
      * Namespace raftpb.
@@ -38400,30 +38546,31 @@ export const raftpb = $root.raftpb = (function() {
         function Entry(properties) {
             if (properties)
                 for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                    this[keys[i]] = properties[keys[i]];
+                    if (properties[keys[i]] != null)
+                        this[keys[i]] = properties[keys[i]];
         }
 
         /**
          * Entry Term.
-         * @type {Long|undefined}
+         * @type {Long}
          */
         Entry.prototype.Term = $util.Long ? $util.Long.fromBits(0,0,true) : 0;
 
         /**
          * Entry Index.
-         * @type {Long|undefined}
+         * @type {Long}
          */
         Entry.prototype.Index = $util.Long ? $util.Long.fromBits(0,0,true) : 0;
 
         /**
          * Entry Type.
-         * @type {raftpb.EntryType|undefined}
+         * @type {raftpb.EntryType}
          */
         Entry.prototype.Type = 0;
 
         /**
          * Entry Data.
-         * @type {Uint8Array|undefined}
+         * @type {Uint8Array}
          */
         Entry.prototype.Data = $util.newBuffer([]);
 
@@ -38451,7 +38598,7 @@ export const raftpb = $root.raftpb = (function() {
                 writer.uint32(/* id 2, wireType 0 =*/16).uint64(message.Term);
             if (message.Index != null && message.hasOwnProperty("Index"))
                 writer.uint32(/* id 3, wireType 0 =*/24).uint64(message.Index);
-            if (message.Data && message.hasOwnProperty("Data"))
+            if (message.Data != null && message.hasOwnProperty("Data"))
                 writer.uint32(/* id 4, wireType 2 =*/34).bytes(message.Data);
             return writer;
         };
@@ -38522,13 +38669,13 @@ export const raftpb = $root.raftpb = (function() {
         Entry.verify = function verify(message) {
             if (typeof message !== "object" || message === null)
                 return "object expected";
-            if (message.Term != null)
+            if (message.Term != null && message.hasOwnProperty("Term"))
                 if (!$util.isInteger(message.Term) && !(message.Term && $util.isInteger(message.Term.low) && $util.isInteger(message.Term.high)))
                     return "Term: integer|Long expected";
-            if (message.Index != null)
+            if (message.Index != null && message.hasOwnProperty("Index"))
                 if (!$util.isInteger(message.Index) && !(message.Index && $util.isInteger(message.Index.low) && $util.isInteger(message.Index.high)))
                     return "Index: integer|Long expected";
-            if (message.Type != null)
+            if (message.Type != null && message.hasOwnProperty("Type"))
                 switch (message.Type) {
                 default:
                     return "Type: enum value expected";
@@ -38536,7 +38683,7 @@ export const raftpb = $root.raftpb = (function() {
                 case 1:
                     break;
                 }
-            if (message.Data != null)
+            if (message.Data != null && message.hasOwnProperty("Data"))
                 if (!(message.Data && typeof message.Data.length === "number" || $util.isString(message.Data)))
                     return "Data: buffer expected";
             return null;
@@ -38677,24 +38824,25 @@ export const raftpb = $root.raftpb = (function() {
         function SnapshotMetadata(properties) {
             if (properties)
                 for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                    this[keys[i]] = properties[keys[i]];
+                    if (properties[keys[i]] != null)
+                        this[keys[i]] = properties[keys[i]];
         }
 
         /**
          * SnapshotMetadata conf_state.
-         * @type {raftpb.ConfState$Properties|undefined}
+         * @type {(raftpb.ConfState$Properties|null)}
          */
         SnapshotMetadata.prototype.conf_state = null;
 
         /**
          * SnapshotMetadata index.
-         * @type {Long|undefined}
+         * @type {Long}
          */
         SnapshotMetadata.prototype.index = $util.Long ? $util.Long.fromBits(0,0,true) : 0;
 
         /**
          * SnapshotMetadata term.
-         * @type {Long|undefined}
+         * @type {Long}
          */
         SnapshotMetadata.prototype.term = $util.Long ? $util.Long.fromBits(0,0,true) : 0;
 
@@ -38716,7 +38864,7 @@ export const raftpb = $root.raftpb = (function() {
         SnapshotMetadata.encode = function encode(message, writer) {
             if (!writer)
                 writer = $Writer.create();
-            if (message.conf_state && message.hasOwnProperty("conf_state"))
+            if (message.conf_state != null && message.hasOwnProperty("conf_state"))
                 $root.raftpb.ConfState.encode(message.conf_state, writer.uint32(/* id 1, wireType 2 =*/10).fork()).ldelim();
             if (message.index != null && message.hasOwnProperty("index"))
                 writer.uint32(/* id 2, wireType 0 =*/16).uint64(message.index);
@@ -38788,15 +38936,15 @@ export const raftpb = $root.raftpb = (function() {
         SnapshotMetadata.verify = function verify(message) {
             if (typeof message !== "object" || message === null)
                 return "object expected";
-            if (message.conf_state != null) {
+            if (message.conf_state != null && message.hasOwnProperty("conf_state")) {
                 let error = $root.raftpb.ConfState.verify(message.conf_state);
                 if (error)
                     return "conf_state." + error;
             }
-            if (message.index != null)
+            if (message.index != null && message.hasOwnProperty("index"))
                 if (!$util.isInteger(message.index) && !(message.index && $util.isInteger(message.index.low) && $util.isInteger(message.index.high)))
                     return "index: integer|Long expected";
-            if (message.term != null)
+            if (message.term != null && message.hasOwnProperty("term"))
                 if (!$util.isInteger(message.term) && !(message.term && $util.isInteger(message.term.low) && $util.isInteger(message.term.high)))
                     return "term: integer|Long expected";
             return null;
@@ -38923,18 +39071,19 @@ export const raftpb = $root.raftpb = (function() {
         function Snapshot(properties) {
             if (properties)
                 for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                    this[keys[i]] = properties[keys[i]];
+                    if (properties[keys[i]] != null)
+                        this[keys[i]] = properties[keys[i]];
         }
 
         /**
          * Snapshot data.
-         * @type {Uint8Array|undefined}
+         * @type {Uint8Array}
          */
         Snapshot.prototype.data = $util.newBuffer([]);
 
         /**
          * Snapshot metadata.
-         * @type {raftpb.SnapshotMetadata$Properties|undefined}
+         * @type {(raftpb.SnapshotMetadata$Properties|null)}
          */
         Snapshot.prototype.metadata = null;
 
@@ -38956,9 +39105,9 @@ export const raftpb = $root.raftpb = (function() {
         Snapshot.encode = function encode(message, writer) {
             if (!writer)
                 writer = $Writer.create();
-            if (message.data && message.hasOwnProperty("data"))
+            if (message.data != null && message.hasOwnProperty("data"))
                 writer.uint32(/* id 1, wireType 2 =*/10).bytes(message.data);
-            if (message.metadata && message.hasOwnProperty("metadata"))
+            if (message.metadata != null && message.hasOwnProperty("metadata"))
                 $root.raftpb.SnapshotMetadata.encode(message.metadata, writer.uint32(/* id 2, wireType 2 =*/18).fork()).ldelim();
             return writer;
         };
@@ -39023,10 +39172,10 @@ export const raftpb = $root.raftpb = (function() {
         Snapshot.verify = function verify(message) {
             if (typeof message !== "object" || message === null)
                 return "object expected";
-            if (message.data != null)
+            if (message.data != null && message.hasOwnProperty("data"))
                 if (!(message.data && typeof message.data.length === "number" || $util.isString(message.data)))
                     return "data: buffer expected";
-            if (message.metadata != null) {
+            if (message.metadata != null && message.hasOwnProperty("metadata")) {
                 let error = $root.raftpb.SnapshotMetadata.verify(message.metadata);
                 if (error)
                     return "metadata." + error;
@@ -39185,78 +39334,79 @@ export const raftpb = $root.raftpb = (function() {
             this.entries = [];
             if (properties)
                 for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                    this[keys[i]] = properties[keys[i]];
+                    if (properties[keys[i]] != null)
+                        this[keys[i]] = properties[keys[i]];
         }
 
         /**
          * Message type.
-         * @type {raftpb.MessageType|undefined}
+         * @type {raftpb.MessageType}
          */
         Message.prototype.type = 0;
 
         /**
          * Message to.
-         * @type {Long|undefined}
+         * @type {Long}
          */
         Message.prototype.to = $util.Long ? $util.Long.fromBits(0,0,true) : 0;
 
         /**
          * Message from.
-         * @type {Long|undefined}
+         * @type {Long}
          */
         Message.prototype.from = $util.Long ? $util.Long.fromBits(0,0,true) : 0;
 
         /**
          * Message term.
-         * @type {Long|undefined}
+         * @type {Long}
          */
         Message.prototype.term = $util.Long ? $util.Long.fromBits(0,0,true) : 0;
 
         /**
          * Message logTerm.
-         * @type {Long|undefined}
+         * @type {Long}
          */
         Message.prototype.logTerm = $util.Long ? $util.Long.fromBits(0,0,true) : 0;
 
         /**
          * Message index.
-         * @type {Long|undefined}
+         * @type {Long}
          */
         Message.prototype.index = $util.Long ? $util.Long.fromBits(0,0,true) : 0;
 
         /**
          * Message entries.
-         * @type {Array.<raftpb.Entry$Properties>|undefined}
+         * @type {Array.<raftpb.Entry$Properties>}
          */
         Message.prototype.entries = $util.emptyArray;
 
         /**
          * Message commit.
-         * @type {Long|undefined}
+         * @type {Long}
          */
         Message.prototype.commit = $util.Long ? $util.Long.fromBits(0,0,true) : 0;
 
         /**
          * Message snapshot.
-         * @type {raftpb.Snapshot$Properties|undefined}
+         * @type {(raftpb.Snapshot$Properties|null)}
          */
         Message.prototype.snapshot = null;
 
         /**
          * Message reject.
-         * @type {boolean|undefined}
+         * @type {boolean}
          */
         Message.prototype.reject = false;
 
         /**
          * Message rejectHint.
-         * @type {Long|undefined}
+         * @type {Long}
          */
         Message.prototype.rejectHint = $util.Long ? $util.Long.fromBits(0,0,true) : 0;
 
         /**
          * Message context.
-         * @type {Uint8Array|undefined}
+         * @type {Uint8Array}
          */
         Message.prototype.context = $util.newBuffer([]);
 
@@ -39290,18 +39440,18 @@ export const raftpb = $root.raftpb = (function() {
                 writer.uint32(/* id 5, wireType 0 =*/40).uint64(message.logTerm);
             if (message.index != null && message.hasOwnProperty("index"))
                 writer.uint32(/* id 6, wireType 0 =*/48).uint64(message.index);
-            if (message.entries && message.entries.length)
+            if (message.entries != null && message.entries.length)
                 for (let i = 0; i < message.entries.length; ++i)
                     $root.raftpb.Entry.encode(message.entries[i], writer.uint32(/* id 7, wireType 2 =*/58).fork()).ldelim();
             if (message.commit != null && message.hasOwnProperty("commit"))
                 writer.uint32(/* id 8, wireType 0 =*/64).uint64(message.commit);
-            if (message.snapshot && message.hasOwnProperty("snapshot"))
+            if (message.snapshot != null && message.hasOwnProperty("snapshot"))
                 $root.raftpb.Snapshot.encode(message.snapshot, writer.uint32(/* id 9, wireType 2 =*/74).fork()).ldelim();
             if (message.reject != null && message.hasOwnProperty("reject"))
                 writer.uint32(/* id 10, wireType 0 =*/80).bool(message.reject);
             if (message.rejectHint != null && message.hasOwnProperty("rejectHint"))
                 writer.uint32(/* id 11, wireType 0 =*/88).uint64(message.rejectHint);
-            if (message.context && message.hasOwnProperty("context"))
+            if (message.context != null && message.hasOwnProperty("context"))
                 writer.uint32(/* id 12, wireType 2 =*/98).bytes(message.context);
             return writer;
         };
@@ -39398,7 +39548,7 @@ export const raftpb = $root.raftpb = (function() {
         Message.verify = function verify(message) {
             if (typeof message !== "object" || message === null)
                 return "object expected";
-            if (message.type != null)
+            if (message.type != null && message.hasOwnProperty("type"))
                 switch (message.type) {
                 default:
                     return "type: enum value expected";
@@ -39423,22 +39573,22 @@ export const raftpb = $root.raftpb = (function() {
                 case 18:
                     break;
                 }
-            if (message.to != null)
+            if (message.to != null && message.hasOwnProperty("to"))
                 if (!$util.isInteger(message.to) && !(message.to && $util.isInteger(message.to.low) && $util.isInteger(message.to.high)))
                     return "to: integer|Long expected";
-            if (message.from != null)
+            if (message.from != null && message.hasOwnProperty("from"))
                 if (!$util.isInteger(message.from) && !(message.from && $util.isInteger(message.from.low) && $util.isInteger(message.from.high)))
                     return "from: integer|Long expected";
-            if (message.term != null)
+            if (message.term != null && message.hasOwnProperty("term"))
                 if (!$util.isInteger(message.term) && !(message.term && $util.isInteger(message.term.low) && $util.isInteger(message.term.high)))
                     return "term: integer|Long expected";
-            if (message.logTerm != null)
+            if (message.logTerm != null && message.hasOwnProperty("logTerm"))
                 if (!$util.isInteger(message.logTerm) && !(message.logTerm && $util.isInteger(message.logTerm.low) && $util.isInteger(message.logTerm.high)))
                     return "logTerm: integer|Long expected";
-            if (message.index != null)
+            if (message.index != null && message.hasOwnProperty("index"))
                 if (!$util.isInteger(message.index) && !(message.index && $util.isInteger(message.index.low) && $util.isInteger(message.index.high)))
                     return "index: integer|Long expected";
-            if (message.entries != null) {
+            if (message.entries != null && message.hasOwnProperty("entries")) {
                 if (!Array.isArray(message.entries))
                     return "entries: array expected";
                 for (let i = 0; i < message.entries.length; ++i) {
@@ -39447,21 +39597,21 @@ export const raftpb = $root.raftpb = (function() {
                         return "entries." + error;
                 }
             }
-            if (message.commit != null)
+            if (message.commit != null && message.hasOwnProperty("commit"))
                 if (!$util.isInteger(message.commit) && !(message.commit && $util.isInteger(message.commit.low) && $util.isInteger(message.commit.high)))
                     return "commit: integer|Long expected";
-            if (message.snapshot != null) {
+            if (message.snapshot != null && message.hasOwnProperty("snapshot")) {
                 let error = $root.raftpb.Snapshot.verify(message.snapshot);
                 if (error)
                     return "snapshot." + error;
             }
-            if (message.reject != null)
+            if (message.reject != null && message.hasOwnProperty("reject"))
                 if (typeof message.reject !== "boolean")
                     return "reject: boolean expected";
-            if (message.rejectHint != null)
+            if (message.rejectHint != null && message.hasOwnProperty("rejectHint"))
                 if (!$util.isInteger(message.rejectHint) && !(message.rejectHint && $util.isInteger(message.rejectHint.low) && $util.isInteger(message.rejectHint.high)))
                     return "rejectHint: integer|Long expected";
-            if (message.context != null)
+            if (message.context != null && message.hasOwnProperty("context"))
                 if (!(message.context && typeof message.context.length === "number" || $util.isString(message.context)))
                     return "context: buffer expected";
             return null;
@@ -39795,24 +39945,25 @@ export const raftpb = $root.raftpb = (function() {
         function HardState(properties) {
             if (properties)
                 for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                    this[keys[i]] = properties[keys[i]];
+                    if (properties[keys[i]] != null)
+                        this[keys[i]] = properties[keys[i]];
         }
 
         /**
          * HardState term.
-         * @type {Long|undefined}
+         * @type {Long}
          */
         HardState.prototype.term = $util.Long ? $util.Long.fromBits(0,0,true) : 0;
 
         /**
          * HardState vote.
-         * @type {Long|undefined}
+         * @type {Long}
          */
         HardState.prototype.vote = $util.Long ? $util.Long.fromBits(0,0,true) : 0;
 
         /**
          * HardState commit.
-         * @type {Long|undefined}
+         * @type {Long}
          */
         HardState.prototype.commit = $util.Long ? $util.Long.fromBits(0,0,true) : 0;
 
@@ -39906,13 +40057,13 @@ export const raftpb = $root.raftpb = (function() {
         HardState.verify = function verify(message) {
             if (typeof message !== "object" || message === null)
                 return "object expected";
-            if (message.term != null)
+            if (message.term != null && message.hasOwnProperty("term"))
                 if (!$util.isInteger(message.term) && !(message.term && $util.isInteger(message.term.low) && $util.isInteger(message.term.high)))
                     return "term: integer|Long expected";
-            if (message.vote != null)
+            if (message.vote != null && message.hasOwnProperty("vote"))
                 if (!$util.isInteger(message.vote) && !(message.vote && $util.isInteger(message.vote.low) && $util.isInteger(message.vote.high)))
                     return "vote: integer|Long expected";
-            if (message.commit != null)
+            if (message.commit != null && message.hasOwnProperty("commit"))
                 if (!$util.isInteger(message.commit) && !(message.commit && $util.isInteger(message.commit.low) && $util.isInteger(message.commit.high)))
                     return "commit: integer|Long expected";
             return null;
@@ -40050,12 +40201,13 @@ export const raftpb = $root.raftpb = (function() {
             this.nodes = [];
             if (properties)
                 for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                    this[keys[i]] = properties[keys[i]];
+                    if (properties[keys[i]] != null)
+                        this[keys[i]] = properties[keys[i]];
         }
 
         /**
          * ConfState nodes.
-         * @type {Array.<Long>|undefined}
+         * @type {Array.<Long>}
          */
         ConfState.prototype.nodes = $util.emptyArray;
 
@@ -40077,7 +40229,7 @@ export const raftpb = $root.raftpb = (function() {
         ConfState.encode = function encode(message, writer) {
             if (!writer)
                 writer = $Writer.create();
-            if (message.nodes && message.nodes.length)
+            if (message.nodes != null && message.nodes.length)
                 for (let i = 0; i < message.nodes.length; ++i)
                     writer.uint32(/* id 1, wireType 0 =*/8).uint64(message.nodes[i]);
             return writer;
@@ -40147,7 +40299,7 @@ export const raftpb = $root.raftpb = (function() {
         ConfState.verify = function verify(message) {
             if (typeof message !== "object" || message === null)
                 return "object expected";
-            if (message.nodes != null) {
+            if (message.nodes != null && message.hasOwnProperty("nodes")) {
                 if (!Array.isArray(message.nodes))
                     return "nodes: array expected";
                 for (let i = 0; i < message.nodes.length; ++i)
@@ -40273,30 +40425,31 @@ export const raftpb = $root.raftpb = (function() {
         function ConfChange(properties) {
             if (properties)
                 for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                    this[keys[i]] = properties[keys[i]];
+                    if (properties[keys[i]] != null)
+                        this[keys[i]] = properties[keys[i]];
         }
 
         /**
          * ConfChange ID.
-         * @type {Long|undefined}
+         * @type {Long}
          */
         ConfChange.prototype.ID = $util.Long ? $util.Long.fromBits(0,0,true) : 0;
 
         /**
          * ConfChange Type.
-         * @type {raftpb.ConfChangeType|undefined}
+         * @type {raftpb.ConfChangeType}
          */
         ConfChange.prototype.Type = 0;
 
         /**
          * ConfChange NodeID.
-         * @type {Long|undefined}
+         * @type {Long}
          */
         ConfChange.prototype.NodeID = $util.Long ? $util.Long.fromBits(0,0,true) : 0;
 
         /**
          * ConfChange Context.
-         * @type {Uint8Array|undefined}
+         * @type {Uint8Array}
          */
         ConfChange.prototype.Context = $util.newBuffer([]);
 
@@ -40324,7 +40477,7 @@ export const raftpb = $root.raftpb = (function() {
                 writer.uint32(/* id 2, wireType 0 =*/16).uint32(message.Type);
             if (message.NodeID != null && message.hasOwnProperty("NodeID"))
                 writer.uint32(/* id 3, wireType 0 =*/24).uint64(message.NodeID);
-            if (message.Context && message.hasOwnProperty("Context"))
+            if (message.Context != null && message.hasOwnProperty("Context"))
                 writer.uint32(/* id 4, wireType 2 =*/34).bytes(message.Context);
             return writer;
         };
@@ -40395,10 +40548,10 @@ export const raftpb = $root.raftpb = (function() {
         ConfChange.verify = function verify(message) {
             if (typeof message !== "object" || message === null)
                 return "object expected";
-            if (message.ID != null)
+            if (message.ID != null && message.hasOwnProperty("ID"))
                 if (!$util.isInteger(message.ID) && !(message.ID && $util.isInteger(message.ID.low) && $util.isInteger(message.ID.high)))
                     return "ID: integer|Long expected";
-            if (message.Type != null)
+            if (message.Type != null && message.hasOwnProperty("Type"))
                 switch (message.Type) {
                 default:
                     return "Type: enum value expected";
@@ -40407,10 +40560,10 @@ export const raftpb = $root.raftpb = (function() {
                 case 2:
                     break;
                 }
-            if (message.NodeID != null)
+            if (message.NodeID != null && message.hasOwnProperty("NodeID"))
                 if (!$util.isInteger(message.NodeID) && !(message.NodeID && $util.isInteger(message.NodeID.low) && $util.isInteger(message.NodeID.high)))
                     return "NodeID: integer|Long expected";
-            if (message.Context != null)
+            if (message.Context != null && message.hasOwnProperty("Context"))
                 if (!(message.Context && typeof message.Context.length === "number" || $util.isString(message.Context)))
                     return "Context: buffer expected";
             return null;

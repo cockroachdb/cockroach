@@ -1,6 +1,5 @@
 import { assert } from "chai";
-import reducer from "./timewindow";
-import  * as timewindow from "./timewindow";
+import reducer, * as timewindow from "./timewindow";
 import moment from "moment";
 
 describe("time window reducer", function() {
@@ -21,20 +20,15 @@ describe("time window reducer", function() {
     });
 
     it("should create the correct action to set time window settings", function() {
-      let windowSize = moment.duration(10, "s");
-      let windowValid = moment.duration(10, "s");
-      let sampleSize = moment.duration(10, "s");
-      const expectedSetting = {
-        type: timewindow.SET_SCALE,
-        payload: {
-          windowSize,
-          windowValid,
-          sampleSize,
-        },
+      const payload: timewindow.TimeScale = {
+        windowSize: moment.duration(10, "s"),
+        windowValid: moment.duration(10, "s"),
+        sampleSize: moment.duration(10, "s"),
       };
       assert.deepEqual(
-        timewindow.setTimeScale({ windowSize, windowValid, sampleSize }),
-        expectedSetting);
+        timewindow.setTimeScale(payload),
+        { type: timewindow.SET_SCALE, payload },
+      );
     });
   });
 

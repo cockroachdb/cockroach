@@ -33,9 +33,9 @@ protos:
 generate: $(GOBINDATA_TARGET)
 
 .PHONY: lint
-lint: $(YARN_INSTALLED_TARGET)
+lint: $(YARN_INSTALLED_TARGET) protos
 	stylint -c .stylintrc styl
-	tslint -c tslint.json $(shell find src -name '*.tsx' -or -name '*.ts' -not -path 'src/js/*')
+	tslint -c tslint.json -p tsconfig.json --type-check
 
 .PHONY: test
 test: $(YARN_INSTALLED_TARGET) protos

@@ -109,8 +109,9 @@ export function SummaryStatBreakdown(props: SummaryStatBreakdownProps & {childre
  * SummaryMetricStat is a helpful component that creates a SummaryStat where
  * metric data is automatically derived from a metric component.
  */
-export function SummaryMetricStat(props: SummaryStatProps & { id: string } & { children?: React.ReactNode }) {
-  return <MetricsDataProvider current id={props.id} >
+export function SummaryMetricStat(propsWithID: SummaryStatProps & { id: string } & { children?: React.ReactNode }) {
+  const { id, ...props } = propsWithID;
+  return <MetricsDataProvider current id={id} >
     <SummaryMetricStatHelper {...props} />
   </MetricsDataProvider>;
 }

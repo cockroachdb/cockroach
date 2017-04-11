@@ -143,4 +143,4 @@ let databaseGrantsListConnected = connect(
 export {
   databaseTablesListConnected as DatabaseTablesList,
   databaseGrantsListConnected as DatabaseGrantsList,
-}
+};

@@ -235,5 +235,5 @@ export {
   // Export original, unconnected MetricsDataProvider for effective unit
   // testing.
   MetricsDataProvider as MetricsDataProviderUnconnected,
-  metricsDataProviderConnected as MetricsDataProvider
+  metricsDataProviderConnected as MetricsDataProvider,
 };

@@ -118,4 +118,4 @@ let timeWindowManagerConnected = connect(
 )(TimeWindowManager);
 
 export default timeWindowManagerConnected;
-export { TimeWindowManager as TimeWindowManagerUnconnected }
+export { TimeWindowManager as TimeWindowManagerUnconnected };

@@ -69,46 +69,56 @@ export class UIDataSet {
  * Reducer which modifies a UIDataSet.
  */
 export default function (state = new UIDataSet(), action: Action): UIDataSet {
-  let keys: string[];
   switch (action.type) {
-    case SET:
-      let {key, value} = (action as PayloadAction<KeyValue>).payload;
+    case SET: {
+      const { key, value } = (action as PayloadAction<KeyValue>).payload;
       state = _.clone(state);
       state[key] = _.clone(state[key]) || new UIData();
       state[key].state = UIDataState.VALID;
       state[key].data = value;
       state[key].error = null;
       return state;
-    case SAVE:
-      keys = (action as PayloadAction<string[]>).payload;
+    }
+    case SAVE: {
+      const keys = (action as PayloadAction<string[]>).payload;
       state = _.clone(state);
       _.each(keys, (k) => {
         state[k] = _.clone(state[k]) || new UIData();
         state[k].state = UIDataState.SAVING;
       });
       return state;
-    case SAVE_ERROR:
-      let { key: saveErrorKey, error: saveError } = (action as PayloadAction<KeyedError>).payload;
+    }
+    case SAVE_ERROR: {
+      // TODO(tamird): https://github.com/palantir/tslint/issues/2551
+      //
+      // tslint:disable-next-line:no-use-before-declare
+      const { key: saveErrorKey, error: saveError } = (action as PayloadAction<KeyedError>).payload;
       state = _.clone(state);
       state[saveErrorKey] = _.clone(state[saveErrorKey]) || new UIData();
       state[saveErrorKey].state = UIDataState.SAVE_ERROR;
       state[saveErrorKey].error = saveError;
       return state;
-    case LOAD:
-      keys = (action as PayloadAction<string[]>).payload;
+    }
+    case LOAD: {
+      const keys = (action as PayloadAction<string[]>).payload;
       state = _.clone(state);
       _.each(keys, (k) => {
         state[k] = _.clone(state[k]) || new UIData();
         state[k].state = UIDataState.LOADING;
       });
       return state;
-    case LOAD_ERROR:
-      let { key: loadErrorKey, error: loadError } = (action as PayloadAction<KeyedError>).payload;
+    }
+    case LOAD_ERROR: {
+      // TODO(tamird): https://github.com/palantir/tslint/issues/2551
+      //
+      // tslint:disable-next-line:no-use-before-declare
+      const { key: loadErrorKey, error: loadError } = (action as PayloadAction<KeyedError>).payload;
       state = _.clone(state);
       state[loadErrorKey] = _.clone(state[loadErrorKey]) || new UIData();
       state[loadErrorKey].state = UIDataState.LOAD_ERROR;
       state[loadErrorKey].error = loadError;
       return state;
+    }
     default:
       return state;
   }
