@@ -44,9 +44,7 @@ import (
 // leaseholder maintaining its node liveness record (also a lease, but
 // at the node level). All ranges up to and including the node
 // liveness table must use expiration-based leases to avoid any
-// circular dependencies. Note that ranges can be changed from using
-// expiration-based to epoch-based leases and vice versa via the
-// environment variable COCKROACH_ENABLE_EPOCH_RANGE_LEASES.
+// circular dependencies.
 //
 // Methods are not thread-safe; a pendingLeaseRequest is logically part of
 // a replica, so replica.mu should be used to synchronize all calls.
