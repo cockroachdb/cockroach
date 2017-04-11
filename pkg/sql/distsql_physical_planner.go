@@ -1536,7 +1536,7 @@ func (dsp *distSQLPlanner) Run(
 		if resp, err := client.SetupFlow(context.Background(), &req); err != nil {
 			return err
 		} else if resp.Error != nil {
-			return resp.Error.GoError()
+			return resp.Error.ErrorDetail()
 		}
 	}
 	localReq := distsqlrun.SetupFlowRequest{
