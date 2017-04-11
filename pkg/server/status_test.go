@@ -190,7 +190,7 @@ func TestStatusLocalLogs(t *testing.T) {
 		t.Skip("Test only works with low verbosity levels")
 	}
 
-	s := log.Scope(t, "")
+	s := log.ScopeWithoutShowLogs(t, "")
 	defer s.Close(t)
 
 	ts := startServer(t)
@@ -198,11 +198,17 @@ func TestStatusLocalLogs(t *testing.T) {
 
 	// Log an error which we expect to show up on every log file.
 	timestamp := timeutil.Now().UnixNano()
+	time.Sleep(ts.Cfg.MaxOffset)
 	log.Errorf(context.Background(), "TestStatusLocalLogFile test message-Error")
+	time.Sleep(ts.Cfg.MaxOffset)
 	timestampE := timeutil.Now().UnixNano()
+	time.Sleep(ts.Cfg.MaxOffset)
 	log.Warningf(context.Background(), "TestStatusLocalLogFile test message-Warning")
+	time.Sleep(ts.Cfg.MaxOffset)
 	timestampEW := timeutil.Now().UnixNano()
+	time.Sleep(ts.Cfg.MaxOffset)
 	log.Infof(context.Background(), "TestStatusLocalLogFile test message-Info")
+	time.Sleep(ts.Cfg.MaxOffset)
 	timestampEWI := timeutil.Now().UnixNano()
 
 	var wrapper serverpb.LogFilesListResponse
