@@ -108,7 +108,7 @@ build buildoss xgo-build install: override LINKFLAGS += \
 # from the linker aren't suppressed. The usage of `-v` also shows when
 # dependencies are rebuilt which is useful when switching between
 # normal and race test builds.
-build buildoss xgo-build install: .buildinfo/tag .buildinfo/rev
+build buildoss xgo-build install: $(BOOTSTRAP_TARGET) .buildinfo/tag .buildinfo/rev
 	$(GO) $(BUILDMODE) -v $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' $(BUILDTARGET)
 
 .PHONY: start
@@ -119,13 +119,13 @@ start:
 # Build, but do not run the tests.
 # PKG is expanded and all packages are built and moved to their directory.
 .PHONY: testbuild
-testbuild:
+testbuild: $(BOOTSTRAP_TARGET)
 	$(GO) list -tags '$(TAGS)' -f \
 	'$(GO) test -v $(GOFLAGS) -tags '\''$(TAGS)'\'' -ldflags '\''$(LINKFLAGS)'\'' -i -c {{.ImportPath}} -o {{.Dir}}/{{.Name}}.test$(SUFFIX)' $(PKG) | \
 	$(SHELL)
 
 .PHONY: gotestdashi
-gotestdashi:
+gotestdashi: $(BOOTSTRAP_TARGET)
 	$(GO) test -v $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -i $(PKG)
 
 testshort: override TESTFLAGS += -short
@@ -169,11 +169,11 @@ stressrace: TESTTIMEOUT := $(RACETIMEOUT)
 # - PKG may not contain any tests! This is handled with an `if` statement that
 # checks for the presence of a test binary before running `stress` on it.
 .PHONY: stress stressrace
-stress stressrace:
+stress stressrace: $(BOOTSTRAP_TARGET)
 	$(GO) list -tags '$(TAGS)' -f '$(GO) test -v $(GOFLAGS) -tags '\''$(TAGS)'\'' -ldflags '\''$(LINKFLAGS)'\'' -i -c {{.ImportPath}} -o '\''{{.Dir}}'\''/stress.test && (cd '\''{{.Dir}}'\'' && if [ -f stress.test ]; then COCKROACH_STRESS=true stress $(STRESSFLAGS) ./stress.test -test.run '\''$(TESTS)'\'' $(if $(BENCHES),-test.bench '\''$(BENCHES)'\'') -test.timeout $(TESTTIMEOUT) $(TESTFLAGS); fi)' $(PKG) | $(SHELL)
 
 .PHONY: upload-coverage
-upload-coverage:
+upload-coverage: $(BOOTSTRAP_TARGET)
 	$(GO) install ./vendor/github.com/wadey/gocovmerge
 	$(GO) install ./vendor/github.com/mattn/goveralls
 	@build/upload-coverage.sh
@@ -183,7 +183,7 @@ acceptance:
 	@pkg/acceptance/run.sh
 
 .PHONY: dupl
-dupl:
+dupl: $(BOOTSTRAP_TARGET)
 	find . -name '*.go'             \
 	       -not -name '*.pb.go'     \
 	       -not -name '*.pb.gw.go'  \
@@ -240,7 +240,7 @@ $(ARCHIVE): $(ARCHIVE).tmp
 # instead of scripts/ls-files.sh once Git v2.11 is widely deployed.
 .INTERMEDIATE: $(ARCHIVE).tmp
 $(ARCHIVE).tmp: ARCHIVE_BASE = cockroach-$(shell cat .buildinfo/tag)
-$(ARCHIVE).tmp: .buildinfo/tag .buildinfo/rev
+$(ARCHIVE).tmp: $(BOOTSTRAP_TARGET) .buildinfo/tag .buildinfo/rev
 	scripts/ls-files.sh | $(TAR) -cf $@ -T - $(TAR_XFORM_FLAG),^,$(ARCHIVE_BASE)/src/github.com/cockroachdb/cockroach/, $^
 	(cd build/archive/contents && $(TAR) -rf ../../../$@ $(TAR_XFORM_FLAG),^,$(ARCHIVE_BASE)/, *)
 
