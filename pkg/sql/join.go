@@ -24,6 +24,7 @@ import (
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 )
 
@@ -293,6 +294,18 @@ func (n *joinNode) MarkDebug(mode explainMode) {
 	n.explain = mode
 	n.left.plan.MarkDebug(mode)
 	n.right.plan.MarkDebug(mode)
+}
+
+func (n *joinNode) Spans(ctx context.Context) (reads, writes roachpb.Spans, err error) {
+	leftReads, leftWrites, err := n.left.plan.Spans(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
+	rightReads, rightWrites, err := n.right.plan.Spans(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
+	return append(leftReads, rightReads...), append(leftWrites, rightWrites...), nil
 }
 
 // Start implements the planNode interface.

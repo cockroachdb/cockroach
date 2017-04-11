@@ -66,6 +66,16 @@ type tableWriter interface {
 	// finalize flushes out any remaining writes. It is called after all calls to
 	// row.
 	finalize(ctx context.Context) error
+
+	// spans collects the upper bound set of read and write spans that the
+	// tableWriter will touch when executed. This is contractual, and the
+	// tableWriter will not touch any keys outside of the spans reported here.
+	//
+	// TODO(nvanbenschoten) we are currently pretty pessimistic here, assuming
+	// that table operations will touch the entire table. In cases where we
+	// can determine ahead of time that this isn't true, we should true to
+	// constrain these spans.
+	spans() (reads, writes roachpb.Spans, err error)
 }
 
 var _ tableWriter = (*tableInserter)(nil)
@@ -112,6 +122,10 @@ func (ti *tableInserter) finalize(ctx context.Context) error {
 	return nil
 }
 
+func (ti *tableInserter) spans() (reads, writes roachpb.Spans, err error) {
+	return collectTableWriterSpans(ti.ri.Helper.TableDesc, ti.ri.Fks)
+}
+
 // tableUpdater handles writing kvs and forming table rows for updates.
 type tableUpdater struct {
 	ru         sqlbase.RowUpdater
@@ -151,6 +165,10 @@ func (tu *tableUpdater) finalize(ctx context.Context) error {
 		return sqlbase.ConvertBatchError(tu.ru.Helper.TableDesc, tu.b)
 	}
 	return nil
+}
+
+func (tu *tableUpdater) spans() (reads, writes roachpb.Spans, err error) {
+	return collectTableWriterSpans(tu.ru.Helper.TableDesc, tu.ru.Fks)
 }
 
 type tableUpsertEvaler interface {
@@ -490,6 +508,10 @@ func (tu *tableUpserter) finalize(ctx context.Context) error {
 	return tu.flush(ctx, true /* finalize */)
 }
 
+func (tu *tableUpserter) spans() (reads, writes roachpb.Spans, err error) {
+	return collectTableWriterSpans(tu.ri.Helper.TableDesc, tu.ri.Fks)
+}
+
 // tableDeleter handles writing kvs and forming table rows for deletes.
 type tableDeleter struct {
 	rd         sqlbase.RowDeleter
@@ -773,4 +795,22 @@ func (td *tableDeleter) deleteIndexScan(
 		resume.Key = rf.Key()
 	}
 	return resume, td.finalize(ctx)
+}
+
+func (td *tableDeleter) spans() (reads, writes roachpb.Spans, err error) {
+	return collectTableWriterSpans(td.rd.Helper.TableDesc, td.rd.Fks)
+}
+
+func collectTableWriterSpans(
+	desc *sqlbase.TableDescriptor, fks sqlbase.FkSpanCollector,
+) (reads, writes roachpb.Spans, err error) {
+	// We don't generally know which spans we will be modifying so we must be
+	// conservative and assume anything in the table might change. See TODO on
+	// tableWriter.spans for discussion on constraining spans wherever possible.
+	tableSpans := desc.AllIndexSpans()
+	fkReads, fkWrites := fks.CollectSpans()
+	if len(fkWrites) > 0 {
+		return nil, nil, errors.Errorf("unexpected foreign key span writes: %v", fkWrites)
+	}
+	return fkReads, tableSpans, nil
 }

@@ -17,10 +17,18 @@
 package sql
 
 import (
+	"fmt"
 	"reflect"
 	"testing"
 
+	"golang.org/x/net/context"
+
+	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/pkg/errors"
 )
@@ -68,25 +76,27 @@ func waitAndAssertEmpty(t *testing.T, pq *PipelineQueue) {
 // use channels to guarantee deterministic execution.
 func TestPipelineQueueNoDependencies(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+
 	var res []int
 	run1, run2, run3 := make(chan struct{}), make(chan struct{}), make(chan struct{})
 
 	// Executes: plan3 -> plan1 -> plan2.
 	pq := MakePipelineQueue(NoDependenciesAnalyzer)
-	pq.Add(newPlanNode(), func(plan planNode) error {
+	pq.Add(ctx, newPlanNode(), func(plan planNode) error {
 		<-run1
 		res = append(res, 1)
 		assertLen(t, &pq, 3)
 		close(run3)
 		return nil
 	})
-	pq.Add(newPlanNode(), func(plan planNode) error {
+	pq.Add(ctx, newPlanNode(), func(plan planNode) error {
 		<-run2
 		res = append(res, 2)
 		assertLenEventually(t, &pq, 1)
 		return nil
 	})
-	pq.Add(newPlanNode(), func(plan planNode) error {
+	pq.Add(ctx, newPlanNode(), func(plan planNode) error {
 		<-run3
 		res = append(res, 3)
 		assertLenEventually(t, &pq, 2)
@@ -107,6 +117,8 @@ func TestPipelineQueueNoDependencies(t *testing.T) {
 // need no extra synchronization to guarantee deterministic execution.
 func TestPipelineQueueAllDependent(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+
 	var res []int
 	run := make(chan struct{})
 	analyzer := dependencyAnalyzerFunc(func(p1 planNode, p2 planNode) bool {
@@ -115,18 +127,18 @@ func TestPipelineQueueAllDependent(t *testing.T) {
 
 	// Executes: plan1 -> plan2 -> plan3.
 	pq := MakePipelineQueue(analyzer)
-	pq.Add(newPlanNode(), func(plan planNode) error {
+	pq.Add(ctx, newPlanNode(), func(plan planNode) error {
 		<-run
 		res = append(res, 1)
 		assertLen(t, &pq, 3)
 		return nil
 	})
-	pq.Add(newPlanNode(), func(plan planNode) error {
+	pq.Add(ctx, newPlanNode(), func(plan planNode) error {
 		res = append(res, 2)
 		assertLen(t, &pq, 2)
 		return nil
 	})
-	pq.Add(newPlanNode(), func(plan planNode) error {
+	pq.Add(ctx, newPlanNode(), func(plan planNode) error {
 		res = append(res, 3)
 		assertLen(t, &pq, 1)
 		return nil
@@ -145,6 +157,8 @@ func TestPipelineQueueAllDependent(t *testing.T) {
 // until the prerequisite plan completes execution.
 func TestPipelineQueueSingleDependency(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+
 	var res []int
 	plan1, plan2, plan3 := newPlanNode(), newPlanNode(), newPlanNode()
 	run1, run3 := make(chan struct{}), make(chan struct{})
@@ -158,18 +172,18 @@ func TestPipelineQueueSingleDependency(t *testing.T) {
 
 	// Executes: plan3 -> plan1 -> plan2.
 	pq := MakePipelineQueue(analyzer)
-	pq.Add(plan1, func(plan planNode) error {
+	pq.Add(ctx, plan1, func(plan planNode) error {
 		<-run1
 		res = append(res, 1)
 		assertLenEventually(t, &pq, 2)
 		return nil
 	})
-	pq.Add(plan2, func(plan planNode) error {
+	pq.Add(ctx, plan2, func(plan planNode) error {
 		res = append(res, 2)
 		assertLen(t, &pq, 1)
 		return nil
 	})
-	pq.Add(plan3, func(plan planNode) error {
+	pq.Add(ctx, plan3, func(plan planNode) error {
 		<-run3
 		res = append(res, 3)
 		assertLen(t, &pq, 3)
@@ -189,6 +203,8 @@ func TestPipelineQueueSingleDependency(t *testing.T) {
 // and the prerequisite plan throws an error.
 func TestPipelineQueueError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+
 	var res []int
 	plan1, plan2, plan3 := newPlanNode(), newPlanNode(), newPlanNode()
 	run1, run3 := make(chan struct{}), make(chan struct{})
@@ -203,19 +219,19 @@ func TestPipelineQueueError(t *testing.T) {
 
 	// Executes: plan3 -> plan1 (error!) -> plan2 (dropped).
 	pq := MakePipelineQueue(analyzer)
-	pq.Add(plan1, func(plan planNode) error {
+	pq.Add(ctx, plan1, func(plan planNode) error {
 		<-run1
 		res = append(res, 1)
 		assertLenEventually(t, &pq, 2)
 		return planErr
 	})
-	pq.Add(plan2, func(plan planNode) error {
+	pq.Add(ctx, plan2, func(plan planNode) error {
 		// Should never be called. We assert this using the res slice, because
 		// we can't call t.Fatalf in a different goroutine.
 		res = append(res, 2)
 		return nil
 	})
-	pq.Add(plan3, func(plan planNode) error {
+	pq.Add(ctx, plan3, func(plan planNode) error {
 		<-run3
 		res = append(res, 3)
 		assertLen(t, &pq, 3)
@@ -241,13 +257,15 @@ func TestPipelineQueueError(t *testing.T) {
 // will be cleared.
 func TestPipelineQueueAddAfterError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+
 	var res []int
 	plan1, plan2, plan3 := newPlanNode(), newPlanNode(), newPlanNode()
 	planErr := errors.Errorf("plan1 will throw this error")
 
 	// Executes: plan1 (error!) -> plan2 (dropped) -> plan3.
 	pq := MakePipelineQueue(NoDependenciesAnalyzer)
-	pq.Add(plan1, func(plan planNode) error {
+	pq.Add(ctx, plan1, func(plan planNode) error {
 		res = append(res, 1)
 		assertLen(t, &pq, 1)
 		return planErr
@@ -261,7 +279,7 @@ func TestPipelineQueueAddAfterError(t *testing.T) {
 		return nil
 	})
 
-	pq.Add(plan2, func(plan planNode) error {
+	pq.Add(ctx, plan2, func(plan planNode) error {
 		// Should never be called. We assert this using the res slice, because
 		// we can't call t.Fatalf in a different goroutine.
 		res = append(res, 2)
@@ -275,7 +293,7 @@ func TestPipelineQueueAddAfterError(t *testing.T) {
 		t.Fatalf("expected plan1 to throw error %v, found %v", planErr, resErr)
 	}
 
-	pq.Add(plan3, func(plan planNode) error {
+	pq.Add(ctx, plan3, func(plan planNode) error {
 		// Will be called, because the error is cleared when Wait is called.
 		res = append(res, 3)
 		assertLen(t, &pq, 1)
@@ -286,5 +304,139 @@ func TestPipelineQueueAddAfterError(t *testing.T) {
 	exp := []int{1, 3}
 	if !reflect.DeepEqual(res, exp) {
 		t.Fatalf("expected pipeline side effects %v, found %v", exp, res)
+	}
+}
+
+func planNodeForQuery(
+	t *testing.T, s serverutils.TestServerInterface, sql string,
+) (planNode, func()) {
+	kvDB := s.KVClient().(*client.DB)
+	txn := client.NewTxn(kvDB)
+	txn.Proto().OrigTimestamp = s.Clock().Now()
+	p := makeInternalPlanner("plan", txn, security.RootUser, &MemoryMetrics{})
+	p.session.leases.leaseMgr = s.LeaseManager().(*LeaseManager)
+	p.session.Database = "test"
+
+	stmts, err := p.parser.Parse(sql, parser.Traditional)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(stmts) != 1 {
+		t.Fatalf("expected to parse 1 statement, got: %d", len(stmts))
+	}
+	stmt := stmts[0]
+	plan, err := p.makePlan(context.TODO(), stmt, false /* autoCommit */)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return plan, func() {
+		finishInternalPlanner(p)
+	}
+}
+
+func TestSpanBasedDependencyAnalyzer(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop()
+
+	if _, err := db.Exec(`CREATE DATABASE test`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`SET DATABASE = test`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`CREATE TABLE foo (k INT PRIMARY KEY)`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`
+		CREATE TABLE bar (
+			k INT PRIMARY KEY, 
+			v INT, 
+			a INT, 
+			UNIQUE INDEX idx(v)
+		)
+	`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`CREATE TABLE fks (f INT REFERENCES foo)`); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, test := range []struct {
+		query1, query2 string
+		independent    bool
+	}{
+		// The dependency analyzer is only used for RETURNING NOTHING statements
+		// at the moment, but it should work on all statement types.
+		{`SELECT * FROM foo`, `SELECT * FROM bar`, true},
+		{`SELECT * FROM foo`, `SELECT * FROM bar@idx`, true},
+		{`SELECT * FROM foo`, `SELECT * FROM foo`, true},
+		{`SELECT * FROM foo`, `SELECT * FROM fks`, true},
+
+		{`DELETE FROM foo`, `DELETE FROM bar`, true},
+		{`DELETE FROM foo`, `DELETE FROM foo`, false},
+		{`DELETE FROM foo`, `DELETE FROM bar WHERE (SELECT k = 1 FROM foo)`, false},
+		{`DELETE FROM foo`, `DELETE FROM bar WHERE (SELECT f = 1 FROM fks)`, true},
+		{`DELETE FROM foo`, `DELETE FROM fks`, false},
+		{`DELETE FROM bar`, `DELETE FROM fks`, true},
+		{`DELETE FROM foo`, `SELECT * FROM foo`, false},
+		{`DELETE FROM foo`, `SELECT * FROM bar`, true},
+		{`DELETE FROM bar`, `SELECT * FROM bar`, false},
+		{`DELETE FROM bar`, `SELECT * FROM bar@idx`, false},
+
+		{`INSERT INTO foo VALUES (1)`, `INSERT INTO bar VALUES (1)`, true},
+		{`INSERT INTO foo VALUES (1)`, `INSERT INTO foo VALUES (1)`, false},
+		{`INSERT INTO foo VALUES (1)`, `INSERT INTO bar SELECT k FROM foo`, false},
+		{`INSERT INTO foo VALUES (1)`, `INSERT INTO bar SELECT f FROM fks`, true},
+		{`INSERT INTO foo VALUES (1)`, `INSERT INTO fks VALUES (1)`, false},
+		{`INSERT INTO bar VALUES (1)`, `INSERT INTO fks VALUES (1)`, true},
+		{`INSERT INTO foo VALUES (1)`, `SELECT * FROM foo`, false},
+		{`INSERT INTO foo VALUES (1)`, `SELECT * FROM bar`, true},
+		{`INSERT INTO bar VALUES (1)`, `SELECT * FROM bar`, false},
+		{`INSERT INTO bar VALUES (1)`, `SELECT * FROM bar@idx`, false},
+		{`INSERT INTO foo VALUES (1)`, `DELETE FROM foo`, false},
+		{`INSERT INTO foo VALUES (1)`, `DELETE FROM bar`, true},
+
+		{`UPDATE foo SET k = 1`, `UPDATE bar SET k = 1`, true},
+		{`UPDATE foo SET k = 1`, `UPDATE foo SET k = 1`, false},
+		{`UPDATE foo SET k = 1`, `UPDATE bar SET k = (SELECT k FROM foo)`, false},
+		{`UPDATE foo SET k = 1`, `UPDATE bar SET k = (SELECT f FROM fks)`, true},
+		{`UPDATE foo SET k = 1`, `INSERT INTO fks VALUES (1)`, false},
+		{`UPDATE bar SET k = 1`, `INSERT INTO fks VALUES (1)`, true},
+		{`UPDATE foo SET k = 1`, `SELECT * FROM foo`, false},
+		{`UPDATE foo SET k = 1`, `SELECT * FROM bar`, true},
+		{`UPDATE bar SET k = 1`, `SELECT * FROM bar`, false},
+		{`UPDATE bar SET k = 1`, `SELECT * FROM bar@idx`, false},
+		{`UPDATE foo SET k = 1`, `DELETE FROM foo`, false},
+		{`UPDATE foo SET k = 1`, `DELETE FROM bar`, true},
+
+		// Statements like statement_timestamp enforce a strict ordering on
+		// statements, restricting reordering and thus independence.
+		{`SELECT * FROM foo`, `SELECT *, statement_timestamp() FROM bar`, false},
+		{`DELETE FROM foo`, `DELETE FROM bar WHERE '2015-10-01'::TIMESTAMP = statement_timestamp()`, true},
+	} {
+		for _, reverse := range []bool{false, true} {
+			q1, q2 := test.query1, test.query2
+			if reverse {
+				// Verify commutativity.
+				q1, q2 = q2, q1
+			}
+
+			name := fmt.Sprintf("%s | %s", q1, q2)
+			t.Run(name, func(t *testing.T) {
+				da := NewSpanBasedDependencyAnalyzer()
+
+				plan1, finish1 := planNodeForQuery(t, s, q1)
+				defer finish1()
+				plan2, finish2 := planNodeForQuery(t, s, q2)
+				defer finish2()
+
+				indep := da.Independent(context.TODO(), plan1, plan2)
+				if exp := test.independent; indep != exp {
+					t.Errorf("expected da.Independent(%q, %q) = %t, but found %t",
+						q1, q2, exp, indep)
+				}
+			})
+		}
 	}
 }

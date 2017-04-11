@@ -1856,6 +1856,20 @@ func (desc *TableDescriptor) InvalidateFKConstraints() {
 	}
 }
 
+// AllIndexSpans returns the Spans for each index in the table, including those
+// being added in the mutations.
+func (desc *TableDescriptor) AllIndexSpans() roachpb.Spans {
+	var spans roachpb.Spans
+	err := desc.ForeachNonDropIndex(func(index *IndexDescriptor) error {
+		spans = append(spans, desc.IndexSpan(index.ID))
+		return nil
+	})
+	if err != nil {
+		panic(err)
+	}
+	return spans
+}
+
 // PrimaryIndexSpan returns the Span that corresponds to the entire primary
 // index; can be used for a full table scan.
 func (desc *TableDescriptor) PrimaryIndexSpan() roachpb.Span {

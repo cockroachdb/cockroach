@@ -24,6 +24,7 @@ import (
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -351,6 +352,10 @@ func (n *sortNode) DebugValues() debugValues {
 		panic(fmt.Sprintf("node not in debug mode (mode %d)", n.explain))
 	}
 	return n.debugVals
+}
+
+func (n *sortNode) Spans(ctx context.Context) (_, _ roachpb.Spans, _ error) {
+	return n.plan.Spans(ctx)
 }
 
 func (n *sortNode) Start(ctx context.Context) error {
