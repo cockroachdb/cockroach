@@ -351,8 +351,11 @@ func (s SystemConfig) GetZoneConfigForKey(key roachpb.RKey) (ZoneConfig, error) 
 		// Not in the structured data namespace.
 		objectID = keys.RootNamespaceID
 	} else if objectID <= keys.MaxReservedDescID {
-		// For now, only user databases and tables get custom zone configs.
-		objectID = keys.RootNamespaceID
+		// For now, you can only set a zone config on the system database as a whole,
+		// not on any of its constituent tables. This is largely because all the
+		// "system config" tables are colocated in the same range by default and
+		// thus couldn't be managed separately.
+		objectID = keys.SystemDatabaseID
 	}
 
 	// Special-case known system ranges to their special zone configs.
