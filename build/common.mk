@@ -31,6 +31,10 @@ ORG_ROOT := $(REPO_ROOT)/..
 PKG_ROOT := $(REPO_ROOT)/pkg
 UI_ROOT  := $(PKG_ROOT)/ui
 
+# The builder container and host machine share this repository, so we have to
+# separate built binaries (and associated bookkeeping) by OS and architecture.
+PLATFORM_SUFFIX := .$(shell $(GO) env GOOS)-$(shell $(GO) env GOARCH)
+
 # Ensure we have an unambiguous GOPATH.
 export GOPATH := $(realpath $(ORG_ROOT)/../../..)
 #                                       ^  ^  ^~ GOPATH
@@ -48,7 +52,7 @@ endif
 # We must remember the original value of GOBIN so we can install the cockroach
 # binary to the user's GOBIN instead of our repository-local GOBIN.
 ORIGINAL_GOBIN := $(GOBIN)
-export GOBIN := $(abspath $(REPO_ROOT)/bin)
+export GOBIN := $(abspath $(REPO_ROOT)/bin$(PLATFORM_SUFFIX))
 
 # Prefer tools we've installed with go install and Yarn to those elsewhere on
 # the PATH.
@@ -151,7 +155,7 @@ $(YARN_INSTALLED_TARGET): $(UI_ROOT)/package.json $(UI_ROOT)/yarn.lock
 
 # Update the git hooks and install commands from dependencies whenever they
 # change.
-$(REPO_ROOT)/.bootstrap: $(GITHOOKS) $(REPO_ROOT)/glide.lock
+$(REPO_ROOT)/.bootstrap$(PLATFORM_SUFFIX): $(GITHOOKS) $(REPO_ROOT)/glide.lock
 ifneq ($(GIT_DIR),)
 	git submodule update --init
 endif
@@ -162,7 +166,7 @@ endif
 	touch $@
 
 # Force Make to run the .bootstrap recipe before building any other targets.
--include $(REPO_ROOT)/.bootstrap
+-include $(REPO_ROOT)/.bootstrap$(PLATFORM_SUFFIX)
 
 # Make doesn't expose a list of the variables declared in a given file, so we
 # resort to sed magic. Roughly, this sed command prints VARIABLE in lines of the
