@@ -188,9 +188,16 @@ func (cl *CertificateLoader) Load() error {
 	if err != nil {
 		if os.IsNotExist(err) {
 			// Directory does not exist.
+			if log.V(3) {
+				log.Infof(context.Background(), "missing certs directory %s", cl.certsDir)
+			}
 			return nil
 		}
 		return err
+	}
+
+	if log.V(3) {
+		log.Infof(context.Background(), "scanning certs directory %s", cl.certsDir)
 	}
 
 	// Walk the directory contents.
@@ -207,6 +214,9 @@ func (cl *CertificateLoader) Load() error {
 		}
 
 		if !isCertificateFile(filename) {
+			if log.V(3) {
+				log.Infof(context.Background(), "skipping non-certificate file %s", filename)
+			}
 			continue
 		}
 
@@ -223,6 +233,9 @@ func (cl *CertificateLoader) Load() error {
 			continue
 		}
 
+		if log.V(3) {
+			log.Infof(context.Background(), "found certificate %s", ci.Filename)
+		}
 		cl.certificates = append(cl.certificates, ci)
 	}
 

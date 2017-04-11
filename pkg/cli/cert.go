@@ -41,10 +41,10 @@ var createCACertCmd = &cobra.Command{
 	Use:   "create-ca --certs-dir=<path to cockroach certs dir> --ca-key=<path-to-ca-key>",
 	Short: "create CA certificate and key",
 	Long: `
-Generates a CA certificate "<certs-dir>/ca.crt" and CA key "<ca-key>".
-If "<certs-dir>" does not exist, it is created.
-If "<certs-dir>/ca.crt" already exist, its contents are appended to the new certificate,
-resulting in the latest certificate always being the first in the file.
+Generate a CA certificate "<certs-dir>/ca.crt" and CA key "<ca-key>".
+The certs directory is created if it does not exist.
+The CA key is created if it does not exist.
+The CA certificate is prepended to "ca.crt" if the file exists.
 `,
 	RunE: MaybeDecorateGRPCError(runCreateCACert),
 }
@@ -65,8 +65,8 @@ var createNodeCertCmd = &cobra.Command{
 	Use:   "create-node --certs-dir=<path to cockroach certs dir> --ca-key=<path-to-ca-key> <host 1> <host 2> ... <host N>",
 	Short: "create node certificate and key",
 	Long: `
-Generates a node certificate and key for a given node, writing them to
-"<certs-dir>/node.crt" and "<certs-dir>/node.key". Any existing files are overwritten.
+Generate a node certificate "<certs-dir>/node.crt" and key "<certs-dir>/node.key".
+Any existing files are overwritten.
 At least one host should be passed in (either IP address or dns name).
 
 Requires a CA cert in "<certs-dir>/ca.crt" and matching key in "--ca-key".
@@ -94,8 +94,8 @@ var createClientCertCmd = &cobra.Command{
 	Use:   "create-client --certs-dir=<path to cockroach certs dir> --ca-key=<path-to-ca-key> <username>",
 	Short: "create client certificate and key",
 	Long: `
-Generates a client certificate and key for a given node, writing them to
-"<certs-dir>/client.<username>.crt" and "<certs-dir>/client.<username>.key".
+Generate a client certificate "<certs-dir>/client.<username>.crt" and key
+"<certs-dir>/client.<username>.key".
 Any existing files are overwritten.
 
 Requires a CA cert in "<certs-dir>/ca.crt" and matching key in "--ca-key".
@@ -129,7 +129,6 @@ func runCreateClientCert(cmd *cobra.Command, args []string) error {
 
 // A listCerts command generates a client certificate and stores it
 // in the cert directory under <username>.crt and key under <username>.key.
-// TODO(marc): rename once certificate_manager is being used.
 var listCertsCmd = &cobra.Command{
 	Use:   "list",
 	Short: "list certs in --certs-dir",
