@@ -27,16 +27,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
-	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/opentracing/opentracing-go"
 )
-
-// Allow local calls to be dispatched directly to the local server without
-// sending an RPC.
-var enableLocalCalls = envutil.EnvOrDefaultBool("COCKROACH_ENABLE_LOCAL_CALLS", true)
 
 // A SendOptions structure describes the algorithm for sending RPCs to one or
 // more replicas, depending on error conditions and how many successful
@@ -174,23 +169,21 @@ func (gt *grpcTransport) SendNext(ctx context.Context, done chan<- BatchCall) {
 	go func() {
 		gt.opts.metrics.SentCount.Inc(1)
 		reply, err := func() (*roachpb.BatchResponse, error) {
-			if enableLocalCalls {
-				if localServer := gt.rpcContext.GetLocalInternalServerForAddr(client.remoteAddr); localServer != nil {
-					// Clone the request. At the time of writing, Replica may mutate it
-					// during command execution which can lead to data races.
-					//
-					// TODO(tamird): we should clone all of client.args.Header, but the
-					// assertions in protoutil.Clone fire and there seems to be no
-					// reasonable workaround.
-					origTxn := client.args.Txn
-					if origTxn != nil {
-						clonedTxn := origTxn.Clone()
-						client.args.Txn = &clonedTxn
-					}
-					gt.opts.metrics.LocalSentCount.Inc(1)
-					log.VEvent(ctx, 2, "sending request to local server")
-					return localServer.Batch(ctx, &client.args)
+			if localServer := gt.rpcContext.GetLocalInternalServerForAddr(client.remoteAddr); localServer != nil {
+				// Clone the request. At the time of writing, Replica may mutate it
+				// during command execution which can lead to data races.
+				//
+				// TODO(tamird): we should clone all of client.args.Header, but the
+				// assertions in protoutil.Clone fire and there seems to be no
+				// reasonable workaround.
+				origTxn := client.args.Txn
+				if origTxn != nil {
+					clonedTxn := origTxn.Clone()
+					client.args.Txn = &clonedTxn
 				}
+				gt.opts.metrics.LocalSentCount.Inc(1)
+				log.VEvent(ctx, 2, "sending request to local server")
+				return localServer.Batch(ctx, &client.args)
 			}
 
 			log.VEventf(ctx, 2, "sending request to %s", client.remoteAddr)
