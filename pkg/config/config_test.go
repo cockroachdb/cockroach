@@ -397,7 +397,10 @@ func TestGetZoneConfigForKey(t *testing.T) {
 		{roachpb.RKey(keys.TimeseriesPrefix.PrefixEnd()), keys.SystemRangesID},
 		{roachpb.RKey(keys.TableDataMin), keys.RootNamespaceID},
 		{roachpb.RKey(keys.SystemConfigSplitKey), keys.RootNamespaceID},
+		{keys.MakeTablePrefix(keys.NamespaceTableID), keys.RootNamespaceID},
 		{keys.MakeTablePrefix(keys.ZonesTableID), keys.RootNamespaceID},
+		{keys.MakeTablePrefix(keys.LeaseTableID), keys.RootNamespaceID},
+		{keys.MakeTablePrefix(keys.JobsTableID), keys.RootNamespaceID},
 	}
 
 	originalZoneConfigHook := config.ZoneConfigHook

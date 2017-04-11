@@ -652,6 +652,9 @@ func Example_zone() {
 	c.Run("zone ls")
 	c.Run("zone get system.nonexistent")
 	c.Run("zone get system.lease")
+	c.Run("zone set system.lease --file=./testdata/zone_attrs.yaml")
+	c.Run("zone set system.namespace --file=./testdata/zone_attrs.yaml")
+	c.Run("zone set system.nonexistent --file=./testdata/zone_attrs.yaml")
 	c.Run("zone set system --file=./testdata/zone_range_max_bytes.yaml")
 	c.Run("zone get system")
 	c.Run("zone rm system")
@@ -698,6 +701,12 @@ func Example_zone() {
 	//   ttlseconds: 86400
 	// num_replicas: 1
 	// constraints: [us-east-1a, ssd]
+	// zone set system.lease --file=./testdata/zone_attrs.yaml
+	// setting zone configs for individual system tables is not supported; try setting your config on the entire "system" database instead
+	// zone set system.namespace --file=./testdata/zone_attrs.yaml
+	// setting zone configs for individual system tables is not supported; try setting your config on the entire "system" database instead
+	// zone set system.nonexistent --file=./testdata/zone_attrs.yaml
+	// system.nonexistent not found
 	// zone set system --file=./testdata/zone_range_max_bytes.yaml
 	// range_min_bytes: 1048576
 	// range_max_bytes: 134217728

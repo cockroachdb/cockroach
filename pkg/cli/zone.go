@@ -493,6 +493,11 @@ func runSetZone(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	if len(path) > 2 && path[1] == keys.SystemDatabaseID {
+		return fmt.Errorf("setting zone configs for individual system tables is not supported; " +
+			"try setting your config on the entire \"system\" database instead")
+	}
+
 	_, zone, err := queryZonePath(conn, path)
 	if err != nil {
 		return err
