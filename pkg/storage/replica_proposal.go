@@ -229,13 +229,6 @@ func (p *EvalResult) MergeAndDestroy(q EvalResult) error {
 		return errors.New("must not specify Stats")
 	}
 
-	if p.Replicated.State.Frozen == storagebase.ReplicaState_FROZEN_UNSPECIFIED {
-		p.Replicated.State.Frozen = q.Replicated.State.Frozen
-	} else if q.Replicated.State.Frozen != storagebase.ReplicaState_FROZEN_UNSPECIFIED {
-		return errors.New("conflicting FrozenStatus")
-	}
-	q.Replicated.State.Frozen = storagebase.ReplicaState_FROZEN_UNSPECIFIED
-
 	p.Replicated.BlockReads = p.Replicated.BlockReads || q.Replicated.BlockReads
 	q.Replicated.BlockReads = false
 
@@ -508,8 +501,6 @@ func (r *Replica) handleReplicatedEvalResult(
 	// that all fields were handled).
 	{
 		rResult.IsLeaseRequest = false
-		rResult.IsConsistencyRelated = false
-		rResult.IsFreeze = false
 		rResult.Timestamp = hlc.Timestamp{}
 	}
 
@@ -591,13 +582,6 @@ func (r *Replica) handleReplicatedEvalResult(
 	}
 
 	// Update the remaining ReplicaState.
-
-	if rResult.State.Frozen != storagebase.ReplicaState_FROZEN_UNSPECIFIED {
-		r.mu.Lock()
-		r.mu.state.Frozen = rResult.State.Frozen
-		r.mu.Unlock()
-	}
-	rResult.State.Frozen = storagebase.ReplicaState_FROZEN_UNSPECIFIED
 
 	if newDesc := rResult.State.Desc; newDesc != nil {
 		if err := r.setDesc(newDesc); err != nil {

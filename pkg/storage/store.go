@@ -35,7 +35,6 @@ import (
 	"golang.org/x/time/rate"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
@@ -1226,67 +1225,6 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 	// Start Raft processing goroutines.
 	s.cfg.Transport.Listen(s.StoreID(), s)
 	s.processRaft()
-
-	doneUnfreezing := make(chan struct{})
-	if s.stopper.RunAsyncTask(ctx, func(ctx context.Context) {
-		defer close(doneUnfreezing)
-		sem := make(chan struct{}, 512)
-		var wg sync.WaitGroup // wait for unfreeze goroutines
-		var unfrozen int64    // updated atomically
-		newStoreReplicaVisitor(s).Visit(func(r *Replica) bool {
-			r.mu.RLock()
-			frozen := r.mu.state.IsFrozen()
-			r.mu.RUnlock()
-			if !frozen {
-				return true
-			}
-			wg.Add(1)
-			if s.stopper.RunLimitedAsyncTask(
-				ctx, sem, true /* wait */, func(ctx context.Context) {
-					defer wg.Done()
-					desc := r.Desc()
-					var ba roachpb.BatchRequest
-					fReq := roachpb.ChangeFrozenRequest{
-						Span: roachpb.Span{
-							Key:    desc.StartKey.AsRawKey(),
-							EndKey: desc.EndKey.AsRawKey(),
-						},
-						Frozen:      false,
-						MustVersion: build.GetInfo().Tag,
-					}
-					ba.Add(&fReq)
-					if _, pErr := r.Send(ctx, ba); pErr != nil {
-						log.Errorf(ctx, "%s: could not unfreeze Range %s on startup: %s", s, r, pErr)
-					} else {
-						// We don't use the returned RangesAffected (0 or 1) for
-						// counting. One of the other Replicas may have beaten us
-						// to it, but it is still fair to count this as "our"
-						// success; otherwise, the logged count will be distributed
-						// across various nodes' logs.
-						atomic.AddInt64(&unfrozen, 1)
-					}
-				}) != nil {
-				wg.Done()
-			}
-			return true
-		})
-		wg.Wait()
-		if unfrozen > 0 {
-			log.Infof(ctx, "reactivated %d frozen Ranges", unfrozen)
-		}
-	}) != nil {
-		close(doneUnfreezing)
-	}
-	// We don't want to jump into gossiping too early - if the first range is
-	// frozen, that means waiting for the next attempt to happen. Instead,
-	// wait for a little bit and if things take too long, let the Gossip
-	// loop figure it out.
-	select {
-	case <-doneUnfreezing:
-		log.Event(ctx, "finished unfreezing")
-	case <-time.After(10 * time.Second):
-		log.Event(ctx, "gave up waiting for unfreezing; continuing in background")
-	}
 
 	// Gossip is only ever nil while bootstrapping a cluster and
 	// in unittests.
@@ -4061,33 +3999,6 @@ func (s *Store) ComputeStatsForKeySpan(startKey, endKey roachpb.RKey) (enginepb.
 	})
 
 	return output, count
-}
-
-// FrozenStatus returns all of the Store's Replicas which are frozen (if the
-// parameter is true) or unfrozen (otherwise). It makes no attempt to prevent
-// new data being rebalanced to the Store, and thus does not guarantee that the
-// Store remains in the reported state.
-func (s *Store) FrozenStatus(collectFrozen bool) (repDescs []roachpb.ReplicaDescriptor) {
-	newStoreReplicaVisitor(s).Visit(func(r *Replica) bool {
-		if !r.IsInitialized() {
-			return true
-		}
-		repDesc, err := r.GetReplicaDescriptor()
-		if err != nil {
-			if _, ok := err.(*roachpb.RangeNotFoundError); ok {
-				return true
-			}
-			ctx := s.AnnotateCtx(context.TODO())
-			log.Fatalf(ctx, "unexpected error: %s", err)
-		}
-		r.mu.RLock()
-		if r.mu.state.IsFrozen() == collectFrozen {
-			repDescs = append(repDescs, repDesc)
-		}
-		r.mu.RUnlock()
-		return true // want more
-	})
-	return
 }
 
 // GetTempPrefix returns a path where temporary files and directories can be

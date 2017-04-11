@@ -109,6 +109,7 @@ var (
 	// after it's been aborted.
 	LocalAbortCacheSuffix = []byte("abc-")
 	// LocalRangeFrozenStatusSuffix is the suffix for a frozen status.
+	// No longer used; exists only to reserve the key so we don't use it.
 	LocalRangeFrozenStatusSuffix = []byte("fzn-")
 	// LocalRangeLastGCSuffix is the suffix for the last GC.
 	LocalRangeLastGCSuffix = []byte("lgc-")

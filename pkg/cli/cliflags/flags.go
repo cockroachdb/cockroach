@@ -400,11 +400,6 @@ The resolution of the Raft timer; other raft timeouts are
 defined in terms of multiples of this value.`,
 	}
 
-	UndoFreezeCluster = FlagInfo{
-		Name:        "undo",
-		Description: `Attempt to undo an earlier attempt to freeze the cluster.`,
-	}
-
 	Replicated = FlagInfo{
 		Name:        "replicated",
 		Description: "Restrict scan to replicated data.",

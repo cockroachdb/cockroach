@@ -30,23 +30,6 @@ message StoreRequestHeader {
       (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.StoreID"];
 }
 
-// A PollFrozenRequest asks the addressed Store for its frozen or thawed
-// Replicas.
-message PollFrozenRequest {
-  StoreRequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-  // When true, collect the frozen Replicas, and the thawed ones otherwise.
-  bool collect_frozen = 2;
-}
-
-// A PollFrozenResponse is the response returned from a PollFrozenRequest.
-message PollFrozenResponse {
-  repeated cockroach.roachpb.ReplicaDescriptor results = 1 [(gogoproto.nullable) = false];
-}
-
-service Freeze {
-  rpc PollFrozen (PollFrozenRequest) returns (PollFrozenResponse) {}
-}
-
 // A CollectChecksumRequest asks the addressed replica for the result of a
 // roachpb.ComputeChecksumRequest.
 message CollectChecksumRequest {

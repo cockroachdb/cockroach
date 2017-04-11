@@ -4120,252 +4120,6 @@ export namespace cockroach {
             }
 
             /**
-             * Properties of a ClusterFreezeRequest.
-             * @typedef cockroach.server.serverpb.ClusterFreezeRequest$Properties
-             * @type {Object}
-             * @property {boolean} [freeze] ClusterFreezeRequest freeze.
-             */
-            type ClusterFreezeRequest$Properties = {
-                freeze?: boolean;
-            };
-
-            /**
-             * Constructs a new ClusterFreezeRequest.
-             * @exports cockroach.server.serverpb.ClusterFreezeRequest
-             * @constructor
-             * @param {cockroach.server.serverpb.ClusterFreezeRequest$Properties=} [properties] Properties to set
-             */
-            class ClusterFreezeRequest {
-
-                /**
-                 * Constructs a new ClusterFreezeRequest.
-                 * @exports cockroach.server.serverpb.ClusterFreezeRequest
-                 * @constructor
-                 * @param {cockroach.server.serverpb.ClusterFreezeRequest$Properties=} [properties] Properties to set
-                 */
-                constructor(properties?: cockroach.server.serverpb.ClusterFreezeRequest$Properties);
-
-                /**
-                 * ClusterFreezeRequest freeze.
-                 * @type {boolean|undefined}
-                 */
-                public freeze?: boolean;
-
-                /**
-                 * Creates a new ClusterFreezeRequest instance using the specified properties.
-                 * @param {cockroach.server.serverpb.ClusterFreezeRequest$Properties=} [properties] Properties to set
-                 * @returns {cockroach.server.serverpb.ClusterFreezeRequest} ClusterFreezeRequest instance
-                 */
-                public static create(properties?: cockroach.server.serverpb.ClusterFreezeRequest$Properties): cockroach.server.serverpb.ClusterFreezeRequest;
-
-                /**
-                 * Encodes the specified ClusterFreezeRequest message. Does not implicitly {@link cockroach.server.serverpb.ClusterFreezeRequest.verify|verify} messages.
-                 * @param {cockroach.server.serverpb.ClusterFreezeRequest$Properties} message ClusterFreezeRequest message or plain object to encode
-                 * @param {$protobuf.Writer} [writer] Writer to encode to
-                 * @returns {$protobuf.Writer} Writer
-                 */
-                public static encode(message: cockroach.server.serverpb.ClusterFreezeRequest$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
-
-                /**
-                 * Encodes the specified ClusterFreezeRequest message, length delimited. Does not implicitly {@link cockroach.server.serverpb.ClusterFreezeRequest.verify|verify} messages.
-                 * @param {cockroach.server.serverpb.ClusterFreezeRequest$Properties} message ClusterFreezeRequest message or plain object to encode
-                 * @param {$protobuf.Writer} [writer] Writer to encode to
-                 * @returns {$protobuf.Writer} Writer
-                 */
-                public static encodeDelimited(message: cockroach.server.serverpb.ClusterFreezeRequest$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
-
-                /**
-                 * Decodes a ClusterFreezeRequest message from the specified reader or buffer.
-                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
-                 * @param {number} [length] Message length if known beforehand
-                 * @returns {cockroach.server.serverpb.ClusterFreezeRequest} ClusterFreezeRequest
-                 * @throws {Error} If the payload is not a reader or valid buffer
-                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
-                 */
-                public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): cockroach.server.serverpb.ClusterFreezeRequest;
-
-                /**
-                 * Decodes a ClusterFreezeRequest message from the specified reader or buffer, length delimited.
-                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
-                 * @returns {cockroach.server.serverpb.ClusterFreezeRequest} ClusterFreezeRequest
-                 * @throws {Error} If the payload is not a reader or valid buffer
-                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
-                 */
-                public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): cockroach.server.serverpb.ClusterFreezeRequest;
-
-                /**
-                 * Verifies a ClusterFreezeRequest message.
-                 * @param {Object.<string,*>} message Plain object to verify
-                 * @returns {?string} `null` if valid, otherwise the reason why it is not
-                 */
-                public static verify(message: { [k: string]: any }): string;
-
-                /**
-                 * Creates a ClusterFreezeRequest message from a plain object. Also converts values to their respective internal types.
-                 * @param {Object.<string,*>} object Plain object
-                 * @returns {cockroach.server.serverpb.ClusterFreezeRequest} ClusterFreezeRequest
-                 */
-                public static fromObject(object: { [k: string]: any }): cockroach.server.serverpb.ClusterFreezeRequest;
-
-                /**
-                 * Creates a ClusterFreezeRequest message from a plain object. Also converts values to their respective internal types.
-                 * This is an alias of {@link cockroach.server.serverpb.ClusterFreezeRequest.fromObject}.
-                 * @function
-                 * @param {Object.<string,*>} object Plain object
-                 * @returns {cockroach.server.serverpb.ClusterFreezeRequest} ClusterFreezeRequest
-                 */
-                public static from(object: { [k: string]: any }): cockroach.server.serverpb.ClusterFreezeRequest;
-
-                /**
-                 * Creates a plain object from a ClusterFreezeRequest message. Also converts values to other types if specified.
-                 * @param {cockroach.server.serverpb.ClusterFreezeRequest} message ClusterFreezeRequest
-                 * @param {$protobuf.ConversionOptions} [options] Conversion options
-                 * @returns {Object.<string,*>} Plain object
-                 */
-                public static toObject(message: cockroach.server.serverpb.ClusterFreezeRequest, options?: $protobuf.ConversionOptions): { [k: string]: any };
-
-                /**
-                 * Creates a plain object from this ClusterFreezeRequest message. Also converts values to other types if specified.
-                 * @param {$protobuf.ConversionOptions} [options] Conversion options
-                 * @returns {Object.<string,*>} Plain object
-                 */
-                public toObject(options?: $protobuf.ConversionOptions): { [k: string]: any };
-
-                /**
-                 * Converts this ClusterFreezeRequest to JSON.
-                 * @returns {Object.<string,*>} JSON object
-                 */
-                public toJSON(): { [k: string]: any };
-            }
-
-            /**
-             * Properties of a ClusterFreezeResponse.
-             * @typedef cockroach.server.serverpb.ClusterFreezeResponse$Properties
-             * @type {Object}
-             * @property {Long} [ranges_affected] ClusterFreezeResponse ranges_affected.
-             * @property {string} [message] ClusterFreezeResponse message.
-             */
-            type ClusterFreezeResponse$Properties = {
-                ranges_affected?: Long;
-                message?: string;
-            };
-
-            /**
-             * Constructs a new ClusterFreezeResponse.
-             * @exports cockroach.server.serverpb.ClusterFreezeResponse
-             * @constructor
-             * @param {cockroach.server.serverpb.ClusterFreezeResponse$Properties=} [properties] Properties to set
-             */
-            class ClusterFreezeResponse {
-
-                /**
-                 * Constructs a new ClusterFreezeResponse.
-                 * @exports cockroach.server.serverpb.ClusterFreezeResponse
-                 * @constructor
-                 * @param {cockroach.server.serverpb.ClusterFreezeResponse$Properties=} [properties] Properties to set
-                 */
-                constructor(properties?: cockroach.server.serverpb.ClusterFreezeResponse$Properties);
-
-                /**
-                 * ClusterFreezeResponse ranges_affected.
-                 * @type {Long|undefined}
-                 */
-                public ranges_affected?: Long;
-
-                /**
-                 * ClusterFreezeResponse message.
-                 * @type {string|undefined}
-                 */
-                public message?: string;
-
-                /**
-                 * Creates a new ClusterFreezeResponse instance using the specified properties.
-                 * @param {cockroach.server.serverpb.ClusterFreezeResponse$Properties=} [properties] Properties to set
-                 * @returns {cockroach.server.serverpb.ClusterFreezeResponse} ClusterFreezeResponse instance
-                 */
-                public static create(properties?: cockroach.server.serverpb.ClusterFreezeResponse$Properties): cockroach.server.serverpb.ClusterFreezeResponse;
-
-                /**
-                 * Encodes the specified ClusterFreezeResponse message. Does not implicitly {@link cockroach.server.serverpb.ClusterFreezeResponse.verify|verify} messages.
-                 * @param {cockroach.server.serverpb.ClusterFreezeResponse$Properties} message ClusterFreezeResponse message or plain object to encode
-                 * @param {$protobuf.Writer} [writer] Writer to encode to
-                 * @returns {$protobuf.Writer} Writer
-                 */
-                public static encode(message: cockroach.server.serverpb.ClusterFreezeResponse$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
-
-                /**
-                 * Encodes the specified ClusterFreezeResponse message, length delimited. Does not implicitly {@link cockroach.server.serverpb.ClusterFreezeResponse.verify|verify} messages.
-                 * @param {cockroach.server.serverpb.ClusterFreezeResponse$Properties} message ClusterFreezeResponse message or plain object to encode
-                 * @param {$protobuf.Writer} [writer] Writer to encode to
-                 * @returns {$protobuf.Writer} Writer
-                 */
-                public static encodeDelimited(message: cockroach.server.serverpb.ClusterFreezeResponse$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
-
-                /**
-                 * Decodes a ClusterFreezeResponse message from the specified reader or buffer.
-                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
-                 * @param {number} [length] Message length if known beforehand
-                 * @returns {cockroach.server.serverpb.ClusterFreezeResponse} ClusterFreezeResponse
-                 * @throws {Error} If the payload is not a reader or valid buffer
-                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
-                 */
-                public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): cockroach.server.serverpb.ClusterFreezeResponse;
-
-                /**
-                 * Decodes a ClusterFreezeResponse message from the specified reader or buffer, length delimited.
-                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
-                 * @returns {cockroach.server.serverpb.ClusterFreezeResponse} ClusterFreezeResponse
-                 * @throws {Error} If the payload is not a reader or valid buffer
-                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
-                 */
-                public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): cockroach.server.serverpb.ClusterFreezeResponse;
-
-                /**
-                 * Verifies a ClusterFreezeResponse message.
-                 * @param {Object.<string,*>} message Plain object to verify
-                 * @returns {?string} `null` if valid, otherwise the reason why it is not
-                 */
-                public static verify(message: { [k: string]: any }): string;
-
-                /**
-                 * Creates a ClusterFreezeResponse message from a plain object. Also converts values to their respective internal types.
-                 * @param {Object.<string,*>} object Plain object
-                 * @returns {cockroach.server.serverpb.ClusterFreezeResponse} ClusterFreezeResponse
-                 */
-                public static fromObject(object: { [k: string]: any }): cockroach.server.serverpb.ClusterFreezeResponse;
-
-                /**
-                 * Creates a ClusterFreezeResponse message from a plain object. Also converts values to their respective internal types.
-                 * This is an alias of {@link cockroach.server.serverpb.ClusterFreezeResponse.fromObject}.
-                 * @function
-                 * @param {Object.<string,*>} object Plain object
-                 * @returns {cockroach.server.serverpb.ClusterFreezeResponse} ClusterFreezeResponse
-                 */
-                public static from(object: { [k: string]: any }): cockroach.server.serverpb.ClusterFreezeResponse;
-
-                /**
-                 * Creates a plain object from a ClusterFreezeResponse message. Also converts values to other types if specified.
-                 * @param {cockroach.server.serverpb.ClusterFreezeResponse} message ClusterFreezeResponse
-                 * @param {$protobuf.ConversionOptions} [options] Conversion options
-                 * @returns {Object.<string,*>} Plain object
-                 */
-                public static toObject(message: cockroach.server.serverpb.ClusterFreezeResponse, options?: $protobuf.ConversionOptions): { [k: string]: any };
-
-                /**
-                 * Creates a plain object from this ClusterFreezeResponse message. Also converts values to other types if specified.
-                 * @param {$protobuf.ConversionOptions} [options] Conversion options
-                 * @returns {Object.<string,*>} Plain object
-                 */
-                public toObject(options?: $protobuf.ConversionOptions): { [k: string]: any };
-
-                /**
-                 * Converts this ClusterFreezeResponse to JSON.
-                 * @returns {Object.<string,*>} JSON object
-                 */
-                public toJSON(): { [k: string]: any };
-            }
-
-            /**
              * Constructs a new Admin service.
              * @exports cockroach.server.serverpb.Admin
              * @extends $protobuf.rpc.Service
@@ -4491,14 +4245,6 @@ export namespace cockroach {
                  * @returns {undefined}
                  */
                 public drain(request: (cockroach.server.serverpb.DrainRequest|{ [k: string]: any }), callback: Admin_drain_Callback): void;
-
-                /**
-                 * Calls ClusterFreeze.
-                 * @param {cockroach.server.serverpb.ClusterFreezeRequest|Object.<string,*>} request ClusterFreezeRequest message or plain object
-                 * @param {Admin_clusterFreeze_Callback} callback Node-style callback called with the error, if any, and ClusterFreezeResponse
-                 * @returns {undefined}
-                 */
-                public clusterFreeze(request: (cockroach.server.serverpb.ClusterFreezeRequest|{ [k: string]: any }), callback: Admin_clusterFreeze_Callback): void;
             }
 
             /**
@@ -14583,7 +14329,6 @@ export namespace cockroach {
              * @property {cockroach.util.hlc.Timestamp$Properties} [gc_threshold] ReplicaState gc_threshold.
              * @property {cockroach.storage.engine.enginepb.MVCCStats$Properties} [stats] ReplicaState stats.
              * @property {cockroach.util.hlc.Timestamp$Properties} [txn_span_gc_threshold] ReplicaState txn_span_gc_threshold.
-             * @property {cockroach.storage.storagebase.ReplicaState.FrozenEnum} [frozen] ReplicaState frozen.
              */
             type ReplicaState$Properties = {
                 raft_applied_index?: Long;
@@ -14594,7 +14339,6 @@ export namespace cockroach {
                 gc_threshold?: cockroach.util.hlc.Timestamp$Properties;
                 stats?: cockroach.storage.engine.enginepb.MVCCStats$Properties;
                 txn_span_gc_threshold?: cockroach.util.hlc.Timestamp$Properties;
-                frozen?: cockroach.storage.storagebase.ReplicaState.FrozenEnum;
             };
 
             /**
@@ -14660,12 +14404,6 @@ export namespace cockroach {
                  * @type {cockroach.util.hlc.Timestamp$Properties|undefined}
                  */
                 public txn_span_gc_threshold?: cockroach.util.hlc.Timestamp$Properties;
-
-                /**
-                 * ReplicaState frozen.
-                 * @type {cockroach.storage.storagebase.ReplicaState.FrozenEnum|undefined}
-                 */
-                public frozen?: cockroach.storage.storagebase.ReplicaState.FrozenEnum;
 
                 /**
                  * Creates a new ReplicaState instance using the specified properties.
@@ -14752,24 +14490,6 @@ export namespace cockroach {
                  * @returns {Object.<string,*>} JSON object
                  */
                 public toJSON(): { [k: string]: any };
-            }
-
-            namespace ReplicaState {
-
-                /**
-                 * FrozenEnum enum.
-                 * @name FrozenEnum
-                 * @memberof cockroach.storage.storagebase.ReplicaState
-                 * @enum {number}
-                 * @property {number} FROZEN_UNSPECIFIED=0 FROZEN_UNSPECIFIED value
-                 * @property {number} FROZEN=1 FROZEN value
-                 * @property {number} UNFROZEN=2 UNFROZEN value
-                 */
-                enum FrozenEnum {
-                    FROZEN_UNSPECIFIED = 0,
-                    FROZEN = 1,
-                    UNFROZEN = 2
-                }
             }
 
             /**
@@ -16880,15 +16600,6 @@ type Admin_liveness_Callback = (error: Error, response?: cockroach.server.server
  * @param {cockroach.server.serverpb.DrainResponse} [response] DrainResponse
  */
 type Admin_drain_Callback = (error: Error, response?: cockroach.server.serverpb.DrainResponse) => void;
-
-/**
- * Callback as used by {@link Admin#clusterFreeze}.
- * @typedef Admin_clusterFreeze_Callback
- * @type {function}
- * @param {?Error} error Error, if any
- * @param {cockroach.server.serverpb.ClusterFreezeResponse} [response] ClusterFreezeResponse
- */
-type Admin_clusterFreeze_Callback = (error: Error, response?: cockroach.server.serverpb.ClusterFreezeResponse) => void;
 
 /**
  * Callback as used by {@link Status#details}.
