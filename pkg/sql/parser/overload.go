@@ -262,13 +262,13 @@ func typeCheckOverloadedExprs(
 
 	// Split the expressions into three groups of indexed expressions:
 	// - Placeholders
-	// - Numeric constants
+	// - Constants
 	// - All other Exprs
 	var resolvableExprs, constExprs, placeholderExprs []indexedExpr
 	for i, expr := range exprs {
 		idxExpr := indexedExpr{e: expr, i: i}
 		switch {
-		case isNumericConstant(expr):
+		case isConstant(expr):
 			constExprs = append(constExprs, idxExpr)
 		case ctx.isUnresolvedPlaceholder(expr):
 			placeholderExprs = append(placeholderExprs, idxExpr)
@@ -433,7 +433,6 @@ func typeCheckOverloadedExprs(
 		}
 	}
 
-	var bestConstType Type
 	if len(constExprs) > 0 {
 		before := overloads
 
@@ -484,21 +483,22 @@ func typeCheckOverloadedExprs(
 
 		// The fourth heuristic is to prefer candidates that accepts the "best" mutual
 		// type in the resolvable type set of all numeric constants.
-		bestConstType = commonNumericConstantType(constExprs)
-		for _, expr := range constExprs {
-			filterOverloads(func(o overloadImpl) bool {
-				return o.params().getAt(expr.i).Equivalent(bestConstType)
-			})
-		}
-		if ok, fn, err := checkReturn(); ok {
-			return typedExprs, fn, err
-		}
-		if homogeneousTyp != nil {
-			if !homogeneousTyp.Equivalent(bestConstType) {
-				homogeneousTyp = nil
+		if bestConstType, ok := commonConstantType(constExprs); ok {
+			for _, expr := range constExprs {
+				filterOverloads(func(o overloadImpl) bool {
+					return o.params().getAt(expr.i).Equivalent(bestConstType)
+				})
 			}
-		} else {
-			homogeneousTyp = bestConstType
+			if ok, fn, err := checkReturn(); ok {
+				return typedExprs, fn, err
+			}
+			if homogeneousTyp != nil {
+				if !homogeneousTyp.Equivalent(bestConstType) {
+					homogeneousTyp = nil
+				}
+			} else {
+				homogeneousTyp = bestConstType
+			}
 		}
 	}
 

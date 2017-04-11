@@ -10,7 +10,7 @@ SELECT ARRAY[1, 2, 3]
 ----
 {1,2,3}
 
-query error expected true to be of type string, found type bool
+query error expected 1 to be of type bool, found type int
 SELECT ARRAY['a', true, 1]
 
 query T
