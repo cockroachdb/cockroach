@@ -1041,7 +1041,9 @@ func (l *loggingT) flushAll() {
 func (l *loggingT) gcDaemon() {
 	l.gcOldFiles()
 	for range l.gcNotify {
-		l.gcOldFiles()
+		if atomic.LoadInt32(&enableGCDeamon) != 0 {
+			l.gcOldFiles()
+		}
 	}
 }
 

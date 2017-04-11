@@ -22,7 +22,6 @@ import (
 	"io"
 	"io/ioutil"
 	stdLog "log"
-	"math"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -506,34 +505,67 @@ func TestGC(t *testing.T) {
 	defer s.Close(t)
 
 	setFlags()
-	logging.stderrThreshold.set(Severity_NONE)
+
 	// Prevent writes to stderr from being sent to log files which would screw up
 	// the expected number of log file calculation below.
 	logging.noStderrRedirect = true
+
+	// Start the first log file. If this is done afterwards, there's a chance of
+	// of an extra log file being created during the subsequent logging.
+	Info(context.Background(), "start")
+
 	defer func(previous uint64) { MaxSize = previous }(MaxSize)
 	MaxSize = 1 // ensure rotation on every log write
 	defer func(previous uint64) {
 		atomic.StoreUint64(&MaxSizePerSeverity, previous)
 	}(MaxSizePerSeverity)
 	atomic.StoreUint64(&MaxSizePerSeverity, 1500)
-	const expectedFiles = 2
+	defer func(previous int32) {
+		atomic.StoreInt32(&enableGCDeamon, previous)
+	}(enableGCDeamon)
+	atomic.StoreInt32(&enableGCDeamon, 0) // Turn off the gc.
 
-	// Empirically, each log file is ~650 bytes in size. Create 20 log files per
-	// level. GC should trim this down to 2.
-	for i := 0; i < expectedFiles*10; i++ {
-		Info(context.Background(), "x")
-	}
+	const expectedFilesAfterGC = 2
+	const newLogFiles = 20
 
-	// Ensure the GC has seen the most recent files.
-	logging.gcOldFiles()
+	logging.lockAndFlushAll()
 
-	allFiles, err := ListLogFiles()
+	allFilesOriginal, err := ListLogFiles()
 	if err != nil {
 		t.Fatal(err)
 	}
-	files := selectFiles(allFiles, math.MaxInt64)
-	if expectedFiles != len(files) {
-		t.Fatalf("%s: expected %d, but found %d", s.logDir, expectedFiles, len(files))
+	if e, a := 1, len(allFilesOriginal); e != a {
+		t.Fatalf("expected %d files, but found %d", e, a)
+	}
+
+	// Empirically, each log file is ~650 bytes in size. GC should trim this
+	// down to 2.
+	for i := 0; i < newLogFiles; i++ {
+		Infof(context.Background(), "%d", i)
+	}
+
+	// Flush all the logs or there is a slight race condition on windows in
+	// which a log file is created but doesn't have content so it doesn't get
+	// GCed.
+	logging.lockAndFlushAll()
+
+	allFilesBefore, err := ListLogFiles()
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The +1 here was created earlier in the first call to info.
+	if e, a := newLogFiles+1, len(allFilesBefore); e != a {
+		t.Fatalf("expected %d files, but found %d", e, a)
+	}
+
+	logging.gcOldFiles()
+
+	allFilesAfter, err := ListLogFiles()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if e, a := expectedFilesAfterGC, len(allFilesAfter); e != a {
+		t.Fatalf("expected %d files, but found %d", e, a)
 	}
 }
 

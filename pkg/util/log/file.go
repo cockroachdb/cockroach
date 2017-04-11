@@ -48,6 +48,9 @@ var MaxSize uint64 = 1024 * 1024 * 10
 // larger.
 var MaxSizePerSeverity = MaxSize * 10
 
+// enableGCDeamon can be used to turn off the logging GC.
+var enableGCDeamon int32 = 1
+
 // If non-empty, overrides the choice of directory in which to write logs. See
 // createLogDirs for the full list of possible destinations. Note that the
 // default is to log to stderr independent of this setting. See --logtostderr.
