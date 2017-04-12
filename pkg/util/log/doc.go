@@ -1,3 +1,4 @@
+// Copyright 2015 Cockroach Labs.
 // Copyright 2013 Google Inc. All Rights Reserved.
 //
 // Go support for leveled logs, analogous to https://code.google.com/p/google-glog/
@@ -48,9 +49,13 @@
 //		Logs are written to standard error instead of to files.
 //	--alsologtostderr=INFO
 //		Logs are written to standard error as well as to files.
-//	--log-dir=""
+//	--log-dir="..."
 //		Log files will be written to this directory instead of the
-//		default temporary directory.
+//		default target directory.
+//  --log-file-max-size=N
+//    Log files are rotated after reaching that size.
+//  --log-dir-max-size=N
+//    Log files are removed after log directory reaches that size.
 //
 //	Other flags provide aids to debugging.
 //
