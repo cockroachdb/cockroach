@@ -46,11 +46,8 @@ type stmtStats struct {
 
 // StmtStatsEnable determines whether to collect per-statement
 // statistics.
-// Note: in the future we will want to have this collection enabled at
-// all times. We hide it behind an environment variable until further
-// testing confirms it works and is stable.
 var StmtStatsEnable = envutil.EnvOrDefaultBool(
-	"COCKROACH_SQL_STMT_STATS_ENABLE", false,
+	"COCKROACH_SQL_STMT_STATS_ENABLE", true,
 )
 
 func (a *appStats) recordStatement(
