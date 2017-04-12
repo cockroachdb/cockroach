@@ -117,7 +117,7 @@ func (p *planner) setClusterSetting(
 		}
 		upsertQ := "UPSERT INTO system.settings (name, value, lastUpdated, valueType) VALUES ($1, $2, NOW(), $3)"
 		if _, err := ie.ExecuteStatementInTransaction(
-			ctx, "update-setting", p.txn, upsertQ, name, encoded, "s",
+			ctx, "update-setting", p.txn, upsertQ, name, encoded, string(typ),
 		); err != nil {
 			return nil, err
 		}
