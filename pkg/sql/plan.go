@@ -200,6 +200,7 @@ var _ planNode = &ordinalityNode{}
 var _ planNode = &relocateNode{}
 var _ planNode = &renderNode{}
 var _ planNode = &scanNode{}
+var _ planNode = &scatterNode{}
 var _ planNode = &showRangesNode{}
 var _ planNode = &sortNode{}
 var _ planNode = &splitNode{}
@@ -338,6 +339,8 @@ func (p *planner) newPlan(
 		return p.RenameTable(ctx, n)
 	case *parser.Revoke:
 		return p.Revoke(ctx, n)
+	case *parser.Scatter:
+		return p.Scatter(ctx, n)
 	case *parser.Select:
 		return p.Select(ctx, n, desiredTypes, autoCommit)
 	case *parser.SelectClause:
@@ -435,6 +438,8 @@ func (p *planner) prepare(ctx context.Context, stmt parser.Statement) (planNode,
 		return p.Split(ctx, n)
 	case *parser.Relocate:
 		return p.Relocate(ctx, n)
+	case *parser.Scatter:
+		return p.Scatter(ctx, n)
 	case *parser.Update:
 		return p.Update(ctx, n, nil, false)
 	default:
