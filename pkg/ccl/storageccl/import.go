@@ -31,7 +31,7 @@ func init() {
 }
 
 // evalImport bulk loads key/value entries.
-func evalImport(ctx context.Context, cArgs storage.CommandArgs) error {
+func evalImport(ctx context.Context, cArgs storage.CommandArgs) (*roachpb.ImportResponse, error) {
 	args := cArgs.Args.(*roachpb.ImportRequest)
 	db := cArgs.EvalCtx.DB()
 	kr := KeyRewriter(args.KeyRewrites)
@@ -41,11 +41,11 @@ func evalImport(ctx context.Context, cArgs storage.CommandArgs) error {
 		var ok bool
 		importStart, ok = kr.RewriteKey(append([]byte(nil), args.DataSpan.Key...))
 		if !ok {
-			return errors.Errorf("could not rewrite key: %s", importStart)
+			return nil, errors.Errorf("could not rewrite key: %s", importStart)
 		}
 		importEnd, ok = kr.RewriteKey(append([]byte(nil), args.DataSpan.EndKey...))
 		if !ok {
-			return errors.Errorf("could not rewrite key: %s", importEnd)
+			return nil, errors.Errorf("could not rewrite key: %s", importEnd)
 		}
 	}
 
@@ -53,7 +53,7 @@ func evalImport(ctx context.Context, cArgs storage.CommandArgs) error {
 	defer tracing.FinishSpan(span)
 
 	if err := beginLimitedRequest(ctx); err != nil {
-		return err
+		return nil, err
 	}
 	defer endLimitedRequest()
 	log.Infof(ctx, "import [%s,%s)", importStart, importEnd)
@@ -85,6 +85,7 @@ func evalImport(ctx context.Context, cArgs storage.CommandArgs) error {
 		b = batchBuilder{}
 	}
 
+	var dataSize int64
 	var iters []engine.Iterator
 	for _, file := range args.Files {
 		if log.V(2) {
@@ -93,7 +94,7 @@ func evalImport(ctx context.Context, cArgs storage.CommandArgs) error {
 
 		dir, err := MakeExportStorage(ctx, file.Dir)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		defer func() {
 			if err := dir.Close(); err != nil {
@@ -103,23 +104,29 @@ func evalImport(ctx context.Context, cArgs storage.CommandArgs) error {
 		tempPrefix := cArgs.EvalCtx.GetTempPrefix()
 		localPath, cleanup, err := FetchFile(ctx, tempPrefix, dir, file.Path)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		defer cleanup()
 
 		if len(file.Sha512) > 0 {
 			checksum, err := sha512ChecksumFile(localPath)
 			if err != nil {
-				return err
+				return nil, err
 			}
 			if !bytes.Equal(checksum, file.Sha512) {
-				return errors.Errorf("checksum mismatch for %s", file.Path)
+				return nil, errors.Errorf("checksum mismatch for %s", file.Path)
 			}
 		}
 
+		fileInfo, err := os.Lstat(localPath)
+		if err != nil {
+			return nil, err
+		}
+		dataSize += fileInfo.Size()
+
 		readerTempDir, err := ioutil.TempDir(tempPrefix, "import-sstreader")
 		if err != nil {
-			return err
+			return nil, err
 		}
 		defer func() {
 			if err := os.RemoveAll(readerTempDir); err != nil {
@@ -129,7 +136,7 @@ func evalImport(ctx context.Context, cArgs storage.CommandArgs) error {
 
 		sst, err := engine.MakeRocksDBSstFileReader(readerTempDir)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		defer sst.Close()
 
@@ -138,7 +145,7 @@ func evalImport(ctx context.Context, cArgs storage.CommandArgs) error {
 		// This becomes less heavyweight when we figure out how to use RocksDB's
 		// TableReader directly.
 		if err := sst.AddFile(localPath); err != nil {
-			return err
+			return nil, err
 		}
 
 		iter := sst.NewIterator(false)
@@ -194,11 +201,16 @@ func evalImport(ctx context.Context, cArgs storage.CommandArgs) error {
 		}
 	}
 	if err := iter.Error(); err != nil {
-		return err
+		return nil, err
 	}
 	// Flush out the last batch.
 	if b.batch.Len() > 0 {
 		sendWriteBatch()
 	}
-	return g.Wait()
+
+	if err := g.Wait(); err != nil {
+		return nil, err
+	}
+
+	return &roachpb.ImportResponse{DataSize: dataSize}, nil
 }

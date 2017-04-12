@@ -286,7 +286,7 @@ func (*Relocate) StatementType() StatementType { return Rows }
 func (*Relocate) StatementTag() string { return "TESTING_RELOCATE" }
 
 // StatementType implements the Statement interface.
-func (*Restore) StatementType() StatementType { return Ack }
+func (*Restore) StatementType() StatementType { return Rows }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*Restore) StatementTag() string { return "RESTORE" }
