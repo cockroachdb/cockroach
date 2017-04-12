@@ -1,4 +1,4 @@
-# LogicTest: default distsql
+# LogicTest: default parallelStmts distsql
 
 # The following tests have results equivalent to Postgres (differences
 # in string representation and number of decimals returned, but otherwise

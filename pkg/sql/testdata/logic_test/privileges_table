@@ -1,4 +1,4 @@
-# LogicTest: default distsql
+# LogicTest: default parallelStmts distsql
 
 # Test default table-level permissions.
 # Default user is root.

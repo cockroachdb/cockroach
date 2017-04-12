@@ -1,4 +1,4 @@
-# LogicTest: default distsql
+# LogicTest: default parallelStmts distsql
 
 query error duplicate column name: "rowid"
 CREATE TABLE t (

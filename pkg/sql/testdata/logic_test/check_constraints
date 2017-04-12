@@ -1,4 +1,4 @@
-# LogicTest: default distsql
+# LogicTest: default parallelStmts distsql
 
 #### column CHECK constraints
 

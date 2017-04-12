@@ -1,4 +1,4 @@
-# LogicTest: default distsql
+# LogicTest: default parallelStmts distsql
 
 ##
 # Test a primary key with a collated string in second position (cannot get a key range).

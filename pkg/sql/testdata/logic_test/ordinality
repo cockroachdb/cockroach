@@ -1,4 +1,4 @@
-# LogicTest: default distsql
+# LogicTest: default parallelStmts distsql
 
 query TI colnames
 SELECT * FROM (VALUES ('a'), ('b')) WITH ORDINALITY AS X(name, i)

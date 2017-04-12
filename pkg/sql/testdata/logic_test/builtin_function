@@ -1,4 +1,4 @@
-# LogicTest: default distsql
+# LogicTest: default parallelStmts distsql
 
 query error unknown function: foo.bar
 SELECT foo.bar()

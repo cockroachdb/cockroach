@@ -23,6 +23,7 @@ import (
 	gosql "database/sql"
 	"flag"
 	"fmt"
+	"go/build"
 	"io"
 	"net/url"
 	"os"
@@ -40,8 +41,6 @@ import (
 
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
-
-	"go/build"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -224,6 +223,10 @@ type testClusterConfig struct {
 	useFakeSpanResolver bool
 	// if non-empty, overrides the default distsql mode.
 	defaultDistSQLMode string
+	// if set, any logic statement expected to succeed and parallelizable
+	// using RETURNING NOTHING syntax will be parallelized transparently.
+	// See logicStatement.parallelizeStmts.
+	parallelStmts bool
 }
 
 // logicTestConfigs contains all possible cluster configs. A test file can
@@ -234,6 +237,7 @@ type testClusterConfig struct {
 // via -config).
 var logicTestConfigs = []testClusterConfig{
 	{name: "default", numNodes: 1},
+	{name: "parallelStmts", numNodes: 1, parallelStmts: true},
 	{name: "distsql", numNodes: 3, useFakeSpanResolver: true, defaultDistSQLMode: "ON"},
 	{name: "5node", numNodes: 5},
 }
@@ -284,6 +288,30 @@ type logicStatement struct {
 	// expected pgcode for the error, if any. "" indicates the
 	// test does not check the pgwire error code.
 	expectErrCode string
+}
+
+var parallelizableRe = regexp.MustCompile(`^\s*(INSERT|UPSERT|UPDATE|DELETE).*$`)
+
+// parallelizeStmts maps all parallelizable statement types in the logic
+// statement which are not expected to throw an error to their parallelized
+// form. The transformation operates directly on the SQL syntax.
+func (ls *logicStatement) parallelizeStmts() {
+	// If the statement expects an error, we cannot parallelize it blindly
+	// because statement parallelism changes expected error semantics. For
+	// instance, errors seen when executing a parallelized statement may
+	// been reported when executing later statements.
+	if ls.expectErr != "" {
+		return
+	}
+	stmts := strings.Split(ls.sql, ";")
+	for i, stmt := range stmts {
+		// We can opt-in to statement parallelization for any parallelizable
+		// statement type that isn't already RETURNING values.
+		if parallelizableRe.MatchString(stmt) && !strings.Contains(stmt, "RETURNING") {
+			stmts[i] = stmt + " RETURNING NOTHING"
+		}
+	}
+	ls.sql = strings.Join(stmts, "; ")
 }
 
 // logicSorter sorts result rows (or not) depending on Test-Script's
@@ -693,7 +721,7 @@ func (t *logicTest) readTestFileConfigs(path string) []logicTestConfigIdx {
 	return []logicTestConfigIdx{idx}
 }
 
-func (t *logicTest) processTestFile(path string) error {
+func (t *logicTest) processTestFile(path string, config testClusterConfig) error {
 	file, err := os.Open(path)
 	if err != nil {
 		return err
@@ -773,6 +801,9 @@ func (t *logicTest) processTestFile(path string) error {
 				fmt.Fprintln(&buf, line)
 			}
 			stmt.sql = strings.TrimSpace(buf.String())
+			if config.parallelStmts {
+				stmt.parallelizeStmts()
+			}
 			if !s.skip {
 				for i := 0; i < repeat; i++ {
 					if ok := t.execStatement(stmt); !ok {
@@ -1308,7 +1339,7 @@ func (t *logicTest) setupAndRunFile(path string, config testClusterConfig) {
 
 	t.logScope.KeepLogs(true)
 
-	if err := t.processTestFile(path); err != nil {
+	if err := t.processTestFile(path, config); err != nil {
 		t.Fatal(err)
 	}
 

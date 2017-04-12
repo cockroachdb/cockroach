@@ -1,4 +1,4 @@
-# LogicTest: default distsql
+# LogicTest: default parallelStmts distsql
 
 # On an implicit transaction, we retry implicitly and the function
 # eventually returns a result.
