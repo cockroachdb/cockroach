@@ -214,18 +214,18 @@ SELECT name, value FROM system.settings WHERE name = 'testing.str'
 statement ok
 SET CLUSTER SETTING testing.str = 'bar'
 
-query TT
-SELECT name, value FROM system.settings WHERE name = 'testing.str'
+query TTT
+SELECT name, value, valueType FROM system.settings WHERE name = 'testing.str'
 ----
-testing.str   bar
+testing.str   bar   s
 
 statement ok
 SET CLUSTER SETTING testing.str = 'baz'
 
-query TT
-SELECT name, value FROM system.settings WHERE name = 'testing.str'
+query TTT
+SELECT name, value, valueType FROM system.settings WHERE name = 'testing.str'
 ----
-testing.str   baz
+testing.str   baz   s
 
 user testuser
 statement error only root is allowed to SET CLUSTER SETTING
@@ -233,30 +233,30 @@ SET CLUSTER SETTING testing.str = 'bar'
 
 user root
 
-query TT
-SELECT name, value FROM system.settings WHERE name = 'testing.str'
+query TTT
+SELECT name, value, valueType FROM system.settings WHERE name = 'testing.str'
 ----
-testing.str   baz
+testing.str   baz   s
 
 statement ok
 SET CLUSTER SETTING testing.str TO DEFAULT
 
-query TT
-SELECT name, value FROM system.settings WHERE name = 'testing.str'
+query TTT
+SELECT name, value, valueType FROM system.settings WHERE name = 'testing.str'
 ----
 
 statement ok
 SET CLUSTER SETTING testing.int TO 5
 
-query TT
-SELECT name, value FROM system.settings WHERE name = 'testing.int'
+query TTT
+SELECT name, value, valueType FROM system.settings WHERE name = 'testing.int'
 ----
-testing.int 5
+testing.int 5   i
 
 statement error argument of testing.int must be type int, not type string
 SET CLUSTER SETTING testing.int TO 'hello'
 
-query TT
-SELECT name, value FROM system.settings WHERE name = 'testing.int'
+query TTT
+SELECT name, value, valueType FROM system.settings WHERE name = 'testing.int'
 ----
-testing.int 5
+testing.int 5 i
