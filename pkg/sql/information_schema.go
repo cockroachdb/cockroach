@@ -329,7 +329,16 @@ CREATE TABLE information_schema.statistics (
 				// Columns in the primary key that aren't in index.ColumnNames or
 				// index.StoreColumnNames are implicit columns in the index.
 				var implicitCols map[string]struct{}
-				if len(index.ExtraColumnIDs) > len(index.StoreColumnNames) {
+				var hasImplicitCols bool
+				if index.HasOldStoredColumns() {
+					// Old STORING format: implicit columns are extra columns minus stored
+					// columns.
+					hasImplicitCols = len(index.ExtraColumnIDs) > len(index.StoreColumnNames)
+				} else {
+					// New STORING format: implicit columns are extra columns.
+					hasImplicitCols = len(index.ExtraColumnIDs) > 0
+				}
+				if hasImplicitCols {
 					implicitCols = make(map[string]struct{})
 					for _, col := range table.PrimaryIndex.ColumnNames {
 						implicitCols[col] = struct{}{}

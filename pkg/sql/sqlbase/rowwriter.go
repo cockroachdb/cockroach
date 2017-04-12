@@ -415,18 +415,12 @@ func MakeRowUpdater(
 		if primaryKeyColChange {
 			return true
 		}
-		for _, id := range index.ColumnIDs {
+		return index.RunOverAllColumns(func(id ColumnID) error {
 			if _, ok := updateColIDtoRowIndex[id]; ok {
-				return true
+				return returnTruePseudoError
 			}
-		}
-		// The extra columns are needed to fix #14601.
-		for _, id := range index.ExtraColumnIDs {
-			if _, ok := updateColIDtoRowIndex[id]; ok {
-				return true
-			}
-		}
-		return false
+			return nil
+		}) != nil
 	}
 
 	indexes := make([]IndexDescriptor, 0, len(tableDesc.Indexes)+len(tableDesc.Mutations))
@@ -516,16 +510,8 @@ func MakeRowUpdater(
 			}
 		}
 		for _, index := range indexes {
-			for _, colID := range index.ColumnIDs {
-				if err := maybeAddCol(colID); err != nil {
-					return RowUpdater{}, err
-				}
-			}
-			// The extra columns are needed to fix #14601.
-			for _, colID := range index.ExtraColumnIDs {
-				if err := maybeAddCol(colID); err != nil {
-					return RowUpdater{}, err
-				}
+			if err := index.RunOverAllColumns(maybeAddCol); err != nil {
+				return RowUpdater{}, err
 			}
 		}
 	}
