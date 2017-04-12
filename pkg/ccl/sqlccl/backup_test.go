@@ -182,6 +182,57 @@ func backupRestoreTestSetup(
 	return backupRestoreTestSetupWithParams(t, clusterSize, numAccounts, base.TestClusterArgs{})
 }
 
+func TestBackupStatementResult(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	const numAccounts = 1
+
+	_, dir, _, sqlDB, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts)
+	defer cleanupFn()
+
+	rows := sqlDB.Query("BACKUP DATABASE bench TO $1", dir)
+
+	columns, err := rows.Columns()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if e, a := columns, []string{
+		"job_id", "status", "fraction_completed", "bytes",
+	}; !reflect.DeepEqual(e, a) {
+		t.Fatalf("unexpected backup columns:\n%s", strings.Join(pretty.Diff(e, a), "\n"))
+	}
+
+	type job struct {
+		id                int64
+		status            string
+		fractionCompleted float32
+	}
+
+	var expectedJob job
+	var actualJob job
+	var unused int64
+
+	if !rows.Next() {
+		t.Fatal("zero rows in backup result")
+	}
+	if err := rows.Scan(&actualJob.id, &actualJob.status, &actualJob.fractionCompleted, &unused); err != nil {
+		t.Fatal(err)
+	}
+	if rows.Next() {
+		t.Fatal("more than one row in backup result")
+	}
+
+	sqlDB.QueryRow(
+		`SELECT id, status, fraction_completed FROM crdb_internal.jobs WHERE id = $1`, actualJob.id,
+	).Scan(
+		&expectedJob.id, &expectedJob.status, &expectedJob.fractionCompleted,
+	)
+
+	if e, a := expectedJob, actualJob; !reflect.DeepEqual(e, a) {
+		t.Fatalf("backup output does not match system.jobs:\n%s", strings.Join(pretty.Diff(e, a), "\n"))
+	}
+}
+
 func TestBackupRestoreLocal(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	if !storage.ProposerEvaluatedKVEnabled() {
@@ -211,13 +262,13 @@ func backupAndRestore(
 		})
 
 		var unused string
-		var dataSize int64
+		var bytes int64
 		sqlDB.QueryRow(`BACKUP DATABASE bench TO $1`, dest).Scan(
-			&unused, &unused, &unused, &dataSize,
+			&unused, &unused, &unused, &bytes,
 		)
-		approxDataSize := int64(backupRestoreRowPayloadSize) * numAccounts
-		if max := approxDataSize * 2; dataSize < approxDataSize || dataSize > max {
-			t.Errorf("expected data size in [%d,%d] but was %d", approxDataSize, max, dataSize)
+		approxBytes := int64(backupRestoreRowPayloadSize) * numAccounts
+		if max := approxBytes * 2; bytes < approxBytes || bytes > max {
+			t.Errorf("expected data size in [%d,%d] but was %d", approxBytes, max, bytes)
 		}
 	}
 

@@ -432,10 +432,10 @@ func backupPlanHook(
 	}
 
 	header := sql.ResultColumns{
-		{Name: "to", Typ: parser.TypeString},
-		{Name: "startTs", Typ: parser.TypeString},
-		{Name: "endTs", Typ: parser.TypeString},
-		{Name: "dataSize", Typ: parser.TypeInt},
+		{Name: "job_id", Typ: parser.TypeInt},
+		{Name: "status", Typ: parser.TypeString},
+		{Name: "fraction_completed", Typ: parser.TypeFloat},
+		{Name: "bytes", Typ: parser.TypeInt},
 	}
 	fn := func() ([]parser.Datums, error) {
 		// TODO(dan): Move this span into sql.
@@ -487,10 +487,12 @@ func backupPlanHook(
 			log.Errorf(ctx, "BACKUP ignoring error while marking job %d (%s) as successful: %+v",
 				jobLogger.JobID(), description, err)
 		}
+		// TODO(benesch): emit periodic progress updates once we have the
+		// infrastructure to stream responses.
 		ret := []parser.Datums{{
-			parser.NewDString(to),
-			parser.NewDString(startTime.String()),
-			parser.NewDString(endTime.String()),
+			parser.NewDInt(parser.DInt(*jobLogger.JobID())),
+			parser.NewDString(string(sql.JobStatusSucceeded)),
+			parser.NewDFloat(parser.DFloat(1.0)),
 			parser.NewDInt(parser.DInt(desc.DataSize)),
 		}}
 		return ret, nil
