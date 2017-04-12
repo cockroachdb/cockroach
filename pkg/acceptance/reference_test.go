@@ -163,12 +163,8 @@ function finish() {
 trap finish EXIT
 
 export COCKROACH_SKIP_UPDATE_CHECK=1
-<<<<<<< HEAD
-$bin start --logtostderr=INFO --background --store=/cockroach-data-reference-7429 &> out
-=======
 export COCKROACH_CERTS_DIR=/certs/
-$bin start --alsologtostderr=INFO --background --store=/cockroach-data-reference-7429 &> out
->>>>>>> 1f562f024... Lots of test fixes.
+$bin start --logtostderr=INFO --background --store=/cockroach-data-reference-7429 &> out
 $bin debug range ls
 $bin quit
 `
