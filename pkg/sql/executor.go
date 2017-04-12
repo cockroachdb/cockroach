@@ -221,6 +221,10 @@ type ExecutorConfig struct {
 	SchemaChangerTestingKnobs *SchemaChangerTestingKnobs
 	// HistogramWindowInterval is (server.Context).HistogramWindowInterval.
 	HistogramWindowInterval time.Duration
+
+	// Cache that are updated by DistSQL.
+	RangeDescriptorCache *kv.RangeDescriptorCache
+	LeaseHolderCache     *kv.LeaseHolderCache
 }
 
 var _ base.ModuleTestingKnobs = &ExecutorTestingKnobs{}
@@ -1299,7 +1303,7 @@ func commitSQLTransaction(txnState *txnState, commitType commitType) (Result, er
 func (e *Executor) execDistSQL(planner *planner, tree planNode, result *Result) error {
 	// Note: if we just want the row count, result.Rows is nil here.
 	ctx := planner.session.Ctx()
-	recv := makeDistSQLReceiver(ctx, result.Rows)
+	recv := makeDistSQLReceiver(ctx, result.Rows, e.cfg.RangeDescriptorCache, e.cfg.LeaseHolderCache)
 	err := e.distSQLPlanner.PlanAndRun(ctx, planner.txn, tree, &recv)
 	if err != nil {
 		return err

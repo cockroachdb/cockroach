@@ -21,9 +21,14 @@ import (
 	"testing"
 	"time"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -141,5 +146,71 @@ func TestDistBackfill(t *testing.T) {
 			t.Errorf("unexpected unsorted %s > %s at %d", curr, str[0], i)
 		}
 		curr = str[0]
+	}
+}
+
+// Test that distSQLReceiver uses inbound metadata to update the
+// RangeDescriptorCache and the LeaseHolderCache.
+func TestDistSQLReceiverUpdatesCaches(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	rangeCache := kv.NewRangeDescriptorCache(nil /* db */, 2<<10 /* size */)
+	leaseCache := kv.NewLeaseHolderCache(2 << 10 /* size */)
+	r := makeDistSQLReceiver(context.TODO(), nil /* sink */, rangeCache, leaseCache)
+
+	descs := []roachpb.RangeDescriptor{
+		{RangeID: 1, StartKey: roachpb.RKey("a"), EndKey: roachpb.RKey("c")},
+		{RangeID: 2, StartKey: roachpb.RKey("c"), EndKey: roachpb.RKey("e")},
+		{RangeID: 3, StartKey: roachpb.RKey("g"), EndKey: roachpb.RKey("z")},
+	}
+
+	// Push some metadata and check that the caches are updated with it.
+	status := r.Push(nil /* row */, distsqlrun.ProducerMetadata{
+		Ranges: []roachpb.RangeInfo{
+			{
+				Desc: descs[0],
+				Lease: roachpb.Lease{Replica: roachpb.ReplicaDescriptor{
+					NodeID: 1, StoreID: 1, ReplicaID: 1}},
+			},
+			{
+				Desc: descs[1],
+				Lease: roachpb.Lease{Replica: roachpb.ReplicaDescriptor{
+					NodeID: 2, StoreID: 2, ReplicaID: 2}},
+			},
+		}})
+	if status != distsqlrun.NeedMoreRows {
+		t.Fatalf("expected status NeedMoreRows, got: %d", status)
+	}
+	status = r.Push(nil /* row */, distsqlrun.ProducerMetadata{
+		Ranges: []roachpb.RangeInfo{
+			{
+				Desc: descs[2],
+				Lease: roachpb.Lease{Replica: roachpb.ReplicaDescriptor{
+					NodeID: 3, StoreID: 3, ReplicaID: 3}},
+			},
+		}})
+	if status != distsqlrun.NeedMoreRows {
+		t.Fatalf("expected status NeedMoreRows, got: %d", status)
+	}
+
+	for i := range descs {
+		desc, err := rangeCache.GetCachedRangeDescriptor(descs[i].StartKey, false /* inclusive */)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if desc == nil {
+			t.Fatalf("failed to find range for key: %s", descs[i].StartKey)
+		}
+		if !desc.Equal(descs[i]) {
+			t.Fatalf("expected: %+v, got: %+v", descs[i], desc)
+		}
+
+		replica, ok := leaseCache.Lookup(context.TODO(), descs[i].RangeID)
+		if !ok {
+			t.Fatalf("didn't find lease for RangeID: %d", descs[i].RangeID)
+		}
+		if replica.ReplicaID != roachpb.ReplicaID(i+1) {
+			t.Fatalf("expected ReplicaID: %d but found replica: %d", i, replica)
+		}
 	}
 }

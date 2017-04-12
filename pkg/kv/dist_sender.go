@@ -288,6 +288,16 @@ func (ds *DistSender) GetParallelSendCount() int32 {
 	return atomic.LoadInt32(&ds.asyncSenderCount)
 }
 
+// RangeDescriptorCache gives access to the DistSender's range cache.
+func (ds *DistSender) RangeDescriptorCache() *RangeDescriptorCache {
+	return ds.rangeCache
+}
+
+// LeaseHolderCache gives access to the DistSender's lease cache.
+func (ds *DistSender) LeaseHolderCache() *LeaseHolderCache {
+	return ds.leaseHolderCache
+}
+
 // RangeLookup implements the RangeDescriptorDB interface.
 // RangeLookup dispatches a RangeLookup request for the given metadata
 // key to the replicas of the given range. Note that we allow
