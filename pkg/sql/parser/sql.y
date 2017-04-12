@@ -756,7 +756,7 @@ func (u *sqlSymUnion) kvOptions() []KVOption {
 %nonassoc  IDENT NULL PARTITION RANGE ROWS PRECEDING FOLLOWING CUBE ROLLUP
 %left      CONCAT       // multi-character ops
 %left      '|'
-%left      '^' '#'
+%left      '^'
 %left      '&'
 %left      LSHIFT RSHIFT
 %left      '+' '-'
@@ -3810,10 +3810,6 @@ a_expr:
   {
     $$.val = &BinaryExpr{Operator: Bitxor, Left: $1.expr(), Right: $3.expr()}
   }
-| a_expr '#' a_expr
-  {
-    $$.val = &BinaryExpr{Operator: Bitxor, Left: $1.expr(), Right: $3.expr()}
-  }
 | a_expr '&' a_expr
   {
     $$.val = &BinaryExpr{Operator: Bitand, Left: $1.expr(), Right: $3.expr()}
@@ -4068,10 +4064,6 @@ b_expr:
     $$.val = &BinaryExpr{Operator: Mod, Left: $1.expr(), Right: $3.expr()}
   }
 | b_expr '^' b_expr
-  {
-    $$.val = &BinaryExpr{Operator: Bitxor, Left: $1.expr(), Right: $3.expr()}
-  }
-| b_expr '#' b_expr
   {
     $$.val = &BinaryExpr{Operator: Bitxor, Left: $1.expr(), Right: $3.expr()}
   }
@@ -4538,7 +4530,6 @@ math_op:
 | '&' { $$.val = Bitand }
 | '|' { $$.val = Bitor  }
 | '^' { $$.val = Bitxor }
-| '#' { $$.val = Bitxor }
 | '<' { $$.val = LT }
 | '>' { $$.val = GT }
 | '=' { $$.val = EQ }

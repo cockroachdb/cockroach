@@ -167,7 +167,7 @@ func TestTypeCheckError(t *testing.T) {
 		// This strange error is a result of the <date> + <int> overload and because
 		// of the limitation described on StrVal.AvailableTypes.
 		{`'a' + 0`, `could not parse 'a' as type date`},
-		{`1.1 # 3.1`, `unsupported binary operator:`},
+		{`1.1 ^ 3.1`, `unsupported binary operator:`},
 		{`~0.1`, `unsupported unary operator:`},
 		{`'10' > 2`, `unsupported comparison operator:`},
 		{`a`, `name "a" is not defined`},
