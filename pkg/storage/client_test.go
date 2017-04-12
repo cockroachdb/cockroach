@@ -25,7 +25,6 @@ client_*.go.
 package storage_test
 
 import (
-	"bytes"
 	"fmt"
 	"math/rand"
 	"net"
@@ -78,15 +77,6 @@ func rg1(s *storage.Store) client.Sender {
 		}
 		return ba
 	})
-}
-
-// rg1Key returns a key that will reliably be located within the first range.
-// This is a bit of a bandaid to ensure tests continue working as intended
-// until the rg1 method is removed.
-func rg1Key(key string) roachpb.Key {
-	// Ensure that the key will be located in the first range by giving it the
-	// meta2 prefix. The first range only contains meta keys as of April 2017.
-	return roachpb.Key(bytes.Join([][]byte{keys.Meta2Prefix, []byte(key)}, nil))
 }
 
 // createTestStore creates a test store using an in-memory

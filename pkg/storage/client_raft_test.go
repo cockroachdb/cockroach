@@ -162,6 +162,10 @@ func TestStoreRecoverFromEngine(t *testing.T) {
 func TestStoreRecoverWithErrors(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	storeCfg := storage.TestStoreConfig(nil)
+	// Splits can cause our chosen keys to end up on ranges other than range 1,
+	// and trying to handle that complicates the test without providing any
+	// added benefit.
+	storeCfg.TestingKnobs.DisableSplitQueue = true
 	eng := engine.NewInMem(roachpb.Attributes{}, 1<<20)
 	defer eng.Close()
 
@@ -170,8 +174,8 @@ func TestStoreRecoverWithErrors(t *testing.T) {
 	func() {
 		stopper := stop.NewStopper()
 		defer stopper.Stop()
+		keyA := roachpb.Key("a")
 		storeCfg := storeCfg // copy
-		keyA := rg1Key("a")
 		storeCfg.TestingKnobs.TestingEvalFilter =
 			func(filterArgs storagebase.FilterArgs) *roachpb.Error {
 				_, ok := filterArgs.Req.(*roachpb.IncrementRequest)
@@ -207,7 +211,7 @@ func TestStoreRecoverWithErrors(t *testing.T) {
 	store := createTestStoreWithEngine(t, eng, false, storeCfg, stopper)
 
 	// Issue a no-op write to lazily initialize raft on the range.
-	keyB := rg1Key("b")
+	keyB := roachpb.Key("b")
 	incArgs := incrementArgs(keyB, 0)
 	if _, err := client.SendWrapped(context.Background(), rg1(store), incArgs); err != nil {
 		t.Fatal(err)
