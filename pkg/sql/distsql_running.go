@@ -20,11 +20,70 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
+
+// To allow queries to send out flow RPCs in parallel, we use a pool of workers
+// that can issue the RPCs on behalf of the running code. The pool is shared by
+// multiple queries.
+const numRunners = 16
+
+// runnerRequest is the request that is sent (via a channel) to a worker.
+type runnerRequest struct {
+	ctx         context.Context
+	rpcContext  *rpc.Context
+	flowReq     *distsqlrun.SetupFlowRequest
+	nodeID      roachpb.NodeID
+	nodeAddress string
+	resultChan  chan<- runnerResult
+}
+
+// runnerResult is returned by a worker (via a channel) for each received
+// request.
+type runnerResult struct {
+	nodeID roachpb.NodeID
+	err    error
+}
+
+func (req runnerRequest) run() {
+	res := runnerResult{nodeID: req.nodeID}
+
+	conn, err := req.rpcContext.GRPCDial(req.nodeAddress)
+	if err != nil {
+		res.err = err
+	} else {
+		client := distsqlrun.NewDistSQLClient(conn)
+		// TODO(radu): do we want a timeout here?
+		_, res.err = client.SetupFlow(req.ctx, req.flowReq)
+	}
+	req.resultChan <- res
+}
+
+func (dsp *distSQLPlanner) initRunners() {
+	// This channel has to be unbuffered because we want to only be able to send
+	// requests if a worker is actually there to receive them.
+	dsp.runnerChan = make(chan runnerRequest)
+	for i := 0; i < numRunners; i++ {
+		dsp.stopper.RunWorker(func() {
+			runnerChan := dsp.runnerChan
+			stopChan := dsp.stopper.ShouldStop()
+			for {
+				select {
+				case req := <-runnerChan:
+					req.run()
+
+				case <-stopChan:
+					return
+				}
+			}
+		})
+	}
+}
 
 // Run executes a physical plan. The plan should have been finalized using
 // FinalizePlan.
@@ -54,32 +113,58 @@ func (dsp *distSQLPlanner) Run(
 	recv.resultToStreamColMap = plan.planToStreamColMap
 	thisNodeID := dsp.nodeDesc.NodeID
 
-	// Start the flows on all other nodes.
+	// Start all the flows except the flow on this node (there is always a flow on
+	// this node).
+	var resultChan chan runnerResult
+	if len(flows) > 1 {
+		resultChan = make(chan runnerResult, len(flows)-1)
+	}
 	for nodeID, flowSpec := range flows {
 		if nodeID == thisNodeID {
 			// Skip this node.
 			continue
 		}
-		req := distsqlrun.SetupFlowRequest{
+		req := &distsqlrun.SetupFlowRequest{
 			Version: distsqlrun.Version,
 			Txn:     *txn.Proto(),
 			Flow:    flowSpec,
 		}
-		if err := distsqlrun.SetFlowRequestTrace(ctx, &req); err != nil {
+		if err := distsqlrun.SetFlowRequestTrace(ctx, req); err != nil {
 			return err
 		}
-		conn, err := dsp.rpcContext.GRPCDial(planCtx.nodeAddresses[nodeID])
-		if err != nil {
-			return err
+		runReq := runnerRequest{
+			ctx:         ctx,
+			rpcContext:  dsp.rpcContext,
+			flowReq:     req,
+			nodeID:      nodeID,
+			nodeAddress: planCtx.nodeAddresses[nodeID],
+			resultChan:  resultChan,
 		}
-		client := distsqlrun.NewDistSQLClient(conn)
-		// TODO(radu): we are not waiting for the flows to complete, but we are
-		// still waiting for a round trip; we should start the flows in parallel, at
-		// least if there are enough of them.
-		if _, err := client.SetupFlow(context.Background(), &req); err != nil {
-			return err
+		// Send out a request to the workers; if no worker is available, run
+		// directly.
+		select {
+		case dsp.runnerChan <- runReq:
+		default:
+			runReq.run()
 		}
 	}
+
+	var firstErr error
+	// Now wait for all the flows to be scheduled on remote nodes. Note that we
+	// are not waiting for the flows themselves to complete.
+	for i := 0; i < len(flows)-1; i++ {
+		res := <-resultChan
+		if firstErr == nil {
+			firstErr = res.err
+		}
+		// TODO(radu): accumulate the flows that we failed to set up and move them
+		// into the local flow.
+	}
+	if firstErr != nil {
+		return firstErr
+	}
+
+	// Set up the flow on this node.
 	localReq := distsqlrun.SetupFlowRequest{
 		Version: distsqlrun.Version,
 		Txn:     *txn.Proto(),
