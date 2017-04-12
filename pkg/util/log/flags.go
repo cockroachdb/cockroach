@@ -29,8 +29,10 @@ func init() {
 		&logging.vmodule, &logging.traceLocation,
 		&LogFileMaxSize, &LogFilesCombinedMaxSize,
 	)
-	// We define this flag here because stderrThreshold has the type Severity
+	// We define these flags here because they have the type Severity
 	// which we can't pass to logflags without creating an import cycle.
 	flag.Var(&logging.stderrThreshold,
 		logflags.AlsoLogToStderrName, "logs at or above this threshold go to stderr")
+	flag.Var(&logging.fileThreshold,
+		logflags.LogFileVerbosityThresholdName, "minimum verbosity of messages written to the log file")
 }
