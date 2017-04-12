@@ -26,9 +26,14 @@ enum Severity {
   WARNING = 2;
   ERROR = 3;
   FATAL = 4;
-  // NONE is the end sentinel. It is never used in pracice, and must be
-  // renumbered to remain at the end if new variants are added.
+  // NONE is used to specify when no messages
+  // should be printed to the log file or stderr.
   NONE = 5;
+  // DEFAULT is the end sentinel. It is used during command-line
+  // handling to indicate that another value should be replaced instead
+  // (depending on which command is being run); see cli/flags.go for
+  // details.
+  DEFAULT = 6;
 }
 
 // Entry represents a cockroach structured log entry.

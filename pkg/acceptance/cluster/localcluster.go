@@ -522,10 +522,10 @@ func (l *LocalCluster) startNode(ctx context.Context, node *testNode) {
 		maybePanic(os.MkdirAll(locallogDir, 0777))
 		cmd = append(
 			cmd,
-			"--alsologtostderr=ERROR",
+			"--logtostderr=ERROR",
 			"--log-dir="+dockerlogDir)
 	} else {
-		cmd = append(cmd, "--alsologtostderr=INFO")
+		cmd = append(cmd, "--logtostderr=INFO")
 	}
 	env := []string{
 		"COCKROACH_SCAN_MAX_IDLE_TIME=200ms",

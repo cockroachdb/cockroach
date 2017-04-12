@@ -95,7 +95,6 @@ func setFlags() {
 	SetExitFunc(os.Exit)
 	logging.noStderrRedirect = false
 	logging.stderrThreshold = Severity_ERROR
-	logging.toStderr = false
 }
 
 // Test that Info works as advertised.
@@ -621,7 +620,6 @@ func TestFatalStacktraceStderr(t *testing.T) {
 
 	setFlags()
 	logging.stderrThreshold = Severity_NONE
-	logging.toStderr = false
 	SetExitFunc(func(int) {})
 
 	defer setFlags()
@@ -688,7 +686,7 @@ func TestFileSeverityFilter(t *testing.T) {
 	defer func(s bool) { showLogs = s }(showLogs)
 	showLogs = false
 
-	s := Scope(t, "")
+	s := Scope(t)
 	defer s.Close(t)
 
 	setFlags()

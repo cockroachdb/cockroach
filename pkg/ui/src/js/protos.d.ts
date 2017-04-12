@@ -12375,6 +12375,7 @@ export namespace cockroach {
              * @property {number} ERROR=3 ERROR value
              * @property {number} FATAL=4 FATAL value
              * @property {number} NONE=5 NONE value
+             * @property {number} DEFAULT=6 DEFAULT value
              */
             enum Severity {
                 UNKNOWN = 0,
@@ -12382,7 +12383,8 @@ export namespace cockroach {
                 WARNING = 2,
                 ERROR = 3,
                 FATAL = 4,
-                NONE = 5
+                NONE = 5,
+                DEFAULT = 6
             }
 
             type Entry$Properties = {

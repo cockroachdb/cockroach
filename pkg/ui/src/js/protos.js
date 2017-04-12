@@ -22391,6 +22391,7 @@ export const cockroach = $root.cockroach = (() => {
              * @property {number} ERROR=3 ERROR value
              * @property {number} FATAL=4 FATAL value
              * @property {number} NONE=5 NONE value
+             * @property {number} DEFAULT=6 DEFAULT value
              */
             log.Severity = (function() {
                 const valuesById = {}, values = Object.create(valuesById);
@@ -22400,6 +22401,7 @@ export const cockroach = $root.cockroach = (() => {
                 values[valuesById[3] = "ERROR"] = 3;
                 values[valuesById[4] = "FATAL"] = 4;
                 values[valuesById[5] = "NONE"] = 5;
+                values[valuesById[6] = "DEFAULT"] = 6;
                 return values;
             })();
 
@@ -22581,6 +22583,7 @@ export const cockroach = $root.cockroach = (() => {
                         case 3:
                         case 4:
                         case 5:
+                        case 6:
                             break;
                         }
                     if (message.time != null && message.hasOwnProperty("time"))
@@ -22634,6 +22637,10 @@ export const cockroach = $root.cockroach = (() => {
                     case "NONE":
                     case 5:
                         message.severity = 5;
+                        break;
+                    case "DEFAULT":
+                    case 6:
+                        message.severity = 6;
                         break;
                     }
                     if (object.time != null)
@@ -22940,6 +22947,7 @@ export const cockroach = $root.cockroach = (() => {
                         case 3:
                         case 4:
                         case 5:
+                        case 6:
                             break;
                         }
                     if (message.time != null && message.hasOwnProperty("time"))
@@ -22990,6 +22998,10 @@ export const cockroach = $root.cockroach = (() => {
                     case "NONE":
                     case 5:
                         message.severity = 5;
+                        break;
+                    case "DEFAULT":
+                    case 6:
+                        message.severity = 6;
                         break;
                     }
                     if (object.time != null)
