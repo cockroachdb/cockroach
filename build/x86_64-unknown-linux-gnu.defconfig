@@ -6,6 +6,7 @@ CT_LOCAL_TARBALLS_DIR="/src"
 CT_PREFIX_DIR="${CT_PREFIX:-/x-tools}/${CT_HOST:+HOST-${CT_HOST}/}${CT_TARGET}"
 CT_ARCH_x86=y
 CT_ARCH_64=y
+CT_TARGET_LDFLAGS="-static-libgcc -static-libstdc++"
 CT_KERNEL_linux=y
 CT_KERNEL_V_2_6_32=y
 # CT_KERNEL_LINUX_INSTALL_CHECK is not set
