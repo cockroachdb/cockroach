@@ -24,6 +24,7 @@ import (
 
 func init() {
 	logflags.InitFlags(&logging.mu, &logging.toStderr,
+		&logging.noStderrRedirect,
 		&logDir, &showLogs, &logging.nocolor, &logging.verbosity,
 		&logging.vmodule, &logging.traceLocation,
 		&LogFileMaxSize, &LogFilesCombinedMaxSize,
@@ -32,6 +33,4 @@ func init() {
 	// which we can't pass to logflags without creating an import cycle.
 	flag.Var(&logging.stderrThreshold,
 		logflags.AlsoLogToStderrName, "logs at or above this threshold go to stderr")
-	flag.BoolVar(&logging.noStderrRedirect, "no-redirect-stderr", false,
-		"disable redirect of stderr")
 }

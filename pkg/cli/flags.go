@@ -237,9 +237,9 @@ func init() {
 		// TODO(peter): Decide if we want to make the lightstep flags visible.
 		if strings.HasPrefix(flag.Name, "lightstep_") {
 			flag.Hidden = true
-		} else if flag.Name == "no-redirect-stderr" {
+		} else if flag.Name == logflags.NoRedirectStderrName {
 			flag.Hidden = true
-		} else if flag.Name == "show-logs" {
+		} else if flag.Name == logflags.ShowLogsName {
 			flag.Hidden = true
 		}
 		pf.AddFlag(flag)

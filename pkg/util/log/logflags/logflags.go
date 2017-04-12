@@ -68,6 +68,7 @@ const (
 	VModuleName                 = "vmodule"
 	LogBacktraceAtName          = "log-backtrace-at"
 	LogDirName                  = "log-dir"
+	NoRedirectStderrName        = "no-redirect-stderr"
 	ShowLogsName                = "show-logs"
 	LogFileMaxSizeName          = "log-file-max-size"
 	LogFilesCombinedMaxSizeName = "log-dir-max-size"
@@ -77,7 +78,7 @@ const (
 // locked while the boolean variables are accessed during flag updates.
 func InitFlags(
 	mu sync.Locker,
-	toStderr *bool,
+	toStderr, noRedirectStderr *bool,
 	logDir flag.Value,
 	showLogs *bool,
 	nocolor *bool,
@@ -87,6 +88,7 @@ func InitFlags(
 	*toStderr = true // wonky way of specifying a default
 	flag.Var(&atomicBool{Locker: mu, b: toStderr}, LogToStderrName, "log to standard error instead of files")
 	flag.BoolVar(nocolor, NoColorName, *nocolor, "disable standard error log colorization")
+	flag.BoolVar(noRedirectStderr, NoRedirectStderrName, *noRedirectStderr, "disable redirect of stderr to the log file")
 	flag.Var(verbosity, VerbosityName, "log level for V logs")
 	flag.Var(vmodule, VModuleName, "comma-separated list of pattern=N settings for file-filtered logging")
 	flag.Var(traceLocation, LogBacktraceAtName, "when logging hits line file:N, emit a stack trace")
