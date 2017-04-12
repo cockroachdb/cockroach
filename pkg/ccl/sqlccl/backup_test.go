@@ -1442,3 +1442,27 @@ func TestBackupRestorePermissions(t *testing.T) {
 		}
 	})
 }
+
+func TestBackupAzureAccountName(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	const numAccounts = 1
+	_, _, _, sqlDB, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts)
+	defer cleanupFn()
+
+	values := url.Values{}
+	values.Set("AZURE_ACCOUNT_KEY", "password")
+	values.Set("AZURE_ACCOUNT_NAME", "\n")
+
+	url := &url.URL{
+		Scheme:   "azure",
+		Host:     "host",
+		Path:     "/backup",
+		RawQuery: values.Encode(),
+	}
+
+	// Verify newlines in the account name cause an error.
+	if _, err := sqlDB.DB.Exec(`backup database d to $1`, url.String()); !testutils.IsError(err, "azure account name invalid") {
+		t.Fatalf("unexpected error, got %v", err)
+	}
+}
