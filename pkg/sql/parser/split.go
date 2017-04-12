@@ -67,3 +67,35 @@ func (node *Relocate) Format(buf *bytes.Buffer, f FmtFlags) {
 	buf.WriteString(" TESTING_RELOCATE ")
 	FormatNode(buf, f, node.Rows)
 }
+
+// Scatter represents an `ALTER TABLE/INDEX .. SCATTER ..`
+// statement.
+type Scatter struct {
+	// Only one of Table and Index can be set.
+	Table *NormalizableTableName
+	Index *TableNameWithIndex
+	// Optional from and to values for the columns in the PK or index (or a prefix
+	// of the columns).
+	// See docs/RFCS/sql_split_syntax.md.
+	From, To Exprs
+}
+
+// Format implements the NodeFormatter interface.
+func (node *Scatter) Format(buf *bytes.Buffer, f FmtFlags) {
+	buf.WriteString("ALTER ")
+	if node.Index != nil {
+		buf.WriteString("INDEX ")
+		FormatNode(buf, f, node.Index)
+	} else {
+		buf.WriteString("TABLE ")
+		FormatNode(buf, f, node.Table)
+	}
+	buf.WriteString(" SCATTER")
+	if node.From != nil {
+		buf.WriteString(" FROM (")
+		FormatNode(buf, f, node.From)
+		buf.WriteString(") TO (")
+		FormatNode(buf, f, node.To)
+		buf.WriteString(")")
+	}
+}

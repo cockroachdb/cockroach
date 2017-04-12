@@ -526,6 +526,7 @@ var planNodeNames = map[reflect.Type]string{
 	reflect.TypeOf(&relocateNode{}):       "relocate",
 	reflect.TypeOf(&renderNode{}):         "render",
 	reflect.TypeOf(&scanNode{}):           "scan",
+	reflect.TypeOf(&scatterNode{}):        "scatter",
 	reflect.TypeOf(&showRangesNode{}):     "showRanges",
 	reflect.TypeOf(&sortNode{}):           "sort",
 	reflect.TypeOf(&splitNode{}):          "split",

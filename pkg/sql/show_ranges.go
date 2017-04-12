@@ -90,25 +90,9 @@ var showRangesColumns = ResultColumns{
 }
 
 func (n *showRangesNode) Start(ctx context.Context) error {
-
-	metaStart := keys.RangeMetaKey(keys.MustAddr(n.span.Key))
-	metaEnd := keys.RangeMetaKey(keys.MustAddr(n.span.EndKey))
-
-	kvs, err := n.p.txn.Scan(ctx, metaStart, metaEnd, 0)
-	if err != nil {
-		return err
-	}
-	if len(kvs) == 0 || !kvs[len(kvs)-1].Key.Equal(metaEnd) {
-		// Normally we need to scan one more KV because the ranges are addressed by
-		// the end key.
-		extraKV, err := n.p.txn.Scan(ctx, metaEnd, keys.Meta2Prefix.PrefixEnd(), 1 /* one result */)
-		if err != nil {
-			return err
-		}
-		kvs = append(kvs, extraKV[0])
-	}
-	n.descriptorKVs = kvs
-	return nil
+	var err error
+	n.descriptorKVs, err = scanMetaKVs(ctx, n.p.txn, n.span)
+	return err
 }
 
 func (n *showRangesNode) Next(ctx context.Context) (bool, error) {
@@ -180,4 +164,27 @@ func (*showRangesNode) MarkDebug(_ explainMode)  {}
 func (*showRangesNode) DebugValues() debugValues { panic("unimplemented") }
 func (*showRangesNode) Spans(context.Context) (_, _ roachpb.Spans, _ error) {
 	panic("unimplemented")
+}
+
+// scanMetaKVs returns the meta KVs for the ranges that touch the given span.
+func scanMetaKVs(
+	ctx context.Context, txn *client.Txn, span roachpb.Span,
+) ([]client.KeyValue, error) {
+	metaStart := keys.RangeMetaKey(keys.MustAddr(span.Key))
+	metaEnd := keys.RangeMetaKey(keys.MustAddr(span.EndKey))
+
+	kvs, err := txn.Scan(ctx, metaStart, metaEnd, 0)
+	if err != nil {
+		return nil, err
+	}
+	if len(kvs) == 0 || !kvs[len(kvs)-1].Key.Equal(metaEnd) {
+		// Normally we need to scan one more KV because the ranges are addressed by
+		// the end key.
+		extraKV, err := txn.Scan(ctx, metaEnd, keys.Meta2Prefix.PrefixEnd(), 1 /* one result */)
+		if err != nil {
+			return nil, err
+		}
+		kvs = append(kvs, extraKV[0])
+	}
+	return kvs, nil
 }
