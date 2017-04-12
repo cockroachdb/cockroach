@@ -18,12 +18,14 @@ package cli
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/pkg/errors"
 )
 
 // statementsValue is an implementation of pflag.Value that appends any
@@ -190,6 +192,19 @@ func parseKeyType(value string) (keyType, error) {
 		}
 	}
 	return 0, fmt.Errorf("unknown key type '%s'", value)
+}
+
+// unquoteArg unquotes the provided argument using Go double-quoted
+// string literal rules.
+func unquoteArg(arg string, disallowSystem bool) (string, error) {
+	s, err := strconv.Unquote(`"` + arg + `"`)
+	if err != nil {
+		return "", errors.Wrapf(err, "invalid argument %q", arg)
+	}
+	if disallowSystem && strings.HasPrefix(s, "\x00") {
+		return "", errors.Errorf("cannot specify system key %q", s)
+	}
+	return s, nil
 }
 
 type mvccKey engine.MVCCKey
