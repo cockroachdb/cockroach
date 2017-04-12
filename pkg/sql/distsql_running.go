@@ -26,7 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/pkg/errors"
 )
 
 // To allow queries to send out flow RPCs in parallel, we use a pool of workers
@@ -51,12 +51,12 @@ type runnerResult struct {
 	response *distsqlrun.SimpleResponse
 }
 
-func (dsp *distSQLPlanner) initRunners(stopper *stop.Stopper) {
+func (dsp *distSQLPlanner) initRunners() {
 	dsp.runnerChan = make(chan runnerRequest, numRunners)
 	for i := 0; i < numRunners; i++ {
-		stopper.RunWorker(func() {
+		dsp.stopper.RunWorker(func() {
 			runnerChan := dsp.runnerChan
-			stopChan := stopper.ShouldStop()
+			stopChan := dsp.stopper.ShouldStop()
 			for {
 				select {
 				case req := <-runnerChan:
@@ -140,17 +140,22 @@ func (dsp *distSQLPlanner) Run(
 	// Now wait for all RPCs to complete. Note that we are not waiting for the
 	// flows themselves to complete.
 	for i := 0; i < len(flows)-1; i++ {
-		res := <-resultChan
-		if err != nil {
-			continue
+		select {
+		case <-dsp.stopper.ShouldStop():
+			// The workers may be gone by now; just error out.
+			err = errors.Errorf("node is stopping")
+		case res := <-resultChan:
+			if err != nil {
+				continue
+			}
+			if res.err != nil {
+				err = res.err
+			} else if res.response.Error != nil {
+				err = res.response.Error.ErrorDetail()
+			}
+			// TODO(radu): accumulate the flows that we couldn't set up and move them
+			// into the local flow.
 		}
-		if res.err != nil {
-			err = res.err
-		} else if res.response.Error != nil {
-			err = res.response.Error.ErrorDetail()
-		}
-		// TODO(radu): accumulate the flows that we couldn't set up and move them
-		// into the local flow.
 	}
 	if err != nil {
 		return err

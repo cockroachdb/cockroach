@@ -65,6 +65,7 @@ type distSQLPlanner struct {
 	// The node descriptor for the gateway node that initiated this query.
 	nodeDesc     roachpb.NodeDescriptor
 	rpcContext   *rpc.Context
+	stopper      *stop.Stopper
 	distSQLSrv   *distsqlrun.ServerImpl
 	spanResolver distsqlplan.SpanResolver
 
@@ -90,10 +91,11 @@ func newDistSQLPlanner(
 	dsp := &distSQLPlanner{
 		nodeDesc:     nodeDesc,
 		rpcContext:   rpcCtx,
+		stopper:      stopper,
 		distSQLSrv:   distSQLSrv,
 		spanResolver: distsqlplan.NewSpanResolver(distSender, gossip, nodeDesc, resolverPolicy),
 	}
-	dsp.initRunners(stopper)
+	dsp.initRunners()
 	return dsp
 }
 
