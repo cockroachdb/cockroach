@@ -69,7 +69,7 @@ else ifeq ($(TYPE),musl)
 override TAGS += musl
 export CC  = /x-tools/x86_64-unknown-linux-musl/bin/x86_64-unknown-linux-musl-gcc
 export CXX = /x-tools/x86_64-unknown-linux-musl/bin/x86_64-unknown-linux-musl-g++
-override LINKFLAGS += -X github.com/cockroachdb/cockroach/pkg/build.typ=release-musl
+override LINKFLAGS += -extldflags -static -X github.com/cockroachdb/cockroach/pkg/build.typ=release-musl
 override GOFLAGS += -installsuffix musl
 else
 $(error unknown build type $(TYPE))
