@@ -662,9 +662,7 @@ func (td *tableDeleter) deleteAllRowsScan(
 	ctx context.Context, resume roachpb.Span, limit int64,
 ) (roachpb.Span, error) {
 	if resume.Key == nil {
-		tablePrefix := sqlbase.MakeIndexKeyPrefix(
-			td.rd.Helper.TableDesc, td.rd.Helper.TableDesc.PrimaryIndex.ID)
-		resume = roachpb.Span{Key: roachpb.Key(tablePrefix), EndKey: roachpb.Key(tablePrefix).PrefixEnd()}
+		resume = td.rd.Helper.TableDesc.PrimaryIndexSpan()
 	}
 	valNeededForCol := make([]bool, len(td.rd.Helper.TableDesc.Columns))
 	for _, idx := range td.rd.FetchColIDtoRowIndex {
@@ -730,11 +728,7 @@ func (td *tableDeleter) deleteIndexFast(
 	ctx context.Context, idx *sqlbase.IndexDescriptor, resume roachpb.Span, limit int64,
 ) (roachpb.Span, error) {
 	if resume.Key == nil {
-		indexPrefix := roachpb.Key(sqlbase.MakeIndexKeyPrefix(td.rd.Helper.TableDesc, idx.ID))
-		resume = roachpb.Span{
-			Key:    indexPrefix,
-			EndKey: indexPrefix.PrefixEnd(),
-		}
+		resume = td.rd.Helper.TableDesc.IndexSpan(idx.ID)
 	}
 
 	if log.V(2) {
@@ -755,9 +749,7 @@ func (td *tableDeleter) deleteIndexScan(
 	ctx context.Context, idx *sqlbase.IndexDescriptor, resume roachpb.Span, limit int64,
 ) (roachpb.Span, error) {
 	if resume.Key == nil {
-		tablePrefix := sqlbase.MakeIndexKeyPrefix(
-			td.rd.Helper.TableDesc, td.rd.Helper.TableDesc.PrimaryIndex.ID)
-		resume = roachpb.Span{Key: roachpb.Key(tablePrefix), EndKey: roachpb.Key(tablePrefix).PrefixEnd()}
+		resume = td.rd.Helper.TableDesc.PrimaryIndexSpan()
 	}
 	valNeededForCol := make([]bool, len(td.rd.Helper.TableDesc.Columns))
 	for _, idx := range td.rd.FetchColIDtoRowIndex {

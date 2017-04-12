@@ -1546,8 +1546,7 @@ func (desc *TableDescriptor) AddColumnMutation(
 	c ColumnDescriptor, direction DescriptorMutation_Direction,
 ) {
 	m := DescriptorMutation{Descriptor_: &DescriptorMutation_Column{Column: &c}, Direction: direction}
-	prefix := roachpb.Key(MakeIndexKeyPrefix(desc, desc.PrimaryIndex.ID))
-	m.ResumeSpans = append(m.ResumeSpans, roachpb.Span{Key: prefix, EndKey: prefix.PrefixEnd()})
+	m.ResumeSpans = append(m.ResumeSpans, desc.PrimaryIndexSpan())
 	desc.addMutation(m)
 }
 
@@ -1556,8 +1555,7 @@ func (desc *TableDescriptor) AddIndexMutation(
 	idx IndexDescriptor, direction DescriptorMutation_Direction,
 ) {
 	m := DescriptorMutation{Descriptor_: &DescriptorMutation_Index{Index: &idx}, Direction: direction}
-	prefix := roachpb.Key(MakeIndexKeyPrefix(desc, desc.PrimaryIndex.ID))
-	m.ResumeSpans = append(m.ResumeSpans, roachpb.Span{Key: prefix, EndKey: prefix.PrefixEnd()})
+	m.ResumeSpans = append(m.ResumeSpans, desc.PrimaryIndexSpan())
 	desc.addMutation(m)
 }
 
@@ -1915,6 +1913,12 @@ func (desc *TableDescriptor) PrimaryIndexSpan() roachpb.Span {
 // for a full index scan.
 func (desc *TableDescriptor) IndexSpan(indexID IndexID) roachpb.Span {
 	prefix := roachpb.Key(MakeIndexKeyPrefix(desc, indexID))
+	return roachpb.Span{Key: prefix, EndKey: prefix.PrefixEnd()}
+}
+
+// TableSpan returns the Span that corresponds to the entire table.
+func (desc *TableDescriptor) TableSpan() roachpb.Span {
+	prefix := roachpb.Key(keys.MakeTablePrefix(uint32(desc.ID)))
 	return roachpb.Span{Key: prefix, EndKey: prefix.PrefixEnd()}
 }
 

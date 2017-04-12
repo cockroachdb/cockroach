@@ -441,8 +441,7 @@ func (p *planner) Scatter(ctx context.Context, n *parser.Scatter) (planNode, err
 	var span roachpb.Span
 	if n.From == nil {
 		// No FROM/TO specified; the span is the entire table/index.
-		span.Key = roachpb.Key(sqlbase.MakeIndexKeyPrefix(tableDesc, index.ID))
-		span.EndKey = span.Key.PrefixEnd()
+		span = tableDesc.IndexSpan(index.ID)
 	} else {
 		switch {
 		case len(n.From) == 0:

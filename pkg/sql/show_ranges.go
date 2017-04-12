@@ -44,13 +44,9 @@ func (p *planner) ShowRanges(ctx context.Context, n *parser.ShowRanges) (planNod
 	}
 	// Note: for interleaved tables, the ranges we report will include rows from
 	// interleaving.
-	keyPrefix := roachpb.Key(sqlbase.MakeIndexKeyPrefix(tableDesc, index.ID))
 	return &showRangesNode{
-		p: p,
-		span: roachpb.Span{
-			Key:    keyPrefix,
-			EndKey: keyPrefix.PrefixEnd(),
-		},
+		p:      p,
+		span:   tableDesc.IndexSpan(index.ID),
 		values: make([]parser.Datum, len(showRangesColumns)),
 	}, nil
 }
