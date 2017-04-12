@@ -44,6 +44,7 @@ type tShim interface {
 	Failed() bool
 	Error(...interface{})
 	Errorf(fmt string, args ...interface{})
+	Name() string
 }
 
 var showLogs bool
@@ -74,7 +75,7 @@ func Scope(t tShim, testName string) *TestLogScope {
 		t.Fatal(err)
 	}
 	if !showLogs {
-		fmt.Fprintln(OrigStderr, "test logs captured to:", tempDir, " (use -show-logs to present inline)")
+		fmt.Fprintf(OrigStderr, "%s logs captured to: %s (use -show-logs to present inline)\n", t.Name(), tempDir)
 	}
 	return &TestLogScope{logDir: tempDir}
 }
