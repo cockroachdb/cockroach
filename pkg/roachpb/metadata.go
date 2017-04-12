@@ -18,6 +18,7 @@
 package roachpb
 
 import (
+	"bytes"
 	"fmt"
 	"sort"
 	"strconv"
@@ -169,6 +170,30 @@ func (r RangeDescriptor) Validate() error {
 		}
 	}
 	return nil
+}
+
+// Equal tests whether two RangeDescriptor have all the fields equal.
+func (r RangeDescriptor) Equal(other RangeDescriptor) bool {
+	if r.RangeID != other.RangeID {
+		return false
+	}
+	if !bytes.Equal(r.StartKey, other.StartKey) {
+		return false
+	}
+	if !bytes.Equal(r.EndKey, other.EndKey) {
+		return false
+	}
+	if len(r.Replicas) != len(other.Replicas) {
+		return false
+	}
+	for i := range r.Replicas {
+		rr := r.Replicas[i]
+		ro := other.Replicas[i]
+		if rr.NodeID != ro.NodeID || rr.StoreID != ro.StoreID || rr.ReplicaID != ro.ReplicaID {
+			return false
+		}
+	}
+	return r.NextReplicaID == other.NextReplicaID
 }
 
 // Validate performs some basic validation of the contents of a replica descriptor.
