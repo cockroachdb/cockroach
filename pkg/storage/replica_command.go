@@ -3425,7 +3425,8 @@ func (r *Replica) ChangeReplicas(
 		// abort the replica add.
 		if nodeUsed {
 			if repDescIdx != -1 {
-				return errors.Errorf("%s: unable to add replica %v which is already present", r, repDesc)
+				log.Warningf(ctx, "unable to add replica %v which is already present", repDesc)
+				return nil
 			}
 			return errors.Errorf("%s: unable to add replica %v; node already has a replica", r, repDesc)
 		}
