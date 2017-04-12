@@ -1868,7 +1868,7 @@ func TestReplicaUpdateTSCache(t *testing.T) {
 	if rOK || wOK {
 		t.Errorf("expected rOK=false and wOK=false; rOK=%t, wOK=%t", rOK, wOK)
 	}
-	tc.repl.store.tsCacheMu.cache.ExpandRequests(hlc.Timestamp{})
+	tc.repl.store.tsCacheMu.cache.ExpandRequests(hlc.Timestamp{}, tc.repl.Desc().RSpan())
 	rTS, _, rOK := tc.repl.store.tsCacheMu.cache.GetMaxRead(roachpb.Key("a"), nil)
 	wTS, _, wOK := tc.repl.store.tsCacheMu.cache.GetMaxWrite(roachpb.Key("a"), nil)
 	if rTS.WallTime != t0.Nanoseconds() || wTS.WallTime != startNanos || !rOK || wOK {
@@ -7621,7 +7621,7 @@ func TestMakeTimestampCacheRequest(t *testing.T) {
 			ba.Header.MaxSpanRequestKeys = c.maxKeys
 			ba.Add(c.req)
 			br.Add(c.resp)
-			cr := makeCacheRequest(&ba, &br)
+			cr := makeCacheRequest(&ba, &br, roachpb.RSpan{})
 			if !reflect.DeepEqual(c.expected, cr) {
 				t.Fatalf("%s", pretty.Diff(c.expected, cr))
 			}
