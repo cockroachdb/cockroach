@@ -72,6 +72,18 @@ send "\r"
 eexpect "1 row"
 eexpect root@
 
+# Test that two statements on the same line can be recalled together.
+send "select 2; select 3;\r"
+eexpect "1 row"
+eexpect "1 row"
+eexpect root@
+send "\033\[A"
+eexpect "SELECT 2; SELECT 3;"
+send "\r"
+eexpect "1 row"
+eexpect "1 row"
+eexpect root@
+
 # Finally terminate with Ctrl+C
 interrupt
 eexpect eof
