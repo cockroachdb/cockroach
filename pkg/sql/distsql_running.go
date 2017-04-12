@@ -20,11 +20,64 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 )
+
+// To allow queries to send out flow RPCs in parallel, we use a pool of workers
+// that can issue the RPCs on behalf of the running code.
+const numRunners = 16
+
+// runnerRequest is the request that is sent (via a channel) to a worker.
+type runnerRequest struct {
+	ctx         context.Context
+	rpcContext  *rpc.Context
+	flowReq     *distsqlrun.SetupFlowRequest
+	nodeID      roachpb.NodeID
+	nodeAddress string
+	resultChan  chan<- runnerResult
+}
+
+// runerResult is returned by a worker (via a channel) for each received
+// request.
+type runnerResult struct {
+	nodeID   roachpb.NodeID
+	err      error
+	response *distsqlrun.SimpleResponse
+}
+
+func (dsp *distSQLPlanner) initRunners(stopper *stop.Stopper) {
+	dsp.runnerChan = make(chan runnerRequest, numRunners)
+	for i := 0; i < numRunners; i++ {
+		stopper.RunWorker(func() {
+			runnerChan := dsp.runnerChan
+			stopChan := stopper.ShouldStop()
+			for {
+				select {
+				case req := <-runnerChan:
+					res := runnerResult{nodeID: req.nodeID}
+
+					conn, err := req.rpcContext.GRPCDial(req.nodeAddress)
+					if err != nil {
+						res.err = err
+					} else {
+						client := distsqlrun.NewDistSQLClient(conn)
+						res.response, res.err = client.SetupFlow(req.ctx, req.flowReq)
+					}
+					req.resultChan <- res
+
+				case <-stopChan:
+					return
+				}
+			}
+		})
+	}
+}
 
 // Run executes a physical plan. The plan should have been finalized using
 // FinalizePlan.
@@ -54,34 +107,56 @@ func (dsp *distSQLPlanner) Run(
 	recv.resultToStreamColMap = plan.planToStreamColMap
 	thisNodeID := dsp.nodeDesc.NodeID
 
+	var resultChan chan runnerResult
+	if len(flows) > 1 {
+		resultChan = make(chan runnerResult, len(flows)-1)
+	}
 	// Start the flows on all other nodes.
 	for nodeID, flowSpec := range flows {
 		if nodeID == thisNodeID {
 			// Skip this node.
 			continue
 		}
-		req := distsqlrun.SetupFlowRequest{
+		req := &distsqlrun.SetupFlowRequest{
 			Version: distsqlrun.Version,
 			Txn:     *txn.Proto(),
 			Flow:    flowSpec,
 		}
-		if err := distsqlrun.SetFlowRequestTrace(ctx, &req); err != nil {
+		if err := distsqlrun.SetFlowRequestTrace(ctx, req); err != nil {
 			return err
 		}
-		conn, err := dsp.rpcContext.GRPCDial(planCtx.nodeAddresses[nodeID])
-		if err != nil {
-			return err
-		}
-		client := distsqlrun.NewDistSQLClient(conn)
-		// TODO(radu): we are not waiting for the flows to complete, but we are
-		// still waiting for a round trip; we should start the flows in parallel, at
-		// least if there are enough of them.
-		if resp, err := client.SetupFlow(context.Background(), &req); err != nil {
-			return err
-		} else if resp.Error != nil {
-			return resp.Error.ErrorDetail()
+		// Send out a request to the workers.
+		dsp.runnerChan <- runnerRequest{
+			ctx:         ctx,
+			rpcContext:  dsp.rpcContext,
+			flowReq:     req,
+			nodeID:      nodeID,
+			nodeAddress: planCtx.nodeAddresses[nodeID],
+			resultChan:  resultChan,
 		}
 	}
+
+	var err error
+	// Now wait for all RPCs to complete. Note that we are not waiting for the
+	// flows themselves to complete.
+	for i := 0; i < len(flows)-1; i++ {
+		res := <-resultChan
+		if err != nil {
+			continue
+		}
+		if res.err != nil {
+			err = res.err
+		} else if res.response.Error != nil {
+			err = res.response.Error.ErrorDetail()
+		}
+		// TODO(radu): accumulate the flows that we couldn't set up and move them
+		// into the local flow.
+	}
+	if err != nil {
+		return err
+	}
+
+	// Set up the flow on this node.
 	localReq := distsqlrun.SetupFlowRequest{
 		Version: distsqlrun.Version,
 		Txn:     *txn.Proto(),

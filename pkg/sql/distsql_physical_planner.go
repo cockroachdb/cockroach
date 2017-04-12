@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 )
@@ -66,6 +67,10 @@ type distSQLPlanner struct {
 	rpcContext   *rpc.Context
 	distSQLSrv   *distsqlrun.ServerImpl
 	spanResolver distsqlplan.SpanResolver
+
+	// runnerChan is used to send out requests (for running SetupFlow RPCs) to a
+	// pool of workers.
+	runnerChan chan runnerRequest
 }
 
 const resolverPolicy = distsqlplan.BinPackingLeaseHolderChoice
@@ -80,13 +85,16 @@ func newDistSQLPlanner(
 	distSQLSrv *distsqlrun.ServerImpl,
 	distSender *kv.DistSender,
 	gossip *gossip.Gossip,
+	stopper *stop.Stopper,
 ) *distSQLPlanner {
-	return &distSQLPlanner{
+	dsp := &distSQLPlanner{
 		nodeDesc:     nodeDesc,
 		rpcContext:   rpcCtx,
 		distSQLSrv:   distSQLSrv,
 		spanResolver: distsqlplan.NewSpanResolver(distSender, gossip, nodeDesc, resolverPolicy),
 	}
+	dsp.initRunners(stopper)
+	return dsp
 }
 
 // setSpanResolver switches to a different SpanResolver. It is the caller's

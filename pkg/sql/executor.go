@@ -298,7 +298,7 @@ func (e *Executor) Start(
 	ctx = e.AnnotateCtx(ctx)
 	log.Infof(ctx, "creating distSQLPlanner with address %s", nodeDesc.Address)
 	e.distSQLPlanner = newDistSQLPlanner(
-		nodeDesc, e.cfg.RPCContext, e.cfg.DistSQLSrv, e.cfg.DistSender, e.cfg.Gossip,
+		nodeDesc, e.cfg.RPCContext, e.cfg.DistSQLSrv, e.cfg.DistSender, e.cfg.Gossip, e.stopper,
 	)
 
 	e.databaseCache = newDatabaseCache(e.systemConfig)
