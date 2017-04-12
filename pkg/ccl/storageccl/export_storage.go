@@ -17,6 +17,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	gcs "cloud.google.com/go/storage"
@@ -375,9 +376,14 @@ type azureStorage struct {
 
 var _ ExportStorage = &azureStorage{}
 
+var azureAccountNameRegex = regexp.MustCompile(`^[a-z0-9]{3,24}$`)
+
 func makeAzureStorage(conf *roachpb.ExportStorage_Azure) (ExportStorage, error) {
 	if conf == nil {
 		return nil, errors.Errorf("azure upload requested but info missing")
+	}
+	if !azureAccountNameRegex.MatchString(conf.AccountName) {
+		return nil, errors.New("azure account name invalid")
 	}
 	client, err := azr.NewBasicClient(conf.AccountName, conf.AccountKey)
 	if err != nil {
