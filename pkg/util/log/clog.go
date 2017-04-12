@@ -86,7 +86,7 @@ func (s *Severity) Set(value string) error {
 		}
 		threshold = Severity(v)
 	}
-	logging.stderrThreshold.set(threshold)
+	s.set(threshold)
 	return nil
 }
 
@@ -553,10 +553,11 @@ func formatLogEntry(entry Entry, stacks []byte, colors *colorProfile) *buffer {
 }
 
 func init() {
-	// Default stderrThreshold to log everything.
+	// Default stderrThreshold and fileThreshold to log everything.
 	// This will be the default in tests unless overridden; the CLI
 	// commands set their default separately in cli/flags.go
 	logging.stderrThreshold = Severity_INFO
+	logging.fileThreshold = Severity_INFO
 
 	logging.setVState(0, nil, false)
 	logging.exitFunc = os.Exit
@@ -579,8 +580,10 @@ type loggingT struct {
 
 	noStderrRedirect bool
 
-	// Level flag. Handled atomically.
+	// Level flag for output to stderr. Handled atomically.
 	stderrThreshold Severity // The -alsologtostderr flag.
+	// Level flag for output to files.
+	fileThreshold Severity
 
 	// freeList is a list of byte buffers, maintained under freeListMu.
 	freeList *buffer
@@ -711,7 +714,7 @@ func (l *loggingT) outputLogEntry(s Severity, file string, line int, msg string)
 	if s >= l.stderrThreshold.get() {
 		l.outputToStderr(entry, stacks)
 	}
-	if logDir.isSet() {
+	if logDir.isSet() && s >= l.fileThreshold.get() {
 		if l.file == nil {
 			if err := l.createFile(); err != nil {
 				// Make sure the message appears somewhere.
