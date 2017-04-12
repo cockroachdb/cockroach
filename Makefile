@@ -91,25 +91,26 @@ buildoss: BUILDTARGET = ./pkg/cmd/cockroach-oss
 
 build buildoss: BUILDMODE = build -i -o cockroach$(SUFFIX)
 
-xgo-build: GO = $(XGO)
-xgo-build: BUILDMODE =
-
-# Special case: we install the cockroach binary to the user-specified GOBIN
-# (usually GOPATH/bin) rather than our repository-local GOBIN.
-install: GOBIN := $(ORIGINAL_GOBIN)
-
-.PHONY: build buildoss xgo-build install
 # The build.utcTime format must remain in sync with TimeFormat in pkg/build/info.go.
 build buildoss xgo-build install: override LINKFLAGS += \
 	-X "github.com/cockroachdb/cockroach/pkg/build.tag=$(shell cat .buildinfo/tag)" \
 	-X "github.com/cockroachdb/cockroach/pkg/build.utcTime=$(shell date -u '+%Y/%m/%d %H:%M:%S')" \
 	-X "github.com/cockroachdb/cockroach/pkg/build.rev=$(shell cat .buildinfo/rev)"
-# Note: We pass `-v` to `go build` and `go test -i` so that warnings
-# from the linker aren't suppressed. The usage of `-v` also shows when
-# dependencies are rebuilt which is useful when switching between
-# normal and race test builds.
-build buildoss xgo-build install: $(BOOTSTRAP_TARGET) .buildinfo/tag .buildinfo/rev
-	$(GO) $(BUILDMODE) -v $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' $(BUILDTARGET)
+
+# Note: We pass `-v` to `go build` and `go test -i` so that warnings from the
+# linker aren't suppressed. The usage of `-v` also shows when dependencies are
+# rebuilt which is useful when switching between normal and race test builds.
+#
+# Also, note the restoration of GOBIN to its original value: we install the
+# cockroach binary to the user-specified GOBIN (usually GOPATH/bin) rather than
+# our repository-local GOBIN.
+.PHONY: build buildoss install
+build buildoss install: $(BOOTSTRAP_TARGET) .buildinfo/tag .buildinfo/rev
+	$(if $(ORIGINAL_GOBIN),GOBIN="$(ORIGINAL_GOBIN)") $(GO) $(BUILDMODE) -v $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' $(BUILDTARGET)
+
+.PHONY: xgo-build
+xgo-build:
+	$(XGO) -v $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' $(BUILDTARGET)
 
 .PHONY: start
 start: build
