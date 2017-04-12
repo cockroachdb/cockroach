@@ -62,20 +62,48 @@ const metricsSampleInterval = 10 * time.Second
 
 // Fully-qualified names for metrics.
 var (
-	MetaTxnBegin           = metric.Metadata{Name: "sql.txn.begin.count"}
-	MetaTxnCommit          = metric.Metadata{Name: "sql.txn.commit.count"}
-	MetaTxnAbort           = metric.Metadata{Name: "sql.txn.abort.count"}
-	MetaTxnRollback        = metric.Metadata{Name: "sql.txn.rollback.count"}
-	MetaSelect             = metric.Metadata{Name: "sql.select.count"}
-	MetaSQLExecLatency     = metric.Metadata{Name: "sql.exec.latency"}
-	MetaDistSQLSelect      = metric.Metadata{Name: "sql.distsql.select.count"}
-	MetaDistSQLExecLatency = metric.Metadata{Name: "sql.distsql.exec.latency"}
-	MetaUpdate             = metric.Metadata{Name: "sql.update.count"}
-	MetaInsert             = metric.Metadata{Name: "sql.insert.count"}
-	MetaDelete             = metric.Metadata{Name: "sql.delete.count"}
-	MetaDdl                = metric.Metadata{Name: "sql.ddl.count"}
-	MetaMisc               = metric.Metadata{Name: "sql.misc.count"}
-	MetaQuery              = metric.Metadata{Name: "sql.query.count"}
+	MetaTxnBegin = metric.Metadata{
+		Name: "sql.txn.begin.count",
+		Help: "Number of SQL transaction BEGIN statements"}
+	MetaTxnCommit = metric.Metadata{
+		Name: "sql.txn.commit.count",
+		Help: "Number of SQL transaction COMMIT statements"}
+	MetaTxnAbort = metric.Metadata{
+		Name: "sql.txn.abort.count",
+		Help: "Number of SQL transaction ABORT statements"}
+	MetaTxnRollback = metric.Metadata{
+		Name: "sql.txn.rollback.count",
+		Help: "Number of SQL transaction ROLLBACK statements"}
+	MetaSelect = metric.Metadata{
+		Name: "sql.select.count",
+		Help: "Number of SQL SELECT statements"}
+	MetaSQLExecLatency = metric.Metadata{
+		Name: "sql.exec.latency",
+		Help: "Latency of SQL statement execution"}
+	MetaDistSQLSelect = metric.Metadata{
+		Name: "sql.distsql.select.count",
+		Help: "Number of dist-SQL SELECT statements"}
+	MetaDistSQLExecLatency = metric.Metadata{
+		Name: "sql.distsql.exec.latency",
+		Help: "Latency of dist-SQL statement execution"}
+	MetaUpdate = metric.Metadata{
+		Name: "sql.update.count",
+		Help: "Number of SQL UPDATE statements"}
+	MetaInsert = metric.Metadata{
+		Name: "sql.insert.count",
+		Help: "Number of SQL INSERT statements"}
+	MetaDelete = metric.Metadata{
+		Name: "sql.delete.count",
+		Help: "Number of SQL DELETE statements"}
+	MetaDdl = metric.Metadata{
+		Name: "sql.ddl.count",
+		Help: "Number of SQL DDL statements"}
+	MetaMisc = metric.Metadata{
+		Name: "sql.misc.count",
+		Help: "Number of other SQL statements"}
+	MetaQuery = metric.Metadata{
+		Name: "sql.query.count",
+		Help: "Number of SQL queries"}
 )
 
 type traceResult struct {
