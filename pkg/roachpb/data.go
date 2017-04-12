@@ -1143,6 +1143,13 @@ func (rs RSpan) Intersect(desc *RangeDescriptor) (RSpan, error) {
 	return RSpan{key, endKey}, nil
 }
 
+// OverlapExclusive returns whether the two spans overlap. It defines
+// overlapping as a pair of spans that share a segment of the keyspace, with
+// the start keys treated as inclusive and the end keys treated as exclusive.
+func (rs RSpan) OverlapExclusive(other RSpan) bool {
+	return bytes.Compare(rs.EndKey, other.Key) > 0 && bytes.Compare(rs.Key, other.EndKey) < 0
+}
+
 // KeyValueByKey implements sorting of a slice of KeyValues by key.
 type KeyValueByKey []KeyValue
 

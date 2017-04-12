@@ -56,6 +56,7 @@ const (
 // populate the read/write interval caches if a potential conflict is detected
 // due to an earlier request (based on timestamp) arriving.
 type cacheRequest struct {
+	span      roachpb.RSpan
 	reads     []roachpb.Span
 	writes    []roachpb.Span
 	txn       roachpb.Span
@@ -616,17 +617,17 @@ func (tc *timestampCache) AddRequest(req cacheRequest) {
 
 // ExpandRequests expands any request that is newer than the specified
 // timestamp.
-func (tc *timestampCache) ExpandRequests(timestamp hlc.Timestamp) {
+func (tc *timestampCache) ExpandRequests(timestamp hlc.Timestamp, span roachpb.RSpan) {
 	// Find all of the requests that have a timestamp greater than or equal to
 	// the specified timestamp. Note that we can't delete the requests during the
 	// btree iteration.
 	var reqs []*cacheRequest
 	tc.tmpReq.timestamp = timestamp
 	tc.requests.AscendGreaterOrEqual(&tc.tmpReq, func(i btree.Item) bool {
-		// TODO(peter): We could be more intelligent about not expanding a request
-		// if there is no possibility of overlap. For example, in workloads where
-		// there are concurrent bulk inserts for completely distinct ranges.
-		reqs = append(reqs, i.(*cacheRequest))
+		cr := i.(*cacheRequest)
+		if cr.span.OverlapExclusive(span) {
+			reqs = append(reqs, cr)
+		}
 		return true
 	})
 
