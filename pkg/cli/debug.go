@@ -786,7 +786,6 @@ var debugCmds = []*cobra.Command{
 	debugRocksDBCmd,
 	debugCompactCmd,
 	debugSSTablesCmd,
-	kvCmd,
 	rangeCmd,
 	debugEnvCmd,
 	debugZipCmd,
