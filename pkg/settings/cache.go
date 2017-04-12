@@ -138,4 +138,32 @@ func (u Updater) Apply() {
 	cache.Lock()
 	cache.values = u
 	cache.Unlock()
+
+	afterApply.Lock()
+	for _, f := range afterApply.hooks {
+		f()
+	}
+	afterApply.Unlock()
+}
+
+var afterApply struct {
+	syncutil.Mutex
+	hooks []func()
+}
+
+// RegisterCallback registers `f`` to be called immediately and then after new
+// settings are read (even if there are no changes).
+//
+// `f` would likely read a setting to update an atomic int or channel, or
+// otherwise trigger additional work. `f` should not block, or otherwise do any
+// lengthy work itself, as it blocks the settings updater.
+//
+// RegisterCallback can (and likely should) be called at `init` -- indeed, the
+// eager call during registration is intended to ensure it initializes defaults
+// even before the first gossip update is received.
+func RegisterCallback(f func()) {
+	f()
+	afterApply.Lock()
+	afterApply.hooks = append(afterApply.hooks, f)
+	afterApply.Unlock()
 }

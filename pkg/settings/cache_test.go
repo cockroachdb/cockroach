@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 )
 
+var i1, i2 int
 
 func init() {
 	registry = map[string]value{
@@ -31,6 +32,12 @@ func init() {
 		"i.2":     {typ: IntValue, i: 5},
 		"f":       {typ: FloatValue, f: 5.4},
 	}
+
+	RegisterCallback(func() {
+		i1 = getInt("i.1")
+		i2 = getInt("i.2")
+	})
+}
 
 func TestCache(t *testing.T) {
 	t.Run("defaults", func(t *testing.T) {
@@ -50,6 +57,13 @@ func TestCache(t *testing.T) {
 			t.Fatalf("expected %v, got %v", expected, actual)
 		}
 		if expected, actual := 5, getInt("i.2"); expected != actual {
+			t.Fatalf("expected %v, got %v", expected, actual)
+		}
+		// registering callback should have also run it initally and set default.
+		if expected, actual := 0, i1; expected != actual {
+			t.Fatalf("expected %v, got %v", expected, actual)
+		}
+		if expected, actual := 5, i2; expected != actual {
 			t.Fatalf("expected %v, got %v", expected, actual)
 		}
 		if expected, actual := 5.4, getFloat("f"); expected != actual {
@@ -97,6 +111,12 @@ func TestCache(t *testing.T) {
 		if expected, actual := 3, getInt("i.2"); expected != actual {
 			t.Fatalf("expected %v, got %v", expected, actual)
 		}
+		if expected, actual := 0, i1; expected != actual {
+			t.Fatalf("expected %v, got %v", expected, actual)
+		}
+		if expected, actual := 3, i2; expected != actual {
+			t.Fatalf("expected %v, got %v", expected, actual)
+		}
 		if expected, actual := 3.1, getFloat("f"); expected != actual {
 			t.Fatalf("expected %v, got %v", expected, actual)
 		}
@@ -113,10 +133,22 @@ func TestCache(t *testing.T) {
 			if err := u.Add("bool.f", EncodeBool(true), "b"); err != nil {
 				t.Fatal(err)
 			}
+			if err := u.Add("i.1", EncodeInt(1), "i"); err != nil {
+				t.Fatal(err)
+			}
+			if err := u.Add("i.2", EncodeInt(7), "i"); err != nil {
+				t.Fatal(err)
+			}
 			u.Apply()
 		}
 
 		if expected, actual := true, getBool("bool.f"); expected != actual {
+			t.Fatalf("expected %v, got %v", expected, actual)
+		}
+		if expected, actual := 1, i1; expected != actual {
+			t.Fatalf("expected %v, got %v", expected, actual)
+		}
+		if expected, actual := 7, i2; expected != actual {
 			t.Fatalf("expected %v, got %v", expected, actual)
 		}
 		// If the updater doesn't have a key, e.g. if the setting has been deleted,
@@ -124,6 +156,12 @@ func TestCache(t *testing.T) {
 		MakeUpdater().Apply()
 
 		if expected, actual := false, getBool("bool.f"); expected != actual {
+			t.Fatalf("expected %v, got %v", expected, actual)
+		}
+		if expected, actual := 0, i1; expected != actual {
+			t.Fatalf("expected %v, got %v", expected, actual)
+		}
+		if expected, actual := 5, i2; expected != actual {
 			t.Fatalf("expected %v, got %v", expected, actual)
 		}
 
