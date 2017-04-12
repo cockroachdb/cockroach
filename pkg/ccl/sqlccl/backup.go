@@ -137,11 +137,9 @@ func spansForAllTableIndexes(tables []*sqlbase.TableDescriptor) []roachpb.Span {
 	sstIntervalTree := interval.Tree{Overlapper: interval.Range.OverlapExclusive}
 	for _, table := range tables {
 		for _, index := range table.AllNonDropIndexes() {
-			startKey := roachpb.Key(sqlbase.MakeIndexKeyPrefix(table, index.ID))
-			ie := intervalSpan(roachpb.Span{Key: startKey, EndKey: startKey.PrefixEnd()})
-			// Errors are only returned if end <= start, which is never the case
-			// here because we use `PrefixEnd` to compute end.
-			_ = sstIntervalTree.Insert(ie, false)
+			if err := sstIntervalTree.Insert(intervalSpan(table.IndexSpan(index.ID)), false); err != nil {
+				panic(errors.Wrap(err, "IndexSpan"))
+			}
 		}
 	}
 
