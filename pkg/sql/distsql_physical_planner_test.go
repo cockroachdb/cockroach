@@ -14,16 +14,24 @@
 // permissions and limitations under the License.
 //
 // Author: Radu Berinde (radu@cockroachlabs.com)
+// Author: Andrei Matei (andreimatei1@gmail.com)
 
 package sql
 
 import (
+	"fmt"
+	"strings"
 	"testing"
 	"time"
+
+	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -141,5 +149,163 @@ func TestDistBackfill(t *testing.T) {
 			t.Errorf("unexpected unsorted %s > %s at %d", curr, str[0], i)
 		}
 		curr = str[0]
+	}
+}
+
+// Test that distSQLReceiver uses inbound metadata to update the
+// RangeDescriptorCache and the LeaseHolderCache.
+func TestDistSQLReceiverUpdatesCaches(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	rangeCache := kv.NewRangeDescriptorCache(nil /* db */, 2<<10 /* size */)
+	leaseCache := kv.NewLeaseHolderCache(2 << 10 /* size */)
+	r := makeDistSQLReceiver(context.TODO(), nil /* sink */, rangeCache, leaseCache)
+
+	descs := []roachpb.RangeDescriptor{
+		{RangeID: 1, StartKey: roachpb.RKey("a"), EndKey: roachpb.RKey("c")},
+		{RangeID: 2, StartKey: roachpb.RKey("c"), EndKey: roachpb.RKey("e")},
+		{RangeID: 3, StartKey: roachpb.RKey("g"), EndKey: roachpb.RKey("z")},
+	}
+
+	// Push some metadata and check that the caches are updated with it.
+	status := r.Push(nil /* row */, distsqlrun.ProducerMetadata{
+		Ranges: []roachpb.RangeInfo{
+			{
+				Desc: descs[0],
+				Lease: roachpb.Lease{Replica: roachpb.ReplicaDescriptor{
+					NodeID: 1, StoreID: 1, ReplicaID: 1}},
+			},
+			{
+				Desc: descs[1],
+				Lease: roachpb.Lease{Replica: roachpb.ReplicaDescriptor{
+					NodeID: 2, StoreID: 2, ReplicaID: 2}},
+			},
+		}})
+	if status != distsqlrun.NeedMoreRows {
+		t.Fatalf("expected status NeedMoreRows, got: %d", status)
+	}
+	status = r.Push(nil /* row */, distsqlrun.ProducerMetadata{
+		Ranges: []roachpb.RangeInfo{
+			{
+				Desc: descs[2],
+				Lease: roachpb.Lease{Replica: roachpb.ReplicaDescriptor{
+					NodeID: 3, StoreID: 3, ReplicaID: 3}},
+			},
+		}})
+	if status != distsqlrun.NeedMoreRows {
+		t.Fatalf("expected status NeedMoreRows, got: %d", status)
+	}
+
+	for i := range descs {
+		desc, err := rangeCache.GetCachedRangeDescriptor(descs[i].StartKey, false /* inclusive */)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if desc == nil {
+			t.Fatalf("failed to find range for key: %s", descs[i].StartKey)
+		}
+		if !desc.Equal(descs[i]) {
+			t.Fatalf("expected: %+v, got: %+v", descs[i], desc)
+		}
+
+		replica, ok := leaseCache.Lookup(context.TODO(), descs[i].RangeID)
+		if !ok {
+			t.Fatalf("didn't find lease for RangeID: %d", descs[i].RangeID)
+		}
+		if replica.ReplicaID != roachpb.ReplicaID(i+1) {
+			t.Fatalf("expected ReplicaID: %d but found replica: %d", i, replica)
+		}
+	}
+}
+
+// Test that a gateway improves the physical plans that it generates as a result
+// of running a badly-planned query and receiving range information in response;
+// this range information is used to update caches on the gateway.
+func TestDistSQLRangeCachesIntegrationTest(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	// We're going to setup a cluster with 4 nodes. The last one will not be a
+	// target of any replication so that its caches stay virgin.
+
+	tc := serverutils.StartTestCluster(t, 4, /* numNodes */
+		base.TestClusterArgs{
+			ReplicationMode: base.ReplicationManual,
+			ServerArgs: base.TestServerArgs{
+				UseDatabase: "test",
+			},
+		})
+	defer tc.Stopper().Stop()
+
+	db0 := tc.ServerConn(0)
+	sqlutils.CreateTable(t, db0, "left",
+		"num INT PRIMARY KEY",
+		3, /* numRows */
+		sqlutils.ToRowFn(sqlutils.RowIdxFn))
+	sqlutils.CreateTable(t, db0, "right",
+		"num INT PRIMARY KEY",
+		3, /* numRows */
+		sqlutils.ToRowFn(sqlutils.RowIdxFn))
+
+	db3 := tc.ServerConn(3)
+
+	// We're going to split one of the tables, but node 4 is unaware of this.
+	_, err := db0.Exec(`
+	ALTER TABLE "right" SPLIT AT VALUES (1), (2), (3);
+	ALTER TABLE "right" TESTING_RELOCATE VALUES (ARRAY[2], 1), (ARRAY[1], 2), (ARRAY[3], 3);
+	`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Run everything in a transaction, so we're bound on a connection on which we
+	// force DistSQL.
+	txn, err := db3.BeginTx(context.TODO(), nil /* opts */)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := txn.Exec("SET DISTSQL = ALWAYS"); err != nil {
+		t.Fatal(err)
+	}
+
+	// Assert that the caches start empty and the initial planning is bad. Only
+	// the gateway and the first node are supposed to be used (the initial state
+	// of the cache should have everything on the first node).
+	query := `SELECT COUNT(1) FROM "left" INNER JOIN "right" USING (num)`
+	row := db3.QueryRow(fmt.Sprintf("SELECT JSON FROM [EXPLAIN (DISTSQL) %v]", query))
+	var json string
+	if err := row.Scan(&json); err != nil {
+		t.Fatal(err)
+	}
+	exp := `{"nodeNames":["1","4"]`
+	if !strings.HasPrefix(json, exp) {
+		t.Fatalf("expected prefix %s, but json is: %s", exp, json)
+	}
+
+	// Run a non-trivial query to force the "wrong range" metadata to flow through
+	// a number of components. Assert that this initial planning is suboptimal -
+	// it should just use the gateway since no information about the other ranges
+	// is known.
+	row = txn.QueryRowContext(context.TODO(), query)
+	var cnt int
+	if err := row.Scan(&cnt); err != nil {
+		t.Fatal(err)
+	}
+	if cnt != 3 {
+		t.Fatalf("expected 3, got: %d", cnt)
+	}
+	if err := txn.Rollback(); err != nil {
+		t.Fatal(err)
+	}
+
+	// Now assert that new plans correctly contain all the nodes. This is expected
+	// to be a result of the caches having been updated on the gateway by the
+	// previous query.
+	row = db3.QueryRow(fmt.Sprintf("SELECT JSON FROM [EXPLAIN (DISTSQL) %v]", query))
+	if err := row.Scan(&json); err != nil {
+		t.Fatal(err)
+	}
+	exp = `{"nodeNames":["1","2","3","4"]`
+	if !strings.HasPrefix(json, exp) {
+		t.Fatalf("expected prefix %q, but json is: %s", exp, json)
 	}
 }

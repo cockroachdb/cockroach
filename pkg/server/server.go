@@ -282,10 +282,11 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		Clock:                   s.clock,
 		DistSQLSrv:              s.distSQLServer,
 		HistogramWindowInterval: s.cfg.HistogramWindowInterval(),
-
 		ClusterStoresUpcall: func() []roachpb.ReplicationTarget {
 			return s.ClusterStores()
 		},
+		RangeDescriptorCache: s.distSender.RangeDescriptorCache(),
+		LeaseHolderCache:     s.distSender.LeaseHolderCache(),
 	}
 	if s.cfg.TestingKnobs.SQLExecutor != nil {
 		execCfg.TestingKnobs = s.cfg.TestingKnobs.SQLExecutor.(*sql.ExecutorTestingKnobs)
