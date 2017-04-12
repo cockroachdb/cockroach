@@ -342,8 +342,10 @@ func (expr *ComparisonExpr) normalize(v *normalizeVisitor) TypedExpr {
 
 				newRightExpr, err := newBinExpr.Eval(v.ctx)
 				if err != nil {
-					v.err = err
-					return expr
+					// In the case of an error during Eval, give up on normalizing this
+					// expression. There are some expected errors here if, for example,
+					// normalization produces a result that overflows an int64.
+					break
 				}
 
 				if !exprCopied {
@@ -396,8 +398,7 @@ func (expr *ComparisonExpr) normalize(v *normalizeVisitor) TypedExpr {
 
 				newRightExpr, err := newBinExpr.Eval(v.ctx)
 				if err != nil {
-					v.err = err
-					return expr
+					break
 				}
 
 				if !exprCopied {
