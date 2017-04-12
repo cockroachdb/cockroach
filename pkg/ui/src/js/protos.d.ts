@@ -12369,7 +12369,7 @@ export namespace cockroach {
              * @name Severity
              * @memberof cockroach.util.log
              * @enum {number}
-             * @property {number} UNKNOWN=0 UNKNOWN value
+             * @property {number} DEFAULT=0 DEFAULT value
              * @property {number} INFO=1 INFO value
              * @property {number} WARNING=2 WARNING value
              * @property {number} ERROR=3 ERROR value
@@ -12377,7 +12377,7 @@ export namespace cockroach {
              * @property {number} NONE=5 NONE value
              */
             enum Severity {
-                UNKNOWN = 0,
+                DEFAULT = 0,
                 INFO = 1,
                 WARNING = 2,
                 ERROR = 3,

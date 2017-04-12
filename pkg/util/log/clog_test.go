@@ -96,7 +96,6 @@ func setFlags() {
 	SetExitFunc(os.Exit)
 	logging.noStderrRedirect = false
 	logging.stderrThreshold = Severity_ERROR
-	logging.toStderr = false
 }
 
 // Test that Info works as advertised.
@@ -588,7 +587,6 @@ func TestFatalStacktraceStderr(t *testing.T) {
 
 	setFlags()
 	logging.stderrThreshold = Severity_NONE
-	logging.toStderr = false
 	SetExitFunc(func(int) {})
 
 	defer setFlags()
