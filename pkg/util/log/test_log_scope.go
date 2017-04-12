@@ -128,7 +128,7 @@ func (l *TestLogScope) Close(t tShim) {
 					"Details cannot be printed yet because we are still unwinding.\n"+
 					"Hopefully the test harness prints the panic below, otherwise check the test logs.\n")
 			}
-			fmt.Fprintln(OrigStderr, "test logs left over in:", l)
+			fmt.Fprintln(OrigStderr, "test logs left over in:", l.logDir)
 		} else if !l.keepLogs {
 			// Clean up.
 			if err := os.RemoveAll(l.logDir); err != nil {
