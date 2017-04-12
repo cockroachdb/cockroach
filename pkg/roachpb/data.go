@@ -1143,6 +1143,18 @@ func (rs RSpan) Intersect(desc *RangeDescriptor) (RSpan, error) {
 	return RSpan{key, endKey}, nil
 }
 
+func (rs RSpan) asSpan() Span {
+	return Span{
+		Key:    Key(rs.Key),
+		EndKey: Key(rs.EndKey),
+	}
+}
+
+// Overlaps returns whether the two spans overlap.
+func (rs RSpan) Overlaps(other RSpan) bool {
+	return rs.asSpan().Overlaps(other.asSpan())
+}
+
 // KeyValueByKey implements sorting of a slice of KeyValues by key.
 type KeyValueByKey []KeyValue
 
