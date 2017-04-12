@@ -1953,8 +1953,8 @@ func (r *Replica) executeAdminBatch(
 			Header:  ba.Header,
 			Args:    args,
 		}
-		resp = &roachpb.ImportResponse{}
-		err := importCmdFn(ctx, cArgs)
+		var err error
+		resp, err = importCmdFn(ctx, cArgs)
 		pErr = roachpb.NewError(err)
 
 	case *roachpb.AdminScatterRequest:
