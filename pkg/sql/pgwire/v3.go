@@ -997,6 +997,10 @@ func (c *v3Conn) sendResponse(
 			}
 
 		case parser.Ack, parser.DDL:
+			if result.PGTag == "SELECT" {
+				tag = append(tag, ' ')
+				tag = strconv.AppendInt(tag, int64(result.RowsAffected), 10)
+			}
 			if err := c.sendCommandComplete(tag); err != nil {
 				return err
 			}
