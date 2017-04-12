@@ -891,7 +891,7 @@ type syncBuffer struct {
 	*bufio.Writer
 	file         *os.File
 	lastRotation int64
-	nbytes       uint64 // The number of bytes written to this file
+	nbytes       int64 // The number of bytes written to this file
 }
 
 func (sb *syncBuffer) Sync() error {
@@ -899,13 +899,13 @@ func (sb *syncBuffer) Sync() error {
 }
 
 func (sb *syncBuffer) Write(p []byte) (n int, err error) {
-	if sb.nbytes+uint64(len(p)) >= MaxSize {
+	if sb.nbytes+int64(len(p)) >= atomic.LoadInt64(&LogFileMaxSize) {
 		if err := sb.rotateFile(time.Now()); err != nil {
 			sb.logger.exit(err)
 		}
 	}
 	n, err = sb.Writer.Write(p)
-	sb.nbytes += uint64(n)
+	sb.nbytes += int64(n)
 	if err != nil {
 		sb.logger.exit(err)
 	}
@@ -965,7 +965,7 @@ func (sb *syncBuffer) rotateFile(now time.Time) error {
 		}, nil, nil)
 		var n int
 		n, err = sb.file.Write(buf.Bytes())
-		sb.nbytes += uint64(n)
+		sb.nbytes += int64(n)
 		if err != nil {
 			return err
 		}
@@ -1058,7 +1058,7 @@ func (l *loggingT) gcOldFiles() {
 		return
 	}
 
-	maxSizePerSeverity := atomic.LoadUint64(&MaxSizePerSeverity)
+	logFilesCombinedMaxSize := atomic.LoadInt64(&LogFilesCombinedMaxSize)
 	files := selectFiles(allFiles, math.MaxInt64)
 	if len(files) == 0 {
 		return
@@ -1068,7 +1068,7 @@ func (l *loggingT) gcOldFiles() {
 	sum := files[0].SizeBytes
 	for _, f := range files[1:] {
 		sum += f.SizeBytes
-		if uint64(sum) < maxSizePerSeverity {
+		if sum < logFilesCombinedMaxSize {
 			continue
 		}
 		path := filepath.Join(dir, f.Name)

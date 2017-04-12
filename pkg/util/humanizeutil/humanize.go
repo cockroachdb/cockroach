@@ -20,6 +20,7 @@ import (
 	"flag"
 	"fmt"
 	"math"
+	"sync/atomic"
 
 	"github.com/dustin/go-humanize"
 	"github.com/spf13/pflag"
@@ -60,6 +61,11 @@ func ParseBytes(s string) (int64, error) {
 // BytesValue is a struct that implements flag.Value and pflag.Value
 // suitable to create command-line parameters that accept sizes
 // specified using a format recognized by humanize.
+// The value is written atomically, so that it is safe to use this
+// struct to make a parameter configurable that is used by an
+// asynchronous process spawned before command-line argument handling.
+// This is useful e.g. for the log file settings which are used
+// by the asynchronous log file GC daemon.
 type BytesValue struct {
 	val   *int64
 	isSet bool
@@ -80,7 +86,7 @@ func (b *BytesValue) Set(s string) error {
 	if err != nil {
 		return err
 	}
-	*b.val = v
+	atomic.StoreInt64(b.val, v)
 	b.isSet = true
 	return nil
 }
@@ -95,5 +101,5 @@ func (b *BytesValue) String() string {
 	// This uses the MiB, GiB, etc suffixes. If we use humanize.Bytes() we get
 	// the MB, GB, etc suffixes, but the conversion is done in multiples of 1000
 	// vs 1024.
-	return IBytes(*b.val)
+	return IBytes(atomic.LoadInt64(b.val))
 }
