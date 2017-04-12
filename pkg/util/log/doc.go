@@ -52,6 +52,8 @@
 //	--log-dir="..."
 //		Log files will be written to this directory instead of the
 //		default target directory.
+//  --log-file-verbosity=LEVEL
+//    Entries with severity below LEVEL are not written to the log file.
 //  --log-file-max-size=N
 //    Log files are rotated after reaching that size.
 //  --log-dir-max-size=N
