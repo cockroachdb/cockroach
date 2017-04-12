@@ -153,10 +153,10 @@ type DistSender struct {
 	gossip  *gossip.Gossip
 	metrics DistSenderMetrics
 	// rangeCache caches replica metadata for key ranges.
-	rangeCache           *rangeDescriptorCache
+	rangeCache           *RangeDescriptorCache
 	rangeLookupMaxRanges int32
 	// leaseHolderCache caches range lease holders by range ID.
-	leaseHolderCache *leaseHolderCache
+	leaseHolderCache *LeaseHolderCache
 	transportFactory TransportFactory
 	rpcContext       *rpc.Context
 	rpcRetryOptions  retry.Options
@@ -222,12 +222,12 @@ func NewDistSender(cfg DistSenderConfig, g *gossip.Gossip) *DistSender {
 	if rdb == nil {
 		rdb = ds
 	}
-	ds.rangeCache = newRangeDescriptorCache(rdb, int(rcSize))
+	ds.rangeCache = NewRangeDescriptorCache(rdb, int(rcSize))
 	lcSize := cfg.LeaseHolderCacheSize
 	if lcSize <= 0 {
 		lcSize = defaultLeaseHolderCacheSize
 	}
-	ds.leaseHolderCache = newLeaseHolderCache(int(lcSize))
+	ds.leaseHolderCache = NewLeaseHolderCache(int(lcSize))
 	if cfg.RangeLookupMaxRanges <= 0 {
 		ds.rangeLookupMaxRanges = defaultRangeLookupMaxRanges
 	}

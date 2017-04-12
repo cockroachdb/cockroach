@@ -82,6 +82,10 @@ func (ri *RangeIterator) LeaseHolder(ctx context.Context) (roachpb.ReplicaDescri
 	if !ri.Valid() {
 		panic(ri.Error())
 	}
+	// TODO(andrei): The leaseHolderCache might have a replica that's not part of
+	// the RangeDescriptor that the iterator is currently positioned on. IOW, the
+	// leaseHolderCache can be inconsistent with the RangerDescriptor cache, and
+	// with reality. We should attempt to fix-up caches when this is encoutered.
 	return ri.ds.leaseHolderCache.Lookup(ctx, ri.Desc().RangeID)
 }
 
