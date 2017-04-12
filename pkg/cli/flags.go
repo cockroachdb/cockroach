@@ -213,6 +213,7 @@ func varFlag(f *pflag.FlagSet, value pflag.Value, flagInfo cliflags.FlagInfo) {
 
 func init() {
 	// Change the logging defaults for the main cockroach binary.
+	// The value is overridden after command-line parsing.
 	if err := flag.Lookup(logflags.LogToStderrName).Value.Set("false"); err != nil {
 		panic(err)
 	}
@@ -248,8 +249,9 @@ func init() {
 	// The --log-dir default changes depending on the command. Avoid confusion by
 	// simply clearing it.
 	pf.Lookup(logflags.LogDirName).DefValue = ""
-	// If no value is specified for --alsologtostderr output everything.
-	pf.Lookup(logflags.AlsoLogToStderrName).NoOptDefVal = "INFO"
+	// If no value is specified for --logtostderr prepare for the
+	// default in `setDefaultStderrVerbosity()`.
+	pf.Lookup(logflags.LogToStderrName).NoOptDefVal = log.Severity_DEFAULT.String()
 
 	// Security flags.
 	baseCfg.Insecure = true
@@ -433,27 +435,22 @@ func extraClientFlagInit() {
 func setDefaultStderrVerbosity(cmd *cobra.Command, defaultSeverity log.Severity) error {
 	pf := cmd.Flags()
 
-	if vf := pf.Lookup(logflags.AlsoLogToStderrName); !vf.Changed {
-		ls := pf.Lookup(logflags.LogToStderrName)
+	vf := pf.Lookup(logflags.LogToStderrName)
 
-		// If `--logtostderr` is specified, the base default is
-		// everything, otherwise it's nothing (subject to the additional
-		// setting below).
-		if ls.Value.String() == "true" {
-			if err := vf.Value.Set(log.Severity_INFO.String()); err != nil {
-				return err
-			}
-		} else {
-			if err := vf.Value.Set(log.Severity_NONE.String()); err != nil {
-				return err
-			}
+	// if `--logtostderr` was not specified but no log directory was
+	// set, then set stderr logging to the level considered default by
+	// the specific command.
+	if !vf.Changed && !log.DirSet() {
+		if err := vf.Value.Set(defaultSeverity.String()); err != nil {
+			return err
 		}
-		// If no log directory has been set, reduce the logging verbosity
-		// to the given default.
-		if !log.DirSet() {
-			if err := vf.Value.Set(defaultSeverity.String()); err != nil {
-				return err
-			}
+	}
+
+	// If `--logtostderr` was specified without explicit verbosity,
+	// set to the level that is considered default by the specific command.
+	if vf.Value.String() == log.Severity_DEFAULT.String() {
+		if err := vf.Value.Set(defaultSeverity.String()); err != nil {
+			return err
 		}
 	}
 

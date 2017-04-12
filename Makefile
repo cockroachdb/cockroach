@@ -34,7 +34,7 @@ STRESSFLAGS  :=
 DUPLFLAGS    := -t 100
 COCKROACH    := ./cockroach
 ARCHIVE      := cockroach.src.tgz
-STARTFLAGS   := -s type=mem,size=1GiB --alsologtostderr
+STARTFLAGS   := -s type=mem,size=1GiB --logtostderr
 BUILDMODE    := install
 BUILDTARGET  := .
 SUFFIX       :=
