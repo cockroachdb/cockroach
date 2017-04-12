@@ -39,14 +39,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
-// MaxSize is the maximum size of a log file in bytes.
-var MaxSize uint64 = 1024 * 1024 * 10
+// LogFileMaxSize is the maximum size of a log file in bytes.
+var LogFileMaxSize int64 = 1024 * 1024 * 10
 
-// MaxSizePerSeverity is the maximum total size in bytes for log files per
-// severity. Note that this is only checked when log files are created, so the
-// total size of log files per severity might temporarily be up to MaxSize
-// larger.
-var MaxSizePerSeverity = MaxSize * 10
+// LogFilesCombinedMaxSize is the maximum total size in bytes for log
+// files. Note that this is only checked when log files are created,
+// so the total size of log files per severity might temporarily be up
+// to LogFileMaxSize larger.
+var LogFilesCombinedMaxSize = LogFileMaxSize * 10
 
 // If non-empty, overrides the choice of directory in which to write logs. See
 // createLogDirs for the full list of possible destinations. Note that the

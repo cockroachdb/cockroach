@@ -20,6 +20,7 @@ import (
 	"flag"
 	"fmt"
 	"math"
+	"sync/atomic"
 
 	"github.com/dustin/go-humanize"
 	"github.com/spf13/pflag"
@@ -80,7 +81,7 @@ func (b *BytesValue) Set(s string) error {
 	if err != nil {
 		return err
 	}
-	*b.val = v
+	atomic.StoreInt64(b.val, v)
 	b.isSet = true
 	return nil
 }
@@ -95,5 +96,5 @@ func (b *BytesValue) String() string {
 	// This uses the MiB, GiB, etc suffixes. If we use humanize.Bytes() we get
 	// the MB, GB, etc suffixes, but the conversion is done in multiples of 1000
 	// vs 1024.
-	return IBytes(*b.val)
+	return IBytes(atomic.LoadInt64(b.val))
 }

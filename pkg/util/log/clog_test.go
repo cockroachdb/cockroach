@@ -468,8 +468,8 @@ func TestRollover(t *testing.T) {
 	logExitFunc = func(e error) {
 		err = e
 	}
-	defer func(previous uint64) { MaxSize = previous }(MaxSize)
-	MaxSize = 2048
+	defer func(previous int64) { LogFileMaxSize = previous }(LogFileMaxSize)
+	LogFileMaxSize = 2048
 
 	Info(context.Background(), "x") // Be sure we have a file.
 	info, ok := logging.file.(*syncBuffer)
@@ -480,7 +480,7 @@ func TestRollover(t *testing.T) {
 		t.Fatalf("info has initial error: %v", err)
 	}
 	fname0 := info.file.Name()
-	Info(context.Background(), strings.Repeat("x", int(MaxSize))) // force a rollover
+	Info(context.Background(), strings.Repeat("x", int(LogFileMaxSize))) // force a rollover
 	if err != nil {
 		t.Fatalf("info has error after big write: %v", err)
 	}
@@ -496,7 +496,7 @@ func TestRollover(t *testing.T) {
 	if fname0 == fname1 {
 		t.Errorf("info.f.Name did not change: %v", fname0)
 	}
-	if info.nbytes >= MaxSize {
+	if info.nbytes >= LogFileMaxSize {
 		t.Errorf("file size was not reset: %d", info.nbytes)
 	}
 }
@@ -510,12 +510,12 @@ func TestGC(t *testing.T) {
 	// Prevent writes to stderr from being sent to log files which would screw up
 	// the expected number of log file calculation below.
 	logging.noStderrRedirect = true
-	defer func(previous uint64) { MaxSize = previous }(MaxSize)
-	MaxSize = 1 // ensure rotation on every log write
-	defer func(previous uint64) {
-		atomic.StoreUint64(&MaxSizePerSeverity, previous)
-	}(MaxSizePerSeverity)
-	atomic.StoreUint64(&MaxSizePerSeverity, 1500)
+	defer func(previous int64) { LogFileMaxSize = previous }(LogFileMaxSize)
+	LogFileMaxSize = 1 // ensure rotation on every log write
+	defer func(previous int64) {
+		atomic.StoreInt64(&LogFilesCombinedMaxSize, previous)
+	}(LogFilesCombinedMaxSize)
+	atomic.StoreInt64(&LogFilesCombinedMaxSize, 1500)
 	const expectedFiles = 2
 
 	// Empirically, each log file is ~650 bytes in size. Create 20 log files per
