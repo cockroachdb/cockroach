@@ -1482,10 +1482,22 @@ func (r *Replica) Send(
 	return br, pErr
 }
 
-func checkBatchRange(store *Store, desc *roachpb.RangeDescriptor, ba roachpb.BatchRequest) error {
-	rspan, err := keys.Range(ba)
-	if err != nil {
-		return err
+// requestCanProceed returns an error if a request (identified by its
+// key span and timestamp) can proceed. It may be called multiple
+// times during the processing of the request (i.e. during both
+// proposal and application for write commands).
+//
+// This is called downstream of raft and therefore should be changed
+// only with extreme care. It also accesses replica state that is not
+// declared in the SpanSet; this is OK because it can never change the
+// evaluation of a batch, only allow or disallow it.
+func (r *Replica) requestCanProceed(rspan roachpb.RSpan, ts hlc.Timestamp) error {
+	r.mu.Lock()
+	desc := r.mu.state.Desc
+	threshold := r.mu.state.GCThreshold
+	r.mu.Unlock()
+	if !threshold.Less(ts) {
+		return errors.Errorf("batch timestamp %v must be after GC threshold %v", ts, threshold)
 	}
 
 	if desc.ContainsKeyRange(rspan.Key, rspan.EndKey) {
@@ -1497,11 +1509,11 @@ func checkBatchRange(store *Store, desc *roachpb.RangeDescriptor, ba roachpb.Bat
 	// Try to suggest the correct range on a key mismatch error where
 	// even the start key of the request went to the wrong range.
 	if !desc.ContainsKey(rspan.Key) {
-		if repl := store.LookupReplica(rspan.Key, nil); repl != nil {
+		if repl := r.store.LookupReplica(rspan.Key, nil); repl != nil {
 			// Only return the correct range descriptor as a hint
 			// if we know the current lease holder for that range, which
 			// indicates that our knowledge is not stale.
-			if lease, _ := repl.getLease(); repl.IsLeaseValid(lease, store.Clock().Now()) {
+			if lease, _ := repl.getLease(); repl.IsLeaseValid(lease, r.store.Clock().Now()) {
 				mismatchErr.SuggestedRange = repl.Desc()
 			}
 		}
@@ -1664,13 +1676,6 @@ func collectSpans(desc roachpb.RangeDescriptor, ba *roachpb.BatchRequest) (*Span
 			return nil, errors.Errorf("unrecognized command %s", inner.Method())
 		}
 	}
-
-	// All commands depend on the RangeLastGCKey and the range descriptor.
-	// TODO(bdarnell): Move this to a special case to avoid the cost of
-	// all the command queue entries (and the stall when a GC or split command
-	// goes through)?
-	spans.Add(SpanReadOnly, roachpb.Span{Key: keys.RangeLastGCKey(ba.Header.RangeID)})
-	spans.Add(SpanReadOnly, roachpb.Span{Key: keys.RangeDescriptorKey(desc.StartKey)})
 
 	// If any command gave us spans that are invalid, bail out early
 	// (before passing them to the command queue, which may panic).
@@ -1933,8 +1938,13 @@ func (r *Replica) executeAdminBatch(
 		return nil, roachpb.NewErrorf("only single-element admin batches allowed")
 	}
 
-	if err := checkBatchRange(r.store, r.Desc(), ba); err != nil {
-		return nil, roachpb.NewErrorWithTxn(err, ba.Txn)
+	rSpan, err := keys.Range(ba)
+	if err != nil {
+		return nil, roachpb.NewError(err)
+	}
+
+	if err := r.requestCanProceed(rSpan, ba.Timestamp); err != nil {
+		return nil, roachpb.NewError(err)
 	}
 
 	args := ba.Requests[0].GetInner()
@@ -2049,6 +2059,15 @@ func (r *Replica) executeReadOnlyBatch(
 	}()
 
 	if err := r.IsDestroyed(); err != nil {
+		return nil, roachpb.NewError(err)
+	}
+
+	rSpan, err := keys.Range(ba)
+	if err != nil {
+		return nil, roachpb.NewError(err)
+	}
+
+	if err := r.requestCanProceed(rSpan, ba.Timestamp); err != nil {
 		return nil, roachpb.NewError(err)
 	}
 
@@ -2399,6 +2418,12 @@ func (r *Replica) evaluateProposal(
 
 	result.Replicated.IsLeaseRequest = ba.IsLeaseRequest()
 	result.Replicated.Timestamp = ba.Timestamp
+	rSpan, err := keys.Range(ba)
+	if err != nil {
+		return nil, roachpb.NewError(err)
+	}
+	result.Replicated.StartKey = rSpan.Key
+	result.Replicated.EndKey = rSpan.EndKey
 
 	if result.WriteBatch == nil {
 		if result.Local.Err == nil {
@@ -2486,6 +2511,22 @@ func (r *Replica) propose(
 	// See #10084.
 	r.raftMu.Lock()
 	defer r.raftMu.Unlock()
+
+	rSpan, err := keys.Range(ba)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	// Must check that the request is in bounds at proposal time in
+	// addition to application time because some evaluation functions
+	// (especially EndTransaction with SplitTrigger) fail (with a
+	// replicaCorruptionError) if called when out of bounds. This is not
+	// synchronized with anything else, but in cases where it matters
+	// the command is also registered in the command queue for the range
+	// descriptor key.
+	if err := r.requestCanProceed(rSpan, ba.Timestamp); err != nil {
+		return nil, nil, err
+	}
 
 	idKey := makeIDKey()
 	proposal, pErr := r.requestToProposal(ctx, idKey, ba, endCmds, spans)
@@ -3487,6 +3528,7 @@ func (r *Replica) processRaftCommand(
 	var isLeaseRequest bool
 	var requestedLease roachpb.Lease
 	var ts hlc.Timestamp
+	var rSpan roachpb.RSpan
 	if raftCmd.ReplicatedEvalResult != nil {
 		isLeaseRequest = raftCmd.ReplicatedEvalResult.IsLeaseRequest
 		if isLeaseRequest {
@@ -3496,6 +3538,10 @@ func (r *Replica) processRaftCommand(
 			requestedLease = *raftCmd.ReplicatedEvalResult.State.Lease
 		}
 		ts = raftCmd.ReplicatedEvalResult.Timestamp
+		rSpan = roachpb.RSpan{
+			Key:    raftCmd.ReplicatedEvalResult.StartKey,
+			EndKey: raftCmd.ReplicatedEvalResult.EndKey,
+		}
 	} else if idKey != "" {
 		isLeaseRequest = raftCmd.BatchRequest.IsLeaseRequest()
 		if isLeaseRequest {
@@ -3506,6 +3552,14 @@ func (r *Replica) processRaftCommand(
 			requestedLease = rl.(*roachpb.RequestLeaseRequest).Lease
 		}
 		ts = raftCmd.BatchRequest.Timestamp
+		var err error
+		rSpan, err = keys.Range(*raftCmd.BatchRequest)
+		if err != nil {
+			// TODO(bdarnell): This should really use forcedErr but I don't
+			// want to do that much refactoring for this code path that will
+			// be deleted soon.
+			log.Fatalf(ctx, "failed to compute range for BatchRequest: %s", err)
+		}
 	}
 
 	r.mu.Lock()
@@ -3627,6 +3681,10 @@ func (r *Replica) processRaftCommand(
 		}
 	}
 	r.mu.Unlock()
+
+	if forcedErr == nil {
+		forcedErr = roachpb.NewError(r.requestCanProceed(rSpan, ts))
+	}
 
 	// applyRaftCommand will return "expected" errors, but may also indicate
 	// replica corruption (as of now, signaled by a replicaCorruptionError).
@@ -4269,14 +4327,6 @@ func evaluateBatch(
 ) (*roachpb.BatchResponse, EvalResult, *roachpb.Error) {
 	br := ba.CreateReply()
 
-	threshold, err := rec.GCThreshold()
-	if err != nil {
-		return nil, EvalResult{}, roachpb.NewError(err)
-	}
-	if !threshold.Less(ba.Timestamp) {
-		return nil, EvalResult{}, roachpb.NewError(fmt.Errorf("batch timestamp %v must be after replica GC threshold %v", ba.Timestamp, threshold))
-	}
-
 	maxKeys := int64(math.MaxInt64)
 	if ba.Header.MaxSpanRequestKeys != 0 {
 		// We have a batch of requests with a limit. We keep track of how many
@@ -4287,14 +4337,6 @@ func evaluateBatch(
 	// Optimize any contiguous sequences of put and conditional put ops.
 	if len(ba.Requests) >= optimizePutThreshold {
 		ba.Requests = optimizePuts(batch, ba.Requests, ba.Header.DistinctSpans)
-	}
-
-	desc, err := rec.Desc()
-	if err != nil {
-		return nil, EvalResult{}, roachpb.NewError(err)
-	}
-	if err := checkBatchRange(rec.Store(), desc, ba); err != nil {
-		return nil, EvalResult{}, roachpb.NewErrorWithTxn(err, ba.Header.Txn)
 	}
 
 	// Create a shallow clone of the transaction. We only modify a few

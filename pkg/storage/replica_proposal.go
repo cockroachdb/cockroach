@@ -17,6 +17,7 @@
 package storage
 
 import (
+	"reflect"
 	"time"
 
 	"golang.org/x/net/context"
@@ -301,7 +302,7 @@ func (p *EvalResult) MergeAndDestroy(q EvalResult) error {
 	}
 	q.Local.updatedTxn = nil
 
-	if (q != EvalResult{}) {
+	if !reflect.DeepEqual(q, EvalResult{}) {
 		log.Fatalf(context.TODO(), "unhandled EvalResult: %s", pretty.Diff(q, EvalResult{}))
 	}
 
@@ -502,6 +503,8 @@ func (r *Replica) handleReplicatedEvalResult(
 	{
 		rResult.IsLeaseRequest = false
 		rResult.Timestamp = hlc.Timestamp{}
+		rResult.StartKey = nil
+		rResult.EndKey = nil
 	}
 
 	if rResult.BlockReads {
@@ -539,7 +542,7 @@ func (r *Replica) handleReplicatedEvalResult(
 
 	// The above are always present, so we assert only if there are
 	// "nontrivial" actions below.
-	shouldAssert = (rResult != storagebase.ReplicatedEvalResult{})
+	shouldAssert = !reflect.DeepEqual(rResult, storagebase.ReplicatedEvalResult{})
 
 	// Process Split or Merge. This needs to happen after stats update because
 	// of the ContainsEstimates hack.
@@ -664,7 +667,7 @@ func (r *Replica) handleReplicatedEvalResult(
 		rResult.RaftLogDelta = nil
 	}
 
-	if (rResult != storagebase.ReplicatedEvalResult{}) {
+	if !reflect.DeepEqual(rResult, storagebase.ReplicatedEvalResult{}) {
 		log.Fatalf(ctx, "unhandled field in ReplicatedEvalResult: %s", pretty.Diff(rResult, storagebase.ReplicatedEvalResult{}))
 	}
 	return shouldAssert
