@@ -256,9 +256,7 @@ The user-specified metadata for secondary indexes include a nonempty
 list of indexed columns, each with an ascending/descending designation,
 and a disjoint list of stored columns. The first list determines how the
 index is sorted, and columns from both lists can be read directly from
-the index. From these lists, CRDB derives a list of so-called extra
-columns, which is the union of the stored columns and the non-indexed
-primary key columns.
+the index.
 
 Users also specify whether a secondary index should be unique. Unique
 secondary indexes constrain the table data not to have two rows where,
@@ -275,8 +273,12 @@ mirroring the primary index encoding:
 2.  The index ID
 3.  Data from where the row intersects the indexed columns
 4.  If the index is non-unique or the row has a NULL in an indexed
-    column, data from where the row intersects the extra columns
-5.  Zero (instead of the column family ID; all secondary KV pairs are
+    column, data from where the row intersects the non-indexed primary
+    key (implicit) columns
+5.  If the index is non-unique or the row has a NULL in an indexed
+    column, and the index uses the old format for stored columns, data
+    from where the row intersects the stored columns
+6.  Zero (instead of the column family ID; all secondary KV pairs are
     sentinels).
 
 Unique indexes relegate the data in extra columns to KV values so that
@@ -289,14 +291,20 @@ simplicity, data in stored columns are also included.
 
 ### Value encoding
 
-While unique indexes store extra columns in the KV value, they do not
-use the encoding described above for primary indexes. Instead, they use
-usual key encoding, concatenate the encoded bytes, and store the result
-as a `BYTES` value. Rows with an indexed NULL have their extra data
-stored in both the KV key and the KV value.
+KV values for secondary indexes have value type `BYTES` and consist of:
 
-Non-unique indexes use a `BYTES` value too, which is empty in the
-absence of composite encoding.
+1.  If the index is unique, data from where the row intersects the
+    non-indexed primary key (implicit) columns, encoded as in the KV key
+2.  If the index is unique, and the index uses the old format for stored
+    columns, data from where the row intersects the stored columns,
+    encoded as in the KV key
+3.  If needed, `TUPLE`-encoded bytes for non-null composite and stored
+    column data (new format).
+
+All of these fields are optional, so the `BYTES` value may be empty.
+Note that, in a unique index, rows with a NULL in an indexed column have
+their implicit column data stored in both the KV key and the KV value.
+(Ditto for stored column data in the old format.)
 
 ### Example dump
 
@@ -325,42 +333,113 @@ Index ID 1 is the primary index.
     /Table/51/1/4/0/1489504989.617188491,0 : 0x247286F30A3505348C0E57EA
     /Table/51/1/5/0/1489504989.617188491,0 : 0xCB0644270A
 
+#### Old STORING format
+
 Index ID 2 is the unique secondary index `i2`.
 
     /Table/51/2/NULL/4/9400.1/0/1489504989.617188491,0 : 0x01CF9BB0038C2BBD011400
-                     ^-------                                      ^-^-^---------
-                     Extra columns                             BYTES 4 9400.1
+                ^--- ^ ^-----                                      ^-^-^---------
+      Indexed column | Stored column                           BYTES 4 9400.1
+                     Implicit column
 
     /Table/51/2/NULL/5/NULL/0/1489504989.617188491,0 : 0xE86B1271038D00
-                     ^-----                                      ^-^-^-
-                     Extra columns                           BYTES 5 NULL
+                ^--- ^ ^---                                      ^-^-^-
+      Indexed column | Stored column                         BYTES 5 NULL
+                     Implicit column
 
     /Table/51/2/"Alice"/0/1489504989.617188491,0 : 0x285AC6F303892C0301016400
-                                                             ^-^-^-----------
-                                                         BYTES 1 10000.5
+                ^------                                      ^-^-^-----------
+         Indexed column                                  BYTES 1 10000.5
 
     /Table/51/2/"Bob"/0/1489504989.617188491,0 : 0x23514F1F038A2C056400
-                                                           ^-^-^-------
-                                                       BYTES 2 2.5E+4
+                ^----                                      ^-^-^-------
+       Indexed column                                  BYTES 2 2.5E+4
 
     /Table/51/2/"Carol"/0/1489504989.617188491,0 : 0xE98BFEE6038B00
-                                                             ^-^-^-
-                                                         BYTES 3 NULL
+                ^------                                      ^-^-^-
+         Indexed column                                  BYTES 3 NULL
 
 Index ID 3 is the non-unique secondary index `i3`.
 
     /Table/51/3/NULL/4/9400.1/0/1489504989.617188491,0 : 0xEEFAED0403
+                ^--- ^ ^-----                                      ^-
+      Indexed column | Stored column                           BYTES
+                     Implicit column
+
     /Table/51/3/NULL/5/NULL/0/1489504989.617188491,0 : 0xBE090D2003
+                ^--- ^ ^---                                      ^-
+      Indexed column | Stored column                         BYTES
+                     Implicit column
+
     /Table/51/3/"Alice"/1/10000.5/0/1489504989.617188491,0 : 0x7B4964C303
+                ^------ ^ ^------                                      ^-
+         Indexed column | Stored column                            BYTES
+                        Implicit column
+
     /Table/51/3/"Bob"/2/2.5E+4/0/1489504989.617188491,0 : 0xDF24708303
+                ^---- ^ ^-----                                      ^-
+       Indexed column | Stored column                           BYTES
+                      Implicit column
+
     /Table/51/3/"Carol"/3/NULL/0/1489504989.617188491,0 : 0x96CA34AD03
+                ^------ ^ ^---                                      ^-
+         Indexed column | Stored column                         BYTES
+                        Implicit column
+
+#### New STORING format
+
+Index ID 2 is the unique secondary index `i2`.
+
+    /Table/51/2/NULL/4/0/1492010940.897101344,0 : 0x7F2009CC038C3505348C0E57EA
+                ^--- ^                                      ^-^-^-------------
+      Indexed column Implicit column                    BYTES 4 9400.10
+
+    /Table/51/2/NULL/5/0/1492010940.897101344,0 : 0x48047B1A038D
+                ^--- ^                                      ^-^-
+      Indexed column Implicit column                    BYTES 5
+
+    /Table/51/2/"Alice"/0/1492010940.897101344,0 : 0x24090BCE03893505348D0F4272
+                ^------                                      ^-^-^-------------
+         Indexed column                                  BYTES 1 10000.50
+
+    /Table/51/2/"Bob"/0/1492010940.897101344,0 : 0x54353EB9038A3505348D2625A0
+                ^----                                      ^-^-^-------------
+       Indexed column                                  BYTES 2 25000.00
+
+    /Table/51/2/"Carol"/0/1492010940.897101344,0 : 0xE731A320038B
+                ^------                                      ^-^-
+         Indexed column                                  BYTES 3
+
+Index ID 3 is the non-unique secondary index `i3`.
+
+    /Table/51/3/NULL/4/0/1492010940.897101344,0 : 0x17C357B0033505348C0E57EA
+                ^--- ^                                      ^-^-------------
+      Indexed column Implicit column                    BYTES 9400.10
+
+    /Table/51/3/NULL/5/0/1492010940.897101344,0 : 0x844708BC03
+                ^--- ^                                      ^-
+      Indexed column Implicit column                    BYTES
+
+    /Table/51/3/"Alice"/1/0/1492010940.897101344,0 : 0x3AD2E728033505348D0F4272
+                ^------ ^                                      ^-^-------------
+         Indexed column Implicit column                    BYTES 10000.50
+
+    /Table/51/3/"Bob"/2/0/1492010940.897101344,0 : 0x7F1225A4033505348D2625A0
+                ^---- ^                                      ^-^-------------
+       Indexed column Implicit column                    BYTES 25000.00
+
+    /Table/51/3/"Carol"/3/0/1492010940.897101344,0 : 0x45C61B8403
+                ^------ ^                                      ^-
+         Indexed column Implicit column                    BYTES
 
 ### Composite encoding
 
-Since secondary indexes use key encoding for all indexed and extra
-columns, every column whose key encoding does not suffice for decoding
-needs to be encoded again. The encoded bytes appear at the end of the
-`BYTES` value (indexed columns followed by extra columns).
+Secondary indexes use key encoding for all indexed columns, implicit
+columns, and stored columns in the old format. Every datum whose key
+encoding does not suffice for decoding (collated strings, floating-point
+and decimal negative zero, decimals with trailing zeros) is encoded
+again, in the same `TUPLE` that contains stored column data in the new
+format.
 
 Example schema and data:
 
@@ -377,19 +456,23 @@ Example schema and data:
 
 Index ID 1 is the primary index.
 
-    /Table/51/1/1/0/1489512229.210163523,0 : 0x6CA87E2B0A2603546564
-    /Table/51/1/2/0/1489512229.210163523,0 : 0xE900EBB50A2603426F62
-    /Table/51/1/3/0/1489512229.210163523,0 : 0xCF8B38950A
+    /Table/51/1/1/0/1492008659.730236666,0 : 0x6CA87E2B0A2603546564
+    /Table/51/1/2/0/1492008659.730236666,0 : 0xE900EBB50A2603426F62
+    /Table/51/1/3/0/1492008659.730236666,0 : 0xCF8B38950A
 
 Index ID 2 is the secondary index `i2`.
 
-    /Table/51/2/NULL/3/0/1489512229.210163523,0 : 0xFE66DB5B0300
-    /Table/51/2/"\x16\x05\x17q\x16\x05\x00\x00\x00 \x00 \x00 \x00\x00\b\x02\x02"/2/0/1489512229.210163523,0 : 0x06A2D3DC0312426F620001
-                ^---------------------------------------------------------------                                          ^-----------
-                Collation key for 'Bob'                                                                                   'Bob'
-    /Table/51/2/"\x18\x16\x16L\x161\x00\x00\x00 \x00 \x00 \x00\x00\b\x02\x02"/1/0/1489512229.210163523,0 : 0xE8B7D5D203125465640001
-                ^------------------------------------------------------------                                          ^-----------
-                Collation key for 'Ted'                                                                                'Ted'
+    /Table/51/2/NULL/3/0/1492008659.730236666,0 : 0xBDAA5DBE03
+                ^---                                        ^-
+                Indexed column                          BYTES
+
+    /Table/51/2/"\x16\x05\x17q\x16\x05\x00\x00\x00 \x00 \x00 \x00\x00\b\x02\x02"/2/0/1492008659.730236666,0 : 0x4A8239F6032603426F62
+                ^---------------------------------------------------------------                                        ^-^---------
+                Indexed column: Collation key for 'Bob'                                                             BYTES 'Bob'
+
+    /Table/51/2/"\x18\x16\x16L\x161\x00\x00\x00 \x00 \x00 \x00\x00\b\x02\x02"/1/0/1492008659.730236666,0 : 0x747DA39A032603546564
+                ^------------------------------------------------------------                                        ^-^---------
+                Indexed column: Collation key for 'Ted'                                                          BYTES 'Ted'
 
 Interleaving
 ------------
