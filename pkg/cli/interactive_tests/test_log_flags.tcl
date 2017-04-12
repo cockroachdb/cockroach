@@ -12,6 +12,24 @@ eexpect ":/# "
 # errors when parsing flags in that context cause the (test) process
 # to exit entirely (it has errorHandling set to ExitOnError).
 
+# Check that log files are created by default in the store directory.
+send "$argv start --store=path=mystore\r"
+eexpect "node starting"
+send "\003"
+eexpect ":/# "
+send "ls mystore/logs\r"
+eexpect "cockroach.log"
+eexpect ":/# "
+
+# Check that an empty `-log-dir` disables file logging.
+send "$argv start --store=path=mystore2 --log-dir=\r"
+eexpect "node starting"
+send "\003"
+eexpect ":/# "
+send "ls mystore2/logs 2>/dev/null | wc -l\r"
+eexpect "0"
+eexpect ":/# "
+
 # Check that leading tildes are properly rejected.
 send "$argv start --log-dir=\~/blah\r"
 eexpect "log directory cannot start with '~'"
