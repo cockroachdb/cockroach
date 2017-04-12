@@ -275,6 +275,23 @@ production usage.`,
 		Description: `Path to the CA key.`,
 	}
 
+	// CACert, Cert, and Key are kept for backwards compatibility in the start command only.
+	// These will be removed soon.
+	CACert = FlagInfo{
+		Name:        "ca-cert",
+		Description: `DEPRECATION WARNING: this will be removed soon, please use --certs-dir`,
+	}
+
+	Cert = FlagInfo{
+		Name:        "cert",
+		Description: `DEPRECATION WARNING: this will be removed soon, please use --certs-dir`,
+	}
+
+	Key = FlagInfo{
+		Name:        "key",
+		Description: `DEPRECATION WARNING: this will be removed soon, please use --certs-dir`,
+	}
+
 	Store = FlagInfo{
 		Name:      "store",
 		Shorthand: "s",
