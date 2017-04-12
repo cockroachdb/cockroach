@@ -82,7 +82,7 @@ func (t *parallelTest) processTestFile(path string, nodeIdx int, db *gosql.DB, c
 		user:    security.RootUser,
 		verbose: testing.Verbose() || log.V(1),
 	}
-	if err := l.processTestFile(path); err != nil {
+	if err := l.processTestFile(path, testClusterConfig{}); err != nil {
 		t.Error(err)
 	}
 }

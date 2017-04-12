@@ -1,4 +1,4 @@
-# LogicTest: default distsql
+# LogicTest: default parallel-stmts distsql
 
 # Demonstrates late restarting of a serializable transaction when its
 # commit timestamp has moved forward.
