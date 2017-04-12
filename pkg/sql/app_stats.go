@@ -53,6 +53,12 @@ var StmtStatsEnable = envutil.EnvOrDefaultBool(
 	"COCKROACH_SQL_STMT_STATS_ENABLE", false,
 )
 
+// SQLSpecifiedTime specify the time that when the sql's consume time
+// exceed，so we can store this sql into the table node_statement_statistics.
+var SQLSpecifiedTime = envutil.EnvOrDefaultFloat(
+	"COCKROACH_SQL_Specified_TIME", 0.1,
+)
+
 func (a *appStats) recordStatement(
 	stmt parser.Statement,
 	distSQLUsed bool,
@@ -62,6 +68,10 @@ func (a *appStats) recordStatement(
 	parseLat, planLat, runLat, svcLat, ovhLat float64,
 ) {
 	if a == nil || !StmtStatsEnable {
+		return
+	}
+
+	if svcLat < SQLSpecifiedTime {
 		return
 	}
 
