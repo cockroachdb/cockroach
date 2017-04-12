@@ -648,6 +648,36 @@ func TestRedirectStderr(t *testing.T) {
 	}
 }
 
+func TestFileSeverityFilter(t *testing.T) {
+	// This test requires that the logs go to files. We must disable
+	// showLogs, if it was specified, for otherwise the Scope() does not
+	// do its job properly.
+	defer func(s bool) { showLogs = s }(showLogs)
+	showLogs = false
+
+	s := Scope(t, "")
+	defer s.Close(t)
+
+	setFlags()
+	logging.fileThreshold = Severity_ERROR
+
+	Infof(context.Background(), "test1")
+	Errorf(context.Background(), "test2")
+
+	Flush()
+
+	contents, err := ioutil.ReadFile(logging.file.(*syncBuffer).file.Name())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(contents), "test2") {
+		t.Fatalf("log does not contain error text\n%s", contents)
+	}
+	if strings.Contains(string(contents), "test1") {
+		t.Fatalf("info text was not filtered out of log\n%s", contents)
+	}
+}
+
 func BenchmarkHeader(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		buf := formatHeader(Severity_INFO, time.Now(), 200, "file.go", 100, nil)

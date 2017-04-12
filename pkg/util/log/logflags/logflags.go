@@ -61,17 +61,18 @@ var _ flag.Value = &atomicBool{}
 
 // LogToStderrName and others are flag names.
 const (
-	LogToStderrName             = "logtostderr"
-	AlsoLogToStderrName         = "alsologtostderr"
-	NoColorName                 = "no-color"
-	VerbosityName               = "verbosity"
-	VModuleName                 = "vmodule"
-	LogBacktraceAtName          = "log-backtrace-at"
-	LogDirName                  = "log-dir"
-	NoRedirectStderrName        = "no-redirect-stderr"
-	ShowLogsName                = "show-logs"
-	LogFileMaxSizeName          = "log-file-max-size"
-	LogFilesCombinedMaxSizeName = "log-dir-max-size"
+	LogToStderrName               = "logtostderr"
+	AlsoLogToStderrName           = "alsologtostderr"
+	NoColorName                   = "no-color"
+	VerbosityName                 = "verbosity"
+	VModuleName                   = "vmodule"
+	LogBacktraceAtName            = "log-backtrace-at"
+	LogDirName                    = "log-dir"
+	NoRedirectStderrName          = "no-redirect-stderr"
+	ShowLogsName                  = "show-logs"
+	LogFileMaxSizeName            = "log-file-max-size"
+	LogFilesCombinedMaxSizeName   = "log-dir-max-size"
+	LogFileVerbosityThresholdName = "log-file-verbosity"
 )
 
 // InitFlags creates logging flags which update the given variables. The passed mutex is
