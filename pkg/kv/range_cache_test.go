@@ -683,7 +683,7 @@ func TestRangeCacheClearOverlapping(t *testing.T) {
 		StartKey: roachpb.RKey("b"),
 		EndKey:   roachpb.RKeyMax,
 	}
-	if err := cache.clearOverlappingCachedRangeDescriptors(context.TODO(), minToBDesc); err != nil {
+	if _, err := cache.clearOverlappingCachedRangeDescriptors(context.TODO(), minToBDesc); err != nil {
 		t.Fatal(err)
 	}
 	cache.rangeCache.cache.Add(rangeCacheKey(mustMeta(roachpb.RKey("b"))), minToBDesc)
@@ -692,7 +692,7 @@ func TestRangeCacheClearOverlapping(t *testing.T) {
 	} else if desc != nil {
 		t.Errorf("descriptor unexpectedly non-nil: %s", desc)
 	}
-	if err := cache.clearOverlappingCachedRangeDescriptors(context.TODO(), bToMaxDesc); err != nil {
+	if _, err := cache.clearOverlappingCachedRangeDescriptors(context.TODO(), bToMaxDesc); err != nil {
 		t.Fatal(err)
 	}
 	cache.rangeCache.cache.Add(rangeCacheKey(mustMeta(roachpb.RKeyMax)), bToMaxDesc)
@@ -703,7 +703,7 @@ func TestRangeCacheClearOverlapping(t *testing.T) {
 	}
 
 	// Add default descriptor back which should remove two split descriptors.
-	if err := cache.clearOverlappingCachedRangeDescriptors(context.TODO(), defDesc); err != nil {
+	if _, err := cache.clearOverlappingCachedRangeDescriptors(context.TODO(), defDesc); err != nil {
 		t.Fatal(err)
 	}
 	cache.rangeCache.cache.Add(rangeCacheKey(keys.RangeMetaKey(roachpb.RKeyMax)), defDesc)
@@ -720,7 +720,7 @@ func TestRangeCacheClearOverlapping(t *testing.T) {
 		StartKey: roachpb.RKey("b"),
 		EndKey:   roachpb.RKey("c"),
 	}
-	if err := cache.clearOverlappingCachedRangeDescriptors(context.TODO(), bToCDesc); err != nil {
+	if _, err := cache.clearOverlappingCachedRangeDescriptors(context.TODO(), bToCDesc); err != nil {
 		t.Fatal(err)
 	}
 	cache.rangeCache.cache.Add(rangeCacheKey(mustMeta(roachpb.RKey("c"))), bToCDesc)
@@ -734,7 +734,7 @@ func TestRangeCacheClearOverlapping(t *testing.T) {
 		StartKey: roachpb.RKey("a"),
 		EndKey:   roachpb.RKey("b"),
 	}
-	if err := cache.clearOverlappingCachedRangeDescriptors(context.TODO(), aToBDesc); err != nil {
+	if _, err := cache.clearOverlappingCachedRangeDescriptors(context.TODO(), aToBDesc); err != nil {
 		t.Fatal(err)
 	}
 	cache.rangeCache.cache.Add(rangeCacheKey(mustMeta(roachpb.RKey("b"))), aToBDesc)
@@ -783,7 +783,7 @@ func TestRangeCacheClearOverlappingMeta(t *testing.T) {
 				t.Fatalf("invocation of clearOverlappingCachedRangeDescriptors panicked: %v", r)
 			}
 		}()
-		if err := cache.clearOverlappingCachedRangeDescriptors(context.TODO(), metaSplitDesc); err != nil {
+		if _, err := cache.clearOverlappingCachedRangeDescriptors(context.TODO(), metaSplitDesc); err != nil {
 			t.Fatal(err)
 		}
 	}()
