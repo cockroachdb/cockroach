@@ -69,9 +69,9 @@ $(PROTOC): goinstall
 
 .PHONY: goinstall
 goinstall: $(BOOTSTRAP_TARGET)
-	go install $(REPO_ROOT)/pkg/cmd/protoc-gen-gogoroach
-	go install $(REPO_ROOT)/vendor/github.com/cockroachdb/c-protobuf/cmd/protoc
-	go install $(REPO_ROOT)/vendor/github.com/grpc-ecosystem/grpc-gateway/protoc-gen-grpc-gateway
+	$(GO_INSTALL) $(REPO_ROOT)/pkg/cmd/protoc-gen-gogoroach
+	$(GO_INSTALL) $(REPO_ROOT)/vendor/github.com/cockroachdb/c-protobuf/cmd/protoc
+	$(GO_INSTALL) $(REPO_ROOT)/vendor/github.com/grpc-ecosystem/grpc-gateway/protoc-gen-grpc-gateway
 
 REPO_NAME := cockroachdb
 IMPORT_PREFIX := github.com/$(REPO_NAME)/
