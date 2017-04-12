@@ -78,7 +78,8 @@ If "ca.crt" contains more than one certificate, the first is used.
 // runCreateNodeCert generates key pair and CA certificate and writes them
 // to their corresponding files.
 // TODO(marc): there is currently no way to specify which CA cert to use if more
-// than one if present.
+// than one is present. We shoult try to load each certificate along with the key
+// and pick the one that works. That way, the key specifies the certificate.
 func runCreateNodeCert(cmd *cobra.Command, args []string) error {
 	return security.CreateNodePair(
 		baseCfg.SSLCertsDir,
