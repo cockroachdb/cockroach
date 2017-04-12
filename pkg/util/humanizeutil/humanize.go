@@ -17,10 +17,12 @@
 package humanizeutil
 
 import (
+	"flag"
 	"fmt"
 	"math"
 
 	"github.com/dustin/go-humanize"
+	"github.com/spf13/pflag"
 )
 
 // IBytes is an int64 version of go-humanize's IBytes.
@@ -53,4 +55,45 @@ func ParseBytes(s string) (int64, error) {
 		return -int64(value), nil
 	}
 	return int64(value), nil
+}
+
+// BytesValue is a struct that implements flag.Value and pflag.Value
+// suitable to create command-line parameters that accept sizes
+// specified using a format recognized by humanize.
+type BytesValue struct {
+	val   *int64
+	isSet bool
+}
+
+var _ flag.Value = &BytesValue{}
+var _ pflag.Value = &BytesValue{}
+
+// NewBytesValue creates a new pflag.Value bound to the specified
+// int64 variable. It also happens to be a flag.Value.
+func NewBytesValue(val *int64) pflag.Value {
+	return &BytesValue{val: val}
+}
+
+// Set implements the flag.Value and pflag.Value interfaces.
+func (b *BytesValue) Set(s string) error {
+	v, err := ParseBytes(s)
+	if err != nil {
+		return err
+	}
+	*b.val = v
+	b.isSet = true
+	return nil
+}
+
+// Type implements the pflag.Value interface.
+func (b *BytesValue) Type() string {
+	return "bytes"
+}
+
+// String implements the flag.Value and pflag.Value interfaces.
+func (b *BytesValue) String() string {
+	// This uses the MiB, GiB, etc suffixes. If we use humanize.Bytes() we get
+	// the MB, GB, etc suffixes, but the conversion is done in multiples of 1000
+	// vs 1024.
+	return IBytes(*b.val)
 }
