@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/interval"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
@@ -44,17 +45,17 @@ func Import(
 	startKey, endKey roachpb.Key,
 	files []roachpb.ImportRequest_File,
 	kr storageccl.KeyRewriter,
-) error {
+) (*roachpb.ImportResponse, error) {
 	var newStartKey, newEndKey roachpb.Key
 	{
 		var ok bool
 		newStartKey, ok = kr.RewriteKey(append([]byte(nil), startKey...))
 		if !ok {
-			return errors.Errorf("could not rewrite key: %s", newStartKey)
+			return &roachpb.ImportResponse{}, errors.Errorf("could not rewrite key: %s", newStartKey)
 		}
 		newEndKey, ok = kr.RewriteKey(append([]byte(nil), endKey...))
 		if !ok {
-			return errors.Errorf("could not rewrite key: %s", newEndKey)
+			return &roachpb.ImportResponse{}, errors.Errorf("could not rewrite key: %s", newEndKey)
 		}
 	}
 
@@ -62,7 +63,7 @@ func Import(
 		log.Infof(ctx, "import [%s,%s) (%d files)", newStartKey, newEndKey, len(files))
 	}
 	if len(files) == 0 {
-		return nil
+		return &roachpb.ImportResponse{}, nil
 	}
 
 	req := &roachpb.ImportRequest{
@@ -77,9 +78,12 @@ func Import(
 		Files:       files,
 		KeyRewrites: kr,
 	}
-	b := &client.Batch{}
-	b.AddRawRequest(req)
-	return db.Run(ctx, b)
+	res, pErr := client.SendWrappedWith(ctx, db.GetSender(), roachpb.Header{}, req)
+	if pErr != nil {
+		return &roachpb.ImportResponse{}, pErr.GoError()
+	}
+
+	return res.(*roachpb.ImportResponse), nil
 }
 
 func loadBackupDescs(ctx context.Context, uris []string) ([]BackupDescriptor, error) {
@@ -587,18 +591,18 @@ func Restore(
 	targets parser.TargetList,
 	opt parser.KVOptions,
 	jobLogger *sql.JobLogger,
-) error {
+) (dataSize int64, err error) {
 
 	db := *p.ExecCfg().DB
 
 	if len(targets.Databases) > 0 {
-		return errors.Errorf("RESTORE DATABASE is not yet supported " +
+		return 0, errors.Errorf("RESTORE DATABASE is not yet supported " +
 			"(but you can use 'RESTORE somedb.*' to restore all backed up tables for a given DB).")
 	}
 
 	backupDescs, err := loadBackupDescs(ctx, uris)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	lastBackupDesc := backupDescs[len(backupDescs)-1]
 
@@ -610,7 +614,7 @@ func Restore(
 		sqlDescs := lastBackupDesc.Descriptors
 		var err error
 		if sqlDescs, err = descriptorsMatchingTargets(sessionDatabase, sqlDescs, targets); err != nil {
-			return err
+			return 0, err
 		}
 		for _, desc := range sqlDescs {
 			if dbDesc := desc.GetDatabase(); dbDesc != nil {
@@ -620,7 +624,7 @@ func Restore(
 			}
 		}
 		if len(tables) == 0 {
-			return errors.Errorf("no tables found: %s", parser.AsString(targets))
+			return 0, errors.Errorf("no tables found: %s", parser.AsString(targets))
 		}
 	}
 
@@ -629,7 +633,7 @@ func Restore(
 	if err := db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		return reassignParentIDs(ctx, txn, p, databasesByID, tables, opt)
 	}); err != nil {
-		return err
+		return 0, err
 	}
 
 	// We get the spans of the restoring tables _as they appear in the backup_,
@@ -646,24 +650,24 @@ func Restore(
 	kr, newTableIDs, err := reassignTableIDs(ctx, db, tables, opt)
 	if err != nil {
 		// We expect user-facing usage errors here, so don't wrapf.
-		return err
+		return 0, err
 	}
 
 	// Pivot the backups, which are grouped by time, into requests for import,
 	// which are grouped by keyrange.
 	importRequests, _, err := makeImportRequests(spans, backupDescs)
 	if err != nil {
-		return errors.Wrapf(err, "making import requests for %d backups", len(backupDescs))
+		return 0, errors.Wrapf(err, "making import requests for %d backups", len(backupDescs))
 	}
 
 	for _, desc := range newTableIDs {
 		jobLogger.Job.DescriptorIDs = append(jobLogger.Job.DescriptorIDs, desc)
 	}
 	if err := jobLogger.Created(ctx); err != nil {
-		return err
+		return 0, err
 	}
 	if err := jobLogger.Started(ctx); err != nil {
-		return err
+		return 0, err
 	}
 
 	progressLogger := jobProgressLogger{
@@ -679,22 +683,31 @@ func Restore(
 		var ok bool
 		splitKeys[i], ok = kr.RewriteKey(append([]byte(nil), r.Key...))
 		if !ok {
-			return errors.Errorf("failed to rewrite key: %s", r.Key)
+			return 0, errors.Errorf("failed to rewrite key: %s", r.Key)
 		}
 	}
 	if err := presplitRanges(ctx, db, splitKeys); err != nil {
-		return errors.Wrapf(err, "presplitting %d ranges", len(importRequests))
+		return 0, errors.Wrapf(err, "presplitting %d ranges", len(importRequests))
 	}
 	// TODO(dan): Wait for the newly created ranges (and leaseholders) to
 	// rebalance.
+
+	mu := struct {
+		syncutil.Mutex
+		dataSize int64
+	}{}
 
 	g, gCtx := errgroup.WithContext(ctx)
 	for i := range importRequests {
 		ir := importRequests[i]
 		g.Go(func() error {
-			if err := Import(gCtx, db, ir.Key, ir.EndKey, ir.files, kr); err != nil {
+			res, err := Import(gCtx, db, ir.Key, ir.EndKey, ir.files, kr)
+			if err != nil {
 				return err
 			}
+			mu.Lock()
+			mu.dataSize += res.DataSize
+			mu.Unlock()
 			if err := progressLogger.chunkFinished(gCtx); err != nil {
 				// Errors while updating progress are not important enough to merit
 				// failing the entire restore.
@@ -709,21 +722,21 @@ func Restore(
 		// This leaves the data that did get imported in case the user wants to
 		// retry.
 		// TODO(dan): Build tooling to allow a user to restart a failed restore.
-		return errors.Wrapf(err, "importing %d ranges", len(importRequests))
+		return 0, errors.Wrapf(err, "importing %d ranges", len(importRequests))
 	}
 
 	// Write the new TableDescriptors and flip the namespace entries over to
 	// them. After this call, any queries on a table will be served by the newly
 	// restored data.
 	if err := restoreTableDescs(ctx, db, tables); err != nil {
-		return errors.Wrapf(err, "restoring %d TableDescriptors", len(tables))
+		return 0, errors.Wrapf(err, "restoring %d TableDescriptors", len(tables))
 	}
 
 	// TODO(dan): Delete any old table data here. The first version of restore
 	// assumes that it's operating on a new cluster. If it's not empty,
 	// everything works but the table data is left abandoned.
 
-	return nil
+	return mu.dataSize, nil
 }
 
 func restorePlanHook(
@@ -746,6 +759,12 @@ func restorePlanHook(
 		return nil, nil, err
 	}
 
+	header := sql.ResultColumns{
+		{Name: "job_id", Typ: parser.TypeInt},
+		{Name: "status", Typ: parser.TypeString},
+		{Name: "fraction_completed", Typ: parser.TypeFloat},
+		{Name: "bytes", Typ: parser.TypeInt},
+	}
 	fn := func() ([]parser.Datums, error) {
 		// TODO(dan): Move this span into sql.
 		ctx, span := tracing.ChildSpan(baseCtx, stmt.StatementTag())
@@ -761,7 +780,7 @@ func restorePlanHook(
 			Username:    p.User(),
 			Details:     sql.RestoreJobDetails{},
 		})
-		err = Restore(
+		dataSize, err := Restore(
 			ctx,
 			p,
 			from,
@@ -779,9 +798,17 @@ func restorePlanHook(
 			log.Errorf(ctx, "RESTORE ignoring error while marking job %d (%s) as successful: %+v",
 				jobLogger.JobID(), description, err)
 		}
-		return nil, nil
+		// TODO(benesch): emit periodic progress updates once we have the
+		// infrastructure to stream responses.
+		ret := []parser.Datums{{
+			parser.NewDInt(parser.DInt(*jobLogger.JobID())),
+			parser.NewDString(string(sql.JobStatusSucceeded)),
+			parser.NewDFloat(parser.DFloat(1.0)),
+			parser.NewDInt(parser.DInt(dataSize)),
+		}}
+		return ret, nil
 	}
-	return fn, nil, nil
+	return fn, header, nil
 }
 
 func init() {

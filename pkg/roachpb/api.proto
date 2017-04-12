@@ -828,6 +828,7 @@ message ImportRequest {
 // ImportResponse is the response to a Import() operation.
 message ImportResponse {
   optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  optional int64 data_size = 3 [(gogoproto.nullable) = false];
 }
 
 // A RequestUnion contains exactly one of the optional requests.
