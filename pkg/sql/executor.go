@@ -51,7 +51,6 @@ import (
 )
 
 var errNoTransactionInProgress = errors.New("there is no transaction in progress")
-var errNoTransactionToPipeline = errors.New("statement pipelining is only allowed in a transaction")
 var errStaleMetadata = errors.New("metadata is still stale")
 var errTransactionInProgress = errors.New("there is already a transaction in progress")
 var errStmtFollowsSchemaChange = errors.New("statement cannot follow a schema change in a transaction")
@@ -1139,9 +1138,6 @@ func (e *Executor) execStmtInOpenTxn(
 	// execution. If neither of these cases are true, we need to synchronize
 	// the pipeline by letting it drain before we can begin executing ourselves.
 	pipelined := IsStmtPipelined(stmt)
-	if pipelined && implicitTxn {
-		return Result{}, errNoTransactionToPipeline
-	}
 	_, independentFromPipelined := stmt.(parser.IndependentFromPipelinedPriors)
 	if !(pipelined || independentFromPipelined) {
 		if err := session.pipelineQueue.Wait(); err != nil {
@@ -1230,11 +1226,16 @@ func (e *Executor) execStmtInOpenTxn(
 	planner.phaseTimes[plannerStartExecStmt] = timeutil.Now()
 
 	var result Result
-	if pipelined {
+	if pipelined && !implicitTxn {
+		// Only run statements asynchronously through the pipeline queue if the
+		// statements are pipelined and we're in a transaction. Pipelined statements
+		// outside of a transaction are run synchronously with mocked results, which
+		// has the same effect as running asynchronously but immediately blocking.
 		result, err = e.execStmtPipelined(stmt, planner)
 	} else {
 		autoCommit := implicitTxn && !e.cfg.TestingKnobs.DisableAutoCommit
-		result, err = e.execStmt(stmt, planner, autoCommit, automaticRetryCount)
+		result, err = e.execStmt(stmt, planner, autoCommit,
+			automaticRetryCount, pipelined /* mockResults */)
 	}
 
 	if err != nil {
@@ -1451,8 +1452,14 @@ func makeRes(stmt parser.Statement, planner *planner, plan planNode) (Result, er
 }
 
 // execStmt executes the statement synchronously and returns the statement's result.
+// If mockResults is set, these results will be replaced by the "zero value" of the
+// statement's result type, identical to the mock results returned by execStmtPipelined.
 func (e *Executor) execStmt(
-	stmt parser.Statement, planner *planner, autoCommit bool, automaticRetryCount int,
+	stmt parser.Statement,
+	planner *planner,
+	autoCommit bool,
+	automaticRetryCount int,
+	mockResults bool,
 ) (Result, error) {
 	session := planner.session
 
@@ -1486,10 +1493,14 @@ func (e *Executor) execStmt(
 	e.recordStatementSummary(
 		planner, stmt, useDistSQL, automaticRetryCount, result, err,
 	)
-
 	if err != nil {
 		result.Close(session.Ctx())
 		return Result{}, err
+	}
+
+	if mockResults {
+		result.Close(session.Ctx())
+		return makeRes(stmt, planner, plan)
 	}
 	return result, nil
 }

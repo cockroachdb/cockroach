@@ -6,19 +6,46 @@ CREATE TABLE kv (
   v INT CHECK (v < 100)
 )
 
-# Pipelining cannot be used outside of a transaction
+statement ok
+CREATE TABLE fk (
+  f INT REFERENCES kv
+)
 
-statement error statement pipelining is only allowed in a transaction
+
+# Pipelining can be used outside of a transaction, but synchronizes immediately
+
+statement ok
 INSERT INTO kv VALUES (1, 2) RETURNING NOTHING
 
-statement error statement pipelining is only allowed in a transaction
-UPSERT INTO kv VALUES (1, 2) RETURNING NOTHING
+statement error duplicate key value \(k\)=\(1\) violates unique constraint "primary"
+INSERT INTO kv VALUES (1, 2) RETURNING NOTHING
 
-statement error statement pipelining is only allowed in a transaction
-UPDATE kv SET v = k WHERE k =3 RETURNING NOTHING
+statement ok
+UPSERT INTO kv VALUES (2, 2) RETURNING NOTHING
 
-statement error statement pipelining is only allowed in a transaction
+statement error failed to satisfy CHECK constraint \(v < 100\)
+UPSERT INTO kv VALUES (2, 500) RETURNING NOTHING
+
+statement ok
+UPDATE kv SET v = k WHERE k = 3 RETURNING NOTHING
+
+statement error duplicate key value \(k\)=\(1\) violates unique constraint "primary"
+UPDATE kv SET k = 1 WHERE k = 2 RETURNING NOTHING
+
+statement ok
 DELETE FROM kv WHERE k = 1 RETURNING NOTHING
+
+statement ok
+INSERT INTO fk VALUES (2)
+
+statement error foreign key violation: values \[2\] in columns \[k\] referenced in table \"fk\"
+DELETE FROM kv WHERE k = 2 RETURNING NOTHING
+
+statement ok
+DELETE FROM fk
+
+statement ok
+DELETE FROM kv
 
 
 # Successfully perform pipelined inserts
@@ -206,12 +233,6 @@ SELECT k, v FROM kv ORDER BY k
 
 # Unsuccessfully perform pipelined deletes
 
-# Temporary table with FK to reference kv
-statement ok
-CREATE TABLE fk (
-  f INT REFERENCES kv
-)
-
 statement ok
 INSERT INTO fk VALUES (2)
 
@@ -241,7 +262,7 @@ SELECT k, v FROM kv ORDER BY k
 4  8
 
 statement ok
-DROP TABLE fk
+DELETE FROM fk
 
 
 # Successfully perform mixed mutations
