@@ -392,6 +392,7 @@ func runStart(cmd *cobra.Command, args []string) error {
 	initMemProfile(startCtx, outputDirectory)
 	initCPUProfile(startCtx, outputDirectory)
 	initBlockProfile()
+	log.StartGCDaemon()
 
 	// Default user for servers.
 	serverCfg.User = security.NodeUser
