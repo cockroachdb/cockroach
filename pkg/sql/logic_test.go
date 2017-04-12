@@ -582,8 +582,6 @@ func (t *logicTest) setUser(user string) func() {
 	t.db = db
 	t.user = user
 
-	t.outf("--- new user: %s", user)
-
 	return cleanupFunc
 }
 
@@ -701,10 +699,10 @@ func (t *logicTest) processTestFile(path string) error {
 	defer file.Close()
 	defer t.traceStop()
 
-	if t.verbose {
+	if *showSQL {
 		t.outf("--- queries start here")
-		defer t.printCompletion(path)
 	}
+	defer t.printCompletion(path)
 
 	t.lastProgress = timeutil.Now()
 
