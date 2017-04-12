@@ -434,7 +434,7 @@ func (ds *MockDistSQLServer) RunSyncFlow(stream DistSQL_RunSyncFlowServer) error
 // SetupFlow is part of the DistSQLServer interface.
 func (ds *MockDistSQLServer) SetupFlow(
 	_ context.Context, req *SetupFlowRequest,
-) (*SimpleResponse, error) {
+) (*SetupFlowResponse, error) {
 	return nil, nil
 }
 

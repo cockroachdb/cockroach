@@ -1,5 +1,4 @@
-// Copyright 2016 The Cockroach Authors.
-//
+// Copyright 2016 The Cockroach Authors.  //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -214,18 +213,21 @@ func (ds *ServerImpl) RunSyncFlow(stream DistSQL_RunSyncFlowServer) error {
 }
 
 // SetupFlow is part of the DistSQLServer interface.
-func (ds *ServerImpl) SetupFlow(_ context.Context, req *SetupFlowRequest) (*SimpleResponse, error) {
+func (ds *ServerImpl) SetupFlow(
+	_ context.Context, req *SetupFlowRequest,
+) (*SetupFlowResponse, error) {
 	// Note: the passed context will be canceled when this RPC completes, so we
 	// can't associate it with the flow.
 	ctx := ds.AnnotateCtx(context.TODO())
 	ctx, f, err := ds.setupFlow(ctx, req, nil)
-	if err == nil {
-		err = ds.flowScheduler.ScheduleFlow(ctx, f)
-	}
 	if err != nil {
-		return &SimpleResponse{Error: NewError(err)}, nil
+		return nil, err
 	}
-	return &SimpleResponse{}, nil
+	err = ds.flowScheduler.ScheduleFlow(ctx, f)
+	if err != nil {
+		return nil, err
+	}
+	return &SetupFlowResponse{}, nil
 }
 
 func (ds *ServerImpl) flowStreamInt(ctx context.Context, stream DistSQL_FlowStreamServer) error {

@@ -197,19 +197,13 @@ func TestClusterFlow(t *testing.T) {
 	}
 
 	log.Infof(ctx, "Setting up flow on 0")
-	if resp, err := clients[0].SetupFlow(ctx, req1); err != nil {
+	if _, err := clients[0].SetupFlow(ctx, req1); err != nil {
 		t.Fatal(err)
-	} else if resp.Error != nil {
-		t.Fatal(resp.Error)
 	}
-
 	log.Infof(ctx, "Setting up flow on 1")
-	if resp, err := clients[1].SetupFlow(ctx, req2); err != nil {
+	if _, err := clients[1].SetupFlow(ctx, req2); err != nil {
 		t.Fatal(err)
-	} else if resp.Error != nil {
-		t.Fatal(resp.Error)
 	}
-
 	log.Infof(ctx, "Running flow on 2")
 	stream, err := clients[2].RunSyncFlow(ctx)
 	if err != nil {

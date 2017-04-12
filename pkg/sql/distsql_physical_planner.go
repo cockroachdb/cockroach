@@ -1534,10 +1534,8 @@ func (dsp *distSQLPlanner) Run(
 		// TODO(radu): we are not waiting for the flows to complete, but we are
 		// still waiting for a round trip; we should start the flows in parallel, at
 		// least if there are enough of them.
-		if resp, err := client.SetupFlow(context.Background(), &req); err != nil {
+		if _, err := client.SetupFlow(context.Background(), &req); err != nil {
 			return err
-		} else if resp.Error != nil {
-			return resp.Error.ErrorDetail()
 		}
 	}
 	localReq := distsqlrun.SetupFlowRequest{

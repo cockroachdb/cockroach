@@ -38,10 +38,6 @@ message SetupFlowRequest {
   optional FlowSpec flow = 3 [(gogoproto.nullable) = false];
 }
 
-message SimpleResponse {
-  optional Error error = 1;
-}
-
 message ConsumerSignal {
   option (gogoproto.onlyone) = true;
 
@@ -58,6 +54,10 @@ message ConsumerSignal {
 message DrainRequest {
 }
 
+message SetupFlowResponse {
+}
+
+
 service DistSQL {
   // RunSyncFlow instantiates a flow and streams back results of that flow.
   // The request must contain one flow, and that flow must have a single mailbox
@@ -66,7 +66,7 @@ service DistSQL {
 
   // SetupFlow instantiates a flow (subgraphs of a distributed SQL
   // computation) on the receiving node.
-  rpc SetupFlow(SetupFlowRequest) returns (SimpleResponse) {}
+  rpc SetupFlow(SetupFlowRequest) returns (SetupFlowResponse) {}
 
   // FlowStream is used to push a stream of messages that is part of a flow. The
   // first message will have a StreamHeader which identifies the flow and the
