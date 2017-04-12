@@ -20,8 +20,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 )
 
-func TestCache(t *testing.T) {
-	defaultsBefore := registry
+
+func init() {
 	registry = map[string]value{
 		"bool.t":  {typ: BoolValue, b: true},
 		"bool.f":  {typ: BoolValue},
@@ -31,18 +31,8 @@ func TestCache(t *testing.T) {
 		"i.2":     {typ: IntValue, i: 5},
 		"f":       {typ: FloatValue, f: 5.4},
 	}
-	cache.Lock()
-	before := cache.values
-	cache.values = nil
-	cache.Unlock()
 
-	defer func() {
-		registry = defaultsBefore
-		cache.Lock()
-		cache.values = before
-		cache.Unlock()
-	}()
-
+func TestCache(t *testing.T) {
 	t.Run("defaults", func(t *testing.T) {
 		if expected, actual := false, getBool("bool.f"); expected != actual {
 			t.Fatalf("expected %v, got %v", expected, actual)
