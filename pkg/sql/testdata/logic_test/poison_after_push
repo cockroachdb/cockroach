@@ -1,4 +1,4 @@
-# LogicTest: default distsql
+# LogicTest: default parallel-stmts distsql
 
 # This example session documents that a SERIALIZABLE transaction is
 # not immediately poisoned when it revisits a Range on which one of

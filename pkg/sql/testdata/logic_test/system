@@ -1,4 +1,4 @@
-# LogicTest: default distsql
+# LogicTest: default parallel-stmts distsql
 
 query T
 SHOW DATABASES
