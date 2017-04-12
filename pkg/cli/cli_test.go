@@ -1155,6 +1155,7 @@ Flags:
       --log-dir string                    if non-empty, write log files in this directory
       --log-dir-max-size bytes            maximum combined size of all log files (default 100 MiB)
       --log-file-max-size bytes           maximum size of each log file (default 10 MiB)
+      --log-file-verbosity Severity       minimum verbosity of messages written to the log file (default INFO)
       --logtostderr                       log to standard error instead of files
       --no-color                          disable standard error log colorization
 
