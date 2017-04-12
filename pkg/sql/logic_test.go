@@ -55,6 +55,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/lib/pq"
 )
@@ -648,7 +649,7 @@ SET DATABASE = test;
 //   # LogicTest: default distsql
 //
 // If the file doesn't contain a directive, the default config is returned.
-func (t *logicTest) readTestFileConfigs(path string) []logicTestConfigIdx {
+func readTestFileConfigs(t *testing.T, path string) []logicTestConfigIdx {
 	file, err := os.Open(path)
 	if err != nil {
 		t.Fatal(err)
@@ -1314,11 +1315,19 @@ func (t *logicTest) setupAndRunFile(path string, config testClusterConfig) {
 	t.logScope.KeepLogs(false)
 }
 
-// run runs the logic tests indicated by the bigtest and logictestdata flags.
-// A new cluster is set up for each separate file in the test.
-// This function must be called from within the testing.T associated with the
-// logicTest.
-func (t *logicTest) run() {
+func TestLogic(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	// Needed for settings logic tests.
+	_, _, cleanup := settings.TestingAddTestVars()
+	defer cleanup()
+
+	if testutils.Stress() {
+		t.Skip()
+	}
+
+	// run the logic tests indicated by the bigtest and logictestdata flags.
+	// A new cluster is set up for each separate file in the test.
 	var globs []string
 	if *bigtest {
 		logicTestPath := build.Default.GOPATH + "/src/github.com/cockroachdb/sqllogictest"
@@ -1376,45 +1385,58 @@ func (t *logicTest) run() {
 	// regardless of what the environment / config says.
 	sql.StmtStatsEnable = true
 
+	var mu syncutil.Mutex
 	total := 0
 	totalFail := 0
 	totalUnsupported := 0
 	lastProgress := timeutil.Now()
-	if *printErrorSummary {
-		defer t.printErrorSummary()
-	}
-	topLevelTest := t.t
 
 	// Read the configuration directives from all the files and accumulate a list
 	// of paths per config.
 	configPaths := make([][]string, len(logicTestConfigs))
 
 	for _, path := range paths {
-		for _, idx := range t.readTestFileConfigs(path) {
+		for _, idx := range readTestFileConfigs(t, path) {
 			configPaths[idx] = append(configPaths[idx], path)
 		}
 	}
 
+	verbose := testing.Verbose() || log.V(1)
 	for idx, cfg := range logicTestConfigs {
 		paths := configPaths[idx]
 		if len(paths) == 0 {
 			continue
 		}
-		topLevelTest.Run(cfg.name, func(tst *testing.T) {
+		// Top-level test: one per test configuration.
+		t.Run(cfg.name, func(t *testing.T) {
 			for _, path := range paths {
-				tst.Run(filepath.Base(path), func(tst *testing.T) {
-					// Rebind t.t for the duration of this test, since the framework will
-					// pass us a different testing.T than what we started with. Same below.
-					t.t = tst
-					t.setupAndRunFile(path, cfg)
+				path := path // Rebind range variable.
+				// Inner test: one per file path.
+				t.Run(filepath.Base(path), func(tst *testing.T) {
+					if !*showSQL {
+						// If we're not printing out all of the SQL interactions, run the
+						// tests in parallel.
+						tst.Parallel()
+					}
+					lt := logicTest{
+						t:               tst,
+						verbose:         verbose,
+						perErrorSummary: make(map[string][]string),
+					}
+					if *printErrorSummary {
+						defer lt.printErrorSummary()
+					}
+					lt.setupAndRunFile(path, cfg)
 
-					total += t.progress
-					totalFail += t.failures
-					totalUnsupported += t.unsupported
+					mu.Lock()
+					defer mu.Unlock()
 					now := timeutil.Now()
+					total += lt.progress
+					totalFail += lt.failures
+					totalUnsupported += lt.unsupported
 					if now.Sub(lastProgress) >= 2*time.Second {
 						lastProgress = now
-						t.outf("--- total progress: %d statements/queries", total)
+						lt.outf("--- total progress: %d statements/queries", total)
 					}
 				})
 			}
@@ -1426,26 +1448,9 @@ func (t *logicTest) run() {
 		unsupportedMsg = fmt.Sprintf(", ignored %d unsupported queries", totalUnsupported)
 	}
 
-	t.outf("--- total: %d tests, %d failures%s", total, totalFail, unsupportedMsg)
-}
-
-func TestLogic(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	// Needed for settings logic tests.
-	_, _, cleanup := settings.TestingAddTestVars()
-	defer cleanup()
-
-	if testutils.Stress() {
-		t.Skip()
+	if verbose {
+		fmt.Printf("--- total: %d tests, %d failures%s\n", total, totalFail, unsupportedMsg)
 	}
-
-	l := &logicTest{
-		t:               t,
-		verbose:         testing.Verbose() || log.V(1),
-		perErrorSummary: make(map[string][]string),
-	}
-	l.run()
 }
 
 type errorSummaryEntry struct {
