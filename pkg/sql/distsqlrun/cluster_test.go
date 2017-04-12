@@ -104,7 +104,7 @@ func TestClusterFlow(t *testing.T) {
 
 	fid := FlowID{uuid.MakeV4()}
 
-	req1 := &SetupFlowRequest{}
+	req1 := &SetupFlowRequest{Version: Version}
 	req1.Flow = FlowSpec{
 		FlowID: fid,
 		Processors: []ProcessorSpec{{
@@ -121,7 +121,7 @@ func TestClusterFlow(t *testing.T) {
 		}},
 	}
 
-	req2 := &SetupFlowRequest{}
+	req2 := &SetupFlowRequest{Version: Version}
 	req2.Flow = FlowSpec{
 		FlowID: fid,
 		Processors: []ProcessorSpec{{
@@ -138,7 +138,7 @@ func TestClusterFlow(t *testing.T) {
 		}},
 	}
 
-	req3 := &SetupFlowRequest{}
+	req3 := &SetupFlowRequest{Version: Version}
 	req3.Flow = FlowSpec{
 		FlowID: fid,
 		Processors: []ProcessorSpec{

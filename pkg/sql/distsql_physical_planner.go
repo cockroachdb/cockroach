@@ -1519,8 +1519,9 @@ func (dsp *distSQLPlanner) Run(
 			continue
 		}
 		req := distsqlrun.SetupFlowRequest{
-			Txn:  *txn.Proto(),
-			Flow: flowSpec,
+			Version: distsqlrun.Version,
+			Txn:     *txn.Proto(),
+			Flow:    flowSpec,
 		}
 		if err := distsqlrun.SetFlowRequestTrace(ctx, &req); err != nil {
 			return err
@@ -1540,8 +1541,9 @@ func (dsp *distSQLPlanner) Run(
 		}
 	}
 	localReq := distsqlrun.SetupFlowRequest{
-		Txn:  *txn.Proto(),
-		Flow: flows[thisNodeID],
+		Version: distsqlrun.Version,
+		Txn:     *txn.Proto(),
+		Flow:    flows[thisNodeID],
 	}
 	if err := distsqlrun.SetFlowRequestTrace(ctx, &localReq); err != nil {
 		return err
