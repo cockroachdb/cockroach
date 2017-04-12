@@ -66,8 +66,6 @@ func InitCLIDefaults() {
 	dumpCtx.dumpMode = dumpBoth
 }
 
-var sqlSize *bytesValue
-var cacheSize *bytesValue
 var insecure *insecureValue
 
 const usageIndentation = 8
@@ -123,36 +121,6 @@ func makeUsageString(flagInfo cliflags.FlagInfo) string {
 	// the correct indentation (7 spaces) here. This is admittedly fragile.
 	return text.Indent(s, strings.Repeat(" ", usageIndentation)) +
 		strings.Repeat(" ", usageIndentation-1)
-}
-
-type bytesValue struct {
-	val   *int64
-	isSet bool
-}
-
-func newBytesValue(val *int64) *bytesValue {
-	return &bytesValue{val: val}
-}
-
-func (b *bytesValue) Set(s string) error {
-	v, err := humanizeutil.ParseBytes(s)
-	if err != nil {
-		return err
-	}
-	*b.val = v
-	b.isSet = true
-	return nil
-}
-
-func (b *bytesValue) Type() string {
-	return "bytes"
-}
-
-func (b *bytesValue) String() string {
-	// This uses the MiB, GiB, etc suffixes. If we use humanize.Bytes() we get
-	// the MB, GB, etc suffixes, but the conversion is done in multiples of 1000
-	// vs 1024.
-	return humanizeutil.IBytes(*b.val)
 }
 
 type insecureValue struct {
@@ -326,10 +294,10 @@ func init() {
 
 		// Engine flags.
 		setDefaultSizeParameters(&serverCfg)
-		cacheSize = newBytesValue(&serverCfg.CacheSize)
+		cacheSize := humanizeutil.NewBytesValue(&serverCfg.CacheSize)
 		varFlag(f, cacheSize, cliflags.Cache)
 
-		sqlSize = newBytesValue(&serverCfg.SQLMemoryPoolSize)
+		sqlSize := humanizeutil.NewBytesValue(&serverCfg.SQLMemoryPoolSize)
 		varFlag(f, sqlSize, cliflags.SQLMem)
 	}
 
