@@ -564,6 +564,12 @@ func init() {
 	logging.gcNotify = make(chan struct{}, 1)
 
 	go logging.flushDaemon()
+}
+
+// StartGCDaemon starts the log file GC -- this must be called after
+// command-line parsing has completed so that no data is lost when the
+// user configures larger max sizes than the defaults.
+func StartGCDaemon() {
 	go logging.gcDaemon()
 }
 
