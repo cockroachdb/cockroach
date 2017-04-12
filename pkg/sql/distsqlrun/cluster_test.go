@@ -237,8 +237,9 @@ func TestClusterFlow(t *testing.T) {
 		}
 		rows, metas = testGetDecodedRows(t, &decoder, rows, metas)
 	}
+	metas = ignoreMisplannedRanges(metas)
 	if len(metas) != 0 {
-		t.Fatalf("unexpected metadata (%d): %v", len(metas), metas)
+		t.Fatalf("unexpected metadata (%d): %+v", len(metas), metas)
 	}
 	// The result should be all the numbers in string form, ordered by the
 	// digit sum (and then by number).
@@ -255,4 +256,16 @@ func TestClusterFlow(t *testing.T) {
 	if rowStr := rows.String(); rowStr != expected {
 		t.Errorf("Result: %s\n Expected: %s\n", rowStr, expected)
 	}
+}
+
+// ignoreMisplannedRanges takes a slice of metadata and returns the entries that
+// are not about range info from mis-planned ranges.
+func ignoreMisplannedRanges(metas []ProducerMetadata) []ProducerMetadata {
+	res := make([]ProducerMetadata, 0)
+	for _, m := range metas {
+		if len(m.Ranges) == 0 {
+			res = append(res, m)
+		}
+	}
+	return res
 }
