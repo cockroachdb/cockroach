@@ -25,17 +25,17 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
-// A leaseHolderCache is a cache of replica descriptors keyed by range ID.
-type leaseHolderCache struct {
+// A LeaseHolderCache is a cache of replica descriptors keyed by range ID.
+type LeaseHolderCache struct {
 	mu    syncutil.Mutex
 	cache *cache.UnorderedCache
 }
 
-// newLeaseHolderCache creates a new leaseHolderCache of the given size.
+// NewLeaseHolderCache creates a new leaseHolderCache of the given size.
 // The underlying cache internally uses a hash map, so lookups
 // are cheap.
-func newLeaseHolderCache(size int) *leaseHolderCache {
-	return &leaseHolderCache{
+func NewLeaseHolderCache(size int) *LeaseHolderCache {
+	return &LeaseHolderCache{
 		cache: cache.NewUnorderedCache(cache.Config{
 			Policy: cache.CacheLRU,
 			ShouldEvict: func(s int, key, value interface{}) bool {
@@ -46,7 +46,7 @@ func newLeaseHolderCache(size int) *leaseHolderCache {
 }
 
 // Lookup returns the cached leader of the given range ID.
-func (lc *leaseHolderCache) Lookup(
+func (lc *LeaseHolderCache) Lookup(
 	ctx context.Context, rangeID roachpb.RangeID,
 ) (roachpb.ReplicaDescriptor, bool) {
 	lc.mu.Lock()
@@ -66,7 +66,7 @@ func (lc *leaseHolderCache) Lookup(
 // Update invalidates the cached leader for the given range ID. If an empty
 // replica descriptor is passed, the cached leader is evicted. Otherwise, the
 // passed-in replica descriptor is cached.
-func (lc *leaseHolderCache) Update(
+func (lc *LeaseHolderCache) Update(
 	ctx context.Context, rangeID roachpb.RangeID, repDesc roachpb.ReplicaDescriptor,
 ) {
 	lc.mu.Lock()
