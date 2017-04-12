@@ -53,6 +53,12 @@ var StmtStatsEnable = envutil.EnvOrDefaultBool(
 	"COCKROACH_SQL_STMT_STATS_ENABLE", false,
 )
 
+// SQLStatiCollectionLatencyThreshold specifies the minimum amount of time
+// consumed by a SQL statement before it is collected for statistics reporting.
+var SQLStatsCollectionLatencyThreshold = envutil.EnvOrDefaultFloat(
+	"COCKROACH_SQL_STATS_SVCLAT_THRESHOLD", 0,
+)
+
 func (a *appStats) recordStatement(
 	stmt parser.Statement,
 	distSQLUsed bool,
@@ -62,6 +68,10 @@ func (a *appStats) recordStatement(
 	parseLat, planLat, runLat, svcLat, ovhLat float64,
 ) {
 	if a == nil || !StmtStatsEnable {
+		return
+	}
+
+	if svcLat < SQLStatsCollectionLatencyThreshold {
 		return
 	}
 
