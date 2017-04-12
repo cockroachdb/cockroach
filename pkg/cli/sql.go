@@ -868,17 +868,29 @@ func (c *cliState) doCheckStatement(startState, contState, execState cliStateEnu
 		return execState
 	}
 
+	var lastInputChunk bytes.Buffer
 	if c.normalizeHistory {
 		// Add statements, not lines, to the history.
+		// The last input chunk is one unit of input by the user, so
+		// we want the user to be able to recall it all at once
+		// (= one history entry)
 		for i := c.partialStmtsLen; i < len(parsedStmts); i++ {
-			c.addHistory(parser.AsStringWithFlags(parsedStmts[i], parser.FmtParsable) + ";")
+			if i > c.partialStmtsLen {
+				lastInputChunk.WriteByte(' ')
+			}
+			fmt.Fprint(&lastInputChunk, parser.AsStringWithFlags(parsedStmts[i], parser.FmtParsable)+";")
 		}
 	} else {
 		// Add the last lines received to the history.
+		// Like above, this is one input chunk. However there may be
+		// sensitive newlines in string literals or SQL comments, so we
+		// can't blindly concatenate all the partial input into a single
+		// line. Leave them separate.
 		for i := c.partialStmtsLen; i < len(c.partialLines); i++ {
-			c.addHistory(c.partialLines[i])
+			fmt.Fprintln(&lastInputChunk, c.partialLines[i])
 		}
 	}
+	c.addHistory(lastInputChunk.String())
 
 	// Replace the last entered lines by the last entered statements.
 	c.partialLines = c.partialLines[:c.partialStmtsLen]
