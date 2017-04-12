@@ -160,6 +160,36 @@ func TestTimestampCacheNoEviction(t *testing.T) {
 	}
 }
 
+func TestTimestampCacheExpandRequests(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	manual := hlc.NewManualClock(123)
+	clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
+	tc := newTimestampCache(clock)
+	defer tc.Clear(clock.Now())
+
+	ab := roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("b")}
+	bc := roachpb.RSpan{Key: roachpb.RKey("b"), EndKey: roachpb.RKey("c")}
+
+	// Increment time to the low water mark + 1.
+	start := clock.Now()
+	manual.Increment(1)
+	tc.AddRequest(cacheRequest{
+		span:      ab,
+		reads:     []roachpb.Span{{Key: roachpb.Key("a")}},
+		timestamp: clock.Now(),
+	})
+
+	tc.ExpandRequests(start, bc)
+	if tc.requests.Len() != 1 {
+		t.Fatalf("expected 1 cached request, but found %d", tc.requests.Len())
+	}
+
+	tc.ExpandRequests(start, ab)
+	if tc.requests.Len() != 0 {
+		t.Fatalf("expected 0 cached requests, but found %d", tc.requests.Len())
+	}
+}
+
 type txnState struct {
 	ts hlc.Timestamp
 	id *uuid.UUID

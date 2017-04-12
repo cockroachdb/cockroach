@@ -1143,6 +1143,21 @@ func (rs RSpan) Intersect(desc *RangeDescriptor) (RSpan, error) {
 	return RSpan{key, endKey}, nil
 }
 
+// asRawSpan returns the RSpan as a Span. This is to be used only in select
+// situations in which an RSpan is known to not contain a wrapped locally-
+// addressed Span. Do not export.
+func (rs RSpan) asRawSpan() Span {
+	return Span{
+		Key:    Key(rs.Key),
+		EndKey: Key(rs.EndKey),
+	}
+}
+
+// Overlaps returns whether the two spans overlap.
+func (rs RSpan) Overlaps(other RSpan) bool {
+	return rs.asRawSpan().Overlaps(other.asRawSpan())
+}
+
 // KeyValueByKey implements sorting of a slice of KeyValues by key.
 type KeyValueByKey []KeyValue
 
