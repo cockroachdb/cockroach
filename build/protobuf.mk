@@ -27,9 +27,9 @@ GOGO_PROTOBUF_TYPES_PACKAGE := $(GOGO_PROTOBUF_PACKAGE)/types
 GOGO_PROTOBUF_PATH := $(GITHUB_ROOT)/../$(GOGO_PROTOBUF_PACKAGE)
 PROTOBUF_PATH  := $(GOGO_PROTOBUF_PATH)/protobuf
 
-PROTOC          := $(GOBIN)/protoc
+PROTOC          := $(LOCAL_BIN)/protoc
 PLUGIN_SUFFIX   := gogoroach
-PROTOC_PLUGIN   := $(GOBIN)/protoc-gen-$(PLUGIN_SUFFIX)
+PROTOC_PLUGIN   := $(LOCAL_BIN)/protoc-gen-$(PLUGIN_SUFFIX)
 GOGOPROTO_PROTO := $(GOGO_PROTOBUF_PATH)/gogoproto/gogo.proto
 
 COREOS_PATH := $(GITHUB_ROOT)/coreos
@@ -69,9 +69,9 @@ $(PROTOC): goinstall
 
 .PHONY: goinstall
 goinstall: $(BOOTSTRAP_TARGET)
-	go install $(REPO_ROOT)/pkg/cmd/protoc-gen-gogoroach
-	go install $(REPO_ROOT)/vendor/github.com/cockroachdb/c-protobuf/cmd/protoc
-	go install $(REPO_ROOT)/vendor/github.com/grpc-ecosystem/grpc-gateway/protoc-gen-grpc-gateway
+	$(GO_INSTALL) $(REPO_ROOT)/pkg/cmd/protoc-gen-gogoroach
+	$(GO_INSTALL) $(REPO_ROOT)/vendor/github.com/cockroachdb/c-protobuf/cmd/protoc
+	$(GO_INSTALL) $(REPO_ROOT)/vendor/github.com/grpc-ecosystem/grpc-gateway/protoc-gen-grpc-gateway
 
 REPO_NAME := cockroachdb
 IMPORT_PREFIX := github.com/$(REPO_NAME)/

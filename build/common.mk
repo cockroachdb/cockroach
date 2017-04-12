@@ -45,10 +45,8 @@ endif
 
 # We install our vendored tools to a directory within this repository to avoid
 # overwriting any user-installed binaries of the same name in the default GOBIN.
-# We must remember the original value of GOBIN so we can install the cockroach
-# binary to the user's GOBIN instead of our repository-local GOBIN.
-ORIGINAL_GOBIN := $(GOBIN)
-export GOBIN := $(abspath $(REPO_ROOT)/bin)
+LOCAL_BIN := $(abspath $(REPO_ROOT)/bin)
+GO_INSTALL := GOBIN='$(LOCAL_BIN)' $(GO) install
 
 # Prefer tools we've installed with go install and Yarn to those elsewhere on
 # the PATH.
@@ -59,7 +57,7 @@ export GOBIN := $(abspath $(REPO_ROOT)/bin)
 # ORG_ROOT. It's much simpler to add the Yarn executable-installation directory
 # to the PATH than have protobuf.mk adjust its paths to work in both ORG_ROOT
 # and UI_ROOT.
-export PATH := $(GOBIN):$(UI_ROOT)/node_modules/.bin:$(PATH)
+export PATH := $(LOCAL_BIN):$(UI_ROOT)/node_modules/.bin:$(PATH)
 
 # HACK: Make has a fast path and a slow path for command execution,
 # but the fast path uses the PATH variable from when make was started,
@@ -153,7 +151,7 @@ $(YARN_INSTALLED_TARGET): $(BOOTSTRAP_TARGET) $(UI_ROOT)/package.json $(UI_ROOT)
 # like we do in the builder container to allow for different host and guest
 # systems, will trigger bootstrapping in the container as necessary. This is
 # extracted into a variable for the same reasons as YARN_INSTALLED_TARGET.
-BOOTSTRAP_TARGET := $(REPO_ROOT)/bin/.bootstrap
+BOOTSTRAP_TARGET := $(LOCAL_BIN)/.bootstrap
 
 # Update the git hooks and install commands from dependencies whenever they
 # change.
@@ -161,7 +159,7 @@ $(BOOTSTRAP_TARGET): $(GITHOOKS) $(REPO_ROOT)/glide.lock
 ifneq ($(GIT_DIR),)
 	git submodule update --init
 endif
-	$(GO) install -v \
+	$(GO_INSTALL) -v \
 	$(PKG_ROOT)/cmd/metacheck \
 	$(PKG_ROOT)/cmd/returncheck \
 	&& $(GO) list -tags glide -f '{{join .Imports "\n"}}' $(REPO_ROOT)/build | grep -vF protoc | xargs $(GO) install -v
