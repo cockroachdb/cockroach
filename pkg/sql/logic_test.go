@@ -55,6 +55,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/lib/pq"
 )
@@ -585,7 +586,7 @@ func (t *logicTest) setUser(user string) func() {
 	return cleanupFunc
 }
 
-func (t *logicTest) setup(numNodes int, useFakeSpanResolver bool, defaultDistSQLMode string) {
+func (t *logicTest) setup(numNodes int, useFakeSpanResolver bool) {
 	t.logScope = log.Scope(t.t, "TestLogic")
 
 	// TODO(pmattis): Add a flag to make it easy to run the tests against a local
@@ -611,10 +612,6 @@ func (t *logicTest) setup(numNodes int, useFakeSpanResolver bool, defaultDistSQL
 	if useFakeSpanResolver {
 		fakeResolver := distsqlutils.FakeResolverForTestCluster(t.cluster)
 		t.cluster.Server(t.nodeIdx).SetDistSQLSpanResolver(fakeResolver)
-	}
-
-	if defaultDistSQLMode != "" {
-		t.cleanupFuncs = append(t.cleanupFuncs, sql.SetDefaultDistSQLMode(defaultDistSQLMode))
 	}
 
 	// db may change over the lifetime of this function, with intermediate
@@ -648,7 +645,7 @@ SET DATABASE = test;
 //   # LogicTest: default distsql
 //
 // If the file doesn't contain a directive, the default config is returned.
-func (t *logicTest) readTestFileConfigs(path string) []logicTestConfigIdx {
+func readTestFileConfigs(t *testing.T, path string) []logicTestConfigIdx {
 	file, err := os.Open(path)
 	if err != nil {
 		t.Fatal(err)
@@ -1295,7 +1292,7 @@ func (t *logicTest) success(file string) {
 
 func (t *logicTest) setupAndRunFile(path string, config testClusterConfig) {
 	defer t.close()
-	t.setup(config.numNodes, config.useFakeSpanResolver, config.defaultDistSQLMode)
+	t.setup(config.numNodes, config.useFakeSpanResolver)
 
 	defer func() {
 		if r := recover(); r != nil {
@@ -1314,11 +1311,19 @@ func (t *logicTest) setupAndRunFile(path string, config testClusterConfig) {
 	t.logScope.KeepLogs(false)
 }
 
-// run runs the logic tests indicated by the bigtest and logictestdata flags.
-// A new cluster is set up for each separate file in the test.
-// This function must be called from within the testing.T associated with the
-// logicTest.
-func (t *logicTest) run() {
+func TestLogic(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	// Needed for settings logic tests.
+	_, _, cleanup := settings.TestingAddTestVars()
+	defer cleanup()
+
+	if testutils.Stress() {
+		t.Skip()
+	}
+
+	// run the logic tests indicated by the bigtest and logictestdata flags.
+	// A new cluster is set up for each separate file in the test.
 	var globs []string
 	if *bigtest {
 		logicTestPath := build.Default.GOPATH + "/src/github.com/cockroachdb/sqllogictest"
@@ -1376,76 +1381,88 @@ func (t *logicTest) run() {
 	// regardless of what the environment / config says.
 	sql.StmtStatsEnable = true
 
-	total := 0
-	totalFail := 0
-	totalUnsupported := 0
-	lastProgress := timeutil.Now()
-	if *printErrorSummary {
-		defer t.printErrorSummary()
+	// mu protects the following vars, which all get updated from within the
+	// possibly parallel subtests.
+	var progress = struct {
+		syncutil.Mutex
+		total, totalFail, totalUnsupported int
+		lastProgress                       time.Time
+	}{
+		lastProgress: timeutil.Now(),
 	}
-	topLevelTest := t.t
 
 	// Read the configuration directives from all the files and accumulate a list
 	// of paths per config.
 	configPaths := make([][]string, len(logicTestConfigs))
 
 	for _, path := range paths {
-		for _, idx := range t.readTestFileConfigs(path) {
+		for _, idx := range readTestFileConfigs(t, path) {
 			configPaths[idx] = append(configPaths[idx], path)
 		}
 	}
 
+	verbose := testing.Verbose() || log.V(1)
 	for idx, cfg := range logicTestConfigs {
 		paths := configPaths[idx]
 		if len(paths) == 0 {
 			continue
 		}
-		topLevelTest.Run(cfg.name, func(tst *testing.T) {
+		var cleanupFuncs []func()
+		if cfg.defaultDistSQLMode != "" {
+			cleanupFuncs = append(cleanupFuncs, sql.SetDefaultDistSQLMode(cfg.defaultDistSQLMode))
+		}
+		// Top-level test: one per test configuration.
+		t.Run(cfg.name, func(t *testing.T) {
 			for _, path := range paths {
-				tst.Run(filepath.Base(path), func(tst *testing.T) {
-					// Rebind t.t for the duration of this test, since the framework will
-					// pass us a different testing.T than what we started with. Same below.
-					t.t = tst
-					t.setupAndRunFile(path, cfg)
+				path := path // Rebind range variable.
+				// Inner test: one per file path.
+				t.Run(filepath.Base(path), func(t *testing.T) {
+					if !*showSQL {
+						// If we're not printing out all of the SQL interactions, run the
+						// tests in parallel.
+						// Skip parallelizing tests that use the kv-batch-size directive since
+						// the batch size is a global variable.
+						// TODO(jordan, radu) make sqlbase.kvBatchSize non-global to fix this.
+						if filepath.Base(path) != "select_index_span_ranges" {
+							t.Parallel()
+						}
+					}
+					lt := logicTest{
+						t:               t,
+						verbose:         verbose,
+						perErrorSummary: make(map[string][]string),
+					}
+					if *printErrorSummary {
+						defer lt.printErrorSummary()
+					}
+					lt.setupAndRunFile(path, cfg)
 
-					total += t.progress
-					totalFail += t.failures
-					totalUnsupported += t.unsupported
+					progress.Lock()
+					defer progress.Unlock()
+					progress.total += lt.progress
+					progress.totalFail += lt.failures
+					progress.totalUnsupported += lt.unsupported
 					now := timeutil.Now()
-					if now.Sub(lastProgress) >= 2*time.Second {
-						lastProgress = now
-						t.outf("--- total progress: %d statements/queries", total)
+					if now.Sub(progress.lastProgress) >= 2*time.Second {
+						progress.lastProgress = now
+						lt.outf("--- total progress: %d statements/queries", progress.total)
 					}
 				})
 			}
 		})
+		for _, cleanupFunc := range cleanupFuncs {
+			cleanupFunc()
+		}
 	}
 
 	unsupportedMsg := ""
-	if totalUnsupported > 0 {
-		unsupportedMsg = fmt.Sprintf(", ignored %d unsupported queries", totalUnsupported)
+	if progress.totalUnsupported > 0 {
+		unsupportedMsg = fmt.Sprintf(", ignored %d unsupported queries", progress.totalUnsupported)
 	}
 
-	t.outf("--- total: %d tests, %d failures%s", total, totalFail, unsupportedMsg)
-}
-
-func TestLogic(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	// Needed for settings logic tests.
-	_, _, cleanup := settings.TestingAddTestVars()
-	defer cleanup()
-
-	if testutils.Stress() {
-		t.Skip()
+	if verbose {
+		fmt.Printf("--- total: %d tests, %d failures%s\n", progress.total, progress.totalFail, unsupportedMsg)
 	}
-
-	l := &logicTest{
-		t:               t,
-		verbose:         testing.Verbose() || log.V(1),
-		perErrorSummary: make(map[string][]string),
-	}
-	l.run()
 }
 
 type errorSummaryEntry struct {
