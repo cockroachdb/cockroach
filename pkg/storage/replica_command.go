@@ -94,7 +94,7 @@ type Command struct {
 
 // DefaultDeclareKeys is the default implementation of Command.DeclareKeys
 func DefaultDeclareKeys(
-	_ roachpb.RangeDescriptor, header roachpb.Header, req roachpb.Request, spans *SpanSet,
+	desc roachpb.RangeDescriptor, header roachpb.Header, req roachpb.Request, spans *SpanSet,
 ) {
 	if roachpb.IsReadOnly(req) {
 		spans.Add(SpanReadOnly, req.Header())
@@ -108,6 +108,7 @@ func DefaultDeclareKeys(
 	}
 	if header.ReturnRangeInfo {
 		spans.Add(SpanReadOnly, roachpb.Span{Key: keys.RangeLeaseKey(header.RangeID)})
+		spans.Add(SpanReadOnly, roachpb.Span{Key: keys.RangeDescriptorKey(desc.StartKey)})
 	}
 }
 
@@ -543,6 +544,10 @@ func declareKeysEndTransaction(
 	if header.Txn != nil && header.Txn.ID != nil {
 		spans.Add(SpanReadWrite, roachpb.Span{Key: keys.AbortCacheKey(header.RangeID, *header.Txn.ID)})
 	}
+
+	// All transactions depend on the range descriptor because they need
+	// to determine which intents are within the local range.
+	spans.Add(SpanReadOnly, roachpb.Span{Key: keys.RangeDescriptorKey(desc.StartKey)})
 
 	if et.InternalCommitTrigger != nil {
 		if st := et.InternalCommitTrigger.SplitTrigger; st != nil {
@@ -1344,7 +1349,7 @@ func evalHeartbeatTxn(
 }
 
 func declareKeysGC(
-	_ roachpb.RangeDescriptor, header roachpb.Header, req roachpb.Request, spans *SpanSet,
+	desc roachpb.RangeDescriptor, header roachpb.Header, req roachpb.Request, spans *SpanSet,
 ) {
 	gcr := req.(*roachpb.GCRequest)
 	for _, key := range gcr.Keys {
@@ -1360,6 +1365,7 @@ func declareKeysGC(
 		// cased and not tracked by the command queue.
 		Key: keys.RangeTxnSpanGCThresholdKey(header.RangeID),
 	})
+	spans.Add(SpanReadOnly, roachpb.Span{Key: keys.RangeDescriptorKey(desc.StartKey)})
 }
 
 // evalGC iterates through the list of keys to garbage collect
