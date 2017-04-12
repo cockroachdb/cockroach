@@ -21,7 +21,9 @@ package settings
 //
 // Registry should never be mutated after init (except in tests), as it is read
 // concurrently by different callers.
-var registry = map[string]value{}
+var registry = map[string]value{
+	"enterprise.enabled": {typ: BoolValue},
+}
 
 // value holds the (parsed, typed) value of a setting.
 // raw settings are stored in system.settings as human-readable strings, but are
@@ -40,6 +42,14 @@ type value struct {
 func TypeOf(key string) (ValueType, bool) {
 	d, ok := registry[key]
 	return d.typ, ok
+}
+
+// GetEnterpriseEnabled returns the "enterprise.enabled" setting.
+// "enterprise.enabled" allows the use of the enterprise functionality (which
+// requires an enterprise license).
+// This is a temporary setting and will be replaced in the future.
+func GetEnterpriseEnabled() bool {
+	return getBool("enterprise.enabled")
 }
 
 // We export Testing* helpers for the settings-related tests in the SQL package.
