@@ -19,6 +19,8 @@ import (
 
 // TODO(tamird): why does rocksdb not link jemalloc,snappy statically?
 
+// TODO(tamird): why does rocksdb not link jemalloc,snappy statically?
+
 // #cgo LDFLAGS: -lprotobuf
 // #cgo LDFLAGS: -lrocksdb
 // #cgo LDFLAGS: -ljemalloc
@@ -26,8 +28,14 @@ import (
 // #cgo CXXFLAGS: -std=c++11 -Werror -Wall -Wno-sign-compare
 // #cgo linux LDFLAGS: -lrt
 // #cgo windows LDFLAGS: -lrpcrt4
+//
+// // Building this package will trigger "unresolved symbol" errors
+// // because it depends on C symbols defined in pkg/storage/engine,
+// // which aren't linked until the final binary is built. This is the
+// // platform voodoo to make the linker ignore these errors.
+// #cgo windows LDFLAGS: -r
 // #cgo darwin LDFLAGS: -Wl,-undefined -Wl,dynamic_lookup
-// #cgo !darwin LDFLAGS: -Wl,-unresolved-symbols=ignore-all
+// #cgo !darwin,!windows LDFLAGS: -Wl,-unresolved-symbols=ignore-all
 //
 // #include <stdlib.h>
 // #include "db.h"
