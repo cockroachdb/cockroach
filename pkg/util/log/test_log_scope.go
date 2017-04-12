@@ -84,7 +84,6 @@ func Scope(t tShim, testName string) *TestLogScope {
 func enableLogFileOutput(dir string, stderrSeverity Severity) error {
 	logging.mu.Lock()
 	defer logging.mu.Unlock()
-	logging.toStderr = false
 	logging.stderrThreshold = stderrSeverity
 	return logDir.Set(dir)
 }

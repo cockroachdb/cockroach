@@ -587,7 +587,7 @@ type loggingT struct {
 	noStderrRedirect bool
 
 	// Level flag for output to stderr. Handled atomically.
-	stderrThreshold Severity // The -alsologtostderr flag.
+	stderrThreshold Severity // The -logtostderr flag.
 	// Level flag for output to files.
 	fileThreshold Severity
 
@@ -600,10 +600,6 @@ type loggingT struct {
 
 	// mu protects the remaining elements of this structure and is
 	// used to synchronize logging.
-
-	// Boolean flags. Also protected by mu (see flags.go).
-	toStderr bool // The -logtostderr flag.
-
 	mu syncutil.Mutex
 	// file holds the log file writer.
 	file flushSyncWriter

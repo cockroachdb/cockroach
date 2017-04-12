@@ -63,7 +63,7 @@ export COCKROACH_SKIP_UPDATE_CHECK=1
 bin=/%s/cockroach
 # TODO(bdarnell): when --background is in referenceBinPath, use it here and below.
 # The until loop will also be unnecessary at that point.
-$bin start --alsologtostderr & &> oldout
+$bin start --logtostderr & &> oldout
 # Wait until cockroach has started up successfully.
 until $bin sql -e "SELECT 1"; do sleep 1; done
 
@@ -76,7 +76,7 @@ $bin sql -d old -e "SELECT i, b, s, d, f, extract(epoch from (timestamp '1970-01
 $bin quit && wait # wait will block until all background jobs finish.
 
 bin=/cockroach/cockroach
-$bin start --background --alsologtostderr &> newout
+$bin start --background --logtostderr &> newout
 echo "Read data written by reference version using new binary"
 $bin sql -d old -e "SELECT i, b, s, d, f, extract(epoch from (timestamp '1970-01-01 00:00:00' + v)) as v, extract(epoch FROM t) as e FROM testing_old" > new.everything
 # diff returns non-zero if different. With set -e above, that would exit here.
@@ -115,7 +115,7 @@ function finish() {
 }
 trap finish EXIT
 
-$bin start --background --alsologtostderr &> out
+$bin start --background --logtostderr &> out
 $bin sql -d old -e "SELECT i, b, s, d, f, extract(epoch from (timestamp '1970-01-01 00:00:00' + v)) as v, extract(epoch FROM t) as e FROM testing_old" > old.everything
 $bin sql -d old -e "SELECT i, b, s, d, f, extract(epoch from (timestamp '1970-01-01 00:00:00' + v)) as v, extract(epoch FROM t) as e FROM testing_new" >> old.everything
 # diff returns non-zero if different. With set -e above, that would exit here.
@@ -162,7 +162,7 @@ function finish() {
 trap finish EXIT
 
 export COCKROACH_SKIP_UPDATE_CHECK=1
-$bin start --alsologtostderr=INFO --background --store=/cockroach-data-reference-7429 &> out
+$bin start --logtostderr=INFO --background --store=/cockroach-data-reference-7429 &> out
 $bin debug kv scan
 $bin quit
 `

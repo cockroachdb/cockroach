@@ -62,7 +62,6 @@ var _ flag.Value = &atomicBool{}
 // LogToStderrName and others are flag names.
 const (
 	LogToStderrName               = "logtostderr"
-	AlsoLogToStderrName           = "alsologtostderr"
 	NoColorName                   = "no-color"
 	VerbosityName                 = "verbosity"
 	VModuleName                   = "vmodule"
@@ -78,16 +77,13 @@ const (
 // InitFlags creates logging flags which update the given variables. The passed mutex is
 // locked while the boolean variables are accessed during flag updates.
 func InitFlags(
-	mu sync.Locker,
-	toStderr, noRedirectStderr *bool,
+	noRedirectStderr *bool,
 	logDir flag.Value,
 	showLogs *bool,
 	nocolor *bool,
 	verbosity, vmodule, traceLocation flag.Value,
 	logFileMaxSize, logFilesCombinedMaxSize *int64,
 ) {
-	*toStderr = true // wonky way of specifying a default
-	flag.Var(&atomicBool{Locker: mu, b: toStderr}, LogToStderrName, "log to standard error instead of files")
 	flag.BoolVar(nocolor, NoColorName, *nocolor, "disable standard error log colorization")
 	flag.BoolVar(noRedirectStderr, NoRedirectStderrName, *noRedirectStderr, "disable redirect of stderr to the log file")
 	flag.Var(verbosity, VerbosityName, "log level for V logs")
