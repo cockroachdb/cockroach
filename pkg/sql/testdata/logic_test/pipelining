@@ -351,6 +351,7 @@ UPDATE kv SET z = 10 WHERE k = 3 RETURNING NOTHING
 statement ok
 ROLLBACK
 
+
 # Statements that are IndependentFromPipelinedPriors should not force a
 # pipeline synchronization.
 
@@ -401,3 +402,31 @@ SELECT k, v FROM kv ORDER BY k
 4  8
 5  9
 6  10
+
+
+# Dependent statements must execute serially in the order that they are issued.
+
+statement ok
+DELETE FROM kv
+
+statement ok
+BEGIN
+
+statement ok
+INSERT INTO kv VALUES (1, 1) RETURNING NOTHING
+
+statement ok
+UPDATE kv SET k = 2 WHERE k = 1 RETURNING NOTHING
+
+statement ok
+DELETE FROM kv WHERE k = 1 RETURNING NOTHING
+
+# If any of the previous three statements are reordered, this result of this
+# query will not be correct.
+query I
+SELECT COUNT(*) FROM kv WHERE k = 2
+----
+1
+
+statement ok
+ROLLBACK
