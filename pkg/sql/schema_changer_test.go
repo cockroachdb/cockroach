@@ -1972,3 +1972,109 @@ INSERT INTO t.kv VALUES ('a', 'b');
 		})
 	}
 }
+
+func TestSecondaryIndexWithOldStoringEncoding(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	params, _ := createTestServerParams()
+	server, sqlDB, kvDB := serverutils.StartServer(t, params)
+	defer server.Stopper().Stop()
+
+	if _, err := sqlDB.Exec(`
+CREATE DATABASE d;
+CREATE TABLE d.t (
+  k INT PRIMARY KEY,
+  a INT,
+  b INT,
+  INDEX i (a) STORING (b),
+  UNIQUE INDEX u (a) STORING (b)
+);
+`); err != nil {
+		t.Fatal(err)
+	}
+	tableDesc := sqlbase.GetTableDescriptor(kvDB, "d", "t")
+	// Verify that this descriptor uses the new STORING encoding. Overwrite it
+	// with one that uses the old encoding.
+	for i, index := range tableDesc.Indexes {
+		if len(index.ExtraColumnIDs) != 1 {
+			t.Fatalf("ExtraColumnIDs not set properly: %s", tableDesc)
+		}
+		if len(index.StoreColumnIDs) != 1 {
+			t.Fatalf("StoreColumnIDs not set properly: %s", tableDesc)
+		}
+		index.ExtraColumnIDs = append(index.ExtraColumnIDs, index.StoreColumnIDs...)
+		index.StoreColumnIDs = nil
+		tableDesc.Indexes[i] = index
+	}
+	if err := kvDB.Put(
+		context.TODO(),
+		sqlbase.MakeDescMetadataKey(tableDesc.GetID()),
+		sqlbase.WrapDescriptor(tableDesc),
+	); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := sqlDB.Exec(`INSERT INTO d.t VALUES (11, 1, 2);`); err != nil {
+		t.Fatal(err)
+	}
+	// Force another ID allocation to ensure that the old encoding persists.
+	if _, err := sqlDB.Exec(`ALTER TABLE d.t ADD COLUMN c INT;`); err != nil {
+		t.Fatal(err)
+	}
+	// Ensure that the decoder sees the old encoding.
+	for indexName, expExplainRow := range map[string]string{
+		"i": "0 /t/i/1/11/2 NULL ROW",
+		"u": "0 /t/u/1 /11/2 ROW",
+	} {
+		{
+			rows, err := sqlDB.Query(fmt.Sprintf(`EXPLAIN (DEBUG) SELECT k, a, b FROM d.t@%s;`, indexName))
+			if err != nil {
+				t.Error(err)
+				continue
+			}
+			defer rows.Close()
+			count := 0
+			for ; rows.Next(); count++ {
+				var i1 *int
+				var t2, t3, t4 *string
+				if err := rows.Scan(&i1, &t2, &t3, &t4); err != nil {
+					t.Errorf("row %d scan failed: %s", count, err)
+					continue
+				}
+				row := fmt.Sprintf("%d %s %s %s", *i1, *t2, *t3, *t4)
+				if row != expExplainRow {
+					t.Errorf("expected %q but read %q", expExplainRow, row)
+				}
+			}
+			if err := rows.Err(); err != nil {
+				t.Error(err)
+			} else if count != 1 {
+				t.Errorf("expected one row but read %d", count)
+			}
+		}
+		{
+			rows, err := sqlDB.Query(fmt.Sprintf(`SELECT k, a, b FROM d.t@%s;`, indexName))
+			if err != nil {
+				t.Error(err)
+				continue
+			}
+			defer rows.Close()
+			count := 0
+			for ; rows.Next(); count++ {
+				var i1, i2, i3 *int
+				if err := rows.Scan(&i1, &i2, &i3); err != nil {
+					t.Errorf("row %d scan failed: %s", count, err)
+					continue
+				}
+				row := fmt.Sprintf("%d %d %d", *i1, *i2, *i3)
+				const expRow = "11 1 2"
+				if row != expRow {
+					t.Errorf("expected %q but read %q", expRow, row)
+				}
+			}
+			if err := rows.Err(); err != nil {
+				t.Error(err)
+			} else if count != 1 {
+				t.Errorf("expected one row but read %d", count)
+			}
+		}
+	}
+}

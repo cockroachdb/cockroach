@@ -1185,6 +1185,21 @@ type IndexEntry struct {
 	Value roachpb.Value
 }
 
+// valueEncodedColumn represents a composite or stored column of a secondary
+// index.
+type valueEncodedColumn struct {
+	id          ColumnID
+	isComposite bool
+}
+
+// byID implements sort.Interface for []valueEncodedColumn based on the id
+// field.
+type byID []valueEncodedColumn
+
+func (a byID) Len() int           { return len(a) }
+func (a byID) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
+func (a byID) Less(i, j int) bool { return a[i].id < a[j].id }
+
 // EncodeSecondaryIndex encodes key/values for a secondary index. colMap maps
 // ColumnIDs to indices in `values`.
 func EncodeSecondaryIndex(
@@ -1234,24 +1249,27 @@ func EncodeSecondaryIndex(
 		entryValue = []byte{}
 	}
 
-	colIDs := append([]ColumnID(nil), secondaryIndex.CompositeColumnIDs...)
-	sort.Sort(columnIDs(colIDs))
+	var cols []valueEncodedColumn
+	for _, id := range secondaryIndex.StoreColumnIDs {
+		cols = append(cols, valueEncodedColumn{id: id, isComposite: false})
+	}
+	for _, id := range secondaryIndex.CompositeColumnIDs {
+		cols = append(cols, valueEncodedColumn{id: id, isComposite: true})
+	}
+	sort.Sort(byID(cols))
 
 	var lastColID ColumnID
 	// Composite columns have their contents at the end of the value.
-	for _, colID := range colIDs {
-		val := values[colMap[colID]]
-		if val == parser.DNull {
+	for _, col := range cols {
+		val := values[colMap[col.id]]
+		if val == parser.DNull || (col.isComposite && !val.(parser.CompositeDatum).IsComposite()) {
 			continue
 		}
-		if !val.(parser.CompositeDatum).IsComposite() {
-			continue
+		if lastColID > col.id {
+			panic(fmt.Errorf("cannot write column id %d after %d", col.id, lastColID))
 		}
-		if lastColID > colID {
-			panic(fmt.Errorf("cannot write column id %d after %d", colID, lastColID))
-		}
-		colIDDiff := colID - lastColID
-		lastColID = colID
+		colIDDiff := col.id - lastColID
+		lastColID = col.id
 		entryValue, err = EncodeTableValue(entryValue, colIDDiff, val)
 		if err != nil {
 			return IndexEntry{}, err

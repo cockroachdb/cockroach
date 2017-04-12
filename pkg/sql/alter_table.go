@@ -258,6 +258,14 @@ func (n *alterTableNode) Start(ctx context.Context) error {
 							containsThisColumn = true
 						}
 					}
+					// The loop above this comment is for the old STORING encoding. The
+					// loop below is for the new encoding (where the STORING columns are
+					// always in the value part of a KV).
+					for _, id := range idx.StoreColumnIDs {
+						if id == col.ID {
+							containsThisColumn = true
+						}
+					}
 
 					// Perform the DROP.
 					if containsThisColumn {

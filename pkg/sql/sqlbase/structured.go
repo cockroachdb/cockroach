@@ -168,6 +168,27 @@ func GetTableDescFromID(ctx context.Context, txn *client.Txn, id ID) (*TableDesc
 	return table, nil
 }
 
+// RunOverAllColumns applies its argument fn to each of the column IDs in desc.
+// If there is an error, that error is returned immediately.
+func (desc *IndexDescriptor) RunOverAllColumns(fn func(id ColumnID) error) error {
+	for _, colID := range desc.ColumnIDs {
+		if err := fn(colID); err != nil {
+			return err
+		}
+	}
+	for _, colID := range desc.ExtraColumnIDs {
+		if err := fn(colID); err != nil {
+			return err
+		}
+	}
+	for _, colID := range desc.StoreColumnIDs {
+		if err := fn(colID); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // allocateName sets desc.Name to a value that is not EqualName to any
 // of tableDesc's indexes. allocateName roughly follows PostgreSQL's
 // convention for automatically-named indexes.
@@ -213,25 +234,27 @@ func (desc *IndexDescriptor) FillColumns(elems parser.IndexElemList) error {
 	return nil
 }
 
+type returnTrue struct{}
+
+func (returnTrue) Error() string { panic("unimplemented") }
+
+var returnTruePseudoError error = returnTrue{}
+
 // ContainsColumnID returns true if the index descriptor contains the specified
-// column ID either in its explicit column IDs or the extra column IDs.
+// column ID either in its explicit column IDs, the extra column IDs, or the
+// stored column IDs.
 func (desc *IndexDescriptor) ContainsColumnID(colID ColumnID) bool {
-	for _, id := range desc.ColumnIDs {
+	return desc.RunOverAllColumns(func(id ColumnID) error {
 		if id == colID {
-			return true
+			return returnTruePseudoError
 		}
-	}
-	for _, id := range desc.ExtraColumnIDs {
-		if id == colID {
-			return true
-		}
-	}
-	return false
+		return nil
+	}) != nil
 }
 
 // FullColumnIDs returns the index column IDs including any extra (implicit or
-// stored) column IDs for non-unique indexes. It also returns the direction with
-// which each column was encoded.
+// stored (old STORING encoding)) column IDs for non-unique indexes. It also
+// returns the direction with which each column was encoded.
 func (desc *IndexDescriptor) FullColumnIDs() ([]ColumnID, []encoding.Direction) {
 	dirs := make([]encoding.Direction, 0, len(desc.ColumnIDs))
 	for _, dir := range desc.ColumnDirections {
@@ -540,6 +563,12 @@ func HasCompositeKeyEncoding(kind ColumnType_Kind) bool {
 	return false
 }
 
+// HasOldStoredColumns returns whether the index has stored columns in the old
+// format (data encoded the same way as if they were in an implicit column).
+func (desc *IndexDescriptor) HasOldStoredColumns() bool {
+	return len(desc.ExtraColumnIDs) > 0 && len(desc.StoreColumnIDs) < len(desc.StoreColumnNames)
+}
+
 func (desc *TableDescriptor) allocateIndexIDs(columnNames map[string]ColumnID) error {
 	if desc.NextIndexID == 0 {
 		desc.NextIndexID = 1
@@ -593,9 +622,11 @@ func (desc *TableDescriptor) allocateIndexIDs(columnNames map[string]ColumnID) e
 		}
 
 		if index != &desc.PrimaryIndex {
-			// Need to clear ExtraColumnIDs because it is used by
-			// ContainsColumnID.
+			indexHasOldStoredColumns := index.HasOldStoredColumns()
+			// Need to clear ExtraColumnIDs and StoreColumnIDs because they are used
+			// by ContainsColumnID.
 			index.ExtraColumnIDs = nil
+			index.StoreColumnIDs = nil
 			var extraColumnIDs []ColumnID
 			for _, primaryColID := range desc.PrimaryIndex.ColumnIDs {
 				if !index.ContainsColumnID(primaryColID) {
@@ -621,7 +652,11 @@ func (desc *TableDescriptor) allocateIndexIDs(columnNames map[string]ColumnID) e
 				if index.ContainsColumnID(col.ID) {
 					return fmt.Errorf("index \"%s\" already contains column \"%s\"", index.Name, col.Name)
 				}
-				index.ExtraColumnIDs = append(index.ExtraColumnIDs, col.ID)
+				if indexHasOldStoredColumns {
+					index.ExtraColumnIDs = append(index.ExtraColumnIDs, col.ID)
+				} else {
+					index.StoreColumnIDs = append(index.StoreColumnIDs, col.ID)
+				}
 			}
 		}
 
