@@ -28,6 +28,11 @@ import "gogoproto/gogo.proto";
 
 message SetupFlowRequest {
   optional roachpb.Transaction txn = 1 [(gogoproto.nullable) = false];
+
+  // Version of distsqlrun protocol; a server accepts a certain range of
+  // versions, up to its own version. See server.go for more details.
+  optional uint32 version = 5 [(gogoproto.nullable) = false];
+
   // If set, the context of an active tracing span.
   optional util.tracing.SpanContextCarrier trace_context = 2;
   optional FlowSpec flow = 3 [(gogoproto.nullable) = false];
