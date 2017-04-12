@@ -143,7 +143,7 @@ type ExportStorage interface {
 	ReadFile(ctx context.Context, basename string) (io.ReadCloser, error)
 
 	// WriteFile should write the content to requested name.
-	WriteFile(ctx context.Context, basename string, content io.Reader) error
+	WriteFile(ctx context.Context, basename string, content io.ReadSeeker) error
 
 	// Delete removes the named file from the store.
 	Delete(ctx context.Context, basename string) error
@@ -171,7 +171,9 @@ func (l *localFileStorage) Conf() roachpb.ExportStorage {
 	}
 }
 
-func (l *localFileStorage) WriteFile(_ context.Context, basename string, content io.Reader) error {
+func (l *localFileStorage) WriteFile(
+	_ context.Context, basename string, content io.ReadSeeker,
+) error {
 	if err := os.MkdirAll(l.base, 0755); err != nil {
 		return errors.Wrap(err, "creating local export storage path")
 	}
@@ -228,7 +230,7 @@ func (h *httpStorage) ReadFile(_ context.Context, basename string) (io.ReadClose
 	return runHTTPRequest(h.client, "GET", h.base, basename, nil)
 }
 
-func (h *httpStorage) WriteFile(_ context.Context, basename string, content io.Reader) error {
+func (h *httpStorage) WriteFile(_ context.Context, basename string, content io.ReadSeeker) error {
 	_, err := runHTTPRequest(h.client, "PUT", h.base, basename, content)
 	return err
 }
@@ -290,7 +292,7 @@ func (s *s3Storage) Conf() roachpb.ExportStorage {
 	}
 }
 
-func (s *s3Storage) WriteFile(_ context.Context, basename string, content io.Reader) error {
+func (s *s3Storage) WriteFile(_ context.Context, basename string, content io.ReadSeeker) error {
 	w, err := s.bucket.PutWriter(filepath.Join(s.prefix, basename), nil, nil)
 	if err != nil {
 		return errors.Wrap(err, "creating s3 writer")
@@ -345,7 +347,7 @@ func makeGCSStorage(ctx context.Context, conf *roachpb.ExportStorage_GCS) (Expor
 	}, nil
 }
 
-func (g *gcsStorage) WriteFile(ctx context.Context, basename string, content io.Reader) error {
+func (g *gcsStorage) WriteFile(ctx context.Context, basename string, content io.ReadSeeker) error {
 	w := g.bucket.Object(filepath.Join(g.prefix, basename)).NewWriter(ctx)
 	if _, err := io.Copy(w, content); err != nil {
 		return errors.Wrap(err, "failed to write to google cloud")
@@ -395,7 +397,7 @@ func (s *azureStorage) Conf() roachpb.ExportStorage {
 	}
 }
 
-func (s *azureStorage) WriteFile(ctx context.Context, basename string, content io.Reader) error {
+func (s *azureStorage) WriteFile(ctx context.Context, basename string, content io.ReadSeeker) error {
 	name := filepath.Join(s.prefix, basename)
 	// A blob in Azure is composed of an ordered list of blocks. To create a
 	// blob, we must first create an empty block blob (i.e., a blob backed
@@ -409,51 +411,61 @@ func (s *azureStorage) WriteFile(ctx context.Context, basename string, content i
 
 	const maxAttempts = 3
 
-	if err := retry.WithMaxAttempts(ctx, base.DefaultRetryOptions(), maxAttempts, func() error {
-		return s.client.CreateBlockBlob(s.conf.Container, name)
-	}); err != nil {
-		return errors.Wrap(err, "creating block blob")
-	}
-	const fourMiB = 1024 * 1024 * 4
+	writeFile := func() error {
+		if err := retry.WithMaxAttempts(ctx, base.DefaultRetryOptions(), maxAttempts, func() error {
+			return s.client.CreateBlockBlob(s.conf.Container, name)
+		}); err != nil {
+			return errors.Wrap(err, "creating block blob")
+		}
+		const fourMiB = 1024 * 1024 * 4
 
-	// NB: Azure wants Block IDs to all be the same length.
-	// http://gauravmantri.com/2013/05/18/windows-azure-blob-storage-dealing-with-the-specified-blob-or-block-content-is-invalid-error/
-	// 9999 * 4mb = 40gb max upload size, well over our max range size.
-	const maxBlockID = 9999
-	const blockIDFmt = "%04d"
+		// NB: Azure wants Block IDs to all be the same length.
+		// http://gauravmantri.com/2013/05/18/windows-azure-blob-storage-dealing-with-the-specified-blob-or-block-content-is-invalid-error/
+		// 9999 * 4mb = 40gb max upload size, well over our max range size.
+		const maxBlockID = 9999
+		const blockIDFmt = "%04d"
 
-	var blocks []azr.Block
-	i := 1
-	uploadBlockFunc := func(b []byte) error {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		default:
+		var blocks []azr.Block
+		i := 1
+		uploadBlockFunc := func(b []byte) error {
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			default:
+			}
+
+			if len(b) < 1 {
+				return errors.New("cannot upload an empty block")
+			}
+
+			if i > maxBlockID {
+				return errors.Errorf("too many blocks for azure blob block writer")
+			}
+			id := base64.URLEncoding.EncodeToString([]byte(fmt.Sprintf(blockIDFmt, i)))
+			i++
+			blocks = append(blocks, azr.Block{ID: id, Status: azr.BlockStatusUncommitted})
+			return retry.WithMaxAttempts(ctx, base.DefaultRetryOptions(), maxAttempts, func() error {
+				return s.client.PutBlock(s.conf.Container, name, id, b)
+			})
 		}
 
-		if len(b) < 1 {
-			return errors.New("cannot upload an empty block")
+		if err := chunkReader(content, fourMiB, uploadBlockFunc); err != nil {
+			return errors.Wrap(err, "putting blocks")
 		}
 
-		if i > maxBlockID {
-			return errors.Errorf("too many blocks for azure blob block writer")
-		}
-		id := base64.URLEncoding.EncodeToString([]byte(fmt.Sprintf(blockIDFmt, i)))
-		i++
-		blocks = append(blocks, azr.Block{ID: id, Status: azr.BlockStatusUncommitted})
-		return retry.WithMaxAttempts(ctx, base.DefaultRetryOptions(), maxAttempts, func() error {
-			return s.client.PutBlock(s.conf.Container, name, id, b)
+		err := retry.WithMaxAttempts(ctx, base.DefaultRetryOptions(), maxAttempts, func() error {
+			return s.client.PutBlockList(s.conf.Container, name, blocks)
 		})
-	}
-
-	if err := chunkReader(content, fourMiB, uploadBlockFunc); err != nil {
-		return errors.Wrap(err, "putting blocks")
+		return errors.Wrap(err, "putting block list")
 	}
 
 	err := retry.WithMaxAttempts(ctx, base.DefaultRetryOptions(), maxAttempts, func() error {
-		return s.client.PutBlockList(s.conf.Container, name, blocks)
+		if _, err := content.Seek(0, io.SeekStart); err != nil {
+			return errors.Wrap(err, "seek")
+		}
+		return writeFile()
 	})
-	return errors.Wrap(err, "putting block list")
+	return errors.Wrap(err, "write file")
 }
 
 // chunkReader calls f with chunks of size from r. The same underlying byte
