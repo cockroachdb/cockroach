@@ -139,24 +139,6 @@ var colorProfile256 = &colorProfile{
 	timePrefix:  []byte("\033[38;5;246m"),
 }
 
-// OutputStats tracks the number of output lines and bytes written.
-type outputStats struct {
-	lines int64
-	bytes int64
-}
-
-// Stats tracks the number of lines of output and number of bytes
-// per severity level. Values must be read with atomic.LoadInt64.
-var Stats struct {
-	Info, Warning, Error outputStats
-}
-
-var severityStats = [Severity_NONE]*outputStats{
-	Severity_INFO:    &Stats.Info,
-	Severity_WARNING: &Stats.Warning,
-	Severity_ERROR:   &Stats.Error,
-}
-
 // Level is exported because it appears in the arguments to V and is
 // the type of the v flag, which can be set programmatically.
 // It's a distinct type because we want to discriminate it from logType.
@@ -748,11 +730,6 @@ func (l *loggingT) outputLogEntry(s Severity, file string, line int, msg string)
 		}
 
 		l.putBuffer(buf)
-
-		if stats := severityStats[s]; stats != nil {
-			atomic.AddInt64(&stats.lines, 1)
-			atomic.AddInt64(&stats.bytes, int64(len(data)))
-		}
 	}
 	exitFunc := l.exitFunc
 	l.mu.Unlock()
