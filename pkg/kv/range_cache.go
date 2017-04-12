@@ -555,7 +555,8 @@ func (rdc *RangeDescriptorCache) insertRangeDescriptorsLocked(
 		// Before adding a new descriptor, make sure we clear out any
 		// pre-existing, overlapping descriptor which might have been
 		// re-inserted due to concurrent range lookups.
-		if err := rdc.clearOverlappingCachedRangeDescriptors(ctx, &rs[i]); err != nil {
+		continueWithInsert, err := rdc.clearOverlappingCachedRangeDescriptors(ctx, &rs[i])
+		if err != nil || !continueWithInsert {
 			return err
 		}
 		rangeKey, err := meta(rs[i].EndKey)
@@ -572,13 +573,18 @@ func (rdc *RangeDescriptorCache) insertRangeDescriptorsLocked(
 
 // clearOverlappingCachedRangeDescriptors looks up and clears any
 // cache entries which overlap the specified descriptor.
+//
+// This method is expected to be used in preparation of inserting a descriptor
+// in the cache; the bool return value specifies if the insertion should go on:
+// if the specified descriptor is already in the cache, then nothing is deleted
+// and false is returned. Otherwise, true is returned.
 func (rdc *RangeDescriptorCache) clearOverlappingCachedRangeDescriptors(
 	ctx context.Context, desc *roachpb.RangeDescriptor,
-) error {
+) (bool, error) {
 	key := desc.EndKey
 	metaKey, err := meta(key)
 	if err != nil {
-		return err
+		return false, err
 	}
 
 	// Clear out any descriptors which subsume the key which we're going
@@ -588,6 +594,10 @@ func (rdc *RangeDescriptorCache) clearOverlappingCachedRangeDescriptors(
 	if ok {
 		descriptor := v.(*roachpb.RangeDescriptor)
 		if descriptor.StartKey.Less(key) && !descriptor.EndKey.Less(key) {
+			if descriptor.Equal(*desc) {
+				// The descriptor is already in the cache. Nothing to do.
+				return false, nil
+			}
 			if log.V(2) {
 				log.Infof(ctx, "clearing overlapping descriptor: key=%s desc=%s", k, descriptor)
 			}
@@ -597,11 +607,11 @@ func (rdc *RangeDescriptorCache) clearOverlappingCachedRangeDescriptors(
 
 	startMeta, err := meta(desc.StartKey)
 	if err != nil {
-		return err
+		return false, err
 	}
 	endMeta, err := meta(desc.EndKey)
 	if err != nil {
-		return err
+		return false, err
 	}
 
 	// Also clear any descriptors which are subsumed by the one we're
@@ -622,5 +632,5 @@ func (rdc *RangeDescriptorCache) clearOverlappingCachedRangeDescriptors(
 	for _, key := range keys {
 		rdc.rangeCache.cache.Del(key)
 	}
-	return nil
+	return true, nil
 }
