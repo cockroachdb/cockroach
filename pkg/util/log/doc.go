@@ -45,15 +45,16 @@
 // This package provides several flags that modify this behavior.
 // These are provided via the pflags library; see InitFlags.
 //
-//	--logtostderr=true
-//		Logs are written to standard error instead of to files.
-//	--alsologtostderr=INFO
+//	--logtostderr=LEVEL
 //		Logs are written to standard error as well as to files.
+//    Entries with severity below LEVEL are not written to stderr.
+//    "true" and "false" are also supported (everything / nothing).
 //	--log-dir="..."
 //		Log files will be written to this directory instead of the
 //		default target directory.
 //  --log-file-verbosity=LEVEL
 //    Entries with severity below LEVEL are not written to the log file.
+//    "true" and "false" are also supported (everything / nothing).
 //  --log-file-max-size=N
 //    Log files are rotated after reaching that size.
 //  --log-dir-max-size=N

@@ -21,7 +21,7 @@ option go_package = "log";
 import "gogoproto/gogo.proto";
 
 enum Severity {
-  UNKNOWN = 0;
+  DEFAULT = 0;
   INFO = 1;
   WARNING = 2;
   ERROR = 3;

@@ -22385,7 +22385,7 @@ export const cockroach = $root.cockroach = (() => {
              * @name Severity
              * @memberof cockroach.util.log
              * @enum {number}
-             * @property {number} UNKNOWN=0 UNKNOWN value
+             * @property {number} DEFAULT=0 DEFAULT value
              * @property {number} INFO=1 INFO value
              * @property {number} WARNING=2 WARNING value
              * @property {number} ERROR=3 ERROR value
@@ -22394,7 +22394,7 @@ export const cockroach = $root.cockroach = (() => {
              */
             log.Severity = (function() {
                 const valuesById = {}, values = Object.create(valuesById);
-                values[valuesById[0] = "UNKNOWN"] = 0;
+                values[valuesById[0] = "DEFAULT"] = 0;
                 values[valuesById[1] = "INFO"] = 1;
                 values[valuesById[2] = "WARNING"] = 2;
                 values[valuesById[3] = "ERROR"] = 3;
@@ -22611,7 +22611,7 @@ export const cockroach = $root.cockroach = (() => {
                         return object;
                     let message = new $root.cockroach.util.log.Entry();
                     switch (object.severity) {
-                    case "UNKNOWN":
+                    case "DEFAULT":
                     case 0:
                         message.severity = 0;
                         break;
@@ -22690,7 +22690,7 @@ export const cockroach = $root.cockroach = (() => {
                         options = {};
                     let object = {};
                     if (options.defaults) {
-                        object.severity = options.enums === String ? "UNKNOWN" : 0;
+                        object.severity = options.enums === String ? "DEFAULT" : 0;
                         if ($util.Long) {
                             let long = new $util.Long(0, 0, false);
                             object.time = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
@@ -22967,7 +22967,7 @@ export const cockroach = $root.cockroach = (() => {
                     if (object.user_name != null)
                         message.user_name = String(object.user_name);
                     switch (object.severity) {
-                    case "UNKNOWN":
+                    case "DEFAULT":
                     case 0:
                         message.severity = 0;
                         break;
@@ -23036,7 +23036,7 @@ export const cockroach = $root.cockroach = (() => {
                         object.program = "";
                         object.host = "";
                         object.user_name = "";
-                        object.severity = options.enums === String ? "UNKNOWN" : 0;
+                        object.severity = options.enums === String ? "DEFAULT" : 0;
                         if ($util.Long) {
                             let long = new $util.Long(0, 0, false);
                             object.time = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
