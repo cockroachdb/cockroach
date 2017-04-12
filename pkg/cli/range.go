@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
@@ -31,6 +32,9 @@ import (
 
 // MakeDBClient creates a kv client for use in cli tools.
 func MakeDBClient() (*client.DB, *stop.Stopper, error) {
+	// TODO(marc): Switch back to default user (security.RootUser) when fixed:
+	// https://github.com/cockroachdb/cockroach/issues/14839
+	baseCfg.User = security.NodeUser
 	conn, clock, stopper, err := getClientGRPCConn()
 	if err != nil {
 		return nil, nil, err
