@@ -59,7 +59,6 @@ func (bt *benchmarkTest) Start(ctx context.Context) {
 	bt.f = acceptance.MakeFarmer(bt.b, bt.prefix, acceptance.GetStopper())
 
 	bt.f.AddEnvVar("COCKROACH_MAX_OFFSET", "1s")
-	bt.f.AddEnvVar("COCKROACH_ENTERPRISE_ENABLED", "true")
 	bt.f.AddEnvVar("COCKROACH_PROPOSER_EVALUATED_KV", "true")
 
 	if bt.cockroachDiskSizeGB != 0 {
@@ -72,6 +71,14 @@ func (bt *benchmarkTest) Start(ctx context.Context) {
 	}
 	acceptance.CheckGossip(ctx, bt.b, bt.f, longWaitTime, acceptance.HasPeers(bt.nodes))
 	bt.f.Assert(ctx, bt.b)
+
+	sqlDB, err := gosql.Open("postgres", bt.f.PGUrl(ctx, 0))
+	if err != nil {
+		bt.b.Fatal(err)
+	}
+	defer sqlDB.Close()
+	sqlutils.MakeSQLRunner(bt.b, sqlDB).Exec("SET CLUSTER SETTING enterprise.enabled = true")
+
 	log.Info(ctx, "initial cluster is up")
 }
 
