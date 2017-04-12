@@ -183,7 +183,7 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 	// key is selected to fall within the meta range in order for the later
 	// routing of requests to range 1 to work properly. Removing the routing
 	// of all requests to range 1 would allow us to make the key more normal.
-	key := rg1Key("key")
+	const key = "key"
 	// Set up a filter to so that the get operation at Step 3 will return an error.
 	var numGets int32
 
@@ -191,6 +191,10 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 	defer stopper.Stop()
 	manual := hlc.NewManualClock(123)
 	cfg := storage.TestStoreConfig(hlc.NewClock(manual.UnixNano, time.Nanosecond))
+	// Splits can cause our chosen key to end up on a range other than range 1,
+	// and trying to handle that complicates the test without providing any
+	// added benefit.
+	cfg.TestingKnobs.DisableSplitQueue = true
 	cfg.TestingKnobs.TestingEvalFilter =
 		func(filterArgs storagebase.FilterArgs) *roachpb.Error {
 			if _, ok := filterArgs.Req.(*roachpb.GetRequest); ok &&
