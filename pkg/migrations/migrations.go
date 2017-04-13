@@ -84,8 +84,8 @@ type runner struct {
 	memMetrics  *sql.MemoryMetrics
 }
 
-func (r *runner) newRootSession(ctx context.Context) *sql.Session {
-	args := sql.SessionArgs{User: security.NodeUser}
+func (r *runner) newSession(ctx context.Context, user string) *sql.Session {
+	args := sql.SessionArgs{User: user}
 	s := sql.NewSession(ctx, args, r.sqlExecutor, nil, r.memMetrics)
 	s.StartUnlimitedMonitor()
 	return s
@@ -308,7 +308,7 @@ func eventlogUniqueIDDefault(ctx context.Context, r runner) error {
 	const alterStmt = "ALTER TABLE system.eventlog ALTER COLUMN uniqueID SET DEFAULT uuid_v4();"
 
 	// System tables can only be modified by a privileged internal user.
-	session := r.newRootSession(ctx)
+	session := r.newSession(ctx, security.NodeUser)
 	defer session.Finish(r.sqlExecutor)
 
 	// Retry a limited number of times because returning an error and letting
