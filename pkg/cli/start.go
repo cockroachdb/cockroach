@@ -367,12 +367,11 @@ func runStart(cmd *cobra.Command, args []string) error {
 	if logDir := f.Value.String(); logDir != "" {
 		outputDirectory = logDir
 
-		vf := pf.Lookup(logflags.AlsoLogToStderrName)
 		ls := pf.Lookup(logflags.LogToStderrName)
-		if ls.Value.String() == "false" && !vf.Changed {
+		if !ls.Changed {
 			// Unless the settings were overridden by the user, silence
 			// logging to stderr because the messages will go to a log file.
-			if err := vf.Value.Set(log.Severity_NONE.String()); err != nil {
+			if err := ls.Value.Set(log.Severity_NONE.String()); err != nil {
 				return err
 			}
 		}
@@ -392,6 +391,7 @@ func runStart(cmd *cobra.Command, args []string) error {
 	initMemProfile(startCtx, outputDirectory)
 	initCPUProfile(startCtx, outputDirectory)
 	initBlockProfile()
+	log.StartGCDaemon()
 
 	// Default user for servers.
 	serverCfg.User = security.NodeUser

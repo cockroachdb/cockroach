@@ -100,7 +100,7 @@ function finish() {
 trap finish EXIT
 
 HOST=$(hostname -f)
-$bin start --alsologtostderr=INFO --background --insecure --host="${HOST}" --port=12345 &> out
+$bin start --logtostderr=INFO --background --insecure --host="${HOST}" --port=12345 &> out
 $bin sql --host="${HOST}" --port=12345 -e "show databases"
 $bin quit --host="${HOST}" --port=12345
 `

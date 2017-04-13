@@ -23,13 +23,16 @@ import (
 )
 
 func init() {
-	logflags.InitFlags(&logging.mu, &logging.toStderr,
+	logflags.InitFlags(
+		&logging.noStderrRedirect,
 		&logDir, &showLogs, &logging.nocolor, &logging.verbosity,
-		&logging.vmodule, &logging.traceLocation)
-	// We define this flag here because stderrThreshold has the type Severity
+		&logging.vmodule, &logging.traceLocation,
+		&LogFileMaxSize, &LogFilesCombinedMaxSize,
+	)
+	// We define these flags here because they have the type Severity
 	// which we can't pass to logflags without creating an import cycle.
 	flag.Var(&logging.stderrThreshold,
-		logflags.AlsoLogToStderrName, "logs at or above this threshold go to stderr")
-	flag.BoolVar(&logging.noStderrRedirect, "no-redirect-stderr", false,
-		"disable redirect of stderr")
+		logflags.LogToStderrName, "logs at or above this threshold go to stderr")
+	flag.Var(&logging.fileThreshold,
+		logflags.LogFileVerbosityThresholdName, "minimum verbosity of messages written to the log file")
 }

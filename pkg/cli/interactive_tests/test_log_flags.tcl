@@ -12,6 +12,24 @@ eexpect ":/# "
 # errors when parsing flags in that context cause the (test) process
 # to exit entirely (it has errorHandling set to ExitOnError).
 
+# Check that log files are created by default in the store directory.
+send "$argv start --store=path=mystore\r"
+eexpect "node starting"
+send "\003"
+eexpect ":/# "
+send "ls mystore/logs\r"
+eexpect "cockroach.log"
+eexpect ":/# "
+
+# Check that an empty `-log-dir` disables file logging.
+send "$argv start --store=path=mystore2 --log-dir=\r"
+eexpect "node starting"
+send "\003"
+eexpect ":/# "
+send "ls mystore2/logs 2>/dev/null | wc -l\r"
+eexpect "0"
+eexpect ":/# "
+
 # Check that leading tildes are properly rejected.
 send "$argv start --log-dir=\~/blah\r"
 eexpect "log directory cannot start with '~'"
@@ -24,19 +42,19 @@ send "\003"
 eexpect ":/# "
 
 # Check that TRUE and FALSE are valid values for the severity flags.
-send "$argv start --alsologtostderr=false\r"
+send "$argv start --logtostderr=false\r"
 eexpect "node starting"
 send "\003"
 eexpect ":/# "
-send "$argv start --alsologtostderr=true\r"
+send "$argv start --logtostderr=true\r"
 eexpect "node starting"
 send "\003"
 eexpect ":/# "
-send "$argv start --alsologtostderr=2\r"
+send "$argv start --logtostderr=2\r"
 eexpect "node starting"
 send "\003"
 eexpect ":/# "
-send "$argv start --alsologtostderr=cantparse\r"
+send "$argv start --logtostderr=cantparse\r"
 eexpect "parsing \"cantparse\": invalid syntax"
 eexpect ":/# "
 

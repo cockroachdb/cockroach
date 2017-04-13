@@ -273,8 +273,8 @@ func main() {
 	// multiple runs.
 	randutil.SeedForTests()
 
-	if f := flag.Lookup("alsologtostderr"); f != nil {
-		fmt.Println("Starting simulation. Add -alsologtostderr to see progress.")
+	if f := flag.Lookup("logtostderr"); f != nil {
+		fmt.Println("Starting simulation. Add -logtostderr to see progress.")
 	}
 	flag.Parse()
 

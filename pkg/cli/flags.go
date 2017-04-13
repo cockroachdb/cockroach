@@ -66,8 +66,6 @@ func InitCLIDefaults() {
 	dumpCtx.dumpMode = dumpBoth
 }
 
-var sqlSize *bytesValue
-var cacheSize *bytesValue
 var insecure *insecureValue
 
 const usageIndentation = 8
@@ -123,36 +121,6 @@ func makeUsageString(flagInfo cliflags.FlagInfo) string {
 	// the correct indentation (7 spaces) here. This is admittedly fragile.
 	return text.Indent(s, strings.Repeat(" ", usageIndentation)) +
 		strings.Repeat(" ", usageIndentation-1)
-}
-
-type bytesValue struct {
-	val   *int64
-	isSet bool
-}
-
-func newBytesValue(val *int64) *bytesValue {
-	return &bytesValue{val: val}
-}
-
-func (b *bytesValue) Set(s string) error {
-	v, err := humanizeutil.ParseBytes(s)
-	if err != nil {
-		return err
-	}
-	*b.val = v
-	b.isSet = true
-	return nil
-}
-
-func (b *bytesValue) Type() string {
-	return "bytes"
-}
-
-func (b *bytesValue) String() string {
-	// This uses the MiB, GiB, etc suffixes. If we use humanize.Bytes() we get
-	// the MB, GB, etc suffixes, but the conversion is done in multiples of 1000
-	// vs 1024.
-	return humanizeutil.IBytes(*b.val)
 }
 
 type insecureValue struct {
@@ -245,6 +213,7 @@ func varFlag(f *pflag.FlagSet, value pflag.Value, flagInfo cliflags.FlagInfo) {
 
 func init() {
 	// Change the logging defaults for the main cockroach binary.
+	// The value is overridden after command-line parsing.
 	if err := flag.Lookup(logflags.LogToStderrName).Value.Set("false"); err != nil {
 		panic(err)
 	}
@@ -269,9 +238,9 @@ func init() {
 		// TODO(peter): Decide if we want to make the lightstep flags visible.
 		if strings.HasPrefix(flag.Name, "lightstep_") {
 			flag.Hidden = true
-		} else if flag.Name == "no-redirect-stderr" {
+		} else if flag.Name == logflags.NoRedirectStderrName {
 			flag.Hidden = true
-		} else if flag.Name == "show-logs" {
+		} else if flag.Name == logflags.ShowLogsName {
 			flag.Hidden = true
 		}
 		pf.AddFlag(flag)
@@ -280,8 +249,18 @@ func init() {
 	// The --log-dir default changes depending on the command. Avoid confusion by
 	// simply clearing it.
 	pf.Lookup(logflags.LogDirName).DefValue = ""
-	// If no value is specified for --alsologtostderr output everything.
-	pf.Lookup(logflags.AlsoLogToStderrName).NoOptDefVal = "INFO"
+	// When a flag is specified but without a value, pflag assigns its
+	// NoOptDefVal to it via Set(). This is also the value used to
+	// generate the implicit assigned value in the usage text
+	// (e.g. "--logtostderr[=XXXXX]"). We can't populate a real default
+	// unfortunately, because the default depends on which command is
+	// run (`start` vs. the rest), and pflag does not support
+	// per-command NoOptDefVals. So we need some sentinel value here
+	// that we can recognize when setDefaultStderrVerbosity() is called
+	// after argument parsing. We could use UNKNOWN, but to ensure that
+	// the usage text is somewhat less confusing to the user, we use the
+	// special severity value DEFAULT instead.
+	pf.Lookup(logflags.LogToStderrName).NoOptDefVal = log.Severity_DEFAULT.String()
 
 	// Security flags.
 	baseCfg.Insecure = true
@@ -326,10 +305,10 @@ func init() {
 
 		// Engine flags.
 		setDefaultSizeParameters(&serverCfg)
-		cacheSize = newBytesValue(&serverCfg.CacheSize)
+		cacheSize := humanizeutil.NewBytesValue(&serverCfg.CacheSize)
 		varFlag(f, cacheSize, cliflags.Cache)
 
-		sqlSize = newBytesValue(&serverCfg.SQLMemoryPoolSize)
+		sqlSize := humanizeutil.NewBytesValue(&serverCfg.SQLMemoryPoolSize)
 		varFlag(f, sqlSize, cliflags.SQLMem)
 	}
 
@@ -465,27 +444,22 @@ func extraClientFlagInit() {
 func setDefaultStderrVerbosity(cmd *cobra.Command, defaultSeverity log.Severity) error {
 	pf := cmd.Flags()
 
-	if vf := pf.Lookup(logflags.AlsoLogToStderrName); !vf.Changed {
-		ls := pf.Lookup(logflags.LogToStderrName)
+	vf := pf.Lookup(logflags.LogToStderrName)
 
-		// If `--logtostderr` is specified, the base default is
-		// everything, otherwise it's nothing (subject to the additional
-		// setting below).
-		if ls.Value.String() == "true" {
-			if err := vf.Value.Set(log.Severity_INFO.String()); err != nil {
-				return err
-			}
-		} else {
-			if err := vf.Value.Set(log.Severity_NONE.String()); err != nil {
-				return err
-			}
+	// if `--logtostderr` was not specified and no log directory was
+	// set, then set stderr logging to the level considered default by
+	// the specific command.
+	if !vf.Changed && !log.DirSet() {
+		if err := vf.Value.Set(defaultSeverity.String()); err != nil {
+			return err
 		}
-		// If no log directory has been set, reduce the logging verbosity
-		// to the given default.
-		if !log.DirSet() {
-			if err := vf.Value.Set(defaultSeverity.String()); err != nil {
-				return err
-			}
+	}
+
+	// If `--logtostderr` was specified without explicit verbosity,
+	// set to the level that is considered default by the specific command.
+	if vf.Value.String() == log.Severity_DEFAULT.String() {
+		if err := vf.Value.Set(defaultSeverity.String()); err != nil {
+			return err
 		}
 	}
 

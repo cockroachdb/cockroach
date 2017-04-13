@@ -95,7 +95,6 @@ func setFlags() {
 	SetExitFunc(os.Exit)
 	logging.noStderrRedirect = false
 	logging.stderrThreshold = Severity_ERROR
-	logging.toStderr = false
 }
 
 // Test that Info works as advertised.
@@ -467,8 +466,8 @@ func TestRollover(t *testing.T) {
 	logExitFunc = func(e error) {
 		err = e
 	}
-	defer func(previous uint64) { MaxSize = previous }(MaxSize)
-	MaxSize = 2048
+	defer func(previous int64) { LogFileMaxSize = previous }(LogFileMaxSize)
+	LogFileMaxSize = 2048
 
 	Info(context.Background(), "x") // Be sure we have a file.
 	info, ok := logging.file.(*syncBuffer)
@@ -479,7 +478,7 @@ func TestRollover(t *testing.T) {
 		t.Fatalf("info has initial error: %v", err)
 	}
 	fname0 := info.file.Name()
-	Info(context.Background(), strings.Repeat("x", int(MaxSize))) // force a rollover
+	Info(context.Background(), strings.Repeat("x", int(LogFileMaxSize))) // force a rollover
 	if err != nil {
 		t.Fatalf("info has error after big write: %v", err)
 	}
@@ -495,7 +494,7 @@ func TestRollover(t *testing.T) {
 	if fname0 == fname1 {
 		t.Errorf("info.f.Name did not change: %v", fname0)
 	}
-	if info.nbytes >= MaxSize {
+	if info.nbytes >= LogFileMaxSize {
 		t.Errorf("file size was not reset: %d", info.nbytes)
 	}
 }
@@ -526,12 +525,12 @@ func TestGC(t *testing.T) {
 	// the expected number of log file calculation below.
 	logging.noStderrRedirect = true
 
-	defer func(previous uint64) { MaxSize = previous }(MaxSize)
-	MaxSize = 1 // ensure rotation on every log write
-	defer func(previous uint64) {
-		atomic.StoreUint64(&MaxSizePerSeverity, previous)
-	}(MaxSizePerSeverity)
-	atomic.StoreUint64(&MaxSizePerSeverity, maxTotalLogFileSize)
+	defer func(previous int64) { LogFileMaxSize = previous }(LogFileMaxSize)
+	LogFileMaxSize = 1 // ensure rotation on every log write
+	defer func(previous int64) {
+		atomic.StoreInt64(&LogFilesCombinedMaxSize, previous)
+	}(LogFilesCombinedMaxSize)
+	atomic.StoreInt64(&LogFilesCombinedMaxSize, 1500)
 
 	allFilesOriginal, err := ListLogFiles()
 	if err != nil {
@@ -621,7 +620,6 @@ func TestFatalStacktraceStderr(t *testing.T) {
 
 	setFlags()
 	logging.stderrThreshold = Severity_NONE
-	logging.toStderr = false
 	SetExitFunc(func(int) {})
 
 	defer setFlags()
@@ -678,6 +676,36 @@ func TestRedirectStderr(t *testing.T) {
 	}
 	if !strings.Contains(string(contents), stderrText) {
 		t.Fatalf("log does not contain stderr text\n%s", contents)
+	}
+}
+
+func TestFileSeverityFilter(t *testing.T) {
+	// This test requires that the logs go to files. We must disable
+	// showLogs, if it was specified, for otherwise the Scope() does not
+	// do its job properly.
+	defer func(s bool) { showLogs = s }(showLogs)
+	showLogs = false
+
+	s := Scope(t)
+	defer s.Close(t)
+
+	setFlags()
+	logging.fileThreshold = Severity_ERROR
+
+	Infof(context.Background(), "test1")
+	Errorf(context.Background(), "test2")
+
+	Flush()
+
+	contents, err := ioutil.ReadFile(logging.file.(*syncBuffer).file.Name())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(contents), "test2") {
+		t.Errorf("log does not contain error text\n%s", contents)
+	}
+	if strings.Contains(string(contents), "test1") {
+		t.Errorf("info text was not filtered out of log\n%s", contents)
 	}
 }
 

@@ -1,3 +1,4 @@
+// Copyright 2015 Cockroach Labs.
 // Copyright 2013 Google Inc. All Rights Reserved.
 //
 // Go support for leveled logs, analogous to https://code.google.com/p/google-glog/
@@ -44,13 +45,20 @@
 // This package provides several flags that modify this behavior.
 // These are provided via the pflags library; see InitFlags.
 //
-//	--logtostderr=true
-//		Logs are written to standard error instead of to files.
-//	--alsologtostderr=INFO
+//	--logtostderr=LEVEL
 //		Logs are written to standard error as well as to files.
-//	--log-dir=""
+//    Entries with severity below LEVEL are not written to stderr.
+//    "true" and "false" are also supported (everything / nothing).
+//	--log-dir="..."
 //		Log files will be written to this directory instead of the
-//		default temporary directory.
+//		default target directory.
+//  --log-file-verbosity=LEVEL
+//    Entries with severity below LEVEL are not written to the log file.
+//    "true" and "false" are also supported (everything / nothing).
+//  --log-file-max-size=N
+//    Log files are rotated after reaching that size.
+//  --log-dir-max-size=N
+//    Log files are removed after log directory reaches that size.
 //
 //	Other flags provide aids to debugging.
 //
