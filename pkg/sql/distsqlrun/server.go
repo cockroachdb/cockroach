@@ -223,6 +223,9 @@ func (ds *ServerImpl) SetupFlow(_ context.Context, req *SetupFlowRequest) (*Simp
 		err = ds.flowScheduler.ScheduleFlow(ctx, f)
 	}
 	if err != nil {
+		// We return flow deployment errors in the response so that they are
+		// packaged correctly over the wire. If we return them directly to this
+		// function, they become part of an rpc error.
 		return &SimpleResponse{Error: NewError(err)}, nil
 	}
 	return &SimpleResponse{}, nil

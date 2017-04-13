@@ -723,7 +723,7 @@ func NewSchemaChangeManager(
 		testingKnobs:   testingKnobs,
 		schemaChangers: make(map[sqlbase.ID]SchemaChanger),
 		distSQLPlanner: newDistSQLPlanner(
-			nodeDesc, rpcContext, distSQLServ, distSender, gossip,
+			nodeDesc, rpcContext, distSQLServ, distSender, gossip, leaseMgr.stopper,
 		),
 	}
 }
