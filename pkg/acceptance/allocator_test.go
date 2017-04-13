@@ -324,10 +324,10 @@ func (at *allocatorTest) printRebalanceStats(db *gosql.DB, host string) error {
 	// Output time it took to rebalance.
 	{
 		var rebalanceIntervalStr string
-		var rebalanceInterval time.Duration
-		q := `SELECT (SELECT MAX(timestamp) FROM rangelog) - ` +
-			`(select MAX(timestamp) FROM eventlog WHERE eventType='` + string(sql.EventLogNodeJoin) + `')`
-		if err := db.QueryRow(q).Scan(&rebalanceIntervalStr); err != nil {
+		if err := db.QueryRow(
+			`SELECT (SELECT MAX(timestamp) FROM rangelog) - (SELECT MAX(timestamp) FROM eventlog WHERE eventType=$1)`,
+			sql.EventLogNodeJoin,
+		).Scan(&rebalanceIntervalStr); err != nil {
 			return err
 		}
 		rebalanceInterval, err := time.ParseDuration(rebalanceIntervalStr)
