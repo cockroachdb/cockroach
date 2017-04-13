@@ -92,7 +92,7 @@ func ExportStorageConfFromURI(path string) (roachpb.ExportStorage, error) {
 	case "http", "https":
 		conf.Provider = roachpb.ExportStorageProvider_Http
 		conf.HttpPath.BaseUri = path
-	case "", "file":
+	case "nodelocal":
 		conf.Provider = roachpb.ExportStorageProvider_LocalFile
 		conf.LocalFile.Path = uri.Path
 	default:
