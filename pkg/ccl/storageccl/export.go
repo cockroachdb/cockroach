@@ -17,6 +17,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl/engineccl"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -29,9 +30,16 @@ import (
 
 func init() {
 	storage.SetExportCmd(storage.Command{
-		DeclareKeys: storage.DefaultDeclareKeys,
+		DeclareKeys: declareKeysExport,
 		Eval:        evalExport,
 	})
+}
+
+func declareKeysExport(
+	desc roachpb.RangeDescriptor, header roachpb.Header, req roachpb.Request, spans *storage.SpanSet,
+) {
+	storage.DefaultDeclareKeys(desc, header, req, spans)
+	spans.Add(storage.SpanReadOnly, roachpb.Span{Key: keys.RangeLastGCKey(header.RangeID)})
 }
 
 // evalExport dumps the requested keys into files of non-overlapping key ranges
