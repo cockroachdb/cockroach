@@ -33,7 +33,7 @@ import (
 func TestBuildBabyCluster(t *testing.T) {
 	t.Skip("only enabled during testing")
 
-	s := log.Scope(t, "")
+	s := log.Scope(t)
 	defer s.Close(t)
 
 	ctx := context.Background()
@@ -56,7 +56,7 @@ func TestBuildBabyCluster(t *testing.T) {
 //	 TESTS=FiveNodesAndWriters \
 //	 TESTFLAGS='-v -remote -key-name google_compute_engine -cwd terraform'
 func TestFiveNodesAndWriters(t *testing.T) {
-	s := log.Scope(t, "")
+	s := log.Scope(t)
 	defer s.Close(t)
 
 	ctx := context.Background()
