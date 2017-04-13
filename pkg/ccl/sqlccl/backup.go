@@ -12,6 +12,7 @@ import (
 	"bytes"
 	"io/ioutil"
 	"sort"
+	"strings"
 
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
@@ -20,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl/intervalccl"
+	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -224,6 +226,19 @@ func backupJobDescription(
 	return backup.String(), nil
 }
 
+// clusterNodeCount returns the approximate number of nodes in the cluster.
+func clusterNodeCount(g *gossip.Gossip) int {
+	const nodePrefix = gossip.KeyNodeIDPrefix + ":"
+
+	var nodes int
+	for k := range g.GetInfoStatus().Infos {
+		if strings.HasPrefix(k, nodePrefix) {
+			nodes++
+		}
+	}
+	return nodes
+}
+
 type backupFileDescriptors []BackupDescriptor_File
 
 func (r backupFileDescriptors) Len() int      { return len(r) }
@@ -341,11 +356,38 @@ func Backup(
 		return BackupDescriptor{}, err
 	}
 
+	// We're already limiting these on the server-side, but sending all the
+	// Export requests at once would fill up distsender/grpc/something and cause
+	// all sorts of badness (node liveness timeouts leading to mass leaseholder
+	// transfers, poor performance on SQL workloads, etc) as well as log spam
+	// about slow distsender requests. Rate limit them here, too.
+	//
+	// Each node limits the number of running Export & Import requests it serves
+	// to avoid overloading the network, so multiply that by the number of nodes
+	// in the cluster and use that as the number of outstanding Export requests
+	// for the rate limiting. This attempts to strike a balance between
+	// simplicity, not getting slow distsender log spam, and keeping the server
+	// side limiter full.
+	//
+	// TODO(dan): Make this limiting per node.
+	//
+	// TODO(dan): See if there's some better solution than rate-limiting #14798.
+	maxConcurrentExports := clusterNodeCount(p.ExecCfg().Gossip) * storageccl.ParallelRequestsLimit
+	exportsSem := make(chan struct{}, maxConcurrentExports)
+
 	header := roachpb.Header{Timestamp: endTime}
 	g, gCtx := errgroup.WithContext(ctx)
 	for i := range spans {
+		select {
+		case exportsSem <- struct{}{}:
+		case <-ctx.Done():
+			return BackupDescriptor{}, ctx.Err()
+		}
+
 		span := spans[i]
 		g.Go(func() error {
+			defer func() { <-exportsSem }()
+
 			req := &roachpb.ExportRequest{
 				Span:      span,
 				Storage:   storageConf,
