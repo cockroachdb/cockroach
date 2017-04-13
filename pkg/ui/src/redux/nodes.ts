@@ -41,7 +41,7 @@ export enum LivenessStatus {
 }
 
 // Functions to select data directly from the redux state.
-const nodeStatusesSelector = (state: AdminUIState) => state.cachedData.nodes.data;
+export const nodeStatusesSelector = (state: AdminUIState) => state.cachedData.nodes.data;
 const livenessesSelector = (state: AdminUIState) => state.cachedData.liveness.data;
 const livenessCheckedAtSelector = (state: AdminUIState) => state.cachedData.liveness.setAt;
 

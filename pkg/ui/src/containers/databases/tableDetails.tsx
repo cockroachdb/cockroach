@@ -24,7 +24,7 @@ import * as hljs from "highlight.js";
 export const GrantsSortedTable = SortedTable as new () => SortedTable<protos.cockroach.server.serverpb.TableDetailsResponse.Grant$Properties>;
 
 const databaseTableGrantsSortSetting = new LocalSetting<AdminUIState, SortSetting>(
-  "tableDetails/sort_setting/grants", (s) => s.ui,
+  "tableDetails/sort_setting/grants", (s) => s.localSettings,
 );
 
 /**

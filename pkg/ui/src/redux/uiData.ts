@@ -30,7 +30,12 @@ export const KEY_REGISTRATION_SYNCHRONIZED = "registration_synchronized";
 export class OptInAttributes {
   email: string = "";
   optin: boolean = null; // Did the user opt in/out of reporting usage
-  dismissed: number = null; // How many times did the user dismiss the banner/modal without opting in/out
+  /**
+   * Number of times the user has dismissed the opt-in banner. This was made a
+   * number instead of a boolean for a feature that was not implemented, and is
+   * currently only ever set to null or 1.
+   */
+  dismissed: number = null;
   firstname: string = "";
   lastname: string = "";
   company: string = "";
@@ -69,6 +74,10 @@ export class UIDataSet {
  * Reducer which modifies a UIDataSet.
  */
 export default function (state = new UIDataSet(), action: Action): UIDataSet {
+  if (_.isNil(action)) {
+    return state;
+  }
+
   switch (action.type) {
     case SET: {
       const { key, value } = (action as PayloadAction<KeyValue>).payload;
