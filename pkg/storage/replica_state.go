@@ -117,6 +117,18 @@ func (rsl replicaStateLoader) save(
 	); err != nil {
 		return enginepb.MVCCStats{}, err
 	}
+	// Freeze-related functionality was removed in #14779 but we must
+	// continue to write a value to this key to avoid inconsistencies
+	// during upgrades.
+	//
+	// TODO(bdarnell): this can be safely removed after propEvalKV is
+	// fully rolled out.
+	var falseVal roachpb.Value
+	falseVal.SetBool(false)
+	if err := engine.MVCCPut(ctx, eng, ms, rsl.RangeFrozenStatusKey(),
+		hlc.Timestamp{}, falseVal, nil); err != nil {
+		return enginepb.MVCCStats{}, err
+	}
 	if err := rsl.setGCThreshold(ctx, eng, ms, &state.GCThreshold); err != nil {
 		return enginepb.MVCCStats{}, err
 	}
