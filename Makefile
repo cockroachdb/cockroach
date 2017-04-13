@@ -129,7 +129,7 @@ gotestdashi: $(BOOTSTRAP_TARGET)
 testshort: override TESTFLAGS += -short
 
 testrace: override GOFLAGS += -race
-testrace: GORACE := halt_on_error=1
+testrace: export GORACE := halt_on_error=1
 testrace: TESTTIMEOUT := $(RACETIMEOUT)
 
 # Run make testlogic to run all of the logic tests. Specify test files to run
@@ -144,6 +144,7 @@ bench: TESTTIMEOUT := $(BENCHTIMEOUT)
 
 .PHONY: test testshort testrace testlogic bench
 test testshort testrace testlogic bench: gotestdashi
+	env
 	$(GO) test $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -run "$(TESTS)" $(if $(BENCHES),-bench "$(BENCHES)") -timeout $(TESTTIMEOUT) $(PKG) $(TESTFLAGS)
 
 testraceslow: override GOFLAGS += -race
