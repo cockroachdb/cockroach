@@ -445,6 +445,9 @@ func TestRangesResponse(t *testing.T) {
 		if ri.State.LastIndex == 0 {
 			t.Error("expected positive LastIndex")
 		}
+		if e, a := 1, len(ri.LeaseHistory); e != a {
+			t.Errorf("expected a lease history length of %d, actual %d\n%+v", e, a, ri)
+		}
 	}
 }
 

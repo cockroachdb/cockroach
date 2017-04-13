@@ -20,6 +20,7 @@ option go_package = "serverpb";
 
 import "cockroach/pkg/build/info.proto";
 import "cockroach/pkg/gossip/gossip.proto";
+import "cockroach/pkg/roachpb/data.proto";
 import "cockroach/pkg/server/status/status.proto";
 import "cockroach/pkg/storage/engine/enginepb/mvcc.proto";
 import "cockroach/pkg/storage/storagebase/state.proto";
@@ -100,6 +101,7 @@ message RangeInfo {
      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.StoreID"
   ];
   string error_message = 7;
+  repeated roachpb.Lease lease_history = 8 [(gogoproto.nullable) = false];
 }
 
 message RangesRequest {

@@ -8765,6 +8765,7 @@ export const cockroach = $root.cockroach = (() => {
                  * @property {number} [source_node_id] RangeInfo source_node_id.
                  * @property {number} [source_store_id] RangeInfo source_store_id.
                  * @property {string} [error_message] RangeInfo error_message.
+                 * @property {Array.<cockroach.roachpb.Lease$Properties>} [lease_history] RangeInfo lease_history.
                  */
 
                 /**
@@ -8774,6 +8775,7 @@ export const cockroach = $root.cockroach = (() => {
                  * @param {cockroach.server.serverpb.RangeInfo$Properties=} [properties] Properties to set
                  */
                 function RangeInfo(properties) {
+                    this.lease_history = [];
                     if (properties)
                         for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
                             if (properties[keys[i]] != null)
@@ -8817,6 +8819,12 @@ export const cockroach = $root.cockroach = (() => {
                 RangeInfo.prototype.error_message = "";
 
                 /**
+                 * RangeInfo lease_history.
+                 * @type {Array.<cockroach.roachpb.Lease$Properties>}
+                 */
+                RangeInfo.prototype.lease_history = $util.emptyArray;
+
+                /**
                  * Creates a new RangeInfo instance using the specified properties.
                  * @param {cockroach.server.serverpb.RangeInfo$Properties=} [properties] Properties to set
                  * @returns {cockroach.server.serverpb.RangeInfo} RangeInfo instance
@@ -8846,6 +8854,9 @@ export const cockroach = $root.cockroach = (() => {
                         writer.uint32(/* id 6, wireType 0 =*/48).int32(message.source_store_id);
                     if (message.error_message != null && message.hasOwnProperty("error_message"))
                         writer.uint32(/* id 7, wireType 2 =*/58).string(message.error_message);
+                    if (message.lease_history != null && message.lease_history.length)
+                        for (let i = 0; i < message.lease_history.length; ++i)
+                            $root.cockroach.roachpb.Lease.encode(message.lease_history[i], writer.uint32(/* id 8, wireType 2 =*/66).fork()).ldelim();
                     return writer;
                 };
 
@@ -8891,6 +8902,11 @@ export const cockroach = $root.cockroach = (() => {
                             break;
                         case 7:
                             message.error_message = reader.string();
+                            break;
+                        case 8:
+                            if (!(message.lease_history && message.lease_history.length))
+                                message.lease_history = [];
+                            message.lease_history.push($root.cockroach.roachpb.Lease.decode(reader, reader.uint32()));
                             break;
                         default:
                             reader.skipType(tag & 7);
@@ -8945,6 +8961,15 @@ export const cockroach = $root.cockroach = (() => {
                     if (message.error_message != null && message.hasOwnProperty("error_message"))
                         if (!$util.isString(message.error_message))
                             return "error_message: string expected";
+                    if (message.lease_history != null && message.hasOwnProperty("lease_history")) {
+                        if (!Array.isArray(message.lease_history))
+                            return "lease_history: array expected";
+                        for (let i = 0; i < message.lease_history.length; ++i) {
+                            let error = $root.cockroach.roachpb.Lease.verify(message.lease_history[i]);
+                            if (error)
+                                return "lease_history." + error;
+                        }
+                    }
                     return null;
                 };
 
@@ -8978,6 +9003,16 @@ export const cockroach = $root.cockroach = (() => {
                         message.source_store_id = object.source_store_id | 0;
                     if (object.error_message != null)
                         message.error_message = String(object.error_message);
+                    if (object.lease_history) {
+                        if (!Array.isArray(object.lease_history))
+                            throw TypeError(".cockroach.server.serverpb.RangeInfo.lease_history: array expected");
+                        message.lease_history = [];
+                        for (let i = 0; i < object.lease_history.length; ++i) {
+                            if (typeof object.lease_history[i] !== "object")
+                                throw TypeError(".cockroach.server.serverpb.RangeInfo.lease_history: object expected");
+                            message.lease_history[i] = $root.cockroach.roachpb.Lease.fromObject(object.lease_history[i]);
+                        }
+                    }
                     return message;
                 };
 
@@ -9000,6 +9035,8 @@ export const cockroach = $root.cockroach = (() => {
                     if (!options)
                         options = {};
                     let object = {};
+                    if (options.arrays || options.defaults)
+                        object.lease_history = [];
                     if (options.defaults) {
                         object.span = null;
                         object.raft_state = null;
@@ -9020,6 +9057,11 @@ export const cockroach = $root.cockroach = (() => {
                         object.source_store_id = message.source_store_id;
                     if (message.error_message != null && message.hasOwnProperty("error_message"))
                         object.error_message = message.error_message;
+                    if (message.lease_history && message.lease_history.length) {
+                        object.lease_history = [];
+                        for (let j = 0; j < message.lease_history.length; ++j)
+                            object.lease_history[j] = $root.cockroach.roachpb.Lease.toObject(message.lease_history[j], options);
+                    }
                     return object;
                 };
 
