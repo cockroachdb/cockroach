@@ -354,7 +354,6 @@ func init() {
 		sqlShellCmd,
 		/* startCmd is covered above */
 	}
-	clientCmds = append(clientCmds, kvCmds...)
 	clientCmds = append(clientCmds, rangeCmds...)
 	clientCmds = append(clientCmds, userCmds...)
 	clientCmds = append(clientCmds, zoneCmds...)
@@ -414,11 +413,8 @@ func init() {
 		varFlag(f, &cliCtx.tableDisplayFormat, cliflags.TableDisplayFormat)
 	}
 
-	// Max results flag for scan, reverse scan, and range list.
-	for _, cmd := range []*cobra.Command{scanCmd, reverseScanCmd, lsRangesCmd} {
-		f := cmd.Flags()
-		int64Flag(f, &maxResults, cliflags.MaxResults, 1000)
-	}
+	// Max results flag for range list.
+	int64Flag(lsRangesCmd.Flags(), &maxResults, cliflags.MaxResults, 1000)
 
 	// Debug commands.
 	{
