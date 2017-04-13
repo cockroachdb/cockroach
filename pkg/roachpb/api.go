@@ -263,6 +263,20 @@ func (er *ExportResponse) combine(c combinable) error {
 
 var _ combinable = &ExportResponse{}
 
+// Combine implements the combinable interface.
+func (r *AdminScatterResponse) combine(c combinable) error {
+	if r != nil {
+		otherR := c.(*AdminScatterResponse)
+		if err := r.ResponseHeader.combine(otherR.Header()); err != nil {
+			return err
+		}
+		r.Ranges = append(r.Ranges, otherR.Ranges...)
+	}
+	return nil
+}
+
+var _ combinable = &AdminScatterResponse{}
+
 // Header implements the Request interface.
 func (rh Span) Header() Span {
 	return rh
@@ -467,6 +481,9 @@ func (*ExportRequest) Method() Method { return Export }
 // Method implements the Request interface.
 func (*ImportRequest) Method() Method { return Import }
 
+// Method implements the Request interface.
+func (*AdminScatterRequest) Method() Method { return AdminScatter }
+
 // ShallowCopy implements the Request interface.
 func (gr *GetRequest) ShallowCopy() Request {
 	shallowCopy := *gr
@@ -667,6 +684,12 @@ func (ekr *ExportRequest) ShallowCopy() Request {
 
 // ShallowCopy implements the Request interface.
 func (r *ImportRequest) ShallowCopy() Request {
+	shallowCopy := *r
+	return &shallowCopy
+}
+
+// ShallowCopy implements the Request interface.
+func (r *AdminScatterRequest) ShallowCopy() Request {
 	shallowCopy := *r
 	return &shallowCopy
 }
@@ -876,6 +899,7 @@ func (*CheckConsistencyRequest) flags() int         { return isAdmin | isRange }
 func (*WriteBatchRequest) flags() int               { return isWrite | isRange }
 func (*ExportRequest) flags() int                   { return isRead | isRange }
 func (*ImportRequest) flags() int                   { return isAdmin | isAlone }
+func (*AdminScatterRequest) flags() int             { return isAdmin | isAlone | isRange }
 
 // Keys returns credentials in an s3gof3r.Keys
 func (b *ExportStorage_S3) Keys() s3gof3r.Keys {
