@@ -15,19 +15,19 @@ import (
 )
 
 const (
-	// The number of ExportKeys or Ingest requests that can run at once. Both
-	// of these requests generally do some read/write from the network and
-	// cache results to a tmp file. In order to not exhaust the disk or memory,
-	// or saturate the network, limit the number of these that can be run in
-	// parallel. This number was chosen by a guess. If SST files are likely to
-	// not be over 200MB, then 5 parallel workers hopefully won't use more than
-	// 1GB of space in the tmp directory. It could be improved by more measured
-	// heuristics.
-	parallelRequestsLimit = 5
+	// ParallelRequestsLimit is the number of Export or Import requests that can
+	// run at once. Both of these requests generally do some read/write from the
+	// network and cache results to a tmp file. In order to not exhaust the disk
+	// or memory, or saturate the network, limit the number of these that can be
+	// run in parallel. This number was chosen by a guess. If SST files are
+	// likely to not be over 200MB, then 5 parallel workers hopefully won't use
+	// more than 1GB of space in the tmp directory. It could be improved by more
+	// measured heuristics.
+	ParallelRequestsLimit = 5
 )
 
 var (
-	parallelRequestsLimiter = make(chan struct{}, parallelRequestsLimit)
+	parallelRequestsLimiter = make(chan struct{}, ParallelRequestsLimit)
 )
 
 func beginLimitedRequest(ctx context.Context) error {
