@@ -1891,8 +1891,6 @@ func TestReplicaUpdateTSCache(t *testing.T) {
 // TestReplicaCommandQueue verifies that reads/writes must wait for
 // pending commands to complete through Raft before being executed on
 // range.
-//
-// TODO(tschottdorf): hacks around #10084 (see usage of propEvalKV).
 func TestReplicaCommandQueue(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	// Test all four combinations of reads & writes waiting.
@@ -1922,11 +1920,6 @@ func TestReplicaCommandQueue(t *testing.T) {
 			addReqs = []string{"", "noop", "write"}
 		}
 		for _, addReq := range addReqs {
-			if addReq == "write" && propEvalKV {
-				// adding a write changes behavior in propEvalKV until the command
-				// queue changes are all done.
-				continue
-			}
 			for _, localKey := range []bool{false, true} {
 				expWait := test.expWait
 				if localKey {
@@ -2036,15 +2029,11 @@ func TestReplicaCommandQueue(t *testing.T) {
 
 						// Next, try read for a non-impacted key--should go through immediately.
 						cmd3Done := make(chan *roachpb.Error, 1)
-						if !propEvalKV {
-							if err := stopper.RunAsyncTask(context.Background(), func(_ context.Context) {
-								args := readOrWriteArgs(key2, true)
-								cmd3Done <- sendWithHeader(roachpb.Header{}, args)
-							}); err != nil {
-								t.Fatal(err)
-							}
-						} else {
-							close(cmd3Done)
+						if err := stopper.RunAsyncTask(context.Background(), func(_ context.Context) {
+							args := readOrWriteArgs(key2, true)
+							cmd3Done <- sendWithHeader(roachpb.Header{}, args)
+						}); err != nil {
+							t.Fatal(err)
 						}
 
 						// Verify that cmd3 finishes quickly no matter what cmds 1 and 2 were.
