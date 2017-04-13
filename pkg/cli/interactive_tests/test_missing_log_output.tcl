@@ -33,23 +33,8 @@ eexpect "starting cockroach node"
 interrupt
 eexpect ":/# "
 
-# Check that --alsologtostderr can override the threshold
-# regardless of what --logtostderr has set.
-send "echo marker; $argv start --alsologtostderr=ERROR\r"
-eexpect "marker\r\nCockroachDB node starting"
-
-# Stop it.
-interrupt
-eexpect ":/# "
-
-send "echo marker; $argv start --alsologtostderr=ERROR --logtostderr\r"
-eexpect "marker\r\nCockroachDB node starting"
-
-# Stop it.
-interrupt
-eexpect ":/# "
-
-send "echo marker; $argv start --alsologtostderr=ERROR --logtostderr=false\r"
+# Check that --logtostderr can override the threshold
+send "echo marker; $argv start --logtostderr=ERROR\r"
 eexpect "marker\r\nCockroachDB node starting"
 
 # Stop it.
@@ -75,17 +60,8 @@ send "echo marker; $argv quit --logtostderr\r"
 eexpect "marker\r\nError"
 eexpect ":/# "
 
-# Now check that `--alsologtostderr` can override the default
-# properly, with or without `--logtostderr`.
-send "$argv quit --alsologtostderr=INFO --logtostderr --vmodule=stopper=1\r"
-eexpect "stop has been called"
-eexpect ":/# "
-
-send "$argv quit --alsologtostderr=INFO --logtostderr=false --vmodule=stopper=1\r"
-eexpect "stop has been called"
-eexpect ":/# "
-
-send "$argv quit --alsologtostderr=INFO --vmodule=stopper=1\r"
+# Now check that `--logtostderr` can override the default
+send "$argv quit --logtostderr=INFO --vmodule=stopper=1\r"
 eexpect "stop has been called"
 eexpect ":/# "
 

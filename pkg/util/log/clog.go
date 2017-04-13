@@ -86,7 +86,7 @@ func (s *Severity) Set(value string) error {
 		}
 		threshold = Severity(v)
 	}
-	logging.stderrThreshold.set(threshold)
+	s.set(threshold)
 	return nil
 }
 
@@ -137,24 +137,6 @@ var colorProfile256 = &colorProfile{
 	warnPrefix:  []byte("\033[38;5;214m"),
 	errorPrefix: []byte("\033[38;5;160m"),
 	timePrefix:  []byte("\033[38;5;246m"),
-}
-
-// OutputStats tracks the number of output lines and bytes written.
-type outputStats struct {
-	lines int64
-	bytes int64
-}
-
-// Stats tracks the number of lines of output and number of bytes
-// per severity level. Values must be read with atomic.LoadInt64.
-var Stats struct {
-	Info, Warning, Error outputStats
-}
-
-var severityStats = [Severity_NONE]*outputStats{
-	Severity_INFO:    &Stats.Info,
-	Severity_WARNING: &Stats.Warning,
-	Severity_ERROR:   &Stats.Error,
 }
 
 // Level is exported because it appears in the arguments to V and is
@@ -571,16 +553,23 @@ func formatLogEntry(entry Entry, stacks []byte, colors *colorProfile) *buffer {
 }
 
 func init() {
-	// Default stderrThreshold to log everything.
+	// Default stderrThreshold and fileThreshold to log everything.
 	// This will be the default in tests unless overridden; the CLI
 	// commands set their default separately in cli/flags.go
 	logging.stderrThreshold = Severity_INFO
+	logging.fileThreshold = Severity_INFO
 
 	logging.setVState(0, nil, false)
 	logging.exitFunc = os.Exit
 	logging.gcNotify = make(chan struct{}, 1)
 
 	go logging.flushDaemon()
+}
+
+// StartGCDaemon starts the log file GC -- this must be called after
+// command-line parsing has completed so that no data is lost when the
+// user configures larger max sizes than the defaults.
+func StartGCDaemon() {
 	go logging.gcDaemon()
 }
 
@@ -597,8 +586,10 @@ type loggingT struct {
 
 	noStderrRedirect bool
 
-	// Level flag. Handled atomically.
-	stderrThreshold Severity // The -alsologtostderr flag.
+	// Level flag for output to stderr. Handled atomically.
+	stderrThreshold Severity
+	// Level flag for output to files.
+	fileThreshold Severity
 
 	// freeList is a list of byte buffers, maintained under freeListMu.
 	freeList *buffer
@@ -609,10 +600,6 @@ type loggingT struct {
 
 	// mu protects the remaining elements of this structure and is
 	// used to synchronize logging.
-
-	// Boolean flags. Also protected by mu (see flags.go).
-	toStderr bool // The -logtostderr flag.
-
 	mu syncutil.Mutex
 	// file holds the log file writer.
 	file flushSyncWriter
@@ -731,7 +718,7 @@ func (l *loggingT) outputLogEntry(s Severity, file string, line int, msg string)
 	if s >= l.stderrThreshold.get() {
 		l.outputToStderr(entry, stacks)
 	}
-	if logDir.isSet() {
+	if logDir.isSet() && s >= l.fileThreshold.get() {
 		if l.file == nil {
 			if err := l.createFile(); err != nil {
 				// Make sure the message appears somewhere.
@@ -750,11 +737,6 @@ func (l *loggingT) outputLogEntry(s Severity, file string, line int, msg string)
 		}
 
 		l.putBuffer(buf)
-
-		if stats := severityStats[s]; stats != nil {
-			atomic.AddInt64(&stats.lines, 1)
-			atomic.AddInt64(&stats.bytes, int64(len(data)))
-		}
 	}
 	exitFunc := l.exitFunc
 	l.mu.Unlock()
@@ -893,7 +875,7 @@ type syncBuffer struct {
 	*bufio.Writer
 	file         *os.File
 	lastRotation int64
-	nbytes       uint64 // The number of bytes written to this file
+	nbytes       int64 // The number of bytes written to this file
 }
 
 func (sb *syncBuffer) Sync() error {
@@ -901,13 +883,13 @@ func (sb *syncBuffer) Sync() error {
 }
 
 func (sb *syncBuffer) Write(p []byte) (n int, err error) {
-	if sb.nbytes+uint64(len(p)) >= MaxSize {
+	if sb.nbytes+int64(len(p)) >= atomic.LoadInt64(&LogFileMaxSize) {
 		if err := sb.rotateFile(time.Now()); err != nil {
 			sb.logger.exit(err)
 		}
 	}
 	n, err = sb.Writer.Write(p)
-	sb.nbytes += uint64(n)
+	sb.nbytes += int64(n)
 	if err != nil {
 		sb.logger.exit(err)
 	}
@@ -967,7 +949,7 @@ func (sb *syncBuffer) rotateFile(now time.Time) error {
 		}, nil, nil)
 		var n int
 		n, err = sb.file.Write(buf.Bytes())
-		sb.nbytes += uint64(n)
+		sb.nbytes += int64(n)
 		if err != nil {
 			return err
 		}
@@ -1068,7 +1050,7 @@ func (l *loggingT) gcOldFiles() {
 		return
 	}
 
-	maxSizePerSeverity := atomic.LoadUint64(&MaxSizePerSeverity)
+	logFilesCombinedMaxSize := atomic.LoadInt64(&LogFilesCombinedMaxSize)
 	files := selectFiles(allFiles, math.MaxInt64)
 	if len(files) == 0 {
 		return
@@ -1078,7 +1060,7 @@ func (l *loggingT) gcOldFiles() {
 	sum := files[0].SizeBytes
 	for _, f := range files[1:] {
 		sum += f.SizeBytes
-		if uint64(sum) < maxSizePerSeverity {
+		if sum < logFilesCombinedMaxSize {
 			continue
 		}
 		path := filepath.Join(dir, f.Name)

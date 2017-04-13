@@ -392,7 +392,7 @@ func Example_logging() {
 	c := newCLITest(cliTestParams{})
 	defer c.cleanup()
 
-	c.RunWithArgs([]string{"sql", "--alsologtostderr=false", "-e", "select 1"})
+	c.RunWithArgs([]string{"sql", "--logtostderr=false", "-e", "select 1"})
 	c.RunWithArgs([]string{"sql", "--log-backtrace-at=foo.go:1", "-e", "select 1"})
 	c.RunWithArgs([]string{"sql", "--log-dir=", "-e", "select 1"})
 	c.RunWithArgs([]string{"sql", "--logtostderr=true", "-e", "select 1"})
@@ -400,7 +400,7 @@ func Example_logging() {
 	c.RunWithArgs([]string{"sql", "--vmodule=foo=1", "-e", "select 1"})
 
 	// Output:
-	// sql --alsologtostderr=false -e select 1
+	// sql --logtostderr=false -e select 1
 	// 1 row
 	// 1
 	// 1
@@ -1150,11 +1150,13 @@ Available Commands:
   help        Help about any command
 
 Flags:
-      --alsologtostderr Severity[=INFO]   logs at or above this threshold go to stderr (default INFO)
-      --log-backtrace-at traceLocation    when logging hits line file:N, emit a stack trace (default :0)
-      --log-dir string                    if non-empty, write log files in this directory
-      --logtostderr                       log to standard error instead of files
-      --no-color                          disable standard error log colorization
+      --log-backtrace-at traceLocation   when logging hits line file:N, emit a stack trace (default :0)
+      --log-dir string                   if non-empty, write log files in this directory
+      --log-dir-max-size bytes           maximum combined size of all log files (default 100 MiB)
+      --log-file-max-size bytes          maximum size of each log file (default 10 MiB)
+      --log-file-verbosity Severity      minimum verbosity of messages written to the log file (default INFO)
+      --logtostderr Severity[=DEFAULT]   logs at or above this threshold go to stderr (default NONE)
+      --no-color                         disable standard error log colorization
 
 Use "cockroach [command] --help" for more information about a command.
 `
