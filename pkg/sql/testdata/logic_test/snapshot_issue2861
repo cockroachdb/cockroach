@@ -1,4 +1,4 @@
-# LogicTest: default distsql
+# LogicTest: default parallel-stmts distsql
 
 # Run a simple shell session in which a reader conflicts with an open txn in
 # SNAPSHOT isolation by means of a read, which is resolved by a Push. Prevents

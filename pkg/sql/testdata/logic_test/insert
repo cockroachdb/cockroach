@@ -1,4 +1,4 @@
-# LogicTest: default
+# LogicTest: default parallel-stmts
 
 statement error table "kv" does not exist
 INSERT INTO kv VALUES ('a', 'b')

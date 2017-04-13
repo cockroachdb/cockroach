@@ -1,4 +1,4 @@
-# LogicTest: default distsql
+# LogicTest: default parallel-stmts distsql
 
 # These tests verify that while we are joining an index with the table, we
 # evaluate what parts of the filter we can using the columns in the index
