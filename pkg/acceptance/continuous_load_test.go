@@ -90,7 +90,7 @@ func (cl continuousLoadTest) queryCount(f *terrafarm.Farmer) (float64, error) {
 // by the `test.timeout` flag, minus the time it takes to reliably tear down
 // the test cluster.
 func (cl continuousLoadTest) Run(ctx context.Context, t testing.TB) {
-	s := log.Scope(t, "TestContinousLoad-"+cl.Prefix)
+	s := log.Scope(t)
 	defer s.Close(t)
 
 	f := MakeFarmer(t, cl.Prefix+cl.shortTestTimeout(), stopper)

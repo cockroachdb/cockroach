@@ -615,7 +615,7 @@ func (t *logicTest) setUser(user string) func() {
 }
 
 func (t *logicTest) setup(numNodes int, useFakeSpanResolver bool) {
-	t.logScope = log.Scope(t.t, "TestLogic")
+	t.logScope = log.Scope(t.t)
 
 	// TODO(pmattis): Add a flag to make it easy to run the tests against a local
 	// MySQL or Postgres instance.

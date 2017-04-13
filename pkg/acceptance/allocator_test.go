@@ -204,7 +204,7 @@ func (at *allocatorTest) Run(ctx context.Context, t *testing.T) {
 }
 
 func (at *allocatorTest) RunAndCleanup(ctx context.Context, t *testing.T) {
-	s := log.Scope(t, "AllocatorTest-"+at.Prefix)
+	s := log.Scope(t)
 	defer s.Close(t)
 
 	defer at.Cleanup(t)
