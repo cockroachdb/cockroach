@@ -24,6 +24,7 @@ import (
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -137,10 +138,37 @@ func queryInfoSchema(
 	return v, nil
 }
 
+func (p *planner) showClusterSetting(name string) (planNode, error) {
+	_, ok := settings.TypeOf(name)
+	if !ok {
+		return nil, errors.Errorf("unknown setting: %q", name)
+	}
+	columns := ResultColumns{{Name: name, Typ: parser.TypeString}}
+
+	return &delayedNode{
+		name:    "SHOW CLUSTER SETTING " + name,
+		columns: columns,
+		constructor: func(ctx context.Context, p *planner) (planNode, error) {
+			v := p.newContainerValuesNode(columns, 1)
+
+			value, _ := settings.Show(name)
+			if _, err := v.rows.AddRow(ctx, parser.Datums{parser.NewDString(value)}); err != nil {
+				v.rows.Close(ctx)
+				return nil, err
+			}
+			return v, nil
+		},
+	}, nil
+}
+
 // Show a session-local variable name.
 func (p *planner) Show(n *parser.Show) (planNode, error) {
 	origName := n.Name
 	name := strings.ToLower(n.Name)
+
+	if n.ClusterSetting {
+		return p.showClusterSetting(name)
+	}
 
 	var columns ResultColumns
 
