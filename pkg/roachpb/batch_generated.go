@@ -8,7 +8,7 @@ import (
 	"strconv"
 )
 
-type reqCounts [34]int32
+type reqCounts [35]int32
 
 // getReqCounts returns the number of times each
 // request type appears in the batch.
@@ -84,6 +84,8 @@ func (ba *BatchRequest) getReqCounts() reqCounts {
 			counts[32]++
 		case r.QueryTxn != nil:
 			counts[33]++
+		case r.Scatter != nil:
+			counts[34]++
 		default:
 			panic(fmt.Sprintf("unsupported request: %+v", r))
 		}
@@ -126,6 +128,7 @@ var requestNames = []string{
 	"Export",
 	"Import",
 	"QueryTxn",
+	"Scatter",
 }
 
 // Summary prints a short summary of the requests in a batch.
@@ -194,6 +197,7 @@ func (ba *BatchRequest) CreateReply() *BatchResponse {
 	var buf31 []ExportResponse
 	var buf32 []ImportResponse
 	var buf33 []QueryTxnResponse
+	var buf34 []ScatterResponse
 
 	for i, r := range ba.Requests {
 		switch {
@@ -401,6 +405,12 @@ func (ba *BatchRequest) CreateReply() *BatchResponse {
 			}
 			br.Responses[i].QueryTxn = &buf33[0]
 			buf33 = buf33[1:]
+		case r.Scatter != nil:
+			if buf34 == nil {
+				buf34 = make([]ScatterResponse, counts[34])
+			}
+			br.Responses[i].Scatter = &buf34[0]
+			buf34 = buf34[1:]
 		default:
 			panic(fmt.Sprintf("unsupported request: %+v", r))
 		}

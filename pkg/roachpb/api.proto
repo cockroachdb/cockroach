@@ -830,6 +830,27 @@ message ImportResponse {
   optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }
 
+// ScatterRequest is the argument to the Scatter() method, which moves replicas
+// and leaseholders for a selection of ranges. Scatter is best-effort; ranges
+// that cannot be moved will include an error detail in the response and won't
+// fail the request.
+message ScatterRequest {
+  optional Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  repeated Span spans = 2 [(gogoproto.nullable) = false];
+}
+
+// ScatterResponse is the response to a Scatter() operation.
+message ScatterResponse {
+  optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+
+  message Range {
+    optional bytes key = 1 [(gogoproto.casttype) = "Key"];
+    // Error will be nil if this range was successfully scattered.
+    optional Error error = 2;
+  }
+  repeated Range ranges = 2 [(gogoproto.nullable) = false];
+}
+
 // A RequestUnion contains exactly one of the optional requests.
 // The values added here must match those in ResponseUnion.
 //
@@ -878,6 +899,7 @@ message RequestUnion {
   optional ExportRequest export = 32;
   optional ImportRequest import = 34;
   optional QueryTxnRequest query_txn = 33;
+  optional ScatterRequest scatter = 36;
 }
 
 // A ResponseUnion contains exactly one of the optional responses.
@@ -925,6 +947,7 @@ message ResponseUnion {
   optional ExportResponse export = 32;
   optional ImportResponse import = 34;
   optional QueryTxnResponse query_txn = 33;
+  optional ScatterResponse scatter = 36;
 }
 
 // A Header is attached to a BatchRequest, encapsulating routing and auxiliary

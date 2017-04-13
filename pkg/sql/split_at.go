@@ -17,8 +17,6 @@
 package sql
 
 import (
-	"math/rand"
-
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
@@ -29,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
@@ -316,86 +315,11 @@ func (n *relocateNode) Next(ctx context.Context) (bool, error) {
 	}
 	n.lastRangeStartKey = rangeDesc.StartKey.AsRawKey()
 
-	if err := relocateRange(ctx, n.p.ExecCfg().DB, rangeDesc, targets); err != nil {
+	if err := storage.RelocateRange(ctx, n.p.ExecCfg().DB, rangeDesc, targets); err != nil {
 		return false, err
 	}
 
 	return true, nil
-}
-
-// relocateRange relocates a given range to a given set of stores. The first
-// store in the slice becomes the new leaseholder.
-//
-// This is best-effort; if replication queues are enabled and a change in
-// membership happens at the same time, there will be errors.
-func relocateRange(
-	ctx context.Context,
-	db *client.DB,
-	rangeDesc roachpb.RangeDescriptor,
-	targets []roachpb.ReplicationTarget,
-) error {
-	// Step 1: Add any stores that don't already have a replica in of the range.
-	//
-	// TODO(radu): we can't have multiple replicas on different stores on the same
-	// node, which can lead to some odd corner cases where we would have to first
-	// remove some replicas (currently these cases fail).
-
-	var addTargets []roachpb.ReplicationTarget
-	for _, t := range targets {
-		found := false
-		for _, replicaDesc := range rangeDesc.Replicas {
-			if replicaDesc.StoreID == t.StoreID && replicaDesc.NodeID == t.NodeID {
-				found = true
-				break
-			}
-		}
-		if !found {
-			addTargets = append(addTargets, t)
-		}
-	}
-	if len(addTargets) > 0 {
-		if err := db.AdminChangeReplicas(
-			ctx, rangeDesc.StartKey.AsRawKey(), roachpb.ADD_REPLICA, addTargets,
-		); err != nil {
-			return err
-		}
-	}
-
-	// Step 2: Transfer the lease to the first target. This needs to happen before
-	// we remove replicas or we may try to remove the lease holder.
-
-	if err := db.AdminTransferLease(
-		ctx, rangeDesc.StartKey.AsRawKey(), targets[0].StoreID,
-	); err != nil {
-		return err
-	}
-
-	// Step 3: Remove any replicas that are not targets.
-
-	var removeTargets []roachpb.ReplicationTarget
-	for _, replicaDesc := range rangeDesc.Replicas {
-		found := false
-		for _, t := range targets {
-			if replicaDesc.StoreID == t.StoreID && replicaDesc.NodeID == t.NodeID {
-				found = true
-				break
-			}
-		}
-		if !found {
-			removeTargets = append(removeTargets, roachpb.ReplicationTarget{
-				StoreID: replicaDesc.StoreID,
-				NodeID:  replicaDesc.NodeID,
-			})
-		}
-	}
-	if len(removeTargets) > 0 {
-		if err := db.AdminChangeReplicas(
-			ctx, rangeDesc.StartKey.AsRawKey(), roachpb.REMOVE_REPLICA, removeTargets,
-		); err != nil {
-			return err
-		}
-	}
-	return nil
 }
 
 func (n *relocateNode) Values() parser.Datums {
@@ -507,68 +431,38 @@ func (p *planner) Scatter(ctx context.Context, n *parser.Scatter) (planNode, err
 		}
 	}
 
-	stores := p.ExecCfg().ClusterStoresUpcall()
-	if log.V(1) {
-		log.Infof(ctx, "Stores: %v", stores)
-	}
-	if len(stores) == 0 {
-		return nil, errors.Errorf("no known stores")
-	}
-
 	return &scatterNode{
-		p:      p,
-		span:   span,
-		stores: stores,
-		rng:    rand.New(rand.NewSource(rand.Int63())),
+		p:    p,
+		span: span,
 	}, nil
 }
 
 type scatterNode struct {
-	p             *planner
-	span          roachpb.Span
-	descriptorKVs []client.KeyValue
-	stores        []roachpb.ReplicationTarget
-	rng           *rand.Rand
+	p    *planner
+	span roachpb.Span
 
-	rowIdx            int
-	lastRangeStartKey []byte
-	lastRelocateErr   error
+	rangeIdx int
+	ranges   []roachpb.ScatterResponse_Range
 }
 
 func (n *scatterNode) Start(ctx context.Context) error {
-	var err error
-	n.descriptorKVs, err = scanMetaKVs(ctx, n.p.txn, n.span)
-	return err
+	db := n.p.ExecCfg().DB
+	req := &roachpb.ScatterRequest{
+		Span: roachpb.Span{Key: n.span.Key, EndKey: n.span.EndKey},
+	}
+	res, pErr := client.SendWrapped(ctx, db.GetSender(), req)
+	if pErr != nil {
+		return pErr.GoError()
+	}
+	n.rangeIdx = -1
+	n.ranges = res.(*roachpb.ScatterResponse).Ranges
+	return nil
 }
 
 func (n *scatterNode) Next(ctx context.Context) (bool, error) {
-	if n.rowIdx >= len(n.descriptorKVs) {
-		return false, nil
-	}
-
-	var desc roachpb.RangeDescriptor
-	if err := n.descriptorKVs[n.rowIdx].ValueProto(&desc); err != nil {
-		return false, err
-	}
-
-	// Choose three random stores.
-	// TODO(radu): this is a toy implementation; we need to get a real
-	// recommendation based on the zone config.
-	num := 3
-	if num > len(n.stores) {
-		num = len(n.stores)
-	}
-	for i := 0; i < num; i++ {
-		j := i + n.rng.Intn(len(n.stores)-i)
-		n.stores[i], n.stores[j] = n.stores[j], n.stores[i]
-	}
-
-	targets := n.stores[:num]
-
-	n.lastRelocateErr = relocateRange(ctx, n.p.ExecCfg().DB, desc, targets)
-	n.lastRangeStartKey = desc.StartKey
-	n.rowIdx++
-	return true, nil
+	n.rangeIdx++
+	hasNext := n.rangeIdx < len(n.ranges)
+	return hasNext, nil
 }
 
 func (*scatterNode) Columns() ResultColumns {
@@ -582,21 +476,23 @@ func (*scatterNode) Columns() ResultColumns {
 			Typ:  parser.TypeString,
 		},
 		{
-			Name: "status",
+			Name: "error",
 			Typ:  parser.TypeString,
 		},
 	}
 }
 
 func (n *scatterNode) Values() parser.Datums {
-	status := "OK"
-	if n.lastRelocateErr != nil {
-		status = n.lastRelocateErr.Error()
+	r := n.ranges[n.rangeIdx]
+	dErr := parser.DNull
+	if r.Error != nil {
+		dErr = parser.NewDString(r.Error.String())
 	}
+
 	return parser.Datums{
-		parser.NewDBytes(parser.DBytes(n.lastRangeStartKey)),
-		parser.NewDString(keys.PrettyPrint(n.lastRangeStartKey)),
-		parser.NewDString(status),
+		parser.NewDBytes(parser.DBytes(r.Key)),
+		parser.NewDString(keys.PrettyPrint(r.Key)),
+		dErr,
 	}
 }
 

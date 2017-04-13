@@ -130,4 +130,6 @@ const (
 	Export
 	// Import bulk loads key/value entries.
 	Import
+	// Scatter moves replicas and leaseholders for a selection of ranges. Best-effort.
+	Scatter
 )

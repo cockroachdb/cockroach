@@ -260,6 +260,7 @@ func (b *Batch) fillResults() error {
 			case *roachpb.CheckConsistencyRequest:
 			case *roachpb.WriteBatchRequest:
 			case *roachpb.ImportRequest:
+			case *roachpb.ScatterRequest:
 			}
 			// Fill up the resume span.
 			if result.Err == nil && reply != nil && reply.Header().ResumeSpan != nil {
