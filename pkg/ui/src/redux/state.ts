@@ -17,7 +17,7 @@ import * as apiReducers from "./apiReducers";
 
 export interface AdminUIState {
     routing: RouterState;
-    ui: localSettings.LocalSettingsDict;
+    localSettings: localSettings.LocalSettingsDict;
     uiData: uiData.UIDataSet;
     metrics: metrics.MetricQueryState;
     timewindow: timewindow.TimeWindowState;
@@ -29,7 +29,7 @@ export interface AdminUIState {
 export const createAdminUIStore = () => createStore(
   combineReducers<AdminUIState>({
     routing: routerReducer,
-    ui: localSettingsReducer,
+    localSettings: localSettingsReducer,
     uiData: uiDataReducer,
     metrics: metricsReducer,
     timewindow: timeWindowReducer,

@@ -19,11 +19,11 @@ import { Bytes } from "../util/format";
 import { NodeStatus$Properties, MetricConstants, BytesUsed } from  "../util/proto";
 
 const liveNodesSortSetting = new LocalSetting<AdminUIState, SortSetting>(
-  "nodes/live_sort_setting", (s) => s.ui,
+  "nodes/live_sort_setting", (s) => s.localSettings,
 );
 
 const deadNodesSortSetting = new LocalSetting<AdminUIState, SortSetting>(
-  "nodes/dead_sort_setting", (s) => s.ui,
+  "nodes/dead_sort_setting", (s) => s.localSettings,
 );
 
 // Specialization of generic SortedTable component:

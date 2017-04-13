@@ -21,7 +21,7 @@ type Event$Properties = protos.cockroach.server.serverpb.EventsResponse.Event$Pr
 const EVENT_BOX_NUM_EVENTS = 10;
 
 const eventsSortSetting = new LocalSetting<AdminUIState, SortSetting>(
-  "events/sort_setting", (s) => s.ui,
+  "events/sort_setting", (s) => s.localSettings,
 );
 
 export interface SimplifiedEvent {

@@ -25,13 +25,13 @@ function rollupStoreMetrics(res: api.NodesResponseMessage): NodeStatus$Propertie
   });
 }
 
-const nodesReducerObj = new CachedDataReducer((req: api.NodesRequestMessage, timeout?: moment.Duration) => api.getNodes(req, timeout).then(rollupStoreMetrics), "nodes", moment.duration(10, "s"));
+export const nodesReducerObj = new CachedDataReducer((req: api.NodesRequestMessage, timeout?: moment.Duration) => api.getNodes(req, timeout).then(rollupStoreMetrics), "nodes", moment.duration(10, "s"));
 export const refreshNodes = nodesReducerObj.refresh;
 
 const raftReducerObj = new CachedDataReducer(api.raftDebug, "raft");
 export const refreshRaft = raftReducerObj.refresh;
 
-const versionReducerObj = new CachedDataReducer(versionCheck, "version");
+export const versionReducerObj = new CachedDataReducer(versionCheck, "version");
 export const refreshVersion = versionReducerObj.refresh;
 
 const databasesReducerObj = new CachedDataReducer(api.getDatabaseList, "databases");

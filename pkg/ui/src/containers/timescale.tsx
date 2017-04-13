@@ -16,7 +16,7 @@ import { LongToMoment } from "../util/convert";
 // Tracks whether the default timescale been set once in the app. Tracked across
 // the entire app so that changing pages doesn't cause it to reset.
 const timescaleDefaultSet = new LocalSetting(
-  "timescale/default_set", (s: AdminUIState) => s.ui, false,
+  "timescale/default_set", (s: AdminUIState) => s.localSettings, false,
 );
 
 interface TimeRangeProps {
