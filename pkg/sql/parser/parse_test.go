@@ -733,7 +733,6 @@ func TestParse2(t *testing.T) {
 		{`SELECT a FROM t WHERE a = b || c`, `SELECT a FROM t WHERE a = (b || c)`},
 		{`SELECT a FROM t WHERE a = + b`, `SELECT a FROM t WHERE a = (+ b)`},
 		{`SELECT a FROM t WHERE a = - b`, `SELECT a FROM t WHERE a = (- b)`},
-		{`SELECT a FROM t WHERE a = ~ b`, `SELECT a FROM t WHERE a = (~ b)`},
 
 		// Escaped string literals are not always escaped the same because
 		// '''' and e'\'' scan to the same token. It's more convenient to
@@ -805,8 +804,8 @@ func TestParse2(t *testing.T) {
 			`SELECT (- 0.) - (- 1)`,
 		},
 		// See #1948.
-		{`SELECT~~+~++~bd(*)`,
-			`SELECT ~ (~ (+ (~ (+ (+ (~ bd(*)))))))`},
+		{`SELECT-++-++-bd(*)`,
+			`SELECT - (+ (+ (- (+ (+ (- bd(*)))))))`},
 		// See #1957.
 		{`SELECT+y[array[]]`,
 			`SELECT + y[ARRAY[]]`},
@@ -1298,7 +1297,7 @@ func TestParsePanic(t *testing.T) {
 
 func TestParsePrecedence(t *testing.T) {
 	// Precedence levels (highest first):
-	//   0: - ~
+	//   0: -
 	//   1: * / // %
 	//   2: + -
 	//   3: << >>
@@ -1337,10 +1336,6 @@ func TestParsePrecedence(t *testing.T) {
 		sql      string
 		expected Expr
 	}{
-		// Unary plus and complement.
-		{`~-1`, unary(UnaryComplement, unary(UnaryMinus, one))},
-		{`-~1`, unary(UnaryMinus, unary(UnaryComplement, one))},
-
 		// Mul, div, floordiv, mod combined with higher precedence.
 		{`-1*2`, binary(Mult, unary(UnaryMinus, one), two)},
 		{`1*-2`, binary(Mult, one, unary(UnaryMinus, two))},

@@ -1476,3 +1476,8 @@ SELECT crdb_testing.to_english(i) FROM (VALUES (1), (13), (617)) AS a(i)
 one
 one-three
 six-one-seven
+
+query II
+SELECT bitwise_not(0), bitwise_not(-123)
+----
+-1 122
