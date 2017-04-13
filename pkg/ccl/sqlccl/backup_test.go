@@ -167,7 +167,7 @@ func backupRestoreTestSetupWithParams(
 		dirCleanupFn()
 	}
 
-	return ctx, dir, tc, sqlDB, cleanupFn
+	return ctx, "nodelocal://" + dir, tc, sqlDB, cleanupFn
 }
 
 func backupRestoreTestSetup(
@@ -1112,11 +1112,14 @@ func TestBackupRestoreChecksum(t *testing.T) {
 	_, dir, _, sqlDB, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts)
 	defer cleanupFn()
 
+	// The helper helpfully prefixes it, but we're going to do direct file IO.
+	rawDir := strings.TrimPrefix(dir, "nodelocal://")
+
 	sqlDB.Exec(`BACKUP DATABASE bench TO $1`, dir)
 
 	var backupDesc BackupDescriptor
 	{
-		backupDescBytes, err := ioutil.ReadFile(filepath.Join(dir, BackupDescriptorName))
+		backupDescBytes, err := ioutil.ReadFile(filepath.Join(rawDir, BackupDescriptorName))
 		if err != nil {
 			t.Fatalf("%+v", err)
 		}
@@ -1126,7 +1129,7 @@ func TestBackupRestoreChecksum(t *testing.T) {
 	}
 
 	// Corrupt one of the files in the backup.
-	f, err := os.OpenFile(filepath.Join(dir, backupDesc.Files[1].Path), os.O_WRONLY, 0)
+	f, err := os.OpenFile(filepath.Join(rawDir, backupDesc.Files[1].Path), os.O_WRONLY, 0)
 	if err != nil {
 		t.Fatalf("%+v", err)
 	}
@@ -1301,12 +1304,12 @@ func TestBackupLevelDB(t *testing.T) {
 	defer cleanupFn()
 
 	_ = sqlDB.Exec(`BACKUP DATABASE bench TO $1`, dir)
-
+	rawDir := strings.TrimPrefix(dir, "nodelocal://")
 	// Verify that the sstables are in LevelDB format by checking the trailer
 	// magic.
 	var magic = []byte("\x57\xfb\x80\x8b\x24\x75\x47\xdb")
 	foundSSTs := 0
-	if err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
+	if err := filepath.Walk(rawDir, func(path string, info os.FileInfo, err error) error {
 		if filepath.Ext(path) == ".sst" {
 			foundSSTs++
 			data, err := ioutil.ReadFile(path)

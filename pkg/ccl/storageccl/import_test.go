@@ -175,7 +175,7 @@ func TestImport(t *testing.T) {
 	s, _, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop()
 
-	storage, err := ExportStorageConfFromURI(dir)
+	storage, err := ExportStorageConfFromURI("nodelocal://" + dir)
 	if err != nil {
 		t.Fatalf("%+v", err)
 	}
