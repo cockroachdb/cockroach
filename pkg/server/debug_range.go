@@ -23,6 +23,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"golang.org/x/net/context"
 
@@ -208,6 +209,16 @@ type debugRangeOutput struct {
 	Value string
 }
 
+type debugLeaseDetails struct {
+	Replica         debugRangeOutput
+	Epoch           debugRangeOutput
+	ProposedTS      debugRangeOutput
+	ProposedTSDelta debugRangeOutput
+	Start           debugRangeOutput
+	StartDelta      debugRangeOutput
+	Expiration      debugRangeOutput
+}
+
 type debugRangeData struct {
 	RangeID    int64
 	Failures   rangeInfoSlice
@@ -220,6 +231,8 @@ type debugRangeData struct {
 	HeaderKeys        []string
 	Results           map[string]map[roachpb.StoreID]*debugRangeOutput
 	HeaderFakeStoreID roachpb.StoreID
+	LeaseHistory      []debugLeaseDetails
+	LeaseEpoch        bool // true if epoch based, false if expiration based
 }
 
 func (d *debugRangeData) postProcessing() {
@@ -297,6 +310,9 @@ func (d *debugRangeData) postProcessing() {
 
 	// leaderStoreInfo keeps tack of the raftLeader with the most recent term.
 	var leaderStoreInfo serverpb.RangeInfo
+	// latestTermInfo is used when there is no leader but we want to
+	// display some details about one of the replicas.
+	var latestTermInfo serverpb.RangeInfo
 
 	// Convert each rangeInfo into debugRangeOutputs.
 	for _, info := range d.rangeInfos {
@@ -323,6 +339,9 @@ func (d *debugRangeData) postProcessing() {
 		raftLeader := sourceReplicaID != 0 && info.RaftState.Lead == uint64(sourceReplicaID)
 		if raftLeader && info.RaftState.HardState.Term > leaderStoreInfo.RaftState.HardState.Term {
 			leaderStoreInfo = info
+		}
+		if info.RaftState.HardState.Term > latestTermInfo.RaftState.HardState.Term {
+			latestTermInfo = info
 		}
 
 		d.Results[debugRangeHeaderStore][info.SourceStoreID] = &debugRangeOutput{
@@ -485,6 +504,12 @@ func (d *debugRangeData) postProcessing() {
 		}
 	}
 
+	// If we have a leader use that as our most up to date info, otherwise use the
+	// replica with the latest term.
+	if leaderStoreInfo.SourceStoreID > 0 {
+		latestTermInfo = leaderStoreInfo
+	}
+
 	// Add warnings to select headers and cells when the values don't match
 	// those of the leader. This only affects non-dormant replicas.
 	if leaderStoreInfo.SourceStoreID > 0 {
@@ -586,6 +611,80 @@ func (d *debugRangeData) postProcessing() {
 				}
 			}
 		}
+	}
+
+	floorMilliseconds := func(d time.Duration) time.Duration {
+		return time.Duration(d.Nanoseconds() - (d.Nanoseconds() % time.Millisecond.Nanoseconds()))
+	}
+
+	// Reverse order for display purposes.
+	for i := len(latestTermInfo.LeaseHistory) - 1; i >= 0; i-- {
+		lease := latestTermInfo.LeaseHistory[i]
+		if lease.ProposedTS == nil {
+			failedInfo := latestTermInfo
+			failedInfo.ErrorMessage = fmt.Sprintf("Lease has a nil proposedTS: %+v", lease)
+			d.Failures = append(d.Failures, failedInfo)
+			continue
+		}
+		if i == len(latestTermInfo.LeaseHistory)-1 {
+			if lease.Epoch != nil {
+				d.LeaseEpoch = true
+			}
+		}
+		if d.LeaseEpoch && lease.Epoch == nil {
+			failedInfo := latestTermInfo
+			failedInfo.ErrorMessage = fmt.Sprintf("Lease has a nil epoch: %+v", lease)
+			d.Failures = append(d.Failures, failedInfo)
+			continue
+		}
+		var detail debugLeaseDetails
+		detail.Replica.Value = fmt.Sprintf("n%d s%d r%d/%d", lease.Replica.NodeID, lease.Replica.StoreID, d.RangeID, lease.Replica.ReplicaID)
+		detail.Replica.Title = detail.Replica.Value
+
+		if d.LeaseEpoch {
+			detail.Epoch.Value = fmt.Sprintf("n%d, %d", lease.Replica.NodeID, *lease.Epoch)
+			detail.Epoch.Title = detail.Epoch.Value
+		} else {
+			detail.Expiration.Title = fmt.Sprintf("%s\n%s", convertTimestamp(lease.Expiration), lease.Expiration)
+			detail.Expiration.Value = floorMilliseconds(lease.Expiration.GoTime().Sub(lease.Start.GoTime())).String()
+		}
+
+		if lease.Start.WallTime != 0 {
+			start := convertTimestamp(lease.Start)
+			detail.Start.Title = fmt.Sprintf("%s\n%s", start, lease.Start)
+			detail.Start.Value = start
+		} else {
+			detail.Start.Title = debugRangeValueEmpty
+			detail.Start.Value = debugRangeValueEmpty
+		}
+
+		if lease.ProposedTS.WallTime != 0 {
+			proposed := convertTimestamp(*lease.ProposedTS)
+			detail.ProposedTS.Title = fmt.Sprintf("%s\n%s", proposed, lease.ProposedTS)
+			detail.ProposedTS.Value = proposed
+		} else {
+			detail.ProposedTS.Title = debugRangeValueEmpty
+			detail.ProposedTS.Value = debugRangeValueEmpty
+		}
+
+		if i > 0 {
+			prevLease := latestTermInfo.LeaseHistory[i-1]
+			if prevLease.ProposedTS != nil && prevLease.ProposedTS.WallTime != 0 {
+				detail.ProposedTSDelta.Title = floorMilliseconds(lease.ProposedTS.GoTime().Sub(prevLease.ProposedTS.GoTime())).String()
+			} else {
+				detail.ProposedTSDelta.Title = debugRangeValueEmpty
+			}
+			detail.ProposedTSDelta.Value = detail.ProposedTSDelta.Title
+
+			if prevLease.Start.WallTime != 0 {
+				detail.StartDelta.Title = floorMilliseconds(lease.Start.GoTime().Sub(prevLease.Start.GoTime())).String()
+			} else {
+				detail.StartDelta.Title = debugRangeValueEmpty
+			}
+			detail.StartDelta.Value = detail.StartDelta.Title
+		}
+
+		d.LeaseHistory = append(d.LeaseHistory, detail)
 	}
 
 	sort.Sort(d.StoreIDs)
@@ -712,28 +811,39 @@ const debugRangeTemplate = `
       .failure-cell.small {
           max-width: 1px;
       }
+      .lease-table {
+        margin: 0 0 40px 0;
+        display: table;
+      }
+      .lease-row {
+        display: table-row;
+        background: #f6f6f6;
+      }
+      .lease-row:nth-of-type(odd) {
+        background: #e9e9e9;
+      }
+      .lease-cell {
+        padding: 6px 12px;
+        display: table-cell;
+        height: 20px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        border-width: 1px 1px 0 0;
+        border-color: rgba(0, 0, 0, 0.1);
+        border-style: solid;
+      }
+      .lease-row:first-of-type .lease-cell {
+        font-weight: 900;
+        color: #ffffff;
+        background: #3d9970;
+        border: none;
+      }
     </STYLE>
   </HEAD>
   <BODY>
     <DIV CLASS="wrapper">
       <H1>Range r{{$.RangeID}}</H1>
-      {{- if $.ReplicaIDs}}
-        <DIV CLASS="table">
-          {{- range $_, $headerName := $.HeaderKeys}}
-            {{- $data := index $.Results $headerName}}
-            {{- $datum := index $data $.HeaderFakeStoreID}}
-            <DIV CLASS="row">
-              <DIV CLASS="header cell {{$datum.Class}}" TITLE="{{html $datum.Title}}">{{$datum.Value}}</DIV>
-              {{- range $_, $storeID := $.StoreIDs}}
-                {{- $datum := index $data $storeID}}
-                <DIV CLASS="cell {{$datum.Class}}" TITLE="{{$datum.Title}}">{{$datum.Value}}</DIV>
-              {{- end}}
-            </DIV>
-          {{- end}}
-        </DIV>
-      {{- else}}
-        <p>No information available for Range r{{$.RangeID}}</p>
-      {{- end}}
       {{- if $.Failures}}
         <H2>Failures</H2>
         <DIV CLASS="failure-table">
@@ -751,6 +861,56 @@ const debugRangeTemplate = `
                 <DIV CLASS="failure-cell">-</DIV>
               {{- end}}
               <DIV CLASS="failure-cell" TITLE="{{$det.ErrorMessage}}">{{$det.ErrorMessage}}</DIV>
+            </DIV>
+          {{- end}}
+        </DIV>
+      {{- end}}
+      {{- if $.ReplicaIDs}}
+        <DIV CLASS="table">
+          {{- range $_, $headerName := $.HeaderKeys}}
+            {{- $data := index $.Results $headerName}}
+            {{- $datum := index $data $.HeaderFakeStoreID}}
+            <DIV CLASS="row">
+              <DIV CLASS="header cell {{$datum.Class}}" TITLE="{{html $datum.Title}}">{{$datum.Value}}</DIV>
+              {{- range $_, $storeID := $.StoreIDs}}
+                {{- $datum := index $data $storeID}}
+                <DIV CLASS="cell {{$datum.Class}}" TITLE="{{$datum.Title}}">{{$datum.Value}}</DIV>
+              {{- end}}
+            </DIV>
+          {{- end}}
+        </DIV>
+      {{- else}}
+        <p>No information available for Range r{{$.RangeID}}</p>
+      {{- end}}
+      {{- if $.LeaseHistory}}
+        <H2>Lease History</H2>
+        <DIV CLASS="lease-table">
+          <DIV CLASS="lease-row">
+            <DIV CLASS="lease-cell">Replica</DIV>
+            {{- if $.LeaseEpoch }}
+              <DIV CLASS="lease-cell">Epoch</DIV>
+            {{- end}}
+            <DIV CLASS="lease-cell">Proposed</DIV>
+            <DIV CLASS="lease-cell">Proposed Delta</DIV>
+            <DIV CLASS="lease-cell">Start</DIV>
+            <DIV CLASS="lease-cell">Start Delta</DIV>
+            {{- if not $.LeaseEpoch }}
+              <DIV CLASS="lease-cell">Expiration</DIV>
+            {{- end}}
+          </DIV>
+          {{- range $_, $lease := $.LeaseHistory}}
+            <DIV CLASS="lease-row">
+              <DIV CLASS="lease-cell" TITLE="{{$lease.Replica.Title}}">{{$lease.Replica.Value}}</DIV>
+              {{- if $.LeaseEpoch }}
+                <DIV CLASS="lease-cell" TITLE="{{$lease.Epoch.Title}}">{{$lease.Epoch.Value}}</DIV>
+              {{- end}}
+              <DIV CLASS="lease-cell" TITLE="{{$lease.ProposedTS.Title}}">{{$lease.ProposedTS.Value}}</DIV>
+              <DIV CLASS="lease-cell" TITLE="{{$lease.ProposedTSDelta.Title}}">{{$lease.ProposedTSDelta.Value}}</DIV>
+              <DIV CLASS="lease-cell" TITLE="{{$lease.Start.Title}}">{{$lease.Start.Value}}</DIV>
+              <DIV CLASS="lease-cell" TITLE="{{$lease.StartDelta.Title}}">{{$lease.StartDelta.Value}}</DIV>
+              {{- if not $.LeaseEpoch }}
+                <DIV CLASS="lease-cell" TITLE="{{$lease.Expiration.Title}}">{{$lease.Expiration.Value}}</DIV>
+              {{- end}}
             </DIV>
           {{- end}}
         </DIV>

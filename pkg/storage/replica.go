@@ -96,6 +96,10 @@ var tickQuiesced = envutil.EnvOrDefaultBool("COCKROACH_TICK_QUIESCED", true)
 // degradation see on test clusters.
 var syncRaftLog = envutil.EnvOrDefaultBool("COCKROACH_SYNC_RAFT_LOG", false)
 
+// leaseHistoryEnabled controls if replica lease histories are enabled. Turning
+// them on will encour some memory usage.
+var leaseHistoryEnabled = envutil.EnvOrDefaultBool("COCKROACH_LEASE_HISTORY", false)
+
 // raftInitialLog{Index,Term} are the starting points for the raft log. We
 // bootstrap the raft membership by synthesizing a snapshot as if there were
 // some discarded prefix to the log, so we must begin the log at an arbitrary
@@ -229,6 +233,9 @@ type Replica struct {
 	// stateLoader provides facilities for loading and saving on-disk replica
 	// state. Requires Replica.raftMu is held.
 	stateLoader replicaStateLoader
+
+	// Contains the lease history when enabled.
+	leaseHistory *leaseHistory
 
 	cmdQMu struct {
 		// Protects all fields in the cmdQMu struct.
@@ -504,6 +511,9 @@ func newReplica(rangeID roachpb.RangeID, store *Store) *Replica {
 		store:          store,
 		abortCache:     NewAbortCache(rangeID),
 		pushTxnQueue:   newPushTxnQueue(store),
+	}
+	if leaseHistoryEnabled {
+		r.leaseHistory = newLeaseHistory()
 	}
 	if store.cfg.StorePool != nil {
 		r.stats = newReplicaStats(store.Clock(), store.cfg.StorePool.getNodeLocalityString)
@@ -2284,7 +2294,7 @@ func (r *Replica) tryExecuteWriteBatch(
 }
 
 // requestToProposal converts a BatchRequest into a ProposalData, by
-// evalutating it. The returned ProposalData is partially valid even
+// evaluating it. The returned ProposalData is partially valid even
 // on a non-nil *roachpb.Error.
 func (r *Replica) requestToProposal(
 	ctx context.Context,
@@ -4851,4 +4861,22 @@ func calcGoodReplicas(
 // GetTempPrefix proxies Store.GetTempPrefix.
 func (r *Replica) GetTempPrefix() string {
 	return r.store.GetTempPrefix()
+}
+
+// GetLeaseHistory returns the lease history stored on this replica.
+func (r *Replica) GetLeaseHistory() []roachpb.Lease {
+	if r.leaseHistory == nil {
+		return []roachpb.Lease{}
+	}
+	return r.leaseHistory.get()
+}
+
+// EnableLeaseHistory turns on the lease history for testing purposes. Returns
+// a function to return it to its original state that can be deferred.
+func EnableLeaseHistory() func() {
+	originalValue := leaseHistoryEnabled
+	leaseHistoryEnabled = true
+	return func() {
+		leaseHistoryEnabled = originalValue
+	}
 }

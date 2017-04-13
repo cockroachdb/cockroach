@@ -462,6 +462,11 @@ func (r *Replica) leasePostApply(
 		// Make sure the push transaction queue is enabled.
 		r.pushTxnQueue.Enable()
 	}
+
+	// Mark the new lease in the replica's lease history.
+	if r.leaseHistory != nil {
+		r.leaseHistory.add(*newLease)
+	}
 }
 
 // maybeTransferRaftLeadership attempts to transfer the leadership
