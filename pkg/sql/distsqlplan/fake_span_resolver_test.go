@@ -61,8 +61,7 @@ func TestFakeSpanResolver(t *testing.T) {
 
 	desc := sqlbase.GetTableDescriptor(db, "test", "t")
 
-	prefix := roachpb.Key(sqlbase.MakeIndexKeyPrefix(desc, desc.PrimaryIndex.ID))
-	span := roachpb.Span{Key: prefix, EndKey: prefix.PrefixEnd()}
+	span := desc.PrimaryIndexSpan()
 
 	// Make sure we see all the nodes. It will not always happen (due to
 	// randomness) but it should happen most of the time.
@@ -85,7 +84,7 @@ func TestFakeSpanResolver(t *testing.T) {
 			t.Logf("%d %s %s", rinfo.NodeID, prettyStart, prettyEnd)
 
 			if !lastKey.Equal(desc.StartKey.AsRawKey()) {
-				t.Errorf("unexpected start key %s, should be %s", prettyStart, keys.PrettyPrint(prefix))
+				t.Errorf("unexpected start key %s, should be %s", prettyStart, keys.PrettyPrint(span.Key))
 			}
 			if !desc.StartKey.Less(desc.EndKey) {
 				t.Errorf("invalid range %s to %s", prettyStart, prettyEnd)

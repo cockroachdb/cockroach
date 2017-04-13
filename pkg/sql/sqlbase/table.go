@@ -189,7 +189,9 @@ func MakeColumnDefDescs(
 	return col, idx, nil
 }
 
-// MakeIndexKeyPrefix returns the key prefix used for the index's data.
+// MakeIndexKeyPrefix returns the key prefix used for the index's data. If you
+// need the corresponding Span, prefer desc.IndexSpan(indexID) or
+// desc.PrimaryIndexSpan().
 func MakeIndexKeyPrefix(desc *TableDescriptor, indexID IndexID) []byte {
 	var key []byte
 	if i, err := desc.FindIndexByID(indexID); err == nil && len(i.Interleave.Ancestors) > 0 {

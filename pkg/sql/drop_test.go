@@ -110,10 +110,8 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 		t.Fatalf("database zone config entry not found")
 	}
 
-	tablePrefix := keys.MakeTablePrefix(uint32(tbDesc.ID))
-	tableStartKey := roachpb.Key(tablePrefix)
-	tableEndKey := tableStartKey.PrefixEnd()
-	if kvs, err := kvDB.Scan(ctx, tableStartKey, tableEndKey, 0); err != nil {
+	tableSpan := tbDesc.TableSpan()
+	if kvs, err := kvDB.Scan(ctx, tableSpan.Key, tableSpan.EndKey, 0); err != nil {
 		t.Fatal(err)
 	} else if l := 6; len(kvs) != l {
 		t.Fatalf("expected %d key value pairs, but got %d", l, len(kvs))
@@ -123,7 +121,7 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 		t.Fatal(err)
 	}
 
-	if kvs, err := kvDB.Scan(ctx, tableStartKey, tableEndKey, 0); err != nil {
+	if kvs, err := kvDB.Scan(ctx, tableSpan.Key, tableSpan.EndKey, 0); err != nil {
 		t.Fatal(err)
 	} else if l := 0; len(kvs) != l {
 		t.Fatalf("expected %d key value pairs, but got %d", l, len(kvs))
@@ -212,8 +210,8 @@ SHOW TABLES;
 	}
 }
 
-func checkKeyCount(t *testing.T, kvDB *client.DB, prefix roachpb.Key, numKeys int) {
-	if kvs, err := kvDB.Scan(context.TODO(), prefix, prefix.PrefixEnd(), 0); err != nil {
+func checkKeyCount(t *testing.T, kvDB *client.DB, span roachpb.Span, numKeys int) {
+	if kvs, err := kvDB.Scan(context.TODO(), span.Key, span.EndKey, 0); err != nil {
 		t.Fatal(err)
 	} else if l := numKeys; len(kvs) != l {
 		t.Fatalf("expected %d key value pairs, but got %d", l, len(kvs))
@@ -270,13 +268,13 @@ func TestDropIndex(t *testing.T) {
 	if status != sqlbase.DescriptorActive {
 		t.Fatal("Index 'foo' is not active.")
 	}
-	indexPrefix := roachpb.Key(sqlbase.MakeIndexKeyPrefix(tableDesc, tableDesc.Indexes[i].ID))
+	indexSpan := tableDesc.IndexSpan(tableDesc.Indexes[i].ID)
 
-	checkKeyCount(t, kvDB, indexPrefix, numRows)
+	checkKeyCount(t, kvDB, indexSpan, numRows)
 	if _, err := sqlDB.Exec(`DROP INDEX t.kv@foo`); err != nil {
 		t.Fatal(err)
 	}
-	checkKeyCount(t, kvDB, indexPrefix, 0)
+	checkKeyCount(t, kvDB, indexSpan, 0)
 
 	tableDesc = sqlbase.GetTableDescriptor(kvDB, "t", "kv")
 	if _, _, err := tableDesc.FindIndexByName("foo"); err == nil {
@@ -339,14 +337,14 @@ func TestDropIndexInterleaved(t *testing.T) {
 	createKVInterleavedTable(t, sqlDB, numRows)
 
 	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "kv")
-	tablePrefix := roachpb.Key(keys.MakeTablePrefix(uint32(tableDesc.ID)))
+	tableSpan := tableDesc.TableSpan()
 
-	checkKeyCount(t, kvDB, tablePrefix, 3*numRows)
+	checkKeyCount(t, kvDB, tableSpan, 3*numRows)
 
 	if _, err := sqlDB.Exec(`DROP INDEX t.intlv@intlv_idx`); err != nil {
 		t.Fatal(err)
 	}
-	checkKeyCount(t, kvDB, tablePrefix, 2*numRows)
+	checkKeyCount(t, kvDB, tableSpan, 2*numRows)
 
 	// Ensure that index is not active.
 	tableDesc = sqlbase.GetTableDescriptor(kvDB, "t", "intlv")
@@ -420,7 +418,7 @@ func TestDropTable(t *testing.T) {
 		t.Fatalf("zone config entry not found")
 	}
 
-	tablePrefix := roachpb.Key(keys.MakeTablePrefix(uint32(tableDesc.ID)))
+	tableSpan := tableDesc.TableSpan()
 
 	runAfterTableNameDropped = func() error {
 		// Test that deleted table cannot be used. This prevents
@@ -441,11 +439,11 @@ func TestDropTable(t *testing.T) {
 		return createKVTable(sqlDB, numRows)
 	}
 
-	checkKeyCount(t, kvDB, tablePrefix, 3*numRows)
+	checkKeyCount(t, kvDB, tableSpan, 3*numRows)
 	if _, err := sqlDB.Exec(`DROP TABLE t.kv`); err != nil {
 		t.Fatal(err)
 	}
-	checkKeyCount(t, kvDB, tablePrefix, 0)
+	checkKeyCount(t, kvDB, tableSpan, 0)
 
 	if numDropTable != 2 {
 		t.Fatalf("numDropTable=%d, expected=2", numDropTable)
@@ -480,13 +478,13 @@ func TestDropTableInterleaved(t *testing.T) {
 	createKVInterleavedTable(t, sqlDB, numRows)
 
 	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "kv")
-	tablePrefix := roachpb.Key(keys.MakeTablePrefix(uint32(tableDesc.ID)))
+	tableSpan := tableDesc.TableSpan()
 
-	checkKeyCount(t, kvDB, tablePrefix, 3*numRows)
+	checkKeyCount(t, kvDB, tableSpan, 3*numRows)
 	if _, err := sqlDB.Exec(`DROP TABLE t.intlv`); err != nil {
 		t.Fatal(err)
 	}
-	checkKeyCount(t, kvDB, tablePrefix, numRows)
+	checkKeyCount(t, kvDB, tableSpan, numRows)
 
 	// Test that deleted table cannot be used. This prevents regressions where
 	// name -> descriptor ID caches might make this statement erronously work.
