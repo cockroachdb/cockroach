@@ -314,22 +314,24 @@ GRANT ALL ON system.lease TO root
 statement ok
 GRANT ALL ON system.lease TO testuser
 
-query TTTT
-select * from system.settings
+query T
+select name from system.settings
 ----
+usage.reporting.storestats
 
 statement ok
 INSERT INTO system.settings (name, value) VALUES ('somesetting', 'somevalue')
 
 query TT
-select name, value from system.settings
+select name, value from system.settings order by name
 ----
 somesetting   somevalue
+usage.reporting.storestats  true
 
 user testuser
 
 statement error user testuser does not have SELECT privilege on table settings
-select * from system.settings
+select name from system.settings
 ----
 
 statement error user testuser does not have INSERT privilege on table settings
