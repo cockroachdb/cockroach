@@ -813,6 +813,7 @@ func (c *v3Conn) handleExecute(buf *readBuffer) error {
 	pinfo := parser.PlaceholderInfo{
 		Types:  stmt.SQLTypes,
 		Values: portal.Qargs,
+		Stmts:  stmt.Stmts,
 	}
 
 	return c.executeStatements(stmt.Query, &pinfo, portalMeta.outFormats, false, int(limit))

@@ -31,6 +31,7 @@ type PreparedStatement struct {
 	Type        parser.StatementType
 	SQLTypes    parser.PlaceholderTypes
 	Columns     ResultColumns
+	Stmts       parser.StatementList
 	portalNames map[string]struct{}
 
 	ProtocolMeta interface{} // a field for protocol implementations to hang metadata off of.
