@@ -15,6 +15,7 @@
 package server_test
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/pkg/errors"
@@ -40,7 +41,6 @@ func TestSettingsRefresh(t *testing.T) {
 
 	insertQ := `UPSERT INTO system.settings (name, value, lastUpdated, valueType)
 		VALUES ($1, $2, NOW(), $3)`
-
 	deleteQ := "DELETE FROM system.settings WHERE name = $1"
 
 	if expected, actual := "<default>", settings.TestingGetString(); expected != actual {
@@ -111,6 +111,28 @@ func TestSettingsRefresh(t *testing.T) {
 			return errors.Errorf("expected %v, got %v", expected, actual)
 		}
 		if expected, actual := "after-mistype", settings.TestingGetString(); expected != actual {
+			return errors.Errorf("expected %v, got %v", expected, actual)
+		}
+		return nil
+	})
+
+	// TODO(dt): add placeholder support to SET and SHOW.
+	setQ := "SET CLUSTER SETTING %s = %s"
+	showQ := "SHOW CLUSTER SETTING %s"
+
+	// SET/SHOW work too.
+	db.Exec(fmt.Sprintf(setQ, strKey, "'via-set'"))
+	testutils.SucceedsSoon(t, func() error {
+		if expected, actual := "via-set", db.QueryStr(fmt.Sprintf(showQ, strKey))[0][0]; expected != actual {
+			return errors.Errorf("expected %v, got %v", expected, actual)
+		}
+		return nil
+	})
+
+	// SET/SHOW work too.
+	db.Exec(fmt.Sprintf(setQ, intKey, "5"))
+	testutils.SucceedsSoon(t, func() error {
+		if expected, actual := "5", db.QueryStr(fmt.Sprintf(showQ, intKey))[0][0]; expected != actual {
 			return errors.Errorf("expected %v, got %v", expected, actual)
 		}
 		return nil

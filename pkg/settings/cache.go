@@ -68,6 +68,38 @@ func getFloat(key string) float64 {
 	return getVal(key, FloatValue).f
 }
 
+func (v value) String() string {
+	switch v.typ {
+	case StringValue:
+		return v.s
+	case BoolValue:
+		return EncodeBool(v.b)
+	case IntValue:
+		return EncodeInt(v.i)
+	case FloatValue:
+		return EncodeFloat(v.f)
+	default:
+		panic("unknown value type " + string(v.typ)) // something something sealed.
+	}
+}
+
+// Show returns a string representation of the current value for a named setting
+// if it exists.
+func Show(key string) (string, bool) {
+	def, ok := registry[key]
+	if !ok {
+		return "", false
+	}
+	cache.RLock()
+	set, ok := cache.values[key]
+	cache.RUnlock()
+
+	if ok {
+		return set.String(), true
+	}
+	return def.String(), true
+}
+
 // Updater is a helper for replacing the global settings map. It is intended to
 // be used in, and only in, the RefreshSettings loop.
 //
