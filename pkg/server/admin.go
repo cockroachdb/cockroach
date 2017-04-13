@@ -56,10 +56,6 @@ const (
 	// eventLimit is the maximum number of events returned by any endpoints
 	// returning events.
 	apiEventLimit = 1000
-
-	// serverUIDataKeyPrefix must precede all UIData keys that are read from the
-	// server.
-	serverUIDataKeyPrefix = "server."
 )
 
 // apiServerMessage is the standard body for all HTTP 500 responses.

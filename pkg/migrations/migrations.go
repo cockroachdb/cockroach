@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -59,6 +60,10 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 		workFn:         createSettingsTable,
 		newDescriptors: 1,
 		newRanges:      0, // it lives in gossip range.
+	},
+	{
+		name:   "enable diagnostics reporting",
+		workFn: optIntToDiagnosticsStatReporting,
 	},
 }
 
@@ -356,4 +361,32 @@ func createSettingsTable(ctx context.Context, r runner) error {
 		}
 		return txn.Run(ctx, b)
 	})
+}
+
+var reportingOptOut = envutil.EnvOrDefaultBool("COCKROACH_SKIP_ENABLING_DIAGNOSTIC_REPORTING", false)
+
+func optIntToDiagnosticsStatReporting(ctx context.Context, r runner) error {
+	const setStmt = "SET CLUSTER SETTING diagnostics.reporting = true"
+
+	// We're opting-out of the automatic opt-in. See discussion in updates.go.
+	if reportingOptOut {
+		return nil
+	}
+
+	// System tables can only be modified by a privileged internal user.
+	session := r.newRootSession(ctx)
+	defer session.Finish(r.sqlExecutor)
+	// Retry a limited number of times because returning an error and letting
+	// the node kill itself is better than holding the migration lease for an
+	// arbitrarily long time.
+	var err error
+	for retry := retry.Start(retry.Options{MaxRetries: 5}); retry.Next(); {
+		res := r.sqlExecutor.ExecuteStatements(session, setStmt, nil)
+		err = checkQueryResults(res.ResultList, 1)
+		if err == nil {
+			break
+		}
+		log.Warningf(ctx, "failed attempt to update setting: %s", err)
+	}
+	return err
 }
