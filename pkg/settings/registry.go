@@ -44,11 +44,11 @@ func TypeOf(key string) (ValueType, bool) {
 	return d.typ, ok
 }
 
-// GetEnterpriseEnabled returns the "enterprise.enabled" setting.
+// EnterpriseEnabled returns the "enterprise.enabled" setting.
 // "enterprise.enabled" allows the use of the enterprise functionality (which
 // requires an enterprise license).
 // This is a temporary setting and will be replaced in the future.
-func GetEnterpriseEnabled() bool {
+func EnterpriseEnabled() bool {
 	return getBool("enterprise.enabled")
 }
 
