@@ -14,6 +14,8 @@
 artifacts
 /bin
 /bin.*
+# TeamCity sometimes creates this file during builds.
+builds.xml
 .buildinfo
 /cockroach
 /cockroach-data
