@@ -38,6 +38,11 @@ typedef struct {
   int len;
 } DBString;
 
+// A DBStatus is an alias for DBString and is used to indicate that
+// the return value indicates the success or failure of an
+// operation. If DBStatus.data == NULL the operation succeeded.
+typedef DBString DBStatus;
+
 typedef struct {
   DBSlice key;
   int64_t wall_time;
@@ -48,12 +53,8 @@ typedef struct {
   bool valid;
   DBKey key;
   DBSlice value;
+  DBStatus status;
 } DBIterState;
-
-// A DBStatus is an alias for DBString and is used to indicate that
-// the return value indicates the success or failure of an
-// operation. If DBStatus.data == NULL the operation succeeded.
-typedef DBString DBStatus;
 
 typedef struct DBCache DBCache;
 typedef struct DBEngine DBEngine;
@@ -184,9 +185,6 @@ DBIterState DBIterNext(DBIterator* iter, bool skip_current_key_versions);
 // current key are skipped. After this call, DBIterValid() returns 1
 // iff the iterator was not positioned at the first key.
 DBIterState DBIterPrev(DBIterator* iter, bool skip_current_key_versions);
-
-// Returns any error associated with the iterator.
-DBStatus DBIterError(DBIterator* iter);
 
 // Implements the merge operator on a single pair of values. update is
 // merged with existing. This method is provided for invocation from
