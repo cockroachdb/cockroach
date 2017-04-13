@@ -114,7 +114,7 @@ var changeTypeInternalToRaft = map[roachpb.ReplicaChangeType]raftpb.ConfChangeTy
 }
 
 var storeSchedulerConcurrency = envutil.EnvOrDefaultInt(
-	"COCKROACH_SCHEDULER_CONCURRENCY", 2*runtime.NumCPU())
+	"COCKROACH_SCHEDULER_CONCURRENCY", 8*runtime.NumCPU())
 
 var enablePreVote = envutil.EnvOrDefaultBool(
 	"COCKROACH_ENABLE_PREVOTE", false)
