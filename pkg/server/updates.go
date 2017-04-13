@@ -28,9 +28,8 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -57,15 +56,16 @@ func init() {
 	}
 }
 
-const updateCheckFrequency = time.Hour * 24
-const usageReportFrequency = updateCheckFrequency
-const updateCheckPostStartup = time.Minute * 5
-const updateCheckRetryFrequency = time.Hour
-const updateMaxVersionsToReport = 3
+const (
+	updateCheckFrequency = time.Hour * 24
+	// TODO(dt): switch to settings.
+	diagnosticReportFrequency = updateCheckFrequency
+	updateCheckPostStartup    = time.Minute * 5
+	updateCheckRetryFrequency = time.Hour
+	updateMaxVersionsToReport = 3
 
-const optinKey = serverUIDataKeyPrefix + "optin-reporting"
-
-const updateCheckJitterSeconds = 120
+	updateCheckJitterSeconds = 120
+)
 
 // randomly shift `d` to be up to `jitterSec` shorter or longer.
 func addJitter(d time.Duration, jitterSec int) time.Duration {
@@ -103,7 +103,7 @@ type storeInfo struct {
 func (s *Server) PeriodicallyCheckForUpdates() {
 	s.stopper.RunWorker(func() {
 		startup := timeutil.Now()
-		nextUpdateCheck := time.Time{}
+		var nextUpdateCheck, nextDiagnosticReport time.Time
 
 		var timer timeutil.Timer
 		defer timer.Stop()
@@ -111,17 +111,14 @@ func (s *Server) PeriodicallyCheckForUpdates() {
 			runningTime := timeutil.Since(startup)
 
 			nextUpdateCheck = s.maybeCheckForUpdates(nextUpdateCheck, runningTime)
+			nextDiagnosticReport = s.maybeReportDiagnostics(nextDiagnosticReport, runningTime)
 
-			// Nominally we'll want to sleep until the next update check.
-			wait := nextUpdateCheck.Sub(timeutil.Now())
-
-			// If a usage report needs to happen sooner than the next update check,
-			// we'll schedule a wake-up then instead.
-			if reportWait := s.maybeReportUsage(runningTime); reportWait < wait {
-				wait = reportWait
+			sooner := nextUpdateCheck
+			if nextDiagnosticReport.Before(nextUpdateCheck) {
+				sooner = nextDiagnosticReport
 			}
 
-			timer.Reset(addJitter(wait, updateCheckJitterSeconds))
+			timer.Reset(addJitter(sooner.Sub(timeutil.Now()), updateCheckJitterSeconds))
 			select {
 			case <-s.stopper.ShouldQuiesce():
 				return
@@ -211,69 +208,32 @@ func (s *Server) checkForUpdates(runningTime time.Duration) bool {
 	return true
 }
 
-func (s *Server) usageReportingEnabled() bool {
-	ctx, span := s.AnnotateCtxWithSpan(context.Background(), "usage-reporting")
-	defer span.Finish()
+// "diagnostics.reporting" enables reporting of metrics related to a
+// node's storage (number, size and health of ranges) back to CockroachDB.
+// Collecting this data from production clusters helps us understand and improve
+// how our storage systems behave in real-world use cases.
+//
+// Note: while the setting itself is actually defined with a default value of
+// `false`, it is usually automatically set to `true` when a cluster is created
+// (or is migrated from a earlier beta version). This can be prevented with the
+// env var COCKROACH_SKIP_ENABLING_DIAGNOSTIC_REPORTING.
+//
+// Doing this, rather than just using a default of `true`, means that a node
+// will not errantly send a report using a default before loading settings.
+var diagnosticsReportingEnabled = settings.RegisterBoolSetting(
+	"diagnostics.reporting", "enable reporting diagnostic metrics to cockroach labs", false,
+)
 
-	// Grab the optin value from the database.
-	req := &serverpb.GetUIDataRequest{Keys: []string{optinKey}}
-	resp, err := s.admin.GetUIData(ctx, req)
-	if err != nil {
-		log.Warning(ctx, err)
-		return false
-	}
-
-	val, ok := resp.KeyValues[optinKey]
-	if !ok {
-		// Key wasn't found, so we opt out by default.
-		return false
-	}
-	optin, err := strconv.ParseBool(string(val.Value))
-	if err != nil {
-		log.Warningf(ctx, "could not parse optin value (%q): %v", val.Value, err)
-		return false
-	}
-	return optin
-}
-
-// mayebReportUsage differs from maybeCheckForUpdates in that it persists the
-// last-report time across restarts (since store usage, unlike version, isn't
-// directly tied to the *running* binary).
-func (s *Server) maybeReportUsage(running time.Duration) time.Duration {
-	if running < updateCheckRetryFrequency {
-		// On first check, we decline to report usage as metrics may not yet
-		// be stable, so instead we request re-evaluation after a retry delay.
-		return updateCheckRetryFrequency - running
-	}
-	if !s.usageReportingEnabled() {
-		return updateCheckFrequency
+func (s *Server) maybeReportDiagnostics(scheduled time.Time, running time.Duration) time.Time {
+	if scheduled.After(timeutil.Now()) {
+		return scheduled
 	}
 
-	// Look up the persisted time to do the next report, if it exists.
-	key := keys.NodeLastUsageReportKey(s.node.Descriptor.NodeID)
-	ctx, span := s.AnnotateCtxWithSpan(context.Background(), "usageReport")
-	defer span.Finish()
-	resp, err := s.db.Get(ctx, key)
-	if err != nil {
-		log.Infof(ctx, "error reading time of next usage report: %s", err)
-		return updateCheckRetryFrequency
-	}
-	if resp.Exists() {
-		whenToCheck, pErr := resp.Value.GetTime()
-		if pErr != nil {
-			log.Warningf(ctx, "error decoding time of next usage report: %s", err)
-		} else if delay := whenToCheck.Sub(timeutil.Now()); delay > 0 {
-			return delay
-		}
-	} else {
-		log.Info(ctx, "no previously set usage report time.")
+	if diagnosticsReportingEnabled() {
+		s.reportDiagnostics()
 	}
 
-	s.reportUsage(ctx)
-	if err := s.db.Put(ctx, key, timeutil.Now().Add(usageReportFrequency)); err != nil {
-		log.Infof(ctx, "error updating usage report time: %s", err)
-	}
-	return usageReportFrequency
+	return scheduled.Add(diagnosticReportFrequency)
 }
 
 func (s *Server) getReportingInfo() reportingInfo {
@@ -296,7 +256,10 @@ func (s *Server) getReportingInfo() reportingInfo {
 	return reportingInfo{summary, stores}
 }
 
-func (s *Server) reportUsage(ctx context.Context) {
+func (s *Server) reportDiagnostics() {
+	ctx, span := s.AnnotateCtxWithSpan(context.Background(), "usageReport")
+	defer span.Finish()
+
 	b := new(bytes.Buffer)
 	if err := json.NewEncoder(b).Encode(s.getReportingInfo()); err != nil {
 		log.Warning(ctx, err)
