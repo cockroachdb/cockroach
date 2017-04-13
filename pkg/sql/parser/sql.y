@@ -1600,6 +1600,10 @@ show_stmt:
   {
     $$.val = &Show{Name: $2}
   }
+| SHOW CLUSTER SETTING any_name
+  {
+    $$.val = &Show{Name: $4.unresolvedName().String(), ClusterSetting: true}
+  }
 | SHOW DATABASE
   {
     $$.val = &Show{Name: $2}

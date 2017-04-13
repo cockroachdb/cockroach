@@ -26,12 +26,16 @@ import "bytes"
 
 // Show represents a SHOW statement.
 type Show struct {
-	Name string
+	Name           string
+	ClusterSetting bool
 }
 
 // Format implements the NodeFormatter interface.
 func (node *Show) Format(buf *bytes.Buffer, f FmtFlags) {
 	buf.WriteString("SHOW ")
+	if node.ClusterSetting {
+		buf.WriteString("CLUSTER SETTING ")
+	}
 	buf.WriteString(node.Name)
 }
 
