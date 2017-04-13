@@ -4062,16 +4062,6 @@ func (r *Replica) evaluateProposalInner(
 			// a transaction.
 			if txn := result.Local.Err.GetTxn(); txn != nil && txn.Equal(ba.Txn) {
 				txn.Writing = wasWriting
-				// TODO(tschottdorf): we're mutating the client's original
-				// memory erroneously when proposer-evaluated KV is on, failing
-				// TestTxnDBLostDeleteAnomaly (and likely others).
-				//
-				// TODO(bdarnell): we shouldn't be looking at the propEvalKV
-				// variable downstream of raft, we should look at the request
-				// to see whether this request was proposer-evaluated or not.
-				if propEvalKV {
-					ba.Txn.Writing = wasWriting
-				}
 			}
 			return result
 		}
