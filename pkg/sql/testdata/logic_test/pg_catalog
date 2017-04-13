@@ -1,4 +1,4 @@
-# LogicTest: default
+# LogicTest: default parallel-stmts
 
 # Verify pg_catalog database handles mutation statements correctly.
 

@@ -1,4 +1,4 @@
-# LogicTest: default distsql
+# LogicTest: default parallel-stmts distsql
 
 # This test verifies that we correctly perform an index join when the KV
 # batches span ranges. This is testing that SQL disables batch limits for index

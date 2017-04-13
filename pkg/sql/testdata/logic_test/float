@@ -1,4 +1,4 @@
-# LogicTest: default distsql
+# LogicTest: default parallel-stmts distsql
 
 # -0 and 0 should not be possible in a unique index.
 

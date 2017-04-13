@@ -1,4 +1,4 @@
-# LogicTest: default distsql
+# LogicTest: default parallel-stmts distsql
 
 ## This test file contains various complex queries that ORMs issue during
 ## startup or general use.
