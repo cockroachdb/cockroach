@@ -444,6 +444,18 @@ func TestRangesResponse(t *testing.T) {
 		if ri.State.LastIndex == 0 {
 			t.Error("expected positive LastIndex")
 		}
+		// Only the first range, rangeID 1, has a lease history at this point.
+		//		var expectedLeaseHistoryCount int
+		//		if ri.State.Desc.RangeID ==
+		var expectedLeaseHistoryCount int
+		if ri.State.Desc.RangeID == roachpb.RangeID(1) {
+			expectedLeaseHistoryCount = 1
+		}
+		if a := len(ri.LeaseHistory); expectedLeaseHistoryCount != a {
+			t.Errorf("expected a lease history length of %d, actual %d\n%+v",
+				expectedLeaseHistoryCount, a, ri,
+			)
+		}
 	}
 }
 

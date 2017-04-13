@@ -395,6 +395,7 @@ type Store struct {
 	metrics            *StoreMetrics
 	intentResolver     *intentResolver
 	raftEntryCache     *raftEntryCache
+	leaseHistory       *leaseHistory
 
 	// gossipRangeCountdown and leaseRangeCountdown are countdowns of
 	// changes to range and leaseholder counts, after which the store
@@ -883,11 +884,12 @@ func NewStore(cfg StoreConfig, eng engine.Engine, nodeDesc *roachpb.NodeDescript
 		panic(fmt.Sprintf("invalid store configuration: %+v", &cfg))
 	}
 	s := &Store{
-		cfg:      cfg,
-		db:       cfg.DB, // TODO(tschottdorf) remove redundancy.
-		engine:   eng,
-		nodeDesc: nodeDesc,
-		metrics:  newStoreMetrics(cfg.HistogramWindowInterval),
+		cfg:          cfg,
+		db:           cfg.DB, // TODO(tschottdorf) remove redundancy.
+		engine:       eng,
+		nodeDesc:     nodeDesc,
+		metrics:      newStoreMetrics(cfg.HistogramWindowInterval),
+		leaseHistory: newLeaseHistory(cfg.Clock),
 	}
 	if cfg.RPCContext != nil {
 		s.allocator = MakeAllocator(cfg.StorePool, cfg.RPCContext.RemoteClocks.Latency)
@@ -4000,6 +4002,12 @@ func (s *Store) ComputeStatsForKeySpan(startKey, endKey roachpb.RKey) (enginepb.
 // allocated.
 func (s *Store) GetTempPrefix() string {
 	return s.engine.GetTempDir()
+}
+
+// GetLeaseHistory returns the lease history of a specific range. The range may
+// or may not exist on the store.
+func (s *Store) GetLeaseHistory(rangeID roachpb.RangeID) []roachpb.Lease {
+	return s.leaseHistory.Get(rangeID)
 }
 
 // The methods below can be used to control a store's queues. Stopping a queue

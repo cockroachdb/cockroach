@@ -208,6 +208,37 @@ type debugRangeOutput struct {
 	Value string
 }
 
+type debugLeaseDetails struct {
+	Replica           debugRangeOutput
+	ProposedTS        debugRangeOutput
+	Start             debugRangeOutput
+	ExpirationOrEpoch debugRangeOutput
+}
+
+// leaseSlice implements sort.Interface.
+type leaseSlice []roachpb.Lease
+
+var _ sort.Interface = leaseSlice(nil)
+
+func (l leaseSlice) Len() int      { return len(l) }
+func (l leaseSlice) Swap(i, j int) { l[i], l[j] = l[j], l[i] }
+func (l leaseSlice) Less(i, j int) bool {
+	if l[i].ProposedTS == nil || l[j].ProposedTS == nil {
+		return l[i].Start.Less(l[j].Start)
+	}
+	return l[i].ProposedTS.Less(*l[j].ProposedTS)
+}
+
+func removeDuplicateLeases(entires leaseSlice) leaseSlice {
+	var result leaseSlice
+	for _, entry := range entires {
+		if len(result) == 0 || (!reflect.DeepEqual(result[len(result)-1], entry)) {
+			result = append(result, entry)
+		}
+	}
+	return result
+}
+
 type debugRangeData struct {
 	RangeID    int64
 	Failures   rangeInfoSlice
@@ -220,6 +251,7 @@ type debugRangeData struct {
 	HeaderKeys        []string
 	Results           map[string]map[roachpb.StoreID]*debugRangeOutput
 	HeaderFakeStoreID roachpb.StoreID
+	LeaseHistory      []debugLeaseDetails
 }
 
 func (d *debugRangeData) postProcessing() {
@@ -297,6 +329,7 @@ func (d *debugRangeData) postProcessing() {
 
 	// leaderStoreInfo keeps tack of the raftLeader with the most recent term.
 	var leaderStoreInfo serverpb.RangeInfo
+	var leaseHistory leaseSlice
 
 	// Convert each rangeInfo into debugRangeOutputs.
 	for _, info := range d.rangeInfos {
@@ -483,6 +516,8 @@ func (d *debugRangeData) postProcessing() {
 				}
 			}
 		}
+
+		leaseHistory = append(leaseHistory, info.LeaseHistory...)
 	}
 
 	// Add warnings to select headers and cells when the values don't match
@@ -586,6 +621,48 @@ func (d *debugRangeData) postProcessing() {
 				}
 			}
 		}
+	}
+
+	// Sort, dedupe and Format the leases for display.
+	sort.Sort(sort.Reverse(leaseHistory))
+	leaseHistory = removeDuplicateLeases(leaseHistory)
+	for _, lease := range leaseHistory {
+		var detail debugLeaseDetails
+		detail.Replica.Value = fmt.Sprintf("n%d s%d r%d", lease.Replica.NodeID, lease.Replica.StoreID, lease.Replica.ReplicaID)
+		detail.Replica.Title = detail.Replica.Value
+		if lease.Epoch != nil {
+			detail.ExpirationOrEpoch.Value = strconv.FormatInt(*lease.Epoch, 10)
+			detail.ExpirationOrEpoch.Title = detail.ExpirationOrEpoch.Value
+		} else {
+			var expiration string
+			if lease.Expiration.WallTime == 0 {
+				expiration = debugRangeValueEmpty
+			} else {
+				expiration = convertTimestamp(lease.Expiration)
+			}
+			detail.ExpirationOrEpoch = debugRangeOutput{
+				Title: fmt.Sprintf("%s\n%s", expiration, lease.Expiration),
+				Value: expiration,
+			}
+		}
+		start := convertTimestamp(lease.Start)
+		detail.Start = debugRangeOutput{
+			Title: fmt.Sprintf("%s\n%s", start, lease.Start),
+			Value: start,
+		}
+		if lease.ProposedTS != nil {
+			proposedTS := convertTimestamp(*lease.ProposedTS)
+			detail.ProposedTS = debugRangeOutput{
+				Title: fmt.Sprintf("%s\n%s", proposedTS, *lease.ProposedTS),
+				Value: proposedTS,
+			}
+		} else {
+			detail.ProposedTS = debugRangeOutput{
+				Title: debugRangeValueEmpty,
+				Value: debugRangeValueEmpty,
+			}
+		}
+		d.LeaseHistory = append(d.LeaseHistory, detail)
 	}
 
 	sort.Sort(d.StoreIDs)
@@ -712,28 +789,39 @@ const debugRangeTemplate = `
       .failure-cell.small {
           max-width: 1px;
       }
+      .lease-table {
+        margin: 0 0 40px 0;
+        display: table;
+      }
+      .lease-row {
+        display: table-row;
+        background: #f6f6f6;
+      }
+      .lease-row:nth-of-type(odd) {
+        background: #e9e9e9;
+      }
+      .lease-cell {
+        padding: 6px 12px;
+        display: table-cell;
+        height: 20px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        border-width: 1px 1px 0 0;
+        border-color: rgba(0, 0, 0, 0.1);
+        border-style: solid;
+      }
+      .lease-row:first-of-type .lease-cell {
+        font-weight: 900;
+        color: #ffffff;
+        background: #3d9970;
+        border: none;
+      }
     </STYLE>
   </HEAD>
   <BODY>
     <DIV CLASS="wrapper">
       <H1>Range r{{$.RangeID}}</H1>
-      {{- if $.ReplicaIDs}}
-        <DIV CLASS="table">
-          {{- range $_, $headerName := $.HeaderKeys}}
-            {{- $data := index $.Results $headerName}}
-            {{- $datum := index $data $.HeaderFakeStoreID}}
-            <DIV CLASS="row">
-              <DIV CLASS="header cell {{$datum.Class}}" TITLE="{{html $datum.Title}}">{{$datum.Value}}</DIV>
-              {{- range $_, $storeID := $.StoreIDs}}
-                {{- $datum := index $data $storeID}}
-                <DIV CLASS="cell {{$datum.Class}}" TITLE="{{$datum.Title}}">{{$datum.Value}}</DIV>
-              {{- end}}
-            </DIV>
-          {{- end}}
-        </DIV>
-      {{- else}}
-        <p>No information available for Range r{{$.RangeID}}</p>
-      {{- end}}
       {{- if $.Failures}}
         <H2>Failures</H2>
         <DIV CLASS="failure-table">
@@ -751,6 +839,42 @@ const debugRangeTemplate = `
                 <DIV CLASS="failure-cell">-</DIV>
               {{- end}}
               <DIV CLASS="failure-cell" TITLE="{{$det.ErrorMessage}}">{{$det.ErrorMessage}}</DIV>
+            </DIV>
+          {{- end}}
+        </DIV>
+      {{- end}}
+      {{- if $.ReplicaIDs}}
+        <DIV CLASS="table">
+          {{- range $_, $headerName := $.HeaderKeys}}
+            {{- $data := index $.Results $headerName}}
+            {{- $datum := index $data $.HeaderFakeStoreID}}
+            <DIV CLASS="row">
+              <DIV CLASS="header cell {{$datum.Class}}" TITLE="{{html $datum.Title}}">{{$datum.Value}}</DIV>
+              {{- range $_, $storeID := $.StoreIDs}}
+                {{- $datum := index $data $storeID}}
+                <DIV CLASS="cell {{$datum.Class}}" TITLE="{{$datum.Title}}">{{$datum.Value}}</DIV>
+              {{- end}}
+            </DIV>
+          {{- end}}
+        </DIV>
+      {{- else}}
+        <p>No information available for Range r{{$.RangeID}}</p>
+      {{- end}}
+      {{- if $.LeaseHistory}}
+        <H2>Lease History</H2>
+        <DIV CLASS="lease-table">
+          <DIV CLASS="lease-row">
+            <DIV CLASS="lease-cell">Replica</DIV>
+            <DIV CLASS="lease-cell">Start</DIV>
+            <DIV CLASS="lease-cell">Expiration/Epoch</DIV>
+            <DIV CLASS="lease-cell">Proposed</DIV>
+          </DIV>
+          {{- range $_, $lease := $.LeaseHistory}}
+            <DIV CLASS="lease-row">
+              <DIV CLASS="lease-cell" TITLE="{{$lease.Replica.Title}}">{{$lease.Replica.Value}}</DIV>
+              <DIV CLASS="lease-cell" TITLE="{{$lease.Start.Title}}">{{$lease.Start.Value}}</DIV>
+              <DIV CLASS="lease-cell" TITLE="{{$lease.ExpirationOrEpoch.Title}}">{{$lease.ExpirationOrEpoch.Value}}</DIV>
+              <DIV CLASS="lease-cell" TITLE="{{$lease.ProposedTS.Title}}">{{$lease.ProposedTS.Value}}</DIV>
             </DIV>
           {{- end}}
         </DIV>

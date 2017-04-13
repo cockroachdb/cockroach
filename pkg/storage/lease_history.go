@@ -1,0 +1,58 @@
+// Copyright 2017 The Cockroach Authors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+// implied. See the License for the specific language governing
+// permissions and limitations under the License.
+
+package storage
+
+import (
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+)
+
+// leaseHistoryMaxEntries is the maximum number of lease history entries to
+// store per replica.
+const leaseHistoryMaxEntries = 100
+
+type leaseHistory struct {
+	syncutil.Mutex
+	history map[roachpb.RangeID][]roachpb.Lease
+}
+
+func newLeaseHistory(clock *hlc.Clock) *leaseHistory {
+	lh := &leaseHistory{
+		history: make(map[roachpb.RangeID][]roachpb.Lease),
+	}
+	return lh
+}
+
+func (lh *leaseHistory) Add(rangeID roachpb.RangeID, lease roachpb.Lease) {
+	lh.Lock()
+	defer lh.Unlock()
+
+	rangeHistory, ok := lh.history[rangeID]
+	if !ok {
+		rangeHistory = make([]roachpb.Lease, 0, leaseHistoryMaxEntries)
+	}
+	var start int
+	if len(rangeHistory) == leaseHistoryMaxEntries {
+		start = 1
+	}
+	lh.history[rangeID] = append(rangeHistory[start:], lease)
+}
+
+func (lh *leaseHistory) Get(rangeID roachpb.RangeID) []roachpb.Lease {
+	lh.Lock()
+	defer lh.Unlock()
+	return lh.history[rangeID]
+}

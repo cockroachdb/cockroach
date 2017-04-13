@@ -2033,6 +2033,8 @@ func applyNewLease(
 	if err := rec.stateLoader().setLease(ctx, batch, ms, &lease); err != nil {
 		return newFailedLeaseTrigger(isTransfer), err
 	}
+	// Mark the new lease in the store's lease history.
+	rec.repl.store.leaseHistory.Add(desc.RangeID, lease)
 
 	var pd EvalResult
 	// If we didn't block concurrent reads here, there'd be a chance that
