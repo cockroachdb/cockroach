@@ -447,17 +447,11 @@ func setDefaultStderrVerbosity(cmd *cobra.Command, defaultSeverity log.Severity)
 	vf := pf.Lookup(logflags.LogToStderrName)
 
 	// if `--logtostderr` was not specified and no log directory was
-	// set, then set stderr logging to the level considered default by
-	// the specific command.
-	if !vf.Changed && !log.DirSet() {
-		if err := vf.Value.Set(defaultSeverity.String()); err != nil {
-			return err
-		}
-	}
-
-	// If `--logtostderr` was specified without explicit verbosity,
-	// set to the level that is considered default by the specific command.
-	if vf.Value.String() == log.Severity_DEFAULT.String() {
+	// set, or `--logtostderr` was specified but without explicit level,
+	// then set stderr logging to the level considered default by the
+	// specific command.
+	if (!vf.Changed && !log.DirSet()) ||
+		(vf.Changed && vf.Value.String() == log.Severity_DEFAULT.String()) {
 		if err := vf.Value.Set(defaultSeverity.String()); err != nil {
 			return err
 		}
