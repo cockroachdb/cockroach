@@ -837,13 +837,11 @@ func (UnaryOperator) operator() {}
 const (
 	UnaryPlus UnaryOperator = iota
 	UnaryMinus
-	UnaryComplement
 )
 
 var unaryOpName = [...]string{
-	UnaryPlus:       "+",
-	UnaryMinus:      "-",
-	UnaryComplement: "~",
+	UnaryPlus:  "+",
+	UnaryMinus: "-",
 }
 
 func (i UnaryOperator) String() string {

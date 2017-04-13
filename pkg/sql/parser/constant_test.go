@@ -371,9 +371,6 @@ func TestFoldNumericConstants(t *testing.T) {
 		{`+1.2`, `1.2`},
 		{`-1`, `-1`},
 		{`-1.2`, `-1.2`},
-		// Unary ops (int only).
-		{`~1`, `-2`},
-		{`~1.2`, `~ 1.2`},
 		// Binary ops.
 		{`1 + 1`, `2`},
 		{`1.2 + 2.3`, `3.5`},
