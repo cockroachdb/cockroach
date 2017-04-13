@@ -1267,6 +1267,7 @@ type rocksDBIterator struct {
 	iter   *C.DBIterator
 	valid  bool
 	reseek bool
+	err    error
 	key    C.DBKey
 	value  C.DBSlice
 }
@@ -1362,7 +1363,7 @@ func (r *rocksDBIterator) SeekReverse(key MVCCKey) {
 }
 
 func (r *rocksDBIterator) Valid() (bool, error) {
-	return r.valid, statusToError(C.DBIterError(r.iter))
+	return r.valid, r.err
 }
 
 func (r *rocksDBIterator) Next() {
@@ -1420,6 +1421,7 @@ func (r *rocksDBIterator) setState(state C.DBIterState) {
 	r.reseek = false
 	r.key = state.key
 	r.value = state.value
+	r.err = statusToError(state.status)
 }
 
 func (r *rocksDBIterator) ComputeStats(
