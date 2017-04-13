@@ -759,13 +759,13 @@ func (u *sqlSymUnion) kvOptions() []KVOption {
 %left      '^' '#'
 %left      '&'
 %left      LSHIFT RSHIFT
+%left      '~'
 %left      '+' '-'
 %left      '*' '/' FLOORDIV '%'
 // Unary Operators
 %left      AT                // sets precedence for AT TIME ZONE
 %left      COLLATE
 %right     UMINUS
-%left      '~'
 %left      '[' ']'
 %left      '(' ')'
 %left      TYPEANNOTATE
@@ -3778,7 +3778,7 @@ a_expr:
   {
     $$.val = &UnaryExpr{Operator: UnaryMinus, Expr: $2.expr()}
   }
-| '~' a_expr %prec UMINUS
+| '~' a_expr
   {
     $$.val = &UnaryExpr{Operator: UnaryComplement, Expr: $2.expr()}
   }
@@ -4039,7 +4039,7 @@ b_expr:
   {
     $$.val = &UnaryExpr{Operator: UnaryMinus, Expr: $2.expr()}
   }
-| '~' b_expr %prec UMINUS
+| '~' b_expr
   {
     $$.val = &UnaryExpr{Operator: UnaryComplement, Expr: $2.expr()}
   }
