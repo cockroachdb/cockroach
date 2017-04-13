@@ -76,7 +76,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -84,8 +86,11 @@ import (
 
 const (
 	archivedStoreURL = "gs://cockroach-test/allocatortest"
-	StableInterval   = 3 * time.Minute
 	adminPort        = base.DefaultHTTPPort
+
+	// If no replica allocator changes are made during this time, we consider the
+	// test finished.
+	stableNanos = 180e9
 )
 
 const (
@@ -113,6 +118,8 @@ type allocatorTest struct {
 	CockroachDiskSizeGB int
 	// Run some schema changes during the rebalancing.
 	RunSchemaChanges bool
+
+	stableInterval duration.Duration
 
 	f *terrafarm.Farmer
 }
@@ -330,15 +337,15 @@ func (at *allocatorTest) printRebalanceStats(db *gosql.DB, host string) error {
 		).Scan(&rebalanceIntervalStr); err != nil {
 			return err
 		}
-		rebalanceInterval, err := time.ParseDuration(rebalanceIntervalStr)
+		rebalanceInterval, err := parser.ParseDInterval(rebalanceIntervalStr)
 		if err != nil {
 			return err
 		}
-		if rebalanceInterval < 0 {
-			// This can happen with single-node clusters.
-			rebalanceInterval = time.Duration(0)
+		if rebalanceInterval.Duration.Compare(duration.Duration{}) < 0 {
+			log.Warningf(context.Background(), "test finished, but clock moved backward")
+		} else {
+			log.Infof(context.Background(), "cluster took %s to rebalance", rebalanceInterval)
 		}
-		log.Infof(context.Background(), "cluster took %s to rebalance", rebalanceInterval)
 	}
 
 	// Output # of range events that occurred. All other things being equal,
@@ -363,7 +370,7 @@ func (at *allocatorTest) printRebalanceStats(db *gosql.DB, host string) error {
 }
 
 type replicationStats struct {
-	ElapsedSinceLastEvent time.Duration
+	ElapsedSinceLastEvent duration.Duration
 	EventType             string
 	RangeID               int64
 	StoreID               int64
@@ -385,13 +392,14 @@ func (at *allocatorTest) allocatorStats(db *gosql.DB) (s replicationStats, err e
 		}
 	}()
 
-	q := `SELECT NOW()-timestamp, rangeID, storeID, eventType FROM rangelog WHERE ` +
-		`timestamp=(SELECT MAX(timestamp) FROM rangelog WHERE eventType IN ($1, $2, $3))`
 	eventTypes := []interface{}{
 		string(storage.RangeEventLogSplit),
 		string(storage.RangeEventLogAdd),
 		string(storage.RangeEventLogRemove),
 	}
+
+	q := `SELECT NOW()-timestamp, rangeID, storeID, eventType FROM rangelog WHERE ` +
+		`timestamp=(SELECT MAX(timestamp) FROM rangelog WHERE eventType IN ($1, $2, $3))`
 
 	var elapsedStr string
 
@@ -404,11 +412,11 @@ func (at *allocatorTest) allocatorStats(db *gosql.DB) (s replicationStats, err e
 	if err := row.Scan(&elapsedStr, &s.RangeID, &s.StoreID, &s.EventType); err != nil {
 		return replicationStats{}, err
 	}
-
-	s.ElapsedSinceLastEvent, err = time.ParseDuration(elapsedStr)
+	elapsedSinceLastEvent, err := parser.ParseDInterval(elapsedStr)
 	if err != nil {
 		return replicationStats{}, err
 	}
+	s.ElapsedSinceLastEvent = elapsedSinceLastEvent.Duration
 
 	s.ReplicaCountStdDev, err = at.stdDev()
 	if err != nil {
@@ -452,7 +460,8 @@ func (at *allocatorTest) WaitForRebalance(ctx context.Context, t *testing.T) err
 			}
 
 			log.Info(ctx, stats)
-			if StableInterval <= stats.ElapsedSinceLastEvent {
+			stableDuration := duration.Duration{Nanos: stableNanos}
+			if stableDuration.Compare(stats.ElapsedSinceLastEvent) <= 0 {
 				host := at.f.Hostname(0)
 				log.Infof(context.Background(), "replica count = %f, max = %f", stats.ReplicaCountStdDev, *flagATMaxStdDev)
 				if stats.ReplicaCountStdDev > *flagATMaxStdDev {
