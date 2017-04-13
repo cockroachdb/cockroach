@@ -386,7 +386,7 @@ func (l *LocalCluster) initCluster(ctx context.Context) {
 	}
 
 	if *cockroachImage == builderImageFull {
-		maybePanic(pullImage(ctx, l, builderImage+":"+builderTag, types.ImagePullOptions{}))
+		maybePanic(pullImage(ctx, l, builderImageFull, types.ImagePullOptions{}))
 	}
 	c, err := createContainer(
 		ctx,
