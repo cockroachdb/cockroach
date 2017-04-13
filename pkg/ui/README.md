@@ -14,14 +14,9 @@ the `--http-port` flag. If you've started a node with the default options,
 you'll be able to access the UI at <http://localhost:8080>.
 
 Our UI is compiled using a collection of tools that depends on
-[Node.js](https://nodejs.org/), so you'll need a recent version of Node
-installed. These Node dependencies are managed with [Yarn](https://yarnpkg.com),
-a package manager that offers more deterministic package installation than NPM.
-On macOS, you can install both of these dependencies with Homebrew:
-
-```shell
-brew install node yarn
-```
+[Node.js](https://nodejs.org/) and are managed with
+[Yarn](https://yarnpkg.com), a package manager that offers more deterministic
+package installation than NPM. NodeJS 6.x and Yarn 0.22.0 are known to work.
 
 With Node and Yarn installed, bootstrap local development by running `make` in
 this directory. This will run `yarn install` to install our Node dependencies,
