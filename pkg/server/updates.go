@@ -30,7 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -211,31 +211,6 @@ func (s *Server) checkForUpdates(runningTime time.Duration) bool {
 	return true
 }
 
-func (s *Server) usageReportingEnabled() bool {
-	ctx, span := s.AnnotateCtxWithSpan(context.Background(), "usage-reporting")
-	defer span.Finish()
-
-	// Grab the optin value from the database.
-	req := &serverpb.GetUIDataRequest{Keys: []string{optinKey}}
-	resp, err := s.admin.GetUIData(ctx, req)
-	if err != nil {
-		log.Warning(ctx, err)
-		return false
-	}
-
-	val, ok := resp.KeyValues[optinKey]
-	if !ok {
-		// Key wasn't found, so we opt out by default.
-		return false
-	}
-	optin, err := strconv.ParseBool(string(val.Value))
-	if err != nil {
-		log.Warningf(ctx, "could not parse optin value (%q): %v", val.Value, err)
-		return false
-	}
-	return optin
-}
-
 // mayebReportUsage differs from maybeCheckForUpdates in that it persists the
 // last-report time across restarts (since store usage, unlike version, isn't
 // directly tied to the *running* binary).
@@ -245,7 +220,7 @@ func (s *Server) maybeReportUsage(running time.Duration) time.Duration {
 		// be stable, so instead we request re-evaluation after a retry delay.
 		return updateCheckRetryFrequency - running
 	}
-	if !s.usageReportingEnabled() {
+	if !settings.UsageReportingStoreStats() {
 		return updateCheckFrequency
 	}
 

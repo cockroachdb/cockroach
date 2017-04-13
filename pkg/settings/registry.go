@@ -22,7 +22,8 @@ package settings
 // Registry should never be mutated after init (except in tests), as it is read
 // concurrently by different callers.
 var registry = map[string]value{
-	"enterprise.enabled": {typ: BoolValue},
+	"enterprise.enabled":         {typ: BoolValue},
+	"usage.reporting.storestats": {typ: BoolValue},
 }
 
 // value holds the (parsed, typed) value of a setting.
@@ -45,11 +46,27 @@ func TypeOf(key string) (ValueType, bool) {
 }
 
 // EnterpriseEnabled returns the "enterprise.enabled" setting.
-// "enterprise.enabled" allows the use of the enterprise functionality (which
+// "enterprise.enabled" enabled the use of the enterprise functionality (which
 // requires an enterprise license).
 // This is a temporary setting and will be replaced in the future.
 func EnterpriseEnabled() bool {
 	return getBool("enterprise.enabled")
+}
+
+// UsageReportingStoreStats returns the "usage.reporting.storestats" setting.
+// "usage.reporting.storestats" enables reporting of metrics related to a node's
+// storage (number, size and health of ranges) back to CockroachDB.
+// Collecting this data from production clusters helps us understand and improve
+// how our storage systems behave in real-world use cases.
+//
+// Note: this setting to *enabled* by default when a cluster is created (or is
+// migrated from a earlier beta version).
+// This can be prevented with the env var COCKROACH_DISABLE_USAGE_REPORTING.
+// Note: that the setting itself is defined with a default value of false even
+// though the behavior appears to default to true: this is so that a node will
+// not errantly send a report before loading its settings.
+func UsageReportingStoreStats() bool {
+	return getBool("usage.reporting.storestats")
 }
 
 // We export Testing* helpers for the settings-related tests in the SQL package.
