@@ -60,6 +60,8 @@ message ChangeReplicas {
 // leases, log truncation, ...) of the Replica or certain special commands must
 // sideline information here based on which all Replicas must take action.
 message ReplicatedEvalResult {
+  optional bytes start_key = 14 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RKey"];
+  optional bytes end_key = 15 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RKey"];
   // Whether to block concurrent readers while processing the proposal data.
   optional bool block_reads = 1 [(gogoproto.nullable) = false];
   // Updates to the Replica's ReplicaState. By convention and as outlined on
@@ -72,8 +74,9 @@ message ReplicatedEvalResult {
   optional roachpb.ComputeChecksumRequest compute_checksum = 5;
   optional bool is_lease_request = 6 [(gogoproto.nullable) = false];
   optional bool is_freeze = 7 [(gogoproto.nullable) = false];
-  // Denormalizes BatchRequest.Timestamp during the transition period for
-  // proposer-evaluated KV. Only used to verify lease coverage.
+  // Duplicates BatchRequest.Timestamp for proposer-evaluated KV. Used
+  // to verify the validity of the command (for lease coverage and GC
+  // threshold).
   optional util.hlc.Timestamp timestamp = 8 [(gogoproto.nullable) = false];
   optional bool is_consistency_related = 9 [(gogoproto.nullable) = false];
   // The stats delta corresponding to the data in this WriteBatch. On

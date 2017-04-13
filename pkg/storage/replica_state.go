@@ -594,11 +594,6 @@ func (rec ReplicaEvalContext) DB() *client.DB {
 	return rec.repl.store.DB()
 }
 
-// Store returns the Replica's Store.
-func (rec ReplicaEvalContext) Store() *Store {
-	return rec.repl.store
-}
-
 // Engine returns the Replica's underlying Engine. In most cases the
 // evaluation Batch should be used instead.
 func (rec ReplicaEvalContext) Engine() engine.Engine {
