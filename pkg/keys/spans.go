@@ -28,9 +28,6 @@ var (
 	// SystemConfigSpan is the range of system objects which will be gossiped.
 	SystemConfigSpan = roachpb.Span{Key: SystemConfigSplitKey, EndKey: SystemConfigTableDataMax}
 
-	// UserDataSpan is the non-meta and non-structured portion of the key space.
-	UserDataSpan = roachpb.Span{Key: SystemMax, EndKey: TableDataMin}
-
 	// NoSplitSpans describes the ranges that should never be split.
 	// Meta1Span: needed to find other ranges.
 	// NodeLivenessSpan: liveness information on nodes in the cluster.

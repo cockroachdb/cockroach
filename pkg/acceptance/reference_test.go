@@ -82,9 +82,7 @@ $bin sql -d old -e "SELECT i, b, s, d, f, extract(epoch from (timestamp '1970-01
 # diff returns non-zero if different. With set -e above, that would exit here.
 diff new.everything old.everything
 
-# Scan all data (some of which may not have been touched by the SQL commands)
-# to wake up all Raft groups.
-$bin debug kv scan
+$bin debug range ls
 
 echo "Add a row with the new binary and render the updated data before shutting down."
 $bin sql -d old -e "INSERT INTO testing_old values (3, false, '!', decimal '2.14159', 2.14159, NOW(), interval '3h')"
@@ -163,7 +161,7 @@ trap finish EXIT
 
 export COCKROACH_SKIP_UPDATE_CHECK=1
 $bin start --alsologtostderr=INFO --background --store=/cockroach-data-reference-7429 &> out
-$bin debug kv scan
+$bin debug range ls
 $bin quit
 `
 	runReferenceTestWithScript(ctx, t, script)

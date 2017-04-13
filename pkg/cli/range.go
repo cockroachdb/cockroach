@@ -21,11 +21,22 @@ import (
 
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 )
+
+// MakeDBClient creates a kv client for use in cli tools.
+func MakeDBClient() (*client.DB, *stop.Stopper, error) {
+	conn, clock, stopper, err := getClientGRPCConn()
+	if err != nil {
+		return nil, nil, err
+	}
+	return client.NewDB(client.NewSender(conn), clock), stopper, nil
+}
 
 // A lsRangesCmd command lists the ranges in a cluster.
 var lsRangesCmd = &cobra.Command{
