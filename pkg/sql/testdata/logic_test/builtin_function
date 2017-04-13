@@ -613,15 +613,21 @@ SELECT pi()
 ----
 3.141592653589793
 
-query III
-SELECT pow(-2::int, 3::int), pow(2::int, 3::int), pow(2::int, -3::int)
+query II
+SELECT pow(-2::int, 3::int), pow(2::int, 3::int)
 ----
--8 8 0
+-8 8
 
-query IIIII
-SELECT pow(0::int, 3::int), pow(0::int, -3::int), pow(3::int, 0::int), pow(-3::int, 0::int), pow(0::int, 0::int)
+statement error integer out of range
+SELECT pow(2::int, -3::int)
+
+query IIII
+SELECT pow(0::int, 3::int), pow(0::int, -3::int), pow(3::int, 0::int), pow(-3::int, 0::int)
 ----
-0 0 1 1 1
+0 0 1 1
+
+statement error invalid operation
+SELECT pow(0::int, 0::int)
 
 query RRR
 SELECT pow(-3.0::float, 2.0), power(3.0::float, 2.0), pow(5.0::decimal, 2.0)

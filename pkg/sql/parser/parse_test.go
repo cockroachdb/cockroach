@@ -724,6 +724,7 @@ func TestParse2(t *testing.T) {
 
 		{`SELECT a FROM t WHERE a = b & c`, `SELECT a FROM t WHERE a = (b & c)`},
 		{`SELECT a FROM t WHERE a = b | c`, `SELECT a FROM t WHERE a = (b | c)`},
+		{`SELECT a FROM t WHERE a = b # c`, `SELECT a FROM t WHERE a = (b # c)`},
 		{`SELECT a FROM t WHERE a = b ^ c`, `SELECT a FROM t WHERE a = (b ^ c)`},
 		{`SELECT a FROM t WHERE a = b + c`, `SELECT a FROM t WHERE a = (b + c)`},
 		{`SELECT a FROM t WHERE a = b - c`, `SELECT a FROM t WHERE a = (b - c)`},
@@ -1391,6 +1392,10 @@ func TestParsePrecedence(t *testing.T) {
 		{`1>>2<<3`, binary(LShift, binary(RShift, one, two), three)},
 		{`1>>2>>3`, binary(RShift, binary(RShift, one, two), three)},
 
+		// Power combined with lower precedence.
+		{`1*2^3`, binary(Mult, one, binary(Pow, two, three))},
+		{`1^2*3`, binary(Mult, binary(Pow, one, two), three)},
+
 		// Bit-and combined with higher precedence.
 		{`1&2<<3`, binary(Bitand, one, binary(LShift, two, three))},
 		{`1<<2&3`, binary(Bitand, binary(LShift, one, two), three)},
@@ -1399,15 +1404,15 @@ func TestParsePrecedence(t *testing.T) {
 		{`1&2&3`, binary(Bitand, binary(Bitand, one, two), three)},
 
 		// Bit-xor combined with higher precedence.
-		{`1^2&3`, binary(Bitxor, one, binary(Bitand, two, three))},
-		{`1&2^3`, binary(Bitxor, binary(Bitand, one, two), three)},
+		{`1#2&3`, binary(Bitxor, one, binary(Bitand, two, three))},
+		{`1&2#3`, binary(Bitxor, binary(Bitand, one, two), three)},
 
 		// Bit-xor combined with self (left associative)
-		{`1^2^3`, binary(Bitxor, binary(Bitxor, one, two), three)},
+		{`1#2#3`, binary(Bitxor, binary(Bitxor, one, two), three)},
 
 		// Bit-or combined with higher precedence.
-		{`1|2^3`, binary(Bitor, one, binary(Bitxor, two, three))},
-		{`1^2|3`, binary(Bitor, binary(Bitxor, one, two), three)},
+		{`1|2#3`, binary(Bitor, one, binary(Bitxor, two, three))},
+		{`1#2|3`, binary(Bitor, binary(Bitxor, one, two), three)},
 
 		// Bit-or combined with self (left associative)
 		{`1|2|3`, binary(Bitor, binary(Bitor, one, two), three)},

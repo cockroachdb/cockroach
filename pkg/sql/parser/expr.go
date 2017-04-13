@@ -744,6 +744,7 @@ const (
 	Div
 	FloorDiv
 	Mod
+	Pow
 	Concat
 	LShift
 	RShift
@@ -752,13 +753,14 @@ const (
 var binaryOpName = [...]string{
 	Bitand:   "&",
 	Bitor:    "|",
-	Bitxor:   "^",
+	Bitxor:   "#",
 	Plus:     "+",
 	Minus:    "-",
 	Mult:     "*",
 	Div:      "/",
 	FloorDiv: "//",
 	Mod:      "%",
+	Pow:      "^",
 	Concat:   "||",
 	LShift:   "<<",
 	RShift:   ">>",
