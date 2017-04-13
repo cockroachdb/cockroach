@@ -80,6 +80,11 @@ const resolverPolicy = distsqlplan.BinPackingLeaseHolderChoice
 // debugging).
 var logPlanDiagram = envutil.EnvOrDefaultBool("COCKROACH_DISTSQL_LOG_PLAN", false)
 
+// If true, for index joins  we instantiate a join reader on every node that
+// has a stream (usually from a table reader). If false, there is a single join
+// reader on the gateway node.
+var distributeIndexJoin = envutil.EnvOrDefaultBool("COCKROACH_DISTSQL_DISTRIBUTE_INDEX_JOIN", true)
+
 func newDistSQLPlanner(
 	nodeDesc roachpb.NodeDescriptor,
 	rpcCtx *rpc.Context,
@@ -786,7 +791,6 @@ func (dsp *distSQLPlanner) addAggregators(
 	multiStage := false
 	allDistinct := true
 	anyDistinct := false
-	//
 
 	// Check if the previous stage is all on one node.
 	prevStageNode := p.Processors[p.ResultRouters[0]].Node
@@ -1057,17 +1061,28 @@ ColLoop:
 		plan.planToStreamColMap[col] = i
 	}
 
-	// TODO(radu): we currently use a single JoinReader. We could have multiple.
-	// Note that in that case, if the index ordering is used, we must make sure
-	// that the index columns are part of the output (so that ordered
-	// synchronizers down the road can maintain the order).
-
-	plan.AddSingleGroupStage(
-		dsp.nodeDesc.NodeID,
-		distsqlrun.ProcessorCoreUnion{JoinReader: &joinReaderSpec},
-		post,
-		getTypesForPlanResult(n, plan.planToStreamColMap),
-	)
+	if distributeIndexJoin && len(plan.ResultRouters) > 1 {
+		// Instantiate one join reader for every stream.
+		plan.AddNoGroupingStage(
+			distsqlrun.ProcessorCoreUnion{JoinReader: &joinReaderSpec},
+			post,
+			getTypesForPlanResult(n, plan.planToStreamColMap),
+			dsp.convertOrdering(n.Ordering().ordering, plan.planToStreamColMap),
+		)
+	} else {
+		// Use a single join reader (if there is a single stream, on that node; if
+		// not, on the gateway node).
+		node := dsp.nodeDesc.NodeID
+		if len(plan.ResultRouters) == 1 {
+			node = plan.Processors[plan.ResultRouters[0]].Node
+		}
+		plan.AddSingleGroupStage(
+			node,
+			distsqlrun.ProcessorCoreUnion{JoinReader: &joinReaderSpec},
+			post,
+			getTypesForPlanResult(n, plan.planToStreamColMap),
+		)
+	}
 	return plan, nil
 }
 
