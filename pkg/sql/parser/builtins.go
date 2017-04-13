@@ -1715,9 +1715,7 @@ var powImpls = []Builtin{
 		},
 		ReturnType: fixedReturnType(TypeInt),
 		fn: func(_ *EvalContext, args Datums) (Datum, error) {
-			x := int64(MustBeDInt(args[0]))
-			y := int64(MustBeDInt(args[1]))
-			return NewDInt(DInt(intPow(x, y))), nil
+			return intPow(MustBeDInt(args[0]), MustBeDInt(args[1]))
 		},
 		Info: "Calculates `x`^`y`.",
 	},
@@ -2088,23 +2086,18 @@ func pickFromTuple(ctx *EvalContext, greatest bool, args Datums) (Datum, error) 
 	return g, nil
 }
 
-func intPow(x, y int64) int64 {
-	// Calculate x^y by squaring. See:
-	// https://en.wikipedia.org/wiki/Exponentiation_by_squaring
-	// special case 1: x == 0 (result 1 if y = 0, 0 otherwise)
-	// special case 2: y < 0 (result 0)
-	if y < 0 {
-		return 0
+func intPow(x, y DInt) (*DInt, error) {
+	xd := apd.New(int64(x), 0)
+	yd := apd.New(int64(y), 0)
+	_, err := IntegerCtx.Pow(xd, xd, yd)
+	if err != nil {
+		return nil, err
 	}
-	var ret int64 = 1
-	for y > 0 {
-		if y&1 == 1 {
-			ret *= x
-		}
-		x *= x
-		y >>= 1
+	i, err := xd.Int64()
+	if err != nil {
+		return nil, errIntOutOfRange
 	}
-	return ret
+	return NewDInt(DInt(i)), nil
 }
 
 var uniqueIntState struct {
