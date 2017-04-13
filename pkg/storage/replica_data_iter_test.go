@@ -71,6 +71,7 @@ func createRangeData(t *testing.T, r *Replica) []engine.MVCCKey {
 	}{
 		{keys.AbortCacheKey(r.RangeID, testTxnID), ts0},
 		{keys.AbortCacheKey(r.RangeID, testTxnID2), ts0},
+		{keys.RangeFrozenStatusKey(r.RangeID), ts0},
 		{keys.RangeLastGCKey(r.RangeID), ts0},
 		{keys.RaftAppliedIndexKey(r.RangeID), ts0},
 		{keys.RaftTruncatedStateKey(r.RangeID), ts0},

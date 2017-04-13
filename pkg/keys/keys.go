@@ -190,6 +190,11 @@ func RaftTruncatedStateKey(rangeID roachpb.RangeID) roachpb.Key {
 	return MakeRangeIDPrefixBuf(rangeID).RaftTruncatedStateKey()
 }
 
+// RangeFrozenStatusKey returns a system-local key for the frozen status.
+func RangeFrozenStatusKey(rangeID roachpb.RangeID) roachpb.Key {
+	return MakeRangeIDPrefixBuf(rangeID).RangeFrozenStatusKey()
+}
+
 // RangeLeaseKey returns a system-local key for a range lease.
 func RangeLeaseKey(rangeID roachpb.RangeID) roachpb.Key {
 	return MakeRangeIDPrefixBuf(rangeID).RangeLeaseKey()
@@ -720,6 +725,11 @@ func (b RangeIDPrefixBuf) LeaseAppliedIndexKey() roachpb.Key {
 // RaftTruncatedStateKey returns a system-local key for a RaftTruncatedState.
 func (b RangeIDPrefixBuf) RaftTruncatedStateKey() roachpb.Key {
 	return append(b.replicatedPrefix(), LocalRaftTruncatedStateSuffix...)
+}
+
+// RangeFrozenStatusKey returns a system-local key for the frozen status.
+func (b RangeIDPrefixBuf) RangeFrozenStatusKey() roachpb.Key {
+	return append(b.replicatedPrefix(), LocalRangeFrozenStatusSuffix...)
 }
 
 // RangeLeaseKey returns a system-local key for a range lease.
