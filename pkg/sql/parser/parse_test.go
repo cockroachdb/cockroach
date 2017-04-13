@@ -211,6 +211,8 @@ func TestParse(t *testing.T) {
 		{`SHOW DATABASE`},
 		{`SHOW SYNTAX`},
 
+		{`SHOW CLUSTER SETTING a`},
+
 		{`SHOW DATABASES`},
 		{`SHOW TABLES`},
 		{`SHOW TABLES FROM a`},
