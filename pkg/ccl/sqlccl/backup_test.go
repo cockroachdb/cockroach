@@ -105,8 +105,21 @@ func bankSplitStmt(numAccounts int, numRanges int) string {
 	return stmt.String()
 }
 
-func enableEnterprise(db *sqlutils.SQLRunner) {
-	db.Exec("SET CLUSTER SETTING enterprise.enabled = true")
+func backupSQLRunner(t testing.TB, tc *testcluster.TestCluster) *sqlutils.SQLRunner {
+	runner := sqlutils.MakeSQLRunner(t, tc.Conns[0])
+	runner.Exec("SET CLUSTER SETTING enterprise.enabled = true")
+
+	show := "SHOW CLUSTER SETTING enterprise.enabled"
+	for _, conn := range tc.Conns {
+		testutils.SucceedsSoon(t, func() error {
+			if sqlutils.MakeSQLRunner(t, conn).QueryStr(show)[0][0] != "true" {
+				return errors.New("enterprise.enabled is not true")
+			}
+			return nil
+		})
+	}
+
+	return runner
 }
 
 func backupRestoreTestSetupWithParams(
@@ -133,8 +146,7 @@ func backupRestoreTestSetupWithParams(
 		}
 	}
 
-	sqlDB = sqlutils.MakeSQLRunner(t, tc.Conns[0])
-	enableEnterprise(sqlDB)
+	sqlDB = backupSQLRunner(t, tc)
 
 	sqlDB.Exec(bankCreateDatabase)
 
@@ -276,8 +288,7 @@ func backupAndRestore(
 	{
 		tcRestore := testcluster.StartTestCluster(t, multiNode, base.TestClusterArgs{})
 		defer tcRestore.Stopper().Stop()
-		sqlDBRestore := sqlutils.MakeSQLRunner(t, tcRestore.Conns[0])
-		enableEnterprise(sqlDBRestore)
+		sqlDBRestore := backupSQLRunner(t, tcRestore)
 
 		// Create some other descriptors to change up IDs
 		sqlDBRestore.Exec(`CREATE DATABASE other`)
@@ -516,8 +527,7 @@ func TestBackupRestoreInterleaved(t *testing.T) {
 	t.Run("all tables in interleave hierarchy", func(t *testing.T) {
 		tcRestore := testcluster.StartTestCluster(t, singleNode, base.TestClusterArgs{})
 		defer tcRestore.Stopper().Stop()
-		sqlDBRestore := sqlutils.MakeSQLRunner(t, tcRestore.Conns[0])
-		enableEnterprise(sqlDBRestore)
+		sqlDBRestore := backupSQLRunner(t, tcRestore)
 		sqlDBRestore.Exec(bankCreateDatabase)
 
 		sqlDBRestore.Exec(`RESTORE bench.* FROM $1`, dir)
@@ -544,8 +554,7 @@ func TestBackupRestoreInterleaved(t *testing.T) {
 	t.Run("interleaved table without parent", func(t *testing.T) {
 		tcRestore := testcluster.StartTestCluster(t, singleNode, base.TestClusterArgs{})
 		defer tcRestore.Stopper().Stop()
-		sqlDBRestore := sqlutils.MakeSQLRunner(t, tcRestore.Conns[0])
-		enableEnterprise(sqlDBRestore)
+		sqlDBRestore := backupSQLRunner(t, tcRestore)
 		sqlDBRestore.Exec(bankCreateDatabase)
 
 		_, err := sqlDBRestore.DB.Exec(`RESTORE TABLE bench.i0 FROM $1`, dir)
@@ -557,8 +566,7 @@ func TestBackupRestoreInterleaved(t *testing.T) {
 	t.Run("interleaved table without child", func(t *testing.T) {
 		tcRestore := testcluster.StartTestCluster(t, singleNode, base.TestClusterArgs{})
 		defer tcRestore.Stopper().Stop()
-		sqlDBRestore := sqlutils.MakeSQLRunner(t, tcRestore.Conns[0])
-		enableEnterprise(sqlDBRestore)
+		sqlDBRestore := backupSQLRunner(t, tcRestore)
 		sqlDBRestore.Exec(bankCreateDatabase)
 
 		_, err := sqlDBRestore.DB.Exec(`RESTORE TABLE bench.bank FROM $1`, dir)
@@ -651,8 +659,8 @@ func TestBackupRestoreCrossTableReferences(t *testing.T) {
 	t.Run("restore everything to new cluster", func(t *testing.T) {
 		tc := testcluster.StartTestCluster(t, singleNode, base.TestClusterArgs{})
 		defer tc.Stopper().Stop()
-		db := sqlutils.MakeSQLRunner(t, tc.Conns[0])
-		enableEnterprise(db)
+		db := backupSQLRunner(t, tc)
+
 		db.Exec(createStore)
 		db.Exec(`RESTORE store.* FROM $1`, dir)
 		// Restore's Validate checks all the tables point to each other correctly.
@@ -694,8 +702,7 @@ func TestBackupRestoreCrossTableReferences(t *testing.T) {
 	t.Run("restore customers to new cluster", func(t *testing.T) {
 		tc := testcluster.StartTestCluster(t, singleNode, base.TestClusterArgs{})
 		defer tc.Stopper().Stop()
-		db := sqlutils.MakeSQLRunner(t, tc.Conns[0])
-		enableEnterprise(db)
+		db := backupSQLRunner(t, tc)
 		db.Exec(createStore)
 		db.Exec(`RESTORE store.customers, store.orders FROM $1`, dir)
 		// Restore's Validate checks all the tables point to each other correctly.
@@ -714,8 +721,7 @@ func TestBackupRestoreCrossTableReferences(t *testing.T) {
 	t.Run("restore orders to new cluster", func(t *testing.T) {
 		tc := testcluster.StartTestCluster(t, singleNode, base.TestClusterArgs{})
 		defer tc.Stopper().Stop()
-		db := sqlutils.MakeSQLRunner(t, tc.Conns[0])
-		enableEnterprise(db)
+		db := backupSQLRunner(t, tc)
 		db.Exec(createStore)
 
 		// FK validation of self-FK is preserved.
@@ -738,8 +744,7 @@ func TestBackupRestoreCrossTableReferences(t *testing.T) {
 	t.Run("restore receipts to new cluster", func(t *testing.T) {
 		tc := testcluster.StartTestCluster(t, singleNode, base.TestClusterArgs{})
 		defer tc.Stopper().Stop()
-		db := sqlutils.MakeSQLRunner(t, tc.Conns[0])
-		enableEnterprise(db)
+		db := backupSQLRunner(t, tc)
 		db.Exec(createStore)
 		db.Exec(`RESTORE store.receipts FROM $1 WITH OPTIONS ('skip_missing_foreign_keys')`, dir)
 		// Restore's Validate checks all the tables point to each other correctly.
@@ -758,8 +763,7 @@ func TestBackupRestoreCrossTableReferences(t *testing.T) {
 	t.Run("restore receipts and customers to new cluster", func(t *testing.T) {
 		tc := testcluster.StartTestCluster(t, singleNode, base.TestClusterArgs{})
 		defer tc.Stopper().Stop()
-		db := sqlutils.MakeSQLRunner(t, tc.Conns[0])
-		enableEnterprise(db)
+		db := backupSQLRunner(t, tc)
 		db.Exec(createStore)
 		db.Exec(`RESTORE store.receipts, store.customers FROM $1 WITH OPTIONS ('skip_missing_foreign_keys')`, dir)
 		// Restore's Validate checks all the tables point to each other correctly.
@@ -792,8 +796,7 @@ func TestBackupRestoreCrossTableReferences(t *testing.T) {
 	t.Run("restore simple view", func(t *testing.T) {
 		tc := testcluster.StartTestCluster(t, singleNode, base.TestClusterArgs{})
 		defer tc.Stopper().Stop()
-		db := sqlutils.MakeSQLRunner(t, tc.Conns[0])
-		enableEnterprise(db)
+		db := backupSQLRunner(t, tc)
 		db.Exec(createStore)
 		if _, err := db.DB.Exec(`RESTORE store.early_customers FROM $1`, dir); !testutils.IsError(err,
 			`cannot restore "early_customers" without restoring referenced table`,
@@ -823,8 +826,7 @@ func TestBackupRestoreCrossTableReferences(t *testing.T) {
 	t.Run("restore multi-table view", func(t *testing.T) {
 		tc := testcluster.StartTestCluster(t, singleNode, base.TestClusterArgs{})
 		defer tc.Stopper().Stop()
-		db := sqlutils.MakeSQLRunner(t, tc.Conns[0])
-		enableEnterprise(db)
+		db := backupSQLRunner(t, tc)
 		db.Exec(createStore)
 		db.Exec(createStoreStats)
 
@@ -946,8 +948,8 @@ func TestBackupRestoreIncremental(t *testing.T) {
 	{
 		tc := testcluster.StartTestCluster(t, singleNode, base.TestClusterArgs{})
 		defer tc.Stopper().Stop()
-		sqlDBRestore := sqlutils.MakeSQLRunner(t, tc.Conns[0])
-		enableEnterprise(sqlDBRestore)
+		sqlDBRestore := backupSQLRunner(t, tc)
+
 		sqlDBRestore.Exec(`CREATE DATABASE bench`)
 
 		for i := len(backupDirs); i > 0; i-- {
@@ -1352,8 +1354,7 @@ func TestRestoredPrivileges(t *testing.T) {
 	t.Run("into fresh db", func(t *testing.T) {
 		tc := testcluster.StartTestCluster(t, singleNode, base.TestClusterArgs{})
 		defer tc.Stopper().Stop()
-		sqlDBRestore := sqlutils.MakeSQLRunner(t, tc.Conns[0])
-		enableEnterprise(sqlDBRestore)
+		sqlDBRestore := backupSQLRunner(t, tc)
 		sqlDBRestore.Exec(`CREATE DATABASE bench`)
 		sqlDBRestore.Exec(`RESTORE bench.bank FROM $1`, dir)
 		sqlDBRestore.CheckQueryResults(`SHOW GRANTS ON bench.bank`, rootOnly)
@@ -1362,8 +1363,7 @@ func TestRestoredPrivileges(t *testing.T) {
 	t.Run("into db with added grants", func(t *testing.T) {
 		tc := testcluster.StartTestCluster(t, singleNode, base.TestClusterArgs{})
 		defer tc.Stopper().Stop()
-		sqlDBRestore := sqlutils.MakeSQLRunner(t, tc.Conns[0])
-		enableEnterprise(sqlDBRestore)
+		sqlDBRestore := backupSQLRunner(t, tc)
 		sqlDBRestore.Exec(`CREATE DATABASE bench`)
 		sqlDBRestore.Exec(`CREATE USER someone`)
 		sqlDBRestore.Exec(`GRANT SELECT, INSERT, UPDATE, DELETE ON DATABASE bench TO someone`)
