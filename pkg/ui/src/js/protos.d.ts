@@ -5258,6 +5258,7 @@ export namespace cockroach {
                 source_node_id?: number;
                 source_store_id?: number;
                 error_message?: string;
+                lease_history?: cockroach.roachpb.Lease$Properties[];
             };
 
             /**
@@ -5311,6 +5312,12 @@ export namespace cockroach {
                  * @type {string}
                  */
                 public error_message: string;
+
+                /**
+                 * RangeInfo lease_history.
+                 * @type {Array.<cockroach.roachpb.Lease$Properties>}
+                 */
+                public lease_history: cockroach.roachpb.Lease$Properties[];
 
                 /**
                  * Creates a new RangeInfo instance using the specified properties.
