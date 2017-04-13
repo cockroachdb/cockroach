@@ -68,7 +68,8 @@ func InitCLIDefaults() {
 
 var sqlSize *bytesValue
 var cacheSize *bytesValue
-var insecure *insecureValue
+var serverInsecure *insecureValue
+var clientInsecure *insecureValue
 
 const usageIndentation = 8
 const wrapWidth = 79 - usageIndentation
@@ -285,7 +286,8 @@ func init() {
 
 	// Security flags.
 	baseCfg.Insecure = true
-	insecure = newInsecureValue(baseCfg)
+	serverInsecure = newInsecureValue(baseCfg)
+	clientInsecure = newInsecureValue(baseCfg)
 
 	{
 		f := startCmd.Flags()
@@ -311,9 +313,9 @@ func init() {
 
 		stringFlag(f, &serverCfg.PIDFile, cliflags.PIDFile, "")
 
-		varFlag(f, insecure, cliflags.Insecure)
+		varFlag(f, serverInsecure, cliflags.ServerInsecure)
 		// Allow '--insecure'
-		f.Lookup(cliflags.Insecure.Name).NoOptDefVal = "true"
+		f.Lookup(cliflags.ServerInsecure.Name).NoOptDefVal = "true"
 
 		// Certificate flags.
 		stringFlag(f, &baseCfg.SSLCA, cliflags.CACert, baseCfg.SSLCA)
@@ -363,9 +365,9 @@ func init() {
 		stringFlag(f, &clientConnHost, cliflags.ClientHost, "")
 		stringFlag(f, &clientConnPort, cliflags.ClientPort, base.DefaultPort)
 
-		varFlag(f, insecure, cliflags.Insecure)
+		varFlag(f, clientInsecure, cliflags.ClientInsecure)
 		// Allow '--insecure'
-		f.Lookup(cliflags.Insecure.Name).NoOptDefVal = "true"
+		f.Lookup(cliflags.ClientInsecure.Name).NoOptDefVal = "true"
 
 		// Certificate flags.
 		stringFlag(f, &baseCfg.SSLCA, cliflags.CACert, baseCfg.SSLCA)
