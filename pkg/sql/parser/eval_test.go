@@ -34,7 +34,7 @@ func TestEval(t *testing.T) {
 		// Bitwise operators.
 		{`1 & 3`, `1`},
 		{`1 | 3`, `3`},
-		{`1 ^ 3`, `2`},
+		{`1 # 3`, `2`},
 		// Arithmetic operators.
 		{`1 + 1`, `2`},
 		{`1 - 2`, `-1`},
@@ -52,6 +52,9 @@ func TestEval(t *testing.T) {
 		{`1.1 % 2.4`, `1.1`},
 		{`4.1 // 2.4`, `1`},
 		{`-4.5:::float // 1.2:::float`, `-3.0`},
+		{`2 ^ 3`, `8`},
+		{`2:::float ^ 3:::float`, `8.0`},
+		{`2:::decimal ^ 3:::decimal`, `8`},
 		// Various near-edge cases for overflow.
 		{`0:::int * 0:::int`, `0`},
 		{`0:::int * 1:::int`, `0`},
@@ -65,11 +68,13 @@ func TestEval(t *testing.T) {
 		{`1.1:::decimal * 2:::int`, `2.2`},
 		{`1.1:::decimal % 2:::int`, `1.1`},
 		{`4.1:::decimal // 2:::int`, `2`},
+		{`1.1:::decimal ^ 2:::int`, `1.21`},
 		{`2:::int +  2.1:::decimal`, `4.1`},
 		{`2:::int -  2.1:::decimal`, `-0.1`},
 		{`2:::int *  2.1:::decimal`, `4.2`},
 		{`2:::int %  2.1:::decimal`, `2.0`},
 		{`4:::int // 2.1:::decimal`, `1`},
+		{`2:::int ^ 2.1:::decimal`, `4.287093850145173`},
 		// Division is always done on floats or decimals.
 		{`4 / 5`, `0.8`},
 		{`1.1:::decimal / 2.2:::decimal`, `0.5`},
@@ -1046,6 +1051,7 @@ func TestEvalError(t *testing.T) {
 		{`4611686018427387904::int * 2::int`, `integer out of range`},
 		{`4611686018427387904::int * 2::int`, `integer out of range`},
 		{`(-9223372036854775807:::int - 1) * -1:::int`, `integer out of range`},
+		{`123 ^ 100`, `integer out of range`},
 	}
 	for _, d := range testData {
 		expr, err := ParseExprTraditional(d.expr)

@@ -747,12 +747,13 @@ const (
 	Concat
 	LShift
 	RShift
+	Pow
 )
 
 var binaryOpName = [...]string{
 	Bitand:   "&",
 	Bitor:    "|",
-	Bitxor:   "^",
+	Bitxor:   "#",
 	Plus:     "+",
 	Minus:    "-",
 	Mult:     "*",
@@ -762,6 +763,7 @@ var binaryOpName = [...]string{
 	Concat:   "||",
 	LShift:   "<<",
 	RShift:   ">>",
+	Pow:      "^",
 }
 
 func (i BinaryOperator) String() string {

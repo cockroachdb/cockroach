@@ -893,6 +893,76 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			},
 		},
 	},
+
+	Pow: {
+		BinOp{
+			LeftType:   TypeInt,
+			RightType:  TypeInt,
+			ReturnType: TypeInt,
+			fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
+				rInt := MustBeDInt(right)
+				r := ctx.getTmpDec().SetCoefficient(int64(rInt)).SetExponent(0)
+				dd := &DDecimal{}
+				dd.SetCoefficient(int64(MustBeDInt(left)))
+				_, err := DecimalCtx.Pow(&dd.Decimal, &dd.Decimal, r)
+				if err != nil {
+					return nil, err
+				}
+				i, err := dd.Int64()
+				if err != nil {
+					return nil, errIntOutOfRange
+				}
+				return NewDInt(DInt(i)), nil
+			},
+		},
+		BinOp{
+			LeftType:   TypeFloat,
+			RightType:  TypeFloat,
+			ReturnType: TypeFloat,
+			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+				f := math.Pow(float64(*left.(*DFloat)), float64(*right.(*DFloat)))
+				return NewDFloat(DFloat(f)), nil
+			},
+		},
+		BinOp{
+			LeftType:   TypeDecimal,
+			RightType:  TypeDecimal,
+			ReturnType: TypeDecimal,
+			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+				l := &left.(*DDecimal).Decimal
+				r := &right.(*DDecimal).Decimal
+				dd := &DDecimal{}
+				_, err := DecimalCtx.Pow(&dd.Decimal, l, r)
+				return dd, err
+			},
+		},
+		BinOp{
+			LeftType:   TypeDecimal,
+			RightType:  TypeInt,
+			ReturnType: TypeDecimal,
+			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+				l := &left.(*DDecimal).Decimal
+				r := MustBeDInt(right)
+				dd := &DDecimal{}
+				dd.SetCoefficient(int64(r))
+				_, err := DecimalCtx.Pow(&dd.Decimal, l, &dd.Decimal)
+				return dd, err
+			},
+		},
+		BinOp{
+			LeftType:   TypeInt,
+			RightType:  TypeDecimal,
+			ReturnType: TypeDecimal,
+			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+				l := MustBeDInt(left)
+				r := &right.(*DDecimal).Decimal
+				dd := &DDecimal{}
+				dd.SetCoefficient(int64(l))
+				_, err := DecimalCtx.Pow(&dd.Decimal, &dd.Decimal, r)
+				return dd, err
+			},
+		},
+	},
 }
 
 var timestampMinusBinOp BinOp
