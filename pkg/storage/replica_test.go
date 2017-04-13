@@ -876,6 +876,10 @@ func TestReplicaLeaseCounters(t *testing.T) {
 	if a, e := metrics.LeaseExpirationCount.Value(), int64(1); a != e {
 		t.Fatalf("expected expiration lease count of %d; got %d", e, a)
 	}
+	// Check the lease history to ensure it contains the first lease.
+	if e, a := 1, len(tc.repl.store.leaseHistory.get(tc.repl.RangeID)); e != a {
+		t.Fatalf("expected lease history count to be %d, got %d", e, a)
+	}
 
 	now := tc.Clock().Now()
 	if err := sendLeaseRequest(tc.repl, &roachpb.Lease{
@@ -902,6 +906,10 @@ func TestReplicaLeaseCounters(t *testing.T) {
 	if a, e := metrics.LeaseExpirationCount.Value(), int64(1); a != e {
 		t.Fatalf("expected expiration lease count of %d; got %d", e, a)
 	}
+	// Check the lease history to ensure it recorded the new lease.
+	if e, a := 2, len(tc.repl.store.leaseHistory.get(tc.repl.RangeID)); e != a {
+		t.Fatalf("expected lease history count to be %d, got %d", e, a)
+	}
 
 	// Make lease request fail by requesting overlapping lease from bogus Replica.
 	if err := sendLeaseRequest(tc.repl, &roachpb.Lease{
@@ -921,6 +929,10 @@ func TestReplicaLeaseCounters(t *testing.T) {
 	}
 	if err := assert(metrics.LeaseRequestErrorCount.Count(), 1, 1000); err != nil {
 		t.Fatal(err)
+	}
+	// Check the lease history to ensure it did not record the failed lease.
+	if e, a := 2, len(tc.repl.store.leaseHistory.get(tc.repl.RangeID)); e != a {
+		t.Fatalf("expected lease history count to be %d, got %d", e, a)
 	}
 }
 
