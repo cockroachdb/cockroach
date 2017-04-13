@@ -78,10 +78,7 @@ func FormatRawSpans(spans []basictracer.RawSpan) string {
 	sort.Sort(logs)
 
 	var buf bytes.Buffer
-	var last time.Time
-	if len(logs) > 0 {
-		last = logs[0].Timestamp
-	}
+	last := start
 	for _, entry := range logs {
 		fmt.Fprintf(&buf, "% 10.3fms % 10.3fms%s",
 			1000*entry.Timestamp.Sub(start).Seconds(),
@@ -94,6 +91,7 @@ func FormatRawSpans(spans []basictracer.RawSpan) string {
 			fmt.Fprintf(&buf, "%s:%v", f.Key(), f.Value())
 		}
 		buf.WriteByte('\n')
+		last = entry.Timestamp
 	}
 	return buf.String()
 }
