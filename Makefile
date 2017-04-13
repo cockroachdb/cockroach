@@ -129,7 +129,7 @@ gotestdashi: $(BOOTSTRAP_TARGET)
 testshort: override TESTFLAGS += -short
 
 testrace: override GOFLAGS += -race
-testrace: GORACE := halt_on_error=1
+testrace: export GORACE = halt_on_error=1
 testrace: TESTTIMEOUT := $(RACETIMEOUT)
 
 # Run make testlogic to run all of the logic tests. Specify test files to run
