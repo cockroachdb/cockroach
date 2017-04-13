@@ -96,6 +96,7 @@ import Raft from "./containers/raft";
 import RaftRanges from "./containers/raftRanges";
 import ClusterViz from "./containers/clusterViz";
 import registrationSyncListener from "./services/registrationService";
+import { alertDataSync } from "./redux/alerts";
 
 ReactDOM.render(
   <Provider store={store}>
@@ -139,5 +140,5 @@ ReactDOM.render(
   document.getElementById("react-layout"),
 );
 
-// Subscribe store listeners.
 store.subscribe(registrationSyncListener(store));
+store.subscribe(alertDataSync(store));
