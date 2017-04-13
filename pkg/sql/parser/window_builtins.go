@@ -19,7 +19,9 @@ package parser
 import (
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/mon"
 	"github.com/pkg/errors"
+	"golang.org/x/net/context"
 )
 
 func initWindowBuiltins() {
@@ -98,7 +100,7 @@ type WindowFunc interface {
 	// because there is an implicit carried dependency between each row and all those
 	// that have come before it (like in an AggregateFunc). As such, this approach does
 	// not present any exploitable associativity/commutativity for optimization.
-	Compute(*EvalContext, WindowFrame) (Datum, error)
+	Compute(context.Context, *mon.MemoryAccount, *EvalContext, WindowFrame) (Datum, error)
 }
 
 // windows are a special class of builtin functions that can only be applied
@@ -209,7 +211,9 @@ func newAggregateWindow(agg AggregateFunc) WindowFunc {
 	return &aggregateWindowFunc{agg: agg}
 }
 
-func (w *aggregateWindowFunc) Compute(ctx *EvalContext, wf WindowFrame) (Datum, error) {
+func (w *aggregateWindowFunc) Compute(
+	ctx context.Context, acc *mon.MemoryAccount, evalCtx *EvalContext, wf WindowFrame,
+) (Datum, error) {
 	if !wf.firstInPeerGroup() {
 		return w.peerRes, nil
 	}
@@ -217,7 +221,9 @@ func (w *aggregateWindowFunc) Compute(ctx *EvalContext, wf WindowFrame) (Datum, 
 	// Accumulate all values in the peer group at the same time, as these
 	// must return the same value.
 	for i := 0; i < wf.PeerRowCount; i++ {
-		w.agg.Add(ctx, wf.argsWithRowOffset(i)[0])
+		if err := w.agg.Add(ctx, acc, evalCtx, wf.argsWithRowOffset(i)[0]); err != nil {
+			return nil, err
+		}
 	}
 
 	// Retrieve the value for the entire peer group, save it, and return it.
@@ -233,7 +239,9 @@ func newRowNumberWindow(_ []Type) WindowFunc {
 	return &rowNumberWindow{}
 }
 
-func (rowNumberWindow) Compute(_ *EvalContext, wf WindowFrame) (Datum, error) {
+func (rowNumberWindow) Compute(
+	_ context.Context, _ *mon.MemoryAccount, _ *EvalContext, wf WindowFrame,
+) (Datum, error) {
 	return NewDInt(DInt(wf.RowIdx + 1 /* one-indexed */)), nil
 }
 
@@ -246,7 +254,9 @@ func newRankWindow(_ []Type) WindowFunc {
 	return &rankWindow{}
 }
 
-func (w *rankWindow) Compute(_ *EvalContext, wf WindowFrame) (Datum, error) {
+func (w *rankWindow) Compute(
+	_ context.Context, _ *mon.MemoryAccount, _ *EvalContext, wf WindowFrame,
+) (Datum, error) {
 	if wf.firstInPeerGroup() {
 		w.peerRes = NewDInt(DInt(wf.rank()))
 	}
@@ -263,7 +273,9 @@ func newDenseRankWindow(_ []Type) WindowFunc {
 	return &denseRankWindow{}
 }
 
-func (w *denseRankWindow) Compute(_ *EvalContext, wf WindowFrame) (Datum, error) {
+func (w *denseRankWindow) Compute(
+	_ context.Context, _ *mon.MemoryAccount, _ *EvalContext, wf WindowFrame,
+) (Datum, error) {
 	if wf.firstInPeerGroup() {
 		w.denseRank++
 		w.peerRes = NewDInt(DInt(w.denseRank))
@@ -283,7 +295,9 @@ func newPercentRankWindow(_ []Type) WindowFunc {
 
 var dfloatZero = NewDFloat(0)
 
-func (w *percentRankWindow) Compute(_ *EvalContext, wf WindowFrame) (Datum, error) {
+func (w *percentRankWindow) Compute(
+	_ context.Context, _ *mon.MemoryAccount, _ *EvalContext, wf WindowFrame,
+) (Datum, error) {
 	// Return zero if there's only one row, per spec.
 	if wf.rowCount() <= 1 {
 		return dfloatZero, nil
@@ -306,7 +320,9 @@ func newCumulativeDistWindow(_ []Type) WindowFunc {
 	return &cumulativeDistWindow{}
 }
 
-func (w *cumulativeDistWindow) Compute(_ *EvalContext, wf WindowFrame) (Datum, error) {
+func (w *cumulativeDistWindow) Compute(
+	_ context.Context, _ *mon.MemoryAccount, _ *EvalContext, wf WindowFrame,
+) (Datum, error) {
 	if wf.firstInPeerGroup() {
 		// (number of rows preceding or peer with current row) / (total rows)
 		w.peerRes = NewDFloat(DFloat(wf.frameSize()) / DFloat(wf.rowCount()))
@@ -329,7 +345,9 @@ func newNtileWindow(_ []Type) WindowFunc {
 
 var errInvalidArgumentForNtile = errors.Errorf("argument of ntile() must be greater than zero")
 
-func (w *ntileWindow) Compute(_ *EvalContext, wf WindowFrame) (Datum, error) {
+func (w *ntileWindow) Compute(
+	_ context.Context, _ *mon.MemoryAccount, _ *EvalContext, wf WindowFrame,
+) (Datum, error) {
 	if w.ntile == nil {
 		// If this is the first call to ntileWindow.Compute, set up the buckets.
 		total := wf.rowCount()
@@ -393,7 +411,9 @@ func makeLeadLagWindowConstructor(forward, withOffset, withDefault bool) func(_ 
 	}
 }
 
-func (w *leadLagWindow) Compute(_ *EvalContext, wf WindowFrame) (Datum, error) {
+func (w *leadLagWindow) Compute(
+	_ context.Context, _ *mon.MemoryAccount, _ *EvalContext, wf WindowFrame,
+) (Datum, error) {
 	offset := 1
 	if w.withOffset {
 		offsetArg := wf.args()[1]
@@ -425,7 +445,9 @@ func newFirstValueWindow(_ []Type) WindowFunc {
 	return &firstValueWindow{}
 }
 
-func (firstValueWindow) Compute(_ *EvalContext, wf WindowFrame) (Datum, error) {
+func (firstValueWindow) Compute(
+	_ context.Context, _ *mon.MemoryAccount, _ *EvalContext, wf WindowFrame,
+) (Datum, error) {
 	return wf.Rows[0].Row[wf.ArgIdxStart], nil
 }
 
@@ -436,7 +458,9 @@ func newLastValueWindow(_ []Type) WindowFunc {
 	return &lastValueWindow{}
 }
 
-func (lastValueWindow) Compute(_ *EvalContext, wf WindowFrame) (Datum, error) {
+func (lastValueWindow) Compute(
+	_ context.Context, _ *mon.MemoryAccount, _ *EvalContext, wf WindowFrame,
+) (Datum, error) {
 	return wf.Rows[wf.frameSize()-1].Row[wf.ArgIdxStart], nil
 }
 
@@ -450,7 +474,9 @@ func newNthValueWindow(_ []Type) WindowFunc {
 
 var errInvalidArgumentForNthValue = errors.Errorf("argument of nth_value() must be greater than zero")
 
-func (nthValueWindow) Compute(_ *EvalContext, wf WindowFrame) (Datum, error) {
+func (nthValueWindow) Compute(
+	_ context.Context, _ *mon.MemoryAccount, _ *EvalContext, wf WindowFrame,
+) (Datum, error) {
 	arg := wf.args()[1]
 	if arg == DNull {
 		return DNull, nil

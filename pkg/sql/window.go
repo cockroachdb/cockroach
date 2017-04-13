@@ -658,7 +658,7 @@ func (n *windowNode) computeWindows(ctx context.Context) error {
 
 				// Perform calculations on each row in the current peer group.
 				for ; frame.RowIdx < frame.FirstPeerIdx+frame.PeerRowCount; frame.RowIdx++ {
-					res, err := builtin.Compute(&n.planner.evalCtx, frame)
+					res, err := builtin.Compute(ctx, acc.acc, &n.planner.evalCtx, frame)
 					if err != nil {
 						return err
 					}

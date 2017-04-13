@@ -18,6 +18,9 @@ import (
 	"reflect"
 	"testing"
 
+	"golang.org/x/net/context"
+
+	"github.com/cockroachdb/cockroach/pkg/sql/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
@@ -30,11 +33,14 @@ import (
 // accumulation, which violates the "deep copy of any internal state" condition.
 func testAggregateResultDeepCopy(t *testing.T, aggFunc func([]Type) AggregateFunc, vals []Datum) {
 	evalCtx := &EvalContext{}
+	acc := &mon.MemoryAccount{}
 	aggImpl := aggFunc([]Type{vals[0].ResolvedType()})
 	runningDatums := make([]Datum, len(vals))
 	runningStrings := make([]string, len(vals))
 	for i := range vals {
-		aggImpl.Add(evalCtx, vals[i])
+		if err := aggImpl.Add(context.Background(), acc, evalCtx, vals[i]); err != nil {
+			t.Fatal(err)
+		}
 		res := aggImpl.Result()
 		runningDatums[i] = res
 		runningStrings[i] = res.String()
@@ -227,12 +233,15 @@ func makeIntervalTestDatum(count int) []Datum {
 
 func runBenchmarkAggregate(b *testing.B, aggFunc func([]Type) AggregateFunc, vals []Datum) {
 	evalCtx := &EvalContext{}
+	acc := &mon.MemoryAccount{}
 	params := []Type{vals[0].ResolvedType()}
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		aggImpl := aggFunc(params)
 		for i := range vals {
-			aggImpl.Add(evalCtx, vals[i])
+			if err := aggImpl.Add(context.Background(), acc, evalCtx, vals[i]); err != nil {
+				b.Fatal(err)
+			}
 		}
 		if aggImpl.Result() == nil {
 			b.Errorf("taking result of aggregate implementation %T failed", aggImpl)

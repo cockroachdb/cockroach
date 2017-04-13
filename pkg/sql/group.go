@@ -24,6 +24,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/mon"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -447,6 +448,7 @@ func (n *groupNode) computeAggregates(ctx context.Context) error {
 func (n *groupNode) Close(ctx context.Context) {
 	n.plan.Close(ctx)
 	for _, f := range n.funcs {
+		n.planner.evalCtx.Mon.CloseAccount(ctx, &f.aggMemAcc)
 		f.close(ctx, n.planner.session)
 	}
 	n.values.Close(ctx)
@@ -680,7 +682,11 @@ type aggregateFuncHolder struct {
 	group         *groupNode
 	buckets       map[string]parser.AggregateFunc
 	bucketsMemAcc WrappableMemoryAccount
-	seen          map[string]struct{}
+	// aggMemAcc is a MemoryAccount rather than a WrappableMemoryAccount because
+	// it must get passed into the `parser` package, which doesn't have access to
+	// WrappableMemoryAccount.
+	aggMemAcc mon.MemoryAccount
+	seen      map[string]struct{}
 }
 
 func (n *groupNode) newAggregateFuncHolder(
@@ -734,8 +740,7 @@ func (a *aggregateFuncHolder) add(
 		a.buckets[string(bucket)] = impl
 	}
 
-	impl.Add(&a.group.planner.evalCtx, d)
-	return nil
+	return impl.Add(ctx, &a.aggMemAcc, &a.group.planner.evalCtx, d)
 }
 
 func (*aggregateFuncHolder) Variable() {}
