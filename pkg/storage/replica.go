@@ -1562,7 +1562,13 @@ func (ec *endCmds) done(br *roachpb.BatchResponse, pErr *roachpb.Error, retry pr
 	// marked as affecting the cache are processed. Inconsistent reads
 	// are excluded.
 	if pErr == nil && retry == proposalNoRetry && ec.ba.ReadConsistency != roachpb.INCONSISTENT {
-		creq := makeCacheRequest(&ec.ba, br)
+		span, err := keys.Range(ec.ba)
+		if err != nil {
+			// This can't happen because we've already called keys.Range before
+			// evaluating the request.
+			log.Fatal(context.Background(), err)
+		}
+		creq := makeCacheRequest(&ec.ba, br, span)
 		ec.repl.store.tsCacheMu.Lock()
 		ec.repl.store.tsCacheMu.cache.AddRequest(creq)
 		ec.repl.store.tsCacheMu.Unlock()
@@ -1576,8 +1582,11 @@ func (ec *endCmds) done(br *roachpb.BatchResponse, pErr *roachpb.Error, retry pr
 	ec.repl.cmdQMu.Unlock()
 }
 
-func makeCacheRequest(ba *roachpb.BatchRequest, br *roachpb.BatchResponse) cacheRequest {
+func makeCacheRequest(
+	ba *roachpb.BatchRequest, br *roachpb.BatchResponse, span roachpb.RSpan,
+) cacheRequest {
 	cr := cacheRequest{
+		span:      span,
 		timestamp: ba.Timestamp,
 		txnID:     ba.GetTxnID(),
 	}
@@ -1851,15 +1860,20 @@ func (r *Replica) beginCmds(
 // will inform the batch response timestamp or batch response txn
 // timestamp.
 func (r *Replica) applyTimestampCache(ba *roachpb.BatchRequest) (bool, *roachpb.Error) {
+	span, err := keys.Range(*ba)
+	if err != nil {
+		return false, roachpb.NewError(err)
+	}
+
 	// TODO(peter): We only need to hold a write lock during the ExpandRequests
 	// calls. Investigate whether using a RWMutex here reduces lock contention.
 	r.store.tsCacheMu.Lock()
 	defer r.store.tsCacheMu.Unlock()
 
 	if ba.Txn != nil {
-		r.store.tsCacheMu.cache.ExpandRequests(ba.Txn.Timestamp)
+		r.store.tsCacheMu.cache.ExpandRequests(ba.Txn.Timestamp, span)
 	} else {
-		r.store.tsCacheMu.cache.ExpandRequests(ba.Timestamp)
+		r.store.tsCacheMu.cache.ExpandRequests(ba.Timestamp, span)
 	}
 
 	var bumped bool
