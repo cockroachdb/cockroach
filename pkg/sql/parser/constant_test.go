@@ -404,8 +404,10 @@ func TestFoldNumericConstants(t *testing.T) {
 		{`1.3 & 3.2`, `1.3 & 3.2`}, // Will be caught during type checking.
 		{`1 | 2`, `3`},
 		{`1.3 | 2.8`, `1.3 | 2.8`}, // Will be caught during type checking.
-		{`1 ^ 3`, `2`},
-		{`1.3 ^ 3.9`, `1.3 ^ 3.9`}, // Will be caught during type checking.
+		{`1 # 3`, `2`},
+		{`1.3 # 3.9`, `1.3 # 3.9`}, // Will be caught during type checking.
+		{`2 ^ 3`, `2 ^ 3`},         // Constant folding won't fold power.
+		{`1.3 ^ 3.9`, `1.3 ^ 3.9`},
 		// Shift ops (int only).
 		{`1 << 2`, `4`},
 		{`1 << -2`, `1 << -2`},                                                     // Should be caught during evaluation.
