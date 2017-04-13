@@ -190,7 +190,7 @@ func TestStatusLocalLogs(t *testing.T) {
 		t.Skip("Test only works with low verbosity levels")
 	}
 
-	s := log.Scope(t, "")
+	s := log.Scope(t)
 	defer s.Close(t)
 
 	ts := startServer(t)

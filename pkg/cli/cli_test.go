@@ -90,7 +90,7 @@ func newCLITest(params cliTestParams) cliTest {
 	InitCLIDefaults()
 
 	if c.t != nil {
-		c.logScope = log.Scope(c.t, "")
+		c.logScope = log.Scope(c.t)
 	}
 
 	c.cleanupFunc = func() error { return nil }

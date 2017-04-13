@@ -24,7 +24,7 @@ import (
 )
 
 func TestDockerPSQL(t *testing.T) {
-	s := log.Scope(t, "")
+	s := log.Scope(t)
 	defer s.Close(t)
 
 	ctx := context.Background()

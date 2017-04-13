@@ -37,7 +37,7 @@ var cmdBase = []string{
 }
 
 func TestDockerCLI(t *testing.T) {
-	s := log.Scope(t, "")
+	s := log.Scope(t)
 	defer s.Close(t)
 
 	containerConfig := container.Config{
@@ -77,7 +77,7 @@ func TestDockerCLI(t *testing.T) {
 }
 
 func TestDockerStartFlags(t *testing.T) {
-	s := log.Scope(t, "")
+	s := log.Scope(t)
 	defer s.Close(t)
 
 	containerConfig := container.Config{

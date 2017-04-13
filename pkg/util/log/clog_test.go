@@ -345,7 +345,7 @@ func TestVmoduleGlob(t *testing.T) {
 }
 
 func TestListLogFiles(t *testing.T) {
-	s := Scope(t, "")
+	s := Scope(t)
 	defer s.Close(t)
 	setFlags()
 
@@ -369,7 +369,7 @@ func TestListLogFiles(t *testing.T) {
 }
 
 func TestGetLogReader(t *testing.T) {
-	s := Scope(t, "")
+	s := Scope(t)
 	defer s.Close(t)
 
 	setFlags()
@@ -458,7 +458,7 @@ func TestGetLogReader(t *testing.T) {
 }
 
 func TestRollover(t *testing.T) {
-	s := Scope(t, "")
+	s := Scope(t)
 	defer s.Close(t)
 
 	setFlags()
@@ -501,7 +501,7 @@ func TestRollover(t *testing.T) {
 }
 
 func TestGC(t *testing.T) {
-	s := Scope(t, "")
+	s := Scope(t)
 	defer s.Close(t)
 
 	logging.mu.Lock()
@@ -571,7 +571,7 @@ func TestGC(t *testing.T) {
 }
 
 func TestLogBacktraceAt(t *testing.T) {
-	s := Scope(t, "")
+	s := Scope(t)
 	defer s.Close(t)
 
 	setFlags()
@@ -616,7 +616,7 @@ func TestLogBacktraceAt(t *testing.T) {
 // in the future clog and this test can be adapted to actually test that;
 // right now clog writes straight to os.StdErr.
 func TestFatalStacktraceStderr(t *testing.T) {
-	s := Scope(t, "")
+	s := Scope(t)
 	defer s.Close(t)
 
 	setFlags()
@@ -661,7 +661,7 @@ func TestRedirectStderr(t *testing.T) {
 	defer func(s bool) { showLogs = s }(showLogs)
 	showLogs = false
 
-	s := Scope(t, "")
+	s := Scope(t)
 	defer s.Close(t)
 
 	setFlags()
