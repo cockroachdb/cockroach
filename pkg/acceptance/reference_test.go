@@ -102,7 +102,7 @@ bin=/%s/cockroach
 }
 
 func TestDockerReadWriteBidirectionalReferenceVersion(t *testing.T) {
-	s := log.Scope(t, "")
+	s := log.Scope(t)
 	defer s.Close(t)
 
 	ctx := context.Background()
@@ -124,7 +124,7 @@ $bin quit && wait
 }
 
 func TestDockerReadWriteForwardReferenceVersion(t *testing.T) {
-	s := log.Scope(t, "")
+	s := log.Scope(t)
 	defer s.Close(t)
 
 	ctx := context.Background()
@@ -145,7 +145,7 @@ $bin quit && wait
 }
 
 func TestDockerMigration_7429(t *testing.T) {
-	s := log.Scope(t, "")
+	s := log.Scope(t)
 	defer s.Close(t)
 
 	ctx := context.Background()

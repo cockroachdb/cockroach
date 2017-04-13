@@ -23,8 +23,6 @@ import (
 	"os"
 	"runtime"
 	"strings"
-
-	"github.com/cockroachdb/cockroach/pkg/util/caller"
 )
 
 // TestLogScope represents the lifetime of a logging output.  It
@@ -49,22 +47,17 @@ type tShim interface {
 
 var showLogs bool
 
-// Scope creates a TestLogScope which corresponds to the lifetime of a
-// logging directory. If testName is empty, the logging directory is
-// named after the caller of Scope, up `skip` caller levels. It also
+// Scope creates a TestLogScope which corresponds to the lifetime of a logging
+// directory. The logging directory is named after the calling test. It also
 // disables logging to stderr for severity levels below ERROR.
-func Scope(t tShim, testName string) *TestLogScope {
+func Scope(t tShim) *TestLogScope {
 	if showLogs {
 		return (*TestLogScope)(nil)
 	}
-	if testName == "" {
-		testName = "logUnknown"
-		if _, _, f := caller.Lookup(1); f != "" {
-			parts := strings.Split(f, ".")
-			testName = "log" + parts[len(parts)-1]
-		}
-	}
-	tempDir, err := ioutil.TempDir("", testName)
+
+	// Subtests are slash-delimited, which can confuse things when slash is also
+	// the path separator.
+	tempDir, err := ioutil.TempDir("", "log"+strings.Replace(t.Name(), "/", "_", -1))
 	if err != nil {
 		t.Fatal(err)
 	}
