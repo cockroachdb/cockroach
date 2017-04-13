@@ -20,6 +20,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/mon"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -68,6 +69,7 @@ type aggregator struct {
 	funcs       []*aggregateFuncHolder
 	outputTypes []sqlbase.ColumnType
 	datumAlloc  sqlbase.DatumAlloc
+	acc         *mon.MemoryAccount
 
 	groupCols columns
 	inputCols columns
@@ -93,7 +95,9 @@ func newAggregator(
 		funcs:       make([]*aggregateFuncHolder, len(spec.Aggregations)),
 		outputTypes: make([]sqlbase.ColumnType, len(spec.Aggregations)),
 		groupCols:   make(columns, len(spec.GroupCols)),
+		acc:         &mon.MemoryAccount{},
 	}
+	flowCtx.evalCtx.Mon.OpenAccount(ag.acc)
 
 	for i, aggInfo := range spec.Aggregations {
 		ag.inputCols[i] = aggInfo.ColIdx
@@ -229,7 +233,7 @@ func (ag *aggregator) accumulateRows(ctx context.Context) (err error) {
 			if err := row[colIdx].EnsureDecoded(&ag.datumAlloc); err != nil {
 				return err
 			}
-			if err := ag.funcs[i].add(encoded, row[colIdx].Datum); err != nil {
+			if err := ag.funcs[i].add(ctx, encoded, row[colIdx].Datum); err != nil {
 				return err
 			}
 		}
@@ -254,7 +258,7 @@ func (ag *aggregator) newAggregateFuncHolder(
 	}
 }
 
-func (a *aggregateFuncHolder) add(bucket []byte, d parser.Datum) error {
+func (a *aggregateFuncHolder) add(ctx context.Context, bucket []byte, d parser.Datum) error {
 	if a.seen != nil {
 		encoded, err := sqlbase.EncodeDatum(bucket, d)
 		if err != nil {
@@ -273,8 +277,7 @@ func (a *aggregateFuncHolder) add(bucket []byte, d parser.Datum) error {
 		a.buckets[string(bucket)] = impl
 	}
 
-	impl.Add(&a.group.flowCtx.evalCtx, d)
-	return nil
+	return impl.Add(ctx, &a.group.flowCtx.evalCtx, d)
 }
 
 func (a *aggregateFuncHolder) get(bucket string) parser.Datum {

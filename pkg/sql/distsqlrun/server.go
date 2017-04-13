@@ -18,6 +18,7 @@ package distsqlrun
 
 import (
 	"io"
+	"math"
 
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
@@ -27,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/sql/mon"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -153,6 +155,14 @@ func (ds *ServerImpl) setupFlow(
 		testingKnobs: ds.TestingKnobs,
 		nodeID:       nodeID,
 	}
+
+	// TODO(justin): DistSQL doesn't currently track its memory usage in general,
+	// so we should eventually initialize this monitor to have a more reasonable
+	// budget.
+	monitor := mon.MakeMonitor("flow", nil, nil, -1, math.MaxInt64)
+	monitor.Start(ctx, nil, mon.MakeStandaloneBudget(math.MaxInt64))
+	flowCtx.evalCtx.Mon = &monitor
+
 	ctx = flowCtx.AnnotateCtx(ctx)
 	flowCtx.evalCtx.Ctx = func() context.Context {
 		// TODO(andrei): This is wrong. Each processor should override Ctx with its

@@ -699,9 +699,14 @@ func (n *groupNode) newAggregateFuncHolder(
 }
 
 func (a *aggregateFuncHolder) close(ctx context.Context, s *Session) {
+	for _, aggFunc := range a.buckets {
+		aggFunc.Close(ctx, &s.TxnState.mon)
+	}
+
 	a.buckets = nil
 	a.seen = nil
 	a.group = nil
+
 	a.bucketsMemAcc.Wtxn(s).Close(ctx)
 }
 
@@ -734,8 +739,7 @@ func (a *aggregateFuncHolder) add(
 		a.buckets[string(bucket)] = impl
 	}
 
-	impl.Add(&a.group.planner.evalCtx, d)
-	return nil
+	return impl.Add(ctx, &a.group.planner.evalCtx, d)
 }
 
 func (*aggregateFuncHolder) Variable() {}
