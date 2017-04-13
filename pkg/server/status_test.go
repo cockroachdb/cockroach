@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/ts"
@@ -410,6 +411,7 @@ func TestMetricsEndpoint(t *testing.T) {
 
 func TestRangesResponse(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer storage.EnableLeaseHistory()()
 	ts := startServer(t)
 	defer ts.Stopper().Stop(context.TODO())
 
@@ -444,6 +446,9 @@ func TestRangesResponse(t *testing.T) {
 		}
 		if ri.State.LastIndex == 0 {
 			t.Error("expected positive LastIndex")
+		}
+		if e, a := 1, len(ri.LeaseHistory); e != a {
+			t.Errorf("expected a lease history length of %d, actual %d\n%+v", e, a, ri)
 		}
 	}
 }
