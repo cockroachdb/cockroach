@@ -85,7 +85,7 @@ func makeTestConfig() Config {
 	return cfg
 }
 
-// makeTestConfigtFromParams creates a Config from a TestServerParams.
+// makeTestConfigFromParams creates a Config from a TestServerParams.
 func makeTestConfigFromParams(params base.TestServerArgs) Config {
 	cfg := makeTestConfig()
 	cfg.TestingKnobs = params.Knobs
