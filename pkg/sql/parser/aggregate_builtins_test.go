@@ -18,6 +18,8 @@ import (
 	"reflect"
 	"testing"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
@@ -34,7 +36,9 @@ func testAggregateResultDeepCopy(t *testing.T, aggFunc func([]Type) AggregateFun
 	runningDatums := make([]Datum, len(vals))
 	runningStrings := make([]string, len(vals))
 	for i := range vals {
-		aggImpl.Add(evalCtx, vals[i])
+		if err := aggImpl.Add(context.Background(), evalCtx, vals[i]); err != nil {
+			t.Fatal(err)
+		}
 		res := aggImpl.Result()
 		runningDatums[i] = res
 		runningStrings[i] = res.String()
@@ -232,7 +236,9 @@ func runBenchmarkAggregate(b *testing.B, aggFunc func([]Type) AggregateFunc, val
 	for i := 0; i < b.N; i++ {
 		aggImpl := aggFunc(params)
 		for i := range vals {
-			aggImpl.Add(evalCtx, vals[i])
+			if err := aggImpl.Add(context.Background(), evalCtx, vals[i]); err != nil {
+				b.Fatal(err)
+			}
 		}
 		if aggImpl.Result() == nil {
 			b.Errorf("taking result of aggregate implementation %T failed", aggImpl)
