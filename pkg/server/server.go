@@ -346,7 +346,6 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		NodeLiveness:                   s.nodeLiveness,
 		Transport:                      s.raftTransport,
 		RPCContext:                     s.rpcContext,
-		RangeRetryOptions:              s.cfg.RetryOptions,
 		RaftTickInterval:               s.cfg.RaftTickInterval,
 		ScanInterval:                   s.cfg.ScanInterval,
 		ScanMaxIdleTime:                s.cfg.ScanMaxIdleTime,

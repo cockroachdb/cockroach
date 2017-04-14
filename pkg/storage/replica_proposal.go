@@ -833,7 +833,7 @@ func (r *Replica) handleLocalEvalResult(
 	}
 
 	if lResult.updatedTxn != nil {
-		r.pushTxnQueue.UpdateTxn(lResult.updatedTxn)
+		r.pushTxnQueue.UpdateTxn(ctx, lResult.updatedTxn)
 		lResult.updatedTxn = nil
 	}
 
