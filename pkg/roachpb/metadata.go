@@ -98,6 +98,11 @@ func (a Attributes) SortedString() string {
 	return strings.Join(attrs, ",")
 }
 
+func (r RangeDescriptor) String() string {
+	return fmt.Sprintf("<RangeID:%d keys:%s-%s replicas:%v nrid:%d>",
+		r.RangeID, r.StartKey, r.EndKey, r.Replicas, r.NextReplicaID)
+}
+
 // RSpan returns the RangeDescriptor's resolved span.
 func (r RangeDescriptor) RSpan() RSpan {
 	return RSpan{Key: r.StartKey, EndKey: r.EndKey}
