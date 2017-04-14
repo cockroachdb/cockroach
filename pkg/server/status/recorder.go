@@ -85,11 +85,11 @@ type storeMetrics interface {
 // store hosted by the node. There are slight differences in the way these are
 // recorded, and they are thus kept separate.
 type MetricsRecorder struct {
-	// prometheusExporter merges metrics into families and generates the
-	// prometheus text format.
-	prometheusExporter metric.PrometheusExporter
-	mu                 struct {
+	mu struct {
 		syncutil.Mutex
+		// prometheusExporter merges metrics into families and generates the
+		// prometheus text format.
+		prometheusExporter metric.PrometheusExporter
 		// nodeRegistry contains, as subregistries, the multiple component-specific
 		// registries which are recorded as "node level" metrics.
 		nodeRegistry *metric.Registry
@@ -121,7 +121,7 @@ func NewMetricsRecorder(clock *hlc.Clock) *MetricsRecorder {
 	mr := &MetricsRecorder{}
 	mr.mu.storeRegistries = make(map[roachpb.StoreID]*metric.Registry)
 	mr.mu.stores = make(map[roachpb.StoreID]storeMetrics)
-	mr.prometheusExporter = metric.MakePrometheusExporter()
+	mr.mu.prometheusExporter = metric.MakePrometheusExporter()
 	mr.mu.clock = clock
 	return mr
 }
@@ -192,10 +192,8 @@ func (mr *MetricsRecorder) MarshalJSON() ([]byte, error) {
 	return json.Marshal(topLevel)
 }
 
-// scrapePrometheus updates the prometheusExporter's metrics snapshot.
-func (mr *MetricsRecorder) scrapePrometheus() {
-	mr.mu.Lock()
-	defer mr.mu.Unlock()
+// scrapePrometheusLocked updates the prometheusExporter's metrics snapshot.
+func (mr *MetricsRecorder) scrapePrometheusLocked() {
 	if mr.mu.nodeRegistry == nil {
 		// We haven't yet processed initialization information; output nothing.
 		if log.V(1) {
@@ -203,16 +201,18 @@ func (mr *MetricsRecorder) scrapePrometheus() {
 		}
 	}
 
-	mr.prometheusExporter.ScrapeRegistry(mr.mu.nodeRegistry)
+	mr.mu.prometheusExporter.ScrapeRegistry(mr.mu.nodeRegistry)
 	for _, reg := range mr.mu.storeRegistries {
-		mr.prometheusExporter.ScrapeRegistry(reg)
+		mr.mu.prometheusExporter.ScrapeRegistry(reg)
 	}
 }
 
 // PrintAsText writes the current metrics values as plain-text to the writer.
 func (mr *MetricsRecorder) PrintAsText(w io.Writer) error {
-	mr.scrapePrometheus()
-	return mr.prometheusExporter.PrintAsText(w)
+	mr.mu.Lock()
+	defer mr.mu.Unlock()
+	mr.scrapePrometheusLocked()
+	return mr.mu.prometheusExporter.PrintAsText(w)
 }
 
 // GetTimeSeriesData serializes registered metrics for consumption by
