@@ -573,6 +573,10 @@ func setupAndInitializeLoggingAndProfiling(startCtx context.Context) (*stop.Stop
 			return nil, err
 		}
 		log.Eventf(startCtx, "created log directory %s", logDir)
+
+		// Start the log file GC daemon to remove files that make the log
+		// directory too large.
+		log.StartGCDaemon()
 	}
 
 	// We log build information to stdout (for the short summary), but also
@@ -583,7 +587,6 @@ func setupAndInitializeLoggingAndProfiling(startCtx context.Context) (*stop.Stop
 	initMemProfile(startCtx, outputDirectory)
 	initCPUProfile(startCtx, outputDirectory)
 	initBlockProfile()
-	log.StartGCDaemon()
 
 	// Disable Stopper task tracking as performing that call site tracking is
 	// moderately expensive (certainly outweighing the infrequent benefit it
