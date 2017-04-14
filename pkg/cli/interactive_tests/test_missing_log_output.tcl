@@ -33,8 +33,8 @@ eexpect "starting cockroach node"
 interrupt
 eexpect ":/# "
 
-# Check that --logtostderr can override the threshold
-send "echo marker; $argv start --logtostderr=ERROR\r"
+# Check that --logtostderr can override the threshold but no error is printed on startup
+send "echo marker; $argv start --logtostderr=ERROR 2>&1 | grep -v '^\\*'\r"
 eexpect "marker\r\nCockroachDB node starting"
 
 # Stop it.
