@@ -67,6 +67,24 @@ func logDepth(ctx context.Context, depth int, sev Severity, format string, args 
 	addStructured(ctx, sev, depth+1, format, args)
 }
 
+// Shoutf logs to the specified severity's log, and also to the real
+// stderr if logging is currently redirected to a file.
+func Shoutf(ctx context.Context, sev Severity, format string, args ...interface{}) {
+	logDepth(ctx, 1, sev, format, args)
+	if stderrRedirected {
+		fmt.Fprintf(OrigStderr, "*\n* %s: %s\n*\n", sev.String(), MakeMessage(ctx, format, args))
+	}
+}
+
+// Shout logs to the specified severity's log, and also to the real
+// stderr if logging is currently redirected to a file.
+func Shout(ctx context.Context, sev Severity, args ...interface{}) {
+	logDepth(ctx, 1, sev, "", args)
+	if stderrRedirected {
+		fmt.Fprintf(OrigStderr, "*\n* %s: %s\n*\n", sev.String(), MakeMessage(ctx, "", args))
+	}
+}
+
 // Infof logs to the INFO log.
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf; a newline is
