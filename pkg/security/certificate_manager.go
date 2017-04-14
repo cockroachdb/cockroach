@@ -19,9 +19,14 @@ package security
 import (
 	"crypto/tls"
 	"os"
+	"os/signal"
 	"path/filepath"
+	"syscall"
 
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"golang.org/x/net/context"
 
 	"github.com/pkg/errors"
 )
@@ -64,6 +69,8 @@ func NewCertificateManager(certsDir string) (*CertificateManager, error) {
 
 // NewCertificateManagerFirstRun creates a new certificate manager.
 // The certsDir is created if it does not exist.
+// This should only be called when generating certificates, the server has
+// no business creating the certs directory.
 func NewCertificateManagerFirstRun(certsDir string) (*CertificateManager, error) {
 	cm := &CertificateManager{certsDir: os.ExpandEnv(certsDir)}
 	if err := NewCertificateLoader(cm.certsDir).MaybeCreateCertsDir(); err != nil {
@@ -71,6 +78,30 @@ func NewCertificateManagerFirstRun(certsDir string) (*CertificateManager, error)
 	}
 
 	return cm, cm.LoadCertificates()
+}
+
+// RegisterSignalHandler registers a signal handler for SIGHUP, triggering a
+// refresh of the certificates directory on notification.
+func (cm *CertificateManager) RegisterSignalHandler(stopper *stop.Stopper) {
+	// Setup signal handler.
+	sigs := make(chan os.Signal, 1)
+	signal.Notify(sigs, syscall.SIGHUP)
+	go func() {
+		for {
+			select {
+			case <-stopper.ShouldStop():
+				signal.Stop(sigs)
+				return
+			case sig := <-sigs:
+				log.Infof(context.Background(), "received signal %q, triggering certificate reload", sig)
+				if err := cm.LoadCertificates(); err != nil {
+					log.Warningf(context.Background(), "could not reload certificates: %v", err)
+				} else {
+					log.Info(context.Background(), "successfully reloaded certificates")
+				}
+			}
+		}
+	}()
 }
 
 // CACertPath returns the expected file path for the CA certificate.
@@ -164,8 +195,24 @@ func (cm *CertificateManager) LoadCertificates() error {
 	return nil
 }
 
-// GetServerTLSConfig returns the most up-to-date server tls.Config.
+// GetServerTLSConfig returns a server TLS config with a callback to fetch the
+// latest TLS config. We still attempt to get the config to make sure
+// the initial call has a valid config loaded.
 func (cm *CertificateManager) GetServerTLSConfig() (*tls.Config, error) {
+	if _, err := cm.GetEmbeddedServerTLSConfig(nil); err != nil {
+		return nil, err
+	}
+	return &tls.Config{
+		GetConfigForClient: cm.GetEmbeddedServerTLSConfig,
+	}, nil
+}
+
+// GetEmbeddedServerTLSConfig returns the most up-to-date server tls.Config.
+// This is the callback set in tls.Config.GetConfigForClient. We currently
+// ignore the ClientHelloInfo object.
+func (cm *CertificateManager) GetEmbeddedServerTLSConfig(
+	_ *tls.ClientHelloInfo,
+) (*tls.Config, error) {
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
 

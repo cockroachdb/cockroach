@@ -21,6 +21,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"syscall"
 	"testing"
 	"time"
 
@@ -29,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/pkg/errors"
 )
 
 func TestGenerateCACert(t *testing.T) {
@@ -138,6 +140,30 @@ func TestGenerateNodeCerts(t *testing.T) {
 	}
 }
 
+func generateAllCerts(certsDir string) error {
+	if err := security.CreateCAPair(
+		certsDir, filepath.Join(certsDir, security.EmbeddedCAKey), 512, time.Hour*48,
+	); err != nil {
+		return errors.Errorf("could not generate CA pair: %v", err)
+	}
+
+	if err := security.CreateNodePair(
+		certsDir, filepath.Join(certsDir, security.EmbeddedCAKey),
+		512, time.Hour*48, []string{"127.0.0.1"},
+	); err != nil {
+		return errors.Errorf("could not generate Node pair: %v", err)
+	}
+
+	if err := security.CreateClientPair(
+		certsDir, filepath.Join(certsDir, security.EmbeddedCAKey),
+		512, time.Hour*48, security.RootUser,
+	); err != nil {
+		return errors.Errorf("could not generate Client pair: %v", err)
+	}
+
+	return nil
+}
+
 // This is a fairly high-level test of CA and node certificates.
 // We construct SSL server and clients and use the generated certs.
 func TestUseCerts(t *testing.T) {
@@ -155,24 +181,8 @@ func TestUseCerts(t *testing.T) {
 		}
 	}()
 
-	if err := security.CreateCAPair(
-		certsDir, filepath.Join(certsDir, security.EmbeddedCAKey), 512, time.Hour*48,
-	); err != nil {
-		t.Fatalf("Expected success, got %v", err)
-	}
-
-	if err := security.CreateNodePair(
-		certsDir, filepath.Join(certsDir, security.EmbeddedCAKey),
-		512, time.Hour*48, []string{"127.0.0.1"},
-	); err != nil {
-		t.Fatalf("Expected success, got %v", err)
-	}
-
-	if err := security.CreateClientPair(
-		certsDir, filepath.Join(certsDir, security.EmbeddedCAKey),
-		512, time.Hour*48, security.RootUser,
-	); err != nil {
-		t.Fatalf("Expected success, got %v", err)
+	if err := generateAllCerts(certsDir); err != nil {
+		t.Fatal(err)
 	}
 
 	// Load TLS Configs. This is what TestServer and HTTPClient do internally.
@@ -237,4 +247,155 @@ func TestUseCerts(t *testing.T) {
 		body, _ := ioutil.ReadAll(resp.Body)
 		t.Fatalf("Expected OK, got %q with body: %s", resp.Status, body)
 	}
+}
+
+// TestRotateCerts tests certs rotation in the server.
+func TestRotateCerts(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	// Do not mock cert access for this test.
+	security.ResetAssetLoader()
+	defer ResetTest()
+	certsDir, err := ioutil.TempDir("", "certs_test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		if err := os.RemoveAll(certsDir); err != nil {
+			t.Fatal(err)
+		}
+	}()
+
+	if err := generateAllCerts(certsDir); err != nil {
+		t.Fatal(err)
+	}
+
+	// Start a test server with first set of certs.
+	params := base.TestServerArgs{
+		SSLCertsDir: certsDir,
+	}
+	s, _, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop()
+
+	// Client test function.
+	clientTest := func(httpClient http.Client) error {
+		req, err := http.NewRequest("GET", s.AdminURL()+"/_status/metrics/local", nil)
+		if err != nil {
+			return errors.Errorf("could not create request: %v", err)
+		}
+		resp, err := httpClient.Do(req)
+		if err != nil {
+			return errors.Errorf("http request failed: %v", err)
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			body, _ := ioutil.ReadAll(resp.Body)
+			return errors.Errorf("Expected OK, got %q with body: %s", resp.Status, body)
+		}
+		return nil
+	}
+
+	// Test client with the same certs.
+	clientContext := testutils.NewNodeTestBaseContext()
+	clientContext.SSLCertsDir = certsDir
+	firstClient, err := clientContext.GetHTTPClient()
+	if err != nil {
+		t.Fatalf("could not create http client: %v", err)
+	}
+
+	if err := clientTest(firstClient); err != nil {
+		t.Fatal(err)
+	}
+
+	// Delete certs and re-generate them.
+	// New clients will fail with CA errors.
+	if err := os.RemoveAll(certsDir); err != nil {
+		t.Fatal(err)
+	}
+	if err := generateAllCerts(certsDir); err != nil {
+		t.Fatal(err)
+	}
+
+	// Setup a second http client. It will load the new certs.
+	// We need to use a new context as it keeps the certificate manager around.
+	// Fails on crypto errors.
+	clientContext = testutils.NewNodeTestBaseContext()
+	clientContext.SSLCertsDir = certsDir
+	secondClient, err := clientContext.GetHTTPClient()
+	if err != nil {
+		t.Fatalf("could not create http client: %v", err)
+	}
+
+	if err := clientTest(secondClient); !testutils.IsError(err, "unknown authority") {
+		t.Fatalf("expected unknown authority error, got: %q", err)
+	}
+
+	// We haven't triggered the reload, first client should still work.
+	if err := clientTest(firstClient); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Log("issuing SIGHUP")
+	if err := syscall.Kill(syscall.Getpid(), syscall.SIGHUP); err != nil {
+		t.Fatal(err)
+	}
+
+	// Try again, the first client should now fail, the second should succeed.
+	testutils.SucceedsSoon(t,
+		func() error {
+			if err := clientTest(firstClient); !testutils.IsError(err, "unknown authority") {
+				return errors.Errorf("expected unknown authority, got %v", err)
+			}
+
+			if err := clientTest(secondClient); err != nil {
+				return err
+			}
+			return nil
+		})
+
+	// Now regenerate certs, but keep the CA cert around.
+	// We still need to delete the key.
+	// New clients will fail with bad certificate (CA not yet loaded).
+	if err := os.Remove(filepath.Join(certsDir, security.EmbeddedCAKey)); err != nil {
+		t.Fatal(err)
+	}
+	if err := generateAllCerts(certsDir); err != nil {
+		t.Fatal(err)
+	}
+
+	// Setup a third http client. It will load the new certs.
+	// We need to use a new context as it keeps the certificate manager around.
+	// Fails on crypto errors.
+	clientContext = testutils.NewNodeTestBaseContext()
+	clientContext.SSLCertsDir = certsDir
+	thirdClient, err := clientContext.GetHTTPClient()
+	if err != nil {
+		t.Fatalf("could not create http client: %v", err)
+	}
+
+	// client3 fails on bad certificate, because the node does not have the new CA.
+	if err := clientTest(thirdClient); !testutils.IsError(err, "tls: bad certificate") {
+		t.Fatalf("expected bad certificate error, got: %q", err)
+	}
+
+	// We haven't triggered the reload, second client should still work.
+	if err := clientTest(secondClient); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Log("issuing SIGHUP")
+	if err := syscall.Kill(syscall.Getpid(), syscall.SIGHUP); err != nil {
+		t.Fatal(err)
+	}
+
+	// client2 fails on bad CA for the node certs, client3 succeeds.
+	testutils.SucceedsSoon(t,
+		func() error {
+			if err := clientTest(secondClient); !testutils.IsError(err, "unknown authority") {
+				return errors.Errorf("expected unknown authority, got %v", err)
+			}
+			if err := clientTest(thirdClient); err != nil {
+				return errors.Errorf("third client failed: %v", err)
+			}
+			return nil
+		})
 }
