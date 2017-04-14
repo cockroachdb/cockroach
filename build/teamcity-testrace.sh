@@ -16,7 +16,7 @@ build/builder.sh env \
 build/builder.sh env \
 	COCKROACH_PROPOSER_EVALUATED_KV="${COCKROACH_PROPOSER_EVALUATED_KV:-false}" \
 	make testrace \
-	TESTFLAGS='-v' \
+	TESTFLAGS='-v -show-logs' \
 	2>&1 \
 	| tee artifacts/testrace.log \
 	| go-test-teamcity
