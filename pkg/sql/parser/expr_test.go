@@ -132,7 +132,6 @@ func TestExprString(t *testing.T) {
 		`(a AND b) OR c`,
 		`a AND (b OR c)`,
 		`a AND NOT ((b OR c) AND (d AND e))`,
-		`~-f`,
 		`-2*(f+3)*g`,
 		`f&g<<(g+h)&i > 0 AND (g&i)+h>>(i&f) > 0`,
 		`f&(g<<g+h)&i > 0 AND g&(i+h>>i)&f > 0`,

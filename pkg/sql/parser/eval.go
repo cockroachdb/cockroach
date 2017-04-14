@@ -150,16 +150,6 @@ var UnaryOps = map[UnaryOperator]unaryOpOverload{
 			},
 		},
 	},
-
-	UnaryComplement: {
-		UnaryOp{
-			Typ:        TypeInt,
-			ReturnType: TypeInt,
-			fn: func(_ *EvalContext, d Datum) (Datum, error) {
-				return NewDInt(^MustBeDInt(d)), nil
-			},
-		},
-	},
 }
 
 // BinOp is a binary operator.
