@@ -2020,11 +2020,15 @@ func (expr *CastExpr) Eval(ctx *EvalContext) (Datum, error) {
 		case *DInt:
 			res = v
 		case *DFloat:
-			f, err := round(float64(*v), 0)
+			d, err := ctx.getTmpDec().SetFloat64(float64(*v))
 			if err != nil {
-				panic(fmt.Sprintf("round should never fail with digits hardcoded to 0: %s", err))
+				return nil, err
 			}
-			res = NewDInt(DInt(*f.(*DFloat)))
+			i, err := d.Int64()
+			if err != nil {
+				return nil, errIntOutOfRange
+			}
+			res = NewDInt(DInt(i))
 		case *DDecimal:
 			d := ctx.getTmpDec()
 			_, err := DecimalCtx.ToIntegral(d, &v.Decimal)
