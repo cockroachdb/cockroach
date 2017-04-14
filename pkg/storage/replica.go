@@ -121,6 +121,7 @@ const (
 var consultsTimestampCacheMethods = [...]bool{
 	roachpb.Put:              true,
 	roachpb.ConditionalPut:   true,
+	roachpb.InitPut:          true,
 	roachpb.Increment:        true,
 	roachpb.Delete:           true,
 	roachpb.DeleteRange:      true,
@@ -139,9 +140,10 @@ func consultsTimestampCache(r roachpb.Request) bool {
 // successful will update the timestamp cache.
 var updatesTimestampCacheMethods = [...]bool{
 	roachpb.Get: true,
-	// ConditionalPut effectively reads and may not write, so must
-	// update the timestamp cache.
+	// ConditionalPut and initPut effectively read and may not write,
+	// so must update the timestamp cache.
 	roachpb.ConditionalPut: true,
+	roachpb.InitPut:        true,
 	// DeleteRange updates the write timestamp cache as it doesn't leave
 	// intents or tombstones for keys which don't yet exist. By updating
 	// the write timestamp cache, it forces subsequent writes to get a
@@ -4270,6 +4272,10 @@ func optimizePuts(
 			if maybeAddPut(t.Key) {
 				continue
 			}
+		case *roachpb.InitPutRequest:
+			if maybeAddPut(t.Key) {
+				continue
+			}
 		}
 		firstUnoptimizedIndex = i
 		break
@@ -4307,6 +4313,10 @@ func optimizePuts(
 				shallow.Blind = true
 				reqs[i].MustSetInner(&shallow)
 			case *roachpb.ConditionalPutRequest:
+				shallow := *t
+				shallow.Blind = true
+				reqs[i].MustSetInner(&shallow)
+			case *roachpb.InitPutRequest:
 				shallow := *t
 				shallow.Blind = true
 				reqs[i].MustSetInner(&shallow)

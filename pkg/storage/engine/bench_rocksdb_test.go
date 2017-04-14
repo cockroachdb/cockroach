@@ -124,6 +124,22 @@ func BenchmarkMVCCBlindConditionalPut_RocksDB(b *testing.B) {
 	}
 }
 
+func BenchmarkMVCCInitPut_RocksDB(b *testing.B) {
+	for _, valueSize := range []int{10, 100, 1000, 10000} {
+		b.Run(fmt.Sprintf("%dBytes", valueSize), func(b *testing.B) {
+			runMVCCInitPut(setupMVCCInMemRocksDB, valueSize, b)
+		})
+	}
+}
+
+func BenchmarkMVCCBlindInitPut_RocksDB(b *testing.B) {
+	for _, valueSize := range []int{10, 100, 1000, 10000} {
+		b.Run(fmt.Sprintf("%dBytes", valueSize), func(b *testing.B) {
+			runMVCCBlindInitPut(setupMVCCInMemRocksDB, valueSize, b)
+		})
+	}
+}
+
 func BenchmarkMVCCBatchPut_RocksDB(b *testing.B) {
 	for _, valueSize := range []int{10} {
 		for _, batchSize := range []int{1, 100, 10000, 100000} {

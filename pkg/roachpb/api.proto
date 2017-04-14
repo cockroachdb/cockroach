@@ -136,6 +136,10 @@ message ConditionalPutResponse {
 message InitPutRequest {
   optional Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   optional Value value = 2 [(gogoproto.nullable) = false];
+  // NOTE: For internal use only! Set to indicate that the put is
+  // writing to virgin keyspace and no reads are necessary to
+  // rationalize MVCC.
+  optional bool blind = 3 [(gogoproto.nullable) = false];
 }
 
 // A InitPutResponse is the return value from the InitPut() method.

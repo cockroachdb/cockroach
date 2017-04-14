@@ -1349,6 +1349,15 @@ func cPutArgs(key roachpb.Key, value, expValue []byte) roachpb.ConditionalPutReq
 	}
 }
 
+func iPutArgs(key roachpb.Key, value []byte) roachpb.InitPutRequest {
+	return roachpb.InitPutRequest{
+		Span: roachpb.Span{
+			Key: key,
+		},
+		Value: roachpb.MakeValueFromBytes(value),
+	}
+}
+
 func deleteArgs(key roachpb.Key) roachpb.DeleteRequest {
 	return roachpb.DeleteRequest{
 		Span: roachpb.Span{
@@ -1479,9 +1488,11 @@ func TestOptimizePuts(t *testing.T) {
 
 	pArgs := make([]roachpb.PutRequest, optimizePutThreshold)
 	cpArgs := make([]roachpb.ConditionalPutRequest, optimizePutThreshold)
+	ipArgs := make([]roachpb.InitPutRequest, optimizePutThreshold)
 	for i := 0; i < optimizePutThreshold; i++ {
 		pArgs[i] = putArgs([]byte(fmt.Sprintf("%02d", i)), []byte("1"))
 		cpArgs[i] = cPutArgs([]byte(fmt.Sprintf("%02d", i)), []byte("1"), []byte("0"))
+		ipArgs[i] = iPutArgs([]byte(fmt.Sprintf("%02d", i)), []byte("1"))
 	}
 	incArgs := incrementArgs([]byte("inc"), 1)
 
@@ -1530,11 +1541,21 @@ func TestOptimizePuts(t *testing.T) {
 				true, true, true, true, true, true, true, true, true, true,
 			},
 		},
-		// Existing key at 11, mixed puts and conditional puts.
+		// Existing key at "0", ten init puts.
+		{
+			roachpb.Key("0"),
+			[]roachpb.Request{
+				&ipArgs[0], &ipArgs[1], &ipArgs[2], &ipArgs[3], &ipArgs[4], &ipArgs[5], &ipArgs[6], &ipArgs[7], &ipArgs[8], &ipArgs[9],
+			},
+			[]bool{
+				true, true, true, true, true, true, true, true, true, true,
+			},
+		},
+		// Existing key at 11, mixed put types.
 		{
 			roachpb.Key("11"),
 			[]roachpb.Request{
-				&pArgs[0], &cpArgs[1], &pArgs[2], &cpArgs[3], &pArgs[4], &cpArgs[5], &pArgs[6], &cpArgs[7], &pArgs[8], &cpArgs[9],
+				&pArgs[0], &cpArgs[1], &pArgs[2], &cpArgs[3], &ipArgs[4], &ipArgs[5], &pArgs[6], &cpArgs[7], &pArgs[8], &ipArgs[9],
 			},
 			[]bool{
 				true, true, true, true, true, true, true, true, true, true,
@@ -1602,7 +1623,17 @@ func TestOptimizePuts(t *testing.T) {
 				true, true, true, true, true, true, true, true, true, true, false,
 			},
 		},
-		// Duplicate cput at 6th key; should see ten cputs.
+		// Duplicate iput at 11th key; should see ten puts.
+		{
+			nil,
+			[]roachpb.Request{
+				&pArgs[0], &pArgs[1], &pArgs[2], &pArgs[3], &pArgs[4], &pArgs[5], &pArgs[6], &pArgs[7], &pArgs[8], &pArgs[9], &ipArgs[9],
+			},
+			[]bool{
+				true, true, true, true, true, true, true, true, true, true, false,
+			},
+		},
+		// Duplicate cput at 10th key; should see ten cputs.
 		{
 			nil,
 			[]roachpb.Request{
@@ -1650,6 +1681,9 @@ func TestOptimizePuts(t *testing.T) {
 				blind = append(blind, t.Blind)
 				t.Blind = false
 			case *roachpb.ConditionalPutRequest:
+				blind = append(blind, t.Blind)
+				t.Blind = false
+			case *roachpb.InitPutRequest:
 				blind = append(blind, t.Blind)
 				t.Blind = false
 			default:
