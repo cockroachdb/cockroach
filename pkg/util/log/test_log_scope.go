@@ -43,6 +43,8 @@ type tShim interface {
 	Error(...interface{})
 	Errorf(fmt string, args ...interface{})
 	Name() string
+	Log(...interface{})
+	Logf(fmt string, args ...interface{})
 }
 
 var showLogs bool
@@ -55,6 +57,14 @@ func Scope(t tShim) *TestLogScope {
 		return (*TestLogScope)(nil)
 	}
 
+	scope := ScopeWithoutShowLogs(t)
+	t.Log("use -show-logs to present logs inline")
+	return scope
+}
+
+// ScopeWithoutShowLogs ignores the -show-logs flag and should be used for tests
+// that require the logs go to files.
+func ScopeWithoutShowLogs(t tShim) *TestLogScope {
 	// Subtests are slash-delimited, which can confuse things when slash is also
 	// the path separator.
 	tempDir, err := ioutil.TempDir("", "log"+strings.Replace(t.Name(), "/", "_", -1))
@@ -67,9 +77,7 @@ func Scope(t tShim) *TestLogScope {
 	if err := enableLogFileOutput(tempDir, Severity_ERROR); err != nil {
 		t.Fatal(err)
 	}
-	if !showLogs {
-		fmt.Fprintf(OrigStderr, "%s logs captured to: %s (use -show-logs to present inline)\n", t.Name(), tempDir)
-	}
+	t.Logf("test logs captured to: %s", tempDir)
 	return &TestLogScope{logDir: tempDir}
 }
 
