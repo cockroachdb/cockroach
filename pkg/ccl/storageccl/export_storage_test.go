@@ -29,7 +29,7 @@ import (
 
 func testExportToTarget(t *testing.T, args roachpb.ExportStorage) {
 	ctx := context.TODO()
-	dir, dirCleanup := testutils.TempDir(t, 0)
+	dir, dirCleanup := testutils.TempDir(t)
 	defer dirCleanup()
 
 	// Setup a sink for the given args.
@@ -121,7 +121,7 @@ func testExportToTarget(t *testing.T, args roachpb.ExportStorage) {
 func TestPutLocal(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	p, cleanupFn := testutils.TempDir(t, 0)
+	p, cleanupFn := testutils.TempDir(t)
 	defer cleanupFn()
 
 	testExportToTarget(t, roachpb.ExportStorage{
@@ -133,7 +133,7 @@ func TestPutLocal(t *testing.T) {
 func TestPutHttp(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	tmp, dirCleanup := testutils.TempDir(t, 0)
+	tmp, dirCleanup := testutils.TempDir(t)
 	defer dirCleanup()
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

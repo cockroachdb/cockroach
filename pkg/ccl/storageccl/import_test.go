@@ -117,7 +117,7 @@ func TestImport(t *testing.T) {
 		t.Skip("command WriteBatch is not allowed without proposer evaluated KV")
 	}
 
-	dir, dirCleanupFn := testutils.TempDir(t, 0)
+	dir, dirCleanupFn := testutils.TempDir(t)
 	defer dirCleanupFn()
 
 	writeSST := func(keys ...[]byte) string {

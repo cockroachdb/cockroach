@@ -120,7 +120,7 @@ func backupRestoreTestSetupWithParams(
 ) {
 	ctx = context.Background()
 
-	dir, dirCleanupFn := testutils.TempDir(t, 1)
+	dir, dirCleanupFn := testutils.TempDir(t)
 
 	temp := filepath.Join(dir, "must-be-cleaned-up")
 
