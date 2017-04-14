@@ -32,4 +32,7 @@ var (
 	ExactCtx = DecimalCtx.WithPrecision(0)
 	// HighPrecisionCtx is a decimal context with high precision.
 	HighPrecisionCtx = DecimalCtx.WithPrecision(2000)
+	// IntegerCtx is a decimal context with enough precision to not round
+	// any int64.
+	IntegerCtx = DecimalCtx.WithPrecision(19)
 )
