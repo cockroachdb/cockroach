@@ -310,7 +310,7 @@ var explainDistSQLColumns = ResultColumns{
 
 func (*explainDistSQLNode) Columns() ResultColumns { return explainDistSQLColumns }
 
-func (n *explainDistSQLNode) Start(context.Context) error {
+func (n *explainDistSQLNode) Start(ctx context.Context) error {
 	// Trigger limit propagation.
 	setUnlimited(n.plan)
 
@@ -319,7 +319,7 @@ func (n *explainDistSQLNode) Start(context.Context) error {
 		return err
 	}
 
-	planCtx := n.distSQLPlanner.NewPlanningCtx(context.TODO(), n.txn)
+	planCtx := n.distSQLPlanner.NewPlanningCtx(ctx, n.txn)
 	plan, err := n.distSQLPlanner.createPlanForNode(&planCtx, n.plan)
 	if err != nil {
 		return err
