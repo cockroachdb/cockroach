@@ -130,7 +130,7 @@ func TestDistBackfill(t *testing.T) {
 		t.Fatal(err)
 	}
 	r.Exec("SET DISTSQL = ALWAYS")
-	res := r.QueryStr("SELECT str FROM NumToStr@foo")
+	res := r.QueryResults("SELECT str FROM NumToStr@foo")
 	if len(res) != n*n {
 		t.Errorf("expected %d entries, got %d", n*n, len(res))
 	}
