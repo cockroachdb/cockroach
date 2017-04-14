@@ -191,7 +191,7 @@ func (s *statusServer) Details(
 	if local {
 		resp := &serverpb.DetailsResponse{
 			NodeID:    s.gossip.NodeID.Get(),
-			BuildInfo: build.GetInfo(),
+			BuildInfo: *build.GetInfo(),
 		}
 		if addr, err := s.gossip.GetNodeIDAddress(s.gossip.NodeID.Get()); err == nil {
 			resp.Address = *addr

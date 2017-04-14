@@ -51,12 +51,12 @@ var (
 )
 
 // Short returns a pretty printed build and version summary.
-func (b Info) Short() string {
+func (b *Info) Short() string {
 	return fmt.Sprintf("CockroachDB %s %s (%s, built %s, %s)", b.Distribution, b.Tag, b.Platform, b.Time, b.GoVersion)
 }
 
 // Timestamp parses the utcTime string and returns the number of seconds since epoch.
-func (b Info) Timestamp() (int64, error) {
+func (b *Info) Timestamp() (int64, error) {
 	val, err := time.Parse(TimeFormat, b.Time)
 	if err != nil {
 		return 0, err
@@ -64,16 +64,18 @@ func (b Info) Timestamp() (int64, error) {
 	return val.Unix(), nil
 }
 
+var info = Info{
+	GoVersion:    runtime.Version(),
+	Tag:          tag,
+	Time:         utcTime,
+	Revision:     rev,
+	CgoCompiler:  cgoCompiler,
+	Platform:     platform,
+	Distribution: Distribution,
+	Type:         typ,
+}
+
 // GetInfo returns an Info struct populated with the build information.
-func GetInfo() Info {
-	return Info{
-		GoVersion:    runtime.Version(),
-		Tag:          tag,
-		Time:         utcTime,
-		Revision:     rev,
-		CgoCompiler:  cgoCompiler,
-		Platform:     platform,
-		Distribution: Distribution,
-		Type:         typ,
-	}
+func GetInfo() *Info {
+	return &info
 }
