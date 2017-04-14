@@ -33,7 +33,7 @@ func TestExport(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	ctx := context.Background()
-	dir, dirCleanupFn := testutils.TempDir(t, 0)
+	dir, dirCleanupFn := testutils.TempDir(t)
 	defer dirCleanupFn()
 	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
 	defer tc.Stopper().Stop()
