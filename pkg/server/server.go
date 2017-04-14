@@ -155,7 +155,8 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 
 	ctx := s.AnnotateCtx(context.Background())
 	if s.cfg.Insecure {
-		log.Warning(ctx, "running in insecure mode, this is strongly discouraged. See --insecure.")
+		log.Shout(ctx, log.Severity_WARNING,
+			"running in insecure mode, this is strongly discouraged. See --insecure.")
 	}
 
 	s.rpcContext = rpc.NewContext(s.cfg.AmbientCtx, s.cfg.Config, s.clock, s.stopper)
