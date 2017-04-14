@@ -97,7 +97,7 @@ var tickQuiesced = envutil.EnvOrDefaultBool("COCKROACH_TICK_QUIESCED", true)
 var syncRaftLog = envutil.EnvOrDefaultBool("COCKROACH_SYNC_RAFT_LOG", false)
 
 // Whether to enable experimental support for proposer-evaluated KV.
-var propEvalKV = envutil.EnvOrDefaultBool("COCKROACH_PROPOSER_EVALUATED_KV", false)
+var propEvalKV = envutil.EnvOrDefaultBool("COCKROACH_PROPOSER_EVALUATED_KV", true)
 
 // ProposerEvaluatedKVEnabled returns whether experimental support for
 // proposer-evaluated KV is enabled.
