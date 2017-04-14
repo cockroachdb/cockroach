@@ -9,6 +9,9 @@
 package sqlccl
 
 import (
+	"math"
+	"strings"
+
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 	"golang.org/x/sync/errgroup"
@@ -40,7 +43,7 @@ const (
 // newTableID.
 func Import(
 	ctx context.Context,
-	db client.DB,
+	db *client.DB,
 	startKey, endKey roachpb.Key,
 	files []roachpb.ImportRequest_File,
 	kr storageccl.KeyRewriter,
@@ -174,7 +177,7 @@ func reassignParentIDs(
 // new IDs. It returns a KeyRewriter that can be used to transform KV data to
 // reflect the ID remapping it has done in the descriptors.
 func reassignTableIDs(
-	ctx context.Context, db client.DB, tables []*sqlbase.TableDescriptor, opt parser.KVOptions,
+	ctx context.Context, db *client.DB, tables []*sqlbase.TableDescriptor, opt parser.KVOptions,
 ) (storageccl.KeyRewriter, map[sqlbase.ID]sqlbase.ID, error) {
 	var newTableIDs map[sqlbase.ID]sqlbase.ID
 	var kr storageccl.KeyRewriter
@@ -473,7 +476,7 @@ func makeImportRequests(
 // left, but this method should only be called on empty keyranges, so it's okay.
 //
 // The `input` parameter expected to be sorted.
-func presplitRanges(baseCtx context.Context, db client.DB, input []roachpb.Key) error {
+func presplitRanges(baseCtx context.Context, db *client.DB, input []roachpb.Key) error {
 	// TODO(dan): This implementation does nothing to control the maximum
 	// parallelization or number of goroutines spawned. Revisit (possibly via a
 	// semaphore) if this becomes a problem in practice.
@@ -533,10 +536,107 @@ func presplitRanges(baseCtx context.Context, db client.DB, input []roachpb.Key) 
 	return g.Wait()
 }
 
+// scatterLeaseholders moves leaseholders to different replicas in a naive way.
+// It's assumed to be called only on empty ranges. If err == nil, then a bool is
+// returned indicating whether any rebalancing took place.
+func scatterLeaseholders(
+	ctx context.Context, db *client.DB, spans []roachpb.Span,
+) (bool, error) {
+	// Consider leaseholders to be "sufficiently" scattered if no store has more
+	// than half of them.
+	const scatteredThresholdFraction = 0.5
+
+	// Send a range request over all the spans to get replica and lease
+	// information. The keyranges are expected to be empty.
+	ba := roachpb.BatchRequest{}
+	ba.Header = roachpb.Header{
+		ReturnRangeInfo: true,
+	}
+	for _, span := range spans {
+		ba.Add(roachpb.NewScan(span.Key, span.EndKey))
+	}
+	br, pErr := db.GetSender().Send(ctx, ba)
+	if pErr != nil {
+		return false, errors.Wrap(pErr.GoError(), "getting range and leaseholder information")
+	}
+
+	// Examine the response replica and lease information to see how scattered
+	// everything is.
+	rangeInfos := make(map[roachpb.RangeID]roachpb.RangeInfo, len(br.Responses))
+	leaseCounts := make(map[roachpb.StoreID]int)
+	for _, r := range br.Responses {
+		for _, ri := range r.GetInner().Header().RangeInfos {
+			if _, ok := rangeInfos[ri.Desc.RangeID]; ok {
+				// Two of the spans were in the same range, don't count it
+				// twice.
+				continue
+			}
+			rangeInfos[ri.Desc.RangeID] = ri
+
+			if len(ri.Desc.Replicas) == 1 {
+				// If there's one replica, nothing to rebalance to.
+				continue
+			}
+			leaseCounts[ri.Lease.Replica.StoreID]++
+		}
+	}
+
+	maxLeases := int(math.Ceil(scatteredThresholdFraction * float64(len(rangeInfos))))
+	alreadyScattered := true
+	for storeID, count := range leaseCounts {
+		if count > maxLeases {
+			log.Infof(ctx, "store %d is not sufficiently scattered: %d vs max %d",
+				storeID, count, maxLeases)
+			alreadyScattered = false
+		}
+	}
+	if alreadyScattered {
+		return false, nil
+	}
+
+	// The existing allocations were not scattered enough, so scatter.
+	g, gCtx := errgroup.WithContext(ctx)
+	b := &client.Batch{}
+	var i int
+	for _, ri := range rangeInfos {
+		rangeInfo := ri
+		r := rangeInfo.Desc.Replicas[i%len(rangeInfo.Desc.Replicas)]
+		i++
+
+		if r == rangeInfo.Lease.Replica {
+			continue
+		}
+		b.Scan(rangeInfo.Desc.StartKey.AsRawKey(), rangeInfo.Desc.EndKey.AsRawKey())
+		g.Go(func() error {
+			err := db.AdminTransferLease(gCtx, rangeInfo.Desc.StartKey.AsRawKey(), r.StoreID)
+
+			// Getting range membership above and assigning the lease here is
+			// not done transactionally, so there's a race. Sniff out the error
+			// and ignore these cases, assuming it will work out in aggregate.
+			if err != nil && strings.Contains(err.Error(), "unable to find store") {
+				log.Warningf(ctx, "\n%s", err)
+				return nil
+			}
+			return err
+		})
+	}
+	if err := g.Wait(); err != nil {
+		return false, errors.Wrapf(err, "scattering leaseholders")
+	}
+
+	// The AdminTransferLease requests don't guarantee that the new leaseholder
+	// is ready. Run a Scan over all the ranges which forces us to wait for the
+	// new leaseholders to be serving.
+	if err := db.Run(ctx, b); err != nil {
+		return false, errors.Wrapf(err, "waiting for new leaseholders to be ready")
+	}
+	return true, nil
+}
+
 // Write the new descriptors. First the ID -> TableDescriptor for the new table,
 // then flip (or initialize) the name -> ID entry so any new queries will use
 // the new one.
-func restoreTableDescs(ctx context.Context, db client.DB, tables []*sqlbase.TableDescriptor) error {
+func restoreTableDescs(ctx context.Context, db *client.DB, tables []*sqlbase.TableDescriptor) error {
 	ctx, span := tracing.ChildSpan(ctx, "restoreTableDescs")
 	defer tracing.FinishSpan(span)
 	err := db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
@@ -589,7 +689,7 @@ func Restore(
 	jobLogger *sql.JobLogger,
 ) error {
 
-	db := *p.ExecCfg().DB
+	db := p.ExecCfg().DB
 
 	if len(targets.Databases) > 0 {
 		return errors.Errorf("RESTORE DATABASE is not yet supported " +
@@ -685,8 +785,14 @@ func Restore(
 	if err := presplitRanges(ctx, db, splitKeys); err != nil {
 		return errors.Wrapf(err, "presplitting %d ranges", len(importRequests))
 	}
-	// TODO(dan): Wait for the newly created ranges (and leaseholders) to
-	// rebalance.
+
+	// TODO(dan): This does a very naive scattering of leaseholders. Replace it
+	// with a call to SCATTER once it's built:
+	// https://github.com/cockroachdb/cockroach/blob/master/docs/RFCS/sql_split_syntax.md#2-alter-tableindex-scatter
+	rekeyedSpans := spansForAllTableIndexes(tables)
+	if _, err := scatterLeaseholders(ctx, db, rekeyedSpans); err != nil {
+		return errors.Wrapf(err, "scattering leaseholders")
+	}
 
 	// We're already limiting these on the server-side, but sending all the
 	// Import requests at once would fill up distsender/grpc/something and cause

@@ -1255,7 +1255,7 @@ func TestPresplitRanges(t *testing.T) {
 				key := encoding.EncodeUvarintAscending(append([]byte(nil), baseKey...), uint64(i))
 				splitPoints = append(splitPoints, key)
 			}
-			if err := presplitRanges(ctx, *kvDB, splitPoints); err != nil {
+			if err := presplitRanges(ctx, kvDB, splitPoints); err != nil {
 				t.Error(err)
 			}
 
@@ -1292,6 +1292,43 @@ func TestPresplitRanges(t *testing.T) {
 						keys.PrettyPrint(desc.EndKey.AsRawKey()),
 					)
 				}
+			}
+		})
+	}
+}
+
+func TestScatterLeaseholders(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	for _, numNodes := range []int{1, 3, 4} {
+		t.Run(strconv.Itoa(numNodes), func(t *testing.T) {
+			ctx, _, tc, sqlDB, cleanupFn := backupRestoreTestSetup(t, numNodes, bankDataInsertRows)
+			defer cleanupFn()
+			kvDB := tc.Server(0).KVClient().(*client.DB)
+
+			tableID, err := sqlutils.QueryTableID(sqlDB.DB, "bench", "bank")
+			if err != nil {
+				t.Fatal(err)
+			}
+			tablePrefix := roachpb.Key(keys.MakeTablePrefix(tableID))
+			spans := []roachpb.Span{{Key: tablePrefix, EndKey: tablePrefix.PrefixEnd()}}
+
+			// I tried a number of different ways of asserting that scatter
+			// worked, but since we let the replicate queue work in the
+			// background, they were all flaky. It's possible that a more
+			// targeted test could be written, but for now, we just check that
+			// scatterLeaseholders eventually indicates that no work needed to
+			// be done 3 times consecutively.
+			for consecutiveIsScattered := 0; consecutiveIsScattered < 3; {
+				didScatter, err := scatterLeaseholders(ctx, kvDB, spans)
+				if err != nil {
+					t.Fatalf("%+v", err)
+				}
+				if !didScatter {
+					consecutiveIsScattered++
+					continue
+				}
+				consecutiveIsScattered = 0
 			}
 		})
 	}
