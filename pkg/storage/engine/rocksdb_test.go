@@ -553,7 +553,7 @@ func BenchmarkRocksDBSstFileReader(b *testing.B) {
 
 func TestRocksDBTimeBound(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	dir, dirCleanup := testutils.TempDir(t, 0)
+	dir, dirCleanup := testutils.TempDir(t)
 	defer dirCleanup()
 
 	rocksdb, err := NewRocksDB(roachpb.Attributes{}, dir, RocksDBCache{}, 0, DefaultMaxOpenFiles)
