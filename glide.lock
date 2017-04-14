@@ -1,8 +1,8 @@
-hash: 620ed7b5a97e5e1c3f144f49863859862222390b5e00249714aab0b1d4c581c7
-updated: 2017-04-11T15:02:41.785025807-04:00
+hash: c14daba1184a6bfb21ba06ee2ad97647ba63504fee08d8ec06aaf74f644d1977
+updated: 2017-04-14T14:27:59.164949959-04:00
 imports:
 - name: cloud.google.com/go
-  version: 70fd9bf9d3537b799ae260d468f1ef7bf6afeaf1
+  version: ed63fb27efcf32e25fe7837e4662457d3da4c4f2
   subpackages:
   - compute/metadata
   - iam
@@ -26,7 +26,6 @@ imports:
   - autorest
   - autorest/azure
   - autorest/date
-  - autorest/to
 - name: github.com/backtrace-labs/go-bcd
   version: 4ad9137a248599da4b00da0be6e71a75c9e1b8d9
 - name: github.com/biogo/store
@@ -38,7 +37,7 @@ imports:
 - name: github.com/chzyer/readline
   version: 41eea22f717c616615e1e59aa06cf831f9901f35
 - name: github.com/client9/misspell
-  version: 9a1fc2456ac9e8c9b4cbe9d005b6e7adac0d357f
+  version: d06ddd376b273047dca6e16eeeb2a2a8f9791978
   subpackages:
   - cmd/misspell
 - name: github.com/cockroachdb/apd
@@ -122,7 +121,7 @@ imports:
 - name: github.com/dustin/go-humanize
   version: 259d2a102b871d17f30e3cd9881a642961a1e486
 - name: github.com/elastic/gosigar
-  version: 6e68f248575b29cdac5c8853b6c76bad600ddffe
+  version: 653b7f4aa2336139b311b942208cb4caf1cf2380
   subpackages:
   - sys/windows
 - name: github.com/elazarl/go-bindata-assetfs
@@ -183,7 +182,7 @@ imports:
 - name: github.com/google/btree
   version: 316fb6d3f031ae8f4d457c6c5186b9e3ded70435
 - name: github.com/google/go-github
-  version: 6896997c7c9fe603fb9d2e8e92303bb18481e60a
+  version: de33c46a823d3f723514fc5333b75ef2e937b7df
   subpackages:
   - github
 - name: github.com/google/go-querystring
@@ -339,7 +338,7 @@ imports:
 - name: github.com/rubyist/circuitbreaker
   version: 2074adba5ddc7d5f7559448a9c3066573521c5bf
 - name: github.com/russross/blackfriday
-  version: 5f33e7b7878355cd2b7e6b8eefc48a5472c69f70
+  version: b253417e1cb644d645a0a3bb1fa5034c8030127c
 - name: github.com/sasha-s/go-deadlock
   version: 341000892f3dd25f440e6231e8533eb3688ed7ec
 - name: github.com/satori/go.uuid
@@ -353,7 +352,7 @@ imports:
   subpackages:
   - doc
 - name: github.com/spf13/pflag
-  version: 9a906f17374922ed0f74e1b2f593d3723f2ffb00
+  version: e453343e6260b4a3a89f1f0e10a2fbb07f8d9750
 - name: github.com/StackExchange/wmi
   version: ea383cf3ba6ec950874b8486cd72356d007c768f
 - name: github.com/tebeka/go2xunit
@@ -383,7 +382,7 @@ imports:
   - proxy
   - trace
 - name: golang.org/x/oauth2
-  version: 7fdf09982454086d5570c7db3e11f360194830ca
+  version: a6bd8cefa1811bd24b86f8902872e4e8225f74c4
   subpackages:
   - google
   - internal
@@ -410,11 +409,11 @@ imports:
   - unicode/norm
   - width
 - name: golang.org/x/time
-  version: a4bde12657593d5e90d0533a3e4fd95e635124cb
+  version: f51c12702a4d776e4c1fa9b0fabab841babae631
   subpackages:
   - rate
 - name: golang.org/x/tools
-  version: 7ee420f17d7525d013c72c05ed371361a29895d3
+  version: cbb995d093b2c4a12ac074e53d90373ecc827527
   subpackages:
   - cmd/goimports
   - cmd/goyacc
@@ -468,7 +467,7 @@ imports:
   - googleapis/api/annotations
   - googleapis/iam/v1
 - name: google.golang.org/grpc
-  version: 9d55a95b90eb10d08a07e0213d23797dbd7b7552
+  version: ded79a3531af2dd320eed5b2fd138f23fb2e3f59
   repo: https://github.com/andreimatei/grpc-go
   subpackages:
   - codes

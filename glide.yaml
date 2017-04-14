@@ -15,7 +15,7 @@ import:
 # https://github.com/grpc/grpc-go/issues/760
 # https://github.com/grpc/grpc-go/issues/1043
 - package: google.golang.org/grpc
-  version: 9d55a95b90eb10d08a07e0213d23797dbd7b7552
+  version: ded79a3531af2dd320eed5b2fd138f23fb2e3f59
   repo: https://github.com/andreimatei/grpc-go
 # We pin glide itself to prevent changes to glide's dependency resolution
 # algorithm from modifying our dependencies unexpectedly.
