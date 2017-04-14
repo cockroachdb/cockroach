@@ -34,7 +34,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
-	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
@@ -59,7 +58,6 @@ type LocalTestCluster struct {
 	StoreTestingKnobs        *storage.StoreTestingKnobs
 	DBContext                *client.DBContext
 	DB                       *client.DB
-	RangeRetryOptions        *retry.Options
 	Stores                   *storage.Stores
 	Sender                   client.Sender
 	Stopper                  *stop.Stopper
@@ -121,9 +119,6 @@ func (ltc *LocalTestCluster) Start(t testing.TB, baseCtx *base.Config, initSende
 		cfg.TestingKnobs.DisableSplitQueue = true
 	} else {
 		cfg.TestingKnobs = *ltc.StoreTestingKnobs
-	}
-	if ltc.RangeRetryOptions != nil {
-		cfg.RangeRetryOptions = *ltc.RangeRetryOptions
 	}
 	cfg.DontRetryPushTxnFailures = ltc.DontRetryPushTxnFailures
 	cfg.AmbientCtx = ambient
