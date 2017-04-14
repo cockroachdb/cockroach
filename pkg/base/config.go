@@ -124,11 +124,11 @@ type Config struct {
 	HistogramWindowInterval time.Duration
 }
 
-var allowOldCertFlags = envutil.EnvOrDefaultBool("COCKROACH_ALLOW_OLD_CERT_FLAGS", true)
+var allowOldCertsFlags = envutil.EnvOrDefaultBool("COCKROACH_ALLOW_OLD_CERTS_FLAGS", true)
 
 // hasOldCertsFlags returns true if we have old certs flags and they are allowed.
 func (cfg *Config) hasOldCertsFlags() bool {
-	if !allowOldCertFlags {
+	if !allowOldCertsFlags {
 		return false
 	}
 	if cfg.SSLCA == "" && cfg.SSLCert == "" && cfg.SSLCertKey == "" {
@@ -136,13 +136,13 @@ func (cfg *Config) hasOldCertsFlags() bool {
 	}
 
 	log.Warning(context.Background(),
-		"flags --ca-cert, --cert, and --key will soon be deprecated, please use --certs-dir",
+		"flags --ca-cert, --cert, and --key are deprecated and will soon be removed, please use --certs-dir",
 	)
 	return true
 }
 
 func didYouMeanInsecureError(err error) error {
-	return fmt.Errorf("problem using security settings: %v, did you mean to use --insecure?", err)
+	return errors.Wrap(err, "problem using security settings, did you mean to use --insecure?")
 }
 
 // InitDefaults sets up the default values for a config.
@@ -173,8 +173,11 @@ func (cfg *Config) AdminURL() string {
 // GetClientCertPaths returns the paths to the client cert and key.
 func (cfg *Config) GetClientCertPaths(user string) (string, string, error) {
 	if cfg.hasOldCertsFlags() {
-		if cfg.SSLCert == "" || cfg.SSLCertKey == "" {
-			return "", "", errors.New("client certificates use requires both --cert and --key")
+		if cfg.SSLCert == "" {
+			return "", "", errors.New("some certificate flags specified, but --cert is empty")
+		}
+		if cfg.SSLCertKey == "" {
+			return "", "", errors.New("some certificate flags specified, but --key is empty")
 		}
 		return cfg.SSLCert, cfg.SSLCertKey, nil
 	}

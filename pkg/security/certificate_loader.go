@@ -159,11 +159,11 @@ func (cl *CertificateLoader) MaybeCreateCertsDir() error {
 	}
 
 	if !os.IsNotExist(err) {
-		return errors.Errorf("could not stat certs directory %s: %v", cl.certsDir, err)
+		return errors.Wrapf(err, "could not stat certs directory %s", cl.certsDir)
 	}
 
 	if err := os.Mkdir(cl.certsDir, defaultCertsDirPerm); err != nil {
-		return errors.Errorf("could not create certs directory %s: %v", cl.certsDir, err)
+		return errors.Wrapf(err, "could not create certs directory %s", cl.certsDir)
 	}
 	return nil
 }

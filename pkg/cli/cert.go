@@ -29,8 +29,8 @@ import (
 )
 
 const defaultKeySize = 2048
-const defaultCALifetime = 5 * 265 * 24 * time.Hour // five years
-const defaultCertLifetime = 265 * 24 * time.Hour   // one year
+const defaultCALifetime = 5 * 365 * 24 * time.Hour // five years
+const defaultCertLifetime = 365 * 24 * time.Hour   // one year
 
 var keySize int
 var certificateLifetime time.Duration
@@ -52,11 +52,13 @@ The CA certificate is prepended to "ca.crt" if the file exists.
 // runCreateCACert generates a key and CA certificate and writes them
 // to their corresponding files.
 func runCreateCACert(cmd *cobra.Command, args []string) error {
-	return security.CreateCAPair(
-		baseCfg.SSLCertsDir,
-		baseCfg.SSLCAKey,
-		keySize,
-		certificateLifetime)
+	return errors.Wrap(
+		security.CreateCAPair(
+			baseCfg.SSLCertsDir,
+			baseCfg.SSLCAKey,
+			keySize,
+			certificateLifetime),
+		"failed to generate CA cert and key")
 }
 
 // A createNodeCert command generates a node certificate and stores it
@@ -81,12 +83,14 @@ If "ca.crt" contains more than one certificate, the first is used.
 // than one is present. We shoult try to load each certificate along with the key
 // and pick the one that works. That way, the key specifies the certificate.
 func runCreateNodeCert(cmd *cobra.Command, args []string) error {
-	return security.CreateNodePair(
-		baseCfg.SSLCertsDir,
-		baseCfg.SSLCAKey,
-		keySize,
-		certificateLifetime,
-		args)
+	return errors.Wrap(
+		security.CreateNodePair(
+			baseCfg.SSLCertsDir,
+			baseCfg.SSLCAKey,
+			keySize,
+			certificateLifetime,
+			args),
+		"failed to generate node certificate and key")
 }
 
 // A createClientCert command generates a client certificate and stores it
@@ -117,15 +121,17 @@ func runCreateClientCert(cmd *cobra.Command, args []string) error {
 	var err error
 	var username string
 	if username, err = sql.NormalizeAndValidateUsername(args[0]); err != nil {
-		return err
+		return errors.Wrap(err, "failed to generate client certificate and key")
 	}
 
-	return security.CreateClientPair(
-		baseCfg.SSLCertsDir,
-		baseCfg.SSLCAKey,
-		keySize,
-		certificateLifetime,
-		username)
+	return errors.Wrap(
+		security.CreateClientPair(
+			baseCfg.SSLCertsDir,
+			baseCfg.SSLCAKey,
+			keySize,
+			certificateLifetime,
+			username),
+		"failed to generate client certificate and key")
 }
 
 // A listCerts command generates a client certificate and stores it
