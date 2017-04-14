@@ -231,7 +231,8 @@ func (d *atomicDescString) store(replicaID roachpb.ReplicaID, desc *roachpb.Rang
 		buf.WriteString("{-}")
 	} else {
 		const maxRangeChars = 30
-		keys.PrettyPrintRange(&buf, roachpb.Key(desc.StartKey), roachpb.Key(desc.EndKey), maxRangeChars)
+		rngStr := keys.PrettyPrintRange(roachpb.Key(desc.StartKey), roachpb.Key(desc.EndKey), maxRangeChars)
+		buf.WriteString(rngStr)
 	}
 
 	str := buf.String()
