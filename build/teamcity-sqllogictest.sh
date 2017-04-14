@@ -8,9 +8,10 @@ mkdir -p artifacts
 # TODO(jordan) improve builder.sh to allow partial GOPATH hiding rather than
 # the all-on/all-off strategy BULIDER_HIDE_GOPATH_SRC gives us.
 export BUILDER_HIDE_GOPATH_SRC=0
+
 for target in bigtest bigtest-distsql; do
     build/builder.sh env \
-             make -C pkg/sql $target \
+             make TYPE=release -C pkg/sql $target \
              TESTFLAGS='-v' \
              2>&1 \
         | tee artifacts/$target.log \

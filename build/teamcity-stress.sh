@@ -1,16 +1,17 @@
 #!/usr/bin/env bash
 set -euxo pipefail
 
+export BUILDER_HIDE_GOPATH_SRC=1
+
 mkdir -p artifacts
 
 exit_status=0
-export BUILDER_HIDE_GOPATH_SRC=1
 
 build/builder.sh go install ./pkg/cmd/github-post
 
 build/builder.sh env \
 		 COCKROACH_PROPOSER_EVALUATED_KV="${COCKROACH_PROPOSER_EVALUATED_KV:-false}" \
-		 make stress \
+		 make TYPE=release stress \
 		 PKG="$PKG" GOFLAGS="${GOFLAGS:-}" TAGS="${TAGS:-}" \
 		 TESTTIMEOUT=30m TESTFLAGS='-test.v' \
 		 STRESSFLAGS='-maxtime 15m -maxfails 1 -stderr' \

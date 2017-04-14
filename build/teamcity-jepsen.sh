@@ -69,8 +69,13 @@ for test in "${tests[@]}"; do
 
         # Run each test over an ssh connection.
         # If this begins to time out frequently, let's do this via nohup and poll.
-        ssh -o "ServerAliveInterval=60" -o "StrictHostKeyChecking no" -i "$HOME/.ssh/${KEY_NAME}" "ubuntu@${controller}" "${testcmd}"
-        if [ $? -ne 0 ]; then
+        #
+        # shellcheck disable=SC2029
+        if ssh -o "ServerAliveInterval=60" -o "StrictHostKeyChecking no" -i "$HOME/.ssh/${KEY_NAME}" "ubuntu@${controller}" "${testcmd}"; then
+            # Test passed. grab just the results file.
+            echo "Test passed. Grabbing minimal logs..."
+            scp -o "StrictHostKeyChecking no" -ri "$HOME/.ssh/${KEY_NAME}" "ubuntu@${controller}:jepsen/cockroachdb/store/latest/{test.fressian,results.edn,latency-quantiles.png,latency-raw.png,rate.png}" "${artifacts_dir}"
+        else
             # Test failed: grab everything.
             echo "Test failed. Grabbing all logs..."
             archive_path="jepsen/cockroachdb/store/failure-logs.tgz"
@@ -78,10 +83,6 @@ for test in "${tests[@]}"; do
             ssh -o "StrictHostKeyChecking no" -i "$HOME/.ssh/${KEY_NAME}" "ubuntu@${controller}" "tar -chzf ${archive_path} jepsen/cockroachdb/store/latest"
             scp -o "StrictHostKeyChecking no" -ri "$HOME/.ssh/${KEY_NAME}" "ubuntu@${controller}:${archive_path}" "${artifacts_dir}"
             echo "##teamcity[testFailed name='${test} ${nemesis}']"
-        else
-            # Test passed. grab just the results file.
-            echo "Test passed. Grabbing minimal logs..."
-            scp -o "StrictHostKeyChecking no" -ri "$HOME/.ssh/${KEY_NAME}" "ubuntu@${controller}:jepsen/cockroachdb/store/latest/{test.fressian,results.edn,latency-quantiles.png,latency-raw.png,rate.png}" "${artifacts_dir}"
         fi
         echo "##teamcity[testFinished name='${test} ${nemesis}']"
         echo "##teamcity[publishArtifacts '${LOG_DIR}']"
