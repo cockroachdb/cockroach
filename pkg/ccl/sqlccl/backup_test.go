@@ -249,9 +249,6 @@ func TestBackupStatementResult(t *testing.T) {
 
 func TestBackupRestoreLocal(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	if !storage.ProposerEvaluatedKVEnabled() {
-		t.Skip("command WriteBatch is not allowed without proposer evaluated KV")
-	}
 
 	const numAccounts = 1000
 
@@ -389,9 +386,6 @@ func verifySystemJobProgress(
 
 func TestBackupRestoreSystemJobs(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	if !storage.ProposerEvaluatedKVEnabled() {
-		t.Skip("command WriteBatch is not allowed without proposer evaluated KV")
-	}
 
 	const expectedProgressUpdateCount = backupRestoreDefaultRanges
 
@@ -501,10 +495,6 @@ func TestBackupRestoreSystemJobs(t *testing.T) {
 
 func TestBackupRestoreInterleaved(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	if !storage.ProposerEvaluatedKVEnabled() {
-		t.Skip("command WriteBatch is not allowed without proposer evaluated KV")
-	}
-
 	const numAccounts = 10
 
 	_, dir, _, sqlDB, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts)
@@ -580,9 +570,6 @@ func TestBackupRestoreInterleaved(t *testing.T) {
 
 func TestBackupRestoreCrossTableReferences(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	if !storage.ProposerEvaluatedKVEnabled() {
-		t.Skip("command WriteBatch is not allowed without proposer evaluated KV")
-	}
 
 	const numAccounts = 30
 	const createStore = "CREATE DATABASE store"
@@ -887,9 +874,6 @@ func checksumBankPayload(t *testing.T, sqlDB *sqlutils.SQLRunner) uint32 {
 
 func TestBackupRestoreIncremental(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	if !storage.ProposerEvaluatedKVEnabled() {
-		t.Skip("command WriteBatch is not allowed without proposer evaluated KV")
-	}
 
 	const numAccounts = 10
 	const numBackups = 4
@@ -1018,9 +1002,6 @@ func startBackgroundWrites(
 
 func TestBackupRestoreWithConcurrentWrites(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	if !storage.ProposerEvaluatedKVEnabled() {
-		t.Skip("command WriteBatch is not allowed without proposer evaluated KV")
-	}
 
 	const rows = 10
 	const numBackgroundTasks = multiNode
@@ -1074,9 +1055,6 @@ func TestBackupRestoreWithConcurrentWrites(t *testing.T) {
 
 func TestBackupAsOfSystemTime(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	if !storage.ProposerEvaluatedKVEnabled() {
-		t.Skip("command WriteBatch is not allowed without proposer evaluated KV")
-	}
 
 	const numAccounts = 1000
 
@@ -1108,9 +1086,6 @@ func TestBackupAsOfSystemTime(t *testing.T) {
 
 func TestBackupRestoreChecksum(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	if !storage.ProposerEvaluatedKVEnabled() {
-		t.Skip("command WriteBatch is not allowed without proposer evaluated KV")
-	}
 
 	const numAccounts = 1000
 	_, dir, _, sqlDB, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts)
@@ -1335,9 +1310,6 @@ func TestBackupLevelDB(t *testing.T) {
 
 func TestRestoredPrivileges(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	if !storage.ProposerEvaluatedKVEnabled() {
-		t.Skip("command WriteBatch is not allowed without proposer evaluated KV")
-	}
 
 	const numAccounts = 1
 	_, dir, _, sqlDB, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts)
@@ -1376,9 +1348,6 @@ func TestRestoredPrivileges(t *testing.T) {
 
 func TestRestoreInto(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	if !storage.ProposerEvaluatedKVEnabled() {
-		t.Skip("command WriteBatch is not allowed without proposer evaluated KV")
-	}
 
 	const numAccounts = 1
 	_, dir, _, sqlDB, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts)
@@ -1402,9 +1371,6 @@ func TestRestoreInto(t *testing.T) {
 
 func TestBackupRestorePermissions(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	if !storage.ProposerEvaluatedKVEnabled() {
-		t.Skip("command WriteBatch is not allowed without proposer evaluated KV")
-	}
 
 	const numAccounts = 1
 	_, dir, tc, sqlDB, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts)
