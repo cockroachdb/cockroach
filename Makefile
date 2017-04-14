@@ -41,18 +41,13 @@ SUFFIX       :=
 
 # Possible values:
 # <empty>: use the default toolchain
-# release: target Linux 2.6.32, dynamically link to GLIBC 2.12.2
-# musl:  target Linux 3.2.84, statically link musl 1.1.16
+# release: target Linux 2.6.32, dynamically link GLIBC 2.12.2
+# musl:  target Linux 2.6.32, statically link musl 1.1.16
 #
 # Both release and musl only work in the cockroachdb/builder docker image,
 # as they depend on cross-compilation toolchains available there.
 #
 # The release variant targets RHEL/CentOS 6.
-#
-# The musl variant targets the latest musl version (at the time of writing).
-# The kernel version is the lowest available in combination with this version
-# of musl. See:
-# https://github.com/crosstool-ng/crosstool-ng/issues/540#issuecomment-276508500.
 TYPE :=
 
 # We intentionally use LINKFLAGS instead of the more traditional LDFLAGS
@@ -63,13 +58,19 @@ LINKFLAGS ?=
 ifeq ($(TYPE),)
 override LINKFLAGS += -X github.com/cockroachdb/cockroach/pkg/build.typ=development
 else ifeq ($(TYPE),release)
-override LINKFLAGS += -s -w -X github.com/cockroachdb/cockroach/pkg/build.typ=release
+# We use a custom toolchain to target old Linux and glibc versions. However,
+# this toolchain's libstdc++ version is quite recent and must be statically
+# linked to avoid depending on the target's available libstdc++.
+export CC  = /x-tools/x86_64-unknown-linux-gnu/bin/x86_64-unknown-linux-gnu-gcc
+export CXX = /x-tools/x86_64-unknown-linux-gnu/bin/x86_64-unknown-linux-gnu-g++
+override LINKFLAGS += -s -w -extldflags "-static-libgcc -static-libstdc++" -X github.com/cockroachdb/cockroach/pkg/build.typ=release
+override GOFLAGS += -installsuffix release
 else ifeq ($(TYPE),musl)
 # This tag disables jemalloc profiling. See https://github.com/jemalloc/jemalloc/issues/585.
 override TAGS += musl
 export CC  = /x-tools/x86_64-unknown-linux-musl/bin/x86_64-unknown-linux-musl-gcc
 export CXX = /x-tools/x86_64-unknown-linux-musl/bin/x86_64-unknown-linux-musl-g++
-override LINKFLAGS += -extldflags -static -X github.com/cockroachdb/cockroach/pkg/build.typ=release-musl
+override LINKFLAGS += -s -w -extldflags "-static" -X github.com/cockroachdb/cockroach/pkg/build.typ=release-musl
 override GOFLAGS += -installsuffix musl
 else
 $(error unknown build type $(TYPE))
@@ -117,7 +118,7 @@ start:
 # Build, but do not run the tests.
 # PKG is expanded and all packages are built and moved to their directory.
 .PHONY: testbuild
-testbuild: $(BOOTSTRAP_TARGET)
+testbuild: gotestdashi
 	$(GO) list -tags '$(TAGS)' -f \
 	'$(GO) test -v $(GOFLAGS) -tags '\''$(TAGS)'\'' -ldflags '\''$(LINKFLAGS)'\'' -i -c {{.ImportPath}} -o {{.Dir}}/{{.Name}}.test$(SUFFIX)' $(PKG) | \
 	$(SHELL)
@@ -136,7 +137,7 @@ testrace: TESTTIMEOUT := $(RACETIMEOUT)
 # Docker for Mac, so we filter out the 20k+ UI dependencies that are guaranteed
 # to be irrelevant to save nearly 10s on every Make invocation.
 bin/sql.test: main.go $(shell find pkg -name 'node_modules' -prune -o -name '*.go')
-	$(GO) test $(GOFLAGS) -c -o bin/sql.test -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' ./pkg/sql
+	$(GO) test $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -c -o bin/sql.test ./pkg/sql
 
 bench: BENCHES := .
 bench: TESTS := -
@@ -206,23 +207,23 @@ dupl: $(BOOTSTRAP_TARGET)
 # comment. See https://github.com/golang/go/issues/10249 for details.
 .PHONY: generate
 generate: gotestdashi
-	$(GO) generate $(PKG)
+	$(GO) generate $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' $(PKG)
 
 # The style checks depend on `go vet` and so must depend on gotestdashi per the
 # above comment. See https://github.com/golang/go/issues/16086 for details.
 .PHONY: check
 check: override TAGS += check
 check: gotestdashi
-	$(GO) test ./build -v -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -run 'TestStyle/$(TESTS)'
+	$(GO) test ./build -v $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -run 'TestStyle/$(TESTS)'
 
 .PHONY: checkshort
 checkshort: override TAGS += check
 checkshort: gotestdashi
-	$(GO) test ./build -v -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -short -run 'TestStyle/$(TESTS)'
+	$(GO) test ./build -v $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -short -run 'TestStyle/$(TESTS)'
 
 .PHONY: clean
 clean:
-	$(GO) clean $(GOFLAGS) -i github.com/cockroachdb/...
+	$(GO) clean $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -i github.com/cockroachdb/...
 	find . -name '*.test*' -type f -exec rm -f {} \;
 	rm -f .bootstrap $(ARCHIVE)
 

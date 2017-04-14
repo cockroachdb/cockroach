@@ -77,7 +77,7 @@ echo "${username}:x:${uid_gid}::${container_home}:/bin/bash" > "${passwd_file}"
 # created as the invoking user. Docker would otherwise create them when
 # mounting, but that would deny write access to the invoking user since docker
 # runs as root.
-mkdir -p "${HOME}"/.yarn-cache "${gocache}"/pkg/docker_amd64{,_msan,_musl,_race} "${gocache}/bin/docker_amd64" "${cockroach_toplevel}/bin.docker_amd64"
+mkdir -p "${HOME}"/.yarn-cache "${gocache}"/pkg/docker_amd64{,_musl,_release}{,_msan,_race} "${gocache}"/bin/docker_amd64 "${cockroach_toplevel}"/bin.docker_amd64
 
 # Since we're mounting both /root and its subdirectories in our container,
 # Docker will create the subdirectories on the host side under the directory
@@ -122,13 +122,13 @@ fi
 vols="${vols} --volume=${cockroach_toplevel}:/go/src/github.com/cockroachdb/cockroach"
 vols="${vols} --volume=${cockroach_toplevel}/bin.docker_amd64:/go/src/github.com/cockroachdb/cockroach/bin"
 vols="${vols} --volume=${gocache}/pkg/docker_amd64:/go/pkg/linux_amd64"
-vols="${vols} --volume=${gocache}/pkg/docker_amd64_msan:/go/pkg/linux_amd64_msan"
-vols="${vols} --volume=${gocache}/pkg/docker_amd64_musl:/go/pkg/linux_amd64_musl"
-vols="${vols} --volume=${gocache}/pkg/docker_amd64_race:/go/pkg/linux_amd64_race"
-vols="${vols} --volume=${gocache}/pkg/docker_amd64:/usr/local/go/pkg/linux_amd64"
-vols="${vols} --volume=${gocache}/pkg/docker_amd64_msan:/usr/local/go/pkg/linux_amd64_msan"
-vols="${vols} --volume=${gocache}/pkg/docker_amd64_musl:/usr/local/go/pkg/linux_amd64_musl"
-vols="${vols} --volume=${gocache}/pkg/docker_amd64_race:/usr/local/go/pkg/linux_amd64_race"
+# NB: it would be slightly more natural to move "amd64" inside the loop body,
+# but the shell discards empty strings in this expansion, which would elide
+# the unsuffixed case.
+for suffix in amd64{,_musl,_release}{,_msan,_race}; do
+  vols="${vols} --volume=${gocache}/pkg/docker_${suffix}:/go/pkg/linux_${suffix}"
+  vols="${vols} --volume=${gocache}/pkg/docker_${suffix}:/usr/local/go/pkg/linux_${suffix}"
+done
 vols="${vols} --volume=${gocache}/bin/docker_amd64:/go/bin"
 vols="${vols} --volume=${HOME}/.yarn-cache:${container_home}/.yarn-cache"
 
