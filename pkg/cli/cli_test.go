@@ -1124,7 +1124,7 @@ func Example_cert() {
 	// cert create-client foo
 	// cert create-client Ομηρος
 	// cert create-client 0foo
-	// username "0foo" invalid; usernames are case insensitive, must start with a letter or underscore, may contain letters, digits or underscores, and must not exceed 63 characters
+	// failed to generate user certificate and key: username "0foo" invalid; usernames are case insensitive, must start with a letter or underscore, may contain letters, digits or underscores, and must not exceed 63 characters
 }
 
 // TestFlagUsage is a basic test to make sure the fragile

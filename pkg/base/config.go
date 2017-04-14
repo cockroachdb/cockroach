@@ -142,7 +142,7 @@ func (cfg *Config) hasOldCertsFlags() bool {
 }
 
 func didYouMeanInsecureError(err error) error {
-	return fmt.Errorf("problem using security settings: %v, did you mean to use --insecure?", err)
+	return errors.Wrap(err, "problem using security settings, did you mean to use --insecure?")
 }
 
 // InitDefaults sets up the default values for a config.
@@ -173,8 +173,11 @@ func (cfg *Config) AdminURL() string {
 // GetClientCertPaths returns the paths to the client cert and key.
 func (cfg *Config) GetClientCertPaths(user string) (string, string, error) {
 	if cfg.hasOldCertsFlags() {
-		if cfg.SSLCert == "" || cfg.SSLCertKey == "" {
-			return "", "", errors.New("client certificates use requires both --cert and --key")
+		if cfg.SSLCert == "" {
+			return "", "", errors.New("some certificate flags specified, but --cert is empty")
+		}
+		if cfg.SSLCertKey == "" {
+			return "", "", errors.New("some certificate flags specified, but --key is empty")
 		}
 		return cfg.SSLCert, cfg.SSLCertKey, nil
 	}
