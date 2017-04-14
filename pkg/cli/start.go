@@ -507,8 +507,7 @@ func runStart(cmd *cobra.Command, args []string) error {
 	select {
 	case sig := <-signalCh:
 		returnErr = fmt.Errorf("received signal '%s' during shutdown, initiating hard shutdown", sig)
-		log.Errorf(shutdownCtx, "%v", returnErr)
-		fmt.Fprintln(os.Stdout, returnErr)
+		log.Shoutf(shutdownCtx, log.Severity_ERROR, "%v", returnErr)
 		// This new signal is not welcome, as it interferes with the graceful
 		// shutdown process. On Unix, a signal that was not handled gracefully by
 		// the application should be visible to other processes as an exit code
@@ -519,8 +518,7 @@ func runStart(cmd *cobra.Command, args []string) error {
 		// NB: we do not return here to go through log.Flush below.
 	case <-time.After(time.Minute):
 		returnErr = errors.New("time limit reached, initiating hard shutdown")
-		log.Errorf(shutdownCtx, "%v", returnErr)
-		fmt.Fprintln(os.Stdout, returnErr)
+		log.Shoutf(shutdownCtx, log.Severity_ERROR, "%v", returnErr)
 		// NB: we do not return here to go through log.Flush below.
 	case <-stopper.IsStopped():
 		const msgDone = "server drained and shutdown completed"
