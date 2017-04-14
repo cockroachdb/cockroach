@@ -1311,7 +1311,35 @@ func MVCCInitPut(
 ) error {
 	iter := engine.NewIterator(true)
 	defer iter.Close()
+	return mvccInitPutUsingIter(ctx, engine, iter, ms, key, timestamp, value, txn)
+}
 
+// MVCCBlindInitPut is a fast-path of MVCCInitPut. See the MVCCInitPut
+// comments for details of the semantics. MVCCBlindInitPut skips
+// retrieving the existing metadata for the key requiring the caller
+// to gauarntee no version for the key currently exist.
+func MVCCBlindInitPut(
+	ctx context.Context,
+	engine ReadWriter,
+	ms *enginepb.MVCCStats,
+	key roachpb.Key,
+	timestamp hlc.Timestamp,
+	value roachpb.Value,
+	txn *roachpb.Transaction,
+) error {
+	return mvccInitPutUsingIter(ctx, engine, nil, ms, key, timestamp, value, txn)
+}
+
+func mvccInitPutUsingIter(
+	ctx context.Context,
+	engine ReadWriter,
+	iter Iterator,
+	ms *enginepb.MVCCStats,
+	key roachpb.Key,
+	timestamp hlc.Timestamp,
+	value roachpb.Value,
+	txn *roachpb.Transaction,
+) error {
 	err := mvccPutUsingIter(ctx, engine, iter, ms, key, timestamp, noValue, txn,
 		func(existVal *roachpb.Value) ([]byte, error) {
 			if existVal != nil {
