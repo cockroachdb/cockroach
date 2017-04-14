@@ -339,68 +339,16 @@ func runStart(cmd *cobra.Command, args []string) error {
 		serverCfg.Stores.Specs[i].Path = absPath
 	}
 
-	// Default the log directory to the "logs" subdirectory of the first
-	// non-memory store. We only do this for the "start" command which is why
-	// this work occurs here and not in an OnInitialize function.
-	//
-	// It is important that no logging occurs before this point or the log files
-	// will be created in $TMPDIR instead of their expected location.
-	pf := cockroachCmd.PersistentFlags()
-	f := pf.Lookup(logflags.LogDirName)
-	if !log.DirSet() && !f.Changed {
-		// We only override the log directory if the user has not explicitly
-		// disabled file logging using --log-dir="".
-		for _, spec := range serverCfg.Stores.Specs {
-			if spec.InMemory {
-				continue
-			}
-			if err := f.Value.Set(filepath.Join(spec.Path, "logs")); err != nil {
-				return err
-			}
-			break
-		}
-	}
-
-	// We need an output directory below. We use the current directory unless
-	// the log directory is configured, in which case we use that.
-	outputDirectory := "."
-	if logDir := f.Value.String(); logDir != "" {
-		outputDirectory = logDir
-
-		ls := pf.Lookup(logflags.LogToStderrName)
-		if !ls.Changed {
-			// Unless the settings were overridden by the user, silence
-			// logging to stderr because the messages will go to a log file.
-			if err := ls.Value.Set(log.Severity_NONE.String()); err != nil {
-				return err
-			}
-		}
-
-		// Make sure the path exists.
-		if err := os.MkdirAll(logDir, 0755); err != nil {
-			return err
-		}
-		log.Eventf(startCtx, "created log directory %s", logDir)
-	}
-
-	// We log build information to stdout (for the short summary), but also
-	// to stderr to coincide with the full logs.
-	info := build.GetInfo()
-	log.Infof(startCtx, info.Short())
-
-	initMemProfile(startCtx, outputDirectory)
-	initCPUProfile(startCtx, outputDirectory)
-	initBlockProfile()
-	log.StartGCDaemon()
-
 	// Default user for servers.
 	serverCfg.User = security.NodeUser
 
-	// Disable Stopper task tracking as performing that call site tracking is
-	// moderately expensive (certainly outweighing the infrequent benefit it
-	// provides).
-	stopper := initBacktrace(outputDirectory, stop.TrackTasks(false))
-	log.Event(startCtx, "initialized profiles")
+	// Set up the logging and profiling output.
+	// It is important that no logging occurs before this point or the log files
+	// will be created in $TMPDIR instead of their expected location.
+	stopper, err := setupAndInitializeLoggingAndProfiling(startCtx)
+	if err != nil {
+		return err
+	}
 
 	// Run the rest of the startup process in the background to avoid preventing
 	// proper handling of signals if we get stuck on something during
@@ -459,6 +407,7 @@ func runStart(cmd *cobra.Command, args []string) error {
 			}
 
 			var buf bytes.Buffer
+			info := build.GetInfo()
 			tw := tabwriter.NewWriter(&buf, 2, 1, 2, ' ', 0)
 			fmt.Fprintf(tw, "CockroachDB node starting at %s\n", timeutil.Now())
 			fmt.Fprintf(tw, "build:\t%s %s @ %s (%s)\n", info.Distribution, info.Tag, info.Time, info.GoVersion)
@@ -558,8 +507,7 @@ func runStart(cmd *cobra.Command, args []string) error {
 	select {
 	case sig := <-signalCh:
 		returnErr = fmt.Errorf("received signal '%s' during shutdown, initiating hard shutdown", sig)
-		log.Errorf(shutdownCtx, "%v", returnErr)
-		fmt.Fprintln(os.Stdout, returnErr)
+		log.Shoutf(shutdownCtx, log.Severity_ERROR, "%v", returnErr)
 		// This new signal is not welcome, as it interferes with the graceful
 		// shutdown process. On Unix, a signal that was not handled gracefully by
 		// the application should be visible to other processes as an exit code
@@ -570,8 +518,7 @@ func runStart(cmd *cobra.Command, args []string) error {
 		// NB: we do not return here to go through log.Flush below.
 	case <-time.After(time.Minute):
 		returnErr = errors.New("time limit reached, initiating hard shutdown")
-		log.Errorf(shutdownCtx, "%v", returnErr)
-		fmt.Fprintln(os.Stdout, returnErr)
+		log.Shoutf(shutdownCtx, log.Severity_ERROR, "%v", returnErr)
 		// NB: we do not return here to go through log.Flush below.
 	case <-stopper.IsStopped():
 		const msgDone = "server drained and shutdown completed"
@@ -581,6 +528,88 @@ func runStart(cmd *cobra.Command, args []string) error {
 	log.Flush()
 
 	return returnErr
+}
+
+// setupAndInitializeLoggingAndProfiling does what it says on the label.
+// Prior to this however it determines suitable defaults for the
+// logging output directory and the verbosity level of stderr logging.
+// We only do this for the "start" command which is why this work
+// occurs here and not in an OnInitialize function.
+func setupAndInitializeLoggingAndProfiling(startCtx context.Context) (*stop.Stopper, error) {
+	// Default the log directory to the "logs" subdirectory of the first
+	// non-memory store. If more than one non-memory stores is detected,
+	// print a warning.
+	ambiguousLogDirs := false
+	pf := cockroachCmd.PersistentFlags()
+	f := pf.Lookup(logflags.LogDirName)
+	if !log.DirSet() && !f.Changed {
+		// We only override the log directory if the user has not explicitly
+		// disabled file logging using --log-dir="".
+		newDir := ""
+		for _, spec := range serverCfg.Stores.Specs {
+			if spec.InMemory {
+				continue
+			}
+			if newDir != "" {
+				ambiguousLogDirs = true
+				break
+			}
+			newDir = filepath.Join(spec.Path, "logs")
+		}
+		if err := f.Value.Set(newDir); err != nil {
+			return nil, err
+		}
+	}
+
+	// We need an output directory below. We use the current directory unless
+	// the log directory is configured, in which case we use that.
+	outputDirectory := "."
+	if logDir := f.Value.String(); logDir != "" {
+		outputDirectory = logDir
+
+		ls := pf.Lookup(logflags.LogToStderrName)
+		if !ls.Changed {
+			// Unless the settings were overridden by the user, silence
+			// logging to stderr because the messages will go to a log file.
+			if err := ls.Value.Set(log.Severity_NONE.String()); err != nil {
+				return nil, err
+			}
+		}
+
+		// Make sure the path exists.
+		if err := os.MkdirAll(logDir, 0755); err != nil {
+			return nil, err
+		}
+		log.Eventf(startCtx, "created log directory %s", logDir)
+
+		// Start the log file GC daemon to remove files that make the log
+		// directory too large.
+		log.StartGCDaemon()
+	}
+
+	if ambiguousLogDirs {
+		// Note that we can't report this message earlier, because the log directory
+		// may not have been ready before the call to MkdirAll() above.
+		log.Shout(startCtx, log.Severity_WARNING, "multiple stores configured"+
+			" and --log-dir not specified, you may want to specify --log-dir to disambiguate.")
+	}
+
+	// We log build information to stdout (for the short summary), but also
+	// to stderr to coincide with the full logs.
+	info := build.GetInfo()
+	log.Infof(startCtx, info.Short())
+
+	initMemProfile(startCtx, outputDirectory)
+	initCPUProfile(startCtx, outputDirectory)
+	initBlockProfile()
+
+	// Disable Stopper task tracking as performing that call site tracking is
+	// moderately expensive (certainly outweighing the infrequent benefit it
+	// provides).
+	stopper := initBacktrace(outputDirectory, stop.TrackTasks(false))
+	log.Event(startCtx, "initialized profiles")
+
+	return stopper, nil
 }
 
 func addrWithDefaultHost(addr string) (string, error) {
