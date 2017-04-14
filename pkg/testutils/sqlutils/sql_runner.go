@@ -49,8 +49,7 @@ func (sr *SQLRunner) Subtest(tb testing.TB) *SQLRunner {
 func (sr *SQLRunner) Exec(query string, args ...interface{}) gosql.Result {
 	r, err := sr.DB.Exec(query, args...)
 	if err != nil {
-		file, line, _ := caller.Lookup(1)
-		sr.Fatalf("%s:%d: error executing '%s': %s", file, line, query, err)
+		sr.queryErr(err, query)
 	}
 	return r
 }
@@ -61,7 +60,7 @@ func (sr *SQLRunner) ExecRowsAffected(expRowsAffected int, query string, args ..
 	r := sr.Exec(query, args...)
 	numRows, err := r.RowsAffected()
 	if err != nil {
-		sr.Fatal(err)
+		sr.queryErr(err, query)
 	}
 	if numRows != int64(expRowsAffected) {
 		sr.Fatalf("expected %d affected rows, got %d on '%s'", expRowsAffected, numRows, query)
@@ -72,9 +71,14 @@ func (sr *SQLRunner) ExecRowsAffected(expRowsAffected int, query string, args ..
 func (sr *SQLRunner) Query(query string, args ...interface{}) *gosql.Rows {
 	r, err := sr.DB.Query(query, args...)
 	if err != nil {
-		sr.Fatalf("error executing '%s': %s", query, err)
+		sr.queryErr(err, query)
 	}
 	return r
+}
+
+func (sr *SQLRunner) queryErr(err error, query string) {
+	file, line, _ := caller.Lookup(2)
+	sr.Fatalf("%s:%d: error executing '%s': %+v", file, line, query, err)
 }
 
 // Row is a wrapper around gosql.Row that kills the test on error.
@@ -96,11 +100,14 @@ func (sr *SQLRunner) QueryRow(query string, args ...interface{}) *Row {
 	return &Row{sr.TB, sr.DB.QueryRow(query, args...)}
 }
 
-// QueryStr runs a Query and converts the result to a string matrix; nulls are
-// represented as "NULL". Empty results are represented by an empty (but
+// QueryResults runs a Query and converts the result to a string matrix; nulls
+// are represented as "NULL". Empty results are represented by an empty (but
 // non-nil) slice. Kills the test on errors.
-func (sr *SQLRunner) QueryStr(query string, args ...interface{}) [][]string {
-	rows := sr.Query(query)
+func (sr *SQLRunner) QueryResults(query string, args ...interface{}) [][]string {
+	rows, err := sr.DB.Query(query, args...)
+	if err != nil {
+		sr.queryErr(err, query)
+	}
 	cols, err := rows.Columns()
 	if err != nil {
 		sr.Fatal(err)
@@ -135,9 +142,27 @@ func (sr *SQLRunner) QueryStr(query string, args ...interface{}) [][]string {
 // CheckQueryResults checks that the rows returned by a query match the expected
 // response.
 func (sr *SQLRunner) CheckQueryResults(query string, expected [][]string) {
-	res := sr.QueryStr(query)
+	res := sr.QueryResults(query)
 	if !reflect.DeepEqual(res, expected) {
 		file, line, _ := caller.Lookup(1)
 		sr.Errorf("%s:%d query '%s': expected:\n%v\ngot:%v\n", file, line, query, expected, res)
 	}
+}
+
+// QueryInt runs a query that returns a single int (or kills test on error).
+func (sr *SQLRunner) QueryInt(query string, args ...interface{}) int64 {
+	var i int64
+	if err := sr.DB.QueryRow(query, args...).Scan(&i); err != nil {
+		sr.queryErr(err, query)
+	}
+	return i
+}
+
+// QueryStr runs a query that returns a single string (or kills test on error).
+func (sr *SQLRunner) QueryStr(query string, args ...interface{}) string {
+	var s string
+	if err := sr.DB.QueryRow(query, args...).Scan(&s); err != nil {
+		sr.queryErr(err, query)
+	}
+	return s
 }
