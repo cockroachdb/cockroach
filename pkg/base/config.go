@@ -297,8 +297,8 @@ func DefaultRetryOptions() retry.Options {
 	// Derive the retry options from a configured or measured
 	// estimate of latency.
 	return retry.Options{
-		InitialBackoff: 10 * time.Millisecond,
+		InitialBackoff: 50 * time.Millisecond,
 		MaxBackoff:     1 * time.Second,
-		Multiplier:     1.5,
+		Multiplier:     2,
 	}
 }

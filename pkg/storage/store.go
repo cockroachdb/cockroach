@@ -607,10 +607,6 @@ type StoreConfig struct {
 	// maintenance queue to dispatch individual maintenance tasks.
 	TimeSeriesDataStore TimeSeriesDataStore
 
-	// RangeRetryOptions are the retry options when retryable errors are
-	// encountered sending commands to ranges.
-	RangeRetryOptions retry.Options
-
 	// DontRetryPushTxnFailures will propagate a push txn failure immediately
 	// instead of utilizing the push txn queue to wait for the transaction to
 	// finish or be pushed by a higher priority contender.
@@ -849,10 +845,6 @@ func (sc *StoreConfig) Valid() bool {
 // suitable for use on a local network.
 // TODO(tschottdorf): see if this ought to be configurable via flags.
 func (sc *StoreConfig) SetDefaults() {
-	if (sc.RangeRetryOptions == retry.Options{}) {
-		sc.RangeRetryOptions = base.DefaultRetryOptions()
-	}
-
 	if sc.RaftTickInterval == 0 {
 		sc.RaftTickInterval = base.DefaultRaftTickInterval
 	}
@@ -2543,33 +2535,11 @@ func (s *Store) Send(
 			})
 		}
 
-		// If this is a push txn request, check the push queue first, which
-		// may cause this request to wait and either return a successful push
-		// txn response or else allow this request to proceed.
-		if ba.IsSinglePushTxnRequest() {
-			pushReq := ba.Requests[0].GetInner().(*roachpb.PushTxnRequest)
-			pushResp, pErr := repl.pushTxnQueue.MaybeWait(repl.AnnotateCtx(ctx), repl, pushReq)
-			// Copy the request in anticipation of setting the force arg and
-			// updating the Now timestamp (see below).
-			pushReqCopy := *pushReq
-			if pErr == errDeadlock {
-				// We've experienced a deadlock; we need to copy the batch request
-				// in order to modify the push txn request to set Force=true.
-				pushReqCopy.Force = true
-			} else if pErr != nil {
-				return nil, pErr
-			} else if pushResp != nil {
-				br = &roachpb.BatchResponse{}
-				br.Add(pushResp)
-				return br, nil
-			}
-			// Move the push timestamp forward to the current time, as this
-			// request may have been waiting to push the txn. If we don't
-			// move the timestamp forward to the current time, we may fail
-			// to push a txn which has expired.
-			pushReqCopy.Now.Forward(s.Clock().Now())
-			ba.Requests = nil
-			ba.Add(&pushReqCopy)
+		// If necessary, the request may need to wait in the push txn queue,
+		// pending updates to the target transaction for either PushTxn or
+		// QueryTxn requests.
+		if br, pErr = s.maybeWaitInPushTxnQueue(ctx, &ba, repl); br != nil || pErr != nil {
+			return br, pErr
 		}
 
 		br, pErr = repl.Send(ctx, ba)
@@ -2648,6 +2618,52 @@ func (s *Store) Send(
 			return nil, pErr
 		}
 	}
+}
+
+// maybeWaitInPushTxnQueue potentially diverts the incoming request to
+// the push txn queue, where it will wait for updates to the target
+// transaction.
+func (s *Store) maybeWaitInPushTxnQueue(
+	ctx context.Context, ba *roachpb.BatchRequest, repl *Replica,
+) (*roachpb.BatchResponse, *roachpb.Error) {
+	// If this is a push txn request, check the push queue first, which
+	// may cause this request to wait and either return a successful push
+	// txn response or else allow this request to proceed.
+	if ba.IsSinglePushTxnRequest() {
+		pushReq := ba.Requests[0].GetInner().(*roachpb.PushTxnRequest)
+		pushResp, pErr := repl.pushTxnQueue.MaybeWaitForPush(repl.AnnotateCtx(ctx), repl, pushReq)
+		// Copy the request in anticipation of setting the force arg and
+		// updating the Now timestamp (see below).
+		pushReqCopy := *pushReq
+		if pErr == errDeadlock {
+			// We've experienced a deadlock; we need to copy the batch request
+			// in order to modify the push txn request to set Force=true.
+			pushReqCopy.Force = true
+		} else if pErr != nil {
+			return nil, pErr
+		} else if pushResp != nil {
+			br := &roachpb.BatchResponse{}
+			br.Add(pushResp)
+			return br, nil
+		}
+		// Move the push timestamp forward to the current time, as this
+		// request may have been waiting to push the txn. If we don't
+		// move the timestamp forward to the current time, we may fail
+		// to push a txn which has expired.
+		pushReqCopy.Now.Forward(s.Clock().Now())
+		ba.Requests = nil
+		ba.Add(&pushReqCopy)
+	} else if ba.IsSingleQueryTxnRequest() {
+		// For query txn requests, wait in the push txn queue either for
+		// transaction update or for dependent transactions to change.
+		queryReq := ba.Requests[0].GetInner().(*roachpb.QueryTxnRequest)
+		pErr := repl.pushTxnQueue.MaybeWaitForQuery(repl.AnnotateCtx(ctx), repl, queryReq)
+		if pErr != nil {
+			return nil, pErr
+		}
+	}
+
+	return nil, nil
 }
 
 // reserveSnapshot throttles incoming snapshots. The returned closure is used

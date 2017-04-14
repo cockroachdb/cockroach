@@ -18,6 +18,7 @@ package storage
 
 import (
 	"bytes"
+	"fmt"
 	"reflect"
 	"sync/atomic"
 	"testing"
@@ -183,7 +184,7 @@ func TestPushTxnQueueEnableDisable(t *testing.T) {
 
 	retCh := make(chan RespWithErr, 1)
 	go func() {
-		resp, pErr := ptq.MaybeWait(context.Background(), tc.repl, &req)
+		resp, pErr := ptq.MaybeWaitForPush(context.Background(), tc.repl, &req)
 		retCh <- RespWithErr{resp, pErr}
 	}()
 
@@ -225,7 +226,7 @@ func TestPushTxnQueueEnableDisable(t *testing.T) {
 	}
 	ptq.mu.Unlock()
 
-	if resp, pErr := ptq.MaybeWait(context.TODO(), tc.repl, &req); resp != nil || pErr != nil {
+	if resp, pErr := ptq.MaybeWaitForPush(context.TODO(), tc.repl, &req); resp != nil || pErr != nil {
 		t.Errorf("expected nil resp and err as queue is disabled; got %+v, %s", resp, pErr)
 	}
 }
@@ -255,7 +256,7 @@ func TestPushTxnQueueCancel(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	retCh := make(chan RespWithErr, 1)
 	go func() {
-		resp, pErr := ptq.MaybeWait(ctx, tc.repl, &req)
+		resp, pErr := ptq.MaybeWaitForPush(ctx, tc.repl, &req)
 		retCh <- RespWithErr{resp, pErr}
 	}()
 
@@ -306,7 +307,7 @@ func TestPushTxnQueueUpdateTxn(t *testing.T) {
 
 	retCh := make(chan RespWithErr, 2)
 	go func() {
-		resp, pErr := ptq.MaybeWait(context.Background(), tc.repl, &req1)
+		resp, pErr := ptq.MaybeWaitForPush(context.Background(), tc.repl, &req1)
 		retCh <- RespWithErr{resp, pErr}
 	}()
 	testutils.SucceedsSoon(t, func() error {
@@ -318,7 +319,7 @@ func TestPushTxnQueueUpdateTxn(t *testing.T) {
 	})
 
 	go func() {
-		resp, pErr := ptq.MaybeWait(context.Background(), tc.repl, &req2)
+		resp, pErr := ptq.MaybeWaitForPush(context.Background(), tc.repl, &req2)
 		retCh <- RespWithErr{resp, pErr}
 	}()
 	testutils.SucceedsSoon(t, func() error {
@@ -336,10 +337,10 @@ func TestPushTxnQueueUpdateTxn(t *testing.T) {
 	for i := 0; i < 2; i++ {
 		respWithErr := <-retCh
 		if respWithErr.resp == nil || respWithErr.resp.PusheeTxn.Status != roachpb.COMMITTED {
-			t.Errorf("expected committed txn response; got %+v", respWithErr.resp)
+			t.Errorf("expected committed txn response; got %+v, err=%v", respWithErr.resp, respWithErr.pErr)
 		}
 		if respWithErr.pErr != nil {
-			t.Errorf("expected nil err; got %+v", respWithErr.pErr)
+			t.Errorf("expected nil err; got err=%v", respWithErr.pErr)
 		}
 	}
 }
@@ -371,7 +372,7 @@ func TestPushTxnQueueUpdateNotPushedTxn(t *testing.T) {
 
 	retCh := make(chan RespWithErr, 1)
 	go func() {
-		resp, pErr := ptq.MaybeWait(context.Background(), tc.repl, &req)
+		resp, pErr := ptq.MaybeWaitForPush(context.Background(), tc.repl, &req)
 		retCh <- RespWithErr{resp, pErr}
 	}()
 
@@ -443,7 +444,7 @@ func TestPushTxnQueuePusheeExpires(t *testing.T) {
 
 	retCh := make(chan RespWithErr, 2)
 	go func() {
-		resp, pErr := ptq.MaybeWait(context.Background(), tc.repl, &req1)
+		resp, pErr := ptq.MaybeWaitForPush(context.Background(), tc.repl, &req1)
 		retCh <- RespWithErr{resp, pErr}
 	}()
 	testutils.SucceedsSoon(t, func() error {
@@ -455,7 +456,7 @@ func TestPushTxnQueuePusheeExpires(t *testing.T) {
 	})
 
 	go func() {
-		resp, pErr := ptq.MaybeWait(context.Background(), tc.repl, &req2)
+		resp, pErr := ptq.MaybeWaitForPush(context.Background(), tc.repl, &req2)
 		retCh <- RespWithErr{resp, pErr}
 	}()
 	testutils.SucceedsSoon(t, func() error {
@@ -476,8 +477,8 @@ func TestPushTxnQueuePusheeExpires(t *testing.T) {
 		}
 	}
 
-	if a, e := atomic.LoadInt32(&queryTxnCount), int32(2); a != e {
-		t.Errorf("expected %d query txns; got %d", e, a)
+	if a, minExpected := atomic.LoadInt32(&queryTxnCount), int32(2); a < minExpected {
+		t.Errorf("expected no fewer than %d query txns; got %d", minExpected, a)
 	}
 }
 
@@ -485,53 +486,74 @@ func TestPushTxnQueuePusheeExpires(t *testing.T) {
 // periodically updated and will notice if the pusher has been aborted.
 func TestPushTxnQueuePusherUpdate(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	tc := testContext{}
-	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
-	tc.Start(t, stopper)
 
-	txn, err := createTxnForPushQueue(context.Background(), &tc)
-	if err != nil {
-		t.Fatal(err)
-	}
-	pusher := newTransaction("pusher", roachpb.Key("a"), 1, enginepb.SERIALIZABLE, tc.Clock())
-	req := roachpb.PushTxnRequest{
-		PushType:  roachpb.PUSH_ABORT,
-		PusherTxn: *pusher,
-		PusheeTxn: txn.TxnMeta,
-	}
+	for _, txnRecordExists := range []bool{true, false} {
+		t.Run(fmt.Sprintf("record-exists=%t", txnRecordExists), func(t *testing.T) {
+			tc := testContext{}
+			stopper := stop.NewStopper()
+			defer stopper.Stop(context.TODO())
+			tc.Start(t, stopper)
 
-	ptq := tc.repl.pushTxnQueue
-	ptq.Enable()
-	ptq.Enqueue(txn)
+			txn, err := createTxnForPushQueue(context.Background(), &tc)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var pusher *roachpb.Transaction
+			if txnRecordExists {
+				pusher, err = createTxnForPushQueue(context.Background(), &tc)
+				if err != nil {
+					t.Fatal(err)
+				}
+			} else {
+				pusher = newTransaction("pusher", roachpb.Key("a"), 1, enginepb.SERIALIZABLE, tc.Clock())
+			}
 
-	retCh := make(chan RespWithErr, 1)
-	go func() {
-		resp, pErr := ptq.MaybeWait(context.Background(), tc.repl, &req)
-		retCh <- RespWithErr{resp, pErr}
-	}()
+			req := roachpb.PushTxnRequest{
+				PushType:  roachpb.PUSH_ABORT,
+				PusherTxn: *pusher,
+				PusheeTxn: txn.TxnMeta,
+			}
 
-	testutils.SucceedsSoon(t, func() error {
-		expDeps := []uuid.UUID{*pusher.ID}
-		if deps := ptq.GetDependents(*txn.ID); !reflect.DeepEqual(deps, expDeps) {
-			return errors.Errorf("expected GetDependents %+v; got %+v", expDeps, deps)
-		}
-		return nil
-	})
+			ptq := tc.repl.pushTxnQueue
+			ptq.Enable()
+			ptq.Enqueue(txn)
 
-	// Update txn on disk with status ABORTED.
-	pusherUpdate := *pusher
-	pusherUpdate.Status = roachpb.ABORTED
-	if err := writeTxnRecord(context.Background(), &tc, &pusherUpdate); err != nil {
-		t.Fatal(err)
-	}
+			retCh := make(chan RespWithErr, 1)
+			go func() {
+				resp, pErr := ptq.MaybeWaitForPush(context.Background(), tc.repl, &req)
+				retCh <- RespWithErr{resp, pErr}
+			}()
 
-	respWithErr := <-retCh
-	if respWithErr.resp != nil {
-		t.Errorf("expected nil response; got %+v", respWithErr.resp)
-	}
-	if !testutils.IsPError(respWithErr.pErr, "txn aborted") {
-		t.Errorf("expected transaction aborted error; got %v", respWithErr.pErr)
+			testutils.SucceedsSoon(t, func() error {
+				expDeps := []uuid.UUID{*pusher.ID}
+				if deps := ptq.GetDependents(*txn.ID); !reflect.DeepEqual(deps, expDeps) {
+					return errors.Errorf("expected GetDependents %+v; got %+v", expDeps, deps)
+				}
+				return nil
+			})
+
+			// If the record doesn't exist yet, give the push queue enough
+			// time to query the missing record and notice.
+			if !txnRecordExists {
+				time.Sleep(10 * time.Millisecond)
+			}
+
+			// Update txn on disk with status ABORTED.
+			pusherUpdate := *pusher
+			pusherUpdate.Status = roachpb.ABORTED
+			if err := writeTxnRecord(context.Background(), &tc, &pusherUpdate); err != nil {
+				t.Fatal(err)
+			}
+			ptq.UpdateTxn(&pusherUpdate)
+
+			respWithErr := <-retCh
+			if respWithErr.resp != nil {
+				t.Errorf("expected nil response; got %+v", respWithErr.resp)
+			}
+			if !testutils.IsPError(respWithErr.pErr, "txn aborted") {
+				t.Errorf("expected transaction aborted error; got %v", respWithErr.pErr)
+			}
+		})
 	}
 }
 
@@ -585,7 +607,7 @@ func TestPushTxnQueueDependencyCycle(t *testing.T) {
 	retCh := make(chan RespWithErr, 3)
 	for _, req := range []*roachpb.PushTxnRequest{reqA, reqB, reqC} {
 		go func(req *roachpb.PushTxnRequest) {
-			resp, pErr := ptq.MaybeWait(ctx, tc.repl, req)
+			resp, pErr := ptq.MaybeWaitForPush(ctx, tc.repl, req)
 			retCh <- RespWithErr{resp, pErr}
 		}(req)
 	}
@@ -661,7 +683,7 @@ func TestPushTxnQueueDependencyCycleWithPriorityInversion(t *testing.T) {
 	retCh := make(chan ReqWithErr, 2)
 	for _, req := range []*roachpb.PushTxnRequest{reqA, reqB} {
 		go func(req *roachpb.PushTxnRequest) {
-			_, pErr := ptq.MaybeWait(ctx, tc.repl, req)
+			_, pErr := ptq.MaybeWaitForPush(ctx, tc.repl, req)
 			retCh <- ReqWithErr{req, pErr}
 		}(req)
 	}
