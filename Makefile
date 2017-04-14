@@ -132,7 +132,7 @@ testrace: override GOFLAGS += -race
 testrace: export GORACE := halt_on_error=1
 testrace: TESTTIMEOUT := $(RACETIMEOUT)
 
-bin/sql.test: main.go $(shell find pkg -type f -name "*.go")
+bin/sql.test: $(shell git ls-files '*.go')
 	$(GO) test $(GOFLAGS) -c -o bin/sql.test -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' ./pkg/sql
 
 bench: BENCHES := .
