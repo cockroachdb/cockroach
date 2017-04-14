@@ -755,9 +755,7 @@ func (u *sqlSymUnion) kvOptions() []KVOption {
 %nonassoc  UNBOUNDED         // ideally should have same precedence as IDENT
 %nonassoc  IDENT NULL PARTITION RANGE ROWS PRECEDING FOLLOWING CUBE ROLLUP
 %left      CONCAT       // multi-character ops
-%left      '|'
-%left      '#'
-%left      '&'
+%left      '&' '|' '#'
 %left      LSHIFT RSHIFT
 %left      '+' '-'
 %left      '*' '/' FLOORDIV '%'
