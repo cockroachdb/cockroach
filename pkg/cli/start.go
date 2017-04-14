@@ -531,25 +531,32 @@ func runStart(cmd *cobra.Command, args []string) error {
 }
 
 // setupAndInitializeLoggingAndProfiling does what it says on the label.
-// Prior to this however it determines suitable defaults for the logging output
-// directory and the verbosity level of stderr logging.
+// Prior to this however it determines suitable defaults for the
+// logging output directory and the verbosity level of stderr logging.
+// We only do this for the "start" command which is why this work
+// occurs here and not in an OnInitialize function.
 func setupAndInitializeLoggingAndProfiling(startCtx context.Context) (*stop.Stopper, error) {
 	// Default the log directory to the "logs" subdirectory of the first
-	// non-memory store. We only do this for the "start" command which is why
-	// this work occurs here and not in an OnInitialize function.
+	// non-memory store. If more than one non-memory stores is detected,
+	// print a warning.
+	ambiguousLogDirs := false
 	pf := cockroachCmd.PersistentFlags()
 	f := pf.Lookup(logflags.LogDirName)
 	if !log.DirSet() && !f.Changed {
 		// We only override the log directory if the user has not explicitly
 		// disabled file logging using --log-dir="".
+		newDir := ""
 		for _, spec := range serverCfg.Stores.Specs {
 			if spec.InMemory {
 				continue
 			}
-			if err := f.Value.Set(filepath.Join(spec.Path, "logs")); err != nil {
-				return nil, err
+			if newDir != "" {
+				ambiguousLogDirs = true
 			}
-			break
+			newDir = filepath.Join(spec.Path, "logs")
+		}
+		if err := f.Value.Set(newDir); err != nil {
+			return nil, err
 		}
 	}
 
@@ -577,6 +584,11 @@ func setupAndInitializeLoggingAndProfiling(startCtx context.Context) (*stop.Stop
 		// Start the log file GC daemon to remove files that make the log
 		// directory too large.
 		log.StartGCDaemon()
+	}
+
+	if ambiguousLogDirs {
+		log.Shout(startCtx, log.Severity_WARNING, "multiple stores configured"+
+			" and --log-dir not specified, you may want to specify --log-dir to disambiguate.")
 	}
 
 	// We log build information to stdout (for the short summary), but also
