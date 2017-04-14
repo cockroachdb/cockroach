@@ -49,23 +49,17 @@ var defaultAssetLoader = AssetLoader{
 	Stat:     os.Stat,
 }
 
-// readFileFn is used to mock out file system access during tests.
-// TODO(marc): remove once the transition to the certificate_loader is complete.
-var readFileFn = ioutil.ReadFile
-
 // assetLoaderImpl is used to list/read/stat security assets.
 var assetLoaderImpl = defaultAssetLoader
 
 // SetAssetLoader overrides the asset loader with the passed-in one.
 func SetAssetLoader(al AssetLoader) {
 	assetLoaderImpl = al
-	readFileFn = al.ReadFile
 }
 
 // ResetAssetLoader restores the asset loader to the default value.
 func ResetAssetLoader() {
 	assetLoaderImpl = defaultAssetLoader
-	readFileFn = defaultAssetLoader.ReadFile
 }
 
 type pemUsage uint32
