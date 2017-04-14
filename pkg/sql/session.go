@@ -292,7 +292,11 @@ func NewSession(
 	return s
 }
 
-// Finish releases resources held by the Session.
+// Finish releases resources held by the Session. It is called by the Session's
+// main goroutine, so no synchronous queries will be in-flight during the
+// method's execution. However, it could be called when asynchronous queries are
+// operating in the background in the case of parallelized statements, which
+// is why we make sure to drain background statements.
 func (s *Session) Finish(e *Executor) {
 	if s.mon == (mon.MemoryMonitor{}) {
 		// This check won't catch the cases where Finish is never called, but it's
@@ -301,6 +305,20 @@ func (s *Session) Finish(e *Executor) {
 		panic("session.Finish: session monitors were never initialized. Missing call " +
 			"to session.StartMonitor?")
 	}
+
+	// Make sure that no statements remain in the PipelineQueue. If no statements
+	// are in the queue, this will be a no-op. If there are statements in the
+	// queue, they would have eventually drained on their own, but if we don't
+	// wait here, we risk alarming the MemoryMonitor. We ignore the error because
+	// it will only ever be non-nil if there are statements in the queue, meaning
+	// that the Session was abandoned in the middle of a transaction, in which
+	// case the error doesn't matter.
+	//
+	// TODO(nvanbenschoten): Once we have better support for cancelling ongoing
+	// statement execution by the infrastructure added to support CancelRequest,
+	// we should try to actively drain this queue instead of passively waiting
+	// for it to drain.
+	_ = s.pipelineQueue.Wait()
 
 	// If we're inside a txn, roll it back.
 	if s.TxnState.State.kvTxnIsOpen() {
