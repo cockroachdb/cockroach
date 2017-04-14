@@ -22,7 +22,6 @@ import (
 	"math"
 	"math/rand"
 	"reflect"
-	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -1116,104 +1115,6 @@ func TestSplitSnapshotRace_SnapshotWins(t *testing.T) {
 		}
 		mtc.waitForValues(rightKey, []int64{0, 0, 0, 225, 225, 225})
 	})
-}
-
-// TestStoreSplitTimestampCacheReadRace prevents regression of #3148. It begins
-// a couple of read requests and lets them complete while a split is happening;
-// the reads hit the right half of the split. If the split happens
-// non-atomically with respect to the reads (and in particular their update of
-// the timestamp cache), then some of them may not be reflected in the
-// timestamp cache of the new range, in which case this test would fail.
-func TestStoreSplitTimestampCacheReadRace(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	if storage.ProposerEvaluatedKVEnabled() {
-		// In propEvalKV, reads and splits are prohibited from overlapping
-		// by the command queue, so this test cannot simulate the race in
-		// the way that it used to.
-		// TODO(bdarnell): undo this if RangeDescriptorKey is changed to a
-		// special case that permits this concurrency again.
-		t.Skip("incompatible with propEvalKV")
-	}
-
-	splitKey := roachpb.Key("a")
-	key := func(i int) roachpb.Key {
-		splitCopy := append([]byte(nil), splitKey.Next()...)
-		return append(splitCopy, []byte(fmt.Sprintf("%03d", i))...)
-	}
-
-	var getStarted sync.WaitGroup
-	storeCfg := storage.TestStoreConfig(nil)
-	storeCfg.TestingKnobs.DisableSplitQueue = true
-	storeCfg.TestingKnobs.TestingEvalFilter =
-		func(filterArgs storagebase.FilterArgs) *roachpb.Error {
-			if et, ok := filterArgs.Req.(*roachpb.EndTransactionRequest); ok {
-				st := et.InternalCommitTrigger.GetSplitTrigger()
-				if st == nil || !st.LeftDesc.EndKey.Equal(splitKey) {
-					return nil
-				}
-			} else if filterArgs.Req.Method() == roachpb.Get &&
-				bytes.HasPrefix(filterArgs.Req.Header().Key, splitKey.Next()) {
-				getStarted.Done()
-			}
-			return nil
-		}
-	stopper := stop.NewStopper()
-	defer stopper.Stop()
-	store := createTestStoreWithConfig(t, stopper, storeCfg)
-
-	now := store.Clock().Now()
-
-	ts := func(i int) hlc.Timestamp {
-		return now.Add(0, int32(1000+i))
-	}
-
-	const num = 10
-
-	errChan := make(chan *roachpb.Error)
-	for i := 0; i < num; i++ {
-		getStarted.Add(1)
-		go func(i int) {
-			args := getArgs(key(i))
-			var h roachpb.Header
-			h.Timestamp = ts(i)
-			_, pErr := client.SendWrappedWith(context.Background(), rg1(store), h, args)
-			errChan <- pErr
-		}(i)
-	}
-
-	getStarted.Wait()
-
-	func() {
-		args := adminSplitArgs(roachpb.KeyMin, splitKey)
-		if _, pErr := client.SendWrapped(context.Background(), rg1(store), args); pErr != nil {
-			t.Fatal(pErr)
-		}
-	}()
-
-	for i := 0; i < num; i++ {
-		if pErr := <-errChan; pErr != nil {
-			t.Fatal(pErr)
-		}
-	}
-
-	for i := 0; i < num; i++ {
-		var h roachpb.Header
-		h.Timestamp = now
-		args := putArgs(key(i), []byte("foo"))
-		keyAddr, err := keys.Addr(args.Key)
-		if err != nil {
-			t.Fatal(err)
-		}
-		h.RangeID = store.LookupReplica(keyAddr, nil).RangeID
-		_, respH, pErr := storage.SendWrapped(context.Background(), store, h, args)
-		if pErr != nil {
-			t.Fatal(pErr)
-		}
-		if respH.Timestamp.Less(ts(i)) {
-			t.Fatalf("%d: expected Put to be forced higher than %s by timestamp caches, but wrote at %s", i, ts(i), respH.Timestamp)
-		}
-	}
 }
 
 // TestStoreSplitTimestampCacheDifferentLeaseHolder prevents regression of

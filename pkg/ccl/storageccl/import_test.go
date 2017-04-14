@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -113,9 +112,6 @@ func clientKVsToEngineKVs(kvs []client.KeyValue) []engine.MVCCKeyValue {
 
 func TestImport(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	if !storage.ProposerEvaluatedKVEnabled() {
-		t.Skip("command WriteBatch is not allowed without proposer evaluated KV")
-	}
 
 	dir, dirCleanupFn := testutils.TempDir(t)
 	defer dirCleanupFn()

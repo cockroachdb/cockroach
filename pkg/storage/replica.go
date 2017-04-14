@@ -96,15 +96,6 @@ var tickQuiesced = envutil.EnvOrDefaultBool("COCKROACH_TICK_QUIESCED", true)
 // degradation see on test clusters.
 var syncRaftLog = envutil.EnvOrDefaultBool("COCKROACH_SYNC_RAFT_LOG", false)
 
-// Whether to enable experimental support for proposer-evaluated KV.
-var propEvalKV = envutil.EnvOrDefaultBool("COCKROACH_PROPOSER_EVALUATED_KV", true)
-
-// ProposerEvaluatedKVEnabled returns whether experimental support for
-// proposer-evaluated KV is enabled.
-func ProposerEvaluatedKVEnabled() bool {
-	return propEvalKV
-}
-
 // raftInitialLog{Index,Term} are the starting points for the raft log. We
 // bootstrap the raft membership by synthesizing a snapshot as if there were
 // some discarded prefix to the log, so we must begin the log at an arbitrary
@@ -2345,10 +2336,9 @@ func (r *Replica) tryExecuteWriteBatch(
 	}
 }
 
-// requestToProposal converts a BatchRequest into a ProposalData,
-// evalutating it or not according to the propEvalKV setting. The
-// returned ProposalData is partially valid even on a non-nil
-// *roachpb.Error.
+// requestToProposal converts a BatchRequest into a ProposalData, by
+// evalutating it. The returned ProposalData is partially valid even
+// on a non-nil *roachpb.Error.
 func (r *Replica) requestToProposal(
 	ctx context.Context,
 	idKey storagebase.CmdIDKey,
@@ -2364,27 +2354,21 @@ func (r *Replica) requestToProposal(
 		Request: &ba,
 	}
 	var pErr *roachpb.Error
-	if propEvalKV {
-		var result *EvalResult
-		// TODO(bdarnell): provide an option to disable spanSet validation
-		// (i.e. pass nil instead of `spans` here) once we're confident our coverage
-		// is good.
-		result, pErr = r.evaluateProposal(ctx, idKey, ba, spans)
-		// Fill out the local results even if pErr != nil; we'll return the error below.
-		proposal.Local = &result.Local
-		proposal.command = storagebase.RaftCommand{
-			ReplicatedEvalResult: &result.Replicated,
-			WriteBatch:           result.WriteBatch,
-		}
-		if r.store.TestingKnobs().TestingEvalFilter != nil {
-			// For backwards compatibility, tests that use TestingEvalFilter
-			// need the original request to be preserved. See #10493
-			proposal.command.BatchRequest = &ba
-		}
-	} else {
-		proposal.command = storagebase.RaftCommand{
-			BatchRequest: &ba,
-		}
+	var result *EvalResult
+	// TODO(bdarnell): provide an option to disable spanSet validation
+	// (i.e. pass nil instead of `spans` here) once we're confident our coverage
+	// is good.
+	result, pErr = r.evaluateProposal(ctx, idKey, ba, spans)
+	// Fill out the local results even if pErr != nil; we'll return the error below.
+	proposal.Local = &result.Local
+	proposal.command = storagebase.RaftCommand{
+		ReplicatedEvalResult: &result.Replicated,
+		WriteBatch:           result.WriteBatch,
+	}
+	if r.store.TestingKnobs().TestingEvalFilter != nil {
+		// For backwards compatibility, tests that use TestingEvalFilter
+		// need the original request to be preserved. See #10493
+		proposal.command.BatchRequest = &ba
 	}
 	return proposal, pErr
 }
