@@ -27,6 +27,7 @@ import "gogoproto/gogo.proto";
 // Span is supplied with every storage node request.
 message Span {
   option (gogoproto.populate) = true;
+  option (gogoproto.goproto_stringer) = false;
 
   // The key for request. If the request operates on a range, this
   // represents the starting key for the range.

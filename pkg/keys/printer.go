@@ -597,6 +597,7 @@ outer:
 
 func init() {
 	roachpb.PrettyPrintKey = PrettyPrint
+	roachpb.PrettyPrintRange = PrettyPrintRange
 }
 
 // MassagePrettyPrintedSpanForTest does some transformations on pretty-printed spans and keys:

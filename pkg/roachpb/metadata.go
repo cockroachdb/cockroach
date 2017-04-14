@@ -18,7 +18,9 @@
 package roachpb
 
 import (
+	"bytes"
 	"fmt"
+	"math"
 	"sort"
 	"strconv"
 	"strings"
@@ -169,6 +171,33 @@ func (r RangeDescriptor) Validate() error {
 		}
 	}
 	return nil
+}
+
+func (r RangeDescriptor) String() string {
+	var buf bytes.Buffer
+	fmt.Fprintf(&buf, "r%d:", r.RangeID)
+
+	if !r.IsInitialized() {
+		buf.WriteString("{-}")
+	} else {
+		const maxRangeChars = math.MaxInt32
+		PrettyPrintRange(&buf, Key(r.StartKey), Key(r.EndKey), maxRangeChars)
+	}
+	buf.WriteString(" [")
+
+	for i, rep := range r.Replicas {
+		if i > 0 {
+			buf.WriteString(", ")
+		}
+		fmt.Fprintf(&buf, "r%d(n%d,s%d)", rep.ReplicaID, rep.NodeID, rep.StoreID)
+	}
+	if len(r.Replicas) > 0 {
+		fmt.Fprintf(&buf, ", next=%d]", r.NextReplicaID)
+	} else {
+		buf.WriteString("<no replicas>]")
+	}
+
+	return buf.String()
 }
 
 // Validate performs some basic validation of the contents of a replica descriptor.

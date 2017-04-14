@@ -54,9 +54,15 @@ var (
 	// KeyMax is a maximum key value which sorts after all other keys.
 	KeyMax = Key(RKeyMax)
 
-	// PrettyPrintKey is a function to print key with human readable format
-	// it's implement at package git.com/cockroachdb/cockroach/keys to avoid package circle import
+	// PrettyPrintKey prints a key in human readable format. It's
+	// implemented in package git.com/cockroachdb/cockroach/keys to avoid
+	// package circle import.
 	PrettyPrintKey func(key Key) string
+
+	// PrettyPrintRange prints a key range in human readable format. It's
+	// implemented in package git.com/cockroachdb/cockroach/keys to avoid
+	// package circle import.
+	PrettyPrintRange func(b *bytes.Buffer, start, end Key, maxChars int)
 )
 
 // RKey denotes a Key whose local addressing has been accounted for.
@@ -1079,6 +1085,13 @@ func (s Span) AsRange() interval.Range {
 	}
 }
 
+func (s Span) String() string {
+	var buf bytes.Buffer
+	const maxChars = math.MaxInt32
+	PrettyPrintRange(&buf, s.Key, s.EndKey, maxChars)
+	return buf.String()
+}
+
 // Spans is a slice of spans.
 type Spans []Span
 
@@ -1122,6 +1135,13 @@ func (rs RSpan) ContainsKeyRange(start, end RKey) bool {
 		return rs.ContainsKey(start)
 	}
 	return bytes.Compare(start, rs.Key) >= 0 && bytes.Compare(rs.EndKey, end) >= 0
+}
+
+func (rs RSpan) String() string {
+	var buf bytes.Buffer
+	const maxChars = math.MaxInt32
+	PrettyPrintRange(&buf, Key(rs.Key), Key(rs.EndKey), maxChars)
+	return buf.String()
 }
 
 // Intersect returns the intersection of the current span and the
