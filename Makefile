@@ -132,19 +132,23 @@ testrace: override GOFLAGS += -race
 testrace: export GORACE := halt_on_error=1
 testrace: TESTTIMEOUT := $(RACETIMEOUT)
 
-# Run make testlogic to run all of the logic tests. Specify test files to run
-# with make testlogic FILES="foo bar".
-testlogic: PKG := ./pkg/sql
-testlogic: TESTS := $(if $(FILES),TestLogic$$//^$(subst $(space),$$|^,$(FILES))$$,TestLogic)
-testlogic: TESTFLAGS := -v $(if $(FILES),-show-sql)
+bin/sql.test: main.go $(shell find pkg -type f -name "*.go")
+	$(GO) test $(GOFLAGS) -c -o bin/sql.test -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' ./pkg/sql
 
 bench: BENCHES := .
 bench: TESTS := -
 bench: TESTTIMEOUT := $(BENCHTIMEOUT)
 
 .PHONY: test testshort testrace testlogic bench
-test testshort testrace testlogic bench: gotestdashi
+test testshort testrace bench: gotestdashi
 	$(GO) test $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -run "$(TESTS)" $(if $(BENCHES),-bench "$(BENCHES)") -timeout $(TESTTIMEOUT) $(PKG) $(TESTFLAGS)
+
+# Run make testlogic to run all of the logic tests. Specify test files to run
+# with make testlogic FILES="foo bar".
+testlogic: TESTS := $(if $(FILES),TestLogic$$//^$(subst $(space),$$|^,$(FILES))$$,TestLogic)
+testlogic: TESTFLAGS := -test.v $(if $(FILES),-show-sql)
+testlogic: bin/sql.test
+	cd pkg/sql && sql.test -test.run "$(TESTS)" -test.timeout $(TESTTIMEOUT) $(TESTFLAGS)
 
 testraceslow: override GOFLAGS += -race
 testraceslow: TESTTIMEOUT := $(RACETIMEOUT)
