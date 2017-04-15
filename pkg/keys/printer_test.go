@@ -180,6 +180,8 @@ func TestPrettyPrint(t *testing.T) {
 }
 
 func TestPrettyPrintRange(t *testing.T) {
+	key := makeKey([]byte("a"))
+	key2 := makeKey([]byte("z"))
 	tableKey := makeKey(MakeTablePrefix(61), encoding.EncodeVarintAscending(nil, 4))
 	tableKey2 := makeKey(MakeTablePrefix(61), encoding.EncodeVarintAscending(nil, 500))
 
@@ -188,6 +190,7 @@ func TestPrettyPrintRange(t *testing.T) {
 		maxChars   int
 		expected   string
 	}{
+		{key, key2, 20, "{a-z}"},
 		{MinKey, tableKey, 8, "/{M…-T…}"},
 		{MinKey, tableKey, 15, "/{Min-Tabl…}"},
 		{MinKey, tableKey, 20, "/{Min-Table/6…}"},
@@ -201,9 +204,8 @@ func TestPrettyPrintRange(t *testing.T) {
 	}
 
 	for i, tc := range testCases {
-		var buf bytes.Buffer
-		PrettyPrintRange(&buf, tc.start, tc.end, tc.maxChars)
-		if str := buf.String(); str != tc.expected {
+		str := PrettyPrintRange(tc.start, tc.end, tc.maxChars)
+		if str != tc.expected {
 			t.Errorf("%d: expected \"%s\", got \"%s\"", i, tc.expected, str)
 		}
 	}
