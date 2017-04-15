@@ -67,6 +67,9 @@ message ReplicaIdent {
 // A range is described using an inclusive start key, a non-inclusive end key,
 // and a list of replicas where the range is stored.
 message RangeDescriptor {
+  // We implement our own String() so we can pretty-print the keys.
+  option (gogoproto.goproto_stringer) = false;
+
   optional int64 range_id = 1 [(gogoproto.nullable) = false,
       (gogoproto.customname) = "RangeID", (gogoproto.casttype) = "RangeID"];
   // start_key is the first key which may be contained by this range.
