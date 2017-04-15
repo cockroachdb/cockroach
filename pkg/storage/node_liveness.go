@@ -330,6 +330,7 @@ func (nl *NodeLiveness) heartbeatInternal(
 		return errSkippedHeartbeat
 	}); err != nil {
 		if err == errNodeAlreadyLive {
+			nl.metrics.HeartbeatSuccesses.Inc(1)
 			return nil
 		}
 		nl.metrics.HeartbeatFailures.Inc(1)
