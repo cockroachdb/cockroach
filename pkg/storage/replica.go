@@ -2249,26 +2249,16 @@ func (r *Replica) tryExecuteWriteBatch(
 		if bumped, pErr := r.applyTimestampCache(&ba); pErr != nil {
 			return nil, pErr, proposalNoRetry
 		} else if bumped {
-			// There is brittleness built into this system. If we bump the
-			// transaction's timestamp, we must absolutely tell the client in
-			// a response transaction (for otherwise it doesn't know about the
-			// incremented timestamp; it might commit with the old one, which
-			// either resolves intents to a lower timestamp than they were
-			// written at, or discards them; whatever it would be in practice,
-			// there's no way to do "the right thing" at that point).
-			// Response transactions are set far away from this code, but at
-			// the time of writing, they always seem to be set. Since that is
-			// a likely target of future micro-optimization, this assertion
-			// is likely to avoid a future correctness anomaly.
+			// If we bump the transaction's timestamp, we must absolutely
+			// tell the client in a response transaction (for otherwise it
+			// doesn't know about the incremented timestamp). Response
+			// transactions are set far away from this code, but at the time
+			// of writing, they always seem to be set. Since that is a
+			// likely target of future micro-optimization, this assertion is
+			// meant to protect against future correctness anomalies.
 			defer func() {
 				if br != nil && ba.Txn != nil && br.Txn == nil {
-					txn := ba.Txn.Clone()
-					br.Txn = &txn
-					// TODO(tschottdorf): this actually fails in tests during
-					// AdminSplit transactions. Very bad.
-					//
-					// See #10401.
-					log.Warningf(ctx, "assertion failed: transaction updated by "+
+					log.Fatalf(ctx, "assertion failed: transaction updated by "+
 						"timestamp cache, but transaction returned in response; "+
 						"updated timestamp would have been lost (recovered): "+
 						"%s in batch %s", ba.Txn, ba,
