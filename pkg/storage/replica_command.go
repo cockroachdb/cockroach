@@ -324,6 +324,18 @@ func evalInitPut(
 	args := cArgs.Args.(*roachpb.InitPutRequest)
 	h := cArgs.Header
 
+	if h.DistinctSpans {
+		if b, ok := batch.(engine.Batch); ok {
+			// Use the distinct batch for both blind and normal ops so that we don't
+			// accidentally flush mutations to make them visible to the distinct
+			// batch.
+			batch = b.Distinct()
+			defer batch.Close()
+		}
+	}
+	if args.Blind {
+		return EvalResult{}, engine.MVCCBlindInitPut(ctx, batch, cArgs.Stats, args.Key, h.Timestamp, args.Value, h.Txn)
+	}
 	return EvalResult{}, engine.MVCCInitPut(ctx, batch, cArgs.Stats, args.Key, h.Timestamp, args.Value, h.Txn)
 }
 
