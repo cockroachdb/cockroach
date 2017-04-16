@@ -2521,7 +2521,7 @@ func (s *Store) Send(
 		// txn response or else allow this request to proceed.
 		if ba.IsSinglePushTxnRequest() {
 			pushReq := ba.Requests[0].GetInner().(*roachpb.PushTxnRequest)
-			pushResp, pErr := repl.pushTxnQueue.MaybeWait(ctx, pushReq)
+			pushResp, pErr := repl.pushTxnQueue.MaybeWait(repl.AnnotateCtx(ctx), pushReq)
 			// Copy the request in anticipation of setting the force arg and
 			// updating the Now timestamp (see below).
 			pushReqCopy := *pushReq
@@ -2540,7 +2540,7 @@ func (s *Store) Send(
 			// request may have been waiting to push the txn. If we don't
 			// move the timestamp forward to the current time, we may fail
 			// to push a txn which has expired.
-			pushReqCopy.Now = s.Clock().Now()
+			pushReqCopy.Now.Forward(s.Clock().Now())
 			ba.Requests = nil
 			ba.Add(&pushReqCopy)
 		}

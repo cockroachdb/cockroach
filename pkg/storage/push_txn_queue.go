@@ -123,12 +123,12 @@ func (ptq *pushTxnQueue) Enable() {
 	}
 }
 
-// ClearAndDisable empties the queue and returns all waiters. This
-// method should be invoked when the replica loses or transfers its
-// lease. Once invoked, no transaction may be enqueued or waiting
-// pushers added. Call Enable() when the lease is again acquired by
-// the replica.
-func (ptq *pushTxnQueue) ClearAndDisable() {
+// Clear empties the queue and returns all waiters. This method should
+// be invoked when the replica loses or transfers its lease. If
+// `disable` is true, future transactions may not be enqueued or
+// waiting pushers added. Call Enable() once the lease is again
+// acquired by the replica.
+func (ptq *pushTxnQueue) Clear(disable bool) {
 	ptq.mu.Lock()
 	var allWaiters []chan *roachpb.Transaction
 	for _, pt := range ptq.mu.txns {
@@ -137,7 +137,9 @@ func (ptq *pushTxnQueue) ClearAndDisable() {
 		}
 		pt.waiters = nil
 	}
-	ptq.mu.txns = nil
+	if disable {
+		ptq.mu.txns = nil
+	}
 	ptq.mu.Unlock()
 
 	// Send on the pending waiter channels outside of the mutex lock.
@@ -275,7 +277,6 @@ func (ptq *pushTxnQueue) MaybeWait(
 		pending: make(chan *roachpb.Transaction, 1),
 	}
 	pending.waiters = append(pending.waiters, push)
-
 	ptq.mu.Unlock()
 
 	// Periodically refresh the pusher and pushee txns (with an
@@ -317,15 +318,17 @@ func (ptq *pushTxnQueue) MaybeWait(
 			updatedPushee, _, pErr := ptq.queryTxnStatus(ctx, req.PusheeTxn, ptq.store.Clock().Now())
 			if pErr != nil {
 				return nil, pErr
-			} else if updatedPushee != nil {
-				pusheePriority = updatedPushee.Priority
-				pending.txn.Store(updatedPushee)
-				if isExpired(ptq.store.Clock().Now(), updatedPushee) {
-					if log.V(1) {
-						log.Warningf(ctx, "%s pushing expired txn %s", req.PusherTxn.ID.Short(), req.PusheeTxn.ID.Short())
-					}
-					return nil, nil
+			} else if updatedPushee == nil {
+				// Continue with push.
+				return nil, nil
+			}
+			pusheePriority = updatedPushee.Priority
+			pending.txn.Store(updatedPushee)
+			if isExpired(ptq.store.Clock().Now(), updatedPushee) {
+				if log.V(1) {
+					log.Warningf(ctx, "%s pushing expired txn %s", req.PusherTxn.ID.Short(), req.PusheeTxn.ID.Short())
 				}
+				return nil, nil
 			}
 
 			if req.PusherTxn.ID != nil {
@@ -364,7 +367,7 @@ func (ptq *pushTxnQueue) MaybeWait(
 						p1, p2 := pusheePriority, pusherPriority
 						if p1 < p2 || (p1 == p2 && bytes.Compare(req.PusheeTxn.ID.GetBytes(), req.PusherTxn.ID.GetBytes()) < 0) {
 							if log.V(1) {
-								log.Warningf(
+								log.Infof(
 									ctx,
 									"%s breaking deadlock by force push of %s; dependencies=%s",
 									req.PusherTxn.ID.Short(),

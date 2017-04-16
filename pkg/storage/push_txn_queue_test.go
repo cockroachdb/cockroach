@@ -196,7 +196,7 @@ func TestPushTxnQueueEnableDisable(t *testing.T) {
 	})
 
 	// Now disable the queue and make sure the waiter is returned.
-	ptq.ClearAndDisable()
+	ptq.Clear(true /* disable */)
 	if ptq.isEnabled() {
 		t.Errorf("expected queue to be disabled")
 	}

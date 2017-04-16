@@ -2024,3 +2024,124 @@ func TestUnsplittableRange(t *testing.T) {
 			origMaxBytes, repl.GetMaxBytes())
 	})
 }
+
+// TestPushTxnQueueDependencyCycleWithRangeSplit verifies that a range
+// split which occurs while a dependency cycle is partially underway
+// will cause the pending push txns to be retried such that they
+// relocate to the appropriate new range.
+func TestPushTxnQueueDependencyCycleWithRangeSplit(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	for _, read2ndPass := range []bool{false, true} {
+		t.Run(fmt.Sprintf("read-2nd-pass:%t", read2ndPass), func(t *testing.T) {
+			var firstPushMu sync.Mutex
+			firstPush := make(chan struct{})
+
+			storeCfg := storage.TestStoreConfig(nil)
+			storeCfg.TestingKnobs.DisableSplitQueue = true
+			storeCfg.TestingKnobs.TestingEvalFilter =
+				func(filterArgs storagebase.FilterArgs) *roachpb.Error {
+					if _, ok := filterArgs.Req.(*roachpb.PushTxnRequest); ok {
+						firstPushMu.Lock()
+						defer firstPushMu.Unlock()
+						if firstPush != nil {
+							close(firstPush)
+							firstPush = nil
+						}
+					}
+					return nil
+				}
+			stopper := stop.NewStopper()
+			defer stopper.Stop()
+			store := createTestStoreWithConfig(t, stopper, storeCfg)
+
+			lhsKey := roachpb.Key("a")
+			rhsKey := roachpb.Key("b")
+
+			// Split at "a".
+			args := adminSplitArgs(lhsKey, lhsKey)
+			if _, pErr := client.SendWrapped(context.Background(), rg1(store), args); pErr != nil {
+				t.Fatalf("split at %q: %s", lhsKey, pErr)
+			}
+			lhs := store.LookupReplica(roachpb.RKey("a"), nil)
+
+			var txnACount, txnBCount int32
+
+			txnAWritesA := make(chan struct{})
+			txnAProceeds := make(chan struct{})
+			txnBWritesB := make(chan struct{})
+			txnBProceeds := make(chan struct{})
+
+			// Start txn to write key a.
+			txnACh := make(chan error)
+			go func() {
+				txnACh <- store.DB().Txn(context.Background(), func(ctx context.Context, txn *client.Txn) error {
+					if err := txn.Put(ctx, lhsKey, "value"); err != nil {
+						return err
+					}
+					if atomic.LoadInt32(&txnACount) == 0 {
+						close(txnAWritesA)
+						<-txnAProceeds
+					}
+					atomic.AddInt32(&txnACount, 1)
+					if err := txn.Put(ctx, rhsKey, "value-from-A"); err != nil {
+						return err
+					}
+					return nil
+				})
+			}()
+			<-txnAWritesA
+
+			// Start txn to write key b.
+			txnBCh := make(chan error)
+			go func() {
+				txnBCh <- store.DB().Txn(context.Background(), func(ctx context.Context, txn *client.Txn) error {
+					if err := txn.Put(ctx, rhsKey, "value"); err != nil {
+						return err
+					}
+					if atomic.LoadInt32(&txnBCount) == 0 {
+						close(txnBWritesB)
+						<-txnBProceeds
+					}
+					atomic.AddInt32(&txnBCount, 1)
+					// Read instead of write key "a" if directed. This caused a
+					// PUSH_TIMESTAMP to be issued from txn B instead of PUSH_ABORT.
+					if read2ndPass {
+						if _, err := txn.Get(ctx, lhsKey); err != nil {
+							return err
+						}
+					} else {
+						if err := txn.Put(ctx, lhsKey, "value-from-B"); err != nil {
+							return err
+						}
+					}
+					return nil
+				})
+			}()
+			<-txnBWritesB
+
+			// Now, let txnA proceed before splitting.
+			close(txnAProceeds)
+			// Wait for the push to occur.
+			<-firstPush
+
+			// Split at "b".
+			args = adminSplitArgs(rhsKey, rhsKey)
+			if _, pErr := client.SendWrappedWith(context.Background(), store, roachpb.Header{
+				RangeID: lhs.RangeID,
+			}, args); pErr != nil {
+				t.Fatalf("split at %q: %s", rhsKey, pErr)
+			}
+
+			// Now that we've split, allow txnB to proceed.
+			close(txnBProceeds)
+
+			// Verify that both complete.
+			for i, ch := range []chan error{txnACh, txnBCh} {
+				if err := <-ch; err != nil {
+					t.Fatalf("%d: txn failure: %v", i, err)
+				}
+			}
+		})
+	}
+}

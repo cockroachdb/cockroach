@@ -425,7 +425,7 @@ func (r *Replica) leasePostApply(
 	if leaseChangingHands && !iAmTheLeaseHolder {
 		// Also clear and disable the push transaction queue. Any waiters
 		// must be redirected to the new lease holder.
-		r.pushTxnQueue.ClearAndDisable()
+		r.pushTxnQueue.Clear(true /* disable */)
 	}
 
 	if !iAmTheLeaseHolder && r.IsLeaseValid(newLease, r.store.Clock().Now()) {
@@ -546,6 +546,13 @@ func (r *Replica) handleReplicatedEvalResult(
 
 	// Process Split or Merge. This needs to happen after stats update because
 	// of the ContainsEstimates hack.
+
+	// For either a split or a merge, clear the push transaction
+	// queue to free waiters so they are redirected to a new range
+	// if appropriate.
+	if rResult.Split != nil || rResult.Merge != nil {
+		r.pushTxnQueue.Clear(false /* disable */)
+	}
 
 	if rResult.Split != nil {
 		// TODO(tschottdorf): We want to let the usual MVCCStats-delta
