@@ -367,6 +367,7 @@ namespace {
 DBIterState DBIterGetState(DBIterator* iter) {
   DBIterState state = {};
   state.valid = iter->rep->Valid();
+  state.status = ToDBStatus(iter->rep->status());
 
   if (state.valid) {
     rocksdb::Slice key;
@@ -2024,10 +2025,9 @@ DBIterState DBIterNext(DBIterator* iter, bool skip_current_key_versions) {
     rocksdb::Slice key;
     rocksdb::Slice ts;
     if (!SplitKey(iter->rep->key(), &key, &ts)) {
-      // TODO(peter): Need to set an error on DBIterator. Currently
-      // DBIterError() returns iter->rep->status().
       DBIterState state = { 0 };
       state.valid = false;
+      state.status = FmtStatus("failed to split mvcc key");
       return state;
     }
     old_key = key.ToString();
@@ -2039,10 +2039,9 @@ DBIterState DBIterNext(DBIterator* iter, bool skip_current_key_versions) {
     rocksdb::Slice key;
     rocksdb::Slice ts;
     if (!SplitKey(iter->rep->key(), &key, &ts)) {
-      // TODO(peter): Need to set an error on DBIterator. Currently
-      // DBIterError() returns iter->rep->status().
       DBIterState state = { 0 };
       state.valid = false;
+      state.status = FmtStatus("failed to split mvcc key");
       return state;
     }
     if (old_key == key) {
@@ -2095,10 +2094,6 @@ DBIterState DBIterPrev(DBIterator* iter, bool skip_current_key_versions){
   }
 
   return DBIterGetState(iter);
-}
-
-DBStatus DBIterError(DBIterator* iter) {
-  return ToDBStatus(iter->rep->status());
 }
 
 DBStatus DBMergeOne(DBSlice existing, DBSlice update, DBString* new_value) {
