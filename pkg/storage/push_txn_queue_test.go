@@ -183,7 +183,7 @@ func TestPushTxnQueueEnableDisable(t *testing.T) {
 
 	retCh := make(chan RespWithErr, 1)
 	go func() {
-		resp, pErr := ptq.MaybeWait(context.Background(), &req)
+		resp, pErr := ptq.MaybeWait(context.Background(), tc.repl, &req)
 		retCh <- RespWithErr{resp, pErr}
 	}()
 
@@ -196,7 +196,7 @@ func TestPushTxnQueueEnableDisable(t *testing.T) {
 	})
 
 	// Now disable the queue and make sure the waiter is returned.
-	ptq.ClearAndDisable()
+	ptq.Clear(true /* disable */)
 	if ptq.isEnabled() {
 		t.Errorf("expected queue to be disabled")
 	}
@@ -225,7 +225,7 @@ func TestPushTxnQueueEnableDisable(t *testing.T) {
 	}
 	ptq.mu.Unlock()
 
-	if resp, pErr := ptq.MaybeWait(context.TODO(), &req); resp != nil || pErr != nil {
+	if resp, pErr := ptq.MaybeWait(context.TODO(), tc.repl, &req); resp != nil || pErr != nil {
 		t.Errorf("expected nil resp and err as queue is disabled; got %+v, %s", resp, pErr)
 	}
 }
@@ -255,7 +255,7 @@ func TestPushTxnQueueCancel(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	retCh := make(chan RespWithErr, 1)
 	go func() {
-		resp, pErr := ptq.MaybeWait(ctx, &req)
+		resp, pErr := ptq.MaybeWait(ctx, tc.repl, &req)
 		retCh <- RespWithErr{resp, pErr}
 	}()
 
@@ -306,7 +306,7 @@ func TestPushTxnQueueUpdateTxn(t *testing.T) {
 
 	retCh := make(chan RespWithErr, 2)
 	go func() {
-		resp, pErr := ptq.MaybeWait(context.Background(), &req1)
+		resp, pErr := ptq.MaybeWait(context.Background(), tc.repl, &req1)
 		retCh <- RespWithErr{resp, pErr}
 	}()
 	testutils.SucceedsSoon(t, func() error {
@@ -318,7 +318,7 @@ func TestPushTxnQueueUpdateTxn(t *testing.T) {
 	})
 
 	go func() {
-		resp, pErr := ptq.MaybeWait(context.Background(), &req2)
+		resp, pErr := ptq.MaybeWait(context.Background(), tc.repl, &req2)
 		retCh <- RespWithErr{resp, pErr}
 	}()
 	testutils.SucceedsSoon(t, func() error {
@@ -371,7 +371,7 @@ func TestPushTxnQueueUpdateNotPushedTxn(t *testing.T) {
 
 	retCh := make(chan RespWithErr, 1)
 	go func() {
-		resp, pErr := ptq.MaybeWait(context.Background(), &req)
+		resp, pErr := ptq.MaybeWait(context.Background(), tc.repl, &req)
 		retCh <- RespWithErr{resp, pErr}
 	}()
 
@@ -443,7 +443,7 @@ func TestPushTxnQueuePusheeExpires(t *testing.T) {
 
 	retCh := make(chan RespWithErr, 2)
 	go func() {
-		resp, pErr := ptq.MaybeWait(context.Background(), &req1)
+		resp, pErr := ptq.MaybeWait(context.Background(), tc.repl, &req1)
 		retCh <- RespWithErr{resp, pErr}
 	}()
 	testutils.SucceedsSoon(t, func() error {
@@ -455,7 +455,7 @@ func TestPushTxnQueuePusheeExpires(t *testing.T) {
 	})
 
 	go func() {
-		resp, pErr := ptq.MaybeWait(context.Background(), &req2)
+		resp, pErr := ptq.MaybeWait(context.Background(), tc.repl, &req2)
 		retCh <- RespWithErr{resp, pErr}
 	}()
 	testutils.SucceedsSoon(t, func() error {
@@ -507,7 +507,7 @@ func TestPushTxnQueuePusherUpdate(t *testing.T) {
 
 	retCh := make(chan RespWithErr, 1)
 	go func() {
-		resp, pErr := ptq.MaybeWait(context.Background(), &req)
+		resp, pErr := ptq.MaybeWait(context.Background(), tc.repl, &req)
 		retCh <- RespWithErr{resp, pErr}
 	}()
 
@@ -585,7 +585,7 @@ func TestPushTxnQueueDependencyCycle(t *testing.T) {
 	retCh := make(chan RespWithErr, 3)
 	for _, req := range []*roachpb.PushTxnRequest{reqA, reqB, reqC} {
 		go func(req *roachpb.PushTxnRequest) {
-			resp, pErr := ptq.MaybeWait(ctx, req)
+			resp, pErr := ptq.MaybeWait(ctx, tc.repl, req)
 			retCh <- RespWithErr{resp, pErr}
 		}(req)
 	}
@@ -661,7 +661,7 @@ func TestPushTxnQueueDependencyCycleWithPriorityInversion(t *testing.T) {
 	retCh := make(chan ReqWithErr, 2)
 	for _, req := range []*roachpb.PushTxnRequest{reqA, reqB} {
 		go func(req *roachpb.PushTxnRequest) {
-			_, pErr := ptq.MaybeWait(ctx, req)
+			_, pErr := ptq.MaybeWait(ctx, tc.repl, req)
 			retCh <- ReqWithErr{req, pErr}
 		}(req)
 	}

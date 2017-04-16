@@ -424,7 +424,7 @@ func (r *Replica) leasePostApply(
 	if leaseChangingHands && !iAmTheLeaseHolder {
 		// Also clear and disable the push transaction queue. Any waiters
 		// must be redirected to the new lease holder.
-		r.pushTxnQueue.ClearAndDisable()
+		r.pushTxnQueue.Clear(true /* disable */)
 	}
 
 	if !iAmTheLeaseHolder && r.IsLeaseValid(newLease, r.store.Clock().Now()) {
