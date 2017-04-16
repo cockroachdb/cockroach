@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -42,10 +41,6 @@ type kvWriteBatch struct {
 }
 
 func newKVWriteBatch(b *testing.B) kvInterface {
-	if !storage.ProposerEvaluatedKVEnabled() {
-		b.Skip("command WriteBatch is not allowed without proposer evaluated KV")
-	}
-
 	enableTracing := tracing.Disable()
 	s, _, _ := serverutils.StartServer(b, base.TestServerArgs{})
 

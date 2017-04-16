@@ -14,7 +14,6 @@ import (
 	"io"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
@@ -35,9 +34,6 @@ func BenchmarkClusterBackup(b *testing.B) {
 	// NB: This benchmark takes liberties in how b.N is used compared to the go
 	// documentation's description. We're getting useful information out of it,
 	// but this is not a pattern to cargo-cult.
-	if !storage.ProposerEvaluatedKVEnabled() {
-		b.Skip("command WriteBatch is not allowed without proposer evaluated KV")
-	}
 	defer tracing.Disable()()
 
 	ctx, dir, _, sqlDB, cleanupFn := backupRestoreTestSetup(b, multiNode, 0)
@@ -70,9 +66,6 @@ func BenchmarkClusterRestore(b *testing.B) {
 	// NB: This benchmark takes liberties in how b.N is used compared to the go
 	// documentation's description. We're getting useful information out of it,
 	// but this is not a pattern to cargo-cult.
-	if !storage.ProposerEvaluatedKVEnabled() {
-		b.Skip("command WriteBatch is not allowed without proposer evaluated KV")
-	}
 	defer tracing.Disable()()
 
 	ctx, dir, _, sqlDB, cleanup := backupRestoreTestSetup(b, multiNode, 0)
@@ -93,9 +86,6 @@ func BenchmarkLoadRestore(b *testing.B) {
 	// NB: This benchmark takes liberties in how b.N is used compared to the go
 	// documentation's description. We're getting useful information out of it,
 	// but this is not a pattern to cargo-cult.
-	if !storage.ProposerEvaluatedKVEnabled() {
-		b.Skip("command WriteBatch is not allowed without proposer evaluated KV")
-	}
 	defer tracing.Disable()()
 
 	ctx, dir, _, sqlDB, cleanup := backupRestoreTestSetup(b, multiNode, 0)

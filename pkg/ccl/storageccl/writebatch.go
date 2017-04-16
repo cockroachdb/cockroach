@@ -35,11 +35,6 @@ func init() {
 func evalWriteBatch(
 	ctx context.Context, batch engine.ReadWriter, cArgs storage.CommandArgs, _ roachpb.Response,
 ) (storage.EvalResult, error) {
-	if !storage.ProposerEvaluatedKVEnabled() {
-		// To reduce the footprint of things that have ever been downstream of
-		// raft, forbid this command from running without proposer evaluated kv.
-		panic("command WriteBatch is not allowed without proposer evaluated KV")
-	}
 
 	args := cArgs.Args.(*roachpb.WriteBatchRequest)
 	h := cArgs.Header

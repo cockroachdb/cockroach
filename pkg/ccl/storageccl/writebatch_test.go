@@ -35,9 +35,6 @@ import (
 
 func TestDBWriteBatch(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	if !storage.ProposerEvaluatedKVEnabled() {
-		t.Skip("command WriteBatch is not allowed without proposer evaluated KV")
-	}
 
 	s, _, db := serverutils.StartServer(t, base.TestServerArgs{Insecure: true})
 	defer s.Stopper().Stop()
@@ -119,9 +116,6 @@ func TestDBWriteBatch(t *testing.T) {
 
 func TestWriteBatchMVCCStats(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	if !storage.ProposerEvaluatedKVEnabled() {
-		t.Skip("command WriteBatch is not allowed without proposer evaluated KV")
-	}
 
 	ctx := context.Background()
 	e := engine.NewInMem(roachpb.Attributes{}, 1<<20)
@@ -188,9 +182,6 @@ func TestWriteBatchMVCCStats(t *testing.T) {
 }
 
 func BenchmarkWriteBatch(b *testing.B) {
-	if !storage.ProposerEvaluatedKVEnabled() {
-		b.Skip("command WriteBatch is not allowed without proposer evaluated KV")
-	}
 	rng, _ := randutil.NewPseudoRand()
 	const payloadSize = 100
 	v := roachpb.MakeValueFromBytes(randutil.RandBytes(rng, payloadSize))
