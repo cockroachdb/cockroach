@@ -91,6 +91,10 @@ type pendingTxn struct {
 	waiters []*waitingPush
 }
 
+func (pt *pendingTxn) getTxn() *roachpb.Transaction {
+	return pt.txn.Load().(*roachpb.Transaction)
+}
+
 // A pushTxnQueue enqueues PushTxn requests which are waiting on
 // extant txns with conflicting intents to abort or commit.
 //
@@ -123,21 +127,31 @@ func (ptq *pushTxnQueue) Enable() {
 	}
 }
 
-// ClearAndDisable empties the queue and returns all waiters. This
-// method should be invoked when the replica loses or transfers its
-// lease. Once invoked, no transaction may be enqueued or waiting
-// pushers added. Call Enable() when the lease is again acquired by
-// the replica.
-func (ptq *pushTxnQueue) ClearAndDisable() {
+// Clear empties the queue and returns all waiters. This method should
+// be invoked when the replica loses or transfers its lease. If
+// `disable` is true, future transactions may not be enqueued or
+// waiting pushers added. Call Enable() once the lease is again
+// acquired by the replica.
+func (ptq *pushTxnQueue) Clear(disable bool) {
 	ptq.mu.Lock()
 	var allWaiters []chan *roachpb.Transaction
 	for _, pt := range ptq.mu.txns {
 		for _, w := range pt.waiters {
 			allWaiters = append(allWaiters, w.pending)
 		}
+		if log.V(1) {
+			log.Infof(
+				context.Background(),
+				"clearing %d waiters for %s",
+				len(pt.waiters),
+				pt.getTxn().ID.Short(),
+			)
+		}
 		pt.waiters = nil
 	}
-	ptq.mu.txns = nil
+	if disable {
+		ptq.mu.txns = nil
+	}
 	ptq.mu.Unlock()
 
 	// Send on the pending waiter channels outside of the mutex lock.
@@ -194,6 +208,9 @@ func (ptq *pushTxnQueue) UpdateTxn(txn *roachpb.Transaction) {
 	delete(ptq.mu.txns, *txn.ID)
 	ptq.mu.Unlock()
 
+	if log.V(1) {
+		log.Infof(context.Background(), "updating %d waiters for %s", len(waiters), txn.ID.Short())
+	}
 	// Send on pending waiter channels outside of the mutex lock.
 	for _, w := range waiters {
 		w.pending <- txn
@@ -245,15 +262,17 @@ var errDeadlock = roachpb.NewErrorf("deadlock detected")
 // In the event of a dependency cycle of pushers leading to deadlock,
 // this method will return an errDeadlock error.
 func (ptq *pushTxnQueue) MaybeWait(
-	ctx context.Context, req *roachpb.PushTxnRequest,
+	ctx context.Context, repl *Replica, req *roachpb.PushTxnRequest,
 ) (*roachpb.PushTxnResponse, *roachpb.Error) {
 	if shouldPushImmediately(req) {
 		return nil, nil
 	}
 
 	ptq.mu.Lock()
-	if ptq.mu.txns == nil {
-		// Not enabled; do nothing.
+	// If the push txn queue is not enabled or if the request is not
+	// contained within the replica, do nothing. The request can fall
+	// outside of the replica after a split or merge.
+	if ptq.mu.txns == nil || !repl.ContainsKey(req.Key) {
 		ptq.mu.Unlock()
 		return nil, nil
 	}
@@ -265,7 +284,7 @@ func (ptq *pushTxnQueue) MaybeWait(
 		ptq.mu.Unlock()
 		return nil, nil
 	}
-	if txn := pending.txn.Load().(*roachpb.Transaction); isPushed(req, txn) {
+	if txn := pending.getTxn(); isPushed(req, txn) {
 		ptq.mu.Unlock()
 		return createPushTxnResponse(txn), nil
 	}
@@ -275,7 +294,19 @@ func (ptq *pushTxnQueue) MaybeWait(
 		pending: make(chan *roachpb.Transaction, 1),
 	}
 	pending.waiters = append(pending.waiters, push)
-
+	if log.V(2) {
+		if req.PusherTxn.ID != nil {
+			log.Infof(
+				ctx,
+				"%s pushing %s (%d pending)",
+				req.PusherTxn.ID.Short(),
+				req.PusheeTxn.ID.Short(),
+				len(pending.waiters),
+			)
+		} else {
+			log.Infof(ctx, "pushing %s (%d pending)", req.PusheeTxn.ID.Short(), len(pending.waiters))
+		}
+	}
 	ptq.mu.Unlock()
 
 	// Periodically refresh the pusher and pushee txns (with an
@@ -284,10 +315,6 @@ func (ptq *pushTxnQueue) MaybeWait(
 	// transactions.
 	r := retry.Start(ptq.store.cfg.RangeRetryOptions)
 	queryCh := r.NextCh()
-
-	// Keep local values for the pusher and pushee priorities to avoid
-	// modifying values in the original request on QueryTxn updates.
-	pusheePriority := req.PusheeTxn.Priority
 
 	for {
 		select {
@@ -317,15 +344,17 @@ func (ptq *pushTxnQueue) MaybeWait(
 			updatedPushee, _, pErr := ptq.queryTxnStatus(ctx, req.PusheeTxn, ptq.store.Clock().Now())
 			if pErr != nil {
 				return nil, pErr
-			} else if updatedPushee != nil {
-				pusheePriority = updatedPushee.Priority
-				pending.txn.Store(updatedPushee)
-				if isExpired(ptq.store.Clock().Now(), updatedPushee) {
-					if log.V(1) {
-						log.Warningf(ctx, "%s pushing expired txn %s", req.PusherTxn.ID.Short(), req.PusheeTxn.ID.Short())
-					}
-					return nil, nil
+			} else if updatedPushee == nil {
+				// Continue with push.
+				return nil, nil
+			}
+			pusheePriority := updatedPushee.Priority
+			pending.txn.Store(updatedPushee)
+			if isExpired(ptq.store.Clock().Now(), updatedPushee) {
+				if log.V(1) {
+					log.Warningf(ctx, "pushing expired txn %s", req.PusheeTxn.ID.Short())
 				}
+				return nil, nil
 			}
 
 			if req.PusherTxn.ID != nil {
@@ -355,7 +384,15 @@ func (ptq *pushTxnQueue) MaybeWait(
 						dependents = append(dependents, id.Short())
 					}
 					if log.V(2) {
-						log.Infof(ctx, "%s has dependencies=%s", req.PusherTxn.ID.Short(), dependents)
+						log.Infof(
+							ctx,
+							"%s (%d), pushing %s (%d), has dependencies=%s",
+							req.PusherTxn.ID.Short(),
+							pusherPriority,
+							req.PusheeTxn.ID.Short(),
+							pusheePriority,
+							dependents,
+						)
 					}
 					push.mu.Unlock()
 
@@ -364,7 +401,7 @@ func (ptq *pushTxnQueue) MaybeWait(
 						p1, p2 := pusheePriority, pusherPriority
 						if p1 < p2 || (p1 == p2 && bytes.Compare(req.PusheeTxn.ID.GetBytes(), req.PusherTxn.ID.GetBytes()) < 0) {
 							if log.V(1) {
-								log.Warningf(
+								log.Infof(
 									ctx,
 									"%s breaking deadlock by force push of %s; dependencies=%s",
 									req.PusherTxn.ID.Short(),

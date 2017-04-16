@@ -1915,6 +1915,10 @@ func (s *Store) SplitRange(ctx context.Context, origRng, newRng *Replica) error 
 	copyDesc.EndKey = append([]byte(nil), newDesc.StartKey...)
 	origRng.setDescWithoutProcessUpdate(&copyDesc)
 
+	// Clear the LHS push txn queue, to redirect to the RHS if
+	// appropriate.
+	origRng.pushTxnQueue.Clear(false /* disable */)
+
 	if kr := s.mu.replicasByKey.ReplaceOrInsert(origRng); kr != nil {
 		return errors.Errorf("replicasByKey unexpectedly contains %s when inserting replica %s", kr, origRng)
 	}
@@ -1980,6 +1984,10 @@ func (s *Store) MergeRange(
 	if err := s.removeReplicaImpl(ctx, subsumedRng, *subsumedDesc, false); err != nil {
 		return errors.Errorf("cannot remove range %s", err)
 	}
+
+	// Clear the RHS push txn queue, to redirect to the LHS if
+	// appropriate.
+	subsumedRng.pushTxnQueue.Clear(false /* disable */)
 
 	// Update the end key of the subsuming range.
 	copy := *subsumingDesc
@@ -2521,7 +2529,7 @@ func (s *Store) Send(
 		// txn response or else allow this request to proceed.
 		if ba.IsSinglePushTxnRequest() {
 			pushReq := ba.Requests[0].GetInner().(*roachpb.PushTxnRequest)
-			pushResp, pErr := repl.pushTxnQueue.MaybeWait(ctx, pushReq)
+			pushResp, pErr := repl.pushTxnQueue.MaybeWait(repl.AnnotateCtx(ctx), repl, pushReq)
 			// Copy the request in anticipation of setting the force arg and
 			// updating the Now timestamp (see below).
 			pushReqCopy := *pushReq
@@ -2540,7 +2548,7 @@ func (s *Store) Send(
 			// request may have been waiting to push the txn. If we don't
 			// move the timestamp forward to the current time, we may fail
 			// to push a txn which has expired.
-			pushReqCopy.Now = s.Clock().Now()
+			pushReqCopy.Now.Forward(s.Clock().Now())
 			ba.Requests = nil
 			ba.Add(&pushReqCopy)
 		}
