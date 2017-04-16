@@ -390,28 +390,27 @@ func runRmZone(cmd *cobra.Command, args []string) error {
 	}
 	defer conn.Close()
 
-	if err := conn.Exec(`BEGIN`, nil); err != nil {
-		return err
-	}
-
-	path, err := queryDescriptorIDPath(conn, names)
-	if err != nil {
-		if err == io.EOF {
-			fmt.Printf("%s not found\n", args[0])
-			return nil
+	return conn.ExecTxn(func(conn *sqlConn) error {
+		path, err := queryDescriptorIDPath(conn, names)
+		if err != nil {
+			if err == io.EOF {
+				fmt.Printf("%s not found\n", args[0])
+				return nil
+			}
+			return err
 		}
-		return err
-	}
-	id := path[len(path)-1]
-	if id == keys.RootNamespaceID {
-		return fmt.Errorf("unable to remove special zone %s", args[0])
-	}
+		id := path[len(path)-1]
+		if id == keys.RootNamespaceID {
+			return fmt.Errorf("unable to remove special zone %s", args[0])
+		}
 
-	if err := runQueryAndFormatResults(conn, os.Stdout,
-		makeQuery(`DELETE FROM system.zones WHERE id=$1`, id), cliCtx.tableDisplayFormat); err != nil {
-		return err
-	}
-	return conn.Exec(`COMMIT`, nil)
+		if err := runQueryAndFormatResults(conn, os.Stdout,
+			makeQuery(`DELETE FROM system.zones WHERE id=$1`, id), cliCtx.tableDisplayFormat); err != nil {
+			return err
+		}
+
+		return nil
+	})
 }
 
 // A setZoneCmd command creates a new or updates an existing zone config.
@@ -480,67 +479,62 @@ func runSetZone(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	if err := conn.Exec(`BEGIN`, nil); err != nil {
-		return err
-	}
-
-	path, err := queryDescriptorIDPath(conn, names)
-	if err != nil {
-		if err == io.EOF {
-			fmt.Printf("%s not found\n", args[0])
-			return nil
+	return conn.ExecTxn(func(conn *sqlConn) error {
+		path, err := queryDescriptorIDPath(conn, names)
+		if err != nil {
+			if err == io.EOF {
+				fmt.Printf("%s not found\n", args[0])
+				return nil
+			}
+			return err
 		}
-		return err
-	}
 
-	if len(path) > 2 && path[1] == keys.SystemDatabaseID {
-		return fmt.Errorf("setting zone configs for individual system tables is not supported; " +
-			"try setting your config on the entire \"system\" database instead")
-	}
+		if len(path) > 2 && path[1] == keys.SystemDatabaseID {
+			return fmt.Errorf("setting zone configs for individual system tables is not supported; " +
+				"try setting your config on the entire \"system\" database instead")
+		}
 
-	_, zone, err := queryZonePath(conn, path)
-	if err != nil {
-		return err
-	}
-	// Convert it to proto and marshal it again to put into the table. This is a
-	// bit more tedious than taking protos directly, but yaml is a more widely
-	// understood format.
-	// Read zoneConfig file to conf.
+		_, zone, err := queryZonePath(conn, path)
+		if err != nil {
+			return err
+		}
+		// Convert it to proto and marshal it again to put into the table. This is a
+		// bit more tedious than taking protos directly, but yaml is a more widely
+		// understood format.
+		// Read zoneConfig file to conf.
 
-	conf, err := readZoneConfig()
-	if err != nil {
-		return fmt.Errorf("error reading zone config: %s", err)
-	}
-	if err := yaml.Unmarshal(conf, &zone); err != nil {
-		return fmt.Errorf("unable to parse zoneConfig file: %s", err)
-	}
+		conf, err := readZoneConfig()
+		if err != nil {
+			return fmt.Errorf("error reading zone config: %s", err)
+		}
+		if err := yaml.Unmarshal(conf, &zone); err != nil {
+			return fmt.Errorf("unable to parse zoneConfig file: %s", err)
+		}
 
-	if err := zone.Validate(); err != nil {
-		return err
-	}
+		if err := zone.Validate(); err != nil {
+			return err
+		}
 
-	buf, err := protoutil.Marshal(&zone)
-	if err != nil {
-		return fmt.Errorf("unable to parse zone config file %q: %s", args[1], err)
-	}
+		buf, err := protoutil.Marshal(&zone)
+		if err != nil {
+			return fmt.Errorf("unable to parse zone config file %q: %s", args[1], err)
+		}
 
-	id := path[len(path)-1]
-	_, _, _, err = runQuery(conn, makeQuery(
-		`UPSERT INTO system.zones (id, config) VALUES ($1, $2)`,
-		id, buf), false)
-	if err != nil {
-		return err
-	}
-	if err := conn.Exec(`COMMIT`, nil); err != nil {
-		return err
-	}
+		id := path[len(path)-1]
+		_, _, _, err = runQuery(conn, makeQuery(
+			`UPSERT INTO system.zones (id, config) VALUES ($1, $2)`,
+			id, buf), false)
+		if err != nil {
+			return err
+		}
 
-	res, err := yaml.Marshal(zone)
-	if err != nil {
-		return err
-	}
-	fmt.Print(string(res))
-	return nil
+		res, err := yaml.Marshal(zone)
+		if err != nil {
+			return err
+		}
+		fmt.Print(string(res))
+		return nil
+	})
 }
 
 var zoneCmds = []*cobra.Command{
