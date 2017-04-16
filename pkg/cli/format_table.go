@@ -35,8 +35,13 @@ func printQueryOutput(
 	w io.Writer, cols []string, allRows [][]string, tag string, displayFormat tableDisplayFormat,
 ) {
 	if len(cols) == 0 {
-		// This operation did not return rows, just show the tag.
-		fmt.Fprintln(w, tag)
+		if strings.Contains(tag, "SELECT") {
+			nRows := len(allRows)
+			fmt.Fprintf(w, "--\n(%d row%s)\n", nRows, util.Pluralize(int64(nRows)))
+		} else {
+			// This operation did not return rows, just show the tag.
+			fmt.Fprintln(w, tag)
+		}
 		return
 	}
 
