@@ -19,7 +19,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
@@ -35,9 +34,6 @@ import (
 // only run if the AWS_S3_BUCKET environment var is set.
 func TestCloudBackupRestoreS3(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	if !storage.ProposerEvaluatedKVEnabled() {
-		t.Skip("command WriteBatch is not allowed without proposer evaluated KV")
-	}
 	s3Keys, err := s3gof3r.EnvKeys()
 	if err != nil {
 		t.Skipf("No AWS env keys (%v)", err)
@@ -67,9 +63,6 @@ func TestCloudBackupRestoreS3(t *testing.T) {
 // occasionally be flaky. It's only run if the GS_BUCKET environment var is set.
 func TestCloudBackupRestoreGoogleCloudStorage(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	if !storage.ProposerEvaluatedKVEnabled() {
-		t.Skip("command WriteBatch is not allowed without proposer evaluated KV")
-	}
 	bucket := os.Getenv("GS_BUCKET")
 	if bucket == "" {
 		t.Skip("GS_BUCKET env var must be set")
@@ -99,9 +92,6 @@ func TestCloudBackupRestoreGoogleCloudStorage(t *testing.T) {
 // AZURE_ACCOUNT_KEY environment vars are set.
 func TestCloudBackupRestoreAzure(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	if !storage.ProposerEvaluatedKVEnabled() {
-		t.Skip("command WriteBatch is not allowed without proposer evaluated KV")
-	}
 	accountName := os.Getenv("AZURE_ACCOUNT_NAME")
 	accountKey := os.Getenv("AZURE_ACCOUNT_KEY")
 	if accountName == "" || accountKey == "" {

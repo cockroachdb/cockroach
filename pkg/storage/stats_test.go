@@ -33,8 +33,8 @@ import (
 // writeInitialState().
 func initialStats() enginepb.MVCCStats {
 	return enginepb.MVCCStats{
-		SysBytes: 237,
-		SysCount: 7,
+		SysBytes: 208,
+		SysCount: 6,
 	}
 }
 func TestRangeStatsEmpty(t *testing.T) {

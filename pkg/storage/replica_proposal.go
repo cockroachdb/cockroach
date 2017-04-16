@@ -75,10 +75,9 @@ type ProposalData struct {
 	// proposalResult come from LocalEvalResult)
 	doneCh chan proposalResult
 
-	// Local contains the results of evaluating the request in
-	// propEvalKV, tying the upstream evaluation of the request to the
-	// downstream application of the command. If propEvalKV is false,
-	// Local is nil.
+	// Local contains the results of evaluating the request
+	// tying the upstream evaluation of the request to the
+	// downstream application of the command.
 	Local *LocalEvalResult
 
 	// Request is the client's original BatchRequest.
