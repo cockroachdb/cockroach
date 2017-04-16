@@ -1550,7 +1550,9 @@ func evalPushTxn(
 		reply.PusheeTxn.Timestamp = args.Now // see method comment
 		// Setting OrigTimestamp bumps LastActive(); see #9265.
 		reply.PusheeTxn.OrigTimestamp = args.Now
-		return EvalResult{}, engine.MVCCPutProto(ctx, batch, cArgs.Stats, key, hlc.Timestamp{}, nil, &reply.PusheeTxn)
+		result := EvalResult{}
+		result.Local.updatedTxn = &reply.PusheeTxn
+		return result, engine.MVCCPutProto(ctx, batch, cArgs.Stats, key, hlc.Timestamp{}, nil, &reply.PusheeTxn)
 	}
 	// Start with the persisted transaction record as final transaction.
 	reply.PusheeTxn = existTxn.Clone()
@@ -1596,7 +1598,7 @@ func evalPushTxn(
 		reason = "pusher has priority"
 		pusherWins = true
 	case args.Force:
-		reason = "forced txn abort"
+		reason = "forced push"
 		pusherWins = true
 	}
 
