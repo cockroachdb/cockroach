@@ -29,6 +29,19 @@ import (
 	"google.golang.org/grpc/transport"
 )
 
+type localRequestKey struct{}
+
+// NewLocalRequestContext takes an existing context which may have the Peer field set,
+// and sets the localRequestKey on it, indicating that this is a local (in-process) request.
+func NewLocalRequestContext(ctx context.Context) context.Context {
+	return context.WithValue(ctx, localRequestKey{}, struct{}{})
+}
+
+// IsLocalRequestContext returns true of 'ctx' has localRequestKey set.
+func IsLocalRequestContext(ctx context.Context) bool {
+	return ctx.Value(localRequestKey{}) != nil
+}
+
 // IsClosedConnection returns true if err's Cause is an error produced by gRPC
 // on closed connections.
 func IsClosedConnection(err error) bool {

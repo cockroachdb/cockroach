@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -181,6 +182,11 @@ func (gt *grpcTransport) SendNext(ctx context.Context, done chan<- BatchCall) {
 					clonedTxn := origTxn.Clone()
 					client.args.Txn = &clonedTxn
 				}
+
+				// Create a new context from the existing one with the "local request" field set.
+				// This tells the handler that this is an in-procress request, bypassing ctx.Peer checks.
+				ctx = grpcutil.NewLocalRequestContext(ctx)
+
 				gt.opts.metrics.LocalSentCount.Inc(1)
 				log.VEvent(ctx, 2, "sending request to local server")
 				return localServer.Batch(ctx, &client.args)

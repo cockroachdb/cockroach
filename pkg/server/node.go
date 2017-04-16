@@ -42,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -809,7 +810,9 @@ func (n *Node) batchInternal(
 	// the request handler) doesn't really fit with the current design of the
 	// security package (which assumes that TLS state is only given at connection
 	// time) - that should be fixed.
-	if peer, ok := peer.FromContext(ctx); ok {
+	if grpcutil.IsLocalRequestContext(ctx) {
+		// this is a in-process request, bypass checks.
+	} else if peer, ok := peer.FromContext(ctx); ok {
 		if tlsInfo, ok := peer.AuthInfo.(credentials.TLSInfo); ok {
 			certUser, err := security.GetCertificateUser(&tlsInfo.State)
 			if err != nil {
