@@ -8,6 +8,11 @@ import { VersionList } from "../interfaces/cockroachlabs";
 import { versionCheck } from "../util/cockroachlabsAPI";
 import { NodeStatus$Properties, RollupStoreMetrics } from "../util/proto";
 
+// The primary export of this file are the "refresh" functions of the various
+// reducers, which are used by many react components to request fresh data.
+// However, some of the reducer objects are also fully exported for use
+// in tests.
+
 export const clusterReducerObj = new CachedDataReducer(api.getCluster, "cluster");
 export const refreshCluster = clusterReducerObj.refresh;
 
@@ -25,13 +30,13 @@ function rollupStoreMetrics(res: api.NodesResponseMessage): NodeStatus$Propertie
   });
 }
 
-const nodesReducerObj = new CachedDataReducer((req: api.NodesRequestMessage, timeout?: moment.Duration) => api.getNodes(req, timeout).then(rollupStoreMetrics), "nodes", moment.duration(10, "s"));
+export const nodesReducerObj = new CachedDataReducer((req: api.NodesRequestMessage, timeout?: moment.Duration) => api.getNodes(req, timeout).then(rollupStoreMetrics), "nodes", moment.duration(10, "s"));
 export const refreshNodes = nodesReducerObj.refresh;
 
 const raftReducerObj = new CachedDataReducer(api.raftDebug, "raft");
 export const refreshRaft = raftReducerObj.refresh;
 
-const versionReducerObj = new CachedDataReducer(versionCheck, "version");
+export const versionReducerObj = new CachedDataReducer(versionCheck, "version");
 export const refreshVersion = versionReducerObj.refresh;
 
 const databasesReducerObj = new CachedDataReducer(api.getDatabaseList, "databases");

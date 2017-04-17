@@ -26,7 +26,7 @@ import {
 export const DatabaseGrantsSortedTable = SortedTable as new () => SortedTable<protos.cockroach.server.serverpb.DatabaseDetailsResponse.Grant>;
 
 const grantsSortSetting = new LocalSetting<AdminUIState, SortSetting>(
-  "databases/sort_setting/grants", (s) => s.ui,
+  "databases/sort_setting/grants", (s) => s.localSettings,
 );
 
 // DatabaseSummaryGrants displays a summary section describing the grants

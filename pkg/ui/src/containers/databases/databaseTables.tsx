@@ -22,7 +22,7 @@ import {
 } from "./databaseSummary";
 
 const databaseTablesSortSetting = new LocalSetting<AdminUIState, SortSetting>(
-  "databases/sort_setting/tables", (s) => s.ui,
+  "databases/sort_setting/tables", (s) => s.localSettings,
 );
 
 // Specialization of generic SortedTable component:
