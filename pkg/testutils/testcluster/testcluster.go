@@ -148,6 +148,7 @@ func StartTestCluster(t testing.TB, nodes int, args base.TestClusterArgs) *TestC
 		storeKnobs := args.ServerArgs.Knobs.Store.(*storage.StoreTestingKnobs)
 		storeKnobs.DisableSplitQueue = true
 		storeKnobs.DisableReplicateQueue = true
+		storeKnobs.DisableReplicaGCQueue = true
 	default:
 		t.Fatal("unexpected replication mode")
 	}
