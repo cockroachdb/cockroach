@@ -141,7 +141,9 @@ func binExprFmtWithParen(buf *bytes.Buffer, f FmtFlags, e1 Expr, op string, e2 E
 	binExprFmtWithParenAndSubOp(buf, f, e1, "", op, e2)
 }
 
-func binExprFmtWithParenAndSubOp(buf *bytes.Buffer, f FmtFlags, e1 Expr, subOp, op string, e2 Expr) {
+func binExprFmtWithParenAndSubOp(
+	buf *bytes.Buffer, f FmtFlags, e1 Expr, subOp, op string, e2 Expr,
+) {
 	exprFmtWithParen(buf, f, e1)
 	buf.WriteByte(' ')
 	if subOp != "" {

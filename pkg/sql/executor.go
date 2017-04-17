@@ -1059,7 +1059,9 @@ func (e *Executor) execStmtInAbortedTxn(session *Session, stmt parser.Statement)
 // execStmtInCommitWaitTxn executes a statement in a txn that's in state
 // CommitWait.
 // Everything but COMMIT/ROLLBACK causes errors. ROLLBACK is treated like COMMIT.
-func (e *Executor) execStmtInCommitWaitTxn(session *Session, stmt parser.Statement) (Result, error) {
+func (e *Executor) execStmtInCommitWaitTxn(
+	session *Session, stmt parser.Statement,
+) (Result, error) {
 	txnState := &session.TxnState
 	if txnState.State != CommitWait {
 		panic("execStmtInCommitWaitTxn called outside of an aborted txn")

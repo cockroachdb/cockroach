@@ -24,6 +24,8 @@ import:
 # Pins to prevent unintended version changes to libs we care about when adding/
 # removing/changing other deps. These are grouped separately to make it easier
 # to comment them out in bulk when running an across-the-board dep update.
+- package: cloud.google.com/go
+  version: ed63fb27efcf32e25fe7837e4662457d3da4c4f2
 - package: github.com/cockroachdb/apd
   version: 4c0c15263a45c631e8f0310f0acbc1e89c722ac2
 - package: github.com/cockroachdb/c-jemalloc

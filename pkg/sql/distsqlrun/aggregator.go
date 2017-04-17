@@ -288,7 +288,9 @@ func (a *aggregateFuncHolder) get(bucket string) parser.Datum {
 
 // encode returns the encoding for the grouping columns, this is then used as
 // our group key to determine which bucket to add to.
-func (ag *aggregator) encode(appendTo []byte, row sqlbase.EncDatumRow) (encoding []byte, err error) {
+func (ag *aggregator) encode(
+	appendTo []byte, row sqlbase.EncDatumRow,
+) (encoding []byte, err error) {
 	for _, colIdx := range ag.groupCols {
 		appendTo, err = row[colIdx].Encode(&ag.datumAlloc, sqlbase.DatumEncoding_VALUE, appendTo)
 		if err != nil {
