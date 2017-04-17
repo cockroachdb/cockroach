@@ -12,7 +12,7 @@ CREATE TABLE fk (
 )
 
 
-# Pipelining can be used outside of a transaction, but synchronizes immediately
+# Parallel statements can be run outside of a transaction, but they synchronize immediately
 
 statement ok
 INSERT INTO kv VALUES (1, 2) RETURNING NOTHING
@@ -48,7 +48,7 @@ statement ok
 DELETE FROM kv
 
 
-# Successfully perform pipelined inserts
+# Successfully perform parallelized inserts
 
 statement ok
 BEGIN
@@ -72,7 +72,7 @@ SELECT k, v FROM kv ORDER BY k
 2  3
 3  4
 
-# Unsuccessfully perform pipelined inserts
+# Unsuccessfully perform parallelized inserts
 
 statement ok
 BEGIN
@@ -100,7 +100,7 @@ SELECT k, v FROM kv ORDER BY k
 3  4
 
 
-# Successfully perform pipelined upserts
+# Successfully perform parallelized upserts
 
 statement ok
 BEGIN
@@ -125,7 +125,7 @@ SELECT k, v FROM kv ORDER BY k
 3  9
 4  8
 
-# Unsuccessfully perform pipelined upserts
+# Unsuccessfully perform parallelized upserts
 
 statement ok
 BEGIN
@@ -154,7 +154,7 @@ SELECT k, v FROM kv ORDER BY k
 4  8
 
 
-# Successfully perform pipelined updates
+# Successfully perform parallelized updates
 
 statement ok
 BEGIN
@@ -179,7 +179,7 @@ SELECT k, v FROM kv ORDER BY k
 3  3
 4  8
 
-# Unsuccessfully perform pipelined updates
+# Unsuccessfully perform parallelized updates
 
 statement ok
 BEGIN
@@ -210,7 +210,7 @@ SELECT k, v FROM kv ORDER BY k
 
 
 
-# Successfully perform pipelined deletes
+# Successfully perform parallelized deletes
 
 statement ok
 BEGIN
@@ -231,7 +231,7 @@ SELECT k, v FROM kv ORDER BY k
 3  3
 4  8
 
-# Unsuccessfully perform pipelined deletes
+# Unsuccessfully perform parallelized deletes
 
 statement ok
 INSERT INTO fk VALUES (2)
@@ -352,8 +352,8 @@ statement ok
 ROLLBACK
 
 
-# Statements that are IndependentFromPipelinedPriors should not force a
-# pipeline synchronization.
+# Statements that are IndependentFromParallelizedPriors should not force a
+# parallel execution synchronization.
 
 statement ok
 BEGIN
