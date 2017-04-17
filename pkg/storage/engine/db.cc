@@ -61,7 +61,7 @@ struct DBEngine {
   virtual DBStatus ApplyBatchRepr(DBSlice repr, bool sync) = 0;
   virtual DBSlice BatchRepr() = 0;
   virtual DBStatus Get(DBKey key, DBString* value) = 0;
-  virtual DBIterator* NewIter(bool prefix) = 0;
+  virtual DBIterator* NewIter(rocksdb::ReadOptions*) = 0;
   virtual DBStatus GetStats(DBStatsResult* stats) = 0;
 
   DBSSTable* GetSSTables(int* n);
@@ -102,7 +102,7 @@ struct DBImpl : public DBEngine {
   virtual DBStatus ApplyBatchRepr(DBSlice repr, bool sync);
   virtual DBSlice BatchRepr();
   virtual DBStatus Get(DBKey key, DBString* value);
-  virtual DBIterator* NewIter(bool prefix);
+  virtual DBIterator* NewIter(rocksdb::ReadOptions*);
   virtual DBStatus GetStats(DBStatsResult* stats);
 };
 
@@ -123,7 +123,7 @@ struct DBBatch : public DBEngine {
   virtual DBStatus ApplyBatchRepr(DBSlice repr, bool sync);
   virtual DBSlice BatchRepr();
   virtual DBStatus Get(DBKey key, DBString* value);
-  virtual DBIterator* NewIter(bool prefix);
+  virtual DBIterator* NewIter(rocksdb::ReadOptions*);
   virtual DBStatus GetStats(DBStatsResult* stats);
 };
 
@@ -143,7 +143,7 @@ struct DBWriteOnlyBatch : public DBEngine {
   virtual DBStatus ApplyBatchRepr(DBSlice repr, bool sync);
   virtual DBSlice BatchRepr();
   virtual DBStatus Get(DBKey key, DBString* value);
-  virtual DBIterator* NewIter(bool prefix);
+  virtual DBIterator* NewIter(rocksdb::ReadOptions*);
   virtual DBStatus GetStats(DBStatsResult* stats);
 };
 
@@ -168,12 +168,13 @@ struct DBSnapshot : public DBEngine {
   virtual DBStatus ApplyBatchRepr(DBSlice repr, bool sync);
   virtual DBSlice BatchRepr();
   virtual DBStatus Get(DBKey key, DBString* value);
-  virtual DBIterator* NewIter(bool prefix);
+  virtual DBIterator* NewIter(rocksdb::ReadOptions*);
   virtual DBStatus GetStats(DBStatsResult* stats);
 };
 
 struct DBIterator {
   std::unique_ptr<rocksdb::Iterator> rep;
+  std::unique_ptr<rocksdb::ReadOptions> read_opts;
 };
 
 // NOTE: these constants must be kept in sync with the values in
@@ -198,6 +199,22 @@ rocksdb::Slice ToSlice(DBString s) {
 
 const int kMVCCVersionTimestampSize = 12;
 
+void EncodeTimestamp(std::string& s, int64_t wall_time, int32_t logical) {
+  EncodeUint64(&s, uint64_t(wall_time));
+  if (logical != 0) {
+    // TODO(peter): Use varint encoding here. Logical values will
+    // usually be small.
+    EncodeUint32(&s, uint32_t(logical));
+  }
+}
+
+std::string EncodeTimestamp(DBTimestamp ts) {
+  std::string s;
+  s.reserve(kMVCCVersionTimestampSize);
+  EncodeTimestamp(s, ts.wall_time, ts.logical);
+  return s;
+}
+
 // MVCC keys are encoded as <key>[<wall_time>[<logical>]]<#timestamp-bytes>. A
 // custom RocksDB comparator (DBComparator) is used to maintain the desired
 // ordering as these keys do not sort lexicographically correctly.
@@ -210,12 +227,7 @@ std::string EncodeKey(DBKey k) {
     // Add a NUL prefix to the timestamp data. See DBPrefixExtractor.Transform
     // for more details.
     s.push_back(0);
-    EncodeUint64(&s, uint64_t(k.wall_time));
-    if (k.logical != 0) {
-      // TODO(peter): Use varint encoding here. Logical values will
-      // usually be small.
-      EncodeUint32(&s, uint32_t(k.logical));
-    }
+    EncodeTimestamp(s, k.wall_time, k.logical);
   }
   s.push_back(char(s.size() - k.key.len));
   return s;
@@ -1038,13 +1050,13 @@ class BaseDeltaIterator : public rocksdb::Iterator {
  public:
   BaseDeltaIterator(rocksdb::Iterator* base_iterator,
                     rocksdb::WBWIIterator* delta_iterator,
-                    bool prefix)
+                    bool prefix_same_as_start)
       : current_at_base_(true),
         equal_keys_(false),
         status_(rocksdb::Status::OK()),
         base_iterator_(base_iterator),
         delta_iterator_(delta_iterator),
-        prefix_same_as_start_(prefix) {
+        prefix_same_as_start_(prefix_same_as_start) {
     merged_.data = NULL;
   }
 
@@ -1920,36 +1932,30 @@ DBEngine* DBNewBatch(DBEngine *db, bool writeOnly) {
   return new DBBatch(db);
 }
 
-DBIterator* DBImpl::NewIter(bool prefix) {
+DBIterator* DBImpl::NewIter(rocksdb::ReadOptions* read_opts) {
   DBIterator* iter = new DBIterator;
-  rocksdb::ReadOptions opts = read_opts;
-  opts.prefix_same_as_start = prefix;
-  opts.total_order_seek = !prefix;
-  iter->rep.reset(rep->NewIterator(opts));
+  iter->read_opts.reset(read_opts);
+  iter->rep.reset(rep->NewIterator(*read_opts));
   return iter;
 }
 
-DBIterator* DBBatch::NewIter(bool prefix) {
+DBIterator* DBBatch::NewIter(rocksdb::ReadOptions* read_opts) {
   DBIterator* iter = new DBIterator;
-  rocksdb::ReadOptions opts = read_opts;
-  opts.prefix_same_as_start = prefix;
-  opts.total_order_seek = !prefix;
-  rocksdb::Iterator* base = rep->NewIterator(opts);
+  rocksdb::Iterator* base = rep->NewIterator(*read_opts);
   rocksdb::WBWIIterator* delta = batch.NewIterator();
-  iter->rep.reset(new BaseDeltaIterator(base, delta, prefix));
+  iter->read_opts.reset(read_opts);
+  iter->rep.reset(new BaseDeltaIterator(base, delta, read_opts->prefix_same_as_start));
   return iter;
 }
 
-DBIterator* DBWriteOnlyBatch::NewIter(bool prefix) {
+DBIterator* DBWriteOnlyBatch::NewIter(rocksdb::ReadOptions* read_opts) {
   return NULL;
 }
 
-DBIterator* DBSnapshot::NewIter(bool prefix) {
+DBIterator* DBSnapshot::NewIter(rocksdb::ReadOptions* read_opts) {
   DBIterator* iter = new DBIterator;
-  rocksdb::ReadOptions opts = read_opts;
-  opts.prefix_same_as_start = prefix;
-  opts.total_order_seek = !prefix;
-  iter->rep.reset(rep->NewIterator(opts));
+  iter->read_opts.reset(read_opts);
+  iter->rep.reset(rep->NewIterator(*read_opts));
   return iter;
 }
 
@@ -1995,7 +2001,31 @@ DBStatus DBSnapshot::GetStats(DBStatsResult* stats) {
 }
 
 DBIterator* DBNewIter(DBEngine* db, bool prefix) {
-  return db->NewIter(prefix);
+  rocksdb::ReadOptions* opts = new rocksdb::ReadOptions;
+  opts->prefix_same_as_start = prefix;
+  opts->total_order_seek = !prefix;
+  return db->NewIter(opts);
+}
+
+DBIterator* DBNewTimeBoundIter(DBEngine* db, DBTimestamp min_ts, DBTimestamp max_ts) {
+  std::string min = EncodeTimestamp(min_ts);
+  std::string max = EncodeTimestamp(max_ts);
+  rocksdb::ReadOptions* opts = new rocksdb::ReadOptions;
+  opts->table_properties_inspector = [min, max](const rocksdb::TableProperties* properties) {
+    auto userprops = properties->user_collected_properties;
+    auto tbl_min = userprops.find("crdb.ts.min");
+    if (tbl_min == userprops.end() || tbl_min->second.empty()) {
+      return true;
+    }
+    auto tbl_max = userprops.find("crdb.ts.max");
+    if (tbl_max == userprops.end() || tbl_max->second.empty()) {
+      return true;
+    }
+    // If the timestamp range of the table overlaps with the timestamp range we
+    // want to iterate, the table might contain timestamps we care about.
+    return max.compare(tbl_min->second) >= 0 && min.compare(tbl_max->second) <= 0;
+  };
+  return db->NewIter(opts);
 }
 
 void DBIterDestroy(DBIterator* iter) {

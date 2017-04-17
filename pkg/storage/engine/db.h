@@ -50,6 +50,11 @@ typedef struct {
 } DBKey;
 
 typedef struct {
+  int64_t wall_time;
+  int32_t logical;
+} DBTimestamp;
+
+typedef struct {
   bool valid;
   DBKey key;
   DBSlice value;
@@ -161,6 +166,8 @@ DBEngine* DBNewBatch(DBEngine* db, bool writeOnly);
 // be skipped). It is the callers responsibility to call
 // DBIterDestroy().
 DBIterator* DBNewIter(DBEngine* db, bool prefix);
+
+DBIterator* DBNewTimeBoundIter(DBEngine* db, DBTimestamp min_ts, DBTimestamp max_ts);
 
 // Destroys an iterator, freeing up any associated memory.
 void DBIterDestroy(DBIterator* iter);
