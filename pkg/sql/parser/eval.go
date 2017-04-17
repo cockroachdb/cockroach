@@ -30,6 +30,7 @@ import (
 
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/mon"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -1719,6 +1720,8 @@ type EvalContext struct {
 	SkipNormalize bool
 
 	collationEnv CollationEnvironment
+
+	Mon *mon.MemoryMonitor
 }
 
 // GetStmtTimestamp retrieves the current statement timestamp as per

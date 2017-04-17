@@ -23,6 +23,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"math"
 	"net"
 	"net/http"
 	"os"
@@ -51,6 +52,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
+	"github.com/cockroachdb/cockroach/pkg/sql/mon"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/ts"
@@ -250,6 +252,21 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 
 	s.refreshSettings()
 
+	// We do not set memory monitors or a noteworthy limit because the children of
+	// this monitor will be setting their own noteworthy limits.
+	rootSQLMemoryMonitor := mon.MakeMonitor(
+		"root",
+		nil,           /* counter monitor */
+		nil,           /* histogram monitor */
+		-1,            /* use default increment */
+		math.MaxInt64, /* noteworthy */
+	)
+	rootSQLMemoryMonitor.Start(context.Background(), nil, mon.MakeStandaloneBudget(s.cfg.SQLMemoryPoolSize))
+
+	distSQLMetrics := sql.MakeMemMetrics("distsql", cfg.HistogramWindowInterval())
+	s.registry.AddMetric(distSQLMetrics.CurBytesCount)
+	s.registry.AddMetric(distSQLMetrics.MaxBytesHist)
+
 	// Set up the DistSQL server
 	distSQLCfg := distsqlrun.ServerConfig{
 		AmbientContext: s.cfg.AmbientCtx,
@@ -257,11 +274,15 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		RPCContext:     s.rpcContext,
 		Stopper:        s.stopper,
 		NodeID:         &s.nodeIDContainer,
+
+		ParentMemoryMonitor: &rootSQLMemoryMonitor,
+		Counter:             distSQLMetrics.CurBytesCount,
+		Hist:                distSQLMetrics.MaxBytesHist,
 	}
 	if s.cfg.TestingKnobs.DistSQL != nil {
 		distSQLCfg.TestingKnobs = *s.cfg.TestingKnobs.DistSQL.(*distsqlrun.TestingKnobs)
 	}
-	s.distSQLServer = distsqlrun.NewServer(distSQLCfg)
+	s.distSQLServer = distsqlrun.NewServer(ctx, distSQLCfg)
 	distsqlrun.RegisterDistSQLServer(s.grpc, s.distSQLServer)
 
 	// Set up admin memory metrics for use by admin SQL executors.
@@ -302,7 +323,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		s.cfg.Config,
 		s.sqlExecutor,
 		&s.internalMemMetrics,
-		s.cfg.SQLMemoryPoolSize,
+		&rootSQLMemoryMonitor,
 		s.cfg.HistogramWindowInterval(),
 	)
 	s.registry.AddMetricStruct(s.pgServer.Metrics())
