@@ -33,11 +33,6 @@ type RetryableTxnError struct {
 	// The error that this RetryableTxnError wraps. Useful for tests that want to
 	// assert that they got the expected error.
 	Cause ErrorDetailInterface
-
-	// TODO(andrei): These are here temporarily for facilitation converting
-	// RetryableTxnError to pErr. Get rid of it afterwards.
-	Transaction *Transaction
-	CauseProto  *ErrorDetail
 }
 
 func (e *RetryableTxnError) Error() string {
@@ -171,11 +166,9 @@ func (e *Error) GoError() error {
 			txnID = e.GetTxn().ID
 		}
 		return &RetryableTxnError{
-			message:     e.Message,
-			TxnID:       txnID,
-			Transaction: e.GetTxn(),
-			Cause:       e.GetDetail(),
-			CauseProto:  e.Detail,
+			message: e.Message,
+			TxnID:   txnID,
+			Cause:   e.GetDetail(),
 		}
 	}
 	return e.GetDetail()
