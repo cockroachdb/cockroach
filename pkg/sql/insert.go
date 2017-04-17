@@ -318,7 +318,9 @@ func (n *insertNode) Next(ctx context.Context) (bool, error) {
 		return false, err
 	}
 
-	n.checkHelper.loadRow(n.insertColIDtoRowIndex, rowVals, false)
+	if err := n.checkHelper.loadRow(n.insertColIDtoRowIndex, rowVals, false); err != nil {
+		return false, err
+	}
 	if err := n.checkHelper.check(&n.p.evalCtx); err != nil {
 		return false, err
 	}
