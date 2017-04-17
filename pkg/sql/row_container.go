@@ -209,6 +209,9 @@ func (c *RowContainer) Len() int {
 	return c.numRows
 }
 
+// Silence unused warning for *RowContainer.NumCols.
+var _ = (*RowContainer).NumCols
+
 // NumCols reports the number of columns held in this RowContainer.
 func (c *RowContainer) NumCols() int {
 	return c.numCols
