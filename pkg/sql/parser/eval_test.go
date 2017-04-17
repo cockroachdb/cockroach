@@ -549,6 +549,11 @@ func TestEval(t *testing.T) {
 		{`(1.1::decimal)::float`, `1.1`},
 		{`(1.1::decimal)::boolean`, `true`},
 		{`(0.0::decimal)::boolean`, `false`},
+		{`(1e300::decimal)::float`, `1e+300`},
+		{`(9223372036854775807::decimal)::int`, `9223372036854775807`},
+		// The two largest floats that can be converted to an int, albeit inexactly.
+		{`9223372036854775295::float::int`, `9223372036854774784`},
+		{`-9223372036854775295::float::int`, `-9223372036854774784`},
 		{`1.1::int`, `1`},
 		{`1.5::int`, `2`},
 		{`1.9::int`, `2`},
@@ -789,6 +794,8 @@ func TestEval(t *testing.T) {
 		{`'-Inf'::decimal = '+Inf'::decimal`, `false`},
 		{`'-Inf'::decimal > '+Inf'::decimal`, `false`},
 		{`'-Inf'::decimal >= '+Inf'::decimal`, `false`},
+		{`'Inf'::decimal::float`, `+Inf`},
+		{`'Inf'::float::decimal`, `Infinity`},
 		// NaN
 		{`'NaN'::float`, `NaN`},
 		{`'NaN'::float(4)`, `NaN`},
@@ -836,6 +843,8 @@ func TestEval(t *testing.T) {
 		{`'NaN'::decimal = 'NaN'::decimal`, `false`},
 		{`'NaN'::decimal > 'NaN'::decimal`, `false`},
 		{`'NaN'::decimal >= 'NaN'::decimal`, `false`},
+		{`'NaN'::decimal::float`, `NaN`},
+		{`'NaN'::float::decimal`, `NaN`},
 	}
 	for _, d := range testData {
 		expr, err := ParseExprTraditional(d.expr)
@@ -1050,6 +1059,21 @@ func TestEvalError(t *testing.T) {
 		{`(-9223372036854775807:::int - 1) * -1:::int`, `integer out of range`},
 		{`123 ^ 100`, `integer out of range`},
 		{`power(123, 100)`, `integer out of range`},
+		// Although these next two tests are valid integers, a float cannot represent
+		// them exactly, and so rounds them to a larger number that is out of bounds
+		// for an int. Thus, they should fail during this conversion.
+		{`9223372036854775807::float::int`, `integer out of range`},
+		{`-9223372036854775808::float::int`, `integer out of range`},
+		// The two smallest floats that cannot be converted to an int.
+		{`9223372036854775296::float::int`, `integer out of range`},
+		{`-9223372036854775296::float::int`, `integer out of range`},
+		{`1e500::decimal::int`, `integer out of range`},
+		{`1e500::decimal::float`, `float out of range`},
+		{`1e300::decimal::float::int`, `integer out of range`},
+		{`'Inf'::decimal::int`, `integer out of range`},
+		{`'NaN'::decimal::int`, `integer out of range`},
+		{`'Inf'::float::int`, `integer out of range`},
+		{`'NaN'::float::int`, `integer out of range`},
 	}
 	for _, d := range testData {
 		expr, err := ParseExprTraditional(d.expr)
