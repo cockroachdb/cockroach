@@ -37,8 +37,8 @@ func newPlanNode() planNode {
 	return &emptyNode{}
 }
 
-// assertLen asserts the number of plans in the PipelineQueue.
-func assertLen(t *testing.T, pq *PipelineQueue, exp int) {
+// assertLen asserts the number of plans in the ParallelizeQueue.
+func assertLen(t *testing.T, pq *ParallelizeQueue, exp int) {
 	if l := pq.Len(); l != exp {
 		t.Errorf("expected plan count of %d, found %d", exp, l)
 	}
@@ -46,7 +46,7 @@ func assertLen(t *testing.T, pq *PipelineQueue, exp int) {
 
 // assertLenEventually is like assertLen, but can be used in racy situations
 // where proper synchronization can not be performed.
-func assertLenEventually(t *testing.T, pq *PipelineQueue, exp int) {
+func assertLenEventually(t *testing.T, pq *ParallelizeQueue, exp int) {
 	testutils.SucceedsSoon(t, func() error {
 		if l := pq.Len(); l != exp {
 			return errors.Errorf("expected plan count of %d, found %d", exp, l)
@@ -55,26 +55,26 @@ func assertLenEventually(t *testing.T, pq *PipelineQueue, exp int) {
 	})
 }
 
-// waitAndAssertEmptyWithErr waits for the PipelineQueue to drain, then asserts
-// that the queue is empty. It returns the error produced by PipelineQueue.Wait.
-func waitAndAssertEmptyWithErr(t *testing.T, pq *PipelineQueue) error {
+// waitAndAssertEmptyWithErr waits for the ParallelizeQueue to drain, then asserts
+// that the queue is empty. It returns the error produced by ParallelizeQueue.Wait.
+func waitAndAssertEmptyWithErr(t *testing.T, pq *ParallelizeQueue) error {
 	err := pq.Wait()
 	if l := pq.Len(); l != 0 {
-		t.Errorf("expected empty PipelineQueue, found %d plans remaining", l)
+		t.Errorf("expected empty ParallelizeQueue, found %d plans remaining", l)
 	}
 	return err
 }
 
-func waitAndAssertEmpty(t *testing.T, pq *PipelineQueue) {
+func waitAndAssertEmpty(t *testing.T, pq *ParallelizeQueue) {
 	if err := waitAndAssertEmptyWithErr(t, pq); err != nil {
-		t.Fatalf("unexpected error waiting for pipeline queue to drain: %v", err)
+		t.Fatalf("unexpected error waiting for ParallelizeQueue to drain: %v", err)
 	}
 }
 
-// TestPipelineQueueNoDependencies tests three plans run through a PipelineQueue when
-// none of the plans are dependent on each other. Because of their independence, we
-// use channels to guarantee deterministic execution.
-func TestPipelineQueueNoDependencies(t *testing.T) {
+// TestParallelizeQueueNoDependencies tests three plans run through a ParallelizeQueue
+// when none of the plans are dependent on each other. Because of their independence,
+// we use channels to guarantee deterministic execution.
+func TestParallelizeQueueNoDependencies(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
 
@@ -82,7 +82,7 @@ func TestPipelineQueueNoDependencies(t *testing.T) {
 	run1, run2, run3 := make(chan struct{}), make(chan struct{}), make(chan struct{})
 
 	// Executes: plan3 -> plan1 -> plan2.
-	pq := MakePipelineQueue(NoDependenciesAnalyzer)
+	pq := MakeParallelizeQueue(NoDependenciesAnalyzer)
 	pq.Add(ctx, newPlanNode(), func(plan planNode) error {
 		<-run1
 		res = append(res, 1)
@@ -108,14 +108,14 @@ func TestPipelineQueueNoDependencies(t *testing.T) {
 	waitAndAssertEmpty(t, &pq)
 	exp := []int{1, 3, 2}
 	if !reflect.DeepEqual(res, exp) {
-		t.Fatalf("expected pipeline side effects %v, found %v", exp, res)
+		t.Fatalf("expected parallel execution side effects %v, found %v", exp, res)
 	}
 }
 
-// TestPipelineQueueAllDependent tests three plans run through a PipelineQueue when
-// all of the plans are dependent on each other. Because of their dependence, we
+// TestParallelizeQueueAllDependent tests three plans run through a ParallelizeQueue
+// when all of the plans are dependent on each other. Because of their dependence, we
 // need no extra synchronization to guarantee deterministic execution.
-func TestPipelineQueueAllDependent(t *testing.T) {
+func TestParallelizeQueueAllDependent(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
 
@@ -126,7 +126,7 @@ func TestPipelineQueueAllDependent(t *testing.T) {
 	})
 
 	// Executes: plan1 -> plan2 -> plan3.
-	pq := MakePipelineQueue(analyzer)
+	pq := MakeParallelizeQueue(analyzer)
 	pq.Add(ctx, newPlanNode(), func(plan planNode) error {
 		<-run
 		res = append(res, 1)
@@ -148,14 +148,14 @@ func TestPipelineQueueAllDependent(t *testing.T) {
 	waitAndAssertEmpty(t, &pq)
 	exp := []int{1, 2, 3}
 	if !reflect.DeepEqual(res, exp) {
-		t.Fatalf("expected pipeline side effects %v, found %v", exp, res)
+		t.Fatalf("expected parallel execution side effects %v, found %v", exp, res)
 	}
 }
 
-// TestPipelineQueueSingleDependency tests three plans where one is dependent on
+// TestParallelizeQueueSingleDependency tests three plans where one is dependent on
 // another. Because one plan is dependent, it will be held in the pending queue
 // until the prerequisite plan completes execution.
-func TestPipelineQueueSingleDependency(t *testing.T) {
+func TestParallelizeQueueSingleDependency(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
 
@@ -171,7 +171,7 @@ func TestPipelineQueueSingleDependency(t *testing.T) {
 	})
 
 	// Executes: plan3 -> plan1 -> plan2.
-	pq := MakePipelineQueue(analyzer)
+	pq := MakeParallelizeQueue(analyzer)
 	pq.Add(ctx, plan1, func(plan planNode) error {
 		<-run1
 		res = append(res, 1)
@@ -195,13 +195,13 @@ func TestPipelineQueueSingleDependency(t *testing.T) {
 	waitAndAssertEmpty(t, &pq)
 	exp := []int{3, 1, 2}
 	if !reflect.DeepEqual(res, exp) {
-		t.Fatalf("expected pipeline side effects %v, found %v", exp, res)
+		t.Fatalf("expected parallel execution side effects %v, found %v", exp, res)
 	}
 }
 
-// TestPipelineQueueError tests three plans where one is dependent on another
+// TestParallelizeQueueError tests three plans where one is dependent on another
 // and the prerequisite plan throws an error.
-func TestPipelineQueueError(t *testing.T) {
+func TestParallelizeQueueError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
 
@@ -218,7 +218,7 @@ func TestPipelineQueueError(t *testing.T) {
 	})
 
 	// Executes: plan3 -> plan1 (error!) -> plan2 (dropped).
-	pq := MakePipelineQueue(analyzer)
+	pq := MakeParallelizeQueue(analyzer)
 	pq.Add(ctx, plan1, func(plan planNode) error {
 		<-run1
 		res = append(res, 1)
@@ -247,15 +247,15 @@ func TestPipelineQueueError(t *testing.T) {
 
 	exp := []int{3, 1}
 	if !reflect.DeepEqual(res, exp) {
-		t.Fatalf("expected pipeline side effects %v, found %v", exp, res)
+		t.Fatalf("expected parallel execution side effects %v, found %v", exp, res)
 	}
 }
 
-// TestPipelineQueueAddAfterError tests that if a plan is added to a PipelineQueue
+// TestParallelizeQueueAddAfterError tests that if a plan is added to a ParallelizeQueue
 // after an error has been produced but before Wait has been called, that the plan
 // will never be run. It then tests that once Wait has been called, the error state
 // will be cleared.
-func TestPipelineQueueAddAfterError(t *testing.T) {
+func TestParallelizeQueueAddAfterError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
 
@@ -264,7 +264,7 @@ func TestPipelineQueueAddAfterError(t *testing.T) {
 	planErr := errors.Errorf("plan1 will throw this error")
 
 	// Executes: plan1 (error!) -> plan2 (dropped) -> plan3.
-	pq := MakePipelineQueue(NoDependenciesAnalyzer)
+	pq := MakeParallelizeQueue(NoDependenciesAnalyzer)
 	pq.Add(ctx, plan1, func(plan planNode) error {
 		res = append(res, 1)
 		assertLen(t, &pq, 1)
@@ -286,7 +286,7 @@ func TestPipelineQueueAddAfterError(t *testing.T) {
 		return nil
 	})
 
-	// Wait for the pipeline queue to clear and assert that we see the
+	// Wait for the ParallelizeQueue to clear and assert that we see the
 	// correct error.
 	resErr := waitAndAssertEmptyWithErr(t, &pq)
 	if resErr != planErr {
@@ -303,7 +303,7 @@ func TestPipelineQueueAddAfterError(t *testing.T) {
 	waitAndAssertEmpty(t, &pq)
 	exp := []int{1, 3}
 	if !reflect.DeepEqual(res, exp) {
-		t.Fatalf("expected pipeline side effects %v, found %v", exp, res)
+		t.Fatalf("expected parallel execution side effects %v, found %v", exp, res)
 	}
 }
 

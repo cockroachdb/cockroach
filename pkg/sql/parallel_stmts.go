@@ -27,14 +27,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
-// PipelineQueue maintains a set of planNodes running with pipelined execution.
-// Pipelined execution means that multiple statements run asynchronously, with
+// ParallelizeQueue maintains a set of planNodes running with parallelized execution.
+// Parallelized execution means that multiple statements run asynchronously, with
 // their results mocked out to the client and with independent statements allowed
 // to run in parallel. Any errors seen when running these statements are delayed
-// until the pipelined execution is "synchronized" on the next non-pipelined
-// statement. The syntax to pipeline statement execution is the statement with
+// until the parallelized execution is "synchronized" on the next non-parallelized
+// statement. The syntax to parallelize statement execution is the statement with
 // RETURNING NOTHING appended to it. The feature is described further in
-// docs/RFCS/sql_pipelining.md.
+// docs/RFCS/sql_parallelization.md.
 //
 // It uses a DependencyAnalyzer to determine dependencies between plans. Using
 // this knowledge, the queue provides the following guarantees about the execution
@@ -45,7 +45,7 @@ import (
 // 3. No plans will begin execution once an error has been seen until Wait is
 //    called to drain the plans and reset the error state.
 //
-type PipelineQueue struct {
+type ParallelizeQueue struct {
 	// analyzer is a DependencyAnalyzer that computes when certain plans are dependent
 	// on one another. It determines if it is safe to run plans concurrently.
 	analyzer DependencyAnalyzer
@@ -54,8 +54,8 @@ type PipelineQueue struct {
 	// channels. These channels are closed when the plan has finished executing.
 	plans map[planNode]doneChan
 
-	// err is the first error seen since the last call to PipelineQueue.Wait. Referred to
-	// as the current "pipeline batch's error".
+	// err is the first error seen since the last call to ParallelizeQueue.Wait.
+	// Referred to as the current "parallel batch's error".
 	err error
 
 	mu           syncutil.Mutex
@@ -65,10 +65,10 @@ type PipelineQueue struct {
 // doneChan is a channel that is closed when a plan finishes execution.
 type doneChan chan struct{}
 
-// MakePipelineQueue creates a new empty PipelineQueue that uses the provided
+// MakeParallelizeQueue creates a new empty ParallelizeQueue that uses the provided
 // DependencyAnalyzer to determine plan dependencies.
-func MakePipelineQueue(analyzer DependencyAnalyzer) PipelineQueue {
-	return PipelineQueue{
+func MakeParallelizeQueue(analyzer DependencyAnalyzer) ParallelizeQueue {
+	return ParallelizeQueue{
 		plans:    make(map[planNode]doneChan),
 		analyzer: analyzer,
 	}
@@ -76,12 +76,12 @@ func MakePipelineQueue(analyzer DependencyAnalyzer) PipelineQueue {
 
 // Add inserts a new plan in the queue and executes the provided function when
 // all plans that it depends on have completed successfully, obeying the guarantees
-// made by the PipelineQueue above. The exec function should be used to run the
+// made by the ParallelizeQueue above. The exec function should be used to run the
 // planNode and return any error observed during its execution.
 //
 // Add should not be called concurrently with Wait. See Wait's comment for more
 // details.
-func (pq *PipelineQueue) Add(ctx context.Context, plan planNode, exec func(planNode) error) {
+func (pq *ParallelizeQueue) Add(ctx context.Context, plan planNode, exec func(planNode) error) {
 	prereqs, finishLocked := pq.insertInQueue(ctx, plan)
 	pq.runningGroup.Add(1)
 	go func() {
@@ -125,7 +125,9 @@ func (pq *PipelineQueue) Add(ctx context.Context, plan planNode, exec func(planN
 // channels of prerequisite blocking the new plan from executing. It also returns a
 // function to call when the new plan has finished executing. This function must be
 // called while pq.mu is held.
-func (pq *PipelineQueue) insertInQueue(ctx context.Context, newPlan planNode) ([]doneChan, func()) {
+func (pq *ParallelizeQueue) insertInQueue(
+	ctx context.Context, newPlan planNode,
+) ([]doneChan, func()) {
 	pq.mu.Lock()
 	defer pq.mu.Unlock()
 
@@ -152,7 +154,7 @@ func (pq *PipelineQueue) insertInQueue(ctx context.Context, newPlan planNode) ([
 // that a new plan is dependent on. It returns a slice of doneChans for each plan
 // in this set. Returns a nil slice if the plan has no prerequisites and can be run
 // immediately.
-func (pq *PipelineQueue) prereqsForPlanLocked(ctx context.Context, newPlan planNode) []doneChan {
+func (pq *ParallelizeQueue) prereqsForPlanLocked(ctx context.Context, newPlan planNode) []doneChan {
 	// Add all plans from the plan set that this new plan is dependent on.
 	var prereqs []doneChan
 	for plan, doneChan := range pq.plans {
@@ -163,15 +165,15 @@ func (pq *PipelineQueue) prereqsForPlanLocked(ctx context.Context, newPlan planN
 	return prereqs
 }
 
-// Len returns the number of plans in the PipelineQueue.
-func (pq *PipelineQueue) Len() int {
+// Len returns the number of plans in the ParallelizeQueue.
+func (pq *ParallelizeQueue) Len() int {
 	pq.mu.Lock()
 	defer pq.mu.Unlock()
 	return len(pq.plans)
 }
 
-// Wait blocks until the PipelineQueue finishes executing all plans. It then
-// returns the error of the last batch of pipelined execution before reseting
+// Wait blocks until the ParallelizeQueue finishes executing all plans. It then
+// returns the error of the last batch of parallelized execution before reseting
 // the error to allow for future use.
 //
 // Wait can not be called concurrently with Add. If we need to lift this
@@ -179,11 +181,11 @@ func (pq *PipelineQueue) Len() int {
 // which will provide the desired starvation and ordering properties. Those
 // being that once Wait is called, future Adds will not be reordered ahead
 // of Waits attempts to drain all running and pending plans.
-func (pq *PipelineQueue) Wait() error {
+func (pq *ParallelizeQueue) Wait() error {
 	pq.runningGroup.Wait()
 
 	// There is no race condition between waiting on the WaitGroup and locking
-	// the mutex because PipelineQueue.Wait cannot be called concurrently with
+	// the mutex because ParallelizeQueue.Wait cannot be called concurrently with
 	// Add. We lock only because Err may be called concurrently.
 	pq.mu.Lock()
 	defer pq.mu.Unlock()
@@ -192,8 +194,8 @@ func (pq *PipelineQueue) Wait() error {
 	return err
 }
 
-// Err returns the PipelineQueue's error.
-func (pq *PipelineQueue) Err() error {
+// Err returns the ParallelizeQueue's error.
+func (pq *ParallelizeQueue) Err() error {
 	pq.mu.Lock()
 	defer pq.mu.Unlock()
 	return pq.err
@@ -202,7 +204,7 @@ func (pq *PipelineQueue) Err() error {
 // DependencyAnalyzer determines if plans are independent of one another, where
 // independent plans are defined by whether their execution could be safely
 // reordered without having an effect on their runtime semantics or on their
-// results. DependencyAnalyzer is used by PipelineQueue to test whether it is
+// results. DependencyAnalyzer is used by ParallelizeQueue to test whether it is
 // safe for multiple statements to be run concurrently.
 //
 // DependencyAnalyzer implementations do not need to be safe to use from multiple
@@ -335,21 +337,22 @@ func (a *spanBasedDependencyAnalyzer) Clear(p planNode) {
 	delete(a.analysisCache, p)
 }
 
-// IsStmtPipelined determines if a given statement's execution should be pipelined.
-// This means that its results should be mocked out, and that it should be run
-// asynchronously.
-func IsStmtPipelined(stmt parser.Statement) bool {
-	pipelinedRetClause := func(ret parser.ReturningClause) bool {
+// IsStmtParallelized determines if a given statement's execution should be
+// parallelized. This means that its results should be mocked out, and that
+// it should be run asynchronously and in parallel with other statements that
+// are independent.
+func IsStmtParallelized(stmt parser.Statement) bool {
+	parallelizedRetClause := func(ret parser.ReturningClause) bool {
 		_, ok := ret.(*parser.ReturningNothing)
 		return ok
 	}
 	switch s := stmt.(type) {
 	case *parser.Delete:
-		return pipelinedRetClause(s.Returning)
+		return parallelizedRetClause(s.Returning)
 	case *parser.Insert:
-		return pipelinedRetClause(s.Returning)
+		return parallelizedRetClause(s.Returning)
 	case *parser.Update:
-		return pipelinedRetClause(s.Returning)
+		return parallelizedRetClause(s.Returning)
 	}
 	return false
 }
