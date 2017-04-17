@@ -171,7 +171,7 @@ func newTestDescriptorDB() *testDescriptorDB {
 	})
 	db.data.Insert(testDescriptorNode{
 		&roachpb.RangeDescriptor{
-			StartKey: roachpb.RKeyMin,
+			StartKey: testutils.MakeKey(keys.Meta2Prefix, roachpb.RKeyMax),
 			EndKey:   roachpb.RKeyMax,
 		},
 	})
