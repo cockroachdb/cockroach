@@ -125,11 +125,8 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		cfg.AmbientCtx.Tracer = tracing.NewTracer()
 	}
 
-	// Try loading the TLS configs before anything else.
-	if _, err := cfg.GetServerTLSConfig(); err != nil {
-		return nil, err
-	}
-	if _, err := cfg.GetClientTLSConfig(); err != nil {
+	// Attempt to load TLS configs right away, failures are permanent.
+	if err := cfg.InitializeNodeTLSConfigs(stopper); err != nil {
 		return nil, err
 	}
 
