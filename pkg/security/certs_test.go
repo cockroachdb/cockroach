@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/pkg/errors"
 )
 
 func TestGenerateCACert(t *testing.T) {
@@ -147,6 +148,31 @@ func TestGenerateNodeCerts(t *testing.T) {
 	}
 }
 
+func generateAllCerts(certsDir string) error {
+	if err := security.CreateCAPair(
+		certsDir, filepath.Join(certsDir, security.EmbeddedCAKey),
+		512, time.Hour*48, true, true,
+	); err != nil {
+		return errors.Errorf("could not generate CA pair: %v", err)
+	}
+
+	if err := security.CreateNodePair(
+		certsDir, filepath.Join(certsDir, security.EmbeddedCAKey),
+		512, time.Hour*48, true, []string{"127.0.0.1"},
+	); err != nil {
+		return errors.Errorf("could not generate Node pair: %v", err)
+	}
+
+	if err := security.CreateClientPair(
+		certsDir, filepath.Join(certsDir, security.EmbeddedCAKey),
+		512, time.Hour*48, true, security.RootUser,
+	); err != nil {
+		return errors.Errorf("could not generate Client pair: %v", err)
+	}
+
+	return nil
+}
+
 // This is a fairly high-level test of CA and node certificates.
 // We construct SSL server and clients and use the generated certs.
 func TestUseCerts(t *testing.T) {
@@ -164,24 +190,8 @@ func TestUseCerts(t *testing.T) {
 		}
 	}()
 
-	if err := security.CreateCAPair(
-		certsDir, filepath.Join(certsDir, security.EmbeddedCAKey), 512, time.Hour*48, false, false,
-	); err != nil {
-		t.Fatalf("Expected success, got %v", err)
-	}
-
-	if err := security.CreateNodePair(
-		certsDir, filepath.Join(certsDir, security.EmbeddedCAKey),
-		512, time.Hour*48, false, []string{"127.0.0.1"},
-	); err != nil {
-		t.Fatalf("Expected success, got %v", err)
-	}
-
-	if err := security.CreateClientPair(
-		certsDir, filepath.Join(certsDir, security.EmbeddedCAKey),
-		512, time.Hour*48, false, security.RootUser,
-	); err != nil {
-		t.Fatalf("Expected success, got %v", err)
+	if err := generateAllCerts(certsDir); err != nil {
+		t.Fatal(err)
 	}
 
 	// Load TLS Configs. This is what TestServer and HTTPClient do internally.

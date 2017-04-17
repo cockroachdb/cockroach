@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 )
@@ -249,6 +250,30 @@ func (cfg *Config) GetCertificateManager() (*security.CertificateManager, error)
 			security.NewCertificateManager(cfg.SSLCertsDir)
 	})
 	return cfg.certificateManager.cm, cfg.certificateManager.err
+}
+
+// InitializeNodeTLSConfigs tries to load client and server-side TLS configs.
+// It also enables the reload-on-SIGHUP functionality on the certificate manager.
+// This should be called early in the life of the server to make sure there are no
+// issues with TLS configs.
+func (cfg *Config) InitializeNodeTLSConfigs(stopper *stop.Stopper) error {
+	if cfg.Insecure {
+		return nil
+	}
+
+	if _, err := cfg.GetServerTLSConfig(); err != nil {
+		return err
+	}
+	if _, err := cfg.GetClientTLSConfig(); err != nil {
+		return err
+	}
+
+	cm, err := cfg.GetCertificateManager()
+	if err != nil {
+		return err
+	}
+	cm.RegisterSignalHandler(stopper)
+	return nil
 }
 
 // GetClientTLSConfig returns the client TLS config, initializing it if needed.
