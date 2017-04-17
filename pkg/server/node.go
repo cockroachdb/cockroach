@@ -22,9 +22,6 @@ import (
 	"net"
 	"time"
 
-	"google.golang.org/grpc/credentials"
-	"google.golang.org/grpc/peer"
-
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
@@ -35,7 +32,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -805,22 +801,6 @@ func (n *Node) recordJoinEvent() {
 func (n *Node) batchInternal(
 	ctx context.Context, args *roachpb.BatchRequest,
 ) (*roachpb.BatchResponse, error) {
-	// TODO(marc): grpc's authentication model (which gives credential access in
-	// the request handler) doesn't really fit with the current design of the
-	// security package (which assumes that TLS state is only given at connection
-	// time) - that should be fixed.
-	if peer, ok := peer.FromContext(ctx); ok {
-		if tlsInfo, ok := peer.AuthInfo.(credentials.TLSInfo); ok {
-			certUser, err := security.GetCertificateUser(&tlsInfo.State)
-			if err != nil {
-				return nil, err
-			}
-			if certUser != security.NodeUser {
-				return nil, errors.Errorf("user %s is not allowed", certUser)
-			}
-		}
-	}
-
 	var br *roachpb.BatchResponse
 
 	if err := n.stopper.RunTaskWithErr(func() error {
