@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -571,6 +572,32 @@ func TestSpanStatsGRPCResponse(t *testing.T) {
 	}
 	if a, e := int(response.RangeCount), initialRanges; a != e {
 		t.Errorf("expected %d ranges, found %d", e, a)
+	}
+}
+
+func TestNodesGRPCResponse(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ts := startServer(t)
+	defer ts.Stopper().Stop()
+
+	rootConfig := testutils.NewTestBaseContext(security.RootUser)
+	rpcContext := rpc.NewContext(log.AmbientContext{}, rootConfig, ts.Clock(), ts.Stopper())
+	var request serverpb.NodesRequest
+
+	url := ts.ServingAddr()
+	conn, err := rpcContext.GRPCDial(url)
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := serverpb.NewStatusClient(conn)
+
+	response, err := client.Nodes(context.Background(), &request)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if a, e := len(response.Nodes), 1; a != e {
+		t.Errorf("expected %d node(s), found %d", e, a)
 	}
 }
 
