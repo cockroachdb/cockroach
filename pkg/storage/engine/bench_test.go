@@ -17,10 +17,8 @@
 package engine
 
 import (
-	"bufio"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"math"
 	"math/rand"
 	"os"
@@ -32,6 +30,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -40,23 +39,6 @@ import (
 )
 
 const overhead = 48 // Per key/value overhead (empirically determined)
-
-// readAllFiles reads all of the files matching pattern thus ensuring they are
-// in the OS buffer cache.
-func readAllFiles(pattern string) {
-	matches, err := filepath.Glob(pattern)
-	if err != nil {
-		return
-	}
-	for _, m := range matches {
-		f, err := os.Open(m)
-		if err != nil {
-			continue
-		}
-		_, _ = io.Copy(ioutil.Discard, bufio.NewReader(f))
-		f.Close()
-	}
-}
 
 type engineMaker func(testing.TB, string) Engine
 
@@ -88,7 +70,7 @@ func setupMVCCData(
 	eng := emk(b, loc)
 
 	if exists {
-		readAllFiles(filepath.Join(loc, "*"))
+		testutils.ReadAllFiles(filepath.Join(loc, "*"))
 		return eng, loc
 	}
 
