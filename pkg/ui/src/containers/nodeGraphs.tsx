@@ -15,6 +15,7 @@ import GraphGroup from "../components/graphGroup";
 import {
   SummaryBar, SummaryLabel, SummaryStat, SummaryStatMessage, SummaryStatBreakdown, SummaryMetricStat,
 } from "../components/summaryBar";
+import Alerts from "./alerts";
 import { Axis, AxisUnits } from "../components/graphs";
 import { LineGraph } from "../components/linegraph";
 import { Metric } from "../components/metric";
@@ -616,6 +617,7 @@ class NodeGraphs extends React.Component<NodeGraphsProps, {}> {
         </GraphGroup>
       </div>
       <div className="l-columns__right">
+        <Alerts />
         <SummaryBar>
           <SummaryLabel>Summary</SummaryLabel>
           <NodeTotalsSummary nodesSummary={this.props.nodesSummary}/>

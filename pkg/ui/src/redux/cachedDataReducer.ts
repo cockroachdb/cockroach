@@ -79,6 +79,10 @@ export class CachedDataReducer<TRequest, TResponseMessage> {
    * Redux reducer which processes actions related to the api endpoint query.
    */
   reducer = (state = new CachedDataReducerState<TResponseMessage>(), action: Action): CachedDataReducerState<TResponseMessage> => {
+    if (_.isNil(action)) {
+      return state;
+    }
+
     switch (action.type) {
       case this.REQUEST:
         // A request is in progress.
@@ -238,6 +242,10 @@ export class KeyedCachedDataReducer<TRequest, TResponseMessage> {
    * runs the CachedDataReducer reducer on the action.
    */
   reducer = (state = new KeyedCachedDataReducerState<TResponseMessage>(), action: Action): KeyedCachedDataReducerState<TResponseMessage> => {
+    if (_.isNil(action)) {
+      return state;
+    }
+
     switch (action.type) {
       case this.cachedDataReducer.REQUEST:
       case this.cachedDataReducer.RECEIVE:

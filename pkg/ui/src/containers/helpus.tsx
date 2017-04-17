@@ -8,7 +8,7 @@ import classNames from "classnames";
 
 import { AdminUIState } from "../redux/state";
 import * as uiData from "../redux/uiData";
-import { bannerDismissedSetting } from "./banner/helpusBanner";
+import { helpusBannerDismissedSetting } from "../redux/alerts";
 
 export interface HelpUsProps {
   optInAttributes: uiData.OptInAttributes;
@@ -17,10 +17,10 @@ export interface HelpUsProps {
   loading: boolean;
   saveError: Error;
   loadError: Error;
-  helpusDismissed: boolean;
   loadUIData: typeof uiData.loadUIData;
   saveUIData: typeof uiData.saveUIData;
-  setDismissedBanner: typeof bannerDismissedSetting.set;
+  helpusDismissed: boolean;
+  setDismissedBanner: typeof helpusBannerDismissedSetting.set;
 }
 
 class HelpUsState {
@@ -174,13 +174,13 @@ let helpusConnected = connect(
       loading: loading(state),
       saveError: saveError(state),
       loadError: loadError(state),
-      helpusDismissed: bannerDismissedSetting.selector(state),
+      helpusDismissed: helpusBannerDismissedSetting.selector(state),
     };
   },
   {
     loadUIData: uiData.loadUIData,
     saveUIData: uiData.saveUIData,
-    setDismissedBanner: bannerDismissedSetting.set,
+    setDismissedBanner: helpusBannerDismissedSetting.set,
   },
 )(HelpUs);
 
