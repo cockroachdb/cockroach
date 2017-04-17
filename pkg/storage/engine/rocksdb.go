@@ -759,6 +759,7 @@ func (r *rocksDBSnapshot) NewIterator(prefix bool) Iterator {
 
 // NewTimeBoundIterator is like NewIterator, but returns a time-bound iterator.
 func (r *rocksDBSnapshot) NewTimeBoundIterator(start, end hlc.Timestamp) Iterator {
+	panic("not implemented")
 	return newRocksDBTimeBoundIterator(r.handle, start, end, r)
 }
 
@@ -1126,6 +1127,7 @@ func (r *rocksDBBatch) NewIterator(prefix bool) Iterator {
 
 // NewTimeBoundIterator is like NewIterator, but returns a time-bound iterator.
 func (r *rocksDBBatch) NewTimeBoundIterator(start, end hlc.Timestamp) Iterator {
+	panic("not implemented")
 	if r.writeOnly {
 		panic("write-only batch")
 	}
