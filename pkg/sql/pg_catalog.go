@@ -1428,27 +1428,29 @@ CREATE TABLE pg_catalog.pg_type (
 `,
 	populate: func(_ context.Context, p *planner, addRow func(...parser.Datum) error) error {
 		h := makeOidHasher()
-		for oid, typ := range parser.OidToType {
+		for o, typ := range parser.OidToType {
 			cat := typCategory(typ)
 			typElem := oidZero
 			builtinPrefix := parser.PGIOBuiltinPrefix(typ)
 			if cat == typCategoryArray {
-				typElem = parser.NewDOid(parser.DInt(parser.UnwrapType(typ).(parser.TArray).Typ.Oid()))
-				if typ != parser.TypeIntVector {
+				if typ == parser.TypeIntVector {
+					typElem = parser.NewDOid(parser.DInt(oid.T_int2))
+				} else {
 					builtinPrefix = "array_"
+					typElem = parser.NewDOid(parser.DInt(parser.UnwrapType(typ).(parser.TArray).Typ.Oid()))
 				}
 			}
 			typname := parser.PGDisplayName(typ)
 
 			if err := addRow(
-				parser.NewDOid(parser.DInt(oid)), // oid
-				parser.NewDName(typname),         // typname
-				pgNamespacePGCatalog.Oid,         // typnamespace
-				parser.DNull,                     // typowner
-				typLen(typ),                      // typlen
-				typByVal(typ),                    // typbyval
-				typTypeBase,                      // typtype
-				cat,                              // typcategory
+				parser.NewDOid(parser.DInt(o)), // oid
+				parser.NewDName(typname),       // typname
+				pgNamespacePGCatalog.Oid,       // typnamespace
+				parser.DNull,                   // typowner
+				typLen(typ),                    // typlen
+				typByVal(typ),                  // typbyval
+				typTypeBase,                    // typtype
+				cat,                            // typcategory
 				parser.MakeDBool(false), // typispreferred
 				parser.MakeDBool(true),  // typisdefined
 				typDelim,                // typdelim
