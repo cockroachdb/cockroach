@@ -28,9 +28,9 @@ func iterateExpectErr(
 	e engine.Engine, startKey, endKey roachpb.Key, startTime, endTime hlc.Timestamp, errString string,
 ) func(*testing.T) {
 	return func(t *testing.T) {
-		iter := NewMVCCIncrementalIterator(e)
+		iter := NewMVCCIncrementalIterator(e, startKey, endKey, startTime, endTime)
 		defer iter.Close()
-		for iter.Reset(startKey, endKey, startTime, endTime); iter.Valid(); iter.Next() {
+		for ; iter.Valid(); iter.Next() {
 			// pass
 		}
 		if err := iter.Error(); !testutils.IsError(err, errString) {
@@ -46,10 +46,10 @@ func assertEqualKVs(
 	expected []engine.MVCCKeyValue,
 ) func(*testing.T) {
 	return func(t *testing.T) {
-		iter := NewMVCCIncrementalIterator(e)
+		iter := NewMVCCIncrementalIterator(e, startKey, endKey, startTime, endTime)
 		defer iter.Close()
 		var kvs []engine.MVCCKeyValue
-		for iter.Reset(startKey, endKey, startTime, endTime); iter.Valid(); iter.Next() {
+		for ; iter.Valid(); iter.Next() {
 			kvs = append(kvs, engine.MVCCKeyValue{Key: iter.Key(), Value: iter.Value()})
 		}
 
