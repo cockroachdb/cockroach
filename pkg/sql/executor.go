@@ -1134,13 +1134,13 @@ func (e *Executor) execStmtInOpenTxn(
 		}
 	}()
 
-	// Check if the statement is pipelined or is independent from pipeline
+	// Check if the statement is parallelized or is independent from parallel
 	// execution. If neither of these cases are true, we need to synchronize
-	// the pipeline by letting it drain before we can begin executing ourselves.
-	pipelined := IsStmtPipelined(stmt)
-	_, independentFromPipelined := stmt.(parser.IndependentFromPipelinedPriors)
-	if !(pipelined || independentFromPipelined) {
-		if err := session.pipelineQueue.Wait(); err != nil {
+	// parallel execution by letting it drain before we can begin executing ourselves.
+	parallelize := IsStmtParallelized(stmt)
+	_, independentFromParallelStmts := stmt.(parser.IndependentFromParallelizedPriors)
+	if !(parallelize || independentFromParallelStmts) {
+		if err := session.parallelizeQueue.Wait(); err != nil {
 			return Result{}, err
 		}
 	}
@@ -1226,24 +1226,25 @@ func (e *Executor) execStmtInOpenTxn(
 	planner.phaseTimes[plannerStartExecStmt] = timeutil.Now()
 
 	var result Result
-	if pipelined && !implicitTxn {
-		// Only run statements asynchronously through the pipeline queue if the
-		// statements are pipelined and we're in a transaction. Pipelined statements
-		// outside of a transaction are run synchronously with mocked results, which
-		// has the same effect as running asynchronously but immediately blocking.
-		result, err = e.execStmtPipelined(stmt, planner)
+	if parallelize && !implicitTxn {
+		// Only run statements asynchronously through the parallelize queue if the
+		// statements are parallelized and we're in a transaction. Parallelized
+		// statements outside of a transaction are run synchronously with mocked
+		// results, which has the same effect as running asynchronously but
+		// immediately blocking.
+		result, err = e.execStmtInParallel(stmt, planner)
 	} else {
 		autoCommit := implicitTxn && !e.cfg.TestingKnobs.DisableAutoCommit
 		result, err = e.execStmt(stmt, planner, autoCommit,
-			automaticRetryCount, pipelined /* mockResults */)
+			automaticRetryCount, parallelize /* mockResults */)
 	}
 
 	if err != nil {
-		if independentFromPipelined {
-			// If the statement run was independent from pipelined execution, it
-			// might have been run concurrently with pipelined statements. Make sure
-			// all complete before returning the error.
-			_ = session.pipelineQueue.Wait()
+		if independentFromParallelStmts {
+			// If the statement run was independent from parallelized execution, it
+			// might have been run concurrently with parallelized statements. Make
+			// sure all complete before returning the error.
+			_ = session.parallelizeQueue.Wait()
 		}
 
 		log.ErrEventf(session.Ctx(), "ERROR: %v", err)
@@ -1453,7 +1454,7 @@ func makeRes(stmt parser.Statement, planner *planner, plan planNode) (Result, er
 
 // execStmt executes the statement synchronously and returns the statement's result.
 // If mockResults is set, these results will be replaced by the "zero value" of the
-// statement's result type, identical to the mock results returned by execStmtPipelined.
+// statement's result type, identical to the mock results returned by execStmtInParallel.
 func (e *Executor) execStmt(
 	stmt parser.Statement,
 	planner *planner,
@@ -1505,15 +1506,15 @@ func (e *Executor) execStmt(
 	return result, nil
 }
 
-// execStmtPipelined executes the statement asynchronously and returns mocked out
+// execStmtInParallel executes the statement asynchronously and returns mocked out
 // results. These mocked out results will be the "zero value" of the statement's
 // result type:
 // - parser.Rows -> an empty set of rows
 // - parser.RowsAffected -> zero rows affected
 //
-// TODO(nvanbenschoten): We do not currently support pipelining distributed SQL queries,
-// so this method can only be used with classical SQL.
-func (e *Executor) execStmtPipelined(stmt parser.Statement, planner *planner) (Result, error) {
+// TODO(nvanbenschoten): We do not currently support parallelizing distributed SQL
+// queries, so this method can only be used with classical SQL.
+func (e *Executor) execStmtInParallel(stmt parser.Statement, planner *planner) (Result, error) {
 	session := planner.session
 	ctx := session.Ctx()
 
@@ -1527,7 +1528,7 @@ func (e *Executor) execStmtPipelined(stmt parser.Statement, planner *planner) (R
 		return Result{}, err
 	}
 
-	session.pipelineQueue.Add(ctx, plan, func(plan planNode) error {
+	session.parallelizeQueue.Add(ctx, plan, func(plan planNode) error {
 		defer plan.Close(ctx)
 
 		result, err := makeRes(stmt, planner, plan)

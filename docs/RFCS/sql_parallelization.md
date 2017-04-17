@@ -1,4 +1,4 @@
-- Feature Name: SQL Statement Pipelining
+- Feature Name: Parallel SQL Statement Execution
 - Status: in-progress
 - Start Date: 2017-01-18
 - Authors: Nathan VanBenschoten
@@ -12,10 +12,10 @@
 
 This RFC proposes a method to support the batching of multiple SQL statements
 for parallel execution within a single transaction. If two or more adjacent SQL
-statements are provably independent, pipelining their KV operations can yield up
-to a linear speedup. This will serve as a critical optimization in cases where
-replicas have high link latencies and round-trip communication costs dominates
-system performance.
+statements are provably independent, executing their KV operations in parallel
+can yield up to a linear speedup. This will serve as a critical optimization in
+cases where replicas have high link latencies and round-trip communication costs
+dominates system performance.
 
 
 # Motivation
@@ -35,9 +35,9 @@ between statements provides an opportunity to exploit [intrinsic inter-statement
 parallelism](#independent-statements), where the statements can safely be
 executed concurrently. In a compute-bound system, this would provide little
 benefit. However, in a system where communication cost dominates performance,
-this pipelining of SQL statements over the network could amortize round-trip
-latency between nodes and provide up to a linear speedup with respect to the
-number of statements in a fully-independent transaction.
+this parallel execution of SQL statements over the network could amortize
+round-trip latency between nodes and provide up to a linear speedup with respect
+to the number of statements in a fully-independent transaction.
 
 
 # Detailed design
@@ -231,8 +231,8 @@ tracking also comes with added complexity and added risk of error.
 
 For these reasons, this RFC proposes to track dependencies between statements at
 the **table-level** of granularity. While this decision is conservative, it
-means that the initial version of SQL Statement Pipelining will have a simpler
-implementation that is easier to reason about by implementers and users.
+means that the initial version of Parallel SQL Statement Execution will have a
+simpler implementation that is easier to reason about by implementers and users.
 Tracking dependencies at the table-level also means that we will not need to
 worry about implicit table-level dependencies between seemingly independent
 statements. These implicit dependencies can take forms like column constraints
@@ -244,7 +244,7 @@ a table, even without an associated filter, to be dependent.
 The algorithm to manage statement execution so that independent statements can
 be run in parallel is fairly straightforward. During statement evaluation, a
 list of asynchronously executable statements is maintained, comprised of both
-currently executing statements and pending statements. Pipelinable statements
+currently executing statements and pending statements. Parallelizable statements
 are appended to the list as they arrive, and they are only allowed to begin
 execution if they don't depend on any statement ahead of them in the list.
 Whenever a statement finishes execution, it is removed from the list, and we
@@ -255,43 +255,45 @@ simply hold table IDs.
 
 When new statements arrive, the `sql.Executor` iterates over them as it does now
 in `execStmtsInCurrentTxn`. For each statement, the Executor first checks if it
-is one of the [statement types that we support](#pipelinable-statements-types)
-for statement pipelining. If the statement type is not pipelinable or if the
-statement has not [opted into](#programmatic-interface) pipelining, the executor
-blocks until the queue of pipelined statements clears before executing the new
-statement synchronously. Notice that these semantics reduce to our current
-statement execution rules when no statements opt-in to pipelining.
+is one of the [statement types that we
+support](#parallelizable-statements-types) 
+for statement parallelized execution.
+If the statement type is not parallelizable or if the statement has not [opted
+into](#programmatic-interface) parallelization, the executor blocks until the
+queue of parallelized statements clears before executing the new statement
+synchronously. Notice that these semantics reduce to our current statement
+execution rules when no statements opt-in to parallelization.
 
-If the current statement is supported through statement pipelining, we first
-create its `planNode` and then collect the [tables](#dependency-granularity)
-that it reads and writes to. This will be accomplished using a new
-`DependencyCollector` type that will implement the `planObserver` interface and
-traverse over the statement's `planNode`. The read and write-sets collected from
-the plan will then be compared against the current statement queue's read and
-write-sets using the rules for [independent
+If the current statement is supported through statement parallelization, we
+first create its `planNode` and then collect the
+[tables](#dependency-granularity) that it reads and writes to. This will be
+accomplished using a new `DependencyCollector` type that will implement the
+`planObserver` interface and traverse over the statement's `planNode`. The read
+and write-sets collected from the plan will then be compared against the current
+statement queue's read and write-sets using the rules for [independent
 statements](#independent-statements). If the statement is deemed to be
 independent of the current batch of statements, then it can immediately begin
 execution in a new goroutine. If the statement is deemed dependent on the
 statements ahead of it in the queue, then it is added as a pending statement in
-the queue. Note that because no DDL statement types will be pipelinable, the
+the queue. Note that because no DDL statement types will be parallelizable, the
 `planNode`s for statements in the queue will never need to be reinitialized.
 
-## Pipelinable Statements Types
+## Parallelizable Statements Types
 
 Initially, there will be **4** types of statements that we will allow to be
-pipelined:
+parallelized:
 - INSERT
 - UPDATE
 - DELETE
 - UPSERT
 
-These statements make up the majority of use cases where statement pipelining
-would be useful, and provide fairly straightforward semantics about read and
-write-sets. Another important quality of these statements is that none of them
-mutate SQL schemas, meaning that the execution or lack of execution of one of
-these statements will never necessitate the re-initialization of the `planNode`
-for another. This may not be true of UPDATEs on system tables, so we will need
-to take special care to disallow that case?
+These statements make up the majority of use cases where statement
+parallelization would be useful, and provide fairly straightforward semantics
+about read and write-sets. Another important quality of these statements is that
+none of them mutate SQL schemas, meaning that the execution or lack of execution
+of one of these statements will never necessitate the re-initialization of the
+`planNode` for another. This may not be true of UPDATEs on system tables, so we
+will need to take special care to disallow that case?
 
 ## Programmatic Interface
 
@@ -300,17 +302,17 @@ conversational API. This means that the clients send a statement and wait for
 the response before proceeding. They expect at the point of a response for a
 statement that the statement has already been applied. To fit this execution
 model while allowing for multiple statements to run in parallel, we would need
-to mock out a successful response to pipelined statements and immediately send
-the value back to the client. The decision to either execute the statement or
-block on other asynchronously executing statements would come down to if the new
-statement was [independent](#independent-statements) from the previous set of
-statements. Additionally, we would always need to let all pipelined statements
-finish executing on read queries and transaction commit statements.
+to mock out a successful response to parallelized statements and immediately
+send the value back to the client. The decision to either execute the statement
+or block on other asynchronously executing statements would come down to if the
+new statement was [independent](#independent-statements) from the previous set
+of statements. Additionally, we would always need to let all parallelized
+statements finish executing on read queries and transaction commit statements.
 
-To perform statement pipelining using this interface, users would need to
-specify which statements could be pipelined. They would do so using some new
-syntax, for instance appending `RETURNING NOTHING` to the end of INSERT and
-UPDATE statements. In turn, adding this syntax would indicate that the SQL
+To perform statement parallelization using this interface, users would need to
+specify which statements could be executed in parallel. They would do so using
+some new syntax, for instance appending `RETURNING NOTHING` to the end of INSERT
+and UPDATE statements. In turn, adding this syntax would indicate that the SQL
 executor could return a fake response (`RowsAffected = 1`) for this statement
 immediately and that the client would not expect the result to have any real
 meaning. A list of pros and cons to this approach are listed below:
@@ -319,19 +321,19 @@ meaning. A list of pros and cons to this approach are listed below:
 - [+] Fits the communication model other SQL clients usually work with
 - [+] Users get more control over which statements are executed concurrently
 - [-] Requires us to mock out results.
-- [-] Mocking out result also means that the statement pipelining feature would
-  be unusable for any situation where a client is interested in the real results
-  of a statement, event when these results do not imply a dependence between
-  statements.
+- [-] Mocking out result also means that the statement parallelization feature
+  would be unusable for any situation where a client is interested in the real
+  results of a statement, event when these results do not imply a dependence
+  between statements.
 - [-] Complicates error handling if we need to associate errors with statements.
-  If we allow ourselves to loosen error semantics for pipelined statements, as
-  discussed [below](#error-handling) this issue goes away.
+  If we allow ourselves to loosen error semantics for parallelized statements,
+  as discussed [below](#error-handling) this issue goes away.
 - [-] Requires us to introduce new syntax
 - [-] Does not permit parallel execution of read queries
 - [-] Expected statement execution times become difficult to predict and reason
-  about. For instance, a large update set in pipeline mode would return
-  immediately. If later a small read query was issued, it would block for an
-  unexpectedly large amount of time while under-the-hood the update would
+  about. For instance, a large update set in parallelized execution mode would
+  return immediately. If later a small read query was issued, it would block for
+  an unexpectedly large amount of time while under-the-hood the update would
   actually be executing. This is not a huge issue because this feature will be
   opt-in, but it could still lead to some surprising behavior for users in much
   the same way lazy evaluation can surprise users.
@@ -371,11 +373,11 @@ manner, and would also require changes to `kv.TxnCoordSender`.
 
 ## Error Handling
 
-Error handling is a major concern with the pipelining of SQL statements.
-However, because SQL Statement Pipelining will be an opt-in feature, we deem it
-ok to relax constraints and simplify error handling. For instance, we may be
-able to loosen the guarantee that the earliest error seen in a parallel batch
-will be the one returned. This is not an unreasonable relaxation because
+Error handling is a major concern with the parallelization of SQL statements.
+However, because Parallel SQL Statement Execution will be an opt-in feature, we
+deem it ok to relax constraints and simplify error handling. For instance, we
+may be able to loosen the guarantee that the earliest error seen in a parallel
+batch will be the one returned. This is not an unreasonable relaxation because
 parallel-executing statements will always be independent, and therefore the
 successful execution of one statement should never depend on the result of
 another earlier in the transaction executing at the same time.
@@ -393,15 +395,15 @@ retried from the beginning.
 
 Regardless of the programmatic interface we go with, we will also want to
 support introspection into the behavior and effectiveness of statement
-pipelining through the `EXPLAIN` statement. By exposing these details to users,
-they can learn more about the behavior of their queries and the impact statement
-pipelining is having on those queries' execution.
+parallelization through the `EXPLAIN` statement. By exposing these details to
+users, they can learn more about the behavior of their queries and the impact
+parallelized statement execution is having on those queries' execution.
 
 It is not immediately obvious how this should work, and it will likely be
-different depending on the pipelining interface. For now, the details of how
-`EXPLAIN` will interact with statement pipelining remains an open question, but
-the ability to use `EXPLAIN` to get insight into statement pipelining remains a
-design goal.
+different depending on the parallelization interface. For now, the details of
+how `EXPLAIN` will interact with statement parallelization remains an open
+question, but the ability to use `EXPLAIN` to get insight into parallelized
+statement execution remains a design goal.
 
 ### Thread-Safe sql.Sessions
 
@@ -410,10 +412,10 @@ This could be problematic when attempting to run execute multiple statements
 concurrently because certain Session variables can be used and modified during
 statement execution, such as `Location`, `Database`, and `virtualSchemas`.
 However, none of these variables should ever be mutated by the [limited set of
-SQL statements](#pipelinable-statements-types) we allow to be pipelined, so we
-do not believe any further synchronization methods will need to be employed in
-order to keep these accesses safe. Still, we should be aware of this during
-implementation.
+SQL statements](#parallelizable-statements-types) we allow to be parallelized,
+so we do not believe any further synchronization methods will need to be
+employed in order to keep these accesses safe. Still, we should be aware of this
+during implementation.
 
 ## Motivating Example Analysis
 
@@ -467,17 +469,17 @@ execution timeline of this transaction looks like:
 BEGIN S1-----\S1 S2-----\S2 S3-----\S3 S4-----\S4 S5-----\S5 COMMIT
 ```
 
-It is interesting to explore how this newly proposed statement pipelining
-functionality could be used to speed up this transaction. For now, we will
-assume that the programmatic interface decided upon was the `RETURN NOTHING`
-proposal.
+It is interesting to explore how this newly proposed parallelized statement
+execution functionality could be used to speed up this transaction. For now, we
+will assume that the programmatic interface decided upon was the `RETURN
+NOTHING` proposal.
 
 First, we note that the SELECT statement's results are used by the client, so
 even if our proposal supported read queries, it would not be useful here.
 However, this is the only statement where the results are used. Because of that,
 the client can add the `RETURNING NOTHING` clause to the end of the four
 mutating statements to indicate to CockroachDB that the results of the
-statements are not needed and that Cockroach should try to pipeline their
+statements are not needed and that Cockroach should try to parallelize their
 execution. At this point, the transaction looks like this:
 
 ```
@@ -519,11 +521,11 @@ that while the last two UPDATE statements mutate the same table, as long as
 their `$2` parameters are different, they will not overlap and are actually
 independent. The reason for our "false" dependency classification is the
 [conservative dependency detection granularity](#dependency-granularity)
-proposed in our initial implementation of statement pipelining. While in theory
-increasing this granularity to the row-level across the board would solve this
-issue, it would also come with a number of complications. Alternatively, one
-proposed solution is to selectively increase this granularity if and only if all
-statements operating on the same table also fit some predefined pattern. One
+proposed in our initial implementation of statement parallelization. While in
+theory increasing this granularity to the row-level across the board would solve
+this issue, it would also come with a number of complications. Alternatively,
+one proposed solution is to selectively increase this granularity if and only if
+all statements operating on the same table also fit some predefined pattern. One
 such pattern might be the "single-row-WHERE-matches-primary-key" style, which
 makes it much easier to analyze inter-statement dependencies than in the general
 case. If such an optimization did exist, we could detect that the two UPDATEs
@@ -588,22 +590,23 @@ the KV access patterns by the SQL layer, or even options like column families or
 interleaved tables could all subtly change the semantics here. In essence, we'd
 be leaking the details of the KV-layer into the behavior of this new feature.
 
-### Pipelining Semicolon-Separated Statements
+### Parallelizing Semicolon-Separated Statements
 
 Our SQL engine currently allows users to provide a semicolon-separated list of
 SQL statements in a single string, and will execute all statements before
 returning multiple result sets back in a single response to the user. Since the
 SQL Executor has access to multiple statements in a transaction all at once when
 a user provides a semicolon-separated list of statements, this interface would
-be a natural fit to extend for statement pipelining. An alternate approach to
-pipelining statements through a standard conversational API is to pipeline
-statements sent within a semicolon-separated statement list. A user would simply
-activate statement pipelining through some kind of session variable setting and
-would then send groups of statements separated by semicolons in a single
-request. Our SQL engine would detect statements that could be run in parallel
-and would do so whenever possible. It would then return a single response with
-multiple result sets, like it already does for grouped statements like these. A
-list of pros and cons to this approach are listed below:
+be a natural fit to extend for parallelized statement execution. An alternate
+approach to parallelizing statements through a standard conversational API is to
+parallelize statements sent within a semicolon-separated statement list. A user
+would simply activate statement parallelization through some kind of session
+variable setting and would then send groups of statements separated by
+semicolons in a single request. Our SQL engine would detect statements that
+could be run in parallel and would do so whenever possible. It would then return
+a single response with multiple result sets, like it already does for grouped
+statements like these. A list of pros and cons to this approach are listed
+below:
 
 - [+] Drivers are already expecting multiple result sets all at once when they
   send semicolon-separated statements
@@ -616,7 +619,7 @@ list of pros and cons to this approach are listed below:
 - [+] Does not need to be opt-in, although we probably still want it to be, at
   least at first
 - [+] More generally applicable
-- [+] Could support pipelined reads
+- [+] Could support parallelized reads
 - [-] May not be possible to use with ORMs (or may at least require custom
   handling)
 - [-] Inflexible with regard to allowing users to decide which statements get
