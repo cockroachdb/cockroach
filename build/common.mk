@@ -48,6 +48,11 @@ endif
 LOCAL_BIN := $(abspath $(REPO_ROOT)/bin)
 GO_INSTALL := GOBIN='$(LOCAL_BIN)' $(GO) install
 
+# Directory scans in the builder image are excruciatingly slow when running
+# Docker for Mac, so we filter out the 20k+ UI dependencies that are
+# guaranteed to be irrelevant to save nearly 10s on every Make invocation.
+FIND_RELEVANT := find pkg -name node_modules -prune -o
+
 # Prefer tools we've installed with go install and Yarn to those elsewhere on
 # the PATH.
 #

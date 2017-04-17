@@ -133,10 +133,7 @@ testrace: override GOFLAGS += -race
 testrace: export GORACE := halt_on_error=1
 testrace: TESTTIMEOUT := $(RACETIMEOUT)
 
-# Directory scans in the builder image are excruciatingly slow when running
-# Docker for Mac, so we filter out the 20k+ UI dependencies that are guaranteed
-# to be irrelevant to save nearly 10s on every Make invocation.
-bin/sql.test: main.go $(shell find pkg -name 'node_modules' -prune -o -name '*.go')
+bin/sql.test: main.go $(shell $(FIND_RELEVANT) -name '*.go')
 	$(GO) test $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -c -o bin/sql.test ./pkg/sql
 
 bench: BENCHES := .
@@ -190,7 +187,8 @@ acceptance:
 
 .PHONY: dupl
 dupl: $(BOOTSTRAP_TARGET)
-	find . -name '*.go'             \
+	$(FIND_RELEVANT) \
+	       -name '*.go'             \
 	       -not -name '*.pb.go'     \
 	       -not -name '*.pb.gw.go'  \
 	       -not -name 'embedded.go' \
@@ -224,7 +222,7 @@ checkshort: gotestdashi
 .PHONY: clean
 clean:
 	$(GO) clean $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -i github.com/cockroachdb/...
-	find . -name '*.test*' -type f -exec rm -f {} \;
+	$(FIND_RELEVANT) -name '*.test*' -type f -exec rm -f {} \;
 	rm -f .bootstrap $(ARCHIVE)
 
 .PHONY: protobuf
