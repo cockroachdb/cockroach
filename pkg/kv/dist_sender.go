@@ -145,10 +145,10 @@ type DistSender struct {
 	gossip  *gossip.Gossip
 	metrics DistSenderMetrics
 	// rangeCache caches replica metadata for key ranges.
-	rangeCache           *rangeDescriptorCache
+	rangeCache           *RangeDescriptorCache
 	rangeLookupMaxRanges int32
 	// leaseHolderCache caches range lease holders by range ID.
-	leaseHolderCache *leaseHolderCache
+	leaseHolderCache *LeaseHolderCache
 	transportFactory TransportFactory
 	rpcContext       *rpc.Context
 	rpcRetryOptions  retry.Options
@@ -214,12 +214,12 @@ func NewDistSender(cfg DistSenderConfig, g *gossip.Gossip) *DistSender {
 	if rdb == nil {
 		rdb = ds
 	}
-	ds.rangeCache = newRangeDescriptorCache(rdb, int(rcSize))
+	ds.rangeCache = NewRangeDescriptorCache(rdb, int(rcSize))
 	lcSize := cfg.LeaseHolderCacheSize
 	if lcSize <= 0 {
 		lcSize = defaultLeaseHolderCacheSize
 	}
-	ds.leaseHolderCache = newLeaseHolderCache(int(lcSize))
+	ds.leaseHolderCache = NewLeaseHolderCache(int(lcSize))
 	if cfg.RangeLookupMaxRanges <= 0 {
 		ds.rangeLookupMaxRanges = defaultRangeLookupMaxRanges
 	}
@@ -278,6 +278,16 @@ func (ds *DistSender) Metrics() DistSenderMetrics {
 // the dist sender has dispatched in its lifetime.
 func (ds *DistSender) GetParallelSendCount() int32 {
 	return atomic.LoadInt32(&ds.asyncSenderCount)
+}
+
+// RangeDescriptorCache gives access to the DistSender's range cache.
+func (ds *DistSender) RangeDescriptorCache() *RangeDescriptorCache {
+	return ds.rangeCache
+}
+
+// LeaseHolderCache gives access to the DistSender's lease cache.
+func (ds *DistSender) LeaseHolderCache() *LeaseHolderCache {
+	return ds.leaseHolderCache
 }
 
 // RangeLookup implements the RangeDescriptorDB interface.

@@ -81,7 +81,8 @@ $(GO_SOURCES_TARGET): $(PROTOC) $(GO_PROTOS) $(GOGOPROTO_PROTO)
 	$(SED_INPLACE) '/import _/d' $(GO_SOURCES)
 	$(SED_INPLACE) '/gogoproto/d' $(GO_SOURCES)
 	$(SED_INPLACE) -E 's!import (fmt|math) "$(IMPORT_PREFIX)(fmt|math)"! !g' $(GO_SOURCES)
-	$(SED_INPLACE) -E 's!$(IMPORT_PREFIX)(errors|fmt|io|github\.com|golang\.org|google\.golang\.org)!\1!g' $(GO_SOURCES)
+	# Fixup standard packages wrongly imported by gogo because of import_prefix.
+	$(SED_INPLACE) -E 's!$(IMPORT_PREFIX)(bytes|errors|fmt|io|github\.com|golang\.org|google\.golang\.org)!\1!g' $(GO_SOURCES)
 	$(SED_INPLACE) -E 's!$(REPO_NAME)/(etcd)!coreos/\1!g' $(GO_SOURCES)
 	gofmt -s -w $(GO_SOURCES)
 	touch $@
