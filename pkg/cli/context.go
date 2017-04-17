@@ -67,7 +67,7 @@ const (
 // Type implements the pflag.Value interface.
 func (f *tableDisplayFormat) Type() string { return "string" }
 
-// String imlements the pflag.Value itnerface.
+// String implements the pflag.Value interface.
 func (f *tableDisplayFormat) String() string {
 	switch *f {
 	case tableDisplayTSV:
