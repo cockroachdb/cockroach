@@ -617,6 +617,13 @@ func (r *RocksDB) NewIterator(prefix bool) Iterator {
 	return newRocksDBIterator(r.rdb, prefix, r)
 }
 
+// NewTimeBoundIterator is like NewIterator, but returns a time-bound iterator.
+func (r *RocksDB) NewTimeBoundIterator(start, end hlc.Timestamp) Iterator {
+	it := &rocksDBIterator{}
+	it.initTimeBound(r.rdb, start, end, r)
+	return it
+}
+
 // NewSnapshot creates a snapshot handle from engine and returns a
 // read-only rocksDBSnapshot engine.
 func (r *RocksDB) NewSnapshot() Reader {
@@ -751,6 +758,11 @@ func (r *rocksDBSnapshot) Iterate(start, end MVCCKey, f func(MVCCKeyValue) (bool
 // engine using the snapshot handle.
 func (r *rocksDBSnapshot) NewIterator(prefix bool) Iterator {
 	return newRocksDBIterator(r.handle, prefix, r)
+}
+
+// NewTimeBoundIterator is like NewIterator, but returns a time-bound iterator.
+func (r *rocksDBSnapshot) NewTimeBoundIterator(start, end hlc.Timestamp) Iterator {
+	panic("not implemented")
 }
 
 // reusableIterator wraps rocksDBIterator and allows reuse of an iterator
@@ -1115,6 +1127,11 @@ func (r *rocksDBBatch) NewIterator(prefix bool) Iterator {
 	return iter
 }
 
+// NewTimeBoundIterator is like NewIterator, but returns a time-bound iterator.
+func (r *rocksDBBatch) NewTimeBoundIterator(start, end hlc.Timestamp) Iterator {
+	panic("not implemented")
+}
+
 func (r *rocksDBBatch) Commit(syncCommit bool) error {
 	if r.Closed() {
 		panic("this batch was already committed")
@@ -1301,6 +1318,14 @@ func (r *rocksDBIterator) getIter() *C.DBIterator {
 
 func (r *rocksDBIterator) init(rdb *C.DBEngine, prefix bool, engine Reader) {
 	r.iter = C.DBNewIter(rdb, C.bool(prefix))
+	if r.iter == nil {
+		panic("unable to create iterator")
+	}
+	r.engine = engine
+}
+
+func (r *rocksDBIterator) initTimeBound(rdb *C.DBEngine, start, end hlc.Timestamp, engine Reader) {
+	r.iter = C.DBNewTimeBoundIter(rdb, goToCTimestamp(start), goToCTimestamp(end))
 	if r.iter == nil {
 		panic("unable to create iterator")
 	}
@@ -1540,6 +1565,13 @@ func cSliceToUnsafeGoBytes(s C.DBSlice) []byte {
 	}
 	// Interpret the C pointer as a pointer to a Go array, then slice.
 	return (*[maxArrayLen]byte)(unsafe.Pointer(s.data))[:s.len:s.len]
+}
+
+func goToCTimestamp(ts hlc.Timestamp) C.DBTimestamp {
+	return C.DBTimestamp{
+		wall_time: C.int64_t(ts.WallTime),
+		logical:   C.int32_t(ts.Logical),
+	}
 }
 
 func statusToError(s C.DBStatus) error {
