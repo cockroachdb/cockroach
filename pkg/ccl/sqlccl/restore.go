@@ -685,8 +685,23 @@ func Restore(
 	if err := presplitRanges(ctx, db, splitKeys); err != nil {
 		return errors.Wrapf(err, "presplitting %d ranges", len(importRequests))
 	}
-	// TODO(dan): Wait for the newly created ranges (and leaseholders) to
-	// rebalance.
+	{
+		newSpans := spansForAllTableIndexes(tables)
+		g, gCtx := errgroup.WithContext(ctx)
+		for i := range newSpans {
+			span := newSpans[i]
+			g.Go(func() error {
+				req := &roachpb.AdminScatterRequest{
+					Span: roachpb.Span{Key: span.Key, EndKey: span.EndKey},
+				}
+				_, pErr := client.SendWrapped(gCtx, db.GetSender(), req)
+				return pErr.GoError()
+			})
+		}
+		if err := g.Wait(); err != nil {
+			return errors.Wrapf(err, "scattering %d ranges", len(importRequests))
+		}
+	}
 
 	// We're already limiting these on the server-side, but sending all the
 	// Import requests at once would fill up distsender/grpc/something and cause
