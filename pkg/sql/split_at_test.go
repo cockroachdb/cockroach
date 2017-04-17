@@ -145,7 +145,9 @@ func TestScatter(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	const numHosts = 4
-	tc := serverutils.StartTestCluster(t, numHosts, base.TestClusterArgs{})
+	tc := serverutils.StartTestCluster(t, numHosts, base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual,
+	})
 	defer tc.Stopper().Stop()
 
 	sqlutils.CreateTable(
