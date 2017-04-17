@@ -179,21 +179,21 @@ func (r RangeDescriptor) String() string {
 	if !r.IsInitialized() {
 		buf.WriteString("{-}")
 	} else {
-		buf.WriteString(RSpan{r.StartKey, r.EndKey}.String())
+		buf.WriteString(r.RSpan().String())
 	}
 	buf.WriteString(" [")
 
-	for i, rep := range r.Replicas {
-		if i > 0 {
-			buf.WriteString(", ")
-		}
-		fmt.Fprintf(&buf, "r%d(n%d,s%d)", rep.ReplicaID, rep.NodeID, rep.StoreID)
-	}
 	if len(r.Replicas) > 0 {
-		fmt.Fprintf(&buf, ", next=%d]", r.NextReplicaID)
+		for i, rep := range r.Replicas {
+			if i > 0 {
+				buf.WriteString(", ")
+			}
+			fmt.Fprintf(&buf, "r%d(n%d,s%d)", rep.ReplicaID, rep.NodeID, rep.StoreID)
+		}
 	} else {
-		buf.WriteString("<no replicas>]")
+		buf.WriteString("<no replicas>")
 	}
+	fmt.Fprintf(&buf, ", next=%d]", r.NextReplicaID)
 
 	return buf.String()
 }
