@@ -20,9 +20,9 @@ openssl x509 -in node.crt -text
 To regenerate:
 ```bash
 rm -f pkg/security/securitytest/test_certs/*.{crt,key}
-./cockroach cert --ca-cert=pkg/security/securitytest/test_certs/ca.crt --ca-key=pkg/security/securitytest/test_certs/ca.key create-ca
-./cockroach cert --ca-cert=pkg/security/securitytest/test_certs/ca.crt --ca-key=pkg/security/securitytest/test_certs/ca.key --cert=pkg/security/securitytest/test_certs/node.crt --key=pkg/security/securitytest/test_certs/node.key create-node 127.0.0.1 ::1 localhost *.local
-./cockroach cert --ca-cert=pkg/security/securitytest/test_certs/ca.crt --ca-key=pkg/security/securitytest/test_certs/ca.key --cert=pkg/security/securitytest/test_certs/client.root.crt --key=pkg/security/securitytest/test_certs/client.root.key create-client root
-./cockroach cert --ca-cert=pkg/security/securitytest/test_certs/ca.crt --ca-key=pkg/security/securitytest/test_certs/ca.key --cert=pkg/security/securitytest/test_certs/client.testuser.crt --key=pkg/security/securitytest/test_certs/client.testuser.key create-client testuser
+./cockroach cert --certs-dir=pkg/security/securitytest/test_certs --ca-key=pkg/security/securitytest/test_certs/ca.key create-ca
+./cockroach cert --certs-dir=pkg/security/securitytest/test_certs --ca-key=pkg/security/securitytest/test_certs/ca.key create-node 127.0.0.1 ::1 localhost *.local
+./cockroach cert --certs-dir=pkg/security/securitytest/test_certs --ca-key=pkg/security/securitytest/test_certs/ca.key create-client root
+./cockroach cert --certs-dir=pkg/security/securitytest/test_certs --ca-key=pkg/security/securitytest/test_certs/ca.key create-client testuser
 make generate PKG=./pkg/security/securitytest
 ```

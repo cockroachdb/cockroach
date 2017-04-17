@@ -101,8 +101,8 @@ trap finish EXIT
 
 HOST=$(hostname -f)
 $bin start --logtostderr=INFO --background --insecure --host="${HOST}" --port=12345 &> out
-$bin sql --host="${HOST}" --port=12345 -e "show databases"
-$bin quit --host="${HOST}" --port=12345
+$bin sql --insecure --host="${HOST}" --port=12345 -e "show databases"
+$bin quit --insecure --host="${HOST}" --port=12345
 `
 	containerConfig.Cmd = []string{"/bin/bash", "-c", script}
 	if err := testDockerOneShot(ctx, t, "start_flags_test", containerConfig); err != nil {

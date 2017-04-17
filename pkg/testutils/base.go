@@ -17,9 +17,6 @@
 package testutils
 
 import (
-	"fmt"
-	"path/filepath"
-
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/security"
 )
@@ -43,15 +40,5 @@ func NewTestBaseContext(user string) *base.Config {
 
 // FillCerts sets the certs on a base.Config.
 func FillCerts(cfg *base.Config) {
-	cfg.SSLCA = filepath.Join(security.EmbeddedCertsDir, security.EmbeddedCACert)
-
-	// The NodeUser has a combined server/client certificate/key pair, all other users
-	// need client certs.
-	if cfg.User == security.NodeUser {
-		cfg.SSLCert = filepath.Join(security.EmbeddedCertsDir, security.EmbeddedNodeCert)
-		cfg.SSLCertKey = filepath.Join(security.EmbeddedCertsDir, security.EmbeddedNodeKey)
-	} else {
-		cfg.SSLCert = filepath.Join(security.EmbeddedCertsDir, fmt.Sprintf("client.%s.crt", cfg.User))
-		cfg.SSLCertKey = filepath.Join(security.EmbeddedCertsDir, fmt.Sprintf("client.%s.key", cfg.User))
-	}
+	cfg.SSLCertsDir = security.EmbeddedCertsDir
 }

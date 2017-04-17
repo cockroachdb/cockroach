@@ -28,7 +28,8 @@ import (
 func TestClientSSLSettings(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	const assetNotFound = "error setting up client TLS config: Asset .* not found"
+	const clientCertNotFound = "no client certificate found for user .*"
+	const certDirNotFound = "problem loading certs directory"
 
 	testCases := []struct {
 		// args
@@ -43,10 +44,10 @@ func TestClientSSLSettings(t *testing.T) {
 	}{
 		{true, false, security.NodeUser, "http", "", true, false},
 		{true, true, "not-a-user", "http", "", true, false},
-		{false, true, "not-a-user", "https", assetNotFound, true, false},
-		{false, false, security.NodeUser, "https", assetNotFound, false, true},
+		{false, true, "not-a-user", "https", clientCertNotFound, true, false},
+		{false, false, security.NodeUser, "https", certDirNotFound, false, true},
 		{false, true, security.NodeUser, "https", "", false, false},
-		{false, true, "bad-user", "https", assetNotFound, false, false},
+		{false, true, "bad-user", "https", clientCertNotFound, false, false},
 	}
 
 	for tcNum, tc := range testCases {
