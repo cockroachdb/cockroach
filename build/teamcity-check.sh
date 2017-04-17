@@ -5,9 +5,9 @@ export BUILDER_HIDE_GOPATH_SRC=1
 
 mkdir -p artifacts
 
-build/builder.sh make TYPE=release check 2>&1 | tee artifacts/check.log | go-test-teamcity
+build/builder.sh make check 2>&1 | tee artifacts/check.log | go-test-teamcity
 
-build/builder.sh make TYPE=release generate
+build/builder.sh make generate
 build/builder.sh /bin/bash -c '! git status --porcelain | read || (git status; git diff -a 1>&2; exit 1)'
 
 # Run the UI tests. This logically belongs in teamcity-test.sh, but we do it
