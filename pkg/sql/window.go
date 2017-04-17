@@ -685,7 +685,8 @@ func (n *windowNode) computeWindows(ctx context.Context) error {
 			// peer. Without ORDER BY, all rows of the partition are included in the window frame,
 			// since all rows become peers of the current row. Once we add better framing support,
 			// we should flesh this logic out more.
-			builtin := windowFn.expr.GetWindowConstructor()()
+			builtin := windowFn.expr.GetWindowConstructor()(&n.planner.evalCtx)
+			defer builtin.Close(ctx, &n.planner.evalCtx)
 
 			// Since we only support two types of window frames (see TODO above), we only
 			// need two possible types of peerGroupChecker's to help determine peer groups
@@ -733,7 +734,7 @@ func (n *windowNode) computeWindows(ctx context.Context) error {
 
 				// Perform calculations on each row in the current peer group.
 				for ; frame.RowIdx < frame.FirstPeerIdx+frame.PeerRowCount; frame.RowIdx++ {
-					res, err := builtin.Compute(&n.planner.evalCtx, frame)
+					res, err := builtin.Compute(ctx, &n.planner.evalCtx, frame)
 					if err != nil {
 						return err
 					}
