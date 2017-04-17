@@ -26,6 +26,7 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"math/rand"
 	"reflect"
 	"sync"
 	"sync/atomic"
@@ -3730,4 +3731,119 @@ func evalLeaseInfo(
 		reply.Lease = lease
 	}
 	return EvalResult{}, nil
+}
+
+// RelocateRange relocates a given range to a given set of stores. The first
+// store in the slice becomes the new leaseholder.
+//
+// This is best-effort; if replication queues are enabled and a change in
+// membership happens at the same time, there will be errors.
+func RelocateRange(
+	ctx context.Context,
+	db *client.DB,
+	rangeDesc roachpb.RangeDescriptor,
+	targets []roachpb.ReplicationTarget,
+) error {
+	// Step 1: Add any stores that don't already have a replica in of the range.
+	//
+	// TODO(radu): we can't have multiple replicas on different stores on the same
+	// node, which can lead to some odd corner cases where we would have to first
+	// remove some replicas (currently these cases fail).
+
+	var addTargets []roachpb.ReplicationTarget
+	for _, t := range targets {
+		found := false
+		for _, replicaDesc := range rangeDesc.Replicas {
+			if replicaDesc.StoreID == t.StoreID && replicaDesc.NodeID == t.NodeID {
+				found = true
+				break
+			}
+		}
+		if !found {
+			addTargets = append(addTargets, t)
+		}
+	}
+	if len(addTargets) > 0 {
+		if err := db.AdminChangeReplicas(
+			ctx, rangeDesc.StartKey.AsRawKey(), roachpb.ADD_REPLICA, addTargets,
+		); err != nil {
+			return err
+		}
+	}
+
+	// Step 2: Transfer the lease to the first target. This needs to happen before
+	// we remove replicas or we may try to remove the lease holder.
+
+	if err := db.AdminTransferLease(
+		ctx, rangeDesc.StartKey.AsRawKey(), targets[0].StoreID,
+	); err != nil {
+		return err
+	}
+
+	// Step 3: Remove any replicas that are not targets.
+
+	var removeTargets []roachpb.ReplicationTarget
+	for _, replicaDesc := range rangeDesc.Replicas {
+		found := false
+		for _, t := range targets {
+			if replicaDesc.StoreID == t.StoreID && replicaDesc.NodeID == t.NodeID {
+				found = true
+				break
+			}
+		}
+		if !found {
+			removeTargets = append(removeTargets, roachpb.ReplicationTarget{
+				StoreID: replicaDesc.StoreID,
+				NodeID:  replicaDesc.NodeID,
+			})
+		}
+	}
+	if len(removeTargets) > 0 {
+		if err := db.AdminChangeReplicas(
+			ctx, rangeDesc.StartKey.AsRawKey(), roachpb.REMOVE_REPLICA, removeTargets,
+		); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// adminScatter moves replicas and leaseholders for a selection of ranges.
+// Scatter is best-effort; ranges that cannot be moved will include an error
+// detail in the response and won't fail the request.
+func (r *Replica) adminScatter(
+	ctx context.Context, args roachpb.AdminScatterRequest,
+) (roachpb.AdminScatterResponse, error) {
+	db := r.store.DB()
+	rangeDesc := *r.Desc()
+
+	rng := rand.New(rand.NewSource(rand.Int63()))
+	stores := r.store.cfg.StorePool.GetStores()
+
+	// Choose three random stores.
+	// TODO(radu): this is a toy implementation; we need to get a real
+	// recommendation based on the zone config.
+	num := 3
+	if num > len(stores) {
+		num = len(stores)
+	}
+	for i := 0; i < num; i++ {
+		j := i + rng.Intn(len(stores)-i)
+		stores[i], stores[j] = stores[j], stores[i]
+	}
+	targets := stores[:num]
+
+	relocateErr := RelocateRange(ctx, db, rangeDesc, targets)
+
+	res := roachpb.AdminScatterResponse{
+		Ranges: []roachpb.AdminScatterResponse_Range{{
+			Span: roachpb.Span{
+				Key:    rangeDesc.StartKey.AsRawKey(),
+				EndKey: rangeDesc.EndKey.AsRawKey(),
+			},
+			Error: roachpb.NewError(relocateErr),
+		}},
+	}
+
+	return res, nil
 }

@@ -2008,6 +2008,11 @@ func (r *Replica) executeAdminBatch(
 		err := importCmdFn(ctx, cArgs)
 		pErr = roachpb.NewError(err)
 
+	case *roachpb.AdminScatterRequest:
+		reply, err := r.adminScatter(ctx, *tArgs)
+		pErr = roachpb.NewError(err)
+		resp = &reply
+
 	default:
 		return nil, roachpb.NewErrorf("unrecognized admin command: %T", args)
 	}
