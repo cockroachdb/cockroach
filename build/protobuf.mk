@@ -61,10 +61,6 @@ CPP_PROTOS := $(filter %/roachpb/metadata.proto %/roachpb/data.proto %/roachpb/i
 CPP_HEADERS := $(subst ./,$(NATIVE_ROOT)/,$(CPP_PROTOS:%.proto=%.pb.h))
 CPP_SOURCES := $(subst ./,$(NATIVE_ROOT)/,$(CPP_PROTOS:%.proto=%.pb.cc))
 
-.DEFAULT_GOAL := protos
-.PHONY: protos
-protos: $(GO_SOURCES) $(UI_SOURCES) $(CPP_HEADERS) $(CPP_SOURCES) $(GW_SOURCES)
-
 $(PROTOC): goinstall
 
 .PHONY: goinstall
@@ -76,7 +72,8 @@ goinstall: $(BOOTSTRAP_TARGET)
 REPO_NAME := cockroachdb
 IMPORT_PREFIX := github.com/$(REPO_NAME)/
 
-$(GO_SOURCES): $(PROTOC) $(GO_PROTOS) $(GOGOPROTO_PROTO)
+GO_SOURCES_TARGET := $(LOCAL_BIN)/.go_protobuf_sources
+$(GO_SOURCES_TARGET): $(PROTOC) $(GO_PROTOS) $(GOGOPROTO_PROTO)
 	(cd $(REPO_ROOT) && git ls-files --exclude-standard --cached --others -- '*.pb.go' | xargs rm -f)
 	for dir in $(sort $(dir $(GO_PROTOS))); do \
 	  $(PROTOC) -I.:$(GOGO_PROTOBUF_PATH):$(PROTOBUF_PATH):$(COREOS_PATH):$(GRPC_GATEWAY_GOOGLEAPIS_PATH) --plugin=$(PROTOC_PLUGIN) --$(PLUGIN_SUFFIX)_out=$(MAPPINGS),plugins=grpc,import_prefix=$(IMPORT_PREFIX):$(ORG_ROOT) $$dir/*.proto; \
@@ -87,23 +84,17 @@ $(GO_SOURCES): $(PROTOC) $(GO_PROTOS) $(GOGOPROTO_PROTO)
 	$(SED_INPLACE) -E 's!$(IMPORT_PREFIX)(errors|fmt|io|github\.com|golang\.org|google\.golang\.org)!\1!g' $(GO_SOURCES)
 	$(SED_INPLACE) -E 's!$(REPO_NAME)/(etcd)!coreos/\1!g' $(GO_SOURCES)
 	gofmt -s -w $(GO_SOURCES)
+	touch $@
 
-$(GW_SOURCES) : $(GW_SERVER_PROTOS) $(GW_TS_PROTOS) $(GO_PROTOS) $(GOGOPROTO_PROTO) $(PROTOC)
+GW_SOURCES_TARGET := $(LOCAL_BIN)/.gw_protobuf_sources
+$(GW_SOURCES_TARGET): $(GW_SERVER_PROTOS) $(GW_TS_PROTOS) $(GO_PROTOS) $(GOGOPROTO_PROTO) $(PROTOC)
 	(cd $(REPO_ROOT) && git ls-files --exclude-standard --cached --others -- '*.pb.gw.go' | xargs rm -f)
 	$(PROTOC) -I.:$(GOGO_PROTOBUF_PATH):$(PROTOBUF_PATH):$(COREOS_PATH):$(GRPC_GATEWAY_GOOGLEAPIS_PATH) --grpc-gateway_out=logtostderr=true,request_context=true:. $(GW_SERVER_PROTOS)
 	$(PROTOC) -I.:$(GOGO_PROTOBUF_PATH):$(PROTOBUF_PATH):$(COREOS_PATH):$(GRPC_GATEWAY_GOOGLEAPIS_PATH) --grpc-gateway_out=logtostderr=true,request_context=true:. $(GW_TS_PROTOS)
+	touch $@
 
-$(UI_JS): $(GO_PROTOS) $(COREOS_RAFT_PROTOS) $(YARN_INSTALLED_TARGET)
-	# Add comment recognized by reviewable.
-	echo '// GENERATED FILE DO NOT EDIT' > $@
-	pbjs -t static-module -w es6 --strict-long --keep-case --path $(ORG_ROOT) --path $(GOGO_PROTOBUF_PATH) --path $(COREOS_PATH) --path $(GRPC_GATEWAY_GOOGLEAPIS_PATH) $(GW_PROTOS) >> $@
-
-$(UI_TS): $(UI_JS)
-	# Add comment recognized by reviewable.
-	echo '// GENERATED FILE DO NOT EDIT' > $@
-	pbts $(UI_JS) >> $@
-
-$(CPP_HEADERS) $(CPP_SOURCES): $(PROTOC) $(CPP_PROTOS)
+CPP_SOURCES_TARGET := $(LOCAL_BIN)/.cpp_protobuf_sources
+$(CPP_SOURCES_TARGET): $(PROTOC) $(CPP_PROTOS)
 	(cd $(REPO_ROOT) && git ls-files --exclude-standard --cached --others -- '*.pb.h' '*.pb.cc' | xargs rm -f)
 	$(PROTOC) -I.:$(GOGO_PROTOBUF_PATH):$(PROTOBUF_PATH) --cpp_out=lite:$(NATIVE_ROOT) $(CPP_PROTOS)
 	$(SED_INPLACE) -E '/gogoproto/d' $(CPP_HEADERS) $(CPP_SOURCES)
@@ -116,3 +107,18 @@ $(CPP_HEADERS) $(CPP_SOURCES): $(PROTOC) $(CPP_PROTOS)
 	@# include deleted files (i.e. these very "symlinks") in its output,
 	@# resulting in recursive "symlinks", which is Bad™.
 	(cd $(NATIVE_ROOT) && find . -name *.pb.cc | sed 's!./!!' | xargs -I % sh -c 'echo "#include \"%\"" > $$(echo % | tr / _)')
+	touch $@
+
+$(UI_JS): $(GO_PROTOS) $(COREOS_RAFT_PROTOS) $(YARN_INSTALLED_TARGET)
+	# Add comment recognized by reviewable.
+	echo '// GENERATED FILE DO NOT EDIT' > $@
+	pbjs -t static-module -w es6 --strict-long --keep-case --path $(ORG_ROOT) --path $(GOGO_PROTOBUF_PATH) --path $(COREOS_PATH) --path $(GRPC_GATEWAY_GOOGLEAPIS_PATH) $(GW_PROTOS) >> $@
+
+$(UI_TS): $(UI_JS)
+	# Add comment recognized by reviewable.
+	echo '// GENERATED FILE DO NOT EDIT' > $@
+	pbts $(UI_JS) >> $@
+
+.DEFAULT_GOAL := protos
+.PHONY: protos
+protos: $(GO_SOURCES_TARGET) $(GW_SOURCES_TARGET) $(CPP_SOURCES_TARGET) $(UI_SOURCES)
