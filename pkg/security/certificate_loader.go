@@ -49,23 +49,17 @@ var defaultAssetLoader = AssetLoader{
 	Stat:     os.Stat,
 }
 
-// readFileFn is used to mock out file system access during tests.
-// TODO(marc): remove once the transition to the certificate_loader is complete.
-var readFileFn = ioutil.ReadFile
-
 // assetLoaderImpl is used to list/read/stat security assets.
 var assetLoaderImpl = defaultAssetLoader
 
 // SetAssetLoader overrides the asset loader with the passed-in one.
 func SetAssetLoader(al AssetLoader) {
 	assetLoaderImpl = al
-	readFileFn = al.ReadFile
 }
 
 // ResetAssetLoader restores the asset loader to the default value.
 func ResetAssetLoader() {
 	assetLoaderImpl = defaultAssetLoader
-	readFileFn = defaultAssetLoader.ReadFile
 }
 
 type pemUsage uint32
@@ -84,6 +78,8 @@ const (
 	// Filename extenstions.
 	certExtension = `.crt`
 	keyExtension  = `.key`
+	// Certificate directory permissions.
+	defaultCertsDirPerm = 0700
 )
 
 func (p pemUsage) String() string {
@@ -151,6 +147,27 @@ func NewCertificateLoader(certsDir string) *CertificateLoader {
 	}
 }
 
+// MaybeCreateCertsDir creates the certificate directory if it does not
+// exist. Returns an error if we could not stat or create the directory.
+func (cl *CertificateLoader) MaybeCreateCertsDir() error {
+	dirInfo, err := os.Stat(cl.certsDir)
+	if err == nil {
+		if !dirInfo.IsDir() {
+			return errors.Errorf("certs directory %s exists but is not a directory", cl.certsDir)
+		}
+		return nil
+	}
+
+	if !os.IsNotExist(err) {
+		return errors.Wrapf(err, "could not stat certs directory %s", cl.certsDir)
+	}
+
+	if err := os.Mkdir(cl.certsDir, defaultCertsDirPerm); err != nil {
+		return errors.Wrapf(err, "could not create certs directory %s", cl.certsDir)
+	}
+	return nil
+}
+
 // TestDisablePermissionChecks turns off permissions checks.
 // Used by tests only.
 func (cl *CertificateLoader) TestDisablePermissionChecks() {
@@ -165,9 +182,16 @@ func (cl *CertificateLoader) Load() error {
 	if err != nil {
 		if os.IsNotExist(err) {
 			// Directory does not exist.
+			if log.V(3) {
+				log.Infof(context.Background(), "missing certs directory %s", cl.certsDir)
+			}
 			return nil
 		}
 		return err
+	}
+
+	if log.V(3) {
+		log.Infof(context.Background(), "scanning certs directory %s", cl.certsDir)
 	}
 
 	// Walk the directory contents.
@@ -184,6 +208,9 @@ func (cl *CertificateLoader) Load() error {
 		}
 
 		if !isCertificateFile(filename) {
+			if log.V(3) {
+				log.Infof(context.Background(), "skipping non-certificate file %s", filename)
+			}
 			continue
 		}
 
@@ -200,6 +227,9 @@ func (cl *CertificateLoader) Load() error {
 			continue
 		}
 
+		if log.V(3) {
+			log.Infof(context.Background(), "found certificate %s", ci.Filename)
+		}
 		cl.certificates = append(cl.certificates, ci)
 	}
 
@@ -223,19 +253,19 @@ func (cl *CertificateLoader) certInfoFromFilename(filename string) (*CertInfo, e
 	case `ca`:
 		pu = CAPem
 		if numParts != 2 {
-			return nil, errors.Errorf("CA certificate filename should match ca.%s", certExtension)
+			return nil, errors.Errorf("CA certificate filename should match ca%s", certExtension)
 		}
 	case `node`:
 		pu = NodePem
 		if numParts != 2 {
-			return nil, errors.Errorf("node certificate filename should match node.%s", certExtension)
+			return nil, errors.Errorf("node certificate filename should match node%s", certExtension)
 		}
 	case `client`:
 		pu = ClientPem
 		// strip prefix and suffix and re-join middle parts.
 		name = strings.Join(parts[1:numParts-1], `.`)
 		if len(name) == 0 {
-			return nil, errors.Errorf("client certificate filename should match client.<user>.%s", certExtension)
+			return nil, errors.Errorf("client certificate filename should match client.<user>%s", certExtension)
 		}
 	default:
 		return nil, errors.Errorf("unknown prefix %q", prefix)
@@ -258,17 +288,18 @@ func (cl *CertificateLoader) certInfoFromFilename(filename string) (*CertInfo, e
 
 // findKey takes a CertInfo and looks for the corresponding key file.
 // If found, sets the 'keyFilename' and returns nil, returns error otherwise.
+// Does not load CA keys.
 func (cl *CertificateLoader) findKey(ci *CertInfo) error {
+	if ci.FileUsage == CAPem {
+		return nil
+	}
+
 	keyFilename := strings.TrimSuffix(ci.Filename, certExtension) + keyExtension
 	fullKeyPath := filepath.Join(cl.certsDir, keyFilename)
 
 	// Stat the file. This follows symlinks.
 	info, err := assetLoaderImpl.Stat(fullKeyPath)
 	if err != nil {
-		if os.IsNotExist(err) && ci.FileUsage == CAPem {
-			// This is a CA cert with no key: not an error.
-			return nil
-		}
 		return errors.Errorf("could not stat key file %s: %v", fullKeyPath, err)
 	}
 

@@ -21,15 +21,15 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-	"os"
-	"path/filepath"
 	"sync"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/pkg/errors"
+	"golang.org/x/net/context"
 )
 
 // Base config defaults.
@@ -60,12 +60,6 @@ const (
 	DefaultCertsDirectory = "${HOME}/.cockroach-certs"
 )
 
-type lazyTLSConfig struct {
-	once      sync.Once
-	tlsConfig *tls.Config
-	err       error
-}
-
 type lazyHTTPClient struct {
 	once       sync.Once
 	httpClient http.Client
@@ -85,12 +79,17 @@ type Config struct {
 	// This is really not recommended.
 	Insecure bool
 
-	// SSLCA and others contain the paths to the ssl certificates and keys.
-	SSLCA       string // CA certificate
-	SSLCAKey    string // CA key (to sign only)
-	SSLCert     string // Client/server certificate
-	SSLCertKey  string // Client/server key
-	SSLCertsDir string // Directory containing certs/keys.
+	// SSLCA, SSLCert, SSLCertKey are here for backwards-compatibility on the
+	// start command only. If specified, a warning is displayed and the
+	// SSL config is built from these rather than the certificate manager.
+	SSLCA      string // CA certificate
+	SSLCert    string // Client/server certificate
+	SSLCertKey string // Client/server key
+
+	// SSLCAKey is used to sign new certs.
+	SSLCAKey string
+	// SSLCertsDir is the path to the certificate/key directory.
+	SSLCertsDir string
 
 	// User running this process. It could be the user under which
 	// the server is running or the user passed in client calls.
@@ -112,12 +111,6 @@ type Config struct {
 	// See https://github.com/grpc/grpc-go/issues/586.
 	HTTPAddr string
 
-	// clientTLSConfig is the loaded client TLS config. It is initialized lazily.
-	clientTLSConfig lazyTLSConfig
-
-	// serverTLSConfig is the loaded server TLS config. It is initialized lazily.
-	serverTLSConfig lazyTLSConfig
-
 	// The certificate manager. Must be accessed through GetCertificateManager.
 	certificateManager lazyCertificateManager
 
@@ -131,13 +124,37 @@ type Config struct {
 	HistogramWindowInterval time.Duration
 }
 
+var allowOldCertsFlags = envutil.EnvOrDefaultBool("COCKROACH_ALLOW_OLD_CERTS_FLAGS", true)
+
+// hasOldCertsFlags returns true if we have old certs flags and they are allowed.
+func (cfg *Config) hasOldCertsFlags() bool {
+	if !allowOldCertsFlags {
+		return false
+	}
+	if cfg.SSLCA == "" && cfg.SSLCert == "" && cfg.SSLCertKey == "" {
+		return false
+	}
+
+	log.Warning(context.Background(),
+		"flags --ca-cert, --cert, and --key are deprecated and will soon be removed, please use --certs-dir",
+	)
+	return true
+}
+
+func didYouMeanInsecureError(err error) error {
+	return errors.Wrap(err, "problem using security settings, did you mean to use --insecure?")
+}
+
 // InitDefaults sets up the default values for a config.
+// This is also used in tests to reset global objects.
 func (cfg *Config) InitDefaults() {
 	cfg.Insecure = defaultInsecure
 	cfg.User = defaultUser
 	cfg.Addr = defaultAddr
 	cfg.AdvertiseAddr = cfg.Addr
 	cfg.HTTPAddr = defaultHTTPAddr
+	cfg.SSLCertsDir = DefaultCertsDirectory
+	cfg.certificateManager = lazyCertificateManager{}
 }
 
 // HTTPRequestScheme returns "http" or "https" based on the value of Insecure.
@@ -153,60 +170,69 @@ func (cfg *Config) AdminURL() string {
 	return fmt.Sprintf("%s://%s", cfg.HTTPRequestScheme(), cfg.HTTPAddr)
 }
 
-// PGURL returns the URL for the postgres endpoint.
-func (cfg *Config) PGURL(user *url.Userinfo) (*url.URL, error) {
-	// Try to convert path to an absolute path. Failing to do so return path
-	// unchanged.
-	absPath := func(path string) string {
-		r, err := filepath.Abs(path)
-		if err != nil {
-			return path
+// GetClientCertPaths returns the paths to the client cert and key.
+func (cfg *Config) GetClientCertPaths(user string) (string, string, error) {
+	if cfg.hasOldCertsFlags() {
+		if cfg.SSLCert == "" {
+			return "", "", errors.New("some certificate flags specified, but --cert is empty")
 		}
-		return r
+		if cfg.SSLCertKey == "" {
+			return "", "", errors.New("some certificate flags specified, but --key is empty")
+		}
+		return cfg.SSLCert, cfg.SSLCertKey, nil
 	}
 
+	cm, err := cfg.GetCertificateManager()
+	if err != nil {
+		return "", "", err
+	}
+	return cm.GetClientCertPaths(user)
+}
+
+// GetCACertPath returns the path to the CA certificate.
+func (cfg *Config) GetCACertPath() (string, error) {
+	if cfg.hasOldCertsFlags() {
+		if cfg.SSLCA == "" {
+			return "", errors.New("no CA certificate found, use --ca-cert")
+		}
+		return cfg.SSLCA, nil
+	}
+
+	cm, err := cfg.GetCertificateManager()
+	if err != nil {
+		return "", err
+	}
+	return cm.GetCACertPath()
+}
+
+// ClientHasValidCerts returns true if the specified client has a valid client cert and key.
+func (cfg *Config) ClientHasValidCerts(user string) bool {
+	_, _, err := cfg.GetClientCertPaths(user)
+	return err == nil
+}
+
+// PGURL returns the URL for the postgres endpoint.
+func (cfg *Config) PGURL(user *url.Userinfo) (*url.URL, error) {
 	options := url.Values{}
 	if cfg.Insecure {
 		options.Add("sslmode", "disable")
 	} else {
-		if cfg.SSLCA == "" {
-			return nil, fmt.Errorf("missing --%s flag", cliflags.CACert.Name)
+		// Fetch CA cert. This is required.
+		caCertPath, err := cfg.GetCACertPath()
+		if err != nil {
+			return nil, didYouMeanInsecureError(err)
 		}
-
-		// Check that cfg.SSLCert and cfg.SSLCertKey are either both empty or
-		// both non-empty.
-		// If both are provided, the server will authenticate the client using
-		// certificate authentication. If not, password authentication will be
-		// used.
-		if cfg.SSLCert == "" && cfg.SSLCertKey != "" {
-			return nil, fmt.Errorf("missing --%s flag", cliflags.Cert.Name)
-		}
-		if cfg.SSLCertKey == "" && cfg.SSLCert != "" {
-			return nil, fmt.Errorf("missing --%s flag", cliflags.Key.Name)
-		}
-
 		options.Add("sslmode", "verify-full")
-		sslFlags := []struct {
-			name     string
-			value    string
-			flagName string
-		}{
-			{"sslcert", cfg.SSLCert, cliflags.Cert.Name},
-			{"sslkey", cfg.SSLCertKey, cliflags.Key.Name},
-			{"sslrootcert", cfg.SSLCA, cliflags.CACert.Name},
-		}
+		options.Add("sslrootcert", caCertPath)
 
-		for _, c := range sslFlags {
-			if c.value == "" {
-				continue
-			}
-			path := absPath(c.value)
-			if _, err := os.Stat(path); err != nil {
-				return nil, fmt.Errorf("file for --%s flag gave error: %v", c.flagName, err)
-			}
-			options.Add(c.name, path)
+		// Fetch certs, but don't fail, we may be using a password.
+		certPath, keyPath, err := cfg.GetClientCertPaths(user.Username())
+		if err == nil {
+			options.Add("sslcert", certPath)
+			options.Add("sslkey", keyPath)
 		}
 	}
+
 	return &url.URL{
 		Scheme:   "postgresql",
 		User:     user,
@@ -220,70 +246,59 @@ func (cfg *Config) PGURL(user *url.Userinfo) (*url.URL, error) {
 func (cfg *Config) GetCertificateManager() (*security.CertificateManager, error) {
 	cfg.certificateManager.once.Do(func() {
 		cfg.certificateManager.cm, cfg.certificateManager.err =
-			security.NewCertificateManager(os.ExpandEnv(cfg.SSLCertsDir))
+			security.NewCertificateManager(cfg.SSLCertsDir)
 	})
 	return cfg.certificateManager.cm, cfg.certificateManager.err
 }
 
 // GetClientTLSConfig returns the client TLS config, initializing it if needed.
-// If Insecure is true, return a nil config, otherwise load a config based
-// on the SSLCert file. If SSLCert is empty, use a very permissive config.
-// TODO(marc): empty SSLCert should fail when client certificates are required.
+// If Insecure is true, return a nil config, otherwise ask the certificate
+// manager for a TLS config using certs for the config.User.
 func (cfg *Config) GetClientTLSConfig() (*tls.Config, error) {
 	// Early out.
 	if cfg.Insecure {
 		return nil, nil
 	}
 
-	// TODO(marc): un-comment when switching over to the certificate_manager.
-	//	cm, err := cfg.GetCertificateManager()
-	//	if err != nil {
-	//		return nil, err
-	//	}
-	//	return cm.GetClientTLSConfig(cfg.User)
-	cfg.clientTLSConfig.once.Do(func() {
-		cfg.clientTLSConfig.tlsConfig, cfg.clientTLSConfig.err = security.LoadClientTLSConfig(
-			cfg.SSLCA, cfg.SSLCert, cfg.SSLCertKey)
-		if cfg.clientTLSConfig.err != nil {
-			cfg.clientTLSConfig.err = errors.Errorf("error setting up client TLS config: %s", cfg.clientTLSConfig.err)
-		}
-	})
+	if cfg.hasOldCertsFlags() {
+		return security.LoadClientTLSConfig(cfg.SSLCA, cfg.SSLCert, cfg.SSLCertKey)
+	}
 
-	return cfg.clientTLSConfig.tlsConfig, cfg.clientTLSConfig.err
+	cm, err := cfg.GetCertificateManager()
+	if err != nil {
+		return nil, didYouMeanInsecureError(err)
+	}
 
+	tlsCfg, err := cm.GetClientTLSConfig(cfg.User)
+	if err != nil {
+		return nil, didYouMeanInsecureError(err)
+	}
+	return tlsCfg, nil
 }
 
 // GetServerTLSConfig returns the server TLS config, initializing it if needed.
-// If Insecure is true, return a nil config, otherwise load a config based
-// on the SSLCert file. Fails if Insecure=false and SSLCert="".
+// If Insecure is true, return a nil config, otherwise ask the certificate
+// manager for a server TLS config.
 func (cfg *Config) GetServerTLSConfig() (*tls.Config, error) {
 	// Early out.
 	if cfg.Insecure {
 		return nil, nil
 	}
 
-	// TODO(marc): un-comment when switching over to the certificate_manager.
-	//	cm, err := cfg.GetCertificateManager()
-	//	if err != nil {
-	//		return nil, err
-	//	}
-	//
-	// return cm.GetServerTLSConfig()
+	if cfg.hasOldCertsFlags() {
+		return security.LoadServerTLSConfig(cfg.SSLCA, cfg.SSLCert, cfg.SSLCertKey)
+	}
 
-	cfg.serverTLSConfig.once.Do(func() {
-		if cfg.SSLCert != "" {
-			cfg.serverTLSConfig.tlsConfig, cfg.serverTLSConfig.err = security.LoadServerTLSConfig(
-				cfg.SSLCA, cfg.SSLCert, cfg.SSLCertKey)
-			if cfg.serverTLSConfig.err != nil {
-				cfg.serverTLSConfig.err = errors.Errorf("error setting up server TLS config: %s", cfg.serverTLSConfig.err)
-			}
-		} else {
-			cfg.serverTLSConfig.err = errors.Errorf("--%s=false, but --%s is empty. Certificates must be specified.",
-				cliflags.Insecure.Name, cliflags.Cert.Name)
-		}
-	})
+	cm, err := cfg.GetCertificateManager()
+	if err != nil {
+		return nil, didYouMeanInsecureError(err)
+	}
 
-	return cfg.serverTLSConfig.tlsConfig, cfg.serverTLSConfig.err
+	tlsCfg, err := cm.GetServerTLSConfig()
+	if err != nil {
+		return nil, didYouMeanInsecureError(err)
+	}
+	return tlsCfg, nil
 }
 
 // GetHTTPClient returns the http client, initializing it

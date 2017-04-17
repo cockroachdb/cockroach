@@ -240,13 +240,29 @@ open "<given path>/.s.PGSQL.<server port>"`,
 		EnvVar: "COCKROACH_INSECURE",
 		Description: `
 Run over non-encrypted (non-TLS) connections. This is strongly discouraged for
-production usage and this flag must be explicitly specified in order for the
-server to listen on an external address in insecure mode.`,
+production usage.`,
 	}
 
+	// KeySize, CertificateLifetime, AllowKeyReuse, and OverwriteFiles are used for
+	// certificate generation functions.
 	KeySize = FlagInfo{
 		Name:        "key-size",
 		Description: `Key size in bits for CA/Node/Client certificates.`,
+	}
+
+	CertificateLifetime = FlagInfo{
+		Name:        "lifetime",
+		Description: `Certificate lifetime.`,
+	}
+
+	AllowCAKeyReuse = FlagInfo{
+		Name:        "allow-ca-key-reuse",
+		Description: `Use the CA key if is exists.`,
+	}
+
+	OverwriteFiles = FlagInfo{
+		Name:        "overwrite",
+		Description: `Certificate and key files are overwritten if they exist.`,
 	}
 
 	MaxResults = FlagInfo{
@@ -260,33 +276,44 @@ server to listen on an external address in insecure mode.`,
 	}
 
 	CertsDir = FlagInfo{
-		Name:        "debug-certs-dir",
-		EnvVar:      "COCKROACH_DEBUG_CERTS_DIR",
-		Description: `DEBUG only: Path to the directory containing SSL certificates and keys.`,
-	}
+		Name:   "certs-dir",
+		EnvVar: "COCKROACH_CERTS_DIR",
+		Description: `
+The path to the directory containing SSL certificates and keys.
 
-	CACert = FlagInfo{
-		Name:        "ca-cert",
-		EnvVar:      "COCKROACH_CA_CERT",
-		Description: `Path to the CA certificate. Needed by clients and servers in secure mode.`,
+Cockroach looks for certificates and keys inside the directory using the following naming scheme:
+
+CA certificate and key: ca.crt, ca.key
+Server certificate and key: node.crt, node.key
+Client certificate and key: client.<user>.crt, client.<user>.key
+
+When running client commands, the user can be specified with the --user flag.
+
+Keys have a minimum permission requirement of 0777 (rwx------). This restriction can be
+disabled by setting the environment variable COCKROACH_SKIP_KEY_PERMISSION_CHECK to true.`,
 	}
 
 	CAKey = FlagInfo{
 		Name:        "ca-key",
 		EnvVar:      "COCKROACH_CA_KEY",
-		Description: `Path to the key protecting --ca-cert. Only needed when signing new certificates.`,
+		Description: `Path to the CA key.`,
+	}
+
+	// CACert, Cert, and Key are kept for backwards compatibility in the start command only.
+	// These will be removed soon.
+	CACert = FlagInfo{
+		Name:        "ca-cert",
+		Description: `DEPRECATION WARNING: this will be removed soon, please use --certs-dir`,
 	}
 
 	Cert = FlagInfo{
 		Name:        "cert",
-		EnvVar:      "COCKROACH_CERT",
-		Description: `Path to the client or server certificate. Needed in secure mode.`,
+		Description: `DEPRECATION WARNING: this will be removed soon, please use --certs-dir`,
 	}
 
 	Key = FlagInfo{
 		Name:        "key",
-		EnvVar:      "COCKROACH_KEY",
-		Description: `Path to the key protecting --cert. Needed in secure mode.`,
+		Description: `DEPRECATION WARNING: this will be removed soon, please use --certs-dir`,
 	}
 
 	Store = FlagInfo{
