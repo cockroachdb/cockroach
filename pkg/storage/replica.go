@@ -32,6 +32,7 @@ import (
 
 	"github.com/coreos/etcd/raft"
 	"github.com/coreos/etcd/raft/raftpb"
+	"github.com/gogo/protobuf/proto"
 	"github.com/google/btree"
 	"github.com/kr/pretty"
 	"github.com/opentracing/opentracing-go"
@@ -1449,7 +1450,35 @@ func (r *Replica) Send(
 		br, pErr = r.executeWriteBatch(ctx, ba)
 	} else if ba.IsReadOnly() {
 		log.Event(ctx, "read-only path")
+		var origTxn roachpb.Transaction
+		if ba.Txn != nil {
+			origTxn = ba.Txn.Clone()
+		}
 		br, pErr = r.executeReadOnlyBatch(ctx, ba)
+		// If we successfully executed a read-only batch, assert that we the
+		// transaction in the response is unchanged from the one in the request.
+		// This check was introduced because, as of 04/2017, DistSQL does not
+		// marshall the txns in the response to the gateway and doesn't update SQL's
+		// txn proto. If this changes, the check can be relaxed or removed, although
+		// it generally seems like a good idea to keep track of what can change in
+		// the transaction proto and what can't.
+		if pErr == nil && ba.Txn != nil {
+			responseTxn := br.Txn.Clone()
+			// The ObservedTimestamps are expected to change.
+			origTxn.ObservedTimestamps = nil
+			responseTxn.ObservedTimestamps = nil
+			// The BatchIndex might change; ignore it.
+			origTxn.BatchIndex = 0
+			responseTxn.BatchIndex = 0
+			// proto.Equal doesn't know how to compare IDs.
+			origTxn.ID = nil
+			responseTxn.ID = nil
+			if !proto.Equal(&origTxn, &responseTxn) {
+				pErr = roachpb.NewErrorf(
+					"unexpected updated txn after read-only batch: %+v vs %+v (ba: %s)",
+					origTxn, responseTxn, ba)
+			}
+		}
 	} else if ba.IsAdmin() {
 		log.Event(ctx, "admin path")
 		br, pErr = r.executeAdminBatch(ctx, ba)
