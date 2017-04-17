@@ -1026,7 +1026,9 @@ func includesFrontOfCurSpan(isReverse bool, rd *roachpb.RangeDescriptor, rs roac
 
 // fillSkippedResponses after meeting the batch key max limit for range
 // requests.
-func fillSkippedResponses(ba roachpb.BatchRequest, br *roachpb.BatchResponse, nextKey roachpb.RKey) {
+func fillSkippedResponses(
+	ba roachpb.BatchRequest, br *roachpb.BatchResponse, nextKey roachpb.RKey,
+) {
 	// Some requests might have NoopResponses; we must replace them with empty
 	// responses of the proper type.
 	for i, req := range ba.Requests {

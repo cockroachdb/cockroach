@@ -708,7 +708,9 @@ func (rec ReplicaEvalContext) TxnSpanGCThreshold() (hlc.Timestamp, error) {
 
 // GetLastReplicaGCTimestamp returns the last time the Replica was
 // considered for GC.
-func (rec ReplicaEvalContext) GetLastReplicaGCTimestamp(ctx context.Context) (hlc.Timestamp, error) {
+func (rec ReplicaEvalContext) GetLastReplicaGCTimestamp(
+	ctx context.Context,
+) (hlc.Timestamp, error) {
 	if rec.ss != nil {
 		if err := rec.ss.checkAllowed(SpanReadOnly,
 			roachpb.Span{Key: keys.RangeLastReplicaGCTimestampKey(rec.RangeID())},

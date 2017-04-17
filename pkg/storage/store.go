@@ -2662,7 +2662,9 @@ func (s *Store) reserveSnapshot(
 
 // HandleSnapshot reads an incoming streaming snapshot and applies it if
 // possible.
-func (s *Store) HandleSnapshot(header *SnapshotRequest_Header, stream SnapshotResponseStream) error {
+func (s *Store) HandleSnapshot(
+	header *SnapshotRequest_Header, stream SnapshotResponseStream,
+) error {
 	s.metrics.raftRcvdMessages[raftpb.MsgSnap].Inc(1)
 
 	if s.IsDraining() {
@@ -3503,7 +3505,9 @@ func (s *Store) startCoalescedHeartbeatsLoop() {
 
 // sendQueuedHeartbeatsToNode requires that the s.coalescedMu lock is held. It
 // returns the number of heartbeats that were sent.
-func (s *Store) sendQueuedHeartbeatsToNode(beats, resps []RaftHeartbeat, to roachpb.StoreIdent) int {
+func (s *Store) sendQueuedHeartbeatsToNode(
+	beats, resps []RaftHeartbeat, to roachpb.StoreIdent,
+) int {
 	var msgType raftpb.MessageType
 
 	if len(beats) == 0 && len(resps) == 0 {

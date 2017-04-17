@@ -772,7 +772,9 @@ func (env *CollationEnvironment) getCacheEntry(locale string) collationEnvironme
 
 // NewDCollatedString is a helper routine to create a *DCollatedString. Panics
 // if locale is invalid. Not safe for concurrent use.
-func NewDCollatedString(contents string, locale string, env *CollationEnvironment) *DCollatedString {
+func NewDCollatedString(
+	contents string, locale string, env *CollationEnvironment,
+) *DCollatedString {
 	entry := env.getCacheEntry(locale)
 	key := entry.collator.KeyFromString(&env.buffer, contents)
 	d := DCollatedString{contents, entry.locale, make([]byte, len(key))}

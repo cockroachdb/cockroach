@@ -358,7 +358,9 @@ var decodeMap = map[byte]byte{
 // CopyData is the statement type after a block of COPY data has been
 // received. There may be additional rows ready to insert. If so, return an
 // insertNode, otherwise emptyNode.
-func (p *planner) CopyData(ctx context.Context, n CopyDataBlock, autoCommit bool) (planNode, error) {
+func (p *planner) CopyData(
+	ctx context.Context, n CopyDataBlock, autoCommit bool,
+) (planNode, error) {
 	// When this many rows are in the copy buffer, they are inserted.
 	const copyRowSize = 100
 
