@@ -76,14 +76,13 @@ func (p *planner) computeRenderAllowingStars(
 // equivalentRenders returns true if and only if the two render expressions
 // are equivalent.
 func (s *renderNode) equivalentRenders(i, j int) bool {
-	firstExprStr := parser.AsStringWithFlags(s.render[i], parser.FmtSymbolicVars)
-	return s.isRenderEquivalent(firstExprStr, j)
+	return s.isRenderEquivalent(symbolicExprStr(s.render[i]), j)
 }
 
 // isRenderEquivalent is a helper function for equivalentRenders() and
 // addOrMergeRenders(). Do not use directly.
 func (s *renderNode) isRenderEquivalent(exprStr string, j int) bool {
-	return parser.AsStringWithFlags(s.render[j], parser.FmtSymbolicVars) == exprStr
+	return symbolicExprStr(s.render[j]) == exprStr
 }
 
 // addOrMergeRenders adds the given result columns to the select
@@ -99,7 +98,7 @@ func (s *renderNode) addOrMergeRender(
 		// point the expressions must have underwent name resolution
 		// already so that comparison occurs after replacing column names
 		// to IndexedVars.
-		exprStr := parser.AsStringWithFlags(expr, parser.FmtSymbolicVars)
+		exprStr := symbolicExprStr(expr)
 		for j := range s.render {
 			if s.isRenderEquivalent(exprStr, j) {
 				return j
@@ -120,6 +119,13 @@ func (s *renderNode) addOrMergeRenders(
 		colIdxs[i] = s.addOrMergeRender(cols[i], exprs[i], reuseExistingRender)
 	}
 	return colIdxs
+}
+
+// symbolicExprStr returns a string representation of the expression using
+// symbolic notation. Because the symbolic notation disambiguate columns, this
+// string can be used to determine if two expressions are equivalent.
+func symbolicExprStr(expr parser.Expr) string {
+	return parser.AsStringWithFlags(expr, parser.FmtSymbolicVars)
 }
 
 // checkRenderStar handles the case where the target specification contains a

@@ -85,22 +85,16 @@ func (p *planner) window(
 	if err := window.extractWindowFunctions(s); err != nil {
 		return nil, err
 	}
-	renderCols := s.columns
+	window.sourceCols = len(s.columns)
 
 	if err := window.constructWindowDefinitions(ctx, n, s); err != nil {
 		return nil, err
 	}
-	windowDefCols := s.columns[len(renderCols):]
 
-	window.replaceIndexedVars(s)
-	indexedVarCols := s.columns[len(renderCols)+len(windowDefCols):]
+	window.replaceIndexVarsAndAggFuncs(s)
 
-	// Despite appearances we are in fact using three separate bound accounts
-	// for each of the following row containers.
 	acc := p.session.TxnState.makeBoundAccount()
-	window.wrappedRenderVals = NewRowContainer(acc, renderCols, 0)
-	window.wrappedWindowDefVals = NewRowContainer(acc, windowDefCols, 0)
-	window.wrappedIndexedVarVals = NewRowContainer(acc, indexedVarCols, 0)
+	window.wrappedRenderVals = NewRowContainer(acc, s.columns, 0)
 	window.windowsAcc = p.session.TxnState.OpenAccount()
 
 	return window, nil
@@ -170,7 +164,6 @@ func (n *windowNode) constructWindowDefinitions(
 	}
 
 	// Construct window definitions for each window function application.
-	origRenderLen := len(s.render)
 	for _, windowFn := range n.funcs {
 		windowDef, err := constructWindowDef(*windowFn.expr.WindowDef, namedWindowSpecs)
 		if err != nil {
@@ -188,14 +181,7 @@ func (n *windowNode) constructWindowDefinitions(
 			if err != nil {
 				return err
 			}
-
-			// TODO(knz/nvanbenschoten): we can't merge this yet because the
-			// rest of the code assumes that the renders for window
-			// definitions are disjoint from the rest.
-			colIdxs := s.addOrMergeRenders(cols, exprs, false)
-			for _, idx := range colIdxs {
-				windowFn.partitionIdxs = append(windowFn.partitionIdxs, idx-origRenderLen)
-			}
+			windowFn.partitionIdxs = s.addOrMergeRenders(cols, exprs, true)
 		}
 
 		// Validate ORDER BY clause.
@@ -211,13 +197,10 @@ func (n *windowNode) constructWindowDefinitions(
 				direction = encoding.Descending
 			}
 
-			// TODO(knz/nvanbenschoten): we can't merge this yet because the
-			// rest of the code assumes that the renders for sorting columns
-			// are disjoint from the rest.
-			colIdxs := s.addOrMergeRenders(cols, exprs, false)
+			colIdxs := s.addOrMergeRenders(cols, exprs, true)
 			for _, idx := range colIdxs {
 				ordering := sqlbase.ColumnOrderInfo{
-					ColIdx:    idx - origRenderLen,
+					ColIdx:    idx,
 					Direction: direction,
 				}
 				windowFn.columnOrdering = append(windowFn.columnOrdering, ordering)
@@ -279,52 +262,143 @@ func constructWindowDef(
 }
 
 // Once the extractWindowFunctions has been run over each render, the remaining
-// expressions will all be "above" the windowing level, with windowFuncHolders standing
-// in as terminal expressions for each window function. This means that we can compute
-// the results of each window function for each row, and then continue evaluating the
-// windowRenders with each window function's respective result for that row.
+// render expressions will either be nil or contain an expression. If one is nil,
+// that means the render will not be touched by windowNode, and will be passed on
+// without modification. If the render is not nil, that means that it contained
+// at least one window function, and now has windowFuncHolders standing in as
+// terminal expressions for each of these window function applications. These
+// expressions will be evaluated after each of the window functions are run, so
+// we refer to them as happening above the "windowing level". In other words, we
+// let the source plan execute to completion below the windowing level, we then
+// compute the results of each window function for each row, and finally we continue
+// evaluating the windowRenders with each window function's respective result for
+// that row above the windowing level.
 //
-// There is one complication here: IndexedVars above the windowing level need to be
-// fixed. Because window function evaluation requires completion of any wrapped plan
-// nodes, if we did nothing here, all IndexedVars would be pointing to their values in
-// the last row of the underlying renderNode. Clearly, we cannot use the renderNode as
-// the IndexedVarContainer for IndexedVars above the windowing level. To work around
-// this, we perform four steps:
-// 1. We add renders for each column referenced by an IndexedVar above the windowing
-//    level.
-// 2. We replace each IndexedVar with a new IndexedVar that uses the windowNode as
-//    an IndexedVarContainer.
-// 3. We buffer all of the column values from the newly added renders while computing
-//    window function results.
+// There is one complication here; expression types that also vary for each row
+// need to be treated with special care if above this windowing level. These expression
+// types are:
+// - IndexedVars: window function evaluation requires completion of any wrapped
+//    plan nodes, so if we did nothing here, all existing IndexedVars from source plans
+//    would be pointing to their values in the last row of the underlying renderNode.
+//    Clearly, we cannot use the renderNode as the IndexedVarContainer for IndexedVars
+//    above the windowing level.
+//   Example:
+//    SELECT x + row_number() OVER () FROM t
+//      is replaced by
+//    SELECT @1 + row_number() OVER () FROM (SELECT x, ... FROM t)
+//
+// - Aggregate Functions: aggregate functions are handled by the groupNode, which
+//    requires the functions to be present in its renders for proper evaluation.
+//    If an aggregate function is found above the windowing level and we do not
+//    migrate it below the windowing level, the aggregation will never be performed.
+//   Example:
+//    SELECT max(x) + row_number() OVER () FROM t
+//      is replaced by
+//    SELECT @1 + row_number() OVER () FROM (SELECT max(x), ... FROM t)
+//
+// To work around both of these cases, we perform four steps:
+// 1. We add renders to the source plan for each column referenced by any existing
+//    IndexedVar or any aggregate function found above the windowing level. In both
+//    cases, we perform deduplication to only add a single render per unique
+//    IndexedVar or aggregate function.
+// 2. We replace each IndexedVar or aggregation function with a new IndexedVar that
+//    uses the windowNode as an IndexedVarContainer (see windowNodeVarContainer and
+//    windowNodeAggContainer).
+// 3. The results are computed by the source node for the newly added renders. The
+//    window node then buffers these results in the wrappedIndexedVarVals RowContainer
+//    while computing window function results.
 // 4. When evaluating windowRenders for each row that contain these new IndexedVars,
 //    the windowNode provides the buffered column value for that row through its
 //    IndexedVarContainer interface.
-func (n *windowNode) replaceIndexedVars(s *renderNode) {
-	ivarHelper := parser.MakeIndexedVarHelper(n, s.ivarHelper.NumVars())
-	n.ivarIdxMap = make(map[int]int)
-	n.ivarSourceInfo = s.sourceInfo
+//
+// Example:
+//   SELECT a, max(b), c + max(d) + first_value(e) OVER (PARTITION BY f) FROM t
+//    (for clarity, we ignore grouping rules)
+//
+//   After extractWindowFunctions is run:
+//    source plan's renders: [a, max(b), d, f]
+//    window plan's renders: [nil, nil, c + max(d) + first_value(@3) OVER (PARTITION BY @4)]
+//
+//   After replaceIndexVarsAndAggFuncs is run:
+//    source plan's renders: [a, max(b), d, f, c, max(d)]
+//    window plan's renders: [nil, nil, @5 + @6 + first_value(@3) OVER (PARTITION BY @4)]
+//
+func (n *windowNode) replaceIndexVarsAndAggFuncs(s *renderNode) {
+	n.colContainer = windowNodeColContainer{
+		windowNodeIvarContainer: makeWindowNodeIvarContainer(n),
+		sourceInfo:              s.sourceInfo[0],
+	}
+	ivarHelper := parser.MakeIndexedVarHelper(&n.colContainer, s.ivarHelper.NumVars())
 
-	varIdx := 0
+	n.aggContainer = windowNodeAggContainer{
+		windowNodeIvarContainer: makeWindowNodeIvarContainer(n),
+		aggFuncs:                make(map[int]*parser.FuncExpr),
+	}
+	// The number of aggregation functions that need to be replaced with IndexedVars
+	// is unknown, so we collect them here and bind them to an IndexedVarHelper later.
+	// We use a map indexed by render index to leverage addOrMergeRender's deduplication
+	// of identical aggregate functions.
+	aggIVars := make(map[int]*parser.IndexedVar)
+
 	for i, render := range n.windowRender {
 		if render == nil {
 			continue
 		}
-		replaceIdxVars := func(expr parser.VariableExpr) (ok bool, newExpr parser.Expr) {
-			iv, ok := expr.(*parser.IndexedVar)
-			if !ok {
-				return true, expr
-			}
-			if _, ok := n.ivarIdxMap[iv.Idx]; !ok {
-				// We add a new render to the wrapped renderNode for each new IndexedVar we
-				// see. We also register this mapping in the ivarIdxMap.
-				s.addRenderColumn(iv, ResultColumn{Name: iv.String(), Typ: iv.ResolvedType()})
+		replaceExprsAboveWindowing := func(expr parser.Expr) (error, bool, parser.Expr) {
+			switch t := expr.(type) {
+			case *parser.IndexedVar:
+				// We add a new render to the source renderNode for each new IndexedVar we
+				// see. We also register this mapping in the idxMap.
+				col := ResultColumn{Name: t.String(), Typ: t.ResolvedType()}
+				colIdx := s.addOrMergeRender(col, t, true)
+				n.colContainer.idxMap[t.Idx] = colIdx
+				return nil, false, ivarHelper.IndexedVar(t.Idx)
+			case *parser.FuncExpr:
+				// All window function applications will have been replaced by
+				// windowFuncHolders at this point, so if we see an aggregate
+				// function in the window renders, it is above a window function.
+				if t.GetAggregateConstructor() != nil {
+					// We add a new render to the source renderNode for each new aggregate
+					// function we see.
+					col := ResultColumn{Name: t.String(), Typ: t.ResolvedType()}
+					colIdx := s.addOrMergeRender(col, t, true)
 
-				n.ivarIdxMap[iv.Idx] = varIdx
-				varIdx++
+					if iVar, ok := aggIVars[colIdx]; ok {
+						// If we have already created an IndexedVar for this aggregate
+						// function, return it.
+						return nil, false, iVar
+					}
+
+					// Create a new IndexedVar with the next available index.
+					idx := len(n.aggContainer.idxMap)
+					aggIVar := parser.NewOrdinalReference(idx)
+					aggIVars[colIdx] = aggIVar
+					n.aggContainer.idxMap[idx] = colIdx
+					n.aggContainer.aggFuncs[idx] = t
+					return nil, false, aggIVar
+				}
+				return nil, true, expr
+			default:
+				return nil, true, expr
 			}
-			return true, ivarHelper.IndexedVar(iv.Idx)
 		}
-		n.windowRender[i] = exprConvertVars(render, replaceIdxVars)
+		expr, err := parser.SimpleVisit(render, replaceExprsAboveWindowing)
+		if err != nil {
+			panic(err)
+		}
+		n.windowRender[i] = expr.(parser.TypedExpr)
+	}
+
+	if len(aggIVars) > 0 {
+		// Now that we know how many aggregate functions there were, we can create
+		// an IndexedVarHelper and bind each of the corresponding IndexedVars to
+		// the helper.
+		aggHelper := parser.MakeIndexedVarHelper(&n.aggContainer, len(aggIVars))
+		for _, aggIVar := range aggIVars {
+			if err := aggHelper.BindIfUnbound(aggIVar); err != nil {
+				panic(err)
+			}
+		}
 	}
 }
 
@@ -336,24 +410,24 @@ type windowNode struct {
 	// The "wrapped" node (which returns un-windowed results).
 	plan planNode
 
-	// The values returned by the wrapped nodes will be split into three RowContainer
-	// groups that are separated for clarity, but have the same lifetime:
-	// - wrappedRenderVals: these values are either passed directly as rendered values of the
+	// The values returned by the wrapped nodes are logically split into three
+	// groups of columns, although they may overlap if renders were merged:
+	// - sourceVals: these values are either passed directly as rendered values of the
 	//     windowNode if their corresponding expressions were not wrapped in window functions,
 	//     or used as arguments to window functions to eventually create rendered values for
 	//     the windowNode if their corresponding expressions were wrapped in window functions.
+	//     These will always be located in wrappedRenderVals[:sourceCols].
 	//     (see extractWindowFunctions)
-	// - wrappedWindowDefVals: these values are used to partition and order window function
+	// - windowDefVals: these values are used to partition and order window function
 	//     applications, and were added to the wrapped node from window definitions.
 	//     (see constructWindowDefinitions)
-	// - wrappedIndexedVarVals: these values are used to buffer the IndexedVar values
+	// - indexedVarVals: these values are used to buffer the IndexedVar values
 	//     for each row. Unlike the renderNode, which can stream values for each IndexedVar,
 	//     we need to buffer all values here while we compute window function results. We
-	//     then index into these values in IndexedVarContainer.IndexedVarEval.
-	//     (see replaceIndexedVars)
-	wrappedRenderVals     *RowContainer
-	wrappedWindowDefVals  *RowContainer
-	wrappedIndexedVarVals *RowContainer
+	//     then index into these values in colContainer.IndexedVarEval and
+	//     aggContainer.IndexedVarEval. (see replaceIndexVarsAndAggFuncs)
+	wrappedRenderVals *RowContainer
+	sourceCols        int
 
 	// A sparse array holding renders specific to this windowNode. This will contain
 	// nil entries for renders that do not contain window functions, and which therefore
@@ -370,9 +444,10 @@ type windowNode struct {
 	windowValues [][]parser.Datum
 	curRowIdx    int
 
-	// ivarIdxMap maps renderNode ivarIdx values to windowNode ivarIdx values.
-	ivarIdxMap     map[int]int
-	ivarSourceInfo multiSourceInfo
+	// colContainer and aggContainer are IndexedVarContainers that provide indirection
+	// to migrate IndexedVars and aggregate functions below the windowing level.
+	colContainer windowNodeColContainer
+	aggContainer windowNodeAggContainer
 
 	windowsAcc WrappableMemoryAccount
 
@@ -440,22 +515,8 @@ func (n *windowNode) Next(ctx context.Context) (bool, error) {
 			return true, nil
 		}
 
-		// Split the values into wrappedRenderVals, wrappedRenderVals, and
-		// wrappedIndexedVarVals.
 		values := n.plan.Values()
-
-		renderEnd := n.wrappedRenderVals.NumCols()
-		windowDefEnd := renderEnd + n.wrappedWindowDefVals.NumCols()
-		renderVals := values[:renderEnd]
-		if _, err := n.wrappedRenderVals.AddRow(ctx, renderVals); err != nil {
-			return false, err
-		}
-		windowDefVals := values[renderEnd:windowDefEnd]
-		if _, err := n.wrappedWindowDefVals.AddRow(ctx, windowDefVals); err != nil {
-			return false, err
-		}
-		indexedVarVals := values[windowDefEnd:]
-		if _, err := n.wrappedIndexedVarVals.AddRow(ctx, indexedVarVals); err != nil {
+		if _, err := n.wrappedRenderVals.AddRow(ctx, values); err != nil {
 			return false, err
 		}
 
@@ -511,7 +572,21 @@ type peerGroupChecker interface {
 }
 
 // computeWindows populates n.windowValues, adding a column of values to the
-// 2D-slice for each window function in n.funcs.
+// 2D-slice for each window function in n.funcs. This needs to be performed
+// all at once because in order to compute the result of a window function
+// for any single row, we need to have access to all rows at the same time.
+//
+// The state shared between rows while computing all window functions for a
+// single row is not easily extracted for two reasons:
+// 1. window functions can define different partitioning attributes
+// 2. window functions can define different column orderings within partitions
+//
+// The general structure is:
+//   for each window function
+//     compute partitions
+//     for each partition
+//       sort partition
+//       evaluate window frame over partition per cell, keeping track of peer groups
 func (n *windowNode) computeWindows(ctx context.Context) error {
 	rowCount := n.wrappedRenderVals.Len()
 	if rowCount == 0 {
@@ -566,8 +641,8 @@ func (n *windowNode) computeWindows(ctx context.Context) error {
 		// See Cao et al. [http://vldb.org/pvldb/vol5/p1244_yucao_vldb2012.pdf]
 		for rowI := 0; rowI < rowCount; rowI++ {
 			row := n.wrappedRenderVals.At(rowI)
-			rowWindowDef := n.wrappedWindowDefVals.At(rowI)
-			entry := parser.IndexedRow{Idx: rowI, Row: row}
+			sourceVals := row[:n.sourceCols]
+			entry := parser.IndexedRow{Idx: rowI, Row: sourceVals}
 			if len(windowFn.partitionIdxs) == 0 {
 				// If no partition indexes are included for the window function, all
 				// rows are added to the same partition.
@@ -576,7 +651,7 @@ func (n *windowNode) computeWindows(ctx context.Context) error {
 				// If the window function has partition indexes, we hash the values of each
 				// of these indexes for each row, and partition based on this hashed value.
 				for i, idx := range windowFn.partitionIdxs {
-					scratchDatum[i] = rowWindowDef[idx]
+					scratchDatum[i] = row[idx]
 				}
 
 				encoded, err := sqlbase.EncodeDatums(scratchBytes, scratchDatum)
@@ -622,7 +697,7 @@ func (n *windowNode) computeWindows(ctx context.Context) error {
 				sorter := &partitionSorter{
 					evalCtx:       &n.planner.evalCtx,
 					rows:          partition,
-					windowDefVals: n.wrappedWindowDefVals,
+					windowDefVals: n.wrappedRenderVals,
 					ordering:      windowFn.columnOrdering,
 				}
 				// The sort needs to be deterministic because multiple window functions with
@@ -676,11 +751,6 @@ func (n *windowNode) computeWindows(ctx context.Context) error {
 			}
 		}
 	}
-
-	// Done using window definition values, release memory.
-	n.wrappedWindowDefVals.Close(ctx)
-	n.wrappedWindowDefVals = nil
-
 	return nil
 }
 
@@ -739,8 +809,6 @@ func (n *windowNode) populateValues(ctx context.Context) error {
 	// accounts.
 	n.wrappedRenderVals.Close(ctx)
 	n.wrappedRenderVals = nil
-	n.wrappedIndexedVarVals.Close(ctx)
-	n.wrappedIndexedVarVals = nil
 	n.windowValues = nil
 	acc.Close(ctx)
 
@@ -752,14 +820,6 @@ func (n *windowNode) Close(ctx context.Context) {
 	if n.wrappedRenderVals != nil {
 		n.wrappedRenderVals.Close(ctx)
 		n.wrappedRenderVals = nil
-	}
-	if n.wrappedWindowDefVals != nil {
-		n.wrappedWindowDefVals.Close(ctx)
-		n.wrappedWindowDefVals = nil
-	}
-	if n.wrappedIndexedVarVals != nil {
-		n.wrappedIndexedVarVals.Close(ctx)
-		n.wrappedIndexedVarVals = nil
 	}
 	if n.windowValues != nil {
 		n.windowValues = nil
@@ -904,17 +964,72 @@ func (w *windowFuncHolder) ResolvedType() parser.Type {
 	return w.expr.ResolvedType()
 }
 
+// windowNodeIvarContainer is an abstract implementation of the
+// parser.IndexedVarContainer interface. It handles evaluation of IndexedVars,
+// but needs to be extended to handle formatting and type introspection
+// for its IndexedVars.
+type windowNodeIvarContainer struct {
+	n *windowNode
+
+	// idxMap maps the index of IndexedVars created in replaceIndexVarsAndAggFuncs
+	// to the index their corresponding results in this container. It permits us to
+	// add a single render to the source plan per unique expression.
+	idxMap map[int]int
+}
+
+func makeWindowNodeIvarContainer(n *windowNode) windowNodeIvarContainer {
+	return windowNodeIvarContainer{
+		n:      n,
+		idxMap: make(map[int]int),
+	}
+}
+
 // IndexedVarEval implements the parser.IndexedVarContainer interface.
-func (n *windowNode) IndexedVarEval(idx int, ctx *parser.EvalContext) (parser.Datum, error) {
-	return n.wrappedIndexedVarVals.At(n.curRowIdx)[n.ivarIdxMap[idx]].Eval(ctx)
+func (ic *windowNodeIvarContainer) IndexedVarEval(
+	idx int, ctx *parser.EvalContext,
+) (parser.Datum, error) {
+	// Determine which row in the buffered values to evaluate.
+	curRow := ic.n.wrappedRenderVals.At(ic.n.curRowIdx)
+	// Determine which value in that row to evaluate.
+	curVal := curRow[ic.idxMap[idx]]
+	return curVal.Eval(ctx)
+}
+
+// windowNodeColContainer is a IndexedVarContainer providing indirection for
+// IndexedVars found above the windowing level. See replaceIndexVarsAndAggFuncs.
+type windowNodeColContainer struct {
+	windowNodeIvarContainer
+
+	// sourceInfo contains information on the for the IndexedVars from the
+	// source plan where they were originally created.
+	sourceInfo *dataSourceInfo
 }
 
 // IndexedVarResolvedType implements the parser.IndexedVarContainer interface.
-func (n *windowNode) IndexedVarResolvedType(idx int) parser.Type {
-	return n.ivarSourceInfo[0].sourceColumns[idx].Typ
+func (cc *windowNodeColContainer) IndexedVarResolvedType(idx int) parser.Type {
+	return cc.sourceInfo.sourceColumns[idx].Typ
 }
 
 // IndexedVarString implements the parser.IndexedVarContainer interface.
-func (n *windowNode) IndexedVarFormat(buf *bytes.Buffer, f parser.FmtFlags, idx int) {
-	n.ivarSourceInfo[0].FormatVar(buf, f, idx)
+func (cc *windowNodeColContainer) IndexedVarFormat(buf *bytes.Buffer, f parser.FmtFlags, idx int) {
+	cc.sourceInfo.FormatVar(buf, f, idx)
+}
+
+// windowNodeAggContainer is a IndexedVarContainer providing indirection for
+// aggregate functions found above the windowing level. See replaceIndexVarsAndAggFuncs.
+type windowNodeAggContainer struct {
+	windowNodeIvarContainer
+
+	// aggFuncs maps the index of IndexedVars to their corresponding aggregate function.
+	aggFuncs map[int]*parser.FuncExpr
+}
+
+// IndexedVarResolvedType implements the parser.IndexedVarContainer interface.
+func (ac *windowNodeAggContainer) IndexedVarResolvedType(idx int) parser.Type {
+	return ac.aggFuncs[idx].ResolvedType()
+}
+
+// IndexedVarString implements the parser.IndexedVarContainer interface.
+func (ac *windowNodeAggContainer) IndexedVarFormat(buf *bytes.Buffer, f parser.FmtFlags, idx int) {
+	ac.aggFuncs[idx].Format(buf, f)
 }
