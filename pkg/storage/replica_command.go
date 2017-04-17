@@ -563,17 +563,20 @@ func declareKeysEndTransaction(
 
 	if et.InternalCommitTrigger != nil {
 		if st := et.InternalCommitTrigger.SplitTrigger; st != nil {
-			// Splits may read from the entire pre-split range and write to
-			// the right side's RangeID spans and abort cache.
-			// TODO(bdarnell): the only time we read from the right-hand
-			// side is when the existing stats contain estimates. We might
-			// be able to be smarter here and avoid declaring reads on RHS
-			// in most cases.
-			spans.Add(SpanReadOnly, roachpb.Span{
+			// Splits may read from the entire pre-split range (they read
+			// from the LHS in all cases, and the RHS only when the existing
+			// stats contain estimates), but they need to declare a write
+			// access to block all other concurrent writes. We block writes
+			// to the RHS because they will fail if applied after the split,
+			// and writes to the LHS because their stat deltas will
+			// interfere with the non-delta stats computed as a part of the
+			// split. (see
+			// https://github.com/cockroachdb/cockroach/issues/14881)
+			spans.Add(SpanReadWrite, roachpb.Span{
 				Key:    st.LeftDesc.StartKey.AsRawKey(),
 				EndKey: st.RightDesc.EndKey.AsRawKey(),
 			})
-			spans.Add(SpanReadOnly, roachpb.Span{
+			spans.Add(SpanReadWrite, roachpb.Span{
 				Key:    keys.MakeRangeKeyPrefix(st.LeftDesc.StartKey),
 				EndKey: keys.MakeRangeKeyPrefix(st.RightDesc.EndKey).PrefixEnd(),
 			})
