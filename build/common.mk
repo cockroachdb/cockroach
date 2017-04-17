@@ -159,10 +159,8 @@ $(BOOTSTRAP_TARGET): $(GITHOOKS) $(REPO_ROOT)/glide.lock
 ifneq ($(GIT_DIR),)
 	git submodule update --init
 endif
-	$(GO_INSTALL) -v \
-	$(PKG_ROOT)/cmd/metacheck \
-	$(PKG_ROOT)/cmd/returncheck \
-	&& $(GO) list -tags glide -f '{{join .Imports "\n"}}' $(REPO_ROOT)/build | grep -vF protoc | xargs $(GO) install -v
+	@$(GO_INSTALL) -v $(PKG_ROOT)/cmd/metacheck $(PKG_ROOT)/cmd/returncheck \
+	$(shell $(GO) list -tags glide -f '{{join .Imports "\n"}}' $(REPO_ROOT)/build | grep -vF protoc)
 	touch $@
 
 # Make doesn't expose a list of the variables declared in a given file, so we
