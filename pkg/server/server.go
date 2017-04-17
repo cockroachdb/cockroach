@@ -250,6 +250,10 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 
 	s.refreshSettings()
 
+	distSQLMetrics := sql.MakeMemMetrics("distsql", cfg.HistogramWindowInterval())
+	s.registry.AddMetric(distSQLMetrics.CurBytesCount)
+	s.registry.AddMetric(distSQLMetrics.MaxBytesHist)
+
 	// Set up the DistSQL server
 	distSQLCfg := distsqlrun.ServerConfig{
 		AmbientContext: s.cfg.AmbientCtx,
@@ -257,6 +261,9 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		RPCContext:     s.rpcContext,
 		Stopper:        s.stopper,
 		NodeID:         &s.nodeIDContainer,
+
+		Counter: distSQLMetrics.CurBytesCount,
+		Hist:    distSQLMetrics.MaxBytesHist,
 	}
 	if s.cfg.TestingKnobs.DistSQL != nil {
 		distSQLCfg.TestingKnobs = *s.cfg.TestingKnobs.DistSQL.(*distsqlrun.TestingKnobs)
