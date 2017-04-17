@@ -209,11 +209,6 @@ func (c *RowContainer) Len() int {
 	return c.numRows
 }
 
-// NumCols reports the number of columns held in this RowContainer.
-func (c *RowContainer) NumCols() int {
-	return c.numCols
-}
-
 // At accesses a row at a specific index.
 func (c *RowContainer) At(i int) parser.Datums {
 	if i < 0 || i >= c.numRows {
