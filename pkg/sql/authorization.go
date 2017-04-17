@@ -61,7 +61,7 @@ func (p *planner) anyPrivilege(descriptor sqlbase.DescriptorProto) error {
 
 // RequireSuperUser implements the AuthorizationAccessor interface.
 func (p *planner) RequireSuperUser(action string) error {
-	if p.session.User != security.RootUser {
+	if p.session.User != security.RootUser && p.session.User != security.NodeUser {
 		return fmt.Errorf("only %s is allowed to %s", security.RootUser, action)
 	}
 	return nil
