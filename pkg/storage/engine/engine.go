@@ -23,6 +23,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 )
 
@@ -122,6 +123,10 @@ type Reader interface {
 	// skipped). The caller must invoke Iterator.Close() when finished with the
 	// iterator to free resources.
 	NewIterator(prefix bool) Iterator
+	// NewTimeBoundIterator is like NewIterator, but the underlying iterator will
+	// efficiently skip over SSTs that contain no MVCC keys in the range [start,
+	// end].
+	NewTimeBoundIterator(start, end hlc.Timestamp) Iterator
 }
 
 // Writer is the write interface to an engine's data.

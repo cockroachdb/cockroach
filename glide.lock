@@ -1,5 +1,5 @@
-hash: 1ce713b585756a466971b31de22349c663db83d3aa75d2175d4ccd9f10fb4dba
-updated: 2017-04-17T17:46:52.324179903Z
+hash: 4f5bd46fc06d906977b88012e48b639a0e7343d6fc1c18882be0964d4620bf95
+updated: 2017-04-17T15:55:56.515736489Z
 imports:
 - name: cloud.google.com/go
   version: ed63fb27efcf32e25fe7837e4662457d3da4c4f2
@@ -50,7 +50,7 @@ imports:
   subpackages:
   - cmd/protoc
 - name: github.com/cockroachdb/c-rocksdb
-  version: 7def73c53db126b0e62552e97629784d5317e932
+  version: c31d6778babd00fecee0e469336b250f3d8f1613
 - name: github.com/cockroachdb/c-snappy
   version: c0cd3c9ce92f195001595e1fbbe66f045daad34f
 - name: github.com/cockroachdb/cmux
