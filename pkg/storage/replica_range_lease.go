@@ -264,7 +264,9 @@ func (p *pendingLeaseRequest) JoinRequest() <-chan *roachpb.Error {
 // LeaderLease.
 //
 // replicaID is the ID of the parent replica.
-func (p *pendingLeaseRequest) TransferInProgress(replicaID roachpb.ReplicaID) (roachpb.Lease, bool) {
+func (p *pendingLeaseRequest) TransferInProgress(
+	replicaID roachpb.ReplicaID,
+) (roachpb.Lease, bool) {
 	if nextLease, ok := p.RequestPending(); ok {
 		// Is the lease being transferred? (as opposed to just extended)
 		if replicaID != nextLease.Replica.ReplicaID {
@@ -391,7 +393,9 @@ func (r *Replica) requiresExpiringLeaseRLocked() bool {
 // for a time interval containing the requested timestamp.
 // If a transfer is in progress, a NotLeaseHolderError directing to the recipient is
 // sent on the returned chan.
-func (r *Replica) requestLeaseLocked(ctx context.Context, status LeaseStatus) <-chan *roachpb.Error {
+func (r *Replica) requestLeaseLocked(
+	ctx context.Context, status LeaseStatus,
+) <-chan *roachpb.Error {
 	if r.store.TestingKnobs().LeaseRequestEvent != nil {
 		r.store.TestingKnobs().LeaseRequestEvent(status.timestamp)
 	}

@@ -2189,7 +2189,9 @@ func arrayLower(arr *DArray, dim int64) Datum {
 	return arrayLower(a, dim-1)
 }
 
-func extractStringFromTimestamp(_ *EvalContext, fromTime time.Time, timeSpan string) (Datum, error) {
+func extractStringFromTimestamp(
+	_ *EvalContext, fromTime time.Time, timeSpan string,
+) (Datum, error) {
 	switch timeSpan {
 	case "year", "years":
 		return NewDInt(DInt(fromTime.Year())), nil

@@ -423,7 +423,9 @@ func TestTxnCoordSenderHeartbeat(t *testing.T) {
 }
 
 // getTxn fetches the requested key and returns the transaction info.
-func getTxn(coord *TxnCoordSender, txn *roachpb.Transaction) (*roachpb.Transaction, *roachpb.Error) {
+func getTxn(
+	coord *TxnCoordSender, txn *roachpb.Transaction,
+) (*roachpb.Transaction, *roachpb.Error) {
 	hb := &roachpb.HeartbeatTxnRequest{
 		Span: roachpb.Span{
 			Key: txn.Key,

@@ -1,5 +1,5 @@
-hash: c14daba1184a6bfb21ba06ee2ad97647ba63504fee08d8ec06aaf74f644d1977
-updated: 2017-04-14T14:27:59.164949959-04:00
+hash: 1ce713b585756a466971b31de22349c663db83d3aa75d2175d4ccd9f10fb4dba
+updated: 2017-04-17T17:46:52.324179903Z
 imports:
 - name: cloud.google.com/go
   version: ed63fb27efcf32e25fe7837e4662457d3da4c4f2
@@ -26,6 +26,7 @@ imports:
   - autorest
   - autorest/azure
   - autorest/date
+  - autorest/to
 - name: github.com/backtrace-labs/go-bcd
   version: 4ad9137a248599da4b00da0be6e71a75c9e1b8d9
 - name: github.com/biogo/store
@@ -59,7 +60,7 @@ imports:
   subpackages:
   - crdb
 - name: github.com/cockroachdb/crlfmt
-  version: 64263ede71a7661a334216da51471d0f21ce80d1
+  version: ec6cff36e0bd2fa9e2ecd36b9fd6ea70568ad3ce
 - name: github.com/cockroachdb/returncheck
   version: e91bb28baf9de4a530d3ae7f041953b23dcce9be
 - name: github.com/cockroachdb/stress
@@ -281,7 +282,7 @@ imports:
   subpackages:
   - runewidth.go
 - name: github.com/mattn/goveralls
-  version: a99c5ee06aeeca2a2befc7e90b99061b1180850c
+  version: 42c8a693f7f0977d9e17901324a9dd149a0f71f6
 - name: github.com/matttproud/golang_protobuf_extensions
   version: c12348ce28de40eed0136aa2b644d0ee0650e56c
   subpackages:
@@ -352,7 +353,7 @@ imports:
   subpackages:
   - doc
 - name: github.com/spf13/pflag
-  version: e453343e6260b4a3a89f1f0e10a2fbb07f8d9750
+  version: 9e4c21054fa135711121b557932b1887f2405d92
 - name: github.com/StackExchange/wmi
   version: ea383cf3ba6ec950874b8486cd72356d007c768f
 - name: github.com/tebeka/go2xunit
@@ -413,7 +414,7 @@ imports:
   subpackages:
   - rate
 - name: golang.org/x/tools
-  version: cbb995d093b2c4a12ac074e53d90373ecc827527
+  version: 663269851cdddc898f963782f74ea574bcd5c814
   subpackages:
   - cmd/goimports
   - cmd/goyacc
@@ -485,7 +486,7 @@ imports:
 - name: gopkg.in/yaml.v2
   version: a3f3340b5840cee44f372bddb5880fcbc419b46a
 - name: honnef.co/go/tools
-  version: 6c3814a19596cc3f3de23f0442023a5adbb28eb6
+  version: 42d503dcc02471f4716bffd62f4b8f8656797dc1
   subpackages:
   - callgraph
   - callgraph/static

@@ -234,7 +234,9 @@ func (r *Replica) LastIndex() (uint64, error) {
 // first current entry. This includes both entries that have been compacted away
 // and the dummy entries that make up the starting point of an empty log.
 // raftTruncatedStateLocked requires that the replica lock be held.
-func (r *Replica) raftTruncatedStateLocked(ctx context.Context) (roachpb.RaftTruncatedState, error) {
+func (r *Replica) raftTruncatedStateLocked(
+	ctx context.Context,
+) (roachpb.RaftTruncatedState, error) {
 	if r.mu.state.TruncatedState != nil {
 		return *r.mu.state.TruncatedState, nil
 	}
