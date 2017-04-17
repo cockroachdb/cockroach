@@ -75,12 +75,14 @@ func TestEval(t *testing.T) {
 		{`2:::int *  2.1:::decimal`, `4.2`},
 		{`2:::int %  2.1:::decimal`, `2.0`},
 		{`4:::int // 2.1:::decimal`, `1`},
-		{`2:::int ^ 2.1:::decimal`, `4.287093850145173`},
+		{`2:::int ^ 2.1:::decimal`, `4.2870938501451726569`},
 		// Division is always done on floats or decimals.
 		{`4 / 5`, `0.8`},
 		{`1.1:::decimal / 2.2:::decimal`, `0.5`},
-		{`1:::int / 2.2:::decimal`, `0.4545454545454545`},
+		{`1:::int / 2.2:::decimal`, `0.45454545454545454545`},
 		{`1.1:::decimal / 2:::int`, `0.55`},
+		// Verify INT_MIN / -1 = -INT_MIN.
+		{`(-9223372036854775807:::int - 1) / -1`, `9223372036854775808`},
 		// Infinity.
 		{`1.0:::float / 0.0`, `+Inf`},
 		{`-1.0:::float * (1.0:::float / 0.0)`, `-Inf`},
