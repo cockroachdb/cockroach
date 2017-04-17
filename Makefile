@@ -223,7 +223,7 @@ checkshort: gotestdashi
 clean:
 	$(GO) clean $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -i github.com/cockroachdb/...
 	$(FIND_RELEVANT) -name '*.test*' -type f -exec rm -f {} \;
-	rm -f .bootstrap $(ARCHIVE)
+	rm -f $(BOOTSTRAP_TARGET) $(ARCHIVE)
 
 .PHONY: protobuf
 protobuf:
