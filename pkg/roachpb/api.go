@@ -86,6 +86,8 @@ const (
 	// Requests for acquiring a lease skip the (proposal-time) check that the
 	// proposing replica has a valid lease.
 	skipLeaseCheck
+	consultsTSCache // mutating commands which write data at a timestamp
+	updatesTSCache  // commands which read data at a timestamp
 )
 
 // GetTxnID returns the transaction ID if the header has a transaction
@@ -109,10 +111,26 @@ func IsTransactionWrite(args Request) bool {
 	return (args.flags() & isTxnWrite) != 0
 }
 
-// IsRange returns true if the operation is range-based and must include
+// IsRange returns true if the command is range-based and must include
 // a start and an end key.
 func IsRange(args Request) bool {
 	return (args.flags() & isRange) != 0
+}
+
+// ConsultsTimestampCache returns whether the command must consult
+// the timestamp cache to determine whether a mutation is safe at
+// a proposed timestamp or needs to move to a higher timestamp to
+// avoid re-writing history.
+func ConsultsTimestampCache(args Request) bool {
+	return (args.flags() & consultsTSCache) != 0
+}
+
+// UpdatesTimestampCache returns whether the command must update
+// the timestamp cache in order to set a low water mark for the
+// timestamp at which mutations to overlapping key(s) can write
+// such that they don't re-write history.
+func UpdatesTimestampCache(args Request) bool {
+	return (args.flags() & updatesTSCache) != 0
 }
 
 // Request is an interface for RPC requests.
@@ -825,12 +843,19 @@ func NewReverseScan(key, endKey Key) Request {
 	}
 }
 
-func (*GetRequest) flags() int            { return isRead | isTxn }
-func (*PutRequest) flags() int            { return isWrite | isTxn | isTxnWrite }
-func (*ConditionalPutRequest) flags() int { return isRead | isWrite | isTxn | isTxnWrite }
-func (*InitPutRequest) flags() int        { return isRead | isWrite | isTxn | isTxnWrite }
-func (*IncrementRequest) flags() int      { return isRead | isWrite | isTxn | isTxnWrite }
-func (*DeleteRequest) flags() int         { return isWrite | isTxn | isTxnWrite }
+func (*GetRequest) flags() int { return isRead | isTxn | updatesTSCache }
+func (*PutRequest) flags() int { return isWrite | isTxn | isTxnWrite | consultsTSCache }
+
+// ConditionalPut and initPut effectively read and may not write,
+// so must update the timestamp cache.
+func (*ConditionalPutRequest) flags() int {
+	return isRead | isWrite | isTxn | isTxnWrite | updatesTSCache | consultsTSCache
+}
+func (*InitPutRequest) flags() int {
+	return isRead | isWrite | isTxn | isTxnWrite | updatesTSCache | consultsTSCache
+}
+func (*IncrementRequest) flags() int { return isRead | isWrite | isTxn | isTxnWrite | consultsTSCache }
+func (*DeleteRequest) flags() int    { return isWrite | isTxn | isTxnWrite | consultsTSCache }
 func (drr *DeleteRangeRequest) flags() int {
 	// DeleteRangeRequest has different properties if the "inline" flag is set.
 	// This flag indicates that the request is deleting inline MVCC values,
@@ -849,12 +874,20 @@ func (drr *DeleteRangeRequest) flags() int {
 	if drr.Inline {
 		return isWrite | isRange | isAlone
 	}
-	return isWrite | isTxn | isTxnWrite | isRange
+	// DeleteRange updates the timestamp cache as it doesn't leave
+	// intents or tombstones for keys which don't yet exist. By updating
+	// the write timestamp cache, it forces subsequent writes to get a
+	// write-too-old error and avoids the phantom delete anomaly.
+	return isWrite | isTxn | isTxnWrite | isRange | updatesTSCache | consultsTSCache
 }
-func (*ScanRequest) flags() int                { return isRead | isRange | isTxn }
-func (*ReverseScanRequest) flags() int         { return isRead | isRange | isReverse | isTxn }
-func (*BeginTransactionRequest) flags() int    { return isWrite | isTxn }
-func (*EndTransactionRequest) flags() int      { return isWrite | isTxn | isAlone }
+func (*ScanRequest) flags() int             { return isRead | isRange | isTxn | updatesTSCache }
+func (*ReverseScanRequest) flags() int      { return isRead | isRange | isReverse | isTxn | updatesTSCache }
+func (*BeginTransactionRequest) flags() int { return isWrite | isTxn | consultsTSCache }
+
+// EndTransaction updates the write timestamp cache to prevent
+// replays. Replays for the same transaction key and timestamp will
+// have Txn.WriteTooOld=true and must retry on EndTransaction.
+func (*EndTransactionRequest) flags() int      { return isWrite | isTxn | isAlone | updatesTSCache }
 func (*AdminSplitRequest) flags() int          { return isAdmin | isAlone }
 func (*AdminMergeRequest) flags() int          { return isAdmin | isAlone }
 func (*AdminTransferLeaseRequest) flags() int  { return isAdmin | isAlone }
