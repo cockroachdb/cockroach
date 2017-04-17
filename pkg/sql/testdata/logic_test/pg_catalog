@@ -725,7 +725,7 @@ oid   typname       typinput        typoutput        typreceive        typsend  
 19    name          namein          nameout          namerecv          namesend          0         0          0
 20    int8          int8in          int8out          int8recv          int8send          0         0          0
 21    int2          int2in          int2out          int2recv          int2send          0         0          0
-22    int2vector    NULL            NULL             NULL              NULL              0         0          0
+22    int2vector    int2vectorin    int2vectorout    int2vectorrecv    int2vectorsend    0         0          0
 23    int4          int4in          int4out          int4recv          int4send          0         0          0
 24    regproc       regprocin       regprocout       regprocrecv       regprocsend       0         0          0
 25    text          textin          textout          textrecv          textsend          0         0          0

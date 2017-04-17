@@ -66,7 +66,7 @@ func initPGBuiltins() {
 	// Make non-array type i/o builtins.
 	for _, typ := range OidToType {
 		// Skip array types. We're doing them separately below.
-		if typ != TypeAny && typ.Equivalent(TypeAnyArray) {
+		if typ != TypeAny && typ != TypeIntVector && typ.Equivalent(TypeAnyArray) {
 			continue
 		}
 		builtinPrefix := PGIOBuiltinPrefix(typ)
