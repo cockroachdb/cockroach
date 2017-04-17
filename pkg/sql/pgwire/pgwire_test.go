@@ -42,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -1269,6 +1270,32 @@ func TestPGPrepareNameQual(t *testing.T) {
 		if _, err = stmt.Exec(); err != nil {
 			t.Fatal(err)
 		}
+	}
+}
+
+// The budget needs to be large enough to establish the connection, but small
+// enough to overflow easily.
+const lowMemoryBudget = 500000
+
+// An error resulting from running out of memory should have the appropriate
+// error code.
+func TestOutOfMemoryError(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
+		SQLMemoryPoolSize: lowMemoryBudget,
+	})
+	defer s.Stopper().Stop()
+
+	_, err := sqlDB.Exec(`SELECT CONCAT_AGG(REPEAT('foo', 10000)) FROM GENERATE_SERIES(1, 1000);`)
+
+	if err == nil {
+		t.Fatal("Expected an out of memory error")
+	}
+
+	if err.(*pq.Error).Code != pgerror.CodeOutOfMemoryError {
+		t.Fatalf("Expected the error code to be %s (pgerror.CodeOutOfMemoryError), was instead %s",
+			pgerror.CodeOutOfMemoryError, err.(*pq.Error).Code)
 	}
 }
 

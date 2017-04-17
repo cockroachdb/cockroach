@@ -27,8 +27,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/sql/mon"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
@@ -62,6 +65,8 @@ const Version = 1
 // compatible with; see above.
 const MinAcceptedVersion = 1
 
+var noteworthyMemoryUsageBytes = envutil.EnvOrDefaultInt64("COCKROACH_NOTEWORTHY_DISTSQL_MEMORY_USAGE", 10*1024)
+
 // ServerConfig encompasses the configuration required to create a
 // DistSQLServer.
 type ServerConfig struct {
@@ -71,6 +76,10 @@ type ServerConfig struct {
 	RPCContext   *rpc.Context
 	Stopper      *stop.Stopper
 	TestingKnobs TestingKnobs
+
+	ParentMemoryMonitor *mon.MemoryMonitor
+	Counter             *metric.Counter
+	Hist                *metric.Histogram
 	// NodeID is the id of the node on which this Server is running.
 	NodeID *base.NodeIDContainer
 }
@@ -81,12 +90,13 @@ type ServerImpl struct {
 	evalCtx       parser.EvalContext
 	flowRegistry  *flowRegistry
 	flowScheduler *flowScheduler
+	memMonitor    mon.MemoryMonitor
 }
 
 var _ DistSQLServer = &ServerImpl{}
 
 // NewServer instantiates a DistSQLServer.
-func NewServer(cfg ServerConfig) *ServerImpl {
+func NewServer(ctx context.Context, cfg ServerConfig) *ServerImpl {
 	ds := &ServerImpl{
 		ServerConfig: cfg,
 		evalCtx: parser.EvalContext{
@@ -94,7 +104,10 @@ func NewServer(cfg ServerConfig) *ServerImpl {
 		},
 		flowRegistry:  makeFlowRegistry(),
 		flowScheduler: newFlowScheduler(cfg.AmbientContext, cfg.Stopper),
+		memMonitor: mon.MakeMonitor("distsql",
+			cfg.Counter, cfg.Hist, -1 /* use default block size */, noteworthyMemoryUsageBytes),
 	}
+	ds.memMonitor.Start(ctx, cfg.ParentMemoryMonitor, mon.BoundAccount{})
 	return ds
 }
 
@@ -140,6 +153,12 @@ func (ds *ServerImpl) setupFlow(
 	if nodeID == 0 {
 		return nil, nil, errors.Errorf("setupFlow called before the NodeID was resolved")
 	}
+
+	monitor := mon.MakeMonitor("flow",
+		ds.Counter, ds.Hist, -1 /* use default block size */, noteworthyMemoryUsageBytes)
+	monitor.Start(ctx, &ds.memMonitor, mon.BoundAccount{})
+	ds.evalCtx.Mon = &monitor
+
 	// TODO(radu): we should sanity check some of these fields (especially
 	// txnProto).
 	flowCtx := FlowCtx{
@@ -153,6 +172,7 @@ func (ds *ServerImpl) setupFlow(
 		testingKnobs: ds.TestingKnobs,
 		nodeID:       nodeID,
 	}
+
 	ctx = flowCtx.AnnotateCtx(ctx)
 	flowCtx.evalCtx.Ctx = func() context.Context {
 		// TODO(andrei): This is wrong. Each processor should override Ctx with its

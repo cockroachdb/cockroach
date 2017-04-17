@@ -244,7 +244,7 @@ func (p *planner) groupBy(
 		group.filterToRenderIdxs[i] = colIdxs[0]
 	}
 
-	group.desiredOrdering = desiredAggregateOrdering(group.funcs)
+	group.desiredOrdering = desiredAggregateOrdering(group.funcs, &p.evalCtx)
 	return group, nil
 }
 
@@ -482,11 +482,13 @@ func (n *groupNode) isNotNullFilter(expr parser.TypedExpr) parser.TypedExpr {
 // aggregation. If zero or multiple MIN/MAX aggregations are requested then no
 // ordering will be requested. A negative index indicates a MAX aggregation was
 // requested for the output column.
-func desiredAggregateOrdering(funcs []*aggregateFuncHolder) sqlbase.ColumnOrdering {
+func desiredAggregateOrdering(
+	funcs []*aggregateFuncHolder, evalCtx *parser.EvalContext,
+) sqlbase.ColumnOrdering {
 	limit := -1
 	direction := encoding.Ascending
 	for i, f := range funcs {
-		impl := f.create()
+		impl := f.create(evalCtx)
 		switch impl.(type) {
 		case *parser.MaxAggregate, *parser.MinAggregate:
 			if limit != -1 || f.arg == nil {
@@ -676,7 +678,7 @@ type aggregateFuncHolder struct {
 	expr          parser.TypedExpr
 	arg           parser.TypedExpr
 	filter        parser.TypedExpr
-	create        func() parser.AggregateFunc
+	create        func(*parser.EvalContext) parser.AggregateFunc
 	group         *groupNode
 	buckets       map[string]parser.AggregateFunc
 	bucketsMemAcc WrappableMemoryAccount
@@ -684,7 +686,7 @@ type aggregateFuncHolder struct {
 }
 
 func (n *groupNode) newAggregateFuncHolder(
-	expr, arg, filter parser.TypedExpr, create func() parser.AggregateFunc,
+	expr, arg, filter parser.TypedExpr, create func(*parser.EvalContext) parser.AggregateFunc,
 ) *aggregateFuncHolder {
 	res := &aggregateFuncHolder{
 		expr:          expr,
@@ -699,9 +701,14 @@ func (n *groupNode) newAggregateFuncHolder(
 }
 
 func (a *aggregateFuncHolder) close(ctx context.Context, s *Session) {
+	for _, aggFunc := range a.buckets {
+		aggFunc.Close(ctx)
+	}
+
 	a.buckets = nil
 	a.seen = nil
 	a.group = nil
+
 	a.bucketsMemAcc.Wtxn(s).Close(ctx)
 }
 
@@ -730,12 +737,11 @@ func (a *aggregateFuncHolder) add(
 
 	impl, ok := a.buckets[string(bucket)]
 	if !ok {
-		impl = a.create()
+		impl = a.create(&a.group.planner.evalCtx)
 		a.buckets[string(bucket)] = impl
 	}
 
-	impl.Add(&a.group.planner.evalCtx, d)
-	return nil
+	return impl.Add(ctx, d)
 }
 
 func (*aggregateFuncHolder) Variable() {}
@@ -756,7 +762,7 @@ func (a *aggregateFuncHolder) TypeCheck(
 func (a *aggregateFuncHolder) Eval(ctx *parser.EvalContext) (parser.Datum, error) {
 	found, ok := a.buckets[a.group.currentBucket]
 	if !ok {
-		found = a.create()
+		found = a.create(ctx)
 	}
 
 	result := found.Result()

@@ -891,25 +891,25 @@ type FuncExpr struct {
 
 // GetAggregateConstructor exposes the AggregateFunc field for use by
 // the group node in package sql.
-func (node *FuncExpr) GetAggregateConstructor() func() AggregateFunc {
+func (node *FuncExpr) GetAggregateConstructor() func(*EvalContext) AggregateFunc {
 	if node.fn.AggregateFunc == nil {
 		return nil
 	}
-	return func() AggregateFunc {
+	return func(evalCtx *EvalContext) AggregateFunc {
 		types := typesOfExprs(node.Exprs)
-		return node.fn.AggregateFunc(types)
+		return node.fn.AggregateFunc(types, evalCtx)
 	}
 }
 
 // GetWindowConstructor returns a window function constructor if the
 // FuncExpr is a built-in window function.
-func (node *FuncExpr) GetWindowConstructor() func() WindowFunc {
+func (node *FuncExpr) GetWindowConstructor() func(*EvalContext) WindowFunc {
 	if node.fn.WindowFunc == nil {
 		return nil
 	}
-	return func() WindowFunc {
+	return func(evalCtx *EvalContext) WindowFunc {
 		types := typesOfExprs(node.Exprs)
-		return node.fn.WindowFunc(types)
+		return node.fn.WindowFunc(types, evalCtx)
 	}
 }
 
