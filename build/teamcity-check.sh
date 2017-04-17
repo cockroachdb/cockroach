@@ -13,4 +13,4 @@ build/builder.sh /bin/bash -c '! git status --porcelain | read || (git status; g
 # Run the UI tests. This logically belongs in teamcity-test.sh, but we do it
 # here to minimize total build time since the rest of this script completes
 # faster than the non-UI tests.
-build/builder.sh make TYPE=release -C pkg/ui test
+build/builder.sh make -C pkg/ui
