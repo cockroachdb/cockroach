@@ -12,6 +12,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"path/filepath"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -127,4 +128,43 @@ func BenchmarkLoadSQL(b *testing.B) {
 		sqlDB.Exec(line)
 	}
 	b.StopTimer()
+}
+
+func BenchmarkClusterEmptyIncrementalBackup(b *testing.B) {
+	defer tracing.Disable()()
+
+	const numStatements = 100000
+
+	ctx, dir, _, sqlDB, cleanupFn := backupRestoreTestSetup(b, multiNode, 0)
+	defer cleanupFn()
+
+	ts := hlc.Timestamp{WallTime: hlc.UnixNano()}
+	if _, err := Load(
+		ctx, sqlDB.DB, bankStatementBuf(numStatements), "bench", dir, ts, 0, dir,
+	); err != nil {
+		b.Fatalf("%+v", err)
+	}
+	sqlDB.Exec(`RESTORE bench.* FROM $1`, dir)
+
+	fullDir := filepath.Join(dir, "full")
+	incrementalDir := filepath.Join(dir, "incremental")
+
+	var unused string
+	var dataSize int64
+	sqlDB.QueryRow(`BACKUP DATABASE bench TO $1`, fullDir).Scan(
+		&unused, &unused, &unused, &dataSize,
+	)
+
+	// We intentionally don't write anything to the database between the full and
+	// incremental backup.
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		sqlDB.Exec(`BACKUP DATABASE bench TO $1 INCREMENTAL FROM $2`, incrementalDir, fullDir)
+	}
+	b.StopTimer()
+
+	// We report the number of bytes that incremental backup was able to
+	// *skip*--i.e., the number of bytes in the full backup.
+	b.SetBytes(dataSize)
 }

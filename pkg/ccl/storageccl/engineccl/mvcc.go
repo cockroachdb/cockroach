@@ -12,6 +12,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/pkg/errors"
 )
@@ -47,28 +48,37 @@ type MVCCIncrementalIterator struct {
 	meta enginepb.MVCCMetadata
 }
 
+var useTimeBoundIterators = envutil.EnvOrDefaultBool("COCKROACH_TIME_BOUND_ITERATORS", false)
+
+func newEngineIter(e engine.Reader, startTime, endTime hlc.Timestamp) engine.Iterator {
+	if useTimeBoundIterators {
+		return e.NewTimeBoundIterator(startTime, endTime)
+	}
+	return e.NewIterator(false)
+}
+
 // NewMVCCIncrementalIterator creates an MVCCIncrementalIterator with the
 // specified engine.
-func NewMVCCIncrementalIterator(e engine.Reader) *MVCCIncrementalIterator {
-	return &MVCCIncrementalIterator{iter: e.NewIterator(false)}
+func NewMVCCIncrementalIterator(
+	e engine.Reader, startKey, endKey roachpb.Key, startTime, endTime hlc.Timestamp,
+) *MVCCIncrementalIterator {
+	i := &MVCCIncrementalIterator{
+		iter:      newEngineIter(e, startTime, endTime),
+		endKey:    engine.MakeMVCCMetadataKey(endKey),
+		startTime: startTime,
+		endTime:   endTime,
+		err:       nil,
+		valid:     true,
+		nextkey:   false,
+	}
+	i.iter.Seek(engine.MakeMVCCMetadataKey(startKey))
+	i.Next()
+	return i
 }
 
 // Close frees up resources held by the iterator.
 func (i *MVCCIncrementalIterator) Close() {
 	i.iter.Close()
-}
-
-// Reset begins a new iteration with the specified key and time ranges.
-func (i *MVCCIncrementalIterator) Reset(
-	startKey, endKey roachpb.Key, startTime, endTime hlc.Timestamp,
-) {
-	i.iter.Seek(engine.MakeMVCCMetadataKey(startKey))
-	i.endKey = engine.MakeMVCCMetadataKey(endKey)
-	i.startTime, i.endTime = startTime, endTime
-	i.err = nil
-	i.valid = true
-	i.nextkey = false
-	i.Next()
 }
 
 // Next advances the iterator to the next key/value in the iteration.

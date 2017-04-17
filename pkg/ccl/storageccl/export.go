@@ -105,9 +105,10 @@ func evalExport(
 	// TODO(dan): Move all this iteration into cpp to avoid the cgo calls.
 	// TODO(dan): Consider checking ctx periodically during the MVCCIterate call.
 	var entries int64
-	iter := engineccl.NewMVCCIncrementalIterator(batch)
+	iter := engineccl.NewMVCCIncrementalIterator(
+		batch, args.Key, args.EndKey, args.StartTime, h.Timestamp,
+	)
 	defer iter.Close()
-	iter.Reset(args.Key, args.EndKey, args.StartTime, h.Timestamp)
 	for ; iter.Valid(); iter.Next() {
 		if log.V(3) {
 			v := roachpb.Value{RawBytes: iter.UnsafeValue()}
