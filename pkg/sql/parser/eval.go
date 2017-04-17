@@ -2020,11 +2020,14 @@ func (expr *CastExpr) Eval(ctx *EvalContext) (Datum, error) {
 		case *DInt:
 			res = v
 		case *DFloat:
-			f, err := round(float64(*v), 0)
-			if err != nil {
-				panic(fmt.Sprintf("round should never fail with digits hardcoded to 0: %s", err))
+			f := float64(*v)
+			// Use `<=` and `>=` here instead of just `<` and `>` because when
+			// math.MaxInt64 and math.MinInt64 are converted to float64s, they are
+			// rounded to numbers with larger absolute values.
+			if math.IsNaN(f) || f <= math.MinInt64 || f >= math.MaxInt64 {
+				return nil, errIntOutOfRange
 			}
-			res = NewDInt(DInt(*f.(*DFloat)))
+			res = NewDInt(DInt(f))
 		case *DDecimal:
 			d := ctx.getTmpDec()
 			_, err := DecimalCtx.ToIntegral(d, &v.Decimal)
