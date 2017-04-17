@@ -69,8 +69,10 @@ type Txn struct {
 		// across transaction aborts. This allows us to determine if a given response
 		// was meant for any incarnation of this transaction.
 		previousIDs map[uuid.UUID]struct{}
-		// commandCount indicates how many commands have been sent through
+		// commandCount indicates how many requests have been sent through
 		// this transaction. Reset on retryable txn errors.
+		// TODO(andrei): This is broken for DistSQL, which doesn't account for the
+		// requests it uses the transaction for.
 		commandCount int
 	}
 }
@@ -855,7 +857,7 @@ func (txn *Txn) send(
 		if log.V(1) {
 			log.Infof(ctx, "failed batch: %s", pErr)
 		}
-		txn.updateStateOnErrLocked(pErr)
+		txn.updateStateOnErrLocked(pErr.GoError())
 		return nil, pErr
 	}
 
@@ -921,12 +923,30 @@ func firstWriteIndex(ba roachpb.BatchRequest) (int, *roachpb.Error) {
 	return firstWriteIdx, nil
 }
 
-func (txn *Txn) updateStateOnErrLocked(pErr *roachpb.Error) {
-	if pErr.TransactionRestart == roachpb.TransactionRestart_NONE {
+// UpdateStateOnErr updates the Txn, and the Transaction proto inside it, in
+// response to an error encountered when running a request through the txn.  If
+// the error is not a RetryableTxnError, then this is a no-op. For a retryable
+// error, the Transaction proto is either initialized with the updated proto
+// from the error, or a new Transaction proto is initialized.
+//
+// TODO(andrei,nvanbenschoten): document whether calling this repeatedly within
+// the same epoch of the txn is safe or not, and generally what protection we
+// have for racing calls. We protect against calls for old IDs, but what about
+// old epochs and/or the current epoch?
+func (txn *Txn) UpdateStateOnErr(err error) {
+	txn.mu.Lock()
+	txn.updateStateOnErrLocked(err)
+	txn.mu.Unlock()
+}
+
+// updateStateOnErrLocked is like UpdateStateOnErr, but assumes that txn.mu is
+// locked.
+func (txn *Txn) updateStateOnErrLocked(err error) {
+	retryErr, ok := err.(*roachpb.RetryableTxnError)
+	if !ok {
 		return
 	}
 
-	retryErr := pErr.GoError().(*roachpb.RetryableTxnError)
 	if !txn.isRetryableErrMeantForTxnLocked(retryErr) {
 		// If this happens, something is wrong; we've received an error that
 		// wasn't meant for this transaction. This is a sign that we either
@@ -937,21 +957,24 @@ func (txn *Txn) updateStateOnErrLocked(pErr *roachpb.Error) {
 		// Letting this wrong error slip here can cause us to retry the wrong
 		// transaction.
 		panic(fmt.Sprintf("Got a retryable error meant for a different transaction. "+
-			"txn.mu.Proto.ID: %v, pErr.ID: %v", txn.mu.Proto.ID, pErr.GetTxn().ID))
+			"txn.mu.Proto.ID: %v, pErr.ID: %v", txn.mu.Proto.ID, retryErr.TxnID))
 	}
 
 	// Reset the statement count as this is a retryable txn error.
 	txn.mu.commandCount = 0
 
+	// Only update the proto if the retryable error is meant for the current
+	// incarnation of the transaction. In other words, only update it if
+	// retryErr.TxnID is not in txn.mu.previousIDs.
 	if roachpb.TxnIDEqual(retryErr.TxnID, txn.mu.Proto.ID) {
-		// Only update the proto if the retryable error is meant for the current
-		// incarnation of the transaction. In other words, only update it if
-		// retryErr.TxnID is not in txn.mu.previousIDs.
-		switch retryErr.Cause.(type) {
-		case *roachpb.TransactionAbortedError:
-			// On Abort, save the old transaction ID so that concurrent requests
-			// or delayed responses that that throw errors know that these errors
-			// were sent to the correct transaction, even once the proto is reset.
+		if retryErr.Transaction != nil {
+			txn.mu.Proto.Update(retryErr.Transaction)
+		} else {
+			// Transaction == nil means the cause was a TransactionAbortedError. We'll
+			// init a new Transaction, and also save the old transaction ID so that
+			// concurrent requests or delayed responses that that throw errors know
+			// that these errors were sent to the correct transaction, even once the
+			// proto is reset.
 			if txn.mu.previousIDs == nil {
 				txn.mu.previousIDs = make(map[uuid.UUID]struct{})
 			}
@@ -965,11 +988,9 @@ func (txn *Txn) updateStateOnErrLocked(pErr *roachpb.Error) {
 				Name: txn.mu.Proto.Name,
 			}
 			// Acts as a minimum priority on restart.
-			if pErr.GetTxn() != nil {
-				txn.mu.Proto.Priority = pErr.GetTxn().Priority
+			if retryErr.RetryPriority != nil {
+				txn.mu.Proto.Priority = *retryErr.RetryPriority
 			}
-		default:
-			txn.mu.Proto.Update(pErr.GetTxn())
 		}
 	}
 }

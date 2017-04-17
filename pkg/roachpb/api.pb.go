@@ -130,6 +130,7 @@
 		ErrorDetail
 		ErrPosition
 		Error
+		RetryableTxnError
 		InternalTimeSeriesData
 		InternalTimeSeriesSample
 		RaftTruncatedState

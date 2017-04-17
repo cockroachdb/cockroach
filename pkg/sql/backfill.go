@@ -412,7 +412,15 @@ func (sc *SchemaChanger) distBackfill(
 					otherTableDescs = append(otherTableDescs, *table)
 				}
 			}
-			recv := distSQLReceiver{}
+			// TODO(andrei): pass the right caches. I think this will crash without
+			// them.
+			recv := makeDistSQLReceiver(
+				ctx,
+				nil, /* sink */
+				nil, /* rangeCache */
+				nil, /* leaseCache */
+				nil, /* txn - the flow does not run wholly in a txn */
+			)
 			planCtx := sc.distSQLPlanner.NewPlanningCtx(ctx, txn)
 			plan, err := sc.distSQLPlanner.CreateBackfiller(
 				&planCtx, backfillType, *tableDesc, duration, chunkSize, spans, otherTableDescs,

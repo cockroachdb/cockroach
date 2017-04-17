@@ -89,8 +89,13 @@ message ReadWithinUncertaintyIntervalError {
   optional util.hlc.Timestamp existing_timestamp = 2 [(gogoproto.nullable) = false];
 }
 
-// A TransactionAbortedError indicates that the transaction was
-// aborted by another concurrent transaction.
+// A TransactionAbortedError indicates that the transaction was aborted by
+// another concurrent transaction. Upon seeing this error, the client is
+// supposed to reset its Transaction proto and try the transaction again.
+//
+// In contrast with other errors, the Transaction that the client gets in the
+// pErr carrying this ErrorDetail is not supposed to be used by the client,
+// besides checking that the transaction's ID is right.
 message TransactionAbortedError {
 }
 
@@ -281,7 +286,13 @@ message Error {
   // restarting the transaction.
   optional TransactionRestart transaction_restart = 3 [(gogoproto.nullable) = false];
 
-  // An optional transaction related to this error. Not to be accessed directly.
+  // An optional updated transaction. This is to be used by the client in case
+  // of retryable errors.
+  //
+  // Not to be accessed directly - use Error.GetTxn().
+  // 
+  // NOTE: TxnCoordSender currently has a role in updating the epoch on the
+  // return path for most retryable errors.
   optional Transaction unexposed_txn = 4;
 
   // Node at which the error was generated (zero if does not apply).
@@ -300,4 +311,38 @@ message Error {
   optional util.hlc.Timestamp now = 8 [(gogoproto.nullable) = false];
 
   reserved 2;
+}
+
+// RetryableTxnError tells the recipient that the transaction it attempted to
+// use to perform an operation must be retried. This is returned generally as a
+// result of a transaction conflict.
+//
+// This is not an ErrorDetail; it is a higher-level error than a pErr. It is
+// created based on a TransactionRetryError or a TransactionAbortedError. It
+// implements the go error interface and is used by the layers above KV. It is a
+// proto because DistSQL needs to send it over the wire. It needs to be in this
+// package because it both depends on and is depended on by roachpb.
+message RetryableTxnError {
+  // A user-readable message.
+  optional string msg = 1 [(gogoproto.nullable) = false];
+  
+  // The ID of the transaction being restarted. The client is supposed to check
+  // this against the ID of its transaction and make sure the retryable error
+  // is meant for its level and didn't escape from some inner transaction.
+  //
+  // TODO(andrei): make this non-nullable (and thus required) if we manage to
+  // make Transaction.ID non-nullable.
+  optional bytes txn_id = 2 [
+    (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID", 
+    (gogoproto.customname) = "TxnID"]; 
+
+  // The Transaction that the client is supposed to use for the next attempt.
+  // If not set, the client is supposed to use a brand new Transaction. This is
+  // set by all retryable errors except TransactionAbortedError to communicate
+  // the new timestamp and epoch for the next attempt.
+  optional Transaction transaction = 3;
+
+  // If set, this is a lower-bound on the priority of the restarted transaction.
+  // This can only be set if transaction is not set.
+  optional int32 retry_priority = 4;
 }
