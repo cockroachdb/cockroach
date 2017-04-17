@@ -132,7 +132,10 @@ testrace: override GOFLAGS += -race
 testrace: export GORACE := halt_on_error=1
 testrace: TESTTIMEOUT := $(RACETIMEOUT)
 
-bin/sql.test: main.go $(shell find pkg -type f -name "*.go")
+# Directory scans in the builder image are excruciatingly slow when running
+# Docker for Mac, so we filter out the 20k+ UI dependencies that are guaranteed
+# to be irrelevant to save nearly 10s on every Make invocation.
+bin/sql.test: main.go $(shell find pkg -name 'node_modules' -prune -o -name '*.go')
 	$(GO) test $(GOFLAGS) -c -o bin/sql.test -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' ./pkg/sql
 
 bench: BENCHES := .
