@@ -1467,7 +1467,7 @@ CREATE TABLE pg_catalog.pg_type (
 				// regproc references
 				h.RegProc(builtinPrefix+"in"),   // typinput
 				h.RegProc(builtinPrefix+"out"),  // typoutput
-				h.RegProc(builtinPrefix+"recv"), // typrecv
+				h.RegProc(builtinPrefix+"recv"), // typreceive
 				h.RegProc(builtinPrefix+"send"), // typsend
 				oidZero, // typmodin
 				oidZero, // typmodout
