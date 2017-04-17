@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/pkg/errors"
 )
 
 const nonCoveringIndexPenalty = 10
@@ -92,7 +93,11 @@ func (p *planner) selectIndex(
 	if s.filter == nil && analyzeOrdering == nil && s.specifiedIndex == nil {
 		// No where-clause, no ordering, and no specified index.
 		s.initOrdering(0)
-		s.spans = makeSpans(nil, &s.desc, s.index)
+		var err error
+		s.spans, err = makeSpans(nil, &s.desc, s.index)
+		if err != nil {
+			return nil, errors.Wrapf(err, "table ID = %d, index ID = %d", s.desc.ID, s.index.ID)
+		}
 		return s, nil
 	}
 
@@ -207,7 +212,12 @@ func (p *planner) selectIndex(
 	s.index = c.index
 	s.specifiedIndex = nil
 	s.isSecondaryIndex = (c.index != &s.desc.PrimaryIndex)
-	s.spans = makeSpans(c.constraints, c.desc, c.index)
+	var err error
+	s.spans, err = makeSpans(c.constraints, c.desc, c.index)
+	if err != nil {
+		return nil, errors.Wrapf(err, "constraints = %v, table ID = %d, index ID = %d",
+			c.constraints, s.desc.ID, s.index.ID)
+	}
 	if len(s.spans) == 0 {
 		// There are no spans to scan.
 		return &emptyNode{}, nil
@@ -815,7 +825,7 @@ func (v indexInfoByCost) Sort() {
 	sort.Sort(v)
 }
 
-func encodeStartConstraintAscending(spans []roachpb.Span, c *parser.ComparisonExpr) {
+func encodeStartConstraintAscending(c *parser.ComparisonExpr) logicalKeyPart {
 	switch c.Operator {
 	case parser.IsNot:
 		// A IS NOT NULL expression allows us to constrain the start of
@@ -823,41 +833,25 @@ func encodeStartConstraintAscending(spans []roachpb.Span, c *parser.ComparisonEx
 		if c.Right != parser.DNull {
 			panic(fmt.Sprintf("expected NULL operand for IS NOT operator, found %v", c.Right))
 		}
-		for i := range spans {
-			spans[i].Key = encoding.EncodeNotNullAscending(spans[i].Key)
+		return logicalKeyPart{
+			val:       parser.DNull,
+			dir:       encoding.Ascending,
+			inclusive: false,
 		}
 	case parser.NE:
 		panic("'!=' operators should have been transformed to 'IS NOT NULL'")
-	case parser.GE, parser.EQ:
-		datum := c.Right.(parser.Datum)
-		key, err := sqlbase.EncodeTableKey(nil, datum, encoding.Ascending)
-		if err != nil {
-			panic(err)
-		}
-		// Append the constraint to all of the existing spans.
-		for i := range spans {
-			spans[i].Key = append(spans[i].Key, key...)
-		}
-	case parser.GT:
-		// A ">" constraint is the last start constraint. Since the constraint
-		// is exclusive and the start key is inclusive, we're going to apply
-		// a .PrefixEnd(). Note that a ">" is usually transformed to a ">=".
-		datum := c.Right.(parser.Datum)
-		key, err := sqlbase.EncodeTableKey(nil, datum, encoding.Ascending)
-		if err != nil {
-			panic(err)
-		}
-		// Append the constraint to all of the existing spans.
-		for i := range spans {
-			spans[i].Key = append(spans[i].Key, key...)
-			spans[i].Key = spans[i].Key.PrefixEnd()
+	case parser.GE, parser.EQ, parser.GT:
+		return logicalKeyPart{
+			val:       c.Right.(parser.Datum),
+			dir:       encoding.Ascending,
+			inclusive: c.Operator != parser.GT,
 		}
 	default:
 		panic(fmt.Sprintf("unexpected operator: %s", c))
 	}
 }
 
-func encodeStartConstraintDescending(spans []roachpb.Span, c *parser.ComparisonExpr) {
+func encodeStartConstraintDescending(c *parser.ComparisonExpr) logicalKeyPart {
 	switch c.Operator {
 	case parser.Is:
 		// An IS NULL expressions allows us to constrain the start of the range
@@ -865,44 +859,25 @@ func encodeStartConstraintDescending(spans []roachpb.Span, c *parser.ComparisonE
 		if c.Right != parser.DNull {
 			panic(fmt.Sprintf("expected NULL operand for IS operator, found %v", c.Right))
 		}
-		for i := range spans {
-			spans[i].Key = encoding.EncodeNullDescending(spans[i].Key)
+		return logicalKeyPart{
+			val:       parser.DNull,
+			dir:       encoding.Descending,
+			inclusive: true,
 		}
 	case parser.NE:
 		panic("'!=' operators should have been transformed to 'IS NOT NULL'")
-	case parser.LE, parser.EQ:
-		datum := c.Right.(parser.Datum)
-		key, err := sqlbase.EncodeTableKey(nil, datum, encoding.Descending)
-		if err != nil {
-			panic(err)
+	case parser.LE, parser.EQ, parser.LT:
+		return logicalKeyPart{
+			val:       c.Right.(parser.Datum),
+			dir:       encoding.Descending,
+			inclusive: c.Operator != parser.LT,
 		}
-		// Append the constraint to all of the existing spans.
-		for i := range spans {
-			spans[i].Key = append(spans[i].Key, key...)
-		}
-	case parser.LT:
-		// A "<" constraint is the last start constraint. Since the constraint
-		// is exclusive and the start key is inclusive, we're going to apply
-		// a .PrefixEnd(). Note that a "<" is usually transformed to a "<=".
-		datum := c.Right.(parser.Datum)
-		key, err := sqlbase.EncodeTableKey(nil, datum, encoding.Descending)
-		if err != nil {
-			panic(err)
-		}
-		// Append the constraint to all of the existing spans.
-		for i := range spans {
-			spans[i].Key = append(spans[i].Key, key...)
-			spans[i].Key = spans[i].Key.PrefixEnd()
-		}
-
 	default:
 		panic(fmt.Sprintf("unexpected operator: %s", c))
 	}
 }
 
-func encodeEndConstraintAscending(
-	spans []roachpb.Span, c *parser.ComparisonExpr, isLastEndConstraint bool,
-) {
+func encodeEndConstraintAscending(c *parser.ComparisonExpr) logicalKeyPart {
 	switch c.Operator {
 	case parser.Is:
 		// An IS NULL expressions allows us to constrain the end of the range
@@ -910,35 +885,25 @@ func encodeEndConstraintAscending(
 		if c.Right != parser.DNull {
 			panic(fmt.Sprintf("expected NULL operand for IS operator, found %v", c.Right))
 		}
-		for i := range spans {
-			spans[i].EndKey = encoding.EncodeNotNullAscending(spans[i].EndKey)
+		return logicalKeyPart{
+			val:       parser.DNull,
+			dir:       encoding.Ascending,
+			inclusive: true,
+		}
+	case parser.NE:
+		panic("'!=' operators should have been transformed to 'IS NOT NULL'")
+	case parser.LE, parser.EQ, parser.LT:
+		return logicalKeyPart{
+			val:       c.Right.(parser.Datum),
+			dir:       encoding.Ascending,
+			inclusive: c.Operator != parser.LT,
 		}
 	default:
-		datum := c.Right.(parser.Datum)
-		if c.Operator != parser.LT {
-			for i := range spans {
-				spans[i].EndKey = encodeInclusiveEndValue(
-					spans[i].EndKey, datum, encoding.Ascending, isLastEndConstraint)
-			}
-			break
-		}
-		if !isLastEndConstraint {
-			panic(fmt.Sprintf("can't have other end constraints after a '<' constraint, found %v", c.Operator))
-		}
-		key, err := sqlbase.EncodeTableKey(nil, datum, encoding.Ascending)
-		if err != nil {
-			panic(err)
-		}
-		// Append the constraint to all of the existing spans.
-		for i := range spans {
-			spans[i].EndKey = append(spans[i].EndKey, key...)
-		}
+		panic(fmt.Sprintf("unexpected operator: %s", c))
 	}
 }
 
-func encodeEndConstraintDescending(
-	spans []roachpb.Span, c *parser.ComparisonExpr, isLastEndConstraint bool,
-) {
+func encodeEndConstraintDescending(c *parser.ComparisonExpr) logicalKeyPart {
 	switch c.Operator {
 	case parser.IsNot:
 		// An IS NOT NULL expressions allows us to constrain the end of the range
@@ -946,80 +911,22 @@ func encodeEndConstraintDescending(
 		if c.Right != parser.DNull {
 			panic(fmt.Sprintf("expected NULL operand for IS NOT operator, found %v", c.Right))
 		}
-		for i := range spans {
-			spans[i].EndKey = encoding.EncodeNotNullDescending(spans[i].EndKey)
+		return logicalKeyPart{
+			val:       parser.DNull,
+			dir:       encoding.Descending,
+			inclusive: false,
+		}
+	case parser.NE:
+		panic("'!=' operators should have been transformed to 'IS NOT NULL'")
+	case parser.GE, parser.EQ, parser.GT:
+		return logicalKeyPart{
+			val:       c.Right.(parser.Datum),
+			dir:       encoding.Descending,
+			inclusive: c.Operator != parser.GT,
 		}
 	default:
-		datum := c.Right.(parser.Datum)
-		if c.Operator != parser.GT {
-			for i := range spans {
-				spans[i].EndKey = encodeInclusiveEndValue(
-					spans[i].EndKey, datum, encoding.Descending, isLastEndConstraint)
-			}
-			break
-		}
-		if !isLastEndConstraint {
-			panic(fmt.Sprintf("can't have other end constraints after a '>' constraint, found %v", c.Operator))
-		}
-		key, err := sqlbase.EncodeTableKey(nil, datum, encoding.Descending)
-		if err != nil {
-			panic(err)
-		}
-		// Append the constraint to all of the existing spans.
-		for i := range spans {
-			spans[i].EndKey = append(spans[i].EndKey, key...)
-		}
+		panic(fmt.Sprintf("unexpected operator: %s", c))
 	}
-}
-
-// Encodes datum at the end of key, using direction `dir` for the encoding.
-// It takes in an inclusive key and returns an inclusive key if
-// isLastEndConstraint is not set, and an exclusive key otherwise (the idea is
-// that, for inclusive constraints, the value for the last column in the
-// constraint needs to be adapted to an exclusive span.EndKey).
-func encodeInclusiveEndValue(
-	key roachpb.Key, datum parser.Datum, dir encoding.Direction, isLastEndConstraint bool,
-) roachpb.Key {
-	// Since the end of a span is exclusive, if the last constraint is an
-	// inclusive one, we might need to make the key exclusive by applying a
-	// PrefixEnd().  We normally avoid doing this by transforming "a = x" to
-	// "a = x±1" for the last end constraint, depending on the encoding direction
-	// (since this keeps the key nice and pretty-printable).
-	// However, we might not be able to do the ±1.
-	needExclusiveKey := false
-	if isLastEndConstraint {
-		if dir == encoding.Ascending {
-			if datum.IsMax() {
-				needExclusiveKey = true
-			} else {
-				nextVal, hasNext := datum.Next()
-				if !hasNext {
-					needExclusiveKey = true
-				} else {
-					datum = nextVal
-				}
-			}
-		} else {
-			if datum.IsMin() {
-				needExclusiveKey = true
-			} else {
-				prevVal, hasPrev := datum.Prev()
-				if !hasPrev {
-					needExclusiveKey = true
-				} else {
-					datum = prevVal
-				}
-			}
-		}
-	}
-	key, err := sqlbase.EncodeTableKey(key, datum, dir)
-	if err != nil {
-		panic(err)
-	}
-	if needExclusiveKey {
-		key = key.PrefixEnd()
-	}
-	return key
 }
 
 // Splits spans according to a constraint like (...) in <tuple>.
@@ -1030,12 +937,8 @@ func encodeInclusiveEndValue(
 //
 // Returns the exploded spans.
 func applyInConstraint(
-	spans []roachpb.Span,
-	c indexConstraint,
-	firstCol int,
-	index *sqlbase.IndexDescriptor,
-	isLastEndConstraint bool,
-) []roachpb.Span {
+	spans []logicalSpan, c indexConstraint, firstCol int, index *sqlbase.IndexDescriptor,
+) ([]logicalSpan, error) {
 	var e *parser.ComparisonExpr
 	// It might be that the IN constraint is a start constraint, an
 	// end constraint, or both, depending on how whether we had
@@ -1047,58 +950,50 @@ func applyInConstraint(
 	}
 	tuple := e.Right.(*parser.DTuple).D
 	existingSpans := spans
-	spans = make([]roachpb.Span, 0, len(existingSpans)*len(tuple))
+	spans = make([]logicalSpan, 0, len(existingSpans)*len(tuple))
 	for _, datum := range tuple {
-		// start and end will accumulate the end constraint for
-		// the current element of the tuple.
-		var start, end []byte
-
+		// parts will accumulate the constraint for the current element of the
+		// tuple.
+		var parts []logicalKeyPart
 		switch t := datum.(type) {
 		case *parser.DTuple:
 			// The constraint is a tuple of tuples, meaning something like
 			// (...) IN ((1,2),(3,4)).
 			for j, tupleIdx := range c.tupleMap {
-				var err error
-				var colDir encoding.Direction
-				if colDir, err = index.ColumnDirections[firstCol+j].ToEncodingDirection(); err != nil {
-					panic(err)
+				dir, err := index.ColumnDirections[firstCol+j].ToEncodingDirection()
+				if err != nil {
+					return nil, err
 				}
-
-				if start, err = sqlbase.EncodeTableKey(start, t.D[tupleIdx], colDir); err != nil {
-					panic(err)
-				}
-				end = encodeInclusiveEndValue(
-					end, t.D[tupleIdx], colDir, isLastEndConstraint && (j == len(c.tupleMap)-1))
+				parts = append(parts, logicalKeyPart{
+					val:       t.D[tupleIdx],
+					dir:       dir,
+					inclusive: true,
+				})
 			}
 		default:
 			// The constraint is a tuple of values, meaning something like
 			// a IN (1,2).
-			var colDir encoding.Direction
-			var err error
-			if colDir, err = index.ColumnDirections[firstCol].ToEncodingDirection(); err != nil {
-				panic(err)
+			dir, err := index.ColumnDirections[firstCol].ToEncodingDirection()
+			if err != nil {
+				return nil, err
 			}
-			if start, err = sqlbase.EncodeTableKey(nil, datum, colDir); err != nil {
-				panic(err)
-			}
-
-			end = encodeInclusiveEndValue(nil, datum, colDir, isLastEndConstraint)
-			// TODO(andrei): assert here that we end is not \xff\xff...
-			// encodeInclusiveEndValue sometimes calls key.PrefixEnd(),
-			// which doesn't work if the input is \xff\xff... However,
-			// that shouldn't happen: datum should not have that encoding.
+			parts = append(parts, logicalKeyPart{
+				val:       datum,
+				dir:       dir,
+				inclusive: true,
+			})
 		}
 		for _, s := range existingSpans {
 			if c.start != nil {
-				s.Key = append(append(roachpb.Key(nil), s.Key...), start...)
+				s.start = append(s.start, parts...)
 			}
 			if c.end != nil {
-				s.EndKey = append(append(roachpb.Key(nil), s.EndKey...), end...)
+				s.end = append(s.end, parts...)
 			}
 			spans = append(spans, s)
 		}
 	}
-	return spans
+	return spans, nil
 }
 
 // spanEvent corresponds to either the start or the end of a span. It is used
@@ -1129,16 +1024,158 @@ func makeSpans(
 	constraints orIndexConstraints,
 	tableDesc *sqlbase.TableDescriptor,
 	index *sqlbase.IndexDescriptor,
-) roachpb.Spans {
+) (roachpb.Spans, error) {
 	if len(constraints) == 0 {
-		return makeSpansForIndexConstraints(nil, tableDesc, index)
+		return roachpb.Spans{tableDesc.IndexSpan(index.ID)}, nil
 	}
-	var allSpans roachpb.Spans
+	var allLogicalSpans []logicalSpan
 	for _, c := range constraints {
-		s := makeSpansForIndexConstraints(c, tableDesc, index)
-		allSpans = append(allSpans, s...)
+		s, err := makeLogicalSpansForIndexConstraints(c, tableDesc, index)
+		if err != nil {
+			return nil, err
+		}
+		allLogicalSpans = append(allLogicalSpans, s...)
 	}
-	return mergeAndSortSpans(allSpans)
+	allSpans, err := spansFromLogicalSpans(allLogicalSpans, tableDesc, index)
+	if err != nil {
+		return nil, err
+	}
+	return mergeAndSortSpans(allSpans), nil
+}
+
+// logicalSpan is a higher-level representation of a span that uses Datums
+// instead of bytes. TODO(radu): In the future, I think we probably want to
+// remove the expressions in indexConstraints as well and directly put in
+// logicalKeyParts.
+type logicalSpan struct {
+	start, end []logicalKeyPart
+}
+
+type logicalKeyPart struct {
+	val       parser.Datum
+	dir       encoding.Direction
+	inclusive bool
+}
+
+func spansFromLogicalSpans(
+	logicalSpans []logicalSpan, tableDesc *sqlbase.TableDescriptor, index *sqlbase.IndexDescriptor,
+) (roachpb.Spans, error) {
+	spans := make(roachpb.Spans, len(logicalSpans))
+	interstices := make([][]byte, len(index.ColumnDirections)+1)
+	interstices[0] = sqlbase.MakeIndexKeyPrefix(tableDesc, index.ID)
+	if len(index.Interleave.Ancestors) > 0 {
+		// TODO(eisen): too much of this code is copied from EncodePartialIndexKey.
+		sharedPrefixLen := 0
+		for i, ancestor := range index.Interleave.Ancestors {
+			// The first ancestor is already encoded in interstices[0].
+			if i != 0 {
+				interstices[sharedPrefixLen] =
+					encoding.EncodeUvarintAscending(interstices[sharedPrefixLen], uint64(ancestor.TableID))
+				interstices[sharedPrefixLen] =
+					encoding.EncodeUvarintAscending(interstices[sharedPrefixLen], uint64(ancestor.IndexID))
+			}
+			sharedPrefixLen += int(ancestor.SharedPrefixLen)
+			interstices[sharedPrefixLen] = encoding.EncodeNotNullDescending(interstices[sharedPrefixLen])
+		}
+		interstices[sharedPrefixLen] =
+			encoding.EncodeUvarintAscending(interstices[sharedPrefixLen], uint64(tableDesc.ID))
+		interstices[sharedPrefixLen] =
+			encoding.EncodeUvarintAscending(interstices[sharedPrefixLen], uint64(index.ID))
+	}
+	for i, ls := range logicalSpans {
+		var s roachpb.Span
+		var err error
+		if s, err = spanFromLogicalSpan(ls, interstices); err != nil {
+			return nil, err
+		}
+		spans[i] = s
+	}
+	return spans, nil
+}
+
+// interstices[i] is inserted right before the ith key part. The last element of
+// interstices is inserted at the end (if all key parts are present).
+func spanFromLogicalSpan(ls logicalSpan, interstices [][]byte) (roachpb.Span, error) {
+	var s roachpb.Span
+	for i := 0; ; i++ {
+		s.Key = append(s.Key, interstices[i]...)
+		if i >= len(ls.start) {
+			break
+		}
+		part := ls.start[i]
+		var err error
+		s.Key, err = encodeLogicalKeyPart(s.Key, part)
+		if err != nil {
+			return roachpb.Span{}, err
+		}
+		if !part.inclusive {
+			if i != len(ls.start)-1 {
+				return roachpb.Span{}, errors.New("exclusive start constraint must be last")
+			}
+			// NotNull is already exclusive.
+			if part.val != parser.DNull {
+				s.Key = s.Key.PrefixEnd()
+			}
+			break
+		}
+	}
+	// Since the end of a span is exclusive, if the last constraint is an
+	// inclusive one, we might need to make the key exclusive by applying a
+	// PrefixEnd(). We normally avoid doing this by transforming "a = x" to "a =
+	// x±1" for the last end constraint, depending on the encoding direction
+	// (since this keeps the key nice and pretty-printable). However, we might not
+	// be able to do the ±1.
+	if n := len(ls.end); n > 0 && ls.end[n-1].inclusive {
+		last := &ls.end[n-1]
+		nextVal, hasNext := nextInDirection(last.val, last.dir)
+		if hasNext {
+			last.val = nextVal
+			last.inclusive = false
+		}
+	}
+	for i := 0; ; i++ {
+		s.EndKey = append(s.EndKey, interstices[i]...)
+		if i >= len(ls.end) {
+			break
+		}
+		part := ls.end[i]
+		var err error
+		s.EndKey, err = encodeLogicalKeyPart(s.EndKey, part)
+		if err != nil {
+			return roachpb.Span{}, err
+		}
+		if !part.inclusive {
+			if i != len(ls.end)-1 {
+				return roachpb.Span{}, errors.New("exclusive end constraint must be last")
+			}
+			return s, nil
+		}
+	}
+	s.EndKey = s.EndKey.PrefixEnd()
+	return s, nil
+}
+
+func encodeLogicalKeyPart(b []byte, part logicalKeyPart) ([]byte, error) {
+	if part.val == parser.DNull && !part.inclusive {
+		if part.dir == encoding.Ascending {
+			return encoding.EncodeNotNullAscending(b), nil
+		}
+		return encoding.EncodeNotNullDescending(b), nil
+	}
+	return sqlbase.EncodeTableKey(b, part.val, part.dir)
+}
+
+func nextInDirection(val parser.Datum, dir encoding.Direction) (parser.Datum, bool) {
+	if dir == encoding.Ascending {
+		if val.IsMax() {
+			return nil, false
+		}
+		return val.Next()
+	}
+	if val.IsMin() {
+		return nil, false
+	}
+	return val.Prev()
 }
 
 // mergeAndSortSpans is used to merge a set of potentially overlapping spans
@@ -1148,12 +1185,15 @@ func mergeAndSortSpans(s roachpb.Spans) roachpb.Spans {
 	// on the X axis. It can be solved using a scan algorithm: we go through all
 	// segment starting and ending points in X order (as "events") and keep
 	// track of how many open segments we have at each point.
-	events := make(spanEvents, 2*len(s))
+	events := make(spanEvents, 0, 2*len(s))
 	for i := range s {
-		events[2*i] = spanEvent{start: true, key: s[i].Key}
-		events[2*i+1] = spanEvent{start: false, key: s[i].EndKey}
-		if s[i].Key.Compare(s[i].EndKey) >= 0 {
-			panic(fmt.Sprintf("invalid input span %s", sqlbase.PrettySpan(s[i], 0)))
+		// Remove any spans which are empty. This can happen for constraints such as
+		// "a > 1 AND a < 2" which we do not simplify to false but which is treated
+		// as "a >= 2 AND a < 2" for span generation.
+		if s[i].Key.Compare(s[i].EndKey) < 0 {
+			events = append(events,
+				spanEvent{start: true, key: s[i].Key},
+				spanEvent{start: false, key: s[i].EndKey})
 		}
 	}
 	sort.Sort(events)
@@ -1184,75 +1224,60 @@ func mergeAndSortSpans(s roachpb.Spans) roachpb.Spans {
 	return s
 }
 
-// makeSpansForIndexConstraints constructs the spans for an index given an
-// instance of indexConstraints. The resulting spans are non-overlapping (by
+// makeLogicalSpansForIndexConstraints constructs the spans for an index given
+// an instance of indexConstraints. The resulting spans are non-overlapping (by
 // virtue of the input constraints being disjunct).
-func makeSpansForIndexConstraints(
+func makeLogicalSpansForIndexConstraints(
 	constraints indexConstraints, tableDesc *sqlbase.TableDescriptor, index *sqlbase.IndexDescriptor,
-) roachpb.Spans {
-	prefix := roachpb.Key(sqlbase.MakeIndexKeyPrefix(tableDesc, index.ID))
+) ([]logicalSpan, error) {
 	// We have one constraint per column, so each contributes something
 	// to the start and/or the end key of the span.
 	// But we also have (...) IN <tuple> constraints that span multiple columns.
 	// These constraints split each span, and that's how we can end up with
 	// multiple spans.
-	resultSpans := roachpb.Spans{{
-		Key:    append(roachpb.Key(nil), prefix...),
-		EndKey: append(roachpb.Key(nil), prefix...),
-	}}
+	resultSpans := []logicalSpan{{}}
 
 	colIdx := 0
-	for i, c := range constraints {
-		// We perform special processing on the last end constraint to account for
-		// the exclusive nature of the scan end key.
-		lastEnd := (c.end != nil) &&
-			(i+1 == len(constraints) || constraints[i+1].end == nil)
-
+	for _, c := range constraints {
 		// IN is handled separately.
 		if (c.start != nil && c.start.Operator == parser.In) ||
 			(c.end != nil && c.end.Operator == parser.In) {
-			resultSpans = applyInConstraint(resultSpans, c, colIdx, index, lastEnd)
+			var err error
+			resultSpans, err = applyInConstraint(resultSpans, c, colIdx, index)
+			if err != nil {
+				return nil, err
+			}
 		} else {
 			dir, err := index.ColumnDirections[colIdx].ToEncodingDirection()
 			if err != nil {
-				panic(err)
+				return nil, err
 			}
 			if c.start != nil {
+				var part logicalKeyPart
 				if dir == encoding.Ascending {
-					encodeStartConstraintAscending(resultSpans, c.start)
+					part = encodeStartConstraintAscending(c.start)
 				} else {
-					encodeStartConstraintDescending(resultSpans, c.start)
+					part = encodeStartConstraintDescending(c.start)
+				}
+				for i := range resultSpans {
+					resultSpans[i].start = append(resultSpans[i].start, part)
 				}
 			}
 			if c.end != nil {
+				var part logicalKeyPart
 				if dir == encoding.Ascending {
-					encodeEndConstraintAscending(resultSpans, c.end, lastEnd)
+					part = encodeEndConstraintAscending(c.end)
 				} else {
-					encodeEndConstraintDescending(resultSpans, c.end, lastEnd)
+					part = encodeEndConstraintDescending(c.end)
+				}
+				for i := range resultSpans {
+					resultSpans[i].end = append(resultSpans[i].end, part)
 				}
 			}
 		}
 		colIdx += c.numColumns()
 	}
-
-	// If we had no end constraints, make it so that we scan the whole index.
-	if len(constraints) == 0 || constraints[0].end == nil {
-		for i := range resultSpans {
-			resultSpans[i].EndKey = resultSpans[i].EndKey.PrefixEnd()
-		}
-	}
-
-	// Remove any spans which are empty. This can happen for constraints such as
-	// "a > 1 AND a < 2" which we do not simplify to false but which is treated
-	// as "a >= 2 AND a < 2" for span generation.
-	n := 0
-	for _, s := range resultSpans {
-		if bytes.Compare(s.Key, s.EndKey) < 0 {
-			resultSpans[n] = s
-			n++
-		}
-	}
-	return resultSpans[:n]
+	return resultSpans, nil
 }
 
 // exactPrefix returns the count of the columns of the index for which an exact
