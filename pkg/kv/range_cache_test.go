@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/util/caller"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
@@ -193,13 +194,20 @@ func initTestDescriptorDB(t *testing.T) *testDescriptorDB {
 
 // assertLookupCountEq fails unless exactly the number of lookups have been observed.
 func (db *testDescriptorDB) assertLookupCountEq(t *testing.T, exp int64, key string) {
-	db.assertLookupCount(t, exp, exp, key)
+	if exp != db.lookupCount {
+		file, line, _ := caller.Lookup(1)
+		t.Errorf("%s:%d: expected lookup count %d after %s, was %d",
+			file, line, exp, key, db.lookupCount)
+	}
+	db.lookupCount = 0
 }
 
 // assertLookupCountEq fails unless number of lookups observed is >= from and <= to.
 func (db *testDescriptorDB) assertLookupCount(t *testing.T, from, to int64, key string) {
 	if from > db.lookupCount || to < db.lookupCount {
-		t.Errorf("Expected lookup count in [%d, %d] after %s, was %d", from, to, key, db.lookupCount)
+		file, line, _ := caller.Lookup(1)
+		t.Errorf("%s:%d: expected lookup count in [%d, %d] after %s, was %d",
+			file, line, from, to, key, db.lookupCount)
 	}
 	db.lookupCount = 0
 }
