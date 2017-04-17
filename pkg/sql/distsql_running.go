@@ -20,6 +20,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
@@ -190,6 +191,12 @@ func (dsp *distSQLPlanner) Run(
 	return nil
 }
 
+// distSQLReceiver is a RowReceiver that stores incoming rows in a RowContainer.
+// This is where the DistSQL execution meets the SQL Session - the RowContainer
+// comes from a client Session.
+//
+// distSQLReceiver also update the RangeDescriptorCache and the LeaseholderCache
+// in response to DistSQL metadata about misplanned ranges.
 type distSQLReceiver struct {
 	ctx context.Context
 
@@ -201,17 +208,37 @@ type distSQLReceiver struct {
 	resultToStreamColMap []int
 	// numRows counts the number of rows we received when rows is nil.
 	numRows int64
-	err     error
-	row     parser.Datums
-	status  distsqlrun.ConsumerStatus
-	alloc   sqlbase.DatumAlloc
-	closed  bool
+
+	// err represents the error that we received either from a producer or
+	// internally in the operation of the distSQLReceiver. If set, this will
+	// ultimately be returned as the error for the SQL query.
+	//
+	// Once set, no more rows are accepted.
+	err error
+
+	row    parser.Datums
+	status distsqlrun.ConsumerStatus
+	alloc  sqlbase.DatumAlloc
+	closed bool
+
+	rangeCache *kv.RangeDescriptorCache
+	leaseCache *kv.LeaseHolderCache
 }
 
 var _ distsqlrun.RowReceiver = &distSQLReceiver{}
 
-func makeDistSQLReceiver(ctx context.Context, sink *RowContainer) distSQLReceiver {
-	return distSQLReceiver{ctx: ctx, rows: sink}
+func makeDistSQLReceiver(
+	ctx context.Context,
+	sink *RowContainer,
+	rangeCache *kv.RangeDescriptorCache,
+	leaseCache *kv.LeaseHolderCache,
+) distSQLReceiver {
+	return distSQLReceiver{
+		ctx:        ctx,
+		rows:       sink,
+		rangeCache: rangeCache,
+		leaseCache: leaseCache,
+	}
 }
 
 // Push is part of the RowReceiver interface.
@@ -222,11 +249,13 @@ func (r *distSQLReceiver) Push(
 		if meta.Err != nil && r.err == nil {
 			r.err = meta.Err
 		}
-		// TODO(andrei): do something with the metadata - update the descriptor
-		// caches.
+		if len(meta.Ranges) > 0 {
+			r.err = r.updateCaches(r.ctx, meta.Ranges)
+		}
 		return r.status
 	}
 	if r.err != nil {
+		// TODO(andrei): We should drain here.
 		return distsqlrun.ConsumerClosed
 	}
 	if r.status != distsqlrun.NeedMoreRows {
@@ -268,6 +297,30 @@ func (r *distSQLReceiver) ProducerDone() {
 		panic("double close")
 	}
 	r.closed = true
+}
+
+// updateCaches takes information about some ranges that were mis-planned and
+// updates the range descriptor and lease-holder caches accordingly.
+//
+// TODO(andrei): updating these caches is not perfect: we can clobber newer
+// information that someone else has populated because there's no timing info
+// anywhere. We also may fail to remove stale info from the LeaseHolderCache if
+// the ids of the ranges that we get are different than the ids in that cache.
+func (r *distSQLReceiver) updateCaches(ctx context.Context, ranges []roachpb.RangeInfo) error {
+	// Update the RangeDescriptorCache.
+	rngDescs := make([]roachpb.RangeDescriptor, len(ranges))
+	for i, ri := range ranges {
+		rngDescs[i] = ri.Desc
+	}
+	if err := r.rangeCache.InsertRangeDescriptors(ctx, rngDescs...); err != nil {
+		return err
+	}
+
+	// Update the LeaseHolderCache.
+	for _, ri := range ranges {
+		r.leaseCache.Update(ctx, ri.Desc.RangeID, ri.Lease.Replica)
+	}
+	return nil
 }
 
 // PlanAndRun generates a physical plan from a planNode tree and executes it. It
