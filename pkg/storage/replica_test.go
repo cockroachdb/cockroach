@@ -2451,6 +2451,39 @@ func TestReplicaCommandQueueTimestampNonInterference(t *testing.T) {
 	}
 }
 
+// TestReplicaCommandQueueSplitDeclaresWrites verifies that split
+// operations declare write access to their entire span. This is
+// necessary to avoid conflicting changes to the range's stats, even
+// though splits do not actually write to their data span (and
+// therefore a failure to declare writes are not caught directly by
+// any other test).
+func TestReplicaCommandQueueSplitDeclaresWrites(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	var spans SpanSet
+	commands[roachpb.EndTransaction].DeclareKeys(
+		roachpb.RangeDescriptor{StartKey: roachpb.RKey("a"), EndKey: roachpb.RKey("d")},
+		roachpb.Header{},
+		&roachpb.EndTransactionRequest{
+			InternalCommitTrigger: &roachpb.InternalCommitTrigger{
+				SplitTrigger: &roachpb.SplitTrigger{
+					LeftDesc: roachpb.RangeDescriptor{
+						StartKey: roachpb.RKey("a"),
+						EndKey:   roachpb.RKey("c"),
+					},
+					RightDesc: roachpb.RangeDescriptor{
+						StartKey: roachpb.RKey("c"),
+						EndKey:   roachpb.RKey("d"),
+					},
+				},
+			},
+		},
+		&spans)
+	if err := spans.checkAllowed(SpanReadWrite, roachpb.Span{Key: roachpb.Key("b")}); err != nil {
+		t.Fatalf("expected declaration of write access, err=%s", err)
+	}
+}
+
 func SendWrapped(
 	ctx context.Context, sender client.Sender, header roachpb.Header, args roachpb.Request,
 ) (roachpb.Response, roachpb.BatchResponse_Header, *roachpb.Error) {
