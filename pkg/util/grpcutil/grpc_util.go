@@ -31,13 +31,13 @@ import (
 
 type localRequestKey struct{}
 
-// NewLocalRequestContext takes an existing context which may have the Peer field set,
-// and returns a Context that can be used for local (in-process) request.
+// NewLocalRequestContext takes an existing context and returns a context that can
+// be used for local (in-process) requests.
 func NewLocalRequestContext(ctx context.Context) context.Context {
 	return context.WithValue(ctx, localRequestKey{}, struct{}{})
 }
 
-// IsLocalRequestContext returns true this context is marked for local (in-process) use.
+// IsLocalRequestContext returns true if this context is marked for local (in-process) use.
 func IsLocalRequestContext(ctx context.Context) bool {
 	return ctx.Value(localRequestKey{}) != nil
 }
