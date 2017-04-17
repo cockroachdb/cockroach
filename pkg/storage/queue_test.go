@@ -738,7 +738,9 @@ type processTimeQueueImpl struct {
 	testQueueImpl
 }
 
-func (pq *processTimeQueueImpl) process(_ context.Context, _ *Replica, _ config.SystemConfig) error {
+func (pq *processTimeQueueImpl) process(
+	_ context.Context, _ *Replica, _ config.SystemConfig,
+) error {
 	time.Sleep(5 * time.Millisecond)
 	return nil
 }

@@ -72,7 +72,9 @@ func (c *checkHelper) init(
 // Set values in the IndexedVars used by the CHECK exprs.
 // Any value not passed is set to NULL, unless `merge` is true, in which
 // case it is left unchanged (allowing updating a subset of a row's values).
-func (c *checkHelper) loadRow(colIdx map[sqlbase.ColumnID]int, row parser.Datums, merge bool) error {
+func (c *checkHelper) loadRow(
+	colIdx map[sqlbase.ColumnID]int, row parser.Datums, merge bool,
+) error {
 	if len(c.exprs) == 0 {
 		return nil
 	}

@@ -274,7 +274,9 @@ type nilVirtualTabler struct{}
 
 var _ VirtualTabler = nilVirtualTabler{}
 
-func (nilVirtualTabler) getVirtualTableDesc(tn *parser.TableName) (*sqlbase.TableDescriptor, error) {
+func (nilVirtualTabler) getVirtualTableDesc(
+	tn *parser.TableName,
+) (*sqlbase.TableDescriptor, error) {
 	return nil, nil
 }
 

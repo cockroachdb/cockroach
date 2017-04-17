@@ -173,7 +173,9 @@ func getTableNames(conn *sqlConn, dbName string, ts string) (tableNames []string
 	return tableNames, nil
 }
 
-func getMetadataForTable(conn *sqlConn, dbName, tableName string, ts string) (tableMetadata, error) {
+func getMetadataForTable(
+	conn *sqlConn, dbName, tableName string, ts string,
+) (tableMetadata, error) {
 	// Fetch column types.
 	rows, err := conn.Query(fmt.Sprintf(`
 		SELECT COLUMN_NAME, DATA_TYPE

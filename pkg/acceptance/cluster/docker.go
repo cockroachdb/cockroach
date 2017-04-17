@@ -455,7 +455,9 @@ func (cli retryingDockerClient) ContainerKill(ctx context.Context, container, si
 		})
 }
 
-func (cli retryingDockerClient) ContainerWait(ctx context.Context, container string) (int64, error) {
+func (cli retryingDockerClient) ContainerWait(
+	ctx context.Context, container string,
+) (int64, error) {
 	var ret int64
 	return ret, retry(ctx, cli.attempts, cli.timeout, "ContainerWait", matchNone,
 		func(timeoutCtx context.Context) error {

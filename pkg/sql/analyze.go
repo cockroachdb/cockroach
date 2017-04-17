@@ -1476,7 +1476,9 @@ func simplifyComparisonExpr(
 	return parser.MakeDBool(true), false
 }
 
-func makePrefixRange(prefix parser.DString, datum parser.TypedExpr, complete bool) parser.TypedExpr {
+func makePrefixRange(
+	prefix parser.DString, datum parser.TypedExpr, complete bool,
+) parser.TypedExpr {
 	if complete {
 		return parser.NewTypedComparisonExpr(
 			parser.EQ,

@@ -587,7 +587,9 @@ func (p *planner) getSubqueryPlan(
 	}, nil
 }
 
-func (p *planner) getGeneratorPlan(ctx context.Context, t *parser.FuncExpr) (planDataSource, error) {
+func (p *planner) getGeneratorPlan(
+	ctx context.Context, t *parser.FuncExpr,
+) (planDataSource, error) {
 	plan, err := p.makeGenerator(ctx, t)
 	if err != nil {
 		return planDataSource{}, err
@@ -719,7 +721,9 @@ func (src *dataSourceInfo) checkDatabaseName(tn parser.TableName) (parser.TableN
 // array and the column index for the column array of that
 // source. Returns invalid indices and an error if the source is not
 // found or the name is ambiguous.
-func (sources multiSourceInfo) findColumn(c *parser.ColumnItem) (srcIdx int, colIdx int, err error) {
+func (sources multiSourceInfo) findColumn(
+	c *parser.ColumnItem,
+) (srcIdx int, colIdx int, err error) {
 	if len(c.Selector) > 0 {
 		return invalidSrcIdx, invalidColIdx, util.UnimplementedWithIssueErrorf(8318, "compound types not supported yet: %q", c)
 	}

@@ -83,7 +83,9 @@ func (q *consistencyQueue) shouldQueue(
 }
 
 // process() is called on every range for which this node is a lease holder.
-func (q *consistencyQueue) process(ctx context.Context, repl *Replica, _ config.SystemConfig) error {
+func (q *consistencyQueue) process(
+	ctx context.Context, repl *Replica, _ config.SystemConfig,
+) error {
 	req := roachpb.CheckConsistencyRequest{}
 	if _, pErr := repl.CheckConsistency(ctx, req); pErr != nil {
 		log.Error(ctx, pErr.GoError())

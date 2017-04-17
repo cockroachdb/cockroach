@@ -26,7 +26,9 @@ import (
 // includes calling expandPlan(). The SQL "prepare" phase, as well as
 // the EXPLAIN statement, should merely build the plan node(s) and
 // call optimizePlan(). This is called automatically by makePlan().
-func (p *planner) optimizePlan(ctx context.Context, plan planNode, needed []bool) (planNode, error) {
+func (p *planner) optimizePlan(
+	ctx context.Context, plan planNode, needed []bool,
+) (planNode, error) {
 	// We propagate the needed columns a first time. This will remove
 	// any unused renders, which in turn may simplify expansion (remove
 	// sub-expressions).

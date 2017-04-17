@@ -306,7 +306,9 @@ func (p *planner) showCreateInterleave(
 // ShowCreateTable returns a CREATE TABLE statement for the specified table in
 // Traditional syntax.
 // Privileges: Any privilege on table.
-func (p *planner) ShowCreateTable(ctx context.Context, n *parser.ShowCreateTable) (planNode, error) {
+func (p *planner) ShowCreateTable(
+	ctx context.Context, n *parser.ShowCreateTable,
+) (planNode, error) {
 	tn, err := n.Table.NormalizeWithDatabaseName(p.session.Database)
 	if err != nil {
 		return nil, err
@@ -757,7 +759,9 @@ func (p *planner) ShowIndex(ctx context.Context, n *parser.ShowIndex) (planNode,
 // Privileges: Any privilege on table.
 //   Notes: postgres does not have a SHOW CONSTRAINTS statement.
 //          mysql requires some privilege for any column.
-func (p *planner) ShowConstraints(ctx context.Context, n *parser.ShowConstraints) (planNode, error) {
+func (p *planner) ShowConstraints(
+	ctx context.Context, n *parser.ShowConstraints,
+) (planNode, error) {
 	tn, err := n.Table.NormalizeWithDatabaseName(p.session.Database)
 	if err != nil {
 		return nil, err

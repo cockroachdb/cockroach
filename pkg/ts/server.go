@@ -55,7 +55,9 @@ type Server struct {
 
 // MakeServer instantiates a new Server which services requests with data from
 // the supplied DB.
-func MakeServer(ambient log.AmbientContext, db *DB, cfg ServerConfig, stopper *stop.Stopper) Server {
+func MakeServer(
+	ambient log.AmbientContext, db *DB, cfg ServerConfig, stopper *stop.Stopper,
+) Server {
 	ambient.AddLogTag("ts-srv", nil)
 	queryWorkerMax := queryWorkerMax
 	if cfg.QueryWorkerMax != 0 {
