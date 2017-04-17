@@ -45,7 +45,7 @@ test: $(YARN_INSTALLED_TARGET) protos
 test-debug: $(YARN_INSTALLED_TARGET) protos
 	karma start --browsers Chrome --no-single-run --reporters mocha
 
-$(GOBINDATA_TARGET): $(YARN_INSTALLED_TARGET) protos
+$(GOBINDATA_TARGET): $(YARN_INSTALLED_TARGET) $(shell git ls-files | grep -vF $(GOBINDATA_TARGET)) | protos
 	rm -rf dist
 	webpack -p
 	go-bindata -nometadata -pkg ui -o $@ -prefix dist dist
