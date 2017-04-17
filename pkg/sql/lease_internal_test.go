@@ -157,21 +157,15 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
 
 	var leases []*LeaseState
-	err := kvDB.Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
-		for i := 0; i < 3; i++ {
-			lease, err := leaseManager.acquireFreshestFromStore(ctx, txn, tableDesc.ID)
-			if err != nil {
-				t.Fatal(err)
-			}
-			leases = append(leases, lease)
-			if err := leaseManager.Release(lease); err != nil {
-				t.Fatal(err)
-			}
+	for i := 0; i < 3; i++ {
+		lease, err := leaseManager.acquireFreshestFromStore(context.TODO(), tableDesc.ID)
+		if err != nil {
+			t.Fatal(err)
 		}
-		return nil
-	})
-	if err != nil {
-		t.Fatal(err)
+		leases = append(leases, lease)
+		if err := leaseManager.Release(lease); err != nil {
+			t.Fatal(err)
+		}
 	}
 	ts := leaseManager.findTableState(tableDesc.ID, false)
 	if numLeases := getNumLeases(ts); numLeases != 3 {
@@ -482,17 +476,11 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	for i := 0; i < numRoutines; i++ {
 		go func() {
 			defer wg.Done()
-			err := kvDB.Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
-				lease, err := leaseManager.acquireFreshestFromStore(ctx, txn, tableDesc.ID)
-				if err != nil {
-					return err
-				}
-				if err := leaseManager.Release(lease); err != nil {
-					return err
-				}
-				return nil
-			})
+			lease, err := leaseManager.acquireFreshestFromStore(context.TODO(), tableDesc.ID)
 			if err != nil {
+				t.Error(err)
+			}
+			if err := leaseManager.Release(lease); err != nil {
 				t.Error(err)
 			}
 		}()

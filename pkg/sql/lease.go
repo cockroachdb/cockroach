@@ -61,7 +61,9 @@ type LeaseState struct {
 	// This descriptor is immutable and can be shared by many goroutines.
 	// Care must be taken to not modify it.
 	sqlbase.TableDescriptor
-	expiration parser.DTimestamp
+	// The timestamp of the transaction that wrote the table descriptor.
+	creationTime hlc.Timestamp
+	expiration   parser.DTimestamp
 
 	// mu protects refcount and released
 	mu       syncutil.Mutex
@@ -138,7 +140,6 @@ func jitteredLeaseDuration() time.Duration {
 // being dropped, the error will be errTableDropped.
 func (s LeaseStore) Acquire(
 	ctx context.Context,
-	txn *client.Txn,
 	tableID sqlbase.ID,
 	minVersion sqlbase.DescriptorVersion,
 	minExpirationTime parser.DTimestamp,
@@ -151,42 +152,29 @@ func (s LeaseStore) Acquire(
 	}
 	lease.expiration = parser.DTimestamp{Time: expiration}
 
-	// Use the supplied (user) transaction to look up the descriptor because the
-	// descriptor might have been created within the transaction.
-	tableDesc, err := sqlbase.GetTableDescFromID(ctx, txn, tableID)
-	if err != nil {
-		return nil, err
-	}
-	if err := filterTableState(tableDesc); err != nil {
-		return nil, err
-	}
-	tableDesc.MaybeUpgradeFormatVersion()
-	// Once the descriptor is set it is immutable and care must be taken
-	// to not modify it.
-	lease.TableDescriptor = *tableDesc
+	err := s.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+		tableDesc, timestamp, err := sqlbase.GetTableDescAndTimestampFromID(ctx, txn, tableID)
+		if err != nil {
+			return err
+		}
+		if err := filterTableState(tableDesc); err != nil {
+			return err
+		}
+		tableDesc.MaybeUpgradeFormatVersion()
+		// Once the descriptor is set it is immutable and care must be taken
+		// to not modify it.
+		lease.TableDescriptor = *tableDesc
+		lease.creationTime = timestamp
 
-	// ValidateTable instead of Validate, even though we have a txn available,
-	// so we don't block reads waiting for this lease.
-	if err := lease.ValidateTable(); err != nil {
-		return nil, err
-	}
-	if lease.Version < minVersion {
-		return nil, errors.Errorf("version %d of table %d does not exist yet", minVersion, tableID)
-	}
+		// ValidateTable instead of Validate, even though we have a txn available,
+		// so we don't block reads waiting for this lease.
+		if err := lease.ValidateTable(); err != nil {
+			return err
+		}
+		if lease.Version < minVersion {
+			return errors.Errorf("version %d of table %d does not exist yet", minVersion, tableID)
+		}
 
-	// Insert the entry in the lease table in a separate transaction. This is
-	// necessary because we want to ensure that the lease entry is added and the
-	// transaction passed to Acquire() might be aborted. The lease entry needs to
-	// be added because we store the returned LeaseState in local in-memory maps
-	// and cannot handle the entry being reverted. This is safe because either
-	// the descriptor we're acquiring the lease on existed prior to the acquire
-	// transaction in which case acquiring the lease is kosher, or the descriptor
-	// was created within the acquire transaction. The second case is more
-	// subtle. We might create a lease entry for a table that doesn't exist, but
-	// there is no harm in that as no other transaction will be attempting to
-	// modify the descriptor and even if the descriptor is never created we'll
-	// just have a dangling lease entry which will eventually get GC'd.
-	err = s.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		nodeID := s.nodeID.Get()
 		if nodeID == 0 {
 			panic("zero nodeID")
@@ -537,8 +525,9 @@ type tableState struct {
 
 // acquire returns a lease at the specified version. The lease will have its
 // refcount incremented, so the caller is responsible to call release() on it.
+// The lease has to be valid for the timestamp.
 func (t *tableState) acquire(
-	ctx context.Context, txn *client.Txn, version sqlbase.DescriptorVersion, m *LeaseManager,
+	ctx context.Context, timestamp hlc.Timestamp, version sqlbase.DescriptorVersion, m *LeaseManager,
 ) (*LeaseState, error) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -546,7 +535,7 @@ func (t *tableState) acquire(
 	if m.testingKnobs.LeaseStoreTestingKnobs.AlwaysAcquireNewLease {
 		// Don't check to see if we already have a lease at the specified version:
 		// just get a new one.
-		if err := t.acquireFromStoreLocked(ctx, txn, version, m); err != nil {
+		if err := t.acquireFromStoreLocked(ctx, version, m); err != nil {
 			return nil, err
 		}
 	}
@@ -555,6 +544,13 @@ func (t *tableState) acquire(
 		s := t.active.findNewest(version)
 		if s != nil {
 			if checkedLease := t.checkLease(s, version, m.clock); checkedLease != nil {
+				if timestamp.Less(checkedLease.creationTime) {
+					// return an error in the rare circumstance a new schema
+					// is pushed.
+					//
+					// TODO(vivek): restart the transaction.
+					return nil, errors.Errorf("table %d unable to acquire lease : %s < %s", t.id, timestamp, checkedLease.creationTime)
+				}
 				return checkedLease, nil
 			}
 		} else if version != 0 {
@@ -565,7 +561,7 @@ func (t *tableState) acquire(
 			}
 		}
 
-		if err := t.acquireFromStoreLocked(ctx, txn, version, m); err != nil {
+		if err := t.acquireFromStoreLocked(ctx, version, m); err != nil {
 			return nil, err
 		}
 		// A new lease was added, so loop and perform the lookup again.
@@ -598,7 +594,7 @@ func (t *tableState) checkLease(
 // acquireFromStoreLocked acquires a new lease from the store and inserts it
 // into the active set. t.mu must be locked.
 func (t *tableState) acquireFromStoreLocked(
-	ctx context.Context, txn *client.Txn, version sqlbase.DescriptorVersion, m *LeaseManager,
+	ctx context.Context, version sqlbase.DescriptorVersion, m *LeaseManager,
 ) error {
 	// Ensure there is no lease acquisition in progress.
 	if t.acquireWait() {
@@ -607,7 +603,7 @@ func (t *tableState) acquireFromStoreLocked(
 		return nil
 	}
 
-	s, err := t.acquireNodeLease(ctx, txn, version, m, parser.DTimestamp{})
+	s, err := t.acquireNodeLease(ctx, version, m, parser.DTimestamp{})
 	if err != nil {
 		return err
 	}
@@ -627,7 +623,7 @@ func (t *tableState) acquireFromStoreLocked(
 //
 // t.mu must be locked.
 func (t *tableState) acquireFreshestFromStoreLocked(
-	ctx context.Context, txn *client.Txn, version sqlbase.DescriptorVersion, m *LeaseManager,
+	ctx context.Context, version sqlbase.DescriptorVersion, m *LeaseManager,
 ) error {
 	// Ensure there is no lease acquisition in progress.
 	t.acquireWait()
@@ -643,7 +639,7 @@ func (t *tableState) acquireFreshestFromStoreLocked(
 			Time: newestLease.expiration.Add(time.Millisecond)}
 	}
 
-	s, err := t.acquireNodeLease(ctx, txn, version, m, minExpirationTime)
+	s, err := t.acquireNodeLease(ctx, version, m, minExpirationTime)
 	if err != nil {
 		return err
 	}
@@ -694,7 +690,6 @@ func (t *tableState) acquireWait() bool {
 // t.mu needs to be locked.
 func (t *tableState) acquireNodeLease(
 	ctx context.Context,
-	txn *client.Txn,
 	minVersion sqlbase.DescriptorVersion,
 	m *LeaseManager,
 	minExpirationTime parser.DTimestamp,
@@ -713,7 +708,7 @@ func (t *tableState) acquireNodeLease(
 	// acquisition.
 	t.mu.Unlock()
 	defer t.mu.Lock()
-	lease, err := m.LeaseStore.Acquire(ctx, txn, t.id, minVersion, minExpirationTime)
+	lease, err := m.LeaseStore.Acquire(ctx, t.id, minVersion, minExpirationTime)
 	if err != nil {
 		return nil, err
 	}
@@ -813,7 +808,7 @@ func (t *tableState) purgeOldLeases(
 	err := db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		var err error
 		if !deleted {
-			lease, err = t.acquire(ctx, txn, minVersion, m)
+			lease, err = t.acquire(ctx, txn.OrigTimestamp(), minVersion, m)
 			if err == errTableDropped {
 				deleted = true
 			}
@@ -1097,7 +1092,7 @@ func (m *LeaseManager) AcquireByName(
 		if err := m.Release(lease); err != nil {
 			log.Warningf(ctx, "error releasing lease: %s", err)
 		}
-		lease, err = m.acquireFreshestFromStore(ctx, txn, tableID)
+		lease, err = m.acquireFreshestFromStore(ctx, tableID)
 		if err != nil {
 			return nil, err
 		}
@@ -1140,7 +1135,7 @@ func (m *LeaseManager) Acquire(
 	ctx context.Context, txn *client.Txn, tableID sqlbase.ID, version sqlbase.DescriptorVersion,
 ) (*LeaseState, error) {
 	t := m.findTableState(tableID, true)
-	lease, err := t.acquire(ctx, txn, version, m)
+	lease, err := t.acquire(ctx, txn.OrigTimestamp(), version, m)
 	if m.LeaseStore.testingKnobs.LeaseAcquiredEvent != nil {
 		m.LeaseStore.testingKnobs.LeaseAcquiredEvent(lease, err)
 	}
@@ -1154,14 +1149,12 @@ func (m *LeaseManager) Acquire(
 // The returned lease had its refcount incremented, so the caller is responsible
 // for release()ing it.
 func (m *LeaseManager) acquireFreshestFromStore(
-	ctx context.Context, txn *client.Txn, tableID sqlbase.ID,
+	ctx context.Context, tableID sqlbase.ID,
 ) (*LeaseState, error) {
 	t := m.findTableState(tableID, true)
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	if err := t.acquireFreshestFromStoreLocked(
-		ctx, txn, 0 /* version */, m,
-	); err != nil {
+	if err := t.acquireFreshestFromStoreLocked(ctx, 0 /* version */, m); err != nil {
 		return nil, err
 	}
 	lease := t.active.findNewest(0)
@@ -1289,10 +1282,33 @@ func (m *LeaseManager) RefreshLeases(s *stop.Stopper, db *client.DB, gossip *gos
 type LeaseCollection struct {
 	// leases holds the state of per-table leases acquired by the leaseMgr.
 	leases []*LeaseState
+	// leases on tables that were created by an uncommitted transaction
+	// affiliated with this LeaseCollection. Leases are normally owned by the
+	// node coordinating the transaction, and since such table descriptors
+	// are not yet committed the node is unable to grab a lease on them.
+	// These leases are not true leases and are not accounted for in the
+	// lease table. They are local to this LeaseCollection and invisible
+	// to other transactions. These dummy leases allow a transaction to
+	// use an uncommitted table descriptor created within the transaction.
+	uncommittedLeases []*LeaseState
+
 	// leaseMgr manages acquiring and releasing per-table leases.
 	leaseMgr *LeaseManager
 	// databaseCache is used as a cache for database names.
 	// TODO(andrei): get rid of it and replace it with a leasing system for
 	// database descriptors.
 	databaseCache *databaseCache
+}
+
+func (lc *LeaseCollection) addUncommittedLease(
+	desc sqlbase.TableDescriptor, creationTime hlc.Timestamp,
+) {
+	lease := &LeaseState{
+		TableDescriptor: desc,
+		creationTime:    creationTime,
+		// No need to set expiration time of lease because this is not
+		// a true lease.
+	}
+
+	lc.uncommittedLeases = append(lc.uncommittedLeases, lease)
 }

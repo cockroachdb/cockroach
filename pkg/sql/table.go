@@ -261,6 +261,17 @@ func (lc *LeaseCollection) getTableLease(
 		return nil, err
 	}
 
+	for _, l := range lc.uncommittedLeases {
+		if parser.ReNormalizeName(l.Name) == tn.TableName.Normalize() &&
+			l.ParentID == dbID {
+			if log.V(2) {
+				log.Infof(ctx, "found uncommitted lease for table '%s'", tn)
+			}
+			// No need to update transaction deadline.
+			return &l.TableDescriptor, nil
+		}
+	}
+
 	// First, look to see if we already have a lease for this table.
 	// This ensures that, once a SQL transaction resolved name N to id X, it will
 	// continue to use N to refer to X even if N is renamed during the
@@ -317,6 +328,16 @@ func (lc *LeaseCollection) getTableLeaseByID(
 			return nil, err
 		}
 		return table, nil
+	}
+
+	for _, l := range lc.uncommittedLeases {
+		if l.ID == tableID {
+			if log.V(2) {
+				log.Infof(ctx, "found uncommitted lease for table %d", tableID)
+			}
+			// No need to update transaction deadline.
+			return &l.TableDescriptor, nil
+		}
 	}
 
 	// First, look to see if we already have a lease for this table -- including
