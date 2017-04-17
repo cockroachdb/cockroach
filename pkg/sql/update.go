@@ -437,8 +437,12 @@ func (u *updateNode) Next(ctx context.Context) (bool, error) {
 		}
 	}
 
-	u.checkHelper.loadRow(u.tw.ru.FetchColIDtoRowIndex, oldValues, false)
-	u.checkHelper.loadRow(u.updateColsIdx, updateValues, true)
+	if err := u.checkHelper.loadRow(u.tw.ru.FetchColIDtoRowIndex, oldValues, false); err != nil {
+		return false, err
+	}
+	if err := u.checkHelper.loadRow(u.updateColsIdx, updateValues, true); err != nil {
+		return false, err
+	}
 	if err := u.checkHelper.check(&u.p.evalCtx); err != nil {
 		return false, err
 	}

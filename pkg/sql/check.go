@@ -72,9 +72,9 @@ func (c *checkHelper) init(
 // Set values in the IndexedVars used by the CHECK exprs.
 // Any value not passed is set to NULL, unless `merge` is true, in which
 // case it is left unchanged (allowing updating a subset of a row's values).
-func (c *checkHelper) loadRow(colIdx map[sqlbase.ColumnID]int, row parser.Datums, merge bool) {
+func (c *checkHelper) loadRow(colIdx map[sqlbase.ColumnID]int, row parser.Datums, merge bool) error {
 	if len(c.exprs) == 0 {
-		return
+		return nil
 	}
 	// Populate IndexedVars.
 	for _, ivar := range c.ivars {
@@ -83,11 +83,18 @@ func (c *checkHelper) loadRow(colIdx map[sqlbase.ColumnID]int, row parser.Datums
 		}
 		ri, has := colIdx[c.cols[ivar.Idx].ID]
 		if has {
+			if row[ri] != parser.DNull {
+				expected, provided := ivar.ResolvedType(), row[ri].ResolvedType()
+				if !expected.Equivalent(provided) {
+					return errors.Errorf("%s value does not match CHECK expr type %s", provided, expected)
+				}
+			}
 			c.curSourceRow[ivar.Idx] = row[ri]
 		} else if !merge {
 			c.curSourceRow[ivar.Idx] = parser.DNull
 		}
 	}
+	return nil
 }
 
 // IndexedVarEval implements the parser.IndexedVarContainer interface.
