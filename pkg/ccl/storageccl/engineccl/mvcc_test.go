@@ -10,12 +10,15 @@ package engineccl
 
 import (
 	"bytes"
+	"fmt"
 	"math"
 	"testing"
 
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -24,13 +27,21 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
+func stubTimeBoundIterators(stubValue bool) func() {
+	realSetting := timeBoundIterators
+	timeBoundIterators = settings.TestingBoolSetting(stubValue)
+	return func() {
+		timeBoundIterators = realSetting
+	}
+}
+
 func iterateExpectErr(
 	e engine.Engine, startKey, endKey roachpb.Key, startTime, endTime hlc.Timestamp, errString string,
 ) func(*testing.T) {
 	return func(t *testing.T) {
-		iter := NewMVCCIncrementalIterator(e)
+		iter := NewMVCCIncrementalIterator(e, startTime, endTime)
 		defer iter.Close()
-		for iter.Reset(startKey, endKey, startTime, endTime); iter.Valid(); iter.Next() {
+		for iter.Reset(startKey, endKey); iter.Valid(); iter.Next() {
 			// pass
 		}
 		if err := iter.Error(); !testutils.IsError(err, errString) {
@@ -46,10 +57,10 @@ func assertEqualKVs(
 	expected []engine.MVCCKeyValue,
 ) func(*testing.T) {
 	return func(t *testing.T) {
-		iter := NewMVCCIncrementalIterator(e)
+		iter := NewMVCCIncrementalIterator(e, startTime, endTime)
 		defer iter.Close()
 		var kvs []engine.MVCCKeyValue
-		for iter.Reset(startKey, endKey, startTime, endTime); iter.Valid(); iter.Next() {
+		for iter.Reset(startKey, endKey); iter.Valid(); iter.Next() {
 			kvs = append(kvs, engine.MVCCKeyValue{Key: iter.Key(), Value: iter.Value()})
 		}
 
@@ -67,10 +78,21 @@ func assertEqualKVs(
 	}
 }
 
-func TestMVCCIterateIncremental(t *testing.T) {
-	defer leaktest.AfterTest(t)()
+func runMVCCIterateIncremental(t *testing.T) {
+	dir, cleanupFn := testutils.TempDir(t)
+	defer cleanupFn()
+
 	ctx := context.Background()
-	e := engine.NewInMem(roachpb.Attributes{}, 1<<20)
+	e, err := engine.NewRocksDB(
+		roachpb.Attributes{},
+		dir,
+		engine.RocksDBCache{},
+		0,
+		engine.DefaultMaxOpenFiles,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
 	defer e.Close()
 
 	var (
@@ -110,6 +132,9 @@ func TestMVCCIterateIncremental(t *testing.T) {
 		if err := engine.MVCCPut(ctx, e, nil, kv.Key.Key, kv.Key.Timestamp, v, nil); err != nil {
 			t.Fatal(err)
 		}
+		if err := e.Flush(); err != nil {
+			t.Fatal(err)
+		}
 	}
 
 	// Exercise time ranges.
@@ -128,6 +153,9 @@ func TestMVCCIterateIncremental(t *testing.T) {
 	if err := engine.MVCCDelete(ctx, e, nil, testKey1, ts3, nil); err != nil {
 		t.Fatal(err)
 	}
+	if err := e.Flush(); err != nil {
+		t.Fatal(err)
+	}
 	t.Run("del", assertEqualKVs(e, keyMin, keyMax, ts0, tsMax, kvs(kv1_3Deleted, kv2_2_2)))
 
 	// Exercise intent handling.
@@ -142,6 +170,9 @@ func TestMVCCIterateIncremental(t *testing.T) {
 	if err := engine.MVCCPut(ctx, e, nil, txn1.TxnMeta.Key, txn1.TxnMeta.Timestamp, txn1Val, &txn1); err != nil {
 		t.Fatal(err)
 	}
+	if err := e.Flush(); err != nil {
+		t.Fatal(err)
+	}
 	txn2ID := uuid.MakeV4()
 	txn2 := roachpb.Transaction{TxnMeta: enginepb.TxnMeta{
 		Key:       testKey2,
@@ -151,6 +182,9 @@ func TestMVCCIterateIncremental(t *testing.T) {
 	}}
 	txn2Val := roachpb.Value{RawBytes: testValue4}
 	if err := engine.MVCCPut(ctx, e, nil, txn2.TxnMeta.Key, txn2.TxnMeta.Timestamp, txn2Val, &txn2); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.Flush(); err != nil {
 		t.Fatal(err)
 	}
 	t.Run("intents1",
@@ -163,9 +197,78 @@ func TestMVCCIterateIncremental(t *testing.T) {
 	if err := engine.MVCCResolveWriteIntent(ctx, e, nil, intent1); err != nil {
 		t.Fatal(err)
 	}
+	if err := e.Flush(); err != nil {
+		t.Fatal(err)
+	}
 	intent2 := roachpb.Intent{Span: roachpb.Span{Key: testKey2}, Txn: txn2.TxnMeta, Status: roachpb.ABORTED}
 	if err := engine.MVCCResolveWriteIntent(ctx, e, nil, intent2); err != nil {
 		t.Fatal(err)
 	}
+	if err := e.Flush(); err != nil {
+		t.Fatal(err)
+	}
 	t.Run("intents4", assertEqualKVs(e, keyMin, keyMax, ts0, tsMax, kvs(kv1_4_4, kv2_2_2)))
+}
+
+func TestMVCCIterateIncremental(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	t.Run("NormalIterators", func(t *testing.T) {
+		stubTimeBoundIterators(false)
+		runMVCCIterateIncremental(t)
+	})
+
+	t.Run("TimeBoundIterators", func(t *testing.T) {
+		stubTimeBoundIterators(true)
+		runMVCCIterateIncremental(t)
+	})
+}
+
+func TestMVCCIterateTimeBound(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	eng, err := loadTestData()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer eng.Close()
+
+	for _, testCase := range []struct {
+		start hlc.Timestamp
+		end   hlc.Timestamp
+	}{
+		// entire time range
+		{hlc.Timestamp{WallTime: 0, Logical: 0}, hlc.Timestamp{WallTime: 1000, Logical: 0}},
+		// one SST
+		{hlc.Timestamp{WallTime: 10, Logical: 0}, hlc.Timestamp{WallTime: 19, Logical: 0}},
+		// one SST, plus the min of the following SST
+		{hlc.Timestamp{WallTime: 10, Logical: 0}, hlc.Timestamp{WallTime: 20, Logical: 0}},
+		// one SST, plus the max of the preceding SST
+		{hlc.Timestamp{WallTime: 9, Logical: 0}, hlc.Timestamp{WallTime: 19, Logical: 0}},
+		// one SST, plus the min of the following and the max of the preceding SST
+		{hlc.Timestamp{WallTime: 9, Logical: 0}, hlc.Timestamp{WallTime: 21, Logical: 0}},
+		// one SST, not min or max
+		{hlc.Timestamp{WallTime: 18, Logical: 0}, hlc.Timestamp{WallTime: 18, Logical: 1}},
+		// one SST's max
+		{hlc.Timestamp{WallTime: 19, Logical: 0}, hlc.Timestamp{WallTime: 19, Logical: 1}},
+		// one SST's min
+		{hlc.Timestamp{WallTime: 20, Logical: 0}, hlc.Timestamp{WallTime: 20, Logical: 1}},
+		// random endpoints
+		{hlc.Timestamp{WallTime: 49, Logical: 0}, hlc.Timestamp{WallTime: 574, Logical: 0}},
+	} {
+		t.Run(fmt.Sprintf("%s-%s", testCase.start, testCase.end), func(t *testing.T) {
+			defer leaktest.AfterTest(t)()
+
+			stubTimeBoundIterators(false)
+			iter := NewMVCCIncrementalIterator(eng, testCase.start, testCase.end)
+			defer iter.Close()
+
+			var expectedKVs []engine.MVCCKeyValue
+			for iter.Reset(keys.MinKey, keys.MaxKey); iter.Valid(); iter.Next() {
+				expectedKVs = append(expectedKVs, engine.MVCCKeyValue{Key: iter.Key(), Value: iter.Value()})
+			}
+
+			stubTimeBoundIterators(true)
+			assertEqualKVs(eng, keys.MinKey, keys.MaxKey, testCase.start, testCase.end, expectedKVs)
+		})
+	}
 }
