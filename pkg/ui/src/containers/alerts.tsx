@@ -5,7 +5,7 @@ import { connect } from "react-redux";
 
 import { AlertBox } from "../components/alertBox";
 import { AdminUIState } from "../redux/state";
-import { Alert, allAlertsSelector } from "../redux/alerts";
+import { Alert, panelAlertsSelector } from "../redux/alerts";
 
 interface AlertSectionProps {
   /**
@@ -37,7 +37,7 @@ class AlertSection extends React.Component<AlertSectionProps, {}> {
 const alertSectionConnected = connect(
   (state: AdminUIState) => {
     return {
-      alerts: allAlertsSelector(state),
+      alerts: panelAlertsSelector(state),
     };
   },
   (dispatch) => {

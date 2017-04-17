@@ -12,9 +12,12 @@ import {
   helpusNotificationSelector, helpusBannerDismissedSetting,
   staggeredVersionWarningSelector, staggeredVersionDismissedSetting,
   newVersionNotificationSelector, newVersionDismissedLocalSetting,
+  disconnectedAlertSelector, disconnectedDismissedLocalSetting,
 } from "./alerts";
 import { KEY_HELPUS, VERSION_DISMISSED_KEY, setUIDataKey, OptInAttributes, isInFlight } from "./uiData";
-import { versionReducerObj, nodesReducerObj, clusterReducerObj } from "./apiReducers";
+import {
+  versionReducerObj, nodesReducerObj, clusterReducerObj, healthReducerObj,
+} from "./apiReducers";
 
 describe("alerts", function() {
   let store: Store<AdminUIState>;
@@ -77,8 +80,6 @@ describe("alerts", function() {
         dispatch(setUIDataKey(KEY_HELPUS, null));
         const alert = helpusNotificationSelector(state());
 
-        // We know that this particular alert returns a thunk (saving persistent
-        // UI data), and that the thunk returns a Promise<void>.
         dispatch(alert.dismiss).then(() => {
           assert.isTrue(helpusBannerDismissedSetting.selector(state()));
           assert.isNotNull(state().uiData[KEY_HELPUS]);
@@ -276,14 +277,55 @@ describe("alerts", function() {
         const alert = newVersionNotificationSelector(state());
         const beforeDismiss = moment();
 
-        // We know that this particular alert returns a thunk (saving persistent
-        // UI data), and that the thunk returns a Promise<void>.
         dispatch(alert.dismiss).then(() => {
           assert.isTrue(newVersionDismissedLocalSetting.selector(state()).isSameOrAfter(beforeDismiss));
           assert.isNotNull(state().uiData[VERSION_DISMISSED_KEY]);
           assert.isNotNull(state().uiData[VERSION_DISMISSED_KEY].data);
           const dismissedMoment = moment(state().uiData[VERSION_DISMISSED_KEY].data as number);
           assert.isTrue(dismissedMoment.isSameOrAfter(beforeDismiss));
+          done();
+        });
+      });
+    });
+
+    describe("disconnected alert", function () {
+      it("requires health to be available before displaying", function () {
+        const alert = disconnectedAlertSelector(state());
+        assert.isUndefined(alert);
+      });
+
+      it("does not display when cluster is healthy", function () {
+        dispatch(healthReducerObj.receiveData(
+          new protos.cockroach.server.serverpb.ClusterResponse({})),
+        );
+        const alert = disconnectedAlertSelector(state());
+        assert.isUndefined(alert);
+      });
+
+      it("displays when cluster health endpoint returns an error", function () {
+        dispatch(healthReducerObj.errorData(new Error("error")));
+        const alert = disconnectedAlertSelector(state());
+        assert.isObject(alert);
+        assert.equal(alert.level, AlertLevel.CRITICAL);
+        assert.equal(alert.title, "Connection to CockroachDB node lost.");
+      });
+
+      it("does not display if dismissed locally", function () {
+        dispatch(healthReducerObj.errorData(new Error("error")));
+        dispatch(disconnectedDismissedLocalSetting.set(moment()));
+        const alert = disconnectedAlertSelector(state());
+        assert.isUndefined(alert);
+      });
+
+      it("dismisses by setting local dismissal", function (done) {
+        dispatch(healthReducerObj.errorData(new Error("error")));
+        const alert = disconnectedAlertSelector(state());
+        const beforeDismiss = moment();
+
+        dispatch(alert.dismiss).then(() => {
+          assert.isTrue(
+            disconnectedDismissedLocalSetting.selector(state()).isSameOrAfter(beforeDismiss),
+          );
           done();
         });
       });
@@ -311,6 +353,7 @@ describe("alerts", function() {
       assert.isTrue(state().cachedData.cluster.inFlight);
       assert.isTrue(state().cachedData.nodes.inFlight);
       assert.isFalse(state().cachedData.version.inFlight);
+      assert.isTrue(state().cachedData.health.inFlight);
     });
 
     it("dispatches request for version data when cluster ID and nodes are available", function() {
@@ -350,6 +393,15 @@ describe("alerts", function() {
       assert.isFalse(state().cachedData.version.inFlight);
     });
 
+    it("refreshes health function whenever the last health response is no longer valid.", function() {
+      dispatch(healthReducerObj.receiveData(
+        new protos.cockroach.server.serverpb.ClusterResponse({})),
+      );
+      dispatch(healthReducerObj.invalidateData());
+      sync();
+      assert.isTrue(state().cachedData.health.inFlight);
+    });
+
     it("does not do anything when all data is available.", function() {
       dispatch(nodesReducerObj.receiveData([
         {
@@ -366,6 +418,9 @@ describe("alerts", function() {
       dispatch(versionReducerObj.receiveData({
         details: [],
       }));
+      dispatch(healthReducerObj.receiveData(
+        new protos.cockroach.server.serverpb.ClusterResponse({})),
+      );
 
       const expectedState = state();
       sync();

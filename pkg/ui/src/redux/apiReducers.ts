@@ -20,7 +20,7 @@ const eventsReducerObj = new CachedDataReducer(api.getEvents, "events", moment.d
 export const refreshEvents = eventsReducerObj.refresh;
 
 export type HealthState = CachedDataReducerState<api.HealthResponseMessage>;
-const healthReducerObj = new CachedDataReducer(api.getHealth, "health", moment.duration(2, "s"));
+export const healthReducerObj = new CachedDataReducer(api.getHealth, "health", moment.duration(2, "s"));
 export const refreshHealth = healthReducerObj.refresh;
 
 function rollupStoreMetrics(res: api.NodesResponseMessage): NodeStatus$Properties[] {
