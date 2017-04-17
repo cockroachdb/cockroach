@@ -223,21 +223,37 @@ type distSQLReceiver struct {
 
 	rangeCache *kv.RangeDescriptorCache
 	leaseCache *kv.LeaseHolderCache
+
+	// The transaction in which the flow producing data for this receiver runs.
+	// The distSQLReceiver updates the TransactionProto in response to
+	// RetryableTxnError's. Nil if no transaction should be updated on errors
+	// (i.e. if the flow overall doesn't run in a transaction).
+	txn *client.Txn
 }
 
 var _ distsqlrun.RowReceiver = &distSQLReceiver{}
 
+// makeDistSQLReceiver creates a distSQLReceiver.
+//
+// ctx is the Context that the receiver will use throughput its lifetime.
+// sink is the container where the results will be stored. If only the row count
+// is needed, this can be nil.
+//
+// txn is the transaction in which the producer flow runs; it will be updated
+// on errors. Nil if the flow overall doesn't run in a transaction.
 func makeDistSQLReceiver(
 	ctx context.Context,
 	sink *RowContainer,
 	rangeCache *kv.RangeDescriptorCache,
 	leaseCache *kv.LeaseHolderCache,
+	txn *client.Txn,
 ) distSQLReceiver {
 	return distSQLReceiver{
 		ctx:        ctx,
 		rows:       sink,
 		rangeCache: rangeCache,
 		leaseCache: leaseCache,
+		txn:        txn,
 	}
 }
 
@@ -247,6 +263,14 @@ func (r *distSQLReceiver) Push(
 ) distsqlrun.ConsumerStatus {
 	if !meta.Empty() {
 		if meta.Err != nil && r.err == nil {
+			if r.txn != nil {
+				// Update the txn in response to remote errors. In the non-DistSQL
+				// world, the TxnCoordSender does this, and the client.Txn updates
+				// itself in non-error cases. Those updates are not necessary if we're
+				// just doing reads. Once DistSQL starts performing writes, we'll need
+				// to perform such updates too.
+				r.txn.UpdateStateOnErr(meta.Err)
+			}
 			r.err = meta.Err
 		}
 		if len(meta.Ranges) > 0 {
