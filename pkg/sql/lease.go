@@ -25,7 +25,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
@@ -154,25 +153,9 @@ func (s LeaseStore) Acquire(
 
 	// Use the supplied (user) transaction to look up the descriptor because the
 	// descriptor might have been created within the transaction.
-	p := makeInternalPlanner("lease-acquire", txn, security.RootUser, s.memMetrics)
-	defer finishInternalPlanner(p)
-
-	const getDescriptor = `SELECT descriptor FROM system.descriptor WHERE id = $1`
-	values, err := p.QueryRow(ctx, getDescriptor, int(tableID))
+	tableDesc, err := sqlbase.GetTableDescFromID(ctx, txn, tableID)
 	if err != nil {
 		return nil, err
-	}
-	if values == nil {
-		return nil, sqlbase.ErrDescriptorNotFound
-	}
-	desc := &sqlbase.Descriptor{}
-	if err := proto.Unmarshal([]byte(*values[0].(*parser.DBytes)), desc); err != nil {
-		return nil, err
-	}
-
-	tableDesc := desc.GetTable()
-	if tableDesc == nil {
-		return nil, errors.Errorf("ID %d is not a table", tableID)
 	}
 	if err := filterTableState(tableDesc); err != nil {
 		return nil, err
