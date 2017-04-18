@@ -1516,7 +1516,11 @@ var Builtins = map[string][]Builtin{
 					Nanos: int64(ctx.stmtTimestamp.Sub(ctx.txnTimestamp)),
 				}
 				if elapsed.Compare(minDuration) < 0 {
-					return nil, roachpb.NewRetryableTxnError("forced by crdb_internal.force_retry()", nil /* txnID */)
+					var txnID *uuid.UUID
+					if ctx.Txn != nil {
+						txnID = ctx.Txn.ID()
+					}
+					return nil, roachpb.NewRetryableTxnError("forced by crdb_internal.force_retry()", txnID)
 				}
 				return DZero, nil
 			},

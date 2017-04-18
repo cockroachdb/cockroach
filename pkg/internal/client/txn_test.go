@@ -217,10 +217,6 @@ func TestTxnResetTxnOnAbort(t *testing.T) {
 	if _, ok := pErr.GetDetail().(*roachpb.TransactionAbortedError); !ok {
 		t.Fatalf("expected TransactionAbortedError, got %v", pErr)
 	}
-
-	if txn.Proto().ID != nil {
-		t.Error("expected txn to be cleared")
-	}
 }
 
 // TestTransactionConfig verifies the proper unwrapping and
@@ -637,9 +633,8 @@ func TestAbortedRetryRenewsTimestamp(t *testing.T) {
 	// Request a client-defined timestamp.
 	refTimestamp := clock.Now()
 	execOpt := TxnExecOptions{
-		AutoRetry:                  true,
-		AutoCommit:                 true,
-		AssignTimestampImmediately: true,
+		AutoRetry:  true,
+		AutoCommit: true,
 	}
 
 	// Perform the transaction.
@@ -770,9 +765,6 @@ func TestTimestampSelectionInOptions(t *testing.T) {
 	db := NewDB(newTestSender(nil), clock)
 	txn := NewTxn(db)
 
-	execOpt := TxnExecOptions{
-		AssignTimestampImmediately: true,
-	}
 	refTimestamp := clock.Now()
 
 	txnClosure := func(ctx context.Context, txn *Txn, opt *TxnExecOptions) error {
@@ -780,7 +772,7 @@ func TestTimestampSelectionInOptions(t *testing.T) {
 		return txn.Put(ctx, "a", "b")
 	}
 
-	if err := txn.Exec(context.Background(), execOpt, txnClosure); err != nil {
+	if err := txn.Exec(context.Background(), TxnExecOptions{}, txnClosure); err != nil {
 		t.Fatal(err)
 	}
 

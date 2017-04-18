@@ -56,6 +56,10 @@ type Txn struct {
 		Proto roachpb.Transaction
 		// UserPriority is the transaction's priority.
 		UserPriority roachpb.UserPriority
+		// active is set whenever the transaction is actively running. It will
+		// be initially set when the transaction sends its first batch, but is
+		// reset if the transaction is aborted.
+		active bool
 		// txnAnchorKey is the key at which to anchor the transaction record. If
 		// unset, the first key written in the transaction will be used.
 		txnAnchorKey roachpb.Key
@@ -77,15 +81,45 @@ type Txn struct {
 
 // NewTxn returns a new txn.
 func NewTxn(db *DB) *Txn {
-	return NewTxnWithProto(db, roachpb.Transaction{})
+	return NewTxnWithProto(db, roachpb.Transaction{
+		TxnMeta: enginepb.TxnMeta{
+			Isolation: enginepb.SERIALIZABLE,
+			Priority:  0,
+			Sequence:  1,
+		},
+		Name: "unnamed",
+	})
 }
 
 // NewTxnWithProto returns a new txn with the provided Transaction proto.
 // This allows a client.Txn to be created with an already initialized proto.
 func NewTxnWithProto(db *DB, proto roachpb.Transaction) *Txn {
 	txn := &Txn{db: db}
+	if proto.ID == nil {
+		proto = initTxnProto(proto, db.clock)
+	}
 	txn.mu.Proto = proto
 	return txn
+}
+
+// initTxnProto initializes the Transaction proto to a fresh state, giving
+// it a new ID and setting its timestamps to the provided clocks current time.
+func initTxnProto(proto roachpb.Transaction, clock *hlc.Clock) roachpb.Transaction {
+	u := uuid.MakeV4()
+	proto.ID = &u
+
+	now := clock.Now()
+	proto.Timestamp = now
+	proto.OrigTimestamp = now
+	proto.MaxTimestamp = now.Add(clock.MaxOffset().Nanoseconds(), 0)
+	return proto
+}
+
+// ID returns the current ID of the transaction.
+func (txn *Txn) ID() *uuid.UUID {
+	txn.mu.Lock()
+	defer txn.mu.Unlock()
+	return txn.mu.Proto.ID
 }
 
 // CommandCount returns the count of commands executed through this txn.
@@ -117,7 +151,7 @@ func (txn *Txn) SetUserPriority(userPriority roachpb.UserPriority) error {
 	if txn.mu.UserPriority == userPriority {
 		return nil
 	}
-	if txn.mu.Proto.IsInitialized() {
+	if txn.mu.active {
 		return errors.Errorf("cannot change the user priority of a running transaction")
 	}
 	if userPriority < roachpb.MinUserPriority || userPriority > roachpb.MaxUserPriority {
@@ -153,7 +187,7 @@ func (txn *Txn) SetDebugName(name string) {
 	if txn.mu.Proto.Name == name {
 		return
 	}
-	if txn.mu.Proto.IsInitialized() {
+	if txn.mu.active {
 		panic("cannot change the debug name of a running transaction")
 	}
 	txn.mu.Proto.Name = name
@@ -178,7 +212,7 @@ func (txn *Txn) SetIsolation(isolation enginepb.IsolationType) error {
 	if txn.mu.Proto.Isolation == isolation {
 		return nil
 	}
-	if txn.mu.Proto.IsInitialized() {
+	if txn.mu.active {
 		return errors.Errorf("cannot change the isolation level of a running transaction")
 	}
 	txn.mu.Proto.Isolation = isolation
@@ -546,15 +580,6 @@ type TxnExecOptions struct {
 	// encountered. If not set, committing or leaving open the txn is the
 	// responsibility of the client.
 	AutoCommit bool
-	// If set, an OrigTimestamp will be assigned to the transaction as early as
-	// possible, instead of when the first KV operation is performed. This allows
-	// users to guarantee that the transactions timestamp is a lower bound for any
-	// operation performed in Exec's closure.
-	//
-	// Useful for SQL txns for ensuring that the value returned by
-	// `cluster_logical_timestamp()` is consistent with the commit (serializable)
-	// ordering.
-	AssignTimestampImmediately bool
 }
 
 // AutoCommitError wraps a non-retryable error coming from auto-commit.
@@ -586,6 +611,10 @@ func (e *AutoCommitError) Error() string {
 // to clean up the transaction before returning an error. In case of
 // TransactionAbortedError, txn is reset to a fresh transaction, ready to be
 // used.
+//
+// It is undefined to call Commit concurrently with any call to Exec. Since Exec
+// with the AutoCommit flag is equivalent to an Exec possibly followed by a Commit,
+// it must not be called concurrently with any other call to Exec or Commit.
 func (txn *Txn) Exec(
 	ctx context.Context, opt TxnExecOptions, fn func(context.Context, *Txn, *TxnExecOptions) error,
 ) (err error) {
@@ -596,19 +625,6 @@ func (txn *Txn) Exec(
 	}
 
 	for {
-		if txn != nil {
-			txn.mu.Lock()
-			// If we're looking at a brand new transaction, then communicate
-			// what should be used as initial timestamp.
-			if opt.AssignTimestampImmediately && !txn.mu.Proto.IsInitialized() {
-				// Control the KV timestamp, such that the value returned by
-				// `cluster_logical_timestamp()` is consistent with the commit
-				// (serializable) ordering.
-				txn.mu.Proto.OrigTimestamp = txn.db.clock.Now()
-			}
-			txn.mu.Unlock()
-		}
-
 		err = fn(ctx, txn, &opt)
 
 		if err == nil && opt.AutoCommit {
@@ -726,6 +742,14 @@ func (txn *Txn) send(
 			ba.UserPriority = txn.mu.UserPriority
 		}
 
+		if !txn.mu.active {
+			user := roachpb.MakePriority(ba.UserPriority)
+			if txn.mu.Proto.Priority < user {
+				txn.mu.Proto.Priority = user
+			}
+			txn.mu.active = true
+		}
+
 		needBeginTxn = !(txn.mu.Proto.Writing || txn.mu.writingTxnRecord) && haveTxnWrite
 		needEndTxn := txn.mu.Proto.Writing || txn.mu.writingTxnRecord || haveTxnWrite
 		elideEndTxn = haveEndTxn && !needEndTxn
@@ -760,30 +784,6 @@ func (txn *Txn) send(
 			// We're going to be writing the transaction record by sending the
 			// begin transaction request.
 			txn.mu.writingTxnRecord = true
-		}
-
-		// Initialize an uninitialized (ID == nil) Transaction proto.
-		if !txn.mu.Proto.IsInitialized() {
-			// The initial timestamp may be communicated by a higher layer.
-			// If so, use that. Otherwise make up a new one.
-			timestamp := txn.mu.Proto.OrigTimestamp
-			if timestamp == (hlc.Timestamp{}) {
-				timestamp = txn.db.clock.Now()
-			}
-			newTxn := roachpb.NewTransaction(
-				txn.mu.Proto.Name,
-				txn.mu.Proto.Key,
-				ba.UserPriority,
-				txn.mu.Proto.Isolation,
-				timestamp,
-				txn.db.clock.MaxOffset().Nanoseconds(),
-			)
-			// Use existing priority as a minimum. This is used on transaction
-			// aborts to ratchet priority when creating successor transaction.
-			if newTxn.Priority < txn.mu.Proto.Priority {
-				newTxn.Priority = txn.mu.Proto.Priority
-			}
-			txn.mu.Proto = *newTxn
 		}
 
 		if elideEndTxn {
@@ -947,16 +947,17 @@ func (txn *Txn) updateStateOnErrLocked(pErr *roachpb.Error) {
 			txn.mu.previousIDs[*txn.mu.Proto.ID] = struct{}{}
 
 			// Next, reset the transaction proto so we start anew on restart.
-			txn.mu.Proto = roachpb.Transaction{
+			txn.mu.Proto = initTxnProto(roachpb.Transaction{
 				TxnMeta: enginepb.TxnMeta{
 					Isolation: txn.mu.Proto.Isolation,
 				},
 				Name: txn.mu.Proto.Name,
-			}
+			}, txn.db.clock)
 			// Acts as a minimum priority on restart.
 			if pErr.GetTxn() != nil {
 				txn.mu.Proto.Priority = pErr.GetTxn().Priority
 			}
+			txn.mu.active = false
 		default:
 			txn.mu.Proto.Update(pErr.GetTxn())
 		}

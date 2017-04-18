@@ -29,6 +29,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/apd"
+	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
@@ -1705,6 +1706,7 @@ type EvalContext struct {
 	Ctx contextHolder
 
 	Planner EvalPlanner
+	Txn     *client.Txn
 
 	ReCache *RegexpCache
 	tmpDec  apd.Decimal

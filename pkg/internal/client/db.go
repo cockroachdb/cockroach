@@ -482,9 +482,8 @@ func (db *DB) Txn(ctx context.Context, retryable func(context.Context, *Txn) err
 	txn := NewTxn(db)
 	txn.SetDebugName("unnamed")
 	opts := TxnExecOptions{
-		AutoCommit:                 true,
-		AutoRetry:                  true,
-		AssignTimestampImmediately: true,
+		AutoCommit: true,
+		AutoRetry:  true,
 	}
 	err := txn.Exec(ctx, opts, func(ctx context.Context, txn *Txn, _ *TxnExecOptions) error {
 		return retryable(ctx, txn)
