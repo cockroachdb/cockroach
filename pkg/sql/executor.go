@@ -1826,17 +1826,24 @@ func SetTxnTimestamps(txn *client.Txn, ts hlc.Timestamp) {
 // convertToErrWithPGCode recognizes errs that should have SQL error codes to be
 // reported to the client and converts err to them. If this doesn't apply, err
 // is returned.
-// Note that this returns a new proto, and no fields from the original one are
-// copied. So only use it in contexts where the only thing that matters in the
-// response is the error detail.
+// Note that this returns a new error, and details from the original error are
+// not preserved in any way (except possibly the message).
+//
 // TODO(andrei): sqlbase.ConvertBatchError() seems to serve similar purposes, but
 // it's called from more specialized contexts. Consider unifying the two.
 func convertToErrWithPGCode(err error) error {
 	if err == nil {
 		return nil
 	}
-	if _, ok := err.(*roachpb.RetryableTxnError); ok {
+	switch tErr := err.(type) {
+	case *roachpb.RetryableTxnError:
 		return sqlbase.NewRetryError(err)
+	case *roachpb.AmbiguousResultError:
+		// TODO(andrei): Once DistSQL starts executing writes, we'll need a
+		// different mechanism to marshal AmbiguousResultErrors from the executing
+		// nodes.
+		return sqlbase.NewStatementCompletionUnknownError(tErr)
+	default:
+		return err
 	}
-	return err
 }
