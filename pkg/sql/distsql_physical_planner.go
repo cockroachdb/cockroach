@@ -824,13 +824,6 @@ func (dsp *distSQLPlanner) addAggregators(
 		allDistinct = false
 	}
 
-	// If the previous stage was all on a single node, we will put the final
-	// stage there. Otherwise, bring the results back on this node.
-	node := dsp.nodeDesc.NodeID
-	if prevStageNode != 0 {
-		node = prevStageNode
-	}
-
 	var finalAggSpec distsqlrun.AggregatorSpec
 	var finalAggPost distsqlrun.PostProcessSpec
 
@@ -990,7 +983,7 @@ func (dsp *distSQLPlanner) addAggregators(
 		}
 	}
 
-	// TODO(radu): we could distribute the final stage by hash.
+	// Set up the final stage.
 
 	finalOutTypes := make([]sqlbase.ColumnType, len(aggregations))
 	for i, agg := range aggregations {
@@ -1001,12 +994,66 @@ func (dsp *distSQLPlanner) addAggregators(
 		}
 	}
 
-	p.AddSingleGroupStage(
-		node,
-		distsqlrun.ProcessorCoreUnion{Aggregator: &finalAggSpec},
-		finalAggPost,
-		finalOutTypes,
-	)
+	if len(finalAggSpec.GroupCols) == 0 || len(p.ResultRouters) == 1 {
+		// No GROUP BY, or we have a single stream. Use a single final aggregator.
+		// If the previous stage was all on a single node, put the final
+		// aggregator there. Otherwise, bring the results back on this node.
+		node := dsp.nodeDesc.NodeID
+		if prevStageNode != 0 {
+			node = prevStageNode
+		}
+		p.AddSingleGroupStage(
+			node,
+			distsqlrun.ProcessorCoreUnion{Aggregator: &finalAggSpec},
+			finalAggPost,
+			finalOutTypes,
+		)
+	} else {
+		// We distribute (by group columns) to multiple processors.
+
+		// Set up the output routers from the previous stage.
+		for _, resultProc := range p.ResultRouters {
+			p.Processors[resultProc].Spec.Output[0] = distsqlrun.OutputRouterSpec{
+				Type:        distsqlrun.OutputRouterSpec_BY_HASH,
+				HashColumns: finalAggSpec.GroupCols,
+			}
+		}
+
+		// We have one final stage processor for each result router. This is a
+		// somewhat arbitrary decision; we could have a different number of nodes
+		// working on the final stage.
+		pIdxStart := distsqlplan.ProcessorIdx(len(p.Processors))
+		for _, resultProc := range p.ResultRouters {
+			proc := distsqlplan.Processor{
+				Node: p.Processors[resultProc].Node,
+				Spec: distsqlrun.ProcessorSpec{
+					Input: []distsqlrun.InputSyncSpec{{
+						// The other fields will be filled in by mergeResultStreams.
+						ColumnTypes: p.ResultTypes,
+					}},
+					Core: distsqlrun.ProcessorCoreUnion{Aggregator: &finalAggSpec},
+					Post: finalAggPost,
+					Output: []distsqlrun.OutputRouterSpec{{
+						Type: distsqlrun.OutputRouterSpec_PASS_THROUGH,
+					}},
+				},
+			}
+			p.AddProcessor(proc)
+		}
+
+		// Connect the streams.
+		for bucket := 0; bucket < len(p.ResultRouters); bucket++ {
+			pIdx := pIdxStart + distsqlplan.ProcessorIdx(bucket)
+			p.MergeResultStreams(p.ResultRouters, bucket, distsqlrun.Ordering{}, pIdx, 0)
+		}
+
+		// Set the new result routers.
+		for i := 0; i < len(p.ResultRouters); i++ {
+			p.ResultRouters[i] = pIdxStart + distsqlplan.ProcessorIdx(i)
+		}
+		p.ResultTypes = finalOutTypes
+		p.SetMergeOrdering(orderingTerminated)
+	}
 
 	evalExprs := dsp.extractPostAggrExprs(n.render)
 	p.AddRendering(evalExprs, p.planToStreamColMap, getTypesForPlanResult(n, nil))
