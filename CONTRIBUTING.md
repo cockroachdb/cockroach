@@ -10,7 +10,7 @@
     frequently.
   - Git 1.8+
   - Bash (4+ is preferred)
-  - Make (3.81+ is known to work)
+  - GNU Make (3.81+ is known to work)
   - CMake 2.8.12+
   - XZ Utils (5.2.3+ is known to work)
   - Optional: NodeJS 6.x and Yarn 0.22.0+. Required when compiling protocol
