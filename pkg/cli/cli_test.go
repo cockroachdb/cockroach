@@ -160,7 +160,7 @@ func (c cliTest) cleanup() {
 			// called Stop(). We just need to wait.
 			<-c.Stopper().IsStopped()
 		default:
-			c.Stopper().Stop()
+			c.Stopper().Stop(context.TODO())
 		}
 	}
 

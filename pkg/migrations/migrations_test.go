@@ -146,7 +146,7 @@ func TestEnsureMigrations(t *testing.T) {
 		leaseManager: &fakeLeaseManager{},
 		db:           db,
 	}
-	defer mgr.stopper.Stop()
+	defer mgr.stopper.Stop(context.TODO())
 
 	fnGotCalled := false
 	fnGotCalledDescriptor := migrationDescriptor{
@@ -302,7 +302,7 @@ func TestDBErrors(t *testing.T) {
 		leaseManager: &fakeLeaseManager{},
 		db:           db,
 	}
-	defer mgr.stopper.Stop()
+	defer mgr.stopper.Stop(context.TODO())
 
 	migration := noopMigration1
 	backwardCompatibleMigrations = []migrationDescriptor{migration}
@@ -365,7 +365,7 @@ func TestLeaseErrors(t *testing.T) {
 		},
 		db: db,
 	}
-	defer mgr.stopper.Stop()
+	defer mgr.stopper.Stop(context.TODO())
 
 	migration := noopMigration1
 	backwardCompatibleMigrations = []migrationDescriptor{migration}
@@ -391,7 +391,7 @@ func TestLeaseExpiration(t *testing.T) {
 		leaseManager: &fakeLeaseManager{leaseTimeRemaining: time.Nanosecond},
 		db:           db,
 	}
-	defer mgr.stopper.Stop()
+	defer mgr.stopper.Stop(context.TODO())
 
 	oldLeaseRefreshInterval := leaseRefreshInterval
 	leaseRefreshInterval = time.Microsecond

@@ -888,7 +888,7 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 		key := roachpb.Key("test-key")
 		_, err := txn.Get(context.TODO(), key)
 		teardownHeartbeats(ts)
-		stopper.Stop()
+		stopper.Stop(context.TODO())
 
 		if test.pErr != nil && err == nil {
 			t.Fatalf("expected an error")
@@ -1024,7 +1024,7 @@ func TestTxnCoordSenderSingleRoundtripTxn(t *testing.T) {
 	// Stop the stopper manually, prior to trying the transaction. This has the
 	// effect of returning a NodeUnavailableError for any attempts at launching
 	// a heartbeat goroutine.
-	stopper.Stop()
+	stopper.Stop(context.TODO())
 
 	var ba roachpb.BatchRequest
 	key := roachpb.Key("test")
@@ -1044,7 +1044,7 @@ func TestTxnCoordSenderSingleRoundtripTxn(t *testing.T) {
 func TestTxnCoordSenderErrorWithIntent(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
-	defer stopper.Stop()
+	defer stopper.Stop(context.TODO())
 	manual := hlc.NewManualClock(123)
 	clock := hlc.NewClock(manual.UnixNano, 20*time.Nanosecond)
 
@@ -1160,7 +1160,7 @@ func TestTxnCoordSenderNoDuplicateIntents(t *testing.T) {
 		MakeTxnMetrics(metric.TestSampleInterval),
 	)
 
-	defer stopper.Stop()
+	defer stopper.Stop(context.TODO())
 	defer teardownHeartbeats(ts)
 
 	db := client.NewDB(ts, clock)

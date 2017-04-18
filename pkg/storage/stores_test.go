@@ -22,6 +22,8 @@ import (
 	"testing"
 	"time"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
@@ -130,7 +132,7 @@ func TestStoresGetStore(t *testing.T) {
 func TestStoresLookupReplica(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
-	defer stopper.Stop()
+	defer stopper.Stop(context.TODO())
 	cfg := TestStoreConfig(nil)
 	ls := NewStores(log.AmbientContext{}, cfg.Clock)
 
@@ -252,7 +254,7 @@ func createStores(count int, t *testing.T) (*hlc.ManualClock, []*Store, *Stores,
 func TestStoresGossipStorage(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	manual, stores, ls, stopper := createStores(2, t)
-	defer stopper.Stop()
+	defer stopper.Stop(context.TODO())
 	ls.AddStore(stores[0])
 
 	// Verify initial read is empty.
@@ -301,7 +303,7 @@ func TestStoresGossipStorage(t *testing.T) {
 func TestStoresGossipStorageReadLatest(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	manual, stores, ls, stopper := createStores(2, t)
-	defer stopper.Stop()
+	defer stopper.Stop(context.TODO())
 	ls.AddStore(stores[0])
 
 	// Add a fake address and write.

@@ -57,7 +57,7 @@ func newKVWriteBatch(b *testing.B) kvInterface {
 	return &kvWriteBatch{
 		db: client.NewDB(client.NewSender(conn), rpcContext.LocalClock),
 		doneFn: func() {
-			s.Stopper().Stop()
+			s.Stopper().Stop(context.TODO())
 			enableTracing()
 		},
 	}

@@ -60,7 +60,7 @@ func getStatusJSONProto(
 func TestStatusLocalStacks(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop()
+	defer s.Stopper().Stop(context.TODO())
 
 	// Verify match with at least two goroutine stacks.
 	re := regexp.MustCompile("(?s)goroutine [0-9]+.*goroutine [0-9]+.*")
@@ -81,7 +81,7 @@ func TestStatusLocalStacks(t *testing.T) {
 func TestStatusJson(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop()
+	defer s.Stopper().Stop(context.TODO())
 	ts := s.(*TestServer)
 
 	nodeID := ts.Gossip().NodeID.Get()
@@ -128,7 +128,7 @@ func TestStatusJson(t *testing.T) {
 func TestStatusGossipJson(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop()
+	defer s.Stopper().Stop(context.TODO())
 
 	var data gossip.InfoStatus
 	if err := getStatusJSONProto(s, "gossip/local", &data); err != nil {
@@ -195,7 +195,7 @@ func TestStatusLocalLogs(t *testing.T) {
 	defer s.Close(t)
 
 	ts := startServer(t)
-	defer ts.Stopper().Stop()
+	defer ts.Stopper().Stop(context.TODO())
 
 	// Log an error of each main type which we expect to be able to retrieve.
 	// The resolution of our log timestamps is such that it's possible to get
@@ -338,7 +338,7 @@ func TestStatusLocalLogs(t *testing.T) {
 func TestNodeStatusResponse(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s := startServer(t)
-	defer s.Stopper().Stop()
+	defer s.Stopper().Stop(context.TODO())
 
 	// First fetch all the node statuses.
 	wrapper := serverpb.NodesResponse{}
@@ -373,7 +373,7 @@ func TestMetricsRecording(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, _, kvDB := serverutils.StartServer(t, base.TestServerArgs{
 		MetricsSampleInterval: 5 * time.Millisecond})
-	defer s.Stopper().Stop()
+	defer s.Stopper().Stop(context.TODO())
 
 	checkTimeSeriesKey := func(now int64, keyName string) error {
 		key := ts.MakeDataKey(keyName, "", ts.Resolution10s, now)
@@ -401,7 +401,7 @@ func TestMetricsRecording(t *testing.T) {
 func TestMetricsEndpoint(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s := startServer(t)
-	defer s.Stopper().Stop()
+	defer s.Stopper().Stop(context.TODO())
 
 	if _, err := getText(s, s.AdminURL()+statusPrefix+"metrics/"+s.Gossip().NodeID.String()); err != nil {
 		t.Fatal(err)
@@ -411,7 +411,7 @@ func TestMetricsEndpoint(t *testing.T) {
 func TestRangesResponse(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ts := startServer(t)
-	defer ts.Stopper().Stop()
+	defer ts.Stopper().Stop(context.TODO())
 
 	// Perform a scan to ensure that all the raft groups are initialized.
 	if _, err := ts.db.Scan(context.TODO(), keys.LocalMax, roachpb.KeyMax, 0); err != nil {
@@ -451,7 +451,7 @@ func TestRangesResponse(t *testing.T) {
 func TestRaftDebug(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s := startServer(t)
-	defer s.Stopper().Stop()
+	defer s.Stopper().Stop(context.TODO())
 
 	var resp serverpb.RaftDebugResponse
 	if err := getStatusJSONProto(s, "raft", &resp); err != nil {
@@ -502,7 +502,7 @@ func TestRaftDebug(t *testing.T) {
 func TestStatusVars(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop()
+	defer s.Stopper().Stop(context.TODO())
 
 	if body, err := getText(s, s.AdminURL()+statusPrefix+"vars"); err != nil {
 		t.Fatal(err)
@@ -514,7 +514,7 @@ func TestStatusVars(t *testing.T) {
 func TestSpanStatsResponse(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ts := startServer(t)
-	defer ts.Stopper().Stop()
+	defer ts.Stopper().Stop(context.TODO())
 
 	httpClient, err := ts.GetHTTPClient()
 	if err != nil {
@@ -544,10 +544,10 @@ func TestSpanStatsResponse(t *testing.T) {
 func TestSpanStatsGRPCResponse(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ts := startServer(t)
-	defer ts.Stopper().Stop()
+	defer ts.Stopper().Stop(context.TODO())
 
 	rpcStopper := stop.NewStopper()
-	defer rpcStopper.Stop()
+	defer rpcStopper.Stop(context.TODO())
 	rpcContext := rpc.NewContext(log.AmbientContext{}, ts.RPCContext().Config, ts.Clock(), rpcStopper)
 	request := serverpb.SpanStatsRequest{
 		NodeID:   "1",
@@ -578,7 +578,7 @@ func TestSpanStatsGRPCResponse(t *testing.T) {
 func TestNodesGRPCResponse(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ts := startServer(t)
-	defer ts.Stopper().Stop()
+	defer ts.Stopper().Stop(context.TODO())
 
 	rootConfig := testutils.NewTestBaseContext(security.RootUser)
 	rpcContext := rpc.NewContext(log.AmbientContext{}, rootConfig, ts.Clock(), ts.Stopper())
@@ -604,7 +604,7 @@ func TestNodesGRPCResponse(t *testing.T) {
 func TestHandleDebugRange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s := startServer(t)
-	defer s.Stopper().Stop()
+	defer s.Stopper().Stop(context.TODO())
 
 	if body, err := getText(s, s.AdminURL()+rangeDebugEndpoint+"?id=1"); err != nil {
 		t.Fatal(err)

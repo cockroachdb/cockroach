@@ -36,7 +36,7 @@ func TestExport(t *testing.T) {
 	dir, dirCleanupFn := testutils.TempDir(t)
 	defer dirCleanupFn()
 	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
-	defer tc.Stopper().Stop()
+	defer tc.Stopper().Stop(ctx)
 	sqlDB := sqlutils.MakeSQLRunner(t, tc.Conns[0])
 	kvDB := tc.Server(0).KVClient().(*client.DB)
 
@@ -139,7 +139,7 @@ func TestExportGCThreshold(t *testing.T) {
 
 	ctx := context.Background()
 	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
-	defer tc.Stopper().Stop()
+	defer tc.Stopper().Stop(ctx)
 	kvDB := tc.Server(0).KVClient().(*client.DB)
 
 	req := &roachpb.ExportRequest{

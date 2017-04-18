@@ -116,7 +116,7 @@ func TestComputeTruncatableIndex(t *testing.T) {
 func TestGetTruncatableIndexes(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
-	defer stopper.Stop()
+	defer stopper.Stop(context.TODO())
 	store, _ := createTestStore(t, stopper)
 	store.SetRaftLogQueueActive(false)
 
@@ -230,7 +230,7 @@ func TestProactiveRaftLogTruncate(t *testing.T) {
 	t.Skip("#9772")
 
 	stopper := stop.NewStopper()
-	defer stopper.Stop()
+	defer stopper.Stop(context.TODO())
 	store, _ := createTestStore(t, stopper)
 
 	store.SetReplicaScannerActive(false)
@@ -258,7 +258,7 @@ func TestProactiveRaftLogTruncate(t *testing.T) {
 	}
 
 	// Wait for any asynchronous tasks to finish.
-	stopper.Quiesce()
+	stopper.Quiesce(context.TODO())
 
 	r.mu.Lock()
 	newFirstIndex, err := r.FirstIndex()

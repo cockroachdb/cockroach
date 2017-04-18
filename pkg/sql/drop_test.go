@@ -42,7 +42,7 @@ func TestDropDatabase(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	params, _ := createTestServerParams()
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop()
+	defer s.Stopper().Stop(context.TODO())
 	ctx := context.TODO()
 
 	// Fix the column families so the key counts below don't change if the
@@ -180,7 +180,7 @@ func TestShowTablesAfterRecreateDatabase(t *testing.T) {
 		},
 	}
 	s, sqlDB, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop()
+	defer s.Stopper().Stop(context.TODO())
 
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
@@ -253,7 +253,7 @@ func TestDropIndex(t *testing.T) {
 		},
 	}
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop()
+	defer s.Stopper().Stop(context.TODO())
 
 	numRows := 2*chunkSize + 1
 	if err := createKVTable(sqlDB, numRows); err != nil {
@@ -331,7 +331,7 @@ func TestDropIndexInterleaved(t *testing.T) {
 		},
 	}
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop()
+	defer s.Stopper().Stop(context.TODO())
 
 	numRows := 2*chunkSize + 1
 	createKVInterleavedTable(t, sqlDB, numRows)
@@ -379,7 +379,7 @@ func TestDropTable(t *testing.T) {
 		},
 	}
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop()
+	defer s.Stopper().Stop(context.TODO())
 	ctx := context.TODO()
 
 	numRows := 2*sql.TableTruncateChunkSize + 1
@@ -472,7 +472,7 @@ func TestDropTableInterleaved(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	params, _ := createTestServerParams()
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop()
+	defer s.Stopper().Stop(context.TODO())
 
 	numRows := 2*sql.TableTruncateChunkSize + 1
 	createKVInterleavedTable(t, sqlDB, numRows)
@@ -500,7 +500,7 @@ func TestDropAndCreateTable(t *testing.T) {
 	params, _ := createTestServerParams()
 	params.UseDatabase = "test"
 	s, db, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop()
+	defer s.Stopper().Stop(context.TODO())
 
 	if _, err := db.Exec(`CREATE DATABASE test`); err != nil {
 		t.Fatal(err)
@@ -535,7 +535,7 @@ func TestCommandsWhileTableBeingDropped(t *testing.T) {
 		},
 	}
 	s, db, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop()
+	defer s.Stopper().Stop(context.TODO())
 
 	sql := `
 CREATE DATABASE test;

@@ -214,7 +214,7 @@ func initCPUProfile(ctx context.Context, dir string) {
 	}
 
 	go func() {
-		defer log.RecoverAndReportPanic()
+		defer log.RecoverAndReportPanic(ctx)
 
 		ctx := context.Background()
 
@@ -336,7 +336,7 @@ func runStart(cmd *cobra.Command, args []string) error {
 	var s *server.Server
 	errChan := make(chan error, 1)
 	go func() {
-		defer log.RecoverAndReportPanic()
+		defer log.RecoverAndReportPanic(startCtx)
 
 		defer sp.Finish()
 		if err := func() error {
@@ -459,7 +459,7 @@ func runStart(cmd *cobra.Command, args []string) error {
 					log.Warning(shutdownCtx, err)
 				}
 			}
-			stopper.Stop()
+			stopper.Stop(shutdownCtx)
 		}()
 	}
 
@@ -729,9 +729,9 @@ func runQuit(_ *cobra.Command, _ []string) (err error) {
 	if err != nil {
 		return err
 	}
-	defer stopper.Stop()
-
 	ctx := stopperContext(stopper)
+	defer stopper.Stop(ctx)
+
 	errChan := make(chan error, 1)
 	go func() {
 		errChan <- doShutdown(ctx, c, onModes)

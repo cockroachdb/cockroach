@@ -46,7 +46,7 @@ func TestOutbox(t *testing.T) {
 
 	// Create a mock server that the outbox will connect and push rows to.
 	stopper := stop.NewStopper()
-	defer stopper.Stop()
+	defer stopper.Stop(context.TODO())
 	mockServer, addr, err := startMockDistSQLServer(stopper)
 	if err != nil {
 		t.Fatal(err)
@@ -198,7 +198,7 @@ func TestOutboxInitializesStreamBeforeRecevingAnyRows(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	stopper := stop.NewStopper()
-	defer stopper.Stop()
+	defer stopper.Stop(context.TODO())
 	mockServer, addr, err := startMockDistSQLServer(stopper)
 	if err != nil {
 		t.Fatal(err)
@@ -260,7 +260,7 @@ func TestOutboxClosesWhenConsumerCloses(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run("", func(t *testing.T) {
 			stopper := stop.NewStopper()
-			defer stopper.Stop()
+			defer stopper.Stop(context.TODO())
 			mockServer, addr, err := startMockDistSQLServer(stopper)
 			if err != nil {
 				t.Fatal(err)

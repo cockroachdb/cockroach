@@ -182,8 +182,8 @@ func NewRaftTransport(
 	}
 
 	if t.rpcContext != nil && log.V(1) {
-		t.rpcContext.Stopper.RunWorker(func() {
-			ctx := t.AnnotateCtx(context.Background())
+		ctx := t.AnnotateCtx(context.Background())
+		t.rpcContext.Stopper.RunWorker(ctx, func() {
 			ticker := time.NewTicker(10 * time.Second)
 			defer ticker.Stop()
 			lastStats := make(map[roachpb.NodeID]raftTransportStats)
@@ -292,8 +292,8 @@ func (t *RaftTransport) RaftMessageBatch(stream MultiRaft_RaftMessageBatchServer
 	errCh := make(chan error, 1)
 
 	// Node stopping error is caught below in the select.
-	if err := t.rpcContext.Stopper.RunTask(func() {
-		t.rpcContext.Stopper.RunWorker(func() {
+	if err := t.rpcContext.Stopper.RunTask(stream.Context(), func() {
+		t.rpcContext.Stopper.RunWorker(stream.Context(), func() {
 			errCh <- func() error {
 				var stats *raftTransportStats
 				for {
@@ -459,9 +459,8 @@ func (t *RaftTransport) processQueue(
 	errCh := make(chan error, 1)
 
 	// Starting workers in a task prevents data races during shutdown.
-	if err := t.rpcContext.Stopper.RunTask(func() {
-		t.rpcContext.Stopper.RunWorker(func() {
-			ctx := t.AnnotateCtx(context.Background())
+	if err := t.rpcContext.Stopper.RunTask(stream.Context(), func() {
+		t.rpcContext.Stopper.RunWorker(stream.Context(), func() {
 			errCh <- func() error {
 				for {
 					resp, err := stream.Recv()
@@ -473,7 +472,7 @@ func (t *RaftTransport) processQueue(
 					handler, ok := t.recvMu.handlers[resp.ToReplica.StoreID]
 					t.recvMu.Unlock()
 					if !ok {
-						log.Warningf(ctx, "no handler found for store %s in response %s",
+						log.Warningf(stream.Context(), "no handler found for store %s in response %s",
 							resp.ToReplica.StoreID, resp)
 						continue
 					}
@@ -569,9 +568,9 @@ func (t *RaftTransport) SendAsync(req *RaftMessageRequest) bool {
 			t.mu.Unlock()
 		}
 		// Starting workers in a task prevents data races during shutdown.
-		if err := t.rpcContext.Stopper.RunTask(func() {
-			t.rpcContext.Stopper.RunWorker(func() {
-				ctx := t.AnnotateCtx(context.Background())
+		ctx := t.AnnotateCtx(context.Background())
+		if err := t.rpcContext.Stopper.RunTask(ctx, func() {
+			t.rpcContext.Stopper.RunWorker(ctx, func() {
 				t.connectAndProcess(ctx, toNodeID, ch, stats)
 				deleteQueue()
 			})

@@ -42,7 +42,7 @@ import (
 func TestIDAllocator(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
-	defer stopper.Stop()
+	defer stopper.Stop(context.TODO())
 	store, _ := createTestStore(t, stopper)
 	const maxI, maxJ = 10, 10
 	allocd := make(chan uint32, maxI*maxJ)
@@ -95,7 +95,7 @@ func TestIDAllocator(t *testing.T) {
 func TestIDAllocatorNegativeValue(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
-	defer stopper.Stop()
+	defer stopper.Stop(context.TODO())
 	store, _ := createTestStore(t, stopper)
 
 	// Increment our key to a negative value.
@@ -146,7 +146,7 @@ func TestNewIDAllocatorInvalidArgs(t *testing.T) {
 func TestAllocateErrorAndRecovery(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
-	defer stopper.Stop()
+	defer stopper.Stop(context.TODO())
 	store, _ := createTestStore(t, stopper)
 	const routines = 10
 	allocd := make(chan uint32, routines)
@@ -244,7 +244,7 @@ func TestAllocateWithStopper(t *testing.T) {
 	// before the end of the test.
 	idAlloc := func() *idAllocator {
 		stopper := stop.NewStopper()
-		defer stopper.Stop()
+		defer stopper.Stop(context.TODO())
 		store, _ := createTestStore(t, stopper)
 		idAlloc, err := newIDAllocator(
 			log.AmbientContext{}, keys.RangeIDGenerator, store.cfg.DB, 2, 10, stopper,
