@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 
 	"golang.org/x/net/context"
 )
@@ -72,7 +73,8 @@ func logDepth(ctx context.Context, depth int, sev Severity, format string, args 
 func Shout(ctx context.Context, sev Severity, args ...interface{}) {
 	logDepth(ctx, 1, sev, "", args)
 	if stderrRedirected {
-		fmt.Fprintf(OrigStderr, "*\n* %s: %s\n*\n", sev.String(), MakeMessage(ctx, "", args))
+		fmt.Fprintf(OrigStderr, "*\n* %s: %s\n*\n", sev.String(),
+			strings.Replace(MakeMessage(ctx, "", args), "\n", "\n* ", -1))
 	}
 }
 
