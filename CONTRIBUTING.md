@@ -9,6 +9,8 @@
     the Makefile enforces the specific version required, as it is updated
     frequently.
   - Git 1.8+
+  - CMake 2.8.12+
+  - XZ Utils
   - Bash
   - Optional: NodeJS 6.x and Yarn 0.22.0+. Required when compiling protocol
     buffers.
