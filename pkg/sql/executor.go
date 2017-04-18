@@ -392,9 +392,37 @@ func (e *Executor) getDatabaseCache() *databaseCache {
 // Prepare returns the result types of the given statement. pinfo may
 // contain partial type information for placeholders. Prepare will
 // populate the missing types. The PreparedStatement is returned (or
-// nil if there are no results).
+// nil if there are no results). If fatalErr is returned true,
+// then the session must be closed because it is not reusable.
 func (e *Executor) Prepare(
 	query string, session *Session, pinfo parser.PlaceholderTypes,
+) (res *PreparedStatement, fatalErr bool, err error) {
+	defer session.maybeRecover("preparing", query, &fatalErr, &err)
+
+	// Prepare needs a transaction because it needs to retrieve db/table
+	// descriptors for type checking.
+	txn := session.TxnState.txn
+	if txn == nil {
+		// The new txn need not be the same transaction used by statements following
+		// this prepare statement because it can only be used by prepare() to get a
+		// table lease that is eventually added to the session.
+		//
+		// TODO(vivek): perhaps we should be more consistent and update
+		// session.TxnState.txn, but more thought needs to be put into whether that
+		// is really needed.
+		txn = client.NewTxn(e.cfg.DB)
+		if err := txn.SetIsolation(session.DefaultIsolationLevel); err != nil {
+			return nil, true, fmt.Errorf("cannot set up txn for prepare %q: %v", query, err)
+		}
+		txn.Proto().OrigTimestamp = e.cfg.Clock.Now()
+	}
+
+	res, err = e.doPrepare(query, session, pinfo, txn)
+	return res, fatalErr, err
+}
+
+func (e *Executor) doPrepare(
+	query string, session *Session, pinfo parser.PlaceholderTypes, txn *client.Txn,
 ) (*PreparedStatement, error) {
 	session.resetForBatch(e)
 	sessionEventf(session, "preparing: %s", query)
@@ -428,23 +456,6 @@ func (e *Executor) Prepare(
 		return nil, err
 	}
 
-	// Prepare needs a transaction because it needs to retrieve db/table
-	// descriptors for type checking.
-	txn := session.TxnState.txn
-	if txn == nil {
-		// The new txn need not be the same transaction used by statements following
-		// this prepare statement because it can only be used by prepare() to get a
-		// table lease that is eventually added to the session.
-		//
-		// TODO(vivek): perhaps we should be more consistent and update
-		// session.TxnState.txn, but more thought needs to be put into whether that
-		// is really needed.
-		txn = client.NewTxn(e.cfg.DB)
-		if err := txn.SetIsolation(session.DefaultIsolationLevel); err != nil {
-			panic(err)
-		}
-		txn.Proto().OrigTimestamp = e.cfg.Clock.Now()
-	}
 	if len(session.TxnState.schemaChangers.schemaChangers) > 0 {
 		return nil, errStmtFollowsSchemaChange
 	}
@@ -474,23 +485,22 @@ func (e *Executor) Prepare(
 	return prepared, nil
 }
 
-// ExecuteStatements executes the given statement(s) and returns a response.
+// ExecuteStatements executes the given statement(s) and returns a
+// response. If the returned panicErr error is non-nil, the session
+// cannot be used any more and must be discarded.
 func (e *Executor) ExecuteStatements(
 	session *Session, stmts string, pinfo *parser.PlaceholderInfo,
-) StatementResults {
+) (results StatementResults, panicErr error) {
 	session.resetForBatch(e)
 	session.phaseTimes[sessionStartBatch] = timeutil.Now()
 
-	defer func() {
-		if r := recover(); r != nil {
-			// On a panic, prepend the executed SQL.
-			panic(fmt.Errorf("%s: %s", stmts, r))
-		}
-	}()
+	defer session.maybeRecover("executing", stmts, nil, &panicErr)
 
 	// Send the Request for SQL execution and set the application-level error
 	// for each result in the reply.
-	return e.execRequest(session, stmts, pinfo, copyMsgNone)
+	results = e.execRequest(session, stmts, pinfo, copyMsgNone)
+
+	return results, panicErr
 }
 
 // CopyData adds data to the COPY buffer and executes if there are enough rows.

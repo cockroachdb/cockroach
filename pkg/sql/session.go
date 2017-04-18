@@ -20,6 +20,8 @@ package sql
 import (
 	"fmt"
 	"net"
+	"runtime"
+	"runtime/debug"
 	"strings"
 	"time"
 
@@ -74,6 +76,12 @@ var debugTrace7881Enabled = envutil.EnvOrDefaultBool("COCKROACH_TRACE_7881", fal
 var logStatementsExecuteEnabled = settings.RegisterBoolSetting(
 	"sql.trace.log_statement_execute",
 	"set to true to enable logging of executed statements", false)
+
+// attemptRecoverFromPanics causes the executor to try to translate
+// panics in the sql package to errors that close the client connection.
+var attemptRecoverFromPanics = settings.RegisterBoolSetting(
+	"sql.internal_error_recovery.enabled",
+	"set to true to translate SQL internal errors to client connection errors", true)
 
 // span baggage key used for marking a span
 const keyFor7881Sample = "found#7881"
@@ -205,6 +213,9 @@ type Session struct {
 	// statistics for result sets (which escape transactions).
 	mon        mon.MemoryMonitor
 	sessionMon mon.MemoryMonitor
+	// emergencyShutdown is set to true by EmergencyClose() to
+	// indicate to Finish() that the session is already closed.
+	emergencyShutdown bool
 
 	leases LeaseCollection
 
@@ -306,6 +317,11 @@ func NewSession(
 // operating in the background in the case of parallelized statements, which
 // is why we make sure to drain background statements.
 func (s *Session) Finish(e *Executor) {
+	if s.emergencyShutdown {
+		// closed by EmergencyClose() already.
+		return
+	}
+
 	if s.mon == (mon.MemoryMonitor{}) {
 		// This check won't catch the cases where Finish is never called, but it's
 		// proven to be easier to remember to call Finish than it is to call
@@ -357,6 +373,36 @@ func (s *Session) Finish(e *Executor) {
 	// in the TxnCoordSender should not be waiting on this channel any more.
 	// Consider getting rid of this cancel field all-together.
 	s.cancel()
+}
+
+// EmergencyClose is an edulcorated version of Finish() which is less picky
+// about the current state of the Session.
+func (s *Session) EmergencyClose() {
+	// Ensure that all in-flight statements are done, so that monitor
+	// traffic is stopped.
+	_ = s.parallelizeQueue.Wait()
+
+	// Release the leases - to ensure other sessions don't get stuck.
+	s.leases.releaseLeases(s.context)
+
+	// The KV txn may be unusable - just leave it dead. Simply
+	// shut down its memory monitor.
+	s.TxnState.mon.EmergencyStop(s.context)
+	// Shut the remaining monitors down.
+	s.sessionMon.EmergencyStop(s.context)
+	s.mon.EmergencyStop(s.context)
+
+	// Finalize the event log.
+	if s.eventLog != nil {
+		s.eventLog.Finish()
+		s.eventLog = nil
+	}
+
+	// Stop the heartbeating.
+	s.cancel()
+
+	// Mark the session as already closed, so that Finish() doesn't get confused.
+	s.emergencyShutdown = true
 }
 
 // Ctx returns the current context for the session: if there is an active SQL
@@ -794,4 +840,117 @@ func (scc *schemaChangerCollection) execSchemaChanges(
 		}
 	}
 	scc.schemaChangers = scc.schemaChangers[:0]
+}
+
+// maybeRecover checks upon a panic whether it can be "recovered" by
+// simply aborting the session. If the panic is non-recoverable it is
+// propagated as a panic; otherwise, the fatalErr and callerErr
+// variables are overwritten with the panic details.
+func (s *Session) maybeRecover(action, query string, fatalErr *bool, callerErr *error) {
+	if r := recover(); r != nil {
+		err := errors.Errorf("panic while %s %q: %s", action, query, r)
+
+		// Is the panic recoverable?
+		if !attemptRecoverFromPanics.Get() || !isRecoverableSQLPanic(1 /* the maybeRecover function */) {
+			// No: continue to panic, this will likely shut down the
+			// server. The panic will be logged by the top-level recover.
+			panic(err)
+		}
+
+		// Close the session with force shutdown of the monitors. This is
+		// guaranteed to succeed, or fail with a panic which we can't
+		// recover from: if there's a panic, that means the lease /
+		// tracing / kv subsystem is broken and we can't resume from that.
+		s.EmergencyClose()
+
+		// Now inform the logs; the return below will inform the caller of
+		// *callerErr which we set above.
+
+		// Note: we do not use log.ReportPanic here, since recovered
+		// panics do not need to be as noisy on stderr when logs are
+		// redirected.
+
+		// A short warning header guaranteed to go to stderr.
+		log.Shout(s.Ctx(), log.Severity_WARNING,
+			"a SQL panic has occurred, recovering by closing client connection")
+		// Panic details go to logs; if logs go to file these do not show on stderr.
+		log.Error(s.Ctx(), err)
+		log.Error(s.Ctx(), "call stack:\n", string(debug.Stack()))
+
+		// Inform the caller a non-recoverable error has occurred.
+		if fatalErr != nil {
+			*fatalErr = true
+		}
+		*callerErr = err
+	}
+}
+
+// isRecoverableSQLPanic returns true if the current panic (as
+// determined by the call stack) is "recoverable" (by shutting down
+// the client connection but keeping the server alive).  A panic is
+// considered recoverable if it was originally emitted by the `sql`
+// package itself or one of its sub-packages. For example, if the
+// panic originates in the `client` package (e.g. as called by
+// client.Txn() from `sql`), the panic is not considered to be
+// recoverable.
+//
+// A "recoverable" call stack looks like this:
+//
+// runtime.* ... panic ...
+// sql.* maybeRecover()
+// runtime.* ... panic ...
+// sql.* ...
+// internal.client.(*Txn).Exec
+// sql.* ...
+// sql.(*Executor).ExecuteStatements/Prepare
+//
+// A non-recoverable call stack looks like this:
+//
+// runtime.* ... panic ...
+// sql.* maybeRecover()
+// runtime.* ... panic ...
+// <non-sql package here>
+//
+// So this analysis here skips until the maybeRecover() call frame,
+// then checks that the first next non-runtime item is in the sql
+// package.
+//
+// The skip parameter indicates how many call frames to skip to
+// start the analysis.
+func isRecoverableSQLPanic(skip int) bool {
+	var pcs [15]uintptr
+	_ = runtime.Callers(skip+1, pcs[:])
+	frames := runtime.CallersFrames(pcs[:])
+
+	searchMaybeRecover := true
+	for {
+		f, more := frames.Next()
+		function := f.Function
+
+		// Skip over runtime things always.
+		if strings.HasPrefix(function, "runtime.") {
+			if !more {
+				return false
+			}
+			continue
+		}
+
+		if searchMaybeRecover {
+			// The first thing we're looking for is `maybeRecover`.
+			if !strings.HasPrefix(function,
+				"github.com/cockroachdb/cockroach/pkg/sql.(*Session).maybeRecover") {
+				return false
+			}
+
+			searchMaybeRecover = false
+			if !more {
+				return false
+			}
+			continue
+		}
+
+		// If we're past maybeRecover, and all the runtime calls have been
+		// skipped, then the first next thing must be in the sql package.
+		return strings.HasPrefix(function, "github.com/cockroachdb/cockroach/pkg/sql")
+	}
 }

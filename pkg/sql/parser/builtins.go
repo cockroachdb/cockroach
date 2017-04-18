@@ -1490,6 +1490,20 @@ var Builtins = map[string][]Builtin{
 		},
 	},
 
+	"crdb_internal.internal_error": {
+		Builtin{
+			Types:      ArgTypes{{"msg", TypeString}},
+			ReturnType: fixedReturnType(TypeInt),
+			impure:     true,
+			fn: func(_ *EvalContext, args Datums) (Datum, error) {
+				msg := string(*args[0].(*DString))
+				panic(msg)
+			},
+			category: categorySystemInfo,
+			Info:     "This function is used only by CockroachDB's developers for testing purposes.",
+		},
+	},
+
 	"crdb_internal.force_retry": {
 		Builtin{
 			Types:      ArgTypes{{"val", TypeInterval}},
