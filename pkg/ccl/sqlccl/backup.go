@@ -271,10 +271,24 @@ func Backup(
 
 	var sqlDescs []sqlbase.Descriptor
 
-	storageConf, err := storageccl.ExportStorageConfFromURI(uri)
+	exportStore, err := exportStorageFromURI(ctx, uri)
 	if err != nil {
 		return BackupDescriptor{}, err
 	}
+	defer exportStore.Close()
+
+	// Ensure there isn't already a readable backup desc.
+	{
+		r, err := exportStore.ReadFile(ctx, BackupDescriptorName)
+		// TODO(dt): If we audit exactly what not-exists error each ExportStorage
+		// returns (and then wrap/tag them), we could narrow this check.
+		if err == nil {
+			r.Close()
+			return BackupDescriptor{}, errors.Errorf("a %s file already appears to exist in %s",
+				BackupDescriptorName, uri)
+		}
+	}
+
 	db := p.ExecCfg().DB
 
 	{
@@ -390,7 +404,7 @@ func Backup(
 
 			req := &roachpb.ExportRequest{
 				Span:      span,
-				Storage:   storageConf,
+				Storage:   exportStore.Conf(),
 				StartTime: startTime,
 			}
 			res, pErr := client.SendWrappedWith(gCtx, db.GetSender(), header, req)
@@ -437,11 +451,6 @@ func Backup(
 		return BackupDescriptor{}, err
 	}
 
-	exportStore, err := storageccl.MakeExportStorage(ctx, storageConf)
-	if err != nil {
-		return BackupDescriptor{}, err
-	}
-	defer exportStore.Close()
 	if err := exportStore.WriteFile(ctx, BackupDescriptorName, bytes.NewReader(descBuf)); err != nil {
 		return BackupDescriptor{}, err
 	}
