@@ -397,7 +397,7 @@ func (e *Executor) Prepare(
 	query string, session *Session, pinfo parser.PlaceholderTypes,
 ) (*PreparedStatement, error) {
 	session.resetForBatch(e)
-	log.VEventf(session.Ctx(), 2, "preparing: %s", query)
+	sessionEventf(session, "preparing: %s", query)
 
 	var parser parser.Parser
 	stmts, err := parser.Parse(query, session.Syntax)
@@ -1079,6 +1079,18 @@ func (e *Executor) execStmtInCommitWaitTxn(
 	}
 }
 
+// sessionEventf logs an event to the current transaction context and to the
+// session event log.
+func sessionEventf(session *Session, format string, args ...interface{}) {
+	if session.eventLog == nil {
+		log.VEventf(session.context, 2, format, args...)
+	} else {
+		str := fmt.Sprintf(format, args...)
+		log.VEvent(session.context, 2, str)
+		session.eventLog.Printf("%s", str)
+	}
+}
+
 // execStmtInOpenTxn executes one statement in the context
 // of the session's current transaction (which is assumed to exist).
 // It handles statements that affect the transaction state (BEGIN, COMMIT)
@@ -1120,7 +1132,7 @@ func (e *Executor) execStmtInOpenTxn(
 		panic("execStmtInOpenTxn called outside of an open txn")
 	}
 
-	log.Eventf(session.Ctx(), "%s", stmt)
+	sessionEventf(session, "%s", stmt)
 
 	// Do not double count automatically retried transactions.
 	if automaticRetryCount == 0 {
@@ -1249,7 +1261,7 @@ func (e *Executor) execStmtInOpenTxn(
 			_ = session.parallelizeQueue.Wait()
 		}
 
-		log.ErrEventf(session.Ctx(), "ERROR: %v", err)
+		sessionEventf(session, "ERROR: %v", err)
 		return Result{}, err
 	}
 
@@ -1260,7 +1272,7 @@ func (e *Executor) execStmtInOpenTxn(
 	case parser.Rows:
 		tResult.count = result.Rows.Len()
 	}
-	log.Eventf(session.Ctx(), "%s done", tResult)
+	sessionEventf(session, "%s done", tResult)
 	return result, nil
 }
 
