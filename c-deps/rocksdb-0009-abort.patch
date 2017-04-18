@@ -1,0 +1,22 @@
+diff --git a/util/threadpool_imp.cc b/util/threadpool_imp.cc
+index 0c4ab4f..31807e6 100644
+--- a/util/threadpool_imp.cc
++++ b/util/threadpool_imp.cc
+@@ -10,6 +10,7 @@
+ #include "util/threadpool_imp.h"
+ #include <algorithm>
+ #include <atomic>
++#include <stdlib.h>
+
+ #ifndef OS_WIN
+ #  include <unistd.h>
+@@ -19,10 +20,6 @@
+ #  include <sys/syscall.h>
+ #endif
+
+-#ifdef OS_FREEBSD
+-#  include <stdlib.h>
+-#endif
+-
+
+ namespace rocksdb {
