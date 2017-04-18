@@ -234,7 +234,7 @@ func (ctx *Context) GRPCDial(target string, opts ...grpc.DialOption) (*grpc.Clie
 	meta, ok := ctx.conns.cache[target]
 	if !ok {
 		meta = &connMeta{
-			heartbeatErr: errNotHeartbeated,
+			heartbeatErr: ErrNotHeartbeated,
 		}
 		ctx.conns.cache[target] = meta
 	}
@@ -323,8 +323,13 @@ func (ctx *Context) NewBreaker() *circuit.Breaker {
 	return newBreaker(&ctx.breakerClock)
 }
 
-var errNotConnected = errors.New("not connected")
-var errNotHeartbeated = errors.New("not yet heartbeated")
+// ErrNotConnected is returned by ConnHealth when there is no connection to the
+// host (e.g. GRPCDial was never called for that address).
+var ErrNotConnected = errors.New("not connected")
+
+// ErrNotHeartbeated is returned by ConnHealth when we have not yet performed
+// the first heartbeat.
+var ErrNotHeartbeated = errors.New("not yet heartbeated")
 
 // ConnHealth returns whether the most recent heartbeat succeeded or not.
 // This should not be used as a definite status of a node's health and just used
@@ -335,7 +340,7 @@ func (ctx *Context) ConnHealth(remoteAddr string) error {
 	if meta, ok := ctx.conns.cache[remoteAddr]; ok {
 		return meta.heartbeatErr
 	}
-	return errNotConnected
+	return ErrNotConnected
 }
 
 func (ctx *Context) runHeartbeat(meta *connMeta, remoteAddr string) error {
