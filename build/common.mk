@@ -95,8 +95,11 @@ space := $(eval) $(eval)
 # message, if any, would get mixed in with noise from other targets if Make was
 # executed in parallel job mode. This check, by contrast, is guaranteed to print
 # its error message before any noisy output.
+#
+# Note that word boundary markers (\b, \<, [[:<:]]) are not portable, but `grep
+# -w`, though not required by POSIX, exists on all tested platforms.
 include $(REPO_ROOT)/.go-version
-ifeq ($(shell $(GO) version | grep -q -E '\b$(GOVERS)\b' && echo y),)
+ifeq ($(shell $(GO) version | grep -qwE '$(GOVERS)' && echo y),)
 $(error "$(GOVERS) required (see CONTRIBUTING.md): $(shell $(GO) version)")
 endif
 
