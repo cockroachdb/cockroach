@@ -337,20 +337,20 @@ func TestPlanDiagramJoin(t *testing.T) {
 	}
 
 	expected := `
-    {
-    	"nodeNames":["1","2","3","4"],
-    	"processors":[
-    	  {"nodeIdx":0,"inputs":[],"core":{"title":"TableReader","details":["primary@TableA","Out: @1,@2,@4"]},"outputs":[{"title":"by hash","details":["@1,@2"]}]},
-    		{"nodeIdx":1,"inputs":[],"core":{"title":"TableReader","details":["primary@TableA","Out: @1,@2,@4"]},"outputs":[{"title":"by hash","details":["@1,@2"]}]},
-    		{"nodeIdx":1,"inputs":[{"title":"unordered","details":[]},{"title":"unordered","details":[]}],"core":{"title":"HashJoiner","details":["ON left(@1,@3)=right(@3,@2)","Out: @1,@2,@3,@4,@5,@6"]},"outputs":[]},
-    		{"nodeIdx":1,"inputs":[{"title":"unordered","details":[]}],"core":{"title":"No-op","details":[]},"outputs":[]},
-    		{"nodeIdx":2,"inputs":[],"core":{"title":"TableReader","details":["primary@TableA","Out: @1,@2,@4"]},"outputs":[{"title":"by hash","details":["@1,@2"]}]},
-    		{"nodeIdx":2,"inputs":[],"core":{"title":"TableReader","details":["primary@TableB","Out: @2,@3,@5"]},"outputs":[{"title":"by hash","details":["@3,@2"]}]},
-    		{"nodeIdx":2,"inputs":[{"title":"unordered","details":[]},{"title":"unordered","details":[]}],"core":{"title":"HashJoiner","details":["ON left(@1,@3)=right(@3,@2)"]},"outputs":[]},
-    		{"nodeIdx":3,"inputs":[],"core":{"title":"TableReader","details":["primary@TableB","Out: @2,@3,@5"]},"outputs":[{"title":"by hash","details":["@3,@2"]}]},
-    		{"nodeIdx":1,"inputs":[],"core":{"title":"Response","details":[]},"outputs":[]}
-      ],
-    	"edges":[
+		{
+			"nodeNames":["1","2","3","4"],
+			"processors":[
+				{"nodeIdx":0,"inputs":[],"core":{"title":"TableReader","details":["primary@TableA","Out: @1,@2,@4"]},"outputs":[{"title":"by hash","details":["@1,@2"]}]},
+				{"nodeIdx":1,"inputs":[],"core":{"title":"TableReader","details":["primary@TableA","Out: @1,@2,@4"]},"outputs":[{"title":"by hash","details":["@1,@2"]}]},
+				{"nodeIdx":1,"inputs":[{"title":"unordered","details":[]},{"title":"unordered","details":[]}],"core":{"title":"HashJoiner","details":["left(@1,@3)=right(@3,@2)","ON @1+@2\u003c@6","Out: @1,@2,@3,@4,@5,@6"]},"outputs":[]},
+				{"nodeIdx":1,"inputs":[{"title":"unordered","details":[]}],"core":{"title":"No-op","details":[]},"outputs":[]},
+				{"nodeIdx":2,"inputs":[],"core":{"title":"TableReader","details":["primary@TableA","Out: @1,@2,@4"]},"outputs":[{"title":"by hash","details":["@1,@2"]}]},
+				{"nodeIdx":2,"inputs":[],"core":{"title":"TableReader","details":["primary@TableB","Out: @2,@3,@5"]},"outputs":[{"title":"by hash","details":["@3,@2"]}]},
+				{"nodeIdx":2,"inputs":[{"title":"unordered","details":[]},{"title":"unordered","details":[]}],"core":{"title":"HashJoiner","details":["left(@1,@3)=right(@3,@2)","ON @1+@2\u003c@6"]},"outputs":[]},
+				{"nodeIdx":3,"inputs":[],"core":{"title":"TableReader","details":["primary@TableB","Out: @2,@3,@5"]},"outputs":[{"title":"by hash","details":["@3,@2"]}]},
+				{"nodeIdx":1,"inputs":[],"core":{"title":"Response","details":[]},"outputs":[]}
+			],
+			"edges":[
 			  {"sourceProc":0,"sourceOutput":1,"destProc":2,"destInput":1},
 				{"sourceProc":0,"sourceOutput":1,"destProc":6,"destInput":1},
 				{"sourceProc":1,"sourceOutput":1,"destProc":2,"destInput":1},
@@ -365,7 +365,7 @@ func TestPlanDiagramJoin(t *testing.T) {
 				{"sourceProc":7,"sourceOutput":1,"destProc":2,"destInput":2},
 				{"sourceProc":7,"sourceOutput":1,"destProc":6,"destInput":2}
 			]
-    }
+	  }
 	`
 
 	compareDiagrams(t, buf.String(), expected)
