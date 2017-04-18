@@ -17,8 +17,11 @@ package cli
 import (
 	"net"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 )
@@ -52,6 +55,19 @@ communicate with a secure cluster).
 %s`
 
 		return errors.Errorf(format, err)
+	}
+}
+
+// MaybeShoutError calls log.Shout on errors, better surfacing problems to the user.
+func MaybeShoutError(
+	wrapped func(*cobra.Command, []string) error,
+) func(*cobra.Command, []string) error {
+	return func(cmd *cobra.Command, args []string) error {
+		err := wrapped(cmd, args)
+		if err != nil {
+			log.Shout(context.Background(), log.Severity_ERROR, err)
+		}
+		return err
 	}
 }
 
