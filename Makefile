@@ -32,6 +32,7 @@ BENCHTIMEOUT := 5m
 TESTFLAGS    :=
 STRESSFLAGS  :=
 DUPLFLAGS    := -t 100
+XGOFLAGS     :=
 COCKROACH    := ./cockroach
 ARCHIVE      := cockroach.src.tgz
 STARTFLAGS   := -s type=mem,size=1GiB --logtostderr
@@ -108,7 +109,7 @@ build buildoss install: $(BOOTSTRAP_TARGET) .buildinfo/tag .buildinfo/rev
 
 .PHONY: xgo-build
 xgo-build:
-	$(XGO) -v $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' $(BUILDTARGET)
+	$(XGO) -v $(XGOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' $(BUILDTARGET)
 
 .PHONY: start
 start: build
