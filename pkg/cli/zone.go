@@ -208,7 +208,7 @@ func parseZoneName(s string) ([]string, error) {
 
 	// TODO(knz): we are passing a name that might not be escaped correctly.
 	// See #8389.
-	tn, err := parser.ParseTableNameTraditional(s)
+	tn, err := parser.ParseTableName(s)
 	if err != nil {
 		return nil, fmt.Errorf("malformed name: %s", s)
 	}

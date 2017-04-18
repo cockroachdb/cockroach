@@ -852,7 +852,7 @@ func TestEval(t *testing.T) {
 		{`'NaN'::float::decimal`, `NaN`},
 	}
 	for _, d := range testData {
-		expr, err := ParseExprTraditional(d.expr)
+		expr, err := ParseExpr(d.expr)
 		if err != nil {
 			t.Fatalf("%s: %v", d.expr, err)
 		}
@@ -954,7 +954,7 @@ func TestTimeConversion(t *testing.T) {
 	for _, test := range tests {
 		ctx := &EvalContext{}
 		exprStr := fmt.Sprintf("experimental_strptime('%s', '%s')", test.start, test.format)
-		expr, err := ParseExprTraditional(exprStr)
+		expr, err := ParseExpr(exprStr)
 		if err != nil {
 			t.Errorf("%s: %v", exprStr, err)
 			continue
@@ -993,7 +993,7 @@ func TestTimeConversion(t *testing.T) {
 		}
 
 		exprStr = fmt.Sprintf("experimental_strftime('%s'::timestamp, '%s')", tmS, revfmt)
-		expr, err = ParseExprTraditional(exprStr)
+		expr, err = ParseExpr(exprStr)
 		if err != nil {
 			t.Errorf("%s: %v", exprStr, err)
 			continue
@@ -1083,7 +1083,7 @@ func TestEvalError(t *testing.T) {
 		{`'NaN'::float::int`, `integer out of range`},
 	}
 	for _, d := range testData {
-		expr, err := ParseExprTraditional(d.expr)
+		expr, err := ParseExpr(d.expr)
 		if err != nil {
 			t.Fatalf("%s: %v", d.expr, err)
 		}

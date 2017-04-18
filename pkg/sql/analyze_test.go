@@ -72,7 +72,7 @@ func makeSelectNode(t *testing.T) *renderNode {
 func parseAndNormalizeExpr(
 	t *testing.T, evalCtx *parser.EvalContext, sql string, sel *renderNode,
 ) parser.TypedExpr {
-	expr, err := parser.ParseExprTraditional(sql)
+	expr, err := parser.ParseExpr(sql)
 	if err != nil {
 		t.Fatalf("%s: %v", sql, err)
 	}

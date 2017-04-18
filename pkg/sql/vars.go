@@ -80,29 +80,6 @@ var varGen = map[string]sessionVar{
 			return nil
 		},
 	},
-	`syntax`: {
-		Set: func(_ context.Context, p *planner, values []parser.TypedExpr) error {
-			s, err := p.getStringVal(`syntax`, values)
-			if err != nil {
-				return err
-			}
-			switch parser.Name(s).Normalize() {
-			case parser.ReNormalizeName(parser.Modern.String()):
-				p.session.Syntax = parser.Modern
-			case parser.ReNormalizeName(parser.Traditional.String()):
-				p.session.Syntax = parser.Traditional
-			default:
-				return fmt.Errorf("set syntax: \"%s\" is not in (%q, %q)", s, parser.Modern, parser.Traditional)
-			}
-
-			return nil
-		},
-		Get: func(p *planner) string { return p.session.Syntax.String() },
-		Reset: func(p *planner) error {
-			p.session.Syntax = parser.Syntax(0)
-			return nil
-		},
-	},
 	`default_transaction_isolation`: {
 		Set: func(_ context.Context, p *planner, values []parser.TypedExpr) error {
 			// It's unfortunate that clients want us to support both SET

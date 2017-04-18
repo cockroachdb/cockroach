@@ -303,8 +303,7 @@ func (p *planner) showCreateInterleave(
 	return s, nil
 }
 
-// ShowCreateTable returns a CREATE TABLE statement for the specified table in
-// Traditional syntax.
+// ShowCreateTable returns a CREATE TABLE statement for the specified table.
 // Privileges: Any privilege on table.
 func (p *planner) ShowCreateTable(
 	ctx context.Context, n *parser.ShowCreateTable,
@@ -459,7 +458,7 @@ func makeIndexColNames(d sqlbase.IndexDescriptor) string {
 
 var isUnique = map[bool]string{true: "UNIQUE "}
 
-// quoteName quotes based on Traditional syntax and adds commas between names.
+// quoteName quotes and adds commas between names.
 func quoteNames(names ...string) string {
 	nameList := make(parser.NameList, len(names))
 	for i, n := range names {
@@ -468,8 +467,7 @@ func quoteNames(names ...string) string {
 	return parser.AsString(nameList)
 }
 
-// ShowCreateView returns a CREATE VIEW statement for the specified view in
-// Traditional syntax.
+// ShowCreateView returns a CREATE VIEW statement for the specified view.
 // Privileges: Any privilege on view.
 func (p *planner) ShowCreateView(ctx context.Context, n *parser.ShowCreateView) (planNode, error) {
 	tn, err := n.View.NormalizeWithDatabaseName(p.session.Database)
@@ -501,7 +499,7 @@ func (p *planner) ShowCreateView(ctx context.Context, n *parser.ShowCreateView) 
 			// Determine whether custom column names were specified when the view
 			// was created, and include them if so.
 			customColNames := false
-			stmt, err := parser.ParseOneTraditional(desc.ViewQuery)
+			stmt, err := parser.ParseOne(desc.ViewQuery)
 			if err != nil {
 				return nil, errors.Wrapf(err, "failed to parse underlying query from view %q", tn)
 			}
@@ -553,7 +551,7 @@ func (p *planner) ShowCreateView(ctx context.Context, n *parser.ShowCreateView) 
 func (p *planner) ShowDatabases(ctx context.Context, n *parser.ShowDatabases) (planNode, error) {
 	const getDatabases = `SELECT SCHEMA_NAME AS "Database" FROM information_schema.schemata
 							ORDER BY "Database"`
-	stmt, err := parser.ParseOneTraditional(getDatabases)
+	stmt, err := parser.ParseOne(getDatabases)
 	if err != nil {
 		return nil, err
 	}
@@ -869,7 +867,7 @@ func (p *planner) ShowTables(ctx context.Context, n *parser.ShowTables) (planNod
 // ShowUsers returns all the users.
 // Privileges: SELECT on system.users.
 func (p *planner) ShowUsers(ctx context.Context, n *parser.ShowUsers) (planNode, error) {
-	stmt, err := parser.ParseOneTraditional(`SELECT username FROM system.users ORDER BY 1`)
+	stmt, err := parser.ParseOne(`SELECT username FROM system.users ORDER BY 1`)
 	if err != nil {
 		return nil, err
 	}

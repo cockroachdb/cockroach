@@ -51,8 +51,6 @@ func Load(
 		loadChunkBytes = config.DefaultZoneConfig().RangeMaxBytes / 2
 	}
 
-	// TODO(dan): Handle traditional vs modern.
-	syntax := parser.Traditional
 	parse := parser.Parser{}
 	evalCtx := parser.EvalContext{}
 
@@ -112,13 +110,13 @@ func Load(
 			return BackupDescriptor{}, errors.Wrap(err, "read line")
 		}
 		currentCmd.WriteString(line)
-		if !isEndOfStatement(syntax, currentCmd.String()) {
+		if !isEndOfStatement(currentCmd.String()) {
 			currentCmd.WriteByte('\n')
 			continue
 		}
 		cmd := currentCmd.String()
 		currentCmd.Reset()
-		stmt, err := parser.ParseOne(cmd, syntax)
+		stmt, err := parser.ParseOne(cmd)
 		if err != nil {
 			return BackupDescriptor{}, errors.Wrapf(err, "parsing: %q", cmd)
 		}
@@ -304,8 +302,8 @@ func (i inserter) Put(key, value interface{}) {
 }
 
 // isEndOfStatement returns true if stmt ends with a semicolon.
-func isEndOfStatement(syntax parser.Syntax, stmt string) bool {
-	sc := parser.MakeScanner(stmt, syntax)
+func isEndOfStatement(stmt string) bool {
+	sc := parser.MakeScanner(stmt)
 	var last int
 	sc.Tokens(func(t int) {
 		last = t
