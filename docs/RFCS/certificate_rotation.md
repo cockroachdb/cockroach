@@ -1,5 +1,5 @@
 - Feature Name: certificate rotation
-- Status: in-progress
+- Status: completed
 - Start Date: 2017-03-18
 - Authors: @mberhault
 - RFC PR: [14254](https://github.com/cockroachdb/cockroach/pull/14254)
