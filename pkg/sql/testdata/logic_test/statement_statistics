@@ -1,0 +1,75 @@
+# LogicTest: default
+
+# Check that node_statement_statistics report per application
+
+statement ok
+SET application_name = hello; SELECT 1
+
+statement ok
+SET application_name = world; SELECT 2
+
+query B
+SELECT count > 0 FROM crdb_internal.node_statement_statistics WHERE application_name IN ('hello', 'world')
+----
+true
+true
+
+# Check that node_statement_statistics report per statement
+
+statement ok
+SET application_name = hello; SELECT 1; SELECT 1,2; SELECT 1
+
+# reset for other tests.
+statement ok
+SET application_name = ''
+
+query TB
+SELECT key, count >= 1 FROM crdb_internal.node_statement_statistics WHERE application_name = 'hello' AND key LIKE 'SELECT%'
+----
+SELECT _    true
+SELECT _, _ true
+
+statement ok
+CREATE TABLE test(x INT, y INT, z INT)
+
+statement ok
+SET application_name = 'valuetest'
+
+# Check that multi-value clauses are shortened.
+
+statement ok
+SELECT x FROM (VALUES (1,2,3), (4,5,6)) AS t(x)
+
+statement ok
+INSERT INTO test VALUES (1, 2, 3), (4, 5, 6)
+
+# Check that the RHS of IN comparisons are shortened.
+
+statement ok
+SELECT x FROM test WHERE y IN (4, 5, 6, 7, 8)
+
+statement ok
+SELECT x FROM test WHERE y NOT IN (4, 5, 6, 7, 8)
+
+# Check that a non-constant prevents shortening.
+
+statement ok
+SELECT x FROM test WHERE y IN (4, 5, 6+x, 7, 8)
+
+# Check that tuples in other positions are not shortened.
+
+statement ok
+SELECT ROW(1,2,3,4,5) FROM test WHERE FALSE
+
+statement ok
+SET application_name = ''
+
+query T
+SELECT key FROM crdb_internal.node_statement_statistics WHERE application_name = 'valuetest' ORDER BY key
+----
+INSERT INTO test VALUES (_, _, _)
+SELECT ROW(_, _, _, _, _) FROM test WHERE _
+SELECT x FROM (VALUES (_, _, _)) AS t (x)
+SELECT x FROM test WHERE y IN (_, _)
+SELECT x FROM test WHERE y IN (_, _, _ + x, _, _)
+SELECT x FROM test WHERE y NOT IN (_, _)

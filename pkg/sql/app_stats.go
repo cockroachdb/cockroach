@@ -46,11 +46,8 @@ type stmtStats struct {
 
 // StmtStatsEnable determines whether to collect per-statement
 // statistics.
-// Note: in the future we will want to have this collection enabled at
-// all times. We hide it behind an environment variable until further
-// testing confirms it works and is stable.
 var StmtStatsEnable = envutil.EnvOrDefaultBool(
-	"COCKROACH_SQL_STMT_STATS_ENABLE", false,
+	"COCKROACH_SQL_STMT_STATS_ENABLE", true,
 )
 
 // SQLStatsCollectionLatencyThreshold specifies the minimum amount of time
@@ -91,7 +88,7 @@ func (a *appStats) recordStatement(
 	if distSQLUsed {
 		buf.WriteByte('+')
 	}
-	parser.FormatNode(&buf, parser.FmtSimple, stmt)
+	parser.FormatNode(&buf, parser.FmtHideConstants, stmt)
 	stmtKey := buf.String()
 
 	// Get the statistics object.
