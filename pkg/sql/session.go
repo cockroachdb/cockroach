@@ -26,6 +26,7 @@ import (
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
+	"golang.org/x/net/trace"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"
@@ -167,9 +168,8 @@ type Session struct {
 	// context is the Session's base context, to be used for all
 	// SQL-related logging. See Ctx().
 	context context.Context
-	// finishEventLog indicates whether an event log was started for
-	// this session.
-	finishEventLog bool
+	// eventLog for SQL statements and results.
+	eventLog trace.EventLog
 	// cancel is a method to call when the session terminates, to
 	// release resources associated with the context above.
 	// TODO(andrei): We need to either get rid of this cancel field, or
@@ -278,14 +278,12 @@ func NewSession(
 	s.PreparedStatements = makePreparedStatements(s)
 	s.PreparedPortals = makePreparedPortals(s)
 
-	if enableSQLEventLog && opentracing.SpanFromContext(ctx) == nil {
+	if enableSQLEventLog {
 		remoteStr := "<admin>"
 		if remote != nil {
 			remoteStr = remote.String()
 		}
-		// Set up an EventLog for session events.
-		ctx = log.WithEventLog(ctx, fmt.Sprintf("sql [%s]", args.User), remoteStr)
-		s.finishEventLog = true
+		s.eventLog = trace.NewEventLog(fmt.Sprintf("sql [%s]", args.User), remoteStr)
 	}
 	s.context, s.cancel = context.WithCancel(ctx)
 
@@ -338,8 +336,9 @@ func (s *Session) Finish(e *Executor) {
 	s.sessionMon.Stop(s.context)
 	s.mon.Stop(s.context)
 
-	if s.finishEventLog {
-		log.FinishEventLog(s.context)
+	if s.eventLog != nil {
+		s.eventLog.Finish()
+		s.eventLog = nil
 	}
 
 	// This will stop the heartbeating of the of the txn record.

@@ -66,6 +66,8 @@ func WithEventLog(ctx context.Context, family, title string) context.Context {
 	return withEventLogInternal(ctx, trace.NewEventLog(family, title))
 }
 
+var _ = WithEventLog
+
 // WithNoEventLog creates a context which no longer has an embedded event log.
 func WithNoEventLog(ctx context.Context) context.Context {
 	return withEventLogInternal(ctx, nil)
