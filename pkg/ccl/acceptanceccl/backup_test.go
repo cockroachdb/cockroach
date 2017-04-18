@@ -181,3 +181,36 @@ func BenchmarkRestoreBig(b *testing.B) {
 		b.StopTimer()
 	})
 }
+
+func BenchmarkRestore2TB(b *testing.B) {
+	if b.N != 1 {
+		b.Fatal("b.N must be 1")
+	}
+
+	const backupBaseURI = "gs://cockroach-test/2t-backup"
+
+	bt := benchmarkTest{
+		b:                   b,
+		nodes:               10,
+		cockroachDiskSizeGB: 250,
+		prefix:              "restore2tb",
+	}
+
+	ctx := context.Background()
+	bt.Start(ctx)
+	defer bt.Close(ctx)
+
+	db, err := gosql.Open("postgres", bt.f.PGUrl(ctx, 0))
+	if err != nil {
+		b.Fatal(err)
+	}
+	defer db.Close()
+
+	if _, err := db.Exec("CREATE DATABASE datablocks"); err != nil {
+		b.Fatal(err)
+	}
+
+	if _, err := db.Exec(`RESTORE datablocks.* FROM $1`, backupBaseURI); err != nil {
+		b.Fatal(err)
+	}
+}
