@@ -19,7 +19,9 @@ package sql
 import (
 	"reflect"
 	"sort"
+	"strings"
 	"time"
+	"unsafe"
 
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
@@ -28,6 +30,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
 var crdbInternal = virtualSchema{
@@ -37,9 +41,42 @@ var crdbInternal = virtualSchema{
 		crdbInternalTablesTable,
 		crdbInternalLeasesTable,
 		crdbInternalSchemaChangesTable,
+		crdbInternalSessionsTable,
+		crdbInternalTxnsTable,
 		crdbInternalStmtStatsTable,
 		crdbInternalJobsTable,
 	},
+}
+
+type sessionRegistry struct {
+	syncutil.Mutex
+	store map[*Session]struct{}
+}
+
+func makeSessionRegistry() sessionRegistry {
+	return sessionRegistry{store: make(map[*Session]struct{})}
+}
+
+func (r *sessionRegistry) register(s *Session) {
+	r.Lock()
+	r.store[s] = struct{}{}
+	r.Unlock()
+}
+
+func (r *sessionRegistry) deregister(s *Session) {
+	r.Lock()
+	delete(r.store, s)
+	r.Unlock()
+}
+
+type queryInfo struct {
+	client                string
+	user                  string
+	database              string
+	defaultIsolationLevel enginepb.IsolationType
+	location              *time.Location
+	searchPath            parser.SearchPath
+	stmts                 map[planNode]string
 }
 
 var crdbInternalBuildInfoTable = virtualSchemaTable{
@@ -206,6 +243,157 @@ CREATE TABLE crdb_internal.schema_changes (
 				); err != nil {
 					return err
 				}
+			}
+		}
+		return nil
+	},
+}
+
+var crdbInternalSessionsTable = virtualSchemaTable{
+	schema: `
+ CREATE TABLE crdb_internal.sessions (
+   NODE_ID                 INT NOT NULL,
+   SESSION_ID              INT NOT NULL,
+   CLIENT                  STRING NOT NULL,
+   "USER"                  STRING NOT NULL,
+   STATEMENT               STRING NOT NULL,
+   TXN_STATE               STRING NOT NULL,
+   TXN_ID                  INT,
+   AUTO_RETRY              BOOL NOT NULL,
+   SQL_TIMESTAMP           TIMESTAMP NOT NULL,
+   DEFAULT_DATABASE        STRING NOT NULL,
+   DEFAULT_ISOLATION_LEVEL STRING NOT NULL,
+   TIME_ZONE               STRING NOT NULL,
+   SEARCH_PATH             STRING NOT NULL
+ );
+ `,
+	populate: func(_ context.Context, p *planner, addRow func(...parser.Datum) error) error {
+		if p.session.sessionRegistry == nil {
+			return nil
+		}
+		registry := p.session.sessionRegistry
+		registry.Lock()
+		defer registry.Unlock()
+		leaseMgr := p.LeaseMgr()
+		nodeID := parser.NewDInt(parser.DInt(int64(leaseMgr.nodeID.Get())))
+		for s := range registry.store {
+			s.Lock()
+			info := queryInfo{
+				client:                s.Client,
+				user:                  s.User,
+				database:              s.Database,
+				defaultIsolationLevel: s.DefaultIsolationLevel,
+				location:              s.Location,
+				searchPath:            s.SearchPath,
+				stmts:                 s.QueryStatements,
+			}
+			s.Unlock()
+			if info.user != p.session.User && p.session.User != security.RootUser {
+				continue
+			}
+
+			txnDatum := parser.DNull
+			txn := s.TxnState.txn
+			if txn != nil {
+				txnDatum = parser.NewDInt(parser.DInt(int64(uintptr(unsafe.Pointer(txn)))))
+			}
+			for _, stmt := range info.stmts {
+				if err := addRow(
+					nodeID,
+					parser.NewDInt(parser.DInt(int64(uintptr(unsafe.Pointer(s))))),
+					parser.NewDString(info.client),
+					parser.NewDString(info.user),
+					parser.NewDString(stmt),
+					parser.NewDString(s.TxnState.State.String()),
+					txnDatum,
+					parser.MakeDBool(parser.DBool(s.TxnState.autoRetry)),
+					parser.MakeDTimestamp(s.TxnState.sqlTimestamp, time.Microsecond),
+					parser.NewDString(info.database),
+					parser.NewDString(info.defaultIsolationLevel.String()),
+					parser.NewDString(info.location.String()),
+					parser.NewDString(strings.Join(info.searchPath, ",")),
+				); err != nil {
+					return err
+				}
+			}
+
+		}
+		return nil
+	},
+}
+
+var crdbInternalTxnsTable = virtualSchemaTable{
+	schema: `
+ CREATE TABLE crdb_internal.txns (
+   NODE_ID           INT NOT NULL,
+   TXN_ID            INT NOT NULL,
+   KV_TXN_UUID       STRING,
+   KEY               BYTES,
+   EPOCH             INT NOT NULL,
+   TIMESTAMP         TIMESTAMP NOT NULL,
+   TIMESTAMP_L       DECIMAL NOT NULL,
+   PRIORITY          INT NOT NULL,
+   SEQUENCE          INT NOT NULL,
+   ISOLATION         STRING NOT NULL,
+   NAME              STRING NOT NULL,
+   STATUS            STRING NOT NULL,
+   ORIG_TIMESTAMP    TIMESTAMP NOT NULL,
+   ORIG_TIMESTAMP_L  DECIMAL NOT NULL,
+   WRITING           BOOL NOT NULL,
+  NUM_INTENTS       INT NOT NULL
+ );
+ `,
+	populate: func(_ context.Context, p *planner, addRow func(...parser.Datum) error) error {
+		// TODO(knz We probably would like this table to report on all
+		// Txn objects currently active, but we do not yet have a proper
+		// registry for that. So for now the virtual table reports only
+		// the Txns known to Session objects).
+		if p.session.sessionRegistry == nil {
+			return nil
+		}
+		registry := p.session.sessionRegistry
+		registry.Lock()
+		defer registry.Unlock()
+		leaseMgr := p.LeaseMgr()
+		nodeID := parser.NewDInt(parser.DInt(int64(leaseMgr.nodeID.Get())))
+		for s := range registry.store {
+			if s.User != p.session.User && p.session.User != security.RootUser {
+				continue
+			}
+
+			txn := s.TxnState.txn
+			if txn == nil {
+				continue
+			}
+			id := txn.Proto().ID
+			idDatum := parser.DNull
+			if id != nil {
+				idDatum = parser.NewDString(id.String())
+			}
+			key := txn.Proto().Key
+			keyDatum := parser.DNull
+			if key != nil {
+				keyDatum = parser.NewDBytes(parser.DBytes(key))
+			}
+			if err := addRow(
+				nodeID,
+				parser.NewDInt(parser.DInt(int64(uintptr(unsafe.Pointer(txn))))),
+				idDatum,
+				keyDatum,
+				parser.NewDInt(parser.DInt(int64(txn.Proto().Epoch))),
+				parser.MakeDTimestamp(time.Unix(0, txn.Proto().Timestamp.WallTime), time.Microsecond),
+				parser.TimestampToDecimal(txn.Proto().Timestamp),
+				parser.NewDInt(parser.DInt(int64(txn.Proto().Priority))),
+				parser.NewDInt(parser.DInt(int64(txn.Proto().Sequence))),
+				parser.NewDString(txn.Proto().Isolation.String()),
+				parser.NewDString(txn.Proto().Name),
+				parser.NewDString(txn.Proto().Status.String()),
+				parser.MakeDTimestamp(time.Unix(0, txn.Proto().OrigTimestamp.WallTime), time.Microsecond),
+				parser.TimestampToDecimal(txn.Proto().OrigTimestamp),
+				parser.MakeDBool(parser.DBool(txn.Proto().Writing)),
+				parser.NewDInt(parser.DInt(int64(len(txn.Proto().Intents)))),
+			); err != nil {
+				return err
 			}
 		}
 		return nil

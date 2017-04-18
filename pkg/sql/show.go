@@ -925,6 +925,18 @@ func (p *planner) ShowUsers(ctx context.Context, n *parser.ShowUsers) (planNode,
 	return p.newPlan(ctx, stmt, nil)
 }
 
+// ShowProcessList returns all the SQL statement on local node.
+// Privileges: None
+func (p *planner) ShowProcessList(
+	ctx context.Context, n *parser.ShowProcessList,
+) (planNode, error) {
+	stmt, err := parser.ParseOne(`SELECT NODE_ID as Node_id, TXN_ID as Id, "USER" as User, CLIENT as Host, DEFAULT_DATABASE as db, STATEMENT as Command, SQL_TIMESTAMP as Start_time, TXN_STATE as State FROM crdb_internal.sessions`)
+	if err != nil {
+		return nil, err
+	}
+	return p.newPlan(ctx, stmt, nil)
+}
+
 // Help returns usage information for the builtin functions
 // Privileges: None
 func (p *planner) Help(ctx context.Context, n *parser.Help) (planNode, error) {
