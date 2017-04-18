@@ -2104,7 +2104,7 @@ func pickFromTuple(ctx *EvalContext, greatest bool, args Datums) (Datum, error) 
 func intPow(x, y DInt) (*DInt, error) {
 	xd := apd.New(int64(x), 0)
 	yd := apd.New(int64(y), 0)
-	_, err := IntegerCtx.Pow(xd, xd, yd)
+	_, err := DecimalCtx.Pow(xd, xd, yd)
 	if err != nil {
 		return nil, err
 	}

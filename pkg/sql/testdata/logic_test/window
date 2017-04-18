@@ -61,9 +61,9 @@ SELECT avg(k) OVER () FROM kv ORDER BY 1
 query R
 SELECT avg(k) OVER (PARTITION BY v) FROM kv ORDER BY 1
 ----
-4.666666666666667
-4.666666666666667
-4.666666666666667
+4.6666666666666666667
+4.6666666666666666667
+4.6666666666666666667
 5
 5.5
 5.5
@@ -123,8 +123,8 @@ SELECT avg(k) OVER (ORDER BY w DESC) FROM kv ORDER BY 1
 query R
 SELECT avg(k) OVER (PARTITION BY v ORDER BY w) FROM kv ORDER BY 1
 ----
-4.666666666666667
-4.666666666666667
+4.6666666666666666667
+4.6666666666666666667
 5
 5.5
 7
@@ -133,8 +133,8 @@ SELECT avg(k) OVER (PARTITION BY v ORDER BY w) FROM kv ORDER BY 1
 query R
 SELECT avg(k) OVER w FROM kv WINDOW w AS (PARTITION BY v ORDER BY w) ORDER BY 1
 ----
-4.666666666666667
-4.666666666666667
+4.6666666666666666667
+4.6666666666666666667
 5
 5.5
 7
@@ -143,8 +143,8 @@ SELECT avg(k) OVER w FROM kv WINDOW w AS (PARTITION BY v ORDER BY w) ORDER BY 1
 query R
 SELECT avg(k) OVER (w) FROM kv WINDOW w AS (PARTITION BY v ORDER BY w) ORDER BY 1
 ----
-4.666666666666667
-4.666666666666667
+4.6666666666666666667
+4.6666666666666666667
 5
 5.5
 7
@@ -153,8 +153,8 @@ SELECT avg(k) OVER (w) FROM kv WINDOW w AS (PARTITION BY v ORDER BY w) ORDER BY 
 query R
 SELECT avg(k) OVER (w ORDER BY w) FROM kv WINDOW w AS (PARTITION BY v) ORDER BY 1
 ----
-4.666666666666667
-4.666666666666667
+4.6666666666666666667
+4.6666666666666666667
 5
 5.5
 7
@@ -164,10 +164,10 @@ query IIIRRTBR colnames
 SELECT *, avg(k) OVER (w ORDER BY w) FROM kv WINDOW w AS (PARTITION BY v) ORDER BY 1
 ----
 k  v     w  f    d     s     b      avg(k) OVER (w ORDER BY w)
-1  2     3  1    1     a     true   4.666666666666667
+1  2     3  1    1     a     true   4.6666666666666666667
 3  4     5  2    8     a     true   5.5
 5  NULL  5  9.9  -321  NULL  false  5
-6  2     3  4.4  4.4   b     true   4.666666666666667
+6  2     3  4.4  4.4   b     true   4.6666666666666666667
 7  2     2  6    7.9   b     true   7
 8  4     2  3    3     A     false  8
 
@@ -175,8 +175,8 @@ query IIIRRTBR colnames
 SELECT *, avg(k) OVER w FROM kv WINDOW w AS (PARTITION BY v ORDER BY w) ORDER BY avg(k) OVER w, k
 ----
 k  v     w  f    d     s     b      avg(k) OVER w
-1  2     3  1    1     a     true   4.666666666666667
-6  2     3  4.4  4.4   b     true   4.666666666666667
+1  2     3  1    1     a     true   4.6666666666666666667
+6  2     3  4.4  4.4   b     true   4.6666666666666666667
 5  NULL  5  9.9  -321  NULL  false  5
 3  4     5  2    8     a     true   5.5
 7  2     2  6    7.9   b     true   7
@@ -265,8 +265,8 @@ SELECT avg(d) OVER (PARTITION BY v ORDER BY w) FROM kv ORDER BY 1
 ----
 -321
    3
-   4.433333333333333
-   4.433333333333333
+   4.4333333333333333333
+   4.4333333333333333333
    5.5
    7.9
 
@@ -285,8 +285,8 @@ SELECT (avg(d) OVER (PARTITION BY v ORDER BY w) + avg(d) OVER (PARTITION BY v OR
 ----
 -642
    6
-   8.866666666666666
-   8.866666666666666
+   8.8666666666666666666
+   8.8666666666666666666
   11.0
   15.8
 
@@ -295,8 +295,8 @@ SELECT (avg(d) OVER (PARTITION BY v ORDER BY w) + avg(d) OVER (PARTITION BY w OR
 ----
 -642
 -151.0
-   7.133333333333333
-   7.133333333333333
+   7.1333333333333333333
+   7.1333333333333333333
    8.45
   15.8
 
@@ -416,20 +416,20 @@ SELECT k, sum(d) OVER (PARTITION BY v ORDER BY w) FROM kv ORDER BY 1
 query IR
 SELECT k, variance(d) OVER (PARTITION BY v ORDER BY w) FROM kv ORDER BY 1
 ----
-1  11.90333333333333
+1  11.903333333333333333
 3  12.5
 5  NULL
-6  11.90333333333333
+6  11.903333333333333333
 7  NULL
 8  NULL
 
 query IR
 SELECT k, stddev(d) OVER (PARTITION BY v ORDER BY w) FROM kv ORDER BY 1
 ----
-1  3.450120770833005
-3  3.535533905932738
+1  3.4501207708330056852
+3  3.5355339059327376220
 5  NULL
-6  3.450120770833005
+6  3.4501207708330056852
 7  NULL
 8  NULL
 
@@ -437,41 +437,41 @@ query IR
 SELECT k, stddev(d) OVER w FROM kv WINDOW w as (PARTITION BY v) ORDER BY variance(d) OVER w, k
 ----
 5  NULL
-1  3.450120770833005
-6  3.450120770833005
-7  3.450120770833005
-3  3.535533905932738
-8  3.535533905932738
+1  3.4501207708330056852
+6  3.4501207708330056852
+7  3.4501207708330056852
+3  3.5355339059327376220
+8  3.5355339059327376220
 
 query IRIR
 SELECT * FROM (SELECT k, d, v, stddev(d) OVER (PARTITION BY v) FROM kv) sub ORDER BY variance(d) OVER (PARTITION BY v), k
 ----
 5  -321  NULL  NULL
-1  1     2     3.450120770833005
-6  4.4   2     3.450120770833005
-7  7.9   2     3.450120770833005
-3  8     4     3.535533905932738
-8  3     4     3.535533905932738
+1  1     2     3.4501207708330056852
+6  4.4   2     3.4501207708330056852
+7  7.9   2     3.4501207708330056852
+3  8     4     3.5355339059327376220
+8  3     4     3.5355339059327376220
 
 query IR
 SELECT k, max(stddev) OVER (ORDER BY d) FROM (SELECT k, d, stddev(d) OVER (PARTITION BY v) as stddev FROM kv) sub ORDER BY 2, k
 ----
 5  NULL
-1  3.450120770833005
-3  3.535533905932738
-6  3.535533905932738
-7  3.535533905932738
-8  3.535533905932738
+1  3.4501207708330056852
+3  3.5355339059327376220
+6  3.5355339059327376220
+7  3.5355339059327376220
+8  3.5355339059327376220
 
 query IR
 SELECT k, max(stddev) OVER (ORDER BY d DESC) FROM (SELECT k, d, stddev(d) OVER (PARTITION BY v) as stddev FROM kv) sub ORDER BY 2, k
 ----
-1  3.535533905932738
-3  3.535533905932738
-5  3.535533905932738
-6  3.535533905932738
-7  3.535533905932738
-8  3.535533905932738
+1  3.5355339059327376220
+3  3.5355339059327376220
+5  3.5355339059327376220
+6  3.5355339059327376220
+7  3.5355339059327376220
+8  3.5355339059327376220
 
 query ITTT
 EXPLAIN SELECT k, stddev(d) OVER w FROM kv WINDOW w as (PARTITION BY v) ORDER BY variance(d) OVER w, k
@@ -487,35 +487,35 @@ EXPLAIN SELECT k, stddev(d) OVER w FROM kv WINDOW w as (PARTITION BY v) ORDER BY
 query ITTT
 EXPLAIN (DEBUG) SELECT k, stddev(d) OVER w FROM kv WINDOW w as (PARTITION BY v) ORDER BY variance(d) OVER w, k
 ----
-0  /kv/primary/1/v  /2                                         PARTIAL
-0  /kv/primary/1/d  1                                          PARTIAL
-0  /kv/primary/1/s  'a'                                        BUFFERED
-1  /kv/primary/3/v  /4                                         PARTIAL
-1  /kv/primary/3/d  8                                          PARTIAL
-1  /kv/primary/3/s  'a'                                        BUFFERED
-2  /kv/primary/5    NULL                                       PARTIAL
-2  /kv/primary/5/d  -321                                       BUFFERED
-3  /kv/primary/6/v  /2                                         PARTIAL
-3  /kv/primary/6/d  4.4                                        PARTIAL
-3  /kv/primary/6/s  'b'                                        BUFFERED
-4  /kv/primary/7/v  /2                                         PARTIAL
-4  /kv/primary/7/d  7.9                                        PARTIAL
-4  /kv/primary/7/s  'b'                                        BUFFERED
-5  /kv/primary/8/v  /4                                         PARTIAL
-5  /kv/primary/8/d  3                                          PARTIAL
-5  /kv/primary/8/s  'A'                                        BUFFERED
-0  0                (1, 3.450120770833005, 11.90333333333333)  BUFFERED
-1  1                (3, 3.535533905932738, 12.5)  BUFFERED
-2  2                (5, NULL, NULL)                            BUFFERED
-3  3                (6, 3.450120770833005, 11.90333333333333)  BUFFERED
-4  4                (7, 3.450120770833005, 11.90333333333333)  BUFFERED
-5  5                (8, 3.535533905932738, 12.5)  BUFFERED
-0  0                (5, NULL, NULL)                            ROW
-1  1                (1, 3.450120770833005, 11.90333333333333)  ROW
-2  2                (6, 3.450120770833005, 11.90333333333333)  ROW
-3  3                (7, 3.450120770833005, 11.90333333333333)  ROW
-4  4                (3, 3.535533905932738, 12.5)  ROW
-5  5                (8, 3.535533905932738, 12.5)  ROW
+0  /kv/primary/1/v  /2                                                 PARTIAL
+0  /kv/primary/1/d  1                                                  PARTIAL
+0  /kv/primary/1/s  'a'                                                BUFFERED
+1  /kv/primary/3/v  /4                                                 PARTIAL
+1  /kv/primary/3/d  8                                                  PARTIAL
+1  /kv/primary/3/s  'a'                                                BUFFERED
+2  /kv/primary/5    NULL                                               PARTIAL
+2  /kv/primary/5/d  -321                                               BUFFERED
+3  /kv/primary/6/v  /2                                                 PARTIAL
+3  /kv/primary/6/d  4.4                                                PARTIAL
+3  /kv/primary/6/s  'b'                                                BUFFERED
+4  /kv/primary/7/v  /2                                                 PARTIAL
+4  /kv/primary/7/d  7.9                                                PARTIAL
+4  /kv/primary/7/s  'b'                                                BUFFERED
+5  /kv/primary/8/v  /4                                                 PARTIAL
+5  /kv/primary/8/d  3                                                  PARTIAL
+5  /kv/primary/8/s  'A'                                                BUFFERED
+0  0                (1, 3.4501207708330056852, 11.903333333333333333)  BUFFERED
+1  1                (3, 3.5355339059327376220, 12.5)                   BUFFERED
+2  2                (5, NULL, NULL)                                    BUFFERED
+3  3                (6, 3.4501207708330056852, 11.903333333333333333)  BUFFERED
+4  4                (7, 3.4501207708330056852, 11.903333333333333333)  BUFFERED
+5  5                (8, 3.5355339059327376220, 12.5)                   BUFFERED
+0  0                (5, NULL, NULL)                                    ROW
+1  1                (1, 3.4501207708330056852, 11.903333333333333333)  ROW
+2  2                (6, 3.4501207708330056852, 11.903333333333333333)  ROW
+3  3                (7, 3.4501207708330056852, 11.903333333333333333)  ROW
+4  4                (3, 3.5355339059327376220, 12.5)                   ROW
+5  5                (8, 3.5355339059327376220, 12.5)                   ROW
 
 query ITTTTT
 EXPLAIN (TYPES) SELECT k, stddev(d) OVER w FROM kv WINDOW w as (PARTITION BY v) ORDER BY variance(d) OVER w, k
@@ -720,7 +720,7 @@ SELECT k, v, w, v - w + 2 + row_number() OVER (PARTITION BY v ORDER BY w) FROM k
 query RIII
 SELECT AVG(k), MAX(v), MIN(w), 2 + row_number() OVER () FROM kv ORDER BY 1
 ----
-6.666666666666667  4  2  3
+6.6666666666666666667  4  2  3
 
 query II
 SELECT k, rank() OVER () FROM kv ORDER BY 1
@@ -764,28 +764,28 @@ SELECT k, v, w, rank() OVER (PARTITION BY v ORDER BY w) FROM kv ORDER BY 1
 query IRI
 SELECT k, (rank() OVER w + avg(w) OVER w), k FROM kv WINDOW w AS (PARTITION BY v ORDER BY w) ORDER BY 1
 ----
-1   4.666666666666667  1
-3   5.5                3
-5   6                  5
-6   4.666666666666667  6
-7   3                  7
-8   3                  8
-9   8.25               9
-10  8.333333333333333  10
-11  9                  11
+1   4.6666666666666666667  1
+3   5.5                    3
+5   6                      5
+6   4.6666666666666666667  6
+7   3                      7
+8   3                      8
+9   8.25                   9
+10  8.3333333333333333333  10
+11  9                      11
 
 query IRI
 SELECT k, (avg(w) OVER w + rank() OVER w), k FROM kv WINDOW w AS (PARTITION BY v ORDER BY w) ORDER BY 1
 ----
-1   4.666666666666667  1
-3   5.5                3
-5   6                  5
-6   4.666666666666667  6
-7   3                  7
-8   3                  8
-9   8.25               9
-10  8.333333333333333  10
-11  9                  11
+1   4.6666666666666666667  1
+3   5.5                    3
+5   6                      5
+6   4.6666666666666666667  6
+7   3                      7
+8   3                      8
+9   8.25                   9
+10  8.3333333333333333333  10
+11  9                      11  
 
 query II
 SELECT k, dense_rank() OVER () FROM kv ORDER BY 1
