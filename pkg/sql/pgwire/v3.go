@@ -22,7 +22,10 @@ import (
 	"crypto/tls"
 	"fmt"
 	"net"
+	"runtime"
+	"runtime/debug"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/lib/pq/oid"
@@ -182,6 +185,11 @@ type v3Conn struct {
 	metrics *ServerMetrics
 
 	sqlMemoryPool *mon.MemoryMonitor
+
+	// abortErr, if non-nil at the start of an iteration of the
+	// read-execute-response loop, indicates the connection is dead and
+	// should be closed ASAP.
+	abortErr error
 }
 
 func makeV3Conn(
@@ -402,6 +410,16 @@ func (c *v3Conn) serve(ctx context.Context, draining func() bool, reserved mon.B
 			}
 		}
 		typ, n, err := c.readBuf.readTypedMsg(c.rd)
+
+		// Is there a fatal error pending on this connection? If so, stop
+		// the connection here. We cannot do this as early as the point
+		// where the error occurs, because clients get confused if the TCP
+		// connection is closed before the first ready message after the
+		// error has occured.
+		if c.abortErr != nil {
+			return c.abortErr
+		}
+
 		c.metrics.BytesInCount.Inc(int64(n))
 		if err != nil {
 			return err
@@ -826,11 +844,23 @@ func (c *v3Conn) executeStatements(
 	limit int,
 ) error {
 	tracing.AnnotateTrace()
-	// Note: sql.Executor gets its Context from c.session.context, which
-	// has been bound by v3Conn.setupSession().
-	results := c.executor.ExecuteStatements(c.session, stmts, pinfo)
+
+	var panicErr string
+	var results sql.StatementResults
+
+	func() {
+		defer c.captureRecoverablePanic(1, &panicErr)
+
+		// Note: sql.Executor gets its Context from c.session.context, which
+		// has been bound by v3Conn.setupSession().
+		results = c.executor.ExecuteStatements(c.session, stmts, pinfo)
+	}()
 	// Delay evaluation of c.session.Ctx().
 	defer func() { results.Close(c.session.Ctx()) }()
+
+	if panicErr != "" {
+		return c.reportPanic(panicErr)
+	}
 
 	tracing.AnnotateTrace()
 	if results.Empty {
@@ -1132,4 +1162,76 @@ func newUnrecognizedMsgTypeErr(typ clientMessageType) error {
 
 func newAdminShutdownErr(err error) error {
 	return pgerror.NewErrorf(pgerror.CodeAdminShutdownError, err.Error())
+}
+
+func (c *v3Conn) captureRecoverablePanic(skip int, err *string) {
+	if r := recover(); r != nil {
+		if !isRecoverableSQLPanic(skip + 1) {
+			panic(r)
+		}
+
+		log.ReportPanic(c.session.Ctx(), r)
+		*err = fmt.Sprintf("%v\n\n%s\n", r, debug.Stack())
+	}
+}
+
+func (c *v3Conn) reportPanic(err string) error {
+	c.abortErr = errors.Errorf("closing connection due to SQL panic (recovered): %v", err)
+	return c.sendInternalError(
+		"internal server error during SQL execution; check the server logs for details",
+	)
+}
+
+// isRecoverableSQLPanic returns true if the current panic (as
+// determined by the call stack) is "recoverable" (by shutting down
+// the client connection but keeping the server alive).  A panic is
+// considered recoverable if it was originally emitted by the `sql`
+// package itself or one of its sub-packages. For example, if the
+// panic originates in the `client` package (e.g. as called by
+// client.Txn() from `sql`), the panic is not considered to be
+// recoverable.
+func isRecoverableSQLPanic(skip int) bool {
+	var pcs [15]uintptr
+	_ = runtime.Callers(skip+1, pcs[:])
+	frames := runtime.CallersFrames(pcs[:])
+
+	// The following loop strips any 'runtime.*' prefix followed by the
+	// one line call stack entry for the recover in sql.Executor.
+	for {
+		f, more := frames.Next()
+		function := f.Function
+		if strings.HasPrefix(function, "runtime.") {
+			if !more {
+				return false
+			}
+			continue
+		}
+		if !strings.HasPrefix(function,
+			"github.com/cockroachdb/cockroach/pkg/sql.(*Executor).ExecuteStatements") {
+			return false
+		}
+		if !more {
+			return false
+		}
+		break
+	}
+	// The following loop strips any additional `runtime.*` prefixes
+	// and checks that the first non-runtime call stack entry is indeed
+	// from package sql.
+	for {
+		f, more := frames.Next()
+		function := f.Function
+		if strings.HasPrefix(function, "runtime.") {
+			if !more {
+				return false
+			}
+			continue
+		}
+		if strings.HasPrefix(function, "github.com/cockroachdb/cockroach/pkg/sql") {
+			return true
+		}
+		return false
+	}
+
+	return false
 }
