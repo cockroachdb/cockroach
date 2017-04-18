@@ -195,7 +195,7 @@ func bootstrapCluster(
 ) (uuid.UUID, error) {
 	clusterID := uuid.MakeV4()
 	stopper := stop.NewStopper()
-	defer stopper.Stop()
+	defer stopper.Stop(context.TODO())
 
 	// Make sure that the store config has a valid clock and that it doesn't
 	// try to use gossip, since that can introduce race conditions.
@@ -636,8 +636,8 @@ func (n *Node) connectGossip(ctx context.Context) error {
 // startGossip loops on a periodic ticker to gossip node-related
 // information. Starts a goroutine to loop until the node is closed.
 func (n *Node) startGossip(stopper *stop.Stopper) {
-	stopper.RunWorker(func() {
-		ctx := n.AnnotateCtx(context.Background())
+	ctx := n.AnnotateCtx(context.Background())
+	stopper.RunWorker(ctx, func() {
 		// This should always return immediately and acts as a sanity check that we
 		// don't try to gossip before we're connected.
 		select {
@@ -692,8 +692,8 @@ func (n *Node) gossipStores(ctx context.Context) {
 // store to compute the value of metrics which cannot be incrementally
 // maintained.
 func (n *Node) startComputePeriodicMetrics(stopper *stop.Stopper, interval time.Duration) {
-	stopper.RunWorker(func() {
-		ctx := n.AnnotateCtx(context.Background())
+	ctx := n.AnnotateCtx(context.Background())
+	stopper.RunWorker(ctx, func() {
 		// Compute periodic stats at the same frequency as metrics are sampled.
 		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
@@ -726,7 +726,7 @@ func (n *Node) computePeriodicMetrics(ctx context.Context, tick int) error {
 func (n *Node) startWriteSummaries(frequency time.Duration) {
 	ctx := log.WithLogTag(n.AnnotateCtx(context.Background()), "summaries", nil)
 	// Immediately record summaries once on server startup.
-	n.stopper.RunWorker(func() {
+	n.stopper.RunWorker(ctx, func() {
 		// Write a status summary immediately; this helps the UI remain
 		// responsive when new nodes are added.
 		if err := n.writeSummaries(ctx); err != nil {
@@ -751,7 +751,7 @@ func (n *Node) startWriteSummaries(frequency time.Duration) {
 // NodeStatusRecorder and persists them to the cockroach data store.
 func (n *Node) writeSummaries(ctx context.Context) error {
 	var err error
-	if runErr := n.stopper.RunTask(func() {
+	if runErr := n.stopper.RunTask(ctx, func() {
 		err = n.recorder.WriteStatusSummary(ctx, n.storeCfg.DB)
 	}); runErr != nil {
 		err = runErr
@@ -774,7 +774,7 @@ func (n *Node) recordJoinEvent() {
 		lastUp = n.startedAt
 	}
 
-	n.stopper.RunWorker(func() {
+	n.stopper.RunWorker(context.TODO(), func() {
 		ctx, span := n.AnnotateCtxWithSpan(context.Background(), "record-join-event")
 		defer span.Finish()
 		retryOpts := base.DefaultRetryOptions()
@@ -826,7 +826,7 @@ func (n *Node) batchInternal(
 
 	var br *roachpb.BatchResponse
 
-	if err := n.stopper.RunTaskWithErr(func() error {
+	if err := n.stopper.RunTaskWithErr(ctx, func() error {
 		var finishSpan func(*roachpb.BatchResponse)
 		// Shadow ctx from the outer function. Written like this to pass the linter.
 		ctx := ctx

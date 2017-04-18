@@ -110,7 +110,7 @@ func (n *Network) CreateNode() (*Node, error) {
 	}
 	node := &Node{Server: server, Listener: ln, Registry: metric.NewRegistry()}
 	node.Gossip = gossip.NewTest(0, n.rpcContext, server, nil, n.Stopper, node.Registry)
-	n.Stopper.RunWorker(func() {
+	n.Stopper.RunWorker(context.TODO(), func() {
 		<-n.Stopper.ShouldQuiesce()
 		netutil.FatalIfUnexpected(ln.Close())
 		<-n.Stopper.ShouldStop()
@@ -138,7 +138,7 @@ func (n *Network) StartNode(node *Node) error {
 		encoding.EncodeUint64Ascending(nil, 0), time.Hour); err != nil {
 		return err
 	}
-	n.Stopper.RunWorker(func() {
+	n.Stopper.RunWorker(context.TODO(), func() {
 		netutil.FatalIfUnexpected(node.Server.Serve(node.Listener))
 	})
 	return nil

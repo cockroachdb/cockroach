@@ -59,7 +59,7 @@ func grpcTransportFactory(
 	opts SendOptions, rpcContext *rpc.Context, replicas ReplicaSlice, args roachpb.BatchRequest,
 ) (Transport, error) {
 	if atomic.AddInt32(&running, 1) <= 1 {
-		rpcContext.Stopper.RunWorker(func() {
+		rpcContext.Stopper.RunWorker(context.TODO(), func() {
 			var iters int
 			var curIdx int
 			defer func() {

@@ -111,11 +111,11 @@ func runDebugZip(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	defer stopper.Stop()
+	ctx := stopperContext(stopper)
+	defer stopper.Stop(ctx)
 
 	status := serverpb.NewStatusClient(conn)
 	admin := serverpb.NewAdminClient(conn)
-	ctx := stopperContext(stopper)
 
 	name := args[0]
 	out, err := os.Create(name)
