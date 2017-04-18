@@ -286,9 +286,8 @@ func (m *SendError) String() string            { return proto.CompactTextString(
 func (*SendError) ProtoMessage()               {}
 func (*SendError) Descriptor() ([]byte, []int) { return fileDescriptorErrors, []int{15} }
 
-// An AmbiguousResultError indicates that an EndTransaction request or a
-// non-transactional write batch may have succeeded or failed, but the response
-// was not received and the final result is ambiguous.
+// An AmbiguousResultError indicates that a request may have succeeded or
+// failed, but the response was not received and the final result is ambiguous.
 type AmbiguousResultError struct {
 	Message string `protobuf:"bytes,1,opt,name=message" json:"message"`
 	// This can be set to give extra information about which error was converted
