@@ -281,6 +281,11 @@ func backupAndRestore(
 		if max := approxBytes * 2; bytes < approxBytes || bytes > max {
 			t.Errorf("expected data size in [%d,%d] but was %d", approxBytes, max, bytes)
 		}
+		if _, err := sqlDB.DB.Exec(`BACKUP DATABASE bench TO $1`, dest); !testutils.IsError(err,
+			"already appears to exist",
+		) {
+			t.Fatalf("expeted to refused to overwrite, got %v", err)
+		}
 	}
 
 	// Start a new cluster to restore into.
