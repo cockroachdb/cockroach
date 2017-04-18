@@ -749,7 +749,7 @@ func (s *SchemaChangeManager) newTimer() *time.Timer {
 // Start starts a goroutine that runs outstanding schema changes
 // for tables received in the latest system configuration via gossip.
 func (s *SchemaChangeManager) Start(stopper *stop.Stopper) {
-	stopper.RunWorker(func() {
+	stopper.RunWorker(context.TODO(), func() {
 		descKeyPrefix := keys.MakeTablePrefix(uint32(sqlbase.DescriptorTable.ID))
 		gossipUpdateC := s.gossip.RegisterSystemConfigChannel()
 		timer := &time.Timer{}

@@ -182,7 +182,7 @@ func TestClientRetryNonTxn(t *testing.T) {
 		},
 	}
 	s, _, _ := serverutils.StartServer(t, args)
-	defer s.Stopper().Stop()
+	defer s.Stopper().Stop(context.TODO())
 
 	testCases := []struct {
 		args        roachpb.Request
@@ -307,7 +307,7 @@ func TestClientRetryNonTxn(t *testing.T) {
 func TestClientRunTransaction(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop()
+	defer s.Stopper().Stop(context.TODO())
 	dbCtx := client.DefaultDBContext()
 	db := createTestClientForUser(t, s, security.NodeUser, dbCtx)
 
@@ -368,7 +368,7 @@ func TestClientRunTransaction(t *testing.T) {
 func TestClientRunConcurrentTransaction(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop()
+	defer s.Stopper().Stop(context.TODO())
 	dbCtx := client.DefaultDBContext()
 	db := createTestClientForUser(t, s, security.NodeUser, dbCtx)
 
@@ -466,7 +466,7 @@ func TestClientRunConcurrentTransaction(t *testing.T) {
 func TestClientGetAndPutProto(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop()
+	defer s.Stopper().Stop(context.TODO())
 	db := createTestClient(t, s)
 
 	zoneConfig := config.ZoneConfig{
@@ -495,7 +495,7 @@ func TestClientGetAndPutProto(t *testing.T) {
 func TestClientGetAndPut(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop()
+	defer s.Stopper().Stop(context.TODO())
 	db := createTestClient(t, s)
 
 	value := []byte("value")
@@ -517,7 +517,7 @@ func TestClientGetAndPut(t *testing.T) {
 func TestClientPutInline(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop()
+	defer s.Stopper().Stop(context.TODO())
 	db := createTestClient(t, s)
 
 	value := []byte("value")
@@ -544,7 +544,7 @@ func TestClientPutInline(t *testing.T) {
 func TestClientEmptyValues(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop()
+	defer s.Stopper().Stop(context.TODO())
 	db := createTestClient(t, s)
 
 	if err := db.Put(context.TODO(), testUser+"/a", []byte{}); err != nil {
@@ -573,7 +573,7 @@ func TestClientEmptyValues(t *testing.T) {
 func TestClientBatch(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop()
+	defer s.Stopper().Stop(context.TODO())
 	db := createTestClient(t, s)
 	ctx := context.TODO()
 
@@ -829,7 +829,7 @@ func concurrentIncrements(db *client.DB, t *testing.T) {
 func TestConcurrentIncrements(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop()
+	defer s.Stopper().Stop(context.TODO())
 	db := createTestClient(t, s)
 
 	// Convenience loop: Crank up this number for testing this
@@ -846,7 +846,7 @@ func TestConcurrentIncrements(t *testing.T) {
 func TestClientPermissions(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop()
+	defer s.Stopper().Stop(context.TODO())
 
 	// NodeUser certs are required for all KV operations.
 	// RootUser has no KV privileges whatsoever.
@@ -947,7 +947,7 @@ func TestInconsistentReads(t *testing.T) {
 func TestReadOnlyTxnObeysDeadline(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop()
+	defer s.Stopper().Stop(context.TODO())
 	db := createTestClient(t, s)
 
 	if err := db.Put(context.TODO(), "k", "v"); err != nil {
@@ -973,7 +973,7 @@ func TestReadOnlyTxnObeysDeadline(t *testing.T) {
 func TestTxn_ReverseScan(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop()
+	defer s.Stopper().Stop(context.TODO())
 	db := createTestClient(t, s)
 
 	keys := []roachpb.Key{}

@@ -125,7 +125,7 @@ func printKeyValue(kv engine.MVCCKeyValue) (bool, error) {
 
 func runDebugKeys(cmd *cobra.Command, args []string) error {
 	stopper := stop.NewStopper()
-	defer stopper.Stop()
+	defer stopper.Stop(stopperContext(stopper))
 
 	if len(args) != 1 {
 		return errors.New("one argument required: dir")
@@ -157,7 +157,7 @@ state like the raft HardState. With --replicated, only includes data covered by
 
 func runDebugRangeData(cmd *cobra.Command, args []string) error {
 	stopper := stop.NewStopper()
-	defer stopper.Stop()
+	defer stopper.Stop(stopperContext(stopper))
 
 	if len(args) != 2 {
 		return errors.New("two arguments required: dir range_id")
@@ -395,7 +395,7 @@ func loadRangeDescriptor(
 
 func runDebugRangeDescriptors(cmd *cobra.Command, args []string) error {
 	stopper := stop.NewStopper()
-	defer stopper.Stop()
+	defer stopper.Stop(stopperContext(stopper))
 
 	if len(args) != 1 {
 		return errors.New("one argument required: dir")
@@ -467,7 +467,7 @@ func printRaftLogEntry(kv engine.MVCCKeyValue) (bool, error) {
 
 func runDebugRaftLog(cmd *cobra.Command, args []string) error {
 	stopper := stop.NewStopper()
-	defer stopper.Stop()
+	defer stopper.Stop(stopperContext(stopper))
 
 	if len(args) != 2 {
 		return errors.New("two arguments required: dir range_id")
@@ -506,7 +506,7 @@ Uses a hard-coded GC policy with a 24 hour TTL for old versions.
 
 func runDebugGCCmd(cmd *cobra.Command, args []string) error {
 	stopper := stop.NewStopper()
-	defer stopper.Stop()
+	defer stopper.Stop(stopperContext(stopper))
 
 	if len(args) != 1 {
 		return errors.New("one argument required: dir")
@@ -592,7 +592,7 @@ type replicaCheckInfo struct {
 
 func runDebugCheckStoreCmd(cmd *cobra.Command, args []string) error {
 	stopper := stop.NewStopper()
-	defer stopper.Stop()
+	defer stopper.Stop(stopperContext(stopper))
 
 	if len(args) != 1 {
 		return errors.New("one required argument: dir")
@@ -714,7 +714,7 @@ Compact the sstables in a store.
 
 func runDebugCompact(cmd *cobra.Command, args []string) error {
 	stopper := stop.NewStopper()
-	defer stopper.Stop()
+	defer stopper.Stop(stopperContext(stopper))
 
 	if len(args) != 1 {
 		return errors.New("one argument is required")
@@ -757,7 +757,7 @@ and TiB.
 
 func runDebugSSTables(cmd *cobra.Command, args []string) error {
 	stopper := stop.NewStopper()
-	defer stopper.Stop()
+	defer stopper.Stop(stopperContext(stopper))
 
 	if len(args) != 1 {
 		return errors.New("one argument is required")

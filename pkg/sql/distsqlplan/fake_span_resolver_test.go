@@ -38,7 +38,7 @@ func TestFakeSpanResolver(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	tc := serverutils.StartTestCluster(t, 3, base.TestClusterArgs{})
-	defer tc.Stopper().Stop()
+	defer tc.Stopper().Stop(context.TODO())
 
 	sqlutils.CreateTable(
 		t, tc.ServerConn(0), "t",

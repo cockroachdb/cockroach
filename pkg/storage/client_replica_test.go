@@ -188,7 +188,7 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 	var numGets int32
 
 	stopper := stop.NewStopper()
-	defer stopper.Stop()
+	defer stopper.Stop(context.TODO())
 	manual := hlc.NewManualClock(123)
 	cfg := storage.TestStoreConfig(hlc.NewClock(manual.UnixNano, time.Nanosecond))
 	// Splits can cause our chosen key to end up on a range other than range 1,
@@ -329,7 +329,7 @@ func TestRangeLookupUseReverse(t *testing.T) {
 	storeCfg := storage.TestStoreConfig(nil)
 	storeCfg.TestingKnobs.DisableSplitQueue = true
 	stopper := stop.NewStopper()
-	defer stopper.Stop()
+	defer stopper.Stop(context.TODO())
 	store := createTestStoreWithConfig(t, stopper, storeCfg)
 
 	// Init test ranges:
@@ -947,7 +947,7 @@ func TestLeaseExtensionNotBlockedByRead(t *testing.T) {
 			},
 		})
 	s := srv.(*server.TestServer)
-	defer s.Stopper().Stop()
+	defer s.Stopper().Stop(context.TODO())
 
 	// Start a read and wait for it to block.
 	key := roachpb.Key("a")
@@ -1024,7 +1024,7 @@ func TestLeaseInfoRequest(t *testing.T) {
 		base.TestClusterArgs{
 			ReplicationMode: base.ReplicationManual,
 		})
-	defer tc.Stopper().Stop()
+	defer tc.Stopper().Stop(context.TODO())
 
 	kvDB0 := tc.Servers[0].DB()
 	kvDB1 := tc.Servers[1].DB()
@@ -1128,7 +1128,7 @@ func TestErrorHandlingForNonKVCommand(t *testing.T) {
 			},
 		})
 	s := srv.(*server.TestServer)
-	defer s.Stopper().Stop()
+	defer s.Stopper().Stop(context.TODO())
 
 	// Send the lease request.
 	key := roachpb.Key("a")

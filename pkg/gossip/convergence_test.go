@@ -64,7 +64,7 @@ func TestConvergence(t *testing.T) {
 	}
 
 	stopper := stop.NewStopper()
-	defer stopper.Stop()
+	defer stopper.Stop(context.TODO())
 
 	network := simulation.NewNetwork(stopper, testConvergenceSize, true)
 
@@ -97,7 +97,7 @@ func TestNetworkReachesEquilibrium(t *testing.T) {
 	}
 
 	stopper := stop.NewStopper()
-	defer stopper.Stop()
+	defer stopper.Stop(context.TODO())
 
 	network := simulation.NewNetwork(stopper, testReachesEquilibriumSize, true)
 

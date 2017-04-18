@@ -22,6 +22,8 @@ import (
 	"os"
 	"text/tabwriter"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -40,7 +42,7 @@ func Main() {
 		os.Args = append(os.Args, "help")
 	}
 
-	defer log.RecoverAndReportPanic()
+	defer log.RecoverAndReportPanic(context.Background())
 
 	if err := Run(os.Args[1:]); err != nil {
 		fmt.Fprintf(stderr, "Failed running %q\n", os.Args[1])

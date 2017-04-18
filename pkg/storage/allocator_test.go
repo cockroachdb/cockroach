@@ -237,7 +237,7 @@ func TestAllocatorSimpleRetrieval(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	stopper, g, _, a, _ := createTestAllocator( /* deterministic */ false)
-	defer stopper.Stop()
+	defer stopper.Stop(context.Background())
 	gossiputil.NewStoreGossiper(g).GossipStores(singleStore, t)
 	result, err := a.AllocateTarget(
 		context.Background(),
@@ -260,7 +260,7 @@ func TestAllocatorCorruptReplica(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	stopper, g, sp, a, _ := createTestAllocator( /* deterministic */ false)
-	defer stopper.Stop()
+	defer stopper.Stop(context.Background())
 	gossiputil.NewStoreGossiper(g).GossipStores(sameDCStores, t)
 	const store1ID = roachpb.StoreID(1)
 
@@ -292,7 +292,7 @@ func TestAllocatorNoAvailableDisks(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	stopper, _, _, a, _ := createTestAllocator( /* deterministic */ false)
-	defer stopper.Stop()
+	defer stopper.Stop(context.Background())
 	result, err := a.AllocateTarget(
 		context.Background(),
 		simpleZoneConfig.Constraints,
@@ -312,7 +312,7 @@ func TestAllocatorTwoDatacenters(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	stopper, g, _, a, _ := createTestAllocator( /* deterministic */ false)
-	defer stopper.Stop()
+	defer stopper.Stop(context.Background())
 	gossiputil.NewStoreGossiper(g).GossipStores(multiDCStores, t)
 	ctx := context.Background()
 	result1, err := a.AllocateTarget(
@@ -369,7 +369,7 @@ func TestAllocatorExistingReplica(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	stopper, g, _, a, _ := createTestAllocator( /* deterministic */ false)
-	defer stopper.Stop()
+	defer stopper.Stop(context.Background())
 	gossiputil.NewStoreGossiper(g).GossipStores(sameDCStores, t)
 	result, err := a.AllocateTarget(
 		context.Background(),
@@ -403,7 +403,7 @@ func TestAllocatorRelaxConstraints(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	stopper, g, _, a, _ := createTestAllocator( /* deterministic */ false)
-	defer stopper.Stop()
+	defer stopper.Stop(context.Background())
 	gossiputil.NewStoreGossiper(g).GossipStores(multiDCStores, t)
 
 	testCases := []struct {
@@ -620,7 +620,7 @@ func TestAllocatorRebalance(t *testing.T) {
 	}
 
 	stopper, g, _, a, _ := createTestAllocator( /* deterministic */ false)
-	defer stopper.Stop()
+	defer stopper.Stop(context.Background())
 
 	gossiputil.NewStoreGossiper(g).GossipStores(stores, t)
 	ctx := context.Background()
@@ -744,7 +744,7 @@ func TestAllocatorRebalanceThrashing(t *testing.T) {
 			// Deterministic is required when stressing as test case 8 may rebalance
 			// to different configurations.
 			stopper, g, _, a, _ := createTestAllocator( /* deterministic */ true)
-			defer stopper.Stop()
+			defer stopper.Stop(context.Background())
 
 			// Create stores with the range counts from the test case and gossip them.
 			var stores []*roachpb.StoreDescriptor
@@ -814,7 +814,7 @@ func TestAllocatorRebalanceByCount(t *testing.T) {
 	}
 
 	stopper, g, _, a, _ := createTestAllocator( /* deterministic */ false)
-	defer stopper.Stop()
+	defer stopper.Stop(context.Background())
 
 	gossiputil.NewStoreGossiper(g).GossipStores(stores, t)
 	ctx := context.Background()
@@ -852,7 +852,7 @@ func TestAllocatorRebalanceByCount(t *testing.T) {
 func TestAllocatorTransferLeaseTarget(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper, g, _, a, _ := createTestAllocator( /* deterministic */ true)
-	defer stopper.Stop()
+	defer stopper.Stop(context.Background())
 
 	// 3 stores where the lease count for each store is equal to 10x the store
 	// ID.
@@ -914,7 +914,7 @@ func TestAllocatorTransferLeaseTarget(t *testing.T) {
 func TestAllocatorTransferLeaseTargetMultiStore(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper, g, _, a, _ := createTestAllocator( /* deterministic */ true)
-	defer stopper.Stop()
+	defer stopper.Stop(context.Background())
 
 	// 3 nodes and 6 stores where the lease count for the first store on each
 	// node is equal to 10x the node ID.
@@ -967,7 +967,7 @@ func TestAllocatorTransferLeaseTargetMultiStore(t *testing.T) {
 func TestAllocatorShouldTransferLease(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper, g, _, a, _ := createTestAllocator( /* deterministic */ true)
-	defer stopper.Stop()
+	defer stopper.Stop(context.Background())
 
 	// 4 stores where the lease count for each store is equal to 10x the store
 	// ID.
@@ -1037,7 +1037,7 @@ func TestAllocatorTransferLeaseTargetLoadBased(t *testing.T) {
 
 	stopper, g, _, storePool, _ := createTestStorePool(
 		TestTimeUntilStoreDeadOff, true /* deterministic */, nodeStatusLive)
-	defer stopper.Stop()
+	defer stopper.Stop(context.Background())
 
 	// 3 stores where the lease count for each store is equal to 10x the store ID.
 	var stores []*roachpb.StoreDescriptor
@@ -1365,11 +1365,11 @@ func TestAllocatorRemoveTarget(t *testing.T) {
 		},
 	}
 
+	ctx := context.Background()
 	stopper, g, _, a, _ := createTestAllocator( /* deterministic */ false)
-	defer stopper.Stop()
+	defer stopper.Stop(ctx)
 	sg := gossiputil.NewStoreGossiper(g)
 	sg.GossipStores(stores, t)
-	ctx := context.Background()
 
 	// Repeat this test 10 times, it should always be either store 2 or 3.
 	for i := 0; i < 10; i++ {
@@ -1748,7 +1748,8 @@ func TestAllocatorComputeAction(t *testing.T) {
 	}
 
 	stopper, _, sp, a, _ := createTestAllocator( /* deterministic */ false)
-	defer stopper.Stop()
+	ctx := context.Background()
+	defer stopper.Stop(ctx)
 
 	// Set up eight stores. Stores six and seven are marked as dead. Replica eight
 	// is dead.
@@ -1765,7 +1766,6 @@ func TestAllocatorComputeAction(t *testing.T) {
 		}})
 
 	lastPriority := float64(999999999)
-	ctx := context.Background()
 	for i, tcase := range testCases {
 		action, priority := a.ComputeAction(ctx, tcase.zone, &tcase.desc)
 		if tcase.expectedAction != action {
@@ -1839,8 +1839,8 @@ func TestAllocatorThrottled(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	stopper, g, _, a, _ := createTestAllocator( /* deterministic */ false)
-	defer stopper.Stop()
 	ctx := context.Background()
+	defer stopper.Stop(ctx)
 
 	// First test to make sure we would send the replica to purgatory.
 	_, err := a.AllocateTarget(
@@ -2057,7 +2057,7 @@ func TestAllocatorRebalanceAway(t *testing.T) {
 	}
 
 	stopper, g, _, a, _ := createTestAllocator( /* deterministic */ false)
-	defer stopper.Stop()
+	defer stopper.Stop(context.TODO())
 	gossiputil.NewStoreGossiper(g).GossipStores(stores, t)
 	ctx := context.Background()
 
@@ -2111,7 +2111,7 @@ func (ts *testStore) rebalance(ots *testStore, bytes int64) {
 
 func Example_rebalancing() {
 	stopper := stop.NewStopper()
-	defer stopper.Stop()
+	defer stopper.Stop(context.TODO())
 
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 
