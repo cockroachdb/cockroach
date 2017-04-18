@@ -193,6 +193,9 @@ func initVirtualTableDesc(
 		return sqlbase.TableDescriptor{}, err
 	}
 	create := stmt.(*parser.CreateTable)
+	if _, err := create.Table.Normalize(); err != nil {
+		return sqlbase.TableDescriptor{}, err
+	}
 	return p.makeTableDesc(ctx, create, 0, keys.VirtualDescriptorID, emptyPrivileges, nil)
 }
 

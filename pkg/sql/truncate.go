@@ -44,11 +44,8 @@ func (p *planner) Truncate(ctx context.Context, n *parser.Truncate) (planNode, e
 	toTruncate := make(map[sqlbase.ID]*sqlbase.TableDescriptor, len(n.Tables))
 
 	for _, name := range n.Tables {
-		tn, err := name.NormalizeTableName()
+		tn, err := name.NormalizeWithDatabaseName(p.session.Database)
 		if err != nil {
-			return nil, err
-		}
-		if err := tn.QualifyWithDatabase(p.session.Database); err != nil {
 			return nil, err
 		}
 

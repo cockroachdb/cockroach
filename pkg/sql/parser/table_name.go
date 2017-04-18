@@ -55,7 +55,7 @@ func (nt *NormalizableTableName) Normalize() (*TableName, error) {
 	case *TableName:
 		return t, nil
 	case UnresolvedName:
-		tn, err := t.NormalizeTableName()
+		tn, err := t.normalizeTableName()
 		if err != nil {
 			return nil, err
 		}
@@ -92,7 +92,7 @@ func (*NormalizableTableName) tableExpr() {}
 type TableNameReference interface {
 	fmt.Stringer
 	NodeFormatter
-	NormalizeTableName() (*TableName, error)
+	normalizeTableName() (*TableName, error)
 }
 
 // TableName corresponds to the name of a table in a FROM clause,
@@ -119,8 +119,8 @@ func (t *TableName) Format(buf *bytes.Buffer, f FmtFlags) {
 }
 func (t *TableName) String() string { return AsString(t) }
 
-// NormalizeTableName implements the TableNameReference interface.
-func (t *TableName) NormalizeTableName() (*TableName, error) { return t, nil }
+// normalizeTableName implements the TableNameReference interface.
+func (t *TableName) normalizeTableName() (*TableName, error) { return t, nil }
 
 // NormalizedTableName normalize DatabaseName and TableName to lowercase
 // and performs Unicode Normalization.
@@ -177,8 +177,8 @@ func (n UnresolvedName) normalizeTableNameAsValue() (TableName, error) {
 	return res, nil
 }
 
-// NormalizeTableName implements the TableNameReference interface.
-func (n UnresolvedName) NormalizeTableName() (*TableName, error) {
+// normalizeTableName implements the TableNameReference interface.
+func (n UnresolvedName) normalizeTableName() (*TableName, error) {
 	tn, err := n.normalizeTableNameAsValue()
 	if err != nil {
 		return nil, err
@@ -216,12 +216,12 @@ func (ts TableNames) Format(buf *bytes.Buffer, f FmtFlags) {
 }
 func (ts TableNames) String() string { return AsString(ts) }
 
-// TableNameReferences corresponds to a comma-delimited
-// list of table name references.
-type TableNameReferences []TableNameReference
+// NormalizableTableNames corresponds to a comma-delimited
+// list of normalizable table names.
+type NormalizableTableNames []NormalizableTableName
 
 // Format implements the NodeFormatter interface.
-func (t TableNameReferences) Format(buf *bytes.Buffer, f FmtFlags) {
+func (t NormalizableTableNames) Format(buf *bytes.Buffer, f FmtFlags) {
 	for i, t := range t {
 		if i > 0 {
 			buf.WriteString(", ")

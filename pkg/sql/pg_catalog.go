@@ -937,7 +937,7 @@ func indexDefFromDescriptor(
 	indexDef := parser.CreateIndex{
 		Name: parser.Name(index.Name),
 		Table: parser.NormalizableTableName{
-			TableNameReference: &parser.TableName{
+			&parser.TableName{
 				DatabaseName: parser.Name(db.Name),
 				TableName:    parser.Name(table.Name),
 			},
@@ -972,7 +972,7 @@ func indexDefFromDescriptor(
 		fields := index.ColumnNames[:sharedPrefixLen]
 		intlDef := &parser.InterleaveDef{
 			Parent: parser.NormalizableTableName{
-				TableNameReference: &parser.TableName{
+				&parser.TableName{
 					TableName: parser.Name(parentTable.Name),
 				},
 			},

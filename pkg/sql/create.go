@@ -417,7 +417,7 @@ func (p *planner) CreateView(ctx context.Context, n *parser.CreateView) (planNod
 		parser.FmtNormalizeTableNames(
 			parser.FmtParsable,
 			func(t *parser.NormalizableTableName) *parser.TableName {
-				tn, err := p.QualifyWithDatabase(ctx, t)
+				tn, err := p.SearchAndQualify(ctx, t)
 				if err != nil {
 					log.Warningf(ctx, "failed to qualify table name %q with database name: %v", t, err)
 					fmtErr = err
@@ -1166,11 +1166,7 @@ func (n *createViewNode) makeViewTableDesc(
 		Privileges:    privileges,
 		ViewQuery:     n.sourceQuery,
 	}
-	viewName, err := p.Name.Normalize()
-	if err != nil {
-		return desc, err
-	}
-	desc.Name = viewName.Table()
+	desc.Name = p.Name.TableName().Table()
 	for i, colRes := range resultColumns {
 		colType, _ := parser.DatumTypeToColumnType(colRes.Typ)
 		columnTableDef := parser.ColumnTableDef{Name: parser.Name(colRes.Name), Type: colType}
@@ -1205,11 +1201,7 @@ func makeTableDescIfAs(
 		Version:       1,
 		Privileges:    privileges,
 	}
-	tableName, err := p.Table.Normalize()
-	if err != nil {
-		return desc, err
-	}
-	desc.Name = tableName.Table()
+	desc.Name = p.Table.TableName().Table()
 	for i, colRes := range resultColumns {
 		colType, err := parser.DatumTypeToColumnType(colRes.Typ)
 		if err != nil {
@@ -1232,6 +1224,7 @@ func makeTableDescIfAs(
 }
 
 // MakeTableDesc creates a table descriptor from a CreateTable statement.
+// The Table field must have been normalized already.
 func MakeTableDesc(
 	ctx context.Context,
 	txn *client.Txn,
@@ -1250,11 +1243,7 @@ func MakeTableDesc(
 		Version:       1,
 		Privileges:    privileges,
 	}
-	tableName, err := n.Table.Normalize()
-	if err != nil {
-		return desc, err
-	}
-	desc.Name = tableName.Table()
+	desc.Name = n.Table.TableName().Table()
 
 	for _, def := range n.Defs {
 		if d, ok := def.(*parser.ColumnTableDef); ok {

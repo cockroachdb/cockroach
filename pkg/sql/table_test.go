@@ -46,7 +46,11 @@ func CreateTestTableDescriptor(
 		return sqlbase.TableDescriptor{}, err
 	}
 	p := planner{session: new(Session)}
-	return p.makeTableDesc(ctx, stmt.(*parser.CreateTable), parentID, id, privileges, nil)
+	create := stmt.(*parser.CreateTable)
+	if _, err := create.Table.Normalize(); err != nil {
+		return sqlbase.TableDescriptor{}, err
+	}
+	return p.makeTableDesc(ctx, create, parentID, id, privileges, nil)
 }
 
 func TestMakeTableDescColumns(t *testing.T) {

@@ -1665,9 +1665,9 @@ type EvalPlanner interface {
 	// expected and returns that row.
 	QueryRow(ctx context.Context, sql string, args ...interface{}) (Datums, error)
 
-	// QualifyWithDatabase resolves a possibly unqualified table name into a
+	// SearchAndQualify resolves a possibly unqualified table name into a
 	// table name that is qualified by database.
-	QualifyWithDatabase(ctx context.Context, t *NormalizableTableName) (*TableName, error)
+	SearchAndQualify(ctx context.Context, t *NormalizableTableName) (*TableName, error)
 }
 
 // contextHolder is a wrapper that returns a Context.
@@ -2330,11 +2330,8 @@ func (expr *CastExpr) Eval(ctx *EvalContext) (Datum, error) {
 			case oidColTypeRegClass:
 				// Resolving a table name requires looking at the search path to
 				// determine the database that owns it.
-				t := &NormalizableTableName{
-					TableNameReference: UnresolvedName{
-						Name(s),
-					}}
-				tn, err := ctx.Planner.QualifyWithDatabase(ctx.Ctx(), t)
+				t := &NormalizableTableName{UnresolvedName{Name(s)}}
+				tn, err := ctx.Planner.SearchAndQualify(ctx.Ctx(), t)
 				if err != nil {
 					return nil, err
 				}

@@ -143,8 +143,8 @@ func (u *sqlSymUnion) newNormalizableTableName() *NormalizableTableName {
 func (u *sqlSymUnion) tablePatterns() TablePatterns {
     return u.val.(TablePatterns)
 }
-func (u *sqlSymUnion) tableNameReferences() TableNameReferences {
-    return u.val.(TableNameReferences)
+func (u *sqlSymUnion) normalizableTableNames() NormalizableTableNames {
+    return u.val.(NormalizableTableNames)
 }
 func (u *sqlSymUnion) indexHints() *IndexHints {
     return u.val.(*IndexHints)
@@ -458,7 +458,7 @@ func (u *sqlSymUnion) kvOptions() []KVOption {
 %type <UnresolvedNames> qualified_name_list
 %type <TablePatterns> table_pattern_list
 %type <UnresolvedName> any_name
-%type <TableNameReferences> table_name_list
+%type <NormalizableTableNames> table_name_list
 %type <Exprs> expr_list
 %type <UnresolvedName> attrs
 %type <SelectExprs> target_list
@@ -470,7 +470,7 @@ func (u *sqlSymUnion) kvOptions() []KVOption {
 %type <Exprs> ctext_expr_list ctext_row
 %type <GroupBy> group_clause
 %type <*Limit> select_limit
-%type <TableNameReferences> relation_expr_list
+%type <NormalizableTableNames> relation_expr_list
 %type <ReturningClause> returning_clause
 
 %type <bool> all_or_distinct
@@ -1126,29 +1126,29 @@ drop_stmt:
   }
 | DROP TABLE table_name_list opt_drop_behavior
   {
-    $$.val = &DropTable{Names: $3.tableNameReferences(), IfExists: false, DropBehavior: $4.dropBehavior()}
+    $$.val = &DropTable{Names: $3.normalizableTableNames(), IfExists: false, DropBehavior: $4.dropBehavior()}
   }
 | DROP TABLE IF EXISTS table_name_list opt_drop_behavior
   {
-    $$.val = &DropTable{Names: $5.tableNameReferences(), IfExists: true, DropBehavior: $6.dropBehavior()}
+    $$.val = &DropTable{Names: $5.normalizableTableNames(), IfExists: true, DropBehavior: $6.dropBehavior()}
   }
 | DROP VIEW table_name_list opt_drop_behavior
   {
-    $$.val = &DropView{Names: $3.tableNameReferences(), IfExists: false, DropBehavior: $4.dropBehavior()}
+    $$.val = &DropView{Names: $3.normalizableTableNames(), IfExists: false, DropBehavior: $4.dropBehavior()}
   }
 | DROP VIEW IF EXISTS table_name_list opt_drop_behavior
   {
-    $$.val = &DropView{Names: $5.tableNameReferences(), IfExists: true, DropBehavior: $6.dropBehavior()}
+    $$.val = &DropView{Names: $5.normalizableTableNames(), IfExists: true, DropBehavior: $6.dropBehavior()}
   }
 
 table_name_list:
   any_name
   {
-    $$.val = TableNameReferences{$1.unresolvedName()}
+    $$.val = NormalizableTableNames{NormalizableTableName{$1.unresolvedName()}}
   }
 | table_name_list ',' any_name
   {
-    $$.val = append($1.tableNameReferences(), $3.unresolvedName())
+    $$.val = append($1.normalizableTableNames(), NormalizableTableName{$3.unresolvedName()})
   }
 
 any_name:
@@ -2094,7 +2094,7 @@ numeric_only:
 truncate_stmt:
   TRUNCATE opt_table relation_expr_list opt_drop_behavior
   {
-    $$.val = &Truncate{Tables: $3.tableNameReferences(), DropBehavior: $4.dropBehavior()}
+    $$.val = &Truncate{Tables: $3.normalizableTableNames(), DropBehavior: $4.dropBehavior()}
   }
 
 // CREATE USER
@@ -3269,11 +3269,11 @@ relation_expr:
 relation_expr_list:
   relation_expr
   {
-    $$.val = TableNameReferences{$1.unresolvedName()}
+    $$.val = NormalizableTableNames{NormalizableTableName{$1.unresolvedName()}}
   }
 | relation_expr_list ',' relation_expr
   {
-    $$.val = append($1.tableNameReferences(), $3.unresolvedName())
+    $$.val = append($1.normalizableTableNames(), NormalizableTableName{$3.unresolvedName()})
   }
 
 // Given "UPDATE foo set set ...", we have to decide without looking any
