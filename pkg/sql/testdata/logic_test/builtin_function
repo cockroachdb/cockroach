@@ -621,10 +621,13 @@ SELECT pow(-2::int, 3::int), pow(2::int, 3::int)
 statement error integer out of range
 SELECT pow(2::int, -3::int)
 
-query IIII
-SELECT pow(0::int, 3::int), pow(0::int, -3::int), pow(3::int, 0::int), pow(-3::int, 0::int)
+query III
+SELECT pow(0::int, 3::int), pow(3::int, 0::int), pow(-3::int, 0::int)
 ----
-0 0 1 1
+0 1 1
+
+statement error integer out of range
+SELECT pow(0::int, -3::int)
 
 statement error invalid operation
 SELECT pow(0::int, 0::int)
