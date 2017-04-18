@@ -229,7 +229,7 @@ func CreateNodePair(
 	if err := writeKeyToFile(keyPath, nodeKey, overwrite); err != nil {
 		return errors.Errorf("error writing node server key to %s: %v", keyPath, err)
 	}
-	log.Infof(context.Background(), "Generated node key: %s", certPath)
+	log.Infof(context.Background(), "Generated node key: %s", keyPath)
 
 	return nil
 }
