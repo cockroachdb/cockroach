@@ -220,7 +220,7 @@ func (p *PhysicalPlan) AddSingleGroupStage(
 
 	pIdx := p.AddProcessor(proc)
 
-	// Connect the result routers to the no-op processor.
+	// Connect the result routers to the processor.
 	p.MergeResultStreams(p.ResultRouters, 0, p.MergeOrdering, pIdx, 0)
 
 	// We now have a single result stream.

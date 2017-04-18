@@ -185,7 +185,7 @@ SELECT URL FROM [EXPLAIN (DISTSQL) SELECT DISTINCT a, b FROM data WHERE (a + b +
 https://raduberinde.github.io/decode.html?eJzMlb3q2zAUxfc-hbnTP_gOlex8CQoaSiFLUtJsxYNrXYrBsYwkQ0vwuxfblDamlULiwUtAH797To4OyQ1qreiYX8mC-AoMEDggJICQAsIaMoTG6IKs1aa_MgIH9QPEe4SyblrXb2cIhTYE4gaudBWBgEv-raIz5YoMIChyeVkNIo0pr7n5KVXuckD4VFaOjIje3iSL4kjyVf-ZrKIPEd8KIQ7HCyCcWiciyVBylAlkHYJu3W_xDh-39UUbN3Ukkxglj1GyeE6pj6V1ZV24iVg_-eGxf6Zpo8iQ-r_zrJvRA1vm4wZszfm4Aalng-XLDDZga85gA1LPBpssM9iArTmDDUg9G2y6zGADtuYMNiA1x-_8P8aeyTa6tnQ3djovQyD1nca_CqtbU9Bno4th-Lg8DbeHDUXWjadsXBzq8ai39TfMvDD3w9wLJ3cwm8KJ3_bGL5166bUfXnvhgPLmlS-99cI7v_LOC-_98P4V2yzQsVDJ_C1jgZqxl3rGAkVLA-L-prFA1Zi_a1PvWffuVwAAAP__o1Sz6A==
 
 query II
-SELECT DISTINCT a, b FROM data WHERE (a + b + c) = 27 ORDER BY c,b,a;
+SELECT DISTINCT a, b FROM data WHERE (a + b + c) = 27 ORDER BY c,b,a
 ----
 10 10
 10 9
@@ -204,7 +204,7 @@ SELECT URL FROM [EXPLAIN (DISTSQL) SELECT DISTINCT a, b FROM data WHERE (a + b +
 https://raduberinde.github.io/decode.html?eJzMlU-rnDAUxff9FHJX7-FdNNF5fwKFLEphNjNlOrviwppLERwjSYSWwe9e1JZ2pC8ZmAy4EdSc-zs5OZAztFrRrjyRBfEVGCBwQMgAIQeEDRQIndEVWavNuGQWbNUPEO8R6rbr3fi5QKi0IRBncLVrCAQcy28NHahUZABBkSvrZoJ0pj6V5qdUpSsB4VPdODIieXiQLEkTyR_HZ_aYfEj4sxBiuzsCwr53IpEMJUeZQTEg6N79gQ94va0v2rilI8lTlCxFmaUxUR9r6-q2cgvYOHnEGEWG1G_U1Zy_4_U84O2tFMM9TbF1Hn_AVszjD6CiJc3XmXTAVsykA6hoSWfrTDpgK2bSAVS0pPN1Jh2wFTPpAOoul8d_OAeynW4tXXCW8woEUt9pvn-s7k1Fn42upuHz635aPX1QZN38l80v23b-Ndr6V8y8Yu4Xc684uxCzpTjz237yo3OveuMXb7ziAPnplk0_e8UvfvKLV_zqF7_eYpsFOhYqmb9lLFAzdlPPWKBoeQDubxoLVI35u7b0XgzvfgUAAP__lQPPnA==
 
 query II
-SELECT DISTINCT a, b FROM data WHERE (a + b + c) = 27 ORDER BY b,a,c;
+SELECT DISTINCT a, b FROM data WHERE (a + b + c) = 27 ORDER BY b,a,c
 ----
 10 7
 9 8
@@ -216,3 +216,129 @@ SELECT DISTINCT a, b FROM data WHERE (a + b + c) = 27 ORDER BY b,a,c;
 8 10
 9 10
 10 10
+
+query T
+SELECT URL FROM [EXPLAIN (DISTSQL) SELECT c, d, SUM(a+c) + AVG(b+d) FROM data GROUP BY c, d]
+----
+https://raduberinde.github.io/decode.html?eJzclk9vm0AQxe_9FGhOibJVswvYiU9UbQ8-xKmc-FShinhXjiWHtRYsNYr83StA9R9o55Xgg-2Tx8CPmZ339MQbpVabUfJiMhr8IEmCFAnySVBAgkKKBS2dnZoss654pAKG-hcNrgXN0-UqLy7HgqbWGRq8UT7PF4YG9Jg8LczYJNo4EqRNnswXZZOlm78k7jXSSZ6QoLFJtXEDL_K9KPAi6V2VpSp-g-oqxWtBdpX_abYW_z_G59nMmVmS29oUUSiiHgkafv02eryI5OW2VkX9MLm7iPxNFRTVl_tJcT_YeTbcqXuXtUG3Uzy9es9J9lwboSeiPsXrf59n-4JVap02zui9V8TrNicu27U78cPk7udwc86NVLLQpxLskxeFXfQZ2Y92uT9oo81VGw-8a2fNKbh28jicD8Y4OefLM3M-0OcgzlfHYUUwxslZUZ2ZFYE-B7GifxxWBGOcnBX9M7Mi0OcgVgyOw4pgjJOzYnBmVgT6HPzT9C89xiZb2jQz7LdnLMjomanWntmVm5rvzk7Ll1d_78unywvaZHl1V1Z_hml1qxhrF5Z1WO7Cag-W7eB-F1jKTnTYib7lacUu3OcX7rNwwHcOWFgBrUOW7vFwr4tReBgYhYeRUQANjAJoYJQ-u_AbfuE3XYxyy2fCNQiFRqS0SgWeRrHA0zAXAI6CAeBAcNkIlv29K7B3PlmA5pKPFhmA5o1waSU6TyPReRqKDnAkOsCR6HyuShCsspExrUTnM0aCkJGNlGklOk8j0Xkaig5wJDrAkeh8wiqQsIr_aKuLHq8__A4AAP__GLxndg==
+
+query T
+SELECT URL FROM [EXPLAIN (DISTSQL) SELECT c, d, SUM(a+c) + AVG(b+d) FROM data GROUP BY c, d ORDER BY c, d]
+----
+https://raduberinde.github.io/decode.html?eJzclk9v2kAQxe_9FNacErFVs2ubJJy2anvgkKQK4VRZlYNXBIl40dpIjSK-e2Vb5W86D1gOwInF9ts363nzk98pt5m5T19NQZ1fJEmQIkEhCYpIUEyJoImzA1MU1lWPNIJu9oc6V4JG-WRaVpcTQQPrDHXeqRyVY0Mdekqfx-bRpJlxJCgzZToa1yYTN3pN3ZvO0jIlQY8mz4zrBDoMdBRoGbTqpap-o-YqJTNBdlr-M5uJ7cv4Ohw6M0xLu1aFjoVuk6Du9x_3TxdaXi7Wqlr3-ncXOpyvomr17aFf3Y-Wno2X1u3LtUIXVTy_BS9p8bJWQlvoa0pm_z_PYoNpbl1mnMlWtkhmu5y4ttvtxL3-3e_u_JzzVsmqP03DvgQ69unPvf1sJ6uFbti0PDPQs65cT6GWLaFVa-ttF7t91Iil7bY6I-cqj2OuQBknN1fyzOYK9OcgcwU89p0rdRwJB2WcXMLVmSUc9OcgCQce-yY8PI6EgzJOLuHhmSUc9OcgCQce-yY8Oo6EgzJOLuHRmSUc9OcgCQceh_j6_2DbR1NMbF4Y9rs-EWSyoWm6WdipG5ifzg7qzZu_D_XT9YXMFGVzVzZ_unlzqyprWSzXxXJZrFbEcjfxjY9Yhl5qL28FvBX7wkP-hYesOOLFESuO-bJjVqzavHWbVV_z4muflPFi0GlejFIG1F7eKGU37Au_5V_4Lc-EKwAFHikgZ3JjulbNFTDfGK-dkMSrERd4NYQSkPu5o8BIHi0SsEXycJExkPN4QZnh8SIBX6QXYIAadc0PMUju5w4zw1NGAsxInjMKcEZ5cUbxnFGAM8qLM0ANugbUKDNI7ucOP394zijAGcVzRgHOqN04k8w-_Q0AAP__maZcig==
+
+query IIR
+SELECT c, d, SUM(a+c) + AVG(b+d) FROM data GROUP BY c, d ORDER BY c, d
+----
+1   1   656.5
+1   2   657.5
+1   3   658.5
+1   4   659.5
+1   5   660.5
+1   6   661.5
+1   7   662.5
+1   8   663.5
+1   9   664.5
+1   10  665.5
+2   1   756.5
+2   2   757.5
+2   3   758.5
+2   4   759.5
+2   5   760.5
+2   6   761.5
+2   7   762.5
+2   8   763.5
+2   9   764.5
+2   10  765.5
+3   1   856.5
+3   2   857.5
+3   3   858.5
+3   4   859.5
+3   5   860.5
+3   6   861.5
+3   7   862.5
+3   8   863.5
+3   9   864.5
+3   10  865.5
+4   1   956.5
+4   2   957.5
+4   3   958.5
+4   4   959.5
+4   5   960.5
+4   6   961.5
+4   7   962.5
+4   8   963.5
+4   9   964.5
+4   10  965.5
+5   1   1056.5
+5   2   1057.5
+5   3   1058.5
+5   4   1059.5
+5   5   1060.5
+5   6   1061.5
+5   7   1062.5
+5   8   1063.5
+5   9   1064.5
+5   10  1065.5
+6   1   1156.5
+6   2   1157.5
+6   3   1158.5
+6   4   1159.5
+6   5   1160.5
+6   6   1161.5
+6   7   1162.5
+6   8   1163.5
+6   9   1164.5
+6   10  1165.5
+7   1   1256.5
+7   2   1257.5
+7   3   1258.5
+7   4   1259.5
+7   5   1260.5
+7   6   1261.5
+7   7   1262.5
+7   8   1263.5
+7   9   1264.5
+7   10  1265.5
+8   1   1356.5
+8   2   1357.5
+8   3   1358.5
+8   4   1359.5
+8   5   1360.5
+8   6   1361.5
+8   7   1362.5
+8   8   1363.5
+8   9   1364.5
+8   10  1365.5
+9   1   1456.5
+9   2   1457.5
+9   3   1458.5
+9   4   1459.5
+9   5   1460.5
+9   6   1461.5
+9   7   1462.5
+9   8   1463.5
+9   9   1464.5
+9   10  1465.5
+10  1   1556.5
+10  2   1557.5
+10  3   1558.5
+10  4   1559.5
+10  5   1560.5
+10  6   1561.5
+10  7   1562.5
+10  8   1563.5
+10  9   1564.5
+10  10  1565.5
+
+# There should be no "by hash" routers if there is a single stream.
+query T
+SELECT URL FROM [EXPLAIN (DISTSQL) SELECT c, d, SUM(a+c) + AVG(b+d) FROM data WHERE a > 9 GROUP BY c, d]
+----
+https://raduberinde.github.io/decode.html?eJykkTFr-zAUxPf_pzA3JfxViOykgycFWkqGpiVNuxQPqvUwBscykgwtwd-9SKLUzaAOnXy69-748XxGrxXt5YksyldwMGxQMQxG12StNt6OSzv1jnLF0PbD6LxdMdTaEMozXOs6Qom9vtIDGBQ52XZhaWLQo_uKTGxWxtNlR_nW0YGkIvOjEoNpT9J8CCWdBMOBekWmzESRiXUmePY_yNx_19HFHzC2TWOokU5fUIgNE9dg2N3c7o8LwZffOvf66fl-IQqvti93C7FezlG55xNFQEzC_XLwA9lB95aSN68YSDUUf6XVo6np0eg6lMfnQ9gOhiLr4rSIj10fRx5rHubJcJ4O58nw6iJcTf8-AwAA__9iu9du
+
+# Distributed final stage without local stage.
+query T
+SELECT URL FROM [EXPLAIN (DISTSQL) SELECT STDDEV(a+b) FROM data GROUP BY c, d]
+----
+https://raduberinde.github.io/decode.html?eJzMlcFq3DAQhu99CjOnlqqwsp009UmF9JBLWrahl6KDYg2OYWMZSYaG4HcvawfSdZOZgnrQ0Za-0cz3g_QIg7N4be4xQPMTJAgoQUAFAmoQcAZawOhdiyE4f9yyAlf2FzQ7Af0wTvH4WwtonUdoHiH28YDQwI25PeAejUUPAixG0x-WQ0bf3xv_oKyJBgTscbDom0LJ4n2hykJVhapBzwLcFJ_KP1e9fSjuTLg7rahKoSrQs57FK_09F5gG5y16tCcl9PzCBJ-7zmNnovMvHSfg-83l5Zcfb5V8t2n3P_dx7T64cbPt9eNk5rHITGIpM_dUZuKpytxTlYmnOnNPdSaemGdjj2F0Q0DyvtMC0Ha4jhLc5Fv85l27FF8_vy67l9vGYojr6tPH1bAuHdv6d7hOgc9T4IsUWO5oWm7p3Z90ScMlCctT37stXaWERcNMWDTMhEXDTFjMzExYdUpYZym6aZjRTcOMbhpmdDMzM7rPU3R_TNFNw4xuGmZ00zCjm5mZ0X2RovtTim4aZnTTMKObhhndzMzczf_Xw0H61vOb3wEAAP__iAmuQw==
