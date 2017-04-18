@@ -138,7 +138,7 @@ func (c *Cluster) Close() {
 	for _, n := range c.Nodes {
 		n.Kill()
 	}
-	c.stopper.Stop()
+	c.stopper.Stop(context.Background())
 }
 
 // IPAddr returns the IP address of the specified node.

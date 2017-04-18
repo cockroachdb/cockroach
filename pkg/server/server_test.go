@@ -58,7 +58,7 @@ func TestSelfBootstrap(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer s.Stopper().Stop()
+	defer s.Stopper().Stop(context.TODO())
 }
 
 // TestServerStartClock tests that a server's clock is not pushed out of thin
@@ -79,7 +79,7 @@ func TestServerStartClock(t *testing.T) {
 		},
 	}
 	s, _, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop()
+	defer s.Stopper().Stop(context.TODO())
 
 	// Run a command so that we are sure to touch the timestamp cache. This is
 	// actually not needed because other commands run during server
@@ -111,7 +111,7 @@ func TestPlainHTTPServer(t *testing.T) {
 		// The default context uses embedded certs.
 		Insecure: true,
 	})
-	defer s.Stopper().Stop()
+	defer s.Stopper().Stop(context.TODO())
 
 	var data serverpb.JSONResponse
 	testutils.SucceedsSoon(t, func() error {
@@ -128,7 +128,7 @@ func TestPlainHTTPServer(t *testing.T) {
 func TestSecureHTTPRedirect(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop()
+	defer s.Stopper().Stop(context.TODO())
 	ts := s.(*TestServer)
 
 	httpClient, err := s.GetHTTPClient()
@@ -178,7 +178,7 @@ func TestSecureHTTPRedirect(t *testing.T) {
 func TestAcceptEncoding(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop()
+	defer s.Stopper().Stop(context.TODO())
 	client, err := s.GetHTTPClient()
 	if err != nil {
 		t.Fatal(err)
@@ -232,7 +232,7 @@ func TestAcceptEncoding(t *testing.T) {
 func TestMultiRangeScanDeleteRange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, _, db := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop()
+	defer s.Stopper().Stop(context.TODO())
 	ts := s.(*TestServer)
 	tds := db.GetSender()
 
@@ -320,7 +320,7 @@ func TestMultiRangeScanWithMaxResults(t *testing.T) {
 
 	for i, tc := range testCases {
 		s, _, db := serverutils.StartServer(t, base.TestServerArgs{})
-		defer s.Stopper().Stop()
+		defer s.Stopper().Stop(context.TODO())
 		ts := s.(*TestServer)
 		tds := db.GetSender()
 
@@ -364,7 +364,7 @@ func TestSystemConfigGossip(t *testing.T) {
 	t.Skip("#12351")
 
 	s, _, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop()
+	defer s.Stopper().Stop(context.TODO())
 	ts := s.(*TestServer)
 	ctx := context.TODO()
 
@@ -461,7 +461,7 @@ func TestOfficializeAddr(t *testing.T) {
 func TestClusterStores(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	tc := serverutils.StartTestCluster(t, 2, base.TestClusterArgs{})
-	defer tc.Stopper().Stop()
+	defer tc.Stopper().Stop(context.TODO())
 
 	testutils.SucceedsSoon(t, func() error {
 		stores := tc.Server(0).(*TestServer).ClusterStores()

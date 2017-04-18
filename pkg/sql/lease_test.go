@@ -70,7 +70,7 @@ func newLeaseTest(t *testing.T, params base.TestServerArgs) *leaseTest {
 }
 
 func (t *leaseTest) cleanup() {
-	t.server.Stopper().Stop()
+	t.server.Stopper().Stop(context.TODO())
 }
 
 func (t *leaseTest) getLeases(descID sqlbase.ID) string {
@@ -604,7 +604,7 @@ func TestLeasesOnDeletedTableAreReleasedImmediately(t *testing.T) {
 		},
 	}
 	s, db, kvDB := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop()
+	defer s.Stopper().Stop(context.TODO())
 
 	stmt := `
 CREATE DATABASE test;
@@ -680,7 +680,7 @@ func TestTxnObeysLeaseExpiration(t *testing.T) {
 		},
 	}
 	s, sqlDB, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop()
+	defer s.Stopper().Stop(context.TODO())
 	leaseManager := s.LeaseManager().(*sql.LeaseManager)
 
 	if _, err := sqlDB.Exec(`
@@ -746,7 +746,7 @@ func TestSubqueryLeases(t *testing.T) {
 		},
 	}
 	s, sqlDB, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop()
+	defer s.Stopper().Stop(context.TODO())
 
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;

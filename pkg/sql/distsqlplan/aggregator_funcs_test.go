@@ -265,7 +265,7 @@ func TestDistAggregationTable(t *testing.T) {
 	const numRows = 100
 
 	tc := serverutils.StartTestCluster(t, 1, base.TestClusterArgs{})
-	defer tc.Stopper().Stop()
+	defer tc.Stopper().Stop(context.TODO())
 
 	// Create a table with a few columns:
 	//  - random integer values from 0 to numRows

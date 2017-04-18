@@ -141,7 +141,7 @@ func TestJobLogger(t *testing.T) {
 	ctx := context.TODO()
 	params, _ := createTestServerParams()
 	s, rawSQLDB, kvDB := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop()
+	defer s.Stopper().Stop(context.TODO())
 
 	t.Run("valid job lifecycles succeed", func(t *testing.T) {
 		db := sqlutils.MakeSQLRunner(t, rawSQLDB)

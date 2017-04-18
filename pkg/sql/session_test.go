@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/lib/pq"
+	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -42,7 +43,7 @@ func TestSessionFinishRollsBackTxn(t *testing.T) {
 	params, _ := createTestServerParams()
 	params.Knobs.SQLExecutor = aborter.executorKnobs()
 	s, mainDB, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop()
+	defer s.Stopper().Stop(context.TODO())
 	{
 		pgURL, cleanup := sqlutils.PGUrl(
 			t, s.ServingAddr(), "TestSessionFinishRollsBackTxn", url.User(security.RootUser))

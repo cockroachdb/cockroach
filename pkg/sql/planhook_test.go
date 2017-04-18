@@ -19,6 +19,8 @@ package sql_test
 import (
 	"testing"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -27,7 +29,7 @@ import (
 func TestPlanHookPrepare(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
-	defer tc.Stopper().Stop()
+	defer tc.Stopper().Stop(context.TODO())
 	sqlDB := tc.Conns[0]
 
 	stmt, err := sqlDB.Prepare(`SHOW planhook`)

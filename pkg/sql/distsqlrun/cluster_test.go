@@ -45,7 +45,7 @@ func TestClusterFlow(t *testing.T) {
 
 	args := base.TestClusterArgs{ReplicationMode: base.ReplicationManual}
 	tc := serverutils.StartTestCluster(t, 3, args)
-	defer tc.Stopper().Stop()
+	defer tc.Stopper().Stop(context.TODO())
 
 	sumDigitsFn := func(row int) parser.Datum {
 		sum := 0

@@ -63,7 +63,7 @@ func createTestClientForUser(
 func TestKVDBCoverage(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop()
+	defer s.Stopper().Stop(context.TODO())
 	ctx := context.TODO()
 
 	db := createTestClient(t, s)
@@ -169,7 +169,7 @@ func TestKVDBCoverage(t *testing.T) {
 func TestKVDBInternalMethods(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop()
+	defer s.Stopper().Stop(context.TODO())
 
 	testCases := []roachpb.Request{
 		&roachpb.HeartbeatTxnRequest{},
@@ -213,7 +213,7 @@ func TestKVDBInternalMethods(t *testing.T) {
 func TestKVDBTransaction(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop()
+	defer s.Stopper().Stop(context.TODO())
 
 	db := createTestClient(t, s)
 
@@ -260,7 +260,7 @@ func TestKVDBTransaction(t *testing.T) {
 func TestAuthentication(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop()
+	defer s.Stopper().Stop(context.TODO())
 
 	b1 := &client.Batch{}
 	b1.Put("a", "b")
@@ -309,7 +309,7 @@ func TestTxnDelRangeIntentResolutionCounts(t *testing.T) {
 		},
 	}
 	s, _, db := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop()
+	defer s.Stopper().Stop(context.TODO())
 
 	for _, abortTxn := range []bool{false, true} {
 		spanSize := int64(10)

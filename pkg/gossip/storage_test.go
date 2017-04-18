@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
+	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/gossip/resolver"
@@ -100,7 +101,7 @@ func (s unresolvedAddrSlice) Swap(i, j int) {
 func TestGossipStorage(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
-	defer stopper.Stop()
+	defer stopper.Stop(context.TODO())
 
 	network := simulation.NewNetwork(stopper, 3, true)
 
@@ -217,7 +218,7 @@ func TestGossipStorage(t *testing.T) {
 func TestGossipStorageCleanup(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
-	defer stopper.Stop()
+	defer stopper.Stop(context.TODO())
 
 	const numNodes = 3
 	network := simulation.NewNetwork(stopper, numNodes, false)

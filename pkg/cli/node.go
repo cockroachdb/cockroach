@@ -57,7 +57,7 @@ func runLsNodes(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	defer stopper.Stop()
+	defer stopper.Stop(stopperContext(stopper))
 
 	nodeStatuses, err := c.Nodes(stopperContext(stopper), &serverpb.NodesRequest{})
 	if err != nil {
@@ -110,12 +110,13 @@ func runStatusNode(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	defer stopper.Stop()
+	ctx := stopperContext(stopper)
+	defer stopper.Stop(ctx)
 
 	switch len(args) {
 	case 0:
 		// Show status for all nodes.
-		nodes, err := c.Nodes(stopperContext(stopper), &serverpb.NodesRequest{})
+		nodes, err := c.Nodes(ctx, &serverpb.NodesRequest{})
 		if err != nil {
 			return err
 		}
@@ -123,7 +124,7 @@ func runStatusNode(cmd *cobra.Command, args []string) error {
 
 	case 1:
 		nodeID := args[0]
-		nodeStatus, err := c.Node(stopperContext(stopper), &serverpb.NodeRequest{NodeId: nodeID})
+		nodeStatus, err := c.Node(ctx, &serverpb.NodeRequest{NodeId: nodeID})
 		if err != nil {
 			return err
 		}

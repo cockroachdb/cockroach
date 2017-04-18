@@ -175,7 +175,7 @@ func (s keySlice) Less(i, j int) bool { return bytes.Compare(s[i], s[j]) < 0 }
 func TestBootstrapCluster(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
-	defer stopper.Stop()
+	defer stopper.Stop(context.TODO())
 	e := engine.NewInMem(roachpb.Attributes{}, 1<<20)
 	stopper.AddCloser(e)
 	if _, err := bootstrapCluster(
@@ -239,7 +239,7 @@ func TestBootstrapNewStore(t *testing.T) {
 		roachpb.Locality{},
 		t,
 	)
-	defer stopper.Stop()
+	defer stopper.Stop(context.TODO())
 
 	// Non-initialized stores (in this case the new in-memory-based
 	// store) will be bootstrapped by the node upon start. This happens
@@ -268,7 +268,7 @@ func TestBootstrapNewStore(t *testing.T) {
 func TestNodeJoin(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	engineStopper := stop.NewStopper()
-	defer engineStopper.Stop()
+	defer engineStopper.Stop(context.TODO())
 	e := engine.NewInMem(roachpb.Attributes{}, 1<<20)
 	engineStopper.AddCloser(e)
 	if _, err := bootstrapCluster(
@@ -286,7 +286,7 @@ func TestNodeJoin(t *testing.T) {
 		roachpb.Locality{},
 		t,
 	)
-	defer stopper1.Stop()
+	defer stopper1.Stop(context.TODO())
 
 	// Create a new node.
 	e2 := engine.NewInMem(roachpb.Attributes{}, 1<<20)
@@ -299,7 +299,7 @@ func TestNodeJoin(t *testing.T) {
 		roachpb.Locality{},
 		t,
 	)
-	defer stopper2.Stop()
+	defer stopper2.Stop(context.TODO())
 
 	// Verify new node is able to bootstrap its store.
 	testutils.SucceedsSoon(t, func() error {
@@ -340,7 +340,7 @@ func TestNodeJoinSelf(t *testing.T) {
 	defer e.Close()
 	engines := []engine.Engine{e}
 	_, addr, _, node, stopper := createTestNode(util.TestAddr, engines, util.TestAddr, t)
-	defer stopper.Stop()
+	defer stopper.Stop(context.TODO())
 	err := node.start(context.Background(), addr, engines, roachpb.Attributes{}, roachpb.Locality{})
 	if err != errCannotJoinSelf {
 		t.Fatalf("expected err %s; got %s", errCannotJoinSelf, err)
@@ -372,7 +372,7 @@ func TestCorruptedClusterID(t *testing.T) {
 
 	engines := []engine.Engine{e}
 	_, serverAddr, _, node, stopper := createTestNode(util.TestAddr, engines, nil, t)
-	stopper.Stop()
+	stopper.Stop(context.TODO())
 	if err := node.start(context.Background(), serverAddr, engines, roachpb.Attributes{}, roachpb.Locality{}); !testutils.IsError(err, "unidentified store") {
 		t.Errorf("unexpected error %v", err)
 	}
@@ -506,7 +506,7 @@ func TestStatusSummaries(t *testing.T) {
 	srv, _, kvDB := serverutils.StartServer(t, base.TestServerArgs{
 		DisableEventLog: true,
 	})
-	defer srv.Stopper().Stop()
+	defer srv.Stopper().Stop(context.TODO())
 	ts := srv.(*TestServer)
 	ctx := context.TODO()
 
@@ -694,7 +694,7 @@ func TestStartNodeWithLocality(t *testing.T) {
 			locality,
 			t,
 		)
-		defer stopper.Stop()
+		defer stopper.Stop(context.TODO())
 
 		// Check the node to make sure the locality was propagated to its
 		// nodeDescriptor.

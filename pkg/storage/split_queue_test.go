@@ -37,7 +37,7 @@ func TestSplitQueueShouldQueue(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	tc := testContext{}
 	stopper := stop.NewStopper()
-	defer stopper.Stop()
+	defer stopper.Stop(context.TODO())
 	tc.Start(t, stopper)
 
 	// Set zone configs.

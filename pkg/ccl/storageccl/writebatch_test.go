@@ -37,8 +37,8 @@ func TestDBWriteBatch(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	s, _, db := serverutils.StartServer(t, base.TestServerArgs{Insecure: true})
-	defer s.Stopper().Stop()
 	ctx := context.Background()
+	defer s.Stopper().Stop(ctx)
 
 	// Key range in request spans multiple ranges.
 	if err := db.WriteBatch(
@@ -191,7 +191,7 @@ func BenchmarkWriteBatch(b *testing.B) {
 		b.Run(strconv.Itoa(numEntries), func(b *testing.B) {
 			ctx := context.Background()
 			tc := testcluster.StartTestCluster(b, 3, base.TestClusterArgs{})
-			defer tc.Stopper().Stop()
+			defer tc.Stopper().Stop(ctx)
 			kvDB := tc.Server(0).KVClient().(*client.DB)
 
 			id := keys.MaxReservedDescID + 1

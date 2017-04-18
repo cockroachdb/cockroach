@@ -25,6 +25,7 @@ import (
 
 	"github.com/lib/pq"
 	"github.com/pkg/errors"
+	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -40,7 +41,7 @@ import (
 func TestPGWireConnectionCloseReleasesLeases(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, _, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop()
+	defer s.Stopper().Stop(context.TODO())
 	url, cleanupConn := sqlutils.PGUrl(t, s.ServingAddr(), "SetupServer", url.User(security.RootUser))
 	defer cleanupConn()
 	conn, err := pq.Open(url.String())

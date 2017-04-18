@@ -89,7 +89,7 @@ func TestMonotonicInserts(t *testing.T) {
 		base.TestClusterArgs{
 			ReplicationMode: base.ReplicationAuto,
 		})
-	defer tc.Stopper().Stop()
+	defer tc.Stopper().Stop(context.TODO())
 	ctx := context.Background()
 
 	var clients []mtClient

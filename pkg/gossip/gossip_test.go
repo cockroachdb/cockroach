@@ -45,7 +45,7 @@ import (
 func TestGossipInfoStore(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
-	defer stopper.Stop()
+	defer stopper.Stop(context.TODO())
 	rpcContext := newInsecureRPCContext(stopper)
 	g := NewTest(1, rpcContext, rpc.NewServer(rpcContext), nil, stopper, metric.NewRegistry())
 	slice := []byte("b")
@@ -65,7 +65,7 @@ func TestGossipInfoStore(t *testing.T) {
 func TestGossipOverwriteNode(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
-	defer stopper.Stop()
+	defer stopper.Stop(context.TODO())
 	rpcContext := newInsecureRPCContext(stopper)
 	g := NewTest(1, rpcContext, rpc.NewServer(rpcContext), nil, stopper, metric.NewRegistry())
 	node1 := &roachpb.NodeDescriptor{NodeID: 1, Address: util.MakeUnresolvedAddr("tcp", "1.1.1.1:1")}
@@ -101,7 +101,7 @@ func TestGossipOverwriteNode(t *testing.T) {
 
 	// Quiesce the stopper now to ensure that the update has propagated before
 	// checking whether node 1 has been removed from the infoStore.
-	stopper.Quiesce()
+	stopper.Quiesce(context.TODO())
 	expectedErr := "unable to look up descriptor for node"
 	if val, err := g.GetNodeDescriptor(node1.NodeID); !testutils.IsError(err, expectedErr) {
 		t.Errorf("expected error %q fetching node %d; got error %v and node %+v",
@@ -112,7 +112,7 @@ func TestGossipOverwriteNode(t *testing.T) {
 func TestGossipGetNextBootstrapAddress(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
-	defer stopper.Stop()
+	defer stopper.Stop(context.TODO())
 
 	resolverSpecs := []string{
 		"127.0.0.1:9000",
@@ -155,7 +155,7 @@ func TestGossipRaceLogStatus(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	stopper := stop.NewStopper()
-	defer stopper.Stop()
+	defer stopper.Stop(context.TODO())
 	local := startGossip(1, stopper, t, metric.NewRegistry())
 
 	local.mu.Lock()
@@ -192,7 +192,7 @@ func TestGossipOutgoingLimitEnforced(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	stopper := stop.NewStopper()
-	defer stopper.Stop()
+	defer stopper.Stop(context.TODO())
 
 	// This test has an implicit dependency on the maxPeers logic deciding that
 	// maxPeers is 3 for a 5-node cluster, so let's go ahead and make that
@@ -275,7 +275,7 @@ func TestGossipNoForwardSelf(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	stopper := stop.NewStopper()
-	defer stopper.Stop()
+	defer stopper.Stop(context.TODO())
 	local := startGossip(1, stopper, t, metric.NewRegistry())
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -355,7 +355,7 @@ func TestGossipCullNetwork(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	stopper := stop.NewStopper()
-	defer stopper.Stop()
+	defer stopper.Stop(context.TODO())
 	local := startGossip(1, stopper, t, metric.NewRegistry())
 	local.SetCullInterval(5 * time.Millisecond)
 
@@ -394,7 +394,7 @@ func TestGossipOrphanedStallDetection(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	stopper := stop.NewStopper()
-	defer stopper.Stop()
+	defer stopper.Stop(context.TODO())
 	local := startGossip(1, stopper, t, metric.NewRegistry())
 	local.SetStallInterval(5 * time.Millisecond)
 
@@ -436,7 +436,7 @@ func TestGossipOrphanedStallDetection(t *testing.T) {
 	local.bootstrap()
 	local.manage()
 
-	peerStopper.Stop()
+	peerStopper.Stop(context.TODO())
 
 	testutils.SucceedsSoon(t, func() error {
 		for _, peerID := range local.Outgoing() {
@@ -448,7 +448,7 @@ func TestGossipOrphanedStallDetection(t *testing.T) {
 	})
 
 	peerStopper = stop.NewStopper()
-	defer peerStopper.Stop()
+	defer peerStopper.Stop(context.TODO())
 	startGossipAtAddr(peerNodeID, peerAddr, peerStopper, t, metric.NewRegistry())
 
 	testutils.SucceedsSoon(t, func() error {
@@ -489,7 +489,7 @@ func TestGossipJoinTwoClusters(t *testing.T) {
 			select {
 			case <-stopper.ShouldQuiesce():
 			default:
-				stopper.Stop()
+				stopper.Stop(context.TODO())
 			}
 		}()
 		rpcCtx := newInsecureRPCContext(stopper)
@@ -546,7 +546,7 @@ func TestGossipJoinTwoClusters(t *testing.T) {
 	})
 
 	// Kill node 0 to force node 2 to bootstrap with node 1.
-	stoppers[0].Stop()
+	stoppers[0].Stop(context.TODO())
 	// Wait for twice the bootstrap interval, and verify that
 	// node 2 still has not connected to node 1.
 	time.Sleep(2 * interval)

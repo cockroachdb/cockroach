@@ -117,7 +117,7 @@ func TestIntentResolution(t *testing.T) {
 
 			s, _, kvDB := serverutils.StartServer(t, base.TestServerArgs{
 				Knobs: base.TestingKnobs{Store: &storeKnobs}})
-			defer s.Stopper().Stop()
+			defer s.Stopper().Stop(context.TODO())
 			// Split the Range. This should not have any asynchronous intents.
 			if err := kvDB.AdminSplit(context.TODO(), splitKey); err != nil {
 				t.Fatal(err)

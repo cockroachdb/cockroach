@@ -29,6 +29,8 @@ import (
 	"testing"
 	"time"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/pkg/internal/rsg"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -195,7 +197,7 @@ func testRandomSyntax(
 	// Use a low memory limit to quickly halt runaway functions.
 	params.SQLMemoryPoolSize = 3 * 1024 * 1024 // 3MB
 	s, db, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop()
+	defer s.Stopper().Stop(context.TODO())
 
 	if setup != nil {
 		err := setup(db)

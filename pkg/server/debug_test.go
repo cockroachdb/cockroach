@@ -19,6 +19,8 @@ import (
 	"os"
 	"testing"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
@@ -33,7 +35,7 @@ func TestDebugRemote(t *testing.T) {
 	// force listening on a non-local address. We can't use certs because the
 	// test certs are only valid for localhost.
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{HTTPAddr: ":0", Insecure: true})
-	defer s.Stopper().Stop()
+	defer s.Stopper().Stop(context.TODO())
 	ts := s.(*TestServer)
 
 	httpClient, err := ts.GetHTTPClient()

@@ -94,7 +94,7 @@ func (tc *TestCluster) stopServers() {
 		go func(s *stop.Stopper) {
 			defer wg.Done()
 			if s != nil {
-				s.Quiesce()
+				s.Quiesce(context.TODO())
 			}
 		}(s)
 	}
@@ -102,7 +102,7 @@ func (tc *TestCluster) stopServers() {
 
 	for i := range tc.mu.serverStoppers {
 		if tc.mu.serverStoppers[i] != nil {
-			tc.mu.serverStoppers[i].Stop()
+			tc.mu.serverStoppers[i].Stop(context.TODO())
 			tc.mu.serverStoppers[i] = nil
 		}
 	}
@@ -113,7 +113,7 @@ func (tc *TestCluster) StopServer(idx int) {
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
 	if tc.mu.serverStoppers[idx] != nil {
-		tc.mu.serverStoppers[idx].Stop()
+		tc.mu.serverStoppers[idx].Stop(context.TODO())
 		tc.mu.serverStoppers[idx] = nil
 	}
 }

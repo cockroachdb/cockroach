@@ -230,7 +230,7 @@ func (nl *NodeLiveness) StartHeartbeat(
 	nl.mu.heartbeatCallback = alive
 	nl.mu.Unlock()
 
-	stopper.RunWorker(func() {
+	stopper.RunWorker(ctx, func() {
 		ambient := nl.ambientCtx
 		ambient.AddLogTag("hb", nil)
 		ticker := time.NewTicker(nl.heartbeatInterval)

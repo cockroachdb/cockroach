@@ -332,7 +332,7 @@ func (e *Executor) Start(
 	e.systemConfigCond = sync.NewCond(e.systemConfigMu.RLocker())
 
 	gossipUpdateC := e.cfg.Gossip.RegisterSystemConfigChannel()
-	e.stopper.RunWorker(func() {
+	e.stopper.RunWorker(ctx, func() {
 		for {
 			select {
 			case <-gossipUpdateC:

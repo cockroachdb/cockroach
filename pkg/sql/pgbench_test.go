@@ -25,6 +25,8 @@ import (
 	"testing"
 	"time"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgbench"
@@ -112,7 +114,7 @@ func execPgbench(b *testing.B, pgURL url.URL) {
 func BenchmarkPgbenchExec_Cockroach(b *testing.B) {
 	defer tracing.Disable()()
 	s, _, _ := serverutils.StartServer(b, base.TestServerArgs{Insecure: true})
-	defer s.Stopper().Stop()
+	defer s.Stopper().Stop(context.TODO())
 
 	pgURL, cleanupFn := sqlutils.PGUrl(
 		b, s.ServingAddr(), "benchmarkCockroach", url.User(security.RootUser))

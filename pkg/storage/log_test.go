@@ -41,7 +41,7 @@ import (
 func TestLogSplits(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop()
+	defer s.Stopper().Stop(context.TODO())
 
 	countSplits := func() int {
 		var count int
@@ -138,7 +138,7 @@ func TestLogSplits(t *testing.T) {
 func TestLogRebalances(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, _, db := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop()
+	defer s.Stopper().Stop(context.TODO())
 
 	// Use a client to get the RangeDescriptor for the first range. We will use
 	// this range's information to log fake rebalance events.

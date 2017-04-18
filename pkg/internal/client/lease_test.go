@@ -39,7 +39,7 @@ var (
 func TestAcquireAndRelease(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, db := setup(t)
-	defer s.Stopper().Stop()
+	defer s.Stopper().Stop(context.TODO())
 
 	ctx := context.Background()
 	manual := hlc.NewManualClock(123)
@@ -69,7 +69,7 @@ func TestAcquireAndRelease(t *testing.T) {
 func TestReacquireLease(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, db := setup(t)
-	defer s.Stopper().Stop()
+	defer s.Stopper().Stop(context.TODO())
 
 	ctx := context.Background()
 	manual := hlc.NewManualClock(123)
@@ -95,7 +95,7 @@ func TestReacquireLease(t *testing.T) {
 func TestExtendLease(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, db := setup(t)
-	defer s.Stopper().Stop()
+	defer s.Stopper().Stop(context.TODO())
 
 	ctx := context.Background()
 	manual := hlc.NewManualClock(123)
@@ -134,7 +134,7 @@ func TestExtendLease(t *testing.T) {
 func TestLeasesMultipleClients(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, db := setup(t)
-	defer s.Stopper().Stop()
+	defer s.Stopper().Stop(context.TODO())
 
 	ctx := context.Background()
 	manual1 := hlc.NewManualClock(123)

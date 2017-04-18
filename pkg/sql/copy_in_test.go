@@ -26,6 +26,8 @@ import (
 	"testing"
 	"time"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -39,7 +41,7 @@ func TestCopyNullInfNaN(t *testing.T) {
 
 	params, _ := createTestServerParams()
 	s, db, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop()
+	defer s.Stopper().Stop(context.TODO())
 
 	if _, err := db.Exec(`
 		CREATE DATABASE d;
@@ -130,7 +132,7 @@ func TestCopyRandom(t *testing.T) {
 
 	params, _ := createTestServerParams()
 	s, db, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop()
+	defer s.Stopper().Stop(context.TODO())
 
 	if _, err := db.Exec(`
 		CREATE DATABASE d;
@@ -252,7 +254,7 @@ func TestCopyError(t *testing.T) {
 
 	params, _ := createTestServerParams()
 	s, db, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop()
+	defer s.Stopper().Stop(context.TODO())
 
 	if _, err := db.Exec(`
 		CREATE DATABASE d;
@@ -307,7 +309,7 @@ func TestCopyOne(t *testing.T) {
 
 	params, _ := createTestServerParams()
 	s, db, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop()
+	defer s.Stopper().Stop(context.TODO())
 
 	if _, err := db.Exec(`
 		CREATE DATABASE d;
@@ -341,7 +343,7 @@ func TestCopyInProgress(t *testing.T) {
 
 	params, _ := createTestServerParams()
 	s, db, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop()
+	defer s.Stopper().Stop(context.TODO())
 
 	if _, err := db.Exec(`
 		CREATE DATABASE d;
@@ -374,7 +376,7 @@ func TestCopyTransaction(t *testing.T) {
 
 	params, _ := createTestServerParams()
 	s, db, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop()
+	defer s.Stopper().Stop(context.TODO())
 
 	if _, err := db.Exec(`
 		CREATE DATABASE d;

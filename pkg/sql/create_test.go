@@ -41,7 +41,7 @@ func TestDatabaseDescriptor(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	params, _ := createTestServerParams()
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop()
+	defer s.Stopper().Stop(context.TODO())
 	ctx := context.TODO()
 
 	expectedCounter := int64(keys.MaxReservedDescID + 1)
@@ -258,7 +258,7 @@ func TestParallelCreateTables(t *testing.T) {
 	const numberOfNodes = 3
 
 	tc := testcluster.StartTestCluster(t, numberOfNodes, base.TestClusterArgs{})
-	defer tc.Stopper().Stop()
+	defer tc.Stopper().Stop(context.TODO())
 
 	if _, err := tc.ServerConn(0).Exec(`CREATE DATABASE "test"`); err != nil {
 		t.Fatal(err)
@@ -311,7 +311,7 @@ func TestParallelCreateConflictingTables(t *testing.T) {
 	const numberOfNodes = 3
 
 	tc := testcluster.StartTestCluster(t, numberOfNodes, base.TestClusterArgs{})
-	defer tc.Stopper().Stop()
+	defer tc.Stopper().Stop(context.TODO())
 
 	if _, err := tc.ServerConn(0).Exec(`CREATE DATABASE "test"`); err != nil {
 		t.Fatal(err)

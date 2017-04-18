@@ -25,6 +25,7 @@ import (
 
 	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
+	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
@@ -53,7 +54,7 @@ func mvccKey(k interface{}) MVCCKey {
 
 func testBatchBasics(t *testing.T, writeOnly bool, commit func(e Engine, b Batch) error) {
 	stopper := stop.NewStopper()
-	defer stopper.Stop()
+	defer stopper.Stop(context.TODO())
 	e := NewInMem(roachpb.Attributes{}, 1<<20)
 	stopper.AddCloser(e)
 
@@ -193,7 +194,7 @@ func TestWriteBatchBasics(t *testing.T) {
 func TestApplyBatchRepr(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
-	defer stopper.Stop()
+	defer stopper.Stop(context.TODO())
 	e := NewInMem(roachpb.Attributes{}, 1<<20)
 	stopper.AddCloser(e)
 
@@ -255,7 +256,7 @@ func TestApplyBatchRepr(t *testing.T) {
 func TestBatchGet(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
-	defer stopper.Stop()
+	defer stopper.Stop(context.TODO())
 	e := NewInMem(roachpb.Attributes{}, 1<<20)
 	stopper.AddCloser(e)
 
@@ -310,7 +311,7 @@ func compareMergedValues(t *testing.T, result, expected []byte) bool {
 func TestBatchMerge(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
-	defer stopper.Stop()
+	defer stopper.Stop(context.TODO())
 	e := NewInMem(roachpb.Attributes{}, 1<<20)
 	stopper.AddCloser(e)
 
@@ -368,7 +369,7 @@ func TestBatchMerge(t *testing.T) {
 func TestBatchProto(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
-	defer stopper.Stop()
+	defer stopper.Stop(context.TODO())
 	e := NewInMem(roachpb.Attributes{}, 1<<20)
 	stopper.AddCloser(e)
 
@@ -416,7 +417,7 @@ func TestBatchProto(t *testing.T) {
 func TestBatchScan(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
-	defer stopper.Stop()
+	defer stopper.Stop(context.TODO())
 	e := NewInMem(roachpb.Attributes{}, 1<<20)
 	stopper.AddCloser(e)
 
@@ -510,7 +511,7 @@ func TestBatchScan(t *testing.T) {
 func TestBatchScanWithDelete(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
-	defer stopper.Stop()
+	defer stopper.Stop(context.TODO())
 	e := NewInMem(roachpb.Attributes{}, 1<<20)
 	stopper.AddCloser(e)
 
@@ -539,7 +540,7 @@ func TestBatchScanWithDelete(t *testing.T) {
 func TestBatchScanMaxWithDeleted(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
-	defer stopper.Stop()
+	defer stopper.Stop(context.TODO())
 	e := NewInMem(roachpb.Attributes{}, 1<<20)
 	stopper.AddCloser(e)
 
@@ -574,7 +575,7 @@ func TestBatchScanMaxWithDeleted(t *testing.T) {
 func TestBatchConcurrency(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
-	defer stopper.Stop()
+	defer stopper.Stop(context.TODO())
 	e := NewInMem(roachpb.Attributes{}, 1<<20)
 	stopper.AddCloser(e)
 
@@ -610,7 +611,7 @@ func TestBatchBuilder(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	stopper := stop.NewStopper()
-	defer stopper.Stop()
+	defer stopper.Stop(context.TODO())
 	e := NewInMem(roachpb.Attributes{}, 1<<20)
 	stopper.AddCloser(e)
 
@@ -659,7 +660,7 @@ func TestBatchBuilderStress(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	stopper := stop.NewStopper()
-	defer stopper.Stop()
+	defer stopper.Stop(context.TODO())
 	e := NewInMem(roachpb.Attributes{}, 1<<20)
 	stopper.AddCloser(e)
 
@@ -725,7 +726,7 @@ func TestBatchDistinct(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	stopper := stop.NewStopper()
-	defer stopper.Stop()
+	defer stopper.Stop(context.TODO())
 	e := NewInMem(roachpb.Attributes{}, 1<<20)
 	stopper.AddCloser(e)
 
@@ -797,7 +798,7 @@ func TestWriteOnlyBatchDistinct(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	stopper := stop.NewStopper()
-	defer stopper.Stop()
+	defer stopper.Stop(context.TODO())
 	e := NewInMem(roachpb.Attributes{}, 1<<20)
 	stopper.AddCloser(e)
 
@@ -841,7 +842,7 @@ func TestBatchDistinctPanics(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	stopper := stop.NewStopper()
-	defer stopper.Stop()
+	defer stopper.Stop(context.TODO())
 	e := NewInMem(roachpb.Attributes{}, 1<<20)
 	stopper.AddCloser(e)
 
@@ -882,7 +883,7 @@ func TestBatchIteration(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	stopper := stop.NewStopper()
-	defer stopper.Stop()
+	defer stopper.Stop(context.TODO())
 	e := NewInMem(roachpb.Attributes{}, 1<<20)
 	defer e.Close()
 
@@ -957,7 +958,7 @@ func TestBatchCombine(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	stopper := stop.NewStopper()
-	defer stopper.Stop()
+	defer stopper.Stop(context.TODO())
 	e := NewInMem(roachpb.Attributes{}, 1<<20)
 	stopper.AddCloser(e)
 

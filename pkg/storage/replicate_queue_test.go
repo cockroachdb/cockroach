@@ -55,7 +55,7 @@ func TestReplicateQueueRebalance(t *testing.T) {
 	tc := testcluster.StartTestCluster(t, numNodes,
 		base.TestClusterArgs{ReplicationMode: base.ReplicationAuto},
 	)
-	defer tc.Stopper().Stop()
+	defer tc.Stopper().Stop(context.TODO())
 
 	const newRanges = 5
 	for i := 0; i < newRanges; i++ {
@@ -113,7 +113,7 @@ func TestReplicateQueueDownReplicate(t *testing.T) {
 	tc := testcluster.StartTestCluster(t, replicaCount+2,
 		base.TestClusterArgs{ReplicationMode: base.ReplicationAuto},
 	)
-	defer tc.Stopper().Stop()
+	defer tc.Stopper().Stop(context.TODO())
 
 	// Split off a range from the initial range for testing; there are
 	// complications if the metadata ranges are moved.

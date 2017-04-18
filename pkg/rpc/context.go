@@ -172,7 +172,7 @@ func NewContext(
 	ctx.heartbeatTimeout = 2 * defaultHeartbeatInterval
 	ctx.conns.cache = make(map[string]*connMeta)
 
-	stopper.RunWorker(func() {
+	stopper.RunWorker(ctx.masterCtx, func() {
 		<-stopper.ShouldQuiesce()
 
 		cancel()
@@ -292,8 +292,8 @@ func (ctx *Context) GRPCDial(target string, opts ...grpc.DialOption) (*grpc.Clie
 		}
 		meta.conn, meta.dialErr = grpc.DialContext(ctx.masterCtx, target, dialOpts...)
 		if meta.dialErr == nil {
-			if err := ctx.Stopper.RunTask(func() {
-				ctx.Stopper.RunWorker(func() {
+			if err := ctx.Stopper.RunTask(ctx.masterCtx, func() {
+				ctx.Stopper.RunWorker(ctx.masterCtx, func() {
 					err := ctx.runHeartbeat(meta, target)
 					if err != nil && !grpcutil.IsClosedConnection(err) {
 						log.Errorf(ctx.masterCtx, "removing connection to %s due to error: %s", target, err)

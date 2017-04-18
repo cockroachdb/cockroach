@@ -909,9 +909,9 @@ func (s *adminServer) Drain(req *serverpb.DrainRequest, stream serverpb.Admin_Dr
 	}
 
 	s.server.grpc.Stop()
-	go s.server.stopper.Stop()
 
 	ctx := stream.Context()
+	go s.server.stopper.Stop(ctx)
 
 	select {
 	case <-s.server.stopper.IsStopped():

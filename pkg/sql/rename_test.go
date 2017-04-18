@@ -37,7 +37,7 @@ import (
 func TestRenameTable(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop()
+	defer s.Stopper().Stop(context.TODO())
 
 	counter := int64(keys.MaxReservedDescID)
 
@@ -160,7 +160,7 @@ func TestTxnCanStillResolveOldName(t *testing.T) {
 			}
 		}
 	s, db, kvDB := serverutils.StartServer(t, serverParams)
-	defer s.Stopper().Stop()
+	defer s.Stopper().Stop(context.TODO())
 
 	sql := `
 CREATE DATABASE test;

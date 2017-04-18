@@ -69,7 +69,7 @@ func TestSkipLargeReplicaSnapshot(t *testing.T) {
 	defer config.TestingSetDefaultZoneConfig(cfg)()
 
 	stopper := stop.NewStopper()
-	defer stopper.Stop()
+	defer stopper.Stop(context.TODO())
 	store := createTestStoreWithConfig(t, stopper, &storeCfg)
 
 	rep, err := store.GetReplica(rangeID)

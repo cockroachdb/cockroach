@@ -75,7 +75,7 @@ func (dsp *distSQLPlanner) initRunners() {
 	// requests if a worker is actually there to receive them.
 	dsp.runnerChan = make(chan runnerRequest)
 	for i := 0; i < numRunners; i++ {
-		dsp.stopper.RunWorker(func() {
+		dsp.stopper.RunWorker(context.TODO(), func() {
 			runnerChan := dsp.runnerChan
 			stopChan := dsp.stopper.ShouldStop()
 			for {

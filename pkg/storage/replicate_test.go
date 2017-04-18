@@ -20,6 +20,7 @@ import (
 	"testing"
 
 	"github.com/pkg/errors"
+	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -35,7 +36,7 @@ func TestEagerReplication(t *testing.T) {
 	storeCfg := storage.TestStoreConfig(nil)
 	storeCfg.TestingKnobs.DisableSplitQueue = true
 	stopper := stop.NewStopper()
-	defer stopper.Stop()
+	defer stopper.Stop(context.TODO())
 	store := createTestStoreWithConfig(t, stopper, storeCfg)
 
 	// Disable the replica scanner so that we rely on the eager replication code

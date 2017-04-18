@@ -34,7 +34,7 @@ import (
 func TestSynthesizeHardState(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
-	defer stopper.Stop()
+	defer stopper.Stop(context.TODO())
 	eng := engine.NewInMem(roachpb.Attributes{}, 1<<20)
 	stopper.AddCloser(eng)
 

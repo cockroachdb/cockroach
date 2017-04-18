@@ -22,6 +22,8 @@ import (
 	"reflect"
 	"testing"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -32,7 +34,7 @@ import (
 func TestRunQuery(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop()
+	defer s.Stopper().Stop(context.TODO())
 
 	url, cleanup := sqlutils.PGUrl(t, s.ServingAddr(), "TestRunQuery", url.User(security.RootUser))
 	defer cleanup()

@@ -37,7 +37,7 @@ func TestTableReader(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop()
+	defer s.Stopper().Stop(context.TODO())
 
 	// Create a table where each row is:
 	//
@@ -162,7 +162,7 @@ func TestMisplannedRangesMetadata(t *testing.T) {
 				UseDatabase: "test",
 			},
 		})
-	defer tc.Stopper().Stop()
+	defer tc.Stopper().Stop(context.TODO())
 
 	db := tc.ServerConn(0)
 	sqlutils.CreateTable(t, db, "t",

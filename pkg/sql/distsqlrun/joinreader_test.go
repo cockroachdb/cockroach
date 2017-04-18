@@ -35,7 +35,7 @@ func TestJoinReader(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop()
+	defer s.Stopper().Stop(context.TODO())
 
 	// Create a table where each row is:
 	//
@@ -152,7 +152,7 @@ func TestJoinReaderDrain(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop()
+	defer s.Stopper().Stop(context.TODO())
 
 	sqlutils.CreateTable(
 		t,

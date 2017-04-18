@@ -40,7 +40,7 @@ func TestPartitionNemesis(t *testing.T) {
 	defer s.Close(t)
 
 	runTestOnConfigs(t, func(ctx context.Context, t *testing.T, c cluster.Cluster, cfg cluster.TestConfig) {
-		stopper.RunWorker(func() {
+		stopper.RunWorker(ctx, func() {
 			BidirectionalPartitionNemesis(ctx, t, c, stopper)
 		})
 		select {
@@ -191,10 +191,10 @@ func runTransactionsAndNemeses(
 	// We're going to run the nemeses for the duration of this function, which may
 	// return before `stopper` is stopped.
 	nemesesStopper := stop.NewStopper()
-	defer nemesesStopper.Stop()
+	defer nemesesStopper.Stop(ctx)
 	const concurrency = 5
 	for _, nemesis := range nemeses {
-		stopper.RunWorker(func() {
+		stopper.RunWorker(ctx, func() {
 			nemesis(ctx, t, c, nemesesStopper)
 		})
 	}

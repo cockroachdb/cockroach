@@ -24,6 +24,8 @@ import (
 	"sort"
 	"testing"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -131,7 +133,7 @@ func TestScanBatches(t *testing.T) {
 
 	s, db, _ := serverutils.StartServer(
 		t, base.TestServerArgs{UseDatabase: "test"})
-	defer s.Stopper().Stop()
+	defer s.Stopper().Stop(context.TODO())
 
 	if _, err := db.Exec(`CREATE DATABASE IF NOT EXISTS test`); err != nil {
 		t.Fatal(err)

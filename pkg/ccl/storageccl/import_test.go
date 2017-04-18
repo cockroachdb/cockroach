@@ -189,7 +189,7 @@ func TestImport(t *testing.T) {
 
 	ctx := context.Background()
 	s, _, kvDB := serverutils.StartServer(t, base.TestServerArgs{Knobs: knobs})
-	defer s.Stopper().Stop()
+	defer s.Stopper().Stop(ctx)
 
 	storage, err := ExportStorageConfFromURI("nodelocal://" + dir)
 	if err != nil {
