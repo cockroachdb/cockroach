@@ -26,6 +26,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
+// plan combines the runtime structure and state of a planner with the
+// query plan tree that the planner created to execute a single SQL statement.
+type plan struct {
+	stmt      parser.Statement
+	planner   *planner
+	queryPlan planNode
+}
+
 type planMaker interface {
 	// newPlan starts preparing the query plan for a single SQL
 	// statement.

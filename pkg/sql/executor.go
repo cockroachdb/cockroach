@@ -1227,6 +1227,22 @@ func (e *Executor) execStmtInOpenTxn(
 	planner.avoidCachedDescriptors = avoidCachedDescriptors
 	planner.phaseTimes[plannerStartExecStmt] = timeutil.Now()
 
+	// Create a new planNode tree.
+	planner.phaseTimes[plannerStartLogicalPlan] = timeutil.Now()
+	autoCommit := implicitTxn && !e.cfg.TestingKnobs.DisableAutoCommit
+	queryPlan, err := planner.makePlan(session.Ctx(), stmt, autoCommit)
+	planner.phaseTimes[plannerEndLogicalPlan] = timeutil.Now()
+	if err != nil {
+		return Result{}, err
+	}
+
+	// Combine SQL statement AST, planner, and queryPlan tree into a plan.
+	p := plan{
+		stmt:      stmt,
+		planner:   planner,
+		queryPlan: queryPlan,
+	}
+
 	var result Result
 	if parallelize && !implicitTxn {
 		// Only run statements asynchronously through the parallelize queue if the
@@ -1234,11 +1250,9 @@ func (e *Executor) execStmtInOpenTxn(
 		// statements outside of a transaction are run synchronously with mocked
 		// results, which has the same effect as running asynchronously but
 		// immediately blocking.
-		result, err = e.execStmtInParallel(stmt, planner)
+		result, err = e.execPlanInParallel(p)
 	} else {
-		autoCommit := implicitTxn && !e.cfg.TestingKnobs.DisableAutoCommit
-		result, err = e.execStmt(stmt, planner, autoCommit,
-			automaticRetryCount, parallelize /* mockResults */)
+		result, err = e.execPlan(p, automaticRetryCount, parallelize /* mockResults */)
 	}
 
 	if err != nil {
@@ -1332,11 +1346,11 @@ func commitSQLTransaction(txnState *txnState, commitType commitType) (Result, er
 
 // exectDistSQL converts a classic plan to a distributed SQL physical plan and
 // runs it.
-func (e *Executor) execDistSQL(planner *planner, tree planNode, result *Result) error {
+func (e *Executor) execDistSQL(p plan, result *Result) error {
 	// Note: if we just want the row count, result.Rows is nil here.
-	ctx := planner.session.Ctx()
+	ctx := p.planner.session.Ctx()
 	recv := makeDistSQLReceiver(ctx, result.Rows, e.cfg.RangeDescriptorCache, e.cfg.LeaseHolderCache)
-	err := e.distSQLPlanner.PlanAndRun(ctx, planner.txn, tree, &recv)
+	err := e.distSQLPlanner.PlanAndRun(ctx, p.planner.txn, p.queryPlan, &recv)
 	if err != nil {
 		return err
 	}
@@ -1351,25 +1365,26 @@ func (e *Executor) execDistSQL(planner *planner, tree planNode, result *Result) 
 
 // execClassic runs a plan using the classic (non-distributed) SQL
 // implementation.
-func (e *Executor) execClassic(planner *planner, plan planNode, result *Result) error {
-	ctx := planner.session.Ctx()
-	if err := planner.startPlan(ctx, plan); err != nil {
+func (e *Executor) execClassic(p plan, result *Result) error {
+	ctx := p.planner.session.Ctx()
+	queryPlan := p.queryPlan
+	if err := p.planner.startPlan(ctx, queryPlan); err != nil {
 		return err
 	}
 
 	switch result.Type {
 	case parser.RowsAffected:
-		count, err := countRowsAffected(ctx, plan)
+		count, err := countRowsAffected(ctx, queryPlan)
 		if err != nil {
 			return err
 		}
 		result.RowsAffected += count
 
 	case parser.Rows:
-		next, err := plan.Next(ctx)
-		for ; next; next, err = plan.Next(ctx) {
-			// The plan.Values Datums needs to be copied on each iteration.
-			values := plan.Values()
+		next, err := queryPlan.Next(ctx)
+		for ; next; next, err = queryPlan.Next(ctx) {
+			// The queryPlan.Values Datums needs to be copied on each iteration.
+			values := queryPlan.Values()
 
 			for _, val := range values {
 				if err := checkResultType(val.ResolvedType()); err != nil {
@@ -1384,7 +1399,7 @@ func (e *Executor) execClassic(planner *planner, plan planNode, result *Result) 
 			return err
 		}
 	case parser.DDL:
-		if n, ok := plan.(*createTableNode); ok && n.n.As() {
+		if n, ok := queryPlan.(*createTableNode); ok && n.n.As() {
 			result.RowsAffected += n.count
 		}
 	}
@@ -1393,13 +1408,13 @@ func (e *Executor) execClassic(planner *planner, plan planNode, result *Result) 
 
 // shouldUseDistSQL determines whether we should use DistSQL for a plan, based
 // on the session settings.
-func (e *Executor) shouldUseDistSQL(planner *planner, plan planNode) (bool, error) {
-	distSQLMode := planner.session.DistSQLMode
+func (e *Executor) shouldUseDistSQL(p plan) (bool, error) {
+	distSQLMode := p.planner.session.DistSQLMode
 	if distSQLMode == distSQLOff {
 		return false, nil
 	}
 	// Don't try to run empty nodes (e.g. SET commands) with distSQL.
-	if _, ok := plan.(*emptyNode); ok {
+	if _, ok := p.queryPlan.(*emptyNode); ok {
 		return false, nil
 	}
 
@@ -1409,26 +1424,27 @@ func (e *Executor) shouldUseDistSQL(planner *planner, plan planNode) (bool, erro
 	// Temporary workaround for #13376: if the transaction modified something,
 	// TxnCoordSender will freak out if it sees scans in this txn from other
 	// nodes. We detect this by checking if the transaction's "anchor" key is set.
-	if planner.txn.AnchorKey() != nil {
+	if p.planner.txn.AnchorKey() != nil {
 		err = errors.New("writing txn")
 	} else {
 		// Trigger limit propagation.
-		setUnlimited(plan)
-		distribute, err = e.distSQLPlanner.CheckSupport(plan)
+		setUnlimited(p.queryPlan)
+		distribute, err = e.distSQLPlanner.CheckSupport(p.queryPlan)
 	}
 
+	ctx := p.planner.session.Ctx()
 	if err != nil {
 		// If the distSQLMode is ALWAYS, any unsupported statement is an error.
 		if distSQLMode == distSQLAlways {
 			return false, err
 		}
 		// Don't use distSQL for this request.
-		log.VEventf(planner.session.Ctx(), 1, "query not supported for distSQL: %s", err)
+		log.VEventf(ctx, 1, "query not supported for distSQL: %s", err)
 		return false, nil
 	}
 
 	if distSQLMode == distSQLAuto && !distribute {
-		log.VEventf(planner.session.Ctx(), 1, "not distributing query")
+		log.VEventf(ctx, 1, "not distributing query")
 		return false, nil
 	}
 
@@ -1436,66 +1452,50 @@ func (e *Executor) shouldUseDistSQL(planner *planner, plan planNode) (bool, erro
 	return true, nil
 }
 
-// makeRes creates an empty result set for the given statement and plan.
-func makeRes(stmt parser.Statement, planner *planner, plan planNode) (Result, error) {
+// makeRes creates an empty result set for the given plan.
+func makeRes(p plan) (Result, error) {
 	result := Result{
-		PGTag: stmt.StatementTag(),
-		Type:  stmt.StatementType(),
+		PGTag: p.stmt.StatementTag(),
+		Type:  p.stmt.StatementType(),
 	}
 	if result.Type == parser.Rows {
-		result.Columns = plan.Columns()
+		result.Columns = p.queryPlan.Columns()
 		for _, c := range result.Columns {
 			if err := checkResultType(c.Typ); err != nil {
 				return Result{}, err
 			}
 		}
-		result.Rows = NewRowContainer(planner.session.makeBoundAccount(), result.Columns, 0)
+		result.Rows = NewRowContainer(p.planner.session.makeBoundAccount(), result.Columns, 0)
 	}
 	return result, nil
 }
 
-// execStmt executes the statement synchronously and returns the statement's result.
-// If mockResults is set, these results will be replaced by the "zero value" of the
-// statement's result type, identical to the mock results returned by execStmtInParallel.
-func (e *Executor) execStmt(
-	stmt parser.Statement,
-	planner *planner,
-	autoCommit bool,
-	automaticRetryCount int,
-	mockResults bool,
-) (Result, error) {
-	session := planner.session
+// execPlan executes the plan synchronously and returns its result. If mockResults is set,
+// these results will be replaced by the "zero value" of the plan's result type, identical
+// to the mock results returned by execPlanInParallel.
+func (e *Executor) execPlan(p plan, automaticRetryCount int, mockResults bool) (Result, error) {
+	session := p.planner.session
+	defer p.queryPlan.Close(session.Ctx())
 
-	planner.phaseTimes[plannerStartLogicalPlan] = timeutil.Now()
-	plan, err := planner.makePlan(session.Ctx(), stmt, autoCommit)
-	planner.phaseTimes[plannerEndLogicalPlan] = timeutil.Now()
+	result, err := makeRes(p)
 	if err != nil {
 		return Result{}, err
 	}
 
-	defer plan.Close(session.Ctx())
-
-	result, err := makeRes(stmt, planner, plan)
-	if err != nil {
-		return Result{}, err
-	}
-
-	useDistSQL, err := e.shouldUseDistSQL(planner, plan)
+	useDistSQL, err := e.shouldUseDistSQL(p)
 	if err != nil {
 		result.Close(session.Ctx())
 		return Result{}, err
 	}
 
-	planner.phaseTimes[plannerStartExecStmt] = timeutil.Now()
+	p.planner.phaseTimes[plannerStartExecStmt] = timeutil.Now()
 	if useDistSQL {
-		err = e.execDistSQL(planner, plan, &result)
+		err = e.execDistSQL(p, &result)
 	} else {
-		err = e.execClassic(planner, plan, &result)
+		err = e.execClassic(p, &result)
 	}
-	planner.phaseTimes[plannerEndExecStmt] = timeutil.Now()
-	e.recordStatementSummary(
-		planner, stmt, useDistSQL, automaticRetryCount, result, err,
-	)
+	p.planner.phaseTimes[plannerEndExecStmt] = timeutil.Now()
+	e.recordStatementSummary(p, useDistSQL, automaticRetryCount, result, err)
 	if err != nil {
 		result.Close(session.Ctx())
 		return Result{}, err
@@ -1503,12 +1503,12 @@ func (e *Executor) execStmt(
 
 	if mockResults {
 		result.Close(session.Ctx())
-		return makeRes(stmt, planner, plan)
+		return makeRes(p)
 	}
 	return result, nil
 }
 
-// execStmtInParallel executes the statement asynchronously and returns mocked out
+// execPlanInParallel executes the statement asynchronously and returns mocked out
 // results. These mocked out results will be the "zero value" of the statement's
 // result type:
 // - parser.Rows -> an empty set of rows
@@ -1516,33 +1516,28 @@ func (e *Executor) execStmt(
 //
 // TODO(nvanbenschoten): We do not currently support parallelizing distributed SQL
 // queries, so this method can only be used with classical SQL.
-func (e *Executor) execStmtInParallel(stmt parser.Statement, planner *planner) (Result, error) {
-	session := planner.session
+func (e *Executor) execPlanInParallel(p plan) (Result, error) {
+	session := p.planner.session
 	ctx := session.Ctx()
 
-	plan, err := planner.makePlan(ctx, stmt, false)
+	mockResult, err := makeRes(p)
 	if err != nil {
 		return Result{}, err
 	}
 
-	mockResult, err := makeRes(stmt, planner, plan)
-	if err != nil {
-		return Result{}, err
-	}
+	session.parallelizeQueue.Add(ctx, p, func(p plan) error {
+		defer p.queryPlan.Close(ctx)
 
-	session.parallelizeQueue.Add(ctx, plan, func(plan planNode) error {
-		defer plan.Close(ctx)
-
-		result, err := makeRes(stmt, planner, plan)
+		result, err := makeRes(p)
 		if err != nil {
 			return err
 		}
 		defer result.Close(ctx)
 
-		planner.phaseTimes[plannerStartExecStmt] = timeutil.Now()
-		err = e.execClassic(planner, plan, &result)
-		planner.phaseTimes[plannerEndExecStmt] = timeutil.Now()
-		e.recordStatementSummary(planner, stmt, false, 0, result, err)
+		p.planner.phaseTimes[plannerStartExecStmt] = timeutil.Now()
+		err = e.execClassic(p, &result)
+		p.planner.phaseTimes[plannerEndExecStmt] = timeutil.Now()
+		e.recordStatementSummary(p, false, 0, result, err)
 		return err
 	})
 	return mockResult, nil

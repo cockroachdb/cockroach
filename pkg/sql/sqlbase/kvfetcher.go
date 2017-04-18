@@ -86,6 +86,7 @@ func SetKVBatchSize(val int64) func() {
 type kvFetcher struct {
 	// "Constant" fields, provided by the caller.
 	txn             *client.Txn
+	sc              *client.SpanConstraints
 	spans           roachpb.Spans
 	reverse         bool
 	useBatchLimit   bool
@@ -170,6 +171,7 @@ func (f *kvFetcher) getBatchSize() int64 {
 // Batch limits can only be used if the spans are ordered.
 func makeKVFetcher(
 	txn *client.Txn,
+	sc *client.SpanConstraints,
 	spans roachpb.Spans,
 	reverse bool,
 	useBatchLimit bool,
@@ -203,6 +205,7 @@ func makeKVFetcher(
 
 	return kvFetcher{
 		txn:             txn,
+		sc:              sc,
 		spans:           copySpans,
 		reverse:         reverse,
 		useBatchLimit:   useBatchLimit,
@@ -217,6 +220,7 @@ func (f *kvFetcher) fetch(ctx context.Context) error {
 
 	b := &f.batch
 	*b = client.Batch{}
+	b.Constrain(f.sc)
 	b.Header.MaxSpanRequestKeys = batchSize
 	b.Header.ReturnRangeInfo = f.returnRangeInfo
 

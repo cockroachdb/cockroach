@@ -159,6 +159,7 @@ type RowInserter struct {
 // InsertCols must contain every column in the primary key.
 func MakeRowInserter(
 	txn *client.Txn,
+	sc *client.SpanConstraints,
 	tableDesc *TableDescriptor,
 	fkTables TableLookupsByID,
 	insertCols []ColumnDescriptor,
@@ -189,7 +190,7 @@ func MakeRowInserter(
 
 	if checkFKs {
 		var err error
-		if ri.Fks, err = makeFKInsertHelper(txn, *tableDesc, fkTables, ri.InsertColIDtoRowIndex); err != nil {
+		if ri.Fks, err = makeFKInsertHelper(txn, sc, *tableDesc, fkTables, ri.InsertColIDtoRowIndex); err != nil {
 			return ri, err
 		}
 	}
@@ -384,6 +385,7 @@ const (
 // passed in requestedCols will be included in FetchCols.
 func MakeRowUpdater(
 	txn *client.Txn,
+	sc *client.SpanConstraints,
 	tableDesc *TableDescriptor,
 	fkTables TableLookupsByID,
 	updateCols []ColumnDescriptor,
@@ -465,12 +467,14 @@ func MakeRowUpdater(
 		var err error
 		// When changing the primary key, we delete the old values and reinsert
 		// them, so request them all.
-		if ru.rd, err = MakeRowDeleter(txn, tableDesc, fkTables, tableDesc.Columns, SkipFKs); err != nil {
+		ru.rd, err = MakeRowDeleter(txn, sc, tableDesc, fkTables, tableDesc.Columns, SkipFKs)
+		if err != nil {
 			return RowUpdater{}, err
 		}
 		ru.FetchCols = ru.rd.FetchCols
 		ru.FetchColIDtoRowIndex = ColIDtoRowIndexFromCols(ru.FetchCols)
-		if ru.ri, err = MakeRowInserter(txn, tableDesc, fkTables, tableDesc.Columns, SkipFKs); err != nil {
+		ru.ri, err = MakeRowInserter(txn, sc, tableDesc, fkTables, tableDesc.Columns, SkipFKs)
+		if err != nil {
 			return RowUpdater{}, err
 		}
 	} else {
@@ -517,7 +521,7 @@ func MakeRowUpdater(
 	}
 
 	var err error
-	if ru.Fks, err = makeFKUpdateHelper(txn, *tableDesc, fkTables, ru.FetchColIDtoRowIndex); err != nil {
+	if ru.Fks, err = makeFKUpdateHelper(txn, sc, *tableDesc, fkTables, ru.FetchColIDtoRowIndex); err != nil {
 		return RowUpdater{}, err
 	}
 	return ru, nil
@@ -762,6 +766,7 @@ type RowDeleter struct {
 // passed in requestedCols will be included in FetchCols.
 func MakeRowDeleter(
 	txn *client.Txn,
+	sc *client.SpanConstraints,
 	tableDesc *TableDescriptor,
 	fkTables TableLookupsByID,
 	requestedCols []ColumnDescriptor,
@@ -814,7 +819,8 @@ func MakeRowDeleter(
 	}
 	if checkFKs {
 		var err error
-		if rd.Fks, err = makeFKDeleteHelper(txn, *tableDesc, fkTables, fetchColIDtoRowIndex); err != nil {
+		rd.Fks, err = makeFKDeleteHelper(txn, sc, *tableDesc, fkTables, fetchColIDtoRowIndex)
+		if err != nil {
 			return RowDeleter{}, err
 		}
 	}

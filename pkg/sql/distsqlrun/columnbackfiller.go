@@ -182,7 +182,8 @@ func (cb *columnBackfiller) runChunk(
 		requestedCols = append(requestedCols, tableDesc.Columns...)
 		requestedCols = append(requestedCols, cb.added...)
 		ru, err := sqlbase.MakeRowUpdater(
-			txn, &tableDesc, fkTables, cb.updateCols, requestedCols, sqlbase.RowUpdaterOnlyColumns,
+			txn, nil /* constraints */, &tableDesc, fkTables,
+			cb.updateCols, requestedCols, sqlbase.RowUpdaterOnlyColumns,
 		)
 		if err != nil {
 			return err
@@ -204,7 +205,7 @@ func (cb *columnBackfiller) runChunk(
 		// populated and deleted by the OLTP commands but not otherwise
 		// read or used
 		if err := cb.fetcher.StartScan(
-			ctx, txn, []roachpb.Span{sp}, true /* limitBatches */, chunkSize,
+			ctx, txn, nil /* constraints */, []roachpb.Span{sp}, true /* limitBatches */, chunkSize,
 		); err != nil {
 			log.Errorf(ctx, "scan error: %s", err)
 			return err

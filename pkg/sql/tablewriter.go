@@ -53,9 +53,9 @@ type expressionCarrier interface {
 type tableWriter interface {
 	expressionCarrier
 
-	// init provides the tableWriter with a Txn to write to and returns an error
-	// if it was misconfigured.
-	init(*client.Txn) error
+	// init provides the tableWriter with a Txn to write to and an optional SpanConstraints.
+	// Returns an error if it was misconfigured.
+	init(*client.Txn, *client.SpanConstraints) error
 
 	// row performs a sql row modification (tableInserter performs an insert,
 	// etc). It batches up writes to the init'd txn and periodically sends them.
@@ -95,9 +95,9 @@ type tableInserter struct {
 
 func (ti *tableInserter) walkExprs(_ func(desc string, index int, expr parser.TypedExpr)) {}
 
-func (ti *tableInserter) init(txn *client.Txn) error {
+func (ti *tableInserter) init(txn *client.Txn, sc *client.SpanConstraints) error {
 	ti.txn = txn
-	ti.b = txn.NewBatch()
+	ti.b = txn.NewConstrainedBatch(sc)
 	return nil
 }
 
@@ -138,9 +138,9 @@ type tableUpdater struct {
 
 func (tu *tableUpdater) walkExprs(_ func(desc string, index int, expr parser.TypedExpr)) {}
 
-func (tu *tableUpdater) init(txn *client.Txn) error {
+func (tu *tableUpdater) init(txn *client.Txn, sc *client.SpanConstraints) error {
 	tu.txn = txn
-	tu.b = txn.NewBatch()
+	tu.b = txn.NewConstrainedBatch(sc)
 	return nil
 }
 
@@ -213,6 +213,7 @@ type tableUpserter struct {
 
 	// Set by init.
 	txn                   *client.Txn
+	sc                    *client.SpanConstraints
 	tableDesc             *sqlbase.TableDescriptor
 	fkTables              sqlbase.TableLookupsByID // for fk checks in update case
 	ru                    sqlbase.RowUpdater
@@ -239,8 +240,9 @@ func (tu *tableUpserter) walkExprs(walk func(desc string, index int, expr parser
 	}
 }
 
-func (tu *tableUpserter) init(txn *client.Txn) error {
+func (tu *tableUpserter) init(txn *client.Txn, sc *client.SpanConstraints) error {
 	tu.txn = txn
+	tu.sc = sc
 	tu.tableDesc = tu.ri.Helper.TableDesc
 	tu.indexKeyPrefix = sqlbase.MakeIndexKeyPrefix(tu.tableDesc, tu.tableDesc.PrimaryIndex.ID)
 
@@ -263,7 +265,7 @@ func (tu *tableUpserter) init(txn *client.Txn) error {
 		// For the fast path, all columns must be specified in the insert.
 		len(tu.ri.InsertCols) == len(tu.tableDesc.Columns)
 	if enableFastPath {
-		tu.fastPathBatch = tu.txn.NewBatch()
+		tu.fastPathBatch = tu.txn.NewConstrainedBatch(sc)
 		tu.fastPathKeys = make(map[string]struct{})
 		return nil
 	}
@@ -278,7 +280,7 @@ func (tu *tableUpserter) init(txn *client.Txn) error {
 	} else {
 		var err error
 		tu.ru, err = sqlbase.MakeRowUpdater(
-			txn, tu.tableDesc, tu.fkTables, tu.updateCols, requestedCols, sqlbase.RowUpdaterDefault,
+			txn, sc, tu.tableDesc, tu.fkTables, tu.updateCols, requestedCols, sqlbase.RowUpdaterDefault,
 		)
 		if err != nil {
 			return err
@@ -339,7 +341,7 @@ func (tu *tableUpserter) flush(ctx context.Context, finalize bool) error {
 		return err
 	}
 
-	b := tu.txn.NewBatch()
+	b := tu.txn.NewConstrainedBatch(tu.sc)
 	for i, insertRow := range tu.insertRows {
 		existingRow := existingRows[i]
 
@@ -402,7 +404,7 @@ func (tu *tableUpserter) upsertRowPKs(ctx context.Context) ([]roachpb.Key, error
 	// primary keys can be constructed from the entries that come back. In this
 	// case, some spots in the slice will be nil (indicating no conflict) and the
 	// others will be conflicting rows.
-	b := tu.txn.NewBatch()
+	b := tu.txn.NewConstrainedBatch(tu.sc)
 	for _, insertRow := range tu.insertRows {
 		entry, err := sqlbase.EncodeSecondaryIndex(
 			tu.tableDesc, &tu.conflictIndex, tu.ri.InsertColIDtoRowIndex, insertRow)
@@ -466,7 +468,7 @@ func (tu *tableUpserter) fetchExisting(ctx context.Context) ([]parser.Datums, er
 	}
 
 	// We don't limit batches here because the spans are unordered.
-	if err := tu.fetcher.StartScan(ctx, tu.txn, pkSpans, false /* no batch limits */, 0); err != nil {
+	if err := tu.fetcher.StartScan(ctx, tu.txn, tu.sc, pkSpans, false /* no batch limits */, 0); err != nil {
 		return nil, err
 	}
 
@@ -519,14 +521,16 @@ type tableDeleter struct {
 
 	// Set by init.
 	txn *client.Txn
+	sc  *client.SpanConstraints
 	b   *client.Batch
 }
 
 func (td *tableDeleter) walkExprs(_ func(desc string, index int, expr parser.TypedExpr)) {}
 
-func (td *tableDeleter) init(txn *client.Txn) error {
+func (td *tableDeleter) init(txn *client.Txn, sc *client.SpanConstraints) error {
 	td.txn = txn
-	td.b = txn.NewBatch()
+	td.sc = sc
+	td.b = txn.NewConstrainedBatch(sc)
 	return nil
 }
 
@@ -677,7 +681,7 @@ func (td *tableDeleter) deleteAllRowsScan(
 	if err != nil {
 		return resume, err
 	}
-	if err := rf.StartScan(ctx, td.txn, roachpb.Spans{resume}, true /* limit batches */, 0); err != nil {
+	if err := rf.StartScan(ctx, td.txn, td.sc, roachpb.Spans{resume}, true /* limit batches */, 0); err != nil {
 		return resume, err
 	}
 
@@ -764,7 +768,7 @@ func (td *tableDeleter) deleteIndexScan(
 	if err != nil {
 		return resume, err
 	}
-	if err := rf.StartScan(ctx, td.txn, roachpb.Spans{resume}, true /* limit batches */, 0); err != nil {
+	if err := rf.StartScan(ctx, td.txn, td.sc, roachpb.Spans{resume}, true /* limit batches */, 0); err != nil {
 		return resume, err
 	}
 

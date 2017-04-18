@@ -274,7 +274,8 @@ func (p *planner) Update(
 	if err := p.fillFKTableMap(ctx, fkTables); err != nil {
 		return nil, err
 	}
-	ru, err := sqlbase.MakeRowUpdater(p.txn, en.tableDesc, fkTables, updateCols, requestedCols, sqlbase.RowUpdaterDefault)
+	ru, err := sqlbase.MakeRowUpdater(p.txn, &p.sc, en.tableDesc,
+		fkTables, updateCols, requestedCols, sqlbase.RowUpdaterDefault)
 	if err != nil {
 		return nil, err
 	}
@@ -398,7 +399,7 @@ func (u *updateNode) Start(ctx context.Context) error {
 	if err := u.run.startEditNode(ctx, &u.editNodeBase); err != nil {
 		return err
 	}
-	return u.run.tw.init(u.p.txn)
+	return u.run.tw.init(u.p.txn, &u.p.sc)
 }
 
 func (u *updateNode) Close(ctx context.Context) {
