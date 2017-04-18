@@ -28,3 +28,4 @@ SHA=$(git rev-parse HEAD)
 # fixing the callers.
 ./push-one-binary.sh ${SHA} cockroach cockroach.linux-amd64
 ./push-one-binary.sh ${SHA} cockroach-darwin-10.9-amd64 cockroach.darwin-amd64
+./push-one-binary.sh ${SHA} cockroach-windows-6.2-amd64.exe cockroach.windows-amd64.exe
