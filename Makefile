@@ -233,7 +233,7 @@ clean:
 
 .PHONY: protobuf
 protobuf:
-	$(MAKE) -C .. -f cockroach/build/protobuf.mk
+	$(MAKE) -C $(ORG_ROOT) -f cockroach/build/protobuf.mk
 
 # archive builds a source tarball out of this repository. Files in the special
 # directory build/archive/contents are inserted directly into $(ARCHIVE_BASE).
