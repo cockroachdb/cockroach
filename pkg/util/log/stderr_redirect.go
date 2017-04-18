@@ -15,8 +15,9 @@
 package log
 
 import (
-	"fmt"
 	"os"
+
+	"golang.org/x/net/context"
 )
 
 // OrigStderr points to the original stderr stream.
@@ -60,22 +61,10 @@ func RecoverAndReportPanic() {
 
 // ReportPanic reports a panic has occurred on the real stderr.
 func ReportPanic(r interface{}) {
+	Shout(context.Background(), Severity_ERROR,
+		"a panic has occurred! If no details are printed below, check the log file for details.")
+
 	// Ensure that the logs are flushed before letting a panic
 	// terminate the server.
 	Flush()
-
-	if stderrRedirected {
-		// The panic message will go to "stderr" which is actually the log
-		// file. Copy it to the real stderr to give the user a chance to
-		// see it.
-		fmt.Fprintln(OrigStderr, r)
-	} else {
-		// We're not redirecting stderr at this point, so the panic
-		// message should be printed below. However we're not very strict
-		// in this package about whether "stderrRedirected" is accurate,
-		// so hint the user that they may still need to look at the log
-		// file.
-		fmt.Fprintln(OrigStderr, "\nERROR: a panic has occurred!\n"+
-			"If no details are printed below, check the log file for details.")
-	}
 }
