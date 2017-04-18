@@ -332,6 +332,7 @@ type planningCtx struct {
 	spanIter distsqlplan.SpanResolverIterator
 	// nodeAddresses contains addresses for all NodeIDs that are referenced by any
 	// physicalPlan we generate with this context.
+	// Nodes that fail a health check have empty addresses.
 	nodeAddresses map[roachpb.NodeID]string
 }
 
@@ -390,8 +391,8 @@ func (dsp *distSQLPlanner) partitionSpans(
 		panic("no spans")
 	}
 	ctx := planCtx.ctx
-	splits := make([]spanPartition, 0, 1)
-	// nodeMap maps a nodeID to an index inside the splits array.
+	partitions := make([]spanPartition, 0, 1)
+	// nodeMap maps a nodeID to an index inside the partitions array.
 	nodeMap := make(map[roachpb.NodeID]int)
 	it := planCtx.spanIter
 	for _, span := range spans {
@@ -426,8 +427,8 @@ func (dsp *distSQLPlanner) partitionSpans(
 			if !desc.ContainsKey(lastKey) {
 				// This range must contain the last range's EndKey.
 				log.Fatalf(
-					ctx, "next range %v doesn't cover last end key %v. Splits: %#v",
-					desc.RSpan(), lastKey, splits,
+					ctx, "next range %v doesn't cover last end key %v. Partitions: %#v",
+					desc.RSpan(), lastKey, partitions,
 				)
 			}
 
@@ -438,22 +439,42 @@ func (dsp *distSQLPlanner) partitionSpans(
 			}
 
 			nodeID := replInfo.NodeDesc.NodeID
-			idx, ok := nodeMap[nodeID]
-			if !ok {
-				idx = len(splits)
-				splits = append(splits, spanPartition{node: nodeID})
-				nodeMap[nodeID] = idx
-				if _, ok := planCtx.nodeAddresses[nodeID]; !ok {
-					planCtx.nodeAddresses[nodeID] = replInfo.NodeDesc.Address.String()
+			partitionIdx, inNodeMap := nodeMap[nodeID]
+			if !inNodeMap {
+				// This is the first time we are seeing nodeID for these spans. Check
+				// its health.
+				addr, inAddrMap := planCtx.nodeAddresses[nodeID]
+				if !inAddrMap {
+					addr = replInfo.NodeDesc.Address.String()
+					err := dsp.rpcContext.ConnHealth(addr)
+					if err != nil && err != rpc.ErrNotConnected && err != rpc.ErrNotHeartbeated {
+						// This host is known to be unhealthy. Don't use it (use the gateway
+						// instead). Note: this can never happen for our nodeID (which
+						// always has its address in the nodeMap).
+						addr = ""
+						log.Infof(ctx, "marking node %d as unhealthy for this plan: %v", nodeID, err)
+					}
+					planCtx.nodeAddresses[nodeID] = addr
+				}
+				if addr == "" {
+					// An empty address indicates an unhealthy host. Use the gateway to
+					// process this span instead of the unhealthy host.
+					nodeID = dsp.nodeDesc.NodeID
+					partitionIdx, inNodeMap = nodeMap[nodeID]
+				}
+				if !inNodeMap {
+					partitionIdx = len(partitions)
+					partitions = append(partitions, spanPartition{node: nodeID})
+					nodeMap[nodeID] = partitionIdx
 				}
 			}
-			split := &splits[idx]
+			partition := &partitions[partitionIdx]
 
 			if lastNodeID == nodeID {
 				// Two consecutive ranges on the same node, merge the spans.
-				split.spans[len(split.spans)-1].EndKey = endKey.AsRawKey()
+				partition.spans[len(partition.spans)-1].EndKey = endKey.AsRawKey()
 			} else {
-				split.spans = append(split.spans, roachpb.Span{
+				partition.spans = append(partition.spans, roachpb.Span{
 					Key:    lastKey.AsRawKey(),
 					EndKey: endKey.AsRawKey(),
 				})
@@ -468,7 +489,7 @@ func (dsp *distSQLPlanner) partitionSpans(
 			lastNodeID = nodeID
 		}
 	}
-	return splits, nil
+	return partitions, nil
 }
 
 // initTableReaderSpec initializes a TableReaderSpec/PostProcessSpec that

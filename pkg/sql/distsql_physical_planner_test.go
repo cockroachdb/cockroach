@@ -38,9 +38,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
 
@@ -442,4 +444,81 @@ func TestDistSQLRangeCachesIntegrationTest(t *testing.T) {
 	if !strings.HasPrefix(json, exp) {
 		t.Fatalf("expected prefix %q, but json is: %s", exp, json)
 	}
+}
+
+func TestDistSQLDeadHosts(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	const n = 100
+	const numNodes = 5
+
+	tc := serverutils.StartTestCluster(t, numNodes, base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual,
+		ServerArgs:      base.TestServerArgs{UseDatabase: "test"},
+	})
+	defer tc.Stopper().Stop(context.TODO())
+
+	r := sqlutils.MakeSQLRunner(t, tc.ServerConn(0))
+	r.DB.SetMaxOpenConns(1)
+	r.Exec("CREATE DATABASE test")
+
+	r.Exec("CREATE TABLE t (x INT PRIMARY KEY, xsquared INT)")
+
+	for i := 0; i < numNodes; i++ {
+		r.Exec(fmt.Sprintf("ALTER TABLE t SPLIT AT VALUES (%d)", n*i/5))
+	}
+
+	for i := 0; i < numNodes; i++ {
+		r.Exec(fmt.Sprintf(
+			"ALTER TABLE t TESTING_RELOCATE VALUES (ARRAY[%d,%d,%d], %d)",
+			i+1, (i+1)%5+1, (i+2)%5+1, n*i/5,
+		))
+	}
+
+	r.Exec(fmt.Sprintf("INSERT INTO t SELECT i, i*i FROM GENERATE_SERIES(1, %d) AS g(i)", n))
+
+	r.Exec("SET DISTSQL = ON")
+
+	// Run a query that uses the entire table and is easy to verify.
+	runQuery := func() error {
+		log.Infof(context.TODO(), "running test query")
+		var res int
+		if err := r.DB.QueryRow("SELECT SUM(xsquared) FROM t").Scan(&res); err != nil {
+			return err
+		}
+		if exp := (n * (n + 1) * (2*n + 1)) / 6; res != exp {
+			t.Fatalf("incorrect result %d, expected %d", res, exp)
+		}
+		log.Infof(context.TODO(), "test query OK")
+		return nil
+	}
+	if err := runQuery(); err != nil {
+		t.Error(err)
+	}
+
+	// Verify the plan (should include all 5 nodes).
+	r.CheckQueryResults(
+		"SELECT URL FROM [EXPLAIN (DISTSQL) SELECT SUM(xsquared) FROM t]",
+		[][]string{{"https://cockroachdb.github.io/distsqlplan/decode.html?eJy8k09LwzAYxu9-CnlOCu9h7bo5e5rHHXQy9SQ91OalFLamJCkoo99d1iDaIskgo8f8-T2_PG1yRC0FP-UH1kjfEYEQgzAHIQFhgYzQKFmw1lKdtlhgIz6RzghV3bTmNJ0RCqkY6RGmMntGitf8Y887zgUrEASbvNr3kkZVh1x9rQ0I29ak1-sYWUeQrflJ6-h8z0NZKi5zI0eal7fHm3V0e3b0b2JbSyVYsRgEZt2F5dFE38_jCakQT1TB4wmpMJ-ogscTUiGZqILHc6mH-E_0jnUja82jBznMywgsSrZvWctWFfysZNGH2-G2391PCNbGrkZ2sKnt0ulYf-HICccDOBrDsdvsUc-ddOKGk5BzL5zw0m1ehpjvnPDKbV6FmO_d_2rmuSbuSzZ2Z93VdwAAAP__XTV6BQ=="}},
+	)
+
+	// Stop node 5.
+	tc.StopServer(4)
+
+	testutils.SucceedsSoon(t, runQuery)
+
+	r.CheckQueryResults(
+		"SELECT URL FROM [EXPLAIN (DISTSQL) SELECT SUM(xsquared) FROM t]",
+		[][]string{{"https://cockroachdb.github.io/distsqlplan/decode.html?eJy8k8FK7DAYhff3KS5npZCF6dRx7KouZ6Ejo64ki9j8lEKnKUkKytB3lzaItkg60qHL5M93vpySHlFpRQ_yQBbJKzgYIjCswBBDMNRGZ2StNt3YH96qdyRXDEVVN67bFgyZNoTkCFe4kpDgWb6VtCepyIBBkZNF2QtqUxyk-UgdGHaNS_6nEUTLoBv3lday0z13eW4ol06PNE8v9xcpvzw5-juxqbRRZEgNAkV7Zjlf6PtNeOZUiBaqMOGZU2G1UIUJz7le8S_Re7K1riyNXvMwTzCQysn_CFY3JqNHo7M-3C93_el-Q5F1fsr9Ylv5UXetnzAPwtEA5mM4CsK3YfMqCMdhOJ5z7esgvA6b13PMN0F4EzZv_mQW7b_PAAAA__-DuA-E"}},
+	)
+
+	// Stop node 2; note that no range had replicas on both 2 and 5.
+	tc.StopServer(1)
+
+	testutils.SucceedsSoon(t, runQuery)
+
+	r.CheckQueryResults(
+		"SELECT URL FROM [EXPLAIN (DISTSQL) SELECT SUM(xsquared) FROM t]",
+		[][]string{{"https://cockroachdb.github.io/distsqlplan/decode.html?eJy8kkFLwzAUx-9-CvmfFHIwXZ3QUz3uoJOpJ8khNo9S6JrykoIy-t2lDaItkk02dkxe_r_fe-Ht0FhDj3pLDtkbJAQWEEihBFq2BTlneSiFhyvzgexGoGrazg_XSqCwTMh28JWvCRle9HtNG9KGGAKGvK7qEd5ytdX8mXsIrDufXeYJVC9gO_9N68XhnvuyZCq1tzPN8-vDVS6vD0b_ELvGsiEmMwGq_sRyeab_2-M5ZoTkTCPs8ZxqBf5Ab8i1tnE0W4UpTwmQKSlskbMdF_TEthjh4bgeX48XhpwPVRkOqyaUhrZ-h2U0nEzCch5OouG7uHkRDafxcHpM27fR8DJuXv7LrPqLrwAAAP__vMyldA=="}},
+	)
 }
