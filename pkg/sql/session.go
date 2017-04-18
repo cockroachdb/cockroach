@@ -42,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
@@ -148,7 +149,9 @@ type Session struct {
 	//
 	// Session parameters, user-configurable.
 	//
-
+	syncutil.Mutex
+	Client          string
+	sessionRegistry *sessionRegistry
 	// ApplicationName is the name of the application running the
 	// current session. This can be used for logging and per-application
 	// statistics. Change via resetApplicationName().
@@ -192,6 +195,8 @@ type Session struct {
 	// TODO(knz): place this in an executionContext parameter-passing
 	// structure.
 	virtualSchemas virtualSchemaHolder
+
+	QueryStatements map[planNode]string
 
 	//
 	// Run-time state.
@@ -297,10 +302,12 @@ func NewSession(
 	s := &Session{
 		Database:         args.Database,
 		DistSQLMode:      distSQLMode,
+		sessionRegistry:  &e.sessionRegistry,
 		SearchPath:       parser.SearchPath{"pg_catalog"},
 		Location:         time.UTC,
 		User:             args.User,
 		virtualSchemas:   e.virtualSchemas,
+		QueryStatements:  make(map[planNode]string),
 		execCfg:          &e.cfg,
 		distSQLPlanner:   e.distSQLPlanner,
 		parallelizeQueue: MakeParallelizeQueue(NewSpanBasedDependencyAnalyzer()),
@@ -320,14 +327,17 @@ func NewSession(
 	s.PreparedStatements = makePreparedStatements(s)
 	s.PreparedPortals = makePreparedPortals(s)
 
+	s.Client = "<admin>"
+	if remote != nil {
+		s.Client = remote.String()
+	}
+
 	if traceSessionEventLogEnabled.Get() {
-		remoteStr := "<admin>"
-		if remote != nil {
-			remoteStr = remote.String()
-		}
-		s.eventLog = trace.NewEventLog(fmt.Sprintf("sql [%s]", args.User), remoteStr)
+		s.eventLog = trace.NewEventLog(fmt.Sprintf("sql [%s]", args.User), s.Client)
 	}
 	s.context, s.cancel = context.WithCancel(ctx)
+
+	s.sessionRegistry.register(s)
 
 	return s
 }
@@ -345,8 +355,8 @@ func (s *Session) Finish(e *Executor) {
 		panic("session.Finish: session monitors were never initialized. Missing call " +
 			"to session.StartMonitor?")
 	}
-
-	// Make sure that no statements remain in the ParallelizeQueue. If no statements
+	s.sessionRegistry.deregister(s)
+	// Make sure that no statements remain in the PipelineQueue. If no statements
 	// are in the queue, this will be a no-op. If there are statements in the
 	// queue, they would have eventually drained on their own, but if we don't
 	// wait here, we risk alarming the MemoryMonitor. We ignore the error because

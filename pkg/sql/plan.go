@@ -368,6 +368,8 @@ func (p *planner) newPlan(
 		return p.ShowTables(ctx, n)
 	case *parser.ShowUsers:
 		return p.ShowUsers(ctx, n)
+	case *parser.ShowProcessList:
+		return p.ShowProcessList(ctx, n)
 	case *parser.ShowRanges:
 		return p.ShowRanges(ctx, n)
 	case *parser.Split:

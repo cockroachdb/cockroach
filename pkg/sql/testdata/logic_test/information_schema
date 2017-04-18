@@ -215,7 +215,9 @@ leases
 node_build_info
 node_statement_statistics
 schema_changes
+sessions
 tables
+txns
 columns
 key_column_usage
 schema_privileges
@@ -270,12 +272,14 @@ xyz
 views
 users
 ui
+txns
 tables
 tables
 table_privileges
 table_constraints
 statistics
 settings
+sessions
 schemata
 schema_privileges
 schema_changes
@@ -317,7 +321,9 @@ def            crdb_internal       leases                     SYSTEM VIEW  1
 def            crdb_internal       node_build_info            SYSTEM VIEW  1
 def            crdb_internal       node_statement_statistics  SYSTEM VIEW  1
 def            crdb_internal       schema_changes             SYSTEM VIEW  1
+def            crdb_internal       sessions                   SYSTEM VIEW  1
 def            crdb_internal       tables                     SYSTEM VIEW  1
+def            crdb_internal       txns                       SYSTEM VIEW  1
 def            information_schema  columns                    SYSTEM VIEW  1
 def            information_schema  key_column_usage           SYSTEM VIEW  1
 def            information_schema  schema_privileges          SYSTEM VIEW  1
