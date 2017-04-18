@@ -105,57 +105,6 @@ const (
 	raftInitialLogTerm  = 5
 )
 
-// consultsTimestampCacheMethods specifies the set of methods which
-// consult the timestamp cache. This syntax creates a sparse array
-// with maximum index equal to the value of the final Method. Unused
-// indexes default to false.
-var consultsTimestampCacheMethods = [...]bool{
-	roachpb.Put:              true,
-	roachpb.ConditionalPut:   true,
-	roachpb.InitPut:          true,
-	roachpb.Increment:        true,
-	roachpb.Delete:           true,
-	roachpb.DeleteRange:      true,
-	roachpb.BeginTransaction: true,
-}
-
-func consultsTimestampCache(r roachpb.Request) bool {
-	m := r.Method()
-	if m < 0 || m >= roachpb.Method(len(consultsTimestampCacheMethods)) {
-		return false
-	}
-	return consultsTimestampCacheMethods[m]
-}
-
-// updatesTimestampCacheMethods specifies the set of methods which if
-// successful will update the timestamp cache.
-var updatesTimestampCacheMethods = [...]bool{
-	roachpb.Get: true,
-	// ConditionalPut and initPut effectively read and may not write,
-	// so must update the timestamp cache.
-	roachpb.ConditionalPut: true,
-	roachpb.InitPut:        true,
-	// DeleteRange updates the write timestamp cache as it doesn't leave
-	// intents or tombstones for keys which don't yet exist. By updating
-	// the write timestamp cache, it forces subsequent writes to get a
-	// write-too-old error and avoids the phantom delete anomaly.
-	roachpb.DeleteRange: true,
-	roachpb.Scan:        true,
-	roachpb.ReverseScan: true,
-	// EndTransaction updates the write timestamp cache to prevent
-	// replays. Replays for the same transaction key and timestamp will
-	// have Txn.WriteTooOld=true and must retry on EndTransaction.
-	roachpb.EndTransaction: true,
-}
-
-func updatesTimestampCache(r roachpb.Request) bool {
-	m := r.Method()
-	if m < 0 || m >= roachpb.Method(len(updatesTimestampCacheMethods)) {
-		return false
-	}
-	return updatesTimestampCacheMethods[m]
-}
-
 type proposalRetryReason int
 
 const (
@@ -1587,7 +1536,7 @@ func makeCacheRequest(
 
 	for i, union := range ba.Requests {
 		args := union.GetInner()
-		if updatesTimestampCache(args) {
+		if roachpb.UpdatesTimestampCache(args) {
 			header := args.Header()
 			switch args.(type) {
 			case *roachpb.DeleteRangeRequest:
@@ -1873,7 +1822,7 @@ func (r *Replica) applyTimestampCache(ba *roachpb.BatchRequest) (bool, *roachpb.
 	var bumped bool
 	for _, union := range ba.Requests {
 		args := union.GetInner()
-		if consultsTimestampCache(args) {
+		if roachpb.ConsultsTimestampCache(args) {
 			header := args.Header()
 			// BeginTransaction is a special case. We use the transaction
 			// key to look for an entry which would indicate this transaction
