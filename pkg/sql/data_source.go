@@ -533,9 +533,7 @@ func (p *planner) getPlanForDesc(
 func (p *planner) getViewPlan(
 	ctx context.Context, tn *parser.TableName, desc *sqlbase.TableDescriptor,
 ) (planDataSource, error) {
-	// Parse the query as Traditional syntax because we know the query was
-	// saved in the descriptor by printing it with parser.Format.
-	stmt, err := parser.ParseOneTraditional(desc.ViewQuery)
+	stmt, err := parser.ParseOne(desc.ViewQuery)
 	if err != nil {
 		return planDataSource{}, errors.Wrapf(err, "failed to parse underlying query from view %q", tn)
 	}

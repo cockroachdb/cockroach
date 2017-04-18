@@ -159,14 +159,6 @@ EXPLAIN SHOW TIME ZONE
 1                 size    1 column, 1 row
 
 query ITTT
-EXPLAIN SHOW SYNTAX
-----
-0 virtual table
-0                 source  SHOW SYNTAX
-1 values
-1                 size    1 column, 1 row
-
-query ITTT
 EXPLAIN SHOW DEFAULT_TRANSACTION_ISOLATION
 ----
 0 virtual table

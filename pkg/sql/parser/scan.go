@@ -44,32 +44,24 @@ type Scanner struct {
 	stmts       []Statement
 	identQuote  int
 	stringQuote int
-	syntax      Syntax
 
 	initialized bool
 }
 
 // MakeScanner makes a Scanner from str.
-func MakeScanner(str string, syntax Syntax) Scanner {
+func MakeScanner(str string) Scanner {
 	var s Scanner
-	s.init(str, syntax)
+	s.init(str)
 	return s
 }
 
-func (s *Scanner) init(str string, syntax Syntax) {
+func (s *Scanner) init(str string) {
 	if s.initialized {
 		panic("scanner already initialized; a scanner cannot be reused.")
 	}
 	s.initialized = true
 	s.in = str
-	s.syntax = syntax
-	switch syntax {
-	case Traditional:
-		s.identQuote = '"'
-	case Modern:
-		s.identQuote = '`'
-		s.stringQuote = '"'
-	}
+	s.identQuote = '"'
 }
 
 // Tokens calls f on all tokens of the input until an EOF is encountered.
@@ -182,17 +174,6 @@ func (s *Scanner) scan(lval *sqlSymType) {
 		if isDigit(s.peek()) {
 			s.scanPlaceholder(lval)
 			return
-		} else if s.syntax == Modern {
-			// TODO(pmattis): This should really be prefixed with '@', but that
-			// conflicts with using '@' for index indirection in qualified names.
-			//
-			// placeholder? $<ident>
-			if t := s.peek(); isIdentStart(t) {
-				s.pos++
-				s.scanIdent(lval, t)
-				lval.id = PLACEHOLDER
-				return
-			}
 		}
 		return
 
@@ -205,14 +186,14 @@ func (s *Scanner) scan(lval *sqlSymType) {
 
 	case singleQuote:
 		// '[^']'
-		if s.scanString(lval, ch, s.syntax == Modern, true) {
+		if s.scanString(lval, ch, false, true) {
 			lval.id = SCONST
 		}
 		return
 
 	case s.stringQuote:
 		// '[^']'
-		if s.scanString(lval, s.stringQuote, s.syntax == Modern, true) {
+		if s.scanString(lval, s.stringQuote, false, true) {
 			lval.id = SCONST
 		}
 		return
@@ -226,42 +207,11 @@ func (s *Scanner) scan(lval *sqlSymType) {
 				lval.id = BCONST
 			}
 			return
-		} else if s.syntax == Modern && (t == 'r' || t == 'R') {
-			// Raw bytes?
-			if t := s.peekN(1); t == singleQuote || t == s.stringQuote {
-				// [rRbB]'[^']'
-				s.pos += 2
-				if s.scanString(lval, t, false, false) {
-					lval.id = BCONST
-				}
-				return
-			}
 		}
 		s.scanIdent(lval, ch)
 		return
 
 	case 'r', 'R':
-		if s.syntax == Modern {
-			// Raw string?
-			if t := s.peek(); t == singleQuote || t == s.stringQuote {
-				// [rR]'[^']'
-				s.pos++
-				if s.scanString(lval, t, false, true) {
-					lval.id = SCONST
-				}
-				return
-			} else if t == 'b' || t == 'B' {
-				// Raw bytes?
-				if t := s.peekN(1); t == singleQuote || t == s.stringQuote {
-					// [bBrR]'[^']'
-					s.pos += 2
-					if s.scanString(lval, t, false, false) {
-						lval.id = BCONST
-					}
-					return
-				}
-			}
-		}
 		s.scanIdent(lval, ch)
 		return
 
@@ -511,16 +461,6 @@ func (s *Scanner) scanComment(lval *sqlSymType) (present, ok bool) {
 		}
 	}
 
-	if s.syntax == Modern && ch == '#' {
-		s.pos++
-		for {
-			switch s.next() {
-			case eof, '\n':
-				return true, true
-			}
-		}
-	}
-
 	return false, true
 }
 
@@ -674,64 +614,35 @@ func (s *Scanner) scanStringOrHex(
 	var buf []byte
 	var runeTmp [utf8.UTFMax]byte
 	start := s.pos
-	tripleQuoted := false
 
 outer:
 	for {
 		switch s.next() {
 		case ch:
-			switch s.syntax {
-			case Traditional:
-				buf = append(buf, s.in[start:s.pos-1]...)
-				if s.peek() == ch {
-					// Double quote is translated into a single quote that is part of the
-					// string.
-					start = s.pos
-					s.pos++
-					continue
-				}
-
-				if newline, ok := s.skipWhitespace(lval, false); !ok {
-					return false
-				} else if !newline {
-					break outer
-				}
-				// SQL allows joining adjacent strings separated by whitespace as long as
-				// that whitespace contains at least one newline. Kind of strange to
-				// require the newline, but that is the standard.
-				if s.peek() != ch {
-					break outer
-				}
-				s.pos++
+			buf = append(buf, s.in[start:s.pos-1]...)
+			if s.peek() == ch {
+				// Double quote is translated into a single quote that is part of the
+				// string.
 				start = s.pos
-
-			case Modern:
-				if s.pos == start+1 && s.peek() == ch {
-					// Triple-quotes at the start of the string.
-					s.pos++
-					start = s.pos
-					tripleQuoted = true
-					continue
-				}
-				if !tripleQuoted {
-					buf = append(buf, s.in[start:s.pos-1]...)
-					break outer
-				}
-				if s.peek() == ch && s.peekN(1) == ch {
-					// Triple-quotes at the end of the string.
-					buf = append(buf, s.in[start:s.pos-1]...)
-					s.pos += 2
-					break outer
-				}
+				s.pos++
+				continue
 			}
-			continue
 
-		case '\n':
-			if s.syntax == Modern && !tripleQuoted {
-				lval.id = ERROR
-				lval.str = fmt.Sprintf("invalid syntax: embedded newline")
+			if newline, ok := s.skipWhitespace(lval, false); !ok {
 				return false
+			} else if !newline {
+				break outer
 			}
+			// SQL allows joining adjacent strings separated by whitespace as long as
+			// that whitespace contains at least one newline. Kind of strange to
+			// require the newline, but that is the standard.
+			if s.peek() != ch {
+				break outer
+			}
+			s.pos++
+			start = s.pos
+
+			continue
 
 		case '\\':
 			t := s.peek()

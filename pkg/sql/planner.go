@@ -166,7 +166,7 @@ func (p *planner) query(ctx context.Context, sql string, args ...interface{}) (p
 			log.Infof(ctx, "placeholders: %q", args)
 		}
 	}
-	stmt, err := parser.ParseOneTraditional(sql)
+	stmt, err := parser.ParseOne(sql)
 	if err != nil {
 		return nil, err
 	}

@@ -128,8 +128,6 @@ type Session struct {
 	// before the database. Currently, this is used only for SELECTs.
 	// Names in the search path must have been normalized already.
 	SearchPath parser.SearchPath
-	// Syntax determine which lexical structure to use for parsing.
-	Syntax parser.Syntax
 	// User is the name of the user logged into the session.
 	User string
 

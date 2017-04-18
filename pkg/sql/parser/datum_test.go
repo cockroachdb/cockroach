@@ -22,7 +22,7 @@ import (
 )
 
 func prepareExpr(t *testing.T, datumExpr string) TypedExpr {
-	expr, err := ParseExprTraditional(datumExpr)
+	expr, err := ParseExpr(datumExpr)
 	if err != nil {
 		t.Fatalf("%s: %v", datumExpr, err)
 	}
