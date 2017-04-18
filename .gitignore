@@ -33,3 +33,6 @@ builds.xml
 
 # Custom or private env vars (e.g. internal keys, access tokens, etc).
 customenv.mk
+
+# Generated files containing include paths.
+zcgo_flags*.go

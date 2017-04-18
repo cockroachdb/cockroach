@@ -34,10 +34,12 @@ export BUILDER_HIDE_GOPATH_SRC=1
 build/builder.sh build/build-static-binaries.sh static-tests.tar.gz
 for archive in cockroach-latest "cockroach-${VERSION}"
 do
-  build/builder.sh make TYPE=release archive ARCHIVE_BASE="${archive}" ARCHIVE="${archive}.src.tgz"
+  build/builder.sh make archive ARCHIVE_BASE="${archive}" ARCHIVE="${archive}.src.tgz"
 done
 build/push-docker-deploy.sh
 mv build/deploy/cockroach cockroach
 aws configure set region us-east-1
-build/build-osx.sh
+build/builder.sh make build TYPE=release-darwin
+# TODO(tamird, #14673): make CCL compile on Windows.
+build/builder.sh make buildoss TYPE=release-windows
 eval $push
