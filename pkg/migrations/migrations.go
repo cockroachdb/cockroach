@@ -292,7 +292,10 @@ func migrationKey(migration migrationDescriptor) roachpb.Key {
 	return append(keys.MigrationPrefix, roachpb.RKey(migration.name)...)
 }
 
-func checkQueryResults(results []sql.Result, numResults int) error {
+func checkQueryResults(results []sql.Result, numResults int, panicErr error) error {
+	if panicErr != nil {
+		return panicErr
+	}
 	for _, result := range results {
 		if result.Err != nil {
 			return result.Err
@@ -316,8 +319,8 @@ func eventlogUniqueIDDefault(ctx context.Context, r runner) error {
 	// arbitrarily long time.
 	var err error
 	for retry := retry.Start(retry.Options{MaxRetries: 5}); retry.Next(); {
-		res := r.sqlExecutor.ExecuteStatements(session, alterStmt, nil)
-		err = checkQueryResults(res.ResultList, 1)
+		res, panicErr := r.sqlExecutor.ExecuteStatements(session, alterStmt, nil)
+		err = checkQueryResults(res.ResultList, 1, panicErr)
 		if err == nil {
 			break
 		}

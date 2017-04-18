@@ -71,11 +71,11 @@ func (ps PreparedStatements) Exists(name string) bool {
 // ps.session.Ctx() is used as the logging context for the prepare operation.
 func (ps PreparedStatements) New(
 	e *Executor, name, query string, placeholderHints parser.PlaceholderTypes,
-) (*PreparedStatement, error) {
+) (*PreparedStatement, bool, error) {
 	// Prepare the query. This completes the typing of placeholders.
-	stmt, err := e.Prepare(query, ps.session, placeholderHints)
-	if err != nil {
-		return nil, err
+	stmt, fatalErr, err := e.Prepare(query, ps.session, placeholderHints)
+	if err != nil || fatalErr {
+		return nil, fatalErr, err
 	}
 
 	// For now we are just counting the size of the query string and
@@ -83,7 +83,7 @@ func (ps PreparedStatements) New(
 	// during prepare, this should be tallied up to the monitor as well.
 	sz := int64(uintptr(len(query)+len(name)) + unsafe.Sizeof(*stmt))
 	if err := stmt.memAcc.Wsession(ps.session).OpenAndInit(ps.session.Ctx(), sz); err != nil {
-		return nil, err
+		return nil, false, err
 	}
 
 	if prevStmt, ok := ps.Get(name); ok {
@@ -91,7 +91,7 @@ func (ps PreparedStatements) New(
 	}
 
 	ps.stmts[name] = stmt
-	return stmt, nil
+	return stmt, false, nil
 }
 
 // Delete removes the PreparedStatement with the provided name from the PreparedStatements.

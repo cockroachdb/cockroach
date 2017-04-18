@@ -20,6 +20,8 @@ package sql
 import (
 	"fmt"
 	"reflect"
+	"runtime"
+	"runtime/debug"
 	"strconv"
 	"strings"
 	"sync"
@@ -395,6 +397,59 @@ func (e *Executor) getDatabaseCache() *databaseCache {
 // nil if there are no results).
 func (e *Executor) Prepare(
 	query string, session *Session, pinfo parser.PlaceholderTypes,
+) (res *PreparedStatement, fatalErr bool, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = errors.Errorf("panic while preparing %q: %s", query, r)
+
+			// Is the panic recoverable?
+			if !isRecoverableSQLPanic(1 /* the func() closure */) {
+				// No: continue to panic, this will likely shut down the
+				// server. The panic will be logged by the top-level recover.
+				panic(err)
+			}
+
+			// Yes: inform the logs; the return below will
+			// inform the caller of panicErr which we set above.
+
+			// Note: we do not use log.ReportPanic here, since recovered
+			// panics do not need to be as noisy on stderr when logs are
+			// redirected.
+
+			// A short warning header guaranteed to go to stderr.
+			log.Shout(session.Ctx(), log.Severity_WARNING,
+				"a SQL panic has occurred, recovering by closing client connection")
+			// Panic details go to logs; if logs go to file these do not show on stderr.
+			log.Error(session.Ctx(), err)
+			log.Error(session.Ctx(), "call stack:\n", debug.Stack())
+			fatalErr = true
+		}
+	}()
+
+	// Prepare needs a transaction because it needs to retrieve db/table
+	// descriptors for type checking.
+	txn := session.TxnState.txn
+	if txn == nil {
+		// The new txn need not be the same transaction used by statements following
+		// this prepare statement because it can only be used by prepare() to get a
+		// table lease that is eventually added to the session.
+		//
+		// TODO(vivek): perhaps we should be more consistent and update
+		// session.TxnState.txn, but more thought needs to be put into whether that
+		// is really needed.
+		txn = client.NewTxn(e.cfg.DB)
+		if err := txn.SetIsolation(session.DefaultIsolationLevel); err != nil {
+			return nil, true, fmt.Errorf("cannot set up txn for prepare %q: %v", query, err)
+		}
+		txn.Proto().OrigTimestamp = e.cfg.Clock.Now()
+	}
+
+	res, err = e.doPrepare(query, session, pinfo, txn)
+	return res, fatalErr, err
+}
+
+func (e *Executor) doPrepare(
+	query string, session *Session, pinfo parser.PlaceholderTypes, txn *client.Txn,
 ) (*PreparedStatement, error) {
 	session.resetForBatch(e)
 	sessionEventf(session, "preparing: %s", query)
@@ -428,23 +483,6 @@ func (e *Executor) Prepare(
 		return nil, err
 	}
 
-	// Prepare needs a transaction because it needs to retrieve db/table
-	// descriptors for type checking.
-	txn := session.TxnState.txn
-	if txn == nil {
-		// The new txn need not be the same transaction used by statements following
-		// this prepare statement because it can only be used by prepare() to get a
-		// table lease that is eventually added to the session.
-		//
-		// TODO(vivek): perhaps we should be more consistent and update
-		// session.TxnState.txn, but more thought needs to be put into whether that
-		// is really needed.
-		txn = client.NewTxn(e.cfg.DB)
-		if err := txn.SetIsolation(session.DefaultIsolationLevel); err != nil {
-			panic(err)
-		}
-		txn.Proto().OrigTimestamp = e.cfg.Clock.Now()
-	}
 	if len(session.TxnState.schemaChangers.schemaChangers) > 0 {
 		return nil, errStmtFollowsSchemaChange
 	}
@@ -474,23 +512,47 @@ func (e *Executor) Prepare(
 	return prepared, nil
 }
 
-// ExecuteStatements executes the given statement(s) and returns a response.
+// ExecuteStatements executes the given statement(s) and returns a
+// response. If the return panicErr error is non-nil, the session
+// cannot be used any more and must be discarded.
 func (e *Executor) ExecuteStatements(
 	session *Session, stmts string, pinfo *parser.PlaceholderInfo,
-) StatementResults {
+) (results StatementResults, panicErr error) {
 	session.resetForBatch(e)
 	session.phaseTimes[sessionStartBatch] = timeutil.Now()
 
 	defer func() {
 		if r := recover(); r != nil {
-			// On a panic, prepend the executed SQL.
-			panic(fmt.Errorf("%s: %s", stmts, r))
+			panicErr = errors.Errorf("panic while executing %q: %s", stmts, r)
+
+			// Is the panic recoverable?
+			if !isRecoverableSQLPanic(1 /* the func() closure */) {
+				// No: continue to panic, this will likely shut down the
+				// server. The panic will be logged by the top-level recover.
+				panic(panicErr)
+			}
+
+			// Yes: inform the logs; the return below will
+			// inform the caller of panicErr which we set above.
+
+			// Note: we do not use log.ReportPanic here, since recovered
+			// panics do not need to be as noisy on stderr when logs are
+			// redirected.
+
+			// A short warning header guaranteed to go to stderr.
+			log.Shout(session.Ctx(), log.Severity_WARNING,
+				"a SQL panic has occurred, recovering by closing client connection")
+			// Panic details go to logs; if logs go to file these do not show on stderr.
+			log.Error(session.Ctx(), panicErr)
+			log.Error(session.Ctx(), "call stack:\n", debug.Stack())
 		}
 	}()
 
 	// Send the Request for SQL execution and set the application-level error
 	// for each result in the reply.
-	return e.execRequest(session, stmts, pinfo, copyMsgNone)
+	results = e.execRequest(session, stmts, pinfo, copyMsgNone)
+
+	return results, panicErr
 }
 
 // CopyData adds data to the COPY buffer and executes if there are enough rows.
@@ -1839,4 +1901,59 @@ func convertToErrWithPGCode(err error) error {
 		return sqlbase.NewRetryError(err)
 	}
 	return err
+}
+
+// isRecoverableSQLPanic returns true if the current panic (as
+// determined by the call stack) is "recoverable" (by shutting down
+// the client connection but keeping the server alive).  A panic is
+// considered recoverable if it was originally emitted by the `sql`
+// package itself or one of its sub-packages. For example, if the
+// panic originates in the `client` package (e.g. as called by
+// client.Txn() from `sql`), the panic is not considered to be
+// recoverable.
+//
+// The skip parameter indicates how many call frames to skip to
+// start the analysis.
+func isRecoverableSQLPanic(skip int) bool {
+	var pcs [15]uintptr
+	_ = runtime.Callers(skip+1, pcs[:])
+	frames := runtime.CallersFrames(pcs[:])
+
+	// The following loop strips any 'runtime.*' prefix followed by the
+	// one line call stack entry for the recover in sql.Executor.
+	for {
+		f, more := frames.Next()
+		function := f.Function
+		if strings.HasPrefix(function, "runtime.") {
+			if !more {
+				return false
+			}
+			continue
+		}
+		if !strings.HasPrefix(function,
+			"github.com/cockroachdb/cockroach/pkg/sql.(*Executor).ExecuteStatements") {
+			return false
+		}
+		if !more {
+			return false
+		}
+		break
+	}
+	// The following loop strips any additional `runtime.*` prefixes
+	// and checks that the first non-runtime call stack entry is indeed
+	// from package sql.
+	for {
+		f, more := frames.Next()
+		function := f.Function
+		if strings.HasPrefix(function, "runtime.") {
+			if !more {
+				return false
+			}
+			continue
+		}
+		if strings.HasPrefix(function, "github.com/cockroachdb/cockroach/pkg/sql") {
+			return true
+		}
+		return false
+	}
 }

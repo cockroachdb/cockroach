@@ -182,6 +182,11 @@ type v3Conn struct {
 	metrics *ServerMetrics
 
 	sqlMemoryPool *mon.MemoryMonitor
+
+	// abortErr, if non-nil at the start of an iteration of the
+	// read-execute-response loop, indicates the connection is dead and
+	// should be closed ASAP.
+	abortErr error
 }
 
 func makeV3Conn(
@@ -402,6 +407,16 @@ func (c *v3Conn) serve(ctx context.Context, draining func() bool, reserved mon.B
 			}
 		}
 		typ, n, err := c.readBuf.readTypedMsg(c.rd)
+
+		// Is there a fatal error pending on this connection? If so, stop
+		// the connection here. We cannot do this as early as the point
+		// where the error occurs, because clients get confused if the TCP
+		// connection is closed before the first ready message after the
+		// error has occurred.
+		if c.abortErr != nil {
+			return c.abortErr
+		}
+
 		c.metrics.BytesInCount.Inc(int64(n))
 		if err != nil {
 			return err
@@ -543,7 +558,10 @@ func (c *v3Conn) handleParse(buf *readBuffer) error {
 		sqlTypeHints[strconv.Itoa(i+1)] = v
 	}
 	// Create the new PreparedStatement in the connection's Session.
-	stmt, err := c.session.PreparedStatements.New(c.executor, name, query, sqlTypeHints)
+	stmt, fatalErr, err := c.session.PreparedStatements.New(c.executor, name, query, sqlTypeHints)
+	if fatalErr {
+		return c.handleRecoveredPanic(err)
+	}
 	if err != nil {
 		return c.sendError(err)
 	}
@@ -826,11 +844,19 @@ func (c *v3Conn) executeStatements(
 	limit int,
 ) error {
 	tracing.AnnotateTrace()
+
 	// Note: sql.Executor gets its Context from c.session.context, which
 	// has been bound by v3Conn.setupSession().
-	results := c.executor.ExecuteStatements(c.session, stmts, pinfo)
-	// Delay evaluation of c.session.Ctx().
+	results, panicErr := c.executor.ExecuteStatements(c.session, stmts, pinfo)
+
+	// We can't do `defer results.Close(c.session.Ctx())` here because
+	// we want the results to be closed using the context at the point
+	// of Close, not at the point of defer.
 	defer func() { results.Close(c.session.Ctx()) }()
+
+	if panicErr != nil {
+		return c.handleRecoveredPanic(panicErr)
+	}
 
 	tracing.AnnotateTrace()
 	if results.Empty {
@@ -1132,4 +1158,16 @@ func newUnrecognizedMsgTypeErr(typ clientMessageType) error {
 
 func newAdminShutdownErr(err error) error {
 	return pgerror.NewErrorf(pgerror.CodeAdminShutdownError, err.Error())
+}
+
+func (c *v3Conn) handleRecoveredPanic(panicErr error) error {
+	// Save the error in the connection, so that the connection gets
+	// closed at the first next client request. We can't close the
+	// connection right away, because otherwise the client may get
+	// confused and re-open a new connection retry the query blindly
+	// multiple times before giving up.
+	c.abortErr = panicErr
+	return c.sendInternalError(
+		"internal server error during SQL execution; check the server logs for details",
+	)
 }
