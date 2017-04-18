@@ -33,16 +33,16 @@ protos:
 generate: $(GOBINDATA_TARGET)
 
 .PHONY: lint
-lint: $(YARN_INSTALLED_TARGET) protos
+lint: $(YARN_INSTALLED_TARGET) | protos
 	stylint -c .stylintrc styl
 	tslint -c tslint.json -p tsconfig.json --type-check
 
 .PHONY: test
-test: $(YARN_INSTALLED_TARGET) protos
+test: $(YARN_INSTALLED_TARGET) | protos
 	karma start
 
 .PHONY: test-debug
-test-debug: $(YARN_INSTALLED_TARGET) protos
+test-debug: $(YARN_INSTALLED_TARGET) | protos
 	karma start --browsers Chrome --no-single-run --reporters mocha
 
 $(GOBINDATA_TARGET): $(YARN_INSTALLED_TARGET) $(shell git ls-files | grep -vF $(GOBINDATA_TARGET)) | protos
