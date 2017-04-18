@@ -17,7 +17,7 @@ import (
 // feature is not enabled, including information or a link explaining how to
 // enable it.
 func CheckEnterpriseEnabled(feature string) error {
-	if settings.GetEnterpriseEnabled() {
+	if settings.EnterpriseEnabled() {
 		return nil
 	}
 	// TODO(dt): link to some stable URL that then redirects to a helpful page
