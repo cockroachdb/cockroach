@@ -1050,11 +1050,31 @@ func spansFromLogicalSpans(
 	logicalSpans []logicalSpan, tableDesc *sqlbase.TableDescriptor, index *sqlbase.IndexDescriptor,
 ) (roachpb.Spans, error) {
 	spans := make(roachpb.Spans, len(logicalSpans))
-	prefix := roachpb.Key(sqlbase.MakeIndexKeyPrefix(tableDesc, index.ID))
+	interstices := make([][]byte, len(index.ColumnDirections)+1)
+	interstices[0] = sqlbase.MakeIndexKeyPrefix(tableDesc, index.ID)
+	if len(index.Interleave.Ancestors) > 0 {
+		// TODO(eisen): too much of this code is shared with EncodePartialIndexKey.
+		sharedPrefixLen := 0
+		for i, ancestor := range index.Interleave.Ancestors {
+			// The first ancestor is already encoded in interstices[0].
+			if i != 0 {
+				interstices[sharedPrefixLen] =
+					encoding.EncodeUvarintAscending(interstices[sharedPrefixLen], uint64(ancestor.TableID))
+				interstices[sharedPrefixLen] =
+					encoding.EncodeUvarintAscending(interstices[sharedPrefixLen], uint64(ancestor.IndexID))
+			}
+			sharedPrefixLen += int(ancestor.SharedPrefixLen)
+			interstices[sharedPrefixLen] = encoding.EncodeNotNullDescending(interstices[sharedPrefixLen])
+		}
+		interstices[sharedPrefixLen] =
+			encoding.EncodeUvarintAscending(interstices[sharedPrefixLen], uint64(tableDesc.ID))
+		interstices[sharedPrefixLen] =
+			encoding.EncodeUvarintAscending(interstices[sharedPrefixLen], uint64(index.ID))
+	}
 	for i, ls := range logicalSpans {
 		var s roachpb.Span
 		var err error
-		if s, err = spanFromLogicalSpan(ls, prefix); err != nil {
+		if s, err = spanFromLogicalSpan(ls, interstices); err != nil {
 			return nil, err
 		}
 		spans[i] = s
@@ -1062,12 +1082,14 @@ func spansFromLogicalSpans(
 	return spans, nil
 }
 
-func spanFromLogicalSpan(ls logicalSpan, prefix roachpb.Key) (roachpb.Span, error) {
-	s := roachpb.Span{
-		Key:    append(roachpb.Key(nil), prefix...),
-		EndKey: append(roachpb.Key(nil), prefix...),
-	}
-	for i, part := range ls.start {
+func spanFromLogicalSpan(ls logicalSpan, interstices [][]byte) (roachpb.Span, error) {
+	var s roachpb.Span
+	for i := 0; true; i++ {
+		s.Key = append(s.Key, interstices[i]...)
+		if i >= len(ls.start) {
+			break
+		}
+		part := ls.start[i]
 		var err error
 		s.Key, err = encodeLogicalKeyPart(s.Key, part)
 		if err != nil {
@@ -1098,7 +1120,12 @@ func spanFromLogicalSpan(ls logicalSpan, prefix roachpb.Key) (roachpb.Span, erro
 			last.inclusive = false
 		}
 	}
-	for i, part := range ls.end {
+	for i := 0; true; i++ {
+		s.EndKey = append(s.EndKey, interstices[i]...)
+		if i >= len(ls.end) {
+			break
+		}
+		part := ls.end[i]
 		var err error
 		s.EndKey, err = encodeLogicalKeyPart(s.EndKey, part)
 		if err != nil {
