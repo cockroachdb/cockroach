@@ -14,7 +14,7 @@ import {
   OptInAttributes, saveUIData, KEY_HELPUS, VERSION_DISMISSED_KEY, loadUIData, isInFlight,
   UIDataSet,
 } from "./uiData";
-import { refreshCluster, refreshNodes, refreshVersion } from "./apiReducers";
+import { refreshCluster, refreshNodes, refreshVersion, refreshHealth } from "./apiReducers";
 import { nodeStatusesSelector } from "./nodes";
 import { AdminUIState } from "./state";
 
@@ -30,7 +30,7 @@ export interface AlertInfo {
   // Title to display with the alert.
   title: string;
   // The text of this alert.
-  text: string;
+  text?: string;
   // Optional hypertext link to be followed when clicking alert.
   link?: string;
 }
@@ -183,6 +183,11 @@ export const newVersionNotificationSelector = createSelector(
   newVersionDismissedPersistentSelector,
   newVersionDismissedLocalSetting.selector,
   (newerVersions, newVersionDismissedPersistentLoaded, newVersionDismissedPersistent, newVersionDismissedLocal): Alert => {
+    // Check if there are new versions available.
+    if (!newerVersions || !newerVersions.details || newerVersions.details.length === 0) {
+      return undefined;
+    }
+
     // Check local dismissal. Local dismissal is valid for one day.
     const yesterday = moment().subtract(1, "day");
     if (newVersionDismissedLocal.isAfter(yesterday)) {
@@ -193,11 +198,6 @@ export const newVersionNotificationSelector = createSelector(
     if (!newVersionDismissedPersistentLoaded
         || !newVersionDismissedPersistent
         || newVersionDismissedPersistent.isAfter(yesterday)) {
-      return undefined;
-    }
-
-    // Check if there are new versions available.
-    if (!newerVersions || !newerVersions.details || newerVersions.details.length === 0) {
       return undefined;
     }
 
@@ -219,13 +219,60 @@ export const newVersionNotificationSelector = createSelector(
     };
   });
 
+export const disconnectedDismissedLocalSetting = new LocalSetting(
+  "disconnected_dismissed", localSettingsSelector, moment(0),
+);
+
 /**
- * All Alerts Selector which succinctly returns an array of all active alerts.
+ * Notification when the Admin UI is disconnected from the cluster.
  */
-export const allAlertsSelector = createSelector(
+export const disconnectedAlertSelector = createSelector(
+  (state: AdminUIState) => state.cachedData.health,
+  disconnectedDismissedLocalSetting.selector,
+  (health, disconnectedDismissed): Alert => {
+    if (!health || !health.lastError) {
+      return undefined;
+    }
+
+    // Allow local dismissal for one minute.
+    const dismissedMaxTime = moment().subtract(1, "m");
+    if (disconnectedDismissed.isAfter(dismissedMaxTime)) {
+      return undefined;
+    }
+
+    return {
+      level: AlertLevel.CRITICAL,
+      title: "Connection to CockroachDB node lost.",
+      dismiss: (dispatch) => {
+        dispatch(disconnectedDismissedLocalSetting.set(moment()));
+        return Promise.resolve();
+      },
+    };
+  },
+);
+
+/**
+ * Selector which returns an array of all active alerts which should be
+ * displayed in the alerts panel, which is embedded within the cluster overview
+ * page; currently, this includes all non-critical alerts.
+ */
+export const panelAlertsSelector = createSelector(
   newVersionNotificationSelector,
   staggeredVersionWarningSelector,
   helpusNotificationSelector,
+  (...alerts: Alert[]): Alert[] => {
+    return _.without(alerts, null, undefined);
+  },
+);
+
+/**
+ * Selector which returns an array of all active alerts which should be
+ * displayed as a banner, which appears at the top of the page and overlaps
+ * content in recognition of the severity of the alert; currently, this includes
+ * all critical-level alerts.
+ */
+export const bannerAlertsSelector = createSelector(
+  disconnectedAlertSelector,
   (...alerts: Alert[]): Alert[] => {
     return _.without(alerts, null, undefined);
   },
@@ -258,6 +305,9 @@ export function alertDataSync(store: Store<AdminUIState>) {
 
   return () => {
     const state: AdminUIState = store.getState();
+
+    // Always refresh health.
+    dispatch(refreshHealth());
 
     // Load persistent settings which have not yet been loaded.
     const uiData = state.uiData;

@@ -30,15 +30,22 @@
 
   &--notification
     color $light-blue
-    border-color rgba(81, 187, 253, .3)
-    background-color rgba(81, 187, 253, .2)
+    border-color $alert-blue-dark
+    background-color $alert-blue-light
 
   &--warning
     color $light-blue
-    border-color rgba(242, 190, 44, .3)
-    background-color rgba(242, 190, 44, .2)
+    border-color $alert-yellow-dark
+    background-color $alert-yellow-light
 
   &--critical
     color $light-blue
-    border-color rgba(241, 105, 105, .3)
-    background-color rgba(241, 105, 105, .2)
+    border-color $alert-red-dark
+    background-color $alert-red-light
+
+.alert-banner
+  position fixed
+  z-index 10
+  left 50px
+  right 50px
+  top 20px
