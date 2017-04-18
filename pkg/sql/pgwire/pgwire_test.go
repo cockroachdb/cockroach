@@ -1506,45 +1506,6 @@ func TestSQLNetworkMetrics(t *testing.T) {
 	}
 }
 
-func TestPrepareSyntax(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop()
-
-	pgURL, cleanupFn := sqlutils.PGUrl(t, s.ServingAddr(), "TestPrepareSyntax", url.User(security.RootUser))
-	defer cleanupFn()
-
-	db, err := gosql.Open("postgres", pgURL.String())
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
-
-	const strTest = `SELECT """test"""`
-
-	if _, err := db.Exec(`SET SYNTAX = traditional`); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := db.Prepare(strTest); err == nil {
-		t.Fatal("expected error")
-	}
-
-	if _, err := db.Exec(`SET SYNTAX = modern`); err != nil {
-		t.Fatal(err)
-	}
-	stmt, err := db.Prepare(strTest)
-	if err != nil {
-		t.Fatalf("unexpected error: %s", err)
-	}
-	var v string
-	if err := stmt.QueryRow().Scan(&v); err != nil {
-		t.Fatalf("unexpected error: %s", err)
-	} else if v != "test" {
-		t.Fatalf("unexpected result: %q", v)
-	}
-}
-
 func TestPGWireOverUnixSocket(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 

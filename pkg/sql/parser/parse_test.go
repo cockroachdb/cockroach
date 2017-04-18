@@ -674,7 +674,7 @@ func TestParse(t *testing.T) {
 		{`RESTORE foo FROM 'bar' WITH OPTIONS ('key1', 'key2'='value')`},
 	}
 	for _, d := range testData {
-		stmts, err := parseTraditional(d.sql)
+		stmts, err := parse(d.sql)
 		if err != nil {
 			t.Fatalf("%s: expected success, but found %s", d.sql, err)
 		}
@@ -915,7 +915,7 @@ func TestParse2(t *testing.T) {
 			`RESTORE DATABASE foo FROM 'bar'`},
 	}
 	for _, d := range testData {
-		stmts, err := parseTraditional(d.sql)
+		stmts, err := parse(d.sql)
 		if err != nil {
 			t.Errorf("%s: expected success, but found %s", d.sql, err)
 			continue
@@ -924,7 +924,7 @@ func TestParse2(t *testing.T) {
 		if d.expected != s {
 			t.Errorf("%s: expected %s, but found (%d statements): %s", d.sql, d.expected, len(stmts), s)
 		}
-		if _, err := parseTraditional(s); err != nil {
+		if _, err := parse(s); err != nil {
 			t.Errorf("expected string found, but not parsable: %s:\n%s", err, s)
 		}
 	}
@@ -943,7 +943,7 @@ func TestParseSyntax(t *testing.T) {
 		{`SELECT '\x' FROM t`},
 	}
 	for _, d := range testData {
-		if _, err := parseTraditional(d.sql); err != nil {
+		if _, err := parse(d.sql); err != nil {
 			t.Fatalf("%s: expected success, but not parsable %s", d.sql, err)
 		}
 	}
@@ -1266,7 +1266,7 @@ SELECT 1 + ANY ARRAY[1, 2, 3]
 		},
 	}
 	for _, d := range testData {
-		_, err := parseTraditional(d.sql)
+		_, err := parse(d.sql)
 		if err == nil || err.Error() != d.expected {
 			t.Fatalf("%s: expected\n%s, but found\n%v", d.sql, d.expected, err)
 		}
@@ -1291,7 +1291,7 @@ func TestParsePanic(t *testing.T) {
 		"(F(F(F(F(F(F(F(F(F(F" +
 		"(F(F(F(F(F(F(F(F(F((" +
 		"F(0"
-	_, err := parseTraditional(s)
+	_, err := parse(s)
 	expected := `syntax error at or near "EOF"`
 	if !testutils.IsError(err, expected) {
 		t.Fatalf("expected %s, but found %v", expected, err)
@@ -1451,7 +1451,7 @@ func TestParsePrecedence(t *testing.T) {
 		{`1 OR 2 OR 3`, or(or(one, two), three)},
 	}
 	for _, d := range testData {
-		expr, err := ParseExprTraditional(d.sql)
+		expr, err := ParseExpr(d.sql)
 		if err != nil {
 			t.Fatalf("%s: %v", d.sql, err)
 		}
@@ -1468,7 +1468,7 @@ func BenchmarkParse(b *testing.B) {
 			UPDATE pgbench_accounts SET abalance = abalance + 77 WHERE aid = 5;
 			SELECT abalance FROM pgbench_accounts WHERE aid = 5;
 			INSERT INTO pgbench_history (tid, bid, aid, delta, mtime) VALUES (1, 2, 5, 77, CURRENT_TIMESTAMP);
-			END`, Traditional)
+			END`)
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -1528,7 +1528,7 @@ func testEncodeString(t *testing.T, input []byte, encode func(*bytes.Buffer, str
 			t.Fatalf("unprintable character: %v (%v): %s %v", ch, input, sql, []byte(sql))
 		}
 	}
-	stmts, err := parseTraditional(sql)
+	stmts, err := parse(sql)
 	if err != nil {
 		t.Fatalf("%s: expected success, but found %s", sql, err)
 	}

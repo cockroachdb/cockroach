@@ -948,7 +948,6 @@ search_path                    pg_catalog    NULL      NULL        NULL        s
 server_version                 9.5.0         NULL      NULL        NULL        string
 session_user                   root          NULL      NULL        NULL        string
 standard_conforming_strings    on            NULL      NULL        NULL        string
-syntax                         Traditional   NULL      NULL        NULL        string
 time zone                      UTC           NULL      NULL        NULL        string
 transaction isolation level    SERIALIZABLE  NULL      NULL        NULL        string
 transaction priority           NORMAL        NULL      NULL        NULL        string
@@ -969,7 +968,6 @@ search_path                    pg_catalog    NULL  user     NULL      pg_catalog
 server_version                 9.5.0         NULL  user     NULL      9.5.0         9.5.0
 session_user                   root          NULL  user     NULL      root          root
 standard_conforming_strings    on            NULL  user     NULL      on            on
-syntax                         Traditional   NULL  user     NULL      Traditional   Traditional
 time zone                      UTC           NULL  user     NULL      UTC           UTC
 transaction isolation level    SERIALIZABLE  NULL  user     NULL      SERIALIZABLE  SERIALIZABLE
 transaction priority           NORMAL        NULL  user     NULL      NORMAL        NORMAL
@@ -990,7 +988,6 @@ search_path                    NULL    NULL     NULL     NULL        NULL
 server_version                 NULL    NULL     NULL     NULL        NULL
 session_user                   NULL    NULL     NULL     NULL        NULL
 standard_conforming_strings    NULL    NULL     NULL     NULL        NULL
-syntax                         NULL    NULL     NULL     NULL        NULL
 time zone                      NULL    NULL     NULL     NULL        NULL
 transaction isolation level    NULL    NULL     NULL     NULL        NULL
 transaction priority           NULL    NULL     NULL     NULL        NULL

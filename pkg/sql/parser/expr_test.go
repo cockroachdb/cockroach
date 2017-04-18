@@ -76,7 +76,7 @@ func TestNormalizeNameInExpr(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		stmt, err := ParseOneTraditional("SELECT " + tc.in)
+		stmt, err := ParseOne("SELECT " + tc.in)
 		if err != nil {
 			t.Fatalf("%s: %v", tc.in, err)
 		}
@@ -152,7 +152,7 @@ func TestExprString(t *testing.T) {
 		`count(1) FILTER (WHERE true)`,
 	}
 	for _, exprStr := range testExprs {
-		expr, err := ParseExprTraditional(exprStr)
+		expr, err := ParseExpr(exprStr)
 		if err != nil {
 			t.Fatalf("%s: %v", exprStr, err)
 		}
@@ -162,7 +162,7 @@ func TestExprString(t *testing.T) {
 		}
 		// str may differ than exprStr (we may be adding some parens).
 		str := typedExpr.String()
-		expr2, err := ParseExprTraditional(str)
+		expr2, err := ParseExpr(str)
 		if err != nil {
 			t.Fatalf("%s: %v", exprStr, err)
 		}
@@ -207,7 +207,7 @@ func TestStripParens(t *testing.T) {
 		{`((1) + (2))`, `(1) + (2)`},
 	}
 	for i, test := range testExprs {
-		expr, err := ParseExprTraditional(test.in)
+		expr, err := ParseExpr(test.in)
 		if err != nil {
 			t.Fatalf("%d: %v", i, err)
 		}

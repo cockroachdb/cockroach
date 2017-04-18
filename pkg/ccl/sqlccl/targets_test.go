@@ -76,7 +76,7 @@ func TestDescriptorsMatchingTargets(t *testing.T) {
 	for _, test := range tests {
 		t.Run("", func(t *testing.T) {
 			sql := fmt.Sprintf(`GRANT ALL ON %s TO ignored`, test.pattern)
-			stmt, err := parser.ParseOne(sql, parser.Traditional)
+			stmt, err := parser.ParseOne(sql)
 			if err != nil {
 				t.Fatal(err)
 			}

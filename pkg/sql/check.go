@@ -50,7 +50,7 @@ func (c *checkHelper) init(
 	for i, check := range tableDesc.Checks {
 		exprStrings[i] = check.Expr
 	}
-	exprs, err := parser.ParseExprsTraditional(exprStrings)
+	exprs, err := parser.ParseExprs(exprStrings)
 	if err != nil {
 		return err
 	}
@@ -134,7 +134,7 @@ func (p *planner) validateCheckExpr(
 	tableName parser.TableExpr,
 	tableDesc *sqlbase.TableDescriptor,
 ) error {
-	expr, err := parser.ParseExprTraditional(exprStr)
+	expr, err := parser.ParseExpr(exprStr)
 	if err != nil {
 		return err
 	}

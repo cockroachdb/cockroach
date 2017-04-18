@@ -407,7 +407,7 @@ func (p *planner) RenameColumn(ctx context.Context, n *parser.RenameColumn) (pla
 	for i, check := range tableDesc.Checks {
 		exprStrings[i] = check.Expr
 	}
-	exprs, err := parser.ParseExprsTraditional(exprStrings)
+	exprs, err := parser.ParseExprs(exprStrings)
 	if err != nil {
 		return nil, err
 	}
