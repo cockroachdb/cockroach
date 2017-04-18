@@ -1,5 +1,5 @@
-hash: 1ce713b585756a466971b31de22349c663db83d3aa75d2175d4ccd9f10fb4dba
-updated: 2017-04-17T17:46:52.324179903Z
+hash: e106243b597946210b4024bce458ba886b36363992d53b51bc0b3aa4bc599258
+updated: 2017-04-18T13:23:36.893924457-04:00
 imports:
 - name: cloud.google.com/go
   version: ed63fb27efcf32e25fe7837e4662457d3da4c4f2
@@ -26,7 +26,6 @@ imports:
   - autorest
   - autorest/azure
   - autorest/date
-  - autorest/to
 - name: github.com/backtrace-labs/go-bcd
   version: 4ad9137a248599da4b00da0be6e71a75c9e1b8d9
 - name: github.com/biogo/store
@@ -70,7 +69,7 @@ imports:
 - name: github.com/codegangsta/cli
   version: 0bdeddeeb0f650497d603c4ad7b20cfe685682f6
 - name: github.com/coreos/etcd
-  version: 7b541f90039c625d8242f90816066ecd5cf78744
+  version: 6dd807481cebac062e82c5ecaecdb2c3d0f605ad
   subpackages:
   - raft
   - raft/raftpb
@@ -353,11 +352,11 @@ imports:
   subpackages:
   - doc
 - name: github.com/spf13/pflag
-  version: 9e4c21054fa135711121b557932b1887f2405d92
+  version: 2300d0f8576fe575f71aaa5b9bbe4e1b0dc2eb51
 - name: github.com/StackExchange/wmi
   version: ea383cf3ba6ec950874b8486cd72356d007c768f
 - name: github.com/tebeka/go2xunit
-  version: 13c29c7515e660c2d5ccc1a2122b9ca38826a949
+  version: ca9f945db336cbce0d742a84282c53d6a4a70a21
   subpackages:
   - lib
 - name: github.com/VividCortex/ewma

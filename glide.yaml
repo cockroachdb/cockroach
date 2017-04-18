@@ -39,7 +39,7 @@ import:
 - package: github.com/cockroachdb/cockroach-go
   version: 6fd53f6d2eea06acb0c7f7aa88e0547acb32441b
 - package: github.com/coreos/etcd
-  version: 7b541f90039c625d8242f90816066ecd5cf78744
+  version: 6dd807481cebac062e82c5ecaecdb2c3d0f605ad
 - package: github.com/gogo/protobuf
   version: 100ba4e885062801d56799d78530b73b178a78f3
 - package: github.com/golang/protobuf
