@@ -459,7 +459,7 @@ SELECT atan2(-10.0, 5.0), atan2(10.0, 5.0)
 query RRR
 SELECT cbrt(-1.0::float), cbrt(27.0::float), cbrt(19.3::decimal)
 ----
--1 3 2.682372592629673
+-1 3 2.6823725926296729544
 
 query RRRRR
 SELECT ceil(-0.5::float), ceil(0.5::float), ceiling(0.5::float), ceil(0.1::decimal), ceiling(-0.9::decimal)
@@ -495,7 +495,7 @@ SELECT div(1::int, 0::int)
 query RRR
 SELECT exp(-1.0::float), exp(1.0::float), exp(2.0::decimal)
 ----
-0.36787944117144233 2.718281828459045 7.389056098930650
+0.36787944117144233 2.718281828459045 7.3890560989306502272
 
 query error exp\(\): overflow
 SELECT exp(1e2000::decimal)
@@ -513,7 +513,7 @@ false true false true false true
 query RRR
 SELECT ln(-2.0::float), ln(2.0::float), ln(2.5::decimal)
 ----
-NaN 0.6931471805599453 0.9162907318741551
+NaN 0.6931471805599453 0.91629073187415506518
 
 query error cannot take logarithm of a negative number
 SELECT ln(-100.000::decimal)
@@ -524,7 +524,7 @@ SELECT ln(0::decimal)
 query RR
 SELECT log(10.0::float), log(100.000::decimal)
 ----
-1 2.000000000000000
+1 2.0000000000000000000
 
 query error cannot take logarithm of a negative number
 SELECT log(-100.000::decimal)
@@ -637,7 +637,7 @@ SELECT pow(-3.0::float, 2.0), power(3.0::float, 2.0), pow(5.0::decimal, 2.0)
 query R
 SELECT pow(CAST (pi() AS DECIMAL), DECIMAL '2.0')
 ----
-9.869604401089357
+9.8696044010893571205
 
 query R
 SELECT power(0::decimal, -1)
@@ -1331,7 +1331,7 @@ select TO_IP('asdf')
 query R
 select ln(4.0786335175292462e+34::decimal)
 ----
-79.69365517194046
+79.693655171940461633
 
 query TTTTTT
 SELECT TO_UUID('63616665-6630-3064-6465-616462656566'),
